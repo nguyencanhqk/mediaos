@@ -235,7 +235,7 @@ v2 kéo vào ba loại dữ liệu cá nhân mới. Chúng là **PII cùng hạn
 
 | Họ mã | v1 | **v2 cấp thêm** | Tổng sau v2 |
 | --- | --- | --- | --- |
-| Bảng dữ liệu | 7 | **+11 bảng mới · 3 bảng ALTER** (§8.2) | **18** |
+| Bảng dữ liệu | 7 | **+11 bảng mới · ALTER 3 bảng — DB-1 lấy 2 (§12.1 · §12.4), DB-2 lấy 1 (§12.3)** (§8.2) | **18** |
 | Màn hình `PAY-SCREEN-` | 001..006 (6) | **007..017 (11)** | 17 |
 | Route `PAYROLL-API-` | 001..035 (35) | **036..085 (50)** | **85** |
 | Mã lỗi `PAYROLL-ERR-` | 001..017 (17) | **018..033 (16)** | 33 |
@@ -335,7 +335,7 @@ Chi tiết cột/kiểu/constraint + **bản đồ reconcile từng bảng di s�
 | --- | --- | --- |
 | Kỳ | `period_month`, `pay_date` | `YYYY-MM`; ngày trả suy từ `payroll_config_json.payDay`, ghi cứng lúc tạo kỳ |
 | Nguồn công | `attendance_period_id` | phải `locked` trước khi tính (PAYROLL-ERR-002) |
-| Trạng thái | `status` | **7 giá trị** §17.15; FSM §13.1 |
+| Trạng thái | `status` | 🔁 **v2: 8 giá trị** §17.15 *(v1: 7 — thêm `Published`)*; FSM §13.1 |
 | Vết | `created_by` · `calculated_by/at` · `submitted_by/at` · `approved_by/at` · `published_by/at` · `locked_by/at` · `reopen_reason` | four-eyes so `submitted_by` ≠ `approved_by` (CHECK chốt cuối) |
 | **GỠ** | ~~`kpi_locked`~~ | KPI ngoài phạm vi sản phẩm (de-media-fy) |
 
@@ -381,17 +381,17 @@ Sáu bảng di sản khoá theo `user_id`. Nguồn đầu vào của máy tính 
 
 ⇒ v1 **giữ `user_id`**, ghi nhận là **nợ reconcile đi cùng đợt reconcile ATT/LEAVE** (`erd-current` §A3), không mở riêng ở wave này. Danh tính hiển thị (họ tên · mã nhân viên · đơn vị) lấy qua điểm chiếu duy nhất (§18) bằng cách JOIN `employee_profiles` theo liên kết user↔employee hiện hành.
 
-### 8.2 **v2** — 3 bảng ALTER + 11 bảng mới
+### 8.2 **v2** — ALTER 3 bảng (**DB-1 lấy 2 · DB-2 lấy 1**) + 11 bảng mới
 
 Chi tiết cột/kiểu/CHECK/index/RLS: **DB-13 §12–§14**. Mọi bảng mới có `company_id` + **RLS ENABLE + FORCE** + **composite tenant FK** + soft delete (trừ bảng sổ), và **neo theo `user_id`** cho nhất quán với §8.1 (không mở lại nợ `employee_id`).
 
-**A. Ba bảng ALTER**
+**A. Ba bảng ALTER — chia cho HAI WO, KHÔNG gộp**
 
-| Bảng | Cột THÊM | Ghi chú |
-| --- | --- | --- |
-| `salary_profiles` | `salary_type` · `pit_payer` · `insurance_salary` · `probation_salary` · `pay_ratio_pct` | `salary_type ∈ {GROSS, NET}` **default `GROSS`** (PAY-DEC-015 — cột MỚI, band `0091` bất khả xâm phạm) · `pit_payer ∈ {EMPLOYEE, COMPANY}` default `EMPLOYEE` (ai chịu TNCN — §13.7) · `insurance_salary numeric(18,2)` NULL = «dùng `base_salary`» · `probation_salary numeric(18,2)` NULL · `pay_ratio_pct numeric(5,2)` default `100.00`, CHECK `> 0 AND <= 100` |
-| `payroll_periods` | `template_id` · `paid_by` · `paid_at` | mẫu bảng lương gắn vào kỳ (PAY-DEC-013) · vết chuyển `Published → Paid` (PAY-DEC-017) |
-| `payroll_period_lines` | `component_values_json` · `template_fingerprint` · `gross_up_iterations` | snapshot giá trị **từng thành phần** (§13.6) · băm tập công thức hiệu lực lúc tính (§3.10) · số vòng gross-up, NULL nếu `salary_type = GROSS` |
+| Bảng | WO | Cột THÊM | Ghi chú |
+| --- | --- | --- | --- |
+| `salary_profiles` | **DB-1** (§12.1) | `salary_type` · `pit_payer` · `insurance_salary` · `probation_salary` · `pay_ratio_pct` | `salary_type ∈ {GROSS, NET}` **default `GROSS`** (PAY-DEC-015 — cột MỚI, band `0091` bất khả xâm phạm) · `pit_payer ∈ {EMPLOYEE, COMPANY}` default `EMPLOYEE` (ai chịu TNCN — §13.7) · `insurance_salary numeric(18,2)` NULL = «dùng `base_salary`» · `probation_salary numeric(18,2)` NULL · `pay_ratio_pct numeric(5,2)` default `100.00`, CHECK `> 0 AND <= 100` |
+| `payroll_periods` | 🔴 **DB-2** (§12.3) | `template_id` · `paid_by` · `paid_at` | mẫu bảng lương gắn vào kỳ (PAY-DEC-013) · vết chuyển `Published → Paid` (PAY-DEC-017). **CẢ BA cột + nới `status_check` + backfill `Paid → Published` + hai CHECK cặp là MỘT chuỗi 4 bước nguyên tử** (§12.3) ⇒ **KHÔNG tách cho DB-1**, kể cả `template_id`: tách bước (2) khỏi bước (3) là `23514` giữa lane migration |
+| `payroll_period_lines` | **DB-1** (§12.4) | `component_values_json` · `template_fingerprint` · `gross_up_iterations` | snapshot giá trị **từng thành phần** (§13.6) · băm tập công thức hiệu lực lúc tính (§3.10) · số vòng gross-up, NULL nếu `salary_type = GROSS` |
 
 > ⚠️ **Trùng TÊN, khác NGHĨA — `salary_type`:** `employee_profiles.salary_type` **đã tồn tại** (`employees.ts:59`, CHECK `emp_salary_type_check` ∈ `monthly`/`hourly`/`project`) và **KHÔNG liên quan** tới `salary_profiles.salary_type` ∈ `GROSS`/`NET` mà v2 dựng. Hai cột khác bảng, khác tập giá trị, khác CHECK. Đặt tên khác đi (`gross_net_mode`) thì lệch benchmark và lệch PAY-DEC-015 đã ký; ⇒ **giữ tên, ghi cảnh báo ở đây + ở DB-13 §12.1 + trong comment schema**, và tên CHECK phải là **`salary_profiles_salary_type_check`** (có tiền tố bảng) để không ai grep nhầm.
 >
@@ -415,7 +415,8 @@ Chi tiết cột/kiểu/CHECK/index/RLS: **DB-13 §12–§14**. Mọi bảng m�
 
 **C. Ba ràng buộc cấu trúc bắt buộc, KHÔNG để WO tự quyết**
 
-1. **`salary_components.code` là KHÔNG GIAN TÊN DÙNG CHUNG với biến hệ thống của máy công thức.** Mã người dùng đặt **cấm tiền tố `SYS_`** và **cấm trùng** mọi mã hệ thống đã seed (CHECK + UNIQUE + verify migration). Thiếu ràng buộc này, một thành phần tên `SYS_GROSS` **che** biến hệ thống trong mọi công thức — đúng lớp lỗi shadowing, không CHECK nào bắt (§13.6).
+1. **`salary_components.code` là KHÔNG GIAN TÊN DÙNG CHUNG với biến hệ thống của máy công thức.** Mã người dùng đặt **cấm tiền tố `SYS_`/`TL_`/`GT_`** (`salary_components_code_shape_check`) và **cấm trùng** mọi mã hệ thống đã seed (`salary_components_company_code_uq` + verify migration). Thiếu ràng buộc này, một thành phần tên `SYS_GROSS` **che** biến hệ thống trong mọi công thức — đúng lớp lỗi shadowing, không CHECK nào bắt (§13.6).
+   - ⚠️ **Hai chốt trên KHÔNG đủ cho bốn nút `aggregate`** (`TONG_THU_NHAP` · `TONG_BH_NV` · `THU_NHAP_CHIU_THUE` · `TONG_KHAU_TRU`): chúng **không mang tiền tố nào** nên `code_shape_check` bỏ qua, và `company_code_uq` là **partial `WHERE deleted_at IS NULL`** nên **một lượt xoá mềm hàng seed là mở đường tạo lại mã đó với công thức tuỳ ý**. ⇒ chốt thứ ba, ở DB: **`salary_components_system_not_deletable`** (`is_system = false OR deleted_at IS NULL` — DB-13 §13.4). «Hàng hệ thống không xoá» ép ở service là **một quy ước**, không phải bất biến.
 2. **`payroll_advances` dùng CẶP `(payroll_period_id, consumed_at)` NULL/NOT NULL** làm khoá chống khấu trừ hai lần — **cùng khuôn `bonus_penalties`** (§13.3), kèm CHECK cặp. Sao chép khuôn đã có thay vì phát minh cờ mới là có chủ đích: cùng một lớp lỗi thì cùng một chốt cuối.
 3. **`payroll_payment_lines` KHÔNG lưu lại số tiền của phiếu** — nó tham chiếu `payslip_id` và đọc số từ đó. Lưu bản sao là đẻ nguồn sự thật thứ hai cho **cùng một khoản tiền**, và khi lệch thì không ai biết bên nào đúng. Số tài khoản ngân hàng thì **CÓ** đóng băng vào dòng chi trả (`bank_account_snapshot`) — vì nhân sự đổi tài khoản sau ngày chi thì tệp UNC đã gửi ngân hàng phải giải thích được bằng số **lúc gửi**.
 
@@ -425,7 +426,7 @@ Chi tiết cột/kiểu/CHECK/index/RLS: **DB-13 §12–§14**. Mọi bảng m�
 
 | Mã | Màn hình | Ghi chú |
 | --- | --- | --- |
-| PAY-SCREEN-001 | Danh sách kỳ lương (`/payroll/periods`) | Bảng + lọc tháng/trạng thái; chip trạng thái 7 giá trị; nút «+ Kỳ lương»; **không hiện số tiền** (cặp `view:payroll-period` không nhạy cảm) |
+| PAY-SCREEN-001 | Danh sách kỳ lương (`/payroll/periods`) | Bảng + lọc tháng/trạng thái; chip trạng thái 🔁 **8 giá trị (v2)** *(v1: 7)*; nút «+ Kỳ lương»; **không hiện số tiền** (cặp `view:payroll-period` không nhạy cảm) |
 | PAY-SCREEN-002 | Chi tiết kỳ lương (`/payroll/periods/:id`) | Bảng lương theo nhân sự (gross/khấu trừ/net) + **thanh hành động theo FSM** (gom · tính · gửi duyệt · duyệt/từ chối · phát hành · khoá · mở lại) + **hộp cảnh báo dữ liệu thiếu**; nút không hiện thay vì hiện rồi 409; ô tiền `tabular-nums`, mask per-row theo quyền |
 | PAY-SCREEN-003 | Phiếu lương chi tiết (`/payroll/payslips/:id`) | Breakdown giải-thích-được: từng `payslip_item` + đầu vào công/phép; chỉ với cặp `view-payslip` |
 | PAY-SCREEN-004 | Hồ sơ lương nhân sự (`/payroll/salary-profiles`) | Danh sách + **lịch sử phiên bản theo `effective_date`**; form tạo phiên bản mới (không sửa quá khứ đã bị kỳ đã tính tham chiếu — snapshot đóng băng nên an toàn); chọn người qua **`PAYROLL-API-034`** (role `payroll-officer` không có cặp HR) |
@@ -473,7 +474,7 @@ Mọi màn: `<PermissionGate>` + `useCan()`, trạng thái loading/error/empty (
 | PAYROLL-FUNC-007 | Điều chỉnh dòng lương | sửa `adjustment_amount` + **lý do bắt buộc** trên một dòng, chỉ khi kỳ `Calculated` (kỳ ≥ Approved ⇒ 003); audit từng lần |
 | PAYROLL-FUNC-008 | Gửi duyệt / duyệt / từ chối | `Calculated → Reviewing → Approved` hoặc quay lại `Calculated`; **four-eyes** (005); reject bắt buộc comment; NOTI-EVENT-020/021/022 |
 | PAYROLL-FUNC-009 | Sinh phiếu lương | tại `Approved`: copy dòng nháp → `payslips` + `payslip_items` (append-only); chốt cuối UNIQUE (kỳ, người) ⇒ race map 006, không 500 |
-| PAYROLL-FUNC-010 | Phát hành phiếu lương | `Approved → Paid`: mở cho nhân viên + NOTI-EVENT-023 từng người; kỳ chưa sinh phiếu ⇒ 007 |
+| PAYROLL-FUNC-010 | Phát hành phiếu lương | 🔁 **v2: `Approved → Published`** *(v1: `Approved → Paid`)*: mở cho nhân viên + NOTI-EVENT-023 từng người; kỳ chưa sinh phiếu ⇒ 007 |
 | PAYROLL-FUNC-011 | Khoá / mở lại kỳ | `Paid → Locked` (khoá luôn chỉnh công ATT tháng đó); mở lại về `CollectingData` **chỉ khi chưa sinh phiếu** (004), lý do bắt buộc + audit |
 | PAYROLL-FUNC-012 | «Phiếu lương của tôi» + xác nhận | Own: danh sách + chi tiết breakdown; xác nhận ghi 1 hàng `payslip_acknowledgements`; phiếu chưa phát hành ⇒ 015 |
 | PAYROLL-FUNC-013 | Export bảng lương XLSX | theo kỳ, cặp `('export','payroll')` **+** `('view-line','payroll-period')` (§18); **audit bắt buộc**; > 10.000 dòng ⇒ 422 (016) |
@@ -621,7 +622,7 @@ Ghi chú bắt buộc:
 | `('approve','payroll-advance')` | `PAYROLL.ADVANCE.APPROVE` | duyệt / từ chối (tự duyệt bị chặn) | — | — | Company | Company |
 | `('view-own','payroll-advance')` | `PAYROLL.ADVANCE.VIEW-OWN` | «Tạm ứng của tôi» | **Own** | — | — | — |
 | `('view','payment-batch')` | `PAYROLL.BATCH.VIEW` | đọc đợt chi trả + dòng chi | — | — | Company | Company |
-| `('manage','payment-batch')` | `PAYROLL.BATCH.MANAGE` | lập đợt · sửa dòng · **xuất tệp UNC (số TK ĐẦY ĐỦ)** · **hoàn tất ⇒ kỳ `Paid`** | — | — | Company | Company |
+| `('manage','payment-batch')` | `PAYROLL.BATCH.MANAGE` | lập đợt · sửa dòng · **hoàn tất đợt** (⇒ kỳ `Paid` khi PHỦ ĐỦ — §13.1). ⚠️ **KHÔNG đủ để xuất tệp UNC**: `071` assert **BA cặp** `manage:payment-batch` + `export:payroll` + `view-payslip:payslip` (§15.1) | — | — | Company | Company |
 | `('view','payroll-budget')` | `PAYROLL.BUDGET.VIEW` | đọc ngân sách lương + thực hiện | — | — | Company | Company |
 | `('manage','payroll-budget')` | `PAYROLL.BUDGET.MANAGE` | lập/sửa ngân sách năm × đơn vị | — | — | **—** | Company |
 | `('view','payroll-report')` | `PAYROLL.REPORT.VIEW` | Tổng quan module + 7 báo cáo | — | — | Company | Company |
@@ -638,6 +639,23 @@ Ghi chú bắt buộc:
    - mọi role giữ `('manage','payroll-template')` **phải** giữ `('view','salary-component')` — mẫu tham chiếu mã thành phần, không đọc được catalog thì editor mẫu là ô trống;
    - mọi role giữ `('approve','payroll-advance')` **phải** giữ `('view','payroll-advance')` — kẻo **duyệt mù**, đúng lớp lỗi mà §11.1 đã chặn cho `approve:payroll-period`.
    - ⚠️ Như §11.1 đã ghi: verify chỉ đúng **tại thời điểm migration**; `permission-admin` gỡ được lúc runtime. QA có ca đối chứng (§21.1).
+8. 🔴 **LUẬT «ROUTE GHI KHÔNG CHỞ SỐ TIỀN» ÁP NGUYÊN CHO v2 — sáu cặp mới tách view/manage thì sáu lần luật này phải được ép.** §11.1 đã dựng luật cho v1 (`collect`/`calculate`/`adjust-line` trả envelope **0 khoá tiền**); v2 đẻ thêm sáu cặp `view`/`manage` mà **vế `manage` chở tiền trong payload**, nên thiếu luật là role chỉ giữ `manage:*` **đọc được tiền qua cửa sau** và **không cổng nào chạm tới** (§14/§21 cấm ca mask per-row).
+
+   **Bảy route GHI phải trả `PayrollWriteResultDto` — 0 khoá tiền, danh sách ĐÓNG:**
+
+   | Mã | Route | Cặp GHI | Tiền nằm ở đâu (cần cặp ĐỌC) |
+   | --- | --- | --- | --- |
+   | 039 | `PUT /payroll/employees/:userId/settings` | `manage:payroll-employee` | 038 (`view:payroll-employee`) |
+   | 060 | `POST /payroll/advances` | `manage:payroll-advance` | 059 / 061 (`view:payroll-advance`) |
+   | 062 | `PATCH /payroll/advances/:id` | `manage:payroll-advance` | 061 (`view:payroll-advance`) |
+   | 067 | `POST /payroll/payment-batches` | `manage:payment-batch` | 066 / 068 (`view:payment-batch`) |
+   | 069 | `PATCH /payroll/payment-batches/:id` | `manage:payment-batch` | 068 / 070 (`view:payment-batch`) |
+   | 074 | `POST /payroll/budgets` | `manage:payroll-budget` | 073 (`view:payroll-budget`) |
+   | 075 | `PATCH /payroll/budgets/:id` | `manage:payroll-budget` | 073 (`view:payroll-budget`) |
+
+   Envelope = `{ id, status?, affectedRows?, warnings[] }` — **không** `amount`, **không** `plannedAmount`, **không** `totalNet`, **không** `bankAccount*`. FE tải lại qua route ĐỌC. *(072 `complete` trả `{ periodStatus, unpaidPayees }` — `unpaidPayees` là **số người**, không phải tiền.)*
+
+   **Điều kiện tự-nhất-quán đi kèm (verify ở migration, DB-13 §15.3 bước B):** **mọi role giữ `manage:X` đều phải giữ `view:X`** cho `payroll-advance` · `payment-batch` · `payroll-budget` · `salary-component`. Không phải vì tiện dụng: nếu một role có `manage` mà không có `view`, nó **không có đường hợp lệ nào để đọc lại số nó vừa ghi**, và đó chính là áp lực làm WO sau nhét số tiền vào envelope GHI «cho đỡ phải gọi hai lần». Đóng đường đó ở tầng dữ liệu rẻ hơn đóng ở tầng ý chí.
 
 ---
 
@@ -650,7 +668,7 @@ Ghi chú bắt buộc:
 | PAYROLL-ERR-001 | 409 | Chuyển **trạng thái kỳ lương** không hợp lệ theo FSM §13.1 (kể cả chuyển tới chính trạng thái hiện tại). Thông điệp nêu from/to |
 | PAYROLL-ERR-002 | 409 | Tính lương khi **kỳ công ATT chưa `locked`** (`kind = attendance-not-locked`) hoặc kỳ lương **chưa gắn `attendance_period_id`** (`kind = attendance-period-missing`) |
 | PAYROLL-ERR-003 | 409 | Tính lại / điều chỉnh dòng khi kỳ đã **≥ `Approved`** (`kind = period-frozen`) — snapshot đã đóng băng |
-| PAYROLL-ERR-004 | 409 | **Mở lại kỳ bị chặn**: kỳ đã sinh phiếu lương (`kind = payslip-already-generated` — phiếu là bản ghi bất biến, không xoá được) · kỳ ở `Paid`/`Locked` (`kind = period-terminal`) |
+| PAYROLL-ERR-004 | 409 | **Mở lại kỳ bị chặn**: kỳ đã sinh phiếu lương (`kind = payslip-already-generated` — phiếu là bản ghi bất biến, không xoá được) · kỳ ở 🔁 **v2: `Published`/`Paid`/`Locked`** *(v1: `Paid`/`Locked`)* (`kind = period-terminal`) — `Published` vào danh sách vì nó **bắt buộc đã sinh phiếu** (§13.1) |
 | PAYROLL-ERR-005 | 409 | **Four-eyes**: người duyệt trùng người gửi duyệt (`kind = same-actor-approval`) — chốt cuối CHECK ở DB, race map 409 không 500 |
 | PAYROLL-ERR-006 | 409 | Sinh phiếu lương lần hai cho cùng (kỳ, nhân sự) — chốt cuối `UNIQUE (company_id, payroll_period_id, user_id)`; hai request song song bóc `23505` từ `cause` → 006 |
 | PAYROLL-ERR-007 | 409 | **Phát hành kỳ chưa sinh phiếu lương** (`kind = no-payslip`) |
@@ -660,7 +678,7 @@ Ghi chú bắt buộc:
 | PAYROLL-ERR-011 | 409 | **Thưởng/phạt**: sửa hoặc quyết định hàng **không còn `Pending`** theo FSM §13.3 (`kind = not-pending`) |
 | PAYROLL-ERR-012 | 409 | **Tự duyệt** thưởng/phạt do chính mình tạo (`kind = self-approval`) — segregation of duties |
 | PAYROLL-ERR-013 | 409 | Sửa / xoá mềm thưởng-phạt **đã được gộp vào một kỳ lương** (`kind = already-consumed`) |
-| PAYROLL-ERR-014 | 409 | **Hồ sơ lương**: đã có phiên bản cùng `effective_date` cho nhân sự đó (`kind = effective-date-exists`) — chốt cuối unique, race map 409 |
+| PAYROLL-ERR-014 | 409 | **Hồ sơ lương**: đã có phiên bản cùng `effective_date` cho nhân sự đó (`kind = effective-date-exists`) — chốt cuối unique, race map 409 · 🔁 **v2 thêm `kind = profile-item-duplicate`**: hai dòng `items[]` cùng `component_code` trong một phiên bản (chốt cuối `salary_profile_items_profile_component_uq`, `23505` ⇒ 409). **Cấp `kind` mới thay vì mã mới** — cùng đối tượng nghiệp vụ, và một unique không có `kind` là **500 trá hình** |
 | PAYROLL-ERR-015 | 409 | Xác nhận phiếu lương **chưa phát hành** (`kind = payslip-not-published`) · xác nhận lần hai (`kind = already-acknowledged` — chốt cuối unique) |
 | PAYROLL-ERR-016 | 422 | Export vượt trần **10.000 dòng** theo bộ lọc hiện hành (`kind = export-too-large`) — thu hẹp bộ lọc rồi xuất lại (§19) |
 | PAYROLL-ERR-017 | 422 | **Không có người duyệt hợp lệ**: lúc `submit`, company không tồn tại user nào **khác actor** giữ cặp `('approve','payroll-period')` (`kind = no-eligible-approver`). Chặn ở đây thay vì để kỳ kẹt vĩnh viễn ở `Reviewing` — thông điệp hướng dẫn gán role `payroll-officer` cho người tính hoặc thêm company-admin thứ hai (§13.1) |
@@ -678,8 +696,8 @@ Ghi chú bắt buộc:
 | PAYROLL-ERR-024 | 409 | **Thành phần lương**: xoá thành phần **hệ thống** (`kind = system-component-immutable`) · xoá/ngưng thành phần **đang được mẫu tham chiếu** (`kind = component-in-use`, `details[]` liệt kê mẫu) · trùng `code` (`kind = component-code-exists` — chốt cuối UNIQUE) · `code` **đụng không gian tên hệ thống** (`kind = component-code-reserved`, tiền tố `SYS_` hoặc trùng mã seed — §8.2 C1) |
 | PAYROLL-ERR-025 | 409 | **Tạm ứng** FSM: sửa/quyết định hàng không còn `Pending` (`kind = advance-not-pending`) · đã khấu trừ (`kind = advance-already-deducted`) · **tự duyệt** (`kind = self-approval`) |
 | PAYROLL-ERR-026 | 409 | Gắn tạm ứng vào **kỳ đã ≥ `Calculated`** (`kind = advance-period-frozen`) — khoản khấu trừ phải có mặt **trước** khi tính, thêm sau là số đã chốt không khớp phiếu |
-| PAYROLL-ERR-027 | 409 | **Đợt chi trả**: lập đợt từ kỳ **chưa `Published`** (`kind = period-not-published`) · hoàn tất khi còn dòng chưa chi (`kind = batch-incomplete`) · hoàn tất lần hai (`kind = batch-already-completed`) · **hai đợt cùng phủ một nhân sự** trong một kỳ (`kind = payee-already-in-batch` — chốt cuối unique) |
-| PAYROLL-ERR-028 | 409 | Đưa kỳ sang `Paid` khi **không có đợt chi trả nào hoàn tất** (`kind = no-completed-batch`) — chặn đường đi tắt bỏ qua bước chi trả thật (PAY-DEC-017) |
+| PAYROLL-ERR-027 | 409 | **Đợt chi trả**: lập đợt từ kỳ **chưa `Published`** (`kind = period-not-published`) · hoàn tất khi còn dòng chưa chi (`kind = batch-incomplete`) · hoàn tất lần hai (`kind = batch-already-completed`) · **một PHIẾU LƯƠNG đã nằm ở đợt khác** (`kind = payee-already-in-batch` — chốt cuối **`payroll_payment_lines_payslip_uq`**, phạm vi **toàn công ty**, KHÔNG phải `batch_user_uq`) |
+| PAYROLL-ERR-028 | 409 | **Hoàn tất một đợt chi trả RỖNG** — `POST …/complete` (072) trên đợt có **0 dòng còn hiệu lực** (`kind = batch-empty`; đợt lập rỗng, hoặc mọi dòng đã xoá mềm lúc `Draft`). Đợt **không** chuyển `Completed`, kỳ **không** chuyển `Paid`. Đây là đường đi tắt bỏ qua bước chi trả thật mà PAY-DEC-017 sinh ra để chặn: một đợt rỗng «hoàn tất» là **một lượt chi trả không tồn tại được ghi là đã chi**. ⚠️ Đây là **đường phát DUY NHẤT** của 028 — bản nháp gán 028 cho «kỳ sang `Paid` mà không đợt nào hoàn tất», một điều kiện **không route nào đạt tới được** sau khi 072 là cửa duy nhất ⇒ mã chết |
 | PAYROLL-ERR-029 | 409 | **Ngân sách lương** trùng `(năm, đơn vị)` (`kind = budget-exists`) — chốt cuối UNIQUE, race map 409 |
 | PAYROLL-ERR-030 | 422 | **Import thu nhập/khấu trừ khác**: sai khuôn cột (`kind = import-invalid`) · vượt trần **5.000 dòng** (`kind = import-too-large`) · có dòng không khớp nhân sự (`kind = import-unknown-user`). **Toàn tệp hoặc không dòng nào** — không import một phần |
 | PAYROLL-ERR-031 | 422 | **Báo cáo / PDF vượt trần**: báo cáo quá **50.000 dòng** theo bộ lọc (`kind = report-too-large`) · PDF hàng loạt quá **2.000 phiếu** (`kind = pdf-batch-too-large`) |
@@ -690,8 +708,28 @@ Ghi chú bắt buộc:
 
 - **Ba mã 018/019/020 chia theo THỜI ĐIỂM, không theo nội dung.** 018/019 phát lúc **LƯU** thành phần/mẫu (người dùng sửa được ngay, `details[]` chỉ vào ký tự); **020 phát lúc TÍNH** (công thức đã qua kiểm mà vẫn vỡ trên dữ liệu thật — chia cho 0 vì một đầu vào bằng 0, tràn số vì lương bất thường). Gộp làm một mã thì FE không biết nên mở editor công thức hay mở dòng lương.
 - **Trần đánh giá là NGÂN SÁCH TẤT ĐỊNH, không phải timeout đồng hồ** (§13.6): `formula-budget-exceeded` đếm **lượt thăm node**, nên ca test tái lập được 100%. Timeout đồng hồ ở tầng kỳ vẫn giữ làm phòng thủ chiều sâu nhưng **KHÔNG** là cổng có ca test đo — đồng hồ làm ca đỏ ngẫu nhiên (`slow-probe-manufactures-timeout-red`).
-- **Vi phạm CHECK mới → 409 đúng mã, KHÔNG 500.** Ngoài `23505`/`23514` của v1, service v2 phải bóc thêm: `payroll_dependents_no_overlap_excl` (**`23P01` exclusion_violation**) ⇒ **409 032**; `payroll_payment_lines_batch_user_uq` (`23505`) ⇒ **409 027** `payee-already-in-batch`; `salary_components_code_uq` (`23505`) ⇒ **409 024** `component-code-exists`. Không map = 500 ở vùng đỏ (`drizzle-wraps-pg-error-code-in-cause` — mã nằm trong `error.cause`).
-- **Bản đồ `object_type` audit MỞ RỘNG — danh sách vẫn ĐÓNG.** v1 có **4** giá trị (`payroll_period` · `salary_profile` · `bonus_penalty` · `payslip`); v2 thêm **8**: `payroll_employee_setting` · `payroll_dependent` · `salary_component` · `payroll_template` · `payroll_statutory_rate` · `payroll_advance` · `payroll_payment_batch` · `payroll_budget` ⇒ **tổng 12**. **`payroll_payment_lines` và `payroll_template_components` KHÔNG có `object_type` riêng** — vết của chúng đi kèm đối tượng cha (`payroll_payment_batch` / `payroll_template`), vì sửa một dòng con luôn là sửa cấu hình của cha. `salary_profile_items` cũng vậy (đi kèm `salary_profile`). WO DB **UNION-ADD chỉ giá trị CÒN THIẾU** vào CHECK `audit_logs.object_type` (`audit-check-union-parse-anchor-trap` — neo 2 tầng, NO-LOSS/NO-GAIN) + `AUDIT_OBJECT_TYPES` cùng commit.
+- **Vi phạm ràng buộc DB → 409/422 đúng mã, KHÔNG 500 — bản đồ ĐÓNG dưới đây.** `mapPayrollPgError` khớp theo **TÊN ràng buộc**, lấy từ `error.cause` (`drizzle-wraps-pg-error-code-in-cause` — driver `pg` bọc mã vào `cause`, đọc `error.code` ở lớp ngoài luôn `undefined`). **Tên không có trong bảng = 500 ở vùng đỏ**, nên bảng này phải khớp **đúng bằng** với tên ràng buộc thật của DB-13 §12–§14:
+
+| Ràng buộc (TÊN thật) | SQLSTATE | ⇒ HTTP | Mã + `kind` |
+| --- | --- | --- | --- |
+| `payroll_payment_lines_payslip_uq` | `23505` | 409 | **027** `payee-already-in-batch` — ⚠️ **KHÔNG phải `..._batch_user_uq`**: hai đợt khác nhau của cùng kỳ **không** vi phạm `batch_user_uq` (khác `batch_id`), nên map nhầm tên để đường **chống trả lương hai lần** trả **500** thay vì 409 |
+| `payroll_payment_lines_batch_user_uq` | `23505` | 409 | **027** `payee-already-in-batch` *(vẫn map — chặn trùng trong CÙNG đợt)* |
+| `payroll_dependents_no_overlap_excl` | **`23P01`** exclusion_violation | 409 | **032** `dependent-overlap` |
+| `salary_components_company_code_uq` | `23505` | 409 | **024** `component-code-exists` |
+| `salary_components_code_shape_check` | `23514` | 409 | **024** `component-code-reserved` — mã đụng tiền tố `SYS_`/`TL_`/`GT_`. **Thiếu hàng này thì ca §21.1 số 8 trả 500**, không phải 409 |
+| `salary_components_system_not_deletable` | `23514` | 409 | **024** `system-component-immutable` — xoá mềm hàng seed |
+| `salary_components_value_pair_check` · `salary_components_engine_kind_check` | `23514` | 400 | `VALIDATION-ERR-001` *(lỗi hình thức, Zod lẽ ra chặn trước — hàng này là lưới cuối)* |
+| `salary_profile_items_profile_component_uq` | `23505` | 409 | **014** `profile-item-duplicate` |
+| `payroll_statutory_rates_company_effective_uq` | `23505` | 409 | **033** `rate-effective-date-exists` |
+| `payroll_budgets_year_unit_uq` | `23505` | 409 | **029** `budget-exists` |
+| `payroll_templates_company_code_uq` | `23505` | 409 | **023** `template-code-exists` |
+| `payroll_periods_four_eyes_check` *(v1)* | `23514` | 409 | **005** `same-actor-approval` |
+| `payroll_period_lines_adjustment_check` *(v1)* | `23514` | 400 | `VALIDATION-ERR-001` |
+
+**QA census bắt buộc**: mỗi TÊN ở cột 1 phải xuất hiện trong `mapPayrollPgError`, và mỗi hàng phải có **≥ 1 ca test kích hoạt ràng buộc THẬT ở DB** (không mock) — ràng buộc có mà không map là 500; map mà không ca là `coverage-high-but-error-code-untested`.
+
+- **Bản đồ `object_type` audit MỞ RỘNG — danh sách vẫn ĐÓNG.** v1 có **4** giá trị (`payroll_period` · `salary_profile` · `bonus_penalty` · `payslip`); v2 thêm **10**: `payroll_employee` · `payroll_employee_setting` · `payroll_dependent` · `salary_component` · `payroll_template` · `payroll_statutory_rate` · `payroll_advance` · `payroll_payment_batch` · `payroll_budget` · `payroll_report` ⇒ **tổng 14**. **`payroll_payment_lines` và `payroll_template_components` KHÔNG có `object_type` riêng** — vết của chúng đi kèm đối tượng cha (`payroll_payment_batch` / `payroll_template`), vì sửa một dòng con luôn là sửa cấu hình của cha. `salary_profile_items` cũng vậy (đi kèm `salary_profile`). WO DB **UNION-ADD chỉ giá trị CÒN THIẾU** vào CHECK `audit_logs.object_type` (`audit-check-union-parse-anchor-trap` — neo 2 tầng, NO-LOSS/NO-GAIN) + `AUDIT_OBJECT_TYPES` cùng commit.
+  - ⚠️ **Hai giá trị dễ bị bỏ sót vì chúng KHÔNG ứng với một bảng nào**: `payroll_report` (078 · 079 · 081 · 082 — báo cáo là **phép đọc số liệu**, không phải một hàng) và `payroll_employee` (036 · 037 — **chiếu HR bó hẹp**, dữ liệu nằm ở bảng HR). Thiếu chúng thì **6 trong 18** đường audit-đọc của §18.1 B ghi `object_type` ngoài bản đồ ⇒ **CHECK violation = 500 ngay trên đường đọc**. Bản đồ route → `object_type` + `object_id` đủ 18 đường: **§18.1 B**.
 
 Quy tắc bổ sung (không cần mã riêng):
 
@@ -717,7 +755,7 @@ Quy tắc bổ sung (không cần mã riêng):
 | **`Calculated`** | ✗ | **reopen ✓** | — *(calculate lại + điều chỉnh dòng tại chỗ ✓)* | submit ✓ | ✗ | ✗ | ✗ | ✗ |
 | **`Reviewing`** | ✗ | **reopen ✓** | reject ✓ (bắt buộc comment) | — | approve ✓ (four-eyes) | ✗ | ✗ | ✗ |
 | **`Approved`** | ✗ | **reopen ✓** *(chỉ khi CHƯA sinh phiếu — 004)* | ✗ | ✗ | — *(generate phiếu tại chỗ ✓)* | **publish ✓** *(chưa sinh phiếu ⇒ 007)* | ✗ | ✗ |
-| **`Published`** | ✗ | ✗ | ✗ | ✗ | ✗ | — *(lập/sửa đợt chi trả tại chỗ ✓)* | **complete-batch ✓** *(không đợt nào hoàn tất ⇒ 028)* | ✗ |
+| **`Published`** | ✗ | ✗ | ✗ | ✗ | ✗ | — *(lập/sửa/**hoàn tất** đợt chi trả tại chỗ ✓ — xem luật PHỦ dưới)* | **complete-batch ✓** *(chỉ khi lượt hoàn tất đó làm **PHỦ ĐỦ** kỳ)* | ✗ |
 | **`Paid`** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | — | lock ✓ |
 | **`Locked`** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | — |
 
@@ -727,6 +765,27 @@ Quy tắc bổ sung (không cần mã riêng):
 - **Hai hành động chạy TẠI CHỖ, không đổi trạng thái**: `calculate` lại ở `Calculated` (ghi đè dòng nháp + snapshot mới) và `generate-payslips` ở `Approved`. Cả hai idempotent, chốt cuối ở DB.
 - **`Locked` là terminal tuyệt đối** — không có đường ra. Bảng công tháng đó đã bất biến từ trước (§3.5); PAYROLL không dựng cổng thứ hai.
 - **v2 — `complete-batch` là chuyển tiếp DUY NHẤT vào `Paid`**, và nó **không có route riêng trên `payroll-periods`**: đích đến là `POST /payroll/payment-batches/:id/complete` (`PAYROLL-API-072`, cặp `('manage','payment-batch')`). Route đó mở tx, **row-lock CẢ HAI hàng** — đợt chi trả **và** kỳ lương — theo thứ tự **kỳ TRƯỚC, đợt SAU** (thứ tự cố định là cách duy nhất chặn deadlock khi hai đợt của cùng một kỳ hoàn tất song song), rồi gọi chính `assertPeriodTransition('Published', 'Paid', 'complete-batch')`. **Không** có hàm FSM thứ hai cho đợt chi trả chạm trạng thái kỳ.
+
+> 🔴 **v2 — LUẬT PHỦ: một kỳ có NHIỀU đợt chi trả, và `Paid` là trạng thái của KỲ, không phải của đợt.** Mô hình cho phép nhiều đợt (bank + cash, hoặc chia đợt theo đơn vị) — `payroll_payment_lines_payslip_uq` chặn một phiếu nằm ở hai đợt, chứ **không** chặn kỳ có hai đợt. Vì vậy `complete` **KHÔNG** đẩy kỳ sang `Paid` một cách vô điều kiện:
+>
+> ```text
+> PHỦ ĐỦ(kỳ) := mọi hàng payslips của kỳ đều có ĐÚNG MỘT payroll_payment_lines
+>               (deleted_at IS NULL) thuộc một đợt status='Completed'
+>
+> 072 complete(đợt B), trong MỘT tx, dưới row-lock kỳ TRƯỚC · đợt SAU:
+>   (0) đợt B còn 0 dòng còn hiệu lực            ⇒ 409 ERR-028 batch-empty  (KHÔNG hoàn tất)
+>   (1) đợt B còn dòng chưa chi                  ⇒ 409 ERR-027 batch-incomplete
+>   (2) đợt B đã Completed                       ⇒ 409 ERR-027 batch-already-completed
+>   (3) đặt B.status = 'Completed'
+>   (4) PHỦ ĐỦ(kỳ) = false ⇒ kỳ GIỮ 'Published'; trả 200 { periodStatus:'Published', unpaidPayees: n }
+>       PHỦ ĐỦ(kỳ) = true  ⇒ assertPeriodTransition('Published','Paid','complete-batch') + ghi paid_by/at
+>                            + phát NOTI-EVENT-027; trả 200 { periodStatus:'Paid', unpaidPayees: 0 }
+> ```
+>
+> **Vì sao phải viết ra:** bản nháp cho `complete` đẩy kỳ sang `Paid` ngay ở đợt ĐẦU TIÊN. Khi đó đợt thứ hai của cùng kỳ **không bao giờ hoàn tất được** — `assertPeriodTransition('Paid','Paid')` ⇒ **409 ERR-001 vĩnh viễn** — và những người nằm trong đợt thứ hai **không bao giờ được đánh dấu đã chi**. Đó là **ngõ cụt dữ liệu**, không phải lỗi hiển thị; và `POST /payment-batches` chặn ở `('period-not-published')` nên cũng không lập lại đợt mới được. Bước (4) là chốt duy nhất.
+>
+> **Race hai đợt cuối hoàn tất song song là TẤT ĐỊNH nhờ row-lock kỳ**: bên vào trước thấy `PHỦ ĐỦ = false` (dòng của bên kia chưa commit) ⇒ kỳ giữ `Published`; bên vào sau thấy `true` ⇒ kỳ `Paid`. **Không** có 409, **không** deadlock, và đúng **một** hàng outbox 027.
+
 - **v2 — `Published` KHÔNG mở lại được.** `reopen` chỉ hợp lệ từ `{Calculated, Reviewing, Approved}`, và ở `Approved` đã bị cờ `payslips_generated_at` chặn (004). Vì `Published` **bắt buộc** đã sinh phiếu, không tồn tại đường nào từ `Published` về sau — bảng trên ghi ✗ toàn hàng là **hệ quả**, không phải lựa chọn thêm.
 - **v2 — hai trạng thái cuối KHÔNG chặn lẫn nhau về phiếu lương:** nhân viên thấy phiếu từ **`Published`** trở đi (§13.2). Đừng suy «`Paid` mới cho xem» từ tên trạng thái — tiền về tài khoản và quyền xem phiếu là hai việc khác nhau, và giữ phiếu kín tới khi ngân hàng xong là đúng thứ mà PAY-DEC-017 muốn **bỏ**.
 - **`reject`** đưa về `Calculated` (không về `CollectingData`) — người tính sửa dòng rồi gửi lại; **comment bắt buộc**, đi vào NOTI-EVENT-022.
@@ -942,9 +1001,20 @@ FUNC    := IF | MIN | MAX | ROUND | ABS | CEIL | FLOOR
 | Số node AST | **200** | trần trên chi phí một công thức |
 | Số thành phần trong một mẫu | **120** | trần trên kích thước đồ thị |
 
+> 🔴 **Zod KHÔNG được cap `length(formula)`** — bốn trần trên do **parser** ép, trả **422 ERR-018** với `kind` + vị trí ký tự. Nếu Zod đặt `.max(500)` thì chuỗi 501 ký tự chết ở pipe với **400 `VALIDATION-ERR-001`** và `formula-too-long` thành **mã chết** (`equal-caps-at-zod-and-service-make-dead-error-code`); FE cũng mất vị trí ký tự để tô đỏ trong editor. CHECK `salary_components_formula_len_check` (≤ 500) là **lưới cuối ở DB**, không phải cổng đầu. ⇒ **ba trần cùng con số 500 là CỐ Ý**, nhưng **thứ tự bắt buộc**: parser (422 018) → service → DB (23514). WO BE-2 có ca ghim: chuỗi 501 ký tự ⇒ **422 018 `formula-too-long`**, KHÔNG phải 400.
+
 **C. Ngân sách ĐỘNG — ép lúc TÍNH (⇒ PAYROLL-ERR-020 `formula-budget-exceeded`)**
 
-**Ngân sách là SỐ LƯỢT THĂM NODE, không phải đồng hồ**: **25.000 lượt/dòng lương** (120 thành phần × 200 node ≈ 24.000, cộng biên). Đếm tất định ⇒ ca test tái lập 100%.
+**Ngân sách là SỐ LƯỢT THĂM NODE, không phải đồng hồ**, và có **HAI trần — không gộp làm một**:
+
+| Trần | Con số | Suy ra từ đâu |
+| --- | --- | --- |
+| **Mỗi LƯỢT chạy đồ thị** (`BUDGET_PER_PASS`) | **25.000 lượt thăm node** | 120 thành phần × 200 node = 24.000, cộng biên |
+| **Tổng một DÒNG lương** (`BUDGET_PER_LINE`) | **775.000 lượt thăm node** | `25.000 × 31` = **30 vòng gross-up + 1 lượt cuối** (§13.8). Kiểm tự-nhất-quán: `120 × 200 × 30 = 720.000 ≤ 775.000` ✓ |
+
+Hồ sơ `GROSS` chạy **đúng 1 lượt** ⇒ chạm trần 25.000 là đã vượt. Hồ sơ `NET` chạy **tối đa 31 lượt**, mỗi lượt vẫn bị 25.000 chặn, và **tổng** bị 775.000 chặn. Vượt trần nào cũng ⇒ **422 ERR-020** `formula-budget-exceeded`, `details[]` nêu trần nào vỡ và ở vòng thứ mấy. Đếm tất định ⇒ ca test tái lập 100%.
+
+> 🔴 **Vì sao KHÔNG dùng một trần 25.000 chung cho cả 30 vòng** *(bản nháp viết thế)*: 25.000 chỉ đủ **đúng một** lượt chạy mẫu đầy 120×200. Dùng chung nghĩa là mọi hồ sơ `salary_type = 'NET'` **vượt trần từ vòng thứ hai** ⇒ 422 ERR-020 ⇒ **PAY-DEC-015 (owner đã ký) không chạy được một lần nào**, và ca đối soát tay NET của §21.1 ca 1 **không thể xanh**. Một trần bất khả thi về toán học không phải ràng buộc an ninh — nó là tính năng bị tắt.
 
 > ⚠️ **Cố ý KHÔNG dùng timeout đồng hồ làm cổng.** Ca test đo đồng hồ đỏ theo tải máy CI, và một phép thử làm chậm hệ thống tự sinh «đỏ vì timeout» cho phép đo kế tiếp (`slow-probe-manufactures-timeout-red`). Timeout wall-clock **vẫn đặt** ở tầng kỳ (phòng thủ chiều sâu, log cảnh báo) nhưng **không có ca test nào assert nó**, và nó **không** là điều kiện của `done_when`.
 
@@ -960,12 +1030,22 @@ FUNC    := IF | MIN | MAX | ROUND | ABS | CEIL | FLOOR
 
 Tham chiếu giữa các thành phần tạo một **DAG**; evaluator **topo-sort** rồi đi một lượt. Bốn mã dưới đây là **thành phần hệ thống đặc biệt** — giá trị **do engine cộng**, không có công thức người dùng sửa được:
 
+Bốn hàng này khai **`value_type = 'engine'`** (§13.4 · DB-13 §13.4) — **KHÔNG** `fixed`/`fixed_amount = 0`.
+
 | Mã | Engine tính bằng | Phụ thuộc |
 | --- | --- | --- |
-| `TONG_THU_NHAP` | Σ giá trị mọi thành phần `kind = 'earning'` đang **bật** trong mẫu | mọi node `earning` |
-| `TONG_BH_NV` | Σ mọi thành phần `kind = 'statutory_employee'` | mọi node `statutory_employee` |
+| `TONG_THU_NHAP` | 🔁 **`Σ giá trị mọi thành phần kind ∈ {earning, tax_exempt} đang bật trong mẫu`** | mọi node `earning` + `tax_exempt` |
+| `TONG_BH_NV` | 🔁 **`Σ giá trị mọi thành phần kind = 'statutory_employee' CÓ pit_deductible = true`** | các node `statutory_employee` được trừ thuế |
 | `THU_NHAP_CHIU_THUE` | `MAX(TONG_THU_NHAP − TONG_BH_NV − GT_BAN_THAN − GT_NPT × SYS_DEPENDENTS − Σ thành phần kind='tax_exempt', 0)` | trên + `tax_exempt` |
-| `TONG_KHAU_TRU` | Σ mọi thành phần `kind ∈ {deduction, statutory_employee, tax}` | các node tương ứng |
+| `TONG_KHAU_TRU` | 🔁 **`Σ {deduction, statutory_employee} + (Σ kind='tax' CHỈ KHI salary_profiles.pit_payer = 'EMPLOYEE')`** | các node tương ứng + `pit_payer` của hồ sơ |
+
+> 🔴 **Ba định nghĩa trên vừa được SỬA CẤU TRÚC — bản nháp sai theo ba cách khác nhau, và cả ba đều lọt qua mọi bất biến SQL.** Ghi nguyên do ở đây vì **fixture đối soát tay của §21.1 ca 1 sẽ được dựng theo chính bảng này**: dựng theo bản sai thì ca test **ghim lỗi thành hành vi đúng**, và §3.11 («owner chịu trách nhiệm CON SỐ») **không che** cho sai cấu trúc.
+>
+> 1. **`tax_exempt` bị trừ mà không bao giờ được TRẢ.** Bản nháp cho `TONG_THU_NHAP` chỉ cộng `earning`, trong khi `THU_NHAP_CHIU_THUE` lại trừ `Σ tax_exempt`. Khoản miễn thuế (tiền ăn ca, xăng xe…) là **tiền nhân viên NHẬN** — nó phải vào `TONG_THU_NHAP` (⇒ vào `net`) rồi mới bị trừ khỏi **thu nhập TÍNH THUẾ**. Bản nháp làm nó chỉ giảm thuế mà không vào lương ⇒ nhân viên **mất đúng khoản đó**, và `net ≥ 0` vẫn xanh.
+> 2. **Đoàn phí bị trừ khỏi thu nhập tính thuế.** `TL_DOAN_PHI` là `kind = 'statutory_employee'` (§13.7 D — NV chịu), nên `Σ statutory_employee` kéo nó vào `TONG_BH_NV`, tức **trừ khỏi thu nhập tính thuế**. Chỉ **bảo hiểm bắt buộc** mới được trừ. ⇒ tách bằng cờ dữ liệu **`salary_components.pit_deductible`** (DB-13 §13.4), **không** hard-code mã `DOAN_PHI` vào engine: hard-code thì khoản NV-chịu-không-được-trừ-thuế tiếp theo lại sai y hệt.
+> 3. **`pit_payer = 'COMPANY'` không diễn đạt được.** §13.7 E đã ký «DN chịu thuế thì thuế **không** vào `TONG_KHAU_TRU`», nhưng bản nháp cộng thẳng `kind = 'tax'`. ⇒ vế `tax` có **điều kiện** trên `pit_payer` của chính hồ sơ lương đang tính.
+>
+> **`pit_deductible` chỉ có nghĩa với `kind = 'statutory_employee'`**; seed: `BHXH_NV` · `BHYT_NV` · `BHTN_NV` = `true`, `DOAN_PHI` = `false`. Ba công thức trên phải khớp **từng chữ** với §13.7 C/D/E — lệch một vế là lệch tiền của mọi người.
 
 - **`THUC_LINH` (net) KHÔNG phải node của đồ thị** — nó là `GREATEST(TONG_THU_NHAP − TONG_KHAU_TRU + adjustment_amount, 0)` và **tính ở SQL** lúc ghi dòng (§3.9). Đưa nó vào đồ thị là đưa clamp vào TS.
 - **Cycle detection phủ CẢ nút tổng hợp**: một thành phần `kind='earning'` tham chiếu `TONG_THU_NHAP` là **vòng** (nó nằm trong chính tổng đó) ⇒ **422 ERR-019** với chu trình đầy đủ. Đây là lý do bốn nút trên phải là **node thật của đồ thị**, không phải biến tính sẵn ngoài lề — tính sẵn ngoài lề thì vòng này **không ai bắt** và kết quả phụ thuộc thứ tự chạy.
@@ -1017,18 +1097,27 @@ can_cu_BHTN   = MIN(luong_dong_bh, TRAN_BHTN)   -- TRAN_BHTN = 20 × LUONG_TOI_T
 
 **C. Phần doanh nghiệp**
 
-`TL_BHXH_DN` · `TL_BHYT_DN` · `TL_BHTN_DN` · `TL_KPCD` (KPCĐ, DN chịu) — **không trừ vào lương nhân viên**, nhưng **phải tính và lưu** vì chúng là **chi phí lương** của báo cáo «chi phí lương theo đơn vị» và của widget ngân sách. Thành phần `kind = 'statutory_employer'`: vào `component_values_json`, **KHÔNG** vào `TONG_KHAU_TRU`, **KHÔNG** vào `gross`/`net`.
+`TL_BHXH_DN` · `TL_BHYT_DN` · `TL_BHTN_DN` · `TL_KPCD` (KPCĐ, DN chịu) — **không trừ vào lương nhân viên**, nhưng **phải tính và lưu** vì chúng là **chi phí lương** của báo cáo «chi phí lương theo đơn vị» và của widget ngân sách. Thành phần `kind = 'statutory_employer'`: vào `component_values_json`, **KHÔNG** vào `TONG_KHAU_TRU`, **KHÔNG** vào `gross`/`net`. *(Khớp §13.6 E: `TONG_KHAU_TRU` chỉ cộng `{deduction, statutory_employee}` + vế `tax` có điều kiện — `statutory_employer` không có mặt ở vế nào.)*
 
 > ⚠️ Đây là chỗ dễ sai nhất của engine luật định: cộng nhầm phần DN vào `TONG_KHAU_TRU` làm **lương nhân viên tụt ~21,5%** mà mọi bất biến SQL vẫn xanh (tổng vẫn khớp, `net ≥ 0` vẫn đúng). Chỉ **fixture đối soát tay** bắt được (§21.1).
 
 **D. Đoàn phí công đoàn** — `TL_DOAN_PHI` trên `can_cu_BHXH`, **NV chịu** (`kind = 'statutory_employee'`), chỉ khi `joins_union = true`.
 
+> 🔴 **Đoàn phí NV chịu, nhưng KHÔNG được trừ khỏi thu nhập tính thuế.** Seed hàng `DOAN_PHI` với **`pit_deductible = false`**; chỉ `BHXH_NV`/`BHYT_NV`/`BHTN_NV` mang `true`. Vì vậy `TONG_BH_NV` (§13.6 E) là `Σ kind='statutory_employee' CÓ pit_deductible = true` — **không** phải `Σ statutory_employee`. Đoàn phí vẫn vào `TONG_KHAU_TRU` (NV trả thật). Gộp nó vào `TONG_BH_NV` là **giảm thuế sai luật** cho mọi đoàn viên, và **không CHECK nào bắt** vì `net` vẫn ≥ 0, tổng vẫn khớp.
+
 **E. TNCN luỹ tiến 7 bậc**
 
 ```text
+-- KHỚP TỪNG CHỮ với §13.6 E. Ba vế in đậm ở đó lặp lại nguyên văn tại đây:
+TONG_THU_NHAP      = Σ kind ∈ {earning, tax_exempt} đang bật trong mẫu
+TONG_BH_NV         = Σ kind = 'statutory_employee' CÓ pit_deductible = true      -- đoàn phí KHÔNG vào
 thu_nhap_tinh_thue = MAX(TONG_THU_NHAP − TONG_BH_NV − GT_BAN_THAN − GT_NPT × SYS_DEPENDENTS − Σ(tax_exempt), 0)
-thue = TNCN_LUY_TIEN(thu_nhap_tinh_thue)      -- 7 bậc lưu trong bản tỉ lệ, mỗi bậc {den_muc, thue_suat}
+thue               = TNCN_LUY_TIEN(thu_nhap_tinh_thue)   -- 7 bậc lưu trong bản tỉ lệ, mỗi bậc {den_muc, thue_suat}
+TONG_KHAU_TRU      = Σ {deduction, statutory_employee}
+                   + (thue  CHỈ KHI salary_profiles.pit_payer = 'EMPLOYEE')      -- COMPANY ⇒ không cộng
 ```
+
+> **`tax_exempt` xuất hiện ở HAI vế và đó là đúng, không phải trùng lặp**: cộng vào `TONG_THU_NHAP` (nhân viên **nhận** khoản đó ⇒ vào `net`), rồi trừ ra khỏi **thu nhập TÍNH THUẾ** (khoản đó **miễn thuế**). Bỏ vế cộng đi — như bản nháp — là lấy mất của nhân viên đúng khoản miễn thuế, `net` vẫn ≥ 0 và tổng vẫn khớp.
 
 - **`SYS_DEPENDENTS` = số NPT có khoảng hiệu lực GIAO với kỳ** — **tính đủ tháng** nếu có giao dù chỉ một ngày. Đây là một **diễn giải pháp lý**, không phải chi tiết kỹ thuật: ghi ở đây để nó được **owner nhìn thấy** và để WO BE không tự chọn cách khác (tỉ lệ theo ngày). Cùng hạng trách nhiệm với §3.11.
 - **`pit_payer = COMPANY`**: thuế vẫn tính đủ và vẫn ghi `component_values_json`, nhưng **KHÔNG vào `TONG_KHAU_TRU`** — doanh nghiệp chịu. Khi đó khoản thuế là **chi phí DN** như mục C. *(Lưu ý: ở đúng nghĩa nghiệp vụ, «DN nộp thuế thay» còn kéo theo bài toán quy đổi thu nhập; v2 **không** làm phần quy đổi đó — nó thuộc cùng họ với gross-up và chỉ áp cho `salary_type = NET` (§13.8). Ghi tường minh để không ai suy ra rằng `pit_payer = COMPANY` tự động bật gross-up.)*
@@ -1054,7 +1143,7 @@ trần    30 vòng                               (không hội tụ ⇒ 422 ERR-
 - **Hồ sơ NET vẫn chịu pro-rate/`pay_ratio_pct` bình thường** — gross-up chạy **trên `SYS_BASE_SALARY` TRƯỚC pro-rate**, rồi pro-rate áp lên `b` đã hội tụ. Đảo thứ tự (gross-up sau pro-rate) cho ra «đi làm nửa tháng vẫn lĩnh đủ NET thoả thuận» — sai nghiệp vụ, và **không CHECK nào bắt được**.
 
 - **Mỗi vòng chạy TOÀN BỘ đồ thị công thức** (BH → giảm trừ → TNCN → khấu trừ), không chỉ công thức thuế — vì thành phần do người dùng định nghĩa có thể phụ thuộc GROSS theo cách bất kỳ.
-- **Ngân sách node của §13.6 C áp cho TỔNG cả 30 vòng**, không phải mỗi vòng. Nếu không, một hồ sơ NET ngốn gấp 30 lần trần mà vẫn «trong hạn».
+- **Hai trần node của §13.6 C áp ĐỒNG THỜI**: mỗi lượt chạy đồ thị ≤ **25.000** (giống hệt hồ sơ GROSS — không nới cho NET), và **tổng cả dòng** ≤ **775.000** (`25.000 × 31` = 30 vòng + lượt cuối). Chỉ có trần-mỗi-lượt thì một hồ sơ NET ngốn 31 lần chi phí mà vẫn «trong hạn»; chỉ có trần-tổng-25.000 thì **không hồ sơ NET nào tính được** (§13.6 C).
 - **`gross_up_iterations` ghi vào dòng lương** (NULL khi `salary_type = GROSS`) — để phiếu lương giải thích được vì sao gross ra con số lẻ đó.
 - **Không hội tụ ⇒ 422 ERR-021 và TOÀN BỘ transaction rollback** — kỳ **không** đổi trạng thái, **không** ghi dòng nào, kể cả dòng của những người đã tính xong. Ghi một phần rồi báo lỗi là để lại bảng lương nửa vời mà trạng thái kỳ nói là chưa tính.
 - **Hàm `net(g)` không đơn điệu là có thật** (công thức người dùng có `IF`), nên lặp điểm bất động có thể dao động. Trần 30 vòng + ERR-021 là **hành vi đã chốt**, không phải «tạm thời»: hệ thống **từ chối** thay vì trả một con số không giải thích được. QA có ca dựng công thức dao động cố ý.
@@ -1095,9 +1184,9 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-18](<../API Design/API-1
 | PAYROLL-API-017 | `GET /payroll-periods/:id/export` | `('export','payroll')` **+ `('view-line','payroll-period')`** (§18) | XLSX bảng lương kỳ; **audit bắt buộc**; > 10.000 dòng ⇒ 422 (016) |
 | PAYROLL-API-018 | `GET /payroll-periods/summary` | **`('view-line','payroll-period')`** **+ SÀN scope Company** | tổng gross/net + headcount + trạng thái kỳ gần nhất — nguồn widget DASH; route khai **TRƯỚC** `/payroll-periods/:id` |
 | PAYROLL-API-019 | `GET /salary-profiles` | `('view','salary-profile')` | filter `userId` · `effectiveOn`; pagination; **audit lượt đọc**; mask theo quyền |
-| PAYROLL-API-020 | `POST /salary-profiles` | `('manage','salary-profile')` | `{ userId, effectiveDate, baseSalary, allowances[], note? }`; trùng ngày ⇒ 014; `Idempotency-Key`; audit |
+| PAYROLL-API-020 | `POST /salary-profiles` | `('manage','salary-profile')` | 🔁 **v2 đổi PAYLOAD, KHÔNG cấp route mới**: `{ userId, effectiveDate, baseSalary, salaryType?, pitPayer?, insuranceSalary?, probationSalary?, payRatioPct?, items[], note? }` — **`items[]`** ghi xuống **`salary_profile_items`** *(v1: `allowances[]` → cột `allowances` jsonb)*. **Dual-write cả hai nguồn tới khi CONTRACT** (DB-13 §12.2); trùng `component_code` trong cùng hồ sơ ⇒ **409 014** `kind = profile-item-duplicate`; trùng ngày ⇒ 014 `effective-date-exists`; `Idempotency-Key`; audit |
 | PAYROLL-API-021 | `GET /salary-profiles/:id` | `('view','salary-profile')` | chi tiết một phiên bản; **audit lượt đọc** |
-| PAYROLL-API-022 | `PATCH /salary-profiles/:id` | `('manage','salary-profile')` | sửa số tiền/ghi chú/ngày hiệu lực · xoá mềm (`{ delete: true }`); **không** đụng phiếu đã phát hành (snapshot đóng băng); audit |
+| PAYROLL-API-022 | `PATCH /salary-profiles/:id` | `('manage','salary-profile')` | sửa số tiền/ghi chú/ngày hiệu lực · xoá mềm (`{ delete: true }`); 🔁 **v2 nhận thêm `items[]` — ĐẶT LẠI TOÀN BỘ** danh sách **`salary_profile_items`** của phiên bản đó trong MỘT transaction (cùng khuôn 053), **không** sửa từng dòng rời; trùng `component_code` ⇒ **409 014** `profile-item-duplicate`; **không** đụng phiếu đã phát hành (snapshot đóng băng); audit |
 | PAYROLL-API-023 | `GET /bonus-penalties` | `('view','bonus-penalty')` | filter `periodMonth` · `status[]` · `kind` · `userId`; pagination |
 | PAYROLL-API-024 | `POST /bonus-penalties` | `('manage','bonus-penalty')` | `{ userId, kind, amount, periodMonth, reason }` — `reason` bắt buộc; `Idempotency-Key`; audit |
 | PAYROLL-API-025 | `GET /bonus-penalties/:id` | `('view','bonus-penalty')` | chi tiết |
@@ -1171,8 +1260,8 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-18](<../API Design/API-1
 | 068 | `GET /payroll/payment-batches/:id` | `('view','payment-batch')` | chi tiết + tổng; audit |
 | 069 | `PATCH /payroll/payment-batches/:id` | `('manage','payment-batch')` | sửa · thêm/bớt dòng — chỉ khi `Draft`/`Ready`; nhân sự đã ở đợt khác của cùng kỳ ⇒ **409 027**; audit |
 | 070 | `GET /payroll/payment-batches/:id/lines` | `('view','payment-batch')` | dòng chi trả — **`bankAccountLast4`**, không số đầy đủ; pagination; audit |
-| 071 | `GET /payroll/payment-batches/:id/export` | `('manage','payment-batch')` | **tệp UNC XLSX — đường DUY NHẤT số tài khoản ĐẦY ĐỦ rời server** (§3.12); **audit BẮT BUỘC** (payload = batch + số dòng, **không** số TK, **không** số tiền); > 10.000 dòng ⇒ 422 016 |
-| 072 | `POST /payroll/payment-batches/:id/complete` | `('manage','payment-batch')` | **row-lock kỳ TRƯỚC, đợt SAU** (§13.1); còn dòng chưa chi ⇒ **409 027**; hoàn tất lần hai ⇒ 409 027; **`Published → Paid`** + ghi `paid_by/at`; NOTI-EVENT-027; `Idempotency-Key`; audit |
+| 071 | `GET /payroll/payment-batches/:id/export` | 🔴 **BA CẶP, assert CẢ BA**: `('manage','payment-batch')` **+ `('export','payroll')` + `('view-payslip','payslip')`** | **tệp UNC XLSX — đường DUY NHẤT số tài khoản ĐẦY ĐỦ rời server** (§3.12), và tệp mang **net từng người**; **audit BẮT BUỘC** (payload = batch + số dòng, **không** số TK, **không** số tiền); > 10.000 dòng ⇒ 422 016. Ba cặp vì: **`export:payroll`** là luật «export đòi CẢ HAI cặp» của §11.1 (017 · 082 · 085 đều tuân), **`view-payslip:payslip`** là vế ĐỌC số tiền (tệp lấy net từ `payslip_id`), **`manage:payment-batch`** là vế đợt chi. Gác bằng **đúng một cặp GHI** — như bản nháp — cho một role chỉ có `manage:payment-batch` tải được **payload nhạy cảm nhất toàn hệ thống** mà không cần cặp đọc nào (bài học RECRUIT H5) |
+| 072 | `POST /payroll/payment-batches/:id/complete` | `('manage','payment-batch')` | **row-lock kỳ TRƯỚC, đợt SAU** (§13.1); đợt **0 dòng còn hiệu lực** ⇒ **409 028** `batch-empty`; còn dòng chưa chi ⇒ **409 027**; hoàn tất lần hai ⇒ 409 027. 🔴 **Kỳ sang `Paid` CHỈ khi lượt này làm PHỦ ĐỦ kỳ** (§13.1 luật PHỦ) — chưa phủ đủ ⇒ **200**, đợt `Completed`, kỳ **giữ `Published`**, body `{ periodStatus, unpaidPayees }`; phủ đủ ⇒ `Published → Paid` + ghi `paid_by/at` + **NOTI-EVENT-027**; `Idempotency-Key`; audit |
 | 073 | `GET /payroll/budgets` | `('view','payroll-budget')` | filter `fiscalYear` · `orgUnitId`; kèm **thực hiện** (cộng từ kỳ đã `Published`+); nguồn widget 002; **SÀN scope `Company`**; audit |
 | 074 | `POST /payroll/budgets` | `('manage','payroll-budget')` | trùng `(năm, đơn vị)` ⇒ **409 029**; `Idempotency-Key`; audit |
 | 075 | `PATCH /payroll/budgets/:id` | `('manage','payroll-budget')` | sửa · xoá mềm; audit |
@@ -1192,6 +1281,8 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-18](<../API Design/API-1
 | 084 | `GET /me/payslips/:id/pdf` | `('view-own-payslip','payslip')` | Own — **KHÔNG cần cặp export** (PAY-DEC-019); **dùng CÙNG bộ lọc kỳ `{Published, Paid, Locked}` với 031/032** (§13.2); phiếu người khác ⇒ **404 010** |
 | 085 | `POST /payroll-periods/:id/payslips/pdf-batch` | `('export','payroll')` **+ `('view-payslip','payslip')`** | sinh PDF hàng loạt → signed-URL tệp ZIP; > 2.000 phiếu ⇒ **422 031**; `Idempotency-Key`; **audit bắt buộc** |
 
+> 🔴 **`salary_profile_items` KHÔNG được cấp route riêng — có chủ đích.** Bảng mới duy nhất của v2 không có mã `PAYROLL-API-*` nào: nó là **bảng con của `salary_profiles`**, nên bề mặt ghi/đọc của nó đi qua **020 · 021 · 022** (payload `items[]`, xem hàng 🔁 ở §15 — `022` đặt lại **toàn bộ** danh sách trong một tx, cùng khuôn 053). Cấp thêm `086/087` là **phá con số 50 đã ĐÓNG** của §5.1b để đổi lấy đúng một bảng CRUD lồng; đổi ngầm payload 020/022 mà **không đánh dấu** thì WO BE-1 phải tự đoán — cả hai lối đều sai, nên bản này chọn lối thứ ba: **giữ 50 route, đánh dấu 🔁 tại chỗ**. Unique của bảng có mã lỗi riêng: **409 `PAYROLL-ERR-014` `kind = profile-item-duplicate`** (§12.1 · §12 hàng 014).
+>
 > **50 mã = 50 route HTTP** (không mã nào gói 2 route) ⇒ **tổng module sau v2 = 85 route**. WO BE regen route-census với 85 và **siết `MIN_COVERED_COUNT` của `route-http-coverage.e2e-spec.ts` CÙNG COMMIT** với từng WO BE — cổng đó có `MAX_UNCOVERED_TOTAL = 0` và xếp `salary`/`payslip` vào nhóm rủi ro cao, nên **mỗi route mới phải có file test chạm đúng literal path**.
 >
 > ⚠️ **Bốn bẫy thứ tự khai route** *(cùng lớp `goals/tree` mà v1 đã vấp ở `summary`)* — route TĨNH phải khai **TRƯỚC** route `:id` cùng cấp:
@@ -1223,7 +1314,7 @@ Nguồn chuẩn: [DB-13](<../DB/DB-13 PAYROLL Database Design.md>). Tóm tắt:
 | `PAYROLL_PERIOD_SUBMITTED` | NOTI-EVENT-020 | kỳ lương gửi duyệt (commit) | **người duyệt hợp lệ** theo `PayrollApproverReader` — CÙNG bộ giải với PAYROLL-ERR-017 (§13.1), `recipient.mode='UserIds'`, trừ actor. **KHÔNG tự tra role `company-admin` riêng** | `{periodId}:{submittedAtIso}` — **mỗi LẦN gửi là một sự kiện** (reject → sửa → gửi lại phải báo lại; engine `DedupeKey` là once-ever, không có bucket thời gian) |
 | `PAYROLL_PERIOD_APPROVED` | NOTI-EVENT-021 | kỳ được duyệt | `submitted_by` (người gửi duyệt), trừ actor | `{periodId}:{approvedAtIso}` |
 | `PAYROLL_PERIOD_REJECTED` | NOTI-EVENT-022 | kỳ bị từ chối | `submitted_by`, trừ actor | `{periodId}:{updatedAtIso}` — `reject` KHÔNG có cột `rejected_at` |
-| `PAYSLIP_PUBLISHED` | NOTI-EVENT-023 | phát hành phiếu lương (`Approved → Paid`, commit) | **từng nhân sự có phiếu** trong kỳ (`payslips.user_id`), trừ actor | `{payslipId}` (một phiếu báo đúng một lần) |
+| `PAYSLIP_PUBLISHED` | NOTI-EVENT-023 | phát hành phiếu lương (🔁 **v2: `Approved → Published`** *(v1: `Approved → Paid`)*, commit) | **từng nhân sự có phiếu** trong kỳ (`payslips.user_id`), trừ actor | `{payslipId}` (một phiếu báo đúng một lần) |
 
 - `notification_type = 'Payroll'`, `module_code = 'PAYROLL'`, `priority` Normal (020/021) · High (022/023), `isEnabled=true`, `isSystemEvent=false` cả 4 — **PAYROLL v1 không có system job** (mọi event đều event-driven; nhắc chốt kỳ = Phase sau nếu cần).
 - **`dedupe_strategy = 'DedupeKey'`** ngay seed đầu cho cả 4 (mặc định `'None'` biến `dedupeKey` thành chuỗi trang trí — bài học `0479`/`0507`/`0538`).
@@ -1245,7 +1336,7 @@ Nguồn chuẩn: [DB-13](<../DB/DB-13 PAYROLL Database Design.md>). Tóm tắt:
 | `PAYROLL_ADVANCE_SUBMITTED` | **NOTI-EVENT-024** | tạo tạm ứng (`Pending`, commit) | **người duyệt hợp lệ** của tạm ứng, trừ actor — bộ giải riêng theo cặp `('approve','payroll-advance')`, **cùng KHUÔN `PayrollApproverReader`** | `{advanceId}:{createdAtIso}` |
 | `PAYROLL_ADVANCE_APPROVED` | **NOTI-EVENT-025** | tạm ứng được duyệt | **nhân sự thụ hưởng** (`payroll_advances.user_id`) **+ người tạo**, trừ actor | `{advanceId}:{decidedAtIso}` |
 | `PAYROLL_ADVANCE_REJECTED` | **NOTI-EVENT-026** | tạm ứng bị từ chối | như trên, trừ actor | `{advanceId}:{decidedAtIso}` |
-| `PAYROLL_PAYMENT_BATCH_COMPLETED` | **NOTI-EVENT-027** | đợt chi trả hoàn tất (kỳ → `Paid`, commit) | người giữ `('view','payment-batch')` trong company, trừ actor | `{batchId}` — một đợt báo đúng một lần |
+| `PAYROLL_PAYMENT_BATCH_COMPLETED` | **NOTI-EVENT-027** | 🔁 **chỉ ở lượt hoàn tất làm kỳ CHUYỂN sang `Paid`** (luật PHỦ §13.1, commit) — hoàn tất đợt giữa chừng (kỳ vẫn `Published`) **KHÔNG** phát | người giữ `('view','payment-batch')` trong company, trừ actor | `{periodId}` — **một KỲ báo đúng một lần** *(dùng `{batchId}` thì kỳ nhiều đợt đẻ nhiều thông báo «đã chi trả» cho cùng một kỳ)* |
 
 - `notification_type = 'Payroll'`, `module_code = 'PAYROLL'` — **CHECK của hai giá trị này đã được `0566` nới cho cả hai bảng** (`notification_events` **và** `notifications`); v2 **không cần nới lại**, WO DB **ĐO rồi NO-OP có chủ đích** kèm `RAISE NOTICE` thay vì viết ALTER rỗng.
 - **`dedupe_strategy = 'DedupeKey'` ngay seed đầu** cho cả 4 (mặc định `'None'` biến `dedupeKey` thành chuỗi trang trí). `isSystemEvent = false` cả 4 — **v2 vẫn KHÔNG có system job**. `priority`: 024 Normal · 025/026 **High** (ảnh hưởng trực tiếp tiền của một cá nhân) · 027 Normal.
@@ -1288,16 +1379,30 @@ Nguồn chuẩn: [DB-13](<../DB/DB-13 PAYROLL Database Design.md>). Tóm tắt:
 
 **B. Audit lượt ĐỌC — v1 có 7 đường, v2 thêm 18 ⇒ tổng 25**
 
-| Nhóm | Mã | Số |
-| --- | --- | --- |
-| Nhân sự + PII | `036` · `037` · `038` · `040` | 4 |
-| Bảng công kỳ | `043` | 1 |
-| Tạm ứng | `059` · `061` | 2 |
-| Chi trả | `066` · `068` · `070` | 3 |
-| Ngân sách | `073` | 1 |
-| Tổng quan + báo cáo | `078` · `079` · `081` | 3 |
-| Xuất tệp | `071` · `082` · `083` · `085` | 4 |
-| | **Tổng v2** | **18** |
+**Mỗi đường phải khai `object_type` + `object_id` TẠI ĐÂY, không để WO tự chọn** — `object_type` ngoài bản đồ ĐÓNG của §12.1 là **CHECK violation ⇒ 500 ngay trên đường đọc**, và `audit_logs.object_id` là **cột `uuid` NULLABLE** (`audit.ts:36`) nên mọi định danh **không phải UUID** (ví dụ `reportCode`) **bắt buộc** đi vào payload, không đi vào `object_id`.
+
+| # | Mã | Route | `object_type` | `object_id` | Payload bắt buộc *(không bao giờ có số tiền)* |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `036` | `GET /payroll/employees` | `payroll_employee` | **NULL** *(đọc DANH SÁCH)* | `{ filters, rowCount }` |
+| 2 | `037` | `GET /payroll/employees/:userId` | `payroll_employee` | `userId` | `{ taxCodeRevealed: bool }` |
+| 3 | `038` | `GET /payroll/employees/:userId/settings` | `payroll_employee_setting` | `userId` *(1 hàng/nhân sự; hàng có thể CHƯA tồn tại ⇒ neo theo `userId`, không theo `id`)* | `{}` — **không** số TK |
+| 4 | `040` | `GET /payroll/employees/:userId/dependents` | `payroll_dependent` | `userId` *(neo CHA — đọc cả danh sách NPT của một người)* | `{ rowCount }` |
+| 5 | `043` | `GET /payroll-periods/:id/timesheet` | `payroll_period` | `payrollPeriodId` | `{ rowCount }` |
+| 6 | `059` | `GET /payroll/advances` | `payroll_advance` | **NULL** | `{ filters, rowCount }` |
+| 7 | `061` | `GET /payroll/advances/:id` | `payroll_advance` | `advanceId` | `{}` |
+| 8 | `066` | `GET /payroll/payment-batches` | `payroll_payment_batch` | **NULL** | `{ filters, rowCount }` |
+| 9 | `068` | `GET /payroll/payment-batches/:id` | `payroll_payment_batch` | `batchId` | `{}` |
+| 10 | `070` | `GET /payroll/payment-batches/:id/lines` | `payroll_payment_batch` *(dòng chi **không** có `object_type` riêng)* | `batchId` | `{ rowCount }` |
+| 11 | `071` | `GET /payroll/payment-batches/:id/export` | `payroll_payment_batch` | `batchId` | `{ rowCount, format:'xlsx' }` — **không** số TK |
+| 12 | `073` | `GET /payroll/budgets` | `payroll_budget` | **NULL** | `{ fiscalYear, orgUnitId?, rowCount }` |
+| 13 | `078` | `GET /payroll/overview` | `payroll_report` | **NULL** | `{ reportCode:'overview' }` |
+| 14 | `079` | `GET /payroll/overview/reminders` | `payroll_report` | **NULL** | `{ reportCode:'overview.reminders' }` |
+| 15 | `081` | `GET /payroll/reports/:reportCode` | `payroll_report` | **NULL** *(`reportCode` KHÔNG phải UUID)* | `{ reportCode, filters, rowCount }` |
+| 16 | `082` | `GET /payroll/reports/:reportCode/export` | `payroll_report` | **NULL** | `{ reportCode, filters, rowCount, format:'xlsx' }` |
+| 17 | `083` | `GET /payslips/:id/pdf` | `payslip` | `payslipId` | `{ format:'pdf' }` |
+| 18 | `085` | `POST /payroll-periods/:id/payslips/pdf-batch` | `payroll_period` | `payrollPeriodId` | `{ payslipCount, format:'zip' }` |
+
+> **Hai `object_type` MỚI của bảng này là lý do §12.1 cấp 10 giá trị chứ không phải 8**: `payroll_employee` (hàng 1–2) và `payroll_report` (hàng 13–16). Cả hai **không ứng với bảng nào** — đó chính là lý do chúng bị bỏ sót ở bản nháp: người viết đi từ danh sách BẢNG, còn audit đi từ danh sách ĐƯỜNG ĐỌC. QA có census: **mọi mã trong bảng này phải có đúng một `object_type` thuộc danh sách ĐÓNG §12.1**, so theo MÃ route, không theo tên hàm.
 
 **KHÔNG audit lượt đọc**: `065` (`/me/payroll-advances`) · `084` (PDF phiếu của mình) · `080` (danh mục báo cáo — metadata, không số liệu) · `054` (xem trước mẫu — dữ liệu giả do client gửi). Cùng một luật với `/me/payslips*` của v1: **tự xem của mình không phải sự kiện an ninh**, và ghi thì đẻ nhiễu che mất lượt xem đáng ngờ thật.
 
@@ -1335,7 +1440,7 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 | --- | --- | --- |
 | Số **câu truy vấn** của một lượt `calculate` | **O(1) theo số nhân sự** | đọc đầu vào 1 lượt · đọc mẫu+thành phần 1 lượt · đọc tỉ lệ 1 lượt · đọc NPT 1 lượt · **ghi 1 lượt** (`INSERT … ON CONFLICT` bind mảng). Ca QA **đếm CÂU SQL**, không đếm builder (`nplus1-test-must-count-queries-not-builders`) |
 | Đánh giá công thức | **≤ 2ms/dòng** (p95) với mẫu 120 thành phần | 500 dòng ⇒ < 1s; cộng I/O vẫn trong trần 5s |
-| Gross-up | ≤ 30 vòng/dòng, **chia sẻ chung ngân sách node** của dòng đó (§13.8) | hồ sơ NET **không** được phép tốn gấp 30 lần |
+| Gross-up | ≤ **30 vòng**/dòng; mỗi vòng ≤ **25.000** node (`BUDGET_PER_PASS`), **tổng cả dòng ≤ 775.000** node (`BUDGET_PER_LINE` = 25.000 × 31) — §13.6 C · §13.8 | hai trần **đồng thời**: trần-mỗi-lượt giữ chi phí một vòng bằng hồ sơ GROSS, trần-tổng chặn hồ sơ NET ngốn 31 lần mà vẫn «trong hạn». **KHÔNG** dùng một trần 25.000 chung cho cả 30 vòng — con số đó làm hồ sơ NET **bất khả thi về toán học** |
 | Báo cáo (081) | < 2s cho 12 kỳ × 500 nhân sự; > 50.000 dòng ⇒ 422 031 | SQL set-based; **KHÔNG cache** (§18.1 D) |
 | PDF một phiếu (083/084) | < 1,5s | sinh từ snapshot, không tính lại |
 | PDF hàng loạt (085) | chạy nền, trả signed-URL; ≤ 2.000 phiếu | > trần ⇒ 422 031 |
@@ -1391,7 +1496,7 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 | Tenant | `rls-tenant-isolation-tester` xanh cho cả 7 bảng trên `LANE_DB`; composite tenant FK bổ sung không làm `fk-tenant-census`/`xtenant-fk-ratchet` đỏ |
 | NOTI | 4 event seed đúng catalog (`DedupeKey`); CHECK nới **cả hai bảng**; payload **không có số tiền** (ca assert tường minh); 020 gửi lại được sau reject→submit lần hai (khoá theo LẦN gửi); 023 gửi đúng từng `payslips.user_id` |
 | Nối ATT | `calculate` khi kỳ công `open` → **409 002**; sau khi khoá kỳ công → 200 (ca ALLOW đối chứng). **KHÔNG viết ca «kỳ lương Locked chặn chỉnh công»** — kỳ công đã bất biến từ trước nên ca DENY đó xanh-rỗng và không dựng được ca ALLOW đối chứng (§3.5, bẫy `deny-cases-vacuous-without-allow-case`) |
-| Validate | Zod mirror CHECK DB **hai chiều đúng bằng** (7 trạng thái kỳ · 3 trạng thái thưởng/phạt · **7** `item_type` — gồm `adjustment` · `period_month`); trần Zod ≠ trần service không đẻ mã chết |
+| Validate | Zod mirror CHECK DB **hai chiều đúng bằng** (🔁 **v2: 8** trạng thái kỳ *(v1: 7)* · 3 trạng thái thưởng/phạt · **7** `item_type` — gồm `adjustment` · `period_month`); trần Zod ≠ trần service không đẻ mã chết |
 | Thu hồi di sản | 16 cặp GỠ có 0 hàng ở **cả ba** bảng `permissions`/`role_permissions`/**`object_permissions`**; `hr-manager` không còn hàng `object_permissions` nào trên `view-payslip`; `view-payslip`/`view-own-payslip`/`acknowledge-own-payslip` còn đúng grant §9g; **`permission-admin.int-spec.ts` vẫn xanh**; **nhân viên mở phiếu CỦA MÌNH ra 200, không 403** (chốt `objectGrantRequired=false` — §18) |
 | Test di sản phải sửa | **6 file** ở DB-13 §10.1 (`bonus-penalty-transition` · `payslip-acknowledgement-transition` · `payslip-appendonly` · `rls-registry` fixture · **`pgbouncer-tenant-isolation`** · `demo-seed-full.mjs`) phải **được sửa, KHÔNG được xoá** — `payslip-appendonly.int-spec.ts` là ca ghim bất biến #2 |
 
@@ -1402,7 +1507,11 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 **A. Đối soát SỐ — không có ca nào thay được**
 
 1. **Fixture đối soát tay, khớp TỪNG ĐỒNG**: ≥ 1 nhân sự **GROSS** đủ mọi khoản (lương cơ bản · phụ cấp định mức · thưởng · phạt · nghỉ không lương · BHXH/BHYT/BHTN · KPCĐ · đoàn phí · TNCN với 2 NPT · điều chỉnh tay) và ≥ 1 nhân sự **NET** đủ mọi khoản. Bảng tính tay đính kèm WO; lệch 1 đồng là ĐỎ.
-2. **Phần DN KHÔNG vào lương NV**: ca ghim `TONG_KHAU_TRU` **không** chứa `statutory_employer`, và `net` của cùng fixture **không đổi** khi tỉ lệ DN đổi. Thiếu ca này, lỗi «cộng nhầm phần DN» đi qua **mọi** bất biến SQL (§13.7 C).
+2. **Bốn nút tổng hợp — ca ghim RIÊNG cho từng vế đã sửa ở §13.6 E** *(fixture của ca 1 dựng theo bảng đó, nên bốn vế này phải có ca ĐỘC LẬP, không dựa vào «tổng khớp»)*:
+   - (a) **phần DN không vào lương NV**: `TONG_KHAU_TRU` **không** chứa `statutory_employer`; `net` **không đổi** khi tỉ lệ DN đổi (§13.7 C);
+   - (b) 🔴 **`tax_exempt` ĐƯỢC TRẢ**: fixture có một khoản miễn thuế; assert nó **có mặt trong `TONG_THU_NHAP`** ⇒ vào `net`, **và** bị trừ khỏi `thu_nhap_tinh_thue`. Ca âm: bỏ nó khỏi `TONG_THU_NHAP` ⇒ `net` tụt đúng bằng khoản đó mà `net ≥ 0` vẫn xanh;
+   - (c) 🔴 **đoàn phí KHÔNG giảm thuế**: fixture có đoàn viên; assert `DOAN_PHI` **có** trong `TONG_KHAU_TRU` nhưng **KHÔNG** trong `TONG_BH_NV`; bật/tắt `joins_union` ⇒ `thu_nhap_tinh_thue` **không đổi**, chỉ `net` đổi;
+   - (d) 🔴 **`pit_payer = 'COMPANY'`**: cùng fixture, đổi mỗi `pit_payer` ⇒ `TONG_KHAU_TRU` **giảm đúng bằng** khoản thuế, `net` **tăng đúng bằng** khoản thuế, và thuế **vẫn** có mặt trong `component_values_json`.
 3. **Số lẻ thật**: fixture cố ý dùng lương/tỉ lệ cho ra số lẻ (`1.005`, `0.385`, `19.999.999,99`) — fixture toàn số tròn làm ca «cấm `Number`» xanh-rỗng (§13.6 F).
 4. **Tỉ lệ luật định versioned**: hai bản `effective_from` khác nhau ⇒ kỳ 09 dùng bản ≤ 30/09; ca ÂM: xoá bản hiệu lực ⇒ **422 022**, kỳ **không** đổi trạng thái.
 
@@ -1411,8 +1520,8 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 5. **Fuzz parser**: chuỗi ngẫu nhiên · ngoặc lồng 10.000 cấp · số 500 chữ số · unicode · **byte NUL thật** · chuỗi giống JS (`constructor`, `__proto__`, `process.exit()`). Yêu cầu: **luôn 4xx có mã, không 500, không treo, không tràn stack**.
 6. **Vòng**: trực tiếp (`A → A`) · gián tiếp (`A → B → C → A`) · **qua nút tổng hợp** (`earning` tham chiếu `TONG_THU_NHAP`) ⇒ **422 019** với chu trình đầy đủ.
 7. **Vòng sinh ra do GHI SONG SONG**: hai lượt sửa hai thành phần, mỗi bản riêng không vòng, hợp lại thì có ⇒ lượt `calculate` phải bắt (§13.6 E — kiểm ở **cả hai** thời điểm).
-8. **Shadowing**: đặt `code = 'SYS_GROSS'` hoặc trùng mã seed ⇒ **409 024** `component-code-reserved`.
-9. **Ngân sách node**: mẫu 120 thành phần × công thức 200 node ⇒ vượt ⇒ **422 020** `formula-budget-exceeded`, **tái lập 100%** (không đo đồng hồ).
+8. **Shadowing — BA nhánh, thiếu nhánh nào là lỗ đó mở**: (a) đặt `code = 'SYS_GROSS'`/`TL_X`/`GT_X` ⇒ **409 024** `component-code-reserved` (`code_shape_check`); (b) đặt `code` trùng mã seed đang sống ⇒ **409 024** `component-code-exists` (`company_code_uq`); (c) 🔴 **nhánh XOÁ MỀM**: `UPDATE salary_components SET deleted_at = now() WHERE code = 'TONG_KHAU_TRU'` **ghi thẳng qua repository** ⇒ phải bị `salary_components_system_not_deletable` chặn ở **DB** (`23514`), rồi thử tạo lại `TONG_KHAU_TRU` với công thức tuỳ ý ⇒ **409 024**. Thiếu (c) thì bốn nút `aggregate` **che được bằng đúng hai câu SQL** — `code_shape_check` không đỡ (chúng không mang tiền tố nào) và `company_code_uq` là partial `WHERE deleted_at IS NULL`.
+9. **Hai trần ngân sách node, ca RIÊNG cho từng trần** (§13.6 C): (a) hồ sơ **GROSS**, mẫu 120 thành phần × 200 node ⇒ vượt **25.000/lượt** ⇒ **422 020**; (b) hồ sơ **NET**, mỗi lượt trong hạn nhưng 31 lượt ⇒ vượt **775.000/dòng** ⇒ **422 020**, `details[]` nêu **vòng thứ mấy**. Cả hai **tái lập 100%** (không đo đồng hồ). 🔴 **Ca đối chứng bắt buộc — trần KHÔNG được bất khả thi**: một hồ sơ `NET` với mẫu **thực tế** (~20 thành phần) hội tụ trong ≤ 30 vòng phải **XANH**, không 422. Thiếu ca này thì một trần quá chặt biến PAY-DEC-015 thành tính năng tắt mà mọi ca âm vẫn xanh.
 10. **Gross-up dao động**: công thức `IF` cố ý làm `net(g)` không đơn điệu ⇒ **422 021** sau 30 vòng, **0 dòng được ghi** (kiểm `count(payroll_period_lines) = 0` sau lỗi).
 11. **Sửa công thức sau khi tính KHÔNG đổi số**: tính kỳ → sửa công thức → **đọc lại** dòng ⇒ `component_values_json` y nguyên; **tính lại** ⇒ số đổi **và** `template_fingerprint` đổi.
 
@@ -1421,7 +1530,14 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 12. **Ma trận đầy đủ 8×8**: mọi ô ✗ ⇒ **409 001**; đặc biệt `Published → CollectingData` (reopen) ⇒ 409, `Approved → Paid` (đi tắt) ⇒ 409, `Published → Locked` (bỏ qua `Paid`) ⇒ 409.
 13. 🔴 **Ca CHỐNG HỒI QUY lớn nhất của wave — phiếu lương ở `Published`**: kỳ ở **đúng `Published`** ⇒ nhân viên `GET /me/payslips` **thấy** phiếu · `GET /me/payslips/:id` 200 · `POST …/acknowledge` 200 · `GET /me/payslips/:id/pdf` 200. Ca hiện có của v1 chạy trên kỳ `Paid` nên **vẫn xanh** khi cả bốn đường cùng sai (§13.2).
 14. **Di trú `Paid` → `Published`**: DB có hàng v1 `status='Paid'`, `paid_by IS NULL` ⇒ sau migrate, hàng đó ở `Published` và **không** vi phạm CHECK nào; ca ÂM: chạy migrate với thứ tự đảo (siết CHECK trước backfill) ⇒ phải **đỏ**, không âm thầm qua.
-15. **`complete-batch` là đường duy nhất vào `Paid`**: gọi thẳng bất kỳ route kỳ nào để set `Paid` ⇒ không tồn tại; hoàn tất đợt khi còn dòng chưa chi ⇒ **409 027**; hoàn tất hai lần ⇒ 409 027; **race** hai đợt cùng kỳ hoàn tất song song ⇒ đúng **một** thắng, bên kia 409 (không 500, không deadlock — kiểm thứ tự row-lock §13.1).
+15. 🔴 **Luật PHỦ — kỳ NHIỀU ĐỢT không được vào ngõ cụt** (§13.1). Dựng kỳ `Published` có **10 phiếu**, chia **hai đợt** 6 + 4:
+    - hoàn tất đợt #1 ⇒ **200**, đợt `Completed`, kỳ **vẫn `Published`**, body `unpaidPayees = 4` — **KHÔNG** 409, **KHÔNG** `Paid`, **KHÔNG** outbox 027;
+    - hoàn tất đợt #2 ⇒ **200**, kỳ `Paid` + `paid_by/at` NOT NULL + **đúng 1** hàng outbox 027;
+    - ⚠️ **ca ÂM chống hồi quy**: assert đợt #2 **KHÔNG** trả 409. Bản nháp cho kỳ sang `Paid` ngay ở đợt #1, khiến đợt #2 ăn `assertPeriodTransition('Paid','Paid')` ⇒ 409 001 **vĩnh viễn**, và 4 người kia **không bao giờ được ghi là đã chi** — ca cũ ghim chính lỗ đó thành hành vi đúng;
+    - hoàn tất đợt **RỖNG** (0 dòng còn hiệu lực) ⇒ **409 028** `batch-empty`, đợt **không** thành `Completed` *(đường phát duy nhất của 028 — thiếu ca này 028 là mã chết)*;
+    - còn dòng chưa chi ⇒ **409 027**; hoàn tất hai lần ⇒ **409 027**;
+    - gọi thẳng bất kỳ route kỳ nào để set `Paid` ⇒ route không tồn tại;
+    - **race** hai đợt cuối hoàn tất song song ⇒ **cả hai 200**, đúng **một** bên đẩy kỳ sang `Paid`, đúng **một** hàng outbox 027 (không 500, không deadlock — kiểm thứ tự row-lock kỳ TRƯỚC · đợt SAU, §13.1).
 16. **`PAYSLIP_PUBLISHED` phát ở `publish`, KHÔNG ở `complete-batch`**: đếm hàng outbox sau từng bước.
 
 **D. Quyền · IDOR · masking**
@@ -1429,19 +1545,26 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 17. **Ma trận allow/deny per-pair TỪNG route mới (50 route × các role)** ở **CẢ HAI tầng** (decorator + service) — census so **theo MÃ cặp**, không theo tên hàm (`two-layer-pair-census-must-be-per-route`). Bao gồm `hr` · `hr-manager` · `manager` ⇒ **403 trên toàn bộ 50 route** (0 cặp PAYROLL).
 18. **Mọi ca DENY phải có ca ALLOW song sinh** — thiếu thì deny-spec xanh-RỖNG (`deny-cases-vacuous-without-allow-case`), và ca ALLOW assert **`=== 200`**, không `.not.toBe(403)` (`allow-counter-case-not-403-lets-500-through`).
 19. **IDOR cross-employee**: nhân viên B đọc tạm ứng của A qua `/me/payroll-advances` ⇒ **không có trong danh sách**; đọc thẳng `061` ⇒ 403 (thiếu cặp); PDF phiếu của A qua `084` ⇒ **404 010**. **Cross-tenant** trên cả 11 bảng mới.
-20. **Mask số tài khoản**: `038` · `070` trả `bankAccountLast4`, **không** khoá `bankAccountNumber` — assert **vắng khoá**, không assert `null`. Chỉ `071` (tệp UNC) chứa số đầy đủ **và** đẻ đúng 1 hàng audit.
+20. **Mask số tài khoản**: `038` · `070` trả `bankAccountLast4`, **không** khoá `bankAccountNumber` — assert **vắng khoá**, không assert `null`. Chỉ `071` (tệp UNC) chứa số đầy đủ **và** đẻ đúng 1 hàng audit. 🔴 **Ba ca DENY của `071` — thiếu MỘT cặp là 403**: role có `manage:payment-batch` nhưng thiếu `export:payroll` ⇒ **403**; thiếu `view-payslip:payslip` ⇒ **403**; có cả ba ⇒ **200 và tệp có số TK đầy đủ** (ca ALLOW song sinh, assert `=== 200`). Ca đầu là ca chống hồi quy quan trọng nhất của nhóm này: bản nháp gác `071` bằng **đúng một cặp GHI**, cho một role chỉ giữ `manage:payment-batch` tải được **payload nhạy cảm nhất toàn hệ thống**.
 21. **`taxCode` vắng khoá** ở `037` khi caller chỉ có `('view','payroll-employee')`; **có mặt** khi thêm `('view','salary-profile')` — hai ca đối xứng.
 22. **Sàn scope Company** của `078`/`079`/`081`/`073` và widget 002/003 ép ở **HAI tầng** (metadata + data): grant scope `Department` ⇒ **không serve**, kể cả đường metadata.
 23. **Allowlist capability**: sau seed, `/auth/me` của `payroll-officer` và `company-admin` trả **đủ 30 cặp sensitive**; gỡ một cặp khỏi **một** trong hai danh sách ⇒ ca đỏ (ghim cả hai, không chỉ một).
 24. **Đối chứng «duyệt mù»**: gỡ `('view','payroll-advance')` khỏi role giữ `('approve','payroll-advance')` lúc runtime ⇒ ca ghi nhận rủi ro còn lại (verify migration chỉ đúng lúc migrate — §11.3 ghi chú 7).
+25. 🔴 **Rò tiền qua route GHI (v2)** — luật §11.3 ghi chú 8, **nhóm ca riêng, không gộp vào ma trận 17**. Với role chỉ giữ **`manage:X` mà KHÔNG giữ `view:X`** (dựng bằng cách gỡ cặp `view` lúc runtime):
+    - gọi **cả bảy** route GHI `039 · 060 · 062 · 067 · 069 · 074 · 075` ⇒ response **200** nhưng body **KHÔNG chứa khoá tiền nào** — assert theo **danh sách khoá cấm** (`amount` · `plannedAmount` · `totalNet` · `gross` · `net` · `bankAccountNumber` · `bankAccountLast4`), **vắng khoá**, không phải `null`;
+    - cùng role gọi route ĐỌC tương ứng (`038 · 059 · 061 · 066 · 068 · 070 · 073`) ⇒ **403** — tức **không đường nào** đọc được tiền;
+    - ca ALLOW song sinh: role có **cả hai** cặp ⇒ route ĐỌC trả **200 CÓ** số tiền (thiếu vế này thì cả nhóm xanh-RỖNG — `deny-cases-vacuous-without-allow-case`);
+    - `072` trả `{ periodStatus, unpaidPayees }` ⇒ assert `unpaidPayees` là **số người**, và **không** có khoá tiền nào.
+
+    Không có nhóm ca này, sáu cặp `view`/`manage` mới của v2 mất đúng cái luật mà v1 đã dựng cho `calculate`/`adjust-line`, và **không cổng nào chạm tới đường rò** (§14/§21 cấm ca mask per-row).
 
 **E. Dữ liệu · di trú · nghiệp vụ**
 
-25. **NPT chồng lấp** ⇒ **409 032** từ `EXCLUDE` ở DB (không phải chỉ từ service): ghi thẳng qua repository cũng phải bị chặn.
-26. **Expand-contract `allowances` → `salary_profile_items`**: sau DB-1, **cả hai** nguồn đọc được và **khớp nhau**; ca ghim cột `allowances` **chưa** bị gỡ.
-27. **Import 076**: tệp có 1 dòng sai ⇒ **422 030**, **0 hàng** được ghi (toàn tệp hoặc không gì); dòng import vào `Pending`, **không** tự duyệt.
-28. **Tạm ứng khấu trừ đúng một lần**: duyệt → tính kỳ → `consumed_at` set; tính lại cùng kỳ ⇒ nhả rồi gộp lại, **không** nhân đôi; kỳ khác **không** đụng hàng đã consume.
-29. **Coverage `apps/api/src/payroll/` ≥ 85%** trên **LANE_DB** (`bash harness/check.sh --all --lane-db=s15payroll`), và **census mã lỗi theo MÃ**: cả **33** mã `PAYROLL-ERR-*` có ≥ 1 ca (`coverage-high-but-error-code-untested`).
+26. **NPT chồng lấp** ⇒ **409 032** từ `EXCLUDE` ở DB (không phải chỉ từ service): ghi thẳng qua repository cũng phải bị chặn.
+27. **Expand-contract `allowances` → `salary_profile_items`**: sau DB-1, **cả hai** nguồn đọc được và **khớp nhau**; ca ghim cột `allowances` **chưa** bị gỡ. Đường GHI: `POST /salary-profiles` (020) với `items[]` ⇒ ghi **cả hai** nguồn; `PATCH` (022) với `items[]` ⇒ **đặt lại toàn bộ** trong một tx; hai dòng cùng `component_code` ⇒ **409 014** `profile-item-duplicate`.
+28. **Import 076**: tệp có 1 dòng sai ⇒ **422 030**, **0 hàng** được ghi (toàn tệp hoặc không gì); dòng import vào `Pending`, **không** tự duyệt.
+29. **Tạm ứng khấu trừ đúng một lần**: duyệt → tính kỳ → `consumed_at` set; tính lại cùng kỳ ⇒ nhả rồi gộp lại, **không** nhân đôi; kỳ khác **không** đụng hàng đã consume.
+30. **Coverage `apps/api/src/payroll/` ≥ 85%** trên **LANE_DB** (`bash harness/check.sh --all --lane-db=s15payroll`), và **hai census theo MÃ**: (a) cả **33** mã `PAYROLL-ERR-*` có ≥ 1 ca (`coverage-high-but-error-code-untested`) — gồm **028** (`batch-empty`, ca 15) và mọi `kind` mới của 014/024/027; (b) mỗi **TÊN ràng buộc** trong bảng `constraint → SQLSTATE → mã` của §12.1 có ≥ 1 ca **kích hoạt ràng buộc THẬT ở DB**, không mock.
 
 ---
 
@@ -1568,7 +1691,7 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 | 1 | **SPEC-11** (file này) | §1 · §3.3/§3.5 chú v2 · §3.9–§3.12 · §5.1b · §5.2b · §8.2 · §9.1 · §10.1b · §10.2 · §11.3 · §12.1 · **§13.1 (FSM 8 — THAY)** · **§13.2 (THAY)** · §13.6–§13.8 · §15.1 · **§17.1 (+ 023 đổi điều kiện phát — THAY)** · §18.1 · §19.1 · §21.1 · §23.2 · §24.1 | — |
 | 2 | **SPEC-01** | **§17.15 → 8 trạng thái** (khuôn `\`\`\`text` + một blockquote, dòng 1496–1508) · **§17.16** sửa điều kiện `Published` (dòng 1510–1518) · **§12.8** sửa câu «FSM 7 trạng thái» + phạm vi v2 + bỏ «PDF = Phase sau» (dòng 803–833, câu phạm vi ở 825) · **§20.2** cấp NOTI-EVENT-024..027 (bảng dòng 1689–1719) · **§10.6** ghi `payroll-officer` **không** giữ `manage:statutory-rate`/`manage:payroll-budget` (dòng 450–465) · bảng liên-module dòng 2107 thêm WIDGET-002/003 | dòng đo 11/09/2026 |
 | 3 | **SPEC-08** | **§15.0** thêm 4 hàng 024–027 (bảng dòng 1229–1253, blockquote dải ở 1255 đổi «028+») · **§15.10** thêm 4 event + ghi chú «CHECK hai bảng đã nới ở `0566`, v2 NO-OP» (dòng 1399–1411) | dòng đo 11/09/2026 |
-| 4 | **DB-13** | **§12–§14 mới**: 3 ALTER · 11 bảng đích · enum v2 · index · RLS/GRANT · kế hoạch migration `0570+` (DB-1) và lô DB-2 · seed catalog + tỉ lệ + mẫu mặc định · **§7 enum mirror contracts HAI CHIỀU** (`payrollPeriodStatusEnum` **7 → 8**) | — |
+| 4 | **DB-13** | **§12–§14 mới**: **ALTER 3 bảng — 2 ở DB-1 (§12.1 + §12.4) · 1 ở DB-2 (§12.3)** · 11 bảng đích · enum v2 · index · RLS/GRANT · kế hoạch migration `0570+` (DB-1) và lô DB-2 · seed catalog + tỉ lệ + mẫu mặc định · **§7 enum mirror contracts HAI CHIỀU** (`payrollPeriodStatusEnum` **7 → 8**) | — |
 | 5 | **API-18** | **§4.1b** nhóm API v2 · **§5b** danh sách 50 endpoint · **§5.1b** ràng buộc hiện thực v2 · **§4.2** viết lại theo PARK-PAYROLL-002 · **§5.2** đánh dấu 036–085 «chưa hiện thực» | — |
 | 6 | **permission-matrix** | **§9g MỞ RỘNG tại chỗ** (PAY-DEC-011 — **KHÔNG** tạo §9h; §9g là tiểu mục cuối, dòng 585–623, §9g.1 ở 625–657): thêm **§9g.2** bảng 17 cặp v2 + ma trận seed **+31 hàng ⇒ 63** + hai điều kiện verify mới | dòng đo 11/09/2026 |
 | 7 | **IMPLEMENTATION-02** | **§8.21 EPIC-20** thêm **IMP02-STORY-191..204** (PL-11..24) theo khuôn 6 cột (dòng 815–826) · **§9** thêm hàng **Sprint 15** (bảng dòng 849–861, Sprint 13 là hàng cuối — **không có Sprint 14**) + nối câu vào blockquote dòng 847 · **sửa dòng tổng 188** («190 story / 1339 point») | dòng đo 11/09/2026 |
@@ -1582,8 +1705,8 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 
 **Nợ để lại cho WO sau của wave S15** *(ghi ở đây để không trôi)*:
 
-- (a) `S15-PAYROLL-DB-1` — 3 ALTER + 7 bảng (track A/B); **RLS+FORCE TRƯỚC backfill**; **backfill `Paid → Published` + thứ tự 4 bước của §13.1**; `cleanupTenants()` thêm 7 bảng **đúng thứ tự con→cha**; `RetentionService.PROTECTED_TABLES` thêm 7 bảng; seed catalog thành phần + **mẫu mặc định tái tạo công thức v1** + bản tỉ lệ luật định (số PAY-DEC-014, ghi rõ «owner xác nhận 02/09»); contracts `payroll.ts` mirror **hai chiều** (`payrollPeriodStatusEnum` 7 → **8**); UNION-ADD 8 giá trị `audit_logs.object_type`.
-- (b) `S15-PAYROLL-DB-2` — 4 bảng (track C) + `paid_by/at` + 3 CHECK + NOTI-EVENT-024..027 ở **cả hai** bảng catalog.
+- (a) `S15-PAYROLL-DB-1` — **ĐÚNG 2 ALTER (§12.1 `salary_profiles` + §12.4 `payroll_period_lines`)** + 7 bảng (track A/B); **RLS+FORCE TRƯỚC backfill**; `cleanupTenants()` thêm 7 bảng **đúng thứ tự con→cha**; `RetentionService.PROTECTED_TABLES` thêm 7 bảng; **đăng ký `rls-registry` + fixture 7 bảng CÙNG COMMIT**; seed catalog thành phần + **mẫu mặc định tái tạo công thức v1** + bản tỉ lệ luật định (số PAY-DEC-014, ghi rõ «owner xác nhận 02/09»); UNION-ADD **10** giá trị `audit_logs.object_type` (§12.1 ghi chú 4). ⛔ **KHÔNG chạm `payroll_periods`** — không `template_id`, không `paid_by/at`, không nới `status_check`, **không** backfill `Paid → Published`, **không** mirror `payrollPeriodStatusEnum` 7 → 8.
+- (b) `S15-PAYROLL-DB-2` — **ALTER thứ ba: §12.3 `payroll_periods` ĐỦ 4 BƯỚC theo đúng thứ tự** (`template_id` · `paid_by/at` → nới `status_check` 8 giá trị → **UPDATE `Paid` → `Published`** → rồi mới siết `published_pair_check` + thêm `paid_pair_check`) — bốn bước là **MỘT chuỗi nguyên tử, một migration, một WO**: tách bước (2) khỏi bước (3) là `UPDATE` vi phạm CHECK 7-giá-trị ⇒ **`23514` giữa lane migration**. Cùng WO: 4 bảng (track C) + contracts `payroll.ts` mirror **hai chiều** (`payrollPeriodStatusEnum` 7 → **8**) **cùng commit với bước (2)** + composite FK `payroll_periods.template_id → payroll_templates` (phải **sau** bước A của DB-1) + NOTI-EVENT-024..027 ở **cả hai** bảng catalog + đăng ký `rls-registry` cho 4 bảng.
 - (c) `S15-PAYROLL-BE-1..5` — **APPEND 17 cặp vào CẢ HAI danh sách** `SENSITIVE_CAPABILITY_ALLOWLIST` + `SENSITIVE_SCREEN_GATE_PAIRS`; siết `MIN_COVERED_COUNT` route-http **mỗi WO**; map `23P01`/`23505` mới → 409 đúng mã.
 - (d) `S15-PAYROLL-FE-1..4` — `.optional()` mọi trường tiền **và** `bankAccountLast4`/`taxCode` (server mask = vắng khoá); `useCanExact` cho widget cặp sensitive; sidebar nhóm gập ẩn khi 0 con hiển thị.
 - (e) **Nợ NGOÀI wave (không tự làm)**: gỡ cột `allowances` của `salary_profiles` (vế **contract** của expand-contract) — WO riêng sau khi DB-1 chạy thật và đo 0 đường đọc còn lại.
@@ -1609,15 +1732,16 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 - [x] **Đo trước khi cấp phát** (11/09/2026), không suy đoán: `NOTI-EVENT` dừng ở 023 ⇒ v2 lấy **024–027** · journal `idx 236 / 0569` ⇒ migration **`0570+`** (PAY-DEC-011 ghi «0569» đã **lỗi thời**, đính chính ở §1) · `IMP02-STORY` max **190** ⇒ v2 lấy **191–204** · `PAY-SCREEN` max **006**, `PAYROLL-API` max **035**, `PAYROLL-ERR` max **017**, `PAYROLL-WIDGET` max **001**
 - [x] **Số cấp phát ĐÓNG và tự-nhất-quán** giữa §5.1b ↔ §8.2 ↔ §9.1 ↔ §11.3 ↔ §12.1 ↔ §15.1 ↔ §17.1: **11 bảng · 11 màn · 50 route · 16 mã lỗi · 17 cặp · 4 event · 2 widget · 8 trạng thái · 11 route Idempotency**
 - [x] **Bốn số của hồ sơ wave được ĐÍNH CHÍNH tại chỗ** (§5.1b): «10 bảng» → **11** · «~40 route» → **50** · «PAY-SCREEN-007..016» → **007..017 (11 màn)** · cặp `export:payslip-pdf` → **không cấp** (PAY-DEC-019 đã ký đường khác)
-- [~] Sáu chỗ v2 **THAY** v1 lập **bảng** ở §1 (§13.1 · §13.2 · §17 · §3.5 · §15 hàng 014 · §15 hàng 031/032/033) — ⚠️ **bảng đúng, nhưng dấu 🔁 TẠI CHỖ chưa đủ**: plan-reviewer vòng 1 (B2) đo ra **8 chuỗi** còn ghi «7 trạng thái / 7 giá trị / `Approved → Paid`» chưa đánh dấu, trong đó **§17 dòng 1226** — chính chỗ bảng §1 khẳng định đã đánh. Danh sách 8 chuỗi + cách kiểm: [review vòng 1](<../plans/S15-PAYROLL-DOC-1-review.md>) mục 2 hàng 2
+- [x] Sáu chỗ v2 **THAY** v1 lập **bảng** ở §1 (§13.1 · §13.2 · §17 · §3.5 · §15 hàng 014 · §15 hàng 031/032/033), **và dấu 🔁 TẠI CHỖ đã đủ**: plan-reviewer vòng 1 (B2) đo ra **8 chuỗi** còn ghi «7 trạng thái / 7 giá trị / `Approved → Paid`» chưa đánh dấu — **đã vá cả 8** (11/09): SPEC-11 §8 bảng cấu trúc (`status` 8 giá trị) · §9.1 PAY-SCREEN-001 (chip 8 giá trị) · §10 PAYROLL-FUNC-010 (`Approved → Published`) · §12 PAYROLL-ERR-004 (`period-terminal` gồm `Published`) · §17 bảng event (`PAYSLIP_PUBLISHED` phát ở `Approved → Published`) · §21 hàng Validate (8 trạng thái kỳ) · DB-13 §2 + §6.3 tiêu đề/cột `status` + khối CHECK (ba dòng chỉ về §12.3). Chuỗi «7 trạng thái» còn lại **chỉ** ở §1 bảng đối chiếu · §22 PAY-DEC-005 · §5.1 — cả ba đều gắn nhãn «v1» có chủ đích
 - [x] **Tự-kiểm chéo §12.1 ↔ §15.1**: mọi mã lỗi §15.1 viện dẫn đều tồn tại ở §12.1 với **đúng HTTP và đúng `kind`** — vòng kiểm này phát hiện route 056/058 đang gán «409, kind của 022» trong khi 022 là **422** ⇒ đã cấp **PAYROLL-ERR-033** (409) cho xung đột bản tỉ lệ, thay vì bẻ cong một mã sẵn có
 - [x] Ranh giới TS↔SQL của PAY-DEC-012 chốt **thành bảng** (§3.9), kèm câu chặn cách đọc sai «clamp ở JS được rồi»
 - [x] Grammar máy công thức là **danh sách ĐÓNG** có EBNF + giới hạn tĩnh + **ngân sách node tất định** (không timeout đồng hồ làm cổng)
 - [x] Hai bẫy di trú im lặng nhất được viết thành **ca test bắt buộc**: `Paid → Published` backfill (§13.1) và bộ lọc `/me/payslips` (§13.2, ca 13 của §21.1)
-- [ ] 🛑 **`plan-reviewer` đối kháng — VÒNG 1 = BLOCK, 14 BLOCKER** (11/09/2026). Reviewer **đã khai điều kiện tự-mở-cổng**: vá đủ 14 mục ⇒ **PASS, KHÔNG cần vòng 2**. Báo cáo đầy đủ + checklist kiểm-được-bằng-grep: **[`docs/plans/S15-PAYROLL-DOC-1-review.md`](<../plans/S15-PAYROLL-DOC-1-review.md>)**.
-  - Bốn cái nặng nhất: **B6** ngân sách node chia chung 30 vòng ⇒ hồ sơ **NET bất khả thi về toán học** (PAY-DEC-015 không chạy được) · **B7** đoàn phí bị trừ khỏi thu nhập tính thuế (**sai cấu trúc**, và fixture đối soát tay sẽ dựng theo chính spec sai này) · **B5** kỳ ≥2 đợt chi trả vào **ngõ cụt vĩnh viễn**, `ERR-028` là **mã chết**, và ca §21.1 số 15 **ghim lỗ đó thành hành vi đúng** · **B9** 4 nút `aggregate` khai `fixed_amount=0` là **fail-open im lặng** (`net=0` hoặc `net=gross` mà mọi bất biến SQL vẫn xanh).
-  - Reviewer **đếm lại độc lập 10 danh sách con số ⇒ KHỚP**; chỉ 3 chỗ lệch (B1 «3 ALTER» · H7 · H8).
-- [ ] 🛑 **CỔNG `S15-PAYROLL-DB-1` ĐANG ĐÓNG** — không mở WO code của track v2 cho tới khi 14 mục ở §2 của file review được vá.
+- [x] ✅ **`plan-reviewer` đối kháng — VÒNG 1 = BLOCK, 14 BLOCKER (11/09/2026) → ĐÃ VÁ ĐỦ 14/14 cùng ngày ⇒ PASS theo ĐIỀU KIỆN TỰ-MỞ-CỔNG reviewer đã khai, KHÔNG mở vòng 2.** Báo cáo + checklist kiểm-được-bằng-grep + trạng thái từng mục: **[`docs/plans/S15-PAYROLL-DOC-1-review.md`](<../plans/S15-PAYROLL-DOC-1-review.md>)** §2.
+  - Bốn cái nặng nhất và cách vá: **B6** ngân sách node — tách **HAI trần** `25.000/lượt` + `775.000/dòng` (§13.6 C · §13.8 · §19.1), hồ sơ NET chạy được, kèm **ca đối chứng** hồ sơ NET thực tế phải XANH · **B7** ba định nghĩa nút tổng hợp sửa **cấu trúc** (§13.6 E ↔ §13.7 C/D/E khớp từng chữ): `TONG_THU_NHAP` gồm `tax_exempt`, `TONG_BH_NV` lọc theo cột mới **`pit_deductible`** (đoàn phí ra), `TONG_KHAU_TRU` cộng `tax` **chỉ khi** `pit_payer='EMPLOYEE'` · **B5** chốt **LUẬT PHỦ** (§13.1): kỳ nhiều đợt, `Paid` chỉ khi phủ đủ; `ERR-028` đổi nghĩa sang `batch-empty` — **có đường phát thật**; ca §21.1 số 15 viết lại kèm **ca ÂM** đợt #2 không được 409 · **B9** 4 nút `aggregate` khai **`value_type='engine'`** (giá trị thứ tư) thay `fixed_amount=0`, cộng CHECK hai chiều `(value_type='engine') = (kind='aggregate')`.
+  - Reviewer **đếm lại độc lập 10 danh sách con số ⇒ KHỚP**; 3 chỗ lệch đã sửa: B1 (ownership §12.3 → DB-2, DB-1 còn **2 ALTER**) · H7 · H8.
+  - Hai chỗ **mở rộng** kéo theo từ các mục trên: `audit_logs.object_type` **+10 ⇒ 14** (thêm `payroll_employee` · `payroll_report` — §12.1 · §18.1 B có bản đồ route → `object_type`/`object_id` đủ 18 đường), và §21.1 nhóm D thêm ca **25** «Rò tiền qua route GHI (v2)» ⇒ nhóm E đánh số lại **26–30**.
+- [x] ✅ **CỔNG `S15-PAYROLL-DB-1` ĐÃ MỞ** (11/09/2026) — 14/14 mục của §2 file review đã vá và kiểm bằng grep. WO kế tiếp theo track: `S15-UI-SHELL-1` (không phụ thuộc DB) và `S15-PAYROLL-DB-1`.
 - [ ] DB-13 v2 · API-18 v2 · §9g.2 · SPEC-01 · SPEC-08 · EPIC-20 · UI-07 · README · erd-current · RELEASE-14 · DECISIONS-14 · harness đồng bộ (§23.2)
 
 ---

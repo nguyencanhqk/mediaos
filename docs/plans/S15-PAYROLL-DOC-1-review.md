@@ -1,6 +1,24 @@
 # S15-PAYROLL-DOC-1 — plan-reviewer đối kháng, VÒNG 1 (11/09/2026)
 
-> **VERDICT: BLOCK — 14 BLOCKER.** Reviewer đã khai **ĐIỀU KIỆN TỰ-MỞ-CỔNG**: vá đủ 14 mục ở §2 ⇒
+> ## ✅ TRẠNG THÁI CUỐI: **PASS — 14/14 mục đã vá (11/09/2026). CỔNG `S15-PAYROLL-DB-1` ĐÃ MỞ.**
+>
+> Vá theo **ĐIỀU KIỆN TỰ-MỞ-CỔNG** reviewer khai ở §2 ⇒ **KHÔNG mở vòng 2** (đúng đề nghị của reviewer:
+> `red-zone-wo-cost-profile` · `plan-review-rounds-inject-new-holes`). Bảng §2 dưới đây có cột **Trạng thái**
+> ghi nơi vá của từng mục; §4 là bộ lệnh grep nghiệm thu chạy lại được.
+>
+> **Hai thay đổi LAN RỘNG kéo theo, WO sau phải biết:**
+>
+> 1. `audit_logs.object_type` cấp **10** giá trị mới (không phải 8) ⇒ tổng **14** — thêm `payroll_employee`
+>    và `payroll_report`. SPEC-11 §18.1 B giờ là **bảng route → `object_type` + `object_id`** đủ 18 đường.
+> 2. §21.1 nhóm D thêm ca **25** («Rò tiền qua route GHI v2») ⇒ nhóm E đánh số lại **26–30**.
+>
+> **Ba quyết định thiết kế MỚI (không có trong bản BLOCK, sinh ra khi vá — đọc trước khi code):**
+> `salary_components.value_type` có giá trị thứ tư **`engine`** · `salary_components.pit_deductible` (BOOLEAN)
+> · **LUẬT PHỦ** cho `Published → Paid` khi kỳ có nhiều đợt chi trả (SPEC-11 §13.1).
+
+---
+
+> **VERDICT BAN ĐẦU: BLOCK — 14 BLOCKER.** Reviewer đã khai **ĐIỀU KIỆN TỰ-MỞ-CỔNG**: vá đủ 14 mục ở §2 ⇒
 > **coi như PASS, KHÔNG cần vòng 2**. Đây là khuôn mà `S13-PAYROLL-DOC-1` đã dùng thành công (SPEC-11 §24).
 >
 > **Phạm vi review:** `docs/spec/SPEC-11 PAYROLL.md` phần v2 · `docs/DB/DB-13 PAYROLL Database Design.md` §12–§15.
@@ -37,24 +55,24 @@
 
 ## 2. ĐIỀU KIỆN TỰ-MỞ-CỔNG — vá đủ 14 mục ⇒ PASS, KHÔNG cần vòng 2
 
-| # | Vá gì | Kiểm bằng |
-| --- | --- | --- |
-| 1 | SPEC-11 §23.2(a): bỏ «backfill `Paid → Published` + 4 bước», «3 ALTER» → «**2 ALTER** (§12.1+§12.4)»; §23.2(b) thêm «§12.3 đủ 4 bước»; `backlog.mjs` DB-1 bỏ `template_id`, DB-2 nhận | `grep "3 ALTER"` = 0 hit |
-| 2 | Sửa **8 chuỗi** của B2 + bỏ tick sai ở §24.1 | `grep "7 trạng thái\|7 giá trị.*17.15\|Approved → Paid"` chỉ còn ở §1 bảng đối chiếu · §22 PAY-DEC-005 · §5.1 (đều gắn nhãn «v1») |
-| 3 | Thêm bảng **route → `object_type` + `object_id`** cho đủ 18 đường §18.1 B; UNION-ADD `payroll_report` (+`payroll_employee`); đồng bộ 3 chỗ con số | mỗi mã trong §18.1 B có đúng một `object_type` thuộc danh sách UNION-ADD |
-| 4 | Cấp bề mặt API cho `salary_profile_items`: đánh 🔁 §15.1 hàng 020/022 (payload `items[]`) **hoặc** cấp 2 route + đính chính 50→52; cấp `kind` cho `23505` | `salary_profile_items` xuất hiện ≥1 lần trong §15.1 |
-| 5 | Chốt mô hình đợt chi trả — **(A)** mọi đợt `Completed` mới sang `Paid`, ERR-028 sống lại · **(B)** 1 đợt/kỳ + UNIQUE + gỡ `payee-already-in-batch`; sửa §13.1·§12.1·§21.1 ca 15·DB-13 §14.2/§14.3 | ERR-028 có ≥1 đường phát; ca 15 không còn assert «đợt thứ hai 409» nếu chọn (A) |
-| 6 | Chốt MỘT con số ngân sách node cho gross-up ở §13.6 C + §13.8 + §19.1 (vd 25.000/**lượt**, trần tổng 775.000/dòng) | ba mục nói cùng con số; `120×200×30 ≤ trần` |
-| 7 | Sửa 3 định nghĩa §13.6 E/§13.7: đoàn phí **ra khỏi** `TONG_BH_NV`; `TONG_THU_NHAP = Σ {earning, tax_exempt}`; `TONG_KHAU_TRU` gồm `tax` **chỉ khi** `pit_payer='EMPLOYEE'` | ba công thức §13.6 E khớp §13.7 C/D/E từng chữ |
-| 8 | DB-13 §13.4 thêm `chk salary_components_system_not_deletable  is_system = false OR deleted_at IS NULL` + ca §21.1 số 8 nhánh xoá-mềm | CHECK có mặt trong khối SQL §13.4 |
-| 9 | Thêm `value_type = 'engine'` (4 giá trị) cho 4 nút `aggregate`; sửa `value_pair_check`; đồng bộ §15.1 + contracts | `grep "fixed_amount = 0"` trong §13.4 = 0 hit |
-| 10 | §15.1 hàng 071 + §11.3 hàng 14: 071 assert **3 cặp**; §21.1 thêm ca deny thiếu-một-cặp | hàng 071 có `('export','payroll')` **và** `('view-payslip','payslip')` |
-| 11 | Viết lại §12.1 ghi chú 3 thành bảng `constraint → SQLSTATE → mã + kind`; **sửa tên** `batch_user_uq` → `payslip_uq` | bảng ≥6 hàng, có `salary_components_code_shape_check` và `payroll_payment_lines_payslip_uq` |
-| 12 | §11.3 ghi chú 8 «route GHI không chở tiền» + liệt kê đúng bằng; §21.1 D thêm ca «Rò tiền qua route GHI (v2)»; DB-13 §15.3 bước B verify `manage:X ⇒ view:X` cho advance/batch/budget/salary-component | §21.1 D có 25 ca |
-| 13 | DB-13 §15.3 bước C: chép nguyên khối RLS+FORCE+policy+GRANT+`0 DELETE`+composite-FK+VERIFY của bước A; thêm «đăng ký `rls-registry` + fixture 11 bảng» vào «cùng commit» của A và C | bước C chứa `relrowsecurity AND relforcerowsecurity`; `grep rls-registry` trong §15.3 ≥ 1 |
-| 14 | `backlog.mjs` sửa 5 mục (a)–(e) của B14; SPEC-11 §13.6 B thêm «**Zod KHÔNG cap `length(formula)`**» | `grep "2 000 ký tự\|50 ms/dòng\|attendance-summary\|không sensitive vì không có tiền"` = 0 hit |
+| # | Vá gì | Kiểm bằng | Trạng thái — vá ở đâu (11/09/2026) |
+| --- | --- | --- | --- |
+| 1 | SPEC-11 §23.2(a): bỏ «backfill `Paid → Published` + 4 bước», «3 ALTER» → «**2 ALTER** (§12.1+§12.4)»; §23.2(b) thêm «§12.3 đủ 4 bước»; `backlog.mjs` DB-1 bỏ `template_id`, DB-2 nhận | `grep "3 ALTER"` = 0 hit | ✅ SPEC-11 §5.1b · §8.2 (bảng A thêm **cột WO**) · §23.2 hàng 4 + nợ (a)/(b) · DB-13 §15.3 bước A/C · `backlog.mjs` DB-1 title/`done_when` ⛔-clause + DB-2 title/`done_when` 4 bước · API-18 · README · erd-current · RELEASE-14 · IMPL-02 |
+| 2 | Sửa **8 chuỗi** của B2 + bỏ tick sai ở §24.1 | `grep "7 trạng thái\|7 giá trị.*17.15\|Approved → Paid"` chỉ còn ở §1 bảng đối chiếu · §22 PAY-DEC-005 · §5.1 (đều gắn nhãn «v1») | ✅ SPEC-11 §8 · §9.1 (PAY-SCREEN-001) · §10 (FUNC-010) · §12 (ERR-004) · §17 (bảng event) · §21 (hàng Validate) · DB-13 §2 · §6.3 tiêu đề + cột `status` + khối CHECK; §24.1 đổi `[~]` → `[x]` liệt kê đủ 8 |
+| 3 | Thêm bảng **route → `object_type` + `object_id`** cho đủ 18 đường §18.1 B; UNION-ADD `payroll_report` (+`payroll_employee`); đồng bộ 3 chỗ con số | mỗi mã trong §18.1 B có đúng một `object_type` thuộc danh sách UNION-ADD | ✅ SPEC-11 §18.1 B = **bảng 18 hàng** (kèm luật `object_id` NULL cho đường đọc DANH SÁCH và cho `reportCode` — cột `uuid`); §12.1 ghi chú 4 **8 → 10 giá trị (⇒14)**; đồng bộ §23.2(a) · DB-13 §15.3 bước B |
+| 4 | Cấp bề mặt API cho `salary_profile_items`: đánh 🔁 §15.1 hàng 020/022 (payload `items[]`) **hoặc** cấp 2 route + đính chính 50→52; cấp `kind` cho `23505` | `salary_profile_items` xuất hiện ≥1 lần trong §15.1 | ✅ Chọn lối 🔁 (**giữ 50 route**): §15 hàng 020/022 đánh 🔁 payload `items[]`; §15.1 có blockquote 🔴 giải thích vì sao KHÔNG cấp 086/087; `kind = profile-item-duplicate` thêm vào **ERR-014** (không đẻ mã mới) |
+| 5 | Chốt mô hình đợt chi trả — **(A)** mọi đợt `Completed` mới sang `Paid`, ERR-028 sống lại · **(B)** 1 đợt/kỳ + UNIQUE + gỡ `payee-already-in-batch`; sửa §13.1·§12.1·§21.1 ca 15·DB-13 §14.2/§14.3 | ERR-028 có ≥1 đường phát; ca 15 không còn assert «đợt thứ hai 409» nếu chọn (A) | ✅ **Chọn (A)** + chốt **LUẬT PHỦ** (SPEC-11 §13.1, có pseudo-code 4 bước dưới row-lock). **ERR-028 đổi nghĩa** sang `batch-empty` — đường phát duy nhất, thật sự tới được. §12.1 ERR-027/028 · §15.1 hàng 072 · §17.1 event 027 (dedupe `{periodId}`, chỉ phát khi kỳ CHUYỂN `Paid`) · §21.1 ca 15 viết lại 7 nhánh kèm **ca ÂM** · DB-13 §14.2/§14.3/§15.4 |
+| 6 | Chốt MỘT con số ngân sách node cho gross-up ở §13.6 C + §13.8 + §19.1 (vd 25.000/**lượt**, trần tổng 775.000/dòng) | ba mục nói cùng con số; `120×200×30 ≤ trần` | ✅ **HAI trần, ba mục nói cùng số**: `BUDGET_PER_PASS = 25.000` · `BUDGET_PER_LINE = 775.000` (= 25.000 × 31 = 30 vòng + lượt cuối). Tự-kiểm `120×200×30 = 720.000 ≤ 775.000` ghi ngay trong bảng §13.6 C. Thêm **ca đối chứng** §21.1 ca 9: hồ sơ NET thực tế phải XANH |
+| 7 | Sửa 3 định nghĩa §13.6 E/§13.7: đoàn phí **ra khỏi** `TONG_BH_NV`; `TONG_THU_NHAP = Σ {earning, tax_exempt}`; `TONG_KHAU_TRU` gồm `tax` **chỉ khi** `pit_payer='EMPLOYEE'` | ba công thức §13.6 E khớp §13.7 C/D/E từng chữ | ✅ §13.6 E bảng 4 nút sửa + blockquote 🔴 nêu 3 lỗi; §13.7 C/D/E khối `text` **lặp lại nguyên văn** ba vế. Đoàn phí tách bằng **cột dữ liệu mới `salary_components.pit_deductible`** (DB-13 §13.4), **không** hard-code mã `DOAN_PHI`. §21.1 ca 2 tách thành 4 nhánh (a)–(d) |
+| 8 | DB-13 §13.4 thêm `chk salary_components_system_not_deletable  is_system = false OR deleted_at IS NULL` + ca §21.1 số 8 nhánh xoá-mềm | CHECK có mặt trong khối SQL §13.4 | ✅ DB-13 §13.4 khối SQL + blockquote giải thích (partial unique `WHERE deleted_at IS NULL` là lỗ); SPEC-11 §8.2 C1 sửa câu «CHECK + UNIQUE» thành **ba chốt**; §21.1 ca 8 có nhánh (c) ghi thẳng qua repository |
+| 9 | Thêm `value_type = 'engine'` (4 giá trị) cho 4 nút `aggregate`; sửa `value_pair_check`; đồng bộ §15.1 + contracts | `grep "fixed_amount = 0"` trong §13.4 = 0 hit | ✅ DB-13 §13.4 cột + `value_type_check` 4 giá trị + nhánh `engine` trong `value_pair_check` + **CHECK hai chiều** `salary_components_engine_kind_check`; §15.1 enum v2 = 4 giá trị; SPEC-11 §13.6 E câu mở đầu; bảng seed §13.4 ghi `engine` cho cả 4 |
+| 10 | §15.1 hàng 071 + §11.3 hàng 14: 071 assert **3 cặp**; §21.1 thêm ca deny thiếu-một-cặp | hàng 071 có `('export','payroll')` **và** `('view-payslip','payslip')` | ✅ §15.1 hàng 071 = **3 cặp** kèm lý do từng cặp; §11.3 hàng `manage:payment-batch` ghi ⚠️ «KHÔNG đủ để xuất tệp UNC»; §21.1 ca 20 thêm **3 ca**: thiếu `export:payroll` ⇒ 403 · thiếu `view-payslip` ⇒ 403 · đủ ba ⇒ **200** |
+| 11 | Viết lại §12.1 ghi chú 3 thành bảng `constraint → SQLSTATE → mã + kind`; **sửa tên** `batch_user_uq` → `payslip_uq` | bảng ≥6 hàng, có `salary_components_code_shape_check` và `payroll_payment_lines_payslip_uq` | ✅ §12.1 bảng **13 hàng** (mọi TÊN đã đối chiếu tồn tại trong DB-13 §12–§14); `payslip_uq` đứng đầu kèm lý do tại sao `batch_user_uq` không bắt được; DB-13 §14.3 thêm cảnh báo map-theo-tên; §21.1 ca 30 (b) census theo TÊN ràng buộc |
+| 12 | §11.3 ghi chú 8 «route GHI không chở tiền» + liệt kê đúng bằng; §21.1 D thêm ca «Rò tiền qua route GHI (v2)»; DB-13 §15.3 bước B verify `manage:X ⇒ view:X` cho advance/batch/budget/salary-component | §21.1 D có 25 ca | ✅ §11.3 **ghi chú 8** = bảng **7 route GHI** + khoá cấm; §21.1 **ca 25** (nhóm D giờ kết ở 25, nhóm E 26–30); DB-13 §15.3 bước B verify 4 tài nguyên |
+| 13 | DB-13 §15.3 bước C: chép nguyên khối RLS+FORCE+policy+GRANT+`0 DELETE`+composite-FK+VERIFY của bước A; thêm «đăng ký `rls-registry` + fixture 11 bảng» vào «cùng commit» của A và C | bước C chứa `relrowsecurity AND relforcerowsecurity`; `grep rls-registry` trong §15.3 ≥ 1 | ✅ DB-13 §15.3 bước C viết đủ khối (kèm `aclexplode`, `mediaos_worker` không `SELECT`, `cleanupTenants` thứ tự con→cha); `rls-registry` có ở **bước A (7 bảng) và bước C (4 bảng)**; §15.4 thêm hàng rủi ro 🔴 «11 bảng đứng ngoài `rls-registry`» kèm ca đối chứng; SPEC-11 §23.2 nợ (a)/(b) cùng câu |
+| 14 | `backlog.mjs` sửa 5 mục (a)–(e) của B14; SPEC-11 §13.6 B thêm «**Zod KHÔNG cap `length(formula)`**» | `grep "2 000 ký tự\|50 ms/dòng\|attendance-summary\|không sensitive vì không có tiền"` = 0 hit | ✅ (a) `template_id` → DB-2 · (b) `2 000/32/500` → **500/20/200/120** · (c) timeout 50 ms → **ngân sách node tất định** · (d) 054 gác `('manage','payroll-template')` **sensitive** · (e) `attendance-summary` → **`timesheet`** (cả `done_when` BE-1 lẫn màn 008 của FE-1). SPEC-11 §13.6 B thêm blockquote 🔴 Zod-không-cap + ca ghim 501 ký tự ⇒ 422 018 |
 
-**Chốt cổng:** 14 mục xong ⇒ `S15-PAYROLL-DB-1` được mở.
+**Chốt cổng:** ✅ 14/14 xong (11/09/2026) ⇒ **`S15-PAYROLL-DB-1` ĐƯỢC MỞ**.
 
 ---
 
