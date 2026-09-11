@@ -28,7 +28,16 @@ import { AuditService } from "../events/audit.service";
 import { AuthService, redactEmailFromDetail, type RequestMeta } from "../auth/auth.service";
 import { PasswordService } from "../auth/password.service";
 import { LoginRateLimiter } from "../auth/login-rate-limiter";
-import { rlKey } from "../common/valkey/valkey-key";
+import { rlKey, type RlBucket } from "../common/valkey/valkey-key";
+
+/**
+ * S18-AUTH-490DEBT-1 (D3b) — hai bucket rate-limit gác ĐƯỜNG THIẾT LẬP 2FA; cả hai phải được gỡ khi
+ * khôi phục tài khoản. Đây là một CẶP, không phải hai thứ rời: sau A2 (`require_two_factor=true`),
+ * `TwoFactorEnforcementGuard` chỉ tha khi `isEnabled`, mà muốn `isEnabled` thì phải đi HẾT
+ * `enroll` → `confirmEnable`. Khoá một trong hai là nhốt nạn nhân khỏi MỌI route.
+ * Cố ý KHÔNG gồm `2fa-disable`/`change-pw`: chúng không nằm trên đường thoát khỏi guard.
+ */
+const TWO_FACTOR_SETUP_BUCKETS: readonly RlBucket[] = ["2fa-enroll", "2fa-enable"];
 import { SecurityEventWriter } from "../auth/security-event-writer.service";
 import { PermissionService } from "../permission/permission.service";
 import { LmsSyncProducer } from "../integrations/lms/lms-sync-producer.service";
@@ -756,11 +765,28 @@ export class AuthUsersService {
     // ⚠️ Vị trí: SAU khi tx COMMIT (Valkey không nằm trong tx DB). Còn `requireRateLimiter()` thì
     // đứng ở ĐẦU hàm — xem lý do ở đó.
     //
+    // ⚠️ PHẢI GỠ CẢ HAI BUCKET, không chỉ `2fa-enroll` (security-reviewer FULL gate 11/09, HIGH).
+    // Bản vá đầu chỉ gỡ `2fa-enroll` vì tin rằng `2fa-enable` "không bị guard ép". SAI, đo được:
+    //   · `confirmEnable` (`two-factor.service.ts:336`) là nơi DUY NHẤT set `user_totp.enabled_at`
+    //     (`grep -rn "enabledAt: new Date()" src --include=*.ts` → đúng 1 kết quả);
+    //   · `TwoFactorEnforcementGuard` tha đúng khi `isEnabled`, tức đúng khi cờ ấy được set.
+    // ⇒ `2fa-enable` KHÔNG phải bề mặt phụ — nó là NỬA SAU của cửa thoát duy nhất sau A2.
+    // Và D2 vừa làm nó khoá được từ đường tấn công: nhánh `account_gone` của `confirmEnable` đứng
+    // TRƯỚC `loadTotp`, nên kẻ giữ access token của tài khoản đã xoá mềm gọi 5 lượt
+    // `POST /auth/2fa/enable` là dựng xong khoá 900s — KHÔNG cần hàng enroll nào. Nạn nhân sau khi
+    // được khôi phục enroll được (200) rồi kẹt 429 ở bước bật, và ăn 403 mọi route tới khi khoá hết
+    // hạn. HỒI QUY do chính WO này đẻ ra: trên master nhánh đó không `recordFailure`.
+    //
+    // Gỡ counter đoán-mã của `2fa-enable` ở đây KHÔNG nới bảo mật: A1 ngay trên đã xoá sạch
+    // `user_totp`, nên không còn bí mật nào để đoán.
+    //
     // ⚠️ GIỚI HẠN đã biết: đây là best-effort CÂM. `reset()` trả `void` và `ValkeyService.del` nuốt
     // lỗi ⇒ Valkey degraded đúng lúc này thì khoá sống hết `LOGIN_LOCKOUT_SEC` mà KHÔNG tín hiệu nào.
     // Cố ý không dựng vế `ok`/`degraded` như `clearLoginThrottle`: đó là bề mặt API riêng, ngoài
     // phạm vi WO này. Ghi ra để lượt sau biết đây là quyết định, không phải bỏ sót.
-    await limiter.reset(rlKey("2fa-enroll", `${actor.companyId}|${id}`));
+    for (const bucket of TWO_FACTOR_SETUP_BUCKETS) {
+      await limiter.reset(rlKey(bucket, `${actor.companyId}|${id}`));
+    }
     return dto;
   }
 

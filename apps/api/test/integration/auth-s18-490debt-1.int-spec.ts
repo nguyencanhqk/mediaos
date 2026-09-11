@@ -420,28 +420,53 @@ describe.skipIf(!hasDb)(
      * enroll; `clearLoginLocks` cố ý KHÔNG gỡ bucket post-auth ⇒ nếu `restoreUser` không tự gỡ thì nạn
      * nhân kẹt 900s và admin bất lực.
      *
-     * Đột biến: bỏ `limiter.reset(...)` ở D3b ⇒ lượt enroll sau restore trả 429 ⇒ ca ĐỎ.
+     * 🔴 CA NÀY TỪNG MÙ MỘT NỬA — security-reviewer FULL gate 11/09 (HIGH). Bản đầu chỉ đo tới vế
+     * `enroll` trả 200 rồi dừng, nên nó XANH trong khi nạn nhân vẫn kẹt: kẻ tấn công khoá được CẢ
+     * bucket `2fa-enable` (nhánh `account_gone` của `confirmEnable` đứng TRƯỚC `loadTotp` ⇒ không cần
+     * hàng enroll nào), mà `confirmEnable` là nơi DUY NHẤT set `enabled_at` — đúng cờ mà
+     * `TwoFactorEnforcementGuard` đòi. Enroll được mà không bật được thì vẫn 403 mọi route.
+     * ⇒ Ca phải đi HẾT đường thoát: enroll **và** enable.
+     *
+     * Đột biến: bỏ `2fa-enroll` khỏi `TWO_FACTOR_SETUP_BUCKETS` ⇒ vế enroll ĐỎ; bỏ `2fa-enable` ⇒ vế
+     * enable ĐỎ. Mỗi bucket một vế — không vế nào che vế nào.
      */
-    it("§restore-unlocks-enroll: kẻ tấn công khoá enroll 5 lượt → admin restore ⇒ nạn nhân enroll lại được (200, KHÔNG 429)", async () => {
+    it("§restore-unlocks-enroll: kẻ tấn công khoá CẢ HAI bucket → admin restore ⇒ nạn nhân enroll VÀ enable lại được", async () => {
       const target = await seedTarget("resunlock");
       const token = await loginToken(target.email);
       await enable2fa(target.id, A.companyId);
       await softDelete(target.id);
 
-      // Kẻ tấn công giữ access token cũ, bồi cho tới khi khoá dựng xong.
+      // Kẻ tấn công giữ access token cũ, bồi CẢ HAI bucket cho tới khi khoá dựng xong.
       for (let i = 0; i < MAX_ATTEMPTS; i++) await postEnroll(token);
-      const lockedBefore = await postEnroll(token);
-      expect(lockedBefore.status, "tiền đề của ca: khoá phải THẬT SỰ dựng được").toBe(429);
+      expect(
+        (await postEnroll(token)).status,
+        "tiền đề: khoá `2fa-enroll` phải THẬT SỰ dựng được",
+      ).toBe(429);
+      // `postEnable` với mã bất kỳ — nhánh `account_gone` chặn TRƯỚC khi đọc mã, nên không cần secret.
+      for (let i = 0; i < MAX_ATTEMPTS; i++) await postEnable(token, "000000");
+      expect(
+        (await postEnable(token, "000000")).status,
+        "tiền đề: khoá `2fa-enable` phải THẬT SỰ dựng được",
+      ).toBe(429);
 
       const res = await postRestore(target.id);
       expect(res.status, JSON.stringify(res.body)).toBe(200);
 
-      // Nạn nhân đăng nhập lại (hàng đã sống) và enroll — không được vướng khoá của kẻ tấn công.
+      // Nạn nhân đăng nhập lại (hàng đã sống) rồi đi HẾT đường thoát khỏi guard ép-2FA.
       const freshToken = await loginToken(target.email);
-      const after = await postEnroll(freshToken);
-      expect(after.status, `restore KHÔNG gỡ khoá 2fa-enroll: ${JSON.stringify(after.body)}`).toBe(
-        200,
-      );
+      const enroll = await postEnroll(freshToken);
+      expect(
+        enroll.status,
+        `restore KHÔNG gỡ khoá 2fa-enroll: ${JSON.stringify(enroll.body)}`,
+      ).toBe(200);
+      const secret = secretFromUri(enroll.body.data.otpauthUri as string);
+      const enable = await postEnable(freshToken, totp.generate(secret));
+      expect(
+        enable.status,
+        `restore KHÔNG gỡ khoá 2fa-enable ⇒ nạn nhân enroll được nhưng KHÔNG BẬT được, và ` +
+          `TwoFactorEnforcementGuard đòi đúng cờ enabled_at ⇒ 403 mọi route: ${JSON.stringify(enable.body)}`,
+      ).toBe(200);
+      expect(await enabledAt(target.id), "đi hết đường thoát thì 2FA phải BẬT được").not.toBeNull();
     });
   },
 );

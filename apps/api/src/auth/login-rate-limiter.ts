@@ -343,12 +343,14 @@ export class LoginRateLimiter {
    * được) khỏi bị bồi hàng (KI-048); xoá nó là mở lại đúng lỗ đó cho mỗi lần bấm nút. **KHÔNG** xoá
    * `2fa-enable`/`2fa-disable`/`change-pw`/`stepup`/`2fa-enroll` — luồng SAU đăng nhập, ngoài phạm vi.
    *
-   * ⚠️ `2fa-enroll` (S18-AUTH-490DEBT-1) là trường hợp DUY NHẤT trong danh sách trên có đường gỡ
-   * RIÊNG, và nó bắt buộc phải có: sau `restoreUser`, `require_two_factor=true` ÉP người vừa được
-   * khôi phục đi enroll, nên một khoá còn sống là nhốt họ trọn `LOGIN_LOCKOUT_SEC` mà nút này không
-   * gỡ được. Đường gỡ nằm ở `AuthUsersService.restoreUser` (gọi `reset()` sau khi tx COMMIT) — đừng
-   * "thống nhất" bằng cách kéo bucket ấy vào đây: nút này là *gỡ khoá ĐĂNG NHẬP*, và
-   * `LoginThrottleBucket` của badge trạng thái cố ý chỉ có `acct`/`ip`/`2fa`.
+   * ⚠️ CẶP `2fa-enroll` + `2fa-enable` (S18-AUTH-490DEBT-1) có đường gỡ RIÊNG, và nó bắt buộc phải
+   * có: sau `restoreUser`, `require_two_factor=true` ÉP người vừa được khôi phục thiết lập 2FA, mà
+   * `TwoFactorEnforcementGuard` chỉ tha khi `enabled_at` được set — tức phải đi HẾT `enroll` →
+   * `confirmEnable`. Khoá MỘT trong hai là nhốt họ khỏi MỌI route trọn `LOGIN_LOCKOUT_SEC`, và nút
+   * này không gỡ được. Đường gỡ nằm ở `AuthUsersService.restoreUser` (`TWO_FACTOR_SETUP_BUCKETS`,
+   * gọi `reset()` sau khi tx COMMIT) — đừng "thống nhất" bằng cách kéo hai bucket ấy vào đây: nút
+   * này là *gỡ khoá ĐĂNG NHẬP*, và `LoginThrottleBucket` của badge cố ý chỉ có `acct`/`ip`/`2fa`.
+   * `2fa-disable`/`change-pw` KHÔNG thuộc cặp đó — chúng không nằm trên đường thoát khỏi guard.
    *
    * Dọn `attempts` in-memory là VÔ ĐIỀU KIỆN (mirror `reset()`): khi Valkey rớt giữa chừng,
    * `recordFailure` đã fail-soft ghi khoá vào memory — bỏ qua nhánh này là gỡ hụt đúng lúc hệ thống đang

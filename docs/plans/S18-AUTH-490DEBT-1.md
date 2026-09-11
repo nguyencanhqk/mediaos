@@ -155,9 +155,28 @@ Chuỗi đo được (review C3, đã xác minh):
 enroll của nạn nhân **15 phút**. Admin restore xong, nạn nhân **bị guard ép enroll** nhưng nhận **429**,
 và nút *"Gỡ khoá đăng nhập"* của admin **không gỡ được**.
 
-Plan v1 gọi đây là *"tiền lệ đã có, không phải hồi quy"* — **đúng** cho `2fa-enable`/`change-pw` (bề mặt
-**không** bị guard ép), **sai** cho `2fa-enroll` **sau A2**. Đây là deny-path mới **không lối thoát**
-trên vùng đỏ ⇒ **phải đóng trong chính WO này** (§4 D3b), không được ghi nợ.
+Plan v1 gọi đây là *"tiền lệ đã có, không phải hồi quy"* — **sai**. Đây là deny-path mới **không lối
+thoát** trên vùng đỏ ⇒ **phải đóng trong chính WO này** (§4 D3b), không được ghi nợ.
+
+> 🔴 **v4 — SỬA MỘT TIỀN ĐỀ SAI của v2/v3** (`security-reviewer` FULL gate 11/09, HIGH; đã đo lại và
+> xác nhận). v2/v3 viết rằng lập luận trên **chỉ** áp cho `2fa-enroll`, còn `2fa-enable`/`change-pw`
+> là *"bề mặt không bị guard ép"*. Vế `2fa-enable` **SAI**:
+>
+> - `confirmEnable` (`two-factor.service.ts:336`) là nơi **DUY NHẤT** trong toàn repo set
+>   `user_totp.enabled_at` (đo: `grep -rn "enabledAt: new Date()" src --include=*.ts` → 1 kết quả);
+> - `TwoFactorEnforcementGuard` (`two-factor-enforcement.guard.ts:102-106`) tha đúng khi `isEnabled`,
+>   tức đúng khi cờ ấy được set.
+>
+> ⇒ `2fa-enable` **là nửa sau của cùng một cửa thoát**, không phải bề mặt phụ. Tệ hơn: **D2 vừa làm
+> nó khoá được từ đường tấn công** — nhánh `account_gone` của `confirmEnable` đứng **TRƯỚC**
+> `loadTotp`, nên kẻ giữ access token của tài khoản đã xoá mềm gọi 5 lượt `POST /auth/2fa/enable` là
+> dựng xong khoá 900s **mà không cần hàng enroll nào**. Nạn nhân sau khôi phục enroll được (200) rồi
+> **kẹt 429 ở bước bật** và ăn **403 mọi route** tới khi khoá hết hạn.
+>
+> Đây là **hồi quy do chính WO này đẻ ra**: trên master nhánh đó không `recordFailure` nên khoá ấy
+> không dựng được từ đường này. ⇒ D3b gỡ **CẢ HAI** bucket (`TWO_FACTOR_SETUP_BUCKETS`), và ca
+> `§restore-unlocks-enroll` phải đi **hết** đường thoát (enroll **và** enable) — bản ca cũ dừng ở
+> enroll nên **xanh trong khi nạn nhân vẫn kẹt**, đúng hình `tests-can-pin-a-hole-open`.
 
 ---
 
