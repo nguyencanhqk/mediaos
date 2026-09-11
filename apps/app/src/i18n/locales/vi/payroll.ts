@@ -316,6 +316,18 @@ export default {
     periodTerminal: "Kỳ đã phát hành hoặc đã khoá — không mở lại được.",
     selfApproval: "Không thể tự duyệt khoản do chính bạn tạo.",
     trailPairViolation: "Dữ liệu duyệt của kỳ không nhất quán — tải lại rồi thử lại.",
+    // ── S15-PAYROLL-BE-1 (track A) ──
+    // Thông điệp phải nói PHẢI LÀM GÌ, không chỉ "sai" — đây là đường người dùng gặp nhiều nhất khi
+    // chuyển hồ sơ lương v1 (mã `PC_nnn` do backfill) sang mã catalog thật.
+    profileItemUnknownComponent:
+      "Mã thành phần lương không có trong danh mục — chọn lại mã từ danh mục thành phần lương của công ty (hồ sơ cũ có thể mang mã tạm cần thay).",
+    profileItemWrongType:
+      "Thành phần lương này không thuộc loại cấp theo hồ sơ — chỉ thành phần có «giá trị theo hồ sơ lương» mới đặt được định mức.",
+    profileItemDuplicate: "Mỗi thành phần lương chỉ được khai một dòng trong cùng phiên bản hồ sơ.",
+    dependentOverlap:
+      "Người phụ thuộc này đã có bản ghi trùng khoảng thời gian hiệu lực — chỉnh lại ngày bắt đầu/kết thúc để hai khoảng không chồng nhau.",
+    bankPairIncomplete:
+      "Có số tài khoản thì phải nhập cả tên ngân hàng lẫn tên chủ tài khoản — nếu muốn xoá tài khoản, xoá cả ba trường cùng lúc.",
     idempotencyInProgress: "Yêu cầu đang được xử lý — vui lòng đợi.",
     idempotencyKeyReused: "Yêu cầu trước đã dùng khoá này cho nội dung khác — thử lại.",
     generic: "Có lỗi xảy ra, vui lòng thử lại.",

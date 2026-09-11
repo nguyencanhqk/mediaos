@@ -15902,6 +15902,12 @@ export const backlog = [
       "apps/api/src/permission/**",
       "apps/api/src/common/db-error.ts",
       "apps/api/test/**",
+      "apps/api/package.json",
+      // FULL gate (security #1) — vá B2 (.strict() + bỏ `allowances` khỏi 020) làm ĐỎ typecheck của
+      // apps/app: SalaryProfileFormDialog.tsx vẫn gửi `allowances`. WO backend buộc phải chạm ĐÚNG
+      // file FE đó để không ship một màn hình chết. paths phải phủ, kẻo guard-scope cảnh báo và gate
+      // đọc sai phạm vi (memory wo-paths-drive-gate-and-scheduler).
+      "apps/app/src/routes/payroll/**",
       "packages/contracts/src/payroll*.ts",
       "packages/contracts/src/index.ts",
       "docs/SPEC/**",

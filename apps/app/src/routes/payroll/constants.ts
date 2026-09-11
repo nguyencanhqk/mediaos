@@ -70,6 +70,17 @@ export const PAYROLL_ENGINE_PAIRS = {
   // Picker 034–035
   pickerPeople: pair("view", "salary-profile", true),
   pickerAttendancePeriods: pair("manage", "payroll-period"),
+  // ── S15-PAYROLL-BE-1 · track A 036–043 ────────────────────────────────────────────────────────
+  // CẢ HAI cặp `payroll-employee` là `is_sensitive` (SPEC-11 §11.3 — 17 cặp mới đều sensitive).
+  employeeList: pair("view", "payroll-employee", true),
+  employeeDetail: pair("view", "payroll-employee", true),
+  employeeSettingsGet: pair("view", "payroll-employee", true),
+  employeeSettingsPut: pair("manage", "payroll-employee", true),
+  employeeDependentList: pair("view", "payroll-employee", true),
+  employeeDependentCreate: pair("manage", "payroll-employee", true),
+  dependentUpdate: pair("manage", "payroll-employee", true),
+  // 043 tái dùng cặp CŨ `view-line:payroll-period` (bảng công là dữ liệu của KỲ).
+  periodTimesheet: pair("view-line", "payroll-period", true),
 } as const satisfies Record<string, PayrollEnginePair>;
 
 export type PayrollEngineKey = keyof typeof PAYROLL_ENGINE_PAIRS;

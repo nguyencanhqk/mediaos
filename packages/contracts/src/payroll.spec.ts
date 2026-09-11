@@ -89,7 +89,9 @@ describe("salary_profiles — versioned, không còn salaryType/payCycle/currenc
     userId: UUID_B,
     effectiveDate: "2026-01-01",
     baseSalary: 15_000_000,
-    allowances: [{ name: "Ăn trưa", amount: 730_000 }],
+    // S15-PAYROLL-BE-1: 020 THAY `allowances[]` bằng `items[]` (mã catalog), và schema nay `.strict()`
+    // ⇒ khoá cũ là 400 chứ không còn bị strip im lặng.
+    items: [{ componentCode: "PHUCAP_TRUA", amount: 730_000 }],
   };
 
   it("ALLOW: payload tối thiểu hợp lệ", () => {
