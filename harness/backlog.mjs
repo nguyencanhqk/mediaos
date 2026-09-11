@@ -15846,8 +15846,14 @@ export const backlog = [
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
-      "apps/api/src/foundation/seed/**",
-      "apps/api/src/permissions/**",
+      // S15-PAYROLL-DB-1 plan-review vòng 1 (B5): `foundation/seed/**` KHÔNG phủ
+      // `foundation/retention/retention.service.ts` (PROTECTED_TABLES += 7) ⇒ mở rộng cả `foundation/**`.
+      // `permissions/**` là thư mục KHÔNG TỒN TẠI (thật: `permission/` số ít — 2 allowlist sensitive).
+      // `payroll/**` cần cho PayrollMasterDataSeeder + registrar + module (seed company-scoped KHÔNG được
+      // nằm trong migration — convention mig 0445 + master-data-seeder.types.ts).
+      "apps/api/src/foundation/**",
+      "apps/api/src/permission/**",
+      "apps/api/src/payroll/**",
       "apps/api/test/**",
       "apps/api/demo-seed-full.mjs",
       "packages/contracts/src/payroll*.ts",
@@ -15908,6 +15914,7 @@ export const backlog = [
       "Settings + dependents: CRUD Company-scope, hiệu lực từ/đến NPT không chồng lấn (CHECK/service + mã lỗi mới), audit ghi/xem; IDOR cross-employee test ở cụm riêng",
       "Bảng công tổng hợp kỳ — literal path CHÍNH XÁC `GET /payroll-periods/:id/timesheet` (PAYROLL-API-043, SPEC-11 §15.1; KHÔNG phải `attendance-summary` — route-http-coverage khớp theo literal path nên lệch tên = cổng đếm hụt): tái dùng PayrollInputsRepository.computeInputsTx — KHÔNG viết aggregation thứ hai; gác ('view-line','payroll-period') (chứa số ngày, không tiền); audit lượt đọc (§18.1 B hàng 5, object_type=payroll_period, object_id=payrollPeriodId)",
       "mapPayrollPgError map đủ constraint mới (23503/23505/23514 theo TÊN); coverage payroll/ ≥85% trên LANE_DB",
+      "🔻 NỢ TỪ DB-1 (plan-review vòng 1, B3): hồ sơ lương DI SẢN có salary_profile_items.component_code dạng `PC_nnn` (mã tất định do backfill sinh, `note` giữ tên gốc) NGOÀI catalog salary_components — vì lúc backfill chạy ở migration 0570 thì catalog chưa tồn tại (nó seed RUNTIME). Chốt hành vi: đường ĐỌC trả nguyên kèm `note`; đường GHI (020/022) kiểm mã tồn tại ⇒ mã ngoài catalog trả 422 PAYROLL-ERR-018 với thông điệp hướng chọn mã catalog thật. Ca test: đọc hồ sơ di sản 200 · lưu lại y nguyên ⇒ 422 (KHÔNG 500, KHÔNG im lặng mất dòng)",
     ],
     notes: [
       "🔴 FULL gate + Opus. Tối đa 1 vòng plan-review + điều kiện tự-mở-cổng (memory plan-review-rounds-inject-new-holes).",
@@ -15946,6 +15953,9 @@ export const backlog = [
       "Catalog: hệ thống is_system không xoá, sửa formula qua ('manage','salary-component') SENSITIVE + audit diff (old/new formula); tự thêm CRUD; template CRUD + components (label · formula override · visible · sort) + scope company/org_unit; đổi template của kỳ chỉ khi ≤ CollectingData (409)",
       "Route xem trước mẫu (PAYROLL-API-054): evaluate trên dữ liệu GIẢ do client gửi (không đọc lương thật, không ghi) — trả cột + giá trị mẫu; gác cặp GHI ('manage','payroll-template') is_sensitive=true, KHÔNG phải view — route phơi ra chính bộ parser, để cặp đọc là mở bề mặt fuzz cho mọi người đọc được catalog (SPEC-11 §15.1 hàng 054 · §18.1 D); không audit lượt đọc (0 dữ liệu thật bị lộ)",
       "Bất biến: sửa công thức SAU khi kỳ Calculated KHÔNG đổi số kỳ đó (snapshot) — có ca test; coverage formula/ ≥95%",
+      "🔻 NỢ TỪ DB-1 (security review) — KHÔNG GIAN TÊN REF: DB-1 CỐ Ý chưa seed 3 thành phần THUONG · PHAT · TAM_UNG vì giá trị của chúng là đầu vào THEO DÒNG mà SYS_* (§13.6 D, khai ĐÓNG) không có biến nào biểu diễn. Việc của BE-2: mở rộng SYS_* trong SPEC-11 §13.6 D (vd SYS_BONUS_AMOUNT · SYS_PENALTY_AMOUNT · SYS_ADVANCE_AMOUNT) RỒI seed ba hàng, có BUMP seedVersion. CẤM seed bằng REF trần (BONUS_AMOUNT…) — theo grammar đó là MÃ THÀNH PHẦN nên tenant tạo được hàng cùng tên và CHE đầu vào engine, mà code_shape_check chỉ cấm tiền tố SYS_/TL_/GT_ nên không bắt. Ca E11/E13 của s15-payroll-db1-seed.int-spec.ts ghim luật này",
+      "🔻 NỢ TỪ DB-1 (silent-failure review, LOW) — hai lỗ hổng hướng-tương-lai của catalog: (a) route tạo/sửa thành phần phải TỪ CHỐI 14 mã hệ thống đã seed (LUONG_CO_BAN · PHU_CAP · NGHI_KHONG_LUONG · 4 nút aggregate · BHXH_NV/BHYT_NV/BHTN_NV · DOAN_PHI · TNCN · BHXH_DN/BHYT_DN/BHTN_DN/KPCD) NGOÀI luật cấm tiền tố SYS_/TL_/GT_ — hôm nay không có route nào ghi salary_components nên chưa khai thác được, nhưng hàng trùng mã sẽ làm seeder ném (fail-loud, không im lặng); (b) assertSeedIntegrity check (5) so HAI TẬP LẤY TỪ DB nên KHÔNG phát hiện được mã catalog bị KHAI TỬ ở seedVersion sau (hàng cũ + link mẫu cũ tồn tại mãi, cả hai vế vẫn khớp) ⇒ khi bump seedVersion có gỡ mã, phải viết bước vá dữ liệu tường minh + assert đối chiếu với hằng TS",
+      "🔻 NỢ TỪ DB-1 (plan-review vòng 1, B1) — CỔNG FAIL-CLOSED khi CATALOG KHÔNG ĐỦ: seed company-scoped (salary_components · payroll_statutory_rates · payroll_templates) chạy RUNTIME qua MasterDataSeedRunner, mà runner NUỐT throw (runOne try/catch toàn phần ⇒ batch Failed + log, boot vẫn tiếp) và có 4 đường công ty không được seed (boot đầu DB trắng · MASTER_DATA_SEED_ON_BOOT=false · NODE_ENV=test no-op · company tạo sau boot). ⇒ đường TÍNH/ĐỌC phải là cổng CỨNG: thiếu 4 nút engine hoặc mã thành phần không phân giải được ⇒ 422 PAYROLL-ERR-018; thiếu bản payroll_statutory_rates hiệu lực ⇒ 422 PAYROLL-ERR-022. CẤM trả 0 / net=gross. Ca test: công ty CHƯA seed catalog ⇒ 422, KHÔNG phải 200 với net=0 (empty-success-is-the-fail-open-shape)",
     ],
     notes: [
       "🔴 FULL gate + Opus — máy công thức là bề mặt tấn công MỚI, security-reviewer tập trung vào parser (DoS bằng biểu thức, injection vào SQL qua label/formula).",
@@ -15983,6 +15993,7 @@ export const backlog = [
       "Snapshot component_values_json đầy đủ mọi thành phần + tỉ lệ đã dùng + NPT đã tính; payslip_items sinh theo thành phần visible của mẫu (item_type map 7 loại hiện có, meta.componentCode) — bất biến SUM(items)=gross−deduction+adjustment vẫn assert trong tx",
       "Fixture đối soát TAY ≥ 2 NV (1 GROSS đủ mọi khoản + BH + TNCN bậc ≥3 + 2 NPT; 1 NET) — số khớp từng đồng với bảng tay trong docs/QA/evidence; biên: NPT hết hiệu lực giữa kỳ, đổi tỉ lệ giữa năm, lương BH vượt trần",
       "Sửa công thức/tỉ lệ SAU Calculated không đổi số; coverage payroll/ ≥85%",
+      "🔻 NỢ TỪ DB-1 (plan-review vòng 1, B1) — CỔNG FAIL-CLOSED khi CATALOG KHÔNG ĐỦ: seed company-scoped chạy RUNTIME và runner NUỐT throw (batch Failed + log, boot vẫn tiếp) ⇒ KHÔNG được coi «đã seed» là điều kiện đương nhiên. calculate phải trả 422 PAYROLL-ERR-022 khi thiếu bản payroll_statutory_rates hiệu lực tại ngày cuối kỳ, và 422 PAYROLL-ERR-018 khi thiếu/không phân giải được 4 nút engine (TONG_THU_NHAP · TONG_BH_NV · THU_NHAP_CHIU_THUE · TONG_KHAU_TRU). CẤM trả net=0 hoặc net=gross — mọi bất biến SQL vẫn xanh ở hình dạng đó. Ca test: công ty CHƯA seed catalog ⇒ calculate 422, kỳ KHÔNG chuyển trạng thái",
     ],
     notes: [
       "🔴 FULL gate + Opus — WO chở tiền nặng nhất wave; chạy phiên riêng.",

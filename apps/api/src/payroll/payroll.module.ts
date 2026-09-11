@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { BonusPenaltiesRepository } from "./bonus-penalties.repository";
 import { BonusPenaltiesService } from "./bonus-penalties.service";
@@ -8,12 +9,14 @@ import { PayrollApproverReader } from "./payroll-approver.reader";
 import { PayrollCalcRepository } from "./payroll-calc.repository";
 import { PayrollCalcService } from "./payroll-calc.service";
 import { PayrollExportService } from "./payroll-export.service";
+import { PayrollMasterDataSeeder } from "./payroll-master-data.seeder";
 import { PayrollInputsRepository } from "./payroll-inputs.repository";
 import { PayrollPayslipsRepository } from "./payroll-payslips.repository";
 import { PayrollPayslipsService } from "./payroll-payslips.service";
 import { PayrollPeopleRepository } from "./payroll-people.repository";
 import { PayrollPeriodsRepository } from "./payroll-periods.repository";
 import { PayrollPeriodsService } from "./payroll-periods.service";
+import { PayrollSeedRegistrar } from "./payroll-seed.registrar";
 import {
   BonusPenaltiesController,
   MePayslipsController,
@@ -45,7 +48,11 @@ import { SalaryProfilesService } from "./salary-profiles.service";
  * KHÔNG đọc gì từ module này — export ở đây không mở thêm bề mặt nào cho NOTI.
  */
 @Module({
-  imports: [PermissionModule],
+  // S15-PAYROLL-DB-1 (additive): + SeedModule (exports MasterDataSeederRegistry) → PayrollSeedRegistrar
+  // (OnModuleInit) đăng ký PayrollMasterDataSeeder để runner RUNTIME per-company seed catalog thành
+  // phần lương + tỉ lệ luật định + mẫu mặc định. Seed company-scoped KHÔNG ĐƯỢC nằm trong migration
+  // (mig 0445 + master-data-seeder.types.ts) — xem docblock của seeder.
+  imports: [PermissionModule, SeedModule],
   controllers: [
     PayrollPeriodsController,
     SalaryProfilesController,
@@ -72,6 +79,9 @@ import { SalaryProfilesService } from "./salary-profiles.service";
     PayrollApprovalService,
     PayrollPayslipsService,
     PayrollExportService,
+    // ── S15-PAYROLL-DB-1 (seed master-data runtime) ──
+    PayrollMasterDataSeeder,
+    PayrollSeedRegistrar,
   ],
   // S13-PAYROLL-DASH-1: chỉ PayrollCalcService — KHÔNG export repository (widget phải đi qua service để
   // giữ nguyên tầng guard THỨ HAI `resolveActor` + audit; export repository là mở đường vòng qua cả hai).

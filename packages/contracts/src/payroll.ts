@@ -50,7 +50,16 @@ const csvEnumList = <T extends z.ZodTypeAny>(item: T) =>
 // 1. Enum — mirror CHECK (DB-13 §7)
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 
-/** SPEC-01 §17.15 — mirror `payroll_periods_status_check`. FSM (chuyển tiếp) ép ở SERVICE, không ở đây. */
+/**
+ * SPEC-01 §17.15 — mirror `payroll_periods_status_check`. FSM (chuyển tiếp) ép ở SERVICE, không ở đây.
+ *
+ * 🔴 **v2 nâng lên 8 giá trị (`Published` xen giữa `Approved` và `Paid`) — NHƯNG KHÔNG PHẢI Ở WO NÀY.**
+ * Cột `payroll_periods.status` còn CHECK 7 giá trị cho tới migration của `S15-PAYROLL-DB-2`, nơi bốn
+ * bước (thêm cột → nới CHECK → `UPDATE 'Paid'→'Published'` → siết CHECK cặp) chạy NGUYÊN TỬ trong MỘT
+ * migration (DB-13 §12.3). Nâng enum này SỚM = Zod nhận `Published` rồi DB ném `23514`; nâng MUỘN =
+ * DB trả `Published` rồi Zod từ chối ⇒ **500 trên đường ĐỌC**. Cả hai chiều đều hỏng ⇒ enum và CHECK
+ * phải đổi CÙNG COMMIT (`contract-must-mirror-db-check-both-directions`).
+ */
 export const payrollPeriodStatusEnum = z.enum([
   "Draft",
   "CollectingData",
@@ -61,6 +70,52 @@ export const payrollPeriodStatusEnum = z.enum([
   "Locked",
 ]);
 export type PayrollPeriodStatus = z.infer<typeof payrollPeriodStatusEnum>;
+
+// ─── v2 (wave S15-PAYROLL-V2 · mig 0570) — mirror CHECK HAI CHIỀU, ĐÚNG BẰNG (DB-13 §15.1) ───
+
+/** mirror `salary_profiles_salary_type_check`. `NET` ⇒ máy tính lương chạy gross-up (SPEC-11 §13.8). */
+export const salaryTypeEnum = z.enum(["GROSS", "NET"]);
+export type SalaryType = z.infer<typeof salaryTypeEnum>;
+
+/** mirror `salary_profiles_pit_payer_check` — ai chịu TNCN (SPEC-11 §13.7 E). */
+export const pitPayerEnum = z.enum(["EMPLOYEE", "COMPANY"]);
+export type PitPayer = z.infer<typeof pitPayerEnum>;
+
+/** mirror `salary_components_kind_check` — **7 giá trị**. */
+export const salaryComponentKindEnum = z.enum([
+  "earning",
+  "deduction",
+  "statutory_employee",
+  "statutory_employer",
+  "tax",
+  "tax_exempt",
+  "aggregate",
+]);
+export type SalaryComponentKind = z.infer<typeof salaryComponentKindEnum>;
+
+/**
+ * mirror `salary_components_value_type_check` — **4 giá trị**.
+ *
+ * 🔴 `engine` DÀNH RIÊNG cho 4 nút `aggregate` (`TONG_THU_NHAP` · `TONG_BH_NV` · `THU_NHAP_CHIU_THUE`
+ * · `TONG_KHAU_TRU`), và `salary_components_engine_kind_check` ép HAI CHIỀU
+ * `(value_type = 'engine') = (kind = 'aggregate')`. Khai bốn nút là `fixed` với `fixed_amount = 0` là
+ * BẪY FAIL-OPEN IM LẶNG: mọi `switch (valueType)` viết đúng-theo-DB rơi vào nhánh `fixed` và trả 0 ⇒
+ * `net = 0` hoặc `net = gross` **trong khi mọi bất biến SQL vẫn xanh**. Giá trị thứ tư thì trình biên
+ * dịch ép xử lý nhánh — nhánh thiếu là LỖI KIỂU, không phải số 0 âm thầm.
+ *
+ * ⚠️ Route tạo/sửa thành phần (PAYROLL-API-045/047) phải TỪ CHỐI `value_type = 'engine'` từ client —
+ * chỉ seeder tạo được (⇒ 422 `VALIDATION-ERR-001`, SPEC-11 §15.1). Đó là việc của S15-PAYROLL-BE-2.
+ */
+export const salaryComponentValueTypeEnum = z.enum(["formula", "fixed", "profile_item", "engine"]);
+export type SalaryComponentValueType = z.infer<typeof salaryComponentValueTypeEnum>;
+
+/** mirror `payroll_templates_scope_check` (PAY-DEC-013 — theo vị trí/NV = PARK-PAYROLL-002). */
+export const payrollTemplateScopeEnum = z.enum(["company", "org_unit"]);
+export type PayrollTemplateScope = z.infer<typeof payrollTemplateScopeEnum>;
+
+/** mirror `payroll_dependents_relationship_check`. */
+export const dependentRelationshipEnum = z.enum(["Child", "Spouse", "Parent", "Other"]);
+export type DependentRelationship = z.infer<typeof dependentRelationshipEnum>;
 
 /**
  * SPEC-01 §17.16 — **DẪN XUẤT, KHÔNG có cột, KHÔNG có CHECK** (SPEC-11 §13.2). Server tính trong DTO từ

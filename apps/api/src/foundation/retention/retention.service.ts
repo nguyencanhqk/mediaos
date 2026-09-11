@@ -74,6 +74,32 @@ export class RetentionService {
     "payroll_periods",
     "payroll_period_lines",
     "bonus_penalties",
+    // PAYROLL v2 — CẢ BẢY bảng mới của S15-PAYROLL-DB-1 (mig 0570).
+    // Sáu bảng đầu theo tiêu chí "không có GRANT DELETE ⇒ retention ăn 42501 UNCAUGHT và hỏng CẢ LƯỢT
+    // cleanup của tenant".
+    "salary_profile_items",
+    "payroll_employee_settings",
+    "payroll_dependents",
+    "salary_components",
+    "payroll_templates",
+    "payroll_statutory_rates",
+    // 🔴 `payroll_template_components` vào đây vì LÝ DO KHÁC — nó là bảng PAYROLL DUY NHẤT CÓ GRANT
+    //    DELETE (API-053 đặt lại cả danh sách thành phần trong một tx), nên tiêu chí "42501" KHÔNG áp.
+    //    Bản đầu của S15-PAYROLL-DB-1 vì thế để nó NGOÀI danh sách — SAI, và security-reviewer bắt
+    //    được đường khai thác cụ thể:
+    //      1. `POST /foundation/retention-policies` nhận `entityType` TỰ DO (contract chỉ ép regex
+    //         `^[a-z_][a-z0-9_]*$`, KHÔNG có allowlist bảng) ⇒ đặt được policy trên bảng này;
+    //      2. `_deleteEligible` lọc theo **`created_at < cutoff`**, KHÔNG theo `deleted_at` ⇒ nó xoá
+    //         CỨNG hàng cấu hình ĐANG SỐNG (hàng cấu hình theo định nghĩa là hàng cũ);
+    //      3. `mediaos_app` CÓ DELETE ⇒ lệnh chạy THẬT.
+    //    Hậu quả: mẫu còn đó nhưng danh sách thành phần RỖNG ⇒ "bảng 0 cột mà không lỗi"
+    //    (empty-success-is-the-fail-open-shape). Mẫu mặc định được seeder dựng lại ở boot sau; mẫu do
+    //    tenant tạo + mọi formula_override/is_visible/sort_order thì MẤT VĨNH VIỄN (bảng không có
+    //    soft-delete; audit_logs chỉ giữ vết lần SỬA, không giữ nội dung hàng bị retention xoá).
+    //    ⇒ Tiêu chí THẬT của tập này là câu ở đầu docblock — "bảng runCleanup TUYỆT ĐỐI KHÔNG được
+    //    xoá" — chứ không phải "thiếu GRANT DELETE". Thêm vào đây KHÔNG đụng API-053 (route tự phát
+    //    DELETE, không đi qua retention) ⇒ chi phí bằng 0. DB-13 §13.6 đã đính chính.
+    "payroll_template_components",
     // Finance ledgers (G13 — append-only, GIỮ; cụm media/finance đang park).
     "kpi_results",
     "profit_snapshots",

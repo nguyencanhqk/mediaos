@@ -507,8 +507,29 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM payslips WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payroll_period_lines WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM bonus_penalties WHERE company_id = ANY($1::uuid[])", ids);
+  // ── PAYROLL v2 (S15-PAYROLL-DB-1, mig 0570) — 7 bảng mới, CON → CHA ──────────────────────────
+  // ⚠️ VỊ TRÍ QUAN TRỌNG HƠN SỰ CÓ MẶT. `salary_profile_items → salary_profiles (NO ACTION)` nên nó
+  //    PHẢI đứng TRƯỚC dòng `DELETE FROM salary_profiles` ngay bên dưới; một khối 7 dòng dán SAU khối
+  //    payroll cũ vẫn thoả câu "trước DELETE FROM users" mà vỡ 23503 hàng loạt ở mọi afterAll.
+  // Phụ thuộc: payroll_dependents/payroll_employee_settings → users (NO ACTION)
+  //             salary_profile_items → salary_profiles (NO ACTION)
+  //             payroll_template_components → payroll_templates + salary_components (NO ACTION)
+  //             payroll_templates → org_units (NO ACTION) · payroll_statutory_rates → chỉ users (audit cols)
+  await direct.query("DELETE FROM payroll_dependents WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query(
+    "DELETE FROM payroll_employee_settings WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query("DELETE FROM salary_profile_items WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payroll_periods WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM salary_profiles WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query(
+    "DELETE FROM payroll_template_components WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query("DELETE FROM payroll_templates WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM salary_components WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM payroll_statutory_rates WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G13 Finance ────────────────────────────────────────────────────────────
   // Xoá TRƯỚC projects/channels/content_items/org_units/teams/users (FK target). Thứ tự nội bộ:
