@@ -106,7 +106,7 @@ describe("S13-PAYROLL-BE-1 census — mã lỗi & kind PAYROLL được ném đ�
     ).toEqual([]);
     // ⚠️ NEO THAY THẾ (§10): `PENDING` rỗng ⇒ nó không còn chống được xanh-RỖNG. Ghim SỐ LƯỢNG mã để
     // một lần xoá bớt hằng không lặng lẽ đi qua cổng này. **Cấm hạ neo để lấy màu xanh.**
-    expect(all.size, "SPEC-11 §12 khai đúng 17 mã PAYROLL-ERR").toBe(17);
+    expect(all.size, "SPEC-11 §12 + §12.1 khai đúng 19 mã PAYROLL-ERR").toBe(19);
   });
 
   /** Tập `kind` ném được — `\s*` nuốt chỗ Prettier ngắt dòng sau dấu `(`. */

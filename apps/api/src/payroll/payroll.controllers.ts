@@ -32,6 +32,7 @@ import {
   ListPayslipsQueryDto,
   ListSalaryProfilesQueryDto,
   PayrollExportQueryDto,
+  PayrollTimesheetQueryDto,
   PeoplePickerQueryDto,
   RejectBonusPenaltyDto,
   RejectPayrollPeriodDto,
@@ -300,6 +301,28 @@ export class PayrollPeriodsController {
     @Body() dto: ReopenPayrollPeriodDto,
   ) {
     return this.approval.reopen(req.user, id, dto);
+  }
+
+  /**
+   * 043 — GET /payroll-periods/:id/timesheet (S15-PAYROLL-BE-1): bảng công tổng hợp kỳ.
+   *
+   * ⚠️ **Literal path CHÍNH XÁC `:id/timesheet`** — KHÔNG `attendance-summary` hay tên nào khác:
+   * `route-http-coverage.e2e-spec.ts` khớp theo **literal path**, lệch tên = cổng đếm hụt.
+   * Gác `('view-line','payroll-period')` (SPEC-11 §15.1): người đọc được dòng bảng lương thì đọc được
+   * số ngày công của kỳ. Payload **KHÔNG có số tiền** — chỉ số NGÀY và số PHÚT.
+   */
+  @Get(":id/timesheet")
+  @UseGuards(PermissionGuard)
+  @RequirePermission(P.periodTimesheet.action, P.periodTimesheet.resourceType, {
+    isSensitive: P.periodTimesheet.isSensitive,
+  })
+  @UsePipes(ZodValidationPipe)
+  timesheet(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: PayrollTimesheetQueryDto,
+  ) {
+    return this.periods.timesheet(req.user, id, query);
   }
 
   /** 003 — GET /payroll-periods/:id. */

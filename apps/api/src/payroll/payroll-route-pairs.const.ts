@@ -7,21 +7,22 @@
  * Census 2 tầng (`payroll-two-layer-guard-census.unit-spec.ts`) so CẢ decorator lẫn service với CHÍNH
  * bảng này — KHÔNG so tầng-với-tầng (hai tầng cùng sai vẫn "khớp nhau").
  *
- * ⚠️ **Khai đủ 35 key NGAY Ở BE-1** (17 key của BE-2 khi đó chưa có route — đã nối dây hết ở BE-2),
- * và khai đủ **BA cờ cuối cùng** (`isSensitive` · `companyFloor` · `objectGrantRequired`) ngay từ đây.
+ * ⚠️ **Khai đủ 43 key** (35 của v1 + 8 track A của `S15-PAYROLL-BE-1`) và khai đủ **BA cờ cuối cùng**
+ * (`isSensitive` · `companyFloor` · `objectGrantRequired`) ngay từ đây.
  * Lý do (plan §1 B8, plan-review vòng 1 blocker #4): const này đi qua FULL gate **bây giờ**; để mặc
  * định `companyFloor = true` cho 3 route `/me/payslips*` (scope **Own** — SPEC-11 §13.5) thì hoặc BE-2
  * phải mở lại file đã ký, hoặc nhân viên **403 trên phiếu của chính mình**.
  *
- * 17 cặp PAYROLL (SPEC-11 §11.1) nhưng chỉ **16 cặp có route** — `('access','payroll')` là cổng
- * nav/capability của khối «Phiếu lương của tôi» trong app ME, KHÔNG gác route nào ở đây.
- * 13 cặp `is_sensitive = true` (seed mig `0565`): mọi `permission.can()` cho chúng phải truyền
- * `isSensitive: true` TƯỜNG MINH — wildcard `*:*` không thoả cổng sensitive.
+ * 19 cặp PAYROLL có mặt ở đây (17 của §11.1 + 2 cặp `payroll-employee` của §11.3) nhưng chỉ **18 cặp
+ * có route** — `('access','payroll')` là cổng nav/capability của khối «Phiếu lương của tôi» trong app
+ * ME, KHÔNG gác route nào ở đây. **15 cặp `is_sensitive = true`** (13 của mig `0565` + 2 cặp
+ * `payroll-employee` của mig `0571`): mọi `permission.can()` cho chúng phải truyền `isSensitive: true`
+ * TƯỜNG MINH — wildcard `*:*` không thoả cổng sensitive.
  */
 export interface PayrollPair {
   readonly action: string;
   readonly resourceType: string;
-  /** true = cặp nằm trong 13 cặp `is_sensitive` của mig `0565`. */
+  /** true = cặp nằm trong tập `is_sensitive` đã seed (mig `0565` v1 + mig `0571` v2). */
   readonly isSensitive: boolean;
   /**
    * SÀN SCOPE Company (khuôn `dash-widget-gate-needs-scope-floor` / RECRUIT M1): SPEC-11 §13.5 chốt
@@ -59,7 +60,7 @@ const pair = (
   ...(objectGrantRequired === false ? { objectGrantRequired: false as const } : {}),
 });
 
-/** Key = mã route API-18 (PAYROLL-API-XXX) — đủ **35** route. */
+/** Key = mã route API-18 (PAYROLL-API-XXX) — đủ **43** route (35 v1 + 8 track A v2). */
 export const PAYROLL_ROUTE_PAIRS = {
   // ── Kỳ lương 001–018 ──────────────────────────────────────────────────────────────────────────
   periodList: pair("view", "payroll-period"), //                                            001
@@ -103,18 +104,32 @@ export const PAYROLL_ROUTE_PAIRS = {
   // ── Picker 034–035 ────────────────────────────────────────────────────────────────────────────
   pickerPeople: pair("view", "salary-profile", true), //                                    034
   pickerAttendancePeriods: pair("manage", "payroll-period"), //                             035
+  // ── v2 track A — Nhân viên PAYROLL 036–043 (S15-PAYROLL-BE-1) ─────────────────────────────────
+  // Cặp `payroll-employee` là 2 trong 17 cặp MỚI của SPEC-11 §11.3 — **TẤT CẢ đều sensitive**, và
+  // §13.5 chốt bảy bề mặt mới CHỈ có scope `Company` ⇒ `companyFloor` bật cho cả 8.
+  employeeList: pair("view", "payroll-employee", true), //                                  036
+  employeeDetail: pair("view", "payroll-employee", true), //                                037
+  employeeSettingsGet: pair("view", "payroll-employee", true), //                           038
+  employeeSettingsPut: pair("manage", "payroll-employee", true), //                         039
+  employeeDependentList: pair("view", "payroll-employee", true), //                         040
+  employeeDependentCreate: pair("manage", "payroll-employee", true), //                     041
+  dependentUpdate: pair("manage", "payroll-employee", true), //                             042
+  // 043 TÁI DÙNG cặp CŨ `view-line:payroll-period` (SPEC-11 §15.1) — bảng công là dữ liệu của KỲ,
+  // không phải của nhân sự; người đọc được dòng bảng lương thì đọc được số ngày công của kỳ đó.
+  periodTimesheet: pair("view-line", "payroll-period", true), //                            043
 } as const satisfies Record<string, PayrollPair>;
 
 export type PayrollRouteKey = keyof typeof PAYROLL_ROUTE_PAIRS;
 
 /**
- * **RỖNG từ `S13-PAYROLL-BE-2`** — cả 35 key đã có route và đã được assert ở tầng service.
+ * **RỖNG từ `S13-PAYROLL-BE-2`** — cả 43 key đã có route và đã được assert ở tầng service (8 key
+ * track A lên dây trong CHÍNH `S15-PAYROLL-BE-1`, nên danh sách này vẫn rỗng).
  *
  * Hằng GIỮ LẠI, không xoá: census 2 tầng assert `PENDING_BE2 ∪ used === all` **VÀ**
  * `PENDING_BE2 ∩ used === ∅`, nên nó vẫn là cổng cho route thứ 36 mọc lên sau này mà quên nối tầng 2.
  *
  * ⚠️ Khi danh sách rỗng, neo chống-xanh-rỗng của CHÍNH nó biến mất ⇒ census phải neo bằng
- * `Object.keys(PAYROLL_ROUTE_PAIRS).length === 35` **và** `used.size === 35`. **Cấm hạ neo để lấy
+ * `Object.keys(PAYROLL_ROUTE_PAIRS).length === 43` **và** `used.size === 43`. **Cấm hạ neo để lấy
  * màu xanh.**
  */
 export const PAYROLL_PENDING_BE2: readonly PayrollRouteKey[] = [];

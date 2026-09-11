@@ -6,6 +6,7 @@ import type {
   PayrollPeriodStatus,
   PayrollReadinessDto,
   PayrollReadinessWarningDto,
+  PayrollTimesheetQuery,
   PayrollWriteResultDto,
   UpdatePayrollPeriodRequest,
 } from "@mediaos/contracts";
@@ -24,6 +25,7 @@ import { SalaryProfilesRepository } from "./salary-profiles.repository";
 
 /**
  * S13-PAYROLL-BE-1 — kỳ lương `PAYROLL-API-001..006` + picker kỳ công `035`.
+ * S15-PAYROLL-BE-1 — thêm `043` bảng công tổng hợp kỳ (tái dùng `computeInputsTx`).
  *
  * Mỗi method mở bằng `access.resolveActor(user, <routeKey>)` — **tầng guard THỨ HAI**, độc lập với
  * decorator route; deny ở đó để lại ZERO side-effect vì nó chạy TRƯỚC khi mở transaction.
@@ -235,6 +237,83 @@ export class PayrollPeriodsService {
           kind: w.kind,
         })),
       };
+    });
+  }
+
+  /**
+   * 043 — **bảng công tổng hợp kỳ** (`GET /payroll-periods/:id/timesheet`, SPEC-11 §15.1).
+   *
+   * 🔴 **TÁI DÙNG `computeInputsTx` — KHÔNG viết aggregation thứ hai.** Hai bản aggregation là hai
+   * định nghĩa "ngày công", và bảng công mà lệch với số dùng để tính lương thì không ai đối soát được.
+   * Đây là điều kiện ĐÓNG của WO, không phải lựa chọn triển khai.
+   *
+   * 🔴 **Nhân sự 0 công 0 phép PHẢI hiện hàng 0 ngày, không được biến mất.** CTE `people` của
+   * `computeInputsTx` là `att ∪ lv` (chỉ người CÓ dữ liệu), nên union thêm `aliveUserIdsTx` — bảng công
+   * thiếu người nghĩa là người đó **không được trả lương** mà không ai nhìn thấy. Đúng lớp lỗi
+   * "thành công mà rỗng" của §13.4.
+   *
+   * ⚠️ **Phân trang cắt trong TS, CÓ CHỦ ĐÍCH và có giới hạn đã biết.** `computeInputsTx` tính set-based
+   * cho CẢ KỲ và không nhận `LIMIT` (nó là một CTE chain trên toàn công ty) — thêm `LIMIT` vào nó sẽ
+   * đổi hành vi của `readiness`/`calculate` vốn CẦN toàn bộ. Vì vậy: tính đủ → sort ổn định theo
+   * `userId` → cắt trang. Chấp nhận được trong trần NFR §19 (500 NV < 5s); vượt trần là WO riêng, KHÔNG
+   * phải cái cớ để viết truy vấn thứ hai.
+   *
+   * **KHÔNG SỐ TIỀN** — DTO chỉ có số NGÀY và số PHÚT, dù cặp gác (`view-line:payroll-period`) là cặp
+   * chở-tiền ở route khác.
+   */
+  async timesheet(user: PayrollRequestUser, id: string, query: PayrollTimesheetQuery) {
+    const actor = await this.access.resolveActor(user, "periodTimesheet");
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const period = await this.repo.findTx(tx, user.companyId, id);
+      if (!period) throw payrollNotFound();
+
+      const [inputs, alive] = await Promise.all([
+        this.inputs.computeInputsTx(tx, user.companyId, period.periodMonth),
+        // `limit: null` — bảng công là tổng hợp cấp KỲ, PHẢI phủ hết công ty (cùng lý do `readiness`).
+        this.people.aliveUserIdsTx(tx, user.companyId, { limit: null }),
+      ]);
+
+      const byUser = new Map(inputs.rows.map((r) => [r.userId, r]));
+      const all = alive.userIds.map((userId) => {
+        const r = byUser.get(userId);
+        return {
+          userId,
+          workDays: inputs.workDays,
+          presentDays: r?.presentDays ?? 0,
+          paidLeaveDays: r?.paidLeaveDays ?? 0,
+          unpaidLeaveDays: r?.unpaidLeaveDays ?? 0,
+          lateMinutes: r?.lateMinutes ?? 0,
+        };
+      });
+      // Thứ tự ỔN ĐỊNH theo `userId` — `aliveUserIdsTx` đã `ORDER BY users.id`, giữ nguyên để trang 2
+      // không cắt một tập khác trang 1.
+      const total = all.length;
+      const offset = payrollOffset(query.page, query.per_page);
+      const pageRows = all.slice(offset, offset + query.per_page);
+
+      const names = await this.people.namesByUserIdsTx(
+        tx,
+        actor,
+        pageRows.map((r) => r.userId),
+      );
+      await this.audit.record(tx, {
+        action: "read",
+        objectType: "payroll_period",
+        objectId: period.id,
+        actorUserId: user.id,
+        before: null,
+        // §18.1 B hàng 5 — `rowCount` là TỔNG hàng của kỳ (không phải hàng của trang này): vết phải
+        // nói "lượt đọc này phủ bao nhiêu người", không phải "màn hình hiện bao nhiêu dòng".
+        after: { rowCount: total },
+      });
+      return paginated(
+        pageRows.map((r) => ({
+          ...r,
+          employeeCode: names.get(r.userId)?.employeeCode ?? null,
+          fullName: names.get(r.userId)?.displayName ?? null,
+        })),
+        toPagination(total, query.page, query.per_page),
+      );
     });
   }
 
