@@ -573,6 +573,21 @@ Giữ nguyên §8.1 · §8.3 · §8.4 · §8.5 · §8.6 · §8.9 của `docs/pla
    *"D2 siết đường GHI, đường ĐỌC ghi nợ"*, và siết ở đây không có cổng nào đo được — đúng cái bệnh
    §8.4 mô tả. Gộp vào WO nợ §8.4 khi làm.
 
+3. **Cửa sổ dựng-lại-khoá quanh `reset()` sau COMMIT** (`security-reviewer` FULL gate 11/09, MEDIUM).
+   Probe `alive` của `enroll` là `SELECT` trần dưới READ COMMITTED (#490 §8.9). Một request `enroll`
+   đọc `users` **trước** khi tx restore commit nhưng chạy `recordFailure` **sau** `limiter.reset(...)`
+   sẽ bồi lại counter cho một tài khoản nay đã sống. Vì `enroll` cố ý không `reset` ở đường thành
+   công (§4 D1), counter đó chỉ tan theo TTL 900s; đủ `LOGIN_MAX_ATTEMPTS` request straddle thì khoá
+   dựng lại và **lại không có đường gỡ**. Xác suất thấp (cần bắn trúng cửa sổ vài chục ms, lặp 5 lần)
+   nhưng KHÔNG bằng 0. Vá đòi khoá hàng `users` trong tx 2FA hoặc một vòng `reset` thứ hai có trễ —
+   cả hai đều cần đo tải ⇒ **WO riêng**. Docblock D3b hiện chỉ ghi giới hạn "Valkey degraded"; cửa sổ
+   này ghi ở đây.
+
+4. **`callsWithin` của `twoFactorDenyBranchAnchors()` khớp theo TÊN method, không kiểm receiver**
+   (`security-reviewer`, LOW). Đổi `this.rateLimiter.recordFailure(...)` thành một
+   `x.recordFailure(...)` bất kỳ vẫn xanh. **Nhất quán có chủ ý** với `isWriteCall` sẵn có trong cùng
+   file (cũng khớp đuôi property-access). Ghi ra để không ai tưởng neo mạnh hơn thực tế.
+
 ---
 
 ## 9. FULL gate — điền sau khi chạy
@@ -582,10 +597,29 @@ Giữ nguyên §8.1 · §8.3 · §8.4 · §8.5 · §8.6 · §8.9 của `docs/pla
 | `plan-reviewer` vòng 1 | **BLOCK** → v2 vá C1–C4, H1–H4, M1–M6 |
 | `plan-reviewer` vòng 2 | **BLOCK** → v3 vá B1 (neo theo khoá nhánh, 3 nhánh không phải 2) · B2 (`paths` thiếu 6 file) · B3 (`done_when` đòi ngược C2) · B4 (trỏ sai file `§restore-flag-failclosed`) · B5 (hoist `requireRateLimiter`) + W1–W5 |
 | `plan-reviewer` vòng 3 | **PASS** — được thi công từ §7 bước 1 |
-| Đo đột biến §5.5 | *(chờ)* |
-| int-spec mới | *(chờ)* |
-| Hồi quy §6 | *(chờ)* |
-| `test:cov:sensitive` (sàn 80%) | *(chờ)* |
-| `security-reviewer` (FULL) | *(chờ)* |
-| `silent-failure-hunter` (FULL) | *(chờ)* |
+| Đo đột biến §5.5 | **13/13 bắt được**, mỗi đột biến ĐỎ **đúng ca của nó** (đối chiếu TÊN CA, không đọc mã thoát) |
+| int-spec mới `auth-s18-490debt-1` | **10 ca XANH** qua HTTP thật (`LANE_DB=mediaos_s18d490`) |
+| Hồi quy §6 | **XANH** — `restore2fa-1` 14 · `2fadeleted-1` 4 · `seceventrest-1` 10 · `user-2fa-reset` 7 · `two-factor` 15 · `two-factor-login` 13 · unit 196 |
+| `test:cov:sensitive` (sàn 80%) | **XANH** — 1132 ca; `auth.service.ts` **88.26%** stmts / **84.11%** branch. Đo riêng `two-factor.service.ts` + `users/auth-users.service.ts`: **98.73%** / **90.27%** |
+| `harness/check.sh --all --lane-db=s18d490` | **XANH** (secret-literals · lint · typecheck · migration-no-drop · tooling · test [chunked] · build · prod-tenant · db-readiness) |
+| `security-reviewer` (FULL) | vòng 1 **BLOCK** — 1 HIGH (`2fa-enable` cũng bị khoá được và cũng nằm trên cửa thoát) ⇒ đã vá + mở rộng cổng; 1 MEDIUM + 1 LOW ⇒ ghi nợ §8 |
+| `silent-failure-hunter` (FULL) | **PASS** — 0 CRITICAL, 0 HIGH (1 MEDIUM = giới hạn best-effort đã ký ở D3b) |
 | `database-reviewer` | **không cần** — 0 migration, 0 đổi schema (§2) |
+
+### 9.1 Đột biến đã đo (13)
+
+| Đột biến | Ca ĐỎ |
+| --- | --- |
+| bỏ `recordFailure` ở `account_gone` của `enroll` | ratchet **(5)** · `§enroll-rl-lock` |
+| bỏ vế `isLocked` của `enroll` | `§enroll-rl-lock` · `§enroll-rl-ceiling` · `§enroll-rl-before-kms` |
+| DỜI `isLocked` xuống SAU `encryptSecret` | `§enroll-rl-before-kms` |
+| thêm `recordReauthFailure` vào `account_gone` của `enroll` | `§enroll-rl-noreauth` |
+| bỏ `recordFailure` ở `account_gone` của `confirmEnable` | `§enable-deny-rl` |
+| `TOTP_RESET` phát VÔ ĐIỀU KIỆN | `§restore-totpreset-neg` |
+| bỏ hẳn `TOTP_RESET` ở `restoreUser` | `§restore-totpreset` |
+| bỏ `2fa-enroll` khỏi `TWO_FACTOR_SETUP_BUCKETS` | `§restore-unlocks-enroll` (vế **enroll**) |
+| bỏ `2fa-enable` khỏi `TWO_FACTOR_SETUP_BUCKETS` | `§restore-unlocks-enroll` (vế **enable**) |
+| bỏ ngữ cảnh khỏi dòng log (×2 writer) | `§reauth-log-ctx-2fa (b)` · `§reauth-log-ctx-auth (b)` |
+| bỏ `try/catch` của `recordReauthFailure` (×2 writer) | `§reauth-log-ctx-* (a)` **và** `(b)` |
+| **DỜI** `recordFailure` từ `enroll` sang `disable` (tổng đếm cấp file GIỮ NGUYÊN = 3) | ratchet **(5)** — chứng minh neo theo KHOÁ NHÁNH, không phải tổng đếm |
+| thêm `recordFailure` vào `disable` (chiều CẤM) | ratchet **(5)** |
