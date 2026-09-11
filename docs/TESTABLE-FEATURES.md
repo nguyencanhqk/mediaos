@@ -256,6 +256,33 @@ RED-trước-GREEN · cross-tenant · coverage):
 
 ---
 
+## 5c-bis. CHAT — bố cục & thao tác v2 (wave S17-CHAT-UX2, nghiệm thu 11/09/2026)
+
+Nâng bố cục/thao tác theo benchmark MISA AMIS Chat (`CHAT-DEC-021…027`, SPEC-15 §5.1d + §22c). Vẫn
+là cùng module `CHAT` ở §5c — mục này chỉ ghi phần **đổi giao diện & DTO** của wave S17.
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Dòng hội thoại có tin cuối | mở `/chat` | mỗi dòng hiện người gửi + trích tin cuối. Tin **thu hồi** hiện "đã thu hồi" — nội dung bị che **ở server**, không phải ẩn ở client; tin chỉ có tệp ⇒ nhãn tệp; tin hệ thống ⇒ kiểu `system`; trích cắt ở 120 grapheme |
+| Phòng riêng (DM) | mở một DM | hiện tên + ảnh người đối diện; người đã **khoá tài khoản / nghỉ việc** ⇒ nhãn «Ngừng hoạt động» nhưng **vẫn gửi được tin** (CHAT-DEC-023) |
+| Ô soạn v2 | gõ `@` · dán ảnh · kéo-thả tệp · chọn emoji | `@mention` gợi ý theo thành viên phòng; ảnh dán hiện thumbnail và lên **đúng một lần**; emoji chèn **tại con trỏ** |
+| Bảng thông tin phòng v2 | mở một phòng → nút ⓘ | Ảnh/Tệp/Liên kết/Tin ghim + Thành viên (Sheet). Liên kết chỉ lấy từ tin **chưa thu hồi, không phải tin hệ thống**; `javascript:`/`data:` bị loại |
+| Thao tác thành viên | Sheet Thành viên của phòng **nhóm** | nút phong/hạ quản trị + bớt khỏi phòng chỉ hiện khi đủ **bốn** vế: có cặp `manage:chat-member` · phòng `group` · mình là admin phòng · không phải hàng của mình. Phòng phòng-ban/dự án ⇒ ẩn + nêu lý do đồng bộ tự động |
+| Drawer chat | bấm badge tin nhắn ở thanh trên (ngoài `/chat`) | mở ngăn kéo bên phải thay cửa sổ nổi cũ; Esc **hai tầng** (đang mở lớp nổi khác thì nhường); trên chính `/chat*` badge KHÔNG mở drawer |
+| `/chat` responsive | thu cửa sổ qua 3 mốc (<768 · 768–1279 · ≥1280) | 1 cột → 2 cột + Sheet thông tin → 3 cột. Bấm nền **không** đóng Sheet thông tin (giữ nháp đổi tên) |
+| Tạo cuộc trò chuyện | `/chat` → Cuộc trò chuyện mới | tab Nhắn riêng/Tạo nhóm. Nhân viên **chưa liên kết tài khoản** bị khoá kèm lý do — không gửi `null` xuống server |
+
+**Chưa có (Known Issue, owner chốt giữ nguyên):** drawer KHÔNG có nút gọi và KHÔNG có bảng thông tin
+phòng — khiếm khuyết **kế thừa** từ cửa sổ nổi cũ, không phải hồi quy. Nút gọi kiểm trên `/chat`.
+
+Bộ test tự động: **42 ca** int-spec (`chat-s17-*.int-spec.ts`, cần `LANE_DB`) + **660 ca** FE cụm chat
+(`components/chat` + `routes/chat` + `layouts`; coverage Stmts 94.72 · Branch 88.52 · Funcs 81.73 ·
+Lines 94.72 — chạy `pnpm --filter @mediaos/app test:chat-cov`). Bằng chứng nghiệm thu (ma trận ·
+8 lượt đột biến RED-trước-GREEN · ratchet · KI):
+[`QA/evidence/S17-CHAT-UX2-QA-1-ACCEPTANCE.md`](QA/evidence/S17-CHAT-UX2-QA-1-ACCEPTANCE.md).
+
+---
+
 ## 5d. ASSET — Quản lý tài sản (wave S11-OFFICE, nghiệm thu QA 30/08/2026)
 
 Module Phase 3 đầu tiên vào được tay người dùng: `modules.ASSET.is_active = true` từ migration `0556`
