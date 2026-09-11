@@ -1757,6 +1757,6 @@ describe("AuthService.recordReauthFailure — nuốt lỗi NHƯNG mang ngữ c�
     expect(line).toContain("context=change_password");
     // Regex chứ KHÔNG string literal: `valkey-key-census.spec.ts` neo mọi literal MỞ ĐẦU bằng tiền
     // tố khoá và sẽ báo file này là "chỗ dựng khoá thứ hai" — đỏ oan cho một assert ÂM.
-    expect(line, "log KHÔNG được mang khoá Valkey (họ rl: nhúng email/slug)").not.toMatch(/rl:/);
+    expect(line, "log KHÔNG được mang khoá Valkey (họ rl: nhúng email/slug)").not.toMatch(/rl:/);
   });
 });
