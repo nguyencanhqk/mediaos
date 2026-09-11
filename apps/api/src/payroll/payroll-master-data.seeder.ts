@@ -106,20 +106,99 @@ interface ComponentSeed {
 }
 
 /**
- * Catalog hệ thống — bảng seed DB-13 §13.4, chép nguyên.
+ * Không gian tên REF — **ĐÓNG** (SPEC-11 §13.6 D). Ba họ, không có họ thứ tư:
+ *   • `SYS_*`  — đầu vào ĐÓNG BĂNG của dòng lương (chỉ đọc);
+ *   • `TL_*` · `GT_*` — hằng luật định hiệu lực tại ngày cuối kỳ (chỉ đọc);
+ *   • *(còn lại)* — **mã thành phần** trong mẫu của kỳ.
  *
- * Công thức ở đây là **công thức v1 viết lại theo catalog** (mẫu mặc định "tái tạo công thức v1"),
- * dùng biến hệ thống của máy công thức (SPEC-11 §13.6). Parser/evaluator là việc của
- * `S15-PAYROLL-BE-2`; ở WO này chúng chỉ là DỮ LIỆU — không ai evaluate chúng.
+ * 🔴 **VÌ SAO PHẢI DÙNG ĐÚNG TIỀN TỐ — và vì sao tên trần là một LỖ THẬT.**
+ * `salary_components_code_shape_check` cấm người dùng đặt mã mang tiền tố `SYS_`/`TL_`/`GT_`. Nếu công
+ * thức seed viết `BASE_SALARY` (tên trần) thay vì `SYS_BASE_SALARY`, thì theo chính grammar đó
+ * `BASE_SALARY` là **mã thành phần**, và CHECK **cho phép** một tenant tạo hàng `code = 'BASE_SALARY'`
+ * ⇒ hàng đó **CHE đầu vào của engine cho cả công ty** (đặt `fixed_amount = 0` là mọi khoản BH = 0).
+ * CHECK vẫn xanh, RLS vẫn xanh, mọi bất biến SQL vẫn xanh — đúng lớp lỗi shadowing mà §8.2 C1 dựng
+ * CHECK đó để chặn. Dùng đúng tiền tố thì CHECK mới bảo vệ đúng thứ nó định bảo vệ.
+ * Ca `s15-payroll-db1-seed.int-spec.ts` **E11** census MỌI REF của mọi công thức seed theo luật này.
+ */
+const SYS_REFS = [
+  "SYS_BASE_SALARY",
+  "SYS_INSURANCE_SALARY",
+  "SYS_PROBATION_SALARY",
+  "SYS_PAY_RATIO",
+  "SYS_WORK_DAYS",
+  "SYS_PRESENT_DAYS",
+  "SYS_PAID_LEAVE_DAYS",
+  "SYS_UNPAID_LEAVE_DAYS",
+  "SYS_LATE_MINUTES",
+  "SYS_PRORATE",
+  "SYS_DEPENDENTS",
+  "SYS_DAILY_RATE",
+] as const;
+
+const STATUTORY_REFS = [
+  "TL_BHXH_NV",
+  "TL_BHYT_NV",
+  "TL_BHTN_NV",
+  "TL_BHXH_DN",
+  "TL_BHYT_DN",
+  "TL_BHTN_DN",
+  "TL_KPCD",
+  "TL_DOAN_PHI",
+  "GT_BAN_THAN",
+  "GT_NPT",
+] as const;
+
+/** `FUNC` của grammar (SPEC-11 §13.6 A) — danh sách ĐÓNG. */
+const FORMULA_FUNCS = [
+  "IF",
+  "MIN",
+  "MAX",
+  "ROUND",
+  "ABS",
+  "CEIL",
+  "FLOOR",
+  "TNCN_LUY_TIEN",
+  "BH_TRAN_BHXH",
+  "BH_TRAN_BHYT",
+  "BH_TRAN_BHTN",
+] as const;
+
+/** Xuất cho spec census E11 — giữ MỘT nguồn, spec KHÔNG chép lại (chép lại là tautology). */
+export const PAYROLL_FORMULA_VOCABULARY = {
+  sysRefs: SYS_REFS,
+  statutoryRefs: STATUTORY_REFS,
+  funcs: FORMULA_FUNCS,
+} as const;
+
+/**
+ * Catalog hệ thống — bảng seed DB-13 §13.4.
+ *
+ * Công thức viết theo **không gian tên đóng** ở trên và `FUNC` hợp lệ của §13.6 A. Parser/evaluator là
+ * việc của `S15-PAYROLL-BE-2`; ở WO này chúng chỉ là DỮ LIỆU — chưa ai evaluate chúng. Nhưng chúng là
+ * dữ liệu **seed lên PROD lúc boot**, và `ON CONFLICT DO NOTHING` KHÔNG cập nhật hàng đã có, nên sai ở
+ * đây là sai VĨNH VIỄN cho tới khi có bước vá dữ liệu ⇒ viết đúng ngay, hoặc KHÔNG seed.
+ *
+ * ⚠️ **BA thành phần CỐ Ý KHÔNG SEED: `THUONG` · `PHAT` · `TAM_UNG`** (DB-13 §13.4 có liệt kê — đã
+ * đính chính cùng commit). Lý do: giá trị của chúng là **đầu vào THEO DÒNG** (thưởng/phạt đã duyệt của
+ * kỳ; tạm ứng `Approved` chưa khấu trừ), mà không gian tên `SYS_*` của §13.6 D — khai **ĐÓNG** —
+ * **không có** biến nào biểu diễn được. Hai lối sai đều tệ: seed bằng REF trần (`BONUS_AMOUNT`…) là
+ * TỰ TAY tạo lỗ shadowing mô tả ở trên; seed `fixed_amount = 0` là fail-open im lặng (khoản thưởng
+ * biến mất mà `net ≥ 0` vẫn đúng). ⇒ **nợ bàn giao `S15-PAYROLL-BE-2`**: mở rộng `SYS_*` trong
+ * SPEC-11 §13.6 D (vd `SYS_BONUS_AMOUNT` · `SYS_PENALTY_AMOUNT` · `SYS_ADVANCE_AMOUNT`) rồi seed ba
+ * hàng này cùng lượt, có **bump `seedVersion`**.
+ *
+ * ⚠️ Điều kiện `joins_social_insurance`/`joins_union` **KHÔNG** nằm trong công thức: §13.7 B chốt
+ * «không tham gia ⇒ thành phần bằng 0, VẪN ghi dòng» — đó là hành vi của ENGINE (BE-3), không phải
+ * một vế `IF` trong công thức catalog.
  */
 const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
-  // ── Nền (earning/deduction) ──
+  // ── Nền ──
   {
     code: "LUONG_CO_BAN",
     name: "Lương cơ bản",
     kind: "earning",
     valueType: "formula",
-    formula: "BASE_SALARY * PAY_RATIO_PCT / 100 * PRESENT_DAYS / WORK_DAYS",
+    formula: "SYS_BASE_SALARY * SYS_PAY_RATIO / 100 * SYS_PRESENT_DAYS / SYS_WORK_DAYS",
     pitDeductible: false,
     sortOrder: 10,
     visibleInDefaultTemplate: true,
@@ -135,43 +214,13 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     visibleInDefaultTemplate: true,
   },
   {
-    code: "THUONG",
-    name: "Thưởng",
-    kind: "earning",
-    valueType: "formula",
-    formula: "BONUS_AMOUNT",
-    pitDeductible: false,
-    sortOrder: 30,
-    visibleInDefaultTemplate: true,
-  },
-  {
-    code: "PHAT",
-    name: "Phạt",
-    kind: "deduction",
-    valueType: "formula",
-    formula: "PENALTY_AMOUNT",
-    pitDeductible: false,
-    sortOrder: 40,
-    visibleInDefaultTemplate: true,
-  },
-  {
     code: "NGHI_KHONG_LUONG",
     name: "Nghỉ không lương",
     kind: "deduction",
     valueType: "formula",
-    formula: "BASE_SALARY * PAY_RATIO_PCT / 100 * UNPAID_LEAVE_DAYS / WORK_DAYS",
+    formula: "SYS_BASE_SALARY * SYS_PAY_RATIO / 100 * SYS_UNPAID_LEAVE_DAYS / SYS_WORK_DAYS",
     pitDeductible: false,
     sortOrder: 50,
-    visibleInDefaultTemplate: true,
-  },
-  {
-    code: "TAM_UNG",
-    name: "Tạm ứng",
-    kind: "deduction",
-    valueType: "formula",
-    formula: "ADVANCE_AMOUNT",
-    pitDeductible: false,
-    sortOrder: 60,
     visibleInDefaultTemplate: true,
   },
   // ── Nút tổng hợp 1/4 ──
@@ -185,13 +234,16 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     sortOrder: 100,
     visibleInDefaultTemplate: true,
   },
-  // ── BH phần NV — pit_deductible = true ──
+  // ── BH phần NV — pit_deductible = true.
+  //    Căn cứ đóng PHẢI KẸP TRẦN bằng `BH_TRAN_*` (SPEC-11 §13.7 B): trần lưu THÀNH TIỀN trong bản tỉ
+  //    lệ; nhân thẳng không kẹp thì người lương cao bị trừ VƯỢT TRẦN và ba cột si_cap/hi_cap/ui_cap
+  //    thành trang trí — sai thẳng vào số nộp bảo hiểm, không CHECK nào bắt.
   {
     code: "BHXH_NV",
     name: "BHXH (nhân viên)",
     kind: "statutory_employee",
     valueType: "formula",
-    formula: "INSURANCE_BASE * SI_EMPLOYEE_PCT / 100",
+    formula: "BH_TRAN_BHXH(SYS_INSURANCE_SALARY) * TL_BHXH_NV / 100",
     pitDeductible: true,
     sortOrder: 110,
     visibleInDefaultTemplate: true,
@@ -201,7 +253,7 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     name: "BHYT (nhân viên)",
     kind: "statutory_employee",
     valueType: "formula",
-    formula: "INSURANCE_BASE * HI_EMPLOYEE_PCT / 100",
+    formula: "BH_TRAN_BHYT(SYS_INSURANCE_SALARY) * TL_BHYT_NV / 100",
     pitDeductible: true,
     sortOrder: 120,
     visibleInDefaultTemplate: true,
@@ -211,23 +263,23 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     name: "BHTN (nhân viên)",
     kind: "statutory_employee",
     valueType: "formula",
-    formula: "INSURANCE_BASE * UI_EMPLOYEE_PCT / 100",
+    formula: "BH_TRAN_BHTN(SYS_INSURANCE_SALARY) * TL_BHTN_NV / 100",
     pitDeductible: true,
     sortOrder: 130,
     visibleInDefaultTemplate: true,
   },
-  // ── Đoàn phí — NV chịu nhưng KHÔNG được trừ thuế (SPEC-11 §13.7 D) ──
+  // ── Đoàn phí — NV chịu, tính trên căn cứ BHXH (§13.7 D), nhưng KHÔNG được trừ thuế ──
   {
     code: "DOAN_PHI",
     name: "Đoàn phí công đoàn",
     kind: "statutory_employee",
     valueType: "formula",
-    formula: "INSURANCE_BASE * UNION_EMPLOYEE_PCT / 100",
+    formula: "BH_TRAN_BHXH(SYS_INSURANCE_SALARY) * TL_DOAN_PHI / 100",
     pitDeductible: false,
     sortOrder: 140,
     visibleInDefaultTemplate: true,
   },
-  // ── Nút tổng hợp 2/4 ──
+  // ── Nút tổng hợp 2/4 · 3/4 ──
   {
     code: "TONG_BH_NV",
     name: "Tổng bảo hiểm nhân viên",
@@ -238,7 +290,6 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     sortOrder: 150,
     visibleInDefaultTemplate: true,
   },
-  // ── Nút tổng hợp 3/4 ──
   {
     code: "THU_NHAP_CHIU_THUE",
     name: "Thu nhập tính thuế",
@@ -254,7 +305,9 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     name: "Thuế TNCN",
     kind: "tax",
     valueType: "formula",
-    formula: "PIT_PROGRESSIVE(THU_NHAP_CHIU_THUE)",
+    // `TNCN_LUY_TIEN` là FUNC hợp lệ (§13.6 A); `THU_NHAP_CHIU_THUE` là MÃ THÀNH PHẦN (họ thứ ba của
+    // không gian tên) — đây chính là lý do bốn nút tổng hợp phải là NODE THẬT của đồ thị.
+    formula: "TNCN_LUY_TIEN(THU_NHAP_CHIU_THUE)",
     pitDeductible: false,
     sortOrder: 170,
     visibleInDefaultTemplate: true,
@@ -278,7 +331,7 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     name: "BHXH (doanh nghiệp)",
     kind: "statutory_employer",
     valueType: "formula",
-    formula: "INSURANCE_BASE * SI_EMPLOYER_PCT / 100",
+    formula: "BH_TRAN_BHXH(SYS_INSURANCE_SALARY) * TL_BHXH_DN / 100",
     pitDeductible: false,
     sortOrder: 200,
     visibleInDefaultTemplate: false,
@@ -288,7 +341,7 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     name: "BHYT (doanh nghiệp)",
     kind: "statutory_employer",
     valueType: "formula",
-    formula: "INSURANCE_BASE * HI_EMPLOYER_PCT / 100",
+    formula: "BH_TRAN_BHYT(SYS_INSURANCE_SALARY) * TL_BHYT_DN / 100",
     pitDeductible: false,
     sortOrder: 210,
     visibleInDefaultTemplate: false,
@@ -298,7 +351,7 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     name: "BHTN (doanh nghiệp)",
     kind: "statutory_employer",
     valueType: "formula",
-    formula: "INSURANCE_BASE * UI_EMPLOYER_PCT / 100",
+    formula: "BH_TRAN_BHTN(SYS_INSURANCE_SALARY) * TL_BHTN_DN / 100",
     pitDeductible: false,
     sortOrder: 220,
     visibleInDefaultTemplate: false,
@@ -308,7 +361,7 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     name: "Kinh phí công đoàn",
     kind: "statutory_employer",
     valueType: "formula",
-    formula: "INSURANCE_BASE * UNION_EMPLOYER_PCT / 100",
+    formula: "BH_TRAN_BHXH(SYS_INSURANCE_SALARY) * TL_KPCD / 100",
     pitDeductible: false,
     sortOrder: 230,
     visibleInDefaultTemplate: false,

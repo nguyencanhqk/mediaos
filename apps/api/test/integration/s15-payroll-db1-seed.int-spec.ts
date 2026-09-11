@@ -6,6 +6,7 @@ import { SeedTrackingService } from "../../src/foundation/seed/seed-tracking.ser
 import {
   PAYROLL_DEFAULT_TEMPLATE_CODE,
   PAYROLL_ENGINE_COMPONENT_CODES,
+  PAYROLL_FORMULA_VOCABULARY,
   PAYROLL_PIT_DEDUCTIBLE_CODES,
   PAYROLL_SEED_RATE_EFFECTIVE_FROM,
   PayrollMasterDataSeeder,
@@ -99,7 +100,23 @@ describe.skipIf(!hasDb)(
     });
 
     it("E4 ca ÂM: lật DOAN_PHI.pit_deductible=true ⇒ outcome.ok === FALSE (KHÔNG dùng .rejects)", async () => {
-      // ⚠️ `.rejects` ở đây sẽ LUÔN xanh vì runner nuốt throw — assert đúng là cờ `ok` của outcome.
+      // ⚠️ HAI lý do ca này trông lạ, cả hai đều CÓ CHỦ ĐÍCH:
+      //
+      // 1. `.rejects` ở đây sẽ LUÔN xanh vì `MasterDataSeedRunner.runOne()` nuốt throw ⇒ assert đúng
+      //    là cờ `ok` của outcome, không phải phép ném.
+      //
+      // 2. Fixture phải TẮT TẠM trigger `salary_component_system_freeze` để dựng được tiền đề. Trigger
+      //    (mig 0570) đóng băng hàng `is_system` tới mức một câu UPDATE thẳng qua `direct` cũng bị
+      //    chặn — tức bất biến DB **giết chính fixture đối kháng** (`db-invariant-kills-adversarial-
+      //    fixtures`). Đây KHÔNG phải nới cổng: hai lớp kiểm hai thứ KHÁC nhau —
+      //      · trigger (ca C5b–C5f ở `s15-payroll-db1-invariants`) chặn đường GHI làm hỏng hàng seed;
+      //      · `assertSeedIntegrity()` (ca này) bắt hàng seed ĐÃ lệch, dù lệch bằng đường nào —
+      //        seeder viết sai, migration vá dữ liệu sai, hay khôi phục từ bản sao lưu cũ.
+      //    Bỏ ca này vì "trigger đã chặn rồi" là bỏ lớp thứ hai đúng lúc lớp thứ nhất bị vòng qua.
+      //    `finally` bật lại trigger VÀ ca E4b assert nó đã bật lại (tắt mà quên bật = mọi ca sau mù).
+      await direct.query(
+        "ALTER TABLE salary_components DISABLE TRIGGER salary_component_system_freeze",
+      );
       await direct.query(
         `UPDATE salary_components SET pit_deductible = true
         WHERE company_id = $1 AND code = 'DOAN_PHI'`,
@@ -119,7 +136,21 @@ describe.skipIf(!hasDb)(
           WHERE company_id = $1 AND code = 'DOAN_PHI'`,
           [A.companyId],
         );
+        await direct.query(
+          "ALTER TABLE salary_components ENABLE TRIGGER salary_component_system_freeze",
+        );
       }
+    });
+
+    it("E4b trigger ĐÃ ĐƯỢC BẬT LẠI sau fixture của E4 (tắt mà quên bật = mọi ca sau MÙ)", async () => {
+      const { rows } = await direct.query<{ tgenabled: string }>(
+        `SELECT tgenabled FROM pg_trigger
+          WHERE tgname = 'salary_component_system_freeze'
+            AND tgrelid = 'salary_components'::regclass AND NOT tgisinternal`,
+      );
+      expect(rows, "trigger biến mất").toHaveLength(1);
+      // 'O' = enabled (origin). 'D' = disabled.
+      expect(rows[0].tgenabled, "trigger còn ĐANG TẮT sau E4").toBe("O");
     });
 
     it("E5 ĐỐI CHỨNG DƯƠNG cho E4: sau khi khôi phục, seeder chạy lại XANH (ok === true)", async () => {
@@ -210,6 +241,74 @@ describe.skipIf(!hasDb)(
       );
       expect(rows.length).toBeGreaterThan(0);
       expect(rows.filter((r) => r.is_visible).map((r) => r.code)).toEqual([]);
+    });
+
+    it("E11 CENSUS: mọi REF trong mọi công thức seed thuộc KHÔNG GIAN TÊN ĐÓNG (§13.6 D)", async () => {
+      // 🔴 Đây là ca biến `salary_components_code_shape_check` thành chốt THẬT.
+      //    CHECK cấm người dùng đặt mã mang tiền tố `SYS_`/`TL_`/`GT_`. Nếu công thức seed tham chiếu
+      //    một tên TRẦN (`BASE_SALARY`, `INSURANCE_BASE`…) thì theo chính grammar §13.6 A tên đó là
+      //    **mã thành phần** ⇒ CHECK **cho phép** một tenant tạo hàng cùng tên ⇒ hàng đó CHE đầu vào
+      //    của engine cho cả công ty (đặt `fixed_amount = 0` là mọi khoản BH = 0), mà CHECK/RLS/mọi
+      //    bất biến SQL vẫn xanh. Nói cách khác: CHECK vẫn chạy nhưng bảo vệ NHẦM không gian tên.
+      //    Census đọc công thức ĐÃ SEED TRONG DB (không đọc hằng TS) nên nó cũng bắt được drift dữ liệu.
+      const { rows } = await direct.query<{ code: string; formula: string | null }>(
+        `SELECT code, formula FROM salary_components
+        WHERE company_id = $1 AND is_system AND deleted_at IS NULL`,
+        [A.companyId],
+      );
+      expect(rows.length, "catalog rỗng ⇒ census này xanh RỖNG").toBeGreaterThan(0);
+
+      const seededCodes = new Set(rows.map((r) => r.code));
+      const sysRefs = new Set<string>(PAYROLL_FORMULA_VOCABULARY.sysRefs);
+      const statutoryRefs = new Set<string>(PAYROLL_FORMULA_VOCABULARY.statutoryRefs);
+      const funcs = new Set<string>(PAYROLL_FORMULA_VOCABULARY.funcs);
+
+      const offenders: string[] = [];
+      for (const r of rows) {
+        if (!r.formula) continue;
+        // Mọi định danh theo đúng khuôn REF của grammar; `FUNC(` phân biệt bằng dấu mở ngoặc ngay sau.
+        for (const m of r.formula.matchAll(/[A-Z][A-Z0-9_]{0,31}(\s*\()?/g)) {
+          const token = m[0].replace(/\s*\($/, "");
+          const isCall = Boolean(m[1]);
+          if (isCall) {
+            if (!funcs.has(token)) offenders.push(`${r.code}: FUNC lạ '${token}'`);
+            continue;
+          }
+          if (sysRefs.has(token) || statutoryRefs.has(token) || seededCodes.has(token)) continue;
+          offenders.push(
+            `${r.code}: REF '${token}' KHÔNG thuộc SYS_*/TL_*/GT_* và KHÔNG phải mã đã seed ` +
+              `⇒ tenant tạo được hàng cùng tên và CHE đầu vào engine`,
+          );
+        }
+      }
+      expect(offenders, offenders.join(" ; ")).toEqual([]);
+    });
+
+    it("E12 ĐỐI CHỨNG DƯƠNG cho E11: từ vựng đóng THỰC SỰ được dùng (census không xanh vì 0 REF)", async () => {
+      // Nếu mọi công thức seed rỗng/NULL thì E11 duyệt 0 token và xanh. Ca này ghim rằng có REF thật.
+      const { rows } = await direct.query<{ n: string }>(
+        `SELECT count(*) AS n FROM salary_components
+        WHERE company_id = $1 AND is_system AND deleted_at IS NULL
+          AND formula LIKE '%SYS\\_%'`,
+        [A.companyId],
+      );
+      expect(
+        Number(rows[0].n),
+        "không công thức seed nào dùng biến SYS_* ⇒ E11 xanh rỗng",
+      ).toBeGreaterThan(0);
+    });
+
+    it("E13 ba thành phần đầu vào-theo-dòng CỐ Ý CHƯA SEED — nợ của S15-PAYROLL-BE-2", async () => {
+      // `THUONG` · `PHAT` · `TAM_UNG` có giá trị là ĐẦU VÀO THEO DÒNG, mà `SYS_*` (§13.6 D, khai ĐÓNG)
+      // không có biến nào biểu diễn được. Seed bằng REF trần = tự tạo lỗ shadowing (xem E11); seed
+      // `fixed_amount = 0` = fail-open im lặng (khoản thưởng biến mất, `net ≥ 0` vẫn đúng).
+      // Ca này ghim CHỦ ĐÍCH: ai seed chúng mà không mở rộng SYS_* trước sẽ phải sửa ca này và giải thích.
+      const { rows } = await direct.query<{ code: string }>(
+        `SELECT code FROM salary_components
+        WHERE company_id = $1 AND code IN ('THUONG','PHAT','TAM_UNG') AND deleted_at IS NULL`,
+        [A.companyId],
+      );
+      expect(rows.map((r) => r.code)).toEqual([]);
     });
 
     it("E10 công ty CHƯA chạy seeder có 0 hàng catalog — đúng 4 đường không-seed của §3.1.a", async () => {

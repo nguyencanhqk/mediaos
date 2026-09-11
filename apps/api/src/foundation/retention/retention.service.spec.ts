@@ -346,6 +346,19 @@ describe("RetentionService", () => {
       "payroll_periods",
       "payroll_period_lines",
       "bonus_penalties",
+      // PAYROLL v2 — CẢ BẢY bảng mới (S15-PAYROLL-DB-1, mig 0570). Sáu bảng đầu theo cùng tiêu chí
+      // "không có GRANT DELETE". `payroll_template_components` vào tập vì lý do KHÁC và nặng hơn: nó
+      // CÓ GRANT DELETE, `_deleteEligible` lọc theo `created_at` (KHÔNG theo `deleted_at`), và
+      // `entityType` của retention-policy là chuỗi TỰ DO ⇒ một policy trỏ vào nó sẽ hard-delete cấu
+      // hình mẫu lương ĐANG SỐNG, mất vĩnh viễn (bảng không có soft-delete). Xem comment tại
+      // `retention.service.ts`.
+      "salary_profile_items",
+      "payroll_employee_settings",
+      "payroll_dependents",
+      "salary_components",
+      "payroll_templates",
+      "payroll_statutory_rates",
+      "payroll_template_components",
       "seed_batches",
     ];
     it.each(APPEND_ONLY_TABLES)(

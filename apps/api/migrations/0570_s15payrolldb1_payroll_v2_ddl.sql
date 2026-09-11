@@ -391,6 +391,59 @@ CREATE UNIQUE INDEX salary_components_company_code_uq
 --> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON salary_components TO mediaos_app;
 --> statement-breakpoint
+-- 🔴 TRIGGER HẸP đóng băng hàng hệ thống (khuôn `bonus_penalty_freeze_guard` của 0564; DB-13 §12.3 dùng
+--    cùng khuôn cho payroll_payment_lines).
+--
+--    VÌ SAO CHECK KHÔNG ĐỦ: `salary_components_system_not_deletable` chỉ gác cột `deleted_at`. Đường
+--    UPDATE thì lọt qua CẢ BA CHECK và hạ cấp được nút engine bằng MỘT câu lệnh:
+--
+--      UPDATE salary_components SET kind='deduction', value_type='fixed', fixed_amount=0
+--       WHERE code='TONG_KHAU_TRU';
+--        · value_pair_check : nhánh 'fixed' thoả (formula vốn NULL)        ✓
+--        · engine_kind_check: false = false                               ✓
+--        · system_not_deletable: deleted_at IS NULL                       ✓
+--      ⇒ TONG_KHAU_TRU không còn là engine ⇒ engine cộng ra 0 ⇒ **net = gross CHO CẢ CÔNG TY**,
+--        trong khi mọi bất biến SQL vẫn xanh (empty-success-is-the-fail-open-shape).
+--      Rẻ hơn nữa: `SET is_active = false` — không CHECK nào chạm tới cột đó.
+--
+--    `mediaos_app` có UPDATE cấp bảng (không có column-GRANT — verify 7.5b ép = 0), và mô hình đe doạ
+--    mà CHECK xoá-mềm tự nêu là "bug/script/repository gọi thẳng"; với mô hình đó UPDATE là đường
+--    NGẮN HƠN DELETE. Đóng ở DB, không chỉ ở service (service ⇒ 409 ERR-024 là lớp thứ hai).
+--
+--    CHO PHÉP sửa: `name` · `sort_order` · `updated_at` · `updated_by` (thuần hiển thị/vết).
+--    ĐÓNG BĂNG: `code` · `kind` · `value_type` · `formula` · `fixed_amount` · `pit_deductible`
+--               · `is_system` · `is_active` · `company_id` · `id`.
+CREATE OR REPLACE FUNCTION salary_component_system_freeze_guard() RETURNS trigger
+LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF NOT OLD.is_system THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.code           IS DISTINCT FROM OLD.code
+  OR NEW.kind           IS DISTINCT FROM OLD.kind
+  OR NEW.value_type     IS DISTINCT FROM OLD.value_type
+  OR NEW.formula        IS DISTINCT FROM OLD.formula
+  OR NEW.fixed_amount   IS DISTINCT FROM OLD.fixed_amount
+  OR NEW.pit_deductible IS DISTINCT FROM OLD.pit_deductible
+  OR NEW.is_system      IS DISTINCT FROM OLD.is_system
+  OR NEW.is_active      IS DISTINCT FROM OLD.is_active
+  OR NEW.company_id     IS DISTINCT FROM OLD.company_id
+  OR NEW.id             IS DISTINCT FROM OLD.id THEN
+    RAISE EXCEPTION
+      'salary_components: hang he thong (code=%) DONG BANG — chi sua duoc name/sort_order. '
+      'Ha cap mot nut aggregate lam engine tra 0 (net=gross) ma moi bat bien SQL van xanh.', OLD.code
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$fn$;
+--> statement-breakpoint
+DROP TRIGGER IF EXISTS salary_component_system_freeze ON salary_components;
+--> statement-breakpoint
+CREATE TRIGGER salary_component_system_freeze
+  BEFORE UPDATE ON salary_components
+  FOR EACH ROW EXECUTE FUNCTION salary_component_system_freeze_guard();
+--> statement-breakpoint
 
 -- ─────────────── (5e) payroll_statutory_rates (DB-13 §13.7 · PAY-DEC-014) ───────────────
 -- ⚠️ Trần lưu THÀNH TIỀN, KHÔNG lưu hệ số: "20×" và mức nền đổi ĐỘC LẬP nhau qua từng đợt sửa luật;
@@ -587,11 +640,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON payroll_template_components TO mediaos_a
 --    nguyên trong cột `allowances` (expand chưa contract) nên KHÔNG mất gì.
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 
+-- ⚠️ Thông điệp CỐ Ý chỉ mang `profile=<id> idx=<ord>` — ĐỦ để chẩn đoán, và KHÔNG kèm tên/số tiền
+--    phụ cấp. Log migration đi vào CI/stdout vận hành; dữ liệu lương là hạng masking-ở-server.
 -- (6a) FAIL-LOUD hình dạng — bỏ qua im lặng = MẤT MỘT KHOẢN PHỤ CẤP CỦA MỘT NGƯỜI, không ai biết.
 DO $$
 DECLARE v_bad text;
 BEGIN
-  SELECT string_agg(format('profile=%s idx=%s elem=%s', sp.id, e.ord, e.elem::text), '; ')
+  SELECT string_agg(format('profile=%s idx=%s', sp.id, e.ord), '; ')
     INTO v_bad
     FROM salary_profiles sp
     CROSS JOIN LATERAL jsonb_array_elements(sp.allowances) WITH ORDINALITY AS e(elem, ord)
@@ -613,7 +668,7 @@ END $$;
 DO $$
 DECLARE v_bad text;
 BEGIN
-  SELECT string_agg(format('profile=%s idx=%s amount=%s', sp.id, e.ord, e.elem ->> 'amount'), '; ')
+  SELECT string_agg(format('profile=%s idx=%s', sp.id, e.ord), '; ')
     INTO v_bad
     FROM salary_profiles sp
     CROSS JOIN LATERAL jsonb_array_elements(sp.allowances) WITH ORDINALITY AS e(elem, ord)
@@ -845,6 +900,14 @@ BEGIN
    WHERE NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = x.cn AND contype = 'c');
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION '[0570] verify: thieu CHECK: %', v_bad;
+  END IF;
+
+  -- (7.9b) Trigger hẹp đóng băng hàng hệ thống PHẢI tồn tại — nó là chốt DUY NHẤT chặn đường UPDATE
+  --        hạ cấp nút engine (CHECK system_not_deletable chỉ gác deleted_at).
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger
+                  WHERE tgname = 'salary_component_system_freeze'
+                    AND tgrelid = 'salary_components'::regclass AND NOT tgisinternal) THEN
+    RAISE EXCEPTION '[0570] verify: thieu trigger salary_component_system_freeze — hang is_system SUA DUOC, net=gross im lang';
   END IF;
 
   -- (7.10) EXPAND chưa CONTRACT: cột allowances PHẢI CÒN. Mất cột = ai đó đã contract sớm.

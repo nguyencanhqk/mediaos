@@ -251,31 +251,77 @@ describe.skipIf(!hasDb)(
         expect(id).toBeTruthy();
       });
 
-      it("A3 tenant A KHÔNG thấy hàng của tenant B trên cả 7 bảng", async () => {
-        // Gieo 1 hàng cho B trên mỗi bảng bằng direct (bypass RLS), rồi đọc bằng app-role trong ngữ cảnh A.
+      it("A3 tenant A KHÔNG thấy hàng của tenant B trên CẢ BẢY bảng", async () => {
+        // Gieo 1 hàng cho B trên MỖI bảng bằng `direct` (bypass RLS), rồi đọc bằng app-role trong ngữ
+        // cảnh A. ⚠️ Bản đầu chỉ lặp 3 bảng trong khi tiêu đề nói 7 — và ba bảng bị bỏ sót lại đúng là
+        // BA BẢNG PII (`payroll_employee_settings` · `payroll_dependents` · `salary_profile_items`).
+        // Tiêu đề nói dối về độ phủ là cách một ca test biến thành lời hứa.
+        const uB = await seedUser(direct, B.companyId, `s15b-${randomUUID().slice(0, 8)}@b.test`);
+        const spB = await direct.query(
+          `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary)
+           VALUES ($1, $2, '2026-01-01', 9000000) RETURNING id`,
+          [B.companyId, uB],
+        );
+        await direct.query(
+          `INSERT INTO salary_profile_items (company_id, salary_profile_id, component_code, amount)
+           VALUES ($1, $2, 'PC_001', 111) RETURNING id`,
+          [B.companyId, spB.rows[0].id],
+        );
+        await direct.query(
+          `INSERT INTO payroll_employee_settings
+             (company_id, user_id, bank_account_number, bank_name, account_holder)
+           VALUES ($1, $2, '9999999999', 'B Bank', 'B Holder')`,
+          [B.companyId, uB],
+        );
+        await direct.query(
+          `INSERT INTO payroll_dependents (company_id, user_id, full_name, relationship, effective_from)
+           VALUES ($1, $2, $3, 'Child', '2026-01-01')`,
+          [B.companyId, uB, `b-dep-${randomUUID().slice(0, 8)}`],
+        );
+        await direct.query(
+          `INSERT INTO payroll_statutory_rates
+             (company_id, effective_from, si_employee_pct, hi_employee_pct, ui_employee_pct,
+              si_employer_pct, hi_employer_pct, ui_employer_pct, union_employer_pct,
+              union_employee_pct, si_cap, hi_cap, ui_cap, base_wage, min_region_wage,
+              personal_deduction, dependent_deduction, pit_brackets)
+           VALUES ($1, '2029-01-01', 8,1.5,1, 17.5,3,1, 2,1, 1,1,1, 1,1, 1,1,
+                   '[{"upTo":1,"rate":5},{"upTo":2,"rate":10},{"upTo":3,"rate":15},
+                     {"upTo":4,"rate":20},{"upTo":5,"rate":25},{"upTo":6,"rate":30},
+                     {"upTo":null,"rate":35}]'::jsonb)`,
+          [B.companyId],
+        );
         const tplB = await direct.query(
           `INSERT INTO payroll_templates (company_id, code, name, scope)
-         VALUES ($1, $2, 'B tpl', 'company') RETURNING id`,
+           VALUES ($1, $2, 'B tpl', 'company') RETURNING id`,
           [B.companyId, fixtureCode("BTPL")],
         );
         const compB = await direct.query(
           `INSERT INTO salary_components (company_id, code, name, kind, value_type, formula)
-         VALUES ($1, $2, 'B comp', 'earning', 'formula', 'BASE_SALARY') RETURNING id`,
+           VALUES ($1, $2, 'B comp', 'earning', 'formula', 'SYS_BASE_SALARY') RETURNING id`,
           [B.companyId, fixtureCode("BCMP")],
         );
         await direct.query(
           `INSERT INTO payroll_template_components (company_id, template_id, component_id)
-         VALUES ($1, $2, $3)`,
+           VALUES ($1, $2, $3)`,
           [B.companyId, tplB.rows[0].id, compB.rows[0].id],
         );
 
+        // ĐỐI CHỨNG DƯƠNG cho chính ca này: hàng của B PHẢI tồn tại khi nhìn bằng `direct` (bypass
+        // RLS). Thiếu vế này thì "A thấy 0 hàng" có thể chỉ vì fixture gieo hụt, không phải vì RLS.
+        for (const t of V2_TABLES) {
+          const { rows } = await direct.query<{ n: string }>(
+            `SELECT count(*) AS n FROM ${t} WHERE company_id = $1`,
+            [B.companyId],
+          );
+          expect(
+            Number(rows[0].n),
+            `fixture gieo hụt cho ${t} ⇒ ca A3 sẽ xanh RỖNG`,
+          ).toBeGreaterThan(0);
+        }
+
         const seen = await asApp(A.companyId, async (c) => {
           const out: Record<string, number> = {};
-          for (const t of [
-            "payroll_templates",
-            "salary_components",
-            "payroll_template_components",
-          ]) {
+          for (const t of V2_TABLES) {
             const r = await c.query(`SELECT count(*)::int AS n FROM ${t} WHERE company_id = $1`, [
               B.companyId,
             ]);
@@ -476,6 +522,103 @@ describe.skipIf(!hasDb)(
           return u.rowCount;
         });
         expect(ok).toBe(1);
+      });
+
+      it("C5b TRIGGER: HẠ CẤP nút engine bằng UPDATE bị CHẶN (CHECK chỉ gác deleted_at)", async () => {
+        // 🔴 Đường NGẮN HƠN xoá mềm, và CHECK không thấy: một câu UPDATE lọt qua cả ba CHECK
+        //    (value_pair nhánh 'fixed' thoả · engine_kind false=false · deleted_at IS NULL)
+        //    ⇒ TONG_KHAU_TRU thôi là engine ⇒ engine cộng ra 0 ⇒ **net = gross cho cả công ty**,
+        //    trong khi mọi bất biến SQL vẫn xanh. Chốt là trigger `salary_component_system_freeze`.
+        await expectSqlState(
+          () =>
+            asApp(A.companyId, async (c) => {
+              const r = await c.query(
+                `INSERT INTO salary_components (company_id, code, name, kind, value_type, is_system)
+                 VALUES ($1, $2, 'agg', 'aggregate', 'engine', true) RETURNING id`,
+                [A.companyId, fixtureCode("C5B")],
+              );
+              return c.query(
+                `UPDATE salary_components
+                    SET kind = 'deduction', value_type = 'fixed', fixed_amount = 0
+                  WHERE id = $1`,
+                [r.rows[0].id],
+              );
+            }),
+          "23514",
+          "hạ cấp nút engine bằng UPDATE",
+        );
+      });
+
+      it("C5c TRIGGER: tắt hàng hệ thống bằng is_active=false bị CHẶN (không CHECK nào chạm cột này)", async () => {
+        await expectSqlState(
+          () =>
+            asApp(A.companyId, async (c) => {
+              const r = await c.query(
+                `INSERT INTO salary_components (company_id, code, name, kind, value_type, is_system)
+                 VALUES ($1, $2, 'agg', 'aggregate', 'engine', true) RETURNING id`,
+                [A.companyId, fixtureCode("C5C")],
+              );
+              return c.query(`UPDATE salary_components SET is_active = false WHERE id = $1`, [
+                r.rows[0].id,
+              ]);
+            }),
+          "23514",
+          "is_active = false trên hàng is_system",
+        );
+      });
+
+      it("C5d TRIGGER: lật pit_deductible của hàng hệ thống bị CHẶN (đường 'đoàn phí giảm thuế')", async () => {
+        await expectSqlState(
+          () =>
+            asApp(A.companyId, async (c) => {
+              const r = await c.query(
+                `INSERT INTO salary_components
+                   (company_id, code, name, kind, value_type, formula, pit_deductible, is_system)
+                 VALUES ($1, $2, 'dp', 'statutory_employee', 'formula', 'SYS_BASE_SALARY', false, true)
+                 RETURNING id`,
+                [A.companyId, fixtureCode("C5D")],
+              );
+              return c.query(`UPDATE salary_components SET pit_deductible = true WHERE id = $1`, [
+                r.rows[0].id,
+              ]);
+            }),
+          "23514",
+          "pit_deductible trên hàng is_system",
+        );
+      });
+
+      it("C5e ĐỐI CHỨNG DƯƠNG cho trigger: sửa name/sort_order của hàng hệ thống VẪN ĐƯỢC", async () => {
+        // Thiếu ca này thì trigger có thể đóng băng QUÁ TAY (khoá cả sửa nhãn) mà không ai biết, và
+        // C5b–C5d vẫn xanh.
+        const n = await asApp(A.companyId, async (c) => {
+          const r = await c.query(
+            `INSERT INTO salary_components (company_id, code, name, kind, value_type, is_system)
+             VALUES ($1, $2, 'ten cu', 'aggregate', 'engine', true) RETURNING id`,
+            [A.companyId, fixtureCode("C5E")],
+          );
+          const u = await c.query(
+            `UPDATE salary_components SET name = 'ten moi', sort_order = 999 WHERE id = $1 RETURNING id`,
+            [r.rows[0].id],
+          );
+          return u.rowCount;
+        });
+        expect(n).toBe(1);
+      });
+
+      it("C5f ĐỐI CHỨNG DƯƠNG cho trigger: hàng KHÔNG is_system sửa thoải mái", async () => {
+        const n = await asApp(A.companyId, async (c) => {
+          const r = await c.query(
+            `INSERT INTO salary_components (company_id, code, name, kind, value_type, formula)
+             VALUES ($1, $2, 'user', 'earning', 'formula', 'SYS_BASE_SALARY') RETURNING id`,
+            [A.companyId, fixtureCode("C5F")],
+          );
+          const u = await c.query(
+            `UPDATE salary_components SET kind = 'deduction', is_active = false WHERE id = $1 RETURNING id`,
+            [r.rows[0].id],
+          );
+          return u.rowCount;
+        });
+        expect(n).toBe(1);
       });
 
       it.each(["SYS_GROSS", "TL_ABC", "GT_XYZ"])(
@@ -975,6 +1118,12 @@ describe.skipIf(!hasDb)(
     // E. Backfill EXPAND (mig 0570 khối 6)
     // ═══════════════════════════════════════════════════════════════════════════════════════════════
     describe("E. backfill expand-contract", () => {
+      // ⚠️ TRUNG THỰC VỀ ĐỘ PHỦ: backfill là một BƯỚC MIGRATION chạy ĐÚNG MỘT LẦN, nên spec chỉ kiểm
+      //    được HẬU ĐIỀU KIỆN còn tồn tại. Trên DB sạch (CI · lane mới tinh · PROD = 0 hàng) thì E2/E3
+      //    duyệt 0 hàng ⇒ chúng KHÔNG chứng minh gì ở đó — đặt tên "[CÓ ĐIỀU KIỆN]" thay vì để tiêu đề
+      //    hứa hão. Bằng chứng THẬT của backfill là lượt lane CÓ dữ liệu v1 + lượt gieo dữ liệu hỏng
+      //    (migration phải ĐỎ), số đo dán trong `docs/plans/S15-PAYROLL-DB-1.md` §10.0.
+      //    E1 thì KHÔNG có điều kiện: nó ghim rằng EXPAND chưa bị CONTRACT.
       it("E1 cột salary_profiles.allowances VẪN CÒN — CONTRACT là WO RIÊNG", async () => {
         const { rows } = await direct.query<{ n: string }>(
           `SELECT count(*) AS n FROM information_schema.columns
@@ -985,7 +1134,7 @@ describe.skipIf(!hasDb)(
         );
       });
 
-      it("E2 mọi hồ sơ lương ĐANG SỐNG có số item KHỚP độ dài allowances (per-profile, không so tổng)", async () => {
+      it("E2 [CÓ ĐIỀU KIỆN — chỉ ràng buộc trên lane CÓ dữ liệu v1] per-profile: số item KHỚP độ dài allowances", async () => {
         // So TỔNG là tautology trên DB sạch (0 = 0) và bỏ lọt lỗi BÙ TRỪ (hồ sơ A thiếu 1, B thừa 1).
         const { rows } = await direct.query<{ id: string; src: number; dst: number }>(
           `SELECT sp.id,
@@ -1000,7 +1149,7 @@ describe.skipIf(!hasDb)(
         expect(bad, `hồ sơ lệch: ${JSON.stringify(bad)}`).toEqual([]);
       });
 
-      it("E3 mã backfill theo khuôn PC_nnn và KHÔNG đụng tiền tố cấm của catalog", async () => {
+      it("E3 [CÓ ĐIỀU KIỆN — như E2] mã backfill theo khuôn PC_nnn, không đụng tiền tố cấm", async () => {
         const { rows } = await direct.query<{ component_code: string }>(
           `SELECT DISTINCT component_code FROM salary_profile_items
           WHERE component_code LIKE 'PC\\_%'`,

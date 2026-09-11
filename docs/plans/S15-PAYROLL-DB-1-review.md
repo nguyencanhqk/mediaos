@@ -79,7 +79,43 @@
 
 ---
 
-## 4. LOW
+## 4. FULL gate SAU khi code xong (11/09/2026) — chạy TUẦN TỰ
+
+### 4.1 `security-reviewer` — VERDICT **BLOCK → đã vá 3/3 HIGH + 2 MED + 1 LOW**
+
+| # | Phát hiện | Vì sao nguy hiểm | Đã vá ở đâu |
+| --- | --- | --- | --- |
+| **H1** | **20 công thức seed dùng REF TRẦN** (`BASE_SALARY`, `INSURANCE_BASE`, `SI_EMPLOYEE_PCT`…) thay vì `SYS_*`/`TL_*` | Theo grammar §13.6 D, REF trần = **mã thành phần** ⇒ `code_shape_check` (chỉ cấm tiền tố `SYS_`/`TL_`/`GT_`) **cho phép** tenant tạo `code='BASE_SALARY'` và **CHE đầu vào engine cho cả công ty** (`fixed_amount=0` ⇒ mọi khoản BH = 0), trong khi CHECK/RLS/mọi bất biến SQL vẫn xanh. Tức CHECK vẫn chạy nhưng **bảo vệ nhầm không gian tên**. Cộng: `PIT_PROGRESSIVE` không có trong `FUNC`; công thức BH **bỏ TRẦN** ⇒ người lương cao bị trừ vượt trần và 3 cột `*_cap` thành trang trí | `payroll-master-data.seeder.ts` viết lại 16 hàng theo `SYS_*`/`TL_*` + `BH_TRAN_*()` + `TNCN_LUY_TIEN()`; xuất `PAYROLL_FORMULA_VOCABULARY`; **ca E11 census MỌI REF** + E12 đối chứng dương. **3 thành phần `THUONG`/`PHAT`/`TAM_UNG` CỐ Ý KHÔNG SEED** (SYS_* không có biến cho đầu vào theo dòng) — ca **E13** ghim chủ đích, nợ ghi vào `done_when` BE-2; DB-13 §13.4 đính chính |
+| **H2** | **Hàng `is_system` UPDATE được**: `UPDATE … SET kind='deduction', value_type='fixed', fixed_amount=0 WHERE code='TONG_KHAU_TRU'` lọt qua **cả ba** CHECK (`value_pair` nhánh `fixed` · `engine_kind` false=false · `system_not_deletable` `deleted_at IS NULL`) | Nút engine bị hạ cấp ⇒ engine cộng ra 0 ⇒ **`net = gross` cho cả công ty**, mọi bất biến SQL vẫn xanh. Rẻ hơn nữa: `SET is_active=false` — không CHECK nào chạm cột đó. CHECK xoá-mềm chỉ đóng **một** nhánh của mô hình đe doạ mà chính nó khai | mig `0570`: trigger hẹp `salary_component_system_freeze` (khuôn `bonus_penalty_freeze_guard` của 0564) đóng băng `code·kind·value_type·formula·fixed_amount·pit_deductible·is_system·is_active·company_id·id`, cho sửa `name`/`sort_order`; verify (7.9b) ép trigger tồn tại; ca **C5b–C5d** (ba vector) + **C5e/C5f** (hai đối chứng dương: sửa nhãn vẫn được · hàng thường sửa thoải mái) |
+| **H3** | **`payroll_template_components` vừa CÓ `GRANT DELETE` vừa ĐỨNG NGOÀI `PROTECTED_TABLES`** | Đường khai thác đo được: `entityType` của retention-policy là **chuỗi tự do** (contract chỉ ép regex) · `_deleteEligible` lọc theo **`created_at`, KHÔNG theo `deleted_at`** ⇒ hard-delete hàng cấu hình **ĐANG SỐNG** · app role CÓ DELETE ⇒ lệnh chạy thật ⇒ mẫu còn nhưng danh sách thành phần RỖNG, và mẫu do tenant tạo **mất vĩnh viễn**. Lập luận cũ của tôi («tiêu chí là *thiếu* GRANT DELETE») là **phân loại, không phải an toàn** | `retention.service.ts` += bảng thứ 7 kèm lý do đầy đủ; `retention.service.spec.ts` `APPEND_ONLY_TABLES` += **7**; DB-13 §13.6 và `erd-current.md` đính chính (**18** bảng, không phải 17) |
+| **M1** | 6 bảng vào `PROTECTED_TABLES` mà **không** vào pin của `.spec.ts` ⇒ ratchet không răng | DB-13 §15.3 bước A đòi «`PROTECTED_TABLES` **+ spec của nó**» | vá cùng H3 |
+| **M2** | **A3 tiêu đề nói «7 bảng» mà chỉ lặp 3** — ba bảng bỏ sót đúng là **ba bảng PII**; **E2/E3 xanh RỖNG trên CI** (0 hàng) | Tiêu đề nói dối về độ phủ; hai ca trang trí trên DB sạch | A3 lặp đủ `V2_TABLES` + **đối chứng dương** «fixture gieo đủ hàng cho B» ; E2/E3 đổi tên thành `[CÓ ĐIỀU KIỆN — chỉ ràng buộc trên lane CÓ dữ liệu v1]` + khối comment nói rõ bằng chứng thật nằm ở §10.0 của plan |
+| **L1** | Thông điệp fail-loud nhúng **tên + số tiền phụ cấp** vào log migration/CI | Dữ liệu lương hạng masking-ở-server rò qua log vận hành | `0570` (6a)/(6b) rút còn `profile=<id> idx=<ord>` |
+
+**Reviewer xác nhận AN TOÀN (đã soi, đừng sửa):** backfill chạy dưới BYPASSRLS vẫn không ghi được hàng sai tenant
+(composite FK ném `23503`, không im lặng) · `ctx.track()` payload sạch PII, `seed_items` sạch · hai chỗ escape `\_`
+(SQL và template literal TS) render **CÙNG một luật** · 17 cặp vào hai allowlist **không** mở thêm bề mặt enforcement
+và **không spec nào ghim SỐ LƯỢNG** hai danh sách đó · `kind='aggregate' AND NOT is_system` là **bất khả thi** ở
+đường INSERT.
+
+### 4.2 `silent-failure-hunter` — **KHÔNG có phát hiện chặn merge**
+
+Đã soi và kết luận AN TOÀN: guard (1b) dùng `COALESCE(v_n,0)` nên bẫy `SELECT…INTO` NULL không thành ·
+verify backfill (6d) có hai toán hạng **chắc chắn non-NULL** (guard (1d) đã ép `allowances` là mảng) nên `0=0`
+là khớp THẬT chứ không phải che lỗi · census `object_permissions` của `0571` có `v_ids` **chắc chắn non-NULL**
+(check 4.1 chạy trước đã ép 34 hàng) · khối UNION-ADD `object_type` **fail-closed** khi không parse được ·
+census GRANT **không** xanh-rỗng vì `B4` là đối chứng dương sẽ đỏ trước nếu `relacl` NULL · thứ tự 7 `DELETE`
+của `cleanupTenants` **đúng con→cha** · trigger không có nhánh ẩn nào trả `NEW` im lặng.
+
+**Hai nợ LOW hướng-tương-lai** (không chặn, đã ghi vào `done_when` của `S15-PAYROLL-BE-2`):
+(a) route tạo thành phần phải từ chối **14 mã hệ thống đã seed**, ngoài luật cấm tiền tố — hôm nay chưa có
+route nào ghi `salary_components` nên chưa khai thác được, và hàng trùng mã làm seeder **ném** (fail-loud);
+(b) `assertSeedIntegrity` check (5) so **hai tập lấy từ DB** nên không phát hiện được mã catalog bị **khai tử**
+ở `seedVersion` sau — khi bump có gỡ mã, phải viết bước vá dữ liệu + assert đối chiếu hằng TS.
+
+---
+
+## 5. LOW (plan-review)
 
 - SPEC-11 §11.3 ghi chú 2 trỏ `SENSITIVE_SCREEN_GATE_PAIRS` ở `:246`; số đúng hiện tại là **`:250`**
   (plan đúng, spec cũ — không sửa ở WO này).
