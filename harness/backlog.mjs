@@ -17121,7 +17121,7 @@ export const backlog = [
     title:
       "Nghiệm thu wave S17-CHAT-UX2: masking preview/links (thu hồi · file · system) · peer cross-tenant + non-member · WS payload hẹp hơn REST · snapshot light/dark 3 màn · axe 0 critical · coverage components/chat ≥80% · ratchet 0-@SubscribeMessage + single-socket-file vẫn xanh · bằng chứng ACCEPTANCE",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/app/src/components/chat/**/*.spec.ts",
       "apps/app/src/components/chat/**/*.spec.tsx",
@@ -17129,6 +17129,9 @@ export const backlog = [
       "apps/app/src/stores/**/*.spec.ts",
       "apps/api/test/integration/chat-s17-*.int-spec.ts",
       "apps/api/src/chat/**/*.spec.ts",
+      "apps/api/src/realtime/**/*.spec.ts",
+      "apps/app/vitest.config.ts",
+      "apps/app/package.json",
       "docs/QA/evidence/S17-CHAT-UX2-QA-1-ACCEPTANCE.md",
       "docs/TESTABLE-FEATURES.md",
       "docs/plans/S17-CHAT-UX2-QA-1.md",
@@ -17149,6 +17152,37 @@ export const backlog = [
     ],
     notes: [
       "🟡 LIGHT. Đóng wave S17 — nếu phát hiện lỗ sản phẩm, vá trong WO này khi ≤ 30 dòng, ngược lại seed WO follow-up (khuôn S13-PAYROLL-QA-1 vá 3 lỗi).",
+      "ĐÃ ĐÓNG 11/09/2026. Bằng chứng: docs/QA/evidence/S17-CHAT-UX2-QA-1-ACCEPTANCE.md. Coverage components/chat Funcs 77.89% → 81.73% (3 spec mới, 47 ca); 8 đột biến M1-M7+M2b, 8/8 ĐỎ đúng ca. Vá 1 lỗ trong WO (≤30 dòng, §5 ACCEPTANCE): ratchet WS so khoá CẤP MỘT nên mù với peer.avatarUrl — gỡ .omit() lồng mà ws-chat-room-payload.spec vẫn XANH 5/5. 3 quyết định phạm vi của owner (KHÔNG thêm axe · 4 ô kind + 2 ca neo thay vì 12 ô · drawer giữ nguyên) ghi ở plan §5 + ACCEPTANCE §8.",
+    ],
+  },
+  {
+    id: "S17-CHAT-UX2-QA-2",
+    module: "CHAT",
+    layer: "DEVOPS",
+    title:
+      "Đưa sàn coverage 80% của cụm chat thành CỔNG PR: CI gọi lượt có --coverage (apps/app), không chỉ `vitest run`",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      ".github/workflows/apps-frontend.yml",
+      "apps/app/package.json",
+      "apps/app/vitest.config.ts",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S17-CHAT-UX2-QA-1"],
+    plan: "docs/QA/evidence/S17-CHAT-UX2-QA-1-ACCEPTANCE.md",
+    src: [
+      "S17-CHAT-UX2-QA-1 §4.1 + KI-S17-3 — `coverage.thresholds` (80/4 trục) ĐÃ có và ĐÃ nghiệm bằng lượt đỏ cố ý, nhưng `Apps — Frontend CI` chạy `pnpm --filter @mediaos/app test` (KHÔNG --coverage) ⇒ sàn hôm nay do người/harness ép qua `pnpm --filter @mediaos/app test:chat-cov`",
+      "memory coverage-threshold-key-typo-is-dead-gate (cổng phải nghiệm bằng VI PHẠM thật) · turbo-cache-false-green (TURBO_FORCE khi đo cổng)",
+    ],
+    done_when: [
+      "CI chạy một lượt có --coverage cho apps/app và ĐỎ khi cụm chat tụt dưới 80 — nghiệm bằng một commit thử hạ sàn giả (hoặc xoá một spec) ⇒ PR ĐỎ, rồi revert",
+      "KHÔNG bật --coverage cho lượt full-suite nếu nó làm CI chậm/đỏ oan: đo thời gian trước-sau, ghi số vào PR. Mẫu số hàm của v8 TĂNG khi có thêm spec nạp file (ACCEPTANCE §4) ⇒ đối chiếu số CI với số local trước khi chốt ngưỡng",
+      "Cập nhật KI-S17-3 trong docs/QA/evidence/S17-CHAT-UX2-QA-1-ACCEPTANCE.md thành ĐÃ ĐÓNG",
+    ],
+    notes: [
+      "🟡 LIGHT. Chỉ chạm CI + script, KHÔNG chạm code sản phẩm. Rủi ro chính là CI đỏ oan — xem done_when #2.",
     ],
   },
   // ════════════════════ S18-AUTH-LOCKOUT — gỡ khoá 429 đăng nhập (seed 2026-09-03) ════════════════════

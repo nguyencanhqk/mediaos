@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:chat-cov": "vitest run src/components/chat src/routes/chat src/layouts --coverage --poolOptions.threads.maxThreads=2"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

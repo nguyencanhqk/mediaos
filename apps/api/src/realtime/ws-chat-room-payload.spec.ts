@@ -22,6 +22,26 @@ const PER_USER_KEYS = ["unreadCount", "pinnedAt", "mutedUntil", "markedUnreadAt"
 /** Khoá có vòng đời NGẮN HƠN sự kiện mang nó (URL ký TTL ngắn) — client cache lại sẽ hỏng. */
 const EPHEMERAL_KEYS = ["avatarUrl"] as const;
 
+/**
+ * Bóc `.optional()`/`.nullable()` để lấy `shape` của ZodObject bên trong. `null` = không phải object
+ * (khoá vô hướng) ⇒ không có hợp đồng lồng nào để so.
+ */
+function tryUnwrapShape(schema: unknown): Record<string, unknown> | null {
+  let node = schema as { unwrap?: () => unknown; shape?: unknown };
+  for (let i = 0; i < 4 && node !== undefined && typeof node?.unwrap === "function"; i += 1) {
+    node = node.unwrap() as typeof node;
+  }
+  const shape = node?.shape;
+  return typeof shape === "object" && shape !== null ? (shape as Record<string, unknown>) : null;
+}
+
+/** Như trên nhưng bắt buộc phải là object — dùng cho khoá đã biết chắc là ZodObject. */
+function unwrapShape(schema: unknown): Record<string, unknown> {
+  const shape = tryUnwrapShape(schema);
+  if (shape === null) throw new Error("schema không phải ZodObject sau khi bóc optional/nullable");
+  return shape;
+}
+
 const ROOM_ID = "11111111-1111-4111-8111-111111111111";
 const COMPANY_ID = "c0000000-0000-4000-8000-00000000000a";
 
@@ -107,5 +127,44 @@ describe("chat:room — payload broadcast HẸP HƠN DTO REST", () => {
       stripped,
       "danh sách khoá bị strip đã đổi — nếu là khoá MỚI thì phải quyết định nó per-user hay dùng chung, rồi cập nhật cả hằng trong file này",
     ).toEqual([...PER_USER_KEYS, ...EPHEMERAL_KEYS].sort());
+  });
+
+  /**
+   * S17-CHAT-UX2-QA-1 — ca này ra đời vì lượt đột biến của QA phát hiện ratchet trên **MÙ với khoá
+   * LỒNG**: nó so danh sách khoá CẤP MỘT, mà `peer` có mặt ở cả hai bên (chỉ khác là bản WS hẹp hơn).
+   * Gỡ `.omit({ avatarUrl: true })` khỏi `wsChatRoomPeerSchema` ⇒ URL ký per-recipient chảy ra sự kiện
+   * broadcast, mà toàn bộ file này vẫn XANH 5/5. Luật chỉ còn được canh ở `packages/contracts` —
+   * một nơi, và không phải nơi người ta tìm khi sửa tầng realtime.
+   *
+   * `.omit()` của Zod KHÔNG với tới khoá lồng, nên mỗi object con là một hợp đồng PHẢI tự canh.
+   */
+  it("BẤT BIẾN CHỐNG TRÔI (KHOÁ LỒNG): object con của payload WS cũng phải hẹp hơn REST", () => {
+    const wsRoomShape = unwrapShape(wsChatRoomEventSchema.shape.room);
+    const nestedStripped: string[] = [];
+    for (const key of Object.keys(wsRoomShape)) {
+      const restNested = tryUnwrapShape(
+        (chatRoomSchema.shape as Record<string, unknown>)[key],
+      );
+      const wsNested = tryUnwrapShape((wsRoomShape as Record<string, unknown>)[key]);
+      if (restNested === null || wsNested === null) continue;
+      for (const nestedKey of Object.keys(restNested)) {
+        if (!(nestedKey in wsNested)) nestedStripped.push(`${key}.${nestedKey}`);
+      }
+    }
+
+    // Vế DẪN XUẤT: chứng minh việc thu hẹp CÒN TỒN TẠI. Gỡ `.omit()` ⇒ mảng rỗng ⇒ ĐỎ.
+    expect(
+      nestedStripped.sort(),
+      "khoá lồng bị strip đã đổi — gỡ nhầm một vế thu hẹp sẽ phát URL ký per-recipient cho cả phòng",
+    ).toEqual(["peer.avatarUrl"]);
+
+    // Vế HÌNH DẠNG: thêm khoá lồng MỚI vào `chatRoomPeerSchema` (vế dẫn xuất ở trên KHÔNG bắt được,
+    // vì khoá mới nằm ở CẢ hai bên) buộc phải chạm file này và quyết định nó per-recipient hay không.
+    expect(Object.keys(unwrapShape(chatRoomSchema.shape.peer)).sort()).toEqual([
+      "avatarUrl",
+      "isActive",
+      "name",
+      "userId",
+    ]);
   });
 });
