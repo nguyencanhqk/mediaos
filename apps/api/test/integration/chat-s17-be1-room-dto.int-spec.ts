@@ -593,11 +593,25 @@ describe.skipIf(!hasLaneDb)("S17-CHAT-UX2-BE-1 — DTO phòng v2 (DB cô lập, 
       expect(roomQueries[0].text).toContain("chat_messages");
     });
 
-    it("ca 21 — vị từ tin cuối ĐI ĐƯỢC trên `idx_chat_messages_room_seq`", async () => {
+    it("ca 21 — vị từ tin cuối ĐI ĐƯỢC trên index `(company_id, room_id, room_seq)`", async () => {
       // ⚠️ Ca này chứng minh HÌNH DẠNG vị từ dùng được index (bật `enable_seqscan=off` để loại nhiễu
       // "bảng bé nên seq scan rẻ hơn"), KHÔNG hứa planner sẽ CHỌN nó ở PROD. Assert trên KẾ HOẠCH, và
       // TUYỆT ĐỐI không assert `pg_stat_user_indexes.idx_scan` — số đó cộng dồn toàn cụm và bằng 0
       // không có nghĩa là index vô dụng (memory `pg-planner-index-assert-trap`, `idx-scan-zero-is-not-unused`).
+      //
+      // ⚠️ **KHÔNG ghim TÊN index** (vá 11/09/2026). `chat_messages` có HAI index phủ ĐÚNG vị từ này:
+      //     `idx_chat_messages_room_seq (company_id, room_id, room_seq DESC)`        — mig `0539:56`
+      //     `uq_chat_messages_room_seq  (company_id, room_id, room_seq)`  UNIQUE     — mig `0539:55`
+      // btree quét NGƯỢC không tốn thêm gì, nên với `ORDER BY room_seq DESC LIMIT 1` hai index có chi phí
+      // BẰNG NHAU ⇒ cái nào thắng là xổ số theo thống kê. Bản cũ assert `toContain("idx_chat_messages_
+      // room_seq")`: XANH trên lane DB sạch, ĐỎ trên CI (run `34597707204` — CI dồn mọi int-spec vào MỘT
+      // DB nên thống kê khác, planner lật sang `uq_…`) ⇒ chặn PR #503 dù schema hoàn toàn đúng.
+      // Thay bằng BA khẳng định TẤT ĐỊNH:
+      //   (1) CATALOG — index thiết kế còn sống, đúng cột + đúng chiều (đọc `pg_indexes`, không qua planner);
+      //   (2) KHÔNG `Seq Scan on chat_messages` khi đã tắt seqscan ⇒ CÓ index phục vụ được vị từ;
+      //   (3) index planner THỰC SỰ dùng cho `chat_messages` phải có tiền tố `(company_id, room_id,
+      //       room_seq` — tra `pg_indexes` theo tên ĐỌC TỪ PLAN. Đổi qua lại giữa hai index anh em KHÔNG
+      //       đỏ; tụt xuống `chat_messages_room_seq_idx (room_id, seq)` (phải Sort mới ra tin cuối) thì ĐỎ.
       const cap = captureQueries();
       let queries: CapturedQuery[];
       try {
@@ -614,6 +628,20 @@ describe.skipIf(!hasLaneDb)("S17-CHAT-UX2-BE-1 — DTO phòng v2 (DB cô lập, 
         // RLS + FORCE: EXPLAIN phải chạy trong đúng ngữ cảnh tenant, nếu không policy đổi cả kế hoạch
         // (memory `rls-force-hides-nonleakproof-expr-from-index-cond`).
         await client.query("SELECT set_config('app.current_company_id', $1, true)", [A.companyId]);
+
+        const indexdefOf = async (name: string): Promise<string | undefined> => {
+          const r = await client.query(
+            `SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1`,
+            [name],
+          );
+          return (r.rows as { indexdef: string }[])[0]?.indexdef;
+        };
+
+        // (1) CATALOG — index thiết kế của mig `0539` còn sống, đúng cột + đúng chiều DESC.
+        const designed = await indexdefOf("idx_chat_messages_room_seq");
+        expect(designed, "`idx_chat_messages_room_seq` (mig 0539:56) đã biến mất").toBeDefined();
+        expect(designed!).toContain("(company_id, room_id, room_seq DESC)");
+
         await client.query("SET LOCAL enable_seqscan = off");
         const plan = await client.query(
           `EXPLAIN (FORMAT TEXT) ${target!.text}`,
@@ -622,7 +650,21 @@ describe.skipIf(!hasLaneDb)("S17-CHAT-UX2-BE-1 — DTO phòng v2 (DB cô lập, 
         const text = (plan.rows as { "QUERY PLAN": string }[])
           .map((r) => r["QUERY PLAN"])
           .join("\n");
-        expect(text).toContain("idx_chat_messages_room_seq");
+
+        // (2) `enable_seqscan=off` chỉ PHẠT seq scan chứ không CẤM — còn thấy nó nghĩa là KHÔNG index
+        // nào phục vụ được vị từ.
+        expect(text, `Seq Scan trên chat_messages dù đã tắt seqscan:\n${text}`).not.toMatch(
+          /Seq Scan on chat_messages\b/,
+        );
+
+        // (3) Index planner thực sự dùng phải có tiền tố `(company_id, room_id, room_seq`.
+        const used = /Index (?:Only )?Scan (?:Backward )?using (\w+) on chat_messages\b/.exec(text);
+        expect(used, `không có Index Scan nào trên chat_messages:\n${text}`).not.toBeNull();
+        const usedDef = await indexdefOf(used![1]!);
+        expect(
+          usedDef,
+          `index '${used![1]}' planner chọn cho chat_messages KHÔNG có tiền tố (company_id, room_id, room_seq):\n${text}`,
+        ).toMatch(/\(company_id, room_id, room_seq\b/);
       } finally {
         await client.query("ROLLBACK").catch(() => undefined);
         client.release();
