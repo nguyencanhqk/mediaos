@@ -16823,8 +16823,8 @@ export const backlog = [
     notes: [
       "🟡 LIGHT + silent-failure-hunter (che nội dung tin) — KHÔNG phải FULL: không permission/RLS/secret/audit/migration.",
       "⚠️ `directKey` là quan hệ ai-nhắn-với-ai (repo docblock :65) — peer suy từ chat_room_members của phòng, KHÔNG parse directKey ra DTO.",
-      "🔎 THI CÔNG 09/09 — drizzle render bảng-có-BÍ-DANH trong `sql` template thành CHỈ bí danh (`FROM \"peer_employee_any\"`), KHÔNG kèm tên bảng gốc ⇒ `relation does not exist` lúc CHẠY, typecheck mù. Phải viết `FROM ${employeeProfiles} AS ${sql.identifier(ALIAS)}` với ALIAS là hằng dùng chung với `alias()`.",
-      "🔎 THI CÔNG 09/09 — cột SQL THÔ trong subquery BẮT BUỘC `.as(\"ten\")`; thiếu là drizzle ném lúc chạy (\"raw SQL field … doesn’t have an alias\").",
+      '🔎 THI CÔNG 09/09 — drizzle render bảng-có-BÍ-DANH trong `sql` template thành CHỈ bí danh (`FROM "peer_employee_any"`), KHÔNG kèm tên bảng gốc ⇒ `relation does not exist` lúc CHẠY, typecheck mù. Phải viết `FROM ${employeeProfiles} AS ${sql.identifier(ALIAS)}` với ALIAS là hằng dùng chung với `alias()`.',
+      '🔎 THI CÔNG 09/09 — cột SQL THÔ trong subquery BẮT BUỘC `.as("ten")`; thiếu là drizzle ném lúc chạy ("raw SQL field … doesn’t have an alias").',
       "🔎 THI CÔNG 09/09 — ca N+1 CŨ (`chat-be1-rooms.int-spec.ts` ca 11) đếm số BUILDER `tx.select` được dựng rồi assert `=== 1`, tức pin chi tiết thi công chứ không phải bất biến: LATERAL dựng 3 builder mà vẫn ĐI TRONG MỘT CÂU. Đã đổi phép đo sang «số builder KHÔNG tăng theo số phòng» (chạy 2 kích cỡ, đòi bằng nhau + đòi lần hai nhiều phòng hơn để không xanh-RỖNG); vế đếm câu SQL THẬT ở tầng driver `pg` nằm ở ca 20 của int-spec mới.",
       "🔎 THI CÔNG 09/09 — CHƯA writer nào sinh tin `message_type='system'` (grep `apps/api/src/chat/**` ra 0 writer) dù SPEC-15 hứa tin hệ thống cho thêm/bớt thành viên và CHECK đã nhận giá trị. Ca `kind:'system'` vì thế gieo THẲNG DB để khoá ĐƯỜNG ĐỌC trước; WO nối dây writer là việc khác.",
       "🔎 THI CÔNG 09/09 — NGOÀI `paths`: `apps/app/src/stores/chat.store.ts` phải sửa 1 chỗ (nhánh `created` của `applyRoomEvent`) vì `peer` ở payload WS hẹp hơn REST đúng khoá `avatarUrl` ⇒ typecheck FE đỏ. Vá bằng `widenWsPeer()` (gán `avatarUrl: null` CHỈ cho phòng vừa tạo); đường `updated`/`archived` vẫn qua `mergeRoomMetadata` (ALLOWLIST, không chạm `peer`) nên avatar KHÔNG bị xoá khi đổi tên phòng.",
@@ -17060,7 +17060,7 @@ export const backlog = [
     title:
       "Drawer chat DEC-026 thay ChatDock/ChatDockWindow (Sheet phải 400px: tìm + chip · danh sách thu gọn ↔ hội thoại push · 1 hội thoại · ⤢ mở /chat · toàn màn dưới md) + /chat responsive (≥1280 3 cột · ≥768 info thành Sheet · <768 1 cột push) + ChatBadge mở drawer",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/app/src/components/chat/ChatDock.tsx",
       "apps/app/src/components/chat/ChatDockWindow.tsx",
@@ -17075,12 +17075,28 @@ export const backlog = [
       "apps/app/src/routes/chat/**",
       "apps/app/src/layouts/**",
       "apps/app/src/i18n/locales/**",
+      // Bổ sung 10/09 (plan §11): drawer dùng LẠI panel/primitive dùng chung nên phải chạm chúng ở mức
+      // PROP TUỲ CHỌN (mặc định = hành vi cũ). `sheet.tsx` là bắt buộc vì DEC-026 chỉ đích danh `Sheet`
+      // mà nó thiếu `leading`/`bodyClassName`/`closeOnBackdrop` + không nhường Esc cho lớp trong cùng.
+      "apps/app/src/components/chat/ConversationHeader.tsx",
+      "apps/app/src/components/chat/ConversationPanel.tsx",
+      "apps/app/src/components/chat/MessageComposer.tsx",
+      "apps/app/src/components/chat/RoomInfoPanel.tsx",
+      "apps/app/src/components/chat/MessageSearchPanel.tsx",
+      "apps/app/src/components/chat/composer/MentionPopover.tsx",
+      "apps/app/src/components/chat/chat-unread.ts",
+      "apps/app/src/components/chat/use-chat-viewport.ts",
+      "packages/ui/src/components/ui/sheet.tsx",
+      "packages/ui/src/components/ui/sheet.spec.tsx",
+      // L1: badge KHÔNG mở drawer trên chính `/chat*` (hai instance `useChatConversation` cùng phòng) —
+      // lệch với câu chữ SPEC-15 §9 dòng 321 + §22c dòng 213, nên sửa SPEC luôn thay vì để QA-1 đo hụt.
+      "docs/SPEC/SPEC-15 CHAT.md",
       "docs/plans/S17-CHAT-UX2-FE-5.md",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
     depends_on: ["S17-CHAT-UX2-FE-1", "S17-CHAT-UX2-FE-2"],
-    plan: "docs/plans/S17-CHAT-UX2-WAVE.md",
+    plan: "docs/plans/S17-CHAT-UX2-FE-5.md",
     src: [
       "SPEC-15 §9 SCREEN-001/002 v2 · §22c DEC-026 (sau DOC-1); hồ sơ HTML §05 board drawer + mobile",
       "apps/app/src/components/chat/ChatDock.tsx:75 (hidden md:flex) · ChatDockWindow.tsx (dùng lại ConversationPanel showHeader=false; detail query cùng queryKey với /chat) · ChatBadge.tsx:97 useHasDockViewport · chat-dock.store.ts (1 phòng mở — bản sửa 05/08)",
@@ -17094,6 +17110,8 @@ export const backlog = [
     ],
     notes: [
       "🟡 LIGHT. Đây là WO đổi hình thái SCREEN-002 — nếu owner đổi ý DEC-026 thì WO này là chỗ duy nhất phải sửa.",
+      "LỆCH đã ghi ở plan §9 (owner chốt khi review PR): L1 badge KHÔNG mở drawer trên chính `/chat*` (hai instance `useChatConversation` cùng phòng giết lưới bù tin) — ĐÃ sửa SPEC-15 §9 dòng 321 + §22c dòng 213 kèm theo; L2 `useHasDockViewport` bị THAY bằng `useChatLayoutMode` (3 mốc) chứ không đổi nghĩa; L3 drawer không có nút «Tin nhắn mới» và không có lối tìm-nội-dung-tin (done_when chỉ đòi «tìm + chip»); L4 `packages/ui/sheet.tsx` +3 prop + 2 điều kiện nhường Esc; L5 drawer KHÔNG có nút gọi và không có bảng thông tin phòng — khiếm khuyết KẾ THỪA từ ChatDockWindow (cũng không có), cần owner chốt có seed WO follow-up không.",
+      "Nợ bàn giao QA-1: `apps/app/vitest.config.ts:18` coverage `include` mới chỉ `src/components/chat/call/**` — QA-1 phải mở rộng sang `src/components/chat/**`, nếu không ngưỡng 80% đo trên tập RỖNG.",
     ],
   },
   {
@@ -17825,9 +17843,9 @@ export const backlog = [
     depends_on: [],
     src: [
       "ĐO 09/09/2026 trong lúc chạy `harness/check.sh --all --lane-db=s18restore2fa` cho S18-AUTH-RESTORE2FA-1: ca `submit happy: exactly 1 RESERVE tx + pending+1 + Reserved + 1 approval/outbox/audit` trả 422 `LEAVE-ERR-MIN-NOTICE` thay vì 201.",
-      "Root-cause: `const D_SINGLE = \"2026-09-08\"` (`:47`) là ngày TUYỆT ĐỐI. Loại nghỉ `annualA` được gieo với `min_notice_days = 0` (`:129`) ⇒ luật đòi ngày nghỉ >= HÔM NAY. Hôm nay là 09/09 ⇒ 08/09 nằm trong quá khứ ⇒ từ chối. Ca này đỏ đúng lúc nửa đêm 09/09, KHÔNG do commit nào.",
+      'Root-cause: `const D_SINGLE = "2026-09-08"` (`:47`) là ngày TUYỆT ĐỐI. Loại nghỉ `annualA` được gieo với `min_notice_days = 0` (`:129`) ⇒ luật đòi ngày nghỉ >= HÔM NAY. Hôm nay là 09/09 ⇒ 08/09 nằm trong quá khứ ⇒ từ chối. Ca này đỏ đúng lúc nửa đêm 09/09, KHÔNG do commit nào.',
       "XÁC MINH có sẵn trên master (không cần stash): `git show master:apps/api/src/leave/leave-request.int.spec.ts` mang ĐÚNG cùng hằng số; nhánh `fix/s18-auth-restore2fa-1` chạm 0 file LEAVE.",
-      "CÒN HAI QUẢ BOM CÙNG HỌ chưa nổ: `FRI = \"2026-09-04\"` (`:48`) và `NOTICE_DATE = \"2026-06-30\"` (`:53`) — cùng hình dạng, sẽ hỏng theo cùng cơ chế khi luật/ngày đổi. `OVER_START = \"2026-11-02\"` còn ở tương lai nên tạm sống.",
+      'CÒN HAI QUẢ BOM CÙNG HỌ chưa nổ: `FRI = "2026-09-04"` (`:48`) và `NOTICE_DATE = "2026-06-30"` (`:53`) — cùng hình dạng, sẽ hỏng theo cùng cơ chế khi luật/ngày đổi. `OVER_START = "2026-11-02"` còn ở tương lai nên tạm sống.',
       "Cùng họ với memory `leave-accrual-spec-red-on-real-today` và `ci-red-can-depend-on-time-of-day` — dự án ĐÃ ăn bẫy này ít nhất một lần trước đây.",
     ],
     done_when: [
@@ -17870,7 +17888,7 @@ export const backlog = [
       "5 advisory HIGH (pnpm audit --json 09/09): js-yaml `>=4.0.0 <4.3.2` → `>=4.3.2` GHSA-2883-xcg3-v3hh (18 đường) · nodemailer `<9.1.0` → `>=9.1.0` GHSA-2x7j-588g-ccc2 (1 đường) · multer `<2.3.0` → `>=2.3.0` GHSA-wc9g-mqfw-jrwm + GHSA-535w-7cp7-47q4, và `=2.2.0` GHSA-qfvm-cv95-jqjf (12 đường mỗi cái).",
       "PHÂN TẦNG ĐƯỜNG TỚI — khác các lượt trước, lần này KHÔNG phải toàn dev-tooling: js-yaml qua `eslint > @eslint/eslintrc` = dev-only (như 07/08). NHƯNG **nodemailer là dependency TRỰC TIẾP của apps/api** (`apps/api/package.json:46` `^9.0.1`) và **multer nằm trên đường UPLOAD THẬT** (`apps/api > @nestjs/core > @nestjs/platform-express > multer`, 12 đường). Cả hai VÀO runtime bundle ⇒ không được viện lý do 'chỉ là dev-dep' như các ghi chú override cũ.",
       "Cả 3 bản vá ĐÃ CÓ trên registry và đủ tuổi (đo 09/09): js-yaml 4.3.2 @ 26/08 · nodemailer 9.1.1 @ 01/09 · multer 2.3.0 @ 28/08 ⇒ không vướng minimumReleaseAge.",
-      "`@nestjs/platform-express` GHIM `multer: \"2.1.1\"` (chuỗi chính xác, không phải range) ⇒ bump direct dep của apps/api KHÔNG đủ, PHẢI nới override — đúng lý do override `multer@>=1.0.0 <2.2.0` đang tồn tại.",
+      '`@nestjs/platform-express` GHIM `multer: "2.1.1"` (chuỗi chính xác, không phải range) ⇒ bump direct dep của apps/api KHÔNG đủ, PHẢI nới override — đúng lý do override `multer@>=1.0.0 <2.2.0` đang tồn tại.',
       "apps/lms KHÔNG thuộc cổng này (`pnpm-workspace.yaml` loại `!apps/lms`, lockfile riêng) nhưng nó khai `nodemailer: ^8.0.7` = NGOÀI dải vá `>=9.1.0` ⇒ nợ RIÊNG, không gộp vào WO này.",
     ],
     done_when: [

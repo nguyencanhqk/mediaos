@@ -52,6 +52,20 @@ interface ConversationPanelProps {
    * phím là nuốt một tổ hợp của trình duyệt để không làm gì cả.
    */
   onSearchInRoom?: () => void;
+  /** S17-CHAT-UX2-FE-5 — quay lại danh sách phòng (mốc 1 cột · drawer). `undefined` ⇒ ẩn nút ‹. */
+  onBack?: () => void;
+  /**
+   * S17-CHAT-UX2-FE-5 — Esc có được phép đóng bảng thông tin phòng không. Mặc định `true` (hành vi cũ).
+   *
+   * Truyền `false` khi bảng thông tin được trình bày bằng một `Sheet` (mốc 2 cột / 1 cột của `/chat`):
+   * ở đó CHÍNH `Sheet` đã nghe Esc và gọi `onClose`. Để cả hai cùng chạy thì React gộp batch
+   * `setInfoSheetOpen(false)` rồi `setInfoSheetOpen(v => !v)` ⇒ `false` → `true`, và **Sheet không bao
+   * giờ đóng được bằng Esc**.
+   *
+   * Một cờ tường minh chứ không phải một mẹo về thứ tự listener: hai handler cùng nằm trên `document`,
+   * thứ tự giữa chúng đảo chiều chỉ vì một component render lại.
+   */
+  escapeClosesInfo?: boolean;
 }
 
 export function ConversationPanel({
@@ -62,6 +76,8 @@ export function ConversationPanel({
   onToggleInfo,
   showHeader = true,
   onSearchInRoom,
+  onBack,
+  escapeClosesInfo = true,
 }: ConversationPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const queryClient = useQueryClient();
@@ -289,8 +305,14 @@ export function ConversationPanel({
    * Esc: huỷ trả lời TRƯỚC, đóng bảng thông tin SAU — bấm Esc lúc đang soạn câu trả lời mà mất luôn
    * bảng thông tin là làm hai việc cho một ý định.
    *
-   * Cả hai NHƯỜNG cho lớp nổi đang mở (`data-floating-layer="open"` — hợp đồng của `Popover`/`Sheet`):
-   * thiếu vế này thì một lần Esc đóng cả popover LẪN thứ nằm dưới nó.
+   * Cả hai NHƯỜNG cho lớp nổi đang mở (`data-floating-layer="open"`): thiếu vế này thì một lần Esc
+   * đóng cả popover LẪN thứ nằm dưới nó.
+   *
+   * ⚠️ S17-CHAT-UX2-FE-5 đính chính docblock cũ: dấu `data-floating-layer` là hợp đồng của **`Popover`
+   * mà thôi** — `Sheet` chỉ ĐỌC dấu đó, nó KHÔNG phát. Chiều ngược lại (panel này giữ Esc để `Sheet`
+   * bao ngoài đừng đóng theo) đi bằng một dấu KHÁC: `data-escape-claim="open"` trên `<section>` gốc
+   * bên dưới, dựng khi `replyTo !== null`. Không có nó thì trong drawer chat, một lần Esc vừa huỷ câu
+   * trả lời vừa đóng cả drawer — mất luôn nháp đang gõ.
    */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -302,7 +324,8 @@ export function ConversationPanel({
           setReplyTo(null);
           return;
         }
-        if (isInfoOpen && onToggleInfo) {
+        // `escapeClosesInfo === false` ⇒ bảng thông tin đang là một `Sheet` và Sheet đó tự nghe Esc.
+        if (isInfoOpen && onToggleInfo && escapeClosesInfo) {
           e.preventDefault();
           onToggleInfo();
         }
@@ -317,7 +340,7 @@ export function ConversationPanel({
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [replyTo, isInfoOpen, onToggleInfo, onSearchInRoom]);
+  }, [replyTo, isInfoOpen, onToggleInfo, onSearchInRoom, escapeClosesInfo]);
 
   const title = roomDisplayName(room, members, myUserId, (code) =>
     t("rooms.directFallback", { code }),
@@ -339,7 +362,23 @@ export function ConversationPanel({
   );
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col" aria-label={title}>
+    <section
+      className="flex h-full min-w-0 flex-1 flex-col"
+      aria-label={title}
+      // S17-CHAT-UX2-FE-5 — mỏ neo để đo "cột hội thoại có bị dựng lại không" khi `/chat` đổi mốc
+      // responsive. Remount ở đó không im lặng: `useChatConversation` cleanup gọi `trimRoomHistory`,
+      // cắt lịch sử về 200 tin và vứt đúng phần người dùng vừa bấm "tải thêm".
+      data-testid="chat-conversation"
+      /*
+       * S17-CHAT-UX2-FE-5 — GIỮ phím Esc cho việc đang dở, để lớp bao ngoài (`Sheet` của drawer, hoặc
+       * `Sheet` bảng thông tin ở mốc 2 cột) đừng đóng theo. Xem docblock của effect bàn phím ở trên.
+       *
+       * Đặt trên chính `<section>` thay vì dựng một node ẩn: một thuộc tính có điều kiện không thêm
+       * node nào vào cây, và nó biến mất cùng lúc với `replyTo` — không có đường nào để dấu này sống
+       * sót lâu hơn trạng thái nó mô tả.
+       */
+      data-escape-claim={replyTo !== null ? "open" : undefined}
+    >
       {showHeader && (
         <ConversationHeader
           room={room}
@@ -352,6 +391,7 @@ export function ConversationPanel({
           isInfoOpen={isInfoOpen}
           onToggleInfo={onToggleInfo}
           onSearchInRoom={onSearchInRoom}
+          onBack={onBack}
           callSlot={
             /*
              * S7-CALL-FE-1 — nút gọi. `callContext === null` (cây không có `<CallProvider>`: test lẻ,

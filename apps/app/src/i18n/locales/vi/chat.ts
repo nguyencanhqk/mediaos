@@ -129,6 +129,8 @@ export default {
 
     // ── S17-CHAT-UX2-FE-2 — đầu phòng v2 + khung trống hero (SPEC-15 §14 · CHAT-DEC-024) ──
     searchInRoom: "Tìm trong phòng này",
+    // S17-CHAT-UX2-FE-5 — nút ‹ ở bố cục mà danh sách và hội thoại LOẠI TRỪ nhau (drawer · màn hẹp).
+    back: "Quay lại danh sách cuộc trò chuyện",
     // Khung trống của TRANG (chưa chọn phòng nào) — hero + 2 hành động. Khác `empty` (phòng đã mở mà
     // chưa có tin): ở đó ô soạn nằm ngay dưới nên hero không cần nút nào.
     heroTitle: "Bắt đầu một cuộc trò chuyện",
@@ -431,14 +433,16 @@ export default {
     openFullPage: "Mở trang tin nhắn",
   },
 
-  /** S7-CHAT-FE-3 — panel chat nổi (CHAT-SCREEN-002). */
-  dock: {
-    minimize: "Thu nhỏ cuộc trò chuyện với {{name}}",
-    expand: "Mở lại cuộc trò chuyện với {{name}}",
-    minimizeShort: "Thu nhỏ",
-    expandShort: "Mở rộng",
-    openFullScreen: "Mở toàn màn hình",
-    close: "Đóng cuộc trò chuyện",
+  /**
+   * S17-CHAT-UX2-FE-5 — drawer chat bên phải (CHAT-SCREEN-002 v2 · CHAT-DEC-026).
+   *
+   * Thay cụm `dock.*` của S7-CHAT-FE-3: cửa sổ nổi đã xoá nên "thu nhỏ"/"mở rộng"/"đóng cuộc trò
+   * chuyện" không còn thao tác nào tương ứng. Nút ‹ dùng `conversation.back` (chung với mốc 1 cột của
+   * `/chat`) — cùng một hành vi thì không được có hai chuỗi rời nhau.
+   */
+  drawer: {
+    title: "Tin nhắn",
+    openFullPage: "Mở trang tin nhắn",
   },
 
   /** S7-CHAT-FE-4 — màn tìm kiếm tin nhắn (CHAT-SCREEN-005 · SPEC-15 §13.7). */

@@ -1,7 +1,16 @@
 /**
- * S7-CHAT-FE-2 — CHAT-SCREEN-001: trang `/chat` full-screen, 3 cột.
+ * S7-CHAT-FE-2 — CHAT-SCREEN-001: trang `/chat` full-screen.
  *
  *   [ danh sách phòng ] [ hội thoại ] [ thông tin phòng ]
+ *
+ * ─── S17-CHAT-UX2-FE-5 (v2) — RESPONSIVE ba mốc (CHAT-DEC-026) ─────────────────────────────────────
+ *   ≥1280  ba cột như trên (320 · co giãn · 340)
+ *   ≥768   hai cột — bảng thông tin phòng chuyển thành `Sheet` mở bằng nút ⓘ
+ *   <768   MỘT khung tại một thời điểm: danh sách → hội thoại (nút ‹) → thông tin toàn màn
+ *
+ * Mốc do `useChatLayoutMode` quyết (JS chứ không chỉ CSS: `md:hidden` giấu được một cột nhưng không
+ * biến một cột thành `Sheet` có focus-trap, và không đổi được nghĩa của nút ⓘ). Cây JSX viết bằng NĂM
+ * KHE CỐ ĐỊNH để cột hội thoại không bị dựng lại khi đổi mốc — xem docblock trong `return`.
  *
  * Trang KHÔNG bọc `ModuleWorkspaceLayout`: layout đó thêm một sidebar module nữa, tức cột thứ TƯ trên
  * một màn hình vốn đã chật. Cổng quyền không mất gì vì nó nằm ở `ProtectedRoute meta` (tầng route), chứ
@@ -16,7 +25,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare } from "lucide-react";
 import { chatApi, chatKeys, useCan } from "@mediaos/web-core";
-import { Button, EmptyState } from "@mediaos/ui";
+import { Button, EmptyState, Sheet } from "@mediaos/ui";
 import type { ChatRoomDto } from "@mediaos/contracts";
 import { ChatEmptyHero } from "@/components/chat/ChatEmptyHero";
 import { ConversationPanel } from "@/components/chat/ConversationPanel";
@@ -25,6 +34,7 @@ import { MessageSearchPanel } from "@/components/chat/MessageSearchPanel";
 import { RoomInfoPanel } from "@/components/chat/RoomInfoPanel";
 import { RoomListPanel } from "@/components/chat/RoomListPanel";
 import { roomDisplayName } from "@/components/chat/chat-format";
+import { useChatLayoutMode } from "@/components/chat/use-chat-viewport";
 import { useChatStore } from "@/stores/chat.store";
 import { CHAT_PAIRS, CONTEXT_AFTER, CONTEXT_BEFORE } from "./constants";
 
@@ -51,7 +61,16 @@ export function ChatPage(): React.ReactElement {
   const enterMessageContext = useChatStore((s) => s.enterMessageContext);
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const [isInfoOpen, setInfoOpen] = useState(true);
+  /**
+   * S17-CHAT-UX2-FE-5 — HAI state cho "bảng thông tin đang mở", không phải một (CHAT-DEC-026).
+   *
+   * ≥1280 bảng là một CỘT (mặc định mở — nó không che gì). <1280 bảng là một `Sheet` phủ lên hội thoại
+   * (mặc định đóng). Dùng chung một state mặc định `true` thì mở trang ở màn 1024px là bung ngay một
+   * Sheet che kín hội thoại mà người dùng chưa bấm gì. Còn "sửa hộ" bằng một `useEffect` đóng-khi-vào-
+   * chế-độ-sheet thì lại ghi đè ý định người dùng mỗi lần xoay máy hoặc kéo cửa sổ.
+   */
+  const [isInfoColumnOpen, setInfoColumnOpen] = useState(true);
+  const [isInfoSheetOpen, setInfoSheetOpen] = useState(false);
   const [isCreateOpen, setCreateOpen] = useState(false);
   /**
    * S7-CHAT-FE-4 — cột trái có HAI chế độ: danh sách phòng ↔ tìm kiếm tin nhắn (CHAT-SCREEN-005).
@@ -99,6 +118,39 @@ export function ChatPage(): React.ReactElement {
 
   const members = useMemo(() => detail?.members ?? [], [detail]);
   const myRole = detail?.myRole ?? null;
+
+  /**
+   * S17-CHAT-UX2-FE-5 — bố cục theo bề rộng khung nhìn (CHAT-DEC-026 · SPEC-15 §9 SCREEN-001 v2).
+   *
+   *   three (≥1280) ba cột: danh sách 320 · hội thoại co giãn · thông tin 340
+   *   two   (≥768)  hai cột; thông tin phòng thành `Sheet` mở bằng nút ⓘ
+   *   single (<768) MỘT khung tại một thời điểm: danh sách → hội thoại (‹) → thông tin toàn màn
+   */
+  const layoutMode = useChatLayoutMode();
+  const isSingle = layoutMode === "single";
+  /** <1280: bảng thông tin là `Sheet`, và CHÍNH nó nghe Esc (xem `escapeClosesInfo` bên dưới). */
+  const isInfoSheet = layoutMode !== "three";
+  const isInfoOpen = isInfoSheet ? isInfoSheetOpen : isInfoColumnOpen;
+  const toggleInfo = useCallback(() => {
+    if (isInfoSheet) setInfoSheetOpen((v) => !v);
+    else setInfoColumnOpen((v) => !v);
+  }, [isInfoSheet]);
+
+  /**
+   * Ở mốc `single`, ba khung LOẠI TRỪ nhau — trước FE-5 chúng chỉ loại trừ MỘT PHẦN.
+   *
+   * `MessageSearchPanel` thay `RoomListPanel`, nhưng nó vẫn đứng SONG SONG với hội thoại; ở ba cột thì
+   * ổn, còn ở một cột (cả hai đều chiếm hết bề ngang) là hai khung chồng lên nhau. Và `jumpToMessage`
+   * tự `setSelectedRoomId`, nên bấm một kết quả tìm kiếm là rơi thẳng vào ca đó.
+   */
+  const activeSinglePane: "search" | "list" | "conversation" = isSearchOpen
+    ? "search"
+    : selectedRoomId === null
+      ? "list"
+      : "conversation";
+  const showList = isSingle ? activeSinglePane === "list" : !isSearchOpen;
+  const showSearch = isSearchOpen;
+  const showConversationArea = isSingle ? activeSinglePane === "conversation" : true;
 
   /**
    * S7-CHAT-FE-4 — nhảy tới MỘT tin bất kỳ trong ngữ cảnh của nó (CHAT-SCREEN-005).
@@ -166,10 +218,78 @@ export function ChatPage(): React.ReactElement {
           t("rooms.directFallback", { code }),
         );
 
+  /**
+   * S17-CHAT-UX2-FE-5 — dựng MỘT LẦN, đặt vào MỘT trong hai khe (cột hoặc Sheet). Xem khe 4 bên dưới.
+   */
+  const infoPanel =
+    selectedRoom === null ? null : (
+      <RoomInfoPanel
+        // ⚠️ `key` BẮT BUỘC: panel giữ state cục bộ theo phòng — nháp đổi tên/mô tả, tab đang mở,
+        // hộp xác nhận đang chờ. Không keyed thì chuyển sang phòng khác vẫn mang nguyên form đã
+        // điền TÊN CỦA PHÒNG CŨ, và bấm Lưu là đổi tên nhầm phòng.
+        //
+        // Tiền tố `info-` cũng bắt buộc: dùng CHUNG một chuỗi key với `ConversationPanel` ở trên là
+        // đúng cái đã làm rò khung hội thoại ra PROD (xem docblock ở đó). Hai anh em cùng mảng
+        // children PHẢI có key khác nhau.
+        key={`info-${selectedRoom.id}`}
+        // <1280 bảng nằm TRONG `Sheet` — Sheet đã có viền, nền và bề rộng riêng, nên panel bỏ khung
+        // của chính nó đi (nếu không là hai đường viền lồng nhau và một cột 340px trong panel 400px).
+        variant={isInfoSheet ? "sheet" : "page"}
+        room={selectedRoom}
+        members={members}
+        myRole={myRole}
+        /*
+         * S17-CHAT-UX2-FE-4 — «Tạo bởi …» lấy từ `detail`, KHÔNG từ `selectedRoom`.
+         *
+         * `createdByName` chỉ có ở `chatRoomDetailSchema` (CHAT-API-004) — đường DANH SÁCH không
+         * mang nó (BE-1 cố ý: thêm một `LEFT JOIN users` cho mỗi phòng ở đường nóng nhất của
+         * module). `selectedRoom` đến từ store (kiểu `ChatRoomDto`) nên đọc trường này ở đó là đọc
+         * một khóa không thuộc hợp đồng — hôm nay tình cờ còn, ngày store dọn là mất im lặng.
+         */
+        createdByName={detail?.createdByName ?? null}
+        isLoading={detailQuery.isLoading}
+        loadError={detailQuery.isError}
+        onChanged={() => void detailQuery.refetch()}
+        onJumpToMessage={(messageId, roomSeq) =>
+          void jumpToMessage(selectedRoom.id, messageId, roomSeq)
+        }
+        onRoomLeft={() => setSelectedRoomId(null)}
+      />
+    );
+
   return (
-    <div className="relative flex h-[calc(100vh-4rem)] min-h-0" data-testid="chat-page">
-      {isSearchOpen ? (
+    /*
+     * S17-CHAT-UX2-FE-5 — `h-full min-h-0` thay `h-[calc(100vh-4rem)]`.
+     *
+     * Con số cũ là số ma bám vào topbar và đã LỆCH: topbar là `h-14` (56px), không phải `4rem` (64px).
+     * `ProtectedShell` đã khoá `h-dvh` + `flex min-h-0 flex-1` nên để nó cấp chiều cao là hết lệch —
+     * và `dvh` còn xử lý đúng thanh URL động của iOS Safari, thứ `100vh` cắt cụt mất ô soạn tin.
+     *
+     * ⚠️ Năm KHE dưới đây là CỐ ĐỊNH theo thứ tự, không được gộp thành ternary đổi type. React giữ index
+     * cho children TĨNH và `false` không làm dịch chỗ, nên `ConversationPanel` ở khe 2 sống nguyên qua cả
+     * ba mốc. Viết `mode === "three" ? <ConversationPanel/> : <ConversationPanel/>` là hai VỊ TRÍ khác
+     * nhau ⇒ React unmount+mount mỗi lần kéo cửa sổ qua mốc ⇒ `useChatConversation` cleanup chạy
+     * `trimRoomHistory` và cắt lịch sử về 200 tin, vứt đúng phần người dùng vừa bấm "tải thêm".
+     */
+    <div className="relative flex h-full min-h-0" data-testid="chat-page" data-layout={layoutMode}>
+      {/* khe 0 — danh sách phòng */}
+      {showList && (
+        <RoomListPanel
+          // Mốc 1 cột: chiếm hết bề ngang. `drawer` ở đây không phải "trong drawer" mà là "không phải
+          // một cột trong bố cục nhiều cột" — cùng hình dạng, cùng lý do.
+          variant={isSingle ? "drawer" : "page"}
+          selectedRoomId={selectedRoomId}
+          onSelectRoom={setSelectedRoomId}
+          onCreateRoom={() => setCreateOpen(true)}
+          onOpenSearch={() => setSearchOpen(true)}
+          isBootstrapping={!hasLoadedRooms}
+        />
+      )}
+
+      {/* khe 1 — tìm theo nội dung tin (CHAT-SCREEN-005) */}
+      {showSearch && (
         <MessageSearchPanel
+          className={isSingle ? "w-full" : undefined}
           query={searchQuery}
           onQueryChange={setSearchQuery}
           scope={{
@@ -179,92 +299,107 @@ export function ChatPage(): React.ReactElement {
           onScopeChange={setSearchScope}
           onOpenResult={(result) => {
             setActiveResultId(result.id);
+            // Mốc 1 cột: đóng cột tìm kiếm để đi THẲNG tới hội thoại. Không đóng thì hai khung cùng
+            // `w-full` chồng lên nhau (xem `activeSinglePane`).
+            if (isSingle) setSearchOpen(false);
             void jumpToMessage(result.roomId, result.id, result.roomSeq);
           }}
           onClose={() => setSearchOpen(false)}
           activeMessageId={activeResultId}
         />
-      ) : (
-        <RoomListPanel
-          selectedRoomId={selectedRoomId}
-          onSelectRoom={setSelectedRoomId}
-          onCreateRoom={() => setCreateOpen(true)}
-          onOpenSearch={() => setSearchOpen(true)}
-          isBootstrapping={!hasLoadedRooms}
-        />
       )}
 
-      {selectedRoom === null ? (
-        <div className="flex min-w-0 flex-1 flex-col">
-          <ChatEmptyHero
-            title={t("conversation.heroTitle")}
-            description={t("conversation.heroBody")}
-            // Cổng `create:chat-room`: thiếu cặp ⇒ KHÔNG truyền handler ⇒ nút không render (§14).
-            onCreateRoom={canCreateRoom ? () => setCreateOpen(true) : undefined}
-            onOpenSearch={() => setSearchOpen(true)}
+      {/* khe 2 — hội thoại (hoặc hero khi chưa chọn phòng). VỊ TRÍ CỐ ĐỊNH — xem docblock ở trên. */}
+      {showConversationArea &&
+        (selectedRoom === null ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <ChatEmptyHero
+              title={t("conversation.heroTitle")}
+              description={t("conversation.heroBody")}
+              // Cổng `create:chat-room`: thiếu cặp ⇒ KHÔNG truyền handler ⇒ nút không render (§14).
+              onCreateRoom={canCreateRoom ? () => setCreateOpen(true) : undefined}
+              onOpenSearch={() => setSearchOpen(true)}
+            />
+          </div>
+        ) : (
+          <ConversationPanel
+            // ⚠️ TIỀN TỐ `conv-` KHÔNG phải trang trí — nó là bản vá của một lỗi ĐÃ RA PROD (05/08).
+            //
+            // Panel này và `RoomInfoPanel` là hai anh em trong CÙNG một mảng children. Khi cả hai cùng
+            // mang `key={selectedRoom.id}`, lúc đổi phòng React dựng map fiber cũ THEO KEY để tìm cái
+            // cần xoá — key trùng nên fiber của panel này bị fiber của info ghi đè khỏi map, và cuối
+            // vòng reconcile React chỉ xoá những gì CÒN trong map. Hệ quả: khung hội thoại cũ không bao
+            // giờ bị gỡ, mỗi lần bấm một phòng lại rơi lại một khung nằm cạnh nhau (owner báo: "cứ ấn
+            // vào là mở thêm khung"). React KHÔNG cảnh báo trùng key cho children tĩnh, nên không có
+            // gì đỏ ở console lẫn ở test.
+            //
+            // Giữ `key` (để đổi phòng là dựng lại state cục bộ) nhưng phải DUY NHẤT trong mảng anh em.
+            key={`conv-${selectedRoom.id}`}
+            room={selectedRoom}
+            members={members}
+            myRole={myRole}
+            isInfoOpen={isInfoOpen}
+            onToggleInfo={toggleInfo}
+            /*
+             * S17-CHAT-UX2-FE-5 — ai là chủ phím Esc cho bảng thông tin.
+             *
+             * <1280 bảng là `Sheet` và Sheet đã tự nghe Esc. Để cả hai cùng chạy thì React gộp batch
+             * `setInfoSheetOpen(false)` rồi `setInfoSheetOpen(v => !v)` ⇒ `false` → `true`, và Sheet
+             * KHÔNG BAO GIỜ đóng được bằng Esc — đúng thứ `done_when` #4 đòi phải làm được.
+             */
+            escapeClosesInfo={!isInfoSheet}
+            /*
+             * Mốc 1 cột: danh sách và hội thoại loại trừ nhau, nên phải có đường quay lại. Ở 2/3 cột
+             * `undefined` ⇒ ẩn nút: danh sách vẫn nằm ngay bên trái, một nút "quay lại" ở đó là mời bấm
+             * vào chỗ không dẫn đi đâu cả.
+             */
+            onBack={isSingle ? () => setSelectedRoomId(null) : undefined}
+            /*
+             * S17 — 🔍 ở thanh đầu + phím tắt: mở cột tìm kiếm ĐÃ bó theo phòng đang mở. Đặt `searchScope`
+             * là "room" chứ không để mặc định "all": người dùng bấm kính lúp TRONG một phòng đang có ý
+             * định tìm trong phòng đó, và phạm vi vẫn đổi lại được bằng nút ngay trong panel.
+             */
+            onSearchInRoom={() => {
+              setSearchScope("room");
+              setSearchOpen(true);
+            }}
           />
-        </div>
-      ) : (
-        <ConversationPanel
-          // ⚠️ TIỀN TỐ `conv-` KHÔNG phải trang trí — nó là bản vá của một lỗi ĐÃ RA PROD (05/08).
-          //
-          // Panel này và `RoomInfoPanel` là hai anh em trong CÙNG một mảng children. Khi cả hai cùng
-          // mang `key={selectedRoom.id}`, lúc đổi phòng React dựng map fiber cũ THEO KEY để tìm cái
-          // cần xoá — key trùng nên fiber của panel này bị fiber của info ghi đè khỏi map, và cuối
-          // vòng reconcile React chỉ xoá những gì CÒN trong map. Hệ quả: khung hội thoại cũ không bao
-          // giờ bị gỡ, mỗi lần bấm một phòng lại rơi lại một khung nằm cạnh nhau (owner báo: "cứ ấn
-          // vào là mở thêm khung"). React KHÔNG cảnh báo trùng key cho children tĩnh, nên không có
-          // gì đỏ ở console lẫn ở test.
-          //
-          // Giữ `key` (để đổi phòng là dựng lại state cục bộ) nhưng phải DUY NHẤT trong mảng anh em.
-          key={`conv-${selectedRoom.id}`}
-          room={selectedRoom}
-          members={members}
-          myRole={myRole}
-          isInfoOpen={isInfoOpen}
-          onToggleInfo={() => setInfoOpen((v) => !v)}
-          /*
-           * S17 — 🔍 ở thanh đầu + phím tắt: mở cột tìm kiếm ĐÃ bó theo phòng đang mở. Đặt `searchScope`
-           * là "room" chứ không để mặc định "all": người dùng bấm kính lúp TRONG một phòng đang có ý
-           * định tìm trong phòng đó, và phạm vi vẫn đổi lại được bằng nút ngay trong panel.
-           */
-          onSearchInRoom={() => {
-            setSearchScope("room");
-            setSearchOpen(true);
-          }}
-        />
-      )}
+        ))}
 
-      {selectedRoom !== null && isInfoOpen && (
-        <RoomInfoPanel
-          // ⚠️ `key` BẮT BUỘC: panel giữ state cục bộ theo phòng — nháp đổi tên/mô tả, tab đang mở,
-          // hộp xác nhận đang chờ. Không keyed thì chuyển sang phòng khác vẫn mang nguyên form đã
-          // điền TÊN CỦA PHÒNG CŨ, và bấm Lưu là đổi tên nhầm phòng.
-          //
-          // Tiền tố `info-` cũng bắt buộc: dùng CHUNG một chuỗi key với `ConversationPanel` ở trên là
-          // đúng cái đã làm rò khung hội thoại ra PROD (xem docblock ở đó). Hai anh em cùng mảng
-          // children PHẢI có key khác nhau.
-          key={`info-${selectedRoom.id}`}
-          room={selectedRoom}
-          members={members}
-          myRole={myRole}
+      {/* khe 3 — bảng thông tin phòng dưới dạng CỘT (chỉ mốc ≥1280) */}
+      {!isInfoSheet && isInfoOpen && infoPanel}
+
+      {/*
+       * khe 4 — CÙNG bảng đó dưới dạng Sheet (mốc <1280).
+       *
+       * `infoPanel` dựng MỘT LẦN ở trên rồi đặt vào đúng MỘT trong hai khe: hai `RoomInfoPanel` sống
+       * song song sẽ chạy hai `listRoomFiles` cho cùng một phòng ⇒ hai hàng `file_access_logs` cho một
+       * lần người dùng mở bảng.
+       *
+       * ⚠️ Gán vào một `const` KHÔNG cứu được remount khi kéo cửa sổ qua mốc 1280: hai khe là hai vị trí
+       * khác nhau trong cây nên React vẫn unmount+mount, và nháp đổi tên/mô tả đang gõ trong bảng sẽ
+       * mất. Chấp nhận (đổi bề rộng cửa sổ GIỮA LÚC đang sửa tên phòng là ca hiếm) — chỉ không được hứa
+       * ngược lại trong docblock.
+       */}
+      {isInfoSheet && selectedRoom !== null && (
+        <Sheet
+          open={isInfoSheetOpen}
+          onClose={() => setInfoSheetOpen(false)}
+          title={t("info.title")}
+          // <768: toàn màn. 768–1279: panel 400px trượt từ phải, giữ thấy hội thoại phía sau.
+          className={isSingle ? "w-full max-w-none" : "max-w-[400px]"}
+          bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
           /*
-           * S17-CHAT-UX2-FE-4 — «Tạo bởi …» lấy từ `detail`, KHÔNG từ `selectedRoom`.
-           *
-           * `createdByName` chỉ có ở `chatRoomDetailSchema` (CHAT-API-004) — đường DANH SÁCH không
-           * mang nó (BE-1 cố ý: thêm một `LEFT JOIN users` cho mỗi phòng ở đường nóng nhất của
-           * module). `selectedRoom` đến từ store (kiểu `ChatRoomDto`) nên đọc trường này ở đó là đọc
-           * một khóa không thuộc hợp đồng — hôm nay tình cờ còn, ngày store dọn là mất im lặng.
+           * Bấm nền KHÔNG đóng — cùng lý do với drawer chat, và đây là chỗ dễ bỏ sót hơn:
+           * `RoomInfoPanel` giữ nháp đổi TÊN/MÔ TẢ phòng bằng state cục bộ, mà `Sheet` unmount sạch
+           * children khi đóng. Một cú click trượt tay ra ngoài lúc đang sửa tên là mất nháp, không
+           * cảnh báo, không hoàn tác. ✕ và Esc vẫn đóng.
            */
-          createdByName={detail?.createdByName ?? null}
-          isLoading={detailQuery.isLoading}
-          loadError={detailQuery.isError}
-          onChanged={() => void detailQuery.refetch()}
-          onJumpToMessage={(messageId, roomSeq) =>
-            void jumpToMessage(selectedRoom.id, messageId, roomSeq)
-          }
-          onRoomLeft={() => setSelectedRoomId(null)}
-        />
+          closeOnBackdrop={false}
+          data-testid="chat-info-sheet"
+        >
+          {infoPanel}
+        </Sheet>
       )}
 
       {/*

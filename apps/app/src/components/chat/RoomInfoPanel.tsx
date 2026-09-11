@@ -90,6 +90,16 @@ interface RoomInfoPanelProps {
    */
   onJumpToMessage: (messageId: string, roomSeq: number) => void;
   onRoomLeft: () => void;
+  /**
+   * S17-CHAT-UX2-FE-5 — panel này đứng thành CỘT hay nằm trong một `Sheet` (CHAT-DEC-026).
+   *
+   *   `page`  (mặc định) cột phải của `/chat` ở mốc ≥1280: 340px + viền trái
+   *   `sheet` mốc <1280: bản thân `Sheet` đã có viền, nền và bề rộng riêng ⇒ panel chiếm hết vật chứa
+   *
+   * Chỉ khác vỏ. Nội dung, cổng quyền, 4 nhánh tư cách của `RoomAvatarEditor` (DEC-016) giữ nguyên —
+   * hai bản khác nội dung là hai bảng thông tin phải nuôi song song.
+   */
+  variant?: "page" | "sheet";
 }
 
 export function RoomInfoPanel({
@@ -102,6 +112,7 @@ export function RoomInfoPanel({
   onChanged,
   onJumpToMessage,
   onRoomLeft,
+  variant = "page",
 }: RoomInfoPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const queryClient = useQueryClient();
@@ -176,8 +187,14 @@ export function RoomInfoPanel({
 
   return (
     <aside
-      className="flex h-full w-80 shrink-0 flex-col border-l border-border"
+      className={cn(
+        "flex h-full min-h-0 flex-col",
+        // 340px theo CHAT-DEC-026 (§9 SCREEN-001 v2 — 320/co giãn/340). Trước FE-5 là `w-80` (320px).
+        variant === "page" ? "w-[340px] shrink-0 border-l border-border" : "w-full",
+      )}
       aria-label={t("info.title")}
+      data-testid="chat-room-info"
+      data-variant={variant}
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col items-center gap-1.5 px-4 pt-4 pb-3 text-center">

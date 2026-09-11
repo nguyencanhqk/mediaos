@@ -36,23 +36,3 @@ export function formatUnreadBadge(count: number): string {
   if (!Number.isFinite(count) || count <= 0) return "";
   return count > UNREAD_BADGE_MAX ? `${UNREAD_BADGE_MAX}+` : String(count);
 }
-
-/**
- * Phòng để mời trong dropdown: **có tin chưa đọc trước**, hết thì phòng gần đây.
- *
- * Giữ thứ tự `roomOrder` (đã sắp theo `lastMessageAt` giảm dần ở store) trong TỪNG nhóm — không sắp lại
- * theo số chưa đọc: một phòng 12 tin cũ nhảy lên trên phòng 1 tin vừa tới là ngược với thứ người dùng
- * đang tìm. Phòng đã lưu trữ bị loại, cùng lý do với `totalUnreadCount`.
- */
-export function pickDropdownRooms(
-  roomsById: Readonly<Record<string, ChatRoomDto>>,
-  roomOrder: readonly string[],
-  limit: number,
-): ChatRoomDto[] {
-  const active = roomOrder
-    .map((id) => roomsById[id])
-    .filter((room): room is ChatRoomDto => room !== undefined && room.isArchived !== true);
-  const unread = active.filter((room) => (room.unreadCount ?? 0) > 0);
-  const rest = active.filter((room) => (room.unreadCount ?? 0) === 0);
-  return [...unread, ...rest].slice(0, limit);
-}

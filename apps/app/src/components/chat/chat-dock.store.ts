@@ -1,17 +1,21 @@
 /**
- * S7-CHAT-FE-3 — trạng thái UI của panel chat nổi (SPEC-15 §9 CHAT-SCREEN-002).
+ * S7-CHAT-FE-3 — trạng thái UI của panel chat phụ (SPEC-15 §9 CHAT-SCREEN-002).
+ *
+ * ⚠️ **Tên file giữ nguyên là "dock", nhưng panel nay là DRAWER** (S17-CHAT-UX2-FE-5 · CHAT-DEC-026).
+ * Cửa sổ nổi góc dưới đã xoá; API `openRoom`/`closeRoom` giữ nguyên tên vì `done_when` của WO đó yêu
+ * cầu, và đổi tên file chỉ để đổi một danh từ là một diff rác chạm mọi import.
  *
  * ⚠️ Store này KHÔNG giữ phòng và KHÔNG giữ tin. Nguồn dữ liệu duy nhất vẫn là `useChatStore` (FE-1) —
- * đó là điều làm cho lời hứa "panel nổi và trang /chat dùng CHUNG store, CHUNG một kết nối WS" đúng
- * theo nghĩa đen. Ở đây chỉ có ba câu hỏi thuần giao diện: cửa sổ nào đang mở, cái nào đang thu nhỏ, và
- * phòng `direct` đó tên gì.
+ * đó là điều làm cho lời hứa "drawer và trang /chat dùng CHUNG store, CHUNG một kết nối WS" đúng theo
+ * nghĩa đen. Ở đây chỉ có hai câu hỏi thuần giao diện: drawer có đang mở không, và hội thoại nào đang
+ * ở trong đó.
  *
  * BẤT BIẾN: mọi cập nhật tạo object MỚI (Zustand so sánh tham chiếu).
  */
 import { create } from "zustand";
 
 /**
- * Trần cửa sổ mở cùng lúc — SPEC-15 §9 CHAT-SCREEN-002: **đúng MỘT hội thoại tại một thời điểm**.
+ * Trần hội thoại mở cùng lúc — SPEC-15 §9 CHAT-SCREEN-002: **đúng MỘT hội thoại tại một thời điểm**.
  *
  * Đổi 2026-08-05 (quyết định của owner) từ 3 xuống 1. Lý do đo được trên máy thật: mỗi lần bấm một phòng
  * là THÊM một cửa sổ mà cửa sổ cũ vẫn nằm đó, nên dải dưới màn hình dồn thành nhiều khung hẹp — người
@@ -29,18 +33,29 @@ export const MAX_DOCK_WINDOWS = 1;
 
 interface ChatDockState {
   /**
+   * S17-CHAT-UX2-FE-5 — drawer có đang mở không (CHAT-DEC-026).
+   *
+   * Trước FE-5, "có gì đó đang mở" SUY từ `openRoomIds.length > 0` — đúng với cửa sổ nổi, vì cửa sổ nổi
+   * chỉ tồn tại khi có một phòng để hiện. Drawer thì KHÁC HẲN: nó mở ra ở chế độ DANH SÁCH, chưa chọn
+   * phòng nào. Không có cờ riêng thì "mở drawer để tìm một phòng" là một trạng thái không biểu diễn
+   * được, và người dùng buộc phải chọn phòng trước khi thấy được danh sách phòng.
+   *
+   * Hai trục ĐỘC LẬP, cố ý: đóng drawer KHÔNG xoá `openRoomIds` — mở lại là về đúng hội thoại đang đọc
+   * dở (mirror hành vi "rời `/chat` là cửa sổ hiện lại nguyên vẹn" của dock cũ).
+   */
+  isOpen: boolean;
+  /**
    * Hội thoại đang mở. Ở trần hiện tại (`MAX_DOCK_WINDOWS === 1`) mảng này dài tối đa MỘT phần tử.
    *
    * Vẫn là MẢNG chứ không phải `string | null`: thứ tự "mở gần đây nhất nằm CUỐI" là thứ luật đẩy cửa sổ
    * cũ ra dựa vào, và đổi kiểu ở đây sẽ bắt viết lại `openRoom`/`closeRoom` nếu trần được nới lại.
    */
   openRoomIds: readonly string[];
-  minimizedRoomIds: Readonly<Record<string, true>>;
   /**
    * Mở (hoặc đưa ra trước mắt) một hội thoại.
    *
-   * Đã mở sẵn ⇒ chỉ BỎ thu nhỏ, GIỮ NGUYÊN vị trí: nhảy cửa sổ sang chỗ khác ngay lúc người dùng vừa
-   * bấm vào nó làm con trỏ chuột trỏ vào một phòng khác so với thứ họ định mở.
+   * Đã mở sẵn ⇒ chỉ bật `isOpen`, GIỮ NGUYÊN mảng: đây là đường "bấm lại chính phòng đang đọc dở" sau
+   * khi đã đóng drawer.
    *
    * Quá trần ⇒ đẩy cái CŨ NHẤT (index 0) ra, KHÔNG từ chối mở. Từ chối là một nút bấm không phản hồi:
    * người dùng vừa chọn một phòng và không có gì xảy ra, không lời giải thích. Ở trần 1, "đẩy cái cũ
@@ -48,8 +63,20 @@ interface ChatDockState {
    * đó đóng lại.
    */
   openRoom: (roomId: string) => void;
+  /**
+   * Đóng một hội thoại. **KHÔNG đóng drawer** — quay về chế độ DANH SÁCH.
+   *
+   * Đổi kết cục ở S17-CHAT-UX2-FE-5: với cửa sổ nổi, đóng hội thoại = không còn gì trên màn hình nên
+   * hai việc trùng nhau. Với drawer, "‹ quay lại" và "✕ đóng hẳn" là hai ý định khác nhau và người dùng
+   * bấm ‹ nhiều hơn hẳn — trả họ về màn hình trống là bắt mở lại drawer sau mỗi lần liếc một phòng.
+   */
   closeRoom: (roomId: string) => void;
-  toggleMinimize: (roomId: string) => void;
+  /** Mở drawer, giữ nguyên hội thoại đang có (nếu có). */
+  openDrawer: () => void;
+  /** Đóng drawer nhưng GIỮ `openRoomIds` — mở lại là về đúng chỗ đang đọc dở. */
+  closeDrawer: () => void;
+  /** Lối vào từ `ChatBadge`: bấm lần nữa là đóng. */
+  toggleDrawer: () => void;
   /**
    * Dọn sạch — mirror `resetChatStore` của FE-1, và giống nó ở cả chỗ CHƯA có caller sản phẩm: đăng
    * xuất là hard navigation nên trình duyệt huỷ luôn cả tab (xem cleanup của `useChatRealtime`). Giữ
@@ -59,16 +86,9 @@ interface ChatDockState {
 }
 
 const createInitialState = () => ({
+  isOpen: false,
   openRoomIds: [] as readonly string[],
-  minimizedRoomIds: {} as Readonly<Record<string, true>>,
 });
-
-/** Gỡ một khoá khỏi map, trả về CHÍNH map cũ khi khoá không có (caller bỏ qua được `set()` thừa). */
-function omitKey<T>(map: Readonly<Record<string, T>>, key: string): Readonly<Record<string, T>> {
-  if (map[key] === undefined) return map;
-  const { [key]: _dropped, ...rest } = map;
-  return rest;
-}
 
 export const useChatDockStore = create<ChatDockState>((set) => ({
   ...createInitialState(),
@@ -76,51 +96,40 @@ export const useChatDockStore = create<ChatDockState>((set) => ({
   openRoom: (roomId) =>
     set((state) => {
       if (state.openRoomIds.includes(roomId)) {
-        // Đang thu nhỏ ⇒ bung ra. Đang mở sẵn ⇒ không có gì đổi, trả nguyên state để khỏi re-render.
-        const minimizedRoomIds = omitKey(state.minimizedRoomIds, roomId);
-        return minimizedRoomIds === state.minimizedRoomIds ? state : { minimizedRoomIds };
+        // ⚠️ `isOpen: true` KHÔNG được bỏ qua ở nhánh này (S17-CHAT-UX2-FE-5). Trước đây nhánh "đã mở
+        // sẵn" trả nguyên `state` khi không có gì đổi — vô hại với cửa sổ nổi, nhưng với drawer nó biến
+        // `openRoom()` thành NO-OP đúng lúc người dùng bấm vào phòng họ đang mở dở: drawer đã đóng,
+        // `openRoomIds` vẫn còn id đó, nên "mở phòng" không mở gì cả. Một nút bấm không phản hồi.
+        return { isOpen: true };
       }
 
       const next = [...state.openRoomIds, roomId];
-      if (next.length <= MAX_DOCK_WINDOWS) return { openRoomIds: next };
+      if (next.length <= MAX_DOCK_WINDOWS) return { isOpen: true, openRoomIds: next };
 
-      // Vượt trần: cắt phần đầu và dọn state của những cửa sổ vừa bị đẩy ra ĐÚNG NHƯ `closeRoom` — bị
-      // đẩy ra và tự đóng là cùng một kết cục, để lại hai loại tàn dư khác nhau thì không ai lần được.
+      // Vượt trần: cắt phần đầu. Bị đẩy ra và tự đóng phải là CÙNG một kết cục — để lại hai loại tàn
+      // dư khác nhau thì không ai lần được.
       //
-      //  · cờ thu nhỏ: giữ lại ⇒ lần sau mở lại chính phòng ấy nó hiện ra ở trạng thái thu nhỏ của một
-      //    phiên đã quên.
-      //
-      // S17-CHAT-UX2-FE-1 — map `resolvedNames` ĐÃ GỠ: `room.peer.name` đến thẳng từ `GET /chat/rooms`
-      // nên không còn gì để cache, và không còn khoá chết nào tích luỹ theo số lần bấm.
-      const evicted = next.slice(0, next.length - MAX_DOCK_WINDOWS);
-      let minimizedRoomIds = state.minimizedRoomIds;
-      for (const id of evicted) {
-        minimizedRoomIds = omitKey(minimizedRoomIds, id);
-      }
+      // Store này KHÔNG còn map phụ nào để dọn kèm: `resolvedNames` gỡ ở S17-CHAT-UX2-FE-1 (tên phòng
+      // đến thẳng từ `GET /chat/rooms`), `minimizedRoomIds` gỡ ở S17-CHAT-UX2-FE-5 (drawer chỉ có
+      // mở/đóng, không có "thu nhỏ"). Nhờ vậy "dọn sạch tàn dư" không còn là việc phải nhớ làm.
       return {
+        isOpen: true,
         openRoomIds: next.slice(next.length - MAX_DOCK_WINDOWS),
-        minimizedRoomIds,
       };
     }),
+
+  openDrawer: () => set((state) => (state.isOpen ? state : { isOpen: true })),
+
+  // GIỮ `openRoomIds`: xem docblock `isOpen`. Đóng drawer là cất nó đi, không phải rời phòng.
+  closeDrawer: () => set((state) => (state.isOpen ? { isOpen: false } : state)),
+
+  toggleDrawer: () => set((state) => ({ isOpen: !state.isOpen })),
 
   closeRoom: (roomId) =>
     set((state) => {
       if (!state.openRoomIds.includes(roomId)) return state;
-      // Gỡ khỏi CẢ HAI map (trước S17-CHAT-UX2-FE-1 là ba — xem `openRoom`). Bị đẩy ra và tự đóng là
-      // cùng một kết cục, để lại hai loại tàn dư khác nhau thì không ai lần được.
-      return {
-        openRoomIds: state.openRoomIds.filter((id) => id !== roomId),
-        minimizedRoomIds: omitKey(state.minimizedRoomIds, roomId),
-      };
-    }),
-
-  toggleMinimize: (roomId) =>
-    set((state) => {
-      if (!state.openRoomIds.includes(roomId)) return state; // không thu nhỏ được cửa sổ không tồn tại
-      if (state.minimizedRoomIds[roomId]) {
-        return { minimizedRoomIds: omitKey(state.minimizedRoomIds, roomId) };
-      }
-      return { minimizedRoomIds: { ...state.minimizedRoomIds, [roomId]: true as const } };
+      // `isOpen` KHÔNG đổi: đây là nút ‹ "quay lại danh sách", không phải nút đóng drawer.
+      return { openRoomIds: state.openRoomIds.filter((id) => id !== roomId) };
     }),
 
   resetChatDock: () => set(createInitialState()),

@@ -26,7 +26,7 @@ import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
 import { useBrandingQuery } from "@/hooks/use-branding";
 import { useChatRealtime } from "@/hooks/use-chat-realtime";
-import { ChatDock } from "@/components/chat/ChatDock";
+import { ChatDrawer } from "@/components/chat/ChatDrawer";
 import { CallProvider } from "@/components/chat/call/CallProvider";
 import { ACCOUNT_SETUP_2FA_PATH, SETUP_2FA_PATHS } from "@/routes/account/constants";
 
@@ -147,10 +147,11 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
         <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         {/* Global overlays — mounted once, visible via layout store */}
         <AppSwitcher />
-        {/* S7-CHAT-FE-3 — panel chat nổi (CHAT-SCREEN-002). Đặt ở shell để nó sống qua MỌI lần đổi route:
-            treo trong cây route thì mỗi lần điều hướng là unmount ⇒ hội thoại đang mở đóng lại và tin
-            đang gõ dở mất. Tự gate `access:chat` + tự ẩn trên /chat bên trong (xem docblock). */}
-        <ChatDock />
+        {/* S17-CHAT-UX2-FE-5 — drawer chat (CHAT-SCREEN-002 v2, thay panel nổi của S7-CHAT-FE-3). Đặt ở
+            shell để nó sống qua MỌI lần đổi route: treo trong cây route thì mỗi lần điều hướng là
+            unmount ⇒ hội thoại đang mở đóng lại và tin đang gõ dở mất. Tự gate `access:chat` + tự ẩn
+            trên /chat* bên trong (xem docblock). */}
+        <ChatDrawer />
       </div>
     </CallProvider>
   );

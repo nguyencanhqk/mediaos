@@ -42,6 +42,16 @@ export function MentionPopover({
       role="listbox"
       aria-label={t("composer.mention.listAria")}
       data-testid="chat-mention-listbox"
+      /*
+       * S17-CHAT-UX2-FE-5 — hợp đồng "lớp nổi đang mở, nhường Esc cho tôi" (xem `packages/ui/popover.tsx`
+       * và `sheet.tsx`).
+       *
+       * Popover này KHÔNG đi qua primitive `Popover` (docblock đầu file giải thích vì sao: nó không có
+       * trigger và không được phép nhận tiêu điểm), nên nó là lớp nổi DUY NHẤT của CHAT chưa phát dấu.
+       * Không có dấu thì trong drawer chat (`Sheet`), một lần Esc vừa đóng danh sách gợi ý `@` vừa đóng
+       * cả drawer — người dùng chỉ muốn bỏ gợi ý và mất luôn tin đang gõ.
+       */
+      data-floating-layer="open"
       className={cn(
         "absolute bottom-full left-3 z-30 mb-1 max-h-64 w-72 overflow-y-auto",
         "rounded-md border border-border bg-popover py-1 shadow-md",

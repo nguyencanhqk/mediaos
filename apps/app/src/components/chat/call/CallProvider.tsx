@@ -1,7 +1,7 @@
 /**
  * S7-CALL-FE-1 — chủ sở hữu DUY NHẤT của máy trạng thái cuộc gọi.
  *
- * Gắn ĐÚNG MỘT LẦN ở `ProtectedShell`, cạnh `useChatRealtime` và `ChatDock`. Đặt trong cây route thì
+ * Gắn ĐÚNG MỘT LẦN ở `ProtectedShell`, cạnh `useChatRealtime` và `ChatDrawer`. Đặt trong cây route thì
  * mỗi lần điều hướng là unmount ⇒ cuộc gọi đang chạy bị cắt giữa chừng (và camera treo, vì cleanup của
  * hook chạy đúng lúc người dùng chỉ định bấm sang trang khác).
  *
@@ -33,7 +33,7 @@ interface CallContextValue {
 const CallContext = createContext<CallContextValue | null>(null);
 
 /**
- * Trả `null` khi cây không có `<CallProvider>` — `ConversationPanel` được `ChatDock`, trang `/chat` và
+ * Trả `null` khi cây không có `<CallProvider>` — `ConversationPanel` được `ChatDrawer`, trang `/chat` và
  * cả test render riêng lẻ, nên NÉM ở đây sẽ biến "chưa bọc provider" thành trang trắng. Caller ẩn nút
  * gọi khi nhận `null`, đúng hành vi mong muốn.
  */

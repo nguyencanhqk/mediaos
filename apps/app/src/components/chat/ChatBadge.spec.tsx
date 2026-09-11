@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 /**
- * S7-CHAT-FE-3 — badge tổng chưa đọc trên header (CHAT-SCREEN-006).
+ * S7-CHAT-FE-3 — badge tổng chưa đọc trên header (CHAT-SCREEN-006), cập nhật cho drawer ở
+ * S17-CHAT-UX2-FE-5.
  *
- * Ba khẳng định giữ chỗ:
+ * Bốn khẳng định giữ chỗ:
  *  (a) thiếu `access:chat` ⇒ KHÔNG render gì (không hiện icon rỗng rồi để server 403);
  *  (b) số hiển thị đến từ store, KHÔNG từ một request nào — bài này không mock `chatApi` và vẫn phải ra
  *      đúng số, đó chính là bằng chứng "không gọi `GET /chat/unread-count`";
- *  (c) bấm một phòng trong dropdown MỞ nó ở panel nổi (dock store), không điều hướng.
+ *  (c) bấm badge MỞ DRAWER, không điều hướng — ở MỌI bề rộng màn hình (v2: drawer toàn màn dưới `md`,
+ *      nên nhánh "màn hẹp thì navigate" của bản dock đã chết);
+ *  (d) trên `/chat*` badge là chỉ báo TĨNH và **không mở drawer** — nếu vỡ, hai instance
+ *      `useChatConversation` cùng một phòng sẽ giết lưới bù tin của nhau.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -77,12 +81,6 @@ describe("ChatBadge", () => {
     mockUseCan.mockReturnValue(true);
     useChatDockStore.getState().resetChatDock();
     seedRooms([]);
-    // jsdom KHÔNG có `matchMedia`. `useHasDockViewport` fail-soft về `true` khi vắng nó, nhưng dựa vào
-    // nhánh fallback để test đường "có dock" là test nhầm thứ — stub tường minh cho ca rộng.
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
-    );
   });
 
   afterEach(() => {
@@ -114,42 +112,75 @@ describe("ChatBadge", () => {
     expect(screen.getByTestId("chat-badge")).toHaveTextContent("1");
   });
 
-  it("bấm một phòng trong dropdown ⇒ mở nó ở panel nổi, không điều hướng", () => {
-    seedRooms([room("a", { unreadCount: 2, name: "Nhóm Kế toán" })]);
+  it("bấm badge ⇒ MỞ DRAWER, không điều hướng", () => {
+    seedRooms([room("a", { unreadCount: 2 })]);
     renderBadge();
 
     fireEvent.click(screen.getByTestId("chat-badge"));
-    fireEvent.click(screen.getByText("Nhóm Kế toán"));
 
-    expect(useChatDockStore.getState().openRoomIds).toEqual(["a"]);
+    expect(useChatDockStore.getState().isOpen).toBe(true);
     expect(navigate).not.toHaveBeenCalled();
-    // Dropdown đóng lại sau khi chọn — để không che chính cửa sổ vừa mở.
-    expect(screen.queryByTestId("chat-badge-dropdown")).toBeNull();
+    // Drawer mở ở chế độ DANH SÁCH: badge không được tự chọn hộ một phòng nào.
+    expect(useChatDockStore.getState().openRoomIds).toEqual([]);
   });
 
-  it("màn hình hẹp hơn md ⇒ điều hướng /chat thay vì mở panel nổi (panel bị ẩn ở đó)", () => {
-    // `ChatDock` ẩn dưới `md` bằng CSS; nếu badge vẫn `openRoom()` thì trên điện thoại người dùng bấm
-    // một phòng và KHÔNG thấy gì xảy ra — nút chết.
+  it("bấm lần nữa ⇒ đóng drawer (nút bật/tắt, aria-expanded phản ánh đúng)", () => {
+    seedRooms([room("a")]);
+    renderBadge();
+
+    fireEvent.click(screen.getByTestId("chat-badge"));
+    expect(screen.getByTestId("chat-badge")).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(screen.getByTestId("chat-badge"));
+    expect(useChatDockStore.getState().isOpen).toBe(false);
+    expect(screen.getByTestId("chat-badge")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("màn hẹp hơn md ⇒ VẪN mở drawer (không còn nhánh điều hướng của bản dock)", () => {
+    /*
+     * ĐỐI CHỨNG cho hành vi CŨ. Bản `ChatDock` ẩn dưới `md` bằng CSS nên badge phải `navigate('/chat')`
+     * ở đó, nếu không là một nút bấm không có tác dụng nhìn thấy được. Drawer chiếm TOÀN MÀN dưới `md`
+     * (`max-w-none`), nên nhánh đó chết — và ca này là thứ duy nhất chứng minh việc gỡ
+     * `useHasDockViewport` là đúng chứ không phải bỏ sót.
+     */
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
     );
-    seedRooms([room("a", { unreadCount: 2, name: "Nhóm Kế toán" })]);
+    seedRooms([room("a", { unreadCount: 2 })]);
     renderBadge();
 
     fireEvent.click(screen.getByTestId("chat-badge"));
-    fireEvent.click(screen.getByText("Nhóm Kế toán"));
 
-    expect(useChatDockStore.getState().openRoomIds).toEqual([]);
-    expect(navigate).toHaveBeenCalledWith({ to: "/chat" });
+    expect(useChatDockStore.getState().isOpen).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("trên /chat: chỉ báo TĨNH — không có nút, không có dropdown (panel nổi không render ở đó)", () => {
+  it("trên /chat: chỉ báo TĨNH — không có nút, và KHÔNG mở drawer", () => {
     pathname = "/chat";
     seedRooms([room("a", { unreadCount: 4 })]);
     renderBadge();
 
     expect(screen.getByTestId("chat-badge-static")).toHaveTextContent("4");
+    expect(screen.queryByTestId("chat-badge")).toBeNull();
+    /*
+     * Vế `isOpen === false` là RATCHET, không phải khẳng định thừa.
+     *
+     * `done_when` của WO này viết «badge mở drawer trên mọi trang có ProtectedShell», nên người sau rất
+     * dễ "sửa cho đúng câu chữ" và bỏ ngoại lệ `/chat*`. Khi ấy `/chat` và drawer cùng mount
+     * `useChatConversation` cho một phòng: cái unmount trước `clearInterval` lưới bù tin của cái còn
+     * sống và cắt lịch sử về 200 tin — im lặng tuyệt đối, không log, không lỗi. Ca này là dòng đỏ duy
+     * nhất chặn được điều đó.
+     */
+    expect(useChatDockStore.getState().isOpen).toBe(false);
+  });
+
+  it("trên /chat/<id> (sub-route) cũng là chỉ báo TĨNH", () => {
+    pathname = "/chat/11111111-1111-4111-8111-111111111111";
+    seedRooms([room("a", { unreadCount: 4 })]);
+    renderBadge();
+
+    expect(screen.getByTestId("chat-badge-static")).toBeTruthy();
     expect(screen.queryByTestId("chat-badge")).toBeNull();
   });
 });

@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { ChatRoomDto } from "@mediaos/contracts";
-import { formatUnreadBadge, pickDropdownRooms, totalUnreadCount } from "./chat-unread";
+import { formatUnreadBadge, totalUnreadCount } from "./chat-unread";
 
 function room(id: string, over: Partial<ChatRoomDto> = {}): ChatRoomDto {
   return {
@@ -69,34 +69,5 @@ describe("formatUnreadBadge", () => {
   it("0 hoặc âm ⇒ chuỗi rỗng (call-site không vẽ badge)", () => {
     expect(formatUnreadBadge(0)).toBe("");
     expect(formatUnreadBadge(-2)).toBe("");
-  });
-});
-
-describe("pickDropdownRooms", () => {
-  it("phòng CÓ tin chưa đọc lên trước, trong từng nhóm giữ thứ tự roomOrder", () => {
-    const rooms = {
-      a: room("a", { unreadCount: 0 }),
-      b: room("b", { unreadCount: 1 }),
-      c: room("c", { unreadCount: 0 }),
-      d: room("d", { unreadCount: 12 }),
-    };
-    // roomOrder = mới nhất trước. `b` đứng trước `d` trong roomOrder ⇒ giữ nguyên thứ tự đó dù `d` có
-    // nhiều tin chưa đọc hơn: sắp theo số chưa đọc đẩy phòng cũ lên trên phòng vừa có tin.
-    const picked = pickDropdownRooms(rooms, ["a", "b", "c", "d"], 10);
-    expect(picked.map((r) => r.id)).toEqual(["b", "d", "a", "c"]);
-  });
-
-  it("loại phòng đã lưu trữ và phòng không còn trong store", () => {
-    const rooms = {
-      a: room("a", { unreadCount: 1 }),
-      z: room("z", { unreadCount: 5, isArchived: true }),
-    };
-    const picked = pickDropdownRooms(rooms, ["a", "z", "da-roi-phong"], 10);
-    expect(picked.map((r) => r.id)).toEqual(["a"]);
-  });
-
-  it("cắt theo limit", () => {
-    const rooms = Object.fromEntries(["a", "b", "c"].map((id) => [id, room(id)]));
-    expect(pickDropdownRooms(rooms, ["a", "b", "c"], 2)).toHaveLength(2);
   });
 });
