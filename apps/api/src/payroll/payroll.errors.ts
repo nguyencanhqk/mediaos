@@ -146,6 +146,12 @@ export const PAYROLL_ERR = {
     `PAYROLL-ERR-018: mã thành phần lương không thuộc loại cấp theo hồ sơ: ${codes}. Chỉ thành phần có "giá trị theo hồ sơ lương" mới đặt được định mức ở đây.`,
   DEPENDENT_OVERLAP:
     "PAYROLL-ERR-032: người phụ thuộc này đã có bản ghi trùng khoảng thời gian hiệu lực — chỉnh lại ngày bắt đầu/kết thúc để hai khoảng không chồng nhau.",
+  /**
+   * Cặp ngân hàng KHÔNG đủ sau khi MERGE (039 là upsert từng phần). Thông điệp **không bao giờ** nhắc
+   * lại số tài khoản — đây đúng là đường mà security review bắt được rò PII qua message lỗi.
+   */
+  BANK_PAIR_INCOMPLETE:
+    "PAYROLL-ERR-018: có số tài khoản thì phải có CẢ tên ngân hàng lẫn tên chủ tài khoản — nếu muốn xoá tài khoản, gửi số tài khoản rỗng (null) cùng lượt.",
   /** Mã 014 — `kind` thứ HAI (SPEC-11 §12 hàng 014): hai dòng `items[]` cùng `component_code`. */
   PROFILE_ITEM_DUPLICATE:
     "PAYROLL-ERR-014: một thành phần lương chỉ được khai một dòng trong cùng phiên bản hồ sơ.",
@@ -277,6 +283,28 @@ export function mapPayrollPgError(err: unknown): Error | null {
         payrollDetails("trail-pair-violation", { constraint: c }),
       );
     }
+    // 🩹 S15-PAYROLL-BE-1 (security review HIGH #2) — BA CHECK của v2 trước đó KHÔNG có nhánh nào ⇒
+    // rơi `null` ⇒ service ném thẳng `DrizzleQueryError` ⇒ **500 vùng đỏ**. Với
+    // `payroll_employee_settings_bank_pair_check` thì nặng hơn một bậc: message của drizzle là
+    // `Failed query: … params: …`, nên **SỐ TÀI KHOẢN ĐẦY ĐỦ đi vào log** khi filter ghi `stack` cho 5xx.
+    // Service đã tiền-kiểm trên hàng SAU MERGE; ba nhánh dưới là lưới cuối cho RACE/đường gọi nội bộ.
+    if (c.includes("payroll_employee_settings_bank_pair_check")) {
+      return payrollUnprocessable(
+        "FORMULA_INVALID",
+        PAYROLL_ERR.BANK_PAIR_INCOMPLETE,
+        payrollDetails("bank-pair-incomplete"),
+      );
+    }
+    if (c.includes("payroll_dependents_period_check")) {
+      return payrollConflict(
+        "DEPENDENT_OVERLAP",
+        PAYROLL_ERR.DEPENDENT_OVERLAP,
+        payrollDetails("dependent-overlap", { reason: "effective-to-before-from" }),
+      );
+    }
+    // `salary_profile_items_amount_check` (amount >= 0): Zod `.nonnegative()` mirror ĐÚNG BẰNG nên tới
+    // được đây là payload lách tầng validate ⇒ 400 hình thức, cùng luật `payroll_period_lines_adjustment_check`.
+    if (c.includes("salary_profile_items_amount_check")) return null;
     if (c === "") {
       // Không tên ⇒ trigger `enforce_bonus_penalty_freeze` (luật 3 ở JSDoc trên).
       return payrollConflict(

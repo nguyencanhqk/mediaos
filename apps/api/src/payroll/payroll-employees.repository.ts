@@ -40,7 +40,7 @@ export interface PayrollEmployeeRow {
  *    ratchet pin `toBeLessThanOrEqual` ⇒ một hit mới là ĐỎ).
  *
  * 2. 🔴 **Base table là `employee_profiles`, KHÔNG phải `users` JOIN sang nó.** Unique
- *    `employee_profiles_company_user_uq` là **PARTIAL** `WHERE deleted_at IS NULL` (`employees.ts:98-100`)
+ *    `employee_profiles_company_user_active_uq` là **PARTIAL** `WHERE deleted_at IS NULL` (`employees.ts:98-100`)
  *    ⇒ một user có thể có NHIỀU hồ sơ đã xoá mềm. JOIN `users → employee_profiles` mà chỉ lọc tenant sẽ
  *    **nhân bản hàng** và làm `pagination.total` đếm sai (`partial-unique-index-makes-join-duplicate`).
  *    Lấy `employee_profiles` làm gốc + lọc `deleted_at IS NULL` cho **đúng một hàng/nhân sự** theo chính
@@ -143,13 +143,24 @@ export class PayrollEmployeesRepository {
       .select(PayrollEmployeesRepository.columns(companyId))
       .from(employeeProfiles)
       .innerJoin(users, eq(users.id, employeeProfiles.userId))
+      // `deleted_at IS NULL` ở CẢ HAI bảng tra cứu: `org_units`/`positions` có soft-delete và
+      // `deleteOrgUnit`/`deletePosition` KHÔNG chặn xoá khi còn nhân sự tham chiếu ⇒ thiếu vị từ này
+      // thì đơn vị/vị trí đã xoá **vẫn hiện tên** trên màn Nhân viên PAYROLL (DB review, MEDIUM).
       .leftJoin(
         orgUnits,
-        and(eq(orgUnits.id, employeeProfiles.orgUnitId), eq(orgUnits.companyId, companyId)),
+        and(
+          eq(orgUnits.id, employeeProfiles.orgUnitId),
+          eq(orgUnits.companyId, companyId),
+          isNull(orgUnits.deletedAt),
+        ),
       )
       .leftJoin(
         positions,
-        and(eq(positions.id, employeeProfiles.positionId), eq(positions.companyId, companyId)),
+        and(
+          eq(positions.id, employeeProfiles.positionId),
+          eq(positions.companyId, companyId),
+          isNull(positions.deletedAt),
+        ),
       );
   }
 

@@ -339,6 +339,13 @@ export class SalaryProfilesRepository {
   }
 }
 
+/**
+ * ⚠️ **Interface này PHẢI phủ ĐỦ cột của `salary_profiles`.** Nó là bản đồ tay cho `tx.execute` (raw
+ * snake_case), và `fromRaw` ép kiểu `as SalaryProfile` nên **trình biên dịch KHÔNG bắt được cột
+ * thiếu**. Cột nào quên ở đây thì nhánh `effectiveOn` của `listTx` trả DTO **thiếu trường trong im
+ * lặng**, còn nhánh không-`effectiveOn` lại trả đủ — cùng một route, hai hành vi (silent-failure
+ * review S15-PAYROLL-BE-1, HIGH #1). Thêm cột vào bảng ⇒ thêm vào ĐÂY và vào `fromRaw` CÙNG LƯỢT.
+ */
 interface RawSalaryRow {
   id: string;
   company_id: string;
@@ -346,6 +353,12 @@ interface RawSalaryRow {
   effective_date: string;
   base_salary: string;
   allowances: unknown;
+  // ── v2 (mig 0570) ──
+  salary_type: string | null;
+  pit_payer: string | null;
+  insurance_salary: string | null;
+  probation_salary: string | null;
+  pay_ratio_pct: string | null;
   note: string | null;
   created_at: string;
   created_by: string | null;
@@ -364,6 +377,11 @@ function fromRaw(r: RawSalaryRow): SalaryProfile {
     effectiveDate: r.effective_date,
     baseSalary: r.base_salary,
     allowances: r.allowances,
+    salaryType: r.salary_type,
+    pitPayer: r.pit_payer,
+    insuranceSalary: r.insurance_salary,
+    probationSalary: r.probation_salary,
+    payRatioPct: r.pay_ratio_pct,
     note: r.note,
     createdAt: new Date(r.created_at),
     createdBy: r.created_by,

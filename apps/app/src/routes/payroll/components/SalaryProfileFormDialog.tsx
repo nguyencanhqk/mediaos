@@ -23,8 +23,18 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * cặp ngoài PAYROLL. Picker và form này gác bằng hai cặp cùng resource `salary-profile` nên luôn
  * mở/đóng cùng nhau.
  *
- * `allowances` là mảng `{name, amount}` — v1 nhập tối giản một dòng phụ cấp; mảng rỗng là hợp lệ
- * (contracts `.default([])`).
+ * 🔻 **S15-PAYROLL-BE-1 — ô «phụ cấp» nhập TAY đã GỠ, có chủ đích.** v1 cho gõ tự do
+ * `{name, amount}` rồi ghi thẳng vào `salary_profiles.allowances`, và cột đó là **đầu vào tính lương**
+ * (`payroll-calc.repository.ts` cộng MỌI phần tử vào `gross`). v2 đóng đường đó: phụ cấp/khấu trừ phải
+ * tham chiếu **mã trong catalog `salary_components`** và server kiểm `value_type='profile_item'` trước
+ * khi ghi (422 `PAYROLL-ERR-018`) — một cái tên gõ tay không kiểm được là đúng lỗ tiền mà v2 sinh ra để
+ * bịt. Vì `PAYROLL-API-044` (catalog thành phần lương) thuộc `S15-PAYROLL-BE-2`, form này **CHƯA có
+ * picker mã** ⇒ tạm gửi `items: []`.
+ *
+ * ⚠️ **KHÔNG để lại ô nhập rồi lặng lẽ bỏ payload** — đó là `ui-promises-backend-never-reads`: người
+ * dùng gõ số, bấm Lưu, hệ thống báo thành công và **không lưu gì**. Thà không có ô còn hơn có ô dối.
+ * `S15-PAYROLL-FE-1` dựng lại form v2 đầy đủ (GROSS/NET · đối tượng TNCN · lương BH · thử việc · tỉ lệ
+ * hưởng · bảng phụ cấp/khấu trừ CÓ ĐỊNH MỨC chọn từ catalog).
  */
 export function SalaryProfileFormDialog({
   open,
@@ -41,8 +51,6 @@ export function SalaryProfileFormDialog({
   const [userId, setUserId] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [baseSalary, setBaseSalary] = useState("");
-  const [allowanceName, setAllowanceName] = useState("");
-  const [allowanceAmount, setAllowanceAmount] = useState("");
   const [note, setNote] = useState("");
   const [errorKey, setErrorKey] = useState<string | null>(null);
 
@@ -51,22 +59,15 @@ export function SalaryProfileFormDialog({
       setUserId("");
       setEffectiveDate("");
       setBaseSalary("");
-      setAllowanceName("");
-      setAllowanceAmount("");
       setNote("");
       setErrorKey(null);
     }
   }, [open]);
 
   const parsedBase = Number(baseSalary);
-  const parsedAllowance = Number(allowanceAmount);
   // `baseSalary > 0` mirror CHECK `salary_profile_base_positive_check` — gửi 0 là 23514 = 500.
   const baseValid = baseSalary.trim() !== "" && Number.isFinite(parsedBase) && parsedBase > 0;
-  const allowanceValid =
-    allowanceName.trim() === ""
-      ? allowanceAmount.trim() === ""
-      : Number.isFinite(parsedAllowance) && parsedAllowance >= 0;
-  const canSubmit = userId !== "" && DATE_RE.test(effectiveDate) && baseValid && allowanceValid;
+  const canSubmit = userId !== "" && DATE_RE.test(effectiveDate) && baseValid;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -75,9 +76,8 @@ export function SalaryProfileFormDialog({
           userId,
           effectiveDate,
           baseSalary: parsedBase,
-          allowances: allowanceName.trim()
-            ? [{ name: allowanceName.trim(), amount: parsedAllowance }]
-            : [],
+          // Rỗng cho tới khi FE-1 có picker catalog — xem docblock đầu file.
+          items: [],
           ...(note.trim() ? { note: note.trim() } : {}),
         },
         // Neo theo (người, ngày hiệu lực): đúng cặp mà UNIQUE của DB ràng buộc ⇒ bấm đúp là một bản ghi.
@@ -159,29 +159,6 @@ export function SalaryProfileFormDialog({
             </span>
           )}
         </label>
-
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">{t("salaryProfileForm.allowanceLegend")}</legend>
-          <div className="flex gap-2">
-            <Input
-              placeholder={t("salaryProfileForm.allowanceName")}
-              value={allowanceName}
-              onChange={(e) => setAllowanceName(e.target.value)}
-            />
-            <Input
-              placeholder={t("salaryProfileForm.allowanceAmount")}
-              value={allowanceAmount}
-              inputMode="numeric"
-              onChange={(e) => setAllowanceAmount(e.target.value)}
-              className="tabular-nums"
-            />
-          </div>
-          {!allowanceValid && (
-            <span className="block text-xs text-danger">
-              {t("salaryProfileForm.allowanceInvalid")}
-            </span>
-          )}
-        </fieldset>
 
         <label className="block text-sm">
           <span className="mb-1 block font-medium">{t("salaryProfileForm.noteLabel")}</span>

@@ -264,9 +264,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-1 — 036/037 nhân sự hưởng l�
     );
     expect(r.rowCount, "037 phải để lại vết đọc").toBe(1);
     expect(r.rows[0].after).toMatchObject({ taxCodeRevealed: true });
-    expect(JSON.stringify(r.rows[0].after), "audit KHÔNG nhân bản PII").not.toContain(
-      "8000000001",
-    );
+    expect(JSON.stringify(r.rows[0].after), "audit KHÔNG nhân bản PII").not.toContain("8000000001");
   });
 
   // ── D. IDOR / cross-tenant ⇒ 404 sentinel ─────────────────────────────────────────────────────
@@ -314,6 +312,38 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-1 — 036/037 nhân sự hưởng l�
     expect(onlyDup.status).toBe(200);
     expect(onlyDup.body.data.length, "lọc q cũng không được nhân bản").toBe(1);
     expect(onlyDup.body.pagination.total, "total đếm sai vì hàng nhân bản").toBe(1);
+  });
+
+  /**
+   * DB review S15-PAYROLL-BE-1 (MEDIUM): `org_units`/`positions` có soft-delete, và
+   * `deleteOrgUnit`/`deletePosition` KHÔNG chặn xoá khi còn nhân sự tham chiếu. JOIN theo PK vẫn khớp
+   * hàng đã xoá ⇒ thiếu `deleted_at IS NULL` thì màn Nhân viên PAYROLL hiện tên đơn vị/vị trí ĐÃ XOÁ.
+   */
+  it("E1b — đơn vị/vị trí XOÁ MỀM ⇒ trả `null`, KHÔNG hiện tên đã xoá", async () => {
+    const hash = await new PasswordService().hash(LOGIN_PW);
+    const u = await seedUser(direct, A.companyId, `deadunit@${A.slug}.test`, hash);
+    const ou = await direct.query(
+      `INSERT INTO org_units (company_id, name, code, deleted_at) VALUES ($1,'Phòng ĐÃ XOÁ','DX',now()) RETURNING id`,
+      [A.companyId],
+    );
+    const po = await direct.query(
+      `INSERT INTO positions (company_id, name, code, deleted_at) VALUES ($1,'Vị trí ĐÃ XOÁ','VX',now()) RETURNING id`,
+      [A.companyId],
+    );
+    await direct.query(
+      `INSERT INTO employee_profiles (company_id, user_id, employee_code, org_unit_id, position_id, status)
+       VALUES ($1,$2,'NVDEAD',$3,$4,'active')`,
+      [A.companyId, u, ou.rows[0].id, po.rows[0].id],
+    );
+
+    const res = await get(tOfficer, "/payroll/employees?q=NVDEAD");
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].orgUnitName, "hiện tên đơn vị ĐÃ XOÁ").toBeNull();
+    expect(res.body.data[0].positionName, "hiện tên vị trí ĐÃ XOÁ").toBeNull();
+    // Đối chứng dương: nhân sự gắn đơn vị CÒN SỐNG vẫn thấy tên (không phải "mọi thứ đều null").
+    const alive = await get(tOfficer, "/payroll/employees?q=NV001");
+    expect(alive.body.data[0].orgUnitName).toBe("Phòng Kế toán");
   });
 
   it("E2 — lọc `orgUnitId` + `hasSalaryProfile=false` hoạt động (ca ALLOW đối chứng cho E1)", async () => {

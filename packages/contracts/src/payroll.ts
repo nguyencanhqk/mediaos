@@ -188,6 +188,14 @@ export type InputSnapshot = z.infer<typeof inputSnapshotSchema>;
 export const SALARY_COMPONENT_CODE_MAX = 32;
 
 /**
+ * Trần số dòng `items[]` một hồ sơ lương. Không phải chống DoS (body limit của express đã chặn ~100kb)
+ * mà là chống **khuếch đại ghi** trên route nhạy cảm: `022` ĐẶT LẠI TOÀN BỘ tập item trong MỘT tx, nên
+ * một payload vài nghìn dòng là vài nghìn INSERT cho một thao tác người dùng. 200 dòng/hồ sơ đã rộng
+ * gấp nhiều lần nhu cầu thật (catalog phụ cấp của một công ty hiếm khi quá vài chục mã).
+ */
+export const SALARY_PROFILE_ITEMS_MAX = 200;
+
+/**
  * Dòng `items[]` khi GHI — payload của `PAYROLL-API-020` / `022` (SPEC-11 §15 hàng 🔁).
  * `salary_profile_items` **KHÔNG có route riêng** (§15.1) — nó là bảng con của `salary_profiles`.
  *
@@ -284,7 +292,7 @@ export const createSalaryProfileSchema = z
      * v2 THAY `allowances[]` — ghi xuống bảng `salary_profile_items` (SPEC-11 §15 hàng 020 🔁).
      * Service mirror ngược sang cột `allowances` cho máy tính lương v1 (§3.2 của plan).
      */
-    items: z.array(salaryProfileItemInputSchema).default([]),
+    items: z.array(salaryProfileItemInputSchema).max(SALARY_PROFILE_ITEMS_MAX).default([]),
     salaryType: salaryTypeEnum.optional(),
     pitPayer: pitPayerEnum.optional(),
     insuranceSalary: z.number().nonnegative().nullable().optional(),
@@ -313,7 +321,7 @@ export const updateSalaryProfileSchema = z
      * `[]` ở đây là khác biệt SỐNG CÒN: coi vắng như rỗng thì `PATCH {note:"x"}` **xoá sạch phụ cấp
      * trong im lặng**, và kỳ lương sau trả thiếu tiền mà không lỗi nào phát ra.
      */
-    items: z.array(salaryProfileItemInputSchema).optional(),
+    items: z.array(salaryProfileItemInputSchema).max(SALARY_PROFILE_ITEMS_MAX).optional(),
     salaryType: salaryTypeEnum.optional(),
     pitPayer: pitPayerEnum.optional(),
     insuranceSalary: z.number().nonnegative().nullable().optional(),

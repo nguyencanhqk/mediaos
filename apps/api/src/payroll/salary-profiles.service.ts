@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   Allowance,
   CreateSalaryProfileRequest,
@@ -37,6 +37,8 @@ import { SalaryProfilesRepository } from "./salary-profiles.repository";
  */
 @Injectable()
 export class SalaryProfilesService {
+  private readonly logger = new Logger(SalaryProfilesService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: PayrollAccessService,
@@ -73,7 +75,6 @@ export class SalaryProfilesService {
       );
     });
   }
-
 
   /**
    * 🔴 **S15-PAYROLL-BE-1 — LÕI AN TOÀN TIỀN của `items[]`. Đọc kỹ trước khi đơn giản hoá.**
@@ -116,6 +117,18 @@ export class SalaryProfilesService {
       items.map((i) => i.componentCode),
     );
     const unknown = items.filter((i) => !catalog.has(i.componentCode)).map((i) => i.componentCode);
+    if (catalog.size === 0 && items.length > 0) {
+      /**
+       * Phân biệt "người dùng gõ sai mã" với "catalog công ty CHƯA seed" — hai tình huống ném CÙNG
+       * 422 nhưng cách xử lý của vận hành khác hẳn nhau. `PayrollMasterDataSeeder` chạy RUNTIME
+       * per-company và **runner nuốt throw** (nợ đã khai ở done_when BE-2/BE-3), nên một company chưa
+       * seed sẽ làm MỌI lượt ghi `items[]` trượt — không có dòng log này thì nhìn từ server hai ca
+       * giống hệt nhau (silent-failure review, LOW #5).
+       */
+      this.logger.warn(
+        `payroll salary-profile items: company ${companyId} có 0 hàng salary_components — mọi lượt ghi items[] sẽ trượt 422. Kiểm tra PayrollMasterDataSeeder đã chạy cho company này chưa.`,
+      );
+    }
     if (unknown.length > 0) {
       throw payrollUnprocessable(
         "FORMULA_INVALID",

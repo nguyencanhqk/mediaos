@@ -328,6 +328,41 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-1 — items[] hồ sơ lương (B1 �
     expect(res.body.data.items[0].componentCode).toBe("PHUCAP_TRUA");
   });
 
+  /**
+   * 🔴 **Silent-failure review S15-PAYROLL-BE-1 (HIGH #1).** `listTx` có HAI nhánh: có `effectiveOn`
+   * thì đi raw `tx.execute` + `fromRaw()` (bản đồ cột viết TAY, ép kiểu `as SalaryProfile` nên trình
+   * biên dịch không bắt được cột thiếu); không có thì đi drizzle. Trước bản vá, nhánh raw **rơi mất**
+   * 5 cột v2 ⇒ CÙNG một route trả DTO khác nhau tuỳ có filter hay không, và trường mất đi trông y hệt
+   * "đã bị mask" (§18.1 A) nên FE không phân biệt được.
+   */
+  it("C4 — 019 với `effectiveOn` trả ĐỦ trường v2 (nhánh raw không được rơi cột)", async () => {
+    const created = await post(tFull, "/salary-profiles").send({
+      userId: subjectUserId,
+      effectiveDate: nextDate(),
+      baseSalary: 20_000_000,
+      salaryType: "NET",
+      pitPayer: "COMPANY",
+      payRatioPct: 80,
+      items: [],
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+
+    const withFilter = await get(tFull, "/salary-profiles?effectiveOn=2029-12-31");
+    expect(withFilter.status, JSON.stringify(withFilter.body)).toBe(200);
+    const row = withFilter.body.data.find((r: { userId: string }) => r.userId === subjectUserId);
+    expect(row, "nhánh effectiveOn không trả hàng nào").toBeTruthy();
+    expect(row.salaryType, "nhánh raw rơi mất `salaryType`").toBe("NET");
+    expect(row.pitPayer, "nhánh raw rơi mất `pitPayer`").toBe("COMPANY");
+
+    // ĐỐI CHỨNG: nhánh KHÔNG filter phải cho CÙNG hình dạng — hai nhánh không được lệch nhau.
+    const noFilter = await get(tFull, "/salary-profiles");
+    const row2 = noFilter.body.data.find(
+      (r: { userId: string; salaryType?: string }) => r.salaryType === "NET",
+    );
+    expect(row2, "nhánh drizzle mất `salaryType`").toBeTruthy();
+    expect(row2.pitPayer).toBe("COMPANY");
+  });
+
   // ── D. PAYROLL-ERR-014 profile-item-duplicate ─────────────────────────────────────────────────
   it("D1 — hai dòng CÙNG `componentCode` ⇒ 409 014 `profile-item-duplicate` (KHÔNG 500)", async () => {
     const res = await createProfile([

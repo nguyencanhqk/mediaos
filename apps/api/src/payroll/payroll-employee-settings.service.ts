@@ -12,7 +12,13 @@ import {
   PayrollEmployeeSettingsRepository,
   type PayrollEmployeeSettingsWrite,
 } from "./payroll-employee-settings.repository";
-import { mapPayrollPgError, payrollNotFound } from "./payroll.errors";
+import {
+  mapPayrollPgError,
+  payrollDetails,
+  payrollNotFound,
+  payrollUnprocessable,
+  PAYROLL_ERR,
+} from "./payroll.errors";
 import type { PayrollRequestUser } from "./payroll.types";
 
 /**
@@ -95,6 +101,39 @@ export class PayrollEmployeeSettingsService {
     return this.db.withTenant(user.companyId, async (tx) => {
       const emp = await this.employees.findTx(tx, user.companyId, userId);
       if (!emp) throw payrollNotFound();
+
+      /**
+       * 🔴 **Kiểm cặp ngân hàng trên hàng SAU MERGE — Zod KHÔNG nhìn thấy vế này.**
+       *
+       * 039 là upsert **từng phần**: `.refine` của contract chỉ soi PAYLOAD, còn CHECK
+       * `payroll_employee_settings_bank_pair_check` chạy trên **hàng sau merge**. Gửi
+       * `{bankName: null}` lên một nhân sự ĐÃ có số TK ⇒ payload tự nó hợp lệ, hàng sau merge thì
+       * không ⇒ trước bản vá này DB ném `23514` mà `mapPayrollPgError` không có nhánh ⇒ **500 vùng
+       * đỏ**, và message của drizzle là `Failed query: … params: …` nên **SỐ TÀI KHOẢN ĐẦY ĐỦ đi vào
+       * log** (security review S15-PAYROLL-BE-1, HIGH #2).
+       *
+       * Kiểm ở đây cho lỗi ĐỌC ĐƯỢC (422 018) và **không bao giờ** để số TK chạm đường lỗi.
+       */
+      const existing = await this.repo.findTx(tx, user.companyId, userId);
+      const pick = <K extends keyof PutPayrollEmployeeSettingsRequest>(
+        key: K,
+        prev: string | null,
+      ): string | null => {
+        const v = dto[key] as string | null | undefined;
+        return v === undefined ? prev : v;
+      };
+      const merged = {
+        bankAccountNumber: pick("bankAccountNumber", existing?.bankAccountNumber ?? null),
+        bankName: pick("bankName", existing?.bankName ?? null),
+        accountHolder: pick("accountHolder", existing?.accountHolder ?? null),
+      };
+      if (merged.bankAccountNumber && (!merged.bankName || !merged.accountHolder)) {
+        throw payrollUnprocessable(
+          "FORMULA_INVALID",
+          PAYROLL_ERR.BANK_PAIR_INCOMPLETE,
+          payrollDetails("bank-pair-incomplete"),
+        );
+      }
 
       const write: PayrollEmployeeSettingsWrite = {
         joinsSocialInsurance: dto.joinsSocialInsurance,

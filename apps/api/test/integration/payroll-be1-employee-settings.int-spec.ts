@@ -234,6 +234,71 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-1 — 038/039 thiết lập nhân s�
     expect(res.body.error.code).toBe("VALIDATION-ERR-001");
   });
 
+  /**
+   * 🔴 **Security review S15-PAYROLL-BE-1 (HIGH #2) — 500 vùng đỏ + số TK vào log.**
+   *
+   * 039 là upsert MERGE TỪNG PHẦN, nên CHECK `payroll_employee_settings_bank_pair_check` chạy trên
+   * hàng **SAU MERGE**. `.refine` của Zod chỉ soi PAYLOAD ⇒ `{bankName:null}` gửi lên nhân sự ĐÃ có
+   * số TK là payload HỢP LỆ nhưng hàng sau merge thì không. Trước bản vá: DB ném `23514` không có
+   * nhánh map ⇒ **500**, và message của drizzle (`Failed query: … params: …`) mang **SỐ TÀI KHOẢN
+   * ĐẦY ĐỦ** vào log 5xx.
+   */
+  it("D4 — gỡ `bankName` khỏi hàng ĐÃ có số TK ⇒ 422 018 đọc được, KHÔNG 500", async () => {
+    // Tiền đề: hàng đã có đủ bộ ba.
+    const seed = await put(tFull, `/payroll/employees/${subjectUserId}/settings`).send({
+      joinsSocialInsurance: false,
+      joinsUnion: false,
+      bankAccountNumber: FULL_BANK,
+      bankName: "Vietcombank",
+      accountHolder: "NGUYEN VAN A",
+    });
+    expect(seed.status, JSON.stringify(seed.body)).toBe(200);
+
+    const res = await put(tFull, `/payroll/employees/${subjectUserId}/settings`).send({
+      joinsSocialInsurance: false,
+      joinsUnion: false,
+      bankName: null,
+    });
+    expect(res.status, `PHẢI là lỗi đọc được, không 500: ${JSON.stringify(res.body)}`).toBe(422);
+    expect(res.body.error.code).toBe("PAYROLL-ERR-018");
+    expect(res.body.error.details).toContainEqual(
+      expect.objectContaining({ field: "kind", message: "bank-pair-incomplete" }),
+    );
+    // Và thông điệp lỗi KHÔNG được mang số TK ra ngoài.
+    expect(JSON.stringify(res.body), "lỗi rò số tài khoản").not.toContain(FULL_BANK);
+  });
+
+  it("D5 — `bankAccountNumber: \"\"` ⇒ 400, KHÔNG ghi hàng `''` nửa nạc nửa mỡ", async () => {
+    const res = await put(tFull, `/payroll/employees/${subjectUserId}/settings`).send({
+      joinsSocialInsurance: false,
+      joinsUnion: false,
+      bankAccountNumber: "",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION-ERR-001");
+    // Không có hàng nào mang chuỗi rỗng — trạng thái đó làm CHECK coi là "CÓ số TK" còn mapper coi là
+    // "KHÔNG có", hai tầng đọc cùng một hàng ra hai nghĩa.
+    const bad = await direct.query(
+      `SELECT count(*)::int AS n FROM payroll_employee_settings
+        WHERE company_id = $1 AND bank_account_number = '' AND deleted_at IS NULL`,
+      [A.companyId],
+    );
+    expect(bad.rows[0].n).toBe(0);
+  });
+
+  it("D6 — ĐỐI CHỨNG DƯƠNG: gỡ CẢ BA cùng lượt (số TK về null) ⇒ 200", async () => {
+    const res = await put(tFull, `/payroll/employees/${subjectUserId}/settings`).send({
+      joinsSocialInsurance: false,
+      joinsUnion: false,
+      bankAccountNumber: null,
+      bankName: null,
+      accountHolder: null,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const after = await get(tFull, `/payroll/employees/${subjectUserId}/settings`);
+    expect(after.body.data.bankAccountLast4).toBeNull();
+  });
+
   // ── E. Audit ──────────────────────────────────────────────────────────────────────────────────
   it("E1 — audit 038/039 neo `userId`, payload KHÔNG chứa số TK", async () => {
     await get(tFull, `/payroll/employees/${subjectUserId}/settings`);

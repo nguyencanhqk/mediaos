@@ -93,16 +93,27 @@ export type PayrollEmployeeSettingsDto = z.infer<typeof payrollEmployeeSettingsS
 /**
  * PUT /payroll/employees/:userId/settings (039) — upsert 1 hàng/nhân sự.
  *
- * `.refine` mirror CHECK `payroll_employee_settings_bank_pair_check` **ĐÚNG BẰNG**: số TK mà thiếu tên
- * ngân hàng hoặc tên chủ TK là **một dòng UNC KHÔNG GỬI ĐƯỢC**. Zod là lưới ĐẦU (400 đọc được),
- * CHECK ở DB là lưới CUỐI. `bankBranch` cố ý LỎNG — nhiều ngân hàng không cần chi nhánh (DB-13 §13.2).
+ * `.refine` mirror CHECK `payroll_employee_settings_bank_pair_check`: số TK mà thiếu tên ngân hàng
+ * hoặc tên chủ TK là **một dòng UNC KHÔNG GỬI ĐƯỢC**. Zod là lưới ĐẦU (400 đọc được), CHECK ở DB là
+ * lưới CUỐI. `bankBranch` cố ý LỎNG — nhiều ngân hàng không cần chi nhánh (DB-13 §13.2).
+ *
+ * 🔴 **`.min(1)` trên `bankAccountNumber` là BẮT BUỘC, không phải trang trí** (security review
+ * S15-PAYROLL-BE-1, HIGH #2): CHECK ở DB phân biệt theo `IS NULL`, còn `.refine` phân biệt theo
+ * *truthy*. Không có `.min(1)` thì `bankAccountNumber: ""` **lọt refine** (vì `!"" === true`) rồi ghi
+ * xuống DB một hàng `bank_account_number = ''` NOT NULL — CHECK coi là "CÓ số TK" và đòi hai trường
+ * kia, còn mapper coi là "KHÔNG có" (`"" ? … : null`). Hai tầng đọc cùng một hàng ra hai nghĩa.
+ *
+ * ⚠️ **`.refine` này chỉ phủ PAYLOAD.** 039 là **upsert MERGE từng phần**, nên CHECK ở DB chạy trên
+ * hàng **SAU MERGE**: gửi `{bankName: null}` lên một nhân sự ĐÃ có số TK thì payload tự nó hợp lệ mà
+ * hàng sau merge thì không. Vế đó **PHẢI** kiểm ở service (`assertBankPairOnMergedRow`) — Zod không
+ * nhìn thấy hàng hiện có.
  */
 export const putPayrollEmployeeSettingsSchema = z
   .object({
     joinsSocialInsurance: z.boolean().default(false),
     socialInsuranceNo: z.string().max(50).nullable().optional(),
     joinsUnion: z.boolean().default(false),
-    bankAccountNumber: z.string().max(50).nullable().optional(),
+    bankAccountNumber: z.string().min(1).max(50).nullable().optional(),
     bankName: z.string().max(200).nullable().optional(),
     bankBranch: z.string().max(200).nullable().optional(),
     accountHolder: z.string().max(200).nullable().optional(),
