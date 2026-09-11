@@ -15,10 +15,10 @@
 | Mã tài liệu | DB-13 |
 | Tên tài liệu | PAYROLL Database Design — Tiền lương |
 | Module | PAYROLL (SPEC-11) |
-| Phiên bản | v1.0 — **Approved** cùng SPEC-11 (owner duyệt gói wave S13-PAYROLL 31/08/2026) |
-| Ngày tạo / cập nhật | 31/08/2026 / 31/08/2026 |
-| Head migration lúc viết | idx 230 / `0563_s12recruitdash1_widget_recruit_funnel` ⇒ migration PAYROLL dự kiến **`0564+`** |
-| Giai đoạn | Phase 2 «HR nâng cao» · wave S13-PAYROLL — hậu go-live |
+| Phiên bản | **v2.0** — **Approved** cùng SPEC-11 v2 (owner ký PAY-DEC-011..020 ngày 02/09/2026). v1.0 (§1–§11) **giữ nguyên**; phần v2 là **§12–§15**, thêm vào cùng file theo PAY-DEC-011 |
+| Ngày tạo / cập nhật | 31/08/2026 / **11/09/2026** (`S15-PAYROLL-DOC-1` viết §12–§15) |
+| Head migration lúc viết | v1: idx 230 / `0563_…` ⇒ lô v1 `0564–0568` **đã viết**. **v2: đo 11/09/2026 = idx 236 / `0569_s14recruitfilegrant1_candidate_file_perm`** ⇒ lô v2 dự kiến **`0570+`** *(PAY-DEC-011 ghi «0569+» — đã lỗi thời, `0569` bị S14 lấy)* |
+| Giai đoạn | Phase 2 «HR nâng cao» · v1 = wave S13-PAYROLL · **v2 = wave S15-PAYROLL-V2** — hậu go-live |
 
 > ⚠️ Số migration dưới đây là **dự kiến**. WO DB phải đọc `apps/api/migrations/meta/_journal.json` **tại thời điểm chạy** và lấy `idx = max + 1` (**KHÔNG suy từ tên file** — bẫy `migration-not-in-journal-is-silently-skipped`); lane migration là lane **nối tiếp** duy nhất của wave.
 >
@@ -46,6 +46,8 @@ Quy tắc nghiệp vụ (mã lỗi, ma trận FSM, masking) sống ở SPEC-11 �
 | Bảng | Vai trò | Ghi chú |
 | --- | --- | --- |
 | `payroll_period_lines` | **Bảng lương NHÁP** — 1 dòng / (kỳ, nhân sự), mutable trước `Approved` | Bắt buộc kỹ thuật để `payslips` giữ được khuôn append-only mà bảng lương vẫn tính lại được (SPEC-11 §3.4, §22a) |
+
+> **v2 thêm 11 bảng nữa và ALTER 3 bảng** — đặc tả ở **§12–§14**, không lặp lại ở đây. Tổng bảng PAYROLL sau v2: **18**. Phạm vi §3 dưới đây mô tả **v1**.
 
 ### 3.2 Bảng RECONCILE (đã tồn tại — ALTER bằng migration mới)
 
@@ -378,7 +380,7 @@ GRANT app: **`SELECT, INSERT`** (REVOKE UPDATE di sản). Unique `(company_id, p
 
 | Nhóm | Giá trị | CHECK |
 | --- | --- | --- |
-| payroll period status (SPEC-01 §17.15) | `Draft` · `CollectingData` · `Calculated` · `Reviewing` · `Approved` · `Paid` · `Locked` | `payroll_periods_status_check` |
+| payroll period status (SPEC-01 §17.15) | `Draft` · `CollectingData` · `Calculated` · `Reviewing` · `Approved` · `Paid` · `Locked` — 🔁 **v2 THÊM `Published` giữa `Approved` và `Paid` ⇒ 8 giá trị, xem §15.1** | `payroll_periods_status_check` |
 | payslip status (SPEC-01 §17.16) | `Generated` · `Published` · `Acknowledged` — **DẪN XUẤT, KHÔNG có cột, KHÔNG có CHECK** (SPEC-11 §13.2) | *(không)* |
 | bonus/penalty status (SPEC-01 §17.17) | `Pending` · `Approved` · `Rejected` | `bonus_penalties_status_check` |
 | bonus/penalty kind | `bonus` · `penalty` | `bonus_penalties_kind_check` |
@@ -492,3 +494,555 @@ Số migration là **dự kiến** — nối tiếp head THẬT tại thời đi
 | **Test/fixture/seed di sản đỏ giữa lane đỏ** | WO migration bị cám dỗ **xoá** `payslip-appendonly.int-spec.ts` — ca ghim bất biến #2 | §10.1 liệt kê **6** file + assertion thay thế; `paths` của WO DB phải chứa `apps/api/demo-seed-full.mjs` và `apps/api/src/foundation/retention/**` |
 | **DROP FK đơn cột "để thay bằng composite"** | `FK_SINGLE_COL_PAIRS_FLOOR` tụt ⇒ ratchet đỏ ⇒ hạ sàn cho qua = mất cổng | §4.2: **ADD composite, GIỮ đơn cột**; sàn chỉ hạ đúng bằng 2 FK biến mất theo cột GỠ, có đo hai lane |
 | **Retention hard-delete bảng không có GRANT DELETE** | `42501` uncaught làm hỏng **cả lượt cleanup tenant** (comment trong `retention.service.ts` nói rõ) | §10 bước A: thêm `payslip_acknowledgements` + `payroll_period_lines` vào `PROTECTED_TABLES` |
+
+---
+
+## PHẦN v2 — wave S15-PAYROLL-V2 (§12–§15)
+
+> **Nguồn nghiệp vụ của phần này:** [SPEC-11 v2](<../spec/SPEC-11 PAYROLL.md>) §3.9–§3.12 · §8.2 · §11.3 · §12.1 · §13.1 · §13.6–§13.8 · §15.1 · §18.1. Quy ước §4 (RLS+FORCE · composite tenant FK · append-only · FSM ở service · `numeric(18,2)` · mirror Zod hai chiều · UUID PK · **ĐO trước khi ALTER**) áp **nguyên vẹn** cho mọi bảng v2 — bên dưới chỉ ghi phần KHÁC.
+>
+> ⚠️ **Head migration đo ngày 11/09/2026: `idx 236` / `0569_s14recruitfilegrant1_candidate_file_perm`** ⇒ lô v2 bắt đầu **`0570+`**. PAY-DEC-011 (viết 02/09) ghi «`0569+`» — **`0569` đã bị `S14-RECRUIT-FILEGRANT-1` lấy**. WO DB vẫn **đọc `_journal.json` tại thời điểm chạy** và lấy `idx = max + 1` (`migration-not-in-journal-is-silently-skipped`).
+>
+> ⚠️ **Band di sản `0091`–`0180` và lô v1 `0564`–`0568` đều BẤT KHẢ XÂM PHẠM.** Mọi thay đổi làm bằng migration MỚI.
+
+## 12. ALTER 3 bảng v1 (lô DB-1 · một phần lô DB-2)
+
+### 12.1 `salary_profiles` — 5 cột MỚI (PAY-DEC-015 · PAY-DEC-016)
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `salary_type` | TEXT | Có | **default `'GROSS'`**, CHECK ∈ `GROSS`/`NET`; `NET` ⇒ gross-up (SPEC-11 §13.8) |
+| `pit_payer` | TEXT | Có | **default `'EMPLOYEE'`**, CHECK ∈ `EMPLOYEE`/`COMPANY` — ai chịu TNCN (SPEC-11 §13.7 E) |
+| `insurance_salary` | numeric(18,2) | Không | lương đóng BH; **NULL = dùng `base_salary`** (không backfill bằng `base_salary` — xem cảnh báo dưới); CHECK `> 0` khi NOT NULL |
+| `probation_salary` | numeric(18,2) | Không | lương thử việc; CHECK `> 0` khi NOT NULL |
+| `pay_ratio_pct` | numeric(5,2) | Có | **default `100.00`**, CHECK `> 0 AND <= 100` — tỉ lệ hưởng |
+
+```sql
+ALTER TABLE salary_profiles ADD COLUMN salary_type      TEXT          NOT NULL DEFAULT 'GROSS';
+ALTER TABLE salary_profiles ADD COLUMN pit_payer        TEXT          NOT NULL DEFAULT 'EMPLOYEE';
+ALTER TABLE salary_profiles ADD COLUMN insurance_salary numeric(18,2);
+ALTER TABLE salary_profiles ADD COLUMN probation_salary numeric(18,2);
+ALTER TABLE salary_profiles ADD COLUMN pay_ratio_pct    numeric(5,2)  NOT NULL DEFAULT 100.00;
+
+ALTER TABLE salary_profiles ADD CONSTRAINT salary_profiles_salary_type_check
+  CHECK (salary_type IN ('GROSS','NET'));
+ALTER TABLE salary_profiles ADD CONSTRAINT salary_profiles_pit_payer_check
+  CHECK (pit_payer IN ('EMPLOYEE','COMPANY'));
+ALTER TABLE salary_profiles ADD CONSTRAINT salary_profiles_insurance_salary_check
+  CHECK (insurance_salary IS NULL OR insurance_salary > 0);
+ALTER TABLE salary_profiles ADD CONSTRAINT salary_profiles_probation_salary_check
+  CHECK (probation_salary IS NULL OR probation_salary > 0);
+ALTER TABLE salary_profiles ADD CONSTRAINT salary_profiles_pay_ratio_check
+  CHECK (pay_ratio_pct > 0 AND pay_ratio_pct <= 100);
+```
+
+> ⚠️ **TÊN `salary_type` ĐÃ TỒN TẠI Ở BẢNG KHÁC, KHÁC NGHĨA.** `employee_profiles.salary_type` (`apps/api/src/db/schema/employees.ts:59`, CHECK **`emp_salary_type_check`** ∈ `monthly`/`hourly`/`project`) **không liên quan** tới cột mới này. Vì vậy CHECK mới **phải** mang tiền tố bảng (`salary_profiles_salary_type_check`) và comment schema phải nói thẳng — grep `salary_type` sẽ ra hai chỗ, người đọc sau cần biết ngay chỗ nào là chỗ nào.
+>
+> ⚠️ **`insurance_salary` để NULL, TUYỆT ĐỐI KHÔNG backfill = `base_salary`.** Hai đại lượng này trùng nhau *hôm nay* nhưng là hai khái niệm: backfill biến «chưa khai» thành «đã khai bằng lương», và lần sau ai đó đổi `base_salary` thì căn cứ đóng BH **không đổi theo** — sai âm thầm vào số nộp bảo hiểm. Quy tắc «NULL ⇒ dùng `base_salary`» sống ở **service**, một chỗ.
+>
+> ⚠️ **`pay_ratio_pct` áp lên LƯƠNG, KHÔNG áp lên căn cứ đóng BH** (SPEC-11 §13.7 B). Đây là ràng buộc nghiệp vụ, DB không ép được — ca test là chốt duy nhất.
+
+### 12.2 `salary_profile_items` thay `allowances` jsonb — **EXPAND-CONTRACT**
+
+`allowances jsonb [{name, amount}]` của v1 lên bảng con `salary_profile_items` (§13.1). Đi **hai lượt** (`migration-expand-contract-required`):
+
+| Lượt | WO | Việc |
+| --- | --- | --- |
+| **EXPAND** | `S15-PAYROLL-DB-1` | TẠO `salary_profile_items` · **backfill** từ `allowances` · **GIỮ nguyên cột `allowances`** (đọc được, còn ghi được) · service đọc bảng mới, ghi **cả hai** |
+| **CONTRACT** | **WO RIÊNG, SAU** | gỡ `allowances` — chỉ sau khi DB-1 chạy thật và **đo 0 đường đọc còn lại** trong `apps/api/**` |
+
+> ⚠️ **ĐO SỐ HÀNG TRƯỚC.** PROD chưa chạy v1 ngày nào (lô `0564–0568` bị census `0565` chặn — `S14-PROD-PAYROLLGRANT-1`) ⇒ kỳ vọng **0 hàng trên PROD**, nhưng **DB dev/lane CÓ hàng**. Backfill phải chạy được với cả hai.
+>
+> ⚠️ **`allowances` có thể chứa phần tử sai khuôn** (jsonb không có CHECK hình dạng). Backfill **fail-loud** khi gặp phần tử thiếu `name`/`amount` hoặc `amount` không parse được — **KHÔNG bỏ qua im lặng** (bỏ qua = mất một khoản phụ cấp của một người, không ai biết). Migration đếm `jsonb_array_length` tổng trước/sau và verify **đúng bằng**.
+
+### 12.3 `payroll_periods` — 3 cột MỚI + 3 CHECK (PAY-DEC-013 · PAY-DEC-017)
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `template_id` | UUID | Không | mẫu bảng lương gắn vào kỳ; composite FK → `payroll_templates (company_id, id)` **NO ACTION**; đổi chỉ khi kỳ ≤ `CollectingData` (ép ở service ⇒ ERR-023) |
+| `paid_by` | UUID | Không | composite FK → `users (company_id, id)` **SET NULL (paid_by)** |
+| `paid_at` | timestamptz | Không | vết chuyển `Published → Paid` |
+
+**Thứ tự DDL BẮT BUỘC — làm sai là `23514` ngay trên lượt migrate:**
+
+```sql
+-- (1) cột mới, để NULL
+ALTER TABLE payroll_periods ADD COLUMN paid_by UUID;
+ALTER TABLE payroll_periods ADD COLUMN paid_at timestamptz;
+
+-- (2) NỚI status_check lên 8 giá trị TRƯỚC khi có hàng nào mang 'Published'
+ALTER TABLE payroll_periods DROP CONSTRAINT payroll_periods_status_check;
+ALTER TABLE payroll_periods ADD  CONSTRAINT payroll_periods_status_check
+  CHECK (status IN ('Draft','CollectingData','Calculated','Reviewing','Approved','Published','Paid','Locked'));
+
+-- (3) DI TRÚ NGHĨA: 'Paid' của v1 = 'đã phát hành phiếu' = 'Published' của v2
+--     ĐO TRƯỚC: SELECT count(*) FROM payroll_periods WHERE status = 'Paid';  -- ghi số đo vào migration
+UPDATE payroll_periods SET status = 'Published' WHERE status = 'Paid';
+
+-- (4) RỒI MỚI siết hai CHECK cặp
+ALTER TABLE payroll_periods DROP CONSTRAINT payroll_periods_published_pair_check;
+ALTER TABLE payroll_periods ADD  CONSTRAINT payroll_periods_published_pair_check
+  CHECK (status NOT IN ('Published','Paid','Locked')
+         OR (published_by IS NOT NULL AND published_at IS NOT NULL
+             AND approved_by IS NOT NULL AND approved_at IS NOT NULL));
+ALTER TABLE payroll_periods ADD  CONSTRAINT payroll_periods_paid_pair_check
+  CHECK (status NOT IN ('Paid','Locked')
+         OR (paid_by IS NOT NULL AND paid_at IS NOT NULL));
+```
+
+> ⚠️ **Đảo bước (3) và (4) = mọi hàng `Paid` di sản vi phạm `paid_pair_check`** (cột `paid_by` còn NULL) ⇒ migration đỏ trên DB có dữ liệu, xanh trên DB rỗng. Đó là hình dạng «xanh ở CI, đỏ ở PROD» kinh điển.
+>
+> ⚠️ **`Locked` nằm trong vế trái của CẢ BA CHECK cặp** (`approved`/`published`/`paid`). Bỏ `Locked` khỏi một vế là mở đường ghi thẳng `Locked` không vết (`nullable-escape-clause-makes-check-vacuous`).
+>
+> ⚠️ **`template_id` KHÔNG được NOT NULL.** Kỳ v1 đã tồn tại không có mẫu; ép NOT NULL là chặn migration. Ràng buộc «phải có mẫu mới `calculate` được» sống ở **service** (⇒ 409 ERR-023 `template-missing`) — CHECK không biểu diễn được vì nó phụ thuộc hành động, không phụ thuộc trạng thái.
+
+### 12.4 `payroll_period_lines` — 3 cột MỚI (PAY-DEC-012)
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `component_values_json` | jsonb | Có | **default `'{}'`** — snapshot giá trị TỪNG thành phần; dòng tính bằng mẫu thì `<> '{}'` |
+| `template_fingerprint` | TEXT | Không | SHA-256 hex(64) của tập công thức hiệu lực + `statutory_rate_id` (SPEC-11 §13.6 G); NULL cho dòng tính theo công thức cố định v1 |
+| `gross_up_iterations` | INTEGER | Không | số vòng gross-up; **NULL khi `salary_type = 'GROSS'`**; CHECK `>= 0 AND <= 30` khi NOT NULL |
+
+```sql
+ALTER TABLE payroll_period_lines ADD COLUMN component_values_json jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE payroll_period_lines ADD COLUMN template_fingerprint  TEXT;
+ALTER TABLE payroll_period_lines ADD COLUMN gross_up_iterations   INTEGER;
+ALTER TABLE payroll_period_lines ADD CONSTRAINT payroll_period_lines_grossup_check
+  CHECK (gross_up_iterations IS NULL OR (gross_up_iterations >= 0 AND gross_up_iterations <= 30));
+ALTER TABLE payroll_period_lines ADD CONSTRAINT payroll_period_lines_fingerprint_check
+  CHECK (template_fingerprint IS NULL OR template_fingerprint ~ '^[0-9a-f]{64}$');
+```
+
+> ⚠️ **`component_values_json` CÓ DEFAULT `'{}'`, khác `payslips.input_snapshot_json` (KHÔNG có default).** Có chủ đích và **không** mâu thuẫn §6.5: dòng v1 hợp lệ **không có** giá trị thành phần nào, nên `{}` là trạng thái đúng của chúng; còn `input_snapshot_json` rỗng thì luôn là snapshot giả. Vì vậy **KHÔNG** thêm CHECK `<> '{}'` cho cột này — ràng buộc «dòng tính bằng mẫu phải có component values» phụ thuộc `template_id` của kỳ (bảng khác) nên **CHECK không biểu diễn được**; ép ở service + ca test.
+>
+> **`payslips` KHÔNG nhận ba cột này.** Phiếu lương đã có `payslip_items` — mỗi thành phần một dòng, có nhãn, có dấu — tức là **cùng thông tin ở dạng giải-thích-được hơn**. Thêm một bản sao jsonb vào bảng append-only là nhân đôi nguồn sự thật trên chính bảng không sửa được. PDF (`PAYROLL-API-083/084`) đọc `payslip_items`, không đọc `component_values_json`.
+
+---
+
+## 13. Bảng MỚI — lô DB-1 (track A + B, 7 bảng)
+
+### 13.1 `salary_profile_items` — phụ cấp/khấu trừ có định mức
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `salary_profile_id` | UUID | Có | composite FK → `salary_profiles (company_id, id)` **NO ACTION** |
+| `component_code` | TEXT | Có | mã thành phần (§13.4); **không** FK cứng sang `salary_components` — xem cảnh báo |
+| `amount` | numeric(18,2) | Có | CHECK `>= 0`; **mask ở server** |
+| `is_active` | BOOLEAN | Có | default `true` — «trạng thái» của phụ cấp theo benchmark |
+| `note` | TEXT | Không | |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+CREATE UNIQUE INDEX salary_profile_items_profile_component_uq
+  ON salary_profile_items (company_id, salary_profile_id, component_code) WHERE deleted_at IS NULL;
+CREATE INDEX salary_profile_items_company_profile_idx
+  ON salary_profile_items (company_id, salary_profile_id) WHERE deleted_at IS NULL;
+chk salary_profile_items_amount_check   amount >= 0
+ALTER TABLE salary_profile_items ADD CONSTRAINT salary_profile_items_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`. RLS ENABLE+FORCE + policy literal-GUC **trước** mọi INSERT.
+
+> ⚠️ **`component_code` là TEXT, KHÔNG phải FK sang `salary_components.code`** — có chủ đích. Hồ sơ lương là bản ghi **versioned, đóng băng theo `effective_date`**; nếu FK cứng thì ngưng dùng một thành phần sẽ **kéo theo ràng buộc lên hồ sơ lương quá khứ** và biến một thao tác catalog thành một thao tác đụng dữ liệu lịch sử. Đổi lại: service **phải** kiểm mã tồn tại khi GHI (⇒ 422 ERR-018 `formula-unknown-ref` dùng chung mã), và có ca test ghim.
+
+### 13.2 `payroll_employee_settings` — BH · công đoàn · tài khoản ngân hàng
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `user_id` | UUID | Có | composite FK → `users (company_id, id)` **NO ACTION**; **UNIQUE (company_id, user_id)** — 1 hàng/người |
+| `joins_social_insurance` | BOOLEAN | Có | default `false` — có tham gia BHXH/BHYT/BHTN không |
+| `social_insurance_no` | TEXT | Không | số sổ BHXH |
+| `joins_union` | BOOLEAN | Có | default `false` — có đóng đoàn phí không |
+| `bank_account_number` | TEXT | Không | **PII — mask 4 số cuối ở mọi DTO** (SPEC-11 §3.12) |
+| `bank_name` · `bank_branch` · `account_holder` | TEXT | Không | |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+CREATE UNIQUE INDEX payroll_employee_settings_user_uq
+  ON payroll_employee_settings (company_id, user_id) WHERE deleted_at IS NULL;
+chk payroll_employee_settings_bank_pair_check
+    bank_account_number IS NULL OR (bank_name IS NOT NULL AND account_holder IS NOT NULL)
+ALTER TABLE payroll_employee_settings ADD CONSTRAINT payroll_employee_settings_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`. **`mediaos_worker`: KHÔNG cấp `SELECT`.**
+
+> **`bank_account_number` là PII hạng `tax_code`, KHÔNG phải secret hạng bất biến #3** — lưu plaintext + **mask ở server** + audit lượt xem, **không** envelope-encryption/KMS (SPEC-11 §3.12). Ghi ở đây để lượt sau không «nâng cấp» lệch với `employee_profiles.tax_code`.
+>
+> ⚠️ **CHECK cặp ngân hàng cố ý LỎNG** (`bank_branch` không bắt buộc): nhiều ngân hàng không cần chi nhánh. Nhưng **số tài khoản không có tên chủ tài khoản là một dòng UNC không gửi được** ⇒ cặp `account_number` + `account_holder` + `bank_name` là ràng buộc thật, ép ở DB.
+>
+> ⚠️ **KHÔNG có cột `bank_*` nào ở `employee_profiles`** (đo 11/09/2026: `grep -i bank apps/api/src/db/schema/` = 0 hit), và comment `employees.ts:78` **cấm** nhồi trường cần lọc vào `personal_extra` jsonb ⇒ cột ngân hàng **bắt buộc** ở bảng PAYROLL này (PAY-DEC-017).
+
+### 13.3 `payroll_dependents` — người phụ thuộc giảm trừ TNCN
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `user_id` | UUID | Có | composite FK **NO ACTION** |
+| `full_name` | TEXT | Có | **PII** |
+| `relationship` | TEXT | Có | CHECK ∈ `Child`/`Spouse`/`Parent`/`Other` |
+| `dependent_tax_code` | TEXT | Không | MST người phụ thuộc — **PII** |
+| `date_of_birth` | DATE | Không | |
+| `effective_from` | DATE | Có | |
+| `effective_to` | DATE | Không | NULL = còn hiệu lực |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;   -- cần cho EXCLUDE trộn '=' với '&&'
+
+ALTER TABLE payroll_dependents ADD CONSTRAINT payroll_dependents_period_check
+  CHECK (effective_to IS NULL OR effective_to >= effective_from);
+
+ALTER TABLE payroll_dependents ADD CONSTRAINT payroll_dependents_no_overlap_excl
+  EXCLUDE USING gist (
+    company_id WITH =,
+    user_id    WITH =,
+    full_name  WITH =,
+    daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]') WITH &&
+  ) WHERE (deleted_at IS NULL);
+
+CREATE INDEX payroll_dependents_company_user_idx
+  ON payroll_dependents (company_id, user_id) WHERE deleted_at IS NULL;
+ALTER TABLE payroll_dependents ADD CONSTRAINT payroll_dependents_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`.
+
+> ⚠️ **`EXCLUDE` ném `23P01` (exclusion_violation), KHÔNG phải `23505`.** Service phải bóc **`23P01`** từ `error.cause` → **409 PAYROLL-ERR-032** `dependent-overlap`. Map thiếu = **500 ở vùng đỏ** (`drizzle-wraps-pg-error-code-in-cause`).
+> ⚠️ **`btree_gist` là extension BẮT BUỘC** — `EXCLUDE` trộn toán tử `=` (uuid/text) với `&&` (range) không chạy nếu thiếu. Migration `CREATE EXTENSION IF NOT EXISTS` **trước** khi ADD CONSTRAINT, và verify fail-loud extension tồn tại.
+> ⚠️ **Khoá chống trùng dùng `full_name`, không dùng `dependent_tax_code`** — MST NPT là cột **nullable** (nhiều NPT là trẻ em chưa có MST), mà `EXCLUDE` trên cột NULL **không loại được gì**: hai hàng NULL không «bằng» nhau nên ràng buộc thành rỗng (`nullable-escape-clause-makes-check-vacuous`). `full_name` NOT NULL là khoá duy nhất dùng được ở tầng DB; trùng tên thật (hai con cùng tên) là ca hiếm, xử lý bằng thông điệp lỗi hướng dẫn thêm hậu tố — **có chủ đích, không phải bỏ sót**.
+
+### 13.4 `salary_components` — catalog thành phần lương
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `code` | TEXT | Có | **UNIQUE (company_id, code)**; CHECK regex + **cấm tiền tố `SYS_`/`TL_`/`GT_`** |
+| `name` | TEXT | Có | nhãn hiển thị mặc định |
+| `kind` | TEXT | Có | CHECK ∈ `earning` · `deduction` · `statutory_employee` · `statutory_employer` · `tax` · `tax_exempt` · `aggregate` (**7 giá trị**) |
+| `value_type` | TEXT | Có | CHECK ∈ `formula` · `fixed` · `profile_item` (nguồn giá trị) |
+| `formula` | TEXT | Không | bắt buộc khi `value_type='formula'` (CHECK cặp); ≤ 500 ký tự |
+| `fixed_amount` | numeric(18,2) | Không | bắt buộc khi `value_type='fixed'` (CHECK cặp) |
+| `is_system` | BOOLEAN | Có | default `false` — hàng seed; **không xoá được** (ép ở service ⇒ ERR-024) |
+| `is_active` | BOOLEAN | Có | default `true` |
+| `sort_order` | INTEGER | Có | default 0 |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+CREATE UNIQUE INDEX salary_components_company_code_uq
+  ON salary_components (company_id, code) WHERE deleted_at IS NULL;
+
+chk salary_components_code_shape_check
+    code ~ '^[A-Z][A-Z0-9_]{0,31}$' AND code NOT LIKE 'SYS\_%' AND code NOT LIKE 'TL\_%' AND code NOT LIKE 'GT\_%'
+chk salary_components_kind_check
+    kind IN ('earning','deduction','statutory_employee','statutory_employer','tax','tax_exempt','aggregate')
+chk salary_components_value_type_check  value_type IN ('formula','fixed','profile_item')
+chk salary_components_value_pair_check
+    (value_type = 'formula'      AND formula IS NOT NULL      AND fixed_amount IS NULL)
+ OR (value_type = 'fixed'        AND fixed_amount IS NOT NULL AND formula IS NULL)
+ OR (value_type = 'profile_item' AND formula IS NULL          AND fixed_amount IS NULL)
+chk salary_components_formula_len_check  formula IS NULL OR length(formula) <= 500
+ALTER TABLE salary_components ADD CONSTRAINT salary_components_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE` (hàng hệ thống không xoá; hàng tự thêm xoá mềm).
+
+> ⚠️ **`salary_components_code_shape_check` là chốt DB cho luật «không gian tên dùng chung»** (SPEC-11 §8.2 C1 · §13.6 D). Không có nó, một thành phần tên `SYS_GROSS` **che** biến hệ thống trong mọi công thức — không CHECK nào khác bắt, không test nào thấy trừ khi có ca riêng. Lưu ý escape `\_` trong `LIKE` (dấu gạch dưới là ký tự đại diện của `LIKE`).
+> ⚠️ **`kind = 'aggregate'`** dành cho **4 mã hệ thống** `TONG_THU_NHAP` · `TONG_BH_NV` · `THU_NHAP_CHIU_THUE` · `TONG_KHAU_TRU` (SPEC-11 §13.6 E) — giá trị do **engine** cộng, không phải do công thức người dùng. Chúng vẫn phải thoả `salary_components_value_pair_check`, nên khai **`value_type = 'fixed'`, `fixed_amount = 0`** làm chỗ giữ; engine bỏ qua giá trị đó. Đây là một **thoả hiệp hình thức với CHECK**, dễ đọc nhầm thành «bốn khoản này bằng 0» ⇒ bắt buộc: comment cột nói rõ, **service CẤM đọc `fixed_amount` của hàng `kind='aggregate'`**, và ca test ghim 4 mã đó có `is_system = true` + `kind = 'aggregate'` + không bị engine đọc `fixed_amount`. *(Phương án thay thế — thêm giá trị `value_type = 'engine'` — bị loại vì nó mở một nhánh `value_type` thứ tư mà chỉ 4 hàng seed dùng, và mọi nơi khớp `value_type` sẽ phải xử lý một nhánh gần như không bao giờ chạy.)*
+> **Seed hệ thống** (bước B của §15): 4 mã `aggregate` + các mã luật định (`BHXH_NV`, `BHYT_NV`, `BHTN_NV`, `BHXH_DN`, `BHYT_DN`, `BHTN_DN`, `KPCD`, `DOAN_PHI`, `TNCN`) + các mã nền (`LUONG_CO_BAN`, `PHU_CAP`, `THUONG`, `PHAT`, `NGHI_KHONG_LUONG`, `TAM_UNG`). `ON CONFLICT DO NOTHING`.
+
+### 13.5 `payroll_templates` — mẫu bảng lương
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `code` · `name` | TEXT | Có | **UNIQUE (company_id, code)** |
+| `scope` | TEXT | Có | CHECK ∈ `company` · `org_unit` (PAY-DEC-013 — theo vị trí/NV = PARK-PAYROLL-002) |
+| `org_unit_id` | UUID | Không | composite FK **NO ACTION**; **cặp với `scope`** (CHECK) |
+| `is_active` | BOOLEAN | Có | default `true` |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+CREATE UNIQUE INDEX payroll_templates_company_code_uq
+  ON payroll_templates (company_id, code) WHERE deleted_at IS NULL;
+chk payroll_templates_scope_check      scope IN ('company','org_unit')
+chk payroll_templates_scope_pair_check (scope = 'org_unit') = (org_unit_id IS NOT NULL)
+ALTER TABLE payroll_templates ADD CONSTRAINT payroll_templates_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`.
+
+### 13.6 `payroll_template_components` — thành phần trong một mẫu
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `template_id` | UUID | Có | composite FK **NO ACTION** |
+| `component_id` | UUID | Có | composite FK → `salary_components (company_id, id)` **NO ACTION** |
+| `column_label` | TEXT | Không | nhãn cột ghi đè (NULL = dùng `salary_components.name`) |
+| `formula_override` | TEXT | Không | công thức ghi đè (NULL = dùng của catalog); ≤ 500 ký tự |
+| `is_visible` | BOOLEAN | Có | default `true` — ẩn/hiện cột |
+| `sort_order` | INTEGER | Có | default 0 |
+| `created_at/by` `updated_at/by` | | | **không** soft delete — đặt lại danh sách là DELETE-rồi-INSERT trong một tx (API-053) |
+
+```sql
+CREATE UNIQUE INDEX payroll_template_components_tpl_component_uq
+  ON payroll_template_components (company_id, template_id, component_id);
+CREATE INDEX payroll_template_components_company_tpl_idx
+  ON payroll_template_components (company_id, template_id);
+chk payroll_template_components_formula_len_check  formula_override IS NULL OR length(formula_override) <= 500
+ALTER TABLE payroll_template_components ADD CONSTRAINT payroll_template_components_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE, **DELETE**`.
+
+> ⚠️ **Đây là bảng PAYROLL DUY NHẤT có `GRANT DELETE`** — ngoại lệ có chủ đích, phải nói thẳng vì nó phá quy tắc «không bảng PAYROLL nào có DELETE» của §4.3. Lý do: `PUT /payroll/templates/:id/components` (API-053) **đặt lại toàn bộ** danh sách trong một transaction; làm bằng soft delete thì unique partial phải mang `deleted_at`, và mỗi lần sắp xếp lại cột sẽ tích luỹ hàng chết vô hạn trên một bảng **cấu hình thuần** (0 dữ liệu tiền, 0 giá trị lịch sử — lịch sử nằm ở `component_values_json` + `template_fingerprint` của dòng lương đã tính). **Vết đầy đủ của mọi lần sửa nằm ở `audit_logs`** (`object_type = 'payroll_template'`, payload kèm diff) — đó là nguồn lịch sử, không phải bảng này.
+>
+> ⚠️ Hệ quả: `RetentionService.PROTECTED_TABLES` **KHÔNG** cần bảng này, nhưng `fk-tenant-census` và ratchet GRANT **sẽ thấy một DELETE mới** ⇒ WO DB phải cập nhật pin/ratchet tương ứng **cùng commit**, kèm comment trỏ về đoạn này.
+
+### 13.7 `payroll_statutory_rates` — tỉ lệ · trần · bậc thuế luật định
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `effective_from` | DATE | Có | **UNIQUE (company_id, effective_from)**; kỳ dùng bản `≤ ngày cuối kỳ` mới nhất |
+| `si_employee_pct` `hi_employee_pct` `ui_employee_pct` | numeric(5,2) | Có | BHXH/BHYT/BHTN — **NV** |
+| `si_employer_pct` `hi_employer_pct` `ui_employer_pct` | numeric(5,2) | Có | BHXH/BHYT/BHTN — **DN** |
+| `union_employer_pct` | numeric(5,2) | Có | KPCĐ (DN) |
+| `union_employee_pct` | numeric(5,2) | Có | đoàn phí (NV) |
+| `si_cap` `hi_cap` `ui_cap` | numeric(18,2) | Có | **trần đóng, lưu THÀNH TIỀN** (không lưu «20×») |
+| `base_wage` `min_region_wage` | numeric(18,2) | Có | lương cơ sở · lương tối thiểu vùng — lưu để **giải thích** trần, không để nhân lúc chạy |
+| `personal_deduction` `dependent_deduction` | numeric(18,2) | Có | giảm trừ bản thân · mỗi NPT |
+| `pit_brackets` | jsonb | Có | **7 bậc**, mỗi phần tử `{ "upTo": số HOẶC null, "rate": phần trăm }`; bậc cuối bắt buộc `upTo = null` (xem khối SQL + cảnh báo dưới) |
+| `note` | TEXT | Không | nguồn văn bản pháp luật (người nhập ghi) |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+CREATE UNIQUE INDEX payroll_statutory_rates_company_effective_uq
+  ON payroll_statutory_rates (company_id, effective_from) WHERE deleted_at IS NULL;
+chk payroll_statutory_rates_pct_range_check
+    si_employee_pct BETWEEN 0 AND 100 AND hi_employee_pct BETWEEN 0 AND 100 AND ui_employee_pct BETWEEN 0 AND 100
+AND si_employer_pct BETWEEN 0 AND 100 AND hi_employer_pct BETWEEN 0 AND 100 AND ui_employer_pct BETWEEN 0 AND 100
+AND union_employer_pct BETWEEN 0 AND 100 AND union_employee_pct BETWEEN 0 AND 100
+chk payroll_statutory_rates_amount_check
+    si_cap > 0 AND hi_cap > 0 AND ui_cap > 0 AND base_wage > 0 AND min_region_wage > 0
+AND personal_deduction >= 0 AND dependent_deduction >= 0
+chk payroll_statutory_rates_brackets_check
+    jsonb_typeof(pit_brackets) = 'array' AND jsonb_array_length(pit_brackets) = 7
+ALTER TABLE payroll_statutory_rates ADD CONSTRAINT payroll_statutory_rates_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`.
+
+> ⚠️ **CHECK chỉ ép được HÌNH DẠNG của `pit_brackets` (mảng, 7 phần tử), KHÔNG ép được tính LIÊN TỤC** (không hở, không chồng, `upTo` tăng dần, bậc cuối `null`). Ép đầy đủ ở SQL cần hàm PL/pgSQL trong CHECK — không immutable, không dùng được. ⇒ **kiểm liên tục ở service khi LƯU và khi TÍNH** (⇒ 422 ERR-022 `statutory-rate-incomplete`), và có **ca test ghim từng hình dạng hỏng**: hở · chồng · không tăng dần · bậc cuối có `upTo` · 6 bậc · 8 bậc.
+> **Trần lưu THÀNH TIỀN, không lưu hệ số** (SPEC-11 §13.7 B): hệ số «20×» và mức nền đổi độc lập nhau qua từng đợt sửa luật; lưu tích số là đúng thứ hệ thống áp, còn `base_wage`/`min_region_wage` lưu kèm **chỉ để giải thích** con số đó đến từ đâu. Service **KHÔNG** nhân lại — ca test ghim.
+> **Seed bước B — số owner xác nhận 02/09/2026 (PAY-DEC-014):** NV `8 / 1,5 / 1` · DN `17,5 / 3 / 1` · KPCĐ `2` · đoàn phí `1` · giảm trừ bản thân `11.000.000` · mỗi NPT `4.400.000` · trần BHXH/BHYT `= 20 × lương cơ sở` · trần BHTN `= 20 × lương tối thiểu vùng` · 7 bậc TNCN. **Hệ thống LƯU và ÁP, không khẳng định đúng luật** (SPEC-11 §3.11) — ca test ghim **số seed**, không ghim «đúng luật».
+
+---
+
+## 14. Bảng MỚI — lô DB-2 (track C, 4 bảng)
+
+### 14.1 `payroll_advances` — tạm ứng
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` · `user_id` | UUID | Có | composite FK **NO ACTION** |
+| `amount` | numeric(18,2) | Có | CHECK `> 0`; **mask ở server** |
+| `deduct_period_month` | TEXT | Có | `YYYY-MM`, CHECK regex — kỳ sẽ khấu trừ |
+| `reason` | TEXT | **Có** | lý do bắt buộc |
+| `status` | TEXT | Có | CHECK ∈ `Pending` · `Approved` · `Rejected` · **`Deducted`** (4 giá trị), default `Pending` |
+| `decided_by` `decided_at` `decision_note` | | Không | reject bắt buộc `decision_note` |
+| `payroll_period_id` `consumed_at` | | Không | **cặp NULL/NOT NULL** — khoá chống khấu trừ hai lần |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+chk payroll_advances_status_check         status IN ('Pending','Approved','Rejected','Deducted')
+chk payroll_advances_amount_check         amount > 0
+chk payroll_advances_month_check          deduct_period_month ~ '^\d{4}-(0[1-9]|1[0-2])$'
+chk payroll_advances_decided_pair_check   status = 'Pending' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL)
+chk payroll_advances_reject_note_check    status <> 'Rejected' OR decision_note IS NOT NULL
+chk payroll_advances_consumed_pair_check  (payroll_period_id IS NULL) = (consumed_at IS NULL)
+chk payroll_advances_consume_status_check payroll_period_id IS NULL OR status = 'Deducted'
+CREATE INDEX payroll_advances_company_user_month_idx
+  ON payroll_advances (company_id, user_id, deduct_period_month) WHERE deleted_at IS NULL;
+CREATE INDEX payroll_advances_company_status_idx
+  ON payroll_advances (company_id, status) WHERE deleted_at IS NULL;
+ALTER TABLE payroll_advances ADD CONSTRAINT payroll_advances_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`. **`mediaos_worker`: KHÔNG cấp `SELECT`** (chứa số tiền per-người).
+
+> **Khuôn sao chép từ `bonus_penalties`, có chủ đích** (§6.7): cùng lớp lỗi «cộng hai lần» thì cùng một chốt cuối — cặp `(payroll_period_id, consumed_at)` NULL/NOT NULL. Đừng phát minh cờ `is_deducted` mới.
+> ⚠️ **FSM 4 trạng thái, khác `bonus_penalties` (3).** `Deducted` là trạng thái **terminal thứ ba**, đạt được khi máy tính lương gộp khoản này vào kỳ. `payroll_advances_consume_status_check` khoá cặp: đã bind kỳ ⇒ **bắt buộc** `Deducted`. Chuyển tiếp hợp lệ: `Pending → Approved | Rejected`; `Approved → Deducted`. Sai ⇒ **409 PAYROLL-ERR-025**, ép ở service.
+> ⚠️ **Tính lại kỳ chưa `Approved` phải NHẢ consume của CHÍNH kỳ đó** (set NULL **cả cặp** + `status` về `Approved`) rồi gộp lại trong cùng tx — y như `bonus_penalties` (SPEC-11 §13.4 bước 4). Nhả một vế của cặp là vỡ `consumed_pair_check`.
+
+### 14.2 `payroll_payment_batches` — đợt chi trả
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `payroll_period_id` | UUID | Có | composite FK **NO ACTION** |
+| `code` | TEXT | Có | mã đợt, **UNIQUE (company_id, code)** |
+| `method` | TEXT | Có | CHECK ∈ `bank` · `cash` |
+| `status` | TEXT | Có | CHECK ∈ `Draft` · `Ready` · `Completed`, default `Draft` |
+| `pay_date` | DATE | Không | ngày chi thực tế |
+| `completed_by` `completed_at` | | Không | **cặp NULL/NOT NULL với `status='Completed'`** |
+| `note` | TEXT | Không | |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+CREATE UNIQUE INDEX payroll_payment_batches_company_code_uq
+  ON payroll_payment_batches (company_id, code) WHERE deleted_at IS NULL;
+CREATE INDEX payroll_payment_batches_company_period_idx
+  ON payroll_payment_batches (company_id, payroll_period_id) WHERE deleted_at IS NULL;
+chk payroll_payment_batches_method_check    method IN ('bank','cash')
+chk payroll_payment_batches_status_check    status IN ('Draft','Ready','Completed')
+chk payroll_payment_batches_completed_pair_check
+    status <> 'Completed' OR (completed_by IS NOT NULL AND completed_at IS NOT NULL)
+ALTER TABLE payroll_payment_batches ADD CONSTRAINT payroll_payment_batches_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`.
+
+> ⚠️ **DB KHÔNG ép được «kỳ phải `Published` mới lập đợt»** (ràng buộc chéo bảng) ⇒ service kiểm ⇒ **409 PAYROLL-ERR-027** `period-not-published`. Cùng lớp `check-cannot-enforce-fsm-transitions`.
+> ⚠️ **`complete` đổi trạng thái CỦA KỲ** (`Published → Paid`) — route `PAYROLL-API-072` row-lock **kỳ TRƯỚC, đợt SAU** (thứ tự cố định chống deadlock khi hai đợt cùng kỳ hoàn tất song song) và gọi chính `assertPeriodTransition`. **Không** có hàm FSM thứ hai (SPEC-11 §13.1).
+
+### 14.3 `payroll_payment_lines` — dòng chi trả per nhân sự
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `batch_id` | UUID | Có | composite FK → `payroll_payment_batches (company_id, id)` **NO ACTION** |
+| `user_id` | UUID | Có | composite FK **NO ACTION** |
+| `payslip_id` | UUID | Có | composite FK → `payslips (company_id, id)` **NO ACTION** — **nguồn số tiền** |
+| `bank_account_snapshot` | TEXT | Không | **số TK ĐÓNG BĂNG lúc lập đợt**; **mask 4 số cuối khi đọc qua API-070** |
+| `bank_name_snapshot` · `account_holder_snapshot` | TEXT | Không | |
+| `paid_at` | timestamptz | Không | |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | **soft delete** — gỡ một dòng khỏi đợt `Draft` là xoá mềm, không DELETE (bảng chở dòng tiền, phải giữ vết) |
+
+```sql
+CREATE UNIQUE INDEX payroll_payment_lines_batch_user_uq
+  ON payroll_payment_lines (company_id, batch_id, user_id) WHERE deleted_at IS NULL;
+CREATE INDEX payroll_payment_lines_company_batch_idx
+  ON payroll_payment_lines (company_id, batch_id) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX payroll_payment_lines_payslip_uq
+  ON payroll_payment_lines (company_id, payslip_id) WHERE deleted_at IS NULL;
+ALTER TABLE payroll_payment_lines ADD CONSTRAINT payroll_payment_lines_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`. Bảng vào `RetentionService.PROTECTED_TABLES`.
+
+> **KHÔNG lưu bản sao số tiền** (SPEC-11 §8.2 C3): dòng chi tham chiếu `payslip_id` và đọc số từ đó. Lưu bản sao là đẻ nguồn sự thật thứ hai cho **cùng một khoản tiền**, và khi lệch thì không ai biết bên nào đúng. **Số tài khoản thì NGƯỢC LẠI — phải đóng băng**: nhân sự đổi tài khoản sau ngày chi thì tệp UNC đã gửi ngân hàng phải giải thích được bằng số **lúc gửi**.
+> ⚠️ **`payroll_payment_lines_payslip_uq` là chốt cuối chống trả hai lần**: một phiếu lương chỉ nằm trong **đúng một** dòng chi trả của toàn công ty. Mạnh hơn `batch_user_uq` (chỉ chặn trùng trong **cùng** một đợt). Race hai đợt ⇒ `23505` ⇒ **409 PAYROLL-ERR-027** `payee-already-in-batch`.
+> ⚠️ **Gỡ một dòng khỏi đợt `Draft` dùng SOFT DELETE, không DELETE** (bảng không có GRANT DELETE) ⇒ **cả ba index trên mang `WHERE deleted_at IS NULL`**. *(Bảng cấu hình `payroll_template_components` được cấp DELETE vì nó là cấu hình thuần — bảng này chở **dòng tiền**, phải giữ vết.)*
+> ⚠️ **Hệ quả của soft delete lên `payroll_payment_lines_payslip_uq`:** một phiếu **bị gỡ** khỏi đợt A **được phép** vào đợt B — đúng ý (sửa sai lúc `Draft`). Nhưng nó cũng nghĩa là unique **không** chặn được «gỡ mềm rồi thêm lại vào đợt đã `Completed`» ⇒ đó là việc của **trigger đóng băng** dưới đây, không phải của index. Ca test phải có cả hai nhánh.
+> **Sau khi đợt `Completed`, trigger hẹp đóng băng** `payslip_id` · `bank_account_snapshot` · `paid_at` · `deleted_at` của mọi dòng thuộc đợt đó — khuôn `bonus_penalty_freeze_guard` (§5.5). **Không** thu hồi UPDATE toàn bảng (còn phải sửa lúc `Draft`), và **phải** khoá cả `deleted_at` — thiếu vế đó thì xoá mềm một dòng của đợt đã hoàn tất vẫn qua được, tức là gỡ một người khỏi bảng chi trả **sau khi đã chi**.
+
+### 14.4 `payroll_budgets` — ngân sách lương năm × đơn vị
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` · `company_id` | UUID | Có | |
+| `fiscal_year` | INTEGER | Có | CHECK `BETWEEN 2000 AND 2100` |
+| `org_unit_id` | UUID | Không | composite FK **NO ACTION**; **NULL = toàn công ty** |
+| `planned_amount` | numeric(18,2) | Có | CHECK `>= 0` |
+| `note` | TEXT | Không | |
+| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+
+```sql
+-- ⚠️ org_unit_id NULLABLE ⇒ unique thường KHÔNG chặn được hai hàng "toàn công ty"
+--    (NULL <> NULL trong unique index). Dùng COALESCE về UUID sentinel toàn-0.
+CREATE UNIQUE INDEX payroll_budgets_year_unit_uq
+  ON payroll_budgets (company_id, fiscal_year, COALESCE(org_unit_id, '00000000-0000-0000-0000-000000000000'::uuid))
+  WHERE deleted_at IS NULL;
+chk payroll_budgets_year_check    fiscal_year BETWEEN 2000 AND 2100
+chk payroll_budgets_amount_check  planned_amount >= 0
+ALTER TABLE payroll_budgets ADD CONSTRAINT payroll_budgets_company_id_id_uq UNIQUE (company_id, id);
+```
+
+GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`.
+
+> ⚠️ **Bẫy NULL trong unique** đã vá bằng `COALESCE` sentinel: không có nó, «ngân sách toàn công ty năm 2026» tạo được **vô hạn lần** mà UNIQUE vẫn xanh, và ERR-029 thành mã chết. Race ⇒ `23505` ⇒ **409 PAYROLL-ERR-029**.
+> **`planned_amount` là kế hoạch; «thực hiện» KHÔNG lưu cột** — nó cộng từ kỳ đã `Published` trở đi lúc đọc (`PAYROLL-API-073`). Lưu cột thực-hiện là nguồn sự thật thứ hai phải đồng bộ mỗi lần kỳ đổi trạng thái.
+
+---
+
+## 15. Enum v2 · index · kế hoạch migration · rủi ro (v2)
+
+### 15.1 Enum v2 — mirror `packages/contracts/src/payroll.ts` HAI CHIỀU, ĐÚNG BẰNG
+
+| Nhóm | Giá trị | CHECK |
+| --- | --- | --- |
+| **payroll period status** 🔁 **7 → 8** | `Draft` · `CollectingData` · `Calculated` · `Reviewing` · `Approved` · **`Published`** · `Paid` · `Locked` | `payroll_periods_status_check` |
+| salary type *(MỚI)* | `GROSS` · `NET` | `salary_profiles_salary_type_check` |
+| PIT payer *(MỚI)* | `EMPLOYEE` · `COMPANY` | `salary_profiles_pit_payer_check` |
+| salary component kind *(MỚI, 7)* | `earning` · `deduction` · `statutory_employee` · `statutory_employer` · `tax` · `tax_exempt` · `aggregate` | `salary_components_kind_check` |
+| salary component value type *(MỚI)* | `formula` · `fixed` · `profile_item` | `salary_components_value_type_check` |
+| template scope *(MỚI)* | `company` · `org_unit` | `payroll_templates_scope_check` |
+| dependent relationship *(MỚI)* | `Child` · `Spouse` · `Parent` · `Other` | `payroll_dependents_relationship_check` |
+| **advance status** *(MỚI, 4)* | `Pending` · `Approved` · `Rejected` · `Deducted` | `payroll_advances_status_check` |
+| payment batch method *(MỚI)* | `bank` · `cash` | `payroll_payment_batches_method_check` |
+| payment batch status *(MỚI)* | `Draft` · `Ready` · `Completed` | `payroll_payment_batches_status_check` |
+| payslip item type | **KHÔNG ĐỔI** — vẫn 7 giá trị (§7) | `payslip_items_type_check` |
+
+> 🔴 **`payrollPeriodStatusEnum` của contracts hiện là 7 giá trị** (`packages/contracts/src/payroll.ts:54–62`, đo 11/09/2026) — **phải lên 8 CÙNG COMMIT với migration §12.3**. Zod 7 vs CHECK 8 = **mã chết** theo đúng chiều nguy hiểm: DB nhận `Published`, Zod từ chối ⇒ **500 trên đường đọc** chứ không phải 4xx (`equal-caps-at-zod-and-service-make-dead-error-code`, `contract-must-mirror-db-check-both-directions`).
+> **Trường tiền + `bankAccountNumber` + `taxCode` trong DTO khai `.optional()`** (server mask = **vắng khoá**) — `server-masking-needs-optional-fe-schema`.
+
+### 15.2 Index theo use case (v2)
+
+| Use case | Index |
+| --- | --- |
+| Danh sách nhân viên PAYROLL (`API-036`) | qua `PayrollPeopleRepository` (HR) + `payroll_employee_settings_user_uq` |
+| Thiết lập/NPT của một người (`038`/`040`) | `payroll_employee_settings_user_uq` · `payroll_dependents_company_user_idx` |
+| NPT hiệu lực trong kỳ (máy tính lương §13.7) | `payroll_dependents_company_user_idx` + lọc `daterange` (gist của `EXCLUDE` phục vụ luôn) |
+| Catalog thành phần (`044`) · giải mã REF khi tính | `salary_components_company_code_uq` |
+| Mẫu + thành phần của mẫu (`051`, tính lương) | `payroll_template_components_company_tpl_idx` (một lượt cho cả kỳ) |
+| Bản tỉ lệ hiệu lực tại ngày cuối kỳ | `payroll_statutory_rates_company_effective_uq` + `effective_from <= X ORDER BY effective_from DESC LIMIT 1` |
+| Tạm ứng gộp vào kỳ (`Approved`, chưa consume, đúng tháng) | `payroll_advances_company_user_month_idx` · `payroll_advances_company_status_idx` |
+| Đợt chi trả theo kỳ (`066`) · dòng chi (`070`) | `payroll_payment_batches_company_period_idx` · `payroll_payment_lines_company_batch_idx` |
+| Chống trả hai lần | `payroll_payment_lines_payslip_uq` |
+| Ngân sách + thực hiện (`073`, widget 002) | `payroll_budgets_year_unit_uq` + `payroll_period_lines_company_period_idx` (đã có) |
+| Báo cáo theo kỳ/đơn vị (`081`) | `payroll_period_lines_company_period_idx` (đã có) + JOIN org-unit qua điểm chiếu |
+
+> ⚠️ **Đừng assert `Index Scan` trong test** — `FORCE RLS` giấu biểu thức không-leakproof khỏi `Index Cond`, planner đổi kế hoạch theo số hàng (`rls-force-hides-nonleakproof-expr-from-index-cond` · `pg-planner-index-assert-trap` · `idx-scan-zero-is-not-unused`).
+> **Máy tính lương v2 vẫn đọc set-based**: §19.1 của SPEC-11 chốt **O(1) câu truy vấn theo số nhân sự** — ca QA **đếm CÂU SQL**, không đếm builder (`nplus1-test-must-count-queries-not-builders`).
+
+### 15.3 Kế hoạch migration v2 (`0570+` — lane DB **nối tiếp**)
+
+| Bước | WO | Nội dung | Ràng buộc thứ tự |
+| --- | --- | --- | --- |
+| **0** *(không phải migration)* | DB-1 | **ĐO**: `_journal.json` `max(idx)` · `count(*)` 7 bảng v1 · **`count(*) FROM payroll_periods WHERE status='Paid'`** (ghi số đo vào migration) · `jsonb_array_length` tổng của `salary_profiles.allowances` · `aclexplode` GRANT thật `mediaos_app`/`mediaos_worker` · giá trị hiện có trong CHECK `audit_logs.object_type` · `permissions ⋈ role_permissions` cho 17 cặp v1 · `btree_gist` đã cài chưa | mọi lệnh dưới viết theo số **ĐO được**, không suy từ file migration (`grant-in-old-migration-is-not-current-state`) |
+| **A** (`0570`) | DB-1 | **ALTER §12.1 + §12.4** · **TẠO 7 bảng §13** (RLS ENABLE+FORCE + policy literal-GUC **TRƯỚC** mọi INSERT + GRANT + composite tenant FK + `UNIQUE (company_id, id)`) · `CREATE EXTENSION btree_gist` · **backfill `allowances` → `salary_profile_items`** (fail-loud, verify tổng đúng bằng) · **GIỮ cột `allowances`** (expand) · **VERIFY fail-loud** khuôn `0549`/`0559`: 7 bảng mới `relrowsecurity AND relforcerowsecurity` + policy tồn tại; **0 `DELETE`** cho app role trên 6/7 bảng mới (ngoại lệ **có chủ đích**: `payroll_template_components` CÓ DELETE — §13.6); tập cột UPDATE so bằng **`aclexplode`**; số composite FK **đúng bằng**; `btree_gist` tồn tại · **cùng commit**: `apps/api/src/db/schema/payroll.ts` parity · `cleanupTenants()` thêm 7 bảng **đúng thứ tự con→cha** và **trước `DELETE FROM users`** · `RetentionService.PROTECTED_TABLES` + spec của nó · `packages/contracts/src/payroll.ts` mirror hai chiều | RLS **TRƯỚC** INSERT (bất biến #1); thiếu `cleanupTenants` = đỏ hàng loạt `afterAll` (`drop-table-must-clean-test-teardown`) |
+| **B** (`0571`) | DB-1 | **Seed + quyền**: seed `salary_components` hệ thống (4 `aggregate` + luật định + nền) · seed **1 bản `payroll_statutory_rates`** (số PAY-DEC-014, `note` ghi «owner xác nhận 02/09/2026») · seed **1 `payroll_templates` mặc định tái tạo công thức v1** (`ON CONFLICT DO NOTHING`; **KHÔNG tự gắn vào kỳ nào**) · seed **17 cặp quyền v2** (`ON CONFLICT (action, resource_type) DO NOTHING`, **TẤT CẢ `is_sensitive = TRUE`**) + **31 hàng grant** · **UNION-ADD 8 giá trị** vào CHECK `audit_logs.object_type` (**clone nguyên khối `0545`** — neo 2 tầng, fail-closed, NO-LOSS/NO-GAIN; `audit-check-union-parse-anchor-trap`) + `AUDIT_OBJECT_TYPES` cùng commit · **VERIFY fail-loud**: đúng **63** hàng grant PAYROLL (32 v1 + 31 v2); `hr`/`hr-manager`/`manager` **= 0 cặp** trên cả `role_permissions` **và** `object_permissions`; `payroll-officer` **KHÔNG** giữ `manage:statutory-rate` và `manage:payroll-budget`; **mọi role giữ `manage:payroll-template` đều giữ `view:salary-component`**; **mọi role giữ `approve:payroll-advance` đều giữ `view:payroll-advance`**; census grant phủ **bốn hình dạng wildcard** (`permission-grant-census-must-cover-four-wildcard-shapes`) | thu hồi/seed cặp chạy **sau** DDL; `super-admin` **không** enumerate |
+| **C** (`0572`) | DB-2 | **§12.3 (`template_id` · `paid_by/at` · 3 CHECK theo ĐÚNG 4 bước)** + **TẠO 4 bảng §14** + composite FK `payroll_periods.template_id` (phải **sau** khi `payroll_templates` tồn tại ⇒ **sau bước A**) · trigger hẹp đóng băng `payroll_payment_lines` sau `Completed` · **VERIFY**: `count(*) WHERE status='Paid' AND paid_by IS NULL` **= 0** sau di trú | **bước (3) backfill TRƯỚC bước (4) siết CHECK** — đảo là `23514` trên DB có dữ liệu |
+| **D** (`0573`) | DB-2 | **Seed NOTI 024–027** vào `notification-event-catalog.const.ts` + `notification_events` (**`dedupe_strategy='DedupeKey'`**, `dedupe_window_seconds=NULL`, `isSystemEvent=false`) + template · `ON CONFLICT (event_code) WHERE company_id IS NULL AND deleted_at IS NULL DO NOTHING` (bare ⇒ `42P10`) · ⚠️ **CHECK `module_code='PAYROLL'`/`notification_type='Payroll'` ĐÃ được `0566` nới cho CẢ HAI bảng** ⇒ bước này **ĐO rồi NO-OP có chủ đích** kèm `RAISE NOTICE`, **KHÔNG viết ALTER rỗng** · seed **17 cặp quyền track C** nếu tách khỏi bước B | PHẢI merge **TRƯỚC** khi `S15-PAYROLL-BE-4` đăng ký registrar outbox (`registerSource()` fail-loud lúc boot) |
+
+**KHÔNG có bước widget DASH** — toàn bộ seed `PAYROLL-WIDGET-002/003` (catalog + **sàn scope `Company`** + slug FE) thuộc **`S15-PAYROLL-DASH-1`** với migration riêng, khuôn `0558`/`0563`/`0568`.
+
+Số migration là **dự kiến** — nối tiếp head THẬT tại thời điểm chạy WO.
+
+### 15.4 Rủi ro dữ liệu MỚI của v2
+
+| Rủi ro | Vì sao nguy hiểm | Chốt chặn |
+| --- | --- | --- |
+| **Backfill `Paid → Published` bị bỏ sót hoặc chạy SAU khi siết CHECK** | mọi kỳ v1 tự nhận «đã chi trả» mà không đợt chi nào tồn tại; hoặc migration `23514` trên DB có dữ liệu (xanh ở CI vì CI rỗng) | §12.3 chốt **4 bước có thứ tự**; bước 0 ĐO `count(*) WHERE status='Paid'` và ghi số vào migration; verify sau di trú = 0 |
+| **Contracts `payrollPeriodStatusEnum` còn 7 giá trị** | DB trả `Published`, Zod từ chối ⇒ **500 trên đường ĐỌC**, không phải 4xx | §15.1: mirror **cùng commit**; ca test dựng kỳ `Published` rồi đọc qua DTO |
+| **Bộ lọc `/me/payslips` còn `{Paid, Locked}`** | nhân viên **mất sạch phiếu lương**, route trả `200` + mảng rỗng — không lỗi, không log | SPEC-11 §13.2 + ca 13 của §21.1 (kỳ ở **đúng `Published`** ⇒ thấy · ack · PDF) |
+| **`EXCLUDE` trên cột NULLABLE thành rỗng** | chọn `dependent_tax_code` (nullable) làm khoá ⇒ ràng buộc **không loại được gì**, ERR-032 thành mã chết | §13.3: khoá theo `full_name` (NOT NULL); ca test hai NPT trùng tên, khoảng giao nhau |
+| **Thiếu `btree_gist`** | `EXCLUDE` trộn `=` với `&&` không tạo được ⇒ migration đỏ ở môi trường chưa cài | §15.3 bước A: `CREATE EXTENSION IF NOT EXISTS` **trước** ADD CONSTRAINT + verify |
+| **`23P01` không được map** | NPT chồng lấp trả **500** thay vì 409 | §13.3: bóc `23P01` từ `error.cause` → 409 **ERR-032** (`drizzle-wraps-pg-error-code-in-cause`) |
+| **Unique bỏ qua hàng `org_unit_id IS NULL`** | tạo được **vô hạn** ngân sách «toàn công ty» cùng năm; ERR-029 thành mã chết | §14.4: `COALESCE(org_unit_id, sentinel)` trong unique index |
+| **Thành phần tên `SYS_*` che biến hệ thống** | một hàng catalog đổi nghĩa **mọi** công thức, không CHECK nào khác bắt | §13.4 `salary_components_code_shape_check` (chú ý escape `\_` của `LIKE`) + ca test |
+| **`pit_brackets` hở/chồng/không tăng dần** | thuế tính sai theo cách **không ai thấy** (số vẫn ra, vẫn ≥ 0, tổng vẫn khớp) | CHECK chỉ ép hình dạng (mảng, 7 phần tử); **liên tục kiểm ở service** lúc lưu **và** lúc tính ⇒ 422 ERR-022; ca test 6 hình dạng hỏng |
+| **Backfill `allowances` bỏ qua phần tử sai khuôn** | mất một khoản phụ cấp của một người, **im lặng** | §12.2: backfill **fail-loud**, verify tổng `jsonb_array_length` **đúng bằng** |
+| **`insurance_salary` bị backfill = `base_salary`** | «chưa khai» thành «đã khai»; đổi lương sau đó không kéo theo căn cứ BH ⇒ sai số nộp bảo hiểm | §12.1: để **NULL**; quy tắc fallback sống ở **service**, một chỗ |
+| **Phần DN cộng nhầm vào `TONG_KHAU_TRU`** | lương NV tụt ~21,5% **trong khi mọi bất biến SQL vẫn xanh** (tổng khớp, `net ≥ 0` đúng) | SPEC-11 §13.7 C + **fixture đối soát tay** (§21.1 ca 1–2) — chốt duy nhất |
+| **`payroll_template_components` có GRANT DELETE** | phá quy tắc «không bảng PAYROLL nào có DELETE» ⇒ ratchet GRANT đỏ, WO sau bị cám dỗ nới cho cả bảng khác | §13.6 ghi **ngoại lệ có chủ đích** + lý do; cập nhật pin/ratchet **cùng commit**, comment trỏ về mục đó |
+| **Số TK đầy đủ rò qua DTO** | PII thanh toán ra khỏi server ngoài đường đã kiểm soát | §13.2 + SPEC-11 §3.12/§18.1: mặc định **`bankAccountLast4`** (trường **DẪN XUẤT**, không phải cột); đường duy nhất = tệp UNC `API-071` + audit; ca test assert **vắng khoá** `bankAccountNumber` |
+| **`mediaos_worker` được cấp `SELECT` bảng lương mới** | quyền đọc lương trôi qua nhiều WO | §13.2/§14.1: **không cấp** trên `payroll_employee_settings` · `salary_profile_items` · `payroll_advances` · `payroll_payment_lines`; verify `aclexplode` |
+| **Một phiếu nằm trong hai đợt chi trả** | trả lương hai lần | `payroll_payment_lines_payslip_uq` (**toàn công ty**, mạnh hơn `batch_user_uq`); race ⇒ `23505` ⇒ 409 ERR-027 |
+| **Deadlock khi hai đợt cùng kỳ hoàn tất song song** | tx treo/đỏ ngẫu nhiên ở vùng đỏ | `API-072` row-lock **kỳ TRƯỚC, đợt SAU** — thứ tự **cố định**, ghi ở SPEC-11 §13.1 và §14.2 |
+| **11 bảng mới quên vào `PROTECTED_TABLES`** | retention hard-delete bảng không có GRANT DELETE ⇒ `42501` uncaught **hỏng cả lượt cleanup tenant** | §15.3 bước A/C cùng commit; `erd-current` §9 cập nhật «18 bảng» |

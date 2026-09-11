@@ -460,7 +460,7 @@ Quyền chính:
 * Xuất phiếu lương.
 * Khóa kỳ lương.
 
-Chi tiết quyền: [SPEC-11 §11](<SPEC-11 PAYROLL.md>) · [ma trận phân quyền §9g](<../permission-matrix-spec.md>). Role hệ thống **`payroll-officer`** (id `…0015`, `is_system=true`, **`requires_two_factor=true`**, KHÔNG canonical — PAY-DEC-009). **KHÔNG có quyền duyệt bảng lương** — `('approve','payroll-period')` chỉ gán Company Admin để giữ four-eyes người tính ≠ người duyệt (PAY-DEC-007).
+Chi tiết quyền: [SPEC-11 §11](<SPEC-11 PAYROLL.md>) · [ma trận phân quyền §9g](<../permission-matrix-spec.md>). Role hệ thống **`payroll-officer`** (id `…0015`, `is_system=true`, **`requires_two_factor=true`**, KHÔNG canonical — PAY-DEC-009). **KHÔNG có quyền duyệt bảng lương** — `('approve','payroll-period')` chỉ gán Company Admin để giữ four-eyes người tính ≠ người duyệt (PAY-DEC-007). **Sau wave S15-PAYROLL-V2, `payroll-officer` cũng KHÔNG giữ `('manage','statutory-rate')` và `('manage','payroll-budget')`** — hai cặp GHI đó chỉ gán Company Admin (tỉ lệ luật định đổi là đổi tiền của mọi kỳ tương lai cho mọi người; ngân sách là cam kết tài chính cấp công ty). Officer vẫn **ĐỌC** được cả hai (`('view','statutory-rate')` · `('view','payroll-budget')`) vì cần để tính và đối chiếu — SPEC-11 §11.3 ghi chú 3.
 
 Vai trò này thuộc giai đoạn sau MVP (wave **S13-PAYROLL**).
 
@@ -802,7 +802,7 @@ Module liên quan:
 
 ### 12.8 PAYROLL — Tiền lương
 
-Tài liệu chi tiết: [SPEC-11](<SPEC-11 PAYROLL.md>) — **đã viết**, owner duyệt 31/08/2026 (wave S13-PAYROLL, PAY-DEC-001..010). Ba bộ trạng thái hợp thức ở §17.15–17.17; sự kiện NOTI-EVENT-020..023 ở §20.2.
+Tài liệu chi tiết: [SPEC-11](<SPEC-11 PAYROLL.md>) — **đã viết, nay là bản v2.0**; owner duyệt 31/08/2026 (wave S13-PAYROLL, PAY-DEC-001..010) và ký thêm **PAY-DEC-011..020 ngày 02/09/2026** (wave **S15-PAYROLL-V2**, SPEC-11 §22.1). Ba bộ trạng thái hợp thức ở §17.15–17.17 — **FSM kỳ lương nay 8 trạng thái** (§17.15, PAY-DEC-017); sự kiện **NOTI-EVENT-020..027** ở §20.2.
 
 Giai đoạn: Phase 2
 
@@ -820,14 +820,18 @@ Chức năng chính:
 * Tạo bảng lương
 * Duyệt bảng lương
 * Phiếu lương
-* Xuất Excel (**PDF = Phase sau**, PARK-PAYROLL-001)
+* Xuất Excel (**PDF phiếu lương đã vào v2** — PAY-DEC-019, SPEC-11 §5.1b; không còn park)
 
-Phạm vi v1 (SPEC-11 §5): hồ sơ lương versioned · thưởng/phạt/khấu trừ nhập tay theo kỳ · kỳ lương FSM 7 trạng thái gắn khoá kỳ công ATT · tổng hợp đầu vào công/phép · tính bảng lương nháp (SQL, snapshot đóng băng) · duyệt một cấp **four-eyes** · phiếu lương phát hành + «phiếu của tôi» + xác nhận · export XLSX + audit · masking lương ở server. **Ngoài v1:** engine BHXH/BHYT/BHTN/TNCN, PDF phiếu lương, variance report, khiếu nại phiếu lương, multi-currency.
+Phạm vi v1 (SPEC-11 §5.1): hồ sơ lương versioned · thưởng/phạt/khấu trừ nhập tay theo kỳ · kỳ lương FSM **8 trạng thái** (v1 có 7 — PAY-DEC-017 tách `Published` khỏi `Paid`, §17.15) gắn khoá kỳ công ATT · tổng hợp đầu vào công/phép · tính bảng lương nháp (SQL, snapshot đóng băng) · duyệt một cấp **four-eyes** · phiếu lương phát hành + «phiếu của tôi» + xác nhận · export XLSX + audit · masking lương ở server.
+
+**Phạm vi v2 (wave S15-PAYROLL-V2 — SPEC-11 §5.1b, PAY-DEC-011..020):** màn **Nhân viên** trong PAYROLL (chiếu HR bó hẹp) · hồ sơ lương **NET/GROSS** + phụ cấp/khấu trừ có định mức + thiết lập BH/công đoàn/TK ngân hàng/người phụ thuộc · **catalog thành phần lương + máy công thức** · **mẫu bảng lương** · **engine BHXH/BHYT/BHTN/KPCĐ/đoàn phí + TNCN luỹ tiến 7 bậc + NET gross-up** · **tạm ứng** có duyệt four-eyes · **đợt chi trả + tệp UNC** · **ngân sách lương** năm/đơn vị · **7 báo cáo + màn Tổng quan `/payroll`** · **PDF phiếu lương**. Kèm theo: **NOTI-EVENT-024..027** (§20.2) và hai widget DASH mới (§31).
+
+**Ngoài v2:** xem danh sách ĐÓNG **PARK-PAYROLL-002** ở SPEC-11 §5.2b (khiếu nại phiếu lương · multi-currency · chu kỳ ngoài tháng · duyệt nhiều cấp · doanh số/KPI làm đầu vào lương · phân bổ lương · lịch gửi báo cáo · đa pháp nhân · mẫu theo từng nhân viên · lương tối thiểu nhiều vùng).
 
 Module liên quan:
 
 * HR: hồ sơ nhân viên (danh tính, đơn vị). *Lưu ý: `employee_profiles.base_salary` **không** tham gia tính lương — nguồn duy nhất là `salary_profiles` versioned (PAY-DEC-003).*
-* ATT: dữ liệu ngày công + `attendance_periods` (phải `locked` trước khi tính; kỳ lương `Locked` khoá ngược đường chỉnh công — `ATT-ERR-024`).
+* ATT: dữ liệu ngày công + `attendance_periods` (phải `locked` trước khi tính — PAYROLL-ERR-002). *Không cần cổng khoá ngược: từ lúc kỳ công `locked`, bảng công tháng đó **đã bất biến** — trigger `0064` chặn vĩnh viễn `locked → open` — nên PAYROLL **không dựng cổng thứ hai và không cấp mã lỗi mới** (SPEC-11 §3.5).*
 * LEAVE: dữ liệu nghỉ phép + `leave_types.paid` (tách phép có lương / không lương).
 * NOTI: gửi duyệt · duyệt/từ chối · phát hành phiếu lương.
 
@@ -1501,11 +1505,12 @@ CollectingData
 Calculated
 Reviewing
 Approved
+Published
 Paid
 Locked
 ```
 
-> Bảy trạng thái theo IMPLEMENTATION-10 §10.1 (P2-PAY-03-002; ở đó viết «Collecting Data» — **cùng một trạng thái**, giá trị lưu là `CollectingData` không dấu cách). `Calculated` chỉ đạt được khi kỳ công ATT của tháng đó đã `locked` (PAYROLL-ERR-002). `Locked` là **terminal tuyệt đối** — không có đường ra, và khoá ngược đường chỉnh công phía ATT (`ATT-ERR-024`). Mở lại kỳ (`reopen`) đưa về `CollectingData`, cần quyền riêng + lý do + audit, và **bị chặn khi kỳ đã sinh phiếu lương** (phiếu là bản ghi bất biến). Chuyển tiếp hợp lệ: SPEC-11 §13.1 — service ép, DB chỉ CHECK tập giá trị.
+> **Tám** trạng thái (v1 có 7 — **PAY-DEC-017 tách `Published` khỏi `Paid`**, SPEC-11 §3.5). Gốc IMPLEMENTATION-10 §10.1 (P2-PAY-03-002; ở đó viết «Collecting Data» — **cùng một trạng thái**, giá trị lưu là `CollectingData` không dấu cách). **`Published` = đã phát hành phiếu lương cho nhân viên** — đúng nghĩa CŨ của `Paid` ở v1; **`Paid` = đợt chi trả đã hoàn tất** (tiền đã rời công ty). `Calculated` chỉ đạt được khi kỳ công ATT của tháng đó đã `locked` (PAYROLL-ERR-002). `Locked` vẫn là **terminal tuyệt đối** — không có đường ra. Mở lại kỳ (`reopen`) đưa về `CollectingData`, cần quyền riêng + lý do + audit, và **bị chặn khi kỳ đã sinh phiếu lương** (phiếu là bản ghi bất biến). Chuyển tiếp hợp lệ: SPEC-11 §13.1 — service ép FSM, DB chỉ CHECK tập giá trị.
 
 ### 17.16 Trạng thái phiếu lương (SPEC-11) — **giá trị DẪN XUẤT**
 
@@ -1515,7 +1520,9 @@ Published
 Acknowledged
 ```
 
-> Ba giá trị này **không lưu cột**, server tính trong DTO (cùng nguyên tắc `Overdue` của task ở mục 17.4 và `Completed` của lượt đặt phòng ở mục 17.10): `Generated` = có hàng `payslips` và kỳ ở `Approved` · `Published` = kỳ ở `Paid`/`Locked` · `Acknowledged` = `Published` và có hàng xác nhận của chính nhân sự đó. Lý do: phát hành là hành động **cấp kỳ**, lưu cờ trên từng phiếu buộc phải UPDATE một bảng append-only cho thông tin đã suy được (SPEC-11 §13.2). Nhân viên **không thấy** phiếu ở `Generated`.
+> Ba giá trị này **không lưu cột**, server tính trong DTO (cùng nguyên tắc `Overdue` của task ở mục 17.4 và `Completed` của lượt đặt phòng ở mục 17.10): `Generated` = có hàng `payslips` và kỳ ở `Approved` · `Published` = kỳ ở **`Published`, `Paid` hoặc `Locked`** (v1 chỉ `Paid`/`Locked` — đổi theo PAY-DEC-017, SPEC-11 §13.2) · `Acknowledged` = `Published` và có hàng xác nhận của chính nhân sự đó. Lý do: phát hành là hành động **cấp kỳ**, lưu cờ trên từng phiếu buộc phải UPDATE một bảng append-only cho thông tin đã suy được (SPEC-11 §13.2). Nhân viên **không thấy** phiếu ở `Generated`.
+>
+> ⚠️ **Bộ lọc của đường Own phải đổi CÙNG LƯỢT:** `GET /me/payslips` (+ `/me/payslips/:id` và PDF phiếu của mình) lọc kỳ ∈ **`{Published, Paid, Locked}`**, không còn `{Paid, Locked}`. Giữ bộ lọc cũ ⇒ nhân viên **không thấy phiếu nào** cho tới khi kế toán chi trả xong, mà route vẫn trả mảng rỗng 200 — không lỗi, không log (SPEC-11 §13.2).
 
 ### 17.17 Trạng thái thưởng/phạt/khấu trừ (SPEC-11)
 
@@ -1709,14 +1716,18 @@ Hệ thống cần hỗ trợ các kênh sau:
 | NOTI-EVENT-017 | Được xếp lịch phỏng vấn | Interviewer (người tham gia lượt) |
 | NOTI-EVENT-018 | Ứng viên đổi stage cần xử lý | Recruiter phụ trách vị trí |
 | NOTI-EVENT-019 | Ứng viên trúng tuyển đã chuyển thành nhân viên | HR (user giữ role `hr` — SPEC-12 §17) |
-| NOTI-EVENT-020 | Bảng lương kỳ được gửi duyệt | Company Admin (người duyệt — SPEC-11 §17) |
+| NOTI-EVENT-020 | Bảng lương kỳ được gửi duyệt | **Người duyệt hợp lệ** theo `PayrollApproverReader` — CÙNG bộ giải với PAYROLL-ERR-017, **KHÔNG** tra role `company-admin` riêng: JOIN tầng ROLE bắt được cả **role tuỳ biến** giữ cặp `('approve','payroll-period')`, và hai bộ giải lệch nhau đẻ đúng thất bại mà 017 sinh ra để chặn (SPEC-11 §13.1/§17) |
 | NOTI-EVENT-021 | Bảng lương kỳ được duyệt | Người gửi duyệt (`submitted_by`) |
 | NOTI-EVENT-022 | Bảng lương kỳ bị từ chối | Người gửi duyệt (`submitted_by`), kèm lý do |
 | NOTI-EVENT-023 | Phiếu lương đã phát hành | Từng nhân viên có phiếu trong kỳ |
+| NOTI-EVENT-024 | Tạm ứng lương được gửi duyệt | Người duyệt hợp lệ của tạm ứng (trừ người thao tác) |
+| NOTI-EVENT-025 | Tạm ứng lương được duyệt | Nhân sự thụ hưởng + người tạo (trừ người thao tác) |
+| NOTI-EVENT-026 | Tạm ứng lương bị từ chối | Nhân sự thụ hưởng + người tạo (trừ người thao tác), kèm lý do |
+| NOTI-EVENT-027 | Đợt chi trả lương đã hoàn tất | Người giữ `('view','payment-batch')` trong công ty (trừ người thao tác) |
 
-> **Dải mở rộng hậu-MVP (đo 28–31/08/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17), **013–015 cấp cho ROOM** (SPEC-14 §17) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17) — wave S12-RECRUIT; **020–023 cấp cho PAYROLL** (SPEC-11 §17) — wave S13-PAYROLL. Module sau lấy **024+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
+> **Dải mở rộng hậu-MVP (đo 28–31/08/2026, cập nhật 11/09/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17), **013–015 cấp cho ROOM** (SPEC-14 §17) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17) — wave S12-RECRUIT; **020–023 cấp cho PAYROLL** (SPEC-11 §17) — wave S13-PAYROLL; **024–027 cấp cho PAYROLL v2** (SPEC-11 §17.1) — wave **S15-PAYROLL-V2** (tạm ứng ×3 + đợt chi trả hoàn tất). Module sau lấy **028+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
 >
-> ⚠️ Payload của 020–023 **tuyệt đối không chứa số tiền** (SPEC-11 §17) — NOTI đi qua nhiều kênh và không có tầng masking riêng.
+> ⚠️ Payload của 020–027 **tuyệt đối không chứa số tiền** — **kể cả số tạm ứng của chính người nhận** (SPEC-11 §17/§17.1) — NOTI đi qua nhiều kênh và không có tầng masking riêng.
 
 ---
 
@@ -2100,11 +2111,11 @@ Chức năng chính:
 | HR           | LEAVE            | Nhân viên là người tạo đơn nghỉ        |
 | HR           | TASK             | Nhân viên được gán task                |
 | ATT          | LEAVE            | Ngày nghỉ ảnh hưởng bảng công          |
-| ATT          | PAYROLL          | Bảng công là dữ liệu tính lương; kỳ công phải `locked` trước khi tính, kỳ lương `Locked` khoá ngược đường chỉnh công (`ATT-ERR-024`) |
+| ATT          | PAYROLL          | Bảng công là dữ liệu tính lương; kỳ công phải `locked` trước khi tính (PAYROLL-ERR-002). Không có cổng khoá ngược riêng — kỳ công `locked` là bất biến (trigger `0064` chặn `locked → open`), PAYROLL không cấp mã lỗi mới (SPEC-11 §3.5) |
 | HR           | PAYROLL          | Nhân sự là đối tượng hưởng lương; PAYROLL đọc danh tính/đơn vị từ HR. Lương cơ bản dùng để **tính** nằm ở `salary_profiles` (SPEC-11), **không** phải `employee_profiles.base_salary` |
 | LEAVE        | PAYROLL          | Ngày nghỉ có lương / không lương (`leave_types.paid`) là đầu vào khấu trừ |
-| PAYROLL      | NOTI             | Gửi duyệt · duyệt/từ chối · phát hành phiếu lương tạo thông báo (`NOTI-EVENT-020..023`) |
-| PAYROLL      | DASH             | Widget «chi phí lương kỳ» (`PAYROLL-WIDGET-001`) — gác bằng cặp nhạy cảm + sàn scope Company |
+| PAYROLL      | NOTI             | Gửi duyệt · duyệt/từ chối · phát hành phiếu lương · tạm ứng · đợt chi trả hoàn tất tạo thông báo (`NOTI-EVENT-020..027`) |
+| PAYROLL      | DASH             | Widget «chi phí lương kỳ» (`PAYROLL-WIDGET-001`), «ngân sách lương năm» (`PAYROLL-WIDGET-002`) và «tạm ứng chờ duyệt» (`PAYROLL-WIDGET-003` — chỉ ĐẾM) — cả ba gác bằng **cặp nhạy cảm + SÀN scope Company**, ép ở hai tầng METADATA và DATA (SPEC-11 §10.1/§10.1b) |
 | PAYROLL      | ME               | «Phiếu lương của tôi» đọc-lại phiếu đã phát hành (Own) |
 | LEAVE        | NOTI             | Đơn nghỉ tạo thông báo duyệt           |
 | TASK         | NOTI             | Task tạo thông báo cho người liên quan |

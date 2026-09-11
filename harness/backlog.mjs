@@ -15755,7 +15755,7 @@ export const backlog = [
     module: "PAYROLL",
     layer: "DOC",
     title:
-      "Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9 PAY-SCREEN-007..016 · §11 cặp mới · §12 ERR-018+ · §13.4 máy công thức decimal + luật định BH/TNCN + gross-up · §22 DEC-011..020) + DB-13 v2 (3 ALTER + 10 bảng mới) + API-18 v2 (~40 route) + §9g v2 + SPEC-01 §17.15 (FSM 8 trạng thái) + EPIC-20 PL-11..24 + UI-07 + PARK-PAYROLL-002 — plan-reviewer PASS trước khi mở DB-1",
+      "Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9.1 PAY-SCREEN-007..017 (11 màn) · §11.3 17 cặp (TẤT CẢ sensitive) · §12.1 ERR-018..033 (16 mã) · §13.6-13.8 máy công thức decimal + luật định BH/TNCN + gross-up · §22.1 DEC-011..020) + DB-13 v2 §12-§15 (3 ALTER + 11 bảng mới) + API-18 v2 (50 route ⇒ tổng 85) + §9g v2 + SPEC-01 §17.15 (FSM 8 trạng thái) + EPIC-20 PL-11..24 + UI-07 + PARK-PAYROLL-002 — plan-reviewer PASS trước khi mở DB-1",
     zone: "green",
     status: "todo",
     paths: [
@@ -15778,13 +15778,14 @@ export const backlog = [
     depends_on: [],
     plan: "docs/plans/S15-PAYROLL-V2-WAVE.md",
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "owner-request 2026-09-02 — duyệt nguyên gói hồ sơ HTML wave S15-PAYROLL-V2 (10/10 PAY-DEC-011..020 theo Đề xuất)",
       "docs/plans/S15-PAYROLL-V2-WAVE.md §2 bản đồ 17 gap · §3 DEC-011..020 · §4 story PL-11..24 · §7 12 bẫy",
       "SPEC-11/DB-13/API-18 v1 (Approved 31/08) — v2 là MỞ RỘNG trong cùng file, không tách SPEC mới (DEC-011)",
     ],
     done_when: [
-      "SPEC-11: §1 phiên bản v2.0 · §5.1 thêm bảng «v2 (wave S15)» PL-11..24 · §5.2 PARK-PAYROLL-001 → những gì v2 lấy lại (BH/TNCN · PDF · report) + PARK-PAYROLL-002 (Doanh số/KPI/Sản phẩm · Phân bổ lương · lịch gửi báo cáo · AI · đa pháp nhân · mẫu theo NV · duyệt nhiều cấp · multi-currency) · §8 bảng mới · §9 PAY-SCREEN-007..016 · §11 cặp mới (manage:salary-component SENSITIVE · view/manage:payroll-template · manage:statutory-rate · view/manage:payroll-employee · approve:payroll-advance · manage:payment-batch · view:payroll-report · export:payslip-pdf …) · §12 PAYROLL-ERR-018+ (công thức lỗi cú pháp/vòng/độ sâu · gross-up không hội tụ · tỉ lệ thiếu hiệu lực · đợt chi trả chưa hoàn tất …) · §13.1 FSM 8 trạng thái + bảng RESET vết cập nhật · §13.4 v2 (máy công thức decimal.js grammar cố định + topo-sort · BH/KPCĐ/đoàn phí + trần · TNCN 7 bậc + giảm trừ NPT theo hiệu lực · gross-up ≤30 vòng ≤1đ · snapshot component_values_json) · §17 NOTI-EVENT-024+ (đo dải) · §22 chép DEC-011..020 nguyên văn",
-      "DB-13 v2: ALTER salary_profiles/payroll_periods/payroll_period_lines + 10 bảng mới (salary_profile_items · payroll_employee_settings · payroll_dependents · salary_components · payroll_templates · payroll_template_components · payroll_statutory_rates · payroll_advances · payroll_payment_batches · payroll_payment_lines · payroll_budgets) đủ cột/kiểu/CHECK/index/RLS/composite tenant-FK; expand-contract cho allowances jsonb → salary_profile_items; seed catalog hệ thống (mã + công thức mặc định) + tỉ lệ luật định seed (số DEC-014, ghi rõ 'owner xác nhận 02/09') ; §7 enum mirror contracts HAI CHIỀU",
+      "SPEC-11: §1 phiên bản v2.0 · §5.1 thêm bảng «v2 (wave S15)» PL-11..24 · §5.2 PARK-PAYROLL-001 → những gì v2 lấy lại (BH/TNCN · PDF · report) + PARK-PAYROLL-002 (Doanh số/KPI/Sản phẩm · Phân bổ lương · lịch gửi báo cáo · AI · đa pháp nhân · mẫu theo NV · duyệt nhiều cấp · multi-currency) · §8 bảng mới · §9.1 PAY-SCREEN-007..017 (11 màn — 017 «Tạm ứng của tôi» thuộc module ME) · §11.3 ĐÚNG 17 cặp, TẤT CẢ is_sensitive=true (view/manage:payroll-employee · view/manage:salary-component · view/manage:payroll-template · view/manage:statutory-rate · view/manage/approve:payroll-advance + view-own:payroll-advance · view/manage:payment-batch · view/manage:payroll-budget · view:payroll-report) — KHÔNG cấp export:payslip-pdf (PAY-DEC-019 đã ký «export:payroll cho batch, Own cho phiếu của mình») · §12.1 PAYROLL-ERR-018..033 (16 mã: công thức cú pháp/vòng/ngân sách · gross-up không hội tụ · tỉ lệ thiếu-hiệu-lực và XUNG ĐỘT (033) · mẫu · thành phần · tạm ứng · đợt chi trả · ngân sách · import · báo cáo/PDF · NPT chồng lấp) · §13.1 FSM 8 trạng thái + bảng RESET vết cập nhật · §13.4 v2 (máy công thức decimal.js grammar cố định + topo-sort · BH/KPCĐ/đoàn phí + trần · TNCN 7 bậc + giảm trừ NPT theo hiệu lực · gross-up ≤30 vòng ≤1đ · snapshot component_values_json) · §17 NOTI-EVENT-024+ (đo dải) · §22 chép DEC-011..020 nguyên văn",
+      "DB-13 v2: ALTER salary_profiles/payroll_periods/payroll_period_lines + 11 bảng mới (salary_profile_items · payroll_employee_settings · payroll_dependents · salary_components · payroll_templates · payroll_template_components · payroll_statutory_rates · payroll_advances · payroll_payment_batches · payroll_payment_lines · payroll_budgets) đủ cột/kiểu/CHECK/index/RLS/composite tenant-FK; expand-contract cho allowances jsonb → salary_profile_items; seed catalog hệ thống (mã + công thức mặc định) + tỉ lệ luật định seed (số DEC-014, ghi rõ 'owner xác nhận 02/09') ; §7 enum mirror contracts HAI CHIỀU",
       "API-18 v2: đủ route mới có mã PAYROLL-API-036+, cặp quyền từng route, DTO mask (bank/NPT/tax_code = vắng khoá), route PDF signed-URL, route báo cáo KHÔNG cache + sàn scope Company",
       "SPEC-01 §17.15 sửa FSM 7→8 (`Approved → Published → Paid → Locked`), §20.2 cấp NOTI-EVENT mới, §12.8 phạm vi v2; permission-matrix §9g v2; IMPLEMENTATION-02 EPIC-20 thêm PL-11..24 (IMP02-STORY-191+, Sprint 15); UI-07 template cập nhật vỏ UI chung (DEC-020); README §8/erd-current/RELEASE (PARK-PAYROLL-002) đồng bộ",
       "harness/lib/stories.mjs sprintOfStory nhận dải 191+ → S15 và harness/dashboard MODULE_SPEC nếu cần — WO S15 không rơi vào rổ phẳng",
@@ -15817,6 +15818,7 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-DOC-1"],
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "docs/plans/S15-PAYROLL-V2-WAVE.md §6 (sidebar v2) + hồ sơ HTML §05 wireframe; UI-07 (cập nhật ở DOC-1); packages/ui/src/components/ui/data-table.tsx · tabs.tsx · sheet.tsx hiện có; sidebar-registry.ts (SidebarItemMeta chưa có group gập/children)",
     ],
     done_when: [
@@ -15835,7 +15837,7 @@ export const backlog = [
     module: "PAYROLL",
     layer: "DB",
     title:
-      "Schema + migration PAYROLL v2 track A+B (mig 0569+): ALTER salary_profiles (salary_type · pit_payer · insurance_salary · probation_salary · pay_ratio_pct) + salary_profile_items (expand-contract thay allowances jsonb) + payroll_employee_settings (BH · công đoàn · bank mask) + payroll_dependents + salary_components + payroll_templates/_components + payroll_statutory_rates + payroll_periods.template_id + payroll_period_lines.component_values_json; RLS+FORCE TRƯỚC backfill; seed catalog hệ thống + tỉ lệ luật định + cặp quyền §9g v2; contracts Zod mirror",
+      "Schema + migration PAYROLL v2 track A+B (mig 0570+): ALTER salary_profiles (salary_type · pit_payer · insurance_salary · probation_salary · pay_ratio_pct) + salary_profile_items (expand-contract thay allowances jsonb) + payroll_employee_settings (BH · công đoàn · bank mask) + payroll_dependents + salary_components + payroll_templates/_components + payroll_statutory_rates + payroll_periods.template_id + payroll_period_lines.component_values_json; RLS+FORCE TRƯỚC backfill; seed catalog hệ thống + tỉ lệ luật định + cặp quyền §9g v2; contracts Zod mirror",
     zone: "red",
     status: "todo",
     paths: [
@@ -15856,6 +15858,7 @@ export const backlog = [
     depends_on: ["S15-PAYROLL-DOC-1"],
     plan: "docs/plans/S15-PAYROLL-DB-1.md",
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "DB-13 v2 (DOC-1, PASS plan-reviewer) — nguồn sự thật schema + seed; permission-matrix §9g v2; khuôn S13-PAYROLL-DB-1 (mig 0564–0566) + 0565 census fail-closed",
     ],
     done_when: [
@@ -15892,6 +15895,7 @@ export const backlog = [
     depends_on: ["S15-PAYROLL-DB-1"],
     plan: "docs/plans/S15-PAYROLL-BE-1.md",
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §13/§15/§18 + API-18 v2 route track A; khuôn S13-PAYROLL-BE-1 (PayrollAccessService · PayrollPeopleRepository · masking spread có điều kiện · PAYROLL_ROUTE_PAIRS census hợp=toàn bộ ∧ giao=∅)",
     ],
     done_when: [
@@ -15930,6 +15934,7 @@ export const backlog = [
     depends_on: ["S15-PAYROLL-DB-1"],
     plan: "docs/plans/S15-PAYROLL-BE-2.md",
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §13.4 grammar + DEC-012/013; DB-13 v2 §6 salary_components/payroll_templates; decimal.js (MIT) — cấm float trên tiền",
     ],
     done_when: [
@@ -15965,6 +15970,7 @@ export const backlog = [
     depends_on: ["S15-PAYROLL-BE-2"],
     plan: "docs/plans/S15-PAYROLL-BE-3.md",
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §13.4 (máy công thức + luật định + gross-up, đính chính owner nếu có); DEC-012/014/015; PayrollCalcService/PayrollCalcRepository v1 (UPSERT set-based, row-lock, RESET vết)",
     ],
     done_when: [
@@ -16001,6 +16007,7 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-BE-1", "S15-UI-SHELL-1"],
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §9 PAY-SCREEN-007/008 + hồ sơ HTML §05 wireframe 1; benchmark ảnh MISA «Nhân viên» + «Chi tiết nhân viên» (02/09)",
     ],
     done_when: [
@@ -16031,6 +16038,7 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-BE-3", "S15-PAYROLL-FE-1"],
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §9 PAY-SCREEN-009/010/011 + hồ sơ HTML §05 wireframe 2; benchmark ảnh MISA «Thành phần lương» + «Mẫu bảng lương» (02/09)",
     ],
     done_when: [
@@ -16066,6 +16074,7 @@ export const backlog = [
     depends_on: ["S15-PAYROLL-DB-1"],
     plan: "docs/plans/S15-PAYROLL-DB-2.md",
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "DB-13 v2 §6 (advances/payment/budgets) + SPEC-01 §17.15 (8 trạng thái, sửa ở DOC-1) + SPEC-11 v2 §13.1 bảng RESET vết + §17 NOTI mới; memory noti-catalog-check-lives-on-two-tables · check-cannot-enforce-fsm-transitions",
     ],
     done_when: [
@@ -16101,6 +16110,7 @@ export const backlog = [
     depends_on: ["S15-PAYROLL-DB-2", "S15-PAYROLL-BE-3"],
     plan: "docs/plans/S15-PAYROLL-BE-4.md",
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §13 (advance FSM · payment · budget) + DEC-017; khuôn bonus_penalties (freeze guard, consume pair) · S5-HR-IMPORT-BE-1 (import Excel) · payroll-export.service (exceljs)",
     ],
     done_when: [
@@ -16137,6 +16147,7 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-BE-4"],
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §9 PAY-SCREEN-012/013/014; benchmark menu «Tính lương ▸ Tạm ứng · Ngân sách lương» + «Chi trả» MISA",
     ],
     done_when: [
@@ -16170,6 +16181,7 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-BE-3", "S15-PAYROLL-BE-4"],
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §10 báo cáo + §9 PAY-SCREEN-015/016 + DEC-018/019; memory dash-widget-gate-needs-scope-floor · widget-cache-hit-skips-audit-trail; file-service signed-URL (S1-FND-FILE-1) + avatar-own-scope-presign-wrapper",
     ],
     done_when: [
@@ -16207,6 +16219,7 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-BE-5", "S15-PAYROLL-FE-2", "S15-PAYROLL-FE-3"],
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 §9 PAY-SCREEN-015/016 + hồ sơ HTML §05 wireframe 3; benchmark ảnh MISA «Tổng quan» + «Báo cáo» (02/09); DECISIONS stack Recharts (đã chốt, chưa cài)",
     ],
     done_when: [
@@ -16238,6 +16251,7 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-FE-4"],
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "SPEC-11 v2 ma trận test (DOC-1); khuôn S13-PAYROLL-QA-1 (195 ca, 3 lỗi sản phẩm lộ ra); memory deny-cases-vacuous-without-allow-case · coverage-high-but-error-code-untested",
     ],
     done_when: [
@@ -16275,6 +16289,7 @@ export const backlog = [
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-QA-1"],
     src: [
+      "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + 3 ALTER (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2.",
       "Khuôn S13-PAYROLL-DASH-1 (mig 0568, gate view-line + sàn Company 2 tầng, useCanExact); memory dash-widget-gate-needs-scope-floor · sensitive-pair-widget-needs-usecanexact · widget-cache-hit-skips-audit-trail",
     ],
     done_when: [

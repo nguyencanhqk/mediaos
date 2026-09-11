@@ -63,6 +63,10 @@ function sprintOfStory(n) {
   if (inR(153, 170)) return "S11"; // 153-162 EPIC-17 ASSET · 163-170 EPIC-18 ROOM — wave S11-OFFICE (IMP02 §9 Sprint 11)
   if (inR(171, 180)) return "S12"; // 171-180 EPIC-19 RECRUIT — wave S12-RECRUIT (IMP02 §9 Sprint 12)
   if (inR(181, 190)) return "S13"; // 181-190 EPIC-20 PAYROLL — wave S13-PAYROLL (IMP02 §9 Sprint 13)
+  // 191-204 = EPIC-20 PAYROLL v2 (PL-11..24) — wave S15-PAYROLL-V2 (IMP02 §9 Sprint 15).
+  // KHÔNG có Sprint 14: wave S14 là dọn/hợp nhất, không cấp story IMP02 mới.
+  // Thiếu nhánh này thì 191+ rơi vào "?" và biến mất khỏi mọi bảng lọc theo sprint.
+  if (inR(191, 204)) return "S15";
   return "?";
 }
 
@@ -428,6 +432,10 @@ export async function buildProgress(backlogItems) {
       num: ep.num,
       module: ep.module,
       name: ep.name,
+      // ⚠️ ĐO ĐƯỢC 11/09/2026: sprint của EPIC lấy stories[0] ⇒ EPIC-20 PAYROLL hiển thị "S13"
+      // dù nó chứa CẢ 181-190 (S13) lẫn 191-204 (S15). CHẤP NHẬN — một EPIC trải hai sprint thì
+      // không có một nhãn đúng; nhãn của story (sprintOfStory ở trên) mới là nhãn chính xác.
+      // Đừng "sửa" thành max/min mà không đổi luôn mọi chỗ đọc field này.
       sprint: ep.stories.length ? sprintOfStory(ep.stories[0].num) : "?",
       priority: stories.reduce((p, s) => (s.priority < p ? s.priority : p), "P3"),
       stats: {

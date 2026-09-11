@@ -16,12 +16,12 @@
 | Tên tài liệu | Module Workspace Template Design |
 | Tên dự án | Hệ thống quản lý doanh nghiệp nội bộ |
 | Tên sản phẩm | Enterprise Management System |
-| Phiên bản | v1.0 |
+| Phiên bản | **v1.1** |
 | Trạng thái | Draft |
 | Giai đoạn | MVP Version 1.0 |
 | Tài liệu nguồn | PRD-00, SPEC-01 -> SPEC-08, DB-01 -> DB-10, API-01 -> API-09, UI-01 -> UI-05 |
 | Ngày tạo | 20/06/2026 |
-| Ngày cập nhật | 20/06/2026 |
+| Ngày cập nhật | **11/09/2026** — v1.1 (DEC-020, WO `S15-PAYROLL-DOC-1`) |
 | Người viết |  |
 | Người duyệt |  |
 
@@ -30,6 +30,7 @@
 | Phiên bản | Ngày | Thay đổi | Người thực hiện |
 | --- | --- | --- | --- |
 | v1.0 | 20/06/2026 | Khởi tạo tài liệu cho giai đoạn MVP v1.0. | |
+| **v1.1** | **11/09/2026** | **DEC-020 — vỏ UI dùng chung** (làm ở `packages/ui` + layout `apps/app`, **mọi module dùng chung, KHÔNG riêng PAYROLL**): §6.2 thêm `SidebarNavGroup` **gập được** · `ColumnPicker` · `DetailPageHeader` · §6.3 slot `detailPageHeader` · §9.2/§9.5 **gập per-group** + luật «nhóm cha ẩn khi mọi con đều ẩn» · §9.4 union `moduleCode` đồng bộ code (**+`PAYROLL`** và 8 module đã ship còn thiếu) + `collapsible`/`defaultCollapsed` · §10.4 toolbar «⚙ chọn cột» + «đơn vị» · §12.3/§12.4 DataTable **ghim cột · chọn cột · footer «Tổng số · Số dòng/trang · 1–N»** · §13.7 tách `DetailPageHeader` + `StatusPill` · §21.8 **Workspace PAYROLL** · §26.1 đường dẫn component dùng chung → **`packages/ui`**. Nguồn: [SPEC-11 §9.1 · §23.2](<../SPEC/SPEC-11 PAYROLL.md>), WO `S15-UI-SHELL-1`. | |
 
 ---
 
@@ -186,10 +187,12 @@ ModuleWorkspaceLayout
 │   └── AvatarMenu
 ├── ModuleSidebar
 │   ├── ModuleIdentity
-│   ├── SidebarNavGroup[]
-│   ├── SidebarNavItem[]
+│   ├── SidebarNavGroup[]                  # v1.1 - GẬP ĐƯỢC từng nhóm (collapsible/defaultCollapsed)
+│   │   ├── SidebarGroupHeader             # v1.1 - nhãn nhóm + chevron; <button aria-expanded>
+│   │   └── SidebarNavItem[]
+│   ├── SidebarNavItem[]                   # mục không thuộc nhóm nào
 │   ├── SidebarBadge optional
-│   └── CollapseToggle
+│   └── CollapseToggle                     # thu gọn CẢ sidebar - KHÁC gập từng nhóm
 └── MainContentShell
     ├── Breadcrumb
     ├── PageHeader
@@ -197,11 +200,18 @@ ModuleWorkspaceLayout
     │   ├── Description optional
     │   ├── PrimaryAction optional
     │   └── SecondaryActions optional
+    ├── DetailPageHeader                    # v1.1 - biến thể cho màn CHI TIẾT (§13.7)
+    │   ├── BackButton                      # <- quay lại danh sách
+    │   ├── Title + StatusPill
+    │   ├── PrimaryAction optional
+    │   └── OverflowMenu optional           # ... hành động phụ
     ├── PageToolbar optional
     │   ├── SearchInput optional
     │   ├── FilterBar optional
     │   ├── Tabs optional
     │   ├── ViewSwitcher optional
+    │   ├── ColumnPicker optional           # v1.1 - chọn cột hiển thị (§10.4, §12.3)
+    │   ├── UnitSelector optional           # v1.1 - lọc theo đơn vị (org_unit)
     │   └── BulkActionBar optional
     ├── PageBody
     ├── RightDrawer optional
@@ -217,7 +227,8 @@ ModuleWorkspaceLayout
 | `sidebar` | Có trên desktop/tablet | Điều hướng trong module hiện tại. |
 | `breadcrumb` | Có | Cho biết vị trí trong module. |
 | `pageHeader` | Có | Tiêu đề, mô tả, hành động chính. |
-| `toolbar` | Tùy màn | Search, filter, tabs, sort, view switch. |
+| `detailPageHeader` | **v1.1** — Có trên màn chi tiết | Biến thể của `pageHeader` cho Detail Template: nút quay lại · tiêu đề + `StatusPill` · hành động chính · menu `⋯`. **Loại trừ nhau với `pageHeader`** — một màn dùng một trong hai, không cả hai (§13.7). |
+| `toolbar` | Tùy màn | Search, filter, tabs, sort, view switch, **chọn cột**, **đơn vị** (v1.1 — §10.4). |
 | `content` | Có | Nội dung chính của màn hình. |
 | `rightPanel` | Tùy màn | Detail drawer, quick view, activity, helper. |
 | `modal` | Tùy hành động | Confirm, form nhanh, approve/reject. |
@@ -363,11 +374,17 @@ Trong module này tôi có thể đi đến những khu vực nào?
 2. Sidebar chỉ chứa menu của module hiện tại.
 3. Menu được render từ cấu hình route/menu metadata, không hard-code theo role.
 4. Menu không có quyền thì ẩn.
-5. Menu cha chỉ hiện nếu có ít nhất một menu con được phép hiển thị.
+5. **Nhóm cha ẩn HOÀN TOÀN khi MỌI menu con đều ẩn** — không render nhãn nhóm, không render chevron. Một nhóm gập được mà bên trong 0 mục hiển thị là **một mũi tên bấm vào không có gì**: đúng lớp lỗi `capability-allowlist-hides-admin-screens` nhìn từ phía ngược lại. Luật này áp cho **cả** nhóm tĩnh lẫn nhóm gập được.
 6. Badge/counter chỉ hiện nếu user có quyền xem dữ liệu tương ứng.
-7. Sidebar có trạng thái expanded/collapsed.
-8. Mỗi module có thể có nhóm `Tổng quan`, `Nghiệp vụ`, `Quản lý`, `Báo cáo`, `Thiết lập`.
-9. Không nên vượt quá 2 cấp trong MVP.
+7. Sidebar có trạng thái expanded/collapsed **cho CẢ sidebar**.
+8. **v1.1 — nhóm GẬP ĐƯỢC theo TỪNG nhóm** (`collapsible` + `defaultCollapsed`, §9.4), **độc lập** với trạng thái thu gọn của cả sidebar ở mục 7. Hai cơ chế khác nhau, đừng gộp:
+   - **Thu gọn cả sidebar** = đổi *chiều rộng* (chỉ còn icon + tooltip). Khi cả sidebar đã thu gọn, **không render chevron nhóm** — không có chỗ cho nhãn nhóm, và gập một nhóm vô hình là thao tác chết.
+   - **Gập một nhóm** = ẩn/hiện *các mục con* của riêng nhóm đó, sidebar vẫn nguyên chiều rộng.
+   - **Nhóm chứa mục ĐANG ACTIVE luôn MỞ**, kể cả `defaultCollapsed: true`. Gập mất mục đang đứng là để người dùng mất dấu vị trí của chính họ.
+   - Trạng thái gập/mở lưu **theo người dùng + theo module** ở client (tiện ích hiển thị, **không** là dữ liệu nghiệp vụ, **không** gọi API). Đọc lỗi/thiếu ⇒ rơi về `defaultCollapsed`.
+   - Header nhóm là `<button aria-expanded>` điều khiển vùng con — bàn phím dùng được, screen reader đọc được (§28).
+9. Mỗi module có thể có nhóm `Tổng quan`, `Nghiệp vụ`, `Quản lý`, `Báo cáo`, `Thiết lập`.
+10. Không nên vượt quá 2 cấp trong MVP.
 
 ### 9.3 Sidebar anatomy
 
@@ -399,7 +416,14 @@ Trong module này tôi có thể đi đến những khu vực nào?
 ```ts
 interface WorkspaceSidebarItem {
   key: string;
-  moduleCode: 'DASH' | 'HR' | 'ATT' | 'LEAVE' | 'TASK' | 'NOTI' | 'AUTH' | 'FOUNDATION';
+  // v1.1 — union ĐỒNG BỘ với nguồn sự thật của code:
+  //   packages/web-core/src/lib/registry.ts  ->  `export type ModuleCode`
+  // Bản v1.0 của tài liệu này chỉ liệt kê 8 module MVP; đo 11/09/2026 code có 17.
+  moduleCode:
+    | 'AUTH' | 'FOUNDATION' | 'DASH' | 'HR' | 'ATT' | 'LEAVE' | 'TASK' | 'NOTI'
+    | 'ME' | 'GOAL'
+    | 'PAYROLL'                    // v1.1 — wave S13 (v1) + S15-PAYROLL-V2 (v2), §21.8
+    | 'RECRUIT' | 'ASSET' | 'ROOM' | 'CHAT' | 'SOCIAL' | 'AI' | 'LMS';
   label: string;
   path?: string;
   icon?: string;
@@ -407,6 +431,9 @@ interface WorkspaceSidebarItem {
   parentKey?: string;
   order: number;
   exact?: boolean;
+  // v1.1 — chỉ có nghĩa trên hàng ĐẠI DIỆN NHÓM (SidebarNavGroup), bỏ qua trên mục lá.
+  collapsible?: boolean;         // mặc định false = nhóm tĩnh, không có chevron
+  defaultCollapsed?: boolean;    // chỉ đọc khi collapsible === true; nhóm chứa mục ACTIVE luôn mở
   requiredPermissions?: string[];
   requiredAnyPermissions?: string[];
   requiredScopes?: Array<'Own' | 'Team' | 'Department' | 'Project' | 'Company' | 'System'>;
@@ -424,9 +451,13 @@ interface WorkspaceSidebarItem {
 | State | UI behavior |
 | --- | --- |
 | Expanded | Hiển thị icon, label, badge, group label. |
-| Collapsed | Chỉ hiển thị icon, tooltip label, badge dạng dot/số nhỏ. |
+| Collapsed | Chỉ hiển thị icon, tooltip label, badge dạng dot/số nhỏ. **Không render chevron nhóm** (§9.2 mục 8). |
 | Active item | Highlight item, bold label, active left border hoặc nền nhẹ. |
 | Parent active | Mở nhóm cha, highlight cha nhẹ. |
+| **Group expanded** (v1.1) | Chevron chỉ xuống, các mục con hiển thị. `aria-expanded="true"`. |
+| **Group collapsed** (v1.1) | Chevron chỉ sang phải, các mục con **ẩn**. `aria-expanded="false"`. Badge của mục con **gộp lên header nhóm** (tổng) để tin cần xử lý không biến mất theo nhóm bị gập. |
+| **Group chứa mục ACTIVE** (v1.1) | **Luôn MỞ**, kể cả `defaultCollapsed: true`. |
+| **Group rỗng sau lọc quyền** (v1.1) | **Không render gì** — không nhãn, không chevron (§9.2 mục 5). |
 | Hover | Nền nhẹ, cursor pointer. |
 | Disabled feature | Có thể ẩn hoặc hiển thị khóa tùy policy. |
 | Forbidden menu | Không render. |
@@ -496,7 +527,9 @@ Toolbar có thể chứa:
 7. Sort.
 8. Bulk action bar.
 9. Refresh.
-10. Saved view nếu phase sau.
+10. **⚙ Chọn cột** (`ColumnPicker`) — v1.1. Bật/tắt cột hiển thị của `DataTable` (§12.3). **Chỉ liệt kê cột mà user ĐƯỢC PHÉP thấy**: cột đã bị server mask (vắng khoá trong payload) **không** được xuất hiện trong danh sách chọn — nếu không, picker trở thành nơi liệt kê tên trường cho người không có quyền đọc trường đó.
+11. **Đơn vị** (`UnitSelector`) — v1.1. Bộ lọc theo `org_unit`, dùng chung cho mọi màn có dữ liệu theo phòng ban/đơn vị (bảng lương, báo cáo, ngân sách, danh sách nhân sự…). **Tập đơn vị hiển thị bám data scope của user**, không phải toàn bộ cây đơn vị công ty.
+12. Saved view nếu phase sau.
 
 ### 10.5 Contextual alert
 
@@ -604,8 +637,10 @@ Ví dụ:
 | PageHeader | Có | Title + primary action nếu có quyền. |
 | Search | Nên có | Tìm nhanh theo tên/mã/email/title. |
 | FilterBar | Có nếu danh sách lớn | Status, department, date range. |
-| DataTable | Có | Sort, column, row action. |
+| DataTable | Có | Sort, column, row action, **ghim cột** (§12.4). |
+| **ColumnPicker** | **v1.1** — Nên có khi bảng > 8 cột | ⚙ ở toolbar (§10.4 mục 10). Lựa chọn lưu **theo người dùng + theo bảng** ở client; đọc lỗi/thiếu ⇒ rơi về bộ cột mặc định. Cột `Identity` và cột `Actions` **không tắt được**. |
 | Pagination | Có | Offset hoặc cursor tùy API. |
+| **TableFooter** | **v1.1** — Có | Một dòng dưới bảng: **«Tổng số N»** · **«Số dòng/trang»** (bộ chọn) · **«1–N»** (dải bản ghi đang hiển thị). ⚠️ `Tổng số` phải đến từ **`meta.total` của API**, **không** đếm `rows.length` của trang hiện tại — và khi API trả **mảng trần không kèm pagination** thì footer phải nói «không rõ tổng», **không** bịa số (`apifetch-drops-pagination-bare-array`). |
 | EmptyState | Có | Khi không có dữ liệu. |
 | ErrorState | Có | Khi API lỗi. |
 | LoadingState | Có | Skeleton table. |
@@ -620,6 +655,15 @@ Ví dụ:
 | Date/time | Created, deadline | Format nhất quán. |
 | Scope indicator | Own/Team/Company | Chỉ dùng khi cần giải thích phạm vi. |
 | Actions | View/Edit/Delete/Approve | Theo permission từng row. |
+
+**v1.1 — Ghim cột (pin) · Chọn cột · Footer**
+
+| Khả năng | Rule |
+| --- | --- |
+| **Ghim cột (pin)** | Cột `Identity` **ghim TRÁI mặc định**; cột `Actions` **ghim PHẢI mặc định**. Bảng rộng cuộn ngang thì hai cột này đứng yên — nếu không, người dùng cuộn sang phải là mất dấu «dòng này là ai». Cột ghim **không tắt được** ở `ColumnPicker`. Vùng cuộn ngang là của **chính bảng**, không phải của trang (§24). |
+| **Chọn cột** | Bật/tắt cột qua ⚙ ở toolbar (§10.4 mục 10). Danh sách chỉ gồm cột user **được phép thấy** — trường server đã mask thì **vắng khỏi cả picker**. Lựa chọn lưu per-user + per-table ở client. |
+| **Footer** | **«Tổng số · Số dòng/trang · 1–N»** — xem §12.3. `Tổng số` lấy từ `meta.total` của API; `1–N` tính từ trang + kích thước trang, **không** từ độ dài mảng trả về. |
+| **Cột tiền** | Canh **phải**, `tabular-nums`, và schema FE khai `.optional()` — server mask = **vắng khoá**, không phải `null` (`server-masking-needs-optional-fe-schema`). Ô vắng hiển thị dấu che, **không** hiển thị `0`. |
 
 ### 12.5 Row action rule
 
@@ -719,6 +763,26 @@ Với dữ liệu nhạy cảm:
 2. UI hiển thị `••••••` hoặc ẩn trường tùy policy.
 3. Có thể hiển thị tooltip `Bạn không có quyền xem thông tin này.`
 4. Không được render dữ liệu nhạy cảm rồi chỉ che bằng CSS.
+### 13.7 `DetailPageHeader` + `StatusPill` — **v1.1**
+
+Khối đầu trang của mọi màn chi tiết (wireframe §13.2 dòng 2–3) được **tách thành component chuẩn**, sống ở `packages/ui` và dùng chung cho **mọi module** (DEC-020) — không phải mỗi module tự dựng lại.
+
+```text
++--------------------------------------------------------------------------------+
+| [<-]  Tiêu đề đối tượng   (StatusPill)                 [Hành động chính] [...]  |
+|       Dòng phụ: mã · đơn vị · người phụ trách                                   |
++--------------------------------------------------------------------------------+
+```
+
+| Thành phần | Bắt buộc | Rule |
+| --- | --- | --- |
+| `←` Quay lại | Có | Về **danh sách nguồn**, giữ nguyên bộ lọc/trang đã có. KHÔNG dùng `history.back()` trần — vào thẳng bằng deep-link thì không có lịch sử để lùi. |
+| Tiêu đề | Có | Tên đối tượng chính. Dòng phụ đặt mã/đơn vị/người phụ trách. |
+| `StatusPill` | Có nếu entity có trạng thái | Nhãn + màu semantic từ **constants chung** của module (SPEC-01 §17.x), **không** hard-code chuỗi tại chỗ. Cùng một trạng thái phải ra **cùng một màu** ở mọi màn. |
+| Hành động chính | Tuỳ quyền | **Ẩn** khi không có quyền; **disable + tooltip** khi có quyền nhưng business rule chặn (§22.3). Không hiện nút rồi để người dùng ăn 409. |
+| `⋯` Overflow | Tuỳ màn | Hành động phụ/nguy hiểm. Mục không có quyền thì **ẩn**; menu rỗng thì **ẩn cả nút `⋯`**. |
+
+> ⚠️ `DetailPageHeader` **thay** `PageHeader` trên màn chi tiết, **không cộng thêm** — hai thanh tiêu đề chồng nhau là lỗi bố cục thường gặp nhất khi tách component kiểu này (§6.3).
 
 ---
 
@@ -1434,6 +1498,80 @@ Bảo mật
 
 ---
 
+## 21.8 PAYROLL Workspace — **v1.1**
+
+### Mục đích
+
+PAYROLL Workspace phục vụ hồ sơ lương, thành phần lương & mẫu bảng lương, dữ liệu tính lương, kỳ lương, tạm ứng, ngân sách, chi trả và báo cáo lương. Nguồn: [SPEC-11 §9 · §9.1](<../SPEC/SPEC-11 PAYROLL.md>) (`PAY-SCREEN-001..016`).
+
+> ⚠️ **PAYROLL là vùng crown-jewel.** Mọi số tiền **che ở SERVER** — client không nhận được thì không render được. Mọi trường tiền trong schema FE khai `.optional()` (server mask = **vắng khoá**). 17 cặp quyền của v2 đều `is_sensitive = true` ⇒ gác bằng **`useCanExact`**, không phải `<PermissionGate>`.
+
+### Sidebar đề xuất
+
+```text
+Tổng quan
+- Tổng quan
+
+Nhân viên
+- Nhân viên
+
+Thành phần lương
+- Thành phần lương
+- Mẫu bảng lương
+
+Dữ liệu tính lương            [nhóm GẬP ĐƯỢC]
+- Bảng công
+- Thu nhập/khấu trừ khác
+
+Tính lương                    [nhóm GẬP ĐƯỢC]
+- Kỳ lương
+- Tạm ứng
+- Ngân sách
+
+Chi trả
+- Chi trả
+
+Báo cáo
+- Báo cáo
+
+Thiết lập                     [nhóm GẬP ĐƯỢC]
+- Tỉ lệ luật định
+```
+
+> **«Phiếu lương của tôi»** (`/me/payslips`) và **«Tạm ứng của tôi»** (`/me/payroll-advances`) nằm ở sidebar **ME**, `moduleCode: 'ME'` — **KHÔNG** kéo `access:payroll` vào (SPEC-11 §9). Đừng nhân bản chúng sang đây.
+
+### Template ưu tiên
+
+| Màn | Mã SPEC-11 | Template |
+| --- | --- | --- |
+| Tổng quan `/payroll` | PAY-SCREEN-015 | Overview (6 khối biểu đồ + Lời nhắc) |
+| Nhân viên (danh sách + chi tiết 5 tab) | PAY-SCREEN-007 | List → **Detail** (§13.7) |
+| Thành phần lương | PAY-SCREEN-009 | List/Table + Form (editor công thức) |
+| Mẫu bảng lương | PAY-SCREEN-010 | List → Detail + Xem trước |
+| Bảng công kỳ | PAY-SCREEN-008 | List/Table (**chỉ ĐỌC**, nguồn ATT) |
+| Kỳ lương (danh sách + chi tiết) | PAY-SCREEN-001/002 | List → Detail + **Approval** (§15) |
+| Phiếu lương chi tiết | PAY-SCREEN-003 | Detail |
+| Hồ sơ lương | PAY-SCREEN-004 | List + Form versioned |
+| Thưởng/phạt/khấu trừ | PAY-SCREEN-005 | List + Approval |
+| Tạm ứng | PAY-SCREEN-012 | List + Approval |
+| Ngân sách lương | PAY-SCREEN-014 | List/Table |
+| Chi trả | PAY-SCREEN-013 | List → Detail |
+| Báo cáo | PAY-SCREEN-016 | **Report** (§18) |
+| Tỉ lệ luật định | PAY-SCREEN-011 | **Settings** (§19) |
+
+### Lưu ý UX
+
+1. **Nút theo FSM: ẩn, không phải hiện-rồi-409.** Thanh hành động của kỳ lương (gom · tính · gửi duyệt · duyệt/từ chối · phát hành · chi trả · khoá · mở lại) chỉ hiện nút **hợp lệ ở trạng thái hiện tại**. Nút **Hoàn tất chi trả** ẩn khi kỳ chưa `Published` hoặc còn dòng chưa chi.
+2. **Four-eyes là quyền, không phải kiểm tra runtime.** Nút duyệt **ẩn với chính người tạo/người tính** ở thưởng/phạt, tạm ứng và kỳ lương.
+3. **Nhóm sidebar gập được phải ẩn khi 0 mục con hiển thị** (§9.2 mục 5) — với vai chỉ có vài cặp quyền, phần lớn nhóm của PAYROLL sẽ rỗng.
+4. **Tab của màn chi tiết Nhân viên gác theo CẶP riêng từng tab; tab thiếu cặp thì ẩn TAB**, không render tab rỗng (SPEC-11 §9.1). Tab «Thuế TNCN» cần **CẢ HAI** cặp.
+5. **Số tài khoản ngân hàng chỉ 4 số cuối** ở mọi màn. Số đầy đủ **chỉ** rời server qua tệp UNC của đợt chi trả — không có màn nào hiển thị nó.
+6. **Mỗi lượt xem lương của người khác để lại vết audit** (trừ lượt tự xem của chính chủ). UI không được prefetch hàng loạt chi tiết lương chỉ để «cho nhanh» — mỗi lượt đọc là một hàng audit.
+7. **Băng cảnh báo bắt buộc**: «mẫu đã đổi kể từ lần tính gần nhất» trên chi tiết kỳ khi fingerprint lệch; và trên màn Tỉ lệ luật định: «hệ thống lưu và áp số này, **không khẳng định đúng luật**».
+8. **Ô tiền canh phải + `tabular-nums` + định dạng VND**; ô bị mask hiển thị dấu che, **không** hiển thị `0`.
+
+---
+
 ## 22. Permission, data scope và UI behavior
 
 ### 22.1 Quy tắc chung
@@ -1663,39 +1801,47 @@ interface WorkspaceRouteMeta {
 
 ### 26.1 Component folder đề xuất
 
+**v1.1 (DEC-020) — vỏ UI dùng chung lên `packages/ui`, phần app-local ở lại `apps/app`.** Cây v1.0 đặt tất cả trong `src/` của một app; nhưng `SidebarNavGroup` / `ColumnPicker` / `DetailPageHeader` / `StatusPill` / `DataTable` là thứ **mọi module dùng chung** — để chúng trong một app là hẹn ngày module thứ hai chép lại. Ranh giới: **dùng chung mọi module ⇒ `packages/ui`; buộc vào route/registry/i18n của một app ⇒ app-local.**
+
 ```text
-src/
+packages/ui/src/                        # DÙNG CHUNG mọi module (DEC-020)
+  layout/
+    ModuleWorkspaceLayout.tsx
+    GlobalTopbar.tsx
+    ModuleSidebar.tsx
+    SidebarNavGroup.tsx                 # v1.1 - nhóm GẬP ĐƯỢC (§9.2, §9.5)
+    MainContentShell.tsx
+    WorkspaceBreadcrumb.tsx
+    WorkspacePageHeader.tsx
+    DetailPageHeader.tsx                # v1.1 - §13.7
+    WorkspaceToolbar.tsx
+    WorkspaceState.tsx
+  data-table/
+    DataTable.tsx                       # ghim cột (§12.4)
+    ColumnPicker.tsx                    # v1.1 - §10.4 muc 10
+    TableFooter.tsx                     # v1.1 - Tong so / So dong-trang / 1-N
+  primitives/
+    StatusPill.tsx                      # v1.1 - §13.7
+    UnitSelector.tsx                    # v1.1 - §10.4 muc 11
+
+apps/app/src/                           # APP-LOCAL: buộc vào route/registry/i18n của app
   layouts/
-    ModuleWorkspaceLayout/
-      ModuleWorkspaceLayout.tsx
-      GlobalTopbar.tsx
-      ModuleSidebar.tsx
-      MainContentShell.tsx
-      WorkspaceBreadcrumb.tsx
-      WorkspacePageHeader.tsx
-      WorkspaceToolbar.tsx
-      WorkspaceState.tsx
+    workspace-shell.tsx                 # ráp layout của packages/ui vào router của app
   components/
-    data-table/
     forms/
     approval/
     kanban/
     calendar/
     audit/
-    permission/
-  modules/
-    hr/
-    attendance/
-    leave/
-    tasks/
-    notifications/
-    dashboard/
-    system/
+    permission/                         # PermissionGate / useCan - bám session của app
   routes/
+    hr/  attendance/  leave/  tasks/  notifications/  dashboard/  payroll/  system/
     workspaceRoutes.ts
     sidebarRegistry.ts
     appRegistry.ts
 ```
+
+> ⚠️ **`packages/ui` KHÔNG được biết gì về session/quyền.** Component ở đó nhận dữ liệu **đã lọc** qua props; quyết định quyền ở lại app (`PermissionGate`/`useCan`/`useCanExact`). Kéo lớp quyền xuống thư viện UI là đẻ nguồn sự thật thứ hai cho phân quyền.
 
 ### 26.2 Layout props
 

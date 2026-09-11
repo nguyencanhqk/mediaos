@@ -582,9 +582,9 @@ Ghi chú:
 
 ---
 
-## 9g. PAYROLL — Tiền lương (SPEC-11) · *Phase 2 — wave S13-PAYROLL, chưa seed*
+## 9g. PAYROLL — Tiền lương (SPEC-11) · *v1 ĐÃ SEED 01/09/2026 (S13-PAYROLL-DB-1, mig `0565`) · v2 = +17 cặp, wave S15-PAYROLL-V2 — CHƯA SEED (§9g.2)*
 
-PAYROLL đứng riêng, **17 cặp** quyền per-(action, resource) theo SPEC-11 §11.1 — owner duyệt gói wave 31/08/2026 (PAY-DEC-001..010). Data scope **chốt cùng migration seed** (`S13-PAYROLL-DB-1`, KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `payroll-officer`** (SPEC-01 §10.6; `roles.company_id IS NULL`, `is_system=true`, **`requires_two_factor=TRUE`** — khác tiền lệ `asset-manager` §9d / `office-admin` §9e / `recruiter` §9f vốn để `false`, vì lương là vùng crown) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`. Id cố định **`…0015`**.
+PAYROLL đứng riêng, quyền per-(action, resource) cấp **HAI đợt**: **v1 = 17 cặp** (SPEC-11 §11.1 — owner duyệt gói wave 31/08/2026, PAY-DEC-001..010; **ĐÃ SEED** 01/09/2026 qua `S13-PAYROLL-DB-1`, mig `0565`) và **v2 = +17 cặp MỚI** (SPEC-11 §11.3 — owner ký 02/09/2026, PAY-DEC-011..020; wave **S15-PAYROLL-V2**, **CHƯA SEED** — bảng ở **§9g.2** dưới) ⇒ **tổng 34 cặp, 30 sensitive**. Data scope **chốt cùng migration seed** của từng đợt (KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `payroll-officer`** (SPEC-01 §10.6; `roles.company_id IS NULL`, `is_system=true`, **`requires_two_factor=TRUE`** — khác tiền lệ `asset-manager` §9d / `office-admin` §9e / `recruiter` §9f vốn để `false`, vì lương là vùng crown) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`. Id cố định **`…0015`**.
 
 **Nguyên tắc nền — DECISIONS-01 «Phương án B» (Block-code):** quyền lương là nhóm **độc lập**, **KHÔNG mặc định cho HR**. Sau wave này `hr`, `hr-manager` và `manager` giữ **0 cặp PAYROLL**.
 
@@ -655,6 +655,44 @@ Ghi chú:
 > **@Own** như bảng §9g ghi — vòng grant `DELETE data_scope <> 'Own'` + INSERT tự sửa.
 
 **Trình tự bắt buộc trong migration seed** (DB-13 §10 bước B): thu hồi **TRƯỚC**, seed cặp mới **SAU** — xoá mọi hàng `role_permissions` **VÀ `object_permissions`** trỏ **16 cặp GỠ** rồi xoá 16 cặp khỏi `permissions`. ⚠️ `object_permissions.permission_id` là **`ON DELETE CASCADE`** (`0005:154`) ⇒ xoá cặp cascade âm thầm: phải ĐO trước rồi xoá tường minh. **Với cặp GIỮ `view-payslip`** (vốn *giữ ngữ nghĩa object-permission override*): thu hồi grant `hr-manager` ở **cả hai** bảng — chỉ xoá `role_permissions` là để lại đường đọc phiếu lương sống trong khi verify vẫn XANH. Verify fail-loud: `hr-manager` = **0 cặp PAYROLL trên CẢ BA bảng**, 16 cặp GỠ = **0 hàng** ở cả ba. Cặp `('view-salary','employee')` (`0019`, domain HR — masking hồ sơ nhân sự của SPEC-03) **KHÔNG đụng tới**. Tiền lệ xoá cặp mồ côi + grant: `0548` (27 cặp / 89 grant của cụm workflow).
+
+### 9g.2 Bộ cặp v2 — wave S15-PAYROLL-V2 (17 cặp, TẤT CẢ sensitive)
+
+> **Nguồn sự thật: SPEC-11 §11.3** (owner ký PAY-DEC-011..020 ngày 02/09/2026). **CHƯA SEED** — cấp phát nằm ở migration `0570+` (`S15-PAYROLL-DB-1` / `DB-2`). Con số **ĐÓNG**: đúng **17 cặp**, WO sau đối chiếu chứ **không tự cấp thêm** (SPEC-11 §5.1b).
+
+| Cặp quyền (SPEC-11 §11.3) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị · HR · HR Manager | Payroll Officer | BOD/Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| `('view','payroll-employee')` | **true** | Đọc thiết lập BH/công đoàn/**TK ngân hàng (4 số cuối)** + người phụ thuộc + chiếu HR bó hẹp | không | không | all | all |
+| `('manage','payroll-employee')` | **true** | Ghi hai bảng đó (thiết lập BH/công đoàn · người phụ thuộc) | không | không | all | all |
+| `('view','salary-component')` | **true** | Đọc catalog thành phần lương **+ công thức** | không | không | all | all |
+| `('manage','salary-component')` | **true** | Tạo/sửa thành phần **+ sửa công thức** | không | không | all | all |
+| `('view','payroll-template')` | **true** | Đọc mẫu bảng lương + công thức ghi đè | không | không | all | all |
+| `('manage','payroll-template')` | **true** | Tạo/sửa mẫu · đặt thành phần · xem trước | không | không | all | all |
+| `('view','statutory-rate')` | **true** | Đọc bảng tỉ lệ luật định | không | không | all | all |
+| `('manage','statutory-rate')` | **true** | Tạo/sửa bản tỉ lệ theo ngày hiệu lực | không | không | **không** | all |
+| `('view','payroll-advance')` | **true** | Đọc tạm ứng của mọi người | không | không | all | all |
+| `('manage','payroll-advance')` | **true** | Tạo · sửa khi `Pending` · xoá mềm | không | không | all | all |
+| `('approve','payroll-advance')` | **true** | Duyệt / từ chối (tự duyệt bị chặn — PAYROLL-ERR-025) | không | không | all | all |
+| `('view-own','payroll-advance')` | **true** | «Tạm ứng của tôi» | **own** | không | không | không |
+| `('view','payment-batch')` | **true** | Đọc đợt chi trả + dòng chi | không | không | all | all |
+| `('manage','payment-batch')` | **true** | Lập đợt · sửa dòng · **xuất tệp UNC (số TK ĐẦY ĐỦ)** · **hoàn tất ⇒ kỳ `Paid`** | không | không | all | all |
+| `('view','payroll-budget')` | **true** | Đọc ngân sách lương + thực hiện | không | không | all | all |
+| `('manage','payroll-budget')` | **true** | Lập/sửa ngân sách năm × đơn vị | không | không | **không** | all |
+| `('view','payroll-report')` | **true** | Tổng quan module + 7 báo cáo | không | không | all | all |
+
+Ghi chú:
+
+- **TẤT CẢ 17 cặp để `is_sensitive = true` — có chủ đích, kể cả `view:statutory-rate`.** Tỉ lệ luật định là hằng pháp luật công khai, nhưng nó **chở số tiền** (trần đóng = 20× lương cơ sở, ngưỡng 7 bậc TNCN, mức giảm trừ), mà luật của module là «số tiền không đi qua cặp không nhạy cảm» (§9g). Phân biệt «tiền công khai» với «tiền của công ty» là một lập luận phải làm lại ở **mỗi** lượt review, còn fail-closed thì không. ⇒ **tổng sau v2: 34 cặp, 30 sensitive, 4 không sensitive** — đúng 4 cặp của v1 (`access:payroll` · `view:payroll-period` · `manage:payroll-period` · `acknowledge-own-payslip`). Chốt cùng seed, **không flip sau** (bẫy `canonical-seed-pin-regression`).
+- **Hệ quả trực tiếp: 30 cặp sensitive phải nằm trong CẢ HAI danh sách ở BACKEND** — `SENSITIVE_CAPABILITY_ALLOWLIST` (`apps/api/src/permission/permission.service.ts:43`) **VÀ** `SENSITIVE_SCREEN_GATE_PAIRS` (`apps/api/src/permission/permission.service.ts:246`); **APPEND, KHÔNG rewrite** (hot-file, CLAUDE.md §9.3). Đo v1 = **13** mục mỗi bên ⇒ sau v2 = **30** mục mỗi bên, và `sensitive-screen-gate-allowlist.spec.ts` phải siết **cùng commit**. Khai một bên quên bên kia = màn **ẩn với chính người được cấp quyền** (`sensitive-capability-allowlist-is-backend`, `capability-allowlist-hides-admin-screens`).
+- **Hai cặp KHÔNG gán `payroll-officer`:** `('manage','statutory-rate')` và `('manage','payroll-budget')`. Lý do khác nhau và **cả hai đều không phải four-eyes**: đổi tỉ lệ luật định là đổi tiền của **mọi kỳ tương lai** cho **mọi người** (quyết định cấp công ty, không phải thao tác vận hành); ngân sách là cam kết tài chính của BOD. Officer **đọc** được cả hai (cần để tính và để đối chiếu), chỉ không ghi.
+- **`('manage','payment-batch')` LÀ một cặp đổi được trạng thái kỳ** (`Published → Paid`, `PAYROLL-API-072`) — ghi tường minh vì tên cặp **không** nói ra điều đó. Chấp nhận được vì: kỳ phải **đã** `Published` (cần `('publish','payroll-period')` của người khác hoặc lượt trước), `Paid` **không** mở thêm quyền nào, và `reopen` vốn đã bị chặn từ khi sinh phiếu. **Không** cấp `('complete','payment-batch')` riêng — cặp thứ 18 cho một nút bấm là chi phí không đổi lấy được gì.
+- **KHÔNG cấp `('export','payslip-pdf')`** — PAY-DEC-019 đã ký đường khác («`('export','payroll')` cho batch, **Own** cho phiếu của mình»). Vì vậy: PDF **hàng loạt** (`PAYROLL-API-085`) assert **CẢ HAI** `('export','payroll')` + `('view-payslip','payslip')` — đúng luật «export đòi cả hai cặp» của §9g, chỉ khác là vế đọc ở đây là **phiếu** chứ không phải **dòng bảng lương**; PDF phiếu **của chính mình** (`PAYROLL-API-084`) chỉ cần `('view-own-payslip','payslip')`, **không** cần cặp export. Cặp `export:payslip-pdf` từng được gợi ý trong WO seed — cấp nó là **đảo một quyết định owner đã ký**.
+- **Cặp Own của v2 dùng dạng SẠCH `('view-own','payroll-advance')`**, KHÔNG bắt chước dạng action-carries-resource `view-own-payslip`. Ba cặp họ `payslip` giữ tên di sản **chỉ vì** chúng có grant đang sống (§9g.1); cặp mới không có ràng buộc đó, và nhân bản một quy ước đặt tên xấu chỉ để «cho giống» là nợ.
+- **Ma trận seed v2 = +31 hàng `role_permissions`** (cộng vào 32 hàng của v1 ⇒ **tổng 63**): `employee` **+1** (`view-own:payroll-advance`@Own) · `manager` **+0** · `hr` **+0** · `hr-manager` **+0** · `payroll-officer` **+14** (17 − `manage:statutory-rate` − `manage:payroll-budget` − `view-own:payroll-advance`) · `company-admin` **+16** (17 − `view-own:payroll-advance`). Migration **verify fail-loud ĐÚNG số**; `super-admin` không enumerate (nhận qua `SuperAdminBootstrapService`).
+  - Phép cộng: **1 + 0 + 0 + 0 + 14 + 16 = 31**; **32 (v1) + 31 (v2) = 63** — khớp bảng §9g.2 ở trên (đếm ô: 1 `own` · 14 `all` · 16 `all`). Migration **verify fail-loud theo số 63**.
+- **Hai điều kiện verify tự-nhất-quán MỚI trong migration** (thêm vào hai điều kiện của §9g, KHÔNG thay): (1) mọi role giữ `('manage','payroll-template')` **phải** giữ `('view','salary-component')` — mẫu tham chiếu mã thành phần, không đọc được catalog thì editor mẫu là ô trống; (2) mọi role giữ `('approve','payroll-advance')` **phải** giữ `('view','payroll-advance')` — kẻo **duyệt mù**, đúng lớp lỗi mà §9g đã chặn cho `approve:payroll-period`. ⚠️ Như §9g đã ghi: verify chỉ đúng **tại thời điểm migration** — `permission-admin` gỡ được lúc runtime; rủi ro còn lại chấp nhận tường minh, QA có ca đối chứng (SPEC-11 §21.1).
+- **Sau v2, `hr` · `hr-manager` và `manager` VẪN giữ 0 cặp PAYROLL** — Phương án B không đổi; v2 **không** cấp cặp nào cho ba role đó.
+- Chi tiết cặp · màn hình gác · route: [SPEC-11 §11.3 · §9.1 · §15.1](<SPEC/SPEC-11 PAYROLL.md>); schema v2: [DB-13 §12–§14](<DB/DB-13 PAYROLL Database Design.md>); API v2: [API-18 §5b](<API Design/API-18_PAYROLL_API_Design.md>).
 
 ---
 
