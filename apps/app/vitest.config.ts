@@ -42,7 +42,7 @@ export default defineConfig({
         "src/components/chat/**/*.spec.{ts,tsx}",
         "src/components/chat/call/call-test-doubles.ts",
       ],
-      thresholds: { statements: 99, branches: 99, functions: 99, lines: 99 },
+      thresholds: { statements: 80, branches: 80, functions: 80, lines: 80 },
     },
   },
 });

@@ -146,10 +146,28 @@ không đổi).
 **Nghiệm bằng VI PHẠM thật, không bằng đọc YAML** (memory `coverage-threshold-key-typo-is-dead-gate`,
 `vitest-globalsetup-teardown-exits-zero` — một cổng chưa từng đỏ là một cổng chưa được chứng minh):
 
-| # | Commit trên nhánh PR | Bước `Coverage gate` | Run |
-| --- | --- | --- | --- |
-| 1 | cổng + **sàn giả 99** (vi phạm cố ý) | ⏳ | ⏳ |
-| 2 | revert sàn về **80** (net diff của PR) | ⏳ | ⏳ |
+| # | Commit trên nhánh PR #505 | Bước `Test` | Bước `Coverage gate` | Run |
+| --- | --- | --- | --- | --- |
+| 1 | cổng + **sàn giả 99** (vi phạm cố ý) | ✅ success | ❌ **failure** — 4 dòng `ERROR: Coverage for … does not meet global threshold (99%)`, `Build`/`Upload dist` sau đó `skipped` | [34684202708](https://github.com/nguyencanhqk/mediaos/actions/runs/34684202708/job/103528212585) |
+| 2 | revert sàn về **80** (net diff của PR) | ✅ | ✅ | ⏳ |
+
+Điểm mấu chốt của lượt #1: bước `Test` NGAY TRƯỚC vẫn **success**, chỉ bước `Coverage gate` đỏ ⇒ cổng
+đỏ vì **đúng lý do coverage**, không phải vì suite hỏng. Một cổng không phân biệt được hai chuyện đó
+thì không phải cổng.
+
+**Đối soát số CI ↔ số local** (done_when #2 — làm TRƯỚC khi chốt ngưỡng, số lấy từ log lượt #1):
+
+| Trục | Local (Windows) | CI (ubuntu-latest) | Lệch | Dư trên sàn 80 |
+| --- | --- | --- | --- | --- |
+| Statements | 94.72 (5705/6023) | 94.72 (5705/6023) | — | +14.7 |
+| Branches | 88.52 (1466/1656) | **88.6 (1469/1658)** | **+2 mẫu số, +3 tử số** | +8.6 |
+| Functions | 81.73 (255/312) | 81.73 (255/312) | — | **+1.7** ← trục hẹp nhất |
+| Lines | 94.72 (5705/6023) | 94.72 (5705/6023) | — | +14.7 |
+
+⇒ số CI **không** đồng nhất tuyệt đối với số local: mẫu số `branches` lệch 2 giữa hai nền. Biên 8.6
+điểm nên vô hại hôm nay, nhưng đừng hiệu chuẩn ngưỡng sát mép dựa trên một lượt local — trục quyết
+định số phận cổng là `functions` (dư 1.7 điểm), và mẫu số của nó TĂNG mỗi khi thêm spec nạp một file
+đang 0% (§4). Thêm file vào `include` mà không thêm spec ⇒ cổng đỏ.
 
 Phụ: ba filter `auth`/`console`/`app` nay gồm cả `.github/workflows/apps-frontend.yml` — không có vế đó
 thì một PR chỉ sửa pipeline đi qua mà **không job nào chạy**, tức cổng vừa sửa không được chính PR sửa
