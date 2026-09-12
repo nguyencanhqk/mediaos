@@ -60,11 +60,14 @@ jobs:
         id: filter
         if: github.event_name != 'workflow_dispatch'
         with:
-          # Mỗi app rebuild khi: source app đổi, HOẶC package dùng chung đổi, HOẶC lockfile đổi.
+          # Mỗi app rebuild khi: source app đổi, HOẶC package dùng chung đổi, HOẶC lockfile đổi,
+          # HOẶC CHÍNH FILE NÀY đổi (S17-CHAT-UX2-QA-2): không có vế cuối thì một PR chỉ sửa pipeline
+          # (thêm/gỡ cổng, đổi lệnh test) đi qua mà KHÔNG job nào chạy — cổng vừa sửa không được nghiệm
+          # bởi chính PR sửa nó. `pull_request` dùng workflow ở head PR nên vế này tự kiểm được.
           filters: |
-            auth:    [ 'apps/auth/**',    'packages/**', 'pnpm-lock.yaml' ]
-            console: [ 'apps/console/**', 'packages/**', 'pnpm-lock.yaml' ]
-            app:     [ 'apps/app/**',     'packages/**', 'pnpm-lock.yaml' ]
+            auth:    [ 'apps/auth/**',    'packages/**', 'pnpm-lock.yaml', '.github/workflows/apps-frontend.yml' ]
+            console: [ 'apps/console/**', 'packages/**', 'pnpm-lock.yaml', '.github/workflows/apps-frontend.yml' ]
+            app:     [ 'apps/app/**',     'packages/**', 'pnpm-lock.yaml', '.github/workflows/apps-frontend.yml' ]
 
   # ── Build/typecheck/test từng app đổi (matrix) ────────────────────────────
   build:
@@ -104,6 +107,24 @@ jobs:
       # prod trước test → import.meta.env override → assertion lệch → đỏ-giả. Vì vậy Resolve VITE_* nằm SAU Test.
       - name: Test
         run: pnpm --filter @mediaos/${{ matrix.app }} test
+
+      # ── Cổng coverage cụm chat (S17-CHAT-UX2-QA-2) ────────────────────────
+      # `apps/app/vitest.config.ts` đã có `coverage.thresholds` 80 trên 4 trục, nhưng bước `Test` ở trên
+      # chạy `vitest run` KHÔNG `--coverage` ⇒ ngưỡng không bao giờ được đánh giá: sàn chỉ tồn tại khi
+      # người/harness nhớ gọi tay. Bước này biến nó thành cổng PR thật.
+      #
+      # LƯỢT RIÊNG, KHÔNG thêm `--coverage` vào bước `Test`. Hai lý do đo được (2026-09-12, local):
+      #   1. `vitest run --coverage` trên TOÀN suite apps/app CHẾT giữa chừng — `Unhandled Rejection:
+      #      Channel closed` (ERR_IPC_CHANNEL_CLOSED, tinypool) ở giây ~8–13, KHÔNG in nổi bảng coverage.
+      #      Lặp lại 3/3 lượt, cả khi đã hạ `maxThreads=2`. Cùng lúc: full suite KHÔNG coverage xanh 29s,
+      #      chat-scoped CÓ coverage xanh 14s. Bật coverage cho lượt full = mua một cổng ĐỎ OAN.
+      #   2. Mẫu số `functions` của v8 TĂNG khi thêm spec nạp file đang 0% (ACCEPTANCE §4) ⇒ đổi phạm vi
+      #      chạy là đổi con số. Gọi ĐÚNG `test:chat-cov` để số ở CI khớp số đo local, không phải một
+      #      ngưỡng thứ hai chưa ai hiệu chuẩn. Số local lúc chốt: st 94.72 · br 88.52 · fn 81.73 · ln 94.72
+      #      (sàn 80 — trục hẹp nhất là `functions`, dư ~1.7 điểm).
+      - name: Coverage gate — cụm chat (≥80% / 4 trục)
+        if: matrix.app == 'app'
+        run: pnpm --filter @mediaos/app test:chat-cov
 
       # VITE_* prod nhúng lúc BUILD (build-time, KHÔNG runtime) — resolve SAU Test, chỉ phục vụ Build.
       # Mỗi app chỉ set biến nó thực sự đọc. DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder để build xanh ở CI).
