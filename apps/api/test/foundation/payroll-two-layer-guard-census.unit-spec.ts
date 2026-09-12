@@ -6,6 +6,7 @@ import { Test } from "@nestjs/testing";
 import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
+import { PayrollAccessService } from "../../src/payroll/payroll-access.service";
 import {
   PAYROLL_PENDING_BE2,
   PAYROLL_ROUTE_PAIRS,
@@ -32,7 +33,10 @@ import { collectRoutes, type RouteInfo } from "./route-census";
 
 const SRC_PAYROLL = path.join(__dirname, "..", "..", "src", "payroll");
 
-/** 35 route — BE-1 (`001..006` · `019..028` · `034..035`) + BE-2 (`007..018` · `029..033`). */
+/**
+ * 43 route — v1: BE-1 (`001..006` · `019..028` · `034..035`) + BE-2 (`007..018` · `029..033`);
+ * v2 track A: `S15-PAYROLL-BE-1` (`036..043`).
+ */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: PayrollRouteKey }> = [
   { method: "GET", path: "/api/v1/payroll-periods", key: "periodList" },
   { method: "POST", path: "/api/v1/payroll-periods", key: "periodCreate" },
@@ -80,6 +84,37 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: PayrollRo
     path: "/api/v1/payroll/pickers/attendance-periods",
     key: "pickerAttendancePeriods",
   },
+  // ── S15-PAYROLL-BE-1 (track A) ──
+  // `payroll/employees` là prefix RIÊNG, không lồng dưới `payroll/pickers` (SPEC-11 §15.1 bẫy 4).
+  { method: "GET", path: "/api/v1/payroll/employees", key: "employeeList" },
+  { method: "GET", path: "/api/v1/payroll/employees/:userId", key: "employeeDetail" },
+  {
+    method: "GET",
+    path: "/api/v1/payroll/employees/:userId/settings",
+    key: "employeeSettingsGet",
+  },
+  {
+    method: "PUT",
+    path: "/api/v1/payroll/employees/:userId/settings",
+    key: "employeeSettingsPut",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/payroll/employees/:userId/dependents",
+    key: "employeeDependentList",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/payroll/employees/:userId/dependents",
+    key: "employeeDependentCreate",
+  },
+  // 042 KHÔNG lồng dưới `:userId` — CÓ CHỦ ĐÍCH (SPEC-11 §15.1): `dependentId` đã đủ định danh, lồng
+  // thêm `userId` tạo HAI nguồn sự thật cho cùng một phép kiểm quyền (URL nói người A, hàng DB nói
+  // người B). Service resolve `userId` TỪ HÀNG.
+  { method: "PATCH", path: "/api/v1/payroll/dependents/:id", key: "dependentUpdate" },
+  // 043 — literal path CHÍNH XÁC (KHÔNG phải `attendance-summary`): `route-http-coverage` khớp theo
+  // literal path, lệch tên = cổng đếm hụt.
+  { method: "GET", path: "/api/v1/payroll-periods/:id/timesheet", key: "periodTimesheet" },
 ];
 
 const PAYROLL_CONTROLLERS = new Set([
@@ -89,6 +124,9 @@ const PAYROLL_CONTROLLERS = new Set([
   "PayslipsController",
   "MePayslipsController",
   "PayrollPickersController",
+  // ── S15-PAYROLL-BE-1 ──
+  "PayrollEmployeesController",
+  "PayrollDependentsController",
 ]);
 
 /** Sổ pin method↔key — đổi handler/key là ĐỎ, phải sửa CÓ CHỦ ĐÍCH qua FULL gate. */
@@ -100,6 +138,15 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "PayrollPeriodsService#collect": ["periodCollect"],
   "PayrollPeriodsService#readiness": ["periodReadiness"],
   "PayrollPeriodsService#pickAttendancePeriods": ["pickerAttendancePeriods"],
+  // ── S15-PAYROLL-BE-1 (track A) ──
+  "PayrollPeriodsService#timesheet": ["periodTimesheet"],
+  "PayrollEmployeesService#list": ["employeeList"],
+  "PayrollEmployeesService#get": ["employeeDetail"],
+  "PayrollEmployeeSettingsService#get": ["employeeSettingsGet"],
+  "PayrollEmployeeSettingsService#upsert": ["employeeSettingsPut"],
+  "PayrollDependentsService#list": ["employeeDependentList"],
+  "PayrollDependentsService#create": ["employeeDependentCreate"],
+  "PayrollDependentsService#update": ["dependentUpdate"],
   "SalaryProfilesService#list": ["salaryProfileList"],
   "SalaryProfilesService#create": ["salaryProfileCreate"],
   "SalaryProfilesService#get": ["salaryProfileDetail"],
@@ -201,7 +248,9 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(1) bảng fixture phủ ĐÚNG tập route PAYROLL đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 35 route PAYROLL (API-18 §5)").toBe(35);
+    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 43 route PAYROLL (API-18 §5 + §5b)").toBe(
+      43,
+    );
     const seen = new Set(payrollRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -230,8 +279,8 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(3) TẦNG 2 — service: ĐÚNG method dùng ĐÚNG key (map pin, không chỉ đếm)", () => {
     const calls = serviceResolveActorCalls();
-    // 36 = 35 route + literal thứ hai của `PayrollExportService#export` (cặp `view-line`).
-    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(36);
+    // 44 = 43 route + literal thứ hai của `PayrollExportService#export` (cặp `view-line`).
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(44);
     const validKeys = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     expect(
       calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),
@@ -267,7 +316,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     const all = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     const used = new Set(ROUTE_TO_KEY.map((r) => r.key as string));
     const pending = new Set<string>(PAYROLL_PENDING_BE2);
-    expect(all.size, "bảng hằng phải khai đủ 35 route API-18").toBe(35);
+    expect(all.size, "bảng hằng phải khai đủ 43 route API-18").toBe(43);
     expect(
       [...pending].filter((k) => used.has(k)),
       "key ĐÃ có route mà vẫn nằm trong PENDING_BE2",
@@ -280,7 +329,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     // một `ROUTE_TO_KEY` bị xoá sạch cũng thoả cả ba assert trên. Hai neo dưới ghim SỐ LƯỢNG thật của
     // cả bảng hằng lẫn tập key đã nối dây. **Cấm hạ neo để lấy màu xanh.**
     expect(pending.size, "BE-2 đã nối dây hết — PENDING_BE2 phải RỖNG").toBe(0);
-    expect(used.size, "35 key đều phải có route").toBe(35);
+    expect(used.size, "43 key đều phải có route").toBe(43);
   });
 
   it("(6) SÀN SCOPE Company — đúng 3 route /me/payslips* được miễn", () => {
@@ -307,7 +356,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     ]);
   });
 
-  it("(8) cờ sensitive khớp seed mig 0565 — đúng 13 cặp is_sensitive trên 16 cặp có route", () => {
+  it("(8) cờ sensitive khớp seed mig 0565+0571 — đúng 15 cặp is_sensitive trên 18 cặp có route", () => {
     const pairs = Object.values(PAYROLL_ROUTE_PAIRS);
     const sensitive = new Set(
       pairs.filter((p) => p.isSensitive).map((p) => `${p.action}:${p.resourceType}`),
@@ -315,9 +364,11 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     const notSensitive = new Set(
       pairs.filter((p) => !p.isSensitive).map((p) => `${p.action}:${p.resourceType}`),
     );
-    expect(sensitive.size, "13 cặp sensitive (SPEC-11 §11.1)").toBe(13);
-    // 16 cặp CÓ route; cặp thứ 17 `access:payroll` là cổng nav, không gác route nào.
-    expect(sensitive.size + notSensitive.size).toBe(16);
+    expect(sensitive.size, "15 cặp sensitive (SPEC-11 §11.1 + 2 cặp payroll-employee §11.3)").toBe(
+      15,
+    );
+    // 18 cặp CÓ route; cặp `access:payroll` là cổng nav, không gác route nào.
+    expect(sensitive.size + notSensitive.size).toBe(18);
     expect([...notSensitive].sort()).toEqual([
       "acknowledge-own-payslip:payslip",
       "manage:payroll-period",
@@ -327,6 +378,42 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     expect(
       [...sensitive].filter((p) => notSensitive.has(p)),
       "cờ sensitive lệch giữa hai route cùng cặp",
+    ).toEqual([]);
+  });
+
+  /**
+   * S15-PAYROLL-BE-1 — `MONEY_FREE_ROUTES` nở từ 5 lên 13 key. Docblock **không phải cổng**, nên ghim
+   * bằng ĐẲNG THỨC: `toContain` để lọt cả hai chiều sai (thêm nhầm một route CHỞ TIỀN vào set ⇒ mapper
+   * thôi mask; bỏ sót một route không-tiền ⇒ DTO mất trường vô cớ).
+   *
+   * ⚠️ Set này KHÔNG suy ngược được thành "cặp gác route này không chở tiền" — `periodTimesheet` gác
+   * bằng `view-line:payroll-period` (cặp chở-tiền ở route KHÁC) mà payload là số NGÀY. Ai sửa danh
+   * sách phải đọc `PayrollAccessService.MONEY_FREE_ROUTES` JSDoc trước.
+   */
+  it("(9) MONEY_FREE_ROUTES là danh sách ĐÓNG — đẳng thức, không `toContain`", () => {
+    const declared = [...PayrollAccessService.MONEY_FREE_ROUTES].sort();
+    expect(declared).toEqual(
+      [
+        "dependentUpdate",
+        "employeeDependentCreate",
+        "employeeDependentList",
+        "employeeDetail",
+        "employeeList",
+        "employeeSettingsGet",
+        "employeeSettingsPut",
+        "periodCreate",
+        "periodDetail",
+        "periodList",
+        "periodTimesheet",
+        "periodUpdate",
+        "pickerAttendancePeriods",
+      ].sort(),
+    );
+    // Mọi key trong set phải là route THẬT — key chết ở đây là mask im lặng cho một route không tồn tại.
+    const all = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
+    expect(
+      declared.filter((k) => !all.has(k)),
+      "key lạ trong MONEY_FREE_ROUTES",
     ).toEqual([]);
   });
 });

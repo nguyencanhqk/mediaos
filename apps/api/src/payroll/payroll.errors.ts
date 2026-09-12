@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException, UnprocessableEntityException } fr
 import type { ErrorDetail } from "@mediaos/contracts";
 import {
   PG_CHECK_VIOLATION,
+  PG_EXCLUSION_VIOLATION,
   PG_FK_VIOLATION,
   PG_UNIQUE_VIOLATION,
   pgErrorCode,
@@ -55,6 +56,20 @@ export const PAYROLL_ERR_CODE = {
   EXPORT_LIMIT: "PAYROLL-ERR-016",
   /** 422 — không có người duyệt hợp lệ (chặn ở `submit`, không để kỳ kẹt ở `Reviewing`). */
   NO_ELIGIBLE_APPROVER: "PAYROLL-ERR-017",
+  /**
+   * 422 — **S15-PAYROLL-BE-1**. SPEC-11 §12.1 cấp 018 cho "tham chiếu không hợp lệ lúc LƯU". BE-1 dùng
+   * nó cho `salary_profile_items[].componentCode` với **`kind` RIÊNG**, KHÔNG mượn `formula-unknown-ref`:
+   * §12.1 chia mã theo THỜI ĐIỂM và `:709` nói rõ mục đích là để FE biết mở **editor công thức** hay mở
+   * **hồ sơ lương**. Hai `kind` của BE-1 — `profile-item-unknown-component` · `profile-item-wrong-type`.
+   * (BE-2 sẽ thêm các `kind` công thức thật: `formula-syntax`/`formula-unknown-ref`/…)
+   */
+  FORMULA_INVALID: "PAYROLL-ERR-018",
+  /**
+   * 409 — **S15-PAYROLL-BE-1**. Hai bản ghi người phụ thuộc **chồng lấp khoảng hiệu lực** cho cùng một
+   * NPT. Chốt cuối `EXCLUDE USING gist` ở DB (`payroll_dependents_no_overlap_excl`) ném **`23P01`**,
+   * KHÔNG phải `23505` ⇒ map race thành 409, không 500 (SPEC-11 §12.1 mã 032).
+   */
+  DEPENDENT_OVERLAP: "PAYROLL-ERR-032",
 } as const;
 
 export type PayrollErrKey = keyof typeof PAYROLL_ERR_CODE;
@@ -113,6 +128,33 @@ export const PAYROLL_ERR = {
     "PAYROLL-ERR-001: trạng thái kỳ lương và vết duyệt không khớp nhau — tải lại kỳ rồi thử lại.",
   NO_ELIGIBLE_APPROVER:
     "PAYROLL-ERR-017: công ty chưa có người duyệt hợp lệ nào khác bạn — gán vai trò cho người tính lương hoặc thêm quản trị viên thứ hai.",
+  /**
+   * S15-PAYROLL-BE-1 — 🔻 **nợ từ DB-1**. Hồ sơ lương DI SẢN mang mã `PC_nnn` do backfill mig `0570`
+   * sinh (DB-13 §12.2.a), NGOÀI catalog `salary_components` vì lúc backfill chạy thì catalog chưa tồn
+   * tại (nó seed RUNTIME). Đường ĐỌC trả nguyên kèm `note`; đường GHI từ chối tại đây và **hướng người
+   * dùng chọn mã catalog thật** — thông điệp phải nói được PHẢI LÀM GÌ, không chỉ "sai".
+   */
+  PROFILE_ITEM_UNKNOWN_COMPONENT: (codes: string) =>
+    `PAYROLL-ERR-018: mã thành phần lương không có trong danh mục: ${codes}. Chọn lại mã từ danh mục thành phần lương của công ty (hồ sơ cũ chuyển đổi từ bản trước có thể mang mã tạm cần thay).`,
+  /**
+   * Thành phần CÓ trong catalog nhưng SAI LOẠI. Đây là chốt chặn một lớp lỗi TIỀN thật, không phải
+   * khắt khe thừa: `salary_profiles.allowances` là đầu vào tính lương v1 và `payroll-calc.repository.ts`
+   * cộng MỌI phần tử của nó vào `gross` — nhận một thành phần `tax`/`deduction` vào `items[]` là
+   * **CỘNG** tiền thuế cho nhân viên thay vì trừ.
+   */
+  PROFILE_ITEM_WRONG_TYPE: (codes: string) =>
+    `PAYROLL-ERR-018: mã thành phần lương không thuộc loại cấp theo hồ sơ: ${codes}. Chỉ thành phần có "giá trị theo hồ sơ lương" mới đặt được định mức ở đây.`,
+  DEPENDENT_OVERLAP:
+    "PAYROLL-ERR-032: người phụ thuộc này đã có bản ghi trùng khoảng thời gian hiệu lực — chỉnh lại ngày bắt đầu/kết thúc để hai khoảng không chồng nhau.",
+  /**
+   * Cặp ngân hàng KHÔNG đủ sau khi MERGE (039 là upsert từng phần). Thông điệp **không bao giờ** nhắc
+   * lại số tài khoản — đây đúng là đường mà security review bắt được rò PII qua message lỗi.
+   */
+  BANK_PAIR_INCOMPLETE:
+    "PAYROLL-ERR-018: có số tài khoản thì phải có CẢ tên ngân hàng lẫn tên chủ tài khoản — nếu muốn xoá tài khoản, gửi số tài khoản rỗng (null) cùng lượt.",
+  /** Mã 014 — `kind` thứ HAI (SPEC-11 §12 hàng 014): hai dòng `items[]` cùng `component_code`. */
+  PROFILE_ITEM_DUPLICATE:
+    "PAYROLL-ERR-014: một thành phần lương chỉ được khai một dòng trong cùng phiên bản hồ sơ.",
 } as const;
 
 /** `details.kind` = phần tử `{field:'kind'}`; các cặp phụ thêm sau — **không bao giờ là số tiền**. */
@@ -188,6 +230,16 @@ export function mapPayrollPgError(err: unknown): Error | null {
         payrollDetails("effective-date-exists"),
       );
     }
+    // S15-PAYROLL-BE-1 — hai dòng `items[]` cùng `component_code` trong MỘT phiên bản. SPEC-11 §12
+    // hàng 014 chốt: cấp `kind` MỚI trên mã CŨ (cùng đối tượng nghiệp vụ), không cấp mã mới — và một
+    // unique KHÔNG có `kind` là "500 trá hình".
+    if (c.includes("salary_profile_items_profile_component_uq")) {
+      return payrollConflict(
+        "SALARY_EFFECTIVE_EXISTS",
+        PAYROLL_ERR.PROFILE_ITEM_DUPLICATE,
+        payrollDetails("profile-item-duplicate"),
+      );
+    }
     // S13-PAYROLL-BE-2 nối dây hai nhánh dưới CÙNG với ca test đi qua chúng (BE-1 cố ý để trống vì
     // không route nào của nó ghi vào hai bảng này — nhánh map khi đó là code chết).
     if (c.includes("payslips_period_user_uq")) {
@@ -231,6 +283,28 @@ export function mapPayrollPgError(err: unknown): Error | null {
         payrollDetails("trail-pair-violation", { constraint: c }),
       );
     }
+    // 🩹 S15-PAYROLL-BE-1 (security review HIGH #2) — BA CHECK của v2 trước đó KHÔNG có nhánh nào ⇒
+    // rơi `null` ⇒ service ném thẳng `DrizzleQueryError` ⇒ **500 vùng đỏ**. Với
+    // `payroll_employee_settings_bank_pair_check` thì nặng hơn một bậc: message của drizzle là
+    // `Failed query: … params: …`, nên **SỐ TÀI KHOẢN ĐẦY ĐỦ đi vào log** khi filter ghi `stack` cho 5xx.
+    // Service đã tiền-kiểm trên hàng SAU MERGE; ba nhánh dưới là lưới cuối cho RACE/đường gọi nội bộ.
+    if (c.includes("payroll_employee_settings_bank_pair_check")) {
+      return payrollUnprocessable(
+        "FORMULA_INVALID",
+        PAYROLL_ERR.BANK_PAIR_INCOMPLETE,
+        payrollDetails("bank-pair-incomplete"),
+      );
+    }
+    if (c.includes("payroll_dependents_period_check")) {
+      return payrollConflict(
+        "DEPENDENT_OVERLAP",
+        PAYROLL_ERR.DEPENDENT_OVERLAP,
+        payrollDetails("dependent-overlap", { reason: "effective-to-before-from" }),
+      );
+    }
+    // `salary_profile_items_amount_check` (amount >= 0): Zod `.nonnegative()` mirror ĐÚNG BẰNG nên tới
+    // được đây là payload lách tầng validate ⇒ 400 hình thức, cùng luật `payroll_period_lines_adjustment_check`.
+    if (c.includes("salary_profile_items_amount_check")) return null;
     if (c === "") {
       // Không tên ⇒ trigger `enforce_bonus_penalty_freeze` (luật 3 ở JSDoc trên).
       return payrollConflict(
@@ -258,9 +332,26 @@ export function mapPayrollPgError(err: unknown): Error | null {
     if (
       c.includes("salary_profiles_user_id") ||
       c.includes("bonus_penalties_user_id") ||
-      c.includes("payslips_user_id")
+      c.includes("payslips_user_id") ||
+      // S15-PAYROLL-BE-1 — ba bảng mới neo `user_id`; cùng luật sentinel với ba bảng trên (không tồn
+      // tại VÀ khác tenant phải trả CÙNG một phản hồi, kẻo dựng oracle "user này có thật ở đâu đó").
+      c.includes("payroll_employee_settings_user_id") ||
+      c.includes("payroll_dependents_user_id")
     ) {
       return payrollNotFound();
+    }
+    return null;
+  }
+  // S15-PAYROLL-BE-1 — `EXCLUDE USING gist` ném `23P01`, KHÔNG nằm trong ba mã trên. Service đã
+  // tiền-kiểm chồng lấp, nên tới được đây là RACE hai request chen nhau ⇒ 409, tuyệt đối không 500.
+  if (code === PG_EXCLUSION_VIOLATION) {
+    const c = pgErrorField(err, "constraint") ?? "";
+    if (c.includes("payroll_dependents_no_overlap_excl")) {
+      return payrollConflict(
+        "DEPENDENT_OVERLAP",
+        PAYROLL_ERR.DEPENDENT_OVERLAP,
+        payrollDetails("dependent-overlap"),
+      );
     }
     return null;
   }

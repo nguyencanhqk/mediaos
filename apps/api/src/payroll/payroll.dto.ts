@@ -4,9 +4,14 @@ import {
   approveBonusPenaltySchema,
   bonusPenaltyListQuerySchema,
   createBonusPenaltySchema,
+  createPayrollDependentSchema,
   createPayrollPeriodSchema,
   createSalaryProfileSchema,
   mePayslipListQuerySchema,
+  payrollEmployeeListQuerySchema,
+  payrollTimesheetQuerySchema,
+  putPayrollEmployeeSettingsSchema,
+  updatePayrollDependentSchema,
   payrollAttendancePeriodPickerQuerySchema,
   payrollExportQuerySchema,
   payrollLineListQuerySchema,
@@ -55,3 +60,10 @@ export class ListPayrollLinesQueryDto extends createZodDto(payrollLineListQueryS
 export class PayrollExportQueryDto extends createZodDto(payrollExportQuerySchema) {}
 export class ListPayslipsQueryDto extends createZodDto(payslipListQuerySchema) {}
 export class ListMePayslipsQueryDto extends createZodDto(mePayslipListQuerySchema) {}
+
+// ── S15-PAYROLL-BE-1 (track A · PAYROLL-API-036..043) ───────────────────────────────────────────
+export class ListPayrollEmployeesQueryDto extends createZodDto(payrollEmployeeListQuerySchema) {}
+export class PutPayrollEmployeeSettingsDto extends createZodDto(putPayrollEmployeeSettingsSchema) {}
+export class CreatePayrollDependentDto extends createZodDto(createPayrollDependentSchema) {}
+export class UpdatePayrollDependentDto extends createZodDto(updatePayrollDependentSchema) {}
+export class PayrollTimesheetQueryDto extends createZodDto(payrollTimesheetQuerySchema) {}

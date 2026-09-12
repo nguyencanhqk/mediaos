@@ -10,9 +10,15 @@ import type {
   PayslipDto,
   PayslipItemDto,
   SalaryProfileDto,
+  SalaryProfileItemDto,
   SalaryProfileListItemDto,
 } from "@mediaos/contracts";
-import type { BonusPenalty, PayrollPeriod, SalaryProfile } from "../db/schema/payroll";
+import type {
+  BonusPenalty,
+  PayrollPeriod,
+  SalaryProfile,
+  SalaryProfileItem,
+} from "../db/schema/payroll";
 import type { PayrollActor } from "./payroll.types";
 
 /**
@@ -41,7 +47,33 @@ const iso = (v: Date | string | null | undefined): string | null => {
 const when = <T extends object>(cond: boolean, obj: T): T | Record<string, never> =>
   cond ? obj : {};
 
-export function toSalaryProfileDto(row: SalaryProfile, actor: PayrollActor): SalaryProfileDto {
+/**
+ * S15-PAYROLL-BE-1 — dòng `items[]` đọc ra. `componentName`/`kind` `null` khi mã NGOÀI catalog: hồ sơ
+ * DI SẢN mang mã `PC_nnn` do backfill mig `0570` sinh (DB-13 §12.2.a). Trả nguyên kèm `note` (giữ tên
+ * gốc) — **lọc bỏ dòng không chiếu được là mất dòng im lặng**, đúng thứ nợ DB-1 cấm.
+ */
+export function toSalaryProfileItemDto(
+  row: SalaryProfileItem,
+  catalog: Map<string, { name: string; kind: string }>,
+  canSeeMoney: boolean,
+): SalaryProfileItemDto {
+  const c = catalog.get(row.componentCode);
+  return {
+    id: row.id,
+    componentCode: row.componentCode,
+    componentName: c?.name ?? null,
+    kind: (c?.kind as SalaryProfileItemDto["kind"]) ?? null,
+    ...when(canSeeMoney, { amount: num(row.amount) }),
+    isActive: row.isActive,
+    note: row.note,
+  } as SalaryProfileItemDto;
+}
+
+export function toSalaryProfileDto(
+  row: SalaryProfile,
+  actor: PayrollActor,
+  items?: { rows: readonly SalaryProfileItem[]; catalog: Map<string, { name: string; kind: string }> },
+): SalaryProfileDto {
   return {
     id: row.id,
     companyId: row.companyId,
@@ -49,8 +81,27 @@ export function toSalaryProfileDto(row: SalaryProfile, actor: PayrollActor): Sal
     effectiveDate: String(row.effectiveDate),
     ...when(actor.canSeeMoney, {
       baseSalary: num(row.baseSalary),
+      // GIỮ trong suốt expand-contract — đọc THẲNG cột, KHÔNG tính lại từ `items[]` (§3.2 của plan).
       allowances: (row.allowances ?? []) as Allowance[],
+      ...(row.insuranceSalary !== null && row.insuranceSalary !== undefined
+        ? { insuranceSalary: num(row.insuranceSalary) }
+        : {}),
+      ...(row.probationSalary !== null && row.probationSalary !== undefined
+        ? { probationSalary: num(row.probationSalary) }
+        : {}),
     }),
+    ...(items
+      ? {
+          items: items.rows.map((r) =>
+            toSalaryProfileItemDto(r, items.catalog, actor.canSeeMoney),
+          ),
+        }
+      : {}),
+    ...(row.salaryType ? { salaryType: row.salaryType as SalaryProfileDto["salaryType"] } : {}),
+    ...(row.pitPayer ? { pitPayer: row.pitPayer as SalaryProfileDto["pitPayer"] } : {}),
+    ...(row.payRatioPct !== null && row.payRatioPct !== undefined
+      ? { payRatioPct: num(row.payRatioPct) }
+      : {}),
     note: row.note,
     createdAt: iso(row.createdAt) as string,
     updatedAt: iso(row.updatedAt) as string,
@@ -69,6 +120,8 @@ export function toSalaryProfileListItem(
       baseSalary: num(row.baseSalary),
       allowances: (row.allowances ?? []) as Allowance[],
     }),
+    ...(row.salaryType ? { salaryType: row.salaryType as SalaryProfileDto["salaryType"] } : {}),
+    ...(row.pitPayer ? { pitPayer: row.pitPayer as SalaryProfileDto["pitPayer"] } : {}),
   } as SalaryProfileListItemDto;
 }
 

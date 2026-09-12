@@ -7,7 +7,8 @@
  *  2. **Gate màn = gate đường tải** — mọi lối vào PAYROLL đòi ĐỦ `access:payroll` + cặp của route đó
  *     (`read-path-gate-pair-must-match-download-pair`).
  *  3. **«Phiếu lương của tôi» KHÔNG sau cổng payroll** — route/sidebar ME, gate `access:me`.
- *  4. **13 cặp sensitive** — không cặp nào lọt lưới, và cặp gác MÀN phải nằm trong allowlist BE.
+ *  4. **15 cặp sensitive** (13 của mig `0565` + 2 cặp `payroll-employee` của mig `0571`) — không cặp
+ *     nào lọt lưới, và cặp gác MÀN phải nằm trong allowlist BE.
  */
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
@@ -35,8 +36,9 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
     beEntries.set(key, { action, resourceType, isSensitive: isSensitive === "true" });
   }
 
-  it("đọc được đủ 35 route pair từ file BE (regex census không mù)", () => {
-    expect(beEntries.size).toBe(35);
+  it("đọc được đủ 43 route pair từ file BE (regex census không mù)", () => {
+    // S15-PAYROLL-BE-1: +8 route track A (036–043) ⇒ 35 → 43.
+    expect(beEntries.size).toBe(43);
   });
 
   it("mỗi khoá PAYROLL_ENGINE_PAIRS khớp ĐÚNG action/resourceType/isSensitive của BE", () => {
@@ -49,11 +51,11 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
     }
   });
 
-  it("không thiếu/thừa khoá nào so với BE (35 = 35)", () => {
+  it("không thiếu/thừa khoá nào so với BE (43 = 43)", () => {
     expect(Object.keys(PAYROLL_ENGINE_PAIRS).sort()).toEqual([...beEntries.keys()].sort());
   });
 
-  it("ĐÚNG 13 cặp DISTINCT is_sensitive (mig 0565) — không cặp nào lọt lưới", () => {
+  it("ĐÚNG 15 cặp DISTINCT is_sensitive (mig 0565 + 0571) — không cặp nào lọt lưới", () => {
     const sensitive = new Set(
       Object.values(PAYROLL_ENGINE_PAIRS)
         .filter((p) => p.isSensitive)
@@ -66,12 +68,14 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
         "calculate:payroll-period",
         "export:payroll",
         "manage:bonus-penalty",
+        "manage:payroll-employee",
         "manage:salary-profile",
         "publish:payroll-period",
         "reopen:payroll-period",
         "view-line:payroll-period",
         "view-own-payslip:payslip",
         "view-payslip:payslip",
+        "view:payroll-employee",
         "view:bonus-penalty",
         "view:salary-profile",
       ].sort(),
@@ -92,10 +96,11 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
     const distinct = new Set(
       Object.values(PAYROLL_ENGINE_PAIRS).map((p) => `${p.action}:${p.resourceType}`),
     );
-    expect(distinct.size).toBe(16);
+    // S15-PAYROLL-BE-1: +2 cặp `payroll-employee` ⇒ 16 → 18 cặp distinct có route.
+    expect(distinct.size).toBe(18);
   });
 
-  it("13 cặp sensitive ĐỀU có trong SENSITIVE_CAPABILITY_ALLOWLIST của BE", () => {
+  it("15 cặp sensitive ĐỀU có trong SENSITIVE_CAPABILITY_ALLOWLIST của BE", () => {
     // Thiếu một cặp trong allowlist ⇒ /auth/me không trả nó ⇒ màn/nút biến mất với ĐÚNG vai được cấp
     // quyền, im lặng (`capability-allowlist-hides-admin-screens`).
     const permSrc = fs.readFileSync(

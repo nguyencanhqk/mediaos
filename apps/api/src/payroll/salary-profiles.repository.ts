@@ -1,7 +1,13 @@
 import { Injectable } from "@nestjs/common";
-import { and, count, desc, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, lte, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
-import { salaryProfiles, type SalaryProfile } from "../db/schema/payroll";
+import {
+  salaryComponents,
+  salaryProfileItems,
+  salaryProfiles,
+  type SalaryProfile,
+  type SalaryProfileItem,
+} from "../db/schema/payroll";
 import type { Allowance } from "@mediaos/contracts";
 
 export interface SalaryProfileListFilter {
@@ -132,8 +138,14 @@ export class SalaryProfilesRepository {
       userId: string;
       effectiveDate: string;
       baseSalary: number;
+      /** Mirror cho máy tính lương v1 — service dựng, đã LỌC theo `value_type`/`isActive` (§3.2). */
       allowances: Allowance[];
       note: string | null;
+      salaryType?: string;
+      pitPayer?: string;
+      insuranceSalary?: number | null;
+      probationSalary?: number | null;
+      payRatioPct?: number;
     },
     actorUserId: string,
   ): Promise<SalaryProfile> {
@@ -147,6 +159,15 @@ export class SalaryProfilesRepository {
         baseSalary: input.baseSalary.toFixed(2),
         allowances: input.allowances,
         note: input.note,
+        ...(input.salaryType !== undefined ? { salaryType: input.salaryType } : {}),
+        ...(input.pitPayer !== undefined ? { pitPayer: input.pitPayer } : {}),
+        ...(input.insuranceSalary !== undefined
+          ? { insuranceSalary: input.insuranceSalary === null ? null : input.insuranceSalary.toFixed(2) }
+          : {}),
+        ...(input.probationSalary !== undefined
+          ? { probationSalary: input.probationSalary === null ? null : input.probationSalary.toFixed(2) }
+          : {}),
+        ...(input.payRatioPct !== undefined ? { payRatioPct: input.payRatioPct.toFixed(2) } : {}),
         createdBy: actorUserId,
         updatedBy: actorUserId,
       })
@@ -163,6 +184,11 @@ export class SalaryProfilesRepository {
       baseSalary?: number;
       allowances?: Allowance[];
       note?: string | null;
+      salaryType?: string;
+      pitPayer?: string;
+      insuranceSalary?: number | null;
+      probationSalary?: number | null;
+      payRatioPct?: number;
     },
     actorUserId: string,
   ): Promise<SalaryProfile | null> {
@@ -171,6 +197,17 @@ export class SalaryProfilesRepository {
     if (patch.baseSalary !== undefined) set["baseSalary"] = patch.baseSalary.toFixed(2);
     if (patch.allowances !== undefined) set["allowances"] = patch.allowances;
     if (patch.note !== undefined) set["note"] = patch.note;
+    if (patch.salaryType !== undefined) set["salaryType"] = patch.salaryType;
+    if (patch.pitPayer !== undefined) set["pitPayer"] = patch.pitPayer;
+    if (patch.insuranceSalary !== undefined) {
+      set["insuranceSalary"] =
+        patch.insuranceSalary === null ? null : patch.insuranceSalary.toFixed(2);
+    }
+    if (patch.probationSalary !== undefined) {
+      set["probationSalary"] =
+        patch.probationSalary === null ? null : patch.probationSalary.toFixed(2);
+    }
+    if (patch.payRatioPct !== undefined) set["payRatioPct"] = patch.payRatioPct.toFixed(2);
     const [row] = await tx
       .update(salaryProfiles)
       .set(set)
@@ -198,8 +235,117 @@ export class SalaryProfilesRepository {
   static effectiveOnCond(onDate: string) {
     return lte(salaryProfiles.effectiveDate, onDate);
   }
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // S15-PAYROLL-BE-1 — `salary_profile_items` (EXPAND-CONTRACT thay cột `allowances` jsonb)
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Tra catalog cho tập `component_code` — **MỘT câu**, trả đủ `name`/`kind`/`valueType` để dùng lại
+   * cho CẢ ba việc: validate · mirror `allowances` (cần `name`) · dựng DTO đọc (cần `name` + `kind`).
+   * Chạy hai câu riêng cho cùng dữ liệu là đường để hai bên lệch nhau.
+   *
+   * ⚠️ **KHÔNG lọc `is_active`** — thành phần đã ngưng dùng vẫn hợp lệ để hồ sơ CŨ tham chiếu; chỉ mã
+   * **không tồn tại / đã xoá mềm** mới là lỗi. Lọc `is_active` ở đây sẽ làm mọi hồ sơ cũ trở nên
+   * không-lưu-lại-được ngay khi HR ngưng một phụ cấp.
+   */
+  async componentsByCodeTx(
+    tx: TenantTx,
+    companyId: string,
+    codes: readonly string[],
+  ): Promise<Map<string, { name: string; kind: string; valueType: string }>> {
+    const out = new Map<string, { name: string; kind: string; valueType: string }>();
+    const uniq = [...new Set(codes)];
+    if (uniq.length === 0) return out;
+    const rows = await tx
+      .select({
+        code: salaryComponents.code,
+        name: salaryComponents.name,
+        kind: salaryComponents.kind,
+        valueType: salaryComponents.valueType,
+      })
+      .from(salaryComponents)
+      .where(
+        and(
+          eq(salaryComponents.companyId, companyId),
+          isNull(salaryComponents.deletedAt),
+          // `sql.param` cho mảng — drizzle không tự bind `text[]` (memory `drizzle-array-bind-sql-param`).
+          sql`${salaryComponents.code} = ANY(${sql.param(uniq)})`,
+        ),
+      );
+    for (const r of rows) out.set(r.code, { name: r.name, kind: r.kind, valueType: r.valueType });
+    return out;
+  }
+
+  /** Đọc `items[]` của MỘT phiên bản, kèm chiếu catalog (`null` khi mã ngoài catalog — hồ sơ di sản). */
+  async listItemsTx(
+    tx: TenantTx,
+    companyId: string,
+    salaryProfileId: string,
+  ): Promise<SalaryProfileItem[]> {
+    return tx
+      .select()
+      .from(salaryProfileItems)
+      .where(
+        and(
+          eq(salaryProfileItems.companyId, companyId),
+          eq(salaryProfileItems.salaryProfileId, salaryProfileId),
+          isNull(salaryProfileItems.deletedAt),
+        ),
+      )
+      .orderBy(asc(salaryProfileItems.componentCode));
+  }
+
+  /**
+   * **ĐẶT LẠI TOÀN BỘ** tập items của một phiên bản, trong CÙNG transaction của caller.
+   *
+   * Xoá mềm hàng cũ TRƯỚC rồi INSERT hàng mới là an toàn với unique PARTIAL
+   * `salary_profile_items_profile_component_uq … WHERE deleted_at IS NULL`: hàng cũ đã "chết" nên không
+   * còn trong phạm vi index khi hàng mới sinh. Hai dòng cùng `component_code` TRONG payload mới vẫn
+   * đụng unique ⇒ `23505` → **409 PAYROLL-ERR-014** `profile-item-duplicate` (chốt cuối ở DB, không
+   * phải vòng lặp kiểm ở JS).
+   */
+  async replaceItemsTx(
+    tx: TenantTx,
+    companyId: string,
+    salaryProfileId: string,
+    items: readonly { componentCode: string; amount: number; isActive: boolean; note?: string }[],
+    actorUserId: string,
+  ): Promise<void> {
+    await tx
+      .update(salaryProfileItems)
+      .set({ deletedAt: sql`now()`, deletedBy: actorUserId, updatedBy: actorUserId })
+      .where(
+        and(
+          eq(salaryProfileItems.companyId, companyId),
+          eq(salaryProfileItems.salaryProfileId, salaryProfileId),
+          isNull(salaryProfileItems.deletedAt),
+        ),
+      );
+    if (items.length === 0) return;
+    await tx.insert(salaryProfileItems).values(
+      items.map((it) => ({
+        companyId,
+        salaryProfileId,
+        componentCode: it.componentCode,
+        // numeric(18,2) — gửi CHUỖI, không để JS float đi vào cột tiền (cùng luật `base_salary`).
+        amount: it.amount.toFixed(2),
+        isActive: it.isActive,
+        note: it.note ?? null,
+        createdBy: actorUserId,
+        updatedBy: actorUserId,
+      })),
+    );
+  }
 }
 
+/**
+ * ⚠️ **Interface này PHẢI phủ ĐỦ cột của `salary_profiles`.** Nó là bản đồ tay cho `tx.execute` (raw
+ * snake_case), và `fromRaw` ép kiểu `as SalaryProfile` nên **trình biên dịch KHÔNG bắt được cột
+ * thiếu**. Cột nào quên ở đây thì nhánh `effectiveOn` của `listTx` trả DTO **thiếu trường trong im
+ * lặng**, còn nhánh không-`effectiveOn` lại trả đủ — cùng một route, hai hành vi (silent-failure
+ * review S15-PAYROLL-BE-1, HIGH #1). Thêm cột vào bảng ⇒ thêm vào ĐÂY và vào `fromRaw` CÙNG LƯỢT.
+ */
 interface RawSalaryRow {
   id: string;
   company_id: string;
@@ -207,6 +353,12 @@ interface RawSalaryRow {
   effective_date: string;
   base_salary: string;
   allowances: unknown;
+  // ── v2 (mig 0570) ──
+  salary_type: string | null;
+  pit_payer: string | null;
+  insurance_salary: string | null;
+  probation_salary: string | null;
+  pay_ratio_pct: string | null;
   note: string | null;
   created_at: string;
   created_by: string | null;
@@ -225,6 +377,11 @@ function fromRaw(r: RawSalaryRow): SalaryProfile {
     effectiveDate: r.effective_date,
     baseSalary: r.base_salary,
     allowances: r.allowances,
+    salaryType: r.salary_type,
+    pitPayer: r.pit_payer,
+    insuranceSalary: r.insurance_salary,
+    probationSalary: r.probation_salary,
+    payRatioPct: r.pay_ratio_pct,
     note: r.note,
     createdAt: new Date(r.created_at),
     createdBy: r.created_by,

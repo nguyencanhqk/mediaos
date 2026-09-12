@@ -358,11 +358,22 @@ describe.skipIf(!hasLaneDb)(
       expect(p.status, JSON.stringify(p.body)).toBe(201);
       periodId = p.body.data.id;
 
+      // S15-PAYROLL-BE-1 — 020 nhận `items[]` (KHÔNG còn `allowances`). Catalog company-scoped seed
+      // RUNTIME nên int-spec tự INSERT: mã phải có `value_type='profile_item'`, nếu không service ném
+      // 422 018 `profile-item-wrong-type` (chốt chặn bơm tiền vào `gross`).
+      // ⚠️ CẤM mã dạng `PC_*` ở seed catalog — đó là dải mã của backfill di sản; seed nhầm vào đây làm
+      // ca "hồ sơ di sản lưu lại y nguyên ⇒ 422" thành xanh RỖNG.
+      await direct.query(
+        `INSERT INTO salary_components (company_id, code, name, kind, value_type, is_system, is_active)
+         VALUES ($1,'PHUCAP_TRUA','Phụ cấp ăn trưa','earning','profile_item',false,true)`,
+        [A.companyId],
+      );
+
       const sp = await post(tFull, "/salary-profiles").send({
         userId: subjectUserId,
         effectiveDate: "2027-06-01",
         baseSalary: 15_000_000,
-        allowances: [{ name: "Ăn trưa", amount: 730_000 }],
+        items: [{ componentCode: "PHUCAP_TRUA", amount: 730_000 }],
       });
       expect(sp.status, JSON.stringify(sp.body)).toBe(201);
       salaryProfileId = sp.body.data.id;
@@ -501,7 +512,43 @@ describe.skipIf(!hasLaneDb)(
       const sp = await get(tFull, `/salary-profiles/${salaryProfileId}`);
       expect(sp.status).toBe(200);
       expect(sp.body.data.baseSalary).toBe(15_000_000);
-      expect(sp.body.data.allowances).toEqual([{ name: "Ăn trưa", amount: 730_000 }]);
+      // `items[]` = nguồn CANONICAL của v2; `allowances` = MIRROR cho máy tính lương v1, `name` lấy
+      // TỪ CATALOG (không phải chuỗi client gửi) — hai nguồn phải khớp sau mỗi lượt ghi.
+      expect(sp.body.data.items).toEqual([
+        expect.objectContaining({
+          componentCode: "PHUCAP_TRUA",
+          componentName: "Phụ cấp ăn trưa",
+          kind: "earning",
+          amount: 730_000,
+          isActive: true,
+        }),
+      ]);
+      expect(sp.body.data.allowances).toEqual([{ name: "Phụ cấp ăn trưa", amount: 730_000 }]);
+    });
+
+    /**
+     * 🔴 **B2 (plan-review vòng 1) — hồi quy `.strict()` của `createSalaryProfileSchema`.**
+     * Trước bản vá, schema tạo hồ sơ lương KHÔNG `.strict()` ⇒ client cũ gửi `allowances` nhận **201
+     * với 0 phụ cấp**: mất tiền, không lỗi (`empty-success-is-the-fail-open-shape`). Sau vá, khoá cũ
+     * phải bị TỪ CHỐI tường minh để người dùng biết phải đổi sang `items[]`.
+     */
+    it("E1b — 020 TỪ CHỐI khoá `allowances` cũ (400), KHÔNG nuốt im lặng", async () => {
+      const res = await post(tFull, "/salary-profiles").send({
+        userId: subjectUserId,
+        effectiveDate: "2027-09-01",
+        baseSalary: 12_000_000,
+        allowances: [{ name: "Ăn trưa", amount: 730_000 }],
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(400);
+      expect(res.body.error.code).toBe("VALIDATION-ERR-001");
+      // Ca ALLOW đối chứng NGAY CẠNH: cùng payload nhưng dùng `items[]` ⇒ 201 (không phải "mọi thứ 400").
+      const ok = await post(tFull, "/salary-profiles").send({
+        userId: subjectUserId,
+        effectiveDate: "2027-09-01",
+        baseSalary: 12_000_000,
+        items: [{ componentCode: "PHUCAP_TRUA", amount: 730_000 }],
+      });
+      expect(ok.status, JSON.stringify(ok.body)).toBe(201);
     });
 
     it("E2 — route GHI `collect` trả envelope KHÔNG khoá tiền (cửa sau của cặp `calculate`)", async () => {

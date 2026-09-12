@@ -17,6 +17,12 @@ import { periodMonthSchema } from "./attendance";
  *
  * VND duy nhất ⇒ KHÔNG có trường `currency` nào (mọi cột `currency` đã GỠ ở `0564`).
  * Tiền là `numeric(18,2)` ở DB; DTO dùng `number` sau khi server đã làm tròn — tính toán/clamp Ở SQL.
+ *
+ * ⚠️ **FILE ĐANG SÁT TRẦN (795/800 dòng — CLAUDE.md §5) sau `S15-PAYROLL-BE-1`.** WO kế tiếp thêm DTO
+ * cho PAYROLL **PHẢI TÁCH FILE TRƯỚC**, đừng nhồi thêm rồi hạ trần. Đường tách sạch nhất: khối §2
+ * (hồ sơ lương + `salary_profile_items`) ra `payroll-salary-profiles.ts` — nó tự chứa, chỉ phụ thuộc
+ * `salaryComponentKindEnum`/`salaryTypeEnum`/`pitPayerEnum` của §1. Track A v2 đã ở
+ * `payroll-employees.ts` (file đó import NGƯỢC từ đây, nên §1 phải ở lại để không tạo vòng import).
  */
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
@@ -26,8 +32,12 @@ import { periodMonthSchema } from "./attendance";
 export const PAYROLL_PAGE_DEFAULT = 20;
 export const PAYROLL_PAGE_MAX = 100;
 
-/** Khuôn `recruitPageQuery` — pagination API-01 §16.1 cho 4 route list của BE-1 + 2 của BE-2. */
-const payrollPageQuery = {
+/**
+ * Khuôn `recruitPageQuery` — pagination API-01 §16.1 cho 4 route list của BE-1 + 2 của BE-2.
+ * **Export từ `S15-PAYROLL-BE-1`** để `payroll-employees.ts` dùng CHUNG, không nhân bản trần/mặc định
+ * (hai bản sao lệch nhau là hai hành vi phân trang khác nhau trên cùng một module).
+ */
+export const payrollPageQuery = {
   page: z.coerce.number().int().min(1).default(1),
   per_page: z.coerce.number().int().min(1).max(PAYROLL_PAGE_MAX).default(PAYROLL_PAGE_DEFAULT),
 };
@@ -172,6 +182,58 @@ export type InputSnapshot = z.infer<typeof inputSnapshotSchema>;
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 
 /**
+ * Trần độ dài mã thành phần — trần THỰC DỤNG cho mã người dùng gõ (DB để TEXT, không CHECK độ dài);
+ * dài hơn gần như chắc chắn là dán nhầm cả TÊN thành phần vào ô MÃ.
+ */
+export const SALARY_COMPONENT_CODE_MAX = 32;
+
+/**
+ * Trần số dòng `items[]` một hồ sơ lương. Không phải chống DoS (body limit của express đã chặn ~100kb)
+ * mà là chống **khuếch đại ghi** trên route nhạy cảm: `022` ĐẶT LẠI TOÀN BỘ tập item trong MỘT tx, nên
+ * một payload vài nghìn dòng là vài nghìn INSERT cho một thao tác người dùng. 200 dòng/hồ sơ đã rộng
+ * gấp nhiều lần nhu cầu thật (catalog phụ cấp của một công ty hiếm khi quá vài chục mã).
+ */
+export const SALARY_PROFILE_ITEMS_MAX = 200;
+
+/**
+ * Dòng `items[]` khi GHI — payload của `PAYROLL-API-020` / `022` (SPEC-11 §15 hàng 🔁).
+ * `salary_profile_items` **KHÔNG có route riêng** (§15.1) — nó là bảng con của `salary_profiles`.
+ *
+ * ⚠️ **`componentCode` KHÔNG validate hình dạng ở đây.** Mã hợp lệ hay không phụ thuộc **catalog của
+ * công ty** (`salary_components`) — dữ liệu runtime mà Zod không biết. Service kiểm BA điều kiện
+ * (tồn tại · chưa xoá mềm · `value_type = 'profile_item'`) rồi ném **422 PAYROLL-ERR-018**. Nhét một
+ * regex đoán mò ở đây sẽ chặn oan mã hợp lệ và đẻ mã lỗi CHẾT.
+ */
+export const salaryProfileItemInputSchema = z.object({
+  componentCode: z.string().min(1).max(SALARY_COMPONENT_CODE_MAX),
+  /** `>= 0` mirror CHECK `salary_profile_items_amount_check`. */
+  amount: z.number().nonnegative(),
+  isActive: z.boolean().default(true),
+  note: z.string().max(500).optional(),
+});
+export type SalaryProfileItemInput = z.infer<typeof salaryProfileItemInputSchema>;
+
+/**
+ * Dòng `items[]` khi ĐỌC. `amount` NHẠY CẢM ⇒ `.optional()` (vắng khoá khi caller không giữ cặp
+ * chở-tiền). `componentName`/`kind` chiếu từ catalog.
+ *
+ * ⚠️ **`componentName`/`kind` nullable có Ý NGHĨA, không phải lười:** hồ sơ DI SẢN mang mã `PC_nnn` do
+ * backfill mig `0570` sinh (DB-13 §12.2.a) — **ngoài catalog**, không có gì để chiếu. Đường ĐỌC trả
+ * nguyên kèm `note` (giữ tên gốc); đường GHI từ chối 422. Lọc bỏ dòng không chiếu được = **mất dòng
+ * im lặng**, đúng thứ nợ DB-1 cấm.
+ */
+export const salaryProfileItemSchema = z.object({
+  id: z.string().uuid(),
+  componentCode: z.string(),
+  componentName: z.string().nullable(),
+  kind: salaryComponentKindEnum.nullable(),
+  amount: z.number().optional(),
+  isActive: z.boolean(),
+  note: z.string().nullable(),
+});
+export type SalaryProfileItemDto = z.infer<typeof salaryProfileItemSchema>;
+
+/**
  * DTO hồ sơ lương. `baseSalary`/`allowances` là trường NHẠY CẢM ⇒ `.optional()`: caller không giữ
  * `('view','salary-profile')` thì server trả DTO **vắng hai khoá này** (không null, không 0).
  */
@@ -181,7 +243,23 @@ export const salaryProfileSchema = z.object({
   userId: z.string().uuid(),
   effectiveDate: z.string().date(),
   baseSalary: z.number().optional(),
+  /**
+   * 🔻 **GIỮ trong suốt EXPAND-CONTRACT (S15-PAYROLL-BE-1).** `items[]` là nguồn CANONICAL của v2,
+   * nhưng cột `allowances` vẫn là **đầu vào tính lương v1** (`payroll-calc.repository.ts` cộng mọi
+   * phần tử vào `gross`) nên chưa gỡ được. Đường GHI của BE-1 giữ hai nguồn đồng bộ; hồ sơ CHƯA qua
+   * đường ghi v2 có thể có `allowances` mà **0 `items`** — đường đọc trả NGUYÊN cả hai, **KHÔNG hoà
+   * giải** (hoà giải lúc đọc là đẻ nguồn sự thật thứ ba). CONTRACT (gỡ cột) là WO SAU.
+   */
   allowances: z.array(allowanceSchema).optional(),
+  /** v2 — `salary_profile_items`; nhạy cảm ⇒ `.optional()` cùng luật với `baseSalary`. */
+  items: z.array(salaryProfileItemSchema).optional(),
+  /** v2 §12.1 — GROSS/NET. ⚠️ Trùng TÊN, KHÁC NGHĨA với `employee_profiles.salary_type` (SPEC-11 §8.2). */
+  salaryType: salaryTypeEnum.optional(),
+  pitPayer: pitPayerEnum.optional(),
+  /** NULL = «dùng `baseSalary`» (DB-13 §12.1). Nhạy cảm ⇒ optional. */
+  insuranceSalary: z.number().nullable().optional(),
+  probationSalary: z.number().nullable().optional(),
+  payRatioPct: z.number().optional(),
   note: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -195,6 +273,8 @@ export const salaryProfileListItemSchema = z.object({
   effectiveDate: z.string().date(),
   baseSalary: z.number().optional(),
   allowances: z.array(allowanceSchema).optional(),
+  salaryType: salaryTypeEnum.optional(),
+  pitPayer: pitPayerEnum.optional(),
 });
 export type SalaryProfileListItemDto = z.infer<typeof salaryProfileListItemSchema>;
 
@@ -203,13 +283,25 @@ export type SalaryProfileListItemDto = z.infer<typeof salaryProfileListItemSchem
  * Trùng `(user, effectiveDate)` chưa xoá mềm ⇒ 23505 trên `salary_profiles_company_user_effective_uq`
  * → service map **PAYROLL-ERR-014**.
  */
-export const createSalaryProfileSchema = z.object({
-  userId: z.string().uuid(),
-  effectiveDate: z.string().date(),
-  baseSalary: z.number().positive(),
-  allowances: z.array(allowanceSchema).default([]),
-  note: z.string().max(500).optional(),
-});
+export const createSalaryProfileSchema = z
+  .object({
+    userId: z.string().uuid(),
+    effectiveDate: z.string().date(),
+    baseSalary: z.number().positive(),
+    /**
+     * v2 THAY `allowances[]` — ghi xuống bảng `salary_profile_items` (SPEC-11 §15 hàng 020 🔁).
+     * Service mirror ngược sang cột `allowances` cho máy tính lương v1 (§3.2 của plan).
+     */
+    items: z.array(salaryProfileItemInputSchema).max(SALARY_PROFILE_ITEMS_MAX).default([]),
+    salaryType: salaryTypeEnum.optional(),
+    pitPayer: pitPayerEnum.optional(),
+    insuranceSalary: z.number().nonnegative().nullable().optional(),
+    probationSalary: z.number().nonnegative().nullable().optional(),
+    /** `> 0 AND <= 100` mirror CHECK `salary_profiles_pay_ratio_check` (DB-13 §12.1). */
+    payRatioPct: z.number().gt(0).max(100).optional(),
+    note: z.string().max(500).optional(),
+  })
+  .strict();
 export type CreateSalaryProfileRequest = z.infer<typeof createSalaryProfileSchema>;
 
 /**
@@ -221,7 +313,20 @@ export const updateSalaryProfileSchema = z
   .object({
     effectiveDate: z.string().date().optional(),
     baseSalary: z.number().positive().optional(),
-    allowances: z.array(allowanceSchema).optional(),
+    /**
+     * v2 — CÓ MẶT ⇒ **ĐẶT LẠI TOÀN BỘ** tập `salary_profile_items` của phiên bản trong MỘT tx (cùng
+     * khuôn 053), không sửa từng dòng rời.
+     *
+     * 🔴 **VẮNG ⇒ KHÔNG chạm `salary_profile_items` VÀ KHÔNG chạm cột `allowances`.** `undefined` khác
+     * `[]` ở đây là khác biệt SỐNG CÒN: coi vắng như rỗng thì `PATCH {note:"x"}` **xoá sạch phụ cấp
+     * trong im lặng**, và kỳ lương sau trả thiếu tiền mà không lỗi nào phát ra.
+     */
+    items: z.array(salaryProfileItemInputSchema).max(SALARY_PROFILE_ITEMS_MAX).optional(),
+    salaryType: salaryTypeEnum.optional(),
+    pitPayer: pitPayerEnum.optional(),
+    insuranceSalary: z.number().nonnegative().nullable().optional(),
+    probationSalary: z.number().nonnegative().nullable().optional(),
+    payRatioPct: z.number().gt(0).max(100).optional(),
     note: z.string().max(500).nullable().optional(),
     delete: z.literal(true).optional(),
   })

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 582,
-    "controllers": 104,
-    "gated": 543,
+    "routes": 590,
+    "controllers": 106,
+    "gated": 551,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -6418,6 +6418,118 @@
       "verdictWo": null
     },
     {
+      "key": "PayrollDependentsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll/dependents/:id",
+      "hasPermission": true,
+      "permission": "manage:payroll-employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollEmployeesController#createDependent",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/employees/:userId/dependents",
+      "hasPermission": true,
+      "permission": "manage:payroll-employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollEmployeesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/employees/:userId",
+      "hasPermission": true,
+      "permission": "view:payroll-employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollEmployeesController#getSettings",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/employees/:userId/settings",
+      "hasPermission": true,
+      "permission": "view:payroll-employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollEmployeesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/employees",
+      "hasPermission": true,
+      "permission": "view:payroll-employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollEmployeesController#listDependents",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/employees/:userId/dependents",
+      "hasPermission": true,
+      "permission": "view:payroll-employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollEmployeesController#putSettings",
+      "httpMethod": "PUT",
+      "path": "/api/v1/payroll/employees/:userId/settings",
+      "hasPermission": true,
+      "permission": "manage:payroll-employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "PayrollPeriodsController#adjustLine",
       "httpMethod": "PATCH",
       "path": "/api/v1/payroll-periods/:id/lines/:lineId",
@@ -6677,6 +6789,22 @@
       "key": "PayrollPeriodsController#summary",
       "httpMethod": "GET",
       "path": "/api/v1/payroll-periods/summary",
+      "hasPermission": true,
+      "permission": "view-line:payroll-period",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPeriodsController#timesheet",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll-periods/:id/timesheet",
       "hasPermission": true,
       "permission": "view-line:payroll-period",
       "permissionLevel": "handler",

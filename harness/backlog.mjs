@@ -15890,12 +15890,27 @@ export const backlog = [
     title:
       "BE track A: route Nhân viên PAYROLL (PAYROLL-API-036 chiếu HR bó hẹp, mở rộng picker 034; tax_code qua view:salary-profile + audit) · hồ sơ lương v2 (salary_type/pit_payer/insurance_salary/probation/pay_ratio + salary_profile_items) · payroll_employee_settings · payroll_dependents · bảng công tổng hợp kỳ (đọc, tái dùng computeInputsTx) — deny-path RED trước",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/payroll/**",
-      "apps/api/src/permissions/**",
+      // S15-PAYROLL-BE-1 plan-review vòng 1 (B10): `permissions/**` số nhiều là thư mục KHÔNG TỒN TẠI
+      // (cùng bug DB-1 đã vá ở B5) — thật là `permission/` số ít. Và bản đầu KHÔNG phủ 3 file plan phải
+      // sửa: `common/db-error.ts` (thêm hằng 23P01 cho EXCLUDE của payroll_dependents) ·
+      // `contracts/src/index.ts` (re-export payroll-employees) · `docs/SPEC/**` (dòng 🔁 §12.1 hàng 018
+      // cho 2 `kind` mới). Thiếu ⇒ guard-scope cảnh báo + gate/scheduler đọc sai phạm vi
+      // (memory wo-paths-drive-gate-and-scheduler).
+      "apps/api/src/permission/**",
+      "apps/api/src/common/db-error.ts",
       "apps/api/test/**",
+      "apps/api/package.json",
+      // FULL gate (security #1) — vá B2 (.strict() + bỏ `allowances` khỏi 020) làm ĐỎ typecheck của
+      // apps/app: SalaryProfileFormDialog.tsx vẫn gửi `allowances`. WO backend buộc phải chạm ĐÚNG
+      // file FE đó để không ship một màn hình chết. paths phải phủ, kẻo guard-scope cảnh báo và gate
+      // đọc sai phạm vi (memory wo-paths-drive-gate-and-scheduler).
+      "apps/app/src/routes/payroll/**",
       "packages/contracts/src/payroll*.ts",
+      "packages/contracts/src/index.ts",
+      "docs/SPEC/**",
       "docs/API Design/**",
       "docs/plans/S15-PAYROLL-BE-1.md",
       "harness/backlog.mjs",

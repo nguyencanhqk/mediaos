@@ -9,6 +9,13 @@
 export const PG_UNIQUE_VIOLATION = "23505";
 export const PG_FK_VIOLATION = "23503";
 export const PG_CHECK_VIOLATION = "23514";
+/**
+ * S15-PAYROLL-BE-1 — `exclusion_violation`. Ràng buộc `EXCLUDE USING gist` ném **`23P01`**, KHÔNG phải
+ * `23505`: `payroll_dependents_no_overlap_excl` (chống chồng lấp khoảng hiệu lực người phụ thuộc) là
+ * hàng đầu tiên trong repo dùng dạng này. Thiếu hằng ⇒ `mapPayrollPgError` không có nhánh nào bắt ⇒
+ * **500 ở vùng đỏ** thay vì 409 PAYROLL-ERR-032.
+ */
+export const PG_EXCLUSION_VIOLATION = "23P01";
 
 /**
  * Return the first `code` string found by walking `err` and its `.cause` chain

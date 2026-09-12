@@ -31,11 +31,7 @@ import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/respo
 import { PasswordService } from "../../src/auth/password.service";
 import { AvatarPresignService } from "../../src/foundation/files/avatar-presign.service";
 import { directPool, hasDb } from "../helpers/integration-db";
-import {
-  captureQueries,
-  queriesFromTable,
-  type CapturedQuery,
-} from "../helpers/query-capture";
+import { captureQueries, queriesFromTable, type CapturedQuery } from "../helpers/query-capture";
 import {
   cleanupTenants,
   seedCompany,
@@ -203,7 +199,9 @@ describe.skipIf(!hasLaneDb)("S17-CHAT-UX2-BE-1 — DTO phòng v2 (DB cô lập, 
     // Hàng counter do `ChatRoomCodeService.allocate` tạo ở lần `POST /chat/rooms` ĐẦU TIÊN. Ca này chạy
     // sau `beforeAll` (đã tạo phòng qua API) nên hàng phải có — assert để một thay đổi thứ tự sau này
     // không âm thầm bỏ qua việc bump.
-    expect(bumped.rowCount, "thiếu hàng sequence_counters chat_room — bump không có tác dụng").toBe(1);
+    expect(bumped.rowCount, "thiếu hàng sequence_counters chat_room — bump không có tác dụng").toBe(
+      1,
+    );
     return roomId;
   }
 
@@ -593,11 +591,32 @@ describe.skipIf(!hasLaneDb)("S17-CHAT-UX2-BE-1 — DTO phòng v2 (DB cô lập, 
       expect(roomQueries[0].text).toContain("chat_messages");
     });
 
-    it("ca 21 — vị từ tin cuối ĐI ĐƯỢC trên `idx_chat_messages_room_seq`", async () => {
+    it("ca 21 — vị từ tin cuối ĐI ĐƯỢC trên index `(company_id, room_id, room_seq)`", async () => {
       // ⚠️ Ca này chứng minh HÌNH DẠNG vị từ dùng được index (bật `enable_seqscan=off` để loại nhiễu
       // "bảng bé nên seq scan rẻ hơn"), KHÔNG hứa planner sẽ CHỌN nó ở PROD. Assert trên KẾ HOẠCH, và
       // TUYỆT ĐỐI không assert `pg_stat_user_indexes.idx_scan` — số đó cộng dồn toàn cụm và bằng 0
       // không có nghĩa là index vô dụng (memory `pg-planner-index-assert-trap`, `idx-scan-zero-is-not-unused`).
+      //
+      // ⚠️ **KHÔNG assert ĐƯỜNG TRUY CẬP planner CHỌN** — dù bằng tên index hay bằng tiền tố cột.
+      // Đo hai vòng CI ngày 11/09/2026 trên cùng một diff, ba kết quả KHÁC NHAU cho cùng câu SQL:
+      //     lane DB sạch → `Index Scan using idx_chat_messages_room_seq`, Index Cond cả 2 cột, KHÔNG Sort
+      //     CI run `34597707204` → lật index, bản assert-tên ĐỎ
+      //     CI run `34608948916` → `Index Scan using chat_messages_room_seq_idx (room_id, seq)`
+      //                            + `Sort (Sort Key: room_seq DESC)`, bản assert-tiền-tố-cột ĐỎ
+      // Ở cardinality test (1 tin/phòng) mọi đường đều ~miễn phí nên planner đổi ý theo thống kê; thêm
+      // nữa `chat_messages` có HAI index phủ đúng vị từ này — `idx_chat_messages_room_seq (company_id,
+      // room_id, room_seq DESC)` (mig `0539:56`) và `uq_chat_messages_room_seq (company_id, room_id,
+      // room_seq)` UNIQUE (mig `0539:55`) — mà btree quét NGƯỢC miễn phí nên chúng chi phí BẰNG NHAU.
+      // `enable_seqscan=off` KHÔNG cứu được: nó loại seq scan chứ không chọn hộ giữa các index.
+      // (memory `pg-planner-index-assert-trap` ca thật #3.)
+      //
+      // Nên ca này chứng minh điều thật sự cần — **vị từ CÓ HÌNH DẠNG mà index thiết kế phục vụ được** —
+      // bằng BA khẳng định TẤT ĐỊNH, không cái nào hỏi planner chọn gì:
+      //   (1) CATALOG — index thiết kế còn sống, đúng cột + đúng chiều (đọc `pg_indexes`);
+      //   (2) HÌNH DẠNG SQL RUNTIME — LATERAL tin cuối lọc ĐẲNG THỨC trên `company_id` + `room_id` rồi
+      //       `ORDER BY room_seq DESC LIMIT` ⇒ ghép với (1) là đủ CHỨNG MINH index phục vụ được vị từ,
+      //       mà không phụ thuộc thống kê. Đo trên câu SQL BẮT ĐƯỢC lúc chạy, không grep mã nguồn;
+      //   (3) KHÔNG `Seq Scan on chat_messages` khi đã tắt seqscan ⇒ CÓ index nào đó phục vụ được thật.
       const cap = captureQueries();
       let queries: CapturedQuery[];
       try {
@@ -614,6 +633,41 @@ describe.skipIf(!hasLaneDb)("S17-CHAT-UX2-BE-1 — DTO phòng v2 (DB cô lập, 
         // RLS + FORCE: EXPLAIN phải chạy trong đúng ngữ cảnh tenant, nếu không policy đổi cả kế hoạch
         // (memory `rls-force-hides-nonleakproof-expr-from-index-cond`).
         await client.query("SELECT set_config('app.current_company_id', $1, true)", [A.companyId]);
+
+        const indexdefOf = async (name: string): Promise<string | undefined> => {
+          const r = await client.query(
+            `SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1`,
+            [name],
+          );
+          return (r.rows as { indexdef: string }[])[0]?.indexdef;
+        };
+
+        // (1) CATALOG — index thiết kế của mig `0539` còn sống, đúng cột + đúng chiều DESC.
+        const designed = await indexdefOf("idx_chat_messages_room_seq");
+        expect(designed, "`idx_chat_messages_room_seq` (mig 0539:56) đã biến mất").toBeDefined();
+        expect(designed!).toContain("(company_id, room_id, room_seq DESC)");
+
+        // (2) HÌNH DẠNG SQL RUNTIME — cắt đúng LATERAL tin cuối (không để vị từ của câu ngoài "trả bài
+        // hộ") rồi soi ba vế phải khớp thứ tự cột của (1): eq company_id · eq room_id · order room_seq desc.
+        const lateral =
+          /left join lateral \(select[\s\S]*?from "chat_messages"[\s\S]*?\) "last_message" on true/i.exec(
+            target!.text,
+          );
+        expect(
+          lateral,
+          `không cắt được LATERAL tin cuối trong câu SQL bắt được:\n${target!.text}`,
+        ).not.toBeNull();
+        const lat = lateral![0];
+        expect(lat, "LATERAL tin cuối mất vị từ đẳng thức company_id").toMatch(
+          /"chat_messages"\."company_id"\s*=\s*"chat_rooms"\."company_id"/i,
+        );
+        expect(lat, "LATERAL tin cuối mất vị từ đẳng thức room_id").toMatch(
+          /"chat_messages"\."room_id"\s*=\s*"chat_rooms"\."id"/i,
+        );
+        expect(lat, "LATERAL tin cuối không còn `ORDER BY room_seq DESC LIMIT`").toMatch(
+          /order by\s+"chat_messages"\."room_seq"\s+desc\s+limit\s+\$?\d+/i,
+        );
+
         await client.query("SET LOCAL enable_seqscan = off");
         const plan = await client.query(
           `EXPLAIN (FORMAT TEXT) ${target!.text}`,
@@ -622,7 +676,13 @@ describe.skipIf(!hasLaneDb)("S17-CHAT-UX2-BE-1 — DTO phòng v2 (DB cô lập, 
         const text = (plan.rows as { "QUERY PLAN": string }[])
           .map((r) => r["QUERY PLAN"])
           .join("\n");
-        expect(text).toContain("idx_chat_messages_room_seq");
+
+        // (3) `enable_seqscan=off` chỉ PHẠT seq scan chứ không CẤM — còn thấy nó nghĩa là KHÔNG index
+        // nào phục vụ được vị từ. Chỉ assert VẮNG MẶT seq scan: index nào thắng là việc của planner
+        // (xem docblock đầu ca — đã đo ba kết quả khác nhau cho cùng câu SQL này).
+        expect(text, `Seq Scan trên chat_messages dù đã tắt seqscan:\n${text}`).not.toMatch(
+          /Seq Scan on chat_messages\b/,
+        );
       } finally {
         await client.query("ROLLBACK").catch(() => undefined);
         client.release();

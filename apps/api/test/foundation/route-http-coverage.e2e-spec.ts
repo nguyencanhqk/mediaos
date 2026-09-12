@@ -325,9 +325,14 @@ const MAX_UNCOVERED_TOTAL = 0;
 // S13-PAYROLL-BE-1 (01/09/2026): 468 → 486 (+18 route PAYROLL `001..006` · `019..028` · `034..035`).
 // S13-PAYROLL-BE-2 (01/09/2026): 486 → 503 (+17 route PAYROLL `007..018` · `029..033`).
 // S14-RECRUIT-FILEGRANT-1 (04/09/2026): 503 → 508 (+5 route tệp CV `RECRUIT-API-033..037`).
-// Nâng CÙNG COMMIT với WO — `MAX_UNCOVERED_TOTAL = 0` là cổng chính, nên mỗi route mới phải có file
-// test chạm ĐÚNG literal path (int-spec `payroll-be1-*` · `payroll-be2-*` · `s14-recruit-filegrant1-cv`).
-const MIN_COVERED_COUNT = 508;
+// S15-PAYROLL-BE-1 (11/09/2026): 508 → **590**. +8 route PAYROLL track A (`036..043`) — nhưng sàn cũ
+// đã TỤT HẬU: số phủ THẬT trước WO này là 582, nghĩa là hằng 508 để hở 74 route (nhiều WO sau
+// S14-RECRUIT-FILEGRANT-1 thêm route + test mà quên siết sàn). Sàn hở thì nó không còn bắt được việc
+// xoá/đổi tên test — đúng lớp lỗi mà `MAX_UNCOVERED_TOTAL = 0` một mình KHÔNG bịt (cổng đó chỉ đo
+// "route nào chưa phủ", không đo "test nào biến mất khỏi scan"). Siết về ĐÚNG số đo hiện tại.
+// Nâng CÙNG COMMIT với WO — mỗi route mới phải có file test chạm ĐÚNG literal path
+// (int-spec `payroll-be1-*` · `payroll-be2-*` · `s14-recruit-filegrant1-cv`).
+const MIN_COVERED_COUNT = 590;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

@@ -101,10 +101,13 @@ interface Fixture {
   payslipId: string;
   salaryProfileId: string;
   bonusPenaltyId: string;
+  /** S15-PAYROLL-BE-1 — 8 route track A neo theo NHÂN SỰ. */
+  subjectUserId: string;
+  dependentId: string;
 }
 
 interface RouteSpec {
-  method: "GET" | "POST" | "PATCH";
+  method: "GET" | "POST" | "PATCH" | "PUT";
   url: (f: Fixture) => string;
   body?: (f: Fixture) => Record<string, unknown>;
   /** true = đường đọc ⇒ ALLOW đối chứng đòi ĐÚNG 200 (không chỉ "khác 403"). */
@@ -113,7 +116,7 @@ interface RouteSpec {
 
 const ghost = (): string => randomUUID();
 
-/** 32 route `companyFloor:true` — MỌI key trừ `EXEMPT_KEYS`. */
+/** 40 route `companyFloor:true` — MỌI key trừ `EXEMPT_KEYS` (32 của v1 + 8 track A v2). */
 const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
   // ── Kỳ lương 001–018 ────────────────────────────────────────────────────────────────────────
   periodList: { method: "GET", url: () => "/payroll-periods", read: true },
@@ -216,6 +219,49 @@ const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
   // ── Phiếu lương của NGƯỜI KHÁC 029–030 ──────────────────────────────────────────────────────
   payslipList: { method: "GET", url: () => "/payslips", read: true },
   payslipDetail: { method: "GET", url: (f) => `/payslips/${f.payslipId}`, read: true },
+  // ── S15-PAYROLL-BE-1 · track A 036–043 (tất cả companyFloor:true) ───────────────────────────
+  employeeList: { method: "GET", url: () => "/payroll/employees", read: true },
+  employeeDetail: {
+    method: "GET",
+    url: (f) => `/payroll/employees/${f.subjectUserId}`,
+    read: true,
+  },
+  employeeSettingsGet: {
+    method: "GET",
+    url: (f) => `/payroll/employees/${f.subjectUserId}/settings`,
+    read: true,
+  },
+  employeeSettingsPut: {
+    method: "PUT",
+    url: () => `/payroll/employees/${ghost()}/settings`,
+    body: () => ({ joinsSocialInsurance: false, joinsUnion: false }),
+  },
+  employeeDependentList: {
+    method: "GET",
+    url: (f) => `/payroll/employees/${f.subjectUserId}/dependents`,
+    read: true,
+  },
+  employeeDependentCreate: {
+    method: "POST",
+    // `:userId` MA ⇒ nếu sàn scope KHÔNG chặn thì service dừng ở 404 sentinel, không tạo NPT rác.
+    url: () => `/payroll/employees/${ghost()}/dependents`,
+    body: () => ({
+      fullName: "QA floor probe",
+      relationship: "Child",
+      effectiveFrom: "2029-01-01",
+      effectiveTo: "2029-12-31",
+    }),
+  },
+  dependentUpdate: {
+    method: "PATCH",
+    url: () => `/payroll/dependents/${ghost()}`,
+    body: () => ({ fullName: "QA floor probe" }),
+  },
+  periodTimesheet: {
+    method: "GET",
+    url: (f) => `/payroll-periods/${f.periodId}/timesheet`,
+    read: true,
+  },
   // ── Picker 034–035 ──────────────────────────────────────────────────────────────────────────
   pickerPeople: { method: "GET", url: () => "/payroll/pickers/people", read: true },
   pickerAttendancePeriods: {
@@ -242,6 +288,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     payslipId: "",
     salaryProfileId: "",
     bonusPenaltyId: "",
+    subjectUserId: "",
+    dependentId: "",
   };
 
   const http = () => request(app.getHttpServer());
@@ -249,12 +297,15 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
   const get = (t: string, u: string) => auth(t)(http().get(u));
   const post = (t: string, u: string) => auth(t)(http().post(u));
   const patch = (t: string, u: string) => auth(t)(http().patch(u));
+  // S15-PAYROLL-BE-1 — 039 là PUT (động từ v1 chưa dùng tới).
+  const put = (t: string, u: string) => auth(t)(http().put(u));
 
   const exec = (spec: RouteSpec, t: string): request.Test => {
     const u = spec.url(fixture);
     const b = spec.body?.(fixture) ?? {};
     if (spec.method === "GET") return get(t, u);
     if (spec.method === "POST") return post(t, u).send(b);
+    if (spec.method === "PUT") return put(t, u).send(b);
     return patch(t, u).send(b);
   };
 
@@ -324,6 +375,23 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       [A.companyId, ownUserId],
     );
     fixture.salaryProfileId = sp.rows[0].id;
+
+    // ── S15-PAYROLL-BE-1 (track A) ────────────────────────────────────────────────────────────
+    // 036..040 chiếu `employee_profiles`; không có hàng thì đường ĐỌC trả 404 sentinel và ca ALLOW
+    // đối chứng của mục B (đòi ĐÚNG 200) thành xanh-RỖNG — ca DENY khi đó không chứng minh được
+    // cổng nào đang chặn.
+    fixture.subjectUserId = ownUserId;
+    await direct.query(
+      `INSERT INTO employee_profiles (company_id, user_id, employee_code, status)
+       VALUES ($1, $2, 'NVFLOOR', 'active')`,
+      [A.companyId, ownUserId],
+    );
+    const dp = await direct.query<{ id: string }>(
+      `INSERT INTO payroll_dependents (company_id, user_id, full_name, relationship, effective_from)
+       VALUES ($1, $2, 'NPT floor probe', 'Child', '2028-01-01') RETURNING id`,
+      [A.companyId, ownUserId],
+    );
+    fixture.dependentId = dp.rows[0].id;
 
     const ap = await direct.query<{ id: string }>(
       `INSERT INTO attendance_periods (company_id, period_month, status)
@@ -497,12 +565,12 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
 
   describe("E. census — 32 key mục A ∪ 3 key mục C = ĐÚNG 35 key của PAYROLL_ROUTE_PAIRS", () => {
     it("PAYROLL_ROUTE_PAIRS giữ đủ 35 key (neo cho toàn bộ census)", () => {
-      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(35);
+      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(43);
     });
 
-    it("ROUTES = 32 key, EXEMPT_KEYS = 3 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
+    it("ROUTES = 40 key, EXEMPT_KEYS = 3 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
       const floorKeys = Object.keys(ROUTES).sort();
-      expect(floorKeys.length).toBe(32);
+      expect(floorKeys.length).toBe(40);
       expect(EXEMPT_KEYS.length).toBe(3);
       expect(
         [...floorKeys, ...EXEMPT_KEYS].sort(),
@@ -519,13 +587,13 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       }
     });
 
-    it("16 cặp distinct có route được seed cho cả ba chủ thể (không cặp nào rơi khỏi fixture)", () => {
+    it("18 cặp distinct có route được seed cho cả ba chủ thể (không cặp nào rơi khỏi fixture)", () => {
       // `('access','payroll')` KHÔNG gác route nào ⇒ 17 cặp SPEC-11 §11.1 nhưng 16 cặp có route.
-      expect(ALL_PAIRS.length).toBe(16);
+      expect(ALL_PAIRS.length).toBe(18);
       const sensitiveCount = ALL_PAIRS.filter((p) => p.isSensitive).length;
       // ĐÚNG 13 cặp `is_sensitive` của mig `0565` — cả 13 đều có route, `('access','payroll')` là
       // cặp thứ 17 KHÔNG nhạy cảm và KHÔNG gác route nào (đo lại 2026-09-01 trên chính bảng hằng).
-      expect(sensitiveCount, "cờ isSensitive phải lấy NGUYÊN từ bảng hằng, không gõ tay").toBe(13);
+      expect(sensitiveCount, "cờ isSensitive phải lấy NGUYÊN từ bảng hằng, không gõ tay").toBe(15);
     });
   });
 });
