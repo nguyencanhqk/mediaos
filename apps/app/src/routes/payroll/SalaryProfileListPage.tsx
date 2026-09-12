@@ -5,7 +5,18 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys, useCanExact } from "@mediaos/web-core";
 import type { SalaryProfileListItemDto } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
+import {
+  Button,
+  ColumnPicker,
+  DataTable,
+  DataToolbar,
+  EmptyState,
+  PageHeader,
+  Select,
+  TableFooter,
+  useColumnVisibility,
+  type ColumnOption,
+} from "@mediaos/ui";
 import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "./constants";
 import { formatPayrollMoney, PAYROLL_NUMERIC_CELL_CLASS } from "./payroll-format";
 import { displayUserRef, usePayrollPeople } from "./use-payroll-people";
@@ -41,15 +52,16 @@ export function SalaryProfileListPage() {
 
   const [userFilter, setUserFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAYROLL_PAGE_SIZE);
   const [createOpen, setCreateOpen] = useState(false);
 
   const listParams = useMemo(
     () => ({
       ...(userFilter ? { userId: userFilter } : {}),
       page,
-      per_page: PAYROLL_PAGE_SIZE,
+      per_page: pageSize,
     }),
-    [userFilter, page],
+    [userFilter, page, pageSize],
   );
 
   const listQuery = useQuery({
@@ -59,8 +71,21 @@ export function SalaryProfileListPage() {
   });
 
   const rows = listQuery.data?.data ?? [];
-  const total = listQuery.data?.pagination?.total ?? rows.length;
-  const lastPage = Math.max(1, Math.ceil(total / PAYROLL_PAGE_SIZE));
+  // Tổng CHỈ từ API; mảng trần ⇒ footer nói «không rõ tổng» thay vì đếm trang hiện tại.
+  const total = listQuery.data?.pagination?.total;
+  /**
+   * Server mask theo CẶP QUYỀN = **vắng khoá** cả trang (`isPayrollMoneyMasked` khuôn `gross`). Cột
+   * tiền vẫn render `—` (không đổi hành vi v1), nhưng **vắng khỏi ⚙ chọn cột**: liệt kê tên trường
+   * tiền cho đúng người không được đọc trường đó là biến picker thành bảng chỉ mục PII
+   * (UI-07 §10.4 mục 10).
+   *
+   * ⚠️ **Trang RỖNG ⇒ coi như MASK (fail-closed).** Phép đo này lấy mẫu từ hàng đang tải; lọc ra 0
+   * kết quả thì không có gì để đo — và «không đo được» KHÔNG phải là «được phép xem». Bản đầu viết
+   * `rows.length > 0 && …` nên trang rỗng cho ra `false` ⇒ tên trường tiền hiện lại trong ⚙ với đúng
+   * vai bị mask, chỉ cần lọc một bộ lọc không khớp gì. Giá phải trả của chiều fail-closed chỉ là:
+   * lúc chưa có dữ liệu thì không bật/tắt được cột tiền — cột vẫn render, và ⚙ đủ lại ngay khi có hàng.
+   */
+  const moneyMasked = rows.length === 0 || rows.every((r) => r.baseSalary === undefined);
 
   const columns = useMemo<ColumnDef<SalaryProfileListItemDto>[]>(
     () => [
@@ -69,7 +94,11 @@ export function SalaryProfileListPage() {
         header: t("salaryProfiles.columns.employee"),
         cell: ({ row }) => displayUserRef(row.original.userId, people),
       },
-      { accessorKey: "effectiveDate", header: t("salaryProfiles.columns.effectiveDate") },
+      {
+        id: "effectiveDate",
+        accessorKey: "effectiveDate",
+        header: t("salaryProfiles.columns.effectiveDate"),
+      },
       {
         id: "baseSalary",
         header: t("salaryProfiles.columns.baseSalary"),
@@ -90,6 +119,21 @@ export function SalaryProfileListPage() {
     ],
     [t, people],
   );
+
+  const columnOptions = useMemo<ColumnOption[]>(
+    () => [
+      { id: "user", label: t("salaryProfiles.columns.employee"), locked: true },
+      { id: "effectiveDate", label: t("salaryProfiles.columns.effectiveDate") },
+      ...(moneyMasked
+        ? []
+        : [
+            { id: "baseSalary", label: t("salaryProfiles.columns.baseSalary") },
+            { id: "allowances", label: t("salaryProfiles.columns.allowances") },
+          ]),
+    ],
+    [t, moneyMasked],
+  );
+  const columnPrefs = useColumnVisibility("payroll.salaryProfiles", columnOptions);
 
   if (!canView) return <EmptyState title={t("salaryProfiles.noPermission")} />;
 
@@ -119,7 +163,17 @@ export function SalaryProfileListPage() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-3">
+      <DataToolbar
+        actions={
+          <ColumnPicker
+            options={columnOptions}
+            hiddenIds={columnPrefs.hiddenIds}
+            onToggle={columnPrefs.toggle}
+            onReset={columnPrefs.reset}
+            isDefault={columnPrefs.isDefault}
+          />
+        }
+      >
         <Select
           className="w-64"
           value={userFilter}
@@ -149,7 +203,7 @@ export function SalaryProfileListPage() {
             {t("salaryProfiles.clearFilters")}
           </Button>
         )}
-      </div>
+      </DataToolbar>
 
       {listQuery.isError ? (
         <EmptyState
@@ -161,27 +215,32 @@ export function SalaryProfileListPage() {
           }
         />
       ) : (
-        <>
-          <DataTable
-            columns={columns}
-            data={rows}
-            isLoading={listQuery.isLoading}
-            pageSize={PAYROLL_PAGE_SIZE}
-            emptyState={
-              <EmptyState
-                title={userFilter ? t("salaryProfiles.emptyFiltered") : t("salaryProfiles.empty")}
-              />
-            }
-          />
-          {lastPage > 1 && (
-            <PaginationFooter
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={listQuery.isLoading}
+          pageSize={pageSize}
+          columnVisibility={columnPrefs.visibility}
+          pinFirstColumn
+          emptyState={
+            <EmptyState
+              title={userFilter ? t("salaryProfiles.emptyFiltered") : t("salaryProfiles.empty")}
+            />
+          }
+          footer={
+            <TableFooter
               page={page}
-              totalPages={lastPage}
+              pageSize={pageSize}
+              total={total}
               disabled={listQuery.isFetching}
               onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
             />
-          )}
-        </>
+          }
+        />
       )}
 
       <SalaryProfileFormDialog

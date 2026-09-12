@@ -12,7 +12,7 @@
  * S5-TASK-NAV-TREE-1 (đợt B):
  * - Dựng CÂY ĐỆ QUY từ `SidebarItemMeta.children` (web-core registry.ts — filterSidebarItems đã lọc
  *   đệ quy sẵn, trước đây chỉ nơi này không đọc children). Gập/mở từng nhánh, GIỮ trạng thái qua
- *   localStorage (lưu tập ĐANG GẬP — mặc định là MỞ).
+ *   localStorage (tập «KHÁC MẶC ĐỊNH» — xem S15-UI-SHELL-1 bên dưới).
  * - Khe cắm extension theo module (sidebar-extensions.ts): section động cần data runtime (cây phòng
  *   ban + dự án của TASK) sống ở component riêng — registry tĩnh không ôm React Query.
  */
@@ -54,6 +54,21 @@ export function isPathActive(pathname: string, path: string | undefined): boolea
   if (!path) return false;
   if (path === "/") return pathname === "/";
   return pathname === path || pathname.startsWith(path + "/");
+}
+
+/**
+ * S15-UI-SHELL-1 (UI-07 §9.5) — nhánh có mục ĐANG ACTIVE **nằm bên trong** thì phải MỞ, kể cả khi
+ * `defaultCollapsed: true`: vào `/payroll/statutory-rates` mà nhóm «Thiết lập» vẫn gập là người dùng
+ * không nhìn thấy chính chỗ mình đang đứng.
+ *
+ * ⚠️ CỐ Ý loại CHÍNH nó khỏi phép đo (chỉ soi CON cháu). Nhánh tự nó active vẫn hiện nguyên khi gập —
+ * cái bị giấu là con cháu, không phải nó — nên ép mở ở đó chỉ làm chết cái chevron mà người dùng TASK
+ * vẫn đang dùng để gập nhánh `/tasks` (S5-TASK-NAV-TREE-1, có spec neo).
+ */
+export function hasActiveDescendant(item: SidebarItemMeta, pathname: string): boolean {
+  return (item.children ?? []).some(
+    (child) => isPathActive(pathname, child.path) || hasActiveDescendant(child, pathname),
+  );
 }
 
 function SidebarLeaf({
@@ -98,18 +113,22 @@ function SidebarNode({
   collapsed,
   pathname,
   depth,
-  isBranchCollapsed,
+  isBranchFlipped,
   onToggleBranch,
 }: {
   item: SidebarItemMeta;
   collapsed: boolean;
   pathname: string;
   depth: number;
-  isBranchCollapsed: (key: string) => boolean;
+  isBranchFlipped: (key: string) => boolean;
   onToggleBranch: (key: string) => void;
 }) {
   const children = item.children ?? [];
+  // `collapsible` CHỈ dùng để TẮT chevron (`false` = nhóm tĩnh, con luôn hiện). Mặc định là gập được —
+  // ngược với bản v1.0 của UI-07, và UI-07 §9.4 đã được sửa theo: 3 cấp cây TASK (S5-TASK-NAV-TREE-1)
+  // đang chạy KHÔNG khai cờ này, đổi mặc định là giết cây đó.
   const hasChildren = children.length > 0;
+  const isCollapsible = hasChildren && item.collapsible !== false;
   const isActive = isPathActive(pathname, item.path);
 
   // Icon-mode: chỉ cấp 1 dạng icon — không render nhánh con (không có chỗ cho label/cây).
@@ -123,7 +142,14 @@ function SidebarNode({
     return <SidebarLeaf item={item} collapsed={false} isActive={isActive} depth={depth} />;
   }
 
-  const isOpen = !isBranchCollapsed(item.sidebarKey);
+  // Nhóm tĩnh (`collapsible: false`): con LUÔN hiện, không chevron — không có gì để gập thì không
+  // được vẽ nút gập.
+  const forcedOpen = !isCollapsible || hasActiveDescendant(item, pathname);
+  // Tập lưu ở localStorage là tập «KHÁC MẶC ĐỊNH», không phải tập «đang gập». Với nhánh mặc-định-mở
+  // (mọi nhánh có trước S15) hai cách đọc TRÙNG nhau ⇒ dữ liệu cũ trong máy người dùng vẫn đúng.
+  const flipped = isBranchFlipped(item.sidebarKey);
+  const defaultOpen = item.defaultCollapsed !== true;
+  const isOpen = forcedOpen || (flipped ? !defaultOpen : defaultOpen);
   const rowLabel = (
     <>
       <DynamicIcon
@@ -137,15 +163,26 @@ function SidebarNode({
   return (
     <div>
       <div className="flex items-center gap-0.5">
-        <button
-          type="button"
-          aria-expanded={isOpen}
-          aria-label={`${isOpen ? "Thu gọn" : "Mở rộng"} ${item.label}`}
-          onClick={() => onToggleBranch(item.sidebarKey)}
-          className="rounded p-1 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-        >
-          <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", isOpen && "rotate-90")} />
-        </button>
+        {isCollapsible ? (
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            // Nhánh đang chứa mục ACTIVE bị GHIM MỞ (§9.5) ⇒ nút vô hiệu + nói lý do, thay vì để một
+            // nút bấm-vào-không-có-gì. Rời khỏi nhánh là nút sống lại.
+            disabled={forcedOpen}
+            title={forcedOpen ? "Nhóm đang chứa mục bạn xem" : undefined}
+            aria-label={`${isOpen ? "Thu gọn" : "Mở rộng"} ${item.label}`}
+            onClick={() => onToggleBranch(item.sidebarKey)}
+            className="rounded p-1 text-muted-foreground/70 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+          >
+            <ChevronRight
+              className={cn("h-3.5 w-3.5 transition-transform", isOpen && "rotate-90")}
+            />
+          </button>
+        ) : (
+          // Giữ chỗ đúng bề rộng chevron để nhóm tĩnh thẳng hàng với nhóm gập được.
+          <span className="h-5 w-5 shrink-0" aria-hidden />
+        )}
         {item.path ? (
           <Link
             to={item.path}
@@ -158,14 +195,24 @@ function SidebarNode({
           >
             {rowLabel}
           </Link>
-        ) : (
+        ) : isCollapsible ? (
+          // Hàng ĐẠI DIỆN NHÓM (không có màn riêng) — bấm cả hàng cũng gập/mở, cùng cổng `forcedOpen`
+          // với chevron để hai điều khiển không nói hai điều khác nhau.
           <button
             type="button"
+            aria-expanded={isOpen}
+            disabled={forcedOpen}
+            title={forcedOpen ? "Nhóm đang chứa mục bạn xem" : undefined}
             onClick={() => onToggleBranch(item.sidebarKey)}
-            className="flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default disabled:hover:bg-transparent"
           >
             {rowLabel}
           </button>
+        ) : (
+          // Nhóm tĩnh không có màn riêng ⇒ chỉ là NHÃN, không phải nút (nút không làm gì là nút chết).
+          <span className="flex flex-1 items-center gap-2 px-2 py-1.5 text-sm font-medium text-muted-foreground">
+            {rowLabel}
+          </span>
         )}
       </div>
       {isOpen && (
@@ -177,7 +224,7 @@ function SidebarNode({
               collapsed={false}
               pathname={pathname}
               depth={depth + 1}
-              isBranchCollapsed={isBranchCollapsed}
+              isBranchFlipped={isBranchFlipped}
               onToggleBranch={onToggleBranch}
             />
           ))}
@@ -192,14 +239,14 @@ function GroupSection({
   items,
   collapsed,
   pathname,
-  isBranchCollapsed,
+  isBranchFlipped,
   onToggleBranch,
 }: {
   group: string;
   items: SidebarItemMeta[];
   collapsed: boolean;
   pathname: string;
-  isBranchCollapsed: (key: string) => boolean;
+  isBranchFlipped: (key: string) => boolean;
   onToggleBranch: (key: string) => void;
 }) {
   return (
@@ -217,7 +264,7 @@ function GroupSection({
             collapsed={collapsed}
             pathname={pathname}
             depth={0}
-            isBranchCollapsed={isBranchCollapsed}
+            isBranchFlipped={isBranchFlipped}
             onToggleBranch={onToggleBranch}
           />
         ))}
@@ -236,7 +283,9 @@ export function ModuleSidebar({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const rawItems = getSidebarItems(moduleCode);
   const visibleItems = filterSidebarItems(rawItems, permission, session);
-  const { has: isBranchCollapsed, toggle: toggleBranch } = usePersistedSet(
+  // Khoá localStorage GIỮ NGUYÊN tên cũ: với nhánh mặc-định-mở (mọi nhánh trước S15) thì «đang gập»
+  // và «khác mặc định» là CÙNG một tập ⇒ đổi khoá chỉ làm mất trạng thái đang có trong máy người dùng.
+  const { has: isBranchFlipped, toggle: toggleBranch } = usePersistedSet(
     `mediaos.sidebar.collapsed:${moduleCode}`,
   );
   const Extension = getSidebarExtension(moduleCode);
@@ -286,7 +335,7 @@ export function ModuleSidebar({
               items={grouped[group]}
               collapsed={collapsed}
               pathname={pathname}
-              isBranchCollapsed={isBranchCollapsed}
+              isBranchFlipped={isBranchFlipped}
               onToggleBranch={toggleBranch}
             />
           ))

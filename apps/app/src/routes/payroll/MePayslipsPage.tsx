@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys } from "@mediaos/web-core";
-import { Button, EmptyState, PageHeader, PaginationFooter } from "@mediaos/ui";
+import { Button, EmptyState, PageHeader, TableFooter } from "@mediaos/ui";
 import { PAYROLL_PAGE_SIZE } from "./constants";
 import { formatPayrollMoney } from "./payroll-format";
 import { parsePayrollError, payrollErrorI18nKey } from "./payroll-errors";
@@ -61,8 +61,9 @@ export function MePayslipsPage() {
   });
 
   const rows = listQuery.data?.data ?? [];
-  const total = listQuery.data?.pagination?.total ?? rows.length;
-  const lastPage = Math.max(1, Math.ceil(total / PAYROLL_PAGE_SIZE));
+  // Tổng CHỈ từ API. Trước đây rơi về `rows.length` — với danh sách 1 trang thì «tổng» bằng số phiếu
+  // của TRANG, một con số đúng do trùng hợp chứ không do đo (`apifetch-drops-pagination-bare-array`).
+  const total = listQuery.data?.pagination?.total;
   const detail = detailQuery.data ?? null;
 
   return (
@@ -123,14 +124,15 @@ export function MePayslipsPage() {
               ))}
             </ul>
 
-            {lastPage > 1 && (
-              <PaginationFooter
-                page={page}
-                totalPages={lastPage}
-                disabled={listQuery.isFetching}
-                onPageChange={setPage}
-              />
-            )}
+            {/* Danh sách THẺ (không phải bảng) ⇒ không có ⚙ chọn cột; footer vẫn dùng chung để
+                «Tổng số · 1–N» đọc giống mọi màn khác (UI-07 §12.3). */}
+            <TableFooter
+              page={page}
+              pageSize={PAYROLL_PAGE_SIZE}
+              total={total}
+              disabled={listQuery.isFetching}
+              onPageChange={setPage}
+            />
           </div>
 
           <div className="space-y-4">

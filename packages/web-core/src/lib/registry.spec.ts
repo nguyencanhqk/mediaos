@@ -1456,3 +1456,83 @@ describe("APP_REGISTRY — app 'chat' (S8-CHAT-ENTRY-1)", () => {
     expect(getVisibleApps(APP_REGISTRY, session, c).map((a) => a.appKey)).toContain("chat");
   });
 });
+
+// ---------------------------------------------------------------------------
+// S15-UI-SHELL-1 (DEC-020) — nhóm cha RỖNG sau lọc quyền phải ẩn HOÀN TOÀN (UI-07 §9.2 mục 5)
+// ---------------------------------------------------------------------------
+
+describe("filterSidebarItems — nhóm gập được rỗng sau lọc quyền", () => {
+  const session = makeSession({ modules: [{ moduleCode: "PAYROLL", status: "active" }] });
+
+  /**
+   * Hình dạng THẬT của sidebar PAYROLL v2: hàng đại diện nhóm chỉ đòi cặp `access:payroll` (ai vào
+   * được module đều pass), còn từng mục con đòi cặp nghiệp vụ riêng. Vai chỉ có `access:payroll`
+   * từng thấy một mũi tên «Thiết lập ▸» bấm vào không có gì.
+   */
+  const items: SidebarItemMeta[] = [
+    {
+      sidebarKey: "payroll.settings",
+      moduleCode: "PAYROLL",
+      label: "Thiết lập",
+      order: 90,
+      collapsible: true,
+      defaultCollapsed: true,
+      requiredPermissions: ["PAYROLL.ACCESS"],
+      children: [
+        {
+          sidebarKey: "payroll.statutoryRates",
+          moduleCode: "PAYROLL",
+          label: "Tỉ lệ luật định",
+          path: "/payroll/statutory-rates",
+          order: 91,
+          requiredPermissions: ["PAYROLL.RATE.VIEW"],
+        },
+      ],
+    },
+    {
+      // Mục CÓ màn của riêng mình + có con — mất hết con thì tụt thành lá, KHÔNG được ẩn.
+      sidebarKey: "payroll.periods",
+      moduleCode: "PAYROLL",
+      label: "Kỳ lương",
+      path: "/payroll/periods",
+      order: 50,
+      requiredPermissions: ["PAYROLL.ACCESS"],
+      children: [
+        {
+          sidebarKey: "payroll.advances",
+          moduleCode: "PAYROLL",
+          label: "Tạm ứng",
+          path: "/payroll/advances",
+          order: 51,
+          requiredPermissions: ["PAYROLL.ADVANCE.VIEW"],
+        },
+      ],
+    },
+  ];
+
+  it("hàng đại diện nhóm (không có path) tự pass nhưng 0 con hiển thị ⇒ ẩn HOÀN TOÀN", () => {
+    const c = createPermissionChecker(makePerms(["PAYROLL.ACCESS"]));
+    const filtered = filterSidebarItems(items, c, session);
+    expect(filtered.find((i) => i.sidebarKey === "payroll.settings")).toBeUndefined();
+  });
+
+  it("mục CÓ path riêng + 0 con hiển thị ⇒ VẪN hiện (tụt xuống thành lá, màn của nó vẫn tồn tại)", () => {
+    const c = createPermissionChecker(makePerms(["PAYROLL.ACCESS"]));
+    const filtered = filterSidebarItems(items, c, session);
+    const periods = filtered.find((i) => i.sidebarKey === "payroll.periods");
+    expect(periods).toBeDefined();
+    expect(periods?.children).toEqual([]);
+  });
+
+  it("có ≥1 con hiển thị ⇒ nhóm hiện lại, kèm cờ collapsible/defaultCollapsed đi qua nguyên vẹn", () => {
+    const c = createPermissionChecker(makePerms(["PAYROLL.ACCESS", "PAYROLL.RATE.VIEW"]));
+    const settings = filterSidebarItems(items, c, session).find(
+      (i) => i.sidebarKey === "payroll.settings",
+    );
+    expect(settings?.children?.map((child) => child.sidebarKey)).toEqual([
+      "payroll.statutoryRates",
+    ]);
+    expect(settings?.collapsible).toBe(true);
+    expect(settings?.defaultCollapsed).toBe(true);
+  });
+});

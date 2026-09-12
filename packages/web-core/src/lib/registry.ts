@@ -911,6 +911,21 @@ export interface SidebarItemMeta extends PermissionRequirement {
   children?: SidebarItemMeta[];
   featureFlag?: string;
   isDivider?: boolean;
+  /**
+   * S15-UI-SHELL-1 (DEC-020 · UI-07 §9.4) — NHÓM GẬP ĐƯỢC. Chỉ có nghĩa trên hàng ĐẠI DIỆN NHÓM
+   * (item có `children`); bỏ qua trên mục lá.
+   *
+   * ⚠️ **Độc lập với việc thu gọn CẢ sidebar** (§9.2 mục 8): thu gọn cả sidebar = đổi CHIỀU RỘNG
+   * (chỉ còn icon); gập một nhóm = ẩn/hiện MỤC CON của riêng nhóm đó. Đừng gộp hai cơ chế.
+   */
+  collapsible?: boolean;
+  /**
+   * Gập SẴN ở lần đầu. Chỉ đọc khi `collapsible === true`.
+   *
+   * ⚠️ Nhóm chứa mục ĐANG ACTIVE **luôn MỞ** kể cả khi cờ này bật — gập mất mục người dùng đang đứng
+   * là làm họ mất dấu vị trí của chính mình (§9.5).
+   */
+  defaultCollapsed?: boolean;
 }
 
 /**
@@ -947,6 +962,20 @@ export function filterSidebarItems(
       const hasVisibleChildren = Boolean(children?.length);
 
       if (!selfAllowed && !hasVisibleChildren) return [];
+
+      /**
+       * UI-07 §9.2 mục 5 (S15-UI-SHELL-1) — **nhóm cha ẩn HOÀN TOÀN khi MỌI mục con đều ẩn.**
+       *
+       * Hàng ĐẠI DIỆN NHÓM = có khai `children` VÀ không có `path` của riêng nó. Một hàng như vậy mà
+       * `selfAllowed` (vd nhóm «Thiết lập» chỉ đòi `access:payroll`) trước đây vẫn được giữ lại dù 0
+       * mục con hiển thị ⇒ sidebar mọc ra một chevron bấm vào KHÔNG có gì. Đó là
+       * `capability-allowlist-hides-admin-screens` nhìn từ phía ngược lại: cổng mở ra phòng trống.
+       *
+       * Item có `path` riêng thì KHÔNG phải hàng đại diện nhóm — nó là một mục thật có màn hình của
+       * mình, mất hết con thì tụt xuống thành lá, vẫn phải hiện.
+       */
+      const isGroupRow = item.children !== undefined && !item.path;
+      if (isGroupRow && !hasVisibleChildren) return [];
 
       return [{ ...item, children }];
     })

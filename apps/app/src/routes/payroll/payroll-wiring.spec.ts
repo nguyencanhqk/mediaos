@@ -13,8 +13,13 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { ROUTE_REGISTRY, APP_REGISTRY } from "@mediaos/web-core";
-import { PAYROLL_SIDEBAR, SIDEBAR_REGISTRY } from "@/layouts/workspace/sidebar-registry";
+import { ROUTE_REGISTRY, APP_REGISTRY, type SidebarItemMeta } from "@mediaos/web-core";
+import {
+  PAYROLL_SIDEBAR,
+  PAYROLL_SIDEBAR_V2,
+  pruneUnbuiltScreens,
+  SIDEBAR_REGISTRY,
+} from "@/layouts/workspace/sidebar-registry";
 import { PAYROLL_ACCESS_PAIR, PAYROLL_ENGINE_PAIRS } from "./constants";
 
 const repoRoot = path.resolve(__dirname, "../../../../..");
@@ -192,14 +197,26 @@ describe("PAYROLL wiring — «Phiếu lương của tôi» KHÔNG nằm sau c�
   });
 });
 
+/**
+ * S15-UI-SHELL-1 (DEC-020) — sidebar PAYROLL lên **cấu trúc v2 có nhóm gập được**, khai đầy đủ ở
+ * `PAYROLL_SIDEBAR_V2` rồi cắt mục chưa có màn (`pruneUnbuiltScreens`). Nên spec này phải đi ĐỆ QUY:
+ * duyệt phẳng `PAYROLL_SIDEBAR` như bản v1 sẽ MÙ với mọi mục nằm trong nhóm.
+ */
+function flattenSidebar(items: readonly SidebarItemMeta[]): SidebarItemMeta[] {
+  return items.flatMap((item) => [item, ...flattenSidebar(item.children ?? [])]);
+}
+
 describe("PAYROLL wiring — sidebar", () => {
-  it("SIDEBAR_REGISTRY.PAYROLL === PAYROLL_SIDEBAR và có đúng 3 mục", () => {
+  it("SIDEBAR_REGISTRY.PAYROLL === PAYROLL_SIDEBAR (bản ĐÃ cắt mục chưa có màn)", () => {
     expect(SIDEBAR_REGISTRY.PAYROLL).toBe(PAYROLL_SIDEBAR);
-    expect(PAYROLL_SIDEBAR).toHaveLength(3);
   });
 
-  it("mỗi mục sidebar trỏ tới một route CÓ THẬT trong ROUTE_REGISTRY, cùng gate", () => {
-    for (const item of PAYROLL_SIDEBAR) {
+  it("mọi mục CÓ path (kể cả trong nhóm) trỏ tới route CÓ THẬT trong ROUTE_REGISTRY, cùng gate", () => {
+    const leaves = flattenSidebar(PAYROLL_SIDEBAR).filter((i) => i.path);
+    // Neo số: đúng 3 màn PAYROLL đã dựng hôm nay. Thêm màn ở WO sau ⇒ sửa số này CÙNG lúc thêm route.
+    expect(leaves).toHaveLength(3);
+
+    for (const item of leaves) {
       const meta = ROUTE_REGISTRY.find((r) => r.path === item.path);
       expect(meta, `sidebar trỏ tới path không có route: ${item.path}`).toBeTruthy();
       expect(item.requiredPermissions, `gate lệch ở ${item.path}`).toEqual(
@@ -208,9 +225,100 @@ describe("PAYROLL wiring — sidebar", () => {
     }
   });
 
-  it("chi tiết kỳ + phiếu lương KHÔNG lên sidebar (màn con)", () => {
-    const paths = PAYROLL_SIDEBAR.map((i) => i.path);
+  it("KHÔNG còn hàng đại diện nhóm nào RỖNG sau khi cắt (chevron mở ra chỗ trống)", () => {
+    for (const item of flattenSidebar(PAYROLL_SIDEBAR)) {
+      if (item.path) continue;
+      expect(
+        item.children?.length,
+        `nhóm rỗng vẫn được đăng ký: ${item.sidebarKey}`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("cấu trúc v2 khai ĐỦ 11 mục có màn của SPEC-11 §9.1 + 3 màn v1 (kể cả màn chưa dựng)", () => {
+    const declared = flattenSidebar(PAYROLL_SIDEBAR_V2)
+      .filter((i) => i.path)
+      .map((i) => i.path);
+    expect(declared).toEqual(
+      expect.arrayContaining([
+        "/payroll", // 015 Tổng quan
+        "/payroll/employees", // 007
+        "/payroll/salary-profiles", // 004 (v1)
+        "/payroll/salary-components", // 009
+        "/payroll/templates", // 010
+        "/payroll/bonus-penalties", // 005 (v1)
+        "/payroll/periods", // 001 (v1)
+        "/payroll/advances", // 012
+        "/payroll/budgets", // 014
+        "/payroll/payment-batches", // 013
+        "/payroll/reports", // 016
+        "/payroll/settings/statutory-rates", // 011
+      ]),
+    );
+  });
+
+  it("node LAI (có path riêng + con) mà màn của CHÍNH nó chưa dựng ⇒ hạ thành hàng nhóm, KHÔNG nuốt con đã dựng", () => {
+    // Hình dạng này CHƯA có trong PAYROLL_SIDEBAR_V2 nhưng kiểu dữ liệu cho phép, và các WO PAYROLL
+    // sau là nơi nó dễ xuất hiện. Bản đầu `return []` ngay khi path chưa dựng ⇒ cả nhánh biến mất
+    // IM LẶNG, kéo theo mục con đã chạy được.
+    const hybrid: SidebarItemMeta[] = [
+      {
+        sidebarKey: "payroll.hybrid",
+        moduleCode: "PAYROLL",
+        label: "Chưa dựng nhưng có con đã dựng",
+        path: "/payroll/chua-dung-bao-gio",
+        order: 10,
+        requiredPermissions: ["access:payroll"],
+        children: [
+          {
+            sidebarKey: "payroll.hybrid.child",
+            moduleCode: "PAYROLL",
+            label: "Kỳ lương",
+            path: "/payroll/periods",
+            order: 11,
+            requiredPermissions: ["access:payroll", "view:payroll-period"],
+          },
+        ],
+      },
+    ];
+
+    const pruned = pruneUnbuiltScreens(hybrid);
+    expect(pruned).toHaveLength(1);
+    // `path` chết bị GỠ (không còn link chết) nhưng nhánh vẫn còn, con vẫn tới được.
+    expect(pruned[0].path).toBeUndefined();
+    expect(pruned[0].children?.map((c) => c.path)).toEqual(["/payroll/periods"]);
+  });
+
+  it("node LAI mà CẢ nó lẫn con đều chưa dựng ⇒ bỏ hẳn", () => {
+    const dead: SidebarItemMeta[] = [
+      {
+        sidebarKey: "payroll.dead",
+        moduleCode: "PAYROLL",
+        label: "Chết cả cụm",
+        path: "/payroll/khong-co",
+        order: 10,
+        children: [
+          {
+            sidebarKey: "payroll.dead.child",
+            moduleCode: "PAYROLL",
+            label: "Con cũng chết",
+            path: "/payroll/cung-khong-co",
+            order: 11,
+          },
+        ],
+      },
+    ];
+    expect(pruneUnbuiltScreens(dead)).toEqual([]);
+  });
+
+  it("«Phiếu lương/Tạm ứng của tôi» + màn con KHÔNG lên sidebar PAYROLL (đệ quy)", () => {
+    const paths = flattenSidebar(PAYROLL_SIDEBAR_V2).map((i) => i.path);
     expect(paths).not.toContain("/payroll/periods/$periodId");
     expect(paths).not.toContain("/payroll/payslips/$payslipId");
+    expect(paths).not.toContain("/me/payslips");
+    expect(paths).not.toContain("/me/payroll-advances");
+    // PAY-SCREEN-008 «Bảng công kỳ» bám theo MỘT kỳ (`/payroll/periods/:id/timesheet`, SPEC-11 §9.1)
+    // ⇒ là TAB của màn chi tiết kỳ, không phải mục điều hướng.
+    expect(paths.some((p) => p?.includes("timesheet"))).toBe(false);
   });
 });

@@ -1,10 +1,10 @@
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 import { payrollApi, payrollKeys } from "@mediaos/web-core";
-import { Button, EmptyState, PageHeader } from "@mediaos/ui";
+import { Button, DetailPageHeader, EmptyState } from "@mediaos/ui";
 import { displayUserRef, usePayrollPeople } from "./use-payroll-people";
 import { PayslipBreakdown } from "./components/PayslipBreakdown";
+import { PayslipStatusBadge } from "./components/StatusBadges";
 
 /**
  * PAY-SCREEN-003 (S13-PAYROLL-FE-1) — phiếu lương chi tiết, đường QUẢN TRỊ
@@ -53,15 +53,13 @@ export function PayslipDetailPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      {/* UI-07 §13.7 — header màn chi tiết. KHÔNG có hành động chính lẫn `⋯`: `payslips` là bảng
+          APPEND-ONLY (không sửa/huỷ/xoá), nên menu rỗng ⇒ nút `⋯` tự ẩn, đúng thiết kế. */}
+      <DetailPageHeader
+        onBack={onBack}
         title={t("payslip.title", { name: displayUserRef(payslip.userId, people) })}
-        description={t("payslip.description")}
-        actions={
-          <Button variant="ghost" size="sm" onClick={onBack}>
-            <ArrowLeft className="mr-2 size-4" />
-            {t("actions.back")}
-          </Button>
-        }
+        subtitle={t("payslip.description")}
+        status={<PayslipStatusBadge status={payslip.status} />}
       />
       <PayslipBreakdown payslip={payslip} />
     </div>

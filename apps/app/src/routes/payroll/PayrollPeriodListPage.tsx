@@ -5,7 +5,19 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys, useCan } from "@mediaos/web-core";
 import type { PayrollPeriodDto, PayrollPeriodStatus } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, Input, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
+import {
+  Button,
+  ColumnPicker,
+  DataTable,
+  DataToolbar,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+  TableFooter,
+  useColumnVisibility,
+  type ColumnOption,
+} from "@mediaos/ui";
 import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE, PAYROLL_PERIOD_STATUSES } from "./constants";
 import { PayrollPeriodStatusBadge } from "./components/StatusBadges";
 import { PeriodFormDialog } from "./components/PeriodFormDialog";
@@ -45,7 +57,24 @@ export function PayrollPeriodListPage({ onOpenPeriod }: { onOpenPeriod: (id: str
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAYROLL_PAGE_SIZE);
   const [createOpen, setCreateOpen] = useState(false);
+
+  /**
+   * ⚙ chọn cột — cột «Kỳ lương» KHOÁ vì nó là cột ĐỊNH DANH (và là cột ghim trái): tắt được nó thì
+   * bảng còn lại là mấy ô trạng thái không biết của kỳ nào (UI-07 §12.4).
+   */
+  const columnOptions = useMemo<ColumnOption[]>(
+    () => [
+      { id: "periodMonth", label: t("periodList.columns.month"), locked: true },
+      { id: "status", label: t("periodList.columns.status") },
+      { id: "payDate", label: t("periodList.columns.payDate") },
+      { id: "attendancePeriod", label: t("periodList.columns.attendancePeriod") },
+      { id: "note", label: t("periodList.columns.note") },
+    ],
+    [t],
+  );
+  const columnPrefs = useColumnVisibility("payroll.periods", columnOptions);
 
   const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -58,9 +87,9 @@ export function PayrollPeriodListPage({ onOpenPeriod }: { onOpenPeriod: (id: str
       ...(PERIOD_MONTH_RE.test(filters.periodMonth) ? { periodMonth: filters.periodMonth } : {}),
       ...(filters.status ? { status: [filters.status] } : {}),
       page,
-      per_page: PAYROLL_PAGE_SIZE,
+      per_page: pageSize,
     }),
-    [filters, page],
+    [filters, page, pageSize],
   );
 
   const listQuery = useQuery({
@@ -70,18 +99,21 @@ export function PayrollPeriodListPage({ onOpenPeriod }: { onOpenPeriod: (id: str
   });
 
   const rows = listQuery.data?.data ?? [];
-  const total = listQuery.data?.pagination?.total ?? rows.length;
-  const lastPage = Math.max(1, Math.ceil(total / PAYROLL_PAGE_SIZE));
+  // `total` CHỈ lấy từ `pagination.total` của API. API trả mảng trần ⇒ `undefined` ⇒ footer nói
+  // «không rõ tổng», KHÔNG lấy `rows.length` làm tổng (`apifetch-drops-pagination-bare-array`).
+  const total = listQuery.data?.pagination?.total;
 
   const columns = useMemo<ColumnDef<PayrollPeriodDto>[]>(
     () => [
-      { accessorKey: "periodMonth", header: t("periodList.columns.month") },
+      { id: "periodMonth", accessorKey: "periodMonth", header: t("periodList.columns.month") },
       {
+        id: "status",
         accessorKey: "status",
         header: t("periodList.columns.status"),
         cell: ({ row }) => <PayrollPeriodStatusBadge status={row.original.status} />,
       },
       {
+        id: "payDate",
         accessorKey: "payDate",
         header: t("periodList.columns.payDate"),
         cell: ({ row }) => row.original.payDate ?? "—",
@@ -93,6 +125,7 @@ export function PayrollPeriodListPage({ onOpenPeriod }: { onOpenPeriod: (id: str
           row.original.attendancePeriodId ? t("periodList.linked") : t("periodList.notLinked"),
       },
       {
+        id: "note",
         accessorKey: "note",
         header: t("periodList.columns.note"),
         cell: ({ row }) => row.original.note ?? "—",
@@ -127,7 +160,17 @@ export function PayrollPeriodListPage({ onOpenPeriod }: { onOpenPeriod: (id: str
         }
       />
 
-      <div className="flex flex-wrap items-end gap-3">
+      <DataToolbar
+        actions={
+          <ColumnPicker
+            options={columnOptions}
+            hiddenIds={columnPrefs.hiddenIds}
+            onToggle={columnPrefs.toggle}
+            onReset={columnPrefs.reset}
+            isDefault={columnPrefs.isDefault}
+          />
+        }
+      >
         <div className="w-48">
           <Input
             placeholder={t("periodList.monthPlaceholder")}
@@ -161,7 +204,7 @@ export function PayrollPeriodListPage({ onOpenPeriod }: { onOpenPeriod: (id: str
             {t("periodList.clearFilters")}
           </Button>
         )}
-      </div>
+      </DataToolbar>
 
       {listQuery.isError ? (
         <EmptyState
@@ -173,37 +216,41 @@ export function PayrollPeriodListPage({ onOpenPeriod }: { onOpenPeriod: (id: str
           }
         />
       ) : (
-        <>
-          <DataTable
-            columns={columns}
-            data={rows}
-            isLoading={listQuery.isLoading}
-            pageSize={PAYROLL_PAGE_SIZE}
-            onRowClick={(row) => onOpenPeriod(row.id)}
-            emptyState={
-              <EmptyState
-                title={hasFilters ? t("periodList.emptyFiltered") : t("periodList.empty")}
-                action={
-                  canCreate && !hasFilters ? (
-                    <Button onClick={() => setCreateOpen(true)}>
-                      <Plus className="mr-2 size-4" />
-                      {t("periodList.create")}
-                    </Button>
-                  ) : undefined
-                }
-              />
-            }
-          />
-
-          {lastPage > 1 && (
-            <PaginationFooter
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={listQuery.isLoading}
+          pageSize={pageSize}
+          columnVisibility={columnPrefs.visibility}
+          pinFirstColumn
+          onRowClick={(row) => onOpenPeriod(row.id)}
+          footer={
+            <TableFooter
               page={page}
-              totalPages={lastPage}
+              pageSize={pageSize}
+              total={total}
               disabled={listQuery.isFetching}
               onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
             />
-          )}
-        </>
+          }
+          emptyState={
+            <EmptyState
+              title={hasFilters ? t("periodList.emptyFiltered") : t("periodList.empty")}
+              action={
+                canCreate && !hasFilters ? (
+                  <Button onClick={() => setCreateOpen(true)}>
+                    <Plus className="mr-2 size-4" />
+                    {t("periodList.create")}
+                  </Button>
+                ) : undefined
+              }
+            />
+          }
+        />
       )}
 
       <PeriodFormDialog
