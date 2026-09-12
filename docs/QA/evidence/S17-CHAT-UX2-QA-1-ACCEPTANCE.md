@@ -139,9 +139,19 @@ không suy đoán). Bốn lượt local 2026-09-12, cùng máy, cùng cây làm 
 
 ⇒ bật `--coverage` cho lượt full là mua **đỏ oan** (3/3 lượt chết, hạ `maxThreads` không cứu), và kể cả
 nếu nó chạy được thì phạm vi chạy khác ⇒ **mẫu số `functions` khác** (§4 — v8 chỉ đếm đủ hàm của file
-đã thực sự chạy) ⇒ con số CI sẽ là một ngưỡng THỨ HAI chưa ai hiệu chuẩn. Gọi đúng `test:chat-cov` thì
-số ở CI = số đo local. **Chi phí cổng: +14s cho riêng app `app`** (~+48% trên nhánh app, hai app kia
-không đổi).
+đã thực sự chạy) ⇒ con số CI sẽ là một ngưỡng THỨ HAI chưa ai hiệu chuẩn.
+
+**Chi phí cổng — số CI THẬT, không suy từ số local** (done_when #2: "đo thời gian trước-sau"):
+
+| Mốc | `Build app` | Ghi chú |
+| --- | --- | --- |
+| master trước WO (2 run gần nhất) | **5m21s** · **5m26s** | chưa có bước cổng |
+| nhánh PR sau WO (lượt xanh #2) | **6m12s** | bước `Coverage gate` tốn **66s** (09:01:12 → 09:02:18) |
+
+⇒ **+~50s trên job `Build app`, ~+16%**. `auth`/`console` không đổi (bước `skipped`).
+
+⚠️ **66s ở CI so với 14s ở local** — runner chậm ~4,7 lần cho đúng lượt này. Đừng lấy số local ước
+lượng chi phí CI: muốn mở cổng ra app khác thì phải đo lại bằng số CI.
 
 **Nghiệm bằng VI PHẠM thật, không bằng đọc YAML** (memory `coverage-threshold-key-typo-is-dead-gate`,
 `vitest-globalsetup-teardown-exits-zero` — một cổng chưa từng đỏ là một cổng chưa được chứng minh):
@@ -149,7 +159,7 @@ không đổi).
 | # | Commit trên nhánh PR #505 | Bước `Test` | Bước `Coverage gate` | Run |
 | --- | --- | --- | --- | --- |
 | 1 | cổng + **sàn giả 99** (vi phạm cố ý) | ✅ success | ❌ **failure** — 4 dòng `ERROR: Coverage for … does not meet global threshold (99%)`, `Build`/`Upload dist` sau đó `skipped` | [34684202708](https://github.com/nguyencanhqk/mediaos/actions/runs/34684202708/job/103528212585) |
-| 2 | revert sàn về **80** (net diff của PR) | ✅ | ✅ | ⏳ |
+| 2 | revert sàn về **80** (net diff của PR) | ✅ success | ✅ **success** — in bảng coverage, `Build`/`Upload dist` chạy tiếp | [34684532510](https://github.com/nguyencanhqk/mediaos/actions/runs/34684532510) |
 
 Điểm mấu chốt của lượt #1: bước `Test` NGAY TRƯỚC vẫn **success**, chỉ bước `Coverage gate` đỏ ⇒ cổng
 đỏ vì **đúng lý do coverage**, không phải vì suite hỏng. Một cổng không phân biệt được hai chuyện đó
