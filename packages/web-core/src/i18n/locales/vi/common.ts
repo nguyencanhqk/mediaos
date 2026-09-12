@@ -18,8 +18,21 @@ export default {
   anyStatus: "Mọi trạng thái",
   pagination: {
     range: "{{from}}–{{to}} trên {{total}}",
+    /** Dải gọn dùng trong `TableFooter` — «Tổng số» đã đứng riêng nên không lặp lại ở đây. */
+    rangeShort: "{{from}}–{{to}}",
     prev: "Trang trước",
     next: "Trang sau",
+  },
+  /**
+   * S15-UI-SHELL-1 (DEC-020) — vỏ bảng dùng chung (UI-07 §12.3).
+   * `total` CỐ Ý không tên là `count`: i18next coi `count` là khoá số nhiều.
+   */
+  table: {
+    total: "Tổng số {{total}}",
+    totalUnknown: "Không rõ tổng",
+    pageSize: "Số dòng/trang",
+    columns: "Chọn cột",
+    columnsReset: "Mặc định",
   },
   actions: {
     save: "Lưu",
@@ -37,6 +50,8 @@ export default {
     refresh: "Làm mới",
     view: "Xem",
     search: "Tìm kiếm",
+    /** Nút `⋯` của `DetailPageHeader` (UI-07 §13.7). */
+    more: "Hành động khác",
   },
   errors: {
     generic: "Có lỗi xảy ra. Vui lòng thử lại.",

@@ -53,6 +53,23 @@ interface DataTableProps<TData, TValue> {
    */
   sorting?: SortingState;
   onSortingChange?: OnChangeFn<SortingState>;
+  /**
+   * GHIM CỘT (v1.1 — UI-07 §12.4). Cột ĐẦU (Identity) ghim TRÁI / cột CUỐI (Actions) ghim PHẢI: bảng
+   * rộng cuộn ngang thì hai cột này đứng yên, người dùng không mất dấu «dòng này là ai».
+   *
+   * ⚠️ Ô ghim phải có nền ĐỤC, nếu không nội dung cuộn qua sẽ hiện xuyên bên dưới. Cách làm ở đây:
+   * khi bật ghim, `<tr>` đổi sang nền đục (`bg-card` / hover `bg-accent`, `bg-muted` cho header) và ô
+   * ghim dùng `bg-inherit` để ăn ĐÚNG màu của hàng — kể cả lúc hover. Không bật ghim thì mọi class
+   * giữ NGUYÊN như trước (`bg-muted/50` · `hover:bg-muted/40`), nên mọi bảng HR/ATT/LEAVE/TASK hiện
+   * có render y hệt.
+   */
+  pinFirstColumn?: boolean;
+  pinLastColumn?: boolean;
+  /**
+   * Footer tuỳ biến dưới bảng (thường là `TableFooter` cho phân trang SERVER — UI-07 §12.3). Có
+   * truyền thì phân trang CLIENT sẵn có không render (hai bộ điều khiển trang chồng nhau là lỗi).
+   */
+  footer?: React.ReactNode;
 }
 
 /**
@@ -74,10 +91,15 @@ export function DataTable<TData, TValue>({
   onGroupingChange,
   sorting,
   onSortingChange,
+  pinFirstColumn = false,
+  pinLastColumn = false,
+  footer,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation("common");
   const isGrouping = (grouping?.length ?? 0) > 0;
   const isManualSort = onSortingChange !== undefined;
+  // Gom nhóm trải hàng group-header qua MỌI cột ⇒ không còn "cột đầu/cuối" để ghim. Tắt ghim khi gom.
+  const isPinning = (pinFirstColumn || pinLastColumn) && !isGrouping;
 
   const table = useReactTable({
     data,
@@ -123,21 +145,42 @@ export function DataTable<TData, TValue>({
   const from = totalRows === 0 ? 0 : pageIndex * pageSize + 1;
   const to = Math.min(from + pageSize - 1, totalRows);
   // Không hiện phân trang client khi đang gom nhóm (tất cả trên 1 trang) hoặc khi ít hơn 1 trang.
-  const showPagination = !isGrouping && totalRows > pageSize;
+  const showPagination = !isGrouping && totalRows > pageSize && footer === undefined;
+
+  /** Class ghim cho ô ở vị trí `index` trong hàng có `count` ô hiển thị. */
+  const pinClass = (index: number, count: number): string | undefined => {
+    if (!isPinning) return undefined;
+    if (pinFirstColumn && index === 0) {
+      return "sticky left-0 z-10 bg-inherit border-r border-border";
+    }
+    if (pinLastColumn && index === count - 1) {
+      return "sticky right-0 z-10 bg-inherit border-l border-border";
+    }
+    return undefined;
+  };
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/50 text-left">
-              {table.getHeaderGroups()[0]?.headers.map((header) => {
+            <tr
+              className={cn(
+                "border-b border-border text-left",
+                // Nền ĐỤC khi ghim (ô ghim `bg-inherit` ăn theo) — ngoài ra giữ nguyên bản cũ.
+                isPinning ? "bg-muted" : "bg-muted/50",
+              )}
+            >
+              {table.getHeaderGroups()[0]?.headers.map((header, index, all) => {
                 const canSort = isManualSort && header.column.getCanSort();
                 const sortDir = header.column.getIsSorted();
                 return (
                   <th
                     key={header.id}
-                    className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                    className={cn(
+                      "px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground",
+                      pinClass(index, all.length),
+                    )}
                   >
                     {header.isPlaceholder ? null : canSort ? (
                       <button
@@ -188,14 +231,19 @@ export function DataTable<TData, TValue>({
                     key={row.id}
                     onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                     className={cn(
-                      "border-b border-border transition-colors last:border-0 hover:bg-muted/40",
+                      "border-b border-border transition-colors last:border-0",
+                      isPinning ? "bg-card hover:bg-accent" : "hover:bg-muted/40",
                       onRowClick && "cursor-pointer",
                     )}
                   >
-                    {row.getVisibleCells().map((cell) => (
+                    {row.getVisibleCells().map((cell, index, all) => (
                       <td
                         key={cell.id}
-                        className={cn("px-4 py-3 align-middle", isGrouping && "pl-8")}
+                        className={cn(
+                          "px-4 py-3 align-middle",
+                          isGrouping && "pl-8",
+                          pinClass(index, all.length),
+                        )}
                       >
                         {cell.getIsPlaceholder()
                           ? null
@@ -233,6 +281,8 @@ export function DataTable<TData, TValue>({
           </div>
         </div>
       )}
+
+      {footer !== undefined && <div className="border-t border-border px-4 py-2.5">{footer}</div>}
     </div>
   );
 }

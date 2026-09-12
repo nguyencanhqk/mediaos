@@ -5,7 +5,19 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plus, RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys, useAuthStore, useCanExact } from "@mediaos/web-core";
 import type { BonusKind, BonusPenaltyDto, BonusPenaltyStatus } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, Input, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
+import {
+  Button,
+  ColumnPicker,
+  DataTable,
+  DataToolbar,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+  TableFooter,
+  useColumnVisibility,
+  type ColumnOption,
+} from "@mediaos/ui";
 import { BONUS_PENALTY_STATUSES, PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "./constants";
 import { canDecideBonusPenalty } from "./payroll-actions";
 import { formatPayrollMoney, PAYROLL_NUMERIC_CELL_CLASS } from "./payroll-format";
@@ -60,6 +72,7 @@ export function BonusPenaltyListPage() {
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAYROLL_PAGE_SIZE);
   const [createOpen, setCreateOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<BonusPenaltyDto | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -76,9 +89,9 @@ export function BonusPenaltyListPage() {
       ...(filters.status ? { status: [filters.status] } : {}),
       ...(filters.kind ? { kind: filters.kind } : {}),
       page,
-      per_page: PAYROLL_PAGE_SIZE,
+      per_page: pageSize,
     }),
-    [filters, page],
+    [filters, page, pageSize],
   );
 
   const listQuery = useQuery({
@@ -109,8 +122,11 @@ export function BonusPenaltyListPage() {
   });
 
   const rows = listQuery.data?.data ?? [];
-  const total = listQuery.data?.pagination?.total ?? rows.length;
-  const lastPage = Math.max(1, Math.ceil(total / PAYROLL_PAGE_SIZE));
+  const total = listQuery.data?.pagination?.total;
+  // Mask theo cặp quyền = vắng khoá cả trang ⇒ cột tiền vắng khỏi ⚙ chọn cột (UI-07 §10.4 mục 10).
+  // Trang RỖNG ⇒ fail-CLOSED: không có hàng để đo thì không được kết luận «được xem» (xem chú thích
+  // dài ở SalaryProfileListPage — cùng một lớp lỗi).
+  const moneyMasked = rows.length === 0 || rows.every((r) => r.amount === undefined);
 
   const columns = useMemo<ColumnDef<BonusPenaltyDto>[]>(
     () => [
@@ -133,8 +149,8 @@ export function BonusPenaltyListPage() {
           </span>
         ),
       },
-      { accessorKey: "periodMonth", header: t("bonus.columns.month") },
-      { accessorKey: "reason", header: t("bonus.columns.reason") },
+      { id: "periodMonth", accessorKey: "periodMonth", header: t("bonus.columns.month") },
+      { id: "reason", accessorKey: "reason", header: t("bonus.columns.reason") },
       {
         id: "status",
         header: t("bonus.columns.status"),
@@ -181,6 +197,20 @@ export function BonusPenaltyListPage() {
     [t, people, canDecide, currentUserId, decideMutation.isPending, decideMutation.mutate],
   );
 
+  /** «Nhân sự» khoá (cột định danh, ghim trái); «Quyết định» khoá (cột hành động, ghim phải). */
+  const columnOptions = useMemo<ColumnOption[]>(
+    () => [
+      { id: "user", label: t("bonus.columns.employee"), locked: true },
+      { id: "kind", label: t("bonus.columns.kind") },
+      ...(moneyMasked ? [] : [{ id: "amount", label: t("bonus.columns.amount") }]),
+      { id: "periodMonth", label: t("bonus.columns.month") },
+      { id: "reason", label: t("bonus.columns.reason") },
+      { id: "status", label: t("bonus.columns.status") },
+    ],
+    [t, moneyMasked],
+  );
+  const columnPrefs = useColumnVisibility("payroll.bonusPenalties", columnOptions);
+
   if (!canView) return <EmptyState title={t("bonus.noPermission")} />;
 
   return (
@@ -209,7 +239,17 @@ export function BonusPenaltyListPage() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-3">
+      <DataToolbar
+        actions={
+          <ColumnPicker
+            options={columnOptions}
+            hiddenIds={columnPrefs.hiddenIds}
+            onToggle={columnPrefs.toggle}
+            onReset={columnPrefs.reset}
+            isDefault={columnPrefs.isDefault}
+          />
+        }
+      >
         <div className="w-40">
           <Input
             placeholder="2026-09"
@@ -253,7 +293,7 @@ export function BonusPenaltyListPage() {
             {t("bonus.clearFilters")}
           </Button>
         )}
-      </div>
+      </DataToolbar>
 
       {errorKey && <p className="text-sm text-danger">{t(errorKey)}</p>}
 
@@ -267,25 +307,31 @@ export function BonusPenaltyListPage() {
           }
         />
       ) : (
-        <>
-          <DataTable
-            columns={columns}
-            data={rows}
-            isLoading={listQuery.isLoading}
-            pageSize={PAYROLL_PAGE_SIZE}
-            emptyState={
-              <EmptyState title={hasFilters ? t("bonus.emptyFiltered") : t("bonus.empty")} />
-            }
-          />
-          {lastPage > 1 && (
-            <PaginationFooter
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={listQuery.isLoading}
+          pageSize={pageSize}
+          columnVisibility={columnPrefs.visibility}
+          pinFirstColumn
+          pinLastColumn
+          emptyState={
+            <EmptyState title={hasFilters ? t("bonus.emptyFiltered") : t("bonus.empty")} />
+          }
+          footer={
+            <TableFooter
               page={page}
-              totalPages={lastPage}
+              pageSize={pageSize}
+              total={total}
               disabled={listQuery.isFetching}
               onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
             />
-          )}
-        </>
+          }
+        />
       )}
 
       <BonusPenaltyFormDialog

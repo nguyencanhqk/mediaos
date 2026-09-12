@@ -30,6 +30,7 @@
 | Phiên bản | Ngày | Thay đổi | Người thực hiện |
 | --- | --- | --- | --- |
 | v1.0 | 20/06/2026 | Khởi tạo tài liệu cho giai đoạn MVP v1.0. | |
+| **v1.1a** | **12/09/2026** | **S15-UI-SHELL-1 — đối chiếu tài liệu ↔ code khi dựng thật**: §9.4 `collapsible` mặc định **true** (cờ để TẮT, không để BẬT — cây TASK 3 cấp đã chạy không khai cờ) · §9.2 mục 8 làm rõ «ACTIVE» = mục CON active, và chevron của nhóm bị ghim mở thì `disabled` + tooltip · §21.8 «Bảng công» là TAB của chi tiết kỳ chứ không phải mục sidebar, không bọc thêm hàng cha «Thiết lập», và mục chưa có màn tự ẩn qua `pruneUnbuiltScreens()` theo `ROUTE_REGISTRY`. Component dựng ở `packages/ui`: `DataToolbar` · `ColumnPicker` + `useColumnVisibility` · `TableFooter` · `StatusPill` · `DetailPageHeader`, cộng `DataTable` nhận `pinFirstColumn`/`pinLastColumn`/`footer`. | |
 | **v1.1** | **11/09/2026** | **DEC-020 — vỏ UI dùng chung** (làm ở `packages/ui` + layout `apps/app`, **mọi module dùng chung, KHÔNG riêng PAYROLL**): §6.2 thêm `SidebarNavGroup` **gập được** · `ColumnPicker` · `DetailPageHeader` · §6.3 slot `detailPageHeader` · §9.2/§9.5 **gập per-group** + luật «nhóm cha ẩn khi mọi con đều ẩn» · §9.4 union `moduleCode` đồng bộ code (**+`PAYROLL`** và 8 module đã ship còn thiếu) + `collapsible`/`defaultCollapsed` · §10.4 toolbar «⚙ chọn cột» + «đơn vị» · §12.3/§12.4 DataTable **ghim cột · chọn cột · footer «Tổng số · Số dòng/trang · 1–N»** · §13.7 tách `DetailPageHeader` + `StatusPill` · §21.8 **Workspace PAYROLL** · §26.1 đường dẫn component dùng chung → **`packages/ui`**. Nguồn: [SPEC-11 §9.1 · §23.2](<../SPEC/SPEC-11 PAYROLL.md>), WO `S15-UI-SHELL-1`. | |
 
 ---
@@ -381,6 +382,7 @@ Trong module này tôi có thể đi đến những khu vực nào?
    - **Thu gọn cả sidebar** = đổi *chiều rộng* (chỉ còn icon + tooltip). Khi cả sidebar đã thu gọn, **không render chevron nhóm** — không có chỗ cho nhãn nhóm, và gập một nhóm vô hình là thao tác chết.
    - **Gập một nhóm** = ẩn/hiện *các mục con* của riêng nhóm đó, sidebar vẫn nguyên chiều rộng.
    - **Nhóm chứa mục ĐANG ACTIVE luôn MỞ**, kể cả `defaultCollapsed: true`. Gập mất mục đang đứng là để người dùng mất dấu vị trí của chính họ.
+     > **v1.1a (S15-UI-SHELL-1) — «ACTIVE» ở đây nghĩa là mục CON đang active, KHÔNG tính chính hàng nhóm.** Một hàng có `path` riêng mà tự nó active thì gập lại vẫn hiện nguyên (cái bị giấu là con cháu), nên ép mở ở đó chỉ tạo ra một chevron bấm-không-ăn. Khi nhóm bị ghim mở, chevron render **`disabled` + tooltip nói lý do** — không để một nút chết im lặng.
    - Trạng thái gập/mở lưu **theo người dùng + theo module** ở client (tiện ích hiển thị, **không** là dữ liệu nghiệp vụ, **không** gọi API). Đọc lỗi/thiếu ⇒ rơi về `defaultCollapsed`.
    - Header nhóm là `<button aria-expanded>` điều khiển vùng con — bàn phím dùng được, screen reader đọc được (§28).
 9. Mỗi module có thể có nhóm `Tổng quan`, `Nghiệp vụ`, `Quản lý`, `Báo cáo`, `Thiết lập`.
@@ -432,8 +434,11 @@ interface WorkspaceSidebarItem {
   order: number;
   exact?: boolean;
   // v1.1 — chỉ có nghĩa trên hàng ĐẠI DIỆN NHÓM (SidebarNavGroup), bỏ qua trên mục lá.
-  collapsible?: boolean;         // mặc định false = nhóm tĩnh, không có chevron
-  defaultCollapsed?: boolean;    // chỉ đọc khi collapsible === true; nhóm chứa mục ACTIVE luôn mở
+  // ⚠️ v1.1a (S15-UI-SHELL-1, đo trên code): mặc định là **true** (nhóm có children thì GẬP ĐƯỢC).
+  // Bản nháp v1.1 ghi mặc định `false`; nhưng cây 3 cấp của TASK (S5-TASK-NAV-TREE-1) đã chạy từ
+  // trước mà KHÔNG khai cờ này, nên lấy `false` làm mặc định là giết cây đang chạy. Cờ dùng để TẮT.
+  collapsible?: boolean;         // false = nhóm TĨNH (con luôn hiện, không chevron); mặc định true
+  defaultCollapsed?: boolean;    // chỉ đọc khi collapsible !== false; nhóm chứa mục con ACTIVE luôn mở
   requiredPermissions?: string[];
   requiredAnyPermissions?: string[];
   requiredScopes?: Array<'Own' | 'Team' | 'Department' | 'Project' | 'Company' | 'System'>;
@@ -1540,6 +1545,13 @@ Thiết lập                     [nhóm GẬP ĐƯỢC]
 
 > **«Phiếu lương của tôi»** (`/me/payslips`) và **«Tạm ứng của tôi»** (`/me/payroll-advances`) nằm ở sidebar **ME**, `moduleCode: 'ME'` — **KHÔNG** kéo `access:payroll` vào (SPEC-11 §9). Đừng nhân bản chúng sang đây.
 
+> **v1.1a (S15-UI-SHELL-1, khi dựng thật) — hai đính chính của sơ đồ trên:**
+>
+> 1. **«Bảng công» KHÔNG phải mục sidebar.** Đường dẫn của PAY-SCREEN-008 là `/payroll/periods/:id/timesheet` ([SPEC-11 §9.1](<../SPEC/SPEC-11 PAYROLL.md>)) — bám theo MỘT kỳ cụ thể, nên không có lối vào ổn định từ thanh điều hướng; nó là **tab của màn chi tiết kỳ**. Nhóm «Dữ liệu tính lương» vì thế hiện chỉ có «Thu nhập/khấu trừ khác».
+> 2. **Không bọc thêm hàng cha «Thiết lập».** `group: 'settings'` đã tự render nhãn «Thiết lập» (§9.3); thêm một hàng đại diện nhóm cùng tên là hai nhãn chồng nhau. «Tỉ lệ luật định» nằm thẳng dưới section header đó.
+>
+> **Mục chưa có màn thì tự ẩn, không phải xoá tay:** `PAYROLL_SIDEBAR_V2` khai ĐỦ cấu trúc v2, `pruneUnbuiltScreens()` cắt mọi mục có `path` chưa xuất hiện trong `ROUTE_REGISTRY` (và cắt luôn hàng nhóm còn rỗng sau đó). Mỗi WO sau chỉ cần thêm route là mục tương ứng tự hiện — **không có link chết ở bất kỳ thời điểm nào**.
+
 ### Template ưu tiên
 
 | Màn | Mã SPEC-11 | Template |
@@ -1801,28 +1813,31 @@ interface WorkspaceRouteMeta {
 
 ### 26.1 Component folder đề xuất
 
+> **v1.1a — hai lệch giữa cây nháp và cây dựng thật:** (1) `ModuleSidebar` + `SidebarNavGroup` **ở lại `apps/app`**, không lên `packages/ui`: chúng đọc `sidebar-registry` · router · i18n của một app cụ thể, đúng ranh giới «buộc vào route/registry/i18n ⇒ app-local» nói ngay bên dưới. Nhóm gập được là **hành vi của `ModuleSidebar`**, không phải một component riêng. (2) `UnitSelector` (§10.4 mục 11) **CHƯA dựng** — nó cần cây `org_unit` bám data scope của người dùng, tức là dữ liệu runtime, nên đi cùng WO có màn thật sự lọc theo đơn vị (S15-PAYROLL-FE-1+).
+
 **v1.1 (DEC-020) — vỏ UI dùng chung lên `packages/ui`, phần app-local ở lại `apps/app`.** Cây v1.0 đặt tất cả trong `src/` của một app; nhưng `SidebarNavGroup` / `ColumnPicker` / `DetailPageHeader` / `StatusPill` / `DataTable` là thứ **mọi module dùng chung** — để chúng trong một app là hẹn ngày module thứ hai chép lại. Ranh giới: **dùng chung mọi module ⇒ `packages/ui`; buộc vào route/registry/i18n của một app ⇒ app-local.**
 
 ```text
-packages/ui/src/                        # DÙNG CHUNG mọi module (DEC-020)
-  layout/
-    ModuleWorkspaceLayout.tsx
-    GlobalTopbar.tsx
-    ModuleSidebar.tsx
-    SidebarNavGroup.tsx                 # v1.1 - nhóm GẬP ĐƯỢC (§9.2, §9.5)
-    MainContentShell.tsx
-    WorkspaceBreadcrumb.tsx
-    WorkspacePageHeader.tsx
-    DetailPageHeader.tsx                # v1.1 - §13.7
-    WorkspaceToolbar.tsx
-    WorkspaceState.tsx
-  data-table/
-    DataTable.tsx                       # ghim cột (§12.4)
-    ColumnPicker.tsx                    # v1.1 - §10.4 muc 10
-    TableFooter.tsx                     # v1.1 - Tong so / So dong-trang / 1-N
-  primitives/
-    StatusPill.tsx                      # v1.1 - §13.7
-    UnitSelector.tsx                    # v1.1 - §10.4 muc 11
+packages/ui/src/                        # DÙNG CHUNG mọi module (DEC-020) — ĐO THẬT 12/09/2026
+  components/layout/
+    app-shell.tsx
+    app-sidebar.tsx
+    page-header.tsx
+    detail-page-header.tsx              # v1.1 - §13.7  (DỰNG: S15-UI-SHELL-1)
+  components/ui/
+    data-table.tsx                      # + pinFirstColumn / pinLastColumn / footer (§12.4)
+    data-toolbar.tsx                    # v1.1 - §10.4  (tên nháp: WorkspaceToolbar)
+    column-picker.tsx                   # v1.1 - §10.4 muc 10
+    table-footer.tsx                    # v1.1 - Tong so / So dong-trang / 1-N
+    status-pill.tsx                     # v1.1 - §13.7
+    pagination-footer.tsx               # S14-FE-DEBT-1 - dieu huong trang, TableFooter dung lai
+  hooks/
+    use-column-visibility.ts            # v1.1 - bo cot per-user + per-table
+    use-local-pref.ts                   # localStorage fail-soft
+
+apps/app/src/layouts/workspace/         # APP-LOCAL — KHÔNG lên packages/ui
+  ModuleSidebar.tsx                     # nhóm gập được (§9.2, §9.5) sống ở ĐÂY: nó đọc
+  sidebar-registry.ts                   # registry + router + i18n của app, không dùng chung được
 
 apps/app/src/                           # APP-LOCAL: buộc vào route/registry/i18n của app
   layouts/

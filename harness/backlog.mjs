@@ -15807,7 +15807,7 @@ export const backlog = [
     title:
       "Vỏ UI dùng chung (DEC-020): sidebar nhóm gập được · toolbar chuẩn (tìm · trạng thái · đơn vị · lọc · ⚙ chọn cột) · DataTable ghim cột + chọn cột + footer «Tổng số · Số dòng/trang · 1–N» · DetailPageHeader (← · tiêu đề · nút chính · ⋯) · StatusPill — áp lên 6 màn PAYROLL v1 làm mẫu",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "packages/ui/**",
       "packages/web-core/**",
@@ -15833,6 +15833,11 @@ export const backlog = [
     notes: [
       "🟢 LIGHT gate — thuần FE. Không đụng quyền/masking; nếu phát hiện cần đổi API thì DỪNG và tách WO.",
       "Gộp với S14-FE-DEBT-1 nếu WO đó chưa chạy (cùng đụng PaginationFooter/error-parser) — tránh hai WO sửa cùng file.",
+      "✅ ĐÓNG 12/09/2026 (PR #504). Dựng ở packages/ui: DataToolbar · ColumnPicker + useColumnVisibility · TableFooter · StatusPill · DetailPageHeader; DataTable thêm pinFirstColumn/pinLastColumn/footer (KHÔNG bật ghim ⇒ class y hệt bản cũ, mọi bảng HR/ATT/LEAVE/TASK render không đổi — có ca neo). Sidebar: SidebarItemMeta thêm collapsible/defaultCollapsed; ModuleSidebar đọc chúng + ghim mở nhánh chứa mục CON đang active (chevron disabled + tooltip, không để nút chết). PAYROLL_SIDEBAR_V2 khai đủ cấu trúc v2, pruneUnbuiltScreens() cắt mục chưa có route. Test: ui 174 · web-core 742 · app 274 file · chunk-test XANH mọi chunk; lint 0 error; đo đột biến 4/4 bị giết.",
+      "🐞 LỖ ĐÃ BỊT khi làm WO này (không phải của UI): filterSidebarItems GIỮ LẠI hàng đại diện nhóm tự-pass-quyền dù 0 mục con hiển thị ⇒ sidebar mọc chevron mở ra chỗ trống. Nay hàng có children + KHÔNG có path riêng mà rỗng thì ẩn hẳn (UI-07 §9.2 mục 5). Lỗ này chưa ai gặp vì trước S15 chưa registry nào dùng `children` tĩnh.",
+      "⚖️ Cổng LIGHT 12/09: code-reviewer APPROVE (0C/0H/1M) · typescript-reviewer PASS (0C/0H/1M). Vá CẢ HAI + 1 lỗ tự tìm khi vá: (a) `moneyMasked = rows.length > 0 && …` cho ra false lúc trang RỖNG ⇒ tên trường tiền hiện lại trong ⚙ với đúng vai bị mask — đổi sang fail-CLOSED; (b) `pruneUnbuiltScreens` `return []` ngay khi `path` chưa dựng ⇒ node LAI (path riêng + con) nuốt luôn mục con ĐÃ dựng, im lặng — nay hạ xuống thành hàng nhóm, giữ con; (c) `useColumnVisibility.toggle` ghi từ danh sách ĐÃ LỌC ⇒ bộ cột tạm hẹp + bấm cột khác = xoá lựa chọn của cột đang vắng. Đo đột biến: (b) và (c) bị giết.",
+      "🔴 NỢ CÓ TÊN — bản vá (a) CHƯA CÓ CA NEO. `SalaryProfileListPage`/`BonusPenaltyListPage` không có spec nào (cần dựng query + auth store giả). WO sau đổi `rows.length === 0 ||` về `rows.length > 0 &&` là lỗ rò tên trường tiền mở lại mà KHÔNG ai đỏ. Ca cần viết: vai bị mask + bộ lọc ra 0 kết quả ⇒ `baseSalary`/`allowances` (và `amount`) VẮNG khỏi options của ColumnPicker.",
+      "📌 NỢ chuyển tiếp: (1) `apps/app/src/hooks/use-local-pref.ts` là bản SINH ĐÔI của `packages/ui/src/hooks/use-local-pref.ts` — WO sau cho bản app re-export rồi xoá (thư mục đó ngoài paths của WO này). (2) `sidebar-registry.ts` nay 1418 dòng, vượt trần 800 — tách theo module là WO dọn riêng. (3) `UnitSelector` (UI-07 §10.4 mục 11) CHƯA dựng: cần cây org_unit bám data scope ⇒ đi cùng S15-PAYROLL-FE-1. (4) «Bảng công kỳ» (PAY-SCREEN-008) KHÔNG lên sidebar — path `/payroll/periods/:id/timesheet` bám một kỳ ⇒ là TAB của màn chi tiết kỳ (UI-07 §21.8 v1.1a).",
     ],
   },
   {

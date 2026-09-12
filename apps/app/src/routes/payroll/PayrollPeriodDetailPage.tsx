@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowLeft, Download, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import {
   payrollApi,
   payrollIdempotencyKey,
@@ -11,7 +11,7 @@ import {
   useCanExact,
 } from "@mediaos/web-core";
 import type { PayrollPeriodLineDto } from "@mediaos/contracts";
-import { Button, DataTable, EmptyState, PageHeader, PaginationFooter } from "@mediaos/ui";
+import { Button, DataTable, DetailPageHeader, EmptyState, TableFooter } from "@mediaos/ui";
 import { triggerBlobDownload } from "../attendance/download-blob";
 import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "./constants";
 import {
@@ -103,8 +103,8 @@ export function PayrollPeriodDetailPage({
 
   const period = periodQuery.data ?? null;
   const lines = linesQuery.data?.data ?? [];
-  const lineTotal = linesQuery.data?.pagination?.total ?? lines.length;
-  const lineLastPage = Math.max(1, Math.ceil(lineTotal / PAYROLL_PAGE_SIZE));
+  // Tổng CHỈ từ API (mảng trần ⇒ footer nói «không rõ tổng», không lấy độ dài trang làm tổng).
+  const lineTotal = linesQuery.data?.pagination?.total;
   const moneyMasked = lines.length > 0 && lines.every((l) => isPayrollMoneyMasked(l));
 
   const refreshAll = () => queryClient.invalidateQueries({ queryKey: payrollKeys.periods.allOf() });
@@ -278,48 +278,44 @@ export function PayrollPeriodDetailPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      {/* UI-07 §13.7 — màn chi tiết dùng `DetailPageHeader` THAY `PageHeader`: ← · tiêu đề + chip
+          trạng thái · dòng phụ · hành động chính · ⋯. «Xuất XLSX» xuống menu `⋯` (hành động phụ,
+          và nó CHỈ hiện khi có cặp `export:payroll` — menu rỗng thì cả nút `⋯` tự ẩn). */}
+      <DetailPageHeader
+        onBack={onBack}
         title={t("periodDetail.title", { month: period.periodMonth })}
-        description={t("periodDetail.description")}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" size="sm" onClick={onBack}>
-              <ArrowLeft className="mr-2 size-4" />
-              {t("actions.back")}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void refreshAll()}
-              disabled={periodQuery.isFetching || linesQuery.isFetching}
-            >
-              <RefreshCw className="mr-2 size-4" />
-              {t("states.retry")}
-            </Button>
-            {canExport && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => exportMutation.mutate()}
-                disabled={exportMutation.isPending}
-              >
-                <Download className="mr-2 size-4" />
-                {t("periodDetail.export")}
-              </Button>
-            )}
+        status={<PayrollPeriodStatusBadge status={period.status} />}
+        subtitle={
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>{t("periodDetail.description")}</span>
+            {period.payDate && <span>{t("periodDetail.payDate", { date: period.payDate })}</span>}
+            {period.note && <span>{period.note}</span>}
           </div>
         }
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refreshAll()}
+            disabled={periodQuery.isFetching || linesQuery.isFetching}
+          >
+            <RefreshCw className="mr-2 size-4" />
+            {t("states.retry")}
+          </Button>
+        }
+        overflowItems={
+          canExport
+            ? [
+                {
+                  key: "export",
+                  label: t("periodDetail.export"),
+                  onSelect: () => exportMutation.mutate(),
+                  disabled: exportMutation.isPending,
+                },
+              ]
+            : []
+        }
       />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <PayrollPeriodStatusBadge status={period.status} />
-        {period.payDate && (
-          <span className="text-sm text-muted-foreground">
-            {t("periodDetail.payDate", { date: period.payDate })}
-          </span>
-        )}
-        {period.note && <span className="text-sm text-muted-foreground">{period.note}</span>}
-      </div>
 
       <PeriodActionBar
         period={period}
@@ -366,17 +362,19 @@ export function PayrollPeriodDetailPage({
             data={lines}
             isLoading={linesQuery.isLoading}
             pageSize={PAYROLL_PAGE_SIZE}
+            pinFirstColumn
             onRowClick={adjustable ? (row) => setAdjustTarget(row) : undefined}
             emptyState={<EmptyState title={t("lines.empty")} />}
+            footer={
+              <TableFooter
+                page={linePage}
+                pageSize={PAYROLL_PAGE_SIZE}
+                total={lineTotal}
+                disabled={linesQuery.isFetching}
+                onPageChange={setLinePage}
+              />
+            }
           />
-          {lineLastPage > 1 && (
-            <PaginationFooter
-              page={linePage}
-              totalPages={lineLastPage}
-              disabled={linesQuery.isFetching}
-              onPageChange={setLinePage}
-            />
-          )}
         </>
       )}
 

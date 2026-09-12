@@ -33,8 +33,18 @@ export * from "./components/ui/stat-card";
 export * from "./components/ui/donut-chart";
 // S17-CHAT-UX2-FE-4 — accordion (bảng thông tin phòng chat v2, khối additive)
 export * from "./components/ui/accordion";
+// S15-UI-SHELL-1 (DEC-020) — vỏ UI dùng chung mọi module: toolbar chuẩn · ⚙ chọn cột · footer bảng ·
+// pill trạng thái. Khối additive, KHÔNG đổi export cũ (UI-07 §26.1).
+export * from "./components/ui/data-toolbar";
+export * from "./components/ui/column-picker";
+export * from "./components/ui/table-footer";
+export * from "./components/ui/status-pill";
+export * from "./hooks/use-local-pref";
+export * from "./hooks/use-column-visibility";
 
 // Layout chrome
 export * from "./components/layout/app-shell";
 export * from "./components/layout/app-sidebar";
 export * from "./components/layout/page-header";
+// S15-UI-SHELL-1 — header màn CHI TIẾT (UI-07 §13.7). THAY `PageHeader` trên màn chi tiết.
+export * from "./components/layout/detail-page-header";

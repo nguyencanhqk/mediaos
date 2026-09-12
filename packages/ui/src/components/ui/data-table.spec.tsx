@@ -153,3 +153,92 @@ describe("DataTable — sắp xếp server (manual-mode)", () => {
     expect(scrollWrapper?.querySelector("table")).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// S15-UI-SHELL-1 (DEC-020) — GHIM CỘT + slot footer (UI-07 §12.3/§12.4 v1.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ca đắt nhất ở đây là **tương thích ngược**: `DataTable` là bảng dùng chung của HR/ATT/LEAVE/TASK.
+ * Không bật ghim thì class của hàng/ô phải GIỮ NGUYÊN bản cũ (`bg-muted/50` · `hover:bg-muted/40`,
+ * không `sticky`) — vì ô ghim cần nền ĐỤC nên bật ghim có đổi nền hàng, và đổi nhầm cho mọi bảng là
+ * một hồi quy nhìn thấy được ở 20+ màn.
+ */
+describe("DataTable — ghim cột + footer (v1.1)", () => {
+  const pinCols: ColumnDef<Row>[] = [
+    { accessorKey: "id", header: "Mã" },
+    { accessorKey: "name", header: "Tên" },
+    { id: "actions", header: "Thao tác", cell: () => <button type="button">Sửa</button> },
+  ];
+
+  it("KHÔNG bật ghim ⇒ không có ô sticky nào, nền hàng giữ nguyên bản cũ", () => {
+    const { container } = render(<DataTable columns={pinCols} data={data} />);
+    expect(container.querySelectorAll(".sticky").length).toBe(0);
+    expect(container.querySelector("thead tr")!.className).toContain("bg-muted/50");
+    expect(container.querySelector("tbody tr")!.className).toContain("hover:bg-muted/40");
+  });
+
+  it("pinFirstColumn: ô ĐẦU của header và của mọi hàng dính trái, nền đục ăn theo hàng", () => {
+    const { container } = render(<DataTable columns={pinCols} data={data} pinFirstColumn />);
+
+    const th = container.querySelectorAll("thead th");
+    expect(th[0].className).toContain("sticky");
+    expect(th[0].className).toContain("left-0");
+    expect(th[0].className).toContain("bg-inherit");
+    expect(th[1].className).not.toContain("sticky");
+
+    for (const row of container.querySelectorAll("tbody tr")) {
+      expect(row.querySelectorAll("td")[0].className).toContain("sticky");
+    }
+    // Nền hàng phải ĐỤC, nếu không nội dung cuộn qua hiện xuyên dưới ô ghim.
+    expect(container.querySelector("thead tr")!.className).toContain("bg-muted");
+    expect(container.querySelector("thead tr")!.className).not.toContain("bg-muted/50");
+    expect(container.querySelector("tbody tr")!.className).toContain("bg-card");
+    expect(container.querySelector("tbody tr")!.className).toContain("hover:bg-accent");
+  });
+
+  it("pinLastColumn: ô CUỐI dính phải; ô giữa không dính", () => {
+    const { container } = render(<DataTable columns={pinCols} data={data} pinLastColumn />);
+    const th = container.querySelectorAll("thead th");
+    expect(th[2].className).toContain("right-0");
+    expect(th[0].className).not.toContain("sticky");
+    expect(th[1].className).not.toContain("sticky");
+  });
+
+  it("ghim theo cột ĐANG HIỂN THỊ: ẩn cột cuối thì cột kế mới là cột ghim phải", () => {
+    const { container } = render(
+      <DataTable columns={pinCols} data={data} pinLastColumn columnVisibility={{ actions: false }} />,
+    );
+    const th = container.querySelectorAll("thead th");
+    expect(th.length).toBe(2);
+    expect(th[1].className).toContain("right-0");
+  });
+
+  it("GOM NHÓM tắt ghim (hàng group-header trải hết cột — không còn cột đầu/cuối để dính)", () => {
+    const { container } = render(
+      <DataTable columns={pinCols} data={data} pinFirstColumn grouping={["name"]} />,
+    );
+    expect(container.querySelectorAll(".sticky").length).toBe(0);
+  });
+
+  it("slot footer render dưới bảng", () => {
+    render(<DataTable columns={pinCols} data={data} footer={<span>Tổng số 128</span>} />);
+    expect(screen.getByText("Tổng số 128")).toBeInTheDocument();
+  });
+
+  it("có footer ⇒ TẮT phân trang client (hai bộ điều khiển trang chồng nhau là lỗi)", () => {
+    const many: Row[] = Array.from({ length: 25 }, (_, i) => ({
+      id: `E${i}`,
+      name: `NV ${i}`,
+    }));
+
+    const { rerender } = render(<DataTable columns={pinCols} data={many} pageSize={10} />);
+    expect(screen.getByLabelText("Trang sau")).toBeInTheDocument();
+
+    rerender(
+      <DataTable columns={pinCols} data={many} pageSize={10} footer={<span>footer riêng</span>} />,
+    );
+    expect(screen.queryByLabelText("Trang sau")).not.toBeInTheDocument();
+    expect(screen.getByText("footer riêng")).toBeInTheDocument();
+  });
+});
