@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**496 WO** · có micro-plan: **288/496** · ⬜ 32 chờ · 🔵 2 đang làm · ✅ 461 xong · 🔴 1 chặn
+**499 WO** · có micro-plan: **293/499** · ⬜ 23 chờ · 🔵 0 đang làm · ✅ 474 xong · 🔴 2 chặn
 
 ## Sprint 0
 
@@ -534,15 +534,15 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S15-PAYROLL-DOC-1` | 🟢 | ⬜ chờ | [📄](S15-PAYROLL-V2-WAVE.md) | — | Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9 |
-| `S15-UI-SHELL-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DOC-1 | Vỏ UI dùng chung (DEC-020): sidebar nhóm gập được · toolbar chuẩn (tìm |
-| `S15-PAYROLL-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DOC-1 | Schema + migration PAYROLL v2 track A+B (mig 0569+): ALTER salary_prof |
-| `S15-PAYROLL-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-1 | BE track A: route Nhân viên PAYROLL (PAYROLL-API-036 chiếu HR bó hẹp,  |
-| `S15-PAYROLL-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-1 | BE track B (1/2): catalog thành phần lương + mẫu bảng lương — CRUD + p |
+| `S15-PAYROLL-DOC-1` | 🟢 | ✅ xong | [📄](S15-PAYROLL-V2-WAVE.md) | — | Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9 |
+| `S15-UI-SHELL-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S15-PAYROLL-DOC-1 | Vỏ UI dùng chung (DEC-020): sidebar nhóm gập được · toolbar chuẩn (tìm |
+| `S15-PAYROLL-DB-1` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-1.md) | ✅S15-PAYROLL-DOC-1 | Schema + migration PAYROLL v2 track A+B (mig 0570+): ĐÚNG 2 ALTER — sa |
+| `S15-PAYROLL-BE-1` | 🔴 | 🔴 chặn | [📄](S15-PAYROLL-BE-1.md) | ✅S15-PAYROLL-DB-1 | BE track A: route Nhân viên PAYROLL (PAYROLL-API-036 chiếu HR bó hẹp,  |
+| `S15-PAYROLL-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-DB-1 | BE track B (1/2): catalog thành phần lương + mẫu bảng lương — CRUD + p |
 | `S15-PAYROLL-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-2 | BE track B (2/2): máy tính lương v2 — evaluate theo mẫu của kỳ · engin |
-| `S15-PAYROLL-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-1 ⏳S15-UI-SHELL-1 | FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thôn |
+| `S15-PAYROLL-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-1 ✅S15-UI-SHELL-1 | FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thôn |
 | `S15-PAYROLL-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-3 ⏳S15-PAYROLL-FE-1 | FE track B: PAY-SCREEN-009 Thành phần lương (catalog + editor công thứ |
-| `S15-PAYROLL-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-1 | Schema + migration PAYROLL v2 track C: payroll_advances · payroll_paym |
+| `S15-PAYROLL-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-DB-1 | Schema + migration PAYROLL v2 track C: 4 bảng (payroll_advances · payr |
 | `S15-PAYROLL-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-2 ⏳S15-PAYROLL-BE-3 | BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four- |
 | `S15-PAYROLL-FE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-4 | FE track C: PAY-SCREEN-012 Tạm ứng (list + form + duyệt) · 013 Chi trả |
 | `S15-PAYROLL-BE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-3 ⏳S15-PAYROLL-BE-4 | BE track D: 7 báo cáo (tổng hợp thu nhập NV · thống kê lương theo thời |
@@ -573,13 +573,14 @@
 | --- | --- | --- | --- | --- | --- |
 | `S17-CHAT-UX2-DOC-1` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | — | Bộ tài liệu CHAT v2 (S17): SPEC-15 §9 sửa SCREEN-001/002/004 «v2» · §9 |
 | `S17-CHAT-UX2-BE-1` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | DTO phòng v2: `lastMessage` (LATERAL tin cuối, che thu hồi ở server) + |
-| `S17-CHAT-UX2-BE-2` | 🟡 | 🔵 đang làm | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phò |
-| `S17-CHAT-UX2-FE-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-BE-1 | Danh sách phòng v2: thanh đầu (tìm · lọc · tạo) · chip lọc DEC-021 · d |
+| `S17-CHAT-UX2-BE-2` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | CHAT-API-031 GET /chat/rooms/:id/links — liên kết đã chia sẻ trong phò |
+| `S17-CHAT-UX2-FE-1` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-BE-1 | Danh sách phòng v2: thanh đầu (tìm · lọc · tạo) · chip lọc DEC-021 · d |
 | `S17-CHAT-UX2-FE-2` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-DOC-1 | Hội thoại v2: header (avatar · tên · «đang online / N thành viên» · tì |
-| `S17-CHAT-UX2-FE-3` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-FE-2 | Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[])  |
-| `S17-CHAT-UX2-FE-4` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-BE-1 ⏳S17-CHAT-UX2-BE-2 | Bảng thông tin phòng v2 DEC-025: bố cục dọc (avatar lớn · tên · Tạo bở |
-| `S17-CHAT-UX2-FE-5` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-1 ✅S17-CHAT-UX2-FE-2 | Drawer chat DEC-026 thay ChatDock/ChatDockWindow (Sheet phải 400px: tì |
-| `S17-CHAT-UX2-QA-1` | 🟡 | ⬜ chờ | [📄](S17-CHAT-UX2-WAVE.md) | ⏳S17-CHAT-UX2-FE-3 ⏳S17-CHAT-UX2-FE-4 ⏳S17-CHAT-UX2-FE-5 | Nghiệm thu wave S17-CHAT-UX2: masking preview/links (thu hồi · file ·  |
+| `S17-CHAT-UX2-FE-3` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-FE-2 | Composer v2 DEC-027: @mention autocomplete từ roster (gửi mentions[])  |
+| `S17-CHAT-UX2-FE-4` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-BE-1 ✅S17-CHAT-UX2-BE-2 | Bảng thông tin phòng v2 DEC-025: bố cục dọc (avatar lớn · tên · Tạo bở |
+| `S17-CHAT-UX2-FE-5` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-FE-5.md) | ✅S17-CHAT-UX2-FE-1 ✅S17-CHAT-UX2-FE-2 | Drawer chat DEC-026 thay ChatDock/ChatDockWindow (Sheet phải 400px: tì |
+| `S17-CHAT-UX2-QA-1` | 🟡 | ✅ xong | [📄](S17-CHAT-UX2-WAVE.md) | ✅S17-CHAT-UX2-FE-3 ✅S17-CHAT-UX2-FE-4 ✅S17-CHAT-UX2-FE-5 | Nghiệm thu wave S17-CHAT-UX2: masking preview/links (thu hồi · file ·  |
+| `S17-CHAT-UX2-QA-2` | 🟡 | ✅ xong | [📄](docs/QA/evidence/S17-CHAT-UX2-QA-1-ACCEPTANCE.md) | ✅S17-CHAT-UX2-QA-1 | Đưa sàn coverage 80% của cụm chat thành CỔNG PR: CI gọi lượt có --cove |
 
 ## Sprint 18
 
@@ -595,12 +596,14 @@
 | `S18-AUTH-SECEVENTREST-1` | 🔴 | ✅ xong | [📄](S18-AUTH-SECEVENTREST-1.md) | ✅S18-AUTH-SECEVENTMETA-1 | 9 điểm ghi `user_security_events` NGOÀI đường mật khẩu vẫn VÔ DANH — n |
 | `S18-AUTH-CHANGEPWTOCTOU-1` | 🔴 | ✅ xong | [📄](S18-AUTH-CHANGEPWTOCTOU-1.md) | ✅S18-AUTH-RESETDELETED-1 | `changePassword` ghi `password_hash` không lọc `deleted_at` ở câu UPDA |
 | `S18-AUTH-2FADELETED-1` | 🔴 | ✅ xong | [📄](S18-AUTH-2FADELETED-1.md) | ✅S18-AUTH-CHANGEPWTOCTOU-1 | `disableTwoFactor` KHÔNG lọc `deleted_at` ở CẢ câu SELECT — user đã xo |
-| `S18-AUTH-RESTORE2FA-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S18-AUTH-2FADELETED-1 ✅S18-AUTH-SECEVENTMETA-1 | Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc |
+| `S18-AUTH-RESTORE2FA-1` | 🔴 | ✅ xong | [📄](S18-AUTH-RESTORE2FA-1.md) | ✅S18-AUTH-2FADELETED-1 ✅S18-AUTH-SECEVENTMETA-1 | Khôi phục user KHÔNG soát lại 2FA + `enroll`/`confirmEnable` không lọc |
 | `S18-QA-ASSETFLAKE-1` | 🟡 | ✅ xong | [📄](S18-QA-ASSETFLAKE-1.md) | — | `s11-asset-db1-invariants` ĐỎ trong lane chung nhưng XANH khi chạy riê |
 | `S18-QA-PIPELINEREPLAY-1` | 🟡 | ✅ xong | [📄](S18-QA-PIPELINEREPLAY-1.md) | — | `task-pipeline-backfill-0500` replay migration 0500 lên TOÀN BỘ projec |
 | `S18-QA-SUPERTESTLISTEN-1` | 🟡 | ✅ xong | [📄](S18-QA-SUPERTESTLISTEN-1.md) | — | 12 int-spec còn `app.init()` KHÔNG kèm `listen(0)` nhưng có `Promise.a |
 | `S18-FE-DEPTQUERYKEY-1` | 🟡 | ✅ xong | [📄](S18-FE-DEPTQUERYKEY-1.md) | — | Hai API khác endpoint/khác cổng quyền dùng CHUNG `hrKeys.departments.l |
+| `S18-QA-LEAVEDATEBOMB-1` | 🟡 | ✅ xong | — *(chưa)* | — | `leave-request.int.spec.ts` dùng NGÀY CỨNG tuyệt đối — đỏ từ 0h 09/09/ |
 | `S18-SEC-AUDITGATE-1` | 🟡 | ✅ xong | [📄](S18-SEC-AUDITGATE-1.md) | — | Cổng `Dependency scan (pnpm audit)` ĐỎ trên master từ 09/09 — 5 adviso |
+| `S18-AUTH-490DEBT-1` | crown | ✅ xong | [📄](S18-AUTH-490DEBT-1.md) | — | Trả 3 nợ FULL-gate của #490 (owner chốt 11/09): §8.2 trần ghi audit nh |
 
 ---
 

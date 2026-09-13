@@ -298,17 +298,32 @@ describe.skipIf(!hasDb)(
       ).toBeGreaterThan(0);
     });
 
-    it("E13 ba thành phần đầu vào-theo-dòng CỐ Ý CHƯA SEED — nợ của S15-PAYROLL-BE-2", async () => {
-      // `THUONG` · `PHAT` · `TAM_UNG` có giá trị là ĐẦU VÀO THEO DÒNG, mà `SYS_*` (§13.6 D, khai ĐÓNG)
-      // không có biến nào biểu diễn được. Seed bằng REF trần = tự tạo lỗ shadowing (xem E11); seed
-      // `fixed_amount = 0` = fail-open im lặng (khoản thưởng biến mất, `net ≥ 0` vẫn đúng).
-      // Ca này ghim CHỦ ĐÍCH: ai seed chúng mà không mở rộng SYS_* trước sẽ phải sửa ca này và giải thích.
-      const { rows } = await direct.query<{ code: string }>(
-        `SELECT code FROM salary_components
-        WHERE company_id = $1 AND code IN ('THUONG','PHAT','TAM_UNG') AND deleted_at IS NULL`,
+    it("E13 ba thành phần đầu vào-theo-dòng SEED TỪ BE-2 — công thức là CHÍNH biến SYS_* (KHÔNG REF trần)", async () => {
+      // 🔁 S15-PAYROLL-BE-2 lật ca này (nợ DB-1): SPEC-11 §13.6 D mở rộng SYS_* bằng `SYS_BONUS_AMOUNT` ·
+      // `SYS_PENALTY_AMOUNT` · `SYS_ADVANCE_AMOUNT` rồi mới seed. Ghim ĐÚNG công thức: một REF trần
+      // (`BONUS_AMOUNT`) là mã thành phần theo grammar ⇒ tenant tạo được hàng cùng tên và CHE đầu vào engine;
+      // `fixed_amount = 0` là fail-open im lặng (khoản thưởng biến mất mà `net ≥ 0` vẫn đúng).
+      const { rows } = await direct.query<{
+        code: string;
+        kind: string;
+        value_type: string;
+        formula: string | null;
+      }>(
+        `SELECT code, kind, value_type, formula FROM salary_components
+        WHERE company_id = $1 AND code IN ('THUONG','PHAT','TAM_UNG') AND is_system AND deleted_at IS NULL
+        ORDER BY code`,
         [A.companyId],
       );
-      expect(rows.map((r) => r.code)).toEqual([]);
+      expect(rows).toEqual([
+        { code: "PHAT", kind: "deduction", value_type: "formula", formula: "SYS_PENALTY_AMOUNT" },
+        {
+          code: "TAM_UNG",
+          kind: "deduction",
+          value_type: "formula",
+          formula: "SYS_ADVANCE_AMOUNT",
+        },
+        { code: "THUONG", kind: "earning", value_type: "formula", formula: "SYS_BONUS_AMOUNT" },
+      ]);
     });
 
     it("E10 công ty CHƯA chạy seeder có 0 hàng catalog — đúng 4 đường không-seed của §3.1.a", async () => {

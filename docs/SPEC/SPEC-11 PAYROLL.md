@@ -154,7 +154,7 @@ Khoản lương v1 nằm cứng trong câu SQL. v2 đưa chúng thành **catalog
 - **Kỳ lương gắn ĐÚNG MỘT mẫu** lúc tạo; đổi mẫu chỉ khi kỳ ≤ `CollectingData` (⇒ **PAYROLL-ERR-023**).
 - **Sửa công thức là sửa TIỀN của cả công ty** ⇒ cặp `('manage','salary-component')` và `('manage','payroll-template')` là **sensitive**, và **audit ghi diff công thức** (trước/sau), không chỉ ghi «đã sửa».
 - **Số đã tính KHÔNG trôi theo công thức**: mỗi dòng bảng lương giữ `component_values_json` + **`template_fingerprint`** (băm tập công thức hiệu lực lúc tính). Sửa công thức sau đó không đổi số của kỳ đã tính; nhưng **tính lại** một kỳ `Calculated` **sẽ** lấy công thức mới — đúng ý, và màn chi tiết kỳ **phải** hiện băng «mẫu đã đổi kể từ lần tính gần nhất» khi fingerprint lệch (§14, §13.6).
-- Thành phần **hệ thống** (seed) **không xoá được**, chỉ sửa công thức/ngưng dùng (⇒ **PAYROLL-ERR-024**) — gỡ một mã hệ thống là làm chết mọi công thức tham chiếu nó.
+- Thành phần **hệ thống** (seed) **ĐÓNG BĂNG**: chỉ đổi được **tên hiển thị** và **thứ tự** — **không** xoá, **không** ngưng dùng, **không** sửa công thức/loại/giá trị (⇒ **PAYROLL-ERR-024** `system-component-immutable`). 🔁 *Đính chính `S15-PAYROLL-BE-2` (13/09/2026, plan-review M1): bản trước viết «chỉ sửa công thức/ngưng dùng», mâu thuẫn trigger `salary_component_system_freeze` (mig `0570`, đã qua security review DB-1) — DB thắng.* **Muốn đổi cách tính một thành phần hệ thống ⇒ GHI ĐÈ công thức trong MẪU** (`payroll_template_components.formula_override`), có audit diff; gỡ một mã hệ thống là làm chết mọi công thức tham chiếu nó.
 
 ### 3.11 **v2** — Luật định là DỮ LIỆU CÓ HIỆU LỰC, hệ thống lưu và áp chứ không khẳng định đúng luật
 
@@ -704,6 +704,12 @@ Ghi chú bắt buộc:
 | PAYROLL-ERR-032 | 409 | **Người phụ thuộc**: hai bản ghi **chồng lấp khoảng hiệu lực** cho cùng một NPT (`kind = dependent-overlap`) — chốt cuối `EXCLUDE USING gist` ở DB, race map 409 không 500 |
 | PAYROLL-ERR-033 | 409 | **Bản tỉ lệ luật định — xung đột**: trùng `effective_from` (`kind = rate-effective-date-exists` — chốt cuối UNIQUE, race map 409) · sửa bản **đã có kỳ lương dùng** (`kind = rate-in-use`; đổi số của bản đã áp là đổi tiền của kỳ đã tính ⇒ phải **tạo bản mới**, không sửa tại chỗ) |
 
+> 🔁 **Kind bổ sung khi hiện thực track B (`S15-PAYROLL-BE-2`, 13/09/2026)** — danh sách vẫn ĐÓNG, mã không đổi:
+>
+> - **018** `formula-arity` (sai số tham số / `ROUND` tham số thứ hai không phải literal nguyên −6..6) · `template-missing-engine-nodes` (mẫu thiếu 4 nút tổng hợp — **fail-closed**, không bao giờ tính ra 0) · `formula-override-not-allowed` (ghi đè công thức trên thành phần `engine`/`profile_item`) · `template-too-many-components` (> 120) · `template-component-unknown` · `template-component-duplicate` · `component-value-pair` (loại giá trị không khớp trường, kiểm trên hàng SAU merge) · `template-scope-pair`.
+> - **023** `template-code-exists` (trùng mã mẫu — chốt cuối UNIQUE). *(`template-in-use` — xoá/ngưng mẫu đang gắn kỳ — thêm ở BE-4 khi có `payroll_periods.template_id`.)*
+> - Ba CHECK ở DB map **409/422 theo TÊN** thay vì để rơi 500: `salary_components_code_shape_check` ⇒ 024 `component-code-reserved` · `salary_components_value_pair_check`/`engine_kind_check` ⇒ 018 `component-value-pair` · `payroll_templates_scope_pair_check` ⇒ 018 `template-scope-pair`. Trigger `salary_component_system_freeze` (23514 KHÔNG tên) ⇒ 024 `system-component-immutable`, phân biệt với trigger thưởng/phạt bằng tiền tố message.
+
 **Bốn quy tắc bổ sung của v2:**
 
 - **Ba mã 018/019/020 chia theo THỜI ĐIỂM, không theo nội dung.** 018/019 phát lúc **LƯU** thành phần/mẫu (người dùng sửa được ngay, `details[]` chỉ vào ký tự); **020 phát lúc TÍNH** (công thức đã qua kiểm mà vẫn vỡ trên dữ liệu thật — chia cho 0 vì một đầu vào bằng 0, tràn số vì lương bất thường). Gộp làm một mã thì FE không biết nên mở editor công thức hay mở dòng lương.
@@ -992,6 +998,14 @@ FUNC    := IF | MIN | MAX | ROUND | ABS | CEIL | FLOOR
 - `IF(cond, a, b)` đánh giá **cả hai nhánh** (không short-circuit) — đơn giản hoá evaluator và làm ngân sách node tất định; không có tác dụng phụ nên không đổi kết quả.
 - `/` với mẫu 0 ⇒ **PAYROLL-ERR-020** `division-by-zero`, **không** trả 0, **không** trả `Infinity`.
 
+**A′. Chốt diễn giải khi hiện thực (`S15-PAYROLL-BE-2`, 13/09/2026 — grammar KHÔNG đổi, chỉ khoá chỗ EBNF im lặng):**
+
+1. **Thứ tự kiểm:** `length > 500` ⇒ `formula-too-long` **trước** khi tokenize; ký tự ngoài bảng chữ cái grammar (chữ thường · unicode · NUL · nháy · `[` · `$` · `!` …) ⇒ `formula-syntax` kèm `pos` (chỉ số UTF-16). `AND`/`OR` là **từ khoá**, không bao giờ là REF; tên hàm đứng một mình (không `(`) ⇒ `formula-syntax`.
+2. **Độ sâu** = `max(chiều cao AST, mức lồng ngoặc/lời gọi hàm/dấu âm)`, trong đó chuỗi `+ −` và `× ÷` là **node N-NGÔI** (công thức cộng 25 số hạng có độ sâu 2, không phải 25). Trần ép **ngay lúc dựng node** ⇒ ngoặc lồng 10.000 cấp dừng ở cấp 20, không tràn stack.
+3. **Bảng arity ĐÓNG:** `IF` = 3 · `MIN`/`MAX` ≥ 2 · `ABS`/`CEIL`/`FLOOR`/`TNCN_LUY_TIEN`/`BH_TRAN_*` = 1 · `ROUND(x)` hoặc `ROUND(x, n)` với `n` là **literal số nguyên** ∈ `[-6, 6]` (`ROUND(x, -3)` = làm tròn tới nghìn đồng). Sai ⇒ **018** `formula-arity`.
+4. **So sánh · `AND` · `OR` trả `1`/`0`**; `IF`/`AND`/`OR` đánh giá **mọi** tham số (ngân sách tất định).
+5. **Mã thành phần DÀNH RIÊNG** (⇒ **409 024** `component-code-reserved`): tiền tố `SYS_`/`TL_`/`GT_` · mọi mã thành phần hệ thống · 11 tên hàm · `AND`/`OR`.
+
 **B. Giới hạn TĨNH — ép lúc LƯU (⇒ PAYROLL-ERR-018)**
 
 | Giới hạn | Trần | Vì sao con số này |
@@ -1022,7 +1036,7 @@ Hồ sơ `GROSS` chạy **đúng 1 lượt** ⇒ chạm trần 25.000 là đã v
 
 | Họ | Nguồn giá trị | Ghi/đọc |
 | --- | --- | --- |
-| `SYS_*` | **đầu vào đóng băng** của dòng lương (§13.4 v1 vẫn là nguồn): `SYS_BASE_SALARY` · `SYS_INSURANCE_SALARY` · `SYS_PROBATION_SALARY` · `SYS_PAY_RATIO` · `SYS_WORK_DAYS` · `SYS_PRESENT_DAYS` · `SYS_PAID_LEAVE_DAYS` · `SYS_UNPAID_LEAVE_DAYS` · `SYS_LATE_MINUTES` · `SYS_PRORATE` · `SYS_DEPENDENTS` · `SYS_DAILY_RATE` | **chỉ đọc**, không thành phần nào được đặt tên trùng (§8.2 C1) |
+| `SYS_*` | **đầu vào đóng băng** của dòng lương (§13.4 v1 vẫn là nguồn): `SYS_BASE_SALARY` · `SYS_INSURANCE_SALARY` · `SYS_PROBATION_SALARY` · `SYS_PAY_RATIO` · `SYS_WORK_DAYS` · `SYS_PRESENT_DAYS` · `SYS_PAID_LEAVE_DAYS` · `SYS_UNPAID_LEAVE_DAYS` · `SYS_LATE_MINUTES` · `SYS_PRORATE` · `SYS_DEPENDENTS` · `SYS_DAILY_RATE` · 🔁 **`SYS_BONUS_AMOUNT` · `SYS_PENALTY_AMOUNT` · `SYS_ADVANCE_AMOUNT`** *(thêm ở `S15-PAYROLL-BE-2` — đầu vào theo dòng của thành phần hệ thống `THUONG` · `PHAT` · `TAM_UNG`; nguồn: thưởng/phạt `Approved` của kỳ · tạm ứng `Approved` chưa khấu trừ — BE-3/BE-4 bind)* | **chỉ đọc**, không thành phần nào được đặt tên trùng (§8.2 C1). Nguồn duy nhất trong code: `PAYROLL_SYS_REFS` (`packages/contracts/src/payroll-catalog.ts`) |
 | `TL_*` · `GT_*` | **hằng luật định** hiệu lực tại ngày cuối kỳ: `TL_BHXH_NV` · `TL_BHYT_NV` · `TL_BHTN_NV` · `TL_BHXH_DN` · `TL_BHYT_DN` · `TL_BHTN_DN` · `TL_KPCD` · `TL_DOAN_PHI` · `GT_BAN_THAN` · `GT_NPT` | chỉ đọc; thiếu bản hiệu lực ⇒ **422 ERR-022** |
 | *(còn lại)* | **mã thành phần** trong mẫu của kỳ | giá trị do chính đồ thị sinh ra |
 
@@ -1048,6 +1062,8 @@ Bốn hàng này khai **`value_type = 'engine'`** (§13.4 · DB-13 §13.4) — *
 > **`pit_deductible` chỉ có nghĩa với `kind = 'statutory_employee'`**; seed: `BHXH_NV` · `BHYT_NV` · `BHTN_NV` = `true`, `DOAN_PHI` = `false`. Ba công thức trên phải khớp **từng chữ** với §13.7 C/D/E — lệch một vế là lệch tiền của mọi người.
 
 - **`THUC_LINH` (net) KHÔNG phải node của đồ thị** — nó là `GREATEST(TONG_THU_NHAP − TONG_KHAU_TRU + adjustment_amount, 0)` và **tính ở SQL** lúc ghi dòng (§3.9). Đưa nó vào đồ thị là đưa clamp vào TS.
+- **«Đang bật trong mẫu» = CÓ MẶT trong mẫu.** `is_visible` chỉ là ẩn/hiện CỘT — thành phần ẩn vẫn cộng vào bốn nút tổng hợp *(chốt `S15-PAYROLL-BE-2`, plan-review MF4)*.
+- **Kiểm vòng ở ngữ cảnh CATALOG** (lưu thành phần, `validate-formula`) dựng cạnh ngầm trên **toàn catalog** ⇒ bảo thủ có chủ ý: có thể báo vòng mà một mẫu cụ thể không chứa đủ các nút để tạo vòng đó.
 - **Cycle detection phủ CẢ nút tổng hợp**: một thành phần `kind='earning'` tham chiếu `TONG_THU_NHAP` là **vòng** (nó nằm trong chính tổng đó) ⇒ **422 ERR-019** với chu trình đầy đủ. Đây là lý do bốn nút trên phải là **node thật của đồ thị**, không phải biến tính sẵn ngoài lề — tính sẵn ngoài lề thì vòng này **không ai bắt** và kết quả phụ thuộc thứ tự chạy.
 - **Kiểm vòng chạy ở HAI thời điểm**: lúc **lưu** mẫu/thành phần (⇒ 019, người dùng sửa được ngay) **và** lúc **tính** (⇒ 019, phòng khi mẫu bị sửa bởi lượt khác giữa chừng). Chỉ kiểm lúc lưu là không đủ — hai người sửa hai thành phần song song, mỗi bản riêng lẻ không vòng nhưng hợp lại thì có.
 
@@ -1063,6 +1079,8 @@ Mỗi dòng lương ghi `template_fingerprint` = băm SHA-256 của **tập côn
 
 1. Màn chi tiết kỳ hiện băng **«mẫu đã đổi kể từ lần tính gần nhất»** khi fingerprint của dòng ≠ fingerprint hiện tại của mẫu (§3.10, §14) — nếu không, công thức bị sửa rồi tính lại làm số nhảy mà **không ai biết vì sao**.
 2. QA ghim ca **«sửa công thức sau khi tính KHÔNG đổi số của kỳ đã tính»** bằng cách so `component_values_json`, không phải so lại phép tính.
+
+🔁 **Hai tầng fingerprint** *(chốt `S15-PAYROLL-BE-2`)*: `formulaSetFingerprint` băm **tập công thức của MẪU** (mã · loại · loại giá trị · công thức hiệu lực · số tiền cố định chuẩn hoá 2 chữ số · `pit_deductible` · ẩn/hiện · thứ tự, sắp theo `(sort_order, code)`) — đây là thứ `GET /payroll/templates/:id` (051) trả. `template_fingerprint` của dòng = `SHA-256(formulaSetFingerprint + ':' + statutory_rate_id)`. Băm bản tỉ lệ vào fingerprint cấp mẫu thì không so được với dòng của kỳ nào (tỉ lệ đi theo KỲ).
 
 **H. Đường tương thích với kỳ v1 (bắt buộc, đừng bỏ)**
 
@@ -1231,18 +1249,18 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-18](<../API Design/API-1
 | 044 | `GET /payroll/salary-components` | `('view','salary-component')` | filter `kind` · `isSystem` · `isActive`; pagination |
 | 045 | `POST /payroll/salary-components` | `('manage','salary-component')` | kiểm cú pháp/vòng/giới hạn khi lưu (⇒ 018/019); `code` reserved ⇒ **409 024**; `Idempotency-Key`; audit **kèm công thức** |
 | 046 | `GET /payroll/salary-components/:id` | `('view','salary-component')` | chi tiết + danh sách mẫu đang tham chiếu |
-| 047 | `PATCH /payroll/salary-components/:id` | `('manage','salary-component')` | sửa công thức/ngưng dùng; hệ thống ⇒ **không** xoá được (409 024); audit **kèm diff công thức** (§13.6 I) |
+| 047 | `PATCH /payroll/salary-components/:id` | `('manage','salary-component')` | hàng **tự thêm**: sửa · ngưng dùng · xoá mềm (`{delete:true}`); đang có mẫu (chưa xoá) tham chiếu ⇒ **409 024** `component-in-use`; đổi công thức/loại/`pitDeductible` ⇒ kiểm lại vòng catalog **và mọi mẫu chứa nó** (⇒ 018/019). Hàng **hệ thống**: chỉ `name`/`sortOrder` ⇒ trường khác **409 024** `system-component-immutable` 🔁 *(BE-2 — M1)*; audit **kèm diff công thức**, **không** số tiền (§13.6 I) |
 | 048 | `POST /payroll/salary-components/validate-formula` | `('manage','salary-component')` | **kiểm tại chỗ, KHÔNG ghi gì** — trả `{ valid, errors[], refs[], depth, nodes }`; nguồn cho editor FE. Vẫn gác cặp GHI vì nó phơi ra chính bộ parser |
 | 049 | `GET /payroll/templates` | `('view','payroll-template')` | filter `scope` (`company`/`org_unit`) · `isActive`; pagination |
 | 050 | `POST /payroll/templates` | `('manage','payroll-template')` | `Idempotency-Key`; audit |
 | 051 | `GET /payroll/templates/:id` | `('view','payroll-template')` | chi tiết + thành phần + **`fingerprint` hiện tại** (§13.6 G) |
 | 052 | `PATCH /payroll/templates/:id` | `('manage','payroll-template')` | sửa · ngưng dùng · xoá mềm; audit |
 | 053 | `PUT /payroll/templates/:id/components` | `('manage','payroll-template')` | **đặt lại toàn bộ** danh sách (nhãn · công thức ghi đè · ẩn/hiện · thứ tự) trong MỘT lượt — sửa từng dòng rời làm đồ thị **tạm thời có vòng** giữa chừng; kiểm vòng trên **trạng thái sau** (⇒ 019); audit kèm diff |
-| 054 | `POST /payroll/templates/:id/preview` | `('manage','payroll-template')` | **xem trước với dữ liệu GIẢ do client gửi** — không chạm dữ liệu thật, **không ghi**, không audit-đọc (không có dữ liệu thật nào bị lộ) |
+| 054 | `POST /payroll/templates/:id/preview` | `('manage','payroll-template')` | **xem trước với dữ liệu GIẢ do client gửi** `{ inputs: SYS_* → chuỗi thập phân, profileItems ≤ 120, pitPayer, statutory }` — không chạm dữ liệu thật (**không đọc** `payroll_statutory_rates`), **không ghi**, không audit-đọc. `SYS_*` vắng ⇒ 0 **chỉ ở preview** ⇒ **FE phải gửi `SYS_WORK_DAYS`** (vắng ⇒ 422 020 `division-by-zero`). Trả `{ columns, values (chuỗi scale 2), formulaSetFingerprint, nodesVisited }`; mẫu thiếu 4 nút tổng hợp ⇒ **422 018** |
 | 055 | `GET /payroll/statutory-rates` | `('view','statutory-rate')` | danh sách bản theo `effective_from` desc |
 | 056 | `POST /payroll/statutory-rates` | `('manage','statutory-rate')` | kiểm **7 bậc liên tục, không hở/chồng** (⇒ **422 022** `statutory-rate-incomplete`); trùng `effective_from` ⇒ **409 033** `rate-effective-date-exists`; `Idempotency-Key`; audit |
 | 057 | `GET /payroll/statutory-rates/:id` | `('view','statutory-rate')` | chi tiết một bản |
-| 058 | `PATCH /payroll/statutory-rates/:id` | `('manage','statutory-rate')` | sửa bản **chưa có kỳ nào dùng**; đã có kỳ dùng ⇒ **409 033** `rate-in-use` (tạo bản mới thay vì sửa tại chỗ); audit |
+| 058 | `PATCH /payroll/statutory-rates/:id` | `('manage','statutory-rate')` | sửa bản **chưa có kỳ nào dùng**; đã có kỳ dùng ⇒ **409 033** `rate-in-use` (tạo bản mới thay vì sửa tại chỗ); audit **không** số tiền/tỉ lệ. 🔁 **«Đã có kỳ dùng» CHỐT ở `S15-PAYROLL-BE-2`** (không có cột nối kỳ↔tỉ lệ): tồn tại `payroll_periods` chưa xoá, `status ∉ {Draft, CollectingData}`, ngày cuối tháng kỳ `≥ effective_from` — **không** có vế «không có bản mới hơn xen giữa» (vế đó lách được bằng POST một bản xen giữa rồi PATCH). Đổi `effectiveFrom` ⇒ kiểm với ngày **sớm hơn** |
 
 **Track C — tạm ứng · chi trả · ngân sách · import** *(WO BE-4)*
 
@@ -1406,6 +1424,8 @@ Nguồn chuẩn: [DB-13](<../DB/DB-13 PAYROLL Database Design.md>). Tóm tắt:
 
 **KHÔNG audit lượt đọc**: `065` (`/me/payroll-advances`) · `084` (PDF phiếu của mình) · `080` (danh mục báo cáo — metadata, không số liệu) · `054` (xem trước mẫu — dữ liệu giả do client gửi). Cùng một luật với `/me/payslips*` của v1: **tự xem của mình không phải sự kiện an ninh**, và ghi thì đẻ nhiễu che mất lượt xem đáng ngờ thật.
 
+> ⚠️ **`054` trả `values` của thành phần `fixed` = CHÍNH `fixedAmount` của catalog** (security-review `S15-PAYROLL-BE-2` LOW-5). DTO `051` cố ý bỏ `fixedAmount`, nhưng xem trước tính trên nó. Bất biến «`('manage','payroll-template')` ⇒ `('view','salary-component')`» chỉ được assert cho **role seed** (mig `0571`) — role tuỳ biến tạo sau có thể giữ cặp đầu mà thiếu cặp sau. **Rủi ro CHẤP NHẬN ở BE-2, chờ owner xác nhận:** `fixedAmount` là định mức **cấp công ty** (vd phụ cấp ăn ca), không phải số tiền của một cá nhân; cả hai cặp đều sensitive + sàn Company. Muốn đóng: `054` đòi thêm `('view','salary-component')` bằng một method tường minh riêng (census hai tầng đổi CÙNG commit).
+
 Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đọc; rollback ⇒ 0 audit).
 
 **C. Allowlist capability — HAI danh sách, APPEND**
@@ -1522,6 +1542,7 @@ Khuôn vẫn là **reveal + audit ATOMIC** (cùng transaction với lượt đ�
 7. **Vòng sinh ra do GHI SONG SONG**: hai lượt sửa hai thành phần, mỗi bản riêng không vòng, hợp lại thì có ⇒ lượt `calculate` phải bắt (§13.6 E — kiểm ở **cả hai** thời điểm).
 8. **Shadowing — BA nhánh, thiếu nhánh nào là lỗ đó mở**: (a) đặt `code = 'SYS_GROSS'`/`TL_X`/`GT_X` ⇒ **409 024** `component-code-reserved` (`code_shape_check`); (b) đặt `code` trùng mã seed đang sống ⇒ **409 024** `component-code-exists` (`company_code_uq`); (c) 🔴 **nhánh XOÁ MỀM**: `UPDATE salary_components SET deleted_at = now() WHERE code = 'TONG_KHAU_TRU'` **ghi thẳng qua repository** ⇒ phải bị `salary_components_system_not_deletable` chặn ở **DB** (`23514`), rồi thử tạo lại `TONG_KHAU_TRU` với công thức tuỳ ý ⇒ **409 024**. Thiếu (c) thì bốn nút `aggregate` **che được bằng đúng hai câu SQL** — `code_shape_check` không đỡ (chúng không mang tiền tố nào) và `company_code_uq` là partial `WHERE deleted_at IS NULL`.
 9. **Hai trần ngân sách node, ca RIÊNG cho từng trần** (§13.6 C): (a) hồ sơ **GROSS**, mẫu 120 thành phần × 200 node ⇒ vượt **25.000/lượt** ⇒ **422 020**; (b) hồ sơ **NET**, mỗi lượt trong hạn nhưng 31 lượt ⇒ vượt **775.000/dòng** ⇒ **422 020**, `details[]` nêu **vòng thứ mấy**. Cả hai **tái lập 100%** (không đo đồng hồ). 🔴 **Ca đối chứng bắt buộc — trần KHÔNG được bất khả thi**: một hồ sơ `NET` với mẫu **thực tế** (~20 thành phần) hội tụ trong ≤ 30 vòng phải **XANH**, không 422. Thiếu ca này thì một trần quá chặt biến PAY-DEC-015 thành tính năng tắt mà mọi ca âm vẫn xanh.
+    - 🔁 *Đo khi hiện thực (`S15-PAYROLL-BE-2`, plan-review MF1):* mẫu HỢP LỆ lớn nhất (≤ 116 thành phần × 200 node + 4 nút tổng hợp ≈ 24.484) **không** chạm 25.000/lượt, và gross-up tối đa 31 lượt nên trần 775.000/dòng chỉ vỡ từ lượt 32 ⇒ **ca âm (a)(b) KHÔNG dựng được bằng mẫu hợp lệ** — hai trần là phòng thủ chiều sâu. Ca âm dựng bằng bộ đếm trần nhỏ hoặc mẫu ghi thẳng DB; **ca đối chứng dương giữ nguyên** và chạy qua đồ thị THẬT.
 10. **Gross-up dao động**: công thức `IF` cố ý làm `net(g)` không đơn điệu ⇒ **422 021** sau 30 vòng, **0 dòng được ghi** (kiểm `count(payroll_period_lines) = 0` sau lỗi).
 11. **Sửa công thức sau khi tính KHÔNG đổi số**: tính kỳ → sửa công thức → **đọc lại** dòng ⇒ `component_values_json` y nguyên; **tính lại** ⇒ số đổi **và** `template_fingerprint` đổi.
 

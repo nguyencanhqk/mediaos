@@ -1,6 +1,7 @@
 import { ConflictException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import { mapPayrollPgError, PAYROLL_ERR_CODE } from "./payroll.errors";
+import { FormulaError } from "./formula/formula.errors";
+import { formulaErrorToHttp, mapPayrollPgError, PAYROLL_ERR_CODE } from "./payroll.errors";
 
 /**
  * S13-PAYROLL-BE-1 — `mapPayrollPgError`: bóc lỗi PG → mã PAYROLL (SPEC-11 §12, plan §8).
@@ -37,11 +38,12 @@ const kindOf = (e: Error | null): string | undefined => {
 };
 
 describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
-  it("23514 KHÔNG có tên constraint (trigger freeze) ⇒ 409, KHÔNG null/500", () => {
+  it("23514 KHÔNG có tên constraint — trigger thưởng/phạt (tiền tố message) ⇒ 409 013, KHÔNG null/500", () => {
+    const msg = "bonus_penalty_freeze_guard: Bonus (id=x, ky 2026-09) da roi Pending hoac da consume";
     for (const err of [
-      pgError({ code: "23514" }),
-      pgError({ code: "23514", constraint: "" }),
-      wrapped({ code: "23514" }),
+      pgError({ code: "23514", message: msg }),
+      pgError({ code: "23514", constraint: "", message: msg }),
+      wrapped({ code: "23514", message: msg }),
     ]) {
       const mapped = mapPayrollPgError(err);
       expect(mapped, "trả null ⇒ caller ném lỗi gốc ⇒ 500 ở vùng đỏ").not.toBeNull();
@@ -49,6 +51,73 @@ describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
       expect(codeOf(mapped)).toBe(PAYROLL_ERR_CODE.BONUS_ALREADY_CONSUMED);
       expect(kindOf(mapped)).toBe("bonus-frozen-race");
     }
+  });
+
+  it("S15-PAYROLL-BE-2 M2 — 23514 không tên của trigger ĐÓNG BĂNG thành phần hệ thống ⇒ 024, KHÔNG dán nhầm 013", () => {
+    const mapped = mapPayrollPgError(
+      wrapped({
+        code: "23514",
+        message: "salary_components: hang he thong (code=TONG_KHAU_TRU) DONG BANG — chi sua duoc name/sort_order.",
+      }),
+    );
+    expect(codeOf(mapped)).toBe(PAYROLL_ERR_CODE.COMPONENT_CONFLICT);
+    expect(kindOf(mapped)).toBe("system-component-immutable");
+  });
+
+  it("ĐỐI CHỨNG M2: 23514 không tên với message LẠ (hoặc không message) ⇒ null — trigger tương lai không bị gắn 013", () => {
+    expect(mapPayrollPgError(wrapped({ code: "23514", message: "payroll_payment_lines_freeze: x" }))).toBeNull();
+    expect(mapPayrollPgError(pgError({ code: "23514" }))).toBeNull();
+  });
+
+  it("M2 chỉ đọc message của NODE mang `code` — message lớp drizzle bên ngoài không đánh lừa được", () => {
+    const outer = Object.assign(new Error("bonus_penalty_freeze_guard: giả ở lớp ngoài"), {
+      cause: pgError({ code: "23514", message: "salary_components: that" }),
+    });
+    expect(kindOf(mapPayrollPgError(outer))).toBe("system-component-immutable");
+  });
+
+  it("S15-PAYROLL-BE-2 — ràng buộc track B map theo TÊN (không rơi 500)", () => {
+    const cases: Array<[Record<string, unknown>, string, string]> = [
+      [{ code: "23505", constraint: "salary_components_company_code_uq" }, PAYROLL_ERR_CODE.COMPONENT_CONFLICT, "component-code-exists"],
+      [{ code: "23505", constraint: "payroll_templates_company_code_uq" }, PAYROLL_ERR_CODE.TEMPLATE_CONFLICT, "template-code-exists"],
+      [{ code: "23505", constraint: "payroll_statutory_rates_company_effective_uq" }, PAYROLL_ERR_CODE.STATUTORY_RATE_CONFLICT, "rate-effective-date-exists"],
+      [{ code: "23514", constraint: "salary_components_code_shape_check" }, PAYROLL_ERR_CODE.COMPONENT_CONFLICT, "component-code-reserved"],
+      [{ code: "23514", constraint: "salary_components_system_not_deletable" }, PAYROLL_ERR_CODE.COMPONENT_CONFLICT, "system-component-immutable"],
+      [{ code: "23514", constraint: "salary_components_value_pair_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "component-value-pair"],
+      [{ code: "23514", constraint: "salary_components_formula_len_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "formula-too-long"],
+      [{ code: "23514", constraint: "payroll_template_components_formula_len_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "formula-too-long"],
+      [{ code: "23514", constraint: "salary_components_engine_kind_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "component-value-pair"],
+      [{ code: "23514", constraint: "payroll_templates_scope_pair_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "template-scope-pair"],
+      [{ code: "23503", constraint: "payroll_templates_org_unit_id_company_fk" }, PAYROLL_ERR_CODE.NOT_FOUND, "not-found"],
+      [{ code: "23503", constraint: "payroll_template_components_component_id_company_fk" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "template-component-unknown"],
+    ];
+    for (const [fields, code, kind] of cases) {
+      const mapped = mapPayrollPgError(wrapped(fields));
+      expect(codeOf(mapped), JSON.stringify(fields)).toBe(code);
+      expect(kindOf(mapped), JSON.stringify(fields)).toBe(kind);
+    }
+  });
+
+  it("formulaErrorToHttp: mã suy từ kind của engine; giữ kind + vị trí; chu trình nối mũi tên; extra đi kèm", () => {
+    const detail = (e: Error, field: string) =>
+      (
+        (e as ConflictException).getResponse() as { details?: Array<Record<string, string>> }
+      ).details?.find((d) => d["field"] === field)?.["message"];
+
+    const cycle = formulaErrorToHttp(new FormulaError("formula-cycle", "vòng", { cycle: ["A", "B", "A"] }));
+    expect(codeOf(cycle)).toBe("PAYROLL-ERR-019");
+    expect(kindOf(cycle)).toBe("formula-cycle");
+    expect(detail(cycle, "cycle")).toBe("A → B → A");
+
+    const tooLong = formulaErrorToHttp(new FormulaError("formula-too-long", "dài", { pos: 500 }), { template: "MAU_X" });
+    expect(codeOf(tooLong)).toBe("PAYROLL-ERR-018");
+    expect(detail(tooLong, "pos")).toBe("500");
+    expect(detail(tooLong, "template")).toBe("MAU_X");
+
+    expect(codeOf(formulaErrorToHttp(new FormulaError("division-by-zero", "chia 0")))).toBe("PAYROLL-ERR-020");
+    expect(codeOf(formulaErrorToHttp(new FormulaError("statutory-rate-incomplete", "bậc", { reason: "count" })))).toBe(
+      "PAYROLL-ERR-022",
+    );
   });
 
   it("23505 theo TÊN constraint — 008 (kỳ trùng tháng) · 014 (hồ sơ lương trùng ngày)", () => {

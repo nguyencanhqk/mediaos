@@ -330,9 +330,12 @@ const MAX_UNCOVERED_TOTAL = 0;
 // S14-RECRUIT-FILEGRANT-1 thêm route + test mà quên siết sàn). Sàn hở thì nó không còn bắt được việc
 // xoá/đổi tên test — đúng lớp lỗi mà `MAX_UNCOVERED_TOTAL = 0` một mình KHÔNG bịt (cổng đó chỉ đo
 // "route nào chưa phủ", không đo "test nào biến mất khỏi scan"). Siết về ĐÚNG số đo hiện tại.
+// S15-PAYROLL-BE-2 (13/09/2026): 590 → **605** (+15 route PAYROLL track B `044..058`, đo thật 605/605). Bẫy đã gặp
+// ở WO này: helper `http()[method](url)` KHÔNG để lại literal `.patch(`/`.put(` ⇒ census không thấy verb và đếm 4
+// route PATCH/PUT là «chưa phủ» dù có ca thật — spec track B dùng helper `pick()` gọi verb tường minh.
 // Nâng CÙNG COMMIT với WO — mỗi route mới phải có file test chạm ĐÚNG literal path
-// (int-spec `payroll-be1-*` · `payroll-be2-*` · `s14-recruit-filegrant1-cv`).
-const MIN_COVERED_COUNT = 590;
+// (int-spec `payroll-be1-*` · `payroll-be2-*` · `s14-recruit-filegrant1-cv` · `s15-payroll-be2-*`).
+const MIN_COVERED_COUNT = 605;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

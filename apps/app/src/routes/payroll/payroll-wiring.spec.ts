@@ -41,9 +41,10 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
     beEntries.set(key, { action, resourceType, isSensitive: isSensitive === "true" });
   }
 
-  it("đọc được đủ 43 route pair từ file BE (regex census không mù)", () => {
+  it("đọc được đủ 58 route pair từ file BE (regex census không mù)", () => {
     // S15-PAYROLL-BE-1: +8 route track A (036–043) ⇒ 35 → 43.
-    expect(beEntries.size).toBe(43);
+    // S15-PAYROLL-BE-2: +15 route track B (044–058) ⇒ 43 → 58.
+    expect(beEntries.size).toBe(58);
   });
 
   it("mỗi khoá PAYROLL_ENGINE_PAIRS khớp ĐÚNG action/resourceType/isSensitive của BE", () => {
@@ -56,11 +57,11 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
     }
   });
 
-  it("không thiếu/thừa khoá nào so với BE (43 = 43)", () => {
+  it("không thiếu/thừa khoá nào so với BE (58 = 58)", () => {
     expect(Object.keys(PAYROLL_ENGINE_PAIRS).sort()).toEqual([...beEntries.keys()].sort());
   });
 
-  it("ĐÚNG 15 cặp DISTINCT is_sensitive (mig 0565 + 0571) — không cặp nào lọt lưới", () => {
+  it("ĐÚNG 21 cặp DISTINCT is_sensitive (mig 0565 + 0571) — không cặp nào lọt lưới", () => {
     const sensitive = new Set(
       Object.values(PAYROLL_ENGINE_PAIRS)
         .filter((p) => p.isSensitive)
@@ -83,6 +84,13 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
         "view:payroll-employee",
         "view:bonus-penalty",
         "view:salary-profile",
+        // S15-PAYROLL-BE-2 track B (mig 0571): +6 cặp.
+        "manage:payroll-template",
+        "manage:salary-component",
+        "manage:statutory-rate",
+        "view:payroll-template",
+        "view:salary-component",
+        "view:statutory-rate",
       ].sort(),
     );
   });
@@ -102,10 +110,11 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
       Object.values(PAYROLL_ENGINE_PAIRS).map((p) => `${p.action}:${p.resourceType}`),
     );
     // S15-PAYROLL-BE-1: +2 cặp `payroll-employee` ⇒ 16 → 18 cặp distinct có route.
-    expect(distinct.size).toBe(18);
+    // S15-PAYROLL-BE-2: +6 cặp track B (view/manage × salary-component · payroll-template · statutory-rate) ⇒ 24.
+    expect(distinct.size).toBe(24);
   });
 
-  it("15 cặp sensitive ĐỀU có trong SENSITIVE_CAPABILITY_ALLOWLIST của BE", () => {
+  it("21 cặp sensitive ĐỀU có trong SENSITIVE_CAPABILITY_ALLOWLIST của BE", () => {
     // Thiếu một cặp trong allowlist ⇒ /auth/me không trả nó ⇒ màn/nút biến mất với ĐÚNG vai được cấp
     // quyền, im lặng (`capability-allowlist-hides-admin-screens`).
     const permSrc = fs.readFileSync(

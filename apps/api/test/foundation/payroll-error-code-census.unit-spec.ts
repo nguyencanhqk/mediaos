@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { FORMULA_ERROR_KINDS } from "../../src/payroll/formula/formula.errors";
 import { PAYROLL_ERR_CODE, PAYROLL_PENDING_BE2_ERRORS } from "../../src/payroll/payroll.errors";
 
 const PAYROLL_SRC = path.join(__dirname, "..", "..", "src", "payroll");
@@ -28,11 +29,19 @@ const INTEGRATION = path.join(__dirname, "..", "integration");
 const stripComments = (src: string): string =>
   src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-const readAll = (dir: string, match: (name: string) => boolean): string =>
+/**
+ * Quét ĐỆ QUY (S15-PAYROLL-BE-2 M4): `src/payroll/formula/**` vừa là nguồn ném (`FormulaError`) vừa là bề mặt
+ * test thật (`formula.*.spec.ts`). `readdirSync` phẳng bỏ sót cả hai mà không ca nào đỏ.
+ */
+const walk = (dir: string): string[] =>
   fs
-    .readdirSync(dir)
-    .filter(match)
-    .map((n) => stripComments(fs.readFileSync(path.join(dir, n), "utf8")))
+    .readdirSync(dir, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
+
+const readAll = (dir: string, match: (name: string) => boolean): string =>
+  walk(dir)
+    .filter((p) => match(path.basename(p)))
+    .map((p) => stripComments(fs.readFileSync(p, "utf8")))
     .join("\n");
 
 describe("S13-PAYROLL-BE-1 census — mã lỗi & kind PAYROLL được ném đều có ca test", () => {
@@ -106,7 +115,8 @@ describe("S13-PAYROLL-BE-1 census — mã lỗi & kind PAYROLL được ném đ�
     ).toEqual([]);
     // ⚠️ NEO THAY THẾ (§10): `PENDING` rỗng ⇒ nó không còn chống được xanh-RỖNG. Ghim SỐ LƯỢNG mã để
     // một lần xoá bớt hằng không lặng lẽ đi qua cổng này. **Cấm hạ neo để lấy màu xanh.**
-    expect(all.size, "SPEC-11 §12 + §12.1 khai đúng 19 mã PAYROLL-ERR").toBe(19);
+    // S15-PAYROLL-BE-2: +6 mã track B (019 · 020 · 022 · 023 · 024 · 033).
+    expect(all.size, "SPEC-11 §12 + §12.1 khai đúng 25 mã PAYROLL-ERR").toBe(25);
   });
 
   /** Tập `kind` ném được — `\s*` nuốt chỗ Prettier ngắt dòng sau dấu `(`. */
@@ -117,6 +127,9 @@ describe("S13-PAYROLL-BE-1 census — mã lỗi & kind PAYROLL được ném đ�
     for (const m of thrownSrc.matchAll(/field:\s*"kind"\s*,\s*message:\s*"([a-z0-9-]+)"/g)) {
       out.add(m[1]);
     }
+    // Dạng thứ ba (S15-PAYROLL-BE-2 M4): kind của MÁY CÔNG THỨC đi qua `formulaErrorToHttp(err)` — kind ĐỘNG, regex
+    // literal không thấy ⇒ đọc thẳng bảng ĐÓNG `FORMULA_ERROR_KINDS` (mọi kind ở đó đều ném được).
+    for (const k of Object.keys(FORMULA_ERROR_KINDS)) out.add(k);
     return [...out].sort();
   };
 

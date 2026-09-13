@@ -66,6 +66,19 @@ export class PayrollAccessService {
     "employeeDependentCreate",
     "dependentUpdate",
     "periodTimesheet",
+    // v2 track B (S15-PAYROLL-BE-2) — route GHI trả `{ id }` (0 khoá tiền); DTO mẫu chỉ có công thức, KHÔNG
+    // `fixedAmount`; 048 trả lỗi cú pháp. KHÔNG thêm: 044/046 (`fixedAmount` cấu hình) · 054 (giá trị xem
+    // trước) · 055/057 (trần đóng · giảm trừ). Cờ không đổi hành vi runtime — chỉ mapper v1 đọc nó.
+    "componentCreate",
+    "componentUpdate",
+    "componentValidateFormula",
+    "templateList",
+    "templateCreate",
+    "templateDetail",
+    "templateUpdate",
+    "templatePutComponents",
+    "statutoryRateCreate",
+    "statutoryRateUpdate",
   ]);
 
   async resolveActor(user: PayrollRequestUser, routeKey: PayrollRouteKey): Promise<PayrollActor> {

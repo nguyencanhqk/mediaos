@@ -115,6 +115,31 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: PayrollRo
   // 043 — literal path CHÍNH XÁC (KHÔNG phải `attendance-summary`): `route-http-coverage` khớp theo
   // literal path, lệch tên = cổng đếm hụt.
   { method: "GET", path: "/api/v1/payroll-periods/:id/timesheet", key: "periodTimesheet" },
+  // ── S15-PAYROLL-BE-2 (track B · 044–058) ──
+  // 048 `validate-formula` là route TĨNH cùng basePath với `:id` — controller khai nó TRƯỚC (API-18 §5b bẫy 2).
+  { method: "GET", path: "/api/v1/payroll/salary-components", key: "componentList" },
+  { method: "POST", path: "/api/v1/payroll/salary-components", key: "componentCreate" },
+  {
+    method: "POST",
+    path: "/api/v1/payroll/salary-components/validate-formula",
+    key: "componentValidateFormula",
+  },
+  { method: "GET", path: "/api/v1/payroll/salary-components/:id", key: "componentDetail" },
+  { method: "PATCH", path: "/api/v1/payroll/salary-components/:id", key: "componentUpdate" },
+  { method: "GET", path: "/api/v1/payroll/templates", key: "templateList" },
+  { method: "POST", path: "/api/v1/payroll/templates", key: "templateCreate" },
+  { method: "GET", path: "/api/v1/payroll/templates/:id", key: "templateDetail" },
+  { method: "PATCH", path: "/api/v1/payroll/templates/:id", key: "templateUpdate" },
+  {
+    method: "PUT",
+    path: "/api/v1/payroll/templates/:id/components",
+    key: "templatePutComponents",
+  },
+  { method: "POST", path: "/api/v1/payroll/templates/:id/preview", key: "templatePreview" },
+  { method: "GET", path: "/api/v1/payroll/statutory-rates", key: "statutoryRateList" },
+  { method: "POST", path: "/api/v1/payroll/statutory-rates", key: "statutoryRateCreate" },
+  { method: "GET", path: "/api/v1/payroll/statutory-rates/:id", key: "statutoryRateDetail" },
+  { method: "PATCH", path: "/api/v1/payroll/statutory-rates/:id", key: "statutoryRateUpdate" },
 ];
 
 const PAYROLL_CONTROLLERS = new Set([
@@ -127,6 +152,10 @@ const PAYROLL_CONTROLLERS = new Set([
   // ── S15-PAYROLL-BE-1 ──
   "PayrollEmployeesController",
   "PayrollDependentsController",
+  // ── S15-PAYROLL-BE-2 ──
+  "PayrollSalaryComponentsController",
+  "PayrollTemplatesController",
+  "PayrollStatutoryRatesController",
 ]);
 
 /** Sổ pin method↔key — đổi handler/key là ĐỎ, phải sửa CÓ CHỦ ĐÍCH qua FULL gate. */
@@ -181,13 +210,40 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   // (SPEC-11 §18 · API-18 §5.1). Hai literal ở CÙNG site là hình dạng ĐÚNG — mất một literal ở đây
   // nghĩa là ai đó vừa gỡ một vế assert, và ca này phải ĐỎ. Tiền lệ: `BonusPenaltiesService#decide`.
   "PayrollExportService#export": ["periodExport", "periodLines"],
+  // ── S15-PAYROLL-BE-2 (track B) ──
+  "SalaryComponentsService#list": ["componentList"],
+  "SalaryComponentsService#get": ["componentDetail"],
+  "SalaryComponentsService#create": ["componentCreate"],
+  "SalaryComponentsService#update": ["componentUpdate"],
+  "SalaryComponentsService#validateFormula": ["componentValidateFormula"],
+  "PayrollTemplatesService#list": ["templateList"],
+  "PayrollTemplatesService#get": ["templateDetail"],
+  "PayrollTemplatesService#create": ["templateCreate"],
+  "PayrollTemplatesService#update": ["templateUpdate"],
+  "PayrollTemplatesService#putComponents": ["templatePutComponents"],
+  "PayrollTemplatesService#preview": ["templatePreview"],
+  "StatutoryRatesService#list": ["statutoryRateList"],
+  "StatutoryRatesService#get": ["statutoryRateDetail"],
+  "StatutoryRatesService#create": ["statutoryRateCreate"],
+  "StatutoryRatesService#update": ["statutoryRateUpdate"],
 };
+
+/**
+ * Quét ĐỆ QUY (S15-PAYROLL-BE-2 M4): `readdirSync` phẳng bỏ sót mọi file ở thư mục con (`src/payroll/formula/`) —
+ * một `resolveActor` hoặc một route key đặt ở đó sẽ lọt khỏi cổng mà không ca nào đỏ.
+ */
+function walkTs(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return walkTs(full);
+    return entry.name.endsWith(".ts") && !entry.name.endsWith(".spec.ts") ? [full] : [];
+  });
+}
 
 function serviceResolveActorCalls(): Array<{ site: string; key: string }> {
   const calls: Array<{ site: string; key: string }> = [];
-  for (const file of fs.readdirSync(SRC_PAYROLL)) {
-    if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
-    const text = fs.readFileSync(path.join(SRC_PAYROLL, file), "utf8");
+  for (const file of walkTs(SRC_PAYROLL)) {
+    const text = fs.readFileSync(file, "utf8");
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
     const visit = (node: ts.Node, cls: string, method: string): void => {
       let nextCls = cls;
@@ -248,8 +304,8 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(1) bảng fixture phủ ĐÚNG tập route PAYROLL đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 43 route PAYROLL (API-18 §5 + §5b)").toBe(
-      43,
+    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 58 route PAYROLL (API-18 §5 + §5b)").toBe(
+      58,
     );
     const seen = new Set(payrollRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
@@ -279,8 +335,8 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(3) TẦNG 2 — service: ĐÚNG method dùng ĐÚNG key (map pin, không chỉ đếm)", () => {
     const calls = serviceResolveActorCalls();
-    // 44 = 43 route + literal thứ hai của `PayrollExportService#export` (cặp `view-line`).
-    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(44);
+    // 59 = 58 route + literal thứ hai của `PayrollExportService#export` (cặp `view-line`).
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(59);
     const validKeys = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     expect(
       calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),
@@ -316,7 +372,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     const all = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     const used = new Set(ROUTE_TO_KEY.map((r) => r.key as string));
     const pending = new Set<string>(PAYROLL_PENDING_BE2);
-    expect(all.size, "bảng hằng phải khai đủ 43 route API-18").toBe(43);
+    expect(all.size, "bảng hằng phải khai đủ 58 route API-18").toBe(58);
     expect(
       [...pending].filter((k) => used.has(k)),
       "key ĐÃ có route mà vẫn nằm trong PENDING_BE2",
@@ -329,7 +385,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     // một `ROUTE_TO_KEY` bị xoá sạch cũng thoả cả ba assert trên. Hai neo dưới ghim SỐ LƯỢNG thật của
     // cả bảng hằng lẫn tập key đã nối dây. **Cấm hạ neo để lấy màu xanh.**
     expect(pending.size, "BE-2 đã nối dây hết — PENDING_BE2 phải RỖNG").toBe(0);
-    expect(used.size, "43 key đều phải có route").toBe(43);
+    expect(used.size, "58 key đều phải có route").toBe(58);
   });
 
   it("(6) SÀN SCOPE Company — đúng 3 route /me/payslips* được miễn", () => {
@@ -356,7 +412,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     ]);
   });
 
-  it("(8) cờ sensitive khớp seed mig 0565+0571 — đúng 15 cặp is_sensitive trên 18 cặp có route", () => {
+  it("(8) cờ sensitive khớp seed mig 0565+0571 — đúng 21 cặp is_sensitive trên 24 cặp có route", () => {
     const pairs = Object.values(PAYROLL_ROUTE_PAIRS);
     const sensitive = new Set(
       pairs.filter((p) => p.isSensitive).map((p) => `${p.action}:${p.resourceType}`),
@@ -364,11 +420,11 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     const notSensitive = new Set(
       pairs.filter((p) => !p.isSensitive).map((p) => `${p.action}:${p.resourceType}`),
     );
-    expect(sensitive.size, "15 cặp sensitive (SPEC-11 §11.1 + 2 cặp payroll-employee §11.3)").toBe(
-      15,
-    );
+    // 21 = 13 của §11.1 + 2 cặp `payroll-employee` (BE-1) + 6 cặp track B (BE-2: view/manage × salary-component ·
+    // payroll-template · statutory-rate) — cả 8 cặp v2 đều sensitive (mig 0571).
+    expect(sensitive.size, "21 cặp sensitive (SPEC-11 §11.1 + §11.3)").toBe(21);
     // 18 cặp CÓ route; cặp `access:payroll` là cổng nav, không gác route nào.
-    expect(sensitive.size + notSensitive.size).toBe(18);
+    expect(sensitive.size + notSensitive.size).toBe(24);
     expect([...notSensitive].sort()).toEqual([
       "acknowledge-own-payslip:payslip",
       "manage:payroll-period",
@@ -407,6 +463,17 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
         "periodTimesheet",
         "periodUpdate",
         "pickerAttendancePeriods",
+        // ── S15-PAYROLL-BE-2 — route GHI trả { id } · DTO mẫu chỉ công thức · 048 trả lỗi cú pháp ──
+        "componentCreate",
+        "componentUpdate",
+        "componentValidateFormula",
+        "templateList",
+        "templateCreate",
+        "templateDetail",
+        "templateUpdate",
+        "templatePutComponents",
+        "statutoryRateCreate",
+        "statutoryRateUpdate",
       ].sort(),
     );
     // Mọi key trong set phải là route THẬT — key chết ở đây là mask im lặng cho một route không tồn tại.
