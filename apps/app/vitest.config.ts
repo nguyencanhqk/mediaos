@@ -22,9 +22,17 @@ export default defineConfig({
      * lệnh ĐỎ. Đã nghiệm bằng một lượt đỏ cố ý (hạ sàn giả lên 99 ⇒ đỏ; trả về 80 ⇒ xanh), vì một
      * khoá gõ sai ở đây không báo lỗi mà lặng lẽ xanh vĩnh viễn.
      *
-     * ⚠️ CI CHƯA gọi lệnh trên (`Apps — Frontend CI` chạy `pnpm --filter @mediaos/app test`, không có
-     * `--coverage`) ⇒ sàn này hôm nay do NGƯỜI/harness ép, chưa phải cổng PR. Nợ đã ghi thành WO
-     * `S17-CHAT-UX2-QA-2` trong `harness/backlog.mjs`.
+     * S17-CHAT-UX2-QA-2 — sàn này GIỜ LÀ CỔNG PR: `Apps — Frontend CI` có bước riêng
+     * `Coverage gate — cụm chat` gọi đúng `test:chat-cov` cho app `app`.
+     *
+     * ⚠️ ĐỪNG "gọn lại" bằng cách thêm `--coverage` vào script `test`: lượt coverage trên TOÀN suite
+     * apps/app chết giữa chừng vì `ERR_IPC_CHANNEL_CLOSED` (tinypool) và không in nổi bảng coverage —
+     * lặp 3/3 lượt, kể cả khi hạ `maxThreads`. Chi tiết + số đo: comment ở bước CI đó.
+     *
+     * ⚠️ `include` dưới đây là phạm vi ĐO; danh sách thư mục trong `test:chat-cov` là phạm vi CHẠY.
+     * Hai thứ khác nhau và phải đi cùng nhau: bỏ một thư mục khỏi lượt chạy thì file trong `include`
+     * mất nguồn thực thi ⇒ coverage TỤT (đỏ), còn thêm spec nạp file đang 0% thì mẫu số `functions`
+     * TĂNG (ACCEPTANCE §4). Đổi vế nào cũng phải chạy lại `test:chat-cov` rồi đọc số, đừng đoán.
      */
     coverage: {
       provider: "v8",

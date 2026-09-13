@@ -117,6 +117,72 @@ Ba spec mới, 47 ca:
   `ERROR: Coverage for … does not meet global threshold (99%)`; trả về 80 ⇒ `exit 0`. Khoá **không**
   gõ sai.
 
+### 4.2 Sàn → **cổng PR** (S17-CHAT-UX2-QA-2, 2026-09-12) — KI-S17-3 đóng
+
+`Apps — Frontend CI` thêm bước riêng, chỉ cho app `app`:
+
+```yaml
+- name: Coverage gate — cụm chat (≥80% / 4 trục)
+  if: matrix.app == 'app'
+  run: pnpm --filter @mediaos/app test:chat-cov
+```
+
+**Vì sao LƯỢT RIÊNG, không phải `--coverage` gắn vào bước `Test`** (done_when #2 — đo trước khi chốt,
+không suy đoán). Bốn lượt local 2026-09-12, cùng máy, cùng cây làm việc:
+
+| Lượt | Lệnh | Kết quả | Thời gian |
+| --- | --- | --- | --- |
+| A | `pnpm --filter @mediaos/app test` (hiện trạng CI) | ✅ 275 file · 2721 ca | **29s** |
+| B | `test:chat-cov` (lượt được chọn làm cổng) | ✅ st 94.72 · br 88.52 · **fn 81.73** · ln 94.72 | **14s** |
+| C | `vitest run --coverage` (toàn suite) ×2 | ❌ **`Unhandled Rejection: Channel closed`** (`ERR_IPC_CHANNEL_CLOSED`, tinypool) — chết ở ~8–13s, **không in nổi bảng coverage** | — |
+| D | `vitest run --coverage --poolOptions.threads.maxThreads=2` | ❌ y hệt C | — |
+
+⇒ bật `--coverage` cho lượt full là mua **đỏ oan** (3/3 lượt chết, hạ `maxThreads` không cứu), và kể cả
+nếu nó chạy được thì phạm vi chạy khác ⇒ **mẫu số `functions` khác** (§4 — v8 chỉ đếm đủ hàm của file
+đã thực sự chạy) ⇒ con số CI sẽ là một ngưỡng THỨ HAI chưa ai hiệu chuẩn.
+
+**Chi phí cổng — số CI THẬT, không suy từ số local** (done_when #2: "đo thời gian trước-sau"):
+
+| Mốc | `Build app` | Ghi chú |
+| --- | --- | --- |
+| master trước WO (2 run gần nhất) | **5m21s** · **5m26s** | chưa có bước cổng |
+| nhánh PR sau WO (lượt xanh #2) | **6m12s** | bước `Coverage gate` tốn **66s** (09:01:12 → 09:02:18) |
+
+⇒ **+~50s trên job `Build app`, ~+16%**. `auth`/`console` không đổi (bước `skipped`).
+
+⚠️ **66s ở CI so với 14s ở local** — runner chậm ~4,7 lần cho đúng lượt này. Đừng lấy số local ước
+lượng chi phí CI: muốn mở cổng ra app khác thì phải đo lại bằng số CI.
+
+**Nghiệm bằng VI PHẠM thật, không bằng đọc YAML** (memory `coverage-threshold-key-typo-is-dead-gate`,
+`vitest-globalsetup-teardown-exits-zero` — một cổng chưa từng đỏ là một cổng chưa được chứng minh):
+
+| # | Commit trên nhánh PR #505 | Bước `Test` | Bước `Coverage gate` | Run |
+| --- | --- | --- | --- | --- |
+| 1 | cổng + **sàn giả 99** (vi phạm cố ý) | ✅ success | ❌ **failure** — 4 dòng `ERROR: Coverage for … does not meet global threshold (99%)`, `Build`/`Upload dist` sau đó `skipped` | [34684202708](https://github.com/nguyencanhqk/mediaos/actions/runs/34684202708/job/103528212585) |
+| 2 | revert sàn về **80** (net diff của PR) | ✅ success | ✅ **success** — in bảng coverage, `Build`/`Upload dist` chạy tiếp | [34684532510](https://github.com/nguyencanhqk/mediaos/actions/runs/34684532510) |
+
+Điểm mấu chốt của lượt #1: bước `Test` NGAY TRƯỚC vẫn **success**, chỉ bước `Coverage gate` đỏ ⇒ cổng
+đỏ vì **đúng lý do coverage**, không phải vì suite hỏng. Một cổng không phân biệt được hai chuyện đó
+thì không phải cổng.
+
+**Đối soát số CI ↔ số local** (done_when #2 — làm TRƯỚC khi chốt ngưỡng, số lấy từ log lượt #1):
+
+| Trục | Local (Windows) | CI (ubuntu-latest) | Lệch | Dư trên sàn 80 |
+| --- | --- | --- | --- | --- |
+| Statements | 94.72 (5705/6023) | 94.72 (5705/6023) | — | +14.7 |
+| Branches | 88.52 (1466/1656) | **88.6 (1469/1658)** | **+2 mẫu số, +3 tử số** | +8.6 |
+| Functions | 81.73 (255/312) | 81.73 (255/312) | — | **+1.7** ← trục hẹp nhất |
+| Lines | 94.72 (5705/6023) | 94.72 (5705/6023) | — | +14.7 |
+
+⇒ số CI **không** đồng nhất tuyệt đối với số local: mẫu số `branches` lệch 2 giữa hai nền. Biên 8.6
+điểm nên vô hại hôm nay, nhưng đừng hiệu chuẩn ngưỡng sát mép dựa trên một lượt local — trục quyết
+định số phận cổng là `functions` (dư 1.7 điểm), và mẫu số của nó TĂNG mỗi khi thêm spec nạp một file
+đang 0% (§4). Thêm file vào `include` mà không thêm spec ⇒ cổng đỏ.
+
+Phụ: ba filter `auth`/`console`/`app` nay gồm cả `.github/workflows/apps-frontend.yml` — không có vế đó
+thì một PR chỉ sửa pipeline đi qua mà **không job nào chạy**, tức cổng vừa sửa không được chính PR sửa
+nó nghiệm (đúng lớp lỗi "cổng chết" ở trên, một tầng cao hơn).
+
 ---
 
 ## 5. Phát hiện của WO — ratchet WS **mù với khoá LỒNG** (đã vá)
@@ -181,6 +247,6 @@ Int-spec của wave chạy riêng trên lane đó: `chat-s17-be1-room-dto` + `ch
 | --- | --- | --- |
 | KI-S17-1 | **Drawer chat không có nút gọi và không có bảng thông tin phòng** | Owner chốt **GIỮ NGUYÊN** (10/09, [comment #499](https://github.com/nguyencanhqk/mediaos/pull/499#issuecomment-5619873027)). Khiếm khuyết **kế thừa** từ `ChatDockWindow` (`showHeader={false}` ⇒ `callSlot` không render), **không phải hồi quy** của FE-5. Nghiệm thu nút gọi CHỈ trên `/chat` |
 | KI-S17-2 | **Chưa quét a11y bằng máy** | `axe` không có trong kho (`pnpm-lock.yaml`: 0 dòng `axe-core`/`jest-axe`/`vitest-axe`). Owner chốt KHÔNG thêm (tiền lệ S8): trong jsdom luật `color-contrast` của axe **không chạy được** (không có engine CSS), nên phần đắt nhất vẫn mù — trả 2 devDependency qua cổng SCA để lấy phần ARIA là không đáng. Nghiệm thu a11y bằng **ca hành vi** (focus-trap · Esc hai tầng · `aria-*` · thứ tự tab — `sheet.spec.tsx`, `ChatDrawer.spec.tsx`, `ConversationPanel.spec.tsx`). Muốn phủ nốt: WO E2E Playwright riêng |
-| KI-S17-3 | **Sàn coverage 80% chưa phải cổng PR** | `Apps — Frontend CI` chạy `pnpm --filter @mediaos/app test` (không `--coverage`) ⇒ `thresholds` hôm nay do người/harness ép qua `test:chat-cov`. Nợ đã seed thành WO **`S17-CHAT-UX2-QA-2`** |
+| KI-S17-3 | ~~**Sàn coverage 80% chưa phải cổng PR**~~ → **ĐÃ ĐÓNG** (2026-09-12, `S17-CHAT-UX2-QA-2`) | `Apps — Frontend CI` có bước riêng **`Coverage gate — cụm chat (≥80% / 4 trục)`** (`if: matrix.app == 'app'`) gọi đúng `pnpm --filter @mediaos/app test:chat-cov`. Nghiệm bằng **vi phạm thật** trên nhánh PR, không bằng đọc YAML — xem §4.2 |
 | KI-S17-4 | jsdom **không đo được màu** | "snapshot light/dark" ở jsdom chỉ chụp được **chuỗi class**. Tương phản màu được canh ở trục token (`MessageBubble.theme.spec.tsx` đọc `packages/ui/src/styles/theme.css`). Thiếu vế nào thì vế kia xanh-rỗng với một nửa lớp lỗi — đừng đọc "snapshot PASS" thành "màu đã chứng minh" |
 | KI-S17-5 | Nợ cũ chưa vá | BE-2 2 finding LOW (join `deleted_at` · bidi/homograph trong URL — `docs/plans/S17-CHAT-UX2-BE-2.md` §12) · FE-4 4 điểm lệch `done_when` owner đã duyệt (`docs/plans/S17-CHAT-UX2-FE-4.md` §7.3) |
