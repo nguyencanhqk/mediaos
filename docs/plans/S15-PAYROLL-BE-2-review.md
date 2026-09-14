@@ -56,7 +56,7 @@ bốn công thức aggregate khớp từng chữ §13.6 E/§13.7 E.
 | MEDIUM-2 | 047 bỏ parse khi hàng đang/sẽ ngưng dùng ⇒ chuỗi > 500 ký tự rơi xuống CHECK ⇒ 500; chuỗi sai cú pháp lưu thẳng | Luôn compile hàng `valueType=formula`; ngưng dùng ⇒ compile thêm phần catalog còn lại. Map `salary_components_formula_len_check` + `payroll_template_components_formula_len_check` ⇒ 422 018. Ca int H1 |
 | MEDIUM-3 | 047 `{delete:true}` bỏ kiểm đồ thị mà `{isActive:false}` có làm ⇒ REF treo âm thầm | Compile catalog trừ hàng bị xoá TRƯỚC `softDeleteTx`. Ca int H2 (song sinh `isActive:false`) |
 | LOW-4 | 045 trùng mã đang dùng + công thức tham chiếu ⇒ 422 019 chu trình rỗng | Tiền-kiểm ⇒ 409 024 `component-code-exists`. Ca int H3 |
-| LOW-5 | 054 trả `values` của thành phần `fixed` = `fixedAmount` catalog cho người thiếu `view:salary-component` (role tuỳ biến) | **Rủi ro chấp nhận** ghi ở SPEC-11 §18.1 — chờ owner (đóng = 054 đòi thêm cặp view) |
+| LOW-5 | 054 trả `values` của thành phần `fixed` = `fixedAmount` catalog cho người thiếu `view:salary-component` (role tuỳ biến) | **Rủi ro chấp nhận** ghi ở SPEC-11 §18.1 — **owner xác nhận 14/09/2026** (muốn đóng = 054 đòi thêm cặp view) |
 | LOW-6 | Seeder assert (5) ném MỖI LẦN BOOT khi người dùng xoá mềm rồi tạo lại `MAU_MAC_DINH` (050 tạo mẫu rỗng) | Seeder chỉ xét hàng `created_by IS NULL` (do seeder tạo). Ca int S7 |
 | LOW-7 | `componentsTx` không lọc `salary_components.deleted_at` | Preview fail-closed thêm vế `componentDeletedAt`. Ca int templates D6 |
 
