@@ -18056,4 +18056,40 @@ export const backlog = [
       "Nợ KHÔNG thuộc WO này (giữ nguyên ở plan #490 §8): §8.1 guard vô điều kiện · §8.3 gộp hai writer `recordReauthFailure` (đòi refactor DI + làm đỏ ratchet `reauthFailedWriterCount() >= 2`) · §8.4 `getTwoFactorStateTx` thiếu `company_id` tường minh · §8.5 nhãn sai nhánh `!row` của `disableTwoFactor` (WO nhãn chung, đừng seed WO thứ tư) · §8.6 không backfill · §8.9 probe `alive` không serialize.",
     ],
   },
+  {
+    id: "S18-OPS-MINIOPIN-1",
+    module: "DEVOPS",
+    layer: "DEVOPS",
+    title:
+      "Ghim image MinIO của docker-compose.yml (container PROD `mediaos-minio`) và scripts/windows/02-infra-up.ps1 (`minio/mc`) sang quay.io theo ĐÚNG bản đang chạy — Docker Hub `minio/minio` + `minio/mc` trả `pull access denied` từ 13/09/2026; máy hiện tại chỉ còn sống nhờ image cache",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "docker-compose.yml",
+      "scripts/windows/**",
+      ".github/workflows/api.yml",
+      "docs/DEVOPS/**",
+      "harness/backlog.mjs",
+    ],
+    skills: [],
+    depends_on: [],
+    src: [
+      "PR #506 run 34768502952: step «Start MinIO» exit 125 — `docker: Error response from daemon: pull access denied for minio/minio`; master còn xanh lúc 05:41 13/09 ⇒ registry đổi, không phải code",
+      "Đo 13/09/2026 bằng `docker manifest inspect`: `minio/minio:latest` + `minio/mc:latest` DENIED · `quay.io/minio/minio:latest` + `quay.io/minio/mc:latest` OK · tag `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` tồn tại",
+      "Đo container PROD (chỉ đọc): `mediaos-minio` chạy `minio/minio:latest` digest sha256:14cea493d9a3… = `minio version RELEASE.2025-09-07T16-13-09Z` — TRÙNG digest `quay.io/minio/minio:latest` kéo về 13/09 ⇒ ghim tag đó KHÔNG đổi binary",
+      "Đo image `mc` đang cache: `minio/mc` digest sha256:a7fe349ef4bd… = `mc RELEASE.2025-08-13T08-35-41Z` — TRÙNG `quay.io/minio/mc:latest`",
+      "PR #507 (+ commit 9e8e49e2 trên #506) chỉ vá CI `.github/workflows/api.yml` sang `quay.io/minio/*:latest` (CI xanh cả hai, job test chạy thật ~16 phút); compose + script Windows cố ý để lại — owner chốt 14/09: WO riêng, ghim phiên bản",
+    ],
+    done_when: [
+      "`docker-compose.yml` service minio: `image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` (tag cố định, KHÔNG `latest`); `scripts/windows/02-infra-up.ps1`: `quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z`; CI `api.yml` ghim CÙNG hai tag để CI = PROD",
+      "TRƯỚC khi recreate: ĐO `docker image inspect` RepoDigests của tag ghim chứa đúng digest container đang chạy (14cea493…) — lệch ⇒ DỪNG, hỏi owner (không nâng bản MinIO trên data cũ khi chưa chốt)",
+      "TRƯỚC khi recreate: so `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` trong `docker inspect mediaos-minio` với `.env` gốc — recreate nạp lại env từ `.env`, lệch ⇒ recreate ĐỔI credential root (memory minio-container-password-drift); lệch thì owner chốt hướng trước",
+      "Recreate `docker compose up -d minio` rồi nghiệm thu: healthcheck healthy · presigned PUT + GET 200 qua API (tải lên/tải về file nhân sự) · môi trường khác dùng chung container này (dev-online?) vẫn chạy — xác minh topology, không suy",
+      "Dựng từ đầu một lần thật (`scripts/windows/02-infra-up.ps1` trên máy/VM sạch, hoặc sau khi gỡ image cache) kéo được image và tạo bucket — ghi kết quả vào docs/DEVOPS",
+    ],
+    notes: [
+      "🟡 VẬN HÀNH chạm container PROD — người chốt thời điểm recreate. Không gấp: máy hiện tại sống bằng image cache; hỏng khi dựng máy mới · `docker image prune -a` · `docker compose pull`.",
+      "⚠️ `quay.io/minio/minio:latest` đứng ở bản 2025-09-07 (đo 13/09/2026, cùng digest bản đang chạy) ⇒ kênh image này không còn ra bản mới. Nợ dài hạn, CHƯA WO: nguồn bản vá bảo mật cho MinIO hoặc thay object storage S3-compatible khác — owner quyết.",
+    ],
+  },
 ];
