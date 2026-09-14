@@ -7,6 +7,9 @@ import {
   createPayrollPeriodSchema,
   createSalaryProfileSchema,
   inputSnapshotSchema,
+  paymentBatchMethodEnum,
+  paymentBatchStatusEnum,
+  payrollAdvanceStatusEnum,
   payrollPeriodStatusEnum,
   payrollWriteResultSchema,
   payslipItemTypeEnum,
@@ -33,19 +36,37 @@ const UUID_A = "11111111-1111-1111-1111-111111111111";
 const UUID_B = "22222222-2222-2222-2222-222222222222";
 
 describe("PAYROLL enum — mirror CHECK tập giá trị", () => {
-  it("payrollPeriodStatusEnum = ĐÚNG 7 giá trị của payroll_periods_status_check (SPEC-01 §17.15)", () => {
+  it("payrollPeriodStatusEnum = ĐÚNG 8 giá trị của payroll_periods_status_check v2 (mig 0572, PAY-DEC-017)", () => {
     expect(payrollPeriodStatusEnum.options).toEqual([
       "Draft",
       "CollectingData",
       "Calculated",
       "Reviewing",
       "Approved",
+      "Published",
       "Paid",
       "Locked",
     ]);
+    // ALLOW: `Published` là trạng thái DB trả về sau `publish` — Zod từ chối nó = 500 trên đường ĐỌC.
+    expect(payrollPeriodStatusEnum.safeParse("Published").success).toBe(true);
     // Giá trị chữ thường là hình dạng DI SẢN đã bị 0564 gỡ khỏi CHECK — nhận nó là 23514 ở DB.
     expect(payrollPeriodStatusEnum.safeParse("draft").success).toBe(false);
     expect(payrollPeriodStatusEnum.safeParse("published").success).toBe(false);
+  });
+
+  it("track C: advance 4 · batch method 2 · batch status 3 — mirror CHECK của 0572", () => {
+    expect(payrollAdvanceStatusEnum.options).toEqual([
+      "Pending",
+      "Approved",
+      "Rejected",
+      "Deducted",
+    ]);
+    expect(paymentBatchMethodEnum.options).toEqual(["bank", "cash"]);
+    expect(paymentBatchStatusEnum.options).toEqual(["Draft", "Ready", "Completed"]);
+    // DENY: hình dạng lệch hoa/thường của CHECK — `bank`/`cash` chữ thường, trạng thái PascalCase.
+    expect(paymentBatchMethodEnum.safeParse("Bank").success).toBe(false);
+    expect(paymentBatchStatusEnum.safeParse("completed").success).toBe(false);
+    expect(payrollAdvanceStatusEnum.safeParse("Paid").success).toBe(false);
   });
 
   it("bonusPenaltyStatusEnum = ĐÚNG 3 giá trị PascalCase (SPEC-01 §17.17)", () => {

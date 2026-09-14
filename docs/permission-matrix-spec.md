@@ -658,7 +658,7 @@ Ghi chú:
 
 ### 9g.2 Bộ cặp v2 — wave S15-PAYROLL-V2 (17 cặp, TẤT CẢ sensitive)
 
-> **Nguồn sự thật: SPEC-11 §11.3** (owner ký PAY-DEC-011..020 ngày 02/09/2026). **CHƯA SEED** — cấp phát nằm ở migration `0570+` (`S15-PAYROLL-DB-1` / `DB-2`). Con số **ĐÓNG**: đúng **17 cặp**, WO sau đối chiếu chứ **không tự cấp thêm** (SPEC-11 §5.1b).
+> **Nguồn sự thật: SPEC-11 §11.3** (owner ký PAY-DEC-011..020 ngày 02/09/2026). **ĐÃ SEED 11/09/2026** — cả 17 cặp + 31 grant ở mig `0571` (`S15-PAYROLL-DB-1`), kể cả 8 cặp track C mà bảng của chúng ra đời ở `0572` (`S15-PAYROLL-DB-2` chỉ GUARD, không seed lại). Con số **ĐÓNG**: đúng **17 cặp**, WO sau đối chiếu chứ **không tự cấp thêm** (SPEC-11 §5.1b).
 
 | Cặp quyền (SPEC-11 §11.3) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị · HR · HR Manager | Payroll Officer | BOD/Admin |
 | --- | --- | --- | --- | --- | --- | --- |

@@ -730,6 +730,15 @@ Ghi chú bắt buộc:
 | `payroll_budgets_year_unit_uq` | `23505` | 409 | **029** `budget-exists` |
 | `payroll_templates_company_code_uq` | `23505` | 409 | **023** `template-code-exists` |
 | `payroll_periods_four_eyes_check` *(v1)* | `23514` | 409 | **005** `same-actor-approval` |
+| 🔁 `payroll_advances_four_eyes_check` *(mig `0572`)* | `23514` | 409 | **025** `self-approval` |
+| 🔁 trigger `payroll_advance_freeze_guard` — tag `frozen` · `status-terminal` · `rebind` · `insert-shape` | `23514` | 409 | **025** `advance-not-pending` / `advance-already-deducted` (theo trạng thái hàng) |
+| 🔁 trigger `payroll_advance_freeze_guard` — tag `period-frozen` | `23514` | 409 | **026** `advance-period-frozen` |
+| 🔁 trigger `payroll_payment_batch_freeze` — tag `frozen` · `insert-completed` · `period-immutable` | `23514` | 409 | **027** `batch-already-completed` *(period-immutable: service không có đường đổi kỳ của đợt — lưới cuối)* |
+| 🔁 trigger `payroll_payment_line_guard` — tag `frozen` · `insert-into-completed` · `move-to-completed` | `23514` | 409 | **027** `batch-already-completed` |
+| 🔁 trigger `payroll_payment_line_guard` — tag `cross-user` · `cross-period` · `not-found` | `23514` | — | **service PHẢI chặn trước** (400/404); tới được DB là lỗi ⇒ 500 có chủ đích, census QA ghim |
+| 🔁 `payroll_payment_lines_bank_pair_check` · `payroll_advances_deducted_bound_check` *(mig `0572`)* | `23514` | 400 | `VALIDATION-ERR-001` *(lưới cuối — service/Zod lẽ ra chặn trước)* |
+
+> 🔁 **Map TRIGGER theo TAG, không theo tiền tố** (plan-review `S15-PAYROLL-DB-2` M1): message = `<trigger>:<tag>: <chi tiết>`; một tiền tố trigger phủ nhiều mã. Danh sách tag ĐÓNG ghi ở `docs/plans/S15-PAYROLL-DB-2.md` §3.5.a; thêm tag = sửa bảng này cùng commit.
 | `payroll_period_lines_adjustment_check` *(v1)* | `23514` | 400 | `VALIDATION-ERR-001` |
 
 **QA census bắt buộc**: mỗi TÊN ở cột 1 phải xuất hiện trong `mapPayrollPgError`, và mỗi hàng phải có **≥ 1 ca test kích hoạt ràng buộc THẬT ở DB** (không mock) — ràng buộc có mà không map là 500; map mà không ca là `coverage-high-but-error-code-untested`.
@@ -821,6 +830,10 @@ Quy tắc bổ sung (không cần mã riêng):
 > | `payroll_periods_status_check` | 7 giá trị | **8 giá trị** (thêm `Published`) |
 > | `payroll_periods_published_pair_check` | `status NOT IN ('Paid','Locked') OR (published_* NOT NULL AND approved_* NOT NULL)` | **`status NOT IN ('Published','Paid','Locked') OR (…)`** — thêm `Published` vào vế trái, nếu không thì kỳ vừa phát hành **không bị ràng buộc nào** |
 > | `payroll_periods_paid_pair_check` | *(không có)* | **MỚI**: `status NOT IN ('Paid','Locked') OR (paid_by IS NOT NULL AND paid_at IS NOT NULL)` |
+> | 🔁 `payroll_periods_submitted_pair_check` *(đính chính 14/09, `S15-PAYROLL-DB-2`)* | `status NOT IN ('Reviewing','Approved','Paid','Locked') OR (submitted_* NOT NULL)` | **thêm `Published`** vào vế trái — thiếu thì kỳ `Published` không có `submitted_*` lọt DB |
+> | 🔁 `payroll_periods_approved_pair_check` *(đính chính 14/09)* | `status NOT IN ('Approved','Paid','Locked') OR (approved_* NOT NULL)` | **thêm `Published`** vào vế trái (nhất quán hình dạng; `published_pair_check` đã bao bắc cầu) |
+>
+> ⇒ **bốn** CHECK cặp đổi/thêm, không phải ba. Kỳ v1 đã `Locked` được gán `paid_* := published_*` trong cùng migration (owner chốt 14/09 — DB-13 §12.3 đính chính).
 >
 > ⚠️ **Thứ tự migration BẮT BUỘC**, làm sai là `23514` ngay trên lượt migrate: (1) `ADD COLUMN paid_by/paid_at` (NULL) → (2) **nới** `status_check` lên 8 giá trị → (3) **UPDATE `status = 'Published'` WHERE `status = 'Paid'`** (di trú nghĩa cũ — §3.5) → (4) **rồi mới** siết `published_pair_check` và thêm `paid_pair_check`. Đảo bước (3) và (4) = mọi hàng `Paid` di sản vi phạm `paid_pair_check` vì `paid_by` còn NULL. WO DB **ĐO `count(*) WHERE status='Paid'` trước** và ghi số đo vào migration.
 >

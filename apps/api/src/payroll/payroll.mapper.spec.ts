@@ -307,6 +307,10 @@ describe("S13-PAYROLL-BE-2 · mapper dòng bảng lương / phiếu lương", ()
 
 describe("S13-PAYROLL-BE-2 · derivePayslipStatus — DẪN XUẤT, fail-closed", () => {
   it.each([
+    // v2 (mig 0572): `Published` là trạng thái NGAY SAU `publish` — thiếu hàng này thì phiếu vừa phát hành
+    // rơi xuống `null` và nhân viên không thấy phiếu cho tới khi chi trả xong.
+    ["Published", null, "Published"],
+    ["Published", new Date("2028-07-02T00:00:00Z"), "Acknowledged"],
     ["Paid", null, "Published"],
     ["Locked", null, "Published"],
     ["Paid", new Date("2028-07-02T00:00:00Z"), "Acknowledged"],

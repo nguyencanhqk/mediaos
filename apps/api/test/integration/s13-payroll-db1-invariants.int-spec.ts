@@ -812,6 +812,9 @@ ${NOT_FIXTURE_TENANT}
         `SELECT event_code, dedupe_strategy, dedupe_window_seconds, is_enabled, is_system_event, notification_type
            FROM notification_events
           WHERE module_code = 'PAYROLL' AND company_id IS NULL AND deleted_at IS NULL
+            -- v1 (0566) = 020..023. 024..027 (0573, S15-PAYROLL-DB-2) ghim ở s15-payroll-db2-invariants F1.
+            AND event_code IN ('PAYROLL_PERIOD_APPROVED','PAYROLL_PERIOD_REJECTED',
+                               'PAYROLL_PERIOD_SUBMITTED','PAYSLIP_PUBLISHED')
           ORDER BY event_code`,
       );
       expect(rows.map((r) => r.event_code)).toEqual([
@@ -861,7 +864,10 @@ ${NOT_FIXTURE_TENANT}
       }>(
         `SELECT t.template_code, t.title_template, t.body_template, t.variables_schema
            FROM notification_templates t JOIN notification_events e ON e.id = t.event_id
-          WHERE e.module_code = 'PAYROLL' AND t.company_id IS NULL AND t.deleted_at IS NULL`,
+          WHERE e.module_code = 'PAYROLL' AND t.company_id IS NULL AND t.deleted_at IS NULL
+            -- v1 (0566). Template v2 024..027 (0573) có allowlist ĐÓNG riêng ở s15-payroll-db2-invariants F3.
+            AND e.event_code IN ('PAYROLL_PERIOD_APPROVED','PAYROLL_PERIOD_REJECTED',
+                                 'PAYROLL_PERIOD_SUBMITTED','PAYSLIP_PUBLISHED')`,
       );
       expect(rows).toHaveLength(4);
       for (const r of rows) {

@@ -191,6 +191,16 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "PAYROLL", eventCode: "PAYROLL_PERIOD_APPROVED", type: "Payroll", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "PAYROLL", eventCode: "PAYROLL_PERIOD_REJECTED", type: "Payroll", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "PAYROLL", eventCode: "PAYSLIP_PUBLISHED", type: "Payroll", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  // ===== PAYROLL v2 track C (SPEC-11 §17.1 · NOTI-EVENT-024..027 · mig 0573 · S15-PAYROLL-DB-2) =====
+  //   DedupeKey + window NULL cả 4. Khoá PRODUCER sinh: 024 '{advanceId}:{createdAtIso}' · 025/026
+  //   '{advanceId}:{decidedAtIso}' · 027 '{periodId}' — MỘT KỲ báo đúng một lần (dùng batchId thì kỳ nhiều
+  //   đợt đẻ nhiều thông báo «đã chi trả»). 027 CHỈ phát ở lượt hoàn tất làm kỳ CHUYỂN sang Paid (luật PHỦ).
+  //   priority 025/026 High (tiền của một cá nhân). ⚠️ KHÔNG biến số tiền nào — kể cả số tạm ứng.
+  //   Registrar outbox đăng ký ở S15-PAYROLL-BE-4 (registerSource() fail-loud nếu mã chưa có ở đây).
+  { module: "PAYROLL", eventCode: "PAYROLL_ADVANCE_SUBMITTED", type: "Payroll", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "PAYROLL", eventCode: "PAYROLL_ADVANCE_APPROVED", type: "Payroll", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "PAYROLL", eventCode: "PAYROLL_ADVANCE_REJECTED", type: "Payroll", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "PAYROLL", eventCode: "PAYROLL_PAYMENT_BATCH_COMPLETED", type: "Payroll", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -210,14 +220,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 75 (59 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566)
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 79 (59 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566 + 4 PAYROLL 0573)
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 61 (45 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566)
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 65 (45 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566 + 4 PAYROLL 0573)
 
 /**
  * S5-LMS-NOTI-1 — ALLOWLIST eventCode mà token máy LMS (`LMS_NOTI_TOKEN`) được phép đẩy vào intake.

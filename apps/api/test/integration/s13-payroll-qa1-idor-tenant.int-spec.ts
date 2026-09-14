@@ -238,11 +238,11 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · IDOR phiếu lương + cô lậ
   ];
 
   /**
-   * Dựng một kỳ lương ĐI HẾT vòng đời tới `Paid` cho `subjects` (mỗi người 1 hồ sơ lương ⇒ 1 phiếu).
+   * Dựng một kỳ lương ĐI HẾT vòng đời tới `Published` (v2 mig 0572 — `Paid` chỉ qua hoàn tất đợt chi trả, BE-4) cho `subjects` (mỗi người 1 hồ sơ lương ⇒ 1 phiếu).
    * Vết duyệt đặt bằng SQL với HAI actor khác nhau — CHECK `payroll_periods_four_eyes_check` khoá cả
    * fixture, không chỉ khoá đường API (`db-invariant-kills-adversarial-fixtures`).
    */
-  async function buildPaidPeriod(
+  async function buildPublishedPeriod(
     tenant: SeededTenant,
     token: string,
     month: string,
@@ -337,7 +337,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · IDOR phiếu lương + cô lậ
     await grant(A.companyId, empX, "a-empx", ME_KEYS, "Own");
     tX = await login(A.slug, `empx@${A.slug}.test`);
 
-    refsA = await buildPaidPeriod(A, tA, "2028-03", [empX, empY], empY, aOfficer);
+    refsA = await buildPublishedPeriod(A, tA, "2028-03", [empX, empY], empY, aOfficer);
     {
       const slips = await direct.query<{ id: string; user_id: string }>(
         `SELECT p.id, p.user_id FROM payslips p WHERE p.payroll_period_id = $1`,
@@ -363,7 +363,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · IDOR phiếu lương + cô lậ
     const tB = await login(B.slug, `officer@${B.slug}.test`);
     const bEmp = await seedUser(direct, B.companyId, `emp@${B.slug}.test`, hash);
     const bEmp2 = await seedUser(direct, B.companyId, `emp2@${B.slug}.test`, hash);
-    refsB = await buildPaidPeriod(B, tB, "2028-04", [bEmp], bEmp2, bOfficer);
+    refsB = await buildPublishedPeriod(B, tB, "2028-04", [bEmp], bEmp2, bOfficer);
   }, 300_000);
 
   afterAll(async () => {
@@ -466,7 +466,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · IDOR phiếu lương + cô lậ
   // ── D. 404 cross-tenant KHÔNG được để lại vết ghi ────────────────────────────────────────────
 
   describe("D. sau toàn bộ mục A, dữ liệu của tenant B NGUYÊN VẸN", () => {
-    it("kỳ của B vẫn `Paid`, số dòng/số phiếu không đổi, không có `reopen_reason` lạ", async () => {
+    it("kỳ của B vẫn `Published`, số dòng/số phiếu không đổi, không có `reopen_reason` lạ", async () => {
       // Bắn LẠI mọi route GHI để ca này độc lập với thứ tự chạy của mục A.
       for (const route of OBJ_ROUTES.filter((r) => r.write)) {
         const res = await send(tA, route, refsB);
@@ -477,7 +477,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · IDOR phiếu lương + cô lậ
         reopen_reason: string | null;
         note: string | null;
       }>(`SELECT status, reopen_reason, note FROM payroll_periods WHERE id = $1`, [refsB.periodId]);
-      expect(row.rows[0].status, "kỳ của B bị đổi trạng thái từ tenant A").toBe("Paid");
+      expect(row.rows[0].status, "kỳ của B bị đổi trạng thái từ tenant A").toBe("Published");
       expect(row.rows[0].reopen_reason).toBeNull();
       expect(row.rows[0].note ?? "").not.toContain("qa idor");
 

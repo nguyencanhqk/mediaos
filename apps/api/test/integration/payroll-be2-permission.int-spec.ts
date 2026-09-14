@@ -316,7 +316,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 ma trận quyền 17 route", () =>
     expect(lines.status).toBe(200);
     const lineId = (lines.body.data as Array<{ id: string }>)[0].id;
 
-    // Một phiếu lương THẬT (kỳ đưa tới `Paid`) cho các route 029–033. `full` tự submit không duyệt
+    // Một phiếu lương THẬT (kỳ đưa tới `Published`) cho các route 029–033. `full` tự submit không duyệt
     // được (four-eyes) nên đẩy trạng thái + vết duyệt bằng SQL với HAI actor khác nhau.
     const other = await seedUser(direct, A.companyId, `approver2@${A.slug}.test`, "x");
     // ⚠️ `submitted_by` PHẢI khác `approved_by`: CHECK `payroll_periods_four_eyes_check` sống ở DB và
@@ -358,7 +358,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 ma trận quyền 17 route", () =>
   });
 
   it.each(ROUTES)("$code — ĐỐI CHỨNG ALLOW: role ĐỦ cặp KHÔNG bị 403", async ({ call }) => {
-    // Không assert 200: nhiều route trả 409 vì FSM (kỳ đang `Paid`). Điều cần chứng minh là guard
+    // Không assert 200: nhiều route trả 409 vì FSM (kỳ đang `Published`). Điều cần chứng minh là guard
     // KHÔNG chặn — thiếu vế này thì mọi ca DENY ở trên xanh-RỖNG.
     const res = await send(tFull, call);
     expect(

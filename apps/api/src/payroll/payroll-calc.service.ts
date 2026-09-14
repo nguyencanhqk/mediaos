@@ -29,9 +29,14 @@ import { toPayrollLineDto, toPayrollSummaryDto } from "./payroll.mapper";
 import { payrollOffset, type PayrollRequestUser, type PayrollUserInputs } from "./payroll.types";
 import { SalaryProfilesRepository } from "./salary-profiles.repository";
 
-/** Kỳ từ trạng thái này trở đi là ĐÓNG BĂNG — tính lại / sửa dòng đều 409 `003`. */
+/**
+ * Kỳ từ trạng thái này trở đi là ĐÓNG BĂNG — tính lại / sửa dòng đều 409 `003`.
+ * v2 (mig `0572`): thêm `Published` — thiếu nó thì tính lại kỳ đã phát hành rơi xuống FSM `001`, và `003`
+ * thành mã chết cho đúng trạng thái mà nó sinh ra để chặn.
+ */
 const FROZEN_STATUSES: ReadonlySet<string> = new Set<PayrollPeriodStatus>([
   "Approved",
+  "Published",
   "Paid",
   "Locked",
 ]);

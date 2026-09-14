@@ -32,6 +32,7 @@ const ALL_STATUSES: readonly PayrollPeriodStatus[] = [
   "Calculated",
   "Reviewing",
   "Approved",
+  "Published",
   "Paid",
   "Locked",
 ];
@@ -47,8 +48,8 @@ const subject = (over: Partial<PeriodActionSubject> = {}): PeriodActionSubject =
 });
 
 describe("PAYROLL FSM — bảng chuyển tiếp", () => {
-  it("có ĐÚNG 10 chuyển tiếp đổi trạng thái + 3 hành động tại chỗ", () => {
-    expect(PERIOD_TRANSITIONS).toHaveLength(10);
+  it("có ĐÚNG 11 chuyển tiếp đổi trạng thái + 3 hành động tại chỗ", () => {
+    expect(PERIOD_TRANSITIONS).toHaveLength(11);
     expect(Object.keys(IN_PLACE_ACTIONS).sort()).toEqual([
       "calculate",
       "collect",
@@ -186,7 +187,8 @@ describe("PAYROLL — reopen bị chặn khi đã sinh phiếu (deny CÓ ĐỐI 
     expect(rows.find((r) => r.action === "reopen")?.reason).toBe("payslips-generated");
   });
 
-  it("Paid/Locked chặn reopen kể cả khi chưa sinh phiếu", () => {
+  it("Published/Paid/Locked chặn reopen kể cả khi chưa sinh phiếu", () => {
+    expect(isReopenBlocked(subject({ status: "Published" }))).toBe(true);
     expect(isReopenBlocked(subject({ status: "Paid" }))).toBe(true);
     expect(isReopenBlocked(subject({ status: "Locked" }))).toBe(true);
   });
@@ -198,7 +200,7 @@ describe("PAYROLL — điều chỉnh dòng chỉ mở ở Calculated", () => {
   });
 
   it("DENY vì trạng thái: Approved trở đi là snapshot đóng băng", () => {
-    for (const s of ["Reviewing", "Approved", "Paid", "Locked"] as const) {
+    for (const s of ["Reviewing", "Approved", "Published", "Paid", "Locked"] as const) {
       expect(canAdjustLines(subject({ status: s }), true), s).toBe(false);
     }
   });
@@ -237,7 +239,7 @@ describe("PAYROLL — thưởng/phạt: sửa & four-eyes", () => {
 });
 
 describe("PAYROLL — bao phủ: mọi (hành động, trạng thái) đều có phán quyết", () => {
-  it("không ô nào ném/undefined trên 9×7 tổ hợp", () => {
+  it("không ô nào ném/undefined trên 9×8 tổ hợp", () => {
     for (const action of PAYROLL_PERIOD_ACTIONS) {
       for (const status of ALL_STATUSES) {
         expect(typeof isPeriodActionAllowedByFsm(action, status)).toBe("boolean");

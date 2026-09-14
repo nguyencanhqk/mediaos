@@ -100,6 +100,13 @@ export class RetentionService {
     //    xoá" — chứ không phải "thiếu GRANT DELETE". Thêm vào đây KHÔNG đụng API-053 (route tự phát
     //    DELETE, không đi qua retention) ⇒ chi phí bằng 0. DB-13 §13.6 đã đính chính.
     "payroll_template_components",
+    // PAYROLL v2 track C — 4 bảng mới của S15-PAYROLL-DB-2 (mig 0572). Cùng tiêu chí "không có GRANT DELETE"
+    // + nặng hơn: `payroll_payment_lines` chở DÒNG TIỀN (xoá cứng một dòng của đợt đã Completed = gỡ một người
+    // khỏi bảng chi trả SAU KHI đã chi); `payroll_advances` là khoản tạm ứng đã/đang trừ vào lương.
+    "payroll_advances",
+    "payroll_payment_batches",
+    "payroll_payment_lines",
+    "payroll_budgets",
     // Finance ledgers (G13 — append-only, GIỮ; cụm media/finance đang park).
     "kpi_results",
     "profit_snapshots",

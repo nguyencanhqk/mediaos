@@ -72,7 +72,10 @@ export function toSalaryProfileItemDto(
 export function toSalaryProfileDto(
   row: SalaryProfile,
   actor: PayrollActor,
-  items?: { rows: readonly SalaryProfileItem[]; catalog: Map<string, { name: string; kind: string }> },
+  items?: {
+    rows: readonly SalaryProfileItem[];
+    catalog: Map<string, { name: string; kind: string }>;
+  },
 ): SalaryProfileDto {
   return {
     id: row.id,
@@ -92,9 +95,7 @@ export function toSalaryProfileDto(
     }),
     ...(items
       ? {
-          items: items.rows.map((r) =>
-            toSalaryProfileItemDto(r, items.catalog, actor.canSeeMoney),
-          ),
+          items: items.rows.map((r) => toSalaryProfileItemDto(r, items.catalog, actor.canSeeMoney)),
         }
       : {}),
     ...(row.salaryType ? { salaryType: row.salaryType as SalaryProfileDto["salaryType"] } : {}),
@@ -315,8 +316,11 @@ interface RawPayslip {
 
 /**
  * Trạng thái phiếu là **DẪN XUẤT** (SPEC-11 §13.2) — không có cột, không có CHECK:
- *   kỳ `Paid`/`Locked` + đã ack ⇒ `Acknowledged` · kỳ `Paid`/`Locked` ⇒ `Published` ·
- *   kỳ chưa phát hành ⇒ `Generated`.
+ *   kỳ `Published`/`Paid`/`Locked` + đã ack ⇒ `Acknowledged` · kỳ `Published`/`Paid`/`Locked` ⇒
+ *   `Published` · kỳ chưa phát hành ⇒ `Generated`.
+ *
+ * 🔁 v2 (mig `0572`): kỳ `Published` là trạng thái NGAY SAU `publish` — thiếu nó ở nhánh đầu thì phiếu vừa
+ * phát hành rơi xuống `null` (fail-closed) và nhân viên không thấy phiếu cho tới khi chi trả xong.
  *
  * Nhánh mặc định **fail-closed `null`** (schema `.nullable()`): trạng thái kỳ ngoài phổ đã biết thì
  * KHÔNG được đoán là `Published` — đoán sai chiều đó là nói với nhân viên rằng phiếu đã phát hành.
@@ -325,7 +329,7 @@ export function derivePayslipStatus(
   periodStatus: string,
   acknowledgedAt: Date | string | null,
 ): PayslipDerivedStatus | null {
-  if (periodStatus === "Paid" || periodStatus === "Locked") {
+  if (periodStatus === "Published" || periodStatus === "Paid" || periodStatus === "Locked") {
     return acknowledgedAt ? "Acknowledged" : "Published";
   }
   if (

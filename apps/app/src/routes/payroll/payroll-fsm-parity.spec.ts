@@ -37,8 +37,9 @@ describe("PAYROLL FSM parity — FE mirror khớp payroll-fsm.ts của BE", () =
     to: m[3],
   }));
 
-  it("đọc được ĐÚNG 10 cạnh từ file BE (regex census không mù)", () => {
-    expect(beEdges).toHaveLength(10);
+  it("đọc được ĐÚNG 11 cạnh từ file BE (regex census không mù)", () => {
+    // v2 (mig 0572): 10 cạnh v1, `publish` đổi đích sang `Published`, thêm `complete-batch Published→Paid`.
+    expect(beEdges).toHaveLength(11);
   });
 
   it("tập cạnh FE === tập cạnh BE, từng ô", () => {

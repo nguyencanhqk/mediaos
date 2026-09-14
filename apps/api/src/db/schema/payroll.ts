@@ -169,6 +169,16 @@ export const payrollPeriods = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     publishedBy: uuid("published_by"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    /**
+     * v2 (mig `0572`) — vết `complete-batch` (`Published → Paid`). ⚠️ `applyTransitionTx` ghi
+     * `patch.paidBy/paidAt` ĐỘNG từ `TRAIL_RESET`; drizzle bỏ qua im lặng khoá không phải cột ⇒ đổi tên hai
+     * field này là `23514` từ `paid_pair_check` ở đường hoàn tất đợt (census ở `payroll-fsm.spec.ts`).
+     * Kỳ v1 đã `Locked` được backfill `paid_* := published_*` (owner chốt 14/09/2026, O-1 lối A).
+     */
+    paidBy: uuid("paid_by"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    /** v2 (mig `0572`) — mẫu bảng lương của kỳ; composite FK NO ACTION; NULL cho kỳ v1 (ERR-023 ở service). */
+    templateId: uuid("template_id"),
     lockedBy: uuid("locked_by"),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     payslipsGeneratedBy: uuid("payslips_generated_by"),

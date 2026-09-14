@@ -1827,6 +1827,81 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── PAYROLL v2 track C (S15-PAYROLL-DB-2, mig 0572) — 4 bảng RLS+FORCE ──
+  // Fixture phải thoả trigger chốt cuối: payroll_advances INSERT bắt buộc Pending + created_by (T3
+  // `insert-shape`); payroll_payment_lines cần phiếu CÙNG user + CÙNG kỳ với đợt (T2 `cross-user`/`cross-period`).
+  // Tháng 2019-0x cố ý xa mọi fixture khác (unique partial `(company_id, period_month)` của payroll_periods).
+  {
+    name: "payroll_advances",
+    table: "payroll_advances",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `padv-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO payroll_advances (company_id, user_id, amount, deduct_period_month, reason, created_by)
+         VALUES ($1, $2, 500000.00, '2019-01', 'RLS fixture', $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payroll_payment_batches",
+    table: "payroll_payment_batches",
+    seedRow: async (direct, t) => {
+      const p = await direct.query(
+        `INSERT INTO payroll_periods (company_id, period_month, status)
+         VALUES ($1, '2019-02', 'Draft') RETURNING id`,
+        [t.companyId],
+      );
+      const r = await direct.query(
+        `INSERT INTO payroll_payment_batches (company_id, payroll_period_id, code, method)
+         VALUES ($1, $2, $3, 'bank') RETURNING id`,
+        [t.companyId, p.rows[0].id, `RLS_B_${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payroll_payment_lines",
+    table: "payroll_payment_lines",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ppl-${randomUUID().slice(0, 8)}@x.test`);
+      const p = await direct.query(
+        `INSERT INTO payroll_periods (company_id, period_month, status)
+         VALUES ($1, '2019-03', 'Draft') RETURNING id`,
+        [t.companyId],
+      );
+      const ps = await direct.query(
+        `INSERT INTO payslips
+           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, input_snapshot_json)
+         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, '{"workDays":22}'::jsonb) RETURNING id`,
+        [t.companyId, p.rows[0].id, u],
+      );
+      const b = await direct.query(
+        `INSERT INTO payroll_payment_batches (company_id, payroll_period_id, code, method)
+         VALUES ($1, $2, $3, 'cash') RETURNING id`,
+        [t.companyId, p.rows[0].id, `RLS_BL_${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO payroll_payment_lines (company_id, batch_id, user_id, payslip_id)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [t.companyId, b.rows[0].id, u, ps.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payroll_budgets",
+    table: "payroll_budgets",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO payroll_budgets (company_id, fiscal_year, planned_amount)
+         VALUES ($1, 2031, 1000000.00) RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // ── G13 Finance (Revenue/Cost/Profit/Expense) — APPEND-ONLY ledgers + mutable allocation/request ──
   // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
   {

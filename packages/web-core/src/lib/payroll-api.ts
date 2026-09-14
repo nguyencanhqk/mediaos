@@ -330,7 +330,7 @@ export const payrollApi = {
 
   /**
    * GET /me/payslips — Own (`view-own-payslip:payslip`). Chỉ phiếu của kỳ **ĐÃ phát hành**
-   * (`Paid`/`Locked`) — server lọc, FE KHÔNG tự suy.
+   * (`Published`/`Paid`/`Locked`) — server lọc, FE KHÔNG tự suy.
    */
   listMyPayslips: (query?: Partial<MePayslipListQuery>): Promise<PaginatedResult<PayslipDto[]>> =>
     apiFetchPaginated(`/me/payslips${buildQueryString(query ?? {})}`, z.array(payslipSchema)),

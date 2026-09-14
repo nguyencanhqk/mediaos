@@ -36,7 +36,7 @@ export const PAYROLL_ERR_CODE = {
   ATTENDANCE_NOT_READY: "PAYROLL-ERR-002",
   /** 409 — tính lại / điều chỉnh dòng khi kỳ đã ≥ `Approved` (snapshot đã đóng băng). */
   PERIOD_FROZEN: "PAYROLL-ERR-003",
-  /** 409 — mở lại kỳ bị chặn (đã sinh phiếu, hoặc kỳ ở `Paid`/`Locked`). */
+  /** 409 — mở lại kỳ bị chặn (đã sinh phiếu, hoặc kỳ ở `Published`/`Paid`/`Locked`). */
   REOPEN_BLOCKED: "PAYROLL-ERR-004",
   /** 409 — four-eyes: người duyệt trùng người gửi duyệt. */
   FOUR_EYES: "PAYROLL-ERR-005",

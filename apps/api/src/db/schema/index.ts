@@ -41,6 +41,8 @@ export * from "./evaluation";
 export * from "./kpi";
 // G12 payroll (salary profile — lương nhạy cảm, ADR-0010)
 export * from "./payroll";
+// S15-PAYROLL-DB-2 (DB-13 §14, mig 0572): tạm ứng · đợt chi trả · dòng chi · ngân sách (track C)
+export * from "./payroll-disbursement";
 // S11-ROOM-DB-1 (DB-16 / SPEC-14, mig 0552·0553·0554·0555): meeting_rooms (tái dụng + ALTER) + room_bookings +
 // room_booking_attendees; 4 bảng meeting_* di sản G10 đã DROP ở 0553 (schema/meeting.ts → rooms.ts).
 export * from "./rooms";

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PayrollPeriodStatus } from "@mediaos/contracts";
+import { payrollPeriods } from "../db/schema/payroll";
 import {
   assertPeriodTransition,
   assertReopenAllowed,
@@ -9,12 +10,13 @@ import {
   PERIOD_TRANSITIONS,
   TRAIL_RESET,
   type PeriodAction,
+  type TrailCol,
 } from "./payroll-fsm";
 
 /**
- * S13-PAYROLL-BE-1 — FSM kỳ lương, ma trận **49 ô** (SPEC-11 §13.1).
+ * S13-PAYROLL-BE-1 → 🔁 S15-PAYROLL-DB-2 — FSM kỳ lương, ma trận **64 ô** (8 × 8, SPEC-11 §13.1 bản v2).
  *
- * ⚠️ Spec này CỐ Ý có CẢ ca ALLOW lẫn ca DENY. 36 ca "phải ném" mà không có ca đối chứng "phải KHÔNG
+ * ⚠️ Spec này CỐ Ý có CẢ ca ALLOW lẫn ca DENY. 50 ca "phải ném" mà không có ca đối chứng "phải KHÔNG
  * ném" là **xanh RỖNG** — một hàm `assertPeriodTransition` luôn-ném cũng làm chúng xanh
  * (memory `deny-cases-vacuous-without-allow-case`).
  *
@@ -28,18 +30,20 @@ const STATUSES: PayrollPeriodStatus[] = [
   "Calculated",
   "Reviewing",
   "Approved",
+  "Published",
   "Paid",
   "Locked",
 ];
 
-/** Chép TAY từ bảng SPEC-11 §13.1 — 10 ô đổi trạng thái. */
+/** Chép TAY từ bảng SPEC-11 §13.1 v2 — 11 ô đổi trạng thái. */
 const EXPECTED_MOVES: ReadonlyArray<[PayrollPeriodStatus, PayrollPeriodStatus, PeriodAction]> = [
   ["Draft", "CollectingData", "collect"],
   ["CollectingData", "Calculated", "calculate"],
   ["Calculated", "Reviewing", "submit"],
   ["Reviewing", "Calculated", "reject"],
   ["Reviewing", "Approved", "approve"],
-  ["Approved", "Paid", "publish"],
+  ["Approved", "Published", "publish"],
+  ["Published", "Paid", "complete-batch"],
   ["Paid", "Locked", "lock"],
   ["Calculated", "CollectingData", "reopen"],
   ["Reviewing", "CollectingData", "reopen"],
@@ -61,15 +65,26 @@ const ALL_ACTIONS: PeriodAction[] = [
   "reject",
   "generate-payslips",
   "publish",
+  "complete-batch",
   "lock",
   "reopen",
 ];
 
+const ALL_TRAIL_COLS: TrailCol[] = [
+  "calculated",
+  "submitted",
+  "approved",
+  "payslipsGenerated",
+  "published",
+  "paid",
+  "locked",
+];
+
 const key = (from: string, to: string, via: string) => `${from}->${to}:${via}`;
 
-describe("S13-PAYROLL-BE-1 · FSM kỳ lương (SPEC-11 §13.1)", () => {
-  it("(a) 10 ô ĐỔI trạng thái — ALLOW đối chứng: không ném", () => {
-    expect(EXPECTED_MOVES).toHaveLength(10);
+describe("S15-PAYROLL-DB-2 · FSM kỳ lương v2 (SPEC-11 §13.1)", () => {
+  it("(a) 11 ô ĐỔI trạng thái — ALLOW đối chứng: không ném", () => {
+    expect(EXPECTED_MOVES).toHaveLength(11);
     for (const [from, to, via] of EXPECTED_MOVES) {
       expect(() => assertPeriodTransition(from, to, via), key(from, to, via)).not.toThrow();
       expect(nextStatus(from, via), key(from, to, via)).toBe(to);
@@ -84,7 +99,7 @@ describe("S13-PAYROLL-BE-1 · FSM kỳ lương (SPEC-11 §13.1)", () => {
     }
   });
 
-  it("(c) 36 ô CẤM (49 − 10 − 3) — ném PAYROLL-ERR-001 kèm from/to", () => {
+  it("(c) 50 ô CẤM (64 − 11 − 3) — ném PAYROLL-ERR-001 kèm from/to", () => {
     const allowed = new Set<string>();
     for (const [f, t] of EXPECTED_MOVES) allowed.add(`${f}->${t}`);
     for (const [at] of EXPECTED_IN_PLACE) allowed.add(`${at}->${at}`);
@@ -110,7 +125,7 @@ describe("S13-PAYROLL-BE-1 · FSM kỳ lương (SPEC-11 §13.1)", () => {
         }
       }
     }
-    expect(denied).toHaveLength(36);
+    expect(denied).toHaveLength(50);
   });
 
   it("(d) SUY NGƯỢC từ hằng — tập ô hợp lệ khớp danh sách chép tay, HAI CHIỀU", () => {
@@ -124,14 +139,26 @@ describe("S13-PAYROLL-BE-1 · FSM kỳ lương (SPEC-11 §13.1)", () => {
 
     // Hai chiều: hằng không được có ô nào ngoài danh sách, và ngược lại.
     expect([...fromConst].sort()).toEqual([...fromHand].sort());
-    expect(fromConst.size).toBe(13);
+    expect(fromConst.size).toBe(14);
   });
 
-  it("(e) TRAIL_RESET đủ 9 action, `clear ∩ set = ∅`, không thiếu `generate-payslips`", () => {
+  it("(d2) v2: `publish` dừng ở Published; `Paid` CHỈ vào được bằng `complete-batch`", () => {
+    expect(nextStatus("Approved", "publish")).toBe("Published");
+    const intoPaid = PERIOD_TRANSITIONS.filter((t) => t.to === "Paid");
+    expect(intoPaid).toEqual([{ action: "complete-batch", from: "Published", to: "Paid" }]);
+    // ÂM: `lock` không nhảy cóc từ Published (khoá kỳ khi chưa chi trả xong).
+    expect(isAllowedTransition("Published", "Locked", "lock")).toBe(false);
+    // DƯƠNG đối chứng: `lock` vẫn hợp lệ từ Paid.
+    expect(isAllowedTransition("Paid", "Locked", "lock")).toBe(true);
+  });
+
+  it("(e) TRAIL_RESET đủ 10 action, `clear ∩ set = ∅`, không thiếu `generate-payslips`/`complete-batch`", () => {
     expect(Object.keys(TRAIL_RESET).sort()).toEqual([...ALL_ACTIONS].sort());
     // Ô này là lý do bảng RESET của plan v1 sai: thiếu nó, BE-2 tự chế cặp ghi ⇒ 23514 từ
     // `payroll_periods_generated_pair_check`.
     expect(TRAIL_RESET["generate-payslips"].set).toEqual(["payslipsGenerated"]);
+    // Thiếu `paid` ⇒ UPDATE status='Paid' không kèm paid_by/at ⇒ 23514 từ `paid_pair_check`.
+    expect(TRAIL_RESET["complete-batch"]).toEqual({ clear: [], set: ["paid"] });
     for (const via of ALL_ACTIONS) {
       const { clear, set } = TRAIL_RESET[via];
       expect(
@@ -143,15 +170,33 @@ describe("S13-PAYROLL-BE-1 · FSM kỳ lương (SPEC-11 §13.1)", () => {
     for (const t of PERIOD_TRANSITIONS) expect(TRAIL_RESET[t.action]).toBeDefined();
   });
 
-  it("(f) `reopen` xoá ĐÚNG 3 cặp vết — KHÔNG chạm published/locked", () => {
+  it("(e2) CENSUS trail → cột drizzle THẬT: mọi `${col}By`/`${col}At` là cột của payrollPeriods", () => {
+    // `applyTransitionTx` ghi `patch[`${col}By`]` động và drizzle BỎ QUA IM LẶNG khoá không phải cột.
+    // Đổi tên `paidBy` trong schema mà quên ở đây = đường hoàn tất đợt ăn 23514 thay vì ghi vết.
+    const used = new Set<TrailCol>();
+    for (const via of ALL_ACTIONS) {
+      for (const c of [...TRAIL_RESET[via].clear, ...TRAIL_RESET[via].set]) used.add(c);
+    }
+    expect([...used].sort()).toEqual([...ALL_TRAIL_COLS].sort());
+    const cols = payrollPeriods as unknown as Record<string, unknown>;
+    for (const c of ALL_TRAIL_COLS) {
+      expect(cols[`${c}By`], `${c}By`).toBeDefined();
+      expect(cols[`${c}At`], `${c}At`).toBeDefined();
+    }
+    // ĐỐI CHỨNG: khoá không tồn tại phải ra undefined (kẻo phép thử trên luôn xanh).
+    expect(cols["nonexistentTrailBy"]).toBeUndefined();
+  });
+
+  it("(f) `reopen` xoá ĐÚNG 3 cặp vết — KHÔNG chạm published/paid/locked", () => {
     expect([...TRAIL_RESET.reopen.clear].sort()).toEqual(["approved", "calculated", "submitted"]);
     expect(TRAIL_RESET.reopen.clear).not.toContain("published");
+    expect(TRAIL_RESET.reopen.clear).not.toContain("paid");
     expect(TRAIL_RESET.reopen.clear).not.toContain("locked");
     // `reject` xoá đúng vết gửi duyệt — không xoá `approved` (kỳ chưa từng được duyệt ở nhánh này).
     expect(TRAIL_RESET.reject.clear).toEqual(["submitted"]);
   });
 
-  it("(g) cổng `reopen`: đã sinh phiếu ⇒ 004; Paid/Locked ⇒ 004; còn lại cho qua", () => {
+  it("(g) cổng `reopen`: đã sinh phiếu ⇒ 004; Published/Paid/Locked ⇒ 004; còn lại cho qua", () => {
     const kindOf = (fn: () => void): { code?: string; kind?: string } => {
       try {
         fn();
@@ -172,12 +217,13 @@ describe("S13-PAYROLL-BE-1 · FSM kỳ lương (SPEC-11 §13.1)", () => {
     expect(generated.code).toBe("PAYROLL-ERR-004");
     expect(generated.kind).toBe("payslip-already-generated");
 
-    for (const status of ["Paid", "Locked"] as PayrollPeriodStatus[]) {
+    // `Published` với cờ NULL là dữ liệu bất khả (publish đòi đã sinh phiếu) — vế hai vẫn phải chặn.
+    for (const status of ["Published", "Paid", "Locked"] as PayrollPeriodStatus[]) {
       const terminal = kindOf(() => assertReopenAllowed({ status, payslipsGeneratedAt: null }));
       expect(terminal.code, status).toBe("PAYROLL-ERR-004");
       expect(terminal.kind, status).toBe("period-terminal");
     }
-    // ALLOW đối chứng — thiếu ca này thì hàm luôn-ném cũng làm 3 ca trên xanh.
+    // ALLOW đối chứng — thiếu ca này thì hàm luôn-ném cũng làm các ca trên xanh.
     for (const status of ["Calculated", "Reviewing", "Approved"] as PayrollPeriodStatus[]) {
       expect(
         () => assertReopenAllowed({ status, payslipsGeneratedAt: null }),
