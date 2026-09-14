@@ -504,6 +504,10 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
     ids,
   );
   await direct.query("DELETE FROM payslip_items WHERE company_id = ANY($1::uuid[])", ids);
+  // PAYROLL v2 track C (S15-PAYROLL-DB-2, mig 0572): payroll_payment_lines → payslips + batches + users
+  // (NO ACTION) ⇒ PHẢI trước `DELETE FROM payslips`. Trigger `payroll_payment_line_guard` chỉ gác
+  // INSERT/UPDATE, KHÔNG gác DELETE (app role không có DELETE — chỉ teardown superuser tới được đây).
+  await direct.query("DELETE FROM payroll_payment_lines WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payslips WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payroll_period_lines WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM bonus_penalties WHERE company_id = ANY($1::uuid[])", ids);
@@ -521,6 +525,10 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
     ids,
   );
   await direct.query("DELETE FROM salary_profile_items WHERE company_id = ANY($1::uuid[])", ids);
+  // PAYROLL v2 track C (mig 0572): batches (→ payroll_periods) sau payroll_payment_lines ở trên; advances →
+  // payroll_periods + users. Cả hai PHẢI trước dòng xoá kỳ ngay dưới.
+  await direct.query("DELETE FROM payroll_payment_batches WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM payroll_advances WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payroll_periods WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM salary_profiles WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query(
@@ -530,6 +538,8 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM payroll_templates WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM salary_components WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payroll_statutory_rates WHERE company_id = ANY($1::uuid[])", ids);
+  // PAYROLL v2 track C (mig 0572): payroll_budgets → org_units (NO ACTION) ⇒ trước org_units/users ở khối sau.
+  await direct.query("DELETE FROM payroll_budgets WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G13 Finance ────────────────────────────────────────────────────────────
   // Xoá TRƯỚC projects/channels/content_items/org_units/teams/users (FK target). Thứ tự nội bộ:

@@ -532,7 +532,7 @@ export class PayslipsController {
 export class MePayslipsController {
   constructor(private readonly payslips: PayrollPayslipsService) {}
 
-  /** 031 — GET /me/payslips (chỉ kỳ `Paid`/`Locked`; chưa có phiếu ⇒ danh sách RỖNG, không lỗi). */
+  /** 031 — GET /me/payslips (chỉ kỳ `Published`/`Paid`/`Locked`; chưa có phiếu ⇒ danh sách RỖNG, không lỗi). */
   @Get()
   @UseGuards(PermissionGuard)
   @RequirePermission(P.mePayslipList.action, P.mePayslipList.resourceType, {

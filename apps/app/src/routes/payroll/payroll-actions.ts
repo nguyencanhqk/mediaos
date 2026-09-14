@@ -33,20 +33,32 @@ export const PAYROLL_PERIOD_ACTIONS = [
 ] as const;
 export type PayrollPeriodAction = (typeof PAYROLL_PERIOD_ACTIONS)[number];
 
+/**
+ * Action của FSM — rộng hơn `PayrollPeriodAction` đúng một phần tử: `complete-batch` (`Published → Paid`)
+ * là cạnh của FSM kỳ nhưng KHÔNG phải nút trên thanh hành động kỳ — nó chạy từ màn Chi trả (hoàn tất đợt,
+ * PAYROLL-API-072, S15-PAYROLL-FE-3). Mirror vào bảng để parity spec so ĐỦ cạnh với BE, nhưng KHÔNG thêm
+ * vào `PAYROLL_PERIOD_ACTIONS`/`PERIOD_ACTION_PAIR`.
+ */
+type PeriodFsmAction = PayrollPeriodAction | "complete-batch";
+
 interface PeriodTransition {
-  readonly action: PayrollPeriodAction;
+  readonly action: PeriodFsmAction;
   readonly from: PayrollPeriodStatus;
   readonly to: PayrollPeriodStatus;
 }
 
-/** **10 chuyển tiếp ĐỔI trạng thái** — liệt kê tường minh từng ô (mirror `PERIOD_TRANSITIONS` của BE). */
+/**
+ * **11 chuyển tiếp ĐỔI trạng thái** — liệt kê tường minh từng ô (mirror `PERIOD_TRANSITIONS` của BE).
+ * v2 (mig `0572`): `publish` dừng ở `Published`; `complete-batch` là đường DUY NHẤT vào `Paid`.
+ */
 export const PERIOD_TRANSITIONS: readonly PeriodTransition[] = [
   { action: "collect", from: "Draft", to: "CollectingData" },
   { action: "calculate", from: "CollectingData", to: "Calculated" },
   { action: "submit", from: "Calculated", to: "Reviewing" },
   { action: "reject", from: "Reviewing", to: "Calculated" },
   { action: "approve", from: "Reviewing", to: "Approved" },
-  { action: "publish", from: "Approved", to: "Paid" },
+  { action: "publish", from: "Approved", to: "Published" },
+  { action: "complete-batch", from: "Published", to: "Paid" },
   { action: "lock", from: "Paid", to: "Locked" },
   { action: "reopen", from: "Calculated", to: "CollectingData" },
   { action: "reopen", from: "Reviewing", to: "CollectingData" },
@@ -111,11 +123,12 @@ export interface PeriodActionSubject {
  * `reopen` có bị chặn không — mirror `assertReopenAllowed` của BE.
  *
  * Hai vế, và vế ĐẦU quan trọng hơn: kỳ đã sinh phiếu mà quay về `CollectingData` thì mọi lần
- * `generate-payslips` sau đều 409 vĩnh viễn ⇒ trạng thái không thoát được. `Paid`/`Locked` chặn ở vế hai.
+ * `generate-payslips` sau đều 409 vĩnh viễn ⇒ trạng thái không thoát được. `Published`/`Paid`/`Locked` chặn
+ * ở vế hai (v2 mig `0572` — mirror `REOPEN_TERMINAL_STATUSES` của BE).
  */
 export function isReopenBlocked(period: PeriodActionSubject): boolean {
   if (period.payslipsGeneratedAt !== null) return true;
-  return period.status === "Paid" || period.status === "Locked";
+  return period.status === "Published" || period.status === "Paid" || period.status === "Locked";
 }
 
 /**

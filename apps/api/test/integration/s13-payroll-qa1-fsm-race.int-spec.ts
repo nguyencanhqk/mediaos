@@ -17,9 +17,9 @@
  *    ⚠️ **THỨ TỰ CỔNG LÀ HỢP ĐỒNG, không phải chi tiết thi công** — đo tại chỗ 2026-09-01, mỗi vế có
  *    lý do đã ghi trong src, và đảo thứ tự sẽ giết một mã lỗi:
  *      · `calculate` — `FROZEN_STATUSES` (`payroll-calc.service.ts:79`) chạy TRƯỚC FSM ⇒ Approved/
- *        Paid/Locked cho **003**, không phải 001. Để FSM bắt trước thì 003 thành mã CHẾT.
+ *        Published/Paid/Locked cho **003**, không phải 001. Để FSM bắt trước thì 003 thành mã CHẾT.
  *      · `reopen` — `assertReopenAllowed` (`payroll-approval.service.ts:253`) chạy TRƯỚC FSM ⇒
- *        Paid/Locked cho **004**. Đây là cổng chống "kỳ về CollectingData khi đã có phiếu".
+ *        Published/Paid/Locked cho **004** (v2 mig 0572). Đây là cổng chống "kỳ về CollectingData khi đã có phiếu".
  *      · `publish` — `NO_PAYSLIP` (`payroll-payslips.service.ts:140`) chạy TRƯỚC FSM; fixture mục A
  *        CỐ Ý không sinh phiếu ⇒ **007** ở MỌI trạng thái, kể cả ô CHO (`Approved`).
  *      · `approve` — four-eyes chạy TRƯỚC FSM nhưng chỉ nổ khi `submitted_by === actor`; fixture đặt
@@ -68,13 +68,14 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1fsm");
 
-/** 7 trạng thái của `payrollPeriodStatusEnum` — nguồn cho trục đứng của ma trận. */
+/** 8 trạng thái của `payrollPeriodStatusEnum` (v2 mig 0572) — nguồn cho trục đứng của ma trận. */
 const STATUSES: readonly PayrollPeriodStatus[] = [
   "Draft",
   "CollectingData",
   "Calculated",
   "Reviewing",
   "Approved",
+  "Published",
   "Paid",
   "Locked",
 ];
@@ -104,7 +105,12 @@ const ACTIONS: ReadonlyArray<{
   },
 ];
 
-const FROZEN: ReadonlySet<PayrollPeriodStatus> = new Set(["Approved", "Paid", "Locked"]);
+const FROZEN: ReadonlySet<PayrollPeriodStatus> = new Set([
+  "Approved",
+  "Published",
+  "Paid",
+  "Locked",
+]);
 
 /**
  * Mã lỗi PHẢI thấy ở một ô CẤM, theo THỨ TỰ CỔNG đã đo của service (xem docblock đầu file).
@@ -112,12 +118,14 @@ const FROZEN: ReadonlySet<PayrollPeriodStatus> = new Set(["Approved", "Paid", "L
  */
 function expectedDenyCode(action: PeriodAction, from: PayrollPeriodStatus): string {
   if (action === "calculate" && FROZEN.has(from)) return "PAYROLL-ERR-003";
-  if (action === "reopen" && (from === "Paid" || from === "Locked")) return "PAYROLL-ERR-004";
+  if (action === "reopen" && (from === "Published" || from === "Paid" || from === "Locked")) {
+    return "PAYROLL-ERR-004";
+  }
   if (action === "publish") return "PAYROLL-ERR-007";
   return "PAYROLL-ERR-001";
 }
 
-describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua ghi", () => {
+describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×8 ở tầng HTTP + đua ghi", () => {
   let app: INestApplication;
   let direct: Pool;
   let A: SeededTenant;
@@ -128,7 +136,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
   let actorUserId: string;
   let otherUserId: string;
   let attendancePeriodId: string;
-  /** 1 kỳ / trạng thái (7 tháng riêng) — nạp lại hình dạng trước MỖI ô, xem `resetTo`. */
+  /** 1 kỳ / trạng thái (8 tháng riêng) — nạp lại hình dạng trước MỖI ô, xem `resetTo`. */
   const periodByStatus = new Map<PayrollPeriodStatus, string>();
 
   const http = () => request(app.getHttpServer());
@@ -163,8 +171,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
 
   /**
    * Nạp hàng kỳ về hình dạng CHUẨN của `status`, thoả MỌI CHECK của mig `0564`:
-   *   `submitted_pair` (Reviewing↑) · `approved_pair` (Approved↑) · `published_pair` (Paid↑) ·
-   *   `locked_pair` (Locked) · `calculated_needs_attendance` (rời Draft/CollectingData) ·
+   *   `submitted_pair` (Reviewing↑) · `approved_pair` (Approved↑) · `published_pair` (Published↑) ·
+   *   `paid_pair` (Paid↑, v2 mig 0572) · `locked_pair` (Locked) · `calculated_needs_attendance` (rời Draft/CollectingData) ·
    *   `four_eyes` (approved_by ≠ submitted_by) · `generated_pair` (cả hai NULL ở đây).
    *
    * `submitted_by` LUÔN là `otherUserId` (KHÁC actor) — cổng four-eyes của `approve` chạy TRƯỚC FSM,
@@ -172,9 +180,10 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
    * `payslips_generated_*` để NULL — nhánh no-op 200 của `generate-payslips` không được che ô nào.
    */
   async function resetTo(periodId: string, status: PayrollPeriodStatus): Promise<void> {
-    const submitted = ["Reviewing", "Approved", "Paid", "Locked"].includes(status);
-    const approved = ["Approved", "Paid", "Locked"].includes(status);
-    const published = ["Paid", "Locked"].includes(status);
+    const submitted = ["Reviewing", "Approved", "Published", "Paid", "Locked"].includes(status);
+    const approved = ["Approved", "Published", "Paid", "Locked"].includes(status);
+    const published = ["Published", "Paid", "Locked"].includes(status);
+    const paid = ["Paid", "Locked"].includes(status);
     const locked = status === "Locked";
     const calculated = status !== "Draft" && status !== "CollectingData";
     await direct.query(
@@ -191,6 +200,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
          published_at  = CASE WHEN $9 THEN now() ELSE NULL END,
          locked_by     = CASE WHEN $10 THEN $6::uuid ELSE NULL END,
          locked_at     = CASE WHEN $10 THEN now() ELSE NULL END,
+         paid_by       = CASE WHEN $11 THEN $6::uuid ELSE NULL END,
+         paid_at       = CASE WHEN $11 THEN now() ELSE NULL END,
          payslips_generated_by = NULL,
          payslips_generated_at = NULL
        WHERE id = $1`,
@@ -205,6 +216,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
         approved,
         published,
         locked,
+        paid,
       ],
     );
   }
@@ -248,7 +260,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
     );
     attendancePeriodId = ap.rows[0].id;
 
-    // 7 kỳ, 7 tháng riêng (unique partial `(company_id, period_month) WHERE deleted_at IS NULL`).
+    // 8 kỳ, 8 tháng riêng (2027-01..08; mục B dùng 2027-09..12) (unique partial `(company_id, period_month) WHERE deleted_at IS NULL`).
     for (const [i, status] of STATUSES.entries()) {
       const month = `2027-0${i + 1}`;
       const r = await direct.query<{ id: string }>(
@@ -267,9 +279,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
     await app?.close();
   });
 
-  // ── A. Ma trận 63 ô qua route THẬT ───────────────────────────────────────────────────────────
+  // ── A. Ma trận 72 ô qua route THẬT ───────────────────────────────────────────────────────────
 
-  describe("A. 9 action × 7 trạng thái — route thật ép ĐÚNG bảng FSM", () => {
+  describe("A. 9 action × 8 trạng thái — route thật ép ĐÚNG bảng FSM", () => {
     const CELLS = ACTIONS.flatMap((a) =>
       STATUSES.map((from) => ({
         action: a.action,
@@ -300,14 +312,15 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
       },
     );
 
-    it("neo chống xanh-rỗng: ma trận có ĐÚNG 63 ô, trong đó 13 ô CHO và 50 ô CẤM", () => {
+    it("neo chống xanh-rỗng: ma trận có ĐÚNG 72 ô, trong đó 13 ô CHO và 59 ô CẤM", () => {
       const cells = ACTIONS.flatMap((a) =>
         STATUSES.map((from) => nextStatus(from, a.action) !== null),
       );
-      expect(cells.length).toBe(63);
-      // 10 ô ĐỔI trạng thái + 3 ô TẠI CHỖ = 13 (PERIOD_TRANSITIONS + IN_PLACE_ACTIONS).
+      expect(cells.length).toBe(72);
+      // 10 ô ĐỔI trạng thái có ROUTE + 3 ô TẠI CHỖ = 13. Cạnh thứ 11 `complete-batch` (Published→Paid)
+      // KHÔNG có route trên payroll-periods (API-072 của BE-4) ⇒ không vào ma trận này.
       expect(cells.filter(Boolean).length).toBe(13);
-      expect(cells.filter((x) => !x).length).toBe(50);
+      expect(cells.filter((x) => !x).length).toBe(59);
     });
   });
 
@@ -382,7 +395,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
       expect(Number(slips.rows[0].n), "1 dòng lương ⇒ ĐÚNG 1 phiếu, không 2").toBe(1);
     });
 
-    it("double-publish ⇒ đúng MỘT 201; kẻ thua 409; kỳ dừng ở Paid (không nhảy quá)", async () => {
+    it("double-publish ⇒ đúng MỘT 201; kẻ thua 409; kỳ dừng ở Published (không nhảy quá)", async () => {
       const id = await freshPeriod("2027-12", "CollectingData");
       expect((await post(tActor, `/payroll-periods/${id}/calculate`).send({})).status).toBe(201);
       await resetTo(id, "Approved");
@@ -397,7 +410,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×7 ở tầng HTTP + đua
       expect(rs.filter((r) => r.status === 201).length, "phải đúng MỘT lượt thắng").toBe(1);
       expect(rs.find((r) => r.status !== 201)!.status).toBe(409);
       const row = await direct.query(`SELECT status FROM payroll_periods WHERE id = $1`, [id]);
-      expect(row.rows[0].status).toBe("Paid");
+      // v2 (mig 0572): `publish` dừng ở `Published`; `Paid` chỉ qua hoàn tất đợt chi trả.
+      expect(row.rows[0].status).toBe("Published");
     });
   });
 

@@ -63,12 +63,12 @@ const csvEnumList = <T extends z.ZodTypeAny>(item: T) =>
 /**
  * SPEC-01 §17.15 — mirror `payroll_periods_status_check`. FSM (chuyển tiếp) ép ở SERVICE, không ở đây.
  *
- * 🔴 **v2 nâng lên 8 giá trị (`Published` xen giữa `Approved` và `Paid`) — NHƯNG KHÔNG PHẢI Ở WO NÀY.**
- * Cột `payroll_periods.status` còn CHECK 7 giá trị cho tới migration của `S15-PAYROLL-DB-2`, nơi bốn
- * bước (thêm cột → nới CHECK → `UPDATE 'Paid'→'Published'` → siết CHECK cặp) chạy NGUYÊN TỬ trong MỘT
- * migration (DB-13 §12.3). Nâng enum này SỚM = Zod nhận `Published` rồi DB ném `23514`; nâng MUỘN =
- * DB trả `Published` rồi Zod từ chối ⇒ **500 trên đường ĐỌC**. Cả hai chiều đều hỏng ⇒ enum và CHECK
- * phải đổi CÙNG COMMIT (`contract-must-mirror-db-check-both-directions`).
+ * 🔁 **v2 = 8 giá trị (mig `0572`, S15-PAYROLL-DB-2, PAY-DEC-017).** `Published` xen giữa `Approved` và
+ * `Paid`: `publish` giờ dừng ở `Published` (phiếu đã phát hành, nhân viên thấy), còn `Paid` nghĩa là
+ * **đã chi trả xong** và CHỈ tới được qua hoàn tất đợt chi trả (PAYROLL-API-072). Kỳ v1 `Paid` được
+ * backfill thành `Published` trong cùng migration. Enum và CHECK đổi CÙNG COMMIT — lệch chiều nào cũng
+ * hỏng: Zod 7 / DB 8 = DB trả `Published` rồi Zod từ chối ⇒ **500 trên đường ĐỌC**
+ * (`contract-must-mirror-db-check-both-directions`).
  */
 export const payrollPeriodStatusEnum = z.enum([
   "Draft",
@@ -76,6 +76,7 @@ export const payrollPeriodStatusEnum = z.enum([
   "Calculated",
   "Reviewing",
   "Approved",
+  "Published",
   "Paid",
   "Locked",
 ]);
@@ -126,6 +127,24 @@ export type PayrollTemplateScope = z.infer<typeof payrollTemplateScopeEnum>;
 /** mirror `payroll_dependents_relationship_check`. */
 export const dependentRelationshipEnum = z.enum(["Child", "Spouse", "Parent", "Other"]);
 export type DependentRelationship = z.infer<typeof dependentRelationshipEnum>;
+
+// ─── v2 track C (mig 0572 · S15-PAYROLL-DB-2) — mirror CHECK HAI CHIỀU, ĐÚNG BẰNG (DB-13 §15.1) ───
+
+/**
+ * mirror `payroll_advances_status_check` — **4 giá trị**. `Deducted` là terminal thứ ba (khác
+ * `bonus_penalties` chỉ có 3): đạt khi máy tính lương gộp khoản tạm ứng vào kỳ; tính lại kỳ chưa
+ * `Approved` nhả về `Approved` (DB-13 §14.1).
+ */
+export const payrollAdvanceStatusEnum = z.enum(["Pending", "Approved", "Rejected", "Deducted"]);
+export type PayrollAdvanceStatus = z.infer<typeof payrollAdvanceStatusEnum>;
+
+/** mirror `payroll_payment_batches_method_check`. */
+export const paymentBatchMethodEnum = z.enum(["bank", "cash"]);
+export type PaymentBatchMethod = z.infer<typeof paymentBatchMethodEnum>;
+
+/** mirror `payroll_payment_batches_status_check`. `Completed` là terminal — trigger DB đóng băng đợt. */
+export const paymentBatchStatusEnum = z.enum(["Draft", "Ready", "Completed"]);
+export type PaymentBatchStatus = z.infer<typeof paymentBatchStatusEnum>;
 
 /**
  * SPEC-01 §17.16 — **DẪN XUẤT, KHÔNG có cột, KHÔNG có CHECK** (SPEC-11 §13.2). Server tính trong DTO từ
@@ -607,7 +626,7 @@ export const payslipListQuerySchema = z.object({
 });
 export type PayslipListQuery = z.infer<typeof payslipListQuerySchema>;
 
-/** `GET /me/payslips` (031) — Own scope; chỉ phiếu của kỳ ĐÃ phát hành (`Paid`/`Locked`, §13.2). */
+/** `GET /me/payslips` (031) — Own scope; chỉ phiếu của kỳ ĐÃ phát hành (`Published`/`Paid`/`Locked`, §13.2). */
 export const mePayslipListQuerySchema = z.object({
   payrollPeriodId: z.string().uuid().optional(),
   ...payrollPageQuery,

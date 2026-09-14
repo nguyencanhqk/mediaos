@@ -752,7 +752,8 @@ async function main() {
       [COMPANY_ID, periodMonth],
     );
     if (!periodId) {
-      // 'Paid' = trạng thái ĐÃ PHÁT HÀNH của FSM mới (SPEC-01 §17.15; 'published' cũ đã rời CHECK).
+      // 'Published' = trạng thái ĐÃ PHÁT HÀNH của FSM v2 (mig 0572, PAY-DEC-017). 'Paid' giờ nghĩa là ĐÃ CHI TRẢ
+      // xong và đòi paid_by/paid_at (payroll_periods_paid_pair_check) — demo không có đợt chi trả nên dừng ở đây.
       //
       // ⚠️ four-eyes: demo dùng HAI ACTOR KHÁC NHAU (người gửi duyệt ≠ người duyệt). TUYỆT ĐỐI KHÔNG để
       //    `submitted_by` NULL cho "qua" CHECK — `payroll_periods_submitted_pair_check` (mig 0564) đóng lối
@@ -786,7 +787,7 @@ async function main() {
            (company_id,period_month,status,attendance_period_id,created_by,
             calculated_by,calculated_at,submitted_by,submitted_at,approved_by,approved_at,
             published_by,published_at,payslips_generated_by,payslips_generated_at)
-         VALUES ($1,$2,'Paid',$5,$6,$6,$4,$6,$4,$3,$4,$3,$4,$3,$4) RETURNING id`,
+         VALUES ($1,$2,'Published',$5,$6,$6,$4,$6,$4,$3,$4,$3,$4,$3,$4) RETURNING id`,
         [COMPANY_ID, periodMonth, ADMIN_ID, day(-15).toISOString(), attPeriodId, submitterId],
       );
     }
@@ -818,7 +819,18 @@ async function main() {
             gross,net,work_days,present_days,paid_leave_days,unpaid_leave_days,late_minutes,
             input_snapshot_json,created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,22,22,0,0,0,$9::jsonb,$10)`,
-        [COMPANY_ID, periodId, uid, person.salary, allowances, deduction, gross, net, snapshot, ADMIN_ID],
+        [
+          COMPANY_ID,
+          periodId,
+          uid,
+          person.salary,
+          allowances,
+          deduction,
+          gross,
+          net,
+          snapshot,
+          ADMIN_ID,
+        ],
       );
     }
 

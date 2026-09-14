@@ -359,6 +359,11 @@ describe("RetentionService", () => {
       "payroll_templates",
       "payroll_statutory_rates",
       "payroll_template_components",
+      // PAYROLL v2 track C (S15-PAYROLL-DB-2, mig 0572) — 0 GRANT DELETE; dòng chi trả + tạm ứng chở tiền.
+      "payroll_advances",
+      "payroll_payment_batches",
+      "payroll_payment_lines",
+      "payroll_budgets",
       "seed_batches",
     ];
     it.each(APPEND_ONLY_TABLES)(

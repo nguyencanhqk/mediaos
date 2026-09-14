@@ -50,8 +50,15 @@ export interface PayslipItemRow {
   [key: string]: unknown;
 }
 
-/** Kỳ ĐÃ PHÁT HÀNH — chỉ hai trạng thái này mới cho nhân viên thấy phiếu của mình (SPEC-11 §13.2). */
-const PUBLISHED_PERIOD_STATUSES = ["Paid", "Locked"];
+/**
+ * Kỳ ĐÃ PHÁT HÀNH — chỉ ba trạng thái này mới cho nhân viên thấy phiếu của mình (SPEC-11 §13.2).
+ *
+ * 🔁 v2 (mig `0572`): `publish` dừng ở `Published`, `Paid` nghĩa là đã chi trả xong. Thiếu `Published` ở
+ * đây thì `/me/payslips` trả **`200 []`** cho mọi nhân viên từ lúc phát hành tới lúc kế toán chi trả xong
+ * — không lỗi, không log (`empty-success-is-the-fail-open-shape`). **Export** để PDF phiếu của mình
+ * (PAYROLL-API-084, S15-PAYROLL-BE-5) dùng CHUNG đúng định nghĩa này, không tự viết danh sách thứ hai.
+ */
+export const PUBLISHED_PERIOD_STATUSES: readonly string[] = ["Published", "Paid", "Locked"];
 
 /**
  * S13-PAYROLL-BE-2 — `payslips` · `payslip_items` · `payslip_acknowledgements`.
@@ -241,7 +248,7 @@ export class PayrollPayslipsRepository {
 
   /**
    * Câu đọc DÙNG CHUNG. `ownerUserId` khác `null` ⇒ **Own scope** (`/me/payslips*`): lọc theo chủ
-   * phiếu **và** chỉ kỳ ĐÃ PHÁT HÀNH (`Paid`/`Locked`) — phiếu `Generated` chưa phát hành thì nhân
+   * phiếu **và** chỉ kỳ ĐÃ PHÁT HÀNH (`Published`/`Paid`/`Locked`) — phiếu `Generated` chưa phát hành thì nhân
    * viên KHÔNG thấy (SPEC-11 §13.2). Cùng vị từ dùng cho list, detail và ack ⇒ không có đường nào
    * nhìn thấy phiếu qua một cửa mà cửa kia chặn.
    */
@@ -327,7 +334,7 @@ export class PayrollPayslipsRepository {
   /**
    * 033 bước 1 — tra phiếu của CHÍNH chủ **KHÔNG lọc kỳ đã phát hành**.
    *
-   * ⚠️ Cố ý khác `findTx`: nếu ack cũng lọc `Paid`/`Locked` thì phiếu chưa phát hành trả 0 hàng ⇒ 404,
+   * ⚠️ Cố ý khác `findTx`: nếu ack cũng lọc `Published`/`Paid`/`Locked` thì phiếu chưa phát hành trả 0 hàng ⇒ 404,
    * và nhánh **`PAYROLL-ERR-015` «phiếu chưa phát hành»** trở thành mã CHẾT (SPEC-11 §12 khai đủ HAI
    * nhánh cho 015). Vế "của chính mình" VẪN ép ở đây — phiếu người khác vẫn 0 hàng ⇒ 404 sentinel.
    */

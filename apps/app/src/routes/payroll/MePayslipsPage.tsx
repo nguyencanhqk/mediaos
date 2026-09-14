@@ -21,7 +21,7 @@ import { PayslipStatusBadge } from "./components/StatusBadges";
  * **TẮT** cho 3 route `/me/payslips*`, `objectGrantRequired: false` — nếu không nhân viên 403 trên
  * phiếu của chính mình).
  *
- * ⚠️ Danh sách chỉ có phiếu của kỳ **ĐÃ phát hành** (`Paid`/`Locked`) — SERVER lọc, FE không tự suy.
+ * ⚠️ Danh sách chỉ có phiếu của kỳ **ĐÃ phát hành** (`Published`/`Paid`/`Locked`) — SERVER lọc, FE không tự suy.
  * Đừng thêm bộ lọc trạng thái ở đây: trạng thái phiếu là DẪN XUẤT, không có cột để lọc.
  *
  * ⚠️ Xác nhận lần hai ⇒ 409 `PAYROLL-ERR-015`. Nút ẩn khi `acknowledgedAt !== null` — bảng

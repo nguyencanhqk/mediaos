@@ -169,6 +169,16 @@ export const payrollPeriods = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     publishedBy: uuid("published_by"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    /**
+     * v2 (mig `0572`) — vết `complete-batch` (`Published → Paid`). ⚠️ `applyTransitionTx` ghi
+     * `patch.paidBy/paidAt` ĐỘNG từ `TRAIL_RESET`; drizzle bỏ qua im lặng khoá không phải cột ⇒ đổi tên hai
+     * field này là `23514` từ `paid_pair_check` ở đường hoàn tất đợt (census ở `payroll-fsm.spec.ts`).
+     * Kỳ v1 đã `Locked` được backfill `paid_* := published_*` (owner chốt 14/09/2026, O-1 lối A).
+     */
+    paidBy: uuid("paid_by"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    /** v2 (mig `0572`) — mẫu bảng lương của kỳ; composite FK NO ACTION; NULL cho kỳ v1 (ERR-023 ở service). */
+    templateId: uuid("template_id"),
     lockedBy: uuid("locked_by"),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     payslipsGeneratedBy: uuid("payslips_generated_by"),
@@ -183,17 +193,23 @@ export const payrollPeriods = pgTable(
       .on(t.companyId, t.periodMonth)
       .where(sql`deleted_at IS NULL`),
     check("payroll_periods_month_check", sql`period_month ~ '^\\d{4}-(0[1-9]|1[0-2])$'`),
+    // v2 (mig 0572) — mirror ĐÚNG khối VERIFY 5.7b của 0572: 8 giá trị + `Published` trong vế trái của MỌI
+    // CHECK cặp (submitted/approved/published) + `paid_pair_check` MỚI. `Locked` nằm trong vế trái của cả bốn.
     check(
       "payroll_periods_status_check",
-      sql`status IN ('Draft','CollectingData','Calculated','Reviewing','Approved','Paid','Locked')`,
+      sql`status IN ('Draft','CollectingData','Calculated','Reviewing','Approved','Published','Paid','Locked')`,
     ),
     check(
       "payroll_periods_approved_pair_check",
-      sql`status NOT IN ('Approved','Paid','Locked') OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+      sql`status NOT IN ('Approved','Published','Paid','Locked') OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
     ),
     check(
       "payroll_periods_published_pair_check",
-      sql`status NOT IN ('Paid','Locked') OR (published_by IS NOT NULL AND published_at IS NOT NULL AND approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+      sql`status NOT IN ('Published','Paid','Locked') OR (published_by IS NOT NULL AND published_at IS NOT NULL AND approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+    ),
+    check(
+      "payroll_periods_paid_pair_check",
+      sql`status NOT IN ('Paid','Locked') OR (paid_by IS NOT NULL AND paid_at IS NOT NULL)`,
     ),
     check(
       "payroll_periods_locked_pair_check",

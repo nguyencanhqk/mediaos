@@ -907,7 +907,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
 
     const pub = await post(tOfficer, `/payroll-periods/${id}/publish`);
     expect(pub.status, JSON.stringify(pub.body)).toBe(201);
-    expect(pub.body.data.status).toBe("Paid");
+    // v2 (mig 0572): `publish` dừng ở `Published` — `Paid` chỉ tới được qua hoàn tất đợt chi trả (BE-4).
+    expect(pub.body.data.status).toBe("Published");
 
     // 030 — chi tiết phiếu (quản trị) + breakdown; đẳng thức SUM(items) = gross − deduction + adj.
     const admin = await get(tOfficer, `/payslips?payrollPeriodId=${id}&per_page=50`);
@@ -1014,10 +1015,12 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
   });
 
   it("E3 — IDOR: phiếu của NGƯỜI KHÁC cùng company ⇒ 404 sentinel (không 403, không lộ tồn tại)", async () => {
-    // ⚠️ Phải lấy phiếu của kỳ ĐÃ PHÁT HÀNH: `/me/payslips/:id` lọc `Paid`/`Locked`, nên một phiếu
-    // của kỳ mới `Approved` sẽ trả 404 cho CẢ chính chủ — ca đối chứng ALLOW khi đó xanh-RỖNG (404
+    // ⚠️ Phải lấy phiếu của kỳ ĐÃ PHÁT HÀNH: `/me/payslips/:id` lọc `Published`/`Paid`/`Locked`, nên một
+    // phiếu của kỳ mới `Approved` sẽ trả 404 cho CẢ chính chủ — ca đối chứng ALLOW khi đó xanh-RỖNG (404
     // vì chưa phát hành, không phải vì IDOR).
-    const paid = await get(tOfficer, "/payroll-periods?status=Paid&per_page=10");
+    // v2 (mig 0572): kỳ vừa `publish` nằm ĐÚNG ở `Published` ⇒ ca ALLOW dưới chính là ca SPEC-11 §13.2
+    // «kỳ ở đúng Published ⇒ nhân viên thấy phiếu». Bộ lọc Own còn `{Paid, Locked}` thì ca này ĐỎ.
+    const paid = await get(tOfficer, "/payroll-periods?status=Published&per_page=10");
     expect(paid.status).toBe(200);
     const paidId = (paid.body.data as Array<{ id: string }>)[0]?.id;
     expect(paidId, "fixture phải có ít nhất một kỳ đã phát hành").toBeDefined();
@@ -1034,6 +1037,10 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
       (p) => p.userId === subjectId,
     )!;
     expect((await get(tEmployee, `/me/payslips/${own.id}`)).status).toBe(200);
+    // v2 — cùng kỳ `Published`: phiếu của chính chủ CÓ trong DANH SÁCH Own (không `200 []`).
+    const ownList = await get(tEmployee, "/me/payslips?per_page=100");
+    expect(ownList.status).toBe(200);
+    expect((ownList.body.data as Array<{ id: string }>).map((p) => p.id)).toContain(own.id);
   });
 
   // ═════════════════════════════════════════════════════════════════════════════════════════════

@@ -110,13 +110,17 @@ export type PayrollEngineKey = keyof typeof PAYROLL_ENGINE_PAIRS;
  */
 export const PAYROLL_ACCESS_PAIR = pair("access", "payroll");
 
-/** 7 trạng thái kỳ lương theo thứ tự vòng đời (SPEC-01 §17.15) — dùng cho bộ lọc + chip. */
+/**
+ * 8 trạng thái kỳ lương theo thứ tự vòng đời (SPEC-01 §17.15, v2 mig `0572`) — dùng cho bộ lọc + chip.
+ * `Published` = đã phát hành phiếu; `Paid` = đã chi trả xong (chỉ tới được qua hoàn tất đợt chi trả).
+ */
 export const PAYROLL_PERIOD_STATUSES = [
   "Draft",
   "CollectingData",
   "Calculated",
   "Reviewing",
   "Approved",
+  "Published",
   "Paid",
   "Locked",
 ] as const;
@@ -138,6 +142,7 @@ export const PAYROLL_PERIOD_STATUS_BADGE_VARIANT: Readonly<Record<string, BadgeV
   Calculated: "brand",
   Reviewing: "warning",
   Approved: "success",
+  Published: "brand",
   Paid: "success",
   Locked: "muted",
 };

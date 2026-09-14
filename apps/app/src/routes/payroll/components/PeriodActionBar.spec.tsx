@@ -129,6 +129,22 @@ describe("PeriodActionBar — không quyền / terminal", () => {
     expect(container.querySelector('[data-testid="payroll-period-actions"]')).toBeNull();
   });
 
+  it("v2: kỳ Published ⇒ không hành động kỳ nào (không «Khoá kỳ» nhảy cóc, không «Mở lại»), dù đủ quyền", () => {
+    // `Published → Paid` chỉ đi từ màn Chi trả (hoàn tất đợt, API-072) — thanh hành động KỲ không có nút đó.
+    mockUseCan.mockReturnValue(true);
+    mockUseCanExact.mockReturnValue(true);
+    const { container } = renderBar(subject({ status: "Published" }), "u1");
+    expect(container.querySelector('[data-testid="payroll-period-actions"]')).toBeNull();
+  });
+
+  it("[allow đối chứng] kỳ Paid + đủ quyền ⇒ thanh hành động CÓ render («Khoá kỳ»)", () => {
+    mockUseCan.mockReturnValue(true);
+    mockUseCanExact.mockReturnValue(true);
+    const { container } = renderBar(subject({ status: "Paid" }), "u1");
+    expect(container.querySelector('[data-testid="payroll-period-actions"]')).not.toBeNull();
+    expect(screen.getByText("Khoá kỳ")).toBeTruthy();
+  });
+
   it("kỳ Locked ⇒ không hành động nào, kể cả khi có đủ mọi quyền", () => {
     mockUseCan.mockReturnValue(true);
     mockUseCanExact.mockReturnValue(true);
