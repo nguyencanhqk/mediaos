@@ -193,17 +193,23 @@ export const payrollPeriods = pgTable(
       .on(t.companyId, t.periodMonth)
       .where(sql`deleted_at IS NULL`),
     check("payroll_periods_month_check", sql`period_month ~ '^\\d{4}-(0[1-9]|1[0-2])$'`),
+    // v2 (mig 0572) — mirror ĐÚNG khối VERIFY 5.7b của 0572: 8 giá trị + `Published` trong vế trái của MỌI
+    // CHECK cặp (submitted/approved/published) + `paid_pair_check` MỚI. `Locked` nằm trong vế trái của cả bốn.
     check(
       "payroll_periods_status_check",
-      sql`status IN ('Draft','CollectingData','Calculated','Reviewing','Approved','Paid','Locked')`,
+      sql`status IN ('Draft','CollectingData','Calculated','Reviewing','Approved','Published','Paid','Locked')`,
     ),
     check(
       "payroll_periods_approved_pair_check",
-      sql`status NOT IN ('Approved','Paid','Locked') OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+      sql`status NOT IN ('Approved','Published','Paid','Locked') OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
     ),
     check(
       "payroll_periods_published_pair_check",
-      sql`status NOT IN ('Paid','Locked') OR (published_by IS NOT NULL AND published_at IS NOT NULL AND approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+      sql`status NOT IN ('Published','Paid','Locked') OR (published_by IS NOT NULL AND published_at IS NOT NULL AND approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+    ),
+    check(
+      "payroll_periods_paid_pair_check",
+      sql`status NOT IN ('Paid','Locked') OR (paid_by IS NOT NULL AND paid_at IS NOT NULL)`,
     ),
     check(
       "payroll_periods_locked_pair_check",

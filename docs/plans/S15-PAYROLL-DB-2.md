@@ -174,6 +174,14 @@ Mọi trigger: `ERRCODE = 'check_violation'`, message **mở đầu bằng tên 
 
 ⇒ Danh sách tag T1 ĐÓNG thành: `period-immutable` · `frozen` · `insert-completed` · **`has-active-lines`** (T1 không lookup nên không có `not-found`).
 
+**🔁 Vá FULL gate `security-reviewer` (14/09, verdict PASS — 0 CRITICAL/HIGH):**
+
+- **MEDIUM-1** — drizzle `schema/payroll.ts` còn `status_check` 7 giá trị + 3 CHECK cặp v1, thiếu `paid_pair_check` (plan §7 dòng 1 đòi mirror). **Vá:** chép đúng 5 định nghĩa của VERIFY 5.7b. Không có spec đối chiếu CHECK drizzle ↔ DB — lệch này im lặng (cả database-reviewer lẫn tôi bỏ sót).
+- **MEDIUM-2 / MEDIUM-3 / LOW-2** — việc của BE-4 (rò số TK qua `DrizzleQueryError` message · đổi hướng chi lương qua snapshot + four-eyes lập/hoàn tất đợt · «đã chi» dẫn xuất từ dòng chi + cờ `legacyPaidTrail`) ⇒ **ghi `done_when` BE-4** cùng commit.
+- **LOW-1** — lookup trong 3 trigger không ghi schema ⇒ bảng tạm (`pg_temp` tìm trước, `mediaos_app` có TEMP) che được. **Vá:** `public.` cho mọi lookup. Nợ tương tự cho `enforce_bonus_penalty_freeze` (0564).
+- **LOW-3 — KHÔNG ÁP, có chủ đích:** bỏ `r.name IN (6 tên)` khỏi guard (1e) sẽ đếm cả grant mà `SuperAdminBootstrapService` sinh lúc boot trên PROD (role hệ thống ngoài 6 tên) ⇒ «THUA» ⇒ **migration dừng lúc deploy PROD**, trong khi lane (không boot) vẫn xanh. Guard là tiền điều kiện, không phải cổng runtime.
+- **LOW-4** — VERIFY chỉ soi grantee `mediaos_app`/`mediaos_worker`; ghi nhận, chưa vá (0 `GRANT … TO PUBLIC` trong file, 0 `ALTER DEFAULT PRIVILEGES` trong repo).
+
 **Sửa trong lúc code (không cần review lại):**
 
 - **M4** ca D8: conn1 `SELECT … FOR NO KEY UPDATE` (không `FOR UPDATE` — kiểm FK tự lấy `KEY SHARE` và ra `55P03` ngay cả khi T2 KHÔNG có `FOR SHARE` ⇒ xanh-RỖNG); conn2 UPDATE cột ngoài FK (`paid_at`); **ca DƯƠNG** conn1 `FOR KEY SHARE` ⇒ conn2 thành công; `ROLLBACK` conn1 trong `finally`.

@@ -477,6 +477,8 @@ GRANT SELECT, INSERT, UPDATE ON payroll_budgets TO mediaos_app;
 -- Mọi trigger: ERRCODE check_violation; message = '<trigger>:<tag>: <chi tiết>' với tag thuộc danh sách ĐÓNG
 -- (SPEC-11 §12.1 map theo TAG). Lookup luôn lọc company_id + IF NOT FOUND ⇒ RAISE (fail-closed); cột nullable
 -- so bằng IS DISTINCT FROM. Trigger HẸP — không đóng băng cả bảng (frozen-table-triggers-break-db-init).
+-- Lookup ghi rõ schema `public.` (security-review LOW-1): hàm SECURITY INVOKER không SET search_path, và pg_temp
+-- luôn được tìm TRƯỚC — bảng tạm cùng tên (mediaos_app có TEMP) sẽ che lookup nếu không ghi rõ schema.
 -- KHÔNG ép đồ thị FSM đầy đủ (việc của service) — chỉ ép bất biến cần OLD/NEW mà CHECK không diễn đạt được.
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -526,7 +528,7 @@ BEGIN
   -- khác, không lỗi nào bắn (fail-open). Gỡ dòng TRƯỚC, xoá đợt SAU. EXISTS chạy sau khi UPDATE đã giữ khoá
   -- hàng đợt ⇒ xếp hàng với FOR SHARE của T2 (INSERT dòng song song không lọt).
   IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
-     AND EXISTS (SELECT 1 FROM payroll_payment_lines l
+     AND EXISTS (SELECT 1 FROM public.payroll_payment_lines l
                   WHERE l.batch_id = OLD.id AND l.company_id = OLD.company_id AND l.deleted_at IS NULL) THEN
     RAISE EXCEPTION 'payroll_payment_batch_freeze:has-active-lines: dot % (id=%) con dong chi song — go dong truoc khi xoa dot',
       OLD.code, OLD.id
@@ -564,7 +566,7 @@ BEGIN
   -- `deleted_at IS NULL` (FULL gate database-reviewer H1): đợt đã xoá mềm = không tồn tại với dòng chi —
   -- ghi dòng vào nó sẽ giữ slot payslip_uq dưới một đợt «đã biến mất».
   SELECT b.status, b.payroll_period_id INTO v_new_status, v_new_period
-    FROM payroll_payment_batches b
+    FROM public.payroll_payment_batches b
    WHERE b.id = NEW.batch_id AND b.company_id = NEW.company_id AND b.deleted_at IS NULL
      FOR SHARE;
   IF NOT FOUND THEN
@@ -585,7 +587,7 @@ BEGIN
 
     IF NEW.batch_id IS DISTINCT FROM OLD.batch_id THEN
       SELECT b.status INTO v_old_status
-        FROM payroll_payment_batches b
+        FROM public.payroll_payment_batches b
        WHERE b.id = OLD.batch_id AND b.company_id = OLD.company_id
          FOR SHARE;
       IF NOT FOUND THEN
@@ -620,7 +622,7 @@ BEGIN
      OR NEW.user_id    IS DISTINCT FROM OLD.user_id
      OR NEW.batch_id   IS DISTINCT FROM OLD.batch_id THEN
     SELECT ps.user_id, ps.payroll_period_id INTO v_ps_user, v_ps_period
-      FROM payslips ps
+      FROM public.payslips ps
      WHERE ps.id = NEW.payslip_id AND ps.company_id = NEW.company_id;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'payroll_payment_line_guard:not-found: phieu % khong ton tai trong cong ty cua dong', NEW.payslip_id
@@ -731,7 +733,7 @@ BEGIN
   -- (F) B2 — bind/nhả CHỈ khi kỳ còn tính lại được.
   IF OLD.payroll_period_id IS NOT NULL AND NEW.payroll_period_id IS NULL THEN
     SELECT pp.status INTO v_period_status
-      FROM payroll_periods pp
+      FROM public.payroll_periods pp
      WHERE pp.id = OLD.payroll_period_id AND pp.company_id = OLD.company_id
        FOR SHARE;
     IF NOT FOUND THEN
@@ -744,7 +746,7 @@ BEGIN
     END IF;
   ELSIF OLD.payroll_period_id IS NULL AND NEW.payroll_period_id IS NOT NULL THEN
     SELECT pp.status INTO v_period_status
-      FROM payroll_periods pp
+      FROM public.payroll_periods pp
      WHERE pp.id = NEW.payroll_period_id AND pp.company_id = NEW.company_id
        FOR SHARE;
     IF NOT FOUND THEN
