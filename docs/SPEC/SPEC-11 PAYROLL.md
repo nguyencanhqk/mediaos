@@ -736,6 +736,7 @@ Ghi chú bắt buộc:
 | 🔁 trigger `payroll_payment_batch_freeze` — tag `frozen` · `insert-completed` · `period-immutable` | `23514` | 409 | **027** `batch-already-completed` *(period-immutable: service không có đường đổi kỳ của đợt — lưới cuối)* |
 | 🔁 trigger `payroll_payment_line_guard` — tag `frozen` · `insert-into-completed` · `move-to-completed` | `23514` | 409 | **027** `batch-already-completed` |
 | 🔁 trigger `payroll_payment_line_guard` — tag `cross-user` · `cross-period` · `not-found` | `23514` | — | **service PHẢI chặn trước** (400/404); tới được DB là lỗi ⇒ 500 có chủ đích, census QA ghim |
+| 🔁 trigger `payroll_payment_batch_freeze` — tag `has-active-lines` *(FULL gate DB-2 H1)* | `23514` | — | **service PHẢI gỡ dòng trước khi xoá mềm đợt** — hiện chưa có route xoá đợt; WO nào thêm route đó map 409 kèm `kind` mới cùng commit |
 | 🔁 `payroll_payment_lines_bank_pair_check` · `payroll_advances_deducted_bound_check` *(mig `0572`)* | `23514` | 400 | `VALIDATION-ERR-001` *(lưới cuối — service/Zod lẽ ra chặn trước)* |
 
 > 🔁 **Map TRIGGER theo TAG, không theo tiền tố** (plan-review `S15-PAYROLL-DB-2` M1): message = `<trigger>:<tag>: <chi tiết>`; một tiền tố trigger phủ nhiều mã. Danh sách tag ĐÓNG ghi ở `docs/plans/S15-PAYROLL-DB-2.md` §3.5.a; thêm tag = sửa bảng này cùng commit.

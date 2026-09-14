@@ -166,6 +166,14 @@ Mọi trigger: `ERRCODE = 'check_violation'`, message **mở đầu bằng tên 
 | **M2** | Trigger không nói gì khi lookup trả rỗng ⇒ dưới RLS (GUC sai/thiếu) (iv) cho qua im lặng | Mọi lookup lọc `company_id = NEW.company_id` (hoặc `OLD.`), `IF NOT FOUND THEN RAISE …:not-found`; so sánh cột nullable bằng `IS DISTINCT FROM` (khuôn `0564:433`) |
 | **M3** | T3 chỉ `BEFORE UPDATE` ⇒ INSERT thẳng hàng `Approved`/`Deducted` với `created_by NULL` qua mặt cả `four_eyes_check` lẫn (E) | **T3 = `BEFORE INSERT OR UPDATE`**. INSERT bắt buộc `status='Pending' AND payroll_period_id IS NULL AND consumed_at IS NULL AND decided_by IS NULL AND decided_at IS NULL AND created_by IS NOT NULL` (tag `insert-shape`) |
 
+**🔁 Vá FULL gate `database-reviewer` (14/09, verdict PASS):**
+
+- **H1** — T1/T2 chỉ soi `status`, không soi `deleted_at` ⇒ xoá mềm đợt `Draft` còn dòng sống làm phiếu bị khoá vĩnh viễn khỏi mọi đợt khác (slot `payslip_uq` giữ bởi dòng dưới đợt «đã biến mất»). **Vá:** T1 thêm tag **`has-active-lines`** (cấm xoá mềm đợt còn dòng `deleted_at IS NULL`); T2 lookup đợt lọc `deleted_at IS NULL` ⇒ ghi dòng vào đợt đã xoá mềm = `not-found`. Ca D10 mới (âm + dương «gỡ dòng trước, xoá đợt sau»).
+- **M1** — FK `payroll_advances_user_id_company_fk` không có index không-partial cho kiểm RI khi xoá CỨNG user ⇒ **chấp nhận, không thêm index**: user chỉ xoá mềm trong hệ thống (bất biến #2), xoá cứng chỉ ở teardown test; cùng hình dạng mọi bảng track C/DB-1 (R10).
+- **L1** — FK `SET NULL (col)` trên cột bị trigger đóng băng (vd `completed_by` của đợt `Completed`) ⇒ xoá cứng user sẽ ABORT thay vì SET NULL êm — fail-safe, ghi DB-13 §14.
+
+⇒ Danh sách tag T1 ĐÓNG thành: `period-immutable` · `frozen` · `insert-completed` · **`has-active-lines`** (T1 không lookup nên không có `not-found`).
+
 **Sửa trong lúc code (không cần review lại):**
 
 - **M4** ca D8: conn1 `SELECT … FOR NO KEY UPDATE` (không `FOR UPDATE` — kiểm FK tự lấy `KEY SHARE` và ra `55P03` ngay cả khi T2 KHÔNG có `FOR SHARE` ⇒ xanh-RỖNG); conn2 UPDATE cột ngoài FK (`paid_at`); **ca DƯƠNG** conn1 `FOR KEY SHARE` ⇒ conn2 thành công; `ROLLBACK` conn1 trong `finally`.

@@ -751,6 +751,40 @@ describe.skipIf(!hasDb)(
         });
       });
 
+      it("D10 T1/T2 (FULL gate H1): cấm xoá mềm đợt còn dòng sống · ghi dòng vào đợt đã xoá mềm = not-found · gỡ dòng trước rồi xoá đợt thì qua", async () => {
+        await inTx(async (c) => {
+          const P = await mkPeriod(c, A.companyId, "Published", a1, a2);
+          const ps1 = await mkPayslip(c, A.companyId, P, e1);
+          const ps2 = await mkPayslip(c, A.companyId, P, e2);
+          const bx = await mkBatch(c, A.companyId, P);
+          const line = await mkLine(c, A.companyId, bx, e1, ps1);
+          const softDeleteBatch = () =>
+            tryQ(
+              c,
+              `UPDATE payroll_payment_batches SET deleted_at = now(), deleted_by = $2 WHERE id = $1`,
+              [bx, a1],
+            );
+          // ÂM: dòng còn sống giữ slot payslip_uq ⇒ xoá mềm đợt bị chặn.
+          expectTag(await softDeleteBatch(), T1, "has-active-lines");
+          // DƯƠNG đứng cạnh: gỡ dòng TRƯỚC, xoá đợt SAU.
+          await c.query(
+            `UPDATE payroll_payment_lines SET deleted_at = now(), deleted_by = $2 WHERE id = $1`,
+            [line, a1],
+          );
+          expect(await softDeleteBatch()).toBeNull();
+          // ÂM: đợt đã xoá mềm KHÔNG nhận dòng mới (fail-closed not-found).
+          expectTag(
+            await tryQ(
+              c,
+              `INSERT INTO payroll_payment_lines (company_id, batch_id, user_id, payslip_id) VALUES ($1, $2, $3, $4)`,
+              [A.companyId, bx, e2, ps2],
+            ),
+            T2,
+            "not-found",
+          );
+        });
+      });
+
       it("D3 T2: INSERT vào đợt Completed bị chặn — đường «gỡ mềm rồi thêm lại» mà unique partial không chặn", async () => {
         await inTx(async (c) => {
           const P = await mkPeriod(c, A.companyId, "Published", a1, a2);

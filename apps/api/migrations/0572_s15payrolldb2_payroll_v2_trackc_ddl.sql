@@ -521,6 +521,18 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
+  -- FULL gate database-reviewer H1: xoá mềm đợt còn dòng SỐNG ⇒ các dòng đó giữ slot
+  -- payroll_payment_lines_payslip_uq dưới một đợt «đã biến mất» ⇒ phiếu bị khoá VĨNH VIỄN khỏi mọi đợt hợp lệ
+  -- khác, không lỗi nào bắn (fail-open). Gỡ dòng TRƯỚC, xoá đợt SAU. EXISTS chạy sau khi UPDATE đã giữ khoá
+  -- hàng đợt ⇒ xếp hàng với FOR SHARE của T2 (INSERT dòng song song không lọt).
+  IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
+     AND EXISTS (SELECT 1 FROM payroll_payment_lines l
+                  WHERE l.batch_id = OLD.id AND l.company_id = OLD.company_id AND l.deleted_at IS NULL) THEN
+    RAISE EXCEPTION 'payroll_payment_batch_freeze:has-active-lines: dot % (id=%) con dong chi song — go dong truoc khi xoa dot',
+      OLD.code, OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -549,9 +561,11 @@ DECLARE
   v_ps_user    uuid;
   v_ps_period  uuid;
 BEGIN
+  -- `deleted_at IS NULL` (FULL gate database-reviewer H1): đợt đã xoá mềm = không tồn tại với dòng chi —
+  -- ghi dòng vào nó sẽ giữ slot payslip_uq dưới một đợt «đã biến mất».
   SELECT b.status, b.payroll_period_id INTO v_new_status, v_new_period
     FROM payroll_payment_batches b
-   WHERE b.id = NEW.batch_id AND b.company_id = NEW.company_id
+   WHERE b.id = NEW.batch_id AND b.company_id = NEW.company_id AND b.deleted_at IS NULL
      FOR SHARE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'payroll_payment_line_guard:not-found: dot % khong ton tai trong cong ty cua dong', NEW.batch_id
