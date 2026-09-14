@@ -16004,6 +16004,13 @@ export const backlog = [
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/payroll/payroll-master-data.seeder.ts",
+      // plan §3.3 — seeder đã 812 dòng > 800 ⇒ tách assert integrity sang file riêng.
+      "apps/api/src/payroll/payroll-master-data.integrity.ts",
+      // plan §3.8 M-2 — templateGraphComponent sang module lá dùng chung (support re-export).
+      "apps/api/src/payroll/payroll-template-graph.ts",
+      "apps/api/src/payroll/payroll-catalog.support.ts",
+      "apps/api/src/payroll/payroll.errors.spec.ts",
+      "apps/api/src/db/schema/payroll.ts",
       "apps/api/src/payroll/formula/**",
       "apps/api/test/**",
       "docs/DB/**",
@@ -16028,9 +16035,13 @@ export const backlog = [
       "database-review BE-2 LOW-2: CREATE INDEX (company_id, component_id) trên payroll_template_components — vế FK payroll_template_components_component_id_company_fk KHÔNG có index ⇒ templatesContainingTx (046/047) và RI khi xoá công ty quét cả bảng; kèm ratchet ghim ĐỊNH NGHĨA index (không chỉ tên)",
       "🔻 NHẬN TỪ S15-PAYROLL-BE-2 (silent-failure-hunter LOW-1): bump seedVersion ⇒ assert (5) phải compileGraph(requireEngineNodes) trên thành phần của mẫu mặc định (import THẲNG formula.graph, KHÔNG qua payroll-catalog.support — vòng import), không chỉ kiểm có đủ 4 nút aggregate — mã seed mới REF tới thành phần người dùng đã gỡ khỏi mẫu làm mẫu hỏng âm thầm",
       "🔻 NHẬN TỪ S15-PAYROLL-BE-2 (check.sh --all): s15-payroll-db1-invariants E2 ĐỎ khi quét TOÀN lane thấy hồ sơ của 6 fixture v1 (payroll-be2-lifecycle · payroll-be2-noti-audit · payroll-be2-permission · s13-payroll-qa1-arithmetic · s13-payroll-qa1-fsm-race · s13-payroll-qa1-idor-tenant) chèn allowances KHÁC rỗng bằng SQL mà KHÔNG kèm salary_profile_items — vá fixture ghi items khớp khuôn backfill 0570 (component_code PC_nnn theo thứ tự · amount · note = name), và/hoặc E2 chỉ xét hàng sở hữu; hiện đỏ theo chunk đồng vị / chunk crash bỏ lại tenant",
+      "🔻 GỘP (owner chốt 14/09/2026): nợ B2 của bonus_penalties (mig 0564, plan DB-2 §3.5.a B2 + LOW-1) — enforce_bonus_penalty_freeze thêm nhánh (F): nhả consume CHỈ khi kỳ cũ ∈ {CollectingData, Calculated}, gắn (UPDATE + INSERT) CHỈ khi kỳ mới ∈ {CollectingData, Calculated} AND deleted_at IS NULL, đọc kỳ FOR SHARE qua public.payroll_periods lọc company_id; CREATE OR REPLACE TRIGGER BEFORE INSERT OR UPDATE; message <trigger>:<tag>: tag ĐÓNG frozen · rebind · status-terminal · period-frozen · not-found (map 409 013 theo tiền tố cũ); ca B1–B9b plan §6.1 + §3.8",
+      "Công thức chốt BẰNG SỐ ĐO (plan §5.2.a, 51.584 ca so BigInt chính xác): C1 khớp chính xác 100%, NGHI_KHONG_LUONG giữ nguyên 100%; v1 lệch đúng 0,01 ở ca hoà nửa xu (v1 làm tròn sai) — ghi SPEC-11 §13.4",
     ],
     notes: [
       "🔴 FULL gate + Opus — sửa hàng bị trigger đóng băng; database-reviewer BẮT BUỘC. Lane migration: KHÔNG chạy song song S15-PAYROLL-DB-2 (nối tiếp head, đo journal lúc chạy).",
+      "✅ plan-reviewer vòng 1 (14/09/2026) = BLOCK kèm điều kiện tự-mở-cổng (B-1 · M-1..M-4) → vá đủ ở plan §3.8 ⇒ PASS, KHÔNG mở vòng 2. Phiên sau bắt đầu IMPLEMENT.",
+      "→ BE-3 (máy tính v2): GIỮ thứ tự khoá kỳ FOR UPDATE TRƯỚC khi ghi bonus_penalties — trigger (F) đọc kỳ FOR SHARE, đảo thứ tự là nguy cơ 40P01 (plan R6).",
     ],
   },
   {
