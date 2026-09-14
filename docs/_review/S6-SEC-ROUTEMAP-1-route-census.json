@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 590,
-    "controllers": 106,
-    "gated": 551,
+    "routes": 605,
+    "controllers": 109,
+    "gated": 566,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -6855,6 +6855,246 @@
       "path": "/api/v1/payroll/pickers/people",
       "hasPermission": true,
       "permission": "view:salary-profile",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollSalaryComponentsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/salary-components",
+      "hasPermission": true,
+      "permission": "manage:salary-component",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollSalaryComponentsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/salary-components/:id",
+      "hasPermission": true,
+      "permission": "view:salary-component",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollSalaryComponentsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/salary-components",
+      "hasPermission": true,
+      "permission": "view:salary-component",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollSalaryComponentsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll/salary-components/:id",
+      "hasPermission": true,
+      "permission": "manage:salary-component",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollSalaryComponentsController#validateFormula",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/salary-components/validate-formula",
+      "hasPermission": true,
+      "permission": "manage:salary-component",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollStatutoryRatesController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/statutory-rates",
+      "hasPermission": true,
+      "permission": "manage:statutory-rate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollStatutoryRatesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/statutory-rates/:id",
+      "hasPermission": true,
+      "permission": "view:statutory-rate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollStatutoryRatesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/statutory-rates",
+      "hasPermission": true,
+      "permission": "view:statutory-rate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollStatutoryRatesController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll/statutory-rates/:id",
+      "hasPermission": true,
+      "permission": "manage:statutory-rate",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollTemplatesController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/templates",
+      "hasPermission": true,
+      "permission": "manage:payroll-template",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollTemplatesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/templates/:id",
+      "hasPermission": true,
+      "permission": "view:payroll-template",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollTemplatesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/templates",
+      "hasPermission": true,
+      "permission": "view:payroll-template",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollTemplatesController#preview",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/templates/:id/preview",
+      "hasPermission": true,
+      "permission": "manage:payroll-template",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollTemplatesController#putComponents",
+      "httpMethod": "PUT",
+      "path": "/api/v1/payroll/templates/:id/components",
+      "hasPermission": true,
+      "permission": "manage:payroll-template",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollTemplatesController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll/templates/:id",
+      "hasPermission": true,
+      "permission": "manage:payroll-template",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

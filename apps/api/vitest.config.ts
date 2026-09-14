@@ -150,6 +150,52 @@ export default defineConfig({
           branches: 85,
           statements: 90,
         },
+        // S15-PAYROLL-BE-2: máy công thức lương — crown-jewel THUẦN (parser là bề mặt tấn công mới, evaluator chở
+        // tiền), unit-test được toàn bộ KHÔNG cần DB ⇒ `done_when` đòi ≥95%. Khoá TỪNG FILE (không glob — per-file
+        // semantics; khoá không khớp file bị bỏ qua im lặng, ratchet `coverage-thresholds-ratchet` kiểm file tồn tại).
+        // Branch 90: v8 đếm nhánh `default: assertNever` của switch exhaustive — không tới được bằng dữ liệu hợp lệ.
+        "src/payroll/formula/formula.tokenizer.ts": {
+          lines: 95,
+          functions: 95,
+          branches: 90,
+          statements: 95,
+        },
+        "src/payroll/formula/formula.parser.ts": {
+          lines: 95,
+          functions: 95,
+          branches: 90,
+          statements: 95,
+        },
+        "src/payroll/formula/formula.evaluator.ts": {
+          lines: 95,
+          functions: 95,
+          branches: 90,
+          statements: 95,
+        },
+        "src/payroll/formula/formula.graph.ts": {
+          lines: 95,
+          functions: 95,
+          branches: 90,
+          statements: 95,
+        },
+        "src/payroll/formula/formula.statutory.ts": {
+          lines: 95,
+          functions: 95,
+          branches: 90,
+          statements: 95,
+        },
+        "src/payroll/formula/formula.fingerprint.ts": {
+          lines: 95,
+          functions: 95,
+          branches: 90,
+          statements: 95,
+        },
+        "src/payroll/formula/formula.ast.ts": {
+          lines: 95,
+          functions: 95,
+          branches: 90,
+          statements: 95,
+        },
         // S1-FND-SETTING-1: SettingService is crown-jewel (validation_schema + secret-mask + audit-in-tx,
         // CLAUDE.md §6 module nhạy cảm) → ≥80% on all axes. Fully unit-tested (no-DB) so per-file gate is
         // safe (unlike controller/repo exercised only by int-specs). Exact path = per-file semantics.

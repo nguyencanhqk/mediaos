@@ -117,19 +117,39 @@ export const PAYROLL_ROUTE_PAIRS = {
   // 043 TÁI DÙNG cặp CŨ `view-line:payroll-period` (SPEC-11 §15.1) — bảng công là dữ liệu của KỲ,
   // không phải của nhân sự; người đọc được dòng bảng lương thì đọc được số ngày công của kỳ đó.
   periodTimesheet: pair("view-line", "payroll-period", true), //                            043
+  // ── v2 track B — catalog · mẫu bảng lương · tỉ lệ luật định 044–058 (S15-PAYROLL-BE-2) ─────────────
+  // 6 cặp của SPEC-11 §11.3, TẤT CẢ sensitive; §13.5 chốt bề mặt mới CHỈ scope `Company` ⇒ sàn bật cho cả 15.
+  componentList: pair("view", "salary-component", true), //                                 044
+  componentCreate: pair("manage", "salary-component", true), //                             045
+  componentDetail: pair("view", "salary-component", true), //                               046
+  componentUpdate: pair("manage", "salary-component", true), //                             047
+  // 048 gác cặp GHI dù KHÔNG ghi gì — nó phơi ra chính parser; để cặp đọc là mở bề mặt fuzz (SPEC-11 §18.1 D).
+  componentValidateFormula: pair("manage", "salary-component", true), //                    048
+  templateList: pair("view", "payroll-template", true), //                                  049
+  templateCreate: pair("manage", "payroll-template", true), //                              050
+  templateDetail: pair("view", "payroll-template", true), //                                051
+  templateUpdate: pair("manage", "payroll-template", true), //                              052
+  templatePutComponents: pair("manage", "payroll-template", true), //                       053
+  // 054 gác cặp GHI (không phải view) — cùng lý do 048: xem trước chạy chính evaluator.
+  templatePreview: pair("manage", "payroll-template", true), //                             054
+  statutoryRateList: pair("view", "statutory-rate", true), //                               055
+  statutoryRateCreate: pair("manage", "statutory-rate", true), //                           056
+  statutoryRateDetail: pair("view", "statutory-rate", true), //                             057
+  statutoryRateUpdate: pair("manage", "statutory-rate", true), //                           058
 } as const satisfies Record<string, PayrollPair>;
 
 export type PayrollRouteKey = keyof typeof PAYROLL_ROUTE_PAIRS;
 
 /**
- * **RỖNG từ `S13-PAYROLL-BE-2`** — cả 43 key đã có route và đã được assert ở tầng service (8 key
- * track A lên dây trong CHÍNH `S15-PAYROLL-BE-1`, nên danh sách này vẫn rỗng).
+ * **RỖNG từ `S13-PAYROLL-BE-2`** — cả 58 key đã có route và đã được assert ở tầng service (8 key track A
+ * lên dây trong CHÍNH `S15-PAYROLL-BE-1`, 15 key track B trong CHÍNH `S15-PAYROLL-BE-2`, nên danh sách này
+ * vẫn rỗng).
  *
  * Hằng GIỮ LẠI, không xoá: census 2 tầng assert `PENDING_BE2 ∪ used === all` **VÀ**
- * `PENDING_BE2 ∩ used === ∅`, nên nó vẫn là cổng cho route thứ 36 mọc lên sau này mà quên nối tầng 2.
+ * `PENDING_BE2 ∩ used === ∅`, nên nó vẫn là cổng cho route mọc lên sau này mà quên nối tầng 2.
  *
  * ⚠️ Khi danh sách rỗng, neo chống-xanh-rỗng của CHÍNH nó biến mất ⇒ census phải neo bằng
- * `Object.keys(PAYROLL_ROUTE_PAIRS).length === 43` **và** `used.size === 43`. **Cấm hạ neo để lấy
+ * `Object.keys(PAYROLL_ROUTE_PAIRS).length === 58` **và** `used.size === 58`. **Cấm hạ neo để lấy
  * màu xanh.**
  */
 export const PAYROLL_PENDING_BE2: readonly PayrollRouteKey[] = [];

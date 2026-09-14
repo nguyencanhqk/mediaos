@@ -104,6 +104,10 @@ interface Fixture {
   /** S15-PAYROLL-BE-1 — 8 route track A neo theo NHÂN SỰ. */
   subjectUserId: string;
   dependentId: string;
+  /** S15-PAYROLL-BE-2 — 046/051/057 là đường ĐỌC ⇒ mục B đòi ĐÚNG 200 ⇒ cần id THẬT. */
+  componentId: string;
+  templateId: string;
+  statutoryRateId: string;
 }
 
 interface RouteSpec {
@@ -116,7 +120,37 @@ interface RouteSpec {
 
 const ghost = (): string => randomUUID();
 
-/** 40 route `companyFloor:true` — MỌI key trừ `EXEMPT_KEYS` (32 của v1 + 8 track A v2). */
+/**
+ * S15-PAYROLL-BE-2 — khối giá trị tỉ lệ HỢP LỆ (seed PAY-DEC-014). 054/056/058 phải QUA Zod mới tới được sàn
+ * scope (tier-2 nằm SAU pipe — xem docblock đầu file). `054` `.strict()` KHÔNG nhận `baseWage`/`minRegionWage`.
+ */
+const STATUTORY_VALUES = {
+  siEmployeePct: 8,
+  hiEmployeePct: 1.5,
+  uiEmployeePct: 1,
+  siEmployerPct: 17.5,
+  hiEmployerPct: 3,
+  uiEmployerPct: 1,
+  unionEmployerPct: 2,
+  unionEmployeePct: 1,
+  siCap: 46_800_000,
+  hiCap: 46_800_000,
+  uiCap: 99_200_000,
+  personalDeduction: 11_000_000,
+  dependentDeduction: 4_400_000,
+  pitBrackets: [
+    { upTo: 5_000_000, rate: 5 },
+    { upTo: 10_000_000, rate: 10 },
+    { upTo: 18_000_000, rate: 15 },
+    { upTo: 32_000_000, rate: 20 },
+    { upTo: 52_000_000, rate: 25 },
+    { upTo: 80_000_000, rate: 30 },
+    { upTo: null, rate: 35 },
+  ],
+};
+const STATUTORY_WAGES = { baseWage: 2_340_000, minRegionWage: 4_960_000 };
+
+/** 55 route `companyFloor:true` — MỌI key trừ `EXEMPT_KEYS` (32 của v1 + 8 track A v2 + 15 track B v2). */
 const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
   // ── Kỳ lương 001–018 ────────────────────────────────────────────────────────────────────────
   periodList: { method: "GET", url: () => "/payroll-periods", read: true },
@@ -269,6 +303,85 @@ const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
     url: () => "/payroll/pickers/attendance-periods",
     read: true,
   },
+  // ── S15-PAYROLL-BE-2 · track B 044–058 (tất cả companyFloor:true) ───────────────────────────
+  componentList: { method: "GET", url: () => "/payroll/salary-components", read: true },
+  componentCreate: {
+    method: "POST",
+    url: () => "/payroll/salary-components",
+    // Tiền tố `SYS_` QUA Zod (trần nằm ở service) ⇒ ALLOW dừng ở 409 024, KHÔNG tạo thành phần rác.
+    body: () => ({
+      code: "SYS_FLOOR_PROBE",
+      name: "QA floor probe",
+      kind: "earning",
+      valueType: "fixed",
+      fixedAmount: 1,
+    }),
+  },
+  componentDetail: {
+    method: "GET",
+    url: (f) => `/payroll/salary-components/${f.componentId}`,
+    read: true,
+  },
+  componentUpdate: {
+    method: "PATCH",
+    url: () => `/payroll/salary-components/${ghost()}`,
+    body: () => ({ name: "QA floor probe" }),
+  },
+  componentValidateFormula: {
+    method: "POST",
+    url: () => "/payroll/salary-components/validate-formula",
+    body: () => ({ formula: "SYS_BASE_SALARY" }),
+  },
+  templateList: { method: "GET", url: () => "/payroll/templates", read: true },
+  templateCreate: {
+    method: "POST",
+    url: () => "/payroll/templates",
+    // Đơn vị MA ⇒ ALLOW dừng ở 404, KHÔNG tạo mẫu rác.
+    body: () => ({
+      code: "QA_FLOOR_PROBE",
+      name: "QA floor probe",
+      scope: "org_unit",
+      orgUnitId: ghost(),
+    }),
+  },
+  templateDetail: { method: "GET", url: (f) => `/payroll/templates/${f.templateId}`, read: true },
+  templateUpdate: {
+    method: "PATCH",
+    url: () => `/payroll/templates/${ghost()}`,
+    body: () => ({ name: "QA floor probe" }),
+  },
+  templatePutComponents: {
+    method: "PUT",
+    url: () => `/payroll/templates/${ghost()}/components`,
+    body: () => ({ components: [] }),
+  },
+  templatePreview: {
+    method: "POST",
+    url: () => `/payroll/templates/${ghost()}/preview`,
+    body: () => ({ statutory: STATUTORY_VALUES }),
+  },
+  statutoryRateList: { method: "GET", url: () => "/payroll/statutory-rates", read: true },
+  statutoryRateCreate: {
+    method: "POST",
+    url: () => "/payroll/statutory-rates",
+    // 6 bậc TNCN QUA Zod (trần 50) nhưng service từ chối ⇒ ALLOW dừng ở 422 022, KHÔNG tạo bản rác.
+    body: () => ({
+      ...STATUTORY_VALUES,
+      ...STATUTORY_WAGES,
+      effectiveFrom: "2032-01-01",
+      pitBrackets: STATUTORY_VALUES.pitBrackets.slice(1),
+    }),
+  },
+  statutoryRateDetail: {
+    method: "GET",
+    url: (f) => `/payroll/statutory-rates/${f.statutoryRateId}`,
+    read: true,
+  },
+  statutoryRateUpdate: {
+    method: "PATCH",
+    url: () => `/payroll/statutory-rates/${ghost()}`,
+    body: () => ({ note: "qa s13 floor probe" }),
+  },
 };
 
 describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (32 + 3)", () => {
@@ -290,6 +403,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     bonusPenaltyId: "",
     subjectUserId: "",
     dependentId: "",
+    componentId: "",
+    templateId: "",
+    statutoryRateId: "",
   };
 
   const http = () => request(app.getHttpServer());
@@ -444,6 +560,30 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       "fixture phải sinh ĐÚNG 1 phiếu (chỉ `ownUserId` có hồ sơ lương)",
     ).toBe(1);
     fixture.payslipId = (payslips.body.data as Array<{ id: string }>)[0].id;
+
+    // ── S15-PAYROLL-BE-2 (track B) — tạo SAU cùng để không chạm fixture kỳ lương ở trên ──────────────
+    const cmp = await post(tCompany, "/payroll/salary-components").send({
+      code: "QA_FLOOR_FIXED",
+      name: "QA floor fixture",
+      kind: "earning",
+      valueType: "fixed",
+      fixedAmount: 100_000,
+    });
+    expect(cmp.status, JSON.stringify(cmp.body)).toBe(201);
+    fixture.componentId = cmp.body.data.id as string;
+    const tpl = await post(tCompany, "/payroll/templates").send({
+      code: "QA_FLOOR_TPL",
+      name: "QA floor fixture",
+    });
+    expect(tpl.status, JSON.stringify(tpl.body)).toBe(201);
+    fixture.templateId = tpl.body.data.id as string;
+    const rate = await post(tCompany, "/payroll/statutory-rates").send({
+      ...STATUTORY_VALUES,
+      ...STATUTORY_WAGES,
+      effectiveFrom: "2031-01-01",
+    });
+    expect(rate.status, JSON.stringify(rate.body)).toBe(201);
+    fixture.statutoryRateId = rate.body.data.id as string;
   }, 300_000);
 
   afterAll(async () => {
@@ -521,6 +661,13 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
         "GET /payroll/pickers/people @Department",
       );
     });
+
+    it("GET /payroll/salary-components (Department) ⇒ 403 AUTH-ERR-SCOPE-DENIED", async () => {
+      expectScopeDenied(
+        await get(tDept, "/payroll/salary-components"),
+        "GET /payroll/salary-components @Department",
+      );
+    });
   });
 
   // ── F. Route 017 export — lỗi phát TỪ TRONG handler vẫn phải là JSON envelope ────────────────
@@ -563,14 +710,14 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
 
   // ── E. Census chống xanh-rỗng ────────────────────────────────────────────────────────────────
 
-  describe("E. census — 32 key mục A ∪ 3 key mục C = ĐÚNG 35 key của PAYROLL_ROUTE_PAIRS", () => {
-    it("PAYROLL_ROUTE_PAIRS giữ đủ 35 key (neo cho toàn bộ census)", () => {
-      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(43);
+  describe("E. census — 55 key mục A ∪ 3 key mục C = ĐÚNG 58 key của PAYROLL_ROUTE_PAIRS", () => {
+    it("PAYROLL_ROUTE_PAIRS giữ đủ 58 key (neo cho toàn bộ census)", () => {
+      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(58);
     });
 
-    it("ROUTES = 40 key, EXEMPT_KEYS = 3 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
+    it("ROUTES = 55 key, EXEMPT_KEYS = 3 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
       const floorKeys = Object.keys(ROUTES).sort();
-      expect(floorKeys.length).toBe(40);
+      expect(floorKeys.length).toBe(55);
       expect(EXEMPT_KEYS.length).toBe(3);
       expect(
         [...floorKeys, ...EXEMPT_KEYS].sort(),
@@ -587,13 +734,14 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       }
     });
 
-    it("18 cặp distinct có route được seed cho cả ba chủ thể (không cặp nào rơi khỏi fixture)", () => {
+    it("24 cặp distinct có route được seed cho cả ba chủ thể (không cặp nào rơi khỏi fixture)", () => {
+      // S15-PAYROLL-BE-2 +6 cặp track B: view/manage × salary-component · payroll-template · statutory-rate.
       // `('access','payroll')` KHÔNG gác route nào ⇒ 17 cặp SPEC-11 §11.1 nhưng 16 cặp có route.
-      expect(ALL_PAIRS.length).toBe(18);
+      expect(ALL_PAIRS.length).toBe(24);
       const sensitiveCount = ALL_PAIRS.filter((p) => p.isSensitive).length;
       // ĐÚNG 13 cặp `is_sensitive` của mig `0565` — cả 13 đều có route, `('access','payroll')` là
       // cặp thứ 17 KHÔNG nhạy cảm và KHÔNG gác route nào (đo lại 2026-09-01 trên chính bảng hằng).
-      expect(sensitiveCount, "cờ isSensitive phải lấy NGUYÊN từ bảng hằng, không gõ tay").toBe(15);
+      expect(sensitiveCount, "cờ isSensitive phải lấy NGUYÊN từ bảng hằng, không gõ tay").toBe(21);
     });
   });
 });

@@ -8,6 +8,8 @@ import {
   pgErrorCode,
   pgErrorField,
 } from "../common/db-error";
+import type { FormulaError, FormulaErrorCode } from "./formula/formula.errors";
+import { FORMULA_MAX_LENGTH } from "./formula/formula.limits";
 
 /**
  * S13-PAYROLL-BE-1 — mã lỗi PAYROLL (SPEC-11 §12 · API-18 §6.5 · quy ước SPEC-01 §9). MỘT CHỖ duy
@@ -20,6 +22,12 @@ import {
  *
  * Khai đủ **001..017** để BE-2 không phải mở lại file đã qua FULL gate; 9 mã BE-2 chưa ném nằm trong
  * `PAYROLL_PENDING_BE2_ERRORS` (census assert tường minh, chống bẫy `coverage-high-but-error-code-untested`).
+ *
+ * 🔻 **S15-PAYROLL-BE-2** thêm 6 mã track B (019 · 020 · 022 · 023 · 024 · 033). Luật ném `kind` của track B:
+ *  - kind của MÁY CÔNG THỨC sống trong bảng ĐÓNG `FORMULA_ERROR_KINDS` (`formula/formula.errors.ts`) và đi qua
+ *    `formulaErrorToHttp` — census mã lỗi đọc bảng đó như một nguồn ném;
+ *  - kind cấp SERVICE BẮT BUỘC là literal `payrollDetails("…")` TẠI CHỖ NÉM (không helper nhận kind biến) — census
+ *    bắt kind bằng regex trên literal, kind dựng động là vùng mù (`refactor-to-helper-blinds-syntax-census`).
  */
 export const PAYROLL_ERR_CODE = {
   /** 409 — chuyển trạng thái kỳ không hợp lệ theo FSM §13.1 (kể cả tới chính trạng thái hiện tại). */
@@ -61,15 +69,35 @@ export const PAYROLL_ERR_CODE = {
    * nó cho `salary_profile_items[].componentCode` với **`kind` RIÊNG**, KHÔNG mượn `formula-unknown-ref`:
    * §12.1 chia mã theo THỜI ĐIỂM và `:709` nói rõ mục đích là để FE biết mở **editor công thức** hay mở
    * **hồ sơ lương**. Hai `kind` của BE-1 — `profile-item-unknown-component` · `profile-item-wrong-type`.
-   * (BE-2 sẽ thêm các `kind` công thức thật: `formula-syntax`/`formula-unknown-ref`/…)
+   * BE-2 thêm các `kind` công thức thật (`formula-syntax`/`formula-unknown-ref`/…) + kind cấu trúc mẫu.
    */
   FORMULA_INVALID: "PAYROLL-ERR-018",
+  /** 422 — **S15-PAYROLL-BE-2**. Vòng phụ thuộc giữa các thành phần (`formula-cycle`, `details.cycle` đầy đủ). */
+  FORMULA_CYCLE: "PAYROLL-ERR-019",
+  /** 422 — **S15-PAYROLL-BE-2**. Lỗi lúc TÍNH: vượt ngân sách node · chia cho 0 · tràn `numeric(18,2)`. */
+  FORMULA_EVAL: "PAYROLL-ERR-020",
+  /** 422 — **S15-PAYROLL-BE-2**. Bản tỉ lệ luật định thiếu/không liên tục bậc TNCN (`statutory-rate-incomplete`). */
+  STATUTORY_RATE_INVALID: "PAYROLL-ERR-022",
+  /**
+   * 409 — **S15-PAYROLL-BE-2**. Mẫu bảng lương: trùng `code` (`template-code-exists`). Ba kind gắn với KỲ
+   * (`template-locked` · `template-missing` · `template-inactive`) và `template-in-use` là việc của BE-3/BE-4 —
+   * cần `payroll_periods.template_id` của DB-2.
+   */
+  TEMPLATE_CONFLICT: "PAYROLL-ERR-023",
+  /**
+   * 409 — **S15-PAYROLL-BE-2**. Thành phần lương: hàng hệ thống đóng băng (`system-component-immutable`) · đang
+   * được mẫu dùng (`component-in-use`) · trùng mã (`component-code-exists`) · mã thuộc không gian tên hệ thống
+   * (`component-code-reserved`).
+   */
+  COMPONENT_CONFLICT: "PAYROLL-ERR-024",
   /**
    * 409 — **S15-PAYROLL-BE-1**. Hai bản ghi người phụ thuộc **chồng lấp khoảng hiệu lực** cho cùng một
    * NPT. Chốt cuối `EXCLUDE USING gist` ở DB (`payroll_dependents_no_overlap_excl`) ném **`23P01`**,
    * KHÔNG phải `23505` ⇒ map race thành 409, không 500 (SPEC-11 §12.1 mã 032).
    */
   DEPENDENT_OVERLAP: "PAYROLL-ERR-032",
+  /** 409 — **S15-PAYROLL-BE-2**. Bản tỉ lệ luật định: trùng `effective_from` · đã có kỳ lương dùng (`rate-in-use`). */
+  STATUTORY_RATE_CONFLICT: "PAYROLL-ERR-033",
 } as const;
 
 export type PayrollErrKey = keyof typeof PAYROLL_ERR_CODE;
@@ -155,6 +183,33 @@ export const PAYROLL_ERR = {
   /** Mã 014 — `kind` thứ HAI (SPEC-11 §12 hàng 014): hai dòng `items[]` cùng `component_code`. */
   PROFILE_ITEM_DUPLICATE:
     "PAYROLL-ERR-014: một thành phần lương chỉ được khai một dòng trong cùng phiên bản hồ sơ.",
+  // ── S15-PAYROLL-BE-2 (track B) — thông điệp nói được PHẢI LÀM GÌ; KHÔNG số tiền ──
+  COMPONENT_VALUE_PAIR:
+    "PAYROLL-ERR-018: loại giá trị không khớp dữ liệu — «công thức» cần công thức, «cố định» cần số tiền, «theo hồ sơ lương» không nhận cả hai.",
+  TEMPLATE_SCOPE_PAIR:
+    "PAYROLL-ERR-018: mẫu theo đơn vị phải chọn đơn vị; mẫu toàn công ty không gắn đơn vị.",
+  TEMPLATE_TOO_MANY_COMPONENTS: (max: number) =>
+    `PAYROLL-ERR-018: một mẫu bảng lương có tối đa ${max} thành phần.`,
+  TEMPLATE_COMPONENT_DUPLICATE:
+    "PAYROLL-ERR-018: một thành phần chỉ được đặt một lần trong mẫu bảng lương.",
+  TEMPLATE_COMPONENT_UNKNOWN:
+    "PAYROLL-ERR-018: có thành phần không tồn tại hoặc đã ngưng dùng trong danh mục — tải lại danh mục rồi chọn lại.",
+  FORMULA_OVERRIDE_NOT_ALLOWED: (codes: string) =>
+    `PAYROLL-ERR-018: không ghi đè được công thức cho thành phần tổng hợp hoặc lấy giá trị theo hồ sơ lương: ${codes}.`,
+  FORMULA_REF_NOT_IN_TEMPLATE: (template: string, ref: string) =>
+    `PAYROLL-ERR-018: mẫu "${template}" không chứa thành phần "${ref}" mà công thức mới tham chiếu — thêm thành phần đó vào mẫu trước.`,
+  TEMPLATE_CODE_EXISTS: "PAYROLL-ERR-023: mã mẫu bảng lương đã tồn tại.",
+  COMPONENT_SYSTEM_IMMUTABLE:
+    "PAYROLL-ERR-024: thành phần lương hệ thống chỉ đổi được tên hiển thị và thứ tự — muốn đổi cách tính, ghi đè công thức trong mẫu bảng lương.",
+  COMPONENT_IN_USE: (templates: string) =>
+    `PAYROLL-ERR-024: thành phần lương đang được mẫu bảng lương sử dụng (${templates}) — gỡ khỏi mẫu trước khi ngưng dùng hoặc xoá.`,
+  COMPONENT_CODE_EXISTS: "PAYROLL-ERR-024: mã thành phần lương đã tồn tại.",
+  FORMULA_TOO_LONG_STORED: `PAYROLL-ERR-018: công thức dài quá ${FORMULA_MAX_LENGTH} ký tự.`,
+  COMPONENT_CODE_RESERVED: (code: string) =>
+    `PAYROLL-ERR-024: mã "${code}" thuộc không gian tên hệ thống (biến hệ thống, hằng luật định, tên hàm hoặc thành phần hệ thống) — chọn mã khác.`,
+  RATE_EFFECTIVE_EXISTS: "PAYROLL-ERR-033: đã có bản tỉ lệ luật định cùng ngày hiệu lực.",
+  RATE_IN_USE:
+    "PAYROLL-ERR-033: bản tỉ lệ này đã được kỳ lương dùng — tạo bản mới với ngày hiệu lực mới thay vì sửa tại chỗ.",
 } as const;
 
 /** `details.kind` = phần tử `{field:'kind'}`; các cặp phụ thêm sau — **không bao giờ là số tiền**. */
@@ -195,6 +250,62 @@ export const payrollNotFound = () =>
   new NotFoundException(body("NOT_FOUND", PAYROLL_ERR.NOT_FOUND, payrollDetails("not-found")));
 
 /**
+ * S15-PAYROLL-BE-2 — mã của máy công thức → key. Bảng ĐÓNG theo `FormulaErrorCode` (trình biên dịch ép đủ nhánh).
+ * Census mã lỗi đọc các literal key dưới đây như bằng chứng «mã được ném».
+ */
+const FORMULA_CODE_TO_KEY: Readonly<Record<FormulaErrorCode, PayrollErrKey>> = {
+  "PAYROLL-ERR-018": "FORMULA_INVALID",
+  "PAYROLL-ERR-019": "FORMULA_CYCLE",
+  "PAYROLL-ERR-020": "FORMULA_EVAL",
+  "PAYROLL-ERR-022": "STATUTORY_RATE_INVALID",
+};
+
+/**
+ * `FormulaError` (engine thuần, không Nest) → 422 PAYROLL-ERR. `kind` giữ NGUYÊN từ engine (bảng đóng
+ * `FORMULA_ERROR_KINDS`); `details` chỉ vị trí/mã/chu trình/trần — engine không bao giờ đặt số tiền vào đó.
+ */
+export function formulaErrorToHttp(
+  err: FormulaError,
+  extra: Record<string, string> = {},
+): UnprocessableEntityException {
+  const d = err.details;
+  return payrollUnprocessable(
+    FORMULA_CODE_TO_KEY[err.code],
+    `${err.code}: ${err.message}`,
+    payrollDetails(err.kind, {
+      ...extra,
+      pos: d.pos,
+      component: d.component,
+      ref: d.ref,
+      func: d.func,
+      cycle: d.cycle?.join(" → "),
+      limit: d.limit,
+      pass: d.pass,
+      reason: d.reason,
+      missing: d.missing?.join(","),
+    }),
+  );
+}
+
+/**
+ * Message của NODE mang `code` trong chuỗi `.cause` — KHÔNG phải `DrizzleQueryError.message` (lớp ngoài là
+ * «Failed query: … params: …», có thể chở tham số). Dùng để phân biệt trigger `RAISE EXCEPTION` không kèm tên
+ * constraint.
+ */
+function pgNodeMessage(err: unknown): string {
+  let current: unknown = err;
+  for (let depth = 0; depth < 5; depth++) {
+    if (typeof current !== "object" || current === null) break;
+    const node = current as Record<string, unknown>;
+    if (typeof node["code"] === "string") {
+      return typeof node["message"] === "string" ? node["message"] : "";
+    }
+    current = node["cause"];
+  }
+  return "";
+}
+
+/**
  * Map lỗi PG → PAYROLL-ERR. Trả `null` khi ngoài phổ — caller `throw mapPayrollPgError(err) ?? err`.
  *
  * BỐN luật (ba luật đầu: plan §8, plan-review vòng 1 blocker #6; luật 4 thêm ở S13-PAYROLL-QA-1):
@@ -206,11 +317,12 @@ export const payrollNotFound = () =>
  *     `calculated_needs_attendance`) → **409 mã 001 kèm `kind='trail-pair-violation'`**: mọi hành
  *     động FSM đã đi qua `applyTransitionTx` nên chúng chỉ nổ khi có BUG, mà bug ở vùng đỏ phải hiện
  *     thành lỗi đọc được — để rơi `null` là **500 vô danh** (§8b).
- *  3. `23514` **KHÔNG tên** → đây là trigger `enforce_bonus_penalty_freeze`: mig `0564` dùng
- *     `RAISE EXCEPTION … USING ERRCODE='check_violation'` **không kèm `USING CONSTRAINT`** ⇒
- *     `err.constraint` RỖNG, không phân biệt được nhánh (A)–(E). Vì vậy service **tiền-kiểm 011/013
- *     dưới `FOR UPDATE`**; nhánh này chỉ còn là chốt cuối cho RACE ⇒ map về **409 cố định**, tuyệt đối
- *     không để rơi thành 500 ở vùng đỏ.
+ *  3. `23514` **KHÔNG tên** → một trigger `RAISE EXCEPTION … USING ERRCODE='check_violation'` không kèm
+ *     `USING CONSTRAINT`. 🔻 **S15-PAYROLL-BE-2 (plan-review M2/MF9):** trước đó mọi 23514 rỗng đều bị gắn
+ *     thành 013 «thưởng/phạt» — kể cả trigger `salary_component_system_freeze` của mig `0570`. Nay khớp
+ *     **DƯƠNG** theo tiền tố message: `bonus_penalty_freeze_guard:` (mig `0564`) ⇒ 013 · `salary_components:`
+ *     (mig `0570`) ⇒ 024 · còn lại ⇒ `null` — trigger tương lai (vd freeze của DB-2) không bị dán nhầm 013.
+ *     Service **tiền-kiểm dưới `FOR UPDATE`**; nhánh này chỉ còn là chốt cuối cho RACE.
  */
 export function mapPayrollPgError(err: unknown): Error | null {
   const code = pgErrorCode(err);
@@ -254,6 +366,28 @@ export function mapPayrollPgError(err: unknown): Error | null {
         "ACK_INVALID",
         PAYROLL_ERR.ACK_ALREADY,
         payrollDetails("already-acknowledged"),
+      );
+    }
+    // ── S15-PAYROLL-BE-2 — ba unique partial của track B (race sau tiền-kiểm, hoặc không tiền-kiểm) ──
+    if (c.includes("salary_components_company_code_uq")) {
+      return payrollConflict(
+        "COMPONENT_CONFLICT",
+        PAYROLL_ERR.COMPONENT_CODE_EXISTS,
+        payrollDetails("component-code-exists"),
+      );
+    }
+    if (c.includes("payroll_templates_company_code_uq")) {
+      return payrollConflict(
+        "TEMPLATE_CONFLICT",
+        PAYROLL_ERR.TEMPLATE_CODE_EXISTS,
+        payrollDetails("template-code-exists"),
+      );
+    }
+    if (c.includes("payroll_statutory_rates_company_effective_uq")) {
+      return payrollConflict(
+        "STATUTORY_RATE_CONFLICT",
+        PAYROLL_ERR.RATE_EFFECTIVE_EXISTS,
+        payrollDetails("rate-effective-date-exists"),
       );
     }
     return null;
@@ -305,13 +439,69 @@ export function mapPayrollPgError(err: unknown): Error | null {
     // `salary_profile_items_amount_check` (amount >= 0): Zod `.nonnegative()` mirror ĐÚNG BẰNG nên tới
     // được đây là payload lách tầng validate ⇒ 400 hình thức, cùng luật `payroll_period_lines_adjustment_check`.
     if (c.includes("salary_profile_items_amount_check")) return null;
-    if (c === "") {
-      // Không tên ⇒ trigger `enforce_bonus_penalty_freeze` (luật 3 ở JSDoc trên).
+    // ── S15-PAYROLL-BE-2 — CHECK track B. Service tiền-kiểm; các nhánh dưới là lưới cuối (race / đường nội
+    //    bộ). Để rơi `null` là 500 vùng đỏ — nên CÓ map kể cả khi SPEC-11 §12.1 cũ ghi «400». ──
+    if (c.includes("salary_components_code_shape_check")) {
       return payrollConflict(
-        "BONUS_ALREADY_CONSUMED",
-        PAYROLL_ERR.BONUS_FROZEN_RACE,
-        payrollDetails("bonus-frozen-race"),
+        "COMPONENT_CONFLICT",
+        PAYROLL_ERR.COMPONENT_CODE_RESERVED(""),
+        payrollDetails("component-code-reserved"),
       );
+    }
+    if (c.includes("salary_components_system_not_deletable")) {
+      return payrollConflict(
+        "COMPONENT_CONFLICT",
+        PAYROLL_ERR.COMPONENT_SYSTEM_IMMUTABLE,
+        payrollDetails("system-component-immutable"),
+      );
+    }
+    if (
+      c.includes("salary_components_value_pair_check") ||
+      c.includes("salary_components_engine_kind_check")
+    ) {
+      return payrollUnprocessable(
+        "FORMULA_INVALID",
+        PAYROLL_ERR.COMPONENT_VALUE_PAIR,
+        payrollDetails("component-value-pair"),
+      );
+    }
+    // `*_formula_len_check` (≤ 500): service parse TRƯỚC khi ghi nên tới được đây là đường lách tiền-kiểm
+    // (security-review BE-2 MEDIUM-2 — 047 từng bỏ parse khi hàng ngưng dùng) ⇒ 422 018, KHÔNG 500.
+    if (
+      c.includes("salary_components_formula_len_check") ||
+      c.includes("payroll_template_components_formula_len_check")
+    ) {
+      return payrollUnprocessable(
+        "FORMULA_INVALID",
+        PAYROLL_ERR.FORMULA_TOO_LONG_STORED,
+        payrollDetails("formula-too-long"),
+      );
+    }
+    if (c.includes("payroll_templates_scope_pair_check")) {
+      return payrollUnprocessable(
+        "FORMULA_INVALID",
+        PAYROLL_ERR.TEMPLATE_SCOPE_PAIR,
+        payrollDetails("template-scope-pair"),
+      );
+    }
+    if (c === "") {
+      // Luật 3 — khớp DƯƠNG theo tiền tố message của trigger (xem JSDoc).
+      const message = pgNodeMessage(err);
+      if (message.startsWith("salary_components:")) {
+        return payrollConflict(
+          "COMPONENT_CONFLICT",
+          PAYROLL_ERR.COMPONENT_SYSTEM_IMMUTABLE,
+          payrollDetails("system-component-immutable"),
+        );
+      }
+      if (message.startsWith("bonus_penalty_freeze_guard:")) {
+        return payrollConflict(
+          "BONUS_ALREADY_CONSUMED",
+          PAYROLL_ERR.BONUS_FROZEN_RACE,
+          payrollDetails("bonus-frozen-race"),
+        );
+      }
+      return null;
     }
     return null;
   }
@@ -336,9 +526,19 @@ export function mapPayrollPgError(err: unknown): Error | null {
       // S15-PAYROLL-BE-1 — ba bảng mới neo `user_id`; cùng luật sentinel với ba bảng trên (không tồn
       // tại VÀ khác tenant phải trả CÙNG một phản hồi, kẻo dựng oracle "user này có thật ở đâu đó").
       c.includes("payroll_employee_settings_user_id") ||
-      c.includes("payroll_dependents_user_id")
+      c.includes("payroll_dependents_user_id") ||
+      // S15-PAYROLL-BE-2 — đơn vị được CHỌN cho mẫu `scope='org_unit'` (không tồn tại / khác tenant ⇒ cùng 404).
+      c.includes("payroll_templates_org_unit_id_company_fk")
     ) {
       return payrollNotFound();
+    }
+    // S15-PAYROLL-BE-2 — `componentId` trong danh sách 053 không thuộc catalog công ty (race sau tiền-kiểm).
+    if (c.includes("payroll_template_components_component_id_company_fk")) {
+      return payrollUnprocessable(
+        "FORMULA_INVALID",
+        PAYROLL_ERR.TEMPLATE_COMPONENT_UNKNOWN,
+        payrollDetails("template-component-unknown"),
+      );
     }
     return null;
   }
