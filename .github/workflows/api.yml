@@ -184,6 +184,9 @@ jobs:
       # Object storage ephemeral. Chạy bằng `docker run` (KHÔNG service container) vì service container không
       # override được `command`, mà `minio/minio` đòi `server /data`. Credential ephemeral — KHÔNG secret thật.
       #
+      # Image lấy từ `quay.io/minio/*`, KHÔNG phải Docker Hub: từ 2026-09-13 `minio/minio` và `minio/mc` trên
+      # Docker Hub trả `pull access denied` (đo bằng `docker manifest inspect`) ⇒ step này exit 125 ở mọi PR.
+      #
       # Presign (getSignedUrl) là tính toán CỤC BỘ, không gọi mạng — nên riêng test "download → 302" chỉ cần
       # env S3_*. Nhưng spec khác có thể gọi putObject/headObject thật, nên vẫn dựng MinIO + tạo bucket.
       - name: Start MinIO (object storage cho integration test)
@@ -192,13 +195,13 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER="$S3_ACCESS_KEY" \
             -e MINIO_ROOT_PASSWORD="$S3_SECRET_KEY" \
-            minio/minio:latest server /data
+            quay.io/minio/minio:latest server /data
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then echo "minio ready"; break; fi
             if [ "$i" = "30" ]; then echo "MinIO không lên sau 60s" >&2; docker logs minio >&2; exit 1; fi
             sleep 2
           done
-          docker run --rm --network host --entrypoint sh minio/mc:latest -c "\
+          docker run --rm --network host --entrypoint sh quay.io/minio/mc:latest -c "\
             mc alias set local http://localhost:9000 '$S3_ACCESS_KEY' '$S3_SECRET_KEY' && \
             mc mb --ignore-existing local/$S3_BUCKET"
 

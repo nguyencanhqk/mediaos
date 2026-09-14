@@ -81,6 +81,24 @@ export const PAYROLL_ENGINE_PAIRS = {
   dependentUpdate: pair("manage", "payroll-employee", true),
   // 043 tái dùng cặp CŨ `view-line:payroll-period` (bảng công là dữ liệu của KỲ).
   periodTimesheet: pair("view-line", "payroll-period", true),
+  // S15-PAYROLL-BE-2 · track B 044–058 — catalog thành phần · mẫu bảng lương · tỉ lệ luật định (cả 6 cặp sensitive).
+  componentList: pair("view", "salary-component", true),
+  componentCreate: pair("manage", "salary-component", true),
+  componentDetail: pair("view", "salary-component", true),
+  componentUpdate: pair("manage", "salary-component", true),
+  // 048 gác cặp GHI (kiểm công thức là bước của luồng sửa, không phải đọc).
+  componentValidateFormula: pair("manage", "salary-component", true),
+  templateList: pair("view", "payroll-template", true),
+  templateCreate: pair("manage", "payroll-template", true),
+  templateDetail: pair("view", "payroll-template", true),
+  templateUpdate: pair("manage", "payroll-template", true),
+  templatePutComponents: pair("manage", "payroll-template", true),
+  // 054 gác cặp GHI — xem trước là bước soạn mẫu.
+  templatePreview: pair("manage", "payroll-template", true),
+  statutoryRateList: pair("view", "statutory-rate", true),
+  statutoryRateCreate: pair("manage", "statutory-rate", true),
+  statutoryRateDetail: pair("view", "statutory-rate", true),
+  statutoryRateUpdate: pair("manage", "statutory-rate", true),
 } as const satisfies Record<string, PayrollEnginePair>;
 
 export type PayrollEngineKey = keyof typeof PAYROLL_ENGINE_PAIRS;

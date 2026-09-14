@@ -129,6 +129,9 @@ export * from "./payroll";
 // đã sát trần 800 dòng; nó import NGƯỢC từ ./payroll (enum + payrollPageQuery), KHÔNG re-export tên nào
 // của ./payroll — trùng tên ở hai star-export là lỗi mơ hồ lúc build.
 export * from "./payroll-employees";
+// S15-PAYROLL-BE-2 — track B v2 (PAYROLL-API-044..058): catalog thành phần · mẫu bảng lương · tỉ lệ luật
+// định. Cùng luật tách file như ./payroll-employees (import ngược từ ./payroll, không re-export tên của nó).
+export * from "./payroll-catalog";
 // S11-ROOM-DB-1 (SPEC-14 · DB-16 §7): enum/hằng ROOM mirror CHECK 0552 hai chiều. DTO park meeting.ts (bảng meetings/
 // meeting_notes/meeting_tasks đã DROP ở 0553, 0 consumer) đã gỡ cùng WO — DTO ROOM thật viết ở S11-ROOM-BE-1 theo API-15.
 export * from "./room";

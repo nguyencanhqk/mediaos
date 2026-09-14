@@ -28,6 +28,18 @@ import { PayrollEmployeeSettingsRepository } from "./payroll-employee-settings.r
 import { PayrollEmployeeSettingsService } from "./payroll-employee-settings.service";
 import { PayrollEmployeesRepository } from "./payroll-employees.repository";
 import { PayrollEmployeesService } from "./payroll-employees.service";
+// ── S15-PAYROLL-BE-2 (track B · PAYROLL-API-044..058) ──
+import {
+  PayrollSalaryComponentsController,
+  PayrollStatutoryRatesController,
+  PayrollTemplatesController,
+} from "./payroll-catalog.controllers";
+import { PayrollTemplatesRepository } from "./payroll-templates.repository";
+import { PayrollTemplatesService } from "./payroll-templates.service";
+import { SalaryComponentsRepository } from "./salary-components.repository";
+import { SalaryComponentsService } from "./salary-components.service";
+import { StatutoryRatesRepository } from "./statutory-rates.repository";
+import { StatutoryRatesService } from "./statutory-rates.service";
 import {
   BonusPenaltiesController,
   MePayslipsController,
@@ -40,10 +52,11 @@ import { SalaryProfilesRepository } from "./salary-profiles.repository";
 import { SalaryProfilesService } from "./salary-profiles.service";
 
 /**
- * `PayrollModule` (SPEC-11 · DB-13 · API-18) — **43/43 route** sau `S15-PAYROLL-BE-1`:
+ * `PayrollModule` (SPEC-11 · DB-13 · API-18) — **58/58 route** sau `S15-PAYROLL-BE-2`:
  * v1 BE-1 nền (`001..006` · `019..028` · `034..035`) + v1 BE-2 máy tính lương · duyệt four-eyes ·
  * phiếu lương · export (`007..018` · `029..033`) + **v2 track A** nhân sự hưởng lương · thiết lập
- * BH/công đoàn/TK ngân hàng · người phụ thuộc · bảng công kỳ (`036..043`).
+ * BH/công đoàn/TK ngân hàng · người phụ thuộc · bảng công kỳ (`036..043`) + **v2 track B** catalog thành phần
+ * lương · mẫu bảng lương · tỉ lệ luật định (`044..058`) trên máy công thức `src/payroll/formula/`.
  *
  * imports: `PermissionModule` (PermissionGuard + DataScopeService — guard 2 tầng §11).
  * `AuditService` **và** `OutboxService` đến từ `EventsModule` @Global — KHÔNG import
@@ -75,6 +88,10 @@ import { SalaryProfilesService } from "./salary-profiles.service";
     // ── S15-PAYROLL-BE-1 ──
     PayrollEmployeesController,
     PayrollDependentsController,
+    // ── S15-PAYROLL-BE-2 ──
+    PayrollSalaryComponentsController,
+    PayrollTemplatesController,
+    PayrollStatutoryRatesController,
   ],
   providers: [
     PayrollAccessService,
@@ -104,6 +121,13 @@ import { SalaryProfilesService } from "./salary-profiles.service";
     PayrollEmployeesService,
     PayrollEmployeeSettingsService,
     PayrollDependentsService,
+    // ── S15-PAYROLL-BE-2 (track B) ──
+    SalaryComponentsRepository,
+    PayrollTemplatesRepository,
+    StatutoryRatesRepository,
+    SalaryComponentsService,
+    PayrollTemplatesService,
+    StatutoryRatesService,
   ],
   // S13-PAYROLL-DASH-1: chỉ PayrollCalcService — KHÔNG export repository (widget phải đi qua service để
   // giữ nguyên tầng guard THỨ HAI `resolveActor` + audit; export repository là mở đường vòng qua cả hai).
