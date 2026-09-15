@@ -17,8 +17,17 @@ import { PayrollAccessService } from "./payroll-access.service";
 import { PayrollInputsRepository } from "./payroll-inputs.repository";
 import { PayrollPeopleRepository } from "./payroll-people.repository";
 import { PayrollPeriodsRepository } from "./payroll-periods.repository";
+import { payrollCatalogSharedLockTx } from "./payroll-catalog.lock";
 import { assertPeriodTransition, resolveActionTarget } from "./payroll-fsm";
-import { mapPayrollPgError, payrollNotFound, PAYROLL_ERR, payrollConflict } from "./payroll.errors";
+import { assertUsableTemplateTx } from "./payroll-template-binding";
+import { PayrollTemplatesRepository } from "./payroll-templates.repository";
+import {
+  mapPayrollPgError,
+  payrollDetails,
+  payrollNotFound,
+  PAYROLL_ERR,
+  payrollConflict,
+} from "./payroll.errors";
 import { toPayrollPeriodDto } from "./payroll.mapper";
 import { payrollOffset, type PayrollRequestUser } from "./payroll.types";
 import { SalaryProfilesRepository } from "./salary-profiles.repository";
@@ -43,6 +52,7 @@ export class PayrollPeriodsService {
     private readonly inputs: PayrollInputsRepository,
     private readonly people: PayrollPeopleRepository,
     private readonly audit: AuditService,
+    private readonly templates: PayrollTemplatesRepository,
   ) {}
 
   /** 001 — danh sách kỳ. **KHÔNG số tiền nào**, kể cả tổng (SPEC-11 §11.1). */
@@ -72,12 +82,20 @@ export class PayrollPeriodsService {
     });
   }
 
-  /** 002 — tạo kỳ. Trùng tháng ⇒ 409 `008` (chốt cuối `payroll_periods_company_month_uq`). */
+  /**
+   * 002 — tạo kỳ. Trùng tháng ⇒ 409 `008` (chốt cuối `payroll_periods_company_month_uq`).
+   * S15-PAYROLL-BE-3: `templateId` ⇒ gắn mẫu ngay, qua CÙNG cổng với 004 và `calculate` (`assertUsableTemplateTx`).
+   */
   async create(user: PayrollRequestUser, dto: CreatePayrollPeriodRequest) {
     await this.access.resolveActor(user, "periodCreate");
     return this.db.withTenant(user.companyId, async (tx) => {
+      // §0b M1 — khoá catalog DÙNG CHUNG đứng ĐẦU tx (trước mọi khoá/đọc khác) khi có gắn mẫu.
+      if (dto.templateId !== undefined) await payrollCatalogSharedLockTx(tx, user.companyId);
       if (dto.attendancePeriodId) {
         await this.assertAttendancePeriod(tx, user.companyId, dto.attendancePeriodId);
+      }
+      if (dto.templateId !== undefined) {
+        await assertUsableTemplateTx(tx, this.templates, user.companyId, dto.templateId, "bind");
       }
       let row;
       try {
@@ -87,6 +105,7 @@ export class PayrollPeriodsService {
           {
             periodMonth: dto.periodMonth,
             attendancePeriodId: dto.attendancePeriodId ?? null,
+            templateId: dto.templateId ?? null,
             note: dto.note ?? null,
           },
           user.id,
@@ -101,7 +120,7 @@ export class PayrollPeriodsService {
         actorUserId: user.id,
         before: null,
         // KHÔNG số tiền trong audit (bất biến #3).
-        after: { periodMonth: row.periodMonth, status: row.status },
+        after: { periodMonth: row.periodMonth, status: row.status, templateId: row.templateId },
       });
       return toPayrollPeriodDto(row);
     });
@@ -127,14 +146,28 @@ export class PayrollPeriodsService {
   async update(user: PayrollRequestUser, id: string, dto: UpdatePayrollPeriodRequest) {
     await this.access.resolveActor(user, "periodUpdate");
     return this.db.withTenant(user.companyId, async (tx) => {
+      // S15-PAYROLL-BE-3 §0b M1 — gắn/đổi mẫu ⇒ khoá catalog DÙNG CHUNG TRƯỚC khoá hàng kỳ (đảo lại là 40P01 với
+      // writer độc quyền đọc `payroll_periods` sau advisory). Census `payroll-catalog-lock-census` ghim thứ tự.
+      if (dto.templateId !== undefined) await payrollCatalogSharedLockTx(tx, user.companyId);
       const before = await this.repo.lockForUpdateTx(tx, user.companyId, id);
       if (!before) throw payrollNotFound();
       const status = before.status as PayrollPeriodStatus;
+      // 023 `template-locked` TRƯỚC nhánh 001 chung — đặt sau thì kind này thành mã CHẾT (plan §4.2).
+      if (dto.templateId !== undefined && status !== "Draft" && status !== "CollectingData") {
+        throw payrollConflict(
+          "TEMPLATE_CONFLICT",
+          PAYROLL_ERR.TEMPLATE_LOCKED,
+          payrollDetails("template-locked"),
+        );
+      }
       if (status !== "Draft" && status !== "CollectingData") {
         throw payrollConflict("PERIOD_TRANSITION", PAYROLL_ERR.PERIOD_TRANSITION(status, status));
       }
       if (dto.attendancePeriodId) {
         await this.assertAttendancePeriod(tx, user.companyId, dto.attendancePeriodId);
+      }
+      if (dto.templateId !== undefined) {
+        await assertUsableTemplateTx(tx, this.templates, user.companyId, dto.templateId, "bind");
       }
       const row = await this.repo.updateTx(
         tx,
@@ -144,6 +177,7 @@ export class PayrollPeriodsService {
           ...(dto.attendancePeriodId !== undefined
             ? { attendancePeriodId: dto.attendancePeriodId }
             : {}),
+          ...(dto.templateId !== undefined ? { templateId: dto.templateId } : {}),
           ...(dto.note !== undefined ? { note: dto.note } : {}),
         },
         user.id,
@@ -156,9 +190,14 @@ export class PayrollPeriodsService {
         actorUserId: user.id,
         before: {
           attendancePeriodId: before.attendancePeriodId,
+          templateId: before.templateId,
           noteSet: before.note !== null,
         },
-        after: { attendancePeriodId: row.attendancePeriodId, noteSet: row.note !== null },
+        after: {
+          attendancePeriodId: row.attendancePeriodId,
+          templateId: row.templateId,
+          noteSet: row.note !== null,
+        },
       });
       return toPayrollPeriodDto(row);
     });

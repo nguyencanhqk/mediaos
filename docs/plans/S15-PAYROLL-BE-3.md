@@ -375,4 +375,66 @@ Số kỳ vọng lấy từ bảng tính ĐỘC LẬP (script Python `decimal` �
 
 ## 11. Bằng chứng
 
-_(điền khi thi công)_
+### 11.1 Thi công (15/09/2026, phiên IMPLEMENT) — điểm LỆCH plan, có chủ đích
+
+| Plan | Thực tế | Vì sao |
+| --- | --- | --- |
+| `payroll-line-snapshot.ts` | `payroll-calc-lines.ts` (dựng `LineInput` → `evaluateLine` → hàng ghi + snapshot) | một module tầng service cho cả input + snapshot; engine thuần vẫn ở `formula/formula.line.ts` |
+| `assertBindableTemplateTx` | `assertUsableTemplateTx(tx, repo, companyId, templateId, mode)` ở `payroll-template-binding.ts` | MỘT cổng cho 002/004 (`bind` ⇒ 404 sentinel) và 007 (`calculate` ⇒ 023 `template-missing` reason `template-deleted`); thứ tự cổng: sống → active → scope → thành phần ngưng → drift → độ phủ đầu vào (B1) → compile |
+| `upsertLinesV2Tx` | GIỮ tên `upsertLinesTx`, chữ ký mới (hàng ghi đã tính) | census/tài liệu cũ neo tên; công thức SQL v1 GỠ hẳn |
+| `base_amount = toMoney(SYS_BASE_SALARY × SYS_PRORATE)` | `toMoney(MIN(base × (present + unpaid) / work, base))` — cùng THỨ TỰ phép với `LUONG_CO_BAN` | `SYS_PRORATE` cắt scale 10 rồi nhân lương 8 chữ số ⇒ lệch được 1 xu; cột chỉ để thông tin |
+| audit `netLines` | = số dòng NET (có `gross_up_iterations`) | không tiền |
+| `statutoryRateId` của DTO 008 | đọc từ snapshot `component_values_json.statutoryRateId` | bảng dòng không có cột này |
+
+### 11.2 RED → GREEN
+
+- **Unit engine** `formula/formula.line.spec.ts` 21 ca — số lấy từ bảng Python `Fraction` độc lập (không sinh từ engine): A1 TNCN 550.000 · NV-G net 35.215.381,81 · NV-N b\* 28.281.300,97 / 12 vòng / net 23.606.663,31 · nửa tháng net 11.671.113,89 · §21.1 bốn vế · O-2 · 021 dao động 30 vòng + `non-positive-base` (m1) · `negative-total` · ngân sách · lưới làm tròn 1.240 ca (≥ 500 ca hoà) `|v4| = v3`.
+- **Int mới** (lane `mediaos_be3`, head `0575`): `s15-payroll-be3-binding-gates` 34 · `s15-payroll-be3-calculate` 5 (NV-G/NV-N ĐƯỜNG THẬT khớp từng đồng: nửa ngày phép có lương + nửa ngày không lương, NPT hết hạn giữa kỳ + NPT hai hàng, bản tỉ lệ thứ hai hiệu lực SAU kỳ, BH vượt trần, tạm ứng bind/rebind, snapshot bất biến khi sửa công thức, phiếu v2) · `s15-payroll-be3-migration` 9 (replay khối DO của 0575 nhánh IF + ELSE trong `BEGIN … ROLLBACK`, preflight 0d/0e/0f) ⇒ **48/48**.
+- **Int v1 chuyển sang v2** + spec PAYROLL dễ bị seed v4/`isSystem` ảnh hưởng: 19 file / **612/612** (lifecycle A1/B1/E1 theo số v2; C1/C2 bỏ tự duyệt; arithmetic `pit_payer = COMPANY` + người duyệt khác người tạo + ca C theo O-5; fsm-race · permission · idor · scope-floor · noti-audit gắn `MAU_MAC_DINH`; db1b oracle `abs`).
+- Unit payroll + 4 census **296/296** (census mã lỗi neo 26 mã; census khoá thêm 058 độc quyền + calc/002/004 dùng chung TRƯỚC khoá kỳ) · `tsc --noEmit` API (gồm `test/`) sạch · eslint sạch · FE: `tsc` sạch, `payroll-error-kind-census` 6/6 (+7 kind, i18n vi).
+
+### 11.3 Đột biến §6.4 — mỗi cái chỉ làm đỏ ca của nó, đã revert
+
+| # | Đột biến | Đỏ |
+| --- | --- | --- |
+| a | bỏ zero tỉ lệ BH theo cờ | unit A1 · O-2 · không-đột-biến (3) |
+| b | gross-up trên đầu vào THẬT | unit NV-N · nửa tháng (2) |
+| c | căn cứ BH fallback = N | unit NV-N · nửa tháng (2) |
+| d | NPT `count(*)` | int C1 · C2 (`expected 3 to be 2`) · C3 · C5 |
+| e | bỏ cổng drift | int G9 · B2b (+ B2c/B2d dây chuyền) |
+| f | item phiếu gồm `statutory_employer` | int C5 (sinh phiếu 500 — bất biến tổng vỡ) |
+| g | item thuế bất kể `pitPayer` | int C5 |
+| h | 058 bỏ khoá catalog | int R1 (058 không chờ) |
+| i | `NGHI_KHONG_LUONG` giữ `deduction` | unit 6 ca (A1 TNCN 750.000) |
+| j | bỏ clamp `net` ở SQL (hai nhánh UPSERT) | int arithmetic `beforeAll` (tính lại 500 — CHECK `net ≥ 0`) |
+| k | `template-locked` thành mã chết | int BIND7 |
+| l | bỏ cổng độ phủ đầu vào (B1) | int G10 ×8 · BIND6 · B2c |
+| m | khoá dùng chung SAU `lockForUpdateTx` | census khoá (calculate) |
+
+### 11.4 FULL gate — security-reviewer (15/09) = **PASS**, 0 CRITICAL/HIGH
+
+| Mức | Phát hiện | Xử lý |
+| --- | --- | --- |
+| MEDIUM | NV không có hàng `payroll_employee_settings` ⇒ tính «không tham gia BH/công đoàn» (O-2) mà route ghi không báo gì — nhập 200 NV quên settings là 200 dòng thiếu BH, người duyệt chỉ thấy khi mở từng dòng | vá: `warnings` thêm số đếm `employees-without-settings:<n>` (không tiền), cạnh `unconsumed-*` |
+| LOW | 056 (POST tỉ lệ) không lấy khoá catalog trong khi 058 có — POST bản R2 rơi vào kỳ đang tính chen giữa ⇒ kỳ `Calculated` bằng R1 (snapshot/fingerprint vẫn ghi đúng R1, không sai im lặng; có từ trước BE-3) | vá: 056 lấy `payrollCatalogLockTx`; census khoá đưa `statutory-rates.service.ts` vào bảng writer (create + update) |
+| LOW | CHECK four-eyes lọt khi `created_by IS NULL` | **KHÔNG áp dụng** — `bonus_penalties.created_by` NOT NULL (`schema/payroll.ts:507-509`; `information_schema` lane: `created_by NO`) |
+| LOW | `details` 422 lộ `userId` cho vai chỉ có `calculate` | chấp nhận — id, không tiền/tên; cần để người vận hành biết sửa hồ sơ nào |
+| ghi chú | bất biến tổng item so với `gross − deduction + adjustment`, không so `net` đã clamp | có từ trước BE-3 (v1), ngoài phạm vi |
+
+**silent-failure-hunter (15/09) = PASS** — không có nuốt lỗi / Map trượt ⇒ 0 ngoài mặc định owner. MEDIUM phòng xa: SQL sinh item phiếu v2 là ALLOWLIST theo `kind` — thêm `kind` mới mà quên nhánh thì `findItemSumMismatchesTx` chặn cả lượt (không sai im lặng) ⇒ đã thêm comment nhắc tại chỗ.
+
+**database-reviewer hẹp (0575 + UPSERT, 15/09) = PASS** — MEDIUM: ngày công đi vào `jsonb_to_recordset` dạng SỐ JSON trong khi tiền đi dạng chuỗi ⇒ gia cố sang chuỗi scale 2 (nguồn là `numeric(8,2)` đọc thẳng nên chưa có đường lệch). LOW (nợ, không làm ở BE-3): nhánh `LEFT JOIN LATERAL old` (hồi sinh điều chỉnh tay) không có index partial `(company_id, payroll_period_id, user_id) WHERE deleted_at IS NOT NULL` — ổn ở quy mô hiện tại · thứ tự khoá chỉ ép bằng comment + census · `DISABLE TRIGGER` trong khối DO cùng khuôn 0574 (lock_timeout 5s cấp tx).
+
+**`check.sh --lane-db=be3` lượt 1 = ĐỎ 3 ca thật, cả ba do diff BE-3 (đã vá):**
+
+| Ca | Root cause | Vá |
+| --- | --- | --- |
+| `identity-projection-ratchet` chiều 6 (16 > pin 15) | `count(distinct pd.full_name)` trong template `sql` thô = vùng mù census chiếu danh tính | viết lại `dependentCountsTx` bằng builder `countDistinct(payrollDependents.fullName)` — KHÔNG nâng pin |
+| migration spec M7 (đếm «2» thay «1») | preflight (0e) đếm ghi đè TOÀN LANE; chạy chunk song song, G10 của spec gates đang ghi đè `NGHI_KHONG_LUONG` trên mẫu sao chép | ghim thông điệp, không ghim con số |
+| migration spec M8 (nhận thông điệp 0e) | (0e) đứng TRƯỚC (0f) và bị cùng spec song song kích | replay preflight gỡ thêm vế (0e) (regex neo, M0 ghim nó CÓ trong file) |
+
+### 11.5 Kiểm lại SAU vá (15/09)
+
+- Vá: cảnh báo `employees-without-settings:<n>` (security MEDIUM) · 056 khoá catalog độc quyền + census (security LOW) · comment allowlist kind (silent-failure) · `dependentCountsTx` sang builder (ratchet) · M7/M8 bỏ phụ thuộc lane · ngày công sang chuỗi scale 2 trong recordset (database MEDIUM).
+- `tsc` exit 0 · eslint sạch · unit payroll + census + `identity-projection-ratchet` **307/307** · int `s15-payroll-be3-{migration,binding-gates,calculate}` + `s15-payroll-be2-statutory-rates` **64/64**.
+- `test:cov:payroll` (29 file / **738** ca, exit 0 — ngưỡng từng file đạt): `src/payroll/**` **92,3 %** stmts / 86,1 % branch · `formula/` **99,81 %** · `formula.line.ts` **100 %**.

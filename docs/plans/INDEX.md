@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**499 WO** · có micro-plan: **293/499** · ⬜ 23 chờ · 🔵 0 đang làm · ✅ 474 xong · 🔴 2 chặn
+**501 WO** · có micro-plan: **296/501** · ⬜ 22 chờ · 🔵 0 đang làm · ✅ 478 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -537,13 +537,14 @@
 | `S15-PAYROLL-DOC-1` | 🟢 | ✅ xong | [📄](S15-PAYROLL-V2-WAVE.md) | — | Bộ tài liệu PAYROLL v2: SPEC-11 v2 (§5.1 phạm vi v2 · §8 bảng mới · §9 |
 | `S15-UI-SHELL-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S15-PAYROLL-DOC-1 | Vỏ UI dùng chung (DEC-020): sidebar nhóm gập được · toolbar chuẩn (tìm |
 | `S15-PAYROLL-DB-1` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-1.md) | ✅S15-PAYROLL-DOC-1 | Schema + migration PAYROLL v2 track A+B (mig 0570+): ĐÚNG 2 ALTER — sa |
-| `S15-PAYROLL-BE-1` | 🔴 | 🔴 chặn | [📄](S15-PAYROLL-BE-1.md) | ✅S15-PAYROLL-DB-1 | BE track A: route Nhân viên PAYROLL (PAYROLL-API-036 chiếu HR bó hẹp,  |
-| `S15-PAYROLL-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-DB-1 | BE track B (1/2): catalog thành phần lương + mẫu bảng lương — CRUD + p |
-| `S15-PAYROLL-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-2 | BE track B (2/2): máy tính lương v2 — evaluate theo mẫu của kỳ · engin |
-| `S15-PAYROLL-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-1 ✅S15-UI-SHELL-1 | FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thôn |
+| `S15-PAYROLL-BE-1` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-1.md) | ✅S15-PAYROLL-DB-1 | BE track A: route Nhân viên PAYROLL (PAYROLL-API-036 chiếu HR bó hẹp,  |
+| `S15-PAYROLL-BE-2` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-2.md) | ✅S15-PAYROLL-DB-1 | BE track B (1/2): catalog thành phần lương (044–048) + mẫu bảng lương  |
+| `S15-PAYROLL-DB-1B` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-1B.md) | ✅S15-PAYROLL-BE-2 | Vá công thức seed LUONG_CO_BAN đang trừ HAI LẦN ngày nghỉ không lương  |
+| `S15-PAYROLL-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-2 ✅S15-PAYROLL-DB-2 ✅S15-PAYROLL-DB-1B | BE track B (2/2): máy tính lương v2 — evaluate theo mẫu của kỳ · engin |
+| `S15-PAYROLL-FE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-1 ✅S15-UI-SHELL-1 | FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thôn |
 | `S15-PAYROLL-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-3 ⏳S15-PAYROLL-FE-1 | FE track B: PAY-SCREEN-009 Thành phần lương (catalog + editor công thứ |
-| `S15-PAYROLL-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-DB-1 | Schema + migration PAYROLL v2 track C: 4 bảng (payroll_advances · payr |
-| `S15-PAYROLL-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-DB-2 ⏳S15-PAYROLL-BE-3 | BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four- |
+| `S15-PAYROLL-DB-2` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-2.md) | ✅S15-PAYROLL-DB-1 | Schema + migration PAYROLL v2 track C: 4 bảng (payroll_advances · payr |
+| `S15-PAYROLL-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-DB-2 ⏳S15-PAYROLL-BE-3 | BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four- |
 | `S15-PAYROLL-FE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-4 | FE track C: PAY-SCREEN-012 Tạm ứng (list + form + duyệt) · 013 Chi trả |
 | `S15-PAYROLL-BE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-3 ⏳S15-PAYROLL-BE-4 | BE track D: 7 báo cáo (tổng hợp thu nhập NV · thống kê lương theo thời |
 | `S15-PAYROLL-FE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-5 ⏳S15-PAYROLL-FE-2 ⏳S15-PAYROLL-FE-3 | FE track D: PAY-SCREEN-015 Tổng quan `/payroll` (6 biểu đồ Recharts +  |
@@ -604,6 +605,7 @@
 | `S18-QA-LEAVEDATEBOMB-1` | 🟡 | ✅ xong | — *(chưa)* | — | `leave-request.int.spec.ts` dùng NGÀY CỨNG tuyệt đối — đỏ từ 0h 09/09/ |
 | `S18-SEC-AUDITGATE-1` | 🟡 | ✅ xong | [📄](S18-SEC-AUDITGATE-1.md) | — | Cổng `Dependency scan (pnpm audit)` ĐỎ trên master từ 09/09 — 5 adviso |
 | `S18-AUTH-490DEBT-1` | crown | ✅ xong | [📄](S18-AUTH-490DEBT-1.md) | — | Trả 3 nợ FULL-gate của #490 (owner chốt 11/09): §8.2 trần ghi audit nh |
+| `S18-OPS-MINIOPIN-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Ghim image MinIO của docker-compose.yml (container PROD `mediaos-minio |
 
 ---
 

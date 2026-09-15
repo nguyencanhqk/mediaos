@@ -546,6 +546,12 @@ export const bonusPenalties = pgTable(
       "bonus_penalties_consume_approved_check",
       sql`payroll_period_id IS NULL OR status = 'Approved'`,
     ),
+    // S15-PAYROLL-BE-3 (mig 0575) — four-eyes ở DB: hàng Approved KHÔNG do chính người tạo quyết định. `IS DISTINCT FROM`
+    // để decided_by NULL (FK SET NULL) không nổ. Service 027 tiền-kiểm; đây là lưới cuối (map 409 PAYROLL-ERR-012).
+    check(
+      "bonus_penalties_four_eyes_check",
+      sql`status <> 'Approved' OR decided_by IS DISTINCT FROM created_by`,
+    ),
   ],
 );
 

@@ -13,6 +13,7 @@ import { AuditService } from "../events/audit.service";
 import { isFormulaError } from "./formula/formula.errors";
 import { assertBracketsContinuous } from "./formula/formula.statutory";
 import { PayrollAccessService } from "./payroll-access.service";
+import { payrollCatalogLockTx } from "./payroll-catalog.lock";
 import { moneyInput, toStatutoryRateDto } from "./payroll-catalog.support";
 import {
   formulaErrorToHttp,
@@ -93,6 +94,9 @@ export class StatutoryRatesService {
     await this.access.resolveActor(user, "statutoryRateCreate");
     StatutoryRatesService.assertBrackets(dto.pitBrackets);
     return this.db.withTenant(user.companyId, async (tx) => {
+      // S15-PAYROLL-BE-3 (security-review LOW) — CÙNG khoá ĐỘC QUYỀN với 058: POST một bản `effective_from` rơi vào kỳ
+      // `calculate` đang tính (khoá dùng chung) phải chờ lượt tính commit, không chen giữa lúc nó chọn bản hiệu lực.
+      await payrollCatalogLockTx(tx, user.companyId);
       let row: PayrollStatutoryRate;
       try {
         row = await this.repo.createTx(
@@ -130,6 +134,10 @@ export class StatutoryRatesService {
     await this.access.resolveActor(user, "statutoryRateUpdate");
     if (dto.pitBrackets !== undefined) StatutoryRatesService.assertBrackets(dto.pitBrackets);
     return this.db.withTenant(user.companyId, async (tx) => {
+      // S15-PAYROLL-BE-3 (plan §3.7) — khoá ĐỘC QUYỀN TRƯỚC kiểm `rate-in-use`: không có nó, `calculate` đang giữ bản tỉ
+      // lệ FOR SHARE commit `Calculated` giữa lúc 058 kiểm và lúc 058 UPDATE ⇒ ghi đè số của bản vừa được dùng. Có
+      // khoá ⇒ 058 chạy sau `calculate` (khoá dùng chung) và thấy kỳ `Calculated` ⇒ 409 033.
+      await payrollCatalogLockTx(tx, user.companyId);
       const before = await this.repo.findTx(tx, user.companyId, id, { forUpdate: true });
       if (!before) throw payrollNotFound();
       const oldFrom = String(before.effectiveFrom);

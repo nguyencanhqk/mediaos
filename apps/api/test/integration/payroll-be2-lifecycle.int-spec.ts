@@ -4,20 +4,21 @@
  * 017` (SPEC-11 §12 · §13.1 · §13.2 · §13.4 · §20).
  *
  * ── VÌ SAO FIXTURE «KHỚP TỪNG ĐỒNG» LÀ CA QUAN TRỌNG NHẤT ──
- * Công thức lương nằm HOÀN TOÀN trong SQL (`PayrollCalcRepository.upsertLinesTx`). Một ca chỉ kiểm
- * "có sinh dòng không" sẽ xanh với MỌI công thức sai. Ca A1 dưới đây gieo dữ liệu để cả năm đại lượng
- * đầu vào là số ĐÃ BIẾT rồi so từng cột với số tính tay theo quyết định owner O1:
+ * Một ca chỉ kiểm "có sinh dòng không" sẽ xanh với MỌI công thức sai. Ca A1 dưới đây gieo dữ liệu để cả năm đại
+ * lượng đầu vào là số ĐÃ BIẾT rồi so từng cột với số tính tay.
  *
- *   work = 22 · present = 18 · unpaid = 2 · base_salary = 22.000.000 · phụ cấp 1.000.000
- *   prorate      = LEAST((18 + 2)/22, 1) = 20/22
- *   base_amount  = round(22.000.000 × 20/22, 2) = 20.000.000
- *   deduction    = round(0 + 2 × (22.000.000/22), 2) = 2.000.000     ← KHÔNG có vế phút trễ (O2)
- *   gross        = 20.000.000 + 1.000.000 = 21.000.000
- *   net          = GREATEST(21.000.000 − 2.000.000 + 0, 0) = 19.000.000
+ * 🔁 S15-PAYROLL-BE-3 (máy tính v2 — owner O-1/O-5 15/09/2026): kỳ gắn `MAU_MAC_DINH`, số tính ở máy công thức theo
+ * mẫu; bảng tay độc lập ở `docs/QA/evidence/S15-PAYROLL-BE-3-DOI-SOAT.md` mục A1 (không tham gia BH, 0 NPT, NV chịu thuế):
  *
- * Tử số CỘNG `unpaid` là chủ ý (phương án B): `present_days` đã LOẠI ngày nghỉ không lương, nên
- * pro-rate theo `present` rồi lại trừ `unpaid × đơn giá` là **trừ hai lần** — mất 2.000.000 mỗi kỳ,
- * im lặng, không CHECK nào bắt. Ca này là thứ duy nhất chặn được lớp lỗi đó.
+ *   work = 22 · present = 18 · unpaid = 2 · base_salary = 22.000.000 · PHU_CAP 1.000.000
+ *   LUONG_CO_BAN     = MIN(22.000.000 × (18 + 2)/22, 22.000.000) = 20.000.000   (tử số CỘNG unpaid — không trừ hai lần)
+ *   NGHI_KHONG_LUONG = −(22.000.000 × 2/22) = −2.000.000                         (earning ÂM, O-5)
+ *   gross (TONG_THU_NHAP) = 20.000.000 + 1.000.000 − 2.000.000 = 19.000.000
+ *   TNCN = luỹ tiến(19.000.000 − 11.000.000) = 550.000  ⇒ deduction = 550.000
+ *   net  = GREATEST(19.000.000 − 550.000 + 0, 0) = 18.450.000
+ *
+ * Trước O-5 (`NGHI_KHONG_LUONG` là `deduction`) TNCN tính trên 10.000.000 = 750.000 — thu thừa 200.000/tháng trên
+ * tiền nghỉ không lương mà NV không nhận, mọi bất biến SQL vẫn xanh. Ca này là thứ chặn lớp lỗi đó ở đường thật.
  *
  * GATE CỨNG `hasDb && LANE_DB`.
  */
@@ -45,6 +46,7 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
+import { seedPayrollCatalog, setProfileItem } from "../helpers/payroll-v2-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = "Passw0rd!payrollbe2";
@@ -200,6 +202,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
   let quietId = "";
   let unpaidTypeId = "";
   let attendancePeriodId = "";
+  /** S15-PAYROLL-BE-3 (O-1) — `MAU_MAC_DINH` do seeder tạo; mọi kỳ fixture gắn nó lúc tạo. */
+  let templateId = "";
 
   const http = () => request(app.getHttpServer());
   const auth = (t: string) => (r: request.Test) => r.set("Authorization", `Bearer ${t}`);
@@ -237,6 +241,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     const p = await post(tOfficer, "/payroll-periods").send({
       periodMonth,
       attendancePeriodId: attId,
+      templateId,
     });
     expect(p.status, JSON.stringify(p.body)).toBe(201);
     const id = p.body.data.id as string;
@@ -270,6 +275,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     adjustmentReason?: string | null;
     gross?: number;
     net?: number;
+    components?: Array<{ code: string; kind: string; isVisible: boolean; value: number }>;
+    templateFingerprint?: string | null;
+    grossUpIterations?: number | null;
   };
 
   const lineOf = async (periodId: string, userId: string) => {
@@ -292,6 +300,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     const hash = await new PasswordService().hash(LOGIN_PW);
     A = await seedCompany(direct, "pay2life");
     companyIds.push(A.companyId);
+    templateId = await seedPayrollCatalog(direct, A.companyId);
 
     // Lịch công ty: T2–T6. ⚠️ khoá `days` — `companies.working_days_json` có hình dạng `{"days":[…]}`
     // (mig 0015), KHÁC `work_schedules.working_days_json` vốn là mảng TRẦN. Thiếu ⇒ work_days = 0 ⇒
@@ -347,14 +356,12 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
         direct,
         `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances)
          VALUES ($1,$2,'2028-01-01',$3,$4::jsonb) RETURNING id`,
-        [
-          A.companyId,
-          uid,
-          base,
-          JSON.stringify(uid === subjectId ? [{ name: "Ăn trưa", amount: 1000000 }] : []),
-        ],
+        [A.companyId, uid, base, "[]"],
       );
     }
+    // S15-PAYROLL-BE-3 (plan §3.8): phụ cấp đi qua item `PHU_CAP` của mẫu — mã mirror `PC_nnn` của `allowances` nằm
+    // NGOÀI mẫu ⇒ 422 018 `profile-item-unknown-component`.
+    await setProfileItem(direct, A.companyId, subjectId, "PHU_CAP", "1000000.00");
 
     // 18 ngày công + 2 ngày nghỉ KHÔNG lương cho MỖI tháng fixture (day-row thập phân 1.00/ngày —
     // nguồn chốt của S13-PAYROLL-BE-1B; `count(distinct ngày)` làm tròn LÊN và che mất nửa buổi).
@@ -396,7 +403,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
   // A. Máy tính lương (007) — đối soát TỪNG ĐỒNG
   // ═════════════════════════════════════════════════════════════════════════════════════════════
 
-  it("A1 — `calculate` khớp TỪNG ĐỒNG theo O1 (tử số = present + unpaid), KHÔNG trừ hai lần", async () => {
+  it("A1 — `calculate` v2 khớp TỪNG ĐỒNG bảng tay (tử số = present + unpaid; nghỉ không lương là thu nhập ÂM ⇒ TNCN 550.000)", async () => {
     const id = await newPeriodCollecting(MONTH);
     const calc = await post(tOfficer, `/payroll-periods/${id}/calculate`);
     expect(calc.status, JSON.stringify(calc.body)).toBe(201);
@@ -418,11 +425,19 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
       allowanceAmount: 1_000_000,
       bonusAmount: 0,
       penaltyAmount: 0,
-      deductionAmount: 2_000_000,
+      deductionAmount: 550_000,
       adjustmentAmount: 0,
-      gross: 21_000_000,
-      net: 19_000_000,
+      gross: 19_000_000,
+      net: 18_450_000,
     });
+    // Snapshot thành phần (O-3 · O-5) — từ `component_values_json` lúc tính, không từ mẫu hiện tại.
+    const value = new Map((line!.components ?? []).map((c) => [c.code, c.value]));
+    expect(value.get("LUONG_CO_BAN")).toBe(20_000_000);
+    expect(value.get("NGHI_KHONG_LUONG")).toBe(-2_000_000);
+    expect(value.get("THU_NHAP_CHIU_THUE")).toBe(8_000_000);
+    expect(value.get("TNCN")).toBe(550_000);
+    expect(line!.templateFingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(line!.grossUpIterations).toBeNull();
   });
 
   it("A2 — nhân sự CÓ hồ sơ lương mà 0 bản ghi công vẫn có dòng (0đ), không biến mất im lặng", async () => {
@@ -522,9 +537,12 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
       `INSERT INTO attendance_periods (company_id, period_month, status) VALUES ($1,$2,'locked') RETURNING id`,
       [B.companyId, MONTH],
     );
+    // S15-PAYROLL-BE-3: cổng mẫu (023) đứng TRƯỚC cổng 009 — B phải có catalog + mẫu thì ca này mới đo đúng 009.
+    const templateB = await seedPayrollCatalog(direct, B.companyId);
     const p = await post(tB, "/payroll-periods").send({
       periodMonth: MONTH,
       attendancePeriodId: ap.rows[0].id as string,
+      templateId: templateB,
     });
     const id = p.body.data.id as string;
     expect((await post(tB, `/payroll-periods/${id}/collect`)).status).toBe(201);
@@ -569,7 +587,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     const id = await newPeriodCollecting(MONTH_ADJUST, await attPeriodOf(MONTH_ADJUST));
     expect((await post(tOfficer, `/payroll-periods/${id}/calculate`)).status).toBe(201);
     const { line } = await lineOf(id, subjectId);
-    expect(line).toMatchObject({ gross: 21_000_000, deductionAmount: 2_000_000, net: 19_000_000 });
+    // v2 — cùng bộ số A1 (evidence): gross 19.000.000 · khấu trừ = TNCN 550.000 · net 18.450.000.
+    expect(line).toMatchObject({ gross: 19_000_000, deductionAmount: 550_000, net: 18_450_000 });
 
     const adj = await patch(tOfficer, `/payroll-periods/${id}/lines/${line!.id}`).send({
       adjustmentAmount: -100_000,
@@ -582,7 +601,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     }
 
     const after = (await lineOf(id, subjectId)).line;
-    expect(after).toMatchObject({ adjustmentAmount: -100_000, net: 18_900_000 });
+    expect(after).toMatchObject({ adjustmentAmount: -100_000, net: 18_350_000 });
     // Thiếu vế tính lại `net` ⇒ `generate-payslips` copy `net` CŨ ⇒ phiếu sai tiền và đẳng thức
     // SUM(items) = gross − deduction + adjustment vỡ.
 
@@ -591,7 +610,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     expect(survived).toMatchObject({
       adjustmentAmount: -100_000,
       adjustmentReason: "truy thu tạm ứng",
-      net: 18_900_000,
+      net: 18_350_000,
     });
 
     // CLAMP: điều chỉnh âm lớn hơn cả `gross − deduction` ⇒ `net = 0`, KHÔNG âm.
@@ -650,8 +669,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
       const r = await direct.query(
         `INSERT INTO bonus_penalties (company_id, user_id, kind, amount, period_month, reason, status,
             decided_by, decided_at, created_by, deleted_at)
-         VALUES ($1,$2,'bonus',$3,$4,'fixture','Approved',$5,now(),$5,$6) RETURNING id`,
-        [A.companyId, subjectId, amount, month, adminId, deleted ? new Date() : null],
+         VALUES ($1,$2,'bonus',$3,$4,'fixture','Approved',$5,now(),$6,$7) RETURNING id`,
+        // S15-PAYROLL-BE-3 (mig 0575 `bonus_penalties_four_eyes_check`): người tạo ≠ người duyệt.
+        [A.companyId, subjectId, amount, month, adminId, officerId, deleted ? new Date() : null],
       );
       return r.rows[0].id as string;
     };
@@ -697,8 +717,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     const r = await direct.query(
       `INSERT INTO bonus_penalties (company_id, user_id, kind, amount, period_month, reason, status,
           decided_by, decided_at, created_by)
-       VALUES ($1,$2,'bonus',777000,$3,'fixture','Approved',$4,now(),$4) RETURNING id`,
-      [A.companyId, orphan, month, adminId],
+       VALUES ($1,$2,'bonus',777000,$3,'fixture','Approved',$4,now(),$5) RETURNING id`,
+      // mig 0575 `bonus_penalties_four_eyes_check`: người tạo ≠ người duyệt.
+      [A.companyId, orphan, month, adminId, officerId],
     );
     const ap = await direct.query(
       `SELECT id FROM attendance_periods WHERE company_id=$1 AND period_month=$2`,
@@ -932,16 +953,36 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     const detail = await get(tOfficer, `/payslips/${mine.id}`);
     expect(detail.status).toBe(200);
     expect(detail.body.data.status).toBe("Published");
-    expect(detail.body.data.net).toBe(18_900_000);
+    expect(detail.body.data.net).toBe(18_350_000);
     const sum = (detail.body.data.items as Array<{ amount: number }>).reduce(
       (a, i) => a + i.amount,
       0,
     );
-    expect(sum).toBe(18_900_000);
-    const types = (detail.body.data.items as Array<{ itemType: string }>).map((i) => i.itemType);
-    // `penalty` là THÀNH PHẦN CON của `deduction_amount`: sinh cả 40 lẫn một `deduction` bằng cả
-    // `deduction_amount` là đếm hai lần. Ở đây chỉ có vế nghỉ-không-lương ⇒ đúng một dòng `attendance`.
-    expect(types).toEqual(["earning", "allowance", "attendance", "adjustment"]);
+    expect(sum).toBe(18_350_000);
+    // v2 (O-3): item theo THÀNH PHẦN khác 0 góp vào net, theo thứ tự mẫu — LUONG_CO_BAN · PHU_CAP · NGHI_KHONG_LUONG
+    // (earning ÂM) · TNCN — rồi điều chỉnh tay. KHÔNG item cho nút tổng hợp (đếm hai lần).
+    const items = detail.body.data.items as Array<{
+      itemType: string;
+      amount: number;
+      meta: { componentCode?: string } | null;
+    }>;
+    expect(items.map((i) => i.itemType)).toEqual([
+      "earning",
+      "earning",
+      "earning",
+      "deduction",
+      "adjustment",
+    ]);
+    expect(items.map((i) => i.meta?.componentCode ?? null)).toEqual([
+      "LUONG_CO_BAN",
+      "PHU_CAP",
+      "NGHI_KHONG_LUONG",
+      "TNCN",
+      null,
+    ]);
+    expect(items.map((i) => i.amount)).toEqual([
+      20_000_000, 1_000_000, -2_000_000, -550_000, -100_000,
+    ]);
 
     // 031/032 — «của tôi»: thấy phiếu của mình sau khi kỳ đã phát hành.
     const meList = await get(tEmployee, "/me/payslips");

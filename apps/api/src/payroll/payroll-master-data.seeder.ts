@@ -191,9 +191,13 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
   {
     code: "NGHI_KHONG_LUONG",
     name: "Nghỉ không lương",
-    kind: "deduction",
+    // 🔁 v4 (S15-PAYROLL-BE-3, owner O-5 15/09): `earning` công thức ÂM thay `deduction` dương. LUONG_CO_BAN cộng
+    // SYS_UNPAID_LEAVE_DAYS vào tử số; để khoản trừ lại là `deduction` thì THU_NHAP_CHIU_THUE (không trừ deduction)
+    // tính TNCN trên tiền NV không nhận (ca A1: 750.000 thay vì 550.000). ROUND_HALF_UP đối xứng quanh 0 ⇒
+    // |v4| = v3 từng xu. Hàng đã seed vá ở mig 0575.
+    kind: "earning",
     valueType: "formula",
-    formula: "SYS_BASE_SALARY * SYS_PAY_RATIO / 100 * SYS_UNPAID_LEAVE_DAYS / SYS_WORK_DAYS",
+    formula: "-(SYS_BASE_SALARY * SYS_PAY_RATIO / 100 * SYS_UNPAID_LEAVE_DAYS / SYS_WORK_DAYS)",
     pitDeductible: false,
     sortOrder: 50,
     visibleInDefaultTemplate: true,
@@ -374,11 +378,27 @@ export const PAYROLL_SYSTEM_COMPONENT_CODES: readonly string[] = SYSTEM_COMPONEN
 /** Hằng catalog hệ thống — xuất cho ca đối chứng engine ↔ số học chính xác (s15-payroll-db1b F2); spec KHÔNG chép lại. */
 export const PAYROLL_SYSTEM_COMPONENTS: readonly ComponentSeed[] = SYSTEM_COMPONENTS;
 
+/**
+ * S15-PAYROLL-BE-3 (plan §0b B1) — BỐN thành phần hệ thống MANG ĐẦU VÀO đã bị gắn/đánh dấu ở máy tính lương. Mẫu gắn
+ * vào kỳ PHẢI chứa đủ (sống, active, KHÔNG ghi đè công thức): thiếu `TAM_UNG` ⇒ tạm ứng `Deducted` mà không trừ; thiếu
+ * `THUONG` ⇒ thưởng consume mà không trả; thiếu `NGHI_KHONG_LUONG` ⇒ nghỉ không lương vẫn được trả (LUONG_CO_BAN đã
+ * cộng unpaid vào tử số). Một nguồn cho cổng gắn mẫu (002/004) lẫn cổng tính (007).
+ */
+export const PAYROLL_TEMPLATE_REQUIRED_INPUT_CODES = [
+  "THUONG",
+  "PHAT",
+  "TAM_UNG",
+  "NGHI_KHONG_LUONG",
+] as const;
+
 /** Giá trị chèn cho MỌI hàng hệ thống — một nguồn cho INSERT (seedComponents) lẫn assert (7). */
 const SYSTEM_ROW_DEFAULTS = { fixedAmount: null, isActive: true } as const;
 
-/** Hằng đi vào assert toàn vẹn (payroll-master-data.integrity.ts) — hàm đó KHÔNG import seeder. */
-const SEED_EXPECTATIONS: PayrollSeedExpectations = {
+/**
+ * Hằng đi vào assert toàn vẹn (payroll-master-data.integrity.ts) — hàm đó KHÔNG import seeder. Xuất cho cổng drift
+ * CỨNG lúc tính (plan §4.8): assert (7) ở seeder chỉ là log vì runner nuốt throw.
+ */
+export const PAYROLL_SEED_EXPECTATIONS: PayrollSeedExpectations = {
   components: SYSTEM_COMPONENTS,
   rowDefaults: SYSTEM_ROW_DEFAULTS,
   engineCodes: PAYROLL_ENGINE_COMPONENT_CODES,
@@ -427,6 +447,9 @@ const STATUTORY_RATE_SEED = {
   note: "owner xác nhận 02/09/2026 (PAY-DEC-014)",
 } as const;
 
+/** Xuất cho unit spec máy tính dòng lương (`formula.line.spec.ts`) — spec KHÔNG chép lại số seed. */
+export const PAYROLL_STATUTORY_RATE_SEED = STATUTORY_RATE_SEED;
+
 @Injectable()
 export class PayrollMasterDataSeeder implements ModuleMasterDataSeeder {
   readonly seedKey = "payroll.master-data";
@@ -434,7 +457,8 @@ export class PayrollMasterDataSeeder implements ModuleMasterDataSeeder {
   // v2 (S15-PAYROLL-BE-2): + THUONG · PHAT · TAM_UNG. Runner gọi seed() MỖI lần boot bất kể version — bump là
   // để batch/track ghi đúng lượt đổi nội dung, KHÔNG phải cơ chế khiến công ty cũ nhận hàng mới.
   // v3 (S15-PAYROLL-DB-1B): LUONG_CO_BAN tử số present + unpaid, kẹp trần — hàng đã seed vá bằng mig 0574.
-  readonly seedVersion = "v3";
+  // v4 (S15-PAYROLL-BE-3): NGHI_KHONG_LUONG thành `earning` công thức ÂM — hàng đã seed vá bằng mig 0575.
+  readonly seedVersion = "v4";
 
   async seed(ctx: MasterDataSeedContext): Promise<void> {
     // CÙNG khoá với route ghi catalog/mẫu (045 · 047 · 050 · 052 · 053) — seeder chạy mỗi lần boot và không
@@ -443,7 +467,7 @@ export class PayrollMasterDataSeeder implements ModuleMasterDataSeeder {
     const insertedCodes = await this.seedComponents(ctx);
     await this.seedStatutoryRate(ctx);
     await this.seedDefaultTemplate(ctx, insertedCodes);
-    await assertPayrollSeedIntegrity(ctx.tx, ctx.companyId, SEED_EXPECTATIONS);
+    await assertPayrollSeedIntegrity(ctx.tx, ctx.companyId, PAYROLL_SEED_EXPECTATIONS);
   }
 
   /** Catalog thành phần hệ thống (DB-13 §13.4). */

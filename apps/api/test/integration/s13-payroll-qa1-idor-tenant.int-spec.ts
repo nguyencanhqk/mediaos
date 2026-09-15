@@ -53,6 +53,7 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
+import { seedPayrollCatalog } from "../helpers/payroll-v2-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1idor");
@@ -264,9 +265,12 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · IDOR phiếu lương + cô lậ
        VALUES ($1, $2, 'locked') RETURNING id`,
       [tenant.companyId, month],
     );
+    // S15-PAYROLL-BE-3 (O-1): kỳ gắn mẫu của CHÍNH tenant (mỗi tenant gọi hàm này đúng một lần).
+    const templateId = await seedPayrollCatalog(direct, tenant.companyId);
     const p = await post(token, "/payroll-periods").send({
       periodMonth: month,
       attendancePeriodId: ap.rows[0].id,
+      templateId,
     });
     expect(p.status, JSON.stringify(p.body)).toBe(201);
     const periodId = p.body.data.id as string;

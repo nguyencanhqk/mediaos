@@ -6,6 +6,7 @@ import { BonusPenaltiesService } from "./bonus-penalties.service";
 import { PayrollAccessService } from "./payroll-access.service";
 import { PayrollApprovalService } from "./payroll-approval.service";
 import { PayrollApproverReader } from "./payroll-approver.reader";
+import { PayrollCalcInputsRepository } from "./payroll-calc-inputs.repository";
 import { PayrollCalcRepository } from "./payroll-calc.repository";
 import { PayrollCalcService } from "./payroll-calc.service";
 import { PayrollExportService } from "./payroll-export.service";
@@ -106,6 +107,7 @@ import { SalaryProfilesService } from "./salary-profiles.service";
     // ── S13-PAYROLL-BE-2 ──
     PayrollApproverReader,
     PayrollCalcRepository,
+    PayrollCalcInputsRepository,
     PayrollPayslipsRepository,
     PayrollCalcService,
     PayrollApprovalService,

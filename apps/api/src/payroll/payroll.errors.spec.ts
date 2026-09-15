@@ -194,6 +194,30 @@ describe("S13-PAYROLL-BE-2 · mapPayrollPgError — 6 nhánh mới (§8b)", () =
     expect(kindOf(e)).toBe("four-eyes");
   });
 
+  it("S15-PAYROLL-BE-3 — `bonus_penalties_four_eyes_check` (mig 0575) ⇒ 409 PAYROLL-ERR-012 `self-approval`, KHÔNG 500", () => {
+    // 027 tiền-kiểm `created_by <> actor`; CHECK là lưới cuối cho RACE / đường ghi nội bộ — cùng mã + kind với service.
+    const e = mapPayrollPgError(
+      wrapped({ code: "23514", constraint: "bonus_penalties_four_eyes_check" }),
+    );
+    expect(codeOf(e)).toBe(PAYROLL_ERR_CODE.BONUS_SELF_APPROVAL);
+    expect(kindOf(e)).toBe("self-approval");
+  });
+
+  it("S15-PAYROLL-BE-3 — formulaErrorToHttp: 021 `grossup-not-converged` mang `iterations` + `reason` + `userId`, KHÔNG sai số tiền", () => {
+    const e = formulaErrorToHttp(
+      new FormulaError("grossup-not-converged", "không hội tụ", { iterations: 30, reason: "not-converged" }),
+      { userId: "u-1" },
+    );
+    const body = e.getResponse() as { code: string; details: Array<{ field: string; message: string }> };
+    expect(body.code).toBe("PAYROLL-ERR-021");
+    expect(body.details).toEqual([
+      { field: "kind", message: "grossup-not-converged", rule: "payroll" },
+      { field: "userId", message: "u-1", rule: "payroll" },
+      { field: "reason", message: "not-converged", rule: "payroll" },
+      { field: "iterations", message: "30", rule: "payroll" },
+    ]);
+  });
+
   it.each([
     "payroll_periods_approved_pair_check",
     "payroll_periods_published_pair_check",

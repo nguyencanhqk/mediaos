@@ -46,6 +46,7 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
+import { seedPayrollCatalog } from "../helpers/payroll-v2-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = "Passw0rd!payrollnoti";
@@ -112,6 +113,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 NOTI 020–023 + audit lượt đ�
   let adminId = "";
   let subjectId = "";
   let attendancePeriodId = "";
+  /** S15-PAYROLL-BE-3 (O-1) — `MAU_MAC_DINH` của công ty; kỳ không gắn mẫu ⇒ `calculate` 409 023. */
+  let templateId = "";
 
   const http = () => request(app.getHttpServer());
   const auth = (t: string) => (r: request.Test) => r.set("Authorization", `Bearer ${t}`);
@@ -177,6 +180,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 NOTI 020–023 + audit lượt đ�
     const p = await post(tOfficer, "/payroll-periods").send({
       periodMonth,
       attendancePeriodId,
+      templateId,
     });
     expect(p.status, JSON.stringify(p.body)).toBe(201);
     const id = p.body.data.id as string;
@@ -197,6 +201,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 NOTI 020–023 + audit lượt đ�
     const hash = await new PasswordService().hash(LOGIN_PW);
     A = await seedCompany(direct, "paynoti");
     companyIds.push(A.companyId);
+    templateId = await seedPayrollCatalog(direct, A.companyId);
     await direct.query(`UPDATE companies SET working_days_json = $2::jsonb WHERE id = $1`, [
       A.companyId,
       JSON.stringify({ days: [1, 2, 3, 4, 5] }),

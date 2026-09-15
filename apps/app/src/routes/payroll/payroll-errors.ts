@@ -60,11 +60,18 @@ export const PAYROLL_ERROR_KINDS = [
   "rate-effective-date-exists",
   "rate-in-use",
   "self-approval",
+  "statutory-rate-missing",
+  "system-component-drift",
   "system-component-immutable",
   "template-code-exists",
   "template-component-duplicate",
   "template-component-unknown",
+  "template-inactive",
+  "template-input-missing",
+  "template-locked",
+  "template-missing",
   "template-scope-pair",
+  "template-scope-unsupported",
   "template-too-many-components",
   "trail-pair-violation",
 ] as const;
@@ -115,11 +122,18 @@ const KIND_TO_I18N_KEY: Readonly<Record<PayrollErrorKind, string>> = {
   "rate-effective-date-exists": "errors.rateEffectiveDateExists",
   "rate-in-use": "errors.rateInUse",
   "self-approval": "errors.selfApproval",
+  "statutory-rate-missing": "errors.statutoryRateMissing",
+  "system-component-drift": "errors.systemComponentDrift",
   "system-component-immutable": "errors.systemComponentImmutable",
   "template-code-exists": "errors.templateCodeExists",
   "template-component-duplicate": "errors.templateComponentDuplicate",
   "template-component-unknown": "errors.templateComponentUnknown",
+  "template-inactive": "errors.templateInactive",
+  "template-input-missing": "errors.templateInputMissing",
+  "template-locked": "errors.templateLocked",
+  "template-missing": "errors.templateMissing",
   "template-scope-pair": "errors.templateScopePair",
+  "template-scope-unsupported": "errors.templateScopeUnsupported",
   "template-too-many-components": "errors.templateTooManyComponents",
   "trail-pair-violation": "errors.trailPairViolation",
 };
@@ -171,6 +185,8 @@ const STATE_CONFLICT_KINDS: ReadonlySet<string> = new Set<PayrollErrorKind>([
   "self-approval",
   "bonus-frozen-race",
   "trail-pair-violation",
+  // S15-PAYROLL-BE-3 — kỳ vừa rời CollectingData ở nơi khác ⇒ tải lại để thấy trạng thái mới.
+  "template-locked",
 ]);
 
 export function isPayrollStateConflict(info: PayrollErrorInfo): boolean {

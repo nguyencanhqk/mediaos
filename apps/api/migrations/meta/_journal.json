@@ -1695,6 +1695,13 @@
       "when": 1717587363000,
       "tag": "0574_s15payrolldb1b_seed_formula_bp_period_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 242,
+      "version": "7",
+      "when": 1717587364000,
+      "tag": "0575_s15payrollbe3_nghi_earning_bp_four_eyes",
+      "breakpoints": true
     }
   ]
 }

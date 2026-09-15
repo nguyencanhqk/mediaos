@@ -353,6 +353,17 @@ export default {
       "Mẫu chứa thành phần không còn trong danh mục (đã ngưng dùng hoặc xoá) — cập nhật lại danh sách thành phần của mẫu.",
     templateScopePair: "Phạm vi theo đơn vị cần chọn đơn vị; phạm vi toàn công ty thì bỏ đơn vị.",
     templateTooManyComponents: "Mẫu vượt quá 120 thành phần — bớt thành phần.",
+    // S15-PAYROLL-BE-3 — máy tính lương v2
+    templateMissing: "Kỳ lương chưa gắn mẫu bảng lương (hoặc mẫu đã bị xoá) — chọn mẫu cho kỳ trước khi tính.",
+    templateInactive: "Mẫu bảng lương của kỳ đang ngưng dùng — bật lại mẫu hoặc chọn mẫu khác.",
+    templateLocked: "Kỳ lương đã tính — chỉ đổi được mẫu khi kỳ còn ở Nháp hoặc Thu thập dữ liệu.",
+    templateScopeUnsupported: "Mẫu theo đơn vị chưa gắn được vào kỳ lương — chọn mẫu toàn công ty.",
+    templateInputMissing:
+      "Mẫu thiếu thành phần hệ thống bắt buộc (thưởng, phạt, tạm ứng, nghỉ không lương) hoặc đang ghi đè công thức của chúng.",
+    systemComponentDrift:
+      "Thành phần lương hệ thống bị sửa lệch cách tính chuẩn — liên hệ quản trị hệ thống trước khi tính lương.",
+    statutoryRateMissing:
+      "Chưa có bản tỉ lệ luật định hiệu lực tại ngày cuối kỳ — tạo bản tỉ lệ ở Thiết lập lương trước.",
     generic: "Có lỗi xảy ra, vui lòng thử lại.",
   },
 };

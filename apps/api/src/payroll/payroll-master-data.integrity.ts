@@ -35,7 +35,7 @@ export interface PayrollSeedExpectations {
   readonly defaultTemplateCode: string;
 }
 
-type SystemRow = {
+export type SystemRow = {
   code: string;
   kind: string;
   valueType: string;
@@ -198,12 +198,40 @@ function assertSystemRowContent(
   expected: PayrollSeedExpectations,
   companyId: string,
 ): void {
+  const drift = systemRowDrift(rows, expected).map(
+    (d) => `${d.code}.${d.field}: DB=${JSON.stringify(d.got)} hằng=${JSON.stringify(d.want)}`,
+  );
+  if (drift.length > 0) {
+    throw new Error(
+      `${TAG} nội dung hàng hệ thống LỆCH hằng seeder (company=${companyId}) — ${drift.join(" · ")}`,
+    );
+  }
+}
+
+/** Một trường lệch của một hàng hệ thống. `got`/`want` có thể là CHUỖI CÔNG THỨC — chỉ vào log, không vào HTTP. */
+export interface SystemRowDriftItem {
+  readonly code: string;
+  readonly field: "kind" | "value_type" | "formula" | "pit_deductible" | "fixed_amount" | "is_active";
+  readonly got: unknown;
+  readonly want: unknown;
+}
+
+/**
+ * S15-PAYROLL-BE-3 (plan §4.8) — lõi THUẦN của assert (7), KHÔNG ném: dùng chung cho seeder (ném ⇒ log vì runner nuốt)
+ * và cổng CỨNG lúc tính (`calculate` ⇒ 422 018 `system-component-drift`). Chỉ so hàng có mã thuộc hằng — người gọi
+ * lọc `is_system` trước. KHÔNG so cột người dùng sửa được (`name`, `sort_order`), KHÔNG so `formula_override` của mẫu
+ * (tuỳ biến hợp lệ).
+ */
+export function systemRowDrift(
+  rows: readonly SystemRow[],
+  expected: PayrollSeedExpectations,
+): SystemRowDriftItem[] {
   const byCode = new Map(expected.components.map((c) => [c.code, c]));
-  const drift: string[] = [];
+  const out: SystemRowDriftItem[] = [];
   for (const row of rows) {
     const e = byCode.get(row.code);
     if (!e) continue;
-    const pairs: Array<[string, unknown, unknown]> = [
+    const pairs: Array<[SystemRowDriftItem["field"], unknown, unknown]> = [
       ["kind", row.kind, e.kind],
       ["value_type", row.valueType, e.valueType],
       ["formula", row.formula, e.formula],
@@ -212,15 +240,10 @@ function assertSystemRowContent(
       ["is_active", row.isActive, expected.rowDefaults.isActive],
     ];
     for (const [field, got, want] of pairs) {
-      if (got !== want)
-        drift.push(`${row.code}.${field}: DB=${JSON.stringify(got)} hằng=${JSON.stringify(want)}`);
+      if (got !== want) out.push({ code: row.code, field, got, want });
     }
   }
-  if (drift.length > 0) {
-    throw new Error(
-      `${TAG} nội dung hàng hệ thống LỆCH hằng seeder (company=${companyId}) — ${drift.join(" · ")}`,
-    );
-  }
+  return out;
 }
 
 /** So hai tập mã, báo THIẾU/THỪA đích danh (thông điệp đếm-số không chỉ ra được hàng nào sai). */
