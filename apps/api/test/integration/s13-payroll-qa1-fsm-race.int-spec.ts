@@ -64,6 +64,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1fsm");
@@ -247,9 +248,10 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×8 ở tầng HTTP + đua
 
     // Người ĂN LƯƠNG (khác cả hai actor) — có hồ sơ lương ⇒ `calculate` sinh được dòng thật.
     const subjectId = await seedUser(direct, A.companyId, `subject@${A.slug}.test`, "x");
-    await direct.query(
+    await writeSalaryProfileWithItems(
+      direct,
       `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances)
-       VALUES ($1, $2, '2026-01-01', '12000000.00', '[]'::jsonb)`,
+       VALUES ($1, $2, '2026-01-01', '12000000.00', '[]'::jsonb) RETURNING id`,
       [A.companyId, subjectId],
     );
 

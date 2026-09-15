@@ -709,6 +709,8 @@ Ghi chú bắt buộc:
 > - **018** `formula-arity` (sai số tham số / `ROUND` tham số thứ hai không phải literal nguyên −6..6) · `template-missing-engine-nodes` (mẫu thiếu 4 nút tổng hợp — **fail-closed**, không bao giờ tính ra 0) · `formula-override-not-allowed` (ghi đè công thức trên thành phần `engine`/`profile_item`) · `template-too-many-components` (> 120) · `template-component-unknown` · `template-component-duplicate` · `component-value-pair` (loại giá trị không khớp trường, kiểm trên hàng SAU merge) · `template-scope-pair`.
 > - **023** `template-code-exists` (trùng mã mẫu — chốt cuối UNIQUE). *(`template-in-use` — xoá/ngưng mẫu đang gắn kỳ — thêm ở BE-4 khi có `payroll_periods.template_id`.)*
 > - Ba CHECK ở DB map **409/422 theo TÊN** thay vì để rơi 500: `salary_components_code_shape_check` ⇒ 024 `component-code-reserved` · `salary_components_value_pair_check`/`engine_kind_check` ⇒ 018 `component-value-pair` · `payroll_templates_scope_pair_check` ⇒ 018 `template-scope-pair`. Trigger `salary_component_system_freeze` (23514 KHÔNG tên) ⇒ 024 `system-component-immutable`, phân biệt với trigger thưởng/phạt bằng tiền tố message.
+>
+> 🔁 **013 — chốt RACE ở DB mở rộng (`S15-PAYROLL-DB-1B`, mig `0574`)**: trigger `bonus_penalty_freeze_guard` (23514 KHÔNG tên) nay mang message `bonus_penalty_freeze_guard:<tag>: …`, tag **ĐÓNG** `frozen` · `rebind` · `status-terminal` · **`period-frozen`** (nhả/gắn consume — kể cả INSERT hàng đã consume — khi kỳ ∉ {`CollectingData`, `Calculated`}) · **`not-found`** (kỳ không thuộc công ty của khoản, hoặc GẮN vào kỳ đã xoá mềm). Map theo **TIỀN TỐ** ⇒ 409 **013** `bonus-frozen-race` — service tiền-kiểm dưới `FOR UPDATE` trước, trigger chỉ bắt race; **KHÔNG** tách mã theo tag.
 
 **Bốn quy tắc bổ sung của v2:**
 
@@ -932,6 +934,8 @@ dailyRate    = 22.000.000 / 22               =  1.000.000
 unpaidDeduct = round(2 × 1.000.000, 2)       =  2.000.000
 → phần base đóng góp vào net                  = 18.000.000
 ```
+
+**Hiện thực ở máy công thức v2 (`S15-PAYROLL-DB-1B`, mig `0574`):** công thức seed `LUONG_CO_BAN = MIN(SYS_BASE_SALARY * (SYS_PRESENT_DAYS + SYS_UNPAID_LEAVE_DAYS) / SYS_WORK_DAYS, SYS_BASE_SALARY) * SYS_PAY_RATIO / 100` — tử số CỘNG `unpaid`, kẹp trần bằng `MIN(…, base)`; `NGHI_KHONG_LUONG` giữ nguyên. ⚠️ **v2 có thể lệch v1 đúng 0,01 đ ở ca HOÀ nửa xu, theo hướng ĐÚNG**: v1 (SQL) chia `(present + unpaid) / work` TRƯỚC, cắt còn ~20 chữ số rồi mới nhân ⇒ ở biên `.xx5` làm tròn XUỐNG; v2 nhân tử số trước rồi chia MỘT lần ⇒ khớp số học chính xác 100% (51.584 ca đo, plan `S15-PAYROLL-DB-1B` §5.2.a). Đối soát v2 bằng số học chính xác, **KHÔNG** bằng v1.
 
 ⚠️ Phương án này **chỉ đúng khi ba đại lượng ngày mang ngữ nghĩa thập phân nửa ngày** (đã chốt ở khối trên): với ngữ nghĩa nguyên-ngày, một ngày nửa-làm/nửa-nghỉ-không-lương cho `present = 1` **và** `unpaid = 1` ⇒ tử số vượt mẫu số (trần `LEAST(…,1)` che mất, số vẫn sai).
 

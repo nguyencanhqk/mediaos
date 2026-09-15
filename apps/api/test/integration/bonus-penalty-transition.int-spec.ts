@@ -53,8 +53,9 @@ describe.skipIf(!hasDb)("PAYROLL bonus/penalty freeze guard + CHECK (DB enforcem
   }
 
   /**
-   * Seed 1 hàng qua direct. Trigger là BEFORE **UPDATE** nên INSERT không bị nó chạm — đó là cách duy nhất
-   * dựng được hàng ở trạng thái đã-duyệt/đã-consume để thử các nhánh đóng băng.
+   * Seed 1 hàng qua direct — cách duy nhất dựng được hàng ở trạng thái đã-duyệt/đã-consume để thử các nhánh đóng băng.
+   * Từ mig 0574 trigger bắn cả INSERT nhưng CHỈ xét vế B2 (có `payroll_period_id` ⇒ kỳ sống ∈ {CollectingData,
+   * Calculated}); INSERT thẳng `Approved`/`Rejected` vẫn đi qua (plan S15-PAYROLL-DB-1B §3.6).
    */
   async function seedBonus(opts: {
     status?: "Pending" | "Approved" | "Rejected";
@@ -88,15 +89,18 @@ describe.skipIf(!hasDb)("PAYROLL bonus/penalty freeze guard + CHECK (DB enforcem
     A = await seedCompany(direct, "bptrans");
     emp = await seedUser(direct, A.companyId, `bpt-emp-${randomUUID().slice(0, 8)}@a.test`);
     approver = await seedUser(direct, A.companyId, `bpt-apr-${randomUUID().slice(0, 8)}@a.test`);
+    // S15-PAYROLL-DB-1B (mig 0574, nhánh (F)): gắn/nhả consume CHỈ hợp lệ khi kỳ ∈ {CollectingData, Calculated}.
+    // Kỳ `Draft` sẽ làm mọi ca dựng hàng đã-consume ăn `period-frozen` — kể cả hai ca CHECK cuối file (BEFORE INSERT
+    // bắn TRƯỚC CHECK ⇒ ca xanh vì lý do SAI). Kỳ `CollectingData` không có CHECK cặp vết nào đòi thêm.
     const p1 = await direct.query(
       `INSERT INTO payroll_periods (company_id, period_month, status)
-       VALUES ($1, '2026-05', 'Draft') RETURNING id`,
+       VALUES ($1, '2026-05', 'CollectingData') RETURNING id`,
       [A.companyId],
     );
     periodId = p1.rows[0].id as string;
     const p2 = await direct.query(
       `INSERT INTO payroll_periods (company_id, period_month, status)
-       VALUES ($1, '2026-06', 'Draft') RETURNING id`,
+       VALUES ($1, '2026-06', 'CollectingData') RETURNING id`,
       [A.companyId],
     );
     period2Id = p2.rows[0].id as string;

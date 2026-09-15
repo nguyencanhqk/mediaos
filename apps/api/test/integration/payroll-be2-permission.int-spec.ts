@@ -34,6 +34,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = "Passw0rd!payrollperm";
@@ -292,9 +293,10 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 ma trận quyền 17 route", () =>
 
     // ── Dữ liệu để mọi route có id THẬT (403 phải đến từ QUYỀN, không phải 404/400) ──
     const subject = await seedUser(direct, A.companyId, `subj@${A.slug}.test`, "x");
-    await direct.query(
+    await writeSalaryProfileWithItems(
+      direct,
       `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances)
-       VALUES ($1,$2,'2028-01-01','10000000.00','[]'::jsonb)`,
+       VALUES ($1,$2,'2028-01-01','10000000.00','[]'::jsonb) RETURNING id`,
       [A.companyId, subject],
     );
     const ap = await direct.query(

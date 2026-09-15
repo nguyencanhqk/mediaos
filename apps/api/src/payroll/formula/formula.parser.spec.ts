@@ -35,14 +35,16 @@ describe("S15-PAYROLL-BE-2 · parser công thức", () => {
     });
 
     it("công thức seed thật parse được và thu đúng REF theo thứ tự xuất hiện, không trùng", () => {
+      // S15-PAYROLL-DB-1B — công thức seed v3 (tử số present + unpaid, kẹp trần). `MIN` là FUNC, không phải REF.
       const p = parseFormula(
-        "SYS_BASE_SALARY * SYS_PAY_RATIO / 100 * SYS_PRESENT_DAYS / SYS_WORK_DAYS",
+        "MIN(SYS_BASE_SALARY * (SYS_PRESENT_DAYS + SYS_UNPAID_LEAVE_DAYS) / SYS_WORK_DAYS, SYS_BASE_SALARY) * SYS_PAY_RATIO / 100",
       );
       expect(p.refs).toEqual([
         "SYS_BASE_SALARY",
-        "SYS_PAY_RATIO",
         "SYS_PRESENT_DAYS",
+        "SYS_UNPAID_LEAVE_DAYS",
         "SYS_WORK_DAYS",
+        "SYS_PAY_RATIO",
       ]);
       expect(parseFormula("B + A + B").refs).toEqual(["B", "A"]);
       expect(parseFormula("TNCN_LUY_TIEN(THU_NHAP_CHIU_THUE)").refs).toEqual([

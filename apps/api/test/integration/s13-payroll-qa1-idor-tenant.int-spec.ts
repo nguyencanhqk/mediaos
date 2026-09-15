@@ -52,6 +52,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1idor");
@@ -251,9 +252,10 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · IDOR phiếu lương + cô lậ
     approverB: string,
   ): Promise<TenantRefs> {
     for (const s of subjects) {
-      await direct.query(
+      await writeSalaryProfileWithItems(
+        direct,
         `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances)
-         VALUES ($1, $2, '2026-01-01', '9000000.00', '[]'::jsonb)`,
+         VALUES ($1, $2, '2026-01-01', '9000000.00', '[]'::jsonb) RETURNING id`,
         [tenant.companyId, s],
       );
     }
@@ -349,12 +351,13 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · IDOR phiếu lương + cô lậ
     }
     // Hồ sơ lương XOÁ MỀM của A — nguồn 404 thứ ba cho mục B.
     {
-      const r = await direct.query<{ id: string }>(
+      const [id] = await writeSalaryProfileWithItems(
+        direct,
         `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances, deleted_at)
          VALUES ($1, $2, '2027-01-01', '1000000.00', '[]'::jsonb, now()) RETURNING id`,
         [A.companyId, empY],
       );
-      softDeletedProfileId = r.rows[0].id;
+      softDeletedProfileId = id;
     }
 
     // ── Tenant B: bộ id đầy đủ để A bắn sang ──────────────────────────────────────────────────
