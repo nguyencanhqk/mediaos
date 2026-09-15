@@ -16220,7 +16220,7 @@ export const backlog = [
     title:
       "BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four-eyes, tự thành khoản khấu trừ ở kỳ chỉ định; «Tạm ứng của tôi» Own) · đợt chi trả (lập từ kỳ Published · bank/cash · tệp UNC XLSX theo mẫu · hoàn tất ⇒ kỳ Paid) · ngân sách lương năm/đơn vị · import Excel thu nhập/khấu trừ khác theo kỳ (khuôn HR import) · outbox NOTI 024+",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/payroll/**",
       "apps/api/src/notifications/**",
@@ -16228,6 +16228,13 @@ export const backlog = [
       "apps/api/test/**",
       "packages/contracts/src/payroll*.ts",
       "docs/API Design/**",
+      "apps/api/package.json",
+      "apps/app/src/routes/payroll/**",
+      "apps/app/src/i18n/**",
+      "docs/SPEC/**",
+      "docs/DB/**",
+      "docs/_review/**",
+      "packages/contracts/src/index.ts",
       "docs/plans/S15-PAYROLL-BE-4.md",
       "harness/backlog.mjs",
     ],
@@ -16240,8 +16247,8 @@ export const backlog = [
     ],
     done_when: [
       "Tạm ứng: tạo (officer hoặc NV tự đề nghị — chốt trong plan) · duyệt/từ chối khác người tạo (mã lỗi tự duyệt) · Approved chưa Deducted được máy tính lương gộp thành khoản khấu trừ kỳ chỉ định (bind consume như bonus_penalties, nhả khi tính lại) · 🔁 Deducted NGAY LÚC BIND trong calculate (CHECK payroll_advances_consume_status_check ép payroll_period_id NOT NULL ⇒ status='Deducted'; nhả ⇒ Approved + NULL cả cặp) — S15-PAYROLL-BE-3 ĐÃ làm release/pick/bind (plan BE-3 §3.5 · §4.9), BE-4 KHÔNG viết lại; route ghi tạm ứng (060/062/063/064) PHẢI map TAG trigger payroll_advance_freeze_guard cùng commit; 🔒 052 kiểm template-in-use (xoá/ngưng mẫu đang gắn kỳ) dưới khoá catalog ĐỘC QUYỀN chỉ ĐỌC payroll_periods — KHÔNG FOR SHARE/UPDATE hàng kỳ (quy ước payroll-catalog.lock.ts: advisory TRƯỚC, khoá hàng SAU; calculate/004 lấy shared TRƯỚC khoá kỳ — plan BE-3 §0b M1); Own route GET /me/payroll-advances fail-closed rỗng",
-      "Đợt chi trả: chỉ từ kỳ Published; lines = payslip net theo phương thức; xuất tệp UNC XLSX (mẫu cột: STT · tên · số TK · ngân hàng · số tiền · nội dung) gác manage:payment-batch + audit; đánh dấu hoàn tất ⇒ kỳ Published→Paid dưới row-lock + RESET vết; tổng lines = tổng net kỳ (assert)",
-      "Ngân sách: CRUD năm/đơn vị + route thực hiện (tổng gross các kỳ Paid/Published trong năm theo đơn vị) — sàn scope Company, gác view-line",
+      "Đợt chi trả: chỉ từ kỳ Published; lines = payslip net theo phương thức; xuất tệp UNC XLSX (mẫu cột: STT · mã NV · tên · số TK · ngân hàng · số tiền · nội dung) gác BA cặp manage:payment-batch + export:payroll + view-payslip:payslip (SPEC-11 §15.1 hàng 071) + audit; đánh dấu hoàn tất ⇒ kỳ Published→Paid dưới row-lock + RESET vết; tổng lines = tổng net kỳ (assert)",
+      "Ngân sách: CRUD năm/đơn vị + route thực hiện (tổng gross các kỳ Paid/Published trong năm theo đơn vị) — sàn scope Company, gác view:payroll-budget (SPEC-11 §15.1 hàng 073; thực hiện = Σ gross phiếu kỳ Published+ theo org_unit hiện tại — plan D-4)",
       "Import Excel thu nhập/khấu trừ khác: validate từng dòng (mã NV · thành phần · số tiền · kỳ), báo lỗi theo dòng, tạo bonus_penalties/khoản theo thành phần ở trạng thái Pending (vẫn qua duyệt) — KHÔNG ghi thẳng Approved",
       "Outbox NOTI 024+ dedupeKey content-derived, payload KHÔNG số tiền; đổi nghĩa 'Paid' ĐÃ LÀM ở S15-PAYROLL-DB-2 (FSM · bộ lọc Own · dẫn xuất phiếu · FE mirror) — BE-4 chỉ còn nối route 072 vào cạnh FSM complete-batch; deny-path RED trước; coverage ≥85%",
       "🔻 NHẬN TỪ S15-PAYROLL-BE-2 (cột payroll_periods.template_id có từ DB-2): PATCH /payroll/templates/:id (052) xoá mềm hoặc ngưng dùng mẫu đang gắn kỳ chưa xoá ⇒ 409 PAYROLL-ERR-023 (kind mới template-in-use, ghi SPEC-11 §12.1) — BE-2 chưa kiểm được vì cột chưa tồn tại",
