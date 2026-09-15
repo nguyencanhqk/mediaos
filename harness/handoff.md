@@ -2,7 +2,7 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
-## Phiên 2026-09-15 (f) — S15-PAYROLL-BE-4 → **FULL gate XONG + vá sau gate, PR MỞ (base `feat/s15-payroll-be-3`, KHÔNG auto-merge)** · S15-PAYROLL-BE-3 #510 vẫn chờ owner merge `--admin`
+## Phiên 2026-09-15 (f) — S15-PAYROLL-BE-4 → **FULL gate XONG + vá sau gate, PR #511 MỞ (base `feat/s15-payroll-be-3`, KHÔNG auto-merge)** · S15-PAYROLL-BE-3 #510 vẫn chờ owner merge `--admin`
 
 **Bắt đầu phiên sau ở đây:**
 - **BE-3 #510**: CI xanh toàn bộ, `MERGEABLE`, up-to-date với master, `REVIEW_REQUIRED` — chỉ còn owner nói rõ «ủy quyền `--admin` cho #510» rồi `gh pr merge 510 --squash --admin` **KHÔNG `--delete-branch`** (còn PR BE-4 stacked — memory `squash-merge-breaks-stacked-prs`). Sau khi merge: ở nhánh BE-4 `git merge origin/master` + `git checkout --ours` file BE-3 xung đột, push, `gh pr edit <BE-4> --base master`.
