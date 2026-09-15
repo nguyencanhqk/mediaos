@@ -264,6 +264,18 @@ describe.skipIf(!hasLaneDb)(
         expect(json).not.toMatch(MONEY_KEY);
       });
 
+      // silent-failure-hunter BE-4 #2: tự nạp trúng 0 người KHÔNG được im lặng — 201 + `no-eligible-payees`.
+      it("tự nạp lần 2 cùng kỳ (8 người đã ở đợt 1, 2 người thiếu TK) ⇒ 201, 0 dòng, warnings `no-eligible-payees` + `no-bank-account:2`", async () => {
+        const { periodId } = await publishedPeriod();
+        const b1 = await createBatch(officer.token, { payrollPeriodId: periodId, method: "bank" });
+        expect(await linesOf(b1.id)).toHaveLength(8);
+        expect(b1.warnings).not.toContain("no-eligible-payees");
+        const b2 = await createBatch(officer.token, { payrollPeriodId: periodId, method: "bank" });
+        expect(b2.warnings).toContain("no-eligible-payees");
+        expect(b2.warnings).toContain("no-bank-account:2");
+        expect(await linesOf(b2.id)).toHaveLength(0);
+      });
+
       it("`userIds` tường minh có người thiếu TK ở đợt `bank` ⇒ 409 027 `payee-no-bank-account`, 0 dòng", async () => {
         const { periodId } = await publishedPeriod();
         expectError(

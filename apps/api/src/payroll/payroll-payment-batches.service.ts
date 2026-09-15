@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   CompletePaymentBatchRequest,
   CompletePaymentBatchResultDto,
@@ -453,7 +453,14 @@ export class PayrollPaymentBatchesService {
           "batchList",
           user.id,
         );
-        if (recipientUserIds.length > 0) {
+        if (recipientUserIds.length === 0) {
+          // silent-failure-hunter BE-4 #3: kỳ sang `Paid` mà không ai giữ `view:payment-batch` ngoài actor ⇒ NOTI-027
+          // không gửi (C7). Để lại dấu vết cho giám sát; KHÔNG số tiền/TK.
+          Logger.warn(
+            `NOTI-027 bỏ qua: không có người nhận ngoài actor (batch ${id}, period ${periodId})`,
+            PayrollPaymentBatchesService.name,
+          );
+        } else {
           const payload: PayrollPaymentBatchCompletedPayload = {
             periodId,
             batchId: id,
@@ -536,6 +543,9 @@ export class PayrollPaymentBatchesService {
         picked = picked.filter((c) => c.hasBank);
         if (skippedNoBank > 0) warnings.push(`no-bank-account:${skippedNoBank}`);
       }
+      // silent-failure-hunter BE-4 #2: tự nạp trúng 0 người (mọi phiếu đã ở đợt khác, hoặc `bank` mà ai còn lại cũng
+      // thiếu TK) vẫn 201 — báo TƯỜNG MINH để officer không tưởng đã lập đợt cho N người; 072 vẫn chặn `batch-empty`.
+      if (picked.length === 0) warnings.push("no-eligible-payees");
     }
     const zeroNet = picked.filter((c) => Number(c.net) === 0).length;
     if (zeroNet > 0) warnings.push(`zero-net:${zeroNet}`);

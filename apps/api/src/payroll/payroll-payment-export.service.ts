@@ -106,8 +106,10 @@ export class PayrollPaymentExportService {
         i + 1,
         xlsxSafe(code),
         xlsxSafe(p?.displayName ?? ""),
-        // Số TK là chuỗi (giữ số 0 đầu); `cash` ⇒ rỗng.
-        r.bank_account_snapshot ?? "",
+        // Số TK là chuỗi (giữ số 0 đầu); `cash` ⇒ rỗng. CŨNG qua `xlsxSafe`: `bankAccountNumber` (039) là
+        // `z.string()` không giới hạn charset ⇒ officer hồ sơ lương có thể gieo `=HYPERLINK(...)` vào snapshot
+        // (security-reviewer BE-4 M1). Số TK thật không bao giờ bắt đầu bằng `= + - @` nên không đổi dữ liệu hợp lệ.
+        xlsxSafe(r.bank_account_snapshot ?? ""),
         xlsxSafe(r.bank_name_snapshot ?? ""),
         Number(r.net),
         // Nội dung ASCII cho cổng ngân hàng: `Luong <YYYY-MM> <mã NV>`.

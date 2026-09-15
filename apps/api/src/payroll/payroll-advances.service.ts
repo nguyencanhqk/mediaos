@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   ApprovePayrollAdvanceRequest,
   CreatePayrollAdvanceRequest,
@@ -358,7 +358,14 @@ export class PayrollAdvancesService {
       const recipientUserIds = [...new Set([row.userId, row.createdBy])].filter(
         (u): u is string => typeof u === "string" && u.length > 0 && u !== user.id,
       );
-      if (recipientUserIds.length > 0) {
+      if (recipientUserIds.length === 0) {
+        // silent-failure-hunter BE-4 #3: người duyệt = người thụ hưởng = người tạo (không thể qua four-eyes) hoặc
+        // `created_by` null ⇒ NOTI 025/026 không gửi. Dấu vết cho giám sát; KHÔNG số tiền.
+        Logger.warn(
+          `NOTI-025/026 bỏ qua: không có người nhận ngoài actor (advance ${row.id}, ${status})`,
+          PayrollAdvancesService.name,
+        );
+      } else {
         const base = {
           advanceId: row.id,
           actorUserId: user.id,

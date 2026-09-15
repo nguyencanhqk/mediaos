@@ -3,6 +3,7 @@ import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import type { PaymentBatchMethod, PaymentBatchStatus } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { payrollPaymentBatches, type PayrollPaymentBatch } from "../db/schema/payroll-disbursement";
+import { countOrThrow, intOrThrow, singleRowOrThrow } from "./payroll-sql.util";
 import type { PaymentBatchRow, PaymentLineRow } from "./payroll-disbursement.mapper";
 import { bankAccountLast4 } from "./payroll-disbursement.mapper";
 
@@ -391,8 +392,12 @@ export class PayrollPaymentBatchesRepository {
       select count(*)::int as live, count(*) filter (where paid_at is null)::int as unpaid
         from payroll_payment_lines l
        where l.company_id = ${companyId}::uuid and l.batch_id = ${batchId}::uuid and l.deleted_at is null`);
-    const row = rowsOf<{ live: number; unpaid: number }>(res)[0];
-    return { live: Number(row?.live ?? 0), unpaid: Number(row?.unpaid ?? 0) };
+    // silent-failure-hunter BE-4 H1: KHÔNG `?? 0` — `unpaid` gác 027 `batch-incomplete`; thiếu hàng phải NÉM.
+    const row = singleRowOrThrow<{ live: unknown; unpaid: unknown }>(res, "lineCountsTx");
+    return {
+      live: intOrThrow(row.live, "lineCountsTx.live"),
+      unpaid: intOrThrow(row.unpaid, "lineCountsTx.unpaid"),
+    };
   }
 
   /**
@@ -412,7 +417,8 @@ export class PayrollPaymentBatchesRepository {
             and b.deleted_at is null and b.status = 'Completed'
             and b.payroll_period_id = ${periodId}::uuid
           where l.company_id = p.company_id and l.payslip_id = p.id and l.deleted_at is null)`);
-    return Number(rowsOf<{ n: number }>(res)[0]?.n ?? 0);
+    // silent-failure-hunter BE-4 H1: KHÔNG `?? 0` — 0 = «đủ phủ» ⇒ kỳ sang `Paid`; thiếu hàng phải NÉM (fail-CLOSED).
+    return countOrThrow(res, "uncoveredPayeesTx");
   }
 
   /** 070 — dòng sống ⋈ `payslips.net`, phân trang; mapper chỉ phát `last4`. */

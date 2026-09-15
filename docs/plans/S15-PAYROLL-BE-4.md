@@ -83,7 +83,7 @@ Verdict vòng 1 = **REVISE** (5 BLOCKING + cảnh báo). Đã vá đủ 5/5 và 
 | Điểm chiếu danh tính | `PayrollPeopleRepository.namesByUserIdsTx(actor)` duy nhất; ratchet chiều 6 `rawSqlIdentity` pin ⇒ SQL thô KHÔNG được chạm `users.full_name/email` |
 | Contracts | `payroll.ts` **860 dòng** (> 800) ⇒ file mới `payroll-disbursement.ts` (import ngược enum, không re-export) · `payroll.ts` chỉ +3 dòng (`paidBy` · `paidAt` · `legacyPaidTrail`) |
 | Own-route khuôn | `MePayslipsController` (`me/payslips`, thuộc segment `me` của `openapi-modules.ts`) · pair `(…, true, false, false)` |
-| Idempotent v2 | 11 route ĐÓNG: BE-4 lấy **060 · 067 · 072 · 074 · 076** |
+| Idempotent v2 | 10 route ĐÓNG: BE-4 lấy **060 · 067 · 072 · 074** — **076 multipart CỐ Ý KHÔNG** (security-reviewer M2: interceptor băm `request.body` trước `FileInterceptor` ⇒ vân tay rỗng, mù tệp; cùng khuôn HR import) |
 | Coverage script | `package.json` `test:cov:payroll` liệt kê file — thêm 3 int-spec BE-4 |
 
 ## 3. Điểm KHÁC WO / tài liệu — đọc trước khi review
@@ -143,7 +143,7 @@ INSERT `Pending` không mang cặp consume ⇒ (F) không bắn; CHECK four-eyes
 | 073 | `GET /payroll/budgets` | `budgetList` | view:payroll-budget ✓ Company | read `payroll_budget` id NULL `{fiscalYear, orgUnitId?, rowCount}` | |
 | 074 | `POST /payroll/budgets` | `budgetCreate` | manage:payroll-budget ✓ | create `{fiscalYear, orgUnitId}` | ✓ |
 | 075 | `PATCH /payroll/budgets/:id` | `budgetUpdate` | manage:payroll-budget ✓ | update/delete (tên trường) | |
-| 076 | `POST /payroll-periods/:id/import-adjustments` | `importAdjustments` | manage:bonus-penalty ✓ (cặp CŨ) | import `payroll_period` `{fileName, rowCount, dryRun}` (chỉ apply) | ✓ |
+| 076 | `POST /payroll-periods/:id/import-adjustments` | `importAdjustments` | manage:bonus-penalty ✓ (cặp CŨ) | import `payroll_period` `{fileName, rowCount, dryRun}` (chỉ apply) | ✗ (multipart — M2) |
 | 077 | `GET /payroll/imports/adjustments-template` | `importTemplate` | manage:bonus-penalty ✓ | **0** | |
 
 `MONEY_FREE_ROUTES` += 11 (route ghi trả `{id}`/đếm + 077): `advanceCreate · advanceUpdate · advanceApprove · advanceReject · batchCreate · batchUpdate · batchComplete · budgetCreate · budgetUpdate · importAdjustments · importTemplate`. Route đọc chở tiền (`amount`/`net`/`totalNet`/`plannedAmount`) gác đúng cặp chở-tiền ⇒ `assertMoneyRoute` ở mapper.
@@ -401,4 +401,18 @@ Khuôn BE-3 (~$1,77k): BE-4 không migration ⇒ **~$1,2–1,6k** — code + tes
 
 **Lệch so với plan, có chủ đích:** (1) `mapPayrollTrackCTag` nằm TRONG `payroll.errors.ts` (786 dòng < 800), không tách file — census FE/mã lỗi đọc kind theo literal `payrollDetails("…")` nên tách file phải giữ literal, không đáng. (2) `PayrollAdjustmentImportRepository` (file mới, 3 câu SQL) thay vì SQL trong service — giữ luật «Repository lo DB». (3) Body 063/064 dùng `note` (SPEC-11 §15.1 hàng 064 nguyên văn), không `decisionNote` như thưởng/phạt. (4) 072 trả **200** (`@HttpCode`), các route POST hành động tạm ứng giữ 201 mặc định như thưởng/phạt. (5) Lỗi tệp ở 076 (vắng/quá 5MB/sai loại/parse hỏng) ⇒ **422 030 `import-invalid` {reason}** thay vì 400 như HR — một mã cho FE.
 
-**Chưa chạy (phiên dừng theo hook COST CRITICAL ~$140):** `bash harness/check.sh --lane-db=be4` (full: lint + typecheck + TOÀN BỘ test trên lane) · `test:cov:payroll` ≥ 85% · 3 reviewer tuần tự (security → silent-failure → database HẸP) · PR (KHÔNG auto-merge) · retarget về master khi #510 merge.
+**Phiên (e) dừng theo hook COST CRITICAL ~$140** trước cổng full — phần còn lại chạy ở phiên (f) 15/09, ghi ở §11b.
+
+## 11b. FULL gate + vá sau gate (15/09/2026 — phiên (f), lane `mediaos_be4`)
+
+| Cổng | Kết quả |
+| --- | --- |
+| `bash harness/check.sh --all --lane-db=be4` (TRƯỚC vá) | **XANH 9/9**: secret-literals · lint · typecheck · migration-no-drop · tooling · test chunked 18/18 chunk trên lane (KI-014 crash hạ tầng chunk 14/16 chạy lại, 0 test đỏ) · build · prod-tenant-check · db-readiness (12/12 index · 0 bảng thiếu FORCE RLS · 0 grant UPDATE/DELETE ledger) |
+| `security-reviewer` (Opus, tĩnh) | **PASS** — 0 CRITICAL/HIGH · 3 MEDIUM · 4 LOW. 7 câu (PII số TK · cặp quyền/IDOR · four-eyes · FSM/chi hai lần · import · idempotency/audit · khác) đều OK trừ M1/M2 |
+| `silent-failure-hunter` (tĩnh) | **BLOCK → VÁ**: H1 `count(*)…[0]?.n ?? 0` trên `uncoveredPayeesTx` (luật PHỦ) · `lineCountsTx` (027 `batch-incomplete`) · `periodsUsingTx` (052) = fail-OPEN nếu driver trả 0 hàng. 8 mục săn còn lại OK (NOTI trong tx · trigger không map đã bị service chặn · audit trong tx · parser không rơi về 0 · không `void`/`.then` nuốt) |
+| `database-reviewer` HẸP (2 câu) | **PASS** — 1a không có cặp khoá ngược (kỳ là tài nguyên đơn giữa 067/072/004; 069 không chạm kỳ; batches không dùng catalog lock) · 1b luật PHỦ chỉ đếm đợt `Completed`, 069 chỉ sửa được `Draft\|Ready` (service + T1/T2) ⇒ bất biến cấu trúc, không fail-open · 1c T3 nhánh F không kích ở 063 (`payroll_period_id` NULL→NULL) · 2: MỌI câu ghi có `company_id` tường minh trên chính bảng bị ghi; 1 LOW `insertLinesTx` thiếu `EXISTS` batch (→ BE-4B) |
+| Vá sau gate (cùng nhánh, commit thứ 2) | **M1** ô «Số tài khoản» UNC qua `xlsxSafe` (+1 unit) · **M2** gỡ `@Idempotent()` ở 076 (multipart — interceptor băm `request.body` rỗng trước `FileInterceptor` ⇒ vân tay mù tệp; cùng khuôn HR import) + sửa SPEC-11 §15.1 hàng 076, API-18 §5.2 (11→10 route) · **H1** `payroll-sql.util.ts` (`singleRowOrThrow` · `intOrThrow` · `countOrThrow`) dùng ở 3 call-site + unit helper 8 ca + unit call-site 3 ca (stub `tx.execute` trả `{rows:[]}` ⇒ ném — Postgres không bao giờ tới nhánh này nên int-spec không đo được) · **SFH#2** 067 tự nạp trúng 0 người ⇒ `warnings: ["no-eligible-payees"]` (+1 int-spec: tự nạp lần 2 cùng kỳ ⇒ 201, 0 dòng, `no-eligible-payees` + `no-bank-account:2`) · **SFH#3** `Logger.warn` (tĩnh) khi holders rỗng ở 072 và 063/064 (không tiền/TK) |
+| Sau vá: prettier (danh sách file) · eslint · `tsc --noEmit` api | XANH |
+| Sau vá: `test:cov:payroll` trên `LANE_DB=mediaos_be4` | **36 file · 904 test XANH** (advances 22 · batches **20** · budgets-import 12) · coverage `src/payroll/**` **94,25 % stmts · 86,01 % branch · 97 % funcs** (≥ 85 %) |
+
+**Nợ để lại có ý thức → `S15-PAYROLL-BE-4B`** (backlog): M3 `users.status` ở `PayrollPairHoldersReader` + `PayrollApproverReader` (kế thừa, không hồi quy) · L4 truthy-guard `if (f.userId)` ở Own 065 · L5 XLSX dựng ma trận trước khi đếm dòng (zip-bomb; đã có cap 5 MB) · L6 rethrow `DrizzleQueryError` thô 3 chỗ ở `payroll-advances.service.ts` (log 5xx chở amount; không rò client) · L7 `.strict()` 4 schema · SFH#4 071 audit commit trước `writeBuffer` (audit thừa nếu sinh tệp ném — chọn «không bao giờ thiếu audit») · DB-LOW `insertLinesTx` thêm `EXISTS` batch. **Không chạy** 9 đột biến còn lại (b c d f i j l p, k không đo được) — cổng đã đủ bằng chứng bằng reviewer + call-site unit.

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { orgUnits } from "../db/schema/org";
+import { countOrThrow } from "./payroll-sql.util";
 import {
   payrollTemplateComponents,
   payrollTemplates,
@@ -285,8 +286,8 @@ export class PayrollTemplatesRepository {
        where pp.company_id = ${companyId}::uuid
          and pp.template_id = ${templateId}::uuid
          and pp.deleted_at is null`);
-    const list = (res as unknown as { rows?: unknown[] }).rows ?? (res as unknown as unknown[]);
-    return Number((list as { n: number }[])[0]?.n ?? 0);
+    // silent-failure-hunter BE-4 H1: KHÔNG `?? 0` — 0 = «không kỳ nào dùng» ⇒ xoá/ngưng được mẫu; thiếu hàng phải NÉM.
+    return countOrThrow(res, "periodsUsingTx");
   }
 
   async orgUnitLiveTx(tx: TenantTx, companyId: string, orgUnitId: string): Promise<boolean> {

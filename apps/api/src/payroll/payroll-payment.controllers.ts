@@ -228,7 +228,10 @@ export class PayrollAdjustmentImportsController {
   @RequirePermission(P.importAdjustments.action, P.importAdjustments.resourceType, {
     isSensitive: P.importAdjustments.isSensitive,
   })
-  @Idempotent()
+  // KHÔNG `@Idempotent()` — CỐ Ý (security-reviewer BE-4 M2, cùng khuôn `HrImportController`): interceptor
+  // idempotency chạy TRƯỚC `FileInterceptor` và băm `request.body`, mà body multipart lúc đó RỖNG ⇒ vân tay
+  // hằng số, mù nội dung tệp ⇒ cùng key + tệp KHÁC sẽ phát lại phản hồi tệp #1 và im lặng bỏ tệp #2.
+  // Chống nạp trùng là `warnings: possible-duplicate:<n>` (C6) + cổng duyệt thưởng/phạt.
   @UseInterceptors(
     FileInterceptor("file", { limits: { fileSize: PAYROLL_ADJUSTMENT_IMPORT_MAX_BYTES } }),
   )

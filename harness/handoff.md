@@ -2,6 +2,17 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-15 (f) — S15-PAYROLL-BE-4 → **FULL gate XONG + vá sau gate, PR MỞ (base `feat/s15-payroll-be-3`, KHÔNG auto-merge)** · S15-PAYROLL-BE-3 #510 vẫn chờ owner merge `--admin`
+
+**Bắt đầu phiên sau ở đây:**
+- **BE-3 #510**: CI xanh toàn bộ, `MERGEABLE`, up-to-date với master, `REVIEW_REQUIRED` — chỉ còn owner nói rõ «ủy quyền `--admin` cho #510» rồi `gh pr merge 510 --squash --admin` **KHÔNG `--delete-branch`** (còn PR BE-4 stacked — memory `squash-merge-breaks-stacked-prs`). Sau khi merge: ở nhánh BE-4 `git merge origin/master` + `git checkout --ours` file BE-3 xung đột, push, `gh pr edit <BE-4> --base master`.
+- **BE-4**: đọc `docs/plans/S15-PAYROLL-BE-4.md` **§11b** (bảng cổng + vá + nợ). Tóm tắt: `check.sh --all --lane-db=be4` XANH 9/9 · security PASS (3 MEDIUM) · silent-failure BLOCK→vá H1 (`count(*) ?? 0` fail-OPEN ⇒ `payroll-sql.util.ts`) · database PASS · cov `src/payroll` 94,25 %/86,01 % branch · 904 test lane xanh. Nợ gom ở WO mới **`S15-PAYROLL-BE-4B`** (🟡, đã seed backlog). CI của PR BE-4 là cổng cuối; nếu đỏ xem log trước khi đụng code (memory `ci-red-can-depend-on-time-of-day`, `vitest-unhandled-rejection-after-teardown`).
+- Runner tay còn dùng được: scratchpad phiên (f) `run-cov.sh` = `. scripts/lib/db-secrets.sh; db_secrets_load; export 3 *_DB_PASSWORD; unset DATABASE_*_URL; LANE_DB=mediaos_be4; pnpm --filter @mediaos/api test:cov:payroll`.
+
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:** (1) `@Idempotent()` trên route **multipart** là vô nghĩa và NGUY HIỂM: APP_INTERCEPTOR băm `request.body` TRƯỚC `FileInterceptor` ⇒ vân tay hằng ⇒ cùng key + tệp khác phát lại phản hồi cũ, im lặng bỏ tệp mới — khuôn HR import cố ý không có decorator là đúng. (2) Reviewer song song (security ∥ check.sh, rồi silent-failure ∥ database) KHÔNG tranh tài nguyên khi dặn rõ «review tĩnh, cấm pnpm/vitest» — tiết kiệm ~30′ wall-clock so với tuần tự, chi phí như nhau. (3) 2/4 câu «database-reviewer HẸP» tự đo được bằng 3 lệnh grep (chỉ mục partial khớp `NOT EXISTS`, vị từ dùng chung) — chỉ hỏi 2 câu còn lại. (4) `count(*)` KHÔNG BAO GIỜ trả 0 hàng ở Postgres nên nhánh fail-OPEN `?? 0` chỉ chứng minh được bằng unit stub `tx.execute` — đừng cố viết int-spec cho nó.
+
+**Chi phí phiên (f):** ~$12 tới lúc mở PR (check.sh + cov + 3 reviewer tĩnh ~560k token subagent + vá + 4 unit/int case).
+
 ## Phiên 2026-09-15 (e) — S15-PAYROLL-BE-4 → **IMPLEMENT XONG, commit checkpoint trên nhánh, CHƯA PR** (🔴, dừng theo hook COST CRITICAL ~$140 — owner chốt có chạy tiếp cổng full + reviewer + PR không)
 
 **Bắt đầu phiên sau ở đây — không đọc lại code/plan từ đầu:**

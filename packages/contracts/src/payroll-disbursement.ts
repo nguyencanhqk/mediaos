@@ -261,7 +261,10 @@ export type PaymentBatchListQuery = z.infer<typeof paymentBatchListQuerySchema>;
 export const paymentLineListQuerySchema = z.object({ ...payrollPageQuery });
 export type PaymentLineListQuery = z.infer<typeof paymentLineListQuerySchema>;
 
-/** Envelope 067/069 — `{ id, warnings }`; warnings dạng `no-bank-account:<n>` · `zero-net:<n>` (số ĐẾM, không tiền). */
+/**
+ * Envelope 067/069 — `{ id, warnings }`; warnings dạng `no-bank-account:<n>` · `zero-net:<n>` (số ĐẾM, không tiền) ·
+ * `no-eligible-payees` (067 tự nạp trúng 0 người — đợt vẫn tạo, 072 sẽ chặn `batch-empty`).
+ */
 export const paymentBatchWriteResultSchema = z.object({
   id: z.string().uuid(),
   warnings: z.array(z.string()),

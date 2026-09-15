@@ -1325,7 +1325,7 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-18](<../API Design/API-1
 | 073 | `GET /payroll/budgets` | `('view','payroll-budget')` | filter `fiscalYear` · `orgUnitId`; kèm **thực hiện** (cộng từ kỳ đã `Published`+); nguồn widget 002; **SÀN scope `Company`**; audit |
 | 074 | `POST /payroll/budgets` | `('manage','payroll-budget')` | trùng `(năm, đơn vị)` ⇒ **409 029**; `Idempotency-Key`; audit |
 | 075 | `PATCH /payroll/budgets/:id` | `('manage','payroll-budget')` | sửa · xoá mềm; audit |
-| 076 | `POST /payroll-periods/:id/import-adjustments` | `('manage','bonus-penalty')` | import XLSX thu nhập/khấu trừ khác (khuôn HR import) → `bonus_penalties` **trạng thái `Pending`** (không tự duyệt); **toàn tệp hoặc không dòng nào** (⇒ 422 030); `Idempotency-Key`; audit |
+| 076 | `POST /payroll-periods/:id/import-adjustments` | `('manage','bonus-penalty')` | import XLSX thu nhập/khấu trừ khác (khuôn HR import) → `bonus_penalties` **trạng thái `Pending`** (không tự duyệt); **toàn tệp hoặc không dòng nào** (⇒ 422 030); **KHÔNG `Idempotency-Key`** (multipart — vân tay body rỗng, mù tệp; cùng khuôn HR import; chống nạp trùng = `warnings: possible-duplicate:<n>` + cổng duyệt); audit |
 | 077 | `GET /payroll/imports/adjustments-template` | `('manage','bonus-penalty')` | tải **tệp mẫu XLSX** sinh từ chính khuôn mà 076 parse — tệp mẫu tĩnh ở FE sẽ trôi khỏi parser |
 
 > 🔁 **Chốt hiện thực track C (`S15-PAYROLL-BE-4`, 15/09/2026 — owner vắng, quyết định mặc định D-1..D-11 ở plan §0, lật rẻ):**
