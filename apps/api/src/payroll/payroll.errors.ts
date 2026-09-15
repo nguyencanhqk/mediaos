@@ -76,6 +76,11 @@ export const PAYROLL_ERR_CODE = {
   FORMULA_CYCLE: "PAYROLL-ERR-019",
   /** 422 — **S15-PAYROLL-BE-2**. Lỗi lúc TÍNH: vượt ngân sách node · chia cho 0 · tràn `numeric(18,2)`. */
   FORMULA_EVAL: "PAYROLL-ERR-020",
+  /**
+   * 422 — **S15-PAYROLL-BE-3**. Gross-up NET không hội tụ (`grossup-not-converged`, `details` = userId · iterations ·
+   * reason — KHÔNG sai số còn lại vì đó là tiền, plan §3.6). Kỳ KHÔNG chuyển trạng thái, 0 dòng được ghi.
+   */
+  GROSSUP_NOT_CONVERGED: "PAYROLL-ERR-021",
   /** 422 — **S15-PAYROLL-BE-2**. Bản tỉ lệ luật định thiếu/không liên tục bậc TNCN (`statutory-rate-incomplete`). */
   STATUTORY_RATE_INVALID: "PAYROLL-ERR-022",
   /**
@@ -210,6 +215,23 @@ export const PAYROLL_ERR = {
   RATE_EFFECTIVE_EXISTS: "PAYROLL-ERR-033: đã có bản tỉ lệ luật định cùng ngày hiệu lực.",
   RATE_IN_USE:
     "PAYROLL-ERR-033: bản tỉ lệ này đã được kỳ lương dùng — tạo bản mới với ngày hiệu lực mới thay vì sửa tại chỗ.",
+  // ── S15-PAYROLL-BE-3 (máy tính lương v2) — thông điệp nói được PHẢI LÀM GÌ; KHÔNG số tiền ──
+  TEMPLATE_MISSING:
+    "PAYROLL-ERR-023: kỳ lương chưa gắn mẫu bảng lương (hoặc mẫu đã bị xoá) — chọn mẫu cho kỳ trước khi tính.",
+  TEMPLATE_INACTIVE:
+    "PAYROLL-ERR-023: mẫu bảng lương của kỳ đang ngưng dùng — bật lại mẫu hoặc chọn mẫu khác cho kỳ.",
+  TEMPLATE_LOCKED:
+    "PAYROLL-ERR-023: kỳ lương đã tính — chỉ đổi được mẫu bảng lương khi kỳ còn ở Nháp hoặc Thu thập dữ liệu.",
+  TEMPLATE_SCOPE_UNSUPPORTED:
+    "PAYROLL-ERR-023: mẫu bảng lương theo đơn vị chưa gắn được vào kỳ lương (kỳ tính cho cả công ty) — chọn mẫu toàn công ty.",
+  SYSTEM_COMPONENT_DRIFT: (codes: string) =>
+    `PAYROLL-ERR-018: thành phần lương hệ thống bị sửa lệch cách tính chuẩn (${codes}) — liên hệ quản trị hệ thống, không tính lương trên dữ liệu này.`,
+  TEMPLATE_INPUT_MISSING: (codes: string) =>
+    `PAYROLL-ERR-018: mẫu bảng lương thiếu thành phần hệ thống bắt buộc hoặc đang ghi đè công thức của chúng (${codes}) — thưởng, phạt, tạm ứng và nghỉ không lương sẽ không vào lương nếu thiếu.`,
+  STATUTORY_RATE_MISSING:
+    "PAYROLL-ERR-022: chưa có bản tỉ lệ luật định hiệu lực tại ngày cuối kỳ — tạo bản tỉ lệ ở Thiết lập lương trước khi tính.",
+  GROSSUP_NOT_CONVERGED:
+    "PAYROLL-ERR-021: không quy đổi được lương NET sang GROSS cho một nhân sự — kiểm tra công thức tuỳ biến của mẫu và hồ sơ lương của người đó.",
 } as const;
 
 /** `details.kind` = phần tử `{field:'kind'}`; các cặp phụ thêm sau — **không bao giờ là số tiền**. */
@@ -257,6 +279,7 @@ const FORMULA_CODE_TO_KEY: Readonly<Record<FormulaErrorCode, PayrollErrKey>> = {
   "PAYROLL-ERR-018": "FORMULA_INVALID",
   "PAYROLL-ERR-019": "FORMULA_CYCLE",
   "PAYROLL-ERR-020": "FORMULA_EVAL",
+  "PAYROLL-ERR-021": "GROSSUP_NOT_CONVERGED",
   "PAYROLL-ERR-022": "STATUTORY_RATE_INVALID",
 };
 
@@ -283,6 +306,7 @@ export function formulaErrorToHttp(
       pass: d.pass,
       reason: d.reason,
       missing: d.missing?.join(","),
+      iterations: d.iterations,
     }),
   );
 }
@@ -401,6 +425,15 @@ export function mapPayrollPgError(err: unknown): Error | null {
     // nên tới được đây là hai lượt duyệt chen nhau. 409, KHÔNG 500 (SPEC-11 §12 mã 005).
     if (c.includes("payroll_periods_four_eyes_check")) {
       return payrollConflict("FOUR_EYES", PAYROLL_ERR.FOUR_EYES, payrollDetails("four-eyes"));
+    }
+    // S15-PAYROLL-BE-3 (mig 0575, nợ security DB-1B MEDIUM) — thưởng/phạt `Approved` tự duyệt. Service 027 tiền-kiểm
+    // `decided_by <> created_by` ⇒ nhánh này là lưới cuối cho RACE / đường ghi nội bộ; CÙNG mã + kind với 027.
+    if (c.includes("bonus_penalties_four_eyes_check")) {
+      return payrollConflict(
+        "BONUS_SELF_APPROVAL",
+        PAYROLL_ERR.BONUS_SELF_APPROVAL,
+        payrollDetails("self-approval"),
+      );
     }
     // 🩹§8b — BỐN CHECK cặp vết duyệt còn lại. Trước BE-2 chúng rơi `null` ⇒ **500 ở vùng đỏ**.
     // Mọi hành động FSM đã đi qua `applyTransitionTx` (bảng `TRAIL_RESET`), nên bốn cái này chỉ nổ khi

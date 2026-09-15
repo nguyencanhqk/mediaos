@@ -25,7 +25,12 @@ export const FORMULA_ERROR_KINDS = {
   "formula-budget-exceeded": "PAYROLL-ERR-020",
   "division-by-zero": "PAYROLL-ERR-020",
   "numeric-overflow": "PAYROLL-ERR-020",
+  // S15-PAYROLL-BE-3 (plan §0b m2) — lỗi của máy tính MỘT dòng lương (`formula.line.ts`).
+  /** Tổng thu nhập / tổng khấu trừ ÂM — cổng trước khi ra cột (CHECK `amounts_check` chỉ là lưới cuối). */
+  "negative-total": "PAYROLL-ERR-020",
   "statutory-rate-incomplete": "PAYROLL-ERR-022",
+  /** Gross-up NET không hội tụ ≤ 1 đ trong 30 vòng, hoặc căn cứ lặp ≤ 0 (§13.8). */
+  "grossup-not-converged": "PAYROLL-ERR-021",
 } as const;
 
 export type FormulaErrorKind = keyof typeof FORMULA_ERROR_KINDS;
@@ -44,6 +49,8 @@ export interface FormulaErrorDetails {
   readonly pass?: number;
   readonly reason?: string;
   readonly missing?: readonly string[];
+  /** Số vòng gross-up đã chạy khi lỗi (`grossup-not-converged`). KHÔNG mang sai số còn lại — đó là tiền (plan §3.6). */
+  readonly iterations?: number;
 }
 
 export class FormulaError extends Error {

@@ -17,12 +17,15 @@
  * `base_amount = 1.000.000 × (present + unpaid)` — mọi con số kỳ vọng dưới đây viết tay được, đúng
  * đến từng đồng, và KHÔNG phụ thuộc tháng nào có mấy ngày lễ.
  *
- * Công thức đang đo (`payroll-calc.repository.ts:74-79`):
- *   prorate     = LEAST((present + unpaid) / work_days, 1)
- *   base_amount = round(base_salary × prorate, 2)
- *   deduction   = round(penalty + unpaid × (base_salary / work_days), 2)
- *   gross       = round(base_amount + allowance + bonus, 2)
- *   net         = GREATEST(round(gross − deduction + adjustment, 2), 0)
+ * 🔁 S15-PAYROLL-BE-3 — máy tính v2 theo `MAU_MAC_DINH` (owner O-1/O-5 15/09/2026). Cô lập phép pro-rate / sàn /
+ * làm tròn khỏi luật định: 4 hồ sơ `pit_payer = 'COMPANY'` (TNCN không vào net) + không tham gia BH (O-2 ⇒ tỉ lệ 0).
+ * Khi đó mẫu mặc định rút về:
+ *   LUONG_CO_BAN     = MIN(base × (present + unpaid) / work_days, base)    (base_amount cùng biểu thức, không × tỉ lệ hưởng)
+ *   NGHI_KHONG_LUONG = −(base × unpaid / work_days)                        (thu nhập ÂM — O-5)
+ *   gross            = LUONG_CO_BAN + PHU_CAP + THUONG + NGHI_KHONG_LUONG
+ *   deduction        = PHAT (+ TAM_UNG)
+ *   net              = GREATEST(round(gross − deduction + adjustment, 2), 0)   ← clamp Ở SQL
+ * Số học CHÍNH XÁC (decimal.js) — ca hoà nửa xu theo v2; lệch v1 đúng 0,01 ở ca hoà là v1 sai (S15-PAYROLL-DB-1B).
  *
  * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5).
  */
@@ -51,6 +54,7 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
+import { seedPayrollCatalog, setProfileItem } from "../helpers/payroll-v2-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1math");
@@ -116,14 +120,15 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
     expect(res.status, JSON.stringify(res.body)).toBe(201);
   }
 
-  async function setBase(userId: string, base: number, allowances: unknown[]): Promise<void> {
-    // S15-PAYROLL-DB-1B: allowances đổi ⇒ mirror salary_profile_items CÙNG tx (E2 quét toàn lane song song).
-    await writeSalaryProfileWithItems(
-      direct,
-      `UPDATE salary_profiles SET base_salary = $3::numeric, allowances = $4::jsonb
-        WHERE company_id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id`,
-      [A.companyId, userId, base.toFixed(2), JSON.stringify(allowances)],
+  /** v2: phụ cấp là item `PHU_CAP` của mẫu (mã mirror `PC_nnn` của `allowances` ngoài mẫu ⇒ 422 018, plan §3.8). */
+  async function setBase(userId: string, base: number, phuCap = 0): Promise<void> {
+    const r = await direct.query(
+      `UPDATE salary_profiles SET base_salary = $3::numeric
+        WHERE company_id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      [A.companyId, userId, base.toFixed(2)],
     );
+    expect(r.rowCount, `hồ sơ lương sống của ${userId}`).toBe(1);
+    if (phuCap > 0) await setProfileItem(direct, A.companyId, userId, "PHU_CAP", phuCap.toFixed(2));
   }
 
   /** Ngày công `present` — chỉ 4 status được đếm (`payroll-inputs.repository.ts:17`). */
@@ -170,6 +175,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
     const hash = await new PasswordService().hash(LOGIN_PW);
     A = await seedCompany(direct, "s13pqa1math");
     companyIds.push(A.companyId);
+    const templateId = await seedPayrollCatalog(direct, A.companyId);
     await direct.query(`UPDATE companies SET working_days_json = $2::jsonb WHERE id = $1`, [
       A.companyId,
       JSON.stringify({ days: [1, 2, 3, 4, 5] }),
@@ -190,13 +196,16 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
       .send({ companySlug: A.slug, email: `officer@${A.slug}.test`, password: LOGIN_PW });
     expect(lg.status, JSON.stringify(lg.body)).toBe(200);
     token = lg.body.data.accessToken;
+    // mig 0575 `bonus_penalties_four_eyes_check`: khoản do officer TẠO phải do người KHÁC duyệt.
+    const approverId = await seedUser(direct, A.companyId, `approver@${A.slug}.test`, "x");
 
     for (const k of Object.keys(S) as Array<keyof typeof S>) {
       S[k] = await seedUser(direct, A.companyId, `s-${k}@${A.slug}.test`, "x");
+      // `pit_payer = COMPANY` — TNCN không vào net, cô lập phép tính công/phụ cấp/thưởng/phạt (xem docblock).
       await writeSalaryProfileWithItems(
         direct,
-        `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances)
-         VALUES ($1, $2, '2026-01-01', '1000000.00', '[]'::jsonb) RETURNING id`,
+        `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances, pit_payer)
+         VALUES ($1, $2, '2026-01-01', '1000000.00', '[]'::jsonb, 'COMPANY') RETURNING id`,
         [A.companyId, S[k]],
       );
     }
@@ -209,6 +218,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
     const p = await post("/payroll-periods").send({
       periodMonth: MONTH,
       attendancePeriodId: ap.rows[0].id,
+      templateId,
     });
     expect(p.status, JSON.stringify(p.body)).toBe(201);
     periodId = p.body.data.id;
@@ -234,25 +244,22 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
     }
 
     // 1) `full` — đủ MỌI thành phần: phụ cấp + thưởng + phạt, đi làm (workDays − 3) ngày.
-    await setBase(S.full, BASE, [
-      { name: "an-trua", amount: 1_500_000 },
-      { name: "xang-xe", amount: 500_000 },
-    ]);
+    await setBase(S.full, BASE, 2_000_000);
     await seedPresent(S.full, weekdaysOfMonth.slice(0, workDays - 3));
-    await seedDecidedBonus(S.full, "bonus", 800_000, officerId);
-    await seedDecidedBonus(S.full, "penalty", 300_000, officerId);
+    await seedDecidedBonus(S.full, "bonus", 800_000, approverId);
+    await seedDecidedBonus(S.full, "penalty", 300_000, approverId);
 
     // 2) `clamp` — đi làm ĐỦ mọi ngày công ⇒ pro-rate chạm trần 1 (không được vượt).
-    await setBase(S.clamp, BASE, []);
+    await setBase(S.clamp, BASE);
     await seedPresent(S.clamp, weekdaysOfMonth.slice(0, workDays));
 
     // 3) `floor` — phạt LỚN HƠN gross ⇒ `net` phải là 0, KHÔNG âm.
-    await setBase(S.floor, BASE, []);
+    await setBase(S.floor, BASE);
     await seedPresent(S.floor, weekdaysOfMonth.slice(0, 1));
-    await seedDecidedBonus(S.floor, "penalty", BASE, officerId);
+    await seedDecidedBonus(S.floor, "penalty", BASE, approverId);
 
     // 4) `round` — lương KHÔNG chia hết cho `work_days` ⇒ điểm làm tròn 2 chữ số phải đúng.
-    await setBase(S.round, BASE + 1, []);
+    await setBase(S.round, BASE + 1);
     await seedPresent(S.round, weekdaysOfMonth.slice(0, workDays - 1));
 
     await recalc();
@@ -275,7 +282,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
 
       const base = present * DAILY;
       expect(money(l.base_amount), "base = đơn giá ngày × ngày công").toBe(cents(base));
-      expect(money(l.allowance_amount), "tổng `amount` trong `allowances`").toBe(cents(2_000_000));
+      expect(money(l.allowance_amount), "tổng item hồ sơ (PHU_CAP)").toBe(cents(2_000_000));
       expect(money(l.bonus_amount)).toBe(cents(800_000));
       expect(money(l.penalty_amount)).toBe(cents(300_000));
       // 0 ngày nghỉ-không-lương ⇒ vế `unpaid × dailyRate` biến mất, khấu trừ = ĐÚNG tiền phạt.
@@ -340,8 +347,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
 
   // ── C. Đơn giá ngày phải dùng CÙNG mẫu số với pro-rate (bẫy trừ HAI LẦN) ─────────────────────
 
-  describe("C. khấu trừ nghỉ-không-lương dùng CÙNG mẫu số `work_days` với pro-rate", () => {
-    it("gieo 2 ngày nghỉ KHÔNG lương ⇒ khấu trừ tăng ĐÚNG 2 × đơn giá ngày, base KHÔNG bị trừ lần hai", async () => {
+  describe("C. nghỉ-không-lương dùng CÙNG mẫu số `work_days` với pro-rate", () => {
+    it("gieo 2 ngày nghỉ KHÔNG lương ⇒ gross giảm ĐÚNG 2 × đơn giá ngày (thu nhập ÂM, O-5), base KHÔNG bị trừ lần hai", async () => {
       const before = (await lines()).get(S.clamp)!;
       const typeId = (
         await direct.query<{ id: string }>(
@@ -368,10 +375,16 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
 
       const after = (await lines()).get(S.clamp)!;
       expect(Number(after.unpaid_leave_days), "2 ngày nghỉ không lương").toBe(2);
+      // 🔁 v2 (O-5): `NGHI_KHONG_LUONG` là `earning` ÂM ⇒ giảm TONG_THU_NHAP (gross), KHÔNG tăng khấu trừ — để nó là
+      // khấu trừ thì thu nhập tính thuế gồm cả tiền NV không nhận (S15-PAYROLL-BE-3 §3.4).
       expect(
-        money(after.deduction_amount) - money(before.deduction_amount),
-        "khấu trừ tăng ĐÚNG 2 × (base_salary / work_days)",
+        money(before.gross) - money(after.gross),
+        "gross giảm ĐÚNG 2 × (base_salary / work_days)",
       ).toBe(cents(2 * DAILY));
+      expect(
+        money(after.deduction_amount),
+        "khấu trừ KHÔNG đổi — nghỉ không lương không phải khoản khấu trừ ở v2",
+      ).toBe(money(before.deduction_amount));
       // Vế O1: tử số pro-rate CỘNG `unpaid` nên `base_amount` KHÔNG giảm — trừ ở base rồi lại trừ ở
       // khấu trừ là mất `base × unpaid / work_days` mỗi người mỗi kỳ (SPEC-11 §13.4, đính chính owner).
       expect(money(after.base_amount), "base KHÔNG được giảm — nếu giảm là TRỪ HAI LẦN").toBe(

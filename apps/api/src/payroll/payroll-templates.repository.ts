@@ -33,6 +33,8 @@ export interface TemplateComponentRow {
   readonly catalogFormula: string | null;
   readonly fixedAmount: string | null;
   readonly pitDeductible: boolean;
+  /** S15-PAYROLL-BE-3 — hàng catalog hệ thống: cổng drift + cổng độ phủ đầu vào lúc gắn/tính (plan §4.8 · §0b B1). */
+  readonly isSystem: boolean;
   readonly componentActive: boolean;
   /** Hàng catalog đã xoá mềm mà link còn sót (ghi thẳng DB) — preview fail-closed trên cả vế này. */
   readonly componentDeletedAt: Date | null;
@@ -184,6 +186,7 @@ export class PayrollTemplatesRepository {
         catalogFormula: salaryComponents.formula,
         fixedAmount: salaryComponents.fixedAmount,
         pitDeductible: salaryComponents.pitDeductible,
+        isSystem: salaryComponents.isSystem,
         componentActive: salaryComponents.isActive,
         componentDeletedAt: salaryComponents.deletedAt,
         columnLabel: payrollTemplateComponents.columnLabel,
@@ -275,7 +278,11 @@ export class PayrollTemplatesRepository {
       .select({ id: orgUnits.id })
       .from(orgUnits)
       .where(
-        and(eq(orgUnits.companyId, companyId), eq(orgUnits.id, orgUnitId), isNull(orgUnits.deletedAt)),
+        and(
+          eq(orgUnits.companyId, companyId),
+          eq(orgUnits.id, orgUnitId),
+          isNull(orgUnits.deletedAt),
+        ),
       )
       .limit(1);
     return rows.length > 0;

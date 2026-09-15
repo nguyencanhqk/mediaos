@@ -35,6 +35,7 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
+import { seedPayrollCatalog } from "../helpers/payroll-v2-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = "Passw0rd!payrollperm";
@@ -249,6 +250,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 ma trận quyền 17 route", () =>
     direct = directPool();
     A = await seedCompany(direct, "payperm");
     companyIds.push(A.companyId);
+    // S15-PAYROLL-BE-3 (O-1): kỳ phải gắn mẫu — không thì `calculate` của ca ALLOW là 409 023, không phải 201.
+    const templateId = await seedPayrollCatalog(direct, A.companyId);
     await direct.query(`UPDATE companies SET working_days_json = $2::jsonb WHERE id = $1`, [
       A.companyId,
       JSON.stringify({ days: [1, 2, 3, 4, 5] }),
@@ -306,7 +309,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 ma trận quyền 17 route", () =>
     const p = await http()
       .post("/payroll-periods")
       .set("Authorization", `Bearer ${tFull}`)
-      .send({ periodMonth: "2028-06", attendancePeriodId: ap.rows[0].id as string });
+      .send({ periodMonth: "2028-06", attendancePeriodId: ap.rows[0].id as string, templateId });
     expect(p.status, JSON.stringify(p.body)).toBe(201);
     const periodId = p.body.data.id as string;
     const authFull = (r: request.Test) => r.set("Authorization", `Bearer ${tFull}`);

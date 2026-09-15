@@ -147,7 +147,8 @@ export class PayrollPayslipsRepository {
                ps.base_salary, ps.total_allowances, ps.bonus_amount, ps.penalty_amount,
                ps.deduction_amount, ps.adjustment_amount, ps.unpaid_leave_days,
                (ps.deduction_amount - ps.penalty_amount) as rest,
-               pl.adjustment_reason
+               pl.adjustment_reason,
+               pl.component_values_json as cvj
           from payslips ps
           join payroll_period_lines pl
             on pl.company_id = ps.company_id
@@ -157,32 +158,66 @@ export class PayrollPayslipsRepository {
          where ps.company_id = ${companyId}::uuid
            and ps.payroll_period_id = ${periodId}::uuid
       ),
+      -- Hai nguồn LOẠI TRỪ nhau theo khoá 'components' của snapshot: kỳ v1 đã Approved vẫn sinh được phiếu theo bản đồ
+      -- 7 dòng cũ; dòng v2 (S15-PAYROLL-BE-3) sinh từ snapshot lúc tính — KHÔNG từ mẫu hiện tại.
+      v1 as (select * from src where not (cvj ? 'components')),
+      v2 as (select * from src where cvj ? 'components'),
       items as (
         select payslip_id, 'earning'::text as item_type, 'Lương cơ bản (theo ngày công)'::text as label,
-               base_salary as amount, 10 as sort_order from src where base_salary <> 0
+               base_salary as amount, 10 as sort_order, null::jsonb as meta from v1 where base_salary <> 0
         union all
         select payslip_id, 'allowance', 'Phụ cấp',
-               total_allowances, 20 from src where total_allowances <> 0
+               total_allowances, 20, null from v1 where total_allowances <> 0
         union all
         select payslip_id, 'bonus', 'Thưởng',
-               bonus_amount, 30 from src where bonus_amount <> 0
+               bonus_amount, 30, null from v1 where bonus_amount <> 0
         union all
         select payslip_id, 'penalty', 'Phạt',
-               -penalty_amount, 40 from src where penalty_amount <> 0
+               -penalty_amount, 40, null from v1 where penalty_amount <> 0
         union all
         select payslip_id, 'attendance',
                'Nghỉ không lương (' || trim(to_char(unpaid_leave_days, 'FM9999990.00')) || ' ngày)',
-               -rest, 50 from src where rest <> 0 and unpaid_leave_days > 0
+               -rest, 50, null from v1 where rest <> 0 and unpaid_leave_days > 0
         union all
         select payslip_id, 'deduction', 'Khấu trừ khác',
-               -rest, 60 from src where rest <> 0 and unpaid_leave_days = 0
+               -rest, 60, null from v1 where rest <> 0 and unpaid_leave_days = 0
         union all
         select payslip_id, 'adjustment',
                'Điều chỉnh: ' || coalesce(adjustment_reason, 'không ghi lý do'),
-               adjustment_amount, 70 from src where adjustment_amount <> 0
+               adjustment_amount, 70, null from v1 where adjustment_amount <> 0
+        union all
+        -- v2 (owner O-3): MỌI thành phần góp vào net — earning/tax_exempt ⇒ +value · deduction/statutory_employee ⇒
+        -- −value · tax ⇒ −value CHỈ khi NV chịu thuế. BỎ aggregate + statutory_employer (không thuộc net). Thành phần
+        -- ẨN cột vẫn sinh item (ẩn chỉ là hiển thị; chỉ sinh item visible là vỡ bất biến tổng) — cờ vào meta.
+        -- ⚠️ ALLOWLIST theo kind (silent-failure-review BE-3): thêm kind mới vào salary_components_kind_check / 4 nút engine
+        -- (formula.graph.ts engineValue) ⇒ PHẢI thêm nhánh ở đây — quên thì findItemSumMismatchesTx chặn cả lượt sinh phiếu.
+        select v2.payslip_id,
+               case c.value->>'kind'
+                 when 'earning' then 'earning'
+                 when 'tax_exempt' then 'allowance'
+                 else 'deduction'
+               end,
+               c.value->>'label',
+               case when c.value->>'kind' in ('earning', 'tax_exempt')
+                    then (c.value->>'value')::numeric
+                    else -((c.value->>'value')::numeric)
+               end,
+               (c.ord * 10)::int,
+               jsonb_build_object('componentCode', c.value->>'code',
+                                  'kind', c.value->>'kind',
+                                  'isVisible', (c.value->>'isVisible')::boolean)
+          from v2
+         cross join lateral jsonb_array_elements(v2.cvj->'components') with ordinality as c(value, ord)
+         where (c.value->>'kind' in ('earning', 'tax_exempt', 'deduction', 'statutory_employee')
+                or (c.value->>'kind' = 'tax' and v2.cvj->>'pitPayer' = 'EMPLOYEE'))
+           and (c.value->>'value')::numeric <> 0
+        union all
+        select payslip_id, 'adjustment',
+               'Điều chỉnh: ' || coalesce(adjustment_reason, 'không ghi lý do'),
+               adjustment_amount, 1000000, null from v2 where adjustment_amount <> 0
       )
-      insert into payslip_items (company_id, payslip_id, item_type, label, amount, sort_order)
-      select ${companyId}::uuid, payslip_id, item_type, label, amount, sort_order from items
+      insert into payslip_items (company_id, payslip_id, item_type, label, amount, sort_order, meta)
+      select ${companyId}::uuid, payslip_id, item_type, label, amount, sort_order, meta from items
     `);
     return Number((res as unknown as { rowCount?: number }).rowCount ?? 0);
   }

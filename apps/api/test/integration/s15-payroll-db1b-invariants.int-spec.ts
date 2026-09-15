@@ -146,7 +146,9 @@ function engineOf(graph: ReturnType<typeof seedGraph>, c: GridCase): { base: str
   );
   return {
     base: (out.get("LUONG_CO_BAN") as Dec).toFixed(2),
-    ded: (out.get("NGHI_KHONG_LUONG") as Dec).toFixed(2),
+    // S15-PAYROLL-BE-3 (O-5, seedVersion v4): NGHI_KHONG_LUONG là `earning` ÂM — oracle so TRỊ TUYỆT ĐỐI của khoản trừ
+    // (ROUND_HALF_UP đối xứng quanh 0 ⇒ |v4| = v3 từng xu; formula.line.spec.ts ghim riêng).
+    ded: (out.get("NGHI_KHONG_LUONG") as Dec).abs().toFixed(2),
   };
 }
 

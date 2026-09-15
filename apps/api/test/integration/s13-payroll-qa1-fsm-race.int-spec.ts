@@ -65,6 +65,7 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
+import { seedPayrollCatalog } from "../helpers/payroll-v2-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1fsm");
@@ -222,6 +223,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×8 ở tầng HTTP + đua
     );
   }
 
+  /** S15-PAYROLL-BE-3 (O-1) — `MAU_MAC_DINH` gắn thẳng vào kỳ INSERT tay; thiếu nó `calculate` ra 409 023, không phải FSM. */
+  let templateId = "";
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -234,6 +238,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×8 ở tầng HTTP + đua
     direct = directPool();
     A = await seedCompany(direct, "s13pqa1fsm");
     companyIds.push(A.companyId);
+    templateId = await seedPayrollCatalog(direct, A.companyId);
     await direct.query(`UPDATE companies SET working_days_json = $2::jsonb WHERE id = $1`, [
       A.companyId,
       JSON.stringify({ days: [1, 2, 3, 4, 5] }),
@@ -266,9 +271,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×8 ở tầng HTTP + đua
     for (const [i, status] of STATUSES.entries()) {
       const month = `2027-0${i + 1}`;
       const r = await direct.query<{ id: string }>(
-        `INSERT INTO payroll_periods (company_id, period_month, status, attendance_period_id)
-         VALUES ($1, $2, 'Draft', $3) RETURNING id`,
-        [A.companyId, month, attendancePeriodId],
+        `INSERT INTO payroll_periods (company_id, period_month, status, attendance_period_id, template_id)
+         VALUES ($1, $2, 'Draft', $3, $4) RETURNING id`,
+        [A.companyId, month, attendancePeriodId, templateId],
       );
       periodByStatus.set(status, r.rows[0].id);
       await resetTo(r.rows[0].id, status);
@@ -332,9 +337,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · FSM 9×8 ở tầng HTTP + đua
     /** Kỳ RIÊNG cho mục B (tháng 2027-09..12) — không giẫm lên 7 kỳ của ma trận. */
     async function freshPeriod(month: string, status: PayrollPeriodStatus): Promise<string> {
       const r = await direct.query<{ id: string }>(
-        `INSERT INTO payroll_periods (company_id, period_month, status, attendance_period_id)
-         VALUES ($1, $2, 'Draft', $3) RETURNING id`,
-        [A.companyId, month, attendancePeriodId],
+        `INSERT INTO payroll_periods (company_id, period_month, status, attendance_period_id, template_id)
+         VALUES ($1, $2, 'Draft', $3, $4) RETURNING id`,
+        [A.companyId, month, attendancePeriodId, templateId],
       );
       const id = r.rows[0].id;
       await resetTo(id, status);

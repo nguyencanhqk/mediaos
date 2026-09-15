@@ -49,7 +49,12 @@ import { SalaryComponentsRepository } from "./salary-components.repository";
 const OVERRIDE_FORBIDDEN: ReadonlySet<string> = new Set(["engine", "profile_item"]);
 
 /** Tóm tắt thành phần cho audit 053 — công thức/nhãn/ẩn hiện/thứ tự, KHÔNG số tiền. */
-const auditSummary = (r: Pick<TemplateComponentRow, "code" | "formulaOverride" | "isVisible" | "sortOrder" | "columnLabel">) => ({
+const auditSummary = (
+  r: Pick<
+    TemplateComponentRow,
+    "code" | "formulaOverride" | "isVisible" | "sortOrder" | "columnLabel"
+  >,
+) => ({
   code: r.code,
   formulaOverride: r.formulaOverride,
   isVisible: r.isVisible,
@@ -135,7 +140,12 @@ export class PayrollTemplatesService {
         objectId: row.id,
         actorUserId: user.id,
         before: null,
-        after: { code: row.code, scope: row.scope, orgUnitId: row.orgUnitId, isActive: row.isActive },
+        after: {
+          code: row.code,
+          scope: row.scope,
+          orgUnitId: row.orgUnitId,
+          isActive: row.isActive,
+        },
       });
       return { id: row.id };
     });
@@ -271,6 +281,7 @@ export class PayrollTemplatesService {
           catalogFormula: c.formula,
           fixedAmount: c.fixedAmount,
           pitDeductible: c.pitDeductible,
+          isSystem: c.isSystem,
           componentActive: c.isActive,
           componentDeletedAt: c.deletedAt,
           columnLabel: input.columnLabel ?? null,
@@ -325,9 +336,10 @@ export class PayrollTemplatesService {
   ): Promise<PayrollTemplatePreviewResult> {
     await this.access.resolveActor(user, "templatePreview");
     const statutory = PayrollTemplatesService.statutoryOrThrow(dto);
-    const sys = Object.fromEntries(
-      SYS_REFS.map((k) => [k, new D(dto.inputs[k] ?? "0")]),
-    ) as Record<SysRef, Dec>;
+    const sys = Object.fromEntries(SYS_REFS.map((k) => [k, new D(dto.inputs[k] ?? "0")])) as Record<
+      SysRef,
+      Dec
+    >;
     const profileItems = Object.fromEntries(
       Object.entries(dto.profileItems).map(([k, v]) => [k, new D(v)]),
     ) as Record<string, Dec>;
@@ -348,20 +360,30 @@ export class PayrollTemplatesService {
     }
     // Khoá `profileItems` không khớp thành phần `profile_item` nào của mẫu ⇒ 422, KHÔNG âm thầm = 0 (khoá gõ sai,
     // khoá của thành phần không phải profile_item) — silent-failure-hunter BE-2 MEDIUM-2.
-    const profileCodes = new Set(rows.filter((r) => r.valueType === "profile_item").map((r) => r.code));
-    const unknownItems = Object.keys(dto.profileItems).filter((k) => !profileCodes.has(k)).sort();
+    const profileCodes = new Set(
+      rows.filter((r) => r.valueType === "profile_item").map((r) => r.code),
+    );
+    const unknownItems = Object.keys(dto.profileItems)
+      .filter((k) => !profileCodes.has(k))
+      .sort();
     if (unknownItems.length > 0) {
       throw payrollUnprocessable(
         "FORMULA_INVALID",
         PAYROLL_ERR.PROFILE_ITEM_UNKNOWN_COMPONENT(unknownItems.join(", ")),
-        payrollDetails("profile-item-unknown-component", { componentCodes: unknownItems.join(",") }),
+        payrollDetails("profile-item-unknown-component", {
+          componentCodes: unknownItems.join(","),
+        }),
       );
     }
     const graph = compileOrThrow(rows.map(templateGraphComponent), true);
     const budget = new Budget();
     let values: Map<string, Dec>;
     try {
-      values = evaluatePass(graph, { sys, profileItems, pitPayer: dto.pitPayer, statutory }, budget);
+      values = evaluatePass(
+        graph,
+        { sys, profileItems, pitPayer: dto.pitPayer, statutory },
+        budget,
+      );
     } catch (err) {
       if (isFormulaError(err)) throw formulaErrorToHttp(err);
       throw err;

@@ -63,6 +63,7 @@ import {
 } from "../../src/payroll/payroll-route-pairs.const";
 import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { seedPayrollCatalog } from "../helpers/payroll-v2-fixtures";
 import {
   cleanupTenants,
   seedCompany,
@@ -466,6 +467,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     const hash = await new PasswordService().hash(LOGIN_PW);
     A = await seedCompany(direct, "s13pqa1floor");
     companyIds.push(A.companyId);
+    // S15-PAYROLL-BE-3 (O-1): kỳ fixture phải gắn mẫu để `calculate` sinh dòng/phiếu thật cho mục C.
+    const templateId = await seedPayrollCatalog(direct, A.companyId);
     await direct.query(`UPDATE companies SET working_days_json = $2::jsonb WHERE id = $1`, [
       A.companyId,
       JSON.stringify({ days: [1, 2, 3, 4, 5] }),
@@ -518,6 +521,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     const p = await post(tCompany, "/payroll-periods").send({
       periodMonth: "2028-06",
       attendancePeriodId: ap.rows[0].id,
+      templateId,
     });
     expect(p.status, JSON.stringify(p.body)).toBe(201);
     fixture.periodId = p.body.data.id as string;

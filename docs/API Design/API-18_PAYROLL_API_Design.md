@@ -363,6 +363,7 @@ Cùng khuôn §5.1: bảng dưới **không nhân bản rule nghiệp vụ**, ch
     "payDate": "2026-10-05",
     "status": "Reviewing",
     "attendancePeriod": { "id": "…", "periodMonth": "2026-09", "status": "locked" },
+    "templateId": "…",
     "headcount": 42,
     "trail": {
       "createdBy": { "id": "…", "fullName": "Nguyễn Văn A" },
@@ -468,9 +469,9 @@ Namespace sau v2: **`PAYROLL-ERR-001..033`** (17 mã v1 + 16 mã v2). Định ng
 | PAYROLL-ERR-018 | `422` | `formula-syntax` · `formula-unknown-ref` · `formula-unknown-function` · `formula-too-long` · `formula-too-deep` · `formula-too-many-nodes` | **Công thức không hợp lệ lúc LƯU** (045 · 047 · 048 · 053); `details[]` nêu **vị trí ký tự** và token gây lỗi |
 | PAYROLL-ERR-019 | `422` | `formula-cycle` | **Vòng phụ thuộc** giữa các thành phần; thông điệp nêu **chu trình đầy đủ** theo mã (`A → B → C → A`), không chỉ nói «có vòng» |
 | PAYROLL-ERR-020 | `422` | `formula-budget-exceeded` · `division-by-zero` · `numeric-overflow` | **Vỡ lúc TÍNH** (007 sau v2): vượt ngân sách node · chia cho 0 · tràn `numeric(18,2)`. Kỳ **không** đổi trạng thái |
-| PAYROLL-ERR-021 | `422` | `grossup-not-converged` | **Gross-up NET không hội tụ** sau 30 vòng; `details[]` nêu `userId` + sai số còn lại. **Rollback TOÀN BỘ tx — không ghi dòng nào** |
+| PAYROLL-ERR-021 | `422` | `grossup-not-converged` | **Gross-up NET không hội tụ** sau 30 vòng hoặc căn cứ lặp ≤ 0; `details[]` nêu `userId` · `iterations` · `reason` (`not-converged` \| `non-positive-base`) — 🔁 **không** «sai số còn lại» (là tiền, §6.5; `S15-PAYROLL-BE-3` §3.6). **Rollback TOÀN BỘ tx — không ghi dòng nào** |
 | PAYROLL-ERR-022 | `422` | `statutory-rate-missing` · `statutory-rate-incomplete` | Thiếu **bản tỉ lệ luật định hiệu lực** tại ngày cuối kỳ (007) · bản thiếu bậc thuế/trần bắt buộc, **7 bậc không liên tục** (khoảng hở/chồng) lúc lưu (056) |
-| PAYROLL-ERR-023 | `409` | `template-locked` · `template-missing` · `template-inactive` | **Mẫu bảng lương của kỳ**: đổi mẫu khi kỳ > `CollectingData` · `calculate` khi kỳ chưa gắn mẫu · mẫu đã ngưng dùng |
+| PAYROLL-ERR-023 | `409` | `template-locked` · `template-missing` · `template-inactive` · `template-scope-unsupported` | **Mẫu bảng lương của kỳ**: đổi mẫu khi kỳ > `CollectingData` · `calculate` khi kỳ chưa gắn mẫu hoặc mẫu đã xoá mềm (`reason = template-deleted`) · mẫu đã ngưng dùng · 🔁 mẫu `scope = org_unit` gắn vào kỳ (`S15-PAYROLL-BE-3`) |
 | PAYROLL-ERR-024 | `409` | `system-component-immutable` · `component-in-use` · `component-code-exists` · `component-code-reserved` | **Thành phần lương**: xoá thành phần hệ thống · xoá/ngưng thành phần đang được mẫu tham chiếu (`details[]` liệt kê mẫu) · trùng `code` (chốt cuối UNIQUE) · `code` đụng không gian tên hệ thống (tiền tố `SYS_`/trùng mã seed) |
 | PAYROLL-ERR-025 | `409` | `advance-not-pending` · `advance-already-deducted` · `self-approval` | **Tạm ứng** FSM (062 · 063 · 064) |
 | PAYROLL-ERR-026 | `409` | `advance-period-frozen` | Gắn tạm ứng vào **kỳ đã ≥ `Calculated`** (060) — khoản khấu trừ phải có mặt **trước** khi tính |
@@ -483,6 +484,8 @@ Namespace sau v2: **`PAYROLL-ERR-001..033`** (17 mã v1 + 16 mã v2). Định ng
 | PAYROLL-ERR-033 | `409` | `rate-effective-date-exists` · `rate-in-use` | **Bản tỉ lệ luật định — xung đột**: trùng `effective_from` (056 — chốt cuối UNIQUE, race map 409) · sửa bản **đã có kỳ lương dùng** (058) ⇒ phải **tạo bản mới**, không sửa tại chỗ (đổi số của bản đã áp là đổi tiền của kỳ đã tính) |
 
 > 🔁 **Kind bổ sung ở `S15-PAYROLL-BE-2`** — nguồn sự thật SPEC-11 §12.1 (khối «Kind bổ sung khi hiện thực track B»): 018 `formula-arity` · `template-missing-engine-nodes` · `formula-override-not-allowed` · `template-too-many-components` · `template-component-unknown` · `template-component-duplicate` · `component-value-pair` · `template-scope-pair`; 023 `template-code-exists`. `details[]` của lỗi máy công thức mang `pos` · `component` · `ref` · `func` · `cycle` (nối `→`) · `limit` · `pass` · `reason` · `template` — **không bao giờ** số tiền.
+>
+> 🔁 **Kind bổ sung ở `S15-PAYROLL-BE-3`** (nguồn sự thật SPEC-11 §12.1): 018 `system-component-drift` · `template-input-missing` (`details.components` = MÃ) · `profile-item-unknown-component` lúc tính kèm `userId`; 020 `negative-total`; 021 `grossup-not-converged` (`userId` · `iterations` · `reason`); 022 `statutory-rate-missing`; 023 `template-scope-unsupported`; 012 `self-approval` từ CHECK `bonus_penalties_four_eyes_check`. `details[]` lỗi 007 thêm `userId` (id, không tiền) và `iterations`.
 
 **Ánh xạ HTTP bổ sung (v2)** — cộng vào bảng §6.5:
 

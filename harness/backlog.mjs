@@ -16054,7 +16054,7 @@ export const backlog = [
     title:
       "BE track B (2/2): máy tính lương v2 — evaluate theo mẫu của kỳ · engine BHXH/BHYT/BHTN/KPCĐ/đoàn phí + trần theo payroll_statutory_rates hiệu lực ngày cuối kỳ · TNCN luỹ tiến 7 bậc + giảm trừ bản thân/NPT · NET gross-up ≤30 vòng ≤1đ · snapshot component_values_json · payslip_items theo thành phần (meta.componentCode) · bất biến SQL giữ nguyên · fixture đối soát tay từng đồng (GROSS + NET)",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/payroll/**",
       "apps/api/test/**",
@@ -16063,6 +16063,15 @@ export const backlog = [
       "docs/QA/**",
       "docs/plans/S15-PAYROLL-BE-3.md",
       "harness/backlog.mjs",
+      // plan §0 O-5 + §4.1 — mig 0575 (NGHI_KHONG_LUONG earning âm + bonus_penalties_four_eyes_check).
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/payroll.ts",
+      // plan §4.11 — kind mới ⇒ census kind FE + i18n vi cùng PR (memory s15-payroll-be2-wave-state).
+      "apps/app/src/routes/payroll/**",
+      "apps/app/src/i18n/**",
+      // plan §0 — quyết định owner 15/09 ghi vào SPEC/DB (kind · participation · gross-up · NGHI_KHONG_LUONG).
+      "docs/SPEC/SPEC-11 PAYROLL.md",
+      "docs/DB/**",
     ],
     skills: ["plan-review", "code-review"],
     depends_on: ["S15-PAYROLL-BE-2", "S15-PAYROLL-DB-2", "S15-PAYROLL-DB-1B"],
@@ -16072,10 +16081,10 @@ export const backlog = [
       "SPEC-11 v2 §13.4 (máy công thức + luật định + gross-up, đính chính owner nếu có); DEC-012/014/015; PayrollCalcService/PayrollCalcRepository v1 (UPSERT set-based, row-lock, RESET vết)",
     ],
     done_when: [
-      "calculate: kỳ có template ⇒ evaluate từng dòng theo AST đã validate (đầu vào = 5 đại lượng v1 + hồ sơ lương v2 + items + settings + NPT hiệu lực + tỉ lệ luật định hiệu lực ngày cuối kỳ + thưởng/phạt/tạm ứng đã duyệt); kỳ KHÔNG template ⇒ đường v1 giữ nguyên (không hồi quy 375 ca cũ)",
+      "calculate: kỳ có template ⇒ evaluate từng dòng theo AST đã validate (đầu vào = 5 đại lượng v1 + hồ sơ lương v2 + items + settings + NPT hiệu lực + tỉ lệ luật định hiệu lực ngày cuối kỳ + thưởng/phạt/tạm ứng đã duyệt); 🔁 kỳ KHÔNG template ⇒ 409 PAYROLL-ERR-023 `template-missing` (SPEC-11 §13.6 H + API-18 — owner chốt 15/09 O-1; bản cũ «giữ đường v1» mâu thuẫn SPEC). Gỡ công thức SQL v1; 8 int-spec v1 chuyển sang seed catalog + gắn MAU_MAC_DINH (plan §7)",
       "Luật định: lương đóng BH = insurance_salary (fallback base) kẹp trần; BHXH/BHYT/BHTN NV + DN, KPCĐ DN, đoàn phí NV (chỉ khi tham gia công đoàn); TNCN: thu nhập tính thuế = tổng chịu thuế − BH NV − giảm trừ bản thân − 4,4tr×NPT hiệu lực, luỹ tiến 7 bậc, pit_payer=company ⇒ DN chịu (ghi khoản riêng); mọi số decimal.js, ghi numeric(18,2) ở SQL",
       "NET: gross-up lặp trên toàn công thức, hội tụ ≤ 1 đ trong ≤ 30 vòng, số vòng vào snapshot; không hội tụ ⇒ 422 mã riêng, kỳ KHÔNG chuyển trạng thái",
-      "Snapshot component_values_json đầy đủ mọi thành phần + tỉ lệ đã dùng + NPT đã tính; payslip_items sinh theo thành phần visible của mẫu (item_type map 7 loại hiện có, meta.componentCode) — bất biến SUM(items)=gross−deduction+adjustment vẫn assert trong tx",
+      "Snapshot component_values_json đầy đủ mọi thành phần + tỉ lệ đã dùng + NPT đã tính; 🔁 payslip_items sinh cho MỌI thành phần góp vào net (owner O-3 15/09 — chỉ thành phần visible là vỡ bất biến tổng vì thành phần ẩn vẫn cộng vào 4 nút): earning/tax_exempt +value · deduction/statutory_employee −value · tax −value chỉ khi pit_payer=EMPLOYEE · bỏ aggregate + statutory_employer; từ SNAPSHOT lúc tính; meta {componentCode, kind, isVisible} — bất biến SUM(items)=gross−deduction+adjustment vẫn assert trong tx",
       "Fixture đối soát TAY ≥ 2 NV (1 GROSS đủ mọi khoản + BH + TNCN bậc ≥3 + 2 NPT; 1 NET) — số khớp từng đồng với bảng tay trong docs/QA/evidence; biên: NPT hết hiệu lực giữa kỳ, đổi tỉ lệ giữa năm, lương BH vượt trần",
       "Sửa công thức/tỉ lệ SAU Calculated không đổi số; coverage payroll/ ≥85%",
       "🔻 NỢ TỪ DB-1 (plan-review vòng 1, B1) — CỔNG FAIL-CLOSED khi CATALOG KHÔNG ĐỦ: seed company-scoped chạy RUNTIME và runner NUỐT throw (batch Failed + log, boot vẫn tiếp) ⇒ KHÔNG được coi «đã seed» là điều kiện đương nhiên. calculate phải trả 422 PAYROLL-ERR-022 khi thiếu bản payroll_statutory_rates hiệu lực tại ngày cuối kỳ, và 422 PAYROLL-ERR-018 khi thiếu/không phân giải được 4 nút engine (TONG_THU_NHAP · TONG_BH_NV · THU_NHAP_CHIU_THUE · TONG_KHAU_TRU). CẤM trả net=0 hoặc net=gross — mọi bất biến SQL vẫn xanh ở hình dạng đó. Ca test: công ty CHƯA seed catalog ⇒ calculate 422, kỳ KHÔNG chuyển trạng thái",
@@ -16230,7 +16239,7 @@ export const backlog = [
       "SPEC-11 v2 §13 (advance FSM · payment · budget) + DEC-017; khuôn bonus_penalties (freeze guard, consume pair) · S5-HR-IMPORT-BE-1 (import Excel) · payroll-export.service (exceljs)",
     ],
     done_when: [
-      "Tạm ứng: tạo (officer hoặc NV tự đề nghị — chốt trong plan) · duyệt/từ chối khác người tạo (mã lỗi tự duyệt) · Approved chưa Deducted được máy tính lương gộp thành khoản khấu trừ kỳ chỉ định (bind consume như bonus_penalties, nhả khi tính lại) · Deducted khi kỳ Approved; Own route GET /me/payroll-advances fail-closed rỗng",
+      "Tạm ứng: tạo (officer hoặc NV tự đề nghị — chốt trong plan) · duyệt/từ chối khác người tạo (mã lỗi tự duyệt) · Approved chưa Deducted được máy tính lương gộp thành khoản khấu trừ kỳ chỉ định (bind consume như bonus_penalties, nhả khi tính lại) · 🔁 Deducted NGAY LÚC BIND trong calculate (CHECK payroll_advances_consume_status_check ép payroll_period_id NOT NULL ⇒ status='Deducted'; nhả ⇒ Approved + NULL cả cặp) — S15-PAYROLL-BE-3 ĐÃ làm release/pick/bind (plan BE-3 §3.5 · §4.9), BE-4 KHÔNG viết lại; route ghi tạm ứng (060/062/063/064) PHẢI map TAG trigger payroll_advance_freeze_guard cùng commit; 🔒 052 kiểm template-in-use (xoá/ngưng mẫu đang gắn kỳ) dưới khoá catalog ĐỘC QUYỀN chỉ ĐỌC payroll_periods — KHÔNG FOR SHARE/UPDATE hàng kỳ (quy ước payroll-catalog.lock.ts: advisory TRƯỚC, khoá hàng SAU; calculate/004 lấy shared TRƯỚC khoá kỳ — plan BE-3 §0b M1); Own route GET /me/payroll-advances fail-closed rỗng",
       "Đợt chi trả: chỉ từ kỳ Published; lines = payslip net theo phương thức; xuất tệp UNC XLSX (mẫu cột: STT · tên · số TK · ngân hàng · số tiền · nội dung) gác manage:payment-batch + audit; đánh dấu hoàn tất ⇒ kỳ Published→Paid dưới row-lock + RESET vết; tổng lines = tổng net kỳ (assert)",
       "Ngân sách: CRUD năm/đơn vị + route thực hiện (tổng gross các kỳ Paid/Published trong năm theo đơn vị) — sàn scope Company, gác view-line",
       "Import Excel thu nhập/khấu trừ khác: validate từng dòng (mã NV · thành phần · số tiền · kỳ), báo lỗi theo dòng, tạo bonus_penalties/khoản theo thành phần ở trạng thái Pending (vẫn qua duyệt) — KHÔNG ghi thẳng Approved",

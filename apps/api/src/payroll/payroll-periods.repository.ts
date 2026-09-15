@@ -95,7 +95,12 @@ export class PayrollPeriodsRepository {
   async createTx(
     tx: TenantTx,
     companyId: string,
-    input: { periodMonth: string; attendancePeriodId: string | null; note: string | null },
+    input: {
+      periodMonth: string;
+      attendancePeriodId: string | null;
+      templateId: string | null;
+      note: string | null;
+    },
     actorUserId: string,
   ): Promise<PayrollPeriod> {
     const [row] = await tx
@@ -104,6 +109,7 @@ export class PayrollPeriodsRepository {
         companyId,
         periodMonth: input.periodMonth,
         attendancePeriodId: input.attendancePeriodId,
+        templateId: input.templateId,
         note: input.note,
         status: "Draft",
         createdBy: actorUserId,
@@ -113,12 +119,15 @@ export class PayrollPeriodsRepository {
     return row;
   }
 
-  /** PATCH 004 — chỉ `attendance_period_id` + `note` (KHÔNG `status`: FSM đi qua route hành động). */
+  /**
+   * PATCH 004 — `attendance_period_id` · `template_id` (S15-PAYROLL-BE-3) · `note` (KHÔNG `status`: FSM đi qua route
+   * hành động). `template_id` chỉ tới đây SAU cổng `assertUsableTemplateTx` + kỳ ≤ `CollectingData`.
+   */
   async updateTx(
     tx: TenantTx,
     companyId: string,
     id: string,
-    patch: { attendancePeriodId?: string; note?: string | null },
+    patch: { attendancePeriodId?: string; templateId?: string; note?: string | null },
     actorUserId: string,
   ): Promise<PayrollPeriod | null> {
     const [row] = await tx

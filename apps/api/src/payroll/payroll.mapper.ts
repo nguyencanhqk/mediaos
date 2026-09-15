@@ -139,6 +139,7 @@ export function toPayrollPeriodDto(row: PayrollPeriod): PayrollPeriodDto {
     status: row.status as PayrollPeriodStatus,
     payDate: row.payDate ? String(row.payDate) : null,
     attendancePeriodId: row.attendancePeriodId,
+    templateId: row.templateId,
     note: row.note,
     reopenReason: row.reopenReason,
     createdBy: row.createdBy,
@@ -222,8 +223,41 @@ interface RawLine {
   adjustment_reason: string | null;
   gross: string;
   net: string;
+  /** v2 — `{}` cho dòng v1; dòng v2 mang `components` + `statutoryRateId` (S15-PAYROLL-BE-3 snapshot). */
+  component_values_json?: Record<string, unknown> | null;
+  template_fingerprint?: string | null;
+  gross_up_iterations?: number | null;
   created_at: Date | string;
   updated_at: Date | string;
+}
+
+/** Một thành phần trong snapshot `component_values_json.components` (tiền là chuỗi scale 2). */
+interface SnapshotComponent {
+  code: string;
+  label: string;
+  kind: string;
+  isVisible: boolean;
+  sortOrder: number;
+  value: string;
+}
+
+/**
+ * S15-PAYROLL-BE-3 — `components[]` của DTO dòng lấy từ SNAPSHOT lúc tính, KHÔNG từ mẫu hiện tại (sửa công thức sau
+ * `Calculated` không đổi số). Dòng v1 (không khoá `components`) ⇒ `undefined` ⇒ vắng khoá.
+ */
+function snapshotComponents(
+  cvj: Record<string, unknown> | null | undefined,
+): PayrollPeriodLineDto["components"] {
+  const list = cvj?.["components"];
+  if (!Array.isArray(list)) return undefined;
+  return (list as SnapshotComponent[]).map((c) => ({
+    code: c.code,
+    label: c.label,
+    kind: c.kind as NonNullable<PayrollPeriodLineDto["components"]>[number]["kind"],
+    isVisible: c.isVisible,
+    sortOrder: c.sortOrder,
+    value: num(c.value),
+  }));
 }
 
 /** 008 · 017 — dòng bảng lương nháp. Năm đại lượng NGÀY không phải tiền ⇒ luôn có mặt. */
@@ -250,6 +284,17 @@ export function toPayrollLineDto(row: RawLine, actor: PayrollActor): PayrollPeri
       gross: num(row.gross),
       net: num(row.net),
     }),
+    // S15-PAYROLL-BE-3 — giá trị thành phần + số vòng gross-up là TIỀN/suy ra tiền ⇒ cùng cổng `canSeeMoney`.
+    ...when(actor.canSeeMoney && snapshotComponents(row.component_values_json) !== undefined, {
+      components: snapshotComponents(row.component_values_json),
+      grossUpIterations: row.gross_up_iterations ?? null,
+    }),
+    // Không tiền — luôn có mặt (FE-2 so fingerprint để hiện băng «mẫu đã đổi»).
+    templateFingerprint: row.template_fingerprint ?? null,
+    statutoryRateId:
+      typeof row.component_values_json?.["statutoryRateId"] === "string"
+        ? (row.component_values_json["statutoryRateId"] as string)
+        : null,
     createdAt: iso(row.created_at) as string,
     updatedAt: iso(row.updated_at) as string,
   } as PayrollPeriodLineDto;

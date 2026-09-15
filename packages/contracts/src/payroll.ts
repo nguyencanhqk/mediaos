@@ -378,6 +378,8 @@ export const payrollPeriodSchema = z.object({
   status: payrollPeriodStatusEnum,
   payDate: z.string().date().nullable(),
   attendancePeriodId: z.string().uuid().nullable(),
+  /** S15-PAYROLL-BE-3 — mẫu bảng lương gắn vào kỳ (id, không tiền). `null` ⇒ `calculate` trả 409 023 `template-missing`. */
+  templateId: z.string().uuid().nullable(),
   note: z.string().nullable(),
   reopenReason: z.string().nullable(),
   createdBy: z.string().uuid().nullable(),
@@ -402,6 +404,8 @@ export type PayrollPeriodDto = z.infer<typeof payrollPeriodSchema>;
 export const createPayrollPeriodSchema = z.object({
   periodMonth: periodMonthSchema,
   attendancePeriodId: z.string().uuid().optional(),
+  /** S15-PAYROLL-BE-3 — gắn mẫu ngay lúc tạo; validate lúc GẮN (tồn tại · active · scope company · đồ thị biên dịch). */
+  templateId: z.string().uuid().optional(),
   note: z.string().max(500).optional(),
 });
 export type CreatePayrollPeriodRequest = z.infer<typeof createPayrollPeriodSchema>;
@@ -418,6 +422,11 @@ export type CreatePayrollPeriodRequest = z.infer<typeof createPayrollPeriodSchem
 export const updatePayrollPeriodSchema = z
   .object({
     attendancePeriodId: z.string().uuid().optional(),
+    /**
+     * S15-PAYROLL-BE-3 — đổi mẫu chỉ khi kỳ ≤ `CollectingData` (khác ⇒ 409 023 `template-locked`). **KHÔNG `.nullable()`**
+     * (cùng lý do `attendancePeriodId`): gỡ về NULL thì `calculate` chỉ còn 409 `template-missing`, không có đường dùng.
+     */
+    templateId: z.string().uuid().optional(),
     note: z.string().max(500).nullable().optional(),
   })
   .strict();
@@ -504,6 +513,29 @@ export const payrollPeriodLineSchema = z.object({
   adjustmentReason: z.string().nullable().optional(),
   gross: z.number().nonnegative().optional(),
   net: z.number().nonnegative().optional(),
+  /**
+   * S15-PAYROLL-BE-3 — giá trị TỪNG thành phần của mẫu tại lúc tính (từ snapshot `component_values_json`, KHÔNG từ mẫu
+   * hiện tại). Tiền ⇒ CHỈ có mặt khi actor thấy tiền (vắng khoá, không null). Dòng v1 ⇒ vắng. `value` CÓ DẤU
+   * (`NGHI_KHONG_LUONG` là thu nhập âm).
+   */
+  components: z
+    .array(
+      z.object({
+        code: z.string(),
+        label: z.string(),
+        kind: salaryComponentKindEnum,
+        isVisible: z.boolean(),
+        sortOrder: z.number().int(),
+        value: z.number(),
+      }),
+    )
+    .optional(),
+  /** Số vòng gross-up (NET) — cùng cổng tiền với `components`. `null` cho GROSS/dòng v1. */
+  grossUpIterations: z.number().int().nullable().optional(),
+  /** SHA-256 tập công thức + bản tỉ lệ đã dùng (§13.6 G) — không tiền. `null` cho dòng v1. */
+  templateFingerprint: z.string().nullable().optional(),
+  /** Bản tỉ lệ luật định đã dùng — không tiền. `null` cho dòng v1. */
+  statutoryRateId: z.string().uuid().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
