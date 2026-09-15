@@ -46,7 +46,7 @@ export const payrollPageQuery = {
  * CSV hoặc lặp key → mảng enum. Idempotent với cả hai hình dạng Express tạo ra
  * (`?status=a,b` và `?status=a&status=b`) — memory `zod-query-param-double-pipe-idempotent`.
  */
-const csvEnumList = <T extends z.ZodTypeAny>(item: T) =>
+export const csvEnumList = <T extends z.ZodTypeAny>(item: T) =>
   z
     .preprocess((v) => {
       if (v === undefined || v === null || v === "") return undefined;
@@ -392,6 +392,11 @@ export const payrollPeriodSchema = z.object({
   approvedAt: z.string().datetime().nullable(),
   publishedBy: z.string().uuid().nullable(),
   publishedAt: z.string().datetime().nullable(),
+  /** S15-PAYROLL-BE-4 — vết `Paid` (cạnh `complete-batch`, mig 0572). ⚠️ «đã chi» hiển thị DẪN XUẤT từ dòng chi, KHÔNG từ cặp này. */
+  paidBy: z.string().uuid().nullable(),
+  paidAt: z.string().datetime().nullable(),
+  /** S15-PAYROLL-BE-4 — kỳ `Locked` di sản (O-1 lối A, DB-2 LOW-2): `paid_* = published_*` ⇒ FE KHÔNG hiện «đã chi». */
+  legacyPaidTrail: z.boolean(),
   lockedBy: z.string().uuid().nullable(),
   lockedAt: z.string().datetime().nullable(),
   payslipsGeneratedBy: z.string().uuid().nullable(),

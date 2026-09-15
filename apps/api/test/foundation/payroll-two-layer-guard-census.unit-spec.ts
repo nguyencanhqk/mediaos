@@ -140,6 +140,32 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: PayrollRo
   { method: "POST", path: "/api/v1/payroll/statutory-rates", key: "statutoryRateCreate" },
   { method: "GET", path: "/api/v1/payroll/statutory-rates/:id", key: "statutoryRateDetail" },
   { method: "PATCH", path: "/api/v1/payroll/statutory-rates/:id", key: "statutoryRateUpdate" },
+  // ── S15-PAYROLL-BE-4 (track C · 059–077) ──
+  { method: "GET", path: "/api/v1/payroll/advances", key: "advanceList" },
+  { method: "POST", path: "/api/v1/payroll/advances", key: "advanceCreate" },
+  { method: "GET", path: "/api/v1/payroll/advances/:id", key: "advanceDetail" },
+  { method: "PATCH", path: "/api/v1/payroll/advances/:id", key: "advanceUpdate" },
+  { method: "POST", path: "/api/v1/payroll/advances/:id/approve", key: "advanceApprove" },
+  { method: "POST", path: "/api/v1/payroll/advances/:id/reject", key: "advanceReject" },
+  // 065 Own — segment `me` (module ME trong openapi-modules), cùng khuôn `/me/payslips*`.
+  { method: "GET", path: "/api/v1/me/payroll-advances", key: "meAdvanceList" },
+  { method: "GET", path: "/api/v1/payroll/payment-batches", key: "batchList" },
+  { method: "POST", path: "/api/v1/payroll/payment-batches", key: "batchCreate" },
+  { method: "GET", path: "/api/v1/payroll/payment-batches/:id", key: "batchDetail" },
+  { method: "PATCH", path: "/api/v1/payroll/payment-batches/:id", key: "batchUpdate" },
+  { method: "GET", path: "/api/v1/payroll/payment-batches/:id/lines", key: "batchLines" },
+  { method: "GET", path: "/api/v1/payroll/payment-batches/:id/export", key: "batchExport" },
+  { method: "POST", path: "/api/v1/payroll/payment-batches/:id/complete", key: "batchComplete" },
+  { method: "GET", path: "/api/v1/payroll/budgets", key: "budgetList" },
+  { method: "POST", path: "/api/v1/payroll/budgets", key: "budgetCreate" },
+  { method: "PATCH", path: "/api/v1/payroll/budgets/:id", key: "budgetUpdate" },
+  // 076 nằm dưới `payroll-periods/:id` (controller gốc `@Controller()` — path đầy đủ); 077 tệp mẫu tĩnh.
+  {
+    method: "POST",
+    path: "/api/v1/payroll-periods/:id/import-adjustments",
+    key: "importAdjustments",
+  },
+  { method: "GET", path: "/api/v1/payroll/imports/adjustments-template", key: "importTemplate" },
 ];
 
 const PAYROLL_CONTROLLERS = new Set([
@@ -156,6 +182,12 @@ const PAYROLL_CONTROLLERS = new Set([
   "PayrollSalaryComponentsController",
   "PayrollTemplatesController",
   "PayrollStatutoryRatesController",
+  // ── S15-PAYROLL-BE-4 ──
+  "PayrollAdvancesController",
+  "MePayrollAdvancesController",
+  "PayrollPaymentBatchesController",
+  "PayrollBudgetsController",
+  "PayrollAdjustmentImportsController",
 ]);
 
 /** Sổ pin method↔key — đổi handler/key là ĐỎ, phải sửa CÓ CHỦ ĐÍCH qua FULL gate. */
@@ -226,6 +258,28 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "StatutoryRatesService#get": ["statutoryRateDetail"],
   "StatutoryRatesService#create": ["statutoryRateCreate"],
   "StatutoryRatesService#update": ["statutoryRateUpdate"],
+  // ── S15-PAYROLL-BE-4 (track C) ──
+  "PayrollAdvancesService#list": ["advanceList"],
+  "PayrollAdvancesService#create": ["advanceCreate"],
+  "PayrollAdvancesService#get": ["advanceDetail"],
+  "PayrollAdvancesService#update": ["advanceUpdate"],
+  // 063/064 đi chung `decide` — key chọn theo tham số `status` (khuôn `BonusPenaltiesService#decide`).
+  "PayrollAdvancesService#decide": ["advanceApprove", "advanceReject"],
+  "PayrollAdvancesService#listMine": ["meAdvanceList"],
+  "PayrollPaymentBatchesService#list": ["batchList"],
+  "PayrollPaymentBatchesService#create": ["batchCreate"],
+  "PayrollPaymentBatchesService#get": ["batchDetail"],
+  "PayrollPaymentBatchesService#update": ["batchUpdate"],
+  "PayrollPaymentBatchesService#lines": ["batchLines"],
+  "PayrollPaymentBatchesService#complete": ["batchComplete"],
+  // 071 đòi **BA** cặp (SPEC-11 §15.1): `manage:payment-batch` (decorator) + `export:payroll` + `view-payslip:payslip`.
+  // Ba literal ở CÙNG site là hình dạng ĐÚNG — mất một literal = ai đó vừa gỡ một vế assert, ca này phải ĐỎ.
+  "PayrollPaymentExportService#export": ["batchExport", "periodExport", "payslipList"],
+  "PayrollBudgetsService#list": ["budgetList"],
+  "PayrollBudgetsService#create": ["budgetCreate"],
+  "PayrollBudgetsService#update": ["budgetUpdate"],
+  "PayrollAdjustmentImportService#import": ["importAdjustments"],
+  "PayrollAdjustmentImportService#template": ["importTemplate"],
 };
 
 /**
@@ -304,8 +358,8 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(1) bảng fixture phủ ĐÚNG tập route PAYROLL đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 58 route PAYROLL (API-18 §5 + §5b)").toBe(
-      58,
+    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 77 route PAYROLL (API-18 §5 + §5b)").toBe(
+      77,
     );
     const seen = new Set(payrollRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
@@ -335,8 +389,9 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(3) TẦNG 2 — service: ĐÚNG method dùng ĐÚNG key (map pin, không chỉ đếm)", () => {
     const calls = serviceResolveActorCalls();
-    // 59 = 58 route + literal thứ hai của `PayrollExportService#export` (cặp `view-line`).
-    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(59);
+    // 80 = 77 route + literal thứ hai của `PayrollExportService#export` (`view-line`) + hai literal thêm của
+    // `PayrollPaymentExportService#export` (`periodExport` · `payslipList` — 071 gác BA cặp, S15-PAYROLL-BE-4).
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(80);
     const validKeys = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     expect(
       calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),
@@ -372,7 +427,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     const all = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     const used = new Set(ROUTE_TO_KEY.map((r) => r.key as string));
     const pending = new Set<string>(PAYROLL_PENDING_BE2);
-    expect(all.size, "bảng hằng phải khai đủ 58 route API-18").toBe(58);
+    expect(all.size, "bảng hằng phải khai đủ 77 route API-18").toBe(77);
     expect(
       [...pending].filter((k) => used.has(k)),
       "key ĐÃ có route mà vẫn nằm trong PENDING_BE2",
@@ -385,18 +440,19 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     // một `ROUTE_TO_KEY` bị xoá sạch cũng thoả cả ba assert trên. Hai neo dưới ghim SỐ LƯỢNG thật của
     // cả bảng hằng lẫn tập key đã nối dây. **Cấm hạ neo để lấy màu xanh.**
     expect(pending.size, "BE-2 đã nối dây hết — PENDING_BE2 phải RỖNG").toBe(0);
-    expect(used.size, "58 key đều phải có route").toBe(58);
+    expect(used.size, "77 key đều phải có route").toBe(77);
   });
 
-  it("(6) SÀN SCOPE Company — đúng 3 route /me/payslips* được miễn", () => {
+  it("(6) SÀN SCOPE Company — đúng 4 route Own (/me/payslips* + /me/payroll-advances) được miễn", () => {
     const noFloor = Object.entries(PAYROLL_ROUTE_PAIRS)
       .filter(([, p]) => !p.companyFloor)
       .map(([k]) => k)
       .sort();
-    expect(noFloor).toEqual(["mePayslipAck", "mePayslipDetail", "mePayslipList"]);
+    // S15-PAYROLL-BE-4: + `meAdvanceList` (065 — `view-own:payroll-advance`, Own hợp lệ).
+    expect(noFloor).toEqual(["meAdvanceList", "mePayslipAck", "mePayslipDetail", "mePayslipList"]);
   });
 
-  it("(7) objectGrantRequired chỉ được khai `false`, và đúng cho 3 route Own", () => {
+  it("(7) objectGrantRequired chỉ được khai `false`, và đúng cho 4 route Own", () => {
     const declared = Object.entries(PAYROLL_ROUTE_PAIRS).filter(
       ([, p]) => p.objectGrantRequired !== undefined,
     );
@@ -406,13 +462,14 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
       "objectGrantRequired=true là 403 cả route — KHÔNG BAO GIỜ khai",
     ).toEqual([]);
     expect(declared.map(([k]) => k).sort()).toEqual([
+      "meAdvanceList",
       "mePayslipAck",
       "mePayslipDetail",
       "mePayslipList",
     ]);
   });
 
-  it("(8) cờ sensitive khớp seed mig 0565+0571 — đúng 21 cặp is_sensitive trên 24 cặp có route", () => {
+  it("(8) cờ sensitive khớp seed mig 0565+0571 — đúng 29 cặp is_sensitive trên 32 cặp có route", () => {
     const pairs = Object.values(PAYROLL_ROUTE_PAIRS);
     const sensitive = new Set(
       pairs.filter((p) => p.isSensitive).map((p) => `${p.action}:${p.resourceType}`),
@@ -422,9 +479,11 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     );
     // 21 = 13 của §11.1 + 2 cặp `payroll-employee` (BE-1) + 6 cặp track B (BE-2: view/manage × salary-component ·
     // payroll-template · statutory-rate) — cả 8 cặp v2 đều sensitive (mig 0571).
-    expect(sensitive.size, "21 cặp sensitive (SPEC-11 §11.1 + §11.3)").toBe(21);
-    // 18 cặp CÓ route; cặp `access:payroll` là cổng nav, không gác route nào.
-    expect(sensitive.size + notSensitive.size).toBe(24);
+    // S15-PAYROLL-BE-4: +8 cặp track C (view/manage/approve/view-own × payroll-advance · view/manage × payment-batch ·
+    // view/manage × payroll-budget) — TẤT CẢ sensitive (mig 0571) ⇒ 21 → 29; distinct có route 24 → 32.
+    expect(sensitive.size, "29 cặp sensitive (SPEC-11 §11.1 + §11.3)").toBe(29);
+    // Cặp `access:payroll` là cổng nav, không gác route nào.
+    expect(sensitive.size + notSensitive.size).toBe(32);
     expect([...notSensitive].sort()).toEqual([
       "acknowledge-own-payslip:payslip",
       "manage:payroll-period",
@@ -474,6 +533,19 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
         "templatePutComponents",
         "statutoryRateCreate",
         "statutoryRateUpdate",
+        // ── S15-PAYROLL-BE-4 — route GHI trả `{ id, status?, warnings }` + 077 tệp mẫu tĩnh. KHÔNG thêm 059/061/065
+        //    (`amount`) · 066/068 (`totalNet`) · 070 (`net`) · 071 (UNC) · 073 (`plannedAmount`/`actualAmount`). ──
+        "advanceCreate",
+        "advanceUpdate",
+        "advanceApprove",
+        "advanceReject",
+        "batchCreate",
+        "batchUpdate",
+        "batchComplete",
+        "budgetCreate",
+        "budgetUpdate",
+        "importAdjustments",
+        "importTemplate",
       ].sort(),
     );
     // Mọi key trong set phải là route THẬT — key chết ở đây là mask im lặng cho một route không tồn tại.

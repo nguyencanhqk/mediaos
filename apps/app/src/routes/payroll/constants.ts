@@ -99,6 +99,29 @@ export const PAYROLL_ENGINE_PAIRS = {
   statutoryRateCreate: pair("manage", "statutory-rate", true),
   statutoryRateDetail: pair("view", "statutory-rate", true),
   statutoryRateUpdate: pair("manage", "statutory-rate", true),
+  // S15-PAYROLL-BE-4 · track C 059–077 — tạm ứng · đợt chi trả · ngân sách · import (8 cặp mới, TẤT CẢ sensitive).
+  advanceList: pair("view", "payroll-advance", true),
+  advanceCreate: pair("manage", "payroll-advance", true),
+  advanceDetail: pair("view", "payroll-advance", true),
+  advanceUpdate: pair("manage", "payroll-advance", true),
+  advanceApprove: pair("approve", "payroll-advance", true),
+  advanceReject: pair("approve", "payroll-advance", true),
+  // 065 Own — «Tạm ứng của tôi» (gate `access:me`, KHÔNG sau cổng payroll — cùng khuôn me.payslips).
+  meAdvanceList: pair("view-own", "payroll-advance", true),
+  batchList: pair("view", "payment-batch", true),
+  batchCreate: pair("manage", "payment-batch", true),
+  batchDetail: pair("view", "payment-batch", true),
+  batchUpdate: pair("manage", "payment-batch", true),
+  batchLines: pair("view", "payment-batch", true),
+  // 071 tệp UNC: BE assert THÊM `export:payroll` + `view-payslip:payslip` — FE gate nút tải bằng CẢ BA (useCanExact).
+  batchExport: pair("manage", "payment-batch", true),
+  batchComplete: pair("manage", "payment-batch", true),
+  budgetList: pair("view", "payroll-budget", true),
+  budgetCreate: pair("manage", "payroll-budget", true),
+  budgetUpdate: pair("manage", "payroll-budget", true),
+  // 076/077 tái dùng cặp CŨ `manage:bonus-penalty`.
+  importAdjustments: pair("manage", "bonus-penalty", true),
+  importTemplate: pair("manage", "bonus-penalty", true),
 } as const satisfies Record<string, PayrollEnginePair>;
 
 export type PayrollEngineKey = keyof typeof PAYROLL_ENGINE_PAIRS;

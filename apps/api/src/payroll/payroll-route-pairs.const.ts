@@ -60,7 +60,7 @@ const pair = (
   ...(objectGrantRequired === false ? { objectGrantRequired: false as const } : {}),
 });
 
-/** Key = mã route API-18 (PAYROLL-API-XXX) — đủ **43** route (35 v1 + 8 track A v2). */
+/** Key = mã route API-18 (PAYROLL-API-XXX) — đủ **77** route (35 v1 + 8 track A + 15 track B + 19 track C v2). */
 export const PAYROLL_ROUTE_PAIRS = {
   // ── Kỳ lương 001–018 ──────────────────────────────────────────────────────────────────────────
   periodList: pair("view", "payroll-period"), //                                            001
@@ -136,6 +136,32 @@ export const PAYROLL_ROUTE_PAIRS = {
   statutoryRateCreate: pair("manage", "statutory-rate", true), //                           056
   statutoryRateDetail: pair("view", "statutory-rate", true), //                             057
   statutoryRateUpdate: pair("manage", "statutory-rate", true), //                           058
+  // ── v2 track C — tạm ứng · đợt chi trả · ngân sách · import 059–077 (S15-PAYROLL-BE-4) ───────────
+  // 8 cặp mới của SPEC-11 §11.3 (mig 0571), TẤT CẢ sensitive; §13.5 chốt bề mặt mới CHỈ scope `Company`
+  // ⇒ sàn bật cho mọi route, TRỪ 065 (`view-own:payroll-advance` — Own hợp lệ, cùng khuôn `/me/payslips*`).
+  advanceList: pair("view", "payroll-advance", true), //                                    059
+  advanceCreate: pair("manage", "payroll-advance", true), //                                060
+  advanceDetail: pair("view", "payroll-advance", true), //                                  061
+  advanceUpdate: pair("manage", "payroll-advance", true), //                                062
+  advanceApprove: pair("approve", "payroll-advance", true), //                              063
+  advanceReject: pair("approve", "payroll-advance", true), //                               064
+  // 065 Own — sàn Company TẮT, object-grant TẮT (xem JSDoc `PayrollPair`); KHÔNG audit lượt đọc.
+  meAdvanceList: pair("view-own", "payroll-advance", true, false, false), //                065
+  batchList: pair("view", "payment-batch", true), //                                        066
+  batchCreate: pair("manage", "payment-batch", true), //                                    067
+  batchDetail: pair("view", "payment-batch", true), //                                      068
+  batchUpdate: pair("manage", "payment-batch", true), //                                    069
+  batchLines: pair("view", "payment-batch", true), //                                       070
+  // 071 gác BA cặp (SPEC-11 §15.1): decorator = `manage:payment-batch`; service assert THÊM `periodExport`
+  // (`export:payroll`) + `payslipList` (`view-payslip:payslip`) — tệp UNC là payload nhạy cảm nhất hệ thống.
+  batchExport: pair("manage", "payment-batch", true), //                                    071
+  batchComplete: pair("manage", "payment-batch", true), //                                  072
+  budgetList: pair("view", "payroll-budget", true), //                                      073
+  budgetCreate: pair("manage", "payroll-budget", true), //                                  074
+  budgetUpdate: pair("manage", "payroll-budget", true), //                                  075
+  // 076/077 TÁI DÙNG cặp CŨ `manage:bonus-penalty` (SPEC-11 §15.1) — đích ghi là `bonus_penalties` `Pending`.
+  importAdjustments: pair("manage", "bonus-penalty", true), //                              076
+  importTemplate: pair("manage", "bonus-penalty", true), //                                 077
 } as const satisfies Record<string, PayrollPair>;
 
 export type PayrollRouteKey = keyof typeof PAYROLL_ROUTE_PAIRS;
@@ -149,7 +175,7 @@ export type PayrollRouteKey = keyof typeof PAYROLL_ROUTE_PAIRS;
  * `PENDING_BE2 ∩ used === ∅`, nên nó vẫn là cổng cho route mọc lên sau này mà quên nối tầng 2.
  *
  * ⚠️ Khi danh sách rỗng, neo chống-xanh-rỗng của CHÍNH nó biến mất ⇒ census phải neo bằng
- * `Object.keys(PAYROLL_ROUTE_PAIRS).length === 58` **và** `used.size === 58`. **Cấm hạ neo để lấy
+ * `Object.keys(PAYROLL_ROUTE_PAIRS).length === 77` **và** `used.size === 77`. **Cấm hạ neo để lấy
  * màu xanh.**
  */
 export const PAYROLL_PENDING_BE2: readonly PayrollRouteKey[] = [];

@@ -2,6 +2,41 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-15 (f) — S15-PAYROLL-BE-4 → **FULL gate XONG + vá sau gate, PR #511 MỞ (base `feat/s15-payroll-be-3`, KHÔNG auto-merge)** · S15-PAYROLL-BE-3 #510 vẫn chờ owner merge `--admin`
+
+**Bắt đầu phiên sau ở đây:**
+- **BE-3 #510**: CI xanh toàn bộ, `MERGEABLE`, up-to-date với master, `REVIEW_REQUIRED` — chỉ còn owner nói rõ «ủy quyền `--admin` cho #510» rồi `gh pr merge 510 --squash --admin` **KHÔNG `--delete-branch`** (còn PR BE-4 stacked — memory `squash-merge-breaks-stacked-prs`). Sau khi merge: ở nhánh BE-4 `git merge origin/master` + `git checkout --ours` file BE-3 xung đột, push, `gh pr edit <BE-4> --base master`.
+- **BE-4**: đọc `docs/plans/S15-PAYROLL-BE-4.md` **§11b** (bảng cổng + vá + nợ). Tóm tắt: `check.sh --all --lane-db=be4` XANH 9/9 · security PASS (3 MEDIUM) · silent-failure BLOCK→vá H1 (`count(*) ?? 0` fail-OPEN ⇒ `payroll-sql.util.ts`) · database PASS · cov `src/payroll` 94,25 %/86,01 % branch · 904 test lane xanh. Nợ gom ở WO mới **`S15-PAYROLL-BE-4B`** (🟡, đã seed backlog). CI của PR BE-4 là cổng cuối; nếu đỏ xem log trước khi đụng code (memory `ci-red-can-depend-on-time-of-day`, `vitest-unhandled-rejection-after-teardown`).
+- Runner tay còn dùng được: scratchpad phiên (f) `run-cov.sh` = `. scripts/lib/db-secrets.sh; db_secrets_load; export 3 *_DB_PASSWORD; unset DATABASE_*_URL; LANE_DB=mediaos_be4; pnpm --filter @mediaos/api test:cov:payroll`.
+
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:** (1) `@Idempotent()` trên route **multipart** là vô nghĩa và NGUY HIỂM: APP_INTERCEPTOR băm `request.body` TRƯỚC `FileInterceptor` ⇒ vân tay hằng ⇒ cùng key + tệp khác phát lại phản hồi cũ, im lặng bỏ tệp mới — khuôn HR import cố ý không có decorator là đúng. (2) Reviewer song song (security ∥ check.sh, rồi silent-failure ∥ database) KHÔNG tranh tài nguyên khi dặn rõ «review tĩnh, cấm pnpm/vitest» — tiết kiệm ~30′ wall-clock so với tuần tự, chi phí như nhau. (3) 2/4 câu «database-reviewer HẸP» tự đo được bằng 3 lệnh grep (chỉ mục partial khớp `NOT EXISTS`, vị từ dùng chung) — chỉ hỏi 2 câu còn lại. (4) `count(*)` KHÔNG BAO GIỜ trả 0 hàng ở Postgres nên nhánh fail-OPEN `?? 0` chỉ chứng minh được bằng unit stub `tx.execute` — đừng cố viết int-spec cho nó.
+
+**Chi phí phiên (f):** ~$12 tới lúc mở PR (check.sh + cov + 3 reviewer tĩnh ~560k token subagent + vá + 4 unit/int case).
+
+## Phiên 2026-09-15 (e) — S15-PAYROLL-BE-4 → **IMPLEMENT XONG, commit checkpoint trên nhánh, CHƯA PR** (🔴, dừng theo hook COST CRITICAL ~$140 — owner chốt có chạy tiếp cổng full + reviewer + PR không)
+
+**Bắt đầu phiên sau ở đây — không đọc lại code/plan từ đầu:**
+- `git checkout feat/s15-payroll-be-4` (stacked trên BE-3 `9ed2e99b`; **PR #510 vẫn MỞ, BLOCKED chờ review người**). Đọc `docs/plans/S15-PAYROLL-BE-4.md` **§11** (bảng bằng chứng + lệch có chủ đích + việc chưa chạy) + memory `s15-payroll-be4-wave-state`.
+- Mọi cổng ĐÃ XANH: unit 87 · int 22+19+12 (+QA1 scope-floor 163) trên `LANE_DB=mediaos_be4` · FE 82 · census 2 tầng 77/77 · mã lỗi 32 · `MIN_COVERED_COUNT` 624 · typecheck/lint/prettier · route-census regen. Đột biến §6.4: 8/17 ca ĐỎ đúng ca (a q o n h g m e), file khôi phục byte-giống.
+- **Còn lại theo thứ tự:** `bash harness/check.sh --lane-db=be4` (full, ~15–20′) → `pnpm --filter @mediaos/api test:cov:payroll` (LANE_DB) ≥ 85% → reviewer tuần tự `security-reviewer` → `silent-failure-hunter` → `database-reviewer` HẸP (4 câu ở header plan; nói thẳng được dừng ở review tĩnh + liệt kê thứ đã chạy) → PR base `feat/s15-payroll-be-3`, **KHÔNG auto-merge** → khi #510 merge: `git merge origin/master` + `--ours` file BE-3, retarget master (memory `squash-merge-breaks-stacked-prs`).
+- Runner int-spec: scratchpad phiên (e) `run-int.sh` = `. scripts/lib/db-secrets.sh; db_secrets_load; unset DATABASE_*_URL; LANE_DB=mediaos_be4; vitest run <file>` — dựng lại 6 dòng nếu scratchpad mất.
+
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:** (1) census mã lỗi đòi literal HTTP-kind trong test surface — `import-too-large` chỉ qua unit `kind:"too-large"` là ĐỎ, phải có ca int 5.001 dòng CSV. (2) JSDoc chứa `*/` (viết `decided_*/decision_note`) đóng comment sớm ⇒ 40 lỗi parse. (3) Tenant đối chứng cross-tenant cho 067 phải có ≥ 2 holder `manage:payment-batch` — không thì C3 (422) chặn trước 404. (4) supertest `.parse` đòi `(res: request.Response, cb)`; typecheck API quét cả `test/`. (5) Đột biến (k) NOTI-027 dedupe theo batchId KHÔNG đo được (producer enqueue một lần/kỳ) — nợ QA-1.
+
+**Chi phí:** ~$140 tới lúc dừng (code + test + 8 đột biến), chưa gồm cổng full + 3 reviewer (~$300 theo plan §10).
+
+## Phiên 2026-09-15 (d) — S15-PAYROLL-BE-4 → **PLAN commit `502c21e5`, plan-review PASS sau vá §0b, CHƯA code** (🔴, dừng theo hook COST CRITICAL ~$64; owner chốt «mở trong phiên mới»)
+
+**Bắt đầu phiên sau ở đây — không đọc lại SPEC/DB/API từ đầu:**
+- `git checkout feat/s15-payroll-be-4` (stacked trên BE-3 `9ed2e99b` — **PR #510 CI xanh, chờ owner merge `--admin`**; khi #510 merge ⇒ `git merge origin/master` + `git checkout --ours` file BE-3, memory `squash-merge-breaks-stacked-prs`).
+- Đọc `docs/plans/S15-PAYROLL-BE-4.md` **§0 (11 quyết định D-1..D-11) → §0b (5 BLOCKING đã vá + 13 cảnh báo) → §4.3 (thứ tự khoá 072 kỳ→đợt→dòng) → §6 (RED-first)**. Memory `s15-payroll-be4-wave-state` tóm tắt + số neo phải bump.
+- Lane `mediaos_be4` ĐÃ dựng (243 mig, 3 trigger track C); **BE-4 KHÔNG có migration**. Runner tay: nạp `*_DB_PASSWORD` từ `.env` (KHÔNG source cả file — `NODE_ENV=production`), unset `DATABASE_*_URL`, `LANE_DB=mediaos_be4`, `pnpm --filter @mediaos/api exec vitest run <file>`.
+- Thứ tự thi công gợi ý: contracts `payroll-disbursement.ts` (file MỚI — `payroll.ts` đã 860 dòng) → `payroll-route-pairs.const.ts` +19 → `payroll.errors.ts` (+6 mã, map TAG/UNIQUE/CHECK, `payrollBadRequest`) → 3 int-spec ĐỎ → service/repo/controller → census/FE pin (2 tầng 58→77 · mã lỗi 26→32 · FE kinds +18 · wiring 58→77 · `MIN_COVERED_COUNT` 605→624 · regen route-census) → `bash harness/check.sh --lane-db=be4` → đột biến §6.4 → reviewer tuần tự security → silent-failure → database HẸP (4 câu ở header plan) → PR KHÔNG auto-merge.
+
+**Điều đắt nhất phiên này mua được (plan-review ~$64) — ĐỪNG mở lại:** (1) gỡ dòng chi đã `paid_at` là nhả `payslip_uq` partial ⇒ chi hai lần ⇒ 409 027 `line-already-paid`; (2) four-eyes tạm ứng phải chặn CẢ người thụ hưởng (`user_id === actor`), CHECK DB chỉ soi `created_by`; (3) duyệt tạm ứng ở kỳ `Calculated` ⇒ `warnings ["recalculate-required"]` kẻo khoản mồ côi im lặng; (4) body 069 `status` enum RIÊNG `Draft|Ready` — tái dùng enum 3 giá trị là lách toàn bộ cổng 072; (5) `payslips` KHÔNG có `deleted_at` (append-only) — vị từ «phiếu của kỳ» = MỘT hàm dùng chung populate/coverage.
+
+**Đã đo, không đo lại:** officer 0565 có `export:payroll` + `view-payslip:payslip` ⇒ 071 dùng được · 8 cặp track C đã ở CẢ HAI allowlist `permission.service.ts` · audit object_type track C có sẵn (0571) · NOTI 024–027 seed + bật (0573).
+
 ## Phiên 2026-09-07 (c) — S18-QA-ASSETFLAKE-1 → **PR #485 MỞ** (🟡, có nhãn auto-merge, vẫn chờ 1 review NGƯỜI)
 
 **Kết quả:** ca `H1` của `s11-asset-db1-invariants` hết đỏ-giả. `check.sh --all --lane-db=s18assetflake`

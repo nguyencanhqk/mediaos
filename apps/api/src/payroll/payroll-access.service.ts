@@ -79,6 +79,20 @@ export class PayrollAccessService {
     "templatePutComponents",
     "statutoryRateCreate",
     "statutoryRateUpdate",
+    // v2 track C (S15-PAYROLL-BE-4) — route GHI trả `{ id, status?, warnings }` (0 khoá tiền) + 077 trả tệp
+    // mẫu tĩnh. KHÔNG thêm: 059/061/065 (`amount`) · 066/068 (`totalNet`) · 070 (`net`) · 071 (tệp UNC chở
+    // net) · 073 (`plannedAmount`/`actualAmount`) — chúng gác đúng cặp chở-tiền ⇒ `assertMoneyRoute` ở mapper.
+    "advanceCreate",
+    "advanceUpdate",
+    "advanceApprove",
+    "advanceReject",
+    "batchCreate",
+    "batchUpdate",
+    "batchComplete",
+    "budgetCreate",
+    "budgetUpdate",
+    "importAdjustments",
+    "importTemplate",
   ]);
 
   async resolveActor(user: PayrollRequestUser, routeKey: PayrollRouteKey): Promise<PayrollActor> {

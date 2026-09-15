@@ -94,6 +94,8 @@ const EXEMPT_KEYS: readonly PayrollRouteKey[] = [
   "mePayslipList",
   "mePayslipDetail",
   "mePayslipAck",
+  // S15-PAYROLL-BE-4 — 065 «Tạm ứng của tôi» (Own, cùng khuôn /me/payslips*).
+  "meAdvanceList",
 ];
 
 interface Fixture {
@@ -109,6 +111,10 @@ interface Fixture {
   componentId: string;
   templateId: string;
   statutoryRateId: string;
+  /** S15-PAYROLL-BE-4 — đường đọc 061/068/070/071 đòi ĐÚNG 200 ⇒ cần id THẬT. */
+  advanceId: string;
+  batchId: string;
+  budgetId: string;
 }
 
 interface RouteSpec {
@@ -297,6 +303,82 @@ const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
     url: (f) => `/payroll-periods/${f.periodId}/timesheet`,
     read: true,
   },
+  // ── S15-PAYROLL-BE-4 · track C 059–077 (18 route companyFloor:true; 065 nằm ở EXEMPT_KEYS) ──────────
+  advanceList: { method: "GET", url: () => "/payroll/advances", read: true },
+  advanceCreate: {
+    method: "POST",
+    url: () => "/payroll/advances",
+    // `userId` MA ⇒ 404 sentinel (FK composite), KHÔNG tạo tạm ứng rác.
+    body: () => ({
+      userId: ghost(),
+      amount: 1,
+      deductPeriodMonth: "2029-05",
+      reason: "qa floor probe",
+    }),
+  },
+  advanceDetail: { method: "GET", url: (f) => `/payroll/advances/${f.advanceId}`, read: true },
+  advanceUpdate: {
+    method: "PATCH",
+    url: () => `/payroll/advances/${ghost()}`,
+    body: () => ({ reason: "qa floor probe" }),
+  },
+  advanceApprove: {
+    method: "POST",
+    url: () => `/payroll/advances/${ghost()}/approve`,
+    body: () => ({}),
+  },
+  advanceReject: {
+    method: "POST",
+    url: () => `/payroll/advances/${ghost()}/reject`,
+    body: () => ({ note: "qa floor probe" }),
+  },
+  batchList: { method: "GET", url: () => "/payroll/payment-batches", read: true },
+  batchCreate: {
+    method: "POST",
+    url: () => "/payroll/payment-batches",
+    // Kỳ MA ⇒ 404 sentinel (sau C3 — công ty fixture có ≥ 2 người giữ manage:payment-batch @Company).
+    body: () => ({ payrollPeriodId: ghost(), method: "cash" }),
+  },
+  batchDetail: { method: "GET", url: (f) => `/payroll/payment-batches/${f.batchId}`, read: true },
+  batchUpdate: {
+    method: "PATCH",
+    url: () => `/payroll/payment-batches/${ghost()}`,
+    body: () => ({ note: "qa floor probe" }),
+  },
+  batchLines: {
+    method: "GET",
+    url: (f) => `/payroll/payment-batches/${f.batchId}/lines`,
+    read: true,
+  },
+  batchExport: {
+    method: "GET",
+    url: (f) => `/payroll/payment-batches/${f.batchId}/export`,
+    read: true,
+  },
+  batchComplete: {
+    method: "POST",
+    url: () => `/payroll/payment-batches/${ghost()}/complete`,
+    body: () => ({}),
+  },
+  budgetList: { method: "GET", url: () => "/payroll/budgets", read: true },
+  budgetCreate: {
+    method: "POST",
+    url: () => "/payroll/budgets",
+    // Đơn vị MA ⇒ 404 sentinel, KHÔNG tạo ngân sách rác.
+    body: () => ({ fiscalYear: 2029, orgUnitId: ghost(), plannedAmount: 1 }),
+  },
+  budgetUpdate: {
+    method: "PATCH",
+    url: () => `/payroll/budgets/${ghost()}`,
+    body: () => ({ note: "qa floor probe" }),
+  },
+  // 076 multipart không tệp ⇒ chủ thể Company ăn 422 030 (không 403); sàn scope chặn TRƯỚC khi chạm tệp.
+  importAdjustments: {
+    method: "POST",
+    url: () => `/payroll-periods/${ghost()}/import-adjustments`,
+    body: () => ({}),
+  },
+  importTemplate: { method: "GET", url: () => "/payroll/imports/adjustments-template", read: true },
   // ── Picker 034–035 ──────────────────────────────────────────────────────────────────────────
   pickerPeople: { method: "GET", url: () => "/payroll/pickers/people", read: true },
   pickerAttendancePeriods: {
@@ -407,6 +489,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     componentId: "",
     templateId: "",
     statutoryRateId: "",
+    advanceId: "",
+    batchId: "",
+    budgetId: "",
   };
 
   const http = () => request(app.getHttpServer());
@@ -588,6 +673,32 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     });
     expect(rate.status, JSON.stringify(rate.body)).toBe(201);
     fixture.statutoryRateId = rate.body.data.id as string;
+
+    // ── S15-PAYROLL-BE-4 (track C) — id THẬT cho các đường đọc 061/068/070/071 ──────────────────────────
+    // Người thứ hai giữ manage:payment-batch @Company (C3 `no-eligible-completer` ở 067 chặn TRƯỚC 404 sentinel).
+    const completerId = await seedUser(direct, A.companyId, `completer@${A.slug}.test`, hash);
+    await grantAllPairs(completerId, "completer", "Company");
+    const adv = await post(tCompany, "/payroll/advances").send({
+      userId: ownUserId,
+      amount: 100_000,
+      deductPeriodMonth: "2028-09",
+      reason: "fixture s13pqa1 floor",
+    });
+    expect(adv.status, JSON.stringify(adv.body)).toBe(201);
+    fixture.advanceId = adv.body.data.id as string;
+    // Kỳ fixture đang `Published` (publish ở trên) ⇒ lập đợt tiền mặt được; chủ phiếu = ownUserId.
+    const batch = await post(tCompany, "/payroll/payment-batches").send({
+      payrollPeriodId: fixture.periodId,
+      method: "cash",
+    });
+    expect(batch.status, JSON.stringify(batch.body)).toBe(201);
+    fixture.batchId = batch.body.data.id as string;
+    const budget = await post(tCompany, "/payroll/budgets").send({
+      fiscalYear: 2028,
+      plannedAmount: 1,
+    });
+    expect(budget.status, JSON.stringify(budget.body)).toBe(201);
+    fixture.budgetId = budget.body.data.id as string;
   }, 300_000);
 
   afterAll(async () => {
@@ -637,6 +748,13 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     it("mePayslipAck — POST /me/payslips/:id/acknowledge (Own) ⇒ 201", async () => {
       const res = await post(tOwn, `/me/payslips/${fixture.payslipId}/acknowledge`);
       expect(res.status, JSON.stringify(res.body)).toBe(201);
+    });
+
+    it("meAdvanceList — GET /me/payroll-advances (Own) ⇒ 200, thấy tạm ứng của chính mình (S15-PAYROLL-BE-4)", async () => {
+      const res = await get(tOwn, "/me/payroll-advances");
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const ids = (res.body.data as Array<{ id: string }>).map((x) => x.id);
+      expect(ids, "tạm ứng của chính mình phải nằm trong danh sách").toContain(fixture.advanceId);
     });
   });
 
@@ -714,15 +832,16 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
 
   // ── E. Census chống xanh-rỗng ────────────────────────────────────────────────────────────────
 
-  describe("E. census — 55 key mục A ∪ 3 key mục C = ĐÚNG 58 key của PAYROLL_ROUTE_PAIRS", () => {
-    it("PAYROLL_ROUTE_PAIRS giữ đủ 58 key (neo cho toàn bộ census)", () => {
-      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(58);
+  describe("E. census — 73 key mục A ∪ 4 key mục C = ĐÚNG 77 key của PAYROLL_ROUTE_PAIRS", () => {
+    it("PAYROLL_ROUTE_PAIRS giữ đủ 77 key (neo cho toàn bộ census)", () => {
+      // S15-PAYROLL-BE-4: +19 route track C (059–077) ⇒ 58 → 77.
+      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(77);
     });
 
-    it("ROUTES = 55 key, EXEMPT_KEYS = 3 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
+    it("ROUTES = 73 key, EXEMPT_KEYS = 4 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
       const floorKeys = Object.keys(ROUTES).sort();
-      expect(floorKeys.length).toBe(55);
-      expect(EXEMPT_KEYS.length).toBe(3);
+      expect(floorKeys.length).toBe(73);
+      expect(EXEMPT_KEYS.length).toBe(4);
       expect(
         [...floorKeys, ...EXEMPT_KEYS].sort(),
         "ROUTES ∪ EXEMPT_KEYS lệch PAYROLL_ROUTE_PAIRS — route mới mọc lên chưa được xếp vào bảng",
@@ -738,14 +857,15 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       }
     });
 
-    it("24 cặp distinct có route được seed cho cả ba chủ thể (không cặp nào rơi khỏi fixture)", () => {
+    it("32 cặp distinct có route được seed cho cả ba chủ thể (không cặp nào rơi khỏi fixture)", () => {
       // S15-PAYROLL-BE-2 +6 cặp track B: view/manage × salary-component · payroll-template · statutory-rate.
+      // S15-PAYROLL-BE-4 +8 cặp track C: payroll-advance ×4 · payment-batch ×2 · payroll-budget ×2 ⇒ 32.
       // `('access','payroll')` KHÔNG gác route nào ⇒ 17 cặp SPEC-11 §11.1 nhưng 16 cặp có route.
-      expect(ALL_PAIRS.length).toBe(24);
+      expect(ALL_PAIRS.length).toBe(32);
       const sensitiveCount = ALL_PAIRS.filter((p) => p.isSensitive).length;
       // ĐÚNG 13 cặp `is_sensitive` của mig `0565` — cả 13 đều có route, `('access','payroll')` là
       // cặp thứ 17 KHÔNG nhạy cảm và KHÔNG gác route nào (đo lại 2026-09-01 trên chính bảng hằng).
-      expect(sensitiveCount, "cờ isSensitive phải lấy NGUYÊN từ bảng hằng, không gõ tay").toBe(21);
+      expect(sensitiveCount, "cờ isSensitive phải lấy NGUYÊN từ bảng hằng, không gõ tay").toBe(29);
     });
   });
 });

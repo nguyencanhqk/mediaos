@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { orgUnits } from "../db/schema/org";
+import { countOrThrow } from "./payroll-sql.util";
 import {
   payrollTemplateComponents,
   payrollTemplates,
@@ -273,6 +274,22 @@ export class PayrollTemplatesRepository {
    * Đơn vị chọn cho mẫu `scope='org_unit'` tồn tại + CHƯA XOÁ MỀM. FK composite `payroll_templates_org_unit_id_company_fk`
    * chặn khác tenant/không tồn tại nhưng KHÔNG chặn hàng đã xoá mềm (MF15) ⇒ tiền-kiểm ở đây.
    */
+  /**
+   * S15-PAYROLL-BE-4 (052 `template-in-use`, D-5) — số kỳ lương SỐNG (bất kể trạng thái) đang gắn mẫu. `SELECT count(*)`
+   * THƯỜNG dưới khoá catalog ĐỘC QUYỀN đã có ở 052 — **KHÔNG `FOR SHARE/UPDATE`** hàng kỳ (BE-3 §0b M1: advisory TRƯỚC,
+   * khoá hàng SAU; `calculate`/004 lấy shared TRƯỚC khoá kỳ, nên 052 khoá kỳ là chu trình 40P01).
+   */
+  async periodsUsingTx(tx: TenantTx, companyId: string, templateId: string): Promise<number> {
+    const res = await tx.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from payroll_periods pp
+       where pp.company_id = ${companyId}::uuid
+         and pp.template_id = ${templateId}::uuid
+         and pp.deleted_at is null`);
+    // silent-failure-hunter BE-4 H1: KHÔNG `?? 0` — 0 = «không kỳ nào dùng» ⇒ xoá/ngưng được mẫu; thiếu hàng phải NÉM.
+    return countOrThrow(res, "periodsUsingTx");
+  }
+
   async orgUnitLiveTx(tx: TenantTx, companyId: string, orgUnitId: string): Promise<boolean> {
     const rows = await tx
       .select({ id: orgUnits.id })
