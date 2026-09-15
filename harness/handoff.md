@@ -2,6 +2,10 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-15 (g) — **BE-3 #510 + BE-4 #511 ĐÃ MERGE master** (`ddca8109` · `7e7936b5`, owner ủy quyền `--admin`)
+
+**Bắt đầu phiên sau ở đây:** master đã có track A+B+C payroll v2 (mig head `0575`). Hai lane `mediaos_be3`/`mediaos_be4` đã DROP. Việc kế tiếp theo backlog: **`S15-PAYROLL-BE-4B`** (🟡 nợ gate BE-4, plan §11b) · `S15-PAYROLL-FE-2`/`FE-3` (màn hình track B/C — đọc `s15-ui-shell-1-wave-state` trước) · `S15-PAYROLL-BE-5` (báo cáo). Cách merge stacked đã dùng: merge base **không** `--delete-branch` → `git merge origin/master` + `--ours` 10 file (diff cây = rỗng) → `gh pr edit --base master` → CI xanh → merge con `--delete-branch`. Bộ phân loại auto-mode chặn `gh pr merge --admin` cho tới khi owner nói rõ «cho phép merge với quyền admin» trong chính phiên.
+
 ## Phiên 2026-09-15 (f) — S15-PAYROLL-BE-4 → **FULL gate XONG + vá sau gate, PR #511 MỞ (base `feat/s15-payroll-be-3`, KHÔNG auto-merge)** · S15-PAYROLL-BE-3 #510 vẫn chờ owner merge `--admin`
 
 **Bắt đầu phiên sau ở đây:**
