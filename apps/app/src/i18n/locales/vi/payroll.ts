@@ -354,7 +354,8 @@ export default {
     templateScopePair: "Phạm vi theo đơn vị cần chọn đơn vị; phạm vi toàn công ty thì bỏ đơn vị.",
     templateTooManyComponents: "Mẫu vượt quá 120 thành phần — bớt thành phần.",
     // S15-PAYROLL-BE-3 — máy tính lương v2
-    templateMissing: "Kỳ lương chưa gắn mẫu bảng lương (hoặc mẫu đã bị xoá) — chọn mẫu cho kỳ trước khi tính.",
+    templateMissing:
+      "Kỳ lương chưa gắn mẫu bảng lương (hoặc mẫu đã bị xoá) — chọn mẫu cho kỳ trước khi tính.",
     templateInactive: "Mẫu bảng lương của kỳ đang ngưng dùng — bật lại mẫu hoặc chọn mẫu khác.",
     templateLocked: "Kỳ lương đã tính — chỉ đổi được mẫu khi kỳ còn ở Nháp hoặc Thu thập dữ liệu.",
     templateScopeUnsupported: "Mẫu theo đơn vị chưa gắn được vào kỳ lương — chọn mẫu toàn công ty.",
@@ -364,6 +365,36 @@ export default {
       "Thành phần lương hệ thống bị sửa lệch cách tính chuẩn — liên hệ quản trị hệ thống trước khi tính lương.",
     statutoryRateMissing:
       "Chưa có bản tỉ lệ luật định hiệu lực tại ngày cuối kỳ — tạo bản tỉ lệ ở Thiết lập lương trước.",
+    // S15-PAYROLL-BE-4 — track C: tạm ứng · đợt chi trả · ngân sách · import
+    advanceNotPending: "Chỉ sửa hoặc quyết định được tạm ứng đang «Chờ duyệt».",
+    advanceAlreadyDeducted:
+      "Tạm ứng này đã được khấu trừ vào một kỳ lương — không sửa/xoá được; tạo đề nghị mới nếu cần.",
+    advancePeriodFrozen:
+      "Kỳ lương chỉ định đã tính hoặc đã duyệt — chọn kỳ khấu trừ khác hoặc mở lại kỳ trước khi thêm tạm ứng.",
+    periodNotPublished: "Chỉ lập đợt chi trả từ kỳ lương đã phát hành phiếu.",
+    batchIncomplete:
+      "Đợt còn dòng chưa đánh dấu đã chi — đánh dấu từng dòng hoặc chọn «Xác nhận đã chi tất cả» khi hoàn tất.",
+    batchAlreadyCompleted: "Đợt chi trả đã hoàn tất — không sửa hay hoàn tất lại được.",
+    payeeAlreadyInBatch:
+      "Phiếu lương của nhân sự này đã nằm ở một đợt chi trả khác — gỡ khỏi đợt đó trước.",
+    batchCodeExists: "Mã đợt chi trả đã tồn tại — chọn mã khác hoặc để trống để hệ thống tự sinh.",
+    batchFourEyes:
+      "Người hoàn tất đợt phải khác người lập đợt — cần một người khác có quyền quản lý đợt chi trả xác nhận.",
+    payeeNoBankAccount:
+      "Có nhân sự chưa khai số tài khoản ngân hàng — khai ở Nhân sự hưởng lương hoặc lập đợt tiền mặt cho họ.",
+    lineAlreadyPaid:
+      "Dòng đã đánh dấu đã chi thì không gỡ khỏi đợt được — phiên bản này không có đường bỏ đánh dấu.",
+    batchEmpty: "Đợt chi trả không còn dòng nào — thêm dòng trước khi hoàn tất.",
+    budgetExists: "Đã có ngân sách cho năm và đơn vị này — sửa hàng đó thay vì tạo mới.",
+    importInvalid:
+      "Tệp import không đúng khuôn — tải tệp mẫu, giữ đúng thứ tự cột rồi nạp lại. Không dòng nào được ghi.",
+    importTooLarge: "Tệp vượt trần 5.000 dòng — tách tệp rồi nạp từng phần.",
+    importUnknownUser:
+      "Có dòng mang mã nhân viên không có trong công ty — sửa mã hoặc bỏ dòng. Không dòng nào được ghi.",
+    templateInUse:
+      "Mẫu bảng lương đang được kỳ lương sử dụng — đổi mẫu cho các kỳ đó trước khi ngưng dùng hoặc xoá.",
+    noEligibleCompleter:
+      "Chưa có ai khác bạn giữ quyền quản lý đợt chi trả — đợt lập ra sẽ không hoàn tất được (bốn mắt). Cấp quyền cho người thứ hai trước.",
     generic: "Có lỗi xảy ra, vui lòng thử lại.",
   },
 };

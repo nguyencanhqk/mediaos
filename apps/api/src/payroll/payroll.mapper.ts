@@ -19,6 +19,7 @@ import type {
   SalaryProfile,
   SalaryProfileItem,
 } from "../db/schema/payroll";
+import { isLegacyPaidTrail } from "./payroll-disbursement.mapper";
 import type { PayrollActor } from "./payroll.types";
 
 /**
@@ -152,6 +153,11 @@ export function toPayrollPeriodDto(row: PayrollPeriod): PayrollPeriodDto {
     approvedAt: iso(row.approvedAt),
     publishedBy: row.publishedBy,
     publishedAt: iso(row.publishedAt),
+    // S15-PAYROLL-BE-4 — vết `Paid` (cạnh `complete-batch`) + cờ kỳ `Locked` di sản (O-1 lối A, DB-2 LOW-2): «đã chi»
+    // hiển thị phải DẪN XUẤT từ dòng chi, KHÔNG từ cặp này; FE-3 dùng cờ để không hiện «đã chi» cho kỳ di sản.
+    paidBy: row.paidBy,
+    paidAt: iso(row.paidAt),
+    legacyPaidTrail: isLegacyPaidTrail(row),
     lockedBy: row.lockedBy,
     lockedAt: iso(row.lockedAt),
     payslipsGeneratedBy: row.payslipsGeneratedBy,

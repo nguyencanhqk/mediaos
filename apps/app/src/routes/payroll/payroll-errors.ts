@@ -74,6 +74,25 @@ export const PAYROLL_ERROR_KINDS = [
   "template-scope-unsupported",
   "template-too-many-components",
   "trail-pair-violation",
+  // ── S15-PAYROLL-BE-4 (track C: tạm ứng · đợt chi trả · ngân sách · import · 052 template-in-use) ──
+  "advance-not-pending",
+  "advance-already-deducted",
+  "advance-period-frozen",
+  "period-not-published",
+  "batch-incomplete",
+  "batch-already-completed",
+  "payee-already-in-batch",
+  "batch-code-exists",
+  "batch-four-eyes",
+  "payee-no-bank-account",
+  "line-already-paid",
+  "batch-empty",
+  "budget-exists",
+  "import-invalid",
+  "import-too-large",
+  "import-unknown-user",
+  "template-in-use",
+  "no-eligible-completer",
 ] as const;
 export type PayrollErrorKind = (typeof PAYROLL_ERROR_KINDS)[number];
 
@@ -136,6 +155,25 @@ const KIND_TO_I18N_KEY: Readonly<Record<PayrollErrorKind, string>> = {
   "template-scope-unsupported": "errors.templateScopeUnsupported",
   "template-too-many-components": "errors.templateTooManyComponents",
   "trail-pair-violation": "errors.trailPairViolation",
+  // ── S15-PAYROLL-BE-4 ──
+  "advance-not-pending": "errors.advanceNotPending",
+  "advance-already-deducted": "errors.advanceAlreadyDeducted",
+  "advance-period-frozen": "errors.advancePeriodFrozen",
+  "period-not-published": "errors.periodNotPublished",
+  "batch-incomplete": "errors.batchIncomplete",
+  "batch-already-completed": "errors.batchAlreadyCompleted",
+  "payee-already-in-batch": "errors.payeeAlreadyInBatch",
+  "batch-code-exists": "errors.batchCodeExists",
+  "batch-four-eyes": "errors.batchFourEyes",
+  "payee-no-bank-account": "errors.payeeNoBankAccount",
+  "line-already-paid": "errors.lineAlreadyPaid",
+  "batch-empty": "errors.batchEmpty",
+  "budget-exists": "errors.budgetExists",
+  "import-invalid": "errors.importInvalid",
+  "import-too-large": "errors.importTooLarge",
+  "import-unknown-user": "errors.importUnknownUser",
+  "template-in-use": "errors.templateInUse",
+  "no-eligible-completer": "errors.noEligibleCompleter",
 };
 
 /** Fallback theo `error.code` — CHỈ cho mã KHÔNG mang `kind` (idempotency, FOUNDATION). */
@@ -187,6 +225,17 @@ const STATE_CONFLICT_KINDS: ReadonlySet<string> = new Set<PayrollErrorKind>([
   "trail-pair-violation",
   // S15-PAYROLL-BE-3 — kỳ vừa rời CollectingData ở nơi khác ⇒ tải lại để thấy trạng thái mới.
   "template-locked",
+  // S15-PAYROLL-BE-4 — tranh chấp trạng thái tạm ứng/đợt/kỳ ⇒ tải lại chi tiết (không mất form).
+  "advance-not-pending",
+  "advance-already-deducted",
+  "advance-period-frozen",
+  "period-not-published",
+  "batch-already-completed",
+  "batch-incomplete",
+  "batch-empty",
+  "batch-four-eyes",
+  "line-already-paid",
+  "template-in-use",
 ]);
 
 export function isPayrollStateConflict(info: PayrollErrorInfo): boolean {

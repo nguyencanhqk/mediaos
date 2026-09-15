@@ -1,4 +1,9 @@
-import { ConflictException, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import type { ErrorDetail } from "@mediaos/contracts";
 import {
   PG_CHECK_VIOLATION,
@@ -95,6 +100,27 @@ export const PAYROLL_ERR_CODE = {
    * (`component-code-reserved`).
    */
   COMPONENT_CONFLICT: "PAYROLL-ERR-024",
+  // ── S15-PAYROLL-BE-4 (track C — SPEC-11 §12.1 hàng 025..030) ──
+  /**
+   * 409 — tạm ứng: sửa/quyết định hàng không còn `Pending` (`advance-not-pending`) · đã khấu trừ vào kỳ
+   * (`advance-already-deducted`) · **tự duyệt** — người TẠO hoặc người THỤ HƯỞNG (`self-approval`, plan-review B2;
+   * CHECK `payroll_advances_four_eyes_check` chỉ soi `created_by` nên vế thụ hưởng CHỈ có ở service).
+   */
+  ADVANCE_CONFLICT: "PAYROLL-ERR-025",
+  /** 409 — gắn/duyệt tạm ứng vào kỳ đã đóng băng (`advance-period-frozen`, D-3) + tag `period-frozen` của T3. */
+  ADVANCE_PERIOD_FROZEN: "PAYROLL-ERR-026",
+  /**
+   * 409 — đợt chi trả: `period-not-published` · `batch-incomplete` · `batch-already-completed` · `payee-already-in-batch`
+   * (chốt cuối `payroll_payment_lines_payslip_uq` TOÀN công ty) · `batch-code-exists` · `batch-four-eyes` ·
+   * `payee-no-bank-account` · `line-already-paid` (B1).
+   */
+  PAYMENT_BATCH_CONFLICT: "PAYROLL-ERR-027",
+  /** 409 — hoàn tất đợt RỖNG (0 dòng sống) — đường phát DUY NHẤT của 028 (`batch-empty`). */
+  BATCH_EMPTY: "PAYROLL-ERR-028",
+  /** 409 — ngân sách trùng `(năm, đơn vị)` — chốt cuối `payroll_budgets_year_unit_uq` (`budget-exists`). */
+  BUDGET_EXISTS: "PAYROLL-ERR-029",
+  /** 422 — import: sai khuôn (`import-invalid`) · > 5.000 dòng (`import-too-large`) · mã NV lạ (`import-unknown-user`). */
+  IMPORT_INVALID: "PAYROLL-ERR-030",
   /**
    * 409 — **S15-PAYROLL-BE-1**. Hai bản ghi người phụ thuộc **chồng lấp khoảng hiệu lực** cho cùng một
    * NPT. Chốt cuối `EXCLUDE USING gist` ở DB (`payroll_dependents_no_overlap_excl`) ném **`23P01`**,
@@ -232,6 +258,46 @@ export const PAYROLL_ERR = {
     "PAYROLL-ERR-022: chưa có bản tỉ lệ luật định hiệu lực tại ngày cuối kỳ — tạo bản tỉ lệ ở Thiết lập lương trước khi tính.",
   GROSSUP_NOT_CONVERGED:
     "PAYROLL-ERR-021: không quy đổi được lương NET sang GROSS cho một nhân sự — kiểm tra công thức tuỳ biến của mẫu và hồ sơ lương của người đó.",
+  // ── S15-PAYROLL-BE-4 (track C) — thông điệp nói được PHẢI LÀM GÌ; KHÔNG số tiền, KHÔNG số tài khoản ──
+  ADVANCE_NOT_PENDING: 'PAYROLL-ERR-025: chỉ sửa/quyết định được tạm ứng đang "Chờ duyệt".',
+  ADVANCE_ALREADY_DEDUCTED:
+    "PAYROLL-ERR-025: tạm ứng này đã được khấu trừ vào một kỳ lương — không sửa/xoá được; tạo đề nghị mới nếu cần.",
+  ADVANCE_SELF_APPROVAL:
+    "PAYROLL-ERR-025: không thể tự duyệt tạm ứng do chính mình tạo hoặc của chính mình — cần một người duyệt khác.",
+  ADVANCE_FROZEN_RACE:
+    "PAYROLL-ERR-025: tạm ứng vừa bị thay đổi bởi một thao tác khác — tải lại rồi thử lại.",
+  ADVANCE_PERIOD_FROZEN:
+    "PAYROLL-ERR-026: kỳ lương chỉ định đã tính hoặc đã duyệt — chọn kỳ khấu trừ khác hoặc mở lại kỳ trước khi thêm tạm ứng.",
+  PERIOD_NOT_PUBLISHED: "PAYROLL-ERR-027: chỉ lập đợt chi trả từ kỳ lương đã phát hành phiếu.",
+  BATCH_INCOMPLETE:
+    "PAYROLL-ERR-027: đợt còn dòng chưa đánh dấu đã chi — đánh dấu từng dòng hoặc gửi confirmAllPaid khi hoàn tất.",
+  BATCH_ALREADY_COMPLETED:
+    "PAYROLL-ERR-027: đợt chi trả đã hoàn tất — không sửa/hoàn tất lại được.",
+  PAYEE_ALREADY_IN_BATCH:
+    "PAYROLL-ERR-027: phiếu lương của nhân sự này đã nằm ở một đợt chi trả khác — gỡ khỏi đợt đó trước.",
+  BATCH_CODE_EXISTS:
+    "PAYROLL-ERR-027: mã đợt chi trả đã tồn tại — chọn mã khác hoặc để trống để hệ thống tự sinh.",
+  BATCH_FOUR_EYES:
+    "PAYROLL-ERR-027: người hoàn tất đợt phải khác người lập đợt — cần một người khác giữ quyền quản lý đợt chi trả xác nhận.",
+  PAYEE_NO_BANK_ACCOUNT:
+    "PAYROLL-ERR-027: có nhân sự chưa khai số tài khoản ngân hàng — khai ở Nhân sự hưởng lương hoặc lập đợt tiền mặt cho họ.",
+  LINE_ALREADY_PAID:
+    "PAYROLL-ERR-027: dòng đã đánh dấu đã chi thì không gỡ khỏi đợt được — không có đường bỏ đánh dấu ở phiên bản này.",
+  BATCH_EMPTY: "PAYROLL-ERR-028: đợt chi trả không còn dòng nào — thêm dòng trước khi hoàn tất.",
+  BUDGET_EXISTS:
+    "PAYROLL-ERR-029: đã có ngân sách cho năm và đơn vị này — sửa hàng đó thay vì tạo mới.",
+  IMPORT_INVALID:
+    "PAYROLL-ERR-030: tệp import không đúng khuôn — tải tệp mẫu, giữ đúng thứ tự cột rồi nạp lại. Không dòng nào được ghi.",
+  IMPORT_TOO_LARGE: (max: number) =>
+    `PAYROLL-ERR-030: tệp vượt trần ${max} dòng — tách tệp rồi nạp từng phần.`,
+  IMPORT_UNKNOWN_USER:
+    "PAYROLL-ERR-030: có dòng mang mã nhân viên không có trong công ty — sửa mã hoặc bỏ dòng. Không dòng nào được ghi.",
+  NO_ELIGIBLE_COMPLETER:
+    "PAYROLL-ERR-017: công ty chưa có người nào khác bạn giữ quyền quản lý đợt chi trả — đợt lập ra sẽ không hoàn tất được (bốn mắt). Cấp quyền cho người thứ hai trước.",
+  TEMPLATE_IN_USE: (periods: number) =>
+    `PAYROLL-ERR-023: mẫu bảng lương đang được ${periods} kỳ lương sử dụng — đổi mẫu cho các kỳ đó trước khi ngưng dùng hoặc xoá.`,
+  PERIOD_FROZEN_IMPORT:
+    "PAYROLL-ERR-003: kỳ lương đã gửi duyệt hoặc đã duyệt — khoản nhập thêm sẽ không được gộp; nhập vào kỳ sau hoặc mở lại kỳ.",
 } as const;
 
 /** `details.kind` = phần tử `{field:'kind'}`; các cặp phụ thêm sau — **không bao giờ là số tiền**. */
@@ -270,6 +336,22 @@ export const payrollUnprocessable = (
  */
 export const payrollNotFound = () =>
   new NotFoundException(body("NOT_FOUND", PAYROLL_ERR.NOT_FOUND, payrollDetails("not-found")));
+
+/**
+ * S15-PAYROLL-BE-4 (plan-review B4) — **400 `VALIDATION-ERR-001`, lưới CUỐI** cho ba CHECK track C mà Zod đã mirror
+ * ĐÚNG BẰNG (`payroll_payment_batches_completed_pair_check` · `payroll_payment_lines_bank_pair_check` ·
+ * `payroll_advances_deducted_bound_check`): tới được đây là payload lách tầng validate hoặc đường ghi nội bộ có bug —
+ * phải hiện thành 400 đọc được (SPEC-11 §12.1 bảng), KHÔNG 500 vùng đỏ. `constraint` đi vào `details` để truy vết;
+ * message KHÔNG mang tham số câu SQL (số tài khoản có thể nằm trong đó — security DB-2 MEDIUM-2).
+ */
+export const payrollBadRequest = (constraint: string) =>
+  new BadRequestException({
+    code: "VALIDATION-ERR-001",
+    message: "Dữ liệu không hợp lệ",
+    details: [
+      { field: "constraint", message: constraint, rule: "payroll" },
+    ] satisfies ErrorDetail[],
+  });
 
 /**
  * S15-PAYROLL-BE-2 — mã của máy công thức → key. Bảng ĐÓNG theo `FormulaErrorCode` (trình biên dịch ép đủ nhánh).
@@ -327,6 +409,67 @@ function pgNodeMessage(err: unknown): string {
     current = node["cause"];
   }
   return "";
+}
+
+/** Bóc `<trigger>:<tag>:` ở đầu message trigger track C (mig 0572). Không khớp ⇒ `null`. */
+const TRIGGER_TAG_RE = /^(\w+):([a-z-]+):/;
+
+/**
+ * S15-PAYROLL-BE-4 — ba trigger track C (mig `0572`) ném `23514` KHÔNG tên constraint, message mở đầu bằng
+ * `<trigger>:<tag>:`. Map theo TAG (luật 3 mở rộng). Tag KHÔNG có trong bảng ⇒ `null` = **500 CÓ CHỦ ĐÍCH** (plan
+ * §3.6): T1 `has-active-lines` (không có route xoá đợt) · T2 `not-found`/`cross-user`/`cross-period` · T3 `not-found` —
+ * service PHẢI chặn trước, tới DB là bug, che bằng 4xx là giấu bug. Census QA ghim tập tag đã map ĐẲNG THỨC.
+ */
+function mapPayrollTrackCTag(message: string): Error | null {
+  const m = TRIGGER_TAG_RE.exec(message);
+  if (!m) return null;
+  const [, trigger, tag] = m;
+  if (trigger === "payroll_payment_batch_freeze") {
+    // `insert-completed` · `period-immutable` · `frozen` — đợt `Completed` là TERMINAL / kỳ của đợt bất biến.
+    if (tag === "insert-completed" || tag === "period-immutable" || tag === "frozen") {
+      return payrollConflict(
+        "PAYMENT_BATCH_CONFLICT",
+        PAYROLL_ERR.BATCH_ALREADY_COMPLETED,
+        payrollDetails("batch-already-completed", { trigger, tag }),
+      );
+    }
+    return null;
+  }
+  if (trigger === "payroll_payment_line_guard") {
+    if (tag === "frozen" || tag === "insert-into-completed" || tag === "move-to-completed") {
+      return payrollConflict(
+        "PAYMENT_BATCH_CONFLICT",
+        PAYROLL_ERR.BATCH_ALREADY_COMPLETED,
+        payrollDetails("batch-already-completed", { trigger, tag }),
+      );
+    }
+    return null;
+  }
+  if (trigger === "payroll_advance_freeze_guard") {
+    if (tag === "frozen" || tag === "status-terminal" || tag === "insert-shape") {
+      return payrollConflict(
+        "ADVANCE_CONFLICT",
+        PAYROLL_ERR.ADVANCE_FROZEN_RACE,
+        payrollDetails("advance-not-pending", { trigger, tag }),
+      );
+    }
+    if (tag === "rebind") {
+      return payrollConflict(
+        "ADVANCE_CONFLICT",
+        PAYROLL_ERR.ADVANCE_ALREADY_DEDUCTED,
+        payrollDetails("advance-already-deducted", { trigger, tag }),
+      );
+    }
+    if (tag === "period-frozen") {
+      return payrollConflict(
+        "ADVANCE_PERIOD_FROZEN",
+        PAYROLL_ERR.ADVANCE_PERIOD_FROZEN,
+        payrollDetails("advance-period-frozen", { trigger, tag }),
+      );
+    }
+    return null;
+  }
+  return null;
 }
 
 /**
@@ -414,6 +557,32 @@ export function mapPayrollPgError(err: unknown): Error | null {
         payrollDetails("rate-effective-date-exists"),
       );
     }
+    // ── S15-PAYROLL-BE-4 — ba UNIQUE track C (mig 0572). `payslip_uq` (TOÀN công ty — chốt cuối chống trả HAI LẦN)
+    //    và `batch_user_uq` (cùng đợt) CÙNG kind `payee-already-in-batch` (SPEC-11 §12.1 hàng 027). ──
+    if (
+      c.includes("payroll_payment_lines_payslip_uq") ||
+      c.includes("payroll_payment_lines_batch_user_uq")
+    ) {
+      return payrollConflict(
+        "PAYMENT_BATCH_CONFLICT",
+        PAYROLL_ERR.PAYEE_ALREADY_IN_BATCH,
+        payrollDetails("payee-already-in-batch"),
+      );
+    }
+    if (c.includes("payroll_payment_batches_company_code_uq")) {
+      return payrollConflict(
+        "PAYMENT_BATCH_CONFLICT",
+        PAYROLL_ERR.BATCH_CODE_EXISTS,
+        payrollDetails("batch-code-exists"),
+      );
+    }
+    if (c.includes("payroll_budgets_year_unit_uq")) {
+      return payrollConflict(
+        "BUDGET_EXISTS",
+        PAYROLL_ERR.BUDGET_EXISTS,
+        payrollDetails("budget-exists"),
+      );
+    }
     return null;
   }
   if (code === PG_CHECK_VIOLATION) {
@@ -434,6 +603,24 @@ export function mapPayrollPgError(err: unknown): Error | null {
         PAYROLL_ERR.BONUS_SELF_APPROVAL,
         payrollDetails("self-approval"),
       );
+    }
+    // ── S15-PAYROLL-BE-4 — CHECK track C (mig 0572) ──
+    // Four-eyes tạm ứng: service 063 tiền-kiểm `created_by === actor OR user_id === actor` dưới `FOR UPDATE`; CHECK
+    // chỉ soi `created_by` và là lưới cuối cho RACE / đường ghi nội bộ ⇒ CÙNG mã 025 + kind `self-approval`.
+    if (c.includes("payroll_advances_four_eyes_check")) {
+      return payrollConflict(
+        "ADVANCE_CONFLICT",
+        PAYROLL_ERR.ADVANCE_SELF_APPROVAL,
+        payrollDetails("self-approval"),
+      );
+    }
+    // Ba CHECK Zod đã mirror ĐÚNG BẰNG ⇒ 400 lưới cuối (plan-review B4), KHÔNG 500 vùng đỏ.
+    if (
+      c.includes("payroll_payment_batches_completed_pair_check") ||
+      c.includes("payroll_payment_lines_bank_pair_check") ||
+      c.includes("payroll_advances_deducted_bound_check")
+    ) {
+      return payrollBadRequest(c);
     }
     // 🩹§8b — BỐN CHECK cặp vết duyệt còn lại. Trước BE-2 chúng rơi `null` ⇒ **500 ở vùng đỏ**.
     // Mọi hành động FSM đã đi qua `applyTransitionTx` (bảng `TRAIL_RESET`), nên bốn cái này chỉ nổ khi
@@ -534,7 +721,9 @@ export function mapPayrollPgError(err: unknown): Error | null {
           payrollDetails("bonus-frozen-race"),
         );
       }
-      return null;
+      // S15-PAYROLL-BE-4 — ba trigger track C (mig 0572) map theo TAG `<trigger>:<tag>:`; tag ngoài bảng ⇒ `null`
+      // (500 CÓ CHỦ ĐÍCH — service phải chặn trước, plan §3.6). Bảng sống ở `payroll-pg-error.tags.ts`.
+      return mapPayrollTrackCTag(message);
     }
     return null;
   }
@@ -561,7 +750,12 @@ export function mapPayrollPgError(err: unknown): Error | null {
       c.includes("payroll_employee_settings_user_id") ||
       c.includes("payroll_dependents_user_id") ||
       // S15-PAYROLL-BE-2 — đơn vị được CHỌN cho mẫu `scope='org_unit'` (không tồn tại / khác tenant ⇒ cùng 404).
-      c.includes("payroll_templates_org_unit_id_company_fk")
+      c.includes("payroll_templates_org_unit_id_company_fk") ||
+      // S15-PAYROLL-BE-4 — nhân sự được CHỌN cho tạm ứng/dòng chi · đơn vị được CHỌN cho ngân sách (composite
+      // tenant-FK của mig 0572: không tồn tại VÀ khác tenant ⇒ CÙNG 404, không dựng oracle).
+      c.includes("payroll_advances_user_id") ||
+      c.includes("payroll_payment_lines_user_id") ||
+      c.includes("payroll_budgets_org_unit_id")
     ) {
       return payrollNotFound();
     }

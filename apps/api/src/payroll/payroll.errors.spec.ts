@@ -1,4 +1,4 @@
-import { ConflictException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import { FormulaError } from "./formula/formula.errors";
 import { formulaErrorToHttp, mapPayrollPgError, PAYROLL_ERR_CODE } from "./payroll.errors";
@@ -39,7 +39,8 @@ const kindOf = (e: Error | null): string | undefined => {
 
 describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
   it("23514 KHÔNG có tên constraint — trigger thưởng/phạt (tiền tố message) ⇒ 409 013, KHÔNG null/500", () => {
-    const msg = "bonus_penalty_freeze_guard: Bonus (id=x, ky 2026-09) da roi Pending hoac da consume";
+    const msg =
+      "bonus_penalty_freeze_guard: Bonus (id=x, ky 2026-09) da roi Pending hoac da consume";
     for (const err of [
       pgError({ code: "23514", message: msg }),
       pgError({ code: "23514", constraint: "", message: msg }),
@@ -67,7 +68,8 @@ describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
     const mapped = mapPayrollPgError(
       wrapped({
         code: "23514",
-        message: "salary_components: hang he thong (code=TONG_KHAU_TRU) DONG BANG — chi sua duoc name/sort_order.",
+        message:
+          "salary_components: hang he thong (code=TONG_KHAU_TRU) DONG BANG — chi sua duoc name/sort_order.",
       }),
     );
     expect(codeOf(mapped)).toBe(PAYROLL_ERR_CODE.COMPONENT_CONFLICT);
@@ -75,7 +77,9 @@ describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
   });
 
   it("ĐỐI CHỨNG M2: 23514 không tên với message LẠ (hoặc không message) ⇒ null — trigger tương lai không bị gắn 013", () => {
-    expect(mapPayrollPgError(wrapped({ code: "23514", message: "payroll_payment_lines_freeze: x" }))).toBeNull();
+    expect(
+      mapPayrollPgError(wrapped({ code: "23514", message: "payroll_payment_lines_freeze: x" })),
+    ).toBeNull();
     expect(mapPayrollPgError(pgError({ code: "23514" }))).toBeNull();
   });
 
@@ -88,18 +92,66 @@ describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
 
   it("S15-PAYROLL-BE-2 — ràng buộc track B map theo TÊN (không rơi 500)", () => {
     const cases: Array<[Record<string, unknown>, string, string]> = [
-      [{ code: "23505", constraint: "salary_components_company_code_uq" }, PAYROLL_ERR_CODE.COMPONENT_CONFLICT, "component-code-exists"],
-      [{ code: "23505", constraint: "payroll_templates_company_code_uq" }, PAYROLL_ERR_CODE.TEMPLATE_CONFLICT, "template-code-exists"],
-      [{ code: "23505", constraint: "payroll_statutory_rates_company_effective_uq" }, PAYROLL_ERR_CODE.STATUTORY_RATE_CONFLICT, "rate-effective-date-exists"],
-      [{ code: "23514", constraint: "salary_components_code_shape_check" }, PAYROLL_ERR_CODE.COMPONENT_CONFLICT, "component-code-reserved"],
-      [{ code: "23514", constraint: "salary_components_system_not_deletable" }, PAYROLL_ERR_CODE.COMPONENT_CONFLICT, "system-component-immutable"],
-      [{ code: "23514", constraint: "salary_components_value_pair_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "component-value-pair"],
-      [{ code: "23514", constraint: "salary_components_formula_len_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "formula-too-long"],
-      [{ code: "23514", constraint: "payroll_template_components_formula_len_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "formula-too-long"],
-      [{ code: "23514", constraint: "salary_components_engine_kind_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "component-value-pair"],
-      [{ code: "23514", constraint: "payroll_templates_scope_pair_check" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "template-scope-pair"],
-      [{ code: "23503", constraint: "payroll_templates_org_unit_id_company_fk" }, PAYROLL_ERR_CODE.NOT_FOUND, "not-found"],
-      [{ code: "23503", constraint: "payroll_template_components_component_id_company_fk" }, PAYROLL_ERR_CODE.FORMULA_INVALID, "template-component-unknown"],
+      [
+        { code: "23505", constraint: "salary_components_company_code_uq" },
+        PAYROLL_ERR_CODE.COMPONENT_CONFLICT,
+        "component-code-exists",
+      ],
+      [
+        { code: "23505", constraint: "payroll_templates_company_code_uq" },
+        PAYROLL_ERR_CODE.TEMPLATE_CONFLICT,
+        "template-code-exists",
+      ],
+      [
+        { code: "23505", constraint: "payroll_statutory_rates_company_effective_uq" },
+        PAYROLL_ERR_CODE.STATUTORY_RATE_CONFLICT,
+        "rate-effective-date-exists",
+      ],
+      [
+        { code: "23514", constraint: "salary_components_code_shape_check" },
+        PAYROLL_ERR_CODE.COMPONENT_CONFLICT,
+        "component-code-reserved",
+      ],
+      [
+        { code: "23514", constraint: "salary_components_system_not_deletable" },
+        PAYROLL_ERR_CODE.COMPONENT_CONFLICT,
+        "system-component-immutable",
+      ],
+      [
+        { code: "23514", constraint: "salary_components_value_pair_check" },
+        PAYROLL_ERR_CODE.FORMULA_INVALID,
+        "component-value-pair",
+      ],
+      [
+        { code: "23514", constraint: "salary_components_formula_len_check" },
+        PAYROLL_ERR_CODE.FORMULA_INVALID,
+        "formula-too-long",
+      ],
+      [
+        { code: "23514", constraint: "payroll_template_components_formula_len_check" },
+        PAYROLL_ERR_CODE.FORMULA_INVALID,
+        "formula-too-long",
+      ],
+      [
+        { code: "23514", constraint: "salary_components_engine_kind_check" },
+        PAYROLL_ERR_CODE.FORMULA_INVALID,
+        "component-value-pair",
+      ],
+      [
+        { code: "23514", constraint: "payroll_templates_scope_pair_check" },
+        PAYROLL_ERR_CODE.FORMULA_INVALID,
+        "template-scope-pair",
+      ],
+      [
+        { code: "23503", constraint: "payroll_templates_org_unit_id_company_fk" },
+        PAYROLL_ERR_CODE.NOT_FOUND,
+        "not-found",
+      ],
+      [
+        { code: "23503", constraint: "payroll_template_components_component_id_company_fk" },
+        PAYROLL_ERR_CODE.FORMULA_INVALID,
+        "template-component-unknown",
+      ],
     ];
     for (const [fields, code, kind] of cases) {
       const mapped = mapPayrollPgError(wrapped(fields));
@@ -114,20 +166,30 @@ describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
         (e as ConflictException).getResponse() as { details?: Array<Record<string, string>> }
       ).details?.find((d) => d["field"] === field)?.["message"];
 
-    const cycle = formulaErrorToHttp(new FormulaError("formula-cycle", "vòng", { cycle: ["A", "B", "A"] }));
+    const cycle = formulaErrorToHttp(
+      new FormulaError("formula-cycle", "vòng", { cycle: ["A", "B", "A"] }),
+    );
     expect(codeOf(cycle)).toBe("PAYROLL-ERR-019");
     expect(kindOf(cycle)).toBe("formula-cycle");
     expect(detail(cycle, "cycle")).toBe("A → B → A");
 
-    const tooLong = formulaErrorToHttp(new FormulaError("formula-too-long", "dài", { pos: 500 }), { template: "MAU_X" });
+    const tooLong = formulaErrorToHttp(new FormulaError("formula-too-long", "dài", { pos: 500 }), {
+      template: "MAU_X",
+    });
     expect(codeOf(tooLong)).toBe("PAYROLL-ERR-018");
     expect(detail(tooLong, "pos")).toBe("500");
     expect(detail(tooLong, "template")).toBe("MAU_X");
 
-    expect(codeOf(formulaErrorToHttp(new FormulaError("division-by-zero", "chia 0")))).toBe("PAYROLL-ERR-020");
-    expect(codeOf(formulaErrorToHttp(new FormulaError("statutory-rate-incomplete", "bậc", { reason: "count" })))).toBe(
-      "PAYROLL-ERR-022",
+    expect(codeOf(formulaErrorToHttp(new FormulaError("division-by-zero", "chia 0")))).toBe(
+      "PAYROLL-ERR-020",
     );
+    expect(
+      codeOf(
+        formulaErrorToHttp(
+          new FormulaError("statutory-rate-incomplete", "bậc", { reason: "count" }),
+        ),
+      ),
+    ).toBe("PAYROLL-ERR-022");
   });
 
   it("23505 theo TÊN constraint — 008 (kỳ trùng tháng) · 014 (hồ sơ lương trùng ngày)", () => {
@@ -205,10 +267,16 @@ describe("S13-PAYROLL-BE-2 · mapPayrollPgError — 6 nhánh mới (§8b)", () =
 
   it("S15-PAYROLL-BE-3 — formulaErrorToHttp: 021 `grossup-not-converged` mang `iterations` + `reason` + `userId`, KHÔNG sai số tiền", () => {
     const e = formulaErrorToHttp(
-      new FormulaError("grossup-not-converged", "không hội tụ", { iterations: 30, reason: "not-converged" }),
+      new FormulaError("grossup-not-converged", "không hội tụ", {
+        iterations: 30,
+        reason: "not-converged",
+      }),
       { userId: "u-1" },
     );
-    const body = e.getResponse() as { code: string; details: Array<{ field: string; message: string }> };
+    const body = e.getResponse() as {
+      code: string;
+      details: Array<{ field: string; message: string }>;
+    };
     expect(body.code).toBe("PAYROLL-ERR-021");
     expect(body.details).toEqual([
       { field: "kind", message: "grossup-not-converged", rule: "payroll" },
@@ -235,6 +303,167 @@ describe("S13-PAYROLL-BE-2 · mapPayrollPgError — 6 nhánh mới (§8b)", () =
     // Nếu nhánh trên khớp quá rộng (ví dụ chỉ so `.includes('pair_check')`) thì ca này ĐỎ.
     expect(
       mapPayrollPgError(wrapped({ code: "23514", constraint: "some_other_pair_check" })),
+    ).toBeNull();
+  });
+});
+
+/**
+ * S15-PAYROLL-BE-4 — bảng chân trị map lỗi DB track C (plan §4.9 · §6.1.1). Ba lớp: (1) TAG của ba trigger mig 0572
+ * — tag ĐÃ map ⇒ đúng mã/kind, tag KHÔNG map ⇒ `null` (500 có chủ đích, service phải chặn trước); (2) UNIQUE/CHECK/FK
+ * theo TÊN; (3) message/details KHÔNG BAO GIỜ chở tham số câu SQL (số tài khoản có thể nằm trong `params`).
+ */
+describe("S15-PAYROLL-BE-4 · mapPayrollPgError — track C (tạm ứng · đợt chi · ngân sách)", () => {
+  /** Giá trị giả «trông như số TK» — nếu lọt vào message/details của lỗi đã map thì ca ĐỎ. */
+  const FAKE_PARAM = "9999-1111";
+  const tagErr = (trigger: string, tag: string) =>
+    wrapped({
+      code: "23514",
+      message: `${trigger}:${tag}: dot ${FAKE_PARAM} (id=x) da Completed — chi sua duoc note`,
+    });
+  const detailsOf = (e: Error | null) =>
+    (
+      (e as ConflictException | null)?.getResponse?.() as {
+        details?: Array<Record<string, string>>;
+      }
+    )?.details ?? [];
+
+  it.each([
+    [
+      "payroll_payment_batch_freeze",
+      "insert-completed",
+      "PAYROLL-ERR-027",
+      "batch-already-completed",
+    ],
+    [
+      "payroll_payment_batch_freeze",
+      "period-immutable",
+      "PAYROLL-ERR-027",
+      "batch-already-completed",
+    ],
+    ["payroll_payment_batch_freeze", "frozen", "PAYROLL-ERR-027", "batch-already-completed"],
+    ["payroll_payment_line_guard", "frozen", "PAYROLL-ERR-027", "batch-already-completed"],
+    [
+      "payroll_payment_line_guard",
+      "insert-into-completed",
+      "PAYROLL-ERR-027",
+      "batch-already-completed",
+    ],
+    [
+      "payroll_payment_line_guard",
+      "move-to-completed",
+      "PAYROLL-ERR-027",
+      "batch-already-completed",
+    ],
+    ["payroll_advance_freeze_guard", "frozen", "PAYROLL-ERR-025", "advance-not-pending"],
+    ["payroll_advance_freeze_guard", "status-terminal", "PAYROLL-ERR-025", "advance-not-pending"],
+    ["payroll_advance_freeze_guard", "insert-shape", "PAYROLL-ERR-025", "advance-not-pending"],
+    ["payroll_advance_freeze_guard", "rebind", "PAYROLL-ERR-025", "advance-already-deducted"],
+    ["payroll_advance_freeze_guard", "period-frozen", "PAYROLL-ERR-026", "advance-period-frozen"],
+  ])(
+    "TAG `%s:%s:` ⇒ 409 %s `%s`; details mang trigger+tag, KHÔNG mang tham số",
+    (trigger, tag, code, kind) => {
+      const e = mapPayrollPgError(tagErr(trigger, tag));
+      expect(e, "tag đã map mà trả null ⇒ 500 vùng đỏ").toBeInstanceOf(ConflictException);
+      expect(codeOf(e)).toBe(code);
+      expect(kindOf(e)).toBe(kind);
+      const d = detailsOf(e);
+      expect(d.find((x) => x["field"] === "trigger")?.["message"]).toBe(trigger);
+      expect(d.find((x) => x["field"] === "tag")?.["message"]).toBe(tag);
+      expect(JSON.stringify((e as ConflictException).getResponse())).not.toContain(FAKE_PARAM);
+    },
+  );
+
+  it.each([
+    ["payroll_payment_batch_freeze", "has-active-lines"],
+    ["payroll_payment_line_guard", "not-found"],
+    ["payroll_payment_line_guard", "cross-user"],
+    ["payroll_payment_line_guard", "cross-period"],
+    ["payroll_advance_freeze_guard", "not-found"],
+  ])(
+    "TAG `%s:%s:` CỐ Ý KHÔNG map ⇒ null (500 có chủ đích — service phải chặn trước, plan §3.6)",
+    (trigger, tag) => {
+      expect(mapPayrollPgError(tagErr(trigger, tag))).toBeNull();
+    },
+  );
+
+  it("tập tag ĐÃ map là ĐÓNG — tag lạ cùng tiền tố trigger ⇒ null", () => {
+    expect(mapPayrollPgError(tagErr("payroll_advance_freeze_guard", "some-new-tag"))).toBeNull();
+    expect(mapPayrollPgError(tagErr("payroll_payment_batch_freeze", "deleted"))).toBeNull();
+  });
+
+  it.each(["payroll_payment_lines_payslip_uq", "payroll_payment_lines_batch_user_uq"])(
+    "23505 `%s` ⇒ 409 027 `payee-already-in-batch` (CẢ HAI tên unique, cùng kind — SPEC-11 §12.1)",
+    (constraint) => {
+      const e = mapPayrollPgError(wrapped({ code: "23505", constraint }));
+      expect(codeOf(e)).toBe(PAYROLL_ERR_CODE.PAYMENT_BATCH_CONFLICT);
+      expect(kindOf(e)).toBe("payee-already-in-batch");
+    },
+  );
+
+  it("23505 `payroll_payment_batches_company_code_uq` ⇒ 409 027 `batch-code-exists`", () => {
+    const e = mapPayrollPgError(
+      wrapped({ code: "23505", constraint: "payroll_payment_batches_company_code_uq" }),
+    );
+    expect(codeOf(e)).toBe("PAYROLL-ERR-027");
+    expect(kindOf(e)).toBe("batch-code-exists");
+  });
+
+  it("23505 `payroll_budgets_year_unit_uq` ⇒ 409 029 `budget-exists` (kể cả bẫy NULL đơn vị — unique COALESCE)", () => {
+    const e = mapPayrollPgError(
+      wrapped({ code: "23505", constraint: "payroll_budgets_year_unit_uq" }),
+    );
+    expect(codeOf(e)).toBe(PAYROLL_ERR_CODE.BUDGET_EXISTS);
+    expect(kindOf(e)).toBe("budget-exists");
+  });
+
+  it("23514 `payroll_advances_four_eyes_check` ⇒ 409 025 `self-approval` (lưới cuối RACE cho vế created_by)", () => {
+    const e = mapPayrollPgError(
+      wrapped({ code: "23514", constraint: "payroll_advances_four_eyes_check" }),
+    );
+    expect(codeOf(e)).toBe(PAYROLL_ERR_CODE.ADVANCE_CONFLICT);
+    expect(kindOf(e)).toBe("self-approval");
+  });
+
+  it.each([
+    "payroll_payment_batches_completed_pair_check",
+    "payroll_payment_lines_bank_pair_check",
+    "payroll_advances_deducted_bound_check",
+  ])(
+    "23514 `%s` (Zod đã mirror) ⇒ 400 VALIDATION-ERR-001 lưới cuối, KHÔNG 500 (plan-review B4)",
+    (constraint) => {
+      const e = mapPayrollPgError(
+        wrapped({ code: "23514", constraint, message: `Failed query: params: ${FAKE_PARAM}` }),
+      );
+      expect(e).toBeInstanceOf(BadRequestException);
+      const body = (e as BadRequestException).getResponse() as {
+        code: string;
+        details: Array<{ field: string; message: string }>;
+      };
+      expect(body.code).toBe("VALIDATION-ERR-001");
+      expect(body.details.find((d) => d.field === "constraint")?.message).toBe(constraint);
+      expect(JSON.stringify(body)).not.toContain(FAKE_PARAM);
+    },
+  );
+
+  it.each([
+    "payroll_advances_user_id_fkey",
+    "payroll_advances_user_id_company_fk",
+    "payroll_payment_lines_user_id_company_fk",
+    "payroll_budgets_org_unit_id_company_fk",
+  ])(
+    "23503 `%s` ⇒ 404 sentinel PAYROLL-ERR-010 (không tồn tại và khác tenant CÙNG một phản hồi)",
+    (constraint) => {
+      const e = mapPayrollPgError(wrapped({ code: "23503", constraint }));
+      expect(e).toBeInstanceOf(NotFoundException);
+      expect(codeOf(e)).toBe("PAYROLL-ERR-010");
+    },
+  );
+
+  it("ĐỐI CHỨNG: FK nội bộ track C (`payroll_payment_lines_batch_id_company_fk`) ⇒ null — bug server không che bằng 404", () => {
+    expect(
+      mapPayrollPgError(
+        wrapped({ code: "23503", constraint: "payroll_payment_lines_batch_id_company_fk" }),
+      ),
     ).toBeNull();
   });
 });

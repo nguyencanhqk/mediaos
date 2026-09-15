@@ -37,6 +37,7 @@ import {
 import {
   formulaErrorToHttp,
   mapPayrollPgError,
+  payrollConflict,
   payrollDetails,
   payrollNotFound,
   payrollUnprocessable,
@@ -168,6 +169,19 @@ export class PayrollTemplatesService {
         orgUnitId: t.orgUnitId,
         isActive: t.isActive,
       });
+
+      // S15-PAYROLL-BE-4 (052 `template-in-use`, D-5 — nợ BE-2/BE-3): xoá mềm HOẶC ngưng dùng mẫu đang được ≥ 1 kỳ SỐNG
+      // tham chiếu (bất kể trạng thái kỳ) ⇒ 409 023. Đếm bằng SELECT thường dưới khoá catalog độc quyền đã giữ ở trên.
+      if (dto.delete === true || (dto.isActive === false && before.isActive)) {
+        const periods = await this.repo.periodsUsingTx(tx, user.companyId, id);
+        if (periods > 0) {
+          throw payrollConflict(
+            "TEMPLATE_CONFLICT",
+            PAYROLL_ERR.TEMPLATE_IN_USE(periods),
+            payrollDetails("template-in-use", { periods }),
+          );
+        }
+      }
 
       if (dto.delete === true) {
         const deleted = await this.repo.softDeleteTx(tx, user.companyId, id, user.id);

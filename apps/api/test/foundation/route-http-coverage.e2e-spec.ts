@@ -335,7 +335,8 @@ const MAX_UNCOVERED_TOTAL = 0;
 // route PATCH/PUT là «chưa phủ» dù có ca thật — spec track B dùng helper `pick()` gọi verb tường minh.
 // Nâng CÙNG COMMIT với WO — mỗi route mới phải có file test chạm ĐÚNG literal path
 // (int-spec `payroll-be1-*` · `payroll-be2-*` · `s14-recruit-filegrant1-cv` · `s15-payroll-be2-*`).
-const MIN_COVERED_COUNT = 605;
+// S15-PAYROLL-BE-4 (15/09/2026): 605 → **624** (+19 route PAYROLL track C `059..077`, int-spec `s15-payroll-be4-*`).
+const MIN_COVERED_COUNT = 624;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

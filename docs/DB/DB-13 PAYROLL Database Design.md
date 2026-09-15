@@ -998,7 +998,7 @@ GRANT app: `SELECT, INSERT, UPDATE`. **Không** `DELETE`.
 | `user_id` | UUID | Có | composite FK **NO ACTION** |
 | `payslip_id` | UUID | Có | composite FK → `payslips (company_id, id)` **NO ACTION** — **nguồn số tiền** |
 | `bank_account_snapshot` | TEXT | Không | **số TK ĐÓNG BĂNG lúc lập đợt**; **mask 4 số cuối khi đọc qua API-070** |
-| `bank_name_snapshot` · `account_holder_snapshot` | TEXT | Không | |
+| `bank_name_snapshot` · `account_holder_snapshot` | TEXT | Không | Snapshot CHỈ 3 cột — `bank_branch` của settings **không** đóng băng; tệp UNC cột «Ngân hàng» = `bank_name_snapshot` (không chi nhánh) — chốt `S15-PAYROLL-BE-4` |
 | `paid_at` | timestamptz | Không | |
 | `created_at/by` `updated_at/by` `deleted_at/by` | | | **soft delete** — gỡ một dòng khỏi đợt `Draft` là xoá mềm, không DELETE (bảng chở dòng tiền, phải giữ vết) |
 

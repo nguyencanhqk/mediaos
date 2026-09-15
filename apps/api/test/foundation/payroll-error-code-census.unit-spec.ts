@@ -117,7 +117,8 @@ describe("S13-PAYROLL-BE-1 census — mã lỗi & kind PAYROLL được ném đ�
     // một lần xoá bớt hằng không lặng lẽ đi qua cổng này. **Cấm hạ neo để lấy màu xanh.**
     // S15-PAYROLL-BE-2: +6 mã track B (019 · 020 · 022 · 023 · 024 · 033).
     // S15-PAYROLL-BE-3: +1 mã 021 `GROSSUP_NOT_CONVERGED` (gross-up NET không hội tụ).
-    expect(all.size, "SPEC-11 §12 + §12.1 khai đúng 26 mã PAYROLL-ERR").toBe(26);
+    // S15-PAYROLL-BE-4: +6 mã track C (025 · 026 · 027 · 028 · 029 · 030).
+    expect(all.size, "SPEC-11 §12 + §12.1 khai đúng 32 mã PAYROLL-ERR").toBe(32);
   });
 
   /** Tập `kind` ném được — `\s*` nuốt chỗ Prettier ngắt dòng sau dấu `(`. */

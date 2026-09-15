@@ -1,5 +1,9 @@
 import { Injectable, type OnModuleInit } from "@nestjs/common";
 import {
+  PAYROLL_EVENT_ADVANCE_APPROVED,
+  PAYROLL_EVENT_ADVANCE_REJECTED,
+  PAYROLL_EVENT_ADVANCE_SUBMITTED,
+  PAYROLL_EVENT_PAYMENT_BATCH_COMPLETED,
   PAYROLL_EVENT_PAYSLIP_PUBLISHED,
   PAYROLL_EVENT_PERIOD_APPROVED,
   PAYROLL_EVENT_PERIOD_REJECTED,
@@ -73,6 +77,69 @@ export class PayrollNotiBridgeRegistrar implements OnModuleInit {
     this.registerPeriodApproved();
     this.registerPeriodRejected();
     this.registerPayslipPublished();
+    // ── S15-PAYROLL-BE-4 — track C (NOTI-EVENT-024..027, seed mig 0573) ──
+    this.registerAdvanceSubmitted();
+    this.registerAdvanceApproved();
+    this.registerAdvanceRejected();
+    this.registerPaymentBatchCompleted();
+  }
+
+  /** 024 — người nhận = holders(`approve:payroll-advance`) − actor, sinh ở 060 (producer KHÔNG enqueue khi rỗng). */
+  private registerAdvanceSubmitted(): void {
+    this.bridge.registerSource({
+      eventType: PAYROLL_EVENT_ADVANCE_SUBMITTED,
+      eventCode: "PAYROLL_ADVANCE_SUBMITTED",
+      sourceModule: SOURCE_MODULE_PAYROLL,
+      sourceEntityType: "payroll_advance",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "advanceId"),
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      dedupeKeyOf: (ctx) =>
+        `${requireField(ctx.payload, "advanceId")}:${requireField(ctx.payload, "createdAtIso")}`,
+    });
+  }
+
+  /** 025 — người nhận = uniq[thụ hưởng, người tạo] − actor (đọc từ payload). */
+  private registerAdvanceApproved(): void {
+    this.bridge.registerSource({
+      eventType: PAYROLL_EVENT_ADVANCE_APPROVED,
+      eventCode: "PAYROLL_ADVANCE_APPROVED",
+      sourceModule: SOURCE_MODULE_PAYROLL,
+      sourceEntityType: "payroll_advance",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "advanceId"),
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      dedupeKeyOf: (ctx) =>
+        `${requireField(ctx.payload, "advanceId")}:${requireField(ctx.payload, "decidedAtIso")}`,
+    });
+  }
+
+  /** 026 — như 025; template có thêm biến `reason` (producer đặt sẵn trong payload). */
+  private registerAdvanceRejected(): void {
+    this.bridge.registerSource({
+      eventType: PAYROLL_EVENT_ADVANCE_REJECTED,
+      eventCode: "PAYROLL_ADVANCE_REJECTED",
+      sourceModule: SOURCE_MODULE_PAYROLL,
+      sourceEntityType: "payroll_advance",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "advanceId"),
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      dedupeKeyOf: (ctx) =>
+        `${requireField(ctx.payload, "advanceId")}:${requireField(ctx.payload, "decidedAtIso")}`,
+    });
+  }
+
+  /**
+   * 027 — CHỈ ở lượt hoàn tất làm kỳ CHUYỂN `Paid`; khoá = `{periodId}` (once-ever MỖI KỲ — kỳ nhiều đợt vẫn một
+   * thông báo). Neo là KỲ (`payroll_period`), không phải đợt.
+   */
+  private registerPaymentBatchCompleted(): void {
+    this.bridge.registerSource({
+      eventType: PAYROLL_EVENT_PAYMENT_BATCH_COMPLETED,
+      eventCode: "PAYROLL_PAYMENT_BATCH_COMPLETED",
+      sourceModule: SOURCE_MODULE_PAYROLL,
+      sourceEntityType: "payroll_period",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "periodId"),
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      dedupeKeyOf: (ctx) => requireField(ctx.payload, "periodId"),
+    });
   }
 
   /** 020 — người nhận = tập người duyệt hợp lệ tại thời điểm gửi. */

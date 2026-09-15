@@ -386,5 +386,19 @@ Census mã lỗi 26 → **32**. FE `PAYROLL_ERROR_KINDS` +18: `advance-not-pendi
 ## 10. Chi phí & reviewer
 Khuôn BE-3 (~$1,77k): BE-4 không migration ⇒ **~$1,2–1,6k** — code + test ~$600–900 · check + đột biến ~$150 · plan-review ~$64 (đã tốn) · 3 reviewer tuần tự ~$300 (database-reviewer prompt HẸP 4 câu ở header). Chỉ hỏi reviewer thứ không tự đo được (thứ tự khoá 072/069/T2 · rò TK qua log · luật PHỦ dưới race · 3 cặp 071).
 
-## 11. Bằng chứng
-*(điền khi thi công)*
+## 11. Bằng chứng (15/09/2026 — phiên IMPLEMENT, lane `mediaos_be4`)
+
+| Cổng | Kết quả |
+| --- | --- |
+| Contracts build · `tsc --noEmit` api/app · eslint (api src+test, app, contracts) · prettier theo danh sách file | XANH |
+| Unit (không DB) — `payroll.errors.spec` (+22 ca track C: 11 tag map · 5 tag KHÔNG map ⇒ null · 2 uq `payee-already-in-batch` · code-uq · budget-uq · four-eyes · 3 CHECK ⇒ 400 · 4 FK ⇒ 404 · đối chứng FK nội bộ) · `payroll-disbursement.mapper.spec` (14) · `payroll-payment-export.service.spec` (11) · `payroll-adjustments-import.service.spec` (11) | **87/87** |
+| Int — `s15-payroll-be4-advances` **22/22** · `s15-payroll-be4-batches` **19/19** · `s15-payroll-be4-budgets-import` **12/12** · `s13-payroll-qa1-scope-floor` (ROUTES 55→73 · EXEMPT 3→4 · fixture advance/batch/budget) **163/163** | XANH trên `LANE_DB=mediaos_be4` |
+| Census — 2 tầng **77/77** (`≥ 80` literal · sensitive 29/32 · noFloor/objectGrant + `meAdvanceList` · `MONEY_FREE_ROUTES` +11 đẳng thức) · mã lỗi **32** + mọi kind có ca (`import-too-large` phải thêm ca int 5.001 dòng CSV mới có literal) · `route-http-coverage` **624** · param-uuid · body-validation · catalog-lock · formula-architecture | XANH |
+| FE — `payroll-wiring` (77 · distinct 32 · sensitive 29) · `payroll-error-kind-census` (+18 kind, shape2 vẫn = 3) · fsm-parity · actions · money-mask | **82/82** + `tsc` app XANH |
+| Route census artifact | regen `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json` (+19 route, 307 dòng) |
+| Đột biến §6.4 (8/17 ca đã chạy — mỗi ca khôi phục byte-giống, không còn `.bak`) | (a) luật PHỦ ⇒ ĐỎ 2 ca · (q) C3 ⇒ ĐỎ · (o) B1 `line-already-paid` ⇒ ĐỎ · (n) `mappedLineWrite` ném lại `err` ⇒ ca MEDIUM-2 ĐỎ (log chứa số TK) · (h) bỏ vế thụ hưởng ⇒ ca B2 ĐỎ · (g) bỏ lọc `user_id = actor` ⇒ ca IDOR 065 ĐỎ · (m) bỏ `template-in-use` ⇒ ca 052 ĐỎ · (e) 071 bỏ `payslipList` ⇒ unit ba cặp ĐỎ. **Chưa chạy**: (b) đảo khoá · (c) `batch-empty` · (d) map `batch_user_uq` · (f) snapshot từ body · (i)/(j) import · (k) NOTI-027 dedupe theo batchId (**không đo được**: producer chỉ enqueue MỘT lần/kỳ nên ca «2 đợt» không phân biệt khoá — ghi nợ QA-1) · (l) `legacyPaidTrail` · (p) Zod `Completed` |
+| Trigger kích hoạt THẬT ở DB (census tag/tên) | `payroll_payment_batch_freeze:frozen:` · `payroll_payment_line_guard:insert-into-completed:` · `:frozen:` (UPDATE `paid_at` dòng đợt Completed) · `:cross-user:` (qua spy repo, ⇒ 500 sạch) · `payslip_uq` (race 2 đợt cùng thêm 1 người) · `payroll_advances_four_eyes_check` (UPDATE thẳng) · `payroll_payment_batches_company_code_uq` · `payroll_budgets_year_unit_uq` (cả bẫy NULL) · FK `payroll_advances_user_id` (tenant khác) · `payroll_budgets_org_unit_id` (đơn vị tenant khác) |
+
+**Lệch so với plan, có chủ đích:** (1) `mapPayrollTrackCTag` nằm TRONG `payroll.errors.ts` (786 dòng < 800), không tách file — census FE/mã lỗi đọc kind theo literal `payrollDetails("…")` nên tách file phải giữ literal, không đáng. (2) `PayrollAdjustmentImportRepository` (file mới, 3 câu SQL) thay vì SQL trong service — giữ luật «Repository lo DB». (3) Body 063/064 dùng `note` (SPEC-11 §15.1 hàng 064 nguyên văn), không `decisionNote` như thưởng/phạt. (4) 072 trả **200** (`@HttpCode`), các route POST hành động tạm ứng giữ 201 mặc định như thưởng/phạt. (5) Lỗi tệp ở 076 (vắng/quá 5MB/sai loại/parse hỏng) ⇒ **422 030 `import-invalid` {reason}** thay vì 400 như HR — một mã cho FE.
+
+**Chưa chạy (phiên dừng theo hook COST CRITICAL ~$140):** `bash harness/check.sh --lane-db=be4` (full: lint + typecheck + TOÀN BỘ test trên lane) · `test:cov:payroll` ≥ 85% · 3 reviewer tuần tự (security → silent-failure → database HẸP) · PR (KHÔNG auto-merge) · retarget về master khi #510 merge.

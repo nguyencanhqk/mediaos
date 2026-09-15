@@ -2,6 +2,18 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-15 (e) — S15-PAYROLL-BE-4 → **IMPLEMENT XONG, commit checkpoint trên nhánh, CHƯA PR** (🔴, dừng theo hook COST CRITICAL ~$140 — owner chốt có chạy tiếp cổng full + reviewer + PR không)
+
+**Bắt đầu phiên sau ở đây — không đọc lại code/plan từ đầu:**
+- `git checkout feat/s15-payroll-be-4` (stacked trên BE-3 `9ed2e99b`; **PR #510 vẫn MỞ, BLOCKED chờ review người**). Đọc `docs/plans/S15-PAYROLL-BE-4.md` **§11** (bảng bằng chứng + lệch có chủ đích + việc chưa chạy) + memory `s15-payroll-be4-wave-state`.
+- Mọi cổng ĐÃ XANH: unit 87 · int 22+19+12 (+QA1 scope-floor 163) trên `LANE_DB=mediaos_be4` · FE 82 · census 2 tầng 77/77 · mã lỗi 32 · `MIN_COVERED_COUNT` 624 · typecheck/lint/prettier · route-census regen. Đột biến §6.4: 8/17 ca ĐỎ đúng ca (a q o n h g m e), file khôi phục byte-giống.
+- **Còn lại theo thứ tự:** `bash harness/check.sh --lane-db=be4` (full, ~15–20′) → `pnpm --filter @mediaos/api test:cov:payroll` (LANE_DB) ≥ 85% → reviewer tuần tự `security-reviewer` → `silent-failure-hunter` → `database-reviewer` HẸP (4 câu ở header plan; nói thẳng được dừng ở review tĩnh + liệt kê thứ đã chạy) → PR base `feat/s15-payroll-be-3`, **KHÔNG auto-merge** → khi #510 merge: `git merge origin/master` + `--ours` file BE-3, retarget master (memory `squash-merge-breaks-stacked-prs`).
+- Runner int-spec: scratchpad phiên (e) `run-int.sh` = `. scripts/lib/db-secrets.sh; db_secrets_load; unset DATABASE_*_URL; LANE_DB=mediaos_be4; vitest run <file>` — dựng lại 6 dòng nếu scratchpad mất.
+
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:** (1) census mã lỗi đòi literal HTTP-kind trong test surface — `import-too-large` chỉ qua unit `kind:"too-large"` là ĐỎ, phải có ca int 5.001 dòng CSV. (2) JSDoc chứa `*/` (viết `decided_*/decision_note`) đóng comment sớm ⇒ 40 lỗi parse. (3) Tenant đối chứng cross-tenant cho 067 phải có ≥ 2 holder `manage:payment-batch` — không thì C3 (422) chặn trước 404. (4) supertest `.parse` đòi `(res: request.Response, cb)`; typecheck API quét cả `test/`. (5) Đột biến (k) NOTI-027 dedupe theo batchId KHÔNG đo được (producer enqueue một lần/kỳ) — nợ QA-1.
+
+**Chi phí:** ~$140 tới lúc dừng (code + test + 8 đột biến), chưa gồm cổng full + 3 reviewer (~$300 theo plan §10).
+
 ## Phiên 2026-09-15 (d) — S15-PAYROLL-BE-4 → **PLAN commit `502c21e5`, plan-review PASS sau vá §0b, CHƯA code** (🔴, dừng theo hook COST CRITICAL ~$64; owner chốt «mở trong phiên mới»)
 
 **Bắt đầu phiên sau ở đây — không đọc lại SPEC/DB/API từ đầu:**

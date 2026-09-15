@@ -51,6 +51,27 @@ import {
 } from "./payroll.controllers";
 import { SalaryProfilesRepository } from "./salary-profiles.repository";
 import { SalaryProfilesService } from "./salary-profiles.service";
+// ── S15-PAYROLL-BE-4 (track C · PAYROLL-API-059..077) ──
+import {
+  MePayrollAdvancesController,
+  PayrollAdvancesController,
+} from "./payroll-advances.controllers";
+import { PayrollAdvancesRepository } from "./payroll-advances.repository";
+import { PayrollAdvancesService } from "./payroll-advances.service";
+import { PayrollAdjustmentImportRepository } from "./payroll-adjustments-import.repository";
+import { PayrollAdjustmentImportService } from "./payroll-adjustments-import.service";
+import { PayrollBudgetsRepository } from "./payroll-budgets.repository";
+import { PayrollBudgetsService } from "./payroll-budgets.service";
+import { PayrollImportParser } from "./payroll-import.parser";
+import { PayrollPairHoldersReader } from "./payroll-pair-holders.reader";
+import {
+  PayrollAdjustmentImportsController,
+  PayrollBudgetsController,
+  PayrollPaymentBatchesController,
+} from "./payroll-payment.controllers";
+import { PayrollPaymentBatchesRepository } from "./payroll-payment-batches.repository";
+import { PayrollPaymentBatchesService } from "./payroll-payment-batches.service";
+import { PayrollPaymentExportService } from "./payroll-payment-export.service";
 
 /**
  * `PayrollModule` (SPEC-11 · DB-13 · API-18) — **58/58 route** sau `S15-PAYROLL-BE-2`:
@@ -93,6 +114,12 @@ import { SalaryProfilesService } from "./salary-profiles.service";
     PayrollSalaryComponentsController,
     PayrollTemplatesController,
     PayrollStatutoryRatesController,
+    // ── S15-PAYROLL-BE-4 ──
+    PayrollAdvancesController,
+    MePayrollAdvancesController,
+    PayrollPaymentBatchesController,
+    PayrollBudgetsController,
+    PayrollAdjustmentImportsController,
   ],
   providers: [
     PayrollAccessService,
@@ -130,6 +157,18 @@ import { SalaryProfilesService } from "./salary-profiles.service";
     SalaryComponentsService,
     PayrollTemplatesService,
     StatutoryRatesService,
+    // ── S15-PAYROLL-BE-4 (track C) ──
+    PayrollPairHoldersReader,
+    PayrollAdvancesRepository,
+    PayrollAdvancesService,
+    PayrollPaymentBatchesRepository,
+    PayrollPaymentBatchesService,
+    PayrollPaymentExportService,
+    PayrollBudgetsRepository,
+    PayrollBudgetsService,
+    PayrollImportParser,
+    PayrollAdjustmentImportRepository,
+    PayrollAdjustmentImportService,
   ],
   // S13-PAYROLL-DASH-1: chỉ PayrollCalcService — KHÔNG export repository (widget phải đi qua service để
   // giữ nguyên tầng guard THỨ HAI `resolveActor` + audit; export repository là mở đường vòng qua cả hai).

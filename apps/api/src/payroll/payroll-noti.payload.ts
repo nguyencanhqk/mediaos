@@ -24,6 +24,11 @@ export const PAYROLL_EVENT_PERIOD_SUBMITTED = "payroll.period_submitted";
 export const PAYROLL_EVENT_PERIOD_APPROVED = "payroll.period_approved";
 export const PAYROLL_EVENT_PERIOD_REJECTED = "payroll.period_rejected";
 export const PAYROLL_EVENT_PAYSLIP_PUBLISHED = "payroll.payslip_published";
+// ── S15-PAYROLL-BE-4 — track C (NOTI-EVENT-024..027, seed mig 0573) ──
+export const PAYROLL_EVENT_ADVANCE_SUBMITTED = "payroll.advance_submitted";
+export const PAYROLL_EVENT_ADVANCE_APPROVED = "payroll.advance_approved";
+export const PAYROLL_EVENT_ADVANCE_REJECTED = "payroll.advance_rejected";
+export const PAYROLL_EVENT_PAYMENT_BATCH_COMPLETED = "payroll.payment_batch_completed";
 
 /** Nhãn trung tính khi `users.full_name` NULL — không quy hành động cho "Hệ thống" (khuôn RECRUIT/ASSET). */
 export const PAYROLL_ACTOR_FALLBACK = "Bộ phận nhân sự";
@@ -77,5 +82,55 @@ export interface PayslipPublishedPayload {
   /** Chủ phiếu. */
   recipientUserId: string;
   period_month: string;
+  [key: string]: unknown;
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// S15-PAYROLL-BE-4 — track C (SPEC-11 §17.1 · template mig 0573). ⚠️ 0 SỐ TIỀN — kể cả số tạm ứng của chính
+// người nhận: NOTI đi qua nhiều kênh, không có tầng masking. Người nhận đi THEO PAYLOAD; producer KHÔNG enqueue khi
+// danh sách rỗng (registrar `requireUserIds` NÉM ⇒ dead-letter câm — plan-review C7).
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+interface PayrollAdvanceEventBase {
+  /** Neo `sourceEntityId` + nửa đầu dedupeKey. */
+  advanceId: string;
+  actorUserId: string;
+  /** Người nhận, resolve MỘT LẦN lúc ghi; KHÔNG rỗng (producer đã lọc). */
+  recipientUserIds: string[];
+  // Template 0573: actor_name · deduct_period_month · payroll_advance_id.
+  actor_name: string;
+  deduct_period_month: string;
+  payroll_advance_id: string;
+  [key: string]: unknown;
+}
+
+/** 024 — `PAYROLL_ADVANCE_SUBMITTED`: người nhận = holders(`approve:payroll-advance`) − actor. dedupe `{advanceId}:{createdAtIso}`. */
+export interface PayrollAdvanceSubmittedPayload extends PayrollAdvanceEventBase {
+  createdAtIso: string;
+}
+
+/** 025 — `PAYROLL_ADVANCE_APPROVED`: người nhận = uniq[user_id, created_by] − actor. dedupe `{advanceId}:{decidedAtIso}`. */
+export interface PayrollAdvanceApprovedPayload extends PayrollAdvanceEventBase {
+  decidedAtIso: string;
+}
+
+/** 026 — `PAYROLL_ADVANCE_REJECTED`: như 025 + biến template `reason`. */
+export interface PayrollAdvanceRejectedPayload extends PayrollAdvanceEventBase {
+  decidedAtIso: string;
+  reason: string;
+}
+
+/**
+ * 027 — `PAYROLL_PAYMENT_BATCH_COMPLETED`: CHỈ ở lượt hoàn tất làm kỳ CHUYỂN `Paid` (luật PHỦ). dedupe = `{periodId}`
+ * — một KỲ báo đúng MỘT lần (khoá theo `batchId` thì kỳ nhiều đợt đẻ nhiều thông báo). Người nhận = holders
+ * (`view:payment-batch`) − actor. `sourceEntity` là KỲ (`payroll_period`), không phải đợt.
+ */
+export interface PayrollPaymentBatchCompletedPayload {
+  periodId: string;
+  batchId: string;
+  actorUserId: string;
+  recipientUserIds: string[];
+  period_month: string;
+  payroll_period_id: string;
   [key: string]: unknown;
 }

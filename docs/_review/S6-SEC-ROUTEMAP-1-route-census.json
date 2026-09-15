@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 605,
-    "controllers": 109,
-    "gated": 566,
+    "routes": 624,
+    "controllers": 114,
+    "gated": 585,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -5604,6 +5604,22 @@
       "verdictWo": null
     },
     {
+      "key": "MePayrollAdvancesController#listMine",
+      "httpMethod": "GET",
+      "path": "/api/v1/me/payroll-advances",
+      "hasPermission": true,
+      "permission": "view-own:payroll-advance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "MePayslipsController#acknowledge",
       "httpMethod": "POST",
       "path": "/api/v1/me/payslips/:id/acknowledge",
@@ -6418,6 +6434,182 @@
       "verdictWo": null
     },
     {
+      "key": "PayrollAdjustmentImportsController#importAdjustments",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll-periods/:id/import-adjustments",
+      "hasPermission": true,
+      "permission": "manage:bonus-penalty",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollAdjustmentImportsController#template",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/imports/adjustments-template",
+      "hasPermission": true,
+      "permission": "manage:bonus-penalty",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollAdvancesController#approve",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/advances/:id/approve",
+      "hasPermission": true,
+      "permission": "approve:payroll-advance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollAdvancesController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/advances",
+      "hasPermission": true,
+      "permission": "manage:payroll-advance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollAdvancesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/advances/:id",
+      "hasPermission": true,
+      "permission": "view:payroll-advance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollAdvancesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/advances",
+      "hasPermission": true,
+      "permission": "view:payroll-advance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollAdvancesController#reject",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/advances/:id/reject",
+      "hasPermission": true,
+      "permission": "approve:payroll-advance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollAdvancesController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll/advances/:id",
+      "hasPermission": true,
+      "permission": "manage:payroll-advance",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollBudgetsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/budgets",
+      "hasPermission": true,
+      "permission": "manage:payroll-budget",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollBudgetsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/budgets",
+      "hasPermission": true,
+      "permission": "view:payroll-budget",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollBudgetsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll/budgets/:id",
+      "hasPermission": true,
+      "permission": "manage:payroll-budget",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "PayrollDependentsController#update",
       "httpMethod": "PATCH",
       "path": "/api/v1/payroll/dependents/:id",
@@ -6519,6 +6711,118 @@
       "path": "/api/v1/payroll/employees/:userId/settings",
       "hasPermission": true,
       "permission": "manage:payroll-employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPaymentBatchesController#complete",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/payment-batches/:id/complete",
+      "hasPermission": true,
+      "permission": "manage:payment-batch",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPaymentBatchesController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/payroll/payment-batches",
+      "hasPermission": true,
+      "permission": "manage:payment-batch",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPaymentBatchesController#exportUnc",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/payment-batches/:id/export",
+      "hasPermission": true,
+      "permission": "manage:payment-batch",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPaymentBatchesController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/payment-batches/:id",
+      "hasPermission": true,
+      "permission": "view:payment-batch",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPaymentBatchesController#lines",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/payment-batches/:id/lines",
+      "hasPermission": true,
+      "permission": "view:payment-batch",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPaymentBatchesController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/payment-batches",
+      "hasPermission": true,
+      "permission": "view:payment-batch",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollPaymentBatchesController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/payroll/payment-batches/:id",
+      "hasPermission": true,
+      "permission": "manage:payment-batch",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],
