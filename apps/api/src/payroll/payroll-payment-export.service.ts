@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { PayrollAccessService } from "./payroll-access.service";
@@ -93,6 +93,28 @@ export class PayrollPaymentExportService {
       return { batch: found, rows: lines, names: nameMap };
     });
 
+    let buffer: Buffer;
+    try {
+      buffer = await this.buildUncBuffer(batch, rows, names);
+    } catch (err) {
+      // silent-failure-hunter BE-4 #4 (vá ở BE-4B): audit `read` đã commit trong tx ở trên (chọn «không bao giờ thiếu
+      // audit»), nhưng KHÔNG tệp nào rời server. Để lại dấu vết server-side — chỉ id đợt + số dòng, KHÔNG TK/tiền — rồi
+      // ném tiếp cho filter (500 sạch; filter tự log stack).
+      Logger.error(
+        `PAYROLL-API-071: audit 'read' đã ghi cho đợt ${batchId} (${rows.length} dòng) nhưng sinh tệp UNC thất bại — không có tệp rời server`,
+        PayrollPaymentExportService.name,
+      );
+      throw err;
+    }
+    return { buffer, filename: `unc-${batch.code}.xlsx` };
+  }
+
+  /** Dựng workbook UNC — tách riêng để đo được nhánh «ném SAU audit» ở unit và giữ `export` gọn. */
+  private async buildUncBuffer(
+    batch: NonNullable<Awaited<ReturnType<PayrollPaymentBatchesRepository["findWithStatsTx"]>>>,
+    rows: Awaited<ReturnType<PayrollPaymentBatchesRepository["linesForExportTx"]>>,
+    names: Awaited<ReturnType<PayrollPeopleRepository["namesByUserIdsTx"]>>,
+  ): Promise<Buffer> {
     // `exceljs` import ĐỘNG — ngoài tx, ngoài đường boot.
     const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
@@ -117,6 +139,6 @@ export class PayrollPaymentExportService {
       ]);
     });
     const out = await workbook.xlsx.writeBuffer();
-    return { buffer: Buffer.from(out as ArrayBuffer), filename: `unc-${batch.code}.xlsx` };
+    return Buffer.from(out as ArrayBuffer);
   }
 }

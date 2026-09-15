@@ -28,13 +28,8 @@ import {
 } from "./payroll-noti.payload";
 import { PayrollPairHoldersReader } from "./payroll-pair-holders.reader";
 import { PayrollPeopleRepository } from "./payroll-people.repository";
-import {
-  mapPayrollPgError,
-  payrollConflict,
-  payrollDetails,
-  payrollNotFound,
-  PAYROLL_ERR,
-} from "./payroll.errors";
+import { mappedWrite } from "./payroll-pg-write.util";
+import { payrollConflict, payrollDetails, payrollNotFound, PAYROLL_ERR } from "./payroll.errors";
 import { payrollOffset, type PayrollActor, type PayrollRequestUser } from "./payroll.types";
 
 /**
@@ -71,7 +66,8 @@ const isoOf = (v: Date | string | null | undefined): string =>
  * là khoản không được nhặt lượt này và hiện `unconsumed-advances`, không sai tiền.
  *
  * ── Envelope route GHI: `{ id, status, warnings }` — 0 khoá tiền (cặp `manage`/`approve` không phải cửa sau đọc tiền).
- * ── 065 Own: `repo.listTx({ userId: actor })` — không hàng ⇒ rỗng; **0 audit** (tự xem của mình, SPEC-11 §18).
+ * ── 065 Own: `repo.listOwnTx({ ownerUserId: actor })` (BE-4B L4 — `ownerUserId` rỗng ⇒ NÉM, không rơi về toàn công ty) —
+ *    không hàng ⇒ rỗng; **0 audit** (tự xem của mình, SPEC-11 §18).
  */
 @Injectable()
 export class PayrollAdvancesService {
@@ -131,12 +127,9 @@ export class PayrollAdvancesService {
         dto.deductPeriodMonth,
         ADVANCE_CREATE_OPEN_STATUSES,
       );
-      let row: PayrollAdvance;
-      try {
-        row = await this.repo.createTx(tx, user.companyId, dto, user.id);
-      } catch (err) {
-        throw mapPayrollPgError(err) ?? err;
-      }
+      const row = await mappedWrite("payroll_advances", () =>
+        this.repo.createTx(tx, user.companyId, dto, user.id),
+      );
       await this.audit.record(tx, {
         action: "create",
         objectType: "payroll_advance",
@@ -202,12 +195,9 @@ export class PayrollAdvancesService {
       const before = await this.lockPendingUnbound(tx, user.companyId, id);
 
       if (dto.delete === true) {
-        let row: PayrollAdvance | null;
-        try {
-          row = await this.repo.softDeleteTx(tx, user.companyId, id, user.id);
-        } catch (err) {
-          throw mapPayrollPgError(err) ?? err;
-        }
+        const row = await mappedWrite("payroll_advances", () =>
+          this.repo.softDeleteTx(tx, user.companyId, id, user.id),
+        );
         if (!row) throw payrollNotFound();
         await this.audit.record(tx, {
           action: "delete",
@@ -238,9 +228,8 @@ export class PayrollAdvancesService {
       const changedFields = (["amount", "deductPeriodMonth", "reason"] as const).filter(
         (k) => dto[k] !== undefined,
       );
-      let row: PayrollAdvance | null;
-      try {
-        row = await this.repo.updateTx(
+      const row = await mappedWrite("payroll_advances", () =>
+        this.repo.updateTx(
           tx,
           user.companyId,
           id,
@@ -252,10 +241,8 @@ export class PayrollAdvancesService {
             ...(dto.reason !== undefined ? { reason: dto.reason } : {}),
           },
           user.id,
-        );
-      } catch (err) {
-        throw mapPayrollPgError(err) ?? err;
-      }
+        ),
+      );
       if (!row) throw payrollNotFound();
       await this.audit.record(tx, {
         action: "update",
@@ -284,20 +271,21 @@ export class PayrollAdvancesService {
   async listMine(user: PayrollRequestUser, query: MePayrollAdvanceListQuery) {
     const actor = await this.access.resolveActor(user, "meAdvanceList");
     return this.db.withTenant(user.companyId, async (tx) => {
+      // BE-4B (security L4): vị từ Own có hàm riêng — `ownerUserId` bắt buộc, rỗng ⇒ ném (KHÔNG rơi về toàn công ty).
       const filter = {
-        userId: user.id,
+        ownerUserId: user.id,
         status: query.status as PayrollAdvanceStatus[] | undefined,
         deductPeriodMonth: query.deductPeriodMonth,
       };
       const [rows, total] = await Promise.all([
-        this.repo.listTx(
+        this.repo.listOwnTx(
           tx,
           user.companyId,
           filter,
           query.per_page,
           payrollOffset(query.page, query.per_page),
         ),
-        this.repo.countTx(tx, user.companyId, filter),
+        this.repo.countOwnTx(tx, user.companyId, filter),
       ]);
       return paginated(
         rows.map((r) => toPayrollAdvanceDto(r, actor)),
@@ -338,12 +326,9 @@ export class PayrollAdvancesService {
         // B3 — kỳ đã tính: chỉ lượt tính LẠI mới nhặt khoản này; không tín hiệu ⇒ officer submit thẳng ⇒ khoản mồ côi.
         if (periodStatus === "Calculated") warnings.push("recalculate-required");
       }
-      let row: PayrollAdvance | null;
-      try {
-        row = await this.repo.decideTx(tx, user.companyId, id, status, note, user.id);
-      } catch (err) {
-        throw mapPayrollPgError(err) ?? err;
-      }
+      const row = await mappedWrite("payroll_advances", () =>
+        this.repo.decideTx(tx, user.companyId, id, status, note, user.id),
+      );
       if (!row) throw payrollNotFound();
       await this.audit.record(tx, {
         action: status === "Approved" ? "approve" : "reject",

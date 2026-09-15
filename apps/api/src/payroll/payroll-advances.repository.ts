@@ -10,6 +10,13 @@ export interface PayrollAdvanceListFilter {
   deductPeriodMonth?: string;
 }
 
+/** 065 Own (BE-4B, security L4) — `ownerUserId` BẮT BUỘC: không có nhánh «thiếu ⇒ không lọc». */
+export interface PayrollAdvanceOwnFilter {
+  ownerUserId: string;
+  status?: PayrollAdvanceStatus[];
+  deductPeriodMonth?: string;
+}
+
 /**
  * S15-PAYROLL-BE-4 — `payroll_advances` (DB-13 §14.1 · mig 0572), khuôn `BonusPenaltiesRepository`.
  *
@@ -29,7 +36,7 @@ export class PayrollAdvancesRepository {
 
   private static filterCond(companyId: string, f: PayrollAdvanceListFilter) {
     const conds = [PayrollAdvancesRepository.scope(companyId)];
-    if (f.userId) conds.push(eq(payrollAdvances.userId, f.userId));
+    if (f.userId !== undefined) conds.push(eq(payrollAdvances.userId, f.userId));
     if (f.status?.length) conds.push(inArray(payrollAdvances.status, f.status));
     if (f.deductPeriodMonth) conds.push(eq(payrollAdvances.deductPeriodMonth, f.deductPeriodMonth));
     return and(...conds);
@@ -49,6 +56,47 @@ export class PayrollAdvancesRepository {
       .orderBy(desc(payrollAdvances.deductPeriodMonth), desc(payrollAdvances.id))
       .limit(limit)
       .offset(offset);
+  }
+
+  /**
+   * BE-4B (security L4) — vị từ Own FAIL-CLOSED: `ownerUserId` rỗng/khoảng trắng ⇒ NÉM trước khi chạm DB. Khuôn cũ đi
+   * qua `filterCond` với truthy-guard `if (f.userId)` ⇒ JWT thiếu `sub` biến route Own thành danh sách TOÀN CÔNG TY (có tiền).
+   */
+  private static ownCond(companyId: string, f: PayrollAdvanceOwnFilter) {
+    if (typeof f.ownerUserId !== "string" || f.ownerUserId.trim().length === 0) {
+      throw new Error(
+        "payroll_advances Own: ownerUserId rỗng — từ chối thay vì rơi về danh sách toàn công ty",
+      );
+    }
+    return PayrollAdvancesRepository.filterCond(companyId, {
+      userId: f.ownerUserId,
+      status: f.status,
+      deductPeriodMonth: f.deductPeriodMonth,
+    });
+  }
+
+  /** 065 — «Tạm ứng của tôi»: CHỈ hàng `user_id = ownerUserId`; ownerUserId rỗng ⇒ ném (không có đường «không lọc»). */
+  async listOwnTx(
+    tx: TenantTx,
+    companyId: string,
+    f: PayrollAdvanceOwnFilter,
+    limit: number,
+    offset: number,
+  ): Promise<PayrollAdvance[]> {
+    const cond = PayrollAdvancesRepository.ownCond(companyId, f);
+    return tx
+      .select()
+      .from(payrollAdvances)
+      .where(cond)
+      .orderBy(desc(payrollAdvances.deductPeriodMonth), desc(payrollAdvances.id))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async countOwnTx(tx: TenantTx, companyId: string, f: PayrollAdvanceOwnFilter): Promise<number> {
+    const cond = PayrollAdvancesRepository.ownCond(companyId, f);
+    const [row] = await tx.select({ n: count() }).from(payrollAdvances).where(cond);
+    return Number(row?.n ?? 0);
   }
 
   async countTx(tx: TenantTx, companyId: string, f: PayrollAdvanceListFilter): Promise<number> {

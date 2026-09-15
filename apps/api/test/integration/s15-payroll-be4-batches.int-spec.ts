@@ -18,6 +18,7 @@ import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
+import { DatabaseService } from "../../src/db/db.service";
 import { PayrollPaymentBatchesRepository } from "../../src/payroll/payroll-payment-batches.repository";
 import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
@@ -360,6 +361,105 @@ describe.skipIf(!hasLaneDb)(
     });
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════════════════════════
+    // S15-PAYROLL-BE-4B — nợ FULL gate BE-4 (plan BE-4 §11b): reader quyền lọc `users.status = 'active'` (security M3)
+    // · `insertLinesTx` EXISTS đợt CÙNG công ty (database LOW). RED trước khi vá: holder bị đình chỉ vẫn được đếm ⇒ C3
+    // xanh giả (four-eyes 072 không bao giờ thoả) / NOTI-027 vào tài khoản chết; dòng chi gắn được vào đợt công ty khác.
+    describe("BE-4B — users.status ở reader quyền · EXISTS đợt ở insertLinesTx", () => {
+      const setStatus = (userId: string, status: "active" | "suspended") =>
+        direct.query(`UPDATE users SET status = $2 WHERE id = $1`, [userId, status]);
+
+      it("C3b — người thứ hai giữ manage:payment-batch nhưng `suspended` ⇒ vẫn 422 017; kích hoạt lại ⇒ 201 (đối chứng ALLOW)", async () => {
+        const pC = await seedUser(direct, C.companyId, `p2@${C.slug}.test`, "x");
+        const holder2 = await seedUser(direct, C.companyId, `holder2@${C.slug}.test`, "x");
+        await grantPayrollPairs(direct, C.companyId, holder2, "be4b-holder2", ["batchComplete"]);
+        await setStatus(holder2, "suspended");
+        const { periodId } = await publishedPeriodWithPayslips(direct, C.companyId, {
+          month: nextMonth(),
+          payees: [{ userId: pC, net: "1.00" }],
+          officerId: soloC.id,
+          approverId: pC,
+        });
+        const body = { payrollPeriodId: periodId, method: "cash" };
+        expectError(
+          await as(soloC.token).post("/payroll/payment-batches").send(body),
+          422,
+          "PAYROLL-ERR-017",
+          "no-eligible-completer",
+        );
+        // ĐỐI CHỨNG ALLOW: cùng người, cùng cặp, chỉ đổi `users.status` ⇒ đủ người hoàn tất ⇒ 201.
+        await setStatus(holder2, "active");
+        const ok = await as(soloC.token).post("/payroll/payment-batches").send(body);
+        expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+        // Trả C về «một người hoàn tất hoạt động» cho ca sau.
+        await setStatus(holder2, "suspended");
+      });
+
+      it("NOTI-027 KHÔNG tới holder view:payment-batch bị đình chỉ — payload đi theo reader đã lọc users.status", async () => {
+        const { periodId } = await publishedPeriod();
+        await setStatus(viewer.id, "suspended");
+        try {
+          const a = await createBatch(officer.token, {
+            payrollPeriodId: periodId,
+            method: "cash",
+          });
+          const r = await complete(completer.token, a.id, { confirmAllPaid: true });
+          expect(r.status, JSON.stringify(r.body)).toBe(200);
+          expect(r.body.data.periodStatus).toBe("Paid");
+          const ev = await outboxOf("payroll.payment_batch_completed", periodId);
+          expect(ev).toHaveLength(1);
+          // holders(view:payment-batch) − completer = officer (+ viewer NẾU còn hoạt động — đang đình chỉ ⇒ loại).
+          expect(ev[0].payload["recipientUserIds"]).toEqual([officer.id]);
+        } finally {
+          await setStatus(viewer.id, "active");
+        }
+      });
+
+      it("insertLinesTx — batch_id không tồn tại HOẶC thuộc công ty khác ⇒ 0 dòng (EXISTS đợt cùng company), không FK/500", async () => {
+        const { payslipIdByUser } = await publishedPeriod();
+        const repo = app.get(PayrollPaymentBatchesRepository);
+        const db = app.get(DatabaseService);
+        const payslipId = payslipIdByUser.get(payees[0])!;
+        const ghost = await db.withTenant(A.companyId, (tx) =>
+          repo.insertLinesTx(
+            tx,
+            A.companyId,
+            { id: randomUUID(), method: "cash" },
+            [payslipId],
+            officer.id,
+          ),
+        );
+        expect(ghost).toEqual([]);
+        // Đợt THẬT của B (B có hai holder ⇒ C3 qua) — cùng id thật, khác company ⇒ 0 dòng.
+        const pB = await seedUser(direct, B.companyId, `pb@${B.slug}.test`, "x");
+        const { periodId: periodB } = await publishedPeriodWithPayslips(direct, B.companyId, {
+          month: nextMonth(),
+          payees: [{ userId: pB, net: "1.00" }],
+          officerId: officerB.id,
+          approverId: pB,
+        });
+        const bB = await createBatch(officerB.token, {
+          payrollPeriodId: periodB,
+          method: "cash",
+          userIds: [pB],
+        });
+        const cross = await db.withTenant(A.companyId, (tx) =>
+          repo.insertLinesTx(
+            tx,
+            A.companyId,
+            { id: bB.id, method: "cash" },
+            [payslipId],
+            officer.id,
+          ),
+        );
+        expect(cross).toEqual([]);
+        const n = await direct.query(
+          `SELECT count(*)::int AS n FROM payroll_payment_lines WHERE batch_id = $1 AND company_id = $2`,
+          [bB.id, A.companyId],
+        );
+        expect(n.rows[0].n).toBe(0);
+      });
+    });
     describe("066/068/070 — đọc + mask", () => {
       it("068 `totalNet` = Σ net dòng sống; 070 VẮNG khoá TK đầy đủ, có `bankAccountLast4`; audit +1 mỗi lượt; viewer thấy tiền (cặp chở-tiền)", async () => {
         const { periodId } = await publishedPeriod();
