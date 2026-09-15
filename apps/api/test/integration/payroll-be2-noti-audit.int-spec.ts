@@ -45,6 +45,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = "Passw0rd!payrollnoti";
@@ -212,9 +213,10 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 NOTI 020–023 + audit lượt đ�
     subjectId = await seedUser(direct, A.companyId, `subject@${A.slug}.test`, hash);
     await grant(subjectId, EMPLOYEE_PAIRS, "employee");
     tEmployee = await login(`subject@${A.slug}.test`);
-    await direct.query(
+    await writeSalaryProfileWithItems(
+      direct,
       `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances)
-       VALUES ($1,$2,'2028-01-01','12000000.00','[]'::jsonb)`,
+       VALUES ($1,$2,'2028-01-01','12000000.00','[]'::jsonb) RETURNING id`,
       [A.companyId, subjectId],
     );
 

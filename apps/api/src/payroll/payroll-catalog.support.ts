@@ -13,6 +13,10 @@ import { formulaSetFingerprint } from "./formula/formula.fingerprint";
 import { compileGraph, type CompiledGraph, type GraphComponent } from "./formula/formula.graph";
 import { FORMULA_FUNCS, hasReservedPrefix, RESERVED_WORDS } from "./formula/formula.vocabulary";
 import { PAYROLL_SYSTEM_COMPONENT_CODES } from "./payroll-master-data.seeder";
+import { templateGraphComponent } from "./payroll-template-graph";
+
+/** S15-PAYROLL-DB-1B: hàm dời sang module lá (seeder dùng được mà không vòng import) — re-export giữ call site cũ. */
+export { templateGraphComponent };
 import type { TemplateComponentRow } from "./payroll-templates.repository";
 import { formulaErrorToHttp } from "./payroll.errors";
 
@@ -69,31 +73,6 @@ export function catalogGraphComponent(row: SalaryComponent): GraphComponent {
     valueType: row.valueType as SalaryComponentValueType,
     formula: row.valueType === "formula" ? row.formula : null,
     fixedAmount: row.valueType === "fixed" ? row.fixedAmount : null,
-    pitDeductible: row.pitDeductible,
-  };
-}
-
-type TemplateGraphSource = Pick<
-  TemplateComponentRow,
-  "code" | "kind" | "valueType" | "catalogFormula" | "formulaOverride" | "fixedAmount" | "pitDeductible"
->;
-
-/**
- * Hàng của mẫu → thành phần đồ thị (ngữ cảnh MẪU). Ghi đè công thức biến thành phần `fixed` thành `formula` trong
- * đồ thị; `engine`/`profile_item` KHÔNG nhận ghi đè (service chặn ⇒ 018 `formula-override-not-allowed`).
- */
-export function templateGraphComponent(row: TemplateGraphSource): GraphComponent {
-  const overridden = row.formulaOverride !== null;
-  return {
-    code: row.code,
-    kind: row.kind as SalaryComponentKind,
-    valueType: (overridden ? "formula" : row.valueType) as SalaryComponentValueType,
-    formula: overridden
-      ? row.formulaOverride
-      : row.valueType === "formula"
-        ? row.catalogFormula
-        : null,
-    fixedAmount: overridden || row.valueType !== "fixed" ? null : row.fixedAmount,
     pitDeductible: row.pitDeductible,
   };
 }

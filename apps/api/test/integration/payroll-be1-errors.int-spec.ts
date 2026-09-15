@@ -343,6 +343,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 mã lỗi (DB cô lập, đường
     expect((await post(tApprover, `/bonus-penalties/${id}/approve`).send({})).status).toBe(201);
     // Máy tính lương (BE-2) sẽ bind cặp này; ở đây bind thẳng để dựng đúng trạng thái.
     const period = await post(tAuthor, "/payroll-periods").send({ periodMonth: "2028-06" });
+    // S15-PAYROLL-DB-1B (mig 0574 nhánh (F)): gắn consume chỉ hợp lệ khi kỳ ∈ {CollectingData, Calculated}; POST tạo `Draft`.
+    await direct.query(`UPDATE payroll_periods SET status = 'CollectingData' WHERE id = $1`, [period.body.data.id]);
     await direct.query(
       `UPDATE bonus_penalties SET payroll_period_id=$2, consumed_at=now() WHERE id=$1`,
       [id, period.body.data.id],
@@ -384,6 +386,8 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 mã lỗi (DB cô lập, đường
       [id, subjectUserId],
     );
     const period = await post(tAuthor, "/payroll-periods").send({ periodMonth: "2028-08" });
+    // S15-PAYROLL-DB-1B (mig 0574 nhánh (F)): kỳ phải ∈ {CollectingData, Calculated} lúc gắn consume.
+    await direct.query(`UPDATE payroll_periods SET status = 'CollectingData' WHERE id = $1`, [period.body.data.id]);
     await direct.query(
       `UPDATE bonus_penalties SET payroll_period_id=$2, consumed_at=now() WHERE id=$1`,
       [id, period.body.data.id],

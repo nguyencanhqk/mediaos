@@ -71,7 +71,7 @@ Thêm (7) + nâng (5) đẩy lên ~880. **Tách** `assertSeedIntegrity` + `asser
 Cùng hình dạng lỗ plan DB-2 §3.5.a B2: không vế trạng-thái-kỳ ⇒ (i) nhả khoản đã trừ ở kỳ `Locked`/`Paid` rồi gắn kỳ sau = **trừ lương hai lần**; (ii) gắn vào kỳ ≥ `Reviewing` = `consumed` mà không bao giờ vào dòng lương. Service v1 không tạo được hai ca này (khoá kỳ FOR UPDATE + tiền-kiểm trạng thái), nên (F) là **lưới cuối DB** cho mô hình đe doạ «bug/script/repository gọi thẳng» — đúng lý do tồn tại của A–E.
 
 ### 3.6 KHÔNG thêm insert-shape («INSERT chỉ `Pending` sạch») cho `bonus_penalties` — có chủ đích
-T3 của `payroll_advances` có (M3 DB-2), nhưng ở đây nó giết fixture đối kháng: `seedBonus` (`bonus-penalty-transition:57` — «INSERT là cách DUY NHẤT dựng hàng đã-duyệt/đã-consume») + 4 ca CHECK chèn thẳng `Approved`/`Rejected`/`draft` để ghim TÊN CHECK; BEFORE INSERT bắn trước CHECK ⇒ cả họ ca đổi sang lỗi trigger. Route `POST /bonus-penalties` chỉ chèn `Pending` (Zod + service) và `bonus_penalties_four_eyes`/`decided_pair` CHECK đã ép hình dạng quyết định. INSERT CHỈ nhận vế B2: **có `payroll_period_id` ⇒ kỳ phải ∈ {CollectingData, Calculated}**. Ghi rủi ro §9 R3.
+T3 của `payroll_advances` có (M3 DB-2), nhưng ở đây nó giết fixture đối kháng: `seedBonus` (`bonus-penalty-transition:57` — «INSERT là cách DUY NHẤT dựng hàng đã-duyệt/đã-consume») + 4 ca CHECK chèn thẳng `Approved`/`Rejected`/`draft` để ghim TÊN CHECK; BEFORE INSERT bắn trước CHECK ⇒ cả họ ca đổi sang lỗi trigger. Route `POST /bonus-penalties` chỉ chèn `Pending` (Zod + service); ở DB chỉ có `decided_pair` CHECK ép hình dạng quyết định (có `decided_by`/`decided_at`) — **KHÔNG có CHECK four-eyes** (security-review DB-1B MEDIUM: bản trước viết `bonus_penalties_four_eyes` là SAI, đã đo lại `pg_constraint`) ⇒ INSERT thô hàng `Approved` tự duyệt (`decided_by = created_by`) đi qua DB — lỗ có từ 0564, nợ ghi BE-3. INSERT CHỈ nhận vế B2: **có `payroll_period_id` ⇒ kỳ phải ∈ {CollectingData, Calculated}**. Ghi rủi ro §9 R3.
 
 ### 3.7 Census đã đo (14/09) — không cần hỏi reviewer
 - **Ghi `bonus_penalties` ngoài `src/` + `test/`:** `grep -rln bonus_penalties` (loại `node_modules` · `dist` · `migrations` · `test` · `src`) ⇒ chỉ `apps/api/releases/*/db/schema/payroll.js` (bản build cũ) + `.claude/hooks/guard-immutability.mjs`. **Không** seed/script/demo nào gắn consume ⇒ (F)/INSERT không phá dữ liệu vận hành.
@@ -255,7 +255,7 @@ Kỳ fixture dùng khuôn `mkPeriod` của `s15-payroll-db2-invariants.int-spec.
 ## 9. Rủi ro tồn đọng
 - **R1 — người vận hành ĐO trước deploy** (agent không chạm DB PROD): `SELECT count(*) FROM salary_components WHERE is_system AND code='LUONG_CO_BAN' AND formula='<cũ>'` + `SELECT count(*) FROM payroll_period_lines WHERE template_fingerprint IS NOT NULL` (phải 0).
 - **R2 — rollback BE qua mốc 0574:** build cũ seed công ty MỚI bằng chuỗi cũ và không có (7). Không tệ hơn hiện trạng (DB-2 đã CẤM rollback qua 0572); roll-forward ⇒ (7) báo đích danh ⇒ vá tay bằng khối (1).
-- **R3 — không insert-shape** (§3.6): INSERT thô hàng `Approved` chưa consume vẫn được; không tạo tiền (chưa gắn kỳ nào) và mọi gắn sau đó qua (F).
+- **R3 — không insert-shape** (§3.6): INSERT thô hàng `Approved` chưa consume vẫn được. **SỬA (security-review MEDIUM):** bản trước ghi «không tạo tiền» là SAI — máy tính (`lockPickedBonusPenaltiesTx`) nhặt hàng `Approved` của tháng rồi gắn vào kỳ `CollectingData`/`Calculated` (được (F) cho qua), và DB KHÔNG có CHECK four-eyes ⇒ script/bug INSERT hàng tự duyệt (`decided_by = created_by`) lọt vào lương. API không đi được (repository ghi theo danh sách cột, service chặn 012). Nợ BE-3: `CHECK (status <> 'Approved' OR decided_by IS DISTINCT FROM created_by)` — đo lại fixture INSERT `Approved` trước khi thêm.
 - **R4 — override người dùng mang chuỗi cũ** (NOTICE ở (0)): không sửa dữ liệu người dùng; BE-3 hiển thị/QA-1 soát.
 - **R5 — ĐÃ ĐO (§5.2.a): v2 lệch v1 đúng 0,01 ở ca hoà nửa xu** (~1% lưới), v1 là bên làm tròn sai. User-visible nhỏ: phiếu v2 của cùng người/cùng số công có thể hơn/kém v1 1 xu. Ghi SPEC-11 §13.4 + báo owner; QA-1/BE-3 đối soát bằng số học chính xác.
 - **R6 — BE-3 đảo thứ tự khoá** (ghi `bonus_penalties` trước khi khoá kỳ) ⇒ nguy cơ 40P01 với FOR SHARE mới — ghi done_when BE-3.
@@ -264,4 +264,79 @@ Kỳ fixture dùng khuôn `mkPeriod` của `s15-payroll-db2-invariants.int-spec.
 Migration `0574` + journal · hằng seeder v3 · integrity (5)(7) tách file · index + drizzle · trigger (F) + INSERT + tag · fixture §3.1/§3.2 · int-spec §6.1 xanh trên lane mới + lane có dữ liệu · §8 bằng chứng dán §11 · FULL gate database + security PASS · docs §7 · backlog cập nhật · PR KHÔNG auto-merge (vùng đỏ).
 
 ## 11. Bằng chứng đã chạy
-_(điền khi thi công)_
+
+**Lane `mediaos_db1b` (PG 17.10), 14/09/2026.**
+
+### 11.1 RED trước bản vá (head `0573`, seeder v2)
+
+`s15-payroll-db1b-invariants`: **23 đỏ / 30** — F1 · F2 · F3 · F4 · F5 · F6 · B3 ×6 · B4 ×6 · B5-DENY · B6 · B7 · B9 · B-neo. Xanh đúng vai ALLOW: B1 ×2 · B2 ×2 · B5-ALLOW · B9b · F3b · F4b.
+
+### 11.2 Migration trên lane CÓ dữ liệu cũ (§8 bước 2–3, `psql -1` = một transaction như migrator)
+
+- Dựng 2 công ty mang chuỗi cũ bằng INSERT (freeze chỉ BEFORE UPDATE) ⇒ trước: **2** hàng.
+- Lượt 1: `NOTICE [0574] preflight: LUONG_CO_BAN chuoi cu=2 · chuoi moi=0 · formula_override mang chuoi cu=0` · `NOTICE [0574] LUONG_CO_BAN: da va 2 hang` · exit 0.
+- Sau: 2 hàng mang chuỗi MỚI · `salary_component_system_freeze` `O`/19 · `bonus_penalty_freeze_guard` `O`/**23** · `pg_get_indexdef` = `CREATE INDEX payroll_template_components_company_component_idx ON public.payroll_template_components USING btree (company_id, component_id)`.
+- Lượt 2 (idempotent): `chuoi cu=0 · chuoi moi=2` · `da va 0 hang` · index `already exists, skipping` · exit 0.
+- Lượt ĐỎ: 1 hàng công thức thứ ba ⇒ `ERROR: [0574] DUNG: 1 hang he thong LUONG_CO_BAN mang cong thuc THU BA — da co nguoi vuot trigger, KHONG tu de` · exit 3 · trigger freeze vẫn `O`. Fixture bằng chứng đã dọn.
+- `bash scripts/lane-db-setup.sh db1b` ⇒ migrator ghi sổ **242** migration (0574 áp lại, idempotent).
+
+### 11.3 GREEN
+
+- `s15-payroll-db1b-invariants` · `bonus-penalty-transition` · `s15-payroll-be2-seed` · `s15-payroll-db1-seed` · `s15-payroll-db1-invariants` · `s13-payroll-db1-invariants` · `payroll-be1-legacy-items` · `s15-payroll-be2-templates` · `s15-payroll-be2-components` · `src/payroll/**` · census formula: **20 file / 457 ca xanh**.
+- Spec boot app (`--no-file-parallelism`): `payroll-be2-lifecycle` (C1 + B8) · `payroll-be2-noti-audit` · `payroll-be2-permission` · `s13-payroll-qa1-arithmetic` · `s13-payroll-qa1-fsm-race` · `s13-payroll-qa1-idor-tenant` · `payroll-be1-errors`: **7 file / 219 ca xanh**.
+- E2/E3 quét toàn lane chạy lại SAU nhóm trên (đã ghi `allowances` khác rỗng qua helper): xanh.
+- `pnpm --filter @mediaos/api typecheck` exit 0 · `lint` 0 lỗi · `check-migration-no-drop` OK (242 migration, 0 lệnh phá huỷ chưa đăng ký).
+
+### 11.4 Đột biến (§8 bước 4 — script sao file ra scratchpad, khôi phục bằng `cp` + replay 0574; KHÔNG `git checkout`)
+
+| Đột biến | Đỏ | Xanh (phần còn lại của nhóm) |
+| --- | --- | --- |
+| **a1** gỡ vế NHẢ của (F) | B3 ×6 — **chỉ** B3 | 17 |
+| **a2** gỡ vế GẮN (UPDATE) của (F) | B4 ×6 · B6 · B9 (hai ca sau cũng đi qua vế gắn — đỏ là ĐÚNG, không phải rò) | 15 |
+| **a3** gỡ nhánh INSERT | B5-DENY — **chỉ** B5-DENY | 22 |
+| index cùng TÊN trên `(company_id, template_id)` | F5 | — |
+| **(b)** (7) bỏ so `formula` | F3 (F3b vẫn xanh) | F3b |
+| **(c)** hằng seeder `LUONG_CO_BAN` về chuỗi cũ | F1 · F2 | — |
+
+Sau lượt: TS khôi phục khớp byte (`cmp`); DB replay 0574 xanh verify (`tgtype 23/O`, indexdef đúng, `prosrc` có (F)).
+
+### 11.5 Điểm lệch plan khi thi công
+
+- **B8** đặt vào C1 của `payroll-be2-lifecycle` (spec đó đã boot app + gieo khoản `Approved`) thay vì file mới — cùng khẳng định, không boot app lần hai.
+- **F4b** dựng trạng thái kiểu 053 bằng SQL (override hợp lệ trên `LUONG_CO_BAN` + gỡ `KPCD`) thay vì gọi API 053. Rủi ro M-2 (bản sao logic) đóng bằng cấu trúc: (5) gọi CHÍNH `PayrollTemplatesRepository.componentsTx` (không dùng `this`) + `templateGraphComponent` từ module lá.
+- **F2** lưới 7.296 ca (6 base × 6 `w` × `p` 0→w+1 bước 0,5 × 4 `u`) + neo tay. Ở ca HOÀ, v1 được phép lệch ĐÚNG ±1 xu chứ không bắt buộc lệch — v1 vẫn đúng khi phép chia chia hết (vd `11/22`).
+- **Fixture `'[]'`** cũng đi qua `writeSalaryProfileWithItems` (đồng dạng, mirror no-op) — không chừa đường ghi thô cho lần sửa sau.
+- **Seeder** còn 683 dòng sau khi tách integrity (vượt trần 800 đã hết).
+
+### 11.6 `check.sh --lane-db=db1b` (TRƯỚC khi vá §11.7)
+
+`secret-literals` · `lint` · `typecheck` · `migration-no-drop` · `tooling-tests` · `test (LANE_DB=mediaos_db1b) [chunked]` — **XANH ✅ exit 0**, KHÔNG banner «XANH KHÔNG ĐỦ BẰNG CHỨNG». api 694/694 file chạy (7 lần chạy lại do crash hạ tầng) · app 275 · auth 4 · console 22 · contracts 39 · ui 24 · web-core 45.
+
+### 11.7 database-reviewer = PASS — 4 mục đã vá (14/09/2026)
+
+| Mục | Vá | Bằng chứng |
+| --- | --- | --- |
+| **M-1** nhánh INSERT lọc `pp.deleted_at IS NULL` không có ca canh | ca **B9c** (INSERT khoản đã consume vào kỳ CollectingData đã xoá mềm ⇒ `not-found`) · verify (4) đếm chuỗi lọc trong `prosrc` **đúng 2** lần | đột biến **a4** (gỡ lọc RIÊNG nhánh INSERT, function-only) ⇒ **chỉ B9c** đỏ, 23 ca nhóm B xanh · **a4-verify** (cả file 0574 mang a4, `psql -1`) ⇒ `ERROR: [0574] verify: loc pp.deleted_at IS NULL phai xuat hien DUNG 2 lan …` exit 3, rollback, `prosrc` vẫn đếm 2 |
+| **L-1** F3/F4 assert lỏng | F3 `toContain("LUONG_CO_BAN.formula")` · F4 `toContain("mẫu mặc định KHÔNG biên dịch được")` | đột biến **(d)** (5) bỏ `compileGraph` ⇒ **chỉ F4** đỏ, F4b xanh; TS khôi phục khớp byte |
+| **L-2** khối (1) không bọc điều kiện | `IF v_before > 0 … ELSE v_n := 0`, so bằng `IS DISTINCT FROM` — DB mới/chạy lại KHÔNG tắt trigger, KHÔNG lấy khoá | nhánh IF: tx dựng 2 hàng chuỗi cũ → replay ⇒ `chuoi cu=2` · `da va 2 hang` · verify (4) xanh · ROLLBACK · nhánh ELSE: replay COMMIT trên lane (0 hàng cũ) ⇒ `da va 0 hang`, exit 0 |
+| **L-3** helper xoá mọi item của hồ sơ | DELETE thêm `AND component_code LIKE 'PC\_%'` · docstring nêu đúng lý do nhận `Pool` (tự giữ tx) | nhóm spec dùng helper chạy lại xanh (dưới) |
+
+**GREEN sau vá** (lane `mediaos_db1b`, 0574 bản vá đã replay):
+
+- Spec boot app (`--no-file-parallelism`): `payroll-be2-lifecycle` 20 · `payroll-be2-permission` 54 · `payroll-be2-noti-audit` 7 · `s13-payroll-qa1-idor-tenant` 36 — lượt đó thoát 1 ngay sau file thứ 4, KHÔNG có ca `×` nào (nghi worker crash; log đã lọc nên không giữ được nguyên nhân) ⇒ chạy lại 3 file còn lại: `s13-payroll-qa1-fsm-race` 80 · `payroll-be1-errors` 13 · `s13-payroll-qa1-arithmetic` 9 = **102/102**, exit 0. Tổng **7 file / 219 ca xanh**.
+- `s15-payroll-db1b-invariants` (32 — thêm B9c) · `s15-payroll-db1-invariants` (62 — E2/E3 quét toàn lane SAU nhóm boot app) · `bonus-penalty-transition` 22 · `s13-payroll-db1-invariants` 44 · `s15-payroll-db1-seed` 14 · `s15-payroll-be2-seed` 8: **6 file / 182 ca xanh**.
+- `pnpm --filter @mediaos/api typecheck` exit 0 · eslint file chạm exit 0 · prettier: `payroll-be2-lifecycle` (HEAD sạch) đã format lại.
+
+### 11.8 security-reviewer = PASS (14/09/2026)
+
+CRITICAL 0 · HIGH 0 · MEDIUM 1 · LOW 4 — không mục nào bắt buộc vá trước commit. Reviewer đối chiếu catalog thật của lane `mediaos_db1b` (chỉ SELECT).
+
+| Mục | Xử lý |
+| --- | --- |
+| **MEDIUM** §3.6/R3 dẫn CHECK `bonus_penalties_four_eyes` KHÔNG tồn tại (đo lại `pg_constraint`: chỉ `decided_pair`) ⇒ INSERT thô `Approved` tự duyệt lọt vào lương qua `lockPickedBonusPenaltiesTx`; lỗ có từ 0564, API không đi được | sửa §3.6 + R3 · nợ CHECK tự duyệt ghi `done_when` BE-3 |
+| **LOW** `releaseConsumedTx`/`bindConsumedTx` trong `calculate` không qua `mapPayrollPgError` ⇒ (F)/(C) bắn do race = 500 thay vì 409 013 (không rò: client nhận «Lỗi hệ thống») | `done_when` BE-3 |
+| **LOW** migration sửa công thức tiền mọi tenant không có hàng `audit_logs` | RELEASE dán BẮT BUỘC 2 dòng NOTICE + số đo R1 (test plan PR) |
+| **LOW** assert (7) chỉ log (runner nuốt) — build cũ seed sau mốc 0574 (R2) giữ chuỗi cũ | `done_when` BE-3: cổng cứng lúc TÍNH |
+| **LOW** (F) lách được bằng script UPDATE `payroll_periods.status` về `CollectingData` (bảng kỳ không có trigger) · `bonus_penalties.company_id` không đóng băng (app role bị RLS WITH CHECK + FK composite chặn, chỉ superuser đổi được) | ghi nhận |
+
+Đã kiểm, không lỗ: x→NULL→y hai câu · đổi kỳ kèm status ((E) + `consume_approved`) · nhả không lọc `deleted_at` (kỳ sống chưa từng trả lương) · `company_id` OLD/NEW khớp FK · INVOKER + RLS thiếu GUC ⇒ `not-found` · `public.` + `proconfig` rỗng, app/worker không CREATE trên `public` · thứ tự khoá (chỉ `releaseConsumedTx`/`bindConsumedTx` ghi `payroll_period_id`, sau `FOR UPDATE` kỳ) · không cửa sổ trigger tắt · map lỗi không đưa uuid tới client · `componentsTx` lọc tenant · fixture không tắt trigger, không literal giống secret.

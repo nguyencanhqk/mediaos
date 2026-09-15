@@ -50,6 +50,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1math");
@@ -116,9 +117,11 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
   }
 
   async function setBase(userId: string, base: number, allowances: unknown[]): Promise<void> {
-    await direct.query(
+    // S15-PAYROLL-DB-1B: allowances đổi ⇒ mirror salary_profile_items CÙNG tx (E2 quét toàn lane song song).
+    await writeSalaryProfileWithItems(
+      direct,
       `UPDATE salary_profiles SET base_salary = $3::numeric, allowances = $4::jsonb
-        WHERE company_id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+        WHERE company_id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id`,
       [A.companyId, userId, base.toFixed(2), JSON.stringify(allowances)],
     );
   }
@@ -190,9 +193,10 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · đối soát số học & biên
 
     for (const k of Object.keys(S) as Array<keyof typeof S>) {
       S[k] = await seedUser(direct, A.companyId, `s-${k}@${A.slug}.test`, "x");
-      await direct.query(
+      await writeSalaryProfileWithItems(
+        direct,
         `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances)
-         VALUES ($1, $2, '2026-01-01', '1000000.00', '[]'::jsonb)`,
+         VALUES ($1, $2, '2026-01-01', '1000000.00', '[]'::jsonb) RETURNING id`,
         [A.companyId, S[k]],
       );
     }

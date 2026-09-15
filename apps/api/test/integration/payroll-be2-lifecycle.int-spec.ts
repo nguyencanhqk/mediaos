@@ -44,6 +44,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { writeSalaryProfileWithItems } from "../helpers/payroll-fixtures";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = "Passw0rd!payrollbe2";
@@ -341,9 +342,11 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
       [subjectId, "22000000.00"],
       [quietId, "10000000.00"],
     ] as const) {
-      await direct.query(
+      // S15-PAYROLL-DB-1B: allowances KHÁC rỗng ⇒ ghi kèm salary_profile_items CÙNG tx (E2 quét toàn lane).
+      await writeSalaryProfileWithItems(
+        direct,
         `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary, allowances)
-         VALUES ($1,$2,'2028-01-01',$3,$4::jsonb)`,
+         VALUES ($1,$2,'2028-01-01',$3,$4::jsonb) RETURNING id`,
         [
           A.companyId,
           uid,
@@ -672,6 +675,16 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     );
     expect(consumed.rows[0].payroll_period_id).toBe(id);
     expect(consumed.rows[0].consumed_at).not.toBeNull();
+
+    // S15-PAYROLL-DB-1B B8 — tính lại TẠI CHỖ ở `Calculated`: service nhả rồi gắn lại trong cùng tx, cả hai phải qua
+    // nhánh (F) của trigger (kỳ ∈ {CollectingData, Calculated}). (F) khoá chết đường tính lại thì lượt hai 409, không 201.
+    expect((await post(tOfficer, `/payroll-periods/${id}/calculate`)).status).toBe(201);
+    expect((await lineOf(id, subjectId)).line!.bonusAmount).toBe(500_000);
+    const rebound = await direct.query(
+      `SELECT payroll_period_id FROM bonus_penalties WHERE id = $1`,
+      [live],
+    );
+    expect(rebound.rows[0].payroll_period_id).toBe(id);
   });
 
   it("C2 — khoản của nhân sự KHÔNG có hồ sơ lương: KHÔNG bị consume (tiền không biến mất)", async () => {

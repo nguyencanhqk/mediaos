@@ -17,6 +17,10 @@ import {
   SYS_REFS,
 } from "./formula/formula.vocabulary";
 import { payrollCatalogLockTx } from "./payroll-catalog.lock";
+import {
+  assertPayrollSeedIntegrity,
+  type PayrollSeedExpectations,
+} from "./payroll-master-data.integrity";
 
 /**
  * S15-PAYROLL-DB-1 — RUNTIME per-company master-data seeder cho PAYROLL v2
@@ -34,7 +38,7 @@ import { payrollCatalogLockTx } from "./payroll-catalog.lock";
  * ── GIÁ PHẢI TRẢ, PHẢI BIẾT ─────────────────────────────────────────────────────────────────────
  * 🔴 `MasterDataSeedRunner.runOne()` bọc **try/catch toàn phần**: seeder ném ⇒ `logger.error` +
  * `markBatchFailed` + `{ ok: false }` rồi **chạy tiếp**. Boot KHÔNG sập. Nghĩa là assert ở
- * `assertSeedIntegrity()` dưới đây là một **dòng log + batch Failed**, KHÔNG phải cổng cứng như
+ * `assertPayrollSeedIntegrity()` (payroll-master-data.integrity.ts) là một **dòng log + batch Failed**, KHÔNG phải cổng cứng như
  * migration verify. Cộng thêm BỐN đường một công ty tồn tại mà không được seed:
  *   (a) boot ĐẦU TIÊN trên DB trắng — thứ tự hook giữa `MasterDataSeedBootstrapService` và
  *       `EnsureDefaultCompanyBootstrapService` không đảm bảo ⇒ runner có thể thấy 0 company;
@@ -53,7 +57,7 @@ import { payrollCatalogLockTx } from "./payroll-catalog.lock";
  *
  * ⚠️ **LUẬT BUMP `seedVersion`**: `ON CONFLICT DO NOTHING` **KHÔNG cập nhật hàng đã có**. Đổi NỘI DUNG
  * một hàng seed (ví dụ lật `pitDeductible`, sửa tỉ lệ) mà không bump `seedVersion` ⇒ công ty cũ giữ
- * giá trị SAI vĩnh viễn và chỉ `assertSeedIntegrity()` phát hiện. Đổi nội dung ⇒ **bump `seedVersion`**
+ * giá trị SAI vĩnh viễn và chỉ `assertPayrollSeedIntegrity()` phát hiện. Đổi nội dung ⇒ **bump `seedVersion`**
  * và viết bước vá dữ liệu tường minh.
  */
 
@@ -95,7 +99,7 @@ type ComponentKind =
   | "aggregate";
 type ComponentValueType = "formula" | "fixed" | "profile_item" | "engine";
 
-interface ComponentSeed {
+export interface ComponentSeed {
   code: string;
   name: string;
   kind: ComponentKind;
@@ -154,7 +158,11 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
     name: "Lương cơ bản",
     kind: "earning",
     valueType: "formula",
-    formula: "SYS_BASE_SALARY * SYS_PAY_RATIO / 100 * SYS_PRESENT_DAYS / SYS_WORK_DAYS",
+    // 🔁 v3 (S15-PAYROLL-DB-1B): tử số pro-rate = present + unpaid, kẹp trần bằng MIN(…, base) — SPEC-11 §13.4
+    // «Nghỉ KHÔNG lương» (owner 2026-09-01). Bản v1/v2 chia theo present rồi NGHI_KHONG_LUONG trừ tiếp ⇒ trừ HAI LẦN.
+    // Nhân tử số TRƯỚC, chia MỘT lần: khớp số học chính xác 100% trên 51.584 ca (plan §5.2.a). Hàng đã seed vá ở mig 0574.
+    formula:
+      "MIN(SYS_BASE_SALARY * (SYS_PRESENT_DAYS + SYS_UNPAID_LEAVE_DAYS) / SYS_WORK_DAYS, SYS_BASE_SALARY) * SYS_PAY_RATIO / 100",
     pitDeductible: false,
     sortOrder: 10,
     visibleInDefaultTemplate: true,
@@ -363,6 +371,21 @@ const SYSTEM_COMPONENTS: readonly ComponentSeed[] = [
  */
 export const PAYROLL_SYSTEM_COMPONENT_CODES: readonly string[] = SYSTEM_COMPONENTS.map((c) => c.code);
 
+/** Hằng catalog hệ thống — xuất cho ca đối chứng engine ↔ số học chính xác (s15-payroll-db1b F2); spec KHÔNG chép lại. */
+export const PAYROLL_SYSTEM_COMPONENTS: readonly ComponentSeed[] = SYSTEM_COMPONENTS;
+
+/** Giá trị chèn cho MỌI hàng hệ thống — một nguồn cho INSERT (seedComponents) lẫn assert (7). */
+const SYSTEM_ROW_DEFAULTS = { fixedAmount: null, isActive: true } as const;
+
+/** Hằng đi vào assert toàn vẹn (payroll-master-data.integrity.ts) — hàm đó KHÔNG import seeder. */
+const SEED_EXPECTATIONS: PayrollSeedExpectations = {
+  components: SYSTEM_COMPONENTS,
+  rowDefaults: SYSTEM_ROW_DEFAULTS,
+  engineCodes: PAYROLL_ENGINE_COMPONENT_CODES,
+  pitDeductibleCodes: PAYROLL_PIT_DEDUCTIBLE_CODES,
+  defaultTemplateCode: PAYROLL_DEFAULT_TEMPLATE_CODE,
+};
+
 /**
  * Số PAY-DEC-014 — **owner xác nhận 02/09/2026**.
  *
@@ -410,7 +433,8 @@ export class PayrollMasterDataSeeder implements ModuleMasterDataSeeder {
   /** ⚠️ Đổi NỘI DUNG seed ⇒ BUMP giá trị này (xem docblock đầu file). */
   // v2 (S15-PAYROLL-BE-2): + THUONG · PHAT · TAM_UNG. Runner gọi seed() MỖI lần boot bất kể version — bump là
   // để batch/track ghi đúng lượt đổi nội dung, KHÔNG phải cơ chế khiến công ty cũ nhận hàng mới.
-  readonly seedVersion = "v2";
+  // v3 (S15-PAYROLL-DB-1B): LUONG_CO_BAN tử số present + unpaid, kẹp trần — hàng đã seed vá bằng mig 0574.
+  readonly seedVersion = "v3";
 
   async seed(ctx: MasterDataSeedContext): Promise<void> {
     // CÙNG khoá với route ghi catalog/mẫu (045 · 047 · 050 · 052 · 053) — seeder chạy mỗi lần boot và không
@@ -419,7 +443,7 @@ export class PayrollMasterDataSeeder implements ModuleMasterDataSeeder {
     const insertedCodes = await this.seedComponents(ctx);
     await this.seedStatutoryRate(ctx);
     await this.seedDefaultTemplate(ctx, insertedCodes);
-    await this.assertSeedIntegrity(ctx);
+    await assertPayrollSeedIntegrity(ctx.tx, ctx.companyId, SEED_EXPECTATIONS);
   }
 
   /** Catalog thành phần hệ thống (DB-13 §13.4). */
@@ -438,10 +462,10 @@ export class PayrollMasterDataSeeder implements ModuleMasterDataSeeder {
           valueType: c.valueType,
           formula: c.formula,
           // `engine` BẮT BUỘC fixedAmount NULL (salary_components_value_pair_check).
-          fixedAmount: null,
+          fixedAmount: SYSTEM_ROW_DEFAULTS.fixedAmount,
           pitDeductible: c.pitDeductible,
           isSystem: true,
-          isActive: true,
+          isActive: SYSTEM_ROW_DEFAULTS.isActive,
           sortOrder: c.sortOrder,
         })
         // ON CONFLICT phải khớp PARTIAL unique index (predicate deleted_at IS NULL) → `where` = arbiter.
@@ -654,159 +678,5 @@ export class PayrollMasterDataSeeder implements ModuleMasterDataSeeder {
         linkedCodes: toLink.map((c) => c.code),
       },
     });
-  }
-
-  /**
-   * Kiểm tra tính toàn vẹn của seed — **theo TẬP MÃ, không theo phép ĐẾM**.
-   *
-   * ⚠️ Vì sao không đếm: app role có `INSERT/UPDATE` trên `salary_components`, và chỉ `value_type`
-   * bị chặn ở route — `kind` và `pit_deductible` thì người dùng đặt được. Một công ty thêm khoản BH
-   * tự nguyện `pit_deductible = true` (hoàn toàn hợp lệ về nghiệp vụ) sẽ làm `count(...) = 3` gãy ⇒
-   * seeder `Failed` mỗi lượt boot ⇒ áp lực nới assert ⇒ **mất chốt «đoàn phí giảm thuế»**
-   * (`invariant-count-must-filter-owned-rows`). Lọc `is_system` + so TẬP MÃ thì hàng của tenant không
-   * ảnh hưởng, mà sai lệch trong hàng seed vẫn bị bắt.
-   *
-   * ⚠️ Ném ở đây KHÔNG chặn boot (runner nuốt) — nó đánh batch `Failed` + log. Cổng cứng nằm ở BE-2/BE-3.
-   */
-  private async assertSeedIntegrity(ctx: MasterDataSeedContext): Promise<void> {
-    const { companyId, tx } = ctx;
-
-    const systemRows = await tx
-      .select({
-        code: salaryComponents.code,
-        kind: salaryComponents.kind,
-        valueType: salaryComponents.valueType,
-        pitDeductible: salaryComponents.pitDeductible,
-      })
-      .from(salaryComponents)
-      .where(
-        and(
-          eq(salaryComponents.companyId, companyId),
-          eq(salaryComponents.isSystem, true),
-          isNull(salaryComponents.deletedAt),
-        ),
-      );
-
-    // (1) Tập mã `value_type = 'engine'` ĐÚNG BẰNG 4 nút tổng hợp.
-    assertSameCodeSet(
-      systemRows.filter((r) => r.valueType === "engine").map((r) => r.code),
-      PAYROLL_ENGINE_COMPONENT_CODES,
-      "nút tổng hợp value_type='engine'",
-      companyId,
-    );
-
-    // (2) Tập mã được trừ thuế ĐÚNG BẰNG 3 khoản BH bắt buộc — `DOAN_PHI` KHÔNG được có mặt.
-    assertSameCodeSet(
-      systemRows
-        .filter((r) => r.kind === "statutory_employee" && r.pitDeductible)
-        .map((r) => r.code),
-      PAYROLL_PIT_DEDUCTIBLE_CODES,
-      "khoản statutory_employee được trừ thuế (pit_deductible)",
-      companyId,
-    );
-
-    // (3) Ca DƯƠNG tường minh: `DOAN_PHI` PHẢI tồn tại và PHẢI `pit_deductible = false`. Thiếu ca này
-    //     thì "DOAN_PHI vắng mặt hoàn toàn" cũng làm (2) xanh.
-    const doanPhi = systemRows.find((r) => r.code === "DOAN_PHI");
-    if (!doanPhi) {
-      throw new Error(
-        `[payroll.master-data] thiếu thành phần DOAN_PHI (company=${companyId}) — (2) sẽ xanh RỖNG`,
-      );
-    }
-    if (doanPhi.pitDeductible !== false) {
-      throw new Error(
-        `[payroll.master-data] DOAN_PHI.pit_deductible = true (company=${companyId}) — đoàn phí do NV ` +
-          `chịu nhưng KHÔNG được trừ thuế (SPEC-11 §13.7 D)`,
-      );
-    }
-
-    // (4) Có ít nhất một bản tỉ lệ luật định CÒN SỐNG. KHÔNG ghim ngày seed: 058 đổi được `effectiveFrom`, ghim
-    //     ngày là ném mỗi lần boot sau khi người dùng sửa hợp lệ (database-review BE-2 HIGH-1).
-    const [rate] = await tx
-      .select({ id: payrollStatutoryRates.id })
-      .from(payrollStatutoryRates)
-      .where(
-        and(
-          eq(payrollStatutoryRates.companyId, companyId),
-          isNull(payrollStatutoryRates.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (!rate) {
-      throw new Error(
-        `[payroll.master-data] không còn bản payroll_statutory_rates nào sống ` +
-          `(company=${companyId}) — máy tính lương sẽ không có tỉ lệ để áp`,
-      );
-    }
-
-    // (5) Mẫu mặc định DO SEEDER TẠO (NẾU CÒN SỐNG) chứa đủ 4 nút aggregate. KHÔNG còn so SET-EQUALITY với catalog: từ
-    //     BE-2 người dùng sửa được thành phần của mẫu qua 053 — ép bằng nhau là kéo seeder vào cuộc chiến hoàn
-    //     tác chỉnh sửa hợp lệ (plan-review BE-2 B2). 053 tự từ chối mẫu thiếu nút engine (⇒ 422 018).
-    const [tpl] = await tx
-      .select({ id: payrollTemplates.id })
-      .from(payrollTemplates)
-      .where(
-        and(
-          eq(payrollTemplates.companyId, companyId),
-          eq(payrollTemplates.code, PAYROLL_DEFAULT_TEMPLATE_CODE),
-          isNull(payrollTemplates.deletedAt),
-          // Mẫu người dùng tạo lại cùng mã (050 luôn tạo RỖNG) ⇒ assert này ném MỖI LẦN BOOT (LOW-6).
-          isNull(payrollTemplates.createdBy),
-        ),
-      )
-      .limit(1);
-    if (tpl) {
-      const tplComponents = await tx
-        .select({ code: salaryComponents.code })
-        .from(payrollTemplateComponents)
-        .innerJoin(
-          salaryComponents,
-          and(
-            eq(salaryComponents.companyId, payrollTemplateComponents.companyId),
-            eq(salaryComponents.id, payrollTemplateComponents.componentId),
-          ),
-        )
-        .where(
-          and(
-            eq(payrollTemplateComponents.companyId, companyId),
-            eq(payrollTemplateComponents.templateId, tpl.id),
-          ),
-        );
-      const present = new Set(tplComponents.map((r) => r.code));
-      const missing = PAYROLL_ENGINE_COMPONENT_CODES.filter((code) => !present.has(code));
-      if (missing.length > 0) {
-        throw new Error(
-          `[payroll.master-data] mẫu mặc định thiếu nút tổng hợp [${missing.join(", ")}] (company=${companyId})`,
-        );
-      }
-    }
-
-    // (6) Tập mã `is_system` sống ĐÚNG BẰNG hằng TS (nợ DB-1 silent-failure (b)): so HAI TẬP LẤY TỪ DB không
-    //     bắt được mã bị KHAI TỬ hay mã THỪA ở seedVersion sau — hàng cũ tồn tại mãi mà hai vế vẫn khớp.
-    assertSameCodeSet(
-      systemRows.map((r) => r.code),
-      SYSTEM_COMPONENTS.map((c) => c.code),
-      "tập mã thành phần hệ thống so với hằng seeder",
-      companyId,
-    );
-  }
-}
-
-/** So hai tập mã, báo THIẾU/THỪA đích danh (thông điệp đếm-số không chỉ ra được hàng nào sai). */
-function assertSameCodeSet(
-  actual: readonly string[],
-  expected: readonly string[],
-  what: string,
-  companyId: string,
-): void {
-  const a = new Set(actual);
-  const e = new Set(expected);
-  const missing = [...e].filter((x) => !a.has(x)).sort();
-  const extra = [...a].filter((x) => !e.has(x)).sort();
-  if (missing.length > 0 || extra.length > 0) {
-    throw new Error(
-      `[payroll.master-data] ${what} LỆCH (company=${companyId}) — thiếu: [${missing.join(", ")}] · ` +
-        `thừa: [${extra.join(", ")}]`,
-    );
   }
 }

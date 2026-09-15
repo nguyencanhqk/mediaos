@@ -919,6 +919,8 @@ export const payrollTemplateComponents = pgTable(
       t.componentId,
     ),
     index("payroll_template_components_company_tpl_idx").on(t.companyId, t.templateId),
+    // S15-PAYROLL-DB-1B (mig 0574) — vế trái FK component_id_company_fk: RI + templatesContainingTx không quét cả bảng.
+    index("payroll_template_components_company_component_idx").on(t.companyId, t.componentId),
     check(
       "payroll_template_components_formula_len_check",
       sql`formula_override IS NULL OR length(formula_override) <= 500`,

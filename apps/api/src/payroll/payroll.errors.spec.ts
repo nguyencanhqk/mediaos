@@ -53,6 +53,16 @@ describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
     }
   });
 
+  it("S15-PAYROLL-DB-1B — message dạng TAG `bonus_penalty_freeze_guard:<tag>:` (5 tag ĐÓNG của mig 0574) ⇒ 409 013 theo luật tiền tố", () => {
+    for (const tag of ["frozen", "rebind", "status-terminal", "period-frozen", "not-found"]) {
+      const mapped = mapPayrollPgError(
+        wrapped({ code: "23514", message: `bonus_penalty_freeze_guard:${tag}: khoan x ky y` }),
+      );
+      expect(codeOf(mapped), tag).toBe(PAYROLL_ERR_CODE.BONUS_ALREADY_CONSUMED);
+      expect(kindOf(mapped), tag).toBe("bonus-frozen-race");
+    }
+  });
+
   it("S15-PAYROLL-BE-2 M2 — 23514 không tên của trigger ĐÓNG BĂNG thành phần hệ thống ⇒ 024, KHÔNG dán nhầm 013", () => {
     const mapped = mapPayrollPgError(
       wrapped({
