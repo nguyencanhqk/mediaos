@@ -1,6 +1,6 @@
-import { UnprocessableEntityException } from "@nestjs/common";
+import { Logger, UnprocessableEntityException } from "@nestjs/common";
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PayrollPaymentExportService,
   UNC_COLUMNS,
@@ -203,5 +203,37 @@ describe("S15-PAYROLL-BE-4 · PayrollPaymentExportService (071)", () => {
       expect(body.details.find((d) => d.field === "kind")?.message).toBe("export-limit");
     }
     expect(over.audit.record).not.toHaveBeenCalled();
+  });
+});
+
+// S15-PAYROLL-BE-4B (plan BE-4 §11b, silent-failure-hunter #4) — audit `read` ghi TRONG tx TRƯỚC khi sinh tệp (chọn «không bao
+// giờ thiếu audit»). Nếu `exceljs` ném SAU đó thì có một hàng audit «đã đọc» mà KHÔNG tệp nào rời server — phải để lại dấu vết
+// server-side (Logger.error, không PII), lỗi vẫn ném lên filter (500 sạch). RED trước khi vá: 0 lời gọi Logger.error.
+describe("S15-PAYROLL-BE-4B · 071 — sinh tệp ném SAU audit ⇒ Logger.error có dấu vết, KHÔNG số TK/tiền, lỗi vẫn ném", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("buildUncBuffer ném ⇒ audit đã 1 hàng · Logger.error(msg có batchId + 071, context service) · rejects", async () => {
+    const { svc, audit } = build(2);
+    vi.spyOn(
+      svc as unknown as { buildUncBuffer: () => Promise<Buffer> },
+      "buildUncBuffer",
+    ).mockRejectedValue(new Error(`zip boom ${ACCOUNT_FULL}0`));
+    const errorSpy = vi.spyOn(Logger, "error").mockImplementation(() => undefined);
+    await expect(svc.export(USER, BATCH_ID)).rejects.toThrow(/zip boom/);
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [msg, ctx] = errorSpy.mock.calls[0] as [string, string];
+    expect(msg).toContain(BATCH_ID);
+    expect(msg).toContain("071");
+    expect(msg).not.toContain(ACCOUNT_FULL);
+    expect(msg).not.toMatch(/\b1000\b|\bnet\b/);
+    expect(ctx).toBe("PayrollPaymentExportService");
+  });
+
+  it("đường xanh: KHÔNG gọi Logger.error", async () => {
+    const { svc } = build(1);
+    const errorSpy = vi.spyOn(Logger, "error").mockImplementation(() => undefined);
+    await svc.export(USER, BATCH_ID);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

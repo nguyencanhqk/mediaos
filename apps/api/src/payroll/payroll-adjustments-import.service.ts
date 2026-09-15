@@ -1,9 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { ErrorDetail, PayrollPeriodStatus, PayrollWriteResultDto } from "@mediaos/contracts";
-import {
-  PAYROLL_ADJUSTMENT_IMPORT_MAX_BYTES,
-  PAYROLL_ADJUSTMENT_IMPORT_MAX_ROWS,
-} from "@mediaos/contracts";
+import { PAYROLL_ADJUSTMENT_IMPORT_MAX_BYTES } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { PayrollAccessService } from "./payroll-access.service";
@@ -104,13 +101,7 @@ export class PayrollAdjustmentImportService {
       const parsed = parseAdjustmentMatrix(matrix, period.periodMonth);
       if (parsed.kind === "header-mismatch") throw PayrollImportParser.invalid("header");
       if (parsed.kind === "empty") throw PayrollImportParser.invalid("no-data-rows");
-      if (parsed.kind === "too-large") {
-        throw payrollUnprocessable(
-          "IMPORT_INVALID",
-          PAYROLL_ERR.IMPORT_TOO_LARGE(PAYROLL_ADJUSTMENT_IMPORT_MAX_ROWS),
-          payrollDetails("import-too-large", { max: PAYROLL_ADJUSTMENT_IMPORT_MAX_ROWS }),
-        );
-      }
+      if (parsed.kind === "too-large") throw PayrollImportParser.tooLarge();
 
       const codes = [...new Set(parsed.rows.map((r) => r.employeeCode.toLowerCase()))];
       const userByCode = await this.repo.resolveEmployeeCodesTx(tx, user.companyId, codes);

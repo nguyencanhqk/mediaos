@@ -774,6 +774,36 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-2 vòng đời kỳ lương (DB cô 
     expect(ok.body.data.status).toBe("Reviewing");
   });
 
+  // S15-PAYROLL-BE-4B (security M3, reviewer HẸP MEDIUM): 017 ở submit đi qua CÙNG pairHoldersQuery — người duyệt bị đình chỉ
+  // KHÔNG được tính là «có người duyệt». Trước vá: admin suspended vẫn đếm ⇒ 201 Reviewing rồi kỳ KẸT (không ai duyệt được).
+  it("D1b — người duyệt DUY NHẤT bị ĐÌNH CHỈ ⇒ officer submit 422 017, kỳ ở nguyên Calculated; kích hoạt lại ⇒ 201 Reviewing", async () => {
+    const month = "2031-11";
+    await direct.query(
+      `INSERT INTO attendance_periods (company_id, period_month, status) VALUES ($1,$2,'locked')`,
+      [A.companyId, month],
+    );
+    const ap = await direct.query(
+      `SELECT id FROM attendance_periods WHERE company_id=$1 AND period_month=$2`,
+      [A.companyId, month],
+    );
+    const id = await newPeriodCollecting(month, ap.rows[0].id as string);
+    expect((await post(tOfficer, `/payroll-periods/${id}/calculate`)).status).toBe(201);
+    await direct.query(`UPDATE users SET status = 'suspended' WHERE id = $1`, [adminId]);
+    try {
+      const r = await post(tOfficer, `/payroll-periods/${id}/submit`);
+      expect(r.status, JSON.stringify(r.body)).toBe(422);
+      expect(r.body.error.code).toBe("PAYROLL-ERR-017");
+      const st = await get(tOfficer, `/payroll-periods/${id}`);
+      expect(st.body.data.status).toBe("Calculated");
+    } finally {
+      await direct.query(`UPDATE users SET status = 'active' WHERE id = $1`, [adminId]);
+    }
+    // ĐỐI CHỨNG ALLOW: cùng người, cùng cặp, chỉ đổi users.status.
+    const ok = await post(tOfficer, `/payroll-periods/${id}/submit`);
+    expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+    expect(ok.body.data.status).toBe("Reviewing");
+  });
+
   it("D2 — 005 four-eyes: người GỬI duyệt không tự duyệt được; người khác thì được (ALLOW đối chứng)", async () => {
     const month = "2029-05";
     await direct.query(

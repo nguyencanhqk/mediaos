@@ -12,7 +12,6 @@ import type {
   UpdatePaymentBatchRequest,
 } from "@mediaos/contracts";
 import { paginated, toPagination } from "../common/pagination";
-import { pgErrorCode, pgErrorField } from "../common/db-error";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import type { PayrollPaymentBatch } from "../db/schema/payroll-disbursement";
 import { AuditService } from "../events/audit.service";
@@ -31,6 +30,7 @@ import {
 } from "./payroll-payment-batches.repository";
 import { PayrollPeopleRepository } from "./payroll-people.repository";
 import { PayrollPeriodsRepository } from "./payroll-periods.repository";
+import { mappedWrite } from "./payroll-pg-write.util";
 import {
   mapPayrollPgError,
   payrollConflict,
@@ -42,36 +42,12 @@ import {
 import { payrollOffset, type PayrollRequestUser } from "./payroll.types";
 
 /**
- * MEDIUM-2 (security DB-2) — mọi câu ghi `payroll_payment_lines` đi qua đây. Lỗi PG **không map** ⇒ ném `Error` MỚI chỉ mang
- * `code` + `constraint` + tag (không `params`, không `cause`): `DrizzleQueryError.message` là «Failed query: … params: …» —
- * với câu INSERT snapshot thì params KHÔNG chứa số TK (set-based), nhưng câu UPDATE/DELETE và mọi câu tương lai thì không
- * ai bảo đảm; `AllExceptionsFilter` log `stack` của 5xx nên thứ ném ra phải sạch NGAY TẠI NGUỒN.
+ * MEDIUM-2 (security DB-2) — mọi câu ghi `payroll_payment_lines` đi qua đây. S15-PAYROLL-BE-4B: thân wrapper chuyển sang
+ * `mappedWrite` (`payroll-pg-write.util.ts`) để `payroll_advances` dùng CÙNG MỘT khuôn (security L6); nhãn bảng giữ nguyên
+ * cho log/int-spec (`payroll_payment_lines write failed: …`).
  */
-export async function mappedLineWrite<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (err) {
-    const mapped = mapPayrollPgError(err);
-    if (mapped) throw mapped;
-    const code = pgErrorCode(err) ?? "unknown";
-    const constraint = pgErrorField(err, "constraint") ?? "";
-    // Tag `<trigger>:<tag>:` — bóc từ message NODE (không phải lớp drizzle), cắt phần thân sau tag.
-    let tag = "";
-    let cur: unknown = err;
-    for (let depth = 0; depth < 5 && typeof cur === "object" && cur !== null; depth++) {
-      const node = cur as Record<string, unknown>;
-      if (typeof node["code"] === "string") {
-        const m = /^(\w+:[a-z-]+):/.exec(String(node["message"] ?? ""));
-        tag = m ? m[1] : "";
-        break;
-      }
-      cur = node["cause"];
-    }
-    throw new Error(
-      `payroll_payment_lines write failed: code=${code} constraint=${constraint} tag=${tag}`,
-    );
-  }
-}
+export const mappedLineWrite = <T>(fn: () => Promise<T>): Promise<T> =>
+  mappedWrite("payroll_payment_lines", fn);
 
 /** Mã đợt tự sinh (D-9/C5): `CT-<YYYYMM>-<BANK|CASH>-<8 hex>` — mã đợt KHÔNG phải PII, dùng làm tên tệp UNC. */
 export function defaultBatchCode(periodMonth: string, method: string): string {
