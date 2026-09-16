@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { PAYROLL_ADJUSTMENT_IMPORT_MAX_ROWS } from "@mediaos/contracts";
 import { payrollDetails, payrollUnprocessable, PAYROLL_ERR } from "./payroll.errors";
 
 export type PayrollImportFileKind = "xlsx" | "csv";
@@ -40,6 +41,11 @@ export class PayrollImportParser {
     }
     const sheet = workbook.worksheets[0];
     if (!sheet) throw PayrollImportParser.invalid("no-worksheet");
+    // BE-4B (security L5): đếm hàng VẬT LÝ (header + dữ liệu, kể cả hàng trống ở giữa) TRƯỚC khi đổi ô thành chuỗi — XLSX là
+    // zip, 5 MB nén được hàng triệu ô; khuôn cũ dựng cả ma trận rồi `parseAdjustmentMatrix` mới đếm. Trần dữ liệu MAX_ROWS ⇒
+    // rowCount tối đa MAX_ROWS + 1. Vượt ⇒ CÙNG mã/kind với parser cột (`import-too-large`), không đọc thêm ô nào.
+    if (sheet.rowCount > PAYROLL_ADJUSTMENT_IMPORT_MAX_ROWS + 1)
+      throw PayrollImportParser.tooLarge();
     const rows: string[][] = [];
     sheet.eachRow({ includeEmpty: false }, (row) => {
       const cells: string[] = [];
@@ -71,6 +77,15 @@ export class PayrollImportParser {
       return "";
     }
     return String(value).trim();
+  }
+
+  /** > MAX_ROWS dòng ⇒ 422 031 `import-too-large` {max} — MỘT nguồn cho cả tiền-kiểm rowCount lẫn parser cột. */
+  static tooLarge() {
+    return payrollUnprocessable(
+      "IMPORT_INVALID",
+      PAYROLL_ERR.IMPORT_TOO_LARGE(PAYROLL_ADJUSTMENT_IMPORT_MAX_ROWS),
+      payrollDetails("import-too-large", { max: PAYROLL_ADJUSTMENT_IMPORT_MAX_ROWS }),
+    );
   }
 
   static invalid(reason: string) {

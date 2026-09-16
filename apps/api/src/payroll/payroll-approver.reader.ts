@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
+import { holderRowsToIds, pairHoldersQuery } from "./payroll-pair-holders.reader";
 import { PAYROLL_ROUTE_PAIRS } from "./payroll-route-pairs.const";
 
 /**
@@ -26,6 +26,8 @@ import { PAYROLL_ROUTE_PAIRS } from "./payroll-route-pairs.const";
  * Thêm **SÀN SCOPE Company** (`PayrollAccessService`, SPEC-11 §13.5): grant hẹp hơn Company bị
  * `resolveActor` từ chối 403, nên tính người đó là "duyệt được" thì `017` xanh giả rồi họ 403 ở `approve`.
  *
+ * S15-PAYROLL-BE-4B (security M3): câu SQL KHÔNG còn chép ở đây — dùng `pairHoldersQuery` của
+ * `PayrollPairHoldersReader` (một vế `users.status = 'active'` chung cho 017/C3/NOTI 020·024·027).
  * BẤT BIẾN #1: chạy TRONG `withTenant` do caller mở + bind `company_id` TƯỜNG MINH (defense-in-depth).
  */
 @Injectable()
@@ -43,41 +45,9 @@ export class PayrollApproverReader {
     companyId: string,
     excludeUserId: string,
   ): Promise<string[]> {
-    const { action, resourceType } = PayrollApproverReader.PAIR;
-    const res = await tx.execute<{ user_id: string }>(sql`
-      with candidate as (
-        select ur.user_id, rp.effect, rp.data_scope, p.action, p.resource_type
-          from user_roles ur
-          join roles r on r.id = ur.role_id and r.deleted_at is null
-                      and (r.company_id = ${companyId}::uuid or r.company_id is null)
-          join role_permissions rp on rp.role_id = r.id
-          join permissions p on p.id = rp.permission_id
-          join users u on u.id = ur.user_id
-         where ur.company_id = ${companyId}::uuid
-           and ur.deleted_at is null
-           and (ur.expires_at is null or ur.expires_at > now())
-           and u.company_id = ${companyId}::uuid
-           and u.deleted_at is null
-           and u.id <> ${excludeUserId}::uuid
-           -- Khớp cặp THEO KIỂU CỦA ENGINE: wildcard tính cho vế DENY, không tính cho vế ALLOW.
-           and (p.action = ${action} or p.action = '*')
-           and (p.resource_type = ${resourceType} or p.resource_type = '*')
-      ),
-      denied as (
-        select distinct user_id from candidate where effect = 'DENY'
-      )
-      select distinct c.user_id
-        from candidate c
-       where c.effect = 'ALLOW'
-         -- Cổng sensitive: exact ALLOW, wildcard KHÔNG thoả (permission.decide.ts).
-         and c.action = ${action}
-         and c.resource_type = ${resourceType}
-         -- SÀN SCOPE Company — grant hẹp hơn sẽ 403 ở route approve (SPEC-11 §13.5).
-         and c.data_scope in ('Company', 'System')
-         and not exists (select 1 from denied d where d.user_id = c.user_id)
-       order by c.user_id
-    `);
-    const list = (res as unknown as { rows?: unknown[] }).rows ?? (res as unknown as unknown[]);
-    return (list as { user_id: string }[]).map((r) => r.user_id);
+    const res = await tx.execute<{ user_id: string }>(
+      pairHoldersQuery(companyId, PayrollApproverReader.PAIR, excludeUserId),
+    );
+    return holderRowsToIds(res);
   }
 }

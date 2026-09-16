@@ -299,6 +299,58 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-4 · tạm ứng 059–065", () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
+  // S15-PAYROLL-BE-4B (plan BE-4 §11b, security M3): `PayrollPairHoldersReader` lọc `users.status = 'active'` — holder bị
+  // đình chỉ KHÔNG nhận NOTI-024 và KHÔNG được tính là «có người duyệt». RED trước khi vá: admin2 đình chỉ vẫn nằm trong
+  // `recipientUserIds`; người duyệt duy nhất đình chỉ vẫn được đếm ⇒ 0 warnings + outbox tới tài khoản chết.
+  describe("BE-4B — users.status ở PayrollPairHoldersReader (060 · NOTI-024) + .strict() 063", () => {
+    const setStatus = (userId: string, status: "active" | "suspended") =>
+      direct.query(`UPDATE users SET status = $2 WHERE id = $1`, [userId, status]);
+
+    it("holder approve:payroll-advance bị đình chỉ KHÔNG nhận NOTI-024 (payload = holders hoạt động − actor)", async () => {
+      await setStatus(admin2.id, "suspended");
+      try {
+        const adv = await createAdvance(officer.token, emp.id, nextMonth());
+        expect(adv.warnings).toEqual([]);
+        const ev = (await outboxOf(A.companyId, "payroll.advance_submitted")).filter(
+          (e) => e.payload["advanceId"] === adv.id,
+        );
+        expect(ev).toHaveLength(1);
+        expect(ev[0].payload["recipientUserIds"]).toEqual([admin.id, bene.id].sort());
+      } finally {
+        await setStatus(admin2.id, "active");
+      }
+    });
+
+    it("người duyệt DUY NHẤT bị đình chỉ ⇒ vẫn tạo được (không kẹt) + warnings no-eligible-approver, 0 outbox; kích hoạt lại ⇒ NOTI-024 tới đúng người", async () => {
+      const apprB = await seedUser(direct, B.companyId, `apprb@${B.slug}.test`, "x");
+      await grantPayrollPairs(direct, B.companyId, apprB, "be4b-apprb", ["advanceApprove"]);
+      const empB = await seedUser(direct, B.companyId, `empb@${B.slug}.test`, "x");
+      await setStatus(apprB, "suspended");
+      const before = (await outboxOf(B.companyId, "payroll.advance_submitted")).length;
+      const advB = await createAdvance(officerB.token, empB, nextMonth());
+      expect(advB.warnings).toEqual(["no-eligible-approver"]);
+      expect((await outboxOf(B.companyId, "payroll.advance_submitted")).length).toBe(before);
+      // ĐỐI CHỨNG ALLOW: cùng người, cùng cặp, chỉ đổi `users.status`.
+      await setStatus(apprB, "active");
+      const advB2 = await createAdvance(officerB.token, empB, nextMonth());
+      expect(advB2.warnings).toEqual([]);
+      const ev = (await outboxOf(B.companyId, "payroll.advance_submitted")).filter(
+        (e) => e.payload["advanceId"] === advB2.id,
+      );
+      expect(ev).toHaveLength(1);
+      expect(ev[0].payload["recipientUserIds"]).toEqual([apprB]);
+    });
+
+    it("063 body có khoá lạ (`amount`) ⇒ 400 (strict) — không âm thầm bỏ qua rồi duyệt", async () => {
+      const adv = await createAdvance(officer.token, emp.id, nextMonth());
+      const res = await as(admin.token)
+        .post(`/payroll/advances/${adv.id}/approve`)
+        .send({ note: "ok", amount: 1 });
+      expect(res.status, JSON.stringify(res.body)).toBe(400);
+      const row = await direct.query(`SELECT status FROM payroll_advances WHERE id = $1`, [adv.id]);
+      expect(row.rows[0].status).toBe("Pending");
+    });
+  });
   describe("062 — sửa / xoá mềm", () => {
     it("sửa `Pending` ⇒ 200; sau duyệt ⇒ 409 025 `advance-not-pending`; `delete:true` xoá mềm", async () => {
       const adv = await createAdvance(officer.token, emp.id, nextMonth());

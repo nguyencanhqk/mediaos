@@ -88,28 +88,38 @@ export const updatePayrollAdvanceSchema = z
   .strict();
 export type UpdatePayrollAdvanceRequest = z.infer<typeof updatePayrollAdvanceSchema>;
 
-/** 063 — duyệt; `note` tuỳ chọn (CHECK chỉ bắt buộc note khi `Rejected`). */
-export const approvePayrollAdvanceSchema = z.object({
-  note: z.string().trim().min(1).max(PAYROLL_ADVANCE_NOTE_MAX).optional(),
-});
+/** 063 — duyệt; `note` tuỳ chọn (CHECK chỉ bắt buộc note khi `Rejected`). `.strict()` (BE-4B L7): khoá lạ ⇒ 400. */
+export const approvePayrollAdvanceSchema = z
+  .object({
+    note: z.string().trim().min(1).max(PAYROLL_ADVANCE_NOTE_MAX).optional(),
+  })
+  .strict();
 export type ApprovePayrollAdvanceRequest = z.infer<typeof approvePayrollAdvanceSchema>;
 
 /**
  * 064 — từ chối; `note` **BẮT BUỘC** (SPEC-11 §15.1 hàng 064), mirror ĐÚNG BẰNG CHECK
- * `payroll_advances_reject_note_check` (`status <> 'Rejected' OR decision_note IS NOT NULL`).
+ * `payroll_advances_reject_note_check` (`status <> 'Rejected' OR decision_note IS NOT NULL`). `.strict()` (BE-4B L7).
  */
-export const rejectPayrollAdvanceSchema = z.object({
-  note: z.string().trim().min(1).max(PAYROLL_ADVANCE_NOTE_MAX),
-});
+export const rejectPayrollAdvanceSchema = z
+  .object({
+    note: z.string().trim().min(1).max(PAYROLL_ADVANCE_NOTE_MAX),
+  })
+  .strict();
 export type RejectPayrollAdvanceRequest = z.infer<typeof rejectPayrollAdvanceSchema>;
 
-/** 059 — filter `status[]` · `userId` · `deductPeriodMonth` + pagination. */
-export const payrollAdvanceListQuerySchema = z.object({
-  userId: z.string().uuid().optional(),
-  status: csvEnumList(payrollAdvanceStatusEnum),
-  deductPeriodMonth: periodMonthSchema.optional(),
-  ...payrollPageQuery,
-});
+/**
+ * 059 — filter `status[]` · `userId` · `deductPeriodMonth` + pagination. `.strict()` (BE-4B L7): khoá lọc gõ sai
+ * (`user_id`, `userid`…) trước đây bị bỏ im lặng ⇒ trả DANH SÁCH TOÀN CÔNG TY (có `amount`) trong khi người gọi tưởng
+ * đã lọc theo một người; giờ ⇒ 400.
+ */
+export const payrollAdvanceListQuerySchema = z
+  .object({
+    userId: z.string().uuid().optional(),
+    status: csvEnumList(payrollAdvanceStatusEnum),
+    deductPeriodMonth: periodMonthSchema.optional(),
+    ...payrollPageQuery,
+  })
+  .strict();
 export type PayrollAdvanceListQuery = z.infer<typeof payrollAdvanceListQuerySchema>;
 
 /** 065 — `GET /me/payroll-advances` (Own): KHÔNG có `userId` — chủ thể là chính caller. */
@@ -240,12 +250,14 @@ export type UpdatePaymentBatchRequest = z.infer<typeof updatePaymentBatchSchema>
 
 /**
  * 072 — hoàn tất đợt. `confirmAllPaid: true` ghi `paid_at` cho MỌI dòng chưa chi trong CÙNG tx trước khi
- * kiểm (D-2); còn dòng chưa chi ⇒ 409 027 `batch-incomplete`. `payDate` ghi vào đợt (ngày chi thật).
+ * kiểm (D-2); còn dòng chưa chi ⇒ 409 027 `batch-incomplete`. `payDate` ghi vào đợt (ngày chi thật). `.strict()` (BE-4B L7).
  */
-export const completePaymentBatchSchema = z.object({
-  payDate: z.string().date().optional(),
-  confirmAllPaid: z.boolean().optional(),
-});
+export const completePaymentBatchSchema = z
+  .object({
+    payDate: z.string().date().optional(),
+    confirmAllPaid: z.boolean().optional(),
+  })
+  .strict();
 export type CompletePaymentBatchRequest = z.infer<typeof completePaymentBatchSchema>;
 
 /** 066 — filter `payrollPeriodId` · `status[]` · `method` + pagination. */

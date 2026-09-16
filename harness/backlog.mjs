@@ -16294,6 +16294,7 @@ export const backlog = [
     ],
     notes: [
       "🟡 LIGHT gate + security-reviewer HẸP 1 câu (reader quyền — vế status). Không migration. Ghi nợ QA-1: đột biến (k) NOTI-027 dedupe theo batchId không đo được bằng int-spec.",
+      "✅ 16/09/2026 thi công trên nhánh feat/s15-payroll-be-4b (lane mediaos_be4b): MỘT câu SQL pairHoldersQuery dùng chung 2 reader + vế users.status = active (allow-list như cổng đăng nhập) · Own 065 listOwnTx/countOwnTx fail-closed · rowCount XLSX trước eachRow · mappedWrite(table) dùng chung advances+lines · .strict() 063/064/072/059 (059 = schema query ĐẦU TIÊN strict — FE-3 không gửi khoá lạ) · Logger.error 071 sau audit · EXISTS đợt ở insertLinesTx. RED 6 int + 5 unit + 5 contracts đo đỏ trước; GREEN: unit 335 · int 80 · cov 927 test 94,37 %/86,43 %. Bằng chứng + quyết định Q-1..Q-5: docs/plans/S15-PAYROLL-BE-4B.md",
     ],
   },
   {

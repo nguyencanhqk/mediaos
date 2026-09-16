@@ -296,7 +296,8 @@ export class PayrollPaymentBatchesRepository {
 
   /**
    * INSERT … SELECT set-based: snapshot TK chép TỪ settings NGAY trong câu (số TK KHÔNG là tham số). `cash` ⇒ ba snapshot
-   * NULL. `payslip_uq`/`batch_user_uq` (23505) và tag T2 map ở service qua `mappedLineWrite`.
+   * NULL. `payslip_uq`/`batch_user_uq` (23505) và tag T2 map ở service qua `mappedLineWrite`. BE-4B: vế EXISTS đợt
+   * cùng `company_id` (sống) ngay trong câu — batch lạ/khác công ty ⇒ 0 dòng.
    */
   async insertLinesTx(
     tx: TenantTx,
@@ -321,6 +322,12 @@ export class PayrollPaymentBatchesRepository {
                on s.company_id = ps.company_id and s.user_id = ps.user_id and s.deleted_at is null
        where ps.company_id = ${companyId}::uuid
          and ps.id = any(${sql.param(payslipIds as string[])}::uuid[])
+         -- BE-4B (database LOW): đợt phải TỒN TẠI, SỐNG và CÙNG công ty ngay trong câu — FK không soi company_id,
+         -- và trigger guard chỉ là lưới cuối. Đợt lạ ⇒ 0 dòng, không 23503/23514 thô.
+         and exists (select 1 from payroll_payment_batches b
+                      where b.id = ${batch.id}::uuid
+                        and b.company_id = ${companyId}::uuid
+                        and b.deleted_at is null)
        order by ps.user_id
       returning user_id, bank_account_snapshot`);
     return rowsOf<Record<string, unknown>>(res).map((r) => ({
