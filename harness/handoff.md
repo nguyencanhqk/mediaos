@@ -2,11 +2,11 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
-## Phiên 2026-09-16 (k) — S15-PAYROLL-FE-3 → **PR #514 MỞ (base master, KHÔNG auto-merge)** 🟡 — chờ CI + owner merge
+## Phiên 2026-09-16 (k) — **S15-PAYROLL-FE-3 ĐÃ MERGE master** (#514 → `51292524`, owner uỷ quyền `--admin`) ✅
 
-**Bắt đầu phiên sau ở đây:** `gh pr checks 514` → xanh ⇒ owner nói rõ «cho phép merge với quyền admin» rồi `gh pr merge 514 --squash --delete-branch` (KHÔNG stacked, không xung đột dự kiến). Lúc rời phiên: gitleaks · pnpm audit · tooling tests · Build auth **pass**; Build app/console + Lint·Typecheck·RLS còn **pending**, chưa có ca đỏ. Việc kế theo backlog: **`S15-PAYROLL-FE-2`** (track B: 009/010/011) hoặc **`S15-PAYROLL-BE-5`** (7 báo cáo + PDF). **Đọc memory `s15-payroll-fe3-wave-state` TRƯỚC.** Bằng chứng đủ để người review chỉ đọc bảng: `docs/plans/S15-PAYROLL-FE-3.md` §7; quyết định D1–D12 ở §2.
+**Bắt đầu phiên sau ở đây:** master đã có track C FE (PAY-SCREEN-012/013/014 + 017 «Tạm ứng của tôi» + dialog import). CI #514 xanh TOÀN BỘ trước khi merge (Build app 6m27s · Lint·Typecheck·Migrate·RLS 18m4s · gitleaks · pnpm audit · tooling). Nhánh `feat/s15-payroll-fe-3` đã xoá cả local lẫn remote; `docs/STATUS.md` đã regen + push master (`f1a932f7`). Không PR PAYROLL nào mở. Việc kế theo backlog: **`S15-PAYROLL-FE-2`** (track B: 009/010/011) hoặc **`S15-PAYROLL-BE-5`** (7 báo cáo + PDF). **Đọc memory `s15-payroll-fe3-wave-state` TRƯỚC.** Bằng chứng đủ để người review chỉ đọc bảng: `docs/plans/S15-PAYROLL-FE-3.md` §7; quyết định D1–D12 ở §2.
 
-⚠️ **`docs/STATUS.md` CỐ Ý không commit vào nhánh** — regen lại sau khi #514 merge. Bài học phiên (i)+(j): commit STATUS xen giữa lúc PR đang mở là thứ đẩy PR sang `CONFLICTING`.
+✅ **`docs/STATUS.md` CỐ Ý không commit vào nhánh, chỉ regen + push master SAU khi merge** (`f1a932f7`) — đúng thứ tự mà bài học phiên (i)+(j) dặn. Lần này PR **không** rơi vào `CONFLICTING`: cách làm này có tác dụng, giữ nguyên cho WO sau.
 
 **Điều đắt nhất phiên này mua được — ĐỪNG đo lại:**
 
