@@ -187,3 +187,39 @@ export const BONUS_KIND_BADGE_VARIANT: Readonly<Record<string, BadgeVariant>> = 
   bonus: "success",
   penalty: "danger",
 };
+
+// ── S15-PAYROLL-FE-1 — PAY-SCREEN-007/008 ──────────────────────────────────────────────────────
+
+/**
+ * Trạng thái nhân sự chiếu từ HR (`employee_profiles.status`, CHECK `emp_status_check` — đo
+ * `db/schema/employees.ts:110`). Giá trị lạ ⇒ `muted` + hiện nguyên chuỗi, KHÔNG bịa nhãn.
+ */
+export const EMPLOYEE_STATUS_BADGE_VARIANT: Readonly<Record<string, BadgeVariant>> = {
+  active: "success",
+  inactive: "warning",
+  resigned: "muted",
+  terminated: "danger",
+};
+
+/** 5 tab của chi tiết nhân sự (SPEC-11 §9.1, PAY-DEC-016) — thứ tự hiển thị. Gate TỪNG tab ở page. */
+export const PAYROLL_EMPLOYEE_TABS = [
+  "general",
+  "salaryHistory",
+  "insurance",
+  "tax",
+  "dependents",
+] as const;
+export type PayrollEmployeeTab = (typeof PAYROLL_EMPLOYEE_TABS)[number];
+
+/** Hai tab của chi tiết kỳ: bảng lương (PAY-SCREEN-002) · bảng công (PAY-SCREEN-008, route riêng). */
+export type PayrollPeriodTab = "lines" | "timesheet";
+
+/**
+ * Trần trang khi tải catalog thành phần lương cho picker `items[]` = `PAYROLL_PAGE_MAX` của contracts.
+ * Catalog `profile_item` của một công ty hiếm khi quá vài chục mã; vượt 100 thì picker THIẾU mã (hiện
+ * cảnh báo), không lật trang trong dialog.
+ */
+export const SALARY_COMPONENT_CATALOG_PAGE = 100;
+
+/** Trần phiên bản hồ sơ lương tải cho timeline «Lịch sử lương» (một người hiếm khi > 100 phiên bản). */
+export const SALARY_HISTORY_PAGE = 100;

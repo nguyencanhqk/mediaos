@@ -11,9 +11,19 @@ import {
   useCanExact,
 } from "@mediaos/web-core";
 import type { PayrollPeriodLineDto } from "@mediaos/contracts";
-import { Button, DataTable, DetailPageHeader, EmptyState, TableFooter } from "@mediaos/ui";
+import {
+  Button,
+  DataTable,
+  DetailPageHeader,
+  EmptyState,
+  TableFooter,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@mediaos/ui";
 import { triggerBlobDownload } from "../attendance/download-blob";
-import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "./constants";
+import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE, type PayrollPeriodTab } from "./constants";
 import {
   canAdjustLines,
   PERIOD_ACTIONS_NEEDING_REASON,
@@ -35,6 +45,7 @@ import { ReadinessPanel } from "./components/ReadinessPanel";
 import { AdjustLineDialog } from "./components/AdjustLineDialog";
 import { PeriodPayslipsSection } from "./components/PeriodPayslipsSection";
 import { ReasonDialog } from "./components/ReasonDialog";
+import { PeriodTimesheetTab } from "./components/PeriodTimesheetTab";
 
 /**
  * PAY-SCREEN-002 (S13-PAYROLL-FE-1) — chi tiết kỳ lương: bảng lương theo nhân sự + thanh hành động FSM
@@ -54,15 +65,25 @@ import { ReasonDialog } from "./components/ReasonDialog";
  *
  * **3. 409 tranh chấp trạng thái ⇒ TẢI LẠI, không chỉ toast** (SPEC-11 §14). Kỳ có thể vừa bị người
  * khác duyệt/từ chối; giữ nguyên màn cũ là để người dùng bấm lại và ăn đúng lỗi đó lần nữa.
+ *
+ * ── S15-PAYROLL-FE-1 — dải tab «Bảng lương / Bảng công» ─────────────────────────────────────────
+ * PAY-SCREEN-008 «Bảng công kỳ» là TAB của màn này (UI-07 §21.8 v1.1a), mỗi tab một route để deep-link:
+ * `/payroll/periods/:id` (lines) · `/payroll/periods/:id/timesheet`. `tab` do ROUTER quyết, đổi tab =
+ * điều hướng (`onTabChange`) — không giữ state tab trong page để URL luôn nói đúng đang xem gì. Tab
+ * «Bảng công» chỉ hiện khi có `view-line` (cùng cặp với 043); route timesheet cũng gate cặp đó.
  */
 export function PayrollPeriodDetailPage({
   periodId,
   onBack,
   onOpenPayslip,
+  tab = "lines",
+  onTabChange,
 }: {
   periodId: string;
   onBack: () => void;
   onOpenPayslip: (payslipId: string) => void;
+  tab?: PayrollPeriodTab;
+  onTabChange: (tab: PayrollPeriodTab) => void;
 }) {
   const { t } = useTranslation("payroll");
   const queryClient = useQueryClient();
@@ -98,7 +119,10 @@ export function PayrollPeriodDetailPage({
   const linesQuery = useQuery({
     queryKey: payrollKeys.periods.lines(periodId, lineParams),
     queryFn: () => payrollApi.listLines(periodId, lineParams),
-    enabled: canViewLines,
+    // Chỉ tải bảng lương khi ĐANG ở tab «Bảng lương»: 008 là route nhạy cảm CÓ audit lượt đọc (SPEC-11
+    // §15) — mở tab «Bảng công» (hoặc deep-link timesheet) mà vẫn kéo 008 là một hàng audit giả cho
+    // lượt xem tiền không hề xảy ra (code-review S15-PAYROLL-FE-1, HIGH).
+    enabled: canViewLines && tab === "lines",
   });
 
   const period = periodQuery.data ?? null;
@@ -339,52 +363,65 @@ export function PayrollPeriodDetailPage({
 
       <ReadinessPanel periodId={periodId} />
 
-      {!canViewLines ? (
-        <EmptyState title={t("lines.noPermission")} />
-      ) : linesQuery.isError ? (
-        <EmptyState
-          title={t("states.error")}
-          action={
-            <Button variant="outline" onClick={() => void linesQuery.refetch()}>
-              {t("states.retry")}
-            </Button>
-          }
-        />
-      ) : (
-        <>
-          {moneyMasked && (
-            <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
-              {t("lines.moneyMasked")}
-            </div>
-          )}
-          <DataTable
-            columns={columns}
-            data={lines}
-            isLoading={linesQuery.isLoading}
-            pageSize={PAYROLL_PAGE_SIZE}
-            pinFirstColumn
-            onRowClick={adjustable ? (row) => setAdjustTarget(row) : undefined}
-            emptyState={<EmptyState title={t("lines.empty")} />}
-            footer={
-              <TableFooter
-                page={linePage}
-                pageSize={PAYROLL_PAGE_SIZE}
-                total={lineTotal}
-                disabled={linesQuery.isFetching}
-                onPageChange={setLinePage}
-              />
-            }
-          />
-        </>
-      )}
+      <Tabs value={tab} onValueChange={(v) => onTabChange(v as PayrollPeriodTab)}>
+        <TabsList>
+          <TabsTrigger value="lines">{t("periodTabs.lines")}</TabsTrigger>
+          {canViewLines && <TabsTrigger value="timesheet">{t("periodTabs.timesheet")}</TabsTrigger>}
+        </TabsList>
 
-      {period.payslipsGeneratedAt !== null && (
-        <PeriodPayslipsSection
-          periodId={periodId}
-          people={people}
-          onOpenPayslip={onOpenPayslip}
-        />
-      )}
+        <TabsContent value="timesheet" className="space-y-4 pt-4">
+          <PeriodTimesheetTab period={period} people={people} />
+        </TabsContent>
+
+        <TabsContent value="lines" className="space-y-6 pt-4">
+          {!canViewLines ? (
+            <EmptyState title={t("lines.noPermission")} />
+          ) : linesQuery.isError ? (
+            <EmptyState
+              title={t("states.error")}
+              action={
+                <Button variant="outline" onClick={() => void linesQuery.refetch()}>
+                  {t("states.retry")}
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              {moneyMasked && (
+                <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+                  {t("lines.moneyMasked")}
+                </div>
+              )}
+              <DataTable
+                columns={columns}
+                data={lines}
+                isLoading={linesQuery.isLoading}
+                pageSize={PAYROLL_PAGE_SIZE}
+                pinFirstColumn
+                onRowClick={adjustable ? (row) => setAdjustTarget(row) : undefined}
+                emptyState={<EmptyState title={t("lines.empty")} />}
+                footer={
+                  <TableFooter
+                    page={linePage}
+                    pageSize={PAYROLL_PAGE_SIZE}
+                    total={lineTotal}
+                    disabled={linesQuery.isFetching}
+                    onPageChange={setLinePage}
+                  />
+                }
+              />
+            </>
+          )}
+
+          {period.payslipsGeneratedAt !== null && (
+            <PeriodPayslipsSection
+              periodId={periodId}
+              people={people}
+              onOpenPayslip={onOpenPayslip}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
 
       <AdjustLineDialog
         open={adjustTarget !== null}

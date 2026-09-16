@@ -16132,7 +16132,10 @@ export const backlog = [
       "Màn 008 bảng công kỳ: đọc GET /payroll-periods/:id/timesheet (PAYROLL-API-043 — KHÔNG phải /me/attendance-summary của ME), cột số ngày tabular-nums, trạng thái khoá kỳ công, link sang chi tiết kỳ",
       "Loading/error/empty/409 tải lại; i18n vi namespace payroll; wiring.spec + test màn hình; typecheck/build xanh",
     ],
-    notes: ["🟡 đụng web-core/contracts; phần màn hình LIGHT gate."],
+    notes: [
+      "🟡 đụng web-core/contracts; phần màn hình LIGHT gate.",
+      "✅ 16/09/2026 (phiên i) — code + test xong trên nhánh feat/s15-payroll-fe-1, PR #513 mở chờ CI + owner. Bằng chứng: docs/plans/S15-PAYROLL-FE-1.md §7 (app 281 file/2773 test · web-core 742 · typecheck app/api/web-core 0 lỗi · build vite · check.sh --quick XANH · TS reviewer PASS · code-reviewer 1 HIGH đã vá + ghim spec). Quyết định D1–D11 ở §2; nợ N1 (PayrollPeriodDetailPage 435 dòng — tách PeriodLinesSection), G3 (chưa có màn sửa/xoá phiên bản 022).",
+    ],
   },
   {
     id: "S15-PAYROLL-FE-2",

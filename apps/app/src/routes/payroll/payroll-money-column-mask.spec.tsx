@@ -38,6 +38,8 @@ vi.mock("@mediaos/web-core", () => ({
     createBonusPenalty: vi.fn(),
     approveBonusPenalty: vi.fn(),
     rejectBonusPenalty: vi.fn(),
+    // S15-PAYROLL-FE-1 — form v2 tải catalog 044 CHỈ khi dialog mở (`open=false` ở đây ⇒ không gọi).
+    listSalaryComponents: vi.fn(async () => ({ data: [], pagination: undefined })),
   },
   payrollKeys: {
     salaryProfiles: { list: (p: unknown) => ["payroll", "salary-profiles", p] },
@@ -46,6 +48,7 @@ vi.mock("@mediaos/web-core", () => ({
       allOf: () => ["payroll", "bonus-penalties"],
     },
     pickers: { people: (p: unknown) => ["payroll", "pickers", "people", p] },
+    catalog: { components: (p: unknown) => ["payroll", "catalog", "components", p] },
   },
 }));
 

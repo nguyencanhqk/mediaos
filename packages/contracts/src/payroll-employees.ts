@@ -216,6 +216,12 @@ export type PayrollTimesheetRowDto = z.infer<typeof payrollTimesheetRowSchema>;
  */
 export const payrollEmployeeWriteResultSchema = z.object({
   id: z.string().uuid(),
-  warnings: z.array(z.string()).default([]),
+  /**
+   * BẮT BUỘC, **KHÔNG** `.default([])` — cùng luật với `payrollWriteResultSchema` (`payroll.ts` §4): BE set
+   * tường minh ở cả 4 đường ghi (settings upsert · dependent create/update/delete), và `.default()` trên
+   * schema PHẢN HỒI làm input ≠ output ⇒ `apiFetch<T>(path, schema: z.ZodType<T>)` suy T về hình dạng
+   * INPUT, mọi caller khai kiểu output đều đỏ (đo khi build web-core ở S15-PAYROLL-FE-1).
+   */
+  warnings: z.array(z.string()),
 });
 export type PayrollEmployeeWriteResultDto = z.infer<typeof payrollEmployeeWriteResultSchema>;
