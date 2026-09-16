@@ -2,6 +2,12 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-16 (j) — **#513 FE-1 + #512 BE-4B ĐÃ MERGE master** (`f573ce5b` · `1fd1ab33`, owner ủy quyền `--admin`) ✅
+
+**Bắt đầu phiên sau ở đây:** master đã có track A FE (PAY-SCREEN-007/008 + form hồ sơ lương v2) và nợ gate BE-4 trả xong. Lane `mediaos_be4b` đã DROP; còn 8 lane DB cũ (`mediaos_s15*`, `mediaos_db1b`) — dọn khi rảnh (memory `pgdata-bloat-lane-dbs-and-job-log`). Không PR PAYROLL nào mở. Việc kế theo backlog: **`S15-PAYROLL-FE-3`** (track C màn hình — đọc memory `s15-payroll-fe1-wave-state` + `s15-payroll-be4b-wave-state`) hoặc `S15-PAYROLL-BE-5` (báo cáo). Nhớ đo `docs/STATUS.md` sau `init.sh` — cả hai WO phải hiện `done` qua ledger overlay.
+
+**Chi phí phiên (i)+(j): ~$218** — cao gấp đôi dự kiến vì (1) hai reviewer tĩnh song song ~400k token, (2) hai lượt `gh pr checks --watch` 10′ chạy trong foreground rồi rơi xuống nền, (3) merge master vào nhánh để hết `CONFLICTING` do chính commit docs của phiên gây ra. **Bài học:** push docs (STATUS/INDEX) lên master TRƯỚC khi mở PR hoặc SAU khi merge — không xen giữa; và watch CI bằng tác vụ nền ngay từ đầu.
+
 ## Phiên 2026-09-16 (i) — S15-PAYROLL-FE-1 → **PR #513 MỞ (base master, KHÔNG auto-merge)** 🟡 — chờ CI + owner merge
 
 **Bắt đầu phiên sau ở đây:** `gh pr checks 513` (và #512 BE-4B vẫn đang mở, CI xanh, BEHIND master) → xanh ⇒ owner nói rõ «cho phép merge với quyền admin» rồi `gh pr merge <n> --squash --delete-branch` (hai PR độc lập, không stacked; merge #512 trước thì #513 cần `gh pr update-branch` hoặc merge thường — không xung đột file dự kiến: #512 chỉ đụng `apps/api` + contracts `payroll-disbursement.ts`). Việc kế theo backlog: **`S15-PAYROLL-FE-3`** (track C: tạm ứng · chi trả · ngân sách — đọc memory `s15-payroll-fe1-wave-state` + `s15-payroll-be4b-wave-state` trước) hoặc `S15-PAYROLL-BE-5`. Bằng chứng FE-1 đủ để người review chỉ đọc bảng: `docs/plans/S15-PAYROLL-FE-1.md` §7; quyết định D1–D11 ở §2.

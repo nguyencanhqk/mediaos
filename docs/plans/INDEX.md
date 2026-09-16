@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**502 WO** · có micro-plan: **299/502** · ⬜ 19 chờ · 🔵 0 đang làm · ✅ 482 xong · 🔴 1 chặn
+**502 WO** · có micro-plan: **300/502** · ⬜ 19 chờ · 🔵 0 đang làm · ✅ 482 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -545,7 +545,7 @@
 | `S15-PAYROLL-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-FE-1 | FE track B: PAY-SCREEN-009 Thành phần lương (catalog + editor công thứ |
 | `S15-PAYROLL-DB-2` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-2.md) | ✅S15-PAYROLL-DB-1 | Schema + migration PAYROLL v2 track C: 4 bảng (payroll_advances · payr |
 | `S15-PAYROLL-BE-4` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-4.md) | ✅S15-PAYROLL-DB-2 ✅S15-PAYROLL-BE-3 | BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four- |
-| `S15-PAYROLL-BE-4B` | 🟡 | ✅ xong | — *(chưa)* | ✅S15-PAYROLL-BE-4 | Nợ FULL gate BE-4 (15/09/2026): lọc users.status ở PayrollPairHoldersR |
+| `S15-PAYROLL-BE-4B` | 🟡 | ✅ xong | [📄](S15-PAYROLL-BE-4B.md) | ✅S15-PAYROLL-BE-4 | Nợ FULL gate BE-4 (15/09/2026): lọc users.status ở PayrollPairHoldersR |
 | `S15-PAYROLL-FE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-4 | FE track C: PAY-SCREEN-012 Tạm ứng (list + form + duyệt) · 013 Chi trả |
 | `S15-PAYROLL-BE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-BE-4 | BE track D: 7 báo cáo (tổng hợp thu nhập NV · thống kê lương theo thời |
 | `S15-PAYROLL-FE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-5 ⏳S15-PAYROLL-FE-2 ⏳S15-PAYROLL-FE-3 | FE track D: PAY-SCREEN-015 Tổng quan `/payroll` (6 biểu đồ Recharts +  |

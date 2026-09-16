@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-16 01:18Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-16 01:48Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -39,7 +39,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `feat/s15-payroll-fe-1` · **file đang đổi (dirty)**: 3
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 242 — `0575_s15payrollbe3_nghi_earning_bp_four_eyes` (243 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -48,8 +48,9 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `ed25f42e` | 2026-09-16 | docs(payroll): S15-PAYROLL-FE-1 — ghi PR #513 vào plan §7 + backlog |
-| `6e671ed0` | 2026-09-16 | feat(payroll): S15-PAYROLL-FE-1 — FE track A: PAY-SCREEN-007 Nhân viên (list + chi tiết 5 tab) · 008 Bảng công kỳ (tab + route) · form hồ sơ lương v2 items[] từ catalog |
+| `1fd1ab33` | 2026-09-16 | fix(payroll): S15-PAYROLL-BE-4B — trả nợ FULL gate BE-4: reader quyền lọc users.status (1 SQL chung) · Own 065 fail-closed · rowCount XLSX · mappedWrite · .strict() ×4 · Logger 071 · EXISTS đợt (#512) |
+| `f573ce5b` | 2026-09-16 | feat(payroll): S15-PAYROLL-FE-1 — PAY-SCREEN-007 Nhân viên (list + 5 tab) · 008 Bảng công kỳ · form hồ sơ lương v2 items[] từ catalog (#513) |
+| `dd5090da` | 2026-09-16 | chore(docs): regen STATUS + handoff phiên 16/09 (i) — S15-PAYROLL-FE-1 PR #513 mở, chờ CI + owner merge |
 | `b531faf8` | 2026-09-16 | chore(docs): regen STATUS + handoff phiên 16/09 (h) — S15-PAYROLL-BE-4B PR #512 mở, chờ CI + owner merge |
 | `47cf75bb` | 2026-09-16 | chore(docs): regen STATUS + handoff phiên 15/09 (g) — BE-3 #510 + BE-4 #511 đã merge master, lane be3/be4 dropped |
 | `7e7936b5` | 2026-09-16 | feat(payroll): S15-PAYROLL-BE-4 — track C: tạm ứng · đợt chi trả + tệp UNC · ngân sách · import thu nhập/khấu trừ · NOTI 024–027 (19 route 059–077) (#511) |
@@ -59,7 +60,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `b03c7a89` | 2026-09-14 | ci(api): kéo MinIO từ quay.io — Docker Hub minio/minio + minio/mc trả pull access denied (#507) |
 | `afd4f32e` | 2026-09-14 | feat(payroll): S15-PAYROLL-BE-2 — track B 15 route (044–058) + máy công thức lương decimal.js (#S15) (#506) |
 | `879c84d0` | 2026-09-13 | docs(status): regen sau khi merge #505 — S17-CHAT-UX2-QA-2 đóng sổ, wave S17-CHAT-UX2 hết nợ |
-| `bfc7595a` | 2026-09-13 | ci(chat): S17-CHAT-UX2-QA-2 — sàn coverage cụm chat thành CỔNG PR (#S17) (#505) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
