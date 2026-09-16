@@ -146,13 +146,17 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
 describe("PAYROLL wiring — ROUTE_REGISTRY & gate màn khớp gate đường tải", () => {
   const byKey = (k: string) => ROUTE_REGISTRY.find((r) => r.routeKey === k);
 
-  it("4 route sidebar PAYROLL tồn tại, moduleCode PAYROLL, đúng screenCode", () => {
+  it("7 route sidebar PAYROLL tồn tại, moduleCode PAYROLL, đúng screenCode", () => {
     const rows = [
       ["payroll.periods", "/payroll/periods", "PAY-SCREEN-001"],
       ["payroll.salaryProfiles", "/payroll/salary-profiles", "PAY-SCREEN-004"],
       ["payroll.bonusPenalties", "/payroll/bonus-penalties", "PAY-SCREEN-005"],
       // S15-PAYROLL-FE-1
       ["payroll.employees", "/payroll/employees", "PAY-SCREEN-007"],
+      // S15-PAYROLL-FE-3 — track C
+      ["payroll.advances", "/payroll/advances", "PAY-SCREEN-012"],
+      ["payroll.paymentBatches", "/payroll/payment-batches", "PAY-SCREEN-013"],
+      ["payroll.budgets", "/payroll/budgets", "PAY-SCREEN-014"],
     ] as const;
     for (const [key, p, screen] of rows) {
       const meta = byKey(key);
@@ -182,6 +186,33 @@ describe("PAYROLL wiring — ROUTE_REGISTRY & gate màn khớp gate đường t�
       "access:payroll",
       "view:payroll-employee",
     ]);
+    // S15-PAYROLL-FE-3 — cặp ĐƯỜNG TẢI của 059 · 066 · 073 (cả ba SENSITIVE).
+    expect(byKey("payroll.advances")?.requiredPermissions).toEqual([
+      "access:payroll",
+      "view:payroll-advance",
+    ]);
+    expect(byKey("payroll.paymentBatches")?.requiredPermissions).toEqual([
+      "access:payroll",
+      "view:payment-batch",
+    ]);
+    expect(byKey("payroll.budgets")?.requiredPermissions).toEqual([
+      "access:payroll",
+      "view:payroll-budget",
+    ]);
+  });
+
+  it("gate 3 màn track C = ĐÚNG cặp của BE (không tự bịa cặp khác cho sidebar)", () => {
+    const cases = [
+      ["payroll.advances", PAYROLL_ENGINE_PAIRS.advanceList],
+      ["payroll.paymentBatches", PAYROLL_ENGINE_PAIRS.batchList],
+      ["payroll.budgets", PAYROLL_ENGINE_PAIRS.budgetList],
+    ] as const;
+    for (const [key, pair] of cases) {
+      expect(byKey(key)?.requiredPermissions, `gate lệch ở ${key}`).toContain(
+        `${pair.action}:${pair.resourceType}`,
+      );
+      expect(pair.isSensitive, `${key} phải là cặp SENSITIVE`).toBe(true);
+    }
   });
 
   it("gate màn Nhân viên = cặp employeeList của BE (không tự bịa cặp khác cho sidebar)", () => {
@@ -233,6 +264,39 @@ describe("PAYROLL wiring — «Phiếu lương của tôi» KHÔNG nằm sau c�
 });
 
 /**
+ * S15-PAYROLL-FE-3 — PAY-SCREEN-017 «Tạm ứng của tôi». CÙNG luật với `me.payslips` ngay trên và neo
+ * riêng vì đây là đường DUY NHẤT nhân viên thấy khoản tạm ứng của chính mình: gate bằng một cặp PAYROLL
+ * nào đó là dựng một cổng có thể thu hồi TRƯỚC dữ liệu riêng của chính người dùng
+ * (`personal-prefs-must-not-sit-behind-permission-gate`). Cổng THẬT là `('view-own','payroll-advance')`
+ * ở BE — ai không có nó thì màn hiện RỖNG, không phải biến mất khỏi Personal Hub.
+ */
+describe("PAYROLL wiring — «Tạm ứng của tôi» KHÔNG nằm sau cổng quyền payroll", () => {
+  const meta = ROUTE_REGISTRY.find((r) => r.routeKey === "me.payrollAdvances");
+
+  it("route tồn tại, thuộc module ME, screenCode PAY-SCREEN-017", () => {
+    expect(meta, "thiếu route me.payrollAdvances").toBeTruthy();
+    expect(meta?.path).toBe("/me/payroll-advances");
+    expect(meta?.moduleCode).toBe("ME");
+    expect(meta?.screenCode).toBe("PAY-SCREEN-017");
+  });
+
+  it("gate là `access:me` — KHÔNG có cặp PAYROLL/tạm-ứng nào trong gate route", () => {
+    expect(meta?.requiredAnyPermissions).toEqual(["access:me"]);
+    const all = [...(meta?.requiredPermissions ?? []), ...(meta?.requiredAnyPermissions ?? [])];
+    expect(all.some((p) => p.includes("payroll") || p.includes("advance"))).toBe(false);
+  });
+
+  it("mục sidebar me.payrollAdvances gate `access:me`, nằm ở ME_SIDEBAR chứ không phải PAYROLL_SIDEBAR", () => {
+    const meItems = SIDEBAR_REGISTRY.ME ?? [];
+    const item = meItems.find((i) => i.sidebarKey === "me.payrollAdvances");
+    expect(item, "thiếu mục sidebar me.payrollAdvances").toBeTruthy();
+    expect(item?.path).toBe("/me/payroll-advances");
+    expect(item?.requiredPermissions).toEqual(["access:me"]);
+    expect(PAYROLL_SIDEBAR.some((i) => i.path === "/me/payroll-advances")).toBe(false);
+  });
+});
+
+/**
  * S15-UI-SHELL-1 (DEC-020) — sidebar PAYROLL lên **cấu trúc v2 có nhóm gập được**, khai đầy đủ ở
  * `PAYROLL_SIDEBAR_V2` rồi cắt mục chưa có màn (`pruneUnbuiltScreens`). Nên spec này phải đi ĐỆ QUY:
  * duyệt phẳng `PAYROLL_SIDEBAR` như bản v1 sẽ MÙ với mọi mục nằm trong nhóm.
@@ -248,9 +312,14 @@ describe("PAYROLL wiring — sidebar", () => {
 
   it("mọi mục CÓ path (kể cả trong nhóm) trỏ tới route CÓ THẬT trong ROUTE_REGISTRY, cùng gate", () => {
     const leaves = flattenSidebar(PAYROLL_SIDEBAR).filter((i) => i.path);
-    // Neo số: 3 màn v1 + «Nhân viên» (S15-PAYROLL-FE-1). Thêm màn ở WO sau ⇒ sửa số này CÙNG lúc thêm route.
-    expect(leaves).toHaveLength(4);
-    expect(leaves.map((i) => i.path)).toContain("/payroll/employees");
+    // Neo số: 3 màn v1 + «Nhân viên» (S15-PAYROLL-FE-1) + 3 màn track C (S15-PAYROLL-FE-3: tạm ứng ·
+    // chi trả · ngân sách). Thêm màn ở WO sau ⇒ sửa số này CÙNG lúc thêm route.
+    expect(leaves).toHaveLength(7);
+    const paths = leaves.map((i) => i.path);
+    expect(paths).toContain("/payroll/employees");
+    expect(paths).toEqual(
+      expect.arrayContaining(["/payroll/advances", "/payroll/payment-batches", "/payroll/budgets"]),
+    );
 
     for (const item of leaves) {
       const meta = ROUTE_REGISTRY.find((r) => r.path === item.path);

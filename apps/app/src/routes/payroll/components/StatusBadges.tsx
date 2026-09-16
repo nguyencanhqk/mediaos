@@ -16,12 +16,16 @@ import type {
   PayslipDerivedStatus,
   BonusPenaltyStatus,
   BonusKind,
+  PayrollAdvanceStatus,
+  PaymentBatchStatus,
 } from "@mediaos/contracts";
 import {
   PAYROLL_PERIOD_STATUS_BADGE_VARIANT,
   PAYSLIP_STATUS_BADGE_VARIANT,
   BONUS_PENALTY_STATUS_BADGE_VARIANT,
   BONUS_KIND_BADGE_VARIANT,
+  PAYROLL_ADVANCE_STATUS_BADGE_VARIANT,
+  PAYMENT_BATCH_STATUS_BADGE_VARIANT,
 } from "../constants";
 
 export function PayrollPeriodStatusBadge({ status }: { status: PayrollPeriodStatus }) {
@@ -60,6 +64,32 @@ export function BonusKindBadge({ kind }: { kind: BonusKind }) {
   // «Thưởng/Phạt» là PHÂN LOẠI, không phải trạng thái vòng đời ⇒ giữ chip trần, KHÔNG chấm màu
   // (chấm màu của StatusPill là dấu hiệu «đây là một trạng thái»).
   return (
-    <StatusPill tone={BONUS_KIND_BADGE_VARIANT[kind] ?? "muted"} hideDot label={t(`bonusKind.${kind}`)} />
+    <StatusPill
+      tone={BONUS_KIND_BADGE_VARIANT[kind] ?? "muted"}
+      hideDot
+      label={t(`bonusKind.${kind}`)}
+    />
+  );
+}
+
+/** S15-PAYROLL-FE-3 — trạng thái tạm ứng (PAY-SCREEN-012/017). */
+export function PayrollAdvanceStatusBadge({ status }: { status: PayrollAdvanceStatus }) {
+  const { t } = useTranslation("payroll");
+  return (
+    <StatusPill
+      tone={PAYROLL_ADVANCE_STATUS_BADGE_VARIANT[status] ?? "muted"}
+      label={t(`advanceStatus.${status}`)}
+    />
+  );
+}
+
+/** S15-PAYROLL-FE-3 — trạng thái đợt chi trả (PAY-SCREEN-013). */
+export function PaymentBatchStatusBadge({ status }: { status: PaymentBatchStatus }) {
+  const { t } = useTranslation("payroll");
+  return (
+    <StatusPill
+      tone={PAYMENT_BATCH_STATUS_BADGE_VARIANT[status] ?? "muted"}
+      label={t(`paymentBatchStatus.${status}`)}
+    />
   );
 }

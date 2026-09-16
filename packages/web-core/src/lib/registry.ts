@@ -1874,6 +1874,58 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 87.5,
   },
+  // S15-PAYROLL-FE-3 — track C. Gate mỗi mục = cặp ĐƯỜNG TẢI của chính màn đó (059 · 066 · 073) và
+  // PHẢI khớp ĐÚNG BẰNG `requiredPermissions` mà `PAYROLL_SIDEBAR_V2` đã khai sẵn cho ba mục này —
+  // `payroll-wiring.spec.ts` so hai vế. Ba mục đó đang bị `pruneUnbuiltScreens()` cắt vì thiếu route;
+  // thêm ba entry dưới đây là chúng TỰ HIỆN, không phải sửa sidebar-registry.
+  {
+    routeKey: "payroll.advances",
+    path: "/payroll/advances",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-012",
+    titleKey: "routeTitle.payrollAdvances",
+    requiredPermissions: ["access:payroll", "view:payroll-advance"],
+    showInSidebar: true,
+    order: 90.1,
+  },
+  {
+    routeKey: "payroll.budgets",
+    path: "/payroll/budgets",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-014",
+    titleKey: "routeTitle.payrollBudgets",
+    requiredPermissions: ["access:payroll", "view:payroll-budget"],
+    showInSidebar: true,
+    order: 90.2,
+  },
+  {
+    routeKey: "payroll.paymentBatches",
+    path: "/payroll/payment-batches",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-013",
+    titleKey: "routeTitle.payrollPaymentBatches",
+    requiredPermissions: ["access:payroll", "view:payment-batch"],
+    showInSidebar: true,
+    order: 90.3,
+  },
+  // S15-PAYROLL-FE-3 — PAY-SCREEN-017 «Tạm ứng của tôi». Route **ME**, gate `access:me` DUY NHẤT —
+  // KHÔNG có cặp PAYROLL nào (SPEC-11 §9.1 + UI-07). Cổng THẬT là `('view-own','payroll-advance')` ở
+  // BE; ai không có nó thì màn hiện RỖNG chứ không biến mất khỏi Personal Hub. Nhét sau `access:payroll`
+  // là đúng lớp lỗi `personal-prefs-must-not-sit-behind-permission-gate` — cùng khuôn `me.payslips`.
+  {
+    routeKey: "me.payrollAdvances",
+    path: "/me/payroll-advances",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "PAY-SCREEN-017",
+    titleKey: "routeTitle.mePayrollAdvances",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 71.6,
+  },
 
   // System
   {

@@ -43,6 +43,7 @@ import { PayrollPeriodStatusBadge } from "./components/StatusBadges";
 import { PeriodActionBar } from "./components/PeriodActionBar";
 import { ReadinessPanel } from "./components/ReadinessPanel";
 import { AdjustLineDialog } from "./components/AdjustLineDialog";
+import { AdjustmentImportDialog } from "./components/AdjustmentImportDialog";
 import { PeriodPayslipsSection } from "./components/PeriodPayslipsSection";
 import { ReasonDialog } from "./components/ReasonDialog";
 import { PeriodTimesheetTab } from "./components/PeriodTimesheetTab";
@@ -104,11 +105,19 @@ export function PayrollPeriodDetailPage({
   );
   // §18: export đòi CẢ HAI cặp. Hiện nút khi chỉ có `export:payroll` là mời người dùng ăn 403.
   const canExport = canExportPair && canViewLines;
+  // S15-PAYROLL-FE-3 — 076 nạp thu nhập/khấu trừ khác cho CHÍNH kỳ này (route `payroll-periods/:id/
+  // import-adjustments`), nên lối vào sống ở màn chi tiết kỳ chứ không phải màn danh sách. Cặp gác là
+  // cặp CŨ `manage:bonus-penalty` — 076/077 ghi vào `bonus_penalties`, không cấp cặp mới.
+  const canImportAdjustments = useCanExact(
+    PAYROLL_ENGINE_PAIRS.importAdjustments.action,
+    PAYROLL_ENGINE_PAIRS.importAdjustments.resourceType,
+  );
 
   const [linePage, setLinePage] = useState(1);
   const [adjustTarget, setAdjustTarget] = useState<PayrollPeriodLineDto | null>(null);
   const [reasonAction, setReasonAction] = useState<PayrollPeriodAction | null>(null);
   const [feedback, setFeedback] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const periodQuery = useQuery({
     queryKey: payrollKeys.periods.detail(periodId),
@@ -327,8 +336,8 @@ export function PayrollPeriodDetailPage({
             {t("states.retry")}
           </Button>
         }
-        overflowItems={
-          canExport
+        overflowItems={[
+          ...(canExport
             ? [
                 {
                   key: "export",
@@ -337,9 +346,29 @@ export function PayrollPeriodDetailPage({
                   disabled: exportMutation.isPending,
                 },
               ]
-            : []
-        }
+            : []),
+          ...(canImportAdjustments
+            ? [
+                {
+                  key: "import-adjustments",
+                  label: t("adjustmentImport.title"),
+                  onSelect: () => setImportOpen(true),
+                },
+              ]
+            : []),
+        ]}
       />
+
+      {/* Chỉ mount khi có cặp ghi — dialog tự nó không phải cổng, nhưng dựng nó cho vai không bao giờ mở
+          được là treo một mutation 403 sẵn trong cây. */}
+      {canImportAdjustments && (
+        <AdjustmentImportDialog
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          periodId={periodId}
+          periodMonth={period.periodMonth}
+        />
+      )}
 
       <PeriodActionBar
         period={period}

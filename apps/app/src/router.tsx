@@ -2094,6 +2094,33 @@ const PayrollEmployeeDetailPage = React.lazy(() =>
     default: m.PayrollEmployeeDetailPage,
   })),
 );
+// S15-PAYROLL-FE-3 — track C: tạm ứng (012) · chi trả (013 list + chi tiết) · ngân sách (014) ·
+// «Tạm ứng của tôi» (017 — route ME, xem khối ME bên dưới).
+const PayrollAdvanceListPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollAdvanceListPage").then((m) => ({
+    default: m.PayrollAdvanceListPage,
+  })),
+);
+const PaymentBatchListPage = React.lazy(() =>
+  import("@/routes/payroll/PaymentBatchListPage").then((m) => ({
+    default: m.PaymentBatchListPage,
+  })),
+);
+const PaymentBatchDetailPage = React.lazy(() =>
+  import("@/routes/payroll/PaymentBatchDetailPage").then((m) => ({
+    default: m.PaymentBatchDetailPage,
+  })),
+);
+const PayrollBudgetListPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollBudgetListPage").then((m) => ({
+    default: m.PayrollBudgetListPage,
+  })),
+);
+const MePayrollAdvancesPage = React.lazy(() =>
+  import("@/routes/payroll/MePayrollAdvancesPage").then((m) => ({
+    default: m.MePayrollAdvancesPage,
+  })),
+);
 
 function PayrollPeriodListRouteContent() {
   const navigate = useNavigate();
@@ -2290,6 +2317,80 @@ const payslipDetailRoute = createRoute({
 // PAY-SCREEN-006 «Phiếu lương của tôi» — route ME (`access:me`), KHÔNG phải route PAYROLL. Deep-link từ
 // NOTI-EVENT-023 trỏ vào `/me/payslips` (target_url TĨNH ở template mig 0566).
 const mePayslipsRoute = makeModuleRoute("/me/payslips", "me.payslips", "ME", MePayslipsPage);
+
+// S15-PAYROLL-FE-3 — track C. Ba màn danh sách đi qua ROUTE_REGISTRY (mục sidebar đã khai sẵn trong
+// `PAYROLL_SIDEBAR_V2`, tự hiện khi route có mặt); chi tiết đợt chi trả dùng RouteMeta CỤC BỘ (mẫu
+// 002/003). Path tĩnh "/payroll/payment-batches" và param "/payroll/payment-batches/$batchId" KHÔNG
+// cạnh tranh nhau (TanStack xếp tĩnh trước param).
+const payrollAdvancesRoute = makeModuleRoute(
+  "/payroll/advances",
+  "payroll.advances",
+  "PAYROLL",
+  PayrollAdvanceListPage,
+);
+const payrollBudgetsRoute = makeModuleRoute(
+  "/payroll/budgets",
+  "payroll.budgets",
+  "PAYROLL",
+  PayrollBudgetListPage,
+);
+function PaymentBatchListRouteContent() {
+  const navigate = useNavigate();
+  return (
+    <PaymentBatchListPage
+      onOpenBatch={(id) =>
+        void navigate({ to: "/payroll/payment-batches/$batchId", params: { batchId: id } })
+      }
+    />
+  );
+}
+const payrollPaymentBatchesRoute = makeModuleRoute(
+  "/payroll/payment-batches",
+  "payroll.paymentBatches",
+  "PAYROLL",
+  PaymentBatchListRouteContent,
+);
+// Gate chi tiết đợt = cặp ĐƯỜNG TẢI của 068 (`view:payment-batch`, SENSITIVE). Khối «dòng chi trả» bên
+// trong dùng CÙNG cặp cho 070 nhưng chỉ gọi khi khối THẬT SỰ hiện — 070 ghi audit MỖI lượt đọc
+// (SPEC-11 §18.1 B), tải cho một khối đang ẩn là một hàng audit «đã xem dòng chi» không hề xảy ra.
+const payrollPaymentBatchDetailMeta: RouteMeta = {
+  routeKey: "payroll.paymentBatch.detail",
+  path: "/payroll/payment-batches/$batchId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "PAYROLL",
+  screenCode: "PAY-SCREEN-013",
+  titleKey: "routeTitle.payrollPaymentBatchDetail",
+  requiredPermissions: ["access:payroll", "view:payment-batch"],
+  showInSidebar: false,
+  order: 90.31,
+};
+const payrollPaymentBatchDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/payment-batches/$batchId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { batchId } = payrollPaymentBatchDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      payrollPaymentBatchDetailMeta,
+      "PAYROLL",
+      <PaymentBatchDetailPage
+        batchId={batchId}
+        onBack={() => void navigate({ to: "/payroll/payment-batches" as "/" })}
+      />,
+    );
+  },
+});
+
+// PAY-SCREEN-017 «Tạm ứng của tôi» — route **ME** (`access:me`), KHÔNG phải route PAYROLL. Cùng khuôn
+// `mePayslipsRoute` ngay trên: cổng THẬT là `('view-own','payroll-advance')` ở BE, không phải
+// `access:payroll` (`personal-prefs-must-not-sit-behind-permission-gate`).
+const mePayrollAdvancesRoute = makeModuleRoute(
+  "/me/payroll-advances",
+  "me.payrollAdvances",
+  "ME",
+  MePayrollAdvancesPage,
+);
 
 // ME — «Tài sản của tôi» (ASSET-SCREEN-006) mount trong ME workspace, gate bằng cặp ASSET.
 const MeAssetsPage = React.lazy(() =>
@@ -3041,6 +3142,12 @@ const routeTree = rootRoute.addChildren([
   payrollPeriodTimesheetRoute,
   payslipDetailRoute,
   mePayslipsRoute,
+  // S15-PAYROLL-FE-3 — track C (012 · 013 list+detail · 014) + 017 «Tạm ứng của tôi» (route ME).
+  payrollAdvancesRoute,
+  payrollBudgetsRoute,
+  payrollPaymentBatchesRoute,
+  payrollPaymentBatchDetailRoute,
+  mePayrollAdvancesRoute,
   goalsListRoute,
   // S5-GOAL-TPL-1 — static TRƯỚC "/goals/$goalId" (xem docblock goalTemplatesMeta).
   goalTemplatesRoute,
