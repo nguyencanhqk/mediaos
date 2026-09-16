@@ -2,6 +2,24 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-16 (k) — S15-PAYROLL-FE-3 → **PR #514 MỞ (base master, KHÔNG auto-merge)** 🟡 — chờ CI + owner merge
+
+**Bắt đầu phiên sau ở đây:** `gh pr checks 514` → xanh ⇒ owner nói rõ «cho phép merge với quyền admin» rồi `gh pr merge 514 --squash --delete-branch` (KHÔNG stacked, không xung đột dự kiến). Lúc rời phiên: gitleaks · pnpm audit · tooling tests · Build auth **pass**; Build app/console + Lint·Typecheck·RLS còn **pending**, chưa có ca đỏ. Việc kế theo backlog: **`S15-PAYROLL-FE-2`** (track B: 009/010/011) hoặc **`S15-PAYROLL-BE-5`** (7 báo cáo + PDF). **Đọc memory `s15-payroll-fe3-wave-state` TRƯỚC.** Bằng chứng đủ để người review chỉ đọc bảng: `docs/plans/S15-PAYROLL-FE-3.md` §7; quyết định D1–D12 ở §2.
+
+⚠️ **`docs/STATUS.md` CỐ Ý không commit vào nhánh** — regen lại sau khi #514 merge. Bài học phiên (i)+(j): commit STATUS xen giữa lúc PR đang mở là thứ đẩy PR sang `CONFLICTING`.
+
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:**
+
+1. 🔴 **Four-eyes tạm ứng chặn CẢ người TẠO LẪN người THỤ HƯỞNG** (`payroll-advances.service.ts:311`). SPEC-11 §9.1 viết HẸP HƠN BE («ẩn với chính người tạo»), và CHECK `payroll_advances_four_eyes_check` ở DB **chỉ soi `created_by`** ⇒ **không suy luật four-eyes từ CHECK**. Ghim ở `payroll-advance-actions.spec.ts` (19 ca).
+2. **076 trả `PayrollWriteResultDto`**, KHÔNG có báo cáo kiểu HR — dòng lỗi về qua **422** `details[]` (`row:<n>` ≤50 + `errorRows`), bóc bằng `parseKindError(e).fields`. **073 trả MẢNG TRẦN** ⇒ `apiFetch`, không `apiFetchPaginated`.
+3. **Phải `pnpm --filter @mediaos/web-core build` TRƯỚC khi chạy spec `apps/app`** — app đọc web-core từ **dist**; chưa build thì `payroll-wiring.spec.ts` đỏ 6 ca với thông điệp đánh lạc hướng («thiếu entry» dù entry đã có).
+4. `pnpm --filter @mediaos/app test` **exit 1** dù **282/282 file PASS** (IPC `Channel closed` sau teardown) — đọc số summary, đừng đọc exit code.
+5. **Mục sidebar PAYROLL tự hiện khi thêm `ROUTE_REGISTRY`** (`PAYROLL_SIDEBAR_V2` + `pruneUnbuiltScreens`) — không sửa `sidebar-registry.ts` cho màn PAYROLL.
+
+**Nợ để lại:** spec T4–T6 (gate UNC · gate dòng chi 070 · mask cột tiền 3 màn) **đẩy sang `S15-PAYROLL-QA-1`** · `ConfirmDialog` thiếu slot `children` (hộp «hoàn tất đợt» phải dùng `Dialog` trực tiếp) · `BudgetFormDialog` chưa có nút xoá mềm dù 075 hỗ trợ `{delete:true}`.
+
+**Chi phí phiên: ~$172** (hook COST CRITICAL; owner chốt «hoàn tất tối thiểu rồi PR»). 9 file màn/dialog + 8 hot-file wiring + 3 subagent (~370k token). **Bài học:** WO FE «nhiều màn» phải **đo phần ĐÃ CÓ SẴN trước khi ước lượng** — ở đây hơn nửa khối lượng dự kiến (cặp quyền · mã lỗi · i18n lỗi · 8 trạng thái · mục sidebar) đã nằm sẵn trên master, WO thực chất là wiring.
+
 ## Phiên 2026-09-16 (j) — **#513 FE-1 + #512 BE-4B ĐÃ MERGE master** (`f573ce5b` · `1fd1ab33`, owner ủy quyền `--admin`) ✅
 
 **Bắt đầu phiên sau ở đây:** master đã có track A FE (PAY-SCREEN-007/008 + form hồ sơ lương v2) và nợ gate BE-4 trả xong. Lane `mediaos_be4b` đã DROP; còn 8 lane DB cũ (`mediaos_s15*`, `mediaos_db1b`) — dọn khi rảnh (memory `pgdata-bloat-lane-dbs-and-job-log`). Không PR PAYROLL nào mở. Việc kế theo backlog: **`S15-PAYROLL-FE-3`** (track C màn hình — đọc memory `s15-payroll-fe1-wave-state` + `s15-payroll-be4b-wave-state`) hoặc `S15-PAYROLL-BE-5` (báo cáo). Nhớ đo `docs/STATUS.md` sau `init.sh` — cả hai WO phải hiện `done` qua ledger overlay.
