@@ -16134,7 +16134,7 @@ export const backlog = [
     ],
     notes: [
       "🟡 đụng web-core/contracts; phần màn hình LIGHT gate.",
-      "✅ 16/09/2026 (phiên i) — code + test xong trên nhánh feat/s15-payroll-fe-1, PR mở chờ CI + owner. Bằng chứng: docs/plans/S15-PAYROLL-FE-1.md §7 (app 281 file/2773 test · web-core 742 · typecheck app/api/web-core 0 lỗi · build vite · check.sh --quick XANH · TS reviewer PASS · code-reviewer 1 HIGH đã vá + ghim spec). Quyết định D1–D11 ở §2; nợ N1 (PayrollPeriodDetailPage 435 dòng — tách PeriodLinesSection), G3 (chưa có màn sửa/xoá phiên bản 022).",
+      "✅ 16/09/2026 (phiên i) — code + test xong trên nhánh feat/s15-payroll-fe-1, PR #513 mở chờ CI + owner. Bằng chứng: docs/plans/S15-PAYROLL-FE-1.md §7 (app 281 file/2773 test · web-core 742 · typecheck app/api/web-core 0 lỗi · build vite · check.sh --quick XANH · TS reviewer PASS · code-reviewer 1 HIGH đã vá + ghim spec). Quyết định D1–D11 ở §2; nợ N1 (PayrollPeriodDetailPage 435 dòng — tách PeriodLinesSection), G3 (chưa có màn sửa/xoá phiên bản 022).",
     ],
   },
   {

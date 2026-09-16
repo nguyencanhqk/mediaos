@@ -127,4 +127,4 @@ gate: `typescript-reviewer` + `react-reviewer` (domain FE) + `quality-gate`.
 
 **Lệch có chủ đích so với plan:** `salaryHistory.noPermission`/`insurance.noPermission` không tồn tại (gate đặt ở page cha — tab thiếu cặp thì ẩn, không có thông điệp riêng). Không đụng `packages/ui`, không DTO mới (ngoài bỏ `.default([])` ở envelope ghi track A — cùng luật với `payrollWriteResultSchema` v1).
 
-**PR:** _(điền sau khi mở)_
+**PR:** #513 (`feat/s15-payroll-fe-1` → master, commit `6e671ed0`; KHÔNG auto-merge — owner chốt sau CI).
