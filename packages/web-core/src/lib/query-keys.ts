@@ -1219,6 +1219,31 @@ export const payrollKeys = {
       [...rootKeys.payroll, "periods", "lines", id, params] as const,
     linesOf: (id: string) => [...rootKeys.payroll, "periods", "lines", id] as const,
     summary: () => [...rootKeys.payroll, "periods", "summary"] as const,
+    // S15-PAYROLL-FE-1 — PAYROLL-API-043 bảng công tổng hợp kỳ (PAY-SCREEN-008). Nhánh con của
+    // `periods` để `periods.allOf()` vẫn quét trúng sau mỗi hành động FSM (gom lại ⇒ số công đổi).
+    timesheet: (id: string, params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "periods", "timesheet", id, params] as const,
+  },
+  /**
+   * S15-PAYROLL-FE-1 — nhân sự hưởng lương (PAYROLL-API-036..042, PAY-SCREEN-007). `settings` và
+   * `dependents` neo theo `userId` (1 hàng/nhân sự · danh sách NPT của MỘT người) — cùng cách BE neo
+   * audit (SPEC-11 §18.1 B hàng 3–4). Route GHI 039/041/042 trả envelope 0 khoá PII ⇒ sau mutation phải
+   * invalidate đúng nhánh `settings(userId)` / `dependents(userId)` rồi ĐỌC LẠI, không vá cache từ kết quả.
+   */
+  employees: {
+    allOf: () => [...rootKeys.payroll, "employees"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "employees", "list", params] as const,
+    detail: (userId: string) => [...rootKeys.payroll, "employees", "detail", userId] as const,
+    settings: (userId: string) => [...rootKeys.payroll, "employees", "settings", userId] as const,
+    dependents: (userId: string) =>
+      [...rootKeys.payroll, "employees", "dependents", userId] as const,
+  },
+  /** S15-PAYROLL-FE-1 — catalog thành phần lương (PAYROLL-API-044) cho picker `items[]` của form hồ sơ lương. */
+  catalog: {
+    allOf: () => [...rootKeys.payroll, "catalog"] as const,
+    components: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "catalog", "components", params] as const,
   },
   salaryProfiles: {
     allOf: () => [...rootKeys.payroll, "salary-profiles"] as const,

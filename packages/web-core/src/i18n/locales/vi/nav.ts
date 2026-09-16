@@ -175,6 +175,10 @@ export default {
     payrollPayslipDetail: "Phiếu lương",
     payrollSalaryProfiles: "Hồ sơ lương",
     payrollBonusPenalties: "Thưởng/phạt",
+    // S15-PAYROLL-FE-1 — PAY-SCREEN-007 (list + detail) · PAY-SCREEN-008 (tab bảng công, route riêng).
+    payrollEmployees: "Nhân viên hưởng lương",
+    payrollEmployeeDetail: "Chi tiết nhân viên hưởng lương",
+    payrollPeriodTimesheet: "Bảng công kỳ",
     mePayslips: "Phiếu lương của tôi",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",

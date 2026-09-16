@@ -1,15 +1,22 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-15 17:48Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-16 00:57Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟡 S15-PAYROLL-FE-1 — FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thông tin chung · Lịch sử lương · Bảo hiểm-Công đoàn · Thuế TNCN · Gia đình) · 008 Bảng công kỳ · form hồ sơ lương v2 (NET/GROSS · đối tượng TNCN · lương BH · thử việc · tỉ lệ hưởng · phụ cấp/khấu trừ có định mức) trên vỏ UI chung
+- **zone**: yellow · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/payroll/**`, `apps/app/src/layouts/**`, `apps/app/src/router.tsx`, `apps/app/src/i18n/**`, `packages/web-core/**`, `packages/contracts/**`, `docs/plans/S15-PAYROLL-FE-1.md`, `harness/backlog.mjs`
+- **phụ thuộc**: S15-PAYROLL-BE-1✓, S15-UI-SHELL-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] Màn 007 list: toolbar chuẩn + DataTable ghim cột mã/tên + chọn cột + footer; chi tiết 5 tab; Lịch sử lương = timeline phiên bản gập được theo effective_date, form tạo phiên bản mới với bảng phụ cấp/khấu trừ (định mức · giá trị · nguồn · trạng thái); mọi trường tiền/bank/NPT .optional() — thiếu quyền không trang trắng
+  - [ ] Tab BH-Công đoàn / TNCN / Gia đình: gác đúng cặp riêng (useCanExact cho cặp sensitive, KHÔNG PermissionGate — memory sensitive-pair-widget-needs-usecanexact); NPT có hiệu lực từ/đến
+  - [ ] Màn 008 bảng công kỳ: đọc GET /payroll-periods/:id/timesheet (PAYROLL-API-043 — KHÔNG phải /me/attendance-summary của ME), cột số ngày tabular-nums, trạng thái khoá kỳ công, link sang chi tiết kỳ
+  - [ ] Loading/error/empty/409 tải lại; i18n vi namespace payroll; wiring.spec + test màn hình; typecheck/build xanh
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🟡 `S15-PAYROLL-FE-1` FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thông tin chung · Lịch sử lương · Bảo hiểm-Công đoàn · Thuế TNCN · Gia đình) · 008 Bảng công kỳ · form hồ sơ lương v2 (NET/GROSS · đối tượng TNCN · lương BH · thử việc · tỉ lệ hưởng · phụ cấp/khấu trừ có định mức) trên vỏ UI chung
 - 🟡 `S15-PAYROLL-FE-3` FE track C: PAY-SCREEN-012 Tạm ứng (list + form + duyệt) · 013 Chi trả (đợt chi · lines · xuất UNC · hoàn tất) · 014 Ngân sách lương · import dialog thu nhập/khấu trừ khác · «Tạm ứng của tôi» ở sidebar ME · chip trạng thái kỳ 8 giá trị
 - 🟡 `S15-PAYROLL-BE-5` BE track D: 7 báo cáo (tổng hợp thu nhập NV · thống kê lương theo thời gian · cơ cấu thu nhập · chi phí lương theo đơn vị · lịch sử lương NV · tổng hợp chi trả · tình hình ngân sách — SQL set-based, phân trang, XLSX) · dữ liệu Tổng quan (6 khối) + Lời nhắc (phiếu chưa phát hành · NV chính thức chưa tham gia BH · lương BH ngoài quy định) · PDF phiếu lương (pdfmake, font Việt nhúng, signed-URL, Own + batch) — gác cặp ĐỌC tiền + sàn Company + audit, KHÔNG cache
 - 🟢 `S16-SOCIAL-DOC-1` Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 + PARK · §8 15 bảng · §9 SOC-SCREEN-001..012 · §11 13 cặp feed-* + luật «tương tác đi theo view:feed» · §12 SOCIAL-ERR-001+ · §13 FSM bài/sáng kiến/bình chọn · §17 NOTI-EVENT đo dải · §22 SOC-DEC-001..010) + DB-17 + API-19 (~45 route) + §9h + SPEC-01 §17.18–17.20 + §12.13 + ghi chú fbpost là tiện ích con + DECISIONS-08 §7 bổ sung + EPIC-21 §8.22 SC-01..14 + UI-07 biến thể cổng thông tin 3 cột + README/erd/RELEASE-14 — plan-reviewer PASS trước khi mở DB-1
@@ -40,7 +47,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 1
+- **branch**: `feat/s15-payroll-fe-1` · **file đang đổi (dirty)**: 30
 - **migration head**: idx 242 — `0575_s15payrollbe3_nghi_earning_bp_four_eyes` (243 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -49,6 +56,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `b531faf8` | 2026-09-16 | chore(docs): regen STATUS + handoff phiên 16/09 (h) — S15-PAYROLL-BE-4B PR #512 mở, chờ CI + owner merge |
 | `47cf75bb` | 2026-09-16 | chore(docs): regen STATUS + handoff phiên 15/09 (g) — BE-3 #510 + BE-4 #511 đã merge master, lane be3/be4 dropped |
 | `7e7936b5` | 2026-09-16 | feat(payroll): S15-PAYROLL-BE-4 — track C: tạm ứng · đợt chi trả + tệp UNC · ngân sách · import thu nhập/khấu trừ · NOTI 024–027 (19 route 059–077) (#511) |
 | `ddca8109` | 2026-09-15 | feat(payroll): S15-PAYROLL-BE-3 — máy tính lương v2 theo mẫu + luật định/TNCN + gross-up NET (mig 0575) (#510) |
@@ -60,7 +68,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `bfc7595a` | 2026-09-13 | ci(chat): S17-CHAT-UX2-QA-2 — sàn coverage cụm chat thành CỔNG PR (#S17) (#505) |
 | `d5496c5d` | 2026-09-12 | docs(status): regen sau khi merge #503/#504 — S15-PAYROLL-BE-1 + S15-UI-SHELL-1 đóng sổ |
 | `da7d55cb` | 2026-09-12 | feat(ui): S15-UI-SHELL-1 — vỏ UI dùng chung DEC-020 + sidebar PAYROLL v2 (#S15) (#504) |
-| `442106cf` | 2026-09-12 | feat(payroll): S15-PAYROLL-BE-1 — BE track A 8 route nhân viên + hồ sơ lương v2 items[] (036–043) (#S15) (#503) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

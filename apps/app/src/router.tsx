@@ -2083,6 +2083,17 @@ const BonusPenaltyListPage = React.lazy(() =>
 const MePayslipsPage = React.lazy(() =>
   import("@/routes/payroll/MePayslipsPage").then((m) => ({ default: m.MePayslipsPage })),
 );
+// S15-PAYROLL-FE-1 — PAY-SCREEN-007 (list + detail).
+const PayrollEmployeeListPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollEmployeeListPage").then((m) => ({
+    default: m.PayrollEmployeeListPage,
+  })),
+);
+const PayrollEmployeeDetailPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollEmployeeDetailPage").then((m) => ({
+    default: m.PayrollEmployeeDetailPage,
+  })),
+);
 
 function PayrollPeriodListRouteContent() {
   const navigate = useNavigate();
@@ -2113,6 +2124,55 @@ const payrollBonusPenaltiesRoute = makeModuleRoute(
   BonusPenaltyListPage,
 );
 
+// S15-PAYROLL-FE-1 — PAY-SCREEN-007 «Nhân viên»: list qua ROUTE_REGISTRY "payroll.employees"; detail dùng
+// RouteMeta CỤC BỘ, gate = cặp ĐƯỜNG TẢI của 037 (`view:payroll-employee`, SENSITIVE — trong allowlist BE).
+// 5 tab bên trong gác THÊM từng cặp NGAY TRONG PAGE (tab thiếu cặp ⇒ ẩn). Path tĩnh "/payroll/employees"
+// và "/payroll/employees/$userId" không cạnh tranh nhau (TanStack xếp tĩnh trước param).
+function PayrollEmployeeListRouteContent() {
+  const navigate = useNavigate();
+  return (
+    <PayrollEmployeeListPage
+      onOpenEmployee={(id) =>
+        void navigate({ to: "/payroll/employees/$userId", params: { userId: id } })
+      }
+    />
+  );
+}
+const payrollEmployeesRoute = makeModuleRoute(
+  "/payroll/employees",
+  "payroll.employees",
+  "PAYROLL",
+  PayrollEmployeeListRouteContent,
+);
+const payrollEmployeeDetailMeta: RouteMeta = {
+  routeKey: "payroll.employee.detail",
+  path: "/payroll/employees/$userId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "PAYROLL",
+  screenCode: "PAY-SCREEN-007",
+  titleKey: "routeTitle.payrollEmployeeDetail",
+  requiredPermissions: ["access:payroll", "view:payroll-employee"],
+  showInSidebar: false,
+  order: 87.6,
+};
+const payrollEmployeeDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/employees/$userId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = payrollEmployeeDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      payrollEmployeeDetailMeta,
+      "PAYROLL",
+      <PayrollEmployeeDetailPage
+        userId={userId}
+        onBack={() => void navigate({ to: "/payroll/employees" as "/" })}
+      />,
+    );
+  },
+});
+
 // Gate chi tiết kỳ = gate ĐƯỜNG TẢI của chính nó (`GET /payroll-periods/:id` = view:payroll-period,
 // KHÔNG nhạy cảm). Bảng lương bên trong gác THÊM bằng view-line:payroll-period NGAY TRONG PAGE — người
 // chỉ có `approve` phải vào được trang để duyệt (DOC-1 quyết định #3: gộp hai cặp = duyệt mù).
@@ -2139,6 +2199,54 @@ const payrollPeriodDetailRoute = createRoute({
       "PAYROLL",
       <PayrollPeriodDetailPage
         periodId={periodId}
+        tab="lines"
+        onTabChange={(tab) => {
+          if (tab === "timesheet") {
+            void navigate({ to: "/payroll/periods/$periodId/timesheet", params: { periodId } });
+          }
+        }}
+        onBack={() => void navigate({ to: "/payroll/periods" as "/" })}
+        onOpenPayslip={(id) =>
+          void navigate({ to: "/payroll/payslips/$payslipId", params: { payslipId: id } })
+        }
+      />,
+    );
+  },
+});
+
+// S15-PAYROLL-FE-1 — PAY-SCREEN-008 «Bảng công kỳ» = TAB của chi tiết kỳ với route riêng để deep-link
+// (UI-07 §21.8 v1.1a: KHÔNG lên sidebar vì bám một kỳ). Gate = cặp ĐƯỜNG TẢI của 043
+// (`view-line:payroll-period`, SENSITIVE) — CHẶT hơn route cha (`view:payroll-period`): người chỉ có
+// `approve` vào được chi tiết kỳ nhưng không vào được bảng công, đúng như tab «Bảng công» bị ẩn với họ.
+const payrollPeriodTimesheetMeta: RouteMeta = {
+  routeKey: "payroll.period.timesheet",
+  path: "/payroll/periods/$periodId/timesheet",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "PAYROLL",
+  screenCode: "PAY-SCREEN-008",
+  titleKey: "routeTitle.payrollPeriodTimesheet",
+  requiredPermissions: ["access:payroll", "view-line:payroll-period"],
+  showInSidebar: false,
+  order: 88.15,
+};
+const payrollPeriodTimesheetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/periods/$periodId/timesheet",
+  beforeLoad: authGuard,
+  component: () => {
+    const { periodId } = payrollPeriodTimesheetRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      payrollPeriodTimesheetMeta,
+      "PAYROLL",
+      <PayrollPeriodDetailPage
+        periodId={periodId}
+        tab="timesheet"
+        onTabChange={(tab) => {
+          if (tab === "lines") {
+            void navigate({ to: "/payroll/periods/$periodId", params: { periodId } });
+          }
+        }}
         onBack={() => void navigate({ to: "/payroll/periods" as "/" })}
         onOpenPayslip={(id) =>
           void navigate({ to: "/payroll/payslips/$payslipId", params: { payslipId: id } })
@@ -2927,6 +3035,10 @@ const routeTree = rootRoute.addChildren([
   payrollSalaryProfilesRoute,
   payrollBonusPenaltiesRoute,
   payrollPeriodDetailRoute,
+  // S15-PAYROLL-FE-1
+  payrollEmployeesRoute,
+  payrollEmployeeDetailRoute,
+  payrollPeriodTimesheetRoute,
   payslipDetailRoute,
   mePayslipsRoute,
   goalsListRoute,

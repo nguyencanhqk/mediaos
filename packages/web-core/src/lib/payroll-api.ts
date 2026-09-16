@@ -55,6 +55,8 @@ import {
   type ApiBlobResult,
 } from "./api-client";
 import { buildQueryString } from "./api-params";
+// S15-PAYROLL-FE-1 — track A v2 (036–043) + catalog 044 tách file, spread vào `payrollApi` bên dưới.
+import { payrollEmployeesApi } from "./payroll-employees-api";
 
 /**
  * S13-PAYROLL-FE-1 — PAYROLL API client (SPEC-11 §15, PAYROLL-API-001..035). MIRROR BE 6 controller:
@@ -370,4 +372,7 @@ export const payrollApi = {
       `/payroll/pickers/attendance-periods${buildQueryString(query ?? {})}`,
       z.array(payrollAttendancePeriodRefSchema),
     ),
+
+  // ── S15-PAYROLL-FE-1 — track A v2 036–043 + catalog 044 (`payroll-employees-api.ts`) ───────────
+  ...payrollEmployeesApi,
 };

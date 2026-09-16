@@ -109,6 +109,13 @@ export function SalaryProfileListPage() {
         ),
       },
       {
+        // S15-PAYROLL-FE-1 — v2 GROSS/NET; đi cùng cổng mask với `baseSalary` (vắng khoá ⇒ `—`).
+        id: "salaryType",
+        header: t("salaryProfiles.columns.salaryType"),
+        cell: ({ row }) =>
+          row.original.salaryType ? t(`salaryType.${row.original.salaryType}`) : "—",
+      },
+      {
         id: "allowances",
         header: t("salaryProfiles.columns.allowances"),
         cell: ({ row }) =>
@@ -128,6 +135,7 @@ export function SalaryProfileListPage() {
         ? []
         : [
             { id: "baseSalary", label: t("salaryProfiles.columns.baseSalary") },
+            { id: "salaryType", label: t("salaryProfiles.columns.salaryType") },
             { id: "allowances", label: t("salaryProfiles.columns.allowances") },
           ]),
     ],

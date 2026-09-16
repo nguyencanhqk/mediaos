@@ -1858,6 +1858,22 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 90,
   },
+  // S15-PAYROLL-FE-1 — PAY-SCREEN-007 «Nhân viên» (SPEC-11 §9.1). Gate = cặp ĐƯỜNG TẢI của 036
+  // (`view:payroll-employee` — SENSITIVE, đã ở cả hai allowlist BE từ DB-1). Mục sidebar «Nhân viên» đã
+  // khai sẵn trong `PAYROLL_SIDEBAR_V2` và tự hiện khi path này có mặt ở đây (`pruneUnbuiltScreens`).
+  // Chi tiết `/payroll/employees/$userId` + tab bảng công `/payroll/periods/$periodId/timesheet` dùng
+  // RouteMeta CỤC BỘ trong router.tsx (mẫu 002/003).
+  {
+    routeKey: "payroll.employees",
+    path: "/payroll/employees",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-007",
+    titleKey: "routeTitle.payrollEmployees",
+    requiredPermissions: ["access:payroll", "view:payroll-employee"],
+    showInSidebar: true,
+    order: 87.5,
+  },
 
   // System
   {
