@@ -1274,6 +1274,43 @@ export const payrollKeys = {
       [...rootKeys.payroll, "me-payslips", "list", params] as const,
     detail: (id: string) => [...rootKeys.payroll, "me-payslips", "detail", id] as const,
   },
+  /** S15-PAYROLL-FE-3 — tạm ứng quản trị (PAYROLL-API-059/061). */
+  advances: {
+    allOf: () => [...rootKeys.payroll, "advances"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "advances", "list", params] as const,
+    detail: (id: string) => [...rootKeys.payroll, "advances", "detail", id] as const,
+  },
+  /**
+   * S15-PAYROLL-FE-3 — nhánh Own (065). Sổ RIÊNG với `advances` ở trên, **cùng lý do `mePayslips` vs
+   * `payslips`**: hai đường tải khác cặp quyền (`view:payroll-advance` vs `view-own:payroll-advance`)
+   * và trả tập khác nhau (Own chỉ khoản của chính caller). Gộp một khoá là nhân viên đọc trúng cache
+   * của màn quản trị và ngược lại. Không có `detail` — 065 chỉ có route danh sách.
+   */
+  meAdvances: {
+    allOf: () => [...rootKeys.payroll, "me-advances"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "me-advances", "list", params] as const,
+  },
+  /**
+   * S15-PAYROLL-FE-3 — đợt chi trả (066/068/070). `lines` là nhánh CON của đợt để `allOf()` quét trúng
+   * sau mỗi lượt đánh dấu đã chi / hoàn tất (số dòng + trạng thái đợt đổi cùng lúc).
+   */
+  paymentBatches: {
+    allOf: () => [...rootKeys.payroll, "payment-batches"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "payment-batches", "list", params] as const,
+    detail: (id: string) => [...rootKeys.payroll, "payment-batches", "detail", id] as const,
+    lines: (id: string, params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "payment-batches", "lines", id, params] as const,
+    linesOf: (id: string) => [...rootKeys.payroll, "payment-batches", "lines", id] as const,
+  },
+  /** S15-PAYROLL-FE-3 — ngân sách lương (073). Không phân trang, không route chi tiết. */
+  budgets: {
+    allOf: () => [...rootKeys.payroll, "budgets"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "budgets", "list", params] as const,
+  },
   pickers: {
     people: (params?: Record<string, unknown>) =>
       [...rootKeys.payroll, "pickers", "people", params] as const,

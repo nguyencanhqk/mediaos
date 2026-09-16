@@ -57,6 +57,8 @@ import {
 import { buildQueryString } from "./api-params";
 // S15-PAYROLL-FE-1 — track A v2 (036–043) + catalog 044 tách file, spread vào `payrollApi` bên dưới.
 import { payrollEmployeesApi } from "./payroll-employees-api";
+// S15-PAYROLL-FE-3 — track C (059–077) tách file, spread vào `payrollApi` bên dưới.
+import { payrollDisbursementApi } from "./payroll-disbursement-api";
 
 /**
  * S13-PAYROLL-FE-1 — PAYROLL API client (SPEC-11 §15, PAYROLL-API-001..035). MIRROR BE 6 controller:
@@ -375,4 +377,7 @@ export const payrollApi = {
 
   // ── S15-PAYROLL-FE-1 — track A v2 036–043 + catalog 044 (`payroll-employees-api.ts`) ───────────
   ...payrollEmployeesApi,
+
+  // ── S15-PAYROLL-FE-3 — track C 059–077 (`payroll-disbursement-api.ts`) ────────────────────────
+  ...payrollDisbursementApi,
 };

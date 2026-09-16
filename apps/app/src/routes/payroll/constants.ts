@@ -151,6 +151,22 @@ export const PAYROLL_PERIOD_STATUSES = [
 /** 3 trạng thái thưởng/phạt (SPEC-01 §17.17). */
 export const BONUS_PENALTY_STATUSES = ["Pending", "Approved", "Rejected"] as const;
 
+/**
+ * S15-PAYROLL-FE-3 — 4 trạng thái tạm ứng, mirror `payrollAdvanceStatusEnum` của contracts
+ * (= CHECK `payroll_advances_status_check`). `Deducted` là trạng thái CUỐI do máy tính lương đặt khi
+ * khoản đã vào phiếu — không có nút nào của FE đưa tới nó.
+ */
+export const PAYROLL_ADVANCE_STATUSES = ["Pending", "Approved", "Rejected", "Deducted"] as const;
+
+/**
+ * S15-PAYROLL-FE-3 — 3 trạng thái đợt chi trả, mirror `paymentBatchStatusEnum`.
+ * ⚠️ `Completed` **không** đặt được qua PATCH 069 (enum body RIÊNG `Draft|Ready`) — chỉ 072 tới được.
+ */
+export const PAYMENT_BATCH_STATUSES = ["Draft", "Ready", "Completed"] as const;
+
+/** S15-PAYROLL-FE-3 — hình thức chi trả, mirror `paymentBatchMethodEnum`. */
+export const PAYMENT_BATCH_METHODS = ["bank", "cash"] as const;
+
 /** Trần trang mặc định — khớp `PAYROLL_PAGE_DEFAULT` của contracts (max 100). */
 export const PAYROLL_PAGE_SIZE = 20;
 
@@ -181,6 +197,21 @@ export const BONUS_PENALTY_STATUS_BADGE_VARIANT: Readonly<Record<string, BadgeVa
   Pending: "warning",
   Approved: "success",
   Rejected: "danger",
+};
+
+/** S15-PAYROLL-FE-3 — tạm ứng. `Deducted` trung tính: đã xong vòng đời, không phải "thành công" mới. */
+export const PAYROLL_ADVANCE_STATUS_BADGE_VARIANT: Readonly<Record<string, BadgeVariant>> = {
+  Pending: "warning",
+  Approved: "success",
+  Rejected: "danger",
+  Deducted: "muted",
+};
+
+/** S15-PAYROLL-FE-3 — đợt chi trả. `Completed` là terminal (trigger DB đóng băng đợt). */
+export const PAYMENT_BATCH_STATUS_BADGE_VARIANT: Readonly<Record<string, BadgeVariant>> = {
+  Draft: "muted",
+  Ready: "warning",
+  Completed: "success",
 };
 
 export const BONUS_KIND_BADGE_VARIANT: Readonly<Record<string, BadgeVariant>> = {

@@ -875,6 +875,20 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 24,
     requiredPermissions: ["access:me"],
   },
+  // S15-PAYROLL-FE-3 — «Tạm ứng của tôi» (PAY-SCREEN-017, GET /me/payroll-advances). CÙNG kỹ thuật
+  // me.payslips ngay trên: gate `access:me`, KHÔNG phải cặp PAYROLL. Cặp đường tải là
+  // `view-own:payroll-advance` — nghĩa của nó là «khoản tạm ứng của chính tôi», không phải «quyền vào
+  // module tiền lương». Ai chưa có khoản nào thì màn hiện RỖNG (065 trả danh sách rỗng, không lỗi).
+  {
+    sidebarKey: "me.payrollAdvances",
+    moduleCode: "ME",
+    label: "Tạm ứng của tôi",
+    path: "/me/payroll-advances",
+    icon: "hand-coins",
+    group: "Công việc của tôi",
+    order: 25,
+    requiredPermissions: ["access:me"],
+  },
   // S11-ASSET-FE-1 — «Tài sản của tôi» (ASSET-SCREEN-006, GET /me/assets). Gate = cặp ASSET (KHÁC các
   // mục ME khác dùng access:me), cùng kỹ thuật me.lms dùng access:lms: quyền xem tài sản độc lập với
   // quyền vào Personal Hub — ai bị thu view:asset KHÔNG thấy mục này. ĐỦ CẢ HAI vì trang tải GET
@@ -1397,8 +1411,7 @@ export const PAYROLL_SIDEBAR_V2: readonly SidebarItemMeta[] = [
  * Bản ĐĂNG KÝ = cấu trúc v2 đã cắt mục chưa có màn. Hôm nay còn 3 màn thật (kỳ lương · hồ sơ lương ·
  * thưởng/phạt); mỗi WO sau thêm route là mục tương ứng tự xuất hiện.
  */
-export const PAYROLL_SIDEBAR: readonly SidebarItemMeta[] =
-  pruneUnbuiltScreens(PAYROLL_SIDEBAR_V2);
+export const PAYROLL_SIDEBAR: readonly SidebarItemMeta[] = pruneUnbuiltScreens(PAYROLL_SIDEBAR_V2);
 
 // ---------------------------------------------------------------------------
 // Map moduleCode → sidebar items

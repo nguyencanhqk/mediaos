@@ -179,7 +179,14 @@ export default {
     payrollEmployees: "Nhân viên hưởng lương",
     payrollEmployeeDetail: "Chi tiết nhân viên hưởng lương",
     payrollPeriodTimesheet: "Bảng công kỳ",
+    // S15-PAYROLL-FE-3 — PAY-SCREEN-012 · 013 (list + chi tiết) · 014. `mePayrollAdvances` nằm trong
+    // khối ME ngay dưới (route `access:me`), KHÔNG phải route PAYROLL.
+    payrollAdvances: "Tạm ứng",
+    payrollBudgets: "Ngân sách lương",
+    payrollPaymentBatches: "Chi trả",
+    payrollPaymentBatchDetail: "Chi tiết đợt chi trả",
     mePayslips: "Phiếu lương của tôi",
+    mePayrollAdvances: "Tạm ứng của tôi",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

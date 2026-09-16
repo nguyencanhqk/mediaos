@@ -241,3 +241,94 @@ export function canDecideBonusPenalty(
   if (!hasApprovePermission || item.status !== "Pending") return false;
   return currentUserId === null || item.createdBy !== currentUserId;
 }
+
+// ── Tạm ứng (SPEC-11 §13 · PAYROLL-API-059..064) ──────────────────────────────────────────────────
+
+/** Lát cắt tối thiểu của một khoản tạm ứng cần để suy nút. */
+export interface PayrollAdvanceActionSubject {
+  readonly status: "Pending" | "Approved" | "Rejected" | "Deducted";
+  /** `!== null` ⇒ đã gắn vào kỳ lương (đã khấu trừ) — khoá sửa (409 `PAYROLL-ERR-025`). */
+  readonly payrollPeriodId: string | null;
+  /** Người TẠO phiếu tạm ứng. `null` khi hàng di sản không có `created_by`. */
+  readonly createdBy: string | null;
+  /** Người THỤ HƯỞNG khoản tạm ứng — vế thứ hai của four-eyes. */
+  readonly userId: string;
+}
+
+/** Sửa/xoá mềm chỉ khi còn `Pending` **và** chưa khấu trừ — mirror tiền-kiểm dưới `FOR UPDATE` của BE. */
+export function canEditAdvance(
+  item: PayrollAdvanceActionSubject,
+  hasManagePermission: boolean,
+): boolean {
+  return hasManagePermission && item.status === "Pending" && item.payrollPeriodId === null;
+}
+
+/**
+ * Duyệt/từ chối tạm ứng — **four-eyes RỘNG HƠN thưởng/phạt**.
+ *
+ * ⚠️ BE chặn **CẢ HAI** vế (`payroll-advances.service.ts`: `before.createdBy === user.id ||
+ * before.userId === user.id` ⇒ 409 `PAYROLL-ERR-025 self-approval`): người TẠO **hoặc** người THỤ
+ * HƯỞNG đều không tự quyết định được. CHECK `payroll_advances_four_eyes_check` ở DB chỉ soi
+ * `created_by` — vế thụ hưởng sống ở service, nên **không** suy luật từ CHECK.
+ *
+ * SPEC-11 §9.1 chỉ viết «ẩn với chính người tạo» — **hẹp hơn BE**. Theo BE: thiếu vế thụ hưởng thì
+ * người được cấp tạm ứng vẫn thấy nút «Duyệt» trên khoản của chính mình rồi ăn 409.
+ *
+ * `currentUserId === null` ⇒ KHÔNG chặn ở FE (fail-open, cùng lý do `isFourEyesBlocked`: BE vẫn chặn,
+ * còn fail-closed sẽ giấu nút khỏi mọi người trong khoảnh khắc `/auth/me` chưa về).
+ */
+export function canDecideAdvance(
+  item: PayrollAdvanceActionSubject,
+  hasApprovePermission: boolean,
+  currentUserId: string | null,
+): boolean {
+  if (!hasApprovePermission || item.status !== "Pending") return false;
+  if (currentUserId === null) return true;
+  return item.createdBy !== currentUserId && item.userId !== currentUserId;
+}
+
+// ── Đợt chi trả (SPEC-11 §13.1 · PAYROLL-API-066..072) ────────────────────────────────────────────
+
+/** Lát cắt tối thiểu của một đợt chi trả cần để suy nút. */
+export interface PaymentBatchActionSubject {
+  readonly status: "Draft" | "Ready" | "Completed";
+  /** Số dòng còn hiệu lực (đã trừ dòng xoá mềm). */
+  readonly lineCount: number;
+  /** Số dòng đã đánh dấu `paid_at`. */
+  readonly paidLineCount: number;
+  /** Người LẬP đợt — vế four-eyes của 072 (`batch-four-eyes`). */
+  readonly createdBy: string | null;
+}
+
+/** Sửa đợt (069) chỉ khi chưa hoàn tất — `Completed` là terminal, trigger DB đóng băng đợt. */
+export function canEditPaymentBatch(
+  batch: PaymentBatchActionSubject,
+  hasManagePermission: boolean,
+): boolean {
+  return hasManagePermission && batch.status !== "Completed";
+}
+
+/**
+ * Nút «Hoàn tất» (072) — **ẩn thay vì hiện rồi 409** (SPEC-11 §14 · UI-07 Lưu ý UX 1). Ba vế ẩn map
+ * đúng ba lỗi BE: `batch-already-completed` (027) · `batch-empty` (028) · `batch-four-eyes`.
+ *
+ * ⚠️ **KHÔNG** ẩn khi còn dòng chưa chi. Đó là ca HỢP LỆ: 072 nhận `confirmAllPaid: true` để ghi
+ * `paid_at` cho mọi dòng trong CÙNG tx. Ẩn ở đây sẽ khoá chết một đợt hợp lệ; `batch-incomplete` chỉ
+ * phát khi người dùng cố hoàn tất mà KHÔNG tick ô xác nhận (xem `paymentBatchHasUnpaidLines`).
+ *
+ * ⚠️ Không cần tải trạng thái KỲ để suy nút: đợt chỉ lập được từ kỳ `Published`, và `Published` không
+ * mở lại được (`REOPEN_TERMINAL_STATUSES`) ⇒ kỳ của một đợt đang tồn tại luôn ≥ `Published`.
+ */
+export function canCompletePaymentBatch(
+  batch: PaymentBatchActionSubject,
+  hasManagePermission: boolean,
+  currentUserId: string | null,
+): boolean {
+  if (!hasManagePermission || batch.status === "Completed" || batch.lineCount === 0) return false;
+  return currentUserId === null || batch.createdBy !== currentUserId;
+}
+
+/** Còn dòng chưa đánh dấu đã chi ⇒ hộp xác nhận phải hiện ô «Xác nhận đã chi tất cả» (`confirmAllPaid`). */
+export function paymentBatchHasUnpaidLines(batch: PaymentBatchActionSubject): boolean {
+  return batch.paidLineCount < batch.lineCount;
+}
