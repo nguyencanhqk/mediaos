@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**502 WO** · có micro-plan: **299/502** · ⬜ 19 chờ · 🔵 1 đang làm · ✅ 481 xong · 🔴 1 chặn
+**502 WO** · có micro-plan: **299/502** · ⬜ 19 chờ · 🔵 0 đang làm · ✅ 482 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -541,8 +541,8 @@
 | `S15-PAYROLL-BE-2` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-2.md) | ✅S15-PAYROLL-DB-1 | BE track B (1/2): catalog thành phần lương (044–048) + mẫu bảng lương  |
 | `S15-PAYROLL-DB-1B` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-1B.md) | ✅S15-PAYROLL-BE-2 | Vá công thức seed LUONG_CO_BAN đang trừ HAI LẦN ngày nghỉ không lương  |
 | `S15-PAYROLL-BE-3` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-3.md) | ✅S15-PAYROLL-BE-2 ✅S15-PAYROLL-DB-2 ✅S15-PAYROLL-DB-1B | BE track B (2/2): máy tính lương v2 — evaluate theo mẫu của kỳ · engin |
-| `S15-PAYROLL-FE-1` | 🟡 | 🔵 đang làm | [📄](S15-PAYROLL-FE-1.md) | ✅S15-PAYROLL-BE-1 ✅S15-UI-SHELL-1 | FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thôn |
-| `S15-PAYROLL-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 ⏳S15-PAYROLL-FE-1 | FE track B: PAY-SCREEN-009 Thành phần lương (catalog + editor công thứ |
+| `S15-PAYROLL-FE-1` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-1.md) | ✅S15-PAYROLL-BE-1 ✅S15-UI-SHELL-1 | FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thôn |
+| `S15-PAYROLL-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-FE-1 | FE track B: PAY-SCREEN-009 Thành phần lương (catalog + editor công thứ |
 | `S15-PAYROLL-DB-2` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-2.md) | ✅S15-PAYROLL-DB-1 | Schema + migration PAYROLL v2 track C: 4 bảng (payroll_advances · payr |
 | `S15-PAYROLL-BE-4` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-4.md) | ✅S15-PAYROLL-DB-2 ✅S15-PAYROLL-BE-3 | BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four- |
 | `S15-PAYROLL-BE-4B` | 🟡 | ✅ xong | — *(chưa)* | ✅S15-PAYROLL-BE-4 | Nợ FULL gate BE-4 (15/09/2026): lọc users.status ở PayrollPairHoldersR |

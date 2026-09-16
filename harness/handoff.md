@@ -2,6 +2,14 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-16 (i) — S15-PAYROLL-FE-1 → **PR #513 MỞ (base master, KHÔNG auto-merge)** 🟡 — chờ CI + owner merge
+
+**Bắt đầu phiên sau ở đây:** `gh pr checks 513` (và #512 BE-4B vẫn đang mở, CI xanh, BEHIND master) → xanh ⇒ owner nói rõ «cho phép merge với quyền admin» rồi `gh pr merge <n> --squash --delete-branch` (hai PR độc lập, không stacked; merge #512 trước thì #513 cần `gh pr update-branch` hoặc merge thường — không xung đột file dự kiến: #512 chỉ đụng `apps/api` + contracts `payroll-disbursement.ts`). Việc kế theo backlog: **`S15-PAYROLL-FE-3`** (track C: tạm ứng · chi trả · ngân sách — đọc memory `s15-payroll-fe1-wave-state` + `s15-payroll-be4b-wave-state` trước) hoặc `S15-PAYROLL-BE-5`. Bằng chứng FE-1 đủ để người review chỉ đọc bảng: `docs/plans/S15-PAYROLL-FE-1.md` §7; quyết định D1–D11 ở §2.
+
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:** (1) Trang chi tiết dùng chung cho hai route (`/periods/:id` · `/periods/:id/timesheet`) ⇒ **mọi query trên route nhạy cảm có audit phải `enabled` theo tab ĐANG hiện**, không chỉ theo quyền — code-reviewer bắt HIGH, đã vá + ghim `payroll-period-tabs.spec.tsx`. (2) `.default([])` trên schema PHẢN HỒI làm **build** web-core đỏ dù `tsc --noEmit` của package xanh (`apiFetch<T>` suy T về input) — đo bằng turbo `typecheck` (dependsOn `^build`), không phải tsc lẻ. (3) `findByText` ném «multiple elements» khi họ tên xuất hiện ở header LẪN tab — dùng `findAllByText`/`findByRole`. (4) Query 008 `lines` gọi NGAY khi mount (không chờ 003) ⇒ test phải chờ dải tab xuất hiện trước khi assert. (5) Chi phí: ~$46 tới lúc mở PR (plan + ~25 file + 6 spec + 2 reviewer tĩnh song song ~400k token subagent).
+
+**Nợ để lại (plan §6):** N1 `PayrollPeriodDetailPage.tsx` 435 dòng (tách `PeriodLinesSection`) · G3 chưa có màn sửa/xoá phiên bản hồ sơ lương (022) · 4 file prettier drift CÓ SẴN trên master (`StatusBadges.tsx` · `system.ts` · `api-params.ts` · `two-factor-api.spec.ts`) — không thuộc WO, dọn khi có WO format.
+
 ## Phiên 2026-09-16 (h) — S15-PAYROLL-BE-4B → **PR #512 MỞ (base master, KHÔNG auto-merge)** 🟡 — chờ CI + owner merge
 
 **Bắt đầu phiên sau ở đây:** `gh pr checks 512` → xanh ⇒ owner nói rõ «cho phép merge với quyền admin» rồi `gh pr merge 512 --squash --delete-branch` (KHÔNG stacked). Sau merge: DROP lane `mediaos_be4b` (`docker exec mediaos-postgres psql -U mediaos -d postgres -c "DROP DATABASE mediaos_be4b"`). Việc kế theo backlog: **`S15-PAYROLL-FE-1`** (deps BE-1 + UI-SHELL-1 đã xong — đọc memory `s15-ui-shell-1-wave-state` trước) → FE-2/FE-3 → BE-5. Bằng chứng BE-4B đủ để người review chỉ đọc bảng: `docs/plans/S15-PAYROLL-BE-4B.md` §3 (RED/GREEN · cov 94,37 %/86,43 % · check.sh lane XANH · đột biến 3 ca đỏ · 2 reviewer PASS). Nợ để lại §4: be4-batches int-spec 945 dòng · comment `auth.service.ts:90-91` sai state-space (ngoài paths) · QA-1 đột biến (k).
