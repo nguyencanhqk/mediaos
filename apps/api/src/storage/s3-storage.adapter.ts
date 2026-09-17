@@ -12,18 +12,16 @@
  *     any provided TTL is clamped to MAX_PRESIGN_TTL_SEC to prevent accidentally long-lived URLs.
  *
  * Method mapping:
- *   PORT `put`        → ObjectStorageService.putObject(key, body, contentType)
- *   PORT `get`        → ObjectStorageService.createDownloadUrl(key, companyId)       [presigned GET]
- *   PORT `delete`     → ObjectStorageService.deleteObject(key)
- *   PORT `signedUrl`  → ObjectStorageService.createUploadUrl(key, contentType, size) [presigned PUT]
+ *   PORT `put`        → ObjectStorageService.putObject(key, body, contentType, companyId)
+ *   PORT `get`        → ObjectStorageService.createDownloadUrl(key, companyId, ttl)  [presigned GET]
+ *   PORT `delete`     → ObjectStorageService.deleteObject(key, companyId)
+ *   PORT `signedUrl`  → ObjectStorageService.createUploadUrl(key, type, size, ttl)   [presigned PUT]
  *   PORT `stat`       → ObjectStorageService.statObject(key, companyId)              [HEAD — S2-FND-FILE-2]
  *   PORT `getBytes`   → ObjectStorageService.getObjectBytes(key, companyId)          [GET bytes — S2-FND-FILE-2]
  *
- * NOTE: ObjectStorageService.createDownloadUrl uses config.presignTtlSec internally (no TTL param).
- * For the PORT's `get` method we therefore use the adapter's resolved TTL only to compute `expiresAt`;
- * the actual S3 TTL comes from the service (matches env S3_PRESIGN_TTL_SEC, same source of truth).
- * Similarly, createUploadUrl uses config.presignTtlSec for the signed expiry. Both expiresAt values
- * are computed as `now + presignTtlSec` using the same env value to keep them consistent.
+ * TTL: the adapter resolves ONE effective TTL (per-call override or env, clamped) and passes it to BOTH the
+ * signer and `expiresAt` — so `expiresAt` is the real signature expiry. (Before S15-PAYROLL-BE-5B the
+ * per-call TTL only moved `expiresAt` while the signature kept the env TTL.)
  */
 
 import { Injectable, Logger } from "@nestjs/common";
@@ -57,7 +55,7 @@ export class S3StorageAdapter implements StorageAdapter {
    * (ObjectStorageService re-validates internally as a hard boundary — double-check is intentional).
    */
   async put(input: StoragePutInput): Promise<void> {
-    await this.objectStorage.putObject(input.key, input.body, input.contentType);
+    await this.objectStorage.putObject(input.key, input.body, input.contentType, input.companyId);
   }
 
   // ─── get ────────────────────────────────────────────────────────────────────────────────────────
@@ -71,7 +69,7 @@ export class S3StorageAdapter implements StorageAdapter {
    */
   async get(input: StorageGetInput): Promise<SignedUrlResult> {
     const ttlSec = this.resolveTtl(input.presignTtlSec);
-    const url = await this.objectStorage.createDownloadUrl(input.key, input.companyId);
+    const url = await this.objectStorage.createDownloadUrl(input.key, input.companyId, ttlSec);
     return { url, expiresAt: this.expiresAt(ttlSec) };
   }
 
@@ -82,7 +80,7 @@ export class S3StorageAdapter implements StorageAdapter {
    * Key is re-validated inside ObjectStorageService.deleteObject (hard boundary).
    */
   async delete(input: StorageDeleteInput): Promise<void> {
-    await this.objectStorage.deleteObject(input.key);
+    await this.objectStorage.deleteObject(input.key, input.companyId);
   }
 
   // ─── signedUrl ───────────────────────────────────────────────────────────────────────────────────
@@ -97,6 +95,7 @@ export class S3StorageAdapter implements StorageAdapter {
       input.key,
       input.contentType,
       input.sizeBytes,
+      ttlSec,
     );
     return { url, expiresAt: this.expiresAt(ttlSec) };
   }

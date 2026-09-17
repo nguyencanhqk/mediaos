@@ -30,7 +30,13 @@ vi.mock("@aws-sdk/client-s3", async () => {
 });
 
 // Import AFTER the mock is registered (hoisted by vitest) so ObjectStorageService picks it up.
-import { HeadObjectCommand, GetObjectCommand, NotFound } from "@aws-sdk/client-s3";
+import {
+  HeadObjectCommand,
+  GetObjectCommand,
+  NotFound,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { ObjectStorageService, StorageNotConfiguredError } from "./object-storage.service";
 import { InvalidStorageKeyError } from "./storage-key";
 
@@ -192,6 +198,68 @@ describe("ObjectStorageService.getObjectBytes", () => {
     sendMock.mockRejectedValueOnce(notFound);
     const service = new ObjectStorageService();
     await expect(service.getObjectBytes(KEY_A, COMPANY_A)).rejects.toBe(notFound);
+    restoreEnv(envSnap);
+  });
+});
+
+describe("ObjectStorageService.putObject (S15-PAYROLL-BE-5B)", () => {
+  let envSnap: EnvSnapshot;
+
+  beforeEach(() => {
+    envSnap = snapshotEnv();
+    sendMock.mockReset();
+  });
+
+  it("rejects a key outside the caller's tenant prefix BEFORE calling the SDK", async () => {
+    setConfiguredEnv();
+    const service = new ObjectStorageService();
+    await expect(
+      service.putObject(KEY_A, new Uint8Array([1]), "application/pdf", COMPANY_B),
+    ).rejects.toBeInstanceOf(InvalidStorageKeyError);
+    expect(sendMock).not.toHaveBeenCalled();
+    restoreEnv(envSnap);
+  });
+
+  it("PUTs the bytes with the declared content type for an in-tenant key", async () => {
+    setConfiguredEnv();
+    sendMock.mockResolvedValue({});
+    const service = new ObjectStorageService();
+    const body = new Uint8Array([1, 2]);
+    await service.putObject(KEY_A, body, "application/zip", COMPANY_A);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const command = sendMock.mock.calls[0][0] as PutObjectCommand;
+    expect(command).toBeInstanceOf(PutObjectCommand);
+    expect(command.input).toMatchObject({ Key: KEY_A, Body: body, ContentType: "application/zip" });
+    restoreEnv(envSnap);
+  });
+});
+
+describe("ObjectStorageService.deleteObject (S15-PAYROLL-BE-5B)", () => {
+  let envSnap: EnvSnapshot;
+
+  beforeEach(() => {
+    envSnap = snapshotEnv();
+    sendMock.mockReset();
+  });
+
+  it("rejects a key outside the caller's tenant prefix BEFORE calling the SDK", async () => {
+    setConfiguredEnv();
+    const service = new ObjectStorageService();
+    await expect(service.deleteObject(KEY_A, COMPANY_B)).rejects.toBeInstanceOf(
+      InvalidStorageKeyError,
+    );
+    expect(sendMock).not.toHaveBeenCalled();
+    restoreEnv(envSnap);
+  });
+
+  it("sends DeleteObjectCommand for an in-tenant key", async () => {
+    setConfiguredEnv();
+    sendMock.mockResolvedValue({});
+    const service = new ObjectStorageService();
+    await service.deleteObject(KEY_A, COMPANY_A);
+    const command = sendMock.mock.calls[0][0] as DeleteObjectCommand;
+    expect(command).toBeInstanceOf(DeleteObjectCommand);
+    expect(command.input).toMatchObject({ Key: KEY_A });
     restoreEnv(envSnap);
   });
 });

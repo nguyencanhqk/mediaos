@@ -41,12 +41,13 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
     beEntries.set(key, { action, resourceType, isSensitive: isSensitive === "true" });
   }
 
-  it("đọc được đủ 82 route pair từ file BE (regex census không mù)", () => {
+  it("đọc được đủ 85 route pair từ file BE (regex census không mù)", () => {
     // S15-PAYROLL-BE-1: +8 route track A (036–043) ⇒ 35 → 43.
     // S15-PAYROLL-BE-2: +15 route track B (044–058) ⇒ 43 → 58.
     // S15-PAYROLL-BE-4: +19 route track C (059–077) ⇒ 58 → 77.
     // S15-PAYROLL-BE-5: +5 route track D phần 1 (078–082) ⇒ 77 → 82.
-    expect(beEntries.size).toBe(82);
+    // S15-PAYROLL-BE-5B: +3 route PDF (083–085) ⇒ 82 → 85 (không cặp mới ⇒ số cặp distinct giữ nguyên).
+    expect(beEntries.size).toBe(85);
   });
 
   it("mỗi khoá PAYROLL_ENGINE_PAIRS khớp ĐÚNG action/resourceType/isSensitive của BE", () => {
@@ -59,7 +60,7 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
     }
   });
 
-  it("không thiếu/thừa khoá nào so với BE (82 = 82)", () => {
+  it("không thiếu/thừa khoá nào so với BE (85 = 85)", () => {
     expect(Object.keys(PAYROLL_ENGINE_PAIRS).sort()).toEqual([...beEntries.keys()].sort());
   });
 
