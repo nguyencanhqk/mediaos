@@ -2,6 +2,14 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-17 (p) — **S15-PAYROLL-BE-5B ĐÃ MERGE master** (#518 → `b1fdbb94`, owner uỷ quyền `--admin`) ✅ · FE-4 đang làm trên nhánh
+
+**Bắt đầu phiên sau ở đây:** master có PDF phiếu lương 083/084/085 + `ServerFileService` + job dọn tệp tạm xoá object. CI #518 xanh toàn bộ trước merge (đã kiểm từng kết luận). Việc (o) ở dưới đã XONG — đừng làm lại. **Trước deploy BE-5B:** đếm `files.is_temporary=true` trên PROD/dev-online (job dọn nay xoá cả object). Lane `mediaos_be5b` còn giữ — drop khi rảnh (cùng ~120 lane cũ chờ owner).
+
+**Đang làm: `S15-PAYROLL-FE-4`** trên nhánh `feat/s15-payroll-fe-4` (cắt từ master, đã merge `b1fdbb94`): Tổng quan `/payroll` (recharts 3.10.1 ở `apps/app`) · Báo cáo 016 · tổng toàn kỳ 018 · lọc `insuranceIssue` · nút PDF 083/084/085. LIGHT gate PASS; app 289 file/2.906 ca xanh (chạy 4 shard — full run sập IPC tinypool). Plan + bằng chứng: `docs/plans/S15-PAYROLL-FE-4.md` §2 (D1–D12) · §5.1. Tiếp: PR base master → CI → owner merge → QA-1.
+
+**Bẫy/bài học phiên này:** (1) `window.open(url, "_blank", "noopener")` TRẢ `null` theo chuẩn HTML ⇒ mẫu «mở tab trắng rồi gán URL» phải cắt `tab.opener = null` thay vì truyền cờ — `recruit/components/CandidateCvTab.tsx` đang dính (nợ ghi ở backlog FE-4); (2) `useCanExact(a) && useCanExact(b)` là gọi hook có điều kiện mà lint KHÔNG bắt — tách hai lời gọi; (3) token biểu đồ: `#1fa9e0` (brand dark) trượt dải sáng của bộ kiểm dataviz ⇒ `--chart-1` dark = `#1b9ad0`.
+
 ## Phiên 2026-09-17 (o) — **S15-PAYROLL-BE-5B CHECKPOINT trên nhánh `feat/s15-payroll-be-5b` (CHƯA PR)** — dừng theo owner vì hook chi phí ~$1.1k
 
 **Bắt đầu phiên sau ở đây — KHÔNG đọc lại SPEC/đo lại:** `git checkout feat/s15-payroll-be-5b` (commit checkpoint trên master `4fbc5beb`). Đọc `docs/plans/S15-PAYROLL-BE-5B.md` **§0.1 (owner O-3..O-7) → §0b (vá plan-review + O-8) → §8.2 + §8.3 (12 mục PHẢI vá, đã ghi file + cách vá + ca test)**. Code + test PDF 083/084/085 + `ServerFileService` + job dọn xoá object ĐÃ xong và xanh cục bộ; 4 reviewer FULL gate đều **PASS** (không cần chạy lại) nhưng để lại 2 HIGH + MEDIUM ở §8.2; `check.sh --lane-db=be5b` đỏ 4 file do chính WO (§8.3 — census QA-1 82→85, luật mutex outbox, spec đổi tên công ty làm bẩn census DB-1).
