@@ -192,4 +192,23 @@ export default {
       deduction: "Khấu trừ",
     },
   },
+
+  // PDF phiếu lương (083 · 084 · 085). Link tải là tạm thời — mỗi lần bấm xin link mới.
+  pdf: {
+    download: "Tải PDF",
+    opening: "Đang tạo PDF…",
+    batch: {
+      start: "Xuất PDF hàng loạt",
+      pending: "Đang tạo tệp PDF cho {{count}} phiếu — bạn có thể tiếp tục làm việc khác.",
+      ready: "Tệp ZIP gồm {{count}} phiếu đã sẵn sàng (giữ đến {{time}}).",
+      download: "Tải tệp ZIP",
+      retry: "Tạo lại",
+      failure: {
+        "generation-failed": "Không tạo được tệp PDF hàng loạt.",
+        forbidden: "Quyền xuất phiếu lương của bạn đã thay đổi trước khi tệp được tạo.",
+        timeout: "Tạo tệp quá thời gian cho phép.",
+        stale: "Yêu cầu tạo tệp bị treo quá lâu và đã huỷ.",
+      },
+    },
+  },
 };
