@@ -172,7 +172,13 @@ phạm. File thấp nhất: `payroll-import.parser.ts` 84,4 %. 1.792 ca xanh, 0 
 
 **Log 5xx:** 0 dòng `-> 5xx` ngoài ca `MEDIUM-2` của `be4-batches-complete` (500 CÓ CHỦ ĐÍCH, ca tự assert).
 
-**Cổng:** _(điền sau `harness/check.sh --lane-db=s15qa1`)_
+**Cổng — `bash harness/check.sh --lane-db=s15qa1` (lane `--reset` sạch, commit `5d0eb9e2`): XANH ✅, KHÔNG banner
+LANE-DB GUARD.** secret-literals · lint · typecheck · migration-no-drop · tooling-tests · test chunked: api **735/735**
+file (8 lượt chạy lại vì sập IPC hạ tầng, 0 ca đỏ) · app 290/290 · auth 4/4 · console 22/22 · contracts 41/41 · ui
+24/24 · web-core 45/45. Lượt `check.sh` ĐẦU TIÊN (commit `585c1020`) ĐỎ 2 ca do chính WO — cả hai đã vá ở `5d0eb9e2`:
+(1) census `supertest-listen-ratchet` bắt helper `payroll-qa1-routes.ts` vì docblock nhắc tên hàm lấy HTTP server
+(census quét chữ, kể cả comment); (2) D1 `s15-payroll-db1-invariants` đỏ vì `qa1-roles` ghi hàng catalog wildcard mang
+resource PAYROLL (§4 plan — gỡ, giữ `*:*`).
 
 **Tái lập:** `bash scripts/lane-db-setup.sh s15qa1` → `LANE_DB=mediaos_s15qa1 pnpm --filter @mediaos/api test:cov:payroll`
 (máy dev Windows: chạy theo shard `--shard=i/10 --reporter=blob` rồi `vitest --merge-reports --coverage`).

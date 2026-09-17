@@ -79,4 +79,14 @@ thái và KHÔNG sửa `src/` (trừ file ghi ở bảng) — lỗi sản phẩm
 
 ## 3. Bằng chứng
 
-_(điền khi đóng)_
+Đầy đủ ở [`docs/QA/evidence/S15-PAYROLL-QA-1-ACCEPTANCE.md`](../QA/evidence/S15-PAYROLL-QA-1-ACCEPTANCE.md) (truy vết
+30 mục §21.1 · ca mới theo file · lỗi sản phẩm · đột biến · số đo). Tóm tắt:
+
+- **Ca mới:** 553 int · 110 unit · 16 FE. Thêm **lane F** (ngoài bảng §1): census tên ràng buộc §12.1 + int-spec bắn
+  ràng buộc thật — lộ **P3** (`payroll_period_lines_adjustment_check` ⇒ 500, nay 400) và một chỗ SPEC tự mâu thuẫn
+  (`value_pair/engine_kind`, đã đính chính bảng đóng theo code + contracts).
+- **Gate:** LIGHT (`typescript-reviewer` PASS) + `security-reviewer` hẹp PASS; 2 MEDIUM (byte NUL thô · vòng import) +
+  3 LOW đã xử lý.
+- **Coverage** `src/payroll/**` 98,00 % · `formula/**` 99,82 %.
+- **Sai lệch so với §1:** nhóm «bốn hình dạng wildcard» qua HTTP bị gỡ — hàng catalog toàn cục mang resource PAYROLL
+  làm đỏ D1 của `s15-payroll-db1-invariants` (đo ở lượt `check.sh` đầu); giữ `*:*`, bốn hình dạng đã ghim ở engine.
