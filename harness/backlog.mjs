@@ -16156,6 +16156,7 @@ export const backlog = [
     ],
     skills: ["code-review"],
     depends_on: ["S15-PAYROLL-BE-3", "S15-PAYROLL-FE-1"],
+    plan: "docs/plans/S15-PAYROLL-FE-2.md",
     src: [
       "📐 SỐ CẤP PHÁT ĐÓNG (S15-PAYROLL-DOC-1, 11/09/2026 — SPEC-11 §5.1b là bảng chuẩn, ĐỐI CHIẾU chứ không tự cấp thêm): 11 bảng mới + ALTER 3 bảng chia HAI WO — DB-1 lấy 2 (§12.1 salary_profiles · §12.4 payroll_period_lines), DB-2 lấy 1 (§12.3 payroll_periods, chuỗi 4 bước nguyên tử) — (⇒18) · PAY-SCREEN-007..017 (11 màn) · PAYROLL-API-036..085 (50 route ⇒ tổng 85; salary_profile_items KHÔNG có route riêng — đi qua payload items[] của 020/022) · PAYROLL-ERR-018..033 (16 mã) · 17 cặp quyền TẤT CẢ sensitive (⇒34 cặp/30 sensitive) · +31 grant (⇒63) · NOTI-EVENT-024..027 · PAYROLL-WIDGET-002/003 · FSM 8 trạng thái · audit object_type +10 (⇒14, gồm payroll_employee và payroll_report) · 18 đường audit-đọc có bản đồ object_type/object_id ở SPEC-11 §18.1 B · migration 0570+ (KHÔNG phải 0569 — S14 đã lấy; vẫn đo journal lúc chạy). Đặc tả: SPEC-11 §8.2/§9.1/§11.3/§12.1/§13.1/§13.6-13.8/§15.1/§17.1/§18.1 · DB-13 §12-§15 · API-18 §4.1b/§5b/§5.1b/§6.5b · permission-matrix §9g.2. Vá plan-review vòng 1 (14 mục, 11/09): docs/plans/S15-PAYROLL-DOC-1-review.md.",
       "SPEC-11 v2 §9 PAY-SCREEN-009/010/011 + hồ sơ HTML §05 wireframe 2; benchmark ảnh MISA «Thành phần lương» + «Mẫu bảng lương» (02/09)",
@@ -16166,7 +16167,10 @@ export const backlog = [
       "Chi tiết kỳ: cột động theo mẫu (visible + label), ghim cột nhân sự, tổng cột; breakdown phiếu lương theo thành phần (meta.componentCode) — PayslipBreakdown dùng chung cho quản trị + ME KHÔNG rẽ nhánh isOwn",
       "Tỉ lệ luật định: bảng phiên bản theo effective_from + form thêm phiên bản (gác manage:statutory-rate); parity FSM FE↔BE (payroll-fsm-parity.spec) cập nhật nếu BE-3 đổi; typecheck/build/test xanh",
     ],
-    notes: ["🟡 LIGHT gate phần màn hình; đụng contracts/web-core."],
+    notes: [
+      "🟡 LIGHT gate phần màn hình; đụng contracts/web-core.",
+      "16/09 (thi công): đo-trước ở plan §0 — contracts/cặp quyền/mục sidebar/20 kind track B CÓ SẴN; 15 kind MÁY CÔNG THỨC (formula.errors.ts) BE phát qua biến ⇒ census 3 hình mù, FE rơi «Có lỗi» — vá bằng bảng riêng + census hình 4. done_when «sửa công thức hệ thống có hộp xác nhận» đọc lại ở D5 (công thức hàng hệ thống BẤT BIẾN từ BE-2 M1 ⇒ hộp xác nhận áp cho thành phần đang được mẫu dùng). Nợ N1 PayrollPeriodDetailPage đã trả (tách PeriodLinesSection).",
+    ],
   },
   {
     id: "S15-PAYROLL-DB-2",

@@ -54,3 +54,47 @@ export function useSalaryComponentsCatalog(enabled = true): SalaryComponentsCata
     isTruncated: total !== undefined && total > SALARY_COMPONENT_CATALOG_PAGE,
   };
 }
+
+export interface SalaryComponentsFullCatalog {
+  /** MỌI thành phần (kể cả ngưng dùng — công thức vẫn có thể đang tham chiếu chúng), sắp theo `sortOrder`. */
+  readonly components: readonly SalaryComponentDto[];
+  /** Mã của `components` — nguồn tô màu + gợi ý của `FormulaEditor`. */
+  readonly codes: readonly string[];
+  readonly canResolve: boolean;
+  readonly isLoading: boolean;
+  readonly isTruncated: boolean;
+}
+
+/**
+ * S15-PAYROLL-FE-2 — catalog ĐẦY ĐỦ (không lọc `valueType`/`isActive`) cho editor công thức (gợi ý + tô màu)
+ * và picker «thêm thành phần» của mẫu bảng lương. Cùng cặp gác 044 (`view:salary-component`, SENSITIVE).
+ *
+ * Mã ngoài danh sách này chỉ bị TÔ ĐỎ ở editor — đúng/sai vẫn do server nói (048/422); catalog vượt trần
+ * một trang thì `isTruncated` để màn nói ra thay vì im lặng tô đỏ mã có thật.
+ */
+export function useSalaryComponentsFullCatalog(enabled = true): SalaryComponentsFullCatalog {
+  const canResolve = useCanExact(
+    PAYROLL_ENGINE_PAIRS.componentList.action,
+    PAYROLL_ENGINE_PAIRS.componentList.resourceType,
+  );
+  const params = { page: 1, per_page: SALARY_COMPONENT_CATALOG_PAGE };
+  const query = useQuery({
+    queryKey: payrollKeys.catalog.components(params),
+    queryFn: () => payrollApi.listSalaryComponents(params),
+    enabled: enabled && canResolve,
+    staleTime: 60 * 1000,
+  });
+  const components = useMemo(
+    () => [...(query.data?.data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
+    [query.data],
+  );
+  const codes = useMemo(() => components.map((c) => c.code), [components]);
+  const total = query.data?.pagination?.total;
+  return {
+    components,
+    codes,
+    canResolve,
+    isLoading: canResolve && query.isLoading,
+    isTruncated: total !== undefined && total > SALARY_COMPONENT_CATALOG_PAGE,
+  };
+}

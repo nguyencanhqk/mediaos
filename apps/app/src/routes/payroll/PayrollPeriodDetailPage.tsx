@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import { RefreshCw } from "lucide-react";
 import {
   payrollApi,
@@ -13,32 +12,22 @@ import {
 import type { PayrollPeriodLineDto } from "@mediaos/contracts";
 import {
   Button,
-  DataTable,
   DetailPageHeader,
   EmptyState,
-  TableFooter,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@mediaos/ui";
 import { triggerBlobDownload } from "../attendance/download-blob";
-import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE, type PayrollPeriodTab } from "./constants";
+import { PAYROLL_ENGINE_PAIRS, type PayrollPeriodTab } from "./constants";
 import {
   canAdjustLines,
   PERIOD_ACTIONS_NEEDING_REASON,
   type PayrollPeriodAction,
 } from "./payroll-actions";
-import {
-  formatPayrollDays,
-  formatPayrollMinutes,
-  formatPayrollMoney,
-  formatPayrollSignedMoney,
-  isPayrollMoneyMasked,
-  PAYROLL_NUMERIC_CELL_CLASS,
-} from "./payroll-format";
 import { isPayrollStateConflict, parsePayrollError, payrollErrorI18nKey } from "./payroll-errors";
-import { displayUserRef, usePayrollPeople } from "./use-payroll-people";
+import { usePayrollPeople } from "./use-payroll-people";
 import { PayrollPeriodStatusBadge } from "./components/StatusBadges";
 import { PeriodActionBar } from "./components/PeriodActionBar";
 import { ReadinessPanel } from "./components/ReadinessPanel";
@@ -47,6 +36,8 @@ import { AdjustmentImportDialog } from "./components/AdjustmentImportDialog";
 import { PeriodPayslipsSection } from "./components/PeriodPayslipsSection";
 import { ReasonDialog } from "./components/ReasonDialog";
 import { PeriodTimesheetTab } from "./components/PeriodTimesheetTab";
+import { PeriodLinesSection } from "./components/PeriodLinesSection";
+import { PeriodTemplateBlock } from "./components/PeriodTemplateBlock";
 
 /**
  * PAY-SCREEN-002 (S13-PAYROLL-FE-1) — chi tiết kỳ lương: bảng lương theo nhân sự + thanh hành động FSM
@@ -113,7 +104,6 @@ export function PayrollPeriodDetailPage({
     PAYROLL_ENGINE_PAIRS.importAdjustments.resourceType,
   );
 
-  const [linePage, setLinePage] = useState(1);
   const [adjustTarget, setAdjustTarget] = useState<PayrollPeriodLineDto | null>(null);
   const [reasonAction, setReasonAction] = useState<PayrollPeriodAction | null>(null);
   const [feedback, setFeedback] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -124,21 +114,7 @@ export function PayrollPeriodDetailPage({
     queryFn: () => payrollApi.getPeriod(periodId),
   });
 
-  const lineParams = useMemo(() => ({ page: linePage, per_page: PAYROLL_PAGE_SIZE }), [linePage]);
-  const linesQuery = useQuery({
-    queryKey: payrollKeys.periods.lines(periodId, lineParams),
-    queryFn: () => payrollApi.listLines(periodId, lineParams),
-    // Chỉ tải bảng lương khi ĐANG ở tab «Bảng lương»: 008 là route nhạy cảm CÓ audit lượt đọc (SPEC-11
-    // §15) — mở tab «Bảng công» (hoặc deep-link timesheet) mà vẫn kéo 008 là một hàng audit giả cho
-    // lượt xem tiền không hề xảy ra (code-review S15-PAYROLL-FE-1, HIGH).
-    enabled: canViewLines && tab === "lines",
-  });
-
   const period = periodQuery.data ?? null;
-  const lines = linesQuery.data?.data ?? [];
-  // Tổng CHỈ từ API (mảng trần ⇒ footer nói «không rõ tổng», không lấy độ dài trang làm tổng).
-  const lineTotal = linesQuery.data?.pagination?.total;
-  const moneyMasked = lines.length > 0 && lines.every((l) => isPayrollMoneyMasked(l));
 
   const refreshAll = () => queryClient.invalidateQueries({ queryKey: payrollKeys.periods.allOf() });
 
@@ -216,81 +192,6 @@ export function PayrollPeriodDetailPage({
     actionMutation.mutate({ action });
   };
 
-  const columns = useMemo<ColumnDef<PayrollPeriodLineDto>[]>(
-    () => [
-      {
-        id: "user",
-        header: t("lines.columns.employee"),
-        cell: ({ row }) => displayUserRef(row.original.userId, people),
-      },
-      {
-        id: "days",
-        header: t("lines.columns.days"),
-        cell: ({ row }) => (
-          <span className={PAYROLL_NUMERIC_CELL_CLASS}>
-            {formatPayrollDays(row.original.presentDays)} /{" "}
-            {formatPayrollDays(row.original.workDays)}
-          </span>
-        ),
-      },
-      {
-        id: "unpaid",
-        header: t("lines.columns.unpaidLeave"),
-        cell: ({ row }) => (
-          <span className={PAYROLL_NUMERIC_CELL_CLASS}>
-            {formatPayrollDays(row.original.unpaidLeaveDays)}
-          </span>
-        ),
-      },
-      {
-        id: "late",
-        header: t("lines.columns.lateMinutes"),
-        cell: ({ row }) => (
-          <span className={PAYROLL_NUMERIC_CELL_CLASS}>
-            {formatPayrollMinutes(row.original.lateMinutes)}
-          </span>
-        ),
-      },
-      {
-        id: "gross",
-        header: t("lines.columns.gross"),
-        cell: ({ row }) => (
-          <span className={PAYROLL_NUMERIC_CELL_CLASS}>
-            {formatPayrollMoney(row.original.gross)}
-          </span>
-        ),
-      },
-      {
-        id: "deduction",
-        header: t("lines.columns.deduction"),
-        cell: ({ row }) => (
-          <span className={PAYROLL_NUMERIC_CELL_CLASS}>
-            {formatPayrollMoney(row.original.deductionAmount)}
-          </span>
-        ),
-      },
-      {
-        id: "adjustment",
-        header: t("lines.columns.adjustment"),
-        cell: ({ row }) => (
-          <span className={PAYROLL_NUMERIC_CELL_CLASS}>
-            {formatPayrollSignedMoney(row.original.adjustmentAmount)}
-          </span>
-        ),
-      },
-      {
-        id: "net",
-        header: t("lines.columns.net"),
-        cell: ({ row }) => (
-          <span className={`${PAYROLL_NUMERIC_CELL_CLASS} font-medium`}>
-            {formatPayrollMoney(row.original.net)}
-          </span>
-        ),
-      },
-    ],
-    [t, people],
-  );
-
   if (periodQuery.isLoading) {
     return <div className="p-6 text-sm text-muted-foreground">{t("states.loading")}</div>;
   }
@@ -330,7 +231,7 @@ export function PayrollPeriodDetailPage({
             variant="outline"
             size="sm"
             onClick={() => void refreshAll()}
-            disabled={periodQuery.isFetching || linesQuery.isFetching}
+            disabled={periodQuery.isFetching}
           >
             <RefreshCw className="mr-2 size-4" />
             {t("states.retry")}
@@ -390,6 +291,8 @@ export function PayrollPeriodDetailPage({
         </div>
       )}
 
+      <PeriodTemplateBlock period={period} onChanged={() => void refreshAll()} />
+
       <ReadinessPanel periodId={periodId} />
 
       <Tabs value={tab} onValueChange={(v) => onTabChange(v as PayrollPeriodTab)}>
@@ -403,44 +306,14 @@ export function PayrollPeriodDetailPage({
         </TabsContent>
 
         <TabsContent value="lines" className="space-y-6 pt-4">
-          {!canViewLines ? (
-            <EmptyState title={t("lines.noPermission")} />
-          ) : linesQuery.isError ? (
-            <EmptyState
-              title={t("states.error")}
-              action={
-                <Button variant="outline" onClick={() => void linesQuery.refetch()}>
-                  {t("states.retry")}
-                </Button>
-              }
-            />
-          ) : (
-            <>
-              {moneyMasked && (
-                <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
-                  {t("lines.moneyMasked")}
-                </div>
-              )}
-              <DataTable
-                columns={columns}
-                data={lines}
-                isLoading={linesQuery.isLoading}
-                pageSize={PAYROLL_PAGE_SIZE}
-                pinFirstColumn
-                onRowClick={adjustable ? (row) => setAdjustTarget(row) : undefined}
-                emptyState={<EmptyState title={t("lines.empty")} />}
-                footer={
-                  <TableFooter
-                    page={linePage}
-                    pageSize={PAYROLL_PAGE_SIZE}
-                    total={lineTotal}
-                    disabled={linesQuery.isFetching}
-                    onPageChange={setLinePage}
-                  />
-                }
-              />
-            </>
-          )}
+          <PeriodLinesSection
+            period={period}
+            people={people}
+            canViewLines={canViewLines}
+            active={tab === "lines"}
+            adjustable={adjustable}
+            onAdjust={setAdjustTarget}
+          />
 
           {period.payslipsGeneratedAt !== null && (
             <PeriodPayslipsSection

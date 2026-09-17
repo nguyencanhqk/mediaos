@@ -2121,6 +2121,28 @@ const MePayrollAdvancesPage = React.lazy(() =>
     default: m.MePayrollAdvancesPage,
   })),
 );
+// S15-PAYROLL-FE-2 — track B: thành phần lương (009) · mẫu bảng lương (010 list + chi tiết) · tỉ lệ luật
+// định (011, dưới «Thiết lập»).
+const SalaryComponentListPage = React.lazy(() =>
+  import("@/routes/payroll/SalaryComponentListPage").then((m) => ({
+    default: m.SalaryComponentListPage,
+  })),
+);
+const PayrollTemplateListPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollTemplateListPage").then((m) => ({
+    default: m.PayrollTemplateListPage,
+  })),
+);
+const PayrollTemplateDetailPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollTemplateDetailPage").then((m) => ({
+    default: m.PayrollTemplateDetailPage,
+  })),
+);
+const StatutoryRateListPage = React.lazy(() =>
+  import("@/routes/payroll/StatutoryRateListPage").then((m) => ({
+    default: m.StatutoryRateListPage,
+  })),
+);
 
 function PayrollPeriodListRouteContent() {
   const navigate = useNavigate();
@@ -2381,6 +2403,67 @@ const payrollPaymentBatchDetailRoute = createRoute({
     );
   },
 });
+
+// S15-PAYROLL-FE-2 — track B. Ba màn danh sách qua ROUTE_REGISTRY (mục sidebar đã khai sẵn trong
+// `PAYROLL_SIDEBAR_V2`, tự hiện khi route có mặt); chi tiết mẫu dùng RouteMeta CỤC BỘ, gate = cặp ĐƯỜNG TẢI
+// của 051 (`view:payroll-template`, SENSITIVE). Path tĩnh "/payroll/templates" và param
+// "/payroll/templates/$templateId" không cạnh tranh nhau (TanStack xếp tĩnh trước param).
+const payrollSalaryComponentsRoute = makeModuleRoute(
+  "/payroll/salary-components",
+  "payroll.salaryComponents",
+  "PAYROLL",
+  SalaryComponentListPage,
+);
+function PayrollTemplateListRouteContent() {
+  const navigate = useNavigate();
+  return (
+    <PayrollTemplateListPage
+      onOpenTemplate={(id) =>
+        void navigate({ to: "/payroll/templates/$templateId", params: { templateId: id } })
+      }
+    />
+  );
+}
+const payrollTemplatesRoute = makeModuleRoute(
+  "/payroll/templates",
+  "payroll.templates",
+  "PAYROLL",
+  PayrollTemplateListRouteContent,
+);
+const payrollTemplateDetailMeta: RouteMeta = {
+  routeKey: "payroll.template.detail",
+  path: "/payroll/templates/$templateId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "PAYROLL",
+  screenCode: "PAY-SCREEN-010",
+  titleKey: "routeTitle.payrollTemplateDetail",
+  requiredPermissions: ["access:payroll", "view:payroll-template"],
+  showInSidebar: false,
+  order: 89.21,
+};
+const payrollTemplateDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/templates/$templateId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { templateId } = payrollTemplateDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      payrollTemplateDetailMeta,
+      "PAYROLL",
+      <PayrollTemplateDetailPage
+        templateId={templateId}
+        onBack={() => void navigate({ to: "/payroll/templates" as "/" })}
+      />,
+    );
+  },
+});
+const payrollStatutoryRatesRoute = makeModuleRoute(
+  "/payroll/settings/statutory-rates",
+  "payroll.statutoryRates",
+  "PAYROLL",
+  StatutoryRateListPage,
+);
 
 // PAY-SCREEN-017 «Tạm ứng của tôi» — route **ME** (`access:me`), KHÔNG phải route PAYROLL. Cùng khuôn
 // `mePayslipsRoute` ngay trên: cổng THẬT là `('view-own','payroll-advance')` ở BE, không phải
@@ -3148,6 +3231,11 @@ const routeTree = rootRoute.addChildren([
   payrollPaymentBatchesRoute,
   payrollPaymentBatchDetailRoute,
   mePayrollAdvancesRoute,
+  // S15-PAYROLL-FE-2 — track B
+  payrollSalaryComponentsRoute,
+  payrollTemplatesRoute,
+  payrollTemplateDetailRoute,
+  payrollStatutoryRatesRoute,
   goalsListRoute,
   // S5-GOAL-TPL-1 — static TRƯỚC "/goals/$goalId" (xem docblock goalTemplatesMeta).
   goalTemplatesRoute,

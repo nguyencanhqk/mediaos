@@ -211,6 +211,27 @@ export function canAdjustLines(period: PeriodActionSubject, hasAdjustPermission:
   return hasAdjustPermission && period.status === "Calculated";
 }
 
+/**
+ * S15-PAYROLL-FE-2 — trạng thái kỳ CÒN đổi được mẫu bảng lương. Mirror `payroll-periods.service.ts` (004):
+ * `templateId` chỉ nhận khi `Draft`/`CollectingData`, khác ⇒ 409 `PAYROLL-ERR-023` `template-locked`.
+ */
+export const TEMPLATE_EDITABLE_STATUSES: ReadonlySet<PayrollPeriodStatus> = new Set([
+  "Draft",
+  "CollectingData",
+]);
+
+/**
+ * Nút «Đổi mẫu» (D10): FSM ∩ `manage:payroll-period` (cặp của 004) ∩ `view:payroll-template` (không đọc được
+ * danh sách mẫu thì không có gì để chọn). Ẩn thay vì hiện rồi 409.
+ */
+export function canChangePeriodTemplate(
+  period: PeriodActionSubject,
+  hasManagePeriod: boolean,
+  hasViewTemplates: boolean,
+): boolean {
+  return hasManagePeriod && hasViewTemplates && TEMPLATE_EDITABLE_STATUSES.has(period.status);
+}
+
 // ── Thưởng/phạt (SPEC-11 §13.3) ───────────────────────────────────────────────────────────────────
 
 /** Lát cắt tối thiểu của một khoản thưởng/phạt cần để suy nút. */

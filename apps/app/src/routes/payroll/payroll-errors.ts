@@ -182,10 +182,62 @@ const CODE_TO_I18N_KEY: Readonly<Record<string, string>> = {
   [IDEMPOTENCY_ERROR_CODES.KEY_REUSED]: "errors.idempotencyKeyReused",
 };
 
+/**
+ * S15-PAYROLL-FE-2 — **`kind` của MÁY CÔNG THỨC** (mirror khoá `FORMULA_ERROR_KINDS` ở
+ * `apps/api/src/payroll/formula/formula.errors.ts`, 15 khoá).
+ *
+ * ⚠️ Bảng RIÊNG vì BE phát chúng qua `formulaErrorToHttp` → `payrollDetails(err.kind, …)` với **BIẾN** — ba
+ * hình dạng của census ở trên grep literal nên MÙ với cả nhóm này, và trước WO này FE rơi «Có lỗi xảy ra» cho
+ * mọi công thức sai. `payroll-error-kind-census.spec.ts` đọc bảng BE (hình 4) và so ĐÚNG BẰNG với mảng dưới.
+ * `formula-too-long` có ở CẢ HAI bảng (service cũng ném literal) — cùng một khoá i18n.
+ *
+ * Nhóm này đi kèm `details` chỉ chỗ sai (`pos` · `ref` · `func` · `cycle` · `missing` · `reason`) — dùng
+ * `payrollErrorText` (không phải `t(payrollErrorI18nKey(...))`) để câu nói được **ở đâu**.
+ */
+export const PAYROLL_FORMULA_ERROR_KINDS = [
+  "formula-syntax",
+  "formula-unknown-ref",
+  "formula-unknown-function",
+  "formula-arity",
+  "formula-too-long",
+  "formula-too-deep",
+  "formula-too-many-nodes",
+  "template-missing-engine-nodes",
+  "formula-cycle",
+  "formula-budget-exceeded",
+  "division-by-zero",
+  "numeric-overflow",
+  "negative-total",
+  "statutory-rate-incomplete",
+  "grossup-not-converged",
+] as const;
+export type PayrollFormulaErrorKind = (typeof PAYROLL_FORMULA_ERROR_KINDS)[number];
+
+const FORMULA_KIND_TO_I18N_KEY: Readonly<Record<PayrollFormulaErrorKind, string>> = {
+  "formula-syntax": "errors.formulaSyntax",
+  "formula-unknown-ref": "errors.formulaUnknownRef",
+  "formula-unknown-function": "errors.formulaUnknownFunction",
+  "formula-arity": "errors.formulaArity",
+  "formula-too-long": "errors.formulaTooLong",
+  "formula-too-deep": "errors.formulaTooDeep",
+  "formula-too-many-nodes": "errors.formulaTooManyNodes",
+  "template-missing-engine-nodes": "errors.templateMissingEngineNodes",
+  "formula-cycle": "errors.formulaCycle",
+  "formula-budget-exceeded": "errors.formulaBudgetExceeded",
+  "division-by-zero": "errors.divisionByZero",
+  "numeric-overflow": "errors.numericOverflow",
+  "negative-total": "errors.negativeTotal",
+  "statutory-rate-incomplete": "errors.statutoryRateIncomplete",
+  "grossup-not-converged": "errors.grossupNotConverged",
+};
+
 /** Thứ tự tra: `kind` (chính xác nhất) → `code` (idempotency) → `generic`. */
 export function payrollErrorI18nKey(info: PayrollErrorInfo): string {
   if (info.kind && info.kind in KIND_TO_I18N_KEY) {
     return KIND_TO_I18N_KEY[info.kind as PayrollErrorKind];
+  }
+  if (info.kind && info.kind in FORMULA_KIND_TO_I18N_KEY) {
+    return FORMULA_KIND_TO_I18N_KEY[info.kind as PayrollFormulaErrorKind];
   }
   if (info.code && info.code in CODE_TO_I18N_KEY) {
     return CODE_TO_I18N_KEY[info.code];
@@ -248,4 +300,74 @@ export function isPayrollStateConflict(info: PayrollErrorInfo): boolean {
  */
 export function shouldRotateIdempotencyKey(info: PayrollErrorInfo): boolean {
   return info.code === IDEMPOTENCY_ERROR_CODES.KEY_REUSED;
+}
+
+/** Hàm dịch tối giản — đủ cho `t` của react-i18next mà không kéo kiểu `TFunction` vào file thuần. */
+export type PayrollTranslate = (key: string, options?: Record<string, unknown>) => string;
+
+/** Chỗ sai của một lỗi công thức — cùng hình cho 422 (`details[]`) lẫn kết quả 048 (`errors[]`). */
+export interface FormulaErrorWhere {
+  readonly pos?: number | string;
+  readonly ref?: string;
+  readonly func?: string;
+  /** Chuỗi đã nối `A → B → A` (422) hoặc mảng mã (048). */
+  readonly cycle?: string | readonly string[];
+  readonly missing?: string;
+  readonly reason?: string;
+  readonly component?: string;
+}
+
+/**
+ * Tham số nội suy cho chữ lỗi công thức. `pos` của BE là chỉ số UTF-16 TỪ 0 ⇒ hiện +1 (người đọc đếm từ 1).
+ * Trường vắng ⇒ chuỗi rỗng (không để `{{ref}}` lọt ra màn).
+ */
+export function formulaErrorParams(where: FormulaErrorWhere): Record<string, string> {
+  const posNum = where.pos === undefined ? Number.NaN : Number(where.pos);
+  const cycle = Array.isArray(where.cycle)
+    ? where.cycle.join(" → ")
+    : typeof where.cycle === "string"
+      ? where.cycle
+      : "";
+  return {
+    at: Number.isInteger(posNum) && posNum >= 0 ? ` (ký tự thứ ${posNum + 1})` : "",
+    ref: where.ref ?? "",
+    func: where.func ?? "",
+    cycle,
+    missing: where.missing ?? "",
+    reason: where.reason ?? "",
+    component: where.component ? ` (thành phần ${where.component})` : "",
+  };
+}
+
+/**
+ * Câu lỗi ĐẦY ĐỦ cho một `ApiError` PAYROLL — như `t(payrollErrorI18nKey(info))` nhưng nội suy chỗ sai
+ * (`details[]` đã bóc thành `info.fields`). Dùng ở mọi form track B (thành phần · mẫu · tỉ lệ).
+ */
+export function payrollErrorText(t: PayrollTranslate, info: PayrollErrorInfo): string {
+  const f = info.fields;
+  const params = formulaErrorParams({
+    pos: f.get("pos"),
+    ref: f.get("ref"),
+    func: f.get("func"),
+    cycle: f.get("cycle"),
+    missing: f.get("missing") ?? f.get("components"),
+    reason: f.get("reason"),
+    component: f.get("component"),
+  });
+  return t(payrollErrorI18nKey(info), params);
+}
+
+/** Câu cho MỘT lỗi của lượt kiểm 048 (`valid:false`) — cùng bảng chữ với 422 khi lưu. */
+export function formulaIssueText(
+  t: PayrollTranslate,
+  issue: { kind: string; pos?: number; ref?: string; func?: string; cycle?: string[] },
+): string {
+  const key = payrollErrorI18nKey({
+    code: null,
+    status: 422,
+    kind: issue.kind,
+    message: "",
+    fields: new Map(),
+  });
+  return t(key, formulaErrorParams(issue));
 }

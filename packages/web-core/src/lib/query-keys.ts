@@ -1239,11 +1239,24 @@ export const payrollKeys = {
     dependents: (userId: string) =>
       [...rootKeys.payroll, "employees", "dependents", userId] as const,
   },
-  /** S15-PAYROLL-FE-1 — catalog thành phần lương (PAYROLL-API-044) cho picker `items[]` của form hồ sơ lương. */
+  /**
+   * S15-PAYROLL-FE-1 — catalog thành phần lương (PAYROLL-API-044) cho picker `items[]` của form hồ sơ lương.
+   * S15-PAYROLL-FE-2 — mở rộng cho CẢ track B (046 · 049/051 · 055). Chung một nhánh CÓ CHỦ ĐÍCH: đổi công thức
+   * một thành phần đổi luôn `catalogFormula` + fingerprint của mọi mẫu chứa nó ⇒ mọi route GHI track B
+   * invalidate `catalog.allOf()` rồi đọc lại.
+   */
   catalog: {
     allOf: () => [...rootKeys.payroll, "catalog"] as const,
     components: (params?: Record<string, unknown>) =>
       [...rootKeys.payroll, "catalog", "components", params] as const,
+    componentDetail: (id: string) =>
+      [...rootKeys.payroll, "catalog", "component-detail", id] as const,
+    templates: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "catalog", "templates", params] as const,
+    templateDetail: (id: string) =>
+      [...rootKeys.payroll, "catalog", "template-detail", id] as const,
+    statutoryRates: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "catalog", "statutory-rates", params] as const,
   },
   salaryProfiles: {
     allOf: () => [...rootKeys.payroll, "salary-profiles"] as const,
