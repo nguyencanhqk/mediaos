@@ -16440,6 +16440,7 @@ export const backlog = [
       "Số học: bảng tay ≥3 NV (GROSS bậc thuế thấp/cao · NET) khớp từng đồng; biên NPT/tỉ lệ đổi giữa năm/trần BH; FSM 8 trạng thái ma trận sai đầy đủ + RESET vết; race double-complete đợt chi trả đúng-1-thắng; census mã lỗi PAYROLL-ERR-001..0xx không mã nào 0 ca",
       "bash harness/check.sh --lane-db xanh KHÔNG banner; coverage payroll/ ≥85% (formula/ ≥95%); TESTABLE-FEATURES.md mục PAYROLL v2; lỗi sản phẩm lộ ra vá CÙNG WO và ghi notes",
       "🔻 NHẬN TỪ S15-PAYROLL-FE-3 (nợ, ghi 17/09 qua S15-PAYROLL-DEBT-1): spec FE T4 gate nút xuất UNC (071) · T5 gate dòng chi 070 (đánh dấu đã chi/gỡ) · T6 mask cột tiền ở 3 màn Tạm ứng/Chi trả/Ngân sách — mỗi ca có ALLOW đối chứng",
+      "🔻 NHẬN TỪ S15-PAYROLL-BE-4B §4 (qua S15-PAYROLL-DEBT-1): tách s15-payroll-be4-batches.int-spec.ts (945 dòng) theo describe. ⚠️ KHÔNG dùng helper dùng chung dựng request supertest (`getHttpServer`) — cổng test/foundation/supertest-listen-ratchet.unit-spec.ts chỉ phân tích TỪNG FILE nên chặn việc đó: mỗi file tự boot app (init + listen(0) + close) và tự tạo request; helper chỉ được giữ phần gieo DB — hoặc nâng census thành phân tích xuyên file trước. Nhớ thêm file mới vào danh sách tường minh của test:cov:payroll (apps/api/package.json)",
       "🔻 NHẬN TỪ S15-PAYROLL-BE-4/BE-4B: đột biến (k) NOTI-027 dedupe theo batchId (producer enqueue một lần/kỳ ⇒ int-spec không đo được) — dựng ca đo được (unit producer hoặc hai đợt cùng kỳ) hoặc ghi rõ vì sao bất khả",
     ],
     notes: [
@@ -16487,7 +16488,7 @@ export const backlog = [
     module: "PAYROLL",
     layer: "FE",
     title:
-      "Trả nợ vệ sinh S15: tách 3 file > 800 dòng (i18n payroll.ts · contracts payroll.ts · int-spec be4-batches) · prettier 3 file lệch sẵn · comment users.status 4 giá trị ở auth.service · ConfirmDialog có slot children · nút xoá mềm ngân sách (075 delete) · test render dialog xem trước 054 · gom triggerBlobDownload về một chỗ · use-local-pref app re-export bản packages/ui",
+      "Trả nợ vệ sinh S15: tách 2 file > 800 dòng (i18n payroll.ts · contracts payroll.ts) · prettier 3 file lệch sẵn · comment users.status 4 giá trị ở auth.service · ConfirmDialog có slot children · nút xoá mềm ngân sách (075 delete) · test render dialog xem trước 054 · gom triggerBlobDownload về một chỗ · use-local-pref app re-export bản packages/ui",
     zone: "yellow",
     status: "todo",
     paths: [
@@ -16504,9 +16505,6 @@ export const backlog = [
       "packages/contracts/src/**",
       "packages/web-core/src/lib/api-params.ts",
       "packages/web-core/src/lib/two-factor-api.spec.ts",
-      "apps/api/test/integration/s15-payroll-be4-batches*",
-      "apps/api/test/helpers/payroll-be4-batches-suite.ts",
-      "apps/api/package.json",
       "apps/api/src/auth/auth.service.ts",
       "docs/plans/S15-PAYROLL-DEBT-1.md",
       "harness/backlog.mjs",
@@ -16517,13 +16515,13 @@ export const backlog = [
       "harness/handoff.md phiên (i)–(l) mục «Nợ để lại»; docs/plans/S15-PAYROLL-FE-1.md §6 · S15-PAYROLL-FE-3.md §6 · S15-PAYROLL-BE-4B.md §4; memory s15-payroll-fe2-wave-state · s15-ui-shell-1-wave-state",
     ],
     done_when: [
-      "Không file nào trong 3 file nợ vượt 800 dòng; export công khai của @mediaos/contracts KHÔNG đổi (re-export) ⇒ typecheck api/web-core/app xanh; int-spec be4-batches tách theo describe, số ca trước = sau, chạy XANH trên LANE_DB",
+      "Hai file nợ (i18n payroll.ts · contracts payroll.ts) ≤ 800 dòng; export công khai của @mediaos/contracts KHÔNG đổi (re-export) ⇒ typecheck api/web-core/app xanh",
       "prettier --check sạch 3 file; comment auth.service ghi đúng CHECK 4 giá trị (mig 0002 + 0450) — chỉ comment, không đổi logic",
       "ConfirmDialog nhận children (tuỳ chọn, không phá nơi gọi cũ) + hộp «hoàn tất đợt» dùng lại nó; BudgetFormDialog có nút xoá mềm (075 {delete:true}) sau hộp xác nhận, gác cùng cặp manage, i18n vi; spec render TemplatePreviewDialog (054) gồm ca lỗi hiện payrollErrorText",
       "triggerBlobDownload còn MỘT bản (apps/app/src/lib), 4 nơi gọi + 3 spec mock trỏ về đó; apps/app use-local-pref là re-export packages/ui (không còn thân hàm sinh đôi); app/web-core test + build xanh",
     ],
     notes: [
-      "🟡 LIGHT gate (typescript-reviewer một lượt). Không migration, không đổi hành vi BE. Nợ KHÔNG thuộc WO này: tổng cột toàn kỳ → done_when BE-5 · T4–T6 + đột biến (k) → done_when QA-1 · G3 → S15-PAYROLL-FE-5 · sidebar-registry → S15-UI-SHELL-2 · nợ BE-2 → S15-PAYROLL-BE-2B.",
+      "🟡 LIGHT gate (typescript-reviewer một lượt). Không migration, không đổi hành vi BE. Nợ KHÔNG thuộc WO này: tổng cột toàn kỳ → done_when BE-5 · T4–T6 + đột biến (k) → done_when QA-1 · G3 → S15-PAYROLL-FE-5 · sidebar-registry → S15-UI-SHELL-2 · nợ BE-2 → S15-PAYROLL-BE-2B · tách int-spec be4-batches (945 dòng) → done_when QA-1 (thử tách bằng helper dùng chung ĐỎ cổng supertest-listen-ratchet — đã bỏ khỏi WO này).",
     ],
   },
   {
