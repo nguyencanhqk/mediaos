@@ -129,6 +129,19 @@ describe("S15-PAYROLL-BE-2 · evaluator công thức", () => {
       expect(run("BH_TRAN_BHTN(120000000)")).toBe("99200000");
     });
 
+    // S15-PAYROLL-QA-1 (G10) — ĐÚNG trần và cận dưới trần (cap−0.01): dưới trần trả NGUYÊN giá trị, TẠI
+    // trần và TRÊN trần kẹp về đúng số tiền trần (không nhân lại hệ số — đã có ở ca trên).
+    it.each([
+      ["BH_TRAN_BHXH", "46799999.99", "46799999.99"],
+      ["BH_TRAN_BHXH", "46800000", "46800000"],
+      ["BH_TRAN_BHYT", "46799999.99", "46799999.99"],
+      ["BH_TRAN_BHYT", "46800000", "46800000"],
+      ["BH_TRAN_BHTN", "99199999.99", "99199999.99"],
+      ["BH_TRAN_BHTN", "99200000", "99200000"],
+    ])("%s(%s) = %s — ĐÚNG trần và cận dưới trần (cap−0,01)", (fn, income, expected) => {
+      expect(run(`${fn}(${income})`)).toBe(expected);
+    });
+
     it.each([
       ["0", "0"],
       ["-1", "0"],
@@ -137,6 +150,31 @@ describe("S15-PAYROLL-BE-2 · evaluator công thức", () => {
       ["10000000", "750000"],
       ["100000000", "25150000"],
     ])("TNCN_LUY_TIEN(%s) = %s theo 7 bậc seed", (income, tax) => {
+      expect(run(`TNCN_LUY_TIEN(${income})`)).toBe(tax);
+    });
+
+    // S15-PAYROLL-QA-1 (G10 — SPEC-11 §21.1 mục 1) — ĐÚNG MỐC 18tr/32tr/52tr/80tr (5tr/10tr đã ghim ở bảng trên)
+    // và ±0,01 quanh CẢ SÁU mốc — số kỳ vọng tính TAY độc lập bằng bậc luỹ tiến (KHÔNG chạy qua engine):
+    // dưới mốc còn ở bậc CŨ (đủ 4 chữ số thập phân trung gian, scale 10, KHÔNG làm tròn tiền); tại/trên mốc
+    // đã sang bậc MỚI. Lệch dù 0,001đ là bậc bị cắt sai chỗ.
+    it.each([
+      ["4999999.99", "249999.9995"],
+      ["5000000.01", "250000.001"],
+      ["9999999.99", "749999.999"],
+      ["10000000.01", "750000.0015"],
+      ["17999999.99", "1949999.9985"],
+      ["18000000", "1950000"],
+      ["18000000.01", "1950000.002"],
+      ["31999999.99", "4749999.998"],
+      ["32000000", "4750000"],
+      ["32000000.01", "4750000.0025"],
+      ["51999999.99", "9749999.9975"],
+      ["52000000", "9750000"],
+      ["52000000.01", "9750000.003"],
+      ["79999999.99", "18149999.997"],
+      ["80000000", "18150000"],
+      ["80000000.01", "18150000.0035"],
+    ])("TNCN_LUY_TIEN(%s) = %s — ĐÚNG mốc bậc thuế ±0,01", (income, tax) => {
       expect(run(`TNCN_LUY_TIEN(${income})`)).toBe(tax);
     });
   });

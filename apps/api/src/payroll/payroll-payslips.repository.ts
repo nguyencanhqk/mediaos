@@ -61,6 +61,19 @@ export interface PayslipItemRow {
 export const PUBLISHED_PERIOD_STATUSES: readonly string[] = ["Published", "Paid", "Locked"];
 
 /**
+ * Bộ lọc câu đọc phiếu. `ownerUserId` BẮT BUỘC khai (S15-PAYROLL-QA-1 P2): `null` = đường quản trị (029/030/083),
+ * chuỗi = Own (031/032/084). Không có dạng «bỏ trống» — bỏ trống từng là cửa rơi về đọc toàn công ty.
+ */
+export interface PayslipListOpts {
+  ownerUserId: string | null;
+  payrollPeriodId?: string;
+  userId?: string;
+}
+interface PayslipSelectOpts extends PayslipListOpts {
+  payslipId?: string;
+}
+
+/**
  * S13-PAYROLL-BE-2 — `payslips` · `payslip_items` · `payslip_acknowledgements`.
  *
  * ⚠️ **BA BẢNG APPEND-ONLY** (bất biến #2 — app role chỉ có SELECT + INSERT): không `UPDATE`, không
@@ -287,19 +300,22 @@ export class PayrollPayslipsRepository {
    * viên KHÔNG thấy (SPEC-11 §13.2). Cùng vị từ dùng cho list, detail và ack ⇒ không có đường nào
    * nhìn thấy phiếu qua một cửa mà cửa kia chặn.
    */
-  private static selectPayslips(
-    companyId: string,
-    opts: {
-      ownerUserId?: string | null;
-      payslipId?: string;
-      payrollPeriodId?: string;
-      userId?: string;
-    },
-  ) {
-    const own = opts.ownerUserId
-      ? sql`and ps.user_id = ${opts.ownerUserId}::uuid
+  private static selectPayslips(companyId: string, opts: PayslipSelectOpts) {
+    // S15-PAYROLL-QA-1 (P2) — FAIL-CLOSED: `null` là đường quản trị; MỌI giá trị khác là ý định Own và phải là chuỗi
+    // khác rỗng. Truthy-guard cũ để `""`/`undefined` (JWT thiếu `sub`) rơi về đọc TOÀN CÔNG TY — khuôn BE-4B `ownCond`.
+    if (
+      opts.ownerUserId !== null &&
+      (typeof opts.ownerUserId !== "string" || opts.ownerUserId.trim().length === 0)
+    ) {
+      throw new Error(
+        "payslips Own: ownerUserId rỗng — từ chối thay vì rơi về danh sách toàn công ty",
+      );
+    }
+    const own =
+      opts.ownerUserId !== null
+        ? sql`and ps.user_id = ${opts.ownerUserId}::uuid
             and pp.status = any(${sql.param(PUBLISHED_PERIOD_STATUSES)}::text[])`
-      : sql``;
+        : sql``;
     const byId = opts.payslipId ? sql`and ps.id = ${opts.payslipId}::uuid` : sql``;
     const byPeriod = opts.payrollPeriodId
       ? sql`and ps.payroll_period_id = ${opts.payrollPeriodId}::uuid`
@@ -319,7 +335,7 @@ export class PayrollPayslipsRepository {
   async listTx(
     tx: TenantTx,
     companyId: string,
-    opts: { ownerUserId?: string | null; payrollPeriodId?: string; userId?: string },
+    opts: PayslipListOpts,
     limit: number,
     offset: number,
   ): Promise<PayslipRow[]> {
@@ -334,11 +350,7 @@ export class PayrollPayslipsRepository {
     return list as PayslipRow[];
   }
 
-  async countTx(
-    tx: TenantTx,
-    companyId: string,
-    opts: { ownerUserId?: string | null; payrollPeriodId?: string; userId?: string },
-  ): Promise<number> {
+  async countTx(tx: TenantTx, companyId: string, opts: PayslipListOpts): Promise<number> {
     const res = await tx.execute<{ n: number }>(sql`
       select count(*)::int as n
       ${PayrollPayslipsRepository.selectPayslips(companyId, opts)}
@@ -357,6 +369,11 @@ export class PayrollPayslipsRepository {
     payslipId: string,
     ownerUserId: string | null,
   ): Promise<PayslipRow | null> {
+    // Cùng lớp với P2: `byId` là truthy-guard ⇒ id rỗng thành «phiếu bất kỳ, limit 1». Controller đã ép UUID — đây là
+    // lưới cho caller ngoài HTTP (security-review QA-1 LOW).
+    if (typeof payslipId !== "string" || payslipId.trim().length === 0) {
+      throw new Error("payslips findTx: payslipId rỗng — từ chối thay vì trả phiếu bất kỳ");
+    }
     const res = await tx.execute<PayslipRow>(sql`
       select ps.*, pp.status as period_status, pp.period_month, ack.created_at as acknowledged_at
       ${PayrollPayslipsRepository.selectPayslips(companyId, { payslipId, ownerUserId })}

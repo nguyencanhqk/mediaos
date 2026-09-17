@@ -48,7 +48,7 @@ const lineStub = (i: number) => ({
   penalty_amount: "0.00",
   deduction_amount: "0.00",
   adjustment_amount: "0.00",
-  adjustment_reason: null,
+  adjustment_reason: null as string | null,
   gross: "1000.00",
   net: "1000.00",
 });
@@ -150,4 +150,61 @@ describe("S13-PAYROLL-BE-2 · export 017 — audit + lọc `q`", () => {
     expect(entry.after.rows).toBe(1);
     expect(entry.after.q).toBe("user-3");
   });
+});
+
+/**
+ * S15-PAYROLL-QA-1 (P1) — 017 chống formula-injection như 071/082: ba ô VĂN BẢN do người dùng nhập (mã NV · họ tên ·
+ * lý do điều chỉnh) đi qua `xlsxSafe`. Trước vá, 017 ghi thô ⇒ `=HYPERLINK(...)` thành công thức sống khi mở tệp.
+ * Đọc lại tệp THẬT bằng exceljs — assert trên chuỗi đầu vào của `addRow` không chứng minh được thứ người dùng mở ra.
+ */
+describe("S15-PAYROLL-QA-1 · export 017 — ô văn bản chống formula-injection", () => {
+  const TEXT_COLUMNS = { code: 1, name: 2, reason: 14 } as const;
+
+  async function exportWith(
+    person: { displayName: string; employeeCode: string },
+    reason: string | null,
+  ): Promise<string[]> {
+    const { svc, calc } = build(1);
+    calc.allLinesForExportTx.mockImplementationOnce(async () => [
+      { ...lineStub(0), adjustment_reason: reason },
+    ]);
+    const people = (svc as unknown as { people: { namesByUserIdsTx: ReturnType<typeof vi.fn> } })
+      .people;
+    people.namesByUserIdsTx.mockImplementationOnce(
+      async () => new Map([["user-0", { userId: "user-0", ...person }]]),
+    );
+    const out = await svc.export(USER, "p1", {});
+    const ExcelJS = await import("exceljs");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(out.buffer as unknown as ArrayBuffer);
+    const row = wb.worksheets[0].getRow(2);
+    expect(wb.worksheets[0].getRow(1).getCell(TEXT_COLUMNS.reason).value).toBe("Lý do điều chỉnh");
+    return [TEXT_COLUMNS.code, TEXT_COLUMNS.name, TEXT_COLUMNS.reason].map((c) => {
+      const v = row.getCell(c).value;
+      expect(typeof v === "string" || v === null, `ô ${c} phải là chữ, không phải công thức`).toBe(
+        true,
+      );
+      return String(v ?? "");
+    });
+  }
+
+  it("ALLOW đối chứng: chữ thường đi nguyên vẹn (không tiền tố thừa)", async () => {
+    expect(
+      await exportWith({ displayName: "Nguyễn Văn A", employeeCode: "NV001" }, "Truy thu"),
+    ).toEqual(["NV001", "Nguyễn Văn A", "Truy thu"]);
+  });
+
+  it.each([
+    ['=HYPERLINK("http://x","bấm")', "=", "@SUM(A1)"],
+    ["+1+1", "-2+3", "\tcmd"],
+    ["@cmd", "\r=1", "=1+1"],
+  ])(
+    "họ tên %j · mã %j · lý do %j ⇒ cả ba ô bắt đầu bằng dấu nháy đơn",
+    async (name, code, reason) => {
+      const cells = await exportWith({ displayName: name, employeeCode: code }, reason);
+      // exceljs đọc lại CR thành LF (chuẩn hoá XML) — so trên cùng dạng; tiền tố `'` là thứ đang được đo.
+      const lf = (v: string) => v.replace(/\r/g, "\n");
+      expect(cells).toEqual([`'${code}`, `'${name}`, `'${reason}`].map(lf));
+    },
+  );
 });

@@ -1,12 +1,9 @@
 import { Logger, UnprocessableEntityException } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  PayrollPaymentExportService,
-  UNC_COLUMNS,
-  xlsxSafe,
-} from "./payroll-payment-export.service";
+import { PayrollPaymentExportService, UNC_COLUMNS } from "./payroll-payment-export.service";
 import { PAYROLL_EXPORT_MAX_ROWS } from "./payroll-export.service";
+import { xlsxSafe } from "./payroll-xlsx.util";
 import type { PayrollActor, PayrollRequestUser } from "./payroll.types";
 
 /**

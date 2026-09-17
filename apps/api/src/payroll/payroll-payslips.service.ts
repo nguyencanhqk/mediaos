@@ -127,7 +127,11 @@ export class PayrollPayslipsService {
     });
   }
 
-  /** 014 — phát hành: `Approved → Paid`. Chưa sinh phiếu ⇒ 409 `007`. Phát N event NOTI-023 theo LÔ. */
+  /**
+   * 014 — phát hành: `Approved → Published` (v2 mig `0572`; `Paid` chỉ tới qua hoàn tất đợt chi trả 072). Chưa sinh
+   * phiếu ⇒ 409 `007` ở MỌI trạng thái (cổng đứng trước FSM — lệch có chủ đích với chữ «mọi ô ✗ ⇒ 001» của SPEC-11
+   * §21.1 #12, ghi ở `docs/QA/evidence/S15-PAYROLL-QA-1-ACCEPTANCE.md`). Phát N event NOTI-023 theo LÔ.
+   */
   async publish(user: PayrollRequestUser, id: string): Promise<PayrollWriteResultDto> {
     await this.access.resolveActor(user, "periodPublish");
     return this.db.withTenant(user.companyId, async (tx) => {
@@ -185,11 +189,11 @@ export class PayrollPayslipsService {
         this.repo.listTx(
           tx,
           user.companyId,
-          opts,
+          { ...opts, ownerUserId: null },
           query.per_page,
           payrollOffset(query.page, query.per_page),
         ),
-        this.repo.countTx(tx, user.companyId, opts),
+        this.repo.countTx(tx, user.companyId, { ...opts, ownerUserId: null }),
       ]);
       await this.audit.record(tx, {
         action: "read",

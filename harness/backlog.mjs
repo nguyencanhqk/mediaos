@@ -16610,6 +16610,33 @@ export const backlog = [
     notes: ["🟡 LIGHT gate; form chở tiền — không log giá trị."],
   },
   {
+    id: "S15-PAYROLL-FE-6",
+    module: "PAYROLL",
+    layer: "FE",
+    title:
+      "Nợ FE-3 (lộ ra ở S15-PAYROLL-QA-1 T5): màn chi tiết đợt chi trả chưa có thao tác trên DÒNG CHI — đánh dấu đã chi · gỡ dòng chưa chi · thêm người (PAYROLL-API-069 markPaidUserIds/removeUserIds/addUserIds) — client đã có (payrollApi.updatePaymentBatch), apps/app chưa gọi ở đâu",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/payroll/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/**",
+      "docs/plans/S15-PAYROLL-FE-6.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S15-PAYROLL-QA-1"],
+    src: [
+      "docs/plans/S15-PAYROLL-QA-1.md §0 (T5 không test được); SPEC-11 §9 PAY-SCREEN-013 · §15.1 hàng 069/070; contracts updatePaymentBatchSchema (KHÔNG có «bỏ đánh dấu đã chi» ở v2 — D-2); PaymentBatchDetailPage.tsx bảng dòng chỉ-đọc",
+    ],
+    done_when: [
+      "Bảng dòng của đợt Draft/Ready có chọn nhiều + «Đánh dấu đã chi» · «Gỡ khỏi đợt» (chỉ dòng CHƯA chi) · «Thêm người» — gate useCanExact(manage:payment-batch); đợt Completed ⇒ chỉ đọc; dòng đã chi KHÔNG có nút gỡ (BE 409 027 line-already-paid)",
+      "Mọi kind 027 của 069 có chữ riêng qua payrollErrorText; invalidate chi tiết + dòng + danh sách đợt",
+      "Spec T5 (nợ QA-1 done_when 6): ALLOW có cặp ⇒ nút hiện + gọi 069 đúng payload · DENY thiếu cặp ⇒ nút vắng, client không gọi · dòng đã chi ⇒ không gỡ được; typecheck/build/test xanh",
+    ],
+    notes: ["🟡 LIGHT gate; thao tác chi tiền — xác nhận trước khi gửi, không log số tài khoản."],
+  },
+  {
     id: "S15-UI-SHELL-2",
     module: "FND",
     layer: "FE",

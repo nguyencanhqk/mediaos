@@ -409,15 +409,26 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(2) TẦNG 1 — decorator khai ĐÚNG cặp VÀ đúng cờ isSensitive", () => {
     const bad: string[] = [];
+    let checked = 0;
     for (const row of ROUTE_TO_KEY) {
       const route = payrollRoutes.find((r) => r.httpMethod === row.method && r.path === row.path);
       if (!route) continue;
+      checked++;
       const pair = PAYROLL_ROUTE_PAIRS[row.key];
       const want = `${pair.action}:${pair.resourceType}`;
       if (!route.hasPermission || route.permission !== want) {
         bad.push(`${row.method} ${row.path} — decorator '${route.permission}' ≠ bảng '${want}'`);
       }
+      // S15-PAYROLL-QA-1 (G13): tiêu đề hứa so CẢ cờ nhưng bản trước chỉ so chuỗi cặp — decorator gõ cứng
+      // `isSensitive: false` vẫn xanh. So TƯỜNG MINH từng route (undefined ≠ false: option bị bỏ cũng là lệch).
+      if (route.isSensitive !== pair.isSensitive) {
+        bad.push(
+          `${row.method} ${row.path} — decorator isSensitive=${String(route.isSensitive)} ≠ bảng ${String(pair.isSensitive)}`,
+        );
+      }
     }
+    // Chống xanh-RỖNG: `continue` ở trên không được nuốt route nào (1) đã chốt đủ 85.
+    expect(checked, "vòng so decorator phải đi qua ĐỦ 85 route").toBe(85);
     expect(bad, "decorator lệch bảng hằng (sửa route hoặc sửa bảng QUA FULL gate)").toEqual([]);
   });
 

@@ -12,6 +12,7 @@ import {
   PAYROLL_ERR,
 } from "./payroll.errors";
 import type { PayrollRequestUser } from "./payroll.types";
+import { xlsxSafe } from "./payroll-xlsx.util";
 
 /** 7 cột CỐ ĐỊNH của tệp UNC (plan D-6) — hợp đồng với cổng ngân hàng, không tuỳ biến theo công ty ở v2. */
 export const UNC_COLUMNS: ReadonlyArray<{ header: string; width: number }> = [
@@ -23,15 +24,6 @@ export const UNC_COLUMNS: ReadonlyArray<{ header: string; width: number }> = [
   { header: "Số tiền", width: 16 },
   { header: "Nội dung", width: 28 },
 ];
-
-/**
- * Chống formula injection (QA-1): ô văn bản bắt đầu bằng `= + - @` được tiền tố `'` để Excel/LibreOffice hiển thị như
- * chữ. Tên người/tên ngân hàng là dữ liệu người dùng nhập — không tin.
- */
-export function xlsxSafe(s: string): string {
-  // S15-PAYROLL-BE-5 (security-review LOW): thêm TAB/CR đầu chuỗi — OWASP CSV-injection coi chúng cùng lớp với `= + - @`.
-  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-}
 
 /**
  * S15-PAYROLL-BE-4 — `PAYROLL-API-071`: tệp UNC XLSX của một đợt chi trả (khuôn `PayrollExportService`).

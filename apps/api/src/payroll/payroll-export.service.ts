@@ -13,6 +13,7 @@ import {
   PAYROLL_ERR,
 } from "./payroll.errors";
 import type { PayrollRequestUser } from "./payroll.types";
+import { xlsxSafe } from "./payroll-xlsx.util";
 
 /** Trần dòng của một lượt xuất (SPEC-11 §18 · API-18 §5.1). Vượt ⇒ 422 `016`, KHÔNG cắt bớt im lặng. */
 export const PAYROLL_EXPORT_MAX_ROWS = 10_000;
@@ -130,8 +131,10 @@ export class PayrollExportService {
     for (const r of rows) {
       const p = names.get(r.user_id);
       sheet.addRow([
-        p?.employeeCode ?? "",
-        p?.displayName ?? "",
+        // S15-PAYROLL-QA-1 (P1): ô VĂN BẢN người dùng nhập qua `xlsxSafe` như 071/082 — ghi thô thì
+        // `=HYPERLINK(...)` trong họ tên/lý do thành công thức khi kế toán sửa ô hoặc lưu lại dạng CSV.
+        xlsxSafe(p?.employeeCode ?? ""),
+        xlsxSafe(p?.displayName ?? ""),
         Number(r.work_days),
         Number(r.present_days),
         Number(r.paid_leave_days),
@@ -143,7 +146,7 @@ export class PayrollExportService {
         Number(r.penalty_amount),
         Number(r.deduction_amount),
         Number(r.adjustment_amount),
-        r.adjustment_reason ?? "",
+        xlsxSafe(r.adjustment_reason ?? ""),
         Number(r.gross),
         Number(r.net),
       ]);
