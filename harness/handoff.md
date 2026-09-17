@@ -2,6 +2,16 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-17 (n) — **S15-PAYROLL-BE-5 ĐÃ MERGE master** (#517 → `91e36d66`, owner uỷ quyền `--admin`) ✅
+
+**Bắt đầu phiên sau ở đây:** master đã có track D phần 1 (078 Tổng quan · 079 Lời nhắc · 080–082 bảy báo cáo + XLSX · 018 `?payrollPeriodId=` trả `lineTotals`/`componentTotals` · 036 `insuranceIssue`). CI #517 xanh toàn bộ trước merge (Build·Typecheck·Migrate·Test API · Lint·Typecheck·Migrate·RLS · Build app/auth/console · gitleaks · audit · tooling). Nhánh đã xoá; lane `mediaos_be5` đã DROP; ledger `finished`; STATUS/INDEX regen + push master sau merge. Không PR PAYROLL nào mở. Việc kế: **`S15-PAYROLL-BE-5B`** (PDF 083–085 + hạ tầng tệp server) → FE-4 → QA-1. **Đọc memory `s15-payroll-be5-wave-state` TRƯỚC BE-5B** — số đo pdfmake/file-service đã có, ĐỪNG đo lại. Bằng chứng BE-5: `docs/plans/S15-PAYROLL-BE-5.md` §8.
+
+**Chỗ bắt tay BE-5B (đã định vị, chưa đọc sâu):** `apps/api/src/storage/object-storage.service.ts` (`presignTtlSec` đọc env, `getSignedUrl` không nhận TTL theo lượt) · `storage/s3-storage.adapter.ts` (`resolveTtl` chỉ đổi `expiresAt`) · `foundation/files/temp-file-cleanup.job-handler.ts` + `.repository.ts` (chỉ xoá mềm hàng) · `foundation/files/file-policy.service.ts` `registerResolver` (khuôn đăng ký ở `employees.module.ts`/`chat.module.ts`).
+
+**Rủi ro owner đã chấp nhận (ghi lại cho QA-1):** R2b — suy lương qua nhóm nhỏ (lọc đơn vị 1 người) ở 3 báo cáo tổng hợp + khối 6 Tổng quan; kích hoạt lại nếu cấp `view:payroll-report` cho vai không giữ `view-payslip`.
+
+**Dọn dẹp còn treo (không thuộc WO nào):** cụm Postgres local còn ~120 DB lane cũ `mediaos_*` (memory `pgdata-bloat-lane-dbs-and-job-log`) — chỉ xoá khi owner đồng ý.
+
 ## Phiên 2026-09-17 (m) — **S15-PAYROLL-DEBT-1 ĐÃ MERGE master** (#516 → `2c9dab5b`, owner uỷ quyền `--admin`) ✅
 
 **Bắt đầu phiên sau ở đây:** nợ vệ sinh S15 đã trả (i18n + contracts `payroll.ts` < 800 · prettier 3 file · comment `users.status` · `ConfirmDialog.children` · xoá mềm ngân sách · test 054 · `apps/app/src/lib/download-blob.ts` · `use-local-pref` re-export ui). Lane `mediaos_debt1` đã DROP; nhánh đã xoá; STATUS/INDEX regen + push master sau merge. Không PR PAYROLL nào mở. Việc kế: **`S15-PAYROLL-BE-5`** → FE-4 → QA-1 → DASH-1. Nợ còn lại đã có chỗ: G3 → `S15-PAYROLL-FE-5` · sidebar-registry → `S15-UI-SHELL-2` · nợ BE-2 → `S15-PAYROLL-BE-2B` (🔴) · tổng cột toàn kỳ → `done_when` BE-5 · tách int-spec be4-batches + T4–T6 + đột biến (k) → `done_when` QA-1. **Đọc memory `s15-payroll-debt1-wave-state` TRƯỚC QA-1.** Bằng chứng: `docs/plans/S15-PAYROLL-DEBT-1.md` §3.
