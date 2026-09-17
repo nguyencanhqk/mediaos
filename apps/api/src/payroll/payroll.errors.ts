@@ -121,6 +121,8 @@ export const PAYROLL_ERR_CODE = {
   BUDGET_EXISTS: "PAYROLL-ERR-029",
   /** 422 — import: sai khuôn (`import-invalid`) · > 5.000 dòng (`import-too-large`) · mã NV lạ (`import-unknown-user`). */
   IMPORT_INVALID: "PAYROLL-ERR-030",
+  /** 422 — **S15-PAYROLL-BE-5**. Báo cáo 081/082 > 50.000 dòng theo bộ lọc (`report-too-large`); PDF hàng loạt = BE-5B. */
+  REPORT_TOO_LARGE: "PAYROLL-ERR-031",
   /**
    * 409 — **S15-PAYROLL-BE-1**. Hai bản ghi người phụ thuộc **chồng lấp khoảng hiệu lực** cho cùng một
    * NPT. Chốt cuối `EXCLUDE USING gist` ở DB (`payroll_dependents_no_overlap_excl`) ném **`23P01`**,
@@ -292,6 +294,8 @@ export const PAYROLL_ERR = {
     `PAYROLL-ERR-030: tệp vượt trần ${max} dòng — tách tệp rồi nạp từng phần.`,
   IMPORT_UNKNOWN_USER:
     "PAYROLL-ERR-030: có dòng mang mã nhân viên không có trong công ty — sửa mã hoặc bỏ dòng. Không dòng nào được ghi.",
+  REPORT_TOO_LARGE: (total: number, max: number) =>
+    `PAYROLL-ERR-031: báo cáo có ${total} dòng, vượt trần ${max} — thu hẹp khoảng tháng hoặc lọc theo đơn vị.`,
   NO_ELIGIBLE_COMPLETER:
     "PAYROLL-ERR-017: công ty chưa có người nào khác bạn giữ quyền quản lý đợt chi trả — đợt lập ra sẽ không hoàn tất được (bốn mắt). Cấp quyền cho người thứ hai trước.",
   TEMPLATE_IN_USE: (periods: number) =>

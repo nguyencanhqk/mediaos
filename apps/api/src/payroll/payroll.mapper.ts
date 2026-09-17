@@ -5,6 +5,7 @@ import type {
   PayrollPeriodLineDto,
   PayrollPeriodStatus,
   PayrollSummaryDto,
+  SalaryComponentKind,
   PayslipDerivedStatus,
   PayslipDetailDto,
   PayslipDto,
@@ -315,6 +316,12 @@ interface RawSummary {
   total_net: string;
 }
 
+/** S15-PAYROLL-BE-5 D-15 — tổng cột toàn kỳ (chỉ khi 018 được gọi kèm `payrollPeriodId`). */
+export interface RawSummaryTotals {
+  lines: Record<string, string>;
+  components: ReadonlyArray<Record<string, unknown>>;
+}
+
 /**
  * 018 — tổng chi phí kỳ. `totalGross`/`totalNet` là **`number`**, KHÔNG chuỗi.
  *
@@ -323,7 +330,11 @@ interface RawSummary {
  * cách đọc tiền trong cùng một màn. Tổng VND của một kỳ (~10^12) còn cách `MAX_SAFE_INTEGER` bốn bậc.
  * Chưa có consumer nào parse chuỗi (`S13-PAYROLL-FE-1` chưa tồn tại lúc đảo).
  */
-export function toPayrollSummaryDto(row: RawSummary, actor: PayrollActor): PayrollSummaryDto {
+export function toPayrollSummaryDto(
+  row: RawSummary,
+  actor: PayrollActor,
+  totals: RawSummaryTotals | null = null,
+): PayrollSummaryDto {
   assertMoneyRoute(actor);
   return {
     payrollPeriodId: row.payroll_period_id,
@@ -333,6 +344,26 @@ export function toPayrollSummaryDto(row: RawSummary, actor: PayrollActor): Payro
     ...when(actor.canSeeMoney, {
       totalGross: num(row.total_gross),
       totalNet: num(row.total_net),
+    }),
+    ...when(actor.canSeeMoney && totals !== null, {
+      lineTotals: totals && {
+        baseAmount: num(totals.lines["base_amount"]),
+        allowanceAmount: num(totals.lines["allowance_amount"]),
+        bonusAmount: num(totals.lines["bonus_amount"]),
+        penaltyAmount: num(totals.lines["penalty_amount"]),
+        deductionAmount: num(totals.lines["deduction_amount"]),
+        adjustmentAmount: num(totals.lines["adjustment_amount"]),
+        gross: num(totals.lines["gross"]),
+        net: num(totals.lines["net"]),
+      },
+      componentTotals: totals?.components.map((c) => ({
+        code: String(c["code"]),
+        label: String(c["label"] ?? c["code"]),
+        kind: c["kind"] as SalaryComponentKind,
+        sortOrder: Number(c["sort_order"] ?? 0),
+        isVisible: c["is_visible"] !== false,
+        total: num(c["total"] as string | null),
+      })),
     }),
   } as PayrollSummaryDto;
 }

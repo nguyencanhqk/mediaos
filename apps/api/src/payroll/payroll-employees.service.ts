@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import type { PayrollEmployeeListQuery } from "@mediaos/contracts";
 import { paginated, toPagination } from "../common/pagination";
 import { DatabaseService } from "../db/db.service";
@@ -40,11 +40,22 @@ export class PayrollEmployeesService {
     const actor = await this.access.resolveActor(user, "employeeList");
     // Cặp PHỤ, cấp TRƯỜNG — resolve NGOÀI `resolveActor` có chủ đích (xem JSDoc `canRevealTaxCode`).
     const canRevealTaxCode = await this.access.canRevealTaxCode(user);
+    // S15-PAYROLL-BE-5 §0b B1: lọc theo lương đóng BH là dò LƯƠNG theo người (ghép `q=<mã NV>` ⇒ total 0/1) —
+    // `view:payroll-employee` không chở tiền, nên giá trị này đòi thêm `view:salary-profile`@Company.
+    if (
+      query.insuranceIssue === "salary-out-of-range" &&
+      !(await this.access.canResolve(user, "salaryProfileList"))
+    ) {
+      throw new ForbiddenException(
+        "AUTH-ERR-FORBIDDEN: lọc theo lương đóng bảo hiểm cần quyền xem hồ sơ lương (scope Công ty)",
+      );
+    }
     return this.db.withTenant(user.companyId, async (tx) => {
       const filter = {
         q: query.q,
         orgUnitId: query.orgUnitId,
         hasSalaryProfile: query.hasSalaryProfile,
+        insuranceIssue: query.insuranceIssue,
       };
       const [rows, total] = await Promise.all([
         this.repo.listTx(

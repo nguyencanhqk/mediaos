@@ -72,6 +72,12 @@ import {
 import { PayrollPaymentBatchesRepository } from "./payroll-payment-batches.repository";
 import { PayrollPaymentBatchesService } from "./payroll-payment-batches.service";
 import { PayrollPaymentExportService } from "./payroll-payment-export.service";
+import { PayrollOverviewRepository } from "./payroll-overview.repository";
+import { PayrollOverviewService } from "./payroll-overview.service";
+import { PayrollReportExportService } from "./payroll-report-export.service";
+import { PayrollReportsController } from "./payroll-reports.controllers";
+import { PayrollReportsRepository } from "./payroll-reports.repository";
+import { PayrollReportsService } from "./payroll-reports.service";
 
 /**
  * `PayrollModule` (SPEC-11 · DB-13 · API-18) — **58/58 route** sau `S15-PAYROLL-BE-2`:
@@ -120,6 +126,8 @@ import { PayrollPaymentExportService } from "./payroll-payment-export.service";
     PayrollPaymentBatchesController,
     PayrollBudgetsController,
     PayrollAdjustmentImportsController,
+    // ── S15-PAYROLL-BE-5 ──
+    PayrollReportsController,
   ],
   providers: [
     PayrollAccessService,
@@ -169,6 +177,12 @@ import { PayrollPaymentExportService } from "./payroll-payment-export.service";
     PayrollImportParser,
     PayrollAdjustmentImportRepository,
     PayrollAdjustmentImportService,
+    // ── S15-PAYROLL-BE-5 (track D phần 1) ──
+    PayrollReportsRepository,
+    PayrollOverviewRepository,
+    PayrollReportsService,
+    PayrollReportExportService,
+    PayrollOverviewService,
   ],
   // S13-PAYROLL-DASH-1: chỉ PayrollCalcService — KHÔNG export repository (widget phải đi qua service để
   // giữ nguyên tầng guard THỨ HAI `resolveActor` + audit; export repository là mở đường vòng qua cả hai).

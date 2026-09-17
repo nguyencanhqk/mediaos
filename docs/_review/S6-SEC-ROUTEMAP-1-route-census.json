@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 624,
-    "controllers": 114,
-    "gated": 585,
+    "routes": 629,
+    "controllers": 115,
+    "gated": 590,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -7159,6 +7159,86 @@
       "path": "/api/v1/payroll/pickers/people",
       "hasPermission": true,
       "permission": "view:salary-profile",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollReportsController#catalog",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/reports",
+      "hasPermission": true,
+      "permission": "view:payroll-report",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollReportsController#data",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/reports/:reportCode",
+      "hasPermission": true,
+      "permission": "view:payroll-report",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollReportsController#export",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/reports/:reportCode/export",
+      "hasPermission": true,
+      "permission": "view:payroll-report",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollReportsController#overview",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/overview",
+      "hasPermission": true,
+      "permission": "view:payroll-report",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "PayrollReportsController#reminders",
+      "httpMethod": "GET",
+      "path": "/api/v1/payroll/overview/reminders",
+      "hasPermission": true,
+      "permission": "view:payroll-report",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

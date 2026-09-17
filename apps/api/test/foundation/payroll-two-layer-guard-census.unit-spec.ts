@@ -166,6 +166,12 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: PayrollRo
     key: "importAdjustments",
   },
   { method: "GET", path: "/api/v1/payroll/imports/adjustments-template", key: "importTemplate" },
+  // ── S15-PAYROLL-BE-5 (track D phần 1) — `reports` TĨNH khai trước `reports/:reportCode` ──
+  { method: "GET", path: "/api/v1/payroll/overview", key: "overview" },
+  { method: "GET", path: "/api/v1/payroll/overview/reminders", key: "overviewReminders" },
+  { method: "GET", path: "/api/v1/payroll/reports", key: "reportList" },
+  { method: "GET", path: "/api/v1/payroll/reports/:reportCode", key: "reportData" },
+  { method: "GET", path: "/api/v1/payroll/reports/:reportCode/export", key: "reportExport" },
 ];
 
 const PAYROLL_CONTROLLERS = new Set([
@@ -188,6 +194,8 @@ const PAYROLL_CONTROLLERS = new Set([
   "PayrollPaymentBatchesController",
   "PayrollBudgetsController",
   "PayrollAdjustmentImportsController",
+  // ── S15-PAYROLL-BE-5 ──
+  "PayrollReportsController",
 ]);
 
 /** Sổ pin method↔key — đổi handler/key là ĐỎ, phải sửa CÓ CHỦ ĐÍCH qua FULL gate. */
@@ -280,6 +288,13 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "PayrollBudgetsService#update": ["budgetUpdate"],
   "PayrollAdjustmentImportService#import": ["importAdjustments"],
   "PayrollAdjustmentImportService#template": ["importTemplate"],
+  // ── S15-PAYROLL-BE-5 (track D phần 1) — cặp NGUỒN (owner O-2) đi qua `def.sourceRouteKey` (biến, scanner này
+  //    không bắt) ⇒ ghim riêng ở `payroll-report-source-pairs.unit-spec.ts`. 082 assert THÊM `periodExport`. ──
+  "PayrollOverviewService#overview": ["overview"],
+  "PayrollOverviewService#reminders": ["overviewReminders"],
+  "PayrollReportsService#catalog": ["reportList"],
+  "PayrollReportsService#data": ["reportData"],
+  "PayrollReportExportService#export": ["periodExport", "reportExport"],
 };
 
 /**
@@ -358,8 +373,9 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(1) bảng fixture phủ ĐÚNG tập route PAYROLL đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 77 route PAYROLL (API-18 §5 + §5b)").toBe(
-      77,
+    // S15-PAYROLL-BE-5: +5 (078–082) ⇒ 82; PDF 083–085 thuộc S15-PAYROLL-BE-5B ⇒ 85.
+    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 82 route PAYROLL (API-18 §5 + §5b)").toBe(
+      82,
     );
     const seen = new Set(payrollRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
@@ -391,7 +407,8 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     const calls = serviceResolveActorCalls();
     // 80 = 77 route + literal thứ hai của `PayrollExportService#export` (`view-line`) + hai literal thêm của
     // `PayrollPaymentExportService#export` (`periodExport` · `payslipList` — 071 gác BA cặp, S15-PAYROLL-BE-4).
-    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(80);
+    // S15-PAYROLL-BE-5: +5 route + literal `periodExport` của `PayrollReportExportService#export` ⇒ 86.
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(86);
     const validKeys = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     expect(
       calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),
@@ -427,7 +444,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     const all = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     const used = new Set(ROUTE_TO_KEY.map((r) => r.key as string));
     const pending = new Set<string>(PAYROLL_PENDING_BE2);
-    expect(all.size, "bảng hằng phải khai đủ 77 route API-18").toBe(77);
+    expect(all.size, "bảng hằng phải khai đủ 82 route API-18 (BE-5)").toBe(82);
     expect(
       [...pending].filter((k) => used.has(k)),
       "key ĐÃ có route mà vẫn nằm trong PENDING_BE2",
@@ -440,7 +457,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     // một `ROUTE_TO_KEY` bị xoá sạch cũng thoả cả ba assert trên. Hai neo dưới ghim SỐ LƯỢNG thật của
     // cả bảng hằng lẫn tập key đã nối dây. **Cấm hạ neo để lấy màu xanh.**
     expect(pending.size, "BE-2 đã nối dây hết — PENDING_BE2 phải RỖNG").toBe(0);
-    expect(used.size, "77 key đều phải có route").toBe(77);
+    expect(used.size, "82 key đều phải có route").toBe(82);
   });
 
   it("(6) SÀN SCOPE Company — đúng 4 route Own (/me/payslips* + /me/payroll-advances) được miễn", () => {
@@ -469,7 +486,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     ]);
   });
 
-  it("(8) cờ sensitive khớp seed mig 0565+0571 — đúng 29 cặp is_sensitive trên 32 cặp có route", () => {
+  it("(8) cờ sensitive khớp seed mig 0565+0571 — đúng 30 cặp is_sensitive trên 33 cặp có route", () => {
     const pairs = Object.values(PAYROLL_ROUTE_PAIRS);
     const sensitive = new Set(
       pairs.filter((p) => p.isSensitive).map((p) => `${p.action}:${p.resourceType}`),
@@ -481,9 +498,10 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     // payroll-template · statutory-rate) — cả 8 cặp v2 đều sensitive (mig 0571).
     // S15-PAYROLL-BE-4: +8 cặp track C (view/manage/approve/view-own × payroll-advance · view/manage × payment-batch ·
     // view/manage × payroll-budget) — TẤT CẢ sensitive (mig 0571) ⇒ 21 → 29; distinct có route 24 → 32.
-    expect(sensitive.size, "29 cặp sensitive (SPEC-11 §11.1 + §11.3)").toBe(29);
+    // S15-PAYROLL-BE-5: + `view:payroll-report` (sensitive, mig 0571) ⇒ 30 / 33 — đủ 17 cặp §11.3 có route.
+    expect(sensitive.size, "30 cặp sensitive (SPEC-11 §11.1 + §11.3)").toBe(30);
     // Cặp `access:payroll` là cổng nav, không gác route nào.
-    expect(sensitive.size + notSensitive.size).toBe(32);
+    expect(sensitive.size + notSensitive.size).toBe(33);
     expect([...notSensitive].sort()).toEqual([
       "acknowledge-own-payslip:payslip",
       "manage:payroll-period",
@@ -546,6 +564,9 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
         "budgetUpdate",
         "importAdjustments",
         "importTemplate",
+        // ── S15-PAYROLL-BE-5 — 079 chỉ SỐ ĐẾM · 080 danh mục metadata. KHÔNG thêm 078/081/082 (chở tiền). ──
+        "overviewReminders",
+        "reportList",
       ].sort(),
     );
     // Mọi key trong set phải là route THẬT — key chết ở đây là mask im lặng cho một route không tồn tại.

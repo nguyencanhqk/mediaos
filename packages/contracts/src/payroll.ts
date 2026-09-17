@@ -589,6 +589,15 @@ export const payrollExportQuerySchema = z.object({
 });
 export type PayrollExportQuery = z.infer<typeof payrollExportQuerySchema>;
 
+/**
+ * `GET /payroll-periods/summary` (018). Vắng `payrollPeriodId` ⇒ kỳ MỚI NHẤT, không tổng cột (đường widget
+ * DASH giữ nguyên). Có ⇒ tóm tắt KỲ ĐÓ + `lineTotals`/`componentTotals` toàn kỳ (S15-PAYROLL-BE-5 D-15).
+ */
+export const payrollSummaryQuerySchema = z
+  .object({ payrollPeriodId: z.string().uuid().optional() })
+  .strict();
+export type PayrollSummaryQuery = z.infer<typeof payrollSummaryQuerySchema>;
+
 /** Tổng chi phí kỳ — gác bằng `('view-line','payroll-period')` + SÀN scope Company (§9g). */
 export const payrollSummarySchema = z.object({
   payrollPeriodId: z.string().uuid(),
@@ -597,6 +606,32 @@ export const payrollSummarySchema = z.object({
   headcount: z.number().int().nonnegative(),
   totalGross: z.number().optional(),
   totalNet: z.number().optional(),
+  /** Tổng 8 cột tiền của MỌI dòng sống trong kỳ (SUM ở SQL) — chỉ khi gọi kèm `payrollPeriodId`. */
+  lineTotals: z
+    .object({
+      baseAmount: z.number(),
+      allowanceAmount: z.number(),
+      bonusAmount: z.number(),
+      penaltyAmount: z.number(),
+      deductionAmount: z.number(),
+      adjustmentAmount: z.number(),
+      gross: z.number(),
+      net: z.number(),
+    })
+    .optional(),
+  /** Tổng từng thành phần (snapshot `component_values_json`) toàn kỳ; kỳ v1 ⇒ `[]`. Cùng điều kiện. */
+  componentTotals: z
+    .array(
+      z.object({
+        code: z.string(),
+        label: z.string(),
+        kind: salaryComponentKindEnum,
+        sortOrder: z.number().int(),
+        isVisible: z.boolean(),
+        total: z.number(),
+      }),
+    )
+    .optional(),
 });
 export type PayrollSummaryDto = z.infer<typeof payrollSummarySchema>;
 

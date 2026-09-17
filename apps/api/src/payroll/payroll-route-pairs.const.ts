@@ -162,6 +162,15 @@ export const PAYROLL_ROUTE_PAIRS = {
   // 076/077 TÁI DÙNG cặp CŨ `manage:bonus-penalty` (SPEC-11 §15.1) — đích ghi là `bonus_penalties` `Pending`.
   importAdjustments: pair("manage", "bonus-penalty", true), //                              076
   importTemplate: pair("manage", "bonus-penalty", true), //                                 077
+  // ── v2 track D phần 1 — Tổng quan · Lời nhắc · 7 báo cáo 078–082 (S15-PAYROLL-BE-5) ─────────────────
+  // MỘT cặp `view:payroll-report` (SPEC-11 §11.3), sàn Company cho cả 5 (§9.1 PAY-SCREEN-015/016). Báo cáo lộ tiền
+  // THEO NGƯỜI assert THÊM cặp đọc của nguồn ở service (owner O-2) — `PAYROLL_REPORTS[code].sourceRouteKey`;
+  // 082 assert thêm `periodExport` (`export:payroll`). PDF 083–085 thuộc S15-PAYROLL-BE-5B.
+  overview: pair("view", "payroll-report", true), //                                        078
+  overviewReminders: pair("view", "payroll-report", true), //                               079
+  reportList: pair("view", "payroll-report", true), //                                      080
+  reportData: pair("view", "payroll-report", true), //                                      081
+  reportExport: pair("view", "payroll-report", true), //                                    082
 } as const satisfies Record<string, PayrollPair>;
 
 export type PayrollRouteKey = keyof typeof PAYROLL_ROUTE_PAIRS;

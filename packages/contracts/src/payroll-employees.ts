@@ -23,6 +23,26 @@ import { dependentRelationshipEnum, payrollPageQuery } from "./payroll";
 // 1. PAYROLL-API-036/037 — nhân sự hưởng lương (chiếu HR bó hẹp, PAY-DEC-016)
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Vấn đề bảo hiểm của nhân sự (S15-PAYROLL-BE-5 D-12..D-14) — CÙNG vị từ với lời nhắc #2/#3 của 079:
+ *  · `not-joined` — NV chính thức (hồ sơ `active` · `full_time`/`part_time` · đã tới ngày chính thức) chưa
+ *    tham gia BHXH (không có thiết lập, hoặc `joinsSocialInsurance = false`);
+ *  · `salary-out-of-range` — NV chính thức đang tham gia BHXH mà lương đóng BH của hồ sơ hiệu lực hôm nay
+ *    nằm ngoài `[lương tối thiểu vùng, trần BHXH]` của bản tỉ lệ hiệu lực hôm nay.
+ */
+export const payrollInsuranceIssueEnum = z.enum(["not-joined", "salary-out-of-range"]);
+export type PayrollInsuranceIssue = z.infer<typeof payrollInsuranceIssueEnum>;
+
+/**
+ * Boolean từ query-string. KHÔNG `z.coerce.boolean()`: `Boolean("false") === true` ⇒ bộ lọc «chưa có hồ sơ
+ * lương» của màn Nhân viên từng trả ĐÚNG tập ngược lại (S15-PAYROLL-BE-5 D-18). `preprocess` idempotent vì
+ * pipe có thể chạy hai lần (memory `zod-query-param-double-pipe-idempotent`); giá trị rác ⇒ 400.
+ */
+const queryBoolean = z.preprocess(
+  (v) => (v === "true" ? true : v === "false" ? false : v),
+  z.boolean(),
+);
+
 /** GET /payroll/employees (036) — filter + pagination. */
 export const payrollEmployeeListQuerySchema = z.object({
   /** Tìm theo họ tên hoặc mã nhân viên. */
@@ -33,7 +53,8 @@ export const payrollEmployeeListQuerySchema = z.object({
    */
   orgUnitId: z.string().uuid().optional(),
   /** `true` = chỉ nhân sự đã có ≥1 phiên bản hồ sơ lương chưa xoá mềm (không xét ngày hiệu lực). */
-  hasSalaryProfile: z.coerce.boolean().optional(),
+  hasSalaryProfile: queryBoolean.optional(),
+  insuranceIssue: payrollInsuranceIssueEnum.optional(),
   ...payrollPageQuery,
 });
 export type PayrollEmployeeListQuery = z.infer<typeof payrollEmployeeListQuerySchema>;

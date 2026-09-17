@@ -1,5 +1,6 @@
 import {
   Body,
+  Header,
   Controller,
   Get,
   Param,
@@ -14,6 +15,7 @@ import {
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request, Response } from "express";
+import { payrollSummaryQuerySchema, type PayrollSummaryQuery } from "@mediaos/contracts";
 import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
@@ -135,8 +137,13 @@ export class PayrollPeriodsController {
   @RequirePermission(P.periodSummary.action, P.periodSummary.resourceType, {
     isSensitive: P.periodSummary.isSensitive,
   })
-  summary(@Req() req: AuthenticatedRequest) {
-    return this.calc.summary(req.user);
+  @Header("Cache-Control", "no-store")
+  summary(
+    @Req() req: AuthenticatedRequest,
+    // S15-PAYROLL-BE-5 D-15: `?payrollPeriodId=` ⇒ tổng cột toàn kỳ; validate tại chỗ (UUID rác ⇒ 400, không 500).
+    @Query(new ZodValidationPipe(payrollSummaryQuerySchema)) query: PayrollSummaryQuery,
+  ) {
+    return this.calc.summary(req.user, query);
   }
 
   /** 007 — POST /payroll-periods/:id/calculate (envelope KHÔNG khoá tiền nào). */
