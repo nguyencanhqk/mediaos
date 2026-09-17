@@ -23,6 +23,7 @@ import {
   type PayrollExportQuery,
   payrollSummarySchema,
   type PayrollSummaryDto,
+  type PayrollSummaryQuery,
   payrollReadinessSchema,
   type PayrollReadinessDto,
   payslipSchema,
@@ -61,6 +62,8 @@ import { payrollEmployeesApi } from "./payroll-employees-api";
 import { payrollDisbursementApi } from "./payroll-disbursement-api";
 // S15-PAYROLL-FE-2 — track B (045–058) tách file, spread vào `payrollApi` bên dưới.
 import { payrollCatalogApi } from "./payroll-catalog-api";
+// S15-PAYROLL-FE-4 — track D (078–082) tách file, spread vào `payrollApi` bên dưới.
+import { payrollReportsApi } from "./payroll-reports-api";
 
 /**
  * S13-PAYROLL-FE-1 — PAYROLL API client (SPEC-11 §15, PAYROLL-API-001..035). MIRROR BE 6 controller:
@@ -157,9 +160,15 @@ export const payrollApi = {
    * GET /payroll-periods/summary — tổng chi phí kỳ GẦN NHẤT (`view-line:payroll-period` + sàn Company).
    * Công ty chưa có kỳ nào ⇒ **200 + `null`** (không 404) để widget phân biệt «chưa có kỳ» với
    * «không có quyền».
+   *
+   * S15-PAYROLL-FE-4: kèm `payrollPeriodId` ⇒ tóm tắt KỲ ĐÓ + `lineTotals`/`componentTotals` TOÀN KỲ (SUM ở
+   * SQL — BE-5 D-15) cho hàng tổng của bảng lương; vắng ⇒ đường widget DASH cũ.
    */
-  getSummary: (): Promise<PayrollSummaryDto | null> =>
-    apiFetch(`/payroll-periods/summary`, payrollSummarySchema.nullable()),
+  getSummary: (query?: Partial<PayrollSummaryQuery>): Promise<PayrollSummaryDto | null> =>
+    apiFetch(
+      `/payroll-periods/summary${buildQueryString(query ?? {})}`,
+      payrollSummarySchema.nullable(),
+    ),
 
   /** POST /payroll-periods/:id/calculate — máy tính lương (`calculate`, SENSITIVE, @Idempotent). */
   calculatePeriod: (id: string, idempotencyKey: string): Promise<PayrollWriteResultDto> =>
@@ -385,4 +394,7 @@ export const payrollApi = {
 
   // ── S15-PAYROLL-FE-2 — track B 045–058 (`payroll-catalog-api.ts`) ─────────────────────────────
   ...payrollCatalogApi,
+
+  // ── S15-PAYROLL-FE-4 — track D 078–082 (`payroll-reports-api.ts`) ───────────────────────────────
+  ...payrollReportsApi,
 };

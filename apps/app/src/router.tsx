@@ -58,6 +58,7 @@ const indexRoute = createRoute({
 // Guarded module routes — wrap with ModuleWorkspaceLayout
 // ---------------------------------------------------------------------------
 import { ROUTE_REGISTRY } from "@mediaos/web-core";
+import { payrollInsuranceIssueEnum, type PayrollInsuranceIssue } from "@mediaos/contracts";
 
 export function getMeta(routeKey: string): RouteMeta {
   const meta = ROUTE_REGISTRY.find((r) => r.routeKey === routeKey);
@@ -2177,22 +2178,36 @@ const payrollBonusPenaltiesRoute = makeModuleRoute(
 // RouteMeta CỤC BỘ, gate = cặp ĐƯỜNG TẢI của 037 (`view:payroll-employee`, SENSITIVE — trong allowlist BE).
 // 5 tab bên trong gác THÊM từng cặp NGAY TRONG PAGE (tab thiếu cặp ⇒ ẩn). Path tĩnh "/payroll/employees"
 // và "/payroll/employees/$userId" không cạnh tranh nhau (TanStack xếp tĩnh trước param).
+//
+// S15-PAYROLL-FE-4: nhận `?insuranceIssue=not-joined|salary-out-of-range` — đích deep-link của Lời nhắc
+// (PAY-SCREEN-015). Giá trị lạ bị BỎ (không lọc), không ném.
 function PayrollEmployeeListRouteContent() {
   const navigate = useNavigate();
+  const { insuranceIssue } = payrollEmployeesRoute.useSearch();
   return (
     <PayrollEmployeeListPage
+      initialInsuranceIssue={insuranceIssue}
       onOpenEmployee={(id) =>
         void navigate({ to: "/payroll/employees/$userId", params: { userId: id } })
       }
     />
   );
 }
-const payrollEmployeesRoute = makeModuleRoute(
-  "/payroll/employees",
-  "payroll.employees",
-  "PAYROLL",
-  PayrollEmployeeListRouteContent,
-);
+const payrollEmployeesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/employees",
+  beforeLoad: authGuard,
+  validateSearch: (search: Record<string, unknown>): { insuranceIssue?: PayrollInsuranceIssue } => {
+    const parsed = payrollInsuranceIssueEnum.safeParse(search.insuranceIssue);
+    return parsed.success ? { insuranceIssue: parsed.data } : {};
+  },
+  component: () =>
+    buildModuleRouteContent(
+      getMeta("payroll.employees"),
+      "PAYROLL",
+      <PayrollEmployeeListRouteContent />,
+    ),
+});
 const payrollEmployeeDetailMeta: RouteMeta = {
   routeKey: "payroll.employee.detail",
   path: "/payroll/employees/$userId",
@@ -2464,6 +2479,94 @@ const payrollStatutoryRatesRoute = makeModuleRoute(
   "PAYROLL",
   StatutoryRateListPage,
 );
+
+// S15-PAYROLL-FE-4 — track D. `/payroll` = PAY-SCREEN-015 «Tổng quan»: vỏ route chỉ đòi `access:payroll`
+// (meta NỚI, cục bộ), `PayrollRootEntry` mới đánh giá meta THẬT của `ROUTE_REGISTRY` và CHUYỂN HƯỚNG người
+// thiếu `view:payroll-report` tới lá sidebar đầu tiên họ mở được (SPEC-11 §9.1). Trang Tổng quan (kèm
+// recharts) nạp lazy BÊN TRONG entry. Báo cáo: danh mục qua ROUTE_REGISTRY; màn xem dùng RouteMeta CỤC BỘ.
+const PayrollRootEntry = React.lazy(() =>
+  import("@/routes/payroll/PayrollRootEntry").then((m) => ({ default: m.PayrollRootEntry })),
+);
+const PayrollReportListPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollReportListPage").then((m) => ({
+    default: m.PayrollReportListPage,
+  })),
+);
+const PayrollReportViewPage = React.lazy(() =>
+  import("@/routes/payroll/PayrollReportViewPage").then((m) => ({
+    default: m.PayrollReportViewPage,
+  })),
+);
+const payrollOverviewMeta = getMeta("payroll.overview");
+const payrollRootShellMeta: RouteMeta = {
+  ...payrollOverviewMeta,
+  requiredPermissions: ["access:payroll"],
+};
+const payrollOverviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      payrollRootShellMeta,
+      "PAYROLL",
+      <PayrollRootEntry
+        overviewMeta={payrollOverviewMeta}
+        onOpenPeriod={(id) =>
+          void navigate({ to: "/payroll/periods/$periodId", params: { periodId: id } })
+        }
+        onOpenEmployees={(issue) =>
+          void navigate({ to: "/payroll/employees", search: { insuranceIssue: issue } })
+        }
+      />,
+    );
+  },
+});
+function PayrollReportListRouteContent() {
+  const navigate = useNavigate();
+  return (
+    <PayrollReportListPage
+      onOpenReport={(code) =>
+        void navigate({ to: "/payroll/reports/$reportCode", params: { reportCode: code } })
+      }
+    />
+  );
+}
+const payrollReportsRoute = makeModuleRoute(
+  "/payroll/reports",
+  "payroll.reports",
+  "PAYROLL",
+  PayrollReportListRouteContent,
+);
+const payrollReportViewMeta: RouteMeta = {
+  routeKey: "payroll.report.view",
+  path: "/payroll/reports/$reportCode",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "PAYROLL",
+  screenCode: "PAY-SCREEN-016",
+  titleKey: "routeTitle.payrollReportView",
+  requiredPermissions: ["access:payroll", "view:payroll-report"],
+  showInSidebar: false,
+  order: 90.91,
+};
+const payrollReportViewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/reports/$reportCode",
+  beforeLoad: authGuard,
+  component: () => {
+    const { reportCode } = payrollReportViewRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      payrollReportViewMeta,
+      "PAYROLL",
+      <PayrollReportViewPage
+        reportCode={reportCode}
+        onBack={() => void navigate({ to: "/payroll/reports" as "/" })}
+      />,
+    );
+  },
+});
 
 // PAY-SCREEN-017 «Tạm ứng của tôi» — route **ME** (`access:me`), KHÔNG phải route PAYROLL. Cùng khuôn
 // `mePayslipsRoute` ngay trên: cổng THẬT là `('view-own','payroll-advance')` ở BE, không phải
@@ -3236,6 +3339,10 @@ const routeTree = rootRoute.addChildren([
   payrollTemplatesRoute,
   payrollTemplateDetailRoute,
   payrollStatutoryRatesRoute,
+  // S15-PAYROLL-FE-4 — track D (015 · 016 danh mục + màn xem)
+  payrollOverviewRoute,
+  payrollReportsRoute,
+  payrollReportViewRoute,
   goalsListRoute,
   // S5-GOAL-TPL-1 — static TRƯỚC "/goals/$goalId" (xem docblock goalTemplatesMeta).
   goalTemplatesRoute,

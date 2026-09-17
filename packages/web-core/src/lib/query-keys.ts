@@ -1219,6 +1219,9 @@ export const payrollKeys = {
       [...rootKeys.payroll, "periods", "lines", id, params] as const,
     linesOf: (id: string) => [...rootKeys.payroll, "periods", "lines", id] as const,
     summary: () => [...rootKeys.payroll, "periods", "summary"] as const,
+    // S15-PAYROLL-FE-4 — 018 `?payrollPeriodId=` (tổng cột TOÀN KỲ). Nhánh con của `summary()` để mọi
+    // invalidate `periods.allOf()` sau hành động FSM (tính lại/điều chỉnh) quét trúng.
+    summaryOf: (id: string) => [...rootKeys.payroll, "periods", "summary", id] as const,
     // S15-PAYROLL-FE-1 — PAYROLL-API-043 bảng công tổng hợp kỳ (PAY-SCREEN-008). Nhánh con của
     // `periods` để `periods.allOf()` vẫn quét trúng sau mỗi hành động FSM (gom lại ⇒ số công đổi).
     timesheet: (id: string, params?: Record<string, unknown>) =>
@@ -1323,6 +1326,23 @@ export const payrollKeys = {
     allOf: () => [...rootKeys.payroll, "budgets"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.payroll, "budgets", "list", params] as const,
+  },
+  /**
+   * S15-PAYROLL-FE-4 — Tổng quan (078) + Lời nhắc (079). Server KHÔNG cache và audit mỗi lượt ⇒ đừng
+   * invalidate rộng tay; số tự tươi khi người dùng quay lại trang (staleTime mặc định).
+   */
+  overview: {
+    allOf: () => [...rootKeys.payroll, "overview"] as const,
+    blocks: (params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "overview", "blocks", params] as const,
+    reminders: () => [...rootKeys.payroll, "overview", "reminders"] as const,
+  },
+  /** S15-PAYROLL-FE-4 — danh mục (080, metadata) + dữ liệu (081) báo cáo. */
+  reports: {
+    allOf: () => [...rootKeys.payroll, "reports"] as const,
+    catalog: () => [...rootKeys.payroll, "reports", "catalog"] as const,
+    data: (code: string, params?: Record<string, unknown>) =>
+      [...rootKeys.payroll, "reports", "data", code, params] as const,
   },
   pickers: {
     people: (params?: Record<string, unknown>) =>

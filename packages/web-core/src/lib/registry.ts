@@ -1947,6 +1947,33 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 91.1,
   },
+  // S15-PAYROLL-FE-4 — track D. `/payroll` là PAY-SCREEN-015 «Tổng quan» (SPEC-11 §9.1: trang GỐC của module);
+  // người thiếu `view:payroll-report` được router CHUYỂN HƯỚNG tới lá sidebar đầu tiên họ mở được
+  // (`payroll-root-redirect.ts`), không thấy trang 403. Gate = cặp ĐƯỜNG TẢI của 078/080 (SENSITIVE, sàn
+  // Company ở BE) và PHẢI khớp `PAYROLL_SIDEBAR_V2` (`payroll-wiring.spec.ts` so hai vế) — hai mục sidebar
+  // tự hiện. Màn xem `/payroll/reports/$reportCode` dùng RouteMeta CỤC BỘ ở `router.tsx`.
+  {
+    routeKey: "payroll.overview",
+    path: "/payroll",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-015",
+    titleKey: "routeTitle.payrollOverview",
+    requiredPermissions: ["access:payroll", "view:payroll-report"],
+    showInSidebar: true,
+    order: 86.9,
+  },
+  {
+    routeKey: "payroll.reports",
+    path: "/payroll/reports",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-016",
+    titleKey: "routeTitle.payrollReports",
+    requiredPermissions: ["access:payroll", "view:payroll-report"],
+    showInSidebar: true,
+    order: 90.9,
+  },
   // S15-PAYROLL-FE-3 — PAY-SCREEN-017 «Tạm ứng của tôi». Route **ME**, gate `access:me` DUY NHẤT —
   // KHÔNG có cặp PAYROLL nào (SPEC-11 §9.1 + UI-07). Cổng THẬT là `('view-own','payroll-advance')` ở
   // BE; ai không có nó thì màn hiện RỖNG chứ không biến mất khỏi Personal Hub. Nhét sau `access:payroll`
