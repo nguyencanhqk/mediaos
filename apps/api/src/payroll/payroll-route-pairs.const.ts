@@ -60,7 +60,7 @@ const pair = (
   ...(objectGrantRequired === false ? { objectGrantRequired: false as const } : {}),
 });
 
-/** Key = mã route API-18 (PAYROLL-API-XXX) — đủ **77** route (35 v1 + 8 track A + 15 track B + 19 track C v2). */
+/** Key = mã route API-18 (PAYROLL-API-XXX) — đủ **85** route (35 v1 + 8 track A + 15 track B + 19 track C + 8 track D v2). */
 export const PAYROLL_ROUTE_PAIRS = {
   // ── Kỳ lương 001–018 ──────────────────────────────────────────────────────────────────────────
   periodList: pair("view", "payroll-period"), //                                            001
@@ -165,12 +165,20 @@ export const PAYROLL_ROUTE_PAIRS = {
   // ── v2 track D phần 1 — Tổng quan · Lời nhắc · 7 báo cáo 078–082 (S15-PAYROLL-BE-5) ─────────────────
   // MỘT cặp `view:payroll-report` (SPEC-11 §11.3), sàn Company cho cả 5 (§9.1 PAY-SCREEN-015/016). Báo cáo lộ tiền
   // THEO NGƯỜI assert THÊM cặp đọc của nguồn ở service (owner O-2) — `PAYROLL_REPORTS[code].sourceRouteKey`;
-  // 082 assert thêm `periodExport` (`export:payroll`). PDF 083–085 thuộc S15-PAYROLL-BE-5B.
+  // 082 assert thêm `periodExport` (`export:payroll`).
   overview: pair("view", "payroll-report", true), //                                        078
   overviewReminders: pair("view", "payroll-report", true), //                               079
   reportList: pair("view", "payroll-report", true), //                                      080
   reportData: pair("view", "payroll-report", true), //                                      081
   reportExport: pair("view", "payroll-report", true), //                                    082
+  // ── v2 track D phần 2 — PDF phiếu lương 083–085 (S15-PAYROLL-BE-5B · PAY-DEC-019: KHÔNG cặp mới) ─────────
+  // 083 decorator = cặp ĐỌC phiếu; service assert THÊM `periodExport` (luật «export đòi CẢ HAI cặp» §11.1).
+  payslipPdf: pair("view-payslip", "payslip", true), //                                     083
+  // 084 Own — cùng cờ với 032 (không sàn Company, không object-grant); lọc kỳ đã phát hành ở repository.
+  mePayslipPdf: pair("view-own-payslip", "payslip", true, false, false), //                 084
+  // 085 decorator = `export:payroll`; service assert THÊM `payslipList` (`view-payslip:payslip`). Cả hai
+  // sàn Company ⇒ lô = toàn bộ phiếu của kỳ (census ghim companyFloor — plan BE-5B §0b).
+  payslipPdfBatch: pair("export", "payroll", true), //                                     085
 } as const satisfies Record<string, PayrollPair>;
 
 export type PayrollRouteKey = keyof typeof PAYROLL_ROUTE_PAIRS;

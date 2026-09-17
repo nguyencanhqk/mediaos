@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { TenantTx } from "../../db/db.service";
-import { files, type FileRecord } from "../../db/schema/files";
+import { fileLinks, files, type FileRecord } from "../../db/schema/files";
 
 /**
  * S2-FND-JOBS-1 (jobs_tempfile · crown) — persistence cho TEMP_FILE_CLEANUP (DB-08 §8.6).
@@ -21,6 +21,10 @@ export class TempFileCleanupRepository {
    *   deleted_at IS NULL
    *   AND ( (is_temporary=true AND expires_at < now) OR (upload_status='Pending' AND created_at < pendingCutoff) )
    *   AND NOT EXISTS (file_links active WHERE file_id=files.id) — link-safety (file đang được tham chiếu thì GIỮ).
+   *
+   * S15-PAYROLL-BE-5B (plan §0b B4): với tệp TẠM, link `link_type=Export` KHÔNG tính là tham chiếu — đó là
+   * link sở hữu của tệp xuất do server sinh (PDF/ZIP phiếu lương), luôn có mặt để resolver của module chặn route
+   * file chung. Link loại khác (Attachment/Contract/…) vẫn GIỮ tệp như cũ.
    *
    * `now` + `pendingCutoff` truyền TỪ handler (một mốc thời gian nhất quán cho cả vòng, dễ test). RLS-scoped —
    * chỉ thấy tenant hiện tại; subquery file_links cũng lọc company_id tường minh (defense-in-depth).
@@ -47,6 +51,7 @@ export class TempFileCleanupRepository {
             WHERE fl.file_id = ${files.id}
               AND fl.company_id = ${companyId}
               AND fl.deleted_at IS NULL
+              AND NOT (${files.isTemporary} AND fl.link_type = 'Export')
           )`,
         ),
       );
@@ -64,6 +69,30 @@ export class TempFileCleanupRepository {
       .set({ deletedAt: new Date(), deletedBy: null, uploadStatus: "Deleted" })
       .where(and(eq(files.companyId, companyId), eq(files.id, fileId), isNull(files.deletedAt)))
       .returning({ id: files.id });
+    return updated.length;
+  }
+
+  /**
+   * S15-PAYROLL-BE-5B — gỡ (xoá mềm, hệ thống) các link `Export` còn sống của tệp vừa dọn, để không còn link
+   * trỏ vào hàng đã xoá. `deleted_by` NULL (không có user actor). Trả số link đã gỡ.
+   */
+  async softDeleteExportLinksBySystemTx(
+    companyId: string,
+    fileId: string,
+    tx: TenantTx,
+  ): Promise<number> {
+    const updated = await tx
+      .update(fileLinks)
+      .set({ deletedAt: new Date(), deletedBy: null })
+      .where(
+        and(
+          eq(fileLinks.companyId, companyId),
+          eq(fileLinks.fileId, fileId),
+          eq(fileLinks.linkType, "Export"),
+          isNull(fileLinks.deletedAt),
+        ),
+      )
+      .returning({ id: fileLinks.id });
     return updated.length;
   }
 }

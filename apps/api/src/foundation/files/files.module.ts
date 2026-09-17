@@ -18,6 +18,8 @@ import { AvatarPresignService } from "./avatar-presign.service";
 import { CoverPresignService } from "./cover-presign.service";
 import { TempFileCleanupJobHandler } from "./temp-file-cleanup.job-handler";
 import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
+import { ServerFileRepository } from "./server-file.repository";
+import { ServerFileService } from "./server-file.service";
 
 /**
  * S1-FND-FILE-1 — FilesModule (self-contained). Wiring:
@@ -56,6 +58,9 @@ import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
     // S5-ME-BE-5 (additive): ký URL avatar directory-class (dùng FileRepository + STORAGE_ADAPTER sẵn có).
     AvatarPresignService,
     CoverPresignService,
+    // S15-PAYROLL-BE-5B (additive): tệp do server sinh (PDF/ZIP tạm) — module sở hữu tự đăng ký resolver.
+    ServerFileRepository,
+    ServerFileService,
     {
       provide: FilePolicyService,
       useFactory: (permission: PermissionService): FilePolicyService =>
@@ -79,6 +84,8 @@ import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
     // FileService.link/unlink own-scope) — cần inject trực tiếp (mirror why FileRepository/FileLinkRepository
     // are already exported for the same reason).
     FileAccessLogService,
+    // S15-PAYROLL-BE-5B (additive): PDF/ZIP phiếu lương lưu tạm + ký URL qua route của module sở hữu.
+    ServerFileService,
   ],
 })
 export class FilesModule {}

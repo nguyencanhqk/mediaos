@@ -126,11 +126,14 @@ describe("S3StorageAdapter — resolveTtl clamp (QA06-FILE-003 signed-URL expiry
   const presignMethods: Array<{
     name: "get" | "signedUrl";
     call: (adapter: S3StorageAdapter, presignTtlSec?: number) => Promise<SignedUrlResult>;
+    /** TTL the adapter handed to the SIGNER (last arg) — must equal the TTL behind `expiresAt`. */
+    signerTtl: (fake: ReturnType<typeof buildFakeObjectStorage>) => unknown;
   }> = [
     {
       name: "get",
       call: (adapter, presignTtlSec) =>
         adapter.get({ key: KEY_A, companyId: COMPANY_A, presignTtlSec }),
+      signerTtl: (fake) => vi.mocked(fake.createDownloadUrl).mock.calls[0]?.[2],
     },
     {
       name: "signedUrl",
@@ -141,10 +144,11 @@ describe("S3StorageAdapter — resolveTtl clamp (QA06-FILE-003 signed-URL expiry
           sizeBytes: 100,
           presignTtlSec,
         }),
+      signerTtl: (fake) => vi.mocked(fake.createUploadUrl).mock.calls[0]?.[3],
     },
   ];
 
-  for (const { name, call } of presignMethods) {
+  for (const { name, call, signerTtl } of presignMethods) {
     describe(`${name}()`, () => {
       it(`clamps a per-call TTL above MAX_PRESIGN_TTL_SEC (${MAX_PRESIGN_TTL_SEC}s) down to the cap and logs a warning`, async () => {
         delete process.env.S3_PRESIGN_TTL_SEC;
@@ -155,6 +159,7 @@ describe("S3StorageAdapter — resolveTtl clamp (QA06-FILE-003 signed-URL expiry
         const result = await call(adapter, 999_999); // far above the 3600s ceiling
 
         expect(result.expiresAt).toEqual(new Date(NOW.getTime() + MAX_PRESIGN_TTL_SEC * 1000));
+        expect(signerTtl(fakeStorage)).toBe(MAX_PRESIGN_TTL_SEC);
         expect(warnSpy).toHaveBeenCalledTimes(1);
         expect(String(warnSpy.mock.calls[0][0])).toContain("clamped");
       });
@@ -168,6 +173,8 @@ describe("S3StorageAdapter — resolveTtl clamp (QA06-FILE-003 signed-URL expiry
         const result = await call(adapter, 900); // valid, well under the 3600s ceiling
 
         expect(result.expiresAt).toEqual(new Date(NOW.getTime() + 900 * 1000));
+        // S15-PAYROLL-BE-5B: the per-call TTL must reach the SIGNATURE, not only `expiresAt`.
+        expect(signerTtl(fakeStorage)).toBe(900);
         expect(warnSpy).not.toHaveBeenCalled();
       });
 
@@ -179,6 +186,7 @@ describe("S3StorageAdapter — resolveTtl clamp (QA06-FILE-003 signed-URL expiry
         const result = await call(adapter, undefined);
 
         expect(result.expiresAt).toEqual(new Date(NOW.getTime() + 1200 * 1000));
+        expect(signerTtl(fakeStorage)).toBe(1200);
       });
 
       it(`falls back to DEFAULT_PRESIGN_TTL_SEC (${DEFAULT_PRESIGN_TTL_SEC}s) when env is absent and no override is given`, async () => {
@@ -189,7 +197,27 @@ describe("S3StorageAdapter — resolveTtl clamp (QA06-FILE-003 signed-URL expiry
         const result = await call(adapter, undefined);
 
         expect(result.expiresAt).toEqual(new Date(NOW.getTime() + DEFAULT_PRESIGN_TTL_SEC * 1000));
+        expect(signerTtl(fakeStorage)).toBe(DEFAULT_PRESIGN_TTL_SEC);
       });
     });
   }
+
+  it("put() forwards companyId so ObjectStorageService re-asserts the tenant prefix", async () => {
+    const fakeStorage = buildFakeObjectStorage();
+    const adapter = new S3StorageAdapter(fakeStorage);
+    const body = new Uint8Array([1, 2, 3]);
+
+    await adapter.put({ key: KEY_A, companyId: COMPANY_A, body, contentType: "application/pdf" });
+
+    expect(fakeStorage.putObject).toHaveBeenCalledWith(KEY_A, body, "application/pdf", COMPANY_A);
+  });
+});
+
+describe("S3StorageAdapter.delete", () => {
+  it("forwards companyId so ObjectStorageService re-asserts the tenant prefix", async () => {
+    const fakeStorage = buildFakeObjectStorage();
+    const adapter = new S3StorageAdapter(fakeStorage);
+    await adapter.delete({ key: KEY_A, companyId: COMPANY_A });
+    expect(fakeStorage.deleteObject).toHaveBeenCalledWith(KEY_A, COMPANY_A);
+  });
 });

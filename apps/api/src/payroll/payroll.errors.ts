@@ -121,7 +121,7 @@ export const PAYROLL_ERR_CODE = {
   BUDGET_EXISTS: "PAYROLL-ERR-029",
   /** 422 — import: sai khuôn (`import-invalid`) · > 5.000 dòng (`import-too-large`) · mã NV lạ (`import-unknown-user`). */
   IMPORT_INVALID: "PAYROLL-ERR-030",
-  /** 422 — **S15-PAYROLL-BE-5**. Báo cáo 081/082 > 50.000 dòng theo bộ lọc (`report-too-large`); PDF hàng loạt = BE-5B. */
+  /** 422 — Báo cáo 081/082 > 50.000 dòng (`report-too-large`, BE-5) · PDF hàng loạt 085 > 2.000 phiếu (`pdf-batch-too-large`, BE-5B). */
   REPORT_TOO_LARGE: "PAYROLL-ERR-031",
   /**
    * 409 — **S15-PAYROLL-BE-1**. Hai bản ghi người phụ thuộc **chồng lấp khoảng hiệu lực** cho cùng một
@@ -296,6 +296,11 @@ export const PAYROLL_ERR = {
     "PAYROLL-ERR-030: có dòng mang mã nhân viên không có trong công ty — sửa mã hoặc bỏ dòng. Không dòng nào được ghi.",
   REPORT_TOO_LARGE: (total: number, max: number) =>
     `PAYROLL-ERR-031: báo cáo có ${total} dòng, vượt trần ${max} — thu hẹp khoảng tháng hoặc lọc theo đơn vị.`,
+  /** Cùng mã 031 (`pdf-batch-too-large`) — S15-PAYROLL-BE-5B, route 085. */
+  PDF_BATCH_TOO_LARGE: (total: number, max: number) =>
+    `PAYROLL-ERR-031: kỳ lương có ${total} phiếu, vượt trần ${max} phiếu cho một lần xuất PDF hàng loạt — tải từng phiếu hoặc liên hệ quản trị.`,
+  /** Cùng mã 007 (`no-payslip-for-pdf`) — S15-PAYROLL-BE-5B, route 085. */
+  NO_PAYSLIP_FOR_PDF: "PAYROLL-ERR-007: kỳ lương chưa có phiếu lương nào — chưa thể xuất PDF.",
   NO_ELIGIBLE_COMPLETER:
     "PAYROLL-ERR-017: công ty chưa có người nào khác bạn giữ quyền quản lý đợt chi trả — đợt lập ra sẽ không hoàn tất được (bốn mắt). Cấp quyền cho người thứ hai trước.",
   TEMPLATE_IN_USE: (periods: number) =>

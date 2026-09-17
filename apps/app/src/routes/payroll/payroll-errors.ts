@@ -95,6 +95,9 @@ export const PAYROLL_ERROR_KINDS = [
   "no-eligible-completer",
   // ── S15-PAYROLL-BE-5 (031) ──
   "report-too-large",
+  // ── S15-PAYROLL-BE-5B (031 · 007) ──
+  "pdf-batch-too-large",
+  "no-payslip-for-pdf",
 ] as const;
 export type PayrollErrorKind = (typeof PAYROLL_ERROR_KINDS)[number];
 
@@ -177,6 +180,8 @@ const KIND_TO_I18N_KEY: Readonly<Record<PayrollErrorKind, string>> = {
   "template-in-use": "errors.templateInUse",
   "no-eligible-completer": "errors.noEligibleCompleter",
   "report-too-large": "errors.reportTooLarge",
+  "pdf-batch-too-large": "errors.pdfBatchTooLarge",
+  "no-payslip-for-pdf": "errors.noPayslipForPdf",
 };
 
 /** Fallback theo `error.code` — CHỈ cho mã KHÔNG mang `kind` (idempotency, FOUNDATION). */

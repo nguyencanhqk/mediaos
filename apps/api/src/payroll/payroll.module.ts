@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, type OnModuleInit } from "@nestjs/common";
 import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { BonusPenaltiesRepository } from "./bonus-penalties.repository";
@@ -78,6 +78,24 @@ import { PayrollReportExportService } from "./payroll-report-export.service";
 import { PayrollReportsController } from "./payroll-reports.controllers";
 import { PayrollReportsRepository } from "./payroll-reports.repository";
 import { PayrollReportsService } from "./payroll-reports.service";
+// ── S15-PAYROLL-BE-5B (additive) ──
+import { FilesModule } from "../foundation/files/files.module";
+import { FilePolicyService } from "../foundation/files/file-policy.service";
+import { PayslipPdfRenderer } from "./payslip-pdf.renderer";
+import { PayrollExportFileResolver } from "./payroll-export-file.resolver";
+import {
+  MePayslipPdfController,
+  PayrollPayslipPdfBatchController,
+  PayrollPayslipPdfController,
+} from "./payroll-pdf.controllers";
+import { PayrollPayslipPdfBatchConsumer } from "./payroll-payslip-pdf-batch.consumer";
+import {
+  DEFAULT_PAYSLIP_PDF_BATCH_LIMITS,
+  PAYSLIP_PDF_BATCH_LIMITS,
+  PayrollPayslipPdfBatchService,
+} from "./payroll-payslip-pdf-batch.service";
+import { PayrollPayslipPdfRepository } from "./payroll-payslip-pdf.repository";
+import { PayrollPayslipPdfService } from "./payroll-payslip-pdf.service";
 
 /**
  * `PayrollModule` (SPEC-11 · DB-13 · API-18) — **58/58 route** sau `S15-PAYROLL-BE-2`:
@@ -105,7 +123,8 @@ import { PayrollReportsService } from "./payroll-reports.service";
   // (OnModuleInit) đăng ký PayrollMasterDataSeeder để runner RUNTIME per-company seed catalog thành
   // phần lương + tỉ lệ luật định + mẫu mặc định. Seed company-scoped KHÔNG ĐƯỢC nằm trong migration
   // (mig 0445 + master-data-seeder.types.ts) — xem docblock của seeder.
-  imports: [PermissionModule, SeedModule],
+  // S15-PAYROLL-BE-5B (additive): + FilesModule (ServerFileService + FilePolicyService — PDF/ZIP phiếu lương tạm).
+  imports: [PermissionModule, SeedModule, FilesModule],
   controllers: [
     PayrollPeriodsController,
     SalaryProfilesController,
@@ -128,6 +147,10 @@ import { PayrollReportsService } from "./payroll-reports.service";
     PayrollAdjustmentImportsController,
     // ── S15-PAYROLL-BE-5 ──
     PayrollReportsController,
+    // ── S15-PAYROLL-BE-5B ──
+    PayrollPayslipPdfController,
+    MePayslipPdfController,
+    PayrollPayslipPdfBatchController,
   ],
   providers: [
     PayrollAccessService,
@@ -183,9 +206,30 @@ import { PayrollReportsService } from "./payroll-reports.service";
     PayrollReportsService,
     PayrollReportExportService,
     PayrollOverviewService,
+    // ── S15-PAYROLL-BE-5B (track D phần 2 — PDF) ──
+    PayslipPdfRenderer,
+    PayrollPayslipPdfRepository,
+    PayrollPayslipPdfService,
+    PayrollPayslipPdfBatchService,
+    PayrollPayslipPdfBatchConsumer,
+    PayrollExportFileResolver,
+    { provide: PAYSLIP_PDF_BATCH_LIMITS, useValue: DEFAULT_PAYSLIP_PDF_BATCH_LIMITS },
   ],
   // S13-PAYROLL-DASH-1: chỉ PayrollCalcService — KHÔNG export repository (widget phải đi qua service để
   // giữ nguyên tầng guard THỨ HAI `resolveActor` + audit; export repository là mở đường vòng qua cả hai).
   exports: [PayrollCalcService],
 })
-export class PayrollModule {}
+export class PayrollModule implements OnModuleInit {
+  constructor(
+    private readonly filePolicy: FilePolicyService,
+    private readonly exportFileResolver: PayrollExportFileResolver,
+  ) {}
+
+  /**
+   * S15-PAYROLL-BE-5B — tệp PDF/ZIP phiếu lương có link `PAYROLL`; resolver từ chối mọi thao tác trên route file
+   * chung (plan E-5). `registerResolver` NÉM khi trùng khoá ⇒ đăng ký đúng một lần ở đây.
+   */
+  onModuleInit(): void {
+    this.filePolicy.registerResolver(this.exportFileResolver);
+  }
+}

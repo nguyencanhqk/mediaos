@@ -1,7 +1,9 @@
+import { Logger } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditService } from "../../events/audit.service";
 import type { DatabaseService, TenantTx } from "../../db/db.service";
 import type { SettingService } from "../settings/setting.service";
+import type { StorageAdapter } from "../../storage/storage-adapter.port";
 import type { FileAccessLogService } from "./file-access-log.service";
 import {
   TEMP_FILE_CLEANUP_JOB_CODE,
@@ -22,6 +24,9 @@ import type { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
  *  - Race (softDeleteBySystemTx=0) → KHÔNG ghi log/audit cho file đó (idempotent, đếm skipped, KHÔNG failed).
  *
  * Link-safety THẬT (NOT EXISTS file_links active) sống ở SQL ⇒ phủ ở integration (temp-file-cleanup.int-spec.ts).
+ *
+ * S15-PAYROLL-BE-5B: xoá object TRƯỚC (ngoài tx), hàng SAU; xoá object lỗi ⇒ GIỮ hàng + `failed`; provider
+ * không phải object-store ⇒ không gọi storage.
  */
 
 const COMPANY_A = "11111111-1111-1111-1111-111111111111";
@@ -33,6 +38,8 @@ interface EligibleRow {
   mimeType: string;
   isTemporary: boolean;
   uploadStatus: string;
+  storageProvider: string;
+  storagePath: string;
 }
 
 function makeFile(over: Partial<EligibleRow> = {}): EligibleRow {
@@ -42,6 +49,8 @@ function makeFile(over: Partial<EligibleRow> = {}): EligibleRow {
     mimeType: "application/pdf",
     isTemporary: true,
     uploadStatus: "Uploaded",
+    storageProvider: "MinIO",
+    storagePath: `${COMPANY_A}/files/obj`,
     ...over,
   };
 }
@@ -53,18 +62,29 @@ interface Harness {
   accessRecord: ReturnType<typeof vi.fn>;
   auditRecord: ReturnType<typeof vi.fn>;
   resolveSetting: ReturnType<typeof vi.fn>;
+  storageDelete: ReturnType<typeof vi.fn>;
+  softDeleteExportLinksBySystemTx: ReturnType<typeof vi.fn>;
+  calls: string[];
 }
 
 function makeHandler(opts: {
   eligible?: EligibleRow[];
   softDeleteReturns?: (fileId: string) => number;
   ttlValue?: unknown;
+  storageDeleteFails?: (key: string) => boolean;
 }): Harness {
   const eligible = opts.eligible ?? [];
+  const calls: string[] = [];
   const findEligibleTx = vi.fn(async () => eligible);
-  const softDeleteBySystemTx = vi.fn(async (_companyId: string, fileId: string) =>
-    opts.softDeleteReturns ? opts.softDeleteReturns(fileId) : 1,
-  );
+  const softDeleteBySystemTx = vi.fn(async (_companyId: string, fileId: string) => {
+    calls.push(`row:${fileId}`);
+    return opts.softDeleteReturns ? opts.softDeleteReturns(fileId) : 1;
+  });
+  const softDeleteExportLinksBySystemTx = vi.fn(async () => 1);
+  const storageDelete = vi.fn(async (input: { key: string; companyId: string }) => {
+    calls.push(`object:${input.key}`);
+    if (opts.storageDeleteFails?.(input.key)) throw new Error("s3 down");
+  });
   const accessRecord = vi.fn(async () => undefined);
   const auditRecord = vi.fn(async () => undefined);
   const resolveSetting = vi.fn(async (_companyId: string, key: string) => ({
@@ -78,12 +98,17 @@ function makeHandler(opts: {
     withTenant: async <T>(_companyId: string, fn: (tx: TenantTx) => Promise<T>): Promise<T> =>
       fn(FAKE_TX),
   } as unknown as DatabaseService;
-  const repo = { findEligibleTx, softDeleteBySystemTx } as unknown as TempFileCleanupRepository;
+  const repo = {
+    findEligibleTx,
+    softDeleteBySystemTx,
+    softDeleteExportLinksBySystemTx,
+  } as unknown as TempFileCleanupRepository;
+  const storage = { delete: storageDelete } as unknown as StorageAdapter;
   const accessLog = { record: accessRecord } as unknown as FileAccessLogService;
   const audit = { record: auditRecord } as unknown as AuditService;
   const settings = { resolveSetting } as unknown as SettingService;
 
-  const handler = new TempFileCleanupJobHandler(db, repo, accessLog, audit, settings);
+  const handler = new TempFileCleanupJobHandler(db, repo, accessLog, audit, settings, storage);
   return {
     handler,
     findEligibleTx,
@@ -91,6 +116,9 @@ function makeHandler(opts: {
     accessRecord,
     auditRecord,
     resolveSetting,
+    storageDelete,
+    softDeleteExportLinksBySystemTx,
+    calls,
   };
 }
 
@@ -205,5 +233,58 @@ describe("TempFileCleanupJobHandler", () => {
     );
     expect(reasons).toContain("temp-expired");
     expect(reasons).toContain("pending-ttl-exceeded");
+  });
+
+  describe("xoá object (S15-PAYROLL-BE-5B · owner O-3/O-6)", () => {
+    it("xoá object TRƯỚC rồi mới xoá mềm hàng, key + companyId đúng, gỡ link Export", async () => {
+      const f = makeFile({ id: "file-1", storagePath: `${COMPANY_A}/files/abc` });
+      const h = makeHandler({ eligible: [f] });
+
+      const res = await h.handler.run({ companyId: COMPANY_A });
+
+      expect(h.storageDelete).toHaveBeenCalledWith({
+        key: `${COMPANY_A}/files/abc`,
+        companyId: COMPANY_A,
+      });
+      expect(h.calls).toEqual([`object:${COMPANY_A}/files/abc`, "row:file-1"]);
+      expect(h.softDeleteExportLinksBySystemTx).toHaveBeenCalledWith(COMPANY_A, "file-1", FAKE_TX);
+      expect(h.auditRecord.mock.calls[0][1].metadata).toMatchObject({
+        objectDeleted: true,
+        exportLinksRemoved: 1,
+      });
+      expect(res).toMatchObject({ total: 1, success: 1, failed: 0 });
+    });
+
+    it("xoá object lỗi ⇒ GIỮ hàng (không xoá mềm, không log/audit), đếm failed, tệp khác vẫn chạy", async () => {
+      const bad = makeFile({ id: "bad", storagePath: `${COMPANY_A}/files/bad` });
+      const good = makeFile({ id: "good", storagePath: `${COMPANY_A}/files/good` });
+      const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+      const h = makeHandler({
+        eligible: [bad, good],
+        storageDeleteFails: (key) => key.endsWith("/bad"),
+      });
+
+      const res = await h.handler.run({ companyId: COMPANY_A });
+
+      expect(h.softDeleteBySystemTx).toHaveBeenCalledTimes(1);
+      expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(COMPANY_A, "good", FAKE_TX);
+      expect(h.auditRecord).toHaveBeenCalledTimes(1);
+      expect(res).toMatchObject({ total: 2, success: 1, failed: 1 });
+      expect(res.metadata).toMatchObject({ deleted: 1, skipped: 0, failed: 1 });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain("file=bad");
+    });
+
+    it("provider không phải object-store ⇒ KHÔNG gọi storage, vẫn xoá mềm như cũ", async () => {
+      const local = makeFile({ id: "local", storageProvider: "Local" });
+      const h = makeHandler({ eligible: [local] });
+
+      const res = await h.handler.run({ companyId: COMPANY_A });
+
+      expect(h.storageDelete).not.toHaveBeenCalled();
+      expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(COMPANY_A, "local", FAKE_TX);
+      expect(h.auditRecord.mock.calls[0][1].metadata).toMatchObject({ objectDeleted: false });
+      expect(res).toMatchObject({ success: 1, failed: 0 });
+    });
   });
 });

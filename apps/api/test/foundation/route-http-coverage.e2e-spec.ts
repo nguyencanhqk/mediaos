@@ -337,7 +337,8 @@ const MAX_UNCOVERED_TOTAL = 0;
 // (int-spec `payroll-be1-*` · `payroll-be2-*` · `s14-recruit-filegrant1-cv` · `s15-payroll-be2-*`).
 // S15-PAYROLL-BE-4 (15/09/2026): 605 → **624** (+19 route PAYROLL track C `059..077`, int-spec `s15-payroll-be4-*`).
 // S15-PAYROLL-BE-5 (17/09/2026): 624 → **629** (+5 route PAYROLL track D `078..082`, int-spec `s15-payroll-be5-*`).
-const MIN_COVERED_COUNT = 629;
+// S15-PAYROLL-BE-5B (17/09/2026): 629 → **632** (+3 route PAYROLL PDF `083..085`, int-spec `s15-payroll-be5b-pdf*`).
+const MIN_COVERED_COUNT = 632;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;
