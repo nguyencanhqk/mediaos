@@ -209,12 +209,17 @@ describe("S13-PAYROLL-BE-1 · mapPayrollPgError", () => {
     ).toBe(PAYROLL_ERR_CODE.SALARY_EFFECTIVE_EXISTS);
   });
 
-  it("`payroll_period_lines_adjustment_check` ⇒ null (SPEC-11 §12 xếp về 400, không chiếm mã)", () => {
-    expect(
-      mapPayrollPgError(
-        wrapped({ code: "23514", constraint: "payroll_period_lines_adjustment_check" }),
-      ),
-    ).toBeNull();
+  // S15-PAYROLL-QA-1: ca cũ ghim `null` và gọi đó là «SPEC xếp về 400» — nhưng `null` nghĩa là caller ném lỗi gốc ⇒
+  // 500 vô danh (tests-can-pin-a-hole-open). Bảng đóng SPEC-11 §12.1 (hàng `payroll_period_lines_adjustment_check`)
+  // đòi 400 `VALIDATION-ERR-001` như ba CHECK Zod-mirror khác; int-spec `s15-payroll-qa1-constraints` A7 bắn CHECK thật.
+  it("`payroll_period_lines_adjustment_check` ⇒ 400 VALIDATION-ERR-001 (không chiếm mã PAYROLL, không 500)", () => {
+    const e = mapPayrollPgError(
+      wrapped({ code: "23514", constraint: "payroll_period_lines_adjustment_check" }),
+    );
+    expect(e).toBeInstanceOf(BadRequestException);
+    expect(((e as BadRequestException).getResponse() as { code: string }).code).toBe(
+      "VALIDATION-ERR-001",
+    );
   });
 
   it("ngoài phổ ⇒ null (caller ném lỗi gốc) — mapper KHÔNG được nuốt lỗi lạ", () => {

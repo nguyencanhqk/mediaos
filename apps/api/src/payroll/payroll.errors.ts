@@ -596,9 +596,10 @@ export function mapPayrollPgError(err: unknown): Error | null {
   }
   if (code === PG_CHECK_VIOLATION) {
     const c = pgErrorField(err, "constraint") ?? "";
-    // `payroll_period_lines_adjustment_check` → để `null`: SPEC-11 §12 xếp nó về 400 VALIDATION-ERR-001
-    // (Zod đã mirror ĐÚNG BẰNG, nên tới được đây nghĩa là payload lách qua tầng validate).
-    if (c.includes("payroll_period_lines_adjustment_check")) return null;
+    // `payroll_period_lines_adjustment_check` ⇒ 400 VALIDATION-ERR-001 (SPEC-11 §12.1 bảng đóng): Zod đã mirror ĐÚNG
+    // BẰNG, tới được đây là payload lách tầng validate. S15-PAYROLL-QA-1: trước đây trả `null` ⇒ caller ném lỗi gốc
+    // ⇒ 500 vô danh ở vùng đỏ, trái với chính chú thích cũ nói «xếp về 400».
+    if (c.includes("payroll_period_lines_adjustment_check")) return payrollBadRequest(c);
     // Four-eyes — chốt cuối ở DB cho RACE: service đã tiền-kiểm `submitted_by <> actor` dưới row-lock,
     // nên tới được đây là hai lượt duyệt chen nhau. 409, KHÔNG 500 (SPEC-11 §12 mã 005).
     if (c.includes("payroll_periods_four_eyes_check")) {

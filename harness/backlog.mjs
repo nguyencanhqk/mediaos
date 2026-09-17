@@ -16504,6 +16504,9 @@ export const backlog = [
     ],
     notes: [
       "🟡 LANE_DB cô lập; fixture giả-secret ghép chuỗi (gitleaks); lỗi sản phẩm tìm được vá tại chỗ như S13-QA-1.",
+      "📌 THI CÔNG 17/09 (plan docs/plans/S15-PAYROLL-QA-1.md · bằng chứng docs/QA/evidence/S15-PAYROLL-QA-1-ACCEPTANCE.md): 553 ca int + 110 unit + 16 FE; cov src/payroll 98,00% (formula 99,82%). 5 lane song song (DB lane riêng); dựng lane-db SONG SONG làm hỏng migrate ('tuple concurrently updated' trên catalog chung cụm) ⇒ dựng TUẦN TỰ.",
+      "🩹 LỖI SẢN PHẨM đã vá cùng WO: P1 017 XLSX ghi thô employeeCode/displayName/adjustment_reason (xlsxSafe dời sang payroll-xlsx.util.ts — phá vòng import) · P2 bộ lọc Own phiếu lương truthy-guard ⇒ PayslipListOpts.ownerUserId bắt buộc string|null, rỗng NÉM; findTx id rỗng NÉM · P3 payroll_period_lines_adjustment_check map null ⇒ 500 (nay 400 VALIDATION-ERR-001). SPEC-11 §12.1 bảng đóng đính chính value_pair/engine_kind ⇒ 422 018 (khớp code + contracts). Bài học: spec seed hàng catalog `permissions` wildcard mang resource PAYROLL làm đỏ D1 db1-invariants ⇒ chỉ dùng `*:*`.",
+      "⚖️ LỆCH có chủ đích (đề nghị owner sửa chữ SPEC): publish chưa sinh phiếu ⇒ 409 007 ở MỌI trạng thái (cổng 007 trước FSM), §21.1 #12 ghi 001. NOTI-027 dedupe theo periodId là CỐ Ý (done_when (k) hiểu thành «đổi sang batchId phải đỏ»). T5 không test được (FE chưa có thao tác dòng chi) ⇒ WO S15-PAYROLL-FE-6. #14 di trú Paid→Published chỉ có VERIFY trong 0572 — đếm PROD status IN ('Paid','Locked') trước deploy.",
     ],
   },
   {

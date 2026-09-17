@@ -17,8 +17,9 @@ import { seedUser } from "./seed";
  * (tạm ứng còn `Pending`, đợt chưa `Completed`, mã chưa trùng…). Mỗi người được ALLOW nhận một `Qa1Slice` riêng.
  * Người bị DENY dùng lát bất kỳ: guard quyền chạy TRƯỚC pipe/handler nên 403 không chạm dữ liệu.
  *
- * ⚠️ Helper KHÔNG tự dựng request (census `supertest-listen-ratchet` — cấm `getHttpServer` trong helper): spec
- * truyền `Qa1Http` vào. Mọi lời gọi gieo qua HTTP đều assert mã, gieo hỏng là NÉM (không xanh-rỗng).
+ * ⚠️ Helper KHÔNG tự dựng request supertest (census `supertest-listen-ratchet` cấm helper dùng chung chạm HTTP
+ * server của app — và nó quét CHỮ, kể cả comment, nên đừng viết tên hàm lấy server ở file này): spec truyền
+ * `Qa1Http` vào. Mọi lời gọi gieo qua HTTP đều assert mã, gieo hỏng là NÉM (không xanh-rỗng).
  */
 
 export type Qa1Verb = "get" | "post" | "put" | "patch";

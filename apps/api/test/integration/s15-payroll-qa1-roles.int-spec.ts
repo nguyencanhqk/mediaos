@@ -14,9 +14,9 @@
  *     · `employee`        ⇒ ALLOW ĐÚNG 065 + 084 (phiếu của chính mình); 48 route còn lại 403.
  *     · `hr-manager` · `manager` · `hr` ⇒ 403 trên CẢ 50 route (DECISIONS-01 Phương án B — 0 cặp PAYROLL).
  *     Ca ALLOW assert MÃ CHÍNH XÁC (200/201/202) trên một «lát» dữ liệu riêng (`payroll-qa1-routes.ts`).
- *  B. Wildcard (done_when 1): role chỉ giữ `*:*` ⇒ 403 cả 50 route (mỗi cặp mới có ≥ 1 route); role giữ HỢP
- *     bốn hình dạng (`*:*` · `*:<res>` × 8 tài nguyên mới · `<act>:*` × 4 action mới) ⇒ vẫn 403 cả 50 — một hình
- *     dạng nào rò là ĐỎ.
+ *  B. Wildcard (done_when 1): role chỉ giữ `*:*` ⇒ 403 cả 50 route (mỗi cặp mới có ≥ 1 route). Ba hình dạng
+ *     còn lại (`*:<res>` · `<act>:*`) ghim ở engine (`permission.decide.pair-sensitive.spec.ts` #11b) — dựng qua
+ *     HTTP phải ghi hàng catalog TOÀN CỤC mang resource PAYROLL (xem comment trong beforeAll).
  *  C. /auth/me (§21.1 #23): cờ hiển thị của officer/admin/employee chứa ĐÚNG các cặp v2 họ giữ, không cặp nào họ
  *     không giữ; hr-manager không có cặp v2 nào.
  *
@@ -119,7 +119,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · role hệ thống × 50 route v
   let direct: Pool;
   let A: SeededTenant;
   const companyIds: string[] = [];
-  const tokens = {} as Record<Canonical | "wildStar" | "wildShapes", string>;
+  const tokens = {} as Record<Canonical | "wildStar", string>;
   const slices = {} as Record<"company-admin" | "payroll-officer" | "employee", Qa1Slice>;
 
   const http: Qa1Http = async (verb, path, token, body, csv) => {
@@ -173,38 +173,24 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · role hệ thống × 50 route v
       tokens[name] = await login(`canon-${name}@${A.slug}.test`);
     }
 
-    // Wildcard: (1) chỉ `*:*`; (2) HỢP bốn hình dạng trên đúng tập tài nguyên/action của 17 cặp mới.
-    // ⓘ `seedPermissionCatalog` để lại 12 hàng `permissions` TOÀN CỤC (`*:<res>` · `<act>:*`, is_sensitive=false) —
-    // CỐ Ý không xoá ở afterAll: `global-catalog-fence` coi cặp BIẾN MẤT là vi phạm (lane dùng lại đã có sẵn chúng
-    // trong ảnh chụp đầu suite). Role giữ chúng thuộc tenant fixture và bị `cleanupTenants` dọn. Spec sau muốn seed
-    // cùng hình dạng với cờ sensitive=true sẽ bị tuyến 1 của fence chặn — đúng hành vi mong muốn.
-    const wildRole = async (label: string, pairs: ReadonlyArray<readonly [string, string]>) => {
-      const uid = await mkUser(label);
-      const roleId = await seedRole(direct, A.companyId, `qa1r-${label}`);
-      for (const [act, res] of pairs) {
-        await seedRolePermission(
-          direct,
-          roleId,
-          await seedPermissionCatalog(direct, act, res, false),
-          "ALLOW",
-          "Company",
-        );
-      }
+    // Wildcard: CHỈ `*:*` — hàng catalog đó đã có sẵn (seed super-admin), nên KHÔNG ghi thêm hàng `permissions` toàn
+    // cục nào. ⚠️ ĐỪNG thêm dạng `*:<tài-nguyên-payroll>` / `<action>:*` ở đây: mỗi dạng là một hàng catalog TOÀN CỤC
+    // mang resource PAYROLL, sống qua `cleanupTenants`, làm đỏ D1 «catalog PAYROLL đúng 34 cặp» của
+    // `s15-payroll-db1-invariants` (đã đo 17/09 — chạy chung chunk ⇒ 1 đỏ thật). Bốn hình dạng được ghim ở tầng
+    // engine: `src/permission/permission.decide.pair-sensitive.spec.ts` #11b.
+    {
+      const uid = await mkUser("wildstar");
+      const roleId = await seedRole(direct, A.companyId, "qa1r-wildstar");
+      await seedRolePermission(
+        direct,
+        roleId,
+        await seedPermissionCatalog(direct, "*", "*", false),
+        "ALLOW",
+        "Company",
+      );
       await seedUserRole(direct, uid, roleId, A.companyId);
-      return login(`${label}@${A.slug}.test`);
-    };
-    const splitPairs = V2_PAIRS.map((p) => p.split(":") as [string, string]);
-    const resources = [...new Set(splitPairs.map(([, r]) => r))];
-    const actions = [...new Set(splitPairs.map(([a]) => a))];
-    expect([resources.length, actions.length], "8 tài nguyên × 4 action của 17 cặp mới").toEqual([
-      8, 4,
-    ]);
-    tokens.wildStar = await wildRole("wildstar", [["*", "*"]]);
-    tokens.wildShapes = await wildRole("wildshapes", [
-      ["*", "*"],
-      ...resources.map((r) => ["*", r] as const),
-      ...actions.map((a) => [a, "*"] as const),
-    ]);
+      tokens.wildStar = await login(`wildstar@${A.slug}.test`);
+    }
 
     const deps = {
       direct,
@@ -247,7 +233,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · role hệ thống × 50 route v
     });
   });
 
-  describe.each(["hr-manager", "manager", "hr", "wildStar", "wildShapes"] as const)(
+  describe.each(["hr-manager", "manager", "hr", "wildStar"] as const)(
     "A/B · %s ⇒ 403 cả 50 route",
     (who) => {
       it.each(QA1_ROUTES.map((r) => [r.code, r] as const))("%s", async (_code, route) => {
@@ -274,7 +260,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · role hệ thống × 50 route v
     });
 
     it("hr-manager · wildcard ⇒ KHÔNG cặp v2 nào", async () => {
-      for (const who of ["hr-manager", "wildStar", "wildShapes"] as const) {
+      for (const who of ["hr-manager", "wildStar"] as const) {
         const caps = await capsOf(tokens[who]);
         expect(
           V2_PAIRS.filter((p) => caps[p] === true),
