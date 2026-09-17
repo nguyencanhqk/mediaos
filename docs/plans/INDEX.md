@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**502 WO** · có micro-plan: **300/502** · ⬜ 19 chờ · 🔵 0 đang làm · ✅ 482 xong · 🔴 1 chặn
+**506 WO** · có micro-plan: **303/506** · ⬜ 20 chờ · 🔵 0 đang làm · ✅ 485 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -542,15 +542,19 @@
 | `S15-PAYROLL-DB-1B` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-1B.md) | ✅S15-PAYROLL-BE-2 | Vá công thức seed LUONG_CO_BAN đang trừ HAI LẦN ngày nghỉ không lương  |
 | `S15-PAYROLL-BE-3` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-3.md) | ✅S15-PAYROLL-BE-2 ✅S15-PAYROLL-DB-2 ✅S15-PAYROLL-DB-1B | BE track B (2/2): máy tính lương v2 — evaluate theo mẫu của kỳ · engin |
 | `S15-PAYROLL-FE-1` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-1.md) | ✅S15-PAYROLL-BE-1 ✅S15-UI-SHELL-1 | FE track A: PAY-SCREEN-007 Nhân viên (danh sách + chi tiết 5 tab: Thôn |
-| `S15-PAYROLL-FE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-FE-1 | FE track B: PAY-SCREEN-009 Thành phần lương (catalog + editor công thứ |
+| `S15-PAYROLL-FE-2` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-2.md) | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-FE-1 | FE track B: PAY-SCREEN-009 Thành phần lương (catalog + editor công thứ |
 | `S15-PAYROLL-DB-2` | 🔴 | ✅ xong | [📄](S15-PAYROLL-DB-2.md) | ✅S15-PAYROLL-DB-1 | Schema + migration PAYROLL v2 track C: 4 bảng (payroll_advances · payr |
 | `S15-PAYROLL-BE-4` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-4.md) | ✅S15-PAYROLL-DB-2 ✅S15-PAYROLL-BE-3 | BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four- |
 | `S15-PAYROLL-BE-4B` | 🟡 | ✅ xong | [📄](S15-PAYROLL-BE-4B.md) | ✅S15-PAYROLL-BE-4 | Nợ FULL gate BE-4 (15/09/2026): lọc users.status ở PayrollPairHoldersR |
-| `S15-PAYROLL-FE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-4 | FE track C: PAY-SCREEN-012 Tạm ứng (list + form + duyệt) · 013 Chi trả |
+| `S15-PAYROLL-FE-3` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-3.md) | ✅S15-PAYROLL-BE-4 | FE track C: PAY-SCREEN-012 Tạm ứng (list + form + duyệt) · 013 Chi trả |
 | `S15-PAYROLL-BE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-BE-4 | BE track D: 7 báo cáo (tổng hợp thu nhập NV · thống kê lương theo thời |
-| `S15-PAYROLL-FE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-5 ⏳S15-PAYROLL-FE-2 ⏳S15-PAYROLL-FE-3 | FE track D: PAY-SCREEN-015 Tổng quan `/payroll` (6 biểu đồ Recharts +  |
+| `S15-PAYROLL-FE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-5 ✅S15-PAYROLL-FE-2 ✅S15-PAYROLL-FE-3 | FE track D: PAY-SCREEN-015 Tổng quan `/payroll` (6 biểu đồ Recharts +  |
 | `S15-PAYROLL-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-FE-4 | QA PAYROLL v2: ma trận allow/deny per-pair TỪNG route mới (kể cả hr-ma |
 | `S15-PAYROLL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-QA-1 | Widget DASH «ngân sách lương năm» (kế hoạch/thực hiện/chênh lệch) + «t |
+| `S15-PAYROLL-DEBT-1` | 🟡 | ✅ xong | [📄](S15-PAYROLL-DEBT-1.md) | ✅S15-PAYROLL-FE-2 ✅S15-PAYROLL-FE-3 ✅S15-PAYROLL-BE-4B | Trả nợ vệ sinh S15: tách 2 file > 800 dòng (i18n payroll.ts · contract |
+| `S15-PAYROLL-FE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-FE-1 | Nợ G3 (FE-1): sửa/xoá mềm phiên bản hồ sơ lương (PAYROLL-API-022 PATCH |
+| `S15-UI-SHELL-2` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S15-UI-SHELL-1 | Nợ S15-UI-SHELL-1: tách apps/app/src/layouts/workspace/sidebar-registr |
+| `S15-PAYROLL-BE-2B` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 | Nợ ghi nhận của S15-PAYROLL-BE-2 (chưa có WO): N+1 assertGraphsAfterEd |
 
 ## Sprint 16
 

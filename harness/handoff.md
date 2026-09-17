@@ -2,6 +2,20 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-17 (m) — **S15-PAYROLL-DEBT-1 ĐÃ MERGE master** (#516 → `2c9dab5b`, owner uỷ quyền `--admin`) ✅
+
+**Bắt đầu phiên sau ở đây:** nợ vệ sinh S15 đã trả (i18n + contracts `payroll.ts` < 800 · prettier 3 file · comment `users.status` · `ConfirmDialog.children` · xoá mềm ngân sách · test 054 · `apps/app/src/lib/download-blob.ts` · `use-local-pref` re-export ui). Lane `mediaos_debt1` đã DROP; nhánh đã xoá; STATUS/INDEX regen + push master sau merge. Không PR PAYROLL nào mở. Việc kế: **`S15-PAYROLL-BE-5`** → FE-4 → QA-1 → DASH-1. Nợ còn lại đã có chỗ: G3 → `S15-PAYROLL-FE-5` · sidebar-registry → `S15-UI-SHELL-2` · nợ BE-2 → `S15-PAYROLL-BE-2B` (🔴) · tổng cột toàn kỳ → `done_when` BE-5 · tách int-spec be4-batches + T4–T6 + đột biến (k) → `done_when` QA-1. **Đọc memory `s15-payroll-debt1-wave-state` TRƯỚC QA-1.** Bằng chứng: `docs/plans/S15-PAYROLL-DEBT-1.md` §3.
+
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:**
+
+1. 🔴 **CI lượt 1 đỏ vì helper int-spec dùng chung dựng `request(app.getHttpServer())`** — cổng `test/foundation/supertest-listen-ratchet.unit-spec.ts` phân tích TỪNG FILE nên cấm helper chạm `getHttpServer`. Đã bỏ phần tách (commit `ea5f3868`). Tách int-spec đúng cách: mỗi file tự boot app (init + `listen(0)` + close) + tự dựng request; helper chỉ gieo DB. **WO chạm `apps/api/test/**`phải chạy`vitest run test/foundation` trước PR\*\* — chạy riêng file int-spec đã đổi là không đủ.
+2. Tách file «giữ hợp đồng» đo rẻ: dump object qua `apps/api/node_modules/.bin/tsx` + `import(pathToFileURL(file))`, so JSON/danh sách export trước–sau.
+3. `sed` chèn vào `paths` theo anchor chung trúng cả WO cũ trong `backlog.mjs` — anchor phải kèm dòng riêng của WO.
+
+**Nợ để lại:** bản inline `recruit/PipelinePage` (revoke object URL TRỄ) chưa gộp vào `lib/download-blob.ts` — cần đo trên trình duyệt thật xem revoke trễ có phải bắt buộc không.
+
+**Chi phí phiên: hook báo ~$568** (≈$124 lúc mở PR; phần lớn còn lại do lượt CI đỏ → sửa → CI lại và thời gian chờ nền trong context lớn). **Bài học:** chạy đủ cổng tĩnh `test/foundation` TRƯỚC khi mở PR rẻ hơn nhiều so với một lượt CI đỏ; reviewer nền dừng sớm khi hook chi phí kêu — dặn phạm vi hẹp ngay từ đầu.
+
 ## Phiên 2026-09-17 (l) — **S15-PAYROLL-FE-2 ĐÃ MERGE master** (#515 → `580b2023`, owner uỷ quyền `--admin`) ✅
 
 **Bắt đầu phiên sau ở đây:** master đã có track B FE (PAY-SCREEN-009/010/011 + chi tiết kỳ v2 + breakdown phiếu theo thành phần). CI #515 xanh toàn bộ trước merge (Build app 6m28s · Lint·Typecheck·Migrate·RLS 14m1s · gitleaks · audit · tooling). Nhánh đã xoá; STATUS regen + push master SAU merge (cách làm của (k) giữ nguyên — PR không `CONFLICTING`). Không PR PAYROLL nào mở. Việc kế: **`S15-PAYROLL-BE-5`** (7 báo cáo + dữ liệu Tổng quan + PDF phiếu) → FE-4 → QA-1. **Đọc memory `s15-payroll-fe2-wave-state` TRƯỚC.** Bằng chứng: `docs/plans/S15-PAYROLL-FE-2.md` §7; quyết định D1–D14 ở §2.
@@ -62,6 +76,7 @@
 ## Phiên 2026-09-15 (f) — S15-PAYROLL-BE-4 → **FULL gate XONG + vá sau gate, PR #511 MỞ (base `feat/s15-payroll-be-3`, KHÔNG auto-merge)** · S15-PAYROLL-BE-3 #510 vẫn chờ owner merge `--admin`
 
 **Bắt đầu phiên sau ở đây:**
+
 - **BE-3 #510**: CI xanh toàn bộ, `MERGEABLE`, up-to-date với master, `REVIEW_REQUIRED` — chỉ còn owner nói rõ «ủy quyền `--admin` cho #510» rồi `gh pr merge 510 --squash --admin` **KHÔNG `--delete-branch`** (còn PR BE-4 stacked — memory `squash-merge-breaks-stacked-prs`). Sau khi merge: ở nhánh BE-4 `git merge origin/master` + `git checkout --ours` file BE-3 xung đột, push, `gh pr edit <BE-4> --base master`.
 - **BE-4**: đọc `docs/plans/S15-PAYROLL-BE-4.md` **§11b** (bảng cổng + vá + nợ). Tóm tắt: `check.sh --all --lane-db=be4` XANH 9/9 · security PASS (3 MEDIUM) · silent-failure BLOCK→vá H1 (`count(*) ?? 0` fail-OPEN ⇒ `payroll-sql.util.ts`) · database PASS · cov `src/payroll` 94,25 %/86,01 % branch · 904 test lane xanh. Nợ gom ở WO mới **`S15-PAYROLL-BE-4B`** (🟡, đã seed backlog). CI của PR BE-4 là cổng cuối; nếu đỏ xem log trước khi đụng code (memory `ci-red-can-depend-on-time-of-day`, `vitest-unhandled-rejection-after-teardown`).
 - Runner tay còn dùng được: scratchpad phiên (f) `run-cov.sh` = `. scripts/lib/db-secrets.sh; db_secrets_load; export 3 *_DB_PASSWORD; unset DATABASE_*_URL; LANE_DB=mediaos_be4; pnpm --filter @mediaos/api test:cov:payroll`.
@@ -73,6 +88,7 @@
 ## Phiên 2026-09-15 (e) — S15-PAYROLL-BE-4 → **IMPLEMENT XONG, commit checkpoint trên nhánh, CHƯA PR** (🔴, dừng theo hook COST CRITICAL ~$140 — owner chốt có chạy tiếp cổng full + reviewer + PR không)
 
 **Bắt đầu phiên sau ở đây — không đọc lại code/plan từ đầu:**
+
 - `git checkout feat/s15-payroll-be-4` (stacked trên BE-3 `9ed2e99b`; **PR #510 vẫn MỞ, BLOCKED chờ review người**). Đọc `docs/plans/S15-PAYROLL-BE-4.md` **§11** (bảng bằng chứng + lệch có chủ đích + việc chưa chạy) + memory `s15-payroll-be4-wave-state`.
 - Mọi cổng ĐÃ XANH: unit 87 · int 22+19+12 (+QA1 scope-floor 163) trên `LANE_DB=mediaos_be4` · FE 82 · census 2 tầng 77/77 · mã lỗi 32 · `MIN_COVERED_COUNT` 624 · typecheck/lint/prettier · route-census regen. Đột biến §6.4: 8/17 ca ĐỎ đúng ca (a q o n h g m e), file khôi phục byte-giống.
 - **Còn lại theo thứ tự:** `bash harness/check.sh --lane-db=be4` (full, ~15–20′) → `pnpm --filter @mediaos/api test:cov:payroll` (LANE_DB) ≥ 85% → reviewer tuần tự `security-reviewer` → `silent-failure-hunter` → `database-reviewer` HẸP (4 câu ở header plan; nói thẳng được dừng ở review tĩnh + liệt kê thứ đã chạy) → PR base `feat/s15-payroll-be-3`, **KHÔNG auto-merge** → khi #510 merge: `git merge origin/master` + `--ours` file BE-3, retarget master (memory `squash-merge-breaks-stacked-prs`).
@@ -85,6 +101,7 @@
 ## Phiên 2026-09-15 (d) — S15-PAYROLL-BE-4 → **PLAN commit `502c21e5`, plan-review PASS sau vá §0b, CHƯA code** (🔴, dừng theo hook COST CRITICAL ~$64; owner chốt «mở trong phiên mới»)
 
 **Bắt đầu phiên sau ở đây — không đọc lại SPEC/DB/API từ đầu:**
+
 - `git checkout feat/s15-payroll-be-4` (stacked trên BE-3 `9ed2e99b` — **PR #510 CI xanh, chờ owner merge `--admin`**; khi #510 merge ⇒ `git merge origin/master` + `git checkout --ours` file BE-3, memory `squash-merge-breaks-stacked-prs`).
 - Đọc `docs/plans/S15-PAYROLL-BE-4.md` **§0 (11 quyết định D-1..D-11) → §0b (5 BLOCKING đã vá + 13 cảnh báo) → §4.3 (thứ tự khoá 072 kỳ→đợt→dòng) → §6 (RED-first)**. Memory `s15-payroll-be4-wave-state` tóm tắt + số neo phải bump.
 - Lane `mediaos_be4` ĐÃ dựng (243 mig, 3 trigger track C); **BE-4 KHÔNG có migration**. Runner tay: nạp `*_DB_PASSWORD` từ `.env` (KHÔNG source cả file — `NODE_ENV=production`), unset `DATABASE_*_URL`, `LANE_DB=mediaos_be4`, `pnpm --filter @mediaos/api exec vitest run <file>`.
