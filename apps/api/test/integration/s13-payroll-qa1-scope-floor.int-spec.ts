@@ -157,7 +157,9 @@ const STATUTORY_VALUES = {
 };
 const STATUTORY_WAGES = { baseWage: 2_340_000, minRegionWage: 4_960_000 };
 
-/** 55 route `companyFloor:true` — MỌI key trừ `EXEMPT_KEYS` (32 của v1 + 8 track A v2 + 15 track B v2). */
+/**
+ * 78 route `companyFloor:true` — MỌI key trừ `EXEMPT_KEYS` (32 của v1 + 8 track A + 15 track B + 18 track C + 5 track D).
+ */
 const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
   // ── Kỳ lương 001–018 ────────────────────────────────────────────────────────────────────────
   periodList: { method: "GET", url: () => "/payroll-periods", read: true },
@@ -379,6 +381,20 @@ const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
     body: () => ({}),
   },
   importTemplate: { method: "GET", url: () => "/payroll/imports/adjustments-template", read: true },
+  // ── S15-PAYROLL-BE-5 · track D phần 1 078–082 (5 route companyFloor:true) ──────────────────────
+  overview: { method: "GET", url: () => "/payroll/overview", read: true },
+  overviewReminders: { method: "GET", url: () => "/payroll/overview/reminders", read: true },
+  reportList: { method: "GET", url: () => "/payroll/reports", read: true },
+  reportData: {
+    method: "GET",
+    url: () => "/payroll/reports/salary-by-period?fromMonth=2028-01&toMonth=2028-12",
+    read: true,
+  },
+  reportExport: {
+    method: "GET",
+    url: () => "/payroll/reports/salary-by-period/export?fromMonth=2028-01&toMonth=2028-12",
+    read: true,
+  },
   // ── Picker 034–035 ──────────────────────────────────────────────────────────────────────────
   pickerPeople: { method: "GET", url: () => "/payroll/pickers/people", read: true },
   pickerAttendancePeriods: {
@@ -832,15 +848,16 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
 
   // ── E. Census chống xanh-rỗng ────────────────────────────────────────────────────────────────
 
-  describe("E. census — 73 key mục A ∪ 4 key mục C = ĐÚNG 77 key của PAYROLL_ROUTE_PAIRS", () => {
-    it("PAYROLL_ROUTE_PAIRS giữ đủ 77 key (neo cho toàn bộ census)", () => {
+  describe("E. census — 78 key mục A ∪ 4 key mục C = ĐÚNG 82 key của PAYROLL_ROUTE_PAIRS", () => {
+    it("PAYROLL_ROUTE_PAIRS giữ đủ 82 key (neo cho toàn bộ census)", () => {
       // S15-PAYROLL-BE-4: +19 route track C (059–077) ⇒ 58 → 77.
-      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(77);
+      // S15-PAYROLL-BE-5: +5 route track D phần 1 (078–082) ⇒ 82 (PDF 083–085 = BE-5B).
+      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(82);
     });
 
-    it("ROUTES = 73 key, EXEMPT_KEYS = 4 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
+    it("ROUTES = 78 key, EXEMPT_KEYS = 4 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
       const floorKeys = Object.keys(ROUTES).sort();
-      expect(floorKeys.length).toBe(73);
+      expect(floorKeys.length).toBe(78);
       expect(EXEMPT_KEYS.length).toBe(4);
       expect(
         [...floorKeys, ...EXEMPT_KEYS].sort(),
@@ -857,15 +874,16 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       }
     });
 
-    it("32 cặp distinct có route được seed cho cả ba chủ thể (không cặp nào rơi khỏi fixture)", () => {
+    it("33 cặp distinct có route được seed cho cả ba chủ thể (không cặp nào rơi khỏi fixture)", () => {
       // S15-PAYROLL-BE-2 +6 cặp track B: view/manage × salary-component · payroll-template · statutory-rate.
       // S15-PAYROLL-BE-4 +8 cặp track C: payroll-advance ×4 · payment-batch ×2 · payroll-budget ×2 ⇒ 32.
+      // S15-PAYROLL-BE-5 +1 cặp track D: view:payroll-report ⇒ 33.
       // `('access','payroll')` KHÔNG gác route nào ⇒ 17 cặp SPEC-11 §11.1 nhưng 16 cặp có route.
-      expect(ALL_PAIRS.length).toBe(32);
+      expect(ALL_PAIRS.length).toBe(33);
       const sensitiveCount = ALL_PAIRS.filter((p) => p.isSensitive).length;
       // ĐÚNG 13 cặp `is_sensitive` của mig `0565` — cả 13 đều có route, `('access','payroll')` là
       // cặp thứ 17 KHÔNG nhạy cảm và KHÔNG gác route nào (đo lại 2026-09-01 trên chính bảng hằng).
-      expect(sensitiveCount, "cờ isSensitive phải lấy NGUYÊN từ bảng hằng, không gõ tay").toBe(29);
+      expect(sensitiveCount, "cờ isSensitive phải lấy NGUYÊN từ bảng hằng, không gõ tay").toBe(30);
     });
   });
 });

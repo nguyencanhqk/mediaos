@@ -102,7 +102,7 @@ Mô tả thiết kế API cho module **PAYROLL** — hồ sơ lương versioned,
 | **C** | **Import thu nhập/khấu trừ khác** | 076–077 | `S15-PAYROLL-BE-4` | Import XLSX → `bonus_penalties` trạng thái `Pending` + tệp mẫu sinh từ **chính khuôn mà 076 parse** |
 | **D** | **Overview** (tổng quan module) | 078–079 | `S15-PAYROLL-BE-5` | 6 khối + 3 loại Lời nhắc của `PAY-SCREEN-015`; **KHÔNG cache** |
 | **D** | **Reports** (7 báo cáo) | 080–082 | `S15-PAYROLL-BE-5` | Danh mục (metadata) · dữ liệu · export XLSX; **KHÔNG cache**, audit mỗi lượt |
-| **D** | **PDF phiếu lương** | 083–085 | `S15-PAYROLL-BE-5` | Phiếu người khác · phiếu **của mình** (không cần cặp export) · **batch → signed-URL ZIP**; sinh từ snapshot `payslip_items`, **không tính lại** |
+| **D** | **PDF phiếu lương** | 083–085 | `S15-PAYROLL-BE-5B` *(owner O-1 17/09/2026 tách khỏi BE-5)* | Phiếu người khác · phiếu **của mình** (không cần cặp export) · **batch → signed-URL ZIP**; sinh từ snapshot `payslip_items`, **không tính lại** |
 
 > Danh sách route đầy đủ + cặp quyền từng route: **§5b** (nguồn: SPEC-11 §15.1). Cặp quyền v2: SPEC-11 §11.3 (**17 cặp, tất cả `is_sensitive = true`**) + permission-matrix §9g.2. Màn hình tiêu thụ: SPEC-11 §9.1 (**`PAY-SCREEN-007..017`** — 11 màn; `017` «Tạm ứng của tôi» thuộc **module ME**, cùng khuôn `PAY-SCREEN-006`).
 
@@ -344,7 +344,8 @@ Cùng khuôn §5.1: bảng dưới **không nhân bản rule nghiệp vụ**, ch
 | **PAYROLL-API-036..043** (track A) | ✅ **Đã hiện thực** | `S15-PAYROLL-BE-1` — nhân sự hưởng lương (chiếu HR bó hẹp, `taxCode` qua `('view','salary-profile')`@**Company** + audit) · thiết lập BH/công đoàn/**TK ngân hàng** (ra ngoài CHỈ `bankAccountLast4`) · người phụ thuộc (chồng lấp ⇒ 409 032 từ `EXCLUDE`/`23P01`) · bảng công tổng hợp kỳ (tái dùng `computeInputsTx`). Kèm đổi **PAYLOAD** 020/021/022 sang `items[]` → `salary_profile_items` (dual-write, cột `allowances` GIỮ tới khi CONTRACT). **43/43 route** lên dây; census 2 tầng + census mã lỗi (19 mã) xanh |
 | **PAYROLL-API-044..058** | ✅ **Đã hiện thực** (`S15-PAYROLL-BE-2`, 13/09/2026) | Track B: `payroll-catalog.controllers.ts` (3 controller) · `salary-components.service.ts` · `payroll-templates.service.ts` · `statutory-rates.service.ts` · máy công thức `src/payroll/formula/`. `@Idempotent` đúng 045 · 050 · 056; 048/054 trả **200**. Census 2 tầng 58/58 route |
 | **PAYROLL-API-059..077** | ✅ **Đã hiện thực** (`S15-PAYROLL-BE-4`, 15/09/2026) | Track C: `payroll-advances.controllers.ts` (059–065, Own 065 ở `me/payroll-advances`) · `payroll-payment.controllers.ts` (066–072 · 073–075 · 076–077) · `payroll-payment-export.service.ts` (071 BA cặp, tệp UNC) · `payroll-pair-holders.reader.ts` (NOTI 024/027 + C3). `@Idempotent` đúng 060 · 067 · 072 · 074 (076 multipart CỐ Ý không — xem §5.2); 072 trả **200**. Luật PHỦ 072 + kỳ `Locked` di sản `legacyPaidTrail`. Census 2 tầng **77/77** route; mã lỗi 32; `MIN_COVERED_COUNT` 624. Quyết định mặc định D-1..D-11 ở `docs/plans/S15-PAYROLL-BE-4.md` §0 (owner lật rẻ) |
-| **PAYROLL-API-078..085** | ❌ **Chưa hiện thực** | Track D `S15-PAYROLL-BE-5` — tổng quan · báo cáo · PDF |
+| **PAYROLL-API-078..082** | ✅ **Hiện thực** `S15-PAYROLL-BE-5` (17/09/2026) | Tổng quan · Lời nhắc · 7 báo cáo — cặp nguồn cho báo cáo theo người (owner O-2); 018 thêm `?payrollPeriodId=` (tổng cột toàn kỳ); 036 thêm filter `insuranceIssue` — chi tiết SPEC-11 §15.1 |
+| **PAYROLL-API-083..085** | ❌ **Chưa hiện thực** | PDF phiếu lương — `S15-PAYROLL-BE-5B` (signed-URL file-service + dọn object, owner O-3) |
 
 > Lệch giữa thiết kế và code ⇒ **sửa code**, không sửa ngầm tài liệu (CLAUDE.md — docs/spec + docs/DB là chuẩn).
 

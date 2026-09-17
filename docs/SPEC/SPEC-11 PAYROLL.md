@@ -1242,7 +1242,7 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-18](<../API Design/API-1
 | PAYROLL-API-015 | `POST /payroll-periods/:id/lock` | `('manage','payroll-period')` | `Paid → Locked`; khoá đường chỉnh công ATT tháng đó; audit |
 | PAYROLL-API-016 | `POST /payroll-periods/:id/reopen` | `('reopen','payroll-period')` | `{ reason }` **bắt buộc**; → `CollectingData`; `payslips_generated_at IS NOT NULL` ⇒ 004; **xoá `calculated_*`/`submitted_*`/`approved_*`** (§13.1 bảng RESET); audit |
 | PAYROLL-API-017 | `GET /payroll-periods/:id/export` | `('export','payroll')` **+ `('view-line','payroll-period')`** (§18) | XLSX bảng lương kỳ; **audit bắt buộc**; > 10.000 dòng ⇒ 422 (016) |
-| PAYROLL-API-018 | `GET /payroll-periods/summary` | **`('view-line','payroll-period')`** **+ SÀN scope Company** | tổng gross/net + headcount + trạng thái kỳ gần nhất — nguồn widget DASH; route khai **TRƯỚC** `/payroll-periods/:id` |
+| PAYROLL-API-018 | `GET /payroll-periods/summary` | **`('view-line','payroll-period')`** **+ SÀN scope Company** | tổng gross/net + headcount + trạng thái kỳ gần nhất — nguồn widget DASH; route khai **TRƯỚC** `/payroll-periods/:id` 🔁 **S15-PAYROLL-BE-5 (D-15):** `?payrollPeriodId=` ⇒ tóm tắt KỲ ĐÓ + `lineTotals` (8 cột tiền) + `componentTotals` (từ snapshot) toàn kỳ, SUM ở SQL — nợ FE-2 «Tổng trang»; vắng tham số ⇒ hành vi cũ (widget DASH không đổi); kỳ lạ ⇒ 404 010 |
 | PAYROLL-API-019 | `GET /salary-profiles` | `('view','salary-profile')` | filter `userId` · `effectiveOn`; pagination; **audit lượt đọc**; mask theo quyền |
 | PAYROLL-API-020 | `POST /salary-profiles` | `('manage','salary-profile')` | 🔁 **v2 đổi PAYLOAD, KHÔNG cấp route mới**: `{ userId, effectiveDate, baseSalary, salaryType?, pitPayer?, insuranceSalary?, probationSalary?, payRatioPct?, items[], note? }` — **`items[]`** ghi xuống **`salary_profile_items`** *(v1: `allowances[]` → cột `allowances` jsonb)*. **Dual-write cả hai nguồn tới khi CONTRACT** (DB-13 §12.2); trùng `component_code` trong cùng hồ sơ ⇒ **409 014** `kind = profile-item-duplicate`; trùng ngày ⇒ 014 `effective-date-exists`; `Idempotency-Key`; audit |
 | PAYROLL-API-021 | `GET /salary-profiles/:id` | `('view','salary-profile')` | chi tiết một phiên bản; **audit lượt đọc** |
@@ -1275,7 +1275,7 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-18](<../API Design/API-1
 
 | Mã | Endpoint | Cặp quyền | Ghi chú |
 | --- | --- | --- | --- |
-| 036 | `GET /payroll/employees` | `('view','payroll-employee')` | danh sách nhân sự hưởng lương — **chiếu HR bó hẹp qua `PayrollPeopleRepository`** (PAY-DEC-016), mở rộng 034; filter `q` · `orgUnitId` · `hasSalaryProfile`; **audit lượt đọc** |
+| 036 | `GET /payroll/employees` | `('view','payroll-employee')` | danh sách nhân sự hưởng lương — **chiếu HR bó hẹp qua `PayrollPeopleRepository`** (PAY-DEC-016), mở rộng 034; filter `q` · `orgUnitId` · `hasSalaryProfile` · 🔁 **`insuranceIssue`** (`not-joined` · `salary-out-of-range` — CÙNG vị từ với lời nhắc 079; `salary-out-of-range` đòi THÊM `('view','salary-profile')`@Company vì là vị từ trên lương — S15-PAYROLL-BE-5 §0b B1); **audit lượt đọc** |
 | 037 | `GET /payroll/employees/:userId` | `('view','payroll-employee')` | tab «Thông tin chung»; **`taxCode` CHỈ có mặt khi caller thêm `('view','salary-profile')`** — vắng khoá nếu không (§18.1); audit |
 | 038 | `GET /payroll/employees/:userId/settings` | `('view','payroll-employee')` | BH · công đoàn · **`bankAccountLast4`** (không bao giờ số đầy đủ); audit |
 | 039 | `PUT /payroll/employees/:userId/settings` | `('manage','payroll-employee')` | upsert 1 hàng/nhân sự; `Idempotency-Key`; audit **không kèm số TK** |
@@ -1342,11 +1342,11 @@ Envelope/error/pagination theo API-01. Chi tiết: [API-18](<../API Design/API-1
 
 | Mã | Endpoint | Cặp quyền | Ghi chú |
 | --- | --- | --- | --- |
-| 078 | `GET /payroll/overview` | `('view','payroll-report')` **+ SÀN scope `Company`** | 6 khối của PAY-SCREEN-015; **KHÔNG cache**; audit mỗi lượt |
+| 078 | `GET /payroll/overview` | `('view','payroll-report')` **+ SÀN scope `Company`** | 6 khối của PAY-SCREEN-015 (nguồn = phiếu của kỳ `Published/Paid/Locked`, đơn vị HIỆN TẠI); khối ngân sách **chỉ có** khi thêm `('view','payroll-budget')`@Company (vắng khoá nếu thiếu — owner O-2); **KHÔNG cache**; audit mỗi lượt |
 | 079 | `GET /payroll/overview/reminders` | `('view','payroll-report')` **+ SÀN `Company`** | 3 loại lời nhắc; **KHÔNG cache**; audit |
-| 080 | `GET /payroll/reports` | `('view','payroll-report')` | **danh mục 7 báo cáo (metadata)** — mã · tên · tham số; **không số liệu** nên không audit-đọc |
-| 081 | `GET /payroll/reports/:reportCode` | `('view','payroll-report')` **+ SÀN `Company`** | dữ liệu báo cáo, SQL set-based, pagination; > 50.000 dòng ⇒ **422 031**; **KHÔNG cache**; **audit mỗi lượt** kèm `reportCode` + bộ lọc, **không** số tiền |
-| 082 | `GET /payroll/reports/:reportCode/export` | `('view','payroll-report')` **+ `('export','payroll')`** | XLSX; **audit bắt buộc** |
+| 080 | `GET /payroll/reports` | `('view','payroll-report')` **+ SÀN `Company`** | **danh mục 7 báo cáo (metadata)** — mã · tham số · cột · `exportable`; **chỉ liệt kê báo cáo caller mở được** (cặp nguồn — owner O-2 17/09/2026); **không số liệu** nên không audit-đọc |
+| 081 | `GET /payroll/reports/:reportCode` | `('view','payroll-report')` **+ SÀN `Company`** · báo cáo lộ tiền THEO NGƯỜI assert THÊM cặp nguồn (owner O-2): `employee-income` + `('view-payslip','payslip')` · `salary-history` + `('view','salary-profile')` · `payment-summary` + `('view','payment-batch')` · `budget-status` + `('view','payroll-budget')` | dữ liệu báo cáo, SQL set-based, pagination, `totals` trên cả bộ lọc; > 50.000 dòng ⇒ **422 031**; **KHÔNG cache**; **audit mỗi lượt** kèm `reportCode` + bộ lọc, **không** số tiền |
+| 082 | `GET /payroll/reports/:reportCode/export` | `('view','payroll-report')` **+ `('export','payroll')`** + cặp nguồn như 081 | XLSX (ô chữ chống formula-injection, hàng tổng chỉ cho cột cộng được); > 50.000 dòng ⇒ **422 031**; **audit bắt buộc** |
 | 083 | `GET /payslips/:id/pdf` | `('view-payslip','payslip')` **+ `('export','payroll')`** | PDF phiếu **của người khác** — sinh từ snapshot `payslip_items`, **không tính lại**; signed-URL; audit |
 | 084 | `GET /me/payslips/:id/pdf` | `('view-own-payslip','payslip')` | Own — **KHÔNG cần cặp export** (PAY-DEC-019); **dùng CÙNG bộ lọc kỳ `{Published, Paid, Locked}` với 031/032** (§13.2); phiếu người khác ⇒ **404 010** |
 | 085 | `POST /payroll-periods/:id/payslips/pdf-batch` | `('export','payroll')` **+ `('view-payslip','payslip')`** | sinh PDF hàng loạt → signed-URL tệp ZIP; > 2.000 phiếu ⇒ **422 031**; `Idempotency-Key`; **audit bắt buộc** |

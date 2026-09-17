@@ -453,11 +453,91 @@ export class PayrollCalcRepository {
    * DASH phải phân biệt được «chưa có kỳ» với «không có quyền».
    */
   async latestSummaryTx(tx: TenantTx, companyId: string): Promise<PayrollPeriodSummaryRow | null> {
+    return this.summaryOfTx(tx, companyId, null);
+  }
+
+  /**
+   * S15-PAYROLL-BE-5 D-15 — tóm tắt của MỘT kỳ (018 `?payrollPeriodId=`). Kỳ không tồn tại / khác tenant / xoá mềm ⇒
+   * `null` ⇒ service ném 404 sentinel. CÙNG câu với `latestSummaryTx` (chỉ khác vị từ chọn kỳ).
+   */
+  async periodSummaryTx(
+    tx: TenantTx,
+    companyId: string,
+    periodId: string,
+  ): Promise<PayrollPeriodSummaryRow | null> {
+    return this.summaryOfTx(tx, companyId, periodId);
+  }
+
+  /**
+   * S15-PAYROLL-BE-5 D-15 — tổng 8 cột tiền của MỌI dòng sống trong kỳ (SUM ở SQL — nợ FE-2 «Tổng trang»).
+   */
+  async lineTotalsTx(
+    tx: TenantTx,
+    companyId: string,
+    periodId: string,
+  ): Promise<Record<string, string>> {
+    const res = await tx.execute<Record<string, string>>(sql`
+      select coalesce(sum(pl.base_amount), 0)       as base_amount,
+             coalesce(sum(pl.allowance_amount), 0)  as allowance_amount,
+             coalesce(sum(pl.bonus_amount), 0)      as bonus_amount,
+             coalesce(sum(pl.penalty_amount), 0)    as penalty_amount,
+             coalesce(sum(pl.deduction_amount), 0)  as deduction_amount,
+             coalesce(sum(pl.adjustment_amount), 0) as adjustment_amount,
+             coalesce(sum(pl.gross), 0)             as gross,
+             coalesce(sum(pl.net), 0)               as net
+        from payroll_period_lines pl
+       where pl.company_id = ${companyId}::uuid
+         and pl.payroll_period_id = ${periodId}::uuid
+         and pl.deleted_at is null
+    `);
+    const list = (res as unknown as { rows?: unknown[] }).rows ?? (res as unknown as unknown[]);
+    const row = (list as Record<string, string>[])[0];
+    if (!row) throw new Error("payroll 018: tổng cột trả 0 hàng");
+    return row;
+  }
+
+  /**
+   * S15-PAYROLL-BE-5 D-15 — tổng TỪNG thành phần của kỳ từ snapshot `component_values_json` (dòng v1 ⇒ 0 hàng).
+   * Nhãn/kind/thứ tự lấy `min` theo mã ⇒ tất định khi hai lượt tính dùng nhãn khác nhau (§0b C12).
+   */
+  async componentTotalsTx(
+    tx: TenantTx,
+    companyId: string,
+    periodId: string,
+  ): Promise<Array<Record<string, unknown>>> {
+    const res = await tx.execute<Record<string, unknown>>(sql`
+      select c.value->>'code'                                            as code,
+             min(c.value->>'label')                                      as label,
+             min(c.value->>'kind')                                       as kind,
+             min((c.value->>'sortOrder')::int)                           as sort_order,
+             bool_or(coalesce((c.value->>'isVisible')::boolean, true))   as is_visible,
+             sum((c.value->>'value')::numeric)                           as total
+        from payroll_period_lines pl
+       cross join lateral jsonb_array_elements(
+               case when jsonb_typeof(pl.component_values_json->'components') = 'array'
+                    then pl.component_values_json->'components' else '[]'::jsonb end) as c(value)
+       where pl.company_id = ${companyId}::uuid
+         and pl.payroll_period_id = ${periodId}::uuid
+         and pl.deleted_at is null
+       group by c.value->>'code'
+       order by min((c.value->>'sortOrder')::int), c.value->>'code'
+    `);
+    return ((res as unknown as { rows?: unknown[] }).rows ??
+      (res as unknown as unknown[])) as Array<Record<string, unknown>>;
+  }
+
+  private async summaryOfTx(
+    tx: TenantTx,
+    companyId: string,
+    periodId: string | null,
+  ): Promise<PayrollPeriodSummaryRow | null> {
+    const byId = periodId ? sql`and id = ${periodId}::uuid` : sql``;
     const res = await tx.execute<PayrollPeriodSummaryRow>(sql`
       with p as (
         select id, period_month, status
           from payroll_periods
          where company_id = ${companyId}::uuid and deleted_at is null
+           ${byId}
          order by period_month desc, id
          limit 1
       )

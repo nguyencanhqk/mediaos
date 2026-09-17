@@ -32,6 +32,12 @@ import type { PayrollActor, PayrollRequestUser } from "./payroll.types";
  * sống ở method RIÊNG có tên tường minh (`canRevealTaxCode`), **có sàn scope của riêng nó**, và KHÔNG
  * BAO GIỜ được gộp vào `canSeeMoney`. Gộp vào là mở lại nhánh mask-per-row tiền mà SPEC đã đóng.
  */
+/** Cặp PHỤ được kiểm mềm ở track D — danh sách ĐÓNG (xem `canResolve`). */
+export type PayrollSoftGateKey = Extract<
+  PayrollRouteKey,
+  "payslipList" | "salaryProfileList" | "batchList" | "budgetList" | "periodExport"
+>;
+
 @Injectable()
 export class PayrollAccessService {
   constructor(private readonly dataScope: DataScopeService) {}
@@ -93,6 +99,10 @@ export class PayrollAccessService {
     "budgetUpdate",
     "importAdjustments",
     "importTemplate",
+    // v2 track D phần 1 (S15-PAYROLL-BE-5) — 079 chỉ SỐ ĐẾM · 080 là danh mục metadata. KHÔNG thêm 078/081/082
+    // (chở tiền tổng hợp/theo người ⇒ `assertMoneyRoute` ở mapper báo cáo).
+    "overviewReminders",
+    "reportList",
   ]);
 
   async resolveActor(user: PayrollRequestUser, routeKey: PayrollRouteKey): Promise<PayrollActor> {
@@ -146,6 +156,28 @@ export class PayrollAccessService {
       "view",
       "salary-profile",
       { isSensitive: true },
+    );
+    return PayrollAccessService.isCompany(scope);
+  }
+
+  /**
+   * S15-PAYROLL-BE-5 (plan D-8 · §0b C10) — kiểm MỀM một cặp PHỤ của track D: `true` khi caller giữ cặp đó ĐÚNG cờ
+   * sensitive **ở scope Company** (sàn — cùng lập luận `canRevealTaxCode` điều 3: `resolveOrNull` không ép sàn nào).
+   *
+   * Dùng cho BA việc, không việc nào là «biết caller có xem được tiền không» (điều cấm ở JSDoc lớp):
+   *  · 080 lọc danh mục báo cáo theo cặp nguồn (owner O-2) + cờ `exportable`;
+   *  · 078 quyết định CÓ hay VẮNG cả khối ngân sách (§0b B2);
+   *  · 036 filter `salary-out-of-range` đòi `view:salary-profile` (§0b B1).
+   * Tham số là union ĐÓNG — thêm key ở đây là một quyết định review, không phải một dòng tiện tay.
+   */
+  async canResolve(user: PayrollRequestUser, key: PayrollSoftGateKey): Promise<boolean> {
+    const p = PAYROLL_ROUTE_PAIRS[key];
+    const scope = await this.dataScope.resolveOrNull(
+      user.id,
+      user.companyId,
+      p.action,
+      p.resourceType,
+      { isSensitive: p.isSensitive },
     );
     return PayrollAccessService.isCompany(scope);
   }

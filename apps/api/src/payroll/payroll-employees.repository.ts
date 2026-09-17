@@ -1,15 +1,19 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, count, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import type { PayrollInsuranceIssue } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import { orgUnits } from "../db/schema/org";
 import { positions } from "../db/schema/positions";
 import { users } from "../db/schema/users";
+import { companyTodaySql } from "./payroll-report.sql";
 
 export interface PayrollEmployeeListFilter {
   q?: string;
   orgUnitId?: string;
   hasSalaryProfile?: boolean;
+  /** S15-PAYROLL-BE-5 — CÙNG vị từ với lời nhắc #2/#3 của 079 (`insuranceIssueSql`). */
+  insuranceIssue?: PayrollInsuranceIssue;
 }
 
 /** Hàng thô của 036/037 — **KHÔNG mang `fullName`/`employeeCode`** (xem luật 1 ở docblock lớp). */
@@ -88,6 +92,59 @@ export class PayrollEmployeesRepository {
     )`;
   }
 
+  /**
+   * S15-PAYROLL-BE-5 (plan D-12..D-14) — vị từ «vấn đề bảo hiểm», NGUỒN DUY NHẤT cho filter 036 VÀ số đếm lời nhắc
+   * #2/#3 của 079 (079 gọi CHÍNH `countTx` với filter này ⇒ hai con số không lệch được).
+   *
+   * «NV chính thức» = hồ sơ `active` · `full_time`/`part_time` · `official_date` NULL hoặc ≤ hôm nay (TZ công ty).
+   * `not-joined` = không có thiết lập sống bật `joins_social_insurance`.
+   * `salary-out-of-range` = đang tham gia BH + hồ sơ lương hiệu lực HÔM NAY (bản `effective_date ≤ today` mới nhất —
+   * cùng vị từ `effectiveProfilesTx`) có căn cứ đóng `COALESCE(probation_salary, insurance_salary, base_salary)` như
+   * engine (§3.11, `formula.line.ts`) nằm ngoài `[min_region_wage, si_cap]` của bản tỉ lệ hiệu lực hôm nay. Hồ sơ
+   * NET không có lương BH/thử việc ⇒ BỎ QUA (engine dùng `b` sau gross-up, không biết trước). Không có bản tỉ lệ ⇒
+   * không ai khớp. Lương khai vượt trần vẫn được nhắc dù engine sẽ kẹp khi tính (chữ «ngoài quy định», §0b C9).
+   *
+   * ⚠️ `salary-out-of-range` là vị từ TRÊN LƯƠNG ⇒ service đòi thêm `('view','salary-profile')`@Company (§0b B1).
+   */
+  static insuranceIssueSql(companyId: string, issue: PayrollInsuranceIssue): SQL {
+    const today = companyTodaySql(companyId);
+    const official = sql`(employee_profiles.status = 'active'
+      and employee_profiles.employment_type in ('full_time', 'part_time')
+      and (employee_profiles.official_date is null or employee_profiles.official_date <= ${today}))`;
+    const joins = sql`exists (
+      select 1 from payroll_employee_settings s
+       where s.company_id = ${companyId}::uuid
+         and s.user_id = employee_profiles.user_id
+         and s.deleted_at is null
+         and s.joins_social_insurance
+    )`;
+    if (issue === "not-joined") return sql`(${official} and not ${joins})`;
+    return sql`(${official} and ${joins} and exists (
+      select 1
+        from (select sp.salary_type, sp.base_salary, sp.insurance_salary, sp.probation_salary
+                from salary_profiles sp
+               where sp.company_id = ${companyId}::uuid
+                 and sp.user_id = employee_profiles.user_id
+                 and sp.deleted_at is null
+                 and sp.effective_date <= ${today}
+               order by sp.effective_date desc, sp.id
+               limit 1) cur
+       cross join lateral (
+              select r.min_region_wage, r.si_cap
+                from payroll_statutory_rates r
+               where r.company_id = ${companyId}::uuid
+                 and r.deleted_at is null
+                 and r.effective_from <= ${today}
+               order by r.effective_from desc
+               limit 1) rate
+       cross join lateral (
+              select coalesce(cur.probation_salary, cur.insurance_salary,
+                              case when cur.salary_type = 'GROSS' then cur.base_salary end) as base) ib
+       where ib.base is not null
+         and (ib.base < rate.min_region_wage or ib.base > rate.si_cap)
+    ))`;
+  }
+
   private static where(companyId: string, f: PayrollEmployeeListFilter): SQL {
     const parts: SQL[] = [PayrollEmployeesRepository.scope(companyId)];
     if (f.q) {
@@ -102,6 +159,9 @@ export class PayrollEmployeesRepository {
     if (f.hasSalaryProfile !== undefined) {
       const e = PayrollEmployeesRepository.hasSalaryProfileSql(companyId);
       parts.push(f.hasSalaryProfile ? e : (sql`not ${e}` as SQL));
+    }
+    if (f.insuranceIssue) {
+      parts.push(PayrollEmployeesRepository.insuranceIssueSql(companyId, f.insuranceIssue));
     }
     return and(...parts) as SQL;
   }
@@ -139,29 +199,31 @@ export class PayrollEmployeesRepository {
   }
 
   private static base(tx: TenantTx, companyId: string) {
-    return tx
-      .select(PayrollEmployeesRepository.columns(companyId))
-      .from(employeeProfiles)
-      .innerJoin(users, eq(users.id, employeeProfiles.userId))
-      // `deleted_at IS NULL` ở CẢ HAI bảng tra cứu: `org_units`/`positions` có soft-delete và
-      // `deleteOrgUnit`/`deletePosition` KHÔNG chặn xoá khi còn nhân sự tham chiếu ⇒ thiếu vị từ này
-      // thì đơn vị/vị trí đã xoá **vẫn hiện tên** trên màn Nhân viên PAYROLL (DB review, MEDIUM).
-      .leftJoin(
-        orgUnits,
-        and(
-          eq(orgUnits.id, employeeProfiles.orgUnitId),
-          eq(orgUnits.companyId, companyId),
-          isNull(orgUnits.deletedAt),
-        ),
-      )
-      .leftJoin(
-        positions,
-        and(
-          eq(positions.id, employeeProfiles.positionId),
-          eq(positions.companyId, companyId),
-          isNull(positions.deletedAt),
-        ),
-      );
+    return (
+      tx
+        .select(PayrollEmployeesRepository.columns(companyId))
+        .from(employeeProfiles)
+        .innerJoin(users, eq(users.id, employeeProfiles.userId))
+        // `deleted_at IS NULL` ở CẢ HAI bảng tra cứu: `org_units`/`positions` có soft-delete và
+        // `deleteOrgUnit`/`deletePosition` KHÔNG chặn xoá khi còn nhân sự tham chiếu ⇒ thiếu vị từ này
+        // thì đơn vị/vị trí đã xoá **vẫn hiện tên** trên màn Nhân viên PAYROLL (DB review, MEDIUM).
+        .leftJoin(
+          orgUnits,
+          and(
+            eq(orgUnits.id, employeeProfiles.orgUnitId),
+            eq(orgUnits.companyId, companyId),
+            isNull(orgUnits.deletedAt),
+          ),
+        )
+        .leftJoin(
+          positions,
+          and(
+            eq(positions.id, employeeProfiles.positionId),
+            eq(positions.companyId, companyId),
+            isNull(positions.deletedAt),
+          ),
+        )
+    );
   }
 
   async listTx(

@@ -50,7 +50,8 @@ interface AuthenticatedRequest extends Request {
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /** Content-Type XLSX đặt Ở ĐƯỜNG THÀNH CÔNG, cạnh `send(buffer)` — `@Header` áp TRƯỚC handler làm 4xx đội nhãn XLSX (bài học 017). */
-function sendXlsx(res: Response, buffer: Buffer, filename: string): void {
+/** Gửi tệp XLSX (dùng chung với báo cáo 082 — S15-PAYROLL-BE-5). */
+export function sendXlsx(res: Response, buffer: Buffer, filename: string): void {
   res.setHeader("Content-Type", XLSX_MIME);
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(buffer);

@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**506 WO** · có micro-plan: **303/506** · ⬜ 20 chờ · 🔵 0 đang làm · ✅ 485 xong · 🔴 1 chặn
+**507 WO** · có micro-plan: **304/507** · ⬜ 20 chờ · 🔵 1 đang làm · ✅ 485 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -547,8 +547,9 @@
 | `S15-PAYROLL-BE-4` | 🔴 | ✅ xong | [📄](S15-PAYROLL-BE-4.md) | ✅S15-PAYROLL-DB-2 ✅S15-PAYROLL-BE-3 | BE track C: tạm ứng FSM (Pending → Approved/Rejected → Deducted, four- |
 | `S15-PAYROLL-BE-4B` | 🟡 | ✅ xong | [📄](S15-PAYROLL-BE-4B.md) | ✅S15-PAYROLL-BE-4 | Nợ FULL gate BE-4 (15/09/2026): lọc users.status ở PayrollPairHoldersR |
 | `S15-PAYROLL-FE-3` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-3.md) | ✅S15-PAYROLL-BE-4 | FE track C: PAY-SCREEN-012 Tạm ứng (list + form + duyệt) · 013 Chi trả |
-| `S15-PAYROLL-BE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-BE-4 | BE track D: 7 báo cáo (tổng hợp thu nhập NV · thống kê lương theo thời |
-| `S15-PAYROLL-FE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-5 ✅S15-PAYROLL-FE-2 ✅S15-PAYROLL-FE-3 | FE track D: PAY-SCREEN-015 Tổng quan `/payroll` (6 biểu đồ Recharts +  |
+| `S15-PAYROLL-BE-5` | 🟡 | 🔵 đang làm | [📄](S15-PAYROLL-BE-5.md) | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-BE-4 | BE track D (phần 1 — owner tách PDF sang S15-PAYROLL-BE-5B, 17/09): 07 |
+| `S15-PAYROLL-BE-5B` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-5 | BE track D (phần 2 — tách từ BE-5 theo owner O-1, 17/09): PDF phiếu lư |
+| `S15-PAYROLL-FE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-BE-5 ⏳S15-PAYROLL-BE-5B ✅S15-PAYROLL-FE-2 ✅S15-PAYROLL-FE-3 | FE track D: PAY-SCREEN-015 Tổng quan `/payroll` (6 biểu đồ Recharts +  |
 | `S15-PAYROLL-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-FE-4 | QA PAYROLL v2: ma trận allow/deny per-pair TỪNG route mới (kể cả hr-ma |
 | `S15-PAYROLL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-QA-1 | Widget DASH «ngân sách lương năm» (kế hoạch/thực hiện/chênh lệch) + «t |
 | `S15-PAYROLL-DEBT-1` | 🟡 | ✅ xong | [📄](S15-PAYROLL-DEBT-1.md) | ✅S15-PAYROLL-FE-2 ✅S15-PAYROLL-FE-3 ✅S15-PAYROLL-BE-4B | Trả nợ vệ sinh S15: tách 2 file > 800 dòng (i18n payroll.ts · contract |

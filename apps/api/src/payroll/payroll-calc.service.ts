@@ -5,6 +5,7 @@ import type {
   PayrollLineListQuery,
   PayrollPeriodStatus,
   PayrollSummaryDto,
+  PayrollSummaryQuery,
   PayrollWriteResultDto,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
@@ -135,7 +136,13 @@ export class PayrollCalcService {
         src.userIds,
       );
       const lines = buildLineWrites(
-        { usable, formulaSetFingerprint: fingerprintOf(usable.rows), rate, statutory, meta: src.meta },
+        {
+          usable,
+          formulaSetFingerprint: fingerprintOf(usable.rows),
+          rate,
+          statutory,
+          meta: src.meta,
+        },
         { ...src, picked, advances },
       );
 
@@ -144,8 +151,18 @@ export class PayrollCalcService {
       );
       await this.calc.softDeleteStaleLinesTx(tx, user.companyId, id, src.userIds, user.id);
       await PayrollCalcService.mapped(async () => {
-        await this.calc.bindConsumedTx(tx, user.companyId, id, picked.map((p) => p.id));
-        await this.calc.bindAdvancesTx(tx, user.companyId, id, advances.map((a) => a.id));
+        await this.calc.bindConsumedTx(
+          tx,
+          user.companyId,
+          id,
+          picked.map((p) => p.id),
+        );
+        await this.calc.bindAdvancesTx(
+          tx,
+          user.companyId,
+          id,
+          advances.map((a) => a.id),
+        );
       });
 
       const row = await this.periods.applyTransitionTx(
@@ -158,7 +175,11 @@ export class PayrollCalcService {
       );
       if (!row) throw payrollNotFound();
       const lineCount = await this.periods.countLiveLinesTx(tx, user.companyId, id);
-      const unconsumed = await this.calcInputs.unconsumedCountsTx(tx, user.companyId, period.periodMonth);
+      const unconsumed = await this.calcInputs.unconsumedCountsTx(
+        tx,
+        user.companyId,
+        period.periodMonth,
+      );
       await this.audit.record(tx, {
         action: "calculate",
         objectType: "payroll_period",
@@ -303,19 +324,37 @@ export class PayrollCalcService {
    * Công ty **chưa có kỳ nào** ⇒ **200 với `data: null`**, KHÔNG 404: widget DASH phải phân biệt được
    * «chưa có kỳ» với «không có quyền» (404 sentinel dùng chung cho cả hai nghĩa ở module này).
    */
-  async summary(user: PayrollRequestUser): Promise<PayrollSummaryDto | null> {
+  /**
+   * 018 — tóm tắt chi phí kỳ. Vắng `payrollPeriodId` ⇒ kỳ MỚI NHẤT, KHÔNG tổng cột (đường widget DASH `PAYROLL_COST`
+   * gọi `summary(user)` giữ nguyên hình); có ⇒ kỳ ĐÓ + `lineTotals`/`componentTotals` toàn kỳ (S15-PAYROLL-BE-5 D-15 —
+   * nợ FE-2 «Tổng trang»). Kỳ lạ/khác tenant ⇒ 404 sentinel. Cùng cặp `view-line` + sàn Company.
+   */
+  async summary(
+    user: PayrollRequestUser,
+    query: PayrollSummaryQuery = {},
+  ): Promise<PayrollSummaryDto | null> {
     const actor = await this.access.resolveActor(user, "periodSummary");
     return this.db.withTenant(user.companyId, async (tx) => {
-      const row = await this.calc.latestSummaryTx(tx, user.companyId);
+      const periodId = query.payrollPeriodId;
+      const row = periodId
+        ? await this.calc.periodSummaryTx(tx, user.companyId, periodId)
+        : await this.calc.latestSummaryTx(tx, user.companyId);
+      if (periodId && !row) throw payrollNotFound();
+      const totals = periodId
+        ? {
+            lines: await this.calc.lineTotalsTx(tx, user.companyId, periodId),
+            components: await this.calc.componentTotalsTx(tx, user.companyId, periodId),
+          }
+        : null;
       await this.audit.record(tx, {
         action: "read",
         objectType: "payroll_period",
         objectId: row?.payroll_period_id ?? undefined,
         actorUserId: user.id,
         before: null,
-        after: { view: "summary", found: row !== null },
+        after: { view: "summary", found: row !== null, scope: periodId ? "period" : "latest" },
       });
-      return row ? toPayrollSummaryDto(row, actor) : null;
+      return row ? toPayrollSummaryDto(row, actor, totals) : null;
     });
   }
 
@@ -352,7 +391,9 @@ export class PayrollCalcService {
         payrollDetails("attendance-period-missing"),
       );
     }
-    if (!(await PayrollCalcService.attendancePeriodLockedTx(tx, companyId, period.attendancePeriodId))) {
+    if (
+      !(await PayrollCalcService.attendancePeriodLockedTx(tx, companyId, period.attendancePeriodId))
+    ) {
       throw payrollConflict(
         "ATTENDANCE_NOT_READY",
         PAYROLL_ERR.ATTENDANCE_NOT_LOCKED,
@@ -456,7 +497,15 @@ export class PayrollCalcService {
       this.calcInputs.dependentCountsTx(tx, companyId, userIds, `${periodMonth}-01`, lastDay),
     ]);
     PayrollCalcService.assertProfileItemsKnown(usable, userIds, profiles, itemsByProfile);
-    return { userIds, inputsByUser, profiles, itemsByProfile, participation, dependents, meta: computed.meta };
+    return {
+      userIds,
+      inputsByUser,
+      profiles,
+      itemsByProfile,
+      participation,
+      dependents,
+      meta: computed.meta,
+    };
   }
 
   /**

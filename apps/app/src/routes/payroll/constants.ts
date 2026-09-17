@@ -122,6 +122,13 @@ export const PAYROLL_ENGINE_PAIRS = {
   // 076/077 tái dùng cặp CŨ `manage:bonus-penalty`.
   importAdjustments: pair("manage", "bonus-penalty", true),
   importTemplate: pair("manage", "bonus-penalty", true),
+  // 078–082 Tổng quan · Lời nhắc · 7 báo cáo (S15-PAYROLL-BE-5): MỘT cặp `view:payroll-report`. BE assert THÊM cặp
+  // nguồn cho báo cáo theo người (080 chỉ liệt kê báo cáo mở được) và `export:payroll` cho 082.
+  overview: pair("view", "payroll-report", true),
+  overviewReminders: pair("view", "payroll-report", true),
+  reportList: pair("view", "payroll-report", true),
+  reportData: pair("view", "payroll-report", true),
+  reportExport: pair("view", "payroll-report", true),
 } as const satisfies Record<string, PayrollEnginePair>;
 
 export type PayrollEngineKey = keyof typeof PAYROLL_ENGINE_PAIRS;

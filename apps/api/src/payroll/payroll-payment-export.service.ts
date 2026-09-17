@@ -29,7 +29,8 @@ export const UNC_COLUMNS: ReadonlyArray<{ header: string; width: number }> = [
  * chữ. Tên người/tên ngân hàng là dữ liệu người dùng nhập — không tin.
  */
 export function xlsxSafe(s: string): string {
-  return /^[=+\-@]/.test(s) ? `'${s}` : s;
+  // S15-PAYROLL-BE-5 (security-review LOW): thêm TAB/CR đầu chuỗi — OWASP CSV-injection coi chúng cùng lớp với `= + - @`.
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
 }
 
 /**

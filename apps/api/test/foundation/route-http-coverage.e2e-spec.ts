@@ -336,7 +336,8 @@ const MAX_UNCOVERED_TOTAL = 0;
 // Nâng CÙNG COMMIT với WO — mỗi route mới phải có file test chạm ĐÚNG literal path
 // (int-spec `payroll-be1-*` · `payroll-be2-*` · `s14-recruit-filegrant1-cv` · `s15-payroll-be2-*`).
 // S15-PAYROLL-BE-4 (15/09/2026): 605 → **624** (+19 route PAYROLL track C `059..077`, int-spec `s15-payroll-be4-*`).
-const MIN_COVERED_COUNT = 624;
+// S15-PAYROLL-BE-5 (17/09/2026): 624 → **629** (+5 route PAYROLL track D `078..082`, int-spec `s15-payroll-be5-*`).
+const MIN_COVERED_COUNT = 629;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

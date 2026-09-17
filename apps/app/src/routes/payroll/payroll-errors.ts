@@ -93,6 +93,8 @@ export const PAYROLL_ERROR_KINDS = [
   "import-unknown-user",
   "template-in-use",
   "no-eligible-completer",
+  // ── S15-PAYROLL-BE-5 (031) ──
+  "report-too-large",
 ] as const;
 export type PayrollErrorKind = (typeof PAYROLL_ERROR_KINDS)[number];
 
@@ -174,6 +176,7 @@ const KIND_TO_I18N_KEY: Readonly<Record<PayrollErrorKind, string>> = {
   "import-unknown-user": "errors.importUnknownUser",
   "template-in-use": "errors.templateInUse",
   "no-eligible-completer": "errors.noEligibleCompleter",
+  "report-too-large": "errors.reportTooLarge",
 };
 
 /** Fallback theo `error.code` — CHỈ cho mã KHÔNG mang `kind` (idempotency, FOUNDATION). */
