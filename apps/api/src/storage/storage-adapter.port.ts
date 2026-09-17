@@ -27,6 +27,8 @@ export const STORAGE_ADAPTER = Symbol("STORAGE_ADAPTER");
 export interface StoragePutInput {
   /** Tenant-scoped, server-derived key (e.g. from buildFileKey). */
   key: string;
+  /** Owning company — the adapter re-asserts the key is inside this tenant's prefix before writing. */
+  companyId: string;
   /** Binary or text body to upload. */
   body: Uint8Array | string;
   /** MIME content type for the stored object. */
@@ -70,6 +72,8 @@ export interface StorageSignedUploadInput {
 export interface StorageDeleteInput {
   /** Tenant-scoped, server-derived key of the object to remove. */
   key: string;
+  /** Owning company — the adapter re-asserts the key is inside this tenant's prefix before deleting. */
+  companyId: string;
 }
 
 /**

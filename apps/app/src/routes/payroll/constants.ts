@@ -129,6 +129,11 @@ export const PAYROLL_ENGINE_PAIRS = {
   reportList: pair("view", "payroll-report", true),
   reportData: pair("view", "payroll-report", true),
   reportExport: pair("view", "payroll-report", true),
+  // 083–085 PDF phiếu lương (S15-PAYROLL-BE-5B · PAY-DEC-019 — KHÔNG cặp mới). BE assert THÊM `export:payroll` ở 083
+  // và `view-payslip:payslip` ở 085; 084 Own (cùng cặp với 032).
+  payslipPdf: pair("view-payslip", "payslip", true),
+  mePayslipPdf: pair("view-own-payslip", "payslip", true),
+  payslipPdfBatch: pair("export", "payroll", true),
 } as const satisfies Record<string, PayrollEnginePair>;
 
 export type PayrollEngineKey = keyof typeof PAYROLL_ENGINE_PAIRS;

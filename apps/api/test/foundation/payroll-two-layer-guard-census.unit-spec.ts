@@ -172,6 +172,14 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: PayrollRo
   { method: "GET", path: "/api/v1/payroll/reports", key: "reportList" },
   { method: "GET", path: "/api/v1/payroll/reports/:reportCode", key: "reportData" },
   { method: "GET", path: "/api/v1/payroll/reports/:reportCode/export", key: "reportExport" },
+  // ── S15-PAYROLL-BE-5B (track D phần 2) — PDF phiếu lương ──
+  { method: "GET", path: "/api/v1/payslips/:id/pdf", key: "payslipPdf" },
+  { method: "GET", path: "/api/v1/me/payslips/:id/pdf", key: "mePayslipPdf" },
+  {
+    method: "POST",
+    path: "/api/v1/payroll-periods/:id/payslips/pdf-batch",
+    key: "payslipPdfBatch",
+  },
 ];
 
 const PAYROLL_CONTROLLERS = new Set([
@@ -196,6 +204,10 @@ const PAYROLL_CONTROLLERS = new Set([
   "PayrollAdjustmentImportsController",
   // ── S15-PAYROLL-BE-5 ──
   "PayrollReportsController",
+  // ── S15-PAYROLL-BE-5B ──
+  "PayrollPayslipPdfController",
+  "MePayslipPdfController",
+  "PayrollPayslipPdfBatchController",
 ]);
 
 /** Sổ pin method↔key — đổi handler/key là ĐỎ, phải sửa CÓ CHỦ ĐÍCH qua FULL gate. */
@@ -295,6 +307,12 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "PayrollReportsService#catalog": ["reportList"],
   "PayrollReportsService#data": ["reportData"],
   "PayrollReportExportService#export": ["periodExport", "reportExport"],
+  // ── S15-PAYROLL-BE-5B (track D phần 2) — «export đòi CẢ HAI cặp» (§11.1): 083/085 hai literal ở CÙNG site.
+  //    Consumer 085 dựng lại actor của NGƯỜI YÊU CẦU với CHÍNH hai cặp đó (plan §0b) — mất một literal = đỏ. ──
+  "PayrollPayslipPdfService#adminPdf": ["payslipPdf", "periodExport"],
+  "PayrollPayslipPdfService#myPdf": ["mePayslipPdf"],
+  "PayrollPayslipPdfBatchService#request": ["payslipPdfBatch", "payslipList"],
+  "PayrollPayslipPdfBatchConsumer#load": ["payslipPdfBatch", "payslipList"],
 };
 
 /**
@@ -373,9 +391,9 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
 
   it("(1) bảng fixture phủ ĐÚNG tập route PAYROLL đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    // S15-PAYROLL-BE-5: +5 (078–082) ⇒ 82; PDF 083–085 thuộc S15-PAYROLL-BE-5B ⇒ 85.
-    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 82 route PAYROLL (API-18 §5 + §5b)").toBe(
-      82,
+    // S15-PAYROLL-BE-5: +5 (078–082) ⇒ 82; S15-PAYROLL-BE-5B: +3 (083–085) ⇒ 85 — ĐỦ 85 route API-18.
+    expect(payrollRoutes.length, "app boot phải thấy ĐỦ 85 route PAYROLL (API-18 §5 + §5b)").toBe(
+      85,
     );
     const seen = new Set(payrollRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
@@ -408,7 +426,8 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     // 80 = 77 route + literal thứ hai của `PayrollExportService#export` (`view-line`) + hai literal thêm của
     // `PayrollPaymentExportService#export` (`periodExport` · `payslipList` — 071 gác BA cặp, S15-PAYROLL-BE-4).
     // S15-PAYROLL-BE-5: +5 route + literal `periodExport` của `PayrollReportExportService#export` ⇒ 86.
-    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(86);
+    // S15-PAYROLL-BE-5B: +3 route + `periodExport` (083) + `payslipList` (085) + 2 literal của consumer ⇒ 93.
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(93);
     const validKeys = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     expect(
       calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),
@@ -444,7 +463,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     const all = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     const used = new Set(ROUTE_TO_KEY.map((r) => r.key as string));
     const pending = new Set<string>(PAYROLL_PENDING_BE2);
-    expect(all.size, "bảng hằng phải khai đủ 82 route API-18 (BE-5)").toBe(82);
+    expect(all.size, "bảng hằng phải khai đủ 85 route API-18 (BE-5B)").toBe(85);
     expect(
       [...pending].filter((k) => used.has(k)),
       "key ĐÃ có route mà vẫn nằm trong PENDING_BE2",
@@ -457,19 +476,30 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     // một `ROUTE_TO_KEY` bị xoá sạch cũng thoả cả ba assert trên. Hai neo dưới ghim SỐ LƯỢNG thật của
     // cả bảng hằng lẫn tập key đã nối dây. **Cấm hạ neo để lấy màu xanh.**
     expect(pending.size, "BE-2 đã nối dây hết — PENDING_BE2 phải RỖNG").toBe(0);
-    expect(used.size, "82 key đều phải có route").toBe(82);
+    expect(used.size, "85 key đều phải có route").toBe(85);
   });
 
-  it("(6) SÀN SCOPE Company — đúng 4 route Own (/me/payslips* + /me/payroll-advances) được miễn", () => {
+  it("(6) SÀN SCOPE Company — đúng 5 route Own (/me/payslips* + /me/payroll-advances) được miễn", () => {
     const noFloor = Object.entries(PAYROLL_ROUTE_PAIRS)
       .filter(([, p]) => !p.companyFloor)
       .map(([k]) => k)
       .sort();
     // S15-PAYROLL-BE-4: + `meAdvanceList` (065 — `view-own:payroll-advance`, Own hợp lệ).
-    expect(noFloor).toEqual(["meAdvanceList", "mePayslipAck", "mePayslipDetail", "mePayslipList"]);
+    // S15-PAYROLL-BE-5B: + `mePayslipPdf` (084 — cùng cặp/cờ với 032).
+    expect(noFloor).toEqual([
+      "meAdvanceList",
+      "mePayslipAck",
+      "mePayslipDetail",
+      "mePayslipList",
+      "mePayslipPdf",
+    ]);
+    // 085 lấy TOÀN BỘ phiếu của kỳ — chỉ đúng khi CẢ HAI cặp của nó có sàn Company (plan BE-5B §0b «IDOR 085»).
+    expect(PAYROLL_ROUTE_PAIRS.payslipPdfBatch.companyFloor).toBe(true);
+    expect(PAYROLL_ROUTE_PAIRS.payslipList.companyFloor).toBe(true);
+    expect(PAYROLL_ROUTE_PAIRS.payslipPdf.companyFloor).toBe(true);
   });
 
-  it("(7) objectGrantRequired chỉ được khai `false`, và đúng cho 4 route Own", () => {
+  it("(7) objectGrantRequired chỉ được khai `false`, và đúng cho 5 route Own", () => {
     const declared = Object.entries(PAYROLL_ROUTE_PAIRS).filter(
       ([, p]) => p.objectGrantRequired !== undefined,
     );
@@ -483,6 +513,7 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
       "mePayslipAck",
       "mePayslipDetail",
       "mePayslipList",
+      "mePayslipPdf",
     ]);
   });
 

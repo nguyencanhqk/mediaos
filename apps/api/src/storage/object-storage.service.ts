@@ -138,7 +138,12 @@ export class ObjectStorageService {
    * The presigned request pins content-type and content-length so the client cannot upload a
    * different type or an oversized object than was authorized at intent time.
    */
-  async createUploadUrl(key: string, contentType: string, sizeBytes: number): Promise<string> {
+  async createUploadUrl(
+    key: string,
+    contentType: string,
+    sizeBytes: number,
+    expiresInSec?: number,
+  ): Promise<string> {
     const config = this.assertConfigured();
     validateKey(key);
     this.assertUploadAllowed(contentType, sizeBytes);
@@ -148,17 +153,24 @@ export class ObjectStorageService {
       ContentType: contentType,
       ContentLength: sizeBytes,
     });
-    return getSignedUrl(this.getClient(), command, { expiresIn: config.presignTtlSec });
+    return getSignedUrl(this.getClient(), command, {
+      expiresIn: expiresInSec ?? config.presignTtlSec,
+    });
   }
 
   /**
-   * Server-side upload of bytes to `key` (WAVE 3 C2 export-worker). UNLIKE createUploadUrl (presigned, for
-   * a CLIENT to PUT), this PUTs directly from the server process — used by the export worker which generates
-   * the CSV in-process. Key MUST be server-derived + validated (re-validated here as a hard boundary).
+   * Server-side upload of bytes to `key`. UNLIKE createUploadUrl (presigned, for a CLIENT to PUT), this PUTs
+   * directly from the server process (S15-PAYROLL-BE-5B: payslip PDF/ZIP). Key MUST be server-derived and is
+   * re-asserted inside `companyId`'s prefix here — same cross-tenant guard as createDownloadUrl.
    */
-  async putObject(key: string, body: Uint8Array | string, contentType: string): Promise<void> {
+  async putObject(
+    key: string,
+    body: Uint8Array | string,
+    contentType: string,
+    companyId: string,
+  ): Promise<void> {
     const config = this.assertConfigured();
-    validateKey(key);
+    assertKeyInTenant(key, companyId);
     const command = new PutObjectCommand({
       Bucket: config.bucket,
       Key: key,
@@ -169,12 +181,13 @@ export class ObjectStorageService {
   }
 
   /**
-   * Delete object at `key` (WAVE 3 C2 compensation). Used to clean up an export object whose job failed to
-   * finalize AFTER a successful upload (avoid orphaned objects). Key re-validated as a hard boundary.
+   * Delete object at `key`. First production caller: TEMP_FILE_CLEANUP (S15-PAYROLL-BE-5B, owner O-3/O-6).
+   * Key re-asserted inside `companyId`'s prefix — a cleanup run for tenant A can never delete B's object.
+   * S3 DeleteObject on an absent key succeeds (idempotent) — callers may retry freely.
    */
-  async deleteObject(key: string): Promise<void> {
+  async deleteObject(key: string, companyId: string): Promise<void> {
     const config = this.assertConfigured();
-    validateKey(key);
+    assertKeyInTenant(key, companyId);
     await this.getClient().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
   }
 
@@ -183,11 +196,13 @@ export class ObjectStorageService {
    * RLS (tenant scope) and pass the owning companyId — we re-assert the key is inside that tenant's
    * prefix before signing (belt-and-suspenders on top of RLS).
    */
-  async createDownloadUrl(key: string, companyId: string): Promise<string> {
+  async createDownloadUrl(key: string, companyId: string, expiresInSec?: number): Promise<string> {
     const config = this.assertConfigured();
     assertKeyInTenant(key, companyId);
     const command = new GetObjectCommand({ Bucket: config.bucket, Key: key });
-    return getSignedUrl(this.getClient(), command, { expiresIn: config.presignTtlSec });
+    return getSignedUrl(this.getClient(), command, {
+      expiresIn: expiresInSec ?? config.presignTtlSec,
+    });
   }
 
   /**

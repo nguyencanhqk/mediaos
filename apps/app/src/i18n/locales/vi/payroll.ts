@@ -663,6 +663,9 @@ export default {
       "Chưa có ai khác bạn giữ quyền quản lý đợt chi trả — đợt lập ra sẽ không hoàn tất được (bốn mắt). Cấp quyền cho người thứ hai trước.",
     reportTooLarge:
       "Báo cáo vượt trần 50.000 dòng — thu hẹp khoảng tháng hoặc lọc theo đơn vị rồi xem lại.",
+    pdfBatchTooLarge:
+      "Kỳ lương vượt trần 2.000 phiếu cho một lần xuất PDF hàng loạt — tải từng phiếu hoặc liên hệ quản trị.",
+    noPayslipForPdf: "Kỳ lương chưa có phiếu lương nào — chưa thể xuất PDF.",
     // S15-PAYROLL-FE-2 — kind của MÁY CÔNG THỨC (`formula.errors.ts`). Nội suy qua `formulaErrorParams`:
     // `at` = « (ký tự thứ N)» hoặc rỗng · `ref`/`func` = token gây lỗi · `cycle` = «A → B → A» ·
     // `missing` = mã còn thiếu · `component` = « (thành phần X)» hoặc rỗng.

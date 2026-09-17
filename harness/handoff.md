@@ -2,6 +2,18 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-17 (o) — **S15-PAYROLL-BE-5B CHECKPOINT trên nhánh `feat/s15-payroll-be-5b` (CHƯA PR)** — dừng theo owner vì hook chi phí ~$1.1k
+
+**Bắt đầu phiên sau ở đây — KHÔNG đọc lại SPEC/đo lại:** `git checkout feat/s15-payroll-be-5b` (commit checkpoint trên master `4fbc5beb`). Đọc `docs/plans/S15-PAYROLL-BE-5B.md` **§0.1 (owner O-3..O-7) → §0b (vá plan-review + O-8) → §8.2 + §8.3 (12 mục PHẢI vá, đã ghi file + cách vá + ca test)**. Code + test PDF 083/084/085 + `ServerFileService` + job dọn xoá object ĐÃ xong và xanh cục bộ; 4 reviewer FULL gate đều **PASS** (không cần chạy lại) nhưng để lại 2 HIGH + MEDIUM ở §8.2; `check.sh --lane-db=be5b` đỏ 4 file do chính WO (§8.3 — census QA-1 82→85, luật mutex outbox, spec đổi tên công ty làm bẩn census DB-1).
+
+**Thứ tự phiên sau:** vá §8.2 + §8.3 → chạy lại đúng các spec đụng (runner: `LANE_DB=mediaos_be5b`, nạp `*_DB_PASSWORD` qua `scripts/lib/db-secrets.sh`, chép riêng `S3_*` từ `.env`, unset `DATABASE_*_URL`) → `vitest run test/foundation` → `test:cov:payroll` ≥ 85 % → `bash harness/check.sh --lane-db=be5b` → PR base master, KHÔNG auto-merge (ghi vào PR: đếm `files.is_temporary=true` trên PROD/dev-online trước deploy).
+
+**Owner chốt phiên này (AskUserQuestion):** O-4 085 = lấy-hoặc-tạo (không route mới) · O-5 chạy nền = outbox consumer · O-6 job dọn xoá object của MỌI hàng nó dọn · O-7 hạn tệp PDF 15′ / ZIP 24 h · O-8 BỎ `@Idempotent()` ở 085 (đã ghi lệch vào SPEC-11 + API-18).
+
+**Bẫy phiên này — ĐỪNG giẫm lại:** (1) route file chung `/foundation/files/*` chỉ company-admin gọi được (mig 0569) ⇒ tệp của module phải giao qua route CỦA module + resolver chặn route chung; (2) `@Idempotent()` chốt mã HTTP TRƯỚC handler và cache body 900 s ⇒ không dùng cho route trả 200/202 động hoặc body có signed-URL; (3) spec int KHÔNG được đổi `companies.name` của tenant fixture (lọc `NOT_FIXTURE_TENANT` dựa vào `'Company ' || slug`); (4) spec lái `OutboxWorker` phải giữ `acquireOutboxWorkerLock`; (5) `peopleVisibleCond` nhúng vào SQL thô nhiều bảng có thể render cột không kèm tên bảng — viết điều kiện tường minh; (6) banner hook chi phí nhảy $33 → $306 → $580 → $860 → $1.1k trong phiên (phần lớn do context 1M + 5 subagent) — mở WO lớn ở phiên MỚI.
+
+**Dọn dẹp còn treo:** lane `mediaos_be5b` GIỮ cho phiên sau (drop sau merge); ~120 DB lane cũ `mediaos_*` chờ owner đồng ý xoá.
+
 ## Phiên 2026-09-17 (n) — **S15-PAYROLL-BE-5 ĐÃ MERGE master** (#517 → `91e36d66`, owner uỷ quyền `--admin`) ✅
 
 **Bắt đầu phiên sau ở đây:** master đã có track D phần 1 (078 Tổng quan · 079 Lời nhắc · 080–082 bảy báo cáo + XLSX · 018 `?payrollPeriodId=` trả `lineTotals`/`componentTotals` · 036 `insuranceIssue`). CI #517 xanh toàn bộ trước merge (Build·Typecheck·Migrate·Test API · Lint·Typecheck·Migrate·RLS · Build app/auth/console · gitleaks · audit · tooling). Nhánh đã xoá; lane `mediaos_be5` đã DROP; ledger `finished`; STATUS/INDEX regen + push master sau merge. Không PR PAYROLL nào mở. Việc kế: **`S15-PAYROLL-BE-5B`** (PDF 083–085 + hạ tầng tệp server) → FE-4 → QA-1. **Đọc memory `s15-payroll-be5-wave-state` TRƯỚC BE-5B** — số đo pdfmake/file-service đã có, ĐỪNG đo lại. Bằng chứng BE-5: `docs/plans/S15-PAYROLL-BE-5.md` §8.

@@ -499,6 +499,16 @@ describe("FileService (deny-path / validation RED)", () => {
       expect(h.linkRepo.insertTx).not.toHaveBeenCalled();
     });
 
+    it("tệp TẠM do hệ thống sinh (is_temporary) → 400 LINK, NO link inserted (BE-5B §8.2 #3)", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow({ isTemporary: true }));
+      const caught = await h.service.link(user, linkInput).catch((e: unknown) => e);
+      expect(caught).toBeInstanceOf(BadRequestException);
+      expect((caught as { getResponse(): { code?: string } }).getResponse().code).toBe(
+        "FOUNDATION-FILE-ERR-LINK",
+      );
+      expect(h.linkRepo.insertTx).not.toHaveBeenCalled();
+    });
+
     it("policy DENY on link → 403 + denied access-log, NO link inserted", async () => {
       h = makeHarness(DENY);
       await expect(h.service.link(user, linkInput)).rejects.toBeInstanceOf(ForbiddenException);
@@ -811,6 +821,16 @@ describe("FileService.confirmUpload (S2-FND-FILE-2)", () => {
 
   it("missing / cross-tenant file (row undefined) → NotFound, storage NOT touched, no state change", async () => {
     h.fileRepo.findByIdTx.mockResolvedValue(undefined);
+    await expect(h.service.confirmUpload(user, FILE, {})).rejects.toBeInstanceOf(NotFoundException);
+    expect(h.storage.stat).not.toHaveBeenCalled();
+    expect(h.fileRepo.markUploadedTx).not.toHaveBeenCalled();
+    expect(h.fileRepo.markFailedTx).not.toHaveBeenCalled();
+  });
+
+  it("tệp TẠM do hệ thống sinh → 404 sentinel, storage KHÔNG chạm, trạng thái giữ (BE-5B §8.2 #4)", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(
+      makeFileRow({ uploadStatus: "Pending", isTemporary: true }),
+    );
     await expect(h.service.confirmUpload(user, FILE, {})).rejects.toBeInstanceOf(NotFoundException);
     expect(h.storage.stat).not.toHaveBeenCalled();
     expect(h.fileRepo.markUploadedTx).not.toHaveBeenCalled();
