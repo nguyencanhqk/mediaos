@@ -1,6 +1,6 @@
 /**
  * S15-PAYROLL-QA-1 — CENSUS "ràng buộc DB PAYROLL ⇒ SQLSTATE ⇒ mã" (SPEC-11 §21.1 mục 30(b) · dòng
- * "QA census bắt buộc" ngay dưới bảng ràng buộc, `docs/spec/SPEC-11 PAYROLL.md:737-765`).
+ * "QA census bắt buộc" ngay dưới bảng ràng buộc, `docs/SPEC/SPEC-11 PAYROLL.md:737-765`).
  *
  * Khuôn: `payroll-error-code-census.unit-spec.ts` (S13-PAYROLL-BE-1) — bỏ comment TRƯỚC khi quét
  * (docblock nhắc TÊN không phải bằng chứng, `vitest-exclude-selfcheck-reads-comments`).
@@ -32,7 +32,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..", "..");
-const SPEC_PATH = path.join(REPO_ROOT, "docs", "spec", "SPEC-11 PAYROLL.md");
+const SPEC_PATH = path.join(REPO_ROOT, "docs", "SPEC", "SPEC-11 PAYROLL.md");
 const PAYROLL_SRC = path.join(__dirname, "..", "..", "src", "payroll");
 const INTEGRATION = path.join(__dirname, "..", "integration");
 

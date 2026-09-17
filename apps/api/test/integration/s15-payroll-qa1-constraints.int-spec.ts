@@ -1,6 +1,6 @@
 /**
  * S15-PAYROLL-QA-1 — bắn THẬT mọi ràng buộc DB còn thiếu ca của bảng "constraint → SQLSTATE → mã"
- * (`docs/spec/SPEC-11 PAYROLL.md:739-763`, mục 30(b) §21.1 + dòng "QA census bắt buộc" ngay dưới bảng).
+ * (`docs/SPEC/SPEC-11 PAYROLL.md:739-763`, mục 30(b) §21.1 + dòng "QA census bắt buộc" ngay dưới bảng).
  * Cặp với `test/foundation/payroll-constraint-map-census.unit-spec.ts` (quét tĩnh — file NÀY là bằng
  * chứng động: lỗi PG THẬT, KHÔNG mock, rồi đưa thẳng vào `mapPayrollPgError(err)`).
  *
