@@ -151,7 +151,7 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
 describe("PAYROLL wiring — ROUTE_REGISTRY & gate màn khớp gate đường tải", () => {
   const byKey = (k: string) => ROUTE_REGISTRY.find((r) => r.routeKey === k);
 
-  it("10 route sidebar PAYROLL tồn tại, moduleCode PAYROLL, đúng screenCode", () => {
+  it("12 route sidebar PAYROLL tồn tại, moduleCode PAYROLL, đúng screenCode", () => {
     const rows = [
       ["payroll.periods", "/payroll/periods", "PAY-SCREEN-001"],
       ["payroll.salaryProfiles", "/payroll/salary-profiles", "PAY-SCREEN-004"],
@@ -166,6 +166,9 @@ describe("PAYROLL wiring — ROUTE_REGISTRY & gate màn khớp gate đường t�
       ["payroll.salaryComponents", "/payroll/salary-components", "PAY-SCREEN-009"],
       ["payroll.templates", "/payroll/templates", "PAY-SCREEN-010"],
       ["payroll.statutoryRates", "/payroll/settings/statutory-rates", "PAY-SCREEN-011"],
+      // S15-PAYROLL-FE-4 — track D
+      ["payroll.overview", "/payroll", "PAY-SCREEN-015"],
+      ["payroll.reports", "/payroll/reports", "PAY-SCREEN-016"],
     ] as const;
     for (const [key, p, screen] of rows) {
       const meta = byKey(key);
@@ -248,6 +251,28 @@ describe("PAYROLL wiring — ROUTE_REGISTRY & gate màn khớp gate đường t�
         "/payroll/settings/statutory-rates",
       ]),
     );
+  });
+
+  it("S15-PAYROLL-FE-4: gate Tổng quan + Báo cáo = ĐÚNG cặp ĐƯỜNG TẢI của 078/080 (SENSITIVE), và hai mục sidebar đã TỰ HIỆN", () => {
+    const cases = [
+      ["payroll.overview", PAYROLL_ENGINE_PAIRS.overview],
+      ["payroll.reports", PAYROLL_ENGINE_PAIRS.reportList],
+    ] as const;
+    for (const [key, pair] of cases) {
+      expect(byKey(key)?.requiredPermissions, `gate lệch ở ${key}`).toEqual([
+        "access:payroll",
+        `${pair.action}:${pair.resourceType}`,
+      ]);
+      expect(pair.isSensitive, `${key} phải là cặp SENSITIVE`).toBe(true);
+    }
+    const paths = flattenSidebar(PAYROLL_SIDEBAR).map((i) => i.path);
+    expect(paths).toEqual(expect.arrayContaining(["/payroll", "/payroll/reports"]));
+  });
+
+  it("S15-PAYROLL-FE-4: thẻ app VẪN trỏ màn danh sách kỳ — `/payroll` là Tổng quan (cổng SENSITIVE), không phải cửa vào mặc định", () => {
+    const app = APP_REGISTRY.find((a) => a.appKey === "payroll");
+    expect(app?.rootPath).toBe("/payroll");
+    expect(app?.defaultRoute).toBe("/payroll/periods");
   });
 
   it("gate màn Nhân viên = cặp employeeList của BE (không tự bịa cặp khác cho sidebar)", () => {
@@ -348,9 +373,10 @@ describe("PAYROLL wiring — sidebar", () => {
   it("mọi mục CÓ path (kể cả trong nhóm) trỏ tới route CÓ THẬT trong ROUTE_REGISTRY, cùng gate", () => {
     const leaves = flattenSidebar(PAYROLL_SIDEBAR).filter((i) => i.path);
     // Neo số: 3 màn v1 + «Nhân viên» (S15-PAYROLL-FE-1) + 3 màn track C (S15-PAYROLL-FE-3: tạm ứng ·
-    // chi trả · ngân sách) + 3 màn track B (S15-PAYROLL-FE-2: thành phần · mẫu · tỉ lệ luật định).
+    // chi trả · ngân sách) + 3 màn track B (S15-PAYROLL-FE-2: thành phần · mẫu · tỉ lệ luật định) + 2 màn
+    // track D (S15-PAYROLL-FE-4: tổng quan · báo cáo).
     // Thêm màn ở WO sau ⇒ sửa số này CÙNG lúc thêm route.
-    expect(leaves).toHaveLength(10);
+    expect(leaves).toHaveLength(12);
     const paths = leaves.map((i) => i.path);
     expect(paths).toContain("/payroll/employees");
     expect(paths).toEqual(

@@ -24,6 +24,8 @@ vi.mock("@mediaos/web-core", () => ({
   payrollApi: {
     getPeriod: vi.fn(),
     listLines: vi.fn(async () => ({ data: [], pagination: { total: 0, page: 1, perPage: 20 } })),
+    // S15-PAYROLL-FE-4 — 018 `?payrollPeriodId=` (tổng toàn kỳ) đi CÙNG điều kiện tải với 008.
+    getSummary: vi.fn(async () => null),
     getReadiness: vi.fn(async () => ({ eligibleCount: 0, warnings: [] })),
     getPeriodTimesheet: vi.fn(async () => ({
       data: [],
@@ -43,6 +45,7 @@ vi.mock("@mediaos/web-core", () => ({
       readiness: (id: string) => ["payroll", "periods", "readiness", id],
       lines: (id: string, p: unknown) => ["payroll", "periods", "lines", id, p],
       linesOf: (id: string) => ["payroll", "periods", "lines", id],
+      summaryOf: (id: string) => ["payroll", "periods", "summary", id],
       timesheet: (id: string, p: unknown) => ["payroll", "periods", "timesheet", id, p],
     },
     payslips: { list: (p: unknown) => ["payroll", "payslips", "list", p] },
@@ -65,6 +68,7 @@ import type { PayrollPeriodTab } from "./constants";
 const mockGetPeriod = payrollApi.getPeriod as ReturnType<typeof vi.fn>;
 const mockListLines = payrollApi.listLines as ReturnType<typeof vi.fn>;
 const mockTimesheet = payrollApi.getPeriodTimesheet as ReturnType<typeof vi.fn>;
+const mockSummary = payrollApi.getSummary as ReturnType<typeof vi.fn>;
 
 const PERIOD_ID = "bbbbbbbb-2222-2222-2222-222222222222";
 
@@ -127,6 +131,7 @@ describe("PAY-SCREEN-002 — dải tab «Bảng lương / Bảng công»", () =>
     await screen.findByTestId("period-timesheet-tab");
     await waitFor(() => expect(mockTimesheet).toHaveBeenCalledTimes(1));
     expect(mockListLines).not.toHaveBeenCalled();
+    expect(mockSummary).not.toHaveBeenCalled();
     expect(screen.getByRole("tab", { name: "Bảng công" }).getAttribute("aria-selected")).toBe(
       "true",
     );
@@ -137,6 +142,7 @@ describe("PAY-SCREEN-002 — dải tab «Bảng lương / Bảng công»", () =>
     // 008 được gọi NGAY khi mount (không chờ 003) — chờ dải tab xuất hiện (kỳ đã tải) rồi mới assert.
     const linesTab = await screen.findByRole("tab", { name: "Bảng lương" });
     await waitFor(() => expect(mockListLines).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockSummary).toHaveBeenCalledWith({ payrollPeriodId: PERIOD_ID }));
     expect(mockTimesheet).not.toHaveBeenCalled();
     expect(screen.queryByTestId("period-timesheet-tab")).toBeNull();
     expect(linesTab.getAttribute("aria-selected")).toBe("true");

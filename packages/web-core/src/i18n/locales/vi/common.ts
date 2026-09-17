@@ -58,4 +58,9 @@ export default {
     loadFailed: "Không tải được dữ liệu.",
     saveFailed: "Lưu thất bại. Vui lòng thử lại.",
   },
+  /** S15-PAYROLL-FE-4 — khung biểu đồ dùng chung (`apps/app/src/components/charts/ChartCard`). */
+  chart: {
+    showTable: "Xem dạng bảng",
+    showChart: "Xem biểu đồ",
+  },
 };

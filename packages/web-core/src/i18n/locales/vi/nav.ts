@@ -190,6 +190,10 @@ export default {
     payrollTemplates: "Mẫu bảng lương",
     payrollTemplateDetail: "Chi tiết mẫu bảng lương",
     payrollStatutoryRates: "Tỉ lệ luật định",
+    // S15-PAYROLL-FE-4 — PAY-SCREEN-015 · 016 (danh mục + màn xem).
+    payrollOverview: "Tổng quan tiền lương",
+    payrollReports: "Báo cáo tiền lương",
+    payrollReportView: "Xem báo cáo tiền lương",
     mePayslips: "Phiếu lương của tôi",
     mePayrollAdvances: "Tạm ứng của tôi",
     forbidden: "Không có quyền truy cập",

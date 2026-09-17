@@ -16462,7 +16462,11 @@ export const backlog = [
       "Sidebar PAYROLL v2 đủ 9 mục/nhóm theo route registry; typecheck/build/test xanh; bundle: route tổng quan code-split (recharts không vào chunk chung)",
       "🔻 NHẬN TỪ S15-PAYROLL-BE-5: chi tiết kỳ đổi «Tổng trang» → «Tổng» bằng `GET /payroll-periods/summary?payrollPeriodId=` (018 mở rộng: `lineTotals` + `componentTotals` toàn kỳ); 080 trả `exportable` + chỉ báo cáo mở được — danh sách 016 dựng từ đó, không hard-code 7 mục; Lời nhắc «NV chưa BH»/«lương BH ngoài quy định» deep-link màn nhân viên bằng filter `insuranceIssue` của 036",
     ],
-    notes: ["🟡 LIGHT gate; recharts là dep FE mới — pnpm audit + license."],
+    notes: [
+      "🟡 LIGHT gate; recharts là dep FE mới — pnpm audit + license.",
+      "📌 THI CÔNG 17/09 (plan §2 D1/D11/D12): recharts cài ở apps/app theo DECISIONS-14 §3.4 (không phải packages/ui); donut cơ cấu → thanh ngang xếp hạng (9 lớp > trần màu); bar+line theo đơn vị → cột ngang (cấm trục kép); gauge = meter. /payroll chuyển hướng người thiếu view:payroll-report tới lá sidebar đầu tiên mở được.",
+      "🧾 NỢ phát hiện (ngoài phạm vi): recruit/components/CandidateCvTab.tsx gọi window.open('', '_blank', 'noopener,noreferrer') — theo chuẩn HTML trả null ⇒ tab trắng không được điều hướng, tải CV nhiều khả năng hỏng im lặng; đo trên trình duyệt thật rồi vá theo khuôn payroll/open-signed-url.ts.",
+    ],
   },
   {
     id: "S15-PAYROLL-QA-1",

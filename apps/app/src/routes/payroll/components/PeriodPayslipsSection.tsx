@@ -6,6 +6,7 @@ import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "../constants";
 import { formatPayrollMoney, PAYROLL_NUMERIC_CELL_CLASS } from "../payroll-format";
 import { displayUserRef, type PayrollPeopleLookup } from "../use-payroll-people";
 import { PayslipStatusBadge } from "./StatusBadges";
+import { PayslipPdfBatchControl } from "./PayslipPdfBatchControl";
 
 /**
  * Khối «phiếu lương của kỳ» trong PAY-SCREEN-002 — **đường đi DUY NHẤT tới PAY-SCREEN-003**.
@@ -19,6 +20,9 @@ import { PayslipStatusBadge } from "./StatusBadges";
  * kéo cả trang xuống 403.
  *
  * Chỉ render khi kỳ ĐÃ sinh phiếu; caller kiểm `payslipsGeneratedAt !== null` trước.
+ *
+ * S15-PAYROLL-FE-4: nút «Xuất PDF hàng loạt» (085) — BE assert `export:payroll` + `view-payslip:payslip`
+ * ⇒ chỉ hiện khi giữ CẢ HAI (cặp sau đã là cổng của chính khối này).
  */
 export function PeriodPayslipsSection({
   periodId,
@@ -36,6 +40,11 @@ export function PeriodPayslipsSection({
     PAYROLL_ENGINE_PAIRS.payslipList.resourceType,
   );
 
+  const canPdfBatch = useCanExact(
+    PAYROLL_ENGINE_PAIRS.payslipPdfBatch.action,
+    PAYROLL_ENGINE_PAIRS.payslipPdfBatch.resourceType,
+  );
+
   const params = { payrollPeriodId: periodId, page: 1, per_page: PAYROLL_PAGE_SIZE };
   const query = useQuery({
     queryKey: payrollKeys.payslips.list(params),
@@ -50,7 +59,10 @@ export function PeriodPayslipsSection({
 
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-medium">{t("periodPayslips.title", { count: total })}</h3>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-medium">{t("periodPayslips.title", { count: total })}</h3>
+        {canPdfBatch && rows.length > 0 && <PayslipPdfBatchControl periodId={periodId} />}
+      </div>
 
       {query.isLoading ? (
         <p className="text-sm text-muted-foreground">{t("states.loading")}</p>

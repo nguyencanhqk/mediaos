@@ -1,4 +1,4 @@
-import type { PayrollPeriodLineDto } from "@mediaos/contracts";
+import type { PayrollPeriodLineDto, PayrollSummaryDto } from "@mediaos/contracts";
 
 /**
  * S15-PAYROLL-FE-2 — cột ĐỘNG của bảng lương kỳ theo mẫu (PAY-SCREEN-002 v2, D9 của plan).
@@ -10,9 +10,12 @@ import type { PayrollPeriodLineDto } from "@mediaos/contracts";
  * ── Hàng TỔNG ─────────────────────────────────────────────────────────────────────────────────────
  * `payroll-format.ts` cấm cộng tiền ở FE vì cộng SỐ THỰC trên `numeric(18,2)` lệch xu so với SQL. Ở đây cộng
  * bằng **SỐ NGUYÊN XU** (`Math.round(v × 100)`) — chính xác tuyệt đối tới 2^53 xu (~90 nghìn tỉ đồng), nên
- * tổng hiển thị khớp `SUM()` của SQL từng xu. Chỉ để HIỂN THỊ, không gửi đi đâu. API không có tổng theo
- * cột toàn kỳ ⇒ tổng là của TRANG đang xem; nhãn nói thật phạm vi (`isWholePeriod`). Một dòng trong trang
- * vắng giá trị (bị che) ⇒ tổng cột đó `undefined` (không cộng thiếu âm thầm).
+ * tổng hiển thị khớp `SUM()` của SQL từng xu. Chỉ để HIỂN THỊ, không gửi đi đâu. Một dòng trong trang vắng
+ * giá trị (bị che) ⇒ tổng cột đó `undefined` (không cộng thiếu âm thầm).
+ *
+ * S15-PAYROLL-FE-4: có tổng TOÀN KỲ từ 018 `?payrollPeriodId=` (`lineTotals` + `componentTotals`, SUM ở SQL —
+ * BE-5 D-15) ⇒ hàng tổng dùng số đó (`totalsFromSummary`), nhãn «Tổng». Chưa về/lỗi ⇒ rơi về tổng TRANG và
+ * nhãn nói thật phạm vi (`isWholePeriod`) — không bao giờ ghi «Tổng» cho số của một trang.
  */
 
 export interface ComponentColumn {
@@ -71,6 +74,30 @@ export function computeLineTotals(
   };
 }
 
+/**
+ * Tổng TOÀN KỲ từ 018. `null` khi response không mang `lineTotals` (gọi thiếu `payrollPeriodId`) hoặc là của
+ * KỲ KHÁC (phòng cache lệch). Thành phần không có trong `componentTotals` ⇒ `undefined` (ô `—`).
+ */
+export function totalsFromSummary(
+  summary: PayrollSummaryDto | null | undefined,
+  periodId: string,
+  columns: readonly ComponentColumn[],
+): LineTotals | null {
+  if (!summary?.lineTotals || summary.payrollPeriodId !== periodId) return null;
+  const byCode: Record<string, number | undefined> = {};
+  for (const col of columns) {
+    byCode[col.code] = summary.componentTotals?.find((c) => c.code === col.code)?.total;
+  }
+  const lt = summary.lineTotals;
+  return {
+    byCode,
+    gross: lt.gross,
+    deduction: lt.deductionAmount,
+    adjustment: lt.adjustmentAmount,
+    net: lt.net,
+  };
+}
+
 /** Hàng của bảng: dòng lương thật HOẶC hàng tổng (không phải DTO — không bấm để điều chỉnh được). */
 export type PeriodLineRow =
   | { readonly kind: "line"; readonly line: PayrollPeriodLineDto }
@@ -79,9 +106,12 @@ export type PeriodLineRow =
 export function toLineRows(
   lines: readonly PayrollPeriodLineDto[],
   columns: readonly ComponentColumn[],
+  periodTotals: LineTotals | null = null,
 ): PeriodLineRow[] {
   const rows: PeriodLineRow[] = lines.map((line) => ({ kind: "line", line }));
-  if (lines.length > 0) rows.push({ kind: "total", totals: computeLineTotals(lines, columns) });
+  if (lines.length > 0) {
+    rows.push({ kind: "total", totals: periodTotals ?? computeLineTotals(lines, columns) });
+  }
   return rows;
 }
 

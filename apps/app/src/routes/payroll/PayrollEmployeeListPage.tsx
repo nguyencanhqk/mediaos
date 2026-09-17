@@ -4,7 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys, useCanExact } from "@mediaos/web-core";
-import type { PayrollEmployeeListItemDto } from "@mediaos/contracts";
+import {
+  payrollInsuranceIssueEnum,
+  type PayrollEmployeeListItemDto,
+  type PayrollInsuranceIssue,
+} from "@mediaos/contracts";
 import {
   Button,
   ColumnPicker,
@@ -26,6 +30,7 @@ import {
 import { UnitSelector } from "./components/UnitSelector";
 
 type ProfileFilter = "" | "true" | "false";
+type InsuranceFilter = "" | PayrollInsuranceIssue;
 
 /**
  * PAY-SCREEN-007 «Nhân viên» — danh sách (S15-PAYROLL-FE-1). Cặp gác `('view','payroll-employee')` —
@@ -40,11 +45,16 @@ type ProfileFilter = "" | "true" | "false";
  *
  * Toolbar chuẩn: tìm `q` (họ tên / mã NV) · `UnitSelector` (khớp CHÍNH XÁC một đơn vị, không đệ quy —
  * plan BE-1 §9.3) · lọc đã/chưa có hồ sơ lương. Cột định danh (tên + mã) ghim trái và KHOÁ trong ⚙.
+ *
+ * S15-PAYROLL-FE-4: lọc «vấn đề bảo hiểm» (`insuranceIssue` của 036) — đích deep-link của Lời nhắc ở Tổng
+ * quan (`?insuranceIssue=` → `initialInsuranceIssue`). Đổi deep-link khi trang đang mở ⇒ bộ lọc theo kịp.
  */
 export function PayrollEmployeeListPage({
   onOpenEmployee,
+  initialInsuranceIssue,
 }: {
   onOpenEmployee: (userId: string) => void;
+  initialInsuranceIssue?: PayrollInsuranceIssue;
 }) {
   const { t } = useTranslation("payroll");
   const canView = useCanExact(
@@ -56,10 +66,22 @@ export function PayrollEmployeeListPage({
   const deferredSearch = useDeferredValue(search.trim());
   const [orgUnitId, setOrgUnitId] = useState("");
   const [profileFilter, setProfileFilter] = useState<ProfileFilter>("");
+  const [insuranceFilter, setInsuranceFilter] = useState<InsuranceFilter>(
+    initialInsuranceIssue ?? "",
+  );
+  const [seenInitialIssue, setSeenInitialIssue] = useState(initialInsuranceIssue);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAYROLL_PAGE_SIZE);
 
-  const hasFilters = search !== "" || orgUnitId !== "" || profileFilter !== "";
+  // Deep-link mới (search param đổi mà trang không remount) ⇒ điều chỉnh state NGAY trong render.
+  if (initialInsuranceIssue !== seenInitialIssue) {
+    setSeenInitialIssue(initialInsuranceIssue);
+    setInsuranceFilter(initialInsuranceIssue ?? "");
+    setPage(1);
+  }
+
+  const hasFilters =
+    search !== "" || orgUnitId !== "" || profileFilter !== "" || insuranceFilter !== "";
   const resetPage = () => setPage(1);
 
   const listParams = useMemo(
@@ -67,10 +89,11 @@ export function PayrollEmployeeListPage({
       ...(deferredSearch ? { q: deferredSearch } : {}),
       ...(orgUnitId ? { orgUnitId } : {}),
       ...(profileFilter ? { hasSalaryProfile: profileFilter === "true" } : {}),
+      ...(insuranceFilter ? { insuranceIssue: insuranceFilter } : {}),
       page,
       per_page: pageSize,
     }),
-    [deferredSearch, orgUnitId, profileFilter, page, pageSize],
+    [deferredSearch, orgUnitId, profileFilter, insuranceFilter, page, pageSize],
   );
 
   const listQuery = useQuery({
@@ -217,6 +240,22 @@ export function PayrollEmployeeListPage({
           <option value="true">{t("employees.filterProfileHas")}</option>
           <option value="false">{t("employees.filterProfileMissing")}</option>
         </Select>
+        <Select
+          className="w-64"
+          value={insuranceFilter}
+          onChange={(e) => {
+            setInsuranceFilter(e.target.value as InsuranceFilter);
+            resetPage();
+          }}
+          aria-label={t("employees.filterInsurance")}
+        >
+          <option value="">{t("employees.filterInsuranceAll")}</option>
+          {payrollInsuranceIssueEnum.options.map((issue) => (
+            <option key={issue} value={issue}>
+              {t(`employees.insuranceIssue.${issue}`)}
+            </option>
+          ))}
+        </Select>
         {hasFilters && (
           <Button
             variant="ghost"
@@ -225,6 +264,7 @@ export function PayrollEmployeeListPage({
               setSearch("");
               setOrgUnitId("");
               setProfileFilter("");
+              setInsuranceFilter("");
               resetPage();
             }}
           >

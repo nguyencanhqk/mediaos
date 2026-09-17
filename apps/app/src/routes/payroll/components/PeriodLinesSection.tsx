@@ -19,6 +19,7 @@ import {
   deriveComponentColumns,
   isWholePeriod,
   toLineRows,
+  totalsFromSummary,
   type ComponentColumn,
   type LineTotals,
   type PeriodLineRow,
@@ -178,11 +179,26 @@ export function PeriodLinesSection({
   const moneyMasked = lines.length > 0 && lines.every((l) => isPayrollMoneyMasked(l));
   const drift = useTemplateDrift(period, lines, canViewTemplates);
 
+  // S15-PAYROLL-FE-4 — tổng TOÀN KỲ (018 `?payrollPeriodId=`), cùng cổng + cùng điều kiện tải với 008.
+  const summaryQuery = useQuery({
+    queryKey: payrollKeys.periods.summaryOf(period.id),
+    queryFn: () => payrollApi.getSummary({ payrollPeriodId: period.id }),
+    enabled: canViewLines && active,
+  });
+
   const dynamic = useMemo(() => deriveComponentColumns(lines), [lines]);
-  const rows = useMemo(() => toLineRows(lines, dynamic), [lines, dynamic]);
-  const totalLabel = isWholePeriod(page, lines.length, lineTotal)
-    ? t("lines.total")
-    : t("lines.pageTotal");
+  const periodTotals = useMemo(
+    () => totalsFromSummary(summaryQuery.data, period.id, dynamic),
+    [summaryQuery.data, period.id, dynamic],
+  );
+  const rows = useMemo(
+    () => toLineRows(lines, dynamic, periodTotals),
+    [lines, dynamic, periodTotals],
+  );
+  const totalLabel =
+    periodTotals !== null || isWholePeriod(page, lines.length, lineTotal)
+      ? t("lines.total")
+      : t("lines.pageTotal");
   const columns = useMemo(
     () => buildColumns(t, people, dynamic, totalLabel),
     [t, people, dynamic, totalLabel],

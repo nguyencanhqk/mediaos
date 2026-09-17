@@ -65,6 +65,12 @@
   --info: #0771a6; /* = --brand ở light (bất biến giá trị) */
   --info-muted: #ddeffa;
 
+  /* S15-PAYROLL-FE-4 — màu CHUỖI biểu đồ (DECISIONS-14 §3). Thứ tự cố định, KHÔNG xoay vòng; đã chạy bộ
+     kiểm bảng màu dataviz trên nền --card (#ffffff): dải sáng · độ bão hoà · tách mù màu ΔE 19,4 · mắt
+     thường ΔE 32,4 · tương phản ≥ 3:1 — ALL PASS. chart-1 = --brand. Chữ KHÔNG mặc màu chuỗi. */
+  --chart-1: #0771a6;
+  --chart-2: #eb6834;
+
   /* Chrome (topbar) — hằng số navy ở CẢ HAI chế độ */
   --chrome: #0f1a2e;
   --chrome-foreground: #e6ecf5;
@@ -126,6 +132,11 @@
   --danger-muted: #2c1519;
   --info: #3ec1f0;
   --info-muted: #11263a;
+
+  /* Bậc DARK của cùng hai họ màu, kiểm trên --card dark (#121a2b): #1fa9e0 (brand dark) vượt dải sáng
+     (L 0,691 > 0,67) nên chart-1 lùi một bậc; ΔE mù màu 23,2 · mắt thường 30,0 — ALL PASS. */
+  --chart-1: #1b9ad0;
+  --chart-2: #d95926;
 
   --chrome: #0f1a2e;
   --chrome-foreground: #e6ecf5;

@@ -13,6 +13,7 @@
  */
 import payrollCatalog from "./payroll-catalog";
 import payrollDisbursement from "./payroll-disbursement";
+import payrollReports from "./payroll-reports";
 
 export default {
   title: "Tiền lương",
@@ -331,6 +332,13 @@ export default {
     filterProfileAll: "Tất cả",
     filterProfileHas: "Đã có hồ sơ lương",
     filterProfileMissing: "Chưa có hồ sơ lương",
+    // S15-PAYROLL-FE-4 — lọc theo `insuranceIssue` (036), đích deep-link của Lời nhắc.
+    filterInsurance: "Bảo hiểm",
+    filterInsuranceAll: "Mọi tình trạng bảo hiểm",
+    insuranceIssue: {
+      "not-joined": "Chính thức nhưng chưa tham gia BH",
+      "salary-out-of-range": "Lương đóng BH ngoài khung",
+    },
     clearFilters: "Xoá bộ lọc",
     empty: "Chưa có nhân sự nào.",
     emptyFiltered: "Không có nhân sự nào khớp bộ lọc.",
@@ -543,6 +551,8 @@ export default {
   ...payrollCatalog,
   // S15-PAYROLL-FE-3 — track C (012/013/014/017 + import) tách file: `payroll-disbursement.ts`.
   ...payrollDisbursement,
+  // S15-PAYROLL-FE-4 — track D (overview · reminders · reports).
+  ...payrollReports,
 
   errors: {
     actionNotApplicable: "Hành động này không áp dụng cho trạng thái hiện tại của kỳ.",

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, RefreshCw } from "lucide-react";
+import { CheckCircle2, FileDown, RefreshCw } from "lucide-react";
 import { payrollApi, payrollKeys } from "@mediaos/web-core";
 import { Button, EmptyState, PageHeader, TableFooter } from "@mediaos/ui";
 import { PAYROLL_PAGE_SIZE } from "./constants";
@@ -9,6 +9,7 @@ import { formatPayrollMoney } from "./payroll-format";
 import { parsePayrollError, payrollErrorI18nKey } from "./payroll-errors";
 import { PayslipBreakdown } from "./components/PayslipBreakdown";
 import { PayslipStatusBadge } from "./components/StatusBadges";
+import { openSignedUrlInNewTab } from "./open-signed-url";
 
 /**
  * PAY-SCREEN-006 (S13-PAYROLL-FE-1) — «Phiếu lương của tôi». Scope **Own tuyệt đối**.
@@ -26,6 +27,9 @@ import { PayslipStatusBadge } from "./components/StatusBadges";
  *
  * ⚠️ Xác nhận lần hai ⇒ 409 `PAYROLL-ERR-015`. Nút ẩn khi `acknowledgedAt !== null` — bảng
  * `payslip_acknowledgements` chỉ-INSERT, không có đường gỡ xác nhận.
+ *
+ * S15-PAYROLL-FE-4: «Tải PDF» (084) — Own, KHÔNG cần cặp export (PAY-DEC-019); cùng bộ lọc kỳ đã phát hành với
+ * 031/032 nên phiếu nào hiện ở đây thì tải được. Signed-URL mở ở tab mới, không lưu.
  */
 export function MePayslipsPage() {
   const { t } = useTranslation("payroll");
@@ -37,6 +41,19 @@ export function MePayslipsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const openPdf = async (id: string) => {
+    setPdfBusy(true);
+    setErrorKey(null);
+    try {
+      await openSignedUrlInNewTab(async () => (await payrollApi.getMyPayslipPdf(id)).url);
+    } catch (err) {
+      setErrorKey(payrollErrorI18nKey(parsePayrollError(err)));
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   const listParams = { page, per_page: PAYROLL_PAGE_SIZE };
   const listQuery = useQuery({
@@ -152,15 +169,25 @@ export function MePayslipsPage() {
             ) : (
               <>
                 <PayslipBreakdown payslip={detail} />
-                {detail.acknowledgedAt === null && (
+                <div className="flex flex-wrap gap-2">
+                  {detail.acknowledgedAt === null && (
+                    <Button
+                      onClick={() => ackMutation.mutate(detail.id)}
+                      disabled={ackMutation.isPending}
+                    >
+                      <CheckCircle2 className="mr-2 size-4" />
+                      {t("mePayslips.acknowledge")}
+                    </Button>
+                  )}
                   <Button
-                    onClick={() => ackMutation.mutate(detail.id)}
-                    disabled={ackMutation.isPending}
+                    variant="outline"
+                    onClick={() => void openPdf(detail.id)}
+                    disabled={pdfBusy}
                   >
-                    <CheckCircle2 className="mr-2 size-4" />
-                    {t("mePayslips.acknowledge")}
+                    <FileDown className="mr-2 size-4" aria-hidden />
+                    {pdfBusy ? t("pdf.opening") : t("pdf.download")}
                   </Button>
-                )}
+                </div>
                 {errorKey && <p className="text-sm text-danger">{t(errorKey)}</p>}
               </>
             )}
