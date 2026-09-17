@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { PayrollAccessService } from "./payroll-access.service";
 import type { PayslipItemRow, PayslipRow } from "./payroll-payslips.repository";
+import { rowsOf } from "./payroll-report.sql";
 import type { PayrollActor } from "./payroll.types";
 
 /**
@@ -30,10 +31,6 @@ function visibleOwner(actor: PayrollActor): SQL {
   return PayrollAccessService.isCompany(actor.routeScope)
     ? sql`true`
     : sql`ps.user_id = ${actor.actorUserId}::uuid`;
-}
-
-function rowsOf<T>(res: unknown): T[] {
-  return ((res as { rows?: unknown[] }).rows ?? (res as unknown[])) as T[];
 }
 
 @Injectable()

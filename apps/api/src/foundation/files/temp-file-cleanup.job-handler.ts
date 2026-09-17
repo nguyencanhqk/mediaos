@@ -87,12 +87,9 @@ export class TempFileCleanupJobHandler implements JobHandler {
     let failed = 0;
 
     for (const file of eligible) {
-      const objectDeleted = await this.deleteObject(companyId, file);
-      if (objectDeleted === "failed") {
-        failed += 1;
-        continue;
-      }
-      if (await this.softDeleteRow(companyId, file, objectDeleted === "deleted")) success += 1;
+      const outcome = await this.cleanOne(companyId, file, pendingCutoff, now);
+      if (outcome === "deleted") success += 1;
+      else if (outcome === "failed") failed += 1;
     }
 
     const skipped = eligible.length - success - failed;
@@ -102,13 +99,48 @@ export class TempFileCleanupJobHandler implements JobHandler {
       );
     }
 
-    // skipped (race: hàng đã bị xoá song song) KHÔNG phải failure.
+    // skipped (race: hàng đã bị xoá / hết đủ điều kiện song song) KHÔNG phải failure.
     return {
       total: eligible.length,
       success,
       failed,
       metadata: { deleted: success, skipped, failed, ttlHours },
     };
+  }
+
+  /**
+   * Dọn MỘT tệp. Kiểm lại đủ-điều-kiện trong tx ngắn NGAY TRƯỚC khi xoá object (plan BE-5B §8.2 #1 — TOCTOU:
+   * tệp có thể đã được gắn link / xác nhận / xoá song song sau lúc liệt kê); câu xoá mềm lặp lại CÙNG vị từ.
+   * Cửa sổ còn lại (đổi trạng thái giữa lúc kiểm và lúc xoá mềm) ⇒ object đã mất mà hàng giữ ⇒ warn, không im.
+   */
+  private async cleanOne(
+    companyId: string,
+    file: FileRecord,
+    pendingCutoff: Date,
+    now: Date,
+  ): Promise<"deleted" | "skipped" | "failed"> {
+    const stillEligible = await this.db.withTenant(companyId, (tx) =>
+      this.repo.isStillEligibleTx(companyId, file.id, pendingCutoff, now, tx),
+    );
+    if (!stillEligible) return "skipped";
+
+    const objectDeleted = await this.deleteObject(companyId, file);
+    if (objectDeleted === "failed") return "failed";
+
+    const removed = await this.softDeleteRow(
+      companyId,
+      file,
+      pendingCutoff,
+      now,
+      objectDeleted === "deleted",
+    );
+    if (removed) return "deleted";
+    if (objectDeleted === "deleted") {
+      this.logger.warn(
+        `TEMP_FILE_CLEANUP tenant=${companyId} file=${file.id} đã xoá object nhưng hàng hết đủ điều kiện trước khi xoá mềm — hàng giữ nguyên, object không còn.`,
+      );
+    }
+    return "skipped";
   }
 
   /** Xoá object (nếu provider là object-store). Không ném — lỗi trả `failed` để giữ hàng cho lượt sau. */
@@ -129,15 +161,26 @@ export class TempFileCleanupJobHandler implements JobHandler {
     }
   }
 
-  /** Xoá mềm hàng + gỡ link Export + log + audit trong MỘT tx. `false` = hàng đã bị xoá song song. */
+  /**
+   * Xoá mềm hàng + gỡ link Export + log + audit trong MỘT tx. `false` = hàng đã bị xoá / hết đủ điều kiện
+   * song song.
+   */
   private softDeleteRow(
     companyId: string,
     file: FileRecord,
+    pendingCutoff: Date,
+    now: Date,
     objectDeleted: boolean,
   ): Promise<boolean> {
     return this.db.withTenant(companyId, async (tx) => {
-      // Idempotent + chống race: nếu file đã bị xoá song song (0 row) → bỏ qua (KHÔNG ghi log/audit thừa).
-      const affected = await this.repo.softDeleteBySystemTx(companyId, file.id, tx);
+      // Idempotent + chống race: câu xoá mềm lặp lại vị từ đủ-điều-kiện; 0 row → bỏ qua (KHÔNG log/audit thừa).
+      const affected = await this.repo.softDeleteBySystemTx(
+        companyId,
+        file.id,
+        pendingCutoff,
+        now,
+        tx,
+      );
       if (affected === 0) return false;
       const exportLinksRemoved = await this.repo.softDeleteExportLinksBySystemTx(
         companyId,

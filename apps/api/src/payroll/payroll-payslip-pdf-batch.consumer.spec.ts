@@ -13,9 +13,9 @@ import {
 } from "./payroll-payslip-pdf-batch.consumer";
 import {
   DEFAULT_PAYSLIP_PDF_BATCH_LIMITS,
-  PAYSLIP_PDF_BATCH_EVENT,
   PayrollPayslipPdfBatchService,
 } from "./payroll-payslip-pdf-batch.service";
+import { PAYSLIP_PDF_BATCH_EVENT } from "./payroll-pdf.const";
 import type { PayrollPayslipPdfRepository } from "./payroll-payslip-pdf.repository";
 import type { PayrollPeopleRepository } from "./payroll-people.repository";
 import type { PayslipRow } from "./payroll-payslips.repository";
@@ -96,7 +96,7 @@ function harness(opts: { file?: ServerFileRow | null; payslips?: PayslipRow[] } 
     renderer as unknown as PayslipPdfRenderer,
     files as unknown as ServerFileService,
   );
-  return { consumer, bus, access, files, renderer, people };
+  return { consumer, bus, access, files, renderer, people, pdfRepo };
 }
 
 const ctx = (payload: Record<string, unknown> = { fileId: FILE_ID }): EventContext => ({
@@ -177,11 +177,43 @@ describe("PayrollPayslipPdfBatchConsumer", () => {
     expect(h.files.markFailedTx).toHaveBeenCalledWith(TX, COMPANY, FILE_ID, "forbidden");
   });
 
-  it("lỗi KHÁC 403 khi dựng actor ⇒ NÉM (outbox thử lại), không đánh Failed", async () => {
+  it("lỗi KHÁC 403 khi dựng actor ⇒ Failed{generation-failed} rồi NÉM (plan §8.2 #2)", async () => {
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
     const h = harness();
     h.access.resolveActor.mockRejectedValueOnce(new Error("db down"));
     await expect(h.consumer.handle(ctx())).rejects.toThrow("db down");
-    expect(h.files.markFailedTx).not.toHaveBeenCalled();
+    expect(h.files.markFailedTx).toHaveBeenCalledWith(TX, COMPANY, FILE_ID, "generation-failed");
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(h.renderer.render).not.toHaveBeenCalled();
+  });
+
+  it("đọc phiếu lỗi (batchPayslipsTx ném) ⇒ log error có fileId + Failed{generation-failed} + NÉM", async () => {
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const h = harness();
+    h.pdfRepo.batchPayslipsTx.mockRejectedValueOnce(new TypeError("bad row"));
+    await expect(h.consumer.handle(ctx())).rejects.toThrow("bad row");
+    expect(h.files.markFailedTx).toHaveBeenCalledWith(TX, COMPANY, FILE_ID, "generation-failed");
+    expect(String(error.mock.calls[0][0])).toContain(FILE_ID);
+    expect(String(error.mock.calls[0][0])).toContain("TypeError");
+    expect(h.files.store).not.toHaveBeenCalled();
+  });
+
+  it("đọc phiếu lỗi mà ghi Failed cũng lỗi ⇒ NÉM (hàng còn Pending — outbox chạy lại)", async () => {
+    vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const h = harness();
+    h.pdfRepo.batchPayslipsTx.mockRejectedValueOnce(new Error("read"));
+    h.files.markFailedTx.mockRejectedValueOnce(new Error("db down"));
+    await expect(h.consumer.handle(ctx())).rejects.toThrow();
+  });
+
+  it("ghi Failed chạm 0 hàng (không còn Pending) ⇒ warn, không im lặng (plan §8.2 #6)", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    const h = harness();
+    h.access.resolveActor.mockRejectedValueOnce(new ForbiddenException());
+    h.files.markFailedTx.mockResolvedValueOnce(0);
+    await h.consumer.handle(ctx());
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain(FILE_ID);
   });
 
   it("render lỗi ⇒ Failed{generation-failed}, KHÔNG ném lại", async () => {

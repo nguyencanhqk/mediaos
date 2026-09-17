@@ -31,6 +31,7 @@ import type { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
 
 const COMPANY_A = "11111111-1111-1111-1111-111111111111";
 const FAKE_TX = { __tx: true } as unknown as TenantTx;
+const ANY_DATE = expect.any(Date);
 
 interface EligibleRow {
   id: string;
@@ -64,6 +65,7 @@ interface Harness {
   resolveSetting: ReturnType<typeof vi.fn>;
   storageDelete: ReturnType<typeof vi.fn>;
   softDeleteExportLinksBySystemTx: ReturnType<typeof vi.fn>;
+  isStillEligibleTx: ReturnType<typeof vi.fn>;
   calls: string[];
 }
 
@@ -72,6 +74,7 @@ function makeHandler(opts: {
   softDeleteReturns?: (fileId: string) => number;
   ttlValue?: unknown;
   storageDeleteFails?: (key: string) => boolean;
+  stillEligible?: (fileId: string) => boolean;
 }): Harness {
   const eligible = opts.eligible ?? [];
   const calls: string[] = [];
@@ -81,6 +84,10 @@ function makeHandler(opts: {
     return opts.softDeleteReturns ? opts.softDeleteReturns(fileId) : 1;
   });
   const softDeleteExportLinksBySystemTx = vi.fn(async () => 1);
+  const isStillEligibleTx = vi.fn(async (_companyId: string, fileId: string) => {
+    calls.push(`check:${fileId}`);
+    return opts.stillEligible ? opts.stillEligible(fileId) : true;
+  });
   const storageDelete = vi.fn(async (input: { key: string; companyId: string }) => {
     calls.push(`object:${input.key}`);
     if (opts.storageDeleteFails?.(input.key)) throw new Error("s3 down");
@@ -102,6 +109,7 @@ function makeHandler(opts: {
     findEligibleTx,
     softDeleteBySystemTx,
     softDeleteExportLinksBySystemTx,
+    isStillEligibleTx,
   } as unknown as TempFileCleanupRepository;
   const storage = { delete: storageDelete } as unknown as StorageAdapter;
   const accessLog = { record: accessRecord } as unknown as FileAccessLogService;
@@ -118,6 +126,7 @@ function makeHandler(opts: {
     resolveSetting,
     storageDelete,
     softDeleteExportLinksBySystemTx,
+    isStillEligibleTx,
     calls,
   };
 }
@@ -147,7 +156,13 @@ describe("TempFileCleanupJobHandler", () => {
     const res = await h.handler.run({ companyId: COMPANY_A });
 
     // soft-delete gọi cho file eligible, cùng tx (BẤT BIẾN #1/#2).
-    expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(COMPANY_A, "file-1", FAKE_TX);
+    expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(
+      COMPANY_A,
+      "file-1",
+      ANY_DATE,
+      ANY_DATE,
+      FAKE_TX,
+    );
 
     // file_access_logs: action='Delete', accessGranted=true, actorUserId KHÔNG set (=> null, System actor).
     expect(h.accessRecord).toHaveBeenCalledTimes(1);
@@ -246,7 +261,7 @@ describe("TempFileCleanupJobHandler", () => {
         key: `${COMPANY_A}/files/abc`,
         companyId: COMPANY_A,
       });
-      expect(h.calls).toEqual([`object:${COMPANY_A}/files/abc`, "row:file-1"]);
+      expect(h.calls).toEqual(["check:file-1", `object:${COMPANY_A}/files/abc`, "row:file-1"]);
       expect(h.softDeleteExportLinksBySystemTx).toHaveBeenCalledWith(COMPANY_A, "file-1", FAKE_TX);
       expect(h.auditRecord.mock.calls[0][1].metadata).toMatchObject({
         objectDeleted: true,
@@ -267,7 +282,13 @@ describe("TempFileCleanupJobHandler", () => {
       const res = await h.handler.run({ companyId: COMPANY_A });
 
       expect(h.softDeleteBySystemTx).toHaveBeenCalledTimes(1);
-      expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(COMPANY_A, "good", FAKE_TX);
+      expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(
+        COMPANY_A,
+        "good",
+        ANY_DATE,
+        ANY_DATE,
+        FAKE_TX,
+      );
       expect(h.auditRecord).toHaveBeenCalledTimes(1);
       expect(res).toMatchObject({ total: 2, success: 1, failed: 1 });
       expect(res.metadata).toMatchObject({ deleted: 1, skipped: 0, failed: 1 });
@@ -282,9 +303,66 @@ describe("TempFileCleanupJobHandler", () => {
       const res = await h.handler.run({ companyId: COMPANY_A });
 
       expect(h.storageDelete).not.toHaveBeenCalled();
-      expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(COMPANY_A, "local", FAKE_TX);
+      expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(
+        COMPANY_A,
+        "local",
+        ANY_DATE,
+        ANY_DATE,
+        FAKE_TX,
+      );
       expect(h.auditRecord.mock.calls[0][1].metadata).toMatchObject({ objectDeleted: false });
       expect(res).toMatchObject({ success: 1, failed: 0 });
+    });
+  });
+
+  describe("kiểm lại đủ-điều-kiện trước khi xoá object (TOCTOU — plan BE-5B §8.2 #1)", () => {
+    it("hết đủ điều kiện sau lúc liệt kê ⇒ KHÔNG gọi storage, KHÔNG xoá mềm, đếm skipped", async () => {
+      const gone = makeFile({ id: "gone", storagePath: `${COMPANY_A}/files/gone` });
+      const ok = makeFile({ id: "ok", storagePath: `${COMPANY_A}/files/ok` });
+      const h = makeHandler({ eligible: [gone, ok], stillEligible: (id) => id !== "gone" });
+
+      const res = await h.handler.run({ companyId: COMPANY_A });
+
+      expect(h.storageDelete).toHaveBeenCalledTimes(1);
+      expect(h.storageDelete).toHaveBeenCalledWith({
+        key: `${COMPANY_A}/files/ok`,
+        companyId: COMPANY_A,
+      });
+      expect(h.softDeleteBySystemTx).toHaveBeenCalledTimes(1);
+      expect(h.auditRecord).toHaveBeenCalledTimes(1);
+      expect(res).toMatchObject({ total: 2, success: 1, failed: 0 });
+      expect(res.metadata).toMatchObject({ deleted: 1, skipped: 1, failed: 0 });
+    });
+
+    it("kiểm lại dùng CÙNG mốc (pendingCutoff, now) của lượt liệt kê, cả ở câu xoá mềm", async () => {
+      const f = makeFile({ id: "file-1" });
+      const h = makeHandler({ eligible: [f] });
+
+      await h.handler.run({ companyId: COMPANY_A });
+
+      const [, cutoff, now] = h.findEligibleTx.mock.calls[0];
+      expect(h.isStillEligibleTx).toHaveBeenCalledWith(COMPANY_A, "file-1", cutoff, now, FAKE_TX);
+      expect(h.softDeleteBySystemTx).toHaveBeenCalledWith(
+        COMPANY_A,
+        "file-1",
+        cutoff,
+        now,
+        FAKE_TX,
+      );
+    });
+
+    it("object đã xoá mà câu xoá mềm hết đủ điều kiện ⇒ warn (không im lặng), đếm skipped", async () => {
+      const f = makeFile({ id: "late", storagePath: `${COMPANY_A}/files/late` });
+      const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+      const h = makeHandler({ eligible: [f], softDeleteReturns: () => 0 });
+
+      const res = await h.handler.run({ companyId: COMPANY_A });
+
+      expect(h.storageDelete).toHaveBeenCalledTimes(1);
+      expect(h.auditRecord).not.toHaveBeenCalled();
+      expect(res).toMatchObject({ total: 1, success: 0, failed: 0 });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain("file=late");
     });
   });
 });

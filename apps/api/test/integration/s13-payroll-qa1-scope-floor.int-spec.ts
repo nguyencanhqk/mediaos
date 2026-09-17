@@ -76,6 +76,8 @@ import {
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
+/** S15-PAYROLL-BE-5B — 084 sinh PDF thật ⇒ cần object storage (CI API có MinIO). */
+const hasStorage = !!process.env.S3_ENDPOINT && !!process.env.S3_BUCKET;
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1");
 
 /**
@@ -89,13 +91,15 @@ const ALL_PAIRS: ReadonlyArray<{ action: string; resourceType: string; isSensiti
   ).values(),
 ];
 
-/** 3 key `companyFloor:false` — mục C. Đối chiếu lại với bảng hằng ở mục E. */
+/** 5 key `companyFloor:false` — mục C. Đối chiếu lại với bảng hằng ở mục E. */
 const EXEMPT_KEYS: readonly PayrollRouteKey[] = [
   "mePayslipList",
   "mePayslipDetail",
   "mePayslipAck",
   // S15-PAYROLL-BE-4 — 065 «Tạm ứng của tôi» (Own, cùng khuôn /me/payslips*).
   "meAdvanceList",
+  // S15-PAYROLL-BE-5B — 084 PDF phiếu của tôi (Own, cùng khuôn /me/payslips*).
+  "mePayslipPdf",
 ];
 
 interface Fixture {
@@ -158,7 +162,8 @@ const STATUTORY_VALUES = {
 const STATUTORY_WAGES = { baseWage: 2_340_000, minRegionWage: 4_960_000 };
 
 /**
- * 78 route `companyFloor:true` — MỌI key trừ `EXEMPT_KEYS` (32 của v1 + 8 track A + 15 track B + 18 track C + 5 track D).
+ * 80 route `companyFloor:true` — MỌI key trừ `EXEMPT_KEYS` (32 của v1 + 8 track A + 15 track B + 18 track C + 5 track D
+ * phần 1 + 2 track D phần 2).
  */
 const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
   // ── Kỳ lương 001–018 ────────────────────────────────────────────────────────────────────────
@@ -395,6 +400,14 @@ const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
     url: () => "/payroll/reports/salary-by-period/export?fromMonth=2028-01&toMonth=2028-12",
     read: true,
   },
+  // ── S15-PAYROLL-BE-5B · track D phần 2 083 + 085 (2 route companyFloor:true; 084 nằm ở EXEMPT_KEYS) ────
+  // Id MA ⇒ ALLOW dừng ở 404 010: không sinh tệp, không phụ thuộc object storage (luồng PDF thật ở spec BE-5B).
+  payslipPdf: { method: "GET", url: () => `/payslips/${ghost()}/pdf` },
+  payslipPdfBatch: {
+    method: "POST",
+    url: () => `/payroll-periods/${ghost()}/payslips/pdf-batch`,
+    body: () => ({}),
+  },
   // ── Picker 034–035 ──────────────────────────────────────────────────────────────────────────
   pickerPeople: { method: "GET", url: () => "/payroll/pickers/people", read: true },
   pickerAttendancePeriods: {
@@ -483,7 +496,7 @@ const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
   },
 };
 
-describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (32 + 3)", () => {
+describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (80 + 5)", () => {
   let app: INestApplication;
   let direct: Pool;
   let A: SeededTenant;
@@ -723,7 +736,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     await app?.close();
   });
 
-  // ── A. DENY — 32 route companyFloor:true, chủ thể Own ⇒ 403 + marker ─────────────────────────
+  // ── A. DENY — 80 route companyFloor:true, chủ thể Own ⇒ 403 + marker ─────────────────────────
 
   describe("A. companyFloor:true — chủ thể ĐỦ cặp nhưng scope Own ⇒ 403 AUTH-ERR-SCOPE-DENIED", () => {
     it.each(Object.keys(ROUTES) as PayrollRouteKey[])("%s ⇒ 403 sàn scope (Own)", async (key) => {
@@ -745,7 +758,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
     });
   });
 
-  // ── C. NGOẠI LỆ SÀN — 3 route /me/payslips*, chủ thể Own là CHỦ phiếu thật ───────────────────
+  // ── C. NGOẠI LỆ SÀN — 5 route /me/*, chủ thể Own là CHỦ dữ liệu thật ─────────────────────────
 
   describe("C. companyFloor:false — chủ phiếu ở scope Own KHÔNG bị scope-denied (200/201 thật)", () => {
     it("mePayslipList — GET /me/payslips (Own) ⇒ 200, thấy phiếu của chính mình", async () => {
@@ -772,6 +785,17 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       const ids = (res.body.data as Array<{ id: string }>).map((x) => x.id);
       expect(ids, "tạm ứng của chính mình phải nằm trong danh sách").toContain(fixture.advanceId);
     });
+
+    it("mePayslipPdf — GET /me/payslips/:id/pdf (Own, phiếu CỦA MÌNH) ⇒ 200 (S15-PAYROLL-BE-5B)", async () => {
+      const res = await get(tOwn, `/me/payslips/${fixture.payslipId}/pdf`);
+      if (hasStorage) {
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect(res.body.data.fileName).toMatch(/^phieu-luong-\d{4}-\d{2}\.pdf$/);
+      } else {
+        // Không có object storage thì không sinh được tệp — nhưng vẫn phải QUA sàn scope.
+        expect(res.status, JSON.stringify(res.body)).not.toBe(403);
+      }
+    });
   });
 
   // ── D. Department cũng bị sàn chặn (sàn là Company, KHÔNG phải "≥ Own") ──────────────────────
@@ -797,6 +821,20 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       expectScopeDenied(
         await get(tDept, "/payroll/pickers/people"),
         "GET /payroll/pickers/people @Department",
+      );
+    });
+
+    it("GET /payslips/:id/pdf (Department) ⇒ 403 AUTH-ERR-SCOPE-DENIED (S15-PAYROLL-BE-5B)", async () => {
+      expectScopeDenied(
+        await get(tDept, `/payslips/${fixture.payslipId}/pdf`),
+        "GET /payslips/:id/pdf @Department",
+      );
+    });
+
+    it("POST /payroll-periods/:id/payslips/pdf-batch (Department) ⇒ 403 AUTH-ERR-SCOPE-DENIED (S15-PAYROLL-BE-5B)", async () => {
+      expectScopeDenied(
+        await post(tDept, `/payroll-periods/${fixture.periodId}/payslips/pdf-batch`).send({}),
+        "POST pdf-batch @Department",
       );
     });
 
@@ -848,17 +886,18 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
 
   // ── E. Census chống xanh-rỗng ────────────────────────────────────────────────────────────────
 
-  describe("E. census — 78 key mục A ∪ 4 key mục C = ĐÚNG 82 key của PAYROLL_ROUTE_PAIRS", () => {
-    it("PAYROLL_ROUTE_PAIRS giữ đủ 82 key (neo cho toàn bộ census)", () => {
+  describe("E. census — 80 key mục A ∪ 5 key mục C = ĐÚNG 85 key của PAYROLL_ROUTE_PAIRS", () => {
+    it("PAYROLL_ROUTE_PAIRS giữ đủ 85 key (neo cho toàn bộ census)", () => {
       // S15-PAYROLL-BE-4: +19 route track C (059–077) ⇒ 58 → 77.
-      // S15-PAYROLL-BE-5: +5 route track D phần 1 (078–082) ⇒ 82 (PDF 083–085 = BE-5B).
-      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(82);
+      // S15-PAYROLL-BE-5: +5 route track D phần 1 (078–082) ⇒ 82.
+      // S15-PAYROLL-BE-5B: +3 route PDF (083 · 084 Own · 085) ⇒ 85.
+      expect(Object.keys(PAYROLL_ROUTE_PAIRS).length).toBe(85);
     });
 
-    it("ROUTES = 78 key, EXEMPT_KEYS = 4 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
+    it("ROUTES = 80 key, EXEMPT_KEYS = 5 key, hợp lại KHỚP HAI CHIỀU bảng hằng", () => {
       const floorKeys = Object.keys(ROUTES).sort();
-      expect(floorKeys.length).toBe(78);
-      expect(EXEMPT_KEYS.length).toBe(4);
+      expect(floorKeys.length).toBe(80);
+      expect(EXEMPT_KEYS.length).toBe(5);
       expect(
         [...floorKeys, ...EXEMPT_KEYS].sort(),
         "ROUTES ∪ EXEMPT_KEYS lệch PAYROLL_ROUTE_PAIRS — route mới mọc lên chưa được xếp vào bảng",
@@ -878,6 +917,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (3
       // S15-PAYROLL-BE-2 +6 cặp track B: view/manage × salary-component · payroll-template · statutory-rate.
       // S15-PAYROLL-BE-4 +8 cặp track C: payroll-advance ×4 · payment-batch ×2 · payroll-budget ×2 ⇒ 32.
       // S15-PAYROLL-BE-5 +1 cặp track D: view:payroll-report ⇒ 33.
+      // S15-PAYROLL-BE-5B: 083/084/085 dùng lại cặp có sẵn (PAY-DEC-019) ⇒ vẫn 33.
       // `('access','payroll')` KHÔNG gác route nào ⇒ 17 cặp SPEC-11 §11.1 nhưng 16 cặp có route.
       expect(ALL_PAIRS.length).toBe(33);
       const sensitiveCount = ALL_PAIRS.filter((p) => p.isSensitive).length;

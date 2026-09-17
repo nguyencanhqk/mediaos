@@ -14,7 +14,11 @@ import { decideBatch, toBatchFailure } from "./payroll-payslip-pdf-batch.decisio
 import { PayrollAccessService } from "./payroll-access.service";
 import { payslipPdfFileName } from "./payroll-payslip-pdf.document-input";
 import { PayrollPayslipPdfRepository } from "./payroll-payslip-pdf.repository";
-import { PAYROLL_FILE_MODULE } from "./payroll-payslip-pdf.service";
+import {
+  PAYROLL_FILE_MODULE,
+  PAYSLIP_PDF_BATCH_ENTITY,
+  PAYSLIP_PDF_BATCH_EVENT,
+} from "./payroll-pdf.const";
 import {
   PAYROLL_ERR,
   payrollConflict,
@@ -23,9 +27,6 @@ import {
   payrollUnprocessable,
 } from "./payroll.errors";
 import type { PayrollRequestUser } from "./payroll.types";
-
-export const PAYSLIP_PDF_BATCH_ENTITY = "payslip-pdf-batch";
-export const PAYSLIP_PDF_BATCH_EVENT = "payroll.payslip_pdf_batch.requested";
 
 /** Trần tiêm qua provider — int dùng trần nhỏ, unit giữ biên trên hằng thật (plan §0b). */
 export const PAYSLIP_PDF_BATCH_LIMITS = Symbol("PAYSLIP_PDF_BATCH_LIMITS");

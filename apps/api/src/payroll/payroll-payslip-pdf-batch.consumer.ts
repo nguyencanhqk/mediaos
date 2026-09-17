@@ -8,13 +8,13 @@ import type { ServerFileRow } from "../foundation/files/server-file.repository";
 import { buildPayslipPdfDocument, type PayslipPdfInput } from "./payslip-pdf.document";
 import { PayslipPdfRenderer } from "./payslip-pdf.renderer";
 import { PayrollAccessService } from "./payroll-access.service";
-import {
-  PAYSLIP_PDF_BATCH_ENTITY,
-  PAYSLIP_PDF_BATCH_EVENT,
-} from "./payroll-payslip-pdf-batch.service";
 import { payslipZipEntryName, toPayslipPdfInput } from "./payroll-payslip-pdf.document-input";
 import { PayrollPayslipPdfRepository } from "./payroll-payslip-pdf.repository";
-import { PAYROLL_FILE_MODULE } from "./payroll-payslip-pdf.service";
+import {
+  PAYROLL_FILE_MODULE,
+  PAYSLIP_PDF_BATCH_ENTITY,
+  PAYSLIP_PDF_BATCH_EVENT,
+} from "./payroll-pdf.const";
 import { PayrollPeopleRepository } from "./payroll-people.repository";
 import type { PayslipItemRow } from "./payroll-payslips.repository";
 
@@ -48,6 +48,8 @@ class BatchTimeoutError extends Error {
  *   khoản đã xoá ⇒ `Failed{forbidden}`.
  * - Đọc trong MỘT tx ngắn, sinh PDF NGOÀI tx, nhả event loop sau mỗi phiếu, trần thời gian < reaper outbox.
  * - Lỗi sinh/ghi ⇒ `Failed` và KHÔNG ném lại (không retry mù). Ghi `Failed` mà lỗi ⇒ NÉM để outbox thử lại.
+ * - Lỗi lúc ĐỌC (khác 403) ⇒ `Failed{generation-failed}` rồi NÉM (outbox ghi nhận lỗi; lượt giao lại thấy hàng
+ *   không còn Pending nên bỏ qua) — plan §8.2 #2.
  */
 @Injectable()
 export class PayrollPayslipPdfBatchConsumer implements OnModuleInit {
@@ -77,7 +79,7 @@ export class PayrollPayslipPdfBatchConsumer implements OnModuleInit {
       this.logger.warn(`event ${ctx.eventId}: payload thiếu fileId hợp lệ — bỏ qua`);
       return;
     }
-    const loaded = await this.load(ctx.companyId, fileId);
+    const loaded = await this.loadOrFail(ctx.companyId, fileId);
     if (loaded.kind === "skip") {
       if (loaded.reason === "missing") {
         this.logger.warn(`event ${ctx.eventId}: không thấy lô PDF ${fileId} của tenant — bỏ qua`);
@@ -104,9 +106,21 @@ export class PayrollPayslipPdfBatchConsumer implements OnModuleInit {
     } catch (err) {
       const failure: PayslipPdfBatchFailure =
         err instanceof BatchTimeoutError ? "timeout" : "generation-failed";
-      const name = err instanceof Error ? err.name : typeof err;
-      this.logger.error(`lô PDF ${fileId} hỏng (${name}) — đánh dấu Failed{${failure}}`);
+      this.logger.error(`lô PDF ${fileId} hỏng (${errorName(err)}) — đánh dấu Failed{${failure}}`);
       await this.markFailed(ctx.companyId, fileId, failure);
+    }
+  }
+
+  private async loadOrFail(companyId: string, fileId: string): Promise<Loaded> {
+    try {
+      return await this.load(companyId, fileId);
+    } catch (err) {
+      this.logger.error(
+        `lô PDF ${fileId} đọc dữ liệu lỗi (${errorName(err)}) — đánh dấu Failed{generation-failed} rồi ném lại`,
+      );
+      // Ghi Failed mà lỗi ⇒ lỗi đó nổi lên (hàng còn Pending — outbox chạy lại cả lượt).
+      await this.markFailed(companyId, fileId, "generation-failed");
+      throw err;
     }
   }
 
@@ -177,10 +191,19 @@ export class PayrollPayslipPdfBatchConsumer implements OnModuleInit {
     failure: PayslipPdfBatchFailure,
   ): Promise<void> {
     // Lỗi ở đây NÉM ra ⇒ outbox thử lại event (hàng còn Pending) — không nuốt.
-    await this.db.withTenant(companyId, (tx) =>
+    const updated = await this.db.withTenant(companyId, (tx) =>
       this.files.markFailedTx(tx, companyId, fileId, failure),
     );
+    if (updated === 0) {
+      this.logger.warn(
+        `lô PDF ${fileId} không còn Pending khi ghi Failed{${failure}} — lượt khác đã chốt/xoá, bỏ qua`,
+      );
+    }
   }
+}
+
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : typeof err;
 }
 
 function groupItems(items: readonly PayslipItemRow[]): Map<string, PayslipItemRow[]> {

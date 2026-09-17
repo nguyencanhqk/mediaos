@@ -47,7 +47,6 @@ const hasStorage = !!process.env.S3_ENDPOINT && !!process.env.S3_BUCKET;
 const hasLaneDb = hasDb && !!process.env.LANE_DB && hasStorage;
 const LOGIN_PW = loginPasswordFixture("s15payrollbe5bpdf");
 const EMP_NAME = "Nguyễn Thị Ánh Tuyết";
-const COMPANY_NAME = "Công ty Cổ phần Ánh Dương";
 
 type Actor = { id: string; token: string };
 
@@ -122,7 +121,9 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
     A = await seedCompany(direct, "be5bpdf");
     B = await seedCompany(direct, "be5bpdfb");
     companyIds.push(A.companyId, B.companyId);
-    await direct.query(`UPDATE companies SET name = $2 WHERE id = $1`, [A.companyId, COMPANY_NAME]);
+    // KHÔNG đổi `companies.name`: lọc `NOT_FIXTURE_TENANT` (`c.name = 'Company ' || c.slug`) của các spec bất biến
+    // chạy song song dựa vào tên gốc để loại tenant fixture. Chữ có dấu của tên công ty đã phủ ở unit
+    // `payslip-pdf.document.spec.ts`.
 
     const mk = async (t: SeededTenant, label: string, grant: (id: string) => Promise<void>) => {
       const email = `${label}@${t.slug}.test`;
@@ -273,8 +274,10 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
     const pdf = await inspectPdf(await fetchBytes(dto.url));
     const text = normalizePdfText(pdf.text);
     expect(pdf.hasEmbeddedRoboto).toBe(true);
+    // Slug fixture có dấu gạch ⇒ pdfmake được phép ngắt dòng sau «-» và bản trích chèn khoảng trắng ở đó
+    // (tuỳ độ rộng slug ngẫu nhiên) ⇒ so tên công ty KHÔNG tính khoảng trắng.
+    expect(text.replace(/\s+/g, "")).toContain(`Company${A.slug}`);
     for (const needle of [
-      COMPANY_NAME,
       "PHIẾU LƯƠNG THÁNG 03/2093",
       EMP_NAME,
       "NV-0042",

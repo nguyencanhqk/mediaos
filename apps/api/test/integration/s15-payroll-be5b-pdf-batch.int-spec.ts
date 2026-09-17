@@ -8,7 +8,9 @@
  *    `Idempotency-Key`) ⇒ 200 + url phản ánh trạng thái MỚI (O-8) ⇒ ZIP đủ entry, mỗi PDF đúng người;
  *  · người khác ⇒ lô riêng · thêm phiếu (vân tay đổi) ⇒ lô mới · `Failed` ⇒ 200 Failed, `retry` ⇒ lô mới ·
  *    `Pending` quá hạn ⇒ `stale` (B3c) · người yêu cầu mất cặp trước worker ⇒ `Failed{forbidden}`;
- *  · route file chung trên ZIP ⇒ 403.
+ *  · route file chung trên ZIP ⇒ 403 · gắn link thật lên ZIP ⇒ 400 · confirm lô Pending ⇒ 404 (plan §8.2 #3/#4).
+ *
+ * Lái `OutboxWorker` ⇒ giữ mutex outbox (S7-QA-OUTBOXPROBE-1, `test/helpers/outbox-worker-lock.ts`).
  *
  * GATE CỨNG `hasDb && LANE_DB` + object storage.
  */
@@ -26,13 +28,16 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { EventBus } from "../../src/events/event-bus";
 import { OutboxWorker } from "../../src/events/outbox-worker";
-import {
-  PAYSLIP_PDF_BATCH_EVENT,
-  PAYSLIP_PDF_BATCH_LIMITS,
-} from "../../src/payroll/payroll-payslip-pdf-batch.service";
+import { PAYSLIP_PDF_BATCH_LIMITS } from "../../src/payroll/payroll-payslip-pdf-batch.service";
+import { PAYSLIP_PDF_BATCH_EVENT } from "../../src/payroll/payroll-pdf.const";
 import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import { inspectPdf, normalizePdfText } from "../helpers/pdf-text";
 import {
   grantAllPayrollPairs,
@@ -68,6 +73,7 @@ type BatchBody = {
 describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
   let app: INestApplication;
   let direct: Pool;
+  let outboxLock: OutboxWorkerLock | undefined;
   const companyIds: string[] = [];
   let A: SeededTenant;
   let B: SeededTenant;
@@ -183,7 +189,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
     );
     fileAdmin = await mk("fileadmin", async (id) => {
       const roleId = await seedRole(direct, A.companyId, `b5bb-file-${tag}`);
-      for (const action of ["view", "download", "delete"]) {
+      for (const action of ["view", "download", "delete", "link", "upload"]) {
         const permId = await seedPermissionCatalog(direct, action, "foundation-file", false);
         await seedRolePermission(direct, roleId, permId, "ALLOW", "Company");
       }
@@ -211,9 +217,12 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
         approverId: bApp,
       })
     ).periodId;
-  }, 120_000);
+    // CUỐI beforeAll: boot + seed chạy song song với spec khác, chỉ thân test xếp hàng sau mutex outbox.
+    outboxLock = await acquireOutboxWorkerLock("s15-payroll-be5b-pdf-batch");
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
+    await outboxLock?.release();
     if (direct) await cleanupTenants(direct, companyIds);
     await direct?.end();
     await app?.close();
@@ -340,6 +349,45 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
     const dl = await http().get(`/foundation/files/${lot.fileId}/download-url`).set(hdr);
     const del = await http().delete(`/foundation/files/${lot.fileId}`).set(hdr);
     expect([meta.status, dl.status, del.status]).toEqual([403, 403, 403]);
+  });
+
+  it("gắn link THẬT lên ZIP (admin có `link:foundation-file`) ⇒ 400 LINK, số link sống giữ nguyên", async () => {
+    const lot = (await post(officer.token, periodMain)).body.data as BatchBody;
+    const liveLinks = () =>
+      count(
+        `SELECT count(*)::int AS n FROM file_links
+          WHERE company_id = $1 AND file_id = $2 AND deleted_at IS NULL`,
+        [A.companyId, lot.fileId],
+      );
+    const before = await liveLinks();
+    const res = await http()
+      .post(`/foundation/files/${lot.fileId}/links`)
+      .set("Authorization", `Bearer ${fileAdmin.token}`)
+      .send({
+        moduleCode: "FOUNDATION",
+        entityType: "Employee",
+        entityId: randomUUID(),
+        linkType: "Attachment",
+      });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.error.code).toBe("FOUNDATION-FILE-ERR-LINK");
+    expect(await liveLinks()).toBe(before);
+  });
+
+  it("confirm lô Pending qua route file chung (admin có `upload:foundation-file`) ⇒ 404, lô giữ Pending + vân tay", async () => {
+    const period = await newPeriod("2094-09", payees.slice(0, 1));
+    const lot = (await post(officer.token, period)).body.data as BatchBody;
+    expect(lot.status).toBe("Pending");
+    const res = await http()
+      .post(`/foundation/files/${lot.fileId}/confirm`)
+      .set("Authorization", `Bearer ${fileAdmin.token}`)
+      .send({});
+    expect(res.status, JSON.stringify(res.body)).toBe(404);
+    const row = await direct.query(
+      `SELECT upload_status, metadata ? 'fingerprint' AS has_fp FROM files WHERE id = $1`,
+      [lot.fileId],
+    );
+    expect(row.rows[0]).toMatchObject({ upload_status: "Pending", has_fp: true });
   });
 
   it("thêm phiếu vào kỳ (vân tay đổi) ⇒ lô MỚI", async () => {

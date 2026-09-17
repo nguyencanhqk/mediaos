@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PAYSLIP_PDF_FILE_TTL_SEC, type PayslipPdfDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
@@ -15,12 +15,23 @@ import { PayrollPeopleRepository } from "./payroll-people.repository";
 import { payslipPdfFileName, toPayslipPdfInput } from "./payroll-payslip-pdf.document-input";
 import { PayrollPayslipPdfRepository } from "./payroll-payslip-pdf.repository";
 import { PayrollPayslipsRepository } from "./payroll-payslips.repository";
+import { PAYROLL_FILE_MODULE, PAYSLIP_PDF_ENTITY } from "./payroll-pdf.const";
 import { payrollNotFound } from "./payroll.errors";
 import type { PayrollActor, PayrollRequestUser } from "./payroll.types";
 
-/** Module + entity của link sở hữu tệp PDF một phiếu (resolver PAYROLL chặn route file chung). */
-export const PAYROLL_FILE_MODULE = "PAYROLL";
-export const PAYSLIP_PDF_ENTITY = "payslip-pdf";
+/**
+ * Tệp vừa giữ chỗ + ghi xong mà không chốt/đọc lại được — chỉ request này ghi hàng đó nên đây là bất thường:
+ * trả 500, KHÔNG cấp URL mù (plan BE-5B §8.2 #8).
+ */
+export class PayslipPdfDeliveryError extends Error {
+  constructor(
+    readonly fileId: string,
+    readonly reason: "not-pending-after-store" | "missing-after-store",
+  ) {
+    super(`payslip-pdf: tệp ${fileId} lỗi giao (${reason})`);
+    this.name = "PayslipPdfDeliveryError";
+  }
+}
 
 type Phase1 =
   | { kind: "ready"; file: ServerFileRow; url: IssuedServerFileUrl }
@@ -37,6 +48,8 @@ type Phase1 =
  */
 @Injectable()
 export class PayrollPayslipPdfService {
+  private readonly logger = new Logger(PayrollPayslipPdfService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: PayrollAccessService,
@@ -95,11 +108,10 @@ export class PayrollPayslipPdfService {
           url: await this.files.issueUrlTx(tx, companyId, user.id, live),
         };
       }
-      const [items, names, companyName] = [
-        await this.payslips.itemsByPayslipIdTx(tx, companyId, payslipId),
-        await this.people.namesByUserIdsTx(tx, actor, [row.user_id]),
-        await this.pdfRepo.companyNameTx(tx, companyId),
-      ];
+      // Cùng một `tx` ⇒ tuần tự (một kết nối không chạy song song câu lệnh).
+      const items = await this.payslips.itemsByPayslipIdTx(tx, companyId, payslipId);
+      const names = await this.people.namesByUserIdsTx(tx, actor, [row.user_id]);
+      const companyName = await this.pdfRepo.companyNameTx(tx, companyId);
       const fileName = payslipPdfFileName(row.period_month, "pdf");
       const reserved = await this.files.reserveTx(tx, {
         companyId,
@@ -117,10 +129,7 @@ export class PayrollPayslipPdfService {
 
     const bytes = await this.renderer.render(buildPayslipPdfDocument(phase1.input));
     const stored = await this.files.store(companyId, phase1.reserved, "pdf", bytes);
-    if (!stored) {
-      // Hàng vừa giữ chỗ chỉ có request này ghi — mất trạng thái Pending là bất thường, không trả URL mù.
-      throw new Error(`payslip-pdf: tệp ${phase1.reserved.fileId} không còn Pending sau khi ghi`);
-    }
+    if (!stored) throw this.deliveryError(phase1.reserved.fileId, "not-pending-after-store");
 
     return this.db.withTenant(companyId, async (tx) => {
       const file = await this.files.findByIdTx(
@@ -129,10 +138,18 @@ export class PayrollPayslipPdfService {
         phase1.reserved.fileId,
         PAYROLL_FILE_MODULE,
       );
-      if (!file) throw new Error(`payslip-pdf: không đọc lại được tệp ${phase1.reserved.fileId}`);
+      if (!file) throw this.deliveryError(phase1.reserved.fileId, "missing-after-store");
       const url = await this.files.issueUrlTx(tx, companyId, user.id, file);
       return toDto(file.id, phase1.fileName, url);
     });
+  }
+
+  private deliveryError(
+    fileId: string,
+    reason: PayslipPdfDeliveryError["reason"],
+  ): PayslipPdfDeliveryError {
+    this.logger.error(`tệp PDF phiếu lương ${fileId} lỗi giao (${reason}) — không cấp URL`);
+    return new PayslipPdfDeliveryError(fileId, reason);
   }
 }
 

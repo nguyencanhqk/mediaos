@@ -130,6 +130,8 @@ Cảnh báo nhận (rẻ):
 
 ## 8. Bằng chứng + việc còn lại (17/09/2026 — CHECKPOINT, chưa PR; owner chốt vá ở phiên mới vì hook chi phí ~$860)
 
+> **§8.4 (phiên 2, 17/09) — ĐÃ VÁ đủ 12 mục §8.2/§8.3** (không chạy lại reviewer — xem §8.4 cuối file).
+
 ### 8.1 Đã chạy (lane `mediaos_be5b`, MinIO thật)
 
 | Cổng                                 | Kết quả                                                                                                                                        |
@@ -167,3 +169,27 @@ secret-literals · lint · typecheck · migration-no-drop · tooling ✅ · FE/c
 9. `test/helpers/outbox-worker-lock.unit-spec.ts` — luật S7-QA-OUTBOXPROBE-1: spec lái `OutboxWorker` PHẢI giữ mutex. Vá: `s15-payroll-be5b-pdf-batch.int-spec.ts` gọi `acquireOutboxWorkerLock` (xem `test/helpers/outbox-worker-lock.ts`) quanh `drain()`.
 10. `test/integration/s13-payroll-db1-invariants.int-spec.ts` D1 (48 ≠ 32) — ROOT-CAUSE: `s15-payroll-be5b-pdf.int-spec.ts` `UPDATE companies SET name = 'Công ty Cổ phần Ánh Dương'` ⇒ lọc `NOT_FIXTURE_TENANT` (`c.name = 'Company ' || c.slug`) không nhận ra tenant fixture ⇒ role của spec chạy song song bị đếm. Vá: KHÔNG đổi tên công ty; assert `Company ${A.slug}` (chữ có dấu của tên công ty đã có ở unit `payslip-pdf.document.spec.ts`).
     11–12. `test/integration/s13-payroll-qa1-scope-floor.int-spec.ts` mục E (82 ≠ 85; ROUTES ∪ EXEMPT lệch) — thêm `payslipPdf` + `payslipPdfBatch` vào ROUTES (mục A — kèm ca HTTP sàn scope Department ⇒ 403 như các route khác của file) và `mePayslipPdf` vào EXEMPT_KEYS (mục C — Own); nâng neo 82 → 85 (78 → 80 · 4 → 5); cập nhật tiêu đề (32 + 3).
+
+### 8.4 Phiên 2 (17/09/2026) — vá đủ §8.2 + §8.3, không chạy lại reviewer
+
+| #     | Vá                                                                                                                                                                                                          | Bằng chứng                                                              |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 1     | `eligibleWhere()` MỘT nguồn cho liệt kê · `isStillEligibleTx` (tx ngắn NGAY TRƯỚC `storage.delete`) · câu xoá mềm lặp CÙNG vị từ + mốc; object đã xoá mà hàng hết đủ điều kiện ⇒ `warn`                     | unit RED→GREEN 3 ca mới (13/13)                                         |
+| 2     | consumer `loadOrFail`: lỗi đọc ⇒ `error(fileId, err.name)` + `Failed{generation-failed}` rồi NÉM (ca cũ «lỗi khác 403 không đánh Failed» đổi theo plan)                                                     | unit RED→GREEN (20/20)                                                  |
+| 3     | `FileService.link()`: `file.isTemporary` ⇒ 400 `FOUNDATION-FILE-ERR-LINK`                                                                                                                                   | unit + int 085 (admin có `link:foundation-file` ⇒ 400, link giữ nguyên) |
+| 4     | `FileService.confirmUpload()`: `row.isTemporary` ⇒ 404 sentinel                                                                                                                                             | unit + int 085 (lô Pending ⇒ 404, vẫn Pending + `fingerprint`)          |
+| 5     | Subquery viết chữ `files.id`/`files.is_temporary`. Đo: drizzle 0.45.2 VỐN render `"files"."id"` ở cả SELECT lẫn UPDATE ⇒ phát hiện của reviewer không đúng với bản đang dùng; giữ chữ để SQL tường minh     | `toSQL()` hai ngữ cảnh                                                  |
+| 6     | `markFailed` chạm 0 hàng ⇒ `warn`                                                                                                                                                                           | unit                                                                    |
+| 7     | `payroll-pdf.const.ts` (4 hằng) · repository dùng `rowsOf` của `payroll-report.sql` · ba `await` tuần tự thường                                                                                             | typecheck                                                               |
+| 8     | `PayrollPayslipPdfService`: `Logger` + `PayslipPdfDeliveryError(reason)` cho hai nhánh sau-khi-ghi. Nợ giữ (không chặn PR): consumer chưa loại tài khoản khoá; key lệch tenant ⇒ `failed` lặp               | —                                                                       |
+| 9     | int 085 giữ `acquireOutboxWorkerLock` (cuối `beforeAll`, trả đầu `afterAll`)                                                                                                                                | `outbox-worker-lock.unit-spec` 2/2                                      |
+| 10    | int 083/084 KHÔNG đổi `companies.name`; so `Company${slug}` bỏ khoảng trắng (pdfmake ngắt dòng sau «-» của slug ⇒ bản trích chèn khoảng trắng — đỏ ngắt quãng ở lượt check đầu)                             | int 13/13 · D1 44/44                                                    |
+| 11–12 | scope-floor: `payslipPdf` + `payslipPdfBatch` vào ROUTES (id ma ⇒ ALLOW dừng 404, không phụ thuộc storage) · `mePayslipPdf` vào EXEMPT_KEYS (+ ca C 200 khi có storage) · 2 ca Department · neo 85 / 80 / 5 | int xanh                                                                |
+
+**Bẩn lane:** D1 đỏ (48 ≠ 32) lần đầu do tenant fixture SÓT từ lượt bị ngắt phiên 1 (tên còn «Công ty Cổ phần Ánh Dương») ⇒ trả tên `Company <slug>` trên `mediaos_be5b` (DB test) ⇒ xanh.
+
+**Cổng (lane `mediaos_be5b`, MinIO thật):**
+
+- `harness/check.sh --lane-db=be5b`: secret-literals · lint · typecheck · migration-no-drop · tooling ✅ · FE/contracts/ui/web-core ✅ · API 722/722 file chạy, 5 ca đỏ ⇒ (a) 083 = mục 10 ở trên (đã vá, chạy lại xanh); (b) 4 ca `s15-payroll-be3-migration` M2/M4/M6/M7 (`tgenabled 'D'`): trigger đóng băng `salary_components` bị spec KHÁC tắt cùng lúc (6 spec có `DISABLE TRIGGER`) — WO này không đụng bảng/trigger đó; chạy riêng **xanh** ⇒ race có sẵn giữa spec, ghi nợ, không chặn PR.
+- Chạy lại riêng: 083/084 13/13 · 085 17/17 · `temp-file-cleanup` 14/14 · scope-floor 180/180 · D1 44/44 · be3-migration xanh.
+- `test:cov:payroll` (đã thêm 2 int-spec BE-5B): crash hạ tầng `ERR_IPC_CHANNEL_CLOSED` 2/2 lượt (0 test đỏ) ⇒ đo coverage CÓ MỤC TIÊU cho mã mới (unit + 3 int-spec): **98,63 % stmt · 93,7 % branch · 97,59 % func** (thấp nhất `payroll-payslip-pdf.service.ts` 90,24 % — nhánh lỗi sau-khi-ghi).

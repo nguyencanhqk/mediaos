@@ -1,8 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import type { FilePermissionInput } from "../foundation/files/file-policy.types";
 import type { FileOwnerPermissionResolver } from "../foundation/files/resolvers/file-owner-permission-resolver";
-import { PAYSLIP_PDF_BATCH_ENTITY } from "./payroll-payslip-pdf-batch.service";
-import { PAYROLL_FILE_MODULE, PAYSLIP_PDF_ENTITY } from "./payroll-payslip-pdf.service";
+import {
+  PAYROLL_FILE_MODULE,
+  PAYSLIP_PDF_BATCH_ENTITY,
+  PAYSLIP_PDF_ENTITY,
+} from "./payroll-pdf.const";
 
 /**
  * S15-PAYROLL-BE-5B — resolver file-policy cho tệp PDF/ZIP phiếu lương (plan E-5 · §0b).

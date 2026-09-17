@@ -256,6 +256,10 @@ export class FileService {
       this.fileRepo.findByIdTx(user.companyId, fileId, tx),
     );
     if (!row) throw new NotFoundException("File không tồn tại");
+    // S15-PAYROLL-BE-5B (plan §8.2 #4): tệp TẠM do hệ thống sinh (PDF/ZIP) tự chốt qua ServerFileService, KHÔNG
+    // đi pha confirm của client. Route chung không qua resolver ⇒ chặn ở đây, trả 404 sentinel như tệp vắng
+    // (không lộ sự tồn tại, không để ghi đè trạng thái/metadata của lô đang sinh).
+    if (row.isTemporary) throw new NotFoundException("File không tồn tại");
 
     // Idempotent: đã Uploaded → trả trạng thái hiện tại (confirm gọi lại vô hại). Non-Pending khác → 409.
     if (row.uploadStatus === "Uploaded") {
@@ -586,6 +590,14 @@ export class FileService {
         throw new BadRequestException({
           code: FOUNDATION_FILE_ERROR_CODES.INFECTED,
           message: `${FOUNDATION_FILE_ERROR_CODES.INFECTED}: không thể link file đang ở trạng thái Infected.`,
+        });
+      }
+      // S15-PAYROLL-BE-5B (plan §8.2 #3): tệp TẠM do hệ thống sinh chỉ mang link sở hữu `Export` của module
+      // sinh ra nó. Link thật gắn thêm khiến TEMP_FILE_CLEANUP giữ tệp mãi (phá hạn tệp tạm — owner O-7).
+      if (file.isTemporary) {
+        throw new BadRequestException({
+          code: FOUNDATION_FILE_ERROR_CODES.LINK,
+          message: `${FOUNDATION_FILE_ERROR_CODES.LINK}: tệp tạm do hệ thống sinh không gắn link được.`,
         });
       }
 
