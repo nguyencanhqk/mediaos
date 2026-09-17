@@ -2,6 +2,21 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-17 (l) — **S15-PAYROLL-FE-2 ĐÃ MERGE master** (#515 → `580b2023`, owner uỷ quyền `--admin`) ✅
+
+**Bắt đầu phiên sau ở đây:** master đã có track B FE (PAY-SCREEN-009/010/011 + chi tiết kỳ v2 + breakdown phiếu theo thành phần). CI #515 xanh toàn bộ trước merge (Build app 6m28s · Lint·Typecheck·Migrate·RLS 14m1s · gitleaks · audit · tooling). Nhánh đã xoá; STATUS regen + push master SAU merge (cách làm của (k) giữ nguyên — PR không `CONFLICTING`). Không PR PAYROLL nào mở. Việc kế: **`S15-PAYROLL-BE-5`** (7 báo cáo + dữ liệu Tổng quan + PDF phiếu) → FE-4 → QA-1. **Đọc memory `s15-payroll-fe2-wave-state` TRƯỚC.** Bằng chứng: `docs/plans/S15-PAYROLL-FE-2.md` §7; quyết định D1–D14 ở §2.
+
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:**
+
+1. 🔴 **15 kind của máy công thức** (`formula/formula.errors.ts`) BE phát qua `payrollDetails(err.kind, …)` với BIẾN ⇒ census 3 hình mù; trước FE-2 mọi công thức sai hiện «Có lỗi xảy ra». Nay có `PAYROLL_FORMULA_ERROR_KINDS` + census **hình 4** + `payrollErrorText(t, info)` (nội suy vị trí/mã/chu trình). QA-1 fuzz công thức: assert chữ, không chỉ mã.
+2. **done_when «sửa công thức hệ thống có hộp xác nhận» lỗi thời** (BE-2 M1: công thức `is_system` bất biến) — D5 áp hộp xác nhận cho thành phần có `usedByTemplates`.
+3. **Trang soạn cục bộ không được re-sync mù theo `query.data`** — TS reviewer bắt HIGH: «Ngưng dùng» mẫu (invalidate `catalog.allOf()`) xoá sạch bảng đang sửa. Vá bằng `baseline` + đồng bộ có điều kiện; ghim 2 ca + đột biến đỏ.
+4. Heredoc Python dài qua Bash tool có thể «unexpected EOF» — ghi script ra scratchpad rồi chạy.
+
+**Nợ để lại:** `apps/app/src/i18n/locales/vi/payroll.ts` 879 dòng (825 trước WO) · ca render dialog xem trước 054 · tổng cột là tổng TRANG khi kỳ > 20 dòng (API không có tổng theo cột toàn kỳ) · nợ FE-3 (T4–T6 → QA-1, `ConfirmDialog` thiếu `children`, nút xoá ngân sách) vẫn còn.
+
+**Chi phí phiên: hook báo ~$1.15k** (≈$204 lúc code xong; phần lớn còn lại phát sinh quanh lượt reviewer nền + chờ CI — owner cho làm tiếp ở mốc $204). **Bài học:** reviewer Sonnet MỘT lượt đủ cho LIGHT gate và bắt được bug thật; nhưng chi phí phiên nhảy vọt trong lúc chờ nền — WO FE sau nên chốt «code + test + PR» trong một mạch, hạn chế lượt chờ dài trong context lớn.
+
 ## Phiên 2026-09-16 (k) — **S15-PAYROLL-FE-3 ĐÃ MERGE master** (#514 → `51292524`, owner uỷ quyền `--admin`) ✅
 
 **Bắt đầu phiên sau ở đây:** master đã có track C FE (PAY-SCREEN-012/013/014 + 017 «Tạm ứng của tôi» + dialog import). CI #514 xanh TOÀN BỘ trước khi merge (Build app 6m27s · Lint·Typecheck·Migrate·RLS 18m4s · gitleaks · pnpm audit · tooling). Nhánh `feat/s15-payroll-fe-3` đã xoá cả local lẫn remote; `docs/STATUS.md` đã regen + push master (`f1a932f7`). Không PR PAYROLL nào mở. Việc kế theo backlog: **`S15-PAYROLL-FE-2`** (track B: 009/010/011) hoặc **`S15-PAYROLL-BE-5`** (7 báo cáo + PDF). **Đọc memory `s15-payroll-fe3-wave-state` TRƯỚC.** Bằng chứng đủ để người review chỉ đọc bảng: `docs/plans/S15-PAYROLL-FE-3.md` §7; quyết định D1–D12 ở §2.
