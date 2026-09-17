@@ -17,7 +17,7 @@ import { Download, Loader2 } from "lucide-react";
 import { useCanExact, attendanceApi, mapApiErrorToUi } from "@mediaos/web-core";
 import { Button } from "@mediaos/ui";
 import { ATT_ENGINE_PAIRS } from "./constants";
-import { triggerBlobDownload } from "./download-blob";
+import { triggerBlobDownload } from "@/lib/download-blob";
 
 /** Query xuất CSV — suy TRỰC TIẾP từ chữ ký attendanceApi.exportCompanyRecords (DRY, không drift contract). */
 type ExportQuery = NonNullable<Parameters<typeof attendanceApi.exportCompanyRecords>[0]>;

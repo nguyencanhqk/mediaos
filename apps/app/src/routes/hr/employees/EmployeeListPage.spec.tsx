@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, ApiError } from "@mediaos/web-core";
 import { hrApi } from "@mediaos/web-core";
 import { EmployeeListPage } from "./EmployeeListPage";
-import { triggerBlobDownload } from "./download-blob";
+import { triggerBlobDownload } from "@/lib/download-blob";
 import type { HrEmployeeListResponse } from "@mediaos/contracts";
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 // Ranh giới I/O tải file — mock để assert gọi mà không đụng DOM download thật.
-vi.mock("./download-blob", () => ({ triggerBlobDownload: vi.fn() }));
+vi.mock("@/lib/download-blob", () => ({ triggerBlobDownload: vi.fn() }));
 const mockDownload = triggerBlobDownload as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------

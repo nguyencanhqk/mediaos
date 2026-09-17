@@ -12,7 +12,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskFileApi } from "@mediaos/web-core";
 import type { TaskFileDto } from "@mediaos/contracts";
 import { TaskFilePanel } from "./TaskFilePanel";
-import { triggerBlobDownload } from "./download-blob";
+import { triggerBlobDownload } from "@/lib/download-blob";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -29,7 +29,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   };
 });
 
-vi.mock("./download-blob", () => ({ triggerBlobDownload: vi.fn() }));
+vi.mock("@/lib/download-blob", () => ({ triggerBlobDownload: vi.fn() }));
 const mockTriggerDownload = triggerBlobDownload as ReturnType<typeof vi.fn>;
 
 function renderWithQuery(ui: React.ReactElement) {

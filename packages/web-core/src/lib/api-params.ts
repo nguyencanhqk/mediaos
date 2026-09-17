@@ -12,11 +12,7 @@
  * Thêm 1 cặp key-value vào URLSearchParams (đệ quy cho array + object).
  * @internal
  */
-function appendQueryParam(
-  params: URLSearchParams,
-  key: string,
-  value: unknown,
-): void {
+function appendQueryParam(params: URLSearchParams, key: string, value: unknown): void {
   if (value === undefined || value === null || value === "") return;
 
   if (Array.isArray(value)) {
@@ -25,9 +21,7 @@ function appendQueryParam(
   }
 
   if (typeof value === "object") {
-    for (const [childKey, childValue] of Object.entries(
-      value as Record<string, unknown>,
-    )) {
+    for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
       appendQueryParam(params, `${key}[${childKey}]`, childValue);
     }
     return;

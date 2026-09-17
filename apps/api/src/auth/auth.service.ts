@@ -87,9 +87,10 @@ const uuidSchema = z.string().uuid();
 const UNIFORM_LOGIN_ERROR = "Thông tin đăng nhập không hợp lệ.";
 /**
  * AUTH-FIX-1: ALLOW-LIST trạng thái được phép cấp token (login/refresh/2FA). Fail-closed — CHỈ 'active'
- * mới qua; mọi giá trị khác ('suspended' và mọi trạng thái tương lai vd 'locked'/'pending') bị CHẶN. Dùng
- * allow-list (không deny-list 'suspended') để trạng thái mới mặc định KHÔNG lọt. Khớp users.status DEFAULT
- * 'active' (mig 0002) + CHECK ('active'|'suspended', mig 0430). reason chỉ vào audit, KHÔNG vào HTTP body.
+ * mới qua; mọi giá trị khác ('invited' · 'suspended' · 'locked' và mọi trạng thái thêm sau) bị CHẶN. Dùng
+ * allow-list (không deny-list từng giá trị) để trạng thái mới mặc định KHÔNG lọt. Khớp users.status DEFAULT
+ * 'active' + CHECK `users_status_chk` = 'active'|'invited'|'suspended' (mig 0002) nới thêm 'locked' (mig 0450).
+ * reason chỉ vào audit, KHÔNG vào HTTP body.
  */
 const ACTIVE_USER_STATUS = "active";
 function isAuthorizedStatus(status: string): boolean {

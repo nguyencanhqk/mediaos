@@ -5,7 +5,11 @@
  * có side-effect (cập nhật hồ sơ công ty, đổi giá trị cấu hình nhạy cảm) để tránh mutation vô ý.
  *
  * KHÔNG chứa/log giá trị nhạy cảm: caller chỉ truyền title/description an toàn (BẤT BIẾN #3).
+ *
+ * `children` (tuỳ chọn, S15-PAYROLL-DEBT-1) — thân hộp cho ô xác nhận phụ (vd «đã chi tất cả» ở hoàn tất
+ * đợt chi trả). Vắng ⇒ thân giữ như cũ.
  */
+import type { ReactNode } from "react";
 import { Button, Dialog } from "@mediaos/ui";
 
 export interface ConfirmDialogProps {
@@ -21,6 +25,7 @@ export interface ConfirmDialogProps {
   busyLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -34,6 +39,7 @@ export function ConfirmDialog({
   busyLabel,
   onConfirm,
   onCancel,
+  children,
 }: ConfirmDialogProps) {
   return (
     <Dialog
@@ -57,8 +63,8 @@ export function ConfirmDialog({
         </>
       }
     >
-      {/* Body giữ trống có chủ đích — nội dung nằm ở description (an toàn, không giá trị nhạy cảm). */}
-      <span className="sr-only">{title}</span>
+      {/* Không có children ⇒ body giữ trống có chủ đích — nội dung nằm ở description (an toàn). */}
+      {children ?? <span className="sr-only">{title}</span>}
     </Dialog>
   );
 }

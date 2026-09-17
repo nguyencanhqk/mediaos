@@ -17,7 +17,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 import { useAuthStore, attendanceApi, ApiError } from "@mediaos/web-core";
-import { triggerBlobDownload } from "./download-blob";
+import { triggerBlobDownload } from "@/lib/download-blob";
 import { ExportAttendanceButton } from "./ExportAttendanceButton";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -28,7 +28,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   };
 });
 
-vi.mock("./download-blob", () => ({ triggerBlobDownload: vi.fn() }));
+vi.mock("@/lib/download-blob", () => ({ triggerBlobDownload: vi.fn() }));
 
 const mockExport = attendanceApi.exportCompanyRecords as ReturnType<typeof vi.fn>;
 const mockDownload = triggerBlobDownload as ReturnType<typeof vi.fn>;

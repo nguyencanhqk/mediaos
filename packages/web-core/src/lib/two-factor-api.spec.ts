@@ -39,7 +39,9 @@ describe("twoFactorApi", () => {
     expect(res).toEqual({ enabled: true, required: false });
     const [url, init] = lastCall();
     expect(url).toContain("/auth/2fa/status");
-    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-access-token");
+    expect((init?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer test-access-token",
+    );
   });
 
   it("enroll() POST, parse otpauthUri + recoveryCodes", async () => {
@@ -67,7 +69,9 @@ describe("twoFactorApi", () => {
     const [url, init] = lastCall();
     expect(url).toContain("/auth/2fa/disable");
     expect(JSON.parse(init?.body as string)).toEqual({ password: "pw" });
-    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-access-token");
+    expect((init?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer test-access-token",
+    );
   });
 
   it("verifyLogin() POST /auth/2fa/verify (public — KHÔNG Bearer) parse tokens", async () => {
@@ -78,7 +82,10 @@ describe("twoFactorApi", () => {
     expect(res.accessToken).toBe("at");
     const [url, init] = lastCall();
     expect(url).toContain("/auth/2fa/verify");
-    expect(JSON.parse(init?.body as string)).toEqual({ challengeToken: "challenge-tok", code: "123456" });
+    expect(JSON.parse(init?.body as string)).toEqual({
+      challengeToken: "challenge-tok",
+      code: "123456",
+    });
     // public endpoint — không gắn Authorization
     expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBeUndefined();
   });

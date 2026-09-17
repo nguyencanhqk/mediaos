@@ -44,7 +44,7 @@ function downloadCandidatesCsv(rows: readonly CandidateListItemResponseDto[]): v
   }
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
   // KHÔNG có `document`/`URL` (SSR/test node chưa hỗ trợ) ⇒ no-op an toàn, KHÔNG ném (khuôn
-  // routes/hr/employees/download-blob.ts — bản sao cục bộ, giữ cô lập feature).
+  // lib/download-blob.ts — bản inline riêng vì revoke TRỄ, xem ghi chú ở lib).
   if (
     typeof document === "undefined" ||
     typeof URL === "undefined" ||

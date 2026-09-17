@@ -7,7 +7,7 @@ import type { PayrollWriteResultDto } from "@mediaos/contracts";
 import { PAYROLL_ADJUSTMENT_IMPORT_MAX_BYTES } from "@mediaos/contracts";
 import { Button, DataTable, Dialog, Input } from "@mediaos/ui";
 import { parsePayrollError, payrollErrorI18nKey } from "../payroll-errors";
-import { triggerBlobDownload } from "../../attendance/download-blob";
+import { triggerBlobDownload } from "@/lib/download-blob";
 
 const XLSX_RE = /\.xlsx$/i;
 

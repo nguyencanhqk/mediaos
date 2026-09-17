@@ -3,7 +3,6 @@ import {
   adjustPayrollLineSchema,
   bonusKindEnum,
   bonusPenaltyStatusEnum,
-  createBonusPenaltySchema,
   createPayrollPeriodSchema,
   createSalaryProfileSchema,
   inputSnapshotSchema,
@@ -14,10 +13,10 @@ import {
   payrollWriteResultSchema,
   payslipItemTypeEnum,
   payslipSchema,
-  rejectBonusPenaltySchema,
   rejectPayrollPeriodSchema,
   salaryProfileSchema,
 } from "./payroll";
+import { createBonusPenaltySchema, rejectBonusPenaltySchema } from "./payroll-bonus-penalties";
 
 /**
  * PAYROLL — Zod contract suite (SPEC-11 · DB-13 §7, mig `0564`).
