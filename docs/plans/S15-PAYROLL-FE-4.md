@@ -43,9 +43,10 @@ Ngoài phạm vi: widget DASH (→ `S15-PAYROLL-DASH-1`), ma trận allow/deny t
   `recharts`).
 - **D3 — `/payroll` là PAY-SCREEN-015, người thiếu cặp thì CHUYỂN HƯỚNG.** `ROUTE_REGISTRY` `payroll.overview`
   gate `access:payroll` + `view:payroll-report` (khớp mục sidebar — cổng test «sidebar = route»). Route
-  `/payroll` bọc `PayrollRootRoute`: đánh giá meta bằng `evaluateRouteFromStore`; `SHOW_403` ⇒ `navigate`
+  `/payroll` = vỏ route chỉ đòi `access:payroll` (meta nới cục bộ) + `PayrollRootEntry`: đánh giá meta bằng `evaluateRouteFromStore`; `SHOW_403` ⇒ `navigate`
   (replace) tới lá sidebar PAYROLL ĐẦU TIÊN mà người dùng mở được (hàm thuần `pickFirstAllowedPath`); không lá
-  nào ⇒ giữ trang 403 như cũ. Thẻ app vẫn `defaultRoute: /payroll/periods` (ca wiring cũ giữ nguyên).
+  nào ⇒ giữ trang 403 như cũ. Trang Tổng quan (kèm recharts) nạp LAZY bên trong entry — người bị chuyển
+  hướng không tải chunk biểu đồ. Thẻ app vẫn `defaultRoute: /payroll/periods` (ca wiring cũ giữ nguyên).
 - **D4 — 078 là MỘT lượt gọi cho cả 6 khối.** `done_when` «mỗi khối gác useCanExact(view-line)» viết trước
   BE-5: cổng thật của 078 là `view:payroll-report` (+ sàn Company, server). ⇒ một query, `enabled` =
   `useCanExact(overview)`; mỗi khối có skeleton/empty riêng, lỗi dùng chung một băng «Tải lại». Khối ngân sách
@@ -74,6 +75,16 @@ useCanExact(periodExport)` (BE assert CẢ HAI). 084: nút ở chi tiết «Phi�
   008). Có `lineTotals`/`componentTotals` ⇒ hàng tổng = TOÀN KỲ, nhãn «Tổng»; chưa về/lỗi ⇒ giữ tổng trang +
   nhãn «Tổng trang» như cũ (không bao giờ ghi «Tổng» cho số của một trang).
 - **D10 — i18n** track D ở file mới `locales/vi/payroll-reports.ts` spread vào `payroll.ts` (giữ < 800 dòng).
+- **D11 — dạng biểu đồ theo VIỆC của dữ liệu (dataviz), hai chỗ lệch chữ `done_when`:** (a) «donut cơ cấu» →
+  thanh ngang xếp hạng MỘT màu — 078 trả tới 8 khoản + «Khác» = 9 lớp, vượt trần màu phân loại; (b) «bar+line
+  theo đơn vị» → cột ngang thu nhập BQ, thấp/cao nhất/số người ở tooltip + bảng — «cột + đường» cần HAI trục
+  (lỗi biểu đồ số 1). «Gauge ngân sách» = meter ngang + mức bằng CHỮ + biểu tượng. Mỗi khối có nút «xem dạng
+  bảng» (lối tới giá trị không cần rê chuột). Token `--chart-1/2` (light `#0771a6`/`#eb6834`, dark
+  `#1b9ad0`/`#d95926`) qua bộ kiểm bảng màu ở CẢ HAI chế độ; `#1fa9e0` (brand dark) trượt dải sáng nên lùi một bậc.
+- **D12 — mở signed-URL**: `open-signed-url.ts` mở tab trắng TRONG click rồi gán URL; **không** truyền cờ
+  `noopener` vào `window.open` (theo chuẩn HTML hàm trả `null` ⇒ tab trắng không bao giờ được điều hướng) mà cắt
+  `tab.opener = null`. Popup bị chặn ⇒ điều hướng chính tab. ⚠️ `recruit/components/CandidateCvTab.tsx` đang
+  dùng đúng mẫu có cờ `noopener` ⇒ nhiều khả năng tải CV hỏng im lặng — NGOÀI phạm vi WO, ghi nợ.
 
 ## 3. File dự kiến
 
@@ -84,12 +95,14 @@ useCanExact(periodExport)` (BE assert CẢ HAI). 084: nút ở chi tiết «Phi�
 - `apps/app/src/components/charts/*` (wrapper)
 - `apps/app/src/routes/payroll/PayrollOverviewPage.tsx` + `components/overview/*` ·
   `PayrollReportListPage.tsx` · `PayrollReportViewPage.tsx` · `report-view.ts` (hàm thuần) ·
-  `payroll-root-redirect.ts` · `use-report-favorites.ts`
+  `payroll-root-redirect.ts` · `PayrollRootEntry.tsx` · `overview-data.ts` · `open-signed-url.ts` ·
+  `components/PayslipPdfBatchControl.tsx` · `components/reports/ReportFilters.tsx`
 - `PayslipDetailPage.tsx` · `MePayslipsPage.tsx` · `components/PeriodPayslipsSection.tsx` ·
   `components/PeriodLinesSection.tsx` · `period-line-columns.ts` · `PayrollEmployeeListPage.tsx`
 - `apps/app/src/router.tsx` (3 route) · `i18n/locales/vi/payroll-reports.ts` + `payroll.ts`
 - Spec: `payroll-track-d-logic.spec.ts` (hàm thuần) · `payroll-track-d-screens.spec.tsx` (cổng + no-call khi
-  thiếu cặp + ALLOW cạnh DENY) · `payroll-wiring.spec.ts` (10 → 12 lá, 2 route mới)
+  thiếu cặp + ALLOW cạnh DENY) · `payroll-track-d-pdf.spec.tsx` · `payroll-wiring.spec.ts` (10 → 12 lá, 2 route
+  mới) · `payroll-period-tabs.spec.tsx` (018 theo cùng điều kiện tab với 008)
 
 ## 4. Kiểm chứng
 
@@ -100,3 +113,15 @@ typecheck/test/build` (đọc SỐ summary — exit 1 do IPC là nhiễu đã bi
 ## 5. Nhật ký
 
 - 17/09 — đo-trước + plan. PR #518 (BE-5B) đang chờ CI; phần D8 đợi merge.
+- 17/09 — phần 1 (`554d9bd8`): 015 · 016 · tổng toàn kỳ · lọc BH. Owner uỷ quyền `--admin` ⇒ #518 merge
+  `b1fdbb94`; merge master vào nhánh (`bc009793`, xung đột duy nhất `pnpm-lock.yaml` — lấy bản master rồi
+  `pnpm install`, diff lock so master giữ nguyên 297 dòng của recharts). Phần 2 (`daf58fa7`): nút PDF 083/084/085.
+
+### 5.1 Bằng chứng
+
+| Kiểm                                                   | Kết quả                                                                                                                                                                                                                            |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm audit --audit-level=high` trước/sau cài recharts | 0 high/critical; cùng 10 low/moderate có sẵn (recharts thêm 0)                                                                                                                                                                     |
+| Spec PAYROLL (`vitest run src/routes/payroll`)         | 19 file · 262 ca xanh (mới: logic 25 · màn 17 · PDF 11)                                                                                                                                                                            |
+| Đột biến (ca DENY không xanh-rỗng)                     | 11/11 bị giết: `enabled` 078 · `enabled` 081 · link sâu thiếu cặp · 080 khi mã lạ · redirect tự trỏ `/payroll` · ngưỡng «vượt» · 083 thiếu export · 085 thiếu export · `retry` khi hỏi lại · cắt opener · đóng tab khi chưa có URL |
+| `vite build`                                           | chunk `PayrollOverviewPage-*.js` 431 KB chứa recharts; chunk entry `index-*` KHÔNG chứa `recharts-wrapper`                                                                                                                         |
