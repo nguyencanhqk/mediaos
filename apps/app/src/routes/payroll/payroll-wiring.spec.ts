@@ -146,7 +146,7 @@ describe("PAYROLL wiring — pair-drift (PAYROLL_ENGINE_PAIRS vs payroll-route-p
 describe("PAYROLL wiring — ROUTE_REGISTRY & gate màn khớp gate đường tải", () => {
   const byKey = (k: string) => ROUTE_REGISTRY.find((r) => r.routeKey === k);
 
-  it("7 route sidebar PAYROLL tồn tại, moduleCode PAYROLL, đúng screenCode", () => {
+  it("10 route sidebar PAYROLL tồn tại, moduleCode PAYROLL, đúng screenCode", () => {
     const rows = [
       ["payroll.periods", "/payroll/periods", "PAY-SCREEN-001"],
       ["payroll.salaryProfiles", "/payroll/salary-profiles", "PAY-SCREEN-004"],
@@ -157,6 +157,10 @@ describe("PAYROLL wiring — ROUTE_REGISTRY & gate màn khớp gate đường t�
       ["payroll.advances", "/payroll/advances", "PAY-SCREEN-012"],
       ["payroll.paymentBatches", "/payroll/payment-batches", "PAY-SCREEN-013"],
       ["payroll.budgets", "/payroll/budgets", "PAY-SCREEN-014"],
+      // S15-PAYROLL-FE-2 — track B
+      ["payroll.salaryComponents", "/payroll/salary-components", "PAY-SCREEN-009"],
+      ["payroll.templates", "/payroll/templates", "PAY-SCREEN-010"],
+      ["payroll.statutoryRates", "/payroll/settings/statutory-rates", "PAY-SCREEN-011"],
     ] as const;
     for (const [key, p, screen] of rows) {
       const meta = byKey(key);
@@ -213,6 +217,32 @@ describe("PAYROLL wiring — ROUTE_REGISTRY & gate màn khớp gate đường t�
       );
       expect(pair.isSensitive, `${key} phải là cặp SENSITIVE`).toBe(true);
     }
+  });
+
+  it("S15-PAYROLL-FE-2: gate 3 màn track B = ĐÚNG cặp ĐƯỜNG TẢI của BE (044 · 049 · 055), đều SENSITIVE", () => {
+    const cases = [
+      ["payroll.salaryComponents", PAYROLL_ENGINE_PAIRS.componentList],
+      ["payroll.templates", PAYROLL_ENGINE_PAIRS.templateList],
+      ["payroll.statutoryRates", PAYROLL_ENGINE_PAIRS.statutoryRateList],
+    ] as const;
+    for (const [key, pair] of cases) {
+      expect(byKey(key)?.requiredPermissions, `gate lệch ở ${key}`).toEqual([
+        "access:payroll",
+        `${pair.action}:${pair.resourceType}`,
+      ]);
+      expect(pair.isSensitive, `${key} phải là cặp SENSITIVE`).toBe(true);
+    }
+  });
+
+  it("S15-PAYROLL-FE-2: ba mục sidebar track B đã TỰ HIỆN (không còn bị pruneUnbuiltScreens cắt)", () => {
+    const paths = flattenSidebar(PAYROLL_SIDEBAR).map((i) => i.path);
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        "/payroll/salary-components",
+        "/payroll/templates",
+        "/payroll/settings/statutory-rates",
+      ]),
+    );
   });
 
   it("gate màn Nhân viên = cặp employeeList của BE (không tự bịa cặp khác cho sidebar)", () => {
@@ -313,8 +343,9 @@ describe("PAYROLL wiring — sidebar", () => {
   it("mọi mục CÓ path (kể cả trong nhóm) trỏ tới route CÓ THẬT trong ROUTE_REGISTRY, cùng gate", () => {
     const leaves = flattenSidebar(PAYROLL_SIDEBAR).filter((i) => i.path);
     // Neo số: 3 màn v1 + «Nhân viên» (S15-PAYROLL-FE-1) + 3 màn track C (S15-PAYROLL-FE-3: tạm ứng ·
-    // chi trả · ngân sách). Thêm màn ở WO sau ⇒ sửa số này CÙNG lúc thêm route.
-    expect(leaves).toHaveLength(7);
+    // chi trả · ngân sách) + 3 màn track B (S15-PAYROLL-FE-2: thành phần · mẫu · tỉ lệ luật định).
+    // Thêm màn ở WO sau ⇒ sửa số này CÙNG lúc thêm route.
+    expect(leaves).toHaveLength(10);
     const paths = leaves.map((i) => i.path);
     expect(paths).toContain("/payroll/employees");
     expect(paths).toEqual(
@@ -419,7 +450,12 @@ describe("PAYROLL wiring — sidebar", () => {
   it("S15-PAYROLL-FE-1: chi tiết nhân sự + tab bảng công là RouteMeta CỤC BỘ — vắng khỏi ROUTE_REGISTRY và sidebar", () => {
     // Hai path bám tham số (`$userId` · `$periodId`) không có lối vào ổn định từ nav; đưa vào registry
     // là tự mở một mục sidebar chết hoặc một thẻ app trỏ vào path không giải được.
-    for (const p of ["/payroll/employees/$userId", "/payroll/periods/$periodId/timesheet"]) {
+    for (const p of [
+      "/payroll/employees/$userId",
+      "/payroll/periods/$periodId/timesheet",
+      // S15-PAYROLL-FE-2 — chi tiết mẫu bảng lương (RouteMeta cục bộ ở router.tsx).
+      "/payroll/templates/$templateId",
+    ]) {
       expect(
         ROUTE_REGISTRY.some((r) => r.path === p),
         `${p} lọt vào ROUTE_REGISTRY`,

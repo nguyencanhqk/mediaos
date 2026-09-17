@@ -1911,6 +1911,42 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 90.3,
   },
+  // S15-PAYROLL-FE-2 — track B (PAY-SCREEN-009/010/011). Cặp gác = cặp ĐƯỜNG TẢI của 044 · 049 · 055 (cả ba
+  // SENSITIVE, đã ở hai allowlist BE từ BE-2). Mục sidebar đã khai sẵn trong `PAYROLL_SIDEBAR_V2` ⇒ tự hiện.
+  // Chi tiết mẫu `/payroll/templates/$templateId` dùng RouteMeta CỤC BỘ ở `router.tsx` (khuôn 002/013).
+  {
+    routeKey: "payroll.salaryComponents",
+    path: "/payroll/salary-components",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-009",
+    titleKey: "routeTitle.payrollSalaryComponents",
+    requiredPermissions: ["access:payroll", "view:salary-component"],
+    showInSidebar: true,
+    order: 89.1,
+  },
+  {
+    routeKey: "payroll.templates",
+    path: "/payroll/templates",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-010",
+    titleKey: "routeTitle.payrollTemplates",
+    requiredPermissions: ["access:payroll", "view:payroll-template"],
+    showInSidebar: true,
+    order: 89.2,
+  },
+  {
+    routeKey: "payroll.statutoryRates",
+    path: "/payroll/settings/statutory-rates",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "PAYROLL",
+    screenCode: "PAY-SCREEN-011",
+    titleKey: "routeTitle.payrollStatutoryRates",
+    requiredPermissions: ["access:payroll", "view:statutory-rate"],
+    showInSidebar: true,
+    order: 91.1,
+  },
   // S15-PAYROLL-FE-3 — PAY-SCREEN-017 «Tạm ứng của tôi». Route **ME**, gate `access:me` DUY NHẤT —
   // KHÔNG có cặp PAYROLL nào (SPEC-11 §9.1 + UI-07). Cổng THẬT là `('view-own','payroll-advance')` ở
   // BE; ai không có nó thì màn hiện RỖNG chứ không biến mất khỏi Personal Hub. Nhét sau `access:payroll`

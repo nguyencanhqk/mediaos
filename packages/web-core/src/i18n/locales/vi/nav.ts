@@ -185,6 +185,11 @@ export default {
     payrollBudgets: "Ngân sách lương",
     payrollPaymentBatches: "Chi trả",
     payrollPaymentBatchDetail: "Chi tiết đợt chi trả",
+    // S15-PAYROLL-FE-2 — PAY-SCREEN-009 · 010 (list + chi tiết) · 011.
+    payrollSalaryComponents: "Thành phần lương",
+    payrollTemplates: "Mẫu bảng lương",
+    payrollTemplateDetail: "Chi tiết mẫu bảng lương",
+    payrollStatutoryRates: "Tỉ lệ luật định",
     mePayslips: "Phiếu lương của tôi",
     mePayrollAdvances: "Tạm ứng của tôi",
     forbidden: "Không có quyền truy cập",

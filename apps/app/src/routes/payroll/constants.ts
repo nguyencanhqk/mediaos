@@ -254,3 +254,15 @@ export const SALARY_COMPONENT_CATALOG_PAGE = 100;
 
 /** Trần phiên bản hồ sơ lương tải cho timeline «Lịch sử lương» (một người hiếm khi > 100 phiên bản). */
 export const SALARY_HISTORY_PAGE = 100;
+
+/**
+ * S15-PAYROLL-FE-2 — bộ lọc 049 cho picker «mẫu gắn vào kỳ»: đang dùng + phạm vi TOÀN CÔNG TY (`org_unit` ⇒
+ * 409 `template-scope-unsupported`, không mời). Dùng chung cho form tạo kỳ và khối mẫu ở chi tiết kỳ (một
+ * khoá cache).
+ */
+export const BINDABLE_TEMPLATE_QUERY = {
+  isActive: true,
+  scope: "company",
+  page: 1,
+  per_page: SALARY_COMPONENT_CATALOG_PAGE,
+} as const;

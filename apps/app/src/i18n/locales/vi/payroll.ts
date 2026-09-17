@@ -11,6 +11,8 @@
  * ⚠️ Chữ trong `errors.*` phải nói ĐIỀU NGƯỜI DÙNG LÀM ĐƯỢC TIẾP, không dịch nguyên mã lỗi. Ví dụ
  * `fourEyes` không phải "vi phạm four-eyes" mà là "người gửi duyệt không tự duyệt được — cần người khác".
  */
+import payrollCatalog from "./payroll-catalog";
+
 export default {
   title: "Tiền lương",
 
@@ -60,6 +62,7 @@ export default {
   // ── Hành động cấp kỳ ────────────────────────────────────────────────────────────────────────────
   actions: {
     cancel: "Huỷ",
+    close: "Đóng",
     back: "Quay lại",
     confirm: "Xác nhận",
     reasonLabel: "Lý do",
@@ -124,6 +127,11 @@ export default {
     attendanceEmpty: "Chưa có kỳ công nào đã khoá. Khoá kỳ công trước rồi quay lại.",
     noteLabel: "Ghi chú",
     submit: "Tạo kỳ",
+    // S15-PAYROLL-FE-2 (D13)
+    templateLabel: "Mẫu bảng lương",
+    templateNone: "— Chọn sau —",
+    templateHint:
+      "Chỉ liệt kê mẫu đang dùng, phạm vi toàn công ty. Kỳ chưa gắn mẫu thì chưa tính lương được — gắn sau ở chi tiết kỳ cũng được.",
   },
 
   // ── PAY-SCREEN-002 ──────────────────────────────────────────────────────────────────────────────
@@ -149,6 +157,11 @@ export default {
     noPermission: "Bạn không có quyền xem bảng lương của kỳ này.",
     empty: "Kỳ chưa có dòng lương nào — hãy gom dữ liệu rồi tính lương.",
     moneyMasked: "Bạn xem được bảng lương nhưng không xem được số tiền.",
+    // S15-PAYROLL-FE-2 (D9 · D11)
+    total: "Tổng",
+    pageTotal: "Tổng trang này",
+    templateDrift:
+      "Mẫu bảng lương đã thay đổi sau lần tính gần nhất — tính lại để áp dụng cách tính mới.",
     columns: {
       employee: "Nhân sự",
       days: "Công thực tế / công chuẩn",
@@ -198,6 +211,13 @@ export default {
     deduction: "Khấu trừ",
     adjustment: "Điều chỉnh",
     net: "Thực nhận",
+    // S15-PAYROLL-FE-2 (D12) — breakdown theo thành phần
+    group: {
+      income: "Thu nhập",
+      deduction: "Khấu trừ",
+      adjustment: "Điều chỉnh",
+    },
+    hiddenComponent: "(không hiện trên bảng lương)",
   },
   mePayslips: {
     title: "Phiếu lương của tôi",
@@ -714,6 +734,9 @@ export default {
   },
 
   // ── Mã lỗi nghiệp vụ ────────────────────────────────────────────────────────────────────────────
+  // S15-PAYROLL-FE-2 — track B (009/010/011 + khối mẫu của chi tiết kỳ) tách file: `payroll-catalog.ts`.
+  ...payrollCatalog,
+
   errors: {
     actionNotApplicable: "Hành động này không áp dụng cho trạng thái hiện tại của kỳ.",
     alreadyAcknowledged: "Bạn đã xác nhận phiếu lương này rồi.",
@@ -765,7 +788,8 @@ export default {
       "Kiểu giá trị không khớp dữ liệu: công thức cần chuỗi công thức, cố định cần số tiền, theo hồ sơ thì để trống cả hai.",
     formulaOverrideNotAllowed:
       "Không ghi đè công thức được cho thành phần tổng hợp hoặc thành phần lấy theo hồ sơ — bỏ phần ghi đè.",
-    formulaTooLong: "Công thức dài quá 500 ký tự — rút gọn hoặc tách thành thành phần trung gian.",
+    formulaTooLong:
+      "Công thức dài quá 500 ký tự{{component}} — rút gọn hoặc tách thành thành phần trung gian.",
     rateEffectiveDateExists:
       "Đã có bản tỉ lệ luật định cùng ngày hiệu lực — sửa bản đó hoặc chọn ngày khác.",
     rateInUse:
@@ -820,6 +844,36 @@ export default {
       "Mẫu bảng lương đang được kỳ lương sử dụng — đổi mẫu cho các kỳ đó trước khi ngưng dùng hoặc xoá.",
     noEligibleCompleter:
       "Chưa có ai khác bạn giữ quyền quản lý đợt chi trả — đợt lập ra sẽ không hoàn tất được (bốn mắt). Cấp quyền cho người thứ hai trước.",
+    // S15-PAYROLL-FE-2 — kind của MÁY CÔNG THỨC (`formula.errors.ts`). Nội suy qua `formulaErrorParams`:
+    // `at` = « (ký tự thứ N)» hoặc rỗng · `ref`/`func` = token gây lỗi · `cycle` = «A → B → A» ·
+    // `missing` = mã còn thiếu · `component` = « (thành phần X)» hoặc rỗng.
+    formulaSyntax:
+      "Công thức sai cú pháp{{at}}{{component}} — kiểm tra dấu ngoặc, toán tử và mã viết HOA không dấu.",
+    formulaUnknownRef:
+      "Không có thành phần hay biến hệ thống tên «{{ref}}»{{at}}{{component}} — chọn mã từ gợi ý.",
+    formulaUnknownFunction:
+      "Hàm «{{func}}» không được hỗ trợ{{at}} — chỉ dùng IF, MIN, MAX, ROUND, ABS, CEIL, FLOOR, TNCN_LUY_TIEN, BH_TRAN_BHXH/BHYT/BHTN.",
+    formulaArity:
+      "Hàm «{{func}}» nhận sai số tham số{{at}} (ROUND chỉ nhận chữ số làm tròn là số nguyên từ −6 đến 6).",
+    formulaTooDeep: "Công thức lồng quá sâu{{component}} — tách bớt thành thành phần trung gian.",
+    formulaTooManyNodes:
+      "Công thức quá dài (quá nhiều phép tính){{component}} — tách thành thành phần trung gian.",
+    templateMissingEngineNodes:
+      "Mẫu thiếu thành phần tổng hợp bắt buộc ({{missing}}) — thêm lại các thành phần tổng hợp của hệ thống.",
+    formulaCycle:
+      "Công thức tạo vòng tham chiếu: {{cycle}} — một thành phần không được tự phụ thuộc vào chính nó.",
+    formulaBudgetExceeded:
+      "Công thức tính quá nặng trên dữ liệu thật{{component}} — đơn giản hoá công thức rồi tính lại.",
+    divisionByZero:
+      "Công thức chia cho 0{{component}} — thường do ngày công chuẩn bằng 0; dùng IF để chặn mẫu số bằng 0.",
+    numericOverflow:
+      "Kết quả công thức vượt giới hạn số tiền{{component}} — kiểm tra lại công thức.",
+    negativeTotal:
+      "Tổng thu nhập hoặc tổng khấu trừ ra số âm{{component}} — kiểm tra dấu của các thành phần.",
+    statutoryRateIncomplete:
+      "Bảng tỉ lệ luật định chưa đủ: cần đúng 7 bậc thuế, ngưỡng tăng dần, chỉ bậc cuối để trống, thuế suất 0–100% ({{reason}}).",
+    grossupNotConverged:
+      "Không quy đổi được lương NET sang GROSS cho một nhân sự — kiểm tra lương thoả thuận và các khoản khấu trừ.",
     generic: "Có lỗi xảy ra, vui lòng thử lại.",
   },
 };

@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { payrollApi, payrollIdempotencyKey, payrollKeys, useCan } from "@mediaos/web-core";
+import {
+  payrollApi,
+  payrollIdempotencyKey,
+  payrollKeys,
+  useCan,
+  useCanExact,
+} from "@mediaos/web-core";
 import { Button, Dialog, Input, Select } from "@mediaos/ui";
-import { PAYROLL_ENGINE_PAIRS } from "../constants";
+import { BINDABLE_TEMPLATE_QUERY, PAYROLL_ENGINE_PAIRS } from "../constants";
 import { parsePayrollError, payrollErrorI18nKey } from "../payroll-errors";
 
 const PERIOD_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -43,6 +49,7 @@ export function PeriodFormDialog({
 
   const [periodMonth, setPeriodMonth] = useState("");
   const [attendancePeriodId, setAttendancePeriodId] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [note, setNote] = useState("");
   const [errorKey, setErrorKey] = useState<string | null>(null);
 
@@ -50,6 +57,7 @@ export function PeriodFormDialog({
     if (!open) {
       setPeriodMonth("");
       setAttendancePeriodId("");
+      setTemplateId("");
       setNote("");
       setErrorKey(null);
     }
@@ -61,6 +69,19 @@ export function PeriodFormDialog({
     enabled: open && canPickAttendance,
   });
 
+  // S15-PAYROLL-FE-2 (D13) — chọn mẫu ngay lúc tạo. Cặp `view:payroll-template` SENSITIVE ⇒ `useCanExact`;
+  // thiếu cặp ⇒ ẩn ô (gắn sau ở chi tiết kỳ). Chỉ liệt kê mẫu đang dùng + toàn công ty (org_unit ⇒ 409).
+  const canPickTemplate = useCanExact(
+    PAYROLL_ENGINE_PAIRS.templateList.action,
+    PAYROLL_ENGINE_PAIRS.templateList.resourceType,
+  );
+  const templateQuery = useQuery({
+    queryKey: payrollKeys.catalog.templates(BINDABLE_TEMPLATE_QUERY),
+    queryFn: () => payrollApi.listPayrollTemplates(BINDABLE_TEMPLATE_QUERY),
+    enabled: open && canPickTemplate,
+  });
+  const templateOptions = templateQuery.data?.data ?? [];
+
   const monthValid = PERIOD_MONTH_RE.test(periodMonth);
 
   const createMutation = useMutation({
@@ -69,10 +90,16 @@ export function PeriodFormDialog({
         {
           periodMonth,
           ...(attendancePeriodId ? { attendancePeriodId } : {}),
+          ...(templateId ? { templateId } : {}),
           ...(note.trim() ? { note: note.trim() } : {}),
         },
-        // Khoá neo theo THÁNG + kỳ công đã chọn: cùng nội dung ⇒ cùng khoá ⇒ bấm đúp là một kỳ.
-        payrollIdempotencyKey("create-period", periodMonth, attendancePeriodId || null),
+        // Khoá neo theo THÁNG + kỳ công + mẫu đã chọn: cùng nội dung ⇒ cùng khoá ⇒ bấm đúp là một kỳ; đổi mẫu
+        // sau một lượt lỗi ⇒ khoá khác (không ăn KEY_REUSED vì payload khác).
+        payrollIdempotencyKey(
+          "create-period",
+          periodMonth,
+          `${attendancePeriodId || "-"}|${templateId || "-"}`,
+        ),
       ),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: payrollKeys.periods.allOf() });
@@ -135,6 +162,27 @@ export function PeriodFormDialog({
               {attendanceOptions.length === 0 && !attendanceQuery.isLoading
                 ? t("periodForm.attendanceEmpty")
                 : t("periodForm.attendanceHint")}
+            </span>
+          </label>
+        )}
+
+        {canPickTemplate && (
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">{t("periodForm.templateLabel")}</span>
+            <Select
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              disabled={templateQuery.isLoading}
+            >
+              <option value="">{t("periodForm.templateNone")}</option>
+              {templateOptions.map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name} ({tpl.code})
+                </option>
+              ))}
+            </Select>
+            <span className="mt-1 block text-xs text-muted-foreground">
+              {t("periodForm.templateHint")}
             </span>
           </label>
         )}

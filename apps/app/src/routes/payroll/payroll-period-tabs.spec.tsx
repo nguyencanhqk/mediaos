@@ -32,6 +32,9 @@ vi.mock("@mediaos/web-core", () => ({
     pickerAttendancePeriods: vi.fn(async () => []),
     pickerPeople: vi.fn(async () => []),
     listPayslips: vi.fn(async () => ({ data: [], pagination: undefined })),
+    // S15-PAYROLL-FE-2 — khối «Mẫu bảng lương» + băng «mẫu đã đổi» của chi tiết kỳ.
+    listPayrollTemplates: vi.fn(async () => ({ data: [], pagination: undefined })),
+    getPayrollTemplate: vi.fn(),
   },
   payrollKeys: {
     periods: {
@@ -43,6 +46,11 @@ vi.mock("@mediaos/web-core", () => ({
       timesheet: (id: string, p: unknown) => ["payroll", "periods", "timesheet", id, p],
     },
     payslips: { list: (p: unknown) => ["payroll", "payslips", "list", p] },
+    catalog: {
+      allOf: () => ["payroll", "catalog"],
+      templates: (p: unknown) => ["payroll", "catalog", "templates", p],
+      templateDetail: (id: string) => ["payroll", "catalog", "template-detail", id],
+    },
     pickers: {
       people: (p: unknown) => ["payroll", "pickers", "people", p],
       attendancePeriods: (p: unknown) => ["payroll", "pickers", "attendance-periods", p],

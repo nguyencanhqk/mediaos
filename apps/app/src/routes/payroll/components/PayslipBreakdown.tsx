@@ -1,5 +1,11 @@
 import { useTranslation } from "react-i18next";
-import type { PayslipDetailDto } from "@mediaos/contracts";
+import { z } from "zod";
+import {
+  salaryComponentKindEnum,
+  type PayslipDetailDto,
+  type PayslipItemDto,
+  type SalaryComponentKind,
+} from "@mediaos/contracts";
 import {
   formatPayrollDays,
   formatPayrollMinutes,
@@ -25,9 +31,108 @@ import { PayslipStatusBadge } from "./StatusBadges";
  * `amount` của item **CÓ DẤU** (earning/allowance/bonus dương · penalty/attendance/deduction âm ·
  * adjustment theo dấu người nhập) — hiện bằng `formatPayrollSignedMoney` để dòng trừ đọc ra là trừ.
  */
+/**
+ * S15-PAYROLL-FE-2 (D12) — `meta` của item phiếu v2 do `generate-payslips` ghi (`payroll-payslips.repository.ts`):
+ * `{ componentCode, kind, isVisible }`. `meta` đi CÙNG cổng mask với `amount` ⇒ vắng khi bị che, và vắng ở
+ * phiếu v1 ⇒ rơi về bảng theo `itemType`. Parse an toàn — `meta` là jsonb tự do.
+ */
+const componentMetaSchema = z.object({
+  componentCode: z.string(),
+  kind: salaryComponentKindEnum,
+  isVisible: z.boolean().optional(),
+});
+
+export type PayslipBreakdownGroup = "income" | "deduction" | "adjustment";
+
+const KIND_GROUP: Readonly<Record<SalaryComponentKind, PayslipBreakdownGroup>> = {
+  earning: "income",
+  tax_exempt: "income",
+  deduction: "deduction",
+  statutory_employee: "deduction",
+  statutory_employer: "deduction",
+  tax: "deduction",
+  // Không bao giờ tới đây: `generate-payslips` KHÔNG sinh item cho `aggregate`/`statutory_employer`
+  // (`payroll-payslips.repository.ts` — chỉ earning · tax_exempt · deduction · statutory_employee · tax). Hai
+  // khoá dưới có mặt chỉ vì `Record<SalaryComponentKind, …>` bắt đủ 7 loại.
+  aggregate: "deduction",
+};
+
+export interface BreakdownEntry {
+  readonly item: PayslipItemDto;
+  readonly code: string | null;
+  readonly group: PayslipBreakdownGroup;
+  readonly hidden: boolean;
+}
+
+/**
+ * Nhóm item theo thành phần — CHỈ khi MỌI item không phải `adjustment` đều parse được `meta` (phiếu v2 nhìn
+ * thấy tiền). Thiếu một ⇒ `null` ⇒ caller dùng bảng v1 (không trộn hai kiểu trong một phiếu). KHÔNG cộng tiền.
+ */
+export function groupPayslipItems(items: readonly PayslipItemDto[]): BreakdownEntry[] | null {
+  const entries: BreakdownEntry[] = [];
+  for (const item of [...items].sort((a, b) => a.sortOrder - b.sortOrder)) {
+    if (item.itemType === "adjustment") {
+      entries.push({ item, code: null, group: "adjustment", hidden: false });
+      continue;
+    }
+    const meta = componentMetaSchema.safeParse(item.meta);
+    if (!meta.success) return null;
+    entries.push({
+      item,
+      code: meta.data.componentCode,
+      group: KIND_GROUP[meta.data.kind],
+      hidden: meta.data.isVisible === false,
+    });
+  }
+  return entries.some((e) => e.code !== null) ? entries : null;
+}
+
+const GROUP_ORDER: readonly PayslipBreakdownGroup[] = ["income", "deduction", "adjustment"];
+
+function ComponentBreakdown({ entries }: { entries: readonly BreakdownEntry[] }) {
+  const { t } = useTranslation("payroll");
+  return (
+    <div className="space-y-4" data-testid="payslip-breakdown-v2">
+      {GROUP_ORDER.map((group) => {
+        const rows = entries.filter((e) => e.group === group);
+        if (rows.length === 0) return null;
+        return (
+          <div key={group} className="overflow-x-auto">
+            <h4 className="mb-1 text-xs font-medium uppercase text-muted-foreground">
+              {t(`payslip.group.${group}`)}
+            </h4>
+            <table className="w-full text-sm">
+              <tbody>
+                {rows.map((e) => (
+                  <tr
+                    key={e.item.id}
+                    className={`border-b border-border/60${e.hidden ? " text-muted-foreground" : ""}`}
+                  >
+                    <td className="w-40 py-1.5 font-mono text-xs">{e.code ?? ""}</td>
+                    <td className="py-1.5">
+                      {e.item.label}
+                      {e.hidden && (
+                        <span className="ml-2 text-xs">{t("payslip.hiddenComponent")}</span>
+                      )}
+                    </td>
+                    <td className={`py-1.5 ${PAYROLL_NUMERIC_CELL_CLASS}`}>
+                      {formatPayrollSignedMoney(e.item.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PayslipBreakdown({ payslip }: { payslip: PayslipDetailDto }) {
   const { t } = useTranslation("payroll");
   const masked = isPayrollMoneyMasked(payslip);
+  const grouped = groupPayslipItems(payslip.items);
 
   return (
     <div className="space-y-6">
@@ -76,6 +181,8 @@ export function PayslipBreakdown({ payslip }: { payslip: PayslipDetailDto }) {
         <h3 className="text-sm font-medium">{t("payslip.breakdownTitle")}</h3>
         {payslip.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("payslip.breakdownEmpty")}</p>
+        ) : grouped ? (
+          <ComponentBreakdown entries={grouped} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

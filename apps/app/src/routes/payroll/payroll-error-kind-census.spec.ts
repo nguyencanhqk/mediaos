@@ -14,7 +14,14 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { PAYROLL_ERROR_KINDS, payrollErrorI18nKey, parsePayrollError } from "./payroll-errors";
+import {
+  PAYROLL_ERROR_KINDS,
+  PAYROLL_FORMULA_ERROR_KINDS,
+  formulaIssueText,
+  payrollErrorI18nKey,
+  payrollErrorText,
+  parsePayrollError,
+} from "./payroll-errors";
 import viPayroll from "@/i18n/locales/vi/payroll";
 
 const repoRoot = path.resolve(__dirname, "../../../../..");
@@ -92,6 +99,57 @@ describe("PAYROLL error-kind census — FE khớp BE (đo theo BA hình dạng)"
       fields: new Map(),
     });
     expect(key).toBe("errors.generic");
+  });
+
+  it("S15-PAYROLL-FE-2 · hình 4: khoá `FORMULA_ERROR_KINDS` (BE) === `PAYROLL_FORMULA_ERROR_KINDS` (FE), đúng bằng", () => {
+    // BE phát nhóm này qua `payrollDetails(err.kind, …)` — BIẾN ⇒ ba hình trên mù. Đọc thẳng bảng đóng.
+    const formulaSrc = fs.readFileSync(path.join(payrollDir, "formula/formula.errors.ts"), "utf8");
+    const block = formulaSrc.match(/export const FORMULA_ERROR_KINDS = \{([\s\S]*?)\} as const;/);
+    expect(block, "không tìm thấy khối FORMULA_ERROR_KINDS").toBeTruthy();
+    const beKinds = [...(block?.[1] ?? "").matchAll(/^\s*"([a-z0-9-]+)":/gm)].map((m) => m[1]);
+    // Neo SỐ LƯỢNG để regex mù (0 khớp) không thành xanh-rỗng.
+    expect(beKinds.length).toBe(15);
+    expect([...PAYROLL_FORMULA_ERROR_KINDS].sort()).toEqual([...beKinds].sort());
+  });
+
+  it("mọi kind công thức có chữ vi riêng (không rơi generic)", () => {
+    const errors = viPayroll.errors as Record<string, string>;
+    for (const kind of PAYROLL_FORMULA_ERROR_KINDS) {
+      const key = payrollErrorI18nKey({
+        code: null,
+        status: 422,
+        kind,
+        message: "",
+        fields: new Map(),
+      });
+      expect(key, `${kind} rơi về generic`).not.toBe("errors.generic");
+      expect(errors[key.replace(/^errors\./, "")], `thiếu bản dịch ${kind}`).toBeTruthy();
+    }
+  });
+
+  it("chữ lỗi công thức nói được CHỖ SAI: pos (+1) · ref · cycle — cả từ 422 lẫn từ 048", () => {
+    const t = (key: string, opts?: Record<string, unknown>) =>
+      `${key}|${JSON.stringify(opts ?? {})}`;
+    const from422 = payrollErrorText(t, {
+      code: "PAYROLL-ERR-018",
+      status: 422,
+      kind: "formula-unknown-ref",
+      message: "",
+      fields: new Map([
+        ["kind", "formula-unknown-ref"],
+        ["pos", "4"],
+        ["ref", "LUONG_X"],
+      ]),
+    });
+    expect(from422).toContain("errors.formulaUnknownRef");
+    expect(from422).toContain("ký tự thứ 5");
+    expect(from422).toContain("LUONG_X");
+
+    const from048 = formulaIssueText(t, { kind: "formula-cycle", cycle: ["A", "B", "A"] });
+    expect(from048).toContain("errors.formulaCycle");
+    expect(from048).toContain("A → B → A");
+    // Không có vị trí ⇒ `at` rỗng, KHÔNG in «ký tự thứ NaN».
+    expect(from048).not.toContain("NaN");
   });
 
   it("`details` sai hình dạng (object thay vì MẢNG) ⇒ kind null, KHÔNG ném", () => {
