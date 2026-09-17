@@ -7,10 +7,7 @@ import * as React from "react";
  * `localStorage` hỏng/đầy/private-mode ⇒ giữ state trong phiên, KHÔNG crash và KHÔNG nuốt im lặng giá
  * trị mặc định: đọc lỗi ⇒ rơi về `initial` (UI-07 §9.2 mục 8, §12.3).
  *
- * ⚠️ NỢ ĐÃ BIẾT (S15-UI-SHELL-1): `apps/app/src/hooks/use-local-pref.ts` là bản SINH ĐÔI có trước,
- * cùng hành vi. Không gộp ở WO này vì `apps/app/src/hooks/**` nằm ngoài `paths` của WO (và đổi nó
- * thành re-export sẽ kéo thứ tự build + mock của test đi theo). WO dọn sau: cho bản app re-export
- * bản này rồi xoá.
+ * Bản DUY NHẤT — `apps/app/src/hooks/use-local-pref.ts` chỉ re-export (S15-PAYROLL-DEBT-1 gộp bản sinh đôi).
  */
 export function useLocalPref<T>(key: string, initial: T): [T, (value: T) => void] {
   const [value, setValue] = React.useState<T>(() => {

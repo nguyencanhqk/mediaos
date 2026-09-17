@@ -16367,6 +16367,7 @@ export const backlog = [
       "PDF: pdfmake + font Việt nhúng (không rơi về font thiếu dấu — test render chuỗi có dấu); phiếu Own qua view-own-payslip (signed-URL TTL ngắn) · batch theo kỳ qua export:payroll (zip hoặc từng tệp — chốt trong plan); audit lượt xuất; nội dung PDF = đúng payslip_items snapshot, không tính lại",
       "pnpm audit sạch cho dep mới; deny-path RED trước; coverage ≥85%",
       "🔻 NHẬN TỪ S15-PAYROLL-DB-2: PDF phiếu của mình (084) lọc kỳ bằng CHÍNH hằng PUBLISHED_PERIOD_STATUSES export từ payroll-payslips.repository.ts ({Published, Paid, Locked}) — KHÔNG tự viết danh sách thứ hai; ca kỳ ở ĐÚNG Published ⇒ nhân viên tải PDF được (SPEC-11 §13.2 chỗ (c))",
+      "🔻 NHẬN TỪ S15-PAYROLL-FE-2 (nợ, ghi 17/09 qua S15-PAYROLL-DEBT-1): 008 lines chỉ trả tổng theo TRANG ⇒ chi tiết kỳ > 20 dòng hiện «Tổng trang», không có tổng cột toàn kỳ. Trả tổng theo cột (component_values + gross/net) của CẢ kỳ — cùng cặp view-line + sàn scope, set-based (SUM trên payroll_period_lines, không cộng JS) — để FE đổi nhãn về «Tổng»",
     ],
     notes: [
       "🟡 chở tiền nhưng chỉ ĐỌC — security-reviewer soát IDOR + sàn scope; chạy trên LANE_DB.",
@@ -16438,6 +16439,8 @@ export const backlog = [
       "Công thức: fuzz ≥1 000 chuỗi · vòng · độ sâu · timeout · injection qua label/formula vào SQL/XLSX (formula bắt đầu bằng '=' trong XLSX phải escape); sửa công thức sau Calculated không đổi số",
       "Số học: bảng tay ≥3 NV (GROSS bậc thuế thấp/cao · NET) khớp từng đồng; biên NPT/tỉ lệ đổi giữa năm/trần BH; FSM 8 trạng thái ma trận sai đầy đủ + RESET vết; race double-complete đợt chi trả đúng-1-thắng; census mã lỗi PAYROLL-ERR-001..0xx không mã nào 0 ca",
       "bash harness/check.sh --lane-db xanh KHÔNG banner; coverage payroll/ ≥85% (formula/ ≥95%); TESTABLE-FEATURES.md mục PAYROLL v2; lỗi sản phẩm lộ ra vá CÙNG WO và ghi notes",
+      "🔻 NHẬN TỪ S15-PAYROLL-FE-3 (nợ, ghi 17/09 qua S15-PAYROLL-DEBT-1): spec FE T4 gate nút xuất UNC (071) · T5 gate dòng chi 070 (đánh dấu đã chi/gỡ) · T6 mask cột tiền ở 3 màn Tạm ứng/Chi trả/Ngân sách — mỗi ca có ALLOW đối chứng",
+      "🔻 NHẬN TỪ S15-PAYROLL-BE-4/BE-4B: đột biến (k) NOTI-027 dedupe theo batchId (producer enqueue một lần/kỳ ⇒ int-spec không đo được) — dựng ca đo được (unit producer hoặc hai đợt cùng kỳ) hoặc ghi rõ vì sao bất khả",
     ],
     notes: [
       "🟡 LANE_DB cô lập; fixture giả-secret ghép chuỗi (gitleaks); lỗi sản phẩm tìm được vá tại chỗ như S13-QA-1.",
@@ -16476,6 +16479,124 @@ export const backlog = [
     ],
     notes: [
       "🟢 LIGHT gate nhưng chở tiền — theo hồ sơ DASH-1 S13. Đóng wave S15: regen STATUS + memory.",
+    ],
+  },
+  // ── Nợ S15 gom 17/09/2026 (owner chốt «vệ sinh + FE nhỏ»; tính năng/hot-file/vùng đỏ tách WO riêng) ──
+  {
+    id: "S15-PAYROLL-DEBT-1",
+    module: "PAYROLL",
+    layer: "FE",
+    title:
+      "Trả nợ vệ sinh S15: tách 3 file > 800 dòng (i18n payroll.ts · contracts payroll.ts · int-spec be4-batches) · prettier 3 file lệch sẵn · comment users.status 4 giá trị ở auth.service · ConfirmDialog có slot children · nút xoá mềm ngân sách (075 delete) · test render dialog xem trước 054 · gom triggerBlobDownload về một chỗ · use-local-pref app re-export bản packages/ui",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/i18n/**",
+      "apps/app/src/routes/payroll/**",
+      "apps/app/src/routes/attendance/**",
+      "apps/app/src/routes/hr/employees/**",
+      "apps/app/src/routes/tasks/**",
+      "apps/app/src/routes/recruit/PipelinePage.tsx",
+      "apps/app/src/lib/**",
+      "apps/app/src/components/ConfirmDialog*",
+      "apps/app/src/hooks/**",
+      "packages/ui/src/hooks/use-local-pref.ts",
+      "packages/contracts/src/**",
+      "packages/web-core/src/lib/api-params.ts",
+      "packages/web-core/src/lib/two-factor-api.spec.ts",
+      "apps/api/test/integration/s15-payroll-be4-batches*",
+      "apps/api/test/helpers/payroll-be4-batches-suite.ts",
+      "apps/api/package.json",
+      "apps/api/src/auth/auth.service.ts",
+      "docs/plans/S15-PAYROLL-DEBT-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S15-PAYROLL-FE-2", "S15-PAYROLL-FE-3", "S15-PAYROLL-BE-4B"],
+    src: [
+      "harness/handoff.md phiên (i)–(l) mục «Nợ để lại»; docs/plans/S15-PAYROLL-FE-1.md §6 · S15-PAYROLL-FE-3.md §6 · S15-PAYROLL-BE-4B.md §4; memory s15-payroll-fe2-wave-state · s15-ui-shell-1-wave-state",
+    ],
+    done_when: [
+      "Không file nào trong 3 file nợ vượt 800 dòng; export công khai của @mediaos/contracts KHÔNG đổi (re-export) ⇒ typecheck api/web-core/app xanh; int-spec be4-batches tách theo describe, số ca trước = sau, chạy XANH trên LANE_DB",
+      "prettier --check sạch 3 file; comment auth.service ghi đúng CHECK 4 giá trị (mig 0002 + 0450) — chỉ comment, không đổi logic",
+      "ConfirmDialog nhận children (tuỳ chọn, không phá nơi gọi cũ) + hộp «hoàn tất đợt» dùng lại nó; BudgetFormDialog có nút xoá mềm (075 {delete:true}) sau hộp xác nhận, gác cùng cặp manage, i18n vi; spec render TemplatePreviewDialog (054) gồm ca lỗi hiện payrollErrorText",
+      "triggerBlobDownload còn MỘT bản (apps/app/src/lib), 4 nơi gọi + 3 spec mock trỏ về đó; apps/app use-local-pref là re-export packages/ui (không còn thân hàm sinh đôi); app/web-core test + build xanh",
+    ],
+    notes: [
+      "🟡 LIGHT gate (typescript-reviewer một lượt). Không migration, không đổi hành vi BE. Nợ KHÔNG thuộc WO này: tổng cột toàn kỳ → done_when BE-5 · T4–T6 + đột biến (k) → done_when QA-1 · G3 → S15-PAYROLL-FE-5 · sidebar-registry → S15-UI-SHELL-2 · nợ BE-2 → S15-PAYROLL-BE-2B.",
+    ],
+  },
+  {
+    id: "S15-PAYROLL-FE-5",
+    module: "PAYROLL",
+    layer: "FE",
+    title:
+      "Nợ G3 (FE-1): sửa/xoá mềm phiên bản hồ sơ lương (PAYROLL-API-022 PATCH, delete:true) ở tab «Hồ sơ lương» của PAY-SCREEN-007 — client đã có (payrollApi.updateSalaryProfile), UI chưa gọi",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/payroll/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/**",
+      "docs/plans/S15-PAYROLL-FE-5.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S15-PAYROLL-FE-1"],
+    src: [
+      "docs/plans/S15-PAYROLL-FE-1.md §6 G3; SPEC-11 §9 PAY-SCREEN-007; API-18 PAYROLL-API-022; luật sửa/xoá phiên bản ở apps/api/src/payroll (đo trước khi vẽ nút)",
+    ],
+    done_when: [
+      "Mỗi phiên bản có Sửa/Xoá theo useCan(manage:salary-profile) ∩ luật BE (đo từ service — không tự suy); form sửa tái dùng SalaryProfileFormDialog + items[]; xoá qua hộp xác nhận; mọi mã lỗi 022 có chữ riêng (payrollErrorText)",
+      "Spec: ALLOW + DENY nút · ca 409/422 hiện đúng chữ · invalidate đúng nhánh query; typecheck/build/test xanh",
+    ],
+    notes: ["🟡 LIGHT gate; form chở tiền — không log giá trị."],
+  },
+  {
+    id: "S15-UI-SHELL-2",
+    module: "FND",
+    layer: "FE",
+    title:
+      "Nợ S15-UI-SHELL-1: tách apps/app/src/layouts/workspace/sidebar-registry.ts (1439 dòng > 800) thành file theo module, giữ nguyên export + thứ tự mục",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/src/layouts/**", "docs/plans/S15-UI-SHELL-2.md", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S15-UI-SHELL-1"],
+    src: ["backlog S15-UI-SHELL-1 notes «NỢ chuyển tiếp (2)»"],
+    done_when: [
+      "Không file sidebar nào > 800 dòng; snapshot cây sidebar theo từng bộ quyền trước = sau (ghim bằng spec); typecheck/build/test app xanh",
+    ],
+    notes: ["🟢 hot-file — làm khi không WO FE nào khác đang mở (xung đột merge)."],
+  },
+  {
+    id: "S15-PAYROLL-BE-2B",
+    module: "PAYROLL",
+    layer: "BE",
+    title:
+      "Nợ ghi nhận của S15-PAYROLL-BE-2 (chưa có WO): N+1 assertGraphsAfterEdit (một câu componentsTx mỗi mẫu, dưới khoá) · catalog thành phần không trần số hàng (045/047/048 tải + compile toàn bộ) · 6 CHECK chưa map qua mapPayrollPgError · precision trung gian 50 không trần",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/payroll/**",
+      "apps/api/test/**",
+      "packages/contracts/src/payroll*.ts",
+      "docs/spec/SPEC-11*.md",
+      "docs/plans/S15-PAYROLL-BE-2B.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S15-PAYROLL-BE-3"],
+    src: [
+      "docs/plans/S15-PAYROLL-BE-2-review.md LOW-1 · LOW-5 · INFO; memory s15-payroll-be2-wave-state",
+    ],
+    done_when: [
+      "assertGraphsAfterEdit đọc thành phần của MỌI mẫu chứa thành phần bằng MỘT câu (không vòng lặp truy vấn); ca int nhiều mẫu giữ nguyên kết quả",
+      "Trần catalog: owner chốt con số + mã lỗi mới ghi SPEC-11 TRƯỚC khi code (hoặc ghi rõ «không trần» là quyết định); 6 CHECK → mã lỗi theo TAG + census",
+      "Precision trung gian: giữ 50 hay trần — quyết định có ca đối soát số học (bảng tay) trước/sau không đổi một đồng",
+    ],
+    notes: [
+      "🔴 chạm máy tính lương (precision) ⇒ FULL gate + plan-reviewer; không trộn với WO FE.",
     ],
   },
   // ─────────────────────────────────────────────────────────────────────────────

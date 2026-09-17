@@ -9,12 +9,12 @@ import {
   Button,
   Checkbox,
   DataTable,
-  Dialog,
   DetailPageHeader,
   EmptyState,
   TableFooter,
 } from "@mediaos/ui";
-import { triggerBlobDownload } from "../attendance/download-blob";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { triggerBlobDownload } from "@/lib/download-blob";
 import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "./constants";
 import { canCompletePaymentBatch, paymentBatchHasUnpaidLines } from "./payroll-actions";
 import { formatPayrollMoney, PAYROLL_NUMERIC_CELL_CLASS } from "./payroll-format";
@@ -39,11 +39,8 @@ import { PaymentBatchStatusBadge } from "./components/StatusBadges";
  * người dùng ăn 403 ở BE.
  *
  * ⚠️ Nút «Hoàn tất» (072) ẩn theo FSM ∩ quyền ∩ four-eyes (D7 `canCompletePaymentBatch`) — KHÔNG ẩn khi
- * còn dòng chưa chi (D8): hộp xác nhận hiện thêm ô «Xác nhận đã chi tất cả» cho ca đó. `ConfirmDialog`
- * (`apps/app/src/components/ConfirmDialog.tsx`) không có khe `children` cho checkbox này (body của nó
- * cố định là một `<span className="sr-only">`), nên hộp xác nhận ở đây dùng thẳng primitive `Dialog`
- * (chính là thứ `ConfirmDialog` bọc lại) để có chỗ đặt ô tick — KHÔNG sửa `ConfirmDialog` (ngoài
- * `paths` của WO này).
+ * còn dòng chưa chi (D8): hộp xác nhận hiện thêm ô «Xác nhận đã chi tất cả» cho ca đó, đặt qua khe
+ * `children` của `ConfirmDialog` (thêm ở S15-PAYROLL-DEBT-1).
  */
 export function PaymentBatchDetailPage({
   batchId,
@@ -305,28 +302,18 @@ export function PaymentBatchDetailPage({
         )}
       </div>
 
-      <Dialog
+      <ConfirmDialog
         open={completeOpen}
-        onClose={() => (completeMutation.isPending ? undefined : setCompleteOpen(false))}
         title={t("paymentBatchDetail.completeTitle")}
         description={t("paymentBatchDetail.completeDescription")}
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setCompleteOpen(false)}
-              disabled={completeMutation.isPending}
-            >
-              {t("paymentBatchDetail.cancel")}
-            </Button>
-            <Button onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
-              {t("paymentBatchDetail.completeSubmit")}
-            </Button>
-          </div>
-        }
+        confirmLabel={t("paymentBatchDetail.completeSubmit")}
+        cancelLabel={t("paymentBatchDetail.cancel")}
+        busy={completeMutation.isPending}
+        onConfirm={() => completeMutation.mutate()}
+        onCancel={() => setCompleteOpen(false)}
       >
         {/* D8 — còn dòng chưa chi KHÔNG chặn nút; hộp xác nhận hiện thêm ô tick này thay vào đó. */}
-        {hasUnpaid && (
+        {hasUnpaid ? (
           <label className="flex items-start gap-2 text-sm">
             <Checkbox
               checked={confirmAllPaid}
@@ -334,8 +321,8 @@ export function PaymentBatchDetailPage({
             />
             <span>{t("paymentBatchDetail.confirmAllPaid", { count: unpaidCount })}</span>
           </label>
-        )}
-      </Dialog>
+        ) : undefined}
+      </ConfirmDialog>
     </div>
   );
 }

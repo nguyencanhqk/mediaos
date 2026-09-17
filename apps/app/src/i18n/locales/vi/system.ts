@@ -206,7 +206,8 @@ export default {
         action: "Gỡ khoá đăng nhập",
         hint: "Người dùng gõ sai mật khẩu hoặc mã 2FA quá nhiều lần. Gỡ để họ đăng nhập lại ngay, không phải chờ hết 15 phút.",
         cleared: "Đã gỡ khoá đăng nhập. Người dùng có thể đăng nhập lại ngay.",
-        failed: "Chưa gỡ được khoá đăng nhập — khoá vẫn còn. Hãy thử lại; nếu vẫn vậy, báo người vận hành.",
+        failed:
+          "Chưa gỡ được khoá đăng nhập — khoá vẫn còn. Hãy thử lại; nếu vẫn vậy, báo người vận hành.",
         unknown:
           "Chưa đọc được trạng thái khoá đăng nhập (bộ nhớ đệm không phản hồi). Nút gỡ khoá vẫn dùng được.",
       },

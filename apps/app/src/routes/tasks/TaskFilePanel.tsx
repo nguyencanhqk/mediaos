@@ -29,7 +29,7 @@ import {
 import { Badge, Button, DataTable, Dialog, EmptyState, Input } from "@mediaos/ui";
 import { TASK_FILE_ENGINE_PAIRS } from "./task-file-constants";
 import { PanelBody } from "./PanelBody";
-import { triggerBlobDownload } from "./download-blob";
+import { triggerBlobDownload } from "@/lib/download-blob";
 
 /** 1024-based byte formatter — mirror EmployeeFilesTab.tsx (không export dùng chung, tránh coupling). */
 function formatBytes(bytes: number): string {

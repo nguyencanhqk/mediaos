@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { Download, FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import { hrApi, mapApiErrorToUi } from "@mediaos/web-core";
 import { Button } from "@mediaos/ui";
+import { triggerBlobDownload } from "@/lib/download-blob";
 import {
   HR_IMPORT_ACCEPT_ATTR,
   HR_IMPORT_MAX_FILE_BYTES,
@@ -17,30 +18,6 @@ import {
 } from "./constants";
 
 const DEFAULT_TEMPLATE_FILENAME = "employee-import-template.csv";
-
-/** Tải file nhị phân qua thẻ <a download> ẩn — mirror routes/hr/employees/download-blob.ts (bản sao cục
- * bộ theo feature, tránh coupling chéo employees↔import). No-op an toàn khi thiếu DOM (SSR/test). */
-function triggerDownload(blob: Blob, filename: string): void {
-  if (
-    typeof document === "undefined" ||
-    typeof URL === "undefined" ||
-    typeof URL.createObjectURL !== "function"
-  ) {
-    return;
-  }
-  const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
 
 export interface ImportUploadStepProps {
   onPreview: (file: File) => void;
@@ -61,7 +38,7 @@ export function ImportUploadStep({ onPreview, isSubmitting, error }: ImportUploa
     setDownloadError(null);
     try {
       const { blob, filename } = await hrApi.downloadImportTemplate();
-      triggerDownload(blob, filename ?? DEFAULT_TEMPLATE_FILENAME);
+      triggerBlobDownload(blob, filename ?? DEFAULT_TEMPLATE_FILENAME);
     } catch (e) {
       setDownloadError(mapApiErrorToUi(e).message || t("import.upload.downloadTemplateError"));
     } finally {

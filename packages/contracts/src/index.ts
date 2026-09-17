@@ -135,6 +135,10 @@ export * from "./payroll-catalog";
 // S15-PAYROLL-BE-4 — track C: tạm ứng · đợt chi trả + dòng chi · ngân sách · import thu nhập/khấu trừ khác.
 // Cùng luật tách file (import ngược từ ./payroll, không re-export tên của nó).
 export * from "./payroll-disbursement";
+// S15-PAYROLL-DEBT-1 — tách nguyên văn khỏi ./payroll (đã vượt 800 dòng): thưởng/phạt 023..028 · readiness +
+// picker 006/034/035. Cùng luật tách file (import ngược từ ./payroll, không re-export tên của nó).
+export * from "./payroll-bonus-penalties";
+export * from "./payroll-readiness";
 // S11-ROOM-DB-1 (SPEC-14 · DB-16 §7): enum/hằng ROOM mirror CHECK 0552 hai chiều. DTO park meeting.ts (bảng meetings/
 // meeting_notes/meeting_tasks đã DROP ở 0553, 0 consumer) đã gỡ cùng WO — DTO ROOM thật viết ở S11-ROOM-BE-1 theo API-15.
 export * from "./room";

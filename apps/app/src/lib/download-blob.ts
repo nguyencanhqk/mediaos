@@ -1,12 +1,13 @@
 /**
- * triggerBlobDownload — kích hoạt tải file nhị phân trong trình duyệt (HR-PROFILE-UI-2).
+ * triggerBlobDownload — kích hoạt tải file nhị phân trong trình duyệt (S3-ATT-EXPORT-1).
  *
  * Tạo object URL tạm cho blob → click thẻ <a download> ẩn → thu hồi URL ngay sau đó. DOM-only: no-op an
  * toàn khi thiếu `document`/`URL.createObjectURL` (SSR / môi trường test node / jsdom chưa hỗ trợ) để KHÔNG
  * ném ở nơi không có DOM — caller vẫn nhận blob và tự xử lý.
  *
- * (Bản sao cục bộ theo feature HR — mirror routes/attendance/download-blob.ts; giữ cô lập feature, KHÔNG
- * để HR phụ thuộc chéo vào module attendance.)
+ * S15-PAYROLL-DEBT-1: BẢN DUY NHẤT của app — gom 4 bản sao y hệt (attendance · hr/employees · tasks · inline
+ * ở hr/import) mà payroll từng import chéo. `lib/` là hạ tầng trung lập, không phải coupling giữa feature.
+ * (`recruit/PipelinePage` giữ bản inline riêng: revoke TRỄ qua setTimeout — biến thể có chủ đích, chưa gộp.)
  */
 export function triggerBlobDownload(blob: Blob, filename: string): void {
   if (

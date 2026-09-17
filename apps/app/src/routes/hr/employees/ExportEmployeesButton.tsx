@@ -18,7 +18,7 @@ import { Download, Loader2 } from "lucide-react";
 import { hrApi, useCanExact, mapApiErrorToUi } from "@mediaos/web-core";
 import type { HrEmployeeExportQuery } from "@mediaos/contracts";
 import { Button } from "@mediaos/ui";
-import { triggerBlobDownload } from "./download-blob";
+import { triggerBlobDownload } from "@/lib/download-blob";
 
 /** Cặp engine NHẠY CẢM cho gate exact (khớp HR_PERMS.EMPLOYEE.EXPORT + seed mig 0491). */
 const EXPORT_EMPLOYEE = { action: "export", resourceType: "employee" } as const;

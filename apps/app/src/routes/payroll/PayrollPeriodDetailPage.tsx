@@ -19,7 +19,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@mediaos/ui";
-import { triggerBlobDownload } from "../attendance/download-blob";
+import { triggerBlobDownload } from "@/lib/download-blob";
 import { PAYROLL_ENGINE_PAIRS, type PayrollPeriodTab } from "./constants";
 import {
   canAdjustLines,
