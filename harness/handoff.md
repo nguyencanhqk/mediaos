@@ -2,6 +2,12 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-17 (q) — **S15-PAYROLL-FE-4 ĐÃ MERGE master** (#519 → `f07fbe61`, owner uỷ quyền `--admin`) ✅
+
+**Bắt đầu phiên sau ở đây:** master có Tổng quan `/payroll` · Báo cáo 016 · nút PDF 083/084/085 · tổng toàn kỳ · lọc `insuranceIssue`. CI #519 xanh toàn bộ trước merge. Việc kế: **`S15-PAYROLL-QA-1`** → DASH-1. Đọc memory `s15-payroll-fe4-wave-state` trước (khuôn chart dùng lại cho DASH-1, bẫy `window.open` noopener, chạy test app theo 4 shard). Owner nên xem thử `/payroll` trên dev-online (light/dark) sau deploy; trước deploy BE-5B vẫn phải đếm `files.is_temporary=true`.
+
+**Chi phí phiên: hook báo ~$1.1k** (≈$270 lúc mở PR; phần còn lại phát sinh trong lúc chờ CI dài ở context lớn). Bài học lặp lại: WO sau nên kết thúc phiên ngay khi PR mở, merge ở phiên ngắn riêng.
+
 ## Phiên 2026-09-17 (p) — **S15-PAYROLL-BE-5B ĐÃ MERGE master** (#518 → `b1fdbb94`, owner uỷ quyền `--admin`) ✅ · FE-4 đang làm trên nhánh
 
 **Bắt đầu phiên sau ở đây:** master có PDF phiếu lương 083/084/085 + `ServerFileService` + job dọn tệp tạm xoá object. CI #518 xanh toàn bộ trước merge (đã kiểm từng kết luận). Việc (o) ở dưới đã XONG — đừng làm lại. **Trước deploy BE-5B:** đếm `files.is_temporary=true` trên PROD/dev-online (job dọn nay xoá cả object). Lane `mediaos_be5b` còn giữ — drop khi rảnh (cùng ~120 lane cũ chờ owner).
