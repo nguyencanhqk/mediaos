@@ -2,6 +2,16 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-18 (s) — **S15-PAYROLL-FE-6 ĐÃ MERGE master** (#521 → `7ed4c72f`) ✅ · mở `S15-PAYROLL-DASH-1`
+
+**Bắt đầu phiên sau ở đây:** master có thao tác trên DÒNG đợt chi trả (069: markPaid · remove · addPayees) — nợ T5 của QA-1 đã đóng bằng `payroll-fe6-payment-lines.spec.tsx` 16/16. LIGHT gate 2/2 PASS sau khi vá 1 HIGH (lựa chọn không dọn ở nhánh lỗi ⇒ nhóm hỏng vĩnh viễn vì `removeUserIds` là all-or-nothing) + 2 MEDIUM. Nợ chuyển tiếp đã seed WO mới **`S15-PAYROLL-FE-7`** (ba vế còn lại của 069: status Draft↔Ready · payDate · note).
+
+**Việc kế = `S15-PAYROLL-DASH-1`** (đóng wave S15). Đặc tả đã có sẵn, KHÔNG cần đo lại: **SPEC-11 §10.1b** (bảng 2 widget) + khuôn `S13-PAYROLL-DASH-1` (mig `0568` · `dashboard-widget-payroll.handlers.ts` · `PayrollCostWidget.tsx`).
+
+**⚠️ LỆCH backlog↔SPEC đã chốt theo SPEC (CLAUDE.md §1 — `docs/SPEC` là chuẩn, không phải chữ trong backlog):** `done_when` của WO ghi gate «ngân sách = `view-line:payroll-period` · tạm ứng = `approve:payroll-advance`»; SPEC-11 §10.1b ghi **`view:payroll-budget`** và **`view:payroll-advance`**. Theo SPEC vì (1) luật «gate màn-hình khớp gate đường-tải» — nguồn là 073/059 chứ không phải 018; (2) `approve:payroll-advance ⇒ view:payroll-advance` đã bị mig 0571 §4.7 ép nên với role canonical (payroll-officer · company-admin) tập người thấy widget KHÔNG đổi.
+
+**Nguồn dữ liệu đã đo (khỏi dò lại):** ngân sách = `PayrollBudgetsRepository.yearTotalsTx` (MỘT công thức với Tổng quan 078 + báo cáo `budget-status`, đã xử đúng chuyện KHÔNG cộng trùng hàng công ty với hàng đơn vị) — cần bọc bằng method service có gate+audit vì `PayrollBudgetsService` mới chỉ có `list/create/update`; tạm ứng = `PayrollAdvancesService.list` với `status:['Pending']`, chỉ lấy `total`.
+
 ## Phiên 2026-09-18 (r) — **S15-PAYROLL-QA-1 ĐÃ MERGE master** (#520 → `8bc5c955`, owner cho `--admin`) ✅
 
 **Bắt đầu phiên sau ở đây:** master có bộ QA PAYROLL v2 (553 int + 110 unit + 16 FE, cov payroll 98%) + 3 vá sản phẩm P1/P2/P3. Lane `mediaos_s15qa1` đã DROP. Việc kế theo owner chốt: **`S15-PAYROLL-FE-6`** (thao tác trên DÒNG đợt chi trả, 069) → DASH-1. **Plan FE-6 đã viết và đã qua plan-reviewer (vòng 1 REVISE → đã vá): `docs/plans/S15-PAYROLL-FE-6.md`** — đọc §0 (base = master) + §1 (bảng luật BE có file:line) + §2 (D1–D8) rồi code thẳng, KHÔNG đo lại BE.
