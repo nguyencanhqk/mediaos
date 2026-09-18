@@ -2,6 +2,18 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-18 (r) — **S15-PAYROLL-QA-1 ĐÃ MERGE master** (#520 → `8bc5c955`, owner cho `--admin`) ✅
+
+**Bắt đầu phiên sau ở đây:** master có bộ QA PAYROLL v2 (553 int + 110 unit + 16 FE, cov payroll 98%) + 3 vá sản phẩm P1/P2/P3. Lane `mediaos_s15qa1` đã DROP. Việc kế theo owner chốt: **`S15-PAYROLL-FE-6`** (thao tác trên DÒNG đợt chi trả, 069) → DASH-1. **Plan FE-6 đã viết và đã qua plan-reviewer (vòng 1 REVISE → đã vá): `docs/plans/S15-PAYROLL-FE-6.md`** — đọc §0 (base = master) + §1 (bảng luật BE có file:line) + §2 (D1–D8) rồi code thẳng, KHÔNG đo lại BE.
+
+**Hai lần CI đỏ, hai bẫy CHỈ CI Linux mới lộ (cổng local trên Windows mù cả hai):**
+1. `c19d9c3f` — spec đọc `docs/spec/SPEC-11 PAYROLL.md`; thư mục canonical trong git là **`docs/SPEC/`**. Windows không phân biệt hoa/thường ⇒ `check.sh --lane-db` XANH, CI `ENOENT`. Mọi `readFileSync` trỏ repo phải lấy tên từ `git ls-files`, không gõ theo CLAUDE.md. Memory: [[git-pathspec-is-case-sensitive-on-windows]].
+2. `117b2599` — G12-006 ghim sẵn `payslips_generated_by === actor1Id` sau hai lượt `generate-payslips` SONG SONG. Máy dev actor1 thắng row-lock mọi lượt; CI actor2 thắng ⇒ đỏ. Nay đo bất biến (người đóng dấu ∈ {actor1, actor2}; lượt no-op không đóng dấu đè). Memory MỚI: [[race-test-must-not-pin-winner]].
+
+**Plan-reviewer bắt 3 lỗi SỰ THẬT trong bản plan FE-6 đầu (đã kiểm chứng lại từng chỗ trên code, đều đúng):** `payee-no-bank-account` là **027** không phải 026 · `addUserIds` đường tường minh **KHÔNG lọc `hasLine`** ⇒ người đã ở đợt khác ăn 409 `payee-already-in-batch` (không phải 404) · `markPaidTx` có `and paid_at is null` ⇒ đánh dấu lại là **no-op IM LẶNG** và envelope không trả số dòng đổi ⇒ UI không được khẳng định "đã đổi N dòng". Bài học: bảng "luật BE đã ĐO" trong plan phải kèm file:line, và vẫn phải cho reviewer soi trước khi code.
+
+**Chi phí phiên: hook báo ~$195** (chờ CI hai vòng trong context lớn). Vẫn đúng bài học của phiên (q): mở PR xong thì kết thúc phiên.
+
 ## Phiên 2026-09-17 (q) — **S15-PAYROLL-FE-4 ĐÃ MERGE master** (#519 → `f07fbe61`, owner uỷ quyền `--admin`) ✅
 
 **Bắt đầu phiên sau ở đây:** master có Tổng quan `/payroll` · Báo cáo 016 · nút PDF 083/084/085 · tổng toàn kỳ · lọc `insuranceIssue`. CI #519 xanh toàn bộ trước merge. Việc kế: **`S15-PAYROLL-QA-1`** → DASH-1. Đọc memory `s15-payroll-fe4-wave-state` trước (khuôn chart dùng lại cho DASH-1, bẫy `window.open` noopener, chạy test app theo 4 shard). Owner nên xem thử `/payroll` trên dev-online (light/dark) sau deploy; trước deploy BE-5B vẫn phải đếm `files.is_temporary=true`.
