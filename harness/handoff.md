@@ -2,6 +2,22 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-18 (t) — **S15-PAYROLL-DASH-1: PR #522 MỞ, chờ owner merge** (đóng wave S15)
+
+**Bắt đầu phiên sau ở đây:** nhánh `feat/s15-payroll-dash-1` (2 commit `dbaaed98` + `4b24af13`, base master `a637a03a`). Việc còn lại: đợi CI → owner merge → regen STATUS + handoff + đóng `status: "done"` cho WO trong `harness/backlog.mjs` (PHIÊN NÀY CHƯA sửa backlog — tránh thêm một vòng CI). Đọc memory `s15-payroll-dash1-wave-state` trước khi đụng lại.
+
+**Chốt quan trọng — lệch backlog ↔ SPEC, đã theo SPEC:** cặp gate 2 widget là `view:payroll-budget` / `view:payroll-advance` (SPEC-11 §10.1b), KHÔNG phải `view-line:payroll-period` / `approve:payroll-advance` như `done_when` viết. Lý do + ghi chú đã bake vào SPEC-11 §10.1b và thân PR. Với vai canonical, tập người thấy widget không đổi.
+
+**Cổng:** LIGHT gate 2/2 PASS (0 CRITICAL/0 HIGH); 2 LOW + 1 MEDIUM của reviewer đã vá trong PR. int-spec 21/21 (lane `mediaos_s15dash1`), hồi quy 6 int-spec DASH 177/177, FE 37 ca, gate unit 11/11, typecheck xanh. ⚠️ `harness/check.sh --lane-db=s15dash1` chạy cục bộ **chưa kết thúc** lúc mở PR (full-suite máy này rất chậm) ⇒ CI là cổng cuối.
+
+**`check.sh --lane-db=s15dash1` chạy xong SAU khi mở PR: kết luận ĐỎ — `@mediaos/api` 736/736 file chạy, 5 lần chạy lại (crash hạ tầng), **2 ĐỎ THẬT chưa định danh**.** Chi tiết bị `tail` cắt mất và thư mục báo cáo chunk đã dọn ⇒ không truy được tên spec trong phiên. ĐÃ LOẠI TRỪ bề mặt của WO bằng cách chạy lại: `src/dashboard` + `src/foundation/seed` + 3 int-spec config/catalog = **385/385 xanh**; `src/payroll` = **462/462 xanh**; int-spec DASH (6 file) = 177/177. Nghi là họ flake đã biết của máy này (xem chỉ mục bẫy: vitest worker crash · super-admin-bootstrap · attendance-leave-sync). **Phiên sau: đọc CI của PR #522 để định danh 2 ca đó** — nếu CI xanh thì đúng là flake máy; nếu đỏ thì truy root-cause trước khi merge. Lần sau chạy `check.sh` ĐỪNG pipe qua `tail` (mất chi tiết chunk).
+
+**NỢ mới ghi nhận, chưa có WO:** (1) `dashboard-widget-catalog.const.ts` 783 dòng + `dashboard-widget-handlers.service.ts` 771 dòng — widget DASH kế tiếp sẽ vượt trần 800; (2) `gatePayrollCost` nên gọi `gateCompanyWide`; (3) audit widget chỉ có trên cache MISS, nay diện rộng hơn vì `PAYROLL_BUDGET` chở tiền.
+
+**Còn lại của S15 sau WO này:** `S15-PAYROLL-FE-5` (nợ G3) · `S15-PAYROLL-FE-7` (3 vế còn lại của 069) · `S15-UI-SHELL-2` (tách sidebar-registry) · `S15-PAYROLL-BE-2B` (🔴 nợ BE-2).
+
+**Chi phí phiên: hook báo ~$95.5** lúc mở PR (2 subagent gate + int-spec lane). Lặp lại bài học (q)/(r): kết thúc phiên ngay khi PR mở.
+
 ## Phiên 2026-09-18 (s) — **S15-PAYROLL-FE-6 ĐÃ MERGE master** (#521 → `7ed4c72f`) ✅ · mở `S15-PAYROLL-DASH-1`
 
 **Bắt đầu phiên sau ở đây:** master có thao tác trên DÒNG đợt chi trả (069: markPaid · remove · addPayees) — nợ T5 của QA-1 đã đóng bằng `payroll-fe6-payment-lines.spec.tsx` 16/16. LIGHT gate 2/2 PASS sau khi vá 1 HIGH (lựa chọn không dọn ở nhánh lỗi ⇒ nhóm hỏng vĩnh viễn vì `removeUserIds` là all-or-nothing) + 2 MEDIUM. Nợ chuyển tiếp đã seed WO mới **`S15-PAYROLL-FE-7`** (ba vế còn lại của 069: status Draft↔Ready · payDate · note).
