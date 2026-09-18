@@ -494,6 +494,13 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · G9 — FSM 9×8 bảng tay + G1
         expect(g.status, JSON.stringify(g.body)).toBe(201);
         expect(g.body?.error?.code).not.toBe("PAYROLL-ERR-006");
       }
+      // Cờ mang dấu NGƯỜI THẮNG cuộc đua — KHÔNG ghim sẵn actor nào (lượt nào giành row-lock trước là
+      // ngẫu nhiên; CI đã thắng bởi actor2). Bất biến thật: đúng một người đóng dấu, và lượt no-op sau
+      // đó KHÔNG đóng dấu lại.
+      const afterRace = await row();
+      expect([actor1Id, actor2Id]).toContain(afterRace.payslips_generated_by);
+      expect(afterRace.payslips_generated_at).not.toBeNull();
+
       const genAgain = await post(tActor1, `/payroll-periods/${id}/generate-payslips`);
       expect(genAgain.status, JSON.stringify(genAgain.body)).toBe(201);
       expect(genAgain.body.data.warnings).toContain("payslips-already-generated");
@@ -503,8 +510,10 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · G9 — FSM 9×8 bảng tay + G1
       );
       expect(slipCount.rows[0].n, "0 phiếu nhân bản qua 3 lượt gọi").toBe(1);
       snap = await row();
-      expect(snap.payslips_generated_by).toBe(actor1Id);
-      expect(snap.payslips_generated_at).not.toBeNull();
+      expect(snap.payslips_generated_by, "lượt no-op đóng dấu ĐÈ người thắng").toBe(
+        afterRace.payslips_generated_by,
+      );
+      expect(snap.payslips_generated_at).toEqual(afterRace.payslips_generated_at);
 
       const pub = await post(tActor1, `/payroll-periods/${id}/publish`);
       expect(pub.status, JSON.stringify(pub.body)).toBe(201);
