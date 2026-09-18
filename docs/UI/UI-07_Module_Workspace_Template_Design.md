@@ -29,6 +29,7 @@
 
 | Phiên bản | Ngày | Thay đổi | Người thực hiện |
 | --- | --- | --- | --- |
+| **v1.2** | **18/09/2026** | **S16-SOCIAL-DOC-1 — thêm §34b biến thể «Cổng thông tin 3 cột»** dành riêng SOCIAL (rail trái 240 · cột feed max 680 · rail phải 300; dưới 1024px rail trái thành thanh tab ngang, rail phải gập xuống cuối). Kèm anatomy thẻ bài, trạng thái bắt buộc và ghi chú hiện thực (`apps/app/src/layouts/portal/`, KHÔNG sửa `layouts/workspace/`). Nguồn: [SPEC-16 §9](<../SPEC/SPEC-16 SOCIAL.md>). | |
 | v1.0 | 20/06/2026 | Khởi tạo tài liệu cho giai đoạn MVP v1.0. | |
 | **v1.1a** | **12/09/2026** | **S15-UI-SHELL-1 — đối chiếu tài liệu ↔ code khi dựng thật**: §9.4 `collapsible` mặc định **true** (cờ để TẮT, không để BẬT — cây TASK 3 cấp đã chạy không khai cờ) · §9.2 mục 8 làm rõ «ACTIVE» = mục CON active, và chevron của nhóm bị ghim mở thì `disabled` + tooltip · §21.8 «Bảng công» là TAB của chi tiết kỳ chứ không phải mục sidebar, không bọc thêm hàng cha «Thiết lập», và mục chưa có màn tự ẩn qua `pruneUnbuiltScreens()` theo `ROUTE_REGISTRY`. Component dựng ở `packages/ui`: `DataToolbar` · `ColumnPicker` + `useColumnVisibility` · `TableFooter` · `StatusPill` · `DetailPageHeader`, cộng `DataTable` nhận `pinFirstColumn`/`pinLastColumn`/`footer`. | |
 | **v1.1** | **11/09/2026** | **DEC-020 — vỏ UI dùng chung** (làm ở `packages/ui` + layout `apps/app`, **mọi module dùng chung, KHÔNG riêng PAYROLL**): §6.2 thêm `SidebarNavGroup` **gập được** · `ColumnPicker` · `DetailPageHeader` · §6.3 slot `detailPageHeader` · §9.2/§9.5 **gập per-group** + luật «nhóm cha ẩn khi mọi con đều ẩn» · §9.4 union `moduleCode` đồng bộ code (**+`PAYROLL`** và 8 module đã ship còn thiếu) + `collapsible`/`defaultCollapsed` · §10.4 toolbar «⚙ chọn cột» + «đơn vị» · §12.3/§12.4 DataTable **ghim cột · chọn cột · footer «Tổng số · Số dòng/trang · 1–N»** · §13.7 tách `DetailPageHeader` + `StatusPill` · §21.8 **Workspace PAYROLL** · §26.1 đường dẫn component dùng chung → **`packages/ui`**. Nguồn: [SPEC-11 §9.1 · §23.2](<../SPEC/SPEC-11 PAYROLL.md>), WO `S15-UI-SHELL-1`. | |
@@ -2132,6 +2133,97 @@ Khi bàn giao wireframe Module Workspace, mỗi màn cần có:
 | State screens | Loading, empty, error, forbidden, disabled module. |
 | Frontend component note | Component props và folder structure. |
 | QA checklist | Acceptance criteria từ UI-07. |
+
+---
+
+## 34b. Biến thể **Cổng thông tin 3 cột** — dành riêng SOCIAL
+
+> **Bổ sung 18/09/2026** (`S16-SOCIAL-DOC-1`, [SPEC-16 §9](<../SPEC/SPEC-16 SOCIAL.md>)). Đây là **biến thể**, không thay Module Workspace 2 cột ở §6 — mọi module khác vẫn dùng khuôn chuẩn.
+
+### 34b.1 Vì sao SOCIAL cần khuôn riêng
+
+Module Workspace chuẩn (sidebar + vùng nội dung) tối ưu cho **danh sách/biểu mẫu**: người dùng vào để *làm một việc*. Bảng tin thì ngược lại — người dùng vào để *đọc lướt*, và phần lớn giá trị nằm ở các khối phụ trợ (sinh nhật · tin nổi bật · bình chọn đang mở · nhóm của tôi) vốn không có chỗ trong khuôn 2 cột. Ép SOCIAL vào khuôn chuẩn sẽ đẩy các khối đó xuống cuối trang, nơi không ai cuộn tới.
+
+### 34b.2 Anatomy desktop (≥ 1024px)
+
+```text
+┌──────────────────────── Global Topbar (+ ô tìm kiếm SOCIAL) ─────────────────────────┐
+├───────────────┬──────────────────────────────────────┬───────────────────────────────┤
+│ Rail trái     │ Cột feed (giữa)                      │ Rail phải                     │
+│ 240px         │ max 680px, căn giữa phần còn lại     │ 300px                         │
+│               │                                      │                               │
+│ Thẻ danh tính │ Dải ô liên kết nhanh (theo quyền)    │ Tin nổi bật                   │
+│  avatar · tên │ Composer «Bạn muốn chia sẻ gì?»      │ Bình chọn đang mở             │
+│  «Trang cá    │   5 nút: Chia sẻ · Tin tức* ·        │ Vinh danh tháng này           │
+│   nhân»       │          Sáng kiến · Bình chọn ·     │ Nhóm của tôi (badge bài mới)  │
+│               │          Vinh danh                   │ Widget DASH «Nhân sự»         │
+│ Bảng tin      │ Thanh Sinh nhật «Hôm nay ▾»          │   (theo quyền)                │
+│ Tin tức       │ Lọc «Tất cả ▾» · Sắp xếp «Hoạt       │                               │
+│ Sáng kiến     │   động mới ⇅»                        │                               │
+│ Bình chọn     │ ── Thẻ bài ──                        │                               │
+│ Nhóm          │ ── Thẻ bài ──                        │                               │
+│ Đã lưu        │ …                                    │                               │
+│ ─────────     │                                      │                               │
+│ Nhóm của tôi  │                                      │                               │
+│ Đăng bài FB ↗ │                                      │                               │
+└───────────────┴──────────────────────────────────────┴───────────────────────────────┘
+```
+
+`*` Nút «Tin tức» chỉ hiện khi caller giữ `manage:feed-news`.
+
+### 34b.3 Quy chuẩn kích thước
+
+| Breakpoint | Rail trái | Cột feed | Rail phải |
+| --- | --- | --- | --- |
+| ≥ 1440px | 240px cố định | max **680px** | 300px cố định |
+| 1024–1439px | 240px cố định | co giãn, max 680px | 300px cố định |
+| 768–1023px | → **thanh tab ngang** dính trên đầu feed | full width, max 680px | → gập xuống **cuối trang** |
+| < 768px | thanh tab ngang cuộn ngang | full width | cuối trang, xếp dọc |
+
+Dưới 1024px **không** dùng drawer cho rail trái: mục SOCIAL ít và phẳng, thanh tab ngang rẻ hơn và không nuốt một lớp tương tác.
+
+### 34b.4 Thẻ bài — anatomy
+
+```text
+┌────────────────────────────────────────────────────────┐
+│ ◯ Nguyễn Văn A · 1 tuần trước · 🏢          [⋯]        │
+│   (🏢 công ty · 👥 nhóm · 🏷 đơn vị)                   │
+├────────────────────────────────────────────────────────┤
+│ Nội dung bài … (cắt sau 6 dòng + «Xem thêm»)           │
+│ #hashtag                                               │
+│ ┌──────┬──────┐   lưới ảnh 1–10 (video tối đa 1)       │
+│ └──────┴──────┘                                        │
+│ [khối riêng theo loại: poll · idea · kudos]            │
+├────────────────────────────────────────────────────────┤
+│ 👍 3 · 31 người xem                                     │
+│ [Thích]  [Bình luận]  [Sao chép liên kết]              │
+├────────────────────────────────────────────────────────┤
+│ ◯ [ô bình luận: mention · đính kèm · emoji · Gửi]      │
+└────────────────────────────────────────────────────────┘
+```
+
+Menu `⋯` hiện theo quyền: **sửa · xoá** (chủ bài) · **lưu · báo cáo** (mọi người) · **ghim · ẩn · khoá bình luận** (`manage:feed-post` / `manage:feed-news`).
+
+> ⚠️ **Bẫy đã gặp ở wave trước:** «nút ⋯ vắng» **không** đồng nghĩa «mục vắng». Ca kiểm thử deny-path phải xác nhận **mục trong menu** không có, chứ không chỉ xác nhận nút mở menu không render — nếu không, một thay đổi làm nút biến mất vì lý do khác sẽ làm ca deny xanh giả.
+
+### 34b.5 Trạng thái bắt buộc
+
+| Trạng thái | Xử lý |
+| --- | --- |
+| Loading | Skeleton **thẻ bài** (không spinner giữa trang); rail phải skeleton từng khối |
+| Empty — chưa có bài | Minh hoạ + CTA «Viết bài đầu tiên» |
+| Empty — không có kết quả tìm | Khác hẳn ô trên: gợi ý bỏ bớt từ khoá |
+| Empty — nhóm chưa có bài | CTA «Đăng bài trong nhóm» nếu là thành viên |
+| Error | Khối lỗi **trong cột feed**, giữ nguyên hai rail; có nút thử lại |
+| Forbidden | Mục **ẩn khỏi rail** thay vì hiện rồi báo lỗi |
+| Bài mới đến qua WS | Badge «N bài mới» ở đầu cột feed — **không** tự chèn vào dòng cuộn đang đọc |
+
+### 34b.6 Ghi chú hiện thực
+
+- Layout đặt ở `apps/app/src/layouts/portal/` — **không** sửa `layouts/workspace/`.
+- Mục rail trái đăng ký qua `ROUTE_REGISTRY` như mọi module; mục chưa có màn tự ẩn (`pruneUnbuiltScreens()`).
+- Ô «Đăng bài Facebook» là **liên kết ngoài** (icon ↗), gate bằng ba cặp `social-*` cũ — xem `S16-SOCIAL-FBPOST-1`.
+- Mọi thời gian hiển thị theo múi giờ công ty; server trả ISO, FE format bằng `date-fns`.
 
 ---
 

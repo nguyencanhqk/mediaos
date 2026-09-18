@@ -144,6 +144,37 @@ Nới giai đoạn **không** kéo theo nới bất biến. Ba điều sau giữ
 
 ---
 
+## 6b. Bổ sung 18/09/2026 — `SOC-DEC-002` (wave S16-SOCIAL)
+
+> ADR này **không bị huỷ**. Sáu quyết định §3 giữ nguyên hiệu lực. Mục này ghi lại một quyết định của wave
+> sau chạm vào cùng mã module, để người đọc ADR không kết luận nhầm rằng `SOCIAL` = fbpost.
+
+**Bối cảnh.** Wave S9 nhập fbpost dưới mã module `SOCIAL`, trong khi [SPEC-01 §7](<../SPEC/SPEC-01 Tổng quan.md>)
+và hàng `modules` do migration `0435` seed vẫn định nghĩa `SOCIAL` = **mạng xã hội nội bộ** (SPEC-16, Phase 4).
+Khi wave `S16-SOCIAL` thi công mạng xã hội nội bộ thật, một mã module mang hai nghĩa là nguồn lỗi chắc chắn.
+
+**Quyết định `SOC-DEC-002` (owner duyệt 02/09/2026, [SPEC-16 §22](<../SPEC/SPEC-16 SOCIAL.md>)):**
+
+| | |
+| --- | --- |
+| Mã `SOCIAL` | = **mạng xã hội nội bộ** (đúng SPEC-01 §7 + hàng `modules` 0435) |
+| fbpost | trở thành **tiện ích con «Đăng bài Facebook»** bên trong module SOCIAL — mục cuối sidebar, mở SSO như cũ |
+| Ba cặp quyền `('view','social-post')` · `('create','social-post')` · `('manage','social-account')` | **GIỮ NGUYÊN** tên, grant và hành vi. Không migration đổi tên quyền trên PROD |
+| Dịch vụ cổng 3500 · SQLite · worker in-process | **KHÔNG đụng** — `SOCIAL-DEC-002..005` của ADR này còn nguyên |
+| Quyền của mạng xã hội nội bộ | resource mang tiền tố **`feed-`** (14 cặp — [ma trận §9h](<../permission-matrix-spec.md>)) |
+
+**Lý do kỹ thuật của tiền tố `feed-`, không phải thẩm mỹ:** migration `0544` có bước verify **đếm grant
+`social*` của vai `employee`** và RAISE nếu khác 0 (hàng rào của `SOCIAL-DEC-006` — fbpost không cấp cho
+employee). Mạng xã hội nội bộ thì **cấp đại trà cho employee** (`SOC-DEC-004`). Đặt cặp mới dưới tên
+`social-*` sẽ làm đỏ verify của một migration **đã ship lên PROD**.
+
+> ⚠️ Lưu ý khi đọc: ADR này dùng tiền tố mã `SOCIAL-DEC-00x`; wave S16 dùng `SOC-DEC-00x`. Hai bộ mã **khác
+> nhau** — `SOCIAL-DEC-002` (fbpost giữ SQLite, §3) không liên quan gì tới `SOC-DEC-002` (quyền sở hữu mã module).
+
+**WO thực thi:** `S16-SOCIAL-FBPOST-1` (chuyển tile, không đụng `apps/fbpost` hay quyền).
+
+---
+
 ## 7. Chữ ký
 
 | | |

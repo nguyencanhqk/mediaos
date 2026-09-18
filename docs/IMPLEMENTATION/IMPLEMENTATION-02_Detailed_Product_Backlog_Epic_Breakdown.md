@@ -856,6 +856,43 @@ PAYROLL phụ thuộc AUTH (RBAC per-pair + scope; `users`; role 2FA), HR (`empl
 
 ---
 
+## 8.22 EPIC-21: SOCIAL - Mạng xã hội nội bộ
+
+> **Bổ sung 2026-09-18** theo [SPEC-16 SOCIAL](<../SPEC/SPEC-16 SOCIAL.md>) (wave **S16-SOCIAL**, Phase 4 kéo lên — owner duyệt 02/09/2026, SOC-DEC-001..010). Story SC-01..14 của `docs/plans/S16-SOCIAL-WAVE.md` §4 ánh xạ 1-1 sang **IMP02-STORY-205..218** (14 story / **112 point**). Dải story đo tại DOC-1: cao nhất đang dùng là 204 (S15-PAYROLL-V2). **Sprint 16.**
+>
+> Trace WO: `S16-SOCIAL-DOC-1 → DB-1 → {Track A: BE-1 → FE-1 ‖ Track B: DB-2 → BE-2 → FE-2 ‖ Track C: BE-3 → FE-3} → QA-1 → DASH-1`, cộng `FBPOST-1` chạy song song ngay sau DOC-1. DB-2 **nối tiếp** DB-1 — lane migration duy nhất của wave, và **không chạy cùng ngày** với lane migration của S15.
+
+**Mục tiêu:** Cho công ty một kênh truyền thông nội bộ hai chiều — nhân viên đăng bài và tương tác, HR phát tin tức đo được tỉ lệ đọc, sáng kiến có quy trình duyệt có vết, bình chọn lấy ý kiến nhanh kể cả ẩn danh, vinh danh ghi nhận đóng góp, và quản trị có hàng đợi kiểm duyệt + số liệu tương tác.
+
+> ⚠️ **Mã `SOCIAL` đã bị app vệ tinh fbpost dùng từ wave S9.** `SOC-DEC-002` giữ `SOCIAL` = mạng xã hội nội bộ và biến fbpost thành **tiện ích con «Đăng bài Facebook»**; resource mới bắt buộc tiền tố **`feed-`** vì migration `0544` verify đếm grant `social*` của `employee`. Xem [DECISIONS-08 §6b](<../DECISIONS/DECISIONS-08_Social_Satellite_App.md>).
+
+**Cấp phát ĐÓNG** (SPEC-16 §5.1 — con số chốt tại DOC-1, **khác** ước lượng lúc seed wave; xem SPEC-16 §23.1): **19 bảng** `feed_*` (Track A 10 · Track B 9) · **12 màn** `SOC-SCREEN-001..012` · **53 route** `SOCIAL-API-001..053` · **14 cặp quyền** (permission-matrix **§9h**, **0 sensitive**, **43 grant** `role_permissions`) · **22 mã lỗi** `SOCIAL-ERR-001..022` · **9 event** `NOTI-EVENT-028..036` · **2 widget DASH** `SOCIAL-WIDGET-001/002` · **3 nhóm trạng thái** SPEC-01 §17.18–17.20.
+
+| Story | Vai | Muốn | Ưu tiên | Point | Ràng buộc kỹ thuật then chốt |
+| --- | --- | --- | --- | --- | --- |
+| IMP02-STORY-205 | Nhân viên | Đăng bài chia sẻ (văn bản · ảnh · video · hashtag · gắn thẻ) theo phạm vi công ty/đơn vị/nhóm; sửa, xoá bài của mình | P1 | 13 | `feed_posts` CHECK cặp `audience` ⇒ khoá ngoại tương ứng (DB-17 §6.1); xoá = **soft-delete** + thùng rác (BẤT BIẾN 2); sửa set `edited_at` + đồng bộ lại hashtag/mention **cùng tx**; `@Idempotent()` trên `SOCIAL-API-002` |
+| IMP02-STORY-206 | Nhân viên | Thích (emoji), bình luận, trả lời 1 cấp, mention @, đính kèm; xem số người xem | P1 | 13 | Bộ emoji **dùng chung CHAT** (không bộ thứ hai); một cấp trả lời ép ở **service** (`SOCIAL-ERR-005`) vì CHECK không nhìn được hàng cha; `feed_mentions` là **bảng thật** (không lặp nợ `task_comment_mentions`); lượt xem `ON CONFLICT DO NOTHING` ⇒ reload không tăng |
+| IMP02-STORY-207 | Nhân viên | Lọc/sắp xếp bảng tin, tìm kiếm bài | P1 | 8 | `search_vector` cột sinh — **đo `unaccent` lúc chạy**, `unaccent()` là STABLE nên phải bọc hàm IMMUTABLE (DB-17 §6.1b); fallback `ILIKE`; feed dùng **cursor-based** (offset trượt khi có bài mới) |
+| IMP02-STORY-208 | Nhân viên | Lưu bài, xem «Đã lưu»; xem «Bài viết của tôi» và trang bài của đồng nghiệp | P2 | 5 | `feed_saved_posts` UNIQUE(company,user,post); trang cá nhân vẫn lọc theo audience của **người xem**, không của chủ trang |
+| IMP02-STORY-209 | HR / Admin | Đăng tin tức, ghim «Tin nổi bật», yêu cầu xác nhận đã đọc và xem ai đã đọc | P1 | 8 | `manage:feed-news`; CHECK `pinned`/`requires_ack` **chỉ** cho `type='news'`; `feed_post_acks` **append-only** (`SELECT, INSERT`) — xác nhận đọc không rút lại được |
+| IMP02-STORY-210 | Nhân viên | Thấy sinh nhật hôm nay/tuần này và gửi lời chúc; tự ẩn sinh nhật của mình | P2 | 5 | **DTO chỉ `{employeeId, fullName, avatar, day, month}`** — không năm, không tuổi (SOC-DEC-007); gate `view:feed`, **không** cấp cặp HR; `user_preferences.feed.showBirthday` phải được tôn trọng ở **mọi** đường ra (widget · gắn thẻ · tìm kiếm) |
+| IMP02-STORY-211 | Nhân viên | Tạo/tham gia nhóm công khai, xin vào nhóm riêng tư; admin nhóm duyệt thành viên, đăng bài trong nhóm | P1 | 13 | **Vai trò trong nhóm là HÀNG** `feed_group_members.role` (khuôn DECISIONS-04), không phải cặp quyền; membership **RLS không ép được** ⇒ lọc trong SQL + **ca IDOR bắt buộc**; `owner` cuối cùng rời nhóm ⇒ 409 `SOCIAL-ERR-015` |
+| IMP02-STORY-212 | Nhân viên | Tạo bình chọn (1/nhiều lựa chọn · ẩn danh · hạn), bỏ phiếu, xem kết quả; tự đóng khi hết hạn | P1 | 13 | `feed_poll_votes.user_id` **vẫn lưu** khi ẩn danh (chống phiếu đôi) nhưng **không ra DTO kể cả cho admin** ⇒ repository dùng tập cột tường minh, cấm `select()` trần; partial unique một-phiếu không đọc được `multiple_choice` ở bảng khác — hai đường hợp lệ ở DB-17 §7.5, **không trigger**; job đóng theo hạn khuôn `system-jobs` |
+| IMP02-STORY-213 | Nhân viên / Admin | Gửi sáng kiến; admin/HR xét duyệt kèm ghi chú; tác giả nhận thông báo | P2 | 8 | FSM `submitted → under_review → accepted\|rejected` (SPEC-01 §17.19) ép ở service bằng `assertIdeaTransition`; nhảy cấp ⇒ 409 `SOCIAL-ERR-019`; `rejected` bắt buộc `review_note` (CHECK ở DB là chốt cuối) |
+| IMP02-STORY-214 | Nhân viên / HR | Gửi lời vinh danh kèm huy hiệu; HR quản lý catalog huy hiệu | P2 | 8 | `feed_kudos` 1-1 với bài `type='kudos'`; nhiều người nhận một lời (`feed_kudos_recipients`); xoá huy hiệu = **tắt** `is_active`, không hard-delete |
+| IMP02-STORY-215 | Hệ thống | Thông báo NOTI cho 9 tình huống tương tác | P1 | 8 | `NOTI-EVENT-028..036` — **catalog CHECK sống ở HAI bảng** + bản mẫu, UNION-ADD không rewrite; dải **đo lại lúc merge**; phát qua outbox, không gọi thẳng |
+| IMP02-STORY-216 | Admin / HR | Hàng đợi báo cáo: ẩn/hiện · khoá bình luận · xoá bài · xử lý báo cáo — mọi thao tác có audit | P1 | 8 | `object_type` mới `feed_post`/`feed_comment`/`feed_group`/`feed_report` **UNION-ADD** vào CHECK `audit_logs` đúng neo parse; audit ghi **cùng tx**; báo cáo đã xử lý ⇒ 409 `SOCIAL-ERR-021` |
+| IMP02-STORY-217 | Admin / HR / Manager | Thống kê tương tác theo tuần & đơn vị, xuất XLSX; widget DASH «Tương tác tuần» | P2 | 8 | SQL **set-based** (không vòng lặp); sàn scope `Company`, manager `Department`; **KHÔNG cache** (số phải tươi); `view:feed-report` là cặp duy nhất có scope khác nhau theo vai |
+| IMP02-STORY-218 | Nhân viên | Dải ô liên kết nhanh hiện theo quyền | P3 | 3 | Dùng `useCan` + `APP_REGISTRY` sẵn có, **không** hard-code; ô «Đăng bài Facebook» gate bằng ba cặp `social-*` cũ |
+
+### Ghi chú dependency
+
+SOCIAL phụ thuộc AUTH (RBAC per-pair + scope), HR (`employees` · `org_units` · `date_of_birth` cắt còn ngày+tháng), FOUNDATION (`files`/`file_links` · `audit_logs` · `user_preferences` · thùng rác · `system-jobs` · `@Idempotent()`), NOTI (outbox) và CHAT (bộ emoji dùng chung). `plan-reviewer` PASS trên SPEC-16 + DB-17 là cổng mở WO DB-1.
+
+**Hai điểm rủi ro cao nhất không nằm ở khối lượng** mà ở hai chỗ RLS không đỡ được: **membership nhóm riêng tư** (STORY-211) và **PII ngày sinh** (STORY-210). Cả hai ép ở service và đều có ca kiểm thử bắt buộc ở SPEC-16 §21.
+
+---
+
 ## 9. Backlog theo Sprint đề xuất
 
 > Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP baseline: **112 story / 869 point** (+ EPIC-12 ME bổ sung 2026-07-13: 8 story / 44 point; + 4 story HR bổ sung EPIC-03 2026-07-13: IMP02-STORY-121..124, 36 point → **124 story / 949 point**). Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).

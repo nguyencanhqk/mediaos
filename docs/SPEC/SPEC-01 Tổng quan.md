@@ -955,31 +955,37 @@ Module liên quan:
 
 ### 12.13 SOCIAL — Mạng xã hội nội bộ
 
-Tài liệu chi tiết: SPEC-16
+Tài liệu chi tiết: [SPEC-16 SOCIAL](<SPEC-16 SOCIAL.md>) · schema [DB-17](<../DB/DB-17 SOCIAL Database Design.md>) · API [API-19](<../API Design/API-19_SOCIAL_API_Design.md>) · quyền [ma trận §9h](<../permission-matrix-spec.md>)
 
-Giai đoạn: Phase 4
+Giai đoạn: Phase 4 — **kéo lên wave `S16-SOCIAL`** (owner duyệt 02/09/2026, SOC-DEC-001..010)
 
 Mục tiêu:
 
 Tạo không gian chia sẻ, truyền thông và gắn kết văn hóa nội bộ trong công ty.
 
-Chức năng chính:
+> ⚠️ **Mã `SOCIAL` có hai bề mặt.** Module `SOCIAL` là **mạng xã hội nội bộ** mô tả ở đây. App vệ tinh **đăng bài Facebook** ([DECISIONS-08](<../DECISIONS/DECISIONS-08_Social_Satellite_App.md>), wave S9) là một **tiện ích con «Đăng bài Facebook»** nằm trong module này — giữ nguyên ba cặp quyền `social-post`/`social-account`, dịch vụ cổng 3500 và đường SSO. Quyền của mạng xã hội nội bộ mang tiền tố **`feed-`** để không đụng vào đó (SOC-DEC-002).
 
-* Đăng bài
-* Like
-* Comment
-* Gắn thẻ nhân viên
-* Hashtag
-* Thông báo công ty
-* Chúc mừng sinh nhật
-* Vinh danh nhân viên
-* Khảo sát nội bộ
+Chức năng chính (phạm vi v1 — SPEC-16 §5.1):
+
+* Bảng tin + 5 loại bài: chia sẻ · tin tức · sáng kiến · bình chọn · vinh danh
+* Bình luận 1 cấp + mention + đính kèm
+* Cảm xúc (dùng chung bộ emoji CHAT)
+* Hashtag + tìm kiếm toàn văn
+* Lưu bài · đếm lượt xem · trang cá nhân
+* Tin tức công ty: ghim + yêu cầu xác nhận đã đọc
+* Chúc mừng sinh nhật (chỉ ngày + tháng — SOC-DEC-007)
+* Nhóm công khai / riêng tư
+* Kiểm duyệt: báo cáo · ẩn · khoá bình luận · xoá
+* Thống kê tương tác + 2 widget DASH
 
 Module liên quan:
 
-* HR: dữ liệu nhân viên, sinh nhật, nhân viên mới.
-* NOTI: thông báo bài viết, tag, comment.
-* DASH: hiển thị tin nội bộ mới.
+* HR: dữ liệu nhân viên, sinh nhật (ngày+tháng), đơn vị tổ chức.
+* NOTI: 9 sự kiện `NOTI-EVENT-028..036` (§20.2).
+* DASH: `SOCIAL-WIDGET-001` «Tương tác tuần» · `SOCIAL-WIDGET-002` «Tin tức chưa đọc».
+* FOUNDATION: files/file_links (đính kèm), audit, `user_preferences`, thùng rác, system-jobs.
+* CHAT: dùng chung bộ emoji.
+* ME: «Bài viết của tôi» · «Đã lưu».
 
 ---
 
@@ -1536,6 +1542,38 @@ Rejected
 
 ---
 
+### 17.18 Trạng thái bài đăng mạng xã hội (SPEC-16)
+
+```text
+published
+hidden
+deleted
+```
+
+> `published ⇄ hidden` là chuyển tiếp **kiểm duyệt**, cần `('manage','feed-post')` và ghi audit mỗi lượt. `deleted` đạt được từ **cả hai** trạng thái kia, là **xoá mềm** (`deleted_at`) + vào thùng rác (BẤT BIẾN 2) — tác giả tự xoá được bài của mình, người khác cần `('manage','feed-post')`. **Ẩn KHÔNG phải xoá:** bài `hidden` vẫn tồn tại và tác giả vẫn thấy; người ngoài nhận **404** chứ không phải 403 (chống dò sự tồn tại — SPEC-16 §12). Bài `deleted` phải biến khỏi feed, bộ đếm, tìm kiếm, hashtag và «Đã lưu» **trong cùng transaction**; khôi phục trả lại đủ.
+
+### 17.19 Trạng thái sáng kiến (SPEC-16)
+
+```text
+submitted
+under_review
+accepted
+rejected
+```
+
+> Chuyển tiếp hợp lệ: `submitted → under_review → accepted | rejected`. **Không** được nhảy thẳng `submitted → accepted` (409 `SOCIAL-ERR-019`). `accepted` và `rejected` là **terminal**; `rejected` bắt buộc có `review_note`. Mọi chuyển tiếp cần `('approve','feed-idea')`, ghi `reviewed_by`/`reviewed_at`, một dòng audit và một thông báo cho tác giả.
+
+### 17.20 Trạng thái bình chọn (SPEC-16)
+
+```text
+open
+closed
+```
+
+> `closed` là **terminal**, đạt được bằng tay (tác giả hoặc `('manage','feed-post')`) hoặc bằng **job** khuôn `system-jobs` khi quá `closes_at`. Còn `open` thì đổi/rút phiếu được; `closed` thì mọi ghi trả 409 `SOCIAL-ERR-016`. Bình chọn **ẩn danh** vẫn lưu `user_id` để chống phiếu đôi nhưng DTO kết quả **không** chở `user_id` — kể cả cho `company-admin` (SPEC-16 §13.4).
+
+---
+
 ## 18. Nguyên tắc UI/UX tổng quan
 
 ### 18.1 Nguyên tắc giao diện
@@ -1724,8 +1762,17 @@ Hệ thống cần hỗ trợ các kênh sau:
 | NOTI-EVENT-025 | Tạm ứng lương được duyệt | Nhân sự thụ hưởng + người tạo (trừ người thao tác) |
 | NOTI-EVENT-026 | Tạm ứng lương bị từ chối | Nhân sự thụ hưởng + người tạo (trừ người thao tác), kèm lý do |
 | NOTI-EVENT-027 | Đợt chi trả lương đã hoàn tất | Người giữ `('view','payment-batch')` trong công ty (trừ người thao tác) |
+| NOTI-EVENT-028 | Có người nhắc tên (@) trong bài hoặc bình luận | Người được nhắc (chỉ khi nằm trong audience của bài) |
+| NOTI-EVENT-029 | Có bình luận mới vào bài của tôi | Tác giả bài (trừ người thao tác) |
+| NOTI-EVENT-030 | Có trả lời vào bình luận của tôi | Tác giả bình luận gốc (trừ người thao tác) |
+| NOTI-EVENT-031 | Tin tức công ty mới được đăng | Nhân viên trong audience của tin |
+| NOTI-EVENT-032 | Sáng kiến đổi trạng thái | Tác giả sáng kiến |
+| NOTI-EVENT-033 | Được vinh danh | Người được vinh danh |
+| NOTI-EVENT-034 | Yêu cầu vào nhóm được duyệt / từ chối | Người xin vào nhóm |
+| NOTI-EVENT-035 | Bình chọn đã đóng | Người tạo bình chọn |
+| NOTI-EVENT-036 | Bài bị báo cáo | Người giữ `('view','feed-report')` (manager: trong đơn vị mình) |
 
-> **Dải mở rộng hậu-MVP (đo 28–31/08/2026, cập nhật 11/09/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17), **013–015 cấp cho ROOM** (SPEC-14 §17) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17) — wave S12-RECRUIT; **020–023 cấp cho PAYROLL** (SPEC-11 §17) — wave S13-PAYROLL; **024–027 cấp cho PAYROLL v2** (SPEC-11 §17.1) — wave **S15-PAYROLL-V2** (tạm ứng ×3 + đợt chi trả hoàn tất). Module sau lấy **028+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
+> **Dải mở rộng hậu-MVP (đo 28–31/08/2026, cập nhật 11/09/2026):** 001–009 là bộ MVP; GOAL/LMS/CHAT **không** cấp mã chuẩn (chỉ là mở rộng SPEC-08 §15). **010–012 cấp cho ASSET** (SPEC-13 §17), **013–015 cấp cho ROOM** (SPEC-14 §17) — wave S11-OFFICE; **016–019 cấp cho RECRUIT** (SPEC-12 §17) — wave S12-RECRUIT; **020–023 cấp cho PAYROLL** (SPEC-11 §17) — wave S13-PAYROLL; **024–027 cấp cho PAYROLL v2** (SPEC-11 §17.1) — wave **S15-PAYROLL-V2** (tạm ứng ×3 + đợt chi trả hoàn tất); **028–036 cấp cho SOCIAL** (SPEC-16 §17.1) — wave **S16-SOCIAL** (mention · bình luận · trả lời · tin tức · sáng kiến · vinh danh · duyệt nhóm · đóng bình chọn · bài bị báo cáo). Module sau lấy **037+** — đo lại bằng grep `NOTI-EVENT-0` trước khi cấp, không mặc định còn trống.
 >
 > ⚠️ Payload của 020–027 **tuyệt đối không chứa số tiền** — **kể cả số tạm ứng của chính người nhận** (SPEC-11 §17/§17.1) — NOTI đi qua nhiều kênh và không có tầng masking riêng.
 
