@@ -16516,7 +16516,7 @@ export const backlog = [
     title:
       "Widget DASH «ngân sách lương năm» (kế hoạch/thực hiện/chênh lệch) + «tạm ứng chờ duyệt» (đếm) — catalog BE + SÀN scope Company 2 tầng + slug FE Grid + useCanExact, đăng ký PAYROLL-WIDGET-002/003 (SPEC-01 §9.9)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/migrations/**",
@@ -16651,7 +16651,7 @@ export const backlog = [
     title:
       "Nợ FE-6: ba vế còn lại của PAYROLL-API-069 chưa có UI ở PAY-SCREEN-013 — đổi trạng thái đợt (Draft↔Ready, enum RIÊNG không có Completed) · sửa ngày chi (payDate) · sửa ghi chú (note)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/payroll/**",
       "apps/app/src/i18n/**",
@@ -16667,7 +16667,13 @@ export const backlog = [
       "Đợt Draft/Ready sửa được payDate + note + chuyển Draft↔Ready qua 069; gate useCanExact(manage:payment-batch); đợt Completed chỉ đọc",
       "`Completed` KHÔNG có trong lựa chọn trạng thái (chỉ 072 tới được — gửi ở 069 là 400); spec neo ca này",
     ],
-    notes: ["🟡 LIGHT gate; cùng màn với FE-6 — làm khi FE-6 đã merge để tránh xung đột file."],
+    notes: [
+      "🟡 LIGHT gate; cùng màn với FE-6 — làm khi FE-6 đã merge để tránh xung đột file.",
+      "ĐÃ LÀM 18/09: hộp «Sửa thông tin đợt» ở menu ⋯ của PAY-SCREEN-013 (components/PaymentBatchEditDialog.tsx) — ba vế đi CHUNG một PATCH (BE gộp thành một updateTx), ô chọn trạng thái sinh từ paymentBatchEditableStatusEnum.options nên Completed không thể lọt, chỉ gửi trường THẬT SỰ đổi (thân rỗng vẫn sinh hàng audit changedFields: []), ô trống ⇒ null chứ không phải \"\".",
+      "BẪY ghi lại: hai ca deny 071 của QA-1 lấy «nút ⋯ vắng» làm bằng chứng, nhưng cặp batchExport CHÍNH LÀ manage:payment-batch — cặp mở mục «Sửa» ⇒ nút ⋯ còn mọc vì lý do khác. Đã đổi sang mở menu rồi assert MỤC xuất vắng (mục sửa có mặt ⇒ ca không rỗng). Cổng 071 không đổi.",
+      "RỦI RO ĐÃ CHẤP NHẬN (plan §2 D5b, cả hai reviewer nêu): hộp không re-sync khi đang mở ⇒ sửa đồng thời có thể đè note/payDate người khác vừa đổi; BE không có kiểm tranh chấp lạc quan cho hai trường đó. Đóng hẳn cần cột phiên bản ở BE — WO riêng.",
+      "BẪY ghi lại: payrollErrorI18nKey tra kind → code → generic và KHÔNG đọc status ⇒ 404 không kind rơi errors.generic, KHÔNG phải errors.notFound. 404 ở màn này (đợt biến mất) có chữ riêng qua override tại call-site, không thêm kind (census PAYROLL_ERROR_KINDS assert đẳng thức với BE).",
+    ],
   },
   {
     id: "S15-UI-SHELL-2",

@@ -202,24 +202,41 @@ describe("T4 — 071 xuất tệp UNC đòi ĐỦ BA cặp (PaymentBatchDetailPa
     expect(api.exportPaymentBatch).not.toHaveBeenCalled();
   });
 
-  it("[deny] THIẾU export:payroll (periodExport) ⇒ không có mục ⋯, không gọi 071", async () => {
+  /**
+   * ⚠️ **Hai ca dưới đây KHÔNG đo được bằng «nút ⋯ vắng» (sửa ở S15-PAYROLL-FE-7).** Cặp
+   * `batchExport` CHÍNH LÀ `manage:payment-batch`, và từ FE-7 cặp đó còn mở mục «Sửa thông tin đợt»
+   * (069) trong cùng menu ⋯ ⇒ người thiếu MỘT trong hai cặp xuất còn lại vẫn thấy nút ⋯ vì lý do
+   * khác. Bằng chứng deny đúng chỗ là **MỤC «Xuất tệp chuyển khoản» vắng khi menu đã MỞ** (+ câu
+   * giải thích + client 071 không được gọi). Ca đầu (thiếu `manage:payment-batch`) giữ nguyên phép
+   * đo cũ: thiếu cặp đó thì cả hai mục đều không có nên nút ⋯ biến mất thật.
+   */
+  it("[deny] THIẾU export:payroll (periodExport) ⇒ menu không có mục xuất, không gọi 071", async () => {
     allow(pairKey(PAYROLL_ENGINE_PAIRS.batchExport), pairKey(PAYROLL_ENGINE_PAIRS.payslipList));
     renderBatchDetail();
 
     await screen.findByText(BATCH.code);
-    expect(screen.queryByTestId("detail-header-overflow")).not.toBeInTheDocument();
+    // Mở menu rồi mới kết luận: `menuitem` chỉ tồn tại sau khi bấm ⋯, không mở thì ca này RỖNG.
+    fireEvent.click(await screen.findByTestId("detail-header-overflow"));
+    expect(
+      screen.getByRole("menuitem", { name: tr("paymentBatchDetail.edit") }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: tr("paymentBatchDetail.export") })).toBeNull();
     expect(
       await screen.findByText(tr("paymentBatchDetail.exportNoPermission")),
     ).toBeInTheDocument();
     expect(api.exportPaymentBatch).not.toHaveBeenCalled();
   });
 
-  it("[deny] THIẾU view-payslip:payslip (payslipList) ⇒ không có mục ⋯, không gọi 071", async () => {
+  it("[deny] THIẾU view-payslip:payslip (payslipList) ⇒ menu không có mục xuất, không gọi 071", async () => {
     allow(pairKey(PAYROLL_ENGINE_PAIRS.batchExport), pairKey(PAYROLL_ENGINE_PAIRS.periodExport));
     renderBatchDetail();
 
     await screen.findByText(BATCH.code);
-    expect(screen.queryByTestId("detail-header-overflow")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByTestId("detail-header-overflow"));
+    expect(
+      screen.getByRole("menuitem", { name: tr("paymentBatchDetail.edit") }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: tr("paymentBatchDetail.export") })).toBeNull();
     expect(
       await screen.findByText(tr("paymentBatchDetail.exportNoPermission")),
     ).toBeInTheDocument();
