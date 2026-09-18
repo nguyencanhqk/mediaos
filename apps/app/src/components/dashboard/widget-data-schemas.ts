@@ -255,3 +255,33 @@ export const payrollCostWidgetDataSchema = z.object({
   }),
 });
 export type PayrollCostWidgetData = z.infer<typeof payrollCostWidgetDataSchema>;
+
+// ── S15-PAYROLL-DASH-1 — PAYROLL_BUDGET · PAYROLL_ADVANCE_PENDING (payroll.handlers.ts) ──────────
+
+/**
+ * PAYROLL_BUDGET — `fetchPayrollBudget()`: tổng NĂM HIỆN TẠI của ngân sách lương
+ * (`PayrollBudgetsService.yearTotals` → cùng con số với khối ngân sách của Tổng quan 078).
+ *
+ * `plannedAmount`/`variance`/`usagePct` `.nullable()` vì công ty có thể CHƯA lập ngân sách năm nay —
+ * `null` là «chưa lập», KHÁC HẲN 0 (component phải in `—`, không in «0 đ»). `actualAmount` luôn là số
+ * (SQL `coalesce(...,0)`): chưa phát hành phiếu nào thì thực hiện = 0, đó là một sự thật, không phải
+ * thiếu dữ liệu.
+ */
+export const payrollBudgetWidgetDataSchema = z.object({
+  fiscalYear: z.number().int(),
+  plannedAmount: z.number().nullable(),
+  actualAmount: z.number(),
+  variance: z.number().nullable(),
+  usagePct: z.number().nullable(),
+});
+export type PayrollBudgetWidgetData = z.infer<typeof payrollBudgetWidgetDataSchema>;
+
+/**
+ * PAYROLL_ADVANCE_PENDING — `fetchPayrollAdvancePending()`: CHỈ `total` (đếm tạm ứng `Pending`).
+ * Không tên người, không số tiền (SPEC-11 §10.1b) — schema hẹp đúng bằng payload là một cái chốt: thêm
+ * khoá ở BE mà quên nghĩ sẽ không lặng lẽ chảy ra UI.
+ */
+export const payrollAdvancePendingWidgetDataSchema = z.object({
+  total: z.number().int().nonnegative(),
+});
+export type PayrollAdvancePendingWidgetData = z.infer<typeof payrollAdvancePendingWidgetDataSchema>;

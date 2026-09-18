@@ -217,7 +217,9 @@ import { PayrollPayslipPdfService } from "./payroll-payslip-pdf.service";
   ],
   // S13-PAYROLL-DASH-1: chỉ PayrollCalcService — KHÔNG export repository (widget phải đi qua service để
   // giữ nguyên tầng guard THỨ HAI `resolveActor` + audit; export repository là mở đường vòng qua cả hai).
-  exports: [PayrollCalcService],
+  // S15-PAYROLL-DASH-1 (additive): DASH cần 2 nguồn widget v2. Export SERVICE (đã gate + audit),
+  // KHÔNG repository — widget đi qua đúng cổng của route 073/059.
+  exports: [PayrollCalcService, PayrollBudgetsService, PayrollAdvancesService],
 })
 export class PayrollModule implements OnModuleInit {
   constructor(

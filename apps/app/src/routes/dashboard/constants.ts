@@ -43,6 +43,10 @@ export const DASH_WIDGET_CODE = {
   RECRUIT_FUNNEL: "RECRUIT_FUNNEL",
   // S13-PAYROLL-DASH-1 (APPEND) — widget «chi phí lương kỳ» (SPEC-11 §10.1 PAYROLL-WIDGET-001, mig 0568).
   PAYROLL_COST: "PAYROLL_COST",
+  // S15-PAYROLL-DASH-1 (APPEND) — 2 widget PAYROLL v2 (SPEC-11 §10.1b PAYROLL-WIDGET-002/003,
+  // mig 0576).
+  PAYROLL_BUDGET: "PAYROLL_BUDGET",
+  PAYROLL_ADVANCE_PENDING: "PAYROLL_ADVANCE_PENDING",
 } as const;
 
 export type DashWidgetCode = (typeof DASH_WIDGET_CODE)[keyof typeof DASH_WIDGET_CODE];
@@ -83,6 +87,18 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<
   // <PermissionGate> (nó gọi `useCan`, vốn chấp nhận wildcard '*:*' — mà wildcard KHÔNG kế thừa cặp
   // sensitive ở BE). Đây là khác biệt DUY NHẤT so với 3 widget wave trước, xem doc-block component.
   PAYROLL_COST: PAYROLL_ENGINE_PAIRS.periodSummary,
+  // S15-PAYROLL-DASH-1 (APPEND) — MIRROR đúng BE: PAYROLL_BUDGET→view:payroll-budget ·
+  // PAYROLL_ADVANCE_PENDING→view:payroll-advance (mig 0571, CẢ HAI is_sensitive — chỉ
+  // payroll-officer/company-admin @Company). Tái dùng cặp của route NGUỒN đã khai ở
+  // PAYROLL_ENGINE_PAIRS (budgetList = 073 · advanceList = 059) — DRY, và giữ đúng luật «gate
+  // màn-hình khớp gate đường-tải».
+  //
+  // ⚠ Cặp NHẠY CẢM ⇒ component gate bằng `useCanExact`, KHÔNG <PermissionGate> (nó gọi `useCan`,
+  // vốn cho wildcard '*:*' lọt — mà wildcard KHÔNG kế thừa cặp sensitive ở BE). Giống PAYROLL_COST.
+  // BE còn ép SÀN scope 'Company' (DASH_WIDGET_MIN_DATA_SCOPE) mà FE KHÔNG kiểm được
+  // (capabilities không mang scope) ⇒ gate ở component chỉ là gate PHỤ.
+  PAYROLL_BUDGET: PAYROLL_ENGINE_PAIRS.budgetList,
+  PAYROLL_ADVANCE_PENDING: PAYROLL_ENGINE_PAIRS.advanceList,
 };
 
 /**

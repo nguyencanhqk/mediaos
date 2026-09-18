@@ -294,6 +294,29 @@ export const DASH_WIDGET_CATALOG: readonly DashWidgetEntry[] = [
     dataSourceKey: "payroll-cost",
     componentKey: "PayrollCostWidget",
   },
+  // ─── S15-PAYROLL-DASH-1 (APPEND-only) — 2 widget PAYROLL v2 (SPEC-11 §10.1b PAYROLL-WIDGET-002/003,
+  // mig 0576). CẢ HAI scope 'Company' là SÀN THẬT (xem DASH_WIDGET_MIN_DATA_SCOPE): yearTotalsTx cộng
+  // và countTx đếm TOÀN company, không co theo scope actor.
+  {
+    widgetCode: "PAYROLL_BUDGET",
+    moduleCode: "PAYROLL",
+    name: "Ngân sách lương năm",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_PAYROLL_BUDGET",
+    defaultDataScope: "Company",
+    widgetType: "Summary",
+    dataSourceKey: "payroll-budget",
+    componentKey: "PayrollBudgetWidget",
+  },
+  {
+    widgetCode: "PAYROLL_ADVANCE_PENDING",
+    moduleCode: "PAYROLL",
+    name: "Tạm ứng chờ duyệt",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_PAYROLL_ADVANCE_PENDING",
+    defaultDataScope: "Company",
+    widgetType: "Summary",
+    dataSourceKey: "payroll-advance-pending",
+    componentKey: "PayrollAdvancePendingWidget",
+  },
 ] as const;
 
 export const DASH_WIDGET_COUNT = DASH_WIDGET_CATALOG.length;
@@ -375,6 +398,19 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
   // Và KHÔNG dùng cặp GHI ('calculate',…): gác bằng nó thì ai thấy widget đều ghi được lương
   // (SPEC-11 §329). Cặp vẫn CHƯA đủ một mình: xem DASH_WIDGET_MIN_DATA_SCOPE.PAYROLL_COST.
   PAYROLL_COST: { action: "view-line", resourceType: "payroll-period" },
+  // ─── S15-PAYROLL-DASH-1 (APPEND) — cặp gate PAYROLL_BUDGET · PAYROLL_ADVANCE_PENDING ────────────
+  // Luật «gate màn-hình khớp gate đường-tải»: mỗi widget mượn ĐÚNG cặp của route NGUỒN nó gọi, không
+  // mượn cặp của widget anh em (SPEC-11 §10.1b).
+  //   • PAYROLL_BUDGET → ('view','payroll-budget') = PAYROLL_ROUTE_PAIRS.budgetList (route 073), mig
+  //     0571:49 is_sensitive=TRUE; grant payroll-officer + company-admin @Company. KHÔNG mượn
+  //     view-line:payroll-period của PAYROLL_COST — đó là cặp của kỳ lương, dữ liệu KHÁC.
+  //   • PAYROLL_ADVANCE_PENDING → ('view','payroll-advance') = PAYROLL_ROUTE_PAIRS.advanceList (route
+  //     059), mig 0571:43 is_sensitive=TRUE. KHÔNG dùng cặp DUYỆT ('approve','payroll-advance'): mig
+  //     0571 §4.7 ĐÃ ép approve ⇒ view (chống duyệt mù) nên `view` là tập RỘNG HƠN, và payload chỉ là
+  //     phép ĐẾM (không tên người, không tiền) nên gác bằng cặp ghi/duyệt là quá chặt.
+  // Cả hai cặp CHƯA đủ một mình: xem DASH_WIDGET_MIN_DATA_SCOPE (sàn 'Company').
+  PAYROLL_BUDGET: { action: "view", resourceType: "payroll-budget" },
+  PAYROLL_ADVANCE_PENDING: { action: "view", resourceType: "payroll-advance" },
 } as const;
 
 /**
@@ -411,6 +447,17 @@ export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> = {
   // gác grant hẹp hơn xuất hiện về sau, ĐỘC LẬP với `companyFloor` mà PayrollAccessService ép ở route
   // 018 (đường METADATA /dashboard/me KHÔNG đi qua PayrollAccessService ⇒ không có sàn đó).
   PAYROLL_COST: "Company",
+  // S15-PAYROLL-DASH-1: sàn = 'Company' cho CẢ HAI widget v2, cùng lý do PAYROLL_COST — phép cộng/đếm
+  // ở nguồn rộng bằng CẢ công ty, không co theo scope actor:
+  //   • PAYROLL_BUDGET → `PayrollBudgetsRepository.yearTotalsTx` cộng kế hoạch + Σ gross phiếu đã phát
+  //     hành của TOÀN công ty (chở TIỀN ⇒ hệ quả nặng nhất trong hai);
+  //   • PAYROLL_ADVANCE_PENDING → `PayrollAdvancesRepository.countTx` đếm tạm ứng Pending của TOÀN công
+  //     ty (không chở tiền, nhưng con số vẫn là thông tin toàn công ty).
+  // Hôm nay mọi grant hai cặp này đều @Company (mig 0571) nên sàn không loại ai — nó gác grant hẹp hơn
+  // xuất hiện về sau, ĐỘC LẬP với `companyFloor` mà PayrollAccessService ép ở route 073/059 (đường
+  // METADATA /dashboard/me KHÔNG đi qua service PAYROLL ⇒ không có sàn đó).
+  PAYROLL_BUDGET: "Company",
+  PAYROLL_ADVANCE_PENDING: "Company",
 } as const;
 
 /**
@@ -641,6 +688,19 @@ export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
   { dashboardType: "Manager", widgetCode: "PAYROLL_COST", sortOrder: 100 },
   { dashboardType: "HR", widgetCode: "PAYROLL_COST", sortOrder: 100 },
   { dashboardType: "Admin", widgetCode: "PAYROLL_COST", sortOrder: 100 },
+  // ─── S15-PAYROLL-DASH-1 (APPEND) — PAYROLL_BUDGET@110 · PAYROLL_ADVANCE_PENDING@120 trên CẢ 4
+  // dashboard type (mirror lý do PAYROLL_COST@100): `payroll-officer` KHÔNG có cặp view-*:dashboard
+  // riêng ⇒ resolve về dashboard type của role KHÁC user đó mang (thường 'Employee'). Ai không có cặp
+  // + sàn Company bị loại bởi filterByGatePair, KHÔNG bởi việc vắng config — lọc theo config sẽ giấu
+  // widget khỏi chính người đáng thấy nó.
+  { dashboardType: "Employee", widgetCode: "PAYROLL_BUDGET", sortOrder: 110 },
+  { dashboardType: "Manager", widgetCode: "PAYROLL_BUDGET", sortOrder: 110 },
+  { dashboardType: "HR", widgetCode: "PAYROLL_BUDGET", sortOrder: 110 },
+  { dashboardType: "Admin", widgetCode: "PAYROLL_BUDGET", sortOrder: 110 },
+  { dashboardType: "Employee", widgetCode: "PAYROLL_ADVANCE_PENDING", sortOrder: 120 },
+  { dashboardType: "Manager", widgetCode: "PAYROLL_ADVANCE_PENDING", sortOrder: 120 },
+  { dashboardType: "HR", widgetCode: "PAYROLL_ADVANCE_PENDING", sortOrder: 120 },
+  { dashboardType: "Admin", widgetCode: "PAYROLL_ADVANCE_PENDING", sortOrder: 120 },
 ] as const;
 
 // ─── S4-DASH-BE-1 (APPEND-only) — resolver route → cặp engine ────────────────────────────────────────

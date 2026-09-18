@@ -42,6 +42,11 @@ const MINI_CATALOG: PermissionCatalogEntry[] = [
   { id: "p-room", action: "view", resourceType: "room", isSensitive: false },
   // mig 0550:62
   { id: "p-asset", action: "view", resourceType: "asset", isSensitive: false },
+  // S15-PAYROLL-DASH-1 — 2 cặp nguồn của widget PAYROLL v2, mig 0571:43 + 0571:49 (CẢ HAI sensitive).
+  // Thiếu hàng ở đây thì engine coi cặp là KHÔNG nhạy cảm ⇒ ca wildcard XANH GIẢ (đã đo: quên thêm là
+  // `rejects` hoá `resolves`). Catalog thu-nhỏ phải lớn lên cùng bề mặt nó gác.
+  { id: "p-budget", action: "view", resourceType: "payroll-budget", isSensitive: true },
+  { id: "p-advance", action: "view", resourceType: "payroll-advance", isSensitive: true },
 ];
 
 /**
@@ -161,6 +166,46 @@ describe("gateWidgetOrThrow — wildcard KHÔNG mở được cặp SENSITIVE (S
     await expect(
       gateWidgetOrThrow(permissionOverGrants(wildcard(true)), user, "PAYROLL_COST"),
     ).rejects.toThrowError("AUTH-ERR-FORBIDDEN: thiếu quyền view-line:payroll-period");
+  });
+
+  /**
+   * S15-PAYROLL-DASH-1 — 2 widget PAYROLL v2 gác bằng CẶP KHÁC nhau (`view:payroll-budget` ·
+   * `view:payroll-advance`, mig 0571 cả hai sensitive). Ghim ở đây vì đây là bề mặt mà lỗ wildcard
+   * từng sống: thêm widget sensitive mới mà quên, ca này vắng chứ không đỏ — nên nó phải được VIẾT
+   * cùng lúc với widget.
+   */
+  it("wildcard KHÔNG mở được PAYROLL_BUDGET / PAYROLL_ADVANCE_PENDING (cặp đích đều SENSITIVE)", async () => {
+    const svc = permissionOverGrants(wildcard(false));
+    await expect(gateWidgetOrThrow(svc, user, "PAYROLL_BUDGET")).rejects.toThrowError(
+      "AUTH-ERR-FORBIDDEN: thiếu quyền view:payroll-budget",
+    );
+    await expect(gateWidgetOrThrow(svc, user, "PAYROLL_ADVANCE_PENDING")).rejects.toThrowError(
+      "AUTH-ERR-FORBIDDEN: thiếu quyền view:payroll-advance",
+    );
+  });
+
+  /**
+   * ĐỐI CHỨNG theo CẶP (không phải theo widget): grant exact `view:payroll-budget` mở ĐÚNG widget ngân
+   * sách và KHÔNG mở widget tạm ứng. Ca này là bản unit của ràng buộc «không mượn chéo cặp» mà int-spec
+   * đo trên đường thật.
+   */
+  it("grant exact view:payroll-budget mở BUDGET nhưng KHÔNG mở ADVANCE_PENDING", async () => {
+    const svc = permissionOverGrants([
+      {
+        action: "view",
+        resourceType: "payroll-budget",
+        isSensitive: true,
+        effect: "ALLOW",
+        expiresAt: null,
+      },
+    ]);
+    await expect(gateWidgetOrThrow(svc, user, "PAYROLL_BUDGET")).resolves.toEqual({
+      action: "view",
+      resourceType: "payroll-budget",
+    });
+    await expect(gateWidgetOrThrow(svc, user, "PAYROLL_ADVANCE_PENDING")).rejects.toThrowError(
+      "AUTH-ERR-FORBIDDEN: thiếu quyền view:payroll-advance",
+    );
   });
 
   it("ĐỐI CHỨNG — grant EXACT cho cặp sensitive vẫn qua bình thường", async () => {

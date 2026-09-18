@@ -237,6 +237,16 @@ export class DashboardWidgetHandlersService {
       gateAndResolve: (ctx) => this.payroll.gatePayrollCost(ctx),
       fetch: (ctx) => this.payroll.fetchPayrollCost(ctx),
     });
+
+    // ─── S15-PAYROLL-DASH-1 (APPEND) — 2 widget PAYROLL v2 (gate + fetch ở payroll.handlers.ts) ────
+    add("payroll-budget", "PAYROLL_BUDGET", {
+      gateAndResolve: (ctx) => this.payroll.gatePayrollBudget(ctx),
+      fetch: (ctx) => this.payroll.fetchPayrollBudget(ctx),
+    });
+    add("payroll-advance-pending", "PAYROLL_ADVANCE_PENDING", {
+      gateAndResolve: (ctx) => this.payroll.gatePayrollAdvancePending(ctx),
+      fetch: (ctx) => this.payroll.fetchPayrollAdvancePending(ctx),
+    });
   }
 
   /** Gate widget self-locked/viewer-dependent (per-user Own cache). */
