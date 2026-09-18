@@ -14,8 +14,9 @@
  * Mỗi ca DENY đi cặp ca ALLOW đối chứng (`deny-cases-vacuous-without-allow-case`): không có đối
  * chứng thì "văng mất chữ/số" có thể chỉ vì trang không render gì, không chứng minh được gì cả.
  *
- * T5 (gắn/gỡ dòng chi 069 qua `updatePaymentBatch`) KHÔNG có UI ở `apps/app` — xác nhận bằng grep,
- * không dựng test giả (xem báo cáo cuối phiên lane E, không phải file này).
+ * T5 (gắn/gỡ dòng chi 069 qua `updatePaymentBatch`) KHÔNG có UI ở `apps/app` **lúc QA-1 chạy** — nợ đó
+ * đã trả ở `S15-PAYROLL-FE-6`; ca T5 nay sống ở `payroll-fe6-payment-lines.spec.tsx` (ALLOW/DENY từng
+ * cặp · FSM `Completed` chỉ-đọc · dòng đã chi khoá ô tích · chữ lỗi 409/404 riêng).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
