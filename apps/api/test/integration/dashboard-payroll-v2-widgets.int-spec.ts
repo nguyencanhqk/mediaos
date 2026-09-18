@@ -90,6 +90,8 @@ const EXPECTED_ACTUAL = 100_000_000;
 const PLANNED = 250_000_000;
 const EXPECTED_VARIANCE = PLANNED - EXPECTED_ACTUAL; // 150tr
 const EXPECTED_USAGE_PCT = 40; // 100tr / 250tr
+// Công ty C: 1 phiếu 20tr, KHÔNG có hàng ngân sách ⇒ kế hoạch `null` mà thực hiện vẫn có số.
+const C_ACTUAL = 20_000_000;
 // 3 tạm ứng Pending SỐNG (+1 Approved, +1 Pending đã xoá mềm — cả hai KHÔNG được đếm).
 const EXPECTED_PENDING = 3;
 
@@ -100,6 +102,8 @@ describe.skipIf(!hasLaneDb)(
     let direct: Pool;
     let A: SeededTenant;
     let B: SeededTenant;
+    /** Công ty C — ĐÃ phát hành phiếu nhưng CHƯA lập ngân sách: nhánh «Active + plannedAmount null». */
+    let C: SeededTenant;
     const companyIds: string[] = [];
 
     let officerUser = ""; // budget + advance + report @Company   ← thấy CẢ HAI widget
@@ -109,6 +113,7 @@ describe.skipIf(!hasLaneDb)(
     let deptUser = ""; // cả hai cặp @Department                ← SÀN scope phải chặn
     let bareUser = ""; // KHÔNG cặp payroll nào
     let bUser = ""; // công ty B: cả hai cặp @Company, tenant RỖNG
+    let cUser = ""; // công ty C: view:payroll-budget @Company, có phiếu mà chưa lập ngân sách
 
     let tOfficer = "";
     let tBudgetOnly = "";
@@ -117,6 +122,7 @@ describe.skipIf(!hasLaneDb)(
     let tDept = "";
     let tBare = "";
     let tB = "";
+    let tC = "";
 
     async function grantPairs(
       companyId: string,
@@ -195,7 +201,8 @@ describe.skipIf(!hasLaneDb)(
       const hash = await new PasswordService().hash(LOGIN_PW);
       A = await seedCompany(direct, "pdash2a");
       B = await seedCompany(direct, "pdash2b");
-      companyIds.push(A.companyId, B.companyId);
+      C = await seedCompany(direct, "pdash2c");
+      companyIds.push(A.companyId, B.companyId, C.companyId);
 
       const mk = (name: string, co = A) =>
         seedUser(direct, co.companyId, `${name}@${co.slug}.test`, hash);
@@ -206,6 +213,10 @@ describe.skipIf(!hasLaneDb)(
       deptUser = await mk("dept");
       bareUser = await mk("bare");
       bUser = await seedUser(direct, B.companyId, `officer@${B.slug}.test`, hash);
+      cUser = await seedUser(direct, C.companyId, `officer@${C.slug}.test`, hash);
+      // Người duyệt RIÊNG cho công ty C — CHECK `payroll_periods_four_eyes_check` đòi approved_by
+      // khác người tính/nộp (helper publishedPeriodWithPayslips ghi rõ trong docblock).
+      const cApprover = await seedUser(direct, C.companyId, `approver@${C.slug}.test`, hash);
 
       await grantPairs(A.companyId, officerUser, "officer", [
         ...DASH_BASE,
@@ -227,6 +238,7 @@ describe.skipIf(!hasLaneDb)(
       ]);
       await grantPairs(A.companyId, bareUser, "bare", DASH_BASE);
       await grantPairs(B.companyId, bUser, "b", [...DASH_BASE, VIEW_BUDGET, VIEW_ADVANCE]);
+      await grantPairs(C.companyId, cUser, "c", [...DASH_BASE, VIEW_BUDGET]);
 
       tOfficer = await login(A.slug, `officer@${A.slug}.test`);
       tBudgetOnly = await login(A.slug, `budgetonly@${A.slug}.test`);
@@ -235,6 +247,7 @@ describe.skipIf(!hasLaneDb)(
       tDept = await login(A.slug, `dept@${A.slug}.test`);
       tBare = await login(A.slug, `bare@${A.slug}.test`);
       tB = await login(B.slug, `officer@${B.slug}.test`);
+      tC = await login(C.slug, `officer@${C.slug}.test`);
 
       // ── Fixture A: kỳ ĐÃ PHÁT HÀNH + 2 phiếu (⇒ thực hiện 100tr) · ngân sách năm 250tr ·
       //    3 tạm ứng Pending sống + 1 Approved + 1 Pending xoá mềm.
@@ -254,6 +267,13 @@ describe.skipIf(!hasLaneDb)(
       await seedAdvance(A.companyId, advanceOnlyUser, "Approved", officerUser);
       await seedAdvance(A.companyId, approveOnlyUser, "Pending", officerUser, true);
       // Công ty B: KHÔNG gieo gì ⇒ cả hai widget Empty (đồng thời chứng cách ly tenant).
+      // Công ty C: CÓ phiếu đã phát hành (thực hiện 20tr) nhưng KHÔNG có hàng payroll_budgets.
+      await publishedPeriodWithPayslips(direct, C.companyId, {
+        month: PERIOD_MONTH,
+        payees: [{ userId: cUser, net: "18000000", gross: String(C_ACTUAL) }],
+        officerId: cUser,
+        approverId: cApprover,
+      });
 
       // Seeder default dashboard_widget_configs (company_id NOT NULL ⇒ runtime, không ở migration).
       const dbsvc = new DatabaseService();
@@ -370,6 +390,31 @@ describe.skipIf(!hasLaneDb)(
         expect(res.status).toBe(200);
         expect(res.body.data.cache?.hit).toBe(true);
         expect(await auditCount("payroll_budget")).toBe(before);
+      });
+
+      /**
+       * NHÁNH RIÊNG, dễ bị bỏ sót vì nó nằm GIỮA hai ca kia: chưa lập kế hoạch (`plannedAmount = null`)
+       * NHƯNG đã phát hành phiếu ⇒ **KHÔNG** phải `Empty` — chi thực tế vẫn là con số có nghĩa và
+       * người quản lý cần thấy. `Empty` chỉ dành cho ca không có gì để nói (chưa lập VÀ chưa chi).
+       *
+       * Đo trên DB thật chứ không chỉ bằng payload giả ở FE: chỗ dễ hỏng là SQL (`yearTotalsTx` rơi vào
+       * nhánh «chưa lập gì» ⇒ kế hoạch NULL, thực hiện Σ mọi phiếu) và phép chuyển `null` ở handler —
+       * cả hai đều KHÔNG được biến NULL thành 0 (`Number(null) === 0` là cái bẫy ở đây).
+       */
+      it("công ty C: có phiếu mà CHƯA lập ngân sách ⇒ Active với plannedAmount NULL, KHÔNG phải 0 và KHÔNG Empty", async () => {
+        const res = await get(tC, "/dashboard/widgets/payroll-budget");
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect(res.body.data.status).toBe("Active");
+        const w = res.body.data.data as {
+          plannedAmount: number | null;
+          actualAmount: number;
+          variance: number | null;
+          usagePct: number | null;
+        };
+        expect(w.plannedAmount).toBeNull();
+        expect(w.variance).toBeNull();
+        expect(w.usagePct).toBeNull();
+        expect(Number(w.actualAmount)).toBe(C_ACTUAL);
       });
 
       it("cross-tenant: công ty B rỗng ⇒ Empty, KHÔNG con số nào của công ty A", async () => {

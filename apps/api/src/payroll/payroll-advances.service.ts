@@ -133,7 +133,9 @@ export class PayrollAdvancesService {
         objectType: "payroll_advance",
         actorUserId: user.id,
         before: null,
-        after: { filters: filter, rowCount: 0, scope: "pending-count" },
+        // `rowCount` = SỐ ĐẾM thật (không phải tiền/tên ⇒ không phạm §10.1b). Ghi cứng 0 ở đây làm
+        // một lượt xem widget trông như «0 kết quả» khi soi audit_logs cạnh vết của 059.
+        after: { filters: filter, rowCount: total, scope: "pending-count" },
       });
       return { total };
     });

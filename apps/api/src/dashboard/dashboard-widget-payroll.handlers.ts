@@ -149,7 +149,13 @@ export class DashboardWidgetPayrollHandlers {
    * PAYROLL_COST: PAYROLL không có DTO nửa-mask nên không có nhánh mask-per-người để cache lẫn).
    */
   async gatePayrollBudget(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
-    return this.gateCompanyWide(ctx, "PAYROLL_BUDGET");
+    // `keyDiscriminator` = NĂM: payload mang `fiscalYear` tính lúc `fetch`, còn khoá cache thì không —
+    // thiếu vế này, hàng cache ghi 31/12 vẫn được phục vụ qua giao thừa UTC tới hết TTL 300s với con
+    // số của NĂM CŨ. Năm vào khoá là đủ; không cần rút TTL.
+    return {
+      ...(await this.gateCompanyWide(ctx, "PAYROLL_BUDGET")),
+      keyDiscriminator: String(new Date().getUTCFullYear()),
+    };
   }
 
   /**
