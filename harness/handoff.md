@@ -2,6 +2,24 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-18 (u) — **S16-SOCIAL-DOC-1: PR #526 MỞ, chờ owner merge** (mở wave S16)
+
+**Bắt đầu phiên sau ở đây:** nhánh `feat/s16-social-doc-1` (`fde92489`, base master `71bc2289`). Docs-only + harness. Việc còn lại: đợi CI → owner merge → regen STATUS + handoff. Đọc memory `s16-social-doc1-wave-state` trước khi đụng bất kỳ WO S16 nào.
+
+**Ba con số ĐÓNG — KHÁC ước lượng lúc seed, đừng census theo số cũ:** 19 bảng (không phải 15) · 14 cặp quyền (không phải 13) · 53 route (không phải ~45) · 43 grant. Lý do ở SPEC-16 §23.1; đã ghim vào `notes` của `S16-SOCIAL-DB-1`.
+
+**Bài học đắt nhất — `plan-reviewer` đề xuất một lệnh ALTER SAI.** Vòng 1 ra CRITICAL «`employees` thiếu `UNIQUE (company_id, id)` ⇒ DB-1 phải ALTER», kèm grep thật. Grep đúng, kết luận sai: **không tồn tại bảng `employees`** (HR là `employee_profiles`, `schema/employees.ts:33`) và bảng đó **đã có** unique từ `0535`. Tiền lệ `DB-15 §4.2` ghi sẵn. Vòng 2 xác nhận bác bỏ đúng. ⇒ Reviewer grep-không-thấy-tên **không** chứng minh thiếu ràng buộc; kiểm tên THẬT trong `schema/` trước (lệch tên ở `erd-current` A2).
+
+**Vá hụt suýt lọt (vòng 2 bắt):** đã sửa **nguyên tắc** §4.2b (`SET NULL` chỉ cho cột nullable) nhưng **ba ô cột ở §6.x vẫn ghi `SET NULL`**. DB-1 viết DDL theo **bảng cột**, không theo mục nguyên tắc ⇒ sửa nguyên tắc mà không sửa bảng cột là vá hụt. Nay có câu «bảng cột phải khớp §4.2b; lệch thì §4.2b thắng».
+
+**Bẫy công cụ mới, đã ghi memory [[bash-heredoc-eats-backslash-and-dies]]:** `python <<'PY'` trong Bash tool **nuốt backslash** (`\b` → byte 0x08, regex mất word-boundary mà không báo lỗi — `\bfeed\b` khớp luôn `feedback`) **và** có thể **chết giữa chừng** vì lỗi quote khiến nửa bản vá không áp (mất ghi chú emoji DB-17, reviewer vòng 2 mới bắt). ⇒ Script >20 dòng hoặc có backslash: **Write ra file rồi chạy**, không nhúng heredoc; sau đó quét lại `chr(8)`.
+
+**Cổng:** 2 vòng (hết hạn mức). V1 REVISE 5 CRITICAL/8 HIGH/11 MED/3 LOW → vá đủ 13 điều kiện; V2 xác nhận 11/13, 2 mục chặn + 4 cảnh báo cấu trúc đã vá + tự kiểm chứng bằng script, **không mở vòng 3** (đúng khuyến nghị V2).
+
+**Nợ ĐO chuyển cho DB-1:** recycle-bin registry (có CHECK riêng không?) · `unaccent` (`pg_extension`; hàm STABLE nên phải bọc IMMUTABLE) · route-census ≠ 53 (fbpost cũng mang tag SOCIAL) · migration `0577+` đo journal.
+
+**Chi phí phiên: hook báo ~$355** lúc mở PR (2 vòng plan-reviewer + bộ tài liệu lớn). Lặp lại bài học: kết thúc phiên ngay khi PR mở.
+
 ## Phiên 2026-09-18 (t) — **S15-PAYROLL-DASH-1: PR #522 MỞ, chờ owner merge** (đóng wave S15)
 
 **Bắt đầu phiên sau ở đây:** nhánh `feat/s15-payroll-dash-1` (2 commit `dbaaed98` + `4b24af13`, base master `a637a03a`). Việc còn lại: đợi CI → owner merge → regen STATUS + handoff + đóng `status: "done"` cho WO trong `harness/backlog.mjs` (PHIÊN NÀY CHƯA sửa backlog — tránh thêm một vòng CI). Đọc memory `s15-payroll-dash1-wave-state` trước khi đụng lại.
@@ -141,7 +159,7 @@
 
 **Bắt đầu phiên sau ở đây:** `gh pr checks 512` → xanh ⇒ owner nói rõ «cho phép merge với quyền admin» rồi `gh pr merge 512 --squash --delete-branch` (KHÔNG stacked). Sau merge: DROP lane `mediaos_be4b` (`docker exec mediaos-postgres psql -U mediaos -d postgres -c "DROP DATABASE mediaos_be4b"`). Việc kế theo backlog: **`S15-PAYROLL-FE-1`** (deps BE-1 + UI-SHELL-1 đã xong — đọc memory `s15-ui-shell-1-wave-state` trước) → FE-2/FE-3 → BE-5. Bằng chứng BE-4B đủ để người review chỉ đọc bảng: `docs/plans/S15-PAYROLL-BE-4B.md` §3 (RED/GREEN · cov 94,37 %/86,43 % · check.sh lane XANH · đột biến 3 ca đỏ · 2 reviewer PASS). Nợ để lại §4: be4-batches int-spec 945 dòng · comment `auth.service.ts:90-91` sai state-space (ngoài paths) · QA-1 đột biến (k).
 
-**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:** (1) `users.status` CHECK thật là **4 giá trị** (`active|invited|suspended|locked`, mig 0002 + 0450) — mọi comment chép «active|suspended» đều SAI; reader quyền dùng allow-list `= 'active'` là ĐỦ, cố ý không soi `locked_at`/`must_change_password`/`require_two_factor`/`companies.status` (lý do ghi trong comment `pairHoldersQuery`). (2) 23503 (FK) ĐÃ được `mapPayrollPgError` map sang 404 sentinel — unit «lỗi không map» phải dùng mã khác (22003). (3) Bash tool nuốt backslash trong `node -e '…"\b"…'` thành `` = `` ⇒ eslint `no-control-regex`; dựng backslash bằng `String.fromCharCode(92)` hoặc viết script ra file. (4) Prettier căn lề bảng markdown ⇒ anchor thay-chuỗi trong bảng plan phải thay THEO DÒNG (tìm placeholder bằng `includes`), không anchor cả ô. (5) Reviewer tĩnh song song (TS ∥ security) trong lúc cov/check chạy nền: tới lúc mở PR ~$17; cả phiên ~$33.
+**Điều đắt nhất phiên này mua được — ĐỪNG đo lại:** (1) `users.status` CHECK thật là **4 giá trị** (`active|invited|suspended|locked`, mig 0002 + 0450) — mọi comment chép «active|suspended» đều SAI; reader quyền dùng allow-list `= 'active'` là ĐỦ, cố ý không soi `locked_at`/`must_change_password`/`require_two_factor`/`companies.status` (lý do ghi trong comment `pairHoldersQuery`). (2) 23503 (FK) ĐÃ được `mapPayrollPgError` map sang 404 sentinel — unit «lỗi không map» phải dùng mã khác (22003). (3) Bash tool nuốt backslash trong `node -e '…"\b"…'` thành `\b` = `\b` ⇒ eslint `no-control-regex`; dựng backslash bằng `String.fromCharCode(92)` hoặc viết script ra file. (4) Prettier căn lề bảng markdown ⇒ anchor thay-chuỗi trong bảng plan phải thay THEO DÒNG (tìm placeholder bằng `includes`), không anchor cả ô. (5) Reviewer tĩnh song song (TS ∥ security) trong lúc cov/check chạy nền: tới lúc mở PR ~$17; cả phiên ~$33.
 
 ## Phiên 2026-09-15 (g) — **BE-3 #510 + BE-4 #511 ĐÃ MERGE master** (`ddca8109` · `7e7936b5`, owner ủy quyền `--admin`)
 
