@@ -5,6 +5,7 @@ import { payrollApi, payrollKeys } from "@mediaos/web-core";
 import type { PaymentBatchMethod } from "@mediaos/contracts";
 import { Button, Dialog, Input, Select } from "@mediaos/ui";
 import { parsePayrollError, payrollErrorI18nKey } from "../payroll-errors";
+import { renderPaymentBatchWarning } from "../payment-batch-warnings";
 
 const CODE_RE = /^[A-Za-z0-9_-]+$/;
 const CODE_MAX = 40;
@@ -77,16 +78,6 @@ export function PaymentBatchFormDialog({ open, onClose }: { open: boolean; onClo
     onError: (error) => setErrorKey(payrollErrorI18nKey(parsePayrollError(error))),
   });
 
-  /** Diễn dịch một mục `warnings` thành câu tiếng Việt — hai dạng `<slug>:<n>` (số đếm) và bare `no-eligible-payees`. */
-  const renderWarning = (warning: string): string => {
-    if (warning === "no-eligible-payees") return t("paymentBatchForm.noEligiblePayees");
-    const [slug, countRaw] = warning.split(":");
-    const count = Number(countRaw ?? 0);
-    if (slug === "no-bank-account") return t("paymentBatchForm.noBankAccount", { count });
-    if (slug === "zero-net") return t("paymentBatchForm.zeroNet", { count });
-    return warning;
-  };
-
   return (
     <Dialog
       open={open}
@@ -110,7 +101,7 @@ export function PaymentBatchFormDialog({ open, onClose }: { open: boolean; onClo
       {warnings !== null ? (
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
           {warnings.map((w) => (
-            <li key={w}>{renderWarning(w)}</li>
+            <li key={w}>{renderPaymentBatchWarning(t, w)}</li>
           ))}
         </ul>
       ) : (

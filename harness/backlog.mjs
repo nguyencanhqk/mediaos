@@ -16619,7 +16619,7 @@ export const backlog = [
     title:
       "Nợ FE-3 (lộ ra ở S15-PAYROLL-QA-1 T5): màn chi tiết đợt chi trả chưa có thao tác trên DÒNG CHI — đánh dấu đã chi · gỡ dòng chưa chi · thêm người (PAYROLL-API-069 markPaidUserIds/removeUserIds/addUserIds) — client đã có (payrollApi.updatePaymentBatch), apps/app chưa gọi ở đâu",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/payroll/**",
       "apps/app/src/i18n/**",
@@ -16637,7 +16637,37 @@ export const backlog = [
       "Mọi kind 027 của 069 có chữ riêng qua payrollErrorText; invalidate chi tiết + dòng + danh sách đợt",
       "Spec T5 (nợ QA-1 done_when 6): ALLOW có cặp ⇒ nút hiện + gọi 069 đúng payload · DENY thiếu cặp ⇒ nút vắng, client không gọi · dòng đã chi ⇒ không gỡ được; typecheck/build/test xanh",
     ],
-    notes: ["🟡 LIGHT gate; thao tác chi tiền — xác nhận trước khi gửi, không log số tài khoản."],
+    notes: [
+      "🟡 LIGHT gate; thao tác chi tiền — xác nhận trước khi gửi, không log số tài khoản.",
+      "✅ XONG: cột chọn theo userId + PaymentLineActions (markPaid/remove, mỗi PATCH đúng MỘT mảng) + PaymentBatchAddPayeesDialog (nguồn = phiếu 029, gửi từng người vì 409 payee-* là all-or-nothing) + payment-batch-warnings.ts dùng chung với 067. Spec payroll-fe6-payment-lines.spec.tsx 16/16 đóng nợ T5 của QA-1.",
+      "LIGHT gate 2/2 PASS sau khi vá: 1 HIGH (lựa chọn KHÔNG được dọn ở nhánh lỗi ⇒ dòng người khác vừa đánh dấu đã chi nằm lại trong Set, ô tích đã disabled nên không bỏ chọn tay được ⇒ mọi lượt gửi sau hỏng cả nhóm vì remove là all-or-nothing) — vá bằng effect ĐỐI SOÁT selected với selectableUserIds sau mỗi lượt tải lại; ca hồi quy ĐÃ ĐO ĐỎ khi gỡ vá. 2 MEDIUM: enabled thật cho query 029 trong dialog (không tin vào unmount của cha) + onError cho mutation allSettled.",
+      "NỢ chuyển tiếp → S15-PAYROLL-FE-7: 069 còn ba vế chưa có UI (status Draft↔Ready · payDate · note).",
+    ],
+  },
+  {
+    id: "S15-PAYROLL-FE-7",
+    module: "PAYROLL",
+    layer: "FE",
+    title:
+      "Nợ FE-6: ba vế còn lại của PAYROLL-API-069 chưa có UI ở PAY-SCREEN-013 — đổi trạng thái đợt (Draft↔Ready, enum RIÊNG không có Completed) · sửa ngày chi (payDate) · sửa ghi chú (note)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/payroll/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/S15-PAYROLL-FE-7.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S15-PAYROLL-FE-6"],
+    src: [
+      "contracts updatePaymentBatchSchema (status/payDate/note); docs/plans/S15-PAYROLL-FE-6.md §3.7",
+    ],
+    done_when: [
+      "Đợt Draft/Ready sửa được payDate + note + chuyển Draft↔Ready qua 069; gate useCanExact(manage:payment-batch); đợt Completed chỉ đọc",
+      "`Completed` KHÔNG có trong lựa chọn trạng thái (chỉ 072 tới được — gửi ở 069 là 400); spec neo ca này",
+    ],
+    notes: ["🟡 LIGHT gate; cùng màn với FE-6 — làm khi FE-6 đã merge để tránh xung đột file."],
   },
   {
     id: "S15-UI-SHELL-2",

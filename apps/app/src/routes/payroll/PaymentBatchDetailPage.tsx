@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -16,11 +16,20 @@ import {
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { triggerBlobDownload } from "@/lib/download-blob";
 import { PAYROLL_ENGINE_PAIRS, PAYROLL_PAGE_SIZE } from "./constants";
-import { canCompletePaymentBatch, paymentBatchHasUnpaidLines } from "./payroll-actions";
+import {
+  canCompletePaymentBatch,
+  canEditPaymentBatch,
+  paymentBatchHasUnpaidLines,
+} from "./payroll-actions";
 import { formatPayrollMoney, PAYROLL_NUMERIC_CELL_CLASS } from "./payroll-format";
 import { isPayrollStateConflict, parsePayrollError, payrollErrorI18nKey } from "./payroll-errors";
 import { displayUserRef, usePayrollPeople } from "./use-payroll-people";
 import { PaymentBatchStatusBadge } from "./components/StatusBadges";
+import { PaymentBatchAddPayeesDialog } from "./components/PaymentBatchAddPayeesDialog";
+import { PaymentLineActions } from "./components/PaymentLineActions";
+
+/** Mảng rỗng DÙNG CHUNG — `?? []` sinh tham chiếu mới mỗi lượt render, làm memo/effect dưới chạy hoài. */
+const NO_LINES: PaymentLineDto[] = [];
 
 /**
  * PAY-SCREEN-013 (S15-PAYROLL-FE-3) — chi tiết đợt chi trả: dòng chi (070) · xuất tệp UNC (071) ·
@@ -41,6 +50,21 @@ import { PaymentBatchStatusBadge } from "./components/StatusBadges";
  * ⚠️ Nút «Hoàn tất» (072) ẩn theo FSM ∩ quyền ∩ four-eyes (D7 `canCompletePaymentBatch`) — KHÔNG ẩn khi
  * còn dòng chưa chi (D8): hộp xác nhận hiện thêm ô «Xác nhận đã chi tất cả» cho ca đó, đặt qua khe
  * `children` của `ConfirmDialog` (thêm ở S15-PAYROLL-DEBT-1).
+ *
+ * ── S15-PAYROLL-FE-6 — THAO TÁC TRÊN DÒNG (069 `markPaidUserIds`/`removeUserIds`/`addUserIds`) ────
+ * Ba luật BE quyết định hình dạng UI ở đây, ghi lại để không ai «sửa cho tiện» rồi vỡ:
+ *
+ *   1. **Đợt `Completed` là chỉ-đọc** (`assertNotCompleted` ⇒ 409 027 `batch-already-completed`) ⇒
+ *      không cột chọn, không thanh thao tác, không nút thêm người. `canEditPaymentBatch` lo vế này.
+ *   2. **`removeUserIds` ALL-OR-NOTHING**: chỉ một dòng trong lượt đã `paid_at` là CẢ LƯỢT bị từ chối
+ *      (409 027 `line-already-paid`, không gỡ dòng nào) ⇒ ô chọn của dòng đã chi phải `disabled`, và
+ *      chữ lỗi phải nói rõ «cả lượt bị từ chối» chứ không để người dùng tưởng gỡ được một phần.
+ *   3. **`markPaidUserIds` no-op IM LẶNG trên dòng đã chi** (SQL có `and l.paid_at is null` —
+ *      `payroll-payment-batches.repository.ts:383-390`) và envelope `{id, warnings}` KHÔNG mang số dòng
+ *      đã đổi ⇒ FE **không được khẳng định số lượng** sau lượt gửi; nó `refreshAll()` và để bảng tự nói.
+ *
+ * ⚠️ Mỗi nút gửi ĐÚNG MỘT mảng trong một PATCH — BE xử theo thứ tự `status/payDate/note → remove → add
+ * → markPaid` trong cùng tx, trộn hai mảng là một 409 không biết của vế nào.
  */
 export function PaymentBatchDetailPage({
   batchId,
@@ -57,6 +81,12 @@ export function PaymentBatchDetailPage({
   const canManageBatch = useCanExact(
     PAYROLL_ENGINE_PAIRS.batchComplete.action,
     PAYROLL_ENGINE_PAIRS.batchComplete.resourceType,
+  );
+  // D1 — khoá RIÊNG `batchUpdate` (069) dù giá trị cặp trùng `batchComplete`: census wiring đọc
+  // theo KHOÁ để biết màn này có gác đúng route 069 hay không, không đọc theo giá trị.
+  const canUpdateBatch = useCanExact(
+    PAYROLL_ENGINE_PAIRS.batchUpdate.action,
+    PAYROLL_ENGINE_PAIRS.batchUpdate.resourceType,
   );
   const canViewLines = useCanExact(
     PAYROLL_ENGINE_PAIRS.batchLines.action,
@@ -79,6 +109,9 @@ export function PaymentBatchDetailPage({
 
   const [linePage, setLinePage] = useState(1);
   const [completeOpen, setCompleteOpen] = useState(false);
+  /** Lựa chọn theo **`userId`** — 069 nhận `userId`, KHÔNG nhận id của dòng. */
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [addOpen, setAddOpen] = useState(false);
   const [confirmAllPaid, setConfirmAllPaid] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
@@ -97,11 +130,71 @@ export function PaymentBatchDetailPage({
   });
 
   const batch = batchQuery.data ?? null;
-  const lines = linesQuery.data?.data ?? [];
+  const lines = linesQuery.data?.data ?? NO_LINES;
   const lineTotal = linesQuery.data?.pagination?.total;
 
+  // D7 — CỐ Ý không invalidate `payslips`: phiếu không đổi vì lượt này, và mỗi lượt đọc phiếu (029) là
+  // một hàng audit tiền. Prefix `allOf()` đã phủ cả nhánh `lines` của đợt.
   const refreshAll = () =>
     queryClient.invalidateQueries({ queryKey: payrollKeys.paymentBatches.allOf() });
+
+  // D2 — thao tác trên dòng cần CẢ hai: quyền ghi 069 ∩ FSM (đợt chưa `Completed`) ∩ quyền đọc dòng
+  // (thiếu `view:payment-batch` thì bảng dòng không tải ⇒ không có gì để chọn).
+  const canEditBatch = batch !== null && canEditPaymentBatch(batch, canUpdateBatch);
+  const canEditLines = canEditBatch && canViewLines;
+  // Nút «Thêm người» KHÔNG cần `canViewLines` (không chọn từ bảng dòng) nhưng CẦN cặp đọc phiếu 029.
+  const canAddPayees = canEditBatch && canPayslipView;
+
+  /** `userId` của các dòng CHỌN ĐƯỢC trên trang hiện tại — dòng đã `paid_at` không gỡ/đánh dấu lại được. */
+  const selectableUserIds = useMemo(
+    () => lines.filter((l) => l.paidAt === null).map((l) => l.userId),
+    [lines],
+  );
+  const allPageSelected =
+    selectableUserIds.length > 0 && selectableUserIds.every((id) => selected.has(id));
+  /** `userId` đã có dòng sống trên TRANG hiện tại — lọc trước cho picker (tiện nghi, không phải cổng). */
+  const userIdsOnPage = useMemo(() => new Set(lines.map((l) => l.userId)), [lines]);
+  const selectedUserIds = useMemo(() => Array.from(selected), [selected]);
+
+  const toggleOne = useCallback((userId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }, []);
+  const toggleAllOnPage = useCallback(() => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of selectableUserIds) {
+        if (allPageSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }, [selectableUserIds, allPageSelected]);
+
+  // Giữ `userId` của trang/đợt cũ thì lượt sau gửi lên người không còn dòng ở đây ⇒ 404 cả lượt.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [linePage, batchId]);
+
+  /**
+   * 🔴 ĐỐI SOÁT lựa chọn với tập CHỌN-ĐƯỢC sau mỗi lượt tải lại — KHÔNG có bước này thì một lượt 409
+   * là cụt đường vĩnh viễn: người khác vừa đánh dấu đã chi (hoặc gỡ) một dòng ta đang chọn ⇒ nhánh lỗi
+   * `refreshAll()` nhưng `userId` đó NẰM LẠI trong `selected`; ô tích của nó giờ `disabled` nên không
+   * bỏ chọn tay được, «chọn cả trang» cũng chỉ duyệt dòng chưa chi nên không với tới. Mọi lượt gửi sau
+   * đều kéo theo id chết ⇒ `removeUserIds` (all-or-nothing) hỏng CẢ nhóm, mãi tới khi người dùng đổi
+   * trang hoặc rời màn. Trả lại `prev` khi không đổi để React bỏ qua lượt render thừa.
+   */
+  useEffect(() => {
+    setSelected((prev) => {
+      const alive = new Set(selectableUserIds);
+      const next = new Set([...prev].filter((id) => alive.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [selectableUserIds]);
 
   const exportMutation = useMutation({
     mutationFn: () => payrollApi.exportPaymentBatch(batchId),
@@ -138,6 +231,39 @@ export function PaymentBatchDetailPage({
 
   const columns = useMemo<ColumnDef<PaymentLineDto>[]>(
     () => [
+      // D3 — `DataTable` KHÔNG có row-selection sẵn ⇒ cột chọn tự vẽ, chỉ mọc khi được sửa dòng.
+      // ⚠️ `selected`/`toggle*` PHẢI nằm trong deps của memo này, nếu không ô tích đứng im vì closure
+      // cũ (lint KHÔNG bắt lỗi này vì deps vẫn "đủ" theo mắt nó).
+      ...(canEditLines
+        ? [
+            {
+              id: "select",
+              header: () => (
+                <Checkbox
+                  checked={allPageSelected}
+                  disabled={selectableUserIds.length === 0}
+                  onChange={toggleAllOnPage}
+                  aria-label={t("paymentBatchDetail.selectAllPage")}
+                  data-testid="line-select-page"
+                />
+              ),
+              cell: ({ row }) => {
+                // Dòng đã chi: không gỡ được (409 `line-already-paid` cho CẢ lượt) và đánh dấu lại là
+                // no-op im lặng ⇒ khoá ô tích thay vì để người dùng chọn rồi ăn lỗi cả nhóm.
+                const paid = row.original.paidAt !== null;
+                return (
+                  <Checkbox
+                    checked={selected.has(row.original.userId)}
+                    disabled={paid}
+                    onChange={() => toggleOne(row.original.userId)}
+                    aria-label={displayUserRef(row.original.userId, people)}
+                    data-testid={`line-select-${row.original.userId}`}
+                  />
+                );
+              },
+            } satisfies ColumnDef<PaymentLineDto>,
+          ]
+        : []),
       {
         id: "user",
         header: t("paymentBatchDetail.columns.employee"),
@@ -174,7 +300,16 @@ export function PaymentBatchDetailPage({
         cell: ({ row }) => row.original.paidAt ?? "—",
       },
     ],
-    [t, people],
+    [
+      t,
+      people,
+      canEditLines,
+      selected,
+      allPageSelected,
+      selectableUserIds,
+      toggleAllOnPage,
+      toggleOne,
+    ],
   );
 
   if (batchQuery.isLoading) {
@@ -256,18 +391,59 @@ export function PaymentBatchDetailPage({
         </div>
       )}
 
-      {canComplete && (
-        <div>
-          <Button size="sm" onClick={() => setCompleteOpen(true)}>
-            {t("paymentBatchDetail.complete")}
-          </Button>
+      {(canComplete || canAddPayees) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {canComplete && (
+            <Button size="sm" onClick={() => setCompleteOpen(true)}>
+              {t("paymentBatchDetail.complete")}
+            </Button>
+          )}
+          {canAddPayees && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAddOpen(true)}
+              data-testid="lines-add-payees"
+            >
+              {t("paymentBatchDetail.addPayees")}
+            </Button>
+          )}
         </div>
+      )}
+
+      {/* Thiếu `view-payslip:payslip` ⇒ nút «Thêm người» ẩn (picker lấy ứng viên từ 029) — nói lý do
+          thay vì để người có quyền sửa đợt tự hỏi vì sao thiếu nút. */}
+      {canEditBatch && !canPayslipView && (
+        <p className="text-sm text-muted-foreground">
+          {t("paymentBatchDetail.addPayeesNoPermission")}
+        </p>
       )}
 
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">
           {t("paymentBatchDetail.linesTitle")}
         </h2>
+
+        {canEditLines && (
+          <PaymentLineActions
+            batchId={batchId}
+            selectedUserIds={selectedUserIds}
+            onFeedback={setFeedback}
+            onRefresh={() => void refreshAll()}
+            onWritten={(action, count) => {
+              setSelected(new Set());
+              // Gỡ sạch dòng của trang cuối ⇒ trang đó biến mất; đứng lại đó là bảng rỗng vĩnh viễn.
+              // So với `lines.length` (CẢ dòng đã chi) chứ KHÔNG phải `selectableUserIds.length`:
+              // `count` không bao giờ vượt số dòng chưa chi, nên điều kiện chỉ đúng khi trang không
+              // còn dòng đã chi nào và vừa bị gỡ hết — tức trang thật sự rỗng. Đổi sang tập chọn-được
+              // là lùi trang oan mỗi khi trang còn dòng đã chi ở lại.
+              if (action === "remove" && linePage > 1 && count >= lines.length) {
+                setLinePage((p) => Math.max(1, p - 1));
+              }
+            }}
+          />
+        )}
+
         {!canViewLines ? (
           <EmptyState title={t("paymentBatchDetail.linesNoPermission")} />
         ) : linesQuery.isError ? (
@@ -286,7 +462,6 @@ export function PaymentBatchDetailPage({
               data={lines}
               isLoading={linesQuery.isLoading}
               pageSize={PAYROLL_PAGE_SIZE}
-              pinFirstColumn
               emptyState={<EmptyState title={t("paymentBatchDetail.linesEmpty")} />}
               footer={
                 <TableFooter
@@ -323,6 +498,19 @@ export function PaymentBatchDetailPage({
           </label>
         ) : undefined}
       </ConfirmDialog>
+
+      {/* Render CÓ ĐIỀU KIỆN: 029 ghi một hàng audit mỗi lượt gọi ⇒ hộp đóng thì hook trong đó không
+          chạy và server không hề bị hỏi (xem docblock của dialog). */}
+      {addOpen && canAddPayees && (
+        <PaymentBatchAddPayeesDialog
+          batchId={batchId}
+          payrollPeriodId={batch.payrollPeriodId}
+          existingUserIds={userIdsOnPage}
+          people={people}
+          onClose={() => setAddOpen(false)}
+          onAdded={() => void refreshAll()}
+        />
+      )}
     </div>
   );
 }

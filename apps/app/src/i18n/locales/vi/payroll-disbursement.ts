@@ -120,6 +120,25 @@ export default {
     completeSubmit: "Hoàn tất",
     cancel: "Huỷ",
     linesTitle: "Dòng chi trả",
+    // ── S15-PAYROLL-FE-6 — thao tác trên dòng (069) ──
+    selectAllPage: "Chọn tất cả dòng chưa chi trên trang này",
+    selectedCount: "Đã chọn {{count}} người",
+    markPaid: "Đánh dấu đã chi",
+    markPaidTitle: "Đánh dấu đã chi",
+    markPaidDescription:
+      "Đánh dấu {{count}} người đã được chi trả. Thao tác này KHÔNG hoàn tác được — hệ thống không có đường gỡ dấu đã chi.",
+    markPaidDone:
+      "Đã gửi yêu cầu đánh dấu đã chi. Bảng dưới đây đang hiện trạng thái mới nhất từ máy chủ.",
+    removeLines: "Gỡ khỏi đợt",
+    removeTitle: "Gỡ người khỏi đợt chi trả",
+    removeDescription:
+      "Gỡ {{count}} người khỏi đợt này. Nếu chỉ một người trong nhóm đã được đánh dấu đã chi thì CẢ LƯỢT bị từ chối và không ai bị gỡ. Gỡ hết dòng thì đợt không hoàn tất được nữa cho tới khi thêm người trở lại.",
+    removeDone: "Đã gỡ {{count}} người khỏi đợt.",
+    addPayees: "Thêm người",
+    addPayeesNoPermission:
+      "Thêm người vào đợt cần thêm quyền xem phiếu lương (danh sách ứng viên lấy từ phiếu của kỳ).",
+    lineNotFound:
+      "Người được chọn không còn dòng chi trong đợt này (danh sách đang cũ). Bảng đã được tải lại.",
     linesNoPermission: "Bạn không có quyền xem dòng chi trả của đợt này.",
     linesEmpty: "Đợt này chưa có dòng chi trả nào.",
     periodNowPaid: "Đã hoàn tất. Kỳ lương chuyển sang «Đã chi trả».",
@@ -133,6 +152,22 @@ export default {
       accountHolder: "Chủ tài khoản",
       paidAt: "Đã chi lúc",
     },
+  },
+
+  paymentBatchAddPayees: {
+    title: "Thêm người vào đợt chi trả",
+    description:
+      "Chỉ nhân sự CÓ phiếu lương trong kỳ của đợt mới thêm được. Mỗi người được gửi một lượt riêng, nên người bị từ chối không làm hỏng cả nhóm.",
+    selectedCount: "Đã chọn {{count}} người",
+    submit: "Thêm vào đợt",
+    alreadyInBatch: "Đã ở trong đợt",
+    empty: "Kỳ lương này chưa có phiếu nào.",
+    loadError: "Không tải được danh sách phiếu lương của kỳ.",
+    partialError: "{{count}} người chưa thêm được — xem lý do bên dưới và thử lại.",
+    selectAllPage: "Chọn tất cả người trên trang này",
+    totalCount: "Tổng {{count}} phiếu",
+    prevPage: "Trang trước",
+    nextPage: "Trang sau",
   },
 
   budgets: {
