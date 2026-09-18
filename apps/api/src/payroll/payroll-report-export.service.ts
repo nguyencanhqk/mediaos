@@ -3,7 +3,7 @@ import type { PayrollReportCode, PayrollReportExportQuery } from "@mediaos/contr
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { PayrollAccessService } from "./payroll-access.service";
-import { xlsxSafe } from "./payroll-payment-export.service";
+import { xlsxSafe } from "./payroll-xlsx.util";
 import type { ReportCell } from "./payroll-reports.mapper";
 import { PAYROLL_REPORTS } from "./payroll-reports.registry";
 import { PayrollReportsService, type CheckedReportFilter } from "./payroll-reports.service";

@@ -231,4 +231,56 @@ describe("S15-PAYROLL-DB-2 · FSM kỳ lương v2 (SPEC-11 §13.1)", () => {
       ).not.toThrow();
     }
   });
+
+  /**
+   * S15-PAYROLL-QA-1 (G9 unit) — lỗ đo được: ca (c) chỉ duyệt CẶP `(from,to)` KHÔNG nằm trong tập cho phép (bỏ
+   * qua cả 14 cặp CHO, dù đúng cặp đó bị gọi SAI action). Vd `Reviewing→Calculated` là cặp CHO (qua `reject`) —
+   * (c) không bao giờ thử `Reviewing→Calculated` qua `submit`/`reopen`/… Ca dưới đây phủ đúng lỗ đó: với MỖI
+   * trong 14 cặp CHO, MỌI action KHÁC action-đúng phải bị cấm 001 trên CHÍNH cặp đó.
+   */
+  it("(h) 14 cặp (from,to) CHO — action KHÁC action-đúng của cặp đó vẫn bị cấm 001", () => {
+    const cells: ReadonlyArray<[PayrollPeriodStatus, PayrollPeriodStatus, PeriodAction]> = [
+      ...EXPECTED_MOVES,
+      ...EXPECTED_IN_PLACE.map(
+        ([at, via]): [PayrollPeriodStatus, PayrollPeriodStatus, PeriodAction] => [at, at, via],
+      ),
+    ];
+    expect(cells).toHaveLength(14);
+    let checked = 0;
+    for (const [from, to, correctVia] of cells) {
+      for (const via of ALL_ACTIONS) {
+        if (via === correctVia) continue;
+        expect(isAllowedTransition(from, to, via), `${from}->${to}:${via}`).toBe(false);
+        expect(
+          () => assertPeriodTransition(from, to, via),
+          `${from}->${to}:${via} (action đúng của cặp là ${correctVia})`,
+        ).toThrowError(
+          expect.objectContaining({
+            response: expect.objectContaining({ code: "PAYROLL-ERR-001" }),
+          }),
+        );
+        checked++;
+      }
+    }
+    // 14 cặp × 9 action-khác (10 action − 1 action-đúng) = 126 — neo chống xanh-rỗng (vòng lặp không bị bỏ qua).
+    expect(checked).toBe(126);
+  });
+
+  /**
+   * (b)/(c) đếm theo (from,to) suy ra CHIỀU DỌC (16 status²) rồi trừ. Ca dưới đây đếm TRỰC TIẾP trên lưới
+   * `8 trạng thái × 10 action = 80 ô` bằng `nextStatus()` — hand count độc lập, không tái dùng bộ đếm của (c)/(d).
+   */
+  it("(i) lưới ĐẦY ĐỦ 8×10 (80 ô): `nextStatus` khác null ĐÚNG 14 ô, null 66 ô", () => {
+    let nonNull = 0;
+    let isNull = 0;
+    for (const from of STATUSES) {
+      for (const via of ALL_ACTIONS) {
+        if (nextStatus(from, via) !== null) nonNull++;
+        else isNull++;
+      }
+    }
+    expect(STATUSES.length * ALL_ACTIONS.length).toBe(80);
+    expect(nonNull).toBe(14);
+    expect(isNull).toBe(66);
+  });
 });

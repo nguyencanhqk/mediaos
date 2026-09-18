@@ -508,6 +508,45 @@ và đã vá** trong chính đợt QA: [`QA/evidence/S13-PAYROLL-QA-1-ACCEPTANCE
 
 ---
 
+## 5i-v2. PAYROLL v2 — nhân viên lương · công thức · tạm ứng · chi trả · ngân sách · báo cáo (wave S15-PAYROLL-V2, nghiệm thu QA 17/09/2026)
+
+Nâng cấp theo benchmark MISA AMIS (PAY-DEC-011..020, SPEC-11 §22.1): **+50 route** (API-18 036–085, tổng 85) ·
+**+11 màn** (PAY-SCREEN-007..017 — `017` «Tạm ứng của tôi» sống ở app ME) · **FSM 8 trạng thái** (`Published` tách
+khỏi `Paid`: kỳ chỉ sang `Paid` khi các **đợt chi trả phủ đủ** mọi phiếu) · máy công thức riêng (catalog thành phần,
+mẫu bảng lương, tỉ lệ luật định có phiên bản, gross-up NET) · PDF phiếu lương (từng phiếu + cả kỳ).
+
+**Quyền:** 17 cặp mới, **tất cả SENSITIVE** (wildcard `*:*` không qua được, kể cả các dạng `*:<tài-nguyên>` /
+`<hành-động>:*`). Role hệ thống sau seed:
+
+| Role                            | Giữ gì ở v2                                                                  | Hệ quả dễ kiểm                                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `company-admin`                 | 16/17 cặp (trừ `view-own:payroll-advance`)                                   | mở được mọi màn quản trị v2; «Tạm ứng của tôi» 403                                                    |
+| `payroll-officer`               | 14/17 — **không** `manage:statutory-rate`, **không** `manage:payroll-budget` | xem được tỉ lệ luật định + ngân sách nhưng **không sửa**; tạo/sửa/duyệt tạm ứng, lập/hoàn tất đợt chi |
+| `employee`                      | chỉ `view-own:payroll-advance` (+ `view-own-payslip` của v1)                 | «Tạm ứng của tôi» + PDF phiếu của chính mình; mọi route quản trị 403                                  |
+| `hr-manager` · `manager` · `hr` | **0** cặp PAYROLL                                                            | 403 trên cả 50 route mới                                                                              |
+
+| Việc                          | Cách kiểm                                                                                              | Kỳ vọng                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Four-eyes tạm ứng · đợt chi   | người lập tạm ứng tự duyệt · người lập đợt tự bấm Hoàn tất                                             | `PAYROLL-ERR-025 self-approval` · `027 batch-four-eyes`; người khác làm thì được                           |
+| Luật PHỦ nhiều đợt            | kỳ 10 phiếu chia 2 đợt 6 + 4; hoàn tất đợt 1 rồi đợt 2                                                 | đợt 1 ⇒ kỳ **vẫn `Published`**, `unpaidPayees = 4`; đợt 2 ⇒ kỳ `Paid`, đúng **một** thông báo «đã chi trả» |
+| Bấm Hoàn tất hai lần cùng lúc | hai tab cùng hoàn tất một đợt                                                                          | một bên 200, bên kia `409 027 batch-already-completed`; kỳ `Paid` một lần                                  |
+| Tệp UNC (xuất chuyển khoản)   | role có `manage:payment-batch` nhưng thiếu `export:payroll` **hoặc** `view-payslip`                    | 403 (tệp chứa số TK đầy đủ — đòi đủ **ba** cặp, cả ba ở scope Company)                                     |
+| Mask tiền theo quyền đọc      | role chỉ có quyền GHI (`manage:X`, không `view:X`) tạo tạm ứng/đợt/ngân sách                           | tạo được, phản hồi **không có khoá tiền nào**; mở danh sách tương ứng ⇒ 403                                |
+| Công thức                     | lưu công thức vòng (`X = Y+1`, `Y = X+1`) — kể cả hai người lưu cùng lúc                               | `422 PAYROLL-ERR-019 formula-cycle`; lưu song song thì đúng một bên được                                   |
+| Sửa công thức sau khi tính    | tính kỳ → sửa công thức một thành phần của mẫu → mở lại bảng lương                                     | số **không đổi**; bấm Tính lại mới đổi (kèm dấu vân tay mẫu mới)                                           |
+| Tỉ lệ luật định               | xoá bản tỉ lệ đang hiệu lực rồi tính kỳ · sửa bản đã có kỳ dùng                                        | `422 PAYROLL-ERR-022`, kỳ không đổi trạng thái · `409 033 rate-in-use`                                     |
+| Xuất bảng lương XLSX (017)    | họ tên / lý do điều chỉnh bắt đầu bằng `=`, `+`, `-`, `@`                                              | ô hiện nguyên văn có dấu `'` đầu — **không** thành công thức (đã vá 17/09)                                 |
+| Phiếu của người khác          | nhân viên mở `/me/payslips/<id người khác>/pdf` · nhân viên chưa có phiếu nào mở «Phiếu lương của tôi» | **404** `PAYROLL-ERR-010` (không 403) · danh sách rỗng                                                     |
+| Phát hành khi chưa sinh phiếu | bấm Phát hành ở kỳ chưa sinh phiếu (mọi trạng thái)                                                    | `409 PAYROLL-ERR-007 no-payslip` (cố ý đứng trước lỗi chuyển trạng thái 001)                               |
+
+Bộ test tự động của `S15-PAYROLL-QA-1`: **553 ca int mới** (role hệ thống × 50 route = 355 · thiếu-một-cặp × 17 cặp
+= 73 · FSM bảng tay 72 ô · IDOR/rò tiền 21 · ràng buộc DB thật 12 · race 5 · số học/công thức 9) + **110 ca unit**
+(gồm census tên ràng buộc 61) + **16 ca FE** (nút UNC · mask 4 màn). Coverage `src/payroll/**` **98,00 %** statements (formula **99,82 %**). **3 lỗi sản phẩm tìm
+được và đã vá**, 1 WO nợ FE (`S15-PAYROLL-FE-6` — màn chi tiết đợt chưa có thao tác trên dòng chi). Bằng chứng:
+[`QA/evidence/S15-PAYROLL-QA-1-ACCEPTANCE.md`](QA/evidence/S15-PAYROLL-QA-1-ACCEPTANCE.md).
+
+---
+
 ## 5j. DASH — widget «Chi phí lương kỳ» (S13-PAYROLL-DASH-1, 02/09/2026)
 
 Dashboard có thêm «Chi phí lương kỳ» (`PAYROLL_COST`, mã `PAYROLL-WIDGET-001`): tổng **thực trả** + tổng
