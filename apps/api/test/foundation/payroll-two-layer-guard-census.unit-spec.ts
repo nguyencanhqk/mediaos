@@ -313,6 +313,11 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "PayrollPayslipPdfService#myPdf": ["mePayslipPdf"],
   "PayrollPayslipPdfBatchService#request": ["payslipPdfBatch", "payslipList"],
   "PayrollPayslipPdfBatchConsumer#load": ["payslipPdfBatch", "payslipList"],
+  // ── S15-PAYROLL-DASH-1 — hai nguồn widget DASH KHÔNG phải route: widget gọi THẲNG service, nên cổng duy
+  //    nhất của chúng là chính `resolveActor` ở đây. Tái dùng ĐÚNG key của route đọc tương ứng (073 · 059)
+  //    ⇒ cùng cặp + cùng SÀN scope Company, không sinh cặp mới, không nới quyền. Đổi/gỡ literal = ĐỎ. ──
+  "PayrollBudgetsService#yearTotals": ["budgetList"],
+  "PayrollAdvancesService#countPending": ["advanceList"],
 };
 
 /**
@@ -438,7 +443,8 @@ describe("PAYROLL census 2 tầng — decorator + service so với PAYROLL_ROUTE
     // `PayrollPaymentExportService#export` (`periodExport` · `payslipList` — 071 gác BA cặp, S15-PAYROLL-BE-4).
     // S15-PAYROLL-BE-5: +5 route + literal `periodExport` của `PayrollReportExportService#export` ⇒ 86.
     // S15-PAYROLL-BE-5B: +3 route + `periodExport` (083) + `payslipList` (085) + 2 literal của consumer ⇒ 93.
-    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(93);
+    // S15-PAYROLL-DASH-1: +2 site nguồn widget (KHÔNG phải route) — `budgetList` · `advanceList` ⇒ 95.
+    expect(calls.length, "scanner resolveActor trả quá ít — nó hỏng").toBeGreaterThanOrEqual(95);
     const validKeys = new Set(Object.keys(PAYROLL_ROUTE_PAIRS));
     expect(
       calls.filter((c) => !validKeys.has(c.key)).map((c) => `${c.site}→${c.key}`),

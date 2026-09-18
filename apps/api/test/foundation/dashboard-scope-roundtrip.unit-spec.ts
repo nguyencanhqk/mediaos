@@ -98,14 +98,16 @@ function wire(grants: CompanyRoleGrantWithScope[]) {
 const FLOORED = Object.keys(DASH_WIDGET_MIN_DATA_SCOPE);
 
 describe("Số đo — GET /dashboard/me (đường sàn scope của filterByGatePair)", () => {
-  it("TRƯỚC (một resolveOrNull mỗi widget khai sàn) = 3", async () => {
+  it("TRƯỚC (một resolveOrNull mỗi widget khai sàn) = 5", async () => {
     const { repo, dataScope } = wire(ADMIN_GRANTS);
     for (const code of FLOORED) {
       const pair = DASH_WIDGET_GATE_PAIR[code];
       await dataScope.resolveOrNull("u1", "co1", pair.action, pair.resourceType);
     }
-    expect(FLOORED).toHaveLength(3); // ASSET_SUMMARY · RECRUIT_FUNNEL · PAYROLL_COST
-    expect(repo.hits).toHaveBeenCalledTimes(3);
+    // S15-PAYROLL-DASH-1: +PAYROLL_BUDGET · PAYROLL_ADVANCE_PENDING (sàn 'Company') ⇒ 3 → 5. Con số ghim
+    // CỐ Ý: thêm một widget khai sàn scope làm ca này ĐỎ, buộc đăng ký có chủ đích thay vì trôi âm thầm.
+    expect(FLOORED).toHaveLength(5); // ASSET_SUMMARY · RECRUIT_FUNNEL · PAYROLL_COST · PAYROLL_BUDGET · PAYROLL_ADVANCE_PENDING
+    expect(repo.hits).toHaveBeenCalledTimes(5);
   });
 
   it("SAU (một resolveManyOrNull cho cả tập) = 1", async () => {
