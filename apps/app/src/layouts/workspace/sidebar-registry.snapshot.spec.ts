@@ -103,6 +103,15 @@ const PERMISSION_SETS: Record<string, readonly string[]> = {
   ME_ONLY: ["access:me"],
   EMPLOYEE: ["access:me", "access:goal", "TASK.TASK.VIEW", "DASH.DASHBOARD.VIEW"],
   HR_ISH: ["access:me", "HR.EMPLOYEE.VIEW", "read:department", "view:audit-log"],
+  /**
+   * PAYROLL là module DUY NHẤT có nhóm 2 cấp (`payroll.inputData` · `payroll.calculation`), nên đây là
+   * chỗ duy nhất đo được hai nhánh khó của `filterSidebarItems`:
+   * - nhóm GIỮ lại khi CHỈ MỘT SỐ con hiện (calculation: thấy «Kỳ lương» + «Ngân sách», ẩn «Tạm ứng»);
+   * - hàng đại diện nhóm BIẾN MẤT khi mọi con đều ẩn dù bản thân nó qua gate `access:payroll`
+   *   (inputData: chỉ có «Thưởng / phạt», thiếu `view:bonus-penalty` ⇒ cả nhóm không hiện).
+   * Bộ ALL không đo được vế nào trong hai vế đó vì nó thấy hết.
+   */
+  PAYROLL_PARTIAL: ["access:payroll", "view:payroll-period", "view:payroll-budget"],
 };
 
 describe("[S15-UI-SHELL-2] snapshot cây sidebar", () => {

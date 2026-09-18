@@ -247,3 +247,32 @@ me.security.activity
 (trống)
 ### PAYROLL
 (trống)
+## PAYROLL_PARTIAL
+### DASH
+(trống)
+### HR
+(trống)
+### ATT
+(trống)
+### LEAVE
+(trống)
+### TASK
+(trống)
+### NOTI
+(trống)
+### FOUNDATION
+(trống)
+### ME
+(trống)
+### GOAL
+(trống)
+### ASSET
+(trống)
+### ROOM
+(trống)
+### RECRUIT
+(trống)
+### PAYROLL
+payroll.calculation
+  payroll.periods
+  payroll.budgets
