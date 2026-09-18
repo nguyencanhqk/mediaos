@@ -69,7 +69,7 @@ const MODULE_SPEC = [
   //   - trên PAYROLL vì tiêu đề S16-SOCIAL-QA-1 liệt kê vai "payroll-officer/recruiter không thêm gì"
   //     ⇒ regex PAYROLL cướp mất (đo thật 18/09/2026, không phải suy đoán).
   // KHÔNG đưa token "fbpost" vào đây: WO ops/QA chỉ NHẮC tới dịch vụ fbpost (S10-OPS-SITEWATCH-1,
-  // S10-QA-CHUNKTEST-FBPOST-1) sẽ bị kéo nhầm về SPEC-16. WO fbpost thật khớp qua social / "đăng bài".
+  // S10-QA-CHUNKTEST-FBPOST-1) sẽ bị kéo nhầm về SPEC-16. WO fbpost thật khớp qua \bsocial\b / "đăng bài".
   // \bfeed\b có word-boundary nên KHÔNG bắt "feedback" của RECRUIT (ký tự 'b' là word-char).
   {
     re: /(\bsocial\b|mạng xã hội|bảng tin|newsfeed|\bfeed\b|feed[-_]|bài đăng|đăng bài|sáng kiến|bình chọn|vinh danh|hashtag)/i,
