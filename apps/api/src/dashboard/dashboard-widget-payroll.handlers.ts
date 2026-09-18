@@ -4,6 +4,16 @@
  *   • PAYROLL_COST (slug `payroll-cost`) — «Chi phí lương kỳ»: tổng gross/net + headcount + trạng thái
  *     của kỳ lương GẦN NHẤT.
  *
+ * S15-PAYROLL-DASH-1 (APPEND, mig 0576 · SPEC-11 §10.1b) — thêm 2 widget v2:
+ *   • PAYROLL_BUDGET (slug `payroll-budget`) — «Ngân sách lương năm»: kế hoạch · thực hiện · chênh
+ *     lệch · tỉ lệ dùng của NĂM HIỆN TẠI. Nguồn `PayrollBudgetsService.yearTotals()` — CÙNG con số với
+ *     khối ngân sách của Tổng quan (078) và hàng tổng báo cáo `budget-status`.
+ *   • PAYROLL_ADVANCE_PENDING (slug `payroll-advance-pending`) — «Tạm ứng chờ duyệt»: CHỈ `total`
+ *     (`PayrollAdvancesService.countPending()`), không tên người, không tiền.
+ *
+ * Mỗi widget mượn ĐÚNG cặp của route nguồn nó gọi (073 → `view:payroll-budget`, 059 →
+ * `view:payroll-advance`) — KHÔNG mượn chéo cặp của widget anh em; xem DASH_WIDGET_GATE_PAIR.
+ *
  * VÌ SAO file RIÊNG (mirror dashboard-widget-office/recruit.handlers.ts): `dashboard-widget-handlers.service.ts`
  * đã sát trần 800 dòng của CLAUDE.md §5. Registry vẫn là MỘT (`DashboardWidgetHandlersService.buildRegistry`
  * gọi sang đây) — tách file, KHÔNG tách registry.
@@ -26,6 +36,8 @@ import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { PayrollCalcService } from "../payroll/payroll-calc.service";
+import { PayrollBudgetsService } from "../payroll/payroll-budgets.service";
+import { PayrollAdvancesService } from "../payroll/payroll-advances.service";
 import { ttlSecondsFor } from "./dashboard-widget-data.const";
 import { meetsMinDataScope } from "./dashboard-widget-catalog.const";
 import { gateWidgetOrThrow } from "./dashboard-widget-gate";
@@ -41,6 +53,9 @@ export class DashboardWidgetPayrollHandlers {
     private readonly permission: PermissionService,
     private readonly dataScope: DataScopeService,
     private readonly payrollCalc: PayrollCalcService,
+    // S15-PAYROLL-DASH-1 (additive): nguồn của 2 widget v2 — service ĐÃ-gate, KHÔNG repository.
+    private readonly budgets: PayrollBudgetsService,
+    private readonly advances: PayrollAdvancesService,
   ) {}
 
   // ── PAYROLL_COST (PayrollCalcService.summary — đúng công thức GET /payroll-periods/summary, API-018) ──
@@ -122,6 +137,105 @@ export class DashboardWidgetPayrollHandlers {
         },
       },
       emptyState: null,
+    };
+  }
+
+  // ── PAYROLL_BUDGET (PayrollBudgetsService.yearTotals — cùng con số với Tổng quan 078) ────────────
+
+  /**
+   * Gate HAI vế, CÙNG hằng với registry: (1) cặp `view:payroll-budget` (403 fail-closed); (2) SÀN scope
+   * `Company` — `yearTotalsTx` cộng TOÀN công ty nên grant hẹp hơn mà được serve là rò tiền ngoài scope.
+   * Sau sàn, scope ∈ {Company, System} ⇒ payload viewer-independent ⇒ cache company-shared (mirror
+   * PAYROLL_COST: PAYROLL không có DTO nửa-mask nên không có nhánh mask-per-người để cache lẫn).
+   */
+  async gatePayrollBudget(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
+    // `keyDiscriminator` = NĂM: payload mang `fiscalYear` tính lúc `fetch`, còn khoá cache thì không —
+    // thiếu vế này, hàng cache ghi 31/12 vẫn được phục vụ qua giao thừa UTC tới hết TTL 300s với con
+    // số của NĂM CŨ. Năm vào khoá là đủ; không cần rút TTL.
+    return {
+      ...(await this.gateCompanyWide(ctx, "PAYROLL_BUDGET")),
+      keyDiscriminator: String(new Date().getUTCFullYear()),
+    };
+  }
+
+  /**
+   * `plannedAmount`/`variance`/`usagePct` về `null` khi công ty CHƯA lập ngân sách năm nay — giữ NULL,
+   * KHÔNG `?? 0`: «chưa lập kế hoạch» khác «kế hoạch 0 đồng». `actualAmount` luôn có (Σ gross phiếu đã
+   * phát hành, `coalesce(...,0)` ở SQL) nên chi thực tế vẫn hiện được dù chưa lập kế hoạch.
+   *
+   * `Empty` CHỈ khi không có gì để nói: chưa lập kế hoạch VÀ chưa phát hành đồng nào.
+   */
+  async fetchPayrollBudget(ctx: WidgetHandlerContext): Promise<WidgetFetchResult> {
+    const t = await this.budgets.yearTotals(ctx.user);
+    const planned = t.plannedAmount === null ? null : Number(t.plannedAmount);
+    const actual = Number(t.actualAmount);
+    if (planned === null && actual === 0) {
+      return {
+        status: "Empty",
+        data: {},
+        emptyState: { message: "Chưa lập ngân sách lương năm nay" },
+      };
+    }
+    return {
+      status: "Active",
+      data: {
+        fiscalYear: t.fiscalYear,
+        plannedAmount: planned,
+        actualAmount: actual,
+        variance: t.variance === null ? null : Number(t.variance),
+        usagePct: t.usagePct === null ? null : Number(t.usagePct),
+      },
+      emptyState: null,
+    };
+  }
+
+  // ── PAYROLL_ADVANCE_PENDING (PayrollAdvancesService.countPending — chỉ `total`) ──────────────────
+
+  /** Gate HAI vế như trên, cặp `view:payroll-advance` + SÀN `Company` (countTx đếm toàn công ty). */
+  async gatePayrollAdvancePending(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
+    return this.gateCompanyWide(ctx, "PAYROLL_ADVANCE_PENDING");
+  }
+
+  /** `total === 0` ⇒ `Empty` (không có việc chờ duyệt là trạng thái ĐẸP, không phải lỗi). */
+  async fetchPayrollAdvancePending(ctx: WidgetHandlerContext): Promise<WidgetFetchResult> {
+    const { total } = await this.advances.countPending(ctx.user);
+    if (total === 0) {
+      return {
+        status: "Empty",
+        data: {},
+        emptyState: { message: "Không có tạm ứng chờ duyệt" },
+      };
+    }
+    return { status: "Active", data: { total }, emptyState: null };
+  }
+
+  /**
+   * Gate dùng chung cho widget company-wide của PAYROLL (cặp + SÀN scope, đọc CÙNG hằng với registry —
+   * memory `read-path-gate-pair-must-match-download-pair`: hai tầng lệch hằng ⇒ deny-path xanh rỗng).
+   * Tách hàm để widget thứ tư KHÔNG sinh thêm một bản sao gate dễ trôi.
+   */
+  private async gateCompanyWide(
+    ctx: WidgetHandlerContext,
+    widgetCode: "PAYROLL_BUDGET" | "PAYROLL_ADVANCE_PENDING",
+  ): Promise<WidgetCacheIdentity> {
+    const pair = await gateWidgetOrThrow(this.permission, ctx.user, widgetCode);
+    const scope = await this.dataScope.resolveAndAssert(
+      ctx.user.id,
+      ctx.user.companyId,
+      pair.action,
+      pair.resourceType,
+    );
+    if (!meetsMinDataScope(widgetCode, scope)) {
+      throw new ForbiddenException(
+        `AUTH-ERR-FORBIDDEN: thiếu quyền ${pair.action}:${pair.resourceType} ở phạm vi đủ rộng`,
+      );
+    }
+    return {
+      shareScope: "company",
+      cacheScope: "Company",
+      keyDiscriminator: null,
+      scopeReferenceId: null,
+      ttlSeconds: ttlSecondsFor(ctx.entry),
     };
   }
 }

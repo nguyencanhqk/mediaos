@@ -50,6 +50,36 @@ export class PayrollBudgetsService {
     });
   }
 
+  /**
+   * S15-PAYROLL-DASH-1 — TỔNG NĂM cho widget DASH `PAYROLL_BUDGET` (SPEC-11 §10.1b PAYROLL-WIDGET-002).
+   *
+   * KHÔNG phải route: widget gọi thẳng service này để đi qua ĐÚNG hai thứ mà một truy vấn trần bỏ mất —
+   * (1) `resolveActor('budgetList')` = cặp `view:payroll-budget` + SÀN scope Company (`companyFloor`);
+   * (2) audit lượt đọc. Con số lấy từ `yearTotalsTx` — CÙNG câu mà khối ngân sách của Tổng quan (078) và
+   * hàng tổng báo cáo `budget-status` dùng ⇒ widget và màn Tổng quan KHÔNG BAO GIỜ lệch nhau, và chuyện
+   * «không cộng trùng hàng công ty với hàng đơn vị» chỉ có MỘT nơi định nghĩa (repo, BE-5 §0b B4).
+   *
+   * `fiscalYear` vắng ⇒ năm hiện tại (UTC) — CÙNG mặc định với 073 (`list`).
+   * `plannedAmount` có thể `null` («chưa lập ngân sách năm nay») — KHÔNG zero-fill: 0 đồng kế hoạch và
+   * «chưa lập» là hai chuyện khác nhau, FE phải phân biệt được (khuôn mask = VẮNG/NULL, không phải 0).
+   */
+  async yearTotals(user: PayrollRequestUser, fiscalYear?: number) {
+    await this.access.resolveActor(user, "budgetList");
+    const year = fiscalYear ?? new Date().getUTCFullYear();
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const totals = await this.repo.yearTotalsTx(tx, user.companyId, year, undefined);
+      await this.audit.record(tx, {
+        action: "read",
+        objectType: "payroll_budget",
+        actorUserId: user.id,
+        before: null,
+        // KHÔNG số tiền trong audit (mirror create/update ở dưới).
+        after: { fiscalYear: year, scope: "year-totals" },
+      });
+      return { fiscalYear: year, ...totals };
+    });
+  }
+
   /** 074 — tạo; đơn vị chọn phải sống ⇒ 404; trùng ⇒ 409 029. */
   async create(
     user: PayrollRequestUser,

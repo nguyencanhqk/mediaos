@@ -492,7 +492,7 @@ Ba điều chốt thêm khi triển khai (`S13-PAYROLL-DASH-1`):
 - **Sàn scope `Company` ép ở HAI tầng độc lập** — `DashboardWidgetRegistryService.filterByGatePair` (đường METADATA `/dashboard/me`) và `DashboardWidgetPayrollHandlers.gatePayrollCost` (đường DATA). `companyFloor` mà `PayrollAccessService` ép ở route 018 **không** gác được đường metadata (đường đó không gọi service PAYROLL), nên hai tầng này là bắt buộc, không phải thừa.
 - **Audit lượt xem widget chỉ có trên cache MISS.** Cache của widget là company-shared, TTL 300s ⇒ lượt xem thứ hai trong TTL không chạy `fetch` nên không đẻ hàng `audit_logs`. Chấp nhận được: §20.12 chỉ đòi +1 hàng/lượt cho `/lines` · `/payslips/:id` · `/salary-profiles`, widget không nằm trong đó. Nếu về sau cần vết per-view, chỗ sửa là `gateAndResolve` (chạy mọi lần serve), không phải `fetch`.
 
-#### 10.1b **v2** — hai widget mới (`S15-PAYROLL-DASH-1`)
+#### 10.1b **v2** — hai widget mới (`S15-PAYROLL-DASH-1`, mig `0576` — **ĐÃ SHIP**)
 
 | Mã                     | widget_code               | Tên                                                                            | Nguồn                                                                | Gate                                                           |
 | ---------------------- | ------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -503,6 +503,13 @@ Ba điều chốt thêm khi triển khai (`S13-PAYROLL-DASH-1`):
 - **Cả hai cặp gác là `is_sensitive = true`** ⇒ FE dùng **`useCanExact`**, **không** `<PermissionGate>` (`sensitive-pair-widget-needs-usecanexact`), và slug phải khớp bản đồ slug FE (`fe-widget-slug-map-is-unchecked-runtime-gate`).
 - **WIDGET-003 chỉ trả `total`** — không tên người, không số tiền. Đếm là dữ liệu ít nhạy cảm nhất thoả được yêu cầu «biết có việc cần duyệt».
 - ⚠️ **Cache hit bỏ qua audit** vẫn đúng như WIDGET-001 (`widget-cache-hit-skips-audit-trail`) — chấp nhận cùng lý do, §20.12 không đòi vết per-view cho widget.
+
+Bốn điều chốt thêm khi triển khai (`S15-PAYROLL-DASH-1`, 18/09/2026):
+
+- **Nguồn đi qua SERVICE, không repository.** Hai method mới, mỗi cái chỉ bọc gate + audit quanh câu đọc đã có: `PayrollBudgetsService.yearTotals()` (gọi `PayrollBudgetsRepository.yearTotalsTx` — **cùng câu** với khối ngân sách của 078 và hàng tổng báo cáo `budget-status`, nên widget không thể lệch với màn Tổng quan) và `PayrollAdvancesService.countPending()`. `countPending` cố ý KHÔNG tái dùng `list()` với `per_page=1`: `list` map DTO của hàng đầu (tên người, số tiền) trong khi widget chỉ được biết CON SỐ — lấy đúng thứ cần thì payload không thể lỡ tay chở thừa. `PayrollModule` export thêm đúng hai service này (không repository).
+- **`Empty` nghĩa là «không có gì để nói», không phải «bằng 0».** WIDGET-002 chỉ `Empty` khi CHƯA lập kế hoạch **VÀ** chưa phát hành đồng nào; chưa lập kế hoạch mà đã có chi thực tế thì widget vẫn `Active` với `plannedAmount = null` (FE in `—`, **không** in «0 đ» — `null` là «chưa lập», khác hẳn 0). WIDGET-003 `Empty` khi `total = 0`.
+- **Gate của WIDGET-003 là `view` chứ không phải `approve`** — chốt lại vì backlog của WO ghi `approve`: luật «gate màn-hình khớp gate đường-tải» buộc mượn cặp của route nguồn (059), và mig 0571 §4.7 đã ép `approve ⇒ view` nên với vai canonical (payroll-officer · company-admin) tập người thấy widget KHÔNG đổi. Tương tự, WIDGET-002 mượn cặp của 073 chứ không mượn `view-line:payroll-period` của WIDGET-001 — đó là dữ liệu khác.
+- **Bằng chứng:** `apps/api/test/integration/dashboard-payroll-v2-widgets.int-spec.ts` (20 ca, LANE_DB — gồm ca đối xứng «chỉ có cặp của widget này thì KHÔNG thấy widget kia», sàn scope ở CẢ metadata lẫn data, đối chiếu số với 078, audit miss/hit, cách ly tenant) · `apps/app/src/components/dashboard/payroll-v2-widgets.spec.tsx` (18 ca FE) · `dashboard-widget-gate.spec.ts` (+2 ca wildcard/cặp).
 
 ### 10.2 **v2** — chức năng PAYROLL-FUNC-015..030
 

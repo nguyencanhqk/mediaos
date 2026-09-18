@@ -34,7 +34,9 @@ export class DashboardConfigSeeder implements ModuleMasterDataSeeder {
   // S11-OFFICE-DASH-1: bump v2→v3 — CÙNG lý do, cho 8 entry mới (ROOM_TODAY + ASSET_SUMMARY × 4 dashboard).
   // S12-RECRUIT-DASH-1: bump v3→v4 — CÙNG lý do, cho 4 entry mới (RECRUIT_FUNNEL × 4 dashboard type).
   // S13-PAYROLL-DASH-1: bump v4→v5 — CÙNG lý do, cho 4 entry mới (PAYROLL_COST × 4 dashboard type).
-  readonly seedVersion = "v5";
+  // S15-PAYROLL-DASH-1: bump v5→v6 — CÙNG lý do, cho 8 entry mới (PAYROLL_BUDGET +
+  // PAYROLL_ADVANCE_PENDING × 4 dashboard type).
+  readonly seedVersion = "v6";
 
   async seed(ctx: MasterDataSeedContext): Promise<void> {
     for (const entry of DASH_DEFAULT_CONFIG) {

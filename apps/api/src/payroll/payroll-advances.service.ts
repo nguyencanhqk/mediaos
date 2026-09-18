@@ -114,6 +114,33 @@ export class PayrollAdvancesService {
     });
   }
 
+  /**
+   * S15-PAYROLL-DASH-1 — ĐẾM tạm ứng `Pending` cho widget DASH `PAYROLL_ADVANCE_PENDING`
+   * (SPEC-11 §10.1b PAYROLL-WIDGET-003).
+   *
+   * Cố ý KHÔNG tái dùng `list()` với `per_page=1`: `list` map DTO của hàng đầu (tên người thụ hưởng, số
+   * tiền) và widget chỉ được phép biết CON SỐ — lấy đúng thứ cần thì payload không thể lỡ tay chở thừa.
+   * Vẫn đi qua CÙNG cổng của 059: `resolveActor('advanceList')` (cặp `view:payroll-advance` + SÀN scope
+   * Company) + audit lượt đọc, nên đây không phải đường vòng quanh gate.
+   */
+  async countPending(user: PayrollRequestUser): Promise<{ total: number }> {
+    await this.access.resolveActor(user, "advanceList");
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const filter = { status: ["Pending"] as PayrollAdvanceStatus[] };
+      const total = await this.repo.countTx(tx, user.companyId, filter);
+      await this.audit.record(tx, {
+        action: "read",
+        objectType: "payroll_advance",
+        actorUserId: user.id,
+        before: null,
+        // `rowCount` = SỐ ĐẾM thật (không phải tiền/tên ⇒ không phạm §10.1b). Ghi cứng 0 ở đây làm
+        // một lượt xem widget trông như «0 kết quả» khi soi audit_logs cạnh vết của 059.
+        after: { filters: filter, rowCount: total, scope: "pending-count" },
+      });
+      return { total };
+    });
+  }
+
   /** 060 — tạo (`Pending`, `created_by` từ JWT) + NOTI-024 tới holders(`approve:payroll-advance`) − actor. */
   async create(
     user: PayrollRequestUser,
