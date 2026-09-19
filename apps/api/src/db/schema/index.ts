@@ -123,3 +123,10 @@ export * from "./assets";
 // SELECT,INSERT) + interview_feedbacks · offers (SELECT,INSERT + UPDATE CẤP CỘT). company_id NOT NULL,
 // RLS+FORCE literal-GUC, MỌI FK chéo là composite tenant FK (chỉ ở SQL). Quyền §9f seed 0560; NOTI 0561.
 export * from "./recruit";
+// S16-SOCIAL-DB-1 (DB-17 §6 / SPEC-16, mig 0577·0578·0579): feed_posts + feed_comments (mutable, soft-delete —
+// app SELECT,INSERT,UPDATE, KHÔNG DELETE) + feed_tags (từ điển, không xoá) + 2 SỔ APPEND-ONLY feed_post_views ·
+// feed_post_acks (SELECT,INSERT duy nhất) + 4 bảng tương tác/gán-lại CÓ DELETE feed_reactions · feed_mentions ·
+// feed_post_tags · feed_saved_posts + feed_reports (mutable, không soft-delete). company_id NOT NULL,
+// RLS+FORCE literal-GUC, MỌI FK chéo là composite tenant FK (chỉ ở SQL) — TRỪ feed_posts.group_id, cố ý CHƯA có
+// FK vì feed_groups thuộc Track B (S16-SOCIAL-DB-2 phải thêm). Quyền §9h seed 0578; audit object_type 0579.
+export * from "./social";

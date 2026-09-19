@@ -16820,7 +16820,7 @@ export const backlog = [
     title:
       "Schema + migration SOCIAL track A (nối tiếp head lúc merge): feed_posts (type · audience · status · pinned · comments_locked · counters · search_vector) · feed_comments · feed_reactions · feed_mentions · feed_tags/feed_post_tags · feed_saved_posts · feed_post_views · feed_post_acks · feed_reports — RLS+FORCE TRƯỚC dữ liệu · composite tenant-FK · UNION-ADD file_links.object_type + audit object_types · seed 13 cặp feed-* + grant employee mặc định (§9h) · đo unaccent · contracts Zod mirror",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -16839,14 +16839,16 @@ export const backlog = [
     ],
     done_when: [
       "Migration đánh số NỐI TIẾP head thật lúc merge (S15-DB-1 có thể đã lấy 0569+ — đo journal), có mặt trong journal; RLS policy + FORCE TRƯỚC mọi dữ liệu; mọi FK mới kèm composite tenant-FK; soft-delete deleted_at ở feed_posts/feed_comments; UNIQUE feed_reactions(company,target_type,target_id,user_id) · feed_saved_posts(company,user,post) · feed_post_views(company,post,user) · feed_post_acks(company,post,user)",
-      "CHECK: type ∈ share/news/idea/poll/kudos · audience ∈ company/group/org_unit (+ CHECK cặp: audience=org_unit ⇒ org_unit_id NOT NULL — KHÔNG vế IS NULL OR rỗng) · status ∈ published/hidden/deleted · emoji ∈ bộ CHAT; search_vector cột sinh: đo pg_extension unaccent — CÓ thì dùng, KHÔNG thì to_tsvector('simple') + ghi DB-17; KHÔNG CREATE EXTENSION",
-      "Seed 13 cặp §9h ON CONFLICT DO NOTHING + grant per-(perm,role): employee/manager/hr/company-admin đủ nhóm create + view:feed Company; manage/approve/report cho company-admin + hr (manager view:feed-report Department) — KHÔNG đụng 3 cặp social-*; census grant phủ 4 hình dạng wildcard; file_links.object_type + audit_logs.object_types UNION-ADD feed_post/feed_comment/feed_group/feed_report đúng neo parse",
-      "packages/contracts social/feed*.ts: Zod mirror CHECK HAI CHIỀU ĐÚNG BẰNG; barrel index.ts không đụng export park (bẫy TS2308); rls-registry + cleanupTenants nhận bảng mới; test schema + seed + invariants trên LANE_DB xanh; 4 vi phạm giả (audience lệch · emoji lạ · reaction đôi · cross-tenant FK) đều làm lưới ĐỎ",
+      "CHECK: type ∈ share/news/idea/poll/kudos · audience ∈ company/group/org_unit (+ CHECK cặp: audience=org_unit ⇒ org_unit_id NOT NULL — KHÔNG vế IS NULL OR rỗng) · status ∈ published/hidden/deleted; ⚠️ ĐÍNH CHÍNH «emoji ∈ bộ CHAT» KHÔNG phải CHECK ở DB — DB-17 §6.3 CẤM (nguồn sự thật là hằng CHAT_REACTION_EMOJIS; CHECK = nguồn thứ hai), lưới nằm ở Zod/service: đây là ngoại lệ DUY NHẤT của luật mirror CHECK↔Zod. search_vector cột sinh: ĐÃ ĐO — unaccent CÓ + public.f_unaccent CÓ SẴN (0538) ⇒ phương án A, TÁI DÙNG hàm cũ, KHÔNG CREATE EXTENSION, KHÔNG tạo hàm mới",
+      "Seed 14 cặp §9h (KHÔNG phải 13) ON CONFLICT DO NOTHING + 43 grant per-(perm,role) breakdown 7/8/14/14: employee/manager/hr/company-admin đủ nhóm create + view:feed Company; manage/approve/report cho company-admin + hr (manager view:feed-report Department) — KHÔNG đụng 3 cặp social-*; census grant phủ 4 hình dạng wildcard; audit_logs.object_type (số ÍT — CHECK audit_logs_object_type_chk, KHÔNG phải «object_types») UNION-ADD feed_post/feed_comment/feed_group/feed_report đúng neo parse, 127→131. ⚠️ ĐÍNH CHÍNH: file_links KHÔNG có gì để UNION-ADD — cột thật tên entity_type và KHÔNG có CHECK nào trên nó (đo 19/09/2026), gắn tệp làm ở tầng SERVICE (BE-1), 0 dòng DDL",
+      "packages/contracts src/social.ts (file PHẲNG, nhất quán recruit.ts/asset.ts/room.ts/payroll.ts — «social/feed*.ts» trong DB-17 là gợi ý tên, không phải yêu cầu thư mục): Zod mirror CHECK HAI CHIỀU ĐÚNG BẰNG; barrel index.ts không đụng export park (bẫy TS2308); rls-registry + cleanupTenants nhận bảng mới; test schema + seed + invariants trên LANE_DB xanh; 4 vi phạm giả (audience lệch · emoji lạ · reaction đôi · cross-tenant FK) đều làm lưới ĐỎ",
     ],
     notes: [
       "📏 CON SỐ ĐÓNG (chốt ở S16-SOCIAL-DOC-1, SPEC-16 §5.1 — KHÁC ước lượng lúc seed): 19 bảng feed_* (Track A 10 · Track B 9, không phải «15») · 14 cặp quyền (không phải «13») · 53 route (không phải «~45») · 22 mã lỗi SOCIAL-ERR-001..022 · 9 event NOTI-EVENT-028..036 (đo dải lúc merge) · 43 grant role_permissions. Lấy theo SPEC-16 §5.1 + DB-17, KHÔNG lấy theo chữ trong backlog. Lý do lệch: SPEC-16 §23.1.",
       "🔴 FULL gate + Opus (crown: permission seed + RLS + audit hot-file). Lane migration NỐI TIẾP duy nhất của wave — và KHÔNG chạy cùng ngày với S15-PAYROLL-DB-1/DB-2.",
       "KHÔNG bật modules.is_active SOCIAL ở đây (việc của FE-1, khuôn 0567); guard verify không assert trạng thái module khác và forward-compatible với is_active=true.",
+      "✅ ĐÃ THI CÔNG 19/09/2026 — mig 0577 (DDL 10 bảng, 26 composite tenant-FK, 22 CHECK, RLS+FORCE, GRANT §4.9) · 0578 (14 cặp + 43 grant) · 0579 (audit object_type 127→131). Cùng commit: schema/social.ts + barrel · packages/contracts/src/social.ts + social.spec.ts + barrel · audit.ts AUDIT_OBJECT_TYPES +4 · cleanupTenants +10 (TRƯỚC DELETE FROM org_units) · rls-registry +10 (4 case khai idColumn) · RetentionService.PROTECTED_TABLES +10 (TRỌN Track A) · s16-social-db1-invariants.int-spec.ts (45 ca). DB-17 §3.2/§6.1/§6.1b/§10 đã cập nhật cùng PR.",
+      "⚠️ NỢ CHUYỂN TIẾP CHO BE-1 (đo 19/09/2026): recycle-bin KHÔNG có registry và KHÔNG có CHECK loại đối tượng (recycle-bin.repository.ts hard-code employeeProfiles) ⇒ done_when của BE-1 «recycle-bin khôi phục trả lại đủ» KHÔNG tự động thoả. BE-1 phải dựng đường khôi phục trong module SOCIAL (màn «thùng rác bài viết» riêng) hoặc mở WO mở rộng recycle-bin thành registry.",
     ],
   },
   {

@@ -423,6 +423,55 @@ describe("RetentionService", () => {
       },
     );
 
+    // S16-SOCIAL-DB-1 (mig 0577) — TRỌN Track A, 10 bảng. Hai nhóm, HAI lý do khác nhau:
+    //  • 6 bảng KHÔNG có GRANT DELETE (posts/comments/tags/views/acks/reports) — như PAYROLL: có mặt ở
+    //    đây để retention no-op TRƯỚC khi phát lệnh, tránh 42501 uncaught hỏng CẢ LƯỢT cleanup.
+    //  • 4 bảng CÓ GRANT DELETE (reactions/mentions/post_tags/saved_posts) — như
+    //    `payroll_template_components`: lệnh retention CHẠY THẬT, `_deleteEligible` lọc `created_at`
+    //    (KHÔNG `deleted_at`) và `entityType` của retention-policy là chuỗi TỰ DO ⇒ xoá CỨNG hàng ĐANG
+    //    SỐNG, bộ đếm like_count/usage_count lệch VĨNH VIỄN. Với nhóm này tập bảo vệ là lớp DUY NHẤT.
+    const SOCIAL_TRACK_A_TABLES = [
+      "feed_posts",
+      "feed_comments",
+      "feed_tags",
+      "feed_post_tags",
+      "feed_reactions",
+      "feed_mentions",
+      "feed_saved_posts",
+      "feed_post_views",
+      "feed_post_acks",
+      "feed_reports",
+    ];
+    it.each(SOCIAL_TRACK_A_TABLES)(
+      "SOCIAL: entity='%s' trong tập bảo vệ (set-membership) — BẤT BIẾN #2 + chống xoá cứng hàng đang sống",
+      (entityType) => {
+        expect(RetentionService.isProtectedTable(entityType)).toBe(true);
+      },
+    );
+
+    it("SOCIAL: tập bảo vệ phủ ĐỦ 10 bảng Track A — đếm đúng-bằng, thiếu một tên là một đường xoá bỏ ngỏ", () => {
+      const covered = SOCIAL_TRACK_A_TABLES.filter((t) => RetentionService.isProtectedTable(t));
+      expect(covered).toHaveLength(10);
+    });
+
+    it.each(SOCIAL_TRACK_A_TABLES)(
+      "SOCIAL: entity='%s' + isEnabled=true + action=Delete + !dryRun ⇒ deletedRecords=0 + KHÔNG phát lệnh DELETE",
+      async (entityType) => {
+        harness = makeTx({
+          policy: makePolicy({ entityType, isEnabled: true, cleanupAction: "Delete" }),
+          eligibleCount: 9,
+        });
+        const { db } = makeDb(harness);
+        const svc = new RetentionService(db);
+
+        const res = await svc.runCleanup(COMPANY, POLICY_ID, { dryRun: false });
+
+        expect(res.deletedRecords).toBe(0);
+        expect(res.skippedDisabled).toBe(false); // enabled — bị chặn bởi PROTECTED_TABLES, KHÔNG bởi disabled
+        expect(harness.calls.execute).toBe(1);
+      },
+    );
+
     it("unprotected + enabled + Delete + !dryRun ⇒ ĐI đường DELETE (execute lần 2) — chốt độ nhạy của test PROTECTED", async () => {
       harness = makeTx({
         policy: makePolicy({ entityType: "tasks", isEnabled: true, cleanupAction: "Delete" }),

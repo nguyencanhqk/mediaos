@@ -3041,6 +3041,131 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── S16-SOCIAL-DB-1 (mig 0577) — 10 bảng SOCIAL Track A (DB-17 §6). company_id NOT NULL + RLS+FORCE
+  // literal-GUC → PHẢI ở harness (rls-guards "không bảng company_id thiếu case"). KHÔNG skipNoContext.
+  // Mọi FK chéo là composite tenant FK ⇒ chain seed qua `direct` (owner) với company_id tường minh.
+  // ⚠️ BỐN bảng PK TỔ HỢP (không cột `id`) PHẢI khai `idColumn` — khuôn `role_permissions`:
+  //    feed_post_tags → tag_id · feed_saved_posts/feed_post_views/feed_post_acks → post_id.
+  // feed_post_views/feed_post_acks APPEND-ONLY (app SELECT,INSERT) — mutate-deny kiểm ở
+  // s16-social-db1-invariants.int-spec; seedRow dùng direct (owner) nên chèn OK.
+  // Cleanup: cleanupTenants() xoá 10 bảng con→cha TRƯỚC `DELETE FROM org_units`.
+  {
+    name: "feed_posts",
+    table: "feed_posts",
+    seedRow: async (direct, t) => (await seedFeedChain(direct, t.companyId)).postId,
+  },
+  {
+    name: "feed_comments",
+    table: "feed_comments",
+    seedRow: async (direct, t) => {
+      const c = await seedFeedChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO feed_comments (company_id, post_id, author_user_id, body)
+         VALUES ($1, $2, $3, 'rls-comment') RETURNING id`,
+        [t.companyId, c.postId, c.userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "feed_tags",
+    table: "feed_tags",
+    seedRow: async (direct, t) => await seedFeedTag(direct, t.companyId),
+  },
+  {
+    name: "feed_post_tags",
+    table: "feed_post_tags",
+    idColumn: "tag_id", // PK tổ hợp (company_id, post_id, tag_id) — không có cột `id`
+    seedRow: async (direct, t) => {
+      const c = await seedFeedChain(direct, t.companyId);
+      const tagId = await seedFeedTag(direct, t.companyId);
+      await direct.query(
+        `INSERT INTO feed_post_tags (company_id, post_id, tag_id) VALUES ($1, $2, $3)`,
+        [t.companyId, c.postId, tagId],
+      );
+      return tagId;
+    },
+  },
+  {
+    name: "feed_reactions",
+    table: "feed_reactions",
+    seedRow: async (direct, t) => {
+      const c = await seedFeedChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO feed_reactions (company_id, target_type, target_id, user_id, emoji)
+         VALUES ($1, 'post', $2, $3, 'like') RETURNING id`,
+        [t.companyId, c.postId, c.userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "feed_mentions",
+    table: "feed_mentions",
+    seedRow: async (direct, t) => {
+      const c = await seedFeedChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO feed_mentions (company_id, target_type, target_id, mentioned_user_id)
+         VALUES ($1, 'post', $2, $3) RETURNING id`,
+        [t.companyId, c.postId, c.userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "feed_saved_posts",
+    table: "feed_saved_posts",
+    idColumn: "post_id", // PK tổ hợp (company_id, user_id, post_id)
+    seedRow: async (direct, t) => {
+      const c = await seedFeedChain(direct, t.companyId);
+      await direct.query(
+        `INSERT INTO feed_saved_posts (company_id, user_id, post_id) VALUES ($1, $2, $3)`,
+        [t.companyId, c.userId, c.postId],
+      );
+      return c.postId;
+    },
+  },
+  {
+    name: "feed_post_views",
+    table: "feed_post_views",
+    idColumn: "post_id", // PK tổ hợp (company_id, post_id, user_id)
+    seedRow: async (direct, t) => {
+      const c = await seedFeedChain(direct, t.companyId);
+      await direct.query(
+        `INSERT INTO feed_post_views (company_id, post_id, user_id) VALUES ($1, $2, $3)`,
+        [t.companyId, c.postId, c.userId],
+      );
+      return c.postId;
+    },
+  },
+  {
+    name: "feed_post_acks",
+    table: "feed_post_acks",
+    idColumn: "post_id", // PK tổ hợp (company_id, post_id, user_id)
+    seedRow: async (direct, t) => {
+      // ack chỉ có nghĩa với bài `news` — chain gieo bài news requires_ack để phản ánh đúng nghiệp vụ.
+      const c = await seedFeedChain(direct, t.companyId, { news: true });
+      await direct.query(
+        `INSERT INTO feed_post_acks (company_id, post_id, user_id) VALUES ($1, $2, $3)`,
+        [t.companyId, c.postId, c.userId],
+      );
+      return c.postId;
+    },
+  },
+  {
+    name: "feed_reports",
+    table: "feed_reports",
+    seedRow: async (direct, t) => {
+      const c = await seedFeedChain(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO feed_reports (company_id, target_type, target_id, reporter_user_id, reason)
+         VALUES ($1, 'post', $2, $3, 'spam') RETURNING id`,
+        [t.companyId, c.postId, c.userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
 
 /**
@@ -3177,6 +3302,44 @@ async function seedAssetInventoryClosed(direct: Pool, companyId: string): Promis
        (company_id, name, status, closed_at, total_items, found_count, missing_count, not_checked_count)
      VALUES ($1, $2, 'Closed', now(), 0, 0, 0, 0) RETURNING id`,
     [companyId, `rls-inv-${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
+
+/**
+ * SOCIAL: user → employee_profile → feed_post (audience='company'). Mỗi lần gọi tạo user + bài MỚI ⇒
+ * không đụng UNIQUE của reactions/mentions hay PK tổ hợp của saved/views/acks.
+ * `news: true` gieo bài tin tức `requires_ack` — dạng duy nhất mà `feed_post_acks` có nghĩa nghiệp vụ
+ * (CHECK `chk_feed_posts_ack_news` chặn requires_ack trên loại bài khác).
+ */
+async function seedFeedChain(
+  direct: Pool,
+  companyId: string,
+  opts?: { news?: boolean },
+): Promise<{ postId: string; userId: string; employeeId: string }> {
+  const userId = await seedUser(direct, companyId, `feed-${randomUUID().slice(0, 8)}@x.test`);
+  const emp = await direct.query(
+    `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [companyId, userId],
+  );
+  const post = await direct.query(
+    `INSERT INTO feed_posts
+       (company_id, author_user_id, author_employee_id, type, audience, body, requires_ack)
+     VALUES ($1, $2, $3, $4, 'company', 'rls-feed-post', $5) RETURNING id`,
+    [companyId, userId, emp.rows[0].id, opts?.news ? "news" : "share", opts?.news === true],
+  );
+  return {
+    postId: post.rows[0].id as string,
+    userId,
+    employeeId: emp.rows[0].id as string,
+  };
+}
+
+/** SOCIAL: một thẻ hashtag mới của tenant (UNIQUE (company_id, tag) ⇒ tên ngẫu nhiên). */
+async function seedFeedTag(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO feed_tags (company_id, tag) VALUES ($1, $2) RETURNING id`,
+    [companyId, `rls-tag-${randomUUID().slice(0, 8)}`],
   );
   return r.rows[0].id as string;
 }

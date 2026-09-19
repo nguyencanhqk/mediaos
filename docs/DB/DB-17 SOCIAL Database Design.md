@@ -8,16 +8,16 @@
 
 ## 1. Thông tin tài liệu
 
-| Trường | Nội dung |
-| --- | --- |
-| Mã tài liệu | DB-17 |
-| Tên tài liệu | SOCIAL - Thiết kế cơ sở dữ liệu |
-| Module code | SOCIAL |
-| Tài liệu cha | DB-01 · SPEC-16 |
-| Phiên bản | v1.0 |
-| Trạng thái | Approved (thiết kế) — **CHƯA migrate** |
-| Wave | `S16-SOCIAL` — `DB-1` (Track A, 10 bảng) · `DB-2` (Track B, 9 bảng) |
-| Ngày tạo | 18/09/2026 |
+| Trường       | Nội dung                                                            |
+| ------------ | ------------------------------------------------------------------- |
+| Mã tài liệu  | DB-17                                                               |
+| Tên tài liệu | SOCIAL - Thiết kế cơ sở dữ liệu                                     |
+| Module code  | SOCIAL                                                              |
+| Tài liệu cha | DB-01 · SPEC-16                                                     |
+| Phiên bản    | v1.0                                                                |
+| Trạng thái   | Approved (thiết kế) — **CHƯA migrate**                              |
+| Wave         | `S16-SOCIAL` — `DB-1` (Track A, 10 bảng) · `DB-2` (Track B, 9 bảng) |
+| Ngày tạo     | 18/09/2026                                                          |
 
 ---
 
@@ -39,15 +39,21 @@
 
 ### 3.2 Bảng SỬA — UNION-ADD, KHÔNG rewrite
 
-| Bảng | Thay đổi |
-| --- | --- |
-| `file_links` | CHECK `object_type` **UNION-ADD** `feed_post` · `feed_comment` |
-| `audit_logs` | CHECK `object_types` **UNION-ADD** `feed_post` · `feed_comment` · `feed_group` · `feed_report` |
-| **recycle-bin** | ⚠️ **PHẢI ĐO TRƯỚC KHI CODE** — xem ghi chú dưới |
+| Bảng                | Thay đổi                                                                                                  | Trạng thái                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `audit_logs`        | CHECK `object_type` (**số ít**) **UNION-ADD** `feed_post` · `feed_comment` · `feed_group` · `feed_report` | ✅ DB-1 mig `0579` — **127 → 131 giá trị** |
+| ~~`file_links`~~    | ~~CHECK `object_type` UNION-ADD~~                                                                         | ❌ **KHÔNG CẦN** — đã ĐO, xem dưới         |
+| ~~**recycle-bin**~~ | ~~registry / CHECK loại đối tượng~~                                                                       | ❌ **KHÔNG CẦN** — đã ĐO, xem dưới         |
 
-> Hai CHECK đầu là **hot-file**: đọc giá trị hiện có, hợp nhất, ghi lại — không gõ lại danh sách từ trí nhớ (bẫy `audit-check-union-parse-anchor-trap`).
->
-> ⚠️ **Recycle-bin — nợ ĐO của DB-1, chưa đo lúc viết tài liệu.** SPEC-16 §13.1/§16 nói bài/bình luận xoá mềm «vào thùng rác». Nếu recycle-bin có **registry hoặc CHECK loại đối tượng riêng**, thì đó là một UNION-ADD thứ ba bị bỏ sót và bài xoá sẽ **không** xuất hiện trong thùng rác. `S16-SOCIAL-DB-1` phải mở `apps/api/src/foundation/` (recycle-bin service + schema) **đo trước**, rồi ghi kết quả vào chính mục này: có CHECK ⇒ UNION-ADD `feed_post`/`feed_comment`; không có ⇒ ghi «không cần».
+> CHECK `audit_logs` là **hot-file**: đọc giá trị hiện có, hợp nhất, ghi lại — không gõ lại danh sách từ trí nhớ (bẫy `audit-check-union-parse-anchor-trap`).
+
+> ✅ **`file_links` — nợ ĐO ĐÃ ĐÓNG (S16-SOCIAL-DB-1, đo trên DB thật 19/09/2026): KHÔNG CÓ GÌ ĐỂ LÀM.**
+> Cột thật trên `file_links` tên **`entity_type`** (`varchar`), **không** phải `object_type`; và `file_links` chỉ có **2 CHECK** — `chk_file_links_link_type` (Avatar/Attachment/Contract/Proof/Document/Import/Export/Other) và `chk_file_links_access_scope` (Owner/Team/Department/Company/System). **KHÔNG có CHECK nào trên `entity_type`** — cột tự do, không allow-list (nguồn: `apps/api/migrations/0433_foundation_db3_files.sql:159-164`, `apps/api/src/db/schema/files.ts:116`).
+> ⇒ Gắn tệp vào bài/bình luận chỉ cần ghi `module_code='SOCIAL'`, `entity_type='feed_post'|'feed_comment'`, `link_type='Attachment'` (giá trị **đã có** trong CHECK) — hoàn toàn ở tầng **SERVICE** (BE-1). **0 dòng DDL.**
+
+> ✅ **Recycle-bin — nợ ĐO ĐÃ ĐÓNG (đo 19/09/2026): KHÔNG CẦN ĐĂNG KÝ GÌ.**
+> Recycle-bin **không có registry và không có CHECK loại đối tượng**: `apps/api/src/recycle-bin/recycle-bin.repository.ts` **hard-code** `employeeProfiles`. Vì vậy DB-1 không có chỗ nào để UNION-ADD.
+> ⚠️ Hệ quả cho **BE-1**: «thùng rác bài viết» của SPEC-16 §13.1/§16 **không** tự động có — nó phải là **màn riêng của SOCIAL** (đường khôi phục dựng trong module SOCIAL), hoặc một WO riêng mở rộng recycle-bin thành registry. `done_when` của `S16-SOCIAL-BE-1` («recycle-bin khôi phục trả lại đủ») cần đọc theo nghĩa đó.
 
 ### 3.3 Bảng dùng lại — không tạo mới
 
@@ -62,29 +68,29 @@
 
    **2a. Bảng ĐÍCH ngoài module — trạng thái ĐO ngày 18/09/2026 (KHÔNG suy diễn):**
 
-   | Đích (tên thiết kế) | Tên THẬT trong code | `UNIQUE (company_id, id)` | Nguồn |
-   | --- | --- | --- | --- |
-   | `users` | `users` | ✅ đã có | `0535` (danh sách 63 bảng) |
-   | `org_units` | `org_units` | ✅ đã có | `0535` |
-   | `files` | `files` | ✅ đã có | `0535` |
-   | **`employees`** | **`employee_profiles`** | ✅ đã có | `0535` — tiền lệ DB-15 §4.2 ghi rõ «`employees`/`employee_profiles` đã có từ `0535`» |
+   | Đích (tên thiết kế) | Tên THẬT trong code     | `UNIQUE (company_id, id)` | Nguồn                                                                                |
+   | ------------------- | ----------------------- | ------------------------- | ------------------------------------------------------------------------------------ |
+   | `users`             | `users`                 | ✅ đã có                  | `0535` (danh sách 63 bảng)                                                           |
+   | `org_units`         | `org_units`             | ✅ đã có                  | `0535`                                                                               |
+   | `files`             | `files`                 | ✅ đã có                  | `0535`                                                                               |
+   | **`employees`**     | **`employee_profiles`** | ✅ đã có                  | `0535` — tiền lệ DB-15 §4.2 ghi rõ «`employees`/`employee_profiles` đã có từ `0535`» |
 
-   > ⚠️ **KHÔNG có bảng tên `employees` trong code** — HR dùng **`employee_profiles`** (lệch tên đã ghi ở [erd-current Phụ lục A2](<../erd-current.md>); tiền lệ [DB-15](<DB-15 ASSET Database Design.md>) §4.2/§6 đã ship dùng đúng cách này). Vì vậy: văn bản thiết kế viết `employees`, **SQL migration viết `employee_profiles`**, và **KHÔNG cần `ALTER TABLE … ADD CONSTRAINT` nào** cho bốn đích trên — cả bốn đã đủ điều kiện từ `0535`. Năm cột chịu luật này: `feed_posts.author_employee_id` · `feed_comments.author_employee_id` · `feed_mentions.mentioned_employee_id` · `feed_group_members.employee_id` · `feed_kudos_recipients.employee_id`.
+   > ⚠️ **KHÔNG có bảng tên `employees` trong code** — HR dùng **`employee_profiles`** (lệch tên đã ghi ở [erd-current Phụ lục A2](../erd-current.md); tiền lệ [DB-15](<DB-15 ASSET Database Design.md>) §4.2/§6 đã ship dùng đúng cách này). Vì vậy: văn bản thiết kế viết `employees`, **SQL migration viết `employee_profiles`**, và **KHÔNG cần `ALTER TABLE … ADD CONSTRAINT` nào** cho bốn đích trên — cả bốn đã đủ điều kiện từ `0535`. Năm cột chịu luật này: `feed_posts.author_employee_id` · `feed_comments.author_employee_id` · `feed_mentions.mentioned_employee_id` · `feed_group_members.employee_id` · `feed_kudos_recipients.employee_id`.
 
    **2b. Luật còn lại:**
    - `company_id` của cả 19 bảng: `REFERENCES companies (id) ON DELETE CASCADE` — teardown `DELETE FROM companies` dọn được.
    - **Composite FK nội bộ: `ON DELETE NO ACTION`, TUYỆT ĐỐI KHÔNG `RESTRICT`** — cascade từ `companies` xoá các bảng anh em theo thứ tự bất định (bài học `cleanupTenants` đỏ hàng loạt, DB-15 §4.2).
    - **FK về `users` — danh sách ĐÓNG, chia theo tính NULL của cột** (verify đếm đúng-bằng ở §9):
 
-   | Nhóm | Cột | RI action | Vì sao |
-   | --- | --- | --- | --- |
-   | Cột **NOT NULL** (chủ thể của hàng) | `feed_posts.author_user_id` · `feed_comments.author_user_id` · `feed_reports.reporter_user_id` · `feed_reactions.user_id` · `feed_saved_posts.user_id` · `feed_poll_votes.user_id` · `feed_group_members.user_id` | **`NO ACTION`** | `SET NULL` trên cột NOT NULL **nổ lúc DELETE** (`null value in column … violates not-null constraint`) — đúng kịch bản `companies` CASCADE xoá `users` **trước** `feed_posts` ⇒ teardown lane DB đỏ hàng loạt. Xoá user là việc của soft-delete AUTH, không được biến hàng thành vô chủ |
-   | Cột **nullable** (vết kiểm toán) | `feed_posts`/`feed_comments`/`feed_groups` (`created_by`, `updated_by`, `deleted_by`) · `feed_reports.resolved_by` · `feed_ideas.reviewed_by` · `feed_kudos_badges` (`created_by`, `updated_by`) | **`SET NULL (<cột>)`** (liệt kê cột — khuôn `0535:682`) | Cột vốn nullable; mất người thao tác không làm hỏng hàng |
-   | Bảng **chỉ-INSERT** | `feed_post_views.user_id` · `feed_post_acks.user_id` · `feed_mentions.mentioned_user_id` | **`NO ACTION`** | RI action chạy ở tầng owner; `SET NULL` ghi đè cột **không có grant UPDATE** (đính chính `0549`, BẤT BIẾN 2) |
+   | Nhóm                                | Cột                                                                                                                                                                                                               | RI action                                               | Vì sao                                                                                                                                                                                                                                                                                  |
+   | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | Cột **NOT NULL** (chủ thể của hàng) | `feed_posts.author_user_id` · `feed_comments.author_user_id` · `feed_reports.reporter_user_id` · `feed_reactions.user_id` · `feed_saved_posts.user_id` · `feed_poll_votes.user_id` · `feed_group_members.user_id` | **`NO ACTION`**                                         | `SET NULL` trên cột NOT NULL **nổ lúc DELETE** (`null value in column … violates not-null constraint`) — đúng kịch bản `companies` CASCADE xoá `users` **trước** `feed_posts` ⇒ teardown lane DB đỏ hàng loạt. Xoá user là việc của soft-delete AUTH, không được biến hàng thành vô chủ |
+   | Cột **nullable** (vết kiểm toán)    | `feed_posts`/`feed_comments`/`feed_groups` (`created_by`, `updated_by`, `deleted_by`) · `feed_reports.resolved_by` · `feed_ideas.reviewed_by` · `feed_kudos_badges` (`created_by`, `updated_by`)                  | **`SET NULL (<cột>)`** (liệt kê cột — khuôn `0535:682`) | Cột vốn nullable; mất người thao tác không làm hỏng hàng                                                                                                                                                                                                                                |
+   | Bảng **chỉ-INSERT**                 | `feed_post_views.user_id` · `feed_post_acks.user_id` · `feed_mentions.mentioned_user_id`                                                                                                                          | **`NO ACTION`**                                         | RI action chạy ở tầng owner; `SET NULL` ghi đè cột **không có grant UPDATE** (đính chính `0549`, BẤT BIẾN 2)                                                                                                                                                                            |
 
    > **Luật một dòng cho DB-1/DB-2:** `SET NULL` **chỉ** đặt lên cột nullable. Cột NOT NULL luôn `NO ACTION`.
->
-> ⚖️ **Bảng cột ở §6.x/§7.x phải KHỚP bảng này. Lệch thì BẢNG NÀY THẮNG.** DB-1/DB-2 viết DDL theo bảng cột của từng bảng (đó là nơi có tên cột), nên một ô ghi chú lạc hậu ở §6.x đủ để tái tạo đúng lỗi mà luật này sinh ra để chặn.
+   >
+   > ⚖️ **Bảng cột ở §6.x/§7.x phải KHỚP bảng này. Lệch thì BẢNG NÀY THẮNG.** DB-1/DB-2 viết DDL theo bảng cột của từng bảng (đó là nơi có tên cột), nên một ô ghi chú lạc hậu ở §6.x đủ để tái tạo đúng lỗi mà luật này sinh ra để chặn.
 
 3. **Append-only** (app role `GRANT SELECT, INSERT`, **không** UPDATE/DELETE — BẤT BIẾN 2): `feed_post_views` · `feed_post_acks`. `mediaos_worker` nhận `SELECT` theo KHUÔN `0549`/`0552` trên các bảng mà job đóng bình chọn cần đọc (`feed_polls`, `feed_poll_options`, `feed_poll_votes`, `feed_posts`).
 4. **FSM ép ở service, DB chỉ CHECK tập giá trị** + UNIQUE/partial-unique làm chốt cuối (phiếu đôi · thích đôi · ack đôi · lưu đôi).
@@ -96,27 +102,27 @@
 
 ### 4.9 Bảng GRANT — đủ 19/19 bảng (app role)
 
-| Bảng | SELECT | INSERT | UPDATE | DELETE | Ghi chú |
-| --- | :-: | :-: | :-: | :-: | --- |
-| `feed_posts` | YES | YES | YES | no | soft delete |
-| `feed_comments` | YES | YES | YES | no | soft delete |
-| `feed_reactions` | YES | YES | YES | YES | đổi emoji = UPDATE; bỏ thích = DELETE |
-| `feed_mentions` | YES | YES | no | YES | sửa bài ⇒ đồng bộ lại tập mention (DELETE + INSERT) |
-| `feed_tags` | YES | YES | YES | no | `usage_count` UPDATE; từ điển không xoá |
-| `feed_post_tags` | YES | YES | no | YES | nối bài↔thẻ; sửa bài ⇒ gán lại |
-| `feed_saved_posts` | YES | YES | no | YES | bỏ lưu = DELETE (tương tác cá nhân, không phải sổ) |
-| `feed_post_views` | YES | YES | no | no | **append-only** |
-| `feed_post_acks` | YES | YES | no | no | **append-only** |
-| `feed_reports` | YES | YES | YES | no | xử lý = UPDATE `status` |
-| `feed_groups` | YES | YES | YES | no | soft delete |
-| `feed_group_members` | YES | YES | YES | YES | xem quyết định dưới bảng |
-| `feed_polls` | YES | YES | YES | no | đóng = UPDATE |
-| `feed_poll_options` | YES | YES | YES | no | `vote_count` UPDATE; lựa chọn bất biến sau khi tạo (§7.4) |
-| `feed_poll_votes` | YES | YES | no | YES | đổi/rút phiếu khi poll còn `open` |
-| `feed_ideas` | YES | YES | YES | no | FSM = UPDATE |
-| `feed_kudos` | YES | YES | YES | no | |
-| `feed_kudos_recipients` | YES | YES | no | YES | sửa bài kudos ⇒ gán lại người nhận |
-| `feed_kudos_badges` | YES | YES | YES | no | xoá = tắt `is_active`, **không** hard-delete |
+| Bảng                    | SELECT | INSERT | UPDATE | DELETE | Ghi chú                                                   |
+| ----------------------- | :----: | :----: | :----: | :----: | --------------------------------------------------------- |
+| `feed_posts`            |  YES   |  YES   |  YES   |   no   | soft delete                                               |
+| `feed_comments`         |  YES   |  YES   |  YES   |   no   | soft delete                                               |
+| `feed_reactions`        |  YES   |  YES   |  YES   |  YES   | đổi emoji = UPDATE; bỏ thích = DELETE                     |
+| `feed_mentions`         |  YES   |  YES   |   no   |  YES   | sửa bài ⇒ đồng bộ lại tập mention (DELETE + INSERT)       |
+| `feed_tags`             |  YES   |  YES   |  YES   |   no   | `usage_count` UPDATE; từ điển không xoá                   |
+| `feed_post_tags`        |  YES   |  YES   |   no   |  YES   | nối bài↔thẻ; sửa bài ⇒ gán lại                            |
+| `feed_saved_posts`      |  YES   |  YES   |   no   |  YES   | bỏ lưu = DELETE (tương tác cá nhân, không phải sổ)        |
+| `feed_post_views`       |  YES   |  YES   |   no   |   no   | **append-only**                                           |
+| `feed_post_acks`        |  YES   |  YES   |   no   |   no   | **append-only**                                           |
+| `feed_reports`          |  YES   |  YES   |  YES   |   no   | xử lý = UPDATE `status`                                   |
+| `feed_groups`           |  YES   |  YES   |  YES   |   no   | soft delete                                               |
+| `feed_group_members`    |  YES   |  YES   |  YES   |  YES   | xem quyết định dưới bảng                                  |
+| `feed_polls`            |  YES   |  YES   |  YES   |   no   | đóng = UPDATE                                             |
+| `feed_poll_options`     |  YES   |  YES   |  YES   |   no   | `vote_count` UPDATE; lựa chọn bất biến sau khi tạo (§7.4) |
+| `feed_poll_votes`       |  YES   |  YES   |   no   |  YES   | đổi/rút phiếu khi poll còn `open`                         |
+| `feed_ideas`            |  YES   |  YES   |  YES   |   no   | FSM = UPDATE                                              |
+| `feed_kudos`            |  YES   |  YES   |  YES   |   no   |                                                           |
+| `feed_kudos_recipients` |  YES   |  YES   |   no   |  YES   | sửa bài kudos ⇒ gán lại người nhận                        |
+| `feed_kudos_badges`     |  YES   |  YES   |  YES   |   no   | xoá = tắt `is_active`, **không** hard-delete              |
 
 > **Quyết định `feed_group_members` — DELETE CỨNG, có chủ ý.** Membership **không phải sổ kiểm toán**: nó là trạng thái hiện tại của quan hệ người↔nhóm. Rời nhóm / bị mời ra ⇒ xoá hàng, và **vết nằm ở `audit_logs`** (`object_type='feed_group'`), không ở bảng quan hệ. Không thêm `status='removed'` vì sẽ bắt mọi truy vấn membership (đường nóng nhất của module — §7.2) mang thêm một vị từ, và làm UNIQUE mất tác dụng chống xin-vào-lại. `SOCIAL-API-039` ghi audit bắt buộc.
 
@@ -150,27 +156,29 @@ feed_kudos  n─0..1 feed_kudos_badges (catalog)
 
 ### 6.1 Bảng `feed_posts`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | FK `companies.id` CASCADE, RLS |
-| `author_user_id` | UUID | Có | composite FK → `users (company_id, id)` **`ON DELETE NO ACTION`** — cột NOT NULL, `SET NULL` sẽ nổ lúc teardown (§4.2b) |
-| `author_employee_id` | UUID | Không | composite FK → `employees (company_id, id)` NO ACTION — hiển thị tên/avatar |
-| `type` | VARCHAR(16) | Có | `share`/`news`/`idea`/`poll`/`kudos` |
-| `audience` | VARCHAR(16) | Có | `company`/`group`/`org_unit`, default `company` |
-| `group_id` | UUID | Không | composite FK → `feed_groups (company_id, id)` NO ACTION |
-| `org_unit_id` | UUID | Không | composite FK → `org_units (company_id, id)` NO ACTION |
-| `body` | TEXT | Không | nội dung; CHECK độ dài ≤ 20000. **Nullable** vì bài `poll` mang nội dung ở `feed_polls.question`, `kudos` ở `feed_kudos.message` — xem CHECK kéo theo |
-| `status` | VARCHAR(16) | Có | `published`/`hidden`/`deleted` (SPEC-01 §17.18), default `published` |
-| `pinned` | BOOLEAN | Có | default `false` — chỉ bài `news` được ghim |
-| `comments_locked` | BOOLEAN | Có | default `false` |
-| `requires_ack` | BOOLEAN | Có | default `false` — chỉ bài `news` |
-| `like_count` | INTEGER | Có | default 0, CHECK ≥ 0 |
-| `comment_count` | INTEGER | Có | default 0, CHECK ≥ 0 |
-| `view_count` | INTEGER | Có | default 0, CHECK ≥ 0 |
-| `search_vector` | TSVECTOR | Có | **cột sinh** — xem §6.1b |
-| `edited_at` | TIMESTAMPTZ | Không | set khi sửa nội dung ⇒ FE hiện nhãn «đã chỉnh sửa» |
-| `created_at/by` `updated_at/by` `deleted_at/by` | | | chuẩn chung, soft delete |
+| Cột                                             | Kiểu        | Bắt buộc | Ghi chú                                                                                                                                               |
+| ----------------------------------------------- | ----------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                            | UUID        | Có       | PK                                                                                                                                                    |
+| `company_id`                                    | UUID        | Có       | FK `companies.id` CASCADE, RLS                                                                                                                        |
+| `author_user_id`                                | UUID        | Có       | composite FK → `users (company_id, id)` **`ON DELETE NO ACTION`** — cột NOT NULL, `SET NULL` sẽ nổ lúc teardown (§4.2b)                               |
+| `author_employee_id`                            | UUID        | Không    | composite FK → `employees (company_id, id)` NO ACTION — hiển thị tên/avatar                                                                           |
+| `type`                                          | VARCHAR(16) | Có       | `share`/`news`/`idea`/`poll`/`kudos`                                                                                                                  |
+| `audience`                                      | VARCHAR(16) | Có       | `company`/`group`/`org_unit`, default `company`                                                                                                       |
+| `group_id`                                      | UUID        | Không    | composite FK → `feed_groups (company_id, id)` NO ACTION — ⚠️ **DB-1 tạo cột KHÔNG kèm FK**, xem ghi chú «FK hoãn» dưới bảng index                     |
+| `org_unit_id`                                   | UUID        | Không    | composite FK → `org_units (company_id, id)` NO ACTION                                                                                                 |
+| `body`                                          | TEXT        | Không    | nội dung; CHECK độ dài ≤ 20000. **Nullable** vì bài `poll` mang nội dung ở `feed_polls.question`, `kudos` ở `feed_kudos.message` — xem CHECK kéo theo |
+| `status`                                        | VARCHAR(16) | Có       | `published`/`hidden`/`deleted` (SPEC-01 §17.18), default `published`                                                                                  |
+| `pinned`                                        | BOOLEAN     | Có       | default `false` — chỉ bài `news` được ghim                                                                                                            |
+| `comments_locked`                               | BOOLEAN     | Có       | default `false`                                                                                                                                       |
+| `requires_ack`                                  | BOOLEAN     | Có       | default `false` — chỉ bài `news`                                                                                                                      |
+| `like_count`                                    | INTEGER     | Có       | default 0, CHECK ≥ 0                                                                                                                                  |
+| `comment_count`                                 | INTEGER     | Có       | default 0, CHECK ≥ 0                                                                                                                                  |
+| `view_count`                                    | INTEGER     | Có       | default 0, CHECK ≥ 0                                                                                                                                  |
+| `published_at`                                  | TIMESTAMPTZ | Có       | default `now()` — **mốc sắp xếp «Mới đăng»**; set 1 lần lúc tạo, **KHÔNG** đổi khi sửa bài                                                            |
+| `last_activity_at`                              | TIMESTAMPTZ | Có       | default `now()` — **mốc sắp xếp «Hoạt động mới»**; xem luật bump dưới                                                                                 |
+| `search_vector`                                 | TSVECTOR    | Có       | **cột sinh** — xem §6.1b                                                                                                                              |
+| `edited_at`                                     | TIMESTAMPTZ | Không    | set khi sửa nội dung ⇒ FE hiện nhãn «đã chỉnh sửa»                                                                                                    |
+| `created_at/by` `updated_at/by` `deleted_at/by` |             |          | chuẩn chung, soft delete                                                                                                                              |
 
 ```sql
 ALTER TABLE feed_posts ADD CONSTRAINT chk_feed_posts_type     CHECK (type IN ('share','news','idea','poll','kudos'));
@@ -223,13 +231,50 @@ CREATE INDEX idx_feed_posts_company_author  ON feed_posts (company_id, author_us
   WHERE deleted_at IS NULL;
 -- tìm kiếm toàn văn
 CREATE INDEX idx_feed_posts_search ON feed_posts USING GIN (search_vector);
+
+-- phân trang KEYSET của SOCIAL-API-001 (sắp xếp `latest` | `active`) — S16-SOCIAL-DB-1 §0.5
+CREATE INDEX idx_feed_posts_company_activity ON feed_posts (company_id, last_activity_at DESC, id)
+  WHERE deleted_at IS NULL AND status = 'published';
+CREATE INDEX idx_feed_posts_company_published ON feed_posts (company_id, published_at DESC, id)
+  WHERE deleted_at IS NULL AND status = 'published';
 ```
 
 GRANT app role: `SELECT, INSERT, UPDATE`. **Không** `DELETE` (soft delete).
 
+> 🔴 **FK `group_id` HOÃN sang DB-2 — ngoại lệ DUY NHẤT của luật «mọi FK mới kèm composite tenant-FK».**
+> `feed_groups` thuộc Track B nên lúc `S16-SOCIAL-DB-1` chạy nó **chưa tồn tại**; migration `0577` vì thế tạo `group_id uuid NULL` **không kèm FK**, nhưng **giữ đủ 5 CHECK cặp** `audience` ở trên.
+> **`S16-SOCIAL-DB-2` BẮT BUỘC thêm** (additive, không rewrite bảng):
+>
+> ```sql
+> ALTER TABLE feed_posts ADD CONSTRAINT feed_posts_group_fk
+>   FOREIGN KEY (company_id, group_id) REFERENCES feed_groups (company_id, id) ON DELETE NO ACTION;
+> ```
+>
+> Nợ này **không** dựa vào ai đọc ghi chú: `apps/api/test/integration/s16-social-db1-invariants.int-spec.ts` có assert **TỰ LÊN NÒNG** — `to_regclass('feed_groups') IS NULL` ⇒ khẳng định 0 FK (nợ còn hạn); khác NULL mà FK chưa có ⇒ **spec ĐỎ**. Cộng một assert rẻ: `count(*) WHERE audience='group' AND group_id IS NOT NULL` = 0 chừng nào FK chưa có (bắt hàng mồ côi **trước** khi `ALTER` của DB-2 nổ).
+
+> ⏱️ **Luật «ai bump» hai cột mốc sắp xếp (S16-SOCIAL-DB-1 §0.5) — BE-1 phải theo đúng:**
+>
+> | Cột                | Ai ghi                                                                                                                                                                                                                               |
+> | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+> | `published_at`     | set **một lần** lúc tạo bài. **KHÔNG** đổi khi sửa nội dung (sửa bài dùng `edited_at`).                                                                                                                                              |
+> | `last_activity_at` | service bump **CÙNG TRANSACTION** khi có **bình luận mới** hoặc **reaction mới**. ⚠️ **TUYỆT ĐỐI KHÔNG** bump theo `feed_post_views` — bump là biến «Hoạt động mới» thành «vừa có người xem», và `view_count` tăng ở mọi lần mở bài. |
+>
+> Vì sao hai cột này nằm ở DB-1 chứ không ở BE-1: `done_when` của `S16-SOCIAL-BE-1` đòi keyset `(last_activity_at, id)` và `(published_at, id)`, nhưng `paths` của BE-1 **không có** `apps/api/migrations/**` — BE-1 không thể tự thêm cột mà không trip `guard-scope`, và DB-1 là lane migration nối tiếp **duy nhất** của wave. Không cấp ở đây thì BE-1 chỉ còn đường xấu: dùng `updated_at` (bị bump bởi **mọi** lần tăng `view_count`, và không có index) hoặc subquery tương quan `max(comments.created_at)` (không index được, cursor không ổn định).
+
 ### 6.1b Cột sinh `search_vector` — ĐO `unaccent` lúc chạy
 
-`unaccent` **có thể không có** trên Postgres PROD và migration **KHÔNG** được `CREATE EXTENSION` mù (cần superuser). WO `S16-SOCIAL-DB-1` phải **đo** rồi chọn một trong hai, và **ghi lại lựa chọn vào mục này**:
+> ✅ **NỢ ĐO ĐÃ ĐÓNG — CHỐT PHƯƠNG ÁN A (S16-SOCIAL-DB-1, đo 19/09/2026 trên `mediaos` = DB PROD, PG 17.10).**
+> `unaccent` **ĐÃ CÀI** (v1.1) ở `mediaos` và mọi lane DB, và **`public.f_unaccent(text)` ĐÃ TỒN TẠI** sẵn `IMMUTABLE PARALLEL SAFE STRICT` — cài bởi `0538_s7chatdb1_chat_v1.sql:363-372` (đã chạy PROD, dùng cho `chat_messages.search_vector`).
+> ⇒ Migration `0577` **TÁI DÙNG `public.f_unaccent`**, **KHÔNG** tạo `feed_immutable_unaccent` như gợi ý bên dưới (tạo thêm = tách nguồn sự thật cho cùng một phép bỏ dấu), và **KHÔNG** phát `CREATE EXTENSION`. Khối tiền-kiểm của `0577` **hậu kiểm** hàm tồn tại + `provolatile='i'` rồi mới chạy tiếp (không tin không đo).
+>
+> ```sql
+> ALTER TABLE feed_posts ADD COLUMN search_vector tsvector
+>   GENERATED ALWAYS AS (to_tsvector('simple', public.f_unaccent(coalesce(body, '')))) STORED;
+> ```
+>
+> ⚠️ **schema-qualify TUYỆT ĐỐI** (`public.f_unaccent`): cột sinh **neo vào OID hàm**, sai `search_path` lúc migrate là hỏng **VĨNH VIỄN** (phải rewrite bảng để sửa).
+
+Bối cảnh của nợ đo (giữ lại để hiểu vì sao có hai phương án): `unaccent` **có thể không có** trên Postgres PROD và migration **KHÔNG** được `CREATE EXTENSION` mù (cần superuser). Hai phương án đã cân nhắc:
 
 ```sql
 -- Bước đo (trong migration, không phải bằng tay):
@@ -255,18 +300,18 @@ ALTER TABLE feed_posts ADD COLUMN search_vector TSVECTOR
 
 ### 6.2 Bảng `feed_comments`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `post_id` | UUID | Có | composite FK → `feed_posts (company_id, id)` NO ACTION |
-| `parent_comment_id` | UUID | Không | composite FK → `feed_comments (company_id, id)` NO ACTION — **chỉ trỏ bình luận gốc** |
-| `author_user_id` | UUID | Có | composite FK → `users`, **`ON DELETE NO ACTION`** — cột NOT NULL (§4.2b) |
-| `author_employee_id` | UUID | Không | composite FK → `employees` NO ACTION |
-| `body` | TEXT | Có | CHECK độ dài ≤ 5000 |
-| `like_count` | INTEGER | Có | default 0, CHECK ≥ 0 |
-| `edited_at` | TIMESTAMPTZ | Không | |
-| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+| Cột                                             | Kiểu        | Bắt buộc | Ghi chú                                                                               |
+| ----------------------------------------------- | ----------- | -------- | ------------------------------------------------------------------------------------- |
+| `id`                                            | UUID        | Có       | PK                                                                                    |
+| `company_id`                                    | UUID        | Có       | CASCADE, RLS                                                                          |
+| `post_id`                                       | UUID        | Có       | composite FK → `feed_posts (company_id, id)` NO ACTION                                |
+| `parent_comment_id`                             | UUID        | Không    | composite FK → `feed_comments (company_id, id)` NO ACTION — **chỉ trỏ bình luận gốc** |
+| `author_user_id`                                | UUID        | Có       | composite FK → `users`, **`ON DELETE NO ACTION`** — cột NOT NULL (§4.2b)              |
+| `author_employee_id`                            | UUID        | Không    | composite FK → `employees` NO ACTION                                                  |
+| `body`                                          | TEXT        | Có       | CHECK độ dài ≤ 5000                                                                   |
+| `like_count`                                    | INTEGER     | Có       | default 0, CHECK ≥ 0                                                                  |
+| `edited_at`                                     | TIMESTAMPTZ | Không    |                                                                                       |
+| `created_at/by` `updated_at/by` `deleted_at/by` |             |          | soft delete                                                                           |
 
 ```sql
 ALTER TABLE feed_comments ADD CONSTRAINT feed_comments_company_id_id_uq UNIQUE (company_id, id);
@@ -285,15 +330,15 @@ GRANT app role: `SELECT, INSERT, UPDATE`. Không `DELETE`.
 
 Dùng cho **cả** bài và bình luận — một bảng, phân biệt bằng `target_type` (SOC-DEC-008).
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `target_type` | VARCHAR(16) | Có | `post`/`comment` |
-| `target_id` | UUID | Có | **không** FK đơn — xem ghi chú dưới |
-| `user_id` | UUID | Có | composite FK → `users` NO ACTION — luôn = actor |
-| `emoji` | VARCHAR(32) | Có | thuộc **bộ emoji CHAT** — ép ở Zod/service, **KHÔNG CHECK ở DB** (xem ghi chú dưới) |
-| `created_at` `updated_at` | | | đổi emoji ⇒ UPDATE tại chỗ |
+| Cột                       | Kiểu        | Bắt buộc | Ghi chú                                                                             |
+| ------------------------- | ----------- | -------- | ----------------------------------------------------------------------------------- |
+| `id`                      | UUID        | Có       | PK                                                                                  |
+| `company_id`              | UUID        | Có       | CASCADE, RLS                                                                        |
+| `target_type`             | VARCHAR(16) | Có       | `post`/`comment`                                                                    |
+| `target_id`               | UUID        | Có       | **không** FK đơn — xem ghi chú dưới                                                 |
+| `user_id`                 | UUID        | Có       | composite FK → `users` NO ACTION — luôn = actor                                     |
+| `emoji`                   | VARCHAR(32) | Có       | thuộc **bộ emoji CHAT** — ép ở Zod/service, **KHÔNG CHECK ở DB** (xem ghi chú dưới) |
+| `created_at` `updated_at` |             |          | đổi emoji ⇒ UPDATE tại chỗ                                                          |
 
 ```sql
 ALTER TABLE feed_reactions ADD CONSTRAINT chk_feed_reactions_target
@@ -313,15 +358,15 @@ GRANT app role: `SELECT, INSERT, UPDATE, DELETE` (bỏ thích).
 
 Bảng **THẬT** — không lặp lại nợ `task_comment_mentions` (SOC-DEC-008).
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `target_type` | VARCHAR(16) | Có | `post`/`comment` |
-| `target_id` | UUID | Có | đa hình như §6.3 |
-| `mentioned_user_id` | UUID | Có | composite FK → `users` **NO ACTION** (bảng chỉ-INSERT/DELETE) |
-| `mentioned_employee_id` | UUID | Không | composite FK → `employees` NO ACTION |
-| `created_at` | | | |
+| Cột                     | Kiểu        | Bắt buộc | Ghi chú                                                       |
+| ----------------------- | ----------- | -------- | ------------------------------------------------------------- |
+| `id`                    | UUID        | Có       | PK                                                            |
+| `company_id`            | UUID        | Có       | CASCADE, RLS                                                  |
+| `target_type`           | VARCHAR(16) | Có       | `post`/`comment`                                              |
+| `target_id`             | UUID        | Có       | đa hình như §6.3                                              |
+| `mentioned_user_id`     | UUID        | Có       | composite FK → `users` **NO ACTION** (bảng chỉ-INSERT/DELETE) |
+| `mentioned_employee_id` | UUID        | Không    | composite FK → `employees` NO ACTION                          |
+| `created_at`            |             |          |                                                               |
 
 ```sql
 ALTER TABLE feed_mentions ADD CONSTRAINT chk_feed_mentions_target CHECK (target_type IN ('post','comment'));
@@ -334,13 +379,13 @@ GRANT app role: `SELECT, INSERT, DELETE` (sửa bài ⇒ đồng bộ lại tậ
 
 ### 6.5 Bảng `feed_tags`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `tag` | VARCHAR(64) | Có | đã chuẩn hoá: lowercase, bỏ `#` |
-| `usage_count` | INTEGER | Có | default 0, CHECK ≥ 0 |
-| `created_at` | | | |
+| Cột           | Kiểu        | Bắt buộc | Ghi chú                         |
+| ------------- | ----------- | -------- | ------------------------------- |
+| `id`          | UUID        | Có       | PK                              |
+| `company_id`  | UUID        | Có       | CASCADE, RLS                    |
+| `tag`         | VARCHAR(64) | Có       | đã chuẩn hoá: lowercase, bỏ `#` |
+| `usage_count` | INTEGER     | Có       | default 0, CHECK ≥ 0            |
+| `created_at`  |             |          |                                 |
 
 ```sql
 ALTER TABLE feed_tags ADD CONSTRAINT feed_tags_company_tag_uq UNIQUE (company_id, tag);
@@ -351,11 +396,11 @@ CREATE INDEX idx_feed_tags_company_usage ON feed_tags (company_id, usage_count D
 
 ### 6.6 Bảng `feed_post_tags`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `post_id` | UUID | Có | composite FK → `feed_posts` NO ACTION |
-| `tag_id` | UUID | Có | composite FK → `feed_tags` NO ACTION |
+| Cột          | Kiểu | Bắt buộc | Ghi chú                               |
+| ------------ | ---- | -------- | ------------------------------------- |
+| `company_id` | UUID | Có       | CASCADE, RLS                          |
+| `post_id`    | UUID | Có       | composite FK → `feed_posts` NO ACTION |
+| `tag_id`     | UUID | Có       | composite FK → `feed_tags` NO ACTION  |
 
 ```sql
 ALTER TABLE feed_post_tags ADD CONSTRAINT feed_post_tags_pk PRIMARY KEY (company_id, post_id, tag_id);
@@ -366,12 +411,12 @@ GRANT app role: `SELECT, INSERT, DELETE`.
 
 ### 6.7 Bảng `feed_saved_posts`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `user_id` | UUID | Có | composite FK → `users` NO ACTION — luôn = actor |
-| `post_id` | UUID | Có | composite FK → `feed_posts` NO ACTION |
-| `created_at` | | | |
+| Cột          | Kiểu | Bắt buộc | Ghi chú                                         |
+| ------------ | ---- | -------- | ----------------------------------------------- |
+| `company_id` | UUID | Có       | CASCADE, RLS                                    |
+| `user_id`    | UUID | Có       | composite FK → `users` NO ACTION — luôn = actor |
+| `post_id`    | UUID | Có       | composite FK → `feed_posts` NO ACTION           |
+| `created_at` |      |          |                                                 |
 
 ```sql
 ALTER TABLE feed_saved_posts ADD CONSTRAINT feed_saved_posts_pk PRIMARY KEY (company_id, user_id, post_id);
@@ -382,12 +427,12 @@ GRANT app role: `SELECT, INSERT, DELETE`.
 
 ### 6.8 Bảng `feed_post_views` — **append-only**
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `post_id` | UUID | Có | composite FK → `feed_posts` NO ACTION |
-| `user_id` | UUID | Có | composite FK → `users` **NO ACTION** (append-only) |
-| `viewed_at` | TIMESTAMPTZ | Có | default `now()` |
+| Cột          | Kiểu        | Bắt buộc | Ghi chú                                            |
+| ------------ | ----------- | -------- | -------------------------------------------------- |
+| `company_id` | UUID        | Có       | CASCADE, RLS                                       |
+| `post_id`    | UUID        | Có       | composite FK → `feed_posts` NO ACTION              |
+| `user_id`    | UUID        | Có       | composite FK → `users` **NO ACTION** (append-only) |
+| `viewed_at`  | TIMESTAMPTZ | Có       | default `now()`                                    |
 
 ```sql
 ALTER TABLE feed_post_views ADD CONSTRAINT feed_post_views_pk PRIMARY KEY (company_id, post_id, user_id);
@@ -398,12 +443,12 @@ GRANT app role: **`SELECT, INSERT`** — không UPDATE/DELETE (BẤT BIẾN 2). 
 
 ### 6.9 Bảng `feed_post_acks` — **append-only**
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `post_id` | UUID | Có | composite FK → `feed_posts` NO ACTION |
-| `user_id` | UUID | Có | composite FK → `users` **NO ACTION** |
-| `acked_at` | TIMESTAMPTZ | Có | default `now()` |
+| Cột          | Kiểu        | Bắt buộc | Ghi chú                               |
+| ------------ | ----------- | -------- | ------------------------------------- |
+| `company_id` | UUID        | Có       | CASCADE, RLS                          |
+| `post_id`    | UUID        | Có       | composite FK → `feed_posts` NO ACTION |
+| `user_id`    | UUID        | Có       | composite FK → `users` **NO ACTION**  |
+| `acked_at`   | TIMESTAMPTZ | Có       | default `now()`                       |
 
 ```sql
 ALTER TABLE feed_post_acks ADD CONSTRAINT feed_post_acks_pk PRIMARY KEY (company_id, post_id, user_id);
@@ -414,20 +459,20 @@ GRANT app role: **`SELECT, INSERT`**. Xác nhận đã đọc là **vết không
 
 ### 6.10 Bảng `feed_reports`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `target_type` | VARCHAR(16) | Có | `post`/`comment` |
-| `target_id` | UUID | Có | đa hình như §6.3 |
-| `reporter_user_id` | UUID | Có | composite FK → `users`, **`ON DELETE NO ACTION`** — cột NOT NULL (§4.2b) |
-| `reason` | VARCHAR(32) | Có | `spam`/`harassment`/`inappropriate`/`misinformation`/`other` |
-| `note` | TEXT | Không | |
-| `status` | VARCHAR(16) | Có | `open`/`resolved`/`dismissed`, default `open` |
-| `resolved_by` | UUID | Không | composite FK → `users`, `SET NULL (resolved_by)` |
-| `resolved_at` | TIMESTAMPTZ | Không | |
-| `resolution_note` | TEXT | Không | |
-| `created_at` `updated_at` | | | |
+| Cột                       | Kiểu        | Bắt buộc | Ghi chú                                                                  |
+| ------------------------- | ----------- | -------- | ------------------------------------------------------------------------ |
+| `id`                      | UUID        | Có       | PK                                                                       |
+| `company_id`              | UUID        | Có       | CASCADE, RLS                                                             |
+| `target_type`             | VARCHAR(16) | Có       | `post`/`comment`                                                         |
+| `target_id`               | UUID        | Có       | đa hình như §6.3                                                         |
+| `reporter_user_id`        | UUID        | Có       | composite FK → `users`, **`ON DELETE NO ACTION`** — cột NOT NULL (§4.2b) |
+| `reason`                  | VARCHAR(32) | Có       | `spam`/`harassment`/`inappropriate`/`misinformation`/`other`             |
+| `note`                    | TEXT        | Không    |                                                                          |
+| `status`                  | VARCHAR(16) | Có       | `open`/`resolved`/`dismissed`, default `open`                            |
+| `resolved_by`             | UUID        | Không    | composite FK → `users`, `SET NULL (resolved_by)`                         |
+| `resolved_at`             | TIMESTAMPTZ | Không    |                                                                          |
+| `resolution_note`         | TEXT        | Không    |                                                                          |
+| `created_at` `updated_at` |             |          |                                                                          |
 
 ```sql
 ALTER TABLE feed_reports ADD CONSTRAINT chk_feed_reports_target CHECK (target_type IN ('post','comment'));
@@ -452,16 +497,16 @@ GRANT app role: `SELECT, INSERT, UPDATE`.
 
 ### 7.1 Bảng `feed_groups`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `name` | VARCHAR(255) | Có | |
-| `description` | TEXT | Không | |
-| `visibility` | VARCHAR(16) | Có | `public`/`private` |
-| `avatar_file_id` | UUID | Không | composite FK → `files` NO ACTION |
-| `member_count` | INTEGER | Có | default 0, CHECK ≥ 0 |
-| `created_at/by` `updated_at/by` `deleted_at/by` | | | soft delete |
+| Cột                                             | Kiểu         | Bắt buộc | Ghi chú                          |
+| ----------------------------------------------- | ------------ | -------- | -------------------------------- |
+| `id`                                            | UUID         | Có       | PK                               |
+| `company_id`                                    | UUID         | Có       | CASCADE, RLS                     |
+| `name`                                          | VARCHAR(255) | Có       |                                  |
+| `description`                                   | TEXT         | Không    |                                  |
+| `visibility`                                    | VARCHAR(16)  | Có       | `public`/`private`               |
+| `avatar_file_id`                                | UUID         | Không    | composite FK → `files` NO ACTION |
+| `member_count`                                  | INTEGER      | Có       | default 0, CHECK ≥ 0             |
+| `created_at/by` `updated_at/by` `deleted_at/by` |              |          | soft delete                      |
 
 ```sql
 ALTER TABLE feed_groups ADD CONSTRAINT chk_feed_groups_visibility CHECK (visibility IN ('public','private'));
@@ -475,16 +520,16 @@ CREATE INDEX idx_feed_groups_company_visibility ON feed_groups (company_id, visi
 
 **Vai trò là HÀNG, không phải cặp quyền** (SOC-DEC-006, khuôn per-project role của DECISIONS-04).
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `group_id` | UUID | Có | composite FK → `feed_groups` NO ACTION |
-| `user_id` | UUID | Có | composite FK → `users` NO ACTION |
-| `employee_id` | UUID | Không | composite FK → `employees` NO ACTION |
-| `role` | VARCHAR(16) | Có | `owner`/`admin`/`member` |
-| `status` | VARCHAR(16) | Có | `active`/`pending` — **`DEFAULT 'pending'`**; service set `active` cho nhóm `public` và cho người tạo nhóm (DEFAULT của Postgres **không** đọc được bảng khác) |
-| `joined_at` | TIMESTAMPTZ | Không | set khi `status` thành `active` |
-| `created_at` `updated_at` | | | |
+| Cột                       | Kiểu        | Bắt buộc | Ghi chú                                                                                                                                                        |
+| ------------------------- | ----------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `company_id`              | UUID        | Có       | CASCADE, RLS                                                                                                                                                   |
+| `group_id`                | UUID        | Có       | composite FK → `feed_groups` NO ACTION                                                                                                                         |
+| `user_id`                 | UUID        | Có       | composite FK → `users` NO ACTION                                                                                                                               |
+| `employee_id`             | UUID        | Không    | composite FK → `employees` NO ACTION                                                                                                                           |
+| `role`                    | VARCHAR(16) | Có       | `owner`/`admin`/`member`                                                                                                                                       |
+| `status`                  | VARCHAR(16) | Có       | `active`/`pending` — **`DEFAULT 'pending'`**; service set `active` cho nhóm `public` và cho người tạo nhóm (DEFAULT của Postgres **không** đọc được bảng khác) |
+| `joined_at`               | TIMESTAMPTZ | Không    | set khi `status` thành `active`                                                                                                                                |
+| `created_at` `updated_at` |             |          |                                                                                                                                                                |
 
 ```sql
 ALTER TABLE feed_group_members ADD CONSTRAINT feed_group_members_pk PRIMARY KEY (company_id, group_id, user_id);
@@ -503,18 +548,18 @@ CREATE INDEX idx_feed_group_members_company_user ON feed_group_members (company_
 
 ### 7.3 Bảng `feed_polls`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `post_id` | UUID | Có | composite FK → `feed_posts` NO ACTION, **UNIQUE** (1-1 với bài `type='poll'`) |
-| `question` | VARCHAR(500) | Có | |
-| `multiple_choice` | BOOLEAN | Có | default `false` |
-| `is_anonymous` | BOOLEAN | Có | default `false` |
-| `status` | VARCHAR(16) | Có | `open`/`closed` (SPEC-01 §17.20), default `open` |
-| `closes_at` | TIMESTAMPTZ | Không | job đóng khi quá hạn |
-| `closed_at` | TIMESTAMPTZ | Không | |
-| `created_at` `updated_at` | | | |
+| Cột                       | Kiểu         | Bắt buộc | Ghi chú                                                                       |
+| ------------------------- | ------------ | -------- | ----------------------------------------------------------------------------- |
+| `id`                      | UUID         | Có       | PK                                                                            |
+| `company_id`              | UUID         | Có       | CASCADE, RLS                                                                  |
+| `post_id`                 | UUID         | Có       | composite FK → `feed_posts` NO ACTION, **UNIQUE** (1-1 với bài `type='poll'`) |
+| `question`                | VARCHAR(500) | Có       |                                                                               |
+| `multiple_choice`         | BOOLEAN      | Có       | default `false`                                                               |
+| `is_anonymous`            | BOOLEAN      | Có       | default `false`                                                               |
+| `status`                  | VARCHAR(16)  | Có       | `open`/`closed` (SPEC-01 §17.20), default `open`                              |
+| `closes_at`               | TIMESTAMPTZ  | Không    | job đóng khi quá hạn                                                          |
+| `closed_at`               | TIMESTAMPTZ  | Không    |                                                                               |
+| `created_at` `updated_at` |              |          |                                                                               |
 
 ```sql
 ALTER TABLE feed_polls ADD CONSTRAINT chk_feed_polls_status CHECK (status IN ('open','closed'));
@@ -530,14 +575,14 @@ CREATE INDEX idx_feed_polls_open_deadline ON feed_polls (company_id, closes_at)
 
 ### 7.4 Bảng `feed_poll_options`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `poll_id` | UUID | Có | composite FK → `feed_polls` NO ACTION |
-| `label` | VARCHAR(255) | Có | |
-| `position` | SMALLINT | Có | thứ tự hiển thị |
-| `vote_count` | INTEGER | Có | default 0, CHECK ≥ 0 |
+| Cột          | Kiểu         | Bắt buộc | Ghi chú                               |
+| ------------ | ------------ | -------- | ------------------------------------- |
+| `id`         | UUID         | Có       | PK                                    |
+| `company_id` | UUID         | Có       | CASCADE, RLS                          |
+| `poll_id`    | UUID         | Có       | composite FK → `feed_polls` NO ACTION |
+| `label`      | VARCHAR(255) | Có       |                                       |
+| `position`   | SMALLINT     | Có       | thứ tự hiển thị                       |
+| `vote_count` | INTEGER      | Có       | default 0, CHECK ≥ 0                  |
 
 ```sql
 ALTER TABLE feed_poll_options ADD CONSTRAINT feed_poll_options_company_id_id_uq UNIQUE (company_id, id);
@@ -552,13 +597,13 @@ CREATE INDEX idx_feed_poll_options_company_poll ON feed_poll_options (company_id
 
 ### 7.5 Bảng `feed_poll_votes`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `poll_id` | UUID | Có | composite FK → `feed_polls` NO ACTION |
-| `option_id` | UUID | Có | composite FK → `feed_poll_options` NO ACTION |
-| `user_id` | UUID | Có | composite FK → `users` NO ACTION — **lưu kể cả poll ẩn danh** |
-| `created_at` | | | |
+| Cột          | Kiểu | Bắt buộc | Ghi chú                                                       |
+| ------------ | ---- | -------- | ------------------------------------------------------------- |
+| `company_id` | UUID | Có       | CASCADE, RLS                                                  |
+| `poll_id`    | UUID | Có       | composite FK → `feed_polls` NO ACTION                         |
+| `option_id`  | UUID | Có       | composite FK → `feed_poll_options` NO ACTION                  |
+| `user_id`    | UUID | Có       | composite FK → `users` NO ACTION — **lưu kể cả poll ẩn danh** |
+| `created_at` |      |          |                                                               |
 
 ```sql
 ALTER TABLE feed_poll_votes ADD CONSTRAINT feed_poll_votes_pk PRIMARY KEY (company_id, poll_id, option_id, user_id);
@@ -587,16 +632,16 @@ GRANT app role: `SELECT, INSERT, DELETE` (đổi phiếu = xoá + chèn trong c�
 
 ### 7.6 Bảng `feed_ideas`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `post_id` | UUID | Có | composite FK → `feed_posts` NO ACTION, **UNIQUE** (1-1 với bài `type='idea'`) |
-| `status` | VARCHAR(16) | Có | `submitted`/`under_review`/`accepted`/`rejected` (SPEC-01 §17.19) |
-| `reviewed_by` | UUID | Không | composite FK → `users`, `SET NULL (reviewed_by)` |
-| `reviewed_at` | TIMESTAMPTZ | Không | |
-| `review_note` | TEXT | Không | **bắt buộc khi `rejected`** |
-| `created_at` `updated_at` | | | |
+| Cột                       | Kiểu        | Bắt buộc | Ghi chú                                                                       |
+| ------------------------- | ----------- | -------- | ----------------------------------------------------------------------------- |
+| `id`                      | UUID        | Có       | PK                                                                            |
+| `company_id`              | UUID        | Có       | CASCADE, RLS                                                                  |
+| `post_id`                 | UUID        | Có       | composite FK → `feed_posts` NO ACTION, **UNIQUE** (1-1 với bài `type='idea'`) |
+| `status`                  | VARCHAR(16) | Có       | `submitted`/`under_review`/`accepted`/`rejected` (SPEC-01 §17.19)             |
+| `reviewed_by`             | UUID        | Không    | composite FK → `users`, `SET NULL (reviewed_by)`                              |
+| `reviewed_at`             | TIMESTAMPTZ | Không    |                                                                               |
+| `review_note`             | TEXT        | Không    | **bắt buộc khi `rejected`**                                                   |
+| `created_at` `updated_at` |             |          |                                                                               |
 
 ```sql
 ALTER TABLE feed_ideas ADD CONSTRAINT chk_feed_ideas_status
@@ -616,15 +661,15 @@ CREATE INDEX idx_feed_ideas_company_status ON feed_ideas (company_id, status, cr
 
 ### 7.7 Bảng `feed_kudos`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `post_id` | UUID | Có | composite FK → `feed_posts` NO ACTION, **UNIQUE** (1-1 với bài `type='kudos'`) |
-| `badge_id` | UUID | Không | composite FK → `feed_kudos_badges` NO ACTION |
-| `message` | TEXT | Không | |
-| `is_official` | BOOLEAN | Có | default `false` — HR ghim vinh danh chính thức, cần `manage:feed-kudos` |
-| `created_at` `updated_at` | | | |
+| Cột                       | Kiểu    | Bắt buộc | Ghi chú                                                                        |
+| ------------------------- | ------- | -------- | ------------------------------------------------------------------------------ |
+| `id`                      | UUID    | Có       | PK                                                                             |
+| `company_id`              | UUID    | Có       | CASCADE, RLS                                                                   |
+| `post_id`                 | UUID    | Có       | composite FK → `feed_posts` NO ACTION, **UNIQUE** (1-1 với bài `type='kudos'`) |
+| `badge_id`                | UUID    | Không    | composite FK → `feed_kudos_badges` NO ACTION                                   |
+| `message`                 | TEXT    | Không    |                                                                                |
+| `is_official`             | BOOLEAN | Có       | default `false` — HR ghim vinh danh chính thức, cần `manage:feed-kudos`        |
+| `created_at` `updated_at` |         |          |                                                                                |
 
 ```sql
 ALTER TABLE feed_kudos ADD CONSTRAINT feed_kudos_company_post_uq UNIQUE (company_id, post_id);
@@ -634,11 +679,11 @@ CREATE INDEX idx_feed_kudos_company_created ON feed_kudos (company_id, created_a
 
 ### 7.8 Bảng `feed_kudos_recipients`
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `kudos_id` | UUID | Có | composite FK → `feed_kudos` NO ACTION |
-| `employee_id` | UUID | Có | composite FK → `employees` NO ACTION |
+| Cột           | Kiểu | Bắt buộc | Ghi chú                               |
+| ------------- | ---- | -------- | ------------------------------------- |
+| `company_id`  | UUID | Có       | CASCADE, RLS                          |
+| `kudos_id`    | UUID | Có       | composite FK → `feed_kudos` NO ACTION |
+| `employee_id` | UUID | Có       | composite FK → `employees` NO ACTION  |
 
 ```sql
 ALTER TABLE feed_kudos_recipients ADD CONSTRAINT feed_kudos_recipients_pk
@@ -648,17 +693,17 @@ CREATE INDEX idx_feed_kudos_recipients_company_emp ON feed_kudos_recipients (com
 
 ### 7.9 Bảng `feed_kudos_badges` — catalog
 
-| Cột | Kiểu | Bắt buộc | Ghi chú |
-| --- | --- | --- | --- |
-| `id` | UUID | Có | PK |
-| `company_id` | UUID | Có | CASCADE, RLS |
-| `code` | VARCHAR(32) | Có | ổn định, dùng để seed |
-| `name` | VARCHAR(255) | Có | |
-| `description` | TEXT | Không | |
-| `icon` | VARCHAR(64) | Không | tên icon hoặc emoji |
-| `is_active` | BOOLEAN | Có | default `true` |
-| `position` | SMALLINT | Có | thứ tự hiển thị |
-| `created_at/by` `updated_at/by` | | | |
+| Cột                             | Kiểu         | Bắt buộc | Ghi chú               |
+| ------------------------------- | ------------ | -------- | --------------------- |
+| `id`                            | UUID         | Có       | PK                    |
+| `company_id`                    | UUID         | Có       | CASCADE, RLS          |
+| `code`                          | VARCHAR(32)  | Có       | ổn định, dùng để seed |
+| `name`                          | VARCHAR(255) | Có       |                       |
+| `description`                   | TEXT         | Không    |                       |
+| `icon`                          | VARCHAR(64)  | Không    | tên icon hoặc emoji   |
+| `is_active`                     | BOOLEAN      | Có       | default `true`        |
+| `position`                      | SMALLINT     | Có       | thứ tự hiển thị       |
+| `created_at/by` `updated_at/by` |              |          |                       |
 
 ```sql
 ALTER TABLE feed_kudos_badges ADD CONSTRAINT feed_kudos_badges_company_code_uq UNIQUE (company_id, code);
@@ -672,19 +717,19 @@ CREATE INDEX idx_feed_kudos_badges_company_active ON feed_kudos_badges (company_
 
 ## 8. Enum chuẩn — mirror `packages/contracts` HAI CHIỀU, ĐÚNG BẰNG
 
-| Enum | Giá trị | Nơi dùng |
-| --- | --- | --- |
-| `feedPostType` | `share` · `news` · `idea` · `poll` · `kudos` | `feed_posts.type` |
-| `feedAudience` | `company` · `group` · `org_unit` | `feed_posts.audience` |
-| `feedPostStatus` | `published` · `hidden` · `deleted` | `feed_posts.status` (SPEC-01 §17.18) |
-| `feedReactionTarget` | `post` · `comment` | `feed_reactions` · `feed_mentions` · `feed_reports` |
-| `feedReportReason` | `spam` · `harassment` · `inappropriate` · `misinformation` · `other` | `feed_reports.reason` |
-| `feedReportStatus` | `open` · `resolved` · `dismissed` | `feed_reports.status` |
-| `feedGroupVisibility` | `public` · `private` | `feed_groups.visibility` |
-| `feedGroupRole` | `owner` · `admin` · `member` | `feed_group_members.role` |
-| `feedGroupMemberStatus` | `active` · `pending` | `feed_group_members.status` |
-| `feedPollStatus` | `open` · `closed` | `feed_polls.status` (SPEC-01 §17.20) |
-| `feedIdeaStatus` | `submitted` · `under_review` · `accepted` · `rejected` | `feed_ideas.status` (SPEC-01 §17.19) |
+| Enum                    | Giá trị                                                              | Nơi dùng                                            |
+| ----------------------- | -------------------------------------------------------------------- | --------------------------------------------------- |
+| `feedPostType`          | `share` · `news` · `idea` · `poll` · `kudos`                         | `feed_posts.type`                                   |
+| `feedAudience`          | `company` · `group` · `org_unit`                                     | `feed_posts.audience`                               |
+| `feedPostStatus`        | `published` · `hidden` · `deleted`                                   | `feed_posts.status` (SPEC-01 §17.18)                |
+| `feedReactionTarget`    | `post` · `comment`                                                   | `feed_reactions` · `feed_mentions` · `feed_reports` |
+| `feedReportReason`      | `spam` · `harassment` · `inappropriate` · `misinformation` · `other` | `feed_reports.reason`                               |
+| `feedReportStatus`      | `open` · `resolved` · `dismissed`                                    | `feed_reports.status`                               |
+| `feedGroupVisibility`   | `public` · `private`                                                 | `feed_groups.visibility`                            |
+| `feedGroupRole`         | `owner` · `admin` · `member`                                         | `feed_group_members.role`                           |
+| `feedGroupMemberStatus` | `active` · `pending`                                                 | `feed_group_members.status`                         |
+| `feedPollStatus`        | `open` · `closed`                                                    | `feed_polls.status` (SPEC-01 §17.20)                |
+| `feedIdeaStatus`        | `submitted` · `under_review` · `accepted` · `rejected`               | `feed_ideas.status` (SPEC-01 §17.19)                |
 
 > ⚠️ **Ngoại lệ DUY NHẤT của luật mirror:** `feed_reactions.emoji` **nằm ngoài** bảng này và ngoài luật «mirror CHECK ↔ Zod đúng bằng», vì cột đó **không có CHECK** (§6.3). Nguồn của nó là hằng `chat-reactions.emoji-set` của CHAT; test mirror không được kỳ vọng tìm thấy CHECK cho `emoji`.
 
@@ -718,13 +763,13 @@ Số migration **đo `apps/api/migrations/meta/_journal.json` lúc chạy** và 
 
 `ON CONFLICT DO NOTHING` cho cả `permissions` lẫn `role_permissions`. Grant per-(cặp, vai) theo [SPEC-16 §11.1](<../SPEC/SPEC-16 SOCIAL.md>) và ma trận quyền §9h:
 
-| Cặp | employee | manager | hr | company-admin |
-| --- | --- | --- | --- | --- |
-| `view:feed` | Company | Company | Company | Company |
-| `create:feed-post` · `-comment` · `-poll` · `-idea` · `-kudos` · `-group` | Company | Company | Company | Company |
-| `manage:feed-news` · `-post` · `-group` · `-kudos` · `-report` | — | — | Company | Company |
-| `approve:feed-idea` | — | — | Company | Company |
-| `view:feed-report` | — | **Department** | Company | Company |
+| Cặp                                                                       | employee | manager        | hr      | company-admin |
+| ------------------------------------------------------------------------- | -------- | -------------- | ------- | ------------- |
+| `view:feed`                                                               | Company  | Company        | Company | Company       |
+| `create:feed-post` · `-comment` · `-poll` · `-idea` · `-kudos` · `-group` | Company  | Company        | Company | Company       |
+| `manage:feed-news` · `-post` · `-group` · `-kudos` · `-report`            | —        | —              | Company | Company       |
+| `approve:feed-idea`                                                       | —        | —              | Company | Company       |
+| `view:feed-report`                                                        | —        | **Department** | Company | Company       |
 
 - **Tổng seed = 14 hàng `permissions` + 43 hàng `role_permissions`** (`employee` 7 · `manager` 8 · `hr` 14 · `company-admin` 14). Migration **verify fail-loud đúng số** như khuôn `0560`/`0565`; `super-admin` **không** enumerate (nhận qua `SuperAdminBootstrapService`). Các role hệ thống `payroll-officer`/`recruiter`/`asset-manager`/`office-admin` nhận **0 hàng** ở wave này.
 - **KHÔNG đụng** ba cặp `social-*` của fbpost; migration `0544` có verify đếm grant `social*` của `employee` và sẽ RAISE nếu bị chạm.
@@ -738,29 +783,46 @@ Số migration **đo `apps/api/migrations/meta/_journal.json` lúc chạy** và 
 
 ## 10. Đối chiếu bất biến (CLAUDE.md §2)
 
-| Bất biến | Cách tuân thủ |
-| --- | --- |
-| **1 — `company_id` mọi query + RLS FORCE** | 19/19 bảng có `company_id` + policy + FORCE, tạo **trước** dữ liệu; mọi repository đi qua `withTenant`; composite tenant-FK chặn tham chiếu chéo tenant |
-| **2 — không hard-delete, append-only** | Soft delete ở `feed_posts`/`feed_comments`/`feed_groups`; `feed_post_views` + `feed_post_acks` chỉ `SELECT, INSERT`; 19 bảng vào `RetentionService.PROTECTED_TABLES` |
-| **3 — không secret plaintext** | SOCIAL không lưu secret nào. Dữ liệu nhạy cảm duy nhất là ngày sinh — **không lưu lại** ở SOCIAL, đọc từ `employees` và cắt còn ngày+tháng ở DTO (SPEC-16 §3.5) |
+| Bất biến                                   | Cách tuân thủ                                                                                                                                                                                                                                                          |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1 — `company_id` mọi query + RLS FORCE** | 19/19 bảng có `company_id` + policy + FORCE, tạo **trước** dữ liệu; mọi repository đi qua `withTenant`; composite tenant-FK chặn tham chiếu chéo tenant                                                                                                                |
+| **2 — không hard-delete, append-only**     | Soft delete ở `feed_posts`/`feed_comments`/`feed_groups`; `feed_post_views` + `feed_post_acks` chỉ `SELECT, INSERT`; vào `RetentionService.PROTECTED_TABLES` **theo tiêu chí dưới bảng** — DB-1 đã thêm **10/10 bảng Track A**, DB-2 tự đo Track B theo cùng công thức |
+| **3 — không secret plaintext**             | SOCIAL không lưu secret nào. Dữ liệu nhạy cảm duy nhất là ngày sinh — **không lưu lại** ở SOCIAL, đọc từ `employees` và cắt còn ngày+tháng ở DTO (SPEC-16 §3.5)                                                                                                        |
+
+> 📌 **`RetentionService.PROTECTED_TABLES` — TIÊU CHÍ, không phải con số** (đính chính của `S16-SOCIAL-DB-1`; bản trước ghi «19 bảng» như một hằng số, dễ bị hiểu thành «cứ đếm cho đủ»).
+> Tiêu chí THẬT ghi trong docblock `apps/api/src/foundation/retention/retention.service.ts`: **«bảng mà `runCleanup` TUYỆT ĐỐI không được xoá»** — **KHÔNG** phải «thiếu GRANT DELETE». Một bảng vào tập này nếu thoả **bất kỳ** điều nào:
+>
+> 1. **append-only / ledger / snapshot**;
+> 2. **app role KHÔNG có GRANT DELETE** — retention phát lệnh DELETE sẽ ăn `42501` **UNCAUGHT và làm hỏng CẢ LƯỢT cleanup của tenant**;
+> 3. **cascade-guard** — hard-delete kéo cascade sang một ledger append-only;
+> 4. **bảng CÓ GRANT DELETE nhưng lệnh retention sẽ xoá CỨNG hàng đang sống** — vì `_deleteEligible` lọc theo **`created_at < cutoff`**, KHÔNG theo `deleted_at`, và `entityType` của `POST /foundation/retention-policies` là chuỗi **tự do** (chỉ regex `^[a-z_][a-z0-9_]*$`, **không** allowlist bảng).
+>
+> Áp lên **Track A ⇒ đủ 10/10 bảng**, chia hai nhóm với hai lý do khác nhau:
+>
+> | Nhóm                  | Bảng                                                                                                 | Tiêu chí | Vì sao                                                                                                                                                                                                                                                                                                                                  |
+> | --------------------- | ---------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | Không có GRANT DELETE | `feed_posts` · `feed_comments` · `feed_tags` · `feed_post_views` · `feed_post_acks` · `feed_reports` | (1)+(2)  | DB đã là tuyến hai (`42501`); có mặt ở tập để retention **no-op trước khi phát lệnh**, tránh hỏng cả lượt cleanup                                                                                                                                                                                                                       |
+> | **CÓ** GRANT DELETE   | `feed_reactions` · `feed_mentions` · `feed_post_tags` · `feed_saved_posts`                           | (4)      | ⚠️ tập này là **lớp phòng thủ DUY NHẤT** — lệnh retention **chạy thật**. Hậu quả: `feed_posts.like_count`/`feed_tags.usage_count` lệch **vĩnh viễn** so với `COUNT(*)` (bộ đếm chỉ cập nhật cùng tx với hàng nguồn — §4.7 — retention không đi qua đường đó); mention và «Đã lưu» bốc hơi, không soft-delete, không audit nội dung hàng |
+>
+> ⚠️ `chat_message_reactions` (cùng hình dạng nhóm hai, **không** nằm trong tập) là một **bỏ sót chưa từng được review**, KHÔNG phải tiền lệ để noi theo. **DB-2 phải tự áp 4 tiêu chí này lên 9 bảng Track B**, không suy từ con số.
 
 ---
 
 ## 11. Rủi ro dữ liệu đã nhận diện
 
-| # | Rủi ro | Giảm thiểu |
-| --- | --- | --- |
-| R1 | `target_id` đa hình không có FK ⇒ hàng mồ côi | Dọn theo trong cùng tx khi xoá mềm bài/bình luận; script đối soát cho QA |
-| R2 | Bộ đếm lệch `COUNT(*)` khi có race | Cập nhật trong cùng tx + ca test hai lượt thích đồng thời + script đối soát |
-| R3 | `unaccent` vắng trên PROD | Đo `pg_extension` lúc chạy, hai phương án ở §6.1b, fallback cuối là `ILIKE` |
-| R4 | Partial unique một-phiếu không đọc được `multiple_choice` | Hai đường hợp lệ ở §7.5, DB-2 chọn và ghi lại — **không** trigger |
-| R5 | Nhóm mất `owner` cuối cùng | `SOCIAL-ERR-015` ở service + index đếm vai trò §7.2 |
-| R6 | `SELECT *` làm rò `user_id` của poll ẩn danh | Repository dùng **tập cột tường minh**, không `select()` trần; ca QA ghim |
-| R7 | Seed quyền chạm nhầm `social-*` của fbpost | Tiền tố `feed-` bắt buộc + verify `0544` là lưới an toàn |
-| R8 | Migration thiếu trong `_journal.json` | Kiểm journal sau khi sinh — bỏ qua im lặng là bẫy đã gặp |
+| #   | Rủi ro                                                    | Giảm thiểu                                                                  |
+| --- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| R1  | `target_id` đa hình không có FK ⇒ hàng mồ côi             | Dọn theo trong cùng tx khi xoá mềm bài/bình luận; script đối soát cho QA    |
+| R2  | Bộ đếm lệch `COUNT(*)` khi có race                        | Cập nhật trong cùng tx + ca test hai lượt thích đồng thời + script đối soát |
+| R3  | `unaccent` vắng trên PROD                                 | Đo `pg_extension` lúc chạy, hai phương án ở §6.1b, fallback cuối là `ILIKE` |
+| R4  | Partial unique một-phiếu không đọc được `multiple_choice` | Hai đường hợp lệ ở §7.5, DB-2 chọn và ghi lại — **không** trigger           |
+| R5  | Nhóm mất `owner` cuối cùng                                | `SOCIAL-ERR-015` ở service + index đếm vai trò §7.2                         |
+| R6  | `SELECT *` làm rò `user_id` của poll ẩn danh              | Repository dùng **tập cột tường minh**, không `select()` trần; ca QA ghim   |
+| R7  | Seed quyền chạm nhầm `social-*` của fbpost                | Tiền tố `feed-` bắt buộc + verify `0544` là lưới an toàn                    |
+| R8  | Migration thiếu trong `_journal.json`                     | Kiểm journal sau khi sinh — bỏ qua im lặng là bẫy đã gặp                    |
 
 ---
 
 ## 12. Liên quan
 
-[SPEC-16 SOCIAL](<../SPEC/SPEC-16 SOCIAL.md>) · [API-19 SOCIAL](<../API Design/API-19_SOCIAL_API_Design.md>) · [Ma trận phân quyền §9h](<../permission-matrix-spec.md>) · [DB-01](<DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [DB-12 CHAT](<DB-12 CHAT Database Design.md>) · [Kế hoạch wave](<../plans/S16-SOCIAL-WAVE.md>)
+[SPEC-16 SOCIAL](<../SPEC/SPEC-16 SOCIAL.md>) · [API-19 SOCIAL](<../API Design/API-19_SOCIAL_API_Design.md>) · [Ma trận phân quyền §9h](../permission-matrix-spec.md) · [DB-01](<DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [DB-12 CHAT](<DB-12 CHAT Database Design.md>) · [Kế hoạch wave](../plans/S16-SOCIAL-WAVE.md)
