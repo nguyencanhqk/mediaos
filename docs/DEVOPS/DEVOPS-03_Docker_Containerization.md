@@ -335,6 +335,46 @@ ems-backend-api:v1.0.0
 
 Production phải deploy bằng tag immutable.
 
+### 13.3 Image hạ tầng bên thứ ba — GHIM tag, KHÔNG `latest` (thực thi 19/09/2026)
+
+`docker-compose.yml` dựng 4 service hạ tầng bằng image công khai. Từ **13/09/2026** Docker Hub `minio/minio`
+và `minio/mc` trả `pull access denied` (đo bằng `docker manifest inspect`) ⇒ CI exit 125 ở step «Start MinIO»,
+và máy đang chạy chỉ còn sống nhờ **image cache** — hỏng khi dựng máy mới, `docker image prune -a`, hoặc
+`docker compose pull`.
+
+**Quyết định (WO `S18-OPS-MINIOPIN-1`):** đổi registry sang `quay.io` **và ghim tag cố định**, dùng CHUNG giữa
+`docker-compose.yml` (PROD) · `scripts/windows/02-infra-up.ps1` · CI `.github/workflows/api.yml` ⇒ CI = PROD.
+
+| Thành phần | Image ghim | Image id |
+| --- | --- | --- |
+| MinIO server | `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` | `sha256:14cea493…` |
+| MinIO client (`mc`) | `quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z` | `sha256:a7fe349e…` |
+
+**Nghiệm thu 19/09/2026 trên container PROD `mediaos-minio`:**
+
+1. Image id của tag ghim **trùng y hệt** container đang chạy ⇒ đổi registry KHÔNG đổi binary
+   (`minio version RELEASE.2025-09-07T16-13-09Z`). Lệch digest ⇒ phải DỪNG, vì đó là nâng bản MinIO trên data cũ.
+2. `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` của container **khớp `.env`** TRƯỚC khi recreate ⇒ không dính lớp lỗi
+   recreate-đổi-credential-root (triệu chứng: presigned PUT/GET 403 `SignatureDoesNotMatch`).
+3. Thử image ghim trên **mạng docker riêng, KHÔNG mở cổng 9000** (PROD giữ nguyên): server READY (`mc ready local`,
+   đúng lệnh healthcheck của compose) + `mc` tạo bucket theo đúng chuỗi lệnh của `02-infra-up.ps1`.
+4. `docker compose up -d minio` → `healthy`; bucket `mediaos-assets` và **2698 object giữ nguyên**
+   (volume `mediaos_miniodata` không bị đụng).
+5. Presigned **PUT 200 + GET 200** bằng đúng credential/endpoint/`forcePathStyle` của app; object ghi **trước**
+   recreate vẫn đọc được qua URL ký mới.
+
+**Chưa làm — nợ ghi nhận:**
+
+- Dựng lại từ đầu trên **máy/VM sạch thật** chưa chạy (hạ tầng hiện chỉ có một máy). Bằng chứng thay thế = mục 3:
+  cả hai tag đều kéo mới được từ quay.io và chạy end-to-end ngoài cache của compose.
+- Vòng tải lên/tải về **qua UI có đăng nhập** chưa chạy tự động được (PROD bật 2FA, chặn automation headless);
+  đã nghiệm thu ở tầng S3 — đúng tầng mà rủi ro credential/chữ ký nằm.
+- ⚠️ Kênh `quay.io/minio/*:latest` đứng ở bản 09/2025 ⇒ **không còn ra bản mới**. Nguồn bản vá bảo mật cho MinIO
+  (hoặc thay bằng object storage S3-compatible khác) là quyết định còn treo của owner, CHƯA có WO.
+
+> **PROD và dev-online dùng CHUNG container này** — `.env`, `.env.dev`, `.env.prod` đều trỏ
+> `S3_ENDPOINT=http://localhost:9000` ⇒ mỗi lần recreate là cửa sổ gián đoạn của CẢ HAI môi trường.
+
 ## 14. Container network
 
 | Network | Service | Expose public |

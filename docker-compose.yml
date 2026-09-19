@@ -111,7 +111,12 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # Image GHIM tag cố định trên quay.io — KHÔNG `latest`, KHÔNG Docker Hub (WO S18-OPS-MINIOPIN-1).
+    # Từ 2026-09-13 `minio/minio` + `minio/mc` trên Docker Hub trả `pull access denied` ⇒ máy mới dựng
+    # không nổi, máy đang chạy chỉ sống nhờ image cache (hỏng khi `docker image prune -a`/`compose pull`).
+    # Tag này = ĐÚNG bản đang chạy PROD: image id sha256:14cea493… = `minio version RELEASE.2025-09-07T16-13-09Z`
+    # ⇒ đổi registry KHÔNG đổi binary (đã đo bằng `docker image inspect` trước khi recreate).
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: mediaos-minio
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]

@@ -28,7 +28,7 @@ try {
   if ($mUser -and $mPass -and $bucket) {
     Write-Host "  tạo bucket $bucket ..."
     $cmd = "mc alias set m http://minio:9000 $mUser $mPass && mc mb -p m/$bucket && mc anonymous set none m/$bucket && mc ls m"
-    docker run --rm --network mediaos_default --entrypoint sh minio/mc -c $cmd
+    docker run --rm --network mediaos_default --entrypoint sh quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z -c $cmd
     if ($LASTEXITCODE -ne 0) { Write-Warn "Tạo bucket lỗi (có thể đã tồn tại / network khác 'mediaos_default')." }
     else { Write-Ok "Bucket $bucket sẵn sàng" }
   }
