@@ -18454,7 +18454,7 @@ export const backlog = [
     title:
       "Ghim image MinIO của docker-compose.yml (container PROD `mediaos-minio`) và scripts/windows/02-infra-up.ps1 (`minio/mc`) sang quay.io theo ĐÚNG bản đang chạy — Docker Hub `minio/minio` + `minio/mc` trả `pull access denied` từ 13/09/2026; máy hiện tại chỉ còn sống nhờ image cache",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "docker-compose.yml",
       "scripts/windows/**",
@@ -18481,6 +18481,10 @@ export const backlog = [
     notes: [
       "🟡 VẬN HÀNH chạm container PROD — người chốt thời điểm recreate. Không gấp: máy hiện tại sống bằng image cache; hỏng khi dựng máy mới · `docker image prune -a` · `docker compose pull`.",
       "⚠️ `quay.io/minio/minio:latest` đứng ở bản 2025-09-07 (đo 13/09/2026, cùng digest bản đang chạy) ⇒ kênh image này không còn ra bản mới. Nợ dài hạn, CHƯA WO: nguồn bản vá bảo mật cho MinIO hoặc thay object storage S3-compatible khác — owner quyết.",
+      "✅ 19/09/2026 ĐÃ THI CÔNG + recreate (owner cho phép trong phiên). Ghim 3 chỗ cùng tag. Tiền đề đo trước khi recreate: image id tag ghim == container đang chạy (sha256:14cea493…) · MINIO_ROOT_USER/PASSWORD container == .env (và == S3_ACCESS_KEY/S3_SECRET_KEY) ⇒ recreate không đổi binary, không đổi credential.",
+      "Nghiệm thu sau recreate: container healthy trên tag ghim · bucket `mediaos-assets` + 2698 object nguyên vẹn (volume `mediaos_miniodata`) · presigned PUT 200 + GET 200 bằng credential app · object ghi TRƯỚC recreate vẫn đọc được. Thử image ghim trước đó trên network docker riêng (không mở 9000): `mc ready local` READY + tạo bucket theo đúng chuỗi lệnh 02-infra-up.ps1.",
+      "📌 TOPOLOGY đã xác minh (không suy): `.env` (PROD) · `.env.dev` (dev-online) · `.env.prod` ĐỀU trỏ `S3_ENDPOINT=http://localhost:9000` ⇒ một container `mediaos-minio` phục vụ CẢ hai môi trường; mọi recreate là cửa sổ gián đoạn của cả hai.",
+      "NỢ còn lại (không chặn): (a) dựng từ đầu trên máy/VM SẠCH thật chưa chạy — hạ tầng chỉ có 1 máy, bằng chứng thay thế là lần chạy trên network riêng; (b) vòng upload/download QUA UI có đăng nhập chưa tự động hoá được (PROD bật 2FA chặn headless) — đã nghiệm thu ở tầng S3, đúng tầng rủi ro credential/chữ ký. Ghi ở docs/DEVOPS/DEVOPS-03 §13.3.",
     ],
   },
 ];
