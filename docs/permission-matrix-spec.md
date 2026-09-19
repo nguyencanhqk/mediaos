@@ -696,6 +696,45 @@ Ghi chú:
 
 ---
 
+## 9h. SOCIAL — Mạng xã hội nội bộ (SPEC-16) · *wave S16-SOCIAL — CHƯA SEED*
+
+SOCIAL đứng riêng, **14 cặp** quyền per-(action, resource) theo [SPEC-16 §11](<SPEC/SPEC-16 SOCIAL.md>) — owner duyệt gói wave 02/09/2026 (SOC-DEC-001..010). Data scope **chốt cùng migration seed** (`S16-SOCIAL-DB-1`, KHÔNG để mở sau). Wave này **không** seed role hệ thống mới: 4 role canonical là đủ.
+
+> ⚠️ **Mã `SOCIAL` có hai bề mặt — đừng nhầm.** Module `SOCIAL` = **mạng xã hội nội bộ** (bảng tin · tin tức · nhóm · bình chọn · sáng kiến · vinh danh). App vệ tinh **đăng bài Facebook** ([DECISIONS-08](<DECISIONS/DECISIONS-08_Social_Satellite_App.md>)) là **tiện ích con** bên trong module đó và giữ nguyên **ba cặp cũ** `('view','social-post')` · `('create','social-post')` · `('manage','social-account')` — **không** đổi tên, **không** đổi grant (SOC-DEC-002). Mọi cặp của mạng xã hội nội bộ mang tiền tố **`feed-`**.
+
+| Cặp quyền (SPEC-16 §11.1) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị | HR | BOD/Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| `('view','feed')` | false | Đọc bảng tin · bài · bình luận · tìm kiếm · sinh nhật (ngày+tháng) | all | all | all | all |
+| `('create','feed-post')` | false | Đăng bài `share`/`idea`/`poll`/`kudos` | all | all | all | all |
+| `('create','feed-comment')` | false | Bình luận · trả lời 1 cấp | all | all | all | all |
+| `('create','feed-poll')` | false | Tạo bình chọn | all | all | all | all |
+| `('create','feed-idea')` | false | Gửi sáng kiến | all | all | all | all |
+| `('create','feed-kudos')` | false | Gửi lời vinh danh | all | all | all | all |
+| `('create','feed-group')` | false | Tạo nhóm | all | all | all | all |
+| `('manage','feed-news')` | false | Đăng **tin tức** công ty · ghim «Tin nổi bật» · xem danh sách đã đọc | không | không | all | all |
+| `('manage','feed-post')` | false | Ẩn/hiện · ghim/bỏ ghim · khoá bình luận · xoá bài người khác | không | không | all | all |
+| `('manage','feed-group')` | false | Can thiệp nhóm bất kỳ (kể cả nhóm mình không là thành viên) | không | không | all | all |
+| `('manage','feed-kudos')` | false | CRUD catalog huy hiệu · ghim vinh danh chính thức | không | không | all | all |
+| `('manage','feed-report')` | false | Xử lý báo cáo (resolve/dismiss) + hành động kiểm duyệt kèm | không | không | all | all |
+| `('approve','feed-idea')` | false | Xét duyệt sáng kiến (`under_review`/`accepted`/`rejected`) | không | không | all | all |
+| `('view','feed-report')` | false | Đọc hàng đợi báo cáo + thống kê tương tác | không | **department** | all | all |
+
+Ghi chú:
+
+- **0 cặp `is_sensitive`** — SOCIAL không chở PII. Dữ liệu nhạy cảm duy nhất chạm tới là ngày sinh, và nó đã bị cắt còn **ngày + tháng** ngay ở DTO (SOC-DEC-007) ⇒ không cần cặp nhạy cảm, cũng **không** cần allowlist capability ở backend. Chốt cùng seed, không flip sau (bẫy `canonical-seed-pin-regression`).
+- **Employee được cấp đại trà 7 cặp** (`view:feed` + 6 cặp `create:*`) — khác hẳn `SOCIAL-DEC-006` của fbpost vốn **không** cấp cho employee. Hai bề mặt khác nhau, cố ý (SOC-DEC-004): một mạng xã hội mà nhân viên không đăng được bài thì không phải mạng xã hội.
+- **Tương tác cá nhân KHÔNG có cặp riêng** (SPEC-16 §11.2): thích · bỏ phiếu · lưu · đánh dấu đã xem · xác nhận đã đọc · báo cáo đều đi theo `('view','feed')` **cộng** điều kiện sở hữu hàng `user_id = actor`. Không đẻ verb mới ngoài DECISIONS-06 ⇒ **không** có ca test kiểu «thiếu cặp `create:feed-reaction`»; ca đúng là «không thấy bài thì không thích được».
+- **Vai trò trong nhóm là HÀNG, không phải cặp quyền** (SOC-DEC-006, khuôn per-project role của DECISIONS-04): `feed_group_members.role ∈ {owner, admin, member}`. Catalog quyền **không** phình theo số nhóm. `('manage','feed-group')` chỉ dành cho admin công ty can thiệp từ ngoài.
+- **Membership nhóm riêng tư RLS không ép được** — RLS chỉ biết tenant. Việc «bài nhóm riêng tư chỉ thành viên thấy» phải lọc **trong SQL** ở service (LEFT JOIN membership, không lọc ở JS) và có **ca IDOR bắt buộc**. Đây là điểm thủng nguy hiểm nhất của module (SPEC-16 §3.4).
+- **`('view','feed-report')` là cặp DUY NHẤT có scope khác nhau theo vai**: manager `Department` (chỉ báo cáo/thống kê trong đơn vị mình), HR và admin `Company`. Sàn scope của route thống kê ép ở service.
+- **Ngoài audience → 404, không 403** (SPEC-16 §12): trả 403 cho một bài mà caller không được thấy là rò sự tồn tại của bài.
+- **Ma trận seed dự kiến = 43 hàng** `role_permissions`: `employee` 7 · `manager` 8 (7 + `view:feed-report`@Department) · `hr` 14 · `company-admin` 14 (7 + 8 + 14 + 14 = 43) — **cộng 0 hàng** cho `payroll-officer`/`recruiter`/`asset-manager`/`office-admin` (các role hệ thống này không nhận gì thêm ngoài bộ của `employee` khi người dùng đồng thời giữ vai `employee`). Migration verify fail-loud đúng số; `super-admin` không enumerate (nhận qua `SuperAdminBootstrapService`).
+- **Census grant phải phủ 4 hình dạng wildcard** (`*:*` · `verb:*` · `*:resource` · cặp tường minh) — không để cặp `feed-*` lọt vào vai nào qua đường wildcard ngoài ý muốn.
+- **KHÔNG đụng ba cặp `social-*`:** migration `0544` có bước verify **đếm grant `social*` của `employee`** và RAISE nếu khác 0. Đặt tên resource mới là `social-*` sẽ làm đỏ verify đó trên PROD — đây là lý do kỹ thuật của tiền tố `feed-`.
+- Chi tiết mã lỗi/quy tắc: [SPEC-16 §11–13](<SPEC/SPEC-16 SOCIAL.md>); schema: [DB-17](<DB/DB-17 SOCIAL Database Design.md>); API: [API-19](<API Design/API-19_SOCIAL_API_Design.md>).
+
+---
+
 ## 10. Nguyên tắc dữ liệu nhạy cảm (SPEC-01 §11.3)
 
 Dữ liệu nhạy cảm: lương · tài khoản ngân hàng · CCCD/CMND · hợp đồng · hồ sơ nhân sự · dữ liệu kỷ luật/nghỉ việc · chấm công chi tiết · log hệ thống.

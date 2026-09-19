@@ -46,6 +46,9 @@ const EPIC_MODULE = {
   18: "ROOM", // SPEC-14 — wave S11-OFFICE (IMP02 §8.19, bổ sung 2026-08-29)
   19: "RECRUIT", // SPEC-12 — wave S12-RECRUIT (IMP02 §8.20, bổ sung 2026-08-31)
   20: "PAYROLL", // SPEC-11 — wave S13-PAYROLL (IMP02 §8.21, bổ sung 2026-08-31)
+  21: "SOCIAL", // SPEC-16 — wave S16-SOCIAL (IMP02 §8.22, bổ sung 2026-09-18).
+  //     Mã module SOCIAL có HAI bề mặt: mạng xã hội nội bộ (module này) và app vệ tinh
+  //     đăng bài Facebook (wave S9, tiện ích con). WO của cả hai đều gắn moduleCode SOCIAL.
 };
 
 // Sprint của 1 story theo IMPLEMENTATION-02 §9 (story trọng tâm mỗi sprint, không chỉ theo epic).
@@ -67,6 +70,9 @@ function sprintOfStory(n) {
   // KHÔNG có Sprint 14: wave S14 là dọn/hợp nhất, không cấp story IMP02 mới.
   // Thiếu nhánh này thì 191+ rơi vào "?" và biến mất khỏi mọi bảng lọc theo sprint.
   if (inR(191, 204)) return "S15";
+  // 205-218 = EPIC-21 SOCIAL (SC-01..14) — wave S16-SOCIAL (IMP02 §9 Sprint 16).
+  // Dải đo lúc viết DOC-1: cao nhất đang dùng trước đó là 204.
+  if (inR(205, 218)) return "S16";
   return "?";
 }
 

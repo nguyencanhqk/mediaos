@@ -62,11 +62,24 @@ function migrationHead() {
 
 // Map từ khoá → spec MVP (để "kiểm tra ở đâu" trỏ đúng tài liệu nghiệm thu).
 const MODULE_SPEC = [
+  // SOCIAL đặt TRÊN CHAT và trên AUTH/HR/TASK/DASH/NOTI (bổ sung 2026-09-18, S16-SOCIAL-DOC-1):
+  //   - trên CHAT vì tiêu đề S16-SOCIAL-BE-1 chứa "bộ emoji CHAT" ⇒ regex \bchat\b sẽ cướp;
+  //   - trên DASH vì WO kiểm duyệt chứa "hàng đợi báo cáo" (DASH bắt "báo cáo");
+  //   - trên NOTI/AUTH/HR/TASK vì WO chứa "thông báo"/"permission"/"nhân sự"/"dự án".
+  //   - trên PAYROLL vì tiêu đề S16-SOCIAL-QA-1 liệt kê vai "payroll-officer/recruiter không thêm gì"
+  //     ⇒ regex PAYROLL cướp mất (đo thật 18/09/2026, không phải suy đoán).
+  // KHÔNG đưa token "fbpost" vào đây: WO ops/QA chỉ NHẮC tới dịch vụ fbpost (S10-OPS-SITEWATCH-1,
+  // S10-QA-CHUNKTEST-FBPOST-1) sẽ bị kéo nhầm về SPEC-16. WO fbpost thật khớp qua \bsocial\b / "đăng bài".
+  // \bfeed\b có word-boundary nên KHÔNG bắt "feedback" của RECRUIT (ký tự 'b' là word-char).
+  {
+    re: /(\bsocial\b|mạng xã hội|bảng tin|newsfeed|\bfeed\b|feed[-_]|bài đăng|đăng bài|sáng kiến|bình chọn|vinh danh|hashtag)/i,
+    spec: "docs/SPEC/SPEC-16 SOCIAL.md",
+  },
   // PAYROLL đặt TRÊN CÙNG: tiêu đề WO S13-PAYROLL-* chứa "chấm công"/"phép" (ATT/LEAVE bắt), "permission"
   // (AUTH bắt), "employee"/"hồ sơ" (HR bắt), "widget DASH" (DASH bắt) — để sau là trỏ nhầm SPEC-04/02/03.
   // KHÔNG dùng "lương" trần: "chất lượng"/"khối lượng" khác dấu nên không đụng, nhưng cụm ghép an toàn hơn.
   {
-    re: /(payroll|payslip|salary|tiền lương|kỳ lương|bảng lương|phiếu lương|hồ sơ lương|thưởng\/phạt)/i,
+    re: /(\bpayroll\b|\bpayslip\b|\bsalary\b|tiền lương|kỳ lương|bảng lương|phiếu lương|hồ sơ lương|thưởng\/phạt)/i,
     spec: "docs/SPEC/SPEC-11 PAYROLL.md",
   },
   // RECRUIT đặt TRÊN CÙNG: tiêu đề WO S12-RECRUIT-* chứa "employee" (HR bắt), "permission §9f" (AUTH bắt),
