@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**507 WO** · có micro-plan: **306/507** · ⬜ 18 chờ · 🔵 0 đang làm · ✅ 488 xong · 🔴 1 chặn
+**509 WO** · có micro-plan: **310/509** · ⬜ 12 chờ · 🔵 0 đang làm · ✅ 496 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -550,20 +550,22 @@
 | `S15-PAYROLL-BE-5` | 🟡 | ✅ xong | [📄](S15-PAYROLL-BE-5.md) | ✅S15-PAYROLL-BE-3 ✅S15-PAYROLL-BE-4 | BE track D (phần 1 — owner tách PDF sang S15-PAYROLL-BE-5B, 17/09): 07 |
 | `S15-PAYROLL-BE-5B` | 🟡 | ✅ xong | [📄](S15-PAYROLL-BE-5B.md) | ✅S15-PAYROLL-BE-5 | BE track D (phần 2 — tách từ BE-5 theo owner O-1, 17/09): PDF phiếu lư |
 | `S15-PAYROLL-FE-4` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-4.md) | ✅S15-PAYROLL-BE-5 ✅S15-PAYROLL-BE-5B ✅S15-PAYROLL-FE-2 ✅S15-PAYROLL-FE-3 | FE track D: PAY-SCREEN-015 Tổng quan `/payroll` (6 biểu đồ Recharts +  |
-| `S15-PAYROLL-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-FE-4 | QA PAYROLL v2: ma trận allow/deny per-pair TỪNG route mới (kể cả hr-ma |
-| `S15-PAYROLL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S15-PAYROLL-QA-1 | Widget DASH «ngân sách lương năm» (kế hoạch/thực hiện/chênh lệch) + «t |
+| `S15-PAYROLL-QA-1` | 🟡 | ✅ xong | [📄](S15-PAYROLL-QA-1.md) | ✅S15-PAYROLL-FE-4 | QA PAYROLL v2: ma trận allow/deny per-pair TỪNG route mới (kể cả hr-ma |
+| `S15-PAYROLL-DASH-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S15-PAYROLL-QA-1 | Widget DASH «ngân sách lương năm» (kế hoạch/thực hiện/chênh lệch) + «t |
 | `S15-PAYROLL-DEBT-1` | 🟡 | ✅ xong | [📄](S15-PAYROLL-DEBT-1.md) | ✅S15-PAYROLL-FE-2 ✅S15-PAYROLL-FE-3 ✅S15-PAYROLL-BE-4B | Trả nợ vệ sinh S15: tách 2 file > 800 dòng (i18n payroll.ts · contract |
-| `S15-PAYROLL-FE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-FE-1 | Nợ G3 (FE-1): sửa/xoá mềm phiên bản hồ sơ lương (PAYROLL-API-022 PATCH |
-| `S15-UI-SHELL-2` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S15-UI-SHELL-1 | Nợ S15-UI-SHELL-1: tách apps/app/src/layouts/workspace/sidebar-registr |
+| `S15-PAYROLL-FE-5` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-5.md) | ✅S15-PAYROLL-FE-1 | Nợ G3 (FE-1): sửa/xoá mềm phiên bản hồ sơ lương (PAYROLL-API-022 PATCH |
+| `S15-PAYROLL-FE-6` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-6.md) | ✅S15-PAYROLL-QA-1 | Nợ FE-3 (lộ ra ở S15-PAYROLL-QA-1 T5): màn chi tiết đợt chi trả chưa c |
+| `S15-PAYROLL-FE-7` | 🟡 | ✅ xong | [📄](S15-PAYROLL-FE-7.md) | ✅S15-PAYROLL-FE-6 | Nợ FE-6: ba vế còn lại của PAYROLL-API-069 chưa có UI ở PAY-SCREEN-013 |
+| `S15-UI-SHELL-2` | 🟢 | ✅ xong | — *(chưa)* | ✅S15-UI-SHELL-1 | Nợ S15-UI-SHELL-1: tách apps/app/src/layouts/workspace/sidebar-registr |
 | `S15-PAYROLL-BE-2B` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S15-PAYROLL-BE-3 | Nợ ghi nhận của S15-PAYROLL-BE-2 (chưa có WO): N+1 assertGraphsAfterEd |
 
 ## Sprint 16
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S16-SOCIAL-DOC-1` | 🟢 | ⬜ chờ | [📄](S16-SOCIAL-WAVE.md) | — | Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 |
-| `S16-SOCIAL-FBPOST-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DOC-1 | Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối si |
-| `S16-SOCIAL-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DOC-1 | Schema + migration SOCIAL track A (nối tiếp head lúc merge): feed_post |
+| `S16-SOCIAL-DOC-1` | 🟢 | ✅ xong | [📄](S16-SOCIAL-WAVE.md) | — | Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 |
+| `S16-SOCIAL-FBPOST-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-DOC-1 | Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối si |
+| `S16-SOCIAL-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-DOC-1 | Schema + migration SOCIAL track A (nối tiếp head lúc merge): feed_post |
 | `S16-SOCIAL-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DB-1 | Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ n |
 | `S16-SOCIAL-FE-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-BE-1 | FE track A: template cổng thông tin 3 cột (apps/app/src/layouts/portal |
 | `S16-SOCIAL-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-DB-1 | Schema + migration SOCIAL track B: feed_groups · feed_group_members (r |
@@ -611,7 +613,7 @@
 | `S18-QA-LEAVEDATEBOMB-1` | 🟡 | ✅ xong | — *(chưa)* | — | `leave-request.int.spec.ts` dùng NGÀY CỨNG tuyệt đối — đỏ từ 0h 09/09/ |
 | `S18-SEC-AUDITGATE-1` | 🟡 | ✅ xong | [📄](S18-SEC-AUDITGATE-1.md) | — | Cổng `Dependency scan (pnpm audit)` ĐỎ trên master từ 09/09 — 5 adviso |
 | `S18-AUTH-490DEBT-1` | crown | ✅ xong | [📄](S18-AUTH-490DEBT-1.md) | — | Trả 3 nợ FULL-gate của #490 (owner chốt 11/09): §8.2 trần ghi audit nh |
-| `S18-OPS-MINIOPIN-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Ghim image MinIO của docker-compose.yml (container PROD `mediaos-minio |
+| `S18-OPS-MINIOPIN-1` | 🟡 | ✅ xong | — *(chưa)* | — | Ghim image MinIO của docker-compose.yml (container PROD `mediaos-minio |
 
 ---
 

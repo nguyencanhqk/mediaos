@@ -16669,7 +16669,7 @@ export const backlog = [
     ],
     notes: [
       "🟡 LIGHT gate; cùng màn với FE-6 — làm khi FE-6 đã merge để tránh xung đột file.",
-      "ĐÃ LÀM 18/09: hộp «Sửa thông tin đợt» ở menu ⋯ của PAY-SCREEN-013 (components/PaymentBatchEditDialog.tsx) — ba vế đi CHUNG một PATCH (BE gộp thành một updateTx), ô chọn trạng thái sinh từ paymentBatchEditableStatusEnum.options nên Completed không thể lọt, chỉ gửi trường THẬT SỰ đổi (thân rỗng vẫn sinh hàng audit changedFields: []), ô trống ⇒ null chứ không phải \"\".",
+      'ĐÃ LÀM 18/09: hộp «Sửa thông tin đợt» ở menu ⋯ của PAY-SCREEN-013 (components/PaymentBatchEditDialog.tsx) — ba vế đi CHUNG một PATCH (BE gộp thành một updateTx), ô chọn trạng thái sinh từ paymentBatchEditableStatusEnum.options nên Completed không thể lọt, chỉ gửi trường THẬT SỰ đổi (thân rỗng vẫn sinh hàng audit changedFields: []), ô trống ⇒ null chứ không phải "".',
       "BẪY ghi lại: hai ca deny 071 của QA-1 lấy «nút ⋯ vắng» làm bằng chứng, nhưng cặp batchExport CHÍNH LÀ manage:payment-batch — cặp mở mục «Sửa» ⇒ nút ⋯ còn mọc vì lý do khác. Đã đổi sang mở menu rồi assert MỤC xuất vắng (mục sửa có mặt ⇒ ca không rỗng). Cổng 071 không đổi.",
       "RỦI RO ĐÃ CHẤP NHẬN (plan §2 D5b, cả hai reviewer nêu): hộp không re-sync khi đang mở ⇒ sửa đồng thời có thể đè note/payDate người khác vừa đổi; BE không có kiểm tranh chấp lạc quan cho hai trường đó. Đóng hẳn cần cột phiên bản ở BE — WO riêng.",
       "BẪY ghi lại: payrollErrorI18nKey tra kind → code → generic và KHÔNG đọc status ⇒ 404 không kind rơi errors.generic, KHÔNG phải errors.notFound. 404 ở màn này (đợt biến mất) có chữ riêng qua override tại call-site, không thêm kind (census PAYROLL_ERROR_KINDS assert đẳng thức với BE).",
@@ -16868,7 +16868,11 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["security-review"],
-    depends_on: ["S16-SOCIAL-DB-1"],
+    // S16-SOCIAL-DB-1 (plan §0.4) — THÊM DB-2: DB-17 §9.1 gán TOÀN BỘ NOTI catalog UNION-ADD cho DB-2,
+    // kể cả 5/9 event thuộc Track A (mention · bình luận vào bài của tôi · trả lời · tin tức mới · bài bị
+    // báo cáo). Chạy BE-1 trước DB-2 ⇒ emit event chưa có trong catalog ⇒ vỡ CHECK khi ghi (nhớ: CHECK
+    // catalog NOTI sống ở HAI bảng). Không phải nợ "ghi chú cho người chốt" — sửa thẳng ở đây.
+    depends_on: ["S16-SOCIAL-DB-1", "S16-SOCIAL-DB-2"],
     plan: "docs/plans/S16-SOCIAL-BE-1.md",
     src: [
       "API-19 (DOC-1) SOCIAL-API-001..~025 · SPEC-16 §11/§12/§13 · SOC-DEC-004/005/007/008/010",
@@ -16956,6 +16960,7 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate + Opus. Nối tiếp DB-1, không song song với lane migration nào khác (kể cả S15).",
+      "⚠️ NỢ BẮT BUỘC TỪ DB-1 (plan S16-SOCIAL-DB-1 §0.2): `feed_posts.group_id` được DB-1 tạo là cột UUID nullable KHÔNG kèm FK, vì `feed_groups` lúc đó chưa tồn tại. DB-2 PHẢI thêm: ALTER TABLE feed_posts ADD CONSTRAINT feed_posts_group_fk FOREIGN KEY (company_id, group_id) REFERENCES feed_groups (company_id, id) ON DELETE NO ACTION. Quên = cột vĩnh viễn không có composite tenant-FK và census MÙ (xtenant-fk-ratchet chỉ đếm FK ĐANG TỒN TẠI). Lưới: `s16-social-db1-invariants.int-spec.ts` có assert TỰ LÊN NÒNG — khi `to_regclass('feed_groups')` khác NULL mà FK chưa có thì spec ĐỎ.",
     ],
   },
   {

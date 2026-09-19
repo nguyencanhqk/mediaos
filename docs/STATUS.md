@@ -1,20 +1,27 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-19 02:48Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-19 04:01Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S16-SOCIAL-DB-1 — Schema + migration SOCIAL track A (nối tiếp head lúc merge): feed_posts (type · audience · status · pinned · comments_locked · counters · search_vector) · feed_comments · feed_reactions · feed_mentions · feed_tags/feed_post_tags · feed_saved_posts · feed_post_views · feed_post_acks · feed_reports — RLS+FORCE TRƯỚC dữ liệu · composite tenant-FK · UNION-ADD file_links.object_type + audit object_types · seed 13 cặp feed-* + grant employee mặc định (§9h) · đo unaccent · contracts Zod mirror
+- **zone**: red · **skills**: security-review, database-review
+- **sửa ở đâu (paths)**: `apps/api/src/db/schema/**`, `apps/api/migrations/**`, `apps/api/test/**`, `packages/contracts/**`, `docs/DB/**`, `docs/plans/**`, `harness/backlog.mjs`
+- **phụ thuộc**: S16-SOCIAL-DOC-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] Migration đánh số NỐI TIẾP head thật lúc merge (S15-DB-1 có thể đã lấy 0569+ — đo journal), có mặt trong journal; RLS policy + FORCE TRƯỚC mọi dữ liệu; mọi FK mới kèm composite tenant-FK; soft-delete deleted_at ở feed_posts/feed_comments; UNIQUE feed_reactions(company,target_type,target_id,user_id) · feed_saved_posts(company,user,post) · feed_post_views(company,post,user) · feed_post_acks(company,post,user)
+  - [ ] CHECK: type ∈ share/news/idea/poll/kudos · audience ∈ company/group/org_unit (+ CHECK cặp: audience=org_unit ⇒ org_unit_id NOT NULL — KHÔNG vế IS NULL OR rỗng) · status ∈ published/hidden/deleted · emoji ∈ bộ CHAT; search_vector cột sinh: đo pg_extension unaccent — CÓ thì dùng, KHÔNG thì to_tsvector('simple') + ghi DB-17; KHÔNG CREATE EXTENSION
+  - [ ] Seed 13 cặp §9h ON CONFLICT DO NOTHING + grant per-(perm,role): employee/manager/hr/company-admin đủ nhóm create + view:feed Company; manage/approve/report cho company-admin + hr (manager view:feed-report Department) — KHÔNG đụng 3 cặp social-*; census grant phủ 4 hình dạng wildcard; file_links.object_type + audit_logs.object_types UNION-ADD feed_post/feed_comment/feed_group/feed_report đúng neo parse
+  - [ ] packages/contracts social/feed*.ts: Zod mirror CHECK HAI CHIỀU ĐÚNG BẰNG; barrel index.ts không đụng export park (bẫy TS2308); rls-registry + cleanupTenants nhận bảng mới; test schema + seed + invariants trên LANE_DB xanh; 4 vi phạm giả (audience lệch · emoji lạ · reaction đôi · cross-tenant FK) đều làm lưới ĐỎ
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🔴 `S15-PAYROLL-BE-2B` Nợ ghi nhận của S15-PAYROLL-BE-2 (chưa có WO): N+1 assertGraphsAfterEdit (một câu componentsTx mỗi mẫu, dưới khoá) · catalog thành phần không trần số hàng (045/047/048 tải + compile toàn bộ) · 6 CHECK chưa map qua mapPayrollPgError · precision trung gian 50 không trần
 - 🟢 `S16-SOCIAL-FBPOST-1` Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối sidebar SOCIAL «Đăng bài Facebook» (SOC-DEC-002): gate 3 cặp social-* cũ, mở SSO như cũ, i18n nav, registry moduleCode SOCIAL giữ — KHÔNG đụng apps/fbpost hay quyền
-- 🔴 `S16-SOCIAL-DB-1` Schema + migration SOCIAL track A (nối tiếp head lúc merge): feed_posts (type · audience · status · pinned · comments_locked · counters · search_vector) · feed_comments · feed_reactions · feed_mentions · feed_tags/feed_post_tags · feed_saved_posts · feed_post_views · feed_post_acks · feed_reports — RLS+FORCE TRƯỚC dữ liệu · composite tenant-FK · UNION-ADD file_links.object_type + audit object_types · seed 13 cặp feed-* + grant employee mặc định (§9h) · đo unaccent · contracts Zod mirror
 
 **CHỜ (kẹt phụ thuộc):**
-- `S16-SOCIAL-BE-1` Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ nguyên) track A: bài + tin tức (ghim · yêu cầu ack · danh sách đã đọc) · bình luận 1 cấp · reaction bộ emoji CHAT · mention feed_mentions + NOTI · hashtag · lưu · lượt xem lần đầu · báo cáo · tìm kiếm tsvector · sinh nhật day/month tôn trọng preference · guard 2 tầng + audience check org_unit · audit manage · @Idempotent · RealtimeEmitter room co:{c}:feed payload DTO — deny-path RED trước ⏳ cần: S16-SOCIAL-DB-1
+- `S16-SOCIAL-BE-1` Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ nguyên) track A: bài + tin tức (ghim · yêu cầu ack · danh sách đã đọc) · bình luận 1 cấp · reaction bộ emoji CHAT · mention feed_mentions + NOTI · hashtag · lưu · lượt xem lần đầu · báo cáo · tìm kiếm tsvector · sinh nhật day/month tôn trọng preference · guard 2 tầng + audience check org_unit · audit manage · @Idempotent · RealtimeEmitter room co:{c}:feed payload DTO — deny-path RED trước ⏳ cần: S16-SOCIAL-DB-1, S16-SOCIAL-DB-2
 - `S16-SOCIAL-FE-1` FE track A: template cổng thông tin 3 cột (apps/app/src/layouts/portal/, <1024px gập 1 cột) · SOC-SCREEN-001 Bảng tin (composer 5 nút · thẻ bài · lọc/sắp xếp · badge bài mới) · 002 Chi tiết bài · 003 Tin tức (+ xác nhận đọc + danh sách đã đọc) · 004 Đã lưu · 005 Trang cá nhân · rail Sinh nhật/Tin nổi bật · tìm kiếm topbar · ME thêm «Bài viết của tôi»/«Đã lưu» · bật modules.is_active SOCIAL (khuôn 0567) · MODULE_APP_METADATA SOCIAL ⏳ cần: S16-SOCIAL-BE-1
 - `S16-SOCIAL-DB-2` Schema + migration SOCIAL track B: feed_groups · feed_group_members (role hàng owner/admin/member · status active/pending) · feed_polls · feed_poll_options · feed_poll_votes · feed_ideas (FSM + reviewed_by/at/note) · feed_kudos · feed_kudos_recipients · feed_kudos_badges (seed catalog) · NOTI-EVENT mới (~9) ở CẢ HAI bảng catalog + template · cặp manage/approve còn thiếu ⏳ cần: S16-SOCIAL-DB-1
 - `S16-SOCIAL-BE-2` BE track B: nhóm (tạo · xin vào · duyệt · vai trò hàng · bài trong nhóm — membership check TRONG SQL) · bình chọn (bỏ/đổi phiếu · ẩn danh không lộ user_id · job đóng theo hạn khuôn system-jobs) · sáng kiến assertIdeaTransition + vết duyệt · kudos + huy hiệu · outbox NOTI ~9 sự kiện · room co:{c}:feedgroup:{id} — deny-path RED: đọc bài nhóm riêng tư khi không là thành viên · vote poll đã đóng · vote đôi · duyệt sáng kiến không có cặp ⏳ cần: S16-SOCIAL-DB-2, S16-SOCIAL-BE-1
@@ -32,7 +39,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `master` · **file đang đổi (dirty)**: 4
 - **migration head**: idx 243 — `0576_s15payrolldash1_widget_budget_advance` (244 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -41,6 +48,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `d3ffe8d4` | 2026-09-19 | chore(docs): regen STATUS — S18-OPS-MINIOPIN-1 #527 đã merge master (c714c0a4) |
 | `c714c0a4` | 2026-09-19 | fix(ops): S18-OPS-MINIOPIN-1 — ghim image MinIO/mc sang quay.io theo đúng bản đang chạy (#527) |
 | `a293d93c` | 2026-09-19 | chore(docs): regen STATUS — merge #523 #524 #525 #526, mở khoá wave S16 |
 | `c667c15d` | 2026-09-19 | docs(social): S16-SOCIAL-DOC-1 — bộ tài liệu SOCIAL (SPEC-16 · DB-17 · API-19 · §9h) (#526) |
@@ -52,7 +60,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `ed5aba85` | 2026-09-18 | chore(docs): handoff (t) — S15-PAYROLL-DASH-1 PR #522 mở, chờ owner merge |
 | `a637a03a` | 2026-09-18 | chore(docs): regen STATUS + handoff (s) — S15-PAYROLL-FE-6 #521 đã merge master (7ed4c72f) |
 | `7ed4c72f` | 2026-09-18 | feat(payroll): S15-PAYROLL-FE-6 — thao tác trên dòng đợt chi trả (069) (#521) |
-| `e33b7783` | 2026-09-18 | chore(docs): regen STATUS + handoff (r) — S15-PAYROLL-QA-1 #520 đã merge master (8bc5c955) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
