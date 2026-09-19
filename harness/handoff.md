@@ -2,7 +2,7 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
-## Phiên 2026-09-18 (u) — **S16-SOCIAL-DOC-1: PR #526 MỞ, chờ owner merge** (mở wave S16)
+## Phiên 2026-09-18 (v) — **S16-SOCIAL-DOC-1: PR #526 MỞ, chờ owner merge** (mở wave S16)
 
 **Bắt đầu phiên sau ở đây:** nhánh `feat/s16-social-doc-1` (`fde92489`, base master `71bc2289`). Docs-only + harness. Việc còn lại: đợi CI → owner merge → regen STATUS + handoff. Đọc memory `s16-social-doc1-wave-state` trước khi đụng bất kỳ WO S16 nào.
 
@@ -19,6 +19,26 @@
 **Nợ ĐO chuyển cho DB-1:** recycle-bin registry (có CHECK riêng không?) · `unaccent` (`pg_extension`; hàm STABLE nên phải bọc IMMUTABLE) · route-census ≠ 53 (fbpost cũng mang tag SOCIAL) · migration `0577+` đo journal.
 
 **Chi phí phiên: hook báo ~$355** lúc mở PR (2 vòng plan-reviewer + bộ tài liệu lớn). Lặp lại bài học: kết thúc phiên ngay khi PR mở.
+
+## Phiên 2026-09-18 (u) — **S15-PAYROLL-FE-7: PR #523 MỞ, chờ owner merge** · DASH-1 #522 đã đóng sổ
+
+**Bắt đầu phiên sau ở đây:** nhánh `feat/s15-payroll-fe-7` (1 commit `756156fe`, base master `71bc2289`). Việc còn lại: đợi CI → owner merge → regen STATUS + handoff. **Backlog ĐÃ đóng trong commit này** (`S15-PAYROLL-DASH-1` → done, `S15-PAYROLL-FE-7` → done + 5 note) nên không cần thêm vòng nữa.
+
+**Câu hỏi treo của phiên (t) đã ĐÓNG:** CI PR #522 xanh toàn bộ (kể cả «Build · Typecheck · Migrate · Test» = full API suite trên Linux) ⇒ **2 ca đỏ cục bộ lúc đó đúng là flake máy này**, không phải lỗi sản phẩm. Không cần truy nữa.
+
+**FE-7 làm gì:** mục «Sửa thông tin đợt» ở menu ⋯ của PAY-SCREEN-013 + `components/PaymentBatchEditDialog.tsx` — ba vế còn lại của 069 (`status` Draft↔Ready · `payDate` · `note`). Ba trường đi CHUNG một PATCH (BE gộp thành một `updateTx`) — **khác** ba mảng dòng của FE-6. Ô chọn trạng thái sinh từ `paymentBatchEditableStatusEnum.options` nên `Completed` không thể lọt. Chỉ gửi trường THẬT SỰ đổi (thân rỗng vẫn sinh hàng audit `changedFields: []`). Ô trống ⇒ `null` chứ không phải `""`.
+
+**HAI BẪY đáng nhớ nhất phiên này:**
+1. 🔴 **Nút `⋯` vắng KHÔNG phải bằng chứng cho «mục X vắng».** Hai ca deny 071 của QA-1 đỏ vì cặp `batchExport` **chính là** `manage:payment-batch` — cặp mà FE-7 dùng để mở mục «Sửa» ⇒ nút ⋯ còn mọc vì lý do khác. Cổng 071 không hề lỏng. Luật rút ra: ca deny đo một mục trong menu/popover PHẢI **mở container rồi assert MỤC**, và assert thêm một mục khác CÓ mặt để ca không rỗng. Mọi màn dùng `DetailPageHeader.overflowItems` đều dính lớp lỗi này khi có WO thứ hai thêm mục.
+2. **`payrollErrorI18nKey` tra `kind → code → generic`, KHÔNG đọc `status`** (`payroll-errors.ts:243-254`) ⇒ **404 không kind rơi `errors.generic`**, không phải `errors.notFound` (tôi viết sai trong bản plan đầu, đã sửa). Muốn 404 có chữ riêng thì override TẠI CALL-SITE, không sửa bảng chung và không thêm `kind` (census assert đẳng thức với BE).
+
+**Cổng:** LIGHT gate 2/2 PASS (0 CRITICAL/0 HIGH); 1 MEDIUM + 2 LOW của reviewer đã vá trong PR. Spec mới kiểm bằng **3 đột biến** (bỏ chuẩn hoá `null` giết 4 ca · gõ tay danh sách trạng thái kèm `Completed` giết A2 · bỏ cổng mục menu giết cả D1 lẫn D2). apps/app 4 shard 2.972/2.972 · census 39/39 · typecheck · lint 0 error · build xanh. Không cần `LANE_DB` (thuần FE).
+
+**Rủi ro đã chấp nhận, ghi cho QA:** hộp không re-sync khi đang mở ⇒ sửa đồng thời có thể đè `note`/`payDate` người khác vừa đổi; BE không có kiểm tranh chấp lạc quan cho hai trường đó. Đóng hẳn cần cột phiên bản ở BE ⇒ WO riêng.
+
+**Còn lại của S15:** `S15-PAYROLL-FE-5` (nợ G3 — sửa/xoá phiên bản hồ sơ lương) · `S15-UI-SHELL-2` (tách sidebar-registry 1439 dòng) · `S15-PAYROLL-BE-2B` (🔴 FULL gate + plan-reviewer, cần owner chốt trần catalog TRƯỚC khi code).
+
+**Chi phí phiên: hook báo ~$61.5** lúc mở PR — rẻ hơn hẳn (q)/(r)/(t) nhờ kết thúc ngay khi PR mở và chỉ mở 2 subagent gate.
 
 ## Phiên 2026-09-18 (t) — **S15-PAYROLL-DASH-1: PR #522 MỞ, chờ owner merge** (đóng wave S15)
 

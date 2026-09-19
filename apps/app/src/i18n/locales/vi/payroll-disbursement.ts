@@ -109,6 +109,7 @@ export default {
   },
   paymentBatchDetail: {
     back: "Về danh sách đợt chi trả",
+    edit: "Sửa thông tin đợt",
     export: "Xuất tệp chuyển khoản",
     exportNoPermission:
       "Xuất tệp chuyển khoản cần đủ ba quyền: quản lý đợt chi trả, xuất dữ liệu lương và xem phiếu lương.",
@@ -152,6 +153,22 @@ export default {
       accountHolder: "Chủ tài khoản",
       paidAt: "Đã chi lúc",
     },
+  },
+
+  // ── S15-PAYROLL-FE-7 — sửa thông tin đợt (069: status · payDate · note) ──
+  paymentBatchEdit: {
+    title: "Sửa thông tin đợt chi trả",
+    statusLabel: "Trạng thái",
+    statusHint:
+      "Chỉ chuyển được giữa «Nháp» và «Sẵn sàng». «Đã hoàn tất» chỉ đạt được bằng nút Hoàn tất đợt, và không quay lại được.",
+    payDateLabel: "Ngày chi",
+    payDateHint: "Để trống nếu chưa chốt ngày chi.",
+    noteLabel: "Ghi chú",
+    noteHint: "Tối đa 500 ký tự. Xoá hết nội dung là bỏ ghi chú của đợt.",
+    submit: "Lưu thay đổi",
+    saved: "Đã lưu thông tin đợt chi trả.",
+    batchNotFound:
+      "Đợt chi trả này không còn tồn tại (có thể vừa bị xoá ở nơi khác). Hãy quay lại danh sách đợt chi trả.",
   },
 
   paymentBatchAddPayees: {

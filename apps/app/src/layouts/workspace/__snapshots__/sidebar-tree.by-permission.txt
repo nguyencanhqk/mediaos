@@ -1,0 +1,278 @@
+## ALL
+### DASH
+dash.overview
+### HR
+hr.overview
+hr.employees
+hr.org-chart
+hr.profile-change-requests
+hr.audit-logs
+hr.contracts
+hr.employee-code-config
+hr.departments
+hr.positions
+hr.job-levels
+hr.contract-types
+### ATT
+att.today
+att.my-records
+att.adjustment-requests.my
+att.remote-work-requests
+att.team-records
+att.records
+att.adjustment-requests
+att.shifts
+att.shift-assignments
+att.rules
+att.reports
+att.audit-logs
+### LEAVE
+leave.overview
+leave.calendar
+leave.my-requests
+leave.my-balances
+leave.approvals
+leave.all-requests
+leave.public-holidays
+leave.types
+leave.policies
+leave.balances
+leave.reports
+leave.audit-logs
+### TASK
+task.overview
+task.my-tasks
+task.overdue
+task.projects
+### NOTI
+noti.list
+noti.events
+noti.templates
+noti.delivery-logs
+### FOUNDATION
+system.overview
+system.company
+system.company-settings
+system.settings
+system.users
+system.modules
+system.roles
+system.permissions
+system.sequences
+system.seeds
+system.retention
+system.audit-logs
+system.login-logs
+system.security-events
+system.files
+system.health
+system.file-access-logs
+system.jobs
+### ME
+me.overview
+me.attendance
+me.leave
+me.tasks
+me.assets
+me.payslips
+me.roomBookings
+me.payrollAdvances
+me.notifications
+me.preferences.notifications
+me.preferences.appearance
+me.profile
+me.profile.change-requests
+me.account
+me.security.password
+me.security.sessions
+me.security.activity
+me.training
+me.lms
+me.chat
+### GOAL
+goal.list
+### ASSET
+asset.list
+asset.inventories
+### ROOM
+room.calendar
+room.manage
+### RECRUIT
+recruit.jobs
+recruit.pipeline
+recruit.interviews
+### PAYROLL
+payroll.overview
+payroll.employees
+payroll.salaryProfiles
+payroll.salaryComponents
+payroll.templates
+payroll.inputData
+  payroll.bonusPenalties
+payroll.calculation
+  payroll.periods
+  payroll.advances
+  payroll.budgets
+payroll.paymentBatches
+payroll.reports
+payroll.statutoryRates
+## ME_ONLY
+### DASH
+(trống)
+### HR
+(trống)
+### ATT
+(trống)
+### LEAVE
+(trống)
+### TASK
+(trống)
+### NOTI
+(trống)
+### FOUNDATION
+(trống)
+### ME
+me.overview
+me.attendance
+me.leave
+me.tasks
+me.payslips
+me.payrollAdvances
+me.notifications
+me.preferences.notifications
+me.preferences.appearance
+me.profile
+me.profile.change-requests
+me.account
+me.security.password
+me.security.sessions
+me.security.activity
+### GOAL
+(trống)
+### ASSET
+(trống)
+### ROOM
+(trống)
+### RECRUIT
+(trống)
+### PAYROLL
+(trống)
+## EMPLOYEE
+### DASH
+dash.overview
+### HR
+(trống)
+### ATT
+(trống)
+### LEAVE
+(trống)
+### TASK
+task.overview
+task.my-tasks
+task.overdue
+### NOTI
+(trống)
+### FOUNDATION
+(trống)
+### ME
+me.overview
+me.attendance
+me.leave
+me.tasks
+me.payslips
+me.payrollAdvances
+me.notifications
+me.preferences.notifications
+me.preferences.appearance
+me.profile
+me.profile.change-requests
+me.account
+me.security.password
+me.security.sessions
+me.security.activity
+### GOAL
+goal.list
+### ASSET
+(trống)
+### ROOM
+(trống)
+### RECRUIT
+(trống)
+### PAYROLL
+(trống)
+## HR_ISH
+### DASH
+(trống)
+### HR
+hr.overview
+hr.employees
+hr.org-chart
+hr.audit-logs
+hr.departments
+### ATT
+(trống)
+### LEAVE
+(trống)
+### TASK
+(trống)
+### NOTI
+(trống)
+### FOUNDATION
+system.audit-logs
+system.login-logs
+system.security-events
+### ME
+me.overview
+me.attendance
+me.leave
+me.tasks
+me.payslips
+me.payrollAdvances
+me.notifications
+me.preferences.notifications
+me.preferences.appearance
+me.profile
+me.profile.change-requests
+me.account
+me.security.password
+me.security.sessions
+me.security.activity
+### GOAL
+(trống)
+### ASSET
+(trống)
+### ROOM
+(trống)
+### RECRUIT
+(trống)
+### PAYROLL
+(trống)
+## PAYROLL_PARTIAL
+### DASH
+(trống)
+### HR
+(trống)
+### ATT
+(trống)
+### LEAVE
+(trống)
+### TASK
+(trống)
+### NOTI
+(trống)
+### FOUNDATION
+(trống)
+### ME
+(trống)
+### GOAL
+(trống)
+### ASSET
+(trống)
+### ROOM
+(trống)
+### RECRUIT
+(trống)
+### PAYROLL
+payroll.calculation
+  payroll.periods
+  payroll.budgets
