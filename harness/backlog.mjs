@@ -16593,7 +16593,7 @@ export const backlog = [
     title:
       "Nợ G3 (FE-1): sửa/xoá mềm phiên bản hồ sơ lương (PAYROLL-API-022 PATCH, delete:true) ở tab «Hồ sơ lương» của PAY-SCREEN-007 — client đã có (payrollApi.updateSalaryProfile), UI chưa gọi",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/payroll/**",
       "apps/app/src/i18n/**",

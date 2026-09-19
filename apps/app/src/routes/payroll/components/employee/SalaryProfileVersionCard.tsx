@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { payrollApi, payrollKeys } from "@mediaos/web-core";
 import type { SalaryProfileDto, SalaryProfileListItemDto } from "@mediaos/contracts";
-import { StatusPill } from "@mediaos/ui";
+import { Button, StatusPill } from "@mediaos/ui";
 import { formatPayrollMoney, PAYROLL_NUMERIC_CELL_CLASS } from "../../payroll-format";
 
 /**
@@ -16,17 +16,34 @@ import { formatPayrollMoney, PAYROLL_NUMERIC_CELL_CLASS } from "../../payroll-fo
  * `items[]` vs `allowances[]`: đường đọc trả NGUYÊN cả hai, không hoà giải (expand-contract, BE-1);
  * hồ sơ v1 chưa qua đường ghi v2 có `allowances` mà 0 `items` ⇒ băng «di sản» để người dùng biết cần
  * tạo phiên bản mới qua catalog.
+ *
+ * ── Sửa / xoá (S15-PAYROLL-FE-5, PAYROLL-API-022) ────────────────────────────────────────────────
+ * Hai nút nằm **trong thân đã mở**, không ở hàng tiêu đề. Ba lý do (plan §2 D1): hàng tiêu đề CHÍNH LÀ
+ * một `<button>` (lồng thẻ là HTML sai) · form sửa cần `items[]`/`payRatioPct`… vốn chỉ có ở 021 nên
+ * mở thân xong là dữ liệu prefill **đã có trong tay** · và không phải prefetch 021 cho mọi phiên bản
+ * (mỗi lượt 021 là một hàng audit «đã xem lương» — đúng bẫy FE-1 đã ăn ở `payroll-period-tabs`).
+ *
+ * 🔴 `baseSalary` VẮNG KHOÁ (server mask) ⇒ **không mọc nút Sửa**: prefill sẽ ra ô trống và người dùng
+ * hoặc phải gõ lại lương mù, hoặc ghi đè bằng số họ đoán. Xoá vẫn mọc — payload `{delete:true}` không
+ * mang giá trị nào nên không có gì để ghi sai.
  */
 export function SalaryProfileVersionCard({
   profile,
   isCurrent,
   expanded,
   onToggle,
+  canManage,
+  onEdit,
+  onDelete,
 }: {
   profile: SalaryProfileListItemDto;
   isCurrent: boolean;
   expanded: boolean;
   onToggle: () => void;
+  /** `manage:salary-profile` (cặp SENSITIVE — đo bằng `useCanExact` ở tab cha). */
+  canManage: boolean;
+  onEdit: (detail: SalaryProfileDto) => void;
+  onDelete: () => void;
 }) {
   const { t } = useTranslation("payroll");
   const detailQuery = useQuery({
@@ -69,10 +86,68 @@ export function SalaryProfileVersionCard({
             <p className="text-muted-foreground">{t("salaryHistory.loadingDetail")}</p>
           )}
           {detailQuery.isError && <p className="text-danger">{t("salaryHistory.detailError")}</p>}
-          {detailQuery.data && <VersionDetail detail={detailQuery.data} />}
+          {detailQuery.data && (
+            <>
+              <VersionDetail detail={detailQuery.data} />
+              {canManage && (
+                <VersionActions detail={detailQuery.data} onEdit={onEdit} onDelete={onDelete} />
+              )}
+            </>
+          )}
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * 🔴 Tiền của phiên bản có hiện đủ hay không — điều kiện để cho sửa (plan §2 D6). Mục đích: ô trống vì
+ * bị mask mà người dùng gõ một số đoán vào thì diff coi là ĐỔI ⇒ PATCH đè lên giá trị thật đang giấu.
+ *
+ * Chỉ đo được bằng trường nào VẮNG KHOÁ **chỉ khi** bị mask. Đúng hai trường như vậy, cả hai nằm thẳng
+ * trong `when(canSeeMoney, …)` và KHÔNG có null-guard: `baseSalary` (`payroll.mapper.ts:88`, DB CHECK
+ * giữ `> 0` nên không bao giờ NULL) và `items[].amount` (`:68`).
+ *
+ * ⚠️ **ĐỪNG thêm `insuranceSalary` / `probationSalary` / `payRatioPct` vào đây.** Mapper gộp `null`
+ * THÀNH vắng khoá (`:91-96`, `:105`), mà `null` là trạng thái THƯỜNG («dùng lương cơ bản» — DB-13
+ * §12.1). Thêm vào ⇒ nút Sửa biến mất ở gần như MỌI hồ sơ, chứ không phải chỉ khi mask. Ba trường đó
+ * được che bởi lớp khác: không đụng tới thì diff không sinh khoá, nên không có gì để ghi đè.
+ *
+ * Hôm nay masking là tất-cả-hoặc-không ở mức route (021 không thuộc `MONEY_FREE_ROUTES`) nên `baseSalary`
+ * một mình đã đủ; `items[].amount` giữ sẵn cho trường hợp cờ mask đi theo từng dòng.
+ */
+function isFullyVisible(detail: SalaryProfileDto): boolean {
+  if (detail.baseSalary === undefined) return false;
+  return (detail.items ?? []).every((item) => item.amount !== undefined);
+}
+
+function VersionActions({
+  detail,
+  onEdit,
+  onDelete,
+}: {
+  detail: SalaryProfileDto;
+  onEdit: (detail: SalaryProfileDto) => void;
+  onDelete: () => void;
+}) {
+  const { t } = useTranslation("payroll");
+  const canEdit = isFullyVisible(detail);
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+      {canEdit ? (
+        <Button size="sm" variant="outline" onClick={() => onEdit(detail)}>
+          <Pencil className="mr-2 size-4" />
+          {t("salaryHistory.edit")}
+        </Button>
+      ) : (
+        <span className="text-xs text-muted-foreground">{t("salaryHistory.editMasked")}</span>
+      )}
+      <Button size="sm" variant="ghost" className="text-danger" onClick={onDelete}>
+        <Trash2 className="mr-2 size-4" />
+        {t("salaryHistory.delete")}
+      </Button>
+    </div>
   );
 }
 

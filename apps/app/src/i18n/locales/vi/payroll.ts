@@ -295,6 +295,18 @@ export default {
     itemRemove: "Bỏ khoản",
     itemIncomplete: "Mỗi khoản cần chọn thành phần và định mức không âm.",
     itemDuplicate: "Mỗi thành phần chỉ khai một dòng.",
+    // ── S15-PAYROLL-FE-5 — chế độ sửa (PAYROLL-API-022) ──
+    editTitle: "Sửa phiên bản hồ sơ lương",
+    editDescription:
+      "Chỉ những ô bạn thay đổi mới được gửi đi. Phiếu lương đã phát hành giữ nguyên số cũ.",
+    editSubmit: "Lưu thay đổi",
+    editEmployeeLocked: "Không đổi được nhân sự của một phiên bản đã tạo.",
+    editItemsUntouched:
+      "Không sửa bảng này thì phụ cấp/khấu trừ hiện tại được giữ nguyên, không bị ghi đè.",
+    noChange: "Bạn chưa thay đổi gì.",
+    noteTooLong: "Ghi chú tối đa 500 ký tự.",
+    editItemsLegacyLocked:
+      "Hồ sơ này còn {{count}} khoản phụ cấp di sản (v1) chưa chuyển sang danh mục, nên không sửa phụ cấp tại đây được — sửa sẽ ghi đè mất các khoản đó. Hãy tạo phiên bản lương mới qua danh mục. Các ô khác vẫn sửa bình thường.",
   },
   salaryType: {
     GROSS: "GROSS",
@@ -409,6 +421,15 @@ export default {
       active: "Đang áp dụng",
       inactive: "Tạm ngưng",
     },
+    // ── S15-PAYROLL-FE-5 — sửa / xoá mềm phiên bản (PAYROLL-API-022) ──
+    edit: "Sửa phiên bản",
+    delete: "Xoá phiên bản",
+    editMasked: "Không sửa được vì bạn không xem được mức lương của phiên bản này.",
+    deleteTitle: "Xoá phiên bản hồ sơ lương?",
+    deleteDescription:
+      "Phiên bản hiệu lực từ {{date}} sẽ được gỡ khỏi lịch sử lương. Phiếu lương đã phát hành giữ nguyên số cũ và các phiên bản khác không đổi.",
+    deleteConfirm: "Xoá phiên bản",
+    deleting: "Đang xoá…",
   },
   insurance: {
     description:
