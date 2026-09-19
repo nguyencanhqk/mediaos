@@ -26,6 +26,7 @@ import { isPayrollStateConflict, parsePayrollError, payrollErrorI18nKey } from "
 import { displayUserRef, usePayrollPeople } from "./use-payroll-people";
 import { PaymentBatchStatusBadge } from "./components/StatusBadges";
 import { PaymentBatchAddPayeesDialog } from "./components/PaymentBatchAddPayeesDialog";
+import { PaymentBatchEditDialog } from "./components/PaymentBatchEditDialog";
 import { PaymentLineActions } from "./components/PaymentLineActions";
 
 /** Mảng rỗng DÙNG CHUNG — `?? []` sinh tham chiếu mới mỗi lượt render, làm memo/effect dưới chạy hoài. */
@@ -112,6 +113,8 @@ export function PaymentBatchDetailPage({
   /** Lựa chọn theo **`userId`** — 069 nhận `userId`, KHÔNG nhận id của dòng. */
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
+  /** S15-PAYROLL-FE-7 — hộp sửa `status`/`payDate`/`note` của chính đợt (069, ba vế đi chung một PATCH). */
+  const [editOpen, setEditOpen] = useState(false);
   const [confirmAllPaid, setConfirmAllPaid] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
@@ -356,8 +359,20 @@ export function PaymentBatchDetailPage({
             {t("states.retry")}
           </Button>
         }
-        overflowItems={
-          canExportUnc
+        // Menu ⋯ tự ẩn khi mảng rỗng ⇒ người không có quyền nào trong hai quyền này không thấy cả nút.
+        overflowItems={[
+          // FE-7 — sửa đầu đợt CHỈ cần `manage:payment-batch` ∩ đợt chưa `Completed`: nó không đọc
+          // dòng chi (`view:payment-batch`) và không đụng phiếu (029) nên không kéo theo hàng audit nào.
+          ...(canEditBatch
+            ? [
+                {
+                  key: "edit",
+                  label: t("paymentBatchDetail.edit"),
+                  onSelect: () => setEditOpen(true),
+                },
+              ]
+            : []),
+          ...(canExportUnc
             ? [
                 {
                   key: "export",
@@ -366,8 +381,8 @@ export function PaymentBatchDetailPage({
                   disabled: exportMutation.isPending,
                 },
               ]
-            : []
-        }
+            : []),
+        ]}
       />
 
       {/* D5 — nút xuất ẩn khi thiếu MỘT TRONG BA cặp; câu này giải thích lý do thay vì để người dùng
@@ -498,6 +513,18 @@ export function PaymentBatchDetailPage({
           </label>
         ) : undefined}
       </ConfirmDialog>
+
+      {/* FE-7 — render CÓ ĐIỀU KIỆN: mỗi lượt mở là một lượt mount mới ⇒ form lấy lại giá trị đang có
+          của đợt mà không cần effect đồng bộ. `canEditBatch` nằm trong điều kiện nên nếu lượt tải lại
+          cho thấy đợt vừa bị người khác hoàn tất thì hộp tự biến mất thay vì cho gõ rồi ăn 409. */}
+      {editOpen && canEditBatch && (
+        <PaymentBatchEditDialog
+          batch={batch}
+          onClose={() => setEditOpen(false)}
+          onFeedback={setFeedback}
+          onRefresh={() => void refreshAll()}
+        />
+      )}
 
       {/* Render CÓ ĐIỀU KIỆN: 029 ghi một hàng audit mỗi lượt gọi ⇒ hộp đóng thì hook trong đó không
           chạy và server không hề bị hỏi (xem docblock của dialog). */}
