@@ -123,21 +123,33 @@ DECLARE
   v_social_before text[];
   v_social_after  text[];
 BEGIN
+  -- ⚠️ PHẠM VI SỞ HỮU (`invariant-count-must-filter-owned-rows`): lưới này chỉ được đo BỀ MẶT mà
+  --    file này có thể chạm — grant `social-*` trên ROLE CANONICAL (`company_id IS NULL`). Vòng lặp
+  --    seed bên dưới chỉ ghi vào role canonical, nên đó đã là toàn bộ tầm với của nó.
+  --    KHÔNG đo toàn cục, vì hai nhóm hàng NGOÀI tầm với biến động ngoài ý muốn của migration:
+  --      • `super-admin` — `SuperAdminBootstrapService` grant TOÀN BỘ catalog per-pair ở MỖI LẦN BOOT
+  --        ⇒ mọi DB đã bootstrap (dev-online/PROD sau boot kế tiếp) có thêm 3 hàng social-*;
+  --      • role TUỲ BIẾN của tenant — fbpost đã live từ 0544, tenant admin hoàn toàn có thể cấp
+  --        `view:social-post` cho role của họ (ĐO ĐƯỢC THẬT 20/09/2026: 5 hàng trên lane DB, 3 canonical
+  --        + 2 role tuỳ biến).
+  --    Đo toàn cục ⇒ tiền-kiểm RAISE và CHẶN MIGRATE trên chính môi trường thật, không phải lưới.
   SELECT array_agg(format('%s|%s:%s|%s|%s', ro.name, p.action, p.resource_type, rp.data_scope, rp.effect)
                    ORDER BY ro.name, p.action, p.resource_type)
     INTO v_social_before
     FROM role_permissions rp
     JOIN roles ro      ON ro.id = rp.role_id
     JOIN permissions p ON p.id = rp.permission_id
-   WHERE p.resource_type IN ('social-post', 'social-account');
+   WHERE p.resource_type IN ('social-post', 'social-account')
+     AND ro.company_id IS NULL AND ro.name <> 'super-admin' AND ro.deleted_at IS NULL;
 
   -- ⚠️ NEO CHỐNG XANH-RỖNG: nếu `social-*` rỗng thì `array_agg` trả NULL ở CẢ HAI vế và
   --    `NULL IS DISTINCT FROM NULL = false` ⇒ lưới PASS mà không kiểm gì
-  --    (`empty-success-is-the-fail-open-shape`). `0544` seed đúng 3 hàng VÔ ĐIỀU KIỆN và có band
-  --    NHỎ HƠN nên luôn chạy trước trong chuỗi migrate đầy đủ — vậy đáy dương là 3. Chạy file này
-  --    trên DB rút gọn (thiếu 0544) sẽ ĐỎ ồn ào thay vì im lặng đúng lúc cần lưới nhất.
+  --    (`empty-success-is-the-fail-open-shape`). `0544` seed đúng 3 hàng VÔ ĐIỀU KIỆN cho role
+  --    CANONICAL `company-admin` và có band NHỎ HƠN nên luôn chạy trước trong chuỗi migrate đầy đủ —
+  --    vậy đáy dương trong phạm vi sở hữu là 3. Chạy file này trên DB rút gọn (thiếu 0544) sẽ ĐỎ ồn ào
+  --    thay vì im lặng đúng lúc cần lưới nhất.
   IF COALESCE(array_length(v_social_before, 1), 0) <> 3 THEN
-    RAISE EXCEPTION '[0578] tien-kiem: `social-*` cua fbpost phai co dung 3 hang TRUOC khi seed feed (dem duoc %) — 0544 chua chay?',
+    RAISE EXCEPTION '[0578] tien-kiem: `social-*` cua fbpost phai co dung 3 hang tren role CANONICAL TRUOC khi seed feed (dem duoc %) — 0544 chua chay?',
       COALESCE(array_length(v_social_before, 1), 0);
   END IF;
 
@@ -173,13 +185,15 @@ BEGIN
 
   -- LƯỚI `social-*`: so BỘ HÀNG (role, action, resource, scope, effect) đúng-bằng. Đếm trần KHÔNG đủ —
   -- đổi scope giữ nguyên số lượng. Mảng đã ORDER BY nên so thẳng là so hai chiều.
+  -- ⚠️ BỘ LỌC PHẢI GIỐNG HỆT vế `before`: lệch một điều kiện là hai mảng luôn DISTINCT ⇒ RAISE mọi lúc.
   SELECT array_agg(format('%s|%s:%s|%s|%s', ro.name, p.action, p.resource_type, rp.data_scope, rp.effect)
                    ORDER BY ro.name, p.action, p.resource_type)
     INTO v_social_after
     FROM role_permissions rp
     JOIN roles ro      ON ro.id = rp.role_id
     JOIN permissions p ON p.id = rp.permission_id
-   WHERE p.resource_type IN ('social-post', 'social-account');
+   WHERE p.resource_type IN ('social-post', 'social-account')
+     AND ro.company_id IS NULL AND ro.name <> 'super-admin' AND ro.deleted_at IS NULL;
 
   IF v_social_after IS DISTINCT FROM v_social_before THEN
     RAISE EXCEPTION '[0578] grant `social-*` cua fbpost BI CHAM — truoc: % | sau: %',
@@ -294,22 +308,38 @@ BEGIN
   END IF;
 
   -- (g) CENSUS 4 HÌNH DẠNG WILDCARD (permission-grant-census-must-cover-four-wildcard-shapes).
-  --  ⚠️ QUÉT MỌI ROLE, loại `super-admin` theo TÊN — KHÔNG lọc company_id IS NULL: role TUỲ BIẾN của
-  --     tenant có company_id NOT NULL nên câu census lọc theo scope sẽ MÙ với đúng nhóm nguy hiểm.
   --   hình dạng 1 `*:*` · 2 `<verb>:*` · 3 `*:<resource feed>` — cả ba đều phải 0 dòng;
   --   hình dạng 4 (cặp tường minh) là đường HỢP LỆ duy nhất, đã đếm đúng-bằng ở (c)/(d).
+  --  ⚠️ `super-admin` loại theo TÊN ở CẢ HAI câu dưới (bootstrap grant toàn catalog mỗi lần boot).
+  --  ⚠️ HAI PHẠM VI KHÁC NHAU — gộp làm một là CHẶN MIGRATE oan:
+  --   • hình dạng 2 (`<verb>:*`) và 3 (`*:<resource feed>`) là cặp catalog mà CHỈ file này có thể sinh
+  --     ra (0578 tạo đúng 14 cặp TƯỜNG MINH, không cặp wildcard nào) ⇒ quét MỌI role, kể cả tuỳ biến.
+  --   • hình dạng 1 (`*:*`) KHÔNG do file này sinh: nó là cặp toàn-quyền của hệ phân quyền, và role
+  --     TUỲ BIẾN của tenant mang `*:*` là quyết định HỢP LỆ của tenant admin (đo được thật trên lane DB
+  --     20/09/2026: 2 role fixture `*:*`). Assert nó trên mọi role ⇒ 0578 RAISE và chặn migrate ở chính
+  --     môi trường thật. Ở đây chỉ canh phần DB-1 sở hữu: 0 role HỆ THỐNG nào mang `*:*`.
+  --     Rủi ro "role tuỳ biến `*:*` có thấy feed không" thuộc PermissionService — chuyển cho BE-1.
   SELECT string_agg(format('%s -> %s:%s', ro.name, p.action, p.resource_type), ' ; ') INTO v_bad
     FROM role_permissions rp
     JOIN roles ro      ON ro.id = rp.role_id
     JOIN permissions p ON p.id = rp.permission_id
    WHERE ro.deleted_at IS NULL AND ro.name <> 'super-admin'
      AND (
-       (p.action = '*' AND p.resource_type = '*')                             -- 1: toàn quyền
-       OR (p.action = '*' AND p.resource_type = ANY (v_res))                  -- 3: mọi verb trên tài nguyên feed
+       (p.action = '*' AND p.resource_type = ANY (v_res))                     -- 3: mọi verb trên tài nguyên feed
        OR (p.resource_type = '*' AND p.action IN ('view', 'create', 'manage', 'approve'))  -- 2: verb trên mọi tài nguyên
      );
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION '[0578] verify: grant WILDCARD = duong ngam vao quyen SOCIAL: %', v_bad;
+  END IF;
+
+  SELECT string_agg(format('%s -> %s:%s', ro.name, p.action, p.resource_type), ' ; ') INTO v_bad
+    FROM role_permissions rp
+    JOIN roles ro      ON ro.id = rp.role_id
+    JOIN permissions p ON p.id = rp.permission_id
+   WHERE ro.deleted_at IS NULL AND ro.name <> 'super-admin' AND ro.company_id IS NULL
+     AND p.action = '*' AND p.resource_type = '*';                            -- 1: toàn quyền (role HỆ THỐNG)
+  IF v_bad IS NOT NULL THEN
+    RAISE EXCEPTION '[0578] verify: role HE THONG mang grant toan quyen `*:*` = duong ngam vao quyen SOCIAL: %', v_bad;
   END IF;
 
   -- (i) object_permissions = 0 hàng trỏ cặp feed — hình dạng bypass MẠNH NHẤT (object grant vốn là

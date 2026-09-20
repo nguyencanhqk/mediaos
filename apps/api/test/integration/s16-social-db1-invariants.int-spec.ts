@@ -941,10 +941,14 @@ describe.skipIf(!hasDb)(
            FROM role_permissions rp
            JOIN roles ro ON ro.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
-          WHERE ro.company_id IS NULL AND ro.deleted_at IS NULL AND rp.effect = 'ALLOW'
+          WHERE ro.company_id IS NULL AND ro.name <> 'super-admin' AND ro.deleted_at IS NULL
+            AND rp.effect = 'ALLOW'
             AND (p.resource_type = 'feed' OR p.resource_type LIKE 'feed-%')
           GROUP BY ro.name ORDER BY ro.name`,
         );
+        // `super-admin` cũng là role company_id IS NULL, nên lọc theo scope KHÔNG đủ để loại nó khỏi
+        // breakdown: sau bootstrap nó có đủ 14 cặp feed và tự thêm một dòng { super-admin, 14 } vào
+        // kỳ vọng 4 dòng. Loại THEO TÊN như `total`/`scoped`.
         expect(perRole.rows).toEqual([
           { role_name: "company-admin", n: 14 },
           { role_name: "employee", n: 7 },
@@ -972,17 +976,33 @@ describe.skipIf(!hasDb)(
       });
 
       it("census wildcard: 0 đường ngầm vào quyền SOCIAL (3 hình dạng wildcard, mọi role trừ super-admin)", async () => {
+        // Hình dạng 2 (`<verb>:*`) + 3 (`*:<resource feed>`): cặp catalog mà CHỈ 0578 có thể sinh ra
+        // (nó tạo đúng 14 cặp TƯỜNG MINH) ⇒ quét MỌI role, kể cả role tuỳ biến của tenant.
         const r = await direct.query(
           `SELECT ro.name::text AS role_name, p.action::text, p.resource_type::text
            FROM role_permissions rp
            JOIN roles ro ON ro.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
           WHERE ro.deleted_at IS NULL AND ro.name <> 'super-admin'
-            AND ((p.action = '*' AND p.resource_type = '*')
-              OR (p.action = '*' AND (p.resource_type = 'feed' OR p.resource_type LIKE 'feed-%'))
+            AND ((p.action = '*' AND (p.resource_type = 'feed' OR p.resource_type LIKE 'feed-%'))
               OR (p.resource_type = '*' AND p.action IN ('view','create','manage','approve')))`,
         );
         expect(r.rows).toEqual([]);
+
+        // Hình dạng 1 (`*:*`) KHÔNG do 0578 sinh — đó là cặp toàn-quyền của hệ phân quyền, và một role
+        // TUỲ BIẾN của tenant mang `*:*` là quyết định HỢP LỆ của tenant admin (S14-FG có fixture đúng
+        // hình dạng đó). Phạm vi DB-1 sở hữu là role HỆ THỐNG ⇒ lọc `company_id IS NULL`, KHÔNG assert
+        // toàn cục (assert toàn cục = đỏ oan trên mọi DB thật; `invariant-count-must-filter-owned-rows`).
+        // Câu hỏi "role tuỳ biến `*:*` có thấy feed không" thuộc PermissionService — nợ chuyển cho BE-1.
+        const star = await direct.query(
+          `SELECT ro.name::text AS role_name
+           FROM role_permissions rp
+           JOIN roles ro ON ro.id = rp.role_id
+           JOIN permissions p ON p.id = rp.permission_id
+          WHERE ro.deleted_at IS NULL AND ro.name <> 'super-admin' AND ro.company_id IS NULL
+            AND p.action = '*' AND p.resource_type = '*'`,
+        );
+        expect(star.rows).toEqual([]);
 
         // Hình dạng bypass MẠNH NHẤT: object_permissions là grant EXACT sẵn.
         const obj = await direct.query(
@@ -993,13 +1013,17 @@ describe.skipIf(!hasDb)(
       });
 
       it("3 cặp `social-*` của fbpost KHÔNG bị chạm (tiền tố feed- là bắt buộc — DB-17 R7)", async () => {
+        // Phạm vi sở hữu = role CANONICAL: 0544 seed 3 hàng social-* cho `company-admin`
+        // (`company_id IS NULL`), và 0578 chỉ ghi vào role canonical. fbpost đã live nên tenant admin
+        // hoàn toàn có thể cấp `view:social-post` cho role TUỲ BIẾN của họ (đo được thật trên lane DB
+        // 20/09/2026: 5 hàng = 3 canonical + 2 tuỳ biến) — liệt kê toàn cục ở đây là đỏ oan, không phải lưới.
         const r = await direct.query(
           `SELECT ro.name::text AS role_name, p.action::text, p.resource_type::text, rp.data_scope::text
            FROM role_permissions rp
            JOIN roles ro ON ro.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
           WHERE p.resource_type IN ('social-post', 'social-account') AND rp.effect = 'ALLOW'
-            AND ro.name <> 'super-admin'
+            AND ro.name <> 'super-admin' AND ro.company_id IS NULL AND ro.deleted_at IS NULL
           ORDER BY p.resource_type, p.action`,
         );
         expect(r.rows).toEqual([
