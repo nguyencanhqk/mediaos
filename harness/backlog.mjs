@@ -16801,7 +16801,17 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
-    depends_on: ["S16-SOCIAL-DOC-1"],
+    // 20/09/2026 — THÊM S16-SOCIAL-FE-1. Seed cũ chỉ ghi DOC-1 nên WO này hiện READY, nhưng đo trên
+    // master (c714c0a4) thì NỬA NHÌN THẤY ĐƯỢC của nó chưa có chỗ nào render. Bằng chứng, đừng đo lại:
+    //   · `/social` = buildShellRouteContent(<SocialRedirectPage/>) (router.tsx ~2982) — ProtectedShell
+    //     THÔI, KHÔNG qua ModuleWorkspaceLayout ⇒ /social không có sidebar nào.
+    //   · SIDEBAR_REGISTRY có 13 module, KHÔNG có SOCIAL; layouts/workspace/sidebar/ không có social.ts.
+    //   · MODULE_APP_METADATA (apps/api foundation/module-catalog) không có SOCIAL.
+    // Cả ba thứ đó là done_when của S16-SOCIAL-FE-1 ("bật modules.is_active SOCIAL khuôn 0567 +
+    // MODULE_APP_METADATA SOCIAL" + template cổng thông tin) ⇒ vỏ sidebar SOCIAL là SẢN PHẨM CỦA FE-1.
+    // Chạy FBPOST-1 trước FE-1 = viết SOCIAL_SIDEBAR không có màn nào hiện, mà done_when (b) lại bắt
+    // GIỮ ô Home ⇒ thay đổi người dùng thấy được = 0.
+    depends_on: ["S16-SOCIAL-DOC-1", "S16-SOCIAL-FE-1"],
     plan: "docs/plans/S16-SOCIAL-FBPOST-1.md",
     src: [
       "SOC-DEC-002 (wave plan §3) · packages/web-core/src/lib/registry.ts (tile SOCIAL S9-SOCIAL-FE-1, 'KHÔNG phải module nội bộ') · apps/app/src/routes/social/open-social.ts + SocialRedirectPage · memory s9-social-fbpost-wave (cửa sổ tile chết)",
@@ -16811,7 +16821,10 @@ export const backlog = [
       "Khi module SOCIAL chưa bật (FE-1 chưa merge) thì ô Home «Mạng xã hội» chưa hiện nhưng người có quyền fbpost VẪN có đường vào (giữ tile tạm hoặc entry trong AppSwitcher) — không tạo cửa sổ tile chết lần hai",
       "Test registry/AppSwitcher/nav giữ nguyên số ca + ca mới cho vị trí mới; typecheck/build/test FE 3 app xanh; không đổi apps/fbpost, không đổi migration/quyền",
     ],
-    notes: ["🟢 LIGHT gate — thuần FE. Nếu phát hiện phải đổi quyền hay API thì DỪNG và tách WO."],
+    notes: [
+      "🟢 LIGHT gate — thuần FE. Nếu phát hiện phải đổi quyền hay API thì DỪNG và tách WO.",
+      "CÁCH LÀM đã đo sẵn 20/09 — KHÔNG cần đụng type dùng chung `SidebarItemMeta`. ModuleSidebar render MỌI mục tĩnh bằng `<Link to={item.path}>`, không có khái niệm liên kết ngoài/onClick ⇒ thêm trường vào SidebarItemMeta sẽ chạm cả 13 module + hai file __snapshots__/sidebar-tree.*.txt đang ghim cây. Dùng khe CÓ SẴN `layouts/workspace/sidebar-extensions.ts` (S5-TASK-NAV-TREE-1) — đúng ngữ nghĩa của nó: «section cần permission hook sống ở component, đăng ký tại đây để ModuleSidebar render SAU các group tĩnh» ⇒ mục tự nằm CUỐI (done_when a) và gọi thẳng `openSocial()` nên giữ được «SSO mở thẳng, fallback /social» y hệt cũ, snapshot sidebar không đổi. Lưu ý một khác biệt của khe này: KHÔNG render khi sidebar ở icon-mode (thu gọn) — cân nhắc lúc làm.",
+    ],
   },
   {
     id: "S16-SOCIAL-DB-1",
