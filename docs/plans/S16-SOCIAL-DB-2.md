@@ -223,7 +223,7 @@ GRANT app: `SELECT, INSERT, UPDATE`. **+ mediaos_worker: `SELECT`** (job đóng 
 
 CHECK: `chk_feed_poll_options_vote_count CHECK (vote_count >= 0)`.
 UNIQUE: `feed_poll_options_company_id_id_uq UNIQUE (company_id,id)` · `feed_poll_options_position_uq UNIQUE (company_id, poll_id, position)`.
-Index: `idx_feed_poll_options_company_poll (company_id, poll_id, position)`.
+Index: **KHÔNG có index rời** — `feed_poll_options_position_uq UNIQUE (company_id, poll_id, position)` đã sinh index ngầm trùng 100% (sửa sau FULL gate, M-1).
 Composite FK (1): `feed_poll_options_poll_tenant_fk` NO ACTION.
 GRANT app: `SELECT, INSERT, UPDATE`. **+ mediaos_worker: `SELECT`**.
 
@@ -241,7 +241,7 @@ GRANT app: `SELECT, INSERT, UPDATE`. **+ mediaos_worker: `SELECT`**.
 
 PK: `feed_poll_votes_pk PRIMARY KEY (company_id, poll_id, option_id, user_id)`.
 UNIQUE INDEX (D1 — phương án A): `feed_poll_votes_single_uq UNIQUE (company_id, poll_id, user_id) WHERE single_choice`.
-Index: `idx_feed_poll_votes_company_poll (company_id, poll_id)`.
+Index: `idx_feed_poll_votes_company_poll_user (company_id, poll_id, user_id)` — `(company_id, poll_id)` là prefix chặt của PK nên vô dụng (sửa sau FULL gate, M-2).
 Composite FK (3): `feed_poll_votes_poll_tenant_fk` · `_option_tenant_fk` · `_user_tenant_fk` — cả 3 NO ACTION.
 GRANT app: `SELECT, INSERT, DELETE` (đổi/rút phiếu = xoá+chèn trong cùng tx khi poll `open`; KHÔNG UPDATE). **+ mediaos_worker: `SELECT`**.
 
@@ -614,6 +614,7 @@ cd "C:/dev 2/MediaOS/apps/api" && export LANE_DB=mediaos_s16socialdb2 \
 | `social.master-data` seeder đăng ký ở `MasterDataSeederRegistry` (D2) | Cơ chế runtime (`onModuleInit`) sống trong module NestJS `apps/api/src/social/**`, ngoài `paths` của DB-2 |
 | Khoá owner cuối cùng của nhóm (`SOCIAL-ERR-015`) | Cần đếm số hàng `role='owner' AND status='active'` cùng nhóm — CHECK cấp hàng không đếm được hàng anh em; index hỗ trợ đã có (`idx_feed_group_members_company_group_role`) |
 | FSM sáng kiến (`assertIdeaTransition`) | CHECK chỉ giữ tập giá trị + tính đầy đủ vết (đã ép ở `chk_feed_ideas_reviewed_pair`/`_reject_note`), không giữ được thứ tự chuyển tiếp |
+| 🔴 **Kiểm `option_id` THUỘC ĐÚNG `poll_id`, cùng tx, TRƯỚC mỗi INSERT phiếu** (FULL gate, H-1) | `feed_poll_votes` có HAI FK RỜI — `(company_id, poll_id) → feed_polls` và `(company_id, option_id) → feed_poll_options` — không gì nối hai cột đó, PK cũng không. Cùng tenant, gửi `pollId=P1` + `optionId=O2` (thuộc P2) ⇒ phiếu ghi THÀNH CÔNG, `feed_poll_votes_single_uq` vẫn PASS (chỉ khoá theo `poll_id,user_id`) ⇒ nhồi phiếu chéo-bình-chọn, `vote_count` của P2 lệch VĨNH VIỄN. Bịt ở DB = `feed_poll_options` thêm `UNIQUE (company_id, poll_id, id)` + FK phiếu 3 cột — phải là **WO riêng** vì làm đỏ assert `conkey=2` / 21 dòng tuple FK |
 | Giới hạn 2-10 lựa chọn bình chọn (`SOCIAL-ERR-018`) | Đếm hàng anh em `feed_poll_options` theo `poll_id` — ngoài khả năng CHECK cấp hàng |
 | Bất biến "lựa chọn không sửa/thêm/xoá sau khi poll tồn tại" | Luật theo thời điểm — `UNIQUE(poll_id,position)` chỉ chặn trùng vị trí, không chặn thêm/xoá |
 | DTO ẩn `user_id` khi `is_anonymous=true` | Tầng repository (chọn cột tường minh), không phải ràng buộc DB |

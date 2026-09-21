@@ -455,7 +455,17 @@ ALTER TABLE feed_kudos_badges
 DO $$
 DECLARE
   v_n int;
+  v_can_bypass boolean;
 BEGIN
+  -- CỔNG FAIL-CLOSED (cùng khuôn 0582 khối (0) — FULL gate DB-2 H1): `feed_posts` ENABLE + FORCE RLS
+  -- từ 0577. Migrate bằng vai KHÔNG BYPASSRLS ⇒ SELECT dưới đây bị policy lọc còn 0 ⇒ v_n = 0 ⇒
+  -- RAISE NOTICE khẳng định "an toàn" TRONG KHI vẫn có thể đang có hàng mồ côi. Hậu-kiểm mất tác
+  -- dụng chẩn đoán đúng lúc cần nhất. Không để hai chuẩn khác nhau trong cùng một commit.
+  SELECT rolsuper OR rolbypassrls INTO v_can_bypass FROM pg_roles WHERE rolname = current_user;
+  IF NOT COALESCE(v_can_bypass, false) THEN
+    RAISE EXCEPTION '[0580] DUNG: vai migrate "%" khong co SUPERUSER/BYPASSRLS. feed_posts la RLS+FORCE => hau-kiem mo coi bi loc con 0 hang va se bao "an toan" MOT CACH SAI truoc khi them feed_posts_group_fk. Chay migrate bang vai co BYPASSRLS.', current_user;
+  END IF;
+
   SELECT count(*) INTO v_n
     FROM feed_posts p
    WHERE p.group_id IS NOT NULL
@@ -495,13 +505,19 @@ CREATE INDEX idx_feed_group_members_company_user
 CREATE INDEX idx_feed_polls_open_deadline ON feed_polls (company_id, closes_at)
   WHERE status = 'open' AND closes_at IS NOT NULL;
 --> statement-breakpoint
-CREATE INDEX idx_feed_poll_options_company_poll ON feed_poll_options (company_id, poll_id, position);
---> statement-breakpoint
+-- KHONG tao index (company_id, poll_id, position) cho feed_poll_options: CONSTRAINT
+-- feed_poll_options_position_uq UNIQUE (company_id, poll_id, position) da sinh index ngam TRUNG 100%
+-- (cung cot, cung thu tu) — them nua chi gap doi chi phi ghi, 0 loi ich doc. FULL gate DB-2 (M-1).
 -- D1 PHƯƠNG ÁN A — CHỐT CUỐI chống phiếu đôi ở poll một-lựa-chọn (partial theo cột dẫn xuất).
 CREATE UNIQUE INDEX feed_poll_votes_single_uq ON feed_poll_votes (company_id, poll_id, user_id)
   WHERE single_choice;
 --> statement-breakpoint
-CREATE INDEX idx_feed_poll_votes_company_poll ON feed_poll_votes (company_id, poll_id);
+-- KHONG dung (company_id, poll_id): do la PREFIX CHAT cua PK (company_id, poll_id, option_id,
+-- user_id) nen index PK da phuc vu — mot index thua tren dung bang LON NHAT module = write
+-- amplification o duong nong. (company_id, poll_id, user_id) KHONG phai prefix cua PK, tra loi
+-- "toi da bo phieu gi trong poll nay" cho poll DA-LUA-CHON (feed_poll_votes_single_uq la partial
+-- WHERE single_choice nen khong dung duoc cho nhanh do). FULL gate DB-2 (M-2).
+CREATE INDEX idx_feed_poll_votes_company_poll_user ON feed_poll_votes (company_id, poll_id, user_id);
 --> statement-breakpoint
 CREATE INDEX idx_feed_ideas_company_status ON feed_ideas (company_id, status, created_at DESC);
 --> statement-breakpoint
@@ -847,11 +863,14 @@ BEGIN
                     'cua BE-2 la 23502 chu khong phai vo hieu hoa chot chong-phieu-doi im lang (D1)', v_def;
   END IF;
 
-  -- (8) 12 index theo tên. Thiếu index = đường đọc của BE-2 quét bảng.
+  -- (8) 11 index theo tên. Thiếu index = đường đọc của BE-2 quét bảng.
+  --     11 chứ không phải 12 như plan §4: FULL gate DB-2 gỡ idx_feed_poll_options_company_poll
+  --     (trùng 100% index ngầm của feed_poll_options_position_uq — M-1) và đổi
+  --     idx_feed_poll_votes_company_poll (prefix chặt của PK) thành _company_poll_user (M-2).
   FOREACH t IN ARRAY ARRAY['feed_groups_company_name_uq', 'idx_feed_groups_company_visibility',
                            'idx_feed_group_members_company_group_role', 'idx_feed_group_members_company_user',
-                           'idx_feed_polls_open_deadline', 'idx_feed_poll_options_company_poll',
-                           'feed_poll_votes_single_uq', 'idx_feed_poll_votes_company_poll',
+                           'idx_feed_polls_open_deadline',
+                           'feed_poll_votes_single_uq', 'idx_feed_poll_votes_company_poll_user',
                            'idx_feed_ideas_company_status', 'idx_feed_kudos_company_created',
                            'idx_feed_kudos_recipients_company_emp', 'idx_feed_kudos_badges_company_active'] LOOP
     IF to_regclass(t) IS NULL THEN

@@ -645,8 +645,9 @@ export const feedPollOptions = pgTable(
   (t) => [
     check("chk_feed_poll_options_vote_count", sql`vote_count >= 0`),
     unique("feed_poll_options_company_id_id_uq").on(t.companyId, t.id),
+    // KHÔNG có index (companyId, pollId, position) rời: `feed_poll_options_position_uq` ngay trên
+    // đã sinh index ngầm TRÙNG 100% (cùng cột, cùng thứ tự) — FULL gate DB-2 (M-1).
     unique("feed_poll_options_position_uq").on(t.companyId, t.pollId, t.position),
-    index("idx_feed_poll_options_company_poll").on(t.companyId, t.pollId, t.position),
   ],
 );
 
@@ -687,7 +688,9 @@ export const feedPollVotes = pgTable(
     uniqueIndex("feed_poll_votes_single_uq")
       .on(t.companyId, t.pollId, t.userId)
       .where(sql`single_choice`),
-    index("idx_feed_poll_votes_company_poll").on(t.companyId, t.pollId),
+    // KHÔNG dùng (companyId, pollId): prefix chặt của PK ⇒ index PK đã phục vụ. Cột thứ ba làm nó
+    // trả lời được "tôi đã bỏ phiếu gì trong poll này" cho poll ĐA-lựa-chọn (single_uq là partial).
+    index("idx_feed_poll_votes_company_poll_user").on(t.companyId, t.pollId, t.userId),
   ],
 );
 

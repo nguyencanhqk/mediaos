@@ -307,6 +307,32 @@ describe.skipIf(!hasDb)(
         });
       });
 
+      // ĐỐI CHỨNG DƯƠNG cho ca ngay trên (FULL gate DB-2 M3): "0 hàng khi không có GUC" tự nó RỖNG
+      // NGHĨA — nếu ai đó DROP POLICY (RLS vẫn ENABLE) hoặc đổi policy thành deny-all thì ca đó VẪN
+      // PASS (0 = 0). Chỉ ca này chứng minh vế `USING` thật sự CHO ĐỌC hàng của chính tenant mình.
+      // Các ca INSERT/UNIQUE thành công không thay thế được: `WITH CHECK` và kiểm unique-index chạy
+      // NGOÀI `USING`.
+      it("GUC = A ⇒ ĐỌC ĐƯỢC hàng của mình trên CẢ 9 bảng (đối chứng dương của ca trên)", async () => {
+        await withRole(app, A.companyId, async (c) => {
+          // 8/9 bảng đã có hàng của A từ fixture; `feed_poll_votes` thì chưa — chèn tại chỗ (tx này
+          // luôn ROLLBACK ở `finally`), nhờ đó ca còn chứng minh luôn WITH CHECK cho bảng phiếu.
+          await c.query(
+            `INSERT INTO feed_poll_votes (company_id, poll_id, option_id, user_id, single_choice)
+             VALUES ($1, $2, $3, $4, true)`,
+            [A.companyId, pollA, optA1, uA],
+          );
+          const zero: string[] = [];
+          for (const t of TRACK_B_TABLES) {
+            const r = await c.query(`SELECT count(*)::int AS n FROM ${t}`);
+            if ((r.rows[0].n as number) === 0) zero.push(t);
+          }
+          expect(
+            zero,
+            "bảng đọc ra 0 hàng dù GUC = A ⇒ policy tenant_isolation đang deny-all / đã bị DROP",
+          ).toEqual([]);
+        });
+      });
+
       it("GUC = A ⇒ thấy nhóm/huy hiệu của A, KHÔNG thấy của B (vế ĐỌC, 2 tenant)", async () => {
         await withRole(app, A.companyId, async (c) => {
           const mine = await c.query(`SELECT count(*)::int AS n FROM feed_groups WHERE id = $1`, [
@@ -1216,6 +1242,70 @@ describe.skipIf(!hasDb)(
             pol: row.pol,
           }).toEqual({ tbl: row.tbl, rls: true, force: true, pol: 1 });
         }
+      });
+
+      // (a2) HỒI QUY cho 4 CHECK mà `0581` nới (FULL gate DB-2 M2). Nhóm 10 chỉ đo IDEMPOTENCY —
+      // nó so `noti1/noti2` với `noti0` (chính trạng thái hiện tại), nên nếu 4 CHECK đã SAI từ trước
+      // thì nó vẫn PASS. Verify fail-loud trong `0581` chỉ chạy MỘT lần lúc migrate.
+      // ⚠️ ĐÍNH CHÍNH ĐO ĐƯỢC (21/09/2026, đối chứng âm chạy thật trên lane): nhánh `IS NULL OR` là
+      // **TUYÊN BỐ Ý ĐỊNH, KHÔNG phải lưới hành vi**. CHECK của Postgres được thoả khi biểu thức ra
+      // TRUE **hoặc NULL**, nên `m = ANY(...)` KHÔNG hề từ chối NULL — đo trực tiếp:
+      //     CREATE TEMP TABLE t (m varchar CHECK (m::text = ANY (ARRAY['AUTH','SOCIAL']::text[])));
+      //     INSERT INTO t VALUES (NULL);  -- ĐƯỢC CHẤP NHẬN
+      // Vì vậy ĐỪNG viết "mất `IS NULL OR` ⇒ hàng legacy NULL không ghi được nữa" (sai). Giá trị thật
+      // của ca này: giữ Ý ĐỊNH ở dạng văn bản, và bắt được bản viết lại THỰC SỰ đổi ngữ nghĩa — ví dụ
+      // `coalesce(module_code,'') = ANY (...)`, thứ khử NULL và MỚI thật sự chặn hàng legacy.
+      it("(a2) 4 CHECK NOTI giữ 'SOCIAL'; 2 CHECK trên notifications giữ nhánh IS NULL", async () => {
+        const r = await direct.query(
+          `SELECT rel.relname::text AS tbl, con.conname::text AS name,
+                pg_get_constraintdef(con.oid) AS def
+           FROM pg_constraint con JOIN pg_class rel ON rel.oid = con.conrelid
+          WHERE con.contype = 'c'
+            AND con.conname = ANY ($1::text[])
+          ORDER BY tbl, name`,
+          [
+            [
+              "chk_notification_events_module_code",
+              "chk_notification_events_type",
+              "chk_notifications_module_code",
+              "chk_notifications_notification_type",
+            ],
+          ],
+        );
+        expect(r.rowCount, "thiếu CHECK NOTI — 0581 đã bị revert?").toBe(4);
+        for (const row of r.rows) {
+          expect(
+            /SOCIAL/i.test(row.def as string),
+            `${row.name}: mất giá trị SOCIAL ⇒ NOTI của module SOCIAL không ghi được`,
+          ).toBe(true);
+          if (row.tbl === "notifications") {
+            expect(
+              /IS NULL/.test(row.def as string),
+              `${row.name}: MẤT nhánh 'IS NULL OR'. Về HÀNH VI, CHECK vẫn nhận NULL (thoả khi ra NULL), ` +
+                "nên ca (a3) KHÔNG bắt được — đó chính là lý do phải soi VĂN BẢN ở đây: mất dòng này là " +
+                "dấu hiệu CHECK đang bị viết lại, và bản viết lại kế tiếp (vd coalesce(col,'')) sẽ chặn " +
+                "thật hàng legacy mà không test nào khác đỏ",
+            ).toBe(true);
+          }
+        }
+      });
+
+      it("(a3) notifications NHẬN cả (NULL, NULL) lẫn ('SOCIAL','Social') — đối chứng dương của (a2)", async () => {
+        await withRole(app, A.companyId, async (c) => {
+          const probe = async (moduleCode: string | null, notiType: string | null) =>
+            c.query(
+              `INSERT INTO notifications (company_id, user_id, module_code, notification_type, title, body)
+               VALUES ($1, $2, $3, $4, 'probe', 'probe')`,
+              [A.companyId, uA, moduleCode, notiType],
+            );
+          // Nhánh legacy: cả hai cột NULL. ⚠️ Ca này KHÔNG phải đối chứng cho nhánh `IS NULL OR` —
+          // đã đo: bỏ nhánh đó thì INSERT NULL VẪN ĐƯỢC (CHECK thoả khi ra NULL). Nó là đối chứng cho
+          // việc CHECK không bị siết thành dạng khử-NULL (coalesce/NOT NULL).
+          await expect(probe(null, null)).resolves.toBeDefined();
+          // Nhánh mới của 0581: SOCIAL ở bảng `notifications` dùng 'SOCIAL' / 'Social' (hai bộ giá
+          // trị KHÁC NHAU — module_code viết HOA, notification_type viết Hoa-thường).
+          await expect(probe("SOCIAL", "Social")).resolves.toBeDefined();
+        });
       });
 
       it("(b) ĐÚNG 21 composite tenant-FK, tuple khớp từng dòng (20 Track B + feed_posts_group_fk)", async () => {

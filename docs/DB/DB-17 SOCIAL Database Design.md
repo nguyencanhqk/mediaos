@@ -592,7 +592,7 @@ CREATE INDEX idx_feed_polls_open_deadline ON feed_polls (company_id, closes_at)
 ALTER TABLE feed_poll_options ADD CONSTRAINT feed_poll_options_company_id_id_uq UNIQUE (company_id, id);
 ALTER TABLE feed_poll_options ADD CONSTRAINT chk_feed_poll_options_vote_count CHECK (vote_count >= 0);
 ALTER TABLE feed_poll_options ADD CONSTRAINT feed_poll_options_position_uq UNIQUE (company_id, poll_id, position);
-CREATE INDEX idx_feed_poll_options_company_poll ON feed_poll_options (company_id, poll_id, position);
+-- (khong tao index roi: feed_poll_options_position_uq da sinh index ngam TRUNG 100% — FULL gate DB-2 M-1)
 ```
 
 > **Lựa chọn BẤT BIẾN sau khi tạo poll.** `UNIQUE (company_id, poll_id, position)` không `DEFERRABLE`, nên sắp xếp lại bằng một câu UPDATE sẽ va unique giữa chừng. Service không cho sửa/chèn/xoá lựa chọn sau khi poll tồn tại (đi cùng luật `multiple_choice` bất biến ở §7.5).
@@ -611,7 +611,8 @@ CREATE INDEX idx_feed_poll_options_company_poll ON feed_poll_options (company_id
 
 ```sql
 ALTER TABLE feed_poll_votes ADD CONSTRAINT feed_poll_votes_pk PRIMARY KEY (company_id, poll_id, option_id, user_id);
-CREATE INDEX idx_feed_poll_votes_company_poll ON feed_poll_votes (company_id, poll_id);
+-- (company_id, poll_id) la PREFIX CHAT cua PK ⇒ bo; dung cot thu ba — FULL gate DB-2 M-2:
+CREATE INDEX idx_feed_poll_votes_company_poll_user ON feed_poll_votes (company_id, poll_id, user_id);
 
 -- ─── Chốt cuối «một người một phiếu» — ✅ ĐÃ CHỌN PHƯƠNG ÁN A (S16-SOCIAL-DB-2, 21/09/2026) ───
 -- Cột dẫn xuất + partial unique. Service ghi `single_choice` = NOT feed_polls.multiple_choice

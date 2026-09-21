@@ -96,7 +96,7 @@ BEGIN
   -- này rỗng và "thành công RỖNG" chính là fail-open; neo thật ở int-spec §7 Nhóm 13).
   IF v_co > 0 THEN
     SELECT string_agg(z.d, '; ') INTO v_bad FROM (
-      SELECT format('cong ty % thieu %', c.id, m.code) AS d
+      SELECT format('cong ty %s thieu %s', c.id, m.code) AS d
         FROM companies c
         CROSS JOIN (VALUES ('teamwork', 1), ('innovation', 2), ('customer-first', 3),
                            ('mentor', 4), ('above-beyond', 5)) AS m(code, pos)

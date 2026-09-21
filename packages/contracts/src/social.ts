@@ -274,6 +274,16 @@ export type FeedIdeaStatusDto = z.infer<typeof feedIdeaStatusSchema>;
 export const FEED_POLL_QUESTION_MAX = 500;
 
 // ═══════════════ Schema tối thiểu Track B — mirror CHECK KÉO THEO (DTO đầy đủ là việc BE-2) ═══════
+//
+// 🔴 CẢNH BÁO CHO BE-2 (FULL gate DB-2 MEDIUM-2 — cùng lớp lỗi với nợ (c) của DB-1):
+// Ba schema dưới đây là LÕI mirror-CHECK, KHÔNG `.strict()`, và CHÚNG MANG CỘT DO SERVER QUYẾT ĐỊNH:
+//   · `feedGroupMemberCoreSchema` → `role`, `status`, `userId`
+//   · `feedPollCoreSchema`        → `status`, `closedAt`
+//   · `feedIdeaCoreSchema`        → `status`, `reviewedBy`, `reviewedAt`, `reviewNote`
+// `.extend()` THẲNG một trong số đó làm body của route ghi = MASS-ASSIGNMENT: tác giả sáng kiến tự
+// gửi `{status:'accepted', reviewedBy:<mình>, reviewedAt:now}` là TỰ DUYỆT sáng kiến của mình, bỏ qua
+// hẳn cặp quyền `approve:feed-idea`; tương tự `role:'owner'` để tự lên chủ nhóm.
+// ⇒ DTO của route PHẢI `.pick()` đúng các trường người dùng được gửi RỒI `.strict()`. KHÔNG `.extend()`.
 
 /**
  * Mirror `chk_feed_group_members_pending_role CHECK (status = 'active' OR role = 'member')`:

@@ -165,12 +165,17 @@ export class RetentionService {
     //  (2) SÁU bảng KHÔNG có GRANT DELETE cho mediaos_app — `feed_groups`, `feed_polls`,
     //      `feed_poll_options`, `feed_ideas`, `feed_kudos`, `feed_kudos_badges`. Như nhóm (a) của Track A:
     //      có mặt ở đây để retention no-op TRƯỚC khi phát lệnh, tránh `42501` uncaught hỏng CẢ LƯỢT
-    //      cleanup tenant. (`feed_poll_options` cũng KHÔNG có cột `created_at` — nhưng nó thuộc nhóm này
-    //      nên không vướng chuyện `_deleteEligible`; ghi ra đây để reviewer sau không phải suy lại.)
+    //      cleanup tenant. (⚠️ ĐÍNH CHÍNH sau FULL gate DB-2 L2: `feed_poll_options` KHÔNG có cột
+    //      `created_at` — nên nó ăn `42703` ngay ở bước ĐẾM `_countEligible`, y hệt
+    //      `feed_kudos_recipients` ở (4') chứ KHÔNG phải "không vướng gì"; nó chỉ không vướng
+    //      `_deleteEligible` vì có cột `id`.)
     //
-    //  (4) HAI bảng CÓ GRANT DELETE và CÓ `created_at` — `feed_group_members`, `feed_poll_votes`. Với
-    //      nhóm này tập PROTECTED_TABLES là LỚP PHÒNG THỦ DUY NHẤT: `_deleteEligible` chạy THẬT và lọc
-    //      theo `created_at < cutoff`, mà membership/phiếu bầu là TRẠNG THÁI HIỆN TẠI chứ không phải
+    //  (4) HAI bảng CÓ GRANT DELETE và CÓ `created_at` — `feed_group_members`, `feed_poll_votes`. Đây là
+    //      nhóm PHẢI có mặt trong tập, vì `_countEligible` (lọc `created_at`) chạy THẬT và sẽ đếm ra
+    //      hàng eligible. ⚠️ ĐÍNH CHÍNH sau FULL gate DB-2 L1: ĐỪNG đọc thành "PROTECTED_TABLES là lớp
+    //      phòng thủ DUY NHẤT" — cả hai bảng dùng PK TỔ HỢP, KHÔNG có cột `id`, mà `_deleteEligible` là
+    //      `DELETE … WHERE id IN (SELECT id …)` ⇒ vẫn ăn `42703` nếu lọt tới đó. DB là tuyến hai. Lý do
+    //      giữ trong tập vẫn nguyên: membership/phiếu bầu là TRẠNG THÁI HIỆN TẠI chứ không phải
     //      ledger — xoá theo tuổi tạo là mất thành viên cũ / phiếu cũ ĐANG HỢP LỆ: không đảo ngược
     //      được, không soft-delete, không audit nội dung hàng (và `feed_poll_options.vote_count` lệch
     //      VĨNH VIỄN vì bộ đếm chỉ đổi cùng tx với hàng nguồn).
