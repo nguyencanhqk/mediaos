@@ -16870,7 +16870,57 @@ export const backlog = [
     module: "SOCIAL",
     layer: "BE",
     title:
-      "Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ nguyên) track A: bài + tin tức (ghim · yêu cầu ack · danh sách đã đọc) · bình luận 1 cấp · reaction bộ emoji CHAT · mention feed_mentions + NOTI · hashtag · lưu · lượt xem lần đầu · báo cáo · tìm kiếm tsvector · sinh nhật day/month tôn trọng preference · guard 2 tầng + audience check org_unit · audit manage · @Idempotent · RealtimeEmitter room co:{c}:feed payload DTO — deny-path RED trước",
+      "Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ nguyên) Nhóm A (19 route, SOCIAL-API-001..019): bài (tạo/sửa/xoá/moderation/view/save) · bình luận 1 cấp · reaction bộ emoji CHAT · mention feed_mentions + NOTI (028/029/030) · hashtag · đính kèm ảnh/video · guard 2 tầng (cờ tier1IsFloor) + audience check org_unit · audit manage · @Idempotent · RealtimeEmitter room co:{c}:feed payload DTO — deny-path RED trước. Nhóm B (tin tức+ack · tìm kiếm/thẻ/profile/sinh nhật · báo cáo, route 020-029) TÁCH sang S16-SOCIAL-BE-1B (owner chốt 21/09/2026, xem plan §0.0)",
+    zone: "red",
+    status: "in_progress",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/src/app.module.ts",
+      "apps/api/src/realtime/**",
+      "apps/api/src/notifications/**",
+      "apps/api/src/foundation/**",
+      "apps/api/src/config/openapi-modules.ts",
+      "apps/api/package.json",
+      "apps/api/vitest.config.ts",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/plans/**",
+      "docs/_review/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    // S16-SOCIAL-DB-1 (plan §0.4) — THÊM DB-2: DB-17 §9.1 gán TOÀN BỘ NOTI catalog UNION-ADD cho DB-2,
+    // kể cả 3/9 event thuộc Nhóm A (mention · bình luận vào bài của tôi · trả lời — 031/036 đã CHUYỂN
+    // sang nợ BE-1B ở lần vá plan 21/09/2026, xem plan §2 D15). Chạy BE-1 trước DB-2 ⇒ emit event chưa có
+    // trong catalog ⇒ vỡ CHECK khi ghi (nhớ: CHECK catalog NOTI sống ở HAI bảng). Không phải nợ "ghi chú
+    // cho người chốt" — sửa thẳng ở đây.
+    depends_on: ["S16-SOCIAL-DB-1", "S16-SOCIAL-DB-2"],
+    plan: "docs/plans/S16-SOCIAL-BE-1.md",
+    src: [
+      "API-19 (DOC-1) SOCIAL-API-001..019 · SPEC-16 §11/§12/§13/§16 · SOC-DEC-004/005/007/008/010",
+      "Khuôn: chat-reactions.service.ts (parseEmoji · emit sau commit chỉ khi có hàng mới) · chat-attachments.service.ts (presign NGOÀI tx + giới hạn) · task-comments.service.ts resolveMentions (nợ bảng mention — lần này bảng THẬT, hành vi NGƯỢC LẠI TASK: silent-drop) · recruit/ (guard 2 tầng + masking + RECRUIT_ROUTE_PAIRS) · realtime/rooms.ts + realtime-emitter + realtime.gateway.ts (room join gate) · memory ws-permission-gate-needs-its-own-room · clamp-must-be-sql-not-js · reused-method-must-be-actor-scoped · idempotency-key-must-be-content-derived",
+    ],
+    done_when: [
+      "Deny-path RED trước rồi GREEN: xem bài hidden/deleted của người khác (404, không 403 lộ tồn tại) · sửa/xoá bài người khác không manage · bài audience org_unit đọc từ đơn vị khác · reaction emoji ngoài bộ · IDOR đa hình (feed_reactions/feed_mentions target_id tenant khác hoặc bài không thấy được) · floor tier1IsFloor (002/006) có census đẳng thức + ma trận int-spec A/B · đính kèm: link file người khác/tenant khác (403/404), đọc đính kèm bài không thấy được (404), vượt giới hạn SPEC-16 §16 (422)",
+      "Listing feed: SQL set-based, lọc audience + status TRONG SQL (không JS), phân trang keyset theo (last_activity_at,id) cho «Hoạt động mới» và (published_at,id) cho «Mới đăng»; counters cập nhật cùng tx với hàng gốc; lượt xem ghi lần đầu qua INSERT … ON CONFLICT DO NOTHING",
+      "Mọi hành động manage (ẩn/hiện/ghim/khoá/xoá người khác) ghi audit_logs object_type feed_*; mention/bình luận mới/trả lời (028/029/030) → outbox NOTI + registrar OnModuleInit đăng ký đúng 3 mã; WS emit sau commit, payload = DTO đã qua serializer (ca test không có cột thừa); room co:{c}:feed join-gate view:feed tại realtime.gateway.ts (fail-soft, không disconnect)",
+      "Soft-delete: bài xoá biến khỏi feed/đếm/saved trong cùng tx; khôi phục qua restorePostTx() nội bộ trả lại đủ đếm/quan hệ (KHÔNG có route HTTP restore — drift SPEC↔API ghi nợ riêng, KHÔNG tự nhận 'đã đóng'); @Idempotent trên 002/015 (007/008 không cần — ON CONFLICT DO NOTHING tự idempotent); trần độ dài body/bình luận (.max(4000), mirror chat.ts:323); coverage social/ ≥85% đo tay trên LANE_DB + per-file threshold social-access.service.ts; route census 19 route + OpenAPI tag SOCIAL + enrich xanh",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus (permission guard + audience/ownership + IDOR + audit). Module NestJS mới `social/` — KHÔNG trộn vào integrations/social (fbpost SSO, khác OpenAPI tag — xem M11 plan).",
+      "✂️ TÁCH KHỎI phạm vi gốc 29 route (owner chốt 21/09/2026, plan §0.0/Phần 1): Nhóm B (route 020-029: tin tức+ack, tìm kiếm/thẻ/profile/sinh nhật, báo cáo) đã chuyển hẳn sang entry `S16-SOCIAL-BE-1B` ngay dưới. `S16-SOCIAL-FE-1.depends_on` đã cập nhật để chờ CẢ HAI.",
+      "Tiêu đề bài không có — nội dung là body; giới hạn độ dài body/bình luận .max(4000) mirror packages/contracts/src/chat.ts:323; đính kèm ≤10 ảnh/bài·≤1 video·≤20MB/tệp (SPEC-16 §16), khuôn code chat-attachments.service.ts; XSS: body lưu plain text, FE render an toàn (không HTML).",
+      "⚠️ NỢ TỪ FULL gate CỦA DB-1 (4 điểm reviewer chốt 19/09/2026 — BẮT BUỘC làm ở BE-1 cho phần Nhóm A, DB không đỡ được):  (a) `audience='group'` — TỪ CHỐI 422 tới khi có route quản lý nhóm (nhóm luôn rỗng hôm nay, filter EXISTS không test được thật).  (b) IDOR TRONG TENANT: `feed_reactions`/`feed_mentions`.`target_id` đa hình, KHÔNG FK ⇒ BE-1 BẮT BUỘC kiểm target tồn tại trong tenant + người gọi THẤY ĐƯỢC nó, TRƯỚC mọi INSERT (`assertTargetVisible`, dùng lại ở BE-1B cho feed_reports).  (c) MASS-ASSIGNMENT: `feedPostCoreSchema` mang `status`/`pinned`/counters và KHÔNG `.strict()` ⇒ DTO BE-1 phải `.pick()` + `.strict()`, KHÔNG `.extend()` thẳng.  (d) Trần độ dài `body`/bình luận — ĐÃ chốt .max(4000) ở plan (bản trước rơi mất nợ này).",
+      "⚠️ WILDCARD `*:*` LÀ CÂU HỎI CỦA PermissionService, KHÔNG PHẢI CỦA DB (đo 20/09/2026, xem plan M1): mọi cặp feed-* đều is_sensitive=false ⇒ *:* mở TẤT CẢ, kể cả cặp nhạy cảm-cảm-tính như view:feed-report. Đây là hành vi ENGINE toàn hệ thống, KHÔNG phải lỗ SOCIAL — KHÔNG được 'vá' bằng cách đổi is_sensitive (phá SOC-DEC-004). Ca test cụ thể minh hoạ dùng route view:feed-report thuộc BE-1B — xem note BE-1B.",
+      "⚠️ CENSUS `feed-*` HIỆN ĐANG ĐẾM TOÀN CỤC (0578 verify (c)/(e) + `s16-social-db1-invariants` total/scoped, kỳ vọng ĐÚNG 43, loại `super-admin` theo tên). Hợp lệ hôm nay vì DB-1 là nơi DUY NHẤT sinh grant feed. Ngay khi BE-1B/FE-1/BE-2 cho tenant admin cấp quyền feed cho role TUỲ BIẾN của họ, các census đó sẽ ĐỎ OAN — lúc đó phải thu hẹp về `ro.company_id IS NULL` (`invariant-count-must-filter-owned-rows`).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-BE-1B",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Module apps/api/src/social/ Nhóm B (10 route, SOCIAL-API-020..029): tin tức (danh sách + xác nhận đọc + danh sách đã đọc) · tìm kiếm tsvector · thẻ (hashtag) · trang cá nhân · sinh nhật day/month tôn trọng preference (dùng getPreferencesForUsers của BE-1) · báo cáo (tạo + danh sách scope Department cho manager + xử lý resolve/dismiss) — TÁI DÙNG hạ tầng SocialAccessService/assertTargetVisible/SOCIAL_ROUTE_PAIRS dựng ở BE-1, KHÔNG dựng lại",
     zone: "red",
     status: "todo",
     paths: [
@@ -16878,34 +16928,34 @@ export const backlog = [
       "apps/api/src/app.module.ts",
       "apps/api/src/realtime/**",
       "apps/api/src/notifications/**",
+      "apps/api/src/foundation/**",
+      "apps/api/src/config/openapi-modules.ts",
+      "apps/api/package.json",
+      "apps/api/vitest.config.ts",
       "apps/api/test/**",
       "packages/contracts/**",
       "docs/plans/**",
+      "docs/_review/**",
       "harness/backlog.mjs",
     ],
     skills: ["security-review"],
-    // S16-SOCIAL-DB-1 (plan §0.4) — THÊM DB-2: DB-17 §9.1 gán TOÀN BỘ NOTI catalog UNION-ADD cho DB-2,
-    // kể cả 5/9 event thuộc Track A (mention · bình luận vào bài của tôi · trả lời · tin tức mới · bài bị
-    // báo cáo). Chạy BE-1 trước DB-2 ⇒ emit event chưa có trong catalog ⇒ vỡ CHECK khi ghi (nhớ: CHECK
-    // catalog NOTI sống ở HAI bảng). Không phải nợ "ghi chú cho người chốt" — sửa thẳng ở đây.
-    depends_on: ["S16-SOCIAL-DB-1", "S16-SOCIAL-DB-2"],
-    plan: "docs/plans/S16-SOCIAL-BE-1.md",
+    depends_on: ["S16-SOCIAL-BE-1"],
+    plan: "docs/plans/S16-SOCIAL-BE-1B.md",
     src: [
-      "API-19 (DOC-1) SOCIAL-API-001..~025 · SPEC-16 §11/§12/§13 · SOC-DEC-004/005/007/008/010",
-      "Khuôn: chat-reactions.service.ts (parseEmoji · emit sau commit chỉ khi có hàng mới) · chat-attachments.service.ts (presign + giới hạn) · task-comments.service.ts resolveMentions (nợ bảng mention — lần này bảng THẬT) · recruit/ (guard 2 tầng + masking) · realtime/rooms.ts + realtime-emitter · memory ws-permission-gate-needs-its-own-room · clamp-must-be-sql-not-js · reused-method-must-be-actor-scoped",
+      "API-19 (DOC-1) SOCIAL-API-020..029 · SPEC-16 §11/§12/§13 · SOC-DEC-007/008/010",
+      "Khuôn: TÁI DÙNG NGUYÊN — social-access.service.ts (assertTargetVisible biến thể targetType='report') · social-preferences.ts (getPreferencesForUsers) · SOCIAL_ROUTE_PAIRS (thêm route mới vào CÙNG bảng hằng, không tạo bảng riêng) — tất cả dựng sẵn ở S16-SOCIAL-BE-1, xem plan BE-1 §9.1 cho danh sách nợ đầy đủ đã chuyển từ BE-1",
     ],
     done_when: [
-      "Deny-path RED trước rồi GREEN: xem bài hidden/deleted của người khác (404, không 403 lộ tồn tại) · sửa/xoá bài người khác không manage · ack tin tức thay người khác · bài audience org_unit đọc từ đơn vị khác · reaction emoji ngoài bộ · route sinh nhật không bao giờ trả năm/date_of_birth (ca grep response) · user đã ẩn sinh nhật không xuất hiện (cả tag/tìm kiếm)",
-      "Listing feed: SQL set-based, lọc audience + status TRONG SQL (không JS), phân trang keyset theo (last_activity_at,id) cho «Hoạt động mới» và (published_at,id) cho «Mới đăng»; counters cập nhật cùng tx với hàng gốc; lượt xem ghi lần đầu qua INSERT … ON CONFLICT DO NOTHING",
-      "Mọi hành động manage (ẩn/hiện/ghim/khoá/xoá người khác/resolve report) ghi audit_logs object_type feed_*; mention/bình luận/tin tức mới → outbox NOTI (mã đo ở DOC-1); WS emit sau commit, payload = DTO đã qua serializer (ca test không có cột thừa); room join gate view:feed",
-      "Soft-delete: bài xoá biến khỏi feed/đếm/tìm kiếm/tag/saved trong cùng tx; recycle-bin khôi phục trả lại đủ; @Idempotent trên mọi POST tạo; coverage social/ ≥85% trên LANE_DB; route census + OpenAPI enrich xanh",
+      "Route sinh nhật (026): Object.keys(item) BẰNG ĐÚNG {employeeId,fullName,avatar,day,month}; grep regex năm \\b(19|20)\\d{2}\\b trên TOÀN BỘ JSON.stringify(response), không chỉ field day/month; neo dương ≥1 hàng thật; user showBirthday=false KHÔNG xuất hiện ở /birthdays lẫn mọi đường đọc khác trả tên/avatar nhân viên (search/tags/profiles/mention-resolve — 1 ca test mỗi đường, danh sách ĐÓNG)",
+      "Ack tin tức (021): assert feed_post_acks có ĐÚNG 1 hàng user_id=actor và 0 hàng cho người khác (không chỉ assert response 200); body không nhận trường userId (server luôn dùng actor.id)",
+      "Báo cáo: IDOR đa hình dùng LẠI assertTargetVisible (target_id tenant khác hoặc actor không thấy được → 404); view:feed-report scope Department cho manager ép TRONG SQL (không lọc JS) + 1 ca deny (manager đọc report ngoài phòng ban) + 1 ca allow (hr Company-wide); PATCH report đã resolved/dismissed → 409 ERR-021; ca *:* mở view:feed-report ghi rõ PIN hành vi ENGINE (memory tests-can-pin-a-hole-open) + PR nêu tường minh xin owner ký, KHÔNG tự ý đổi is_sensitive",
+      "@Idempotent trên 027; outbox NOTI đăng ký + emit SOCIAL_NEWS_PUBLISHED(031)/SOCIAL_POST_REPORTED(036); route census 29 route (19 BE-1 + 10 BE-1B) + OpenAPI enrich xanh; coverage social/ ≥85% đo LẦN 2 (sau BE-1B, thay lần đo tạm ở BE-1)",
     ],
     notes: [
-      "🔴 FULL gate + Opus (permission guard + audience/ownership + PII sinh nhật + audit). Module NestJS mới `social/` — KHÔNG trộn vào integrations/social (fbpost SSO).",
-      "Tiêu đề bài không có — nội dung là body; giới hạn độ dài body/bình luận + số ảnh/tệp mirror hằng CHAT; XSS: body lưu plain text, FE render an toàn (không HTML).",
-      "⚠️ NỢ TỪ FULL gate CỦA DB-1 (4 điểm reviewer chốt 19/09/2026 — BẮT BUỘC làm ở BE-1, DB không đỡ được):  (a) ⚠️ ĐIỀU KIỆN MỞ ĐÃ ĐƯỢC VIẾT LẠI SAU FULL GATE DB-2 (21/09/2026) — ĐỪNG ĐỌC 'DB-2 đã land' LÀ ĐÃ AN TOÀN: DB-2 thêm `feed_groups` + `feed_posts_group_fk` nên CHỈ đóng nhánh `group_id` MỒ CÔI (UUID rác không ghi được nữa). Nhánh CHÍNH vẫn fail-OPEN: `group_id` HỢP LỆ trỏ nhóm **riêng tư mà người xem KHÔNG là thành viên** — RLS chỉ biết `company_id`, KHÔNG biết `feed_group_members`, nên DB không đỡ được. Điều kiện mở `audience='group'` là: lọc membership **TRONG SQL bằng `EXISTS`/`JOIN`, TUYỆT ĐỐI KHÔNG `NOT IN`** (subquery sinh NULL ⇒ NULL-semantics ⇒ bài lọt ra ngoài nhóm), kèm ca deny 404 cho người ngoài nhóm riêng tư. Tới khi có cả hai: vẫn TỪ CHỐI THẲNG bằng 422.  (b) IDOR TRONG TENANT: `feed_reactions`/`feed_mentions`/`feed_reports`.`target_id` là ĐA HÌNH và KHÔNG có FK ⇒ BE-1 BẮT BUỘC kiểm target tồn tại trong tenant + người gọi THẤY ĐƯỢC nó, TRƯỚC mọi INSERT.  (c) MASS-ASSIGNMENT: `feedPostCoreSchema`/`feedReportCoreSchema` mang `status`/`pinned`/`requiresAck`/counters/`resolvedBy` và KHÔNG `.strict()` ⇒ DTO của BE-1 phải `.pick()` + `.strict()`, KHÔNG `.extend()` thẳng.  (d) `note`/`resolutionNote` chưa có trần độ dài ở cả DB lẫn Zod — chốt trần ở BE-1 (mirror hằng CHAT).",
-      "⚠️ WILDCARD `*:*` LÀ CÂU HỎI CỦA PermissionService, KHÔNG PHẢI CỦA DB (đo 20/09/2026): trên DB thật CÓ role TUỲ BIẾN của tenant mang cặp toàn-quyền `*:*` (S14-FG có fixture đúng hình dạng đó). 0578/int-spec DB-1 chỉ canh được phần nó sở hữu (role HỆ THỐNG) — nên BE-1 phải TRẢ LỜI TƯỜNG MINH: `*:*` có mở quyền `feed-*` không? Nếu PermissionService coi `*:*` là match-all thì mọi role tuỳ biến toàn-quyền thấy toàn bộ SOCIAL, kể cả `view:feed-report` (báo cáo toàn công ty). Cần deny-path test RED-trước cho đúng câu này.",
-      "⚠️ CENSUS `feed-*` HIỆN ĐANG ĐẾM TOÀN CỤC (0578 verify (c)/(e) + `s16-social-db1-invariants` total/scoped, kỳ vọng ĐÚNG 43, loại `super-admin` theo tên). Hợp lệ hôm nay vì DB-1 là nơi DUY NHẤT sinh grant feed. Ngay khi BE-1/FE-1 cho tenant admin cấp quyền feed cho role TUỲ BIẾN của họ, các census đó sẽ ĐỎ OAN — lúc đó phải thu hẹp về `ro.company_id IS NULL` như các ca social-*/wildcard đã làm ở DB-1 (`invariant-count-must-filter-owned-rows`).",
+      "🔴 FULL gate + Opus — thuần tiêu thụ hạ tầng BE-1, rủi ro thấp hơn BE-1 nhưng vẫn chạm permission/IDOR/PII sinh nhật.",
+      "KHÔNG mở entry này tới khi S16-SOCIAL-BE-1 merge — hạ tầng (SocialAccessService, SOCIAL_ROUTE_PAIRS, social-preferences.ts) chưa tồn tại trước đó.",
+      "3 ca test yếu bản gốc (H3 review 21/09/2026) đã viết lại nguyên văn yêu cầu trong done_when ở trên — KHÔNG được viết lại yếu hơn khi thi công.",
+      "Sinh nhật/tìm kiếm/thẻ/profile: PII nhân viên — mọi đường đọc PHẢI đi qua getPreferencesForUsers (BE-1 dựng), KHÔNG tự viết query preference riêng.",
     ],
   },
   {
@@ -16931,7 +16981,7 @@ export const backlog = [
       "apps/api/src/foundation/module-catalog/**",
     ],
     skills: ["code-review"],
-    depends_on: ["S16-SOCIAL-BE-1"],
+    depends_on: ["S16-SOCIAL-BE-1", "S16-SOCIAL-BE-1B"],
     plan: "docs/plans/S16-SOCIAL-FE-1.md",
     src: [
       "SPEC-16 §9 SOC-SCREEN-001..005 · UI-07 biến thể 3 cột (DOC-1) · hồ sơ HTML §05 wireframe · SOC-DEC-003/007/008/010",
@@ -16946,6 +16996,7 @@ export const backlog = [
     notes: [
       "🟡 LIGHT gate (typescript + react reviewer). Nếu S15-UI-SHELL-1 đã merge: dùng sidebar nhóm gập/StatusPill; chưa thì KHÔNG chờ.",
       "Body bài render plain text + linkify + #tag/@mention thành link — KHÔNG dangerouslySetInnerHTML.",
+      "⚠️ BE-1 chỉ nhận type share|news (D2, plan S16-SOCIAL-BE-1.md §2) — composer chỉ render 2 nút; 3 nút poll/idea/kudos mở sau BE-2. Tin tức/tìm kiếm/báo cáo/sinh nhật (màn phụ) cần S16-SOCIAL-BE-1B — depends_on đã cập nhật để chờ CẢ HAI BE-1 và BE-1B (tách WO 21/09/2026, xem plan BE-1 §0.0).",
     ],
   },
   {

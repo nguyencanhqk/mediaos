@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-21 03:38Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-21 08:43Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -30,7 +30,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `feat/s16-social-db-2` · **file đang đổi (dirty)**: 18
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 250 — `0583_s16socialdb2_audit_union_kudos_badge` (251 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -39,6 +39,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `9e17ae51` | 2026-09-21 | feat(social): S16-SOCIAL-DB-2 — schema + migration SOCIAL Track B (0580-0583) (#529) |
 | `a3637274` | 2026-09-21 | docs(social): S16-SOCIAL-DB-2 — micro-plan vùng đỏ Track B (chưa thi công) |
 | `f68c3f78` | 2026-09-21 | feat(social): S16-SOCIAL-DB-1 — schema + migration SOCIAL Track A (0577/0578/0579) (#528) |
 | `eb7ca824` | 2026-09-20 | chore(docs): regen STATUS — FBPOST-1 chuyển CHỜ (cần FE-1), DB-2 lên READY |
@@ -50,7 +51,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `c667c15d` | 2026-09-19 | docs(social): S16-SOCIAL-DOC-1 — bộ tài liệu SOCIAL (SPEC-16 · DB-17 · API-19 · §9h) (#526) |
 | `45b68327` | 2026-09-19 | refactor(fe): S15-UI-SHELL-2 — tách sidebar-registry theo module + ghim cây sidebar bằng snapshot (#525) |
 | `55461e8a` | 2026-09-19 | feat(payroll): S15-PAYROLL-FE-5 — sửa / xoá mềm phiên bản hồ sơ lương (PAYROLL-API-022) (#524) |
-| `333b2530` | 2026-09-19 | feat(payroll): S15-PAYROLL-FE-7 — sửa trạng thái · ngày chi · ghi chú của đợt chi trả (069) (#523) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
