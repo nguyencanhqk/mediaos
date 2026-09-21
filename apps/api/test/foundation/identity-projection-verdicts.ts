@@ -666,6 +666,40 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "ĐIỂM CHIẾU DUY NHẤT của module PAYROLL (tên trong cảnh báo readiness 006 · danh bạ picker 034 · tên trên bảng lương của BE-2 — SPEC-11 §18, khuôn ROOM/RECRUIT). Vị từ = PayrollActor.peopleVisibleCond, tính ĐÚNG MỘT LẦN/request bởi payroll-access.service.ts#resolveActor theo cặp CỦA ROUTE lấy từ bảng hằng PAYROLL_ROUTE_PAIRS (payroll-route-pairs.const.ts — CÙNG bảng cho decorator + assert tầng 2 + căn cứ chiếu; repository KHÔNG nhận cặp rời ⇒ không có đường truyền cặp sai route). SPEC-11 §13.5 chốt kỳ lương/hồ sơ lương/thưởng-phạt CHỈ Company và resolveActor ép SÀN scope Company (403 AUTH-ERR-SCOPE-DENIED khi grant hẹp hơn) ⇒ mọi grant THẬT trên các route này đều mở tên; nhánh users.id = actor là fail-closed cho trường hợp scope hẹp lọt qua. employeeCode bọc CÙNG vị từ (mirror ROOM M2); picker 034 tái dùng CHÍNH hàm này và lọc `q` SAU khi bọc cột (không SELECT users trần ⇒ không dò được tên bằng cách thử q). Bằng chứng: test/foundation/payroll-two-layer-guard-census.unit-spec.ts (18 route × cặp, 2 tầng so với CÙNG bảng hằng) + test/integration/payroll-be1-scope.int-spec.ts (ma trận per-pair A/B + wildcard *:* ⇒ 403).",
     signedBy: "S13-PAYROLL-BE-1",
   },
+  // ── social (S16-SOCIAL-BE-1) ────────────────────────────────────────────────
+  //
+  // Bốn điểm. Điểm thứ NĂM (`social-mentions.ts#resolveMentions:users.fullName`) từng tồn tại và đã
+  // bị XOÁ chứ không xin dòng ở đây: nó dựng `droppedMentions[]`, tức trả TÊN cho một `userId` mà
+  // caller chỉ cần ĐOÁN — một oracle dò danh bạ trên chính đường mà SPEC-16 §12 `ERR-009` sinh ra để
+  // không rò gì. Nay `droppedMentions` chỉ dội lại id caller vừa gửi (thông tin mới = 0).
+  {
+    point: "social/social-posts.repository.ts#POST_COLUMNS:users.fullName",
+    basis: "scoped-predicate",
+    reason:
+      "Tên TÁC GIẢ của chính hàng bài, và mọi câu đọc bài mang `SocialAccessService.visiblePostCondition` NGAY TRONG truy vấn (social-posts.repository.ts:77,165) — vị từ SQL thật: `deleted_at IS NULL` + status (`hidden` chỉ cho tác giả/`manage:feed-post`) + audience (`company`, hoặc `org_unit` ∈ tập đơn vị của actor). API-19 §6.1 chốt `author.fullName` là một phần DTO thẻ bài; người đọc được bài thì đọc được tên người viết nó.",
+    signedBy: "S16-SOCIAL-BE-1",
+  },
+  {
+    point: "social/social-comments.repository.ts#COMMENT_COLUMNS:users.fullName",
+    basis: "second-assert",
+    reason:
+      "Tên TÁC GIẢ bình luận. Bình luận KHÔNG có phạm vi riêng — nó thừa hưởng phạm vi BÀI CHA, và cổng đó nằm ở tầng service TRƯỚC mọi truy vấn: `social-comments.service.ts:86` gọi `assertPostVisible` rồi mới `listForPost`; đường theo `{comment_id}` đi qua `assertCommentVisible` (JOIN `feed_posts` + `visiblePostCondition`). Truy vấn ở repository chỉ lọc `post_id` + `deleted_at IS NULL` nên bằng chứng nằm ở điểm KHẲNG ĐỊNH, không ở vị từ của chính câu.",
+    signedBy: "S16-SOCIAL-BE-1",
+  },
+  {
+    point: "social/social-reactions.repository.ts#listReactors:users.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-013 «ai đã thả cảm xúc». `social-reactions.service.ts` gọi `assertPostVisible` TRƯỚC khi đọc (ca deny `GET /posts/{id}/reactions` trên bài không thấy được ⇒ 404 ở social-be1-content). DTO trả danh tính NHÂN SỰ, KHÔNG `userId` (ca test grep chính id đó trong response), trần cứng 100 hàng — không phải đường kéo danh bạ.",
+    signedBy: "S16-SOCIAL-BE-1",
+  },
+  {
+    point: "social/social-posts.service.ts#resolveActorName:users.fullName",
+    basis: "self-bound-row",
+    reason:
+      "Truy vấn ghim `eq(users.id, userId)` với `userId = actor.actorUserId` (social-posts.service.ts, `resolveActorName`) — lấy tên hiển thị của CHÍNH người đang thao tác để dựng biến template `{actor_name}` của NOTI-028/029/030. Cùng hình dạng với `chat-messages.repository.ts#findSenderDisplayName`.",
+    signedBy: "S16-SOCIAL-BE-1",
+  },
 ];
 
 /**
@@ -685,7 +719,12 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // Không đo được bằng máy — chúng là câu người viết.
   waiver: 7,
   "no-actor": 7,
-  "second-assert": 3,
+  // 3 → 5 (S16-SOCIAL-BE-1, 21/09/2026): `social-comments.repository.ts#COMMENT_COLUMNS` ·
+  // `social-reactions.repository.ts#listReactors`. Nới CÓ CHỦ ĐÍCH qua FULL gate. Cả hai nằm trên
+  // đường đọc ĐÃ bound bằng `assertPostVisible` TRƯỚC mọi truy vấn (bình luận và cảm xúc KHÔNG có
+  // phạm vi riêng — chúng thừa hưởng phạm vi BÀI CHA), và KHÔNG mở bề mặt đọc nào ngoài tập bài mà
+  // actor vốn đã được phép đọc. Ca deny 404 cho cả hai đường ở `social-be1-content.int-spec.ts`.
+  "second-assert": 5,
   // 7 → 8 (S10-SEC-LOGINLOG429-1, 25/08/2026): `recordLoginAttemptForUser:users.email`. Nới CÓ CHỦ
   // ĐÍCH và đi qua FULL gate đúng như dòng cảnh báo của cổng này đòi. Điểm mới KHÔNG mở bề mặt đọc
   // nào: email đọc ra chỉ rơi vào `login_logs.email` (cột vốn đã chứa email client tự khai), và bề
@@ -696,7 +735,10 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   "self-bound-route": 9,
   "order-only": 1,
   // Có vị từ SQL thật, nhưng SỔ này không nhìn thấy vị từ ⇒ vẫn phải có trần.
-  "scoped-predicate": 23, // S11-ASSET-BE-1: +2 (holderSelect · listByAssetTx) — plan-review B7, nâng có chủ đích qua FULL gate
+  // 23 → 24 (S16-SOCIAL-BE-1, 21/09/2026): `social-posts.repository.ts#POST_COLUMNS:users.fullName`
+  // — tên tác giả trên thẻ bài. Vị từ `visiblePostCondition` nằm NGAY TRONG câu (status + audience +
+  // deleted_at), không phải một khẳng định ở tầng khác.
+  "scoped-predicate": 24, // S11-ASSET-BE-1: +2 (holderSelect · listByAssetTx) — plan-review B7, nâng có chủ đích qua FULL gate
   // 8 → 11 (S17-CHAT-UX2-BE-1, 10/09/2026): DTO phòng v2 thêm BA điểm chiếu trong
   // `chat-rooms.repository.ts` — `listRoomsForUser:lastSender.fullName` ·
   // `listRoomsForUser:peerUser.fullName` · `findRoomCreatorName:users.fullName`. Nới CÓ CHỦ ĐÍCH:
@@ -711,7 +753,9 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // đọc nào ngoài phòng của chính actor — oversight cũng KHÔNG được miễn `assertMember` (API-13
   // §5.1d(4), có ca int-spec 404 cho actor mang `view:chat-oversight`).
   membership: 12,
-  "self-bound-row": 4, // S11-ASSET-BE-1: +1 (findUserDisplayNameTx — tên actor cho payload NOTI, thay raw SQL để không nới vùng mù rawSqlIdentity)
+  // 4 → 5 (S16-SOCIAL-BE-1, 21/09/2026): `social-posts.service.ts#resolveActorName` — tên của CHÍNH
+  // actor cho biến template `{actor_name}` của NOTI-028/029/030. Truy vấn ghim `users.id = actor`.
+  "self-bound-row": 5, // S11-ASSET-BE-1: +1 (findUserDisplayNameTx — tên actor cho payload NOTI, thay raw SQL để không nới vùng mù rawSqlIdentity)
   // 14 → 15 (S11-ROOM-BE-1, 30/08/2026): `rooms/room-people.repository.ts#namesByUserIdsTx` — điểm chiếu DUY NHẤT của
   // module ROOM; cặp gate route ghi (`book`/`cancel`) ≠ cặp bound (`view`, resolveOrNull ⇒ fail-closed `users.id =
   // actor`). Nới có chủ đích, plan-review B1 chọn basis này thay vì nâng `scoped-predicate` (đã bão hoà); qua FULL gate.

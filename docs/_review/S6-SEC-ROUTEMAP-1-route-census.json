@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 632,
-    "controllers": 118,
-    "gated": 593,
+    "routes": 651,
+    "controllers": 121,
+    "gated": 612,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -9045,6 +9045,310 @@
       "path": "/api/v1/foundation/system-settings/:key",
       "hasPermission": true,
       "permission": "system-manage:foundation-setting",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialCommentsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/posts/:post_id/comments",
+      "hasPermission": true,
+      "permission": "create:feed-comment",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialCommentsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/posts/:post_id/comments",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialCommentsController#remove",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/comments/:comment_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialCommentsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/social/comments/:comment_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/posts",
+      "hasPermission": true,
+      "permission": "create:feed-post",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#getOne",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/posts/:post_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/feed",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#listSaved",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/saved",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#moderate",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/social/posts/:post_id/moderation",
+      "hasPermission": true,
+      "permission": "manage:feed-post",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#recordView",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/posts/:post_id/view",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#remove",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/posts/:post_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#save",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/posts/:post_id/save",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#unsave",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/posts/:post_id/save",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPostsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/social/posts/:post_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialReactionsController#deleteCommentReaction",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/comments/:comment_id/reaction",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialReactionsController#deletePostReaction",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/posts/:post_id/reaction",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialReactionsController#listReactors",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/posts/:post_id/reactions",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialReactionsController#putCommentReaction",
+      "httpMethod": "PUT",
+      "path": "/api/v1/social/comments/:comment_id/reaction",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialReactionsController#putPostReaction",
+      "httpMethod": "PUT",
+      "path": "/api/v1/social/posts/:post_id/reaction",
+      "hasPermission": true,
+      "permission": "view:feed",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

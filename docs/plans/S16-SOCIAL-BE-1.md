@@ -376,3 +376,146 @@ Payload audit theo API-19 §8: `{postId, field, from, to}` — **MỖI TRƯỜNG
 **Ghi chú `@Idempotent()` (cảnh báo cuối, Phần 3):** `done_when` gốc nói "mọi POST tạo" nhưng Nhóm A chỉ đặt trên `002`/`015` — route `007`(view)/`008`(save) là POST nhưng KHÔNG cần `@Idempotent()` vì `ON CONFLICT DO NOTHING`/PK tổ hợp (`user_id`+`post_id`) đã tự nhiên idempotent ở tầng DB, gọi lại nhiều lần không tạo hàng trùng — khác với `002`/`015` tạo hàng MỚI mỗi lần (không có khoá tự nhiên chống trùng).
 
 **Còn "CHƯA ĐO" (không bịa):** hằng CHAT số ảnh/video/dung lượng tương ứng D18 (dùng SPEC-16 §16 làm chuẩn); hằng CHAT cho trường `note` ngắn (D19, không có tiền lệ, là quyết định mới không phải mirror). **Còn cần owner ký trước khi thi công:** D13 (hệ quả org_unit không đệ quy cây con); §9.5 lựa chọn sửa SPEC hay mở WO `BE-3` cho recycle-bin.
+
+---
+
+## §11. ĐÍNH CHÍNH SAU THI CÔNG (21/09/2026) — plan ↔ code thật
+
+> Ghi **sau khi code chạy và test xanh**. Mỗi mục là một chỗ plan mô tả sai hiện thực, kèm phép đo.
+> Đây là phần bắt buộc đọc trước khi mở `S16-SOCIAL-BE-1B`/`BE-2`: bốn mục đầu là **hợp đồng kỹ
+> thuật đã đổi**, không phải khẩu vị.
+
+### 11.1 D2/D3 — `feedPostCoreSchema.pick()/.extend()` **KHÔNG TỒN TẠI**
+
+**Đo:** zod 3.25.76, `feedPostCoreSchema` kết thúc bằng `.superRefine()` ⇒ nó là `ZodEffects`, và
+`ZodEffects` không có `.pick`/`.extend` (cả hai `undefined`). Cơ chế plan mô tả **không biên dịch được**.
+
+**Thay bằng:** mỗi DTO ghi là một **allowlist tường minh** `z.object({…}).strict()` ở
+`packages/contracts/src/social-api.ts`. Chặt hơn `.pick()`: `.pick()` là "bỏ bớt khỏi danh sách đầy
+đủ" (quên bỏ một trường ⇒ lọt), allowlist là "chỉ nhận tên có ở đây" (quên thêm ⇒ 400, không phải rò).
+Ca R15 xác nhận `{status,pinned,likeCount}` bị **từ chối 400**, không phải im lặng bỏ qua.
+
+### 11.2 D21 (MỚI) — WS chỉ fan-out bài `audience='company'` + `status='published'`
+
+API-19 §7 khai ĐÚNG hai room: `co:{c}:feed` (cả công ty) và `co:{c}:feedgroup:{groupId}`. **KHÔNG có
+room nào cho `audience='org_unit'`.** Phát một bài org_unit vào room cả-công-ty là rò đúng nội dung mà
+REST trả 404 cho chính những người đó — một cổng quyền bị đi vòng qua kênh phụ.
+
+⇒ BE-1 thu hẹp: `SocialPostsService.emitPostCreated` / `SocialCommentsService.emitCommentCreated` chỉ
+phát khi bài (hoặc bài CHA) là `company` + `published`. Vế thứ hai nằm ở schema:
+`wsFeedPostCreatedEventSchema` khoá cứng `audience: z.literal("company")` ⇒ một bài org_unit lọt tới
+emitter sẽ NÉM ở `.parse()` chứ không âm thầm phát ra. **Nợ `S16-SOCIAL-BE-2`:** dựng room
+`co:{c}:feedgroup:{groupId}` (có gate membership riêng) và cân nhắc room cho `org_unit`.
+
+### 11.3 §6 — registrar NOTI sống ở `notifications/**`, KHÔNG ở `SocialModule.onModuleInit()`
+
+Plan viết `SocialModule.onModuleInit()` gọi `registerSource`. Làm vậy buộc `SocialModule` import
+`NotificationsModule` — **ngược chiều với cả 12 registrar hiện có** (GOAL/ASSET/RECRUIT/CHAT/ATT/…
+đều nằm ở `notifications/**`) và tạo vòng phụ thuộc. Đã theo tiền lệ:
+`apps/api/src/notifications/social-noti-bridge.registrar.ts`, đăng ký ở `notifications.module.ts`.
+`SocialModule.onModuleInit()` vẫn tồn tại nhưng cho việc KHÁC: đăng ký `SocialFileResolver`.
+
+### 11.4 D17 — định nghĩa `tier1IsFloor` phải HẸP hơn plan, nếu không cờ vô nghĩa
+
+Plan định nghĩa "cặp tầng-1 ≠ cặp thật kiểm ở tầng-2". Định nghĩa đó **quét cả `001`/`004`/`005`/
+`016`/`017`** (chúng cũng hỏi `manage:feed-post` ở tầng 2 — cho bộ lọc `status`, và cho nhánh
+sửa/xoá của người khác) ⇒ gần như mọi route đều `true` và cờ mất hết giá trị chẩn đoán.
+
+**Định nghĩa đã chốt:** `tier1IsFloor = true` ⇔ **cặp quyền route đòi PHỤ THUỘC VÀO NỘI DUNG REQUEST**
+(`002` theo `type`, `006` theo TRƯỜNG có mặt) — không một cặp tĩnh nào diễn đạt được. Ở năm route kia,
+`view:feed` ĐÚNG là cặp gác route; phần thêm là vị từ HÀNG (sở hữu) hoặc bộ lọc TUỲ CHỌN.
+Census đo đẳng thức này bằng nguồn ĐỘC LẬP: tập `tier1IsFloor===true` phải BẰNG ĐÚNG tập route có
+bảng cặp-theo-payload (`SOCIAL_POST_TYPE_PAIRS` / `SOCIAL_MODERATION_FIELD_PAIRS`).
+
+### 11.5 Bốn bẫy thi công đã cắn (đo thật, không suy diễn)
+
+| # | Bẫy | Triệu chứng | Sự thật |
+| --- | --- | --- | --- |
+| 1 | `sql\`${col} = ANY(${jsArray})\`` | 500 `Failed query`, typecheck XANH | drizzle bind mảng JS vào fragment `sql` THÔ mà không ép kiểu ⇒ Postgres từ chối `= ANY($1)`. Dùng `inArray()`. |
+| 2 | `file_links.link_type = "attachment"` | 500 vô danh; drizzle giấu mã PG trong `error.cause` nên log chỉ có "Failed query: insert into file_links" | `chk_file_links_link_type` chỉ nhận giá trị **VIẾT HOA** (`Attachment`). |
+| 3 | Bộ cảm xúc là **TÊN**, không phải ký tự emoji | ca IDOR trả 400 (Zod) thay vì 404 ⇒ xanh giả vì lý do SAI | `chatReactionEmojiSchema` = `like|love|haha|wow|sad|angry` (`chat.ts:216`). |
+| 4 | `storage_path` không mang tiền tố `<companyId>/` | 500 ở tầng storage TRƯỚC khi đọc được kết luận policy ⇒ ca "ALLOW" dạng phủ định (`not 403/404`) XANH GIẢ | `assertKeyInTenant` (`storage-key.ts:107`). Ca ALLOW phải assert **200 + có URL**, không assert phủ định. |
+
+### 11.6 `SocialAccessService` — thêm `resolveViewerContext` (không có trong plan)
+
+`FilePolicyService` hỏi quyền tệp qua `FilePermissionInput` **không có `routeKey`** (đường tải là route
+của FOUNDATION). Nếu vị từ visibility chỉ nhận `SocialActor` đầy đủ, resolver buộc phải bịa một
+`routeKey` hoặc **tự viết lại vị từ** — và bản viết lại sẽ trôi khỏi bản gốc, tức đúng lớp lỗi
+`read-path-gate-pair-must-match-download-pair`. Đã tách `SocialViewerContext` (phần ngữ cảnh XEM) để
+cổng MÀN HÌNH và cổng ĐƯỜNG TẢI dùng CHUNG một `visiblePostCondition`.
+
+### 11.7 `SocialFileResolver` là BẮT BUỘC, không phải tuỳ chọn
+
+`FilePolicyService.decideForLinkedFile` DENY `deny-no-resolver` khi một link có cặp `(module,entity)`
+chưa ai đăng ký, và **không leo thang lên `FOUNDATION.FILE.*`**. Vì luật là AND trên MỌI link của một
+tệp, thiếu resolver không chỉ làm đính kèm SOCIAL không ký được URL — nó làm **tệp đó không tải được ở
+mọi module khác**. Đăng ký ở `SocialModule.onModuleInit()`.
+
+### 11.8 D20 — 🔴 `user_preferences.feed.showBirthday` **CHƯA TỒN TẠI** (nợ BE-1B)
+
+SPEC-16 §3.5 + SOC-DEC-007 chốt nhân viên tự ẩn sinh nhật bằng `user_preferences.feed.showBirthday`.
+Đo thật trên `schema/user-preferences.ts:24-63` + grep toàn bộ `db/schema/*.ts`: **không có cột `feed`,
+không có `show_birthday`**, không jsonb nào mang ngữ nghĩa đó (`me_layout_config` là bố cục màn ME).
+⇒ `getPreferencesForUsers` CHƯA trả `showBirthday` — trả một cờ luôn `true` từ hư không là **fail-OPEN
+có vẻ ngoài hoàn chỉnh**: route `026` sẽ hiện sinh nhật của mọi người và mọi ca test «người đã ẩn không
+xuất hiện» xanh giả vì không ai ẩn được. **BE-1B phải mở migration thêm chỗ chứa nó TRƯỚC route `026`.**
+
+### 11.9 Census `feed-*` đếm TOÀN CỤC — đã chạm, chưa vỡ
+
+`s16-social-db1-invariants` + verify block của mig `0578` đếm grant `feed-*` trên **MỌI role**, kỳ vọng
+đúng 43. Int-spec của BE-1 gieo role tenant mang cặp `feed-*` ⇒ trên một lane DB **bẩn** (rác tích tụ
+từ các lượt chạy hỏng) con số lên 156 và hai ca đó ĐỎ.
+
+**Đo trên lane DB SẠCH sau lượt chạy đầy đủ:** `canonical = 43` · `tenant-role = 0` · 0 company sót ⇒
+`cleanupTenants` dọn ĐÚNG, và hai ca đó XANH (98/98). Không phải lỗi sản phẩm, không phải lỗi dọn dẹp.
+
+⚠️ **Nợ `QA-1` GIỮ NGUYÊN và nay có bằng chứng:** census phải thu hẹp về `ro.company_id IS NULL`
+(`invariant-count-must-filter-owned-rows`) NGAY KHI có route cho tenant admin cấp `feed-*` cho role
+tuỳ biến (BE-1 **không** có route đó — chỉ test mới gieo). Tới lúc đó, cách chạy đúng là
+`bash scripts/lane-db-setup.sh <lane> --reset` trước mỗi lượt đo bất biến.
+
+### 11.10 Phạm vi KHÔNG đổi
+
+19 route `SOCIAL-API-001..019` đúng như §4. Route census: **632 → 651** (+19). Không migration mới.
+
+### 11.11 BA CỔNG TOÀN CỤC BẮT ĐƯỢC LỖI THẬT SAU KHI test-của-WO ĐÃ XANH
+
+> Cả ba đều đỏ **sau khi** 148 test của WO đã xanh. Ghi lại vì chúng là bằng chứng cho một điều:
+> test của chính WO không đủ để đóng một WO vùng đỏ — cổng toàn cục mới thấy được thứ WO không nhìn.
+
+**(1) `identity-projection-ratchet` — tìm ra một RÒ THẬT, không phải thủ tục.**
+Cổng đòi mọi điểm chiếu danh tính có một dòng phán quyết. Nó lôi ra 5 điểm của SOCIAL, và điểm thứ
+năm (`resolveMentions:users.fullName`) là **lỗ đang mở**: `droppedMentions[]` trả `fullName` cho một
+`userId` mà caller chỉ cần ĐOÁN ⇒ ô soạn thảo thành oracle dò danh bạ, đúng trên đường mà SPEC-16 §12
+`ERR-009` dựng ra để không rò gì. Docblock của chính tôi lúc đó khẳng định "không thêm thông tin nào
+mới" — câu đó SAI.
+**Vá:** `droppedMentions` nay là `string[]` dội lại đúng `userId` caller vừa gửi (thông tin mới = 0);
+`users.fullName` bị gỡ khỏi `resolveMentions` ⇒ điểm chiếu thứ năm BIẾN MẤT thay vì xin waiver.
+4 điểm còn lại đã ký: `POST_COLUMNS` (`scoped-predicate` — `visiblePostCondition` nằm ngay trong câu)
+· `COMMENT_COLUMNS` + `listReactors` (`second-assert` — `assertPostVisible` ở tầng service trước mọi
+truy vấn) · `resolveActorName` (`self-bound-row`). Trần: `scoped-predicate` 23→24 · `second-assert`
+3→5 · `self-bound-row` 4→5.
+
+**(2) `route-http-coverage` — 4/19 route KHÔNG có ca test nào.**
+`GET /social/saved` · `POST|DELETE /social/posts/:post_id/save` · `GET /social/posts/:post_id/reactions`.
+Bốn route ghi/đọc THẬT của người dùng lọt lưới vì bộ test của WO đi theo *kịch bản deny-path* chứ
+không theo *danh sách route*. Đã viết 7 ca thật (lưu/bỏ lưu/danh sách đã lưu là trạng thái CÁ NHÂN;
+danh sách người thả cảm xúc không chở `userId`), rồi mới nâng `MIN_COVERED_COUNT` 632→651.
+
+**(3) `supertest-listen-ratchet` — ca R17 xanh do MAY.**
+Ca đua 3 lượt thích (`Promise.all` supertest) thiếu `await app.listen(0)`: không có server đang lắng
+nghe thì supertest dựng server tạm cho TỪNG request trên cùng một app, và response ĐẦU TIÊN về đóng
+server dùng chung (memory `supertest-closes-shared-server-on-first-response`). Ca vẫn xanh — tức nó
+chưa từng đo được lost-update như nó tuyên bố. Đã thêm `app.listen(0)`; **KHÔNG** đổi `Promise.all`
+thành vòng `await` tuần tự (làm vậy là bỏ luôn thứ ca đó sinh ra để đo).
+
+**Số đo cuối:** 293 test SOCIAL xanh · 44/44 cổng `test/foundation` xanh · coverage `social/`
+**92.36% stmts · 86.3% branches · 93.57% funcs** (ngưỡng 85%) · per-file `social-access.service.ts`
+100/86.84 (ngưỡng 90/85).
+
+### 11.12 Lane DB bẩn làm census `feed-*` ĐỎ OAN — cách chạy đúng
+
+Ba lượt debug hỏng để lại 10 company + 27 role test trong lane DB, đẩy grant `feed-*` toàn cục từ 43
+lên 156 và làm `s16-social-db1-invariants` đỏ. Sau `lane-db-setup.sh <lane> --reset` + một lượt chạy
+sạch: `canonical = 43` · `tenant-role = 0` · 0 company sót ⇒ `cleanupTenants` dọn ĐÚNG.
+**Luật:** trước mỗi lượt đo BẤT BIẾN, reset lane DB. Xem §11.9 cho nợ QA-1 đi kèm.

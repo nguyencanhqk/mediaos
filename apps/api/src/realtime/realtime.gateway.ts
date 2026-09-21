@@ -15,10 +15,17 @@ import { PermissionService } from "../permission/permission.service";
 import { ChatRoomsRepository } from "../chat/chat-rooms.repository";
 import { RealtimeEmitterService } from "./realtime-emitter.service";
 import { ChatPresenceService, PRESENCE_HEARTBEAT_MS } from "./chat-presence.service";
-import { chatRoomName, chatUserRoomName, userRoomName } from "./rooms";
+import { chatRoomName, chatUserRoomName, feedRoomName, userRoomName } from "./rooms";
 
 /** Cặp quyền đường ĐỌC của CHAT — CÙNG cặp mà `chat-rooms.controller.ts` bắt buộc cho mọi route đọc. */
 const CHAT_READ_PAIR = { action: "view", resourceType: "chat-room" } as const;
+
+/**
+ * S16-SOCIAL-BE-1 — cặp quyền đường ĐỌC của SOCIAL, CÙNG cặp mà mọi route đọc bảng tin bắt buộc
+ * (`SOCIAL_ROUTE_PAIRS.feedList`). Type-level (không `resourceId`) = cùng mức với `@RequirePermission`.
+ * `is_sensitive = false` (mig 0578) ⇒ không cần `ctx` reauth.
+ */
+const FEED_READ_PAIR = { action: "view", resourceType: "feed" } as const;
 
 /** Người dùng đã verify ở handshake — gắn vào socket.data (server-side, KHÔNG đọc từ payload client). */
 interface SocketUser {
@@ -134,6 +141,33 @@ export class RealtimeGateway
     }
     // (0) Đích NOTI — join TRƯỚC mọi bước có thể thất bại, và KHÔNG phụ thuộc cặp quyền CHAT.
     await client.join(userRoomName(user.companyId, user.id));
+
+    // ── (0b) Cổng quyền đường đọc WS của SOCIAL — S16-SOCIAL-BE-1 ────────────────
+    // ⚠️ KHỐI RIÊNG, ĐẶT TRƯỚC khối CHAT có chủ đích. Khối CHAT `return` sớm khi thiếu
+    // `view:chat-room`; gộp cổng feed vào trong đó sẽ làm mọi người KHÔNG có quyền chat mất luôn bảng
+    // tin — hai cặp quyền độc lập, hai quyết định độc lập.
+    //
+    // Fail-SOFT, và `catch` là BẮT BUỘC chứ không thừa: khối CHAT bên dưới fail-LOUD (`disconnect`)
+    // vì "connected mà 0 phòng chat" là trạng thái sống dối. Bảng tin KHÔNG thuộc nhóm đó — FE chỉ
+    // mất badge «N bài mới» và tự thấy khi tải lại. Để một lỗi ở đây rơi vào `catch` chung nghĩa là
+    // một trục trặc của bảng tin sẽ NGẮT phiên chat của mọi người.
+    try {
+      const feedDecision = await this.permissions.can({
+        userId: user.id,
+        companyId: user.companyId,
+        ...FEED_READ_PAIR,
+      });
+      if (feedDecision.allow) {
+        await client.join(feedRoomName(user.companyId));
+      } else {
+        this.logger.debug(`WS: user=${user.id} thiếu cặp view:feed — không join room bảng tin`);
+      }
+    } catch (err) {
+      this.logger.warn("WS: cổng quyền bảng tin lỗi — bỏ qua room bảng tin, phiên vẫn sống", {
+        userId: user.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     try {
       // ── (A) Cổng quyền đường đọc WS ──────────────────────────────────────────────

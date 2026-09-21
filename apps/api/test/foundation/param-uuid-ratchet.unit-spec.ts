@@ -146,6 +146,9 @@ const CLEAN_PREFIXES = [
   "chat/",
   "dashboard/",
   "permission/",
+  // S16-SOCIAL-BE-1: module mới, sinh ra ĐÃ sạch — 19 route Nhóm A khai `ParseUUIDPipe` cấp METHOD
+  // trên mọi `:post_id`/`:comment_id`. Ghim ngay để BE-1B/BE-2 không thêm route thiếu pipe.
+  "social/",
   "user-invites/",
   "users/",
 ];

@@ -141,6 +141,20 @@ export const API_MODULE_TAGS: readonly ApiModuleTag[] = [
     segments: ["chat"],
   },
   {
+    // S16-SOCIAL-BE-1: BẮT BUỘC khai TRƯỚC khi route `/social/**` đầu tiên lên — route không có mục ở
+    // đây rơi vào UNCLASSIFIED_PREFIX và `openapi-contract.e2e-spec` coi đó là LỖI.
+    //
+    // ⚠️ API-19 §5.1 nói "fbpost đã khai tag SOCIAL" — ĐO THẬT: SAI. `API_MODULE_TAGS` không hề có
+    // entry `SOCIAL` trước WO này, và route fbpost (`GET /api/v1/integrations/social/sso-link`) có
+    // segment ĐẦU là `integrations` ⇒ nó thuộc FND, không đụng segment `social`. Vì vậy mục dưới đây
+    // là entry MỚI hoàn toàn và KHÔNG lấy route nào khỏi FND. (Nợ sửa API-19 — plan §9.5.)
+    code: "SOCIAL",
+    tagPrefix: "Social",
+    description:
+      "Bảng tin nội bộ: bài viết (chia sẻ/tin tức), bình luận 1 cấp, cảm xúc, nhắc tên, hashtag, lưu bài, lượt xem (SPEC-16).",
+    segments: ["social"],
+  },
+  {
     code: "FND",
     tagPrefix: "Foundation",
     description:

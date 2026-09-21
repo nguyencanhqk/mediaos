@@ -14,6 +14,9 @@ import {
   wsChatTypingEventSchema,
   wsNotificationEventSchema,
   wsNotificationReadEventSchema,
+  wsFeedPostCreatedEventSchema,
+  wsFeedCommentCreatedEventSchema,
+  wsFeedReactionChangedEventSchema,
   type ChatMessageDto,
   type NotificationDto,
   type WsChatMessageRecalledEvent,
@@ -23,12 +26,16 @@ import {
   type WsChatReadEvent,
   type WsChatRoomEvent,
   type WsChatTypingEvent,
+  type WsFeedPostCreatedEvent,
+  type WsFeedCommentCreatedEvent,
+  type WsFeedReactionChangedEvent,
 } from "@mediaos/contracts";
 import {
   callRoomName,
   callUserRoomName,
   chatRoomName,
   chatUserRoomName,
+  feedRoomName,
   userRoomName,
 } from "./rooms";
 
@@ -491,6 +498,60 @@ export class RealtimeEmitterService {
           (err instanceof Error ? err.message : String(err)),
         err instanceof Error ? err.stack : undefined,
       );
+    }
+  }
+
+  // ═══════════ S16-SOCIAL-BE-1 — 3 sự kiện bảng tin (room `co:{companyId}:feed`) ═══════════
+  //
+  // ⚠️ **CHỈ GỌI SAU KHI TRANSACTION ĐÃ COMMIT** — như mọi method của lớp này (xem docblock đầu file).
+  //
+  // ⚠️ **CHỈ bài `audience='company'` + `status='published'` được đưa tới đây.** Room này chứa cả
+  // công ty; lưới nằm ở `SocialPostsService`/`SocialCommentsService` vì chỉ tầng đó biết audience
+  // của bài cha. Schema `wsFeedPostCreatedEventSchema` khoá cứng `audience: 'company'` làm vế thứ
+  // hai — một bài org_unit lọt tới đây sẽ NÉM ở `.parse()` (và `emitToFeed` nuốt + log), chứ không
+  // âm thầm phát ra. Xem `rooms.ts::feedRoomName`.
+
+  emitFeedPostCreated(companyId: string, payload: WsFeedPostCreatedEvent): void {
+    this.emitToFeed(
+      companyId,
+      WS_EVENTS.FEED_POST_CREATED,
+      () => wsFeedPostCreatedEventSchema.parse(payload),
+      "emitFeedPostCreated",
+    );
+  }
+
+  emitFeedCommentCreated(companyId: string, payload: WsFeedCommentCreatedEvent): void {
+    this.emitToFeed(
+      companyId,
+      WS_EVENTS.FEED_COMMENT_CREATED,
+      () => wsFeedCommentCreatedEventSchema.parse(payload),
+      "emitFeedCommentCreated",
+    );
+  }
+
+  emitFeedReactionChanged(companyId: string, payload: WsFeedReactionChangedEvent): void {
+    this.emitToFeed(
+      companyId,
+      WS_EVENTS.FEED_REACTION_CHANGED,
+      () => wsFeedReactionChangedEventSchema.parse(payload),
+      "emitFeedReactionChanged",
+    );
+  }
+
+  /**
+   * Khuôn chung của 3 emit bảng tin. Cùng hợp đồng `emitToRoom` (no-op khi chưa có server ·
+   * `.parse()` TRƯỚC emit · KHÔNG BAO GIỜ throw lên caller) nhưng nhắm `feedRoomName` thay vì
+   * `chatRoomName` — `emitToRoom` hard-code phòng chat nên không dùng lại được.
+   */
+  private emitToFeed(companyId: string, event: string, build: () => unknown, label: string): void {
+    if (!this.server) return;
+    try {
+      this.server.to(feedRoomName(companyId)).emit(event, build());
+    } catch (err) {
+      this.logger.warn(`${label} failed`, {
+        companyId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

@@ -16872,7 +16872,7 @@ export const backlog = [
     title:
       "Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ nguyên) Nhóm A (19 route, SOCIAL-API-001..019): bài (tạo/sửa/xoá/moderation/view/save) · bình luận 1 cấp · reaction bộ emoji CHAT · mention feed_mentions + NOTI (028/029/030) · hashtag · đính kèm ảnh/video · guard 2 tầng (cờ tier1IsFloor) + audience check org_unit · audit manage · @Idempotent · RealtimeEmitter room co:{c}:feed payload DTO — deny-path RED trước. Nhóm B (tin tức+ack · tìm kiếm/thẻ/profile/sinh nhật · báo cáo, route 020-029) TÁCH sang S16-SOCIAL-BE-1B (owner chốt 21/09/2026, xem plan §0.0)",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/social/**",
       "apps/api/src/app.module.ts",
@@ -16952,6 +16952,9 @@ export const backlog = [
       "@Idempotent trên 027; outbox NOTI đăng ký + emit SOCIAL_NEWS_PUBLISHED(031)/SOCIAL_POST_REPORTED(036); route census 29 route (19 BE-1 + 10 BE-1B) + OpenAPI enrich xanh; coverage social/ ≥85% đo LẦN 2 (sau BE-1B, thay lần đo tạm ở BE-1)",
     ],
     notes: [
+      "🔴 21/09/2026 — ĐO THẬT ở BE-1 (plan §11.8): `user_preferences.feed.showBirthday` mà SPEC-16 §3.5 + SOC-DEC-007 hứa **KHÔNG TỒN TẠI** ở DB. Grep toàn bộ `db/schema/*.ts`: không cột `feed`, không `show_birthday`, không jsonb nào mang ngữ nghĩa đó (`me_layout_config` là bố cục màn ME). ⇒ PHẢI mở migration thêm chỗ chứa nó TRƯỚC khi làm route 026. CẤM \"tạm đọc me_layout_config\" (nhét ngữ nghĩa SOCIAL vào ô module khác ⇒ một lần dọn ME sau này xoá mất cờ riêng tư). Hàm `getPreferencesForUsers` (BE-1, `social-preferences.ts`) CỐ Ý chưa trả cờ này — trả cờ luôn true từ hư không là fail-OPEN có vẻ ngoài hoàn chỉnh, và mọi ca test «người đã ẩn không xuất hiện» sẽ xanh giả.",
+      "♻️ Hạ tầng BE-1 DÙNG LẠI, KHÔNG dựng lại: `SocialAccessService` (`resolveActor`/`visiblePostCondition`/`assertPostVisible`/`assertCommentVisible`/`assertTargetVisible`) · `SOCIAL_ROUTE_PAIRS` (thêm route 020-029 vào CÙNG bảng) · `social-feed-cursor.ts` (keyset + dấu vân bộ lọc) · `social-counters.ts` · `social-attachments.service.ts` · `SocialFileResolver`. `feed_reports.target_id` đa hình KHÔNG FK ⇒ BẮT BUỘC `assertTargetVisible` TRƯỚC INSERT (cùng lỗ IDOR đã bịt ở BE-1).",
+      "📌 NOTI: BE-1 đã đăng ký 028/029/030 ở `notifications/social-noti-bridge.registrar.ts`. BE-1B thêm 031 (tin tức mới) + 036 (bài bị báo cáo) vào CHÍNH file đó — KHÔNG tạo registrar thứ hai, và KHÔNG đặt `registerSource` trong `SocialModule` (vòng phụ thuộc — plan BE-1 §11.3).",
       "🔴 FULL gate + Opus — thuần tiêu thụ hạ tầng BE-1, rủi ro thấp hơn BE-1 nhưng vẫn chạm permission/IDOR/PII sinh nhật.",
       "KHÔNG mở entry này tới khi S16-SOCIAL-BE-1 merge — hạ tầng (SocialAccessService, SOCIAL_ROUTE_PAIRS, social-preferences.ts) chưa tồn tại trước đó.",
       "3 ca test yếu bản gốc (H3 review 21/09/2026) đã viết lại nguyên văn yêu cầu trong done_when ở trên — KHÔNG được viết lại yếu hơn khi thi công.",
@@ -17103,6 +17106,8 @@ export const backlog = [
       "Outbox NOTI cho 9 sự kiện có ca test từng sự kiện (allow + deny); WS room feedgroup join gate membership; coverage social/ ≥85% LANE_DB",
     ],
     notes: [
+      "🔴 21/09/2026 (plan BE-1 §11.2, quyết định D21) — BE-1 CHỈ fan-out WS cho bài `audience=company` + `status=published`. Lý do: API-19 §7 khai đúng 2 room (`co:{c}:feed` cả công ty · `co:{c}:feedgroup:{groupId}`) và KHÔNG có room nào cho `org_unit` ⇒ phát bài org_unit vào room cả-công-ty là rò đúng nội dung mà REST trả 404. BE-2 phải dựng room nhóm (gate membership RIÊNG — `view:feed` KHÔNG đủ vào room nhóm riêng tư) và quyết định có cần room org_unit không. `wsFeedPostCreatedEventSchema` hiện khoá cứng `audience: z.literal(\"company\")` — nới nó là một quyết định có chủ đích, không phải dọn dẹp.",
+      "⚠️ Dư lượng SÀN tầng-1 (plan BE-1 M18/D5, có ca test R12 đóng đinh): vai TUỲ BIẾN chỉ có `manage:feed-news` mà KHÔNG có `manage:feed-post` bị 403 Ở TẦNG 1 khi gọi `006`, kể cả khi chỉ đổi `pinned`. Hôm nay 0 tác động (hai cặp cấp cùng tập vai canonical — mig 0578:92-95). Khi BE-2 mở cấp quyền cho vai tuỳ biến, phải thiết kế lại sàn của `002`/`006`.",
       "🔴 FULL gate + Opus (membership = permission ở tầng hàng + FSM). Không mở thêm cặp quyền ngoài §9h; nếu cần thì DỪNG.",
     ],
   },
@@ -17168,10 +17173,12 @@ export const backlog = [
     done_when: [
       "Report queue: lọc open/resolved/dismissed · resolve kèm hành động (ẩn bài / khoá bình luận / xoá / không làm gì) trong 1 tx + audit; người báo cáo không thấy ai xử lý; manage:feed-report bắt buộc",
       "Thống kê: 1 query/khối, tham số tuần/đơn vị validate, sàn scope Company (manager Department qua org_unit của employee) ở CẢ metadata lẫn data, không cache, XLSX có ca test; huy hiệu hệ thống không xoá được (mã lỗi riêng)",
+      "Route KHÔI PHỤC bài đã xoá mềm + đăng ký SOCIAL vào recycle-bin registry (owner chốt 21/09/2026: GIỮ lời hứa thùng rác của SPEC-16 §3.6/§13.1/§7, KHÔNG sửa SPEC). Hàm nền `restorePostTx()` ĐÃ có sẵn từ BE-1 (`social-counters.ts`) và đã có ca test đối xứng đếm — chỉ cần dựng route + gate + audit. `recycle-bin.repository.ts:46-56` hard-code `employeeProfiles`, chưa có registry ⇒ phải mở registry trước.",
       "Coverage social/ giữ ≥85%; route census xanh",
     ],
     notes: [
       "🟡 LIGHT gate nhưng chở số liệu toàn công ty — theo khuôn báo cáo PAYROLL (không cache, sàn scope).",
+      "➕ 21/09/2026 (owner ký, plan BE-1 §9.5): drift SPEC↔API recycle-bin ĐÃ CHỐT theo hướng GIỮ SPEC ⇒ route khôi phục thuộc WO này. API-19 hiện KHÔNG khai route restore nào trong 53 route — cần bổ sung mã route mới khi mở plan.",
     ],
   },
   {

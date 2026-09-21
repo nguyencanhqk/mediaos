@@ -79,6 +79,9 @@ import { LeaveNotiBridgeRegistrar } from "./leave-noti-bridge.registrar";
 // ChatModule (acyclic; producer enqueue sống ở chat/**, consumer sống ở đây).
 import { ChatAudienceReader } from "./chat-audience.reader";
 import { ChatNotiBridgeRegistrar } from "./chat-noti-bridge.registrar";
+// S16-SOCIAL-BE-1 (additive): 3 mapping SOCIAL → NOTI (028/029/030). Registrar OnModuleInit, KHÔNG
+// import SocialModule — chỉ dùng hằng eventType/eventCode của social-noti.payload.ts.
+import { SocialNotiBridgeRegistrar } from "./social-noti-bridge.registrar";
 import { PcrApproverAudienceReader } from "./pcr-approver-audience.reader";
 import { HrPcrNotiBridgeRegistrar } from "./hr-pcr-noti-bridge.registrar";
 // S12-RECRUIT-BE-1 (additive): reader raw-SQL + registrar 4 mapping RECRUIT (seed 0561) — KHÔNG
@@ -167,6 +170,7 @@ import { LmsServiceIntakeGuard } from "./lms-service-intake.guard";
     // EventsModule) tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
     ChatAudienceReader,
     ChatNotiBridgeRegistrar,
+    SocialNotiBridgeRegistrar,
     // S5-LMS-NOTI-1 (additive): guard danh tính máy cho LmsNotificationsController. Provider (không phải
     // APP_GUARD) — chỉ áp cho đúng controller đó qua @UseGuards, KHÔNG chạm request nào khác.
     LmsServiceIntakeGuard,
