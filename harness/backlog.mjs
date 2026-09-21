@@ -16953,7 +16953,7 @@ export const backlog = [
     module: "SOCIAL",
     layer: "DB",
     title:
-      "Schema + migration SOCIAL track B: feed_groups · feed_group_members (role hàng owner/admin/member · status active/pending) · feed_polls · feed_poll_options · feed_poll_votes · feed_ideas (FSM + reviewed_by/at/note) · feed_kudos · feed_kudos_recipients · feed_kudos_badges (seed catalog) · NOTI-EVENT mới (~9) ở CẢ HAI bảng catalog + template · cặp manage/approve còn thiếu",
+      "Schema + migration SOCIAL track B: feed_groups · feed_group_members (role hàng owner/admin/member · status active/pending) · feed_polls · feed_poll_options · feed_poll_votes · feed_ideas (FSM + reviewed_by/at/note) · feed_kudos · feed_kudos_recipients · feed_kudos_badges (seed catalog) · NOTI-EVENT 028..036 ở CẢ HAI bảng catalog + template (0 cặp quyền mới — DB-1/0578 đã seed đủ 14 cặp/43 grant)",
     zone: "red",
     status: "todo",
     paths: [
@@ -16975,7 +16975,7 @@ export const backlog = [
     done_when: [
       "9 bảng RLS+FORCE, composite tenant-FK, UNIQUE feed_group_members(company,group,user) · feed_poll_votes(company,poll,user,option) · feed_polls(post_id) · feed_ideas(post_id); CHECK: visibility public/private · role owner/admin/member · idea status 4 giá trị + CHECK cặp (accepted/rejected ⇒ reviewed_by/at NOT NULL) · poll 2–10 options (ép ở service, đếm test) · closes_at > created_at",
       "NOTI: dải NOTI-EVENT ĐO lúc chạy (S15 giữ 024+), hàng events + template cho: mention · bình luận vào bài · trả lời · tin tức mới · sáng kiến đổi trạng thái · vinh danh · nhóm xin vào/duyệt · bình chọn đóng · bài bị báo cáo — CHECK module_code nới ở CẢ notification_events và notifications; DedupeKey theo (event, target, user)",
-      "Seed catalog huy hiệu (≥6 mã hệ thống, không xoá) + cặp còn thiếu ON CONFLICT DO NOTHING; contracts mirror hai chiều; rls-registry + cleanupTenants; invariants spec trên LANE_DB xanh",
+      "Seed catalog huy hiệu (ĐÚNG 5 mã hệ thống theo DB-17 §7.9: teamwork/innovation/customer-first/mentor/above-beyond, không xoá) cho công ty HIỆN CÓ + cặp còn thiếu ON CONFLICT DO NOTHING; contracts mirror hai chiều; rls-registry + cleanupTenants; invariants spec trên LANE_DB xanh",
     ],
     notes: [
       "🔴 FULL gate + Opus. Nối tiếp DB-1, không song song với lane migration nào khác (kể cả S15).",
@@ -17003,6 +17003,20 @@ export const backlog = [
     ],
     skills: ["security-review"],
     depends_on: ["S16-SOCIAL-DB-2", "S16-SOCIAL-BE-1"],
+    // ⚠️ NỢ BẮT BUỘC TỪ S16-SOCIAL-DB-2 (chốt 21/09/2026, xem docs/plans/S16-SOCIAL-DB-2.md §10):
+    //  (a) Đăng ký seeder `social.master-data` ở MasterDataSeederRegistry — mig 0582 CHỈ seed 5 huy hiệu
+    //      cho công ty ĐANG TỒN TẠI lúc migrate; công ty tạo SAU sẽ KHÔNG có huy hiệu nào nếu thiếu seeder.
+    //  (b) Ghi `single_choice` = NOT feed_polls.multiple_choice cùng câu INSERT phiếu (cột CỐ Ý không
+    //      DEFAULT — quên ghi ăn 23502), VÀ chặn UPDATE multiple_choice/is_anonymous sau khi tạo poll:
+    //      partial unique feed_poll_votes_single_uq không đọc được bảng khác ⇒ đổi cờ giữa chừng làm
+      //    chốt chống-phiếu-đôi SAI LỆCH IM LẶNG. Điều kiện PHẢI có TRƯỚC khi mở route.
+    //  (c) NOTI 034 SOCIAL_GROUP_JOIN_DECIDED đang là dedupe_strategy=None (không nguồn bền vững: nhánh
+    //      từ chối XOÁ CỨNG hàng, feed_group_members không có decided_at). Thêm bảng nhật ký yêu cầu
+    //      vào nhóm thì nâng lên DedupeKey bằng migration nhỏ.
+    //  (d) Bổ sung các bảng feed_* nóng vào `childTables` của deleteWithFkRetry (test/helpers/seed.ts):
+    //      khối feed nay xoá ở ĐẦU cleanupTenants, nên khi BE-2 có worker/outbox ghi feed_*, một hàng
+    //      chèn lại sau đó làm DELETE FROM users ăn 23503 mà KHÔNG có vòng thử lại.
+
     plan: "docs/plans/S16-SOCIAL-BE-2.md",
     src: [
       "API-19 SOCIAL-API-~026..040 · SPEC-16 §13 FSM · SOC-DEC-006/009",

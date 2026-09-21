@@ -160,6 +160,38 @@ export class RetentionService {
     "feed_post_views",
     "feed_post_acks",
     "feed_reports",
+    // ── S16-SOCIAL-DB-2 (mig 0580) — TRỌN Track B, 9 bảng. BA lý do khác nhau (DB-17 §10, plan §6.3):
+    //
+    //  (2) SÁU bảng KHÔNG có GRANT DELETE cho mediaos_app — `feed_groups`, `feed_polls`,
+    //      `feed_poll_options`, `feed_ideas`, `feed_kudos`, `feed_kudos_badges`. Như nhóm (a) của Track A:
+    //      có mặt ở đây để retention no-op TRƯỚC khi phát lệnh, tránh `42501` uncaught hỏng CẢ LƯỢT
+    //      cleanup tenant. (`feed_poll_options` cũng KHÔNG có cột `created_at` — nhưng nó thuộc nhóm này
+    //      nên không vướng chuyện `_deleteEligible`; ghi ra đây để reviewer sau không phải suy lại.)
+    //
+    //  (4) HAI bảng CÓ GRANT DELETE và CÓ `created_at` — `feed_group_members`, `feed_poll_votes`. Với
+    //      nhóm này tập PROTECTED_TABLES là LỚP PHÒNG THỦ DUY NHẤT: `_deleteEligible` chạy THẬT và lọc
+    //      theo `created_at < cutoff`, mà membership/phiếu bầu là TRẠNG THÁI HIỆN TẠI chứ không phải
+    //      ledger — xoá theo tuổi tạo là mất thành viên cũ / phiếu cũ ĐANG HỢP LỆ: không đảo ngược
+    //      được, không soft-delete, không audit nội dung hàng (và `feed_poll_options.vote_count` lệch
+    //      VĨNH VIỄN vì bộ đếm chỉ đổi cùng tx với hàng nguồn).
+    //
+    //  (4') MỘT bảng CÓ GRANT DELETE nhưng KHÔNG có cột `created_at` — `feed_kudos_recipients` (chỉ 3
+    //      cột: company_id · kudos_id · employee_id). ⚠️ LÝ DO KHÁC hai bảng trên: một policy trỏ vào nó
+    //      ăn `42703 (undefined_column)` ngay ở bước ĐẾM (`_countEligible`), TRƯỚC khi tới guard này —
+    //      y hệt đính chính đã ghi cho `feed_post_tags`/`feed_post_views`/`feed_post_acks` ở trên. Bảng
+    //      VẪN phải vào tập (chống-mất-dữ-liệu nguyên vẹn: người-nhận-kudos là trạng thái hiện tại),
+    //      nhưng ĐỪNG đọc dòng này thành "đã chặn được 42xxx uncaught" cho nó.
+    //
+    //  ⇒ 9 Track B + 10 Track A = 19/19 bảng SOCIAL, khớp nguyên văn SPEC-16 §16.
+    "feed_groups",
+    "feed_group_members",
+    "feed_polls",
+    "feed_poll_options",
+    "feed_poll_votes",
+    "feed_ideas",
+    "feed_kudos",
+    "feed_kudos_recipients",
+    "feed_kudos_badges",
   ]);
 
   /**

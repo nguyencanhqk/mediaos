@@ -450,6 +450,48 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   if (companyIds.length === 0) return;
   const ids = [companyIds];
 
+  // ── S16-SOCIAL-DB-1 (mig 0577) + S16-SOCIAL-DB-2 (mig 0580) — 19 bảng SOCIAL, CON → CHA ──────
+  // ⚠️ MỌI FK trong cụm là composite `ON DELETE NO ACTION` ⇒ KHÔNG cascade nào cứu, THỨ TỰ LÀ BẮT BUỘC.
+  //
+  // VỊ TRÍ (khối này phải là khối ĐẦU TIÊN của hàm) — HAI ràng buộc, cái thứ hai là cái CHẶT NHẤT:
+  //   (1) TRƯỚC `DELETE FROM org_units` (dòng ~726): `feed_posts.org_unit_id → org_units` NO ACTION —
+  //       ràng buộc cũ của Track A, chặt hơn "trước DELETE FROM users" vì org_units xoá SỚM HƠN users.
+  //   (2) 🔴 TRƯỚC `DELETE FROM files` (ngay dưới đây): `feed_groups.avatar_file_id → files
+  //       (company_id, id)` NO ACTION là FK feed→files ĐẦU TIÊN của module (Track A KHÔNG có FK nào tới
+  //       `files`). Một hàng `feed_groups` mang `avatar_file_id` mà khối này đứng sau ⇒ `DELETE FROM
+  //       files` ăn 23503 ⇒ teardown ĐỎ của MỌI int-spec dùng chung helper, không riêng SOCIAL.
+  //       Đây là lý do khối 19 dòng được DỜI LÊN ĐẦU HÀM ở S16-SOCIAL-DB-2 (plan §6.2).
+  // Bài học khối PAYROLL v2 bên dưới: VỊ TRÍ QUAN TRỌNG HƠN SỰ CÓ MẶT.
+  //
+  // `employee_profiles` KHÔNG có lệnh DELETE riêng (rơi theo cascade từ `users`, dòng ~831), nên "trước
+  // users" là đủ cho các cột trỏ vào nó (feed_posts/feed_comments.author_employee_id ·
+  // feed_mentions.mentioned_employee_id · feed_group_members.employee_id · feed_kudos_recipients.employee_id).
+  await direct.query("DELETE FROM feed_poll_votes WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_poll_options WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_kudos_recipients WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_ideas WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_kudos WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_polls WHERE company_id = ANY($1::uuid[])", ids);
+  // ↑ 6 dòng Track B — TRƯỚC feed_posts (poll/idea/kudos trỏ vào feed_posts qua post_id NO ACTION).
+  await direct.query("DELETE FROM feed_reports WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_mentions WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_reactions WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_post_acks WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_post_views WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_saved_posts WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_post_tags WHERE company_id = ANY($1::uuid[])", ids);
+  // feed_comments tự trỏ chính nó (parent_comment_id NO ACTION) — một câu DELETE cả bảng theo tenant
+  // xoá cha lẫn con trong CÙNG câu lệnh nên RI kiểm ở cuối câu, không nổ.
+  await direct.query("DELETE FROM feed_comments WHERE company_id = ANY($1::uuid[])", ids);
+  // ⚠️ feed_posts nay CÒN bị feed_groups giữ (`feed_posts_group_fk`, mig 0580) ⇒ PHẢI xoá TRƯỚC feed_groups.
+  await direct.query("DELETE FROM feed_posts WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_tags WHERE company_id = ANY($1::uuid[])", ids);
+  // ↓ 3 dòng Track B — SAU feed_posts, TRƯỚC feed_groups.
+  await direct.query("DELETE FROM feed_group_members WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_kudos_badges WHERE company_id = ANY($1::uuid[])", ids);
+  // LÁ CUỐI: feed_posts.group_id VÀ feed_group_members.group_id đều đã xoá ở trên.
+  await direct.query("DELETE FROM feed_groups WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── FOUNDATION-DB-3 (mig 0433) — files / file_links / file_access_logs ─────
   // file_access_logs.file_id → files (CASCADE); file_links.file_id → files (CASCADE).
   // files.uploaded_by → users (RESTRICT) → xoá TRƯỚC users (phải ở đầu hàm).
@@ -608,26 +650,6 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM candidate_stage_events WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM candidates WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM job_openings WHERE company_id = ANY($1::uuid[])", ids);
-
-  // ── S16-SOCIAL-DB-1 (mig 0577) — 10 bảng SOCIAL Track A, CON → CHA ───────────
-  // ⚠️ MỌI FK trong cụm là composite `ON DELETE NO ACTION` ⇒ KHÔNG cascade nào cứu, THỨ TỰ LÀ BẮT BUỘC.
-  // Khối này phải đứng TRƯỚC `DELETE FROM org_units` (feed_posts.org_unit_id → org_units NO ACTION) —
-  // ràng buộc CHẶT HƠN câu "trước DELETE FROM users", vì org_units bị xoá SỚM HƠN users.
-  // `employee_profiles` KHÔNG có lệnh DELETE riêng (rơi theo cascade từ `users`), nên "trước users" là
-  // đủ cho 3 cột trỏ vào nó (feed_posts/feed_comments.author_employee_id · feed_mentions.mentioned_employee_id).
-  // Bài học `seed.ts` khối PAYROLL v2 ở trên: VỊ TRÍ QUAN TRỌNG HƠN SỰ CÓ MẶT.
-  await direct.query("DELETE FROM feed_reports WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM feed_mentions WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM feed_reactions WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM feed_post_acks WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM feed_post_views WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM feed_saved_posts WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM feed_post_tags WHERE company_id = ANY($1::uuid[])", ids);
-  // feed_comments tự trỏ chính nó (parent_comment_id NO ACTION) — một câu DELETE cả bảng theo tenant
-  // xoá cha lẫn con trong CÙNG câu lệnh nên RI kiểm ở cuối câu, không nổ.
-  await direct.query("DELETE FROM feed_comments WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM feed_posts WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM feed_tags WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-6 Communication ───────────────────────────────────────────────────
   // ⚠️ S7-CALL (mig 0546): cuộc gọi xoá TRƯỚC chat_rooms VÀ trước `DELETE FROM users` bên dưới.
