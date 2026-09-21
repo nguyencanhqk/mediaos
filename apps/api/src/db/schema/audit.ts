@@ -403,6 +403,19 @@ export const AUDIT_OBJECT_TYPES = [
   // (BẤT BIẾN #3). 0545 UNION ADD-only, NEO 2 TẦNG vào `object_type = ANY(…)` như 0528.
   "social_sso",
   "social_account",
+  // S16-SOCIAL-DB-1 (mig 0579): module SOCIAL Track A (SPEC-16 §18) — 'feed_post' cho ẩn/xoá/ghim bài
+  // của NGƯỜI KHÁC (manage:feed-post · manage:feed-news), 'feed_comment' cho ẩn/xoá bình luận của người
+  // khác, 'feed_report' cho xử lý báo cáo vi phạm (resolved/dismissed = quyết định kỷ luật nội dung).
+  // 'feed_group' FRONT-LOAD CÓ CHỦ Ý cho Track B (S16-SOCIAL-DB-2): giá trị CHECK là CHUỖI, độc lập với
+  // sự tồn tại của bảng `feed_groups` — thêm ngay để DB-2 không phải đụng lại hot-file audit lần hai
+  // (mỗi lần đụng = một lần ACCESS EXCLUSIVE + một lần rủi ro parse). before/after = snapshot nghiệp vụ
+  // (loại bài · trạng thái · lý do báo cáo) — KHÔNG nội dung đầy đủ, KHÔNG ngày sinh (BẤT BIẾN #3).
+  // 0579 UNION ADD-only, NEO 2 TẦNG vào `object_type = ANY(…)` như 0545/0528, fail-closed +
+  // NO-LOSS/NO-GAIN + assert SỐ HỌC |after| = |cũ| + |thêm|; append-only #2 nguyên vẹn.
+  "feed_post",
+  "feed_comment",
+  "feed_group",
+  "feed_report",
   // S11-ASSET-DB-1 (mig 0550): module ASSET (SPEC-13 §18) — 'asset' cho tạo/sửa/xoá mềm/đổi trạng thái (thanh
   // lý · mất · tìm thấy lại), 'asset_category' cho CRUD/khôi phục loại, 'asset_assignment' cho cấp phát/thu hồi,
   // 'asset_maintenance' cho mở/đóng lượt bảo trì, 'asset_inventory' cho mở/đóng đợt kiểm kê (dòng kiểm kê gom

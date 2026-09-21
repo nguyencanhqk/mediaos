@@ -122,6 +122,44 @@ export class RetentionService {
     // retention no-op (deletedRecords=0) TRƯỚC khi phát lệnh ⇒ tránh 42501 uncaught làm hỏng cả lượt cleanup.
     "org_units",
     "projects",
+    // ── S16-SOCIAL-DB-1 (mig 0577) — TRỌN Track A, 10 bảng. HAI lý do KHÁC NHAU, đừng gộp làm một:
+    //
+    //  (a) SÁU bảng KHÔNG có GRANT DELETE cho mediaos_app — `feed_posts`, `feed_comments`, `feed_tags`,
+    //      `feed_post_views`, `feed_post_acks`, `feed_reports`. Với nhóm này DB đã là tuyến hai (`42501`);
+    //      có mặt ở đây để retention no-op TRƯỚC khi phát lệnh DELETE (đúng lý do đưa 7 bảng PAYROLL vào).
+    //      ⚠️ ĐÍNH CHÍNH phạm vi: guard này chạy SAU `_countEligible`, mà `feed_post_tags` /
+    //      `feed_post_views` / `feed_post_acks` KHÔNG có cột `created_at` (chúng dùng `viewed_at` /
+    //      `acked_at` / không có) ⇒ một policy trỏ vào chúng ăn `42703` ngay ở bước ĐẾM, trước khi tới
+    //      đây. Việc chống MẤT DỮ LIỆU vẫn nguyên vẹn (guard đứng trước `_deleteEligible`), nhưng đừng
+    //      đọc dòng trên thành "đã chặn được 42xxx uncaught" cho ba bảng đó. Hình dạng này CÓ SẴN —
+    //      `employee_status_histories` trong chính tập này cũng không có `created_at`. Vá đúng chỗ là
+    //      dời guard lên TRƯỚC `_countEligible`; đó là thay đổi hành vi, thuộc WO khác.
+    //
+    //  (b) BỐN bảng CÓ GRANT DELETE — `feed_reactions`, `feed_mentions`, `feed_post_tags`,
+    //      `feed_saved_posts`. Với nhóm này tập PROTECTED_TABLES là LỚP PHÒNG THỦ DUY NHẤT: lệnh
+    //      retention CHẠY THẬT. Mà `_deleteEligible` lọc theo `created_at < cutoff`, KHÔNG theo
+    //      `deleted_at`, và `entityType` của `POST /foundation/retention-policies` là chuỗi TỰ DO (chỉ
+    //      regex `^[a-z_][a-z0-9_]*$`, không allowlist bảng) ⇒ một policy trỏ đúng tên bảng sẽ xoá CỨNG
+    //      hàng ĐANG SỐNG. Hậu quả: `feed_posts.like_count` / `feed_tags.usage_count` lệch VĨNH VIỄN so
+    //      với COUNT(*) (bộ đếm chỉ cập nhật cùng tx với hàng nguồn — DB-17 §4.7 — retention không đi
+    //      qua đường đó), mention và "Đã lưu" của nhân viên bốc hơi không soft-delete, không audit nội
+    //      dung hàng, không khôi phục được.
+    //
+    //  ⚠️ `chat_message_reactions` (cùng hình dạng, KHÔNG nằm trong tập này) là một BỎ SÓT chưa từng
+    //  được review — không phải tiền lệ để noi theo; lấy omission làm chuẩn là lặp lại chính lớp lỗi mà
+    //  `payroll_template_components` ở trên sinh ra để chặn. Chi phí thêm = 0: retention không phải
+    //  đường ghi hợp lệ của bảng nào trong bốn (bỏ thích · gỡ thẻ · gỡ mention · bỏ lưu đều đi qua
+    //  DELETE của service).
+    "feed_posts",
+    "feed_comments",
+    "feed_tags",
+    "feed_post_tags",
+    "feed_reactions",
+    "feed_mentions",
+    "feed_saved_posts",
+    "feed_post_views",
+    "feed_post_acks",
+    "feed_reports",
   ]);
 
   /**

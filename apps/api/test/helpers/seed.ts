@@ -609,6 +609,26 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM candidates WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM job_openings WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── S16-SOCIAL-DB-1 (mig 0577) — 10 bảng SOCIAL Track A, CON → CHA ───────────
+  // ⚠️ MỌI FK trong cụm là composite `ON DELETE NO ACTION` ⇒ KHÔNG cascade nào cứu, THỨ TỰ LÀ BẮT BUỘC.
+  // Khối này phải đứng TRƯỚC `DELETE FROM org_units` (feed_posts.org_unit_id → org_units NO ACTION) —
+  // ràng buộc CHẶT HƠN câu "trước DELETE FROM users", vì org_units bị xoá SỚM HƠN users.
+  // `employee_profiles` KHÔNG có lệnh DELETE riêng (rơi theo cascade từ `users`), nên "trước users" là
+  // đủ cho 3 cột trỏ vào nó (feed_posts/feed_comments.author_employee_id · feed_mentions.mentioned_employee_id).
+  // Bài học `seed.ts` khối PAYROLL v2 ở trên: VỊ TRÍ QUAN TRỌNG HƠN SỰ CÓ MẶT.
+  await direct.query("DELETE FROM feed_reports WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_mentions WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_reactions WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_post_acks WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_post_views WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_saved_posts WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_post_tags WHERE company_id = ANY($1::uuid[])", ids);
+  // feed_comments tự trỏ chính nó (parent_comment_id NO ACTION) — một câu DELETE cả bảng theo tenant
+  // xoá cha lẫn con trong CÙNG câu lệnh nên RI kiểm ở cuối câu, không nổ.
+  await direct.query("DELETE FROM feed_comments WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_posts WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM feed_tags WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-6 Communication ───────────────────────────────────────────────────
   // ⚠️ S7-CALL (mig 0546): cuộc gọi xoá TRƯỚC chat_rooms VÀ trước `DELETE FROM users` bên dưới.
   // Cả 4 FK của hai bảng này là composite `ON DELETE RESTRICT` (KHÔNG cascade — cascade chạy tầng

@@ -199,3 +199,7 @@ export * from "./me-training";
 // S5-BE-CONTRACT-1 (additive): hằng số idempotency dùng chung api ↔ web (tên header + mã lỗi).
 // Tên export riêng (IDEMPOTENCY_*) KHÔNG trùng barrel hiện có.
 export * from "./idempotency";
+// S16-SOCIAL-DB-1 (additive): enum/hằng + schema lõi module SOCIAL Track A — mirror HAI CHIỀU các CHECK của
+// migration 0577 (DB-17 §8). Tên export prefix feed*/FEED_* KHÔNG trùng barrel hiện có (tên trần
+// Post/Comment/Report sẽ đụng ./media đang park ⇒ TS2308).
+export * from "./social";
