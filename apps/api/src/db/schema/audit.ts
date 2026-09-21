@@ -431,5 +431,10 @@ export const AUDIT_OBJECT_TYPES = [
   // S11-ROOM-DB-1 (mig 0554): 'room_booking' cho đặt/huỷ lượt (object_id = bookingId; đặt hộ ghi cả organizer +
   // bookedBy trong after); phòng họp dùng 'meeting_room' ở trên (create · update · deactivate · delete).
   "room_booking",
+  // S16-SOCIAL-DB-2 (mig 0583): 'feed_kudos_badge' cho CRUD catalog huy hiệu vinh danh (manage:feed-kudos —
+  // SPEC-16 §18.1 liệt kê "sửa catalog huy hiệu" trong danh sách hành động bắt buộc ghi audit). Bài vinh danh
+  // KHÔNG có mã riêng: nó là một feed_post (ẩn/xoá đã ghi dưới 'feed_post' từ 0579). UNION ADD-only, sync
+  // CÙNG COMMIT với 0583 — CHECK mở mà hằng này không mở thì BE-3 phải ép kiểu để lách = mất lưới.
+  "feed_kudos_badge",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

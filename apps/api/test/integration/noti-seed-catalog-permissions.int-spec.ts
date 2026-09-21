@@ -96,10 +96,16 @@ describe.skipIf(!runIsolatedDb)(
       // S13-PAYROLL-DB-1: +PAYROLL_PERIOD_SUBMITTED, +PAYROLL_PERIOD_APPROVED, +PAYROLL_PERIOD_REJECTED,
       // +PAYSLIP_PUBLISHED, cả bốn isEnabled=true, is_system_event=false) → 79/65 (mig 0573 ·
       // S15-PAYROLL-DB-2: +PAYROLL_ADVANCE_SUBMITTED, +PAYROLL_ADVANCE_APPROVED, +PAYROLL_ADVANCE_REJECTED,
-      // +PAYROLL_PAYMENT_BATCH_COMPLETED, cả bốn isEnabled=true, is_system_event=false).
-      it("pin: registry có đúng 79 mã (65 enabled + 14 disabled) — sau mig 0573 (S15-PAYROLL-DB-2)", () => {
-        expect(NOTI_EVENT_COUNT).toBe(79);
-        expect(NOTI_ENABLED_EVENT_COUNT).toBe(65);
+      // +PAYROLL_PAYMENT_BATCH_COMPLETED, cả bốn isEnabled=true, is_system_event=false) → 88/74
+      // (mig 0581 · S16-SOCIAL-DB-2: +9 SOCIAL NOTI-EVENT-028..036 — SOCIAL_MENTIONED,
+      // SOCIAL_POST_COMMENTED, SOCIAL_COMMENT_REPLIED, SOCIAL_NEWS_PUBLISHED,
+      // SOCIAL_IDEA_STATUS_CHANGED, SOCIAL_KUDOS_RECEIVED, SOCIAL_GROUP_JOIN_DECIDED,
+      // SOCIAL_POLL_CLOSED, SOCIAL_POST_REPORTED — cả chín isEnabled=true; is_system_event=true
+      // CHỈ ở SOCIAL_POLL_CLOSED (job đóng bình chọn theo hạn), tám mã còn lại false;
+      // số disabled GIỮ NGUYÊN 14).
+      it("pin: registry có đúng 88 mã (74 enabled + 14 disabled) — sau mig 0581 (S16-SOCIAL-DB-2)", () => {
+        expect(NOTI_EVENT_COUNT).toBe(88);
+        expect(NOTI_ENABLED_EVENT_COUNT).toBe(74);
       });
 
       it("tập event_code (company_id IS NULL) == registry — KHÔNG mã lạ, KHÔNG thiếu", async () => {

@@ -865,14 +865,17 @@ describe.skipIf(!hasDb)(
         }
       });
 
-      it("26 composite tenant-FK, 0 FK một-cột tới bảng ≠ companies", async () => {
+      it("27 composite tenant-FK, 0 FK một-cột tới bảng ≠ companies", async () => {
+        // ⚠️ RATCHET bump CÓ CHỦ Ý (S16-SOCIAL-DB-2, plan §0): 26 (0577, 10 bảng Track A)
+        // + feed_posts_group_fk (mig 0580 — `feed_posts` ∈ FEED_TABLES nên nó rơi vào phép đếm này) = 27.
+        // Nới thành `toBeGreaterThanOrEqual` là GIẾT ratchet — đúng lớp lỗi nó sinh ra để chặn.
         const multi = await direct.query(
           `SELECT count(*)::int AS n FROM pg_constraint c
           WHERE c.contype = 'f' AND c.conrelid::regclass::text = ANY ($1::text[])
             AND array_length(c.conkey, 1) >= 2`,
           [[...FEED_TABLES]],
         );
-        expect(multi.rows[0].n).toBe(26);
+        expect(multi.rows[0].n).toBe(27);
 
         const single = await direct.query(
           `SELECT count(*)::int AS n FROM pg_constraint c
@@ -1048,9 +1051,11 @@ describe.skipIf(!hasDb)(
         ]);
       });
 
-      it("audit_logs.object_type: 131 giá trị, CÓ ĐỦ 4 feed_*, và canary cũ KHÔNG mất (NO-LOSS)", async () => {
+      it("audit_logs.object_type: 132 giá trị, CÓ ĐỦ 5 feed_*, và canary cũ KHÔNG mất (NO-LOSS)", async () => {
         // ⚠️ RATCHET: 131 là mốc SAU khi 0579 thêm 4 giá trị vào 127 (đo 19/09/2026). Lane nào thêm
         // object_type mới thì sửa số này MỘT CÁCH CÓ CHỦ Ý — đó chính là điểm của ratchet.
+        // Bump 131 → 132 CÓ CHỦ Ý (S16-SOCIAL-DB-2, plan §0): + `feed_kudos_badge` (mig 0583) — mở CHECK
+        // cho audit CRUD catalog huy hiệu (SPEC-16 §18.1), nếu không BE-3 ăn 23514 khi ghi audit.
         const r = await direct.query(
           `SELECT substring(pg_get_constraintdef(oid)
                  FROM 'object_type[[:space:]]*=[[:space:]]*ANY[[:space:]]*\\([[:space:]]*''(\\{[^}]*\\})''')::text[] AS vals
@@ -1059,9 +1064,15 @@ describe.skipIf(!hasDb)(
         );
         const vals = r.rows[0].vals as string[];
         expect(vals).not.toBeNull();
-        expect(vals).toHaveLength(131);
+        expect(vals).toHaveLength(132);
         expect(vals).toEqual(
-          expect.arrayContaining(["feed_post", "feed_comment", "feed_group", "feed_report"]),
+          expect.arrayContaining([
+            "feed_post",
+            "feed_comment",
+            "feed_group",
+            "feed_report",
+            "feed_kudos_badge",
+          ]),
         );
         // NO-LOSS: canary 'defect' (0086 — chỉ có ở DB, không có trong snapshot TS) phải còn.
         expect(vals).toContain("defect");

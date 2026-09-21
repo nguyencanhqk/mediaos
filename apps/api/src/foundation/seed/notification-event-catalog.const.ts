@@ -13,7 +13,7 @@
  *   event_code VERBATIM: TASK_MENTIONED + TASK_COMMENT_CREATED (KHÔNG TASK_COMMENT_MENTIONED).
  */
 
-/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551 + 'ROOM' 0555 + 'RECRUIT' 0561 + 'PAYROLL' 0566). */
+/** module_code hợp lệ (CHECK chk_notification_events_module_code — 0479 + 'GOAL' 0507 + 'LMS' 0529 + 'CHAT' 0538 + 'ASSET' 0551 + 'ROOM' 0555 + 'RECRUIT' 0561 + 'PAYROLL' 0566 + 'SOCIAL' 0581). */
 export type NotiModuleCode =
   | "AUTH"
   | "HR"
@@ -29,9 +29,10 @@ export type NotiModuleCode =
   | "ASSET"
   | "ROOM"
   | "RECRUIT"
-  | "PAYROLL";
+  | "PAYROLL"
+  | "SOCIAL";
 
-/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551 + 'Room' 0555 + 'Recruit' 0561 + 'Payroll' 0566). */
+/** notification_type hợp lệ (CHECK chk_notification_events_type — 0479 + 'Goal' 0507 + 'Training' 0529 + 'Chat' 0538 + 'Asset' 0551 + 'Room' 0555 + 'Recruit' 0561 + 'Payroll' 0566 + 'Social' 0581). */
 export type NotiType =
   | "System"
   | "Account"
@@ -50,7 +51,8 @@ export type NotiType =
   | "Asset"
   | "Room"
   | "Recruit"
-  | "Payroll";
+  | "Payroll"
+  | "Social";
 
 /** default_priority hợp lệ (CHECK chk_notification_events_priority — 0479). */
 export type NotiPriority = "Low" | "Normal" | "High" | "Urgent" | "Critical";
@@ -201,6 +203,25 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "PAYROLL", eventCode: "PAYROLL_ADVANCE_APPROVED", type: "Payroll", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "PAYROLL", eventCode: "PAYROLL_ADVANCE_REJECTED", type: "Payroll", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "PAYROLL", eventCode: "PAYROLL_PAYMENT_BATCH_COMPLETED", type: "Payroll", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  // ===== SOCIAL (SPEC-16 §17.1 · NOTI-EVENT-028..036 · mig 0581 · S16-SOCIAL-DB-2) =====
+  //   Kênh IN_APP duy nhất (SPEC-16 §17.2). Khoá dedupe do PRODUCER (BE-2) sinh, content-derived theo ĐỐI
+  //   TƯỢNG — KHÔNG nhét user_id: NotificationDedupeService chống trùng theo tuple (company_id,
+  //   recipient_user_id, event_code, dedupe_key) và recipient_user_id ĐÃ là cột riêng.
+  //     028 '{target_type}:{target_id}' · 029/030 '{comment_id}' · 031 '{post_id}'
+  //     032 '{idea_id}:{status}' (accepted/rejected TERMINAL) · 033 '{kudos_id}' · 035 '{poll_id}' · 036 '{report_id}'
+  //   🔴 034 dùng dedupe 'None' (KHÔNG DedupeKey): feed_group_members không có `decided_at` và nhánh TỪ CHỐI
+  //   xoá cứng hàng ⇒ không nguồn bền vững nào phủ cả hai nhánh; mất thông báo tệ hơn trùng thông báo.
+  //   035 isSystemEvent=true — JOB đóng bình chọn theo hạn phát (khuôn ROOM_BOOKING_REMINDER).
+  //   Registrar outbox đăng ký ở S16-SOCIAL-BE-2 (registerSource() fail-loud nếu mã chưa có ở đây).
+  { module: "SOCIAL", eventCode: "SOCIAL_MENTIONED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "SOCIAL", eventCode: "SOCIAL_POST_COMMENTED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "SOCIAL", eventCode: "SOCIAL_COMMENT_REPLIED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "SOCIAL", eventCode: "SOCIAL_NEWS_PUBLISHED", type: "Social", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "SOCIAL", eventCode: "SOCIAL_IDEA_STATUS_CHANGED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "SOCIAL", eventCode: "SOCIAL_KUDOS_RECEIVED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "SOCIAL", eventCode: "SOCIAL_GROUP_JOIN_DECIDED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "SOCIAL", eventCode: "SOCIAL_POLL_CLOSED", type: "Social", priority: "Low", isEnabled: true, isSystemEvent: true }, // prettier-ignore
+  { module: "SOCIAL", eventCode: "SOCIAL_POST_REPORTED", type: "Social", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -220,14 +241,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 79 (59 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566 + 4 PAYROLL 0573)
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 88 (59 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566 + 4 PAYROLL 0573 + 9 SOCIAL 0581)
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 65 (45 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566 + 4 PAYROLL 0573)
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 74 (45 + 2 CHAT 0538 + 3 ASSET 0551 + 3 ROOM 0555 + 4 RECRUIT 0561 + 4 PAYROLL 0566 + 4 PAYROLL 0573 + 9 SOCIAL 0581)
 
 /**
  * S5-LMS-NOTI-1 — ALLOWLIST eventCode mà token máy LMS (`LMS_NOTI_TOKEN`) được phép đẩy vào intake.

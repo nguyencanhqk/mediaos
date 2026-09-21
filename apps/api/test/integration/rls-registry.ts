@@ -3166,6 +3166,102 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── S16-SOCIAL-DB-2 (mig 0580) — 9 bảng SOCIAL Track B (DB-17 §7). Cùng luật Track A ở trên:
+  // company_id NOT NULL + RLS+FORCE literal-GUC ⇒ PHẢI có case ở đây, KHÔNG skipNoContext.
+  // ⚠️ BA bảng PK TỔ HỢP (không cột `id`) khai `idColumn` = cột của hàng MỚI-TẠO-MỖI-LẦN-SEED
+  //    (khuôn `feed_saved_posts`→`post_id`): feed_group_members→group_id · feed_poll_votes→poll_id ·
+  //    feed_kudos_recipients→kudos_id. Dùng `user_id`/`employee_id` là SAI: chúng tái dùng được.
+  // ⚠️ `feed_poll_votes.single_choice` KHÔNG có DEFAULT (cố ý — fail-closed, plan §6.1) ⇒ INSERT dưới
+  //    đây PHẢI truyền tường minh, nếu không ăn 23502.
+  // Cleanup: `cleanupTenants()` xoá 19 bảng feed con→cha TRƯỚC `DELETE FROM file_access_logs`.
+  {
+    name: "feed_groups",
+    table: "feed_groups",
+    seedRow: async (direct, t) => await seedFeedGroup(direct, t.companyId),
+  },
+  {
+    name: "feed_group_members",
+    table: "feed_group_members",
+    idColumn: "group_id", // PK tổ hợp (company_id, group_id, user_id) — không có cột `id`
+    seedRow: async (direct, t) => {
+      const groupId = await seedFeedGroup(direct, t.companyId);
+      const c = await seedFeedChain(direct, t.companyId);
+      await direct.query(
+        `INSERT INTO feed_group_members (company_id, group_id, user_id, employee_id, role, status, joined_at)
+         VALUES ($1, $2, $3, $4, 'owner', 'active', now())`,
+        [t.companyId, groupId, c.userId, c.employeeId],
+      );
+      return groupId;
+    },
+  },
+  {
+    name: "feed_polls",
+    table: "feed_polls",
+    seedRow: async (direct, t) => (await seedFeedPollChain(direct, t.companyId)).pollId,
+  },
+  {
+    name: "feed_poll_options",
+    table: "feed_poll_options",
+    seedRow: async (direct, t) => (await seedFeedPollChain(direct, t.companyId)).optionId,
+  },
+  {
+    name: "feed_poll_votes",
+    table: "feed_poll_votes",
+    idColumn: "poll_id", // PK tổ hợp (company_id, poll_id, option_id, user_id)
+    seedRow: async (direct, t) => {
+      const p = await seedFeedPollChain(direct, t.companyId);
+      await direct.query(
+        `INSERT INTO feed_poll_votes (company_id, poll_id, option_id, user_id, single_choice)
+         VALUES ($1, $2, $3, $4, true)`,
+        [t.companyId, p.pollId, p.optionId, p.userId],
+      );
+      return p.pollId;
+    },
+  },
+  {
+    name: "feed_ideas",
+    table: "feed_ideas",
+    seedRow: async (direct, t) => {
+      const c = await seedFeedChain(direct, t.companyId, { type: "idea" });
+      const r = await direct.query(
+        `INSERT INTO feed_ideas (company_id, post_id, status) VALUES ($1, $2, 'submitted') RETURNING id`,
+        [t.companyId, c.postId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "feed_kudos",
+    table: "feed_kudos",
+    seedRow: async (direct, t) => (await seedFeedKudosChain(direct, t.companyId)).kudosId,
+  },
+  {
+    name: "feed_kudos_recipients",
+    table: "feed_kudos_recipients",
+    idColumn: "kudos_id", // PK tổ hợp (company_id, kudos_id, employee_id)
+    seedRow: async (direct, t) => {
+      const k = await seedFeedKudosChain(direct, t.companyId);
+      await direct.query(
+        `INSERT INTO feed_kudos_recipients (company_id, kudos_id, employee_id) VALUES ($1, $2, $3)`,
+        [t.companyId, k.kudosId, k.employeeId],
+      );
+      return k.kudosId;
+    },
+  },
+  {
+    name: "feed_kudos_badges",
+    table: "feed_kudos_badges",
+    // Catalog per-company: UNIQUE (company_id, code) ⇒ code ngẫu nhiên; `position` NOT NULL.
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO feed_kudos_badges (company_id, code, name, position)
+         VALUES ($1, $2, 'rls-badge', 9) RETURNING id`,
+        [t.companyId, `rls-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
 
 /**
@@ -3315,18 +3411,26 @@ async function seedAssetInventoryClosed(direct: Pool, companyId: string): Promis
 async function seedFeedChain(
   direct: Pool,
   companyId: string,
-  opts?: { news?: boolean },
+  opts?: { news?: boolean; type?: "share" | "news" | "idea" | "poll" | "kudos" },
 ): Promise<{ postId: string; userId: string; employeeId: string }> {
   const userId = await seedUser(direct, companyId, `feed-${randomUUID().slice(0, 8)}@x.test`);
   const emp = await direct.query(
     `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
     [companyId, userId],
   );
+  // `type` (S16-SOCIAL-DB-2): bài nền của Track B phải đúng LOẠI nghiệp vụ (poll/idea/kudos) — body vẫn
+  // điền vì `chk_feed_posts_body_required` chỉ MIỄN, không CẤM, body cho poll/kudos.
   const post = await direct.query(
     `INSERT INTO feed_posts
        (company_id, author_user_id, author_employee_id, type, audience, body, requires_ack)
      VALUES ($1, $2, $3, $4, 'company', 'rls-feed-post', $5) RETURNING id`,
-    [companyId, userId, emp.rows[0].id, opts?.news ? "news" : "share", opts?.news === true],
+    [
+      companyId,
+      userId,
+      emp.rows[0].id,
+      opts?.type ?? (opts?.news ? "news" : "share"),
+      opts?.news === true,
+    ],
   );
   return {
     postId: post.rows[0].id as string,
@@ -3342,4 +3446,59 @@ async function seedFeedTag(direct: Pool, companyId: string): Promise<string> {
     [companyId, `rls-tag-${randomUUID().slice(0, 8)}`],
   );
   return r.rows[0].id as string;
+}
+
+/**
+ * SOCIAL Track B (mig 0580): một nhóm MỚI của tenant. Tên ngẫu nhiên vì `feed_groups_company_name_uq`
+ * là partial unique trên `(company_id, lower(name)) WHERE deleted_at IS NULL`.
+ * `avatar_file_id` để NULL — FK feed→files ĐẦU TIÊN của module, không cần cho phép đo RLS.
+ */
+async function seedFeedGroup(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO feed_groups (company_id, name, visibility) VALUES ($1, $2, 'public') RETURNING id`,
+    [companyId, `rls-group-${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
+
+/**
+ * SOCIAL Track B: bài `poll` MỚI → `feed_polls` → 1 `feed_poll_options`. Mỗi lần gọi tạo bài MỚI ⇒
+ * không đụng `feed_polls_company_post_uq` (1 poll / bài) hay `feed_poll_options_position_uq`.
+ */
+async function seedFeedPollChain(
+  direct: Pool,
+  companyId: string,
+): Promise<{ pollId: string; optionId: string; userId: string; postId: string }> {
+  const c = await seedFeedChain(direct, companyId, { type: "poll" });
+  const poll = await direct.query(
+    `INSERT INTO feed_polls (company_id, post_id, question) VALUES ($1, $2, 'rls-poll?') RETURNING id`,
+    [companyId, c.postId],
+  );
+  const opt = await direct.query(
+    `INSERT INTO feed_poll_options (company_id, poll_id, label, position)
+     VALUES ($1, $2, 'rls-option', 1) RETURNING id`,
+    [companyId, poll.rows[0].id],
+  );
+  return {
+    pollId: poll.rows[0].id as string,
+    optionId: opt.rows[0].id as string,
+    userId: c.userId,
+    postId: c.postId,
+  };
+}
+
+/**
+ * SOCIAL Track B: bài `kudos` MỚI → `feed_kudos` (badge_id NULL — catalog huy hiệu là tuỳ chọn).
+ * Mỗi lần gọi tạo bài MỚI ⇒ không đụng `feed_kudos_company_post_uq`.
+ */
+async function seedFeedKudosChain(
+  direct: Pool,
+  companyId: string,
+): Promise<{ kudosId: string; employeeId: string; userId: string }> {
+  const c = await seedFeedChain(direct, companyId, { type: "kudos" });
+  const k = await direct.query(
+    `INSERT INTO feed_kudos (company_id, post_id, message) VALUES ($1, $2, 'rls-kudos') RETURNING id`,
+    [companyId, c.postId],
+  );
+  return { kudosId: k.rows[0].id as string, employeeId: c.employeeId, userId: c.userId };
 }

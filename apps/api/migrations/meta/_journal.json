@@ -1730,6 +1730,34 @@
       "when": 1717587368000,
       "tag": "0579_s16socialdb1_audit_union_object_type",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "7",
+      "when": 1717587369000,
+      "tag": "0580_s16socialdb2_feed_track_b_ddl",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "7",
+      "when": 1717587370000,
+      "tag": "0581_s16socialdb2_noti_track_b",
+      "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "7",
+      "when": 1717587371000,
+      "tag": "0582_s16socialdb2_seed_kudos_badges",
+      "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "7",
+      "when": 1717587372000,
+      "tag": "0583_s16socialdb2_audit_union_kudos_badge",
+      "breakpoints": true
     }
   ]
 }

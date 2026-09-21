@@ -16903,7 +16903,7 @@ export const backlog = [
     notes: [
       "🔴 FULL gate + Opus (permission guard + audience/ownership + PII sinh nhật + audit). Module NestJS mới `social/` — KHÔNG trộn vào integrations/social (fbpost SSO).",
       "Tiêu đề bài không có — nội dung là body; giới hạn độ dài body/bình luận + số ảnh/tệp mirror hằng CHAT; XSS: body lưu plain text, FE render an toàn (không HTML).",
-      "⚠️ NỢ TỪ FULL gate CỦA DB-1 (4 điểm reviewer chốt 19/09/2026 — BẮT BUỘC làm ở BE-1, DB không đỡ được):  (a) TỪ CHỐI THẲNG `audience='group'` bằng 422 cho tới khi DB-2 land: CHECK chỉ đòi `group_id` khác NULL và Zod chỉ đòi `uuid()`, nên lọc kiểu `NOT (... NOT IN my_groups)` với UUID rác cho NULL-semantics ⇒ **fail-OPEN** (bài lọt ra ngoài nhóm).  (b) IDOR TRONG TENANT: `feed_reactions`/`feed_mentions`/`feed_reports`.`target_id` là ĐA HÌNH và KHÔNG có FK ⇒ BE-1 BẮT BUỘC kiểm target tồn tại trong tenant + người gọi THẤY ĐƯỢC nó, TRƯỚC mọi INSERT.  (c) MASS-ASSIGNMENT: `feedPostCoreSchema`/`feedReportCoreSchema` mang `status`/`pinned`/`requiresAck`/counters/`resolvedBy` và KHÔNG `.strict()` ⇒ DTO của BE-1 phải `.pick()` + `.strict()`, KHÔNG `.extend()` thẳng.  (d) `note`/`resolutionNote` chưa có trần độ dài ở cả DB lẫn Zod — chốt trần ở BE-1 (mirror hằng CHAT).",
+      "⚠️ NỢ TỪ FULL gate CỦA DB-1 (4 điểm reviewer chốt 19/09/2026 — BẮT BUỘC làm ở BE-1, DB không đỡ được):  (a) ⚠️ ĐIỀU KIỆN MỞ ĐÃ ĐƯỢC VIẾT LẠI SAU FULL GATE DB-2 (21/09/2026) — ĐỪNG ĐỌC 'DB-2 đã land' LÀ ĐÃ AN TOÀN: DB-2 thêm `feed_groups` + `feed_posts_group_fk` nên CHỈ đóng nhánh `group_id` MỒ CÔI (UUID rác không ghi được nữa). Nhánh CHÍNH vẫn fail-OPEN: `group_id` HỢP LỆ trỏ nhóm **riêng tư mà người xem KHÔNG là thành viên** — RLS chỉ biết `company_id`, KHÔNG biết `feed_group_members`, nên DB không đỡ được. Điều kiện mở `audience='group'` là: lọc membership **TRONG SQL bằng `EXISTS`/`JOIN`, TUYỆT ĐỐI KHÔNG `NOT IN`** (subquery sinh NULL ⇒ NULL-semantics ⇒ bài lọt ra ngoài nhóm), kèm ca deny 404 cho người ngoài nhóm riêng tư. Tới khi có cả hai: vẫn TỪ CHỐI THẲNG bằng 422.  (b) IDOR TRONG TENANT: `feed_reactions`/`feed_mentions`/`feed_reports`.`target_id` là ĐA HÌNH và KHÔNG có FK ⇒ BE-1 BẮT BUỘC kiểm target tồn tại trong tenant + người gọi THẤY ĐƯỢC nó, TRƯỚC mọi INSERT.  (c) MASS-ASSIGNMENT: `feedPostCoreSchema`/`feedReportCoreSchema` mang `status`/`pinned`/`requiresAck`/counters/`resolvedBy` và KHÔNG `.strict()` ⇒ DTO của BE-1 phải `.pick()` + `.strict()`, KHÔNG `.extend()` thẳng.  (d) `note`/`resolutionNote` chưa có trần độ dài ở cả DB lẫn Zod — chốt trần ở BE-1 (mirror hằng CHAT).",
       "⚠️ WILDCARD `*:*` LÀ CÂU HỎI CỦA PermissionService, KHÔNG PHẢI CỦA DB (đo 20/09/2026): trên DB thật CÓ role TUỲ BIẾN của tenant mang cặp toàn-quyền `*:*` (S14-FG có fixture đúng hình dạng đó). 0578/int-spec DB-1 chỉ canh được phần nó sở hữu (role HỆ THỐNG) — nên BE-1 phải TRẢ LỜI TƯỜNG MINH: `*:*` có mở quyền `feed-*` không? Nếu PermissionService coi `*:*` là match-all thì mọi role tuỳ biến toàn-quyền thấy toàn bộ SOCIAL, kể cả `view:feed-report` (báo cáo toàn công ty). Cần deny-path test RED-trước cho đúng câu này.",
       "⚠️ CENSUS `feed-*` HIỆN ĐANG ĐẾM TOÀN CỤC (0578 verify (c)/(e) + `s16-social-db1-invariants` total/scoped, kỳ vọng ĐÚNG 43, loại `super-admin` theo tên). Hợp lệ hôm nay vì DB-1 là nơi DUY NHẤT sinh grant feed. Ngay khi BE-1/FE-1 cho tenant admin cấp quyền feed cho role TUỲ BIẾN của họ, các census đó sẽ ĐỎ OAN — lúc đó phải thu hẹp về `ro.company_id IS NULL` như các ca social-*/wildcard đã làm ở DB-1 (`invariant-count-must-filter-owned-rows`).",
     ],
@@ -16953,7 +16953,7 @@ export const backlog = [
     module: "SOCIAL",
     layer: "DB",
     title:
-      "Schema + migration SOCIAL track B: feed_groups · feed_group_members (role hàng owner/admin/member · status active/pending) · feed_polls · feed_poll_options · feed_poll_votes · feed_ideas (FSM + reviewed_by/at/note) · feed_kudos · feed_kudos_recipients · feed_kudos_badges (seed catalog) · NOTI-EVENT mới (~9) ở CẢ HAI bảng catalog + template · cặp manage/approve còn thiếu",
+      "Schema + migration SOCIAL track B: feed_groups · feed_group_members (role hàng owner/admin/member · status active/pending) · feed_polls · feed_poll_options · feed_poll_votes · feed_ideas (FSM + reviewed_by/at/note) · feed_kudos · feed_kudos_recipients · feed_kudos_badges (seed catalog) · NOTI-EVENT 028..036 ở CẢ HAI bảng catalog + template (0 cặp quyền mới — DB-1/0578 đã seed đủ 14 cặp/43 grant)",
     zone: "red",
     status: "todo",
     paths: [
@@ -16973,9 +16973,9 @@ export const backlog = [
       "Khuôn: 0561 (NOTI catalog CHECK hai bảng + template pin) · DECISIONS-04 per-project role (vai trò là hàng) · memory noti-catalog-check-lives-on-two-tables · nullable-escape-clause-makes-check-vacuous · check-cannot-enforce-fsm-transitions",
     ],
     done_when: [
-      "9 bảng RLS+FORCE, composite tenant-FK, UNIQUE feed_group_members(company,group,user) · feed_poll_votes(company,poll,user,option) · feed_polls(post_id) · feed_ideas(post_id); CHECK: visibility public/private · role owner/admin/member · idea status 4 giá trị + CHECK cặp (accepted/rejected ⇒ reviewed_by/at NOT NULL) · poll 2–10 options (ép ở service, đếm test) · closes_at > created_at",
+      "9 bảng RLS+FORCE, composite tenant-FK, UNIQUE feed_group_members(company,group,user) · feed_poll_votes(company,poll,user,option) · feed_polls(post_id) · feed_ideas(post_id); CHECK: visibility public/private · role owner/admin/member · idea status 4 giá trị + CHECK cặp (accepted/rejected ⇒ reviewed_by/at NOT NULL) · closes_at > created_at. (Luật «poll 2–10 lựa chọn» ĐÃ CHUYỂN sang done_when của S16-SOCIAL-BE-2 — CHECK cấp hàng không đếm được hàng anh em nên DB-2 không thể giao được việc này; FULL gate DB-2 M4)",
       "NOTI: dải NOTI-EVENT ĐO lúc chạy (S15 giữ 024+), hàng events + template cho: mention · bình luận vào bài · trả lời · tin tức mới · sáng kiến đổi trạng thái · vinh danh · nhóm xin vào/duyệt · bình chọn đóng · bài bị báo cáo — CHECK module_code nới ở CẢ notification_events và notifications; DedupeKey theo (event, target, user)",
-      "Seed catalog huy hiệu (≥6 mã hệ thống, không xoá) + cặp còn thiếu ON CONFLICT DO NOTHING; contracts mirror hai chiều; rls-registry + cleanupTenants; invariants spec trên LANE_DB xanh",
+      "Seed catalog huy hiệu (ĐÚNG 5 mã hệ thống theo DB-17 §7.9: teamwork/innovation/customer-first/mentor/above-beyond, không xoá) cho công ty HIỆN CÓ + cặp còn thiếu ON CONFLICT DO NOTHING; contracts mirror hai chiều; rls-registry + cleanupTenants; invariants spec trên LANE_DB xanh",
     ],
     notes: [
       "🔴 FULL gate + Opus. Nối tiếp DB-1, không song song với lane migration nào khác (kể cả S15).",
@@ -17003,6 +17003,42 @@ export const backlog = [
     ],
     skills: ["security-review"],
     depends_on: ["S16-SOCIAL-DB-2", "S16-SOCIAL-BE-1"],
+    // ⚠️ NỢ BẮT BUỘC TỪ S16-SOCIAL-DB-2 (chốt 21/09/2026, xem docs/plans/S16-SOCIAL-DB-2.md §10):
+    //  (a) Đăng ký seeder `social.master-data` ở MasterDataSeederRegistry — mig 0582 CHỈ seed 5 huy hiệu
+    //      cho công ty ĐANG TỒN TẠI lúc migrate; công ty tạo SAU sẽ KHÔNG có huy hiệu nào nếu thiếu seeder.
+    //      ⚠️ Hệ quả CHƯA ghi ở đâu khác: một PROD CÀI MỚI chạy migrate TRƯỚC khi boot app ⇒ 0 company
+    //      lúc 0582 chạy ⇒ 0582 no-op ⇒ công ty sinh ra ở boot ship với catalog huy hiệu RỖNG cho tới
+    //      khi seeder này hạ cánh. PROD hiện tại an toàn (đã có company). (FULL gate DB-2 M1)
+    //  (b) Ghi `single_choice` = NOT feed_polls.multiple_choice cùng câu INSERT phiếu (cột CỐ Ý không
+    //      DEFAULT — quên ghi ăn 23502), VÀ chặn UPDATE multiple_choice/is_anonymous sau khi tạo poll:
+    //      partial unique feed_poll_votes_single_uq không đọc được bảng khác ⇒ đổi cờ giữa chừng làm
+    //      chốt chống-phiếu-đôi SAI LỆCH IM LẶNG. Điều kiện PHẢI có TRƯỚC khi mở route.
+    //      ⚠️ single_choice CHỈ fail-closed với "QUÊN GHI" (23502). Ghi SAI GIÁ TRỊ (false cho poll
+    //      một-lựa-chọn) thì partial index KHÔNG áp và phiếu đôi lọt IM LẶNG — DB không đối chiếu
+    //      được với feed_polls.multiple_choice. (FULL gate DB-2 M-5)
+    //  (c) NOTI 034 SOCIAL_GROUP_JOIN_DECIDED đang là dedupe_strategy=None (không nguồn bền vững: nhánh
+    //      từ chối XOÁ CỨNG hàng, feed_group_members không có decided_at). Thêm bảng nhật ký yêu cầu
+    //      vào nhóm thì nâng lên DedupeKey bằng migration nhỏ.
+    //  (d) Bổ sung các bảng feed_* nóng vào `childTables` của deleteWithFkRetry (test/helpers/seed.ts):
+    //      khối feed nay xoá ở ĐẦU cleanupTenants, nên khi BE-2 có worker/outbox ghi feed_*, một hàng
+    //      chèn lại sau đó làm DELETE FROM users ăn 23503 mà KHÔNG có vòng thử lại.
+    //  (e) 🔴 SERVICE PHẢI KIỂM `optionId ∈ poll` CÙNG TX TRƯỚC MỖI INSERT PHIẾU. DB KHÔNG ép được:
+    //      feed_poll_votes có HAI FK RỜI — (company_id, poll_id) → feed_polls và (company_id,
+    //      option_id) → feed_poll_options — không gì nối option_id với poll_id, và PK
+    //      (company_id, poll_id, option_id, user_id) cũng không. Trong CÙNG tenant, gửi pollId=P1 +
+    //      optionId=O2 (thuộc P2) ⇒ phiếu ghi THÀNH CÔNG, feed_poll_votes_single_uq VẪN PASS (nó chỉ
+    //      khoá theo poll_id,user_id), rồi service bump vote_count của O2 ⇒ NHỒI PHIẾU CHÉO-BÌNH-CHỌN,
+    //      vote_count của P2 lệch VĨNH VIỄN (không có đường đối soát). Hôm nay chưa reachable vì
+    //      apps/api/src/social/** chưa tồn tại. Bịt ở DB (nếu muốn chốt cứng) = feed_poll_options thêm
+    //      UNIQUE (company_id, poll_id, id) rồi đổi FK phiếu thành 3 cột — việc đó PHẢI là WO riêng
+    //      vì làm đỏ các assert đang chốt conkey=2 / 21 dòng tuple FK. (FULL gate DB-2 H-1)
+    //  (f) DTO của BE-2 PHẢI `.pick()` + `.strict()`, KHÔNG `.extend()` thẳng core schema Track B:
+    //      feedGroupMemberCoreSchema mang role/status/userId · feedPollCoreSchema mang status/closedAt ·
+    //      feedIdeaCoreSchema mang status/reviewedBy/reviewedAt/reviewNote, đều KHÔNG .strict().
+    //      Dùng thẳng làm body PATCH = tác giả sáng kiến tự gửi {status:'accepted', reviewedBy:mình}
+    //      ⇒ TỰ DUYỆT sáng kiến của mình, bỏ qua approve:feed-idea; tương tự role:'owner' cho nhóm.
+    //      Cùng lớp lỗi với nợ (c) của DB-1. (FULL gate DB-2 MEDIUM-2)
+
     plan: "docs/plans/S16-SOCIAL-BE-2.md",
     src: [
       "API-19 SOCIAL-API-~026..040 · SPEC-16 §13 FSM · SOC-DEC-006/009",
@@ -17011,6 +17047,7 @@ export const backlog = [
     done_when: [
       "Feed/chi tiết/tìm kiếm: bài audience=group chỉ trả khi LEFT JOIN membership active (SQL), nhóm public đọc được không cần tham gia; ca IDOR: người ngoài nhóm riêng tư → 404; owner rời nhóm phải chuyển owner trước; company-admin manage:feed-group can thiệp bất kỳ nhóm (audit)",
       "Poll: vote/đổi phiếu chỉ khi open và trước closes_at; allow_multiple=false ⇒ 1 option/user (UNIQUE + ca race); kết quả poll ẩn danh KHÔNG trả user_id kể cả admin (ca grep); job đóng poll idempotent theo (poll_id) + NOTI người tạo",
+      "Poll — hai luật DB KHÔNG ép được, ca RED trước (chuyển từ done_when của DB-2, FULL gate DB-2 M4/H-1): (1) số lựa chọn 2–10 khi TẠO/SỬA poll ⇒ SOCIAL-ERR-018 (CHECK cấp hàng không đếm được hàng anh em; hôm nay chỉ FE-2 chặn = bỏ qua được bằng gọi API thẳng); (2) optionId PHẢI thuộc đúng pollId, kiểm cùng tx TRƯỚC mỗi INSERT phiếu — hai FK rời không nối option với poll, gửi chéo poll ⇒ nhồi phiếu + vote_count lệch vĩnh viễn",
       "Sáng kiến: ma trận chuyển trạng thái đủ ca sai (accepted→submitted …), approve:feed-idea bắt buộc, vết reviewed_* + audit + NOTI tác giả; kudos: recipients ≠ tác giả, ≤10 người, huy hiệu phải có trong catalog; mọi POST @Idempotent",
       "Outbox NOTI cho 9 sự kiện có ca test từng sự kiện (allow + deny); WS room feedgroup join gate membership; coverage social/ ≥85% LANE_DB",
     ],

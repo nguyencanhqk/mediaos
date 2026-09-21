@@ -230,3 +230,143 @@ export const feedReportCoreSchema = z
     }
   });
 export type FeedReportCoreDto = z.infer<typeof feedReportCoreSchema>;
+
+// ═══════════════ S16-SOCIAL-DB-2 — 5 enum mirror CHECK migration 0580 (Track B) ═══════════════
+
+/**
+ * Track B (nhóm · bình chọn · sáng kiến · vinh danh) — CÙNG LUẬT mirror HAI CHIỀU như Track A ở trên:
+ * không chặt hơn CHECK (400 oan), không lỏng hơn (500 check-violation vô danh). Pin ở `social.spec.ts`
+ * bằng mảng literal chép TỪ MIGRATION `0580` (KHÔNG import từ `schema/social.ts` — tautology).
+ *
+ * ⚠️ NGOẠI LỆ THỨ HAI của luật mirror (thứ nhất là `feed_reactions.emoji` ở trên):
+ *   `chk_feed_polls_closes_future CHECK (closes_at IS NULL OR closes_at > created_at)` **KHÔNG mirror
+ *   đúng-bằng được** — `created_at` do DB sinh TRONG CÙNG câu INSERT nên nó CHƯA TỒN TẠI lúc Zod
+ *   validate request. `feedPollCoreSchema` vì vậy CỐ Ý không chặn `closesAt` trong quá khứ; xấp xỉ
+ *   `closesAt > new Date()` là việc của tầng service (BE-2), CHECK ở DB là lưới cuối chống ghi tay/lỗi
+ *   giờ máy chủ. Đọc chỗ này thành "thiếu superRefine" là hiểu nhầm — xem plan S16-SOCIAL-DB-2 §6.5.
+ */
+
+/** `chk_feed_groups_visibility` (0580) — DB-17 §7.1. */
+export const feedGroupVisibilitySchema = z.enum(["public", "private"]);
+export type FeedGroupVisibilityDto = z.infer<typeof feedGroupVisibilitySchema>;
+
+/** `chk_feed_group_members_role` (0580) — DB-17 §7.2. */
+export const feedGroupRoleSchema = z.enum(["owner", "admin", "member"]);
+export type FeedGroupRoleDto = z.infer<typeof feedGroupRoleSchema>;
+
+/** `chk_feed_group_members_status` (0580) — chỉ 2 giá trị: rời/mời-ra-nhóm là DELETE cứng (SOC-DEC-006). */
+export const feedGroupMemberStatusSchema = z.enum(["active", "pending"]);
+export type FeedGroupMemberStatusDto = z.infer<typeof feedGroupMemberStatusSchema>;
+
+/** `chk_feed_polls_status` (0580) — DB-17 §7.3. */
+export const feedPollStatusSchema = z.enum(["open", "closed"]);
+export type FeedPollStatusDto = z.infer<typeof feedPollStatusSchema>;
+
+/**
+ * `chk_feed_ideas_status` (0580) — DB-17 §7.6. Tập GIÁ TRỊ, KHÔNG phải FSM: thứ tự chuyển
+ * (`submitted → under_review → accepted|rejected`, hai trạng thái cuối là terminal) ép ở SERVICE
+ * (`assertIdeaTransition`, `SOCIAL-ERR-019`) — CHECK cấp hàng không đọc được trạng thái CŨ.
+ */
+export const feedIdeaStatusSchema = z.enum(["submitted", "under_review", "accepted", "rejected"]);
+export type FeedIdeaStatusDto = z.infer<typeof feedIdeaStatusSchema>;
+
+/** Mirror kiểu `varchar(500)` của `feed_polls.question` (giới hạn KIỂU, không phải CHECK riêng). */
+export const FEED_POLL_QUESTION_MAX = 500;
+
+// ═══════════════ Schema tối thiểu Track B — mirror CHECK KÉO THEO (DTO đầy đủ là việc BE-2) ═══════
+//
+// 🔴 CẢNH BÁO CHO BE-2 (FULL gate DB-2 MEDIUM-2 — cùng lớp lỗi với nợ (c) của DB-1):
+// Ba schema dưới đây là LÕI mirror-CHECK, KHÔNG `.strict()`, và CHÚNG MANG CỘT DO SERVER QUYẾT ĐỊNH:
+//   · `feedGroupMemberCoreSchema` → `role`, `status`, `userId`
+//   · `feedPollCoreSchema`        → `status`, `closedAt`
+//   · `feedIdeaCoreSchema`        → `status`, `reviewedBy`, `reviewedAt`, `reviewNote`
+// `.extend()` THẲNG một trong số đó làm body của route ghi = MASS-ASSIGNMENT: tác giả sáng kiến tự
+// gửi `{status:'accepted', reviewedBy:<mình>, reviewedAt:now}` là TỰ DUYỆT sáng kiến của mình, bỏ qua
+// hẳn cặp quyền `approve:feed-idea`; tương tự `role:'owner'` để tự lên chủ nhóm.
+// ⇒ DTO của route PHẢI `.pick()` đúng các trường người dùng được gửi RỒI `.strict()`. KHÔNG `.extend()`.
+
+/**
+ * Mirror `chk_feed_group_members_pending_role CHECK (status = 'active' OR role = 'member')`:
+ * yêu cầu vào nhóm còn CHỜ DUYỆT không được mang vai trò quản trị.
+ */
+export const feedGroupMemberCoreSchema = z
+  .object({
+    groupId: z.string().uuid(),
+    userId: z.string().uuid(),
+    employeeId: z.string().uuid().nullish(),
+    role: feedGroupRoleSchema,
+    status: feedGroupMemberStatusSchema.default("pending"),
+    joinedAt: z.string().datetime({ offset: true }).nullish(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.status === "pending" && v.role !== "member") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["role"],
+        message: "thành viên đang chờ duyệt chỉ được mang role='member'",
+      });
+    }
+  });
+export type FeedGroupMemberCoreDto = z.infer<typeof feedGroupMemberCoreSchema>;
+
+/**
+ * Mirror `chk_feed_polls_closed_pair CHECK (status = 'open' OR closed_at IS NOT NULL)`.
+ * ⚠️ `chk_feed_polls_closes_future` CỐ Ý không mirror ở đây — xem docblock NGOẠI LỆ THỨ HAI ở trên.
+ * Bất biến "`multiple_choice`/`is_anonymous` không đổi sau khi tạo" là luật THEO THỜI ĐIỂM ⇒ thuộc
+ * service BE-2, không phải schema (SPEC-16 §13.4).
+ */
+export const feedPollCoreSchema = z
+  .object({
+    postId: z.string().uuid(),
+    question: z.string().min(1).max(FEED_POLL_QUESTION_MAX),
+    multipleChoice: z.boolean().default(false),
+    isAnonymous: z.boolean().default(false),
+    status: feedPollStatusSchema.default("open"),
+    closesAt: z.string().datetime({ offset: true }).nullish(),
+    closedAt: z.string().datetime({ offset: true }).nullish(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.status === "closed" && v.closedAt == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["closedAt"],
+        message: "bình chọn đã đóng phải có closedAt",
+      });
+    }
+  });
+export type FeedPollCoreDto = z.infer<typeof feedPollCoreSchema>;
+
+/**
+ * Mirror `chk_feed_ideas_reviewed_pair CHECK (status IN ('submitted','under_review') OR (reviewed_by
+ * IS NOT NULL AND reviewed_at IS NOT NULL))` + `chk_feed_ideas_reject_note CHECK (status <> 'rejected'
+ * OR (review_note IS NOT NULL AND length(btrim(review_note)) > 0))`.
+ */
+export const feedIdeaCoreSchema = z
+  .object({
+    postId: z.string().uuid(),
+    status: feedIdeaStatusSchema.default("submitted"),
+    reviewedBy: z.string().uuid().nullish(),
+    reviewedAt: z.string().datetime({ offset: true }).nullish(),
+    reviewNote: z.string().nullish(),
+  })
+  .superRefine((v, ctx) => {
+    // `chk_feed_ideas_reviewed_pair` — đã có kết luận ⇒ PHẢI đủ CẢ người duyệt LẪN mốc thời gian.
+    if (v.status !== "submitted" && v.status !== "under_review") {
+      if (v.reviewedBy == null || v.reviewedAt == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["status"],
+          message: "sáng kiến đã có kết luận phải có reviewedBy và reviewedAt",
+        });
+      }
+    }
+    // `chk_feed_ideas_reject_note` — từ chối PHẢI có lý do (btrim: khoảng trắng KHÔNG tính).
+    if (v.status === "rejected" && (v.reviewNote == null || v.reviewNote.trim().length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["reviewNote"],
+        message: "từ chối sáng kiến bắt buộc có review_note",
+      });
+    }
+  });
+export type FeedIdeaCoreDto = z.infer<typeof feedIdeaCoreSchema>;

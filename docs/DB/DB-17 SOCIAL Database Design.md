@@ -41,7 +41,7 @@
 
 | Bảng                | Thay đổi                                                                                                  | Trạng thái                                 |
 | ------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `audit_logs`        | CHECK `object_type` (**số ít**) **UNION-ADD** `feed_post` · `feed_comment` · `feed_group` · `feed_report` | ✅ DB-1 mig `0579` — **127 → 131 giá trị** |
+| `audit_logs`        | CHECK `object_type` (**số ít**) **UNION-ADD** `feed_post` · `feed_comment` · `feed_group` · `feed_report` | ✅ DB-1 mig `0579` — **127 → 131**; ✅ DB-2 mig `0583` **+ `feed_kudos_badge` → 132** (SPEC-16 §18.1 audit CRUD catalog huy hiệu) |
 | ~~`file_links`~~    | ~~CHECK `object_type` UNION-ADD~~                                                                         | ❌ **KHÔNG CẦN** — đã ĐO, xem dưới         |
 | ~~**recycle-bin**~~ | ~~registry / CHECK loại đối tượng~~                                                                       | ❌ **KHÔNG CẦN** — đã ĐO, xem dưới         |
 
@@ -563,6 +563,10 @@ CREATE INDEX idx_feed_group_members_company_user ON feed_group_members (company_
 
 ```sql
 ALTER TABLE feed_polls ADD CONSTRAINT chk_feed_polls_status CHECK (status IN ('open','closed'));
+-- MỚI ở DB-2 (done_when đòi, DB-17 bản đầu thiếu): hạn đóng phải sau lúc tạo. `IS NULL OR` KHÔNG
+--   làm CHECK rỗng nghĩa vì `closes_at` HỢP LỆ NULL (poll không hạn) — nhánh non-NULL vẫn có răng.
+ALTER TABLE feed_polls ADD CONSTRAINT chk_feed_polls_closes_future
+  CHECK (closes_at IS NULL OR closes_at > created_at);
 ALTER TABLE feed_polls ADD CONSTRAINT chk_feed_polls_closed_pair
   CHECK (status = 'open' OR closed_at IS NOT NULL);
 ALTER TABLE feed_polls ADD CONSTRAINT feed_polls_company_post_uq UNIQUE (company_id, post_id);
@@ -588,7 +592,7 @@ CREATE INDEX idx_feed_polls_open_deadline ON feed_polls (company_id, closes_at)
 ALTER TABLE feed_poll_options ADD CONSTRAINT feed_poll_options_company_id_id_uq UNIQUE (company_id, id);
 ALTER TABLE feed_poll_options ADD CONSTRAINT chk_feed_poll_options_vote_count CHECK (vote_count >= 0);
 ALTER TABLE feed_poll_options ADD CONSTRAINT feed_poll_options_position_uq UNIQUE (company_id, poll_id, position);
-CREATE INDEX idx_feed_poll_options_company_poll ON feed_poll_options (company_id, poll_id, position);
+-- (khong tao index roi: feed_poll_options_position_uq da sinh index ngam TRUNG 100% — FULL gate DB-2 M-1)
 ```
 
 > **Lựa chọn BẤT BIẾN sau khi tạo poll.** `UNIQUE (company_id, poll_id, position)` không `DEFERRABLE`, nên sắp xếp lại bằng một câu UPDATE sẽ va unique giữa chừng. Service không cho sửa/chèn/xoá lựa chọn sau khi poll tồn tại (đi cùng luật `multiple_choice` bất biến ở §7.5).
@@ -607,20 +611,22 @@ CREATE INDEX idx_feed_poll_options_company_poll ON feed_poll_options (company_id
 
 ```sql
 ALTER TABLE feed_poll_votes ADD CONSTRAINT feed_poll_votes_pk PRIMARY KEY (company_id, poll_id, option_id, user_id);
-CREATE INDEX idx_feed_poll_votes_company_poll ON feed_poll_votes (company_id, poll_id);
+-- (company_id, poll_id) la PREFIX CHAT cua PK ⇒ bo; dung cot thu ba — FULL gate DB-2 M-2:
+CREATE INDEX idx_feed_poll_votes_company_poll_user ON feed_poll_votes (company_id, poll_id, user_id);
 
--- ─── Chốt cuối «một người một phiếu» cho poll MỘT lựa chọn — DB-2 CHỌN A hoặc B ───
--- PHƯƠNG ÁN A (khuyến nghị): cột dẫn xuất + partial unique. Service ghi `single_choice`
--- cùng lúc chèn phiếu, lấy từ `feed_polls.multiple_choice` (bất biến — xem ghi chú dưới).
-ALTER TABLE feed_poll_votes ADD COLUMN single_choice BOOLEAN NOT NULL;
+-- ─── Chốt cuối «một người một phiếu» — ✅ ĐÃ CHỌN PHƯƠNG ÁN A (S16-SOCIAL-DB-2, 21/09/2026) ───
+-- Cột dẫn xuất + partial unique. Service ghi `single_choice` = NOT feed_polls.multiple_choice
+-- cùng câu INSERT phiếu (bất biến — xem ghi chú dưới). Phương án B (chỉ row-lock ở service, không
+-- DDL) ĐÃ BỊ LOẠI: mọi bảng khác của module đều có UNIQUE/PK làm chốt cuối ở DB, phó thác 100%
+-- cho service là bỏ lớp phòng thủ đó riêng cho đúng chỗ dễ mất tiền-uy-tín nhất (phiếu đôi).
+-- Thi công ở mig 0580 — cột khai THẲNG trong CREATE TABLE (không ALTER rời, cùng kết quả).
+single_choice BOOLEAN NOT NULL          -- trong CREATE TABLE feed_poll_votes; CỐ Ý KHÔNG DEFAULT
 CREATE UNIQUE INDEX feed_poll_votes_single_uq
   ON feed_poll_votes (company_id, poll_id, user_id)
   WHERE single_choice;
-
--- PHƯƠNG ÁN B: không chốt ở DB (không thêm DDL nào);
--- một-phiếu ép ở service dưới row-lock `SELECT … FROM feed_polls FOR UPDATE`,
--- SOCIAL-ERR-017 là lưới duy nhất.
 ```
+
+> 🔒 **CỐ Ý KHÔNG đặt DEFAULT cho `single_choice`** (chốt DB-2): `DEFAULT false` sẽ biến một lần quên ghi của service thành **vô hiệu hoá chốt chống-phiếu-đôi IM LẶNG** (fail-open). Không DEFAULT ⇒ quên ghi thì ăn `23502` ồn ào (fail-closed). Mọi `INSERT feed_poll_votes` — kể cả fixture/seedRow của test — phải truyền cột này tường minh.
 
 > ⚠️ **Vì sao phải chọn: partial unique KHÔNG tham chiếu được bảng khác.** `multiple_choice` nằm ở `feed_polls`, nên vị từ `WHERE` của partial unique **không** đọc được nó — đó là lý do phương án A phải denormalize cờ xuống `feed_poll_votes`. **KHÔNG** dùng trigger đồng bộ (bẫy `frozen-table-triggers-break-db-init`). DB-2 ghi lại phương án đã chọn vào chính mục này.
 >
@@ -711,7 +717,7 @@ ALTER TABLE feed_kudos_badges ADD CONSTRAINT feed_kudos_badges_company_id_id_uq 
 CREATE INDEX idx_feed_kudos_badges_company_active ON feed_kudos_badges (company_id, is_active, position);
 ```
 
-**Seed catalog ban đầu** (`ON CONFLICT DO NOTHING`): `teamwork` «Tinh thần đồng đội» · `innovation` «Sáng tạo» · `customer-first` «Tận tâm với khách hàng» · `mentor` «Người dẫn dắt» · `above-beyond` «Vượt mong đợi».
+**Seed catalog ban đầu — ✅ CHỐT ĐÚNG 5 MÃ (S16-SOCIAL-DB-2, mig `0582`)** (`ON CONFLICT DO NOTHING`, chỉ cho công ty ĐANG TỒN TẠI lúc migrate; công ty tạo sau do seeder `social.master-data` của BE-2 lo — nợ đã ghi): `teamwork` «Tinh thần đồng đội» · `innovation` «Sáng tạo» · `customer-first` «Tận tâm với khách hàng» · `mentor` «Người dẫn dắt» · `above-beyond` «Vượt mong đợi».
 
 ---
 
