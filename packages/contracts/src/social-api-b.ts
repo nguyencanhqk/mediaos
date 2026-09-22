@@ -339,16 +339,32 @@ export type FeedReportTargetSnapshotDto = z.infer<typeof feedReportTargetSnapsho
  * ⚠️ `resolvedBy`/`resolvedAt`/`resolutionNote` **LUÔN CÓ MẶT, nullable** — KHÔNG `.optional()`:
  * khoá khi-có-khi-không làm chính `toEqual` ở trên thành ngẫu nhiên theo dữ liệu.
  *
- * ⚠️ **CÓ lộ danh tính người báo cáo** (D13, cần chữ ký owner ở PR): SPEC-16 không có điều khoản báo
- * cáo ẩn danh — khác poll, nơi SOC-DEC-009 MINH THỊ ẩn danh — và trách nhiệm giải trình khi xử lý vi
- * phạm cần biết ai báo cáo (chống báo cáo bừa). Đánh đổi: hiệu ứng chùn tay tố giác.
+ * ⚠️ **`reporter` là `null` khi người đọc ở scope HẸP HƠN `Company`** — D13-a, owner ký 22/09/2026.
+ *
+ * (Chính xác: lộ khi `SocialAccessService.isCompany(routeScope)`, tức `Company` HOẶC `System`.)
+ *
+ * SPEC-16 không có điều khoản báo cáo ẩn danh (khác poll, nơi SOC-DEC-009 MINH THỊ ẩn danh), nên
+ * vị trí này phải tự chốt. Kịch bản đóng: bài thuộc `org_unit = X` mà **tác giả chính là trưởng phòng
+ * X**; nhân viên E báo cáo bài đó; vị từ D6 tính theo đơn vị của BÀI ⇒ `view:feed-report@Department`
+ * đọc được tên + avatar + `employeeId` của người vừa tố giác chính mình — kênh trả đũa trực tiếp.
+ *
+ * Trách nhiệm giải trình (chống báo cáo bừa) vẫn giữ được: HR/company-admin đọc ở `Company` — cũng
+ * là vai DUY NHẤT xử lý được báo cáo (`029` có `companyFloor:true`) — vẫn thấy đủ danh tính.
+ *
+ * ⚠️ Khoá `reporter` **LUÔN CÓ MẶT**, che bằng `null` chứ KHÔNG bỏ khoá: tập khoá đóng ở trên.
+ *
+ * ⚠️ **HAI hình dạng, ĐỪNG gộp khi render:**
+ * - `reporter === null` ⇒ **bị che theo scope**. KHÔNG BAO GIỜ có nghĩa «tra không ra»: khi được lộ,
+ *   server LUÔN dựng object (có thể với trường `null` bên trong).
+ * - `reporter` là object mà `employeeId === null` ⇒ **hồ sơ nhân sự không còn** (xoá mềm); `fullName`
+ *   vẫn có thể có vì đến từ `users`. Đây là dữ liệu thật, không phải che.
  */
 export const feedReportSchema = z.object({
   id: uuid(),
   targetType: feedTargetTypeSchema,
   targetId: uuid(),
   targetSnapshot: feedReportTargetSnapshotSchema.nullable(),
-  reporter: feedReportPersonSchema,
+  reporter: feedReportPersonSchema.nullable(),
   reason: feedReportReasonSchema,
   note: z.string().nullable(),
   status: feedReportStatusSchema,

@@ -39,6 +39,25 @@ const TEMPLATE_KEYS: Record<string, readonly string[]> = {
   SOCIAL_POST_REPORTED: ["target_type_label", "reason_label"],
 };
 
+/**
+ * 🔴 **Khoá bị CẤM forward theo TỪNG MÃ** — hẹp hơn `PAYLOAD_KEYS` dùng chung.
+ *
+ * `SOCIAL_POST_REPORTED` (NOTI-036): `actorUserId` ở đây là **user_id NGƯỜI TỐ GIÁC**, và người
+ * nhận gồm cả người giữ `manage:feed-report@Department` (`social-reports.service.ts` nhánh Department).
+ * Forward nó là **vòng qua SOC-DEC-011**: `028` đã che `reporter` theo scope, nhưng
+ * `notifications.payload` trả nguyên văn cho người nhận (`my-notifications.mapper.ts`) ⇒ cùng bí mật
+ * đi ra bằng cửa khác — đúng khuôn «cổng màn-hình ≠ cổng đường-tải». Nặng hơn vì hàng `notifications`
+ * **sống lâu hơn grant** — cùng lý lẽ đã dùng để bỏ `actor_name` khỏi chính payload này.
+ *
+ * An toàn về chức năng, đã đo: `actorUserId` KHÔNG nằm trong `TEMPLATE_KEYS.SOCIAL_POST_REPORTED`
+ * ⇒ không phá render; và `outbox-notification-bridge.service.ts` đọc `ctx.payload.actorUserId`
+ * **TRƯỚC** khi gọi `payloadOf` ⇒ cột `notifications.created_by` vẫn giữ được neo điều tra
+ * (cột đó KHÔNG có trong `MyNotificationDetail`).
+ */
+const PAYLOAD_KEYS_DENIED: Record<string, readonly string[]> = {
+  SOCIAL_POST_REPORTED: ["actorUserId", "actor_name"],
+};
+
 function strField(payload: Record<string, unknown>, key: string): string | undefined {
   const v = payload[key];
   return typeof v === "string" && v.length > 0 ? v : undefined;
@@ -181,11 +200,21 @@ export class SocialNotiBridgeRegistrar implements OnModuleInit {
     });
   }
 
-  /** Whitelist khoá + ép ĐỦ biến template TRƯỚC khi render (thiếu ⇒ ném, không render `{x}`). */
+  /**
+   * Whitelist khoá + ép ĐỦ biến template TRƯỚC khi render (thiếu ⇒ ném, không render `{x}`),
+   * rồi TRỪ tiếp `PAYLOAD_KEYS_DENIED[eventCode]` — xem docblock của hằng đó.
+   *
+   * Thứ tự có ý: `requireField` chạy TRƯỚC phép trừ, nên một ngày ai đó cấm nhầm một biến
+   * template thì lỗi lộ ra ở chính chỗ render chứ không thành `{x}` câm trong thông báo.
+   */
   private payloadOf(ctx: EventContext, eventCode: string): Record<string, unknown> {
     for (const k of TEMPLATE_KEYS[eventCode] ?? []) requireField(ctx.payload, k);
+    const denied = PAYLOAD_KEYS_DENIED[eventCode] ?? [];
     return Object.fromEntries(
-      PAYLOAD_KEYS.filter((k) => k in ctx.payload).map((k) => [k, ctx.payload[k]]),
+      PAYLOAD_KEYS.filter((k) => k in ctx.payload && !denied.includes(k)).map((k) => [
+        k,
+        ctx.payload[k],
+      ]),
     );
   }
 }

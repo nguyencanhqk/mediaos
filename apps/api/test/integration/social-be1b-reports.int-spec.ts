@@ -420,6 +420,76 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1B báo cáo vi phạm (DB cô lập)
     });
 
     /**
+     * 🔴 **D13-a — danh tính người tố giác CHỈ lộ ở scope `Company`** (owner ký 22/09/2026).
+     *
+     * Kịch bản đóng, dựng từ chính fixture này: `postX` thuộc đơn vị X; nhân viên `emp` (cũng ở X)
+     * tố giác nó; vị từ D6 tính theo đơn vị của BÀI ⇒ manager X đọc được hàng báo cáo đó. Nếu DTO
+     * chở luôn `reporter`, manager X — hoàn toàn có thể CHÍNH LÀ tác giả bài bị tố — biết ngay ai tố mình.
+     *
+     * Ca này pin CẢ HAI vế, và vế DƯƠNG đi TRƯỚC: HR @Company phải thấy `employeeId` THẬT của người
+     * tố giác (trách nhiệm giải trình, chống báo cáo bừa) — không có neo đó thì vế `toBeNull()` bên dưới
+     * xanh cả khi đường lấy `reporter` hỏng HOÀN TOÀN.
+     */
+    it("D13-a: manager @Department thấy hàng nhưng KHÔNG thấy người tố giác (HR @Company thì CÓ)", async () => {
+      // `[201, 409]`: `N-D5` ở trên có thể đã tạo đúng bộ ba này — cả hai lối đều để lại MỘT hàng `open`.
+      const r = await report(tEmp, "post", postX, "harassment");
+      expect([201, 409]).toContain(r.status);
+      // Ghim ĐÚNG loại 409 — nếu mai sau `027` sinh 409 vì lý do KHÁC (vd xung đột
+      // `Idempotency-Key`), `toContain` ở trên sẽ nuốt mất.
+      if (r.status === 409) expect(JSON.stringify(r.body)).toContain("đang chờ xử lý");
+
+      const row = await direct.query(
+        `SELECT fr.id FROM feed_reports fr
+           JOIN users u ON u.id = fr.reporter_user_id
+          WHERE fr.company_id = $1 AND fr.target_id = $2 AND u.email = $3
+          ORDER BY fr.created_at DESC, fr.id DESC
+          LIMIT 1`,
+        [A.companyId, postX, `emp@${A.slug}.test`],
+      );
+      // `LIMIT 1` ⇒ `rowCount` chỉ có thể 0 hoặc 1: đây là neo TỒN TẠI, không phải neo duy-nhất.
+      // `ORDER BY` để một lượt «dismiss rồi tố lại» sau này không làm hàng được chọn thành tuỳ ý.
+      expect(row.rowCount, "phải TỒN TẠI hàng báo cáo của `emp` trên `postX`").toBe(1);
+      const reportId = row.rows[0].id as string;
+
+      type Item = { id: string; reporter: { employeeId: string | null } | null };
+
+      // ① NEO DƯƠNG — HR @Company VẪN thấy đủ danh tính.
+      const asHr = await get(tHr, "/social/reports?limit=100");
+      expect(asHr.status, JSON.stringify(asHr.body)).toBe(200);
+      const hrItem = (asHr.body.data.data as Item[]).find((x) => x.id === reportId);
+      expect(hrItem, "HR phải thấy chính báo cáo vừa dựng").toBeTruthy();
+      expect(hrItem!.reporter, "HR @Company KHÔNG được bị che — cần cho trách nhiệm giải trình").not.toBeNull();
+      const reporterEmployeeId = hrItem!.reporter!.employeeId;
+      expect(reporterEmployeeId, "`employeeId` người tố giác phải THẬT, không null").toBeTruthy();
+
+      // ② DENY — manager X đọc CÙNG hàng đó ở Department.
+      const asMgr = await get(tMgrX, "/social/reports?limit=100");
+      expect(asMgr.status, JSON.stringify(asMgr.body)).toBe(200);
+      const items = asMgr.body.data.data as Item[];
+      const mgrItem = items.find((x) => x.id === reportId);
+      expect(mgrItem, "manager X VẪN phải thấy hàng báo cáo của đơn vị mình (neo dương)").toBeTruthy();
+      expect(mgrItem!.reporter, "manager @Department KHÔNG được thấy người tố giác").toBeNull();
+
+      // Che theo SCOPE, không theo hàng: MỌI hàng trong hàng đợi của manager đều phải `null`.
+      expect(items.length, "hàng đợi của manager X không được rỗng").toBeGreaterThan(0);
+      for (const it of items) expect(it.reporter).toBeNull();
+
+      // Tập khoá ĐÓNG phải GIỐNG HỆT hình dạng đã lộ — che bằng `null`, KHÔNG bỏ khoá.
+      // `H5-keys` chỉ chạy bằng `tHr` nên nó khoá hình dạng ĐÃ LỘ; không có dòng dưới thì một lượt
+      // sau lỡ `delete item.reporter` khi che sẽ không ai bắt.
+      expect(Object.keys(mgrItem!).sort()).toEqual(Object.keys(hrItem!).sort());
+      expect(Object.keys(mgrItem!)).toContain("reporter");
+
+      // Và `employeeId` đó không lọt qua BẤT KỲ đường nào khác của response (snapshot, resolvedBy…).
+      //
+      // ⚠️ RÀNG BUỘC FIXTURE — ĐỪNG «sửa test» nếu dòng này đỏ: nó xanh được là vì `emp` KHÔNG đăng
+      // bài nào (mọi bài do `author`/`authory` đăng) nên `targetSnapshot.authorEmployeeId` không bao giờ
+      // trùng id người tố. Cho `emp` đăng bài bị tố trong unitX thì dòng này ĐỎ ĐÚNG — và nó chỉ ra
+      // một kênh lộ THẬT (tự tố bài của chính mình), phải điều tra chứ không nới assert.
+      expect(JSON.stringify(asMgr.body)).not.toContain(reporterEmployeeId!);
+    });
+
+    /**
      * 🔴 **029 LÀ ROUTE CHỈ-COMPANY, và đó là thiết kế — không phải thiếu sót.**
      *
      * ĐO THẬT trên seed `0578` (dòng 100-110): `manage:feed-report` chỉ cấp cho `hr` và
@@ -627,6 +697,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1B báo cáo vi phạm (DB cô lập)
       expect(res.body.data.status).toBe("resolved");
       expect(res.body.data.resolvedAt).not.toBeNull();
       expect(res.body.data.resolvedBy).not.toBeNull();
+      // D13-a — biến đối số `revealReporter` của `029` từ lời hứa thành PHÉP ĐO: HR ở Company phải
+      // thấy danh tính. Thiếu dòng này thì đổi đối số đó thành `false` vẫn xanh cả 12 ca của `029`.
+      expect(res.body.data.reporter?.employeeId, "HR @Company phải thấy người tố giác ở 029").toBeTruthy();
 
       const row = await direct.query(
         `SELECT status, resolved_by, resolved_at, resolution_note FROM feed_reports WHERE id = $1`,

@@ -149,7 +149,15 @@ export interface SocialPostReportedPayload extends Omit<SocialPayloadBase, "acto
    * bảng có bề mặt đọc KHÁC (và rộng hơn) bề mặt đọc của chính hàng gốc — và hàng thông báo **sống
    * lâu hơn grant**, nên thu hồi `manage:feed-report` không xoá được tên đã ghi.
    *
-   * Danh tính người tố giác vẫn đọc được ở `028`/`029` qua DTO có gác phạm vi — đó là đường đúng.
+   * ⚠️ **`actorUserId` cŨNG không được forward** (D13-a, owner ký 22/09). Nó VẪN nằm trong payload
+   * outbox — `outbox-notification-bridge.service.ts` đọc nó để điền `notifications.created_by`, cột
+   * KHÔNG có trong `MyNotificationDetail` ⇒ neo điều tra còn nguyên — nhưng `PAYLOAD_KEYS_DENIED` của
+   * registrar trừ nó khỏi `notifications.payload`. Lý do giống hệt `actor_name` ở trên: user_id giải ra
+   * được danh tính qua DTO của module khác, và hàng thông báo sống lâu hơn grant.
+   *
+   * Danh tính người tố giác chỉ đọc được ở `028`/`029`, và **chỉ khi người đọc ở scope Company**
+   * (SOC-DEC-011 · `toReportDto(r, revealReporter)`). Đó là đường DUY NHẤT — nếu thêm một đường nữa
+   * thì phải gác bằng CÙNG vị từ, không phải bằng một bản luật thứ hai.
    */
   reportId: string;
   report_id: string;

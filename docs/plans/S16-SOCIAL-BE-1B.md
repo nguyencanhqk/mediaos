@@ -651,7 +651,39 @@ chúng CÙNG một lượt trên cùng lane DB trước khi mở PR — xem `inv
 7. Giữ nguyên 3 nợ đã ghi ở §12.5 (lọc theo `view:feed` hiệu lực · `unackedOnly` lọc sau trang ·
    NOTI-036 hỏi engine từng ứng viên) + nợ đặt lại verify của `0578` (§12.4).
 
-### 13.8 CÒN CẦN CHỮ KÝ OWNER Ở PR (reviewer chấm mức độ, KHÔNG tự ký)
+### 13.8 CHỮ KÝ OWNER — ĐÃ KÝ ĐỦ 5/5 (22/09/2026)
+
+> ✅ **Đóng mục này.** Owner đã quyết cả năm mục. **Bốn** mục ký NGUYÊN TRẠNG (D13-b · D5 · H4-iii ·
+> W1') — không đổi code. **Một** mục (D13-a) owner chọn đường giảm thiểu **(i)** ⇒ đã thi công.
+>
+> **D13-a — đã VÁ:** `reporter` của DTO báo cáo = `null` khi `routeScope ≠ Company`.
+> - Nguồn luật: `SocialAccessService.isCompany(actor.routeScope)` (KHÔNG `scope !== null`).
+> - `toReportDto(r, revealReporter)` — tham số **không có mặc định**, ép mọi call-site mới tự quyết;
+>   mặc định `true` thì quên là lộ lại mà typecheck vẫn xanh (fail-OPEN im lặng).
+> - Khoá `reporter` VẪN có mặt (tập khoá ĐÓNG) — che bằng `null`, không bỏ khoá; contract
+>   `feedReportSchema.reporter` đổi thành `.nullable()`.
+> - `029` không đổi hành vi (`companyFloor:true` ⇒ luôn Company) nhưng VẪN hỏi `isCompany` thay vì
+>   viết thẳng `true`, để nó đi theo nếu sàn ở `social-route-pairs` bị hạ.
+> - Ca đo: `social-be1b-reports.int-spec.ts` «**D13-a: manager @Department thấy hàng nhưng KHÔNG
+>   thấy người tố giác (HR @Company thì CÓ)**» — neo DƯƠNG trước (HR phải thấy `employeeId` THẬT),
+>   rồi deny; cộng vét MỌI hàng trong hàng đợi + `JSON.stringify(body)` không chứa `employeeId` đó.
+>   **RED đã chứng minh:** gỡ vá ⇒ ĐỎ đúng ở vế deny (neo dương vẫn xanh), trả lại ⇒ XANH.
+> - **KÊNH THỨ HAI đã bịt cùng lượt (FULL gate vòng 2, BA reviewer độc lập HỘI TỤ):** NOTI-036 forward
+>   `actorUserId` (= user_id NGƯỜI TỐ GIÁC) vào `notifications.payload`, mà người nhận gồm cả người
+>   giữ `manage:feed-report@Department` và `my-notifications.mapper.ts` trả payload NGUYÊN VĂN ⇒ cùng
+>   bí mật đi ra bằng cửa khác (khuôn «cổng màn-hình ≠ cổng đường-tải»), và hàng `notifications` **sống
+>   lâu hơn grant**. Vá: `PAYLOAD_KEYS_DENIED` — whitelist trừ theo TẪNG MÃ ở
+>   `social-noti-bridge.registrar.ts`. An toàn đã đo: `actorUserId` không phải biến template của
+>   `SOCIAL_POST_REPORTED`, và `outbox-notification-bridge` đọc nó TRƯỚC `payloadOf` nên cột
+>   `notifications.created_by` vẫn giữ neo điều tra. Phép đo: `social-noti-bridge.registrar.spec.ts`
+>   (4 ca, không cần DB) — RED đã chứng minh; kèm ca đối chứng NOTI-028 VẪN forward `actorUserId`
+>   để chứng minh phép trừ là theo-mã chứ không phải toàn cục.
+> - Ghi vào nguồn sự thật: **SPEC-16 SOC-DEC-011** + bảng `SOCIAL-API-028` của API-19.
+>
+> **D13-b · D5 · H4-iii · W1' — ký nguyên trạng**, code giữ nguyên. D5 (mã lỗi «báo cáo trùng đang
+> mở» chưa số hoá vào catalog `SOCIAL-ERR-*`) ghi thành **nợ kỹ thuật**, số hoá ở WO sau.
+
+#### 13.8-bis Nội dung 5 mục (giữ lại để tra lý do)
 
 - **D13-a — DTO `028` lộ danh tính người tố giác.** Kịch bản sắc nhất, dựng từ code: bài thuộc
   `org_unit = X` mà **tác giả chính là trưởng phòng X**; nhân viên E báo cáo bài đó; vị từ D6 tính

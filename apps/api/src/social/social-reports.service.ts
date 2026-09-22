@@ -108,8 +108,11 @@ export class SocialReportsService {
       }),
     );
 
+    // D13-a — che danh tính người tố giác với mọi scope HẸP HƠN Company (manager @Department).
+    const revealReporter = SocialAccessService.isCompany(actor.routeScope);
+
     return {
-      data: rows.map(toReportDto),
+      data: rows.map((r) => toReportDto(r, revealReporter)),
       page: query.page,
       limit: query.limit,
       total,
@@ -166,7 +169,10 @@ export class SocialReportsService {
       const after = await this.repo.findReport(tx, actor, reportId);
       // Không thể trượt: vị từ phạm vi không đổi trong cùng tx. Ném rõ ràng thay vì `!` rồi nổ chỗ khác.
       if (!after) throw new NotFoundException(SOCIAL_ERR.REPORT_NOT_FOUND);
-      return toReportDto(after);
+      // `029` có `companyFloor:true` ⇒ tới được đây thì `routeScope` đã là Company. Vẫn hỏi
+      // `isCompany` chứ KHÔNG viết thẳng `true`: nếu sàn ở `social-route-pairs` bị hạ, chỗ này đi
+      // theo thay vì ở lại thành lỗ lộ im lặng.
+      return toReportDto(after, SocialAccessService.isCompany(actor.routeScope));
     });
   }
 
@@ -338,8 +344,13 @@ function person(
  *
  * `targetSnapshot` là `null` khi và chỉ khi đích không còn hàng nào (bài bị xoá CỨNG). Bài đã xoá
  * MỀM vẫn trả snapshot đầy đủ kèm `deletedAt` — đó chính là mục đích của bypass D13/H4-ii.
+ *
+ * 🔴 **`revealReporter` KHÔNG có giá trị mặc định — cố ý.** D13-a (owner ký 22/09/2026): danh tính
+ * người tố giác CHỈ lộ cho người đọc ở scope `Company`. Bắt truyền TƯỜNG MINH để một call-site
+ * MỚI phải TỰ QUYẾT — mặc định `true` thì quên là lộ lại mà typecheck vẫn xanh (fail-OPEN im lặng).
+ * Nguồn luật DUY NHẤT là `SocialAccessService.isCompany(actor.routeScope)`, KHÔNG `scope !== null`.
  */
-function toReportDto(r: ReportRow): FeedReportDto {
+function toReportDto(r: ReportRow, revealReporter: boolean): FeedReportDto {
   return {
     id: r.id,
     targetType: r.targetType,
@@ -359,7 +370,9 @@ function toReportDto(r: ReportRow): FeedReportDto {
             status: (r.targetStatus ?? "deleted") as "published" | "hidden" | "deleted",
             deletedAt: r.targetDeletedAt ? r.targetDeletedAt.toISOString() : null,
           },
-    reporter: person(r.reporterEmployeeId, r.reporterFullName, r.reporterAvatarUrl),
+    reporter: revealReporter
+      ? person(r.reporterEmployeeId, r.reporterFullName, r.reporterAvatarUrl)
+      : null,
     reason: r.reason as FeedReportReasonDto,
     note: r.note,
     status: r.status,
