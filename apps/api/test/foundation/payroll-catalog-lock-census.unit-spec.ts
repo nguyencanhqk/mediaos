@@ -26,6 +26,11 @@ const DB_TOUCH = [
   ".orgUnitLiveTx(",
   ".templatesContainingTx(",
   ".componentsTx(",
+  // 🔁 S15-PAYROLL-BE-2B — hai method MỚI. `".componentsForTemplatesTx("` KHÔNG chứa `".componentsTx("` như
+  // chuỗi con (dấu `(` ở cuối), nên thiếu dòng này thì census coi lời gọi gộp là KHÔNG chạm DB ⇒ đặt nó
+  // trước khoá vẫn xanh (plan §12 B4).
+  ".componentsForTemplatesTx(",
+  ".countActiveTx(",
   ".createTx(",
   ".updateTx(",
   ".softDeleteTx(",

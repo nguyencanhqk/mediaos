@@ -46,6 +46,32 @@ const SYSTEM_MUTABLE_FIELDS: ReadonlySet<string> = new Set(["name", "sortOrder"]
 const GRAPH_FIELDS = ["formula", "kind", "valueType", "pitDeductible", "isActive"] as const;
 
 /**
+ * S15-PAYROLL-BE-2B — trần **200 hàng `salary_components` sống + `is_active`** mỗi công ty (owner chốt
+ * 22/09/2026; SPEC-11 §12.1 mã 034). Khuôn theo `PAYROLL_EXPORT_MAX_ROWS`: hằng ở SERVICE, không ở
+ * `contracts` — đây là luật server-side, không DTO nào mang hình dạng phụ thuộc nó.
+ *
+ * Vì sao đo CHÍNH tập *sống + active*: đó là tập `listActiveTx` nạp và `compileOrThrow` dựng lại đồ thị ở
+ * MỌI lượt ghi catalog (§13.6 E), dưới advisory lock ĐỘC QUYỀN — chi phí giữ khoá tăng theo chính tập này.
+ * 19 hàng `is_system` do seeder ghi thẳng repository (không qua 045) nên trần không chặn seed.
+ */
+export const PAYROLL_CATALOG_COMPONENTS_MAX = 200;
+
+/**
+ * Ném 034 khi tập sống+active ĐÃ đầy. Hàm cấp MODULE, không phải method: hai đường ghi (045 · 047) phải
+ * giữ lời gọi `this.repo.countActiveTx(` NGAY TRONG THÂN method của mình — `payroll-catalog-lock-census`
+ * đọc thân method theo chuỗi để chứng minh mọi lần chạm DB đứng SAU advisory lock; gói lời gọi đó vào một
+ * method riêng là làm nó vô hình với cổng ấy.
+ */
+function assertCatalogHasRoom(total: number): void {
+  if (total < PAYROLL_CATALOG_COMPONENTS_MAX) return;
+  throw payrollUnprocessable(
+    "CATALOG_COMPONENT_LIMIT",
+    PAYROLL_ERR.CATALOG_COMPONENT_LIMIT(total, PAYROLL_CATALOG_COMPONENTS_MAX),
+    payrollDetails("component-catalog-limit", { total, max: PAYROLL_CATALOG_COMPONENTS_MAX }),
+  );
+}
+
+/**
  * S15-PAYROLL-BE-2 — `PAYROLL-API-044..048`: catalog thành phần lương.
  *
  * - Mọi đường GHI lấy `payrollCatalogLockTx` TRƯỚC `FOR UPDATE` ⇒ kiểm vòng lúc LƯU đọc được trạng thái đã commit
@@ -76,7 +102,10 @@ export class SalaryComponentsService {
         page: query.page,
         perPage: query.per_page,
       });
-      return paginated(rows.map(toSalaryComponentDto), toPagination(total, query.page, query.per_page));
+      return paginated(
+        rows.map(toSalaryComponentDto),
+        toPagination(total, query.page, query.per_page),
+      );
     });
   }
 
@@ -106,6 +135,13 @@ export class SalaryComponentsService {
     }
     return this.db.withTenant(user.companyId, async (tx) => {
       await payrollCatalogLockTx(tx, user.companyId);
+      // Trần catalog — điều kiện RẺ NHẤT, đứng ngay sau khoá và TRƯỚC kiểm trùng mã/compile đồ thị.
+      // Chỉ áp khi hàng mới sẽ SỐNG + ACTIVE: `isActive:false` không làm phình tập compile, chặn nó là chặn
+      // nhầm bản chất (plan §12 B2). Đường bật lại hàng tắt được gác riêng ở 047.
+      // Hệ quả có chủ ý: request vừa TRÙNG MÃ vừa quá trần trả 034 (422) thay vì 024 (409).
+      if (dto.isActive !== false) {
+        assertCatalogHasRoom(await this.repo.countActiveTx(tx, user.companyId));
+      }
       const formula = dto.valueType === "formula" ? (dto.formula ?? null) : null;
       if (dto.valueType === "formula") {
         const catalog = await this.repo.listActiveTx(tx, user.companyId);
@@ -199,6 +235,18 @@ export class SalaryComponentsService {
             payrollDetails("system-component-immutable", { fields: frozen.join(",") }),
           );
         }
+      }
+
+      // Đường THỨ HAI làm tập sống+active phình thêm một hàng: bật lại hàng đang tắt. Không gác ở đây thì
+      // «tạo N hàng inactive rồi bật từng hàng» biến trần 045 thành trang trí (plan §12 B2).
+      // Hàng `is_system` luôn `is_active` nên không bao giờ đi qua nhánh này.
+      //
+      // ⚠️ `dto.delete !== true` là BẮT BUỘC, không phải thừa: schema 047 là `.partial().strict()` chỉ đòi
+      // «ít nhất một trường», nên `{delete:true, isActive:true}` là payload HỢP LỆ và nhánh xoá mềm nằm
+      // NGAY DƯỚI đây. Thiếu vế này thì ở trần, lượt XOÁ một hàng đang tắt bị chính lỗi «hết chỗ» chặn —
+      // người dùng đang GIẢI PHÓNG chỗ lại bị từ chối, với thông điệp sai bản chất (security-review MEDIUM).
+      if (dto.delete !== true && dto.isActive === true && before.isActive === false) {
+        assertCatalogHasRoom(await this.repo.countActiveTx(tx, user.companyId));
       }
 
       if (dto.delete === true || dto.isActive === false) {
@@ -300,13 +348,16 @@ export class SalaryComponentsService {
     try {
       parsed = parseFormula(dto.formula);
     } catch (err) {
-      if (isFormulaError(err)) return { valid: false, errors: [formulaIssueOf(err)], refs: [], depth: 0, nodes: 0 };
+      if (isFormulaError(err))
+        return { valid: false, errors: [formulaIssueOf(err)], refs: [], depth: 0, nodes: 0 };
       throw err;
     }
     const shape = { refs: [...parsed.refs], depth: parsed.depth, nodes: parsed.nodes };
     return this.db.withTenant(user.companyId, async (tx) => {
       const catalog = await this.repo.listActiveTx(tx, user.companyId);
-      const existing = dto.componentCode ? catalog.find((c) => c.code === dto.componentCode) : undefined;
+      const existing = dto.componentCode
+        ? catalog.find((c) => c.code === dto.componentCode)
+        : undefined;
       // Mã giữ chỗ chữ thường KHÔNG thể là REF (REF chỉ chữ hoa) ⇒ không đụng thành phần thật nào.
       const code = dto.componentCode ?? "__validate__";
       const candidate: GraphComponent = {
@@ -384,12 +435,23 @@ export class SalaryComponentsService {
     const others = catalog.filter((c) => c.id !== before.id).map(catalogGraphComponent);
     // Hàng mang công thức LUÔN được parse + kiểm, kể cả khi đang/sẽ ngưng dùng (security-review BE-2 MEDIUM-2):
     // bỏ `edited` khỏi đồ thị là để chuỗi sai cú pháp/quá dài đi thẳng xuống CHECK DB ⇒ 500.
-    if (merged.isActive || merged.valueType === "formula") compileOrThrow([...others, edited], false);
+    if (merged.isActive || merged.valueType === "formula")
+      compileOrThrow([...others, edited], false);
     // Ngưng dùng ⇒ phần catalog CÒN LẠI phải tự đứng được (không hàng nào treo REF vào hàng vừa rút).
     if (!merged.isActive) compileOrThrow(others, false);
 
-    for (const t of await this.templates.templatesContainingTx(tx, companyId, before.id)) {
-      const rows = await this.templates.componentsTx(tx, companyId, t.id);
+    // MỘT câu cho MỌI mẫu chứa thành phần (S15-PAYROLL-BE-2B — nợ BE-2 LOW-1): vòng lặp cũ phát một câu MỖI
+    // mẫu trong khi GIỮ advisory lock ĐỘC QUYỀN. Thứ tự lặp GIỮ NGUYÊN theo `templatesContainingTx`
+    // (`ORDER BY payroll_templates.code`) ⇒ mẫu báo lỗi trong `payrollDetails.template` không đổi.
+    const affected = await this.templates.templatesContainingTx(tx, companyId, before.id);
+    if (affected.length === 0) return;
+    const rowsByTemplate = await this.templates.componentsForTemplatesTx(
+      tx,
+      companyId,
+      affected.map((t) => t.id),
+    );
+    for (const t of affected) {
+      const rows = rowsByTemplate.get(t.id) ?? [];
       const graph = rows.map((r) =>
         r.componentId === before.id
           ? templateGraphComponent({

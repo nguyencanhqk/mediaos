@@ -15,6 +15,7 @@ import {
 } from "../common/db-error";
 import type { FormulaError, FormulaErrorCode } from "./formula/formula.errors";
 import { FORMULA_MAX_LENGTH } from "./formula/formula.limits";
+import { statutoryBracketCountError } from "./formula/formula.statutory";
 
 /**
  * S13-PAYROLL-BE-1 — mã lỗi PAYROLL (SPEC-11 §12 · API-18 §6.5 · quy ước SPEC-01 §9). MỘT CHỖ duy
@@ -131,6 +132,12 @@ export const PAYROLL_ERR_CODE = {
   DEPENDENT_OVERLAP: "PAYROLL-ERR-032",
   /** 409 — **S15-PAYROLL-BE-2**. Bản tỉ lệ luật định: trùng `effective_from` · đã có kỳ lương dùng (`rate-in-use`). */
   STATUTORY_RATE_CONFLICT: "PAYROLL-ERR-033",
+  /**
+   * 422 — **S15-PAYROLL-BE-2B**. Catalog thành phần lương chạm trần **200 hàng sống + `is_active`** mỗi công ty
+   * (`component-catalog-limit`). Cùng họ «quá tải» với 016/030/031 ⇒ **422, KHÔNG 409**: không có xung đột trạng
+   * thái nào, dữ liệu gửi lên đúng hình thức, chỉ là hệ thống từ chối vì tập đã đầy.
+   */
+  CATALOG_COMPONENT_LIMIT: "PAYROLL-ERR-034",
 } as const;
 
 export type PayrollErrKey = keyof typeof PAYROLL_ERR_CODE;
@@ -307,6 +314,8 @@ export const PAYROLL_ERR = {
     `PAYROLL-ERR-023: mẫu bảng lương đang được ${periods} kỳ lương sử dụng — đổi mẫu cho các kỳ đó trước khi ngưng dùng hoặc xoá.`,
   PERIOD_FROZEN_IMPORT:
     "PAYROLL-ERR-003: kỳ lương đã gửi duyệt hoặc đã duyệt — khoản nhập thêm sẽ không được gộp; nhập vào kỳ sau hoặc mở lại kỳ.",
+  CATALOG_COMPONENT_LIMIT: (total: number, max: number) =>
+    `PAYROLL-ERR-034: công ty đã có ${total} thành phần lương đang dùng (trần ${max}) — ngưng dùng hoặc xoá bớt thành phần cũ trước khi thêm mới.`,
 } as const;
 
 /** `details.kind` = phần tử `{field:'kind'}`; các cặp phụ thêm sau — **không bao giờ là số tiền**. */
@@ -713,6 +722,29 @@ export function mapPayrollPgError(err: unknown): Error | null {
         PAYROLL_ERR.TEMPLATE_SCOPE_PAIR,
         payrollDetails("template-scope-pair"),
       );
+    }
+    // ── S15-PAYROLL-BE-2B — SÁU CHECK track B trả nợ ghi nhận của BE-2 (review LOW-5). Cả sáu trước đó
+    //    KHÔNG có nhánh nào ⇒ rơi `null` ⇒ caller `throw mapPayrollPgError(err) ?? err` ném lại lỗi PG THÔ ⇒
+    //    `AllExceptionsFilter` xếp vào nhánh «lỗi không xác định» ⇒ **500 vô danh ở vùng đỏ**.
+    //    Không route nào chạm được chúng qua đường thường (Zod/service chặn trước) — đó CHÍNH LÀ lý do phải map:
+    //    lưới cuối chỉ nổ khi có BUG hoặc đường ghi nội bộ, và bug phải hiện thành lỗi đọc được.
+    //    Nhóm theo TIỀN-KIỂM (SPEC-11 §21.1 chú thích dưới bảng), không theo cảm tính:
+    //    tiền-kiểm là **Zod mirror ĐÚNG BẰNG** ⇒ 400 `VALIDATION-ERR-001`.
+    if (
+      c.includes("salary_components_kind_check") ||
+      c.includes("salary_components_value_type_check") ||
+      c.includes("payroll_templates_scope_check") ||
+      c.includes("payroll_statutory_rates_pct_range_check") ||
+      c.includes("payroll_statutory_rates_amount_check")
+    ) {
+      return payrollBadRequest(c);
+    }
+    // Vế còn lại: tiền-kiểm ở **SERVICE** (`assertBracketsContinuous` → `formula.statutory.ts`) ⇒ lưới DB phải cho
+    // CÙNG mã + CÙNG `kind` + CÙNG `reason` với tiền-kiểm đó (khuôn `value_pair_check`→018 · `four_eyes_check`→005).
+    // CHECK có HAI vế (`jsonb_typeof = 'array'` VÀ `jsonb_array_length = 7`); service ném `reason: "count"` cho cả
+    // hai (kể cả `!Array.isArray`) nên một `reason` phủ đủ. **Không thêm `kind` mới** ⇒ không đụng census kind FE.
+    if (c.includes("payroll_statutory_rates_brackets_check")) {
+      return formulaErrorToHttp(statutoryBracketCountError());
     }
     if (c === "") {
       // Luật 3 — khớp DƯƠNG theo tiền tố message của trigger (xem JSDoc).

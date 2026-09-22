@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { orgUnits } from "../db/schema/org";
 import { countOrThrow } from "./payroll-sql.util";
@@ -210,6 +210,74 @@ export class PayrollTemplatesRepository {
         ),
       )
       .orderBy(asc(payrollTemplateComponents.sortOrder), asc(salaryComponents.code));
+  }
+
+  /**
+   * S15-PAYROLL-BE-2B — bản **GỘP** của `componentsTx` cho NHIỀU mẫu trong MỘT câu (trả nợ N+1 của BE-2 LOW-1:
+   * `assertGraphsAfterEdit` phát một câu MỖI mẫu trong khi GIỮ advisory lock catalog ĐỘC QUYỀN ⇒ thời gian giữ
+   * khoá tuyến tính theo số mẫu).
+   *
+   * ⚠️ **Bộ cột · JOIN · `orderBy` PHẢI ĐÚNG BẰNG `componentsTx`** (chỉ thêm khoá nhóm `templateId` ở đầu
+   * `orderBy`) — lệch một cột là hai đường dựng ra đồ thị KHÁC NHAU cho cùng một mẫu. `componentsTx` là nguồn
+   * CHUẨN và **KHÔNG được sửa**: nó nằm trên đường TÍNH lương (`assertUsableTemplateTx` ở
+   * `payroll-template-binding.ts` · `payroll-master-data.integrity.ts`). Ca oracle ở
+   * `s15-payroll-be2-components.int-spec.ts` so deep-equal hai đường để lệch cột không lọt qua typecheck
+   * (hoán vị hai cột cùng kiểu `boolean` thì `tsc` im lặng).
+   *
+   * **KHÔNG lọc `is_visible`** — giữ nguyên luật MF4 của `componentsTx`; caller tự quyết định lọc gì.
+   */
+  async componentsForTemplatesTx(
+    tx: TenantTx,
+    companyId: string,
+    templateIds: readonly string[],
+  ): Promise<Map<string, TemplateComponentRow[]>> {
+    // Guard RỖNG: `inArray(col, [])` sinh SQL `false` — vẫn là một vòng tới DB không để làm gì.
+    if (templateIds.length === 0) return new Map();
+    const rows = await tx
+      .select({
+        templateId: payrollTemplateComponents.templateId,
+        componentId: payrollTemplateComponents.componentId,
+        code: salaryComponents.code,
+        name: salaryComponents.name,
+        kind: salaryComponents.kind,
+        valueType: salaryComponents.valueType,
+        catalogFormula: salaryComponents.formula,
+        fixedAmount: salaryComponents.fixedAmount,
+        pitDeductible: salaryComponents.pitDeductible,
+        isSystem: salaryComponents.isSystem,
+        componentActive: salaryComponents.isActive,
+        componentDeletedAt: salaryComponents.deletedAt,
+        columnLabel: payrollTemplateComponents.columnLabel,
+        formulaOverride: payrollTemplateComponents.formulaOverride,
+        isVisible: payrollTemplateComponents.isVisible,
+        sortOrder: payrollTemplateComponents.sortOrder,
+      })
+      .from(payrollTemplateComponents)
+      .innerJoin(
+        salaryComponents,
+        and(
+          eq(salaryComponents.companyId, payrollTemplateComponents.companyId),
+          eq(salaryComponents.id, payrollTemplateComponents.componentId),
+        ),
+      )
+      .where(
+        and(
+          eq(payrollTemplateComponents.companyId, companyId),
+          inArray(payrollTemplateComponents.templateId, [...templateIds]),
+        ),
+      )
+      .orderBy(
+        asc(payrollTemplateComponents.templateId),
+        asc(payrollTemplateComponents.sortOrder),
+        asc(salaryComponents.code),
+      );
+    const byTemplate = new Map<string, TemplateComponentRow[]>();
+    for (const { templateId, ...row } of rows) {
+      const bucket = byTemplate.get(templateId);
+      if (bucket) bucket.push(row);
+      else byTemplate.set(templateId, [row]);
+    }
+    return byTemplate;
   }
 
   /** 053 — ĐẶT LẠI toàn bộ trong tx hiện tại. Người gọi PHẢI giữ advisory lock catalog + `FOR UPDATE` hàng mẫu. */

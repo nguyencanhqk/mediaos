@@ -617,6 +617,8 @@ export default {
       "Có số tài khoản thì phải nhập cả tên ngân hàng lẫn tên chủ tài khoản — nếu muốn xoá tài khoản, xoá cả ba trường cùng lúc.",
     idempotencyInProgress: "Yêu cầu đang được xử lý — vui lòng đợi.",
     idempotencyKeyReused: "Yêu cầu trước đã dùng khoá này cho nội dung khác — thử lại.",
+    componentCatalogLimit:
+      "Danh mục thành phần lương đã chạm trần 200 thành phần đang dùng — ngưng dùng hoặc xoá bớt thành phần cũ trước khi thêm mới.",
     componentCodeExists: "Mã thành phần lương này đã tồn tại — chọn mã khác.",
     componentCodeReserved:
       "Mã này thuộc không gian tên hệ thống (tiền tố SYS_/TL_/GT_, mã hệ thống, tên hàm) — chọn mã khác.",
