@@ -85,11 +85,66 @@ export const SOCIAL_ERR = {
   /** `SOCIAL-ERR-010` (403) — đổi trường kiểm duyệt cụ thể mà thiếu cặp quyền của TRƯỜNG đó. */
   MODERATION_FIELD_DENIED: "SOCIAL-ERR-010: bạn không có quyền thay đổi trường kiểm duyệt này.",
 
-  // ── Nhóm B (`S16-SOCIAL-BE-1B`) — khai sẵn, KHÔNG dùng ở WO này ──
+  // ── Nhóm B (`S16-SOCIAL-BE-1B`) ──
   /** `SOCIAL-ERR-011` (409) — xác nhận đã đọc một bài không phải tin tức / không bật yêu cầu ack. */
   ACK_NOT_APPLICABLE: "SOCIAL-ERR-011: bài viết này không yêu cầu xác nhận đã đọc.",
   /** `SOCIAL-ERR-021` (409) — xử lý một báo cáo đã kết thúc. */
   REPORT_ALREADY_DECIDED: "SOCIAL-ERR-021: báo cáo này đã được xử lý.",
+
+  /**
+   * `SOCIAL-ERR-001` — cùng luật 404-cho-mọi-lý-do, trục BÁO CÁO: báo cáo không tồn tại · tenant khác
+   * · ngoài phạm vi Department của actor. Một chuỗi cho mọi lý do.
+   */
+  REPORT_NOT_FOUND: "SOCIAL-ERR-001: không tìm thấy báo cáo.",
+
+  /**
+   * (409) — **KHÔNG SỐ HOÁ** (D5, cần chữ ký owner ở PR). Báo cáo trùng khi cái cũ còn `open`.
+   *
+   * ┌─ VÌ SAO KHÔNG CÓ MÃ `SOCIAL-ERR-0XX` ────────────────────────────────────────────────────────┐
+   * │ Catalog SOCIAL của SPEC-16 §12 đóng ở `001..022` và ĐÃ DÙNG HẾT; §12 im lặng hoàn toàn về ca  │
+   * │ này (quét đủ 22 mã). Bịa thêm một số là sửa SPEC không có chữ ký. Hằng CÓ TÊN dưới đây đủ để   │
+   * │ int-spec assert theo HẰNG chứ không theo câu chữ tự do — thứ duy nhất mã số mang lại ở đây.    │
+   * │ Nếu owner muốn số hoá sau: thêm dòng SPEC-16 §12 rồi đổi hằng này, một chỗ.                    │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+   */
+  REPORT_DUPLICATE_OPEN: "SOCIAL-ERR: bạn đã báo cáo nội dung này và báo cáo đó đang chờ xử lý.",
 } as const;
 
 export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];
+
+/** Tên constraint DB mà SOCIAL DỊCH thành mã lỗi nghiệp vụ — nguồn sự thật một chỗ (D5). */
+export const SOCIAL_CONSTRAINT = {
+  /** Partial UNIQUE INDEX `(company_id, target_type, target_id, reporter_user_id) WHERE status='open'`. */
+  REPORT_OPEN_UQ: "feed_reports_open_uq",
+} as const;
+
+/**
+ * Bóc lỗi Postgres THẬT ra khỏi vỏ của drizzle (khuôn `assets.errors.ts#pgErrorOf`, đã hỏng thật một
+ * lần ở CHAT): `drizzle-orm` bọc lỗi driver trong `DrizzleQueryError` ⇒ `err.code` ở lớp NGOÀI là
+ * `undefined`, mã `23505` nằm dưới `err.cause`. Đi theo chuỗi `cause` có cận trên 5 tầng (chuỗi tự
+ * tham chiếu sẽ treo).
+ *
+ * Bản sao CỤC BỘ thay vì import từ `assets/`: một cạnh phụ thuộc SOCIAL → ASSET chỉ để dùng 8 dòng
+ * tiện ích là ràng hai module không liên quan vào nhau.
+ */
+export function socialPgErrorOf(err: unknown): { code?: unknown; constraint?: unknown } | null {
+  let cur: unknown = err;
+  for (let depth = 0; depth < 5 && cur; depth += 1) {
+    const e = cur as { code?: unknown; constraint?: unknown; cause?: unknown };
+    if (typeof e.code === "string") return e;
+    cur = e.cause;
+  }
+  return null;
+}
+
+/**
+ * `true` ⇔ lỗi là vi phạm UNIQUE của ĐÚNG constraint `name`.
+ *
+ * ⚠️ Khớp theo **TÊN CONSTRAINT**, KHÔNG theo mã `23505` trần: `feed_reports` còn
+ * `feed_reports_company_id_id_uq` (ống nước FK composite) cũng ném `23505`, và nuốt mọi `23505` thành
+ * "báo cáo trùng" là dịch SAI nguyên nhân rồi làm lỗi thật biến mất khỏi log điều tra.
+ */
+export function isUniqueViolationOf(err: unknown, name: string): boolean {
+  const e = socialPgErrorOf(err);
+  return !!e && e.code === "23505" && e.constraint === name;
+}

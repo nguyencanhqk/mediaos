@@ -1,15 +1,22 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-22 06:45Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-22 07:41Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S16-SOCIAL-BE-1B — Module apps/api/src/social/ Nhóm B (10 route, SOCIAL-API-020..029): tin tức (danh sách + xác nhận đọc + danh sách đã đọc) · tìm kiếm tsvector · thẻ (hashtag) · trang cá nhân · sinh nhật day/month tôn trọng preference (dùng getPreferencesForUsers của BE-1) · báo cáo (tạo + danh sách scope Department cho manager + xử lý resolve/dismiss) — TÁI DÙNG hạ tầng SocialAccessService/assertTargetVisible/SOCIAL_ROUTE_PAIRS dựng ở BE-1, KHÔNG dựng lại
+- **zone**: red · **skills**: security-review
+- **sửa ở đâu (paths)**: `apps/api/src/social/**`, `apps/api/migrations/**`, `apps/api/src/db/schema/**`, `apps/api/src/me/**`, `docs/SPEC/**`, `apps/api/src/app.module.ts`, `apps/api/src/realtime/**`, `apps/api/src/notifications/**`, `apps/api/src/foundation/**`, `apps/api/src/config/openapi-modules.ts`, `apps/api/package.json`, `apps/api/vitest.config.ts`, `apps/api/test/**`, `packages/contracts/**`, `docs/plans/**`, `docs/_review/**`, `harness/backlog.mjs`
+- **phụ thuộc**: S16-SOCIAL-BE-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] Route sinh nhật (026): Object.keys(item) BẰNG ĐÚNG {employeeId,fullName,avatar,day,month}; grep regex năm \b(19|20)\d{2}\b trên TOÀN BỘ JSON.stringify(response), không chỉ field day/month; neo dương ≥1 hàng thật; user showBirthday=false KHÔNG xuất hiện ở /birthdays lẫn mọi đường đọc khác trả tên/avatar nhân viên (search/tags/profiles/mention-resolve — 1 ca test mỗi đường, danh sách ĐÓNG)
+  - [ ] Ack tin tức (021): assert feed_post_acks có ĐÚNG 1 hàng user_id=actor và 0 hàng cho người khác (không chỉ assert response 200); body không nhận trường userId (server luôn dùng actor.id)
+  - [ ] Báo cáo: IDOR đa hình dùng LẠI assertTargetVisible (target_id tenant khác hoặc actor không thấy được → 404); view:feed-report scope Department cho manager ép TRONG SQL (không lọc JS) + 1 ca deny (manager đọc report ngoài phòng ban) + 1 ca allow (hr Company-wide); PATCH report đã resolved/dismissed → 409 ERR-021; ca *:* mở view:feed-report ghi rõ PIN hành vi ENGINE (memory tests-can-pin-a-hole-open) + PR nêu tường minh xin owner ký, KHÔNG tự ý đổi is_sensitive
+  - [ ] @Idempotent trên 027; outbox NOTI đăng ký + emit SOCIAL_NEWS_PUBLISHED(031)/SOCIAL_POST_REPORTED(036); route census 29 route (19 BE-1 + 10 BE-1B) + OpenAPI enrich xanh; coverage social/ ≥85% đo LẦN 2 (sau BE-1B, thay lần đo tạm ở BE-1)
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🔴 `S16-SOCIAL-BE-1B` Module apps/api/src/social/ Nhóm B (10 route, SOCIAL-API-020..029): tin tức (danh sách + xác nhận đọc + danh sách đã đọc) · tìm kiếm tsvector · thẻ (hashtag) · trang cá nhân · sinh nhật day/month tôn trọng preference (dùng getPreferencesForUsers của BE-1) · báo cáo (tạo + danh sách scope Department cho manager + xử lý resolve/dismiss) — TÁI DÙNG hạ tầng SocialAccessService/assertTargetVisible/SOCIAL_ROUTE_PAIRS dựng ở BE-1, KHÔNG dựng lại
 - 🔴 `S16-SOCIAL-BE-2` BE track B: nhóm (tạo · xin vào · duyệt · vai trò hàng · bài trong nhóm — membership check TRONG SQL) · bình chọn (bỏ/đổi phiếu · ẩn danh không lộ user_id · job đóng theo hạn khuôn system-jobs) · sáng kiến assertIdeaTransition + vết duyệt · kudos + huy hiệu · outbox NOTI ~9 sự kiện · room co:{c}:feedgroup:{id} — deny-path RED: đọc bài nhóm riêng tư khi không là thành viên · vote poll đã đóng · vote đôi · duyệt sáng kiến không có cặp
 
 **CHỜ (kẹt phụ thuộc):**
@@ -29,7 +36,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `feat/s16-social-be-1b` · **file đang đổi (dirty)**: 2
 - **migration head**: idx 250 — `0583_s16socialdb2_audit_union_kudos_badge` (251 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -38,6 +45,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `f0c38985` | 2026-09-22 | docs(social): S16-SOCIAL-BE-1B — micro-plan vùng đỏ Nhóm B (chưa thi công) |
+| `5324418d` | 2026-09-22 | chore(docs): regen STATUS + bàn giao — merge #531 (S15-PAYROLL-BE-2B) + #530 (S16-SOCIAL-BE-1) |
 | `71021c2b` | 2026-09-22 | feat(social): S16-SOCIAL-BE-1 — module bảng tin Nhóm A (SOCIAL-API-001..019) (#530) |
 | `bfd55d65` | 2026-09-22 | feat(payroll): S15-PAYROLL-BE-2B — trả 4 nợ ghi nhận của BE-2 (N+1 · trần catalog · 6 CHECK · precision) (#531) |
 | `9e17ae51` | 2026-09-21 | feat(social): S16-SOCIAL-DB-2 — schema + migration SOCIAL Track B (0580-0583) (#529) |
@@ -48,8 +57,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `83c5a20b` | 2026-09-19 | docs(social): S16-SOCIAL-DB-1 — micro-plan vùng đỏ + 6 phép đo thực địa (chưa thi công) |
 | `d3ffe8d4` | 2026-09-19 | chore(docs): regen STATUS — S18-OPS-MINIOPIN-1 #527 đã merge master (c714c0a4) |
 | `c714c0a4` | 2026-09-19 | fix(ops): S18-OPS-MINIOPIN-1 — ghim image MinIO/mc sang quay.io theo đúng bản đang chạy (#527) |
-| `a293d93c` | 2026-09-19 | chore(docs): regen STATUS — merge #523 #524 #525 #526, mở khoá wave S16 |
-| `c667c15d` | 2026-09-19 | docs(social): S16-SOCIAL-DOC-1 — bộ tài liệu SOCIAL (SPEC-16 · DB-17 · API-19 · §9h) (#526) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

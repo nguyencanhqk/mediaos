@@ -31,6 +31,9 @@ function toDto(row: UserPreference | undefined): MePreferences {
     density: (row?.density as MePreferences["density"]) ?? null,
     favoriteModules: row?.favoriteModules ?? null,
     meLayoutConfig: row?.meLayoutConfig ?? null,
+    // S16-SOCIAL-BE-1B (D11) — `?? null` ở đây là ĐÚNG ngữ nghĩa, không phải một default ngầm: cột
+    // NULLABLE không DEFAULT (`0584`), và `null` nghĩa là "chưa override ⇒ hiện" ở CẢ DB lẫn DTO.
+    showBirthday: row?.showBirthday ?? null,
     updatedAt: row?.updatedAt ? row.updatedAt.toISOString() : null,
   };
 }

@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { check, jsonb, pgTable, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  jsonb,
+  pgTable,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { users } from "./users";
@@ -43,6 +52,17 @@ export const userPreferences = pgTable(
     density: varchar("density", { length: 20 }),
     favoriteModules: jsonb("favorite_modules").$type<string[]>(),
     meLayoutConfig: jsonb("me_layout_config").$type<Record<string, unknown>>(),
+    /**
+     * S16-SOCIAL-BE-1B (migration 0584) — ẩn sinh nhật khỏi widget `GET /social/birthdays` (SPEC-16
+     * §3.5 · SOC-DEC-007). **NULLABLE, KHÔNG DEFAULT** đúng luật cột override của bảng này:
+     * `NULL` = kế thừa mặc định **"hiện"**. Ba trạng thái `true`/`null`/không-có-hàng gộp về MỘT
+     * nhánh "hiện"; chỉ `false` mới ẩn.
+     *
+     * ⚠️ Phạm vi HẸP (D10, owner ký 22/09/2026): cờ chặn ĐÚNG hai trường `day`/`month` và mọi trường
+     * phái sinh từ `date_of_birth`. Nó **KHÔNG** ẩn danh tính (tên/avatar) khỏi tìm kiếm `023` / thẻ
+     * `024` / trang cá nhân `025` — SPEC-16 dòng 254/502/548 đã sửa theo trong cùng WO.
+     */
+    showBirthday: boolean("show_birthday"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

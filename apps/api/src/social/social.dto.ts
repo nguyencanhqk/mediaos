@@ -2,11 +2,20 @@ import { createZodDto } from "nestjs-zod";
 import {
   createFeedCommentSchema,
   createFeedPostSchema,
+  createFeedReportSchema,
+  listBirthdaysQuerySchema,
   listCommentsQuerySchema,
   listFeedQuerySchema,
+  listFeedReportsQuerySchema,
+  listNewsQuerySchema,
+  listPostAcksQuerySchema,
+  listProfilePostsQuerySchema,
   listSavedQuerySchema,
+  listTagsQuerySchema,
   moderateFeedPostSchema,
   putFeedReactionSchema,
+  resolveFeedReportSchema,
+  searchFeedQuerySchema,
   updateFeedCommentSchema,
   updateFeedPostSchema,
 } from "@mediaos/contracts";
@@ -29,3 +38,14 @@ export class ModerateFeedPostBody extends createZodDto(moderateFeedPostSchema) {
 export class CreateFeedCommentBody extends createZodDto(createFeedCommentSchema) {}
 export class UpdateFeedCommentBody extends createZodDto(updateFeedCommentSchema) {}
 export class PutFeedReactionBody extends createZodDto(putFeedReactionSchema) {}
+
+// ── S16-SOCIAL-BE-1B — Nhóm B (`SOCIAL-API-020..029`) ──
+export class ListNewsQuery extends createZodDto(listNewsQuerySchema) {}
+export class ListPostAcksQuery extends createZodDto(listPostAcksQuerySchema) {}
+export class SearchFeedQuery extends createZodDto(searchFeedQuerySchema) {}
+export class ListTagsQuery extends createZodDto(listTagsQuerySchema) {}
+export class ListProfilePostsQuery extends createZodDto(listProfilePostsQuerySchema) {}
+export class ListBirthdaysQuery extends createZodDto(listBirthdaysQuerySchema) {}
+export class CreateFeedReportBody extends createZodDto(createFeedReportSchema) {}
+export class ListFeedReportsQuery extends createZodDto(listFeedReportsQuerySchema) {}
+export class ResolveFeedReportBody extends createZodDto(resolveFeedReportSchema) {}

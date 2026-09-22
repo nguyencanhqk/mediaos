@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 651,
-    "controllers": 121,
-    "gated": 612,
+    "routes": 661,
+    "controllers": 124,
+    "gated": 622,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -9120,6 +9120,118 @@
       "verdictWo": null
     },
     {
+      "key": "SocialDiscoveryController#birthdays",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/birthdays",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialDiscoveryController#listTags",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/tags",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialDiscoveryController#profilePosts",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/profiles/:employee_id/posts",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialDiscoveryController#search",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/search",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialNewsController#ack",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/posts/:post_id/ack",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialNewsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/news",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialNewsController#listAcks",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/posts/:post_id/acks",
+      "hasPermission": true,
+      "permission": "manage:feed-news",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "SocialPostsController#create",
       "httpMethod": "POST",
       "path": "/api/v1/social/posts",
@@ -9349,6 +9461,54 @@
       "path": "/api/v1/social/posts/:post_id/reaction",
       "hasPermission": true,
       "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialReportsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/reports",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialReportsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/reports",
+      "hasPermission": true,
+      "permission": "view:feed-report",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialReportsController#resolve",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/social/reports/:report_id",
+      "hasPermission": true,
+      "permission": "manage:feed-report",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

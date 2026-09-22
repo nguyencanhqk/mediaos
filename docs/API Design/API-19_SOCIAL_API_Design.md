@@ -92,7 +92,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-026` | `GET /social/birthdays` | `view:feed` | **DTO chỉ `{employeeId, fullName, avatar, day, month}`** — không năm, không tuổi; tôn trọng `showBirthday` |
 | **Báo cáo & kiểm duyệt — Track A ghi · Track C xử lý** ||||
 | `SOCIAL-API-027` | `POST /social/reports` | `view:feed` (hàng `reporter_user_id = actor`) | Báo cáo bài/bình luận |
-| `SOCIAL-API-028` | `GET /social/reports` | `view:feed-report` | Sàn scope `Company`; manager `Department` |
+| `SOCIAL-API-028` | `GET /social/reports` | `view:feed-report` | Sàn scope `Company`; manager `Department`. **`reporter` = `null` khi scope HẸP HƠN `Company`** (D13-a, owner ký 22/09/2026) — chỉ HR/company-admin thấy người tố giác; khoá vẫn có mặt |
 | `SOCIAL-API-029` | `PATCH /social/reports/{report_id}` | `manage:feed-report` | `resolve`/`dismiss` (+ hành động kèm); đã xử lý ⇒ 409 `ERR-021`; ghi audit |
 | **Nhóm — Track B** ||||
 | `SOCIAL-API-030` | `GET /social/groups` | `view:feed` | Nhóm `public` + nhóm actor là thành viên |

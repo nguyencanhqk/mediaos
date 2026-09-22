@@ -96,6 +96,16 @@ export interface SocialTargetAccess {
   authorUserId: string;
   postAudience: string;
   postStatus: string;
+  /**
+   * `org_unit_id` của BÀI (bài cha, nếu đích là bình luận). `null` ⇔ bài toàn công ty.
+   *
+   * ⟲ **S16-SOCIAL-BE-1B thêm trường này** (chỉ THÊM, không đổi trường cũ ⇒ 0 thay đổi hành vi cho
+   * caller BE-1). Lý do: người nhận `NOTI-036` lọc theo đơn vị của bài đích (H4-iii/D6), và câu trả
+   * lời đó phải đến từ CHÍNH cửa `assertTargetVisible` mà actor vừa đi qua. Cách duy nhất khác là
+   * đọc lại hàng báo cáo bằng một scope Company dựng tay — tức mở đúng đường "đọc bất kỳ đích nào
+   * trong tenant" mà D13-R cấm.
+   */
+  postOrgUnitId: string | null;
 }
 
 /** Đích đa hình của `feed_reactions` / `feed_mentions` (và `feed_reports` ở BE-1B). */

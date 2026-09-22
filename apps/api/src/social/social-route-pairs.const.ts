@@ -63,8 +63,28 @@ export interface SocialPair {
    * `['manager','view','feed-report','Department']` — và `view:feed-report` là cặp của route `028`,
    * thuộc `S16-SOCIAL-BE-1B`. Khi BE-1B mở, nó thêm hàng đó với `companyFloor:false` +
    * `dataScope:"Department"` và PHẢI ép vị từ phòng ban TRONG SQL.
+   *
+   * ✅ **BE-1B (22/09/2026) đã mở đúng hàng đó** — `reportsList`. Tập `companyFloor:false` nay có
+   * ĐÚNG MỘT phần tử, và census ép nó phải kèm `dataScope` (xem field dưới).
    */
   readonly companyFloor: boolean;
+  /**
+   * S16-SOCIAL-BE-1B (plan §1 M3) — **phạm vi dữ liệu HẸP NHẤT mà route này ép TRONG SQL**, khai
+   * BẮT BUỘC cho MỌI route `companyFloor:false` (census `social-two-layer-guard-census` assert đẳng
+   * thức đó). `undefined` cho route `companyFloor:true` — ở đó sàn Company đã trả lời xong câu hỏi
+   * phạm vi, không còn gì để khai.
+   *
+   * ┌─ VÌ SAO PHẢI LÀ MỘT FIELD, KHÔNG PHẢI "đọc `actor.routeScope` lúc runtime là đủ" ─────────────┐
+   * │ Tắt `companyFloor` KHÔNG chỉ mở thêm `Department`: nó mở cho **MỌI** scope mà grant resolve ra │
+   * │ được, kể cả `Own`/`Team` — hai giá trị mà SPEC-16 §11.1 không hề định nghĩa cho cặp            │
+   * │ `view:feed-report`. Một grant `view:feed-report@Own` sẽ đi lọt `resolveActor` và, nếu           │
+   * │ repository chỉ `if (scope === 'Department') … else <không lọc>`, nó đọc được TOÀN BỘ hàng đợi   │
+   * │ báo cáo của công ty — fail-OPEN.                                                               │
+   * │ Field này là lời hứa MÁY-KIỂM-ĐƯỢC rằng route có ép phạm vi hẹp đó trong SQL; comment của       │
+   * │ chính tác giả BE-1 ở ngay trên đã cam kết trước điều này, nay biến nó thành đẳng thức census.  │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+   */
+  readonly dataScope?: "Company" | "Department";
 }
 
 const pair = (
@@ -75,10 +95,10 @@ const pair = (
 ): SocialPair => ({ action, resourceType, isSensitive: false, tier1IsFloor, companyFloor });
 
 /**
- * Key = mã route API-19 (`SOCIAL-API-XXX`) — đúng 19 route của Nhóm A.
+ * Key = mã route API-19 (`SOCIAL-API-XXX`) — 19 route Nhóm A (`S16-SOCIAL-BE-1`) + 10 route Nhóm B
+ * (`S16-SOCIAL-BE-1B`) = **29 route**.
  *
- * `S16-SOCIAL-BE-1B` thêm route `020..029` vào CHÍNH bảng này (không tạo bảng hằng thứ hai);
- * `S16-SOCIAL-BE-2` thêm `030..053`.
+ * `S16-SOCIAL-BE-2` thêm `030..053` vào CHÍNH bảng này (không tạo bảng hằng thứ hai).
  */
 export const SOCIAL_ROUTE_PAIRS = {
   // ── Bảng tin & bài 001–013 ──
@@ -105,6 +125,56 @@ export const SOCIAL_ROUTE_PAIRS = {
   commentDelete: pair("view", "feed"),
   commentReactionPut: pair("view", "feed"),
   commentReactionDelete: pair("view", "feed"),
+
+  // ══ Nhóm B (`S16-SOCIAL-BE-1B`, API-19 §5.1 dòng 85-96) — 10 route `020..029` ══
+  // ── Tin tức + xác nhận đã đọc 020–022 ──
+  /** 020 `GET /social/news` — danh sách tin tức (`type='news'`, `sort='active'` cố định). */
+  newsList: pair("view", "feed"),
+  /** 021 `POST /social/posts/{id}/ack` — tự xác nhận đã đọc. `view:feed` là ĐỦ: actor ack cho CHÍNH
+   *  mình (server luôn dùng `actor.id`, body không nhận `userId`). */
+  postAck: pair("view", "feed"),
+  /** 022 `GET /social/posts/{id}/acks` — ai đã đọc / CHƯA đọc. Cặp `manage:feed-news` (KHÔNG
+   *  `view:feed`): nửa "chưa đọc" chiếu tên/avatar của MỌI người trong audience của bài, kể cả người
+   *  chưa tương tác gì — một đường chiếu danh tính toàn công ty, không phải một danh sách tương tác. */
+  postAcksList: pair("manage", "feed-news"),
+  // ── Tìm kiếm · thẻ · trang cá nhân · sinh nhật 023–026 ──
+  /** 023 `GET /social/search` — tìm toàn văn `tsvector` trong phạm vi bài actor THẤY ĐƯỢC. */
+  search: pair("view", "feed"),
+  /** 024 `GET /social/tags` — thẻ phổ biến. KHÔNG chiếu danh tính nào. */
+  tagsList: pair("view", "feed"),
+  /** 025 `GET /social/profiles/{employee_id}/posts` — bài của một nhân viên, qua CÙNG `listFeed`. */
+  profilePosts: pair("view", "feed"),
+  /** 026 `GET /social/birthdays` — widget sinh nhật. Gate `view:feed` và **không** cấp thêm cặp HR
+   *  nào (SOC-DEC-007) — đây là cửa sau tiềm năng vào PII của HR. */
+  birthdays: pair("view", "feed"),
+  // ── Báo cáo vi phạm 027–029 ──
+  /** 027 `POST /social/reports` — bất kỳ ai thấy được nội dung đều báo cáo được. */
+  reportCreate: pair("view", "feed"),
+  /**
+   * 028 `GET /social/reports` — hàng đợi kiểm duyệt.
+   *
+   * 🔴 ROUTE DUY NHẤT của SOCIAL có `companyFloor:false`. Seed `0578` cấp
+   * `['manager','view','feed-report','Department']` — vai `manager` đọc hàng đợi của ĐƠN VỊ MÌNH.
+   * Sàn Company sẽ 403 chính vai đó, nên cờ phải tắt; và vì tắt, `dataScope` bên dưới trở thành lời
+   * hứa máy-kiểm-được rằng repository CÓ ép vị từ phòng ban trong SQL (`switch` vét cạn, mọi scope
+   * ngoài `Company|System|Department` ⇒ `sql\`false\``).
+   */
+  reportsList: { ...pair("view", "feed-report", false, false), dataScope: "Department" },
+  /**
+   * 029 `PATCH /social/reports/{id}` — xử lý (resolved/dismissed). Cặp QUẢN LÝ, **sàn Company GIỮ
+   * NGUYÊN** — và đó là bất đối xứng CÓ CHỦ Ý với `028`, không phải quên tắt cờ.
+   *
+   * ĐO THẬT trên seed `0578` (dòng 100-110): `manage:feed-report` chỉ cấp cho `hr` và `company-admin`
+   * ở scope **Company**; `manager` chỉ có `view:feed-report@Department`. Nói cách khác: manager ĐỌC
+   * được hàng đợi của đơn vị mình nhưng KHÔNG kết thúc báo cáo — HR/company-admin xử lý (D6).
+   * Một grant `manage:feed-report@Department` (seed không sinh, nhưng vai tuỳ biến có thể) vì vậy bị
+   * TỪ CHỐI 403 `AUTH-ERR-SCOPE-DENIED` ở tầng 2, KHÔNG được "coi như Company".
+   *
+   * ⚠️ Hệ quả cho người đọc `social-reports.repository.ts`: vị từ D6 trên đường `findReport` hôm nay
+   * LUÔN là `true` (scope ở đây luôn Company/System). Nó vẫn phải có mặt — cùng một câu luật cho cả
+   * hai đường — nhưng ca đo thật của `switch` vét cạn nằm ở unit spec, không ở int-spec của `029`.
+   */
+  reportResolve: pair("manage", "feed-report"),
 } as const satisfies Record<string, SocialPair>;
 
 export type SocialRouteKey = keyof typeof SOCIAL_ROUTE_PAIRS;
