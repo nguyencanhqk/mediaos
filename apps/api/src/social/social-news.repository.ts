@@ -4,6 +4,7 @@ import type { TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import { feedPostAcks, feedPosts } from "../db/schema/social";
 import { users } from "../db/schema/users";
+import { activeGroupMemberExists } from "./social-group-predicates";
 import type { SocialViewerContext } from "./social.types";
 
 /**
@@ -181,10 +182,12 @@ export class SocialNewsRepository {
   async unackedEmployeesFor(
     tx: TenantTx,
     companyId: string,
-    post: { id: string; audience: string; orgUnitId: string | null },
+    post: { id: string; audience: string; orgUnitId: string | null; groupId: string | null },
     opts: { page: number; limit: number },
   ): Promise<{ rows: AckPersonRow[]; total: number }> {
-    if (post.audience === "group") return { rows: [], total: 0 };
+    // Khoá đi kèm `audience` mà THIẾU ⇒ fail-CLOSED (tập rỗng) — KHÔNG bao giờ nới thành "cả công
+    // ty". `CHECK chk_feed_posts_audience_group` đã cấm hàng như vậy tồn tại; vế này là lưới thứ hai.
+    if (post.audience === "group" && post.groupId == null) return { rows: [], total: 0 };
     if (post.audience === "org_unit" && post.orgUnitId == null) return { rows: [], total: 0 };
 
     const where = and(
@@ -198,6 +201,13 @@ export class SocialNewsRepository {
       sql`${employeeProfiles.userId} IS NOT NULL`,
       ...(post.audience === "org_unit" && post.orgUnitId != null
         ? [eq(employeeProfiles.orgUnitId, post.orgUnitId)]
+        : []),
+      // S16-SOCIAL-BE-2A D14(1) — bài trong nhóm: "chưa đọc" là THÀNH VIÊN ACTIVE chưa ack, không
+      // phải cả công ty và cũng không phải tập rỗng. EXISTS tương quan TRONG CÂU (không resolve
+      // mảng id trước — tập nhóm đổi liên tục). Vế `employee_profiles.status='active'` ở ngay trên
+      // đã lo D7, nên ở đây chỉ còn membership + nhóm còn sống.
+      ...(post.audience === "group" && post.groupId != null
+        ? [activeGroupMemberExists(companyId, post.groupId, employeeProfiles.userId)]
         : []),
       sql`NOT EXISTS (
         SELECT 1 FROM ${feedPostAcks} a
@@ -254,15 +264,16 @@ export class SocialNewsRepository {
    * `limit - 1` người khi tác giả rơi vào cửa sổ cắt.
    *
    * «thuộc audience» = nhân viên **đang hoạt động** (`status='active'`, xem `unackedEmployeesFor`)
-   * có tài khoản. Nợ CHƯA đóng (chuyển `S16-SOCIAL-BE-2`): chưa lọc theo `view:feed` hiệu lực.
+   * có tài khoản; với `audience='group'` thì còn phải là **thành viên `active` của nhóm còn sống**
+   * (S16-SOCIAL-BE-2A D14). Nợ CHƯA đóng: chưa lọc theo `view:feed` hiệu lực.
    */
   async audienceUserIds(
     tx: TenantTx,
     companyId: string,
-    post: { audience: string; orgUnitId: string | null },
+    post: { audience: string; orgUnitId: string | null; groupId: string | null },
     opts: { excludeUserId: string; limit: number },
   ): Promise<{ userIds: string[]; total: number }> {
-    if (post.audience === "group") return { userIds: [], total: 0 };
+    if (post.audience === "group" && post.groupId == null) return { userIds: [], total: 0 };
     if (post.audience === "org_unit" && post.orgUnitId == null) return { userIds: [], total: 0 };
 
     const where = and(
@@ -276,6 +287,12 @@ export class SocialNewsRepository {
       sql`${employeeProfiles.userId} <> ${opts.excludeUserId}`,
       ...(post.audience === "org_unit" && post.orgUnitId != null
         ? [eq(employeeProfiles.orgUnitId, post.orgUnitId)]
+        : []),
+      // S16-SOCIAL-BE-2A D14(2) — SINH ĐÔI của vế trên, và phải đi CÙNG LƯỢT: một bên quyết ai được
+      // BÁO (NOTI-031), bên kia liệt ai CHƯA ĐỌC. Vá lẻ một cái ⇒ tin nhóm báo cho 0 người trong khi
+      // route `022` liệt đủ danh sách "chưa đọc" — hai đường nói ngược nhau về cùng một tin.
+      ...(post.audience === "group" && post.groupId != null
+        ? [activeGroupMemberExists(companyId, post.groupId, employeeProfiles.userId)]
         : []),
     );
 

@@ -181,7 +181,12 @@ export class SocialNewsService {
           : await this.repo.unackedEmployeesFor(
               tx,
               actor.companyId,
-              { id: postId, audience: post.audience, orgUnitId: post.orgUnitId },
+              {
+                id: postId,
+                audience: post.audience,
+                orgUnitId: post.orgUnitId,
+                groupId: post.groupId,
+              },
               query,
             );
 

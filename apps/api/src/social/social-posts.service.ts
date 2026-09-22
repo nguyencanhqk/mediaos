@@ -180,7 +180,7 @@ export class SocialPostsService {
       const mentions = await resolveMentions(
         tx,
         actor,
-        { audience: dto.audience, orgUnitId: dto.orgUnitId ?? null },
+        { audience: dto.audience, orgUnitId: dto.orgUnitId ?? null, groupId: dto.groupId ?? null },
         dto.mentionedUserIds ?? [],
       );
       const fresh = await syncMentions(tx, actor.companyId, "post", postId, mentions.accepted);
@@ -205,6 +205,8 @@ export class SocialPostsService {
         await this.enqueueNewsPublishedNoti(tx, actor, postId, {
           audience: dto.audience,
           orgUnitId: dto.audience === "org_unit" ? (dto.orgUnitId ?? null) : null,
+          // Cùng khuôn "khoá chỉ có nghĩa với ĐÚNG audience của nó" như `orgUnitId` ngay trên.
+          groupId: dto.audience === "group" ? (dto.groupId ?? null) : null,
         });
       }
 
@@ -265,7 +267,7 @@ export class SocialPostsService {
       const mentions = await resolveMentions(
         tx,
         actor,
-        { audience: post.audience, orgUnitId: post.orgUnitId },
+        { audience: post.audience, orgUnitId: post.orgUnitId, groupId: post.groupId },
         dto.mentionedUserIds ?? [],
       );
       // CHỈ mention MỚI mới sinh thông báo — mỗi lần bấm Lưu không được bắn lại cho người cũ.
@@ -420,7 +422,9 @@ export class SocialPostsService {
     tx: TenantTx,
     actor: SocialActor,
     postId: string,
-    post: { audience: string; orgUnitId: string | null },
+    // S16-SOCIAL-BE-2A D14(2): +`groupId` — tin đăng vào nhóm tính người nhận theo membership, và
+    // thiếu trường này thì `audienceUserIds` fail-closed về tập rỗng (tin không báo cho ai).
+    post: { audience: string; orgUnitId: string | null; groupId: string | null },
   ): Promise<void> {
     // Cắt + đếm + loại tác giả đều ở SQL (xem `audienceUserIds`): `recipients` đã là ≤ trần, `total`
     // là tổng THẬT trước khi cắt — hai con số khác nhau và payload cần CẢ HAI.

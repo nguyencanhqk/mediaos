@@ -2,9 +2,10 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import { orgUnits } from "../db/schema/org";
-import { feedMentions, feedPostTags, feedTags } from "../db/schema/social";
+import { feedGroupMembers, feedMentions, feedPostTags, feedTags } from "../db/schema/social";
 import { users } from "../db/schema/users";
 import { bumpTagUsage } from "./social-counters";
+import { activeGroupMemberExists } from "./social-group-predicates";
 import type { SocialActor, SocialPostAccess, SocialTargetType } from "./social.types";
 
 /**
@@ -162,7 +163,10 @@ export interface MentionResolution {
  *     ĐỨNG ĐẦU đơn vị đó (`org_units.head_user_id`) — đúng hai nguồn mà `departmentOrgUnitIds()` gộp
  *     lại ở chiều ngược. Lệch một vế là mention được người không đọc được bài (họ nhận thông báo về
  *     một bài bấm vào ra 404), hoặc bỏ mất người đọc được.
- *   • `audience='group'` ⇒ KHÔNG BAO GIỜ tới đây (bị từ chối 422 ở `assertWriteAudience`).
+ *   • `audience='group'` ⇒ mention được nhận khi người được nhắc là **thành viên `active` của
+ *     chính nhóm đó** và nhóm chưa xoá mềm (S16-SOCIAL-BE-2A D14-3/D13). TRƯỚC BE-2A nhánh này
+ *     không tới được (422 ở `assertWriteAudience`), và vế `inAudience` để `false` cho mọi người
+ *     — khi cửa ghi mở ra, dòng đó biến thành «bài nhóm nuốt sạch mention, vẫn trả 201».
  *
  * ⚠️ Tự nhắc chính mình bị BỎ (vào `dropped`): không ai cần thông báo về việc mình vừa gõ tên mình,
  * và để nó lọt sẽ đẻ một hàng `feed_mentions` mà `resolveRecipients` phải lọc lại ở tầng NOTI.
@@ -170,7 +174,7 @@ export interface MentionResolution {
 export async function resolveMentions(
   tx: TenantTx,
   actor: SocialActor,
-  post: Pick<SocialPostAccess, "audience" | "orgUnitId">,
+  post: Pick<SocialPostAccess, "audience" | "orgUnitId" | "groupId">,
   mentionedUserIds: readonly string[],
 ): Promise<MentionResolution> {
   const unique = [...new Set(mentionedUserIds)];
@@ -202,6 +206,34 @@ export async function resolveMentions(
     );
 
   const found = new Map(rows.map((r) => [r.userId, r]));
+
+  // Thành viên ACTIVE của nhóm, trong số những người ĐƯỢC NHẮC ở lượt này — chỉ hỏi khi bài thật
+  // sự thuộc một nhóm. Một câu cho cả danh sách (không N+1), và lọc D7 ngay trong câu: người đã nghỉ
+  // việc còn nguyên hàng `feed_group_members` nên membership KHÔNG đủ để kết luận "còn trong nhóm".
+  let groupMembers = new Set<string>();
+  if (post.audience === "group" && post.groupId != null) {
+    const memberRows = await tx
+      .select({ userId: feedGroupMembers.userId })
+      .from(feedGroupMembers)
+      .innerJoin(
+        employeeProfiles,
+        and(
+          eq(employeeProfiles.companyId, feedGroupMembers.companyId),
+          eq(employeeProfiles.userId, feedGroupMembers.userId),
+          eq(employeeProfiles.status, "active"),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(feedGroupMembers.companyId, actor.companyId),
+          eq(feedGroupMembers.groupId, post.groupId),
+          inArray(feedGroupMembers.userId, unique),
+          activeGroupMemberExists(actor.companyId, post.groupId, feedGroupMembers.userId),
+        ),
+      );
+    groupMembers = new Set(memberRows.map((r) => r.userId));
+  }
 
   // Ai đứng đầu ĐÚNG đơn vị của bài — chỉ hỏi khi bài thật sự giới hạn theo đơn vị.
   let heads = new Set<string>();
@@ -240,7 +272,8 @@ export async function resolveMentions(
       post.audience === "company" ||
       (post.audience === "org_unit" &&
         post.orgUnitId != null &&
-        (row.orgUnitId === post.orgUnitId || heads.has(row.userId)));
+        (row.orgUnitId === post.orgUnitId || heads.has(row.userId))) ||
+      (post.audience === "group" && post.groupId != null && groupMembers.has(row.userId));
     if (inAudience) accepted.push(person);
     else dropped.push(person);
   }
