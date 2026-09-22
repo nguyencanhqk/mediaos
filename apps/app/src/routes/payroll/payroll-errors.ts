@@ -98,6 +98,8 @@ export const PAYROLL_ERROR_KINDS = [
   // ── S15-PAYROLL-BE-5B (031 · 007) ──
   "pdf-batch-too-large",
   "no-payslip-for-pdf",
+  // ── S15-PAYROLL-BE-2B (034) — trần catalog thành phần lương ──
+  "component-catalog-limit",
 ] as const;
 export type PayrollErrorKind = (typeof PAYROLL_ERROR_KINDS)[number];
 
@@ -116,6 +118,7 @@ const KIND_TO_I18N_KEY: Readonly<Record<PayrollErrorKind, string>> = {
   "attendance-period-missing": "errors.attendancePeriodMissing",
   "bank-pair-incomplete": "errors.bankPairIncomplete",
   "bonus-frozen-race": "errors.bonusFrozenRace",
+  "component-catalog-limit": "errors.componentCatalogLimit",
   "component-code-exists": "errors.componentCodeExists",
   "component-code-reserved": "errors.componentCodeReserved",
   "component-in-use": "errors.componentInUse",

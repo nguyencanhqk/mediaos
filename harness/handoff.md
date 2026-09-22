@@ -2,6 +2,34 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-22 (a) — **S15-PAYROLL-BE-2B: PLAN XONG + đã vá theo plan-reviewer, CHƯA thi công**
+
+**Bắt đầu phiên sau ở đây:** nhánh `feat/s15-payroll-be-2b` (base master `9e17ae51`, commit docs-only `5c4eae8c`).
+Ledger đã `start`. Lane DB `mediaos_be2b` đã chain-migrate sẵn. Đọc memory `s15-payroll-be2b-plan-state` +
+`docs/plans/S15-PAYROLL-BE-2B.md` **§12 TRƯỚC §0-§11** (§12 = hợp đồng thi công, thắng khi mâu thuẫn), rồi code
+theo thứ tự §8. **Chưa sửa một dòng code sản phẩm nào** — cây sạch.
+
+**Owner chốt trong phiên:** trần catalog **200** hàng sống+active + mã lỗi mới (`PAYROLL-ERR-034`, 422,
+kind `component-catalog-limit`); **GIỮ precision 50**, không thêm trần giá trị trung gian.
+
+**plan-reviewer REVISE — 6 mục chặn đã vá vào §12.** Đắt nhất: (B1) mã 034 làm drift bảng mã **ĐÓNG** ở 4 chỗ
+(`SPEC-11:241`, `:693`, bảng §12.1, `API-18` 3 con số) ⇒ phải mở `paths` thêm API-18; (B2) trần 200 như plan gốc
+**chặn nhầm** hàng inactive và **để hở** đường «tạo N hàng inactive → 047 bật từng hàng» ⇒ chốt: 045 áp trần chỉ
+khi `dto.isActive !== false`, 047 áp ở nhánh `false→true`, đếm bằng `countActiveTx` gọi ngay sau lock;
+(B4) `payroll-catalog-lock-census` liệt kê `DB_TOUCH` bằng **chuỗi cứng** ⇒ method mới vô hình với cổng khoá.
+
+**Phát hiện mang giá trị ngoài WO:** `mapPayrollPgError` trả `null` ⇒ **500**, KHÔNG phải «400 hình thức» như
+comment `payroll.errors.ts:669-670` tự nhận (bằng chứng: `main.ts:50` + `all-exceptions.filter.ts:138-145` +
+`s15-payroll-qa1-constraints.int-spec.ts:283-289`). ⇒ nợ THẬT chưa có WO: `salary_profile_items_amount_check`.
+
+**Bẫy công cụ mới, đã ghi memory `pnpm-test-double-dash-runs-full-suite`:** `pnpm --filter @mediaos/api test --
+<path>` KHÔNG lọc — chạy TOÀN BỘ suite (bỏ `--` mới đúng); và git network qua Bash tool chết `publickey`, phải
+dùng PowerShell tool (`gh` thì vẫn chạy trong Bash).
+
+**Chi phí phiên: hook báo ~$202** lúc dừng — phần lớn vào 2 subagent (planner 237k + plan-reviewer 211k token)
+trên context đã nặng. Bài học: WO vùng đỏ nên **tách phiên lập-kế-hoạch và phiên thi công**; đóng phiên ngay khi
+plan qua đối kháng, thi công ở context sạch.
+
 ## Phiên 2026-09-18 (v) — **S16-SOCIAL-DOC-1: PR #526 MỞ, chờ owner merge** (mở wave S16)
 
 **Bắt đầu phiên sau ở đây:** nhánh `feat/s16-social-doc-1` (`fde92489`, base master `71bc2289`). Docs-only + harness. Việc còn lại: đợi CI → owner merge → regen STATUS + handoff. Đọc memory `s16-social-doc1-wave-state` trước khi đụng bất kỳ WO S16 nào.
