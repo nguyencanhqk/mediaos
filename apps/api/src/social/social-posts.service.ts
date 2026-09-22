@@ -211,13 +211,33 @@ export class SocialPostsService {
 
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
       const post = await this.access.assertPostVisible(tx, actor, postId);
-      this.access.assertCanMutateContent(actor, post.authorUserId);
+      const asManager = this.access.assertCanMutateContent(actor, post.authorUserId);
 
       const now = new Date();
       await tx
         .update(feedPosts)
         .set({ body: dto.body, editedAt: now, updatedAt: now, updatedBy: actor.actorUserId })
         .where(and(eq(feedPosts.id, postId), eq(feedPosts.companyId, actor.companyId)));
+
+      // Quan ly SUA noi dung cua NGUOI KHAC => vao so, cung luat voi duong XOA (`remove`).
+      // Khong co dong nay thi dau vet bien mat hoan toan: `body` bi ghi de, `updated_by`/`edited_at`
+      // cung bi ghi de, va lan tac gia tu sua tiep XOA luon hai cot do. Sua loi nguoi khac la hanh
+      // dong quan trong khong kem xoa. (FULL gate PR #530 HIGH-2 — owner ky 22/09/2026; plan §4
+      // truoc do ghi audit `—` cho 004/016.)
+      if (asManager) {
+        await this.audit.record(tx, {
+          action: "social.post.update",
+          objectType: "feed_post",
+          objectId: postId,
+          actorUserId: actor.actorUserId,
+          moduleCode: "SOCIAL",
+          entityType: "feed_post",
+          entityId: postId,
+          resultStatus: "Success",
+          // KHONG cho noi dung bai — API-19 §8 chot payload audit chi mang id + truong doi.
+          metadata: { postId, authorUserId: post.authorUserId },
+        });
+      }
 
       await syncPostTags(tx, actor.companyId, postId, parseHashtags(dto.body));
 

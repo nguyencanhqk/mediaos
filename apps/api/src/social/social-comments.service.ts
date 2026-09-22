@@ -214,13 +214,28 @@ export class SocialCommentsService {
 
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
       const comment = await this.access.assertCommentVisible(tx, actor, commentId);
-      this.access.assertCanMutateContent(actor, comment.authorUserId);
+      const asManager = this.access.assertCanMutateContent(actor, comment.authorUserId);
 
       const now = new Date();
       await tx
         .update(feedComments)
         .set({ body: dto.body, editedAt: now, updatedAt: now, updatedBy: actor.actorUserId })
         .where(and(eq(feedComments.id, commentId), eq(feedComments.companyId, actor.companyId)));
+
+      // Cung luat voi `remove` va voi 004 — xem lap luan o `SocialPostsService.update`.
+      if (asManager) {
+        await this.audit.record(tx, {
+          action: "social.comment.update",
+          objectType: "feed_comment",
+          objectId: commentId,
+          actorUserId: actor.actorUserId,
+          moduleCode: "SOCIAL",
+          entityType: "feed_comment",
+          entityId: commentId,
+          resultStatus: "Success",
+          metadata: { commentId, postId: comment.postId, authorUserId: comment.authorUserId },
+        });
+      }
 
       const mentions = await resolveMentions(
         tx,

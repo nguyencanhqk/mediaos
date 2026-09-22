@@ -84,5 +84,19 @@ export interface SocialCommentAccess {
   post: SocialPostAccess;
 }
 
+/**
+ * Kết quả `assertTargetVisible` — đích đã qua cổng visibility, KÈM audience/status của bài CHA.
+ *
+ * Hai trường `postAudience`/`postStatus` có mặt ở đây để người gọi thu hẹp FAN-OUT WS (D21) mà
+ * KHÔNG phải truy vấn lại bài: room `co:{c}:feed` là room CẢ CÔNG TY, nên phát sự kiện của bài
+ * `org_unit`/`hidden` vào đó là rò đúng thứ mà REST trả 404.
+ */
+export interface SocialTargetAccess {
+  postId: string;
+  authorUserId: string;
+  postAudience: string;
+  postStatus: string;
+}
+
 /** Đích đa hình của `feed_reactions` / `feed_mentions` (và `feed_reports` ở BE-1B). */
 export type SocialTargetType = "post" | "comment";

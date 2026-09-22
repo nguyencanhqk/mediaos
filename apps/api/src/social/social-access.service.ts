@@ -16,6 +16,7 @@ import type {
   SocialCommentAccess,
   SocialPostAccess,
   SocialRequestUser,
+  SocialTargetAccess,
   SocialTargetType,
   SocialViewerContext,
 } from "./social.types";
@@ -63,8 +64,9 @@ export class SocialAccessService {
    * Ba câu hỏi scope đi CHUNG một lượt `resolveManyOrNull` (1 round-trip thay vì 3) và đọc kết quả
    * **THEO CHỈ SỐ, không theo khoá cặp**: `routeKey='postModerate'` hỏi ĐÚNG cặp `manage:feed-post`
    * mà cờ `canManagePosts` cũng hỏi — tra theo khoá thì hai vai đè nhau; và `Map.get()` trượt trả
-   * `undefined`, mà hai cờ dưới đây kiểm `!== null` ⇒ `undefined` sẽ MỞ KHOÁ, typecheck không bắt
-   * (nguyên văn bài học đã ghi ở `recruit-access.service.ts:36-44`).
+   * `undefined`, mà một cờ kiểm `!= null` sẽ coi `undefined` là MỞ KHOÁ, typecheck không bắt
+   * (nguyên văn bài học đã ghi ở `recruit-access.service.ts:36-44`). Hai cờ dưới đây đi qua
+   * `isCompany()` nên `undefined` fail-closed — xem khối 🔴 ở chỗ gán.
    */
   async resolveActor(user: SocialRequestUser, routeKey: SocialRouteKey): Promise<SocialActor> {
     const p = SOCIAL_ROUTE_PAIRS[routeKey];
@@ -319,13 +321,25 @@ export class SocialAccessService {
     actor: SocialViewerContext,
     targetType: SocialTargetType,
     targetId: string,
-  ): Promise<{ postId: string; authorUserId: string }> {
+  ): Promise<SocialTargetAccess> {
     if (targetType === "post") {
       const post = await this.assertPostVisible(tx, actor, targetId);
-      return { postId: post.id, authorUserId: post.authorUserId };
+      return {
+        postId: post.id,
+        authorUserId: post.authorUserId,
+        postAudience: post.audience,
+        postStatus: post.status,
+      };
     }
     const comment = await this.assertCommentVisible(tx, actor, targetId);
-    return { postId: comment.postId, authorUserId: comment.authorUserId };
+    return {
+      postId: comment.postId,
+      authorUserId: comment.authorUserId,
+      // Bài CHA của bình luận — cảm xúc trên bình luận của bài `org_unit` cũng là dữ liệu riêng
+      // của đơn vị đó, không được phát ra room cả-công-ty (D21).
+      postAudience: comment.post.audience,
+      postStatus: comment.post.status,
+    };
   }
 
   /**

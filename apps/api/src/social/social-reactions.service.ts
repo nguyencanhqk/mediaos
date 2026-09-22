@@ -93,7 +93,12 @@ export class SocialReactionsService {
       if (outcome === "inserted") {
         await this.bumpLike(tx, actor, targetType, targetId, target.postId, 1);
       }
-      return { ...(await this.snapshot(tx, actor, targetType, targetId, target.postId)), outcome };
+      return {
+        ...(await this.snapshot(tx, actor, targetType, targetId, target.postId)),
+        outcome,
+        postAudience: target.postAudience,
+        postStatus: target.postStatus,
+      };
     });
 
     if (result.outcome !== "unchanged") this.emit(actor, result);
@@ -141,6 +146,8 @@ export class SocialReactionsService {
       return {
         ...(await this.snapshot(tx, actor, targetType, targetId, target.postId)),
         outcome: changed ? ("updated" as const) : ("unchanged" as const),
+        postAudience: target.postAudience,
+        postStatus: target.postStatus,
       };
     });
 
@@ -214,7 +221,16 @@ export class SocialReactionsService {
     };
   }
 
-  /** Phát `feed:reaction.changed` — payload KHÔNG có `mine`, KHÔNG có `actorUserId`. */
+  /**
+   * Phát `feed:reaction.changed` — payload KHÔNG có `mine`, KHÔNG có `actorUserId`.
+   *
+   * ⚠️ **LƯdI D21 — CHỈ bài `audience='company'` + `status='published'`.** `co:{c}:feed` là room CẢ
+   * CÔNG TY (`rooms.ts` `feedRoomName`) và API-19 §7 không khai room nào cho `org_unit`. Phát lượt cảm
+   * xúc của bài `org_unit`/`hidden` vào đó là rò SỰ TỎN TẠI của `postId`/`commentId` riêng tư + đường
+   * cong tương tác theo thời gian thực, đúng thứ mà REST trả 404 cho chính những người đó. Hai
+   * emitter kia (`emitPostCreated`/`emitCommentCreated`) đã có lưới này từ đầu; ở đây nó bị thiếu
+   * (FULL gate PR #530). Bài của bình luận lấy audience/status của bài CHA — xem `SocialTargetAccess`.
+   */
   private emit(
     actor: SocialActor,
     snap: {
@@ -223,8 +239,11 @@ export class SocialReactionsService {
       postId: string;
       likeCount: number;
       rows: { emoji: string; count: number }[];
+      postAudience: string;
+      postStatus: string;
     },
   ): void {
+    if (snap.postAudience !== "company" || snap.postStatus !== "published") return;
     this.realtime.emitFeedReactionChanged(actor.companyId, {
       targetType: snap.targetType,
       targetId: snap.targetId,

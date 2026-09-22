@@ -16,11 +16,12 @@ import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
+import { RealtimeEmitterService } from "../../src/realtime/realtime-emitter.service";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -467,6 +468,88 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 ranh giới nhìn thấy + IDOR (DB
 
   // ══════════════ R5 — emoji ngoài bộ ══════════════
 
+  /**
+   * D21 cho `feed:reaction.changed` (FULL gate PR #530).
+   *
+   * `emitPostCreated`/`emitCommentCreated` thu hẹp fan-out bằng lưới `audience==='company' &&
+   * status==='published'`, VÀ schema WS của chúng khoá cứng `audience: z.literal("company")` nên
+   * `.parse()` là một cổng thứ hai. Payload cảm xúc KHÔNG có trường `audience` ⇒ schema không đỡ
+   * được gì, lưới trong service là lớp DUY NHẤT.
+   *
+   * Thiếu lưới đó: mọi socket của CẢ CÔNG TY (room `co:{c}:feed`, gác bằng `view:feed` mà ai cũng có)
+   * nhận `{targetType, targetId, postId, likeCount, reactions[]}` của bài `org_unit`/`hidden` — rò SỰ
+   * TỒN TẠI của `postId`/`commentId` riêng tư + đường cong tương tác theo thời gian thực, đúng thứ mà
+   * REST trả 404 cho chính những người đó.
+   */
+  describe("D21 — fan-out WS của cảm xúc thu hẹp theo audience/status của bài CHA", () => {
+    let emitSpy: MockInstance<RealtimeEmitterService["emitFeedReactionChanged"]>;
+    /**
+     * Bình luận RIÊNG của block này. KHÔNG dùng `commentOnPublicId`: ca R2 ở trên XOÁ MẮM nó thật
+     * (`tManager` có `manage:feed-post`), nên mọi ca chạy SAU sẽ nhận 404 và báo sai chỗ hỏng.
+     */
+    let ownCommentId = "";
+
+    beforeAll(async () => {
+      emitSpy = vi.spyOn(app.get(RealtimeEmitterService), "emitFeedReactionChanged");
+      const c = await post(tSameUnit, `/social/posts/${publicPostId}/comments`).send({
+        body: "binh luan rieng cho ca D21",
+      });
+      expect(c.status, JSON.stringify(c.body)).toBe(201);
+      ownCommentId = c.body.data.id;
+    });
+
+    afterAll(() => {
+      emitSpy.mockRestore();
+    });
+
+    it("ALLOW đối chứng: bài company+published ⇒ CÓ emit đúng 1 lần", async () => {
+      // Neo chống-xanh-rỗng ĐỨNG TRƯỚC các ca deny: nếu emitter không bao giờ được gọi (đổi tên
+      // method, bỏ emit, spy gắn sai instance) thì mọi ca "0 emit" dưới đây xanh vì lý do SAI.
+      emitSpy.mockClear();
+      const res = await put(tOtherUnit, `/social/posts/${publicPostId}/reaction`).send({
+        emoji: "love",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(emitSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("DENY fan-out: bài `org_unit` ⇒ 200 cho người TRONG đơn vị nhưng 0 emit", async () => {
+      emitSpy.mockClear();
+      const res = await put(tSameUnit, `/social/posts/${orgUnitPostId}/reaction`).send({
+        emoji: "like",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(
+        emitSpy,
+        "room co:{c}:feed là CẢ công ty — bài org_unit không được phát vào đó",
+      ).not.toHaveBeenCalled();
+    });
+
+    it("DENY fan-out: bài `hidden` ⇒ 0 emit (kể cả actor có `manage:feed-post`)", async () => {
+      emitSpy.mockClear();
+      const res = await put(tManager, `/social/posts/${hiddenPostId}/reaction`).send({
+        emoji: "wow",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it("DENY fan-out: GỠ cảm xúc trên bài `org_unit` cũng 0 emit (đường gỡ dùng cùng lưới)", async () => {
+      emitSpy.mockClear();
+      const res = await auth(tSameUnit)(http().delete(`/social/posts/${orgUnitPostId}/reaction`));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it("ALLOW đối chứng: cảm xúc trên BÌNH LUẬN của bài company ⇒ CÓ emit", async () => {
+      emitSpy.mockClear();
+      const res = await put(tSameUnit, `/social/comments/${ownCommentId}/reaction`).send({
+        emoji: "haha",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(emitSpy).toHaveBeenCalledTimes(1);
+    });
+  });
   describe("R5 — bộ cảm xúc đóng", () => {
     it("DENY: giá trị ngoài bộ CHAT ⇒ 400/422, KHÔNG ghi hàng", async () => {
       const res = await put(tSameUnit, `/social/posts/${publicPostId}/reaction`).send({

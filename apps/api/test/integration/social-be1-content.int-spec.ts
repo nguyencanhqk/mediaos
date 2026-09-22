@@ -732,6 +732,100 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 quy tắc nội dung + bộ đếm 
   // `route-http-coverage.e2e-spec.ts` bắt (ratchet "chưa phủ = 0"). Chúng là đường ghi/đọc THẬT của
   // người dùng, không phải route phụ — thiếu test ở đây nghĩa là 4/19 route của WO chưa ai chạm.
 
+  /**
+   * Audit cho SỬA nội dung của NGƯỜI KHÁC — 004/016 (FULL gate PR #530 HIGH-2, owner ký 22/09/2026).
+   *
+   * Plan §4 trước đó ghi audit `—` cho hai route này, nên code KHỚP plan; cái sai là chính dòng plan.
+   * Lập luận đổi: đường XOÁ cùng module ĐÃ vào sổ, và sửa `body` của người khác **xoá dấu vết còn
+   * sạch hơn xoá bài** — `body` bị ghi đè, `updated_by`/`edited_at` cũng bị ghi đè, rồi lần tác giả
+   * tự sửa tiếp ghi đè NỐT hai cột đó ⇒ không còn gì cho biết ai đã viết lại lời của họ.
+   *
+   * `assertCanMutateContent` vốn ĐÃ trả cờ `asManager` đúng cho việc này (docblock của nó nói thẳng
+   * "caller dùng nó để quyết định có ghi audit_logs hay không"); bản đầu bỏ rơi giá trị trả về.
+   */
+  describe("§6 / HIGH-2 — SỬA nội dung người khác vào sổ audit, sửa của MÌNH thì không", () => {
+    async function auditRowsFor(objectId: string) {
+      const r = await direct.query(
+        `SELECT action, object_type, metadata FROM audit_logs
+          WHERE company_id = $1 AND object_id = $2 ORDER BY created_at`,
+        [A.companyId, objectId],
+      );
+      return r.rows as {
+        action: string;
+        object_type: string;
+        metadata: Record<string, unknown>;
+      }[];
+    }
+
+    it("004 — quản lý sửa bài của người khác ⇒ 1 dòng `social.post.update`", async () => {
+      const p = await post(tAuthor, "/social/posts").send({
+        type: "share",
+        audience: "company",
+        body: "bai cua tac gia se bi quan ly sua",
+      });
+      expect(p.status, JSON.stringify(p.body)).toBe(201);
+      const id = p.body.data.id as string;
+
+      const res = await patch(tPeer, `/social/posts/${id}`).send({
+        body: "quan ly viet lai",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+      const rows = await auditRowsFor(id);
+      expect(rows.length, "sửa nội dung người khác PHẢI vào sổ").toBe(1);
+      expect(rows[0].action).toBe("social.post.update");
+      expect(rows[0].object_type).toBe("feed_post");
+      expect(rows[0].metadata.postId).toBe(id);
+      expect(typeof rows[0].metadata.authorUserId).toBe("string");
+      // Payload audit KHÔNG chở nội dung bài (API-19 §8) — cả body cũ lẫn body mới.
+      const meta = JSON.stringify(rows[0].metadata);
+      expect(meta).not.toContain("quan ly viet lai");
+      expect(meta).not.toContain("bai cua tac gia se bi quan ly sua");
+    });
+
+    it("004 — tác giả sửa bài CỦA MÌNH ⇒ 0 dòng audit (không đẻ tiếng ồn)", async () => {
+      const p = await post(tAuthor, "/social/posts").send({
+        type: "share",
+        audience: "company",
+        body: "bai cua tac gia tu sua",
+      });
+      const id = p.body.data.id as string;
+      expect((await patch(tAuthor, `/social/posts/${id}`).send({ body: "tu sua" })).status).toBe(
+        200,
+      );
+      expect(await auditRowsFor(id)).toEqual([]);
+    });
+
+    it("016 — quản lý sửa bình luận của người khác ⇒ 1 dòng `social.comment.update`", async () => {
+      const c = await post(tAuthor, `/social/posts/${postId}/comments`).send({
+        body: "binh luan cua tac gia",
+      });
+      expect(c.status, JSON.stringify(c.body)).toBe(201);
+      const cid = c.body.data.id as string;
+
+      const res = await patch(tPeer, `/social/comments/${cid}`).send({
+        body: "quan ly sua hoc",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+      const rows = await auditRowsFor(cid);
+      expect(rows.length).toBe(1);
+      expect(rows[0].action).toBe("social.comment.update");
+      expect(rows[0].object_type).toBe("feed_comment");
+      expect(rows[0].metadata.postId).toBe(postId);
+    });
+
+    it("016 — chủ bình luận tự sửa ⇒ 0 dòng audit", async () => {
+      const c = await post(tAuthor, `/social/posts/${postId}/comments`).send({
+        body: "binh luan tu sua",
+      });
+      const cid = c.body.data.id as string;
+      expect(
+        (await patch(tAuthor, `/social/comments/${cid}`).send({ body: "tu sua" })).status,
+      ).toBe(200);
+      expect(await auditRowsFor(cid)).toEqual([]);
+    });
+  });
   describe("008/009/010 — lưu bài là trạng thái CÁ NHÂN", () => {
     it("lưu → xuất hiện ở /social/saved của CHÍNH mình, KHÔNG ở của người khác", async () => {
       const p = await post(tAuthor, "/social/posts").send({
