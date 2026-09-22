@@ -108,6 +108,60 @@ export const SOCIAL_ERR = {
    * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    */
   REPORT_DUPLICATE_OPEN: "SOCIAL-ERR: bạn đã báo cáo nội dung này và báo cáo đó đang chờ xử lý.",
+
+  // ─────────────── S16-SOCIAL-BE-2A — NHÓM (`012..015`) ───────────────
+
+  /**
+   * `SOCIAL-ERR-012` (404) — nhóm lạ. KHÔNG phân biệt "không tồn tại" · tenant khác · **đã xoá mềm**
+   * (D13) · `private` mà actor không phải thành viên `active`. Một chuỗi cho mọi lý do: phân biệt
+   * được tức là xác nhận một nhóm kín CÓ TỒN TẠI.
+   */
+  GROUP_NOT_FOUND: "SOCIAL-ERR-012: không tìm thấy nhóm.",
+
+  /** `SOCIAL-ERR-013` (409) — đã là thành viên, hoặc đã có yêu cầu vào nhóm đang chờ duyệt. */
+  GROUP_MEMBERSHIP_EXISTS: "SOCIAL-ERR-013: bạn đã tham gia hoặc đã gửi yêu cầu vào nhóm này.",
+
+  /**
+   * `SOCIAL-ERR-013` (409) — dạng body của `038` KHÔNG khớp trạng thái hàng (M-d): gửi
+   * `{role:…}` lên một hàng `pending`, hoặc `{decision:…}` lên một hàng `active`.
+   *
+   * ⚠️ Vì sao phải bắt ở SERVICE chứ không để DB nói: `chk_feed_group_members_pending_role`
+   * (`status='active' OR role='member'`) sẽ ném `23514` ⇒ **500** cho một thao tác quản trị hoàn
+   * toàn bình thường (bấm "đổi vai trò" trên đúng hàng đang chờ duyệt).
+   */
+  GROUP_MEMBER_STATE_MISMATCH:
+    "SOCIAL-ERR-013: thao tác không khớp trạng thái của thành viên này (chờ duyệt cần duyệt/từ chối, đang hoạt động mới đổi được vai trò).",
+
+  /**
+   * `SOCIAL-ERR-014` (403) — vai trò trong nhóm không đủ.
+   *
+   * 🔴 **NGHĨA ĐÃ NỚI so với SPEC-16 §12** (D-OWNER-8, owner ký 22/09/2026): §12 viết hẹp "duyệt
+   * thành viên / đổi vai trò", còn ở đây dùng cho MỌI 403 vai-trò-nhóm — `033` sửa nhóm · `034` xoá
+   * nhóm (owner-ONLY) · `038` · `039`. SPEC-16 §12 được sửa trong CÙNG PR, không để docs trôi.
+   */
+  GROUP_ROLE_REQUIRED: "SOCIAL-ERR-014: bạn không có quyền thực hiện thao tác này trong nhóm.",
+
+  /**
+   * `SOCIAL-ERR-015` (409) — thao tác sẽ làm nhóm **mất owner ACTIVE cuối cùng**.
+   *
+   * 🔴 **NGHĨA ĐÃ NỚI** (D-OWNER-8): §12 viết hẹp "rời nhóm khi là owner cuối", nhưng bất biến phải
+   * ép ở CẢ BA đường mất owner — `036` rời · `038` hạ vai trò owner cuối · `039` mời owner cuối ra.
+   * Thiếu một đường là nhóm rơi về **0 owner và khoá vĩnh viễn** (chỉ `manage:feed-group` gỡ được).
+   * ⚠️ `034` xoá nhóm KHÔNG thuộc bất biến này (H7) — nó là luật AUTHORIZATION, không phải luật đếm.
+   */
+  GROUP_LAST_OWNER: "SOCIAL-ERR-015: nhóm phải còn ít nhất một chủ nhóm đang hoạt động.",
+
+  /**
+   * (409) — **KHÔNG SỐ HOÁ**, cùng lý do và cùng tiền lệ với `REPORT_DUPLICATE_OPEN` ở trên: catalog
+   * SPEC-16 §12 đóng ở `001..022` và **đã dùng hết** (`022` = huy hiệu, thuộc BE-2B). Bịa thêm số là
+   * sửa SPEC không chữ ký; D-OWNER-8 chỉ cho nới nghĩa `014`/`015`, không cấp mã mới.
+   *
+   * Ca thật (W1, plan-reviewer vòng 3): `feed_groups_company_name_uq` là **partial unique**
+   * `(company_id, lower(name)) WHERE deleted_at IS NULL` ⇒ `031` tạo trùng tên và `033` đổi sang tên
+   * trùng ném `23505` mà trước đây không call-site nào dịch ⇒ **500** cho thao tác bình thường.
+   * Trùng tên với một nhóm ĐÃ xoá mềm thì KHÔNG đụng index (partial) ⇒ vẫn tạo được.
+   */
+  GROUP_NAME_TAKEN: "SOCIAL-ERR: tên nhóm này đã được dùng trong công ty.",
 } as const;
 
 export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];
@@ -116,6 +170,10 @@ export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];
 export const SOCIAL_CONSTRAINT = {
   /** Partial UNIQUE INDEX `(company_id, target_type, target_id, reporter_user_id) WHERE status='open'`. */
   REPORT_OPEN_UQ: "feed_reports_open_uq",
+  /** PK tổ hợp `(company_id, group_id, user_id)` của `feed_group_members` — xin vào nhóm lần hai. */
+  GROUP_MEMBER_PK: "feed_group_members_pk",
+  /** Partial UNIQUE INDEX `(company_id, lower(name)) WHERE deleted_at IS NULL` của `feed_groups` (W1). */
+  GROUP_NAME_UQ: "feed_groups_company_name_uq",
 } as const;
 
 /**
