@@ -16928,7 +16928,7 @@ export const backlog = [
     title:
       "Module apps/api/src/social/ Nhóm B (10 route, SOCIAL-API-020..029): tin tức (danh sách + xác nhận đọc + danh sách đã đọc) · tìm kiếm tsvector · thẻ (hashtag) · trang cá nhân · sinh nhật day/month tôn trọng preference (dùng getPreferencesForUsers của BE-1) · báo cáo (tạo + danh sách scope Department cho manager + xử lý resolve/dismiss) — TÁI DÙNG hạ tầng SocialAccessService/assertTargetVisible/SOCIAL_ROUTE_PAIRS dựng ở BE-1, KHÔNG dựng lại",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/social/**",
       // S16-SOCIAL-BE-1B plan §0.0 (22/09/2026): 4 path nới thêm — migration/schema cho cột
@@ -17055,98 +17055,129 @@ export const backlog = [
     ],
   },
   {
-    id: "S16-SOCIAL-BE-2",
+    id: "S16-SOCIAL-BE-2A",
     module: "SOCIAL",
     layer: "BE",
     title:
-      "BE track B: nhóm (tạo · xin vào · duyệt · vai trò hàng · bài trong nhóm — membership check TRONG SQL) · bình chọn (bỏ/đổi phiếu · ẩn danh không lộ user_id · job đóng theo hạn khuôn system-jobs) · sáng kiến assertIdeaTransition + vết duyệt · kudos + huy hiệu · outbox NOTI ~9 sự kiện · room co:{c}:feedgroup:{id} — deny-path RED: đọc bài nhóm riêng tư khi không là thành viên · vote poll đã đóng · vote đôi · duyệt sáng kiến không có cặp",
+      "BE track B/1 — NHÓM (SOCIAL-API-030..039 + nhánh audience='group' của 002): tạo · xin vào · duyệt · vai trò hàng · bài trong nhóm (membership check TRONG SQL) · bất biến ≥1 owner active · NOTI-034 · deny-path RED: đọc bài/nhóm riêng tư khi không là thành viên · tải đính kèm của bài nhóm · rò danh bạ qua danh sách thành viên",
     zone: "red",
-    status: "todo",
     paths: [
       "apps/api/src/social/**",
       "apps/api/src/app.module.ts",
-      "apps/api/src/realtime/**",
       "apps/api/src/notifications/**",
       "apps/api/test/**",
       "packages/contracts/**",
       "docs/plans/**",
       "harness/backlog.mjs",
-      "apps/api/src/scheduler/**",
     ],
+    status: "in_progress",
     skills: ["security-review"],
-    depends_on: ["S16-SOCIAL-DB-2", "S16-SOCIAL-BE-1"],
-    // ⚠️ NỢ BẮT BUỘC TỪ S16-SOCIAL-DB-2 (chốt 21/09/2026, xem docs/plans/S16-SOCIAL-DB-2.md §10):
-    //  (a) Đăng ký seeder `social.master-data` ở MasterDataSeederRegistry — mig 0582 CHỈ seed 5 huy hiệu
-    //      cho công ty ĐANG TỒN TẠI lúc migrate; công ty tạo SAU sẽ KHÔNG có huy hiệu nào nếu thiếu seeder.
-    //      ⚠️ Hệ quả CHƯA ghi ở đâu khác: một PROD CÀI MỚI chạy migrate TRƯỚC khi boot app ⇒ 0 company
-    //      lúc 0582 chạy ⇒ 0582 no-op ⇒ công ty sinh ra ở boot ship với catalog huy hiệu RỖNG cho tới
-    //      khi seeder này hạ cánh. PROD hiện tại an toàn (đã có company). (FULL gate DB-2 M1)
-    //  (b) Ghi `single_choice` = NOT feed_polls.multiple_choice cùng câu INSERT phiếu (cột CỐ Ý không
-    //      DEFAULT — quên ghi ăn 23502), VÀ chặn UPDATE multiple_choice/is_anonymous sau khi tạo poll:
-    //      partial unique feed_poll_votes_single_uq không đọc được bảng khác ⇒ đổi cờ giữa chừng làm
-    //      chốt chống-phiếu-đôi SAI LỆCH IM LẶNG. Điều kiện PHẢI có TRƯỚC khi mở route.
-    //      ⚠️ single_choice CHỈ fail-closed với "QUÊN GHI" (23502). Ghi SAI GIÁ TRỊ (false cho poll
-    //      một-lựa-chọn) thì partial index KHÔNG áp và phiếu đôi lọt IM LẶNG — DB không đối chiếu
-    //      được với feed_polls.multiple_choice. (FULL gate DB-2 M-5)
-    //  (c) NOTI 034 SOCIAL_GROUP_JOIN_DECIDED đang là dedupe_strategy=None (không nguồn bền vững: nhánh
-    //      từ chối XOÁ CỨNG hàng, feed_group_members không có decided_at). Thêm bảng nhật ký yêu cầu
-    //      vào nhóm thì nâng lên DedupeKey bằng migration nhỏ.
-    //  (d) Bổ sung các bảng feed_* nóng vào `childTables` của deleteWithFkRetry (test/helpers/seed.ts):
-    //      khối feed nay xoá ở ĐẦU cleanupTenants, nên khi BE-2 có worker/outbox ghi feed_*, một hàng
-    //      chèn lại sau đó làm DELETE FROM users ăn 23503 mà KHÔNG có vòng thử lại.
-    //  (e) 🔴 SERVICE PHẢI KIỂM `optionId ∈ poll` CÙNG TX TRƯỚC MỖI INSERT PHIẾU. DB KHÔNG ép được:
-    //      feed_poll_votes có HAI FK RỜI — (company_id, poll_id) → feed_polls và (company_id,
-    //      option_id) → feed_poll_options — không gì nối option_id với poll_id, và PK
-    //      (company_id, poll_id, option_id, user_id) cũng không. Trong CÙNG tenant, gửi pollId=P1 +
-    //      optionId=O2 (thuộc P2) ⇒ phiếu ghi THÀNH CÔNG, feed_poll_votes_single_uq VẪN PASS (nó chỉ
-    //      khoá theo poll_id,user_id), rồi service bump vote_count của O2 ⇒ NHỒI PHIẾU CHÉO-BÌNH-CHỌN,
-    //      vote_count của P2 lệch VĨNH VIỄN (không có đường đối soát). Hôm nay chưa reachable vì
-    //      apps/api/src/social/** chưa tồn tại. Bịt ở DB (nếu muốn chốt cứng) = feed_poll_options thêm
-    //      UNIQUE (company_id, poll_id, id) rồi đổi FK phiếu thành 3 cột — việc đó PHẢI là WO riêng
-    //      vì làm đỏ các assert đang chốt conkey=2 / 21 dòng tuple FK. (FULL gate DB-2 H-1)
-    //  (f) DTO của BE-2 PHẢI `.pick()` + `.strict()`, KHÔNG `.extend()` thẳng core schema Track B:
-    //      feedGroupMemberCoreSchema mang role/status/userId · feedPollCoreSchema mang status/closedAt ·
-    //      feedIdeaCoreSchema mang status/reviewedBy/reviewedAt/reviewNote, đều KHÔNG .strict().
-    //      Dùng thẳng làm body PATCH = tác giả sáng kiến tự gửi {status:'accepted', reviewedBy:mình}
-    //      ⇒ TỰ DUYỆT sáng kiến của mình, bỏ qua approve:feed-idea; tương tự role:'owner' cho nhóm.
-    //      Cùng lớp lỗi với nợ (c) của DB-1. (FULL gate DB-2 MEDIUM-2)
-
-    //  (g) ⟲ NỢ TỪ FULL GATE CỦA BE-1B (22/09/2026 — chi tiết + ngưỡng đo ở plan BE-1B §13.7):
-    //      1. Câu `count` của `028` mang 2 JOIN mà kết quả KHÔNG phụ thuộc khi scope Company/System
-    //         (scopeCondition trả `true`). EXPLAIN trên lane: planner loại được feed_posts nhưng
-    //         KHÔNG loại feed_comments ⇒ ~R lần tra bảng bình luận mỗi lần mở hàng đợi. Chỉ gắn JOIN
-    //         khi routeScope === 'Department'.
-    //      2. `028` không lọc `status` (mặc định của FE) KHÔNG có index phục vụ ORDER BY — index hiện
-    //         có `(company_id, status, created_at DESC)` chỉ dùng được khi status ghim bằng đẳng thức.
-    //      3. `listTags` LIKE tiền tố không dùng index (collation en_US.utf8, thiếu text_pattern_ops).
-    //      4. `026` không có LIMIT; EXTRACT(...) không index được ⇒ quét employee_profiles mỗi lần mở.
-    //      5. `manageReportCandidates` không có trần + không lọc roles.deleted_at — nó là ĐẦU VÀO của
-    //         vòng hỏi permission engine.
-    //      6. `unackedEmployeesFor` trả rỗng CÂM cho audience='group' (hôm nay 422 chặn ở tầng ghi
-    //         nên chưa reachable) — khi BE-2 MỞ NHÓM thì «0 người chưa đọc» đứng cạnh nửa «đã đọc»
-    //         có số thật sẽ đọc thành «cả nhóm đã đọc xong». Vá TRƯỚC khi mở nhóm.
-    //      7. Định nghĩa «thuộc audience» vẫn CHƯA lọc theo `view:feed` hiệu lực (cần API set-based
-    //         «ai có cặp X» ở tầng permission); NOTI-036 vẫn hỏi engine TỪNG ứng viên.
-    //      8. `0578` không re-run được (verify đếm grant trên TOÀN BỘ role kể cả role tuỳ biến của
-    //         tenant) — cần migration SAU đặt lại verify theo phạm vi sở hữu, HOẶC chốt 0578 là
-    //         migration MỘT-LẦN. KHÔNG sửa 0578 tại chỗ.
-    plan: "docs/plans/S16-SOCIAL-BE-2.md",
+    depends_on: ["S16-SOCIAL-DB-2", "S16-SOCIAL-BE-1", "S16-SOCIAL-BE-1B"],
+    plan: "docs/plans/S16-SOCIAL-BE-2A.md",
     src: [
-      "API-19 SOCIAL-API-~026..040 · SPEC-16 §13 FSM · SOC-DEC-006/009",
-      "Khuôn: tasks per-project role check · payroll assertPeriodTransition (FSM ở service + bảng RESET vết) · system-jobs handler (@SystemJobHandler @Optional) · memory period-key-idempotency-needs-frozen-source · deny-cases-vacuous-without-allow-case",
+      "API-19 SOCIAL-API-030..039 · SPEC-16 §3.4/§12/§13.6/§18 · SOC-DEC-006",
+      "Khuôn: tasks/project-access.service.ts (role-là-hàng, assertProjectRoleTx(allowedRoles)) · social-counters.ts (bump TRONG SQL) · social-access.service.ts (BỐN CỬA)",
     ],
     done_when: [
-      "Feed/chi tiết/tìm kiếm: bài audience=group chỉ trả khi LEFT JOIN membership active (SQL), nhóm public đọc được không cần tham gia; ca IDOR: người ngoài nhóm riêng tư → 404; owner rời nhóm phải chuyển owner trước; company-admin manage:feed-group can thiệp bất kỳ nhóm (audit)",
-      "Poll: vote/đổi phiếu chỉ khi open và trước closes_at; allow_multiple=false ⇒ 1 option/user (UNIQUE + ca race); kết quả poll ẩn danh KHÔNG trả user_id kể cả admin (ca grep); job đóng poll idempotent theo (poll_id) + NOTI người tạo",
-      "Poll — hai luật DB KHÔNG ép được, ca RED trước (chuyển từ done_when của DB-2, FULL gate DB-2 M4/H-1): (1) số lựa chọn 2–10 khi TẠO/SỬA poll ⇒ SOCIAL-ERR-018 (CHECK cấp hàng không đếm được hàng anh em; hôm nay chỉ FE-2 chặn = bỏ qua được bằng gọi API thẳng); (2) optionId PHẢI thuộc đúng pollId, kiểm cùng tx TRƯỚC mỗi INSERT phiếu — hai FK rời không nối option với poll, gửi chéo poll ⇒ nhồi phiếu + vote_count lệch vĩnh viễn",
-      "Sáng kiến: ma trận chuyển trạng thái đủ ca sai (accepted→submitted …), approve:feed-idea bắt buộc, vết reviewed_* + audit + NOTI tác giả; kudos: recipients ≠ tác giả, ≤10 người, huy hiệu phải có trong catalog; mọi POST @Idempotent",
-      "Outbox NOTI cho 9 sự kiện có ca test từng sự kiện (allow + deny); WS room feedgroup join gate membership; coverage social/ ≥85% LANE_DB",
+      "Feed/chi tiết/tìm kiếm: bài audience=group chỉ trả khi membership active ép TRONG SQL (EXISTS, không resolve mảng id trước); người ngoài nhóm riêng tư → 404; company-admin manage:feed-group can thiệp bất kỳ nhóm (audit)",
+      "🔴 OWNER CHỐT 22/09/2026 (D-OWNER-5, giải mâu thuẫn nghĩa-đen của done_when cũ): bài audience='group' BỊ LOẠI khỏi feed chung 001 · tìm kiếm 023 · trang cá nhân 025 — TRỪ khi request lọc đích danh groupId. Nhóm public đọc được không cần tham gia CHỈ ở đường đi-qua-nhóm. Có ca test cả hai chiều",
+      "🔴 Bất biến ≥1 owner ACTIVE ép ở MỌI đường mất owner: 036 leave · 038 đổi vai trò (đường CHUYỂN OWNER) · 039 mời ra · 034 xoá nhóm. Riêng 034 là owner-ONLY hoặc manage:feed-group (API-19 §5.1 dòng 102 — admin KHÔNG được xoá nhóm); assertGroupRoleTx nhận allowedRoles theo từng route, KHÔNG một tập cứng",
+      "🔴 Cổng MÀN HÌNH phải khớp cổng ĐƯỜNG TẢI: social-file.resolver dùng chung visiblePostCondition — có ca deny «người ngoài nhóm riêng tư xin URL đính kèm của bài nhóm» + ALLOW đối chứng (memory read-path-gate-pair-must-match-download-pair)",
+      "🔴 Vị từ «nhân viên đang hoạt động» = employee_profiles.status='active' (+ users.deleted_at IS NULL AND users.status='active' khi JOIN users) ở MỌI tập người: 037 danh sách thành viên · người nhận NOTI-034 · nợ (g)6. Nghỉ việc KHÔNG xoá mềm — hàng feed_group_members vẫn active (memory s16-social-be1b-wave-state)",
+      "Nợ (g)6 của BE-1B vá TRƯỚC khi mở nhóm: unackedEmployeesFor trả RỖNG CÂM cho audience='group' ⇒ «0 người chưa đọc» đứng cạnh nửa «đã đọc» có số thật. RED trước",
+      "Nợ (a) của DB-2: seeder social.master-data đăng ký MasterDataSeederRegistry (5 huy hiệu hệ thống, ON CONFLICT DO NOTHING) — mig 0582 chỉ seed cho company ĐANG TỒN TẠI; PROD cài mới migrate trước boot ⇒ catalog RỖNG",
+      "Nợ (d) của DB-2: ĐO race childTables của deleteWithFkRetry (test/helpers/seed.ts) — tái lập được thì vá, KHÔNG tái lập được thì ghi «đã đo, không vá» vào plan §10 (không vá phòng ngừa không bằng chứng)",
+      "DTO ghi dùng .pick()+.strict(), KHÔNG .extend() core schema (nợ f) — body 038 khai tường minh, cấm đặt role:'owner' tuỳ tiện; mọi POST có @Idempotent (035 join · 036 leave)",
+      "feed_groups.member_count bump TRONG SQL cùng tx với join/duyệt/rời/mời-ra (SPEC-16 §13.6 — 5 cột, member_count là cột DUY NHẤT của WO này); script đối soát 5 cột giao QA hoặc ghi nợ tường minh",
+      "Deny-path RED trước + ALLOW đối chứng cho: G1 đọc bài nhóm private · G2 đọc nhóm private · G3 ghi vào nhóm không thuộc · G4 bài nhóm public (đối chứng G1) · G5 owner cuối rời · G6 member thường duyệt · G7 xin vào trùng · G8 manage:feed-group can thiệp · G9 tải đính kèm · G10 danh sách 030/037 không lộ nhóm private. Census 2 tầng 10 route; coverage social/ ≥85% LANE_DB",
     ],
     notes: [
-      "🔴 NỢ ĐO ĐƯỢC TỪ S16-SOCIAL-BE-1B (22/09/2026) — `0578` KHÔNG RE-RUN ĐƯỢC: khối verify cuối của migration `0578` đếm grant `feed-*` trên TOÀN BỘ role rồi RAISE nếu ≠ 43, tức nó đếm cả role TUỲ BIẾN của tenant — thứ nó KHÔNG sở hữu (`invariant-count-must-filter-owned-rows`). ĐO THẬT trên lane `mediaos_be1b`: 43 hàng role hệ thống + 57 hàng role tuỳ biến do fixture int-spec dựng ⇒ verify thấy 100 và raise. Hệ quả: mọi DB đã có tenant cấp `feed-*` cho vai tuỳ biến (mọi lane test sau lượt int-spec đầu, và một ngày nào đó là PROD khi khôi phục backup rồi chạy lại chain) sẽ KHÔNG áp lại được `0578`. KHÔNG sửa tại chỗ được — `0578` đã áp ở mọi môi trường. Cần một migration SAU đặt lại verify theo phạm vi SỞ HỮU (`ro.company_id IS NULL`), hoặc chốt tường minh rằng `0578` là migration MỘT-LẦN. Ca idempotency ở `s16-social-db1-invariants.int-spec.ts` hiện BỎ QUA đúng khối verify đó khi chạy lại, có ghi lý do tại chỗ.",
-      "🔴 21/09/2026 (plan BE-1 §11.2, quyết định D21) — BE-1 CHỈ fan-out WS cho bài `audience=company` + `status=published`. Lý do: API-19 §7 khai đúng 2 room (`co:{c}:feed` cả công ty · `co:{c}:feedgroup:{groupId}`) và KHÔNG có room nào cho `org_unit` ⇒ phát bài org_unit vào room cả-công-ty là rò đúng nội dung mà REST trả 404. BE-2 phải dựng room nhóm (gate membership RIÊNG — `view:feed` KHÔNG đủ vào room nhóm riêng tư) và quyết định có cần room org_unit không. `wsFeedPostCreatedEventSchema` hiện khoá cứng `audience: z.literal(\"company\")` — nới nó là một quyết định có chủ đích, không phải dọn dẹp.",
-      "⚠️ Dư lượng SÀN tầng-1 (plan BE-1 M18/D5, có ca test R12 đóng đinh): vai TUỲ BIẾN chỉ có `manage:feed-news` mà KHÔNG có `manage:feed-post` bị 403 Ở TẦNG 1 khi gọi `006`, kể cả khi chỉ đổi `pinned`. Hôm nay 0 tác động (hai cặp cấp cùng tập vai canonical — mig 0578:92-95). Khi BE-2 mở cấp quyền cho vai tuỳ biến, phải thiết kế lại sàn của `002`/`006`.",
-      "🔴 FULL gate + Opus (membership = permission ở tầng hàng + FSM). Không mở thêm cặp quyền ngoài §9h; nếu cần thì DỪNG.",
+      "🔴 FULL gate + Opus. Đây là phần DUY NHẤT của track B chạm visiblePostCondition + đường tải tệp ⇒ đáng một FULL gate riêng.",
+      "⚠️ TÁCH 22/09/2026 từ S16-SOCIAL-BE-2 (owner chốt sau khi plan-reviewer BLOCK: 21 route + ~15 file + ~900 dòng contracts trong 1 WO là quá tải — BE-1B chỉ 10 route đã cần 1 PR riêng + FULL gate 3/3 BLOCK hai vòng). BE-2B/BE-2C nối tiếp, KHÔNG song song: cùng chạm social-posts.service.ts#create · social-route-pairs.const.ts · social.errors.ts · social.module.ts.",
+      "⚠️ assertWriteAudience hôm nay là hàm SYNC chạy NGOÀI withTenant (social-posts.service.ts:153 đứng trước :155). D2 biến nó thành kiểm DB ⇒ PHẢI chốt ĐÚNG MỘT call-site, TRONG tx, chữ ký (tx, actor, groupId); SocialGroupAccessService chỉ nhận tx, CẤM tự mở withTenant (withTenant lồng = treo IM LẶNG trên PgBouncer). Hoist resolveActor/PermissionService ra TRƯỚC tx ghi.",
+      "⚠️ feed_group_members DELETE CỨNG là ngoại lệ đã CHỐT của BẤT BIẾN 2 (DB-17 §4.9, vết ở audit_logs) — trích trong PR description để reviewer không tự ý 'sửa' thành soft-delete.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-BE-2B",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "BE track B/2 — BÌNH CHỌN · SÁNG KIẾN · VINH DANH (SOCIAL-API-040..048 + 3 nhánh type của 002): vote/đổi phiếu · ẩn danh không lộ user_id · job đóng theo hạn khuôn system-jobs · assertIdeaTransition + vết duyệt · kudos + huy hiệu · NOTI-032/033/035",
+    zone: "red",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/src/app.module.ts",
+      "apps/api/src/notifications/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    status: "todo",
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-2A"],
+    plan: "docs/plans/S16-SOCIAL-BE-2B.md",
+    src: [
+      "API-19 SOCIAL-API-040..048 · SPEC-16 §13.3 FSM sáng kiến · §13.4 FSM bình chọn · §13.6 · SOC-DEC-009",
+      "Khuôn: payroll/payroll-fsm.ts (FSM ở service, assertXTransition ném 409 có kind) · social-reports.service.ts resolveReport (UPDATE cặp vết một câu) · @SystemJobHandler @Optional",
+    ],
+    done_when: [
+      "🔴 Nợ (b) của DB-2 KHÔNG được xả bằng lập luận «không có route PATCH nên tự động đúng» — chính WO này mở closeTx, đường UPDATE ĐẦU TIÊN vào feed_polls (schema social.ts:596 ghi thẳng «service PHẢI chặn UPDATE»; SPEC-16 §13.4: «Service chặn cả hai; CÓ CA QA RIÊNG»). Vá: (a) closeTx UPDATE tường minh ĐÚNG 2 cột status+closedAt, cấm mapped-write; (b) structure spec (khuôn realtime/chat-realtime-structure.spec.ts) assert không site nào trong apps/api/src/social/** ghi multipleChoice/isAnonymous ngoài createPollTx; (c) ca RED cho chính nó",
+      "🔴 Nợ (e) của DB-2: optionId PHẢI thuộc đúng pollId, kiểm CÙNG TX TRƯỚC MỖI INSERT phiếu — hai FK rời không nối option với poll; gửi chéo poll ⇒ nhồi phiếu + vote_count lệch VĨNH VIỄN. RED trước: vote_count của poll kia KHÔNG đổi",
+      "🔴 Luật 2–10 lựa chọn ép Ở SERVICE → 422 SOCIAL-ERR-018, KHÔNG ở Zod: Zod từ chối trả 400 VÔ DANH ⇒ mã lỗi SPEC không bao giờ được ném (social-access.service.ts:353 ghi thẳng luật này). Ca test assert đúng MÃ, không chỉ status. Áp cùng luật cho K1/K2 (recipients ≠ tác giả, ≤10) và ERR-022 huy hiệu",
+      "🔴 voteTx là MỘT tx: -1 vote_count cho MỌI option bị xoá, +1 cho option mới — DELETE-rồi-INSERT mà không giảm đếm cũ làm lệch ngay ở luồng đổi phiếu BÌNH THƯỜNG. Ca đối chứng Σ vote_count == COUNT(*) phiếu sau đổi phiếu. Bắt 23505 (feed_poll_votes_single_uq) → 409 ERR-017",
+      "🔴 Ca race phiếu đôi phải là bất biến ĐẾM ĐƯỢC, không phải «409 HOẶC hội tụ» (mọi hành vi đều pass = deny vacuous): sau race, COUNT(*) feed_poll_votes WHERE (poll,user) == 1 VÀ Σ vote_count == COUNT(*) phiếu của poll",
+      "Ghi single_choice = NOT feed_polls.multiple_choice ĐỌC TỪ feed_polls NGAY TRONG câu vote (cột cố ý không DEFAULT — quên ghi ăn 23502; ghi SAI GIÁ TRỊ thì partial index không áp và phiếu đôi lọt IM LẶNG)",
+      "Poll: vote/đổi phiếu chỉ khi open và trước closes_at; kết quả ẩn danh KHÔNG trả user_id kể cả admin (ca grep + tập cột tường minh, cấm select() trần); job đóng idempotent theo UPDATE…WHERE status='open' RETURNING (chống race với 044 đóng tay) + NOTI-035 người tạo; 044 có @Idempotent",
+      "Sáng kiến: FSM 3 cạnh tường minh (submitted→under_review→accepted|rejected, KHÔNG reopen), ma trận đủ ca sai kể cả từ trạng thái terminal; approve:feed-idea bắt buộc; reviewTx UPDATE ĐỒNG THỜI status+reviewedBy+reviewedAt+reviewNote MỘT câu (thiếu một vế ăn CHECK chk_feed_ideas_reviewed_pair); audit + NOTI-032 tác giả",
+      "NOTI: pin eventCode VERBATIM theo migration 0581 (SOCIAL_IDEA_STATUS_CHANGED · SOCIAL_KUDOS_RECEIVED · SOCIAL_POLL_CLOSED) — KHÔNG tự đặt tên; 034 dedupe_strategy='None' theo catalog, không khai dedupeKeyOf mâu thuẫn. Mỗi sự kiện có ca allow + deny",
+      "Sổ/ratchet đo RIÊNG từng cái, KHÔNG cộng tay lẫn nhau: (1) MIN_COVERED_COUNT của route-http-coverage · (2) census 2 tầng + SERVICE_SITES · (3) route-census JSON · (4) identity-projection-verdicts (047 chiếu tên người được vinh danh + người gửi) kèm bump các sổ đếm cuối file",
+      "Coverage social/ ≥85% LANE_DB; mọi POST @Idempotent; DTO .pick()+.strict()",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus. Nối tiếp BE-2A, KHÔNG song song (cùng chạm create() · route-pairs · errors · module).",
+      "⚠️ Ranh giới với BE-3 CẦN CHỮ KÝ: src của backlog ghi literal BE-2 «~026..040» và BE-3 «~041..045», nhưng title BE-3 chỉ nhắc «catalog huy hiệu CRUD». Plan đề xuất 047/048 (ĐỌC) thuộc WO này, 049/050/051 (CRUD) thuộc BE-3 — API-19 §15 lại gom 047..051 thành một cụm. Chốt ở PR và sửa src của CẢ HAI WO.",
+      "⚠️ §13.6 liệt ĐÚNG 5 cột đếm và feed_poll_options.vote_count KHÔNG nằm trong đó — nhưng nó vẫn là bộ đếm thật phải đối soát; ghi bổ sung vào script đối soát hoặc nợ tường minh cho QA.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-BE-2C",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "BE track B/3 — REALTIME room nhóm co:{c}:feedgroup:{id}: thêm feedUserRoomName (room ĐÁNH DẤU đã qua cổng view:feed) + join/leave động theo membership · fan-out bài audience='group' · nới D8 và CẬP NHẬT API-19 §7",
+    zone: "red",
+    paths: [
+      "apps/api/src/realtime/**",
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    status: "todo",
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-2A"],
+    plan: "docs/plans/S16-SOCIAL-BE-2C.md",
+    src: [
+      "API-19 §7 (2 room) · SPEC-16 §13.7 · SOC-DEC-006",
+      "Khuôn: realtime/rooms.ts chatUserRoomName + realtime-emitter.service.ts syncRoomMembership + realtime-emitter.chat.spec.ts (assert BỘ CHỌN room của join/leave)",
+    ],
+    done_when: [
+      "🔴 OWNER CHỐT 22/09/2026 (D-OWNER-2): thêm feedUserRoomName — room ĐÁNH DẤU riêng cho feed, đã qua cổng view:feed — rồi tái dùng syncRoomMembership. CẤM dùng userRoomName làm bộ chọn: rooms.ts:29-31 ghi thẳng bẫy này (kéo socket TRƯỢT cổng view:feed vào room nhóm)",
+      "🔴 Nới D8 («API-19 §7 chỉ 2 room») là SỬA TÀI LIỆU CHUẨN: cập nhật API-19 §7 thêm room đánh dấu, ghi lý do. KHÔNG sửa code mà để tài liệu trôi",
+      "Join room nhóm gate MEMBERSHIP riêng — view:feed KHÔNG đủ để vào room nhóm riêng tư; join/leave đẩy tới đúng socket đang sống khi 035/036/038/039 đổi membership",
+      "emitFeedPostCreated fan-out thêm room nhóm khi audience='group'; wsFeedPostCreatedEventSchema hiện KHOÁ CỨNG audience: z.literal('company') — nới nó là quyết định CÓ CHỦ ĐÍCH, ghi rõ, không phải dọn dẹp",
+      "Payload WS qua CÙNG DTO/masking layer như REST (cấm emit thẳng row); ca W2 so tập trường WS với DTO REST",
+      "Ca W1 assert BỘ CHỌN ROOM ĐÍCH của join/leave (khuôn realtime-emitter.chat.spec.ts:173-186), KHÔNG chỉ spy «có emit» — spy suông là xanh-giả",
+      "Đo chat-realtime-structure.spec.ts TRƯỚC khi sửa gateway/emitter (ratchet cấu trúc đọc và assert nội dung 2 file đó)",
+      "Quyết định tường minh: KHÔNG mở room org_unit (API-19 §7 không có) — ghi lý do, không để lửng",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus (room = cổng đọc ở tầng realtime). Nối tiếp BE-2A.",
+      "⚠️ TÁCH RA để không treo BE-2A/BE-2B: phần này bị chặn bởi quyết định room-đánh-dấu và bởi việc phải sửa tài liệu chuẩn API-19.",
     ],
   },
   {
@@ -17170,7 +17201,7 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
-    depends_on: ["S16-SOCIAL-BE-2", "S16-SOCIAL-FE-1"],
+    depends_on: ["S16-SOCIAL-BE-2A", "S16-SOCIAL-BE-2B", "S16-SOCIAL-FE-1"],
     plan: "docs/plans/S16-SOCIAL-FE-2.md",
     src: [
       "SPEC-16 §9 SOC-SCREEN-006..009 · hồ sơ HTML §05 (thẻ poll · kudos) · SOC-DEC-006/009 · routes/social FE-1",
@@ -17203,7 +17234,7 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
-    depends_on: ["S16-SOCIAL-BE-2"],
+    depends_on: ["S16-SOCIAL-BE-2A", "S16-SOCIAL-BE-2B"],
     plan: "docs/plans/S16-SOCIAL-BE-3.md",
     src: [
       "API-19 SOCIAL-API-~041..045 · SOC-DEC-005/010 · khuôn payroll report (set-based + XLSX exceljs) · memory dash-widget-gate-needs-scope-floor · widget-cache-hit-skips-audit-trail",
