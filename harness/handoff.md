@@ -2,6 +2,37 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-22 (b) — **CHUỖI MERGE: #531 + #530 đã vào master, hết PR mở**
+
+**Bắt đầu phiên sau ở đây:** `master` = `71021c2b`, cây sạch, **0 WO in_progress**, 2 WO READY:
+`S16-SOCIAL-BE-1B` (Nhóm B, 10 route SOCIAL-API-020..029) và `S16-SOCIAL-BE-2` (track B: nhóm · bình chọn ·
+sáng kiến · kudos). Cả hai 🔴 ⇒ FULL gate + plan-reviewer, tách phiên lập-kế-hoạch / thi công.
+
+**Đã merge (squash, `--admin`):**
+- `bfd55d65` ← PR #531 `S15-PAYROLL-BE-2B` (CI 12/12, FULL gate 3/3 PASS trước đó)
+- `71021c2b` ← PR #530 `S16-SOCIAL-BE-1` (CI 14/14 **chạy lại trên cây hợp nhất**, 19m35s)
+
+Ledger đã đóng dấu `finished` cho cả hai (tay, vì vùng đỏ không auto-finish). Nhánh remote + local đã xoá.
+STATUS regen MỘT LẦN ở cuối chuỗi (không regen giữa chừng — xem [[status-regen-commit-cancels-pages-deploy]]).
+
+**Quy trình đã nghiệm lại, dùng nguyên cho lần sau (2 PR trở lên cùng mở):**
+1. Đo ma trận xung đột TRƯỚC, đừng đoán theo tên file: `git merge-tree --write-tree` + `git commit-tree` dựng
+   master GIẢ sau squash A rồi thử B. Lần này **cả hai thứ tự đều SẠCH** — `harness/backlog.mjs` chung nhưng
+   hunk ở vùng riêng từng WO; không PR nào đụng `RELEASE-02`.
+2. Merge PR thứ nhất → PR thứ hai **tụt BEHIND ngay** (`strict: true`) ⇒ `gh pr update-branch <n>` rồi **chờ
+   CI chạy lại đủ ~20 phút trên cây hợp nhất**. Đây là bước `--admin` KHÔNG được phép thay thế.
+3. `gh pr merge <n> --squash --delete-branch --admin`. `--admin` chỉ vượt yêu-cầu-review-bất-khả-thi
+   (repo 1 tài khoản = tác giả PR), không vượt verification.
+4. Checkout `master` TRƯỚC khi merge PR của nhánh đang đứng — `--delete-branch` không xoá được nhánh đang
+   checkout. Đã làm đúng, không dính.
+
+**Bẫy công cụ ghi thêm:** `gh pr list --template` **báo lỗi nếu thiếu `--json`** (`cannot use --template
+without specifying --json`) — khác `gh pr view`, nơi `--json` cũng bắt buộc nhưng dễ nhớ hơn vì luôn phải liệt
+kê trường. Và `gh pr merge --admin` **thành công IM LẶNG** (0 dòng stdout) ⇒ đừng đọc "không có output" là
+thất bại; xác minh bằng `gh pr view <n> --json state,mergeCommit`.
+
+**Chi phí phiên:** hook báo ~$15 lúc đóng sổ — rẻ vì phiên chỉ merge, không mở subagent nào.
+
 ## Phiên 2026-09-22 (a) — **S15-PAYROLL-BE-2B: PLAN XONG + đã vá theo plan-reviewer, CHƯA thi công**
 
 **Bắt đầu phiên sau ở đây:** nhánh `feat/s15-payroll-be-2b` (base master `9e17ae51`, commit docs-only `5c4eae8c`).
