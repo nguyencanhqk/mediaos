@@ -101,6 +101,8 @@ export class SocialPostsService {
         authorUserId: query.authorUserId,
         orgUnitId: query.orgUnitId,
         tag: query.tag,
+        // D-OWNER-6: feed khám phá KHÔNG có bài nhóm — trừ khi lọc đích danh `groupId` (D-OWNER-7).
+        groupScope: query.groupId ? { only: query.groupId } : "exclude",
       }),
     );
 
@@ -121,6 +123,10 @@ export class SocialPostsService {
         limit: query.limit,
         cursor,
         savedByActorOnly: true,
+        // D-OWNER-6: GIỮ bài nhóm ở «Đã lưu» — chính actor đã bấm lưu, và membership vẫn bị
+        // `visiblePostCondition` gác. Ẩn đi thì `savedByMe=true` mà không thấy bài: hai đường nói
+        // ngược nhau về cùng một hành động của chính người dùng.
+        groupScope: "include",
       }),
     );
     return this.toPage(actor, rows, query.limit, fingerprint);
@@ -616,6 +622,9 @@ function feedFingerprint(actor: SocialActor, q: ListFeedQueryDto): string {
     q.authorUserId,
     q.orgUnitId,
     q.tag?.toLowerCase(),
+    // 🔴 D-OWNER-7 (W2): thiếu dòng này thì con trỏ của feed thường dùng LẠI được cho feed nhóm ⇒
+    // trang sau cắt theo tập CŨ, sai IM LẶNG. Quên nó compile sạch — chỉ ca G15 bắt được.
+    q.groupId,
     actor.canManagePosts ? "mp1" : "mp0",
     [...actor.orgUnitIds].sort().join(","),
   ]);

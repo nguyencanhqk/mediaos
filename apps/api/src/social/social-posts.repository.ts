@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import type { FeedSortDto } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
@@ -78,12 +78,35 @@ export class SocialPostsRepository {
        * hai bản đó trôi khỏi nhau ngay lần đầu luật audience đổi.
        */
       searchText?: string;
+      /**
+       * 🔴 S16-SOCIAL-BE-2A (D-OWNER-6/D1) — bài `audience='group'` có nằm trong tập kết quả không.
+       * **BẮT BUỘC, không `?`, không giá trị mặc định** (W6): `listFeed` là MỘT hàm phục vụ NĂM
+       * route (`001`·`010`·`020`·`023`·`025`), mỗi route trả lời câu này KHÁC nhau, và mọi field
+       * khác ở đây đều optional — viết theo thói quen thành `groupScope?:` là để sẵn một cửa
+       * fail-OPEN cho caller MỚI (BE-2B/BE-3): quên truyền ⇒ bài nhóm chảy vào feed khám phá, im
+       * lặng. Kiểu này làm "quên" KHÔNG biểu diễn được.
+       *
+       *   • `"exclude"`      — feed khám phá: `001` (không lọc nhóm), `023` tìm kiếm, `025` trang cá nhân
+       *   • `"include"`      — nội dung actor ĐÃ có quan hệ: `010` Đã lưu, `020` Tin tức
+       *   • `{ only: id }`   — `001?groupId=` lọc đích danh (cửa thoát DUY NHẤT của D-OWNER-6)
+       *
+       * ⚠️ Đây là bộ lọc **THÀNH PHẦN FEED**, KHÔNG phải quyền: `visiblePostCondition` vẫn AND ở
+       * trên nó. `{only}` không nới gì — người ngoài nhóm kín lọc đích danh vẫn nhận tập rỗng.
+       */
+      groupScope: "exclude" | "include" | { only: string };
     },
   ): Promise<PostRow[]> {
     const where: SQL[] = [
       eq(feedPosts.companyId, viewer.companyId),
       this.access.visiblePostCondition(viewer),
     ];
+
+    // D-OWNER-6 — tầng THÀNH PHẦN FEED (D1), tách hẳn khỏi tầng VISIBILITY ở trên.
+    if (opts.groupScope === "exclude") {
+      where.push(ne(feedPosts.audience, "group"));
+    } else if (typeof opts.groupScope === "object") {
+      where.push(eq(feedPosts.groupId, opts.groupScope.only));
+    }
 
     if (opts.type) where.push(eq(feedPosts.type, opts.type as never));
     if (opts.audience) where.push(eq(feedPosts.audience, opts.audience as never));
