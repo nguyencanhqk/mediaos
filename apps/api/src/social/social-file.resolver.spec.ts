@@ -40,6 +40,10 @@ interface Opts {
   /** `null` = `assert*Visible` ném 404 (không thấy được). */
   authorUserId?: string | null;
   canManagePosts?: boolean;
+  /** Lỗi `assert*Visible` ném ra THAY cho 404 — dùng để đo nhánh leo-thang của `ownerContent`. */
+  failVisibleWith?: unknown;
+  /** Lỗi `resolveViewerContext` ném ra — nằm NGOÀI `withTenant`, nhánh riêng. */
+  failViewerWith?: unknown;
 }
 
 function makeResolver(o: Opts) {
@@ -52,17 +56,22 @@ function makeResolver(o: Opts) {
   } as unknown as DatabaseService;
 
   const access = {
-    resolveViewerContext: vi.fn().mockResolvedValue({
-      actorUserId: ACTOR,
-      companyId: COMPANY,
-      canManagePosts: o.canManagePosts ?? false,
-      orgUnitIds: [],
+    resolveViewerContext: vi.fn(async () => {
+      if (o.failViewerWith !== undefined) throw o.failViewerWith;
+      return {
+        actorUserId: ACTOR,
+        companyId: COMPANY,
+        canManagePosts: o.canManagePosts ?? false,
+        orgUnitIds: [],
+      };
     }),
     assertPostVisible: vi.fn(async () => {
+      if (o.failVisibleWith !== undefined) throw o.failVisibleWith;
       if (o.authorUserId == null) throw new NotFoundException("SOCIAL-ERR-001");
       return { id: ENTITY, authorUserId: o.authorUserId };
     }),
     assertCommentVisible: vi.fn(async () => {
+      if (o.failVisibleWith !== undefined) throw o.failVisibleWith;
       if (o.authorUserId == null) throw new NotFoundException("SOCIAL-ERR-001");
       return { id: ENTITY, postId: ENTITY, authorUserId: o.authorUserId };
     }),
@@ -252,5 +261,71 @@ describe("canLinkFile — SÁU vế, từng vế một", () => {
     // Không bóc sâu vào mock của dataScope ở đây — vế hành vi đã đủ; điều cần chắc là nhánh bình
     // luận CHẠY ĐƯỢC và không rơi về nhánh bài.
     expect(true).toBe(true);
+  });
+});
+
+/**
+ * `ownerContent` — RANH GIỚI giữa "câu trả lời" và "sự cố" (silent-failure-hunter, FULL gate #530).
+ *
+ * Bản đầu dùng `catch { return null }` KHÔNG phân biệt loại lỗi. Hậu quả không nằm ở kết quả deny
+ * (deny vẫn đúng, vẫn fail-closed) mà ở chỗ MẤT LOG: `FilePolicyService` có try/catch riêng để xếp
+ * resolver-throw thành `deny-error`, và `SocialAttachmentsService.signOne` dựa ĐÚNG vào `reason` đó
+ * để `logger.error`. Nuốt trắng ở đây đẩy mọi sự cố hạ tầng vào nhánh `deny-resolver` = "từ chối
+ * bình thường, không log" ⇒ sự cố DB toàn hệ thống nhìn y như "bạn không có quyền", không ai gỡ được.
+ */
+describe("ownerContent — 404 là câu TRẢ LỜI, lỗi khác là SỰ CỐ phải leo lên", () => {
+  it("lỗi DB ở `assert*Visible` LEO LÊN, KHÔNG hoá thành deny im lặng", async () => {
+    const boom = new Error("connection terminated unexpectedly");
+    const r = makeResolver({ scopes: ["Company"], failVisibleWith: boom });
+    await expect(r.canDownloadFile(input())).rejects.toThrow(boom);
+    await expect(r.canViewFile(input())).rejects.toThrow(boom);
+  });
+
+  it("lỗi ở `resolveViewerContext` (NGOÀI `withTenant`) cũng leo lên", async () => {
+    const boom = new Error("pool exhausted");
+    const r = makeResolver({ scopes: ["Company"], failViewerWith: boom });
+    await expect(r.canDownloadFile(input())).rejects.toThrow(boom);
+  });
+
+  it("nhánh bình luận cũng leo lên, không chỉ nhánh bài", async () => {
+    const boom = new Error("statement timeout");
+    const r = makeResolver({ scopes: ["Company"], failVisibleWith: boom });
+    await expect(r.canDownloadFile(input({ entityType: FEED_COMMENT_ENTITY }))).rejects.toThrow(
+      boom,
+    );
+  });
+
+  it("`canLinkFile` (vế 6b dùng CÙNG `ownerContent`) cũng leo lên", async () => {
+    const boom = new Error("deadlock detected");
+    const r = makeResolver({
+      scopes: ["Company", "Company"],
+      file: OK_FILE,
+      failVisibleWith: boom,
+    });
+    await expect(
+      r.canLinkFile(input({ action: FilePolicyAction.Link, entityType: FEED_POST_ENTITY })),
+    ).rejects.toThrow(boom);
+  });
+
+  it("404 đã BỌC LẠI (không `instanceof`) vẫn được nuốt — `getStatus()` là bất biến qua mọi cách bọc", async () => {
+    // Đây là lý do `isNotFound` soi `getStatus()` chứ không `instanceof NotFoundException`: ở worker
+    // vitest hai bản `@nestjs/common` khác instance làm `instanceof` trượt TRONG IM LẶNG ⇒ 404 sạch
+    // bị xếp thành deny-error và spam log.
+    const r = makeResolver({
+      scopes: ["Company"],
+      failVisibleWith: { getStatus: () => 404, message: "SOCIAL-ERR-001" },
+    });
+    expect(await r.canDownloadFile(input())).toBe(false);
+  });
+
+  it("404 dạng thuộc tính `status` (không có `getStatus`) cũng được nuốt", async () => {
+    const r = makeResolver({ scopes: ["Company"], failVisibleWith: { status: 404 } });
+    expect(await r.canDownloadFile(input())).toBe(false);
+  });
+
+  it("500 đã bọc lại KHÔNG bị nuốt — chỉ ĐÚNG 404 mới là câu trả lời", async () => {
+    const wrapped = { getStatus: () => 500 };
+    const r = makeResolver({ scopes: ["Company"], failVisibleWith: wrapped });
+    await expect(r.canDownloadFile(input())).rejects.toBe(wrapped);
   });
 });

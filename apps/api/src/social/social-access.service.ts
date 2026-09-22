@@ -99,8 +99,16 @@ export class SocialAccessService {
       companyId: user.companyId,
       routeKey,
       routeScope: routeScopeOrNull,
-      canManagePosts: managePostsScope !== null,
-      canManageNews: manageNewsScope !== null,
+      // 🔴 SÀN SCOPE Company — `isCompany(scope)`, TUYỆT ĐỐI KHÔNG `scope !== null` (khuôn
+      // `PayrollAccessService.canRevealTaxCode` điều 3, BLOCKER B3 của plan-review PAYROLL — giữ
+      // nguyên chữ này để lượt sau không "đơn giản hoá" nó đi). `resolveManyOrNull` trả scope MẠNH
+      // NHẤT và KHÔNG ép sàn nào, trong khi `SOCIAL_ROUTE_PAIRS` khai `companyFloor=true` cho TOÀN
+      // BỘ 19 route. Viết `!== null` ⇒ một vai giữ `manage:feed-post`@`Department` (API ghi grant
+      // cho phép: `role-admin.service.ts` chỉ chặn `System`) bị 403 ở route 006 SỞ HỮU năng lực đó,
+      // nhưng đọc được MỌI bài `hidden` của cả công ty (`visiblePostCondition` :157) và sửa/xoá nội
+      // dung của BẤT KỲ ai (`assertCanMutateContent` :354) — ô cửa sổ rộng hơn cửa chính.
+      canManagePosts: SocialAccessService.isCompany(managePostsScope),
+      canManageNews: SocialAccessService.isCompany(manageNewsScope),
       // D13 (owner ký 21/09/2026) — đơn vị của chính actor ∪ đơn vị actor đứng đầu. KHÔNG cây con.
       orgUnitIds: this.dataScope.departmentOrgUnitIds(ctx),
     };
@@ -129,7 +137,10 @@ export class SocialAccessService {
     return {
       actorUserId: userId,
       companyId,
-      canManagePosts: managePostsScope !== null,
+      // Cùng SÀN Company như `resolveActor` — xem khối 🔴 ở đó. Lệch giữa hai đường là tệ nhất:
+      // đường TẢI TỆP sẽ rộng hơn đường MÀN HÌNH, đúng lớp lỗi `read-path-gate-pair-must-match-
+      // download-pair` mà resolver này sinh ra để bịt.
+      canManagePosts: SocialAccessService.isCompany(managePostsScope),
       orgUnitIds: this.dataScope.departmentOrgUnitIds(ctx),
     };
   }

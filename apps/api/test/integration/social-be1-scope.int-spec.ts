@@ -86,6 +86,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 ma trận quyền + sàn tầng-1 (
     userId: string,
     label: string,
     pairs: readonly PairKey[],
+    /** Scope cua grant. Mac dinh `Company` — moi vai canonical (mig 0578) dung o day. */
+    scope: "Company" | "Department" | "Team" | "Own" = "Company",
   ) {
     const roleId = await seedRole(
       direct,
@@ -97,7 +99,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 ma trận quyền + sàn tầng-1 (
       // Mọi cặp `feed-*` là NON-sensitive (mig 0578) — truyền cờ TƯỜNG MINH; `seedPermissionCatalog`
       // tự NÉM nếu lệch với catalog, nên đây là một phép đo chứ không phải một lời khai.
       const permId = await seedPermissionCatalog(direct, action, resource, false);
-      await seedRolePermission(direct, roleId, permId, "ALLOW", "Company");
+      await seedRolePermission(direct, roleId, permId, "ALLOW", scope);
     }
     await seedUserRole(direct, userId, roleId, companyId);
   }
@@ -348,6 +350,118 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 ma trận quyền + sàn tầng-1 (
 
   // ══════════════ R23 — cross-tenant ══════════════
 
+  /**
+   * SÀN SCOPE Company cho CỜ DẪN XUẤT (FULL gate PR #530, HIGH-1).
+   *
+   * `SOCIAL_ROUTE_PAIRS` khai `companyFloor = true` cho TOÀN BỘ 19 route, nên hợp đồng của module là:
+   * `manage:feed-post` CHỈ hợp lệ ở scope Company. Sàn đó được ép cho cặp CỦA ROUTE (`resolveActor`),
+   * nhưng hai cờ DẪN XUẤT (`canManagePosts`/`canManageNews`) từng đọc bằng `scope !== null` — và
+   * `resolveManyOrNull` trả scope MẠNH NHẤT mà KHÔNG ép sàn nào.
+   *
+   * Hệ quả (đo ở các ca dưới): một vai giữ `manage:feed-post`@`Department` — grant mà API ghi quyền
+   * CHO PHÉP tạo (`role-admin.service.ts` chỉ chặn `System`) — bị 403 đúng ở route 006 SỞ HỮU năng
+   * lực kiểm duyệt, nhưng lại đọc được mọi bài `hidden` toàn công ty và sửa/xoá nội dung của BẤT KỲ
+   * ai qua 004/005/016/017. "Ô cửa sổ rộng hơn cửa chính" — đúng chữ của BLOCKER B3 ở PAYROLL
+   * (`payroll-access.service.ts:144-151`), lớp lỗi kho này đã hardened một lần rồi.
+   *
+   * Hôm nay tác động với vai CANONICAL = 0 (mig 0578 cấp mọi cặp `feed-*` ở `Company`), nên đây là
+   * fail-OPEN TIỀM ẨN: kích hoạt bằng một lần cấp quyền hợp lệ qua API đã ship.
+   */
+  describe("cờ dẫn xuất canManagePosts — grant HẸP hơn Company không được nới thành toàn công ty", () => {
+    /** `view:feed`+`create:*` @Company, nhưng `manage:feed-post` @Department. */
+    let tDeptManager = "";
+    /** Bài `hidden` của NGƯỜI KHÁC (tác giả `tFull`) — đo đường ĐỌC. */
+    let hiddenPostId = "";
+    /**
+     * Bài RIÊNG cho các ca sửa/xoá. KHÔNG dùng `postId` dùng chung: khi sàn scope hỏng, ca "XOÁ bài
+     * của người khác" THÀNH CÔNG thật và xoá mềm luôn fixture chia sẻ ⇒ R23 đỏ theo và báo SAI chỗ
+     * hỏng (đo được ở lượt RED của chính finding này).
+     */
+    let ownPostId = "";
+
+    beforeAll(async () => {
+      const hash = await new PasswordService().hash(LOGIN_PW);
+      const email = `deptmgr@${A.slug}.test`;
+      const uid = await seedUser(direct, A.companyId, email, hash);
+      // HAI role cho CÙNG user: cặp thường ở Company, cặp quản lý ở Department. Đây là hình dạng
+      // thật của ý định "moderator của một phòng" mà admin dựng được qua API ghi quyền.
+      await grantPairs(
+        A.companyId,
+        uid,
+        "deptmgr-co",
+        ["view:feed", "create:feed-post", "create:feed-comment"],
+        "Company",
+      );
+      await grantPairs(A.companyId, uid, "deptmgr-dept", ["manage:feed-post"], "Department");
+      tDeptManager = await login(A.slug, email);
+
+      const h = await post(tFull, "/social/posts").send({
+        type: "share",
+        audience: "company",
+        body: "bai se bi an cho ca san scope",
+      });
+      expect(h.status, JSON.stringify(h.body)).toBe(201);
+      hiddenPostId = h.body.data.id;
+      expect(
+        (
+          await patch(tFull, `/social/posts/${hiddenPostId}/moderation`).send({
+            hidden: true,
+          })
+        ).status,
+      ).toBe(200);
+
+      const m = await post(tFull, "/social/posts").send({
+        type: "share",
+        audience: "company",
+        body: "bai rieng cho ca sua-xoa cua block san scope",
+      });
+      expect(m.status, JSON.stringify(m.body)).toBe(201);
+      ownPostId = m.body.data.id;
+    }, 120_000);
+
+    it("DENY: grant @Department ⇒ GET /social/feed?status=hidden 403", async () => {
+      const res = await get(tDeptManager, "/social/feed?status=hidden");
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+    });
+
+    it("DENY: grant @Department ⇒ đọc bài hidden của người khác ⇒ 404", async () => {
+      const res = await get(tDeptManager, `/social/posts/${hiddenPostId}`);
+      expect(res.status, JSON.stringify(res.body)).toBe(404);
+    });
+
+    it("DENY: grant @Department ⇒ SỬA bài của người khác ⇒ 403 SOCIAL-ERR-003", async () => {
+      const res = await patch(tDeptManager, `/social/posts/${ownPostId}`).send({
+        body: "toi sua ho",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+      expect(JSON.stringify(res.body)).toContain("SOCIAL-ERR-003");
+    });
+
+    it("DENY: grant @Department ⇒ XOÁ bài của người khác ⇒ 403", async () => {
+      const res = await auth(tDeptManager)(http().delete(`/social/posts/${ownPostId}`));
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+    });
+
+    it("đối chứng — 006 /moderation vốn ĐÃ 403 ở tầng 1 với grant @Department (cửa chính)", async () => {
+      // Đóng đinh sự BẤT ĐỐI XỨNG là lý do finding tồn tại: cửa chính đã khoá từ trước, chỉ các ô
+      // cửa sổ bên cạnh là mở. Nếu ai gỡ sàn ở `resolveActor`, ca này đỏ.
+      const res = await patch(tDeptManager, `/social/posts/${ownPostId}/moderation`).send({
+        hidden: true,
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+    });
+
+    it("ALLOW đối chứng: CÙNG các cặp đó ở @Company ⇒ đọc bài ẩn + sửa bài người khác được", async () => {
+      // Neo chống-xanh-rỗng: nếu SOCIAL từ chối manage với MỌI scope thì 5 ca deny trên vẫn xanh
+      // trong khi tính năng kiểm duyệt đã chết.
+      expect((await get(tPostManager, "/social/feed?status=hidden")).status).toBe(200);
+      expect((await get(tPostManager, `/social/posts/${hiddenPostId}`)).status).toBe(200);
+      const upd = await patch(tPostManager, `/social/posts/${ownPostId}`).send({
+        body: "quan ly Company sua duoc",
+      });
+      expect(upd.status, JSON.stringify(upd.body)).toBe(200);
+    });
+  });
   describe("R23 — cô lập tenant", () => {
     it("DENY: company B đọc bài của company A ⇒ 404 (RLS + vị từ, KHÔNG 403)", async () => {
       const res = await get(tOther, `/social/posts/${postId}`);

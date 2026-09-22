@@ -236,6 +236,20 @@ export class SocialCommentsService {
         mentions.accepted,
       );
 
+      // `dto.attachmentIds` là allowlist ĐẦY ĐỦ của lượt sửa (khuôn `SocialPostsService.update`, D18
+      // liệt kê 016 trong nhóm phải đồng bộ): kiểm `undefined` chứ KHÔNG `?.length` như nhánh tạo —
+      // mảng RỖNG ở đường sửa nghĩa là "bỏ hết đính kèm", nuốt nó đi là im lặng không gỡ link nào.
+      if (dto.attachmentIds) {
+        await this.attachments.syncLinksTx(
+          tx,
+          actor.companyId,
+          actor.actorUserId,
+          "comment",
+          commentId,
+          dto.attachmentIds,
+        );
+      }
+
       if (dto.mentionedUserIds && fresh.length > 0) {
         await this.enqueueMentionNotis(tx, actor, comment.postId, commentId, fresh);
       }

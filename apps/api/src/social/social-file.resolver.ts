@@ -162,8 +162,17 @@ export class SocialFileResolver implements FileOwnerPermissionResolver {
   /**
    * Nội dung (bài hoặc bình luận) mà tệp được gắn vào, ĐÃ QUA vị từ visibility.
    *
-   * `null` = không thấy được, vì BẤT KỲ lý do nào — không phân biệt, cùng luật 404-cho-mọi-lý-do của
-   * đường REST. Resolver trả boolean nên "không thấy" và "không có quyền" hợp nhất tự nhiên ở đây.
+   * `null` = KHÔNG THẤY ĐƯỢC (404 của `assert*Visible`) — ở đây 404 là một câu TRẢ LỜI, không phải sự
+   * cố, nên nuốt nó là đúng: hợp đồng của resolver là boolean fail-closed, và "không tồn tại" ⇄ "không
+   * có quyền" hợp nhất tự nhiên theo luật 404-cho-mọi-lý-do của đường REST.
+   *
+   * MỌI lỗi khác (DB timeout, cạn pool, bug ở `resolveViewerContext`/`assert*Visible`) PHẢI ném tiếp.
+   * Nuốt trắng như bản đầu là biến một sự cố hạ tầng thật thành "không có quyền" TRONG IM LẶNG:
+   * `FilePolicyService.decideForLinkedFile` có try/catch riêng để xếp loại resolver-throw thành
+   * `deny-error` CÓ LOG, và `SocialAttachmentsService.signOne` dựa ĐÚNG vào `reason` đó để
+   * `logger.error`. Nuốt ở đây thì sự cố rơi vào nhánh `deny-resolver` = "từ chối bình thường, không
+   * log" ⇒ mất sạch dấu vết, sự cố toàn hệ thống thành "tôi không xem được ảnh của chính mình" không
+   * ai gỡ được. Sibling `ChatMessageFileResolver.seesMessage` làm đúng luật này.
    */
   private async ownerContent(
     input: FilePermissionInput,
@@ -178,11 +187,26 @@ export class SocialFileResolver implements FileOwnerPermissionResolver {
         const post = await this.access.assertPostVisible(tx, viewer, input.entityId);
         return { authorUserId: post.authorUserId, viewer };
       });
-    } catch {
-      // `assert*Visible` ném 404 khi không thấy được — ở đây nó là một câu TRẢ LỜI, không phải sự cố.
-      // Nuốt có chủ đích và HẸP: hợp đồng của resolver là boolean fail-closed, và mọi lý do khác
-      // (lỗi DB…) cũng phải ra `false` chứ không được leo lên thành 500 của route tải tệp.
-      return null;
+    } catch (err) {
+      if (isNotFound(err)) return null;
+      throw err;
     }
   }
+}
+
+/**
+ * Nhận diện 404 mà KHÔNG `instanceof NotFoundException`: `withTenant` có thể bọc lại lỗi, và ở worker
+ * vitest hai bản `@nestjs/common` khác instance làm `instanceof` trượt trong im lặng ⇒ deny-error thay
+ * vì deny sạch. Soi `getStatus()` là bất biến qua mọi cách bọc.
+ *
+ * Bản sao của `isNotFound` trong `ChatMessageFileResolver` — CỐ Ý nhân bản: `apps/api/src/chat/**`
+ * NGOÀI `paths` của WO này. Nợ gom về một util dùng chung ghi cho `S16-SOCIAL-BE-2`.
+ */
+function isNotFound(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const candidate = err as { getStatus?: unknown; status?: unknown };
+  if (typeof candidate.getStatus === "function") {
+    return (candidate.getStatus as () => number)() === 404;
+  }
+  return candidate.status === 404;
 }

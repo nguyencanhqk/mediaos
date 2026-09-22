@@ -365,6 +365,119 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 đính kèm — gate LINK + gate Đ
     });
   });
 
+  // ══════════════ 016 — đính kèm trên ĐƯỜNG SỬA bình luận (FULL gate #530) ══════════════
+
+  /**
+   * `SOCIAL-API-016` `PATCH /social/comments/{id}` — route này TRƯỚC ĐÂY không có MỘT ca test HTTP
+   * nào, và `update()` bỏ rơi `dto.attachmentIds` TRONG IM LẶNG: DTO `.strict()` KHAI BÁO trường đó
+   * (`social-api.ts` `updateFeedCommentSchema`) nên client gửi lên được 200 sạch, không lỗi, không
+   * log — mà tập đính kèm KHÔNG HỀ đổi. D18 liệt kê 016 trong nhóm phải đồng bộ (002/004/015/016).
+   *
+   * ⚠️ VÌ SAO `route-http-coverage` KHÔNG bắt được lỗ này: nó quét TĨNH ở CẤP FILE — gom tập verb và
+   * tập path riêng rẽ rồi giao nhau. `social-be1-content.int-spec.ts` có `.patch(` (route 004) VÀ có
+   * chuỗi `/social/comments/${x}` (ca DELETE) ⇒ 016 được TÍNH là "covered" dù chưa ai PATCH nó lần
+   * nào. Đúng chiều false-positive mà docblock của chính cổng đó cảnh báo là "SAI CHIỀU NGUY HIỂM".
+   */
+  describe("016 — sửa bình luận: đính kèm đồng bộ THẬT + gate vẫn chạy trên đường sửa", () => {
+    let postId = "";
+
+    beforeAll(async () => {
+      const p = await post(tOwner, "/social/posts").send({
+        type: "share",
+        audience: "company",
+        body: "bài chứa bình luận có đính kèm",
+      });
+      expect(p.status, JSON.stringify(p.body)).toBe(201);
+      postId = p.body.data.id;
+    });
+
+    /** Bình luận của `tOwner` mang sẵn 1 tệp đính kèm. */
+    async function commentWithFile(): Promise<{
+      commentId: string;
+      fileId: string;
+    }> {
+      const fileId = await seedFile(ownerUserId);
+      const c = await post(tOwner, `/social/posts/${postId}/comments`).send({
+        body: "bình luận có ảnh",
+        attachmentIds: [fileId],
+      });
+      expect(c.status, JSON.stringify(c.body)).toBe(201);
+      expect(await countLiveLinks(fileId)).toBe(1);
+      return { commentId: c.body.data.id, fileId };
+    }
+
+    it("THAY đính kèm: tệp MỚI được link, tệp CŨ bị gỡ — không phải 200 rỗng", async () => {
+      const { commentId, fileId: oldFile } = await commentWithFile();
+      const newFile = await seedFile(ownerUserId);
+
+      const res = await patch(tOwner, `/social/comments/${commentId}`).send({
+        body: "sửa + đổi ảnh",
+        attachmentIds: [newFile],
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+      // Hai vế này là CHÍNH ca: bản trước để cả hai sai cùng lúc (mới=0, cũ=1) mà vẫn trả 200.
+      expect(await countLiveLinks(newFile), "tệp MỚI phải được link").toBe(1);
+      expect(await countLiveLinks(oldFile), "tệp CŨ phải bị gỡ link").toBe(0);
+      // …và gỡ bằng XOÁ MỀM, không hard-delete (bất biến §2): hàng vẫn còn để vế 5 còn đo được.
+      expect(await countLinks(oldFile), "hàng link cũ vẫn còn — xoá mềm").toBe(1);
+    });
+
+    it("attachmentIds mảng RỖNG = BỎ HẾT đính kèm (không được coi là 'không đề cập')", async () => {
+      const { commentId, fileId } = await commentWithFile();
+      const res = await patch(tOwner, `/social/comments/${commentId}`).send({
+        body: "bỏ hết ảnh",
+        attachmentIds: [],
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(await countLiveLinks(fileId)).toBe(0);
+    });
+
+    it("KHÔNG gửi attachmentIds ⇒ giữ nguyên tập đính kèm (sửa chữ không được làm mất ảnh)", async () => {
+      const { commentId, fileId } = await commentWithFile();
+      const res = await patch(tOwner, `/social/comments/${commentId}`).send({
+        body: "chỉ sửa chữ",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(await countLiveLinks(fileId)).toBe(1);
+    });
+
+    it("DENY: đường SỬA cũng chạy gate LINK — gắn tệp của NGƯỜI KHÁC ⇒ 422, tệp cũ GIỮ nguyên", async () => {
+      const { commentId, fileId: mine } = await commentWithFile();
+      const foreign = await seedFile(peerUserId);
+
+      const res = await patch(tOwner, `/social/comments/${commentId}`).send({
+        body: "thử gắn tệp người khác",
+        attachmentIds: [foreign],
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(422);
+      expect(await countLinks(foreign), "tệp ngoại lai KHÔNG được link").toBe(0);
+      // Tx phải roll back trọn: không được gỡ tệp cũ RỒI mới vấp gate ⇒ mất trắng đính kèm.
+      expect(await countLiveLinks(mine), "tệp cũ phải CÒN SỐNG — tx roll back trọn").toBe(1);
+    });
+
+    it("DENY: người KHÁC (không manage:feed-post) sửa bình luận của tôi ⇒ 403 SOCIAL-ERR-003", async () => {
+      const { commentId } = await commentWithFile();
+      const res = await patch(tPeer, `/social/comments/${commentId}`).send({
+        body: "tôi sửa hộ",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+      expect(JSON.stringify(res.body)).toContain("SOCIAL-ERR-003");
+    });
+
+    it("ALLOW đối chứng: manage:feed-post sửa được bình luận của người khác", async () => {
+      // Neo chống-xanh-rỗng cho ca DENY ngay trên: nếu 016 từ chối MỌI ai thì ca đó vẫn xanh.
+      const c = await post(tPeer, `/social/posts/${postId}/comments`).send({
+        body: "bình luận của peer",
+      });
+      expect(c.status, JSON.stringify(c.body)).toBe(201);
+      const res = await patch(tOwner, `/social/comments/${c.body.data.id}`).send({
+        body: "quản lý sửa",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.data.body).toBe("quản lý sửa");
+    });
+  });
   async function countPosts(): Promise<number> {
     const r = await direct.query(
       `SELECT count(*)::int AS n FROM feed_posts WHERE company_id = $1`,
@@ -376,6 +489,21 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 đính kèm — gate LINK + gate Đ
   async function countLinks(fileId: string): Promise<number> {
     const r = await direct.query(
       `SELECT count(*)::int AS n FROM file_links WHERE company_id = $1 AND file_id = $2`,
+      [A.companyId, fileId],
+    );
+    return Number(r.rows[0].n);
+  }
+
+  /**
+   * Link CÒN SỐNG. Tách khỏi `countLinks` CÓ CHỦ ĐÍCH: `syncLinksTx` gỡ link bằng **xoá mềm**
+   * (`deleted_at`, bất biến CLAUDE.md §2 "không hard-delete"), nên hàng vẫn nằm đó — và `countLinks`
+   * PHẢI tiếp tục đếm cả hàng đã gỡ vì nó là phép đo của vế 5 ("tệp ĐÃ TỪNG có link" ⇒ 422). Đo
+   * "đã gỡ chưa" bằng `countLinks` là đo sai cột: nó không bao giờ về 0.
+   */
+  async function countLiveLinks(fileId: string): Promise<number> {
+    const r = await direct.query(
+      `SELECT count(*)::int AS n FROM file_links
+        WHERE company_id = $1 AND file_id = $2 AND deleted_at IS NULL`,
       [A.companyId, fileId],
     );
     return Number(r.rows[0].n);
