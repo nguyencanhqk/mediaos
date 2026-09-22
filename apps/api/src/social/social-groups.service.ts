@@ -114,6 +114,11 @@ export class SocialGroupsService {
         created.id,
         groupMemberCountDelta(null, "active"),
       );
+      // Cùng lý lẽ với `034` ở trên: vòng đời nhóm (sinh · diệt) vào sổ append-only, không phụ
+      // thuộc việc actor có đi qua nhánh `manage:feed-group` hay không.
+      await this.recordGroupAudit(tx, actor, "social.group.created", created.id, {
+        visibility: dto.visibility,
+      });
       return this.readGroupDto(tx, actor, created.id);
     });
   }
@@ -193,11 +198,12 @@ export class SocialGroupsService {
       );
       if (!deleted) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
 
-      if (viaManage) {
-        await this.recordGroupAudit(tx, actor, "social.group.deleted", groupId, {
-          viaManage: true,
-        });
-      }
+      // 🔴 Audit LUÔN, không chỉ nhánh `viaManage` (FULL gate 22/09, `security-reviewer` MEDIUM-2).
+      // Khuôn "chỉ ghi sổ khi thao tác lên nội dung NGƯỜI KHÁC" mượn từ BE-1, nơi đối tượng là BÀI
+      // của chính actor. Nhóm KHÔNG phải nội dung riêng của owner: sau `034`, D13 làm mọi bài trong
+      // nhóm biến khỏi feed VÀ khỏi đường tải tệp của TẤT CẢ thành viên. Vết duy nhất còn lại là
+      // `feed_groups.deleted_by` — một cột UPDATE được, không phải sổ append-only.
+      await this.recordGroupAudit(tx, actor, "social.group.deleted", groupId, { viaManage });
     });
     return { deleted: true };
   }
@@ -214,6 +220,15 @@ export class SocialGroupsService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const group = await this.groups.findLiveGroupTx(tx, actor.companyId, groupId);
       if (!group) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+
+      // 🔴 THỨ TỰ KHOÁ (FULL gate 22/09, `security-reviewer` LOW-4). Không phải vì bất biến owner —
+      // `035` không chạm nó — mà để mọi đường chạm cặp (`feed_groups`, `feed_group_members`) khoá
+      // hàng CHA trước, CÙNG một kiểu khoá. Không có neo này, `035` đi đường NÂNG CẤP khoá:
+      // `insertMemberTx` lấy `FOR KEY SHARE` trên hàng nhóm (kiểm RI của FK), rồi
+      // `bumpGroupMemberCount` đòi khoá GHI trên chính hàng đó. Một `036`/`038`/`039` song song đang
+      // xếp hàng chờ `FOR UPDATE` ở giữa hai câu ấy ⇒ chu trình chờ ⇒ deadlock 40P01 ⇒ 500 cho cả
+      // hai. Lấy khoá GHI ngay từ đầu thì hai giao dịch chỉ nối đuôi nhau.
+      await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
 
       const status = group.visibility === "public" ? "active" : "pending";
       try {
@@ -326,13 +341,31 @@ export class SocialGroupsService {
 
     return this.db.withTenant(actor.companyId, async (tx) => {
       const group = await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const { membership: mine, viaManage } = await this.groupAccess.assertGroupRoleTx(
+      const decideRoles: readonly FeedGroupRole[] = ["owner", "admin"];
+      const { viaManage } = await this.groupAccess.assertGroupRoleTx(
         tx,
         actor,
         groupId,
-        ["owner", "admin"],
+        decideRoles,
       );
       await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
+
+      // 🔴 TOCTOU CỦA CHÍNH ACTOR — `security-reviewer` và `silent-failure-hunter` HỘI TỤ ĐỘC LẬP
+      // (FULL gate 22/09). `assertGroupRoleTx` ở trên đọc vai của actor TRƯỚC khi khoá hàng CHA.
+      // Dưới READ COMMITTED, một `038`/`039` song song hạ vai (hoặc mời ra) chính actor ĐÚNG trong
+      // khoảng giữa hai câu đó vẫn để actor đi tiếp với vai CŨ ⇒ người VỪA mất quyền vẫn phong được
+      // `owner` cho người khác (D12 thủng), và người đó xoá được nhóm qua cổng owner-only của `034`.
+      // `target` đã đọc lại sau khoá ngay từ bản đầu — vế bỏ sót là chính actor. Đọc lại SAU khoá
+      // thì mọi đường đổi vai trò đã bị serialize qua đúng một hàng `feed_groups`.
+      const mine = await this.groupAccess.getMembershipTx(
+        tx,
+        actor.companyId,
+        groupId,
+        actor.actorUserId,
+      );
+      if (!viaManage && !(mine?.status === "active" && decideRoles.includes(mine.role))) {
+        throw new ForbiddenException(SOCIAL_ERR.GROUP_ROLE_REQUIRED);
+      }
 
       const target = await this.groupAccess.getMembershipTx(
         tx,

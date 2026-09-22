@@ -429,7 +429,7 @@ tải) · D4 (một call-site, trong tx, service chỉ nhận `tx`) · D5 (`allo
 | # | Điểm | Quyết định thi công | Vì sao |
 | --- | --- | --- | --- |
 | **T1** 🔴 | **L-c — DTO nhóm: BỎ `avatarFileId`/`avatarUrl`** | `createFeedGroupSchema` không nhận `avatarFileId`; `feedGroupSchema` không có `avatarUrl`. Cột `feed_groups.avatar_file_id` giữ nguyên trong schema | Ảnh đại diện nhóm là một **tính năng riêng**, không phải một cột: CHAT phải dựng `chat-room-avatar-file.resolver` + `chat-room-avatar-presign.service` + controller tải lên mới hiện được ảnh phòng. SOCIAL chưa có resolver cho `(SOCIAL, feed_group)` ⇒ `FilePolicyService` DENY `deny-no-resolver` ⇒ một `avatarFileId` nhận vào **không đường nào ký URL đọc lại**. Đó đúng là tính năng WRITE-ONLY mà D-OWNER-7 vừa từ chối cho `groupId`. **Nợ mới**: đường tải lên + đọc lại avatar nhóm → WO riêng (khuôn `chat-room-avatar-*`) |
-| **T2** 🔴 | **`035`/`036` KHÔNG dùng `assertGroupVisibleTx`** — gác bằng `findLiveGroupTx` (nhóm còn sống trong tenant) | Cổng đọc trả 404 cho «`private` + không phải thành viên `active`». Dùng nó ở `035` giết CHÍNH nhánh SPEC đòi (API-19 dòng 103: private ⇒ `pending`) — nhóm kín sẽ **không ai xin vào được**, nhánh `pending` thành code chết. Ở `036`, người đang `pending` không phải thành viên `active` ⇒ **không huỷ được yêu cầu của chính mình**, trong khi bảng delta D10 có đúng dòng đó. Giá phải trả: ai biết ĐÚNG UUID nhóm kín phân biệt được 404 với 201 — không lộ tên/mô tả/thành viên/bài, UUIDv4 không đoán được, và `030` vẫn giấu hoàn toàn nên không có đường LIỆT để dò |
+| **T2** 🔴 | **`035`/`036` KHÔNG dùng `assertGroupVisibleTx`** | Gác bằng `findLiveGroupTx` (nhóm còn sống trong tenant) | Cổng đọc trả 404 cho «`private` + không phải thành viên `active`». Dùng nó ở `035` giết CHÍNH nhánh SPEC đòi (API-19 dòng 103: private ⇒ `pending`) — nhóm kín sẽ **không ai xin vào được**, nhánh `pending` thành code chết. Ở `036`, người đang `pending` không phải thành viên `active` ⇒ **không huỷ được yêu cầu của chính mình**, trong khi bảng delta D10 có đúng dòng đó. ⚠️ **GIÁ PHẢI TRẢ — câu SỬA 22/09 sau FULL gate (`security-reviewer` MEDIUM-1; bản trước viết "không lộ tên/mô tả/thành viên/bài" là SAI THỰC TẾ, owner suýt ký một mô tả rủi ro sai):** ai biết ĐÚNG UUID một nhóm kín gọi được `035` và nhận về **DTO ĐẦY ĐỦ** của nhóm đó (`name` · `description` · `memberCount`) — `join()` kết thúc bằng `readGroupDto`, và `getGroupTx` tự khai trong docblock rằng nó KHÔNG phải cổng quyền. Từ đó nhóm hiện **vĩnh viễn** trong `030` của người ấy (hàng `pending` khớp nhánh `userId IS NOT NULL`). Siết riêng `035` KHÔNG bịt được gì: `030` trả đúng bộ trường ấy cho cùng hàng `pending` — đó là hệ quả trực tiếp của **T3**, đã ký có chủ ý. Cái THỰC SỰ không lộ: **BÀI trong nhóm và đính kèm của chúng** (`visiblePostCondition` đòi membership `active`, cổng màn hình và cổng tải dùng chung vị từ), **danh bạ thành viên** (`037` đòi `active`), và sự TỒN TẠI của nhóm với người chưa từng có quan hệ với nó (UUIDv4 không đoán được, `030` không có đường LIỆT để dò). Ai có UUID mà không có quan hệ nào với nhóm? Chỉ người từng là thành viên / từng xin vào / nhận deep-link `NOTI-034` — đều đã biết nhóm tồn tại. **Nợ:** `035` bị từ chối rồi xin lại được vô hạn (`reject` xoá CỨNG hàng, không throttle, không vết) — kênh làm phiền owner, giao BE-2B/BE-3 |
 | **T3** | `030` thêm nhánh `manage:feed-group` thấy MỌI nhóm còn sống | API-19 dòng 98 chỉ tả nhánh người thường. Nhưng `033`/`034`/`037`/`038`/`039` đều mở cho cờ này và `assertGroupVisibleTx` đã cho nó NHÌN thấy nhóm private — nếu `030` giấu thì quản trị viên **hành động được mà không tìm được**, và FE phải đoán id |
 | **T4** | **D12 mở rộng một bước**: cấp vai `owner` chỉ dành cho `owner` hiện tại hoặc `manage:feed-group` (403 `ERR-014` cho `admin`) | Plan D12 đã ký câu này; ghi lại ở đây vì nó là vế giữ cho cổng owner-only của `034` khỏi thành trang trí — `admin` tự nâng mình lên `owner` rồi xoá nhóm là hai bước bấm. **Hạ** vai một owner thì `admin` VẪN làm được (G5b ký vậy), chỉ bị bất biến ≥1 owner chặn |
 | **T5** | Thêm hằng lỗi `GROUP_MEMBER_NOT_FOUND` (404, **không số hoá**) | `038`/`039`/`036` cần nói "người này không phải thành viên". Trả `GROUP_NOT_FOUND` là gửi người dùng đi sai hướng (họ đang mở đúng nhóm đó), mà catalog SPEC-16 §12 đã cạn ở `022` ⇒ hằng CÓ TÊN, đúng tiền lệ `REPORT_DUPLICATE_OPEN`/`GROUP_NAME_TAKEN` |
@@ -454,3 +454,52 @@ Không chỉ viết test — đã gỡ từng lưới ra và xác minh ca tươn
 Ngoài ra census 2 tầng **tự bắt** thiếu sót khi chạy lần đầu (9 site `SocialGroupsService#*` "gọi
 `resolveActor` nhưng KHÔNG có trong sổ pin") và ratchet điểm chiếu danh tính **tự bắt**
 `listMembersTx:users.fullName` chưa có phán quyết — đúng hai cổng mà B3.14 dự báo.
+
+---
+
+## §14. Sổ vết FULL GATE — 22/09/2026 (chạy TRƯỚC khi mở PR)
+
+`security-reviewer` · `database-reviewer` · `silent-failure-hunter` chạy ĐỘC LẬP trên diff
+`9dc89337..48ed6143`. **Cả ba trả `PASS`** — 0 CRITICAL, 0 HIGH.
+
+### 14.1 🔴 Điểm HỘI TỤ — hai reviewer độc lập tìm ra CÙNG một lỗi
+
+`security-reviewer` và `silent-failure-hunter` (và `database-reviewer` xếp nó MEDIUM) đều dừng ở
+**TOCTOU của CHÍNH ACTOR** trong `038` `decideMember`: `assertGroupRoleTx` đọc vai của actor **trước**
+`lockGroupRowTx`, còn `target` thì đã đọc lại **sau** khoá ngay từ bản đầu. Dưới READ COMMITTED, một
+`038`/`039` song song hạ vai actor đúng giữa hai câu đó ⇒ actor **vừa mất quyền vẫn phong được
+`owner`** cho người khác (D12 thủng), rồi người đó xoá nhóm qua cổng owner-only của `034`.
+
+Đáng ghi: đây đúng lớp lỗi C3 mà WO này sinh ra để đóng — đã bịt kỹ phía **target** và phía **đếm
+owner** (neo `FOR UPDATE` + G5d race thật), nhưng bỏ sót phía **quyền của chính người gọi**. Ba
+reviewer hội tụ là tín hiệu mạnh, cùng khuôn với [[s16-social-be1b-wave-state]].
+
+**ĐÃ VÁ** — đọc lại `mine` sau `lockGroupRowTx` + tái khẳng định `decideRoles` (bỏ qua khi `viaManage`).
+**Không có test tất định** cho bản vá này: trong một request đơn lẻ, giá trị trước và sau khoá luôn
+bằng nhau — chỉ interleaving mới phân biệt được, mà một ca đua cho cửa sổ hai-câu-liên-tiếp sẽ
+flaky hơn là có ích. Ghi ra đây thay vì giả vờ có lưới.
+
+### 14.2 Đã vá trong lượt gate này
+
+| Nguồn | Sev | Vá |
+| --- | --- | --- |
+| hội tụ 2-3 reviewer | MEDIUM | TOCTOU actor ở `038` — §14.1 |
+| `security-reviewer` | MEDIUM | `031`/`034` **audit LUÔN**, không chỉ nhánh `viaManage`. Khuôn "chỉ ghi sổ khi đụng nội dung NGƯỜI KHÁC" đúng cho BÀI, sai cho NHÓM: sau `034`, D13 làm mọi bài trong nhóm biến khỏi feed VÀ khỏi đường tải của TẤT CẢ thành viên, vết còn lại chỉ là `feed_groups.deleted_by` (cột UPDATE được, không phải sổ append-only). Ca mới **G8b** |
+| `security-reviewer` | MEDIUM | Câu **T2** của §13 viết sai thực tế ("không lộ tên/mô tả/thành viên/bài") — đã sửa tại chỗ |
+| `security-reviewer` | LOW | `035` lấy `lockGroupRowTx` ngay đầu: trước đó `035` đi đường **nâng cấp khoá** (`FOR KEY SHARE` do RI của FK ở `insertMemberTx` → khoá GHI ở `bumpGroupMemberCount`), gặp `036`/`038`/`039` đang chờ `FOR UPDATE` ⇒ deadlock 40P01 ⇒ 500 cho cả hai. ⚠️ `database-reviewer` kết luận "không có deadlock" ở đúng điểm này — kết luận đó BỎ QUA việc khoá ngầm của RI yếu hơn khoá mà câu sau đòi |
+| `silent-failure-hunter` | LOW | `bumpGroupMemberCount` thêm `RETURNING` + ném khi khớp 0 dòng (khuôn `bumpPostCounter`) — `void` vô điều kiện là đúng hình dạng "thành công RỖNG" mà WO này đi đóng |
+
+### 14.3 Cần chữ ký owner — KHÔNG tự sửa
+
+| # | Việc | Đánh đổi |
+| --- | --- | --- |
+| **S2** | `assertOwnerRemainsTx` đếm HÀNG membership, **không** lọc D7 (`users.status='active'` · `employee_profiles.status='active'`) — khác mọi tập-người còn lại của WO | Owner A rời nhóm hợp lệ khi owner B duy nhất còn lại **đã nghỉ việc** ⇒ nhóm mồ côi quản trị, chỉ `manage:feed-group` gỡ được. Siết vào thì lệch với định nghĩa `member_count` của SPEC §13.6 (bộ đếm đếm HÀNG, không đếm người còn đi làm) ⇒ hai nguồn sự thật cho một con số. Chọn: siết + sửa SPEC §13.6, hay giữ + ghi nợ |
+| **S3** | `035` bị từ chối rồi **xin lại vô hạn** (`reject` xoá CỨNG hàng, không throttle, không vết "đã từng bị từ chối") | Kênh làm phiền owner (mỗi lượt sinh một hàng chờ duyệt), không rò dữ liệu. SPEC chưa nói gì về throttle ⇒ giao BE-2B/BE-3 nếu muốn chặn |
+
+### 14.4 Ghi nhận — không phải finding
+
+`database-reviewer` xác nhận độc lập: `withTenant` đúng một lần mỗi route (không lồng), `company_id`
+tường minh ở **mọi** câu mới dù RLS đã ép, `deleted_at IS NULL` đủ ở mọi vị từ hiển thị với đúng hai
+miễn trừ đã ký, tên constraint khớp migration `0580` từng chữ, index `idx_feed_group_members_company_group_role`
+phủ đúng câu đếm owner, không N+1, không nối chuỗi SQL. Hai nít LOW không vá: `ILIKE` leading-wildcard
+ở `nameContains` (đã chặn bởi `company_id`) và OFFSET pagination (quy ước sẵn có của cả module).

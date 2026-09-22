@@ -366,6 +366,28 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2A · nhóm — cổng thực thể (
     expect((await auditRowsFor(gid)).map((r) => r.action)).toContain("social.group.deleted");
   });
 
+  it("G8b — vòng đời nhóm (`031` sinh · `034` diệt) vào sổ audit KỂ CẢ khi actor là owner của chính nhóm", async () => {
+    // FULL gate 22/09 (`security-reviewer` MEDIUM-2): khuôn «chỉ ghi sổ khi đụng nội dung NGƯỜI
+    // KHÁC» đúng cho BÀI (nội dung riêng của tác giả), SAI cho NHÓM — `034` làm mọi bài trong nhóm
+    // biến khỏi feed VÀ khỏi đường tải tệp của TẤT CẢ thành viên. Cả hai assert dưới đây ĐỎ trên
+    // code TRƯỚC bản vá — đọc thẳng từ diff, không phải phép đo đã chạy: `create()` không có một
+    // lời gọi `recordGroupAudit` nào, còn `remove()` gói lời gọi trong `if (viaManage)` mà ca này
+    // xoá bằng token của chính `owner` (⇒ `viaManage === false`).
+    const created = await post(owner.token, "/social/groups").send({
+      name: `Vòng đời ${randomUUID().slice(0, 6)}`,
+      description: "sinh và diệt bởi chính owner",
+      visibility: "private",
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const gid = created.body.data.id as string;
+
+    expect((await auditRowsFor(gid)).map((r) => r.action)).toContain("social.group.created");
+
+    const delByOwner = await del(owner.token, `/social/groups/${gid}`);
+    expect(delByOwner.status, JSON.stringify(delByOwner.body)).toBe(200);
+    expect((await auditRowsFor(gid)).map((r) => r.action)).toContain("social.group.deleted");
+  });
+
   // ───────────────────────── G10 (`037`) — danh bạ nhóm ─────────────────────────
 
   it("G10-c — `037`: thành viên đọc được (neo dương); người ngoài nhóm KÍN ⇒ 404; nhóm MỞ ⇒ 403", async () => {

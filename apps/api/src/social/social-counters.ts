@@ -287,11 +287,23 @@ export async function bumpGroupMemberCount(
   companyId: string,
   groupId: string,
   delta: number,
-): Promise<void> {
-  if (delta === 0) return;
-  await tx.execute(
+): Promise<number | null> {
+  if (delta === 0) return null;
+  // 🔴 `RETURNING` + ném khi 0 dòng (FULL gate 22/09, `silent-failure-hunter` LOW-1) — cùng khuôn
+  // `bumpPostCounter`. Một `UPDATE` khớp 0 dòng (sai `groupId`/`companyId` từ một call-site tương
+  // lai của BE-2B/BE-2C) mà trả `void` là bộ đếm lệch VĨNH VIỄN, không exception, không log: đúng
+  // hình dạng "thành công RỖNG" mà WO này đi đóng. Ném ở đây làm cả tx quay lui — thà 500 ồn còn
+  // hơn một con số nói dối. Không có đường gọi hợp lệ nào khớp 0 dòng: mọi call-site đã xác nhận
+  // nhóm tồn tại trong CÙNG tx (nhóm xoá MỀM vẫn khớp — câu này cố ý không lọc `deleted_at`).
+  const rows = await tx.execute<{ value: number }>(
     sql`UPDATE feed_groups
            SET member_count = member_count + ${delta}
-         WHERE id = ${groupId} AND company_id = ${companyId}`,
+         WHERE id = ${groupId} AND company_id = ${companyId}
+     RETURNING member_count AS value`,
   );
+  const row = rows.rows[0];
+  if (!row) {
+    throw new Error(`bumpGroupMemberCount: không có hàng feed_groups nào khớp (group=${groupId})`);
+  }
+  return Number(row.value);
 }
