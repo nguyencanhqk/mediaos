@@ -212,7 +212,10 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   //   🔴 034 dùng dedupe 'None' (KHÔNG DedupeKey): feed_group_members không có `decided_at` và nhánh TỪ CHỐI
   //   xoá cứng hàng ⇒ không nguồn bền vững nào phủ cả hai nhánh; mất thông báo tệ hơn trùng thông báo.
   //   035 isSystemEvent=true — JOB đóng bình chọn theo hạn phát (khuôn ROOM_BOOKING_REMINDER).
-  //   Registrar outbox đăng ký ở S16-SOCIAL-BE-2 (registerSource() fail-loud nếu mã chưa có ở đây).
+  //   Registrar outbox đăng ký THEO TỪNG WO, KHÔNG phải một lượt ở BE-2 (sửa 21/09/2026 — bản trước
+  //   ghi "đăng ký ở S16-SOCIAL-BE-2" cho CẢ khối, SAI): S16-SOCIAL-BE-1 đăng ký 028/029/030
+  //   (`notifications/social-noti-bridge.registrar.ts`) vì nó PHÁT ba mã đó ngay; BE-1B đăng ký
+  //   031/036; BE-2 đăng ký 032-035. `registerSource()` fail-loud nếu mã chưa có/chưa enabled ở đây.
   { module: "SOCIAL", eventCode: "SOCIAL_MENTIONED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "SOCIAL", eventCode: "SOCIAL_POST_COMMENTED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "SOCIAL", eventCode: "SOCIAL_COMMENT_REPLIED", type: "Social", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore

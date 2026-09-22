@@ -7,6 +7,13 @@ import {
 } from "./chat";
 import { chatCallKindSchema, chatCallStatusSchema } from "./chat-call";
 import { notificationSchema } from "./notification";
+import {
+  feedAttachmentSchema,
+  feedCommentSchema,
+  feedPostSchema,
+  feedReactionSummarySchema,
+} from "./social-api";
+import { feedTargetTypeSchema } from "./social";
 
 /**
  * Realtime (G10-1) — hợp đồng WS giữa api ↔ web (Socket.IO namespace `/ws`).
@@ -58,6 +65,11 @@ export const WS_EVENTS = {
   // S4-NOTI-BE-1 (additive): phát sau mark-read/mark-all-read/xoá mềm — payload CHỈ unread_count (không
   // row) để DASH/header badge invalidate mà không rò nội dung thông báo qua kênh phụ.
   NOTIFICATION_READ: "notification:read",
+  // S16-SOCIAL-BE-1 (additive) — phát SAU commit của REST (tạo bài · tạo bình luận · đổi cảm xúc).
+  // Vẫn là chiều server→client duy nhất; KHÔNG có event nào từ client. Room `co:{companyId}:feed`.
+  FEED_POST_CREATED: "feed:post.created",
+  FEED_COMMENT_CREATED: "feed:comment.created",
+  FEED_REACTION_CHANGED: "feed:reaction.changed",
 } as const;
 export type WsEventName = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
 
@@ -307,3 +319,62 @@ export type WsNotificationReadEvent = z.infer<typeof wsNotificationReadEventSche
 // KHÔNG có schema `ack` nào: ack chỉ có nghĩa cho event client → server, mà WS một chiều
 // (CHAT-DEC-005) không có loại đó. `wsAckSchema`/`wsChatSendAckSchema`/`wsPresenceListAckSchema` đã bị
 // `S7-CHAT-RT-1` xoá cùng cụm hai-chiều — xem ghi chú ở `WS_EVENTS`.
+
+// ═══════════════ S16-SOCIAL-BE-1 — 3 sự kiện bảng tin (room `co:{companyId}:feed`) ═══════════════
+//
+// ┌─ BA LUẬT CỦA PAYLOAD BẢNG TIN — ĐỌC TRƯỚC KHI THÊM KHOÁ ───────────────────────────────────────┐
+// │ 1. **HẸP HƠN DTO REST, không bao giờ rộng hơn.** Bốn khoá của `feedPostSchema` là projection    │
+// │    THEO ACTOR — `myReaction` · `savedByMe` · `isMine` · `status`. Sự kiện này phát tới CẢ       │
+// │    công ty, nên giữ chúng lại là gửi trạng thái của người vừa bấm cho tất cả người khác, và mỗi  │
+// │    client render sai. Đúng lớp lỗi đã cắn ở `wsChatReactionEventSchema` (`mine`) và             │
+// │    `wsChatRoomEventSchema` (`unreadCount`) — memory `ws-payload-narrower-than-rest-dto`.        │
+// │    `status` còn tệ hơn: nó CHỈ được lộ cho tác giả/`manage:feed-post` ở REST, phát cho cả room  │
+// │    là biến một khoá có cổng thành khoá công khai.                                               │
+// │ 2. **KHÔNG `url` trên đính kèm.** `url` là presign KÝ CHO MỘT NGƯỜI và là bearer capability: ai  │
+// │    cầm cũng tải được, không qua guard nào nữa, không sinh `file_access_logs`. Phát nó cho cả     │
+// │    room là đi vòng qua `FilePolicyService` — nguyên văn lỗ mà FULL gate S7-CHAT-BE-GATE-3 bắt    │
+// │    được. FE nhận sự kiện rồi gọi REST để lấy URL của CHÍNH MÌNH.                                │
+// │ 3. **Chỉ bài `audience='company'` + `status='published'` mới được fan-out** (quyết định BE-1,    │
+// │    xem plan §2 D21). API-19 §7 chỉ khai 2 room: `co:{c}:feed` (cả công ty) và                    │
+// │    `co:{c}:feedgroup:{groupId}`; KHÔNG có room cho `audience='org_unit'`. Phát một bài org_unit  │
+// │    vào room cả-công-ty là rò đúng nội dung mà REST trả 404 cho chính những người đó. Lưới nằm ở  │
+// │    SERVICE (`social-posts.service.ts`) vì schema không biết audience của bài cha ở 2 sự kiện     │
+// │    kia; ràng buộc `audience` ở đây là vế thứ hai của cùng một luật.                              │
+// └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+/** Đính kèm trên kênh WS — **CỐ TÌNH KHÔNG CÓ `url`** (luật 2). */
+export const wsFeedAttachmentSchema = feedAttachmentSchema.omit({ url: true });
+export type WsFeedAttachment = z.infer<typeof wsFeedAttachmentSchema>;
+
+/** `feed:post.created` — bài mới. `audience` khoá cứng `company` (luật 3). */
+export const wsFeedPostCreatedEventSchema = feedPostSchema
+  .omit({ myReaction: true, savedByMe: true, isMine: true, status: true, attachments: true })
+  .extend({
+    audience: z.literal("company"),
+    attachments: z.array(wsFeedAttachmentSchema),
+  });
+export type WsFeedPostCreatedEvent = z.infer<typeof wsFeedPostCreatedEventSchema>;
+
+/** `feed:comment.created` — bình luận mới trên một bài ĐANG fan-out được. */
+export const wsFeedCommentCreatedEventSchema = feedCommentSchema
+  .omit({ myReaction: true, isMine: true, attachments: true })
+  .extend({ attachments: z.array(wsFeedAttachmentSchema) });
+export type WsFeedCommentCreatedEvent = z.infer<typeof wsFeedCommentCreatedEventSchema>;
+
+/**
+ * `feed:reaction.changed` — API-19 §7 chốt payload `{targetType, targetId, likeCount}`.
+ *
+ * `reactions[]` (tổng hợp theo emoji) thêm vào có chủ ý và **đã strip `mine`**: FE cần thanh cảm xúc
+ * cập nhật, và `likeCount` một mình không dựng được nó. Không có `actorUserId` — ai vừa thả không
+ * phục vụ màn hình nào, mà thêm vào là phát "ai phản ứng gì với bài nào" theo thời gian thực cho cả
+ * công ty (cùng lập luận `wsChatReactionEventSchema`).
+ */
+export const wsFeedReactionChangedEventSchema = z.object({
+  targetType: feedTargetTypeSchema,
+  targetId: z.string().uuid(),
+  /** Bài gốc — FE định vị thẻ cần cập nhật khi đích là một bình luận. */
+  postId: z.string().uuid(),
+  likeCount: z.number().int().nonnegative(),
+  reactions: z.array(feedReactionSummarySchema.omit({ mine: true })),
+});
+export type WsFeedReactionChangedEvent = z.infer<typeof wsFeedReactionChangedEventSchema>;

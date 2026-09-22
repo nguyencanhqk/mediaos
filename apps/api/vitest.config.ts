@@ -138,6 +138,15 @@ export default defineConfig({
           branches: 95,
           statements: 95,
         },
+        // S16-SOCIAL-BE-1 (D11) — crown-jewel của SOCIAL: MỌI quyết định "ai thấy được gì" đi qua
+        // đúng file này. Đây là cổng coverage THẬT duy nhất của module (không có cơ chế per-directory
+        // — `test:cov:social` chỉ ĐO, không gate).
+        "src/social/social-access.service.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 85,
+          statements: 90,
+        },
         "src/payroll/payroll-access.service.ts": {
           lines: 90,
           functions: 90,

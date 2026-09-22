@@ -41,6 +41,9 @@ import { RecruitModule } from "./recruit/recruit.module";
 import { PayrollModule } from "./payroll/payroll.module";
 // S7-CHAT-BE-1 (additive): ChatModule — phòng chat & thành viên (SPEC-15 / DB-12 / API-13).
 import { ChatModule } from "./chat/chat.module";
+// S16-SOCIAL-BE-1 (additive): SocialModule — bảng tin nội bộ (SPEC-16 / DB-17 / API-19), 19 route
+// Nhóm A. KHÔNG phải `integrations/social/` (app vệ tinh fbpost, SOC-DEC-002) — hai thứ khác hẳn.
+import { SocialModule } from "./social/social.module";
 import { IdempotencyModule } from "./common/idempotency/idempotency.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
@@ -125,6 +128,8 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     // NotificationsModule. Module vẫn inactive — FE-1 mới bật cờ.
     RecruitModule,
     PayrollModule,
+    // S16-SOCIAL-BE-1 (additive) — module `SOCIAL` vẫn is_active=false tới khi S16-SOCIAL-FE-1 bật cờ.
+    SocialModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):

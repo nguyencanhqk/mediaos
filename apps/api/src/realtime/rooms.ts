@@ -62,3 +62,20 @@ export function callUserRoomName(companyId: string, userId: string): string {
 export function callRoomName(companyId: string, callId: string): string {
   return `co:${companyId}:call:${callId}`;
 }
+
+/**
+ * S16-SOCIAL-BE-1 — bảng tin nội bộ của MỘT công ty. Mọi socket đã qua cổng `view:feed` join room này.
+ *
+ * ⚠️ **CHỈ bài `audience='company'` được phát vào đây.** Room này chứa cả công ty, nên một bài
+ * `audience='org_unit'` bắn vào nó là phát đúng nội dung mà REST trả 404 cho chính những người đó —
+ * cổng quyền bị đi vòng qua kênh phụ. API-19 §7 khai thêm `co:{c}:feedgroup:{groupId}` cho bài nhóm;
+ * BE-1 chưa mở nhóm (`audience='group'` bị từ chối 422) nên room đó chưa tồn tại, và **chưa có room
+ * nào cho `org_unit`** — lưới nằm ở `SocialPostsService` (memory `ws-permission-gate-needs-its-own-room`).
+ *
+ * ⚠️ **Ở TRONG ROOM KHÔNG PHẢI LÀ QUYỀN.** Socket join ngay sau cổng quyền ở handshake, nhưng cổng đó
+ * chỉ có tác dụng ĐÚNG MỘT LẦN lúc connect: người bị thu hồi `view:feed` giữa phiên vẫn ở lại room
+ * tới khi họ ngắt kết nối. Đó là lý do payload WS phải HẸP HƠN DTO REST và không mang URL presign.
+ */
+export function feedRoomName(companyId: string): string {
+  return `co:${companyId}:feed`;
+}

@@ -203,3 +203,7 @@ export * from "./idempotency";
 // migration 0577 (DB-17 §8). Tên export prefix feed*/FEED_* KHÔNG trùng barrel hiện có (tên trần
 // Post/Comment/Report sẽ đụng ./media đang park ⇒ TS2308).
 export * from "./social";
+// S16-SOCIAL-BE-1 (additive): DTO request/response 19 route Nhóm A (API-19 §5.1/§6). Tách khỏi ./social
+// theo đúng luật đã dùng cho ./payroll-employees — import NGƯỢC từ ./social, KHÔNG re-export tên nào của
+// nó (trùng tên ở hai star-export là lỗi mơ hồ lúc build).
+export * from "./social-api";
