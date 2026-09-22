@@ -16928,9 +16928,17 @@ export const backlog = [
     title:
       "Module apps/api/src/social/ Nhóm B (10 route, SOCIAL-API-020..029): tin tức (danh sách + xác nhận đọc + danh sách đã đọc) · tìm kiếm tsvector · thẻ (hashtag) · trang cá nhân · sinh nhật day/month tôn trọng preference (dùng getPreferencesForUsers của BE-1) · báo cáo (tạo + danh sách scope Department cho manager + xử lý resolve/dismiss) — TÁI DÙNG hạ tầng SocialAccessService/assertTargetVisible/SOCIAL_ROUTE_PAIRS dựng ở BE-1, KHÔNG dựng lại",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/social/**",
+      // S16-SOCIAL-BE-1B plan §0.0 (22/09/2026): 4 path nới thêm — migration/schema cho cột
+      // user_preferences.show_birthday (route 026 không đóng được nếu thiếu), me/** + contracts/me.ts
+      // để cờ CÓ đường ghi thật (owner ký 22/09), docs/spec/** để sửa SPEC-16 FUNC-009/§18.2/T13
+      // theo đúng chữ ký owner về phạm vi showBirthday (chỉ chặn day/month).
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/src/me/**",
+      "docs/SPEC/**",
       "apps/api/src/app.module.ts",
       "apps/api/src/realtime/**",
       "apps/api/src/notifications/**",
