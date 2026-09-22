@@ -9,6 +9,8 @@ import type { DataScope } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { feedComments, feedPosts } from "../db/schema/social";
 import { DataScopeService } from "../permission/data-scope.service";
+import { SocialGroupAccessService } from "./social-group-access.service";
+import { visibleGroupPostExists } from "./social-group-predicates";
 import { SOCIAL_ROUTE_PAIRS, type SocialRouteKey } from "./social-route-pairs.const";
 import { SOCIAL_ERR } from "./social.errors";
 import type {
@@ -56,7 +58,11 @@ import type {
  */
 @Injectable()
 export class SocialAccessService {
-  constructor(private readonly dataScope: DataScopeService) {}
+  constructor(
+    private readonly dataScope: DataScopeService,
+    // Cổng quyền TRONG nhóm — chỉ nhận `tx`, không tự mở `withTenant` (xem docblock của nó).
+    private readonly groups: SocialGroupAccessService,
+  ) {}
 
   /**
    * Tầng 2 + ngữ cảnh. Gọi ĐÚNG MỘT LẦN đầu mỗi method service (khuôn `RecruitAccessService`).
@@ -70,7 +76,7 @@ export class SocialAccessService {
    */
   async resolveActor(user: SocialRequestUser, routeKey: SocialRouteKey): Promise<SocialActor> {
     const p = SOCIAL_ROUTE_PAIRS[routeKey];
-    const [routeScopeOrNull, managePostsScope, manageNewsScope] =
+    const [routeScopeOrNull, managePostsScope, manageNewsScope, manageGroupsScope] =
       await this.dataScope.resolveManyOrNull(user.id, user.companyId, [
         // [0] cặp của route — cờ sensitive lấy từ BẢNG, không gõ lại literal.
         { action: p.action, resourceType: p.resourceType, isSensitive: p.isSensitive },
@@ -78,6 +84,10 @@ export class SocialAccessService {
         // để lần sau ai đổi cờ catalog thì thấy ngay chỗ phải đổi theo.
         { action: "manage", resourceType: "feed-post", isSensitive: false },
         { action: "manage", resourceType: "feed-news", isSensitive: false },
+        // [3] S16-SOCIAL-BE-2A (D9). CỐ Ý **không** thêm `create:feed-group` vào đây: nó đã là cặp
+        // của route `031` ở [0], và hỏi hai lần cùng một cặp là đúng cái bẫy "hai vai đè nhau" ghi
+        // ở docblock trên.
+        { action: "manage", resourceType: "feed-group", isSensitive: false },
       ]);
 
     // Tầng 2 — assert cặp của route, ĐỘC LẬP với decorator. Deny ở đây để lại ZERO side-effect vì
@@ -111,6 +121,8 @@ export class SocialAccessService {
       // dung của BẤT KỲ ai (`assertCanMutateContent` :354) — ô cửa sổ rộng hơn cửa chính.
       canManagePosts: SocialAccessService.isCompany(managePostsScope),
       canManageNews: SocialAccessService.isCompany(manageNewsScope),
+      // Cùng SÀN Company như hai cờ trên — `isCompany()` để `undefined`/`null` fail-closed.
+      canManageGroups: SocialAccessService.isCompany(manageGroupsScope),
       // D13 (owner ký 21/09/2026) — đơn vị của chính actor ∪ đơn vị actor đứng đầu. KHÔNG cây con.
       orgUnitIds: this.dataScope.departmentOrgUnitIds(ctx),
     };
@@ -178,6 +190,22 @@ export class SocialAccessService {
         and(eq(t.audience, "org_unit"), inArray(t.orgUnitId, [...actor.orgUnitIds])) ?? sql`false`,
       );
     }
+    // 🔴 S16-SOCIAL-BE-2A (D3) — nhánh `group`: thành viên `active` HOẶC nhóm `public`, nhóm CÒN SỐNG.
+    // Vị từ RIÊNG, không dùng chung với tập-người (`activeGroupMemberExists`): xem docblock của
+    // `visibleGroupPostExists` — nhóm public đọc được bởi mọi người nhưng chỉ THÀNH VIÊN mới là
+    // người nhận NOTI / người bị đếm "chưa đọc". EXISTS tương
+    // quan TRONG CÂU (không resolve mảng id trước: tập nhóm đổi liên tục, và một mảng đọc ở tx khác
+    // là TOCTOU). Vị từ dùng CHUNG với ba hàm tập-người — một luật, một bản (`social-group-
+    // predicates.ts`). Bám `t.groupId` theo tham số `alias`, KHÔNG `feedPosts.groupId` (M-g).
+    //
+    // ⚠️ Vị từ này phục vụ CẢ cổng màn hình LẪN cổng đường tải (`SocialFileResolver` dùng chung) —
+    // nới nhánh này là nới cả hai. `manage:feed-group` CỐ Ý không có mặt ở đây (D9-ii).
+    audienceOr.push(
+      and(
+        eq(t.audience, "group"),
+        visibleGroupPostExists(actor.companyId, t.groupId, actor.actorUserId),
+      ) ?? sql`false`,
+    );
     // Tác giả luôn thấy bài của chính mình — kể cả `org_unit` của đơn vị họ vừa rời, kể cả `group`.
     audienceOr.push(isAuthor);
     const audienceOk = or(...audienceOr) ?? sql`false`;
@@ -348,13 +376,47 @@ export class SocialAccessService {
    * Nhánh **GHI**: actor tự chọn `audience` + khoá đi kèm khi đăng bài. 403 `SOCIAL-ERR-002` ở đây
    * KHÔNG rò gì — actor vừa gõ chính cái id đó vào request nên đã biết nó tồn tại.
    *
-   * ⚠️ Đây là chỗ DUY NHẤT `audience='group'` bị từ chối (422 `SOCIAL-ERR-008`, plan D1). Đặt ở
-   * service chứ không ở Zod có chủ ý: Zod từ chối sẽ trả 400 vô danh, còn đây là quyết định NGHIỆP
-   * VỤ "chưa mở" và cần một mã lỗi nói đúng lý do cho FE hiện thông báo.
+   * ⟲ **S16-SOCIAL-BE-2A (D4) — hàm này ĐÃ THÀNH `async` và chạy TRONG tx ghi.**
+   *
+   * ┌─ BA RÀNG BUỘC, KHÔNG PHẢI KHẨU VỊ ─────────────────────────────────────────────────────────────┐
+   * │ 1. **MỘT call-site DUY NHẤT** (`social-posts.service.ts`), và nó nằm **TRONG** `withTenant`.    │
+   * │    Trước BE-2A hàm này SYNC và chạy NGOÀI tx (`:153` đứng trước `:155`) — kiểm ở ngoài rồi ghi  │
+   * │    ở trong là TOCTOU: membership có thể bị thu hồi giữa hai thời điểm.                          │
+   * │ 2. Nhận `tx` của caller và **chuyển thẳng** cho `SocialGroupAccessService`. Service đó CẤM tự mở │
+   * │    `withTenant` — lồng tx = treo IM LẶNG trên PgBouncer.                                        │
+   * │ 3. Thứ tự lỗi ở nhánh `group`: **404 TRƯỚC 403**. Nhóm không thấy được (không tồn tại · xoá mềm │
+   * │    · `private` mà không phải thành viên) ⇒ 404 `ERR-012`, KHÔNG được để lộ rằng nó tồn tại;     │
+   * │    thấy được mà không phải thành viên `active` (nhóm `public`) ⇒ 403 `ERR-002`.                 │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ Thiếu `groupId` KHÔNG tới được đây: `createFeedPostSchema.superRefine` chặn từ Zod ⇒ **400**
+   * (M24/D-OWNER-9). Vế `AUDIENCE_KEY_MISSING` bên dưới vì vậy là nhánh chết với cả `org_unit` —
+   * giữ nguyên làm lưới thứ hai, nhưng đừng viết ca test kỳ vọng 422 ở đó.
    */
-  assertWriteAudience(actor: SocialActor, audience: string, orgUnitId: string | null): void {
+  async assertWriteAudience(
+    tx: TenantTx,
+    actor: SocialActor,
+    audience: string,
+    orgUnitId: string | null,
+    groupId: string | null,
+  ): Promise<void> {
     if (audience === "group") {
-      throw new UnprocessableEntityException(SOCIAL_ERR.AUDIENCE_GROUP_NOT_AVAILABLE);
+      if (groupId == null) {
+        throw new UnprocessableEntityException(SOCIAL_ERR.AUDIENCE_KEY_MISSING);
+      }
+      // 404 trước: cửa này nuốt cả "nhóm đã xoá mềm" (D13) và "private mà mình không thuộc".
+      await this.groups.assertGroupVisibleTx(tx, actor, groupId);
+      const membership = await this.groups.getMembershipTx(
+        tx,
+        actor.companyId,
+        groupId,
+        actor.actorUserId,
+      );
+      // `pending` KHÔNG phải thành viên: xin vào rồi là đăng được thì cổng nhóm kín vô nghĩa.
+      if (membership?.status !== "active") {
+        throw new ForbiddenException(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE);
+      }
+      return;
     }
     if (audience === "org_unit") {
       if (orgUnitId == null) {

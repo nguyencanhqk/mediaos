@@ -149,10 +149,20 @@ export class SocialPostsService {
     if (dto.type === "news" && !actor.canManageNews) {
       throw new ForbiddenException(SOCIAL_ERR.NEWS_MANAGE_REQUIRED);
     }
-    // 422 `audience='group'` (chưa mở) · 403 `ERR-002` đăng vào đơn vị mình không thuộc.
-    this.access.assertWriteAudience(actor, dto.audience, dto.orgUnitId ?? null);
-
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
+      // 🔴 S16-SOCIAL-BE-2A (D4) — cổng GHI nằm TRONG tx, ngay trước INSERT. Trước đây nó chạy NGOÀI
+      // `withTenant`: với `org_unit` (dữ liệu đã có sẵn trên actor) thì vô hại, nhưng nhánh `group`
+      // phải HỎI DB (membership là hàng) — kiểm ở tx riêng rồi ghi ở tx sau là TOCTOU.
+      // 404 `ERR-012` nhóm không thấy được (kể cả đã xoá mềm) · 403 `ERR-002` không phải thành viên
+      // `active` / đăng vào đơn vị mình không thuộc.
+      await this.access.assertWriteAudience(
+        tx,
+        actor,
+        dto.audience,
+        dto.orgUnitId ?? null,
+        dto.groupId ?? null,
+      );
+
       const authorEmployeeId = await this.employeeIdOf(tx, actor);
 
       const [inserted] = await tx
@@ -164,7 +174,9 @@ export class SocialPostsService {
           type: dto.type,
           audience: dto.audience,
           orgUnitId: dto.audience === "org_unit" ? (dto.orgUnitId ?? null) : null,
-          groupId: null,
+          // Khoá chỉ có nghĩa với ĐÚNG audience của nó — `CHECK chk_feed_posts_audience_group` đòi
+          // `group_id IS NOT NULL` khi `audience='group'`, nên hằng `null` cũ khoá chặt nhánh này.
+          groupId: dto.audience === "group" ? (dto.groupId ?? null) : null,
           body: dto.body,
           requiresAck: dto.requiresAck,
           // `status`/`pinned`/counters CỐ Ý không truyền: DEFAULT của DB là nguồn sự thật, và DTO

@@ -21,6 +21,16 @@ export interface SocialActor extends SocialViewerContext {
   routeScope: DataScope;
   /** Có `manage:feed-news` — tạo bài `type='news'` (002) và đổi `pinned` (006). */
   canManageNews: boolean;
+  /**
+   * S16-SOCIAL-BE-2A — có `manage:feed-group`: quản trị BẤT KỲ nhóm nào (`033`/`034`/`037`/`038`/
+   * `039`) và NHÌN thấy nhóm `private` không phải của mình.
+   *
+   * 🔴 Cờ này **KHÔNG** nới `visiblePostCondition` (D9-ii): thấy NHÓM khác với đọc được BÀI trong
+   * nhóm. Và nó nằm ở ĐÂY chứ không ở `SocialViewerContext` (W3) — đặt lên lớp cha là buộc
+   * `resolveViewerContext` (đường của `FilePolicyService`) phải resolve thêm cặp, làm cổng ĐƯỜNG TẢI
+   * rộng hơn cổng MÀN HÌNH.
+   */
+  canManageGroups: boolean;
 }
 
 /**

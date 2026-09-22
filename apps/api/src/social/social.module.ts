@@ -12,6 +12,7 @@ import { SocialCommentsService } from "./social-comments.service";
 import { SocialDiscoveryRepository } from "./social-discovery.repository";
 import { SocialDiscoveryService } from "./social-discovery.service";
 import { SocialFileResolver } from "./social-file.resolver";
+import { SocialGroupAccessService } from "./social-group-access.service";
 import { SocialMasterDataSeeder } from "./social-master-data.seeder";
 import { SocialNewsRepository } from "./social-news.repository";
 import { SocialNewsService } from "./social-news.service";
@@ -91,6 +92,7 @@ import {
     SocialReportsRepository,
     SocialReportsService,
     // S16-SOCIAL-BE-2A — khối additive (nợ (a) của DB-2: catalog huy hiệu cho công ty sinh SAU migrate).
+    SocialGroupAccessService,
     SocialMasterDataSeeder,
     SocialSeedRegistrar,
   ],

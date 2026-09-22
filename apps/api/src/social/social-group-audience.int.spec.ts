@@ -113,6 +113,7 @@ function actorOf(userId: string, companyId: string): SocialActor {
     routeKey: "postCreate",
     routeScope: "Company",
     canManageNews: false,
+    canManageGroups: false,
   } as SocialActor;
 }
 

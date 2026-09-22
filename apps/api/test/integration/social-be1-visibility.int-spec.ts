@@ -322,15 +322,25 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 ranh giới nhìn thấy + IDOR (DB
       expect(ids).toContain(publicPostId);
     });
 
-    it("`audience='group'` CHƯA MỞ ⇒ 422 SOCIAL-ERR-008 (D1)", async () => {
+    /**
+     * ⟲ **HỢP ĐỒNG ĐỔI Ở `S16-SOCIAL-BE-2A`** (không phải hồi quy): BE-1 chốt cửa `audience='group'`
+     * bằng 422 `ERR-008` ("chưa mở"); BE-2A MỞ cửa đó, nên câu trả lời đúng cho một `groupId` lạ giờ
+     * là **404 `ERR-012`** — cùng một chuỗi cho "không tồn tại · tenant khác · đã xoá mềm · private
+     * mà mình không thuộc", đúng luật 404-trước-403 của SPEC-16 §12.
+     *
+     * Ca này CỐ Ý ở lại đây (thay vì xoá): nó giữ neo rằng đường `002` + `group` **không bao giờ**
+     * trả 201 cho một nhóm actor không thuộc. Ca ALLOW (thành viên `active` đăng được) sống ở
+     * `social-group-access.int.spec.ts` / int-spec của BE-2A.
+     */
+    it("`audience='group'` với nhóm LẠ ⇒ 404 SOCIAL-ERR-012 (BE-2A: 404 trước 403)", async () => {
       const res = await post(tAuthor, "/social/posts").send({
         type: "share",
         audience: "group",
         groupId: randomUUID(),
         body: "Bài nhóm",
       });
-      expect(res.status, JSON.stringify(res.body)).toBe(422);
-      expect(JSON.stringify(res.body)).toContain("SOCIAL-ERR-008");
+      expect(res.status, JSON.stringify(res.body)).toBe(404);
+      expect(JSON.stringify(res.body)).toContain("SOCIAL-ERR-012");
     });
   });
 

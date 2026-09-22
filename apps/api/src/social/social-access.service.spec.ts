@@ -1,8 +1,9 @@
-import { ForbiddenException, UnprocessableEntityException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import type { DataScope } from "@mediaos/contracts";
 import type { DataScopeService } from "../permission/data-scope.service";
 import { SocialAccessService } from "./social-access.service";
+import type { SocialGroupAccessService } from "./social-group-access.service";
 import { SOCIAL_ERR } from "./social.errors";
 import type { SocialRequestUser, SocialViewerContext } from "./social.types";
 
@@ -22,6 +23,7 @@ const USER: SocialRequestUser = {
 };
 
 function makeService(opts: {
+  group?: { visible?: boolean; membershipStatus?: "active" | "pending" | null };
   scopes: (DataScope | null)[];
   orgUnitId?: string | null;
   headed?: string[];
@@ -42,7 +44,29 @@ function makeService(opts: {
       return [...ids];
     },
   } as unknown as DataScopeService;
-  return new SocialAccessService(dataScope);
+  return new SocialAccessService(dataScope, makeGroups(opts.group));
+}
+
+/**
+ * Cổng quyền nhóm giả — đúng hai câu hỏi mà `assertWriteAudience` hỏi nó (D4):
+ *   • `assertGroupVisibleTx` — ném khi nhóm không thấy được (không tồn tại · xoá mềm · private mà
+ *     mình không thuộc). Ở tầng UNIT ta chỉ cần biết nó ĐƯỢC GỌI và lỗi của nó LEO LÊN nguyên vẹn.
+ *   • `getMembershipTx` — trả hàng membership hoặc `null`.
+ * Hành vi THẬT của hai hàm này được đo trên DB ở `social-group-access.int.spec.ts`.
+ */
+function makeGroups(opts?: {
+  visible?: boolean;
+  membershipStatus?: "active" | "pending" | null;
+}): SocialGroupAccessService {
+  return {
+    assertGroupVisibleTx: vi.fn(async () => {
+      if (opts?.visible === false) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+      return { id: "g1", name: "N", visibility: "private", membership: null };
+    }),
+    getMembershipTx: vi.fn(async () =>
+      opts?.membershipStatus == null ? null : { role: "member", status: opts.membershipStatus },
+    ),
+  } as unknown as SocialGroupAccessService;
 }
 
 describe("resolveActor — tầng guard THỨ HAI", () => {
@@ -113,11 +137,11 @@ describe("resolveActor — tầng guard THỨ HAI", () => {
 
   it("cặp của route được hỏi kèm cờ `isSensitive` lấy TỪ BẢNG (không gõ lại literal)", async () => {
     const dataScope = {
-      resolveManyOrNull: vi.fn().mockResolvedValue(["Company", null, null]),
+      resolveManyOrNull: vi.fn().mockResolvedValue(["Company", null, null, null]),
       resolveContext: vi.fn().mockResolvedValue({ orgUnitId: null, headedOrgUnitIds: [] }),
       departmentOrgUnitIds: () => [],
     } as unknown as DataScopeService;
-    const svc = new SocialAccessService(dataScope);
+    const svc = new SocialAccessService(dataScope, makeGroups());
     await svc.resolveActor(USER, "postCreate");
 
     const requests = (dataScope.resolveManyOrNull as ReturnType<typeof vi.fn>).mock.calls[0][2];
@@ -126,14 +150,25 @@ describe("resolveActor — tầng guard THỨ HAI", () => {
       resourceType: "feed-post",
       isSensitive: false,
     });
-    // Hai cờ phụ khai `isSensitive` TƯỜNG MINH — quên cờ thì wildcard `*:*` mở khoá chúng.
+    // BA cờ phụ khai `isSensitive` TƯỜNG MINH — quên cờ thì wildcard `*:*` mở khoá chúng.
     expect(requests[1].isSensitive).toBe(false);
     expect(requests[2].isSensitive).toBe(false);
+    // S16-SOCIAL-BE-2A (D9): cặp thứ tư là `manage:feed-group`, và CỐ Ý **không** có
+    // `create:feed-group` (nó đã là cặp của route `031` ở [0] — hỏi hai lần là hai vai đè nhau).
+    expect(requests[3]).toEqual({
+      action: "manage",
+      resourceType: "feed-group",
+      isSensitive: false,
+    });
+    expect(requests).toHaveLength(4);
   });
 });
 
 describe("assertWriteAudience — nhánh GHI (403 `ERR-002` chỉ ở đây)", () => {
-  const svc = makeService({ scopes: ["Company", null, null] });
+  // ⟲ S16-SOCIAL-BE-2A (D4): hàm ĐÃ thành `async` và nhận `(tx, actor, audience, orgUnitId, groupId)`.
+  // `tx` ở tầng unit là placeholder — nhánh `org_unit` không chạm DB, nhánh `group` chỉ chuyển `tx`
+  // thẳng cho `SocialGroupAccessService` (đã giả lập).
+  const TX = {} as never;
   const actor = (orgUnitIds: string[]): SocialViewerContext => ({
     actorUserId: USER.id,
     companyId: USER.companyId,
@@ -141,50 +176,80 @@ describe("assertWriteAudience — nhánh GHI (403 `ERR-002` chỉ ở đây)", (
     orgUnitIds,
   });
 
-  it("`company` luôn hợp lệ", () => {
-    expect(() => svc.assertWriteAudience(actor([]) as never, "company", null)).not.toThrow();
+  it("`company` luôn hợp lệ", async () => {
+    const svc = makeService({ scopes: ["Company", null, null, null] });
+    await expect(
+      svc.assertWriteAudience(TX, actor([]) as never, "company", null, null),
+    ).resolves.toBeUndefined();
   });
 
-  it("`group` ⇒ 422 SOCIAL-ERR-008 (D1 — chưa mở)", () => {
-    try {
-      svc.assertWriteAudience(actor([]) as never, "group", null);
-      expect.unreachable("phải ném");
-    } catch (e) {
-      expect(e).toBeInstanceOf(UnprocessableEntityException);
-      expect((e as Error).message).toBe(SOCIAL_ERR.AUDIENCE_GROUP_NOT_AVAILABLE);
-    }
+  it("`group` + thành viên `active` ⇒ hợp lệ (cửa đã MỞ từ BE-2A)", async () => {
+    const svc = makeService({
+      scopes: ["Company", null, null, null],
+      group: { membershipStatus: "active" },
+    });
+    await expect(
+      svc.assertWriteAudience(TX, actor([]) as never, "group", null, "g1"),
+    ).resolves.toBeUndefined();
   });
 
-  it("`org_unit` thiếu khoá ⇒ 422 SOCIAL-ERR-008", () => {
-    try {
-      svc.assertWriteAudience(actor(["u1"]) as never, "org_unit", null);
-      expect.unreachable("phải ném");
-    } catch (e) {
-      expect(e).toBeInstanceOf(UnprocessableEntityException);
-      expect((e as Error).message).toBe(SOCIAL_ERR.AUDIENCE_KEY_MISSING);
-    }
+  it("`group` + hàng `pending` ⇒ 403 SOCIAL-ERR-002 (xin vào KHÔNG phải là thành viên)", async () => {
+    const svc = makeService({
+      scopes: ["Company", null, null, null],
+      group: { membershipStatus: "pending" },
+    });
+    await expect(
+      svc.assertWriteAudience(TX, actor([]) as never, "group", null, "g1"),
+    ).rejects.toThrowError(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE);
   });
 
-  it("`org_unit` mà actor KHÔNG thuộc ⇒ 403 SOCIAL-ERR-002", () => {
-    try {
-      svc.assertWriteAudience(actor(["u1"]) as never, "org_unit", "u2");
-      expect.unreachable("phải ném");
-    } catch (e) {
-      expect(e).toBeInstanceOf(ForbiddenException);
-      expect((e as Error).message).toBe(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE);
-    }
+  it("`group` + KHÔNG có hàng membership ⇒ 403 SOCIAL-ERR-002 (kể cả nhóm public)", async () => {
+    const svc = makeService({
+      scopes: ["Company", null, null, null],
+      group: { membershipStatus: null },
+    });
+    await expect(
+      svc.assertWriteAudience(TX, actor([]) as never, "group", null, "g1"),
+    ).rejects.toThrowError(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE);
   });
 
-  it("`org_unit` mà actor THUỘC ⇒ hợp lệ", () => {
-    expect(() =>
-      svc.assertWriteAudience(actor(["u1", "u2"]) as never, "org_unit", "u2"),
-    ).not.toThrow();
+  it("🔴 `group` KHÔNG thấy được ⇒ 404 ERR-012 LEO LÊN nguyên vẹn, KHÔNG bị nuốt thành 403", async () => {
+    const svc = makeService({
+      scopes: ["Company", null, null, null],
+      group: { visible: false, membershipStatus: "active" },
+    });
+    // 404 TRƯỚC 403: một nhóm kín (hoặc đã xoá mềm) không được lộ ra qua việc đổi mã lỗi.
+    await expect(
+      svc.assertWriteAudience(TX, actor([]) as never, "group", null, "g1"),
+    ).rejects.toThrowError(SOCIAL_ERR.GROUP_NOT_FOUND);
   });
 
-  it("tập org_unit RỖNG ⇒ MỌI đơn vị bị từ chối (fail-closed)", () => {
-    expect(() => svc.assertWriteAudience(actor([]) as never, "org_unit", "u1")).toThrowError(
-      ForbiddenException,
-    );
+  it("`org_unit` thiếu khoá ⇒ 422 SOCIAL-ERR-008", async () => {
+    const svc = makeService({ scopes: ["Company", null, null, null] });
+    await expect(
+      svc.assertWriteAudience(TX, actor(["u1"]) as never, "org_unit", null, null),
+    ).rejects.toThrowError(SOCIAL_ERR.AUDIENCE_KEY_MISSING);
+  });
+
+  it("`org_unit` mà actor KHÔNG thuộc ⇒ 403 SOCIAL-ERR-002", async () => {
+    const svc = makeService({ scopes: ["Company", null, null, null] });
+    await expect(
+      svc.assertWriteAudience(TX, actor(["u1"]) as never, "org_unit", "u2", null),
+    ).rejects.toThrowError(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE);
+  });
+
+  it("`org_unit` mà actor THUỘC ⇒ hợp lệ", async () => {
+    const svc = makeService({ scopes: ["Company", null, null, null] });
+    await expect(
+      svc.assertWriteAudience(TX, actor(["u1", "u2"]) as never, "org_unit", "u2", null),
+    ).resolves.toBeUndefined();
+  });
+
+  it("tập org_unit RỖNG ⇒ MỌI đơn vị bị từ chối (fail-closed)", async () => {
+    const svc = makeService({ scopes: ["Company", null, null, null] });
+    await expect(
+      svc.assertWriteAudience(TX, actor([]) as never, "org_unit", "u1", null),
+    ).rejects.toThrowError(ForbiddenException);
   });
 });
 
