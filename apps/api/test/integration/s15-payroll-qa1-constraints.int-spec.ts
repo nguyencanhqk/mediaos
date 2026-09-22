@@ -492,5 +492,254 @@ describe.skipIf(!hasLaneDb)(
         ).toBeNull();
       });
     });
+
+    // ════════════════════════════════════════════════════════════════════════════════════════════════
+    // D. 🔁 S15-PAYROLL-BE-2B — SÁU CHECK có TÊN trả nợ ghi nhận của BE-2 (review LOW-5).
+    //    Cả sáu trước đó VẮNG MẶT khỏi CẢ bảng ĐÓNG SPEC-11 §21.1 lẫn `mapPayrollPgError` ⇒ rơi `null` ⇒
+    //    lỗi PG THÔ ra `AllExceptionsFilter` ⇒ **500 vô danh ở vùng đỏ** (cùng lớp lỗi đã vá ở ca A7).
+    //    Không route nào chạm được chúng qua đường thường — Zod/service chặn trước; đó CHÍNH LÀ lý do phải
+    //    map: lưới cuối chỉ nổ khi có BUG hoặc đường ghi nội bộ, và bug phải hiện thành lỗi ĐỌC ĐƯỢC.
+    //    Mức bằng chứng: file này KHÔNG boot Nest ⇒ sáu ca chứng minh **mapper**, không phải HTTP
+    //    end-to-end — cùng mức với A1..A7 đã được nhận là ĐỦ (plan §12 M6).
+    // ════════════════════════════════════════════════════════════════════════════════════════════════
+    describe("D. sáu CHECK track B chưa map (S15-PAYROLL-BE-2B)", () => {
+      /** Cột của một bản tỉ lệ luật định — thứ tự này là thứ tự tham số của `rateSql()`. */
+      const RATE_COLS = [
+        "si_employee_pct",
+        "hi_employee_pct",
+        "ui_employee_pct",
+        "si_employer_pct",
+        "hi_employer_pct",
+        "ui_employer_pct",
+        "union_employer_pct",
+        "union_employee_pct",
+        "si_cap",
+        "hi_cap",
+        "ui_cap",
+        "base_wage",
+        "min_region_wage",
+        "personal_deduction",
+        "dependent_deduction",
+        "pit_brackets",
+      ] as const;
+      type RateCol = (typeof RATE_COLS)[number];
+      /** Bản HỢP LỆ — ca chỉ ghi đè ĐÚNG cột đang thử, mọi cột khác giữ giá trị đi qua được. */
+      const RATE_OK: Readonly<Record<RateCol, string>> = {
+        si_employee_pct: "8.00",
+        hi_employee_pct: "1.50",
+        ui_employee_pct: "1.00",
+        si_employer_pct: "17.50",
+        hi_employer_pct: "3.00",
+        ui_employer_pct: "1.00",
+        union_employer_pct: "2.00",
+        union_employee_pct: "1.00",
+        si_cap: "46800000.00",
+        hi_cap: "46800000.00",
+        ui_cap: "99200000.00",
+        base_wage: "2340000.00",
+        min_region_wage: "4960000.00",
+        personal_deduction: "11000000.00",
+        dependent_deduction: "4400000.00",
+        pit_brackets: JSON.stringify([
+          { upTo: 5000000, rate: 5 },
+          { upTo: 10000000, rate: 10 },
+          { upTo: 18000000, rate: 15 },
+          { upTo: 32000000, rate: 20 },
+          { upTo: 52000000, rate: 25 },
+          { upTo: 80000000, rate: 30 },
+          { upTo: null, rate: 35 },
+        ]),
+      };
+      let rateDay = 1;
+      /** Ngày hiệu lực MỚI mỗi lần — tránh đụng `payroll_statutory_rates_company_effective_uq` (ràng buộc KHÁC). */
+      const nextEffectiveFrom = () => `2050-01-${String(rateDay++).padStart(2, "0")}`;
+      const rateSql = (): string => {
+        const cols = RATE_COLS.join(", ");
+        const holes = RATE_COLS.map((c, i) =>
+          c === "pit_brackets" ? `$${i + 3}::jsonb` : `$${i + 3}`,
+        ).join(", ");
+        return `INSERT INTO payroll_statutory_rates (company_id, effective_from, ${cols}) VALUES ($1, $2, ${holes})`;
+      };
+      const rateParams = (patch: Partial<Record<RateCol, string>> = {}): unknown[] => [
+        A.companyId,
+        nextEffectiveFrom(),
+        ...RATE_COLS.map((c) => patch[c] ?? RATE_OK[c]),
+      ];
+      const reasonOf = (m: MappedBody | null): string | undefined =>
+        (
+          m?.raw as { details?: Array<{ field: string; message: string }> } | undefined
+        )?.details?.find((d) => d.field === "reason")?.message;
+
+      it("D1 `salary_components_kind_check` (23514) ⇒ 400 VALIDATION-ERR-001 (Zod `salaryComponentKindEnum` mirror ĐÚNG BẰNG)", async () => {
+        const err = await fireRaw(
+          `INSERT INTO salary_components (company_id, code, name, kind, value_type, formula)
+         VALUES ($1, $2, 'kind lạ', 'not_a_kind', 'formula', 'SYS_BASE_SALARY')`,
+          [A.companyId, cCode("KIND")],
+        );
+        expect(err.code).toBe("23514");
+        expect(err.constraint).toBe("salary_components_kind_check");
+        const m = mapped(err);
+        expect(m, "null ⇒ lỗi PG thô ⇒ 500 vùng đỏ — đúng nợ đang trả").not.toBeNull();
+        expect(m?.status).toBe(400);
+        expect(m?.code).toBe("VALIDATION-ERR-001");
+        // ĐỐI CHỨNG DƯƠNG: một `kind` trong danh sách đóng đi qua.
+        await allow(
+          `INSERT INTO salary_components (company_id, code, name, kind, value_type, formula)
+         VALUES ($1, $2, 'ok', 'deduction', 'formula', 'SYS_BASE_SALARY')`,
+          [A.companyId, cCode("KINDOK")],
+        );
+      });
+
+      /**
+       * ⚠️ `value_type` LẠ vi phạm ĐỒNG THỜI HAI CHECK: `salary_components_value_type_check` (danh sách 4
+       * giá trị) VÀ `salary_components_value_pair_check` (bốn nhánh OR đều mở đầu bằng `value_type = '…'`,
+       * nên giá trị ngoài danh sách không khớp nhánh nào). PG báo ràng buộc nào là **TUỲ Ý** — đo thật trên
+       * lane này nó báo `value_pair_check`, nên một ca INSERT thẳng KHÔNG chứng minh được nhánh map của
+       * `value_type_check`, và tệ hơn: nó sẽ đỏ/xanh đổi chiều theo phiên bản PG.
+       *
+       * Cách cô lập: gỡ TẠM ràng buộc kia TRONG MỘT TRANSACTION rồi `ROLLBACK`. DDL của PostgreSQL có tính
+       * GIAO DỊCH nên schema KHÔNG bao giờ đổi thật — kể cả khi ca này ném giữa chừng. `lock_timeout` để
+       * `ACCESS EXCLUSIVE` không treo khi có spec khác đang chạm bảng.
+       */
+      it("D2 `salary_components_value_type_check` (23514) ⇒ 400 VALIDATION-ERR-001 (Zod `salaryComponentValueTypeEnum` mirror ĐÚNG BẰNG)", async () => {
+        const client = await direct.connect();
+        let err: PgRawError;
+        try {
+          await client.query("BEGIN");
+          await client.query("SET LOCAL lock_timeout = '5s'");
+          await client.query(
+            `ALTER TABLE salary_components DROP CONSTRAINT salary_components_value_pair_check`,
+          );
+          let caught: unknown;
+          try {
+            await client.query(
+              `INSERT INTO salary_components (company_id, code, name, kind, value_type, formula)
+             VALUES ($1, $2, 'value_type lạ', 'earning', 'not_a_value_type', 'SYS_BASE_SALARY')`,
+              [A.companyId, cCode("VTYPE")],
+            );
+          } catch (e) {
+            caught = e;
+          }
+          expect(caught, "INSERT kỳ vọng NÉM nhưng chạy trót lọt").toBeDefined();
+          err = caught as PgRawError;
+        } finally {
+          await client.query("ROLLBACK");
+          client.release();
+        }
+        expect(err.code).toBe("23514");
+        expect(err.constraint).toBe("salary_components_value_type_check");
+        const m = mapped(err);
+        expect(m, "null ⇒ lỗi PG thô ⇒ 500 vùng đỏ — đúng nợ đang trả").not.toBeNull();
+        expect(m?.status).toBe(400);
+        expect(m?.code).toBe("VALIDATION-ERR-001");
+
+        // ROLLBACK đã trả ràng buộc kia về — chứng minh bằng chính nó, không tin suông vào DDL-giao-dịch.
+        const restored = await fireRaw(
+          `INSERT INTO salary_components (company_id, code, name, kind, value_type, formula, fixed_amount)
+         VALUES ($1, $2, 'cặp sai', 'earning', 'fixed', 'SYS_BASE_SALARY', 10.00)`,
+          [A.companyId, cCode("VPAIRBACK")],
+        );
+        expect(
+          restored.constraint,
+          "ROLLBACK phải trả `salary_components_value_pair_check` về nguyên trạng",
+        ).toBe("salary_components_value_pair_check");
+
+        // ĐỐI CHỨNG DƯƠNG: `value_type` trong danh sách đóng đi qua.
+        await allow(
+          `INSERT INTO salary_components (company_id, code, name, kind, value_type, fixed_amount)
+         VALUES ($1, $2, 'ok', 'earning', 'fixed', 1000.00)`,
+          [A.companyId, cCode("VTYPEOK")],
+        );
+      });
+
+      it("D3 `payroll_templates_scope_check` (23514) ⇒ 400 VALIDATION-ERR-001 (Zod `payrollTemplateScopeEnum` mirror ĐÚNG BẰNG)", async () => {
+        const err = await fireRaw(
+          `INSERT INTO payroll_templates (company_id, code, name, scope) VALUES ($1, $2, 'scope lạ', 'global')`,
+          [A.companyId, cCode("SCOPE")],
+        );
+        expect(err.code).toBe("23514");
+        expect(err.constraint).toBe("payroll_templates_scope_check");
+        const m = mapped(err);
+        expect(m).not.toBeNull();
+        expect(m?.status).toBe(400);
+        expect(m?.code).toBe("VALIDATION-ERR-001");
+        await allow(
+          `INSERT INTO payroll_templates (company_id, code, name, scope) VALUES ($1, $2, 'ok', 'company')`,
+          [A.companyId, cCode("SCOPEOK")],
+        );
+      });
+
+      it("D4 `payroll_statutory_rates_pct_range_check` (23514) ⇒ 400 VALIDATION-ERR-001 (Zod `PERCENT_INPUT` mirror ĐÚNG BẰNG)", async () => {
+        const err = await fireRaw(rateSql(), rateParams({ si_employee_pct: "101.00" }));
+        expect(err.code).toBe("23514");
+        expect(err.constraint).toBe("payroll_statutory_rates_pct_range_check");
+        const m = mapped(err);
+        expect(m).not.toBeNull();
+        expect(m?.status).toBe(400);
+        expect(m?.code).toBe("VALIDATION-ERR-001");
+        // ĐỐI CHỨNG DƯƠNG: biên TRÊN hợp lệ (100.00) đi qua — CHECK là `BETWEEN`, không phải `< 100`.
+        await allow(rateSql(), rateParams({ si_employee_pct: "100.00" }));
+      });
+
+      it("D5 `payroll_statutory_rates_amount_check` (23514) ⇒ 400 VALIDATION-ERR-001 (Zod `POSITIVE_MONEY_INPUT` mirror ĐÚNG BẰNG)", async () => {
+        const err = await fireRaw(rateSql(), rateParams({ si_cap: "0.00" }));
+        expect(err.code).toBe("23514");
+        expect(err.constraint).toBe("payroll_statutory_rates_amount_check");
+        const m = mapped(err);
+        expect(m).not.toBeNull();
+        expect(m?.status).toBe(400);
+        expect(m?.code).toBe("VALIDATION-ERR-001");
+        // ĐỐI CHỨNG DƯƠNG: giảm trừ = 0 HỢP LỆ (`>= 0`) trong khi cap phải `> 0` — hai vế CÙNG một CHECK.
+        await allow(rateSql(), rateParams({ personal_deduction: "0.00" }));
+      });
+
+      /**
+       * Vế THỨ SÁU khác năm vế trên: tiền-kiểm KHÔNG phải Zod (Zod chỉ `.max(50)`) mà là SERVICE
+       * (`assertBracketsContinuous` → 422 `PAYROLL-ERR-022` `statutory-rate-incomplete` `reason = count`).
+       * Lưới DB vì thế phải cho CÙNG mã + CÙNG `kind` + CÙNG `reason`, không phải 400 — khuôn
+       * `salary_components_value_pair_check` → 018 và `payroll_periods_four_eyes_check` → 005.
+       */
+      it("D6 `payroll_statutory_rates_brackets_check` (23514) ⇒ 422 022 statutory-rate-incomplete reason=count (CÙNG phản hồi tiền-kiểm service)", async () => {
+        // Vế 1 — SAI SỐ LƯỢNG bậc (6 thay vì 7).
+        const err = await fireRaw(
+          rateSql(),
+          rateParams({
+            pit_brackets: JSON.stringify([
+              { upTo: 5000000, rate: 5 },
+              { upTo: 10000000, rate: 10 },
+              { upTo: 18000000, rate: 15 },
+              { upTo: 32000000, rate: 20 },
+              { upTo: 52000000, rate: 25 },
+              { upTo: null, rate: 35 },
+            ]),
+          }),
+        );
+        expect(err.code).toBe("23514");
+        expect(err.constraint).toBe("payroll_statutory_rates_brackets_check");
+        const m = mapped(err);
+        expect(m, "null ⇒ 500 vùng đỏ trên đường tỉ lệ luật định").not.toBeNull();
+        expect(m?.status).toBe(422);
+        expect(m?.code).toBe(PAYROLL_ERR_CODE.STATUTORY_RATE_INVALID);
+        expect(m?.kind).toBe("statutory-rate-incomplete");
+        expect(
+          reasonOf(m),
+          "reason PHẢI trùng tiền-kiểm service (`count`) — FE phân nhánh theo nó",
+        ).toBe("count");
+
+        // Vế 2 của CÙNG CHECK — `jsonb_typeof <> 'array'`: cùng ràng buộc ⇒ cùng phản hồi.
+        const err2 = await fireRaw(
+          rateSql(),
+          rateParams({ pit_brackets: JSON.stringify({ brackets: 7 }) }),
+        );
+        expect(err2.constraint).toBe("payroll_statutory_rates_brackets_check");
+        const m2 = mapped(err2);
+        expect(m2?.status).toBe(422);
+        expect(m2?.kind).toBe("statutory-rate-incomplete");
+        expect(reasonOf(m2)).toBe("count");
+
+        // ĐỐI CHỨNG DƯƠNG: ĐÚNG 7 bậc đi qua (mảng mặc định của `RATE_OK`).
+        await allow(rateSql(), rateParams());
+      });
+    });
   },
 );

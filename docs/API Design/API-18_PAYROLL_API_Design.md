@@ -464,9 +464,9 @@ Namespace `PAYROLL-ERR-001..017` — định nghĩa đầy đủ ở SPEC-11 §1
 
 > Thông điệp lỗi **không bao giờ chứa số tiền** — kể cả trong `details`.
 
-#### 6.5b **v2** — `PAYROLL-ERR-018..033` (16 mã mới, SPEC-11 §12.1)
+#### 6.5b **v2** — `PAYROLL-ERR-018..034` (17 mã mới, SPEC-11 §12.1)
 
-Namespace sau v2: **`PAYROLL-ERR-001..033`** (17 mã v1 + 16 mã v2). Định nghĩa đầy đủ ở **SPEC-11 §12.1** — bảng dưới chỉ khoá **HTTP + `kind`** để backend/FE/QA khớp hợp đồng lỗi.
+Namespace sau v2: **`PAYROLL-ERR-001..034`** (17 mã v1 + 17 mã v2). Định nghĩa đầy đủ ở **SPEC-11 §12.1** — bảng dưới chỉ khoá **HTTP + `kind`** để backend/FE/QA khớp hợp đồng lỗi.
 
 | Mã              | HTTP  | `kind`                                                                                                                                     | Dùng cho                                                                                                                                                                                                                                                                          |
 | --------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -486,8 +486,11 @@ Namespace sau v2: **`PAYROLL-ERR-001..033`** (17 mã v1 + 16 mã v2). Định ng
 | PAYROLL-ERR-031 | `422` | `report-too-large` · `pdf-batch-too-large`                                                                                                 | **Vượt trần**: báo cáo > **50.000 dòng** (081/082) · PDF hàng loạt > **2.000 phiếu** (085)                                                                                                                                                                                        |
 | PAYROLL-ERR-032 | `409` | `dependent-overlap`                                                                                                                        | **Người phụ thuộc** chồng lấp khoảng hiệu lực cho cùng một NPT (041 · 042) — chốt cuối `EXCLUDE USING gist`, race map 409 **không 500**                                                                                                                                           |
 | PAYROLL-ERR-033 | `409` | `rate-effective-date-exists` · `rate-in-use`                                                                                               | **Bản tỉ lệ luật định — xung đột**: trùng `effective_from` (056 — chốt cuối UNIQUE, race map 409) · sửa bản **đã có kỳ lương dùng** (058) ⇒ phải **tạo bản mới**, không sửa tại chỗ (đổi số của bản đã áp là đổi tiền của kỳ đã tính)                                             |
+| PAYROLL-ERR-034 | `422` | `component-catalog-limit`                                                                                                  | **Catalog thành phần lương chạm trần 200 hàng sống+`is_active`** — 045 (tạo hàng `isActive` khác `false`) và 047 (bật lại `false → true`). `details` mang `total`/`max` — **hai số đếm, KHÔNG phải tiền** (§6.5 không cấm) |
 
 > 🔁 **Kind bổ sung ở `S15-PAYROLL-BE-2`** — nguồn sự thật SPEC-11 §12.1 (khối «Kind bổ sung khi hiện thực track B»): 018 `formula-arity` · `template-missing-engine-nodes` · `formula-override-not-allowed` · `template-too-many-components` · `template-component-unknown` · `template-component-duplicate` · `component-value-pair` · `template-scope-pair`; 023 `template-code-exists`. `details[]` của lỗi máy công thức mang `pos` · `component` · `ref` · `func` · `cycle` (nối `→`) · `limit` · `pass` · `reason` · `template` — **không bao giờ** số tiền.
+>
+> 🔁 **Mã bổ sung ở `S15-PAYROLL-BE-2B` (22/09/2026)** — nguồn sự thật SPEC-11 §12.1: **034** `component-catalog-limit`. Đây là mã DUY NHẤT v2 cấp thêm sau 033 ⇒ mọi ô đếm «16 mã» của tài liệu này đã thành **17**, namespace `018..034`.
 >
 > 🔁 **Kind bổ sung ở `S15-PAYROLL-BE-3`** (nguồn sự thật SPEC-11 §12.1): 018 `system-component-drift` · `template-input-missing` (`details.components` = MÃ) · `profile-item-unknown-component` lúc tính kèm `userId`; 020 `negative-total`; 021 `grossup-not-converged` (`userId` · `iterations` · `reason`); 022 `statutory-rate-missing`; 023 `template-scope-unsupported`; 012 `self-approval` từ CHECK `bonus_penalties_four_eyes_check`. `details[]` lỗi 007 thêm `userId` (id, không tiền) và `iterations`.
 
@@ -496,7 +499,7 @@ Namespace sau v2: **`PAYROLL-ERR-001..033`** (17 mã v1 + 16 mã v2). Định ng
 | HTTP  | Dùng thêm cho                                                           |
 | ----- | ----------------------------------------------------------------------- |
 | `409` | PAYROLL-ERR-023 · 024 · 025 · 026 · 027 · 028 · 029 · **032** · **033** |
-| `422` | PAYROLL-ERR-018 · 019 · 020 · 021 · 022 · 030 · 031                     |
+| `422` | PAYROLL-ERR-018 · 019 · 020 · 021 · 022 · 030 · 031 · **034**           |
 
 > **Ba mã 018/019/020 chia theo THỜI ĐIỂM, không theo nội dung** — 018/019 phát lúc **LƯU** (người dùng sửa được ngay, `details[]` chỉ vào ký tự); **020 phát lúc TÍNH** (công thức đã qua kiểm mà vẫn vỡ trên dữ liệu thật). Gộp làm một mã thì FE không biết nên mở **editor công thức** hay mở **dòng lương**.
 >
@@ -538,7 +541,7 @@ Chống trùng **nghiệp vụ** là việc của UNIQUE ở DB, không phải i
 | Flip Stub → Approved                                                                                                               | ✅ owner duyệt gói wave 31/08/2026 (đồng bộ SPEC-11 §1 + DB-13 §1)                           |
 | **v2 — 50 endpoint `036..085` + nhóm API 4 track + ràng buộc hiện thực**                                                           | ✅ Khoá ở **§4.1b · §5b · §5.1b** (`S15-PAYROLL-DOC-1`, 11/09/2026)                          |
 | **v2 — «không bao gồm» viết lại theo PARK-PAYROLL-002**                                                                            | ✅ **§4.2** (v2 đã lấy lại engine BH/TNCN · PDF + export batch · report phòng ban/variance)  |
-| **v2 — 16 mã lỗi `PAYROLL-ERR-018..033`**                                                                                          | ✅ **§6.5b** (HTTP + `kind` khớp SPEC-11 §12.1; **033** = xung đột bản tỉ lệ luật định, 409) |
+| **v2 — 17 mã lỗi `PAYROLL-ERR-018..034`**                                                                                          | ✅ **§6.5b** (HTTP + `kind` khớp SPEC-11 §12.1; **033** = xung đột bản tỉ lệ luật định, 409) |
 | **v2 — DTO/schema + `packages/contracts/src/payroll.ts` mirror HAI CHIỀU** (`payrollPeriodStatusEnum` **7 → 8**)                   | ⏳ `S15-PAYROLL-DB-1` (enum/CHECK) → `BE-1..5` (DTO đầy đủ)                                  |
 | **v2 — OpenAPI nhóm PAYROLL mở rộng 85 route + route-census 85**                                                                   | ⏳ `S15-PAYROLL-BE-1..5`; **siết `MIN_COVERED_COUNT` cùng commit mỗi WO**                    |
 | **v2 — APPEND 17 cặp vào CẢ HAI danh sách** `SENSITIVE_CAPABILITY_ALLOWLIST` + `SENSITIVE_SCREEN_GATE_PAIRS` (13 → **30** mỗi bên) | ⏳ `S15-PAYROLL-BE-1..5` (§5.1b)                                                             |
@@ -551,7 +554,7 @@ Chống trùng **nghiệp vụ** là việc của UNIQUE ở DB, không phải i
 ## 9. Liên quan
 
 - **Đặc tả nghiệp vụ (nguồn sự thật):** [SPEC-11 PAYROLL](<../SPEC/SPEC-11 PAYROLL.md>) — §11 permission (+ §11.2 bản đồ 19 cặp di sản), §12 mã lỗi, §13 FSM/máy tính lương/scope, §15 API, §17 sự kiện, §18 audit/masking, §22 quyết định.
-  - **v2 (wave S15-PAYROLL-V2, PAY-DEC-011..020):** **§15.1** bảng 50 route `036..085` (**nguồn của §5b**) · **§5.1b** con số ĐÓNG (11 bảng · **11 màn** · 50 route · **16 mã lỗi** · 17 cặp · 4 event · 2 widget · 8 trạng thái) · **§5.2b** PARK-PAYROLL-002 (**nguồn của §4.2**) · **§3.9** ranh giới TS↔SQL · §3.10–§3.12 thành phần-là-dữ-liệu / luật-định-là-dữ-liệu / PII mới · **§9.1** `PAY-SCREEN-007..017` · §10.1b hai widget mới · §10.2 `PAYROLL-FUNC-015..030` · **§11.3** 17 cặp mới · **§12.1** mã lỗi **018..033** (**nguồn của §6.5b**) · **§13.1 FSM 8 trạng thái (THAY v1)** · **§13.2 bộ lọc Own (THAY v1)** · **§15 hàng 014 · 031 · 032 · 033 (🔁 đã sửa TẠI CHỖ)** · §13.6 máy công thức · §13.7 engine luật định · §13.8 gross-up · **§17.1** NOTI-EVENT-024..027 (+ 023 đổi điều kiện phát) · §18.1 audit & masking v2 · §19.1 NFR · §21.1 test scenario · §23.2 tác động tài liệu.
+  - **v2 (wave S15-PAYROLL-V2, PAY-DEC-011..020):** **§15.1** bảng 50 route `036..085` (**nguồn của §5b**) · **§5.1b** con số ĐÓNG (11 bảng · **11 màn** · 50 route · **17 mã lỗi** · 17 cặp · 4 event · 2 widget · 8 trạng thái) · **§5.2b** PARK-PAYROLL-002 (**nguồn của §4.2**) · **§3.9** ranh giới TS↔SQL · §3.10–§3.12 thành phần-là-dữ-liệu / luật-định-là-dữ-liệu / PII mới · **§9.1** `PAY-SCREEN-007..017` · §10.1b hai widget mới · §10.2 `PAYROLL-FUNC-015..030` · **§11.3** 17 cặp mới · **§12.1** mã lỗi **018..033** (**nguồn của §6.5b**) · **§13.1 FSM 8 trạng thái (THAY v1)** · **§13.2 bộ lọc Own (THAY v1)** · **§15 hàng 014 · 031 · 032 · 033 (🔁 đã sửa TẠI CHỖ)** · §13.6 máy công thức · §13.7 engine luật định · §13.8 gross-up · **§17.1** NOTI-EVENT-024..027 (+ 023 đổi điều kiện phát) · §18.1 audit & masking v2 · §19.1 NFR · §21.1 test scenario · §23.2 tác động tài liệu.
 - **Chuẩn API:** [API-01 Tổng quan](<API-01 TỔNG QUAN.md>).
 - **Thiết kế DB:** [DB-13 PAYROLL Database Design](<../DB/DB-13 PAYROLL Database Design.md>) (§5 bản đồ reconcile · **§12–§14 bản v2**: ALTER 3 bảng (2 ở DB-1 · 1 ở DB-2) · 11 bảng mới · enum v2 · RLS/GRANT · migration `0570+` · seed catalog/tỉ lệ/mẫu mặc định) · [DB-09 §8.19](<../DB/DB-09 Database Index Query Pattern Performance Design.md>) · [DB-10 seed PAYROLL](../DB/DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md).
 - **Phân quyền:** [Ma trận phân quyền §9g](../permission-matrix-spec.md) (+ **§9g.2** — 17 cặp v2, ma trận seed **+32 hàng ⇒ 64**, hai điều kiện verify mới).

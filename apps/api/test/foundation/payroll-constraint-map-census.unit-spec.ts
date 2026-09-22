@@ -128,11 +128,17 @@ function parseConstraintTable(specMarkdown: string): ParsedTable {
 const specMarkdown = fs.readFileSync(SPEC_PATH, "utf8");
 const parsed = parseConstraintTable(specMarkdown);
 
-// ── Neo chống parser-vỡ-thành-xanh-rỗng — đếm TAY từ bảng (SPEC-11 dòng 741-763), hard-code ────────
-// 17 tên ràng buộc thật (một số dòng gộp 2 tên bằng " · ", vd dòng 747/760) + 3 trigger + 15 cặp
+// ── Neo chống parser-vỡ-thành-xanh-rỗng — đếm TAY từ bảng, hard-code ──────────────────────────────
+// 23 tên ràng buộc thật (một số dòng gộp 2 tên bằng " · ") + 3 trigger + 15 cặp
 // trigger:tag (5 payroll_advance_freeze_guard · 4 payroll_payment_batch_freeze · 6 payroll_payment_line_guard),
-// trong đó 4 cặp CỐ Ý không map (cột HTTP = "—", dòng 758-759).
-const EXPECTED_CONSTRAINT_NAME_COUNT = 17;
+// trong đó 4 cặp CỐ Ý không map (cột HTTP = "—").
+// 🔁 S15-PAYROLL-BE-2B (22/09/2026): 17 → 23 — SÁU CHECK có TÊN của track B trước đó vắng mặt khỏi CẢ bảng
+// lẫn mapper ⇒ rơi `null` ⇒ 500 vùng đỏ: `salary_components_kind_check` · `salary_components_value_type_check` ·
+// `payroll_templates_scope_check` · `payroll_statutory_rates_pct_range_check` ·
+// `payroll_statutory_rates_amount_check` (năm cái này 400 VALIDATION-ERR-001, Zod mirror ĐÚNG BẰNG) ·
+// `payroll_statutory_rates_brackets_check` (422 022 `statutory-rate-incomplete` reason `count` — tiền-kiểm ở
+// SERVICE nên lưới DB phải cho CÙNG phản hồi). Ba hằng còn lại KHÔNG đổi: sáu hàng mới đều là CHECK, không trigger.
+const EXPECTED_CONSTRAINT_NAME_COUNT = 23;
 const EXPECTED_TRIGGER_NAME_COUNT = 3;
 const EXPECTED_TAG_PAIR_COUNT = 15;
 const EXPECTED_UNMAPPED_TAG_COUNT = 4;

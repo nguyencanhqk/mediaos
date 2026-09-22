@@ -52,6 +52,15 @@ const incomplete = (reason: string, index?: number): FormulaError =>
     { reason, ...(index === undefined ? {} : { pos: index }) },
   );
 
+/**
+ * S15-PAYROLL-BE-2B — CÙNG lỗi mà tiền-kiểm này ném cho vế «không đủ 7 bậc», tái dùng ở LƯỚI CUỐI
+ * `mapPayrollPgError` khi CHECK `payroll_statutory_rates_brackets_check` (23514) nổ. Một nguồn sự thật cho
+ * mã + `kind` + `reason` — chép chuỗi sang tầng lỗi là để hai đường trôi khỏi nhau mà không ca nào đỏ.
+ * CHECK có hai vế (`jsonb_typeof = 'array'` VÀ `jsonb_array_length = 7`); `reason: "count"` phủ cả hai vì
+ * `assertBracketsContinuous` cũng ném `count` cho `!Array.isArray` (xem nhánh đầu của nó).
+ */
+export const statutoryBracketCountError = (): FormulaError => incomplete("count");
+
 /** Khuôn thập phân TĨNH (không `new RegExp` từ input) — chặn chuỗi rác trước khi `new D()` ném lỗi thư viện. */
 const DECIMAL_STRING = /^-?\d{1,18}(\.\d{1,6})?$/;
 

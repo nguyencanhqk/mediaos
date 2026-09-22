@@ -87,12 +87,34 @@ export class SalaryComponentsRepository {
       .orderBy(asc(salaryComponents.sortOrder), asc(salaryComponents.code));
   }
 
-  async findManyTx(tx: TenantTx, companyId: string, ids: readonly string[]): Promise<SalaryComponent[]> {
+  /**
+   * S15-PAYROLL-BE-2B — ĐẾM hàng catalog *sống + đang dùng* cho trần `PAYROLL_CATALOG_COMPONENTS_MAX`
+   * (SPEC-11 §12.1 mã 034). Predicate ĐÚNG BẰNG `listActiveTx` — trần phải đo CHÍNH tập mà mọi lượt ghi
+   * catalog nạp + compile lại, nếu không thì trần chặn một tập, chi phí sinh từ tập khác.
+   *
+   * `SELECT count(*)` thay vì `listActiveTx().length`: rẻ hơn (không kéo hàng) và không đổi hành vi nhánh
+   * `formula` — nhánh đó vẫn cần CHÍNH các hàng để dựng đồ thị nên vẫn gọi `listActiveTx` như cũ.
+   */
+  async countActiveTx(tx: TenantTx, companyId: string): Promise<number> {
+    const [row] = await tx
+      .select({ n: count() })
+      .from(salaryComponents)
+      .where(and(SalaryComponentsRepository.live(companyId), eq(salaryComponents.isActive, true)));
+    return Number(row?.n ?? 0);
+  }
+
+  async findManyTx(
+    tx: TenantTx,
+    companyId: string,
+    ids: readonly string[],
+  ): Promise<SalaryComponent[]> {
     if (ids.length === 0) return [];
     return tx
       .select()
       .from(salaryComponents)
-      .where(and(SalaryComponentsRepository.live(companyId), inArray(salaryComponents.id, [...ids])));
+      .where(
+        and(SalaryComponentsRepository.live(companyId), inArray(salaryComponents.id, [...ids])),
+      );
   }
 
   async createTx(

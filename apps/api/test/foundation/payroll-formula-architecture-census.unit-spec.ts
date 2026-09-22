@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
+import { D, SCALE_INTERMEDIATE, SCALE_MONEY } from "../../src/payroll/formula/formula.decimal";
 
 /**
  * S15-PAYROLL-BE-2 — CENSUS KIẾN TRÚC máy công thức lương (SPEC-11 §13.6 A · DECISIONS-14 §2.3).
@@ -84,5 +86,36 @@ describe("S15-PAYROLL-BE-2 census — kiến trúc máy công thức", () => {
       }
     }
     expect(offenders, offenders.join("\n")).toEqual([]);
+  });
+});
+
+/**
+ * 🔁 S15-PAYROLL-BE-2B — GHIM cấu hình số học (SPEC-11 §13.6 F; owner chốt 22/09/2026 **GIỮ precision 50**).
+ *
+ * Đọc THUỘC TÍNH RUNTIME của `D` (bản đã `Decimal.clone`) chứ không quét chữ trong `formula.decimal.ts`:
+ * quét chữ chết theo cú pháp (đổi sang biến, đổi thứ tự khoá, gộp `clone` vào chỗ khác là mù), còn thuộc
+ * tính runtime thì đổi con số ở BẤT KỲ đâu cũng đỏ ngay.
+ *
+ * Bốn hằng này là toàn bộ quy tắc làm tròn của phiếu lương. Hạ `precision` đổi hành vi làm tròn ở phép NHÂN
+ * trung gian — lệch đồng ở đuôi mà mọi bất biến SQL (`net ≥ 0`, tổng khớp) vẫn xanh; chỉ ca đối soát tay
+ * (`formula.decimal-reconciliation.spec.ts`) bắt được. Đổi ở đây phải là quyết định của owner, không phải
+ * hệ quả phụ của một lượt refactor.
+ */
+describe("S15-PAYROLL-BE-2B census — cấu hình số học TIỀN ghim ở thuộc tính runtime", () => {
+  it("D giữ precision 50 + ROUND_HALF_UP; scale trung gian 10; scale tiền 2", () => {
+    expect(D.precision, "precision của Decimal đã clone").toBe(50);
+    expect(D.rounding, "chế độ làm tròn mặc định").toBe(Decimal.ROUND_HALF_UP);
+    expect(SCALE_INTERMEDIATE, "scale mọi phép trung gian").toBe(10);
+    expect(SCALE_MONEY, "scale giá trị mỗi thành phần").toBe(2);
+  });
+
+  it("tự-kiểm: `D` là BẢN SAO, không phải `Decimal` toàn cục (Decimal.set sẽ rò ra mọi dep)", () => {
+    // Nếu `formula.decimal.ts` đổi sang `Decimal.set(...)` thì `D === Decimal` và cấu hình thành TOÀN CỤC:
+    // một dep bắc cầu đổi precision là phiếu lương đổi quy tắc làm tròn mà không dòng nào ở đây thay đổi.
+    expect(D).not.toBe(Decimal);
+    expect(
+      Decimal.precision,
+      "Decimal toàn cục PHẢI giữ mặc định 20 — clone không được rò ra",
+    ).toBe(20);
   });
 });

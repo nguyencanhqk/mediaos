@@ -119,7 +119,8 @@ describe("S13-PAYROLL-BE-1 census — mã lỗi & kind PAYROLL được ném đ�
     // S15-PAYROLL-BE-3: +1 mã 021 `GROSSUP_NOT_CONVERGED` (gross-up NET không hội tụ).
     // S15-PAYROLL-BE-4: +6 mã track C (025 · 026 · 027 · 028 · 029 · 030).
     // S15-PAYROLL-BE-5: +1 mã 031 `REPORT_TOO_LARGE` (báo cáo > 50.000 dòng; PDF hàng loạt dùng lại ở BE-5B).
-    expect(all.size, "SPEC-11 §12 + §12.1 khai đúng 33 mã PAYROLL-ERR").toBe(33);
+    // S15-PAYROLL-BE-2B: +1 mã 034 `CATALOG_COMPONENT_LIMIT` (catalog thành phần chạm trần 200 sống+active).
+    expect(all.size, "SPEC-11 §12 + §12.1 khai đúng 34 mã PAYROLL-ERR").toBe(34);
   });
 
   /** Tập `kind` ném được — `\s*` nuốt chỗ Prettier ngắt dòng sau dấu `(`. */
