@@ -1,6 +1,7 @@
 import { Module, type OnModuleInit } from "@nestjs/common";
 import { FilePolicyService } from "../foundation/files/file-policy.service";
 import { FilesModule } from "../foundation/files/files.module";
+import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { RealtimeEmitterModule } from "../realtime/realtime-emitter.module";
 import { StorageModule } from "../storage/storage.module";
@@ -11,6 +12,7 @@ import { SocialCommentsService } from "./social-comments.service";
 import { SocialDiscoveryRepository } from "./social-discovery.repository";
 import { SocialDiscoveryService } from "./social-discovery.service";
 import { SocialFileResolver } from "./social-file.resolver";
+import { SocialMasterDataSeeder } from "./social-master-data.seeder";
 import { SocialNewsRepository } from "./social-news.repository";
 import { SocialNewsService } from "./social-news.service";
 import { SocialPostsModerationService } from "./social-posts-moderation.service";
@@ -20,6 +22,7 @@ import { SocialReactionsRepository } from "./social-reactions.repository";
 import { SocialReactionsService } from "./social-reactions.service";
 import { SocialReportsRepository } from "./social-reports.repository";
 import { SocialReportsService } from "./social-reports.service";
+import { SocialSeedRegistrar } from "./social-seed.registrar";
 import {
   SocialDiscoveryController,
   SocialNewsController,
@@ -57,7 +60,8 @@ import {
  * sống nhưng chưa lộ ra FE.
  */
 @Module({
-  imports: [PermissionModule, FilesModule, RealtimeEmitterModule, StorageModule],
+  // S16-SOCIAL-BE-2A: +`SeedModule` (exports `MasterDataSeederRegistry`) cho `SocialSeedRegistrar`.
+  imports: [PermissionModule, FilesModule, RealtimeEmitterModule, StorageModule, SeedModule],
   controllers: [
     SocialPostsController,
     SocialReactionsController,
@@ -86,6 +90,9 @@ import {
     SocialDiscoveryService,
     SocialReportsRepository,
     SocialReportsService,
+    // S16-SOCIAL-BE-2A — khối additive (nợ (a) của DB-2: catalog huy hiệu cho công ty sinh SAU migrate).
+    SocialMasterDataSeeder,
+    SocialSeedRegistrar,
   ],
   exports: [SocialAccessService],
 })
