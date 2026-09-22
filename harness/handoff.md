@@ -2,6 +2,50 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-22 (c) — **S16-SOCIAL-BE-1B: FULL gate 3/3 BLOCK → đã vá → PR #532 MỞ**
+
+**Bắt đầu phiên sau ở đây:** PR **#532** (`feat/s16-social-be-1b`, base master `dcbb6974`) đang chờ
+CI + **chữ ký owner 5 mục** (D13-a lộ danh tính người tố giác · D13-b `targetSnapshot` đọc xuyên
+`visiblePostCondition` · D5 · H4-iii · W1'). Liệt kê đầy đủ + kịch bản ở ĐẦU PR body và plan §13.8.
+Đọc memory `s16-social-be1b-wave-state` trước khi đụng BE-2/FE-1.
+
+**Phiên này làm gì:** code đã thi công sẵn từ phiên trước (uncommitted, ~4 100 dòng) nhưng **chưa
+gate, chưa commit**. Chạy verify → FULL gate 3 reviewer Opus song song → vá → PR.
+
+**BA reviewer ĐỘC LẬP hội tụ vào CÙNG một lỗi** (không ai thấy báo cáo của ai): ba câu «tập nhân
+viên» chỉ lọc `deleted_at IS NULL`, trong khi **nghỉ việc KHÔNG xoá mềm** (`status='resigned'` giữ
+nguyên hàng). Hệ quả nặng nhất không phải rò dữ liệu mà là **người bị ảnh hưởng không có đường gỡ**:
+widget sinh nhật phơi ngày/tháng sinh của người đã nghỉ, mà cách tự ẩn duy nhất đòi một phiên đăng
+nhập mà tài khoản đã khoá không có ⇒ «hàng rào thứ hai» ghi trong sổ waiver là RỖNG.
+
+⇒ Hội tụ ba chiều là tín hiệu MẠNH (khác reviewer đơn lẻ hay báo sai) — nhưng vẫn tự xác minh từng
+cái trước khi vá; lần này cả ba đều đúng.
+
+**Hai lỗi cấu trúc transaction:** `withTenant` LỒNG NHAU = **treo im lặng** trên PgBouncer
+transaction-mode (pool `max:20` không có `connectionTimeoutMillis` ⇒ chờ vô hạn). Hai hình dạng khác
+nhau, nhớ cả hai: (1) gọi `decorate`/presign trong tx đọc; (2) gọi **PermissionService trong tx
+GHI** — `permission.repository.ts` cũng là `withTenant`. Cách vá (2): hoist tập ứng viên ra TRƯỚC tx
+(nó chỉ phụ thuộc `companyId`), giữ `outbox.enqueue` trong tx.
+
+**Bài học vận hành ĐẮT NHẤT của phiên:** chạy spec **riêng lẻ** giấu một lỗi ĐỎ-CI. Câu census
+`scoped` của `s16-social-db1-invariants` quét cả role tuỳ biến của tenant; fixture của **BE-1** gieo
+đúng một role như vậy ⇒ đỏ oan ngay khi hai spec chạy chung DB = trên CI. §12.4 đã thu hẹp 2 câu anh
+em nhưng bỏ sót câu này. **Trước khi mở PR: chạy TẤT CẢ spec của module trong MỘT lượt trên cùng
+lane DB.**
+
+**Hai cơ chế chống-lỗi-câm do chính WO đặt ra mà không có cổng nào canh** — đáng nhớ vì nó lặp lại:
+ca `unackedOnly` xanh trên MẢNG RỖNG (deny vacuous, thiếu neo dương); nhánh CẮT của trần 500 người
+nhận NOTI chưa từng chạy. Nhánh trần đo bằng **unit spec + repository giả** (rẻ hơn gieo 501 user;
+trần là `export const` module-level nên int-spec không hạ được) — mẫu `social-news-noti-cap.spec.ts`
+kèm `fakeTx()` chuỗi-hoá-được.
+
+**Số đo:** 63 file / **1122 test** xanh trên lane `mediaos_be1b` · web-core 742/742 · typecheck 10/10
+`TURBO_FORCE=1` (0 cache) · lint 0 error · coverage `src/social/**` 95.6/87.97/96.96 (tăng từ
+95.44/87.21/95.93 sau khi vá).
+
+**Chi phí phiên:** hook báo ~$29 lúc mở PR — rẻ hơn phiên lập kế hoạch ($154) dù chạy 3 reviewer
+Opus, vì gate chạy trên context sạch và không điều tra lại những gì plan đã chốt.
+
 ## Phiên 2026-09-22 (b) — **CHUỖI MERGE: #531 + #530 đã vào master, hết PR mở**
 
 **Bắt đầu phiên sau ở đây:** `master` = `71021c2b`, cây sạch, **0 WO in_progress**, 2 WO READY:
