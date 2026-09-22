@@ -36,13 +36,24 @@ describe("getPreferencesForUsers", () => {
     expect(select).toHaveBeenCalledTimes(1);
   });
 
-  it("TẬP CỘT TƯỜNG MINH — chỉ `userId`/`locale`/`timezone`, KHÔNG `select()` trần", async () => {
+  it("TẬP CỘT TƯỜNG MINH — chỉ 4 cột đã ký, KHÔNG `select()` trần", async () => {
     // Bảng này có `theme`/`meLayoutConfig`/… — không lý do gì một truy vấn của SOCIAL kéo về bố cục
     // màn hình ME của NGƯỜI KHÁC (DB-17 §11 R6).
+    //
+    // ⟲ **S16-SOCIAL-BE-1B (22/09/2026) thêm `showBirthday`** — nới CÓ CHỦ ĐÍCH, KHÔNG phải nới để
+    // lấy màu xanh: cột `user_preferences.show_birthday` (migration `0584`) là chỗ chứa cờ mà
+    // SOC-DEC-007 hứa và BE-1 đo thấy CHƯA TỒN TẠI. Route `026` đọc nó qua ĐÚNG hàm này — hàm DUY
+    // NHẤT của module đọc preference của NGƯỜI KHÁC — nên thêm một đường đọc thứ hai ở repository
+    // sinh nhật mới là thứ phải chặn, không phải dòng này.
     const { tx, select } = fakeTx([]);
     await getPreferencesForUsers(tx, COMPANY, ["u1"]);
     const projection = select.mock.calls[0][0];
-    expect(Object.keys(projection).sort()).toEqual(["locale", "timezone", "userId"]);
+    expect(Object.keys(projection).sort()).toEqual([
+      "locale",
+      "showBirthday",
+      "timezone",
+      "userId",
+    ]);
   });
 
   it("người CHƯA có hàng preference VẮNG MẶT trong Map (không tự điền hàng giả)", async () => {

@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
 import type {
   CreateFeedPostDto,
@@ -29,7 +29,14 @@ import {
   targetTypeLabel,
   type ResolvedMention,
 } from "./social-mentions";
-import { SOCIAL_EVENT_MENTIONED, type SocialMentionedPayload } from "./social-noti.payload";
+import { SocialNewsRepository } from "./social-news.repository";
+import {
+  SOCIAL_EVENT_MENTIONED,
+  SOCIAL_EVENT_NEWS_PUBLISHED,
+  SOCIAL_NEWS_NOTI_RECIPIENT_CAP,
+  type SocialMentionedPayload,
+  type SocialNewsPublishedPayload,
+} from "./social-noti.payload";
 import {
   SocialActorProjectionRepository,
   SocialPostsRepository,
@@ -54,6 +61,8 @@ import type { SocialActor, SocialRequestUser, SocialViewerContext } from "./soci
  */
 @Injectable()
 export class SocialPostsService {
+  private readonly logger = new Logger(SocialPostsService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: SocialAccessService,
@@ -63,6 +72,8 @@ export class SocialPostsService {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly realtime: RealtimeEmitterService,
+    // ⟲ S16-SOCIAL-BE-1B — chỉ dùng cho tập người nhận NOTI-031 (`audienceUserIds`).
+    private readonly news: SocialNewsRepository,
   ) {}
 
   /** `SOCIAL-API-001` — `GET /social/feed`. */
@@ -186,6 +197,16 @@ export class SocialPostsService {
       }
 
       await this.enqueueMentionNotis(tx, actor, "post", postId, postId, fresh);
+
+      // ⟲ S16-SOCIAL-BE-1B — NOTI-031 «tin tức công ty mới». CÙNG tx với INSERT (C8): tập người nhận
+      // chỉ còn đúng tại thời điểm này (bài có thể bị ẩn/xoá/đổi audience ngay sau đó, và registrar
+      // chạy SAU, NGOÀI tx).
+      if (dto.type === "news") {
+        await this.enqueueNewsPublishedNoti(tx, actor, postId, {
+          audience: dto.audience,
+          orgUnitId: dto.audience === "org_unit" ? (dto.orgUnitId ?? null) : null,
+        });
+      }
 
       const row = await this.repo.findVisible(tx, actor, postId);
       return { row, dropped: mentions.dropped };
@@ -378,6 +399,88 @@ export class SocialPostsService {
         ? encodeFeedCursor({ sortAt: new Date(last.sortAt), id: last.id }, fingerprint)
         : null;
     return { data, nextCursor };
+  }
+
+  /**
+   * ⟲ **S16-SOCIAL-BE-1B** — `NOTI-031` «tin tức công ty mới». Producer tính người nhận TRONG tx (C8).
+   *
+   * ┌─ 🔴 TRẦN 500 NGƯỜI NHẬN — VÀ VÌ SAO KHÔNG ĐƯỢC CẮT CÂM ────────────────────────────────────────┐
+   * │ v1 không chia lô: công ty >500 người vẫn đọc tin qua `GET /social/news`; NOTI là kênh đẩy PHỤ.  │
+   * │ Nhưng cắt IM LẶNG là đúng hình dạng «thành công RỖNG = fail-OPEN», và hệ quả nghiệp vụ THẬT là: │
+   * │ với tin `requires_ack`, người thứ 501 trở đi **không hề được báo** trong khi route `022` vẫn    │
+   * │ liệt họ vào danh sách «chưa đọc» — hai đường nói ngược nhau về cùng một người.                  │
+   * │ Ba ràng buộc, cả ba đo được ở ca `N-C8-trần`:                                                   │
+   * │   1. XÁC ĐỊNH — repository trả tập ĐÃ sắp theo `user_id` tăng dần, cắt SAU khi sắp.             │
+   * │   2. QUAN SÁT ĐƯỢC — log WARN (post_id + tổng + trần) **VÀ** `recipientsTruncated`/              │
+   * │      `totalRecipients` trong payload outbox (hàng dữ liệu tự mang bằng chứng, log thì trôi).    │
+   * │   3. KHÔNG NUỐT tập rỗng — log WARN rồi KHÔNG enqueue (registrar sẽ NÉM nếu nhận payload rỗng). │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   */
+  private async enqueueNewsPublishedNoti(
+    tx: TenantTx,
+    actor: SocialActor,
+    postId: string,
+    post: { audience: string; orgUnitId: string | null },
+  ): Promise<void> {
+    // Cắt + đếm + loại tác giả đều ở SQL (xem `audienceUserIds`): `recipients` đã là ≤ trần, `total`
+    // là tổng THẬT trước khi cắt — hai con số khác nhau và payload cần CẢ HAI.
+    const { userIds: recipients, total } = await this.news.audienceUserIds(
+      tx,
+      actor.companyId,
+      post,
+      { excludeUserId: actor.actorUserId, limit: SOCIAL_NEWS_NOTI_RECIPIENT_CAP },
+    );
+
+    if (total === 0) {
+      this.logger.warn(
+        `NOTI-031: tin ${postId} (audience=${post.audience}) không có người nhận nào — không phát thông báo.`,
+      );
+      return;
+    }
+
+    const truncated = total > SOCIAL_NEWS_NOTI_RECIPIENT_CAP;
+    if (truncated) {
+      this.logger.warn(
+        `NOTI-031: tin ${postId} có ${total} người nhận, vượt trần ${SOCIAL_NEWS_NOTI_RECIPIENT_CAP} — đã cắt ${total - recipients.length} người (thứ tự user_id tăng dần).`,
+      );
+    }
+
+    const actorName = await resolveActorName(tx, actor.companyId, actor.actorUserId);
+    const payload: SocialNewsPublishedPayload = {
+      actorUserId: actor.actorUserId,
+      postId,
+      post_id: postId,
+      actor_name: actorName,
+      recipientUserIds: recipients,
+      recipientsTruncated: truncated,
+      totalRecipients: total,
+    };
+    await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_NEWS_PUBLISHED, payload });
+  }
+
+  /**
+   * ⟲ **MỐI NỐI TÁI DÙNG CỦA `S16-SOCIAL-BE-1B`** — `020` (tin tức) · `023` (tìm kiếm) · `025` (trang
+   * cá nhân) trả CÙNG thẻ bài với dòng cuộn, nên chúng dùng LẠI `toPage`/`decorate` thay vì dựng bản
+   * thứ hai (bản thứ hai sẽ trôi khỏi bản này ngay lần đầu DTO bài đổi).
+   *
+   * ⚠️ Hai wrapper này **KHÔNG nới phạm vi đọc** và đó là điều kiện để chúng tồn tại: `rows` phải đến
+   * từ một câu ĐÃ mang `visiblePostCondition` (tức `listFeed`/`findVisible`). Chúng chỉ thêm
+   * tag/cảm xúc/đính kèm cho những hàng caller VỐN ĐÃ đọc được, và đính kèm vẫn đi qua
+   * `FilePolicyService` theo TỪNG người xem. Đừng biến chúng thành đường lấy bài — đó là lớp lỗi
+   * `reused-method-must-be-actor-scoped`.
+   */
+  decorateForViewer(viewer: SocialViewerContext, rows: PostRow[]): Promise<FeedPostDto[]> {
+    return this.decorate(viewer, rows);
+  }
+
+  /** Xem docblock `decorateForViewer` — cùng điều kiện: `rows` đến từ câu ĐÃ lọc visibility. */
+  toPageForViewer(
+    actor: SocialActor,
+    rows: PostRow[],
+    limit: number,
+    fingerprint: string,
+  ): Promise<FeedPostPageDto> {
+    return this.toPage(actor, rows, limit, fingerprint);
   }
 
   /** Row → DTO cho một LÔ: tag + projection theo actor (1 tx đọc) rồi đính kèm ĐÃ KÝ (ngoài tx). */

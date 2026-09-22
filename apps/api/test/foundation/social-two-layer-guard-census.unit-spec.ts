@@ -35,9 +35,13 @@ const SOCIAL_CONTROLLERS = new Set([
   "SocialPostsController",
   "SocialReactionsController",
   "SocialCommentsController",
+  // S16-SOCIAL-BE-1B — 3 controller Nhóm B (`social-b.controllers.ts`).
+  "SocialNewsController",
+  "SocialDiscoveryController",
+  "SocialReportsController",
 ]);
 
-/** Bảng route HTTP → key — fixture của census, phủ ĐỦ 19 route Nhóm A (API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 29 route (19 Nhóm A + 10 Nhóm B, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -66,6 +70,17 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
     path: "/api/v1/social/comments/:comment_id/reaction",
     key: "commentReactionDelete",
   },
+  // ── S16-SOCIAL-BE-1B — Nhóm B (`SOCIAL-API-020..029`) ──
+  { method: "GET", path: "/api/v1/social/news", key: "newsList" },
+  { method: "POST", path: "/api/v1/social/posts/:post_id/ack", key: "postAck" },
+  { method: "GET", path: "/api/v1/social/posts/:post_id/acks", key: "postAcksList" },
+  { method: "GET", path: "/api/v1/social/search", key: "search" },
+  { method: "GET", path: "/api/v1/social/tags", key: "tagsList" },
+  { method: "GET", path: "/api/v1/social/birthdays", key: "birthdays" },
+  { method: "GET", path: "/api/v1/social/profiles/:employee_id/posts", key: "profilePosts" },
+  { method: "POST", path: "/api/v1/social/reports", key: "reportCreate" },
+  { method: "GET", path: "/api/v1/social/reports", key: "reportsList" },
+  { method: "PATCH", path: "/api/v1/social/reports/:report_id", key: "reportResolve" },
 ];
 
 /**
@@ -96,6 +111,17 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "SocialReactionsService#removeOnPost": ["postReactionDelete"],
   "SocialReactionsService#removeOnComment": ["commentReactionDelete"],
   "SocialReactionsService#listReactors": ["postReactionList"],
+  // ── S16-SOCIAL-BE-1B — 10 handler Nhóm B, mỗi handler MỘT key literal ──
+  "SocialNewsService#list": ["newsList"],
+  "SocialNewsService#ack": ["postAck"],
+  "SocialNewsService#listAcks": ["postAcksList"],
+  "SocialDiscoveryService#search": ["search"],
+  "SocialDiscoveryService#listTags": ["tagsList"],
+  "SocialDiscoveryService#profilePosts": ["profilePosts"],
+  "SocialDiscoveryService#birthdays": ["birthdays"],
+  "SocialReportsService#create": ["reportCreate"],
+  "SocialReportsService#list": ["reportsList"],
+  "SocialReportsService#resolve": ["reportResolve"],
 };
 
 /** Mọi literal `resolveActor(<expr>, "<key>")` trong `social/**.ts`, kèm `Class#method` bao quanh. */
@@ -167,7 +193,9 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
 
   it("bảng fixture phủ ĐÚNG tập route SOCIAL đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    expect(socialRoutes.length, "app boot phải thấy 19 route SOCIAL Nhóm A").toBe(19);
+    expect(socialRoutes.length, "app boot phải thấy 29 route SOCIAL (19 Nhóm A + 10 Nhóm B)").toBe(
+      29,
+    );
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -285,12 +313,76 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     expect(sensitive).toEqual([]);
   });
 
-  it("Nhóm A — companyFloor BẬT cho toàn bộ 19 route (tập false RỖNG có chủ ý)", () => {
-    // Seed 0578 cấp mọi cặp `feed-*` ở scope Company cho 4 vai canonical, TRỪ ĐÚNG MỘT dòng:
-    // ['manager','view','feed-report','Department'] — và `view:feed-report` thuộc BE-1B.
+  /**
+   * ⟲ **S16-SOCIAL-BE-1B đổi khẳng định này** (trước: tập `false` RỖNG cho 19 route Nhóm A).
+   *
+   * Seed `0578` cấp mọi cặp `feed-*` ở scope Company cho 4 vai canonical, TRỪ ĐÚNG MỘT dòng:
+   * `['manager','view','feed-report','Department']` — cặp của route `028`. BE-1B mở đúng route đó,
+   * nên tập `companyFloor:false` nay có ĐÚNG MỘT phần tử.
+   *
+   * `toEqual` một danh sách ĐÓNG chứ không `toBeLessThanOrEqual(1)`: tắt sàn Company là thao tác
+   * nguy hiểm nhất của bảng hằng này (nó mở cho MỌI scope resolve được, kể cả `Own`/`Team`), nên mỗi
+   * lần thêm một route như vậy phải là một sửa đổi CÓ CHỦ ĐÍCH đi qua FULL gate.
+   */
+  it("companyFloor tắt ở ĐÚNG MỘT route — `reportsList` (028), không hơn", () => {
     const notFloored = Object.entries(SOCIAL_ROUTE_PAIRS)
       .filter(([, p]) => !p.companyFloor)
-      .map(([k]) => k);
-    expect(notFloored).toEqual([]);
+      .map(([k]) => k)
+      .sort();
+    expect(notFloored).toEqual(["reportsList"]);
+  });
+
+  /**
+   * C2-c (plan §5.1) — **mọi route tắt sàn Company PHẢI khai `dataScope`**.
+   *
+   * Đây là vế máy-kiểm-được của lời hứa "route này có ép phạm vi hẹp TRONG SQL". Không có nó, tắt
+   * `companyFloor` là một thao tác im lặng: decorator vẫn trông y hệt, census vẫn xanh, và cái duy
+   * nhất còn gác phạm vi là một `if` nào đó trong repository mà không cổng nào nhìn thấy.
+   *
+   * Vế NGƯỢC LẠI cũng assert: route CÓ sàn Company thì `dataScope` phải `undefined` — khai một phạm
+   * vi hẹp bên cạnh một sàn rộng là hai câu trả lời cho cùng một câu hỏi, và người đọc sau sẽ tin
+   * câu sai.
+   */
+  it("C2-c — companyFloor:false ⇒ dataScope xác định; companyFloor:true ⇒ dataScope undefined", () => {
+    const missing: string[] = [];
+    const spurious: string[] = [];
+    for (const [key, p] of Object.entries(SOCIAL_ROUTE_PAIRS)) {
+      if (!p.companyFloor && p.dataScope === undefined) missing.push(key);
+      if (p.companyFloor && p.dataScope !== undefined) spurious.push(key);
+    }
+    expect(missing, "route tắt sàn Company mà KHÔNG khai dataScope").toEqual([]);
+    expect(spurious, "route có sàn Company mà vẫn khai dataScope").toEqual([]);
+    // Neo chống-xanh-rỗng: phải tồn tại ÍT NHẤT một route tắt sàn, nếu không hai assert trên là
+    // hai vòng lặp chạy trên tập rỗng.
+    expect(Object.values(SOCIAL_ROUTE_PAIRS).filter((p) => !p.companyFloor).length).toBeGreaterThan(
+      0,
+    );
+    expect(SOCIAL_ROUTE_PAIRS.reportsList.dataScope).toBe("Department");
+  });
+
+  /**
+   * C2-b (plan §5.1) — KHÔNG route nào của Nhóm B đặt `tier1IsFloor`.
+   *
+   * API-19 §5.1 không có route nào của `020..029` rẽ cặp quyền theo NỘI DUNG request (khác `002`
+   * theo `type` và `006` theo TRƯỜNG). Assert tập RỖNG chứ không bỏ qua: nếu một ngày ai đó đặt cờ
+   * đó ở đây mà không kèm bảng cặp-theo-payload, đẳng thức D17 ở trên sẽ đỏ — ca này chỉ nói ĐỎ ở
+   * đâu.
+   */
+  it("C2-b — 10 route Nhóm B không route nào tier1IsFloor", () => {
+    const groupB = [
+      "newsList",
+      "postAck",
+      "postAcksList",
+      "search",
+      "tagsList",
+      "profilePosts",
+      "birthdays",
+      "reportCreate",
+      "reportsList",
+      "reportResolve",
+    ] as const;
+    expect(groupB.length, "danh sách Nhóm B phải đủ 10 route").toBe(10);
+    const flagged = groupB.filter((k) => SOCIAL_ROUTE_PAIRS[k].tier1IsFloor);
+    expect(flagged).toEqual([]);
   });
 });

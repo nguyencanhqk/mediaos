@@ -72,6 +72,12 @@ export class SocialPostsRepository {
       orgUnitId?: string;
       tag?: string;
       savedByActorOnly?: boolean;
+      /**
+       * S16-SOCIAL-BE-1B (`SOCIAL-API-023`) — từ khoá toàn văn. Thêm MỘT vị từ vào CHÍNH câu này thay
+       * vì mở một repository tìm kiếm riêng: bản thứ hai sẽ cần chép lại `visiblePostCondition` và
+       * hai bản đó trôi khỏi nhau ngay lần đầu luật audience đổi.
+       */
+      searchText?: string;
     },
   ): Promise<PostRow[]> {
     const where: SQL[] = [
@@ -103,6 +109,17 @@ export class SocialPostsRepository {
            AND s.post_id = ${feedPosts.id}
            AND s.user_id = ${viewer.actorUserId}
       )`);
+    }
+    if (opts.searchText) {
+      // Cột SINH `search_vector = to_tsvector('simple', f_unaccent(body))` (mig `0577` §12) — vế phải
+      // PHẢI dùng CÙNG cấu hình `'simple'` VÀ CÙNG hàm `f_unaccent`, nếu không câu khớp 0 kết quả
+      // **im lặng** (HTTP 200, danh sách rỗng, không lỗi). Ca `C4` vì vậy có neo DƯƠNG `length===1`,
+      // không chỉ kiểm "không có id sai".
+      // `plainto_tsquery` (KHÔNG `to_tsquery`): nó tự thoát mọi ký tự toán tử của người dùng — gõ
+      // `a & b` hay `!(` vào ô tìm kiếm không được phép thành cú pháp truy vấn, chứ không phải 500.
+      where.push(
+        sql`${feedPosts.searchVector} @@ plainto_tsquery('simple', public.f_unaccent(${opts.searchText}))`,
+      );
     }
     if (opts.cursor) where.push(this.keysetCondition(opts.sort, opts.cursor));
 

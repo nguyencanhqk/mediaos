@@ -344,7 +344,15 @@ const MAX_UNCOVERED_TOTAL = 0;
 // :post_id/reactions` ban đầu LỌT LƯỚI test của WO và bị chính cổng này bắt — đã viết ca THẬT cho cả
 // bốn (khối «lưu bài là trạng thái CÁ NHÂN» + «danh sách người đã thả cảm xúc» ở social-be1-content),
 // KHÔNG nới hằng để lấy màu xanh.
-const MIN_COVERED_COUNT = 651;
+// S16-SOCIAL-BE-1B (22/09/2026): 651 → **661** (+10 route SOCIAL Nhóm B `020..029`, int-spec
+// `social-be1b-reports` · `social-be1b-news` · `social-be1b-discovery`).
+// ⚠️ Con số này KHÁC con số census 2 tầng của SOCIAL (29 = 19 + 10, đo ở
+// `social-two-layer-guard-census.unit-spec.ts`) và KHÁC census JSON
+// `docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`. BA phép đo, BA câu hỏi khác nhau: ở đây là
+// «route có ca HTTP THẬT gọi đúng verb+path hay không», census 2 tầng là «decorator và service có
+// khai cùng một cặp quyền hay không», census JSON là «hệ có bao nhiêu route». Bump cái này KHÔNG
+// thay được bump hai cái kia.
+const MIN_COVERED_COUNT = 661;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

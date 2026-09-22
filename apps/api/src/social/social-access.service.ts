@@ -329,6 +329,7 @@ export class SocialAccessService {
         authorUserId: post.authorUserId,
         postAudience: post.audience,
         postStatus: post.status,
+        postOrgUnitId: post.orgUnitId,
       };
     }
     const comment = await this.assertCommentVisible(tx, actor, targetId);
@@ -339,6 +340,7 @@ export class SocialAccessService {
       // của đơn vị đó, không được phát ra room cả-công-ty (D21).
       postAudience: comment.post.audience,
       postStatus: comment.post.status,
+      postOrgUnitId: comment.post.orgUnitId,
     };
   }
 

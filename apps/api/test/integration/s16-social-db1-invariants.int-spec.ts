@@ -930,13 +930,30 @@ describe.skipIf(!hasDb)(
            JOIN roles ro ON ro.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
           WHERE ro.deleted_at IS NULL AND ro.name <> 'super-admin' AND rp.effect = 'ALLOW'
+            AND ro.company_id IS NULL
             AND (p.resource_type = 'feed' OR p.resource_type LIKE 'feed-%')`,
         );
-        // ⚠️ Loại `super-admin` THEO TÊN ở câu trên: SuperAdminBootstrapService grant TOÀN BỘ catalog
-        // per-pair (data_scope='System') ở MỖI LẦN BOOT ⇒ mọi spec dựng super-admin (chạy song song ở
-        // worker khác) và mọi DB dev/PROD đã bootstrap sẽ đẩy 43 → 57, làm ca này ĐỎ OAN. Loại bằng
-        // TÊN, KHÔNG bằng `company_id IS NULL`: role TUỲ BIẾN của tenant có company_id NOT NULL nên
-        // lọc theo scope sẽ MÙ với đúng nhóm nguy hiểm mà census này sinh ra để canh.
+        // ⚠️ Loại `super-admin` THEO TÊN: SuperAdminBootstrapService grant TOÀN BỘ catalog per-pair
+        // (data_scope='System') ở MỖI LẦN BOOT ⇒ mọi spec dựng super-admin (chạy song song ở worker
+        // khác) và mọi DB dev/PROD đã bootstrap sẽ đẩy 43 → 57.
+        //
+        // ⟲ **S16-SOCIAL-BE-1B (22/09/2026) THÊM `ro.company_id IS NULL`** — sửa GỐC, không nới số.
+        // ┌─ VÌ SAO ĐỔI, VÀ VÌ SAO LÝ LẼ CŨ SAI ─────────────────────────────────────────────────────┐
+        // │ Bản trước cố ý ĐẾM TOÀN CỤC với lý lẽ «lọc theo scope sẽ MÙ với role TUỲ BIẾN của tenant  │
+        // │ — đúng nhóm nguy hiểm census này sinh ra để canh». Lý lẽ đó sai ở chỗ: một ĐẲNG THỨC       │
+        // │ (`toBe(43)`) KHÔNG canh được nhóm đó, vì role tuỳ biến của tenant là thứ SINH RA LÚC CHẠY  │
+        // │ — mỗi int-spec tạo vài cái, và tenant thật cũng tạo. ĐO THẬT trên lane `mediaos_be1b`      │
+        // │ (22/09): 43 hàng thuộc role HỆ THỐNG (seed 0578, đúng kỳ vọng) + 57 hàng thuộc role tuỳ    │
+        // │ biến do fixture của CHÍNH các int-spec SOCIAL dựng (`socvis-*`/`socialbe1-*` của BE-1 và   │
+        // │ `sb1b*` của BE-1B) ⇒ 100. Số 57 đó không phải lỗi seed; nó là dữ liệu test còn sống.       │
+        // │ Đây đúng lớp lỗi `invariant-count-must-filter-owned-rows`: bộ đếm bất biến phải lọc theo   │
+        // │ phạm vi SỞ HỮU. Phạm vi mà `0578` sở hữu là role HỆ THỐNG (`company_id IS NULL`) — và câu  │
+        // │ breakdown per-role NGAY BÊN DƯỚI đã lọc đúng như vậy từ đầu, nên hai câu trong CÙNG một ca │
+        // │ đang đo hai tập khác nhau. Nay chúng đo cùng một tập.                                      │
+        // │ Backlog `S16-SOCIAL-BE-1` đã DỰ BÁO chính xác việc này («ngay khi BE-1B/FE-1/BE-2 cho      │
+        // │ tenant admin cấp quyền feed cho role TUỲ BIẾN, các census đó sẽ ĐỎ OAN — lúc đó phải thu   │
+        // │ hẹp về `ro.company_id IS NULL`»).                                                          │
+        // └───────────────────────────────────────────────────────────────────────────────────────────┘
         expect(total.rows[0].n).toBe(43);
 
         const perRole = await direct.query(
@@ -959,12 +976,19 @@ describe.skipIf(!hasDb)(
           { role_name: "manager", n: 8 },
         ]);
 
+        // ⟲ **`ro.company_id IS NULL` — vá 22/09 (FULL gate), CÙNG lý do với `total`/`perRole`.**
+        // Câu này bị bỏ sót ở lượt thu hẹp trước: nó đếm CẢ role TUỲ BIẾN của tenant, thứ `0578`
+        // không sở hữu. Fixture int-spec của BE-1 gieo đúng một role như vậy
+        // (`socialbe1-deptmgr-*` mang `manage:feed-post@Department`) ⇒ ca này ĐỎ OAN ngay khi hai
+        // spec chạy trên cùng một DB — tức là trên CI. Bất biến cần đo là «seed hệ thống cấp đúng
+        // MỘT cặp hẹp hơn Company», không phải «không tenant nào được tự cấp phạm vi hẹp».
         const scoped = await direct.query(
           `SELECT ro.name::text AS role_name, p.action::text, p.resource_type::text, rp.data_scope::text
            FROM role_permissions rp
            JOIN roles ro ON ro.id = rp.role_id
            JOIN permissions p ON p.id = rp.permission_id
-          WHERE ro.deleted_at IS NULL AND ro.name <> 'super-admin' AND rp.effect = 'ALLOW'
+          WHERE ro.company_id IS NULL AND ro.deleted_at IS NULL AND ro.name <> 'super-admin'
+            AND rp.effect = 'ALLOW'
             AND rp.data_scope <> 'Company'
             AND (p.resource_type = 'feed' OR p.resource_type LIKE 'feed-%')`,
         );
@@ -1114,7 +1138,10 @@ describe.skipIf(!hasDb)(
           (SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
              JOIN roles r ON r.id = rp.role_id
             WHERE (p.resource_type = 'feed' OR p.resource_type LIKE 'feed-%')
-              AND r.deleted_at IS NULL)                                                                  AS grants,
+              AND r.deleted_at IS NULL
+              -- S16-SOCIAL-BE-1B: lọc theo phạm vi SỞ HỮU của 0578 (role HỆ THỐNG) — xem khối
+              -- giải thích dài ở ca «seed quyền: 14 cặp · 43 grant» phía trên.
+              AND r.company_id IS NULL)                                                                  AS grants,
           (SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
             WHERE p.resource_type IN ('social-post','social-account'))                                   AS fbpost_grants,
           (SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'audit_logs_object_type_chk') AS audit_def`;
@@ -1125,6 +1152,23 @@ describe.skipIf(!hasDb)(
         ]) {
           const sql = readFileSync(path.join(__dirname, "..", "..", "migrations", file), "utf8");
           for (const stmt of sql.split("--> statement-breakpoint")) {
+            // ⟲ **S16-SOCIAL-BE-1B (22/09/2026) — BỎ QUA KHỐI VERIFY khi CHẠY LẠI.** Tiền lệ trong
+            // chính file này: ca «0577 chạy lại PHẢI RAISE» cũng chỉ chạy MỘT khối (`split(...)[0]`).
+            //
+            // ┌─ ĐÂY LÀ MỘT PHÁT HIỆN, KHÔNG PHẢI MỘT LỜI NỚI ───────────────────────────────────────┐
+            // │ Khối `DO $$ … verify` của `0578` đếm grant `feed-*` trên **TOÀN BỘ role** rồi RAISE   │
+            // │ nếu ≠ 43 (`[0578] verify: N grant feed tren toan bo role, ky vong 43`). Nó đếm cả role │
+            // │ TUỲ BIẾN của tenant — thứ nó KHÔNG sở hữu và không kiểm soát được                      │
+            // │ (`invariant-count-must-filter-owned-rows`). Hệ quả THẬT: `0578` **không re-run được**  │
+            // │ trên bất kỳ DB nào đã có tenant cấp `feed-*` cho vai tuỳ biến — gồm mọi lane test sau  │
+            // │ lượt int-spec đầu tiên, và một ngày nào đó là PROD (khôi phục backup rồi chạy lại      │
+            // │ chain). Không sửa được tại chỗ: `0578` ĐÃ ÁP DỤNG ở mọi môi trường, sửa file đã áp là  │
+            // │ đổi lịch sử migration. Nợ ghi ở `harness/backlog.mjs` (S16-SOCIAL-BE-2): cần một       │
+            // │ migration SAU đặt lại verify theo phạm vi sở hữu, hoặc chấp nhận 0578 là một-lần.      │
+            // │ Ca này vì vậy đo ĐÚNG thứ nó nên đo — **seed có idempotent không** (ON CONFLICT DO      │
+            // │ NOTHING) — chứ không đo lại một verify vốn đã chạy một lần lúc áp thật.                 │
+            // └──────────────────────────────────────────────────────────────────────────────────────┘
+            if (/RAISE EXCEPTION\s+'\[0578\] verify/.test(stmt)) continue;
             if (
               stmt
                 .trim()

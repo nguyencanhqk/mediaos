@@ -20,17 +20,14 @@ import { userPreferences } from "../db/schema/user-preferences";
  * `theme`/`meLayoutConfig`… — không có lý do gì để một truy vấn của SOCIAL kéo về bố cục màn hình ME
  * của người khác. Thêm cột vào tập dưới đây là một quyết định, không phải một tiện tay.
  *
- * ┌─ 🔴 DRIFT SPEC↔DB ĐÃ ĐO (21/09/2026) — NỢ CỦA `S16-SOCIAL-BE-1B` ──────────────────────────────┐
+ * ┌─ ✅ DRIFT SPEC↔DB ĐÃ TRẢ (22/09/2026, `S16-SOCIAL-BE-1B` — migration `0584`) ──────────────────┐
  * │ SPEC-16 §3.5 + SOC-DEC-007 chốt nhân viên tự ẩn sinh nhật bằng                                  │
- * │ **`user_preferences.feed.showBirthday = false`**. Đo thật trên `schema/user-preferences.ts:24-63`│
- * │ (và grep toàn bộ `apps/api/src/db/schema/*.ts`): **KHÔNG có cột `feed`**, không có               │
- * │ `show_birthday`, và không jsonb nào mang ngữ nghĩa đó — `me_layout_config` là bố cục màn ME.     │
- * │ ⇒ Trường SPEC hứa CHƯA TỒN TẠI. BE-1B phải mở migration thêm chỗ chứa nó TRƯỚC khi làm route     │
- * │ `026`, KHÔNG được "tạm đọc `me_layout_config`" (nhét ngữ nghĩa SOCIAL vào ô của module khác là   │
- * │ cách chắc chắn để một lần dọn ME sau này xoá mất cờ riêng tư).                                   │
- * │ Hàm dưới đây vì vậy CHƯA trả `showBirthday`: trả một cờ luôn `true` từ hư không sẽ là **fail-    │
- * │ OPEN có vẻ ngoài hoàn chỉnh** — route `026` sẽ hiện sinh nhật của mọi người và mọi ca test       │
- * │ «người đã ẩn không xuất hiện» sẽ xanh giả vì không ai ẩn được.                                   │
+ * │ **`user_preferences.feed.showBirthday = false`**. BE-1 đo thật (21/09) và thấy cột đó KHÔNG tồn  │
+ * │ tại, nên hàm này CỐ Ý chưa trả cờ — trả một cờ luôn `true` từ hư không là **fail-OPEN có vẻ      │
+ * │ ngoài hoàn chỉnh**: route `026` hiện sinh nhật của mọi người, và mọi ca test «người đã ẩn không  │
+ * │ xuất hiện» xanh giả vì không ai ẩn được.                                                        │
+ * │ BE-1B mở cột THẬT `user_preferences.show_birthday` (boolean NULLABLE, không DEFAULT — `0584`) và │
+ * │ đường ghi THẬT `PATCH /me/preferences` (D11), KHÔNG "tạm đọc `me_layout_config`".                │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 
@@ -39,6 +36,15 @@ export interface SocialUserPreference {
   userId: string;
   locale: string | null;
   timezone: string | null;
+  /**
+   * `NULL` = **kế thừa mặc định "hiện"** (SOC-DEC-007 nguyên văn «(mặc định hiện)»), KHÔNG phải "chưa
+   * biết". Caller TUYỆT ĐỐI KHÔNG tự áp một default ngược: ba trạng thái `true` · `null` · **vắng
+   * mặt trong Map** (người chưa có hàng preference) đều gộp về MỘT nhánh "hiện"; chỉ `false` mới ẩn.
+   *
+   * Viết điều kiện ẩn là `pref?.showBirthday === false` — KHÔNG `!pref?.showBirthday` (nhánh thứ hai
+   * biến `null`/vắng mặt thành "ẩn" và widget sinh nhật sẽ rỗng cho toàn công ty).
+   */
+  showBirthday: boolean | null;
 }
 
 /**
@@ -68,13 +74,11 @@ export async function getPreferencesForUsers(
       userId: userPreferences.userId,
       locale: userPreferences.locale,
       timezone: userPreferences.timezone,
+      showBirthday: userPreferences.showBirthday,
     })
     .from(userPreferences)
     .where(
-      and(
-        eq(userPreferences.companyId, companyId),
-        inArray(userPreferences.userId, [...userIds]),
-      ),
+      and(eq(userPreferences.companyId, companyId), inArray(userPreferences.userId, [...userIds])),
     );
 
   for (const row of rows) out.set(row.userId, row);

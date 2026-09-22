@@ -21,6 +21,8 @@ export interface MePreferencesPatchColumns {
   density?: string | null;
   favoriteModules?: string[] | null;
   meLayoutConfig?: Record<string, unknown> | null;
+  /** S16-SOCIAL-BE-1B (D11) — cờ ẩn sinh nhật (`0584`). `null` = revert-to-inherit ⇒ "hiện". */
+  showBirthday?: boolean | null;
 }
 
 @Injectable()

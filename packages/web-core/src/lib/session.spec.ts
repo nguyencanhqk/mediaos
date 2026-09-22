@@ -30,6 +30,9 @@ const EMPTY_PREFS: MePreferences = {
   density: null,
   favoriteModules: null,
   meLayoutConfig: null,
+  // S16-SOCIAL-BE-1B — cờ ẩn sinh nhật (`user_preferences.show_birthday`, mig 0584). `null` = chưa
+  // override ⇒ HIỆN, cùng luật với mọi field khác của fixture "rỗng" này.
+  showBirthday: null,
   updatedAt: null,
 };
 

@@ -73,6 +73,8 @@ RLS chỉ ép `company_id`. Việc «bài trong nhóm riêng tư chỉ thành vi
 
 Widget sinh nhật đọc `employees.date_of_birth` nhưng DTO **chỉ** chở `{employeeId, fullName, avatar, day, month}` — không năm, không tuổi, không ngày đầy đủ. Đây là **cửa sau tiềm năng vào PII của HR** nên gate là `view:feed` và **không** cấp thêm cặp HR nào (SOC-DEC-007). Nhân viên tự ẩn bằng `user_preferences.feed.showBirthday = false`.
 
+> **Phạm vi của cờ — chốt 22/09/2026 (S16-SOCIAL-BE-1B, D10).** Cờ `showBirthday` gate ĐÚNG hai trường `day`/`month` của widget `026` và mọi trường phái sinh từ `date_of_birth`. Nó **KHÔNG** ẩn danh tính nhân viên (tên/avatar) khỏi tìm kiếm `023` · thẻ `024` · trang cá nhân `025`: ba đường đó vốn **không chở** `day`/`month`, và ẩn danh tính ở đó sẽ làm bài viết của người ẩn sinh nhật biến mất khỏi tìm kiếm — một hệ quả không ai chọn. **Lưu trữ:** cột phẳng `user_preferences.show_birthday` (`boolean` NULLABLE, **không** DEFAULT — migration `0584`); `NULL` = kế thừa mặc định **hiện**. Đường ghi: `PATCH /me/preferences { "showBirthday": false }`.
+
 ### 3.6 Xoá là xoá mềm; ẩn không phải xoá
 
 Xoá bài/bình luận = `deleted_at` + vào thùng rác (BẤT BIẾN 2 của CLAUDE.md). **Ẩn** (`status = hidden`) là hành vi kiểm duyệt khác hẳn: bài vẫn tồn tại, tác giả và người có `manage:feed-post` vẫn thấy, người khác thì không (SOC-DEC-005).
@@ -251,7 +253,7 @@ Màn MISA có «Giới thiệu ứng viên». Ở MediaOS đây là **việc c�
 | `SOCIAL-FUNC-006` | Tin tức: ghim · yêu cầu xác nhận đọc · danh sách đã đọc | 003 | Ghim và tạo tin cần `manage:feed-news` |
 | `SOCIAL-FUNC-007` | Hashtag: parse `#tag` · lọc theo thẻ | 001 | |
 | `SOCIAL-FUNC-008` | Tìm kiếm toàn văn | 001 | `tsvector`, phạm vi tenant (§13.5) |
-| `SOCIAL-FUNC-009` | Sinh nhật ngày+tháng + gửi lời chúc | 001 | Tôn trọng `showBirthday` ở **mọi** đường ra |
+| `SOCIAL-FUNC-009` | Sinh nhật ngày+tháng + gửi lời chúc | 001 | `day`/`month` không lộ ở **bất kỳ** đường ra nào; `showBirthday` gate widget `026` — **không** ẩn danh tính (xem §3.5) |
 | `SOCIAL-FUNC-010` | Nhóm: tạo · xin vào · duyệt · vai trò hàng · bài trong nhóm | 006 | Membership ép trong SQL (§3.4) |
 | `SOCIAL-FUNC-011` | Bình chọn: bỏ/đổi phiếu · ẩn danh · hạn đóng | 007 | Job đóng theo hạn (§13.4) |
 | `SOCIAL-FUNC-012` | Sáng kiến: gửi · xét duyệt có ghi chú | 008 | FSM §13.3 |
@@ -499,7 +501,7 @@ Mọi thao tác `manage:*` và `approve:feed-idea`: ẩn/hiện bài · ghim/b�
 | Mention dùng để dò sự tồn tại của bài kín | Bỏ mention im lặng, không trả thông tin bài (`SOCIAL-ERR-009`) |
 | Bài `hidden` vẫn đọc được qua đường chi tiết | `SOCIAL-ERR-001` trả 404 cho người không phải tác giả/`manage` |
 | Payload WS chở cột thừa | WS dùng **đúng** DTO của REST (§3.8); QA có ca so khớp trường |
-| `showBirthday=false` bị bỏ qua ở tìm kiếm/gắn thẻ | Tôn trọng preference ở **mọi** đường ra, không chỉ widget |
+| Ngày/tháng sinh rò qua một đường đọc khác widget | Hai trường `day`/`month` (và mọi trường phái sinh `date_of_birth`) không có mặt trong DTO của `023`/`024`/`025` — không đường ra nào chở chúng |
 
 ---
 
@@ -545,7 +547,7 @@ Mọi thao tác `manage:*` và `approve:feed-idea`: ẩn/hiện bài · ghim/b�
 | T10 | Bỏ phiếu vào poll đã đóng | 409 `SOCIAL-ERR-016` |
 | T11 | Xem kết quả poll ẩn danh bằng `company-admin` | Response **không** chứa `user_id` |
 | T12 | Đọc widget sinh nhật | Response **không** chứa năm sinh / `date_of_birth` |
-| T13 | Người đã đặt `showBirthday=false` | Không xuất hiện ở widget **và** không ở gắn thẻ/tìm kiếm |
+| T13 | Người đã đặt `showBirthday=false` | Không xuất hiện ở widget sinh nhật (`026`); **vẫn** tìm được ở `023`/`024`/`025` (cờ không ẩn danh tính), và các đường đó không chở `day`/`month` |
 | T14 | Xác nhận đã đọc một bài không phải `news` | 409 `SOCIAL-ERR-011` |
 | T15 | Chuyển sáng kiến `submitted → accepted` (bỏ qua `under_review`) | 409 `SOCIAL-ERR-019` |
 | T16 | Xét duyệt sáng kiến không có `approve:feed-idea` | 403 `SOCIAL-ERR-020` |

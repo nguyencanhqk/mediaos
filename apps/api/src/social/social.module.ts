@@ -8,12 +8,23 @@ import { SocialAccessService } from "./social-access.service";
 import { SocialAttachmentsService } from "./social-attachments.service";
 import { SocialCommentsRepository } from "./social-comments.repository";
 import { SocialCommentsService } from "./social-comments.service";
+import { SocialDiscoveryRepository } from "./social-discovery.repository";
+import { SocialDiscoveryService } from "./social-discovery.service";
 import { SocialFileResolver } from "./social-file.resolver";
+import { SocialNewsRepository } from "./social-news.repository";
+import { SocialNewsService } from "./social-news.service";
 import { SocialPostsModerationService } from "./social-posts-moderation.service";
 import { SocialActorProjectionRepository, SocialPostsRepository } from "./social-posts.repository";
 import { SocialPostsService } from "./social-posts.service";
 import { SocialReactionsRepository } from "./social-reactions.repository";
 import { SocialReactionsService } from "./social-reactions.service";
+import { SocialReportsRepository } from "./social-reports.repository";
+import { SocialReportsService } from "./social-reports.service";
+import {
+  SocialDiscoveryController,
+  SocialNewsController,
+  SocialReportsController,
+} from "./social-b.controllers";
 import {
   SocialCommentsController,
   SocialPostsController,
@@ -47,7 +58,15 @@ import {
  */
 @Module({
   imports: [PermissionModule, FilesModule, RealtimeEmitterModule, StorageModule],
-  controllers: [SocialPostsController, SocialReactionsController, SocialCommentsController],
+  controllers: [
+    SocialPostsController,
+    SocialReactionsController,
+    SocialCommentsController,
+    // S16-SOCIAL-BE-1B — khối additive, KHÔNG viết lại mảng cũ (hot-file: append, không rewrite).
+    SocialNewsController,
+    SocialDiscoveryController,
+    SocialReportsController,
+  ],
   providers: [
     SocialAccessService,
     SocialPostsRepository,
@@ -60,6 +79,13 @@ import {
     SocialCommentsService,
     SocialReactionsService,
     SocialFileResolver,
+    // S16-SOCIAL-BE-1B — khối additive.
+    SocialNewsRepository,
+    SocialNewsService,
+    SocialDiscoveryRepository,
+    SocialDiscoveryService,
+    SocialReportsRepository,
+    SocialReportsService,
   ],
   exports: [SocialAccessService],
 })

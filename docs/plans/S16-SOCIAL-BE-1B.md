@@ -428,3 +428,246 @@ const REPORT_REASON_LABEL: Record<FeedReportReasonDto, string> = {
 **Tổng kết cho plan-reviewer:** 7/7 quyết định owner (A1-A7) đã nạp — A1/A5/A6 nay là quyết định CHỐT không cần chữ ký thêm (D3/D6); A2/A3/A4 là NGHĨA VỤ THI CÔNG cụ thể (sửa SPEC + mở API ME + migration `0585`), không còn là lựa chọn; A7/D5 và D13 (DTO report + bypass gate) VẪN cần chữ ký ở PR vì SPEC thật sự im lặng. 6/6 CRITICAL (C2-C8, trừ C1 đã là quyết định A) đã vá bằng census/ratchet cụ thể theo bước. 3/3 HIGH (H3/H5/H4-ii-iii) đã có switch vét cạn + DTO tường minh + lọc NOTI theo Department. 6/6 MEDIUM (M-b..M-f + ratchet UNPIPED) đã nạp vào §6/§8.
 
 **Còn cần chữ ký ở PR (không tự chốt được):** D5 (mã lỗi báo cáo trùng, không số hoá) · D13 (DTO report lộ danh tính reporter + bypass `visiblePostCondition` cho `targetSnapshot`) · diễn giải NOTI-036 theo Department (H4-iii, suy luận từ D6 chứ SPEC viết câu ngắn hơn).
+
+---
+
+## §12. ĐÍNH CHÍNH SAU THI CÔNG (22/09/2026) — đọc TRƯỚC §1-§11
+
+> Bản plan ở trên là hợp đồng TRƯỚC khi code. Mục này ghi những chỗ **hiện thực khác plan** và những
+> **phép đo mới** chỉ có được khi chạy thật. Khi hai bên mâu thuẫn, mục này thắng.
+
+### 12.1 Bốn lệch plan↔code (hợp đồng kỹ thuật, không phải khẩu vị)
+
+1. **DTO Nhóm B nằm ở `packages/contracts/src/social-api-b.ts`, KHÔNG ở `social-api.ts`.** Plan §3
+   giao vào `social-api.ts` (+180-220 dòng). ĐO THẬT: `social-api.ts` đang 459 dòng; gộp vào đẩy nó
+   lên **820 — VƯỢT trần 800** của CLAUDE.md §5, và BE-2 còn 24 route chưa có chỗ. Tách theo CÙNG
+   luật đã tách `social-api` khỏi `social` (import NGƯỢC, KHÔNG re-export). `index.ts` export cả hai.
+2. **`SocialTargetAccess` thêm `postOrgUnitId`** (file BE-1 `social.types.ts` + `social-access.service.ts`).
+   Plan §7.1 nói producer NOTI-036 tính người nhận trong tx bằng vị từ Department của bài đích — mà
+   `assertTargetVisible` không trả `org_unit_id`. Cách duy nhất khác là đọc lại hàng báo cáo bằng một
+   `SocialActor` dựng tay ở scope Company, tức mở đúng đường "đọc bất kỳ đích nào trong tenant" mà
+   **D13-R cấm**. Thêm một trường vào kết quả của CHÍNH cửa mà actor vừa đi qua là đường sạch.
+3. **`SocialPostsService` mở hai wrapper `decorateForViewer`/`toPageForViewer`** cho `020`/`023`/`025`
+   dùng lại thẻ bài của BE-1 (thay vì mapper thứ hai). Điều kiện ghi tại chỗ: `rows` PHẢI đến từ câu
+   đã mang `visiblePostCondition`; hai hàm này KHÔNG nới phạm vi đọc.
+4. **`023` tìm kiếm thêm MỘT vị từ vào `listFeed`** (`opts.searchText`), không mở repository tìm kiếm
+   riêng — bản thứ hai sẽ phải chép lại `visiblePostCondition` và hai bản đó trôi khỏi nhau.
+
+### 12.2 `029` là route CHỈ-COMPANY — bất đối xứng CÓ CHỦ Ý với `028`
+
+Plan §4 để `029` không có `dataScope` (⇒ `companyFloor:true`) nhưng không nói hệ quả. ĐO THẬT trên
+seed `0578` (dòng 100-110): `manage:feed-report` chỉ cấp cho `hr`/`company-admin` ở **Company**;
+`manager` chỉ có `view:feed-report@Department`. Nghĩa là **manager ĐỌC được hàng đợi của đơn vị mình
+nhưng KHÔNG kết thúc báo cáo** — đúng D6 ("HR/company-admin xử lý"). Một grant
+`manage:feed-report@Department` bị 403 `AUTH-ERR-SCOPE-DENIED` ở tầng 2, KHÔNG "coi như Company".
+
+⚠️ Hệ quả đo được: vị từ D6 trên đường `findReport` (029) **hôm nay LUÔN là `true`**. Nó vẫn phải có
+mặt (một luật, một bản), nhưng ca đo thật của `switch` vét cạn nằm ở **unit spec**
+(`social-reports.repository.spec.ts`), KHÔNG ở int-spec của `029`. Plan §5.1 ghi ca `N-D13-d` kỳ vọng
+404 trên `029` — SAI: câu trả lời đúng là **403**, và 403 ở đây không rò gì (nó nói về cấu hình quyền
+của người gọi, không về sự tồn tại của hàng).
+
+### 12.3 Điểm chiếu danh tính: **6**, không phải 4 — và 3 trong số đó census MÙ
+
+Plan §8 bước 24 ước lượng 4 điểm (`scoped-predicate` 24→27, `second-assert` 5→6). ĐO THẬT: **6**.
+
+| Điểm | Căn cứ đã ký | Ghi chú |
+| --- | --- | --- |
+| `social-discovery.repository.ts#birthdays` | `waiver` (7→8) | **KHÔNG** `scoped-predicate` như plan viết: vị từ của câu là `company_id` + nhân viên hoạt động + cửa sổ ngày/tháng, KHÔNG có vị từ `data_scope` nào. Dán nhãn scope lên nó là khai sai trong chính sổ chống khai sai. Phơi toàn công ty LÀ tính năng (SOC-DEC-007 ký). |
+| `social-news.repository.ts#ackedPeople` | `second-assert` | Plan bỏ sót — nửa «đã đọc» là điểm thứ hai bên cạnh `unackedEmployeesFor`. |
+| `social-news.repository.ts#unackedEmployeesFor` | `second-assert` | Điểm RỘNG NHẤT của module. |
+| `social-reports.repository.ts#REPORT_COLUMNS` × **3** (`rReporterUser` · `rAuthorUser` · `rResolverUser`) | `second-assert` (5→10) | Plan đếm là MỘT điểm; thực tế là BA cột danh tính riêng. |
+
+`search` **KHÔNG** sinh điểm mới (nó đi qua `POST_COLUMNS` đã ký ở BE-1) — plan đếm thừa một.
+
+> 🔴 **BA điểm của `social-reports.repository.ts` chỉ LỘ RA sau khi vá census.** Bản đầu của file dùng
+> `aliasedTable(users, …)` trong khi `identity-projection-census.ts#boundIdentifiers` chỉ nhận
+> `alias(users, …)` ⇒ **ratchet XANH trong khi ba đường chiếu tên người mở ra mà không ai ký**. Đã vá
+> census để nhận CẢ HAI tên (cùng lớp lỗi `identity-projection-census-misses-alias` đã cắn một lần với
+> alias cục bộ→cấp module). Đây là phát hiện có giá trị vượt WO này.
+
+### 12.4 `0578` KHÔNG RE-RUN ĐƯỢC — defect mới đo được, đã ghi nợ
+
+Khối verify cuối của `0578` đếm grant `feed-*` trên **TOÀN BỘ role** rồi RAISE nếu ≠ 43 — nó đếm cả
+role TUỲ BIẾN của tenant, thứ nó không sở hữu (`invariant-count-must-filter-owned-rows`). ĐO THẬT trên
+lane `mediaos_be1b`: **43 role hệ thống + 57 role tuỳ biến (fixture int-spec của CẢ BE-1 lẫn BE-1B) =
+100** ⇒ raise. Backlog BE-1 đã DỰ BÁO đúng việc này.
+
+Đã xử lý: (a) census trong `s16-social-db1-invariants.int-spec.ts` thu hẹp về `ro.company_id IS NULL`
+(phạm vi `0578` sở hữu — và câu breakdown per-role ngay bên dưới VỐN ĐÃ lọc như vậy, tức hai câu trong
+cùng một ca đang đo hai tập khác nhau); (b) ca idempotency BỎ QUA đúng khối verify đó khi chạy lại, có
+ghi lý do tại chỗ; (c) **nợ ghi vào `S16-SOCIAL-BE-2`** — cần một migration SAU đặt lại verify theo
+phạm vi sở hữu, hoặc chốt `0578` là migration MỘT-LẦN. KHÔNG sửa `0578` tại chỗ (đã áp mọi môi trường).
+
+### 12.5 Nợ ghi nhận MỚI (chuyển `S16-SOCIAL-BE-2`)
+
+1. **`unackedEmployeesFor`/`audienceUserIds` định nghĩa "thuộc audience" = nhân viên đang hoạt động có
+   tài khoản**, CHƯA lọc theo `view:feed` hiệu lực như plan §3 viết. Lý do: quyết định đó thuộc
+   `PermissionService` (4 tầng ưu tiên · DENY-overrides · `expires_at` · wildcard · ảnh chụp catalog)
+   và nó CHỈ trả lời cho MỘT user mỗi lượt. Hai đường khả dĩ đều tệ hơn: hỏi engine cho TOÀN BỘ nhân
+   viên công ty mỗi lần mở màn hình, hoặc viết lại engine bằng SQL (nguồn sự thật thứ hai cho phân
+   quyền). ĐO THẬT: seed `0578` cấp `view:feed` cho CẢ BỐN vai canonical ⇒ hai tập TRÙNG NHAU hôm nay.
+   Cần một API set-based "ai có cặp X" ở tầng permission để đóng đúng chỗ.
+2. **`unackedOnly` của `020` lọc SAU khi lấy trang** (không phải vị từ SQL) — đánh đổi có ý thức, ghi
+   tại chỗ: bộ lọc phụ thuộc `feed_post_acks` của CHÍNH actor và nhét vào câu keyset làm trang trả về
+   ít hơn `limit` ngẫu nhiên. FE dùng nó cho WIDGET; con số chính xác lấy từ `countOnly` (đếm TRONG
+   SQL). Khi FE cần cuộn theo bộ lọc này, chuyển thành vị từ `NOT EXISTS` trong `listFeed`.
+3. **NOTI-036 hỏi engine TỪNG ứng viên** (tập nhỏ: HR + company-admin + manager). Nếu tập đó lớn lên,
+   cần API set-based như mục 1.
+
+### 12.6 Số đo đóng WO
+
+- Census 2 tầng SOCIAL: **29 route** (19 + 10) · `companyFloor:false` = ĐÚNG MỘT (`reportsList`).
+- `route-http-coverage` `MIN_COVERED_COUNT`: 651 → **661**; census JSON `docs/_review/…`: **661**.
+- `identity-projection` trần: `waiver` 7→**8**, `second-assert` 5→**10**.
+- `param-uuid-ratchet` `UNPIPED_CEILING=1`: KHÔNG đổi (mọi `@Param` mới đều có `ParseUUIDPipe`).
+- Coverage `src/social/**` (lane `mediaos_be1b`, 305 test): **95.44 / 87.19 / 95.93** (stmt/branch/func).
+- 3 ratchet canonical-seed NOTI (`noti-seed-catalog-permissions` · `s5-noti-fix1-deeplink` ·
+  `notification-admin-template-list`) **XANH sau `0585`** — 235 test, không literal nào phải nới.
+
+---
+
+## §13. FULL GATE 22/09/2026 — 3/3 BLOCK, đã vá; nợ chuyển BE-2
+
+> Ba reviewer chạy ĐỘC LẬP trên diff thật (`security-reviewer` · `database-reviewer` ·
+> `silent-failure-hunter`, đều Opus). Cả ba trả **BLOCK**, và **hội tụ vào CÙNG một lỗi** dù không
+> reviewer nào thấy báo cáo của hai reviewer kia.
+
+### 13.1 Lỗi HỘI TỤ — vị từ «đang hoạt động» chỉ có `deleted_at IS NULL` (3 câu)
+
+`social-discovery.repository.ts#birthdays` · `social-news.repository.ts#unackedEmployeesFor` ·
+`#audienceUserIds`. Ba docblock đều KHAI là lọc «nhân viên đang hoạt động»; SQL thì không — nên đây
+là **drift doc↔code**, không phải một quyết định ai đó đã ký.
+
+Người nghỉ việc **KHÔNG bị xoá mềm**: off-board đặt `status='resigned'/'terminated'` và GIỮ NGUYÊN
+hàng (`hr-write.service.ts:600-667` · `hr-import.repository.ts:106`). Hệ quả đo được:
+
+1. **`026` phơi PII của người đã nghỉ** — tên + avatar + ngày/tháng sinh ra TOÀN công ty, qua đúng
+   route mà SPEC-16 §3.5 gọi là «cửa sau tiềm năng vào PII của HR». Và họ **không có đường gỡ**:
+   cách tự ẩn duy nhất là `PATCH /me/preferences`, đòi một phiên đăng nhập mà tài khoản đã khoá
+   không có ⇒ hàng rào thứ hai của waiver (`identity-projection-verdicts.ts`) RỖNG với đúng nhóm này.
+2. **`022` liệt họ VĨNH VIỄN vào «chưa đọc»** — họ không thể xác nhận, nên tỉ lệ đọc tin bắt buộc
+   không bao giờ về 0.
+3. **NOTI-031: họ CHIẾM SUẤT trong trần 500** (tập sắp theo `user_id` tăng dần) ⇒ ở công ty >500
+   người, nhân viên ĐANG LÀM bị đẩy khỏi thông báo một cách **tất định**.
+
+Khuôn chuẩn đã có sẵn trong kho — kể cả **cùng module, cách 3 file**: `social-mentions.ts:195-201`
+(BE-1) lọc `users.deleted_at IS NULL` + `users.status='active'`. Đã vá cả 3 câu; liveness của `users`
+đặt ở ĐIỀU KIỆN JOIN chứ không ở `where`: giữ `leftJoin` để nhân viên chưa có tài khoản vẫn hiện, và
+`where` dùng chung với câu đếm nên hai câu phải đo cùng một tập.
+
+**Ca RED đã chứng minh là cổng thật** (gỡ vế `status` ⇒ ĐỎ, trả lại ⇒ XANH):
+`social-be1b-discovery.int-spec.ts` «nhân viên đã NGHỈ VIỆC KHÔNG xuất hiện ở widget» ·
+`social-be1b-news.int-spec.ts` «người đã NGHỈ VIỆC vắng khỏi «chưa đọc» VÀ khỏi người nhận NOTI-031».
+Cả hai có **neo DƯƠNG trước** (khi còn `active` thì PHẢI thấy) nên không thể xanh vì lý do sai.
+
+### 13.2 Hai lỗi CẤU TRÚC TRANSACTION — `withTenant` lồng nhau
+
+`DatabaseService.withTenant` = `db.transaction` thuần, **không reentrancy** ⇒ mỗi lượt gọi xin một
+connection MỚI. Docblock `social-posts.service.ts:57-59` (BE-1) đã ghi sẵn: lồng nhau **TREO trên
+PgBouncer transaction-mode chứ không báo lỗi**. Pool `max: 20` KHÔNG đặt `connectionTimeoutMillis`
+(`db/index.ts:18`) ⇒ chờ VÔ HẠN.
+
+1. **`GET /social/news`** gọi `decorateForViewer` (mở tx thứ hai → `attachments.decorateMany` mở tx
+   thứ ba + presign S3) **bên trong** tx của chính nó. Cả 4 call-site của BE-1 và
+   `search`/`profilePosts` của chính BE-1B đều decorate SAU khi tx đóng — chỉ chỗ này lồng. Đã tách:
+   tx chỉ còn đọc `rows`/`acked`/`nextCursor`, phần trang trí chạy sau khi tx đóng.
+2. **`POST /social/reports`** hỏi permission engine K lượt trong tx ghi (đang giữ khoá hàng vừa
+   INSERT + khoá idempotency) — `resolveManyOrNull` → `permission.repository.ts:29/70` cũng là
+   `withTenant`. Đã hoist sang `resolveReportNotiCandidates()` chạy TRƯỚC tx; phần phụ thuộc bài đích
+   (`targetOrgUnitId`) là phép lọc thuần JS, ở lại trong tx cùng `outbox.enqueue` (C8 giữ nguyên).
+
+### 13.3 Hai cơ chế chống-lỗi-câm của chính WO này KHÔNG có cổng nào canh
+
+- **`unackedOnly`**: ca duy nhất chỉ có hai assert `not.toContain`, và tại thời điểm nó chạy tập tin
+  đã cạn ⇒ `ids` RỖNG ⇒ **deny vacuous**. Bộ lọc có thể hỏng hoàn toàn mà suite vẫn xanh. Đã thêm
+  **neo dương** (một tin `requiresAck` chưa xác nhận PHẢI có mặt).
+- **Trần 500 của NOTI-031**: chỉ nhánh `recipientsTruncated === false` được đo; nhánh CẮT chưa từng
+  chạy. Đã viết `social-news-noti-cap.spec.ts` (4 ca, unit + repository giả — không cần gieo 501
+  user): cắt đúng trần · cờ `true` · `totalRecipients` là tổng THẬT · tập là TIỀN TỐ của thứ tự đã
+  sắp · WARN mang `post_id` · ranh giới `>` chứ không `>=` · tập rỗng thì KHÔNG enqueue · trần đi
+  XUỐNG SQL.
+
+### 13.4 Ba lỗi còn lại đã vá cùng lượt
+
+1. **`nextCursor` lấy từ `filtered`, không từ `page`** (`social-news.service.ts`). `filtered` rỗng ⇒
+   `nextCursor: null` ⇒ theo hợp đồng DTO, FE hiểu là **HẾT danh sách và dừng hẳn**, trong khi huy
+   hiệu `countOnly` (đếm TRONG SQL) vẫn dương. Hai đường của CÙNG một màn hình nói ngược nhau, HTTP
+   200, không log. Mốc con trỏ phải là cửa sổ keyset THẬT. Có ca đo riêng: trang lọc rỗng vẫn trả con
+   trỏ, và lật tiếp bằng con trỏ đó ra được tin chưa xác nhận.
+2. **Vị từ Department của NOTI-036 HẸP HƠN của `028`**: producer so `employee_profiles.org_unit_id`
+   đơn lẻ, còn `028` lọc bằng `departmentOrgUnitIds(ctx)` = **own ∪ headed**
+   (`data-scope.service.ts:161-166`). Trưởng phòng Marketing mà hồ sơ nằm ở «Ban giám đốc» ĐỌC ĐƯỢC
+   báo cáo của Marketing ở `028` nhưng KHÔNG được nhắc — đúng cái mà docblock
+   `social-noti.payload.ts` tuyên bố là không thể xảy ra. Đã dùng CÙNG một nguồn luật cho hai đường.
+3. **`audienceUserIds` cắt ở JS sau khi kéo về toàn bộ** (`clamp-must-be-sql-not-js`): công ty 5 000
+   người là 5 000 uuid qua dây để dùng 500. Đã chuyển `limit`/`count`/loại-tác-giả xuống SQL; payload
+   giữ `totalRecipients` là **tổng thật** bằng câu `count()` riêng — cắt rồi thì `rows.length` không
+   còn là tổng, và cờ sẽ nói dối đúng lúc nó có việc để làm.
+
+### 13.5 Mục LOW đã đóng
+
+- **Tên người TỐ GIÁC không còn vào `notifications.payload`** (`actor_name` gỡ khỏi
+  `SocialPostReportedPayload`): template `SOCIAL_POST_REPORTED` không render nó, mà `payloadOf`
+  forward MỌI khoá có trong whitelist. Đúng nguyên tắc header `0585` dùng để bỏ `{post_title}` — và
+  hàng thông báo **sống lâu hơn grant**, thu hồi `manage:feed-report` không xoá tên đã ghi.
+- **Trần `page` = `FEED_PAGE_MAX` (10 000)** cho 3 danh sách OFFSET (`022`/`024`/`028`): `page` không
+  trần ⇒ `OFFSET 2.5e9` quét sạch bảng của tenant bằng một request hợp lệ về hình thức.
+- **`0585` verify: `coalesce(short_body_template,'')`** — cột NULLABLE, `NULL NOT LIKE` ra `NULL` ⇒
+  hàng bị loại ⇒ RAISE. Fail-closed nên không nguy hiểm, nhưng vị từ nói sai ý định. Khối `DO` đã sửa
+  được chạy lại trực tiếp trên lane DB: sạch.
+- **Docblock thứ tự controller nói SAI**: `social.module.ts` đăng ký `SocialPostsController` TRƯỚC,
+  không phải sau. Điều làm route an toàn là BE-1 **không có route bắt-tất** `GET social/:param` —
+  lập luận đã viết lại theo sự thật đó.
+
+### 13.6 Một lỗi ĐỎ-CI mà gate KHÔNG tìm ra — chỉ lộ khi chạy hai spec chung một DB
+
+`s16-social-db1-invariants.int-spec.ts` còn MỘT câu census nữa (`scoped` — «đúng một cặp hẹp hơn
+Company») **quét TOÀN BỘ role**, kể cả role tuỳ biến của tenant. §12.4 đã thu hẹp `total`/`perRole`
+về `ro.company_id IS NULL` nhưng bỏ sót câu này. Fixture int-spec của **BE-1** gieo đúng một role như
+vậy (`socialbe1-deptmgr-*` mang `manage:feed-post@Department`) ⇒ ca ĐỎ OAN ngay khi hai spec chạy
+trên cùng một DB, tức là **trên CI**. Đã thu hẹp cho nhất quán với hai câu kia.
+
+⚠️ Bài học vận hành: chạy các spec SOCIAL **riêng lẻ** không phát hiện được lớp lỗi này. Phải chạy
+chúng CÙNG một lượt trên cùng lane DB trước khi mở PR — xem `invariant-count-must-filter-owned-rows`.
+
+### 13.7 Nợ ghi nhận MỚI → `S16-SOCIAL-BE-2` (reviewer nêu, KHÔNG vá trong WO này)
+
+1. **Câu `count` của `028` mang 2 JOIN mà kết quả không phụ thuộc** khi scope là Company/System
+   (`scopeCondition` trả `true`). Planner loại được `feed_posts` nhưng **KHÔNG** loại `feed_comments`
+   (đo bằng `EXPLAIN` trên lane): ≈ R lần tra bảng bình luận mỗi lần mở hàng đợi. Sửa bằng cách chỉ
+   gắn JOIN khi `routeScope === "Department"`.
+2. **`028` không lọc `status` (mặc định) không có index phục vụ `ORDER BY`**: index hiện có là
+   `(company_id, status, created_at DESC)`, chỉ dùng được khi `status` ghim bằng đẳng thức. Ngưỡng
+   đo: `SELECT count(*) FROM feed_reports WHERE company_id=$1`.
+3. **`listTags` LIKE tiền tố không dùng index** (collation `en_US.utf8`, thiếu `text_pattern_ops`).
+4. **`026` không có `LIMIT`** và `EXTRACT(...)` không index được ⇒ quét `employee_profiles` của
+   tenant mỗi lần mở widget.
+5. **`manageReportCandidates` không có trần** và không lọc `roles.deleted_at` — nó là đầu vào của
+   vòng hỏi engine.
+6. **`unackedEmployeesFor` trả rỗng CÂM cho `audience='group'`** — hôm nay không dựng được kịch bản
+   (`assertWriteAudience` chặn `group` bằng 422), nhưng khi BE-2 mở nhóm thì «0 người chưa đọc» đứng
+   cạnh nửa «đã đọc» có số thật sẽ đọc thành «cả nhóm đã đọc xong».
+7. Giữ nguyên 3 nợ đã ghi ở §12.5 (lọc theo `view:feed` hiệu lực · `unackedOnly` lọc sau trang ·
+   NOTI-036 hỏi engine từng ứng viên) + nợ đặt lại verify của `0578` (§12.4).
+
+### 13.8 CÒN CẦN CHỮ KÝ OWNER Ở PR (reviewer chấm mức độ, KHÔNG tự ký)
+
+- **D13-a — DTO `028` lộ danh tính người tố giác.** Kịch bản sắc nhất, dựng từ code: bài thuộc
+  `org_unit = X` mà **tác giả chính là trưởng phòng X**; nhân viên E báo cáo bài đó; vị từ D6 tính
+  theo đơn vị của BÀI ⇒ trưởng phòng X (`view:feed-report@Department`, seed `0578`) đọc được **tên +
+  avatar + employeeId của E — người vừa tố giác chính mình**. SPEC-16 không có điều khoản báo cáo ẩn
+  danh. Hai đường giảm thiểu nếu owner không ký nguyên: (i) ẩn `reporter` khi
+  `routeScope !== Company`; (ii) ẩn khi `targetAuthorUserId === actor.actorUserId`.
+- **D13-b — `targetSnapshot` đọc xuyên `visiblePostCondition`.** `view:feed-report@Department` trở
+  thành đường đọc `bodyExcerpt` + tác giả + trạng thái của bài đã **ẩn/xoá mềm** trong đơn vị mình,
+  rộng hơn `view:feed` của chính họ. Đó là mục đích của hàng đợi kiểm duyệt (che đi thì hàng đợi vô
+  nghĩa) và ba rào D13-R đã được cả hai reviewer xác minh là thực thi đúng — nhưng nới quyền đọc là
+  có thật và cần chữ ký.
+- **D5** (mã lỗi báo cáo trùng không số hoá) · **H4-iii** (diễn giải NOTI-036 theo Department) ·
+  **W1'** (pin hành vi ENGINE của `*:*`) — như §11 đã nêu.
+
+### 13.9 Số đo sau vá
+
+Chạy lại TRÊN LANE DB sau khi vá (không dùng số cũ của §12.6): xem phần cuối commit message.
+Coverage `src/social/**` tăng từ 95.44/87.21/95.93 lên **95.6 / 87.97 / 96.96**.

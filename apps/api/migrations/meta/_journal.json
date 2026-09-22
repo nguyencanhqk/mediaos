@@ -1758,6 +1758,20 @@
       "when": 1717587372000,
       "tag": "0583_s16socialdb2_audit_union_kudos_badge",
       "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1717587373000,
+      "tag": "0584_s16socialbe1b_feed_show_birthday",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1717587374000,
+      "tag": "0585_s16socialbe1b_noti_news_template_fix",
+      "breakpoints": true
     }
   ]
 }

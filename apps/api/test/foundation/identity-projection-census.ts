@@ -119,7 +119,16 @@ function boundIdentifiers(sf: ts.SourceFile, text: string): Map<string, string> 
       ts.isCallExpression(node.initializer)
     ) {
       const call = node.initializer;
-      if (ts.isIdentifier(call.expression) && call.expression.text === "alias") {
+      // ⚠️ HAI TÊN cho CÙNG MỘT việc: `alias()` của `drizzle-orm/pg-core` và `aliasedTable()` của
+      // `drizzle-orm`. Bản đầu chỉ nhận `alias` ⇒ census MÙ với mọi điểm chiếu đi qua `aliasedTable`.
+      // ĐO THẬT (S16-SOCIAL-BE-1B, 22/09/2026): `social-reports.repository.ts` viết bằng
+      // `aliasedTable` và ratchet XANH trong khi ba đường chiếu `users.fullName` (người báo cáo · tác
+      // giả bài bị báo cáo · người xử lý) mở ra mà không dòng phán quyết nào — đúng lớp lỗi
+      // `identity-projection-census-misses-alias` đã cắn một lần với `alias` cục bộ→cấp module.
+      if (
+        ts.isIdentifier(call.expression) &&
+        (call.expression.text === "alias" || call.expression.text === "aliasedTable")
+      ) {
         const [target, label] = call.arguments;
         if (
           target &&

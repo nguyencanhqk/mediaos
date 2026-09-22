@@ -301,6 +301,12 @@ export const mePreferencesSchema = z.object({
   density: meDensitySchema.nullable(),
   favoriteModules: z.array(z.string()).nullable(),
   meLayoutConfig: z.record(z.string(), z.unknown()).nullable(),
+  /**
+   * S16-SOCIAL-BE-1B (D11) — ẩn sinh nhật khỏi widget `GET /social/birthdays` (SPEC-16 §3.5 ·
+   * SOC-DEC-007 «mặc định hiện»). `null` = chưa override ⇒ **hiện**, cùng luật với mọi field khác ở
+   * đây. Cờ chặn ĐÚNG `day`/`month`; nó KHÔNG ẩn tên/avatar khỏi tìm kiếm/thẻ/trang cá nhân (D10).
+   */
+  showBirthday: z.boolean().nullable(),
   updatedAt: z.string().nullable(),
 });
 export type MePreferences = z.infer<typeof mePreferencesSchema>;
@@ -330,6 +336,15 @@ export const mePreferencesPatchSchema = z
     defaultLanding: z.string().trim().min(1).max(120).nullable().optional(),
     favoriteModules: z.array(z.string().trim().min(1).max(50)).max(20).nullable().optional(),
     meLayoutConfig: z.record(z.string(), z.unknown()).nullable().optional(),
+    /**
+     * S16-SOCIAL-BE-1B (D11, owner ký 22/09/2026) — đường GHI của cờ ẩn sinh nhật. Schema này
+     * `.strict()`, nên thiếu dòng này thì `PATCH /me/preferences {showBirthday:false}` bị Zod từ chối
+     * 400 và cột `0584` vừa thêm sẽ **không có đường ghi nào** ngoài SQL tay.
+     *
+     * KHÔNG thêm vào `mePreferencesAppearanceShape`: đây là quyền riêng tư, không phải giao diện —
+     * `/me/preferences/appearance` cố ý không nhận nó.
+     */
+    showBirthday: z.boolean().nullable().optional(),
   })
   .strict();
 export type MePreferencesPatch = z.infer<typeof mePreferencesPatchSchema>;

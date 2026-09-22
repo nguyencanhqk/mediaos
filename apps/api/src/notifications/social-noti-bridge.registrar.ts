@@ -2,9 +2,12 @@ import { Injectable, OnModuleInit } from "@nestjs/common";
 import type { EventContext } from "../events/event-bus";
 import {
   SOCIAL_EVENT_CODES,
+  SOCIAL_EVENT_CODES_B,
   SOCIAL_EVENT_COMMENT_REPLIED,
   SOCIAL_EVENT_MENTIONED,
+  SOCIAL_EVENT_NEWS_PUBLISHED,
   SOCIAL_EVENT_POST_COMMENTED,
+  SOCIAL_EVENT_POST_REPORTED,
 } from "../social/social-noti.payload";
 import { OutboxNotificationBridge } from "./outbox-notification-bridge.service";
 
@@ -20,6 +23,9 @@ const PAYLOAD_KEYS = [
   "actor_name",
   "post_id",
   "target_type_label",
+  // S16-SOCIAL-BE-1B — biến template của NOTI-036 (`SOCIAL_POST_REPORTED`). ĐÚNG MỘT khoá thiếu:
+  // `target_type_label` đã có sẵn từ NOTI-028.
+  "reason_label",
 ] as const;
 
 /** Biến template BẮT BUỘC của từng mã (mirror `variables_schema` của migration `0581`). */
@@ -27,6 +33,10 @@ const TEMPLATE_KEYS: Record<string, readonly string[]> = {
   SOCIAL_MENTIONED: ["actor_name", "target_type_label", "post_id"],
   SOCIAL_POST_COMMENTED: ["actor_name", "post_id"],
   SOCIAL_COMMENT_REPLIED: ["actor_name", "post_id"],
+  // S16-SOCIAL-BE-1B — mirror `variables_schema` SAU migration `0585` (đã bỏ `{post_title}`).
+  SOCIAL_NEWS_PUBLISHED: ["actor_name", "post_id"],
+  // `target_url_template` của mã này là `/social/reports` — KHÔNG placeholder, nên không cần `post_id`.
+  SOCIAL_POST_REPORTED: ["target_type_label", "reason_label"],
 };
 
 function strField(payload: Record<string, unknown>, key: string): string | undefined {
@@ -50,6 +60,25 @@ function requireField(payload: Record<string, unknown>, key: string): string {
     );
   }
   return v;
+}
+
+/**
+ * Mảng người nhận do PRODUCER tính — RỖNG ⇒ **NÉM**, cùng luật `requireField`.
+ *
+ * Trả `[]` là nhánh nuốt câm đúng hình dạng «thành công RỖNG = fail-OPEN»: engine
+ * `recordSkip("no_recipient")` không log, và một sự kiện đáng lẽ báo cho cả công ty biến mất không
+ * dấu vết. Producer đã có nhánh xử lý tập rỗng ở tầng nó (log WARN rồi KHÔNG enqueue), nên một
+ * payload đã tới đây mà rỗng nghĩa là hợp đồng payload đã lệch.
+ */
+function requireUserIds(payload: Record<string, unknown>, key: string): string[] {
+  const v = payload[key];
+  const ids = Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x) : [];
+  if (ids.length === 0) {
+    throw new Error(
+      `SocialNotiBridgeRegistrar: payload outbox thiếu/rỗng '${key}' — hợp đồng social-noti.payload.ts lệch.`,
+    );
+  }
+  return ids;
 }
 
 /**
@@ -116,9 +145,39 @@ export class SocialNotiBridgeRegistrar implements OnModuleInit {
       sourceModule: SOURCE_MODULE_SOCIAL,
       sourceEntityType: "feed_comment",
       sourceEntityIdOf: (ctx) => requireField(ctx.payload, "commentId"),
-      resolveRecipients: (ctx) => Promise.resolve([requireField(ctx.payload, "parentAuthorUserId")]),
+      resolveRecipients: (ctx) =>
+        Promise.resolve([requireField(ctx.payload, "parentAuthorUserId")]),
       dedupeKeyOf: (ctx) => requireField(ctx.payload, "commentId"),
       payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_COMMENT_REPLIED"),
+    });
+
+    // ── S16-SOCIAL-BE-1B — 2 mã Nhóm B. Khối ADDITIVE: không sửa 3 lời gọi ở trên. ──
+
+    this.bridge.registerSource({
+      eventType: SOCIAL_EVENT_NEWS_PUBLISHED,
+      eventCode: SOCIAL_EVENT_CODES_B[SOCIAL_EVENT_NEWS_PUBLISHED],
+      sourceModule: SOURCE_MODULE_SOCIAL,
+      sourceEntityType: "feed_post",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "post_id"),
+      // Producer đã tính tập người nhận TRONG tx (C8) — registrar CHỈ đọc lại. Xem docblock
+      // `SocialNewsPublishedPayload`: tra lại ở đây (chạy SAU, NGOÀI tx) sẽ đọc trạng thái MỚI HƠN
+      // (bài đã bị ẩn/xoá/đổi audience) và trả một tập khác tập đúng tại thời điểm ghi.
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      dedupeKeyOf: (ctx) => requireField(ctx.payload, "post_id"),
+      payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_NEWS_PUBLISHED"),
+    });
+
+    this.bridge.registerSource({
+      eventType: SOCIAL_EVENT_POST_REPORTED,
+      eventCode: SOCIAL_EVENT_CODES_B[SOCIAL_EVENT_POST_REPORTED],
+      sourceModule: SOURCE_MODULE_SOCIAL,
+      // Neo là chính BÁO CÁO (không phải bài): một bài bị báo cáo nhiều lần sinh nhiều hàng đợi khác
+      // nhau, và người xử lý cần lần ngược về đúng báo cáo họ được nhắc.
+      sourceEntityType: "feed_report",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "report_id"),
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      dedupeKeyOf: (ctx) => requireField(ctx.payload, "report_id"),
+      payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_POST_REPORTED"),
     });
   }
 

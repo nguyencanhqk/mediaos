@@ -700,6 +700,61 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "Truy vấn ghim `eq(users.id, userId)` với `userId = actor.actorUserId` (social-posts.service.ts, `resolveActorName`) — lấy tên hiển thị của CHÍNH người đang thao tác để dựng biến template `{actor_name}` của NOTI-028/029/030. Cùng hình dạng với `chat-messages.repository.ts#findSenderDisplayName`.",
     signedBy: "S16-SOCIAL-BE-1",
   },
+
+  // ══ S16-SOCIAL-BE-1B (22/09/2026) — 6 điểm chiếu MỚI của Nhóm B ══
+  //
+  // ⚠️ SỐ THẬT LÀ 6, KHÔNG PHẢI 4 như plan §8 ước lượng — và chênh lệch đó là một PHÁT HIỆN, không
+  // phải một sai số: (a) `search` KHÔNG sinh điểm mới (nó đi qua `POST_COLUMNS` đã ký ở BE-1);
+  // (b) snapshot đích của `028`/`029` không phải MỘT điểm mà BA cột danh tính riêng (người báo cáo ·
+  // tác giả bài bị báo cáo · người xử lý); (c) nửa «đã đọc» của `022` (`ackedPeople`) là một điểm
+  // thứ hai bên cạnh `unackedEmployeesFor`.
+  //
+  // 🔴 BA điểm của `social-reports.repository.ts` chỉ LỘ RA sau khi census được vá: bản đầu của file
+  // đó dùng `aliasedTable(users, …)` còn `boundIdentifiers` chỉ nhận `alias(users, …)` ⇒ ratchet XANH
+  // trong khi ba đường chiếu tên người mở ra mà không ai ký. Census nay nhận CẢ HAI tên
+  // (`identity-projection-census.ts#boundIdentifiers`).
+  {
+    point: "social/social-discovery.repository.ts#birthdays:users.fullName",
+    basis: "waiver",
+    reason:
+      "SOCIAL-API-026 widget sinh nhật. PHƠI CÓ CHỦ ĐÍCH ở phạm vi TOÀN CÔNG TY — đó chính là tính năng (SOC-DEC-007 ký: route riêng, gate `view:feed`, KHÔNG cấp thêm cặp HR nào). CỐ Ý **không** khai `scoped-predicate`: vị từ của câu là `company_id` + nhân viên chưa xoá + cửa sổ ngày/tháng, KHÔNG có vị từ `data_scope` nào — dán nhãn scope lên nó là khai sai trong chính sổ sinh ra để chống khai sai. Hai hàng rào THẬT: (1) DTO đóng ĐÚNG 5 khoá `{employeeId, fullName, avatar, day, month}` — không năm sinh, không `date_of_birth`, không `userId` (ca done_when grep regex `\\b(19|20)\\d{2}\\b` trên TOÀN BỘ response); (2) mỗi người tự rút khỏi danh sách bằng `user_preferences.show_birthday=false` qua `PATCH /me/preferences` (lọc ở service qua `getPreferencesForUsers`, hàm DUY NHẤT đọc preference của người khác).",
+    signedBy: "S16-SOCIAL-BE-1B",
+  },
+  {
+    point: "social/social-news.repository.ts#ackedPeople:users.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-022 nửa «ĐÃ đọc». Truy vấn chỉ lọc `(company_id, post_id)` nên bằng chứng nằm ở điểm KHẲNG ĐỊNH, không ở vị từ của chính câu: route gate `manage:feed-news` (tầng 1 = bảng hằng, tầng 2 = `resolveActor(user,\"postAcksList\")`) và `social-news.service.ts#listAcks` gọi `assertPostVisible` TRƯỚC khi đọc — `manage:feed-news` KHÔNG phải giấy thông hành đọc bài của đơn vị khác. Tập hàng thêm nữa bị chặn bởi CHÍNH hành vi: chỉ người đã có hàng `feed_post_acks` cho bài này.",
+    signedBy: "S16-SOCIAL-BE-1B",
+  },
+  {
+    point: "social/social-news.repository.ts#unackedEmployeesFor:users.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-022 nửa «CHƯA đọc» — ĐIỂM CHIẾU RỘNG NHẤT của module: nó chiếu tên/avatar của MỌI nhân viên trong audience của bài, kể cả người chưa tương tác gì (audience `company` ⇒ toàn công ty). Vì vậy route này gate `manage:feed-news`, KHÔNG `view:feed`, và service gọi `assertPostVisible` trước — hai khẳng định đó là căn cứ. Vị từ của câu thu hẹp thêm theo `org_unit_id` của bài khi `audience='org_unit'`, và trả RỖNG cho `audience='group'` (fail-closed: nhóm chưa mở ở BE-1/BE-1B nên không có cách nào biết ai thuộc nhóm). Nợ đã ghi trong docblock của hàm: định nghĩa «thuộc audience» ở đây là nhân viên đang hoạt động có tài khoản, CHƯA lọc theo `view:feed` hiệu lực — hai tập trùng nhau hôm nay (seed 0578 cấp `view:feed` cho cả 4 vai canonical) và cần một API set-based ở tầng permission để đóng đúng chỗ (`S16-SOCIAL-BE-2`).",
+    signedBy: "S16-SOCIAL-BE-1B",
+  },
+  {
+    point: "social/social-reports.repository.ts#REPORT_COLUMNS:rReporterUser.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-028/029 — tên NGƯỜI BÁO CÁO trong hàng đợi kiểm duyệt. Căn cứ là cặp quyền RIÊNG `view:feed-report`/`manage:feed-report` (cao hơn `view:feed`) assert ở tầng 2, cộng vị từ phạm vi D6 nằm TRONG chính câu (`scopeCondition`, `switch` vét cạn 5 giá trị `DataScope`, mọi giá trị ngoài `Company|System|Department` ⇒ `sql`false``). CỐ Ý khai `second-assert` chứ KHÔNG `scoped-predicate`: câu này **không** mang `visiblePostCondition` — bypass ĐÃ KÝ (D13/H4-ii) để hàng đợi đọc được cả bài `hidden`/đã xoá mềm — nên nhãn «vị từ scope chặn tập hàng» sẽ hứa nhiều hơn thứ câu truy vấn thật sự làm. ⚠️ DTO này LỘ danh tính người tố giác có chủ đích (SPEC-16 không có điều khoản báo cáo ẩn danh — khác poll/SOC-DEC-009); đánh đổi hiệu ứng chùn-tay-tố-giác nêu tường minh ở PR.",
+    signedBy: "S16-SOCIAL-BE-1B",
+  },
+  {
+    point: "social/social-reports.repository.ts#REPORT_COLUMNS:rAuthorUser.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-028/029 — tên TÁC GIẢ của nội dung bị báo cáo (`targetSnapshot.authorFullName`). Cùng căn cứ với `rReporterUser` và là điểm CẦN ĐỌC KỸ NHẤT của cả sổ với module này: cột này lấy từ bài đích, và bài đích được JOIN **XUYÊN** `visiblePostCondition` (D13/H4-ii, bypass CÓ CHỦ Ý). Ba thứ giữ nó không thành «đọc bất kỳ bài nào trong tenant»: (1) cặp quyền riêng ở tầng 1+2; (2) D13-R — KHÔNG tồn tại hàm public nhận `(targetType,targetId)` rời, snapshot chỉ là JOIN trong chính câu `listReports`/`findReport` đã lọc `company_id` + D6; (3) `target_id` luôn lấy từ hàng `feed_reports` vừa qua vị từ đó, không bao giờ từ tham số caller. Ca chứng minh: `N-D13-c` (không có cặp ⇒ 403 tầng 1, không truy vấn snapshot nào chạy) · `N-D13-d` (manager Department không thấy hàng NÊN cũng không thấy snapshot) · `N-D13-e` (bài `hidden` KHÔNG bị báo cáo thì không đường nào của 028/029 trả nội dung nó).",
+    signedBy: "S16-SOCIAL-BE-1B",
+  },
+  {
+    point: "social/social-reports.repository.ts#REPORT_COLUMNS:rResolverUser.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-028/029 — tên NGƯỜI ĐÃ XỬ LÝ báo cáo (`resolvedBy`). Cùng căn cứ với `rReporterUser`: cặp riêng `view/manage:feed-report` + vị từ D6 trong chính câu. Cột `resolved_by` chỉ khác NULL sau khi một người có `manage:feed-report` kết thúc báo cáo, nên tập tên lộ ra là tập người XỬ LÝ — chính thứ `chk_feed_reports_resolved_pair` tồn tại để bảo đảm truy được.",
+    signedBy: "S16-SOCIAL-BE-1B",
+  },
 ];
 
 /**
@@ -717,14 +772,23 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
  */
 export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // Không đo được bằng máy — chúng là câu người viết.
-  waiver: 7,
+  // 7 → 8 (S16-SOCIAL-BE-1B, 22/09/2026): `social-discovery.repository.ts#birthdays` — widget sinh
+  // nhật phơi tên/avatar ở phạm vi TOÀN CÔNG TY, đúng như SOC-DEC-007 ký. Nới CÓ CHỦ ĐÍCH qua FULL
+  // gate. Hàng rào là DTO đóng 5 khoá (không năm sinh) + cờ tự-ẩn `user_preferences.show_birthday`.
+  waiver: 8,
   "no-actor": 7,
   // 3 → 5 (S16-SOCIAL-BE-1, 21/09/2026): `social-comments.repository.ts#COMMENT_COLUMNS` ·
   // `social-reactions.repository.ts#listReactors`. Nới CÓ CHỦ ĐÍCH qua FULL gate. Cả hai nằm trên
   // đường đọc ĐÃ bound bằng `assertPostVisible` TRƯỚC mọi truy vấn (bình luận và cảm xúc KHÔNG có
   // phạm vi riêng — chúng thừa hưởng phạm vi BÀI CHA), và KHÔNG mở bề mặt đọc nào ngoài tập bài mà
   // actor vốn đã được phép đọc. Ca deny 404 cho cả hai đường ở `social-be1-content.int-spec.ts`.
-  "second-assert": 5,
+  // 5 → 10 (S16-SOCIAL-BE-1B, 22/09/2026): `social-news.repository.ts` `ackedPeople` +
+  // `unackedEmployeesFor` (route 022, gate `manage:feed-news` + `assertPostVisible` ở service) và BA
+  // cột danh tính của `social-reports.repository.ts#REPORT_COLUMNS` (người báo cáo · tác giả bài bị
+  // báo cáo · người xử lý — cặp riêng `view/manage:feed-report` + vị từ D6 trong chính câu).
+  // ⚠️ BA điểm cuối chỉ ĐO ĐƯỢC sau khi census nhận thêm `aliasedTable` bên cạnh `alias`; trước đó
+  // ratchet XANH trong khi chúng mở toang. Nới CÓ CHỦ ĐÍCH qua FULL gate.
+  "second-assert": 10,
   // 7 → 8 (S10-SEC-LOGINLOG429-1, 25/08/2026): `recordLoginAttemptForUser:users.email`. Nới CÓ CHỦ
   // ĐÍCH và đi qua FULL gate đúng như dòng cảnh báo của cổng này đòi. Điểm mới KHÔNG mở bề mặt đọc
   // nào: email đọc ra chỉ rơi vào `login_logs.email` (cột vốn đã chứa email client tự khai), và bề

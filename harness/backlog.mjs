@@ -16939,6 +16939,10 @@ export const backlog = [
       "apps/api/src/db/schema/**",
       "apps/api/src/me/**",
       "docs/SPEC/**",
+      // Thi công 22/09: đổi `mePreferencesSchema` (contracts) làm vỡ typecheck một fixture test ở
+      // packages/web-core (đối tượng MePreferences dựng đủ trường). Hệ quả TRỰC TIẾP của nghĩa vụ A3
+      // — vá cùng commit theo tiền lệ §0.0, không tách WO.
+      "packages/web-core/**",
       "apps/api/src/app.module.ts",
       "apps/api/src/realtime/**",
       "apps/api/src/notifications/**",
@@ -16960,7 +16964,7 @@ export const backlog = [
       "Khuôn: TÁI DÙNG NGUYÊN — social-access.service.ts (assertTargetVisible biến thể targetType='report') · social-preferences.ts (getPreferencesForUsers) · SOCIAL_ROUTE_PAIRS (thêm route mới vào CÙNG bảng hằng, không tạo bảng riêng) — tất cả dựng sẵn ở S16-SOCIAL-BE-1, xem plan BE-1 §9.1 cho danh sách nợ đầy đủ đã chuyển từ BE-1",
     ],
     done_when: [
-      "Route sinh nhật (026): Object.keys(item) BẰNG ĐÚNG {employeeId,fullName,avatar,day,month}; grep regex năm \\b(19|20)\\d{2}\\b trên TOÀN BỘ JSON.stringify(response), không chỉ field day/month; neo dương ≥1 hàng thật; user showBirthday=false KHÔNG xuất hiện ở /birthdays lẫn mọi đường đọc khác trả tên/avatar nhân viên (search/tags/profiles/mention-resolve — 1 ca test mỗi đường, danh sách ĐÓNG)",
+      "Route sinh nhật (026): Object.keys(item) BẰNG ĐÚNG {employeeId,fullName,avatar,day,month}; grep regex năm \b(19|20)\d{2}\b trên TOÀN BỘ JSON.stringify(response.data), không chỉ field day/month; neo dương ≥1 hàng thật; user showBirthday=false KHÔNG xuất hiện ở /birthdays. ⟲ SỬA 22/09/2026 theo chữ ký owner D10 (plan §0.2/§2.1): cờ CHỈ chặn day/month + mọi trường phái sinh date_of_birth — nó KHÔNG ẩn danh tính (tên/avatar) khỏi 023 tìm kiếm / 024 thẻ / 025 trang cá nhân, và ba đường đó vốn KHÔNG chở day/month. Gạch cũ đọc nghĩa đen làm bài của người ẩn sinh nhật biến mất khỏi tìm kiếm. SPEC-16 dòng 74/254/502/548 đã sửa khớp trong CÙNG WO; ca đo chiều NGƯỢC LẠI (người đã ẩn VẪN tìm thấy được) ở social-be1b-discovery.int-spec.ts",
       "Ack tin tức (021): assert feed_post_acks có ĐÚNG 1 hàng user_id=actor và 0 hàng cho người khác (không chỉ assert response 200); body không nhận trường userId (server luôn dùng actor.id)",
       "Báo cáo: IDOR đa hình dùng LẠI assertTargetVisible (target_id tenant khác hoặc actor không thấy được → 404); view:feed-report scope Department cho manager ép TRONG SQL (không lọc JS) + 1 ca deny (manager đọc report ngoài phòng ban) + 1 ca allow (hr Company-wide); PATCH report đã resolved/dismissed → 409 ERR-021; ca *:* mở view:feed-report ghi rõ PIN hành vi ENGINE (memory tests-can-pin-a-hole-open) + PR nêu tường minh xin owner ký, KHÔNG tự ý đổi is_sensitive",
       "@Idempotent trên 027; outbox NOTI đăng ký + emit SOCIAL_NEWS_PUBLISHED(031)/SOCIAL_POST_REPORTED(036); route census 29 route (19 BE-1 + 10 BE-1B) + OpenAPI enrich xanh; coverage social/ ≥85% đo LẦN 2 (sau BE-1B, thay lần đo tạm ở BE-1)",
@@ -17107,6 +17111,25 @@ export const backlog = [
     //      ⇒ TỰ DUYỆT sáng kiến của mình, bỏ qua approve:feed-idea; tương tự role:'owner' cho nhóm.
     //      Cùng lớp lỗi với nợ (c) của DB-1. (FULL gate DB-2 MEDIUM-2)
 
+    //  (g) ⟲ NỢ TỪ FULL GATE CỦA BE-1B (22/09/2026 — chi tiết + ngưỡng đo ở plan BE-1B §13.7):
+    //      1. Câu `count` của `028` mang 2 JOIN mà kết quả KHÔNG phụ thuộc khi scope Company/System
+    //         (scopeCondition trả `true`). EXPLAIN trên lane: planner loại được feed_posts nhưng
+    //         KHÔNG loại feed_comments ⇒ ~R lần tra bảng bình luận mỗi lần mở hàng đợi. Chỉ gắn JOIN
+    //         khi routeScope === 'Department'.
+    //      2. `028` không lọc `status` (mặc định của FE) KHÔNG có index phục vụ ORDER BY — index hiện
+    //         có `(company_id, status, created_at DESC)` chỉ dùng được khi status ghim bằng đẳng thức.
+    //      3. `listTags` LIKE tiền tố không dùng index (collation en_US.utf8, thiếu text_pattern_ops).
+    //      4. `026` không có LIMIT; EXTRACT(...) không index được ⇒ quét employee_profiles mỗi lần mở.
+    //      5. `manageReportCandidates` không có trần + không lọc roles.deleted_at — nó là ĐẦU VÀO của
+    //         vòng hỏi permission engine.
+    //      6. `unackedEmployeesFor` trả rỗng CÂM cho audience='group' (hôm nay 422 chặn ở tầng ghi
+    //         nên chưa reachable) — khi BE-2 MỞ NHÓM thì «0 người chưa đọc» đứng cạnh nửa «đã đọc»
+    //         có số thật sẽ đọc thành «cả nhóm đã đọc xong». Vá TRƯỚC khi mở nhóm.
+    //      7. Định nghĩa «thuộc audience» vẫn CHƯA lọc theo `view:feed` hiệu lực (cần API set-based
+    //         «ai có cặp X» ở tầng permission); NOTI-036 vẫn hỏi engine TỪNG ứng viên.
+    //      8. `0578` không re-run được (verify đếm grant trên TOÀN BỘ role kể cả role tuỳ biến của
+    //         tenant) — cần migration SAU đặt lại verify theo phạm vi sở hữu, HOẶC chốt 0578 là
+    //         migration MỘT-LẦN. KHÔNG sửa 0578 tại chỗ.
     plan: "docs/plans/S16-SOCIAL-BE-2.md",
     src: [
       "API-19 SOCIAL-API-~026..040 · SPEC-16 §13 FSM · SOC-DEC-006/009",
@@ -17120,6 +17143,7 @@ export const backlog = [
       "Outbox NOTI cho 9 sự kiện có ca test từng sự kiện (allow + deny); WS room feedgroup join gate membership; coverage social/ ≥85% LANE_DB",
     ],
     notes: [
+      "🔴 NỢ ĐO ĐƯỢC TỪ S16-SOCIAL-BE-1B (22/09/2026) — `0578` KHÔNG RE-RUN ĐƯỢC: khối verify cuối của migration `0578` đếm grant `feed-*` trên TOÀN BỘ role rồi RAISE nếu ≠ 43, tức nó đếm cả role TUỲ BIẾN của tenant — thứ nó KHÔNG sở hữu (`invariant-count-must-filter-owned-rows`). ĐO THẬT trên lane `mediaos_be1b`: 43 hàng role hệ thống + 57 hàng role tuỳ biến do fixture int-spec dựng ⇒ verify thấy 100 và raise. Hệ quả: mọi DB đã có tenant cấp `feed-*` cho vai tuỳ biến (mọi lane test sau lượt int-spec đầu, và một ngày nào đó là PROD khi khôi phục backup rồi chạy lại chain) sẽ KHÔNG áp lại được `0578`. KHÔNG sửa tại chỗ được — `0578` đã áp ở mọi môi trường. Cần một migration SAU đặt lại verify theo phạm vi SỞ HỮU (`ro.company_id IS NULL`), hoặc chốt tường minh rằng `0578` là migration MỘT-LẦN. Ca idempotency ở `s16-social-db1-invariants.int-spec.ts` hiện BỎ QUA đúng khối verify đó khi chạy lại, có ghi lý do tại chỗ.",
       "🔴 21/09/2026 (plan BE-1 §11.2, quyết định D21) — BE-1 CHỈ fan-out WS cho bài `audience=company` + `status=published`. Lý do: API-19 §7 khai đúng 2 room (`co:{c}:feed` cả công ty · `co:{c}:feedgroup:{groupId}`) và KHÔNG có room nào cho `org_unit` ⇒ phát bài org_unit vào room cả-công-ty là rò đúng nội dung mà REST trả 404. BE-2 phải dựng room nhóm (gate membership RIÊNG — `view:feed` KHÔNG đủ vào room nhóm riêng tư) và quyết định có cần room org_unit không. `wsFeedPostCreatedEventSchema` hiện khoá cứng `audience: z.literal(\"company\")` — nới nó là một quyết định có chủ đích, không phải dọn dẹp.",
       "⚠️ Dư lượng SÀN tầng-1 (plan BE-1 M18/D5, có ca test R12 đóng đinh): vai TUỲ BIẾN chỉ có `manage:feed-news` mà KHÔNG có `manage:feed-post` bị 403 Ở TẦNG 1 khi gọi `006`, kể cả khi chỉ đổi `pinned`. Hôm nay 0 tác động (hai cặp cấp cùng tập vai canonical — mig 0578:92-95). Khi BE-2 mở cấp quyền cho vai tuỳ biến, phải thiết kế lại sàn của `002`/`006`.",
       "🔴 FULL gate + Opus (membership = permission ở tầng hàng + FSM). Không mở thêm cặp quyền ngoài §9h; nếu cần thì DỪNG.",

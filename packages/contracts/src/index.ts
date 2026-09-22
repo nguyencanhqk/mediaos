@@ -207,3 +207,6 @@ export * from "./social";
 // theo đúng luật đã dùng cho ./payroll-employees — import NGƯỢC từ ./social, KHÔNG re-export tên nào của
 // nó (trùng tên ở hai star-export là lỗi mơ hồ lúc build).
 export * from "./social-api";
+// S16-SOCIAL-BE-1B (additive): DTO 10 route Nhóm B (API-19 §5.1 dòng 85-96). Tách khỏi ./social-api
+// theo CÙNG luật (import NGƯỢC, KHÔNG re-export) — gộp vào đó sẽ đẩy file lên 820 dòng, vượt trần 800.
+export * from "./social-api-b";
