@@ -169,3 +169,44 @@ export interface SocialPostReportedPayload extends Omit<SocialPayloadBase, "acto
   reason_label: string;
   recipientUserIds: string[];
 }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// S16-SOCIAL-BE-2A — 1 event NHÓM (`034` kết quả yêu cầu vào nhóm)
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+export const SOCIAL_EVENT_GROUP_JOIN_DECIDED = "social.group_join_decided";
+
+/** Mã catalog của khối NHÓM — VERBATIM theo `0581:199` (bảng riêng, cùng lý do đã ghi ở `_B`). */
+export const SOCIAL_EVENT_CODES_C = {
+  [SOCIAL_EVENT_GROUP_JOIN_DECIDED]: "SOCIAL_GROUP_JOIN_DECIDED",
+} as const;
+
+/**
+ * `NOTI-EVENT-034` — người nhận là **NGƯỜI XIN VÀO NHÓM** (đúng một người), lọc D7.
+ *
+ * 🔴 **KHÔNG extends `SocialPayloadBase`**: sự kiện này không có bài nào, và `postId`/`post_id`/
+ * `actor_name` của base đều là bắt buộc. Kế thừa để "cho giống" sẽ buộc producer bịa một `post_id`
+ * rỗng — thứ mà `assertInternalTargetUrl` sẽ nuốt im lặng vào một URL đích hỏng.
+ *
+ * ⚠️ Ba biến template của `0581:255-260` (`variables_schema = {group_name, decision_label,
+ * group_id}`) PHẢI có đủ: registrar `requireField` NÉM khi thiếu, và `target_url_template` là
+ * `/social/groups/{group_id}` — nên khoá **snake** `group_id` là thứ deep-link ăn, không phải camel.
+ *
+ * ⚠️ **KHÔNG chở danh tính người duyệt** (D13-a của BE-1B): hàng `notifications` sống lâu hơn grant,
+ * và `my-notifications.mapper.ts` trả payload NGUYÊN VĂN cho người nhận. Người xin vào cần biết
+ * *kết quả*, không cần biết *ai bấm*.
+ *
+ * `dedupe_strategy='None'` theo catalog ⇒ registrar **KHÔNG khai `dedupeKeyOf`** (khai mà catalog bỏ
+ * qua = tài liệu nói sai về code). Lý do chọn `None` nằm ở header `0581`.
+ */
+export interface SocialGroupJoinDecidedPayload {
+  /** Neo `source_entity_id` + biến `{group_id}` của `target_url_template`. */
+  group_id: string;
+  /** Biến `{group_name}` — tên nhóm ĐỌC TRONG TX của `038` (tên có thể đổi ngay sau đó). */
+  group_name: string;
+  /** Biến `{decision_label}` — bảng nhãn ĐÓNG ở service, KHÔNG phải chữ tự do. */
+  decision_label: string;
+  /** Đúng MỘT người: chính người xin vào. Rỗng ⇒ producer KHÔNG phát (xem `038`). */
+  recipientUserIds: string[];
+  [key: string]: unknown;
+}

@@ -162,6 +162,17 @@ export const SOCIAL_ERR = {
    * Trùng tên với một nhóm ĐÃ xoá mềm thì KHÔNG đụng index (partial) ⇒ vẫn tạo được.
    */
   GROUP_NAME_TAKEN: "SOCIAL-ERR: tên nhóm này đã được dùng trong công ty.",
+
+  /**
+   * (404) — **KHÔNG SỐ HOÁ** (cùng tiền lệ `REPORT_DUPLICATE_OPEN`/`GROUP_NAME_TAKEN`): không có
+   * hàng `feed_group_members` cho `{user_id}` trong nhóm này — `036` rời một nhóm chưa tham gia,
+   * `038`/`039` thao tác lên một người không phải thành viên (hoặc ai đó vừa mời họ ra).
+   *
+   * ⚠️ TÁCH KHỎI `GROUP_NOT_FOUND` có chủ ý: tới được đây thì actor ĐÃ qua cổng nhóm (`032` thấy
+   * được nhóm, `038`/`039` còn phải là `owner|admin`), nên nói đúng cái thiếu KHÔNG lộ gì thêm —
+   * trong khi trả "không tìm thấy nhóm" cho một nhóm người dùng đang mở là gửi họ đi sai hướng.
+   */
+  GROUP_MEMBER_NOT_FOUND: "SOCIAL-ERR: người này không phải thành viên của nhóm.",
 } as const;
 
 export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];

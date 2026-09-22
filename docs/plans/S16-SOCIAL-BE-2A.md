@@ -418,3 +418,39 @@ hôm nay không call-site nào dịch ⇒ **500 cho một thao tác người dù
 tải) · D4 (một call-site, trong tx, service chỉ nhận `tx`) · D5 (`allowedRoles` theo route) · D7 · §5
 (mỗi DENY có ALLOW + neo dương) · §8 (FULL gate TRƯỚC PR · cả bộ spec một lượt cùng lane DB · ba sổ
 đo RIÊNG) · §6 (không migration — `0579:58` đã front-load `feed_group`).
+
+---
+
+## §13. Sổ vết THI CÔNG Bước 2 — 22/09/2026 (10 route nhóm)
+
+> Ghi ở đây mọi chỗ **code khác plan**, kèm lý do đo được. Plan là hợp đồng; chỗ nào hợp đồng im lặng
+> hoặc sai thực tế thì ghi ra, KHÔNG sửa lặng lẽ.
+
+| # | Điểm | Quyết định thi công | Vì sao |
+| --- | --- | --- | --- |
+| **T1** 🔴 | **L-c — DTO nhóm: BỎ `avatarFileId`/`avatarUrl`** | `createFeedGroupSchema` không nhận `avatarFileId`; `feedGroupSchema` không có `avatarUrl`. Cột `feed_groups.avatar_file_id` giữ nguyên trong schema | Ảnh đại diện nhóm là một **tính năng riêng**, không phải một cột: CHAT phải dựng `chat-room-avatar-file.resolver` + `chat-room-avatar-presign.service` + controller tải lên mới hiện được ảnh phòng. SOCIAL chưa có resolver cho `(SOCIAL, feed_group)` ⇒ `FilePolicyService` DENY `deny-no-resolver` ⇒ một `avatarFileId` nhận vào **không đường nào ký URL đọc lại**. Đó đúng là tính năng WRITE-ONLY mà D-OWNER-7 vừa từ chối cho `groupId`. **Nợ mới**: đường tải lên + đọc lại avatar nhóm → WO riêng (khuôn `chat-room-avatar-*`) |
+| **T2** 🔴 | **`035`/`036` KHÔNG dùng `assertGroupVisibleTx`** — gác bằng `findLiveGroupTx` (nhóm còn sống trong tenant) | Cổng đọc trả 404 cho «`private` + không phải thành viên `active`». Dùng nó ở `035` giết CHÍNH nhánh SPEC đòi (API-19 dòng 103: private ⇒ `pending`) — nhóm kín sẽ **không ai xin vào được**, nhánh `pending` thành code chết. Ở `036`, người đang `pending` không phải thành viên `active` ⇒ **không huỷ được yêu cầu của chính mình**, trong khi bảng delta D10 có đúng dòng đó. Giá phải trả: ai biết ĐÚNG UUID nhóm kín phân biệt được 404 với 201 — không lộ tên/mô tả/thành viên/bài, UUIDv4 không đoán được, và `030` vẫn giấu hoàn toàn nên không có đường LIỆT để dò |
+| **T3** | `030` thêm nhánh `manage:feed-group` thấy MỌI nhóm còn sống | API-19 dòng 98 chỉ tả nhánh người thường. Nhưng `033`/`034`/`037`/`038`/`039` đều mở cho cờ này và `assertGroupVisibleTx` đã cho nó NHÌN thấy nhóm private — nếu `030` giấu thì quản trị viên **hành động được mà không tìm được**, và FE phải đoán id |
+| **T4** | **D12 mở rộng một bước**: cấp vai `owner` chỉ dành cho `owner` hiện tại hoặc `manage:feed-group` (403 `ERR-014` cho `admin`) | Plan D12 đã ký câu này; ghi lại ở đây vì nó là vế giữ cho cổng owner-only của `034` khỏi thành trang trí — `admin` tự nâng mình lên `owner` rồi xoá nhóm là hai bước bấm. **Hạ** vai một owner thì `admin` VẪN làm được (G5b ký vậy), chỉ bị bất biến ≥1 owner chặn |
+| **T5** | Thêm hằng lỗi `GROUP_MEMBER_NOT_FOUND` (404, **không số hoá**) | `038`/`039`/`036` cần nói "người này không phải thành viên". Trả `GROUP_NOT_FOUND` là gửi người dùng đi sai hướng (họ đang mở đúng nhóm đó), mà catalog SPEC-16 §12 đã cạn ở `022` ⇒ hằng CÓ TÊN, đúng tiền lệ `REPORT_DUPLICATE_OPEN`/`GROUP_NAME_TAKEN` |
+| **T6** | `038` **không** có class `createZodDto` | `decideFeedGroupMemberSchema` là UNION ⇒ `createZodDto` ném `TS2509`. Dùng `@Body(new ZodValidationPipe(schema))` (khuôn `employee-code-config.controller.ts:40`). ⚠️ Cách "sửa" sai mà người sau dễ chọn: đổi union thành `z.object({decision?, role?})` — đúng thứ D12 loại bỏ |
+| **T7** | `bumpGroupMemberCount` + hàm thuần `groupMemberCountDelta(before, after)` | Bảy dòng của bảng D10 là BẢY HỆ QUẢ của một phép tính: «số hàng active SAU» − «TRƯỚC» cho chính hàng đó. Viết theo route là mời lại đúng hai lỗi C5. Mọi call-site lấy `before`/`after` từ giá trị DB vừa `RETURNING`, không từ giả định |
+| **T8** | `bumpGroupMemberCount` **không** lọc `deleted_at IS NULL` (ngoại lệ THỨ HAI của D13, sau neo `FOR UPDATE` W4) | D13 nói về vị từ **hiển thị/audience**; đây là bảo trì bộ đếm. Bỏ qua UPDATE vì nhóm vừa bị xoá mềm là để lại một `member_count` nói dối về một nhóm còn khôi phục được |
+| **T9** | Không có `countActiveOwnersTx` ở repository (plan §3.1 có liệt) | Bất biến owner đã ép ở `assertOwnerRemainsTx` (Bước 1.6) — một luật một bản. Thêm câu đếm thứ hai ở repo là nguồn sự thật thứ hai cho đúng bất biến vừa bịt |
+| **T10** | `037` trả 403 (không 404) cho người ngoài một nhóm **public** | Nhóm public đã lộ sự tồn tại ở `030` nên 403 không lộ thêm gì; còn nhóm private thì `assertGroupVisibleTx` đã 404 TRƯỚC đó. Hai cổng chồng nhau có chủ ý |
+
+### Bốn phép ĐO CỔNG đã chạy (tháo cơ chế, xem test có đỏ không)
+
+Không chỉ viết test — đã gỡ từng lưới ra và xác minh ca tương ứng ĐỎ, rồi khôi phục:
+
+| Tháo gì | Test đỏ | Thông điệp |
+| --- | --- | --- |
+| Bỏ `bumpGroupMemberCount(+1)` ở `031` | **C2** bước (1) + **G18** | `expected +0 to be 1` |
+| Bỏ vế `employee_profiles.status='active'` ở `listMembersTx` (D7) | **G11** | người đã nghỉ việc lọt vào danh bạ |
+| Bỏ `assertOwnerRemainsTx` ở nhánh đổi vai trò của `038` | **G5b** | `expected 200 to be 409` — nhóm mất owner cuối |
+| Nới phạm vi `030` thành `sql\`true\`` | **G10-b** | nhóm private lọt vào danh sách người ngoài |
+| `034` cho `admin` vào `allowedRoles` | **G6b** | `expected 200 to be 403` — admin xoá được nhóm |
+
+Ngoài ra census 2 tầng **tự bắt** thiếu sót khi chạy lần đầu (9 site `SocialGroupsService#*` "gọi
+`resolveActor` nhưng KHÔNG có trong sổ pin") và ratchet điểm chiếu danh tính **tự bắt**
+`listMembersTx:users.fullName` chưa có phán quyết — đúng hai cổng mà B3.14 dự báo.

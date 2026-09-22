@@ -321,8 +321,8 @@ Màn MISA có «Giới thiệu ứng viên». Ở MediaOS đây là **việc c�
 | `SOCIAL-ERR-011` | 409 | Xác nhận đã đọc một bài không phải `news` hoặc không bật «yêu cầu xác nhận» |
 | `SOCIAL-ERR-012` | 404 | Nhóm không tồn tại, hoặc nhóm `private` với người không phải thành viên |
 | `SOCIAL-ERR-013` | 409 | Đã là thành viên / đã có yêu cầu vào nhóm đang chờ |
-| `SOCIAL-ERR-014` | 403 | Duyệt thành viên / đổi vai trò mà không phải `owner`\|`admin` nhóm và không có `manage:feed-group` |
-| `SOCIAL-ERR-015` | 409 | Rời nhóm khi là `owner` cuối cùng |
+| `SOCIAL-ERR-014` | 403 | **Mọi 403 vai-trò-nhóm** — sửa nhóm `033` · xoá nhóm `034` (**`owner` MỘT MÌNH**, `admin` KHÔNG xoá được — API-19 §5.1) · duyệt/từ chối/đổi vai trò `038` · mời ra `039` · đọc danh bạ thành viên `037` khi không phải thành viên của một nhóm `public`. Nhánh thoát chung: `manage:feed-group`. Cấp vai `owner` cho người khác chỉ dành cho `owner` hiện tại (hoặc `manage:feed-group`) — `admin` tự nâng mình lên `owner` biến cổng owner-only của `034` thành hai bước bấm. _(Nghĩa NỚI 22/09/2026 — S16-SOCIAL-BE-2A, D-OWNER-8; bản cũ chỉ ghi «duyệt thành viên / đổi vai trò».)_ |
+| `SOCIAL-ERR-015` | 409 | **Mọi thao tác làm nhóm mất `owner` `active` CUỐI CÙNG** — rời nhóm `036` · hạ vai trò owner cuối `038` · mời owner cuối ra `039`. Thiếu một đường là nhóm rơi về **0 owner và khoá vĩnh viễn** (chỉ `manage:feed-group` gỡ được). Ba đường đi qua một neo `SELECT … FROM feed_groups … FOR UPDATE` chung trước khi đếm — `COUNT` trần là TOCTOU. **`034` xoá nhóm KHÔNG thuộc bất biến này** (nó là luật ủy quyền, không phải luật đếm; đọc nghĩa đen thì xoá nhóm luôn 409). _(Nghĩa NỚI 22/09/2026 — S16-SOCIAL-BE-2A, D-OWNER-8.)_ |
 | `SOCIAL-ERR-016` | 409 | Bỏ phiếu vào bình chọn đã `closed` hoặc quá hạn |
 | `SOCIAL-ERR-017` | 409 | Bỏ phiếu lần hai vào bình chọn một-lựa-chọn (đổi phiếu phải đi đường sửa) |
 | `SOCIAL-ERR-018` | 422 | Bình chọn ngoài khoảng 2–10 lựa chọn |

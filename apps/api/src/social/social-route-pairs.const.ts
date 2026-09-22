@@ -175,6 +175,35 @@ export const SOCIAL_ROUTE_PAIRS = {
    * hai đường — nhưng ca đo thật của `switch` vét cạn nằm ở unit spec, không ở int-spec của `029`.
    */
   reportResolve: pair("manage", "feed-report"),
+
+  // ══ NHÓM (`S16-SOCIAL-BE-2A`, API-19 §5.1 dòng 98-107) — 10 route `030..039` ══
+  //
+  // 🔴 **CẢ 10 ĐỀU `tier1IsFloor: false`, và đó KHÔNG phải sơ suất.** Định nghĩa của cờ (docblock ở
+  // đầu file) HẸP: cặp quyền thật sự đòi PHỤ THUỘC NỘI DUNG REQUEST. Vế tầng-2 của nhóm là **vai trò
+  // HÀNG** `feed_group_members.role` (SOC-DEC-006) — không phải một cặp quyền khác — cộng nhánh thoát
+  // `manage:feed-group` đọc từ `SocialActor.canManageGroups`. Đúng hình dạng của `001`/`004`/`005`
+  // (`view:feed` + `manage:feed-post` cho nhánh nội dung người khác), và census assert ĐẲNG THỨC tập
+  // `tier1IsFloor===true` với tập route có bảng cặp-theo-payload — đặt `true` ở đây là ĐỎ ngay.
+  //
+  // `companyFloor: true` cả 10 (`dataScope` bỏ trống): seed `0578:87-97` cấp `create:feed-group` cho
+  // cả 4 vai canonical và `manage:feed-group` cho `hr` + `company-admin`, TẤT CẢ ở scope `Company`.
+  // Phạm vi dữ liệu của nhóm là membership ép trong SQL, không phải scope của grant.
+  /** 030 `GET /social/groups` — public ∪ nhóm của actor; `manage:feed-group` thấy mọi nhóm còn sống. */
+  groupsList: pair("view", "feed"),
+  /** 031 `POST /social/groups` — cặp RIÊNG (`create:feed-group`), khác 9 route còn lại. */
+  groupCreate: pair("create", "feed-group"),
+  groupGet: pair("view", "feed"),
+  /** 033 `PATCH …/{id}` — tầng 2: vai `owner|admin` HOẶC `manage:feed-group` (+audit khi qua manage). */
+  groupUpdate: pair("view", "feed"),
+  /** 034 `DELETE …/{id}` — tầng 2: vai **`owner` MỘT MÌNH** (API-19 dòng 102) HOẶC `manage:feed-group`. */
+  groupDelete: pair("view", "feed"),
+  groupJoin: pair("view", "feed"),
+  groupLeave: pair("view", "feed"),
+  groupMembersList: pair("view", "feed"),
+  /** 038 `PATCH …/members/{uid}` — duyệt/từ chối/đổi vai trò; audit LUÔN (thao tác lên người khác). */
+  groupMemberDecide: pair("view", "feed"),
+  /** 039 `DELETE …/members/{uid}` — mời ra; audit LUÔN. */
+  groupMemberRemove: pair("view", "feed"),
 } as const satisfies Record<string, SocialPair>;
 
 export type SocialRouteKey = keyof typeof SOCIAL_ROUTE_PAIRS;

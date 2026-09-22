@@ -13,6 +13,10 @@ import { SocialDiscoveryRepository } from "./social-discovery.repository";
 import { SocialDiscoveryService } from "./social-discovery.service";
 import { SocialFileResolver } from "./social-file.resolver";
 import { SocialGroupAccessService } from "./social-group-access.service";
+import { SocialGroupMembersRepository } from "./social-group-members.repository";
+import { SocialGroupsController } from "./social-groups.controller";
+import { SocialGroupsRepository } from "./social-groups.repository";
+import { SocialGroupsService } from "./social-groups.service";
 import { SocialMasterDataSeeder } from "./social-master-data.seeder";
 import { SocialNewsRepository } from "./social-news.repository";
 import { SocialNewsService } from "./social-news.service";
@@ -71,6 +75,10 @@ import {
     SocialNewsController,
     SocialDiscoveryController,
     SocialReportsController,
+    // S16-SOCIAL-BE-2A — khối additive. 🔴 Thêm controller mới PHẢI kèm một dòng ở
+    // `SOCIAL_CONTROLLERS` của `social-two-layer-guard-census.unit-spec.ts`: hằng đó là DANH SÁCH
+    // TRẮNG, quên thêm ⇒ 10 route vô hình với census mà cả 4 assert vẫn XANH (fail-open im lặng).
+    SocialGroupsController,
   ],
   providers: [
     SocialAccessService,
@@ -93,6 +101,9 @@ import {
     SocialReportsService,
     // S16-SOCIAL-BE-2A — khối additive (nợ (a) của DB-2: catalog huy hiệu cho công ty sinh SAU migrate).
     SocialGroupAccessService,
+    SocialGroupsRepository,
+    SocialGroupMembersRepository,
+    SocialGroupsService,
     SocialMasterDataSeeder,
     SocialSeedRegistrar,
   ],

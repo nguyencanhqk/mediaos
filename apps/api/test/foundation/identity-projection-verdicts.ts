@@ -735,6 +735,13 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     signedBy: "S16-SOCIAL-BE-1B",
   },
   {
+    point: "social/social-group-members.repository.ts#listMembersTx:users.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-037 danh sách thành viên nhóm. Truy vấn chỉ lọc `(company_id, group_id[, status])` nên bằng chứng nằm ở ĐIỂM KHẲNG ĐỊNH, không ở vị từ của chính câu: `social-groups.service.ts#listMembers` đi qua HAI cổng trước mọi truy vấn — `assertGroupVisibleTx` (nhóm `private` + không phải thành viên `active` ⇒ 404, không xác nhận nhóm tồn tại) rồi `assertGroupRoleTx(['owner','admin','member'])` (nhóm `public` + người ngoài ⇒ 403: nhóm công khai nhưng danh bạ thành viên thì không). Nhánh thoát duy nhất là `manage:feed-group` — đúng cặp đang gác `033`/`034`/`038`/`039`. Tập hàng còn bị thu hẹp thêm bởi D7 (`users` còn sống + `employee_profiles.status='active'`) nên người đã nghỉ việc không lộ ra. DTO CỐ Ý chở `userId` (ngoại lệ đã ghi ở `social-api-groups.ts`): `038`/`039` khoá theo `{user_id}` trên đường dẫn nên FE không duyệt/đổi-vai/mời-ra được nếu thiếu nó, và người đọc được danh sách này vốn đã là thành viên chính nhóm đó.",
+    signedBy: "S16-SOCIAL-BE-2A",
+  },
+  {
     point: "social/social-reports.repository.ts#REPORT_COLUMNS:rReporterUser.fullName",
     basis: "second-assert",
     reason:
@@ -788,7 +795,10 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // báo cáo · người xử lý — cặp riêng `view/manage:feed-report` + vị từ D6 trong chính câu).
   // ⚠️ BA điểm cuối chỉ ĐO ĐƯỢC sau khi census nhận thêm `aliasedTable` bên cạnh `alias`; trước đó
   // ratchet XANH trong khi chúng mở toang. Nới CÓ CHỦ ĐÍCH qua FULL gate.
-  "second-assert": 10,
+  // 10 → 11 (S16-SOCIAL-BE-2A, 22/09/2026): `social-group-members.repository.ts#listMembersTx`
+  // (route `037`). Nới CÓ CHỦ ĐÍCH qua FULL gate. Điểm mới KHÔNG mở bề mặt đọc nào ngoài tập người
+  // mà actor đã là thành viên cùng nhóm (hoặc `manage:feed-group`), và còn bị D7 thu hẹp thêm.
+  "second-assert": 11,
   // 7 → 8 (S10-SEC-LOGINLOG429-1, 25/08/2026): `recordLoginAttemptForUser:users.email`. Nới CÓ CHỦ
   // ĐÍCH và đi qua FULL gate đúng như dòng cảnh báo của cổng này đòi. Điểm mới KHÔNG mở bề mặt đọc
   // nào: email đọc ra chỉ rơi vào `login_logs.email` (cột vốn đã chứa email client tự khai), và bề

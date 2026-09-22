@@ -79,7 +79,6 @@ export const feedGroupSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   visibility: feedGroupVisibilitySchema,
-  avatarUrl: z.string().nullable(),
   memberCount: z.number().int().min(0),
   myRole: feedGroupRoleSchema.nullable(),
   myStatus: feedGroupMemberStatusSchema.nullable(),
@@ -100,9 +99,18 @@ export type FeedGroupPageDto = z.infer<typeof feedGroupPageSchema>;
 /**
  * Body tạo nhóm — `.pick()` + `.strict()`: **KHÔNG** có `memberCount` (server đếm), **KHÔNG** có
  * `id`. Người tạo thành `owner`/`active` cùng tx ở service, không do body khai.
+ *
+ * 🔴 **KHÔNG có `avatarFileId`, và DTO đọc KHÔNG có `avatarUrl` — chốt thi công 22/09/2026 (L-c).**
+ * Ảnh đại diện nhóm là một TÍNH NĂNG RIÊNG, không phải một cột: CHAT phải dựng cả cụm
+ * `chat-room-avatar-file.resolver` + `chat-room-avatar-presign.service` + controller tải lên mới
+ * hiện được một ảnh phòng. SOCIAL hôm nay **chưa có resolver nào cho `(SOCIAL, feed_group)`**, nên
+ * `FilePolicyService.decideForLinkedFile` DENY `deny-no-resolver` ⇒ một `avatarFileId` nhận vào sẽ
+ * KHÔNG có đường nào ký URL để đọc lại. Nhận một trường mà không đường nào đọc được chính là tính
+ * năng WRITE-ONLY mà D-OWNER-7 vừa từ chối cho `groupId`. Cột `feed_groups.avatar_file_id` giữ
+ * nguyên trong schema; đường tải lên + đọc lại giao **WO riêng** (khuôn `chat-room-avatar-*`).
  */
 export const createFeedGroupSchema = feedGroupCoreSchema
-  .pick({ name: true, description: true, visibility: true, avatarFileId: true })
+  .pick({ name: true, description: true, visibility: true })
   .strict();
 export type CreateFeedGroupDto = z.infer<typeof createFeedGroupSchema>;
 
@@ -175,3 +183,19 @@ export const decideFeedGroupMemberSchema = z
   ])
   .describe("SOCIAL-API-038");
 export type DecideFeedGroupMemberDto = z.infer<typeof decideFeedGroupMemberSchema>;
+
+/**
+ * Kết quả `038`/`039` — MỘT hình dạng cho cả ba nhánh (duyệt · từ chối · đổi vai trò) và cho cả
+ * `039` mời ra.
+ *
+ * `role`/`status` **null ⇔ hàng thành viên KHÔNG CÒN** (từ chối yêu cầu và mời ra đều xoá CỨNG —
+ * DB-17 §4.9). Một union ba nhánh sẽ buộc FE rẽ kiểu cho ba lời gọi vốn cùng một màn hình, còn một
+ * `{ok:true}` trần thì không nói được "sau thao tác người này đang ở đâu" — thứ FE cần để vẽ lại
+ * đúng một dòng trong danh sách mà không gọi lại `037`.
+ */
+export const feedGroupMemberMutationSchema = z.object({
+  userId: uuid(),
+  role: feedGroupRoleSchema.nullable(),
+  status: feedGroupMemberStatusSchema.nullable(),
+});
+export type FeedGroupMemberMutationDto = z.infer<typeof feedGroupMemberMutationSchema>;
