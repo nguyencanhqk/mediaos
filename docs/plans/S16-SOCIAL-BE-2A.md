@@ -110,7 +110,7 @@
 | **D11** | `@Idempotent` | `done_when` đòi "**mọi POST**" ⇒ `031` create · `035` join · `036` leave đều có. Không im lặng bỏ sót | backlog `done_when` |
 | **D12** | Body `038` | `.strict()`, hai dạng loại trừ nhau: `{decision:'approve'\|'reject'}` (cho hàng `pending`) **hoặc** `{role:'admin'\|'member'\|'owner'}` (cho hàng `active`). `role:'owner'` **hợp lệ** — đó là đường chuyển owner (D6) — nhưng chỉ `owner` hiện tại hoặc `manage:feed-group` được dùng, và phải giữ bất biến ≥1 owner. 🔴 **M-d**: gửi dạng `{role:'admin'}` hoặc `{role:'owner'}` lên một hàng `pending` chạm `chk_feed_group_members_pending_role` (`social.ts:570`: `status='active' OR role='member'`) ⇒ 23514 ⇒ **500**. Server phải tự bắt "dạng body không khớp trạng thái hàng" và trả **409 `ERR-013`** TRƯỚC khi chạm DB (ca RED G16) | API-19 `:106`; D5/D6; M-d |
 
-| **D13** 🔴 MỚI | Vòng đời **xoá mềm nhóm** (H1) | `feed_groups.deleted_at` (`social.ts:519`) KHÔNG xuất hiện ở bất kỳ vị từ nào của bản plan trước. Luật một dòng: **MỌI vị từ chạm `feed_groups` mang `deleted_at IS NULL`** — `visiblePostCondition` nhánh group (D3) · `assertGroupVisibleTx` · kiểm GHI D2 · `030` · `035` · `037`. Thiếu nó: sau `034`, thành viên cũ vẫn **đăng bài được** vào nhóm đã xoá, vẫn đọc bài cũ, vẫn `035` xin vào được; nhóm public đã xoá vẫn phát bài cho cả công ty |
+| **D13** 🔴 MỚI | Vòng đời **xoá mềm nhóm** (H1) | `feed_groups.deleted_at` (`social.ts:519`) KHÔNG xuất hiện ở bất kỳ vị từ nào của bản plan trước. Luật một dòng: **MỌI vị từ chạm `feed_groups` mang `deleted_at IS NULL`** — ⚠️ **MIỄN TRỪ DUY NHẤT (W4): neo `SELECT … FOR UPDATE` của D6-ii CỐ Ý KHÔNG mang vế này** (phải khoá được cả nhóm đã xoá mềm, nếu không thì thao tác trên nhóm vừa bị xoá mất hàng rào đua). Ghi ở đây để lượt sau đừng "vá cho nhất quán" rồi làm hỏng neo — `visiblePostCondition` nhánh group (D3) · `assertGroupVisibleTx` · kiểm GHI D2 · `030` · `035` · `037`. Thiếu nó: sau `034`, thành viên cũ vẫn **đăng bài được** vào nhóm đã xoá, vẫn đọc bài cũ, vẫn `035` xin vào được; nhóm public đã xoá vẫn phát bài cho cả công ty |
 | **D14** 🔴 MỚI | **BA** hàm tập-người phải vá cho nhánh `group`, không phải một (C4) | (1) `unackedEmployeesFor` (`social-news.repository.ts:187`) — nợ (g)6 đã biết. (2) **`audienceUserIds` (`:265`)** — sinh đôi cách đó 78 dòng: tin `type='news'` + `audience='group'` là HỢP LỆ theo CHECK (`social.ts:140-153`) ⇒ `enqueueNewsPublishedNoti` (`social-posts.service.ts:205,427`) nhận tập RỖNG ⇒ **NOTI-031 không tới ai**, trong khi `022` (sau khi vá g6) lại liệt đúng danh sách "chưa đọc" — hai đường nói ngược nhau, đúng lý lẽ plan dùng để đòi vá (g)6 trước. (3) **`resolveMentions` (`social-mentions.ts:239-246`)** — `inAudience` cho `group` = false với MỌI người ⇒ mọi @mention trong bài/bình luận nhóm bị **bỏ IM LẶNG** (vẫn 201 + `droppedMentions[]`, không lỗi, không log); 4 call-site `social-posts.service.ts:180`·`:265` và `social-comments.service.ts:163`·`:240`; hàm phải nhận thêm `groupId` (hôm nay `:183` chỉ truyền `{audience, orgUnitId}`). Cả ba dùng CÙNG vị từ EXISTS membership `active` + D7. Docblock `social-mentions.ts:165` ("`group` ⇒ KHÔNG BAO GIỜ tới đây") phải sửa — D4 làm câu đó thành SAI |
 
 ### 2.3 Cần chữ ký ở PR
@@ -141,10 +141,11 @@ Tách `repository` thành **hai file** ngay từ đầu (bản trước gộp, �
 
 | File | Sửa gì |
 | --- | --- |
-| `social-access.service.ts` | `visiblePostCondition` +nhánh OR group (D3) · `assertWriteAudience` → **async, nhận `tx`+`groupId`** (D4) · `resolveActor` batch 3→4 (D9) · `SocialActor`/`SocialViewerContext` +cờ |
+| `social-access.service.ts` | `visiblePostCondition` +nhánh OR group (D3) · `assertWriteAudience` → **async, nhận `tx`+`groupId`** (D4) · `resolveActor` batch 3→4 (D9) · **CHỈ `SocialActor` +cờ `canManageGroups`** — ⚠️ W3: `SocialActor extends SocialViewerContext` (`social.types.ts:18`), đặt cờ lên `SocialViewerContext` là buộc `resolveViewerContext` phải resolve thêm cặp ⇒ **mở lại đúng lỗ H2** |
 | `social-posts.service.ts` | **Chuyển** lời gọi `assertWriteAudience` từ `:153` (ngoài tx) **vào trong** `withTenant` (D4) · bỏ `groupId: null` cứng ở `:167` |
 | `social-posts.repository.ts` (`listFeed` — **MỘT hàm phục vụ NĂM route**, M21) | (i) Bộ lọc D-OWNER-6 ở **tầng feed**, KHÔNG nhồi vào `visiblePostCondition` (D1) — áp **theo call-site**, xem bảng 6 đường đọc ngay dưới. (ii) **+`groupId`** vào opts (D-OWNER-7) |
-| `packages/contracts/src/social-api.ts` + `social-feed-cursor.ts` | `listFeedQuerySchema` **+`groupId: uuid().optional()`**; 🔴 **`feedFingerprint` PHẢI chứa `groupId`** — quên ⇒ con trỏ của feed thường dùng lại được cho feed nhóm ⇒ phân trang SAI IM LẶNG (đúng thứ `fingerprintFeedFilter` sinh ra để chặn) |
+| `packages/contracts/src/social-api.ts` | `listFeedQuerySchema` **+`groupId: uuid().optional()`** |
+| **`social-posts.service.ts:593-605`** (`feedFingerprint`) — ⚠️ W2: **KHÔNG** ở `packages/contracts`, và `social-feed-cursor.ts` (cùng thư mục `src/social/`) chỉ giữ `fingerprintFeedFilter` chung | 🔴 `feedFingerprint` PHẢI chứa `q.groupId` — quên ⇒ con trỏ của feed thường dùng lại được cho feed nhóm ⇒ phân trang SAI IM LẶNG. **Quên dòng này compile SẠCH**; chỉ G15 bắt được |
 | `social-mentions.ts` | D14(3) — `inAudience` nhánh `group` (EXISTS membership active + D7) + hàm nhận thêm `groupId`; sửa docblock `:165` |
 | `docs/SPEC/SPEC-16 SOCIAL.md` §12 | D-OWNER-8 — nới nghĩa `ERR-014`/`ERR-015` trong **CÙNG PR** (docs là nguồn sự thật, không để drift) |
 | `apps/api/package.json` (`test:cov:social`) | M20 — thêm int-spec mới của BE-2A; script liệt kê TỪNG spec nên spec không có tên trong đó **không tính vào cổng coverage** |
@@ -160,7 +161,12 @@ Tách `repository` thành **hai file** ngay từ đầu (bản trước gộp, �
 
 > `listFeed` là **một hàm phục vụ năm route** (M21) + một đường thứ sáu nhận vị từ trực tiếp (M22).
 > Nhét bộ lọc vào `listFeed` là cắn luôn `010`/`020`; nhét ở ba service call-site là để lọt.
-> ⇒ Bộ lọc là **tham số của `listFeed`** (`excludeGroupAudience: boolean`), caller quyết định.
+> ⇒ Bộ lọc là **tham số của `listFeed`**, caller quyết định. 🔴 **W6 — kiểu phải làm cho "quên"
+> KHÔNG biểu diễn được**: `groupScope: "exclude" | "include" | { only: string }`, **BẮT BUỘC, cấm
+> `?:`, cấm giá trị mặc định**. Mọi field khác trong `opts` của `listFeed`
+> (`social-posts.repository.ts:64-81`) đều `?`, nên viết theo thói quen thành `excludeGroupAudience?:
+> boolean` là để sẵn một cửa fail-OPEN cho caller MỚI (BE-2B/BE-3): quên truyền ⇒ `false` ⇒ bài nhóm
+> public chảy vào feed khám phá, im lặng.
 
 | # | Đường | Hàm | Bài `audience='group'` | Vì sao |
 | --- | --- | --- | --- | --- |
@@ -186,15 +192,30 @@ Mọi DTO ghi: `.pick()` từ core schema **rồi** `.strict()`. Cấm `.extend(
 | `002`+group | `POST /social/posts` (`audience=group`) | `create:feed-post` (sàn) | — | D2/D4: member `active` **trong tx**, nhóm `deleted_at IS NULL` (D13) | ✅ | — | — | `ERR-002`; thiếu `groupId` ⇒ **400 Zod** (D-OWNER-9) |
 | `001`+`groupId` | `GET /social/feed?groupId=` | `view:feed` | — | D-OWNER-7: lọc đích danh, vẫn QUA `visiblePostCondition`; `groupId` vào `feedFingerprint` | — | — | — | cursor lệch `groupId` ⇒ **400** |
 | `030` | `GET /social/groups` | `view:feed` | — | public ∪ nhóm của actor (**không lộ nhóm private ngoài**) | — | — | — | — |
-| `031` | `POST /social/groups` | `create:feed-group` | — | tạo + hàng `owner`/`active` cùng tx | ✅ | — | — | — |
+| `031` | `POST /social/groups` | `create:feed-group` | — | tạo + hàng `owner`/`active` cùng tx; bump `member_count` **+1** (D10) | ✅ | — | — | **W1**: trùng tên ⇒ 409 (xem dưới) |
 | `032` | `GET /social/groups/{id}` | `view:feed` | — | `assertGroupVisibleTx` | — | — | — | `ERR-012` |
-| `033` | `PATCH /social/groups/{id}` | `view:feed` | `['owner','admin']` | +thoát `manage:feed-group` | — | khi qua `manage` | — | `ERR-012`,`ERR-014` |
+| `033` | `PATCH /social/groups/{id}` | `view:feed` | `['owner','admin']` | +thoát `manage:feed-group` | — | khi qua `manage` | — | `ERR-012`,`ERR-014`, **W1**: đổi sang tên trùng ⇒ 409 |
 | `034` | `DELETE /social/groups/{id}` | `view:feed` | **`['owner']`** 🔴 | +thoát `manage`; xoá mềm. **KHÔNG** chịu bất biến đếm owner (D6-i, H7) | — | khi qua `manage` | — | `ERR-012`,`ERR-014` |
 | `035` | `POST /social/groups/{id}/join` | `view:feed` | — | public→`active`, private→`pending`; trùng ⇒ **`isUniqueViolationOf(err, 'feed_group_members_pk')`** → `ERR-013` (H6: KHÔNG bắt `23505` trần — luật đã ghi ở `social.errors.ts:140-150`) | ✅ | — | — | `ERR-012`,`ERR-013` |
 | `036` | `POST /social/groups/{id}/leave` | `view:feed` | — | D6 owner cuối → 409 | ✅ | — | — | `ERR-015` |
 | `037` | `GET /social/groups/{id}/members` | `view:feed` | — | membership HOẶC `manage`; D7 | — | — | — | `ERR-012` |
 | `038` | `PATCH /social/groups/{id}/members/{uid}` | `view:feed` | `['owner','admin']` | D12 body; **D6-ii bất biến owner (FOR UPDATE)**; delta D10 | — | ✅ `feed_group` | `034` | `ERR-014`,`ERR-015`, **`ERR-013`** (body lệch trạng thái hàng — M-d) |
 | `039` | `DELETE /social/groups/{id}/members/{uid}` | `view:feed` | `['owner','admin']` | **D6** | — | ✅ `feed_group` | — | `ERR-014`,`ERR-015` |
+
+🔴 **W1 (nợ MỚI vòng 3, cùng lớp H6) — tên nhóm trùng ⇒ 500 nếu không ai bắt.**
+`feed_groups_company_name_uq` là **partial unique index** `(company_id, lower(name)) WHERE deleted_at
+IS NULL` (`social.ts:527-529`): `031` tạo trùng tên và `033` đổi sang tên trùng đều ném `23505` mà
+hôm nay không call-site nào dịch ⇒ **500 cho một thao tác người dùng hoàn toàn bình thường**.
+
+- Bắt bằng `isUniqueViolationOf(err, SOCIAL_CONSTRAINT.GROUP_NAME_UQ)` — **theo TÊN CONSTRAINT**, không
+  `23505` trần (luật `social.errors.ts:140-150`); thêm `GROUP_NAME_UQ: "feed_groups_company_name_uq"`
+  vào `SOCIAL_CONSTRAINT`.
+- **Mã lỗi: KHÔNG SỐ HOÁ** — catalog SPEC-16 §12 đóng ở `001..022` và **đã dùng hết** (`022` = huy
+  hiệu, thuộc BE-2B). Theo đúng tiền lệ của chính module (`REPORT_DUPLICATE_OPEN`,
+  `social.errors.ts:100-110`): hằng CÓ TÊN `GROUP_NAME_TAKEN` (409), int-spec assert theo HẰNG chứ
+  không theo câu chữ. Số hoá sau nếu owner muốn — thêm dòng SPEC rồi đổi hằng, **một chỗ**.
+  (D-OWNER-8 chỉ nới nghĩa `ERR-014`/`015`; nó KHÔNG cấp quyền bịa mã mới.)
+- Ca **G18** ở §5.
 
 ---
 
@@ -218,6 +239,7 @@ Mọi DTO ghi: `.pick()` từ core schema **rồi** `.strict()`. Cấm `.extend(
 | **G12** 🔴 MỚI (D13/H1) | Sau `034` xoá mềm nhóm: thành viên cũ `002` đăng bài vào nhóm đó · đọc bài cũ trong nhóm · `035` xin vào · nhóm public đã xoá còn lộ bài không | 404 `ERR-012` / bài 404 `ERR-001` / vắng mặt ở mọi đường liệt | Trước khi xoá, cả ba đường đều chạy được (neo dương) |
 | **G13** 🔴 MỚI (D14-3) | @mention một thành viên trong bài/bình luận thuộc nhóm | Mention **được ghi nhận**, KHÔNG rơi vào `droppedMentions[]` | Mention người NGOÀI nhóm ⇒ rơi vào `droppedMentions[]` (fail-closed vẫn đúng) |
 | **G14** 🔴 MỚI (D14-2) | Tin `type='news'` + `audience='group'` + `requiresAck` | NOTI-031 tới **đúng tập thành viên active** (neo dương ≥1), và `022` liệt **cùng tập** đó | Người ngoài nhóm không nhận; người đã nghỉ việc không nhận (D7) |
+| **G18** MỚI (W1) | `031` tạo nhóm trùng tên (khác hoa/thường) · `033` đổi sang tên đã có | **409 `GROUP_NAME_TAKEN`**, KHÔNG phải 500 | Tên chưa dùng ⇒ 201/200; tên trùng với một nhóm **đã xoá mềm** ⇒ 201 (index là partial `WHERE deleted_at IS NULL`) |
 | **G16** MỚI (M-d) | `038` gửi `{role:'admin'}` lên hàng `pending` | **409 `ERR-013`** — KHÔNG để chạm `chk_feed_group_members_pending_role` ⇒ 23514 ⇒ 500 | `{decision:'approve'}` lên hàng `pending` ⇒ 200; `{role:'admin'}` lên hàng `active` ⇒ 200 |
 | **G9b** 🔴 MỚI (H2) | Người giữ `manage:feed-group` xin URL tải đính kèm của bài trong nhóm private mà họ KHÔNG thuộc | **404/403** — cờ `manage` KHÔNG nới `visiblePostCondition` (D9-ii) | Cùng người đó vẫn gọi được `033`/`037`/`038` trên nhóm đó |
 | G6 | `member` thường duyệt/từ chối (`038`) | 403 `ERR-014` | `admin`/`owner` duyệt được |
@@ -277,11 +299,11 @@ Mọi DTO ghi: `.pick()` từ core schema **rồi** `.strict()`. Cấm `.extend(
 13. `@Idempotent` cho `031`/`035`/`036` (D11).
 
 **Bước 3 — đóng WO**
-14. 🔴 Census 2 tầng — **BỐN việc, thiếu một là fail-OPEN IM LẶNG (H3)**: (i) `SOCIAL_CONTROLLERS` **+`SocialGroupsController`** — đây là **danh sách trắng** (`social-two-layer-guard-census.unit-spec.ts:34-42`), quên thêm ⇒ 10 route **vô hình**, count vẫn 29, **cả 4 assert XANH**; (ii) `ROUTE_TO_KEY` +10; (iii) `SERVICE_SITES` +10 site; (iv) `toBe(29)` → **`toBe(39)`**. Khai `tier1IsFloor`/`companyFloor`/`dataScope` cho 10 cặp mới (census assert **đẳng thức tập**). Cộng `identity-projection-verdicts.ts`: điểm chiếu `listMembersTx` + `030` + **bump các sổ đếm ở cuối file**.
+14. 🔴 Census 2 tầng — **BỐN việc, thiếu một là fail-OPEN IM LẶNG (H3)**: (i) `SOCIAL_CONTROLLERS` **+`SocialGroupsController`** — đây là **danh sách trắng** (`social-two-layer-guard-census.unit-spec.ts:34-42`), quên thêm ⇒ 10 route **vô hình**, count vẫn 29, **cả 4 assert XANH**; (ii) `ROUTE_TO_KEY` +10; (iii) **`SERVICE_SITE_TO_KEYS`** (tên thật, W5 — `social-two-layer-guard-census.unit-spec.ts:92`) +10 site; (iv) `toBe(29)` → **`toBe(39)`**. Khai `tier1IsFloor`/`companyFloor`/`dataScope` cho 10 cặp mới (census assert **đẳng thức tập**). Cộng `identity-projection-verdicts.ts`: điểm chiếu `listMembersTx` + `030` + **bump các sổ đếm ở cuối file**.
 15. 🔴 Ba sổ **đo RIÊNG, cấm cộng tay lẫn nhau** (`route-http-coverage.e2e-spec.ts:351-354` ghi thẳng "BA phép đo, BA câu hỏi khác nhau"): (1) `MIN_COVERED_COUNT` · (2) census 2 tầng + `SERVICE_SITES` · (3) route-census JSON.
 16. `pnpm --filter @mediaos/contracts build && pnpm typecheck`; `bash harness/check.sh --all` xanh, **không** banner "XANH KHÔNG ĐỦ BẰNG CHỨNG".
 17. Chạy **TẤT CẢ spec của module trong MỘT lượt trên cùng lane DB** (bài học BE-1B: chạy riêng lẻ giấu lỗi đỏ-CI).
-18. **Sửa `SPEC-16` §12** (D-OWNER-8 — nới nghĩa `ERR-014`/`ERR-015`) + **thêm int-spec mới của WO vào `test:cov:social`** (M20). Hai việc docs/cổng làm TRƯỚC gate để reviewer đọc bản đã đồng bộ.
+18. **Đồng bộ tài liệu/sổ TRƯỚC gate** — ba việc: (a) `SPEC-16` §12 nới nghĩa `ERR-014`/`ERR-015` (D-OWNER-8); (b) int-spec mới ở `test/integration/**` thêm vào `test:cov:social` (M20 — spec colocated trong `src/social/` thì không cần); (c) 🔴 **`harness/backlog.mjs` `done_when` #2/#3 của WO này** — #3 còn ghi literal "ép ở MỌI đường mất owner … · `034` xoá nhóm" (trái D6-i/H7) và #2 đọc như thể `023`/`025` cũng có cửa thoát `groupId` (chỉ `001` có). Không sửa thì H7 chỉ **dời chỗ mâu thuẫn**, không tắt.
 19. **FULL gate** (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`) **TRƯỚC khi mở PR** — không phải việc làm sau. → PR.
 
 ---
