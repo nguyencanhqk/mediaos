@@ -210,3 +210,6 @@ export * from "./social-api";
 // S16-SOCIAL-BE-1B (additive): DTO 10 route Nhóm B (API-19 §5.1 dòng 85-96). Tách khỏi ./social-api
 // theo CÙNG luật (import NGƯỢC, KHÔNG re-export) — gộp vào đó sẽ đẩy file lên 820 dòng, vượt trần 800.
 export * from "./social-api-b";
+// S16-SOCIAL-BE-2A (additive): DTO 10 route NHÓM (API-19 §5.1 dòng 97-107). Tách khỏi ./social-api-b
+// theo cùng luật trần 800 dòng; import NGƯỢC, KHÔNG re-export tên nào của ba file kia.
+export * from "./social-api-groups";
