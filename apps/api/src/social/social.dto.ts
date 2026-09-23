@@ -1,5 +1,7 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  listPollsQuerySchema,
+  votePollSchema,
   createFeedCommentSchema,
   createFeedPostSchema,
   createFeedGroupSchema,
@@ -72,3 +74,7 @@ export class ListFeedGroupMembersQuery extends createZodDto(listFeedGroupMembers
  * Làm vậy là cho phép gửi CẢ HAI trường trong một request, và thứ tự áp dụng trở thành luật ngầm
  * không ai viết ra — đúng cái D12 loại bỏ.
  */
+
+// ── S16-SOCIAL-BE-2B-1 — BÌNH CHỌN (`040..044`) ──
+export class ListPollsQuery extends createZodDto(listPollsQuerySchema) {}
+export class VotePollBody extends createZodDto(votePollSchema) {}

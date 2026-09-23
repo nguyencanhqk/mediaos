@@ -213,3 +213,4 @@ export * from "./social-api-b";
 // S16-SOCIAL-BE-2A (additive): DTO 10 route NHÓM (API-19 §5.1 dòng 97-107). Tách khỏi ./social-api-b
 // theo cùng luật trần 800 dòng; import NGƯỢC, KHÔNG re-export tên nào của ba file kia.
 export * from "./social-api-groups";
+export * from "./social-api-polls";

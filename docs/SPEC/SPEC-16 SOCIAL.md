@@ -392,7 +392,7 @@ Cột sinh `search_vector` trên `feed_posts` — **cột này LUÔN tồn tại
 
 ### 13.6 Bộ đếm denormalized
 
-Bộ đếm denormalized của module gồm **năm** cột, không phải ba — tất cả cập nhật **trong cùng transaction** với hàng nguồn:
+Bộ đếm denormalized của module gồm **sáu** cột — tất cả cập nhật **trong cùng transaction** với hàng nguồn:
 
 | Cột | Đối soát với |
 | --- | --- |
@@ -401,8 +401,23 @@ Bộ đếm denormalized của module gồm **năm** cột, không phải ba —
 | `feed_posts.view_count` | `COUNT(*) feed_post_views` |
 | `feed_tags.usage_count` | `COUNT(*) feed_post_tags` qua bài chưa xoá mềm |
 | `feed_groups.member_count` | `COUNT(*) feed_group_members` `status='active'` |
+| **`feed_poll_options.vote_count`** | **`COUNT(*) feed_poll_votes` theo `(poll_id, option_id)`** |
 
-Có ca test race (hai lượt thích đồng thời) và **script đối soát cả năm cột** cho QA.
+Có ca test race (hai lượt thích đồng thời) và **script đối soát cả sáu cột** cho QA.
+
+> 🔴 **`vote_count` bổ sung 23/09/2026 (S16-SOCIAL-BE-2B-1, owner chốt S2).** Trước đó nó có
+> `CHECK >= 0` nhưng **không nằm trong bảng này** ⇒ không sổ đối soát nào nhìn tới nó, trong khi
+> FULL gate đã chỉ ra một lỗ có thể làm nó lệch **DƯƠNG** trong im lặng (lệch dương không chạm
+> `CHECK`, không lỗi, không log — chỉ là kết quả bình chọn sai).
+>
+> ⚠️ **Đối soát phải xuống tới TỪNG option**, không chỉ tổng theo poll: lỗi "trừ sai option"
+> (`-1` vào B thay vì A) cho `Σ` đúng và `COUNT(*)` đúng ⇒ một phép đo ở mức tổng vẫn XANH trong
+> khi kết quả bình chọn đã sai NGƯỜI.
+>
+> ⏳ **Nợ đã mở, KHÔNG làm trong BE-2B-1:** hàm `recountPollTx` (tính lại khi đã lệch — `feed_posts`
+> có đường đó ở `restorePostTx`, poll thì chưa). Lý do tách: nó thêm **writer thứ hai** vào
+> `feed_poll_options`, đúng chân trụ «không writer nào khác chạm bảng này» mà chứng minh
+> không-deadlock của module đang đứng lên ⇒ phải qua một lượt gate riêng.
 
 ### 13.7 Realtime
 

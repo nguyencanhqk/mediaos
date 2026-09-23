@@ -352,7 +352,15 @@ const MAX_UNCOVERED_TOTAL = 0;
 // «route có ca HTTP THẬT gọi đúng verb+path hay không», census 2 tầng là «decorator và service có
 // khai cùng một cặp quyền hay không», census JSON là «hệ có bao nhiêu route». Bump cái này KHÔNG
 // thay được bump hai cái kia.
-const MIN_COVERED_COUNT = 661;
+// S16-SOCIAL-BE-2B-1 (23/09/2026): 661 → **676**. +5 route SOCIAL bình chọn (`040..044`, int-spec
+// `social-be2b1-polls`) — nhưng sàn cũ đã TỤT HẬU **10 đơn vị**: `S16-SOCIAL-BE-2A` thêm 10 route
+// (`030..039`) mà KHÔNG siết hằng này, nên trước WO này số phủ THẬT đã là 671 trong khi sàn còn 661.
+// Số dưới đây là **SỐ ĐO ĐƯỢC** — dòng console nguyên văn của chính spec này:
+//   [S10-QA-ROUTEHTTP-1] Route HTTP coverage: 676/676 (100.0%) — CHƯA phủ: 0
+// KHÔNG cộng tay `661 + 5`: làm vậy sẽ khoá vĩnh viễn cái lỗ 10 đơn vị của BE-2A, và sàn hở thì nó
+// không còn bắt được việc xoá/đổi tên test — đúng lớp lỗi mà `MAX_UNCOVERED_TOTAL = 0` một mình
+// KHÔNG bịt (cổng đó chỉ đo "route nào chưa phủ", không đo "test nào biến mất khỏi scan").
+const MIN_COVERED_COUNT = 676;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

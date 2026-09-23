@@ -29,6 +29,7 @@ import {
   targetTypeLabel,
   type ResolvedMention,
 } from "./social-mentions";
+import { createPollTx } from "./social-post-types";
 import { SocialNewsRepository } from "./social-news.repository";
 import {
   SOCIAL_EVENT_MENTIONED,
@@ -152,9 +153,16 @@ export class SocialPostsService {
   async create(user: SocialRequestUser, dto: CreateFeedPostDto): Promise<FeedPostCreatedDto> {
     const actor = await this.access.resolveActor(user, "postCreate");
 
-    if (dto.type === "news" && !actor.canManageNews) {
-      throw new ForbiddenException(SOCIAL_ERR.NEWS_MANAGE_REQUIRED);
-    }
+    // 🔴 S16-SOCIAL-BE-2B-1 — cổng phụ THEO LOẠI BÀI, MỘT lời gọi cho mọi loại.
+    //
+    // Trước đây chỗ này là `if (dto.type === "news" && !actor.canManageNews) throw …` — một nhánh
+    // hard-code, trong khi bảng `SOCIAL_POST_TYPE_PAIRS` (thứ census đọc để kết luận "loại bài nào
+    // cũng có cặp gác") KHÔNG có call-site runtime nào. Hai thứ rời nhau: thêm một loại vào
+    // `feedCreatableTypeSchema` mà quên nhánh `if` thì loại đó tạo được KHÔNG QUA CẶP NÀO, và
+    // census vẫn XANH vì nó chỉ kiểm bảng có khoá, không kiểm ai dùng bảng.
+    //
+    // Giờ cổng ĐỌC chính bảng đó ⇒ quên khai một loại là TS đỏ, không phải là một lỗ chờ ship.
+    await this.access.assertCreatablePostType(actor, dto.type);
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
       // 🔴 S16-SOCIAL-BE-2A (D4) — cổng GHI nằm TRONG tx, ngay trước INSERT. Trước đây nó chạy NGOÀI
       // `withTenant`: với `org_unit` (dữ liệu đã có sẵn trên actor) thì vô hại, nhưng nhánh `group`
@@ -193,6 +201,15 @@ export class SocialPostsService {
         .returning({ id: feedPosts.id });
 
       const postId = inserted.id;
+
+      // ⟲ S16-SOCIAL-BE-2B-1 — thân riêng theo loại bài. CÙNG tx với INSERT bài: một bài
+      // `type='poll'` không có hàng `feed_polls` là bài mà `040..044` trả 404 mãi mãi, và người
+      // dùng nhìn thấy một "bình chọn" không bấm được. `dto.poll` chắc chắn có mặt khi
+      // `type='poll'` — `createFeedPostSchema.superRefine` ràng cả hai chiều.
+      if (dto.type === "poll" && dto.poll) {
+        await createPollTx(tx, actor.companyId, postId, dto.poll);
+      }
+
       await syncPostTags(tx, actor.companyId, postId, parseHashtags(dto.body));
 
       const mentions = await resolveMentions(

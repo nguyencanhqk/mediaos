@@ -307,3 +307,59 @@ export async function bumpGroupMemberCount(
   }
   return Number(row.value);
 }
+
+/**
+ * Cộng `delta` vào `feed_poll_options.vote_count` cho MỘT tập lựa chọn, CÙNG TX với hàng phiếu.
+ *
+ * ┌─ 🔴 BỘ ĐẾM NGUY HIỂM NHẤT CỦA MODULE ──────────────────────────────────────────────────────────┐
+ * │ `vote_count` **KHÔNG nằm trong 5 cột** mà SPEC-16 §13.6 liệt kê cho script đối soát định kỳ,   │
+ * │ nhưng nó có `chk_feed_poll_options_vote_count (vote_count >= 0)`. Hệ quả của cặp đó rất xấu:   │
+ * │   · lệch DƯƠNG  → kết quả bình chọn SAI. Không lỗi, không log, không ai biết.                   │
+ * │   · lệch ÂM     → 23514 ⇒ 500.                                                                 │
+ * │ Tức là **nhánh dễ phát hiện lại là nhánh ít xảy ra hơn**. Lưới duy nhất đáng tin là bất biến    │
+ * │ `Σ vote_count == COUNT(*) phiếu` kiểm sau MỖI bước của chuỗi vote/đổi/rút (ca `C-2`).           │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Cùng luật SQL-không-JS của cả file: sàn 0 là việc của CHECK, KHÔNG phải `Math.max` ở JS.
+ */
+export async function bumpPollOptionVotes(
+  tx: TenantTx,
+  companyId: string,
+  pollId: string,
+  optionIds: readonly string[],
+  delta: number,
+): Promise<number> {
+  if (delta === 0 || optionIds.length === 0) return 0;
+
+  const rows = await tx.execute<{ id: string }>(
+    sql`UPDATE feed_poll_options
+           SET vote_count = vote_count + ${delta}
+         WHERE company_id = ${companyId}
+           AND poll_id = ${pollId}
+           AND id IN (${sql.join(
+             optionIds.map((id) => sql`${id}`),
+             sql`, `,
+           )})
+     RETURNING id`,
+  );
+
+  // 🔴 `RETURNING` + đối chiếu SỐ LƯỢNG, không chỉ "có dòng nào không" — khuôn `bumpGroupMemberCount`
+  // siết thêm một bậc. Khớp THIẾU dòng nghĩa là một `optionId` không thuộc tenant/poll này đã lọt
+  // qua cổng `countOptionsOfPollTx`, và bỏ qua nó để lại bộ đếm lệch VĨNH VIỄN trong im lặng.
+  // Ném ⇒ cả tx quay lui: thà 500 ồn còn hơn một kết quả bình chọn nói dối.
+  //
+  // 🔴 FULL gate 23/09/2026 (`database-reviewer` H-2 · `silent-failure-hunter` L-3): vị từ CŨ chỉ có
+  // `company_id` + `id`, nên nó KHÔNG THỂ phát hiện vế "thuộc poll" mà chính thông điệp này khẳng
+  // định — vế đó do một câu KHÁC ở call-site gác (`countOptionsOfPollTx`). Một call-site tương lai
+  // quên câu đó, gửi `optionId` của bình chọn KHÁC trong cùng tenant, sẽ khớp 1/1 ⇒ assert PASS ⇒
+  // `vote_count` của bình chọn kia lệch DƯƠNG vĩnh viễn (không lỗi, không log, không script đối soát
+  // — `vote_count` ngoài 5 cột SPEC-16 §13.6). Thêm `poll_id` đưa lưới vào CHÍNH hàm, thay vì dựa
+  // vào kỷ luật của người gọi.
+  if (rows.rows.length !== optionIds.length) {
+    throw new Error(
+      `bumpPollOptionVotes: khớp ${rows.rows.length}/${optionIds.length} hàng feed_poll_options ` +
+        `(company=${companyId}, poll=${pollId}) — có optionId không thuộc tenant/poll này`,
+    );
+  }
+  return rows.rows.length;
+}

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 671,
-    "controllers": 125,
-    "gated": 632,
+    "routes": 676,
+    "controllers": 126,
+    "gated": 637,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -9381,6 +9381,86 @@
       "path": "/api/v1/social/posts/:post_id/acks",
       "hasPermission": true,
       "permission": "manage:feed-news",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPollsController#close",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/posts/:post_id/poll/close",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPollsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/polls",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPollsController#results",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/posts/:post_id/poll/results",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPollsController#vote",
+      "httpMethod": "PUT",
+      "path": "/api/v1/social/posts/:post_id/poll/vote",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialPollsController#withdraw",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/posts/:post_id/poll/vote",
+      "hasPermission": true,
+      "permission": "view:feed",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

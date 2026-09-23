@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TenantTx } from "../db/db.service";
-import { AuditService, type AuditEntry } from "./audit.service";
+import { AUDIT_RECORD_MANY_MAX, AuditService, type AuditEntry } from "./audit.service";
 
 /**
  * RED #2 (BE-3) — AuditService v2 (BẤT BIẾN #2 append-only ghi-trong-tx · #3 không secret):
@@ -225,5 +225,89 @@ describe("AuditService v2 (BE-3)", () => {
         expect((rows[0] as Record<string, unknown>)["actorType"]).toBe(actorType);
       },
     );
+  });
+
+  /**
+   * S16-SOCIAL-BE-2B-1 · FULL gate lượt 2, finding **M-1** (`security-reviewer` + `silent-failure-
+   * hunter` hội tụ).
+   *
+   * `recordMany` là writer MỚI, dùng chung TOÀN HỆ, trên bảng **append-only** — và có ZERO ca.
+   * Bất biến mask/enum hôm nay đứng được nhờ `entries.map(this.buildRow)`, nhưng đó là bằng chứng
+   * **cấu trúc**, không phải lưới: một lượt "tối ưu" dựng row inline trong `recordMany` (đúng thứ
+   * docblock của nó cấm) sẽ cho cả lô audit KHÔNG mask, và **không test nào đỏ**. Token/secret lọt
+   * vào `metadata` khi đó nằm vĩnh viễn trong một bảng không xoá được.
+   */
+  describe("recordMany() — lô nhiều hàng, cùng đường mask/enum với record()", () => {
+    /** `captureTx` cũ đẩy MỘT object; bản lô nhận MẢNG nên cần biến thể riêng. */
+    function captureManyTx(): { tx: TenantTx; calls: Record<string, unknown>[][] } {
+      const calls: Record<string, unknown>[][] = [];
+      const tx = {
+        insert: () => ({
+          values: async (v: Record<string, unknown>[]) => {
+            calls.push(v);
+          },
+        }),
+      } as unknown as TenantTx;
+      return { tx, calls };
+    }
+
+    const entry = (action: string, metadata: unknown): AuditEntry =>
+      ({ action, objectType: "user", metadata }) as AuditEntry;
+
+    it("MASK áp cho MỌI hàng của lô, không chỉ hàng đầu", async () => {
+      const { tx, calls } = captureManyTx();
+      const n = await svc.recordMany(tx, [
+        entry("A", { token: "tok-A", keep: 1 }),
+        entry("B", { password: "pw-B", keep: 2 }),
+      ]);
+
+      expect(n, "trả SỐ hàng để call-site đối chiếu được").toBe(2);
+      expect(calls).toHaveLength(1); // MỘT câu INSERT cho cả lô
+      const [rows] = calls;
+      expect(rows).toHaveLength(2);
+
+      // Neo dương TRƯỚC assert phủ định: khoá không nhạy cảm phải còn nguyên, nếu không một
+      // `metadata: null` cũng "không chứa secret" và ca này xanh vì lý do sai.
+      expect((rows[0].metadata as Record<string, unknown>).keep).toBe(1);
+      expect((rows[1].metadata as Record<string, unknown>).keep).toBe(2);
+      expect(JSON.stringify(rows), "hàng thứ HAI của lô cũng phải được mask").not.toContain(
+        "tok-A",
+      );
+      expect(JSON.stringify(rows)).not.toContain("pw-B");
+    });
+
+    it("enum SAI ở hàng thứ hai ⇒ NÉM, và KHÔNG câu INSERT nào được phát", async () => {
+      const { tx, calls } = captureManyTx();
+      await expect(
+        svc.recordMany(tx, [
+          { action: "A", objectType: "user", actorType: "Job" } as AuditEntry,
+          { action: "B", objectType: "user", actorType: "KhongHopLe" } as AuditEntry,
+        ]),
+      ).rejects.toThrow(/actor_type/);
+
+      // 🔴 Fail-closed trên CẢ LÔ: `map` vật chất hoá xong mới insert, nên không có lô ghi nửa vời
+      // vào một bảng không gỡ lại được.
+      expect(calls, "một hàng hợp lệ cũng KHÔNG được lọt xuống khi lô có hàng sai").toHaveLength(0);
+    });
+
+    it("mảng RỖNG ⇒ trả 0 và không phát câu nào (drizzle ném thật với `values([])`)", async () => {
+      const { tx, calls } = captureManyTx();
+      expect(await svc.recordMany(tx, [])).toBe(0);
+      expect(calls).toHaveLength(0);
+    });
+
+    it("vượt trần ⇒ NÉM trước khi phát câu (trần bind param của PG là 2113 hàng)", async () => {
+      const { tx, calls } = captureManyTx();
+      const tooMany = Array.from({ length: AUDIT_RECORD_MANY_MAX + 1 }, (_, i) =>
+        entry(`A${i}`, null),
+      );
+      await expect(svc.recordMany(tx, tooMany)).rejects.toThrow(/vượt trần/);
+      expect(calls).toHaveLength(0);
+
+      // Neo dương: ĐÚNG ở trần thì vẫn ghi ⇒ ca trên đỏ vì SỐ LƯỢNG, không vì cú pháp.
+      const atLimit = Array.from({ length: AUDIT_RECORD_MANY_MAX }, (_, i) => entry(`B${i}`, null));
+      expect(await svc.recordMany(tx, atLimit)).toBe(AUDIT_RECORD_MANY_MAX);
+      expect(calls).toHaveLength(1);
+    });
   });
 });

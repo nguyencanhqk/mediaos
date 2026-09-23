@@ -210,3 +210,38 @@ export interface SocialGroupJoinDecidedPayload {
   recipientUserIds: string[];
   [key: string]: unknown;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  S16-SOCIAL-BE-2B-1 — BÌNH CHỌN
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+export const SOCIAL_EVENT_POLL_CLOSED = "social.poll_closed";
+
+/** Mã catalog của khối BÌNH CHỌN — VERBATIM theo `0581:202`. Bảng riêng, cùng lý do đã ghi ở `_B`. */
+export const SOCIAL_EVENT_CODES_D = {
+  [SOCIAL_EVENT_POLL_CLOSED]: "SOCIAL_POLL_CLOSED",
+} as const;
+
+/**
+ * `NOTI-EVENT-035` — bình chọn đã kết thúc. Người nhận là **TÁC GIẢ BÀI** (đúng một người), lọc D7.
+ *
+ * ⚠️ Catalog `0581` khai mã này `is_system_event = true` và priority `Low`: phần lớn lần phát đến
+ * từ **job theo hạn**, không từ một người bấm nút. Đó cũng là lý do payload không có `actor_name` —
+ * ở nhánh job thì không có actor nào để kể tên, và một chuỗi "Hệ thống" bịa ra ở producer sẽ trôi
+ * khác với nhãn mà FE tự dựng.
+ *
+ * 🔴 **KHÔNG chở gì về CỬ TRI** — không `user_id`, không số phiếu theo người, không "ai đã bỏ phiếu".
+ * `my-notifications.mapper.ts` trả payload NGUYÊN VĂN, và hàng `notifications` sống lâu hơn grant:
+ * một khoá lỡ tay ở đây là rò cử tri của bình chọn ẩn danh qua đường thông báo, vòng qua hết mọi
+ * cổng mà `043` dựng lên (SOC-DEC-009). Comment `0581:261` ra lệnh đúng điều này cho
+ * `variables_schema`.
+ */
+export interface SocialPollClosedPayload {
+  /** Neo `source_entity_id` + biến `{post_id}` của `target_url_template`. */
+  post_id: string;
+  /** Biến `{poll_question}` — câu hỏi ĐỌC TRONG TX lúc đóng (bài có thể bị xoá ngay sau đó). */
+  poll_question: string;
+  /** Đúng MỘT người: tác giả bài. Rỗng ⇒ producer KHÔNG phát (tác giả đã nghỉ việc / bị khoá). */
+  recipientUserIds: string[];
+  [key: string]: unknown;
+}

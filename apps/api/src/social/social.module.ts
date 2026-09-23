@@ -15,6 +15,10 @@ import { SocialFileResolver } from "./social-file.resolver";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { SocialGroupMembersRepository } from "./social-group-members.repository";
 import { SocialGroupsController } from "./social-groups.controller";
+import { SocialPollCloseExpiredJobHandler } from "./social-poll-close.job-handler";
+import { SocialPollsController } from "./social-polls.controller";
+import { SocialPollsRepository } from "./social-polls.repository";
+import { SocialPollsService } from "./social-polls.service";
 import { SocialGroupsRepository } from "./social-groups.repository";
 import { SocialGroupsService } from "./social-groups.service";
 import { SocialMasterDataSeeder } from "./social-master-data.seeder";
@@ -79,6 +83,9 @@ import {
     // `SOCIAL_CONTROLLERS` của `social-two-layer-guard-census.unit-spec.ts`: hằng đó là DANH SÁCH
     // TRẮNG, quên thêm ⇒ 10 route vô hình với census mà cả 4 assert vẫn XANH (fail-open im lặng).
     SocialGroupsController,
+    // S16-SOCIAL-BE-2B-1 — 040..044. Thêm ở đây thì PHẢI thêm tên vào SOCIAL_CONTROLLERS của
+    // census 2 tầng: danh sách đó là ALLOWLIST, quên thêm thì route VÔ HÌNH mà cả 4 assert vẫn XANH.
+    SocialPollsController,
   ],
   providers: [
     SocialAccessService,
@@ -104,6 +111,9 @@ import {
     SocialGroupsRepository,
     SocialGroupMembersRepository,
     SocialGroupsService,
+    SocialPollsService,
+    SocialPollsRepository,
+    SocialPollCloseExpiredJobHandler,
     SocialMasterDataSeeder,
     SocialSeedRegistrar,
   ],
