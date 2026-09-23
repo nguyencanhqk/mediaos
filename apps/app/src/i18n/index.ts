@@ -32,6 +32,10 @@ import roomsVi from "./locales/vi/rooms";
 import recruitVi from "./locales/vi/recruit";
 // S13-PAYROLL-FE-1 — PAY-SCREEN-001..006 (namespace mới "payroll", SPEC-11 §9/§14).
 import payrollVi from "./locales/vi/payroll";
+// S16-SOCIAL-FE-1 — SOC-SCREEN-001..005, cổng thông tin /feed* (namespace mới "social", SPEC-16 §9/§14).
+// ⚠️ Tên namespace là `social` nhưng đường dẫn route là `/feed` (plan D1) — `/social` đang là trang
+// trung chuyển SSO của app vệ tinh fbpost. Hai thứ khác nhau CÓ CHỦ ĐÍCH.
+import socialVi from "./locales/vi/social";
 
 registerI18nResources("vi", {
   common: employeePickerVi,
@@ -50,6 +54,7 @@ registerI18nResources("vi", {
   rooms: roomsVi,
   recruit: recruitVi,
   payroll: payrollVi,
+  social: socialVi,
   // S4-FE-NOTI-2 — ĐÈ THÊM 1 khoá routeTitle.notiEvents vào bundle "nav" đã nhúng sẵn ở @mediaos/web-core
   // (deep-merge, KHÔNG đụng khoá cũ) — route noti.events (ROUTE_REGISTRY) cần titleKey này.
   // S4-FE-NOTI-4 — THÊM notiTemplates (route noti.templates, MỚI) + notificationDeliveryLogs (route

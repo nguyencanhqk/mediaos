@@ -1,12 +1,21 @@
 import React from "react";
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
-import { getAuthRedirectUrl, useAuthStore, type RouteMeta } from "@mediaos/web-core";
+import {
+  getAuthRedirectUrl,
+  useAuthStore,
+  type LayoutType,
+  type RouteMeta,
+} from "@mediaos/web-core";
 import { Skeleton } from "@mediaos/ui";
 import { ForbiddenPage } from "@/routes/forbidden";
 import { ProtectedShell } from "@/layouts/protected/ProtectedShell";
 import { ProtectedRoute } from "@/layouts/protected/ProtectedRoute";
 import { HomePortalLayout } from "@/layouts/home/HomePortalLayout";
 import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout";
+// S16-SOCIAL-FE-1 — vỏ cổng thông tin 3 cột cho layout MODULE_PORTAL (xem LAYOUT_CONTENT_BUILDERS).
+// KHÔNG lazy: nó là KHUNG của route, không phải nội dung — lazy hoá khung làm cả cổng nháy trắng
+// một nhịp ở mỗi lần điều hướng giữa các màn /feed*.
+import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
 // S5-TASK-WORKSPACE-1 — parser ?tab= của workspace dự án (file thuần TS, không component).
 import { parseWorkspaceTab, type ProjectWorkspaceTab } from "@/routes/tasks/workspace-constants";
 
@@ -90,17 +99,64 @@ function RouteSuspenseFallback(): React.ReactElement {
   );
 }
 
+/**
+ * S16-SOCIAL-FE-1 (plan D3) — 🔴 **NƠI `RouteMeta.layout` THỰC SỰ ĐƯỢC ĐỌC.**
+ *
+ * Trước WO này `layout` là **metadata TRƠ**: quét toàn kho không file nào đọc nó lúc chạy, vì chính
+ * hàm dưới đây hard-code `ModuleWorkspaceLayout`. Hệ quả là thêm một nhánh vào `LayoutType` chẳng
+ * làm cổng nào đỏ — đúng lớp lỗi `gate-measurement-row-can-be-unsatisfiable` (một dòng "phép đo" mà
+ * không ca nào thoả được).
+ *
+ * `Record<LayoutType, …>` **VÉT CẠN** biến nó thành răng thật: thêm nhánh thứ 7 vào `LayoutType` mà
+ * không khai ở đây là **ĐỎ TYPECHECK**, không phải một hành vi lặng lẽ sai lúc chạy.
+ *
+ * `null` = "layout này KHÔNG dựng qua đường `buildModuleRouteContent`" (AUTH/ERROR/ACCOUNT/HOME_PORTAL
+ * có đường dựng riêng) — một lời khai tường minh, khác hẳn việc vắng mặt.
+ */
+type LayoutContentBuilder = (
+  moduleCode: ModuleCodeArg,
+  page: React.ReactNode,
+) => React.ReactElement;
+
+const LAYOUT_CONTENT_BUILDERS: Record<LayoutType, LayoutContentBuilder | null> = {
+  MODULE_WORKSPACE: (moduleCode, page) => (
+    <ModuleWorkspaceLayout moduleCode={moduleCode}>{page}</ModuleWorkspaceLayout>
+  ),
+  /**
+   * Cổng thông tin 3 cột (UI-07 §34b). Hôm nay SOCIAL là module DUY NHẤT khai layout này, nên trỏ
+   * thẳng vào vỏ của nó; `SocialPortalShell` **tự ném** nếu nhận moduleCode khác — module portal thứ
+   * hai phải có vỏ riêng chứ không mượn rail (và rail phải của SOCIAL chở widget sinh nhật).
+   */
+  MODULE_PORTAL: (moduleCode, page) => (
+    <SocialPortalShell moduleCode={moduleCode}>{page}</SocialPortalShell>
+  ),
+  AUTH: null,
+  HOME_PORTAL: null,
+  ACCOUNT: null,
+  ERROR: null,
+};
+
 export function buildModuleRouteContent(
   meta: RouteMeta,
   moduleCode: ModuleCodeArg,
   page: React.ReactNode,
 ): React.ReactElement {
+  const buildInner = LAYOUT_CONTENT_BUILDERS[meta.layout];
+  if (!buildInner) {
+    // Fail-LOUD. Một route khai `layout:"AUTH"` rồi đi qua đây là lỗi cấu hình; render nó bằng khuôn
+    // workspace "cho chạy" sẽ giấu lỗi đó sau một giao diện trông bình thường.
+    throw new Error(
+      `[router] layout "${meta.layout}" không dựng được qua buildModuleRouteContent ` +
+        `(route "${meta.routeKey}"). Khai builder trong LAYOUT_CONTENT_BUILDERS hoặc dùng đường dựng riêng.`,
+    );
+  }
   return (
     <ProtectedShell>
       <ProtectedRoute meta={meta}>
-        <ModuleWorkspaceLayout moduleCode={moduleCode}>
-          <React.Suspense fallback={<RouteSuspenseFallback />}>{page}</React.Suspense>
-        </ModuleWorkspaceLayout>
+        {buildInner(
+          moduleCode,
+          <React.Suspense fallback={<RouteSuspenseFallback />}>{page}</React.Suspense>,
+        )}
       </ProtectedRoute>
     </ProtectedShell>
   );
@@ -2987,6 +3043,126 @@ const socialRedirectRoute = createRoute({
   component: () => buildShellRouteContent(<SocialRedirectPage />),
 });
 
+// ═══ S16-SOCIAL-FE-1 — cổng thông tin nội bộ `/feed*` (SPEC-16 §9, SOC-SCREEN-001..005) ═══
+//
+// 🔴 `socialRedirectRoute` NGAY TRÊN **KHÔNG BỊ ĐỤNG TỚI**. `/social` vẫn là đường lỗi SSO của app
+// vệ tinh fbpost; portal ở `/feed` (plan D1). Hợp nhất hai thứ đó là `done_when` của
+// `S16-SOCIAL-FBPOST-1`, không phải của WO này.
+//
+// Cả 6 route đi qua `makeModuleRoute` ⇒ `buildModuleRouteContent` đọc `meta.layout === "MODULE_PORTAL"`
+// và dựng bằng `SocialPortalShell` (xem LAYOUT_CONTENT_BUILDERS ở đầu file).
+const FeedPage = React.lazy(() =>
+  import("@/routes/social/feed/FeedPage").then((m) => ({ default: m.FeedPage })),
+);
+const PostDetailPage = React.lazy(() =>
+  import("@/routes/social/feed/PostDetailPage").then((m) => ({ default: m.PostDetailPage })),
+);
+const NewsPage = React.lazy(() =>
+  import("@/routes/social/feed/NewsPage").then((m) => ({ default: m.NewsPage })),
+);
+const SavedPage = React.lazy(() =>
+  import("@/routes/social/feed/SavedPage").then((m) => ({ default: m.SavedPage })),
+);
+const ProfilePostsPage = React.lazy(() =>
+  import("@/routes/social/feed/ProfilePostsPage").then((m) => ({ default: m.ProfilePostsPage })),
+);
+
+/**
+ * Bộ lọc/sắp xếp sống trong URL (plan D6) — `validateSearch` rơi về mặc định thay vì NÉM khi gặp
+ * tham số rác (ca C17): một `validateSearch` ném là màn hình lỗi thay cho bảng tin, chỉ vì người
+ * dùng sửa tay thanh địa chỉ.
+ *
+ * `q` (tìm kiếm) và `wish` (lời chúc điền sẵn) là tham số CỦA FE — chúng không nằm trong
+ * `listFeedQuerySchema` và KHÔNG được gửi lên API; `FeedPage` lọc chúng ra trước khi gọi.
+ */
+/** Tham số URL của `/feed` — bộ lọc (D6) + hai tham số CHỈ của FE (`q` tìm kiếm, `wish` lời chúc). */
+interface FeedRouteSearch {
+  sort?: "active" | "latest";
+  tag?: string;
+  type?: string;
+  q?: string;
+  wish?: string;
+}
+
+/**
+ * ⚠️ KHÔNG dùng `listFeedQuerySchema.parse` ở đây dù nó là nguồn sự thật DTO: schema đó `.strict()`
+ * và có `z.coerce`, nên một URL người dùng sửa tay (`?limit=abc`) sẽ NÉM — và một `validateSearch`
+ * ném là **màn hình lỗi thay cho bảng tin** (ca C17 vế deny). Lọc tay từng khoá rồi bỏ khoá lạ: URL
+ * rác thì mất bộ lọc, chứ không mất cả trang. `q`/`wish` cũng không nằm trong schema đó.
+ */
+function validateFeedRouteSearch(raw: Record<string, unknown>): FeedRouteSearch {
+  const str = (k: string): string | undefined =>
+    typeof raw[k] === "string" && (raw[k] as string).length > 0 ? (raw[k] as string) : undefined;
+  const sort = raw.sort === "latest" || raw.sort === "active" ? raw.sort : undefined;
+  return {
+    ...(sort ? { sort } : {}),
+    ...(str("tag") ? { tag: str("tag") } : {}),
+    ...(str("type") ? { type: str("type") } : {}),
+    ...(str("q") ? { q: str("q") } : {}),
+    ...(str("wish") ? { wish: str("wish") } : {}),
+  };
+}
+
+const feedMeta = getMeta("social.feed");
+const feedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed",
+  beforeLoad: authGuard,
+  validateSearch: validateFeedRouteSearch,
+  component: () => buildModuleRouteContent(feedMeta, "SOCIAL", <FeedPage />),
+});
+
+/**
+ * Năm route còn lại khai bằng `createRoute` TRỰC TIẾP, không qua `makeModuleRoute`.
+ *
+ * 🔴 Lý do KHÔNG phải sở thích: tham số `path: string` của `makeModuleRoute` làm TypeScript suy ra
+ * kiểu route với path là `string` chứ không phải literal, nên **`$postId`/`$employeeId` không vào
+ * được union đường dẫn của router**. Hệ quả đo được: mọi `<Link to="/feed/posts/$postId">` ĐỎ
+ * typecheck (`'postId' does not exist in type 'ParamsReducerFn<…, "never", …>'`). Khai trực tiếp thì
+ * literal được giữ và link chết bị bắt ngay lúc biên dịch — đúng lưới ta muốn có.
+ */
+const feedNewsMeta = getMeta("social.news");
+const feedNewsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/news",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(feedNewsMeta, "SOCIAL", <NewsPage />),
+});
+
+const feedSavedMeta = getMeta("social.saved");
+const feedSavedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/saved",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(feedSavedMeta, "SOCIAL", <SavedPage />),
+});
+
+const feedPostDetailMeta = getMeta("social.postDetail");
+const feedPostDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/posts/$postId",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(feedPostDetailMeta, "SOCIAL", <PostDetailPage />),
+});
+
+// Route TĨNH `/feed/profiles/me`. Lý do đầy đủ ở docblock `ProfilePostsPage`: mục sidebar ME cần path
+// cố định, và `ME_SIDEBAR` KHÔNG đi qua `pruneUnbuiltScreens` nên một link chết ở đó sẽ KHÔNG tự ẩn.
+const feedMyPostsMeta = getMeta("social.myPosts");
+const feedMyPostsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/profiles/me",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(feedMyPostsMeta, "SOCIAL", <ProfilePostsPage isMe />),
+});
+
+const feedProfilePostsMeta = getMeta("social.profilePosts");
+const feedProfilePostsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/profiles/$employeeId",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(feedProfilePostsMeta, "SOCIAL", <ProfilePostsPage />),
+});
+
 // S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
 // điều hướng tới đây, route content chỉ cần authGuard (không permission pair — self-service, giống
 // accountSessionsRoute/accountChangePasswordRoute).
@@ -3375,6 +3551,15 @@ const routeTree = rootRoute.addChildren([
   chatRoute,
   lmsRedirectRoute,
   socialRedirectRoute,
+  // S16-SOCIAL-FE-1 — 6 route /feed* (portal 3 cột). Thứ tự khai KHÔNG quan trọng với TanStack
+  // Router (nó tự xếp tĩnh trước động), nhưng `/feed/profiles/me` vẫn khai trước `$employeeId` để
+  // người đọc thấy ngay ý định.
+  feedRoute,
+  feedNewsRoute,
+  feedSavedRoute,
+  feedPostDetailRoute,
+  feedMyPostsRoute,
+  feedProfilePostsRoute,
   accountSetupTwoFactorRoute,
   accountProfileRoute,
   systemAuditLogsRoute,

@@ -115,3 +115,7 @@ payroll.calculation | mod=PAYROLL | label=Tính lương | path=- | icon=calculat
 payroll.paymentBatches | mod=PAYROLL | label=Chi trả | path=/payroll/payment-batches | icon=banknote | group=operation | order=80 | all=[access:payroll,view:payment-batch]
 payroll.reports | mod=PAYROLL | label=Báo cáo | path=/payroll/reports | icon=bar-chart-3 | group=report | order=90 | all=[access:payroll,view:payroll-report]
 payroll.statutoryRates | mod=PAYROLL | label=Tỉ lệ luật định | path=/payroll/settings/statutory-rates | icon=scale | group=settings | order=100 | all=[access:payroll,view:statutory-rate]
+### SOCIAL
+social.feed | mod=SOCIAL | label=Bảng tin | path=/feed | icon=rss | group=overview | order=10 | any=[view:feed]
+social.news | mod=SOCIAL | label=Tin tức | path=/feed/news | icon=megaphone | group=overview | order=20 | any=[view:feed]
+social.saved | mod=SOCIAL | label=Đã lưu | path=/feed/saved | icon=bookmark | group=overview | order=30 | any=[view:feed]

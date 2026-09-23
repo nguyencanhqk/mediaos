@@ -759,24 +759,66 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     order: 80,
   },
   {
-    // S9-SOCIAL-FE-1 — app vệ tinh fbpost (đăng bài Facebook Page). Giống LMS: KHÔNG phải module nội
-    // bộ MediaOS mà là một ứng dụng riêng, mở qua cầu SSO. `rootPath`/`defaultRoute` trỏ tới route
-    // trung chuyển /social (đường LỖI); đường thường không đi qua đó — xem open-social.ts.
+    /**
+     * S16-SOCIAL-FE-1 (D13①) — ô này ĐỔI NGHĨA: từ "app vệ tinh fbpost" thành **cổng thông tin nội
+     * bộ** (SPEC-16). `rootPath`/`defaultRoute` `/social` → **`/feed`**, gate `view:social-post` →
+     * **`view:feed`**. `appKey`/`nameKey`/`icon`/`order` giữ nguyên để không đổi danh tính ô.
+     *
+     * Vì sao SỬA ô đang có chứ không thêm ô thứ hai tên «Mạng xã hội»: ô SOCIAL **đã tồn tại từ S9**
+     * và đang gate bằng cặp fbpost, nên `done_when` của WO («ô Home hiện theo module + `view:feed`»)
+     * KHÔNG thể thoả nếu không đụng chính ô này; thêm ô thứ hai cùng tên là hai ô trùng tên trên Home.
+     *
+     * ⚠️ Vế còn lại của quyết định nằm ở ô `fbpost` NGAY DƯỚI — đọc cả hai, đừng đọc một.
+     */
     appKey: "social",
     moduleCode: "SOCIAL",
     nameKey: "app.social",
     descKey: "appDesc.social",
     icon: "megaphone",
+    rootPath: "/feed",
+    defaultRoute: "/feed",
+    category: "collaboration",
+    aliases: ["bang tin", "mang xa hoi", "social", "feed", "tin tuc noi bo"],
+    // Dùng THẲNG cặp engine (như "access:lms"), không qua PERMISSION_CODE_TO_PAIR: capabilities từ
+    // /auth/me vốn đã khoá theo cặp. `view:feed` CŨNG là cặp mà mọi route `/feed*` đòi — ô hiện ra
+    // thì bấm vào phải vào được, không có cửa nào mở ra rồi đá 403.
+    requiredAnyPermissions: ["view:feed"],
+    status: "active",
+    order: 90,
+  },
+  {
+    /**
+     * S16-SOCIAL-FE-1 (D13②) — app vệ tinh fbpost (đăng bài Facebook Page), TÁCH ra ô RIÊNG.
+     *
+     * 🔴 **Vì sao phải có ô này, không phải chỉ sửa ô trên:** ô SOCIAL cũ gate `view:social-post`.
+     * Sửa thẳng nó sang `view:feed` làm người **chỉ** có `view:social-post` **MẤT ô Home** cho tới
+     * khi `S16-SOCIAL-FBPOST-1` chạy — đúng "cửa sổ tile chết" mà `done_when` của WO đó cấm tái tạo.
+     * Hai ô KHÁC TÊN nên không có chuyện "hai ô cùng tên": người có cả hai quyền thấy «Mạng xã hội»
+     * (cổng thông tin) + «Đăng bài Facebook» (vệ tinh) — đúng quan hệ cha / tiện-ích-con của
+     * SOC-DEC-002.
+     *
+     * Phương án bị loại: OR-gate `["view:feed","view:social-post"]` trên MỘT ô — người fbpost-only sẽ
+     * bị đá vào `/feed` rồi ăn 403, phá đúng nguyên tắc "ô hiện ra thì bấm vào phải vào được".
+     *
+     * `rootPath`/`defaultRoute` giữ `/social` = route trung chuyển SSO (đường LỖI; đường thường đi
+     * qua `open-social.ts`). **FBPOST-1** sau đó gộp ô này vào rail SOCIAL và gỡ khỏi Home.
+     *
+     * ⚠️ `order: 90.5` — `registry.spec.ts` assert `APP_REGISTRY.map(a=>a.order)` tăng dần **THEO VỊ
+     * TRÍ MẢNG**. Ô này phải nằm VẬT LÝ giữa `social`(90) và `assets`(100); đẩy xuống cuối mảng là
+     * spec ĐỎ ngay.
+     */
+    appKey: "fbpost",
+    moduleCode: "SOCIAL",
+    nameKey: "app.fbpost",
+    descKey: "appDesc.fbpost",
+    icon: "facebook",
     rootPath: "/social",
     defaultRoute: "/social",
     category: "collaboration",
-    aliases: ["dang bai", "facebook", "fanpage", "social", "mang xa hoi", "fbpost"],
-    // Dùng THẲNG cặp engine (như "access:lms"), không qua PERMISSION_CODE_TO_PAIR: capabilities từ
-    // /auth/me vốn đã khoá theo cặp. Đây CŨNG là cặp mà endpoint sso-link đòi — ô hiện ra thì bấm
-    // vào phải vào được, không có cửa nào mở ra rồi đá 403.
+    aliases: ["dang bai", "facebook", "fanpage", "fbpost", "dang bai facebook"],
     requiredAnyPermissions: ["view:social-post"],
     status: "active",
-    order: 90,
+    order: 90.5,
   },
   {
     // S11-ASSET-FE-1 — thẻ "Tài sản" (SPEC-13, wave S11-OFFICE). Module NỘI BỘ thật (khác LMS/SOCIAL).
@@ -2116,6 +2158,98 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["FOUNDATION.SEED.VIEW"],
     showInSidebar: true,
     order: 77,
+  },
+
+  // ═══ S16-SOCIAL-FE-1 — cổng thông tin nội bộ (SPEC-16 §9, SOC-SCREEN-001..005) ═══
+  //
+  // 🔴 **Đường dẫn gốc là `/feed`, KHÔNG phải `/social`** (plan D1). `/social` đang là trang trung
+  // chuyển SSO của app vệ tinh fbpost (`routes/social/SocialRedirectPage.tsx`); chiếm chỗ ở đây sẽ
+  // phá đường lỗi đang chạy VÀ lấn `done_when` của `S16-SOCIAL-FBPOST-1`. Tiền tố REST của BE thì vẫn
+  // là `/social/*` — hai thứ khác nhau CÓ CHỦ ĐÍCH, đừng "sửa cho khớp" theo chiều nào.
+  //
+  // `layout: "MODULE_PORTAL"` ở đây KHÔNG còn là metadata trơ: `buildModuleRouteContent`
+  // (`apps/app/src/router.tsx`) dispatch qua `LAYOUT_CONTENT_BUILDERS`, một `Record<LayoutType, …>`
+  // VÉT CẠN — xem docblock `LayoutType`.
+  //
+  // Dải `order` 92..97: trần đang dùng của registry này là `91.1` (PAYROLL), đo ở T0 (plan W6).
+  //
+  // Gate: **`view:feed` cho cả 6** (cặp engine literal, `is_sensitive=false` theo seed `0578`). Màn
+  // nào cần hơn thì gate BÊN TRONG bằng `<PermissionGate>` — ví dụ «Danh sách đã đọc» của Tin tức đòi
+  // `manage:feed-news`. Nâng gate route lên cặp chặt hơn là khoá cả màn với người lẽ ra đọc được.
+  {
+    routeKey: "social.feed",
+    path: "/feed",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-001",
+    titleKey: "routeTitle.socialFeed",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 92,
+  },
+  {
+    routeKey: "social.news",
+    path: "/feed/news",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-003",
+    titleKey: "routeTitle.socialNews",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 93,
+  },
+  {
+    routeKey: "social.saved",
+    path: "/feed/saved",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-004",
+    titleKey: "routeTitle.socialSaved",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 94,
+  },
+  {
+    // Chi tiết bài — KHÔNG `showInSidebar`: bám theo MỘT bài cụ thể nên không có lối vào ổn định.
+    routeKey: "social.postDetail",
+    path: "/feed/posts/$postId",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-002",
+    titleKey: "routeTitle.socialPostDetail",
+    requiredPermissions: ["view:feed"],
+    order: 95,
+  },
+  {
+    /**
+     * 🔴 Route TĨNH `/feed/profiles/me` — khai TRƯỚC nhánh động, và đây là một QUYẾT ĐỊNH, không phải
+     * tiện tay (plan W5, finding #2).
+     *
+     * Mục sidebar ME «Bài viết của tôi» cần một `path` cố định. Ba sự thật buộc phải có route tĩnh:
+     *  (a) `SidebarItemMeta` KHÔNG có `onClick` ⇒ không thể giải một placeholder `$me` lúc bấm;
+     *  (b) `ME_SIDEBAR` **KHÔNG** đi qua `pruneUnbuiltScreens` (chỉ PAYROLL/SOCIAL có) ⇒ mục trỏ vào
+     *      đường không tồn tại sẽ KHÔNG tự ẩn, nó thành link chết 404 hiện với mọi người;
+     *  (c) `/feed/profiles/$employeeId` là nhánh động, `"me"` không phải UUID.
+     * Trang của route này tự đọc người dùng hiện tại rồi render lại đúng màn `SOC-SCREEN-005`.
+     */
+    routeKey: "social.myPosts",
+    path: "/feed/profiles/me",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-005",
+    titleKey: "routeTitle.socialMyPosts",
+    requiredPermissions: ["view:feed"],
+    order: 96,
+  },
+  {
+    routeKey: "social.profilePosts",
+    path: "/feed/profiles/$employeeId",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-005",
+    titleKey: "routeTitle.socialProfilePosts",
+    requiredPermissions: ["view:feed"],
+    order: 97,
   },
 
   // Account
