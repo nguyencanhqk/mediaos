@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**512 WO** · có micro-plan: **316/512** · ⬜ 9 chờ · 🔵 0 đang làm · ✅ 502 xong · 🔴 1 chặn
+**515 WO** · có micro-plan: **319/515** · ⬜ 10 chờ · 🔵 0 đang làm · ✅ 504 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -564,17 +564,20 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S16-SOCIAL-DOC-1` | 🟢 | ✅ xong | [📄](S16-SOCIAL-WAVE.md) | — | Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 |
-| `S16-SOCIAL-FBPOST-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-DOC-1 ⏳S16-SOCIAL-FE-1 | Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối si |
+| `S16-SOCIAL-FBPOST-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-DOC-1 ✅S16-SOCIAL-FE-1 | Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối si |
 | `S16-SOCIAL-DB-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-DB-1.md) | ✅S16-SOCIAL-DOC-1 | Schema + migration SOCIAL track A (nối tiếp head lúc merge): feed_post |
 | `S16-SOCIAL-BE-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-1.md) | ✅S16-SOCIAL-DB-1 ✅S16-SOCIAL-DB-2 | Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ n |
 | `S16-SOCIAL-BE-1B` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-1B.md) | ✅S16-SOCIAL-BE-1 | Module apps/api/src/social/ Nhóm B (10 route, SOCIAL-API-020..029): ti |
-| `S16-SOCIAL-FE-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1 ✅S16-SOCIAL-BE-1B | FE track A: template cổng thông tin 3 cột (apps/app/src/layouts/portal |
+| `S16-SOCIAL-FE-1` | amber | ✅ xong | [📄](S16-SOCIAL-FE-1.md) | ✅S16-SOCIAL-BE-1 ✅S16-SOCIAL-BE-1B | FE track A: template cổng thông tin 3 cột (apps/app/src/layouts/portal |
+| `S16-SOCIAL-BE-1C` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1 | BE track A/bổ sung — ĐƯỜNG ĐĂNG KÝ TỆP cho bài & bình luận: 2 route bọ |
+| `S16-SOCIAL-BE-1D` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1 | BE track A/bổ sung — TRẢ MẢNG MENTION trong DTO bài & bình luận: feedP |
 | `S16-SOCIAL-DB-2` | 🔴 | ✅ xong | [📄](S16-SOCIAL-DB-2.md) | ✅S16-SOCIAL-DB-1 | Schema + migration SOCIAL track B: feed_groups · feed_group_members (r |
 | `S16-SOCIAL-BE-2A` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2A.md) | ✅S16-SOCIAL-DB-2 ✅S16-SOCIAL-BE-1 ✅S16-SOCIAL-BE-1B | BE track B/1 — NHÓM (SOCIAL-API-030..039 + nhánh audience='group' của  |
-| `S16-SOCIAL-BE-2B` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A | BE track B/2 — BÌNH CHỌN · SÁNG KIẾN · VINH DANH (SOCIAL-API-040..048  |
+| `S16-SOCIAL-BE-2B-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2B-1.md) | ✅S16-SOCIAL-BE-2A | BE track B/2a — BÌNH CHỌN (SOCIAL-API-040..044 + nhánh type='poll' của |
+| `S16-SOCIAL-BE-2B-2` | 🔴 | ⬜ chờ | [📄](S16-SOCIAL-BE-2B-2.md) | ✅S16-SOCIAL-BE-2B-1 | BE track B/2b — SÁNG KIẾN · VINH DANH (SOCIAL-API-045..048 + nhánh typ |
 | `S16-SOCIAL-BE-2C` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A | BE track B/3 — REALTIME room nhóm co:{c}:feedgroup:{id}: thêm feedUser |
-| `S16-SOCIAL-FE-2` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A ⏳S16-SOCIAL-BE-2B ⏳S16-SOCIAL-FE-1 | FE track B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm · thành viên · |
-| `S16-SOCIAL-BE-3` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A ⏳S16-SOCIAL-BE-2B | BE track C: hàng đợi báo cáo (resolve/dismiss + hành động ẩn/khoá/xoá  |
+| `S16-SOCIAL-FE-2` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A ⏳S16-SOCIAL-BE-2B-2 ✅S16-SOCIAL-FE-1 | FE track B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm · thành viên · |
+| `S16-SOCIAL-BE-3` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A ⏳S16-SOCIAL-BE-2B-2 | BE track C: hàng đợi báo cáo (resolve/dismiss + hành động ẩn/khoá/xoá  |
 | `S16-SOCIAL-FE-3` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-BE-3 ⏳S16-SOCIAL-FE-2 | FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 01 |
 | `S16-SOCIAL-QA-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-3 | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
 | `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
