@@ -6,7 +6,7 @@
  * danh sách RỖNG im lặng (hoặc tệ hơn: bài của người khác). Nhánh `me` vì vậy đi `001` với
  * `authorUserId`, tức hỏi bằng khoá mà FE thật sự có.
  */
-import { screen, cleanup, waitFor } from "@testing-library/react";
+import { screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { ProfilePostsPage } from "./ProfilePostsPage";
@@ -14,6 +14,7 @@ import { makePost, page, renderWithProviders, resetCaps, setCaps } from "./socia
 
 const listFeed = vi.fn();
 const listProfilePosts = vi.fn();
+const savePost = vi.fn();
 let mockParams: Record<string, string> = {};
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -36,6 +37,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.socialApi,
       listFeed: (...a: unknown[]) => listFeed(...a),
       listProfilePosts: (...a: unknown[]) => listProfilePosts(...a),
+      savePost: (...a: unknown[]) => savePost(...a),
     },
   };
 });
@@ -45,6 +47,7 @@ beforeEach(() => {
   mockParams = {};
   listFeed.mockReset();
   listProfilePosts.mockReset();
+  savePost.mockReset();
 });
 
 afterEach(() => {
@@ -87,6 +90,24 @@ describe("C11 — trang cá nhân của ĐỒNG NGHIỆP (`/feed/profiles/$emplo
     const t = i18n.getFixedT("vi", "social");
     await waitFor(() => expect(screen.getByTestId("feed-empty")).toBeInTheDocument());
     expect(screen.getByTestId("profile-title")).toHaveTextContent(t("profile.titleUnknown"));
+  });
+});
+
+describe("🔴 hành động ghi hỏng phải phát ra tín hiệu", () => {
+  it("lưu bài hỏng ⇒ dải lỗi hiện trên đầu trang cá nhân", async () => {
+    mockParams = { employeeId: "22222222-2222-4222-8222-222222222222" };
+    listProfilePosts.mockResolvedValue(page([makePost()]));
+    savePost.mockRejectedValue(new Error("boom"));
+    renderWithProviders(<ProfilePostsPage />);
+
+    await waitFor(() => expect(screen.getByTestId("post-save-toggle")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("post-save-toggle"));
+
+    await waitFor(() => expect(screen.getByTestId("feed-action-error")).toBeInTheDocument());
+    expect(screen.getByTestId("feed-action-error")).toHaveAttribute("data-kind", "save");
+    expect(screen.getByTestId("feed-action-error")).toHaveTextContent(
+      i18n.getFixedT("vi", "social")("actionError.generic.save"),
+    );
   });
 });
 

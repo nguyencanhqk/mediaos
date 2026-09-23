@@ -32,8 +32,33 @@ import { FEED_BODY_MAX, type CreateFeedPostDto } from "@mediaos/contracts";
 /** Hai loại bài mà FE-1 soạn được. Xem docblock đầu file trước khi thêm phần tử thứ ba. */
 type ComposerType = "share" | "news";
 
+/**
+ * `then` là tín hiệu DUY NHẤT mà ô soạn có để biết "server đã nhận chưa". Không có nó thì mọi phán
+ * đoán về thành-công/thất-bại đều là đoán mò — xem hộp «KHÔNG DỌN KHI CHƯA ĐƯỢC XÁC NHẬN» dưới đây.
+ */
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return typeof (value as { then?: unknown } | null | undefined)?.then === "function";
+}
+
 interface FeedComposerProps {
-  onSubmit: (dto: CreateFeedPostDto) => void;
+  /**
+   * Gửi bài lên caller.
+   *
+   * ┌─ 🔴 KHÔNG DỌN Ô SOẠN KHI CHƯA ĐƯỢC XÁC NHẬN (lỗi H2, vá 23/09/2026) ─────────────────────────┐
+   * │ Bản trước gọi `setBody("")` NGAY sau `onSubmit` — fire-and-forget. Ca hỏng thật: soạn 1.500   │
+   * │ chữ → bấm «Đăng» → rớt mạng 1 giây → ô soạn TRỐNG, bảng tin không có bài mới, không một chữ   │
+   * │ báo lỗi. Không có đường nào lấy lại nội dung đã gõ ⇒ **mất trắng dữ liệu người dùng**.        │
+   * │ Chuỗi i18n `actionError.generic.post` còn hứa thẳng «Nội dung bạn gõ vẫn còn trong ô soạn» —  │
+   * │ dọn sớm biến câu đó thành lời nói dối.                                                        │
+   * │                                                                                                │
+   * │ ⇒ Hợp đồng mới: **trả về Promise** (ví dụ `mutation.mutateAsync(dto)`) thì ô soạn tự dọn khi  │
+   * │ promise RESOLVE, và giữ nguyên từng ký tự khi nó REJECT.                                      │
+   * │ Caller trả `void` (ví dụ `mutation.mutate`) ⇒ ô soạn **KHÔNG dọn**: thà để người dùng tự xoá  │
+   * │ một bài đã đăng xong còn hơn nuốt mất bài chưa đăng được. Khoá `Idempotency-Key` suy-từ-nội-   │
+   * │ dung ở `socialApi.createPost` làm lượt gửi lặp cùng nội dung không đẻ ra bài thứ hai.         │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   */
+  onSubmit: (dto: CreateFeedPostDto) => void | Promise<unknown>;
   isSubmitting: boolean;
   /** Nội dung điền sẵn (widget Sinh nhật «Gửi lời chúc» — D12: chỉ MỞ composer, không tự đăng). */
   prefillBody?: string;
@@ -53,6 +78,12 @@ export function FeedComposer({
   const [body, setBody] = React.useState(prefillBody ?? "");
   const [requiresAck, setRequiresAck] = React.useState(false);
   const [touched, setTouched] = React.useState(false);
+  /**
+   * Lượt gửi của CHÍNH ô soạn đang bay. Tách khỏi `isSubmitting` của caller vì nó là vế còn lại của
+   * C26: từ khi ô soạn KHÔNG dọn rỗng ngay nữa, "nội dung trống ⇒ nút khoá" không còn chặn được cú
+   * bấm thứ hai. Cờ này mới là thứ chặn.
+   */
+  const [sending, setSending] = React.useState(false);
 
   /**
    * Nạp nội dung điền sẵn khi người dùng bấm «Gửi lời chúc» ở widget Sinh nhật.
@@ -79,21 +110,39 @@ export function FeedComposer({
 
   const trimmed = body.trim();
   const tooLong = trimmed.length > FEED_BODY_MAX;
+  const busy = isSubmitting || sending;
   // `share`/`news` BẮT BUỘC có body (`superRefine` của createFeedPostSchema) — chặn ở đây để người
   // dùng thấy lý do, thay vì nhận 400 vô danh từ Zod của server.
-  const canSubmit = trimmed.length > 0 && !tooLong && !isSubmitting;
+  const canSubmit = trimmed.length > 0 && !tooLong && !busy;
 
   const submit = (): void => {
     setTouched(true);
     if (!canSubmit) return;
-    onSubmit({
+    const result = onSubmit({
       type,
       audience: "company",
       body: trimmed,
       requiresAck: type === "news" ? requiresAck : false,
     } as CreateFeedPostDto);
-    setBody("");
-    setRequiresAck(false);
+
+    // Caller không hứa gì ⇒ giữ NGUYÊN nội dung (xem hộp ở `FeedComposerProps.onSubmit`).
+    if (!isPromiseLike(result)) return;
+
+    setSending(true);
+    result.then(
+      () => {
+        setBody("");
+        setRequiresAck(false);
+        // Dọn cả `touched`: bỏ quên nó thì ngay sau một lượt đăng THÀNH CÔNG, ô rỗng + `touched`
+        // còn bật sẽ bắn «Hãy nhập nội dung trước khi đăng» — một cảnh báo đỏ cho việc vừa xong.
+        setTouched(false);
+        setSending(false);
+      },
+      () => {
+        // Hỏng ⇒ KHÔNG đụng vào `body`. Caller là chỗ nói ra lỗi (dải `ActionErrorBanner`).
+        setSending(false);
+      },
+    );
   };
 
   const typeButton = (value: ComposerType, label: string, Icon: typeof Share2) => (
@@ -179,7 +228,7 @@ export function FeedComposer({
           đổi một ký tự. Vô hiệu hoá nút là vế còn lại của cùng một lời hứa.
         */}
         <Button type="button" onClick={submit} disabled={!canSubmit} data-testid="composer-submit">
-          {isSubmitting ? t("composer.submitting") : t("composer.submit")}
+          {busy ? t("composer.submitting") : t("composer.submit")}
         </Button>
       </div>
     </section>

@@ -13,6 +13,7 @@ import { SavedPage } from "./SavedPage";
 import { makePost, page, renderWithProviders, resetCaps, setCaps } from "./social-test-doubles";
 
 const listSaved = vi.fn();
+const unsavePost = vi.fn();
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -29,13 +30,18 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
-    socialApi: { ...actual.socialApi, listSaved: (...a: unknown[]) => listSaved(...a) },
+    socialApi: {
+      ...actual.socialApi,
+      listSaved: (...a: unknown[]) => listSaved(...a),
+      unsavePost: (...a: unknown[]) => unsavePost(...a),
+    },
   };
 });
 
 beforeEach(() => {
   setCaps({ "view:feed": true });
   listSaved.mockReset();
+  unsavePost.mockReset();
 });
 
 afterEach(() => {
@@ -77,6 +83,27 @@ describe("C10 — SOC-SCREEN-004 Đã lưu", () => {
     await waitFor(() => expect(listSaved).toHaveBeenCalled());
     const arg = listSaved.mock.calls[0][0] as Record<string, unknown>;
     expect(Object.keys(arg).sort()).toEqual(["cursor", "limit"]);
+  });
+});
+
+describe("🔴 hành động ghi hỏng phải phát ra tín hiệu", () => {
+  it("bỏ lưu hỏng ⇒ dải lỗi hiện; KHÔNG im lặng để người dùng tưởng bấm hụt", async () => {
+    /**
+     * Đây là màn người dùng BỎ LƯU nhiều nhất. Không render `actionError` thì bài vẫn nằm nguyên
+     * chỗ cũ sau cú bấm và không một ký tự nào giải thích vì sao — họ bấm lại vài lần rồi thôi.
+     */
+    listSaved.mockResolvedValue(page([makePost({ savedByMe: true })]));
+    unsavePost.mockRejectedValue(new Error("boom"));
+    renderWithProviders(<SavedPage />);
+
+    await waitFor(() => expect(screen.getByTestId("post-save-toggle")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("post-save-toggle"));
+
+    await waitFor(() => expect(screen.getByTestId("feed-action-error")).toBeInTheDocument());
+    expect(screen.getByTestId("feed-action-error")).toHaveAttribute("data-kind", "save");
+    expect(screen.getByTestId("feed-action-error")).toHaveTextContent(
+      i18n.getFixedT("vi", "social")("actionError.generic.save"),
+    );
   });
 });
 

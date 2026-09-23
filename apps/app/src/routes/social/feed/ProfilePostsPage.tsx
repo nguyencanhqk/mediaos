@@ -24,6 +24,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { socialApi, socialKeys, useAuthStore } from "@mediaos/web-core";
 import type { FeedPostDto } from "@mediaos/contracts";
+import { ActionErrorBanner } from "./components/ActionErrorBanner";
 import { FeedPostList } from "./components/FeedPostList";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
@@ -88,6 +89,15 @@ export function ProfilePostsPage({ isMe = false }: ProfilePostsPageProps): React
       <h1 className="text-lg font-semibold text-foreground" data-testid="profile-title">
         {title}
       </h1>
+
+      {/* Cùng luật với Bảng tin/Đã lưu: hành động ghi hỏng PHẢI phát ra tín hiệu, không im lặng. */}
+      {actions.actionError && (
+        <ActionErrorBanner
+          kind={actions.actionError.kind}
+          forbidden={actions.actionError.forbidden}
+          onDismiss={actions.clearActionError}
+        />
+      )}
 
       <FeedPostList
         posts={posts}

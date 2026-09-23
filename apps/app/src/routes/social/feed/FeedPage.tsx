@@ -18,9 +18,11 @@ import * as React from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { socialApi, socialKeys, useCan } from "@mediaos/web-core";
+import { Info, X } from "lucide-react";
+import { ApiError, socialApi, socialKeys, useCan } from "@mediaos/web-core";
 import type { CreateFeedPostDto, FeedPostDto, FeedSortDto } from "@mediaos/contracts";
 import { useFeedRealtime } from "@/hooks/use-feed-realtime";
+import { ActionErrorBanner } from "./components/ActionErrorBanner";
 import { FeedComposer } from "./components/FeedComposer";
 import { FeedPostList } from "./components/FeedPostList";
 import { NewFeedPostsBadge } from "./components/NewFeedPostsBadge";
@@ -72,12 +74,36 @@ export function FeedPage(): React.ReactElement {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
 
+  /** Lỗi của lượt ĐĂNG BÀI. Tách khỏi `actions.actionError` vì hai đường ghi khác nhau. */
+  const [postError, setPostError] = React.useState<{ forbidden: boolean } | null>(null);
+  /**
+   * Số lượt nhắc bị BỎ ở lượt đăng gần nhất — **thông tin, KHÔNG phải lỗi** (SPEC-16 §12 `ERR-009`).
+   *
+   * Server bỏ im lặng mention người ngoài audience rồi vẫn trả 201. Nuốt luôn con số này nghĩa là
+   * người đăng tin rằng cả ba đồng nghiệp họ vừa nhắc đều đã được báo, trong khi không ai nhận gì.
+   */
+  const [droppedMentionCount, setDroppedMentionCount] = React.useState(0);
+
   const createMutation = useMutation({
     mutationFn: (dto: CreateFeedPostDto) => socialApi.createPost(dto),
-    onSuccess: () => {
+    // Lượt gửi MỚI dọn dấu vết lượt trước: một dải lỗi cũ treo cạnh bài vừa đăng xong là thông tin sai.
+    onMutate: () => {
+      setPostError(null);
+      setDroppedMentionCount(0);
+    },
+    onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
       // Bài của CHÍNH mình vừa đăng cũng đi qua WS về lại; reset để badge không đếm nó.
       resetNewPosts();
+      setDroppedMentionCount(created.droppedMentions.length);
+    },
+    /**
+     * 🔴 Thiếu `onError` = hỏng IM LẶNG TUYỆT ĐỐI: app không có hệ toast và `QueryClient` ở
+     * `main.tsx` không khai `MutationCache.onError`, nên một lượt đăng hỏng sẽ không sinh ra một ký
+     * tự nào trên màn hình. Người dùng bấm lại vài lần rồi kết luận nút hỏng.
+     */
+    onError: (err) => {
+      setPostError({ forbidden: err instanceof ApiError && err.status === 403 });
     },
   });
 
@@ -124,8 +150,55 @@ export function FeedPage(): React.ReactElement {
 
   return (
     <div className="flex flex-col gap-4">
+      {/*
+        Hai dải lỗi + một dải THÔNG TIN, đặt trên ĐẦU cột giữa — chỗ duy nhất người dùng chắc chắn
+        nhìn thấy sau khi bấm, kể cả khi họ đã cuộn xuống giữa danh sách.
+      */}
+      {actions.actionError && (
+        <ActionErrorBanner
+          kind={actions.actionError.kind}
+          forbidden={actions.actionError.forbidden}
+          onDismiss={actions.clearActionError}
+        />
+      )}
+
+      {postError && (
+        <ActionErrorBanner
+          kind="post"
+          forbidden={postError.forbidden}
+          onDismiss={() => setPostError(null)}
+        />
+      )}
+
+      {droppedMentionCount > 0 && (
+        <div
+          role="status"
+          data-testid="dropped-mentions-notice"
+          className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2"
+        >
+          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {t("composer.droppedMentions", { count: droppedMentionCount })}
+          </p>
+          <button
+            type="button"
+            onClick={() => setDroppedMentionCount(0)}
+            aria-label={t("actionError.dismiss")}
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/*
+        🔴 `mutateAsync`, KHÔNG phải `mutate`: ô soạn chỉ dọn nội dung khi promise RESOLVE. Đổi về
+        `mutate` (trả `void`) là trả lại lỗi H2 — bài 1.500 chữ bay mất khi mạng rớt.
+        Promise bị từ chối đã có `onError` của mutation + handler của composer bắt ⇒ không sinh
+        unhandled rejection.
+      */}
       <FeedComposer
-        onSubmit={(dto) => createMutation.mutate(dto)}
+        onSubmit={(dto) => createMutation.mutateAsync(dto)}
         isSubmitting={createMutation.isPending}
         prefillBody={search.wish ? t("birthday.wishPrefill", { name: search.wish }) : undefined}
       />

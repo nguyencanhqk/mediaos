@@ -13,6 +13,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { socialApi, socialKeys } from "@mediaos/web-core";
 import type { FeedPostDto } from "@mediaos/contracts";
+import { ActionErrorBanner } from "./components/ActionErrorBanner";
 import { FeedPostList } from "./components/FeedPostList";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
@@ -43,6 +44,18 @@ export function SavedPage(): React.ReactElement {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-foreground">{t("saved.title")}</h1>
+
+      {/*
+        🔴 Màn này là chỗ người dùng BỎ LƯU nhiều nhất. Không render `actionError` thì một lượt bỏ
+        lưu hỏng sẽ im lặng tuyệt đối: bài vẫn nằm đó và họ tưởng mình bấm hụt.
+      */}
+      {actions.actionError && (
+        <ActionErrorBanner
+          kind={actions.actionError.kind}
+          forbidden={actions.actionError.forbidden}
+          onDismiss={actions.clearActionError}
+        />
+      )}
 
       <FeedPostList
         posts={posts}

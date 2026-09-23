@@ -9,6 +9,7 @@
 import { screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WS_EVENTS } from "@mediaos/contracts";
+import { ApiError } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { FeedPage } from "./FeedPage";
 import { makePost, page, renderWithProviders, resetCaps, setCaps } from "./social-test-doubles";
@@ -16,6 +17,7 @@ import { makePost, page, renderWithProviders, resetCaps, setCaps } from "./socia
 const listFeed = vi.fn();
 const search = vi.fn();
 const createPost = vi.fn();
+const savePost = vi.fn();
 let mockSearch: Record<string, unknown> = {};
 
 type Handler = (payload: unknown) => void;
@@ -53,6 +55,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       listFeed: (...a: unknown[]) => listFeed(...a),
       search: (...a: unknown[]) => search(...a),
       createPost: (...a: unknown[]) => createPost(...a),
+      savePost: (...a: unknown[]) => savePost(...a),
     },
   };
 });
@@ -72,6 +75,7 @@ beforeEach(() => {
   listFeed.mockReset();
   search.mockReset();
   createPost.mockReset();
+  savePost.mockReset();
   listFeed.mockResolvedValue(page([makePost()]));
 });
 
@@ -198,6 +202,121 @@ describe("C15 — badge «N bài mới»: ĐẾM, KHÔNG chèn (D7 · SOC-DEC-01
 
     fireEvent.click(screen.getByTestId("new-posts-badge"));
     await waitFor(() => expect(screen.queryByTestId("new-posts-badge")).toBeNull());
+  });
+});
+
+/** Gõ nội dung rồi bấm «Đăng» — dùng ở cả bốn ca lỗi/thành công bên dưới. */
+const composeAndSend = async (draft: string): Promise<void> => {
+  await waitFor(() => expect(screen.getByTestId("feed-composer")).toBeInTheDocument());
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: draft } });
+  fireEvent.click(screen.getByTestId("composer-submit"));
+};
+
+describe("🔴 H1 — đăng bài HỎNG phải phát ra tín hiệu, không im lặng", () => {
+  const t = i18n.getFixedT("vi", "social");
+  const DRAFT = "z".repeat(1500);
+
+  it("500 ⇒ dải lỗi CHUNG hiện, và nội dung 1.500 chữ VẪN CÒN trong ô soạn", async () => {
+    /**
+     * App KHÔNG có hệ toast và `QueryClient` ở `main.tsx` không khai `MutationCache.onError` ⇒ một
+     * mutation thiếu `onError` là hỏng IM LẶNG TUYỆT ĐỐI. Ghép với "ô soạn dọn sớm" thì người dùng
+     * mất trắng bài vừa gõ mà không một ký tự nào xuất hiện trên màn hình.
+     */
+    createPost.mockRejectedValue(new Error("mạng rớt"));
+    renderWithProviders(<FeedPage />);
+    await composeAndSend(DRAFT);
+
+    await waitFor(() => expect(screen.getByTestId("feed-action-error")).toBeInTheDocument());
+    const banner = screen.getByTestId("feed-action-error");
+    expect(banner).toHaveAttribute("data-kind", "post");
+    expect(banner).toHaveTextContent(t("actionError.generic.post"));
+    // Lời hứa của chính câu đó: «Nội dung bạn gõ vẫn còn trong ô soạn».
+    expect(screen.getByRole("textbox")).toHaveValue(DRAFT);
+  });
+
+  it("403 ⇒ câu «không có quyền», KHÁC hẳn câu chung", async () => {
+    // Mất quyền thì thử lại bao nhiêu lần cũng vô ích — hai tình huống đòi hai hành vi khác nhau.
+    createPost.mockRejectedValue(new ApiError(403, "SOCIAL-ERR-403", "forbidden"));
+    renderWithProviders(<FeedPage />);
+    await composeAndSend("tin nội bộ");
+
+    await waitFor(() => expect(screen.getByTestId("feed-action-error")).toBeInTheDocument());
+    const banner = screen.getByTestId("feed-action-error");
+    expect(banner).toHaveTextContent(t("actionError.forbidden.post"));
+    expect(banner).not.toHaveTextContent(t("actionError.generic.post"));
+  });
+
+  it("đăng THÀNH CÔNG ⇒ ô soạn rỗng và KHÔNG có dải lỗi nào", async () => {
+    createPost.mockResolvedValue({ ...makePost(), droppedMentions: [] });
+    renderWithProviders(<FeedPage />);
+    await composeAndSend("xin chào");
+
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+    expect(screen.queryByTestId("feed-action-error")).toBeNull();
+  });
+
+  it("đóng dải lỗi ⇒ nó biến mất (người dùng không bị kẹt với một vệt đỏ)", async () => {
+    createPost.mockRejectedValue(new Error("mạng rớt"));
+    renderWithProviders(<FeedPage />);
+    await composeAndSend("xin chào");
+
+    await waitFor(() => expect(screen.getByTestId("feed-action-error")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: t("actionError.dismiss") }));
+    expect(screen.queryByTestId("feed-action-error")).toBeNull();
+  });
+});
+
+describe("🔴 M7 — `droppedMentions` là THÔNG TIN, không được nuốt", () => {
+  const t = i18n.getFixedT("vi", "social");
+
+  it("201 kèm 3 mention bị bỏ ⇒ nói ra bằng một dải THÔNG TIN (không phải lỗi)", async () => {
+    /**
+     * Server bỏ im lặng mention người ngoài audience rồi vẫn trả 201. Nuốt con số này nghĩa là
+     * người đăng tin rằng cả ba đồng nghiệp vừa nhắc đều đã được báo — trong khi không ai nhận gì.
+     */
+    createPost.mockResolvedValue({
+      ...makePost(),
+      droppedMentions: [
+        "33333333-3333-4333-8333-333333333333",
+        "44444444-4444-4444-8444-444444444444",
+        "55555555-5555-4555-8555-555555555555",
+      ],
+    });
+    renderWithProviders(<FeedPage />);
+    await composeAndSend("chào @a @b @c");
+
+    await waitFor(() => expect(screen.getByTestId("dropped-mentions-notice")).toBeInTheDocument());
+    const notice = screen.getByTestId("dropped-mentions-notice");
+    expect(notice).toHaveTextContent(t("composer.droppedMentions", { count: 3 }));
+    // 🔴 THÔNG TIN, không phải lỗi: dùng dải đỏ ở đây là nói sai rằng bài đăng hỏng.
+    expect(notice).toHaveAttribute("role", "status");
+    expect(screen.queryByTestId("feed-action-error")).toBeNull();
+  });
+
+  it("không có mention nào bị bỏ ⇒ KHÔNG hiện gì (đối chứng)", async () => {
+    createPost.mockResolvedValue({ ...makePost(), droppedMentions: [] });
+    renderWithProviders(<FeedPage />);
+    await composeAndSend("xin chào");
+
+    await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("dropped-mentions-notice")).toBeNull();
+  });
+});
+
+describe("lỗi HÀNH ĐỘNG trên bài (useFeedActions) phải hiện ở màn danh sách", () => {
+  it("lưu bài hỏng ⇒ dải lỗi `save` hiện trên đầu bảng tin", async () => {
+    // Không render `actionError` thì cảm xúc/lưu/kiểm duyệt/xoá hỏng đều im lặng tuyệt đối.
+    savePost.mockRejectedValue(new Error("boom"));
+    renderWithProviders(<FeedPage />);
+
+    await waitFor(() => expect(screen.getByTestId("post-save-toggle")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("post-save-toggle"));
+
+    await waitFor(() => expect(screen.getByTestId("feed-action-error")).toBeInTheDocument());
+    expect(screen.getByTestId("feed-action-error")).toHaveAttribute("data-kind", "save");
+    expect(screen.getByTestId("feed-action-error")).toHaveTextContent(
+      i18n.getFixedT("vi", "social")("actionError.generic.save"),
+    );
   });
 });
 
