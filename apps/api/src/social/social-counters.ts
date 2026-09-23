@@ -325,6 +325,7 @@ export async function bumpGroupMemberCount(
 export async function bumpPollOptionVotes(
   tx: TenantTx,
   companyId: string,
+  pollId: string,
   optionIds: readonly string[],
   delta: number,
 ): Promise<number> {
@@ -334,6 +335,7 @@ export async function bumpPollOptionVotes(
     sql`UPDATE feed_poll_options
            SET vote_count = vote_count + ${delta}
          WHERE company_id = ${companyId}
+           AND poll_id = ${pollId}
            AND id IN (${sql.join(
              optionIds.map((id) => sql`${id}`),
              sql`, `,
@@ -343,12 +345,20 @@ export async function bumpPollOptionVotes(
 
   // 🔴 `RETURNING` + đối chiếu SỐ LƯỢNG, không chỉ "có dòng nào không" — khuôn `bumpGroupMemberCount`
   // siết thêm một bậc. Khớp THIẾU dòng nghĩa là một `optionId` không thuộc tenant/poll này đã lọt
-  // qua cổng `assertOptionsBelongToPoll`, và bỏ qua nó để lại bộ đếm lệch VĨNH VIỄN trong im lặng.
+  // qua cổng `countOptionsOfPollTx`, và bỏ qua nó để lại bộ đếm lệch VĨNH VIỄN trong im lặng.
   // Ném ⇒ cả tx quay lui: thà 500 ồn còn hơn một kết quả bình chọn nói dối.
+  //
+  // 🔴 FULL gate 23/09/2026 (`database-reviewer` H-2 · `silent-failure-hunter` L-3): vị từ CŨ chỉ có
+  // `company_id` + `id`, nên nó KHÔNG THỂ phát hiện vế "thuộc poll" mà chính thông điệp này khẳng
+  // định — vế đó do một câu KHÁC ở call-site gác (`countOptionsOfPollTx`). Một call-site tương lai
+  // quên câu đó, gửi `optionId` của bình chọn KHÁC trong cùng tenant, sẽ khớp 1/1 ⇒ assert PASS ⇒
+  // `vote_count` của bình chọn kia lệch DƯƠNG vĩnh viễn (không lỗi, không log, không script đối soát
+  // — `vote_count` ngoài 5 cột SPEC-16 §13.6). Thêm `poll_id` đưa lưới vào CHÍNH hàm, thay vì dựa
+  // vào kỷ luật của người gọi.
   if (rows.rows.length !== optionIds.length) {
     throw new Error(
       `bumpPollOptionVotes: khớp ${rows.rows.length}/${optionIds.length} hàng feed_poll_options ` +
-        `(company=${companyId}) — có optionId không thuộc tenant/poll này`,
+        `(company=${companyId}, poll=${pollId}) — có optionId không thuộc tenant/poll này`,
     );
   }
   return rows.rows.length;

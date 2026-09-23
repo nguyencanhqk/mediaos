@@ -1,13 +1,10 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+// `ForbiddenException` đã BỎ ở FULL gate 23/09 (`security-reviewer` F9 — import chết): 403 của `044`
+// do `assertCanMutateContent` ném, file này không tự ném 403 ở đâu.
+import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
-import { OutboxService } from "../events/outbox.service";
+import { OutboxService, type NewEvent } from "../events/outbox.service";
 import { SocialAccessService } from "./social-access.service";
 import { bumpPollOptionVotes } from "./social-counters";
 import { SOCIAL_EVENT_POLL_CLOSED, type SocialPollClosedPayload } from "./social-noti.payload";
@@ -36,6 +33,8 @@ import type { SocialActor, SocialRequestUser } from "./social.types";
  */
 @Injectable()
 export class SocialPollsService {
+  private readonly logger = new Logger(SocialPollsService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: SocialAccessService,
@@ -76,7 +75,12 @@ export class SocialPollsService {
     const actor = await this.access.resolveActor(user, "pollVote");
     // Khử trùng lặp TRƯỚC mọi thứ: `[A, A]` gửi lên sẽ làm `countOptionsOfPollTx` khớp 1/2 và ném
     // nhầm thành "option lạ", trong khi lỗi thật của người dùng là gửi trùng.
-    const wanted = [...new Set(optionIds)];
+    // 🔴 FULL gate 23/09/2026 (`database-reviewer` L-5): chuẩn hoá HOA/thường TRƯỚC khi khử trùng
+    // lặp. `Set` so sánh CHUỖI, Postgres so sánh `uuid`, và Zod `.uuid()` nhận CẢ HAI dạng ⇒
+    // `["AB…","ab…"]` (cùng MỘT uuid) lọt qua `Set` thành 2 phần tử, rồi `countOptionsOfPollTx` khớp
+    // 1/2 ⇒ ném 404 "không tìm thấy lựa chọn" cho một lỗi thật là gửi TRÙNG. Fail-closed nên không
+    // lệch đếm, nhưng thông điệp chỉ sai hướng người dùng.
+    const wanted = [...new Set(optionIds.map((id) => id.toLowerCase()))];
 
     return this.db.withTenant(actor.companyId, async (tx) => {
       const poll = await this.openPollForWriteTx(tx, actor, postId);
@@ -98,10 +102,26 @@ export class SocialPollsService {
         poll.id,
         actor.actorUserId,
       );
-      await bumpPollOptionVotes(tx, actor.companyId, removed, -1);
+      await bumpPollOptionVotes(tx, actor.companyId, poll.id, removed, -1);
 
       try {
-        await this.repo.insertVotesTx(tx, actor.companyId, poll.id, actor.actorUserId, wanted);
+        // 🔴 FULL gate 23/09/2026 — BỐN reviewer hội tụ. Xem docblock `insertVotesTx`: câu
+        // `INSERT … SELECT` ghi ÍT hơn `wanted` mà KHÔNG ném gì, rồi `+1` ngay dưới bơm đủ cả
+        // `wanted` ⇒ `vote_count` lệch **DƯƠNG** vĩnh viễn (rủi ro số 1 của plan §9: không lỗi,
+        // không log, không script đối soát). Ném ⇒ cả tx quay lui.
+        const written = await this.repo.insertVotesTx(
+          tx,
+          actor.companyId,
+          poll.id,
+          actor.actorUserId,
+          wanted,
+        );
+        if (written !== wanted.length) {
+          throw new Error(
+            `insertVotesTx: ghi ${written}/${wanted.length} phiếu (poll=${poll.id}) — có optionId ` +
+              `không thuộc bình chọn này, hoặc hàng feed_polls biến mất giữa tx`,
+          );
+        }
       } catch (err) {
         // 🔴 HAI chốt DB, HAI nhánh — dịch CẢ HAI:
         //   · `…_single_uq` : hai option KHÁC nhau, cùng người, poll một-lựa-chọn.
@@ -116,7 +136,7 @@ export class SocialPollsService {
         }
         throw err;
       }
-      await bumpPollOptionVotes(tx, actor.companyId, wanted, 1);
+      await bumpPollOptionVotes(tx, actor.companyId, poll.id, wanted, 1);
 
       return this.readResultsTx(tx, actor, poll);
     });
@@ -138,7 +158,7 @@ export class SocialPollsService {
         poll.id,
         actor.actorUserId,
       );
-      await bumpPollOptionVotes(tx, actor.companyId, removed, -1);
+      await bumpPollOptionVotes(tx, actor.companyId, poll.id, removed, -1);
       return this.readResultsTx(tx, actor, poll);
     });
   }
@@ -195,27 +215,59 @@ export class SocialPollsService {
       });
 
       const fresh = await this.repo.getPollByPostTx(tx, actor.companyId, postId);
-      return this.readResultsTx(tx, actor, fresh ?? poll);
+      // 🔴 FULL gate 23/09/2026 (`santa-A` F9 · `silent-failure-hunter` L-2): KHÔNG `?? poll`.
+      // `poll` là ảnh chụp TRƯỚC UPDATE ⇒ nó mang `status:'open'` cho một bình chọn vừa đóng, trong
+      // khi audit + NOTI đã phát. Trả một trạng thái NÓI DỐI tệ hơn 500 — cùng lý lẽ mà
+      // `bumpGroupMemberCount` đã áp cho vế 0 dòng.
+      if (!fresh) {
+        throw new Error(`close: hàng feed_polls biến mất sau khi đóng (poll=${poll.id})`);
+      }
+      return this.readResultsTx(tx, actor, fresh);
     });
   }
 
   /**
-   * NOTI-035 — dùng chung giữa `044` (tay) và system-job.
-   *
-   * `recipientUserIds` rỗng ⇒ **không phát**: tác giả đã nghỉ việc/bị khoá thì một hàng
-   * `notifications` trỏ vào tài khoản không đăng nhập được là rác vĩnh viễn trong bảng append-only.
-   *
-   * 🔴 Vị từ "còn hoạt động" phải có **CẢ HAI** vế — `employee_profiles.status='active'` VÀ
-   * `users.status='active' AND users.deleted_at IS NULL`. Nghỉ việc **KHÔNG xoá mềm** hàng `users`,
-   * nên chỉ lọc `deleted_at` là hở. Đúng lỗi mà BA reviewer độc lập đã hội tụ ở BE-1B.
+   * NOTI-035 cho MỘT bình chọn — đường `044` (đóng tay). Thân là bản LÔ với lô cỡ 1.
    */
   async enqueuePollClosedNotiTx(
     tx: TenantTx,
     companyId: string,
     poll: { postId: string; question: string },
   ): Promise<void> {
-    const rows = await tx.execute<{ user_id: string }>(sql`
-      SELECT u.id AS user_id
+    await this.enqueuePollClosedNotiManyTx(tx, companyId, [poll]);
+  }
+
+  /**
+   * NOTI-035 cho MỘT LÔ bình chọn — **MỘT** câu người nhận + **MỘT** `enqueueMany`.
+   *
+   * ┌─ VÌ SAO LÀ BẢN LÔ, KHÔNG PHẢI VÒNG LẶP GỌI BẢN ĐƠN ────────────────────────────────────────────┐
+   * │ FULL gate 23/09/2026 — `database-reviewer` H-1 · `santa-A` F7 · `santa-B` F2 ·               │
+   * │ `silent-failure-hunter` M-6. Job gọi bản đơn trong vòng `for` là `2N` round-trip nằm TRONG   │
+   * │ transaction đang giữ khoá ghi trên N hàng `feed_polls`. `OutboxService.enqueueMany` tồn tại   │
+   * │ CHÍNH cho ca này và docblock của nó đã ra luật thành văn: «500 lượt `enqueue` là 500           │
+   * │ round-trip nằm trong transaction nghiệp vụ đang giữ row-lock trên kỳ».                          │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * 🔴 Vị từ "còn hoạt động" phải có **CẢ HAI** vế — `employee_profiles.status='active'` VÀ
+   * `users.status='active' AND users.deleted_at IS NULL`. Nghỉ việc **KHÔNG xoá mềm** hàng `users`,
+   * nên chỉ lọc `deleted_at` là hở. Đúng lỗi mà BA reviewer độc lập đã hội tụ ở BE-1B.
+   *
+   * 🔴 `p.deleted_at IS NULL` (FULL gate 23/09 — BỐN nguồn hội tụ): thiếu vế này thì một bình chọn
+   * trên bài **đã xoá mềm** vẫn phát NOTI-035 mang `poll_question` + `target_url=/social/posts/{id}`,
+   * người nhận bấm vào ăn 404, và câu hỏi của bài đã xoá **tái xuất hiện qua bảng `notifications`** —
+   * thứ sống lâu hơn bài. `closeExpiredTx` giờ cũng loại bài đã xoá, nên hai vế cùng một luật.
+   *
+   * @returns số event đã enqueue (≤ `polls.length`).
+   */
+  async enqueuePollClosedNotiManyTx(
+    tx: TenantTx,
+    companyId: string,
+    polls: readonly { postId: string; question: string }[],
+  ): Promise<number> {
+    if (polls.length === 0) return 0;
+
+    const rows = await tx.execute<{ post_id: string; user_id: string }>(sql`
+      SELECT p.id AS post_id, u.id AS user_id
         FROM feed_posts p
         JOIN users u
           ON u.company_id = p.company_id AND u.id = p.author_user_id
@@ -223,17 +275,51 @@ export class SocialPollsService {
         JOIN employee_profiles ep
           ON ep.company_id = u.company_id AND ep.user_id = u.id
          AND ep.status = 'active' AND ep.deleted_at IS NULL
-       WHERE p.company_id = ${companyId} AND p.id = ${poll.postId}
+       WHERE p.company_id = ${companyId}
+         AND p.deleted_at IS NULL
+         AND p.id IN (${sql.join(
+           polls.map((p) => sql`${p.postId}`),
+           sql`, `,
+         )})
     `);
-    const recipientUserIds = rows.rows.map((r) => r.user_id);
-    if (recipientUserIds.length === 0) return;
 
-    const payload: SocialPollClosedPayload = {
-      post_id: poll.postId,
-      poll_question: poll.question,
-      recipientUserIds,
-    };
-    await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_POLL_CLOSED, payload });
+    const byPost = new Map<string, string[]>();
+    for (const r of rows.rows) {
+      const list = byPost.get(r.post_id);
+      if (list) list.push(r.user_id);
+      else byPost.set(r.post_id, [r.user_id]);
+    }
+
+    const events: NewEvent[] = [];
+    for (const poll of polls) {
+      const recipientUserIds = byPost.get(poll.postId);
+      if (recipientUserIds === undefined || recipientUserIds.length === 0) {
+        // 🔴 FULL gate 23/09/2026 (`silent-failure-hunter` M-1 · `database-reviewer` M-2): tập rỗng
+        // rơi IM LẶNG là hình dạng "thành công RỖNG". `social-noti-bridge.registrar.ts` đã ra luật
+        // cho MỌI producer: «tập rỗng ⇒ log WARN rồi KHÔNG enqueue» — hai producer SOCIAL khác
+        // (NOTI-031, NOTI-036) đã tuân, producer này thì chưa.
+        // Tập rỗng có BA nguyên nhân và KHÔNG cái nào là lỗi: tác giả nghỉ việc/bị khoá · tác giả
+        // KHÔNG có hàng `employee_profiles` (`employeeIdOf` trả `null` ⇒ tài khoản console/tích hợp
+        // tạo được bài) · bài đã xoá mềm. Ai NÊN nhận trong ca thứ hai là quyết định chính sách của
+        // owner (plan §13.3) — dòng log này chỉ bảo đảm nó không còn vô hình.
+        this.logger.warn(
+          `NOTI-035 post=${poll.postId}: tập người nhận RỖNG (tác giả không còn hoạt động / không có ` +
+            `hồ sơ nhân sự / bài đã xoá mềm) — KHÔNG phát thông báo.`,
+        );
+        continue;
+      }
+
+      const payload: SocialPollClosedPayload = {
+        post_id: poll.postId,
+        poll_question: poll.question,
+        recipientUserIds,
+      };
+      events.push({ eventType: SOCIAL_EVENT_POLL_CLOSED, payload });
+    }
+
+    if (events.length === 0) return 0;
+    await this.outbox.enqueueMany(tx, events);
+    return events.length;
   }
 
   /**
@@ -263,9 +349,11 @@ export class SocialPollsService {
     if (!poll) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
 
     if (poll.status !== "open") throw new ConflictException(SOCIAL_ERR.POLL_CLOSED);
-    if (poll.closesAt !== null && poll.closesAt.getTime() <= Date.now()) {
-      throw new ConflictException(SOCIAL_ERR.POLL_CLOSED);
-    }
+    // 🔴 FULL gate 23/09/2026 (`santa-A` F1 · `santa-B` F3): `expired` tính TRONG SQL bằng đồng hồ
+    // **DB** (xem docblock `PollForWrite.expired`). Bản cũ so `closesAt.getTime() <= Date.now()` —
+    // đồng hồ **APP** — trong khi job so `closes_at <= now()` của DB: một bất biến, HAI đồng hồ. App
+    // chậm hơn DB δ ⇒ phiếu vẫn được nhận trong δ sau khi hệ thống đã coi bình chọn hết hạn.
+    if (poll.expired) throw new ConflictException(SOCIAL_ERR.POLL_CLOSED);
     return poll;
   }
 

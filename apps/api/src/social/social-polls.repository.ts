@@ -41,6 +41,16 @@ export interface PollForWrite {
   multipleChoice: boolean;
   isAnonymous: boolean;
   closesAt: Date | null;
+  /**
+   * "Đã quá hạn" tính bằng đồng hồ **DB**, trong CÙNG câu đọc hàng poll.
+   *
+   * 🔴 FULL gate 23/09/2026 (`santa-A` F1 · `santa-B` F3): cổng ghi TRƯỚC ĐÂY so
+   * `closesAt.getTime() <= Date.now()` — đồng hồ **APP** — trong khi job (`closeExpiredTx`) so
+   * `closes_at <= now()` — đồng hồ **DB**. Một bất biến, hai đồng hồ: app chậm hơn DB δ thì phiếu
+   * vẫn được nhận trong δ **sau** khi hệ thống đã coi bình chọn hết hạn và job đã được phép đóng nó.
+   * Tính trong SQL ⇒ cổng ghi và job dùng đúng một nguồn thời gian.
+   */
+  expired: boolean;
 }
 
 /** Một hàng của `040` — thông tin bình chọn kèm khoá bài để FE mở chi tiết. */
@@ -74,9 +84,18 @@ export class SocialPollsRepository {
    * rồi quyết định là đúng TOCTOU mà neo này sinh ra để đóng.
    */
   async lockPollRowTx(tx: TenantTx, companyId: string, pollId: string): Promise<void> {
-    await tx.execute(
+    const locked = await tx.execute(
       sql`SELECT 1 FROM feed_polls WHERE company_id = ${companyId} AND id = ${pollId} FOR UPDATE`,
     );
+    // 🔴 FULL gate 23/09/2026 — BA reviewer độc lập hội tụ (`security-reviewer` F3 ·
+    // `database-reviewer` L-1 · orchestrator). Khớp 0 hàng ⇒ **không khoá gì**, không lỗi, không log,
+    // và người gọi vẫn tin mình đã tuần tự hoá. Đây là neo chống-đua DUY NHẤT của cả ba đường ghi và
+    // là chân trụ của chứng minh không-deadlock ở docblock đầu file — tức chỗ "thành công RỖNG" đắt
+    // nhất trong cụm. Cùng khuôn `bumpGroupMemberCount` / `bumpPollOptionVotes`, hai chỗ đã siết
+    // đúng lớp lỗi này ở FULL gate 22/09.
+    if (locked.rows.length !== 1) {
+      throw new Error(`lockPollRowTx: không khoá được hàng feed_polls nào (poll=${pollId})`);
+    }
   }
 
   /** Hàng poll của một BÀI. `null` = bài không mang bình chọn (⇒ 404 `SOCIAL-ERR-001`). */
@@ -94,6 +113,8 @@ export class SocialPollsRepository {
         multipleChoice: feedPolls.multipleChoice,
         isAnonymous: feedPolls.isAnonymous,
         closesAt: feedPolls.closesAt,
+        // Xem docblock `PollForWrite.expired` — vế hạn phải đo bằng đồng hồ DB, không `Date.now()`.
+        expired: sql<boolean>`${feedPolls.closesAt} IS NOT NULL AND ${feedPolls.closesAt} <= now()`,
       })
       .from(feedPolls)
       .where(and(eq(feedPolls.companyId, companyId), eq(feedPolls.postId, postId)))
@@ -169,9 +190,9 @@ export class SocialPollsRepository {
     pollId: string,
     userId: string,
     optionIds: readonly string[],
-  ): Promise<void> {
-    if (optionIds.length === 0) return;
-    await tx.execute(
+  ): Promise<number> {
+    if (optionIds.length === 0) return 0;
+    const inserted = await tx.execute<{ option_id: string }>(
       sql`INSERT INTO feed_poll_votes (company_id, poll_id, option_id, user_id, single_choice)
           SELECT ${companyId}, ${pollId}, opt.id, ${userId}, NOT p.multiple_choice
             FROM feed_polls p
@@ -182,8 +203,18 @@ export class SocialPollsRepository {
              AND opt.id IN (${sql.join(
                optionIds.map((id) => sql`${id}`),
                sql`, `,
-             )})`,
+             )})
+       RETURNING option_id`,
     );
+    // 🔴 FULL gate 23/09/2026 — BỐN reviewer hội tụ (`santa-A` F3 · `santa-B` F4 ·
+    // `database-reviewer` H-2 · `silent-failure-hunter` L-1). `INSERT … SELECT` ghi ÍT hơn
+    // `optionIds` là "thành công RỖNG": câu không ném gì, rồi `bumpPollOptionVotes(+1)` ở service bơm
+    // đủ ⇒ `vote_count` lệch **DƯƠNG** vĩnh viễn — đúng nhánh mà plan §9 gọi là rủi ro số 1 (không
+    // lỗi, không log, chỉ là kết quả bình chọn SAI). Hôm nay chưa với tới được (cổng D4 dùng đúng bộ
+    // vị từ này, hàng poll đang bị `FOR UPDATE`, và app role không có GRANT DELETE trên
+    // `feed_polls`/`feed_poll_options`) — nhưng bất biến đứng trên BA chân ngoài hàm, không trên
+    // bằng chứng tại chỗ. Trả số hàng để service đối chiếu.
+    return inserted.rows.length;
   }
 
   /**
@@ -197,9 +228,12 @@ export class SocialPollsRepository {
    * gõ sai sẽ chạy thành công mà không ghi gì. `social-poll-flags-structure.spec.ts` gác tập cột này.
    */
   async closeManualTx(tx: TenantTx, companyId: string, pollId: string): Promise<boolean> {
+    // MỘT mốc cho cả hai cột — hai lần `new Date()` cho ra hai giá trị lệch nhau tới 1ms trong cùng
+    // một hành động (`santa-A` F8). Khuôn `softDeletePostTx` (`social-counters.ts`) đã làm vậy.
+    const now = new Date();
     const updated = await tx
       .update(feedPolls)
-      .set({ status: "closed", closedAt: new Date(), updatedAt: new Date() })
+      .set({ status: "closed", closedAt: now, updatedAt: now })
       .where(
         and(
           eq(feedPolls.companyId, companyId),
@@ -214,23 +248,53 @@ export class SocialPollsRepository {
   /**
    * Đóng MỌI poll quá hạn của một tenant — thân của system-job.
    *
-   * 🔴 **KHÔNG neo `FOR UPDATE`**, khác hẳn ba đường ghi kia, và đó là quyết định có chủ đích:
-   *   · Câu này set-based; thêm khoá biến nó thành vòng lặp per-row và **mất
-   *     `idx_feed_polls_open_deadline`** (`(company_id, closes_at) WHERE status='open' AND
-   *     closes_at IS NOT NULL`) — vị từ dưới đây giữ ĐÚNG hình dạng của index đó.
-   *   · Nó vẫn an toàn: ở READ COMMITTED, Postgres **re-check `WHERE`** sau khi chờ khoá hàng, nên
-   *     một `044` vừa đóng xong sẽ làm hàng đó rớt khỏi `status = 'open'` và job không đụng tới.
-   *     `RETURNING` vì vậy là danh sách poll mà **CHÍNH job này** đã đóng ⇒ NOTI-035 không nhân đôi.
-   *   · Nó chỉ chạm `feed_polls` (không `feed_poll_options`) nên không tham gia thứ tự khoá kia.
+   * Vị từ của sub-select giữ ĐÚNG hình dạng `idx_feed_polls_open_deadline`
+   * (`(company_id, closes_at) WHERE status='open' AND closes_at IS NOT NULL`) + `ORDER BY closes_at`
+   * khớp thứ tự index; `EXISTS` chỉ là filter phía trên nên không phá index cond.
+   *
+   * ┌─ FULL GATE 23/09/2026 — HAI vá vào câu này ────────────────────────────────────────────────────┐
+   * │ 1. **Chia LÔ + `FOR UPDATE SKIP LOCKED`** (`database-reviewer` H-1 · `santa-A` F7 ·          │
+   * │    `santa-B` F2 · `silent-failure-hunter` M-6). Bản cũ không `LIMIT`: một nhịp sau khi        │
+   * │    `WORKERS_SCHEDULER_ENABLED=false` vài ngày có thể gặt hàng nghìn poll trong MỘT tx, ghim   │
+   * │    một server-connection của PgBouncer (pool `max:20`, không `connectionTimeoutMillis`) và    │
+   * │    **chặn mọi `041`/`042`/`044`** trên cả lô ở `lockPollRowTx` — không lỗi, không log, chỉ   │
+   * │    TREO. Vỡ ở hàng cuối ⇒ rollback toàn phần ⇒ nhịp sau làm lại từ đầu, không tiến-độ-từng-   │
+   * │    phần. `SKIP LOCKED` để job không xếp hàng sau một `044` đang mở dở.                        │
+   * │    ⚠️ Vế `AND status = 'open'` ở câu NGOÀI giữ nguyên lập luận EPQ cũ (`santa-A` đã ĐO bằng   │
+   * │    `EXPLAIN` rằng PG giữ qual này trong `Filter` ⇒ re-check sau khi chờ khoá) — đừng bỏ.      │
+   * │ 2. **Loại bài đã XOÁ MỀM** (`security-reviewer` F5 · `santa-A` F4 · `santa-B` F1 ·          │
+   * │    `silent-failure-hunter` M-2 · orchestrator — BỐN nguồn độc lập). `softDeletePostTx` KHÔNG  │
+   * │    chạm `feed_polls`, nên poll của một bài trong thùng rác vẫn `open` + còn `closes_at`.      │
+   * │    Bản cũ đóng nó và phát NOTI-035 mang `poll_question` + `target_url=/social/posts/{id}` cho │
+   * │    tác giả ⇒ bấm vào ăn 404, và câu hỏi của bài đã xoá **tái xuất hiện qua bảng                │
+   * │    `notifications`** (sống lâu hơn bài). Đường `044` không làm được vậy (`assertPostVisible`  │
+   * │    chặn) ⇒ hai nửa của CÙNG một FSM đối xử khác nhau với `deleted_at`. Giờ cùng một luật.     │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    */
-  async closeExpiredTx(tx: TenantTx, companyId: string): Promise<ClosedPollRow[]> {
+  async closeExpiredTx(
+    tx: TenantTx,
+    companyId: string,
+    limit: number,
+  ): Promise<ClosedPollRow[]> {
     const rows = await tx.execute<{ id: string; post_id: string; question: string }>(
       sql`UPDATE feed_polls
              SET status = 'closed', closed_at = now(), updated_at = now()
-           WHERE company_id = ${companyId}
+           WHERE (company_id, id) IN (
+                   SELECT company_id, id
+                     FROM feed_polls
+                    WHERE company_id = ${companyId}
+                      AND status = 'open'
+                      AND closes_at IS NOT NULL
+                      AND closes_at <= now()
+                      AND EXISTS (SELECT 1
+                                    FROM feed_posts p
+                                   WHERE p.company_id = feed_polls.company_id
+                                     AND p.id = feed_polls.post_id
+                                     AND p.deleted_at IS NULL)
+                    ORDER BY closes_at
+                    LIMIT ${limit}
+                    FOR UPDATE SKIP LOCKED)
              AND status = 'open'
-             AND closes_at IS NOT NULL
-             AND closes_at <= now()
        RETURNING id, post_id, question`,
     );
     return rows.rows.map((r) => ({ pollId: r.id, postId: r.post_id, question: r.question }));
@@ -273,7 +337,18 @@ export class SocialPollsRepository {
         and(eq(feedPosts.companyId, feedPolls.companyId), eq(feedPosts.id, feedPolls.postId)),
       )
       .where(and(...where))
-      .orderBy(asc(feedPolls.status), sql`${feedPolls.createdAt} DESC`)
+      // 🔴 FULL gate 23/09/2026 — BỐN nguồn hội tụ vào MỘT dòng, hai lỗi khác nhau:
+      //  · `asc(status)` trên cột `varchar` so sánh CHUỖI ⇒ `'closed' < 'open'` ⇒ bình chọn ĐÃ KẾT
+      //    THÚC lên đầu danh sách, nghịch với việc chính của màn này (đi bỏ phiếu). Sắp TƯỜNG MINH.
+      //  · OFFSET không có khoá phá-hoà DUY NHẤT: `created_at` mặc định `now()` = mốc BẮT ĐẦU TX nên
+      //    mọi poll tạo trong CÙNG một tx (seed/import) có `created_at` GIỐNG HỆT ⇒ hàng lặp hoặc
+      //    MẤT giữa hai trang, không lỗi. Khuôn `030` thật (`social-groups.repository.ts`) và `028`
+      //    đều có chốt cuối; docblock trên chỉ nói "khuôn 030" nên vế này bị trôi.
+      .orderBy(
+        sql`CASE WHEN ${feedPolls.status} = 'open' THEN 0 ELSE 1 END`,
+        sql`${feedPolls.createdAt} DESC`,
+        asc(feedPolls.id),
+      )
       .limit(opts.limit)
       .offset(opts.offset);
   }
