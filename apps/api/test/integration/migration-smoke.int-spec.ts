@@ -92,7 +92,7 @@ const MVP_ACTIVE_MODULES = ["AUTH", "HR", "ATT", "LEAVE", "TASK", "DASH", "NOTI"
 // sách inactive" (`recruit-wiring.spec.ts` cũ), một mã module gõ sai/migration quên chạy vẫn lọt qua vì
 // không assert dương tính is_active=true. `describe` "2a-ext" bên dưới đóng lỗ này cho CẢ BA module đã
 // launch, không chỉ RECRUIT.
-const EXTENSION_ACTIVE_MODULES = ["ASSET", "ROOM", "RECRUIT", "PAYROLL"] as const;
+const EXTENSION_ACTIVE_MODULES = ["ASSET", "ROOM", "RECRUIT", "PAYROLL", "SOCIAL"] as const;
 
 // Extension modules phải inactive.
 //
@@ -111,7 +111,10 @@ const EXTENSION_ACTIVE_MODULES = ["ASSET", "ROOM", "RECRUIT", "PAYROLL"] as cons
 // 0567 bật modules.PAYROLL.is_active=true CÙNG COMMIT với lần chuyển này, sau khi 35/35 route PAYROLL
 // đã lên dây ở BE-1/BE-2 và 6 màn PAY-SCREEN-001..006 đã có. Chỉ GỠ mà không THÊM là để lọt đúng ca
 // "migration quên chạy" — danh sách ACTIVE mới assert dương tính is_active=true.
-const EXTENSION_INACTIVE_MODULES = ["CHAT", "SOCIAL"] as const;
+// S16-SOCIAL-FE-1 — CHUYỂN "SOCIAL" sang EXTENSION_ACTIVE_MODULES (không chỉ gỡ khỏi đây): danh
+// sách ACTIVE assert DƯƠNG TÍNH is_active = true, còn "gỡ khỏi inactive" chỉ là phủ định và để lọt
+// ca migration 0586 quên chạy — chính lỗ mà describe "2a-ext" sinh ra để bịt.
+const EXTENSION_INACTIVE_MODULES = ["CHAT"] as const;
 
 // system_settings defaults phải tồn tại sau seed (DB-08 §8.3 + 0435_foundation_db5).
 const REQUIRED_SYSTEM_SETTINGS = [

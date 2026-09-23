@@ -32,9 +32,11 @@ import { HR_SIDEBAR } from "./sidebar/hr";
 import { LEAVE_SIDEBAR } from "./sidebar/leave";
 import { ME_SIDEBAR } from "./sidebar/me";
 import { NOTI_SIDEBAR } from "./sidebar/noti";
-import { PAYROLL_SIDEBAR, PAYROLL_SIDEBAR_V2, pruneUnbuiltScreens } from "./sidebar/payroll";
+import { PAYROLL_SIDEBAR, PAYROLL_SIDEBAR_V2 } from "./sidebar/payroll";
+import { pruneUnbuiltScreens } from "./sidebar/prune-unbuilt";
 import { RECRUIT_SIDEBAR } from "./sidebar/recruit";
 import { ROOM_SIDEBAR } from "./sidebar/room";
+import { SOCIAL_SIDEBAR, SOCIAL_SIDEBAR_V2 } from "./sidebar/social";
 import { SYSTEM_SIDEBAR } from "./sidebar/system";
 import { TASK_SIDEBAR } from "./sidebar/task";
 
@@ -52,6 +54,8 @@ export {
   pruneUnbuiltScreens,
   RECRUIT_SIDEBAR,
   ROOM_SIDEBAR,
+  SOCIAL_SIDEBAR,
+  SOCIAL_SIDEBAR_V2,
   SYSTEM_SIDEBAR,
   TASK_SIDEBAR,
 };
@@ -73,6 +77,7 @@ export const SIDEBAR_REGISTRY: Partial<Record<ModuleCode, readonly SidebarItemMe
   ROOM: ROOM_SIDEBAR,
   RECRUIT: RECRUIT_SIDEBAR,
   PAYROLL: PAYROLL_SIDEBAR,
+  SOCIAL: SOCIAL_SIDEBAR,
 };
 
 export function getSidebarItems(moduleCode: ModuleCode): readonly SidebarItemMeta[] {

@@ -88,6 +88,8 @@ me.security.activity | mod=ME | label=Hoạt động bảo mật | path=/me/secu
 me.training | mod=ME | label=Tiến độ đào tạo | path=/me/training | icon=graduation-cap | group=Đào tạo | order=59 | any=[access:lms]
 me.lms | mod=ME | label=Đào tạo (LMS) | path=/lms | icon=graduation-cap | group=Đào tạo | order=60 | any=[access:lms]
 me.chat | mod=ME | label=Tin nhắn | path=/chat | icon=messages-square | group=Trao đổi | order=70 | any=[access:chat]
+me.feed.mine | mod=ME | label=Bài viết của tôi | path=/feed/profiles/me | icon=rss | group=Trao đổi | order=71 | any=[view:feed]
+me.feed.saved | mod=ME | label=Bài đã lưu | path=/feed/saved | icon=bookmark | group=Trao đổi | order=72 | any=[view:feed]
 ### GOAL
 goal.list | mod=GOAL | label=Mục tiêu | path=/goals | icon=target | group=overview | order=10 | any=[access:goal]
 ### ASSET
@@ -115,3 +117,7 @@ payroll.calculation | mod=PAYROLL | label=Tính lương | path=- | icon=calculat
 payroll.paymentBatches | mod=PAYROLL | label=Chi trả | path=/payroll/payment-batches | icon=banknote | group=operation | order=80 | all=[access:payroll,view:payment-batch]
 payroll.reports | mod=PAYROLL | label=Báo cáo | path=/payroll/reports | icon=bar-chart-3 | group=report | order=90 | all=[access:payroll,view:payroll-report]
 payroll.statutoryRates | mod=PAYROLL | label=Tỉ lệ luật định | path=/payroll/settings/statutory-rates | icon=scale | group=settings | order=100 | all=[access:payroll,view:statutory-rate]
+### SOCIAL
+social.feed | mod=SOCIAL | label=Bảng tin | path=/feed | icon=rss | group=overview | order=10 | any=[view:feed]
+social.news | mod=SOCIAL | label=Tin tức | path=/feed/news | icon=megaphone | group=overview | order=20 | any=[view:feed]
+social.saved | mod=SOCIAL | label=Đã lưu | path=/feed/saved | icon=bookmark | group=overview | order=30 | any=[view:feed]

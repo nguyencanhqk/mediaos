@@ -35,6 +35,14 @@ export const rootKeys = {
   recruit: ["recruit"] as const,
   // S13-PAYROLL-FE-1 — Tiền lương (SPEC-11). Module RIÊNG, wave S13-PAYROLL.
   payroll: ["payroll"] as const,
+  /**
+   * S16-SOCIAL-FE-1 — Bảng tin nội bộ (SPEC-16). Module RIÊNG, wave S16-SOCIAL.
+   *
+   * ⚠️ Slug `"social"` ở đây là MIỀN DỮ LIỆU (`/social/*` của BE), KHÔNG phải đường dẫn FE — portal
+   * nằm ở `/feed` (plan D1) vì `/social` đang là trang trung chuyển SSO fbpost. Đừng "sửa cho khớp"
+   * theo hướng nào: hai thứ khác nhau có chủ đích.
+   */
+  social: ["social"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -1350,4 +1358,69 @@ export const payrollKeys = {
     attendancePeriods: (params?: Record<string, unknown>) =>
       [...rootKeys.payroll, "pickers", "attendance-periods", params] as const,
   },
+};
+
+// ── S16-SOCIAL-FE-1 — Bảng tin nội bộ (SPEC-16, SOCIAL-API-001..026) ──────────
+//
+// ┌─ VÌ SAO `list` MANG NGUYÊN `params` MÀ KHÔNG MANG `cursor` ────────────────────────────────────┐
+// │ 001/010/014/020/023/025 phân trang KEYSET. Con trỏ thuộc về `useInfiniteQuery` (nó tự giữ      │
+// │ `pageParam`), KHÔNG thuộc về key: nhét `cursor` vào key thì mỗi trang là một cache entry khác  │
+// │ ⇒ cuộn xuống 5 trang rồi quay lại là 5 lần gọi mạng, và `invalidateQueries` chỉ dọn được một   │
+// │ trang. Cùng lý do đã ghi ở `chatKeys.rooms.files`.                                             │
+// │ Bộ lọc (`sort`/`tag`/`type`/`audience`/`status`) thì NGƯỢC LẠI — chúng định nghĩa danh sách là │
+// │ danh sách NÀO, nên phải nằm trong key (plan D6: bộ lọc sống trong URL search).                 │
+// └────────────────────────────────────────────────────────────────────────────────────────────────┘
+//
+// ⚠️ KHÔNG có `socialInvalidation` ở WO này — cùng lý do đã ghi cho `chatKeys`: bảng "mutation X ⇒
+// invalidate Y" chỉ nên đóng đinh khi có call-site thật. Badge «N bài mới» (plan D7) invalidate ĐÍCH
+// DANH `socialKeys.feed.list(search)` tại chỗ bấm, không qua bảng.
+export const socialKeys = {
+  all: rootKeys.social,
+
+  /** 001 — dòng cuộn chính. `params` = bộ lọc đã chuẩn hoá từ URL search, KHÔNG gồm `cursor`. */
+  feed: {
+    allOf: () => [...rootKeys.social, "feed"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "feed", "list", params] as const,
+  },
+
+  /** 003 — chi tiết bài (`SOC-SCREEN-002`). */
+  posts: {
+    allOf: () => [...rootKeys.social, "posts"] as const,
+    detail: (postId: string) => [...rootKeys.social, "posts", "detail", postId] as const,
+    /** 014 — bình luận của MỘT bài. */
+    comments: (postId: string) => [...rootKeys.social, "posts", "comments", postId] as const,
+    /** 013 — ai đã thả cảm xúc. Mảng trần, không phân trang. */
+    reactors: (postId: string) => [...rootKeys.social, "posts", "reactors", postId] as const,
+    /**
+     * 022 — danh sách đã đọc / CHƯA đọc.
+     *
+     * 🔴 Nhánh key RIÊNG chứ không gộp vào `detail`: route này gate `manage:feed-news` trong khi
+     * `detail` chỉ gate `view:feed`. Gộp chung một entry cache là để dữ liệu của cổng CHẶT nằm lẫn
+     * trong entry mà cổng LỎNG đọc được — đúng hình dạng lỗi `read-path-gate-pair-must-match-...`.
+     */
+    acks: (postId: string, params?: Record<string, unknown>) =>
+      [...rootKeys.social, "posts", "acks", postId, params] as const,
+  },
+
+  /** 010 — bài đã lưu (`SOC-SCREEN-004`). Chỉ của chính actor, không có bộ lọc. */
+  saved: () => [...rootKeys.social, "saved"] as const,
+
+  /** 020 — tin tức (`SOC-SCREEN-003`). */
+  news: {
+    allOf: () => [...rootKeys.social, "news"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "news", "list", params] as const,
+  },
+
+  /** 023 — tìm kiếm topbar. `q` nằm trong `params`. */
+  search: (params?: Record<string, unknown>) => [...rootKeys.social, "search", params] as const,
+
+  /** 025 — trang cá nhân (`SOC-SCREEN-005`). */
+  profilePosts: (employeeId: string, params?: Record<string, unknown>) =>
+    [...rootKeys.social, "profile-posts", employeeId, params] as const,
+
+  /** 026 — widget sinh nhật rail phải. `range` = today|week|month nằm trong `params`. */
+  birthdays: (params?: Record<string, unknown>) =>
+    [...rootKeys.social, "birthdays", params] as const,
 };

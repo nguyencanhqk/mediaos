@@ -89,6 +89,8 @@ me.security.activity
 me.training
 me.lms
 me.chat
+me.feed.mine
+me.feed.saved
 ### GOAL
 goal.list
 ### ASSET
@@ -116,6 +118,10 @@ payroll.calculation
 payroll.paymentBatches
 payroll.reports
 payroll.statutoryRates
+### SOCIAL
+social.feed
+social.news
+social.saved
 ## ME_ONLY
 ### DASH
 (trống)
@@ -156,6 +162,8 @@ me.security.activity
 ### RECRUIT
 (trống)
 ### PAYROLL
+(trống)
+### SOCIAL
 (trống)
 ## EMPLOYEE
 ### DASH
@@ -199,6 +207,8 @@ goal.list
 ### RECRUIT
 (trống)
 ### PAYROLL
+(trống)
+### SOCIAL
 (trống)
 ## HR_ISH
 ### DASH
@@ -247,6 +257,8 @@ me.security.activity
 (trống)
 ### PAYROLL
 (trống)
+### SOCIAL
+(trống)
 ## PAYROLL_PARTIAL
 ### DASH
 (trống)
@@ -276,3 +288,5 @@ me.security.activity
 payroll.calculation
   payroll.periods
   payroll.budgets
+### SOCIAL
+(trống)

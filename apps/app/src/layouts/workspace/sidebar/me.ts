@@ -257,4 +257,34 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 70,
     requiredAnyPermissions: ["access:chat"],
   },
+  // S16-SOCIAL-FE-1 — hai lối vào CÁ NHÂN của bảng tin. Cùng hình dạng `me.lms`/`me.chat` ngay trên:
+  // link RỜI khỏi module ME, gate bằng cặp engine LITERAL của module đích (`view:feed`, seed `0578`).
+  //
+  // 🔴 `path` của «Bài viết của tôi» là route TĨNH `/feed/profiles/me`, KHÔNG phải một placeholder.
+  // Ba lý do đo được (plan W5, finding #2), cái thứ hai là cái nguy hiểm:
+  //  (a) `SidebarItemMeta` KHÔNG có `onClick` ⇒ không giải được `$me` lúc bấm;
+  //  (b) `ME_SIDEBAR` **KHÔNG** đi qua `pruneUnbuiltScreens` (đặc quyền của PAYROLL/SOCIAL —
+  //      `sidebar-registry.ts`) ⇒ mục trỏ vào đường không tồn tại **KHÔNG tự ẩn**, nó thành link chết
+  //      404 hiện với MỌI người có `view:feed`;
+  //  (c) `"me"` không phải UUID nên không lọt nhánh `/feed/profiles/$employeeId`.
+  {
+    sidebarKey: "me.feed.mine",
+    moduleCode: "ME",
+    label: "Bài viết của tôi",
+    path: "/feed/profiles/me",
+    icon: "rss",
+    group: "Trao đổi",
+    order: 71,
+    requiredAnyPermissions: ["view:feed"],
+  },
+  {
+    sidebarKey: "me.feed.saved",
+    moduleCode: "ME",
+    label: "Bài đã lưu",
+    path: "/feed/saved",
+    icon: "bookmark",
+    group: "Trao đổi",
+    order: 72,
+    requiredAnyPermissions: ["view:feed"],
+  },
 ];

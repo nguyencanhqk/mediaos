@@ -18,8 +18,12 @@ export default {
     // S8-CHAT-ENTRY-1 — module CHAT nội bộ (SPEC-15). Nhãn "Tin nhắn" khớp mục sidebar ME đã ship
     // ở S7-CHAT-FE-3 — cùng một chỗ đến thì phải cùng một tên gọi.
     chat: "Tin nhắn",
-    // S9-SOCIAL-FE-1 — cổng SSO sang app vệ tinh fbpost (DECISIONS-08).
-    social: "Đăng bài",
+    // S16-SOCIAL-FE-1 — ô này ĐỔI NGHĨA: nay là cổng thông tin nội bộ (SPEC-16), không còn là
+    // fbpost. Vệ tinh fbpost tách sang khoá `fbpost` ngay dưới (D13 — hai ô KHÁC TÊN, xem registry.ts).
+    social: "Mạng xã hội",
+    // S16-SOCIAL-FE-1 (D13②) — app vệ tinh fbpost, cổng SSO (DECISIONS-08). Giữ nguyên nghĩa cũ của
+    // `social`, chỉ đổi khoá — để người chỉ có `view:social-post` KHÔNG mất ô Home.
+    fbpost: "Đăng bài Facebook",
     // S11-ASSET-FE-1 — module ASSET nội bộ (SPEC-13, wave S11-OFFICE).
     assets: "Tài sản",
     // S11-ROOM-FE-1 — module ROOM nội bộ (SPEC-14, wave S11-OFFICE).
@@ -42,7 +46,8 @@ export default {
     goals: "Mục tiêu phòng ban, dự án và nhân viên theo kỳ — cây, tiến độ và chốt kỳ.",
     lms: "Khóa học, bài kiểm tra và lộ trình đào tạo (mở hệ LMS).",
     chat: "Nhắn tin nội bộ theo phòng ban, dự án và hội thoại riêng.",
-    social: "Soạn, hẹn giờ và đăng bài lên các trang Facebook của công ty.",
+    social: "Bảng tin nội bộ: chia sẻ, tin tức công ty, bình luận, thả cảm xúc và sinh nhật đồng nghiệp.",
+    fbpost: "Soạn, hẹn giờ và đăng bài lên các trang Facebook của công ty.",
     assets: "Danh mục tài sản, cấp phát, thu hồi, bảo trì và kiểm kê theo đợt.",
     rooms: "Lịch phòng họp theo tuần, đặt phòng, huỷ lịch và quản trị phòng.",
     recruit: "Vị trí tuyển, pipeline ứng viên, phỏng vấn, offer và chuyển thành nhân viên.",
@@ -196,6 +201,16 @@ export default {
     payrollReportView: "Xem báo cáo tiền lương",
     mePayslips: "Phiếu lương của tôi",
     mePayrollAdvances: "Tạm ứng của tôi",
+    // S16-SOCIAL-FE-1 — 6 route `/feed*` (SOC-SCREEN-001..005 + route tĩnh `/feed/profiles/me`).
+    // Khai Ở ĐÂY chứ không ở khối đè của `apps/app/src/i18n/index.ts`: khối đè đó dành cho RouteMeta
+    // CỤC BỘ trong `router.tsx`, còn 6 route này nằm trong `ROUTE_REGISTRY` của chính package này —
+    // cùng chỗ với `payroll*`/`system*`. Thiếu bản dịch thì breadcrumb in ra nguyên chuỗi key.
+    socialFeed: "Bảng tin",
+    socialPostDetail: "Chi tiết bài viết",
+    socialNews: "Tin tức",
+    socialSaved: "Đã lưu",
+    socialProfilePosts: "Trang cá nhân",
+    socialMyPosts: "Bài viết của tôi",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

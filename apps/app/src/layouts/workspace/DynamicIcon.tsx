@@ -56,11 +56,25 @@ import {
   DoorOpen,
   UserPlus,
   Briefcase,
+  // S16-SOCIAL-FE-1 — 3 mục sidebar SOCIAL đang hiển thị (track A) + 3 mục track B khai sẵn trong
+  // SOCIAL_SIDEBAR_V2 (tự ẩn tới khi FE-2 thêm route). Khai TRƯỚC cả 6 để lúc FE-2 mở route thì mục
+  // hiện ra kèm đúng biểu tượng, không phải một vòng tròn mặc định mà không ai nhớ vì sao.
+  Rss,
+  Megaphone,
+  Bookmark,
+  Lightbulb,
+  Vote,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
 
 const ICON_MAP: Record<string, LucideIcon> = {
+  // S16-SOCIAL-FE-1 — SOCIAL. `users` (mục «Nhóm») đã có sẵn ở dưới, không khai lại.
+  rss: Rss,
+  megaphone: Megaphone,
+  bookmark: Bookmark,
+  lightbulb: Lightbulb,
+  vote: Vote,
   "layout-dashboard": LayoutDashboard,
   users: Users,
   user: User,

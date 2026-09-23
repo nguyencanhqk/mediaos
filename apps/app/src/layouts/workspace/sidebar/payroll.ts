@@ -1,4 +1,5 @@
-import { ROUTE_REGISTRY, type SidebarItemMeta } from "@mediaos/web-core";
+import { type SidebarItemMeta } from "@mediaos/web-core";
+import { pruneUnbuiltScreens } from "./prune-unbuilt";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PAYROLL — sidebar v2 (S15-UI-SHELL-1 · DEC-020 · UI-07 §21.8 · SPEC-11 §9.1)
@@ -16,36 +17,11 @@ import { ROUTE_REGISTRY, type SidebarItemMeta } from "@mediaos/web-core";
 // ⚠️ «Phiếu lương của tôi» (PAY-SCREEN-006) và «Tạm ứng của tôi» (017) KHÔNG ở đây — chúng thuộc
 // sidebar ME, gate `access:me`. Dữ liệu của chính người dùng không nằm sau cổng module quản trị
 // tiền lương (`personal-prefs-must-not-sit-behind-permission-gate`).
+//
+// S16-SOCIAL-FE-1 (D9): `pruneUnbuiltScreens` đã TÁCH sang `./prune-unbuilt.ts` — SOCIAL là module
+// thứ hai cần nó. File này chỉ còn RE-EXPORT lại để đường import công khai cũ không chết.
 
-/**
- * Cắt mục CHƯA có màn: lá trỏ tới `path` không có trong `ROUTE_REGISTRY` thì bỏ; hàng đại diện nhóm
- * (không có `path` riêng) mất hết con thì cũng bỏ — một chevron mở ra chỗ trống còn tệ hơn link chết
- * vì nó không báo lỗi gì cả.
- */
-export function pruneUnbuiltScreens(items: readonly SidebarItemMeta[]): SidebarItemMeta[] {
-  const built = new Set(ROUTE_REGISTRY.map((r) => r.path));
-  return items.flatMap((item): SidebarItemMeta[] => {
-    const children = item.children ? pruneUnbuiltScreens(item.children) : undefined;
-    const selfBuilt = item.path !== undefined && built.has(item.path);
-    const hasBuiltChildren = Boolean(children?.length);
-
-    // Không màn của mình, cũng không còn con nào ⇒ không còn gì để dẫn tới.
-    if (!selfBuilt && !hasBuiltChildren) return [];
-
-    /**
-     * **Node LAI** (có `path` riêng VÀ có con) mà màn của CHÍNH nó chưa dựng, nhưng con thì đã có:
-     * HẠ xuống thành hàng đại diện nhóm (bỏ `path`) — KHÔNG vứt cả nhánh.
-     *
-     * Bản đầu `return []` ngay khi `path` chưa dựng, nên một node lai sẽ nuốt luôn mọi mục con ĐÃ
-     * chạy được, **im lặng**: không link chết, không chevron rỗng, cả nhánh chỉ đơn giản biến mất.
-     * Nó cũng phá đúng lời hứa của hàm này («WO sau chỉ cần thêm route là mục tự hiện»). Chưa dữ
-     * liệu nào chạm phải — `PAYROLL_SIDEBAR_V2` giữ hàng nhóm không `path` và mục lá không con —
-     * nhưng kiểu dữ liệu cho phép, và các WO PAYROLL sau chính là nơi hình dạng đó dễ xuất hiện.
-     */
-    const base = selfBuilt ? item : { ...item, path: undefined };
-    return [children ? { ...base, children } : { ...base }];
-  });
-}
+export { pruneUnbuiltScreens };
 
 /** Cấu trúc ĐẦY ĐỦ của sidebar PAYROLL v2 — gồm cả màn chưa dựng (bị cắt lúc đăng ký). */
 export const PAYROLL_SIDEBAR_V2: readonly SidebarItemMeta[] = [

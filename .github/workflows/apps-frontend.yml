@@ -126,6 +126,20 @@ jobs:
         if: matrix.app == 'app'
         run: pnpm --filter @mediaos/app test:chat-cov
 
+      # ── Cổng coverage cụm social (S16-SOCIAL-FE-1) ────────────────────────
+      # CÙNG bệnh với cổng chat ở trên: `apps/app/vitest.social.config.ts` đặt ngưỡng 80 trên 4 trục cho
+      # `src/routes/social/**` · `src/layouts/portal/**` · `src/hooks/use-feed-realtime.ts`, nhưng bước
+      # `Test` chạy `vitest run` KHÔNG `--coverage` ⇒ sàn chỉ tồn tại khi người/harness nhớ gọi tay.
+      # (Các spec SOCIAL thì VẪN chạy ở bước `Test` — chỉ NGƯỠNG coverage là không được ép.)
+      #
+      # LƯỢT RIÊNG + CONFIG RIÊNG, KHÔNG gộp vào `test:chat-cov`: `coverage.include` là MỘT danh sách cho
+      # mỗi config, nên gộp hai cụm là bắt chúng dùng chung một con số — một WO SOCIAL làm tụt coverage
+      # sẽ hiện ra như "cụm chat đỏ". Lý do đầy đủ ở đầu `apps/app/vitest.social.config.ts`.
+      # Số local lúc chốt (23/09/2026): st 94.9 · br 89.5 · fn 82.3 · ln 94.9 (sàn 80 — hẹp nhất `functions`).
+      - name: Coverage gate — cụm social (≥80% / 4 trục)
+        if: matrix.app == 'app'
+        run: pnpm --filter @mediaos/app test:social-cov
+
       # VITE_* prod nhúng lúc BUILD (build-time, KHÔNG runtime) — resolve SAU Test, chỉ phục vụ Build.
       # Mỗi app chỉ set biến nó thực sự đọc. DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder để build xanh ở CI).
       - name: Resolve build-time VITE_* env for ${{ matrix.app }}

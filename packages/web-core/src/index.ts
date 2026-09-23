@@ -140,6 +140,11 @@ export {
   // (kỳ + dòng + readiness + summary cùng đổi); nhánh Own `mePayslips` tách RIÊNG khỏi `payslips`
   // vì hai đường tải khác cặp quyền và trả tập khác nhau.
   payrollKeys,
+  // S16-SOCIAL-FE-1 — Bảng tin nội bộ (SPEC-16). KHÔNG có `socialInvalidation` (cùng lý do CHAT):
+  // badge «N bài mới» invalidate ĐÍCH DANH `socialKeys.feed.list(search)` tại chỗ bấm. Nhánh
+  // `posts.acks` tách RIÊNG khỏi `posts.detail` vì hai đường tải khác cặp quyền (022 đòi
+  // `manage:feed-news`, 003 chỉ `view:feed`) — gộp là để dữ liệu cổng CHẶT nằm trong entry cổng LỎNG đọc.
+  socialKeys,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -397,3 +402,7 @@ export { chatCallApi } from "./lib/chat-call-api";
 export { getAppSocket } from "./lib/realtime-socket";
 // S7-CALL-FE-1 — `/ws-call`: namespace RIÊNG chở SDP/ICE, CHỈ mở khi đang có cuộc gọi (xem docblock).
 export { closeCallSocket, getCallSocket } from "./lib/realtime-socket";
+
+// S16-SOCIAL-FE-1 — SOCIAL API client (SPEC-16 · API-19 §5.1). Mirror SOCIAL-API-001..026.
+// Tiền tố BE là `/social`; đường dẫn ROUTE của FE là `/feed` (plan D1) — KHÁC NHAU CÓ CHỦ ĐÍCH.
+export { socialApi, feedDeletedResultSchema, type FeedDeletedResultDto } from "./lib/social-api";

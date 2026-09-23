@@ -240,7 +240,6 @@ export function auditModuleMetadataCoverage(input: CoverageInput): CoverageViola
  */
 const EXEMPT_MODULES: Readonly<Record<string, string>> = {
   CHAT: "Phase 4 — mig 0435:299 is_active=false; app CHAT chạy ngoài my-apps (S7/S8 wave), chưa có card",
-  SOCIAL: "Phase 4 — mig 0435:300 is_active=false; wave S16-SOCIAL sẽ bật cùng metadata",
   MOBILE: "Phase 5 — mig 0435:301 is_active=false; không có route web",
   AI: "Phase 5 — mig 0435:302 is_active=false; chưa có màn hình",
 };
@@ -258,7 +257,14 @@ const EXPECTED_SEEDED_MODULE_COUNT = 17;
  * Viết LITERAL, KHÔNG import cross-package: apps/api KHÔNG phụ thuộc @mediaos/web-core, và đây chính là
  * điểm drift (hai hằng ở hai package, không có cổng runtime nào so chúng). Sai lệch ⇒ card mở nhầm chỗ.
  * Nguồn literal (đọc tay 02/09): goals :669/:671 · assets :776/:778 · rooms :797/:799 ·
- * recruit :818/:820 · payroll :841/:843.
+ * recruit :818/:820 · payroll :841/:843. Bổ sung 23/09: social :777/:779.
+ *
+ * 🔴 HẰNG NÀY KEYED THEO **MODULE**, NHƯNG `APP_REGISTRY` CÓ THỂ CÓ NHIỀU TILE CÙNG MODULE.
+ * `moduleCode: "SOCIAL"` có ĐÚNG HAI tile (D13, registry.ts): `social` → `/feed` (icon `megaphone`,
+ * cổng thông tin nội bộ) và `fbpost` → `/social` (icon `facebook`, app vệ tinh đăng bài Facebook).
+ * Dòng SOCIAL dưới đây ghim tile **`social`**, KHÔNG phải `fbpost` — vì `MODULE_APP_METADATA` là
+ * đích điều hướng của thẻ my-apps cấp MODULE. Trỏ nhầm sang `/social` là đưa người dùng vào đường
+ * trung chuyển SSO của app vệ tinh (đường LỖI, không 404 để báo) thay vì vào cổng thông tin.
  */
 const APP_REGISTRY_LITERALS: Readonly<Record<string, { route: string; icon: string }>> = {
   GOAL: { route: "/goals", icon: "target" },
@@ -266,6 +272,9 @@ const APP_REGISTRY_LITERALS: Readonly<Record<string, { route: string; icon: stri
   ROOM: { route: "/rooms", icon: "calendar-clock" },
   RECRUIT: { route: "/recruit/job-openings", icon: "user-plus" },
   PAYROLL: { route: "/payroll/periods", icon: "wallet" },
+  // tile `social` (registry.ts icon :777, defaultRoute :779) — KHÔNG phải tile `fbpost` (/social,
+  // icon `facebook`, registry.ts :810-816). Xem cảnh báo HAI TILE ở docblock ngay trên.
+  SOCIAL: { route: "/feed", icon: "megaphone" },
 };
 
 /**
@@ -290,6 +299,11 @@ const NEW_MODULE_GATES: ReadonlyArray<{
   // GOAL: caps RỖNG ⇒ false. Ca này CHẾT nếu requiredAny của GOAL để rỗng (hasAnyCapability([]) === true)
   // ⇒ nó cũng là cổng chặn "GOAL hiện cho mọi user" kiểu ME.
   { code: "GOAL", deny: {}, allow: { "access:goal": true } }, // 0506:46
+  // SOCIAL (S16-SOCIAL-FE-1): ca DENY dùng cặp THẬT `view:social-post` (seed 0544:41) — đó là gate của
+  // tile VỆ TINH `fbpost` (registry.ts:819 requiredAnyPermissions). Người CHỈ có `view:social-post`
+  // KHÔNG được thấy thẻ cổng thông tin SOCIAL: đúng lý do D13 tách hai tile. Cặp mở thẻ là
+  // `view:feed` (0578:41). Đừng thay deny bằng `access:social`/wildcard — ca sẽ xanh-rỗng.
+  { code: "SOCIAL", deny: { "view:social-post": true }, allow: { "view:feed": true } },
 ];
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
@@ -468,7 +482,8 @@ describe("S14-FND-MODULEMETA-1 — BLOCKING 1: deny-path THỰC THI qua hasAnyCa
    * ('a:r', '*:r', 'a:*', '*:*') (memory: permission-grant-census-must-cover-four-wildcard-shapes).
    * Ca này ĐÓNG ĐINH hành vi hiện tại để việc thu hồi wildcard sau này là thay đổi CÓ Ý THỨC.
    */
-  it("GHI NHẬN wildcard: caps {'*:*': true} ⇒ true cho CẢ 5 module (deny KHÔNG tuyệt đối)", () => {
+  // (23/09: 5 → 6 module sau khi APPEND SOCIAL vào NEW_MODULE_GATES — vòng lặp duyệt cả mảng.)
+  it("GHI NHẬN wildcard: caps {'*:*': true} ⇒ true cho CẢ 6 module (deny KHÔNG tuyệt đối)", () => {
     for (const gate of NEW_MODULE_GATES) {
       const meta = MODULE_APP_METADATA[gate.code];
       expect(meta, `MODULE_APP_METADATA.${gate.code} chưa tồn tại`).toBeDefined();
@@ -482,10 +497,46 @@ describe("S14-FND-MODULEMETA-1 — BLOCKING 1: deny-path THỰC THI qua hasAnyCa
       expect(meta, `MODULE_APP_METADATA.${gate.code} chưa tồn tại`).toBeDefined();
       expect(meta.requiredAny.length).toBe(1);
       expect(meta.feCodes.length).toBe(meta.requiredAny.length);
-      // Cặp legacy read:* KHÔNG tồn tại trong seed của 5 module này (drift-guard S1-FND-MODULE).
+      // Cặp legacy read:* KHÔNG tồn tại trong seed của các module này (drift-guard S1-FND-MODULE).
       for (const p of meta.requiredAny) expect(p.action).not.toBe("read");
       // KHÔNG dùng mã dotted FE làm cặp engine.
       for (const p of meta.requiredAny) expect(p.resourceType).not.toContain(".");
     }
+  });
+});
+
+/**
+ * S16-SOCIAL-FE-1 (ca C22, vế API) — ghim `MODULE_APP_METADATA.SOCIAL`.
+ *
+ * ┌─ 🔴 ĐỌC TRƯỚC KHI TIN: ĐÂY **KHÔNG** PHẢI MỘT PHÉP KIỂM CHÉO GÓI ────────────────────────────┐
+ * │ Plan FE-1 ca C22 đòi assert `MODULE_APP_METADATA.SOCIAL.route === APP_REGISTRY(social)        │
+ * │ .defaultRoute`. **Không làm được như một đẳng thức**: `APP_REGISTRY` sống ở                   │
+ * │ `@mediaos/web-core`, và `apps/api/package.json` KHÔNG phụ thuộc gói đó (nó là gói trình duyệt  │
+ * │ — thêm dependency chỉ để test là đổi đồ thị phụ thuộc của backend, cái giá sai).               │
+ * │                                                                                                │
+ * │ Thứ có được thay thế: **hai cái ghim vào CÙNG một literal**, mỗi bên một gói, mỗi bên trỏ sang │
+ * │ bên kia. Nó bắt được ca "một bên đổi, bên kia quên" — đúng lỗi cần chặn. Nó **KHÔNG** bắt được │
+ * │ ca hiếm "cả hai cùng đổi sang cùng một giá trị sai". Nói ra giới hạn đó ở đây thay vì để người │
+ * │ đọc sau tưởng cổng chặt hơn thực tế (memory `gate-measurement-row-can-be-unsatisfiable`).      │
+ * │ Vế FE: `apps/app/src/routes/social/social-wiring.spec.ts`.                                     │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+describe("S16-SOCIAL-FE-1 — MODULE_APP_METADATA.SOCIAL (ghim vế API của C22)", () => {
+  it("route = '/feed', KHÔNG phải '/social'", () => {
+    // `/social` là trang trung chuyển SSO của app vệ tinh fbpost (tile RIÊNG `fbpost`, cùng
+    // moduleCode SOCIAL nhưng khác appKey). Trỏ nhầm ở đây đưa người dùng vào đường LỖI SSO thay vì
+    // vào cổng thông tin — và không có 404 nào để báo, nên lỗi im lặng.
+    expect(MODULE_APP_METADATA.SOCIAL?.route).toBe("/feed");
+  });
+
+  it("requiredAny = đúng cặp `view:feed` (cặp THẬT trong seed 0578)", () => {
+    expect(MODULE_APP_METADATA.SOCIAL?.requiredAny).toEqual([
+      { action: "view", resourceType: "feed" },
+    ]);
+  });
+
+  it("SOCIAL KHÔNG còn nằm trong danh sách miễn trừ (chống DOUBLE_LISTED)", () => {
+    // Quên xoá dòng miễn trừ = module vừa có metadata vừa được miễn ⇒ ratchet báo DOUBLE_LISTED.
+    expect(Object.keys(EXEMPT_MODULES)).not.toContain("SOCIAL");
   });
 });
