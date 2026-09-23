@@ -37,10 +37,20 @@ export function resetCaps(): void {
 /**
  * `retry: false` là BẮT BUỘC ở test: mặc định react-query thử lại 3 lần, nên một ca kiểm trạng thái
  * LỖI sẽ chờ hết ba lượt backoff rồi mới đỏ — hoặc hết giờ trước đó và đỏ vì lý do khác.
+ *
+ * 🔴 `retryDelay: 0` KHÔNG thừa, và nó KHÔNG phải bản sao của dòng trên. `retry: false` ở đây chỉ là
+ * **mặc định**, nên màn nào tự khai `retry` ở CẤP QUERY sẽ ĐÈ nó — `PostDetailPage` làm đúng thế để
+ * bỏ retry riêng cho 404. Khi đó query vẫn thử lại thật với backoff **1s + 2s**, ca lỗi chạm trần 5s
+ * của vitest và **đỏ vì HẾT GIỜ chứ không vì assert** — đọc y hệt một ca đỏ thật, nhưng dẫn người
+ * sửa đi sai hướng hoàn toàn. `retryDelay` thì CHỈ đặt được ở cấp default, nên nó phải nằm ở đây.
+ * Cùng họ [[mutant-red-must-match-expected-message]].
  */
 export function renderWithProviders(node: ReactNode) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, retryDelay: 0 },
+      mutations: { retry: false, retryDelay: 0 },
+    },
   });
   return render(
     <QueryClientProvider client={client}>

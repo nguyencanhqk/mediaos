@@ -121,6 +121,11 @@ export default {
     confirmDelete: "Xoá bình luận này?",
     loadMore: "Xem thêm bình luận",
     empty: "Chưa có bình luận nào.",
+    // Lỗi TẢI danh sách bình luận cần tiêu đề RIÊNG: `state.errorTitle` là "Không tải được bảng
+    // tin" — sai chỗ khi cái hỏng là danh sách bình luận của một bài. Đây là nhánh mà trước bản vá
+    // FULL gate rơi thẳng vào câu "Chưa có bình luận nào", khiến người đọc kết luận 12 bình luận
+    // vừa bị xoá sạch.
+    errorTitle: "Không tải được bình luận",
     locked: "Tác giả đã khoá bình luận cho bài này.",
     bodyRequired: "Hãy nhập nội dung bình luận.",
     /**
@@ -171,6 +176,9 @@ export default {
     readersRead: "Đã đọc",
     readersUnread: "Chưa đọc",
     readersEmpty: "Chưa có ai xác nhận đã đọc.",
+    // Nửa «chưa đọc» rỗng có nghĩa NGƯỢC HẲN với `readersEmpty`: ở đây rỗng là tin MỪNG (mọi người
+    // đã đọc), ở kia rỗng là chưa ai đọc. Dùng chung một câu cho cả hai nửa là nói sai một nửa.
+    readersAllRead: "Mọi người trong phạm vi đã xác nhận đọc.",
     readersCount: "{{read}}/{{total}} đã xác nhận",
   },
 
@@ -249,5 +257,38 @@ export default {
     retry: "Thử lại",
     loadMore: "Xem thêm",
     loadingMore: "Đang tải…",
+  },
+
+  // ── Lỗi HÀNH ĐỘNG GHI (khác hẳn lỗi TẢI ở `state` trên) ────────────────────
+  //
+  // Khối này sinh ra từ FULL gate 23/09/2026: cả 12 mutation của module thiếu `onError`, app không
+  // có hệ toast, `QueryClient` không khai `MutationCache.onError` ⇒ mọi hành động ghi hỏng là câm
+  // tuyệt đối. Người dùng bấm «Xác nhận đã đọc», server trả 500, nút nhả ra như cũ — họ đóng tab và
+  // tin rằng đã xác nhận.
+  //
+  // Tách ĐÔI mỗi hành động thành `forbidden` (403) và lỗi chung, vì hai ca đòi hai hành vi khác
+  // nhau: mất quyền thì thử lại bao nhiêu lần cũng vô ích, lỗi mạng/500 thì thử lại là đúng.
+  actionError: {
+    forbidden: {
+      reaction: "Bạn không còn quyền bày tỏ cảm xúc ở bài này.",
+      save: "Bạn không còn quyền lưu bài này.",
+      moderate: "Bạn không có quyền thực hiện thao tác kiểm duyệt này.",
+      delete: "Bạn không có quyền xoá bài này.",
+      comment: "Bạn không còn quyền bình luận ở bài này.",
+      commentDelete: "Bạn không có quyền xoá bình luận này.",
+      post: "Bạn không có quyền đăng loại bài này.",
+      ack: "Bạn không còn quyền xác nhận tin này.",
+    },
+    generic: {
+      reaction: "Không gửi được cảm xúc. Vui lòng thử lại.",
+      save: "Không lưu được bài. Vui lòng thử lại.",
+      moderate: "Không thực hiện được thao tác. Vui lòng thử lại.",
+      delete: "Không xoá được bài. Bài vẫn còn — vui lòng thử lại.",
+      comment: "Không gửi được bình luận. Nội dung bạn gõ vẫn còn trong ô soạn.",
+      commentDelete: "Không xoá được bình luận. Vui lòng thử lại.",
+      post: "Không đăng được bài. Nội dung bạn gõ vẫn còn trong ô soạn.",
+      ack: "Không ghi nhận được xác nhận của bạn. Vui lòng thử lại.",
+    },
+    dismiss: "Đóng thông báo",
   },
 } as const;

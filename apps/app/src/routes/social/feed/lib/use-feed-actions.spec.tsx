@@ -208,11 +208,26 @@ describe("buildPostMenuActions — sáu hành động dùng chung của menu ⋯
     expect(() => buildPostMenuActions(post, { actions }).onEdit()).not.toThrow();
   });
 
-  it("`onDelete` xoá rồi gọi `afterDelete` (rời trang ở màn chi tiết)", () => {
+  /**
+   * 🔴 `afterDelete` phải được TRAO cho `remove`, KHÔNG được gọi cạnh nó.
+   *
+   * Bản đầu gọi `deps.actions.remove(post.id)` rồi `deps.afterDelete?.()` ngay dòng sau. `remove` là
+   * `mutate()` bất đồng bộ, nên ở màn chi tiết (`afterDelete = () => navigate({to:"/feed"}))` người
+   * dùng bị đá về bảng tin **trước khi request rời máy**. Xoá thất bại 403/409 ⇒ họ tin là đã xoá
+   * xong, trong khi bài vẫn còn nguyên. FULL gate 23/09/2026 bắt được.
+   */
+  it("`onDelete` TRAO `afterDelete` cho `remove`, KHÔNG gọi nó đồng bộ", () => {
     const afterDelete = vi.fn();
     buildPostMenuActions(post, { actions, afterDelete }).onDelete();
-    expect(actions.remove).toHaveBeenCalledWith(POST_ID);
-    expect(afterDelete).toHaveBeenCalledTimes(1);
+
+    expect(actions.remove).toHaveBeenCalledWith(POST_ID, afterDelete);
+    // Vế ĐẮT NHẤT: chưa có xác nhận của server thì chưa được rời trang.
+    expect(afterDelete).not.toHaveBeenCalled();
+  });
+
+  it("không có `afterDelete` (ở lại danh sách) ⇒ `remove` nhận undefined, không ném", () => {
+    expect(() => buildPostMenuActions(post, { actions }).onDelete()).not.toThrow();
+    expect(actions.remove).toHaveBeenCalledWith(POST_ID, undefined);
   });
 
   it("ba hành động kiểm duyệt ĐẢO đúng chiều trạng thái hiện tại", () => {

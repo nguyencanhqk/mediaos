@@ -32,6 +32,8 @@ const ACTIONS: FeedActions = {
   remove: vi.fn(),
   pendingReactionPostId: null,
   pendingSavePostId: null,
+  actionError: null,
+  clearActionError: vi.fn(),
 };
 
 const POST: FeedPostDto = {

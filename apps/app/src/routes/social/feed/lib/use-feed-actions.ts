@@ -9,13 +9,25 @@
  */
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { socialApi, socialKeys } from "@mediaos/web-core";
-import type {
-  FeedPostDto,
-  FeedReactionEmojiDto,
-  FeedReactionSummaryDto,
-} from "@mediaos/contracts";
+import { ApiError, socialApi, socialKeys } from "@mediaos/web-core";
+import type { FeedPostDto, FeedReactionEmojiDto, FeedReactionSummaryDto } from "@mediaos/contracts";
 import type { PostCardMenuActions } from "../components/PostCardMenu";
+
+/**
+ * Hành động nào vừa hỏng. Dùng để chọn CÂU nói với người dùng — «không ghim được bài» khác hẳn
+ * «không thả được cảm xúc», và một câu chung chung («Đã xảy ra lỗi») thì không giúp họ quyết định
+ * làm gì tiếp.
+ */
+export type FeedActionKind = "reaction" | "save" | "moderate" | "delete";
+
+export interface FeedActionError {
+  kind: FeedActionKind;
+  /**
+   * 403. Tách riêng vì hai ca này đòi hai hành vi khác nhau của người dùng: mất quyền thì thử lại
+   * bao nhiêu lần cũng vô ích (đi hỏi quản trị), còn lỗi mạng/500 thì thử lại là đúng.
+   */
+  forbidden: boolean;
+}
 
 export interface FeedActions {
   /**
@@ -31,9 +43,18 @@ export interface FeedActions {
     postId: string,
     patch: { hidden?: boolean; locked?: boolean; pinned?: boolean },
   ) => void;
-  remove: (postId: string) => void;
+  /**
+   * `onDone` chạy trong `onSuccess` của mutation, KHÔNG chạy ngay sau khi gọi. Ca hỏng mà chữ ký này
+   * sinh ra để chặn: màn chi tiết truyền `() => navigate({to:"/feed"})`; gọi nó cạnh `mutate()` sẽ
+   * đá người dùng về bảng tin TRƯỚC khi biết xoá được hay không, và khi server trả 403 thì bài vẫn
+   * còn nguyên trong khi người dùng tin là đã xoá xong.
+   */
+  remove: (postId: string, onDone?: () => void) => void;
   pendingReactionPostId: string | null;
   pendingSavePostId: string | null;
+  /** Hành động ghi gần nhất bị hỏng; `null` = chưa có lỗi nào. Màn PHẢI render nó ra. */
+  actionError: FeedActionError | null;
+  clearActionError: () => void;
 }
 
 export function useFeedActions(): FeedActions {
@@ -41,6 +62,16 @@ export function useFeedActions(): FeedActions {
   const [reactionSummaries, setReactionSummaries] = React.useState<
     Record<string, readonly FeedReactionSummaryDto[]>
   >({});
+  const [actionError, setActionError] = React.useState<FeedActionError | null>(null);
+
+  /**
+   * Một `onError` cho cả bốn mutation. KHÔNG bỏ trống cái nào: app này không có hệ toast và
+   * `QueryClient` ở `main.tsx` không khai `MutationCache.onError`, nên mutation thiếu `onError` là
+   * hỏng IM LẶNG TUYỆT ĐỐI — nút nhả ra như cũ, không một ký tự nào xuất hiện.
+   */
+  const onActionError = (kind: FeedActionKind) => (err: unknown) => {
+    setActionError({ kind, forbidden: err instanceof ApiError && err.status === 403 });
+  };
 
   /** Làm mới đúng hai nhánh mà một thay đổi trên bài có thể ảnh hưởng. */
   const invalidatePostLists = (postId?: string): void => {
@@ -60,13 +91,19 @@ export function useFeedActions(): FeedActions {
       // Dùng NGUYÊN mảng server trả về làm nguồn sự thật, không tự cộng trừ từng số.
       setReactionSummaries((prev) => ({ ...prev, [result.targetId]: result.reactions }));
       invalidatePostLists(result.targetId);
+      setActionError(null);
     },
+    onError: onActionError("reaction"),
   });
 
   const saveMutation = useMutation({
     mutationFn: ({ postId, currentlySaved }: { postId: string; currentlySaved: boolean }) =>
       currentlySaved ? socialApi.unsavePost(postId) : socialApi.savePost(postId),
-    onSuccess: (result) => invalidatePostLists(result.postId),
+    onSuccess: (result) => {
+      invalidatePostLists(result.postId);
+      setActionError(null);
+    },
+    onError: onActionError("save"),
   });
 
   const moderateMutation = useMutation({
@@ -82,12 +119,20 @@ export function useFeedActions(): FeedActions {
         ...(patch.locked !== undefined ? { commentsLocked: patch.locked } : {}),
         ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
       } as Parameters<typeof socialApi.moderatePost>[1]),
-    onSuccess: (post) => invalidatePostLists(post.id),
+    onSuccess: (post) => {
+      invalidatePostLists(post.id);
+      setActionError(null);
+    },
+    onError: onActionError("moderate"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (postId: string) => socialApi.deletePost(postId),
-    onSuccess: () => invalidatePostLists(),
+    onSuccess: () => {
+      invalidatePostLists();
+      setActionError(null);
+    },
+    onError: onActionError("delete"),
   });
 
   return {
@@ -95,11 +140,16 @@ export function useFeedActions(): FeedActions {
     setReaction: (postId, emoji) => reactionMutation.mutate({ postId, emoji }),
     toggleSave: (postId, currentlySaved) => saveMutation.mutate({ postId, currentlySaved }),
     moderate: (postId, patch) => moderateMutation.mutate({ postId, patch }),
-    remove: (postId) => deleteMutation.mutate(postId),
+    // `onDone` đi vào tuỳ chọn của CHÍNH LƯỢT mutate ⇒ React Query chỉ gọi nó sau khi server xác
+    // nhận. Đặt nó cạnh `mutate()` là bug đã có thật: điều hướng chạy trước cả khi request rời máy.
+    remove: (postId, onDone) =>
+      deleteMutation.mutate(postId, { onSuccess: () => onDone?.() }),
     pendingReactionPostId: reactionMutation.isPending
       ? (reactionMutation.variables?.postId ?? null)
       : null,
     pendingSavePostId: saveMutation.isPending ? (saveMutation.variables?.postId ?? null) : null,
+    actionError,
+    clearActionError: () => setActionError(null),
   };
 }
 
@@ -135,10 +185,8 @@ export function buildPostMenuActions(
       void navigator.clipboard?.writeText(`${window.location.origin}/feed/posts/${post.id}`);
     },
     onEdit: () => deps.openDetail?.(post.id),
-    onDelete: () => {
-      deps.actions.remove(post.id);
-      deps.afterDelete?.();
-    },
+    // `afterDelete` truyền XUỐNG `remove` chứ không gọi cạnh nó — xem docblock của `FeedActions.remove`.
+    onDelete: () => deps.actions.remove(post.id, deps.afterDelete),
     onToggleHidden: () => deps.actions.moderate(post.id, { hidden: post.status !== "hidden" }),
     onToggleComments: () => deps.actions.moderate(post.id, { locked: !post.commentsLocked }),
     onTogglePinned: () => deps.actions.moderate(post.id, { pinned: !post.pinned }),
