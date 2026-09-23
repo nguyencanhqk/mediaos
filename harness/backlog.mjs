@@ -16970,7 +16970,7 @@ export const backlog = [
       "@Idempotent trên 027; outbox NOTI đăng ký + emit SOCIAL_NEWS_PUBLISHED(031)/SOCIAL_POST_REPORTED(036); route census 29 route (19 BE-1 + 10 BE-1B) + OpenAPI enrich xanh; coverage social/ ≥85% đo LẦN 2 (sau BE-1B, thay lần đo tạm ở BE-1)",
     ],
     notes: [
-      "🔴 21/09/2026 — ĐO THẬT ở BE-1 (plan §11.8): `user_preferences.feed.showBirthday` mà SPEC-16 §3.5 + SOC-DEC-007 hứa **KHÔNG TỒN TẠI** ở DB. Grep toàn bộ `db/schema/*.ts`: không cột `feed`, không `show_birthday`, không jsonb nào mang ngữ nghĩa đó (`me_layout_config` là bố cục màn ME). ⇒ PHẢI mở migration thêm chỗ chứa nó TRƯỚC khi làm route 026. CẤM \"tạm đọc me_layout_config\" (nhét ngữ nghĩa SOCIAL vào ô module khác ⇒ một lần dọn ME sau này xoá mất cờ riêng tư). Hàm `getPreferencesForUsers` (BE-1, `social-preferences.ts`) CỐ Ý chưa trả cờ này — trả cờ luôn true từ hư không là fail-OPEN có vẻ ngoài hoàn chỉnh, và mọi ca test «người đã ẩn không xuất hiện» sẽ xanh giả.",
+      '🔴 21/09/2026 — ĐO THẬT ở BE-1 (plan §11.8): `user_preferences.feed.showBirthday` mà SPEC-16 §3.5 + SOC-DEC-007 hứa **KHÔNG TỒN TẠI** ở DB. Grep toàn bộ `db/schema/*.ts`: không cột `feed`, không `show_birthday`, không jsonb nào mang ngữ nghĩa đó (`me_layout_config` là bố cục màn ME). ⇒ PHẢI mở migration thêm chỗ chứa nó TRƯỚC khi làm route 026. CẤM "tạm đọc me_layout_config" (nhét ngữ nghĩa SOCIAL vào ô module khác ⇒ một lần dọn ME sau này xoá mất cờ riêng tư). Hàm `getPreferencesForUsers` (BE-1, `social-preferences.ts`) CỐ Ý chưa trả cờ này — trả cờ luôn true từ hư không là fail-OPEN có vẻ ngoài hoàn chỉnh, và mọi ca test «người đã ẩn không xuất hiện» sẽ xanh giả.',
       "♻️ Hạ tầng BE-1 DÙNG LẠI, KHÔNG dựng lại: `SocialAccessService` (`resolveActor`/`visiblePostCondition`/`assertPostVisible`/`assertCommentVisible`/`assertTargetVisible`) · `SOCIAL_ROUTE_PAIRS` (thêm route 020-029 vào CÙNG bảng) · `social-feed-cursor.ts` (keyset + dấu vân bộ lọc) · `social-counters.ts` · `social-attachments.service.ts` · `SocialFileResolver`. `feed_reports.target_id` đa hình KHÔNG FK ⇒ BẮT BUỘC `assertTargetVisible` TRƯỚC INSERT (cùng lỗ IDOR đã bịt ở BE-1).",
       "📌 NOTI: BE-1 đã đăng ký 028/029/030 ở `notifications/social-noti-bridge.registrar.ts`. BE-1B thêm 031 (tin tức mới) + 036 (bài bị báo cáo) vào CHÍNH file đó — KHÔNG tạo registrar thứ hai, và KHÔNG đặt `registerSource` trong `SocialModule` (vòng phụ thuộc — plan BE-1 §11.3).",
       "🔴 FULL gate + Opus — thuần tiêu thụ hạ tầng BE-1, rủi ro thấp hơn BE-1 nhưng vẫn chạm permission/IDOR/PII sinh nhật.",
@@ -17000,6 +17000,12 @@ export const backlog = [
       "harness/backlog.mjs",
       "apps/api/migrations/**",
       "apps/api/src/foundation/module-catalog/**",
+      // Mở rộng 23/09/2026 (plan-reviewer finding #5, owner ký): T9 bật module BẮT BUỘC sửa 2 sổ
+      // test ở apps/api/test (module-app-metadata-ratchet.unit-spec.ts XOÁ EXEMPT_MODULES.SOCIAL ·
+      // migration-smoke.int-spec.ts CHUYỂN SOCIAL inactive→active), và hook realtime nằm ở
+      // apps/app/src/hooks/use-feed-realtime.ts. Thiếu 2 glob này thì guard-scope cảnh báo oan.
+      "apps/api/test/**",
+      "apps/app/src/hooks/**",
     ],
     skills: ["code-review"],
     depends_on: ["S16-SOCIAL-BE-1", "S16-SOCIAL-BE-1B"],
@@ -17018,6 +17024,44 @@ export const backlog = [
       "🟡 LIGHT gate (typescript + react reviewer). Nếu S15-UI-SHELL-1 đã merge: dùng sidebar nhóm gập/StatusPill; chưa thì KHÔNG chờ.",
       "Body bài render plain text + linkify + #tag/@mention thành link — KHÔNG dangerouslySetInnerHTML.",
       "⚠️ BE-1 chỉ nhận type share|news (D2, plan S16-SOCIAL-BE-1.md §2) — composer chỉ render 2 nút; 3 nút poll/idea/kudos mở sau BE-2. Tin tức/tìm kiếm/báo cáo/sinh nhật (màn phụ) cần S16-SOCIAL-BE-1B — depends_on đã cập nhật để chờ CẢ HAI BE-1 và BE-1B (tách WO 21/09/2026, xem plan BE-1 §0.0).",
+      "✍️ OWNER KÝ 23/09/2026 (plan §11, 8 mục). Đáng nhớ nhất: (1) ĐÍNH KÈM CẮT khỏi WO này → S16-SOCIAL-BE-1C, nên done_when gạch 2 phần «đính kèm» KHÔNG đóng ở đây; (2) ô Home thành HAI tile (social→/feed gate view:feed · fbpost→/social gate view:social-post) để không tạo tile chết cho người fbpost-only; (3) nút «Báo cáo» GỠ khỏi FE-1, đi cùng dialog + cảnh báo SOC-DEC-011 ở FE-3; (4) «dải ô liên kết nhanh» (SC-14) hoãn sang FE-3 ⇒ SOC-SCREEN-001 ship THIẾU phần này.",
+      "🔴 GATE PHÂN TẦNG: T0-T8/T10 LIGHT, nhưng T9 (migration bật module + đổi cổng quyền) là COMMIT RIÊNG qua FULL gate + người chốt — zone amber của WO KHÔNG áp cho commit đó (harness/policy.md: chạm migration ⇒ đỏ).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-BE-1C",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "BE track A/bổ sung — ĐƯỜNG ĐĂNG KÝ TỆP cho bài & bình luận: 2 route bọc own-scope POST /social/files/upload-url + POST /social/files/:id/confirm, mở khoá đính kèm ảnh/video mà S16-SOCIAL-FE-1 buộc phải cắt",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-1"],
+    plan: "docs/plans/S16-SOCIAL-BE-1C.md",
+    src: [
+      "SOC-DEC-008 (≤10 ảnh/bài · ≤1 video · ≤20MB/tệp, mirror hằng CHAT) · SPEC-16 §16 · plan S16-SOCIAL-FE-1.md §8 N1",
+      "Khuôn: chat/files (2 route upload-url + confirm) · memory avatar-own-scope-presign-wrapper (FileService KHÔNG gate — gate nằm ở FilesController)",
+    ],
+    done_when: [
+      "🔴 KHÔNG cặp quyền mới, KHÔNG migration. Đo được ở avatar-own-scope-presign-wrapper: gate nằm ở FilesController (files.controller.ts:49-64 đòi *:foundation-file), FileService thì KHÔNG — nên 2 route mới chỉ cần gate create:feed-post / create:feed-comment rồi gọi thẳng files.upload/confirmUpload. Ai đề xuất thêm cặp quyền hoặc migration phải giải thích vì sao tiền lệ avatar không áp",
+      "Ràng buộc SOC-DEC-008 ép Ở SERVICE (≤10 ảnh/bài · ≤1 video · ≤20MB/tệp) với MÃ LỖI SPEC, không để Zod trả 400 vô danh; ca test assert đúng mã",
+      "IDOR: người A không đăng ký được tệp vào bài/bình luận của người B — ca DENY kèm ca ALLOW đứng cạnh (deny đứng một mình là xanh-rỗng)",
+      "file_links.object_type đã UNION-ADD feed_post/feed_comment từ DB-1 — ĐO LẠI trước khi viết, đừng giả định; nếu thiếu thì đây là việc của DB, không phải WO này",
+      "Cập nhật API-19 + census route (route mới ⇒ MIN_COVERED_COUNT của route-http-coverage phải đặt = SỐ SPEC IN RA, cấm cộng tay)",
+    ],
+    notes: [
+      "TÁCH RA 23/09/2026 từ nợ N1 của plan S16-SOCIAL-FE-1 (owner ký). Lý do tách: mở endpoint = chạm file-service ⇒ không thuộc WO FE amber.",
+      "Sau WO này, S16-SOCIAL-FE-2 mới dựng được UI đính kèm cho composer (FE-1 cố ý không có).",
+      "SocialFileResolver + social-attachments.service.ts đã sẵn phía server — chỉ thiếu CỬA VÀO.",
     ],
   },
   {
