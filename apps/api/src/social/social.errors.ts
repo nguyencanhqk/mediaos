@@ -19,6 +19,12 @@
  *
  * 22 mã của catalog SOCIAL: `001..010` dùng ở Nhóm A (WO này); `011`,`021` thuộc `S16-SOCIAL-BE-1B`;
  * `012..020`,`022` thuộc `S16-SOCIAL-BE-2`. Khai đủ ở đây để BE-1B/BE-2 không đẻ bảng mã thứ hai.
+ *
+ * Sau khi `S16-SOCIAL-BE-2` tách ba (23/09/2026): `012..015` = BE-2A (nhóm, đã ship) ·
+ * **`016..018` = BE-2B-1 (bình chọn, WO hiện tại)** · `019`,`020`,`022` = BE-2B-2 (sáng kiến ·
+ * vinh danh). ⚠️ «ĐÃ DÙNG HẾT» trong hai docblock dưới nghĩa là **không còn số TRỐNG cho ca MỚI**
+ * ngoài danh sách SPEC-16 §12 — KHÔNG có nghĩa là WO sau phải bịa hằng không-số cho nhánh chính
+ * của nó. Ca nào SPEC-16 §12 ĐÃ định nghĩa thì dùng đúng số của nó.
  */
 export const SOCIAL_ERR = {
   /**
@@ -173,6 +179,58 @@ export const SOCIAL_ERR = {
    * trong khi trả "không tìm thấy nhóm" cho một nhóm người dùng đang mở là gửi họ đi sai hướng.
    */
   GROUP_MEMBER_NOT_FOUND: "SOCIAL-ERR: người này không phải thành viên của nhóm.",
+
+  // ─────────────── S16-SOCIAL-BE-2B-1 — BÌNH CHỌN (`016..018`) ───────────────
+
+  /**
+   * `SOCIAL-ERR-016` (409) — bình chọn KHÔNG còn nhận phiếu. MỘT chuỗi cho HAI nguyên nhân:
+   * `status='closed'` (đóng tay qua `044` hoặc job) **và** `closes_at` đã qua trong khi hàng vẫn
+   * `open` (job chưa chạy tới). Người dùng không phân biệt được hai cái đó và cũng không cần.
+   *
+   * ⚠️ Hai nhánh ấy phải có **HAI ca test RIÊNG** (P-1 · P-2): gộp làm một thì bỏ hẳn một nhánh
+   * kiểm tra mà ca vẫn xanh.
+   */
+  POLL_CLOSED: "SOCIAL-ERR-016: bình chọn đã kết thúc.",
+
+  /**
+   * `SOCIAL-ERR-017` (409) — đã bỏ phiếu rồi, ở một bình chọn CHỈ CHO CHỌN MỘT.
+   *
+   * 🔴 Ném từ HAI nguồn khác nhau, phải dịch CẢ HAI (plan §2 D5b):
+   *   1. `feed_poll_votes_single_uq` — partial unique `(company, poll, user) WHERE single_choice`:
+   *      hai lượt bỏ phiếu cho HAI option KHÁC nhau đua nhau.
+   *   2. `feed_poll_votes_pk` — PK `(company, poll, option, user)`: hai lượt cho CÙNG một option.
+   *
+   * Chỉ dịch (1) là lỗi đã suýt ship: lượt thua của ca đua «cùng option» rơi xuống `23505` không ai
+   * dịch ⇒ **500** cho người dùng, trong khi ca đua vẫn XANH vì trạng thái cuối vẫn đúng
+   * (1 phiếu, Σ khớp). Ca `P-5a` assert `statuses.every(s => s < 500)` chính là để bắt nhánh này.
+   */
+  POLL_VOTE_DUPLICATE: "SOCIAL-ERR-017: bạn đã bỏ phiếu cho bình chọn này.",
+
+  /**
+   * `SOCIAL-ERR-018` (422) — số lựa chọn ngoài khoảng 2–10.
+   *
+   * 🔴 ÉP Ở SERVICE, **KHÔNG** ở Zod. Zod từ chối thì NestJS trả **400 vô danh** và mã SPEC này
+   * không bao giờ được ném ra — luật viết sẵn ở `packages/contracts/src/social-api.ts:309-310`.
+   * Ai thêm `.min(2).max(10)` vào schema sẽ làm ca `P-7b` (422) CHẾT ÂM THẦM: nó chuyển thành 400
+   * và assert theo MÃ sẽ đỏ, nhưng assert theo status trần thì vẫn xanh.
+   *
+   * Vắng HẲN trường `options` là chuyện khác (hình dạng sai) ⇒ 400 của Zod là ĐÚNG — ca `P-7a`.
+   */
+  POLL_OPTIONS_RANGE: "SOCIAL-ERR-018: bình chọn phải có từ 2 đến 10 lựa chọn.",
+
+  /**
+   * (404) — **KHÔNG SỐ HOÁ** (cùng tiền lệ `REPORT_DUPLICATE_OPEN`/`GROUP_NAME_TAKEN`): SPEC-16 §12
+   * im lặng về ca này. `optionId` gửi lên không thuộc `pollId` của bài đang thao tác.
+   *
+   * 🔴 Đây là nợ (e) của DB-2: `feed_poll_votes` có HAI FK RỜI — `(company, poll)` và
+   * `(company, option)` — **không cái nào** ràng option THUỘC poll. Gửi chéo poll thì INSERT vẫn
+   * thành công, phiếu rơi vào poll người khác và `vote_count` của nó lệch VĨNH VIỄN. Lệch dương
+   * không ném gì cả: không lỗi, không log, chỉ là kết quả bình chọn sai.
+   *
+   * 404 (không phải 422): option của một poll khác là đối tượng mà actor **không được biết là có
+   * tồn tại** — cùng luật 404-cho-mọi-lý-do của `POST_NOT_FOUND`.
+   */
+  POLL_OPTION_NOT_FOUND: "SOCIAL-ERR: không tìm thấy lựa chọn của bình chọn này.",
 } as const;
 
 export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];
@@ -185,6 +243,21 @@ export const SOCIAL_CONSTRAINT = {
   GROUP_MEMBER_PK: "feed_group_members_pk",
   /** Partial UNIQUE INDEX `(company_id, lower(name)) WHERE deleted_at IS NULL` của `feed_groups` (W1). */
   GROUP_NAME_UQ: "feed_groups_company_name_uq",
+
+  /**
+   * Partial UNIQUE `(company_id, poll_id, user_id) WHERE single_choice` của `feed_poll_votes` —
+   * chốt chống phiếu-đôi ở bình chọn MỘT-LỰA-CHỌN. Hai option KHÁC nhau, cùng người, đua nhau.
+   */
+  POLL_VOTE_SINGLE_UQ: "feed_poll_votes_single_uq",
+
+  /**
+   * 🔴 PK `(company_id, poll_id, option_id, user_id)` của `feed_poll_votes` — CÙNG một option, cùng
+   * người, hai lượt đua nhau. **Nhánh thứ hai** của `POLL_VOTE_DUPLICATE`.
+   *
+   * Bỏ sót hằng này là lỗi fail-quiet đã được `plan-reviewer` chặn trước khi code: ca đua vẫn XANH
+   * (trạng thái cuối đúng) trong khi lượt thua trả **500 chưa dịch** cho người dùng.
+   */
+  POLL_VOTE_PK: "feed_poll_votes_pk",
 } as const;
 
 /**
