@@ -307,3 +307,49 @@ export async function bumpGroupMemberCount(
   }
   return Number(row.value);
 }
+
+/**
+ * Cộng `delta` vào `feed_poll_options.vote_count` cho MỘT tập lựa chọn, CÙNG TX với hàng phiếu.
+ *
+ * ┌─ 🔴 BỘ ĐẾM NGUY HIỂM NHẤT CỦA MODULE ──────────────────────────────────────────────────────────┐
+ * │ `vote_count` **KHÔNG nằm trong 5 cột** mà SPEC-16 §13.6 liệt kê cho script đối soát định kỳ,   │
+ * │ nhưng nó có `chk_feed_poll_options_vote_count (vote_count >= 0)`. Hệ quả của cặp đó rất xấu:   │
+ * │   · lệch DƯƠNG  → kết quả bình chọn SAI. Không lỗi, không log, không ai biết.                   │
+ * │   · lệch ÂM     → 23514 ⇒ 500.                                                                 │
+ * │ Tức là **nhánh dễ phát hiện lại là nhánh ít xảy ra hơn**. Lưới duy nhất đáng tin là bất biến    │
+ * │ `Σ vote_count == COUNT(*) phiếu` kiểm sau MỖI bước của chuỗi vote/đổi/rút (ca `C-2`).           │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Cùng luật SQL-không-JS của cả file: sàn 0 là việc của CHECK, KHÔNG phải `Math.max` ở JS.
+ */
+export async function bumpPollOptionVotes(
+  tx: TenantTx,
+  companyId: string,
+  optionIds: readonly string[],
+  delta: number,
+): Promise<number> {
+  if (delta === 0 || optionIds.length === 0) return 0;
+
+  const rows = await tx.execute<{ id: string }>(
+    sql`UPDATE feed_poll_options
+           SET vote_count = vote_count + ${delta}
+         WHERE company_id = ${companyId}
+           AND id IN (${sql.join(
+             optionIds.map((id) => sql`${id}`),
+             sql`, `,
+           )})
+     RETURNING id`,
+  );
+
+  // 🔴 `RETURNING` + đối chiếu SỐ LƯỢNG, không chỉ "có dòng nào không" — khuôn `bumpGroupMemberCount`
+  // siết thêm một bậc. Khớp THIẾU dòng nghĩa là một `optionId` không thuộc tenant/poll này đã lọt
+  // qua cổng `assertOptionsBelongToPoll`, và bỏ qua nó để lại bộ đếm lệch VĨNH VIỄN trong im lặng.
+  // Ném ⇒ cả tx quay lui: thà 500 ồn còn hơn một kết quả bình chọn nói dối.
+  if (rows.rows.length !== optionIds.length) {
+    throw new Error(
+      `bumpPollOptionVotes: khớp ${rows.rows.length}/${optionIds.length} hàng feed_poll_options ` +
+        `(company=${companyId}) — có optionId không thuộc tenant/poll này`,
+    );
+  }
+  return rows.rows.length;
+}

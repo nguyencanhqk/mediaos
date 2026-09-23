@@ -220,6 +220,8 @@ export type SocialRouteKey = keyof typeof SOCIAL_ROUTE_PAIRS;
 export const SOCIAL_POST_TYPE_PAIRS = {
   share: null,
   news: { action: "manage", resourceType: "feed-news", isSensitive: false },
+  /** S16-SOCIAL-BE-2B-1 — seed `0578:75-86` cấp `create:feed-poll` @Company cho cả 4 vai canonical. */
+  poll: { action: "create", resourceType: "feed-poll", isSensitive: false },
 } as const satisfies Record<
   string,
   { action: string; resourceType: string; isSensitive: boolean } | null

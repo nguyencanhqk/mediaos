@@ -34,7 +34,8 @@ const POLL_REPOSITORY = "social-polls.repository.ts";
  * `updated_at` có mặt vì đây là UPDATE thật; `closed_at` **bắt buộc đi cùng** `status` nếu không sẽ
  * vỡ CHECK `chk_feed_polls_closed_pair` (`status='open' OR closed_at IS NOT NULL`) ⇒ 500.
  */
-const ALLOWED_CLOSE_COLUMNS = ["status", "closedAt", "updatedAt"] as const;
+const ALLOWED_CLOSE_COLUMNS_CAMEL = ["status", "closedAt", "updatedAt"] as const;
+const ALLOWED_CLOSE_COLUMNS_SNAKE = ["status", "closed_at", "updated_at"] as const;
 
 /** Bỏ comment — luật nói về CODE, không về văn xuôi GIẢI THÍCH luật (chính docblock ở trên sẽ làm spec đỏ oan). */
 const stripComments = (text: string): string =>
@@ -117,11 +118,13 @@ describe("Nợ (b) DB-2 — `multiple_choice`/`is_anonymous` BẤT BIẾN sau kh
     expect(legitWriteSites).toBe(1);
   });
 
-  it("mọi câu đóng poll ghi ĐÚNG tập cột đóng `{status, closedAt, updatedAt}` — cấm mapped-write", () => {
+  it("mọi câu đóng poll ghi ĐÚNG tập cột đóng — cấm mapped-write, cả builder LẪN SQL thô", () => {
     const source = socialSources().find((s) => s.file === POLL_REPOSITORY);
     expect(source, `thiếu ${POLL_REPOSITORY}`).toBeDefined();
+    const text = (source as { text: string }).text;
 
-    const setBodies = (source as { text: string }).text
+    // ── Dạng 1: drizzle builder `.set({ … })` — đường đóng TAY (`044`) ──
+    const setBodies = text
       .split(/\.set\(\s*\{/)
       .slice(1)
       .map((chunk) => chunk.split(/\}\s*\)/)[0]);
@@ -130,11 +133,27 @@ describe("Nợ (b) DB-2 — `multiple_choice`/`is_anonymous` BẤT BIẾN sau kh
       // `toEqual` trên mảng đã sắp xếp: thừa MỘT cột cũng đỏ. Đó là điểm của ca này — drizzle BỎ QUA
       // IM LẶNG khoá không phải cột (`payroll-fsm.ts:37-38`), nên `.set({ multipleChoice })` lọt vào
       // đây sẽ không ném gì lúc chạy; chỉ có spec đọc mã nguồn mới thấy.
-      expect([...topLevelKeys(body)].sort()).toEqual([...ALLOWED_CLOSE_COLUMNS].sort());
+      expect([...topLevelKeys(body)].sort()).toEqual([...ALLOWED_CLOSE_COLUMNS_CAMEL].sort());
     }
 
-    // 🔴 NEO DƯƠNG: đúng HAI đường đóng poll — `044` (tay) và job (theo hạn). Không có vế này thì
-    // một file repository không còn câu `.set()` nào cũng làm vòng lặp trên chạy 0 lần và XANH.
-    expect(setBodies.length).toBe(2);
+    // ── Dạng 2: SQL THÔ `UPDATE feed_polls SET … WHERE` — đường đóng của JOB ──
+    //
+    // 🔴 Ca này ban đầu chỉ gác dạng 1 và giả định cả hai đường đóng đều là builder. Thực tế đường
+    // job **phải** là SQL thô: nó set-based, và một vòng lặp per-row sẽ mất
+    // `idx_feed_polls_open_deadline`. Nếu để nguyên giả định cũ, nửa đường ghi vào `feed_polls`
+    // **không được gác gì cả** — đúng lớp lỗi mà chính spec này sinh ra để chặn.
+    const rawSetClauses = [
+      ...text.matchAll(/UPDATE\s+feed_polls\s+SET\s+([\s\S]*?)\bWHERE\b/gi),
+    ].map((m) => m[1]);
+
+    for (const clause of rawSetClauses) {
+      const columns = [...clause.matchAll(/(\w+)\s*=/g)].map((m) => m[1]).sort();
+      expect(columns).toEqual([...ALLOWED_CLOSE_COLUMNS_SNAKE].sort());
+    }
+
+    // 🔴 NEO DƯƠNG cho CẢ HAI dạng. Không có hai vế này thì một file repository không còn câu ghi
+    // nào cũng làm hai vòng lặp trên chạy 0 lần và XANH — lưới rỗng trông y hệt lưới đang gác.
+    expect(setBodies.length, "đúng MỘT đường đóng tay (044) dùng builder").toBe(1);
+    expect(rawSetClauses.length, "đúng MỘT đường đóng của job dùng SQL thô").toBe(1);
   });
 });

@@ -1,3 +1,5 @@
+import { SOCIAL_POST_TYPE_PAIRS, type SocialCreatablePostType } from "./social-route-pairs.const";
+
 /**
  * S16-SOCIAL-BE-1 — mã lỗi SOCIAL (SPEC-16 §12, quy ước SPEC-01 §9 `MODULE-ERR-XXX`).
  *
@@ -244,7 +246,43 @@ export const SOCIAL_ERR = {
    * người dùng nghĩ theo đồng hồ của họ, không theo thời điểm INSERT.
    */
   POLL_CLOSES_AT_PAST: "SOCIAL-ERR: hạn kết thúc bình chọn phải ở tương lai.",
+
+  /**
+   * (403) — **KHÔNG SỐ HOÁ** (SPEC-16 §12 im lặng; `020` là của `approve:feed-idea`, không dùng lại
+   * được). Thiếu cặp `create:feed-poll` ở phạm vi Company khi tạo bài `type='poll'`.
+   *
+   * Hôm nay seed `0578:75-86` cấp cặp này cho CẢ 4 vai canonical ⇒ không vai chuẩn nào chạm được
+   * nhánh này. Nó vẫn phải tồn tại: một tenant thu hồi cặp đó khỏi một vai tuỳ biến là chuyện bình
+   * thường, và lúc ấy đây là khác biệt giữa 403 đọc được với một bài lọt qua cổng.
+   */
+  POLL_CREATE_REQUIRED: "SOCIAL-ERR: bạn không có quyền tạo bình chọn.",
 } as const;
+
+/**
+ * Mã lỗi 403 cho từng LOẠI BÀI có cặp quyền phụ (`SOCIAL_POST_TYPE_PAIRS`).
+ *
+ * 🔴 Kiểu khoá **suy ra từ chính bảng cặp**: loại nào có cặp non-null thì BẮT BUỘC có dòng ở đây.
+ * Thêm một loại bài mới vào `SOCIAL_POST_TYPE_PAIRS` mà quên mã lỗi ⇒ **TS đỏ ngay**, không cần
+ * lưới quét mã nguồn và không có đường ship thiếu. Loại `share` (cặp `null`) tự động KHÔNG có mặt —
+ * nên ở đây không có nhánh chết nào (bài học `SOCIAL-ERR-008`).
+ */
+export const SOCIAL_POST_TYPE_DENIED = {
+  /** `null` = loại này KHÔNG có cặp phụ (cặp sàn `create:feed-post` là đủ) — mirror `SOCIAL_POST_TYPE_PAIRS.share`. */
+  share: null,
+  news: SOCIAL_ERR.NEWS_MANAGE_REQUIRED,
+  poll: SOCIAL_ERR.POLL_CREATE_REQUIRED,
+} as const satisfies Record<SocialCreatablePostType, string | null>;
+
+/**
+ * (403) — hai bảng `SOCIAL_POST_TYPE_PAIRS` ↔ `SOCIAL_POST_TYPE_DENIED` LỆCH NHAU: loại bài có cặp
+ * quyền nhưng không có mã lỗi tương ứng.
+ *
+ * ⚠️ Đây **không phải nhánh chết mà là chân FAIL-CLOSED**. Cặp/mã lỗi được khai ở hai hằng khác
+ * nhau, `satisfies` ép ĐỦ KHOÁ nhưng KHÔNG ép được "non-null bên này ⇒ non-null bên kia". Nếu lệch,
+ * lựa chọn duy nhất khác là `return` — tức **bỏ qua cổng quyền vì một lỗi khai báo**. Chặn.
+ */
+export const SOCIAL_POST_TYPE_PAIR_DESYNC =
+  "SOCIAL-ERR: cấu hình quyền theo loại bài không hợp lệ.";
 
 export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];
 

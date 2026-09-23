@@ -11,8 +11,17 @@ import { feedComments, feedPosts } from "../db/schema/social";
 import { DataScopeService } from "../permission/data-scope.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { visibleGroupPostExists } from "./social-group-predicates";
-import { SOCIAL_ROUTE_PAIRS, type SocialRouteKey } from "./social-route-pairs.const";
-import { SOCIAL_ERR } from "./social.errors";
+import {
+  SOCIAL_POST_TYPE_PAIRS,
+  SOCIAL_ROUTE_PAIRS,
+  type SocialCreatablePostType,
+  type SocialRouteKey,
+} from "./social-route-pairs.const";
+import {
+  SOCIAL_ERR,
+  SOCIAL_POST_TYPE_DENIED,
+  SOCIAL_POST_TYPE_PAIR_DESYNC,
+} from "./social.errors";
 import type {
   SocialActor,
   SocialCommentAccess,
@@ -126,6 +135,45 @@ export class SocialAccessService {
       // D13 (owner ký 21/09/2026) — đơn vị của chính actor ∪ đơn vị actor đứng đầu. KHÔNG cây con.
       orgUnitIds: this.dataScope.departmentOrgUnitIds(ctx),
     };
+  }
+
+  /**
+   * Cổng phụ **theo LOẠI BÀI** của `SOCIAL-API-002` (API-19 §5.1b). Gọi sau `resolveActor`, trước INSERT.
+   *
+   * ┌─ VÌ SAO LÀ MỘT HÀM ĐỌC BẢNG, KHÔNG PHẢI MỘT CHUỖI `if` ──────────────────────────────────────┐
+   * │ Trước WO này `SOCIAL_POST_TYPE_PAIRS` **không có call-site nào ở runtime** — chỉ census đọc   │
+   * │ (`social-two-layer-guard-census.unit-spec.ts:314`), còn `create()` gác `news` bằng cờ         │
+   * │ `canManageNews` hard-code. Tức là bảng và lưới là HAI thứ rời nhau: thêm một loại bài vào     │
+   * │ `feedCreatableTypeSchema` mà quên nhánh `if` thì route `002` tạo được loại đó **không cặp     │
+   * │ quyền nào gác** — và census vẫn XANH, vì nó chỉ kiểm bảng CÓ khoá, không kiểm ai dùng bảng.   │
+   * │                                                                                               │
+   * │ Đọc bảng ở đây làm nó LOAD-BEARING: quên khai một loại ⇒ TS đỏ ngay tại `SOCIAL_POST_TYPE_    │
+   * │ PAIRS[type]` (kiểu `SocialCreatablePostType` suy từ chính bảng), không cần lưới quét mã nguồn.│
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ `news` đi qua ĐÂY thay vì cờ batch `canManageNews`, CÓ CHỦ ĐÍCH: để hai loại bài không có hai
+   * cơ chế. Giá phải trả là **một round-trip quyền lặp lại** cho riêng đường tạo tin tức (cờ batch
+   * vẫn còn vì các route khác dùng nó) — chấp nhận trên một route GHI để đổi lấy việc xoá hẳn đường
+   * trôi. Mã lỗi giữ NGUYÊN theo từng loại: đổi nó là đổi hành vi của một route đã ship.
+   *
+   * Scope ép SÀN `Company` qua `isCompany()` — `undefined`/`null` fail-closed, TUYỆT ĐỐI không `!= null`.
+   */
+  async assertCreatablePostType(actor: SocialActor, type: SocialCreatablePostType): Promise<void> {
+    const pair = SOCIAL_POST_TYPE_PAIRS[type];
+    if (pair === null) return; // `share` — cặp sàn `create:feed-post` là đủ.
+
+    const denied = SOCIAL_POST_TYPE_DENIED[type];
+    if (denied === null) {
+      // Hai bảng lệch nhau (có cặp mà không có mã lỗi). Lựa chọn khác duy nhất là `return` — tức
+      // BỎ QUA cổng quyền vì một lỗi khai báo. Chặn.
+      throw new ForbiddenException(SOCIAL_POST_TYPE_PAIR_DESYNC);
+    }
+
+    const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
+      pair,
+    ]);
+    if (SocialAccessService.isCompany(scope)) return;
+    throw new ForbiddenException(denied);
   }
 
   static isCompany(scope: DataScope | null): boolean {
