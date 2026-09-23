@@ -89,6 +89,8 @@ me.security.activity
 me.training
 me.lms
 me.chat
+me.feed.mine
+me.feed.saved
 ### GOAL
 goal.list
 ### ASSET

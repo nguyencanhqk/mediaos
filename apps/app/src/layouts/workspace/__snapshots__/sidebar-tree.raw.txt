@@ -88,6 +88,8 @@ me.security.activity | mod=ME | label=Hoạt động bảo mật | path=/me/secu
 me.training | mod=ME | label=Tiến độ đào tạo | path=/me/training | icon=graduation-cap | group=Đào tạo | order=59 | any=[access:lms]
 me.lms | mod=ME | label=Đào tạo (LMS) | path=/lms | icon=graduation-cap | group=Đào tạo | order=60 | any=[access:lms]
 me.chat | mod=ME | label=Tin nhắn | path=/chat | icon=messages-square | group=Trao đổi | order=70 | any=[access:chat]
+me.feed.mine | mod=ME | label=Bài viết của tôi | path=/feed/profiles/me | icon=rss | group=Trao đổi | order=71 | any=[view:feed]
+me.feed.saved | mod=ME | label=Bài đã lưu | path=/feed/saved | icon=bookmark | group=Trao đổi | order=72 | any=[view:feed]
 ### GOAL
 goal.list | mod=GOAL | label=Mục tiêu | path=/goals | icon=target | group=overview | order=10 | any=[access:goal]
 ### ASSET

@@ -175,6 +175,13 @@ export default {
   appearancePage: {
     title: "Giao diện",
     description: "Chọn giao diện hiển thị cho ứng dụng.",
+    // S16-SOCIAL-FE-1 — khối QUYỀN RIÊNG TƯ đặt nhờ ở màn này (ME chưa có màn riêng — xem nợ ghi ở
+    // `BirthdayPrivacyCard`). Nhãn viết theo chiều KHẲNG ĐỊNH («hiện sinh nhật») để khớp trạng thái
+    // mặc định là HIỆN, tránh một công tắc phủ định mà người dùng phải tự đảo trong đầu.
+    birthdayPrivacyTitle: "Quyền riêng tư",
+    birthdayPrivacyLabel: "Hiện sinh nhật của tôi trên bảng tin",
+    birthdayPrivacyNote:
+      "Tắt sẽ ẩn ngày/tháng sinh của bạn khỏi widget Sinh nhật. Tên và ảnh đại diện của bạn ở các phần khác không bị ảnh hưởng.",
     themeSectionTitle: "Chế độ hiển thị",
     theme: {
       system: "Theo hệ thống",

@@ -13,6 +13,7 @@ import {
   mePreferencesSchema,
   type MePreferences,
   type MePreferencesAppearancePatch,
+  type MePreferencesPatch,
   meSecurityActivityItemSchema,
   type MeSecurityActivityItem,
   meAvatarSchema,
@@ -111,6 +112,25 @@ export const meApi = {
    */
   patchAppearance: (patch: MePreferencesAppearancePatch): Promise<MePreferences> =>
     apiFetch("/me/preferences/appearance", mePreferencesSchema, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
+  /**
+   * PATCH /me/preferences — patch TỔNG HỢP (S16-SOCIAL-FE-1).
+   *
+   * 🔴 **Vì sao cần đường này bên cạnh `patchAppearance`:** `showBirthday` (cờ ẩn sinh nhật,
+   * SOC-DEC-007) là **quyền riêng tư, không phải giao diện** — contracts CỐ Ý không đưa nó vào
+   * `mePreferencesAppearanceShape`, nên `PATCH /me/preferences/appearance {showBirthday:false}` bị
+   * `.strict()` từ chối **400**. Không có hàm này thì cột `0584` vừa thêm không có đường ghi nào từ
+   * FE ngoài SQL tay.
+   *
+   * Luật ba trạng thái giữ nguyên như mọi field preference: field VẮNG = không đụng cột · `null` =
+   * trả về kế thừa (với `showBirthday` nghĩa là **HIỆN**, theo SOC-DEC-007 «mặc định hiện») · giá
+   * trị thật = override. Đừng quy `null` về `false`.
+   */
+  patchPreferences: (patch: MePreferencesPatch): Promise<MePreferences> =>
+    apiFetch("/me/preferences", mePreferencesSchema, {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),

@@ -9,6 +9,7 @@
  * Ngôn ngữ & múi giờ: READ-ONLY (ME-DEC-008 P2 "Có NẾU company cho phép" — policy override CHƯA mở ở MVP)
  * — CHỈ hiển thị giá trị kế thừa hiện tại từ `GET /me/preferences`, KHÔNG có control để sửa/gửi override.
  */
+import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Palette, Monitor, Sun, Moon } from "lucide-react";
@@ -123,7 +124,79 @@ function MeAppearancePageInner() {
           <p className="pt-2 text-xs text-muted-foreground">{t("appearancePage.readOnlyNote")}</p>
         </CardContent>
       </Card>
+
+      <BirthdayPrivacyCard
+        value={prefsQuery.data?.showBirthday ?? null}
+        isLoading={prefsQuery.isLoading}
+      />
     </div>
+  );
+}
+
+/**
+ * S16-SOCIAL-FE-1 — cờ ẩn sinh nhật khỏi widget bảng tin (SOC-DEC-007 · SPEC-16 §3.5).
+ *
+ * ┌─ HAI QUYẾT ĐỊNH, cả hai đều dễ làm sai ──────────────────────────────────────────────────────┐
+ * │ 1. **Đi qua `patchPreferences`, KHÔNG `patchAppearance`.** Contracts CỐ Ý không đưa           │
+ * │    `showBirthday` vào `mePreferencesAppearanceShape` — đây là quyền riêng tư, không phải giao  │
+ * │    diện — nên `/me/preferences/appearance` `.strict()` sẽ từ chối **400**.                     │
+ * │ 2. **`null` nghĩa là ĐANG HIỆN, không phải đang tắt.** SOC-DEC-007 chốt «mặc định hiện», và   │
+ * │    BE viết điều kiện ẩn là `showBirthday === false` chứ không `!showBirthday`. Vẽ công tắc      │
+ * │    bằng `Boolean(value)` sẽ hiện "đang tắt" cho MỌI người chưa từng đụng vào nó.                │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠️ **NỢ VỊ TRÍ (ghi để không ai tưởng là cố ý gọn):** đây là một mục QUYỀN RIÊNG TƯ đặt nhờ trên
+ * màn «Giao diện» vì ME **chưa có màn Quyền riêng tư** nào. Khi màn đó ra đời, chuyển khối này sang
+ * và xoá ở đây. Nó chỉ hiện với người có `view:feed` nên không làm rối trang của người không dùng
+ * bảng tin.
+ */
+function BirthdayPrivacyCard({
+  value,
+  isLoading,
+}: {
+  value: boolean | null;
+  isLoading: boolean;
+}): React.ReactElement | null {
+  const { t } = useTranslation("me");
+  const queryClient = useQueryClient();
+  const canViewFeed = useCan("view", "feed");
+
+  const mutation = useMutation({
+    mutationFn: (showBirthday: boolean) => meApi.patchPreferences({ showBirthday }),
+    onSuccess: (result) => queryClient.setQueryData(meKeys.preferences(), result),
+  });
+
+  if (!canViewFeed) return null;
+
+  // `null` = chưa override ⇒ ĐANG HIỆN. Xem quyết định (2) ở docblock.
+  const isShown = value !== false;
+
+  return (
+    <Card className="max-w-xl">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-semibold">
+          {t("appearancePage.birthdayPrivacyTitle")}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <label className="flex items-center justify-between gap-4">
+          <span className="text-sm text-muted-foreground">
+            {t("appearancePage.birthdayPrivacyLabel")}
+          </span>
+          <input
+            type="checkbox"
+            checked={isShown}
+            disabled={isLoading || mutation.isPending}
+            onChange={(e) => mutation.mutate(e.target.checked)}
+            data-testid="me-show-birthday-toggle"
+            className="h-4 w-4 rounded border-border"
+          />
+        </label>
+        <p className="pt-2 text-xs text-muted-foreground">
+          {t("appearancePage.birthdayPrivacyNote")}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
