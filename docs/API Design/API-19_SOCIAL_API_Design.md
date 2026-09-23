@@ -136,10 +136,11 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | --- | --- | --- | --- |
 | `share` | `create:feed-post` | — | `ERR-007` (đính kèm) · `ERR-008` (audience) |
 | `news` | `create:feed-post` **＋** `manage:feed-news` | `pinned?` · `requiresAck?` | `ERR-010` (thiếu `manage:feed-news`) |
-| `poll` | `create:feed-poll` | `question` · `options[]` (2–10) · `multipleChoice?` · `isAnonymous?` · `closesAt?` | **`ERR-018`** (ngoài 2–10 lựa chọn) |
+| `poll` | `create:feed-post` **＋** `create:feed-poll` | `question` · `options[]` (2–10) · `multipleChoice?` · `isAnonymous?` · `closesAt?` | **`ERR-018`** (ngoài 2–10 lựa chọn) · 403 **không số** (thiếu `create:feed-poll`) · 422 **không số** (`closesAt` ở quá khứ) |
 | `idea` | `create:feed-idea` | — (trạng thái khởi tạo luôn `submitted`) | — |
 | `kudos` | `create:feed-kudos` (**＋ `manage:feed-kudos`** nếu `isOfficial=true`) | `recipients[]` · `badgeId?` · `message` · `isOfficial?` | **`ERR-022`** (huy hiệu không có / đã tắt) |
 
+- 🔴 **Cột "Cặp quyền BẮT BUỘC" là cặp SÀN ＋ cặp theo loại.** `create:feed-post` do decorator của route gác (tầng 1) nên nó áp cho **mọi** `type`; cặp riêng theo loại do `SocialAccessService.assertCreatablePostType` gác (tầng 2, đọc bảng `SOCIAL_POST_TYPE_PAIRS`). Đọc bảng này thành "poll chỉ cần `create:feed-poll`" là sai — đã sửa 23/09/2026 (BE-2B-1, finding **M55**). Hai dòng `idea`/`kudos` chưa thi công cũng theo đúng luật hai tầng đó.
 - Mọi `type` đều thêm `audience` + khoá tương ứng (`groupId` **hoặc** `orgUnitId`) ⇒ `ERR-008`; ghi vào nhóm/đơn vị actor không thuộc ⇒ **403 `ERR-002`**.
 - `body` bắt buộc với `share`/`news`/`idea`; với `poll`/`kudos` có thể vắng (DB-17 §6.1).
 - Mention ngoài audience **bị bỏ im lặng**, trả về trong `data.droppedMentions[]` — **không** phải lỗi (SPEC-16 §12 `ERR-009`).
@@ -244,7 +245,11 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
 ### 6.4 Phân trang
 
 - **Feed và bình luận:** cursor-based (`cursor` + `limit`, `limit` ≤ 50) — dòng cuộn dài, offset sẽ trượt khi có bài mới.
-- **Danh sách quản trị** (báo cáo · nhóm · huy hiệu · thống kê): offset (`page` + `pageSize`) theo API-01.
+- **Danh sách quản trị** (báo cáo · nhóm · huy hiệu · thống kê · **bình chọn `040`**): offset (`page` + `limit`) theo API-01.
+
+🔴 **Mọi danh sách offset PHẢI trả envelope `{data, page, limit, total}`** — không trả mảng trần. Thiếu `total` thì FE không phân biệt được «trang cuối» với «trang rỗng» và không dựng được pager; `030` đã theo đúng khuôn này. `040` được sửa cho khớp ngày 23/09/2026 (BE-2B-1, owner chốt **S5**) — trước đó nó trả mảng trần.
+
+⚠️ **Thứ tự phải có khoá phá-hoà DUY NHẤT.** OFFSET không có chốt cuối ổn định thì hàng **lặp hoặc MẤT** giữa hai trang mà không lỗi gì — `created_at` mặc định `now()` là mốc BẮT ĐẦU transaction nên mọi hàng tạo trong cùng một tx (seed/import) giống hệt nhau. `030` chốt bằng `id`; `040` chốt bằng `CASE WHEN status='open' … END, created_at DESC, id`.
 
 ### 6.5 Envelope lỗi + mã
 
@@ -260,9 +265,11 @@ Race ở chốt cuối DB (`23505` thích đôi · phiếu đôi · ack đôi ·
 
 ### 6.6 Idempotency
 
-`@Idempotent()` trên POST tạo: `SOCIAL-API-002` (bài) · `015` (bình luận) · `027` (báo cáo) · `031` (nhóm) · `049` (huy hiệu).
+`@Idempotent()` trên POST tạo: `SOCIAL-API-002` (bài) · `015` (bình luận) · `027` (báo cáo) · `031` (nhóm) · **`044` (đóng bình chọn tay)** · `049` (huy hiệu).
 
 Key **do client sinh khi mở composer/form**, TTL 15′, replay trả `Idempotency-Replayed: true`. Key phải **suy từ nội dung** — không dùng timestamp hay số ngẫu nhiên sinh lại mỗi lần bấm.
+
+🔴 **Decorator chỉ khoá khi client GỬI header.** `IdempotencyInterceptor` đăng ký toàn cục (`APP_INTERCEPTOR`) và khoá thật qua Valkey (in-flight ⇒ 409 · replay nguyên trạng · key dùng lại với payload khác ⇒ 409), **nhưng** thiếu header `Idempotency-Key` thì nó chạy thẳng handler — back-compat có chủ ý. Vì vậy mỗi route `@Idempotent()` vẫn phải có lưới KHÔNG-ĐIỀU-KIỆN của riêng nó ở tầng dữ liệu; với `044` đó là `UPDATE … WHERE status='open' … RETURNING` (lượt hai khớp 0 hàng ⇒ 409, không sinh audit/NOTI thứ hai). Ghi rõ ở đây vì FULL gate 23/09/2026 đã đọc decorator thành **cả hai thái cực sai**: "đã có khoá server-side đầy đủ" và "chỉ là `SetMetadata`, không khoá gì".
 
 `PUT …/reaction` và `PUT …/poll/vote` idempotent **theo bản chất** (đặt trạng thái, không cộng dồn) nên không cần decorator.
 
