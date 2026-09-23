@@ -412,7 +412,25 @@ export interface SessionContext {
 // Route metadata (FRONTEND-03 §12, UI-02 §8.3)
 // ---------------------------------------------------------------------------
 
-export type LayoutType = "AUTH" | "HOME_PORTAL" | "MODULE_WORKSPACE" | "ACCOUNT" | "ERROR";
+/**
+ * Khuôn khung của một route.
+ *
+ * 🔴 **`MODULE_PORTAL` (S16-SOCIAL-FE-1) — và vì sao thêm một nhánh ở ĐÂY mới có nghĩa.**
+ * Trước WO này, `RouteMeta.layout` là **metadata TRƠ**: quét toàn kho không file nào đọc nó lúc chạy
+ * (`router.tsx` hard-code `ModuleWorkspaceLayout`), nên thêm một giá trị union chẳng làm cổng nào đỏ
+ * — đúng lớp lỗi `gate-measurement-row-can-be-unsatisfiable`. FE-1 vá gốc: `buildModuleRouteContent`
+ * nay **dispatch qua `LAYOUT_CONTENT_BUILDERS`**, một `Record<LayoutType, …>` VÉT CẠN trong
+ * `apps/app/src/router.tsx`. Hệ quả cho người thêm nhánh thứ 7: **typecheck ĐỎ** cho tới khi khai
+ * nhánh đó dựng bằng gì (hoặc `null` = "không dựng qua đường này"). Đừng gỡ sự vét cạn đó.
+ */
+export type LayoutType =
+  | "AUTH"
+  | "HOME_PORTAL"
+  | "MODULE_WORKSPACE"
+  /** Cổng thông tin 3 cột (UI-07 §34b) — rail trái 240 · cột giữa ≤680 · rail phải 300. */
+  | "MODULE_PORTAL"
+  | "ACCOUNT"
+  | "ERROR";
 
 export interface RouteMeta extends PermissionRequirement {
   /** Key duy nhất, stable, dùng cho breadcrumb / QA / analytics. */
