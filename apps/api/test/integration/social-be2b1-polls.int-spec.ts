@@ -148,7 +148,6 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
     return [Number(r.rows[0].sum_counts), Number(r.rows[0].n_votes)];
   }
 
-
   /**
    * Đẩy một bình chọn vào trạng thái **quá hạn mà hàng vẫn `open`** — trạng thái có thật giữa hai
    * nhịp job.
@@ -415,7 +414,12 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
 
     const list = await get(manager.token, "/social/polls");
     expect(list.status).toBe(200);
-    expect(Array.isArray(list.body.data) && list.body.data.length, "neo dương").toBeGreaterThan(0);
+    // `body.data` = envelope ngoài (`ResponseEnvelopeInterceptor`), `.data` = envelope PHÂN TRANG
+    // của `040` (owner chốt S5) — đúng hai tầng như `030` (`social-be2a-groups.int-spec.ts:189`).
+    expect(
+      Array.isArray(list.body.data.data) && list.body.data.data.length,
+      "neo dương",
+    ).toBeGreaterThan(0);
     expect(JSON.stringify(list.body)).not.toContain(voter.userId);
 
     const withdrawn = await del(voter.token, `/social/posts/${postId}/poll/vote`);
@@ -515,6 +519,127 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
     expect(await counters(postId)).toEqual([0, 0]);
   });
 
+  // ─────────────────────────── O-3 · `optionIds: []` ───────────────────────────
+
+  it("O-3 — `optionIds: []` là RÚT PHIẾU, trả 200 và xoá hết phiếu của CHÍNH người gọi", async () => {
+    // ✍️ Owner chốt O-3 (23/09/2026): GIỮ hành vi này, KHÔNG đổi thành 422 dẫn sang `042`.
+    // Căn cứ: contract cố ý không `.min(1)` và có docblock giải thích (`social-api-polls.ts:35`),
+    // và cả 5 route dùng CÙNG cặp `view:feed` nên `[]` ở `041` không lách được quyền của `042`.
+    // Thiếu sót THẬT mà FULL gate chỉ ra là **không có ca test** — chính là ca này.
+    const { postId, optionIds } = await createPoll(author.token, {
+      options: ["A", "B"],
+      multipleChoice: true,
+    });
+
+    // Neo dương: có phiếu THẬT để mà rút, của HAI người — để thấy `[]` chỉ đụng người gọi.
+    expect(
+      (await put(voter.token, `/social/posts/${postId}/poll/vote`).send({ optionIds })).status,
+    ).toBe(200);
+    expect(
+      (
+        await put(other.token, `/social/posts/${postId}/poll/vote`).send({
+          optionIds: [optionIds[0]],
+        })
+      ).status,
+    ).toBe(200);
+    expect(await counters(postId)).toEqual([3, 3]);
+
+    const emptied = await put(voter.token, `/social/posts/${postId}/poll/vote`).send({
+      optionIds: [],
+    });
+    expect(emptied.status, "mảng rỗng có NGHĨA — không phải 400 vô danh").toBe(200);
+    // Chỉ phiếu của `voter` biến mất; phiếu của `other` còn nguyên.
+    expect(await counters(postId), "`[]` chỉ rút phiếu của CHÍNH người gọi").toEqual([1, 1]);
+
+    // Idempotent: gửi `[]` lần hai khi đã không còn phiếu ⇒ vẫn 200, không đổi gì.
+    expect(
+      (await put(voter.token, `/social/posts/${postId}/poll/vote`).send({ optionIds: [] })).status,
+    ).toBe(200);
+    expect(await counters(postId)).toEqual([1, 1]);
+  });
+
+  // ─────────────────────────── S5 · envelope phân trang của `040` ───────────────────────────
+
+  it("S5 — `040` trả envelope `{data,page,limit,total}`, `total` đếm CÙNG vị từ với trang", async () => {
+    // ✍️ Owner chốt S5 (23/09/2026): đổi từ MẢNG TRẦN sang envelope, khuôn `030`.
+    await createPoll(author.token, { options: ["A", "B"] });
+
+    const res = await get(author.token, "/social/polls?page=1&limit=2");
+    expect(res.status).toBe(200);
+    const page = res.body.data as {
+      data: { pollId: string; status: string }[];
+      page: number;
+      limit: number;
+      total: number;
+    };
+
+    expect(Array.isArray(page.data), "`data` phải là mảng, không phải object").toBe(true);
+    expect(page.page, "`page` phải VỌNG LẠI tham số, không hằng hoá").toBe(1);
+    expect(page.limit).toBe(2);
+    expect(page.data.length, "trang 1 phải đầy — neo dương cho `total` bên dưới").toBe(2);
+
+    // 🔴 `total` đếm qua CÙNG `innerJoin` + CÙNG `where` với trang. Bỏ join ở câu đếm là tổng số
+    // nói một đằng, trang liệt một nẻo — và FE dựng pager sai số trang.
+    expect(page.total, "`total` phải ≥ số hàng của một trang đầy").toBeGreaterThanOrEqual(
+      page.data.length,
+    );
+
+    // Đối chứng: lọc `status` phải đổi CẢ `total` lẫn `data`, không chỉ `data`.
+    const openOnly = await get(author.token, "/social/polls?page=1&limit=100&status=open");
+    const closedOnly = await get(author.token, "/social/polls?page=1&limit=100&status=closed");
+    const all = await get(author.token, "/social/polls?page=1&limit=100");
+    expect(openOnly.status).toBe(200);
+    expect(closedOnly.status).toBe(200);
+    expect(
+      (openOnly.body.data.data as unknown[]).every(
+        (r) => (r as { status: string }).status === "open",
+      ),
+      "bộ lọc `status` phải thật sự lọc",
+    ).toBe(true);
+    expect(openOnly.body.data.total + closedOnly.body.data.total).toBe(all.body.data.total);
+  });
+
+  it("S5/H-6 — `040` xếp bình chọn ĐANG MỞ lên trước, và hai trang KHÔNG lặp/mất hàng", async () => {
+    // Cần có CẢ hai trạng thái trong tập, nếu không "open đứng trước closed" đúng một cách RỖNG.
+    const toClose = await createPoll(author.token, { options: ["A", "B"] });
+    expect((await post(author.token, `/social/posts/${toClose.postId}/poll/close`)).status).toBe(
+      201,
+    );
+    await createPoll(author.token, { options: ["A", "B"] });
+
+    const all = await get(author.token, "/social/polls?page=1&limit=100");
+    const rows = all.body.data.data as { pollId: string; status: string }[];
+    expect(
+      rows.some((r) => r.status === "open"),
+      "neo dương: tập có poll đang mở",
+    ).toBe(true);
+    expect(
+      rows.some((r) => r.status === "closed"),
+      "neo dương: tập có poll đã đóng",
+    ).toBe(true);
+
+    // `asc(status)` trên `varchar` so CHUỖI ⇒ `'closed' < 'open'` ⇒ poll ĐÃ KẾT THÚC lên đầu,
+    // nghịch đúng việc chính của màn này (đi bỏ phiếu). Đo bằng: sau hàng `closed` đầu tiên
+    // KHÔNG được còn hàng `open` nào.
+    const firstClosed = rows.findIndex((r) => r.status === "closed");
+    expect(
+      rows.slice(firstClosed).every((r) => r.status === "closed"),
+      `thứ tự sai: ${JSON.stringify(rows.map((r) => r.status))}`,
+    ).toBe(true);
+
+    // Khoá phá-hoà: lật trang theo `limit=1` phải KHÔNG lặp id. `created_at` là mốc BẮT ĐẦU TX nên
+    // nhiều poll có thể trùng mốc; thiếu chốt `id` thì một hàng hiện hai lần hoặc biến mất.
+    const seen: string[] = [];
+    for (let p = 1; p <= 4; p += 1) {
+      const one = await get(author.token, `/social/polls?page=${p}&limit=1`);
+      const got = one.body.data.data as { pollId: string }[];
+      if (got.length === 0) break;
+      seen.push(got[0].pollId);
+    }
+    expect(seen.length, "neo dương: lật được vài trang").toBeGreaterThan(1);
+    expect(new Set(seen).size, `id lặp giữa các trang: ${JSON.stringify(seen)}`).toBe(seen.length);
+  });
+
   // ─────────────────────────── Job đóng theo hạn ───────────────────────────
 
   it("J-1/J-2 — job đóng ĐÚNG poll quá hạn, chạy lại không đổi gì và KHÔNG phát NOTI lần hai", async () => {
@@ -554,7 +679,6 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
     expect((await pollRow(expired.postId)).closed_at).toEqual(closedAt);
     expect(await outboxCount(expired.postId), "KHÔNG phát NOTI lần hai").toBe(1);
   });
-
 
   /** Số bình chọn đang ở trạng thái «quá hạn mà vẫn `open`» — tập mà job PHẢI gặt đúng bằng. */
   async function expiredOpenCount(): Promise<number> {
