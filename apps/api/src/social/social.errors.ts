@@ -231,6 +231,19 @@ export const SOCIAL_ERR = {
    * tồn tại** — cùng luật 404-cho-mọi-lý-do của `POST_NOT_FOUND`.
    */
   POLL_OPTION_NOT_FOUND: "SOCIAL-ERR: không tìm thấy lựa chọn của bình chọn này.",
+
+  /**
+   * (422) — **KHÔNG SỐ HOÁ** (SPEC-16 §12 im lặng). Hạn đóng bình chọn nằm trong quá khứ.
+   *
+   * 🔴 Phát hiện lúc THI CÔNG, plan không liệt: `chk_feed_polls_closes_future` là
+   * `closes_at IS NULL OR closes_at > created_at`, mà `created_at` do DB sinh ⇒ Zod **không thể**
+   * ép luật này (nó không biết `created_at`), và nếu service không kiểm thì một mốc quá khứ đi
+   * thẳng xuống CHECK ⇒ `23514` ⇒ **500** cho một sai sót nhập liệu hoàn toàn bình thường.
+   *
+   * Kiểm ở service so với `now()`, KHÔNG so với `created_at`: hai mốc chênh nhau vài mili-giây và
+   * người dùng nghĩ theo đồng hồ của họ, không theo thời điểm INSERT.
+   */
+  POLL_CLOSES_AT_PAST: "SOCIAL-ERR: hạn kết thúc bình chọn phải ở tương lai.",
 } as const;
 
 export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];

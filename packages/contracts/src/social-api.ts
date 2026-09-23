@@ -78,9 +78,18 @@ export type FeedSortDto = z.infer<typeof feedSortSchema>;
 export const feedStatusFilterSchema = z.enum(["published", "hidden"]);
 export type FeedStatusFilterDto = z.infer<typeof feedStatusFilterSchema>;
 
-/** Loại bài BE-1 chấp nhận TẠO (plan §2 D2 — poll/idea/kudos thuộc BE-2). */
-export const feedCreatableTypeSchema = z.enum(["share", "news"]);
+/**
+ * Loại bài API chấp nhận TẠO.
+ *
+ * Mở dần theo WO: BE-1 `share`/`news` · **BE-2B-1 thêm `poll`** · BE-2B-2 thêm `idea`/`kudos`.
+ * Mỗi lần mở là một quyết định CÓ CHỦ ĐÍCH: `SOCIAL_POST_TYPE_PAIRS` phải có khoá tương ứng, nếu
+ * không route `002` sẽ tạo được một loại bài mà **không cặp quyền nào gác** (fail-OPEN).
+ */
+export const feedCreatableTypeSchema = z.enum(["share", "news", "poll"]);
 export type FeedCreatableTypeDto = z.infer<typeof feedCreatableTypeSchema>;
+
+/** Nhãn một lựa chọn của bình chọn. Dài tối đa theo `feed_poll_options.label varchar(255)`. */
+const pollOptionLabel = () => z.string().trim().min(1).max(255);
 
 /** Phân loại đính kèm suy từ `files.mime_type` ở server — client KHÔNG gửi lên. */
 export const feedAttachmentKindSchema = z.enum(["image", "video", "file"]);
@@ -315,9 +324,44 @@ export const createFeedPostSchema = z
     audience: feedAudienceSchema.default("company"),
     groupId: uuid().nullish(),
     orgUnitId: uuid().nullish(),
-    body: feedBody(),
+    /**
+     * 🔴 TUỲ CHỌN từ BE-2B-1, **không phải nới lỏng cho mọi loại bài**.
+     *
+     * CHECK `chk_feed_posts_body_required` (`db/schema/social.ts:154-157`) cho phép `body` NULL
+     * đúng với `type IN ('poll','kudos')`. `superRefine` dưới đây ép lại vế còn lại: `share`/`news`
+     * vẫn BẮT BUỘC có `body`. Bỏ vế đó đi là mở đường tạo bài chia sẻ rỗng — CHECK sẽ bắt, nhưng
+     * bằng **500** thay vì một thông báo đọc được.
+     */
+    body: feedBody().optional(),
     /** Chỉ hợp lệ với `type='news'` (mirror `chk_feed_posts_ack_news`). */
     requiresAck: z.boolean().default(false),
+    /**
+     * Chi tiết bình chọn — CHỈ hợp lệ với `type='poll'` (`superRefine` chặn cả hai chiều).
+     *
+     * ⚠️ `options` **KHÔNG có ràng buộc độ dài mảng ở đây, CÓ CHỦ ĐÍCH**: luật 2–10 là
+     * `SOCIAL-ERR-018` và phải ném Ở SERVICE. Đặt `.min(2).max(10)` vào đây thì Zod từ chối trước
+     * và NestJS trả **400 vô danh** ⇒ mã lỗi của SPEC-16 §12 không bao giờ ra tới người dùng, còn
+     * ca test assert theo MÃ sẽ chết âm thầm (xem `social.errors.ts#POLL_OPTIONS_RANGE`).
+     * Vắng HẲN `options` là chuyện khác — hình dạng sai, 400 của Zod là đúng.
+     */
+    poll: z
+      .object({
+        question: z.string().trim().min(1).max(500),
+        options: z.array(pollOptionLabel()),
+        multipleChoice: z.boolean().default(false),
+        isAnonymous: z.boolean().default(false),
+        /**
+         * Hạn đóng. `undefined` = bình chọn không tự đóng (job bỏ qua vì vị từ đòi
+         * `closes_at IS NOT NULL`).
+         *
+         * ⚠️ «Phải ở TƯƠNG LAI» KHÔNG ép được ở đây: `chk_feed_polls_closes_future` so với
+         * `created_at` của chính hàng — một giá trị do DB sinh. Service kiểm so với `now()` và ném
+         * 422 có nghĩa; để lọt xuống DB thì CHECK vỡ và người dùng nhận **500**.
+         */
+        closesAt: z.string().datetime({ offset: true }).optional(),
+      })
+      .strict()
+      .optional(),
     mentionedUserIds: mentionIds(),
     attachmentIds: attachmentIds(),
   })
@@ -367,6 +411,34 @@ export const createFeedPostSchema = z
         code: z.ZodIssueCode.custom,
         path: ["requiresAck"],
         message: "chỉ bài type='news' được yêu cầu xác nhận đọc",
+      });
+    }
+    // ── S16-SOCIAL-BE-2B-1 — `type='poll'` ⇄ khoá `poll`, RÀNG CẢ HAI CHIỀU ──
+    // Thiếu một chiều là một lỗ thật, không phải chuyện gọn gàng:
+    //  · thiếu chiều "poll bắt buộc có khoá" ⇒ tạo được bài type='poll' KHÔNG có bình chọn nào,
+    //    và mọi route 040..044 sau đó trả 404 cho một bài trông như bình chọn;
+    //  · thiếu chiều "type khác cấm mang khoá" ⇒ payload thừa đi qua im lặng, đúng thứ `.strict()`
+    //    sinh ra để chặn.
+    if (v.type === "poll" && v.poll == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["poll"],
+        message: "type='poll' bắt buộc có chi tiết bình chọn",
+      });
+    }
+    if (v.type !== "poll" && v.poll != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["poll"],
+        message: "chỉ bài type='poll' được mang chi tiết bình chọn",
+      });
+    }
+    // `body` bắt buộc cho mọi loại TRỪ `poll` — mirror `chk_feed_posts_body_required`.
+    if (v.type !== "poll" && v.body == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["body"],
+        message: "bài chia sẻ / tin tức bắt buộc có nội dung",
       });
     }
   });
