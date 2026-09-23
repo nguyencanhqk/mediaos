@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-23 01:58Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-23 02:50Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -48,7 +48,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `feat/s16-social-be-2b` · **file đang đổi (dirty)**: 4
+- **branch**: `feat/s16-social-be-2b` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 252 — `0585_s16socialbe1b_noti_news_template_fix` (253 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -57,18 +57,18 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `eba33f1d` | 2026-09-23 | test(social): S16-SOCIAL-BE-2B-1 — int-spec bình chọn 14/14 + siết 4 sổ ratchet |
+| `2f3476fe` | 2026-09-23 | feat(social): S16-SOCIAL-BE-2B-1 — service/controller/job bình chọn + census + NOTI-035 |
+| `2447ed4e` | 2026-09-23 | feat(social): S16-SOCIAL-BE-2B-1 — cổng quyền theo loại bài + createPollTx + repository bình chọn |
+| `8ef55134` | 2026-09-23 | feat(social): S16-SOCIAL-BE-2B-1 — contracts mở type='poll' (D6) + lưới closesAt quá khứ |
+| `37e96736` | 2026-09-23 | test(social): S16-SOCIAL-BE-2B-1 Bước 1 RED — structure-spec nợ (b) + mã lỗi 016..018 |
+| `60702568` | 2026-09-23 | docs(social): kế hoạch BE-2B-1 — kết quả Bước 0 (U1·U2b·U3·U4·U5), đóng S4 bằng phép đo |
+| `76caf1a6` | 2026-09-23 | docs(social): kế hoạch — tách S16-SOCIAL-BE-2B thành BE-2B-1 (bình chọn) + BE-2B-2 (sáng kiến·vinh danh) |
 | `b87065e1` | 2026-09-23 | docs(social): plan S16-SOCIAL-BE-2B — micro-plan vùng đỏ (chưa thi công) |
 | `817472c5` | 2026-09-23 | chore(harness): kế hoạch mở WO S16-SOCIAL-BE-2B — regen STATUS/INDEX sau #532/#533 |
 | `5f8434c0` | 2026-09-23 | S16-SOCIAL-BE-2A — NHÓM (SOCIAL-API-030..039 + nhánh audience='group' của 002) (#533) |
 | `9dc89337` | 2026-09-22 | feat(social): S16-SOCIAL-BE-1B — module bảng tin Nhóm B (SOCIAL-API-020..029) (#532) |
 | `5324418d` | 2026-09-22 | chore(docs): regen STATUS + bàn giao — merge #531 (S15-PAYROLL-BE-2B) + #530 (S16-SOCIAL-BE-1) |
-| `71021c2b` | 2026-09-22 | feat(social): S16-SOCIAL-BE-1 — module bảng tin Nhóm A (SOCIAL-API-001..019) (#530) |
-| `bfd55d65` | 2026-09-22 | feat(payroll): S15-PAYROLL-BE-2B — trả 4 nợ ghi nhận của BE-2 (N+1 · trần catalog · 6 CHECK · precision) (#531) |
-| `9e17ae51` | 2026-09-21 | feat(social): S16-SOCIAL-DB-2 — schema + migration SOCIAL Track B (0580-0583) (#529) |
-| `a3637274` | 2026-09-21 | docs(social): S16-SOCIAL-DB-2 — micro-plan vùng đỏ Track B (chưa thi công) |
-| `f68c3f78` | 2026-09-21 | feat(social): S16-SOCIAL-DB-1 — schema + migration SOCIAL Track A (0577/0578/0579) (#528) |
-| `eb7ca824` | 2026-09-20 | chore(docs): regen STATUS — FBPOST-1 chuyển CHỜ (cần FE-1), DB-2 lên READY |
-| `64e37e82` | 2026-09-20 | chore(harness): S16-SOCIAL-FBPOST-1 phụ thuộc FE-1 — vỏ sidebar SOCIAL chưa tồn tại |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
