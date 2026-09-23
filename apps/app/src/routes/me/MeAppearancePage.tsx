@@ -128,6 +128,7 @@ function MeAppearancePageInner() {
       <BirthdayPrivacyCard
         value={prefsQuery.data?.showBirthday ?? null}
         isLoading={prefsQuery.isLoading}
+        isUnknown={prefsQuery.isError || prefsQuery.data === undefined}
       />
     </div>
   );
@@ -147,26 +148,48 @@ function MeAppearancePageInner() {
  *
  * ⚠️ **NỢ VỊ TRÍ (ghi để không ai tưởng là cố ý gọn):** đây là một mục QUYỀN RIÊNG TƯ đặt nhờ trên
  * màn «Giao diện» vì ME **chưa có màn Quyền riêng tư** nào. Khi màn đó ra đời, chuyển khối này sang
- * và xoá ở đây. Nó chỉ hiện với người có `view:feed` nên không làm rối trang của người không dùng
- * bảng tin.
+ * và xoá ở đây.
+ *
+ * 🔴 **ĐỪNG GÁC KHỐI NÀY SAU `view:feed`** (đã từng làm, FULL gate bắt được, gỡ 23/09/2026). Lập luận
+ * "người không dùng bảng tin thì khỏi thấy cho gọn" ĐẢO NGƯỢC CHIỀU CỔNG: vị từ liệt kê sinh nhật ở
+ * `social-discovery.repository.ts:109-123` là `company_id` + `deleted_at IS NULL` +
+ * `employee_profiles.status='active'` + có `date_of_birth` — **KHÔNG có vế nào về quyền của người BỊ
+ * LIỆT KÊ**, và đường gỡ duy nhất là `showBirthday !== false`
+ * (`social-discovery.service.ts:150-153`). Nên một nhân viên KHÔNG có `view:feed` vẫn bị chiếu
+ * `fullName` + `avatar` + ngày/tháng ra mọi đồng nghiệp CÓ `view:feed`, mà không còn màn nào để tự
+ * ẩn. Đúng hình dạng lỗi mà chính BE đã lường trước cho người đã nghỉ việc
+ * (`social-discovery.repository.ts:113-118`). Cờ này là **own-scope** — `PATCH /me/preferences`
+ * resolve chủ thể 100% từ token — nên cổng đúng là `ME_ACCESS_PAIR` của cả trang
+ * (`MeAppearancePage` dòng ~205), không cặp `feed-*` nào. Bài học:
+ * `personal-prefs-must-not-sit-behind-permission-gate`.
  */
 function BirthdayPrivacyCard({
   value,
   isLoading,
+  isUnknown,
 }: {
   value: boolean | null;
   isLoading: boolean;
-}): React.ReactElement | null {
+  /**
+   * `GET /me/preferences` chưa/không trả được dữ liệu. TÁCH KHỎI `value` vì cả "lỗi tải" lẫn "chưa
+   * override" đều rơi về `null`, mà hai thứ đó nói hai điều khác hẳn nhau: `null` nghĩa là "tôi BIẾT
+   * là đang hiện", còn lỗi tải nghĩa là "tôi KHÔNG BIẾT". Vẽ ô tick ĐANG BẬT cho ca thứ hai là để màn
+   * hình khẳng định một trạng thái quyền riêng tư mà nó không hề đọc được.
+   */
+  isUnknown: boolean;
+}): React.ReactElement {
   const { t } = useTranslation("me");
   const queryClient = useQueryClient();
-  const canViewFeed = useCan("view", "feed");
 
   const mutation = useMutation({
     mutationFn: (showBirthday: boolean) => meApi.patchPreferences({ showBirthday }),
     onSuccess: (result) => queryClient.setQueryData(meKeys.preferences(), result),
+    // onError: KHÔNG revert gì cả — ô tick là controlled theo `value`, nên khi PATCH hỏng nó tự nhảy
+    // về trạng thái cũ. Thiếu dòng báo lỗi bên dưới thì cú nhảy đó IM LẶNG và người dùng tin rằng
+    // mình đã ẩn ngày sinh khỏi widget toàn công ty, trong khi nó vẫn đang hiện.
   });
 
-  if (!canViewFeed) return null;
+  // KHÔNG gác thêm cặp quyền nào ở đây — xem khối 🔴 trong docblock trên.
 
   // `null` = chưa override ⇒ ĐANG HIỆN. Xem quyết định (2) ở docblock.
   const isShown = value !== false;
@@ -186,12 +209,22 @@ function BirthdayPrivacyCard({
           <input
             type="checkbox"
             checked={isShown}
-            disabled={isLoading || mutation.isPending}
+            disabled={isLoading || isUnknown || mutation.isPending}
             onChange={(e) => mutation.mutate(e.target.checked)}
             data-testid="me-show-birthday-toggle"
             className="h-4 w-4 rounded border-border"
           />
         </label>
+        {isUnknown && !isLoading && (
+          <p role="alert" className="pt-2 text-xs text-destructive">
+            {t("appearancePage.birthdayPrivacyUnknown")}
+          </p>
+        )}
+        {mutation.isError && (
+          <p role="alert" className="pt-2 text-xs text-destructive">
+            {t("appearancePage.birthdayPrivacyError")}
+          </p>
+        )}
         <p className="pt-2 text-xs text-muted-foreground">
           {t("appearancePage.birthdayPrivacyNote")}
         </p>
