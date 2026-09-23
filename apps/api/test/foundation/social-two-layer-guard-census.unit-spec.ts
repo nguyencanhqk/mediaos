@@ -43,9 +43,11 @@ const SOCIAL_CONTROLLERS = new Set([
   // của nó VÔ HÌNH với census, và cả bốn assert dưới vẫn XANH (fail-open IM LẶNG). Thêm controller
   // SOCIAL mới ⇒ thêm MỘT dòng ở đây, cùng commit.
   "SocialGroupsController",
+  // S16-SOCIAL-BE-2B-1 — 5 route binh chon (040..044).
+  "SocialPollsController",
 ]);
 
-/** Bảng route HTTP → key — fixture census, phủ ĐỦ 39 route (19 A + 10 B + 10 NHÓM, API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 44 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -104,6 +106,12 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
     path: "/api/v1/social/groups/:group_id/members/:user_id",
     key: "groupMemberRemove",
   },
+  // ── S16-SOCIAL-BE-2B-1 — BINH CHON 040..044 ──
+  { method: "GET", path: "/api/v1/social/polls", key: "pollList" },
+  { method: "PUT", path: "/api/v1/social/posts/:post_id/poll/vote", key: "pollVote" },
+  { method: "DELETE", path: "/api/v1/social/posts/:post_id/poll/vote", key: "pollVoteWithdraw" },
+  { method: "GET", path: "/api/v1/social/posts/:post_id/poll/results", key: "pollResults" },
+  { method: "POST", path: "/api/v1/social/posts/:post_id/poll/close", key: "pollClose" },
 ];
 
 /**
@@ -156,6 +164,11 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "SocialGroupsService#listMembers": ["groupMembersList"],
   "SocialGroupsService#decideMember": ["groupMemberDecide"],
   "SocialGroupsService#removeMember": ["groupMemberRemove"],
+  "SocialPollsService#list": ["pollList"],
+  "SocialPollsService#vote": ["pollVote"],
+  "SocialPollsService#withdrawVote": ["pollVoteWithdraw"],
+  "SocialPollsService#results": ["pollResults"],
+  "SocialPollsService#close": ["pollClose"],
 };
 
 /** Mọi literal `resolveActor(<expr>, "<key>")` trong `social/**.ts`, kèm `Class#method` bao quanh. */
@@ -230,7 +243,7 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     expect(
       socialRoutes.length,
       "app boot phải thấy 39 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM)",
-    ).toBe(39);
+    ).toBe(44);
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -335,8 +348,19 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     // nó, và chúng phải là ĐÚNG hai service phục vụ `002`/`006`.
     // `SocialAccessService` KHÔNG có mặt và đó là ĐÚNG: nó DỰNG cờ (gán trong object literal của
     // `resolveActor`), không ĐỌC nó qua `x.canManageNews`. Tập dưới đây vì vậy là tập người TIÊU THỤ
-    // cờ — và nó phải là ĐÚNG hai service phục vụ `002`/`006`, không hơn.
-    expect(classes).toEqual(["SocialPostsModerationService", "SocialPostsService"]);
+    // cờ.
+    //
+    // 🔴 **S16-SOCIAL-BE-2B-1 — tập này rút từ HAI xuống MỘT, có chủ đích.** `SocialPostsService`
+    // không còn đọc cờ nữa: cổng theo-loại-bài của `002` chuyển sang
+    // `SocialAccessService.assertCreatablePostType`, hàm ĐỌC `SOCIAL_POST_TYPE_PAIRS` thay vì một
+    // chuỗi `if` hard-code. Lý do đổi nằm ở docblock hàm đó, tóm tắt: trước WO này bảng cặp-theo-
+    // loại **không có call-site runtime nào** — chỉ ca `D17` ngay trên đọc nó — nên bảng và lưới là
+    // hai thứ rời nhau, và thêm một loại bài mà quên nhánh `if` thì loại đó tạo được KHÔNG QUA CẶP
+    // NÀO trong khi census vẫn XANH.
+    //
+    // `006` (`SocialPostsModerationService`) vẫn tiêu thụ cờ: nó gác theo TRƯỜNG được sửa
+    // (`SOCIAL_MODERATION_FIELD_PAIRS`), không theo loại bài — bảng khác, cơ chế khác.
+    expect(classes).toEqual(["SocialPostsModerationService"]);
   });
 
   it("cả 14 cặp feed-* đều is_sensitive=false trong bảng hằng (mirror catalog 0578)", () => {

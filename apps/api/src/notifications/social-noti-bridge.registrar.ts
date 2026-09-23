@@ -4,6 +4,8 @@ import {
   SOCIAL_EVENT_CODES,
   SOCIAL_EVENT_CODES_B,
   SOCIAL_EVENT_CODES_C,
+  SOCIAL_EVENT_CODES_D,
+  SOCIAL_EVENT_POLL_CLOSED,
   SOCIAL_EVENT_GROUP_JOIN_DECIDED,
   SOCIAL_EVENT_COMMENT_REPLIED,
   SOCIAL_EVENT_MENTIONED,
@@ -25,6 +27,8 @@ const PAYLOAD_KEYS = [
   "actor_name",
   "post_id",
   "target_type_label",
+  // S16-SOCIAL-BE-2B-1 — bien template cua NOTI-035.
+  "poll_question",
   // S16-SOCIAL-BE-1B — biến template của NOTI-036 (`SOCIAL_POST_REPORTED`). ĐÚNG MỘT khoá thiếu:
   // `target_type_label` đã có sẵn từ NOTI-028.
   "reason_label",
@@ -49,6 +53,9 @@ const TEMPLATE_KEYS: Record<string, readonly string[]> = {
   // `target_url_template` là `/social/groups/{group_id}` (khác `SOCIAL_POST_REPORTED`, vốn trỏ tới
   // một URL KHÔNG placeholder).
   SOCIAL_GROUP_JOIN_DECIDED: ["group_name", "decision_label", "group_id"],
+  // S16-SOCIAL-BE-2B-1 — mirror `variables_schema` cua `0581:262-267`. KHONG `actor_name`: phan lon
+  // luot phat den tu JOB (`is_system_event = true`), o do khong co actor nao de ke ten.
+  SOCIAL_POLL_CLOSED: ["poll_question", "post_id"],
 };
 
 /**
@@ -225,6 +232,25 @@ export class SocialNotiBridgeRegistrar implements OnModuleInit {
       // và nếu ai đó bật `DedupeKey` sau này, chuỗi «xin → từ chối → xin lại → duyệt» sẽ NUỐT MẤT
       // quyết định thứ hai. Mất tệ hơn trùng.
       payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_GROUP_JOIN_DECIDED"),
+    });
+
+    // ── S16-SOCIAL-BE-2B-1 — NOTI-035 (khối additive) ──
+    this.bridge.registerSource({
+      eventType: SOCIAL_EVENT_POLL_CLOSED,
+      eventCode: SOCIAL_EVENT_CODES_D[SOCIAL_EVENT_POLL_CLOSED],
+      sourceModule: SOURCE_MODULE_SOCIAL,
+      sourceEntityType: "feed_post",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "post_id"),
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      // 🔴 BẮT BUỘC có `dedupeKeyOf` — catalog `0581` khai mã này `dedupe_strategy='DedupeKey'`.
+      // Bỏ trống thì engine rơi về `ctx.eventId`, một giá trị LUÔN KHÁC NHAU mỗi lượt phát ⇒ dedupe
+      // biến mất CÂM: không lỗi, không log, chỉ là người dùng nhận thông báo trùng mãi.
+      //
+      // Khoá là `post_id` trần, KHÔNG kèm trạng thái: một bình chọn chỉ đóng ĐÚNG MỘT LẦN (không có
+      // route nào mở lại), nên hai lượt phát cho cùng `post_id` luôn là trùng lặp thật — cửa sổ đua
+      // giữa `044` (tay) và job.
+      dedupeKeyOf: (ctx) => requireField(ctx.payload, "post_id"),
+      payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_POLL_CLOSED"),
     });
   }
 

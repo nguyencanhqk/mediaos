@@ -204,6 +204,27 @@ export const SOCIAL_ROUTE_PAIRS = {
   groupMemberDecide: pair("view", "feed"),
   /** 039 `DELETE …/members/{uid}` — mời ra; audit LUÔN. */
   groupMemberRemove: pair("view", "feed"),
+
+  // ── Bình chọn 040–044 (`S16-SOCIAL-BE-2B-1`) ──
+  //
+  // Cả năm đều `view:feed`, `tier1IsFloor = false`: vế tầng-2 của chúng là quyền trên HÀNG (bài cha
+  // có thấy được không · có phải chủ bài không), KHÔNG phải một bảng cặp-theo-payload. Đặt
+  // `tier1IsFloor = true` sẽ làm ca đẳng thức `D17` của census ĐỎ ngay — tập cờ phải BẰNG ĐÚNG tập
+  // route có bảng ánh xạ payload→cặp, mà bình chọn thì không có bảng nào như thế.
+  //
+  // Bình chọn KHÔNG có cặp riêng ở tầng đọc: nó thừa hưởng phạm vi của BÀI CHA qua
+  // `visiblePostCondition`. Cấp cho nó một cặp riêng sẽ đẻ ra đường đọc thứ hai vào cùng dữ liệu
+  // với luật khác — đúng thứ `read-path-gate-pair-must-match-download-pair` cấm.
+  /** 040 `GET /social/polls` — danh sách bình chọn thấy được; OFFSET. */
+  pollList: pair("view", "feed"),
+  /** 041 `PUT …/poll/vote` — bỏ/đổi phiếu; chỉ khi `open` và trước `closes_at`. */
+  pollVote: pair("view", "feed"),
+  /** 042 `DELETE …/poll/vote` — rút phiếu; chỉ khi `open`. */
+  pollVoteWithdraw: pair("view", "feed"),
+  /** 043 `GET …/poll/results` — kết quả; KHÔNG BAO GIỜ trả `user_id` (SOC-DEC-009). */
+  pollResults: pair("view", "feed"),
+  /** 044 `POST …/poll/close` — đóng tay; chủ bài HOẶC `manage:feed-post`; audit LUÔN. */
+  pollClose: pair("view", "feed"),
 } as const satisfies Record<string, SocialPair>;
 
 export type SocialRouteKey = keyof typeof SOCIAL_ROUTE_PAIRS;
