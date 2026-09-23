@@ -195,8 +195,11 @@ export const MODULE_APP_METADATA: Readonly<Record<string, ModuleAppMeta>> = {
     route: "/feed", // = APP_REGISTRY.defaultRoute của tile `social` (registry.ts, D13①)
     icon: "megaphone",
     requiredAny: [{ action: "view", resourceType: "feed" }], // mig 0578
-    // ⚠️ NỢ: chưa có mã FE truy vết trong PERMISSION_CODE_TO_PAIR cho cặp này (giống PAYROLL).
-    feCodes: [],
+    // ⚠️ NỢ: 'SOCIAL.FEED.VIEW' là mã TRUY VẾT (mig 0578:41), chưa map trong PERMISSION_CODE_TO_PAIR
+    // — nợ y hệt PAYROLL/RECRUIT ngay trên. feCodes KHÔNG được để rỗng: ratchet
+    // (module-app-metadata-ratchet.unit-spec.ts, ca "feCodes cùng độ dài") đòi
+    // feCodes.length === requiredAny.length cho mọi module trong NEW_MODULE_GATES.
+    feCodes: ["SOCIAL.FEED.VIEW"],
   },
 };
 
