@@ -1,22 +1,41 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-23 00:56Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-23 01:58Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S16-SOCIAL-BE-2B-1 — BE track B/2a — BÌNH CHỌN (SOCIAL-API-040..044 + nhánh type='poll' của 002 + system-job đóng poll theo hạn): vote/đổi phiếu một tx bù trừ đối xứng · ẩn danh KHÔNG lộ user_id · đóng nợ (b) cờ poll bất biến và nợ (e) option∈poll của DB-2 · NOTI-035
+- **zone**: red · **skills**: security-review
+- **sửa ở đâu (paths)**: `apps/api/src/social/**`, `apps/api/src/app.module.ts`, `apps/api/src/notifications/**`, `apps/api/test/**`, `packages/contracts/**`, `apps/api/package.json`, `docs/_review/**`, `docs/API Design/**`, `docs/SPEC/**`, `docs/plans/**`, `harness/backlog.mjs`
+- **phụ thuộc**: S16-SOCIAL-BE-2A✓
+- **done_when (đích hội tụ)**:
+  - [ ] 🔴 Nợ (b) của DB-2 KHÔNG được xả bằng lập luận «không có route PATCH nên tự động đúng» — chính WO này mở closeTx, đường UPDATE ĐẦU TIÊN vào feed_polls (schema social.ts:596-600 ghi thẳng «service PHẢI chặn UPDATE»). Vá: (a) closeTx UPDATE tường minh ĐÚNG 2 cột status+closedAt (+updatedAt), cấm mapped-write; (b) structure spec (khuôn realtime/chat-realtime-structure.spec.ts, PHẢI stripComments nếu không docblock social.ts làm nó đỏ oan) assert không site nào trong apps/api/src/social/** ghi multipleChoice/isAnonymous ngoài createPollTx, danh sách vi phạm toEqual([]) KÈM neo dương toBe(1); (c) ca RED cho chính spec đó
+  - [ ] 🔴 Nợ (e) của DB-2: optionId PHẢI thuộc đúng pollId, kiểm CÙNG TX TRƯỚC MỖI INSERT phiếu — hai FK rời (0580:416-422) không nối option với poll; gửi chéo poll ⇒ nhồi phiếu + vote_count lệch VĨNH VIỄN. 404 hằng-tên POLL_OPTION_NOT_FOUND (không 422 — option của poll khác là thứ actor không được biết tồn tại). RED trước: vote_count của poll kia toBe(before) VÀ COUNT(*) phiếu poll kia không đổi
+  - [ ] 🔴 Luật 2–10 lựa chọn ép Ở SERVICE → 422 SOCIAL-ERR-018, KHÔNG ở Zod: Zod từ chối trả 400 VÔ DANH ⇒ mã lỗi SPEC không bao giờ được ném (luật ở packages/contracts/src/social-api.ts:309-310). Ca test assert đúng MÃ. ⚠️ Nếu ai thêm .min(2).max(10) vào Zod thì ca 422 CHẾT và chuyển thành 400 — ghi cảnh báo tại chỗ. Thêm ca «vắng hẳn options» (Zod 400) tách khỏi ca «[] hoặc 1 phần tử» (service 422)
+  - [ ] 🔴 voteTx là MỘT tx: -1 vote_count cho MỌI option bị xoá, +1 cho option mới — DELETE-rồi-INSERT mà không giảm đếm cũ làm lệch ngay ở luồng đổi phiếu BÌNH THƯỜNG. Ca đối chứng Σ vote_count == COUNT(*) phiếu sau MỖI bước, và phải ghi GIÁ TRỊ TUYỆT ĐỐI kỳ vọng từng bước (0==0 thoả ⇒ deny vacuous) + Σ > 0 ở ít nhất 2 bước. Bắt 23505 theo TÊN feed_poll_votes_single_uq → 409 ERR-017
+  - [ ] 🔴 Ca race phiếu đôi phải là bất biến ĐẾM ĐƯỢC, không phải «409 HOẶC hội tụ» (mọi hành vi đều pass = deny vacuous): sau race, COUNT(*) feed_poll_votes WHERE (poll,user) == 1 VÀ Σ vote_count == COUNT(*) phiếu. 🔴 KÈM expect(statuses.every(s => s < 500)).toBe(true) — hai lượt vote CÙNG option đâm PK feed_poll_votes_pk chứ không đâm single_uq, mà đường dịch chỉ bắt single_uq ⇒ ca đua sẽ XANH trong khi người dùng ăn 500. Ba ca: cùng option (nhánh PK) · khác option (nhánh single_uq) · poll ĐA lựa chọn (single_uq không áp)
+  - [ ] Ghi single_choice = NOT feed_polls.multiple_choice ĐỌC TỪ feed_polls NGAY TRONG câu vote (cột cố ý không DEFAULT — quên ghi ăn 23502; ghi SAI GIÁ TRỊ thì partial index không áp và phiếu đôi lọt IM LẶNG)
+  - [ ] 🔴 Neo khoá lockPollRowTx (SELECT 1 … FOR UPDATE) đầu MỌI đường ghi đi qua MỘT HÀNG POLL CỤ THỂ (voteTx · withdrawVoteTx · closeTx của 044). Job KHÔNG neo — nó set-based một câu và thêm lock sẽ phá hình dạng vị từ của idx_feed_polls_open_deadline; an toàn vì chỉ chạm feed_polls và PG re-check WHERE sau khi chờ khoá ở READ COMMITTED. Ghi thành một dòng ĐO ĐƯỢC mệnh đề chân trụ: D9 (lựa chọn bất biến) ⇒ KHÔNG writer nào khác chạm feed_poll_options ⇒ thứ tự khoá toàn hệ là duy nhất feed_polls → feed_poll_options
+  - [ ] Poll: vote/đổi phiếu chỉ khi open và trước closes_at (HAI ca RIÊNG, gộp thì bỏ một nhánh vẫn xanh); kết quả ẩn danh KHÔNG trả user_id kể cả admin (tập cột TƯỜNG MINH, cấm select() trần; ca grep user_id trên body của CẢ 040·041·042·043 + neo dương voteCount > 0); job đóng idempotent theo UPDATE…WHERE status='open' RETURNING (chống race với 044 đóng tay) + NOTI-035 người tạo; 044 có @Idempotent với khoá SUY TỪ NỘI DUNG (close:{postId}), không theo timestamp
+  - [ ] 🔴 audit + outbox CHỈ phát khi RETURNING ≠ rỗng, TRONG CÙNG tx — viết audit trước khi kiểm updated.length>0 ⇒ hai dòng audit cho một lần đóng, mà audit_logs append-only nên KHÔNG gỡ lại được
+  - [ ] 🔴 KHÔNG audit 041/042 là CỐ Ý — phải tuyên bố trong PR: audit một lượt bỏ phiếu (actor_user_id + object_id=postId) TÁI DỰNG ĐƯỢC danh sách cử tri ⇒ phá SOC-DEC-009, và audit_logs sống lâu hơn grant. Cùng chỗ đó trích DB-17 §4 (dòng 121) cho ngoại lệ DELETE CỨNG feed_poll_votes so với bất biến #2, để reviewer không tự ý «sửa thành soft-delete»
+  - [ ] Hành vi CHƯA XÁC ĐỊNH phải quyết tường minh + có ca: 042 khi user chưa có phiếu (đề xuất 200 no-op) · 041/043/044 trên bài KHÔNG mang poll (đề xuất 404 ERR-001)
+  - [ ] NOTI: pin eventCode VERBATIM theo migration 0581 (SOCIAL_POLL_CLOSED — Low, DedupeKey, is_system_event=true); 🔴 dedupe_strategy='DedupeKey' ⇒ BẮT BUỘC khai dedupeKeyOf, bỏ trống thì fallback ctx.eventId LUÔN khác nhau ⇒ dedupe biến mất CÂM. (Câu «034 = None» trong backlog cũ nói về BE-2A, KHÔNG phải WO này.) PAYLOAD_KEYS +poll_question; TEMPLATE_KEYS mirror variables_schema 0581:262-267. Ca allow + deny
+  - [ ] Sổ/ratchet đo RIÊNG từng cái, KHÔNG cộng tay lẫn nhau: (1) MIN_COVERED_COUNT của route-http-coverage — hiện 661 trong khi census JSON 671 vì BE-2A QUÊN BUMP, nên phải đặt = SỐ SPEC IN RA (dán dòng console vào sổ vết), cấm cộng 661+n · (2) census 2 tầng BỐN việc (SOCIAL_CONTROLLERS là ALLOWLIST — quên thêm controller mới ⇒ route vô hình mà cả 4 assert vẫn PASS · ROUTE_TO_KEY · SERVICE_SITE_TO_KEYS · toBe(n)) · (3) route-census JSON regen · (4) identity-projection-verdicts + bump ĐÚNG trần basis. Lệnh đóng WO PHẢI gồm cả 4 spec sổ này, không chỉ glob social-*
+  - [ ] 🔴 Mọi file service mới nằm PHẲNG trong apps/api/src/social/ — census readdirSync KHÔNG đệ quy, đặt vào thư mục con ⇒ site resolveActor vô hình ⇒ census xanh rỗng
+  - [ ] Coverage social/ ≥85% LANE_DB (lưu ý: chỉ social-access.service.ts 90/90/85 mới là CỔNG THẬT, src/social/** chỉ được ĐO); mọi POST @Idempotent; DTO .pick()+.strict(), CẤM .extend() core schema (feedPollCoreSchema mang status/closedAt ⇒ .extend() cho phép tự đóng poll không qua 044)
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 -  `S16-SOCIAL-FE-1` FE track A: template cổng thông tin 3 cột (apps/app/src/layouts/portal/, <1024px gập 1 cột) · SOC-SCREEN-001 Bảng tin (composer 5 nút · thẻ bài · lọc/sắp xếp · badge bài mới) · 002 Chi tiết bài · 003 Tin tức (+ xác nhận đọc + danh sách đã đọc) · 004 Đã lưu · 005 Trang cá nhân · rail Sinh nhật/Tin nổi bật · tìm kiếm topbar · ME thêm «Bài viết của tôi»/«Đã lưu» · bật modules.is_active SOCIAL (khuôn 0567) · MODULE_APP_METADATA SOCIAL
-- 🔴 `S16-SOCIAL-BE-2B` BE track B/2 — BÌNH CHỌN · SÁNG KIẾN · VINH DANH (SOCIAL-API-040..048 + 3 nhánh type của 002): vote/đổi phiếu · ẩn danh không lộ user_id · job đóng theo hạn khuôn system-jobs · assertIdeaTransition + vết duyệt · kudos + huy hiệu · NOTI-032/033/035
 - 🔴 `S16-SOCIAL-BE-2C` BE track B/3 — REALTIME room nhóm co:{c}:feedgroup:{id}: thêm feedUserRoomName (room ĐÁNH DẤU đã qua cổng view:feed) + join/leave động theo membership · fan-out bài audience='group' · nới D8 và CẬP NHẬT API-19 §7
 
 **CHỜ (kẹt phụ thuộc):**
 - `S16-SOCIAL-FBPOST-1` Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối sidebar SOCIAL «Đăng bài Facebook» (SOC-DEC-002): gate 3 cặp social-* cũ, mở SSO như cũ, i18n nav, registry moduleCode SOCIAL giữ — KHÔNG đụng apps/fbpost hay quyền ⏳ cần: S16-SOCIAL-FE-1
-- `S16-SOCIAL-FE-2` FE track B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm · thành viên · xin vào/duyệt · cài đặt) · 007 Bình chọn (thẻ poll trong feed + trang danh sách) · 008 Sáng kiến (danh sách + xét duyệt) · 009 Vinh danh (thẻ kudos + huy hiệu) · rail phải: Bình chọn đang mở · Vinh danh tháng này · Nhóm của tôi (badge bài mới) ⏳ cần: S16-SOCIAL-BE-2B, S16-SOCIAL-FE-1
-- `S16-SOCIAL-BE-3` BE track C: hàng đợi báo cáo (resolve/dismiss + hành động ẩn/khoá/xoá kèm) · thống kê tương tác (bài · bình luận · thích · thành viên hoạt động theo tuần & đơn vị — SQL set-based · sàn scope Company, manager Department · XLSX · KHÔNG cache) · catalog huy hiệu CRUD (manage:feed-kudos) · dữ liệu widget DASH ⏳ cần: S16-SOCIAL-BE-2B
+- `S16-SOCIAL-BE-2B-2` BE track B/2b — SÁNG KIẾN · VINH DANH (SOCIAL-API-045..048 + nhánh type='idea'|'kudos' của 002): assertIdeaTransition 3 cạnh + vết duyệt một câu · kudos + huy hiệu + map employee→user lọc người đã nghỉ · NOTI-032/033 ⏳ cần: S16-SOCIAL-BE-2B-1
+- `S16-SOCIAL-FE-2` FE track B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm · thành viên · xin vào/duyệt · cài đặt) · 007 Bình chọn (thẻ poll trong feed + trang danh sách) · 008 Sáng kiến (danh sách + xét duyệt) · 009 Vinh danh (thẻ kudos + huy hiệu) · rail phải: Bình chọn đang mở · Vinh danh tháng này · Nhóm của tôi (badge bài mới) ⏳ cần: S16-SOCIAL-BE-2B-2, S16-SOCIAL-FE-1
+- `S16-SOCIAL-BE-3` BE track C: hàng đợi báo cáo (resolve/dismiss + hành động ẩn/khoá/xoá kèm) · thống kê tương tác (bài · bình luận · thích · thành viên hoạt động theo tuần & đơn vị — SQL set-based · sàn scope Company, manager Department · XLSX · KHÔNG cache) · catalog huy hiệu CRUD (manage:feed-kudos) · dữ liệu widget DASH ⏳ cần: S16-SOCIAL-BE-2B-2
 - `S16-SOCIAL-FE-3` FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 011 Thống kê tương tác (Recharts nếu S15-FE-4 đã cài, không thì stat-card + bảng) · 012 Thiết lập huy hiệu · dải ô liên kết nhanh theo useCan (Công việc · Nghỉ phép · Chấm công · Đặt phòng · Mục tiêu · Đào tạo · Đăng bài Facebook) · nhúng widget DASH «Nhân sự» vào rail phải theo quyền ⏳ cần: S16-SOCIAL-BE-3, S16-SOCIAL-FE-2
 - `S16-SOCIAL-QA-1` QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager · hr · company-admin · payroll-officer/recruiter không thêm gì) · IDOR: bài nhóm riêng tư · bài hidden/deleted · sửa/xoá bài người khác · ack giả · vote đôi · poll đóng · kết quả ẩn danh không lộ user_id · sinh nhật không lộ năm/ẩn theo preference · cross-tenant 2 công ty · fuzz mention/hashtag/emoji/body · race counters (2 like đồng thời, đối soát COUNT ↔ counter) · WS payload = DTO · soft-delete lan đủ · census mã lỗi theo MÃ · coverage social/ ≥85% LANE_DB ⏳ cần: S16-SOCIAL-FE-3
 - `S16-SOCIAL-DASH-1` Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạt động) + «Tin tức chưa đọc» (Own, đếm tin yêu cầu ack chưa xác nhận) — catalog BE + SÀN scope 2 tầng + slug FE Grid + useCanExact, đăng ký SOCIAL-WIDGET-001/002 (SPEC-01 §9.9) ⏳ cần: S16-SOCIAL-QA-1
@@ -29,7 +48,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 1
+- **branch**: `feat/s16-social-be-2b` · **file đang đổi (dirty)**: 4
 - **migration head**: idx 252 — `0585_s16socialbe1b_noti_news_template_fix` (253 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -38,6 +57,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `b87065e1` | 2026-09-23 | docs(social): plan S16-SOCIAL-BE-2B — micro-plan vùng đỏ (chưa thi công) |
+| `817472c5` | 2026-09-23 | chore(harness): kế hoạch mở WO S16-SOCIAL-BE-2B — regen STATUS/INDEX sau #532/#533 |
 | `5f8434c0` | 2026-09-23 | S16-SOCIAL-BE-2A — NHÓM (SOCIAL-API-030..039 + nhánh audience='group' của 002) (#533) |
 | `9dc89337` | 2026-09-22 | feat(social): S16-SOCIAL-BE-1B — module bảng tin Nhóm B (SOCIAL-API-020..029) (#532) |
 | `5324418d` | 2026-09-22 | chore(docs): regen STATUS + bàn giao — merge #531 (S15-PAYROLL-BE-2B) + #530 (S16-SOCIAL-BE-1) |
@@ -48,8 +69,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `f68c3f78` | 2026-09-21 | feat(social): S16-SOCIAL-DB-1 — schema + migration SOCIAL Track A (0577/0578/0579) (#528) |
 | `eb7ca824` | 2026-09-20 | chore(docs): regen STATUS — FBPOST-1 chuyển CHỜ (cần FE-1), DB-2 lên READY |
 | `64e37e82` | 2026-09-20 | chore(harness): S16-SOCIAL-FBPOST-1 phụ thuộc FE-1 — vỏ sidebar SOCIAL chưa tồn tại |
-| `83c5a20b` | 2026-09-19 | docs(social): S16-SOCIAL-DB-1 — micro-plan vùng đỏ + 6 phép đo thực địa (chưa thi công) |
-| `d3ffe8d4` | 2026-09-19 | chore(docs): regen STATUS — S18-OPS-MINIOPIN-1 #527 đã merge master (c714c0a4) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

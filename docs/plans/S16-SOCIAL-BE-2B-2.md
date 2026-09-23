@@ -1,3 +1,14 @@
+> # NHAP - CHUA DUYET
+>
+> File nay la PHAN CON LAI cua plan S16-SOCIAL-BE-2B truoc khi owner chot TACH DOI (23/09/2026).
+> Phan BINH CHON da chuyen sang S16-SOCIAL-BE-2B-1.md (da va 20 finding cua plan-reviewer).
+> Giu file nay de KHONG MAT bang do M1..M54. TRUOC KHI MO WO BE-2B-2 phai:
+> (1) cat bo phan poll; (2) do lai moi so dong (BE-2B-1 se lam troi); (3) bo sung D18 (vi tu nguoi
+> con hoat dong, viet VERBATIM) va C-6 (assert cau truc SOCIAL_POST_TYPE_PAIRS); (4) sua 2 o SAI da
+> biet: M24 la 10 int-spec khong phai 11, M54 trich sai cho - nguon dung la
+> packages/contracts/src/social-api.ts:309-310; (5) chay lai plan-reviewer.
+> Owner DA KY: 047/048 thuoc WO nay (khong phai BE-3); ep CA K1 lan K2 + bo sung SPEC-16 par.13.
+>
 # Plan S16-SOCIAL-BE-2B — BÌNH CHỌN · SÁNG KIẾN · VINH DANH (`SOCIAL-API-040..048` + 3 nhánh `type` của `002`)
 
 > 🔴 **Crown.** Ba thứ crown chồng lên nhau trong một WO: (1) **đường UPDATE ĐẦU TIÊN vào `feed_polls`**
