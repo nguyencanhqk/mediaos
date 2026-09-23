@@ -183,6 +183,21 @@ export const MODULE_APP_METADATA: Readonly<Record<string, ModuleAppMeta>> = {
     // ⚠️ NỢ: 'PAYROLL.PERIOD.VIEW' là mã TRUY VẾT, chưa map trong PERMISSION_CODE_TO_PAIR.
     feCodes: ["PAYROLL.PERIOD.VIEW"],
   },
+  // SOCIAL — S16-SOCIAL-FE-1. Cặp `view:feed` (mig 0578, is_sensitive=FALSE) cấp @Company cho cả 4 vai
+  // canonical. Vì non-sensitive nên `getCapabilities()` đã surface nó ⇒ KHÔNG cần đụng
+  // `SENSITIVE_CAPABILITY_ALLOWLIST`.
+  //
+  // 🔴 `route` phải BẰNG ĐÚNG `APP_REGISTRY` tile `social`.`defaultRoute` = **`/feed`**, KHÔNG phải
+  // `/social`. `/social` là trang trung chuyển SSO của app vệ tinh fbpost (tile RIÊNG `fbpost`, cùng
+  // `moduleCode: "SOCIAL"` nhưng khác appKey) — trỏ nhầm ở đây là đưa người dùng vào đường lỗi SSO
+  // thay vì vào cổng thông tin. Ca C22 của FE-1 ghim đẳng thức route ↔ defaultRoute.
+  SOCIAL: {
+    route: "/feed", // = APP_REGISTRY.defaultRoute của tile `social` (registry.ts, D13①)
+    icon: "megaphone",
+    requiredAny: [{ action: "view", resourceType: "feed" }], // mig 0578
+    // ⚠️ NỢ: chưa có mã FE truy vết trong PERMISSION_CODE_TO_PAIR cho cặp này (giống PAYROLL).
+    feCodes: [],
+  },
 };
 
 /**

@@ -12,7 +12,7 @@
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 import { describe, expect, it } from "vitest";
-import { ROUTE_REGISTRY } from "@mediaos/web-core";
+import { APP_REGISTRY, ROUTE_REGISTRY } from "@mediaos/web-core";
 import type { SidebarItemMeta } from "@mediaos/web-core";
 import {
   ME_SIDEBAR,
@@ -109,5 +109,46 @@ describe("C20 — cổng quyền của 6 route SOCIAL", () => {
   it("chỉ 3 route track A hiện trên sidebar; route động/`me` thì không", () => {
     const inSidebar = SOCIAL_ROUTES.filter((r) => r.showInSidebar).map((r) => r.routeKey);
     expect(inSidebar.sort()).toEqual(["social.feed", "social.news", "social.saved"]);
+  });
+});
+
+/**
+ * C22 — vế FE của cặp ghim `route` ↔ `defaultRoute`.
+ *
+ * ⚠️ Đây **không** phải phép kiểm chéo gói: `MODULE_APP_METADATA` sống ở `apps/api` và `apps/app`
+ * không import được nó. Vế kia nằm ở `apps/api/test/foundation/module-app-metadata-ratchet.unit-spec.ts`
+ * — đọc docblock ở đó để biết chính xác cặp ghim này bắt được gì và KHÔNG bắt được gì.
+ */
+describe("C22 — tile Home SOCIAL (D13: HAI tile, không một)", () => {
+  const social = APP_REGISTRY.find((a) => a.appKey === "social");
+  const fbpost = APP_REGISTRY.find((a) => a.appKey === "fbpost");
+
+  it("tile `social` trỏ `/feed` và gác bằng `view:feed`", () => {
+    expect(social?.defaultRoute).toBe("/feed");
+    expect(social?.rootPath).toBe("/feed");
+    expect(social?.requiredAnyPermissions).toEqual(["view:feed"]);
+  });
+
+  it("tile `fbpost` TỒN TẠI, giữ `/social` + `view:social-post`", () => {
+    /**
+     * 🔴 Ca này chặn một HỒI QUY cụ thể, không phải một chi tiết trang trí: nếu ai đó "dọn" tile
+     * thứ hai đi (nó trông thừa vì cùng `moduleCode: SOCIAL`), người **chỉ** có `view:social-post`
+     * sẽ MẤT ô Home — đúng "cửa sổ tile chết" mà `done_when` của `S16-SOCIAL-FBPOST-1` cấm tái tạo.
+     */
+    expect(fbpost, "tile fbpost bị gỡ — người fbpost-only sẽ mất ô Home").toBeDefined();
+    expect(fbpost?.defaultRoute).toBe("/social");
+    expect(fbpost?.requiredAnyPermissions).toEqual(["view:social-post"]);
+    expect(fbpost?.moduleCode).toBe("SOCIAL");
+  });
+
+  it("hai tile KHÁC TÊN (không phải hai ô trùng tên trên Home)", () => {
+    expect(social?.nameKey).not.toBe(fbpost?.nameKey);
+  });
+
+  it("`order` của APP_REGISTRY vẫn TĂNG DẦN theo vị trí mảng", () => {
+    // `registry.spec.ts` đã có ca này, nhưng nhắc lại ở đây vì tile `fbpost` (order 90.5) PHẢI nằm
+    // vật lý giữa `social`(90) và `assets`(100) — đẩy xuống cuối mảng là đỏ.
+    const orders = APP_REGISTRY.map((a) => a.order);
+    expect(orders).toEqual([...orders].sort((a, b) => a - b));
   });
 });

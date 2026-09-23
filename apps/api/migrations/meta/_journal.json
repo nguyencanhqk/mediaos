@@ -1772,6 +1772,13 @@
       "when": 1717587374000,
       "tag": "0585_s16socialbe1b_noti_news_template_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1717587375000,
+      "tag": "0586_s16socialfe1_enable_social_module",
+      "breakpoints": true
     }
   ]
 }

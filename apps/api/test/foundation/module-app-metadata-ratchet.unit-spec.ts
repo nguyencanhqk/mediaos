@@ -240,7 +240,6 @@ export function auditModuleMetadataCoverage(input: CoverageInput): CoverageViola
  */
 const EXEMPT_MODULES: Readonly<Record<string, string>> = {
   CHAT: "Phase 4 — mig 0435:299 is_active=false; app CHAT chạy ngoài my-apps (S7/S8 wave), chưa có card",
-  SOCIAL: "Phase 4 — mig 0435:300 is_active=false; wave S16-SOCIAL sẽ bật cùng metadata",
   MOBILE: "Phase 5 — mig 0435:301 is_active=false; không có route web",
   AI: "Phase 5 — mig 0435:302 is_active=false; chưa có màn hình",
 };
@@ -487,5 +486,41 @@ describe("S14-FND-MODULEMETA-1 — BLOCKING 1: deny-path THỰC THI qua hasAnyCa
       // KHÔNG dùng mã dotted FE làm cặp engine.
       for (const p of meta.requiredAny) expect(p.resourceType).not.toContain(".");
     }
+  });
+});
+
+/**
+ * S16-SOCIAL-FE-1 (ca C22, vế API) — ghim `MODULE_APP_METADATA.SOCIAL`.
+ *
+ * ┌─ 🔴 ĐỌC TRƯỚC KHI TIN: ĐÂY **KHÔNG** PHẢI MỘT PHÉP KIỂM CHÉO GÓI ────────────────────────────┐
+ * │ Plan FE-1 ca C22 đòi assert `MODULE_APP_METADATA.SOCIAL.route === APP_REGISTRY(social)        │
+ * │ .defaultRoute`. **Không làm được như một đẳng thức**: `APP_REGISTRY` sống ở                   │
+ * │ `@mediaos/web-core`, và `apps/api/package.json` KHÔNG phụ thuộc gói đó (nó là gói trình duyệt  │
+ * │ — thêm dependency chỉ để test là đổi đồ thị phụ thuộc của backend, cái giá sai).               │
+ * │                                                                                                │
+ * │ Thứ có được thay thế: **hai cái ghim vào CÙNG một literal**, mỗi bên một gói, mỗi bên trỏ sang │
+ * │ bên kia. Nó bắt được ca "một bên đổi, bên kia quên" — đúng lỗi cần chặn. Nó **KHÔNG** bắt được │
+ * │ ca hiếm "cả hai cùng đổi sang cùng một giá trị sai". Nói ra giới hạn đó ở đây thay vì để người │
+ * │ đọc sau tưởng cổng chặt hơn thực tế (memory `gate-measurement-row-can-be-unsatisfiable`).      │
+ * │ Vế FE: `apps/app/src/routes/social/social-wiring.spec.ts`.                                     │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+describe("S16-SOCIAL-FE-1 — MODULE_APP_METADATA.SOCIAL (ghim vế API của C22)", () => {
+  it("route = '/feed', KHÔNG phải '/social'", () => {
+    // `/social` là trang trung chuyển SSO của app vệ tinh fbpost (tile RIÊNG `fbpost`, cùng
+    // moduleCode SOCIAL nhưng khác appKey). Trỏ nhầm ở đây đưa người dùng vào đường LỖI SSO thay vì
+    // vào cổng thông tin — và không có 404 nào để báo, nên lỗi im lặng.
+    expect(MODULE_APP_METADATA.SOCIAL?.route).toBe("/feed");
+  });
+
+  it("requiredAny = đúng cặp `view:feed` (cặp THẬT trong seed 0578)", () => {
+    expect(MODULE_APP_METADATA.SOCIAL?.requiredAny).toEqual([
+      { action: "view", resourceType: "feed" },
+    ]);
+  });
+
+  it("SOCIAL KHÔNG còn nằm trong danh sách miễn trừ (chống DOUBLE_LISTED)", () => {
+    // Quên xoá dòng miễn trừ = module vừa có metadata vừa được miễn ⇒ ratchet báo DOUBLE_LISTED.
+    expect(Object.keys(EXEMPT_MODULES)).not.toContain("SOCIAL");
   });
 });
