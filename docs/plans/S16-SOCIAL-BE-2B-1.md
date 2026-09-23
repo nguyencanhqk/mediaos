@@ -180,7 +180,7 @@ room WS `feedgroup` → BE-2C.
 | **D13** 🔴 | **Job — idempotent bằng CHÍNH câu ghi, KHÔNG neo khoá** | `UPDATE feed_polls SET status='closed', closed_at=now(), updated_at=now() WHERE company_id=$ AND status='open' AND closes_at IS NOT NULL AND closes_at <= now() RETURNING id, post_id, question`. NOTI-035 enqueue **TRONG CÙNG tx**, **chỉ cho các hàng `RETURNING` trả về** | M9; M34 |
 | **D14** 🔴 | **Poll ẩn danh — tập cột TƯỜNG MINH, cấm `select()` trần** | `043` trả đúng bộ trường API-19 §6.3 (`:229-242`): `{pollId, question, isAnonymous, status, totalVoters, myVote[], options[{id,label,voteCount}]}`. `user_id` **KHÔNG BAO GIỜ** vào DTO — kể cả `company-admin`, kể cả khi `isAnonymous=false`. `totalVoters = COUNT(DISTINCT user_id)`. 🔴 **Ghim tập cột cho CẢ `040`·`041`·`042`·`043`** (plan cũ chỉ ghim `043`) | API-19 §6.3; SOC-DEC-009; reviewer |
 | **D15** | **Cổng ĐỌC đi qua `visiblePostCondition`** | Poll thừa hưởng phạm vi BÀI CHA. `040`/`043` JOIN `feed_posts` + vị từ NGAY TRONG câu; `041`/`042`/`044` gọi `assertPostVisible` trước. Tái dùng `listFeed` thì **BẮT BUỘC** khai `groupScope` tường minh — **U3** | BE-2A D1 |
-| **D16** 🔴 | **Audit — và chỗ CỐ Ý KHÔNG audit** | `044` **LUÔN** (đóng poll không đảo ngược được): `feed_post`/`postId`/`social.poll.close`/`{postId, pollId, via:'manual'|'job'}`. 🔴 **KHÔNG audit `041`/`042` — CỐ Ý**: audit một lượt bỏ phiếu (`actor_user_id` + `object_id=postId`) **TÁI DỰNG ĐƯỢC danh sách cử tri** ⇒ phá SOC-DEC-009, mà `audit_logs` **append-only, sống lâu hơn grant**. Phải tuyên bố trong PR để reviewer không «sửa cho đủ DoD» | M44; reviewer B10 |
+| **D16** 🔴 | **Audit — và chỗ CỐ Ý KHÔNG audit** | `044` **LUÔN** (đóng poll không đảo ngược được): `feed_post`/`postId`/`social.poll.close`/`{postId, pollId, via:'manual' hoặc 'job'}`. 🔴 **KHÔNG audit `041`/`042` — CỐ Ý**: audit một lượt bỏ phiếu (`actor_user_id` + `object_id=postId`) **TÁI DỰNG ĐƯỢC danh sách cử tri** ⇒ phá SOC-DEC-009, mà `audit_logs` **append-only, sống lâu hơn grant**. Phải tuyên bố trong PR để reviewer không «sửa cho đủ DoD» | M44; reviewer B10 |
 | **D20** 🔴 | **audit + outbox CHỈ phát khi `RETURNING` ≠ rỗng, TRONG CÙNG tx** | Viết audit trước khi kiểm `updated.length > 0` ⇒ hai dòng audit cho một lần đóng; `audit_logs` append-only nên **không gỡ lại được** | reviewer B9 |
 | **D21** | **Hành vi CHƯA XÁC ĐỊNH — quyết tường minh** | `042` khi user chưa có phiếu ⇒ **200 no-op** (idempotent, không 404). `041`/`043`/`044` trên bài KHÔNG mang poll ⇒ **404 `ERR-001`** (không 500, không 422) | reviewer B8 |
 | **D17** | **File mới nằm PHẲNG trong `src/social/`** | Census `readdirSync` không đệ quy | M21 |
@@ -191,7 +191,7 @@ room WS `feedgroup` → BE-2C.
 | # | Câu hỏi | Hiện trạng ĐO ĐƯỢC | A | B | Khuyến nghị |
 | --- | --- | --- | --- | --- | --- |
 | **S2** 🔴 | `vote_count` đối soát ở đâu? | SPEC-16 §13.6 liệt **ĐÚNG 5 cột** và đòi «script đối soát cả năm»; `vote_count` không trong đó nhưng có `CHECK >= 0` ⇒ lệch âm = **500**, lệch dương = **hỏng câm** | Bổ sung `vote_count` vào script đối soát + sửa SPEC-16 §13.6 thành **6 cột** | Giữ 5 cột, ghi **nợ tường minh** cho QA-1 | **A.** Bộ đếm có CHECK mà không sổ nào đối soát là «cổng CHẾT trông y hệt cổng sống». Chọn B ⇒ **phải** ghi vào `done_when` của QA-1 |
-| **S4** | Actor audit của job? | API-19 §5.1d `:165` đòi «audit ghi rõ nguồn là job, không phải người». Cột nullable; kiểu TS **CHƯA ĐO** (U1) | `actorUserId: null` + `metadata.via='job'` | Dựng «user hệ thống» per-tenant | **A** nếu U1 cho phép. B đẻ user ảo có `user_id` thật, sẽ hiện ở mọi màn lọc audit theo người. U1 **không** cho `null` ⇒ **DỪNG hỏi lại owner** |
+| ~~**S4**~~ | ~~Actor audit của job?~~ | ✅ **ĐÓNG 23/09 BẰNG PHÉP ĐO U1 — KHÔNG CẦN CHỮ KÝ.** Cả hai phương án plan đưa ra đều SAI: `actorUserId` có kiểu `?: string` (**optional, không nullable**) nên A (`null`) **không biên dịch được**; và B (user ảo) là thừa vì enum `AUDIT_ACTOR_TYPES` (`events/audit.service.ts:59`, CHECK `0432`) **đã có sẵn `"Job"`**. Đường đúng: **bỏ hẳn `actorUserId`** + `actorType: "Job"`, y như `leave-accrual.service.ts:206-222` · `lms-user-sync.job-handler.ts:197` · `chat-calls.service.ts:478` | — | — | **Bài học ghi lại:** plan đặt một câu hỏi nhị phân cho owner trên một tiền đề CHƯA ĐO (*«cột nullable nên chắc truyền null được»*). Đo xong thì câu hỏi biến mất. **Đo trước khi soạn phương án, đừng soạn phương án rồi đo sau** |
 | **S5** | Phân trang `040` | API-19 §6.4 `:246-247` chỉ nói về feed (cursor) và danh sách quản trị (offset) | **OFFSET** (khuôn `030`) | Cursor | **A.** Rẻ hơn, khớp `030`/`028` đã ship, FE-2 vẽ ở rail phải. Ghi bổ sung một dòng vào API-19 §6.4 |
 
 ---
@@ -485,15 +485,16 @@ bash harness/check.sh --all
 
 ### Kết quả U1..U5 + chữ ký constructor job
 
-| # | Câu hỏi | Kết quả đo | Hệ quả |
+| # | Câu hỏi | Kết quả đo (Bước 0 — 23/09/2026) | Hệ quả |
 | --- | --- | --- | --- |
-| U1 | `record()` nhận `actorUserId: null`? | | |
-| U2 | `coveredCount` thật (dán dòng console) | | |
-| U2b | `uncovered == 0` hôm nay? | | |
-| U3 | `040` tái dùng `listFeed`? | | |
-| U4 | Spec contracts nào đỏ khi mở enum? | | |
-| U5 | DTO thẻ bài có nới không? | | |
-| — | Chữ ký constructor `social-poll-close.job-handler.ts` (căn cứ KHÔNG `@Optional`) | | |
+| **U1** 🔴 | `record()` nhận `actorUserId: null`? | **KHÔNG.** `AuditService` thật nằm ở **`apps/api/src/events/audit.service.ts`** (KHÔNG phải `foundation/audit/` — M45 trích nhầm cây), `:15` `interface AuditEntry`, `:19` **`actorUserId?: string`** — *optional, KHÔNG nullable* ⇒ truyền `null` là **lỗi TS**. NHƯNG `:59` `AUDIT_ACTOR_TYPES = ["User","System","Job","Integration"]` (CHECK gốc ở mig `0432:61-67`) | 🔴 **S4 ĐÓNG BẰNG PHÉP ĐO — không cần owner chọn A/B.** Đường đúng là vế thứ BA mà plan không thấy: **BỎ HẲN** `actorUserId` (undefined ⇒ cột NULL) + **`actorType: "Job"`**. Tiền lệ y hệt: `leave-accrual.service.ts:206-222` · `lms-user-sync.job-handler.ts:197` · `chat-calls.service.ts:478`. Nhánh tay của `044` giữ `actorType:"User"` + `actorUserId`. `metadata.via` GIỮ để phân biệt trong cùng `action` |
+| **U1b** | Tiền lệ `leave-accrual` còn dạy gì? | `:206-208` nguyên văn: *«Audit CHỈ khi thực sự cấp. `granted=0` là trạng thái BÌNH THƯỜNG gần như mọi nhịp 60s — ghi audit ở đó = ~526k dòng rác/năm trong bảng append-only (đúng quả bom đã phải đi gỡ ở LMS sync)»* | **Củng cố D20**: job chỉ ghi audit khi `RETURNING` trả ≥1 hàng. Không chỉ là chuyện đúng/sai — còn là chuyện bom rác trong bảng append-only |
+| **U2b** 🔴 | `uncovered == 0` HÔM NAY? | **CÓ.** Chạy thật trên `LANE_DB=mediaos_be2b`: `[S10-QA-ROUTEHTTP-1] Route HTTP coverage: **671/671 (100.0%) — CHƯA phủ: 0**` (9/9 test pass) | ⇒ `coveredCount == routes.length == 671` == census JSON ⇒ **tiền đề «sàn 661 lỏng đúng 10» ĐÃ CHỨNG MINH**, không còn là suy luận. Reviewer B6 đóng |
+| **U2** | `coveredCount` sau +5 route | ⏳ đo ở Bước 5 — dán dòng console vào đây | Dự kiến 676, **nhưng gõ theo số IN RA** |
+| **U3** 🔴 | `040` tái dùng `listFeed`? | **KHÔNG — nhưng cũng KHÔNG chép lại vị từ.** `listFeed` (`social-posts.repository.ts:61-83`) CÓ `type?: string` nhưng trả **THẺ BÀI**, còn `040` trả **dữ liệu POLL** (API-19 §6.3). Đo được đường thứ ba: **`SocialAccessService.visiblePostCondition(actor, t)`** (`social-access.service.ts:179`) nhận **tham số alias `t`** nên JOIN được, và `:186-199` cho thấy nó **ĐÃ có đủ ba vế** gồm nhánh `group` (BE-2A D3, EXISTS tương quan TRONG CÂU) | `040`/`043` viết câu riêng trong `social-polls.repository.ts` **JOIN `feed_posts` + gọi `visiblePostCondition`** — docblock `:41` ghi «một luật, một bản», chép lại là trôi. ⚠️ **KHÔNG** có tham số `groupScope` ở đây: `groupScope` là khái niệm của FEED (bài nhóm có nằm trong tập kết quả không), còn ở `040` ngữ nghĩa đúng là «mọi poll trên bài tôi thấy được» ⇒ vị từ một mình là đủ và đúng |
+| **U4** | Spec nào ghim `feedCreatableTypeSchema` 2 giá trị? | **KHÔNG CÓ.** Chỉ `packages/contracts/src/social-api.ts:82-83` (nguồn) + `dist/cjs/social-api.d.ts:63` (**bản build CŨ**) | Mở enum 2→3 **an toàn**. 🔴 Nhớ `pnpm build` contracts trước khi typecheck — `dist` cũ gây **đỏ oan** (memory `stale-contracts-dist-typecheck-false-red`) |
+| **U5** | DTO thẻ bài có nới không? | **KHÔNG nới.** `feedPostSchema:145-172` có `type: z.string()` (lỏng) và **không trường nào** cho poll; API-19 §6.1 cũng không khai | Giữ nguyên. **Nợ cho FE-2:** thẻ bài `type='poll'` phải gọi `043` riêng để vẽ kết quả — ghi vào §10 |
+| **—** | Chữ ký constructor job (căn cứ KHÔNG `@Optional`) | ⏳ điền ở Bước 4 | Chỉ nhận provider THẬT ⇒ không `@Optional` |
 
 ---
 
