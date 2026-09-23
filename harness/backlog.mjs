@@ -17006,6 +17006,12 @@ export const backlog = [
       // apps/app/src/hooks/use-feed-realtime.ts. Thiếu 2 glob này thì guard-scope cảnh báo oan.
       "apps/api/test/**",
       "apps/app/src/hooks/**",
+      // Mở rộng LƯỢT 2 (23/09/2026, FULL gate security-reviewer MEDIUM): WO này DỰNG cổng coverage
+      // `test:social-cov` nhưng không bước CI nào gọi nó — ngưỡng 80% chỉ tồn tại khi có người nhớ
+      // gõ tay. Nối nó vào `.github/workflows/apps-frontend.yml` là đóng chính cái lỗ mà WO này tạo
+      // ra, nên thuộc về đây chứ không phải một WO DEVOPS riêng. (Các spec SOCIAL thì VẪN chạy ở
+      // bước `Test` — chỉ NGƯỠNG là không được ép.)
+      ".github/workflows/apps-frontend.yml",
     ],
     skills: ["code-review"],
     depends_on: ["S16-SOCIAL-BE-1", "S16-SOCIAL-BE-1B"],
@@ -17031,6 +17037,8 @@ export const backlog = [
       "🔴 LỆCH HỢP ĐỒNG so với plan, đã sửa tại chỗ và cần owner biết: (1) D5 «@mention thành link profile» KHÔNG LÀM ĐƯỢC — feedPostSchema/feedCommentSchema không trả mảng mention (client GỬI mentionedUserIds lên, server không trả lại) nên FE không có employeeId để trỏ tới; mention render thành SPAN, #tag và URL vẫn là link thật. Muốn nối được thì BE phải trả mentions[{userId,employeeId,label}] — nợ cho FE-2/BE. (2) C22 route↔defaultRoute KHÔNG assert chéo gói được (apps/api không phụ thuộc @mediaos/web-core), thay bằng hai cái ghim vào cùng literal '/feed', mỗi gói một cái.",
       "🔄 D2 mất NỬA lý do sau khi #534 merge: feedCreatableTypeSchema nay là [share,news,poll] (không còn [share,news]). Bỏ nút «Bình chọn» giờ là quyết định PHẠM VI của owner, KHÔNG phải bất khả thi kỹ thuật — idea/kudos thì vẫn bị contracts từ chối. Kéo theo R16/C27 MỚI: bài type=poll CÓ THẬT trong bảng tin nên PostCard phải suy biến an toàn (body được phép NULL), và ca C27 chặn cả chiều ngược (không được lén hiện thực poll).",
       "✂️ SC-14 «dải ô liên kết nhanh» KHÔNG ship ở FE-1 (owner ký hoãn sang FE-3) ⇒ SOC-SCREEN-001 ship THIẾU phần này. Nút «Báo cáo» cũng KHÔNG có (đi cùng dialog + cảnh báo SOC-DEC-011 ở FE-3).",
+      "🔴 FULL GATE LƯỢT 1 (23/09/2026) — **CHẶN**, đã vá HẾT trong WO (owner ký). 4 reviewer song song: security BLOCK (1 HIGH) · database PASS · typescript BLOCK (6 HIGH) · silent-failure BLOCK (7 HIGH). **Phát hiện đắt nhất, 2 reviewer độc lập hội tụ và đo được bằng lệnh: `onError` trong routes/social = 0, trong 13 module khác = 203, app KHÔNG có hệ toast, `main.tsx` không khai `MutationCache.onError` ⇒ MỌI hành động ghi hỏng là IM LẶNG TUYỆT ĐỐI.** Ca đau nhất: bấm «Xác nhận đã đọc» mà server 500 ⇒ người dùng đóng tab tin là đã xác nhận, trong khi `feed_post_acks` append-only không có đường sửa tay. HIGH bảo mật: cờ ẩn sinh nhật bị gác sau `view:feed` ⇒ đúng nhóm cần nó lại không bấm tới được (vị từ liệt kê không xét quyền người BỊ liệt kê). 12 mục đã vá, MỖI mục nghiệm bằng vi phạm thật. Bảng đầy đủ + 4 điều tóm tắt SAI + bẫy hạ tầng test `retryDelay` ở plan §13.",
+      "✍️ OWNER KÝ LƯỢT 2 — 23/09/2026, TRƯỚC khi mở PR, đóng đúng 3 lệch nêu ở hai ghi chú ngay trên: (1) D5 mention — CHẤP NHẬN render span, ghi nợ BE thành WO riêng `S16-SOCIAL-BE-1D` (BE trả mentions[{userId,employeeId,label}] đã lọc theo tầm nhìn người xem); dứt khoát KHÔNG tra-theo-TÊN ở FE vì mở lại oracle dò danh bạ SOCIAL-ERR-009. (2) C22 — CHẤP NHẬN hai cái ghim vào cùng literal '/feed', giới hạn «không bắt được cả-hai-cùng-đổi-sai» phải nằm trong docblock CẢ HAI file, KHÔNG cho apps/api phụ thuộc @mediaos/web-core. (3) D2 nút «Bình chọn» — GIỮ NGUYÊN phạm vi FE-1 (chỉ ĐỌC poll, chưa tạo); luồng soạn poll đã nằm sẵn trong done_when của `S16-SOCIAL-FE-2`, không mở rộng WO đang chờ PR.",
     ],
   },
   {
@@ -17067,6 +17075,42 @@ export const backlog = [
       "TÁCH RA 23/09/2026 từ nợ N1 của plan S16-SOCIAL-FE-1 (owner ký). Lý do tách: mở endpoint = chạm file-service ⇒ không thuộc WO FE amber.",
       "Sau WO này, S16-SOCIAL-FE-2 mới dựng được UI đính kèm cho composer (FE-1 cố ý không có).",
       "SocialFileResolver + social-attachments.service.ts đã sẵn phía server — chỉ thiếu CỬA VÀO.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-BE-1D",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "BE track A/bổ sung — TRẢ MẢNG MENTION trong DTO bài & bình luận: feedPostSchema/feedCommentSchema thêm mentions[{userId,employeeId,label}] đã lọc theo tầm nhìn người xem, mở khoá @mention-thành-link mà S16-SOCIAL-FE-1 buộc phải hạ xuống span",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-1"],
+    plan: "docs/plans/S16-SOCIAL-BE-1D.md",
+    src: [
+      "Nợ D5 của plan S16-SOCIAL-FE-1.md (owner ký 23/09/2026) · SPEC-16 §12 SOCIAL-ERR-009 · bảng feed_mentions đã có từ DB-1 (BE-1 GHI vào nó để bắn NOTI-EVENT-028/029/030, chỉ chưa ĐỌC ra DTO)",
+      "Khuôn: social-preferences.ts getPreferencesForUsers (nạp theo LÔ, chống N+1) · social-access.service.ts assertTargetVisible · memory server-masking-needs-optional-fe-schema",
+    ],
+    done_when: [
+      "🔴 ĐÂY LÀ QUYẾT ĐỊNH TẦM NHÌN, KHÔNG PHẢI THÊM TRƯỜNG: mảng trả về PHẢI lọc theo tầm nhìn NGƯỜI XEM, không phải theo người đã được nhắc. Lý do FE không tự tra được là tra-theo-TÊN mở lại oracle dò danh bạ mà SPEC-16 §12 SOCIAL-ERR-009 đóng — trả nguyên mảng không lọc là mở lại CÙNG oracle ở cửa khác, chỉ rẻ hơn cho kẻ dò. Ca DENY: người xem KHÔNG thấy nhân sự X thì bài nhắc X trả về phần tử ĐÃ RÚT (giữ label hiển thị, bỏ employeeId) — cấm rơi trường trong im lặng, cấm trả mảng rỗng thay cho «đã rút»",
+      "Ca DENY đứng cạnh ca ALLOW (deny một mình là xanh-rỗng — memory ca-deny-rong-thieu-allow); thêm ca người-xem-khác-đơn-vị và ca bài audience='group' mà người xem không là thành viên",
+      "KHÔNG N+1: nạp mention theo LÔ cho cả trang feed (khuôn getPreferencesForUsers), ca test đếm số câu truy vấn hoặc assert set-based — không để mỗi bài một câu",
+      "KHÔNG cặp quyền mới, KHÔNG migration: feed_mentions đã tồn tại từ DB-1 và BE-1 đã GHI vào nó. Ai đề xuất thêm cặp quyền/migration phải giải thích vì sao",
+      "Schema FE nhận mentions là OPTIONAL (server có thể rút) — memory server-masking-needs-optional-fe-schema; cập nhật API-19 + census route nếu đổi hình dạng response",
+    ],
+    notes: [
+      "TÁCH RA 23/09/2026 từ nợ D5 của plan S16-SOCIAL-FE-1 (owner ký lượt 2, chọn «chấp nhận span + ghi nợ BE»).",
+      "⚠️ Sau WO này FE mới nối được @mention thành link. Tới lúc đó mention vẫn là SPAN ở FE-1/FE-2 — tiền lệ: MessageBubble của CHAT cũng không link mention.",
+      "🔴 LEO LÊN FULL GATE nếu lúc thi công thấy bộ giải mention phải đọc NGOÀI tầm nhìn người xem rồi mới lọc — lúc đó nó thành đường đọc nhân sự, không còn là bổ sung DTO.",
     ],
   },
   {

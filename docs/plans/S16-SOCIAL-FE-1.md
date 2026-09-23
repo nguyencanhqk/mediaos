@@ -335,6 +335,7 @@ pnpm --filter @mediaos/api exec vitest run test/integration/migration-smoke.int-
 | **N6** | **Room WS `co:{c}:feedgroup:{groupId}`** chưa hiện thực phía BE; không có room cho `audience='org_unit'` ⇒ badge chỉ đếm bài `audience='company'` | Giới hạn BE hôm nay, không phải lỗi FE | Ghi chú trong UI? **Không** — im lặng là đúng ở v1; mở WO khi FE-2 làm Nhóm |
 | ~~**N7**~~ | ~~`LayoutType` thêm nhánh — rà mọi `switch`~~ | 🔴 **XOÁ (finding #6): việc RỖNG.** Không file nào đọc `RouteMeta.layout` ⇒ không có `switch` nào để rà. Thay bằng yêu cầu **gắn răng thật** đã ghi ở D3 | — |
 | **N8** | **Nút «Báo cáo» + hộp thoại soạn báo cáo + cảnh báo tự-lộ-danh-tính** (SOC-DEC-011) | ✍️ Owner ký 23/09/2026: gỡ khỏi FE-1 (§5.2). Nợ đi theo **form soạn**, không theo màn hàng đợi — ship nút mà thiếu cảnh báo là đúng cái hại spec lường trước | `S16-SOCIAL-FE-3` — **ba thứ đi cùng một lượt**, không tách |
+| **N9** | 🔴 **`@mention` thành link profile** — `feedPostSchema`/`feedCommentSchema` **không trả mảng mention**, FE không có `employeeId` để trỏ tới ⇒ mention render thành **span** (`#tag`/URL vẫn là link thật) | ✍️ **OWNER KÝ LƯỢT 2 — 23/09/2026** (§12): chấp nhận span, KHÔNG tra-theo-TÊN ở FE. Tra theo tên vừa sai khi trùng tên, vừa mở lại đúng **oracle dò danh bạ** mà SPEC-16 §12 `ERR-009` đã đóng. Tiền lệ: `MessageBubble` của CHAT cũng không link mention | **`S16-SOCIAL-BE-1D`** (đã seed vào backlog) — BE trả `mentions[{userId,employeeId,label}]` **đã lọc theo tầm nhìn NGƯỜI XEM**.<br>⚠️ **Cảnh báo cho BE-1D:** trả nguyên mảng không lọc là mở lại **CÙNG oracle ở cửa khác, chỉ rẻ hơn cho kẻ dò**. Bảng `feed_mentions` đã có từ DB-1 và BE-1 đã GHI vào nó — chỉ thiếu đường ĐỌC ra DTO ⇒ không cặp quyền mới, không migration |
 
 ---
 
@@ -449,3 +450,129 @@ Plan bản đầu bị **BLOCK** với 15 finding. Bảng dưới là trạng th
 - `feedPostSchema.status.optional()` (`social-api.ts:167`) ⇒ R8 đúng.
 - 3 event `WS_EVENTS.FEED_*` (`realtime.ts:70-72`) ⇒ T7 đúng.
 - **T9 đúng 4 việc, KHÔNG có việc thứ 5** — reviewer quét `"SOCIAL"` toàn `apps/api` (`openapi-modules.ts:151` đã có SOCIAL; catalog NOTI đã do DB-2 đóng).
+
+---
+
+## §12. Chữ ký owner LƯỢT 2 — 23/09/2026, TRƯỚC khi mở PR
+
+Thi công T0→T10 xong thì lộ **ba chỗ lệch so với plan**. Cả ba đã trình owner và được chốt dưới đây.
+Ghi lại vì **lý do** mới là thứ đáng giữ — bản thân quyết định thì đọc diff cũng ra.
+
+| # | Lệch | Owner chốt | Lý do giữ lại |
+| --- | --- | --- | --- |
+| **O-1** | **D5 `@mention` thành link profile KHÔNG làm được.** Client **GỬI** `mentionedUserIds[]` lên, server dùng để bắn NOTI rồi **KHÔNG trả lại**. Từ chuỗi `"@An Nguyễn"` trong `body` không có đường nào ra `employeeId` | ✅ **Chấp nhận render span**, ghi nợ BE thành WO riêng **`S16-SOCIAL-BE-1D`** (xem N9) | Đường duy nhất FE tự làm được là **tra theo TÊN** — vừa sai khi trùng tên, vừa mở lại đúng **oracle dò danh bạ** mà SPEC-16 §12 `ERR-009` đóng. Dứt khoát KHÔNG làm ở FE.<br>⚠️ Nợ này **mang theo cái bẫy của chính nó**: BE-1D trả nguyên mảng mention không lọc theo tầm nhìn người xem thì mở lại **cùng oracle ở cửa khác** — chỉ rẻ hơn cho kẻ dò. Điều kiện đóng đã ghi vào `done_when` của BE-1D |
+| **O-2** | **C22 «route của tile Home === `defaultRoute` của module» KHÔNG assert chéo gói được**: `APP_REGISTRY` ở `@mediaos/web-core`, mà `apps/api` **không phụ thuộc** gói đó | ✅ **Chấp nhận hai cái ghim** vào cùng literal `/feed` — mỗi gói một cái, mỗi bên trỏ sang bên kia. **KHÔNG** cho `apps/api` phụ thuộc `@mediaos/web-core` | Bắt được **"một bên đổi, bên kia quên"**; **KHÔNG** bắt được **"cả hai cùng đổi sai"**. Giới hạn đó **phải nằm trong docblock CẢ HAI file** — nếu không, dòng xanh đọc y hệt một phép đo mạnh hơn thực tế. Cùng lớp lỗi `gate-measurement-row-can-be-unsatisfiable`.<br>Phương án "cho backend phụ thuộc gói FE" bị loại: ngược hướng kiến trúc, cần ADR riêng |
+| **O-3** | **D2 mất NỬA lý do sau khi #534 merge** (07:27 cùng ngày): `feedCreatableTypeSchema` nay là `["share","news","poll"]`. Bỏ nút «Bình chọn» **không còn là bất khả thi kỹ thuật** mà thành quyết định **phạm vi** | ✅ **Giữ nguyên phạm vi FE-1**: chỉ **ĐỌC** poll, chưa cho tạo. Luồng soạn poll đã nằm sẵn trong `done_when` của **`S16-SOCIAL-FE-2`** | Không mở rộng một WO đang chờ PR: thêm form soạn poll (2–10 lựa chọn · 1/nhiều · ẩn danh · hạn) là **một màn riêng**, và sẽ bắt chạy lại toàn bộ gate.<br>⚠️ Kéo theo **R16/C27**: bài `type:"poll"` **CÓ THẬT** trong bảng tin ⇒ `PostCard` phải suy biến an toàn (`body` được phép NULL), không ném, không in chữ `"null"`; C27 chặn **cả chiều ngược** (không lén hiện thực poll). `idea`/`kudos` thì contracts vẫn từ chối |
+
+### Hệ quả lên backlog (đã ghi cùng lượt)
+
+- **Seed mới:** `S16-SOCIAL-BE-1D` — đặt cạnh `S16-SOCIAL-BE-1C`, cùng khuôn "track A/bổ sung", `depends_on: ["S16-SOCIAL-BE-1"]`.
+- **Không đổi:** `S16-SOCIAL-FE-2` đã phủ nút «Bình chọn» từ lúc seed — O-3 **không** thêm việc, chỉ xác nhận chỗ đứng của nó.
+
+---
+
+## §13. FULL gate lượt 1 — 23/09/2026 — **CHẶN**, đã vá hết trong WO (owner ký)
+
+Bốn reviewer chạy song song trên `git diff origin/master...HEAD`.
+
+| Reviewer | Verdict | Kết quả |
+| --- | --- | --- |
+| `security-reviewer` | **BLOCK** | 1 HIGH · 2 MEDIUM · 2 LOW · 1 INFO |
+| `database-reviewer` | PASS | 0 CRITICAL/HIGH · 2 MEDIUM · 2 LOW |
+| `typescript-reviewer` | **BLOCK** | 6 HIGH · 15 MEDIUM |
+| `silent-failure-hunter` | **BLOCK** | 7 HIGH · 7 MEDIUM |
+
+### 🔴 Phát hiện đắt nhất — lớp lỗi HỆ THỐNG, hai reviewer độc lập hội tụ
+
+Đo bằng lệnh, không phải cảm tính:
+
+```
+onError trong apps/app/src/routes/social/  →   0
+onError trong 13 module khác               → 203
+hệ toast trong apps/app                    →   0   (Toaster|useToast|sonner)
+MutationCache.onError ở main.tsx           → KHÔNG khai
+```
+
+⇒ **Mọi hành động ghi của SOCIAL hỏng là im lặng tuyệt đối.** Nút nhả ra như cũ, không một ký tự nào
+xuất hiện. Ca đau nhất: nhân viên bấm «Xác nhận đã đọc» một tin `requiresAck`, server trả 500 ⇒ họ
+đóng tab tin rằng đã xác nhận, mà `feed_post_acks` là **append-only, không có đường sửa tay** ⇒ bảng
+chấp hành của HR thiếu tên họ vĩnh viễn.
+
+**Bài học cho mọi WO FE sau:** chạy `grep -c onError <thư mục module>` và so với module khác **TRƯỚC
+khi** khai `done_when`. Một module mới có 12 `useMutation` và 0 `onError` thì **mọi ca test vẫn
+xanh** — không cổng nào trong kho bắt được.
+
+### HIGH bảo mật — cờ quyền riêng tư gác sau CỔNG SAI
+
+`MeAppearancePage` gác `BirthdayPrivacyCard` sau `useCan("view","feed")` với lý do thẩm mỹ. Chuỗi
+bằng chứng cho thấy nó **đảo ngược chiều cổng**:
+
+1. vị từ liệt kê sinh nhật (`social-discovery.repository.ts:109-123`) = `company_id` + `deleted_at IS
+   NULL` + `employee_profiles.status='active'` + có `date_of_birth` — **không vế nào về quyền của
+   người BỊ LIỆT KÊ**;
+2. đường gỡ duy nhất là `showBirthday !== false` (`social-discovery.service.ts:150-153`);
+3. ⇒ nhân viên KHÔNG có `view:feed` vẫn bị chiếu tên + avatar + ngày/tháng ra mọi đồng nghiệp CÓ
+   `view:feed`, **mà không còn màn nào để tự ẩn**.
+
+Chính BE đã lường trước hình dạng này cho người nghỉ việc (`repository.ts:113-118` viết nguyên văn
+«họ không còn đường gỡ»). FE tái tạo lỗ đó cho một nhóm khác. Cờ này **own-scope** ⇒ cổng đúng là
+`ME_ACCESS_PAIR` của trang. Bài học: `personal-prefs-must-not-sit-behind-permission-gate`.
+
+### Danh sách đã vá — MỖI mục nghiệm bằng VI PHẠM THẬT
+
+| # | Mục | Vi phạm hoàn nguyên | Ca ĐỎ |
+| --- | --- | --- | --- |
+| 1 | Cờ sinh nhật sau `view:feed` | gác lại cổng | 6 |
+| 2 | `Boolean(value)` cho cờ ba trạng thái | đổi `value !== false` → `Boolean(value)` | 3 |
+| 3 | **M3 mới** — `data?.x ?? null` gộp «chưa đặt» với «không đọc được» | — (lộ ra vì ca test đỏ) | — |
+| 4 | DB M1/M2 ratchet thiếu SOCIAL | route→`/social` · icon→`facebook` · deny→cặp allow | 3/3 |
+| 5 | `test:social-cov` không nối CI | — (đo thật 94.9/89.5/82.3/94.9) | — |
+| 6 | Ô tìm kiếm luôn `value=""` | trả về `value=""` | 2 (ca URL-không-q vẫn xanh) |
+| 7 | `?wish=` không trần | bỏ `.slice()` | 1 |
+| 8 | `FeedRouteSearch` khai 2 lần, lệch nhau | — (tách module thuần) | — |
+| 9 | H7 `listPostAcks` thiếu `state` | bỏ `state` · bỏ `onError` · mẫu số 1 nửa | 5 · 2 · 1 |
+| 10 | H4/H5/H6 màn chi tiết | 7 mutant | 7/7 |
+| 11 | H2 ô soạn + H1 tạo bài + M7 mentions | 4 mutant | 4/4 |
+| 12 | `afterDelete` gọi cạnh `mutate()` | trả về gọi đồng bộ | 2 |
+
+### Bốn điều reviewer/agent kiểm chứng thấy TÔI tóm tắt SAI — ghi để không lặp
+
+1. **`total` của `feedAckPageSchema` là tổng của NỬA đang hỏi**, không phải toàn audience ⇒
+   `news.readersCount` (`{{read}}/{{total}}`) **không điền được từ một lời gọi**. Giải pháp: thêm lời
+   gọi ĐẾM nửa kia với `limit:1`. **Hệ quả cho QA: mở panel phát 2 request 022, không phải 1.**
+2. **`droppedMentions` là `z.array(uuid())`** — chỉ dội lại `userId` caller đã gửi, KHÔNG có
+   tên/`employeeId` (cố ý, cổng `identity-projection-ratchet`). Dải thông tin vì vậy chỉ nói được
+   **SỐ LƯỢNG**, không liệt kê tên được — và khoá i18n cũng chỉ nhận `{{count}}`, khớp.
+3. Docblock nhắc `droppedMentions` ở `social-api.ts:261` là của **`createComment`**, không phải
+   `createPost`. Luật vẫn đúng vì cả hai dùng chung `feedDroppedMentionsSchema`.
+4. `listPostAcksQuerySchema.state` ở dòng **142**, không phải 139.
+
+### 🔴 Bẫy HẠ TẦNG TEST mới — đọc trước khi viết ca lỗi cho bất kỳ màn nào
+
+`renderWithProviders` khai `retry: false` ở tầng **default**. Màn nào tự khai `retry` ở **cấp query**
+sẽ **ĐÈ** nó — `PostDetailPage` làm đúng thế để bỏ retry riêng cho 404. Khi đó query **vẫn thử lại
+thật** với backoff **1s + 2s**, ca lỗi chạm trần 5s của vitest và **ĐỎ VÌ HẾT GIỜ chứ không vì
+assert** — đọc y hệt một ca đỏ thật nhưng dẫn người sửa đi sai hướng hoàn toàn. `retryDelay` thì
+**chỉ đặt được ở tầng default**, nên đã thêm `retryDelay: 0` vào `social-test-doubles.tsx`.
+Cùng họ `mutant-red-must-match-expected-message`.
+
+### Hạ tầng đã dựng — TÁI DÙNG cho FE-2/FE-3, đừng chế cái khác
+
+- `components/ActionErrorBanner.tsx` — `kind` × `forbidden`(403), `role="alert"`,
+  `data-testid="feed-action-error"`.
+- i18n `actionError.{forbidden,generic}.<kind>` — tách ĐÔI vì 403 và 500 đòi hai hành vi khác nhau
+  của người dùng (mất quyền thì thử lại vô ích; lỗi mạng thì thử lại là đúng).
+- `useFeedActions()` trả thêm `actionError` + `clearActionError`; **`remove(postId, onDone?)` chạy
+  `onDone` TRONG `onSuccess`**.
+- **Hợp đồng mới của ô soạn:** `onSubmit: (dto) => void | Promise<unknown>`. Trả Promise ⇒ chỉ dọn
+  khi RESOLVE, giữ **từng ký tự** khi REJECT. Trả `void` ⇒ **KHÔNG dọn** (mặc định an toàn — không
+  đoán mò). Caller vì vậy phải dùng `mutateAsync`, không `mutate`.
+
+### Nợ ghi nhận (KHÔNG chặn PR này)
+
+| Nợ | Giao cho |
+| --- | --- |
+| `PostDetailPage` chưa nói ra `droppedMentions` của **bình luận** (cùng lớp M7, đã xử lý ở bài) | FE-2 |
+| Đề xuất BE: `listPostAcksQuerySchema` nhận `countOnly` như `listNewsQuerySchema` đã có ⇒ FE lấy mẫu số mà không phải kéo về một hàng danh tính | BE track C |
+| `SOCIAL.FEED.VIEW` chưa map trong `PERMISSION_CODE_TO_PAIR` (nợ y hệt GOAL/RECRUIT/PAYROLL, display-only) | nợ chung |
+| `router.tsx` 3583 → còn lớn; `registry.ts` 2291; `query-keys.ts` 1426 — cả ba vượt trần 800 từ TRƯỚC WO này | WO tách file riêng |
