@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 661,
-    "controllers": 124,
-    "gated": 622,
+    "routes": 671,
+    "controllers": 125,
+    "gated": 632,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -9171,6 +9171,166 @@
       "key": "SocialDiscoveryController#search",
       "httpMethod": "GET",
       "path": "/api/v1/social/search",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#create",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/groups",
+      "hasPermission": true,
+      "permission": "create:feed-group",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#decideMember",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/social/groups/:group_id/members/:user_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#get",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/groups/:group_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#join",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/groups/:group_id/join",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#leave",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/groups/:group_id/leave",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/groups",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#listMembers",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/groups/:group_id/members",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#remove",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/groups/:group_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#removeMember",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/groups/:group_id/members/:user_id",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialGroupsController#update",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/social/groups/:group_id",
       "hasPermission": true,
       "permission": "view:feed",
       "permissionLevel": "handler",

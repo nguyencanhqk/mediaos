@@ -163,7 +163,7 @@ export class SocialCommentsService {
       const mentions = await resolveMentions(
         tx,
         actor,
-        { audience: post.audience, orgUnitId: post.orgUnitId },
+        { audience: post.audience, orgUnitId: post.orgUnitId, groupId: post.groupId },
         dto.mentionedUserIds ?? [],
       );
       const fresh = await syncMentions(
@@ -240,7 +240,11 @@ export class SocialCommentsService {
       const mentions = await resolveMentions(
         tx,
         actor,
-        { audience: comment.post.audience, orgUnitId: comment.post.orgUnitId },
+        {
+          audience: comment.post.audience,
+          orgUnitId: comment.post.orgUnitId,
+          groupId: comment.post.groupId,
+        },
         dto.mentionedUserIds ?? [],
       );
       const fresh = await syncMentions(

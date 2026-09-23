@@ -239,3 +239,71 @@ export async function softDeleteCommentTx(
   await bumpPostCounter(tx, companyId, postId, "commentCount", -1, false);
   return true;
 }
+
+// ─────────── S16-SOCIAL-BE-2A — bộ đếm `feed_groups.member_count` (D10, khối additive) ───────────
+
+/** Trạng thái hàng `feed_group_members` — `null` = hàng KHÔNG tồn tại (trước khi thêm / sau khi xoá). */
+export type FeedGroupMemberState = "active" | "pending" | null;
+
+/**
+ * Delta của `member_count` suy TỪ CHUYỂN TRẠNG THÁI CỦA HÀNG, **không phải từ tên route** (D10).
+ *
+ * ┌─ VÌ SAO KHÔNG PHẢI MỘT BẢNG THEO ROUTE ────────────────────────────────────────────────────────┐
+ * │ SPEC-16 §13.6 định nghĩa `member_count = COUNT(*) WHERE status='active'`. Bảy dòng của bảng     │
+ * │ delta trong plan (`031` +1 · `035` public +1 · `035` private 0 · `038` approve +1 · `038` reject │
+ * │ 0 · `038` đổi vai trò 0 · `036`/`039` −1 CHỈ KHI hàng bị xoá đang `active`) là BẢY HỆ QUẢ của   │
+ * │ đúng một phép tính: «số hàng active SAU» trừ «số hàng active TRƯỚC» cho CHÍNH hàng đó.          │
+ * │ Viết theo route là mời hai lớp lỗi đã có tên: quên dòng `031` ⇒ nhóm mới có 1 hàng active mà     │
+ * │ `member_count = 0` (bất biến vỡ ở thao tác ĐẦU TIÊN); trừ nhầm khi mời ra / huỷ một hàng         │
+ * │ `pending` ⇒ chạm `chk_feed_groups_member_count` (`>= 0`) ⇒ **500**, hoặc lệch âm hỏng CÂM.       │
+ * │ Hàm thuần + vét cạn ⇒ route mới của BE-2B/BE-2C chỉ cần nói TRƯỚC/SAU, không phải nhớ bảng.     │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+export function groupMemberCountDelta(
+  before: FeedGroupMemberState,
+  after: FeedGroupMemberState,
+): number {
+  const counted = (s: FeedGroupMemberState) => (s === "active" ? 1 : 0);
+  return counted(after) - counted(before);
+}
+
+/**
+ * Cộng `delta` vào `feed_groups.member_count`, CÙNG TX với hàng thành viên vừa đổi.
+ *
+ * Cùng luật SQL-không-JS của cả file (khuôn `bumpPostCounter`): sàn 0 là việc của
+ * `chk_feed_groups_member_count`, KHÔNG phải `Math.max` ở JS — kẹp ở JS chỉ biến một lỗi đếm thật
+ * thành một con số sai im lặng.
+ *
+ * ⚠️ **KHÔNG lọc `deleted_at IS NULL`** — ngoại lệ THỨ HAI của luật D13 (thứ nhất là neo `FOR UPDATE`
+ * của `lockGroupRowTx`), và vì một lý do khác: D13 nói về vị từ **hiển thị/audience**, còn đây là bảo
+ * trì bộ đếm. Bộ đếm phải đi theo những hàng THẬT SỰ đã đổi; bỏ qua câu UPDATE vì nhóm vừa bị xoá
+ * mềm là để lại một `member_count` nói dối về một nhóm còn có thể được khôi phục.
+ *
+ * ⚠️ **KHÔNG bump `updated_at`**: người vào/ra nhóm không phải là "nhóm vừa được sửa" — cùng lý lẽ
+ * với `last_activity_at` ở đầu file.
+ */
+export async function bumpGroupMemberCount(
+  tx: TenantTx,
+  companyId: string,
+  groupId: string,
+  delta: number,
+): Promise<number | null> {
+  if (delta === 0) return null;
+  // 🔴 `RETURNING` + ném khi 0 dòng (FULL gate 22/09, `silent-failure-hunter` LOW-1) — cùng khuôn
+  // `bumpPostCounter`. Một `UPDATE` khớp 0 dòng (sai `groupId`/`companyId` từ một call-site tương
+  // lai của BE-2B/BE-2C) mà trả `void` là bộ đếm lệch VĨNH VIỄN, không exception, không log: đúng
+  // hình dạng "thành công RỖNG" mà WO này đi đóng. Ném ở đây làm cả tx quay lui — thà 500 ồn còn
+  // hơn một con số nói dối. Không có đường gọi hợp lệ nào khớp 0 dòng: mọi call-site đã xác nhận
+  // nhóm tồn tại trong CÙNG tx (nhóm xoá MỀM vẫn khớp — câu này cố ý không lọc `deleted_at`).
+  const rows = await tx.execute<{ value: number }>(
+    sql`UPDATE feed_groups
+           SET member_count = member_count + ${delta}
+         WHERE id = ${groupId} AND company_id = ${companyId}
+     RETURNING member_count AS value`,
+  );
+  const row = rows.rows[0];
+  if (!row) {
+    throw new Error(`bumpGroupMemberCount: không có hàng feed_groups nào khớp (group=${groupId})`);
+  }
+  return Number(row.value);
+}

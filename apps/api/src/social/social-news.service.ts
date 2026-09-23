@@ -76,6 +76,10 @@ export class SocialNewsService {
 
       const cursor = query.cursor ? decodeFeedCursor(query.cursor, fingerprint) : null;
       const rows = await this.posts.listFeed(tx, actor, {
+        // D-OWNER-6: GIỮ tin đăng vào nhóm ở trang Tin tức — và badge `countUnackedFor` (ngay trên,
+        // đi thẳng qua `visiblePostCondition`) đếm CÙNG tập đó. Lệch nhau ⇒ "badge 3 tin chưa đọc,
+        // danh sách rỗng, HTTP 200" — đúng lớp lỗi BE-1B vừa bịt.
+        groupScope: "include",
         sort: "active",
         limit: query.limit,
         cursor,
@@ -181,7 +185,12 @@ export class SocialNewsService {
           : await this.repo.unackedEmployeesFor(
               tx,
               actor.companyId,
-              { id: postId, audience: post.audience, orgUnitId: post.orgUnitId },
+              {
+                id: postId,
+                audience: post.audience,
+                orgUnitId: post.orgUnitId,
+                groupId: post.groupId,
+              },
               query,
             );
 

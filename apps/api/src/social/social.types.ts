@@ -21,6 +21,16 @@ export interface SocialActor extends SocialViewerContext {
   routeScope: DataScope;
   /** Có `manage:feed-news` — tạo bài `type='news'` (002) và đổi `pinned` (006). */
   canManageNews: boolean;
+  /**
+   * S16-SOCIAL-BE-2A — có `manage:feed-group`: quản trị BẤT KỲ nhóm nào (`033`/`034`/`037`/`038`/
+   * `039`) và NHÌN thấy nhóm `private` không phải của mình.
+   *
+   * 🔴 Cờ này **KHÔNG** nới `visiblePostCondition` (D9-ii): thấy NHÓM khác với đọc được BÀI trong
+   * nhóm. Và nó nằm ở ĐÂY chứ không ở `SocialViewerContext` (W3) — đặt lên lớp cha là buộc
+   * `resolveViewerContext` (đường của `FilePolicyService`) phải resolve thêm cặp, làm cổng ĐƯỜNG TẢI
+   * rộng hơn cổng MÀN HÌNH.
+   */
+  canManageGroups: boolean;
 }
 
 /**
@@ -110,3 +120,32 @@ export interface SocialTargetAccess {
 
 /** Đích đa hình của `feed_reactions` / `feed_mentions` (và `feed_reports` ở BE-1B). */
 export type SocialTargetType = "post" | "comment";
+
+// ─────────── S16-SOCIAL-BE-2A — NHÓM (khối additive, hot-file: append không rewrite) ───────────
+
+/** Vai trò trong nhóm — mirror `chk_feed_group_members_role` (`0580`). */
+export type FeedGroupRole = "owner" | "admin" | "member";
+
+/** Hàng membership tối thiểu — đúng những gì cổng quyền nhóm cần và không hơn. */
+export interface SocialGroupMembership {
+  role: FeedGroupRole;
+  /** `pending` = yêu cầu CHỜ DUYỆT, **chưa phải thành viên**: không đọc được bài nhóm kín. */
+  status: string;
+}
+
+/**
+ * Ngữ cảnh actor mà `SocialGroupAccessService` cần — CỐ Ý hẹp hơn `SocialActor`.
+ *
+ * ⚠️ `canManageGroups` (`manage:feed-group`) chỉ được đặt trên `SocialActor`, **KHÔNG** trên
+ * `SocialViewerContext` (W3/H2): `SocialActor extends SocialViewerContext`, nên đặt lên lớp cha là
+ * buộc `resolveViewerContext` — đường của `FilePolicyService` — phải resolve thêm một cặp quyền, và
+ * cổng ĐƯỜNG TẢI sẽ rộng hơn cổng MÀN HÌNH đúng lớp lỗi mà resolver đó sinh ra để bịt.
+ *
+ * Cờ này mở `033`/`034`/`037`/`038`/`039` và cho NHÌN thấy nhóm `private`; nó **KHÔNG** nới
+ * `visiblePostCondition` (D9-ii) — thấy nhóm khác với đọc được bài trong nhóm.
+ */
+export interface SocialGroupActor {
+  actorUserId: string;
+  companyId: string;
+  canManageGroups: boolean;
+}

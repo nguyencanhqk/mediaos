@@ -3,6 +3,8 @@ import type { EventContext } from "../events/event-bus";
 import {
   SOCIAL_EVENT_CODES,
   SOCIAL_EVENT_CODES_B,
+  SOCIAL_EVENT_CODES_C,
+  SOCIAL_EVENT_GROUP_JOIN_DECIDED,
   SOCIAL_EVENT_COMMENT_REPLIED,
   SOCIAL_EVENT_MENTIONED,
   SOCIAL_EVENT_NEWS_PUBLISHED,
@@ -26,6 +28,12 @@ const PAYLOAD_KEYS = [
   // S16-SOCIAL-BE-1B — biến template của NOTI-036 (`SOCIAL_POST_REPORTED`). ĐÚNG MỘT khoá thiếu:
   // `target_type_label` đã có sẵn từ NOTI-028.
   "reason_label",
+  // S16-SOCIAL-BE-2A — BA biến template của NOTI-034 (`SOCIAL_GROUP_JOIN_DECIDED`). Khoá **snake**
+  // `group_id` là thứ `target_url_template` `/social/groups/{group_id}` ăn; thiếu nó ⇒ URL đích giữ
+  // nguyên `{group_id}` ⇒ `assertInternalTargetUrl` từ chối ⇒ dead-letter câm.
+  "group_id",
+  "group_name",
+  "decision_label",
 ] as const;
 
 /** Biến template BẮT BUỘC của từng mã (mirror `variables_schema` của migration `0581`). */
@@ -37,6 +45,10 @@ const TEMPLATE_KEYS: Record<string, readonly string[]> = {
   SOCIAL_NEWS_PUBLISHED: ["actor_name", "post_id"],
   // `target_url_template` của mã này là `/social/reports` — KHÔNG placeholder, nên không cần `post_id`.
   SOCIAL_POST_REPORTED: ["target_type_label", "reason_label"],
+  // S16-SOCIAL-BE-2A — mirror `variables_schema` của `0581:260`. `group_id` có mặt vì
+  // `target_url_template` là `/social/groups/{group_id}` (khác `SOCIAL_POST_REPORTED`, vốn trỏ tới
+  // một URL KHÔNG placeholder).
+  SOCIAL_GROUP_JOIN_DECIDED: ["group_name", "decision_label", "group_id"],
 };
 
 /**
@@ -197,6 +209,22 @@ export class SocialNotiBridgeRegistrar implements OnModuleInit {
       resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
       dedupeKeyOf: (ctx) => requireField(ctx.payload, "report_id"),
       payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_POST_REPORTED"),
+    });
+
+    // ── S16-SOCIAL-BE-2A — NOTI-034 (khối additive) ──
+    this.bridge.registerSource({
+      eventType: SOCIAL_EVENT_GROUP_JOIN_DECIDED,
+      eventCode: SOCIAL_EVENT_CODES_C[SOCIAL_EVENT_GROUP_JOIN_DECIDED],
+      sourceModule: SOURCE_MODULE_SOCIAL,
+      sourceEntityType: "feed_group",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "group_id"),
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      // 🔴 CỐ Ý KHÔNG có `dedupeKeyOf`: catalog `0581` khai `dedupe_strategy='None'` cho mã này
+      // (không nguồn `decided_at` bền vững nào phủ được CẢ nhánh duyệt lẫn nhánh từ chối — nhánh từ
+      // chối xoá CỨNG hàng). Khai một khoá ở đây là để tài liệu nói một đằng, engine làm một nẻo;
+      // và nếu ai đó bật `DedupeKey` sau này, chuỗi «xin → từ chối → xin lại → duyệt» sẽ NUỐT MẤT
+      // quyết định thứ hai. Mất tệ hơn trùng.
+      payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_GROUP_JOIN_DECIDED"),
     });
   }
 

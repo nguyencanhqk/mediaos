@@ -50,6 +50,9 @@ export class SocialDiscoveryService {
 
     const rows = await this.db.withTenant(actor.companyId, (tx) =>
       this.posts.listFeed(tx, actor, {
+        // D-OWNER-6: tìm kiếm (023) và trang cá nhân (025) là feed KHÁM PHÁ ⇒ loại bài nhóm, và
+        // KHÔNG có cửa thoát `groupId` ở hai đường này (chỉ `001` có).
+        groupScope: "exclude",
         sort: "active",
         limit: query.limit,
         cursor,
@@ -106,6 +109,9 @@ export class SocialDiscoveryService {
       // hỏi nó có thể trùng thật không.
       if (!authorUserId) return [];
       return this.posts.listFeed(tx, actor, {
+        // D-OWNER-6: tìm kiếm (023) và trang cá nhân (025) là feed KHÁM PHÁ ⇒ loại bài nhóm, và
+        // KHÔNG có cửa thoát `groupId` ở hai đường này (chỉ `001` có).
+        groupScope: "exclude",
         sort: "active",
         limit: query.limit,
         cursor,

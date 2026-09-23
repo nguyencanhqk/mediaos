@@ -2,7 +2,10 @@ import { createZodDto } from "nestjs-zod";
 import {
   createFeedCommentSchema,
   createFeedPostSchema,
+  createFeedGroupSchema,
   createFeedReportSchema,
+  listFeedGroupMembersQuerySchema,
+  listFeedGroupsQuerySchema,
   listBirthdaysQuerySchema,
   listCommentsQuerySchema,
   listFeedQuerySchema,
@@ -17,6 +20,7 @@ import {
   resolveFeedReportSchema,
   searchFeedQuerySchema,
   updateFeedCommentSchema,
+  updateFeedGroupSchema,
   updateFeedPostSchema,
 } from "@mediaos/contracts";
 
@@ -49,3 +53,22 @@ export class ListBirthdaysQuery extends createZodDto(listBirthdaysQuerySchema) {
 export class CreateFeedReportBody extends createZodDto(createFeedReportSchema) {}
 export class ListFeedReportsQuery extends createZodDto(listFeedReportsQuerySchema) {}
 export class ResolveFeedReportBody extends createZodDto(resolveFeedReportSchema) {}
+
+// ── S16-SOCIAL-BE-2A — NHÓM (`SOCIAL-API-030..039`) ──
+export class ListFeedGroupsQuery extends createZodDto(listFeedGroupsQuerySchema) {}
+export class CreateFeedGroupBody extends createZodDto(createFeedGroupSchema) {}
+export class UpdateFeedGroupBody extends createZodDto(updateFeedGroupSchema) {}
+export class ListFeedGroupMembersQuery extends createZodDto(listFeedGroupMembersQuerySchema) {}
+/**
+ * ⚠️ **`038` KHÔNG có class DTO ở đây — có lý do, đừng "bổ sung cho đủ bộ".**
+ *
+ * `decideFeedGroupMemberSchema` là một **UNION** hai dạng loại trừ nhau (D12), và `createZodDto` yêu
+ * cầu kiểu đầu ra là một object có thành viên tĩnh: bọc union ⇒ `TS2509` ("Base constructor return
+ * type is not an object type"). Đường duy nhất KHÔNG làm hỏng hình dạng union là truyền schema
+ * thẳng cho pipe ở controller: `@Body(new ZodValidationPipe(decideFeedGroupMemberSchema))` — khuôn
+ * đã dùng ở `employees/employee-code-config.controller.ts:40`.
+ *
+ * Cách "sửa" sai mà người sau dễ chọn: đổi union thành `z.object({decision?, role?})` cho bọc được.
+ * Làm vậy là cho phép gửi CẢ HAI trường trong một request, và thứ tự áp dụng trở thành luật ngầm
+ * không ai viết ra — đúng cái D12 loại bỏ.
+ */

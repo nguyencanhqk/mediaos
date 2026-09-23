@@ -264,6 +264,17 @@ export const listFeedQuerySchema = z
     authorUserId: uuid().optional(),
     orgUnitId: uuid().optional(),
     tag: z.string().trim().min(1).max(64).optional(),
+    /**
+     * S16-SOCIAL-BE-2A (D-OWNER-7) — lọc ĐÍCH DANH một nhóm. API-19 §5.1 dòng 64 đã liệt `groupId`
+     * là bộ lọc của `SOCIAL-API-001` từ đầu; contracts bỏ sót vì BE-1 chưa có route nhóm nào.
+     *
+     * 🔴 Đây là **cửa thoát DUY NHẤT** của D-OWNER-6 (bài `audience='group'` bị loại khỏi feed khám
+     * phá). Nó là BỘ LỌC, **không phải cửa hậu**: câu vẫn mang `visiblePostCondition`, nên người
+     * không phải thành viên `active` của nhóm đó không thấy gì thêm.
+     * ⚠️ PHẢI có mặt trong `feedFingerprint` — thiếu thì con trỏ của feed thường dùng lại được cho
+     * feed nhóm và phân trang sai IM LẶNG.
+     */
+    groupId: uuid().optional(),
   })
   .strict();
 export type ListFeedQueryDto = z.infer<typeof listFeedQuerySchema>;

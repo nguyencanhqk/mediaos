@@ -101,6 +101,8 @@ export class SocialPostsService {
         authorUserId: query.authorUserId,
         orgUnitId: query.orgUnitId,
         tag: query.tag,
+        // D-OWNER-6: feed khám phá KHÔNG có bài nhóm — trừ khi lọc đích danh `groupId` (D-OWNER-7).
+        groupScope: query.groupId ? { only: query.groupId } : "exclude",
       }),
     );
 
@@ -121,6 +123,10 @@ export class SocialPostsService {
         limit: query.limit,
         cursor,
         savedByActorOnly: true,
+        // D-OWNER-6: GIỮ bài nhóm ở «Đã lưu» — chính actor đã bấm lưu, và membership vẫn bị
+        // `visiblePostCondition` gác. Ẩn đi thì `savedByMe=true` mà không thấy bài: hai đường nói
+        // ngược nhau về cùng một hành động của chính người dùng.
+        groupScope: "include",
       }),
     );
     return this.toPage(actor, rows, query.limit, fingerprint);
@@ -149,10 +155,20 @@ export class SocialPostsService {
     if (dto.type === "news" && !actor.canManageNews) {
       throw new ForbiddenException(SOCIAL_ERR.NEWS_MANAGE_REQUIRED);
     }
-    // 422 `audience='group'` (chưa mở) · 403 `ERR-002` đăng vào đơn vị mình không thuộc.
-    this.access.assertWriteAudience(actor, dto.audience, dto.orgUnitId ?? null);
-
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
+      // 🔴 S16-SOCIAL-BE-2A (D4) — cổng GHI nằm TRONG tx, ngay trước INSERT. Trước đây nó chạy NGOÀI
+      // `withTenant`: với `org_unit` (dữ liệu đã có sẵn trên actor) thì vô hại, nhưng nhánh `group`
+      // phải HỎI DB (membership là hàng) — kiểm ở tx riêng rồi ghi ở tx sau là TOCTOU.
+      // 404 `ERR-012` nhóm không thấy được (kể cả đã xoá mềm) · 403 `ERR-002` không phải thành viên
+      // `active` / đăng vào đơn vị mình không thuộc.
+      await this.access.assertWriteAudience(
+        tx,
+        actor,
+        dto.audience,
+        dto.orgUnitId ?? null,
+        dto.groupId ?? null,
+      );
+
       const authorEmployeeId = await this.employeeIdOf(tx, actor);
 
       const [inserted] = await tx
@@ -164,7 +180,9 @@ export class SocialPostsService {
           type: dto.type,
           audience: dto.audience,
           orgUnitId: dto.audience === "org_unit" ? (dto.orgUnitId ?? null) : null,
-          groupId: null,
+          // Khoá chỉ có nghĩa với ĐÚNG audience của nó — `CHECK chk_feed_posts_audience_group` đòi
+          // `group_id IS NOT NULL` khi `audience='group'`, nên hằng `null` cũ khoá chặt nhánh này.
+          groupId: dto.audience === "group" ? (dto.groupId ?? null) : null,
           body: dto.body,
           requiresAck: dto.requiresAck,
           // `status`/`pinned`/counters CỐ Ý không truyền: DEFAULT của DB là nguồn sự thật, và DTO
@@ -180,7 +198,7 @@ export class SocialPostsService {
       const mentions = await resolveMentions(
         tx,
         actor,
-        { audience: dto.audience, orgUnitId: dto.orgUnitId ?? null },
+        { audience: dto.audience, orgUnitId: dto.orgUnitId ?? null, groupId: dto.groupId ?? null },
         dto.mentionedUserIds ?? [],
       );
       const fresh = await syncMentions(tx, actor.companyId, "post", postId, mentions.accepted);
@@ -205,6 +223,8 @@ export class SocialPostsService {
         await this.enqueueNewsPublishedNoti(tx, actor, postId, {
           audience: dto.audience,
           orgUnitId: dto.audience === "org_unit" ? (dto.orgUnitId ?? null) : null,
+          // Cùng khuôn "khoá chỉ có nghĩa với ĐÚNG audience của nó" như `orgUnitId` ngay trên.
+          groupId: dto.audience === "group" ? (dto.groupId ?? null) : null,
         });
       }
 
@@ -265,7 +285,7 @@ export class SocialPostsService {
       const mentions = await resolveMentions(
         tx,
         actor,
-        { audience: post.audience, orgUnitId: post.orgUnitId },
+        { audience: post.audience, orgUnitId: post.orgUnitId, groupId: post.groupId },
         dto.mentionedUserIds ?? [],
       );
       // CHỈ mention MỚI mới sinh thông báo — mỗi lần bấm Lưu không được bắn lại cho người cũ.
@@ -420,7 +440,9 @@ export class SocialPostsService {
     tx: TenantTx,
     actor: SocialActor,
     postId: string,
-    post: { audience: string; orgUnitId: string | null },
+    // S16-SOCIAL-BE-2A D14(2): +`groupId` — tin đăng vào nhóm tính người nhận theo membership, và
+    // thiếu trường này thì `audienceUserIds` fail-closed về tập rỗng (tin không báo cho ai).
+    post: { audience: string; orgUnitId: string | null; groupId: string | null },
   ): Promise<void> {
     // Cắt + đếm + loại tác giả đều ở SQL (xem `audienceUserIds`): `recipients` đã là ≤ trần, `total`
     // là tổng THẬT trước khi cắt — hai con số khác nhau và payload cần CẢ HAI.
@@ -600,6 +622,9 @@ function feedFingerprint(actor: SocialActor, q: ListFeedQueryDto): string {
     q.authorUserId,
     q.orgUnitId,
     q.tag?.toLowerCase(),
+    // 🔴 D-OWNER-7 (W2): thiếu dòng này thì con trỏ của feed thường dùng LẠI được cho feed nhóm ⇒
+    // trang sau cắt theo tập CŨ, sai IM LẶNG. Quên nó compile sạch — chỉ ca G15 bắt được.
+    q.groupId,
     actor.canManagePosts ? "mp1" : "mp0",
     [...actor.orgUnitIds].sort().join(","),
   ]);

@@ -39,9 +39,13 @@ const SOCIAL_CONTROLLERS = new Set([
   "SocialNewsController",
   "SocialDiscoveryController",
   "SocialReportsController",
+  // 🔴 S16-SOCIAL-BE-2A — `Set` này là DANH SÁCH TRẮNG: controller không có tên ở đây thì 10 route
+  // của nó VÔ HÌNH với census, và cả bốn assert dưới vẫn XANH (fail-open IM LẶNG). Thêm controller
+  // SOCIAL mới ⇒ thêm MỘT dòng ở đây, cùng commit.
+  "SocialGroupsController",
 ]);
 
-/** Bảng route HTTP → key — fixture census, phủ ĐỦ 29 route (19 Nhóm A + 10 Nhóm B, API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 39 route (19 A + 10 B + 10 NHÓM, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -81,6 +85,25 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
   { method: "POST", path: "/api/v1/social/reports", key: "reportCreate" },
   { method: "GET", path: "/api/v1/social/reports", key: "reportsList" },
   { method: "PATCH", path: "/api/v1/social/reports/:report_id", key: "reportResolve" },
+  // ── S16-SOCIAL-BE-2A — NHÓM (`SOCIAL-API-030..039`) ──
+  { method: "GET", path: "/api/v1/social/groups", key: "groupsList" },
+  { method: "POST", path: "/api/v1/social/groups", key: "groupCreate" },
+  { method: "GET", path: "/api/v1/social/groups/:group_id", key: "groupGet" },
+  { method: "PATCH", path: "/api/v1/social/groups/:group_id", key: "groupUpdate" },
+  { method: "DELETE", path: "/api/v1/social/groups/:group_id", key: "groupDelete" },
+  { method: "POST", path: "/api/v1/social/groups/:group_id/join", key: "groupJoin" },
+  { method: "POST", path: "/api/v1/social/groups/:group_id/leave", key: "groupLeave" },
+  { method: "GET", path: "/api/v1/social/groups/:group_id/members", key: "groupMembersList" },
+  {
+    method: "PATCH",
+    path: "/api/v1/social/groups/:group_id/members/:user_id",
+    key: "groupMemberDecide",
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/social/groups/:group_id/members/:user_id",
+    key: "groupMemberRemove",
+  },
 ];
 
 /**
@@ -122,6 +145,17 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "SocialReportsService#create": ["reportCreate"],
   "SocialReportsService#list": ["reportsList"],
   "SocialReportsService#resolve": ["reportResolve"],
+  // ── S16-SOCIAL-BE-2A — 10 handler NHÓM, mỗi handler MỘT key literal ──
+  "SocialGroupsService#list": ["groupsList"],
+  "SocialGroupsService#create": ["groupCreate"],
+  "SocialGroupsService#get": ["groupGet"],
+  "SocialGroupsService#update": ["groupUpdate"],
+  "SocialGroupsService#remove": ["groupDelete"],
+  "SocialGroupsService#join": ["groupJoin"],
+  "SocialGroupsService#leave": ["groupLeave"],
+  "SocialGroupsService#listMembers": ["groupMembersList"],
+  "SocialGroupsService#decideMember": ["groupMemberDecide"],
+  "SocialGroupsService#removeMember": ["groupMemberRemove"],
 };
 
 /** Mọi literal `resolveActor(<expr>, "<key>")` trong `social/**.ts`, kèm `Class#method` bao quanh. */
@@ -193,9 +227,10 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
 
   it("bảng fixture phủ ĐÚNG tập route SOCIAL đã boot — không thiếu, không thừa", () => {
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
-    expect(socialRoutes.length, "app boot phải thấy 29 route SOCIAL (19 Nhóm A + 10 Nhóm B)").toBe(
-      29,
-    );
+    expect(
+      socialRoutes.length,
+      "app boot phải thấy 39 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM)",
+    ).toBe(39);
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
