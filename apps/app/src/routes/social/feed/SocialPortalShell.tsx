@@ -13,7 +13,7 @@
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 import * as React from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { socialApi, socialKeys, useCan, type ModuleCode } from "@mediaos/web-core";
 import type { FeedBirthdayDto, FeedBirthdayRangeDto } from "@mediaos/contracts";
@@ -84,6 +84,21 @@ export function SocialPortalShell({
     });
   };
 
+  /**
+   * Từ khoá HIỆN TẠI, đọc từ URL — URL là nguồn sự thật (đúng như docblock prop của `FeedSearchBox`
+   * đã hứa). Trước đây chỗ này truyền hằng `""`, và cái giá KHÔNG phải là "ô trông hơi trống":
+   *   · mở link chia sẻ `/feed?q=nghỉ+lễ` ⇒ danh sách đã lọc nhưng ô tìm kiếm RỖNG, người dùng
+   *     không biết mình đang xem kết quả lọc;
+   *   · nút ✕ chỉ render khi `draft.length > 0` ⇒ **không còn đường nào trên UI để xoá bộ lọc**,
+   *     `onClearSearch` thành code không tới được;
+   *   · `useEffect` đồng bộ URL→ô trong `FeedSearchBox` thành no-op vì `value` không bao giờ đổi.
+   *
+   * `strict: false` vì shell render dưới NHIỀU route `/feed*`, không chỉ `/feed` — route con không
+   * khai `q` thì `useSearch` strict sẽ ném.
+   */
+  const search = useSearch({ strict: false }) as { q?: string };
+  const currentQuery = search.q ?? "";
+
   const onSearch = (q: string): void => {
     void navigate({ to: "/feed", search: (prev: Record<string, unknown>) => ({ ...prev, q }) });
   };
@@ -101,7 +116,9 @@ export function SocialPortalShell({
   return (
     <PortalLayout
       leftRail={<PortalLeftRail moduleCode="SOCIAL" />}
-      searchSlot={<FeedSearchBox value="" onSubmit={onSearch} onClear={onClearSearch} />}
+      searchSlot={
+        <FeedSearchBox value={currentQuery} onSubmit={onSearch} onClear={onClearSearch} />
+      }
       rightRail={
         <PortalRightRail>
           <BirthdayWidget

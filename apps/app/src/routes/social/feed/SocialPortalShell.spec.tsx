@@ -14,6 +14,8 @@ import { page, renderWithProviders, resetCaps, setCaps } from "./social-test-dou
 const navigateSpy = vi.fn();
 const listBirthdays = vi.fn();
 const listNews = vi.fn();
+/** Tham số URL mà `useSearch` trả về. Đặt trong từng ca để giả lập `/feed?q=...`. */
+let routeSearch: Record<string, unknown> = {};
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -23,6 +25,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
       <a href={to}>{children}</a>
     ),
     useNavigate: () => navigateSpy,
+    useSearch: () => routeSearch,
     useRouterState: ({ select }: { select: (s: { location: { pathname: string } }) => unknown }) =>
       select({ location: { pathname: "/feed" } }),
   };
@@ -47,6 +50,7 @@ beforeEach(() => {
   navigateSpy.mockReset();
   listBirthdays.mockReset().mockResolvedValue({ data: [] });
   listNews.mockReset().mockResolvedValue(page([]));
+  routeSearch = {};
 });
 
 afterEach(() => {
@@ -190,5 +194,57 @@ describe("điều hướng từ rail phải và ô tìm kiếm", () => {
     };
     // GỠ đúng `q`, KHÔNG xoá sạch: người dùng bỏ từ khoá chứ không bỏ bộ lọc đang đặt.
     expect(clearArg.search({ sort: "latest", q: "cũ" })).toEqual({ sort: "latest" });
+  });
+});
+
+/**
+ * S16-SOCIAL-FE-1 · vá FULL gate 23/09/2026 — ô tìm kiếm phải ĐỌC TỪ URL.
+ *
+ * Trước bản vá, shell truyền hằng `value=""`. Cái giá không phải "ô trông hơi trống": nút ✕ chỉ
+ * render khi `draft.length > 0`, nên mở một link chia sẻ `/feed?q=…` cho ra một bảng tin ĐÃ LỌC mà
+ * **không còn đường nào trên UI để xoá bộ lọc** — `onClearSearch` thành code không tới được.
+ */
+describe("SocialPortalShell — ô tìm kiếm đồng bộ từ URL", () => {
+  it("URL có ?q= ⇒ ô tìm kiếm hiện đúng từ khoá (không phải rỗng)", async () => {
+    routeSearch = { q: "quy chế" };
+    renderWithProviders(
+      <SocialPortalShell moduleCode="SOCIAL">
+        <div>nội dung</div>
+      </SocialPortalShell>,
+    );
+
+    const box = await screen.findByTestId("feed-search-box");
+    const input = box.querySelector("input");
+    await waitFor(() => expect((input as HTMLInputElement).value).toBe("quy chế"));
+  });
+
+  it("URL có ?q= ⇒ CÓ nút xoá bộ lọc, và bấm nó thì điều hướng bỏ q", async () => {
+    routeSearch = { q: "quy chế" };
+    renderWithProviders(
+      <SocialPortalShell moduleCode="SOCIAL">
+        <div>nội dung</div>
+      </SocialPortalShell>,
+    );
+
+    // Đây là ca đắt nhất: nút này VẮNG MẶT hoàn toàn trước bản vá.
+    const clearBtn = await waitFor(() => {
+      const el = screen.getByTestId("feed-search-box").querySelector('button[aria-label]');
+      expect(el).not.toBeNull();
+      return el as HTMLButtonElement;
+    });
+    fireEvent.click(clearBtn);
+    expect(navigateSpy).toHaveBeenCalled();
+  });
+
+  it("URL KHÔNG có q ⇒ ô rỗng (không bịa từ khoá)", async () => {
+    routeSearch = {};
+    renderWithProviders(
+      <SocialPortalShell moduleCode="SOCIAL">
+        <div>nội dung</div>
+      </SocialPortalShell>,
+    );
+
+    const box = await screen.findByTestId("feed-search-box");
+    expect((box.querySelector("input") as HTMLInputElement).value).toBe("");
   });
 });

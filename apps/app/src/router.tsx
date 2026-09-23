@@ -67,6 +67,7 @@ const indexRoute = createRoute({
 // Guarded module routes — wrap with ModuleWorkspaceLayout
 // ---------------------------------------------------------------------------
 import { ROUTE_REGISTRY } from "@mediaos/web-core";
+import { validateFeedRouteSearch } from "@/routes/social/feed/lib/feed-route-search";
 import { payrollInsuranceIssueEnum, type PayrollInsuranceIssue } from "@mediaos/contracts";
 
 export function getMeta(routeKey: string): RouteMeta {
@@ -3049,8 +3050,14 @@ const socialRedirectRoute = createRoute({
 // vệ tinh fbpost; portal ở `/feed` (plan D1). Hợp nhất hai thứ đó là `done_when` của
 // `S16-SOCIAL-FBPOST-1`, không phải của WO này.
 //
-// Cả 6 route đi qua `makeModuleRoute` ⇒ `buildModuleRouteContent` đọc `meta.layout === "MODULE_PORTAL"`
-// và dựng bằng `SocialPortalShell` (xem LAYOUT_CONTENT_BUILDERS ở đầu file).
+// Cả 6 route đều gọi `buildModuleRouteContent`, hàm này đọc `meta.layout === "MODULE_PORTAL"` và
+// dựng bằng `SocialPortalShell` (xem LAYOUT_CONTENT_BUILDERS ở đầu file).
+//
+// ⚠️ Cả 6 khai bằng `createRoute` TRỰC TIẾP, **không** qua `makeModuleRoute` — kể cả 1 route tĩnh.
+// Lý do: `makeModuleRoute(path: string)` nhận `string` nên TS **mất literal**, và khi mất literal thì
+// `$postId`/`$employeeId` không vào được union đường dẫn ⇒ MỌI `<Link to>` trỏ tới chúng đỏ
+// typecheck. Route tĩnh thì vẫn lọt, nhưng khai một kiểu cho 5 và một kiểu cho 1 là mời người sau
+// "dọn dẹp cho nhất quán" rồi làm đỏ lại nhánh động.
 const FeedPage = React.lazy(() =>
   import("@/routes/social/feed/FeedPage").then((m) => ({ default: m.FeedPage })),
 );
@@ -3072,37 +3079,9 @@ const ProfilePostsPage = React.lazy(() =>
  * tham số rác (ca C17): một `validateSearch` ném là màn hình lỗi thay cho bảng tin, chỉ vì người
  * dùng sửa tay thanh địa chỉ.
  *
- * `q` (tìm kiếm) và `wish` (lời chúc điền sẵn) là tham số CỦA FE — chúng không nằm trong
- * `listFeedQuerySchema` và KHÔNG được gửi lên API; `FeedPage` lọc chúng ra trước khi gọi.
+ * Bản thân hàm lọc sống ở `routes/social/feed/lib/feed-route-search.ts` — tách ra để test được
+ * (đáng kể nhất là trần của `wish`) và để `FeedRouteSearch` chỉ còn MỘT nguồn.
  */
-/** Tham số URL của `/feed` — bộ lọc (D6) + hai tham số CHỈ của FE (`q` tìm kiếm, `wish` lời chúc). */
-interface FeedRouteSearch {
-  sort?: "active" | "latest";
-  tag?: string;
-  type?: string;
-  q?: string;
-  wish?: string;
-}
-
-/**
- * ⚠️ KHÔNG dùng `listFeedQuerySchema.parse` ở đây dù nó là nguồn sự thật DTO: schema đó `.strict()`
- * và có `z.coerce`, nên một URL người dùng sửa tay (`?limit=abc`) sẽ NÉM — và một `validateSearch`
- * ném là **màn hình lỗi thay cho bảng tin** (ca C17 vế deny). Lọc tay từng khoá rồi bỏ khoá lạ: URL
- * rác thì mất bộ lọc, chứ không mất cả trang. `q`/`wish` cũng không nằm trong schema đó.
- */
-function validateFeedRouteSearch(raw: Record<string, unknown>): FeedRouteSearch {
-  const str = (k: string): string | undefined =>
-    typeof raw[k] === "string" && (raw[k] as string).length > 0 ? (raw[k] as string) : undefined;
-  const sort = raw.sort === "latest" || raw.sort === "active" ? raw.sort : undefined;
-  return {
-    ...(sort ? { sort } : {}),
-    ...(str("tag") ? { tag: str("tag") } : {}),
-    ...(str("type") ? { type: str("type") } : {}),
-    ...(str("q") ? { q: str("q") } : {}),
-    ...(str("wish") ? { wish: str("wish") } : {}),
-  };
-}
-
 const feedMeta = getMeta("social.feed");
 const feedRoute = createRoute({
   getParentRoute: () => rootRoute,
