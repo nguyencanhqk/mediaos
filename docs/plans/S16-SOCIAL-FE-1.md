@@ -576,3 +576,21 @@ Cùng họ `mutant-red-must-match-expected-message`.
 | Đề xuất BE: `listPostAcksQuerySchema` nhận `countOnly` như `listNewsQuerySchema` đã có ⇒ FE lấy mẫu số mà không phải kéo về một hàng danh tính | BE track C |
 | `SOCIAL.FEED.VIEW` chưa map trong `PERMISSION_CODE_TO_PAIR` (nợ y hệt GOAL/RECRUIT/PAYROLL, display-only) | nợ chung |
 | `router.tsx` 3583 → còn lớn; `registry.ts` 2291; `query-keys.ts` 1426 — cả ba vượt trần 800 từ TRƯỚC WO này | WO tách file riêng |
+
+### ✍️ Chữ ký owner cho VÙNG ĐỎ — 23/09/2026
+
+Owner **chốt commit T9 `ee2c9480`** (migration `0586` bật `modules.SOCIAL.is_active` +
+`MODULE_APP_METADATA.SOCIAL`) sau khi FULL gate lượt 1 đã chặn, 12 mục được vá và mỗi mục nghiệm
+bằng vi phạm thật, `check.sh --all --lane-db=socialfe1` xanh 9/9 với `LANE_DB` thật.
+
+Điều kiện đi kèm chữ ký này (đã thoả tại thời điểm ký):
+
+- deny-path chạy THẬT, không phải skip — `tenant-isolation.int-spec` 1314 ca, không có banner
+  «XANH KHÔNG ĐỦ BẰNG CHỨNG»;
+- 4 reviewer FULL gate đã chạy TRƯỚC khi PR mở (`full-gate-must-run-before-pr-opens`);
+- ba lệch hợp đồng ở §12 đã có chữ ký riêng, nợ D5 đã seed thành `S16-SOCIAL-BE-1D` kèm điều kiện
+  đóng chống mở lại oracle `ERR-009`.
+
+⚠️ Chữ ký này KHÔNG thay được **review của người trên GitHub**: PR #535 đang `mergeStateStatus:
+BLOCKED` / `reviewDecision: REVIEW_REQUIRED`, và `auto-merge.yml` chỉ squash khi CI verify xanh
+**cộng 1 review NGƯỜI**. Tác nhân tự duyệt PR của chính mình là bỏ qua đúng cái cổng đó.
