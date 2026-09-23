@@ -17114,7 +17114,7 @@ export const backlog = [
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
-    status: "todo",
+    status: "in_progress",
     skills: ["security-review"],
     depends_on: ["S16-SOCIAL-BE-2A"],
     plan: "docs/plans/S16-SOCIAL-BE-2B.md",
