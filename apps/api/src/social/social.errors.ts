@@ -256,6 +256,21 @@ export const SOCIAL_ERR = {
    * thường, và lúc ấy đây là khác biệt giữa 403 đọc được với một bài lọt qua cổng.
    */
   POLL_CREATE_REQUIRED: "SOCIAL-ERR: bạn không có quyền tạo bình chọn.",
+
+  /**
+   * (409) — **KHÔNG SỐ HOÁ** (SPEC-16 §12 im lặng). Hết `lock_timeout` khi chờ khoá hàng
+   * `feed_polls` — thường là job đóng-theo-hạn đang giữ đúng hàng đó.
+   *
+   * 🔴 Vì sao PHẢI dịch chứ không để rơi xuống 500 (FULL gate lượt 2, `database-reviewer` D-1):
+   * đây là trạng thái **tạm thời và thử-lại-được**, đúng nghĩa 409 — nói với người dùng "bấm lại"
+   * thay vì "hệ thống lỗi". Để nguyên `55P03` thì nó thành 500 chưa dịch, đúng lớp lỗi mà H-1 của
+   * lượt gate trước đã bắt ở `23505`.
+   *
+   * ⚠️ Trước khi có trần này, ca đó KHÔNG phải 500 mà là **TREO vô hạn** (`lock_timeout=0` ở mức
+   * session, pool `max:20` không `connectionTimeoutMillis`) — tức là mã lỗi này thay một chế độ
+   * hỏng câm bằng một chế độ hỏng đọc được.
+   */
+  POLL_WRITE_BUSY: "SOCIAL-ERR: bình chọn đang được xử lý, vui lòng thử lại.",
 } as const;
 
 /**

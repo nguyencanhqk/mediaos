@@ -1,9 +1,20 @@
-import { Injectable } from "@nestjs/common";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { ConflictException, Injectable } from "@nestjs/common";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { feedPollOptions, feedPollVotes, feedPolls, feedPosts } from "../db/schema/social";
 import { SocialAccessService } from "./social-access.service";
+import { SOCIAL_ERR, socialPgErrorOf } from "./social.errors";
 import type { SocialViewerContext } from "./social.types";
+
+/**
+ * Trần CHỜ KHOÁ cho ba đường GHI của bình chọn (`041`/`042`/`044`) — xem `lockPollRowTx`.
+ *
+ * Ngắn hơn hẳn trần của job (`5s`): ở đây có NGƯỜI đang ngồi đợi phản hồi HTTP, còn job thì không.
+ */
+const POLL_WRITE_LOCK_TIMEOUT = "3s";
+
+/** `lock_not_available` — Postgres bắn khi `lock_timeout` hết mà chưa lấy được khoá hàng. */
+const PG_LOCK_NOT_AVAILABLE = "55P03";
 
 /**
  * S16-SOCIAL-BE-2B-1 — truy cập dữ liệu BÌNH CHỌN (`SOCIAL-API-040..044` + system-job).
@@ -53,6 +64,18 @@ export interface PollForWrite {
   expired: boolean;
 }
 
+/**
+ * Kết quả bình chọn đọc trong MỘT ảnh chụp — xem `pollResultsTx`.
+ *
+ * 🔴 `myVote` là phiếu của CHÍNH actor. Không có trường nào chở danh tính cử tri khác, và đó là
+ * BẤT BIẾN của kiểu này: thêm một `voters`/`userIds` ở đây là mở đúng đường rò mà SOC-DEC-009 cấm.
+ */
+export interface PollResults {
+  options: { id: string; label: string; voteCount: number }[];
+  totalVoters: number;
+  myVote: string[];
+}
+
 /** Một hàng của `040` — thông tin bình chọn kèm khoá bài để FE mở chi tiết. */
 export interface PollListRow {
   pollId: string;
@@ -82,11 +105,33 @@ export class SocialPollsRepository {
    *
    * Không trả gì: người gọi đọc lại trạng thái SAU khoá bằng `getPollForWriteTx`. Đọc trước khoá
    * rồi quyết định là đúng TOCTOU mà neo này sinh ra để đóng.
+   *
+   * ┌─ TRẦN CHỜ KHOÁ — phía REQUEST, không chỉ phía JOB (FULL gate lượt 2, `database-reviewer` D-1) ┐
+   * │ O-7 đã bó tx của job, nhưng đo trên PG thật cho thấy role `mediaos_app` có `lock_timeout = 0` │
+   * │ VÀ `statement_timeout = 0` ở mức session, còn pool thì `max: 20` **không**                     │
+   * │ `connectionTimeoutMillis`. Nghĩa là: job giữ `FOR UPDATE` trên tối đa 200 hàng `feed_polls`   │
+   * │ trong khi chạy; một người bấm bỏ phiếu vào đúng một trong 200 poll đó dừng NGAY TẠI ĐÂY —     │
+   * │ không lỗi, không log, chỉ TREO. Đủ 20 request như vậy là cạn pool và **toàn bộ API** đứng im. │
+   * │ Đây đúng hình dạng mà docblock `closeExpiredTx` mô tả, chỉ là đã dời từ phía job sang phía    │
+   * │ request. Đặt trần ở ĐÂY để cả ba đường ghi (`041`/`042`/`044`) cùng hưởng một lần khai báo.   │
+   * │ Và phải DỊCH `55P03` — để nó rơi xuống 500 chưa dịch là đúng lớp lỗi H-1 của lượt gate trước. │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    */
   async lockPollRowTx(tx: TenantTx, companyId: string, pollId: string): Promise<void> {
-    const locked = await tx.execute(
-      sql`SELECT 1 FROM feed_polls WHERE company_id = ${companyId} AND id = ${pollId} FOR UPDATE`,
-    );
+    // `SET LOCAL` không nhận bind param; hằng literal của module (xem `POLL_WRITE_LOCK_TIMEOUT`).
+    await tx.execute(sql.raw(`set local lock_timeout = '${POLL_WRITE_LOCK_TIMEOUT}'`));
+
+    let locked: Awaited<ReturnType<TenantTx["execute"]>>;
+    try {
+      locked = await tx.execute(
+        sql`SELECT 1 FROM feed_polls WHERE company_id = ${companyId} AND id = ${pollId} FOR UPDATE`,
+      );
+    } catch (err) {
+      if (socialPgErrorOf(err)?.code === PG_LOCK_NOT_AVAILABLE) {
+        throw new ConflictException(SOCIAL_ERR.POLL_WRITE_BUSY);
+      }
+      throw err;
+    }
     // 🔴 FULL gate 23/09/2026 — BA reviewer độc lập hội tụ (`security-reviewer` F3 ·
     // `database-reviewer` L-1 · orchestrator). Khớp 0 hàng ⇒ **không khoá gì**, không lỗi, không log,
     // và người gọi vẫn tin mình đã tuần tự hoá. Đây là neo chống-đua DUY NHẤT của cả ba đường ghi và
@@ -271,11 +316,7 @@ export class SocialPollsRepository {
    * │    chặn) ⇒ hai nửa của CÙNG một FSM đối xử khác nhau với `deleted_at`. Giờ cùng một luật.     │
    * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    */
-  async closeExpiredTx(
-    tx: TenantTx,
-    companyId: string,
-    limit: number,
-  ): Promise<ClosedPollRow[]> {
+  async closeExpiredTx(tx: TenantTx, companyId: string, limit: number): Promise<ClosedPollRow[]> {
     const rows = await tx.execute<{ id: string; post_id: string; question: string }>(
       sql`UPDATE feed_polls
              SET status = 'closed', closed_at = now(), updated_at = now()
@@ -308,19 +349,42 @@ export class SocialPollsRepository {
    * luật audience đổi (nhánh `group` của BE-2A là ví dụ vừa xảy ra).
    *
    * Phân trang OFFSET (khuôn `030`) — API-19 §6.4 không xếp danh sách này vào nhóm cursor.
+   *
+   * 🔴 **Trả kèm `total`** (owner chốt S5, 23/09/2026). Bản đầu trả MẢNG TRẦN: FE không phân biệt
+   * được «trang cuối» với «trang rỗng», và không dựng được pager — trong khi `030`, khuôn mà chính
+   * plan khai, vẫn trả envelope.
+   *
+   * ┌─ `count(*) OVER ()`, KHÔNG phải câu đếm thứ hai (FULL gate lượt 2 — BỐN nguồn hội tụ) ────────┐
+   * │ Bản đầu của vá S5 đếm bằng một `select({n: count()})` RIÊNG. Nó đi đúng `innerJoin` + đúng    │
+   * │ `where` (đã `EXPLAIN` xác nhận hai kế hoạch giống hệt), nên KHÔNG rò phạm vi — nhưng nó là     │
+   * │ **câu thứ hai trên cùng một tx READ COMMITTED**, tức **ảnh chụp thứ hai**. Một `002`/`044`     │
+   * │ commit chen vào giữa cho `total` và `data` kể hai câu chuyện khác nhau: `total=11` mà trang    │
+   * │ trả 10 hàng, đúng thứ envelope sinh ra để phân biệt («trang cuối» vs «trang rỗng»).            │
+   * │                                                                                                │
+   * │ 🔴 Điểm chí mạng: đó **CHÍNH LÀ lớp lỗi H-8** mà hàm `pollResultsTx` 40 dòng bên dưới vừa gộp  │
+   * │ ba câu thành một để đóng. Vá một chỗ rồi mở lại ở chỗ kia, trong CÙNG một lượt. Docblock cũ    │
+   * │ chỉ lập luận về «cùng vị từ» và không một lần nhắc «cùng ảnh chụp» — đúng trục nó vừa vá.      │
+   * │ Window function tính SAU `WHERE`/`JOIN` nhưng TRƯỚC `LIMIT`/`OFFSET` ⇒ `total` vẫn là tổng     │
+   * │ thật, và giờ ở cùng một ảnh chụp với hàng. Phụ thu: bỏ hẳn một lượt quét tập thấy-được.        │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ **Giá phải trả, đã cân nhắc:** window function chỉ tồn tại nếu có HÀNG. Trang rỗng ⇒ không
+   * biết `total`. Với `page=1` thì rỗng nghĩa là tổng = 0 (đúng). Với `page>1` vượt biên thì phải
+   * hỏi lại bằng một câu đếm — nhánh HIẾM, và ở đó `total` lệch `data` cũng vô nghĩa vì `data` rỗng.
+   * Nên đường thường đi MỘT câu / MỘT ảnh chụp, chỉ nhánh vượt-biên trả thêm một câu.
    */
   async listPollsTx(
     tx: TenantTx,
     viewer: SocialViewerContext,
     opts: { status?: "open" | "closed"; limit: number; offset: number },
-  ): Promise<PollListRow[]> {
+  ): Promise<{ rows: PollListRow[]; total: number }> {
     const where = [
       eq(feedPolls.companyId, viewer.companyId),
       this.access.visiblePostCondition(viewer),
     ];
     if (opts.status) where.push(eq(feedPolls.status, opts.status));
 
-    return tx
+    const rows = await tx
       .select({
         pollId: feedPolls.id,
         postId: feedPolls.postId,
@@ -330,6 +394,7 @@ export class SocialPollsRepository {
         closesAt: feedPolls.closesAt,
         closedAt: feedPolls.closedAt,
         createdAt: feedPolls.createdAt,
+        total: sql<number>`count(*) over ()`.mapWith(Number),
       })
       .from(feedPolls)
       .innerJoin(
@@ -351,58 +416,93 @@ export class SocialPollsRepository {
       )
       .limit(opts.limit)
       .offset(opts.offset);
-  }
 
-  /** Các lựa chọn của poll kèm bộ đếm, theo đúng `position`. */
-  async optionsWithCountsTx(
-    tx: TenantTx,
-    companyId: string,
-    pollId: string,
-  ): Promise<{ id: string; label: string; voteCount: number }[]> {
-    return tx
-      .select({
-        id: feedPollOptions.id,
-        label: feedPollOptions.label,
-        voteCount: feedPollOptions.voteCount,
-      })
-      .from(feedPollOptions)
-      .where(and(eq(feedPollOptions.companyId, companyId), eq(feedPollOptions.pollId, pollId)))
-      .orderBy(asc(feedPollOptions.position));
+    const page = rows.map(({ total: _total, ...row }) => row);
+    if (rows.length > 0) return { rows: page, total: rows[0].total };
+
+    // Trang RỖNG — window function không có hàng nào để bám. `offset === 0` ⇒ tập thật sự rỗng
+    // (đây là đường của mọi tenant chưa có bình chọn nào, phải MIỄN PHÍ, không tốn câu thứ hai).
+    if (opts.offset === 0) return { rows: page, total: 0 };
+
+    // Chỉ còn nhánh VƯỢT BIÊN (`page>1` mà hết hàng). Hỏi lại tổng bằng một câu riêng: ở đây lệch
+    // ảnh chụp là vô hại vì `data` đã rỗng, và FE cần con số để lùi về trang cuối hợp lệ.
+    const [totalRow] = await tx
+      .select({ n: count() })
+      .from(feedPolls)
+      .innerJoin(
+        feedPosts,
+        and(eq(feedPosts.companyId, feedPolls.companyId), eq(feedPosts.id, feedPolls.postId)),
+      )
+      .where(and(...where));
+    return { rows: page, total: Number(totalRow?.n ?? 0) };
   }
 
   /**
-   * Số NGƯỜI đã bỏ phiếu (không phải số phiếu — poll đa-lựa-chọn có nhiều phiếu mỗi người).
+   * Toàn bộ kết quả bình chọn trong **MỘT câu** — lựa chọn + bộ đếm + tổng cử tri + phiếu của
+   * chính actor.
    *
-   * 🔴 Trả về một CON SỐ, không bao giờ trả danh sách `user_id`. Đây là chỗ dễ "tiện tay" nhất để
-   * làm rò cử tri: một `SELECT user_id …` ở đây rồi `.length` ở service sẽ khiến mảng id đi qua
-   * tầng service, và lần refactor sau nó vào DTO. Xem SOC-DEC-009.
+   * ┌─ VÌ SAO MỘT CÂU, KHÔNG BA (FULL gate 23/09/2026 — H-8, ba nguồn) ─────────────────────────────┐
+   * │ Bản cũ chạy ba câu qua `Promise.all` trên CÙNG một tx. Ở READ COMMITTED mỗi CÂU lấy ảnh chụp  │
+   * │ RIÊNG, nên một lượt `041` commit chen vào giữa làm response tự mâu thuẫn:                      │
+   * │ `Σ options.voteCount` đếm sau lượt đó còn `totalVoters` đếm trước (hoặc ngược lại) ⇒ FE tính   │
+   * │ tỉ lệ ra **>100%**. Đúng bất biến mà cả WO này dựng lưới bảo vệ ở đường GHI, vỡ ở đường ĐỌC.   │
+   * │ `Promise.all` còn che điều đó: ba câu chạy "song song" nên cửa sổ trông như bằng không, trong  │
+   * │ khi driver vẫn tuần tự hoá chúng trên MỘT connection — chạy rời hay `Promise.all` đều hở như   │
+   * │ nhau, gộp câu mới là thứ đóng được.                                                            │
+   * │ Không chọn `repeatable read` (tx này thường ĐÃ mở và đang ghi — `041`/`042`/`044` gọi lại      │
+   * │ hàm này sau khi ghi, đổi isolation giữa chừng là không hợp lệ) và không `FOR SHARE` (giữ khoá  │
+   * │ đọc trên cả bảng phiếu, ngược hướng H-3).                                                       │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * 🔴 Trả `totalVoters` là một CON SỐ và `myVote` chỉ của CHÍNH actor — không bao giờ một danh
+   * sách `user_id`. Đây là chỗ dễ "tiện tay" nhất để làm rò cử tri: một `SELECT user_id …` ở đây
+   * rồi `.length` ở service sẽ khiến mảng id đi qua tầng service, và lần refactor sau nó vào DTO.
+   * Xem SOC-DEC-009.
    */
-  async totalVotersTx(tx: TenantTx, companyId: string, pollId: string): Promise<number> {
-    const rows = await tx.execute<{ value: number }>(
-      sql`SELECT COUNT(DISTINCT user_id) AS value
-            FROM feed_poll_votes
-           WHERE company_id = ${companyId} AND poll_id = ${pollId}`,
-    );
-    return Number(rows.rows[0]?.value ?? 0);
-  }
-
-  /** Các `optionId` mà CHÍNH actor đã chọn. Chỉ của actor — không bao giờ của người khác. */
-  async myVoteOptionIdsTx(
+  async pollResultsTx(
     tx: TenantTx,
     companyId: string,
     pollId: string,
     userId: string,
-  ): Promise<string[]> {
-    const rows = await tx
-      .select({ optionId: feedPollVotes.optionId })
-      .from(feedPollVotes)
-      .where(
-        and(
-          eq(feedPollVotes.companyId, companyId),
-          eq(feedPollVotes.pollId, pollId),
-          eq(feedPollVotes.userId, userId),
-        ),
-      );
-    return rows.map((r) => r.optionId);
+  ): Promise<PollResults> {
+    const rows = await tx.execute<{
+      id: string;
+      label: string;
+      vote_count: number;
+      mine: boolean;
+      total_voters: number;
+    }>(
+      // `total_voters` là sub-query KHÔNG tương quan ⇒ PG nâng thành InitPlan, chạy ĐÚNG MỘT LẦN
+      // cho cả câu (không phải mỗi hàng option). `mine` thì tương quan theo `o.id` — đó là chủ ý.
+      sql`SELECT o.id,
+                 o.label,
+                 o.vote_count,
+                 EXISTS (SELECT 1
+                           FROM feed_poll_votes v
+                          WHERE v.company_id = ${companyId}
+                            AND v.poll_id = ${pollId}
+                            AND v.option_id = o.id
+                            AND v.user_id = ${userId}) AS mine,
+                 (SELECT COUNT(DISTINCT v2.user_id)
+                    FROM feed_poll_votes v2
+                   WHERE v2.company_id = ${companyId}
+                     AND v2.poll_id = ${pollId}) AS total_voters
+            FROM feed_poll_options o
+           WHERE o.company_id = ${companyId}
+             AND o.poll_id = ${pollId}
+           ORDER BY o.position`,
+    );
+
+    return {
+      options: rows.rows.map((r) => ({
+        id: r.id,
+        label: r.label,
+        voteCount: Number(r.vote_count),
+      })),
+      // Poll không có lựa chọn nào thì cũng KHÔNG THỂ có phiếu nào (`feed_poll_votes.option_id` là
+      // FK vào `feed_poll_options`) ⇒ `0` ở đây là sự thật, không phải một giá trị rơi về che lỗi.
+      totalVoters: Number(rows.rows[0]?.total_voters ?? 0),
+      myVote: rows.rows.filter((r) => r.mine).map((r) => r.id),
+    };
   }
 }

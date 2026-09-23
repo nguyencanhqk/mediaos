@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import {
@@ -23,8 +24,18 @@ export const SOCIAL_POLL_CLOSE_BATCH_SIZE = 200;
 /** Trần số lô một lượt chạy — chặn vòng lặp chạy mất kiểm soát nếu vị từ gặt bị viết sai. */
 const MAX_BATCHES_PER_RUN = 50;
 
-/** Số `postId` MẪU ghi vào `metadata` của dòng audit — số đếm thật nằm ở khoá `closed`. */
-const AUDIT_POSTID_SAMPLE = 20;
+/**
+ * Trần CHỜ KHOÁ cho mỗi tx của job (FULL gate 23/09/2026 — `silent-failure-hunter` M-6 / O-7).
+ *
+ * Chia lô đã bó cửa sổ khoá về `BATCH_SIZE` hàng, nhưng CHỜ khoá thì vẫn vô hạn: một tx khác đang
+ * giữ hàng `feed_polls` (hoặc hàng `outbox`/`audit_logs` liên quan) đủ lâu là job đứng im — không
+ * lỗi, không log, và `system_job_runs` của nó treo ở `'Running'` qua mọi nhịp sau. Thà ném để
+ * `JobRunner` finalize `'Failed'` rồi nhịp kế làm lại: vị từ gặt vốn idempotent nên lùi không mất gì.
+ */
+const JOB_LOCK_TIMEOUT = "5s";
+
+/** Trần THỜI GIAN một câu — chặn một lô bệnh lý (thống kê lệch, index mất) kéo dài vô hạn. */
+const JOB_STATEMENT_TIMEOUT = "30s";
 
 /**
  * S16-SOCIAL-BE-2B-1 — đóng bình chọn **quá hạn** (`closes_at <= now()`), API-19 §5.1d.
@@ -81,7 +92,7 @@ export class SocialPollCloseExpiredJobHandler implements JobHandler {
    * │   · vỡ ở hàng cuối ⇒ rollback TOÀN PHẦN ⇒ nhịp sau làm lại từ đầu, không tiến-độ-từng-phần.     │
    * │ Chia lô + `FOR UPDATE SKIP LOCKED` (xem `closeExpiredTx`) bó cửa sổ khoá về `BATCH_SIZE` và  │
    * │ cho tiến độ từng phần. Vị từ gặt vốn đã idempotent nên lô dư trôi sang vòng sau miễn phí.      │
-   * │ ⚠️ NỢ đã ghi (plan §13.4): chưa đặt `lock_timeout`/`statement_timeout` cho tx của job.        │
+   * │ Mỗi tx còn đặt `lock_timeout`/`statement_timeout` LOCAL — xem hai hằng ở đầu file.             │
    * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    *
    * KHÔNG catch: lỗi propagate cho `JobRunner` để nó finalize run-row `'Failed'` — nuốt lỗi ở đây
@@ -93,6 +104,12 @@ export class SocialPollCloseExpiredJobHandler implements JobHandler {
 
     for (; batches < MAX_BATCHES_PER_RUN; batches += 1) {
       const rows = await this.db.withTenant(ctx.companyId, async (tx) => {
+        // `SET LOCAL` KHÔNG nhận bind param (giới hạn của PG) nên phải `sql.raw`; an toàn vì hai
+        // giá trị là hằng literal của chính module này — không đường nào cho dữ liệu ngoài vào đây.
+        // LOCAL = tự reset khi commit ⇒ không rò sang session khác qua PgBouncer.
+        await tx.execute(sql.raw(`set local lock_timeout = '${JOB_LOCK_TIMEOUT}'`));
+        await tx.execute(sql.raw(`set local statement_timeout = '${JOB_STATEMENT_TIMEOUT}'`));
+
         const closed = await this.repo.closeExpiredTx(
           tx,
           ctx.companyId,
@@ -106,32 +123,38 @@ export class SocialPollCloseExpiredJobHandler implements JobHandler {
         // MỘT câu người nhận + MỘT `enqueueMany` cho cả lô — xem `enqueuePollClosedNotiManyTx`.
         await this.polls.enqueuePollClosedNotiManyTx(tx, ctx.companyId, closed);
 
-        await this.audit.record(tx, {
-          action: "social.poll.close",
-          objectType: "feed_post",
-          // Một dòng cho cả LÔ: `object_id` là bài đầu tiên, số lượng nằm ở metadata. Ghi mỗi poll
-          // một dòng sẽ làm một nhịp gặt 500 poll đẻ 500 dòng audit cho MỘT hành động của hệ thống —
-          // không ai đọc, và bảng thì append-only.
-          // ⚠️ NỢ CHỜ CHỮ KÝ OWNER (plan §13.3, `silent-failure-hunter` M-5): hệ quả là poll thứ
-          // 2..N của một lô **không tra được** bằng `object_id` của chính nó — chỉ nằm trong
-          // `metadata.postIds`, thứ mà mọi màn lọc audit theo đối tượng không đọc. `044` thì ghi
-          // một dòng/poll ⇒ CÙNG một `action` có hai hình dạng audit.
-          objectId: closed[0].postId,
-          actorType: "Job",
-          actionGroup: "SOCIAL",
-          resultStatus: "Success",
-          dataScope: "Company",
-          sensitivityLevel: "Normal",
-          // CHỈ SỐ ĐẾM + khoá kỹ thuật — không câu hỏi bình chọn, không danh tính ai.
-          // `postIds` CHẶN TRÊN: một mảng không giới hạn đi vào `jsonb` của bảng append-only là
-          // không gỡ lại được (`database-reviewer` H-1). Số đếm thật luôn ở `closed`.
-          metadata: {
-            via: "job",
-            closed: closed.length,
-            postIds: closed.slice(0, AUDIT_POSTID_SAMPLE).map((r) => r.postId),
-            postIdsTruncated: closed.length > AUDIT_POSTID_SAMPLE,
-          },
-        });
+        // ─── AUDIT: MỘT DÒNG / MỖI POLL (owner chốt O-1, 23/09/2026) ───────────────────────────
+        // Bản trước ghi MỘT dòng cho cả lô (`object_id` = bài đầu tiên, phần còn lại nhét vào
+        // `metadata.postIds`). Hệ quả: poll thứ 2..N **không tra được** bằng `object_id` của chính
+        // nó — mọi màn lọc audit theo đối tượng đều không đọc `metadata` — và CÙNG một `action`
+        // có hai hình dạng vì `044` (đóng tay) vẫn ghi một dòng/poll.
+        //
+        // Lý lẽ chống-bom-rác của T8 (tiền lệ `leave-accrual` ~526k dòng/năm) KHÔNG áp ở đây, và
+        // đó là khác biệt về BẬC ĐỘ LỚN, không phải khẩu vị: leave-accrual sinh theo
+        // `nhân viên × kỳ` (tăng vô hạn theo thời gian), còn đóng poll sinh theo **số bình chọn có
+        // hạn mà người dùng tạo** — hữu hạn, và mỗi poll chỉ đóng ĐÚNG MỘT LẦN (vị từ
+        // `WHERE status='open'`).
+        //
+        // 🔴 `recordMany` chứ KHÔNG phải vòng `for` gọi `record()`: `N` round-trip bên trong tx
+        // đang giữ khoá ghi trên `N` hàng `feed_polls` đúng là hình dạng mà H-3 đã chặn ở đường
+        // NOTI. Xem docblock `AuditService.recordMany`.
+        await this.audit.recordMany(
+          tx,
+          closed.map((row) => ({
+            action: "social.poll.close" as const,
+            objectType: "feed_post" as const,
+            objectId: row.postId,
+            actorType: "Job",
+            actionGroup: "SOCIAL",
+            resultStatus: "Success",
+            dataScope: "Company",
+            sensitivityLevel: "Normal",
+            // CHỈ khoá kỹ thuật + cỡ lô — KHÔNG câu hỏi bình chọn, KHÔNG danh tính ai.
+            // `batchSize` giữ lại để đọc audit vẫn thấy dòng này thuộc một nhịp gặt nào; nó là
+            // một SỐ, không phải mảng không giới hạn đi vào `jsonb` append-only (`DB` H-1).
+            metadata: { via: "job", batchSize: closed.length },
+          })),
+        );
 
         return closed;
       });
@@ -141,7 +164,8 @@ export class SocialPollCloseExpiredJobHandler implements JobHandler {
       if (rows.length < SOCIAL_POLL_CLOSE_BATCH_SIZE) break;
     }
 
-    if (batches >= MAX_BATCHES_PER_RUN) {
+    const ceilingHit = batches >= MAX_BATCHES_PER_RUN;
+    if (ceilingHit) {
       this.logger.warn(
         `${this.jobCode} tenant=${ctx.companyId}: chạm trần ${MAX_BATCHES_PER_RUN} lô ` +
           `(${total} bình chọn) — phần còn lại để nhịp sau.`,
@@ -151,6 +175,15 @@ export class SocialPollCloseExpiredJobHandler implements JobHandler {
       this.logger.log(`${this.jobCode} tenant=${ctx.companyId}: đóng ${total} bình chọn quá hạn.`);
     }
 
-    return { total, success: total, failed: 0 };
+    // 🔴 FULL gate lượt 2 (`silent-failure-hunter` F-2): chạm trần mà chỉ `logger.warn` thì
+    // `system_job_runs` — bề mặt mà người vận hành và mọi alert THẬT SỰ đọc — ghi `'Success'`.
+    // Nếu tốc độ đến vượt trần một cách bền vững thì tồn đọng là VĨNH VIỄN và vô hình với mọi
+    // dashboard; log dòng đơn lẻ không ai canh. `JobRunResult.metadata` có sẵn đúng cho ca này.
+    return {
+      total,
+      success: total,
+      failed: 0,
+      metadata: { batches, batchCeilingHit: ceilingHit },
+    };
   }
 }

@@ -54,8 +54,8 @@ export class SocialPollsController {
   list(@Req() req: AuthenticatedRequest, @Query() query: ListPollsQuery) {
     return this.polls.list(req.user, {
       status: query.status,
+      page: query.page,
       limit: query.limit,
-      offset: (query.page - 1) * query.limit,
     });
   }
 
@@ -93,6 +93,13 @@ export class SocialPollsController {
    *
    * `@Idempotent()` với khoá **suy từ nội dung** (đường dẫn mang `post_id`): gửi lại vì mạng chập
    * không được sinh dòng audit / NOTI thứ hai. Khoá theo timestamp sẽ làm decorator vô dụng.
+   *
+   * ⚠️ **Decorator là NỬA CÓ ĐIỀU KIỆN, không phải lưới.** `IdempotencyInterceptor` (toàn cục,
+   * `APP_INTERCEPTOR`) chỉ khoá khi client CÓ gửi header `Idempotency-Key`; thiếu header thì nó
+   * `next.handle()` thẳng — back-compat có chủ ý, ghi rõ ở `idempotency.decorator.ts:12`. Lưới
+   * KHÔNG-ĐIỀU-KIỆN của `044` vì vậy là `closeManualTx`: `WHERE status='open' … RETURNING` ⇒ lượt
+   * thứ hai khớp 0 hàng ⇒ `close()` ném, không có dòng audit/NOTI thứ hai (ca `P-11`). Đừng đọc
+   * decorator thành "đã có khoá server-side" — mà cũng đừng đọc thành "chỉ là `SetMetadata`".
    */
   @Post("posts/:post_id/poll/close")
   @Idempotent()

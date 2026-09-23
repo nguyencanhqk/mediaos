@@ -75,6 +75,21 @@ const TEMPLATE_KEYS: Record<string, readonly string[]> = {
  */
 const PAYLOAD_KEYS_DENIED: Record<string, readonly string[]> = {
   SOCIAL_POST_REPORTED: ["actorUserId", "actor_name"],
+  /**
+   * S16-SOCIAL-BE-2B-1 (nợ test N7 phát hiện, 23/09/2026) — NOTI-035 «bình chọn đã đóng».
+   *
+   * `PAYLOAD_KEYS` là allowlist **toàn module**: `actorUserId`/`actor_name` nằm trong đó vì NOTI-028
+   * (nhắc tên) cần chúng. Nghĩa là không có gì chặn hai khoá ấy đi vào payload của mã NÀY nếu một
+   * lượt sửa producer sau này thêm chúng — và `notifications.payload` là bề mặt đọc thứ hai, sống
+   * lâu hơn grant (SOC-DEC-009). Với bình chọn ẩn danh, "actor" của một lượt đóng có thể chính là
+   * người đã bỏ phiếu.
+   *
+   * Không phải lỗ ĐANG bị khai thác: producer hiện chỉ chở `post_id` + `poll_question` +
+   * `recipientUserIds`. Đây là ghi thành LUẬT điều mà docblock `SocialPollClosedPayload` vốn đã
+   * khẳng định («payload không có `actor_name` — nhánh job không có actor nào để kể tên»), thay vì
+   * để nó là một tính chất tình cờ của producer.
+   */
+  SOCIAL_POLL_CLOSED: ["actorUserId", "actor_name"],
 };
 
 function strField(payload: Record<string, unknown>, key: string): string | undefined {

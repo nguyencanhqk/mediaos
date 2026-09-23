@@ -43,15 +43,29 @@ export class SocialPollsService {
     private readonly outbox: OutboxService,
   ) {}
 
-  /** `040` — danh sách bình chọn actor thấy được. */
+  /**
+   * `040` — danh sách bình chọn actor thấy được.
+   *
+   * 🔴 Nhận `page`, KHÔNG nhận `offset` (owner chốt S5, 23/09/2026): envelope trả lại `page` cho FE
+   * nên phép `(page-1)*limit` phải nằm ĐÚNG MỘT chỗ. Bản trước để controller tính offset rồi service
+   * không còn biết `page` — muốn trả envelope là phải tính ngược, và hai phép tính ngược nhau ở hai
+   * tầng là chỗ trôi kinh điển.
+   */
   async list(
     user: SocialRequestUser,
-    query: { status?: "open" | "closed"; limit: number; offset: number },
+    query: { status?: "open" | "closed"; page: number; limit: number },
   ) {
     const actor = await this.access.resolveActor(user, "pollList");
-    return this.db.withTenant(actor.companyId, async (tx) => {
-      const rows = await this.repo.listPollsTx(tx, actor, query);
-      return rows.map((r) => ({
+    const { page, limit } = query;
+    const { rows, total } = await this.db.withTenant(actor.companyId, (tx) =>
+      this.repo.listPollsTx(tx, actor, {
+        status: query.status,
+        limit,
+        offset: (page - 1) * limit,
+      }),
+    );
+    return {
+      data: rows.map((r) => ({
         pollId: r.pollId,
         postId: r.postId,
         question: r.question,
@@ -60,8 +74,11 @@ export class SocialPollsService {
         closesAt: r.closesAt?.toISOString() ?? null,
         closedAt: r.closedAt?.toISOString() ?? null,
         createdAt: r.createdAt.toISOString(),
-      }));
-    });
+      })),
+      page,
+      limit,
+      total,
+    };
   }
 
   /**
@@ -252,6 +269,13 @@ export class SocialPollsService {
    * `users.status='active' AND users.deleted_at IS NULL`. Nghỉ việc **KHÔNG xoá mềm** hàng `users`,
    * nên chỉ lọc `deleted_at` là hở. Đúng lỗi mà BA reviewer độc lập đã hội tụ ở BE-1B.
    *
+   * ✍️ **Owner chốt O-2 (23/09/2026): GIỮ INNER JOIN `employee_profiles` — đây là LUẬT MODULE, không
+   * phải thiếu sót của WO này.** Hệ quả đã biết và được chấp nhận: tài khoản console/tích hợp
+   * (`employeeIdOf` trả `null`) tạo được bài+poll nhưng **không bao giờ** nhận NOTI-035. Căn cứ đo
+   * được: `social-groups.service.ts#isActiveRecipient` (NOTI-031, BE-2A — ĐÃ qua FULL gate và ĐÃ
+   * ship) dùng **đúng cùng hai vế này**. Đổi riêng chỗ này sang LEFT JOIN sẽ làm poll khác nhóm ⇒
+   * muốn đổi thì phải đổi CẢ hai producer trong một WO riêng. Lượt gate sau đừng "phát hiện" lại.
+   *
    * 🔴 `p.deleted_at IS NULL` (FULL gate 23/09 — BỐN nguồn hội tụ): thiếu vế này thì một bình chọn
    * trên bài **đã xoá mềm** vẫn phát NOTI-035 mang `poll_question` + `target_url=/social/posts/{id}`,
    * người nhận bấm vào ăn 404, và câu hỏi của bài đã xoá **tái xuất hiện qua bảng `notifications`** —
@@ -363,14 +387,20 @@ export class SocialPollsService {
    * 🔴 `user_id` KHÔNG BAO GIỜ có mặt, kể cả `company-admin`, kể cả khi `isAnonymous = false`.
    * «Không ẩn danh» nghĩa là FE được phép hiển thị *rằng có người đã bỏ phiếu*, không phải API được
    * phép trả *ai*. Một `select()` trần ở repository sẽ kéo cột `user_id` vào đây mà typecheck không
-   * kêu — đó là lý do repository trả về con SỐ (`totalVotersTx`) chứ không trả danh sách.
+   * kêu — đó là lý do repository trả về con SỐ (`pollResultsTx`) chứ không trả danh sách.
+   *
+   * 🔴 FULL gate 23/09/2026 (H-8, ba nguồn): ba câu qua `Promise.all` cho BA ảnh chụp READ
+   * COMMITTED ⇒ `Σ options.voteCount` và `totalVoters` đọc được ở hai thời điểm khác nhau ⇒ FE tính
+   * tỉ lệ >100%. Gộp thành MỘT câu ở `pollResultsTx` — xem docblock ở đó để biết vì sao
+   * `repeatable read`/`FOR SHARE` đều không phải đường đúng.
    */
   private async readResultsTx(tx: TenantTx, actor: SocialActor, poll: PollForWrite) {
-    const [options, totalVoters, myVote] = await Promise.all([
-      this.repo.optionsWithCountsTx(tx, actor.companyId, poll.id),
-      this.repo.totalVotersTx(tx, actor.companyId, poll.id),
-      this.repo.myVoteOptionIdsTx(tx, actor.companyId, poll.id, actor.actorUserId),
-    ]);
+    const { options, totalVoters, myVote } = await this.repo.pollResultsTx(
+      tx,
+      actor.companyId,
+      poll.id,
+      actor.actorUserId,
+    );
 
     return {
       pollId: poll.id,
