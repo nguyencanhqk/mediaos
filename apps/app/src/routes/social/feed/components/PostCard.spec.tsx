@@ -234,3 +234,69 @@ describe("lưới ảnh — đính kèm bị từ chối presign (`url: null`) K
     expect(screen.queryByTestId("post-image-grid")).toBeNull();
   });
 });
+
+describe("tương tác thật trên thẻ bài", () => {
+  it("chọn một emoji ⇒ gọi `onReactionChange` với đúng mã", () => {
+    const onReactionChange = vi.fn();
+    render(
+      <I18nextProvider i18n={i18n}>
+        <PostCard
+          post={BASE_POST}
+          onReactionChange={onReactionChange}
+          onToggleSave={vi.fn()}
+          menuActions={noopActions}
+        />
+      </I18nextProvider>,
+    );
+
+    fireEvent.click(within(screen.getByTestId("feed-reaction-bar")).getByRole("button"));
+    fireEvent.click(within(screen.getByTestId("feed-reaction-picker")).getAllByRole("menuitem")[1]);
+    expect(onReactionChange).toHaveBeenCalledWith("love");
+  });
+
+  it("bấm lại ĐÚNG emoji đang thả ⇒ GỠ (gửi `null`), không cần nút «bỏ thích» riêng", () => {
+    const onReactionChange = vi.fn();
+    render(
+      <I18nextProvider i18n={i18n}>
+        <PostCard
+          post={{ ...BASE_POST, myReaction: "like" }}
+          onReactionChange={onReactionChange}
+          onToggleSave={vi.fn()}
+          menuActions={noopActions}
+        />
+      </I18nextProvider>,
+    );
+
+    fireEvent.click(within(screen.getByTestId("feed-reaction-bar")).getByRole("button"));
+    fireEvent.click(within(screen.getByTestId("feed-reaction-picker")).getAllByRole("menuitem")[0]);
+    expect(onReactionChange).toHaveBeenCalledWith(null);
+  });
+
+  it("nút lưu gọi `onToggleSave`", () => {
+    const onToggleSave = vi.fn();
+    render(
+      <I18nextProvider i18n={i18n}>
+        <PostCard
+          post={BASE_POST}
+          onReactionChange={vi.fn()}
+          onToggleSave={onToggleSave}
+          menuActions={noopActions}
+        />
+      </I18nextProvider>,
+    );
+    fireEvent.click(screen.getByTestId("post-save-toggle"));
+    expect(onToggleSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("bấm một mục menu ⇒ gọi hành động VÀ đóng menu (không để menu treo)", () => {
+    setCaps({ "view:feed": true, "manage:feed-post": true });
+    renderCard();
+
+    fireEvent.click(screen.getByTestId("post-menu-trigger"));
+    fireEvent.click(screen.getByTestId("post-menu-toggle-hidden"));
+
+    expect(noopActions.onToggleHidden).toHaveBeenCalledTimes(1);
+    // Menu phải tự đóng: một menu còn mở sau khi bấm che mất chính thẻ bài vừa đổi trạng thái.
+    expect(screen.queryByTestId("post-menu")).toBeNull();
+  });
+});

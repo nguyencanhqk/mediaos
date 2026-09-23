@@ -24,7 +24,7 @@ import { useFeedRealtime } from "@/hooks/use-feed-realtime";
 import { FeedComposer } from "./components/FeedComposer";
 import { FeedPostList } from "./components/FeedPostList";
 import { NewFeedPostsBadge } from "./components/NewFeedPostsBadge";
-import { useFeedActions } from "./lib/use-feed-actions";
+import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
 interface FeedRouteSearch {
   sort?: FeedSortDto;
@@ -92,21 +92,28 @@ export function FeedPage(): React.ReactElement {
       queryKey: isSearching ? socialKeys.search({ q: search.q }) : socialKeys.feed.list(listParams),
     });
     resetNewPosts();
-    if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
+    /**
+     * ⚠️ Guard `typeof window.scrollTo === "function"` là VÔ DỤNG ở đây — đo thật trong jsdom: nó
+     * **có** định nghĩa `scrollTo`, nên guard luôn đi lọt; jsdom ghi `Error: Not implemented:
+     * window.scrollTo` ra virtual console (không ném cho caller). Dòng log đó vẫn xuất hiện dù có
+     * `try/catch`, và đó là hành vi ĐÚNG của jsdom, không phải lỗi cần vá.
+     *
+     * `try/catch` giữ lại cho môi trường nhúng nào đó THỰC SỰ ném: cuộn là việc TRANG TRÍ, hỏng nó
+     * không được phép hỏng việc tải lại danh sách — thứ người dùng vừa bấm badge để làm.
+     */
+    try {
       window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      // Môi trường không cuộn được (jsdom, webview hạn chế) — bỏ qua, không phải lỗi nghiệp vụ.
     }
   };
 
-  const buildMenuActions = (post: FeedPostDto) => ({
-    onCopyLink: () => {
-      void navigator.clipboard?.writeText(`${window.location.origin}/feed/posts/${post.id}`);
-    },
-    onEdit: () => void navigate({ to: "/feed/posts/$postId", params: { postId: post.id } }),
-    onDelete: () => actions.remove(post.id),
-    onToggleHidden: () => actions.moderate(post.id, { hidden: post.status !== "hidden" }),
-    onToggleComments: () => actions.moderate(post.id, { locked: !post.commentsLocked }),
-    onTogglePinned: () => actions.moderate(post.id, { pinned: !post.pinned }),
-  });
+  // Sáu hành động của menu ⋯ dựng bằng helper DÙNG CHUNG — bốn màn cùng một luật, một chỗ sửa.
+  const buildMenuActions = (post: FeedPostDto) =>
+    buildPostMenuActions(post, {
+      actions,
+      openDetail: (postId) => void navigate({ to: "/feed/posts/$postId", params: { postId } }),
+    });
 
   const setSort = (sort: FeedSortDto): void => {
     void navigate({

@@ -19,7 +19,7 @@ import type { CreateFeedCommentDto, FeedCommentDto } from "@mediaos/contracts";
 import { PostCard } from "./components/PostCard";
 import { CommentList } from "./components/CommentList";
 import { CommentComposer } from "./components/CommentComposer";
-import { useFeedActions } from "./lib/use-feed-actions";
+import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
 export function PostDetailPage(): React.ReactElement {
   const { t } = useTranslation("social");
@@ -119,19 +119,13 @@ export function PostDetailPage(): React.ReactElement {
         isSavePending={actions.pendingSavePostId === post.id}
         onReactionChange={(emoji) => actions.setReaction(post.id, emoji)}
         onToggleSave={() => actions.toggleSave(post.id, post.savedByMe)}
-        menuActions={{
-          onCopyLink: () => {
-            void navigator.clipboard?.writeText(window.location.href);
-          },
-          onEdit: () => {},
-          onDelete: () => {
-            actions.remove(post.id);
-            void navigate({ to: "/feed" });
-          },
-          onToggleHidden: () => actions.moderate(post.id, { hidden: post.status !== "hidden" }),
-          onToggleComments: () => actions.moderate(post.id, { locked: !post.commentsLocked }),
-          onTogglePinned: () => actions.moderate(post.id, { pinned: !post.pinned }),
-        }}
+        // Cùng helper với 4 màn kia. `openDetail` BỎ TRỐNG vì ta đang ĐỨNG ở màn chi tiết — một mục
+        // menu điều hướng về chính trang đang mở là cái bẫy, không phải tính năng. Xoá xong thì phải
+        // rời trang: ở lại sẽ hiện "không tìm thấy bài viết" cho bài mình vừa chủ động xoá.
+        menuActions={buildPostMenuActions(post, {
+          actions,
+          afterDelete: () => void navigate({ to: "/feed" }),
+        })}
       />
 
       <section className="rounded-lg border border-border bg-card p-4">

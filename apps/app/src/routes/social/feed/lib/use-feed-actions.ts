@@ -10,7 +10,12 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { socialApi, socialKeys } from "@mediaos/web-core";
-import type { FeedReactionEmojiDto, FeedReactionSummaryDto } from "@mediaos/contracts";
+import type {
+  FeedPostDto,
+  FeedReactionEmojiDto,
+  FeedReactionSummaryDto,
+} from "@mediaos/contracts";
+import type { PostCardMenuActions } from "../components/PostCardMenu";
 
 export interface FeedActions {
   /**
@@ -95,5 +100,47 @@ export function useFeedActions(): FeedActions {
       ? (reactionMutation.variables?.postId ?? null)
       : null,
     pendingSavePostId: saveMutation.isPending ? (saveMutation.variables?.postId ?? null) : null,
+  };
+}
+
+/**
+ * Dựng bộ hành động cho menu ⋯ của MỘT bài.
+ *
+ * ┌─ VÌ SAO LÀ MỘT HÀM DÙNG CHUNG, KHÔNG PHẢI SÁU ARROW LẶP LẠI Ở MỖI MÀN ──────────────────────┐
+ * │ Bốn màn (`FeedPage` · `SavedPage` · `ProfilePostsPage` · `PostDetailPage`) đều render cùng   │
+ * │ `PostCard` nên đều cần đúng sáu hành động này. Bản đầu của WO chép chúng vào từng màn — bốn   │
+ * │ bản sao của cùng một luật, và ba trong số đó chắc chắn sẽ trôi khi luật đổi (ví dụ khi         │
+ * │ «Báo cáo» của FE-3 được thêm vào menu).                                                       │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠️ `onToggleHidden` đọc `post.status` — trường **OPTIONAL**, chỉ có mặt với tác giả hoặc người có
+ * `manage:feed-post`. Với người đọc thường nó `undefined` ⇒ `!== "hidden"` ⇒ "ẩn bài". Điều đó KHÔNG
+ * nguy hiểm vì mục menu tương ứng cũng chỉ hiện cho người có `manage:feed-post` (xem `PostCardMenu`),
+ * nhưng đừng suy ra rằng `status` luôn có — dùng nó ở chỗ khác mà quên là một lỗi im lặng.
+ */
+export function buildPostMenuActions(
+  post: Pick<FeedPostDto, "id" | "status" | "commentsLocked" | "pinned">,
+  deps: {
+    actions: Pick<FeedActions, "moderate" | "remove">;
+    /** Mở màn chi tiết (chỗ sửa bài). `undefined` ⇒ đang Ở chính màn đó. */
+    openDetail?: (postId: string) => void;
+    /** Sau khi xoá. `undefined` ⇒ ở lại (danh sách tự refetch). */
+    afterDelete?: () => void;
+  },
+): PostCardMenuActions {
+  return {
+    onCopyLink: () => {
+      // `?.` vì `navigator.clipboard` KHÔNG tồn tại trên http không phải localhost (và trong jsdom).
+      // Sao chép link hỏng không được phép làm chết cả menu.
+      void navigator.clipboard?.writeText(`${window.location.origin}/feed/posts/${post.id}`);
+    },
+    onEdit: () => deps.openDetail?.(post.id),
+    onDelete: () => {
+      deps.actions.remove(post.id);
+      deps.afterDelete?.();
+    },
+    onToggleHidden: () => deps.actions.moderate(post.id, { hidden: post.status !== "hidden" }),
+    onToggleComments: () => deps.actions.moderate(post.id, { locked: !post.commentsLocked }),
+    onTogglePinned: () => deps.actions.moderate(post.id, { pinned: !post.pinned }),
   };
 }

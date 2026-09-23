@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 import { socialApi, socialKeys } from "@mediaos/web-core";
 import type { FeedPostDto } from "@mediaos/contracts";
 import { FeedPostList } from "./components/FeedPostList";
-import { useFeedActions } from "./lib/use-feed-actions";
+import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
 export function SavedPage(): React.ReactElement {
   const { t } = useTranslation("social");
@@ -33,16 +33,12 @@ export function SavedPage(): React.ReactElement {
     [savedQuery.data],
   );
 
-  const buildMenuActions = (post: FeedPostDto) => ({
-    onCopyLink: () => {
-      void navigator.clipboard?.writeText(`${window.location.origin}/feed/posts/${post.id}`);
-    },
-    onEdit: () => void navigate({ to: "/feed/posts/$postId", params: { postId: post.id } }),
-    onDelete: () => actions.remove(post.id),
-    onToggleHidden: () => actions.moderate(post.id, { hidden: post.status !== "hidden" }),
-    onToggleComments: () => actions.moderate(post.id, { locked: !post.commentsLocked }),
-    onTogglePinned: () => actions.moderate(post.id, { pinned: !post.pinned }),
-  });
+  // Sáu hành động của menu ⋯ dựng bằng helper DÙNG CHUNG — bốn màn cùng một luật, một chỗ sửa.
+  const buildMenuActions = (post: FeedPostDto) =>
+    buildPostMenuActions(post, {
+      actions,
+      openDetail: (postId) => void navigate({ to: "/feed/posts/$postId", params: { postId } }),
+    });
 
   return (
     <div className="flex flex-col gap-4">
