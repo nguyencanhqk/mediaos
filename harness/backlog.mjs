@@ -17111,6 +17111,7 @@ export const backlog = [
       "Nếu đóng xong: GỠ khối ĐÍNH CHÍNH ở 4 docblock của BE-1C (`social-files.service.ts` · `social-access.service.ts` · `social-route-pairs.const.ts` · `packages/contracts/src/social-api.ts`) vì lúc đó D1a thành SỰ THẬT",
     ],
     notes: [
+      "✍️ OWNER DUYỆT 24/09/2026 — cho phép siết route 004/017 (đổi hành vi 2 route ĐÃ SHIP). CHƯA thi công: theo CLAUDE.md §6 đây là crown-jewel ⇒ phiên sau vào THẲNG bước micro-plan (planner) → `plan-reviewer` PASS → mới code. Owner chốt kèm: không mở trong phiên seed vì lý do chi phí.",
       "SEED 24/09/2026 từ FULL gate của S16-SOCIAL-BE-1C. 🔴 KHÔNG do BE-1C đẻ ra — khoảng hở có TỪ BE-1; BE-1C chỉ làm nó dễ tới hơn (trước đó nhân viên chỉ lấy được tệp `image/*` qua cửa avatar `update:avatar`@Own, nay lấy được mọi MIME trong allowlist).",
       "NỢ MEDIUM #1 (cùng nguồn): trần SOC-DEC-008 ở `social-attachments.service.ts` chỉ đếm `kind==='image'` (≤10) và `'video'` (≤1). Tệp PDF/docx KHÔNG rơi vào nhánh nào ⇒ KHÔNG trần số lượng, chỉ còn trần dung lượng mỗi tệp.",
       "NỢ MEDIUM #2 (cùng nguồn, NGOÀI paths — `FileService`): `file_access_logs.permission_code` ghi `'FOUNDATION.FILE.UPLOAD'` + audit `moduleCode='FOUNDATION'` cho tệp đi cửa SOCIAL/CHAT/avatar, trong khi actor KHÔNG có cặp `upload:foundation-file`. Hai bảng append-only ⇒ vết điều tra nói SAI cặp quyền đã dùng. Tiền lệ CHAT/avatar y hệt ⇒ không phải hồi quy của BE-1C.",
