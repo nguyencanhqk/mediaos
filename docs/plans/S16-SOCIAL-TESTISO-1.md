@@ -150,3 +150,29 @@ hai khối đều ngắn. Đổi lại `check.sh --all` hết đỏ ngẫu nhiê
 
 **Vượt ngoài `done_when` (có chủ ý):** `done_when` chỉ nêu Nhóm 13; Nhóm 10 phát lại `0582` trong đúng
 hình dạng RR ấy nên mang **cùng lớp lỗi** — vá luôn thay vì để lại quả bom hẹn giờ trong cùng file.
+
+---
+
+## §8. Gate LIGHT — 24/09/2026 (sau khi đồng bộ master)
+
+Chạy `typescript-reviewer` ĐỘC LẬP trên `git diff origin/master...HEAD`. **Verdict PASS**, 0 CRITICAL /
+0 HIGH. Reviewer kiểm chứng lại bằng ĐỌC CODE (không tin lời plan) và xác nhận đúng 3 điều cốt lõi:
+khoá đặt trước câu `SELECT` đầu tiên ở **cả hai** call-site (dòng 1231-1234 và 1531-1535) · khoá phát
+trên **cùng** `PoolClient` với khối đo, qua `directPool()` nên **bypass PgBouncer** · census thứ tự khoá
+không tìm được writer nào giữ `feed_kudos_badges` rồi mới xin `companies` trong cùng một tx.
+
+Hai finding **MEDIUM** đã vá trong cùng nhánh (đo trước khi sửa, không sửa theo cảm tính):
+
+| #   | Finding                                                                                                                                                     | Phép ĐO                                                                                                                                                                                                                                    | Bản vá                                                                                                                                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M-1 | Hai câu `LOCK TABLE` **không có cận trên** cho lúc CHỜ khoá — lệch quy ước repo (>30 chỗ dùng `SET LOCAL lock_timeout`, `'5s'` là giá trị phổ biến nhất)    | Giữ khoá `EXCLUSIVE` ở session A, session B xin khoá với `lock_timeout='1s'` ⇒ **đỏ đúng 1s**, `55P03: canceling statement due to lock timeout`, khoá `companies` đã lấy được, chết ở khoá thứ hai ⇒ cận trên CÓ hiệu lực, không trang trí | Thêm `SET LOCAL lock_timeout = '5s'` trước hai câu `LOCK TABLE`. `SET` là utility statement ⇒ KHÔNG lấy snapshot, hợp đồng "khoá xong trước SELECT đầu" giữ nguyên (spec vẫn 53/53 PASS)                                                               |
+| M-2 | Docblock khẳng định truyền `companyId` khác `null` làm khoá "VÔ DỤNG mà KHÔNG có gì đỏ" và gọi đó là "bẫy y hệt" `payroll-catalog.lock.ts` — **khai NGƯỢC** | `BEGIN; SELECT set_config(…); SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;` trên PG của repo ⇒ **`25001: SET TRANSACTION ISOLATION LEVEL must be called before any query`** — đỏ CỨNG, không im lặng                                   | Viết lại docblock theo hành vi đo được: đây là **fail-closed** (PG từ chối thẳng ở call-site, chưa tới helper); `pg_advisory_xact_lock` của payroll mới là fail-open thật vì LUÔN thành công bất kể snapshot. Ghi rõ "đừng chép lời khai giữa hai chỗ" |
+
+**LOW đã cân nhắc, KHÔNG sửa:** reviewer đề nghị chỉ đóng dấu `status: "done"` trong `harness/backlog.mjs`
+sau khi merge. Dòng đó nằm **trong chính nhánh này** nên chỉ hạ cánh lên master khi PR merge — không có
+cửa lệch ledger. Giữ nguyên để tránh một commit trống sau merge.
+
+**Xung đột với master (24/09, sau khi #538 land):** đúng **một** file — `docs/STATUS.md` (TỰ SINH).
+Hoà giải bằng cách lấy bản master ⇒ diff PR **không còn chạm** file này, hết cửa tái xung đột với #539.
+`harness/backlog.mjs` tự merge sạch (chỉ dòng `todo`→`done`). Verify lại trên lane DB **sạch**
+(`bash scripts/lane-db-setup.sh testiso --reset`, chain 0000→latest): **53/53 PASS**.

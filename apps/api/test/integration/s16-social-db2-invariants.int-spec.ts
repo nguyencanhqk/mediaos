@@ -219,10 +219,26 @@ describe.skipIf(!hasDb)(
      * một cổng xác minh đỏ-ngẫu-nhiên là cổng fail-open: một lượt đỏ có thể là nó, che mất một ĐỎ THẬT.
      */
     async function lockAgainstConcurrentKudosSeed(c: PoolClient): Promise<void> {
-      // ⚠️ BẮT BUỘC gọi qua `withRole(direct, null, …)` — truyền companyId KHÁC null sẽ làm hai dòng
-      // dưới VÔ DỤNG mà KHÔNG có gì đỏ: `withRole` chạy `SELECT set_config('app.current_company_id',…)`
-      // ngay sau `BEGIN`, mà đó là một câu SELECT ⇒ snapshot RR chốt TRƯỚC khi tới đây. Đúng hình dạng
-      // fail-open. Bẫy y hệt đã ghi độc lập ở `src/payroll/payroll-catalog.lock.ts` (dòng ~27).
+      // ⚠️ BẮT BUỘC gọi qua `withRole(direct, null, …)`. Truyền companyId KHÁC null thì `withRole` chạy
+      // `SELECT set_config('app.current_company_id',…)` ngay sau `BEGIN` — một câu SELECT — nên câu
+      // `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ` ở call-site ném CỨNG
+      // `25001: SET TRANSACTION ISOLATION LEVEL must be called before any query` (ĐO 24/09/2026 trên
+      // PG của repo) ⇒ ca ĐỎ NGAY tại dòng đó, KHÔNG bao giờ chạy tới đây.
+      //   KHÔNG cùng lớp lỗi với `src/payroll/payroll-catalog.lock.ts` (dòng ~27) dù nghe giống: ở đó
+      //   `pg_advisory_xact_lock` LUÔN thành công bất kể snapshot đã chốt ⇒ khoá thành rỗng ÂM THẦM
+      //   (fail-open thật). Ở đây PG TỪ CHỐI thẳng ⇒ fail-closed. Đừng chép lời khai giữa hai chỗ.
+      //
+      // `lock_timeout` = CẬN TRÊN cho lúc CHỜ nhận khoá (không phải lúc GIỮ). Thiếu nó, một tx bất
+      // thường đang giữ khoá xung đột sẽ treo ca này tới hết `testTimeout` 120s của chính nó, và trong
+      // suốt thời gian đó mọi spec ghi `companies`/`feed_kudos_badges` (testTimeout mặc định 20s) bị
+      // chặn theo ⇒ đổi một flake thành một chuỗi đỏ khó truy. 5s = giá trị dùng nhiều nhất trong repo,
+      // dư ~10 lần so với đo thật (chặn >500ms chỉ 18/~4200 vòng dưới chaos writer); vượt ngưỡng thì đỏ
+      // NGAY với `55P03: canceling statement due to lock timeout` (ĐO 24/09/2026: đúng ngưỡng, khoá
+      // `companies` đã lấy được, chết ở khoá `feed_kudos_badges`) — nói rõ "có kẻ giữ khoá", khác hẳn
+      // một ca treo im lặng.
+      // `SET`/`LOCK TABLE` đều là utility statement ⇒ KHÔNG lấy snapshot, giữ nguyên hợp đồng
+      // "khoá xong TRƯỚC câu SELECT đầu tiên".
+      await c.query("SET LOCAL lock_timeout = '5s'");
       await c.query("LOCK TABLE companies IN SHARE MODE"); // chặn tạo company mới
       await c.query("LOCK TABLE feed_kudos_badges IN EXCLUSIVE MODE"); // chặn mọi commit huy hiệu
     }
