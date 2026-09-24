@@ -171,6 +171,78 @@ describe.skipIf(!hasDb)(
       }
     }
 
+    /**
+     * S16-SOCIAL-TESTISO-1 — KHOÁ CÁCH LY bắt buộc cho MỌI khối phát lại `0582` trong file này.
+     *
+     * GỌI Ở ĐÂU: NGAY SAU `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`, và TRƯỚC câu `SELECT`
+     * đầu tiên của khối. `LOCK TABLE` là *utility statement* nên KHÔNG lấy snapshot; snapshot RR chỉ
+     * hình thành ở câu đầu tiên CẦN nó. Gọi sau câu SELECT đầu tiên là VÔ DỤNG — snapshot đã chốt.
+     *
+     * VÌ SAO CẦN. `0582` là `INSERT … CROSS JOIN companies … ON CONFLICT (company_id, code) DO NOTHING`
+     * — phạm vi TOÀN DB, không giới hạn ở tenant của spec này. Chạy nó trong một snapshot RR DÀI trên
+     * lane DB DÙNG CHUNG là một ca đua: khi phiên KHÁC commit một hàng `feed_kudos_badges` cho một
+     * company đã hiện diện trong snapshot, PostgreSQL KHÔNG "skip im lặng" như trực giác về `DO NOTHING`
+     * mách bảo — `ON CONFLICT` dò xung đột trên hàng MỚI NHẤT (ngoài snapshot) trong khi tx bị ràng ở
+     * snapshot cũ, RR không hoà giải được ⇒ `40001 could not serialize access due to concurrent update`.
+     * Ba nguồn ghi đồng thời trong cây test đều theo đúng hình dạng nguy hiểm «tạo company (commit) →
+     * chèn huy hiệu (commit)»: `test/integration/rls-registry.ts` · `src/social/social-master-data.seeder.ts`
+     * (qua int-spec của nó) · `test/integration/social-be2b2-kudos.int-spec.ts`.
+     *
+     * PHÉP ĐO CỔNG (lane `mediaos_testiso`, 2 phiên tự canh giờ, 24/09/2026) — kịch bản: A lấy snapshot
+     * RR → B commit 5 huy hiệu cho CHÍNH company đó → A chạy thân `0582`:
+     *
+     *   | biến thể                        | phiên B            | phiên A                  |
+     *   | ------------------------------- | ------------------ | ------------------------ |
+     *   | GỠ hai dòng LOCK dưới đây        | ghi được sau 6ms   | **ERROR 40001**          |
+     *   | GIỮ (hiện trạng)                 | **bị chặn >3s**    | **PASS**                 |
+     *
+     * …và ở tầng SPEC, chạy CHÍNH file này dưới một *chaos writer* lặp «tạo company → chèn huy hiệu»:
+     * GỠ hai dòng LOCK ⇒ **4/8 lượt ĐỎ**; GIỮ ⇒ **0/10 lượt ĐỎ**. ⚠️ Phép đo TUẦN TỰ (chạy spec một
+     * mình) KHÔNG bác được giả thuyết ca ĐUA — phiên kia không thể commit vào GIỮA cửa sổ snapshot; đó
+     * đúng là bẫy đã làm 2 giả thuyết trước bị bác OAN (`gate-measurement-row-can-be-unsatisfiable`).
+     *
+     * HAI ĐƯỜNG BỊ CẤM (đừng "sửa" lại thành chúng khi ca này đỏ):
+     *   · **retry 40001** ⇒ giấu triệu chứng, và che luôn một ca 40001 THẬT nếu sau này có;
+     *   · **hạ xuống READ COMMITTED** ⇒ chỉ thu hẹp cửa sổ chứ không đóng: một company commit vào giữa
+     *     câu `INSERT` và câu `VERIFY` của `0582` vẫn làm vỡ đẳng thức `v_left = 5 * v_co` (v_co đếm nó,
+     *     v_left thì không).
+     *
+     * THỨ TỰ KHOÁ (hợp đồng chống deadlock): `companies` TRƯỚC → `feed_kudos_badges` SAU. Census
+     * 24/09/2026 trên `apps/ packages/ scripts/ harness/` (`*.ts` · `*.sql` · `*.mjs` · `*.js`): hai
+     * dòng dưới đây là khoá bảng TƯỜNG MINH DUY NHẤT trong cả repo — mọi chỗ khác chỉ dùng
+     * `pg_advisory_*`, không nằm chung đồ thị chờ với khoá bảng ⇒ chưa có vòng chờ nào để sinh deadlock.
+     * Thêm `LOCK TABLE` ở bất kỳ đâu khác ⇒ PHẢI theo đúng thứ tự này.
+     *
+     * GIÁ PHẢI TRẢ (chấp nhận được, có chủ ý): mọi spec chạy song song mà tạo company hoặc ghi huy hiệu
+     * sẽ XẾP HÀNG trong lúc hai khối này chạy. Đo dưới chaos writer: 18 vòng ghi bị chặn >500ms trên
+     * ~4200 vòng qua 10 lượt spec — nhiễu không đáng kể. Đổi lại `check.sh --all` hết đỏ ngẫu nhiên —
+     * một cổng xác minh đỏ-ngẫu-nhiên là cổng fail-open: một lượt đỏ có thể là nó, che mất một ĐỎ THẬT.
+     */
+    async function lockAgainstConcurrentKudosSeed(c: PoolClient): Promise<void> {
+      // ⚠️ BẮT BUỘC gọi qua `withRole(direct, null, …)`. Truyền companyId KHÁC null thì `withRole` chạy
+      // `SELECT set_config('app.current_company_id',…)` ngay sau `BEGIN` — một câu SELECT — nên câu
+      // `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ` ở call-site ném CỨNG
+      // `25001: SET TRANSACTION ISOLATION LEVEL must be called before any query` (ĐO 24/09/2026 trên
+      // PG của repo) ⇒ ca ĐỎ NGAY tại dòng đó, KHÔNG bao giờ chạy tới đây.
+      //   KHÔNG cùng lớp lỗi với `src/payroll/payroll-catalog.lock.ts` (dòng ~27) dù nghe giống: ở đó
+      //   `pg_advisory_xact_lock` LUÔN thành công bất kể snapshot đã chốt ⇒ khoá thành rỗng ÂM THẦM
+      //   (fail-open thật). Ở đây PG TỪ CHỐI thẳng ⇒ fail-closed. Đừng chép lời khai giữa hai chỗ.
+      //
+      // `lock_timeout` = CẬN TRÊN cho lúc CHỜ nhận khoá (không phải lúc GIỮ). Thiếu nó, một tx bất
+      // thường đang giữ khoá xung đột sẽ treo ca này tới hết `testTimeout` 120s của chính nó, và trong
+      // suốt thời gian đó mọi spec ghi `companies`/`feed_kudos_badges` (testTimeout mặc định 20s) bị
+      // chặn theo ⇒ đổi một flake thành một chuỗi đỏ khó truy. 5s = giá trị dùng nhiều nhất trong repo,
+      // dư ~10 lần so với đo thật (chặn >500ms chỉ 18/~4200 vòng dưới chaos writer); vượt ngưỡng thì đỏ
+      // NGAY với `55P03: canceling statement due to lock timeout` (ĐO 24/09/2026: đúng ngưỡng, khoá
+      // `companies` đã lấy được, chết ở khoá `feed_kudos_badges`) — nói rõ "có kẻ giữ khoá", khác hẳn
+      // một ca treo im lặng.
+      // `SET`/`LOCK TABLE` đều là utility statement ⇒ KHÔNG lấy snapshot, giữ nguyên hợp đồng
+      // "khoá xong TRƯỚC câu SELECT đầu tiên".
+      await c.query("SET LOCAL lock_timeout = '5s'");
+      await c.query("LOCK TABLE companies IN SHARE MODE"); // chặn tạo company mới
+      await c.query("LOCK TABLE feed_kudos_badges IN EXCLUSIVE MODE"); // chặn mọi commit huy hiệu
+    }
+
     const mkPost = async (companyId: string, userId: string, type: string): Promise<string> =>
       (
         await direct.query(
@@ -1150,6 +1222,8 @@ describe.skipIf(!hasDb)(
     //     idempotent là "sau lần 1" == "sau lần 2".
     //   · REPEATABLE READ giữ MỘT ảnh chụp cho cả khối: một spec chạy song song tạo company mới giữa
     //     chừng sẽ không làm đẳng thức `5 × count(companies)` trong verify của `0582` vỡ (đỏ-giả).
+    //     ⚠️ NHƯNG RR MỘT MÌNH KHÔNG ĐỦ — nó đổi đỏ-giả lấy `40001` (S16-SOCIAL-TESTISO-1). Cách ly
+    //     thật nằm ở `lockAgainstConcurrentKudosSeed` ngay dưới; đọc docblock của nó trước khi sửa khối này.
     //   · ROLLBACK ⇒ KHÔNG rác sang tenant của spec khác (`fresh-lane-db-exposes-teardown-ri-race`).
     // ══════════════════════════════════════════════════════════════════════════════════════════════
     describe("Nhóm 10 · idempotency migration", () => {
@@ -1172,6 +1246,7 @@ describe.skipIf(!hasDb)(
 
         await withRole(direct, null, async (c) => {
           await c.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+          await lockAgainstConcurrentKudosSeed(c); // TRƯỚC câu SELECT đầu tiên — xem docblock của helper
           const noti0 = (await c.query(NOTI_COUNTS)).rows[0];
 
           await runMigrationFile(c, "0581_s16socialdb2_noti_track_b.sql");
@@ -1463,12 +1538,15 @@ describe.skipIf(!hasDb)(
     // NHÓM 13 — Seed catalog huy hiệu. ĐÂY LÀ BẰNG CHỨNG DUY NHẤT cho `done_when` #3: `0582` là NO-OP
     //           có bảo đảm trên mọi lane DB/CI (0 company lúc migrate — plan §3), nên nếu không có ca
     //           này thì done_when "xanh RỖNG". Chạy CHÍNH file `0582` (không chép lại thân SQL — chống
-    //           trôi) trên một company THẬT, trong tx REPEATABLE READ rồi ROLLBACK.
+    //           trôi) trên một company THẬT, trong tx REPEATABLE READ rồi ROLLBACK — kèm khoá cách ly
+    //           `lockAgainstConcurrentKudosSeed` (BẮT BUỘC: RR một mình làm ca này đỏ `40001` ngẫu
+    //           nhiên trên lane DB dùng chung — S16-SOCIAL-TESTISO-1, xem docblock của helper).
     // ══════════════════════════════════════════════════════════════════════════════════════════════
     describe("Nhóm 13 · seed 5 huy hiệu hệ thống trên company THẬT", () => {
       it("thân SQL của 0582 trên company thật ⇒ ĐÚNG 5 mã, is_active, position 1..5; chạy lại ⇒ không đổi", async () => {
         await withRole(direct, null, async (c) => {
           await c.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+          await lockAgainstConcurrentKudosSeed(c); // TRƯỚC câu SELECT đầu tiên — xem docblock của helper
 
           const before = await c.query(
             `SELECT count(*)::int AS n FROM feed_kudos_badges WHERE company_id = $1`,
