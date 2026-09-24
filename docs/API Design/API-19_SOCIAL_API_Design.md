@@ -64,7 +64,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-001` | `GET /social/feed` | `view:feed` (+ `manage:feed-post` khi `status` khác `published`) | Lọc `type`/`audience`/`groupId`/`tag`/`authorId`/**`status`**, sắp xếp `latest`\|`active`; cursor-based. **`status` là nguồn dữ liệu của `SOC-SCREEN-010`** — `status` khác `published` đòi thêm `manage:feed-post` |
 | `SOCIAL-API-002` | `POST /social/posts` | **theo `type` — xem §5.1b** | `@Idempotent()`; parse hashtag + mention cùng tx. 5 loại bài dùng 5 cặp khác nhau |
 | `SOCIAL-API-003` | `GET /social/posts/{post_id}` | `view:feed` | `hidden` ⇒ 404 trừ tác giả / `manage:feed-post` |
-| `SOCIAL-API-004` | `PATCH /social/posts/{post_id}` | `view:feed` + chủ bài, **hoặc** `manage:feed-post` | Set `edited_at`; đồng bộ lại hashtag/mention |
+| `SOCIAL-API-004` | `PATCH /social/posts/{post_id}` | `view:feed` + chủ bài, **hoặc** `manage:feed-post`; **+ `create:feed-post` khi THÊM đính kèm mới — xem §5.1f** | Set `edited_at`; đồng bộ lại hashtag/mention |
 | `SOCIAL-API-005` | `DELETE /social/posts/{post_id}` | như trên | Xoá **mềm** + recycle-bin |
 | `SOCIAL-API-006` | `PATCH /social/posts/{post_id}/moderation` | **theo TỪNG trường — xem §5.1c** | Body `{hidden?, pinned?, commentsLocked?}`; **mỗi trường đổi = 1 dòng audit** |
 | `SOCIAL-API-007` | `POST /social/posts/{post_id}/view` | `view:feed` (hàng `user_id = actor`) | `ON CONFLICT DO NOTHING` — reload không tăng |
@@ -77,7 +77,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | **Bình luận — Track A** ||||
 | `SOCIAL-API-014` | `GET /social/posts/{post_id}/comments` | `view:feed` | Phân trang; trả lời lồng 1 cấp |
 | `SOCIAL-API-015` | `POST /social/posts/{post_id}/comments` | `create:feed-comment` | `@Idempotent()`; bài khoá bình luận ⇒ 409 `ERR-004`; trả lời quá 1 cấp ⇒ 422 `ERR-005` |
-| `SOCIAL-API-016` | `PATCH /social/comments/{comment_id}` | chủ bình luận **hoặc** `manage:feed-post` | |
+| `SOCIAL-API-016` | `PATCH /social/comments/{comment_id}` | chủ bình luận **hoặc** `manage:feed-post`; **+ `create:feed-comment` khi THÊM đính kèm mới — xem §5.1f** | |
 | `SOCIAL-API-017` | `DELETE /social/comments/{comment_id}` | như trên | Xoá mềm |
 | `SOCIAL-API-018` | `PUT /social/comments/{comment_id}/reaction` | `view:feed` (hàng `user_id = actor`) | |
 | `SOCIAL-API-019` | `DELETE /social/comments/{comment_id}/reaction` | như trên | |
@@ -174,6 +174,31 @@ decorator mang SÀN, cặp thật hỏi ở tầng 2 (`SocialAccessService.asser
   gắn vào bài vẫn bị `canLinkFile` hỏi lại cặp đúng của đích THẬT. Nói dối chỉ tự thu hẹp cửa.
 - **Không cặp quyền mới, không migration**: cả hai cặp đã có trong catalog từ seed `0578:42-43`.
 - Tệp vừa đăng ký **inert** (0 `file_links`) ⇒ không đường tải nào ký URL cho nó cho tới khi được gắn.
+
+### 5.1f `SOCIAL-API-004` / `016` — cặp `create` khi lượt SỬA **THÊM đính kèm mới**
+
+> S16-SOCIAL-ATTGATE-1 (owner ký 24/09/2026). Đóng khoảng hở: trước bản này, hai route SỬA gác
+> `view:feed` + (chủ nội dung ∨ `manage:feed-post`) rồi ghi thẳng `file_links`, nên một vai giữ
+> `manage:feed-post` mà KHÔNG có `create:feed-post` vẫn gắn được tệp vào bài của người khác —
+> trong khi chính vai đó bị chặn ở `002`.
+
+| Lượt PATCH | Cặp ĐÒI THÊM | Mã lỗi |
+| --- | --- | --- |
+| Không gửi `attachmentIds` (chỉ sửa chữ) | — | — |
+| `attachmentIds` = danh sách hiện có (0 tệp MỚI) | — | — |
+| `attachmentIds: []` (GỠ HẾT đính kèm) | — | — |
+| `attachmentIds` có ≥1 tệp **CHƯA** gắn vào nội dung này | `004` → `create:feed-post` · `016` → `create:feed-comment` | 403 `SOCIAL-ERR` «không có quyền … đính kèm» |
+
+**Điều kiện là «có tệp MỚI», KHÔNG phải «danh sách không rỗng».** Chủ ý: người kiểm duyệt phải gỡ
+được một ảnh vi phạm khỏi bài người khác — FE gửi lại danh sách còn lại, và một luật theo
+«không rỗng» sẽ biến thao tác gỡ đó thành 403.
+
+**Thứ tự cổng trong lượt PATCH:** `resolveActor` → 404 (không thấy nội dung) → 403 `SOCIAL-ERR-003`
+(không phải chủ, không `manage:feed-post`) → **403 cặp `create` (mục này)** → 422 `SOCIAL-ERR-007`
+(tệp không thuộc người gọi / sai trạng thái / quá trần). Cổng quyền đứng TRƯỚC vế sở hữu tệp: vai
+thiếu cặp nhận 403 nói đúng lý do, không phải 422 nói về quyền sở hữu tệp.
+
+**Cờ `tier1IsFloor` của hai route này = `true`** kể từ đây: cặp ở decorator chỉ là SÀN.
 
 ### 5.1c `SOCIAL-API-006` — trường nào cần cặp nào
 

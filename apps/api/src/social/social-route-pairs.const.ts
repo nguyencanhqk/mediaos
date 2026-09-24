@@ -47,15 +47,24 @@ export interface SocialPair {
    * │ · `006` phụ thuộc TRƯỜNG nào có mặt (`pinned` cần `manage:feed-news`).                        │
    * │                                                                                               │
    * │ ⚠️ ĐỊNH NGHĨA NÀY HẸP HƠN "tầng 2 có kiểm cặp khác" — và phải hẹp, nếu không cờ vô nghĩa:     │
-   * │ `001` cũng hỏi `manage:feed-post` (cho bộ lọc `status`), `004`/`005`/`016`/`017` cũng hỏi nó   │
-   * │ (nhánh sửa/xoá của người khác). Nhưng ở NĂM route đó, `view:feed` của decorator ĐÚNG là cặp    │
-   * │ gác route: request cơ bản chạy trọn vẹn chỉ với nó, phần thêm là vị từ HÀNG (sở hữu) hoặc một  │
-   * │ bộ lọc TUỲ CHỌN. Ở `002`/`006` thì không: một request hợp lệ về cú pháp bị 403 vì cặp mà       │
-   * │ decorator KHÔNG hề nhắc tới.                                                                  │
+   * │ `001` cũng hỏi `manage:feed-post` (cho bộ lọc `status`), `005`/`017` cũng hỏi nó (nhánh xoá   │
+   * │ của người khác). Nhưng ở BA route đó, `view:feed` của decorator ĐÚNG là cặp gác route: request │
+   * │ cơ bản chạy trọn vẹn chỉ với nó, phần thêm là vị từ HÀNG (sở hữu) hoặc một bộ lọc TUỲ CHỌN.    │
+   * │ Ở `002`/`006` thì không: một request hợp lệ về cú pháp bị 403 vì cặp mà decorator KHÔNG hề      │
+   * │ nhắc tới.                                                                                     │
+   * │                                                                                               │
+   * │ 🔴 **`004`/`016` ĐÃ ĐỔI PHE (S16-SOCIAL-ATTGATE-1, owner ký S-3 ngày 24/09/2026).** Bản trước  │
+   * │ xếp chúng cùng nhóm `005`/`017` với lý do "phần thêm chỉ là vị từ HÀNG". Câu đó HẾT ĐÚNG: từ   │
+   * │ WO này, một PATCH hợp lệ về cú pháp bị **403** vì cặp `create:feed-post`/`create:feed-comment` │
+   * │ — cặp mà decorator không nhắc — và điều kiện phụ thuộc NỘI DUNG REQUEST (`attachmentIds` có    │
+   * │ tệp MỚI hay không). Đúng định nghĩa hẹp ở trên, nên chúng mang cờ.                             │
    * │                                                                                               │
    * │ Census (`social-two-layer-guard-census.unit-spec.ts`) đo đẳng thức này bằng một thứ ĐỘC LẬP:   │
    * │ tập `tier1IsFloor===true` phải BẰNG ĐÚNG tập route có bảng cặp-theo-payload                   │
-   * │ (`SOCIAL_POST_TYPE_PAIRS` cho `002`, `SOCIAL_MODERATION_FIELD_PAIRS` cho `006`).              │
+   * │ (`SOCIAL_POST_TYPE_PAIRS` cho `002`, `SOCIAL_MODERATION_FIELD_PAIRS` cho `006`,                │
+   * │ `SOCIAL_FILE_TARGET_PAIRS` cho `054`/`055`, và với `004`/`016` là **call-site AST của          │
+   * │ `resolveAttachNewGate` ở mức `Class#method`** — pin mức LỚP sẽ cho phép dời cổng từ `update()`  │
+   * │ sang `create()` mà census vẫn xanh).                                                           │
    * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    */
   readonly tier1IsFloor: boolean;
@@ -134,7 +143,8 @@ export const SOCIAL_ROUTE_PAIRS = {
   /** 002 `POST /social/posts` — SÀN; `type='news'` đòi thêm `manage:feed-news` (D4). */
   postCreate: pair("create", "feed-post", true),
   postDetail: pair("view", "feed"),
-  postUpdate: pair("view", "feed"),
+  /** 004 `PATCH /social/posts/{id}` — SÀN; THÊM đính kèm mới đòi `create:feed-post` (ATTGATE-1). */
+  postUpdate: pair("view", "feed", true),
   postDelete: pair("view", "feed"),
   /** 006 `PATCH …/moderation` — SÀN; `pinned` đòi `manage:feed-news` (D5). */
   postModerate: pair("manage", "feed-post", true),
@@ -148,7 +158,8 @@ export const SOCIAL_ROUTE_PAIRS = {
   // ── Bình luận 014–019 ──
   commentList: pair("view", "feed"),
   commentCreate: pair("create", "feed-comment"),
-  commentUpdate: pair("view", "feed"),
+  /** 016 `PATCH /social/comments/{id}` — SÀN; THÊM đính kèm mới đòi `create:feed-comment`. */
+  commentUpdate: pair("view", "feed", true),
   commentDelete: pair("view", "feed"),
   commentReactionPut: pair("view", "feed"),
   commentReactionDelete: pair("view", "feed"),
@@ -396,11 +407,11 @@ export type SocialKudosFlag = keyof typeof SOCIAL_KUDOS_FLAG_PAIRS;
  * ⚠️ **KHÔNG cặp nào ở đây là cặp MỚI**: cả hai đã có trong catalog từ seed `0578:42-43`. WO này
  * không thêm cặp quyền, không migration.
  *
- * 🔴 ĐÍNH CHÍNH (FULL gate 24/09/2026, HIGH) — bảng này là cổng DUY NHẤT ép được phân biệt
- * post-vs-comment trên đường tệp, và nó ép bằng giá trị CLIENT TỰ KHAI. Điều đó chấp nhận được vì
- * route TẠO (`002`/`015`) đã gác chính hai cặp ấy ở tầng 1 — **KHÔNG** phải vì `canLinkFile` hỏi lại:
- * đường gắn thật (`SocialAttachmentsService.assertLinkableFilesTx`) không hỏi cặp nào cả. Nợ ở đường
- * SỬA (`004`/`017`) ghi tại `harness/backlog.mjs`.
+ * 🔴 Bảng này là cổng DUY NHẤT ép được phân biệt post-vs-comment trên đường tệp, và ở cửa `054`/`055`
+ * nó ép bằng giá trị CLIENT TỰ KHAI. Điều đó chấp nhận được vì cặp `create` của ĐÍCH THẬT được ép ở
+ * đường GHI, **KHÔNG** bởi `canLinkFile` (hàm đó chỉ chạy trên route FOUNDATION): tầng-1 ở `002`/`015`,
+ * và tham số `gate` của `syncLinksTx` ở `004`/`016` — cùng bảng này, qua
+ * `SocialAccessService.resolveAttachNewGate` (S16-SOCIAL-ATTGATE-1).
  */
 export const SOCIAL_FILE_TARGET_PAIRS = {
   post: { action: "create", resourceType: "feed-post", isSensitive: false },

@@ -20,7 +20,10 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { SocialAccessService } from "./social-access.service";
-import { SocialAttachmentsService } from "./social-attachments.service";
+import {
+  ATTACH_GATE_ENFORCED_BY_TIER1,
+  SocialAttachmentsService,
+} from "./social-attachments.service";
 import { SocialCommentsRepository, type CommentRow } from "./social-comments.repository";
 import { bumpPostCounter, softDeleteCommentTx } from "./social-counters";
 import { decodeFeedCursor, encodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
@@ -182,6 +185,8 @@ export class SocialCommentsService {
           "comment",
           commentId,
           dto.attachmentIds,
+          // `015` đã bị `create:feed-comment` ép ở CẢ HAI tầng (decorator + `resolveActor`).
+          ATTACH_GATE_ENFORCED_BY_TIER1,
         );
       }
 
@@ -211,6 +216,17 @@ export class SocialCommentsService {
     dto: UpdateFeedCommentDto,
   ): Promise<FeedCommentCreatedDto> {
     const actor = await this.access.resolveActor(user, "commentUpdate");
+
+    // S16-SOCIAL-ATTGATE-1 — vế 6a. Khuôn + lý do đầy đủ: `SocialPostsService.update`. Tóm tắt:
+    // resolve quyền PHẢI ở ngoài `withTenant` (tx lồng tx = treo im lặng), áp quyết định trong tx
+    // và CHỈ khi có tệp MỚI, để vai `manage:feed-post` vẫn gỡ được đính kèm vi phạm.
+    const attach =
+      dto.attachmentIds === undefined
+        ? null
+        : {
+            ids: dto.attachmentIds,
+            gate: await this.access.resolveAttachNewGate(actor, "comment"),
+          };
 
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
       const comment = await this.access.assertCommentVisible(tx, actor, commentId);
@@ -258,14 +274,15 @@ export class SocialCommentsService {
       // `dto.attachmentIds` là allowlist ĐẦY ĐỦ của lượt sửa (khuôn `SocialPostsService.update`, D18
       // liệt kê 016 trong nhóm phải đồng bộ): kiểm `undefined` chứ KHÔNG `?.length` như nhánh tạo —
       // mảng RỖNG ở đường sửa nghĩa là "bỏ hết đính kèm", nuốt nó đi là im lặng không gỡ link nào.
-      if (dto.attachmentIds) {
+      if (attach) {
         await this.attachments.syncLinksTx(
           tx,
           actor.companyId,
           actor.actorUserId,
           "comment",
           commentId,
-          dto.attachmentIds,
+          attach.ids,
+          attach.gate,
         );
       }
 
