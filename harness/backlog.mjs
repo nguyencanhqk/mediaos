@@ -17471,7 +17471,7 @@ export const backlog = [
     title:
       "Vá CÁCH LY TEST: Nhóm 13 của s16-social-db2-invariants chạy thân migration 0582 (phạm vi TOÀN DB) trong snapshot REPEATABLE READ dài trên lane DB dùng chung ⇒ phiên khác commit feed_kudos_badges làm ON CONFLICT DO NOTHING ném 40001 ⇒ ĐỎ NGẪU NHIÊN trong check.sh --all",
     zone: "amber",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
     skills: ["code-review"],
     depends_on: [],
