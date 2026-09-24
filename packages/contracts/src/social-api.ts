@@ -617,11 +617,11 @@ export type FeedPostFlagResultDto = z.infer<typeof feedPostFlagResultSchema>;
  * │ sao: route `002 POST /social/posts` và `015 POST …/comments` đã gác CHÍNH cặp                      │
  * │ `create:feed-post`/`create:feed-comment` ở TẦNG 1 ⇒ nói dối ở đây chỉ TỰ THU HẸP cửa của mình.     │
  * │                                                                                                   │
- * │ ⚠️ **ĐÍNH CHÍNH 24/09/2026 (FULL gate, HIGH):** bản đầu ghi «lúc gắn, `canLinkFile` hỏi LẠI cặp     │
- * │ đúng» — SAI. Đường gắn thật (`SocialAttachmentsService.assertLinkableFilesTx`) KHÔNG hỏi cặp nào;  │
- * │ `canLinkFile` chỉ chạy trên `POST /foundation/files/:id/links` (gate `link:foundation-file`).      │
- * │ Cặp đúng được ép bởi ROUTE TẠO, không bởi resolver. Đường SỬA (`004`/`017`) không ép — nợ đã ghi   │
- * │ ở `harness/backlog.mjs`, có từ BE-1, KHÔNG do cửa này đẻ ra.                                       │
+ * │ 🔴 Cặp `create` của đích THẬT được ép trên ĐƯỜNG GHI, **không** bởi `canLinkFile` (hàm đó chỉ      │
+ * │ chạy trên `POST /foundation/files/:id/links`, gate `link:foundation-file`): tầng-1 ở `002`/`015`,  │
+ * │ và tham số `gate` của `syncLinksTx` ở đường SỬA `004`/`016` (S16-SOCIAL-ATTGATE-1, 24/09/2026).    │
+ * │ Bản đầu của khối này viết «lúc gắn, `canLinkFile` hỏi LẠI cặp đúng» — SAI, và câu sai đó đã tự     │
+ * │ nhân bản ra 4 docblock. Đừng khai «cổng X hỏi lại ở bước sau» khi chưa lần tới call-site của X.    │
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * `originalName` PHẢI mang đuôi khớp `declaredMimeType`, và MIME phải ∈ allowlist `system_settings` —

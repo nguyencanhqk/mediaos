@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, UnprocessableEntityException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   FEED_MAX_ATTACHMENT_BYTES,
@@ -15,6 +21,41 @@ import { STORAGE_ADAPTER, type StorageAdapter } from "../storage/storage-adapter
 import { FEED_COMMENT_ENTITY, FEED_POST_ENTITY, SOCIAL_MODULE } from "./social-file.resolver";
 import { SOCIAL_ERR } from "./social.errors";
 import type { SocialTargetType, SocialViewerContext } from "./social.types";
+
+/**
+ * S16-SOCIAL-ATTGATE-1 (plan D-1/D-2, owner ký S-1/S-6 ngày 24/09/2026) — cổng «được GẮN tệp MỚI
+ * vào đích này», tức vế 6a của `SocialFileResolver.canLinkFile` (cặp `create:feed-*` theo đích).
+ *
+ * ┌─ VÌ SAO LÀ MỘT GIÁ TRỊ TRUYỀN VÀO, KHÔNG PHẢI MỘT LỜI GỌI QUYỀN TẠI CHỖ ──────────────────────┐
+ * │ `syncLinksTx` chạy BÊN TRONG transaction nghiệp vụ. Hỏi quyền ở đây nghĩa là gọi               │
+ * │ `dataScope.resolveManyOrNull` → `permission.repository.ts:70` **tự mở `withTenant`** ⇒         │
+ * │ `withTenant` LỒNG `withTenant`. `db.service.ts:83` không tái nhập (không ALS, không truyền tx  │
+ * │ hiện hành) nên đó là client THỨ HAI lấy từ pool trong khi client thứ nhất còn giữ tx; pool     │
+ * │ `max: 20` ⇒ đủ request đồng thời là **TREO IM LẶNG, không lỗi, không log**. Cùng lý do đã ghi  │
+ * │ ở docblock lớp bên dưới về `FileService.link()`.                                               │
+ * │ ⇒ RESOLVE quyền NGOÀI tx (`SocialAccessService.resolveAttachNewGate`), ÁP quyết định TRONG tx. │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠️ **Union phân biệt, KHÔNG phải `{ denyMessage: string | null }`** (plan F-2): hình dạng «vắng
+ * mặt = cho qua» là fail-OPEN đội lốt — `undefined`, `""`, hay object dựng thiếu field qua một
+ * `Partial`/cast đều lọt mà TS không bắt. Ở đây DENY là nhánh phải CHỦ ĐỘNG thoát ra: đọc `gate.allow`
+ * trên một object thiếu field cho `undefined` ⇒ `!gate.allow` ⇒ **ném**.
+ */
+export type AttachNewGate =
+  | { readonly allow: true }
+  | { readonly allow: false; readonly reason: string };
+
+/**
+ * Cổng của ĐƯỜNG TẠO (`SOCIAL-API-002` / `015`): cặp `create:feed-post` / `create:feed-comment` đã
+ * bị ép ở **CẢ HAI** tầng trước khi service chạy — decorator `@RequirePermission`
+ * (`social.controllers.ts:90` và `:258`) và `SocialAccessService.resolveActor` (`:105-121`, ném độc
+ * lập với decorator). Hỏi lại ở đây là một round-trip quyền thừa trên đường nóng nhất của module.
+ *
+ * 🔴 **CHỈ dùng ở 2 call-site TẠO.** Đường SỬA (`004`/`016`) gác `view:feed` — dán hằng này lên đó
+ * là ghim một lời khai SAI vào mã; `social-file-target-pairs-structure.spec.ts` đếm đúng 2 lần xuất
+ * hiện để chặn việc đó.
+ */
+export const ATTACH_GATE_ENFORCED_BY_TIER1: AttachNewGate = { allow: true };
 
 /** `scan_status` được phép gắn — mirror `SocialFileResolver.LINKABLE_SCAN`. */
 const LINKABLE_SCAN = new Set(["Clean", "NotRequired"]);
@@ -61,6 +102,11 @@ export class SocialAttachmentsService {
    * Vế 2-5 trùng ĐÚNG với `SocialFileResolver.canLinkFile` (xem jsdoc ở đó để biết vì sao từng vế
    * tồn tại). Vế giới hạn số lượng/dung lượng là của SPEC-16 §16 và chỉ có ở đây — resolver không
    * đếm được "bài này đã có mấy ảnh".
+   *
+   * 🔴 **VẾ 6a KHÔNG Ở ĐÂY, và đó là CÓ CHỦ ĐÍCH** (S16-SOCIAL-ATTGATE-1): cặp `create:feed-*` theo
+   * đích được ép bởi tham số `gate` của `syncLinksTx` — một quyết định resolve NGOÀI tx, vì hỏi
+   * quyền trong tx = `withTenant` lồng nhau = treo im lặng (xem docblock `AttachNewGate`). Đừng
+   * "hoàn thiện" hàm này bằng một lời gọi `dataScope`/`access` — đó chính là cái bẫy.
    *
    * ⚠️ Thông điệp lỗi CỐ Ý không nói tệp nào hỏng vì lý do gì: `fileId` do client gửi lên, nhưng
    * "tệp này tồn tại nhưng không phải của bạn" và "tệp này không tồn tại" phải không phân biệt được
@@ -133,6 +179,10 @@ export class SocialAttachmentsService {
    *
    * Lúc sửa: link cũ bị **gỡ mềm** (`deleted_at`), không xoá cứng — `file_links` là vết của việc
    * "tệp này đã từng thuộc về đâu", và vế 5 ở trên dựa vào chính vết đó để chặn tái-link.
+   *
+   * `gate` (S16-SOCIAL-ATTGATE-1) là vế 6a — cặp `create:feed-*` theo đích — đã resolve NGOÀI tx.
+   * Tham số **BẮT BUỘC**, không optional, không default: một call-site thứ năm quên khai là TS đỏ
+   * lúc build, không phải một đường gắn không cổng phát hiện sau khi ship.
    */
   async syncLinksTx(
     tx: TenantTx,
@@ -141,6 +191,7 @@ export class SocialAttachmentsService {
     targetType: SocialTargetType,
     targetId: string,
     fileIds: readonly string[],
+    gate: AttachNewGate,
   ): Promise<void> {
     const entityType = targetType === "post" ? FEED_POST_ENTITY : FEED_COMMENT_ENTITY;
 
@@ -163,7 +214,12 @@ export class SocialAttachmentsService {
     if (toUnlink.length > 0) {
       await tx
         .update(fileLinks)
-        .set({ deletedAt: new Date() })
+        // `deletedBy` (FULL gate 24/09/2026, `database-reviewer` F3): cột đã có sẵn, trước đây để
+        // NULL. Từ S16-SOCIAL-ATTGATE-1, việc «vai `manage:feed-post` GỠ đính kèm của người khác mà
+        // KHÔNG cần cặp `create:feed-*`» là hành vi CHÍNH THỨC (owner ký S-1) — mà gỡ là MỘT CHIỀU
+        // (vế 5 «đã TỪNG link» làm tệp không gắn lại được). Không ghi ai gỡ thì không còn nơi nào
+        // trả lời được câu đó: audit của `004` chỉ mang `{postId, authorUserId}`.
+        .set({ deletedAt: new Date(), deletedBy: userId })
         .where(
           and(
             eq(fileLinks.companyId, companyId),
@@ -177,6 +233,28 @@ export class SocialAttachmentsService {
 
     const toAdd = [...wanted].filter((id) => !had.has(id));
     if (toAdd.length === 0) return;
+
+    // ┌─ VẾ 6a — CẶP `create` THEO ĐÍCH (S16-SOCIAL-ATTGATE-1) ──────────────────────────────────┐
+    // │ Đặt SAU `toAdd.length === 0` là toàn bộ nội dung quyết định D-1 (owner ký S-1): lượt sửa  │
+    // │ KHÔNG thêm tệp nào — gỡ bớt, gửi lại y nguyên danh sách, hay `[]` để bỏ hết — **không**   │
+    // │ đòi cặp `create`. Nếu không, vai `manage:feed-post` mất luôn khả năng GỠ một ảnh vi phạm  │
+    // │ (FE gửi lại danh sách còn lại ⇒ non-empty ⇒ 403): đó là hồi quy CHỨC NĂNG kiểm duyệt,     │
+    // │ không phải siết chặt.                                                                     │
+    // │ Đặt TRƯỚC `assertLinkableFilesTx` cũng có chủ đích: "anh có được gắn không" đi trước      │
+    // │ "tệp này có gắn được không" ⇒ vai thiếu cặp nhận **403**, không phải 422 nói về sở hữu    │
+    // │ tệp — một mã 422 ở đây sẽ mô tả sai hoàn toàn lý do bị chặn.                              │
+    // └───────────────────────────────────────────────────────────────────────────────────────────┘
+    if (!gate.allow) {
+      // ⚠️ PHẢI là `logger`, KHÔNG phải `audit.record(tx, …)`: cú ném ngay dưới roll back cả tx
+      // (D-7, ca G15 assert đúng điều đó) ⇒ một hàng audit sẽ biến mất cùng lượt sửa. Lời gọi
+      // logger sống sót qua rollback. Không có dòng này thì cổng crown-jewel là vùng MÙ: filter
+      // toàn cục chỉ log khi status ≥ 500, nên một vai đâm liên tục vào 403 mới để lại 0 log ·
+      // 0 audit · 0 số đo. KHÔNG log id/tên tệp — chỉ SỐ LƯỢNG.
+      this.logger.warn(
+        `SOCIAL attach-gate DENY target=${targetType}:${targetId} actor=${userId} newFiles=${toAdd.length}`,
+      );
+      throw new ForbiddenException(gate.reason);
+    }
 
     // Chỉ tệp MỚI mới đi qua cổng — tệp đã gắn từ trước đã qua rồi, và bắt nó qua lại sẽ đỏ ở vế 5
     // ("đã từng có link" — chính là link của nó).

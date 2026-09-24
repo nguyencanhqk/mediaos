@@ -225,6 +225,99 @@ function serviceResolveActorCalls(): Array<{ site: string; key: string }> {
   return calls;
 }
 
+/**
+ * S16-SOCIAL-ATTGATE-1 · **S-1** — ĐỐI SỐ THỨ 7 (`gate`) của MỌI lời gọi `syncLinksTx`, theo
+ * `Class#method`, phân loại theo HÌNH DẠNG cú pháp.
+ *
+ * ┌─ VÌ SAO CẦN CA NÀY KHI ĐÃ CÓ 3 LƯỚI KHÁC (FULL gate 24/09/2026, `silent-failure-hunter` HIGH) ─┐
+ * │ Ba lưới không-cần-DB kia khoá nhau ở chỗ *hằng/lời gọi XUẤT HIỆN ở đâu*, KHÔNG ở chỗ *giá trị  │
+ * │ nào TỚI ĐƯỢC tham số `gate`*. Thay `attach.gate` bằng `{ allow: true }` ngay tại call-site mà  │
+ * │ vẫn giữ lời gọi `resolveAttachNewGate` ở trên ⇒ structure-spec (e) XANH (số đếm hằng không     │
+ * │ đổi) · census D17 XANH (call-site vẫn `SocialPostsService#update`) · unit-spec XANH (nó không  │
+ * │ gọi `update()`). Chỉ G5/G11 bắt được — mà chúng SKIP khi chạy không có `LANE_DB`.              │
+ * │ ⇒ Ca này là lưới KHÔNG-CẦN-DB duy nhất đo được cổng có thật sự được NỐI vào đường ghi.         │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+function syncLinksGateArgShapes(): Array<{ site: string; shape: string; text: string }> {
+  const out: Array<{ site: string; shape: string; text: string }> = [];
+  for (const file of fs.readdirSync(SRC_SOCIAL)) {
+    if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
+    const text = fs.readFileSync(path.join(SRC_SOCIAL, file), "utf8");
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
+    const visit = (node: ts.Node, cls: string, method: string): void => {
+      let nextCls = cls;
+      let nextMethod = method;
+      if (ts.isClassDeclaration(node) && node.name) nextCls = node.name.text;
+      if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name)) nextMethod = node.name.text;
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "syncLinksTx"
+      ) {
+        const arg = node.arguments[6];
+        const shape =
+          arg === undefined
+            ? "MISSING"
+            : ts.isPropertyAccessExpression(arg)
+              ? "property-access"
+              : ts.isIdentifier(arg)
+                ? "identifier"
+                : ts.isObjectLiteralExpression(arg)
+                  ? "object-literal"
+                  : "other";
+        out.push({ site: `${nextCls}#${nextMethod}`, shape, text: arg?.getText(sf) ?? "" });
+      }
+      ts.forEachChild(node, (c) => visit(c, nextCls, nextMethod));
+    };
+    visit(sf, "?", "?");
+  }
+  return out;
+}
+
+/**
+ * S16-SOCIAL-ATTGATE-1 — call-site của `resolveAttachNewGate` ở mức **`Class#method`**.
+ *
+ * 🔴 **KHÔNG dùng `classesReferencingManageNews()` cho việc này** (plan F-5): khuôn đó có độ phân
+ * giải LỚP, mà `SocialPostsService` phục vụ CẢ `postCreate` lẫn `postUpdate` ⇒ "lớp có gọi cổng"
+ * không phân biệt được route nào, và ai dời lời gọi từ `update()` sang `create()` thì census **vẫn
+ * XANH** trong khi cổng đã biến mất khỏi `004`. Khuôn đúng là `serviceResolveActorCalls()` ngay
+ * trên — nó đã trích `Class#method`.
+ */
+function attachGateCallSites(): string[] {
+  const sites: string[] = [];
+  for (const file of fs.readdirSync(SRC_SOCIAL)) {
+    if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
+    const text = fs.readFileSync(path.join(SRC_SOCIAL, file), "utf8");
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
+    const visit = (node: ts.Node, cls: string, method: string): void => {
+      let nextCls = cls;
+      let nextMethod = method;
+      if (ts.isClassDeclaration(node) && node.name) nextCls = node.name.text;
+      if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name)) nextMethod = node.name.text;
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "resolveAttachNewGate"
+      ) {
+        sites.push(`${nextCls}#${nextMethod}`);
+      }
+      ts.forEachChild(node, (c) => visit(c, nextCls, nextMethod));
+    };
+    visit(sf, "?", "?");
+  }
+  return sites;
+}
+
+/**
+ * Ánh xạ call-site cổng → route key. Một site KHÔNG có trong bảng này = cổng vừa mọc ở chỗ census
+ * chưa biết ⇒ ca D17 phải ĐỎ TO, không im lặng bỏ qua (đó là cả lý do bảng này tồn tại).
+ * `SocialAccessService#resolveAttachNewGate` là nơi ĐỊNH NGHĨA hàm, không phải nơi tiêu thụ.
+ */
+const ATTACH_GATE_SITE_TO_KEY: Record<string, string> = {
+  "SocialPostsService#update": "postUpdate",
+  "SocialCommentsService#update": "commentUpdate",
+};
+
 /** Tên lớp có tham chiếu tới cờ cặp-KHÁC `canManageNews` — tín hiệu AST của một nhánh tầng-2. */
 function classesReferencingManageNews(): Set<string> {
   const out = new Set<string>();
@@ -371,12 +464,60 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     ) {
       payloadDependent.push("fileUploadUrl", "fileConfirm");
     }
+    // S16-SOCIAL-ATTGATE-1 — nguồn ĐỘC LẬP cho `004`/`016`: call-site AST của `resolveAttachNewGate`
+    // ở mức `Class#method`. Không có bảng hằng nào để đọc ở đây (cổng là một QUYẾT ĐỊNH resolve
+    // ngoài tx, không phải một ánh xạ trường→cặp), nên chính vị trí lời gọi là bằng chứng.
+    const gateSites = attachGateCallSites().filter((s) => !s.startsWith("SocialAccessService#"));
+    // `new Set`: hai lời gọi cổng trong CÙNG một method ⇒ key trùng ⇒ `toEqual` đỏ với thông điệp
+    // lạc đề (không phải vì bất biến bị phá). `flagged` vốn là tập duy nhất.
+    for (const site of new Set(gateSites)) {
+      const key = ATTACH_GATE_SITE_TO_KEY[site];
+      // Dời cổng sang một method khác ⇒ site lạ ⇒ ĐỎ ở đây, không phải xanh im lặng.
+      expect(
+        key,
+        `call-site cổng đính kèm lạ: ${site} — cập nhật ATTACH_GATE_SITE_TO_KEY`,
+      ).toBeTruthy();
+      payloadDependent.push(key);
+    }
+    expect(
+      gateSites.length,
+      "phải có call-site cổng đính kèm thật (AST không hỏng)",
+    ).toBeGreaterThan(0);
     payloadDependent.sort();
 
     // Neo chống-xanh-rỗng ở CẢ HAI vế (plan §7 mục 3b): hai tập rỗng cũng `toEqual` nhau.
     expect(flagged.length, "phải có route tier1IsFloor thật").toBeGreaterThan(0);
     expect(payloadDependent.length, "phải có route cặp-theo-payload thật").toBeGreaterThan(0);
     expect(flagged).toEqual(payloadDependent);
+  });
+
+  /**
+   * S16-SOCIAL-ATTGATE-1 · S-1 — cổng phải được NỐI, không chỉ được KHAI.
+   *
+   * Đường SỬA phải truyền một giá trị ĐỌC TỪ BIẾN (`attach.gate` — thứ do `resolveAttachNewGate`
+   * dựng ra), KHÔNG phải một object literal hay một hằng: cả hai cái sau đều là «cổng mở cứng» mà
+   * ba lưới tĩnh còn lại đọc y hệt mã đúng.
+   */
+  it("S-1 — đối số `gate` của `syncLinksTx`: TẠO dùng hằng, SỬA dùng giá trị đã resolve", () => {
+    const shapes = syncLinksGateArgShapes();
+
+    // Neo chống-xanh-rỗng: AST hỏng / đổi tên hàm ⇒ mảng rỗng ⇒ mọi assert dưới thành vacuous.
+    expect(shapes.length, "phải thấy ĐỦ 4 call-site `syncLinksTx`").toBe(4);
+    expect(shapes.every((x) => x.shape !== "MISSING"), "call-site thiếu đối số `gate`").toBe(true);
+
+    const bySite = new Map(shapes.map((x) => [x.site, x]));
+    for (const site of ["SocialPostsService#create", "SocialCommentsService#create"]) {
+      expect(bySite.get(site)?.shape, `${site} phải truyền HẰNG đường TẠO`).toBe("identifier");
+      expect(bySite.get(site)?.text).toBe("ATTACH_GATE_ENFORCED_BY_TIER1");
+    }
+    for (const site of ["SocialPostsService#update", "SocialCommentsService#update"]) {
+      // 🔴 `object-literal` ở đây = cổng bị vô hiệu hoá tại chỗ. Đó là mutant mà ca này sinh ra để bắt.
+      expect(
+        bySite.get(site)?.shape,
+        `${site} phải truyền giá trị ĐÃ RESOLVE (attach.gate), không phải literal/hằng`,
+      ).toBe("property-access");
+      expect(bySite.get(site)?.text).toBe("attach.gate");
+    }
   });
 
   it("D17 — chỉ hai service của route floor mới đụng cờ cặp-KHÁC `canManageNews`", () => {
