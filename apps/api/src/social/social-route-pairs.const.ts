@@ -1,4 +1,7 @@
 import type { FeedCreatableTypeDto } from "@mediaos/contracts";
+// An toàn về chu trình: `social.errors.ts` KHÔNG còn import gì từ file này (từ BE-2B-2 nó ghép kiểu
+// trực tiếp với enum Zod của contracts) ⇒ cạnh phụ thuộc chỉ đi MỘT chiều.
+import { SOCIAL_ERR } from "./social.errors";
 
 /**
  * S16-SOCIAL-BE-1 — BẢNG HẰNG route → cặp quyền, NGUỒN SỰ THẬT DUY NHẤT cho CẢ BA nơi (khuôn
@@ -87,6 +90,28 @@ export interface SocialPair {
    * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    */
   readonly dataScope?: "Company" | "Department";
+  /**
+   * S16-SOCIAL-BE-2B-2 — thông điệp 403 mà **`resolveActor`** phát cho route này, thay cho chuỗi
+   * `AUTH-ERR-*` dùng chung. `undefined` ⇒ giữ chuỗi chung (47/48 route).
+   *
+   * ┌─ 🔴 VÌ SAO Ở ĐÂY, VÀ VÌ SAO ĐÂY LÀ CHỖ DUY NHẤT ĐÚNG (đo 24/09/2026) ──────────────────────────┐
+   * │ SPEC-16 §12 gán `SOCIAL-ERR-020` cho ca «xét duyệt sáng kiến mà không có `approve:feed-idea`».   │
+   * │ Plan BE-2B-2 (D20) định phát mã đó từ một hàm `assertApproveIdea` ở service, vì `PermissionGuard` │
+   * │ không phát được mã module. **Đo ra thì hàm đó KHÔNG BAO GIỜ CHẠY TỚI:** `resolveActor` đã tự       │
+   * │ resolve cặp của route rồi ném `AUTH-ERR-FORBIDDEN` (không có grant) hoặc `AUTH-ERR-SCOPE-DENIED`  │
+   * │ (`companyFloor` mà scope hẹp hơn) — CẢ HAI nhánh, trước khi service chạy một dòng nào.            │
+   * │                                                                                                 │
+   * │ Tức là tầng-2 mà plan đòi **vốn đã tồn tại** (`resolveActor`, xem comment «Tầng 2 — assert cặp    │
+   * │ của route, ĐỘC LẬP với decorator»); nó chỉ nói sai "tiếng". Thêm một hàm assert thứ hai ở service │
+   * │ chỉ tạo mã CHẾT + code chết trông như một cổng. Nên sửa đúng chỗ: cho bảng hằng chở thông điệp.   │
+   * │                                                                                                 │
+   * │ ⚠️ Giới hạn CÒN LẠI, phải ghi vào PR: nhánh bị **`PermissionGuard` chặn ở tầng-1** (không có grant │
+   * │ nào ⇒ guard 403 `Permission denied: <reason>`) vẫn KHÔNG mang mã này — guard chạy TRƯỚC service   │
+   * │ và `@RequirePermission` không nhận message tuỳ biến. Phủ cả ca đó đòi đổi `PermissionGuard` toàn   │
+   * │ hệ = WO riêng (plan §10 đã ghi nợ).                                                              │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   */
+  readonly denyMessage?: string;
 }
 
 const pair = (
@@ -242,8 +267,13 @@ export const SOCIAL_ROUTE_PAIRS = {
   // một cặp KHÁC. Xem `SocialAccessService.assertApproveIdea`.
   /** 045 `GET /social/ideas` — danh sách sáng kiến thấy được; lọc `status`; OFFSET. */
   ideaList: pair("view", "feed"),
-  /** 046 `PATCH …/idea/review` — xét duyệt (FSM 3 cạnh); audit LUÔN + NOTI-032 cho tác giả. */
-  ideaReview: pair("approve", "feed-idea"),
+  /**
+   * 046 `PATCH …/idea/review` — xét duyệt (FSM 3 cạnh); audit LUÔN + NOTI-032 cho tác giả.
+   *
+   * Route DUY NHẤT của module mang `denyMessage`: SPEC-16 §12 có mã riêng (`SOCIAL-ERR-020`) cho ca
+   * thiếu quyền xét duyệt. Xem docblock của field đó.
+   */
+  ideaReview: { ...pair("approve", "feed-idea"), denyMessage: SOCIAL_ERR.IDEA_APPROVE_REQUIRED },
   /** 047 `GET /social/kudos` — vinh danh gần đây / theo tháng; OFFSET. */
   kudosList: pair("view", "feed"),
   /** 048 `GET /social/kudos-badges` — catalog huy hiệu ĐANG BẬT; OFFSET. */

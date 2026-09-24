@@ -229,15 +229,41 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 quy tắc nội dung + bộ đếm 
   // ══════════════ R14 / R15 / R30 — biên DTO ══════════════
 
   describe("R14/R15/R30 — biên DTO của `POST /social/posts`", () => {
-    it("R14 DENY: `type='poll'` (thuộc BE-2) ⇒ 400 Zod, KHÔNG 500, KHÔNG tạo hàng", async () => {
+    /**
+     * ⟲ **S16-SOCIAL-BE-2B-2 (24/09/2026) — ca này đã ĐỔI TIỀN ĐỀ, không phải nới cho qua.**
+     *
+     * Bản cũ assert `poll`/`idea`/`kudos` đều 400 vì "thuộc BE-2, chưa mở". Ba loại đó nay MỞ HẾT
+     * (`poll` ở BE-2B-1, `idea`/`kudos` ở BE-2B-2) nên một vòng lặp đòi 400 cho cả ba là sai sự thật.
+     *
+     * Điều ca này VẪN đo — và là lý do nó tồn tại — là: **payload SAI HÌNH DẠNG cho một loại bài có
+     * khoá riêng phải trả 400 của Zod, KHÔNG 500, và KHÔNG để lại hàng nào.** Ba loại, ba hình dạng
+     * sai khác nhau, cùng một luật. (Sau BE-2B-1 thì `poll` thực ra đã đi qua nhánh "thiếu khoá `poll`"
+     * chứ không còn qua nhánh "enum từ chối" — tức ca đã đo một thứ khác lời khai của nó cả một WO.)
+     */
+    it("R14 DENY: loại bài có khoá riêng mà payload sai hình dạng ⇒ 400 Zod, KHÔNG 500, KHÔNG tạo hàng", async () => {
       const before = await countPosts();
-      for (const type of ["poll", "idea", "kudos"]) {
-        const res = await post(tAuthor, "/social/posts").send({
-          type,
-          audience: "company",
-          body: "x",
-        });
-        expect(res.status, `${type}: ${JSON.stringify(res.body)}`).toBe(400);
+      const malformed: Array<[string, Record<string, unknown>]> = [
+        // `type='poll'` mà THIẾU khoá `poll` (superRefine ràng hai chiều).
+        ["poll", { type: "poll", audience: "company", body: "x" }],
+        // `type='idea'` mà THIẾU `body` — CHECK `chk_feed_posts_body_required` KHÔNG miễn `idea`, nên
+        // không có vế Zod này thì nó rơi xuống 23514 ⇒ 500.
+        ["idea", { type: "idea", audience: "company" }],
+        // `type='kudos'` mà THIẾU khoá `kudos`.
+        ["kudos", { type: "kudos", audience: "company", body: "x" }],
+        // Và chiều NGƯỢC: loại khác mang khoá không thuộc về nó.
+        [
+          "share+kudos",
+          {
+            type: "share",
+            audience: "company",
+            body: "x",
+            kudos: { recipientEmployeeIds: [], message: "y" },
+          },
+        ],
+      ];
+      for (const [label, payload] of malformed) {
+        const res = await post(tAuthor, "/social/posts").send(payload);
+        expect(res.status, `${label}: ${JSON.stringify(res.body)}`).toBe(400);
       }
       expect(await countPosts()).toBe(before);
     });

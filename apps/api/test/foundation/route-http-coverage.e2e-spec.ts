@@ -360,7 +360,13 @@ const MAX_UNCOVERED_TOTAL = 0;
 // KHÔNG cộng tay `661 + 5`: làm vậy sẽ khoá vĩnh viễn cái lỗ 10 đơn vị của BE-2A, và sàn hở thì nó
 // không còn bắt được việc xoá/đổi tên test — đúng lớp lỗi mà `MAX_UNCOVERED_TOTAL = 0` một mình
 // KHÔNG bịt (cổng đó chỉ đo "route nào chưa phủ", không đo "test nào biến mất khỏi scan").
-const MIN_COVERED_COUNT = 676;
+// S16-SOCIAL-BE-2B-2 (24/09/2026): 676 → **680**. +4 route SOCIAL sáng kiến/vinh danh (`045..048`,
+// int-spec `social-be2b2-ideas` · `social-be2b2-kudos`). Số dưới đây là **SỐ ĐO ĐƯỢC** — dòng console
+// nguyên văn của chính spec này, chạy sau khi 4 route land:
+//   [S10-QA-ROUTEHTTP-1] Route HTTP coverage: 680/680 (100.0%) — CHƯA phủ: 0
+// Baseline trước WO đo cùng cách: 676/676 — KHÔNG cộng tay `676 + 4` (phép cộng tay không phát hiện
+// được một route mới KHÔNG có ca nào, vì nó khoá sàn theo kỳ vọng thay vì theo thực tế).
+const MIN_COVERED_COUNT = 680;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

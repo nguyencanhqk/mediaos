@@ -98,15 +98,19 @@ export class SocialAccessService {
 
     // Tầng 2 — assert cặp của route, ĐỘC LẬP với decorator. Deny ở đây để lại ZERO side-effect vì
     // nó chạy TRƯỚC mọi thao tác ghi. Chuỗi lỗi là hợp đồng với FE/QA, không phải văn bản tự do.
+    // S16-SOCIAL-BE-2B-2: route nào có mã lỗi RIÊNG của SPEC-16 §12 cho ca thiếu quyền thì phát mã
+    // đó (hôm nay chỉ `046` — `SOCIAL-ERR-020`). `undefined` ⇒ giữ chuỗi chung cho 47 route còn lại.
+    // Xem docblock `SocialPair.denyMessage`: đây là chỗ DUY NHẤT tới được, vì một assert thứ hai ở
+    // service không bao giờ chạy tới (hai nhánh dưới đây đã chặn hết).
     if (routeScopeOrNull == null) {
-      throw new ForbiddenException("AUTH-ERR-FORBIDDEN: out of permission scope");
+      throw new ForbiddenException(p.denyMessage ?? "AUTH-ERR-FORBIDDEN: out of permission scope");
     }
     // SÀN SCOPE (khuôn RECRUIT/ROOM · memory `dash-widget-gate-needs-scope-floor`): cặp chỉ-Company
     // mà grant resolve ra hẹp hơn ⇒ TỪ CHỐI, KHÔNG "coi như" Company — một lần đổi `data_scope`
     // per-pair sau này không được âm thầm nới thành toàn công ty.
     if (p.companyFloor && !SocialAccessService.isCompany(routeScopeOrNull)) {
       throw new ForbiddenException(
-        "AUTH-ERR-SCOPE-DENIED: cặp SOCIAL này chỉ hợp lệ ở scope Company",
+        p.denyMessage ?? "AUTH-ERR-SCOPE-DENIED: cặp SOCIAL này chỉ hợp lệ ở scope Company",
       );
     }
 
@@ -200,30 +204,26 @@ export class SocialAccessService {
   }
 
   /**
-   * S16-SOCIAL-BE-2B-2 (D20, owner ký **S5** 24/09/2026) — assert tầng HAI của `046`, hỏi LẠI chính cặp
-   * mà decorator đã gác.
+   * S16-SOCIAL-BE-2B-2 (D19) — **câu HỎI**, không phải cổng: actor có `approve:feed-idea` @Company không?
    *
-   * ┌─ 🔴 VÌ SAO HỎI LẠI MỘT CẶP ĐÃ ĐƯỢC GÁC — VÀ MÃ NÀY PHỦ ĐÚNG CÁI GÌ ─────────────────────────────┐
-   * │ `PermissionGuard` ném `ForbiddenException("Permission denied: " + decision.reason)`                │
-   * │ (`permission.guard.ts:140`) và `@RequirePermission` KHÔNG nhận message tuỳ biến (chỉ                │
-   * │ `action`/`resourceType`/`isSensitive`/`requiresReauth`). Nghĩa là tầng-1 **không bao giờ phát được** │
-   * │ `SOCIAL-ERR-020` — khai hằng đó rồi chỉ dựa vào decorator là khai một hằng CHẾT.                    │
-   * │                                                                                                   │
-   * │ Vùng phủ THẬT của mã: ca **«có grant nhưng scope hẹp hơn Company»**. Guard cho qua (nó chỉ hỏi     │
-   * │ "có quyết định ALLOW không"), sàn `isCompany()` ở đây mới từ chối. Ca «không có grant nào» vẫn là   │
-   * │ 403 CHUNG của guard — ghi rõ ở docblock của hằng, ở §13 của plan và ở PR. Đừng tuyên bố mã phủ cả  │
-   * │ hai, và đừng "sửa" bằng cách hạ decorator xuống `view:feed`: làm thế là tháo tầng-1 của route GHI  │
-   * │ duy nhất trong module có cặp `approve:*`.                                                          │
-   * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+   * Dùng cho MASK `reviewNote` ở `045` — một route gác `view:feed` (MỌI nhân viên), nơi câu hỏi "ai được
+   * đọc ghi chú xét duyệt" hoàn toàn khác câu hỏi "ai được vào route".
    *
-   * @throws ForbiddenException 403 `SOCIAL-ERR-020`
+   * ┌─ 🔴 VÌ SAO ĐÂY LÀ `Promise<boolean>`, KHÔNG PHẢI MỘT `assert…` (đo 24/09/2026) ──────────────────┐
+   * │ Plan (D20) định có `assertApproveIdea` để phát `SOCIAL-ERR-020` cho `046`. Hàm đó **không bao giờ │
+   * │ chạy tới**: `resolveActor` ngay trên đã tự resolve cặp của route và ném ở CẢ HAI nhánh (không có   │
+   * │ grant · scope hẹp hơn `companyFloor`) trước khi service chạy. Giữ một `assert` như thế = code chết │
+   * │ trông y hệt một cổng — kiểu hỏng tệ nhất cho người đọc sau.                                       │
+   * │ Mã `SOCIAL-ERR-020` giờ phát từ `SocialPair.denyMessage` của `ideaReview` (xem docblock ở đó).     │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ Fail-closed: `resolveManyOrNull` trả `null`/scope hẹp ⇒ `false`. Không `!= null`.
    */
-  async assertApproveIdea(actor: SocialActor): Promise<void> {
+  async canApproveIdeas(actor: SocialActor): Promise<boolean> {
     const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
       SOCIAL_ROUTE_PAIRS.ideaReview,
     ]);
-    if (SocialAccessService.isCompany(scope)) return;
-    throw new ForbiddenException(SOCIAL_ERR.IDEA_APPROVE_REQUIRED);
+    return SocialAccessService.isCompany(scope);
   }
 
   static isCompany(scope: DataScope | null): boolean {

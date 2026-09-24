@@ -63,7 +63,7 @@ export class SocialIdeasService {
     // thì lý do loại nó khỏi audit (`046`) và khỏi payload NOTI-032 SỤP — hai chỗ kia ít nhất còn có
     // cổng đọc riêng, `045` thì không. Ghi chú xét duyệt là chữ TỰ DO của người duyệt về một ý tưởng
     // của một đồng nghiệp cụ thể.
-    const canSeeAllNotes = await this.canReviewIdeas(actor);
+    const canSeeAllNotes = await this.access.canApproveIdeas(actor);
 
     const { rows, total } = await this.db.withTenant(actor.companyId, (tx) =>
       this.repo.listIdeasTx(tx, actor, {
@@ -85,21 +85,22 @@ export class SocialIdeasService {
    * `046` — `PATCH /social/posts/{post_id}/idea/review`. Tầng 1 `approve:feed-idea` (decorator).
    *
    * THỨ TỰ các cổng, mỗi bước một lý do:
-   *   1. **`assertApproveIdea`** (D20) — tầng 2 hỏi lại chính cặp của decorator để phát được
-   *      `SOCIAL-ERR-020`; guard không phát được mã module nào.
+   *   1. **`resolveActor`** — tầng 2, tự resolve `approve:feed-idea` + ép sàn Company; thiếu ⇒ 403
+   *      **`SOCIAL-ERR-020`** (qua `SocialPair.denyMessage`). Chạy TRƯỚC khi mở tx ⇒ ca `I-2b` đo được
+   *      «403 mà KHÔNG hàng nào bị khoá».
    *   2. **`assertPostVisible`** — 404 cho mọi lý do «không được thấy» (404 TRƯỚC 403, API-19 §6.5).
    *   3. **`getIdeaForReviewTx`** (D6) — không có hàng `feed_ideas` ⇒ **404**, không phải 409.
    *   4. **`assertIdeaTransition`** (D4) — FSM 3 cạnh ⇒ 409 `ERR-019`.
    *   5. **note của `rejected`** (D7) — 422 có mã TRƯỚC khi `chk_feed_ideas_reject_note` biến nó thành 500.
    *   6. **`reviewTx`** (D5) — một câu 4 cột; 0 hàng ⇒ 409.
    *   7. **audit + NOTI-032** (D8) — CHỈ khi bước 6 thành công, CÙNG tx.
-   *
-   * ⚠️ Bước 1 chạy TRƯỚC khi mở tx: nó không cần `tx` và giữ nó ngoài tx làm ca `I-2b` đo được «403 mà
-   * KHÔNG hàng nào bị khoá».
    */
   async review(user: SocialRequestUser, postId: string, dto: ReviewFeedIdeaDto) {
+    // `resolveActor` LÀ tầng-2 của route này: nó tự resolve cặp `approve:feed-idea` (độc lập với
+    // decorator) và ném **`SOCIAL-ERR-020`** ở cả hai nhánh — không có grant · scope hẹp hơn Company
+    // (`SocialPair.denyMessage` của `ideaReview`). Một `assert…` thứ hai ở đây KHÔNG BAO GIỜ chạy tới:
+    // đo 24/09/2026, và plan D20 đã sai ở đúng điểm này.
     const actor = await this.access.resolveActor(user, "ideaReview");
-    await this.access.assertApproveIdea(actor);
 
     return this.db.withTenant(actor.companyId, async (tx) => {
       await this.access.assertPostVisible(tx, actor, postId);
@@ -194,22 +195,6 @@ export class SocialIdeasService {
       recipientUserIds: recipients,
     };
     await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_IDEA_STATUS_CHANGED, payload });
-  }
-
-  /**
-   * Có `approve:feed-idea` @Company không — câu hỏi của D19, KHÔNG phải cổng.
-   *
-   * Tái dùng `assertApproveIdea` bằng try/catch thay vì gọi `resolveManyOrNull` lần thứ hai: cặp và sàn
-   * scope khi đó có ĐÚNG MỘT định nghĩa. Bản viết lại "cho gọn" sẽ có hai chỗ hỏi cùng câu hỏi, và
-   * chúng trôi khỏi nhau đúng lúc ai đó sửa sàn ở một chỗ.
-   */
-  private async canReviewIdeas(actor: SocialActor): Promise<boolean> {
-    try {
-      await this.access.assertApproveIdea(actor);
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   /**

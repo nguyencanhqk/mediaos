@@ -386,6 +386,14 @@ open → closed
 - 🔒 **`multiple_choice` và `is_anonymous` BẤT BIẾN sau khi tạo poll.** Chốt cuối chống phiếu đôi ở DB là partial unique dựa trên cờ dẫn xuất `single_choice` (DB-17 §7.5); đổi `multiple_choice` giữa chừng làm chốt đó **sai lệch im lặng**. Đổi `is_anonymous` sau khi có phiếu thì người đã bỏ phiếu bị đổi giao kèo riêng tư. Service chặn cả hai; có ca QA riêng.
 - **Lựa chọn (`feed_poll_options`) cũng bất biến** sau khi tạo — DB-17 §7.4.
 
+### 13.4b Vinh danh — danh sách người nhận
+
+_(Bổ sung 24/09/2026, `S16-SOCIAL-BE-2B-2`, owner ký **S3**. Trước đó SPEC-16 lẫn DB-17 **im lặng hoàn toàn** về hai luật dưới đây — đã dán grep phủ định vào §13 của plan; chúng chỉ tồn tại trong code, nên QA không có nguồn để viết ca.)_
+
+- **Không tự vinh danh chính mình.** Tác giả bài `type='kudos'` không được nằm trong `recipients[]` ⇒ **422** (hằng có tên `KUDOS_SELF_RECIPIENT`; SPEC-16 §12 không cấp số cho ca này). Không có ràng buộc DB nào chặn — `feed_kudos_recipients` không biết ai là tác giả — nên đây là lưới DUY NHẤT.
+- **Từ 1 đến 10 người nhận mỗi lời vinh danh** ⇒ ngoài khoảng trả **422** (`KUDOS_RECIPIENT_LIMIT`, một mã cho CẢ HAI đầu). Mảng rỗng là "vinh danh không ai": hình dạng hợp lệ, nghiệp vụ vô nghĩa. Ép ở **service**, không ở schema — ép ở schema trả 400 vô danh và mã lỗi không tới được người dùng.
+- **Người ĐÃ NGHỈ việc vẫn được vinh danh** (owner ký **S6** 24/09/2026): vinh danh là **lịch sử**, và lời cảm ơn lúc chia tay là ca thật. Ba hàng rào thay cho việc chặn ở đường ghi: (1) họ **không nhận thông báo** — `NOTI-EVENT-033` lọc người còn hoạt động; (2) DTO của `SOCIAL-API-047` chở cờ `isFormerEmployee` nói rõ trạng thái; (3) có **đường tự gỡ** — xoá mềm bài (`SOCIAL-API-003`) làm cả bài lẫn danh sách người nhận biến khỏi `047`.
+
 ### 13.5 Tìm kiếm
 
 Cột sinh `search_vector` trên `feed_posts` — **cột này LUÔN tồn tại** ở mọi môi trường (DB-17 §6.1b cấm nhánh «bỏ cột»). Dùng `unaccent` **nếu extension có mặt** — WO `S16-SOCIAL-DB-1` **đo `pg_extension` lúc chạy**; không có thì `to_tsvector('simple', …)` và ghi lại lựa chọn vào DB-17. Migration **không** `CREATE EXTENSION` mù (cần superuser, PROD có thể từ chối). Trường hợp xấu nhất là fallback `ILIKE` — và đó là quyết định ở **tầng service**, DDL không đổi.

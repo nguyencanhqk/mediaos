@@ -174,8 +174,8 @@ throttle `035` → BE-3.
 | **S1** | `047`/`048` thuộc WO này; `049..051` thuộc BE-3 | ✅ **KÝ 23/09/2026.** Sửa `src` CẢ HAI WO cùng PR |
 | **S3** | K1 + K2 ép ở service + bổ sung 2 dòng SPEC-16 §13 | ✅ **KÝ 23/09/2026**, kèm điều kiện dán grep phủ định |
 | **S5** | `ERR-020`: giữ decorator tầng-1 + service tự resolve (D20) | ✅ **KÝ 24/09/2026.** Ghi rõ vùng phủ thật của mã vào §13 + PR |
-| **S6** ⟲F10 | **D12(a) — cho phép vinh danh người ĐÃ NGHỈ (chặn ở NOTI + cờ `isFormerEmployee` ở DTO), thay vì chặn ở đường ghi** | ⏳ **PHẢI KÝ TRƯỚC Bước 1** — xây rồi xin là sai chiều với một quyết định mở bề mặt chiếu danh tính.<br>⚠️ Lý lẽ cũ («phương án B làm K-4 thành ca không dựng được») **đã rút — SAI một nửa**: dưới B vẫn dựng được ca D18 ở tầng repository (gọi thẳng `userIdsOfEmployeesTx`); chỉ **ca HTTP đúng như `done_when` mô tả** (một bài có cả người đã nghỉ lẫn người active) là không dựng được. Lý do THẬT chọn A: (i) `done_when` #4 do owner viết mô tả đúng hình dạng đó; (ii) vinh danh là **lịch sử**, chặn ở ghi làm mất ca «cảm ơn lúc chia tay»; (iii) bề mặt phơi hẹp + CÓ đường tự gỡ (D12c) |
-| **S7** ⟲F13 | **D2/C-6 thay lưới `done_when` #8** | ⏳ **PHẢI KÝ TRƯỚC Bước 1.** Lưới đó **không thoả được** (đếm literal = 0, assert đòi = 1) ⇒ hoặc spec đỏ vĩnh viễn, hoặc phải khôi phục literal hard-code = thoái lui kiến trúc BE-2B-1. Thay bằng ghép-kiểu + C-6 (bắt ở TS, so TẬP với enum, phủ thêm `SOCIAL_KUDOS_FLAG_PAIRS`) |
+| **S6** ✅ ⟲F10 | **D12(a) — cho phép vinh danh người ĐÃ NGHỈ (chặn ở NOTI + cờ `isFormerEmployee` ở DTO), thay vì chặn ở đường ghi** | ✅ **KÝ 24/09/2026 — phương án A.** _(PHẢI KÝ TRƯỚC Bước 1 — xây rồi xin là sai chiều với một quyết định mở bề mặt chiếu danh tính.<br>⚠️ Lý lẽ cũ («phương án B làm K-4 thành ca không dựng được») **đã rút — SAI một nửa**: dưới B vẫn dựng được ca D18 ở tầng repository (gọi thẳng `userIdsOfEmployeesTx`); chỉ **ca HTTP đúng như `done_when` mô tả** (một bài có cả người đã nghỉ lẫn người active) là không dựng được. Lý do THẬT chọn A: (i) `done_when` #4 do owner viết mô tả đúng hình dạng đó; (ii) vinh danh là **lịch sử**, chặn ở ghi làm mất ca «cảm ơn lúc chia tay»; (iii) bề mặt phơi hẹp + CÓ đường tự gỡ (D12c) |
+| **S7** ✅ ⟲F13 | **D2/C-6 thay lưới `done_when` #8** | ✅ **KÝ 24/09/2026.** Lưới đó **không thoả được** (đếm literal = 0, assert đòi = 1) ⇒ hoặc spec đỏ vĩnh viễn, hoặc phải khôi phục literal hard-code = thoái lui kiến trúc BE-2B-1. Thay bằng ghép-kiểu + C-6 (bắt ở TS, so TẬP với enum, phủ thêm `SOCIAL_KUDOS_FLAG_PAIRS`) |
 
 ---
 
@@ -514,43 +514,67 @@ bash harness/check.sh --all
 
 ---
 
-## §13. Sổ vết THI CÔNG — *(để trống)*
+## §13. Sổ vết THI CÔNG — *(điền 24/09/2026)*
 
 | # | Điểm | Quyết định thi công | Vì sao (đo được) |
 | --- | --- | --- | --- |
-| T1 | | | |
-| T2 | | | |
+| **T1** 🔴 | **D20 SAI — `assertApproveIdea` KHÔNG BAO GIỜ chạy tới** | Bỏ hàm đó. `SOCIAL-ERR-020` phát từ **`SocialPair.denyMessage`** của `ideaReview`, đọc trong chính `resolveActor`. Thêm field `denyMessage?: string` (additive; 47/48 route giữ nguyên chuỗi `AUTH-ERR-*`) | Plan M39 đo `permission.guard.ts:140` nhưng **bỏ sót `social-access.service.ts:101-115`**: `resolveActor` tự resolve cặp của route rồi ném `AUTH-ERR-FORBIDDEN` (không grant) / `AUTH-ERR-SCOPE-DENIED` (`companyFloor` mà scope hẹp) — CẢ HAI nhánh, trước khi service chạy. Ca `I-2b` bắt được: nhận `AUTH-ERR-…` thay vì `SOCIAL-ERR-020`. Tầng-2 mà D20 đòi **vốn đã tồn tại**, nó chỉ nói sai "tiếng" |
+| **T2** 🔴 | **Tiền đề §0.2 SAI — `POLL_CREATE_REQUIRED` KHÔNG ship câm** | Giữ census C-7 nhưng đổi lý do; sửa docblock đã cũ ở `social.errors.ts` | `social-be2b1-polls-isolation.int-spec.ts` ca **N1** đã dựng đúng ca đó bằng vai tuỳ biến `NO_POLL_PAIRS`, có neo dương + đếm bài mồ côi trên DB. Docblock cũ viết «không vai CHUẨN nào chạm được» và bị đọc thành «không ca nào chạm» |
+| **T3** | **C-7 có HAI tầng bằng chứng**, không một | Tầng A (tham chiếu HẰNG) cho 10 hằng của WO + `POLL_CREATE_REQUIRED`; tầng B (còn ném không) cho TOÀN bảng | Đo: int-spec BE-1/1B/2A assert bằng **chuỗi mã** (`toContain("SOCIAL-ERR-004")`). Nhận chuỗi mã làm bằng chứng thì 8 hằng "mượn" được ca của hằng anh em cùng số (`001` có 3 hằng; `010`/`007`/`008` mỗi cái 2). Nâng tầng A ra toàn module = sửa cách assert ở 13 int-spec ⇒ **nợ**, ghi §10 |
+| **T4** | **`AUDIENCE_GROUP_NOT_AVAILABLE` là hằng CHẾT** | Đưa vào `NEVER_THROWN` của C-7 kèm lý do; **KHÔNG dọn** (plan §10 đã ghi nợ nhánh chết `SOCIAL-ERR-008`) | Tầng B của C-7 phát hiện: BE-2A đã MỞ `audience='group'` nên nhánh "chưa khả dụng" bị gỡ khỏi `src/social` mà hằng còn lại. Census giữ nó HIỆN HÌNH thay vì để nó ngủ trong bảng |
+| **T5** | **Trần `reviewNote` = `FEED_NOTE_MAX` (1000)**, không phải 2000 như plan D7 | Dùng hằng SOCIAL có sẵn | `social-api.ts:48` đã khai `FEED_NOTE_MAX = 1000` kèm chú thích «định nghĩa ở đây để 1 chỗ giữ mọi trần SOCIAL». `review_note` là `text` ở DB (không trần), nên 2000 của plan là con số không có nguồn — thêm nó là dựng trần thứ hai |
+| **T6** | **`047` lọc tháng bằng MỘT trường `YYYY-MM`**, không phải cặp `month`+`year` | `kudosMonthSchema` regex; biên tính theo **múi giờ CÔNG TY** trong chính câu SQL | Cặp rời sinh 4 tổ hợp mà 3 phải tự đặt luật chéo ⇒ rơi vào `superRefine` ⇒ FE gửi thiếu nửa nhận 400 vô danh. Biên theo UTC thì ở VN (+07) một lời vinh danh đăng 03:00 ngày 1 rơi vào **tháng trước** — sai hiển nhiên, không lỗi nào báo. `resolveCompanyTz` KHÔNG dùng được (nó tự mở `withTenant` ⇒ lồng = treo im lặng), nên đọc tz bằng scalar subquery trong cùng câu; hai biên là hằng ⇒ index `idx_feed_kudos_company_created` vẫn dùng được |
+| **T7** | **Ca `R14` của BE-1 là cổng ĐÃ CŨ** — đã viết lại, không nới cho qua | Đổi từ «3 loại chưa mở ⇒ 400» sang «payload SAI HÌNH DẠNG cho loại có khoá riêng ⇒ 400, không 500, không để lại hàng», 4 hình dạng sai | Ba loại nay mở hết. Và ca đó **đã đo sai lời khai của nó cả một WO**: sau BE-2B-1, `poll` đi qua nhánh "thiếu khoá `poll`" chứ không còn nhánh "enum từ chối" |
+| **T8** | `users.status` hợp lệ = `{active, invited, suspended, locked}` — **KHÔNG có `inactive`** | Ca `K-4b` dùng `suspended` | Đo `users_status_chk` trên lane. `inactive` là giá trị của `employee_profiles.status` (tập KHÁC). Gõ nhầm ⇒ fixture chết `23514` trong `beforeAll` ⇒ **cả 29 ca SKIP**, trông y hệt "spec chưa chạy" |
+| **T9** | `seedUser` KHÔNG đặt `full_name` | Fixture `UPDATE users SET full_name` tường minh | Không có nó, `reviewer.fullName` của `045` là `null` ⇒ ca "vẫn nói được AI đã duyệt" **xanh-RỖNG**: DTO trả `null` vì THIẾU DỮ LIỆU, không vì masking đúng |
+| **T10** | Ca `K-9` không được assert `not.toContain(<employeeId>)` | Đo theo `kudosId` + một `message` duy nhất của chính bài đó | Cùng một người được vinh danh ở NHIỀU bài (K-4/K-8 vẫn còn) ⇒ assert theo `employeeId` là **đỏ oan**. Đã vấp đúng một lần |
+| **T11** | `dedupe_key` lưu ở DB mang **tiền tố mã sự kiện** | Assert `SOCIAL_IDEA_STATUS_CHANGED:{post_id}:{status}` | `notification-dedupe.service.ts`: `computeKey = ${eventCode}:${dedupeKey}`. Assert dạng producer trả sẽ đỏ; assert lỏng hơn sẽ không bắt được khi ai đó đổi `computeKey` |
+| **T12** | `social-posts.service.ts` = **724/800 dòng** (plan dự kiến ~665) | Giữ nguyên, ghi NỢ | +71 dòng thay vì +12: `enqueueKudosReceivedNoti` + 2 nhánh + docblock. Còn 76 dòng đệm; BE-2C/BE-3 **phải tách trước khi thêm**. Không tách ở WO này vì `resolveActorName` sống trong chính file đó ⇒ tách ra sẽ tạo import vòng |
+| **T13** | Lệnh chạy "tất cả spec SOCIAL" phải dùng **filter chuỗi con**, không glob | `vitest run src/social test/integration/social test/foundation/social` | Glob `test/integration/social-*.int-spec.ts` nở ở **thư mục gốc repo**, không phải `apps/api` ⇒ không khớp gì, vitest lặng lẽ chỉ chạy `src/social`: **18 file / 213 test** trông như XANH trong khi 644 test thật chưa chạy. Đúng lớp "xanh không đủ bằng chứng" |
+| **T14** | Nhánh **vượt biên OFFSET** của 3 câu danh sách có ca riêng | `page=999` ⇒ `data` rỗng mà `total > 0` | `count(*) over ()` chỉ tồn tại KHI CÓ HÀNG ⇒ trang rỗng phải hỏi tổng bằng câu thứ hai. Thiếu nhánh đó thì `total = 0` cho một tập KHÔNG rỗng ⇒ FE không phân biệt «trang cuối» với «không có gì» và mất nút lùi. Coverage chỉ ra đúng ba khối này chưa phủ |
 
 ### Phải ghi vào đây trước khi mở PR
 
-1. **Vùng phủ thật của `SOCIAL-ERR-020`** (D20): mã chỉ ra ở ca «có grant, sai scope»; ca «không có
-   grant» là 403 chung của `PermissionGuard`.
-2. **Grep phủ định cho S3** — dán NGUYÊN VĂN lệnh + kết quả trước khi sửa SPEC-16 §13.
-3. **Đường tự gỡ của D12** (xoá mềm bài) đã đo bằng ca K-9.
+1. ✅ **Vùng phủ thật của `SOCIAL-ERR-020`** (T1): mã ra ở CẢ HAI nhánh mà service tới được — «không có grant» (khi guard cho qua) và «có grant, scope hẹp hơn Company» — vì nó phát từ `resolveActor`. **Vùng KHÔNG phủ:** nhánh bị `PermissionGuard` chặn ở tầng-1 vẫn trả `Permission denied: <reason>` (ca `I-2` assert đúng điều đang xảy ra, không assert điều mong muốn). Phủ nốt đòi đổi `PermissionGuard` toàn hệ = WO riêng.
+2. ✅ **Grep phủ định cho S3** — chạy 24/09/2026, dán NGUYÊN VĂN:
+
+```text
+$ grep -rniE "tự vinh danh|self.?recipient|tối đa 10 người|recipient.?limit|10 người được vinh danh" docs/ --include=*.md
+docs/plans/S16-SOCIAL-BE-2B-2.md:153   (chính plan này)
+docs/plans/S16-SOCIAL-BE-2B-2.md:204   (chính plan này)
+docs/plans/S16-SOCIAL-BE-2B-2.md:283   (chính plan này)
+docs/plans/S16-SOCIAL-BE-2B-2.md:284   (chính plan này)
+=> 4 dòng, TẤT CẢ thuộc plan của chính WO này. SPEC-16 và DB-17: 0 dòng.
+```
+
+   ⇒ Điều kiện của S3 thoả. Đã thêm **SPEC-16 §13.4b** (3 gạch đầu dòng: K1 · K2 · người đã nghỉ).
+3. ✅ **Đường tự gỡ của D12** đã đo bằng ca `K-9` (xoá mềm bài ⇒ bài + danh sách người nhận biến khỏi `047`; assert theo `kudosId`, xem T10).
 
 ### Phép ĐO CỔNG (tháo lưới, xác minh ca tương ứng ĐỎ, khôi phục)
 
 | Tháo gì | Test kỳ vọng ĐỎ | Thông điệp thực tế |
 | --- | --- | --- |
-| Bỏ `reviewedAt` khỏi `reviewTx` | **I-5** (23514) | |
-| Bỏ `WHERE status=<from>` | **I-6** (audit 2 dòng) | |
-| Bỏ `getIdeaForReviewTx` (0 hàng ⇒ 409) | **I-11** | |
-| Bỏ `assertApproveIdea` | **I-2b** | |
-| Bỏ vế `status='active'` của D18 | **K-4** | |
-| Bỏ mask `reviewNote` của D19 | **I-10** | |
-| Bỏ `:{status}` khỏi khoá dedupe 032 | **N-032c** | |
-| Xoá 1 khoá khỏi `SOCIAL_POST_TYPE_DENIED` | **C-6** (và TS) | |
-| Bỏ tên controller khỏi `SOCIAL_CONTROLLERS` | **C-1** (XANH = fail-open) | |
+| Xoá khoá `kudos` khỏi `SOCIAL_POST_TYPE_DENIED` | **C-6** (và TS) | ✅ **ĐÃ CHẠY 24/09.** TS: `TS1360` (không thoả `Record<…>`) + `TS7053` ở `social-access.service.ts:165`. C-6 đỏ **3 assert**: «expected 4 to be 5» · «expected [idea,news,poll,share] to deeply equal [idea,kudos,news,…]» · «kudos mã lỗi rỗng». Đã khôi phục, và siết assert đầu dùng `denied ?? null` (khoá VẮNG trả `undefined` nên `.not.toBeNull()` trần cho nó đi qua — đúng kết quả, sai lý do) |
+| Bỏ `assertApproveIdea` | **I-2b** | ✅ **ĐÃ CHẠY 24/09 (ngoài ý muốn)** — lượt chạy ĐẦU của `I-2b` chính là phép đo này: nhận `{"success":false,"message":"AUTH-ERR-…"}` thay vì `SOCIAL-ERR-020` ⇒ chứng minh hàm đó **không bao giờ tới được**. Lưới THẬT nay là `denyMessage`; tháo nó ⇒ `I-2b` nhận `AUTH-ERR-SCOPE-DENIED` |
+| Bỏ `getIdeaForReviewTx` (0 hàng ⇒ 409) | **I-11** | ⏳ chưa tháo lại. `I-11` assert CẢ HAI chiều (`toContain(POST_NOT_FOUND)` **và** `not.toContain(IDEA_TRANSITION)`) nên nó phân biệt được 404 thật với 409-nuốt-404 |
+| Bỏ `reviewedAt` khỏi `reviewTx` | **I-5** (23514) | ⏳ chưa tháo lại. `I-5` assert `reviewed_by` **và** `reviewed_at` đều khác NULL |
+| Bỏ `WHERE status=<from>` | **I-6** (audit 2 dòng) | ⏳ chưa tháo lại. `I-6` đếm `audit_logs = 1` **và** outbox `= 1` sau `Promise.allSettled` |
+| Bỏ vế `status='active'` của D18 | **K-4** | ⏳ chưa tháo lại. `K-4` có neo dương (người `active` CÙNG bài PHẢI nhận) nên không xanh-rỗng được |
+| Bỏ mask `reviewNote` của D19 | **I-10** | ⏳ chưa tháo lại. `I-10` có neo dương ở CẢ HAI người được phép thấy |
+| Bỏ `:{status}` khỏi khoá dedupe 032 | **N-032c** | ⏳ chưa tháo lại. `N-032c` assert `notis.length === 2` **và** so TẬP hai `dedupe_key` |
+| Bỏ tên controller khỏi `SOCIAL_CONTROLLERS` | **C-1** (XANH = fail-open) | ⏳ chưa tháo lại |
+
+> ⚠️ Bảy dòng ⏳ là **nợ của lượt FULL gate**, KHÔNG phải đã đo. Mỗi dòng ghi rõ vì sao ca tương ứng không xanh-rỗng được, nhưng "không xanh-rỗng" ≠ "đã chứng minh ĐỎ khi tháo" — đúng cái bẫy `gate-measurement-row-can-be-unsatisfiable` cảnh báo: cột kết quả trống đọc y hệt cột đã chạy.
 
 ### Kết quả U2 · U4 · U6 · U7 · U8
 
 | # | Câu hỏi | Kết quả đo | Hệ quả |
 | --- | --- | --- | --- |
-| U2 | `coveredCount` thật | | |
-| U4 | Điểm chiếu + basis của `listIdeasTx`/`listKudosTx` | | |
-| U6 | Badge trong tenant fixture | | |
-| U7 | Employee không có `users` dựng được? | | |
-| U8 | Vai tuỳ biến trong int-spec | | |
+| **U2** | `coveredCount` thật | baseline **676/676**; sau WO **680/680**, CHƯA phủ **0** (dòng console nguyên văn của chính spec) | `MIN_COVERED_COUNT` 676 → **680** |
+| **U4** | Điểm chiếu + basis | census IN RA đúng hai khoá: `social-ideas.repository.ts#listIdeasTx:users.fullName` · `social-kudos.repository.ts#recipientsOfTx:users.fullName` | `scoped-predicate` 24→**25** (`listIdeasTx` — `visiblePostCondition` trong chính câu) · `second-assert` 11→**12** (`recipientsOfTx` — `kudosId` đến từ câu đã lọc, cùng tx) |
+| **U6** | Badge trong tenant fixture | **0**. `MasterDataSeedBootstrapService.onApplicationBootstrap` `return` ngay khi `NODE_ENV=test`; `0582` CROSS JOIN chạy lúc lane có 0 công ty; `seed.ts:491` chỉ DELETE | Spec **tự INSERT** badge. Có ca `U6` ghim chính phép đo này (seeder chạy trong test ⇒ đỏ) |
+| **U7** | Employee không có `users`? | **ĐƯỢC** — `employees.ts:44` `userId` nullable (mig `0442`) | `K-4c` dựng được; `recipientsOfTx` phải LEFT JOIN `users` |
+| **U8** | Vai tuỳ biến trong int-spec | **ĐƯỢC, và đã là khuôn sẵn** — `makeUser(label, hash, pairs)` tạo role `p-<label>-<uuid>` riêng, cấp ĐÚNG `pairs`; role có `company_id` ⇒ `cleanupTenants` dọn | `T-1`/`T-2`/`T-3` dựng được; vai canonical KHÔNG bị chạm (ca `T-3b`) |
 
 ---
 
@@ -577,8 +601,8 @@ bash harness/check.sh --all
 | S1 | `047`/`048` thuộc WO này | ✅ 23/09/2026 |
 | S3 | K1/K2 + SPEC-16 §13 | ✅ 23/09/2026 (kèm grep phủ định) |
 | S5 | `ERR-020`: decorator + service resolve (D20) | ✅ 24/09/2026 |
-| S6 | D12 — vinh danh người đã nghỉ | ⏳ **trước Bước 1** |
-| S7 | D2/C-6 thay lưới `done_when` #8 | ⏳ **trước Bước 1** |
+| S6 | D12 — vinh danh người đã nghỉ (phương án A) | ✅ 24/09/2026 |
+| S7 | D2/C-6 thay lưới `done_when` #8 | ✅ 24/09/2026 |
 
 ### 14.4 Ghi nhận — không phải finding — *(để trống)*
 
