@@ -5,6 +5,9 @@ import {
   SOCIAL_EVENT_CODES_B,
   SOCIAL_EVENT_CODES_C,
   SOCIAL_EVENT_CODES_D,
+  SOCIAL_EVENT_CODES_E,
+  SOCIAL_EVENT_IDEA_STATUS_CHANGED,
+  SOCIAL_EVENT_KUDOS_RECEIVED,
   SOCIAL_EVENT_POLL_CLOSED,
   SOCIAL_EVENT_GROUP_JOIN_DECIDED,
   SOCIAL_EVENT_COMMENT_REPLIED,
@@ -38,6 +41,14 @@ const PAYLOAD_KEYS = [
   "group_id",
   "group_name",
   "decision_label",
+  // S16-SOCIAL-BE-2B-2 — biến template DUY NHẤT còn thiếu của NOTI-032 (`actor_name` + `post_id` của
+  // NOTI-033 đã có sẵn từ NOTI-028/031).
+  //
+  // 🔴 `status` (enum thô) CỐ Ý **KHÔNG** có mặt ở đây: nó chỉ là nguyên liệu dựng khoá dedupe
+  // `{post_id}:{status}`, và `dedupeKeyOf` đọc `ctx.payload` THÔ — trước khi `payloadOf` lọc
+  // allowlist này. Thêm nó vào đây là đẩy một chuỗi enum không ai dịch vào `notifications.payload`,
+  // một bề mặt đọc sống lâu hơn grant.
+  "status_label",
 ] as const;
 
 /** Biến template BẮT BUỘC của từng mã (mirror `variables_schema` của migration `0581`). */
@@ -56,6 +67,17 @@ const TEMPLATE_KEYS: Record<string, readonly string[]> = {
   // S16-SOCIAL-BE-2B-1 — mirror `variables_schema` cua `0581:262-267`. KHONG `actor_name`: phan lon
   // luot phat den tu JOB (`is_system_event = true`), o do khong co actor nao de ke ten.
   SOCIAL_POLL_CLOSED: ["poll_question", "post_id"],
+  // S16-SOCIAL-BE-2B-2 — mirror `variables_schema` của `0581:243-254`, VERBATIM.
+  //
+  // `post_id` có mặt ở CẢ HAI vì `target_url_template` của cả hai mã là `/social/posts/{post_id}`:
+  // thiếu nó ⇒ URL đích giữ nguyên `{post_id}` ⇒ `assertInternalTargetUrl` từ chối ⇒ **dead-letter
+  // CÂM** (không lỗi cho người dùng, chỉ là thông báo không bao giờ tới).
+  //
+  // 🔴 `SOCIAL_IDEA_STATUS_CHANGED` KHÔNG có `actor_name`: comment `0581:242` ra lệnh «CHỈ
+  // status_label — KHÔNG nhúng review_note», và danh tính người duyệt bị cấm hẳn ở
+  // `PAYLOAD_KEYS_DENIED` dưới đây (kênh trả đũa).
+  SOCIAL_IDEA_STATUS_CHANGED: ["status_label", "post_id"],
+  SOCIAL_KUDOS_RECEIVED: ["actor_name", "post_id"],
 };
 
 /**
@@ -90,6 +112,27 @@ const PAYLOAD_KEYS_DENIED: Record<string, readonly string[]> = {
    * để nó là một tính chất tình cờ của producer.
    */
   SOCIAL_POLL_CLOSED: ["actorUserId", "actor_name"],
+  /**
+   * S16-SOCIAL-BE-2B-2 (D16) — NOTI-032 «sáng kiến đổi trạng thái».
+   *
+   * 🔴 Danh tính NGƯỜI DUYỆT không được vào `notifications.payload`. Xét duyệt là kênh có thể bị TRẢ
+   * ĐŨA: người bị từ chối sáng kiến đọc được "ai bấm" là đủ để biến một quyết định của tổ chức thành
+   * một việc giữa hai cá nhân. Nặng hơn vì hàng `notifications` **sống lâu hơn grant** — người duyệt
+   * mất cặp `approve:feed-idea` hôm nay thì hàng đã ghi hôm qua vẫn nằm đó, và
+   * `my-notifications.mapper.ts` trả payload NGUYÊN VĂN cho người nhận.
+   *
+   * An toàn về chức năng, đã đo: `actorUserId`/`actor_name` KHÔNG nằm trong
+   * `TEMPLATE_KEYS.SOCIAL_IDEA_STATUS_CHANGED` ⇒ không phá render. Producer hôm nay cũng không chở hai
+   * khoá đó — đây là ghi thành LUẬT, để nó không còn là tính chất tình cờ của producer.
+   *
+   * ⚠️ **Đính chính 24/09/2026 (FULL gate `security-reviewer`, LOW):** bản trước của docblock này nói
+   * thêm «bridge đọc `ctx.payload.actorUserId` TRƯỚC khi gọi `payloadOf` ⇒ `notifications.created_by`
+   * vẫn giữ neo điều tra». Với mã NÀY thì **sai**: producer `enqueueIdeaStatusNoti` không hề đặt
+   * `actorUserId` vào payload, nên `created_by` là **NULL** cho MỌI hàng NOTI-032. Đừng "vá" bằng cách
+   * nối `actorUserId` vào payload — làm thế là phá chính D16. Neo điều tra THẬT của một lượt xét duyệt
+   * nằm ở `audit_logs` (`action='social.idea.review'`, `actor_user_id`), và nó có cổng đọc riêng.
+   */
+  SOCIAL_IDEA_STATUS_CHANGED: ["actorUserId", "actor_name"],
 };
 
 function strField(payload: Record<string, unknown>, key: string): string | undefined {
@@ -266,6 +309,47 @@ export class SocialNotiBridgeRegistrar implements OnModuleInit {
       // giữa `044` (tay) và job.
       dedupeKeyOf: (ctx) => requireField(ctx.payload, "post_id"),
       payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_POLL_CLOSED"),
+    });
+
+    // ── S16-SOCIAL-BE-2B-2 — NOTI-032 + NOTI-033 (khối additive) ──
+
+    this.bridge.registerSource({
+      eventType: SOCIAL_EVENT_IDEA_STATUS_CHANGED,
+      eventCode: SOCIAL_EVENT_CODES_E[SOCIAL_EVENT_IDEA_STATUS_CHANGED],
+      sourceModule: SOURCE_MODULE_SOCIAL,
+      // `feed_post`, KHÔNG `feed_idea`: CHECK `audit_logs.object_type` (`0583`) và cả module đều coi
+      // sáng kiến là một BÀI — neo hai chỗ theo hai khoá khác nhau là bắt người điều tra tự ghép.
+      sourceEntityType: "feed_post",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "post_id"),
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      // 🔴 BẮT BUỘC có `dedupeKeyOf` — catalog `0581:194` khai `dedupe_strategy='DedupeKey'`. Bỏ trống
+      // thì engine rơi về `ctx.eventId`, một giá trị LUÔN KHÁC mỗi lượt ⇒ dedupe biến mất CÂM.
+      //
+      // 🔴 Khoá là `{post_id}:{status}`, KHÔNG phải `post_id` trần — đây là chỗ mã này KHÁC
+      // `SOCIAL_POLL_CLOSED` ngay trên. Bình chọn đóng ĐÚNG MỘT LẦN nên `post_id` trần là đủ; sáng
+      // kiến đi qua tới HAI lượt chuyển (`submitted→under_review` rồi `→accepted|rejected`), và tuple
+      // dedupe thật là `(company_id, recipient_user_id, event_code, dedupe_key)` ⇒ khoá trần sẽ
+      // **NUỐT lượt thứ hai**: tác giả nhận đúng một thông báo và không bao giờ biết kết quả cuối.
+      // Ca `N-032c` là lưới DUY NHẤT bắt được điều này.
+      dedupeKeyOf: (ctx) =>
+        `${requireField(ctx.payload, "post_id")}:${requireField(ctx.payload, "status")}`,
+      payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_IDEA_STATUS_CHANGED"),
+    });
+
+    this.bridge.registerSource({
+      eventType: SOCIAL_EVENT_KUDOS_RECEIVED,
+      eventCode: SOCIAL_EVENT_CODES_E[SOCIAL_EVENT_KUDOS_RECEIVED],
+      sourceModule: SOURCE_MODULE_SOCIAL,
+      sourceEntityType: "feed_post",
+      sourceEntityIdOf: (ctx) => requireField(ctx.payload, "post_id"),
+      // Producer đã tính tập người nhận TRONG tx (map employee→user + lọc D18 4 vế). Registrar CHỈ
+      // đọc lại: tra lại ở đây (chạy SAU, NGOÀI tx) sẽ đọc trạng thái MỚI HƠN — một người vừa nghỉ
+      // việc sau khi bài được đăng sẽ rụng khỏi tập, khác tập đúng tại thời điểm ghi.
+      resolveRecipients: (ctx) => Promise.resolve(requireUserIds(ctx.payload, "recipientUserIds")),
+      // Catalog `0581:196` = `DedupeKey`. `post_id` trần ĐỦ: một bài kudos chỉ phát MỘT lần (không có
+      // route sửa người nhận ở WO này), nên hai lượt phát cho cùng `post_id` luôn là trùng thật.
+      dedupeKeyOf: (ctx) => requireField(ctx.payload, "post_id"),
+      payloadOf: (ctx) => this.payloadOf(ctx, "SOCIAL_KUDOS_RECEIVED"),
     });
   }
 

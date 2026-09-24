@@ -762,6 +762,21 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "SOCIAL-API-028/029 — tên NGƯỜI ĐÃ XỬ LÝ báo cáo (`resolvedBy`). Cùng căn cứ với `rReporterUser`: cặp riêng `view/manage:feed-report` + vị từ D6 trong chính câu. Cột `resolved_by` chỉ khác NULL sau khi một người có `manage:feed-report` kết thúc báo cáo, nên tập tên lộ ra là tập người XỬ LÝ — chính thứ `chk_feed_reports_resolved_pair` tồn tại để bảo đảm truy được.",
     signedBy: "S16-SOCIAL-BE-1B",
   },
+  // ══ S16-SOCIAL-BE-2B-2 (24/09/2026) — 2 điểm chiếu MỚI của Track B (sáng kiến · vinh danh) ══
+  {
+    point: "social/social-ideas.repository.ts#listIdeasTx:users.fullName",
+    basis: "scoped-predicate",
+    reason:
+      "SOCIAL-API-045 — tên NGƯỜI DUYỆT sáng kiến. `visiblePostCondition` nằm NGAY TRONG câu (status + audience + deleted_at, JOIN `feed_posts`), cùng hình dạng với `POST_COLUMNS:users.fullName` của thẻ bài — không phải một khẳng định ở tầng khác. 🔴 Điểm chiếu này là LỰA CHỌN CÓ CHỦ ĐÍCH thay cho việc chiếu `feed_ideas.reviewed_by` THÔ: route gác **chỉ `view:feed`** (mọi nhân viên), nên chiếu một `users.id` ra đây là biến danh sách sáng kiến thành bản đồ user-id của tầng quản lý — đúng lớp lỗi mà `feedPostAuthorSchema` (API-19 §6.1) đã bỏ `userId` để tránh. Chiếu TÊN thu hẹp bề mặt: tên người duyệt là thông tin người nộp sáng kiến vốn cần (ai đã kết luận), `users.id` thì không. LEFT JOIN vì FK `reviewed_by` là `SET NULL` (người duyệt đã nghỉ ⇒ `null`, hợp lệ). Ca đo: `045 KHÔNG chiếu reviewed_by thô` ở `social-be2b2-ideas.int-spec.ts` (assert THU HẸP theo uuid fixture + neo dương `reviewer.fullName` khác rỗng). ⚠️ Ghi chú xét duyệt (`review_note`) đi theo luật KHÁC và KHÔNG thuộc sổ này: nó bị MASK theo người xem (chỉ tác giả sáng kiến hoặc người có `approve:feed-idea`) — ca `I-10`.",
+    signedBy: "S16-SOCIAL-BE-2B-2",
+  },
+  {
+    point: "social/social-kudos.repository.ts#recipientsOfTx:users.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-047 — tên NGƯỜI ĐƯỢC VINH DANH. Truy vấn chỉ lọc `(company_id, kudos_id IN (…))` nên bằng chứng nằm ở ĐIỂM KHẲNG ĐỊNH, không ở vị từ của chính câu: tập `kudosId` truyền vào đến TRỰC TIẾP từ `listKudosTx` — câu ĐÃ mang `visiblePostCondition` — và CÙNG tx (cùng ảnh chụp). Không tồn tại đường public nào nhận `kudosId` rời từ caller, đúng khuôn D13-R của BE-1B. DTO người nhận đóng ĐÚNG 4 khoá `{employeeId, fullName, avatarUrl, isFormerEmployee}` — **KHÔNG `userId`** (ca `K-7`: assert thu hẹp theo uuid user của fixture + neo dương `employeeId` CÓ mặt). 🔴 PHƠI CÓ CHỦ ĐÍCH đã cân (owner ký **S6** 24/09/2026): người ĐÃ NGHỈ việc vẫn hiện ra, vì vinh danh là LỊCH SỬ và «cảm ơn lúc chia tay» là ca thật. Ba thứ giữ nó hẹp: (1) chỉ trong MỘT bài mà người xem VỐN ĐÃ thấy — hẹp hơn widget sinh nhật của BE-1B (danh bạ toàn công ty); (2) cờ `isFormerEmployee` nói rõ trạng thái thay vì để người xem đoán (ca `K-8`); (3) có ĐƯỜNG TỰ GỠ — xoá mềm bài (`003`) làm cả bài lẫn danh sách người nhận biến khỏi `047` (ca `K-9`). LEFT JOIN `users` vì `employee_profiles.user_id` nullable (mig `0442`): nhân sự chưa có tài khoản vẫn phải hiện ra, INNER JOIN sẽ làm bài vinh danh 3 người hiện 2 mà không lỗi gì (ca `K-4c`).",
+    signedBy: "S16-SOCIAL-BE-2B-2",
+  },
 ];
 
 /**
@@ -798,7 +813,11 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // 10 → 11 (S16-SOCIAL-BE-2A, 22/09/2026): `social-group-members.repository.ts#listMembersTx`
   // (route `037`). Nới CÓ CHỦ ĐÍCH qua FULL gate. Điểm mới KHÔNG mở bề mặt đọc nào ngoài tập người
   // mà actor đã là thành viên cùng nhóm (hoặc `manage:feed-group`), và còn bị D7 thu hẹp thêm.
-  "second-assert": 11,
+  // 11 → 12 (S16-SOCIAL-BE-2B-2, 24/09/2026): `social-kudos.repository.ts#recipientsOfTx` (route `047`).
+  // Nới CÓ CHỦ ĐÍCH qua FULL gate. Điểm mới KHÔNG mở bề mặt đọc nào ngoài MỘT bài mà actor vốn đã thấy
+  // (tập `kudosId` đến từ câu đã mang `visiblePostCondition`, cùng tx); bề mặt phơi rộng nhất của nó —
+  // tên người ĐÃ NGHỈ việc — là quyết định owner ký S6, kèm cờ `isFormerEmployee` và đường tự gỡ.
+  "second-assert": 12,
   // 7 → 8 (S10-SEC-LOGINLOG429-1, 25/08/2026): `recordLoginAttemptForUser:users.email`. Nới CÓ CHỦ
   // ĐÍCH và đi qua FULL gate đúng như dòng cảnh báo của cổng này đòi. Điểm mới KHÔNG mở bề mặt đọc
   // nào: email đọc ra chỉ rơi vào `login_logs.email` (cột vốn đã chứa email client tự khai), và bề
@@ -812,7 +831,11 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // 23 → 24 (S16-SOCIAL-BE-1, 21/09/2026): `social-posts.repository.ts#POST_COLUMNS:users.fullName`
   // — tên tác giả trên thẻ bài. Vị từ `visiblePostCondition` nằm NGAY TRONG câu (status + audience +
   // deleted_at), không phải một khẳng định ở tầng khác.
-  "scoped-predicate": 24, // S11-ASSET-BE-1: +2 (holderSelect · listByAssetTx) — plan-review B7, nâng có chủ đích qua FULL gate
+  // 24 → 25 (S16-SOCIAL-BE-2B-2, 24/09/2026): `social-ideas.repository.ts#listIdeasTx:users.fullName`
+  // — tên người duyệt sáng kiến (route `045`). Vị từ `visiblePostCondition` nằm NGAY TRONG câu, cùng
+  // hình dạng với `POST_COLUMNS`. Nới CÓ CHỦ ĐÍCH qua FULL gate; chiếu TÊN là để KHÔNG chiếu
+  // `reviewed_by` thô trên một route gác `view:feed`.
+  "scoped-predicate": 25, // S11-ASSET-BE-1: +2 (holderSelect · listByAssetTx) — plan-review B7, nâng có chủ đích qua FULL gate
   // 8 → 11 (S17-CHAT-UX2-BE-1, 10/09/2026): DTO phòng v2 thêm BA điểm chiếu trong
   // `chat-rooms.repository.ts` — `listRoomsForUser:lastSender.fullName` ·
   // `listRoomsForUser:peerUser.fullName` · `findRoomCreatorName:users.fullName`. Nới CÓ CHỦ ĐÍCH:

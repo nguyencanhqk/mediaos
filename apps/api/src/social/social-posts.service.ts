@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type {
   CreateFeedPostDto,
   FeedPostCreatedDto,
@@ -29,12 +29,15 @@ import {
   targetTypeLabel,
   type ResolvedMention,
 } from "./social-mentions";
-import { createPollTx } from "./social-post-types";
+import { createIdeaTx, createKudosTx, createPollTx } from "./social-post-types";
+import { userIdsOfEmployeesTx } from "./social-kudos.repository";
 import { SocialNewsRepository } from "./social-news.repository";
 import {
   SOCIAL_EVENT_MENTIONED,
+  SOCIAL_EVENT_KUDOS_RECEIVED,
   SOCIAL_EVENT_NEWS_PUBLISHED,
   SOCIAL_NEWS_NOTI_RECIPIENT_CAP,
+  type SocialKudosReceivedPayload,
   type SocialMentionedPayload,
   type SocialNewsPublishedPayload,
 } from "./social-noti.payload";
@@ -163,6 +166,16 @@ export class SocialPostsService {
     //
     // Giờ cổng ĐỌC chính bảng đó ⇒ quên khai một loại là TS đỏ, không phải là một lỗ chờ ship.
     await this.access.assertCreatablePostType(actor, dto.type);
+
+    // 🔴 S16-SOCIAL-BE-2B-2 (D10/D22) — cổng THỨ HAI của nhánh vinh danh: cờ `isOfficial`.
+    //
+    // Chạy **TRƯỚC khi mở tx**, có chủ đích. Đặt nó trong tx cũng cho 403 đúng, nhưng lúc đó bằng
+    // chứng "không ghi gì" lại phụ thuộc vào rollback — và ca `K-3` đếm `COUNT(*) feed_kudos = 0` như
+    // một bất biến, không như một hệ quả của việc tx đã bị huỷ đúng cách.
+    if (dto.type === "kudos" && dto.kudos?.isOfficial) {
+      await this.access.assertKudosOfficial(actor);
+    }
+
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
       // 🔴 S16-SOCIAL-BE-2A (D4) — cổng GHI nằm TRONG tx, ngay trước INSERT. Trước đây nó chạy NGOÀI
       // `withTenant`: với `org_unit` (dữ liệu đã có sẵn trên actor) thì vô hại, nhưng nhánh `group`
@@ -208,6 +221,58 @@ export class SocialPostsService {
       // `type='poll'` — `createFeedPostSchema.superRefine` ràng cả hai chiều.
       if (dto.type === "poll" && dto.poll) {
         await createPollTx(tx, actor.companyId, postId, dto.poll);
+      }
+
+      // ⟲ S16-SOCIAL-BE-2B-2 — hai loại bài của Track B, CÙNG tx với INSERT bài (cùng lý do như
+      // `poll`: một bài `type='idea'` không có hàng `feed_ideas` là bài mà `045`/`046` trả 404 mãi
+      // mãi). `superRefine` ràng cả hai chiều nên `dto.kudos` chắc chắn có mặt khi `type='kudos'`.
+      if (dto.type === "idea") {
+        await createIdeaTx(tx, actor.companyId, postId);
+      }
+
+      if (dto.type === "kudos" && dto.kudos) {
+        const { kudosId, recipientEmployeeIds } = await createKudosTx(
+          tx,
+          actor.companyId,
+          postId,
+          authorEmployeeId,
+          dto.kudos,
+        );
+
+        // 🔴 AUDIT nhánh ĐẶC QUYỀN — owner ký **S8** 24/09/2026 (FULL gate `security-reviewer`, MEDIUM).
+        //
+        // `create()` KHÔNG audit bất kỳ `type` nào, và đó là đúng cho bài thường: tác giả + thời điểm
+        // đã nằm trong chính hàng `feed_posts`. `isOfficial:true` thì khác — nó dùng năng lực
+        // `manage:feed-kudos` để xuất bản nội dung mang **DẤU CÔNG TY**, tức một người nói thay tổ
+        // chức. Đó đúng hình dạng mà module này đã audit ở mọi chỗ khác: `social.post.update` chỉ ghi
+        // khi đi qua nhánh `asManager` (finding HIGH-2 của FULL gate PR #530, owner ký 22/09/2026) ·
+        // `social.poll.close` ghi kèm cờ `viaManage` · mọi mutation nhóm qua `manage:feed-group`.
+        // `isOfficial` là ngoại lệ DUY NHẤT còn lại — bít nó ở đây.
+        //
+        // ⚠️ CHỈ ghi ở nhánh `isOfficial`. Audit MỌI bài kudos sẽ làm sổ ngập thao tác thường và làm
+        // mờ đúng thứ cần nhìn thấy; ca `K-3c` đếm cả hai chiều (có cờ ⇒ 1 dòng · không cờ ⇒ 0 dòng).
+        if (dto.kudos.isOfficial) {
+          await this.audit.record(tx, {
+            action: "social.kudos.official",
+            // `feed_post`, KHÔNG `feed_kudos`: CHECK `audit_logs.object_type` (`0583`) cố ý chỉ có
+            // `feed_post` — «vinh danh là một BÀI». Thêm giá trị mới ở đây là một migration.
+            objectType: "feed_post",
+            objectId: postId,
+            actorUserId: actor.actorUserId,
+            actorType: "User",
+            actionGroup: "SOCIAL",
+            resultStatus: "Success",
+            dataScope: "Company",
+            sensitivityLevel: "Normal",
+            // KHÔNG chở `message` (chữ tự do) và KHÔNG chở `employee_id` người nhận — sổ audit có bề
+            // mặt đọc RIÊNG, rộng hơn `047`. Chỉ id + số lượng, đủ để lần ngược.
+            metadata: { postId, kudosId, recipientCount: recipientEmployeeIds.length },
+          });
+        }
+        // 🔴 NOTI-033 enqueue **TRONG tx** (D24). Ghi hàng outbox sau commit là at-most-once: chết
+        // giữa hai bước ⇒ lời vinh danh có thật mà không ai được báo, và không có đường phát lại.
+        // Khuôn đã dùng cho NOTI-028 (`enqueueMentionNotis`) và NOTI-031 ngay dưới đây.
+        await this.enqueueKudosReceivedNoti(tx, actor, postId, recipientEmployeeIds);
       }
 
       await syncPostTags(tx, actor.companyId, postId, parseHashtags(dto.body));
@@ -414,6 +479,16 @@ export class SocialPostsService {
         and(
           eq(employeeProfiles.companyId, actor.companyId),
           eq(employeeProfiles.userId, actor.actorUserId),
+          // 🔴 `deleted_at IS NULL` — FULL gate `security-reviewer` (S16-SOCIAL-BE-2B-2, 24/09/2026).
+          //
+          // Unique index `employee_profiles_company_user_active_uq` chỉ phủ hàng CÒN SỐNG
+          // (`WHERE deleted_at IS NULL`), nên một user có 1 hồ sơ đã xoá mềm + 1 hồ sơ sống làm
+          // `LIMIT 1` **không xác định** — nó có thể trả hồ sơ ĐÃ XOÁ. Trước BE-2B-2 điều đó chỉ ảnh
+          // hưởng `feed_posts.author_employee_id` (một cột hiển thị); từ BE-2B-2 giá trị này là vế
+          // TRÁI của luật K1 (`KUDOS_SELF_RECIPIENT`, lưới DUY NHẤT — không CHECK nào ở DB chặn tự
+          // vinh danh) ⇒ trả hồ sơ cũ là **lách được K1**: tác giả gửi chính `employee_id` đang sống
+          // của mình và đi qua.
+          isNull(employeeProfiles.deletedAt),
         ),
       )
       .limit(1);
@@ -495,6 +570,43 @@ export class SocialPostsService {
       totalRecipients: total,
     };
     await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_NEWS_PUBLISHED, payload });
+  }
+
+  /**
+   * S16-SOCIAL-BE-2B-2 — NOTI-033 «bạn được vinh danh». Người nhận = tập được vinh danh, map
+   * `employee_id` → `user_id` rồi lọc **D18** (4 vế).
+   *
+   * ⚠️ Trừ `actorUserId` MỘT LẦN NỮA dù `KUDOS_SELF_RECIPIENT` đã chặn tự-vinh-danh ở đường ghi: lưới
+   * kia là luật NGHIỆP VỤ (owner có thể nới), lưới này là tính chất của THÔNG BÁO (không ai tự báo cho
+   * mình). Hai lý do khác nhau ⇒ hai lưới, không phải một lưới lặp.
+   *
+   * ⚠️ Tập rỗng ⇒ **KHÔNG enqueue**. Ba đường dẫn tới rỗng và cả ba đều BÌNH THƯỜNG, không phải lỗi:
+   * mọi người nhận đã nghỉ việc (ca `K-4`) · tài khoản bị khoá (`K-4b`) · nhân sự chưa có tài khoản
+   * `users` (`K-4c`). Enqueue một hàng với `recipientUserIds: []` sẽ thành dead-letter câm ở registrar
+   * (`requireUserIds` ném) — một lỗi hạ tầng cho một tình huống nghiệp vụ hợp lệ.
+   */
+  private async enqueueKudosReceivedNoti(
+    tx: TenantTx,
+    actor: SocialActor,
+    postId: string,
+    recipientEmployeeIds: readonly string[],
+  ): Promise<void> {
+    const mapped = await userIdsOfEmployeesTx(tx, actor.companyId, recipientEmployeeIds);
+    const recipients = mapped.filter((id) => id !== actor.actorUserId);
+    if (recipients.length === 0) {
+      this.logger.warn(
+        `NOTI-033: vinh danh ở bài ${postId} không có người nhận nào CÒN HOẠT ĐỘNG (${recipientEmployeeIds.length} nhân sự được ghi) — không phát thông báo.`,
+      );
+      return;
+    }
+
+    const actorName = await resolveActorName(tx, actor.companyId, actor.actorUserId);
+    const payload: SocialKudosReceivedPayload = {
+      post_id: postId,
+      actor_name: actorName,
+      recipientUserIds: recipients,
+    };
+    await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_KUDOS_RECEIVED, payload });
   }
 
   /**

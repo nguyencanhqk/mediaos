@@ -245,3 +245,72 @@ export interface SocialPollClosedPayload {
   recipientUserIds: string[];
   [key: string]: unknown;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  S16-SOCIAL-BE-2B-2 — SÁNG KIẾN (NOTI-032) · VINH DANH (NOTI-033)
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+export const SOCIAL_EVENT_IDEA_STATUS_CHANGED = "social.idea_status_changed";
+export const SOCIAL_EVENT_KUDOS_RECEIVED = "social.kudos_received";
+
+/** Mã catalog của khối SÁNG KIẾN · VINH DANH — VERBATIM theo `0581:194,196`. Bảng RIÊNG (như `_B`.._D`). */
+export const SOCIAL_EVENT_CODES_E = {
+  [SOCIAL_EVENT_IDEA_STATUS_CHANGED]: "SOCIAL_IDEA_STATUS_CHANGED",
+  [SOCIAL_EVENT_KUDOS_RECEIVED]: "SOCIAL_KUDOS_RECEIVED",
+} as const;
+
+/**
+ * `NOTI-EVENT-032` — sáng kiến đổi trạng thái. Người nhận là **TÁC GIẢ BÀI** (đúng một người).
+ *
+ * 🔴 **KHÔNG chở `review_note`.** Migration `0581:242` ra lệnh đúng điều này cho `variables_schema`
+ * («CHỈ `status_label` — KHÔNG nhúng `review_note`»): ghi chú xét duyệt là chữ TỰ DO của người duyệt,
+ * và `my-notifications.mapper.ts` trả payload NGUYÊN VĂN cho người nhận. Cùng lý do mà audit của `046`
+ * cũng không mang `review_note`.
+ *
+ * 🔴 **KHÔNG chở danh tính NGƯỜI DUYỆT** (`actorUserId`/`actor_name` nằm trong
+ * `PAYLOAD_KEYS_DENIED`). Xét duyệt là kênh có thể bị TRẢ ĐŨA, và hàng `notifications` **sống lâu hơn
+ * grant**: người nộp sáng kiến cần biết *kết quả*, không cần biết *ai bấm*. Cùng khuôn với NOTI-034
+ * của BE-2A và NOTI-036 của BE-1B.
+ */
+export interface SocialIdeaStatusChangedPayload {
+  /** Neo `source_entity_id` + biến `{post_id}` của `target_url_template` `/social/posts/{post_id}`. */
+  post_id: string;
+  /** Biến `{status_label}` — bảng nhãn ĐÓNG `IDEA_STATUS_LABEL`, KHÔNG phải chuỗi enum thô. */
+  status_label: string;
+  /**
+   * 🔴 Trạng thái ĐÍCH dạng enum thô — **CHỈ để dựng khoá dedupe `{post_id}:{status}`**, cố ý KHÔNG
+   * có trong `PAYLOAD_KEYS` nên nó KHÔNG đi vào `notifications.payload`.
+   *
+   * Vì sao phải có: catalog khai mã này `dedupe_strategy='DedupeKey'`, và tuple dedupe thật là
+   * `(company_id, recipient_user_id, event_code, dedupe_key)`. Khoá chỉ `post_id` sẽ **NUỐT lượt
+   * chuyển THỨ HAI** của cùng một sáng kiến (`submitted→under_review` rồi `→accepted`): tác giả nhận
+   * đúng một thông báo và không bao giờ biết kết quả cuối. `dedupeKeyOf` đọc `ctx.payload` THÔ — trước
+   * khi `payloadOf` lọc allowlist — nên khoá này đọc được mà không phơi ra.
+   */
+  status: string;
+  /** Đúng MỘT người: tác giả bài, đã lọc `activeUserIdsTx`. Rỗng ⇒ producer KHÔNG phát. */
+  recipientUserIds: string[];
+  [key: string]: unknown;
+}
+
+/**
+ * `NOTI-EVENT-033` — được vinh danh. Người nhận là **TẬP NGƯỜI ĐƯỢC VINH DANH**, map `employee_id` →
+ * `user_id` rồi lọc **D18** (4 vế) — xem `userIdsOfEmployeesTx`.
+ *
+ * ⚠️ Tác giả KHÔNG nhận: `KUDOS_SELF_RECIPIENT` đã chặn tự-vinh-danh ở đường ghi, và producer vẫn trừ
+ * `actorUserId` một lần nữa — hai lưới cho cùng một luật, vì lưới thứ nhất là luật NGHIỆP VỤ (có thể
+ * được nới) còn lưới thứ hai là tính chất của THÔNG BÁO (không ai tự báo cho mình).
+ *
+ * 🔴 **KHÔNG chở `employee_id` nào**, kể cả của người nhận: `recipientUserIds` là thứ engine cần, và
+ * một danh sách `employee_id` trong payload là bản đồ nhân sự đi ra bằng cửa thông báo (ca `K-7` gác
+ * cùng bất biến ở DTO của `047`).
+ */
+export interface SocialKudosReceivedPayload {
+  /** Neo `source_entity_id` + biến `{post_id}`. */
+  post_id: string;
+  /** Biến `{actor_name}` — tên người GỬI lời vinh danh, đọc TRONG TX. */
+  actor_name: string;
+  /** Tập người nhận SAU lọc D18. Rỗng ⇒ producer KHÔNG enqueue (không hàng outbox nào). */
+  recipientUserIds: string[];
+  [key: string]: unknown;
+}

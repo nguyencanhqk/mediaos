@@ -1,3 +1,8 @@
+import type { FeedCreatableTypeDto } from "@mediaos/contracts";
+// An toàn về chu trình: `social.errors.ts` KHÔNG còn import gì từ file này (từ BE-2B-2 nó ghép kiểu
+// trực tiếp với enum Zod của contracts) ⇒ cạnh phụ thuộc chỉ đi MỘT chiều.
+import { SOCIAL_ERR } from "./social.errors";
+
 /**
  * S16-SOCIAL-BE-1 — BẢNG HẰNG route → cặp quyền, NGUỒN SỰ THẬT DUY NHẤT cho CẢ BA nơi (khuôn
  * `RECRUIT_ROUTE_PAIRS`):
@@ -85,6 +90,28 @@ export interface SocialPair {
    * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    */
   readonly dataScope?: "Company" | "Department";
+  /**
+   * S16-SOCIAL-BE-2B-2 — thông điệp 403 mà **`resolveActor`** phát cho route này, thay cho chuỗi
+   * `AUTH-ERR-*` dùng chung. `undefined` ⇒ giữ chuỗi chung (47/48 route).
+   *
+   * ┌─ 🔴 VÌ SAO Ở ĐÂY, VÀ VÌ SAO ĐÂY LÀ CHỖ DUY NHẤT ĐÚNG (đo 24/09/2026) ──────────────────────────┐
+   * │ SPEC-16 §12 gán `SOCIAL-ERR-020` cho ca «xét duyệt sáng kiến mà không có `approve:feed-idea`».   │
+   * │ Plan BE-2B-2 (D20) định phát mã đó từ một hàm `assertApproveIdea` ở service, vì `PermissionGuard` │
+   * │ không phát được mã module. **Đo ra thì hàm đó KHÔNG BAO GIỜ CHẠY TỚI:** `resolveActor` đã tự       │
+   * │ resolve cặp của route rồi ném `AUTH-ERR-FORBIDDEN` (không có grant) hoặc `AUTH-ERR-SCOPE-DENIED`  │
+   * │ (`companyFloor` mà scope hẹp hơn) — CẢ HAI nhánh, trước khi service chạy một dòng nào.            │
+   * │                                                                                                 │
+   * │ Tức là tầng-2 mà plan đòi **vốn đã tồn tại** (`resolveActor`, xem comment «Tầng 2 — assert cặp    │
+   * │ của route, ĐỘC LẬP với decorator»); nó chỉ nói sai "tiếng". Thêm một hàm assert thứ hai ở service │
+   * │ chỉ tạo mã CHẾT + code chết trông như một cổng. Nên sửa đúng chỗ: cho bảng hằng chở thông điệp.   │
+   * │                                                                                                 │
+   * │ ⚠️ Giới hạn CÒN LẠI, phải ghi vào PR: nhánh bị **`PermissionGuard` chặn ở tầng-1** (không có grant │
+   * │ nào ⇒ guard 403 `Permission denied: <reason>`) vẫn KHÔNG mang mã này — guard chạy TRƯỚC service   │
+   * │ và `@RequirePermission` không nhận message tuỳ biến. Phủ cả ca đó đòi đổi `PermissionGuard` toàn   │
+   * │ hệ = WO riêng (plan §10 đã ghi nợ).                                                              │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   */
+  readonly denyMessage?: string;
 }
 
 const pair = (
@@ -225,6 +252,32 @@ export const SOCIAL_ROUTE_PAIRS = {
   pollResults: pair("view", "feed"),
   /** 044 `POST …/poll/close` — đóng tay; chủ bài HOẶC `manage:feed-post`; audit LUÔN. */
   pollClose: pair("view", "feed"),
+
+  // ── Sáng kiến 045–046 · Vinh danh 047–048 (`S16-SOCIAL-BE-2B-2`) ──
+  //
+  // Cả bốn `tier1IsFloor = false` — không route nào trong cụm này có bảng ánh xạ payload→cặp (đẳng
+  // thức `D17` của census: tập cờ BẰNG ĐÚNG tập route CÓ bảng như thế, và hôm nay đó là `002` +
+  // `006`). Ba route đọc thừa hưởng phạm vi BÀI CHA qua `visiblePostCondition`, không có cặp đọc
+  // riêng.
+  //
+  // 🔴 `046` là route DUY NHẤT của module gác bằng một cặp `approve:*`, và cũng là chỗ duy nhất
+  // decorator KHÔNG phải `view:feed`. Nó vẫn `tier1IsFloor = false` vì cặp `approve:feed-idea` ĐÚNG
+  // là cặp gác route — tầng 2 (`resolveActor`) chỉ hỏi LẠI chính cặp đó, chứ không hỏi một cặp KHÁC.
+  // Nó cũng là route DUY NHẤT mang `denyMessage` — xem docblock của field đó, và assert ghim tập
+  // «route có `denyMessage`» ở `social-two-layer-guard-census.unit-spec.ts`.
+  /** 045 `GET /social/ideas` — danh sách sáng kiến thấy được; lọc `status`; OFFSET. */
+  ideaList: pair("view", "feed"),
+  /**
+   * 046 `PATCH …/idea/review` — xét duyệt (FSM 3 cạnh); audit LUÔN + NOTI-032 cho tác giả.
+   *
+   * Route DUY NHẤT của module mang `denyMessage`: SPEC-16 §12 có mã riêng (`SOCIAL-ERR-020`) cho ca
+   * thiếu quyền xét duyệt. Xem docblock của field đó.
+   */
+  ideaReview: { ...pair("approve", "feed-idea"), denyMessage: SOCIAL_ERR.IDEA_APPROVE_REQUIRED },
+  /** 047 `GET /social/kudos` — vinh danh gần đây / theo tháng; OFFSET. */
+  kudosList: pair("view", "feed"),
+  /** 048 `GET /social/kudos-badges` — catalog huy hiệu ĐANG BẬT; OFFSET. */
+  kudosBadgeList: pair("view", "feed"),
 } as const satisfies Record<string, SocialPair>;
 
 export type SocialRouteKey = keyof typeof SOCIAL_ROUTE_PAIRS;
@@ -232,23 +285,73 @@ export type SocialRouteKey = keyof typeof SOCIAL_ROUTE_PAIRS;
 /**
  * D4 — cặp quyền BẮT BUỘC THEO `type` ở `SOCIAL-API-002` (API-19 §5.1b).
  *
- * Bảng này là vế tầng-2 của `postCreate.tier1IsFloor`. Chỉ 2 loại ở BE-1 (D2); `poll`/`idea`/`kudos`
- * thuộc BE-2 và được Zod từ chối 400 TRƯỚC khi chạm bảng này.
+ * Bảng này là vế tầng-2 của `postCreate.tier1IsFloor`. Từ BE-2B-2 nó phủ **cả 5 loại bài** mà
+ * `feedCreatableTypeSchema` chấp nhận — không còn loại nào "Zod từ chối trước khi chạm bảng".
  *
  * `share` ánh xạ về CHÍNH cặp sàn (không cặp phụ) — ghi tường minh `null` thay vì bỏ trống để census
  * phân biệt "loại này không cần cặp phụ" với "quên khai loại này".
+ *
+ * ┌─ 🔴 D2a — GHÉP VỚI ENUM ZOD Ở TẦNG KIỂU (S16-SOCIAL-BE-2B-2) ──────────────────────────────────┐
+ * │ `satisfies Record<FeedCreatableTypeDto, …>` thay cho `Record<string, …>`. Đây không phải chuyện │
+ * │ gọn gàng mà là bịt một lỗ CÓ THẬT: trước bản này, `Record<string, …>` cho phép enum Zod mở thêm │
+ * │ một giá trị mà bảng KHÔNG có khoá tương ứng, và hậu quả là `SOCIAL_POST_TYPE_PAIRS[type]` trả   │
+ * │ `undefined` → `assertCreatablePostType` so `=== null` KHÔNG khớp → đọc `DENIED[type]` cũng      │
+ * │ `undefined` → ném `SOCIAL_POST_TYPE_PAIR_DESYNC` (fail-closed, may mắn) — nhưng chỉ phát hiện   │
+ * │ LÚC CHẠY, trên đúng một route ghi, bằng một 403 nói sai lý do.                                  │
+ * │                                                                                                 │
+ * │ Với `Record<FeedCreatableTypeDto, …>`, mở enum mà quên bảng là **TS đỏ lúc build**. Phép đo bổ  │
+ * │ sung ở tầng dữ liệu: `social-post-type-pairs-structure.spec.ts` (**C-6**) so TẬP khoá của hai   │
+ * │ bảng với `feedCreatableTypeSchema.options` — bắt cả chiều ngược (bảng có khoá lạ mà enum không   │
+ * │ có), điều `satisfies` một mình không bắt.                                                       │
+ * │                                                                                                 │
+ * │ ⚠️ Lý do lưới cũ (`done_when` #8 của backlog: «mỗi cặp non-null xuất hiện ĐÚNG MỘT LẦN dưới     │
+ * │ dạng literal trong `social-posts.service.ts`») bị THAY: BE-2B-1 đã dời hết cặp vào bảng này ⇒   │
+ * │ phép đếm literal = 0 trong khi assert đòi = 1 ⇒ **đỏ vĩnh viễn**, và cách "sửa" duy nhất là nhét│
+ * │ literal trở lại = dựng nguồn sự thật thứ hai. Owner ký **S7** ngày 24/09/2026.                  │
+ * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 export const SOCIAL_POST_TYPE_PAIRS = {
   share: null,
   news: { action: "manage", resourceType: "feed-news", isSensitive: false },
   /** S16-SOCIAL-BE-2B-1 — seed `0578:75-86` cấp `create:feed-poll` @Company cho cả 4 vai canonical. */
   poll: { action: "create", resourceType: "feed-poll", isSensitive: false },
+  /**
+   * S16-SOCIAL-BE-2B-2 — seed `0578:45,79-86` cấp `create:feed-idea` @Company cho cả 4 vai canonical
+   * ⇒ **không vai chuẩn nào dựng được ca DENY**. Ca đó dựng bằng VAI TUỲ BIẾN của chính int-spec
+   * (`makeUser(label, hash, ["view:feed","create:feed-post"])`), KHÔNG bằng cách sửa
+   * `role_permissions` của vai canonical — sửa vai canonical là đóng dấu lên lane DB dùng chung.
+   */
+  idea: { action: "create", resourceType: "feed-idea", isSensitive: false },
+  /** S16-SOCIAL-BE-2B-2 — như `idea`. `isOfficial:true` còn đòi THÊM `manage:feed-kudos`, xem `SOCIAL_KUDOS_FLAG_PAIRS`. */
+  kudos: { action: "create", resourceType: "feed-kudos", isSensitive: false },
 } as const satisfies Record<
-  string,
+  FeedCreatableTypeDto,
   { action: string; resourceType: string; isSensitive: boolean } | null
 >;
 
 export type SocialCreatablePostType = keyof typeof SOCIAL_POST_TYPE_PAIRS;
+
+/**
+ * S16-SOCIAL-BE-2B-2 (D22) — cặp quyền của từng CỜ ĐẶC QUYỀN trong payload `type='kudos'`.
+ *
+ * Tiền lệ: `SOCIAL_MODERATION_FIELD_PAIRS` (cặp theo TỪNG TRƯỜNG của `006`). Hôm nay bảng có đúng
+ * một dòng, và một bảng-một-dòng nghe như thừa — nó không thừa:
+ *
+ * `isOfficial:true` biến một bài ai cũng tạo được thành bài mang DẤU CÔNG TY, và thứ duy nhất phân
+ * biệt hai loại đó là một lời gọi `resolveManyOrNull` nằm lẫn trong thân `create()`. Không có bảng
+ * này thì cặp đó chỉ được MỘT ca int-spec giữ: xoá dòng gọi đi là mọi census, mọi sổ, mọi ratchet
+ * vẫn XANH (không route nào đổi, không cặp nào biến khỏi bảng route). Có bảng thì **C-6** canh được
+ * nó ở tầng dữ liệu, độc lập với ca HTTP.
+ *
+ * ⚠️ **KHÔNG** đưa bảng này vào nguồn độc lập của đẳng thức `tier1IsFloor` (census): `002` đã
+ * `tier1IsFloor:true` sẵn vì `SOCIAL_POST_TYPE_PAIRS`, thêm một nguồn thứ hai cho cùng route sẽ làm
+ * đẳng thức đó đỏ oan.
+ */
+export const SOCIAL_KUDOS_FLAG_PAIRS = {
+  isOfficial: { action: "manage", resourceType: "feed-kudos", isSensitive: false },
+} as const satisfies Record<string, { action: string; resourceType: string; isSensitive: boolean }>;
+
+export type SocialKudosFlag = keyof typeof SOCIAL_KUDOS_FLAG_PAIRS;
 
 /**
  * D5 — cặp quyền theo TỪNG TRƯỜNG ở `SOCIAL-API-006` (API-19 §5.1c).

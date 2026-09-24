@@ -45,9 +45,14 @@ const SOCIAL_CONTROLLERS = new Set([
   "SocialGroupsController",
   // S16-SOCIAL-BE-2B-1 — 5 route binh chon (040..044).
   "SocialPollsController",
+  // S16-SOCIAL-BE-2B-2 — 2 route sang kien (045..046) + 2 route vinh danh (047..048), cung file
+  // `social-b2b2.controllers.ts`. HAI ten rieng: gop lai thi mot luot "cho gon" sau nay xoa duoc 4
+  // route khoi phep do ma khong assert nao do.
+  "SocialIdeasController",
+  "SocialKudosController",
 ]);
 
-/** Bảng route HTTP → key — fixture census, phủ ĐỦ 44 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN, API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 48 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -112,6 +117,11 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
   { method: "DELETE", path: "/api/v1/social/posts/:post_id/poll/vote", key: "pollVoteWithdraw" },
   { method: "GET", path: "/api/v1/social/posts/:post_id/poll/results", key: "pollResults" },
   { method: "POST", path: "/api/v1/social/posts/:post_id/poll/close", key: "pollClose" },
+  // ── S16-SOCIAL-BE-2B-2 — SANG KIEN 045..046 · VINH DANH 047..048 ──
+  { method: "GET", path: "/api/v1/social/ideas", key: "ideaList" },
+  { method: "PATCH", path: "/api/v1/social/posts/:post_id/idea/review", key: "ideaReview" },
+  { method: "GET", path: "/api/v1/social/kudos", key: "kudosList" },
+  { method: "GET", path: "/api/v1/social/kudos-badges", key: "kudosBadgeList" },
 ];
 
 /**
@@ -169,6 +179,12 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "SocialPollsService#withdrawVote": ["pollVoteWithdraw"],
   "SocialPollsService#results": ["pollResults"],
   "SocialPollsService#close": ["pollClose"],
+  // S16-SOCIAL-BE-2B-2 — 4 site moi. `SocialIdeasService#review` la site DUY NHAT cua module dung
+  // mot cap `approve:*`.
+  "SocialIdeasService#list": ["ideaList"],
+  "SocialIdeasService#review": ["ideaReview"],
+  "SocialKudosService#list": ["kudosList"],
+  "SocialKudosService#listBadges": ["kudosBadgeList"],
 };
 
 /** Mọi literal `resolveActor(<expr>, "<key>")` trong `social/**.ts`, kèm `Class#method` bao quanh. */
@@ -242,8 +258,8 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
     expect(
       socialRoutes.length,
-      "app boot phải thấy 39 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM)",
-    ).toBe(44);
+      "app boot phải thấy 48 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH)",
+    ).toBe(48);
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(

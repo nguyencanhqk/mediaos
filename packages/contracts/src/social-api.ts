@@ -81,11 +81,17 @@ export type FeedStatusFilterDto = z.infer<typeof feedStatusFilterSchema>;
 /**
  * Loại bài API chấp nhận TẠO.
  *
- * Mở dần theo WO: BE-1 `share`/`news` · **BE-2B-1 thêm `poll`** · BE-2B-2 thêm `idea`/`kudos`.
+ * Mở dần theo WO: BE-1 `share`/`news` · BE-2B-1 thêm `poll` · **BE-2B-2 thêm `idea`/`kudos`** (đủ 5
+ * loại của `chk_feed_posts_type`).
  * Mỗi lần mở là một quyết định CÓ CHỦ ĐÍCH: `SOCIAL_POST_TYPE_PAIRS` phải có khoá tương ứng, nếu
  * không route `002` sẽ tạo được một loại bài mà **không cặp quyền nào gác** (fail-OPEN).
+ *
+ * 🔴 Từ BE-2B-2, «phải có khoá tương ứng» KHÔNG còn là lời nhắc trong docblock: cả
+ * `SOCIAL_POST_TYPE_PAIRS` lẫn `SOCIAL_POST_TYPE_DENIED` đều
+ * `satisfies Record<FeedCreatableTypeDto, …>` ⇒ thêm một giá trị vào enum này mà quên hai bảng đó là
+ * **TS đỏ lúc build**, không phải một loại bài không ai gác (plan D2a; spec C-6 so TẬP khoá).
  */
-export const feedCreatableTypeSchema = z.enum(["share", "news", "poll"]);
+export const feedCreatableTypeSchema = z.enum(["share", "news", "poll", "idea", "kudos"]);
 export type FeedCreatableTypeDto = z.infer<typeof feedCreatableTypeSchema>;
 
 /** Nhãn một lựa chọn của bình chọn. Dài tối đa theo `feed_poll_options.label varchar(255)`. */
@@ -362,6 +368,32 @@ export const createFeedPostSchema = z
       })
       .strict()
       .optional(),
+    /**
+     * Chi tiết VINH DANH — CHỈ hợp lệ với `type='kudos'` (`superRefine` chặn cả hai chiều).
+     *
+     * ⚠️ `recipientEmployeeIds` — tên nói rõ đây là `employee_profiles.id`, KHÔNG phải `users.id`.
+     * `feed_kudos_recipients.employee_id` neo theo nhân sự (DB-17 §7.8) còn NOTI gửi theo `user_id`;
+     * chỗ nối hai khoá đó là đúng lớp lỗi ba reviewer độc lập cùng bắt ở BE-1B, nên hợp đồng gọi
+     * đúng tên khoá thay vì để `recipients[]` mơ hồ như API-19 §5.1b viết tắt.
+     *
+     * ⚠️ **KHÔNG ràng buộc độ dài mảng ở đây, CÓ CHỦ ĐÍCH** (cùng luật với `poll.options`): trần 10
+     * người nhận là `KUDOS_RECIPIENT_LIMIT` và mảng RỖNG cũng vậy — cả hai ném **422 có mã** ở
+     * service. `.max(10)` ở đây biến ca đó thành 400 vô danh và ca test assert theo MÃ chết âm thầm.
+     */
+    kudos: z
+      .object({
+        recipientEmployeeIds: z.array(uuid()),
+        /** Vắng = vinh danh không gắn huy hiệu (hợp lệ — `feed_kudos.badge_id` nullable). */
+        badgeId: uuid().optional(),
+        message: z.string().trim().min(1).max(FEED_BODY_MAX),
+        /**
+         * `true` = bài mang DẤU CÔNG TY. Cặp `manage:feed-kudos` kiểm ở service (403 có mã) —
+         * không phải ở đây: một người không có cặp đó gửi `true` là lỗi QUYỀN, không phải hình dạng.
+         */
+        isOfficial: z.boolean().default(false),
+      })
+      .strict()
+      .optional(),
     mentionedUserIds: mentionIds(),
     attachmentIds: attachmentIds(),
   })
@@ -433,12 +465,33 @@ export const createFeedPostSchema = z
         message: "chỉ bài type='poll' được mang chi tiết bình chọn",
       });
     }
-    // `body` bắt buộc cho mọi loại TRỪ `poll` — mirror `chk_feed_posts_body_required`.
-    if (v.type !== "poll" && v.body == null) {
+    // ── S16-SOCIAL-BE-2B-2 — `type='kudos'` ⇄ khoá `kudos`, RÀNG CẢ HAI CHIỀU (cùng luật với poll) ──
+    // Thiếu chiều "kudos bắt buộc có khoá" ⇒ tạo được bài `type='kudos'` KHÔNG có hàng `feed_kudos`,
+    // và `047` sau đó không bao giờ thấy nó — một bài trông như vinh danh mà không vinh danh ai.
+    // Thiếu chiều "type khác cấm mang khoá" ⇒ payload thừa đi qua im lặng.
+    if (v.type === "kudos" && v.kudos == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["kudos"],
+        message: "type='kudos' bắt buộc có chi tiết vinh danh",
+      });
+    }
+    if (v.type !== "kudos" && v.kudos != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["kudos"],
+        message: "chỉ bài type='kudos' được mang chi tiết vinh danh",
+      });
+    }
+    // `body` bắt buộc cho mọi loại TRỪ `poll` và `kudos` — mirror `chk_feed_posts_body_required`
+    // (`db/schema/social.ts:154-157`: `type IN ('poll','kudos') OR body IS NOT NULL AND btrim ≠ ''`).
+    // 🔴 `idea` KHÔNG được miễn: CHECK không miễn nó, nên bỏ vế này cho `idea` là để một bài sáng kiến
+    // rỗng rơi xuống CHECK ⇒ **500** thay vì một thông báo đọc được.
+    if (v.type !== "poll" && v.type !== "kudos" && v.body == null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["body"],
-        message: "bài chia sẻ / tin tức bắt buộc có nội dung",
+        message: "bài chia sẻ / tin tức / sáng kiến bắt buộc có nội dung",
       });
     }
   });

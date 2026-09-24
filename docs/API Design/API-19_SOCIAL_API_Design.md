@@ -137,12 +137,13 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `share` | `create:feed-post` | — | `ERR-007` (đính kèm) · `ERR-008` (audience) |
 | `news` | `create:feed-post` **＋** `manage:feed-news` | `pinned?` · `requiresAck?` | `ERR-010` (thiếu `manage:feed-news`) |
 | `poll` | `create:feed-post` **＋** `create:feed-poll` | `question` · `options[]` (2–10) · `multipleChoice?` · `isAnonymous?` · `closesAt?` | **`ERR-018`** (ngoài 2–10 lựa chọn) · 403 **không số** (thiếu `create:feed-poll`) · 422 **không số** (`closesAt` ở quá khứ) |
-| `idea` | `create:feed-idea` | — (trạng thái khởi tạo luôn `submitted`) | — |
-| `kudos` | `create:feed-kudos` (**＋ `manage:feed-kudos`** nếu `isOfficial=true`) | `recipients[]` · `badgeId?` · `message` · `isOfficial?` | **`ERR-022`** (huy hiệu không có / đã tắt) |
+| `idea` | `create:feed-idea` | — (trạng thái khởi tạo luôn `submitted`) | 403 **không số** (thiếu `create:feed-idea`) |
+| `kudos` | `create:feed-kudos` (**＋ `manage:feed-kudos`** nếu `isOfficial=true`) | `recipientEmployeeIds[]` · `badgeId?` · `message` · `isOfficial?` | **`ERR-022`** (huy hiệu không có / đã tắt) · 422 **không số** (ngoài 1–10 người nhận · tự vinh danh · người nhận không hợp lệ) · 403 **không số** (thiếu `create:feed-kudos`; thiếu `manage:feed-kudos` khi `isOfficial`) |
 
 - 🔴 **Cột "Cặp quyền BẮT BUỘC" là cặp SÀN ＋ cặp theo loại.** `create:feed-post` do decorator của route gác (tầng 1) nên nó áp cho **mọi** `type`; cặp riêng theo loại do `SocialAccessService.assertCreatablePostType` gác (tầng 2, đọc bảng `SOCIAL_POST_TYPE_PAIRS`). Đọc bảng này thành "poll chỉ cần `create:feed-poll`" là sai — đã sửa 23/09/2026 (BE-2B-1, finding **M55**). Hai dòng `idea`/`kudos` chưa thi công cũng theo đúng luật hai tầng đó.
 - Mọi `type` đều thêm `audience` + khoá tương ứng (`groupId` **hoặc** `orgUnitId`) ⇒ `ERR-008`; ghi vào nhóm/đơn vị actor không thuộc ⇒ **403 `ERR-002`**.
 - `body` bắt buộc với `share`/`news`/`idea`; với `poll`/`kudos` có thể vắng (DB-17 §6.1).
+- 🔴 **Khoá của `kudos` là `recipientEmployeeIds[]`, KHÔNG phải `recipients[]`** (sửa 24/09/2026 khi thi công BE-2B-2): `feed_kudos_recipients.employee_id` neo theo **`employee_profiles.id`**, còn NOTI gửi theo `users.id`. Tên viết tắt `recipients[]` của bản trước để ngỏ đúng chỗ nhầm đắt nhất của cụm này — hợp đồng gọi đúng tên khoá.
 - Mention ngoài audience **bị bỏ im lặng**, trả về trong `data.droppedMentions[]` — **không** phải lỗi (SPEC-16 §12 `ERR-009`).
 
 ### 5.1c `SOCIAL-API-006` — trường nào cần cặp nào
@@ -245,11 +246,11 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
 ### 6.4 Phân trang
 
 - **Feed và bình luận:** cursor-based (`cursor` + `limit`, `limit` ≤ 50) — dòng cuộn dài, offset sẽ trượt khi có bài mới.
-- **Danh sách quản trị** (báo cáo · nhóm · huy hiệu · thống kê · **bình chọn `040`**): offset (`page` + `limit`) theo API-01.
+- **Danh sách quản trị** (báo cáo · nhóm · huy hiệu · thống kê · **bình chọn `040`** · **sáng kiến `045`** · **vinh danh `047`** · **catalog huy hiệu `048`**): offset (`page` + `limit`) theo API-01.
 
 🔴 **Mọi danh sách offset PHẢI trả envelope `{data, page, limit, total}`** — không trả mảng trần. Thiếu `total` thì FE không phân biệt được «trang cuối» với «trang rỗng» và không dựng được pager; `030` đã theo đúng khuôn này. `040` được sửa cho khớp ngày 23/09/2026 (BE-2B-1, owner chốt **S5**) — trước đó nó trả mảng trần.
 
-⚠️ **Thứ tự phải có khoá phá-hoà DUY NHẤT.** OFFSET không có chốt cuối ổn định thì hàng **lặp hoặc MẤT** giữa hai trang mà không lỗi gì — `created_at` mặc định `now()` là mốc BẮT ĐẦU transaction nên mọi hàng tạo trong cùng một tx (seed/import) giống hệt nhau. `030` chốt bằng `id`; `040` chốt bằng `CASE WHEN status='open' … END, created_at DESC, id`.
+⚠️ **Thứ tự phải có khoá phá-hoà DUY NHẤT.** OFFSET không có chốt cuối ổn định thì hàng **lặp hoặc MẤT** giữa hai trang mà không lỗi gì — `created_at` mặc định `now()` là mốc BẮT ĐẦU transaction nên mọi hàng tạo trong cùng một tx (seed/import) giống hệt nhau. `030` chốt bằng `id`; `040` chốt bằng `CASE WHEN status='open' … END, created_at DESC, id`; `045`/`047` chốt bằng `created_at DESC, id`; `048` bằng `position, id` (`position` là `smallint` tenant sửa được qua BE-3 nên nó **có thể trùng** — vẫn cần chốt cuối).
 
 ### 6.5 Envelope lỗi + mã
 
@@ -293,7 +294,8 @@ Key **do client sinh khi mở composer/form**, TTL 15′, replay trả `Idempote
 ## 8. Hai tầng guard + audit
 
 - Cặp quyền khai ở **decorator route** *và* kiểm lại ở **service**; census QA so từng route theo MÃ ở cả hai tầng.
-- Ghi `audit_logs` **cùng transaction** cho: `006` moderation · `029` xử lý báo cáo · `038`/`039` thành viên nhóm · `046` xét duyệt sáng kiến · `049`/`050`/`051` huy hiệu · `053` export.
+- Ghi `audit_logs` **cùng transaction** cho: `006` moderation · `029` xử lý báo cáo · `038`/`039` thành viên nhóm · `046` xét duyệt sáng kiến · `049`/`050`/`051` huy hiệu · `053` export · **`002` CHỈ ở nhánh `type='kudos'` + `isOfficial=true`** (`social.kudos.official`).
+- 🔴 **Vì sao `002` audit một nhánh chứ không cả route** (bổ sung 24/09/2026, `S16-SOCIAL-BE-2B-2`, owner ký **S8**): bài thường đã có tác giả + thời điểm trong chính hàng `feed_posts`, audit thêm chỉ làm sổ ngập thao tác thường. `isOfficial=true` thì khác — nó dùng năng lực `manage:feed-kudos` để xuất bản nội dung mang **DẤU CÔNG TY**, tức một người nói thay tổ chức, đúng hình dạng mà module đã audit ở mọi chỗ khác (`social.post.update` chỉ ghi khi qua nhánh `asManager` · `social.poll.close` kèm `viaManage`). Metadata `{postId, kudosId, recipientCount}` — **KHÔNG** `message` (chữ tự do) và **KHÔNG** `employee_id` người nhận: sổ audit có bề mặt đọc RIÊNG, rộng hơn `047`.
 - `object_type` audit mới: `feed_post` · `feed_comment` · `feed_group` · `feed_report` (UNION-ADD — DB-17 §3.2).
 - Payload audit **không** chứa nội dung bài đầy đủ, chỉ `{postId, field, from, to}`.
 

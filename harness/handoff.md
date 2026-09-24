@@ -2,6 +2,25 @@
 
 > `harness/finish.sh` nhắc ghi vào đây cuối phiên; `harness/init.sh` đọc đầu phiên.
 
+## Phiên 2026-09-24 — **S16-SOCIAL-BE-2B-2: plan CHỐT lượt 2, CHƯA thi công**
+
+**Bắt đầu phiên sau ở đây:** nhánh `feat/s16-social-be-2b-2` (base master `f407c1d1`), plan
+`docs/plans/S16-SOCIAL-BE-2B-2.md` đã qua `plan-reviewer` (BLOCK → vá đủ F1..F27). Lane DB
+`mediaos_be2b2` đã dựng. Vào thẳng **§8 Bước 0**: xin **chữ ký S6 + S7** (bắt buộc TRƯỚC khi code)
+rồi đo U6/U7/U8.
+
+**Bốn thứ đo được đã phá khẳng định của plan lượt 1** (chi tiết memory `s16-social-be2b2-plan-state`):
+(1) `PermissionGuard` KHÔNG phát được mã lỗi module — `permission.guard.ts:140` ném chuỗi cố định,
+decorator không nhận message ⇒ `SOCIAL-ERR-020` sẽ CHẾT nếu chỉ gác bằng decorator; (2)
+`UPDATE … RETURNING` trả giá trị SAU ⇒ không lấy được `status` cũ; (3) `assertPostVisible` không lọc
+`type` ⇒ bài `share` lọt vào route review và 409 nuốt mất 404; (4) ca DENY cặp `create:feed-*` không
+dựng được bằng vai canonical (seed cấp cho cả 4 vai — `POLL_CREATE_REQUIRED` của BE-2B-1 đã ship mà
+không ca nào chạm).
+
+**Bài học quy trình:** plan-reviewer bắt 4 CRITICAL mà plan tự tin đã đo kỹ — trong đó 3 cái là
+**hành vi nền tảng chưa ai đo** (guard, RETURNING, assertPostVisible), không phải lỗi logic nghiệp vụ.
+Ô nào plan không có dòng ĐO thì reviewer coi như chưa biết, và lần này reviewer đúng.
+
 ## Phiên 2026-09-22 (c) — **S16-SOCIAL-BE-1B: FULL gate 3/3 BLOCK → đã vá → PR #532 MỞ**
 
 **Bắt đầu phiên sau ở đây:** PR **#532** (`feat/s16-social-be-1b`, base master `dcbb6974`) đang chờ

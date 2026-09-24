@@ -12,16 +12,13 @@ import { DataScopeService } from "../permission/data-scope.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { visibleGroupPostExists } from "./social-group-predicates";
 import {
+  SOCIAL_KUDOS_FLAG_PAIRS,
   SOCIAL_POST_TYPE_PAIRS,
   SOCIAL_ROUTE_PAIRS,
   type SocialCreatablePostType,
   type SocialRouteKey,
 } from "./social-route-pairs.const";
-import {
-  SOCIAL_ERR,
-  SOCIAL_POST_TYPE_DENIED,
-  SOCIAL_POST_TYPE_PAIR_DESYNC,
-} from "./social.errors";
+import { SOCIAL_ERR, SOCIAL_POST_TYPE_DENIED, SOCIAL_POST_TYPE_PAIR_DESYNC } from "./social.errors";
 import type {
   SocialActor,
   SocialCommentAccess,
@@ -101,15 +98,19 @@ export class SocialAccessService {
 
     // Tầng 2 — assert cặp của route, ĐỘC LẬP với decorator. Deny ở đây để lại ZERO side-effect vì
     // nó chạy TRƯỚC mọi thao tác ghi. Chuỗi lỗi là hợp đồng với FE/QA, không phải văn bản tự do.
+    // S16-SOCIAL-BE-2B-2: route nào có mã lỗi RIÊNG của SPEC-16 §12 cho ca thiếu quyền thì phát mã
+    // đó (hôm nay chỉ `046` — `SOCIAL-ERR-020`). `undefined` ⇒ giữ chuỗi chung cho 47 route còn lại.
+    // Xem docblock `SocialPair.denyMessage`: đây là chỗ DUY NHẤT tới được, vì một assert thứ hai ở
+    // service không bao giờ chạy tới (hai nhánh dưới đây đã chặn hết).
     if (routeScopeOrNull == null) {
-      throw new ForbiddenException("AUTH-ERR-FORBIDDEN: out of permission scope");
+      throw new ForbiddenException(p.denyMessage ?? "AUTH-ERR-FORBIDDEN: out of permission scope");
     }
     // SÀN SCOPE (khuôn RECRUIT/ROOM · memory `dash-widget-gate-needs-scope-floor`): cặp chỉ-Company
     // mà grant resolve ra hẹp hơn ⇒ TỪ CHỐI, KHÔNG "coi như" Company — một lần đổi `data_scope`
     // per-pair sau này không được âm thầm nới thành toàn công ty.
     if (p.companyFloor && !SocialAccessService.isCompany(routeScopeOrNull)) {
       throw new ForbiddenException(
-        "AUTH-ERR-SCOPE-DENIED: cặp SOCIAL này chỉ hợp lệ ở scope Company",
+        p.denyMessage ?? "AUTH-ERR-SCOPE-DENIED: cặp SOCIAL này chỉ hợp lệ ở scope Company",
       );
     }
 
@@ -174,6 +175,62 @@ export class SocialAccessService {
     ]);
     if (SocialAccessService.isCompany(scope)) return;
     throw new ForbiddenException(denied);
+  }
+
+  /**
+   * S16-SOCIAL-BE-2B-2 (D22) — cổng của CỜ `isOfficial` trong payload `type='kudos'`.
+   *
+   * `create:feed-kudos` (cổng theo LOẠI bài) cho phép đăng một lời vinh danh thường; `isOfficial:true`
+   * biến nó thành bài mang **DẤU CÔNG TY** và đòi cặp KHÁC: `manage:feed-kudos`.
+   *
+   * ⚠️ Đọc `SOCIAL_KUDOS_FLAG_PAIRS` thay vì gõ literal — cùng lý do đã ghi ở `assertCreatablePostType`:
+   * một bảng hằng mà không call-site runtime nào đọc thì census/spec canh nó chỉ canh được một hằng
+   * chết. Đọc bảng làm nó LOAD-BEARING.
+   *
+   * ⚠️ **KHÔNG nhét cặp này vào batch `resolveActor`**: batch đó chạy cho CẢ 48 route, còn câu hỏi này
+   * chỉ có nghĩa với đúng một nhánh của một route GHI. Một round-trip quyền thêm trên nhánh đó là giá
+   * đúng để không phải trả nó trên 47 route còn lại.
+   *
+   * Scope ép SÀN `Company` qua `isCompany()` — `undefined`/`null` fail-closed.
+   *
+   * @throws ForbiddenException 403 `KUDOS_OFFICIAL_DENIED`
+   */
+  async assertKudosOfficial(actor: SocialActor): Promise<void> {
+    const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
+      SOCIAL_KUDOS_FLAG_PAIRS.isOfficial,
+    ]);
+    if (SocialAccessService.isCompany(scope)) return;
+    throw new ForbiddenException(SOCIAL_ERR.KUDOS_OFFICIAL_DENIED);
+  }
+
+  /**
+   * S16-SOCIAL-BE-2B-2 (D19) — **câu HỎI**, không phải cổng: actor có `approve:feed-idea` @Company không?
+   *
+   * Dùng cho MASK `reviewNote` ở `045` — một route gác `view:feed` (MỌI nhân viên), nơi câu hỏi "ai được
+   * đọc ghi chú xét duyệt" hoàn toàn khác câu hỏi "ai được vào route".
+   *
+   * ┌─ 🔴 VÌ SAO ĐÂY LÀ `Promise<boolean>`, KHÔNG PHẢI MỘT `assert…` (đo 24/09/2026) ──────────────────┐
+   * │ Plan (D20) định có `assertApproveIdea` để phát `SOCIAL-ERR-020` cho `046`. Hàm đó **không bao giờ │
+   * │ chạy tới**: `resolveActor` ngay trên đã tự resolve cặp của route và ném ở CẢ HAI nhánh (không có   │
+   * │ grant · scope hẹp hơn `companyFloor`) trước khi service chạy. Giữ một `assert` như thế = code chết │
+   * │ trông y hệt một cổng — kiểu hỏng tệ nhất cho người đọc sau.                                       │
+   * │ Mã `SOCIAL-ERR-020` giờ phát từ `SocialPair.denyMessage` của `ideaReview` (xem docblock ở đó).     │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ Fail-closed: `resolveManyOrNull` trả `null`/scope hẹp ⇒ `false`. Không `!= null`.
+   */
+  async canApproveIdeas(actor: SocialActor): Promise<boolean> {
+    // ⚠️ BÓC TAY ba field, KHÔNG truyền nguyên `SOCIAL_ROUTE_PAIRS.ideaReview` (FULL gate
+    // `security-reviewer`, LOW): `resolveStrongestScopes` spread nguyên vật vào `decideStrongestScope`
+    // (`{ ...req, pairIsSensitive: … }`). Hôm nay `ScopeRequest` chỉ có 4 field và không trùng tên nào
+    // của `SocialPair` — nhưng một field mới trùng tên (`requiresReauth`, hay một `companyFloor` tương
+    // lai) sẽ đổi **quyết định phân quyền** trong im lặng, và typecheck không bắt. Đây là lý do
+    // `resolveActor` cũng bóc tay ở chỗ tương ứng.
+    const p = SOCIAL_ROUTE_PAIRS.ideaReview;
+    const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
+      { action: p.action, resourceType: p.resourceType, isSensitive: p.isSensitive },
+    ]);
+    return SocialAccessService.isCompany(scope);
   }
 
   static isCompany(scope: DataScope | null): boolean {

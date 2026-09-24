@@ -1,4 +1,8 @@
-import { SOCIAL_POST_TYPE_PAIRS, type SocialCreatablePostType } from "./social-route-pairs.const";
+// S16-SOCIAL-BE-2B-2 (D2a): khoá của `SOCIAL_POST_TYPE_DENIED` ghép với ENUM ZOD, không với bảng cặp.
+// Trước bản này nó ghép với `SocialCreatablePostType` (= keyof bảng cặp) — đủ để giữ hai BẢNG khớp
+// nhau, nhưng KHÔNG bắt được ca cả hai bảng cùng thiếu một giá trị mà enum đã mở (fail-OPEN: route
+// `002` tạo được một loại bài không cặp nào gác). Ghép thẳng vào enum bịt chiều đó ở tầng kiểu.
+import type { FeedCreatableTypeDto } from "@mediaos/contracts";
 
 /**
  * S16-SOCIAL-BE-1 — mã lỗi SOCIAL (SPEC-16 §12, quy ước SPEC-01 §9 `MODULE-ERR-XXX`).
@@ -23,8 +27,10 @@ import { SOCIAL_POST_TYPE_PAIRS, type SocialCreatablePostType } from "./social-r
  * `012..020`,`022` thuộc `S16-SOCIAL-BE-2`. Khai đủ ở đây để BE-1B/BE-2 không đẻ bảng mã thứ hai.
  *
  * Sau khi `S16-SOCIAL-BE-2` tách ba (23/09/2026): `012..015` = BE-2A (nhóm, đã ship) ·
- * **`016..018` = BE-2B-1 (bình chọn, WO hiện tại)** · `019`,`020`,`022` = BE-2B-2 (sáng kiến ·
- * vinh danh). ⚠️ «ĐÃ DÙNG HẾT» trong hai docblock dưới nghĩa là **không còn số TRỐNG cho ca MỚI**
+ * `016..018` = BE-2B-1 (bình chọn, đã ship) · **`019`,`020`,`022` = BE-2B-2 (sáng kiến · vinh danh,
+ * WO hiện tại — đã khai)**. Sau BE-2B-2, **cả 22 mã của SPEC-16 §12 đều đã có hằng** ⇒ WO sau
+ * (`BE-2C`/`BE-3`) không còn số nào để lấy: ca mới của chúng là hằng CÓ TÊN, không số.
+ * ⚠️ «ĐÃ DÙNG HẾT» trong hai docblock dưới nghĩa là **không còn số TRỐNG cho ca MỚI**
  * ngoài danh sách SPEC-16 §12 — KHÔNG có nghĩa là WO sau phải bịa hằng không-số cho nhánh chính
  * của nó. Ca nào SPEC-16 §12 ĐÃ định nghĩa thì dùng đúng số của nó.
  */
@@ -251,9 +257,15 @@ export const SOCIAL_ERR = {
    * (403) — **KHÔNG SỐ HOÁ** (SPEC-16 §12 im lặng; `020` là của `approve:feed-idea`, không dùng lại
    * được). Thiếu cặp `create:feed-poll` ở phạm vi Company khi tạo bài `type='poll'`.
    *
-   * Hôm nay seed `0578:75-86` cấp cặp này cho CẢ 4 vai canonical ⇒ không vai chuẩn nào chạm được
-   * nhánh này. Nó vẫn phải tồn tại: một tenant thu hồi cặp đó khỏi một vai tuỳ biến là chuyện bình
-   * thường, và lúc ấy đây là khác biệt giữa 403 đọc được với một bài lọt qua cổng.
+   * Seed `0578:75-86` cấp cặp này cho CẢ 4 vai canonical ⇒ không vai CHUẨN nào chạm được nhánh này.
+   *
+   * ✅ **ĐÍNH CHÍNH (S16-SOCIAL-BE-2B-2, 24/09/2026)** — bản trước của docblock này viết «không vai
+   * chuẩn nào chạm được» và bị đọc thành «không ca test nào chạm» (plan BE-2B-2 §0.2 đã dẫn nó làm
+   * bằng cho một món nợ KHÔNG tồn tại). Ca đó CÓ THẬT:
+   * `social-be2b1-polls-isolation.int-spec.ts` ca **N1** dựng một **vai tuỳ biến** (`NO_POLL_PAIRS`)
+   * cho user của chính spec, có neo dương (cùng user tạo được bài `share`) và đếm bài mồ côi trên DB.
+   * Giới hạn đúng của câu trên là: **vai canonical** không dựng được ca này — không phải "không ai đo".
+   * Census `social-error-code-census.spec.ts` (tầng A) giữ nguyên chuẩn đó từ nay.
    */
   POLL_CREATE_REQUIRED: "SOCIAL-ERR: bạn không có quyền tạo bình chọn.",
 
@@ -271,6 +283,122 @@ export const SOCIAL_ERR = {
    * hỏng câm bằng một chế độ hỏng đọc được.
    */
   POLL_WRITE_BUSY: "SOCIAL-ERR: bình chọn đang được xử lý, vui lòng thử lại.",
+
+  // ══════════════ S16-SOCIAL-BE-2B-2 — SÁNG KIẾN · VINH DANH (`019` `020` `022` + 5 hằng tên) ══════
+
+  /**
+   * `SOCIAL-ERR-019` (409) — chuyển trạng thái sáng kiến sai (SPEC-16 §13.3 / SPEC-01 §17.19).
+   *
+   * Phủ CẢ BA hình dạng sai, cùng một chuỗi: nhảy cóc (`submitted → accepted`) · rời trạng thái
+   * terminal (`accepted → …`, reopen) · **thua đua** (hai người duyệt cùng lúc; người thứ hai thấy 0
+   * hàng khớp `WHERE status = <from>`). Ba nguyên nhân là MỘT sự thật với người dùng: "trạng thái đã
+   * khác lúc bạn mở màn hình".
+   *
+   * ⚠️ KHÔNG dùng mã này cho ca «bài không có hàng `feed_ideas`» (bài `type='share'`): `assertPostVisible`
+   * cho bài đó đi QUA (nó chỉ gác tầm nhìn), nên nếu để 0-hàng-UPDATE nuốt luôn ca ấy thì route trả
+   * «chuyển trạng thái sai» cho một bài không hề là sáng kiến. Ca đó là **404 `POST_NOT_FOUND`**, ném
+   * từ `getIdeaForReviewTx`.
+   */
+  IDEA_TRANSITION: "SOCIAL-ERR-019: trạng thái sáng kiến đã thay đổi, vui lòng tải lại.",
+
+  /**
+   * (403) — **KHÔNG SỐ HOÁ** (SPEC-16 §12 im lặng; `020` là của `approve:feed-idea`, nghĩa khác).
+   * Thiếu cặp `create:feed-idea` @Company khi tạo bài `type='idea'`. Dòng `SOCIAL_POST_TYPE_DENIED.idea`.
+   *
+   * Seed `0578` cấp cặp này cho cả 4 vai canonical ⇒ ca DENY **không dựng được bằng vai chuẩn**. Nó
+   * vẫn phải tồn tại (tenant thu hồi cặp khỏi một vai tuỳ biến là chuyện bình thường) và lần này ca
+   * đó ĐƯỢC dựng thật — `T-1` tạo vai riêng của spec, không sửa vai canonical. Đó là lý do `C-7`
+   * (census mã lỗi) ra đời: `POLL_CREATE_REQUIRED` của BE-2B-1 ship mà **không ca nào chạm**.
+   */
+  IDEA_CREATE_REQUIRED: "SOCIAL-ERR: bạn không có quyền đăng sáng kiến.",
+
+  /** (403) — **KHÔNG SỐ HOÁ**. Thiếu `create:feed-kudos` @Company. Dòng `SOCIAL_POST_TYPE_DENIED.kudos`; ca `T-2`. */
+  KUDOS_CREATE_REQUIRED: "SOCIAL-ERR: bạn không có quyền đăng lời vinh danh.",
+
+  /**
+   * `SOCIAL-ERR-020` (403) — xét duyệt sáng kiến mà không có `approve:feed-idea` ở phạm vi Company.
+   *
+   * ┌─ 🔴 MÃ NÀY PHÁT TỪ ĐÂU, VÀ PHỦ ĐÚNG CÁI GÌ — ĐỌC TRƯỚC KHI ASSERT NÓ TRONG TEST ────────────────┐
+   * │ Phát từ **`SocialAccessService.resolveActor`**, qua `SocialPair.denyMessage` của `ideaReview`.    │
+   * │ KHÔNG từ một hàm `assert…` riêng ở service: `resolveActor` đã tự resolve cặp của route rồi ném ở │
+   * │ CẢ HAI nhánh trước khi service chạy, nên một assert thứ hai không bao giờ tới được (plan §13 T1).│
+   * │                                                                                                  │
+   * │ **Phủ CẢ HAI nhánh của `resolveActor`:** (a) `routeScopeOrNull == null` — không resolve ra scope  │
+   * │ nào; (b) sàn `companyFloor` — có grant nhưng scope hẹp hơn Company. Nhánh (a) tới được khi tầng-1 │
+   * │ cho qua bằng một grant CẤP ĐỐI TƯỢNG: `PermissionGuard` đi qua `decideCan` (có xét object grant)  │
+   * │ trong khi `resolveManyOrNull` chỉ đọc grant theo VAI cấp công ty — hai câu hỏi khác nhau.         │
+   * │ _(Bản trước của docblock này nói mã chỉ ra ở nhánh (b) — **nói HẸP hơn thực tế**; sửa 24/09/2026  │
+   * │ theo FULL gate `security-reviewer`.)_                                                            │
+   * │                                                                                                  │
+   * │ **VÙNG KHÔNG PHỦ:** ca bị `PermissionGuard` chặn ở **TẦNG 1** vẫn trả `Permission denied:         │
+   * │ <reason>` (`permission.guard.ts:140`; `@RequirePermission` không nhận message tuỳ biến) — mã này  │
+   * │ không ra ở đó. Giới hạn CÓ CHỦ ĐÍCH, owner ký **S5** 24/09/2026: phủ nốt đòi đổi                 │
+   * │ `PermissionGuard` toàn hệ = WO riêng. Ca `I-2` assert đúng điều đang xảy ra, không điều mong muốn.│
+   * │ Đừng "sửa" bằng cách hạ decorator xuống `view:feed` để service tự gác — làm thế là tháo tầng-1   │
+   * │ của route GHI duy nhất trong module có cặp `approve:*`.                                          │
+   * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+   */
+  IDEA_APPROVE_REQUIRED: "SOCIAL-ERR-020: bạn không có quyền xét duyệt sáng kiến.",
+
+  /**
+   * `SOCIAL-ERR-022` (422) — huy hiệu không có trong catalog hoặc đã tắt.
+   *
+   * MỘT chuỗi cho cả BA nguyên nhân (không tồn tại · `is_active=false` · thuộc tenant khác) — cùng
+   * luật chống-oracle với `POST_NOT_FOUND`: phân biệt ba lý do là nói cho người gọi biết một uuid
+   * huy hiệu của công ty khác CÓ THẬT.
+   */
+  KUDOS_BADGE_INVALID: "SOCIAL-ERR-022: huy hiệu không tồn tại hoặc đã ngừng sử dụng.",
+
+  /**
+   * (422) — **KHÔNG SỐ HOÁ** (SPEC-16 §12 im lặng; owner ký **S3** ngày 23/09/2026 kèm điều kiện bổ
+   * sung 2 dòng vào SPEC-16 §13). Từ chối sáng kiến mà không ghi lý do.
+   *
+   * 🔴 Vì sao phải ném ở SERVICE chứ không để Zod `.min(1)`: `chk_feed_ideas_reject_note` là
+   * `length(btrim(review_note)) > 0`, nên `"   "` (ba khoảng trắng) THOẢ `.min(1)` của Zod nhưng VỠ
+   * CHECK ⇒ `23514` ⇒ **500** cho một sai sót nhập liệu hoàn toàn bình thường. Service so sau khi
+   * trim, trả 422 đọc được.
+   */
+  IDEA_REJECT_NOTE_REQUIRED: "SOCIAL-ERR: từ chối sáng kiến bắt buộc ghi lý do.",
+
+  /**
+   * (422) — **KHÔNG SỐ HOÁ** (owner ký S3). Tự vinh danh chính mình: tác giả nằm trong danh sách
+   * người nhận.
+   *
+   * Không có CHECK nào ở DB chặn việc này (`feed_kudos_recipients` không biết tác giả bài), nên đây
+   * là lưới DUY NHẤT.
+   */
+  KUDOS_SELF_RECIPIENT: "SOCIAL-ERR: không thể tự vinh danh chính mình.",
+
+  /**
+   * (422) — **KHÔNG SỐ HOÁ** (owner ký S3). Số người nhận ngoài khoảng `1..KUDOS_RECIPIENT_MAX`.
+   *
+   * Phủ CẢ HAI đầu, cùng một chuỗi: mảng RỖNG (vinh danh không ai) và quá trần. Zod không ép khoảng
+   * này — ép ở đó cho 400 vô danh (cùng luật với `POLL_OPTIONS_RANGE`).
+   */
+  KUDOS_RECIPIENT_LIMIT: "SOCIAL-ERR: số người được vinh danh phải từ 1 đến 10.",
+
+  /**
+   * (422) — **KHÔNG SỐ HOÁ**. Một hoặc nhiều `recipientEmployeeIds` không phải nhân sự CÒN TỒN TẠI
+   * của tenant (không có · đã xoá mềm · tenant khác).
+   *
+   * ⚠️ **KHÔNG lọc `status = 'active'` ở đường GHI** — vinh danh người ĐÃ NGHỈ là ca thật (lời cảm ơn
+   * lúc chia tay) và owner ký **S6** ngày 24/09/2026 cho phép. Người đã nghỉ bị chặn ở **NOTI** (họ
+   * không nhận thông báo) và hiện ra với cờ `isFormerEmployee` ở DTO của `047`.
+   *
+   * ⚠️ Cross-tenant đã bị FK tổ hợp `feed_kudos_recipients_employee_tenant_fk` (`0580:439`) chặn ở
+   * tầng DB bằng `23503` ⇒ mã này là **chất lượng thông điệp**, không phải lưới bảo mật duy nhất.
+   */
+  KUDOS_RECIPIENT_INVALID: "SOCIAL-ERR: danh sách người được vinh danh không hợp lệ.",
+
+  /**
+   * (403) — **KHÔNG SỐ HOÁ** (SPEC-16 §12 im lặng; `022` là của huy hiệu, không dùng lại được).
+   * Gửi `isOfficial: true` mà không có `manage:feed-kudos` @Company.
+   *
+   * Cặp này được canh ở hai chỗ độc lập: `SOCIAL_KUDOS_FLAG_PAIRS` (bảng hằng, spec **C-6** so cấu
+   * trúc) và ca `K-3` (HTTP, đếm `COUNT(*) feed_kudos = 0`). Một chỗ thôi thì xoá dòng
+   * `resolveManyOrNull` trong `create()` vẫn để mọi census XANH.
+   */
+  KUDOS_OFFICIAL_DENIED: "SOCIAL-ERR: bạn không có quyền đăng vinh danh chính thức của công ty.",
 } as const;
 
 /**
@@ -286,7 +414,11 @@ export const SOCIAL_POST_TYPE_DENIED = {
   share: null,
   news: SOCIAL_ERR.NEWS_MANAGE_REQUIRED,
   poll: SOCIAL_ERR.POLL_CREATE_REQUIRED,
-} as const satisfies Record<SocialCreatablePostType, string | null>;
+  /** S16-SOCIAL-BE-2B-2 — thiếu `create:feed-idea` @Company. Ca DENY dựng bằng vai TUỲ BIẾN (T-1). */
+  idea: SOCIAL_ERR.IDEA_CREATE_REQUIRED,
+  /** S16-SOCIAL-BE-2B-2 — thiếu `create:feed-kudos` @Company. `isOfficial` là cặp KHÁC (`KUDOS_OFFICIAL_DENIED`). */
+  kudos: SOCIAL_ERR.KUDOS_CREATE_REQUIRED,
+} as const satisfies Record<FeedCreatableTypeDto, string | null>;
 
 /**
  * (403) — hai bảng `SOCIAL_POST_TYPE_PAIRS` ↔ `SOCIAL_POST_TYPE_DENIED` LỆCH NHAU: loại bài có cặp
