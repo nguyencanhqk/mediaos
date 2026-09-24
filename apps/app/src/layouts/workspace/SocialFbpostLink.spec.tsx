@@ -31,17 +31,22 @@ describe("S16-SOCIAL-FBPOST-1 — mục rail «Đăng bài Facebook»", () => {
     vi.clearAllMocks();
   });
 
-  // ---- C4 · cổng quyền: 2 ca ALLOW + 1 ca DENY (ca DENY một mình không đủ) --------------------
+  // ---- C4 · cổng quyền: 1 ca ALLOW + 2 ca DENY (khớp ĐÚNG cổng của endpoint SSO) ---------------
   it("C4-allow-1 · có `view:social-post` ⇒ THẤY mục", () => {
     grant("view:social-post");
     render(<SocialFbpostLink />);
     expect(screen.getByRole("button", { name: "app.fbpost" })).toBeInTheDocument();
   });
 
-  it("C4-allow-2 · chỉ có `manage:social-account` (không có view:social-post) ⇒ VẪN thấy mục", () => {
+  it("C4-deny-2 · 🔴 CHỈ có `manage:social-account` ⇒ KHÔNG thấy mục (dù done_when (a) nói OR)", () => {
+    // Đo 24/09/2026: endpoint DUY NHẤT vào fbpost gác `@RequirePermission("view","social-post")`
+    // (apps/api/src/integrations/social/social-sso.controller.ts) — KHÔNG nhận manage:social-account.
+    // Gate OR sẽ hiện một mục bấm vào ăn 403 rồi hiện thông điệp SAI (403 = "công ty chưa được bật").
+    // Nếu ai đó nới gate về OR mà KHÔNG nới guard backend thì ca này ĐỎ — đó là cả mục đích của nó.
     grant("manage:social-account");
-    render(<SocialFbpostLink />);
-    expect(screen.getByRole("button", { name: "app.fbpost" })).toBeInTheDocument();
+    const { container } = render(<SocialFbpostLink />);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("C4-deny · không cặp `social-*` nào ⇒ KHÔNG render gì (kể cả khi có view:feed)", () => {

@@ -95,3 +95,44 @@ cổng nào trong kho bắt được vì `layouts/home/` **không có spec nào*
 **giữ trong AppSwitcher** (`getVisibleApps`) — vì xoá hẳn khỏi `APP_REGISTRY` sẽ cắt đường vào của người
 chỉ có `view:social-post` và của người thu gọn sidebar. Đây là chữ của `done_when` (b), không phải nới
 phạm vi. `@testing-library/user-event` KHÔNG có trong kho ⇒ ca bấm dùng `fireEvent` + `waitFor`.
+
+---
+
+## §6. Gate LIGHT 24/09/2026 — PASS, và một ĐỔI QUYẾT ĐỊNH sau khi đo
+
+`typescript-reviewer` độc lập trên `git diff origin/master...HEAD`: **PASS**, 0 CRITICAL / 0 HIGH.
+Reviewer tự kiểm bằng đọc code (không tin plan): xác nhận không persona nào mất đường vào so với master ·
+không chỗ nào trong 3 app còn vẽ lưới Home bằng `getVisibleApps` · `isCurrentApp` không mở đường tắt
+vòng qua hộp thoại form-bẩn · khoá i18n `app.fbpost` tồn tại thật ở runtime (không chỉ trong spec mock).
+
+### 🔴 D3 ĐỔI — cổng mục rail siết từ OR về ĐÚNG MỘT cặp `view:social-post`
+
+Reviewer nêu một khoảng trống: người **chỉ** có `manage:social-account` thấy mục rail (gate OR của D3)
+nhưng ô AppSwitcher gác `view:social-post` ⇒ ở icon-mode họ mất đường vào; reviewer đề nghị **nới** gate
+ô AppSwitcher. **Đo lại thì cả đề xuất đó lẫn D3 ban đầu đều SAI:**
+
+> Đường DUY NHẤT vào fbpost là `GET /integrations/social/sso-link`, và nó gác
+> `@RequirePermission("view", "social-post", { isSensitive: false })`
+> (`apps/api/src/integrations/social/social-sso.controller.ts:27`) — **KHÔNG** nhận `manage:social-account`.
+
+⇒ Gate OR (ở rail HOẶC ở ô AppSwitcher) sinh ra một mục **hiện ra nhưng bấm vào ăn 403**, rồi trang
+`/social` hiện thông điệp của nhánh 403 («Công ty của bạn chưa được bật ứng dụng Đăng bài») — **chẩn đoán
+SAI**: một vấn đề QUYỀN bị đọc thành vấn đề CẤU HÌNH. Phá nguyên tắc «ô hiện ra thì bấm vào phải vào
+được» (CLAUDE.md §5), và đúng lý do `S16-SOCIAL-FE-1` đã LOẠI phương án OR-gate cho ô Home.
+
+**Chốt:** gate mục rail = `view:social-post`. Ba cổng khớp nhau: mục rail = ô AppSwitcher = endpoint.
+Ca test `C4-allow-2` (manage-only ⇒ thấy mục) đổi thành **`C4-deny-2`** (manage-only ⇒ KHÔNG thấy), kèm
+lý do trong ca: nới gate FE mà không nới guard BE thì ca ĐỎ.
+
+⚠️ **LỆCH `done_when` (a)** — backlog ghi «chỉ hiện khi có `view:social-post` **hoặc**
+`manage:social-account`». Không làm theo, vì đo được rằng vế `manage:social-account` dẫn tới 403.
+**CHỜ CHỮ KÝ OWNER (mục 3):** hoặc (i) sửa chữ `done_when` (a) về một cặp `view:social-post` — mặc định
+đã thi công; hoặc (ii) muốn người `manage:social-account` vào được thật thì **nới guard BACKEND** ⇒
+**tách WO** (đổi quyền, không còn zone green).
+
+### Hai finding còn lại
+
+| #   | Sev    | Xử lý                                                                                                                                                                                                                                                                                                                                |
+| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | MEDIUM | `registry.spec.ts` C2 — vế "đo hiệu số" suy `switcherOnlyKeys` TỪ CHÍNH thuộc tính đang kiểm ⇒ gần tautology (filter SAI-nhưng-tự-nhất-quán vẫn xanh). **Đã vá:** vế kỳ vọng viết tay `["fbpost"]`                                                                                                                                   |
+| 2   | LOW    | `void openSocial(...)` không có `.catch`. An toàn HIỆN TẠI vì `openSocial` tự bọc try/catch và luôn gọi `onFallback`; cùng khuôn với `AppSwitcher` sẵn có. **Đã ghi hợp đồng never-throw vào docblock `cross-domain-apps.ts`**, không thêm `.catch` rỗng (một `.catch(()=>{})` chính là nuốt lỗi im lặng — lớp lỗi FE-1 vừa trả giá) |

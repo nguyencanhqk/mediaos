@@ -15,6 +15,11 @@ import { openSocial } from "@/routes/social/open-social";
  * ứng dụng Facebook, còn «Đăng bài Facebook» thì rơi về trang trung chuyển. Tách thành dữ liệu thuần
  * để spec đo được ĐÚNG câu hỏi "khoá nào được coi là cross-domain", thay vì đếm chuỗi trong component.
  *
+ * 🔴 **HỢP ĐỒNG của mỗi `opener`: NEVER-THROW.** Nó phải tự bọc lỗi và gọi `fallback`, KHÔNG được ném
+ * ra ngoài — nơi gọi dùng `void opener(...)` nên một promise reject sẽ thành unhandled rejection bị nuốt
+ * IM LẶNG (module SOCIAL không có hệ toast). `openLms`/`openSocial` hiện đều tự bọc try/catch; đừng bỏ
+ * catch đi. Cố ý KHÔNG thêm `.catch(() => {})` ở nơi gọi: một catch rỗng cũng chính là nuốt lỗi im lặng.
+ *
  * Khoá = `appKey` của `APP_REGISTRY`, **KHÔNG** phải `moduleCode`: ô `social` (cổng thông tin) và ô
  * `fbpost` (vệ tinh) dùng CHUNG `moduleCode: "SOCIAL"` — so theo module sẽ bắt cả hai.
  */

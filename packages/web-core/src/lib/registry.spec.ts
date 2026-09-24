@@ -1556,12 +1556,10 @@ describe("S16-SOCIAL-FBPOST-1 — getHomeGridApps vs getVisibleApps (cờ switch
     const home = getHomeGridApps(APP_REGISTRY, makeSession(), fbpostOnly).map((a) => a.appKey);
     const switcher = getVisibleApps(APP_REGISTRY, makeSession(), fbpostOnly).map((a) => a.appKey);
     expect(home).not.toContain("fbpost");
-    // Đo ĐÚNG hiệu số: hai danh sách chỉ khác nhau ở các ô switcherOnly, không khác vì bất kỳ lý do nào
-    // khác (nếu ai đó thêm điều kiện lạ vào getHomeGridApps thì ca này ĐỎ).
-    const switcherOnlyKeys = APP_REGISTRY.filter((a) => a.switcherOnly).map((a) => a.appKey);
-    expect(switcher.filter((k) => !home.includes(k))).toEqual(
-      switcher.filter((k) => switcherOnlyKeys.includes(k)),
-    );
+    // Đo ĐÚNG hiệu số bằng danh sách KỲ VỌNG VIẾT TAY, KHÔNG suy lại từ `a.switcherOnly` (suy lại thì
+    // hai vế cùng tính từ thuộc tính đang kiểm ⇒ tautology: một filter SAI nhưng tự nhất quán vẫn xanh).
+    // Ai đó thêm điều kiện lạ vào getHomeGridApps, hay gắn cờ cho ô thứ hai, thì ca này ĐỎ.
+    expect(switcher.filter((k) => !home.includes(k))).toEqual(["fbpost"]);
   });
 
   it("C2b · ô `fbpost` là ô DUY NHẤT mang switcherOnly (census — thêm ô mới phải cân nhắc lại)", () => {

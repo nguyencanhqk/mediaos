@@ -14,8 +14,18 @@ import { openSocial } from "@/routes/social/open-social";
  * sang fbpost (`openSocial`), KHÔNG điều hướng nội bộ. Thêm trường vào `SidebarItemMeta` sẽ chạm cả
  * 13 module + hai snapshot `sidebar-tree.*.txt` đang ghim cây, nên dùng khe có sẵn.
  *
- * Gate = `view:social-post` HOẶC `manage:social-account` — 2 trong 3 cặp `social-*` CŨ (S9), KHÔNG
- * phải cặp `feed-*` nào: fbpost là tiện ích con, quyền của nó độc lập với quyền bảng tin.
+ * Gate = ĐÚNG MỘT cặp `view:social-post` (cặp `social-*` CŨ từ S9), KHÔNG phải cặp `feed-*` nào:
+ * fbpost là tiện ích con, quyền của nó độc lập với quyền bảng tin.
+ *
+ * 🔴 **`done_when` (a) của WO ghi «view:social-post HOẶC manage:social-account» — cố tình KHÔNG làm
+ * theo.** Đo 24/09/2026: đường DUY NHẤT vào fbpost là `GET /integrations/social/sso-link`, và nó gác
+ * `@RequirePermission("view", "social-post")` (`apps/api/src/integrations/social/social-sso.controller.ts`)
+ * — KHÔNG nhận `manage:social-account`. Gate OR ở đây sẽ hiện mục cho người chỉ có
+ * `manage:social-account`, họ bấm vào ăn **403** rồi rơi về `/social` với thông điệp SAI («Công ty của
+ * bạn chưa được bật ứng dụng Đăng bài» — chẩn đoán nhầm một vấn đề QUYỀN thành vấn đề cấu hình).
+ * Đúng nguyên tắc «ô hiện ra thì bấm vào phải vào được» (CLAUDE.md §5), và đúng lý do S16-SOCIAL-FE-1
+ * đã LOẠI phương án OR-gate cho ô Home. Ba cổng giờ khớp nhau: mục rail = ô AppSwitcher = endpoint.
+ * Muốn người `manage:social-account` vào được thì phải nới gate ở BACKEND ⇒ **tách WO** (đổi quyền).
  *
  * Fallback giữ Y HỆT hành vi cũ của ô Home: lỗi (mạng · 503 cầu SSO chưa cấu hình · 403 công ty chưa
  * bật · 401 hết phiên) → điều hướng `/social`, nơi `SocialRedirectPage` hiện lý do ĐỌC ĐƯỢC và cho thử
@@ -28,10 +38,9 @@ import { openSocial } from "@/routes/social/open-social";
 export function SocialFbpostLink() {
   const { t } = useTranslation("nav");
   const navigate = useNavigate();
-  const canViewPost = useCan("view", "social-post");
-  const canManageAccount = useCan("manage", "social-account");
+  const canOpenFbpost = useCan("view", "social-post");
 
-  if (!canViewPost && !canManageAccount) return null;
+  if (!canOpenFbpost) return null;
 
   return (
     <button
