@@ -220,8 +220,15 @@ export class SocialAccessService {
    * ⚠️ Fail-closed: `resolveManyOrNull` trả `null`/scope hẹp ⇒ `false`. Không `!= null`.
    */
   async canApproveIdeas(actor: SocialActor): Promise<boolean> {
+    // ⚠️ BÓC TAY ba field, KHÔNG truyền nguyên `SOCIAL_ROUTE_PAIRS.ideaReview` (FULL gate
+    // `security-reviewer`, LOW): `resolveStrongestScopes` spread nguyên vật vào `decideStrongestScope`
+    // (`{ ...req, pairIsSensitive: … }`). Hôm nay `ScopeRequest` chỉ có 4 field và không trùng tên nào
+    // của `SocialPair` — nhưng một field mới trùng tên (`requiresReauth`, hay một `companyFloor` tương
+    // lai) sẽ đổi **quyết định phân quyền** trong im lặng, và typecheck không bắt. Đây là lý do
+    // `resolveActor` cũng bóc tay ở chỗ tương ứng.
+    const p = SOCIAL_ROUTE_PAIRS.ideaReview;
     const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
-      SOCIAL_ROUTE_PAIRS.ideaReview,
+      { action: p.action, resourceType: p.resourceType, isSensitive: p.isSensitive },
     ]);
     return SocialAccessService.isCompany(scope);
   }

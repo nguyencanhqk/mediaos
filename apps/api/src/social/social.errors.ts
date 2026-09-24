@@ -318,15 +318,22 @@ export const SOCIAL_ERR = {
   /**
    * `SOCIAL-ERR-020` (403) — xét duyệt sáng kiến mà không có `approve:feed-idea` ở phạm vi Company.
    *
-   * ┌─ 🔴 VÙNG PHỦ THẬT CỦA MÃ NÀY — ĐỌC TRƯỚC KHI ASSERT NÓ TRONG TEST ─────────────────────────────┐
-   * │ `PermissionGuard` **không phát được mã này**: nó ném `ForbiddenException("Permission denied: " + │
-   * │ decision.reason)` (`permission.guard.ts:140`) và `@RequirePermission` không nhận message tuỳ     │
-   * │ biến (chỉ `action`/`resourceType`/`isSensitive`/`requiresReauth`). Nên mã này CHỈ ra ở nhánh mà  │
-   * │ tầng-1 ĐÃ CHO QUA rồi tầng-2 mới từ chối — tức ca **«có grant nhưng scope hẹp hơn Company»**     │
-   * │ (`assertApproveIdea` ép sàn `isCompany()`).                                                      │
+   * ┌─ 🔴 MÃ NÀY PHÁT TỪ ĐÂU, VÀ PHỦ ĐÚNG CÁI GÌ — ĐỌC TRƯỚC KHI ASSERT NÓ TRONG TEST ────────────────┐
+   * │ Phát từ **`SocialAccessService.resolveActor`**, qua `SocialPair.denyMessage` của `ideaReview`.    │
+   * │ KHÔNG từ một hàm `assert…` riêng ở service: `resolveActor` đã tự resolve cặp của route rồi ném ở │
+   * │ CẢ HAI nhánh trước khi service chạy, nên một assert thứ hai không bao giờ tới được (plan §13 T1).│
    * │                                                                                                  │
-   * │ Ca «không có grant nào» trả **403 CHUNG của guard**, KHÔNG phải chuỗi này. Đó là giới hạn có chủ  │
-   * │ đích, owner ký **S5** ngày 24/09/2026: phủ cả hai ca đòi đổi `PermissionGuard` toàn hệ = WO riêng.│
+   * │ **Phủ CẢ HAI nhánh của `resolveActor`:** (a) `routeScopeOrNull == null` — không resolve ra scope  │
+   * │ nào; (b) sàn `companyFloor` — có grant nhưng scope hẹp hơn Company. Nhánh (a) tới được khi tầng-1 │
+   * │ cho qua bằng một grant CẤP ĐỐI TƯỢNG: `PermissionGuard` đi qua `decideCan` (có xét object grant)  │
+   * │ trong khi `resolveManyOrNull` chỉ đọc grant theo VAI cấp công ty — hai câu hỏi khác nhau.         │
+   * │ _(Bản trước của docblock này nói mã chỉ ra ở nhánh (b) — **nói HẸP hơn thực tế**; sửa 24/09/2026  │
+   * │ theo FULL gate `security-reviewer`.)_                                                            │
+   * │                                                                                                  │
+   * │ **VÙNG KHÔNG PHỦ:** ca bị `PermissionGuard` chặn ở **TẦNG 1** vẫn trả `Permission denied:         │
+   * │ <reason>` (`permission.guard.ts:140`; `@RequirePermission` không nhận message tuỳ biến) — mã này  │
+   * │ không ra ở đó. Giới hạn CÓ CHỦ ĐÍCH, owner ký **S5** 24/09/2026: phủ nốt đòi đổi                 │
+   * │ `PermissionGuard` toàn hệ = WO riêng. Ca `I-2` assert đúng điều đang xảy ra, không điều mong muốn.│
    * │ Đừng "sửa" bằng cách hạ decorator xuống `view:feed` để service tự gác — làm thế là tháo tầng-1   │
    * │ của route GHI duy nhất trong module có cặp `approve:*`.                                          │
    * └─────────────────────────────────────────────────────────────────────────────────────────────────┘

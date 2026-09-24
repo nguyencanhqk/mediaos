@@ -242,6 +242,15 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · vinh danh (DB cô lập)", ()
       )
     ).rows[0].n as number;
 
+  const auditOfficialRows = async (postId: string) =>
+    (
+      await direct.query(
+        `SELECT metadata FROM audit_logs
+          WHERE object_type = 'feed_post' AND object_id = $1 AND action = 'social.kudos.official'`,
+        [postId],
+      )
+    ).rows as Array<{ metadata: Record<string, unknown> }>;
+
   const outboxRows = async (postId: string) =>
     (
       await direct.query(
@@ -772,6 +781,38 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · vinh danh (DB cô lập)", ()
   it("`047` từ chối `month` sai hình dạng ⇒ 400", async () => {
     expect((await get(author.token, "/social/kudos?month=2026-13")).status).toBe(400);
     expect((await get(author.token, "/social/kudos?month=thang-9")).status).toBe(400);
+
+    // 🔴 `0000-01` và `1899-05` đi QUA regex cũ `^\d{4}-…` rồi vỡ ở SQL: Postgres không có năm 0 ⇒
+    // `('0000-01' || '-01')::timestamp` ném `22008` ⇒ **500** cho một tham số query (FULL gate
+    // `security-reviewer`, MEDIUM-1 — đo thật bằng psql). Hai ca dưới là lưới của bản vá; thiếu chúng
+    // thì hai ca trên vẫn xanh vì chúng chỉ thử những hình dạng mà regex TỰ từ chối.
+    expect((await get(author.token, "/social/kudos?month=0000-01")).status).toBe(400);
+    expect((await get(author.token, "/social/kudos?month=1899-05")).status).toBe(400);
+
+    // Neo dương: một tháng HỢP LỆ vẫn đi qua ⇒ regex không siết quá tay.
+    expect((await get(author.token, "/social/kudos?month=2026-09")).status).toBe(200);
+  });
+
+  it("K-3c — `isOfficial:true` để lại ĐÚNG 1 dòng audit; kudos thường để lại 0 dòng", async () => {
+    // Nhánh đặc quyền (owner ký S8, 24/09/2026): `manage:feed-kudos` xuất bản nội dung mang dấu công ty.
+    const officialPost = await createKudos(official.token, {
+      recipients: [r1.employeeId],
+      isOfficial: true,
+    });
+    expect(officialPost.status, JSON.stringify(officialPost.body)).toBe(201);
+
+    const rows = await auditOfficialRows(officialPost.postId);
+    expect(rows.length, "một lượt xuất bản chính thức = một dòng sổ").toBe(1);
+    expect(rows[0].metadata.postId).toBe(officialPost.postId);
+    expect(rows[0].metadata.recipientCount).toBe(1);
+    // KHÔNG chở chữ tự do / danh tính người nhận — sổ audit có bề mặt đọc RIÊNG, rộng hơn `047`.
+    expect(JSON.stringify(rows[0].metadata)).not.toContain(r1.employeeId);
+
+    // 🔴 Neo ÂM — đây là vế làm ca này có nghĩa: kudos THƯỜNG không ghi sổ. Không có vế này thì một
+    // bản "audit mọi bài kudos" vẫn xanh, và sổ ngập thao tác thường đúng bằng cách làm mờ thứ cần nhìn.
+    const plainPost = await createKudos(author.token, { recipients: [r1.employeeId] });
+    expect(plainPost.status).toBe(201);
+    expect((await auditOfficialRows(plainPost.postId)).length).toBe(0);
   });
 
   it("`047`/`048` trang VƯỢT BIÊN: `data` rỗng nhưng `total` vẫn ĐÚNG", async () => {

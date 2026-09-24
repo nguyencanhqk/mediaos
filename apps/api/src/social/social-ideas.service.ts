@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { FeedIdeaStatusDto, ReviewFeedIdeaDto } from "@mediaos/contracts";
 import { UnprocessableEntityException } from "@nestjs/common";
 import { DatabaseService, type TenantTx } from "../db/db.service";
@@ -36,6 +36,8 @@ interface IdeaItemDto {
  */
 @Injectable()
 export class SocialIdeasService {
+  private readonly logger = new Logger(SocialIdeasService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: SocialAccessService,
@@ -184,7 +186,19 @@ export class SocialIdeasService {
     if (authorUserId === actor.actorUserId) return;
 
     const recipients = await activeUserIdsTx(tx, actor.companyId, [authorUserId]);
-    if (recipients.length === 0) return;
+    if (recipients.length === 0) {
+      // 🔴 PHẢI log. Nhánh này là «tác giả sáng kiến không còn nhận được thông báo» (tài khoản bị khoá
+      // `suspended`/`locked` hoặc xoá mềm SAU khi đăng bài) — hợp lệ về nghiệp vụ, nhưng nếu return
+      // câm thì sự kiện đó **biến khỏi mọi bề mặt quan sát**: không hàng outbox để registrar bắt, không
+      // dòng log để vận hành tra khi có người hỏi «vì sao tác giả X không nhận được kết quả xét duyệt».
+      // Hai đường NOTI anh em CÙNG hình dạng rỗng (`enqueueNewsPublishedNoti` NOTI-031 ·
+      // `enqueueKudosReceivedNoti` NOTI-033) đều đã log WARN cho đúng tình huống này — bỏ ở đây là bất
+      // nhất trong cùng module, không phải một quyết định. (FULL gate `silent-failure-hunter`, MEDIUM-1.)
+      this.logger.warn(
+        `NOTI-032: sáng kiến ở bài ${postId} chuyển sang "${status}" nhưng tác giả (${authorUserId}) KHÔNG còn hoạt động — không phát thông báo.`,
+      );
+      return;
+    }
 
     const payload: SocialIdeaStatusChangedPayload = {
       post_id: postId,

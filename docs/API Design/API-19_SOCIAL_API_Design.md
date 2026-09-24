@@ -294,7 +294,8 @@ Key **do client sinh khi mở composer/form**, TTL 15′, replay trả `Idempote
 ## 8. Hai tầng guard + audit
 
 - Cặp quyền khai ở **decorator route** *và* kiểm lại ở **service**; census QA so từng route theo MÃ ở cả hai tầng.
-- Ghi `audit_logs` **cùng transaction** cho: `006` moderation · `029` xử lý báo cáo · `038`/`039` thành viên nhóm · `046` xét duyệt sáng kiến · `049`/`050`/`051` huy hiệu · `053` export.
+- Ghi `audit_logs` **cùng transaction** cho: `006` moderation · `029` xử lý báo cáo · `038`/`039` thành viên nhóm · `046` xét duyệt sáng kiến · `049`/`050`/`051` huy hiệu · `053` export · **`002` CHỈ ở nhánh `type='kudos'` + `isOfficial=true`** (`social.kudos.official`).
+- 🔴 **Vì sao `002` audit một nhánh chứ không cả route** (bổ sung 24/09/2026, `S16-SOCIAL-BE-2B-2`, owner ký **S8**): bài thường đã có tác giả + thời điểm trong chính hàng `feed_posts`, audit thêm chỉ làm sổ ngập thao tác thường. `isOfficial=true` thì khác — nó dùng năng lực `manage:feed-kudos` để xuất bản nội dung mang **DẤU CÔNG TY**, tức một người nói thay tổ chức, đúng hình dạng mà module đã audit ở mọi chỗ khác (`social.post.update` chỉ ghi khi qua nhánh `asManager` · `social.poll.close` kèm `viaManage`). Metadata `{postId, kudosId, recipientCount}` — **KHÔNG** `message` (chữ tự do) và **KHÔNG** `employee_id` người nhận: sổ audit có bề mặt đọc RIÊNG, rộng hơn `047`.
 - `object_type` audit mới: `feed_post` · `feed_comment` · `feed_group` · `feed_report` (UNION-ADD — DB-17 §3.2).
 - Payload audit **không** chứa nội dung bài đầy đủ, chỉ `{postId, field, from, to}`.
 

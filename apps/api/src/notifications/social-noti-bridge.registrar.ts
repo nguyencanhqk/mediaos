@@ -122,10 +122,15 @@ const PAYLOAD_KEYS_DENIED: Record<string, readonly string[]> = {
    * `my-notifications.mapper.ts` trả payload NGUYÊN VĂN cho người nhận.
    *
    * An toàn về chức năng, đã đo: `actorUserId`/`actor_name` KHÔNG nằm trong
-   * `TEMPLATE_KEYS.SOCIAL_IDEA_STATUS_CHANGED` ⇒ không phá render; và bridge đọc
-   * `ctx.payload.actorUserId` TRƯỚC khi gọi `payloadOf` ⇒ cột `notifications.created_by` vẫn giữ neo
-   * điều tra. Producer hôm nay cũng không chở hai khoá đó — đây là ghi thành LUẬT, để nó không còn là
-   * tính chất tình cờ của producer.
+   * `TEMPLATE_KEYS.SOCIAL_IDEA_STATUS_CHANGED` ⇒ không phá render. Producer hôm nay cũng không chở hai
+   * khoá đó — đây là ghi thành LUẬT, để nó không còn là tính chất tình cờ của producer.
+   *
+   * ⚠️ **Đính chính 24/09/2026 (FULL gate `security-reviewer`, LOW):** bản trước của docblock này nói
+   * thêm «bridge đọc `ctx.payload.actorUserId` TRƯỚC khi gọi `payloadOf` ⇒ `notifications.created_by`
+   * vẫn giữ neo điều tra». Với mã NÀY thì **sai**: producer `enqueueIdeaStatusNoti` không hề đặt
+   * `actorUserId` vào payload, nên `created_by` là **NULL** cho MỌI hàng NOTI-032. Đừng "vá" bằng cách
+   * nối `actorUserId` vào payload — làm thế là phá chính D16. Neo điều tra THẬT của một lượt xét duyệt
+   * nằm ở `audit_logs` (`action='social.idea.review'`, `actor_user_id`), và nó có cổng đọc riêng.
    */
   SOCIAL_IDEA_STATUS_CHANGED: ["actorUserId", "actor_name"],
 };

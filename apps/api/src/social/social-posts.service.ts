@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type {
   CreateFeedPostDto,
   FeedPostCreatedDto,
@@ -231,13 +231,44 @@ export class SocialPostsService {
       }
 
       if (dto.type === "kudos" && dto.kudos) {
-        const { recipientEmployeeIds } = await createKudosTx(
+        const { kudosId, recipientEmployeeIds } = await createKudosTx(
           tx,
           actor.companyId,
           postId,
           authorEmployeeId,
           dto.kudos,
         );
+
+        // 🔴 AUDIT nhánh ĐẶC QUYỀN — owner ký **S8** 24/09/2026 (FULL gate `security-reviewer`, MEDIUM).
+        //
+        // `create()` KHÔNG audit bất kỳ `type` nào, và đó là đúng cho bài thường: tác giả + thời điểm
+        // đã nằm trong chính hàng `feed_posts`. `isOfficial:true` thì khác — nó dùng năng lực
+        // `manage:feed-kudos` để xuất bản nội dung mang **DẤU CÔNG TY**, tức một người nói thay tổ
+        // chức. Đó đúng hình dạng mà module này đã audit ở mọi chỗ khác: `social.post.update` chỉ ghi
+        // khi đi qua nhánh `asManager` (finding HIGH-2 của FULL gate PR #530, owner ký 22/09/2026) ·
+        // `social.poll.close` ghi kèm cờ `viaManage` · mọi mutation nhóm qua `manage:feed-group`.
+        // `isOfficial` là ngoại lệ DUY NHẤT còn lại — bít nó ở đây.
+        //
+        // ⚠️ CHỈ ghi ở nhánh `isOfficial`. Audit MỌI bài kudos sẽ làm sổ ngập thao tác thường và làm
+        // mờ đúng thứ cần nhìn thấy; ca `K-3c` đếm cả hai chiều (có cờ ⇒ 1 dòng · không cờ ⇒ 0 dòng).
+        if (dto.kudos.isOfficial) {
+          await this.audit.record(tx, {
+            action: "social.kudos.official",
+            // `feed_post`, KHÔNG `feed_kudos`: CHECK `audit_logs.object_type` (`0583`) cố ý chỉ có
+            // `feed_post` — «vinh danh là một BÀI». Thêm giá trị mới ở đây là một migration.
+            objectType: "feed_post",
+            objectId: postId,
+            actorUserId: actor.actorUserId,
+            actorType: "User",
+            actionGroup: "SOCIAL",
+            resultStatus: "Success",
+            dataScope: "Company",
+            sensitivityLevel: "Normal",
+            // KHÔNG chở `message` (chữ tự do) và KHÔNG chở `employee_id` người nhận — sổ audit có bề
+            // mặt đọc RIÊNG, rộng hơn `047`. Chỉ id + số lượng, đủ để lần ngược.
+            metadata: { postId, kudosId, recipientCount: recipientEmployeeIds.length },
+          });
+        }
         // 🔴 NOTI-033 enqueue **TRONG tx** (D24). Ghi hàng outbox sau commit là at-most-once: chết
         // giữa hai bước ⇒ lời vinh danh có thật mà không ai được báo, và không có đường phát lại.
         // Khuôn đã dùng cho NOTI-028 (`enqueueMentionNotis`) và NOTI-031 ngay dưới đây.
@@ -448,6 +479,16 @@ export class SocialPostsService {
         and(
           eq(employeeProfiles.companyId, actor.companyId),
           eq(employeeProfiles.userId, actor.actorUserId),
+          // 🔴 `deleted_at IS NULL` — FULL gate `security-reviewer` (S16-SOCIAL-BE-2B-2, 24/09/2026).
+          //
+          // Unique index `employee_profiles_company_user_active_uq` chỉ phủ hàng CÒN SỐNG
+          // (`WHERE deleted_at IS NULL`), nên một user có 1 hồ sơ đã xoá mềm + 1 hồ sơ sống làm
+          // `LIMIT 1` **không xác định** — nó có thể trả hồ sơ ĐÃ XOÁ. Trước BE-2B-2 điều đó chỉ ảnh
+          // hưởng `feed_posts.author_employee_id` (một cột hiển thị); từ BE-2B-2 giá trị này là vế
+          // TRÁI của luật K1 (`KUDOS_SELF_RECIPIENT`, lưới DUY NHẤT — không CHECK nào ở DB chặn tự
+          // vinh danh) ⇒ trả hồ sơ cũ là **lách được K1**: tác giả gửi chính `employee_id` đang sống
+          // của mình và đi qua.
+          isNull(employeeProfiles.deletedAt),
         ),
       )
       .limit(1);

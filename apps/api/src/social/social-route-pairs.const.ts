@@ -262,9 +262,9 @@ export const SOCIAL_ROUTE_PAIRS = {
   //
   // 🔴 `046` là route DUY NHẤT của module gác bằng một cặp `approve:*`, và cũng là chỗ duy nhất
   // decorator KHÔNG phải `view:feed`. Nó vẫn `tier1IsFloor = false` vì cặp `approve:feed-idea` ĐÚNG
-  // là cặp gác route — tầng 2 chỉ hỏi LẠI chính cặp đó để phát được `SOCIAL-ERR-020` (guard chỉ ném
-  // `Permission denied: <reason>`, `RequirePermission` không nhận message tuỳ biến), chứ không hỏi
-  // một cặp KHÁC. Xem `SocialAccessService.assertApproveIdea`.
+  // là cặp gác route — tầng 2 (`resolveActor`) chỉ hỏi LẠI chính cặp đó, chứ không hỏi một cặp KHÁC.
+  // Nó cũng là route DUY NHẤT mang `denyMessage` — xem docblock của field đó, và assert ghim tập
+  // «route có `denyMessage`» ở `social-two-layer-guard-census.unit-spec.ts`.
   /** 045 `GET /social/ideas` — danh sách sáng kiến thấy được; lọc `status`; OFFSET. */
   ideaList: pair("view", "feed"),
   /**

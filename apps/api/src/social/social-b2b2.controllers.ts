@@ -38,10 +38,12 @@ interface AuthenticatedRequest extends Request {
  * `UNPIPED_CEILING = 1`, trần ĐÃ DÙNG HẾT, và assert là ĐẲNG THỨC — thiếu một pipe là đỏ ngay.
  *
  * 🔴 **`046` là route DUY NHẤT của module gác bằng một cặp `approve:*`** — decorator ĐÚNG là cặp thật
- * cần kiểm (nên `tier1IsFloor = false`). Tầng 2 hỏi LẠI chính cặp đó, không phải một cặp khác: guard
- * chỉ ném `Permission denied: <reason>` nên `SOCIAL-ERR-020` bắt buộc phải phát từ service
- * (`assertApproveIdea`). Đừng hạ decorator xuống `view:feed` để "cho service tự gác" — làm thế là tháo
- * tầng-1 của đường DUYỆT.
+ * cần kiểm (nên `tier1IsFloor = false`), và là route DUY NHẤT mang `SocialPair.denyMessage`.
+ *
+ * `SOCIAL-ERR-020` phát từ **`resolveActor`** (nó tự resolve cặp của route rồi đọc `denyMessage` của
+ * bảng hằng), KHÔNG từ một `assert…` riêng ở service: `resolveActor` đã chặn ở CẢ HAI nhánh trước khi
+ * service chạy một dòng, nên một hàm assert thứ hai là **code chết trông như một cổng** (plan §13 T1).
+ * Đừng hạ decorator xuống `view:feed` để "cho service tự gác" — làm thế là tháo tầng-1 của đường DUYỆT.
  *
  * ⚠️ WO này KHÔNG có POST mới ⇒ KHÔNG `@Idempotent()` nào. `046` là `PATCH` và lưới không-điều-kiện
  * của nó ở tầng dữ liệu: `UPDATE … WHERE status = <from>` (lượt hai khớp 0 hàng ⇒ 409, không sinh

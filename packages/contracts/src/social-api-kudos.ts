@@ -27,7 +27,13 @@ import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
  */
 export const kudosMonthSchema = z
   .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "tháng phải có dạng YYYY-MM");
+  // 🔴 `(19|20)` chứ KHÔNG `\d{4}` — FULL gate `security-reviewer` MEDIUM-1, đo thật trên Postgres:
+  //   SELECT ('0000-01' || '-01')::timestamp;  =>  ERROR 22008 date/time field value out of range
+  // `\d{4}` nhận năm `0000`, chuỗi đó đi thẳng vào `::timestamp AT TIME ZONE …` của `listKudosTx` và
+  // không call-site nào bắt ⇒ **500** cho một tham số query. Đúng lớp lỗi mà `IDEA_REJECT_NOTE_REQUIRED`
+  // (D7) ra đời để chặn: hợp lệ với schema nhưng vỡ ở tầng DB. Chặn ở hợp đồng là chỗ RẺ nhất, và nó
+  // không mất ca dùng nào — `feed_kudos` không có dữ liệu trước 1900.
+  .regex(/^(19|20)\d{2}-(0[1-9]|1[0-2])$/, "tháng phải có dạng YYYY-MM (năm 1900–2099)");
 export type KudosMonthDto = z.infer<typeof kudosMonthSchema>;
 
 /** `047` — phân trang theo TRANG (API-19 §6.4). Vắng `month` = vinh danh GẦN ĐÂY (mới nhất trước). */

@@ -848,6 +848,36 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · sáng kiến (DB cô lập)",
       expect((await notiRows(author.userId, postId)).length).toBe(1);
     });
 
+    it("N-032d — tác giả sáng kiến bị KHOÁ tài khoản ⇒ KHÔNG hàng outbox nào (không dead-letter câm)", async () => {
+      // Ca ĐỐI XỨNG với `N-033c` của phía vinh danh — FULL gate `silent-failure-hunter` (MEDIUM-1) chỉ
+      // ra phía sáng kiến thiếu hẳn nó, và cùng lúc thiếu cả dòng log cho nhánh này.
+      const hash = await app.get(PasswordService).hash(LOGIN_PW);
+      const doomed = await makeUser(A, `ideadoomed-${randomUUID().slice(0, 6)}`, hash, {
+        orgUnitId: ouSales,
+      });
+      const { postId } = await createIdea(doomed.token);
+      expect(postId, "fixture phải tạo được sáng kiến").not.toBe("");
+
+      // 🔴 `suspended`, KHÔNG `inactive`: `users_status_chk` = {active, invited, suspended, locked}.
+      await direct.query(`UPDATE users SET status = 'suspended' WHERE id = $1`, [doomed.userId]);
+
+      const res = await patch(reviewer.token, `/social/posts/${postId}/idea/review`).send({
+        status: "under_review",
+      });
+      // Lượt duyệt VẪN thành công — NOTI không phải điều kiện của việc xét duyệt.
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect((await ideaRow(postId))?.status).toBe("under_review");
+      // Audit VẪN có (nó không phụ thuộc NOTI) — neo dương, chứng minh 0 outbox dưới đây KHÔNG phải do
+      // cả đường ghi bị chặn.
+      expect((await auditRows(postId)).length).toBe(1);
+
+      // `activeUserIdsTx` trả rỗng ⇒ producer KHÔNG enqueue. Enqueue một hàng `recipientUserIds: []` sẽ
+      // thành dead-letter ở registrar (`requireUserIds` ném) — một lỗi hạ tầng cho tình huống hợp lệ.
+      expect((await outboxRows(postId)).length).toBe(0);
+      await drain();
+      expect((await notiRows(doomed.userId, postId)).length).toBe(0);
+    });
+
     it("N-032 — tác giả tự duyệt sáng kiến của mình ⇒ KHÔNG thông báo (không ai tự báo cho mình)", async () => {
       const selfIdea = await createIdea(reviewer.token);
       expect(selfIdea.status).toBe(201);

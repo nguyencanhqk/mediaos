@@ -98,6 +98,14 @@ export async function assertRecipientsTx(
   // đây khớp 1/2 ⇒ ném "người nhận không hợp lệ" cho một lỗi thật là gửi TRÙNG. Cùng bản vá đã áp
   // cho `optionIds` của `041` (FULL gate BE-2B-1 L-5).
   const wanted = [...new Set(employeeIds.map((id) => id.toLowerCase()))];
+  // Guard RỖNG — **KHÔNG phải một quyết định nghiệp vụ**, và đừng đọc nó thành «0 người nhận thì coi
+  // như hợp lệ». Đo (drizzle 0.45.2): `inArray(col, [])` sinh `sql`false`` nên bỏ guard này cho ra hành
+  // vi Y HỆT (0 hàng ⇒ `0 !== 0` ⇒ vẫn trả `[]`) — nó ở đây chỉ để **không tốn một vòng tới DB không
+  // để làm gì**, cùng lý do đã ghi ở `payroll-templates.repository.ts`.
+  //
+  // Ở call-site DUY NHẤT hiện nay (`createKudosTx`) nhánh này **không tới được**: gate K2
+  // (`KUDOS_RECIPIENT_MIN = 1`) chạy ngay phía trên. Call-site MỚI nào tái dùng hàm này phải tự trả lời
+  // «mảng rỗng có nghĩa gì với tôi» — hàm này KHÔNG assert điều đó. (FULL gate `silent-failure-hunter`, LOW-2.)
   if (wanted.length === 0) return [];
 
   const rows = await tx

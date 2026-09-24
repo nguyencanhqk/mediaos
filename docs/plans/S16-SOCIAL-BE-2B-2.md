@@ -578,33 +578,124 @@ docs/plans/S16-SOCIAL-BE-2B-2.md:284   (chính plan này)
 
 ---
 
-## §14. Sổ vết FULL GATE — *(để trống; chạy TRƯỚC khi mở PR)*
+## §14. Sổ vết FULL GATE — *(chạy 24/09/2026, TRƯỚC khi mở PR)*
 
-`security-reviewer` · `database-reviewer` · `silent-failure-hunter` ĐỘC LẬP trên diff
-`f407c1d1..<HEAD>` (+ `santa-method` cho `reviewTx` · `userIdsOfEmployeesTx`).
+Ba reviewer ĐỘC LẬP trên diff `f407c1d1..HEAD`, mỗi người một trục, không thấy kết quả của nhau.
 
-> **Nhắc:** reviewer có thể **hội tụ vào cùng một lỗi thật** (BE-1B: ba reviewer độc lập cùng bắt đúng
-> một lỗi) **và** có thể **cùng kết luận sai** (`database-reviewer` từng khẳng định «không có deadlock»
-> ở đúng chỗ có deadlock). Kiểm chứng lại mọi finding nặng.
+| Reviewer | Verdict | Finding |
+| --- | --- | --- |
+| `security-reviewer` | **PASS** — 0 CRITICAL, 0 HIGH | 3 MEDIUM + 4 LOW |
+| `database-reviewer` | **PASS** — 0 CRITICAL, 0 HIGH | 3 LOW/INFO |
+| `silent-failure-hunter` | **PASS** có điều kiện | 1 MEDIUM + 1 LOW |
 
-### 14.1 Điểm HỘI TỤ — *(để trống)*
+### 14.1 Điểm HỘI TỤ — hai reviewer độc lập cùng bác MỘT dòng của plan
+
+`security-reviewer` và `database-reviewer` **hội tụ**, bằng hai đường suy luận khác nhau, vào cùng một
+kết luận: **dòng ĐO CỔNG «Bỏ `WHERE status=<from>` → I-6 (audit 2 dòng)» là KHÔNG THOẢ ĐƯỢC** — đúng
+cái bẫy `gate-measurement-row-can-be-unsatisfiable` mà chính plan tự cảnh báo ở §13 rồi vấp lại.
+
+Lý do (đọc từ code, không suy từ tên hàm) — hai lượt duyệt đồng thời cùng `submitted→under_review`:
+
+- **Gỡ `WHERE status=<from>`, GIỮ `FOR UPDATE OF i`:** T2 chờ ở `getIdeaForReviewTx`, T1 commit, T2 đọc
+  `status='under_review'`, `assertIdeaTransition('under_review','under_review')` ném 409 **TRƯỚC**
+  `reviewTx` ⇒ audit vẫn = 1 ⇒ **I-6 XANH**.
+- **Gỡ `FOR UPDATE`, GIỮ `WHERE`:** cả hai đọc `submitted`, cả hai qua FSM; UPDATE của T2 chờ khoá hàng
+  rồi tái-đánh-giá `WHERE` trên bản MỚI ⇒ 0 hàng ⇒ `applied=false` ⇒ 409 ⇒ audit vẫn = 1 ⇒ **I-6 XANH**.
+
+⇒ I-6 **chỉ đỏ khi gỡ CẢ HAI**. Bất biến #2 (một lượt chuyển = một dòng audit) được giữ **hai lần độc
+lập** — nên đây KHÔNG phải lỗ, nhưng dòng ĐO CỔNG phải viết lại: hoặc tháo cả hai, hoặc tách thành hai
+lượt tháo riêng với hai phép đo khác nhau (ca «gỡ `FOR UPDATE`» phải đo bằng `applied === false`, không
+bằng đếm audit). **Đã sửa ở bảng ĐO CỔNG của §13.**
+
+`database-reviewer` bổ sung một hệ quả của cùng sự thật đó: vế `WHERE status=<from>` hôm nay **không có
+đường nào để thực sự trả 0 hàng** trong traffic hợp lệ (vì `FOR UPDATE` đã tuần tự hoá và FSM chặn
+trước) — nó là phòng thủ-thêm-lớp cho một đường ghi TƯƠNG LAI bỏ qua kỷ luật khoá, chứ không phải thứ
+ca I-6 đang đo. Giữ nguyên, nhưng đừng đọc comment của nó thành "đây là lưới đang hoạt động".
 
 ### 14.2 Đã vá trong lượt gate
 
-| Nguồn | Sev | Vá |
-| --- | --- | --- |
+| Nguồn | Sev | Finding | Vá |
+| --- | --- | --- | --- |
+| `security` | **MEDIUM** | 🔴 `GET /social/kudos?month=0000-01` ⇒ **500**. Regex `^\d{4}-…` nhận năm `0000`; Postgres không có năm 0 (`SELECT ('0000-01'\|\|'-01')::timestamp` ⇒ `22008`, reviewer chạy thật trên container). Không call-site nào bắt. Hai ca 400 đã có chỉ thử `2026-13`/`thang-9` — hai hình dạng regex TỰ từ chối ⇒ lưới không phủ. Đúng lớp lỗi mà D7 ra đời để chặn | Siết `^(19\|20)\d{2}-…` + **3 ca**: `0000-01` ⇒ 400 · `1899-05` ⇒ 400 · neo dương `2026-09` ⇒ 200 |
+| `security` | **MEDIUM** | `isOfficial:true` dùng năng lực `manage:feed-kudos` để xuất bản nội dung mang DẤU CÔNG TY mà **không để lại dòng audit nào**. Tiền lệ ngược nằm trong CHÍNH file đó: `social.post.update` chỉ ghi khi qua nhánh `asManager` (HIGH-2 của FULL gate PR #530, owner ký 22/09) · `social.poll.close` kèm `viaManage` · mọi mutation nhóm qua `manage:feed-group`. `isOfficial` là ngoại lệ DUY NHẤT còn lại | **Owner ký S8 24/09/2026.** Audit `social.kudos.official` (`objectType:"feed_post"`, metadata `{postId, kudosId, recipientCount}` — KHÔNG `message`, KHÔNG `employee_id`), CHỈ ở nhánh `isOfficial`, TRONG tx. Ca **K-3c** đếm hai chiều (có cờ ⇒ 1 dòng · kudos thường ⇒ 0 dòng) |
+| `security` | **MEDIUM** | **BA docblock đã ship trỏ vào `assertApproveIdea`** — hàm đã xoá ở T1 (`grep` ⇒ 0 định nghĩa). Người đọc sau sẽ tra đúng ba khối đó rồi hoặc «khôi phục» code chết, hoặc xoá `denyMessage` vì tưởng bảng hằng không ai dùng. Và một trong ba **nói HẸP hơn thực tế**: mã phát ở CẢ HAI nhánh của `resolveActor`, không chỉ nhánh scope hẹp — nhánh `routeScopeOrNull == null` tới được khi tầng-1 cho qua bằng grant CẤP ĐỐI TƯỢNG (`decideCan` xét object grant, `resolveManyOrNull` chỉ đọc grant theo VAI cấp công ty) | Sửa cả ba (`social-b2b2.controllers.ts` · `social-route-pairs.const.ts` · `social.errors.ts`), thay bằng cơ chế `denyMessage` + câu hai-nhánh |
+| `silent-failure` | **MEDIUM** | `enqueueIdeaStatusNoti` **return CÂM** khi tập người nhận rỗng (tác giả bị khoá/xoá mềm sau khi đăng), trong khi HAI đường NOTI anh em cùng hình dạng (`enqueueNewsPublishedNoti` · `enqueueKudosReceivedNoti`) đều `logger.warn`. `SocialIdeasService` không có `Logger` nào ⇒ thiếu hẳn hạ tầng log. Sự kiện «một lượt duyệt không báo được cho ai» biến khỏi MỌI bề mặt quan sát | Thêm `Logger` + `warn`, và ca **N-032d** đối xứng với `N-033c` (tác giả `suspended` ⇒ 0 outbox, nhưng audit VẪN = 1 làm neo dương) |
+| `security` | LOW | `employeeIdOf` không lọc `deleted_at`; unique index chỉ phủ hàng còn sống ⇒ user có 1 hồ sơ xoá-mềm + 1 hồ sơ sống làm `LIMIT 1` **không xác định**. Trước WO này chỉ ảnh hưởng một cột hiển thị; từ WO này nó là vế TRÁI của K1 ⇒ **lách được `KUDOS_SELF_RECIPIENT`** (lưới DUY NHẤT — không CHECK nào ở DB chặn tự vinh danh) | `+ isNull(employeeProfiles.deletedAt)` |
+| `security` | LOW | `canApproveIdeas` truyền NGUYÊN `SocialPair` vào `resolveManyOrNull` (mọi call-site khác bóc tay 3 field). `resolveStrongestScopes` spread nguyên vật vào `decideStrongestScope` ⇒ một field mới của `ScopeRequest` trùng tên với field của `SocialPair` sẽ đổi **quyết định phân quyền** trong im lặng, typecheck không bắt | Bóc tay như `resolveActor` |
+| `security` | LOW | Docblock registrar hứa `notifications.created_by` giữ neo điều tra — **sai với mã NÀY**: producer không đặt `actorUserId` vào payload nên `created_by` NULL cho MỌI hàng NOTI-032 | Đính chính docblock. **KHÔNG** nối `actorUserId` vào payload — làm thế là phá chính D16 |
+| `silent-failure` | LOW | Nhánh `wanted.length === 0` của `assertRecipientsTx` là nhánh chết ở call-site duy nhất; docblock không nói caller phải gate trước ⇒ call-site BE-3 tương lai có thể đọc `return []` thành «0 người nhận hợp lệ, coi như OK» | Ghi rõ nó là gì (đo: drizzle 0.45.2 `inArray(col, [])` sinh `sql\`false\`` ⇒ bỏ guard cho hành vi Y HỆT; guard chỉ để tránh một vòng tới DB vô ích) + cảnh báo cho call-site mới |
 
-### 14.3 Chữ ký owner
+### 14.3 Ghi nhận — KHÔNG phải finding
+
+- **`denyMessage` không đổi hành vi 47/48 route còn lại** (`grep` toàn cây: đúng MỘT route mang nó).
+- **`SOCIAL-ERR-020` KHÔNG phải oracle**, và thứ tự `resolveActor` TRƯỚC `assertPostVisible` làm nó
+  *tốt hơn* thứ tự ngược: deny tầng-2 hoàn toàn độc lập với `post_id` ⇒ người thiếu quyền nhận 403
+  byte-giống-hệt cho bài tồn tại / không tồn tại / tenant khác / ngoài audience.
+- **Mask `reviewNote` kín ở MỌI đường ra**: `grep` toàn `apps/api/src` + `packages/contracts/src` ⇒ điểm
+  chiếu DUY NHẤT của `feed_ideas.review_note` trong cả repo là `listIdeasTx`, đã bị mask ở service.
+  Audit loại nó · `PAYLOAD_KEYS` loại nó · response `046` không có nó · WS dùng `FeedPostDto` (U5).
+- **Rò qua NOTI: sạch.** `status` (enum thô) và `recipientUserIds` KHÔNG vào `notifications.payload`;
+  `dedupeKeyOf` đọc `ctx.payload` THÔ nên vẫn dựng được `{post_id}:{status}` mà không phơi.
+  NOTI-033 payload = `{post_id, actor_name, recipientUserIds}` — không `employee_id` nào.
+- **Bất biến #1:** `company_id` đủ ở cả 10 câu mới; mọi JOIN nối `company_id` hai đầu; `getIdeaForReviewTx`
+  là raw SQL nhưng tham số hoá đầy đủ. `recipientsOfTx` có ĐÚNG MỘT caller và `kudosIds` đến trực tiếp
+  từ câu đã mang `visiblePostCondition`, CÙNG tx ⇒ không đường public nào truyền `kudosId` tuỳ ý.
+- **Bất biến #2:** `if (!applied) throw` đứng TRƯỚC cả audit lẫn outbox ⇒ người thua đua không ghi gì.
+- **§6 «KHÔNG migration» ĐÚNG** — `database-reviewer` kiểm bằng `psql` THẬT: `git diff` migrations rỗng ·
+  `audit_logs.object_type` CHECK đã có `feed_post` (từ `0579`) · `feed_kudos_badges` đã có GRANT
+  SELECT/INSERT/UPDATE cho `mediaos_app` · cả 4 bảng `relrowsecurity=t` + `relforcerowsecurity=t`.
+- **Không deadlock** — `database-reviewer` kê đủ tập khoá: `FOR UPDATE OF i` khoá CHỈ hàng `feed_ideas`
+  (không khoá `feed_posts` dù có JOIN); `grep` xác nhận `feed_ideas` chỉ bị ghi bởi `createIdeaTx` +
+  `reviewTx`, còn `003`/`004`/`006`/job poll chỉ khoá `feed_posts`/`feed_polls` ⇒ **không có chu trình
+  khoá ngược chiều nào tồn tại**.
+- **Biên tháng theo tz công ty đúng**: `companies.timezone` là `text NOT NULL DEFAULT 'Asia/Ho_Chi_Minh'`
+  (không thể NULL); đường ghi DUY NHẤT gọi `assertValidTimezone`; subquery tz không tương quan với
+  `feed_kudos` ⇒ Postgres gấp thành InitPlan hằng-lúc-chạy nên index vẫn dùng được. ⚠️ `database-reviewer`
+  tự ghi giới hạn: lane rỗng nên **không có `EXPLAIN ANALYZE` thật**, kết luận dựa trên ngữ nghĩa InitPlan.
+- **`22P02` không tới được**: mọi uuid vào từ client qua `ParseUUIDPipe` hoặc Zod `uuid()`; biến thể duy
+  nhất còn lại là HOA/thường, đã `.toLowerCase()` trước cả `Set` lẫn `inArray`.
+
+### 14.4 Nợ verify — thật thà ghi là NỢ, không ghi là đã đo
+
+Sáu dòng ĐO CỔNG còn ⏳ ở §13. Cả `security-reviewer` lẫn `silent-failure-hunter` đọc từng ca tương ứng
+và xác nhận **không ca nào có thể xanh-rỗng** (mỗi ca có neo dương + assert hai chiều) — nhưng
+«không xanh-rỗng» ≠ «đã chứng minh ĐỎ khi tháo». Không reviewer nào BLOCK vì nó.
+
+### 14.5 Một test ĐỎ của `harness/check.sh --all --lane-db` — đo được, CHƯA truy ra nguyên nhân
+
+`bash harness/check.sh --all --lane-db=be2b2chk`: mọi bước xanh (secret-literals · lint · typecheck ·
+migration-no-drop · tooling-tests · build · prod-tenant-check · db-readiness) **trừ** bước `test`.
+
+⚠️ **Lệnh trả exit code 0 nhưng kết luận IN RA là ĐỎ** — đừng tin exit code của lần chạy này.
+
+Đỏ đúng MỘT ca, ở một spec **KHÔNG thuộc WO này**:
+`s16-social-db2-invariants.int-spec.ts` › «Nhóm 13 · thân SQL của `0582` trên company THẬT».
+
+Đã đo (mỗi dòng là một lần chạy thật):
+
+| Điều kiện | Kết quả |
+| --- | --- |
+| Chạy RIÊNG file đó, trên CHÍNH lane đã đỏ (`mediaos_be2b2chk`) | **XANH 53/53** |
+| Chạy cùng `social-master-data-seeder.int.spec.ts` (giả thuyết: seeder reconcile mọi company ⇒ `before ≠ 0`) | **XANH 56/56 ⇒ giả thuyết SAI** |
+| Trong `check.sh`, chunk 40 file chạy song song | **ĐỎ** — và cùng lượt đó có **4 chunk crash hạ tầng** (12 · 13 · 17 retry; 18 đỏ) |
+| Toàn bộ 36 file SOCIAL tuần tự trên lane `mediaos_be2b2` | **XANH 644/644** |
+
+⇒ Kết luận ĐÚNG mức bằng chứng: **flake chỉ xuất hiện dưới tải song song**, không tái hiện được khi cô
+lập, và **đã loại trừ 2 giả thuyết**. Chưa truy ra cơ chế. Một khả năng CHƯA kiểm: WO này thêm 2 file
+int-spec ⇒ **dịch biên giới 40-file/chunk**, nên hai spec trước đây ở hai chunk khác nhau có thể rơi vào
+cùng chunk — tức WO này *làm lộ*, chứ không *gây ra*. Ghi thành nợ, không vá triệu chứng bằng cách nới
+assert. Liên quan: `flake-rate-tracks-lane-db-dirtiness` · `vitest-worker-crash-chunked-runs`.
+
+### 14.6 Chữ ký owner
 
 | # | Việc | Trạng thái |
 | --- | --- | --- |
 | S1 | `047`/`048` thuộc WO này | ✅ 23/09/2026 |
-| S3 | K1/K2 + SPEC-16 §13 | ✅ 23/09/2026 (kèm grep phủ định) |
-| S5 | `ERR-020`: decorator + service resolve (D20) | ✅ 24/09/2026 |
+| S3 | K1/K2 + SPEC-16 §13 | ✅ 23/09/2026 (grep phủ định đã dán ở §13) |
+| S5 | `ERR-020`: vùng phủ ghi rõ | ✅ 24/09/2026 — **và đã phải sửa theo T1** |
 | S6 | D12 — vinh danh người đã nghỉ (phương án A) | ✅ 24/09/2026 |
 | S7 | D2/C-6 thay lưới `done_when` #8 | ✅ 24/09/2026 |
-
-### 14.4 Ghi nhận — không phải finding — *(để trống)*
+| **S8** | **Audit `social.kudos.official` cho nhánh `isOfficial`** (đổi hợp đồng API-19 §8, vốn khai audit của `002` là «—») | ✅ **KÝ 24/09/2026** theo FULL gate `security-reviewer` MEDIUM |
 
 ---
 
