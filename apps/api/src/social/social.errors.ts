@@ -2,7 +2,7 @@
 // Trước bản này nó ghép với `SocialCreatablePostType` (= keyof bảng cặp) — đủ để giữ hai BẢNG khớp
 // nhau, nhưng KHÔNG bắt được ca cả hai bảng cùng thiếu một giá trị mà enum đã mở (fail-OPEN: route
 // `002` tạo được một loại bài không cặp nào gác). Ghép thẳng vào enum bịt chiều đó ở tầng kiểu.
-import type { FeedCreatableTypeDto } from "@mediaos/contracts";
+import type { FeedCreatableTypeDto, FeedTargetTypeDto } from "@mediaos/contracts";
 
 /**
  * S16-SOCIAL-BE-1 — mã lỗi SOCIAL (SPEC-16 §12, quy ước SPEC-01 §9 `MODULE-ERR-XXX`).
@@ -122,6 +122,31 @@ export const SOCIAL_ERR = {
    * └───────────────────────────────────────────────────────────────────────────────────────────────┘
    */
   REPORT_DUPLICATE_OPEN: "SOCIAL-ERR: bạn đã báo cáo nội dung này và báo cáo đó đang chờ xử lý.",
+
+  // ─────────────── S16-SOCIAL-BE-1C — cửa đăng ký tệp (`054`/`055`) ───────────────
+
+  /**
+   * (403) — **KHÔNG SỐ HOÁ**, cùng lý do `REPORT_DUPLICATE_OPEN`: SPEC-16 §12 đóng ở `001..022` và
+   * `docs/spec/**` nằm NGOÀI `paths` của WO này, nên bịa số là sửa spec không chữ ký.
+   *
+   * Mở cửa tải tệp để đính kèm vào BÀI mà thiếu `create:feed-post` @Company. Ném ở TẦNG 2
+   * (`SocialAccessService.assertFileTarget`) vì tầng 1 của route chỉ gác SÀN `view:feed` — cặp thật
+   * phụ thuộc `target` của request (plan §1 D1).
+   */
+  FILE_TARGET_POST_DENIED: "SOCIAL-ERR: cần quyền đăng bài để tải tệp đính kèm cho bài viết.",
+
+  /** (403) — như trên, trục BÌNH LUẬN: thiếu `create:feed-comment` @Company. */
+  FILE_TARGET_COMMENT_DENIED: "SOCIAL-ERR: cần quyền bình luận để tải tệp đính kèm cho bình luận.",
+
+  /**
+   * (403) — người gọi `confirm` KHÔNG sở hữu tệp.
+   *
+   * ⚠️ Vế này chạy TRƯỚC `FileService.confirmUpload` (mirror `ChatFilesService.confirmOwnUpload`).
+   * Thiếu nó thì bất kỳ ai qua được cửa cũng confirm hộ tệp người khác — tức đẩy tệp của người khác
+   * qua bước verify size/checksum và đưa nó vào trạng thái GẮN-ĐƯỢC, ngay trước mũi vế
+   * `files.owner_user_id` mà `SocialFileResolver.canLinkFile` (vế 2) đang gác.
+   */
+  FILE_NOT_OWNED: "SOCIAL-ERR: tệp này không thuộc về bạn.",
 
   // ─────────────── S16-SOCIAL-BE-2A — NHÓM (`012..015`) ───────────────
 
@@ -430,6 +455,20 @@ export const SOCIAL_POST_TYPE_DENIED = {
  */
 export const SOCIAL_POST_TYPE_PAIR_DESYNC =
   "SOCIAL-ERR: cấu hình quyền theo loại bài không hợp lệ.";
+
+/**
+ * S16-SOCIAL-BE-1C — mã 403 theo `target` của cửa đăng ký tệp. Song ánh với
+ * `SOCIAL_FILE_TARGET_PAIRS`: mỗi `target` có ĐÚNG một cặp quyền và ĐÚNG một thông điệp.
+ *
+ * ⚠️ Khác `SOCIAL_POST_TYPE_DENIED`, ở đây **không giá trị nào là `null`** — không có `target` nào
+ * "cặp sàn là đủ", vì sàn của route này (`view:feed`) là cặp mà MỌI nhân viên đều có (seed `0578`
+ * cấp cho cả 4 vai canonical). Một `null` ở bảng này = một đích mà cửa mở toang cho cả công ty.
+ * Kiểu `Record<…, string>` (không `| null`) làm điều đó thành lỗi biên dịch, không phải lỗ ngầm.
+ */
+export const SOCIAL_FILE_TARGET_DENIED = {
+  post: SOCIAL_ERR.FILE_TARGET_POST_DENIED,
+  comment: SOCIAL_ERR.FILE_TARGET_COMMENT_DENIED,
+} as const satisfies Record<FeedTargetTypeDto, string>;
 
 export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];
 

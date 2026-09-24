@@ -7,6 +7,8 @@ import { RealtimeEmitterModule } from "../realtime/realtime-emitter.module";
 import { StorageModule } from "../storage/storage.module";
 import { SocialAccessService } from "./social-access.service";
 import { SocialAttachmentsService } from "./social-attachments.service";
+import { SocialFilesController } from "./social-files.controller";
+import { SocialFilesService } from "./social-files.service";
 import { SocialCommentsRepository } from "./social-comments.repository";
 import { SocialCommentsService } from "./social-comments.service";
 import { SocialDiscoveryRepository } from "./social-discovery.repository";
@@ -96,6 +98,10 @@ import {
     // khỏi phép đo.
     SocialIdeasController,
     SocialKudosController,
+    // S16-SOCIAL-BE-1C — 054..055 (cửa đăng ký tệp đính kèm). Khối additive; như ba khối trên, tên
+    // này PHẢI có mặt trong `SOCIAL_CONTROLLERS` của census 2 tầng — allowlist, quên thêm thì hai
+    // route vô hình với phép đo mà mọi assert vẫn XANH.
+    SocialFilesController,
   ],
   providers: [
     SocialAccessService,
@@ -126,6 +132,9 @@ import {
     SocialPollCloseExpiredJobHandler,
     SocialMasterDataSeeder,
     SocialSeedRegistrar,
+    // S16-SOCIAL-BE-1C — khối additive (cửa đăng ký tệp). Wrapper own-scope quanh `FileService`;
+    // `FileService` + `FileRepository` đến từ `FilesModule` ĐÃ có trong `imports` (nó export cả hai).
+    SocialFilesService,
     // S16-SOCIAL-BE-2B-2 — khối additive (sáng kiến · vinh danh).
     SocialIdeasRepository,
     SocialIdeasService,

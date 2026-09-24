@@ -366,7 +366,11 @@ const MAX_UNCOVERED_TOTAL = 0;
 //   [S10-QA-ROUTEHTTP-1] Route HTTP coverage: 680/680 (100.0%) — CHƯA phủ: 0
 // Baseline trước WO đo cùng cách: 676/676 — KHÔNG cộng tay `676 + 4` (phép cộng tay không phát hiện
 // được một route mới KHÔNG có ca nào, vì nó khoá sàn theo kỳ vọng thay vì theo thực tế).
-const MIN_COVERED_COUNT = 680;
+// S16-SOCIAL-BE-1C (24/09/2026): 680 → 682. Con số này là SỐ SPEC IN RA
+// ("[S10-QA-ROUTEHTTP-1] Route HTTP coverage: 682/682"), KHÔNG phải 680 cộng tay 2 — hai route mới
+// (`social/files/upload-url` · `social/files/:id/confirm`) có ca HTTP ở
+// `social-be1c-file-door.int-spec.ts`, và chỉ phép đo thật mới nói được là scan CÓ khớp verb/path.
+const MIN_COVERED_COUNT = 682;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;
