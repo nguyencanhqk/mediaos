@@ -29,12 +29,15 @@ import {
   targetTypeLabel,
   type ResolvedMention,
 } from "./social-mentions";
-import { createPollTx } from "./social-post-types";
+import { createIdeaTx, createKudosTx, createPollTx } from "./social-post-types";
+import { userIdsOfEmployeesTx } from "./social-kudos.repository";
 import { SocialNewsRepository } from "./social-news.repository";
 import {
   SOCIAL_EVENT_MENTIONED,
+  SOCIAL_EVENT_KUDOS_RECEIVED,
   SOCIAL_EVENT_NEWS_PUBLISHED,
   SOCIAL_NEWS_NOTI_RECIPIENT_CAP,
+  type SocialKudosReceivedPayload,
   type SocialMentionedPayload,
   type SocialNewsPublishedPayload,
 } from "./social-noti.payload";
@@ -163,6 +166,16 @@ export class SocialPostsService {
     //
     // Giờ cổng ĐỌC chính bảng đó ⇒ quên khai một loại là TS đỏ, không phải là một lỗ chờ ship.
     await this.access.assertCreatablePostType(actor, dto.type);
+
+    // 🔴 S16-SOCIAL-BE-2B-2 (D10/D22) — cổng THỨ HAI của nhánh vinh danh: cờ `isOfficial`.
+    //
+    // Chạy **TRƯỚC khi mở tx**, có chủ đích. Đặt nó trong tx cũng cho 403 đúng, nhưng lúc đó bằng
+    // chứng "không ghi gì" lại phụ thuộc vào rollback — và ca `K-3` đếm `COUNT(*) feed_kudos = 0` như
+    // một bất biến, không như một hệ quả của việc tx đã bị huỷ đúng cách.
+    if (dto.type === "kudos" && dto.kudos?.isOfficial) {
+      await this.access.assertKudosOfficial(actor);
+    }
+
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
       // 🔴 S16-SOCIAL-BE-2A (D4) — cổng GHI nằm TRONG tx, ngay trước INSERT. Trước đây nó chạy NGOÀI
       // `withTenant`: với `org_unit` (dữ liệu đã có sẵn trên actor) thì vô hại, nhưng nhánh `group`
@@ -208,6 +221,27 @@ export class SocialPostsService {
       // `type='poll'` — `createFeedPostSchema.superRefine` ràng cả hai chiều.
       if (dto.type === "poll" && dto.poll) {
         await createPollTx(tx, actor.companyId, postId, dto.poll);
+      }
+
+      // ⟲ S16-SOCIAL-BE-2B-2 — hai loại bài của Track B, CÙNG tx với INSERT bài (cùng lý do như
+      // `poll`: một bài `type='idea'` không có hàng `feed_ideas` là bài mà `045`/`046` trả 404 mãi
+      // mãi). `superRefine` ràng cả hai chiều nên `dto.kudos` chắc chắn có mặt khi `type='kudos'`.
+      if (dto.type === "idea") {
+        await createIdeaTx(tx, actor.companyId, postId);
+      }
+
+      if (dto.type === "kudos" && dto.kudos) {
+        const { recipientEmployeeIds } = await createKudosTx(
+          tx,
+          actor.companyId,
+          postId,
+          authorEmployeeId,
+          dto.kudos,
+        );
+        // 🔴 NOTI-033 enqueue **TRONG tx** (D24). Ghi hàng outbox sau commit là at-most-once: chết
+        // giữa hai bước ⇒ lời vinh danh có thật mà không ai được báo, và không có đường phát lại.
+        // Khuôn đã dùng cho NOTI-028 (`enqueueMentionNotis`) và NOTI-031 ngay dưới đây.
+        await this.enqueueKudosReceivedNoti(tx, actor, postId, recipientEmployeeIds);
       }
 
       await syncPostTags(tx, actor.companyId, postId, parseHashtags(dto.body));
@@ -495,6 +529,43 @@ export class SocialPostsService {
       totalRecipients: total,
     };
     await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_NEWS_PUBLISHED, payload });
+  }
+
+  /**
+   * S16-SOCIAL-BE-2B-2 — NOTI-033 «bạn được vinh danh». Người nhận = tập được vinh danh, map
+   * `employee_id` → `user_id` rồi lọc **D18** (4 vế).
+   *
+   * ⚠️ Trừ `actorUserId` MỘT LẦN NỮA dù `KUDOS_SELF_RECIPIENT` đã chặn tự-vinh-danh ở đường ghi: lưới
+   * kia là luật NGHIỆP VỤ (owner có thể nới), lưới này là tính chất của THÔNG BÁO (không ai tự báo cho
+   * mình). Hai lý do khác nhau ⇒ hai lưới, không phải một lưới lặp.
+   *
+   * ⚠️ Tập rỗng ⇒ **KHÔNG enqueue**. Ba đường dẫn tới rỗng và cả ba đều BÌNH THƯỜNG, không phải lỗi:
+   * mọi người nhận đã nghỉ việc (ca `K-4`) · tài khoản bị khoá (`K-4b`) · nhân sự chưa có tài khoản
+   * `users` (`K-4c`). Enqueue một hàng với `recipientUserIds: []` sẽ thành dead-letter câm ở registrar
+   * (`requireUserIds` ném) — một lỗi hạ tầng cho một tình huống nghiệp vụ hợp lệ.
+   */
+  private async enqueueKudosReceivedNoti(
+    tx: TenantTx,
+    actor: SocialActor,
+    postId: string,
+    recipientEmployeeIds: readonly string[],
+  ): Promise<void> {
+    const mapped = await userIdsOfEmployeesTx(tx, actor.companyId, recipientEmployeeIds);
+    const recipients = mapped.filter((id) => id !== actor.actorUserId);
+    if (recipients.length === 0) {
+      this.logger.warn(
+        `NOTI-033: vinh danh ở bài ${postId} không có người nhận nào CÒN HOẠT ĐỘNG (${recipientEmployeeIds.length} nhân sự được ghi) — không phát thông báo.`,
+      );
+      return;
+    }
+
+    const actorName = await resolveActorName(tx, actor.companyId, actor.actorUserId);
+    const payload: SocialKudosReceivedPayload = {
+      post_id: postId,
+      actor_name: actorName,
+      recipientUserIds: recipients,
+    };
+    await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_KUDOS_RECEIVED, payload });
   }
 
   /**

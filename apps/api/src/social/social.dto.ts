@@ -1,6 +1,10 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  listIdeasQuerySchema,
+  listKudosBadgesQuerySchema,
+  listKudosQuerySchema,
   listPollsQuerySchema,
+  reviewFeedIdeaSchema,
   votePollSchema,
   createFeedCommentSchema,
   createFeedPostSchema,
@@ -78,3 +82,14 @@ export class ListFeedGroupMembersQuery extends createZodDto(listFeedGroupMembers
 // ── S16-SOCIAL-BE-2B-1 — BÌNH CHỌN (`040..044`) ──
 export class ListPollsQuery extends createZodDto(listPollsQuerySchema) {}
 export class VotePollBody extends createZodDto(votePollSchema) {}
+
+// ── S16-SOCIAL-BE-2B-2 — SÁNG KIẾN (`045..046`) · VINH DANH (`047..048`) ──
+export class ListIdeasQuery extends createZodDto(listIdeasQuerySchema) {}
+/**
+ * ⚠️ Bọc được vì `reviewFeedIdeaSchema` là OBJECT phẳng `.strict()`, KHÔNG union (xem lý do TS2509 ở
+ * khối `038`). Và nó **KHÔNG** `.extend(feedIdeaCoreSchema)`: schema lõi đó mang
+ * `status`/`reviewedBy`/`reviewedAt` ⇒ extend biến body này thành TỰ DUYỆT.
+ */
+export class ReviewFeedIdeaBody extends createZodDto(reviewFeedIdeaSchema) {}
+export class ListKudosQuery extends createZodDto(listKudosQuerySchema) {}
+export class ListKudosBadgesQuery extends createZodDto(listKudosBadgesQuerySchema) {}

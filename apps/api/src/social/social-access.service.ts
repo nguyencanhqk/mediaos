@@ -12,16 +12,13 @@ import { DataScopeService } from "../permission/data-scope.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { visibleGroupPostExists } from "./social-group-predicates";
 import {
+  SOCIAL_KUDOS_FLAG_PAIRS,
   SOCIAL_POST_TYPE_PAIRS,
   SOCIAL_ROUTE_PAIRS,
   type SocialCreatablePostType,
   type SocialRouteKey,
 } from "./social-route-pairs.const";
-import {
-  SOCIAL_ERR,
-  SOCIAL_POST_TYPE_DENIED,
-  SOCIAL_POST_TYPE_PAIR_DESYNC,
-} from "./social.errors";
+import { SOCIAL_ERR, SOCIAL_POST_TYPE_DENIED, SOCIAL_POST_TYPE_PAIR_DESYNC } from "./social.errors";
 import type {
   SocialActor,
   SocialCommentAccess,
@@ -174,6 +171,59 @@ export class SocialAccessService {
     ]);
     if (SocialAccessService.isCompany(scope)) return;
     throw new ForbiddenException(denied);
+  }
+
+  /**
+   * S16-SOCIAL-BE-2B-2 (D22) — cổng của CỜ `isOfficial` trong payload `type='kudos'`.
+   *
+   * `create:feed-kudos` (cổng theo LOẠI bài) cho phép đăng một lời vinh danh thường; `isOfficial:true`
+   * biến nó thành bài mang **DẤU CÔNG TY** và đòi cặp KHÁC: `manage:feed-kudos`.
+   *
+   * ⚠️ Đọc `SOCIAL_KUDOS_FLAG_PAIRS` thay vì gõ literal — cùng lý do đã ghi ở `assertCreatablePostType`:
+   * một bảng hằng mà không call-site runtime nào đọc thì census/spec canh nó chỉ canh được một hằng
+   * chết. Đọc bảng làm nó LOAD-BEARING.
+   *
+   * ⚠️ **KHÔNG nhét cặp này vào batch `resolveActor`**: batch đó chạy cho CẢ 48 route, còn câu hỏi này
+   * chỉ có nghĩa với đúng một nhánh của một route GHI. Một round-trip quyền thêm trên nhánh đó là giá
+   * đúng để không phải trả nó trên 47 route còn lại.
+   *
+   * Scope ép SÀN `Company` qua `isCompany()` — `undefined`/`null` fail-closed.
+   *
+   * @throws ForbiddenException 403 `KUDOS_OFFICIAL_DENIED`
+   */
+  async assertKudosOfficial(actor: SocialActor): Promise<void> {
+    const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
+      SOCIAL_KUDOS_FLAG_PAIRS.isOfficial,
+    ]);
+    if (SocialAccessService.isCompany(scope)) return;
+    throw new ForbiddenException(SOCIAL_ERR.KUDOS_OFFICIAL_DENIED);
+  }
+
+  /**
+   * S16-SOCIAL-BE-2B-2 (D20, owner ký **S5** 24/09/2026) — assert tầng HAI của `046`, hỏi LẠI chính cặp
+   * mà decorator đã gác.
+   *
+   * ┌─ 🔴 VÌ SAO HỎI LẠI MỘT CẶP ĐÃ ĐƯỢC GÁC — VÀ MÃ NÀY PHỦ ĐÚNG CÁI GÌ ─────────────────────────────┐
+   * │ `PermissionGuard` ném `ForbiddenException("Permission denied: " + decision.reason)`                │
+   * │ (`permission.guard.ts:140`) và `@RequirePermission` KHÔNG nhận message tuỳ biến (chỉ                │
+   * │ `action`/`resourceType`/`isSensitive`/`requiresReauth`). Nghĩa là tầng-1 **không bao giờ phát được** │
+   * │ `SOCIAL-ERR-020` — khai hằng đó rồi chỉ dựa vào decorator là khai một hằng CHẾT.                    │
+   * │                                                                                                   │
+   * │ Vùng phủ THẬT của mã: ca **«có grant nhưng scope hẹp hơn Company»**. Guard cho qua (nó chỉ hỏi     │
+   * │ "có quyết định ALLOW không"), sàn `isCompany()` ở đây mới từ chối. Ca «không có grant nào» vẫn là   │
+   * │ 403 CHUNG của guard — ghi rõ ở docblock của hằng, ở §13 của plan và ở PR. Đừng tuyên bố mã phủ cả  │
+   * │ hai, và đừng "sửa" bằng cách hạ decorator xuống `view:feed`: làm thế là tháo tầng-1 của route GHI  │
+   * │ duy nhất trong module có cặp `approve:*`.                                                          │
+   * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * @throws ForbiddenException 403 `SOCIAL-ERR-020`
+   */
+  async assertApproveIdea(actor: SocialActor): Promise<void> {
+    const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
+      SOCIAL_ROUTE_PAIRS.ideaReview,
+    ]);
+    if (SocialAccessService.isCompany(scope)) return;
+    throw new ForbiddenException(SOCIAL_ERR.IDEA_APPROVE_REQUIRED);
   }
 
   static isCompany(scope: DataScope | null): boolean {

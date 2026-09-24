@@ -37,6 +37,11 @@ import {
   SocialNewsController,
   SocialReportsController,
 } from "./social-b.controllers";
+import { SocialIdeasController, SocialKudosController } from "./social-b2b2.controllers";
+import { SocialIdeasRepository } from "./social-ideas.repository";
+import { SocialIdeasService } from "./social-ideas.service";
+import { SocialKudosRepository } from "./social-kudos.repository";
+import { SocialKudosService } from "./social-kudos.service";
 import {
   SocialCommentsController,
   SocialPostsController,
@@ -86,6 +91,11 @@ import {
     // S16-SOCIAL-BE-2B-1 — 040..044. Thêm ở đây thì PHẢI thêm tên vào SOCIAL_CONTROLLERS của
     // census 2 tầng: danh sách đó là ALLOWLIST, quên thêm thì route VÔ HÌNH mà cả 4 assert vẫn XANH.
     SocialPollsController,
+    // S16-SOCIAL-BE-2B-2 — 045..048. HAI tên, không gộp: `SOCIAL_CONTROLLERS` của census 2 tầng là
+    // ALLOWLIST, và hai cụm nghiệp vụ riêng giữ cho một lượt gộp "cho gọn" không lặng lẽ xoá 4 route
+    // khỏi phép đo.
+    SocialIdeasController,
+    SocialKudosController,
   ],
   providers: [
     SocialAccessService,
@@ -116,6 +126,11 @@ import {
     SocialPollCloseExpiredJobHandler,
     SocialMasterDataSeeder,
     SocialSeedRegistrar,
+    // S16-SOCIAL-BE-2B-2 — khối additive (sáng kiến · vinh danh).
+    SocialIdeasRepository,
+    SocialIdeasService,
+    SocialKudosRepository,
+    SocialKudosService,
   ],
   exports: [SocialAccessService],
 })

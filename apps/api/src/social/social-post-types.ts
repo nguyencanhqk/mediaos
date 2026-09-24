@@ -1,7 +1,14 @@
 import { UnprocessableEntityException } from "@nestjs/common";
 import type { CreateFeedPostDto } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
-import { feedPollOptions, feedPolls } from "../db/schema/social";
+import {
+  feedIdeas,
+  feedKudos,
+  feedKudosRecipients,
+  feedPollOptions,
+  feedPolls,
+} from "../db/schema/social";
+import { assertActiveBadgeTx, assertRecipientsTx } from "./social-kudos.repository";
 import { SOCIAL_ERR } from "./social.errors";
 
 /**
@@ -93,4 +100,111 @@ function assertPollInput(input: CreatePollInput): void {
   if (input.closesAt !== undefined && new Date(input.closesAt).getTime() <= Date.now()) {
     throw new UnprocessableEntityException(SOCIAL_ERR.POLL_CLOSES_AT_PAST);
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  S16-SOCIAL-BE-2B-2 — SÁNG KIẾN (`type='idea'`) · VINH DANH (`type='kudos'`)
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+/** Khoảng số người được vinh danh hợp lệ. Trần 10 do owner chốt (S3, 23/09/2026) — SPEC-16 §13. */
+export const KUDOS_RECIPIENT_MIN = 1;
+export const KUDOS_RECIPIENT_MAX = 10;
+
+type CreateKudosInput = NonNullable<CreateFeedPostDto["kudos"]>;
+
+/**
+ * Tạo hàng `feed_ideas` cho một bài `type='idea'` vừa INSERT. Trả về `feed_ideas.id`.
+ *
+ * 🔴 **`status: "submitted"` ghi TƯỜNG MINH.** Cột `feed_ideas.status` là `varchar(16) NOT NULL`
+ * **KHÔNG CÓ DEFAULT** (`0580:263-301`) — khác `feed_polls.status` vốn `DEFAULT 'open'`. Bỏ trường này
+ * cho "DB tự lo" như `createPollTx` làm là `23502` (not-null violation) ⇒ **500** cho một đường tạo bài
+ * hoàn toàn bình thường. Đây là chỗ hai loại bài KHÔNG đối xứng, và đối xứng hoá cho gọn là một lỗi.
+ *
+ * `reviewed_by`/`reviewed_at`/`review_note` CỐ Ý không truyền: `chk_feed_ideas_reviewed_pair` cho
+ * chúng NULL đúng khi `status IN ('submitted','under_review')`, và chúng là vết của `046`.
+ *
+ * Không có gì để validate ở đây — sáng kiến không có trường riêng nào trong payload `002` (API-19
+ * §5.1b: cột "Trường body riêng" của `idea` là «—»). `body` bắt buộc đã ép ở `superRefine`.
+ */
+export async function createIdeaTx(
+  tx: TenantTx,
+  companyId: string,
+  postId: string,
+): Promise<string> {
+  const [idea] = await tx
+    .insert(feedIdeas)
+    .values({ companyId, postId, status: "submitted" })
+    .returning({ id: feedIdeas.id });
+  return idea.id;
+}
+
+/**
+ * Tạo hàng `feed_kudos` + `feed_kudos_recipients` cho một bài `type='kudos'` vừa INSERT.
+ *
+ * Trả về `{ kudosId, recipientEmployeeIds }` — caller cần tập id ĐÃ CHUẨN HOÁ để map sang `user_id`
+ * cho NOTI-033 (KHÔNG đọc lại từ DTO: DTO có thể chứa trùng lặp và khác HOA/thường).
+ *
+ * ┌─ THỨ TỰ BỐN LUẬT LÀ MỘT QUYẾT ĐỊNH, KHÔNG PHẢI TÌNH CỜ ────────────────────────────────────────┐
+ * │ Khi một payload vi phạm NHIỀU luật cùng lúc, mã lỗi trả về là mã của luật chạy TRƯỚC. Thứ tự ở   │
+ * │ đây đi từ RẺ và ÍT RÒ RỈ tới ĐẮT:                                                               │
+ * │   1. **K2** số lượng (thuần bộ nhớ) — 11 người thì không cần hỏi DB câu nào;                    │
+ * │   2. **K1** tự vinh danh (thuần bộ nhớ);                                                        │
+ * │   3. **`ERR-022`** huy hiệu (một câu, KHÔNG rò gì về nhân sự);                                   │
+ * │   4. **D12a** người nhận (một câu trên `employee_profiles`).                                    │
+ * │ Đảo 3↔4 thì một payload vừa sai huy hiệu vừa có `employee_id` dò-thử sẽ trả mã người-nhận —      │
+ * │ tức biến cổng huy hiệu thành oracle dò nhân sự. Giữ nguyên thứ tự này.                          │
+ * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠️ Cổng `isOfficial` (cặp `manage:feed-kudos` ⇒ 403) KHÔNG ở đây mà ở `social-posts.service.ts`
+ * **TRƯỚC khi mở tx**: nó là câu hỏi QUYỀN, không phải luật dữ liệu, và chạy nó trước tx là cách duy
+ * nhất bảo đảm `COUNT(*) feed_kudos = 0` mà không dựa vào rollback (ca `K-3` đếm đúng điều đó).
+ *
+ * ⚠️ `authorEmployeeId` có thể `null` — tác giả không có hồ sơ nhân sự (`employee_profiles.user_id`
+ * nullable, và một `users` có thể chưa được gán hồ sơ). Lúc đó K1 đúng là KHÔNG chặn gì: không có
+ * `employee_id` nào của tác giả để trùng. Fail-open ở đây là ĐÚNG NGHĨA, không phải lỗ.
+ */
+export async function createKudosTx(
+  tx: TenantTx,
+  companyId: string,
+  postId: string,
+  authorEmployeeId: string | null,
+  input: CreateKudosInput,
+): Promise<{ kudosId: string; recipientEmployeeIds: string[] }> {
+  // (1) K2 — trần + sàn, MỘT mã cho cả hai đầu. Mảng rỗng là "vinh danh không ai": hình dạng hợp lệ,
+  // nghiệp vụ vô nghĩa ⇒ 422 có mã, không phải 400 vô danh của Zod.
+  const distinct = [...new Set(input.recipientEmployeeIds.map((id) => id.toLowerCase()))];
+  if (distinct.length < KUDOS_RECIPIENT_MIN || distinct.length > KUDOS_RECIPIENT_MAX) {
+    throw new UnprocessableEntityException(SOCIAL_ERR.KUDOS_RECIPIENT_LIMIT);
+  }
+
+  // (2) K1 — tự vinh danh. So SAU khi chuẩn hoá HOA/thường: `Set` so chuỗi, Postgres so `uuid`, nên
+  // một `employee_id` gửi bằng chữ HOA sẽ lọt qua phép so trần rồi ghi được vào DB.
+  if (authorEmployeeId != null && distinct.includes(authorEmployeeId.toLowerCase())) {
+    throw new UnprocessableEntityException(SOCIAL_ERR.KUDOS_SELF_RECIPIENT);
+  }
+
+  // (3) ERR-022 — huy hiệu tồn tại VÀ đang bật. (4) D12a — người nhận là nhân sự còn tồn tại.
+  await assertActiveBadgeTx(tx, companyId, input.badgeId);
+  const recipientEmployeeIds = await assertRecipientsTx(tx, companyId, distinct);
+
+  const [kudos] = await tx
+    .insert(feedKudos)
+    .values({
+      companyId,
+      postId,
+      badgeId: input.badgeId ?? null,
+      message: input.message,
+      isOfficial: input.isOfficial,
+    })
+    .returning({ id: feedKudos.id });
+
+  await tx.insert(feedKudosRecipients).values(
+    recipientEmployeeIds.map((employeeId) => ({
+      companyId,
+      kudosId: kudos.id,
+      employeeId,
+    })),
+  );
+
+  return { kudosId: kudos.id, recipientEmployeeIds };
 }
