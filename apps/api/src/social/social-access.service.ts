@@ -12,13 +12,19 @@ import { DataScopeService } from "../permission/data-scope.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { visibleGroupPostExists } from "./social-group-predicates";
 import {
+  SOCIAL_FILE_TARGET_PAIRS,
   SOCIAL_KUDOS_FLAG_PAIRS,
   SOCIAL_POST_TYPE_PAIRS,
   SOCIAL_ROUTE_PAIRS,
   type SocialCreatablePostType,
   type SocialRouteKey,
 } from "./social-route-pairs.const";
-import { SOCIAL_ERR, SOCIAL_POST_TYPE_DENIED, SOCIAL_POST_TYPE_PAIR_DESYNC } from "./social.errors";
+import {
+  SOCIAL_ERR,
+  SOCIAL_FILE_TARGET_DENIED,
+  SOCIAL_POST_TYPE_DENIED,
+  SOCIAL_POST_TYPE_PAIR_DESYNC,
+} from "./social.errors";
 import type {
   SocialActor,
   SocialCommentAccess,
@@ -201,6 +207,43 @@ export class SocialAccessService {
     ]);
     if (SocialAccessService.isCompany(scope)) return;
     throw new ForbiddenException(SOCIAL_ERR.KUDOS_OFFICIAL_DENIED);
+  }
+
+  /**
+   * S16-SOCIAL-BE-1C (D1) — cổng TẦNG 2 của cửa đăng ký tệp (`054`/`055`), theo `target`.
+   *
+   * ┌─ VÌ SAO CỔNG NÀY LÀ THỨ DUY NHẤT GÁC ĐƯỢC CỬA ẤY ─────────────────────────────────────────────┐
+   * │ `SocialFileResolver.canLinkFile` hỏi `create:feed-post` cho `feed_post` và `create:feed-comment` │
+   * │ cho `feed_comment` (vế 6a). `@RequirePermission` khai được ĐÚNG MỘT cặp tĩnh, nên tầng 1 của hai  │
+   * │ route chỉ giữ được SÀN `view:feed` — một cặp mà seed `0578` cấp cho CẢ 4 vai canonical. Không có  │
+   * │ hàm này thì cửa tải tệp của bảng tin **mở cho mọi nhân viên**, kể cả vai bị thu hồi cả hai cặp    │
+   * │ `create:feed-*`. Đó không phải lỗ tải-về (tệp 0-link là inert) mà là lỗ GHI: một vai bị cấm đăng  │
+   * │ bài vẫn bơm được tệp vào kho tenant, không giới hạn số lượt.                                      │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ **KHÔNG nhét hai cặp này vào batch `resolveActor`** — cùng lý do đã ghi ở `assertKudosOfficial`:
+   * batch đó chạy cho CẢ 50 route, còn câu hỏi này chỉ có nghĩa với đúng hai route. Một round-trip
+   * quyền thêm trên hai route GHI là giá đúng để không phải trả nó trên 48 route còn lại.
+   *
+   * ⚠️ `target` là ĐẦU VÀO của cổng, KHÔNG phải một khẳng định được tin (plan §1 D1a): khai `'comment'`
+   * rồi đem tệp gắn vào BÀI thì trên đường TẠO vẫn bị chặn — nhưng bởi **TẦNG 1 của route `002`/`015`**
+   * (chính là hai cặp `create:feed-*`), KHÔNG phải bởi `canLinkFile`.
+   *
+   * 🔴 ĐÍNH CHÍNH (FULL gate 24/09/2026, HIGH): `assertLinkableFilesTx` — đường gắn mà FE thật sự đi —
+   * chép vế 2–5 của `canLinkFile` nhưng KHÔNG hỏi cặp quyền nào. `canLinkFile` chỉ chạy trên
+   * `POST /foundation/files/:id/links` (`link:foundation-file`). Nợ còn lại ở đường SỬA `004`/`017`
+   * (chỉ `view:feed` + tác giả) đã ghi vào `harness/backlog.mjs` — có từ BE-1, không do WO này.
+   *
+   * Scope ép SÀN `Company` qua `isCompany()` — `undefined`/`null` fail-closed, TUYỆT ĐỐI không `!= null`.
+   *
+   * @throws ForbiddenException 403 `FILE_TARGET_POST_DENIED` / `FILE_TARGET_COMMENT_DENIED`
+   */
+  async assertFileTarget(actor: SocialActor, target: SocialTargetType): Promise<void> {
+    const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
+      SOCIAL_FILE_TARGET_PAIRS[target],
+    ]);
+    if (SocialAccessService.isCompany(scope)) return;
+    throw new ForbiddenException(SOCIAL_FILE_TARGET_DENIED[target]);
   }
 
   /**

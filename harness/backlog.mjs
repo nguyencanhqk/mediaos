@@ -17048,7 +17048,7 @@ export const backlog = [
     title:
       "BE track A/bổ sung — ĐƯỜNG ĐĂNG KÝ TỆP cho bài & bình luận: 2 route bọc own-scope POST /social/files/upload-url + POST /social/files/:id/confirm, mở khoá đính kèm ảnh/video mà S16-SOCIAL-FE-1 buộc phải cắt",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/social/**",
       "apps/api/test/**",
@@ -17073,8 +17073,49 @@ export const backlog = [
     ],
     notes: [
       "TÁCH RA 23/09/2026 từ nợ N1 của plan S16-SOCIAL-FE-1 (owner ký). Lý do tách: mở endpoint = chạm file-service ⇒ không thuộc WO FE amber.",
+      "✅ XONG 24/09/2026 — 2 route SOCIAL-API-054/055, 17/17 int-spec xanh trên lane `mediaos_be1c`. Census 50 route (từ 48) · MIN_COVERED_COUNT 680→682 (= SỐ SPEC IN RA `682/682`, không cộng tay).",
+      "🔴 done_when #4 SAI CHIỀU — đã ĐO LẠI: `file_links` KHÔNG có cột `object_type` (cột thật `entity_type`) và KHÔNG CHECK nào trên nó (mig 0579:18-23). Nên không có gì để UNION-ADD, và cũng không phải việc DB bị thiếu. 0 dòng DDL, đúng như WO khai.",
+      "🔴 done_when #1 nói «chỉ cần gate create:feed-post / create:feed-comment» — ĐO RA là KHÔNG khai nổi bằng một cặp tĩnh: `canLinkFile` hỏi cặp KHÁC NHAU tuỳ đích mà `@RequirePermission` chỉ mang một cặp. Owner chốt 24/09/2026: SÀN `view:feed` + tầng-2 theo `target` (bảng `SOCIAL_FILE_TARGET_PAIRS`, `tier1IsFloor:true`) — xem plan §1 D1. Vẫn KHÔNG cặp quyền mới, KHÔNG migration.",
+      "NỢ DOC: SPEC-16 §15 còn ghi «53 route» trong khi API-19 nay có 55. `docs/spec/**` NGOÀI `paths` của WO này ⇒ giao WO doc kế: thêm cụm «Đính kèm · SOCIAL-API-054..055 · 2», sửa tổng 53→55.",
       "Sau WO này, S16-SOCIAL-FE-2 mới dựng được UI đính kèm cho composer (FE-1 cố ý không có).",
       "SocialFileResolver + social-attachments.service.ts đã sẵn phía server — chỉ thiếu CỬA VÀO.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-ATTGATE-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Đường GẮN tệp không hỏi cặp quyền: `assertLinkableFilesTx` chép vế 2-5 của `canLinkFile` nhưng BỎ vế 6a (cặp `create` theo đích) ⇒ route SỬA 004/017 (chỉ `view:feed` + tác giả) gắn được tệp mà không cặp `create:feed-*` nào bị hỏi",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-1C"],
+    plan: "docs/plans/S16-SOCIAL-ATTGATE-1.md",
+    src: [
+      "FULL gate của S16-SOCIAL-BE-1C (24/09/2026) — finding HIGH của `security-reviewer`, ĐÃ XÁC MINH độc lập",
+      "`social-attachments.service.ts` jsdoc `assertLinkableFilesTx` («Vế 2-5 trùng ĐÚNG với canLinkFile») · `social-file.resolver.ts` vế 6a · `social-posts.service.ts` update() · `social-route-pairs.const.ts` postUpdate/commentUpdate",
+    ],
+    done_when: [
+      "🔴 ĐO LẠI TRƯỚC KHI SỬA — phát hiện gốc: `SocialFileResolver.canLinkFile` CHỈ chạy trên `POST /foundation/files/:id/links` (gate `link:foundation-file`, cặp nhân viên thường KHÔNG có) ⇒ nhánh đó CHẾT với người dùng thường. Đường FE thật đi là `SocialAttachmentsService.syncLinksTx` → `assertLinkableFilesTx`, và hàm đó KHÔNG hỏi cặp quyền nào",
+      "Hệ quả cần đóng: `004 PATCH /social/posts/{id}` + `017 PATCH /social/comments/{id}` gác `view:feed` + (tác giả ∨ `manage:feed-post`) rồi gọi thẳng `syncLinksTx` ⇒ vai giữ `manage:feed-post` mà KHÔNG có `create:feed-post` gắn được tệp vào bài. Ca ALLOW phải đứng cạnh ca DENY",
+      "🔴 ĐÂY LÀ ĐỔI HÀNH VI 2 ROUTE ĐÃ SHIP ⇒ cần CHỮ KÝ OWNER trước khi code, + test cho cả 4 route 002/004/015/017 (không chỉ 2 route sửa)",
+      "Cân nhắc lối rẻ hơn: gọi `SocialAccessService.assertFileTarget(actor, 'post'|'comment')` ngay trước mỗi `syncLinksTx` — hàm đã tồn tại từ BE-1C, `SOCIAL_FILE_TARGET_PAIRS` đã đúng cặp. ~1 dòng/call-site",
+      "Nếu đóng xong: GỠ khối ĐÍNH CHÍNH ở 4 docblock của BE-1C (`social-files.service.ts` · `social-access.service.ts` · `social-route-pairs.const.ts` · `packages/contracts/src/social-api.ts`) vì lúc đó D1a thành SỰ THẬT",
+    ],
+    notes: [
+      "✍️ OWNER DUYỆT 24/09/2026 — cho phép siết route 004/017 (đổi hành vi 2 route ĐÃ SHIP). CHƯA thi công: theo CLAUDE.md §6 đây là crown-jewel ⇒ phiên sau vào THẲNG bước micro-plan (planner) → `plan-reviewer` PASS → mới code. Owner chốt kèm: không mở trong phiên seed vì lý do chi phí.",
+      "SEED 24/09/2026 từ FULL gate của S16-SOCIAL-BE-1C. 🔴 KHÔNG do BE-1C đẻ ra — khoảng hở có TỪ BE-1; BE-1C chỉ làm nó dễ tới hơn (trước đó nhân viên chỉ lấy được tệp `image/*` qua cửa avatar `update:avatar`@Own, nay lấy được mọi MIME trong allowlist).",
+      "NỢ MEDIUM #1 (cùng nguồn): trần SOC-DEC-008 ở `social-attachments.service.ts` chỉ đếm `kind==='image'` (≤10) và `'video'` (≤1). Tệp PDF/docx KHÔNG rơi vào nhánh nào ⇒ KHÔNG trần số lượng, chỉ còn trần dung lượng mỗi tệp.",
+      "NỢ MEDIUM #2 (cùng nguồn, NGOÀI paths — `FileService`): `file_access_logs.permission_code` ghi `'FOUNDATION.FILE.UPLOAD'` + audit `moduleCode='FOUNDATION'` cho tệp đi cửa SOCIAL/CHAT/avatar, trong khi actor KHÔNG có cặp `upload:foundation-file`. Hai bảng append-only ⇒ vết điều tra nói SAI cặp quyền đã dùng. Tiền lệ CHAT/avatar y hệt ⇒ không phải hồi quy của BE-1C.",
+      "NỢ LOW (cùng nguồn): `social-files.service.ts` confirm phân biệt 404 (vắng) vs 403 (của người khác), trong khi CHÍNH module ở `assertLinkableFilesTx` từ chối phân biệt hai ca đó vì «vòng lặp đoán UUID đọc được kho tệp của cả công ty». Hai cửa cùng module, hai luật — nên thống nhất.",
     ],
   },
   {

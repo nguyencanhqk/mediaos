@@ -64,6 +64,12 @@ const STRONG_EVIDENCE: readonly string[] = [
   "KUDOS_RECIPIENT_INVALID",
   "KUDOS_RECIPIENT_LIMIT",
   "KUDOS_SELF_RECIPIENT",
+  // S16-SOCIAL-BE-1C — 3 hang cua cua dang ky tep. Dat o TANG A (bang chung MANH) ngay tu dau: ca
+  // ba deu KHONG co ma `SOCIAL-ERR-0XX`, nen bang chung "theo chuoi ma" von khong ton tai o day —
+  // tang B mot minh se tha chung ngay khi co mot `throw` bat ky.
+  "FILE_TARGET_POST_DENIED",
+  "FILE_TARGET_COMMENT_DENIED",
+  "FILE_NOT_OWNED",
 ];
 
 /**
