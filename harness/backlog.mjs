@@ -17465,6 +17465,33 @@ export const backlog = [
     notes: ["🟡 gate theo diff (nếu vá code social/ vùng quyền thì FULL)."],
   },
   {
+    id: "S16-SOCIAL-TESTISO-1",
+    module: "SOCIAL",
+    layer: "QA",
+    title:
+      "Vá CÁCH LY TEST: Nhóm 13 của s16-social-db2-invariants chạy thân migration 0582 (phạm vi TOÀN DB) trong snapshot REPEATABLE READ dài trên lane DB dùng chung ⇒ phiên khác commit feed_kudos_badges làm ON CONFLICT DO NOTHING ném 40001 ⇒ ĐỎ NGẪU NHIÊN trong check.sh --all",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    plan: "docs/plans/S16-SOCIAL-TESTISO-1.md",
+    src: [
+      "Nguyên nhân gốc + 2 phép đo tất định: docs/plans/S16-SOCIAL-BE-2B-2.md §14.5 (24/09/2026)",
+      "4 nguồn ghi feed_kudos_badges trong cây test: test/integration/rls-registry.ts · src/social/social-master-data.seeder.ts · test/integration/social-be2b2-kudos.int-spec.ts · chính s16-social-db2-invariants",
+    ],
+    done_when: [
+      "🔴 Nhóm 13 lấy khoá TRƯỚC câu SELECT đầu tiên: LOCK TABLE companies IN SHARE MODE + feed_kudos_badges IN EXCLUSIVE MODE, đặt NGAY SAU `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`. ĐO CỔNG: gỡ hai dòng LOCK ⇒ ca đua tái hiện 40001; giữ ⇒ PASS (kịch bản 2 phiên đã ghi ở §14.5).",
+      "CẤM retry 40001 (giấu triệu chứng + che ca 40001 THẬT sau này) và CẤM hạ xuống READ COMMITTED (một company commit GIỮA câu INSERT và câu VERIFY vẫn vỡ đẳng thức v_left = 5*v_co)",
+      "Kiểm thứ tự khoá: grep toàn cây test xác nhận KHÔNG chỗ nào khác lấy khoá bảng tường minh (nếu có ⇒ chốt một thứ tự chung, ghi vào docblock) — chống deadlock",
+      "Chạy `bash harness/check.sh --all --lane-db` XANH trên lane SẠCH (--reset), không còn ca đỏ Nhóm 13",
+    ],
+    notes: [
+      "🟡 Chỉ chạm spec test, KHÔNG chạm code sản phẩm ⇒ LIGHT gate. PROD/CI KHÔNG dính lỗi này: migrate chạy trước khi boot app, `companies` rỗng, không có phiên ghi đồng thời.",
+      "⚠️ Vì sao gấp dù là test: flake này làm `check.sh --all` mất độ tin — một lượt ĐỎ có thể là nó, che mất một ĐỎ THẬT (fail-open của chính cổng xác minh).",
+    ],
+  },
+  {
     id: "S16-SOCIAL-DASH-1",
     module: "DASH",
     layer: "FULL",

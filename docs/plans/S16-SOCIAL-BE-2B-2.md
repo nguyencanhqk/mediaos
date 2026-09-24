@@ -661,7 +661,7 @@ Sáu dòng ĐO CỔNG còn ⏳ ở §13. Cả `security-reviewer` lẫn `silent-
 và xác nhận **không ca nào có thể xanh-rỗng** (mỗi ca có neo dương + assert hai chiều) — nhưng
 «không xanh-rỗng» ≠ «đã chứng minh ĐỎ khi tháo». Không reviewer nào BLOCK vì nó.
 
-### 14.5 Một test ĐỎ của `harness/check.sh --all --lane-db` — đo được, CHƯA truy ra nguyên nhân
+### 14.5 Một test ĐỎ của `harness/check.sh --all --lane-db` — ✅ ĐÃ TRUY RA NGUYÊN NHÂN (24/09/2026)
 
 `bash harness/check.sh --all --lane-db=be2b2chk`: mọi bước xanh (secret-literals · lint · typecheck ·
 migration-no-drop · tooling-tests · build · prod-tenant-check · db-readiness) **trừ** bước `test`.
@@ -671,20 +671,70 @@ migration-no-drop · tooling-tests · build · prod-tenant-check · db-readiness
 Đỏ đúng MỘT ca, ở một spec **KHÔNG thuộc WO này**:
 `s16-social-db2-invariants.int-spec.ts` › «Nhóm 13 · thân SQL của `0582` trên company THẬT».
 
-Đã đo (mỗi dòng là một lần chạy thật):
+**NGUYÊN NHÂN GỐC (đo tất định 24/09/2026, KHÔNG còn là giả thuyết).** Ca Nhóm 13 chạy thân `0582`
+bên trong một tx **REPEATABLE READ** dài trên lane DB **dùng chung**. `0582` là
+`INSERT … CROSS JOIN companies … ON CONFLICT (company_id, code) DO NOTHING` — phạm vi **TOÀN DB**.
+Khi một phiên KHÁC commit một hàng `feed_kudos_badges` cho một company **đã hiện diện trong snapshot**
+của tx đó, PostgreSQL **KHÔNG "skip im lặng"** như trực giác về `DO NOTHING`, mà ném:
 
-| Điều kiện | Kết quả |
+```
+ERROR:  could not serialize access due to concurrent update   -- SQLSTATE 40001
+```
+
+Vì `ON CONFLICT` dò xung đột trên **hàng MỚI NHẤT** (ngoài snapshot), còn tx thì bị ràng ở snapshot cũ
+⇒ RR không hoà giải được ⇒ 40001. Ca test đỏ vì lỗi này, không vì một assert nào sai.
+
+**Phép đo (lane `mediaos_be2b2`, 2 phiên psql):**
+
+| Bước | Kết quả |
 | --- | --- |
-| Chạy RIÊNG file đó, trên CHÍNH lane đã đỏ (`mediaos_be2b2chk`) | **XANH 53/53** |
-| Chạy cùng `social-master-data-seeder.int.spec.ts` (giả thuyết: seeder reconcile mọi company ⇒ `before ≠ 0`) | **XANH 56/56 ⇒ giả thuyết SAI** |
-| Trong `check.sh`, chunk 40 file chạy song song | **ĐỎ** — và cùng lượt đó có **4 chunk crash hạ tầng** (12 · 13 · 17 retry; 18 đỏ) |
-| Toàn bộ 36 file SOCIAL tuần tự trên lane `mediaos_be2b2` | **XANH 644/644** |
+| **Control** — 1 company, KHÔNG ai chen ngang, chạy thân `0582` trong tx RR rồi ROLLBACK | `NOTICE [0582] da seed 5 huy hieu x 1 cong ty` — **XANH** |
+| **Đua** — A: `BEGIN; RR; SELECT …` (lấy snapshot) → B: commit 5 huy hiệu cho CHÍNH company đó → A: chạy thân `0582` | **`ERROR: could not serialize access due to concurrent update`** |
 
-⇒ Kết luận ĐÚNG mức bằng chứng: **flake chỉ xuất hiện dưới tải song song**, không tái hiện được khi cô
-lập, và **đã loại trừ 2 giả thuyết**. Chưa truy ra cơ chế. Một khả năng CHƯA kiểm: WO này thêm 2 file
-int-spec ⇒ **dịch biên giới 40-file/chunk**, nên hai spec trước đây ở hai chunk khác nhau có thể rơi vào
-cùng chunk — tức WO này *làm lộ*, chứ không *gây ra*. Ghi thành nợ, không vá triệu chứng bằng cách nới
-assert. Liên quan: `flake-rate-tracks-lane-db-dirtiness` · `vitest-worker-crash-chunked-runs`.
+**Vì sao HAI giả thuyết trước bị bác OAN.** Cả hai đều đo bằng cách chạy **tuần tự** (file riêng lẻ ·
+chạy kèm `social-master-data-seeder.int.spec.ts`) — mà tuần tự thì phiên kia **không thể commit VÀO
+GIỮA** cửa sổ snapshot của A. Phép đo ấy **không chạm tới được** ca cần đo, nên kết luận "giả thuyết
+SAI" là kết luận rỗng. Cùng lớp bẫy: `gate-measurement-row-can-be-unsatisfiable`.
+
+**Ai là phiên commit đồng thời** — 4 chỗ ghi `feed_kudos_badges` trong cây test:
+`test/integration/rls-registry.ts` · `src/social/social-master-data.seeder.ts` (qua int-spec của nó) ·
+`test/integration/social-be2b2-kudos.int-spec.ts` (**WO này mới thêm**) · chính `s16-social-db2-invariants`.
+Cả ba nguồn ngoài đều theo đúng hình dạng nguy hiểm: **tạo company (commit) → chèn huy hiệu (commit)
+ngay sau đó** — A chỉ cần lấy snapshot rơi vào giữa hai commit ấy là đỏ.
+
+⇒ Kết luận về trách nhiệm: WO này vừa **dịch biên giới chunk 40-file**, vừa **thêm nguồn ghi thứ 4**
+⇒ nâng xác suất trúng. Nhưng lỗi **thiết kế** nằm ở spec của DB-2 — chạy một thân migration phạm vi
+TOÀN DB bên trong một snapshot RR dài, trên lane DB dùng chung — **không** ở code BE-2B-2.
+
+**Vì sao PROD/CI không dính:** migrate chạy TRƯỚC khi boot app, `companies` rỗng lúc `0582` chạy, và
+không có phiên nào ghi `feed_kudos_badges` đồng thời. Rủi ro thuần tuý của môi trường test.
+
+**Hướng vá — ĐÃ ĐO, không phải đề xuất suông (WO RIÊNG: chạm spec của DB-2, có thứ tự khoá ⇒ review).**
+Lấy khoá NGAY SAU `SET TRANSACTION ISOLATION LEVEL`, TRƯỚC câu `SELECT` đầu tiên (snapshot RR hình
+thành ở câu đầu tiên CẦN snapshot — `LOCK TABLE` là utility statement nên KHÔNG lấy snapshot; đo được
+ở bảng dưới, A vượt qua verify ⇒ snapshot quả thật hình thành SAU khi khoá đã cầm):
+
+```sql
+BEGIN;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+LOCK TABLE companies         IN SHARE MODE;      -- chặn tạo company mới
+LOCK TABLE feed_kudos_badges IN EXCLUSIVE MODE;  -- chặn mọi commit huy hiệu
+-- … câu SELECT đầu tiên (snapshot) … rồi mới chạy thân 0582
+```
+
+| Biến thể (cùng kịch bản đua, tự canh giờ) | Phiên B chen ngang | Phiên A giữ snapshot |
+| --- | --- | --- |
+| **Hiện trạng** (không khoá) | ghi được NGAY (chờ 0s) | **`ERROR 40001`** |
+| **Hướng vá** (khoá trước snapshot) | **bị chặn 5s** tới khi A xong | **PASS** — `da seed 5 huy hieu x 1 cong ty` |
+
+⚠️ Giá phải trả: mọi spec khác tạo company/ghi huy hiệu sẽ **xếp hàng** trong lúc Nhóm 13 chạy (ở đây
+là ~5s). Chấp nhận được vì ca này ngắn; nhưng WO vá phải kiểm thứ tự khoá — hôm nay KHÔNG chỗ nào
+khác trong cây test lấy khoá bảng tường minh, nên chưa có vòng chờ để sinh deadlock.
+
+Hai đường **KHÔNG** được dùng:
+- **retry 40001** ⇒ giấu triệu chứng, và che luôn ca 40001 THẬT nếu sau này có;
+- **hạ xuống READ COMMITTED** ⇒ chỉ thu hẹp cửa sổ chứ không đóng: một company commit giữa câu
+  `INSERT` và câu `VERIFY` vẫn làm vỡ đẳng thức `v_left = 5 * v_co` (v_co đếm nó, v_left thì không).
 
 ### 14.6 Chữ ký owner
 
