@@ -25,6 +25,8 @@ import {
   putFeedReactionSchema,
   resolveFeedReportSchema,
   searchFeedQuerySchema,
+  socialFileConfirmInputSchema,
+  socialFileUploadUrlInputSchema,
   updateFeedCommentSchema,
   updateFeedGroupSchema,
   updateFeedPostSchema,
@@ -93,3 +95,7 @@ export class ListIdeasQuery extends createZodDto(listIdeasQuerySchema) {}
 export class ReviewFeedIdeaBody extends createZodDto(reviewFeedIdeaSchema) {}
 export class ListKudosQuery extends createZodDto(listKudosQuerySchema) {}
 export class ListKudosBadgesQuery extends createZodDto(listKudosBadgesQuerySchema) {}
+
+// ─── S16-SOCIAL-BE-1C — cửa đăng ký tệp (SOCIAL-API-054/055) ───
+export class SocialFileUploadUrlBody extends createZodDto(socialFileUploadUrlInputSchema) {}
+export class SocialFileConfirmBody extends createZodDto(socialFileConfirmInputSchema) {}

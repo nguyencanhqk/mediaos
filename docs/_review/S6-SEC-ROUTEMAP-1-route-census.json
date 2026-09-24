@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 680,
-    "controllers": 128,
-    "gated": 641,
+    "routes": 682,
+    "controllers": 129,
+    "gated": 643,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -9171,6 +9171,38 @@
       "key": "SocialDiscoveryController#search",
       "httpMethod": "GET",
       "path": "/api/v1/social/search",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialFilesController#confirmUpload",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/files/:id/confirm",
+      "hasPermission": true,
+      "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialFilesController#createUploadUrl",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/files/upload-url",
       "hasPermission": true,
       "permission": "view:feed",
       "permissionLevel": "handler",

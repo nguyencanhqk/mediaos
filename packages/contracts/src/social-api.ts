@@ -593,3 +593,61 @@ export const feedPostFlagResultSchema = z
   })
   .strict();
 export type FeedPostFlagResultDto = z.infer<typeof feedPostFlagResultSchema>;
+
+// ─── S16-SOCIAL-BE-1C — cửa đăng ký tệp đính kèm (SOCIAL-API-054/055) ────────────────────────────
+
+/**
+ * `POST /api/v1/social/files/upload-url` body — đăng ký MỘT tệp Private owned-by-token để chuẩn bị
+ * đính kèm vào bài hoặc bình luận.
+ *
+ * ⚠️ **HẸP HƠN `uploadFileInputSchema` CÓ CHỦ ĐÍCH** (khuôn `chatFileUploadUrlInputSchema`):
+ *   • `visibility` KHÔNG nhận từ client — server ép `'Private'`;
+ *   • `moduleCode`/`entityType`/`entityId` KHÔNG nhận — chúng đi thẳng vào `audit_logs` và
+ *     `file_access_logs` (hai bảng append-only phục vụ điều tra), nên nhận vào là để client tự khai
+ *     tệp của mình thuộc entity của module khác trong dấu vết điều tra. Bài/bình luận lúc này còn
+ *     CHƯA TỒN TẠI — `file_links` do `SocialAttachmentsService` tạo TRONG CÙNG transaction với INSERT
+ *     nội dung, client không được tự gắn.
+ *
+ * ┌─ 🔴 `target` LÀ ĐẦU VÀO CỦA CỔNG, KHÔNG PHẢI MỘT KHẲNG ĐỊNH ĐƯỢC TIN (plan §1 D1a) ────────────┐
+ * │ Nó quyết định cặp quyền nào được hỏi ở TẦNG 2 của cửa này — `create:feed-post` hay                │
+ * │ `create:feed-comment` — vì `SocialFileResolver.canLinkFile` hỏi cặp KHÁC NHAU tuỳ đích, còn       │
+ * │ `@RequirePermission` chỉ khai được MỘT cặp tĩnh.                                                  │
+ * │                                                                                                   │
+ * │ Khai `'comment'` rồi đem tệp gắn vào BÀI là chuyện client làm được, và trên đường TẠO thì KHÔNG   │
+ * │ sao: route `002 POST /social/posts` và `015 POST …/comments` đã gác CHÍNH cặp                      │
+ * │ `create:feed-post`/`create:feed-comment` ở TẦNG 1 ⇒ nói dối ở đây chỉ TỰ THU HẸP cửa của mình.     │
+ * │                                                                                                   │
+ * │ ⚠️ **ĐÍNH CHÍNH 24/09/2026 (FULL gate, HIGH):** bản đầu ghi «lúc gắn, `canLinkFile` hỏi LẠI cặp     │
+ * │ đúng» — SAI. Đường gắn thật (`SocialAttachmentsService.assertLinkableFilesTx`) KHÔNG hỏi cặp nào;  │
+ * │ `canLinkFile` chỉ chạy trên `POST /foundation/files/:id/links` (gate `link:foundation-file`).      │
+ * │ Cặp đúng được ép bởi ROUTE TẠO, không bởi resolver. Đường SỬA (`004`/`017`) không ép — nợ đã ghi   │
+ * │ ở `harness/backlog.mjs`, có từ BE-1, KHÔNG do cửa này đẻ ra.                                       │
+ * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * `originalName` PHẢI mang đuôi khớp `declaredMimeType`, và MIME phải ∈ allowlist `system_settings` —
+ * `FileService.upload` re-validate cả hai (FOUNDATION-FILE-ERR-EXTENSION / -MIME / -SIZE / -BLOCKED).
+ * Trần `≤20MB/tệp` (SOC-DEC-008) CỐ Ý **không** ép ở đây: nó là `SOCIAL-ERR-007` và phải ném Ở SERVICE
+ * lúc GẮN (`SocialAttachmentsService`), nếu không Zod trả **400 vô danh** và mã lỗi của SPEC-16 §16
+ * không bao giờ ra tới người dùng.
+ */
+export const socialFileUploadUrlInputSchema = z
+  .object({
+    target: feedTargetTypeSchema,
+    originalName: z.string().trim().min(1).max(500),
+    declaredMimeType: z.string().min(1).max(255),
+    sizeBytes: z.number().int().nonnegative(),
+  })
+  .strict();
+export type SocialFileUploadUrlInput = z.infer<typeof socialFileUploadUrlInputSchema>;
+
+/**
+ * `POST /api/v1/social/files/{id}/confirm` body — xác nhận bytes đã lên (`Pending → Uploaded`).
+ *
+ * ⚠️ **CÓ body, KHÁC `POST /chat/files/{id}/confirm` (body rỗng `{}`)** — và đó là hệ quả trực tiếp
+ * của D1: cửa này gác bằng SÀN `view:feed` + cặp `create` theo `target`, nên bước confirm phải hỏi
+ * ĐÚNG cặp mà bước upload đã hỏi. Bỏ `target` đi ở đây = confirm gác LỎNG hơn upload, tức là đúng thứ
+ * bất đối xứng mà jsdoc `ChatFilesController` cảnh báo ("ba chỗ phải đổi cùng nhau hoặc không đổi chỗ
+ * nào"). CHAT không gặp chuyện này vì nó chỉ có MỘT cặp (`send:chat-message`).
+ */
+export const socialFileConfirmInputSchema = z.object({ target: feedTargetTypeSchema }).strict();
+export type SocialFileConfirmInput = z.infer<typeof socialFileConfirmInputSchema>;

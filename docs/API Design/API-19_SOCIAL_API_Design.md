@@ -56,7 +56,7 @@ Bảng tin · bài (5 loại) · bình luận 1 cấp · cảm xúc · lưu · l
 
 Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-census gom đúng module qua `API_MODULE_TAGS` nhóm `SOCIAL`.
 
-### 5.1 Bảng endpoint — 53 route
+### 5.1 Bảng endpoint — 55 route (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng)
 
 | Mã | Method · Path | Cặp quyền | Ghi chú |
 | --- | --- | --- | --- |
@@ -123,8 +123,18 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | **Thống kê — Track C** ||||
 | `SOCIAL-API-052` | `GET /social/stats/engagement` | `view:feed-report` | Theo tuần & đơn vị; SQL set-based; **KHÔNG cache** |
 | `SOCIAL-API-053` | `GET /social/stats/engagement/export` | `view:feed-report` | XLSX; ghi audit |
+| **Cửa đăng ký tệp đính kèm — `S16-SOCIAL-BE-1C`** ||||
+| `SOCIAL-API-054` | `POST /social/files/upload-url` | **SÀN `view:feed` + cặp theo `target` — xem §5.1e** | `@HttpCode(200)`; đăng ký tệp `Private` owned-by-token + presigned-PUT. **Không** `@Idempotent()` |
+| `SOCIAL-API-055` | `POST /social/files/{id}/confirm` | như trên | `Pending → Uploaded`; owner-check TRƯỚC khi chạm storage; 200 idempotent khi đã `Uploaded` |
 
-> **53 mã = 53 route HTTP** — không mã nào gói hai route.
+> **55 mã = 55 route HTTP** — không mã nào gói hai route.
+>
+> ⚠️ **`054`/`055` NẰM NGOÀI 53 route của SPEC-16 §15, CÓ CHỦ Ý.** Chúng là hạ tầng own-scope quanh
+> `FileService` (khuôn `POST /chat/files/*`), không phải một chức năng nghiệp vụ mới của SPEC-16: mọi
+> ràng buộc sản phẩm về đính kèm (≤10 ảnh · ≤1 video · ≤20MB — SOC-DEC-008) vẫn ép ở bước GẮN với mã
+> `SOCIAL-ERR-007`. `docs/spec/**` nằm NGOÀI `paths` của `S16-SOCIAL-BE-1C` nên SPEC-16 §15 vẫn ghi
+> «53 route»; **nợ doc đã ghi nhận** (plan `S16-SOCIAL-BE-1C.md` §4): WO doc kế tiếp thêm dòng cụm
+> «Đính kèm · `SOCIAL-API-054..055` · 2» và sửa tổng 53 → 55.
 >
 > ⚠️ **Route-census của module SOCIAL KHÔNG bằng 53.** App vệ tinh fbpost (`apps/api/src/integrations/social/`) đã khai tag module `SOCIAL` từ wave S9. Khi BE-1..BE-3 land, census kỳ vọng = **53 + số route fbpost đang đếm** (đo lúc chạy, đừng gõ cứng). Hai lựa chọn cho WO BE-1, ghi lại lựa chọn vào §9: (a) giữ chung tag `SOCIAL` và cập nhật số sàn census; (b) tách tag OpenAPI riêng cho tiện ích fbpost. Không đo trước ⇒ cổng census đỏ ngay PR đầu.
 
@@ -145,6 +155,25 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 - `body` bắt buộc với `share`/`news`/`idea`; với `poll`/`kudos` có thể vắng (DB-17 §6.1).
 - 🔴 **Khoá của `kudos` là `recipientEmployeeIds[]`, KHÔNG phải `recipients[]`** (sửa 24/09/2026 khi thi công BE-2B-2): `feed_kudos_recipients.employee_id` neo theo **`employee_profiles.id`**, còn NOTI gửi theo `users.id`. Tên viết tắt `recipients[]` của bản trước để ngỏ đúng chỗ nhầm đắt nhất của cụm này — hợp đồng gọi đúng tên khoá.
 - Mention ngoài audience **bị bỏ im lặng**, trả về trong `data.droppedMentions[]` — **không** phải lỗi (SPEC-16 §12 `ERR-009`).
+
+### 5.1e `SOCIAL-API-054/055` — cặp quyền phân nhánh theo `target`
+
+`SocialFileResolver.canLinkFile` (vế 6a) hỏi **hai cặp khác nhau** tuỳ đích tệp sẽ được gắn vào, còn
+`@RequirePermission` chỉ khai được **một** cặp tĩnh. Nên hai route này theo đúng khuôn `002`/`006`:
+decorator mang SÀN, cặp thật hỏi ở tầng 2 (`SocialAccessService.assertFileTarget`, bảng hằng
+`SOCIAL_FILE_TARGET_PAIRS`).
+
+| `target` | Cặp tầng-2 | Thiếu ⇒ |
+| --- | --- | --- |
+| `post` | `create:feed-post` @Company | 403 `SOCIAL-ERR: cần quyền đăng bài…` |
+| `comment` | `create:feed-comment` @Company | 403 `SOCIAL-ERR: cần quyền bình luận…` |
+
+- **SÀN `view:feed` là sàn THẬT, không phải chỗ để trống**: `canLinkFile` cũng đòi đúng cặp đó ở vế
+  `readScope`. Thiếu nó ⇒ 403 ở **tầng 1** (`PermissionGuard`), trước khi service chạy một dòng.
+- 🔴 **`target` là đầu vào của CỔNG, không phải một khẳng định được tin.** Khai `comment` rồi đem tệp
+  gắn vào bài vẫn bị `canLinkFile` hỏi lại cặp đúng của đích THẬT. Nói dối chỉ tự thu hẹp cửa.
+- **Không cặp quyền mới, không migration**: cả hai cặp đã có trong catalog từ seed `0578:42-43`.
+- Tệp vừa đăng ký **inert** (0 `file_links`) ⇒ không đường tải nào ký URL cho nó cho tới khi được gắn.
 
 ### 5.1c `SOCIAL-API-006` — trường nào cần cặp nào
 

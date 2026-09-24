@@ -1,4 +1,4 @@
-import type { FeedCreatableTypeDto } from "@mediaos/contracts";
+import type { FeedCreatableTypeDto, FeedTargetTypeDto } from "@mediaos/contracts";
 // An toàn về chu trình: `social.errors.ts` KHÔNG còn import gì từ file này (từ BE-2B-2 nó ghép kiểu
 // trực tiếp với enum Zod của contracts) ⇒ cạnh phụ thuộc chỉ đi MỘT chiều.
 import { SOCIAL_ERR } from "./social.errors";
@@ -278,6 +278,22 @@ export const SOCIAL_ROUTE_PAIRS = {
   kudosList: pair("view", "feed"),
   /** 048 `GET /social/kudos-badges` — catalog huy hiệu ĐANG BẬT; OFFSET. */
   kudosBadgeList: pair("view", "feed"),
+
+  // ── Cửa đăng ký tệp đính kèm 054–055 (`S16-SOCIAL-BE-1C`) ──
+  //
+  // 🔴 HAI ROUTE DUY NHẤT NGOÀI `002`/`006` mang `tier1IsFloor: true`, và chúng thoả ĐÚNG định nghĩa
+  // HẸP của cờ: cặp quyền thật sự đòi PHỤ THUỘC NỘI DUNG REQUEST (`target`), vì
+  // `SocialFileResolver.canLinkFile` hỏi `create:feed-post` cho `feed_post` và `create:feed-comment`
+  // cho `feed_comment` (vế 6a) — hai cặp KHÁC NHAU mà `@RequirePermission` không khai nổi cùng lúc.
+  // Bảng cặp-theo-payload của chúng: `SOCIAL_FILE_TARGET_PAIRS` (nguồn độc lập của đẳng thức D17).
+  //
+  // ⚠️ SÀN `view:feed` LÀ SÀN THẬT, KHÔNG PHẢI CHỖ ĐỂ TRỐNG: `canLinkFile` cũng đòi đúng cặp đó ở vế
+  // `readScope` (`social-file.resolver.ts:141-147`). Ai không đọc được bảng tin thì không gắn được
+  // tệp vào nó — hạ decorator xuống `@Public` hay bỏ guard là tháo tầng-1 của một đường GHI.
+  /** 054 `POST /social/files/upload-url` — SÀN; `target` quyết định cặp `create` ở tầng 2 (D1). */
+  fileUploadUrl: pair("view", "feed", true),
+  /** 055 `POST /social/files/{id}/confirm` — SÀN; cùng luật `target` (D1), + owner-check ở service. */
+  fileConfirm: pair("view", "feed", true),
 } as const satisfies Record<string, SocialPair>;
 
 export type SocialRouteKey = keyof typeof SOCIAL_ROUTE_PAIRS;
@@ -352,6 +368,47 @@ export const SOCIAL_KUDOS_FLAG_PAIRS = {
 } as const satisfies Record<string, { action: string; resourceType: string; isSensitive: boolean }>;
 
 export type SocialKudosFlag = keyof typeof SOCIAL_KUDOS_FLAG_PAIRS;
+
+/**
+ * S16-SOCIAL-BE-1C (D1) — cặp quyền theo `target` của cửa đăng ký tệp (`054`/`055`).
+ *
+ * ┌─ VÌ SAO BẢNG NÀY PHẢI TỒN TẠI, THAY VÌ MỘT CẶP TĨNH TRÊN DECORATOR ────────────────────────────┐
+ * │ `SocialFileResolver.canLinkFile` hỏi `create:feed-post` khi `entity_type='feed_post'` và          │
+ * │ `create:feed-comment` khi `='feed_comment'`. `@RequirePermission` khai được ĐÚNG MỘT cặp tĩnh.    │
+ * │ Chọn bừa một trong hai ⇒ vai tuỳ biến giữ cặp KIA bị 403 ngay ở cửa: viết được bình luận bằng     │
+ * │ chữ mà không đính kèm nổi một tấm ảnh vào chính nó. Đó ĐÚNG là lớp lỗi mà jsdoc                   │
+ * │ `ChatFilesController` gọi tên ("tải lên được mà gắn không được"); CHAT không gặp vì nó chỉ có một │
+ * │ cặp (`send:chat-message`) cho cả luồng.                                                           │
+ * │                                                                                                   │
+ * │ ĐO THẬT (`0578:67-74`): hôm nay cả 4 vai canonical giữ CẢ HAI cặp ⇒ tác động lên vai canonical    │
+ * │ = 0. Nhưng grant là **per-(permission, role)** và sửa được lúc chạy, nên vai lệch một cặp là dựng │
+ * │ được — `social-be1c-file-door.int-spec.ts` dựng đúng hai vai đó (ca D1/A4 và D2/A5).              │
+ * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * `satisfies Record<FeedTargetTypeDto, …>` (khuôn D2a của `SOCIAL_POST_TYPE_PAIRS`): mở thêm một giá
+ * trị `target` mà quên khai ở đây là **TS đỏ lúc build**, không phải một `undefined` chỉ lộ ra lúc
+ * chạy trên đúng một route ghi. Neo vào enum của **contracts** (`FeedTargetTypeDto`) chứ KHÔNG vào
+ * `SocialTargetType` của `social.types.ts`: file kia đã import `SocialRouteKey` TỪ ĐÂY, nên neo
+ * ngược lại là dựng một chu trình — đúng thứ dòng đầu file vừa dọn xong. Enum contracts cũng là thứ
+ * đi trên dây, nên neo vào nó chặt hơn. Chiều ngược (bảng có khoá lạ) do
+ * `social-file-target-pairs-structure.spec.ts` đo ở tầng DỮ LIỆU, độc lập với TS.
+ *
+ * ⚠️ **KHÔNG cặp nào ở đây là cặp MỚI**: cả hai đã có trong catalog từ seed `0578:42-43`. WO này
+ * không thêm cặp quyền, không migration.
+ *
+ * 🔴 ĐÍNH CHÍNH (FULL gate 24/09/2026, HIGH) — bảng này là cổng DUY NHẤT ép được phân biệt
+ * post-vs-comment trên đường tệp, và nó ép bằng giá trị CLIENT TỰ KHAI. Điều đó chấp nhận được vì
+ * route TẠO (`002`/`015`) đã gác chính hai cặp ấy ở tầng 1 — **KHÔNG** phải vì `canLinkFile` hỏi lại:
+ * đường gắn thật (`SocialAttachmentsService.assertLinkableFilesTx`) không hỏi cặp nào cả. Nợ ở đường
+ * SỬA (`004`/`017`) ghi tại `harness/backlog.mjs`.
+ */
+export const SOCIAL_FILE_TARGET_PAIRS = {
+  post: { action: "create", resourceType: "feed-post", isSensitive: false },
+  comment: { action: "create", resourceType: "feed-comment", isSensitive: false },
+} as const satisfies Record<
+  FeedTargetTypeDto,
+  { action: string; resourceType: string; isSensitive: boolean }
+>;
 
 /**
  * D5 — cặp quyền theo TỪNG TRƯỜNG ở `SOCIAL-API-006` (API-19 §5.1c).

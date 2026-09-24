@@ -7,6 +7,7 @@ import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
 import {
+  SOCIAL_FILE_TARGET_PAIRS,
   SOCIAL_MODERATION_FIELD_PAIRS,
   SOCIAL_POST_TYPE_PAIRS,
   SOCIAL_ROUTE_PAIRS,
@@ -50,9 +51,11 @@ const SOCIAL_CONTROLLERS = new Set([
   // route khoi phep do ma khong assert nao do.
   "SocialIdeasController",
   "SocialKudosController",
+  // S16-SOCIAL-BE-1C — 2 route cua dang ky tep (054..055), `social-files.controller.ts`.
+  "SocialFilesController",
 ]);
 
-/** Bảng route HTTP → key — fixture census, phủ ĐỦ 48 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH, API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 50 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 2 CỬA TỆP, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -122,6 +125,9 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
   { method: "PATCH", path: "/api/v1/social/posts/:post_id/idea/review", key: "ideaReview" },
   { method: "GET", path: "/api/v1/social/kudos", key: "kudosList" },
   { method: "GET", path: "/api/v1/social/kudos-badges", key: "kudosBadgeList" },
+  // ── S16-SOCIAL-BE-1C — CUA DANG KY TEP 054..055 ──
+  { method: "POST", path: "/api/v1/social/files/upload-url", key: "fileUploadUrl" },
+  { method: "POST", path: "/api/v1/social/files/:id/confirm", key: "fileConfirm" },
 ];
 
 /**
@@ -185,6 +191,10 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "SocialIdeasService#review": ["ideaReview"],
   "SocialKudosService#list": ["kudosList"],
   "SocialKudosService#listBadges": ["kudosBadgeList"],
+  // S16-SOCIAL-BE-1C — 2 site moi. Moi site MOT key literal: ternary chon key (vi du
+  // `target === "comment" ? … : …`) se lam census MU voi dung hai route nay.
+  "SocialFilesService#createUploadUrl": ["fileUploadUrl"],
+  "SocialFilesService#confirmOwnUpload": ["fileConfirm"],
 };
 
 /** Mọi literal `resolveActor(<expr>, "<key>")` trong `social/**.ts`, kèm `Class#method` bao quanh. */
@@ -258,8 +268,8 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
     expect(
       socialRoutes.length,
-      "app boot phải thấy 48 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH)",
-    ).toBe(48);
+      "app boot phải thấy 50 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 2 CỬA TỆP)",
+    ).toBe(50);
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -349,6 +359,17 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
       )
     ) {
       payloadDependent.push("postModerate");
+    }
+    // S16-SOCIAL-BE-1C — nguon DOC LAP cho hai route cua tep: bang `SOCIAL_FILE_TARGET_PAIRS` anh xa
+    // `target` cua request → cap quyen. Dieu kien hoi "co cap nao KHAC cap san cua route khong" —
+    // cung hinh dang voi hai nhanh tren, nen mot lan "don dep" lam bang tro thanh toan `view:feed`
+    // se keo dang thuc do, chu khong am tham tha hai route.
+    if (
+      Object.values(SOCIAL_FILE_TARGET_PAIRS).some(
+        (v) => v.resourceType !== SOCIAL_ROUTE_PAIRS.fileUploadUrl.resourceType,
+      )
+    ) {
+      payloadDependent.push("fileUploadUrl", "fileConfirm");
     }
     payloadDependent.sort();
 
