@@ -16795,7 +16795,7 @@ export const backlog = [
     title:
       "Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối sidebar SOCIAL «Đăng bài Facebook» (SOC-DEC-002): gate 3 cặp social-* cũ, mở SSO như cũ, i18n nav, registry moduleCode SOCIAL giữ — KHÔNG đụng apps/fbpost hay quyền",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/social/**",
       "apps/app/src/layouts/**",

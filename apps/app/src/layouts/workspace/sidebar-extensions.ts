@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { ModuleCode } from "@mediaos/web-core";
 import { TaskSidebarTree } from "./TaskSidebarTree";
+import { SocialFbpostLink } from "./SocialFbpostLink";
 
 /**
  * Khe cắm section ĐỘNG theo module cho ModuleSidebar (S5-TASK-NAV-TREE-1).
@@ -11,6 +12,8 @@ import { TaskSidebarTree } from "./TaskSidebarTree";
  */
 const SIDEBAR_EXTENSIONS: Partial<Record<ModuleCode, ComponentType>> = {
   TASK: TaskSidebarTree,
+  // S16-SOCIAL-FBPOST-1 — mục CUỐI rail SOCIAL, liên kết NGOÀI qua SSO (không phải route nội bộ).
+  SOCIAL: SocialFbpostLink,
 };
 
 export function getSidebarExtension(moduleCode: ModuleCode): ComponentType | undefined {

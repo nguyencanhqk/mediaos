@@ -19,6 +19,7 @@ import {
   SOCIAL_SIDEBAR,
   SOCIAL_SIDEBAR_V2,
 } from "@/layouts/workspace/sidebar-registry";
+import { getSidebarExtension } from "@/layouts/workspace/sidebar-extensions";
 
 const BUILT_PATHS = new Set(ROUTE_REGISTRY.map((r) => r.path));
 const SOCIAL_ROUTES = ROUTE_REGISTRY.filter((r) => r.moduleCode === "SOCIAL");
@@ -150,5 +151,22 @@ describe("C22 — tile Home SOCIAL (D13: HAI tile, không một)", () => {
     // vật lý giữa `social`(90) và `assets`(100) — đẩy xuống cuối mảng là đỏ.
     const orders = APP_REGISTRY.map((a) => a.order);
     expect(orders).toEqual([...orders].sort((a, b) => a - b));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S16-SOCIAL-FBPOST-1 — «Đăng bài Facebook» chuyển từ ô Home → mục rail SOCIAL
+// ---------------------------------------------------------------------------
+
+describe("S16-SOCIAL-FBPOST-1 — mục rail đăng ký đúng chỗ", () => {
+  it("module SOCIAL CÓ extension sidebar (mục «Đăng bài Facebook» render SAU các group tĩnh)", () => {
+    expect(getSidebarExtension("SOCIAL")).toBeTypeOf("function");
+  });
+
+  it("KHÔNG thêm mục tĩnh nào vào SOCIAL_SIDEBAR_V2 — liên kết NGOÀI không đi qua <Link>", () => {
+    // Nếu ai đó "dọn" mục này thành SidebarItemMeta thì nó thành <Link to="..."> nội bộ ⇒ bấm vào
+    // không lấy token SSO, và hai snapshot sidebar-tree.*.txt cũng đổi. Ca này giữ hợp đồng đó.
+    expect(SOCIAL_SIDEBAR_V2.some((i) => i.sidebarKey.includes("fbpost"))).toBe(false);
+    expect(SOCIAL_SIDEBAR_V2.every((i) => i.path?.startsWith("/feed"))).toBe(true);
   });
 });

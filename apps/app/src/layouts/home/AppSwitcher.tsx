@@ -27,8 +27,7 @@ import { Skeleton, cn } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
 import { AppCard } from "./AppCard";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
-import { openLms } from "@/routes/lms/open-lms";
-import { openSocial } from "@/routes/social/open-social";
+import { getCrossDomainOpener, isCurrentApp } from "./cross-domain-apps";
 
 function buildSession(): SessionContext {
   const state = useAuthStore.getState();
@@ -92,7 +91,7 @@ function AppSwitcherGrid({ apps, currentModuleCode, onSelect }: AppSwitcherGridP
           key={app.appKey}
           app={app}
           effectiveStatus={app.status}
-          isCurrent={app.moduleCode === currentModuleCode}
+          isCurrent={isCurrentApp(app, currentModuleCode)}
           onSelect={onSelect}
         />
       ))}
@@ -177,22 +176,24 @@ export function AppSwitcher() {
 
   const doNavigate = (app: AppRegistryItem) => {
     closeAppSwitcher();
-    // "Đào tạo" (LMS) là app CROSS-DOMAIN: vào thẳng qua token SSO thay vì điều hướng tới trang trung
-    // chuyển /lms. Lỗi → rơi về /lms (LmsRedirectPage tự thử lại). Owner 2026-07-25.
-    if (app.appKey === "lms") {
-      void openLms(() => void navigate({ to: app.defaultRoute as "/" }));
-      return;
-    }
-    // "Đăng bài" (fbpost) cùng loại CROSS-DOMAIN với LMS — S9-SOCIAL-FE-1 / DECISIONS-08.
-    if (app.appKey === "social") {
-      void openSocial(() => void navigate({ to: app.defaultRoute as "/" }));
+    // App CROSS-DOMAIN ("Đào tạo"/LMS · "Đăng bài Facebook"/fbpost): vào thẳng qua token SSO thay vì
+    // điều hướng tới trang trung chuyển. Lỗi → rơi về trang trung chuyển của app đó (tự thử lại + hiện
+    // lý do đọc được). Owner 2026-07-25 (LMS) · DECISIONS-08 (fbpost).
+    //
+    // 🔴 S16-SOCIAL-FBPOST-1 — hai nhánh `if` cũ ở đây đã chuyển thành map thuần `cross-domain-apps.ts`,
+    // và nhánh fbpost sửa khoá `"social"` → `"fbpost"`: khoá `"social"` ĐỔI NGHĨA ở S16-SOCIAL-FE-1
+    // (D13①) thành cổng thông tin nội bộ `/feed`, nên nhánh cũ bắt SAI ô — chọn «Mạng xã hội» bị SSO
+    // đẩy thẳng ra ứng dụng Facebook, còn «Đăng bài Facebook» rơi về `/social`.
+    const openCrossDomain = getCrossDomainOpener(app.appKey);
+    if (openCrossDomain) {
+      void openCrossDomain(() => void navigate({ to: app.defaultRoute as "/" }));
       return;
     }
     void navigate({ to: app.defaultRoute as "/" });
   };
 
   const handleSelect = (app: AppRegistryItem) => {
-    if (app.moduleCode === currentModuleCode) {
+    if (isCurrentApp(app, currentModuleCode)) {
       closeAppSwitcher();
       return;
     }

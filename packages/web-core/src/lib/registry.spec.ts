@@ -4,6 +4,7 @@ import {
   evaluateRouteAccess,
   filterSidebarItems,
   getVisibleApps,
+  getHomeGridApps,
   normalizeUserStatus,
   APP_REGISTRY,
   ROUTE_REGISTRY,
@@ -1534,5 +1535,53 @@ describe("filterSidebarItems — nhóm gập được rỗng sau lọc quyền",
     ]);
     expect(settings?.collapsible).toBe(true);
     expect(settings?.defaultCollapsed).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S16-SOCIAL-FBPOST-1 — `switcherOnly`: lưới Home ≠ AppSwitcher
+// ---------------------------------------------------------------------------
+
+describe("S16-SOCIAL-FBPOST-1 — getHomeGridApps vs getVisibleApps (cờ switcherOnly)", () => {
+  // Người CHỈ có quyền fbpost — KHÔNG có `view:feed`. Đây là persona mà bản vá tồn tại vì nó:
+  // họ không vào được `/feed` nên không bao giờ thấy mục rail «Đăng bài Facebook».
+  const fbpostOnly = createPermissionChecker(makePerms(["view:social-post"]));
+
+  it("C1 · AppSwitcher (getVisibleApps) VẪN trả ô `fbpost` cho người chỉ có view:social-post", () => {
+    const keys = getVisibleApps(APP_REGISTRY, makeSession(), fbpostOnly).map((a) => a.appKey);
+    expect(keys).toContain("fbpost");
+  });
+
+  it("C2 · lưới Home (getHomeGridApps) KHÔNG vẽ ô `fbpost` — nhưng chỉ vì cờ, không vì quyền", () => {
+    const home = getHomeGridApps(APP_REGISTRY, makeSession(), fbpostOnly).map((a) => a.appKey);
+    const switcher = getVisibleApps(APP_REGISTRY, makeSession(), fbpostOnly).map((a) => a.appKey);
+    expect(home).not.toContain("fbpost");
+    // Đo ĐÚNG hiệu số: hai danh sách chỉ khác nhau ở các ô switcherOnly, không khác vì bất kỳ lý do nào
+    // khác (nếu ai đó thêm điều kiện lạ vào getHomeGridApps thì ca này ĐỎ).
+    const switcherOnlyKeys = APP_REGISTRY.filter((a) => a.switcherOnly).map((a) => a.appKey);
+    expect(switcher.filter((k) => !home.includes(k))).toEqual(
+      switcher.filter((k) => switcherOnlyKeys.includes(k)),
+    );
+  });
+
+  it("C2b · ô `fbpost` là ô DUY NHẤT mang switcherOnly (census — thêm ô mới phải cân nhắc lại)", () => {
+    expect(APP_REGISTRY.filter((a) => a.switcherOnly).map((a) => a.appKey)).toEqual(["fbpost"]);
+  });
+
+  it("C2c · cờ KHÔNG nới quyền: không có view:social-post thì cả hai bề mặt đều KHÔNG có `fbpost`", () => {
+    const none = createPermissionChecker(makePerms([]));
+    expect(getVisibleApps(APP_REGISTRY, makeSession(), none).map((a) => a.appKey)).not.toContain(
+      "fbpost",
+    );
+    expect(getHomeGridApps(APP_REGISTRY, makeSession(), none).map((a) => a.appKey)).not.toContain(
+      "fbpost",
+    );
+  });
+
+  it("C3 · ô cổng thông tin `social` KHÔNG bị cờ kéo theo (vẫn vẽ ở lưới Home)", () => {
+    const feedUser = createPermissionChecker(makePerms(["view:feed"]));
+    expect(getHomeGridApps(APP_REGISTRY, makeSession(), feedUser).map((a) => a.appKey)).toContain(
+      "social",
+    );
   });
 });

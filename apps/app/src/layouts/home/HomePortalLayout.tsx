@@ -16,7 +16,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   APP_REGISTRY,
-  getVisibleApps,
+  getHomeGridApps,
   createPermissionChecker,
   type AppRegistryItem,
   type SessionContext,
@@ -52,7 +52,10 @@ function buildVisibleApps(): AppRegistryItem[] {
     .filter(([, v]) => v)
     .map(([key]) => ({ permission: key, scopes: [] }));
   const permission = createPermissionChecker(perms);
-  return getVisibleApps(APP_REGISTRY, session, permission);
+  // S16-SOCIAL-FBPOST-1 (D2) — lưới Home dùng `getHomeGridApps` (= getVisibleApps TRỪ ô
+  // `switcherOnly`), còn AppSwitcher vẫn `getVisibleApps`. Hai bề mặt, hai hàm: app đã có đường vào
+  // CHÍNH ở rail module cha thì không cần một ô riêng ở Home, nhưng PHẢI giữ đường vào trong AppSwitcher.
+  return getHomeGridApps(APP_REGISTRY, session, permission);
 }
 
 // ---------------------------------------------------------------------------
