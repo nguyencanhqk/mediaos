@@ -399,6 +399,14 @@ Reviewer đọc mã thật, xác minh M1–M20 và **cố ý tìm cách phá ph�
 | F4 | db | Câu «vế 5 — đã TỪNG link» không lọc `deleted_at`, mà **mọi index có `file_id` đều PARTIAL `WHERE deleted_at IS NULL`** ⇒ rơi về `file_links_company_id_idx`, quét toàn bộ link của công ty | CÓ TRƯỚC WO này; sửa = **migration** thêm index không-partial `(company_id, file_id)`, ngoài phạm vi (WO này 0 migration). Reviewer nói rõ đây là suy luận từ định nghĩa index, **chưa chạy `EXPLAIN ANALYZE`** |
 | F5 | db | Lỗi hạ tầng khi resolve quyền ⇒ fail-closed thành **403**, không phải 5xx ⇒ blip DB trông như lỗi phân quyền | Nhất quán với `resolveActor` và luật nền tảng. Ghi để on-call không truy nhầm |
 
+> **✍️ OWNER KÝ 24/09/2026 (sau merge PR #539):** ba khoản **F1 · F4 · C-5** đã seed thành Work Order
+> **`S16-SOCIAL-ATTDEBT-1`** (`harness/backlog.mjs`, zone `red`, `status: todo`, xếp sau các WO S16 đang
+> READY) — *chưa làm*. WO đó ghi rõ điều kiện chặn: **F1 và F4 đều do reviewer suy luận mà CHƯA chạy
+> EXPLAIN/benchmark ⇒ phải ĐO trước khi sửa**; nếu planner đã dùng index hợp lý thì đóng F4 bằng số đo
+> chứ không thêm migration thừa. **C-2/F-8 CỐ Ý không nằm trong WO đó** vì nó là quyết định NGỮ NGHĨA
+> (vế 5 có cho gắn lại sau khi gỡ không, ai được gắn lại) ⇒ cần chữ ký owner riêng, không gộp vào WO
+> kỹ thuật. F2 và F5 giữ nguyên trạng thái «ghi để biết».
+
 ### Điều kiện chặn C-1 của `security-reviewer` — ĐÃ THOẢ
 
 `security-reviewer` đặt điều kiện: phải có bằng chứng int-spec **chạy thật** với `LANE_DB` (nó không chạy được vì cần Docker + hook chi phí). Bằng chứng của lượt thi công này, trên `LANE_DB=mediaos_attgate`:

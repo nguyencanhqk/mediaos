@@ -46,12 +46,17 @@ Thêm: kể cả người có `view:feed`, khi họ thu gọn sidebar (icon-mode
 | **D3** | Gate mục rail = `view:social-post` **HOẶC** `manage:social-account`                                                                          | Đúng `done_when` (a). KHÔNG đổi quyền/seed/API (WO green)                                                                                                                              |
 | **D4** | KHÔNG đổi `rootPath`/`defaultRoute` `/social` của ô `fbpost`                                                                                 | `/social` là đường LỖI (trang trung chuyển hiện thông báo đọc được); đường thường đi qua `openSocial()`                                                                                |
 
-**Chờ chữ ký owner (không chặn thi công, mặc định theo D2):**
+**✍️ OWNER ĐÃ KÝ 3/3 — 24/09/2026 (sau gate LIGHT, trước khi merge PR #540):**
 
-1. D2 giữ entry fbpost trong AppSwitcher — nếu owner muốn **xoá hẳn** khỏi `APP_REGISTRY` thì phải chấp
-   nhận người `view:social-post`-only mất đường vào, HOẶC mở `view:feed` cho họ (đổi quyền ⇒ **tách WO**).
-2. Mục rail vắng ở icon-mode (đo #2). Vá đúng nghĩa đòi đổi `SidebarItemMeta` + 2 snapshot ⇒ ngoài phạm
-   vi WO green. Hiện dựa vào AppSwitcher làm đường vào luôn-có.
+1. **KÝ — D2 GIỮ entry fbpost trong AppSwitcher.** Ô rời lưới Home qua `switcherOnly`, còn trong
+   `APP_REGISTRY`. Owner KHÔNG chọn phương án xoá hẳn (sẽ cắt đường vào của người
+   `view:social-post`-only, hoặc phải mở `view:feed` cho họ ⇒ đổi quyền, tách WO).
+2. **KÝ — CHẤP NHẬN mục rail vắng ở icon-mode** (đo #2). Vá đúng nghĩa đòi đổi `SidebarItemMeta` + 2
+   snapshot ⇒ ngoài phạm vi WO green. AppSwitcher là đường vào luôn-có.
+3. **KÝ — lối (i) của §6: SỬA CHỮ `done_when` (a) về đúng một cặp `view:social-post`**, giữ nguyên code
+   đã thi công. KHÔNG nới guard backend. Backlog đã sửa kèm khối ĐÍNH CHÍNH ghi lý do (mục rail = ô
+   AppSwitcher = guard endpoint). Muốn `manage:social-account` vào được THẬT ⇒ WO riêng đổi quyền, hết
+   zone green.
 
 ---
 
@@ -126,9 +131,10 @@ lý do trong ca: nới gate FE mà không nới guard BE thì ca ĐỎ.
 
 ⚠️ **LỆCH `done_when` (a)** — backlog ghi «chỉ hiện khi có `view:social-post` **hoặc**
 `manage:social-account`». Không làm theo, vì đo được rằng vế `manage:social-account` dẫn tới 403.
-**CHỜ CHỮ KÝ OWNER (mục 3):** hoặc (i) sửa chữ `done_when` (a) về một cặp `view:social-post` — mặc định
-đã thi công; hoặc (ii) muốn người `manage:social-account` vào được thật thì **nới guard BACKEND** ⇒
-**tách WO** (đổi quyền, không còn zone green).
+**✍️ OWNER KÝ 24/09/2026 — chọn lối (i):** sửa chữ `done_when` (a) về đúng một cặp `view:social-post`,
+giữ code đã thi công. Lối (ii) (nới guard BACKEND để `manage:social-account` vào được thật) **KHÔNG
+chọn** ở WO này — nếu sau cần thì tách WO đổi quyền (hết zone green). `harness/backlog.mjs` đã sửa chữ
+`done_when` (a) + thêm khối ĐÍNH CHÍNH ghi lại phép đo `social-sso.controller.ts:27`.
 
 ### Hai finding còn lại
 
