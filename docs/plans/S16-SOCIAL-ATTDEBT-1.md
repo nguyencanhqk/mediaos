@@ -596,3 +596,77 @@ Reviewer khai «TypeScript KHÔNG đòi đủ thuộc tính trong một `as` ass
 chạy, nên `snap === undefined` là nhánh LOAD-BEARING, không phải phòng thủ thừa. Nhưng cơ chế là
 «assertion lọt khi kiểu nguồn ĐỦ NHỎ», không phải «assertion luôn lọt». Ghi lại cho chính xác vì
 docblock của `SocialActor.attachNewGate` viện dẫn đúng sự thật này.
+
+---
+
+## §10 — FULL GATE (24/09/2026) — 3/3 PASS, và 5 khoản đã vá ngay sau đó
+
+> Gate chạy trên `git diff master...HEAD` tại commit `c3fe153e`, ba reviewer ĐỘC LẬP, read-only,
+> theo CLAUDE.md §6 (diff chạm permission · audit append-only · migration ⇒ FULL gate).
+
+| Reviewer | Verdict | CRITICAL | HIGH |
+| --- | --- | --- | --- |
+| `security-reviewer` | **PASS** | 0 | 0 |
+| `database-reviewer` | **PASS** | 0 | 0 |
+| `silent-failure-hunter` | **PASS** | 0 | 0 |
+
+Không reviewer nào tìm được đường biến DENY thành ALLOW, làm mất `throw`, hay mở tx-lồng-tx.
+Cả ba hội tụ vào CÙNG một bẫy từ ba phía: **`SecurityAlertService.emit()` nuốt lỗi** — phía DDL
+(CHECK dựng từ literal ⇒ 23514 bị nuốt) và phía app (cửa sổ khử trùng đóng trước khi ghi thành công).
+
+### 10.1 — Năm khoản đã VÁ trong lượt này
+
+| # | Nguồn | Vá | Bằng chứng ĐO |
+| --- | --- | --- | --- |
+| **V1** | SFH M-1 | `ATTACH_IDX = 4` (hằng gõ tay) → `attachIdx = baseRequests.length` | typecheck sạch · 246 unit pass. Lý do: WO sau append một cặp base thứ 5 — **đúng việc file này ĐÃ làm một lần ở `[3]` (BE-2A)** — thì ảnh chụp cổng đọc scope của cặp base MỚI ⇒ vai giữ cặp đó @Company nhưng thiếu `create:feed-post` lọt `isCompany` ⇒ gắn tệp mới qua PATCH không cần cặp `create` = mở lại đúng lỗ ATTGATE-1. Typecheck câm, `G-TABLE`/`D17` chỉ so tập ROUTE, `U2` sẽ được sửa máy móc rồi xanh lại |
+| **V2** | SFH M-2 + SEC M4 | `emit()` trả `false` ⇒ `alertSeenAt.delete(key)` + log mang `company/actor/target/route`; nhánh `catch` cũng trả khoá và log kèm `stack` | **Mutant**: gỡ cả 2 lời gọi `delete(key)` ⇒ đúng **2 ca mới ĐỎ bằng `AssertionError` đúng thông điệp** (`expected "spy" to be called 2 times, but got 1`), 11 ca kia vẫn xanh |
+| **V3** | DB MEDIUM-1 | `0588` bỏ «DROP + ADD với 4 giá trị gõ tay», thay bằng **DO-block đọc `pg_get_constraintdef` THẬT rồi cộng dồn** (clone nguyên khối `0583`: NEO 2 tầng · fail-closed · NO-LOSS + NO-GAIN + SỐ HỌC) | Chạy trên 3 DB thử (§10.2) |
+| **V4** | DB MEDIUM-2 | `0587` thêm `SET LOCAL lock_timeout = '5s'` + trả `DEFAULT` sau (khuôn `0535:693` / `0547:342`) | Chain `0000→latest` áp sạch trên lane `mediaos_attdebt` ⇒ `--> statement-breakpoint` chạy được qua migrator drizzle |
+| **V5** | SEC M1 | Đính chính 3 docblock khai NGƯỢC còn sót: `social-posts.service.ts:342` · `social-comments.service.ts:221` · `social-attachments.service.ts:38` | Từng câu được xác minh bằng mã TRƯỚC khi sửa, không nhận lời khai của reviewer |
+
+🔴 **V5 là lớp lỗi của chính WO này.** Plan §1 D-1 đã đặt việc sửa docblock là *hạng mục thi công bắt
+buộc* vì «một câu khai sai tự nhân bản ra 4 file» — rồi lượt thi công chỉ sửa 1 trong 4. Cùng lớp với
+[[canlinkfile-not-on-attachment-write-path]]. Sắc thái: `social-attachments.service.ts:32-37` KHÔNG
+sai thẳng (câu «hỏi quyền TẠI ĐÂY sẽ là tx lồng tx» vẫn đúng như một giả định) — nó chỉ **misleading**
+vì kết luận trỏ sang `resolveAttachNewGate`, hàm nay không còn chạm DB. Đã ghi đúng sắc thái đó.
+
+### 10.2 — V3 đo trên Postgres thật (3 DB dùng-một-lần)
+
+| Ca | Bản literal CŨ | Bản DO-block MỚI |
+| --- | --- | --- |
+| CHECK gốc 0122 (viết `IN (…)`, pg render **`= ANY (ARRAY[…])`** = tầng 2) | — | parse tầng-2 ✅ · `3 → 4 giá trị` · giá trị mới INSERT được ✅ |
+| Chạy LẦN HAI trên kết quả của chính nó (pg render `'{…}'` = tầng 1) | — | parse tầng-1 ✅ · **idempotent skip** ✅ ⇒ **cả hai tầng parse đều được thực thi**, không tầng nào là mã chết |
+| CHECK có giá trị ngoài luồng `ngoai_luong_canary`, **chưa** có hàng | 🔴 **NUỐT MẤT canary trong im lặng** — 0 lỗi, 0 notice | canary SỐNG SÓT · `4 → 5 giá trị` ✅ |
+| CHECK có giá trị ngoài luồng, **đã có hàng** mang giá trị đó | 🔴 `ERROR: check constraint "security_alerts_type_check" … is violated by some row` ⇒ migrator drizzle chạy MỌI migration pending trong MỘT tx ⇒ **cuộn cả band, `db:migrate` đỏ vĩnh viễn** | canary sống sót, không lỗi ✅ |
+
+⇒ Hai kịch bản mà `database-reviewer` nêu là **số liệu**, không phải suy đoán. Và kịch bản 3 là
+kịch bản IM LẶNG: `emit()` của loại bị nuốt sẽ ăn 23514 rồi **bị nuốt tiếp** ⇒ tín hiệu an ninh biến
+mất, chỉ còn một dòng `logger.error` không mang actor/target.
+
+### 10.3 — Cổng tiền-PR (CLAUDE.md §9.5, vùng đỏ)
+
+`bash harness/check.sh --all --lane-db=attdebt` ⇒ **XANH ✅** (KHÔNG phải «XANH KHÔNG ĐỦ BẰNG CHỨNG»):
+`secret-literals` · `lint` · `typecheck` · `migration-no-drop` · `tooling-tests` ·
+`test (LANE_DB=mediaos_attdebt) [chunked]` · `build` · `prod-tenant-check` · `db-readiness`.
+Tổng **1728 pass / 16 skipped**; `tenant-isolation.int-spec` chạy đủ **1314 ca** ⇒ int-spec thực thi
+thật, không phải skip. `db-readiness`: 12/12 index · 0 bảng thiếu FORCE RLS · 0 grant UPDATE/DELETE
+trên 9 bảng ledger.
+
+DDL xác nhận trên lane sau migrate:
+```
+CHECK ((alert_type = ANY ('{anomalous_login,attach_gate_deny,repeated_cross_scope_deny,repeated_reauth_failure}'::text[])))
+file_links_company_file_idx   -- có mặt trong 8 index của file_links
+```
+
+### 10.4 — Nợ để lại (KHÔNG vá ở lượt này, owner chốt phạm vi)
+
+| Nguồn | Khoản | Vì sao hoãn |
+| --- | --- | --- |
+| SFH M-3 | Lưới census `G-ALERT` vế (iii) đúng **nhờ hiệu ứng phụ**: `nextInTenant` không bao giờ được gán `true`, mọi node trong callback `withTenant` bị duyệt HAI lần. Một lượt «dọn dẹp» xoá nhánh đệ quy trông-thừa ⇒ bất biến R2 **mất lưới mà ca vẫn XANH**. Lưới cũng mù với call-graph (dời reporter vào helper ⇒ vẫn xanh) | Sửa AST walker, cần đo bằng mutant riêng |
+| SFH M-5 | `route` suy bằng **nghịch đảo** `ATTACH_GATE_ROUTE_TARGET` — bảng KHÔNG được ép song ánh. Thêm route thứ ba cùng `target:"post"` ⇒ mọi alert của route mới ghi `route:"postUpdate"` = **lời khai sai ghim vĩnh viễn vào bảng append-only** | 1 dòng assert trong census |
+| SEC M2 | `try` của `reportAttachGateDeny` chỉ bọc `emit`; 4 dòng trước nằm ngoài ⇒ vẫn còn đường 500 đè 403 (khó kích hoạt hôm nay, nhưng docblock đang tuyên bố bất biến MẠNH HƠN mã) | |
+| SEC M3 | `logger.warn` — vết DUY NHẤT của deny thứ 2..n trong cửa sổ 60s — **không lưới nào canh** | Cần spy `Logger.prototype.warn` |
+| SEC M4b · SFH M-4 · L-1 | Map khử trùng: không có trần kích thước · quét O(n) mỗi deny · `Date.now()` (bước NTP LÙI ⇒ khoá bị khử tới khi đồng hồ đuổi kịp) · cửa sổ giới hạn TỐC ĐỘ chứ không giới hạn TỔNG | Trần theo actor cần quyết định của owner |
+| DB LOW-1 | Câu «đã TỪNG link chưa» kéo về N hàng chỉ để hỏi tồn-tại — thiếu `.limit(1)` | |
+| SEC L2 · L3 · SFH L-3 · L-4 | `as keyof typeof` che `undefined` ở tầng kiểu · `docs/API Design` đã mở `paths` nhưng chưa viết dòng hợp đồng vận hành · câu «thiếu `throw` ⇒ 403 hoá 200» thực ra là TypeError ⇒ 500 · `logger.warn` thiếu `companyId` | |
+| DB LOW-2 | ⚠️ Gài cho `S16-SOCIAL-IDXDEDUP-1`: **CHỈ** được drop `file_links_company_id_idx`. `idx_file_links_file` (partial, cột dẫn đầu `file_id`) **KHÔNG** bị index mới bao — PG 16/17 không có index skip-scan | |

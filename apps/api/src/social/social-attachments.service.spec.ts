@@ -254,4 +254,42 @@ describe("SocialAttachmentsService.reportAttachGateDeny (S16-SOCIAL-ATTDEBT-1 C-
     // ghi đè lên một quyết định an ninh. Ca này đỏ nếu ai bỏ try/catch trong reporter.
     await expect(svc.reportAttachGateDeny(denial(), COMPANY)).resolves.toBeUndefined();
   });
+
+  // ┌─ VÁ FULL GATE M-2 — GHI HỎNG PHẢI TRẢ LẠI CỬA SỔ KHỬ TRÙNG ────────────────────────────────┐
+  // │ Hai ca dưới đi CẶP với ca «khử trùng theo cửa sổ» ở trên, và chính cặp đó mới là phép đo:   │
+  // │ ghi THÀNH CÔNG ⇒ lượt sau cùng đích BỊ khử (ca trên) · ghi HỎNG ⇒ lượt sau KHÔNG bị khử     │
+  // │ (hai ca này). Thiếu vế đối chứng thì một cài đặt «không bao giờ khử» cũng xanh.             │
+  // │ Vì sao quan trọng: `emit()` NUỐT lỗi ghi rồi trả `false`, mà `shouldEmitAlert` đã đóng cửa  │
+  // │ sổ 60s TRƯỚC khi gọi ⇒ bỏ `alertSeenAt.delete(key)` là đốt trọn 60 giây, alert MẤT HẲN chứ  │
+  // │ không chỉ chậm — và không lượt deny nào trong cửa sổ đó được thử lại.                       │
+  // └────────────────────────────────────────────────────────────────────────────────────────────┘
+  it("🔴 `emit` trả `false` (ghi hỏng, đã bị nuốt) ⇒ TRẢ LẠI khoá, lượt deny sau CÙNG đích vẫn ghi", async () => {
+    const alerts = {
+      emit: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
+    };
+    const svc = makeService(alerts);
+
+    await svc.reportAttachGateDeny(denial(), COMPANY);
+    expect(alerts.emit).toHaveBeenCalledTimes(1);
+
+    await svc.reportAttachGateDeny(denial(), COMPANY);
+    expect(
+      alerts.emit,
+      "lượt ghi ĐẦU hỏng ⇒ khoá phải được trả lại ⇒ lượt sau CÙNG đích phải được thử ghi lại",
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  it("`emit` NÉM ⇒ khoá khử trùng cũng được trả lại (cùng bất biến với nhánh `false`)", async () => {
+    const alerts = {
+      emit: vi.fn().mockRejectedValueOnce(new Error("DB sập")).mockResolvedValue(true),
+    };
+    const svc = makeService(alerts);
+
+    await svc.reportAttachGateDeny(denial(), COMPANY);
+    await svc.reportAttachGateDeny(denial(), COMPANY);
+    expect(
+      alerts.emit,
+      "ngoại lệ hạ tầng không được ăn mất cửa sổ ghi của 60 giây kế tiếp",
+    ).toHaveBeenCalledTimes(2);
+  });
 });

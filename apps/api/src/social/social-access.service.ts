@@ -74,16 +74,6 @@ import type {
  * `SOCIAL_ERR.POST_NOT_FOUND`. `SOCIAL-ERR-002` (403) CHỈ dùng ở nhánh GHI (`assertWriteAudience`),
  * nơi actor tự chọn đích nên đã biết nó tồn tại.
  */
-/**
- * S16-SOCIAL-ATTDEBT-1 (F1) — chỉ số của phần tử thứ 5 trong batch của `resolveActor`.
- *
- * Hằng CÓ TÊN, không phải số 4 rải rác: mảng đó được đọc theo **chỉ số cứng** (luật của chính file
- * này — tra theo KHOÁ thì hai vai hỏi cùng một cặp sẽ đè nhau, và `Map.get()` trượt trả `undefined`
- * mà một cờ kiểm `!= null` coi là MỞ KHOÁ). Đặt tên cho chỉ số là cách duy nhất để lần sau ai thêm
- * phần tử thấy ngay thứ phải dịch.
- */
-const ATTACH_IDX = 4;
-
 @Injectable()
 export class SocialAccessService {
   private readonly logger = new Logger(SocialAccessService.name);
@@ -119,6 +109,20 @@ export class SocialAccessService {
       { action: "manage", resourceType: "feed-group", isSensitive: false },
     ];
 
+    // ┌─ S16-SOCIAL-ATTDEBT-1 (F1 · vá FULL gate M-1) — CHỈ SỐ SUY RA, TUYỆT ĐỐI KHÔNG GÕ SỐ ────┐
+    // │ Phần tử cổng gắn tệp được APPEND ngay sau `baseRequests`, nên chỉ số của nó **bằng chính  │
+    // │ `baseRequests.length`**. Bản đầu của WO này viết hằng `4`, và đó là một quả mìn hẹn giờ    │
+    // │ theo chiều **fail-OPEN**: WO sau append một cặp base thứ 5 — đúng việc file này ĐÃ làm một │
+    // │ lần ở `[3]` (BE-2A) — thì ảnh chụp cổng đọc scope của **cặp base mới** thay vì của         │
+    // │ `create:feed-*`. Vai giữ cặp mới đó @Company nhưng KHÔNG có `create:feed-post` sẽ lọt      │
+    // │ `isCompany(snap.scope)` ⇒ gắn tệp MỚI qua PATCH mà không có cặp `create` ⇒ mở lại ĐÚNG lỗ  │
+    // │ mà ATTGATE-1 vừa bịt. Không lưới nào bắt: typecheck câm (cả hai đều `DataScope | null`),   │
+    // │ `G-TABLE`/`D17` chỉ so tập ROUTE, còn `U2` sẽ được sửa máy móc (`requests[4]`→`[5]`,       │
+    // │ `toHaveLength(6)`) rồi xanh lại mà không ai đụng tới hằng. Suy từ `.length` là cách DUY     │
+    // │ NHẤT làm bất biến này TỰ GIỮ thay vì trông vào trí nhớ của lượt sau.                       │
+    // └────────────────────────────────────────────────────────────────────────────────────────────┘
+    const attachIdx = baseRequests.length;
+
     // ┌─ S16-SOCIAL-ATTDEBT-1 (F1) — PHẦN TỬ THỨ 5, CHỈ CHO `004`/`016` ─────────────────────────┐
     // │ 🔴 **APPEND Ở CUỐI, TUYỆT ĐỐI KHÔNG chèn vào đầu/giữa.** Mảng này được đọc THEO CHỈ SỐ     │
     // │ CỨNG ngay dưới. Chèn ở đầu ⇒ `managePostsScope` nhận scope của `view:feed` ⇒ **mọi nhân    │
@@ -153,7 +157,7 @@ export class SocialAccessService {
     const attachNewGate: AttachNewGateSnapshot =
       attachTarget === undefined
         ? { resolved: false }
-        : { resolved: true, target: attachTarget, scope: scopes[ATTACH_IDX] ?? null };
+        : { resolved: true, target: attachTarget, scope: scopes[attachIdx] ?? null };
 
     // Tầng 2 — assert cặp của route, ĐỘC LẬP với decorator. Deny ở đây để lại ZERO side-effect vì
     // nó chạy TRƯỚC mọi thao tác ghi. Chuỗi lỗi là hợp đồng với FE/QA, không phải văn bản tự do.
@@ -194,7 +198,7 @@ export class SocialAccessService {
       canManageGroups: SocialAccessService.isCompany(manageGroupsScope),
       // D13 (owner ký 21/09/2026) — đơn vị của chính actor ∪ đơn vị actor đứng đầu. KHÔNG cây con.
       orgUnitIds: this.dataScope.departmentOrgUnitIds(ctx),
-      // S16-SOCIAL-ATTDEBT-1 (F1) — ảnh chụp cổng gắn tệp. `scopes[ATTACH_IDX]` chỉ `undefined` được
+      // S16-SOCIAL-ATTDEBT-1 (F1) — ảnh chụp cổng gắn tệp. `scopes[attachIdx]` chỉ `undefined` được
       // nếu hợp đồng «độ dài mảng trả == độ dài `requests`» của `resolveStrongestScopes` vỡ
       // (`permission.service.ts:849-865` giữ nó kể cả ở nhánh lỗi hạ tầng) ⇒ quy về `null` =
       // fail-CLOSED, KHÔNG phải một kiểm tra runtime trên đường nóng.

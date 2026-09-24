@@ -218,8 +218,12 @@ export class SocialCommentsService {
     const actor = await this.access.resolveActor(user, "commentUpdate");
 
     // S16-SOCIAL-ATTGATE-1 — vế 6a. Khuôn + lý do đầy đủ: `SocialPostsService.update`. Tóm tắt:
-    // resolve quyền PHẢI ở ngoài `withTenant` (tx lồng tx = treo im lặng), áp quyết định trong tx
-    // và CHỈ khi có tệp MỚI, để vai `manage:feed-post` vẫn gỡ được đính kèm vi phạm.
+    // resolve quyền ở NGOÀI tx (ảnh chụp cặp `create:feed-*` chỉ được dựng ở `resolveActor`), áp
+    // quyết định TRONG tx và CHỈ khi có tệp MỚI, để vai `manage:feed-post` vẫn gỡ được đính kèm
+    // vi phạm.
+    // 🔴 ĐÍNH CHÍNH S16-SOCIAL-ATTDEBT-1 (F1, vá FULL gate M1): bản trước viết lý do là «tx lồng tx
+    // = treo im lặng». Câu đó NAY SAI — `resolveAttachNewGate` không còn chạm DB. Cơ chế thật: khối
+    // ĐÍNH CHÍNH trên `SocialAccessService.resolveAttachNewGate`.
     const attach =
       dto.attachmentIds === undefined
         ? null

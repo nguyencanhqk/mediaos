@@ -36,6 +36,13 @@ import type { SocialTargetType, SocialViewerContext } from "./social.types";
  * │ `max: 20` ⇒ đủ request đồng thời là **TREO IM LẶNG, không lỗi, không log**. Cùng lý do đã ghi  │
  * │ ở docblock lớp bên dưới về `FileService.link()`.                                               │
  * │ ⇒ RESOLVE quyền NGOÀI tx (`SocialAccessService.resolveAttachNewGate`), ÁP quyết định TRONG tx. │
+ * │                                                                                                │
+ * │ 🔴 ĐÍNH CHÍNH S16-SOCIAL-ATTDEBT-1 (F1, vá FULL gate M1) — đoạn trên vẫn đúng NHƯ MỘT GIẢ ĐỊNH │
+ * │ («nếu hỏi quyền TẠI ĐÂY thì sẽ là tx lồng tx»), nhưng đừng đọc nó thành «`resolveAttachNewGate`│
+ * │ mở tx riêng»: từ WO này hàm đó **không chạm DB**, nó chỉ đọc ảnh chụp mà `resolveActor` đã nạp. │
+ * │ Bất biến «giá trị truyền vào, không phải lời gọi quyền tại chỗ» KHÔNG đổi, nhưng lý do giữ nó   │
+ * │ nay là «ảnh chụp chỉ dựng được ở `resolveActor`», không còn là «gọi ở đây sẽ treo». Cơ chế đầy  │
+ * │ đủ: khối ĐÍNH CHÍNH trên `SocialAccessService.resolveAttachNewGate`.                            │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * ⚠️ **Union phân biệt, KHÔNG phải `{ denyMessage: string | null }`** (plan F-2): hình dạng «vắng
@@ -201,7 +208,7 @@ export class SocialAttachmentsService {
     // người dùng nhận **500 thay vì 403**, tức một sự cố hạ tầng ghi đè lên một quyết định an ninh.
     // Vết phòng-thủ-theo-chiều-sâu KHÔNG bao giờ được đổi outcome của thứ nó đang quan sát.
     try {
-      await this.securityAlerts.emit(companyId, {
+      const written = await this.securityAlerts.emit(companyId, {
         alertType: "attach_gate_deny",
         // `low`: một lượt deny lẻ không phải sự cố (owner ký S-3).
         severity: "low",
@@ -212,12 +219,35 @@ export class SocialAttachmentsService {
         // Chỉ SỐ LƯỢNG tệp — không id, không tên tệp (cùng kỷ luật với `logger.warn` nhánh deny).
         detail: { route, target: targetType, targetId, newFiles: newFileCount, pair },
       });
+
+      // ┌─ VÁ FULL GATE M-2 — ĐỌC giá trị trả của `emit()`, TRẢ LẠI khoá khử trùng khi ghi hỏng ──┐
+      // │ `emit()` NUỐT lỗi ghi rồi trả `false` (`security-alert.service.ts:64-76`). Bản đầu của   │
+      // │ WO này vứt giá trị đó đi, trong khi `shouldEmitAlert` ĐÃ đóng cửa sổ 60s cho khoá này ⇒  │
+      // │ một lượt ghi hỏng (CHECK vỡ vì thiếu dòng journal · DB nghẽn · grant lệch) **ĐỐT TRỌN**  │
+      // │ 60 giây: mọi lượt deny cùng đích sau đó bị khử trùng, không lượt nào thử lại ⇒ alert mất │
+      // │ HẲN chứ không chỉ chậm. Trả khoá lại để lượt deny kế tiếp còn cửa ghi.                   │
+      // │ Và phải TỰ log định danh: dòng log của `emit()` chỉ mang `companyId` + `alertType` +     │
+      // │ stack, KHÔNG có actor/target (chúng nằm trong `detail`, mà `detail` không được log) ⇒    │
+      // │ không có dòng này thì không nối được «alert nào mất» với «deny nào», ngoài cách khớp tay │
+      // │ bằng dấu thời gian với `logger.warn` ở nhánh deny.                                       │
+      // └──────────────────────────────────────────────────────────────────────────────────────────┘
+      if (!written) {
+        this.alertSeenAt.delete(key);
+        this.logger.error(
+          `security_alert attach-gate DENY KHÔNG ghi được (outcome 403 giữ nguyên) — ` +
+            `company=${companyId} actor=${actorUserId} target=${targetType}:${targetId} route=${route}`,
+        );
+      }
     } catch (alertErr) {
-      // KHÔNG nuốt IM: log rồi thôi. Deny vẫn là deny.
+      // KHÔNG nuốt IM: log rồi thôi. Deny vẫn là deny. Khoá cũng được trả lại vì đúng lý do ở khối
+      // trên — và log kèm `stack`: ca DUY NHẤT khối này bắt được là «`emit` hoặc một lớp chèn giữa
+      // NÉM», tức đúng loại lỗi cần stack nhất.
+      this.alertSeenAt.delete(key);
       this.logger.error(
-        `Không ghi được security_alert cho attach-gate DENY (outcome 403 giữ nguyên): ${
-          alertErr instanceof Error ? alertErr.message : String(alertErr)
-        }`,
+        `Không ghi được security_alert cho attach-gate DENY (outcome 403 giữ nguyên) — ` +
+          `company=${companyId} actor=${actorUserId} target=${targetType}:${targetId}: ${
+            alertErr instanceof Error ? (alertErr.stack ?? alertErr.message) : String(alertErr)
+          }`,
       );
     }
   }

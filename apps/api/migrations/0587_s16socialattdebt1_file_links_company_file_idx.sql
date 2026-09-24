@@ -31,4 +31,18 @@
 --    ở WO này (owner ký S-6): bán kính là mọi module đang dùng `file_links`. Đã ghi nợ ở backlog.
 -- ⚠️ KHÔNG backfill, KHÔNG đổi cột, KHÔNG đụng RLS/grant ⇒ luật «RLS policy + FORCE TRƯỚC backfill»
 --    (CLAUDE.md §3) không áp dụng cho migration này. Rollback: `DROP INDEX file_links_company_file_idx;`
+--
+-- 🔴 VÁ FULL GATE (database-reviewer MEDIUM-2, 24/09/2026) — `lock_timeout`. Lập luận «ở 7 hàng lượt
+--    khoá này ~0 ms» ở trên nói về THỜI GIAN GIỮ khoá, nhưng thời gian **CHỜ** lấy khoá KHÔNG bị
+--    chặn bởi kích thước bảng: `CREATE INDEX` lấy SHARE trên `file_links`, nên một transaction dài
+--    đang mở trên bảng đó (import HR · đường avatar · CHAT) làm migration đợi VÔ HẠN, và vì khoá
+--    xếp hàng, MỌI lệnh ghi `file_links` đến sau cũng kẹt sau nó ⇒ đường gắn tệp của **cả 4 module**
+--    đứng im suốt lượt deploy, không có gì tự cứu. Thà đỏ + chạy lại.
+-- ⚠️ PHẢI trả về DEFAULT sau đó: `SET LOCAL` sống tới hết TRANSACTION, mà drizzle bọc TẤT CẢ
+--    migration pending trong MỘT transaction ⇒ không trả thì nó rò sang mọi migration chạy sau
+--    trong cùng band (khuôn 0535:693-697 · 0547:342-345).
+SET LOCAL lock_timeout = '5s';
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS file_links_company_file_idx ON file_links (company_id, file_id);
+--> statement-breakpoint
+SET LOCAL lock_timeout = DEFAULT;

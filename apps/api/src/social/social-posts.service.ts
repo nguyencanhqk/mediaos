@@ -338,10 +338,16 @@ export class SocialPostsService {
   ): Promise<FeedPostCreatedDto> {
     const actor = await this.access.resolveActor(user, "postUpdate");
 
-    // ┌─ S16-SOCIAL-ATTGATE-1 — VẾ 6a, RESOLVE Ở ĐÂY VÌ NÓ PHẢI Ở NGOÀI `withTenant` ─────────────┐
-    // │ `resolveAttachNewGate` tự mở `withTenant` (qua `dataScope` → `permission.repository`).     │
-    // │ Gọi nó bên trong tx dưới = tx LỒNG tx = treo im lặng khi pool cạn. Quyết định áp TRONG tx, │
-    // │ và chỉ khi có tệp MỚI (`syncLinksTx`) — xem docblock `AttachNewGate`.                      │
+    // ┌─ S16-SOCIAL-ATTGATE-1 — VẾ 6a, RESOLVE Ở ĐÂY (KHÔNG ở trong tx dưới) ─────────────────────┐
+    // │ 🔴 ĐÍNH CHÍNH S16-SOCIAL-ATTDEBT-1 (F1, vá FULL gate M1): bản ATTGATE-1 của khối này viết  │
+    // │ «`resolveAttachNewGate` tự mở `withTenant` (qua `dataScope` → `permission.repository`)» —  │
+    // │ câu đó NAY SAI. Hàm ấy **không còn chạm DB**: cặp `create:feed-*` đã được `resolveActor`   │
+    // │ nạp sẵn trong CÙNG lượt đọc grant, hàm chỉ đọc ảnh chụp. Lý do phải resolve Ở ĐÂY vì thế   │
+    // │ cũng đổi bản chất — không phải «gọi trong tx sẽ treo», mà là **ảnh chụp chỉ được dựng ở    │
+    // │ `resolveActor`**, tức ở đầu method, trước khi tx mở. Lời khai đầy đủ + lý do: khối ĐÍNH    │
+    // │ CHÍNH trên `SocialAccessService.resolveAttachNewGate`. KHÔNG nhắc lại cơ chế ở đây nữa —   │
+    // │ một câu khai sai trong docblock đã tự nhân bản ra 4 file một lần rồi (ATTGATE-1 §6).       │
+    // │ Quyết định vẫn ÁP TRONG tx, và chỉ khi có tệp MỚI (`syncLinksTx`) — xem `AttachNewGate`.   │
     // │ Gộp id + cổng thành MỘT giá trị: nhánh «không gửi `attachmentIds`» do đó không tồn tại,    │
     // │ nên không phải khai một cổng giả cho nó (`…ENFORCED_BY_TIER1` sẽ là lời khai SAI ở route   │
     // │ này — tầng 1 của `004` chỉ là `view:feed`).                                                │
