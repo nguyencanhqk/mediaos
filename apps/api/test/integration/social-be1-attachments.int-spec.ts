@@ -43,6 +43,13 @@ const LOGIN_PW = "Passw0rd!socialatt1";
  * DENY xanh-giả theo chiều NGƯỢC: peer thấy được bài `hidden` một cách hợp lệ, resolver cho qua
  * ĐÚNG, và ta sẽ tưởng cổng đường-tải bị thủng trong khi nó đang chạy chuẩn.
  */
+/**
+ * 🔴 **S16-SOCIAL-ATTGATE-1 — BỘ CẶP NÀY LÀ MỘT PHÉP ĐO, KHÔNG PHẢI MAY MẮN.** Từ WO đó, đường SỬA
+ * (`004`/`016`) đòi cặp `create:feed-*` khi THÊM tệp mới. Các ca dưới (`THAY đính kèm`, `mảng
+ * RỖNG`, `KHÔNG gửi attachmentIds`, `SỬA + tệp người khác ⇒ 422`) còn xanh **vì** `tOwner` giữ CẢ
+ * HAI cặp `create:feed-*`. Thu hẹp bộ này ⇒ vài ca ở đây chuyển sang **403**, và đó là hành vi
+ * ĐÚNG, không phải hồi quy — ma trận của cổng nằm ở `social-attgate-1-update-attach.int-spec.ts`.
+ */
 const OWNER_PAIRS = [
   "view:feed",
   "create:feed-post",

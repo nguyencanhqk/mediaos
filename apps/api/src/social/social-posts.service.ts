@@ -18,7 +18,10 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { SocialAccessService } from "./social-access.service";
-import { SocialAttachmentsService } from "./social-attachments.service";
+import {
+  ATTACH_GATE_ENFORCED_BY_TIER1,
+  SocialAttachmentsService,
+} from "./social-attachments.service";
 import { bumpPostCounter, softDeletePostTx } from "./social-counters";
 import { decodeFeedCursor, encodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
 import {
@@ -293,6 +296,9 @@ export class SocialPostsService {
           "post",
           postId,
           dto.attachmentIds,
+          // `002` đã bị `create:feed-post` ép ở CẢ HAI tầng (decorator + `resolveActor`) trước khi
+          // tới đây — xem docblock của hằng. Hỏi lại = round-trip quyền thừa trên đường nóng nhất.
+          ATTACH_GATE_ENFORCED_BY_TIER1,
         );
       }
 
@@ -331,6 +337,24 @@ export class SocialPostsService {
     dto: UpdateFeedPostDto,
   ): Promise<FeedPostCreatedDto> {
     const actor = await this.access.resolveActor(user, "postUpdate");
+
+    // ┌─ S16-SOCIAL-ATTGATE-1 — VẾ 6a, RESOLVE Ở ĐÂY VÌ NÓ PHẢI Ở NGOÀI `withTenant` ─────────────┐
+    // │ `resolveAttachNewGate` tự mở `withTenant` (qua `dataScope` → `permission.repository`).     │
+    // │ Gọi nó bên trong tx dưới = tx LỒNG tx = treo im lặng khi pool cạn. Quyết định áp TRONG tx, │
+    // │ và chỉ khi có tệp MỚI (`syncLinksTx`) — xem docblock `AttachNewGate`.                      │
+    // │ Gộp id + cổng thành MỘT giá trị: nhánh «không gửi `attachmentIds`» do đó không tồn tại,    │
+    // │ nên không phải khai một cổng giả cho nó (`…ENFORCED_BY_TIER1` sẽ là lời khai SAI ở route   │
+    // │ này — tầng 1 của `004` chỉ là `view:feed`).                                                │
+    // │ ⚠️ `=== undefined` chứ KHÔNG `?.length`: mảng RỖNG nghĩa là "bỏ hết đính kèm", là một lượt │
+    // │ ghi thật, và nó vẫn phải đi qua `syncLinksTx` (ngữ nghĩa đã có test canh từ BE-1).         │
+    // └─────────────────────────────────────────────────────────────────────────────────────────────┘
+    const attach =
+      dto.attachmentIds === undefined
+        ? null
+        : {
+            ids: dto.attachmentIds,
+            gate: await this.access.resolveAttachNewGate(actor, "post"),
+          };
 
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
       const post = await this.access.assertPostVisible(tx, actor, postId);
@@ -373,14 +397,15 @@ export class SocialPostsService {
       // CHỈ mention MỚI mới sinh thông báo — mỗi lần bấm Lưu không được bắn lại cho người cũ.
       const fresh = await syncMentions(tx, actor.companyId, "post", postId, mentions.accepted);
 
-      if (dto.attachmentIds) {
+      if (attach) {
         await this.attachments.syncLinksTx(
           tx,
           actor.companyId,
           actor.actorUserId,
           "post",
           postId,
-          dto.attachmentIds,
+          attach.ids,
+          attach.gate,
         );
       }
 

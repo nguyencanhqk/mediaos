@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { feedTargetTypeSchema } from "@mediaos/contracts";
 import { describe, expect, it } from "vitest";
 import {
@@ -107,6 +109,62 @@ describe("S16-SOCIAL-BE-1C · C-8 · cấu trúc bảng cặp-theo-target", () =
       expect(floor.tier1IsFloor, `${key} phải khai tier1IsFloor`).toBe(true);
       expect(floor.companyFloor, `${key} giữ sàn scope Company`).toBe(true);
     }
+  });
+
+  /**
+   * S16-SOCIAL-ATTGATE-1 — hằng `ATTACH_GATE_ENFORCED_BY_TIER1` khai rằng «cặp create đã bị tầng-1
+   * ép». Câu đó CHỈ đúng ở `002`/`015`. Dán nó lên đường SỬA (`004`/`016`, tầng-1 = `view:feed`) là
+   * vừa mở lại đúng lỗ WO này đóng, vừa ghim một lời khai SAI vào mã cho người đọc sau.
+   *
+   * ⚠️ **PHẢI `stripComments` trước khi đếm** (plan F-12): docblock của chính hằng đó nhắc tên nó
+   * nhiều lần, quét thô sẽ đếm cả comment và ca này thành vô nghĩa. Ca tự-kiểm ngay dưới chứng minh
+   * regex THẬT SỰ cắt — không có nó, một regex hỏng sẽ làm cả hai ca xanh-rỗng.
+   */
+  describe("(e) hằng cổng đường TẠO chỉ được dùng ở ĐÚNG 2 call-site TẠO", () => {
+    const CONST_NAME = "ATTACH_GATE_ENFORCED_BY_TIER1";
+    const stripComments = (s: string): string =>
+      s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+    it("neo tự-kiểm: regex strip THẬT SỰ cắt comment (chống xanh-rỗng)", () => {
+      expect(stripComments("/* x */ a // y\nb")).not.toContain("x");
+      expect(stripComments("/* x */ a // y\nb")).not.toContain("y");
+      expect(stripComments("/* x */ a // y\nb")).toContain("a");
+    });
+
+    it("đếm trên MÃ (đã bỏ comment): 1 khai báo + đúng 2 nơi TIÊU THỤ", () => {
+      // `__dirname` (không `import.meta`): tsconfig của api là CommonJS — khuôn
+      // `social-error-code-census.spec.ts:43`.
+      const dir = __dirname;
+      const consumers: Array<{ file: string; n: number }> = [];
+      let scanned = 0;
+      for (const f of fs.readdirSync(dir)) {
+        if (!f.endsWith(".ts") || f.endsWith(".spec.ts")) continue;
+        scanned += 1;
+        const code = stripComments(fs.readFileSync(path.join(dir, f), "utf8"));
+        const n = code.split(CONST_NAME).length - 1;
+        if (n > 0) consumers.push({ file: f, n });
+      }
+      // Neo tự-kiểm: bộ quét này KHÔNG đệ quy. Nếu ai đó dời service vào thư mục con
+      // (`src/social/posts/…`) thì `consumers` teo lại và ca sẽ đỏ theo hướng khó đọc — dòng này
+      // nói thẳng nguyên nhân thay vì để người sau đi đoán.
+      expect(scanned, "bộ quét KHÔNG đệ quy — có file .ts nào bị dời vào thư mục con?").toBeGreaterThan(40);
+
+      const attachments = consumers.find((c) => c.file === "social-attachments.service.ts");
+      expect(attachments, "hằng phải được KHAI ở chính service đính kèm").toBeTruthy();
+
+      // Hai nơi tiêu thụ: `create()` của bài và của bình luận. Mỗi file: 1 import + 1 lời gọi = 2.
+      const posts = consumers.find((c) => c.file === "social-posts.service.ts");
+      const comments = consumers.find((c) => c.file === "social-comments.service.ts");
+      expect(posts?.n, "social-posts.service.ts: import + 1 call-site TẠO").toBe(2);
+      expect(comments?.n, "social-comments.service.ts: import + 1 call-site TẠO").toBe(2);
+
+      // 🔴 VẾ CHẶN THẬT: không file nào KHÁC ba file trên được nhắc tới hằng này.
+      expect(consumers.map((c) => c.file).sort()).toEqual([
+        "social-attachments.service.ts",
+        "social-comments.service.ts",
+        "social-posts.service.ts",
+      ]);
+    });
   });
 
   it("neo hồi quy: bảng theo-LOẠI-BÀI của `002` không bị WO này chạm", () => {

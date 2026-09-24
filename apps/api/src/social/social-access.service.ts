@@ -9,6 +9,9 @@ import type { DataScope } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { feedComments, feedPosts } from "../db/schema/social";
 import { DataScopeService } from "../permission/data-scope.service";
+// ⚠️ `import type` — CHỈ kiểu, bị xoá lúc biên dịch. `SocialAttachmentsService` là lớp nặng (kéo
+// theo FilePolicy + StorageAdapter); một import giá trị ở đây sẽ dựng vòng phụ thuộc runtime.
+import type { AttachNewGate } from "./social-attachments.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { visibleGroupPostExists } from "./social-group-predicates";
 import {
@@ -229,10 +232,10 @@ export class SocialAccessService {
    * rồi đem tệp gắn vào BÀI thì trên đường TẠO vẫn bị chặn — nhưng bởi **TẦNG 1 của route `002`/`015`**
    * (chính là hai cặp `create:feed-*`), KHÔNG phải bởi `canLinkFile`.
    *
-   * 🔴 ĐÍNH CHÍNH (FULL gate 24/09/2026, HIGH): `assertLinkableFilesTx` — đường gắn mà FE thật sự đi —
-   * chép vế 2–5 của `canLinkFile` nhưng KHÔNG hỏi cặp quyền nào. `canLinkFile` chỉ chạy trên
-   * `POST /foundation/files/:id/links` (`link:foundation-file`). Nợ còn lại ở đường SỬA `004`/`017`
-   * (chỉ `view:feed` + tác giả) đã ghi vào `harness/backlog.mjs` — có từ BE-1, không do WO này.
+   * 🔴 `canLinkFile` KHÔNG nằm trên đường gắn (đo 24/09/2026): nó chỉ chạy trên
+   * `POST /foundation/files/:id/links` (`link:foundation-file`). Đường gắn thật là
+   * `SocialAttachmentsService.syncLinksTx` — ở đó vế 6a được ép bởi tham số `gate`, mà đường SỬA
+   * `004`/`016` lấy từ `resolveAttachNewGate` ngay dưới (S16-SOCIAL-ATTGATE-1).
    *
    * Scope ép SÀN `Company` qua `isCompany()` — `undefined`/`null` fail-closed, TUYỆT ĐỐI không `!= null`.
    *
@@ -244,6 +247,34 @@ export class SocialAccessService {
     ]);
     if (SocialAccessService.isCompany(scope)) return;
     throw new ForbiddenException(SOCIAL_FILE_TARGET_DENIED[target]);
+  }
+
+  /**
+   * S16-SOCIAL-ATTGATE-1 (plan D-1, owner ký S-1) — vế 6a cho ĐƯỜNG SỬA `004`/`016`: cặp
+   * `create:feed-*` theo đích, trả về dưới dạng **quyết định** chứ không ném.
+   *
+   * ┌─ VÌ SAO TRẢ GIÁ TRỊ, KHÔNG NÉM ────────────────────────────────────────────────────────────┐
+   * │ Câu hỏi quyền phải hỏi NGOÀI transaction (hàm này mở `withTenant` riêng qua `dataScope`),   │
+   * │ nhưng câu trả lời chỉ được ÁP khi đã biết lượt sửa có thật sự THÊM tệp mới hay không — và   │
+   * │ điều đó chỉ tính được TRONG tx (`syncLinksTx` so tập link hiện có với tập client gửi). Ném  │
+   * │ ở đây = chặn cả lượt gỡ/giữ nguyên đính kèm ⇒ vai `manage:feed-post` mất khả năng gỡ ảnh    │
+   * │ vi phạm. Nên: resolve ở đây, ném ở đó.                                                      │
+   * └─────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * ⚠️ **Owner chốt S-7 (24/09/2026): KHÔNG gộp hàm này với `assertFileTarget`.** Hai cửa (054/055
+   * vs 004/016) dùng CHUNG hai bảng hằng `SOCIAL_FILE_TARGET_PAIRS` + `SOCIAL_FILE_TARGET_DENIED`,
+   * và việc chống trôi giữa chúng giao cho `social-file-target-pairs-structure.spec.ts` — đổi lấy
+   * việc KHÔNG đụng vào mã của hai route đã ship.
+   *
+   * ⚠️ Fail-closed: `resolveManyOrNull` trả `null`/scope hẹp hơn Company ⇒ DENY. TUYỆT ĐỐI không
+   * `!= null` (cùng luật với `assertKudosOfficial`/`assertFileTarget` ngay trên).
+   */
+  async resolveAttachNewGate(actor: SocialActor, target: SocialTargetType): Promise<AttachNewGate> {
+    const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
+      SOCIAL_FILE_TARGET_PAIRS[target],
+    ]);
+    if (SocialAccessService.isCompany(scope)) return { allow: true };
+    return { allow: false, reason: SOCIAL_FILE_TARGET_DENIED[target] };
   }
 
   /**

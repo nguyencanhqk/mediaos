@@ -35,27 +35,23 @@ import type { SocialRequestUser, SocialTargetType } from "./social.types";
  * │ `@RequirePermission` chỉ khai được MỘT cặp tĩnh.                                                  │
  * │                                                                                                   │
  * │ Khai `'comment'` rồi đem tệp gắn vào BÀI là chuyện client làm được. Trên đường TẠO nó vô hại, và   │
- * │ ĐÂY LÀ LÝ DO ĐÚNG (bản trước ghi SAI — xem khối ⚠️ ngay dưới): route `002`/`015` đã gác CHÍNH cặp  │
+ * │ ĐÂY LÀ LÝ DO ĐÚNG (xem khối ngay dưới): route `002`/`015` đã gác CHÍNH cặp                        │
  * │ `create:feed-post`/`create:feed-comment` ở TẦNG 1, nên nói dối ở cửa tệp chỉ TỰ THU HẸP cửa của    │
  * │ mình, không mở thêm gì.                                                                           │
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * ┌─ ⚠️ ĐÍNH CHÍNH (FULL gate 24/09/2026, finding HIGH) — `canLinkFile` KHÔNG ở trên đường GẮN ────┐
- * │ Bản đầu của khối trên viết: «lúc gắn, `canLinkFile` hỏi LẠI cặp đúng của đích THẬT». **SAI.**    │
- * │ ĐO THẬT: đường gắn mà FE đi là `SocialAttachmentsService.assertLinkableFilesTx`, và nó chép lại   │
- * │ **vế 2–5** của `canLinkFile` (sở hữu · `Uploaded` · scan · chưa-từng-link · trần SOC-DEC-008)     │
- * │ nhưng **KHÔNG hỏi cặp quyền nào cả** — vế 6a nằm ngoài. `canLinkFile` chỉ chạy trên               │
- * │ `POST /foundation/files/:id/links`, gate `link:foundation-file`, cặp mà nhân viên thường KHÔNG có │
- * │ ⇒ nhánh đó thực tế chết với người dùng thường.                                                    │
- * │                                                                                                   │
- * │ Hệ quả CÒN LẠI (nợ, KHÔNG do WO này đẻ ra — có từ BE-1): đường **SỬA** `004 PATCH /social/posts/  │
- * │ {id}` và `017 PATCH /social/comments/{id}` chỉ gác `view:feed` + (tác giả ∨ `manage:feed-post`),  │
- * │ rồi gọi thẳng `syncLinksTx` với `attachmentIds` của client. Một vai giữ `manage:feed-post` mà     │
- * │ KHÔNG có `create:feed-post` gắn được tệp vào bài qua đường đó. Siết nó = đổi hành vi 2 route ĐÃ   │
- * │ SHIP ⇒ cần chữ ký owner + test cho 4 route cũ ⇒ **WO riêng** (xem `harness/backlog.mjs`).         │
- * │                                                                                                   │
- * │ 🔴 ĐỪNG chép lại câu «canLinkFile sẽ hỏi lại» vào bất kỳ chỗ nào nữa. Nó đã đứng trong 4 docblock │
- * │ kể cả `packages/contracts` — đúng lớp lỗi của memory `check-is-null-branch-is-intent-not-guard`.  │
+ * ┌─ 🔴 CẶP `create` CỦA ĐÍCH THẬT ĐƯỢC HỎI Ở ĐÂU (đo lại 24/09/2026 — ĐỪNG suy đoán lại) ────────┐
+ * │ **KHÔNG phải bởi `canLinkFile`.** Hàm đó chỉ chạy trên `POST /foundation/files/:id/links`, gate  │
+ * │ `link:foundation-file` — cặp mà nhân viên thường KHÔNG có ⇒ nhánh ấy chết với người dùng thường. │
+ * │ Đường gắn mà FE thật sự đi là `SocialAttachmentsService.syncLinksTx`, và nó ép cặp `create` bằng │
+ * │ **hai** cơ chế khác nhau tuỳ đường:                                                              │
+ * │   • TẠO `002`/`015` — tầng 1 của route (decorator) **và** `resolveActor`, cả hai cùng cặp;       │
+ * │   • SỬA `004`/`016` — tham số `gate` của `syncLinksTx`, resolve NGOÀI tx bởi                     │
+ * │     `SocialAccessService.resolveAttachNewGate` (S16-SOCIAL-ATTGATE-1, owner ký 24/09/2026).      │
+ * │                                                                                                 │
+ * │ 🔴 Bản trước của docblock này (và 3 docblock khác, kể cả `packages/contracts`) viết «lúc gắn,    │
+ * │ `canLinkFile` hỏi LẠI cặp đúng của đích THẬT» — SAI, và cái sai đó tự nhân bản ra 4 chỗ. Trước   │
+ * │ khi khai «cổng X sẽ hỏi lại ở bước sau», hãy LẦN CALL-CHAIN tới call-site thật của X.            │
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * ┌─ 🔴 CHỖ SOCIAL KHÁC CHAT, VÀ VÌ SAO PHẢI KHÁC (plan §1 D1) ───────────────────────────────────┐

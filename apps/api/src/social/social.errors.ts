@@ -133,10 +133,12 @@ export const SOCIAL_ERR = {
    * (`SocialAccessService.assertFileTarget`) vì tầng 1 của route chỉ gác SÀN `view:feed` — cặp thật
    * phụ thuộc `target` của request (plan §1 D1).
    */
-  FILE_TARGET_POST_DENIED: "SOCIAL-ERR: cần quyền đăng bài để tải tệp đính kèm cho bài viết.",
+  FILE_TARGET_POST_DENIED:
+    "SOCIAL-ERR: cần quyền đăng bài để thêm tệp đính kèm cho bài viết.",
 
   /** (403) — như trên, trục BÌNH LUẬN: thiếu `create:feed-comment` @Company. */
-  FILE_TARGET_COMMENT_DENIED: "SOCIAL-ERR: cần quyền bình luận để tải tệp đính kèm cho bình luận.",
+  FILE_TARGET_COMMENT_DENIED:
+    "SOCIAL-ERR: cần quyền bình luận để thêm tệp đính kèm cho bình luận.",
 
   /**
    * (403) — người gọi `confirm` KHÔNG sở hữu tệp.
