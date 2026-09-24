@@ -16795,7 +16795,7 @@ export const backlog = [
     title:
       "Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối sidebar SOCIAL «Đăng bài Facebook» (SOC-DEC-002): gate 3 cặp social-* cũ, mở SSO như cũ, i18n nav, registry moduleCode SOCIAL giữ — KHÔNG đụng apps/fbpost hay quyền",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/app/src/routes/social/**",
       "apps/app/src/layouts/**",
@@ -16823,12 +16823,15 @@ export const backlog = [
       "SOC-DEC-002 (wave plan §3) · packages/web-core/src/lib/registry.ts (tile SOCIAL S9-SOCIAL-FE-1, 'KHÔNG phải module nội bộ') · apps/app/src/routes/social/open-social.ts + SocialRedirectPage · memory s9-social-fbpost-wave (cửa sổ tile chết)",
     ],
     done_when: [
-      "Tile «Đăng bài» KHÔNG còn là ô riêng ở Home; xuất hiện là mục sidebar cuối trong module SOCIAL (nhãn «Đăng bài Facebook», icon ↗ ngoài), chỉ hiện khi có view:social-post hoặc manage:social-account — hành vi bấm (SSO mở thẳng, fallback lỗi) y hệt cũ",
+      '🔴 ĐÍNH CHÍNH 24/09/2026 (owner ký sau gate LIGHT — plan §6): gate mục rail = ĐÚNG MỘT cặp `view:social-post`, KHÔNG phải OR với `manage:social-account`. Bản seed ghi OR là SAI: đường DUY NHẤT vào fbpost là `GET /integrations/social/sso-link` và nó gác `@RequirePermission("view","social-post")` (`social-sso.controller.ts:27`) ⇒ vế OR sinh mục HIỆN RA nhưng bấm vào ăn 403, rồi `/social` hiện thông điệp nhánh 403 («công ty chưa được bật») = chẩn đoán SAI một vấn đề QUYỀN thành vấn đề CẤU HÌNH',
+      "Tile «Đăng bài» KHÔNG còn là ô riêng ở Home; xuất hiện là mục sidebar cuối trong module SOCIAL (nhãn «Đăng bài Facebook», icon ↗ ngoài), chỉ hiện khi có `view:social-post` — hành vi bấm (SSO mở thẳng, fallback lỗi) y hệt cũ. Ba cổng PHẢI khớp nhau: mục rail = ô AppSwitcher = guard của endpoint",
       "Khi module SOCIAL chưa bật (FE-1 chưa merge) thì ô Home «Mạng xã hội» chưa hiện nhưng người có quyền fbpost VẪN có đường vào (giữ tile tạm hoặc entry trong AppSwitcher) — không tạo cửa sổ tile chết lần hai",
       "Test registry/AppSwitcher/nav giữ nguyên số ca + ca mới cho vị trí mới; typecheck/build/test FE 3 app xanh; không đổi apps/fbpost, không đổi migration/quyền",
     ],
     notes: [
+      "✍️ OWNER KÝ 3/3 (24/09/2026, sau gate LIGHT PASS — plan §3 + §6): (1) `done_when` (a) SỬA CHỮ về đúng một cặp `view:social-post` — giữ code đã thi công, KHÔNG nới guard backend (nếu sau này muốn `manage:social-account` vào được THẬT thì tách WO đổi quyền, hết zone green); (2) D2 GIỮ entry fbpost trong `APP_REGISTRY` (ô rời lưới Home qua `switcherOnly` nhưng còn trong AppSwitcher) — xoá hẳn sẽ cắt đường vào của người `view:social-post`-only; (3) CHẤP NHẬN mục rail vắng ở icon-mode (khe `sidebar-extensions` không render khi thu gọn) — AppSwitcher là đường vào luôn-có.",
       "🟢 LIGHT gate — thuần FE. Nếu phát hiện phải đổi quyền hay API thì DỪNG và tách WO.",
+      '✅ Gate LIGHT PASS 24/09/2026 (`typescript-reviewer` 0 CRITICAL/0 HIGH; 1 MEDIUM + 2 LOW đã vá). Dọc đường vá 2 BUG THẬT của master ở `AppSwitcher` (cùng gốc: FE-1 đổi nghĩa `appKey:"social"` nhưng `doNavigate`/`handleSelect` còn nhận diện theo giá trị cũ ⇒ chọn «Mạng xã hội» bị SSO đẩy thẳng ra Facebook · đang ở `/feed` mà chọn «Đăng bài Facebook» thì bấm chết). Không cổng nào bắt được vì `apps/app/src/layouts/home/` KHÔNG có spec nào trước WO này.',
       "CÁCH LÀM đã đo sẵn 20/09 — KHÔNG cần đụng type dùng chung `SidebarItemMeta`. ModuleSidebar render MỌI mục tĩnh bằng `<Link to={item.path}>`, không có khái niệm liên kết ngoài/onClick ⇒ thêm trường vào SidebarItemMeta sẽ chạm cả 13 module + hai file __snapshots__/sidebar-tree.*.txt đang ghim cây. Dùng khe CÓ SẴN `layouts/workspace/sidebar-extensions.ts` (S5-TASK-NAV-TREE-1) — đúng ngữ nghĩa của nó: «section cần permission hook sống ở component, đăng ký tại đây để ModuleSidebar render SAU các group tĩnh» ⇒ mục tự nằm CUỐI (done_when a) và gọi thẳng `openSocial()` nên giữ được «SSO mở thẳng, fallback /social» y hệt cũ, snapshot sidebar không đổi. Lưu ý một khác biệt của khe này: KHÔNG render khi sidebar ở icon-mode (thu gọn) — cân nhắc lúc làm.",
     ],
   },
@@ -17088,7 +17091,7 @@ export const backlog = [
     title:
       "Đường GẮN tệp không hỏi cặp quyền: `assertLinkableFilesTx` chép vế 2-5 của `canLinkFile` nhưng BỎ vế 6a (cặp `create` theo đích) ⇒ route SỬA 004/016 (chỉ `view:feed` + tác giả) gắn được tệp mà không cặp `create:feed-*` nào bị hỏi",
     zone: "red",
-    status: "in_progress",
+    status: "done",
     paths: [
       "apps/api/src/social/**",
       "apps/api/test/**",
@@ -17123,6 +17126,43 @@ export const backlog = [
       "NỢ MEDIUM #1 (cùng nguồn): trần SOC-DEC-008 ở `social-attachments.service.ts` chỉ đếm `kind==='image'` (≤10) và `'video'` (≤1). Tệp PDF/docx KHÔNG rơi vào nhánh nào ⇒ KHÔNG trần số lượng, chỉ còn trần dung lượng mỗi tệp.",
       "NỢ MEDIUM #2 (cùng nguồn, NGOÀI paths — `FileService`): `file_access_logs.permission_code` ghi `'FOUNDATION.FILE.UPLOAD'` + audit `moduleCode='FOUNDATION'` cho tệp đi cửa SOCIAL/CHAT/avatar, trong khi actor KHÔNG có cặp `upload:foundation-file`. Hai bảng append-only ⇒ vết điều tra nói SAI cặp quyền đã dùng. Tiền lệ CHAT/avatar y hệt ⇒ không phải hồi quy của BE-1C.",
       "NỢ LOW (cùng nguồn): `social-files.service.ts` confirm phân biệt 404 (vắng) vs 403 (của người khác), trong khi CHÍNH module ở `assertLinkableFilesTx` từ chối phân biệt hai ca đó vì «vòng lặp đoán UUID đọc được kho tệp của cả công ty». Hai cửa cùng module, hai luật — nên thống nhất.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-ATTDEBT-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Trả 3 khoản nợ FULL gate của S16-SOCIAL-ATTGATE-1: (F1) cổng đính kèm nạp LẠI ảnh chụp grant mà `resolveActor` vừa nạp ⇒ +1 transaction mỗi PATCH có `attachmentIds` · (F4) câu «vế 5 — đã TỪNG link» không lọc `deleted_at` nên rơi về `file_links_company_id_idx` · (C-5) nhánh DENY của cổng chỉ `logger.warn`, KHÔNG sinh `security_alerts`",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/src/foundation/**",
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "database-review"],
+    depends_on: ["S16-SOCIAL-ATTGATE-1"],
+    src: [
+      "FULL gate 3/3 của S16-SOCIAL-ATTGATE-1 (24/09/2026) — plan `docs/plans/S16-SOCIAL-ATTGATE-1.md` §8; owner ký «seed thành WO, chưa làm» 24/09/2026",
+      "`social-attachments.service.ts` (`resolveAttachNewGate` · `assertLinkableFilesTx`) · `social-access.service.ts` `resolveActor` (batch grant, đường nóng CẢ 50 route) · `file_links` index hiện có",
+    ],
+    done_when: [
+      "🔴 ĐO TRƯỚC KHI SỬA — cả F1 lẫn F4 đều do reviewer nêu mà CHƯA chạy EXPLAIN/benchmark. F4: chạy EXPLAIN (ANALYZE) trên câu «đã TỪNG link» với dữ liệu thật trước khi thêm index; nếu planner đã dùng index hợp lý thì ĐÓNG F4 bằng số đo, KHÔNG thêm migration thừa",
+      "F1: gộp cặp quyền thứ 5 vào batch `resolveActor` thay vì mở transaction thứ hai — 🔴 đụng đường nóng của CẢ 50 route SOCIAL ⇒ phải có ca hồi quy cho route KHÔNG đính kèm (không được đổi số câu/ngữ nghĩa quyền của chúng), và đo lại số transaction mỗi PATCH (trước: 2 · sau: 1)",
+      "F4 (nếu EXPLAIN xác nhận): migration đánh số NỐI TIẾP head lúc merge, index `(company_id, file_id)` KHÔNG-partial trên `file_links` — mọi index có `file_id` hiện nay đều PARTIAL `WHERE deleted_at IS NULL` nên câu hỏi «đã TỪNG link» (cố ý KHÔNG lọc `deleted_at`) không dùng được chúng",
+      "C-5: nhánh DENY của `resolveAttachNewGate` sinh vết BỀN trong `security_alerts` (bảng append-only) kèm cặp quyền bị thiếu + route + actor, không chỉ `logger.warn`. Ca test phải đo HÀNG được ghi, không chỉ lời gọi logger",
+      "Không đụng cửa 054/055 đã ship và KHÔNG refactor `assertFileTarget` (kế thừa chữ ký owner S-7 của ATTGATE-1)",
+    ],
+    notes: [
+      "✍️ OWNER KÝ 24/09/2026: seed thành WO, CHƯA làm — xếp sau các WO S16 đang READY.",
+      "🔴 NỢ THỨ TƯ (C-2/F-8) CỐ Ý KHÔNG nằm trong WO này vì nó là QUYẾT ĐỊNH SẢN PHẨM, không phải lỗi: vai `manage:feed-post` GỠ đính kèm của người khác là phá huỷ MỘT CHIỀU — link xoá mềm ⇒ `signOne` trả `null` kể cả với TÁC GIẢ, và vế 5 («đã TỪNG link») khiến tệp không bao giờ gắn lại được (422 vĩnh viễn). Owner đã ĐỌC và CHẤP NHẬN ở ATTGATE-1. Muốn đóng thì phải chốt NGỮ NGHĨA vế 5 trước (cho gắn lại sau khi gỡ? ai được gắn lại?) ⇒ tách WO có chữ ký owner, KHÔNG gộp vào WO kỹ thuật này.",
+      "Bẫy đã trả giá ở ATTGATE-1, đừng lặp: lời gọi quyền BÊN TRONG transaction ⇒ `withTenant` lồng `withTenant` (`db.service.ts:83` không tái nhập, pool max 20) = TREO IM LẶNG. Resolve NGOÀI tx, áp TRONG tx.",
+      "Bẫy lưới tĩnh (ATTGATE-1 §8): lưới đếm hằng/đếm call-site khoá ở «hằng xuất hiện ở đâu», KHÔNG ở «giá trị nào TỚI ĐƯỢC tham số cổng» ⇒ nếu WO này đổi hình dạng đối số thứ 7 của `syncLinksTx` thì phải cập nhật lưới AST `syncLinksGateArgShapes()` và đo lại bằng mutant.",
     ],
   },
   {

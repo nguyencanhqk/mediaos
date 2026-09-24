@@ -544,6 +544,20 @@ export interface AppRegistryItem extends PermissionRequirement {
   aliases?: readonly string[];
   status: ModuleStatus;
   order: number;
+  /**
+   * S16-SOCIAL-FBPOST-1 (D2) — `true` ⇒ ô KHÔNG vẽ trong **lưới ô Home**, nhưng VẪN ở AppSwitcher
+   * (và vẫn khớp ô tìm kiếm theo `aliases`).
+   *
+   * 🔴 **Vì sao cần một trường thay vì xoá ô khỏi `APP_REGISTRY`:** lưới Home và AppSwitcher gọi CÙNG
+   * MỘT `getVisibleApps(APP_REGISTRY, …)` (`HomePortalLayout` · `AppSwitcher`) ⇒ xoá ô là mất CẢ HAI.
+   * Với `fbpost` thì mất cả hai = người **chỉ** có `view:social-post` mất sạch đường vào: họ không có
+   * `view:feed` nên không vào được `/feed`, mà mục rail «Đăng bài Facebook» lại sống TRONG rail SOCIAL.
+   * Đúng "cửa sổ tile chết" mà ô 90.5 được tách ra để tránh (xem docblock ô `fbpost`).
+   *
+   * Dùng cho app đã có đường vào CHÍNH ở nơi khác (rail của module cha) và chỉ cần một đường vào
+   * DỰ PHÒNG luôn-có. KHÔNG dùng để "ẩn cho gọn" — ô biến mất khỏi Home là mất một đường vào thật.
+   */
+  switcherOnly?: boolean;
 }
 
 /**
@@ -801,7 +815,16 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
      * bị đá vào `/feed` rồi ăn 403, phá đúng nguyên tắc "ô hiện ra thì bấm vào phải vào được".
      *
      * `rootPath`/`defaultRoute` giữ `/social` = route trung chuyển SSO (đường LỖI; đường thường đi
-     * qua `open-social.ts`). **FBPOST-1** sau đó gộp ô này vào rail SOCIAL và gỡ khỏi Home.
+     * qua `open-social.ts`).
+     *
+     * ✅ **S16-SOCIAL-FBPOST-1 (24/09/2026) đã gộp ô này vào rail SOCIAL** — mục CUỐI sidebar SOCIAL
+     * («Đăng bài Facebook», `SocialFbpostLink` qua khe `sidebar-extensions.ts`). Ô ở đây chuyển thành
+     * `switcherOnly: true`: RỜI lưới ô Home, GIỮ trong AppSwitcher.
+     * 🔴 **Đừng "dọn" nốt ô này đi.** Nó là đường vào DUY NHẤT còn lại cho hai nhóm: (1) người **chỉ**
+     * có `view:social-post` — không có `view:feed` nên không vào được `/feed`, tức không bao giờ thấy
+     * rail SOCIAL; (2) người thu gọn sidebar — khe extension KHÔNG render ở icon-mode
+     * (`ModuleSidebar.tsx`: `{Extension && !collapsed && …}`). Xoá ô = dựng lại đúng "cửa sổ tile chết"
+     * mà ô này được tách ra để tránh. Đổi quyền để bỏ nó ⇒ **tách WO** (không phải việc zone green).
      *
      * ⚠️ `order: 90.5` — `registry.spec.ts` assert `APP_REGISTRY.map(a=>a.order)` tăng dần **THEO VỊ
      * TRÍ MẢNG**. Ô này phải nằm VẬT LÝ giữa `social`(90) và `assets`(100); đẩy xuống cuối mảng là
@@ -817,6 +840,7 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     category: "collaboration",
     aliases: ["dang bai", "facebook", "fanpage", "fbpost", "dang bai facebook"],
     requiredAnyPermissions: ["view:social-post"],
+    switcherOnly: true, // S16-SOCIAL-FBPOST-1 (D2) — rời lưới Home, GIỮ ở AppSwitcher
     status: "active",
     order: 90.5,
   },
@@ -951,6 +975,21 @@ export function getVisibleApps(
       return permission.checkRequirement(app).allowed;
     })
     .sort((a, b) => a.order - b.order);
+}
+
+/**
+ * Ô vẽ trong **lưới Home** = `getVisibleApps` TRỪ các ô `switcherOnly` (S16-SOCIAL-FBPOST-1 · D2).
+ *
+ * Hai bề mặt được ĐẶT TÊN RIÊNG có chủ đích: AppSwitcher gọi `getVisibleApps` (đường vào luôn-có),
+ * lưới Home gọi hàm này. Trước đây cả hai gọi CÙNG một hàm, nên "gỡ một ô khỏi Home" chỉ làm được bằng
+ * cách xoá ô khỏi `APP_REGISTRY` — tức mất luôn đường vào trong AppSwitcher. Xem `switcherOnly`.
+ */
+export function getHomeGridApps(
+  apps: readonly AppRegistryItem[],
+  session: SessionContext,
+  permission: PermissionChecker,
+): AppRegistryItem[] {
+  return getVisibleApps(apps, session, permission).filter((app) => !app.switcherOnly);
 }
 
 // ---------------------------------------------------------------------------

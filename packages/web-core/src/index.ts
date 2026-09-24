@@ -354,6 +354,7 @@ export {
   type AppRegistryItem,
   APP_REGISTRY,
   getVisibleApps,
+  getHomeGridApps,
   // Sidebar registry
   type SidebarItemMeta,
   filterSidebarItems,
