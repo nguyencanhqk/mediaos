@@ -214,3 +214,7 @@ export * from "./social-api-b";
 // theo cùng luật trần 800 dòng; import NGƯỢC, KHÔNG re-export tên nào của ba file kia.
 export * from "./social-api-groups";
 export * from "./social-api-polls";
+// S16-SOCIAL-BE-2B-2 (additive): DTO 2 route SÁNG KIẾN (`045..046`) + 2 route VINH DANH (`047..048`).
+// Cùng luật: import NGƯỢC từ ./social, ./social-api, ./social-api-b — KHÔNG re-export tên nào của chúng.
+export * from "./social-api-ideas";
+export * from "./social-api-kudos";
