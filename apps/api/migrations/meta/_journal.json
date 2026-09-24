@@ -1779,6 +1779,20 @@
       "when": 1717587375000,
       "tag": "0586_s16socialfe1_enable_social_module",
       "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "7",
+      "when": 1717587376000,
+      "tag": "0587_s16socialattdebt1_file_links_company_file_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1717587377000,
+      "tag": "0588_s16socialattdebt1_security_alerts_attach_gate_deny",
+      "breakpoints": true
     }
   ]
 }

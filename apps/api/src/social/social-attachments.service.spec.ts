@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { TenantTx } from "../db/db.service";
 import {
   ATTACH_GATE_ENFORCED_BY_TIER1,
+  SocialAttachGateDeniedException,
   SocialAttachmentsService,
   type AttachNewGate,
 } from "./social-attachments.service";
@@ -54,8 +55,15 @@ function fakeTx(currentLinks: ReadonlyArray<{ id: string; fileId: string }>) {
  * Thứ tự cổng được đo THẬT ở ca G18 của `test/integration/social-attgate-1-update-attach.int-spec.ts`
  * (403 chứ không 422). (FULL gate 24/09/2026, `silent-failure-hunter` S-2.)
  */
-function makeService(): SocialAttachmentsService {
-  return new SocialAttachmentsService(null as never, null as never, null as never);
+function makeService(alerts?: { emit: (...a: never[]) => Promise<boolean> }): SocialAttachmentsService {
+  // S16-SOCIAL-ATTDEBT-1: đối số thứ 4 là `SecurityAlertService`. Mặc định `null` giữ nguyên mọi ca
+  // cũ (chúng không đi qua đường alert); ca nào đo `reportAttachGateDeny` thì truyền giả vào.
+  return new SocialAttachmentsService(
+    null as never,
+    null as never,
+    null as never,
+    (alerts ?? null) as never,
+  );
 }
 
 describe("SocialAttachmentsService — cổng `AttachNewGate` (S16-SOCIAL-ATTGATE-1)", () => {
@@ -114,5 +122,136 @@ describe("SocialAttachmentsService — cổng `AttachNewGate` (S16-SOCIAL-ATTGAT
       makeService().syncLinksTx(tx, COMPANY, USER, "post", TARGET, [FILE_A], broken),
     ).rejects.toThrow(ForbiddenException);
     expect(insert, "không được ghi khi cổng không đọc được").not.toHaveBeenCalled();
+  });
+});
+/**
+ * S16-SOCIAL-ATTDEBT-1 (C-5) — **U3**: `reportAttachGateDeny`.
+ *
+ * Ba bất biến được đo ở đây, cái nào hỏng cũng im lặng trong production:
+ *  1. **Phân biệt bằng `instanceof`**, không bằng thông điệp — cùng transaction còn ném
+ *     `ForbiddenException` của `assertCanMutateContent`, và hai hằng `FILE_TARGET_*_DENIED` đang có
+ *     một khoản nợ muốn đổi CÂU CHỮ (nợ D-4 của ATTGATE-1). So chuỗi thì lượt đổi đó giết alert.
+ *  2. **Tên khoá `detail` sống sót `sanitizeDetail`** — bộ lọc đó cắt mọi khoá khớp
+ *     /(password|secret|token|code|otp|dek|cipher|hash|key)/i **trong im lặng**.
+ *  3. **Khử trùng theo cửa sổ** — `security_alerts` là append-only, KHÔNG có đường dọn
+ *     (`retention.service.ts` PROTECTED_TABLES) và KHÔNG có ThrottlerGuard nào chặn vòng lặp PATCH.
+ */
+describe("SocialAttachmentsService.reportAttachGateDeny (S16-SOCIAL-ATTDEBT-1 C-5)", () => {
+  const COMPANY = "22222222-2222-4222-8222-222222222222";
+  const ACTOR = "11111111-1111-4111-8111-111111111111";
+
+  function makeAlerts() {
+    return { emit: vi.fn().mockResolvedValue(true) };
+  }
+
+  function denial(
+    targetId = "33333333-3333-4333-8333-333333333333",
+    newFileCount = 2,
+  ) {
+    return new SocialAttachGateDeniedException(
+      SOCIAL_ERR.FILE_TARGET_POST_DENIED,
+      {
+        targetType: "post",
+        targetId,
+        actorUserId: ACTOR,
+        newFileCount,
+      },
+    );
+  }
+
+  it("ngoại lệ KHÁC ⇒ KHÔNG phát alert (phân biệt bằng instanceof, không bằng thông điệp)", async () => {
+    const alerts = makeAlerts();
+    const svc = makeService(alerts);
+    // Chính hằng mà cổng dùng, nhưng gói trong `ForbiddenException` TRẦN: một lưới so chuỗi sẽ
+    // phát alert ở đây (SAI), `instanceof` thì không.
+    await svc.reportAttachGateDeny(
+      new ForbiddenException(SOCIAL_ERR.FILE_TARGET_POST_DENIED),
+      COMPANY,
+    );
+    await svc.reportAttachGateDeny(new Error("bất kỳ"), COMPANY);
+    expect(alerts.emit).not.toHaveBeenCalled();
+  });
+
+  it("ngoại lệ của cổng ⇒ phát ĐÚNG một alert, `detail` đủ khoá và sống sót sanitizeDetail", async () => {
+    const alerts = makeAlerts();
+    const svc = makeService(alerts);
+    await svc.reportAttachGateDeny(denial(), COMPANY);
+
+    expect(alerts.emit).toHaveBeenCalledTimes(1);
+    const [companyId, signal] = alerts.emit.mock.calls[0] as [
+      string,
+      {
+        alertType: string;
+        severity: string;
+        subjectUserId: string;
+        detail: Record<string, unknown>;
+      },
+    ];
+    expect(companyId).toBe(COMPANY);
+    expect(signal.alertType).toBe("attach_gate_deny");
+    expect(signal.severity).toBe("low");
+    expect(signal.subjectUserId).toBe(ACTOR);
+    expect(signal.detail).toEqual({
+      route: "postUpdate",
+      target: "post",
+      targetId: "33333333-3333-4333-8333-333333333333",
+      newFiles: 2,
+      pair: "create:feed-post",
+    });
+
+    // 🔴 Ca ĐỐI CHỨNG: chứng minh bộ lọc THẬT SỰ cắt — không có nó thì assert trên là xanh-rỗng
+    // (nó sẽ xanh y hệt kể cả khi `sanitizeDetail` là hàm rỗng).
+    const BLOCKED = /(password|secret|token|code|otp|dek|cipher|hash|key)/i;
+    for (const k of Object.keys(signal.detail)) {
+      expect(
+        BLOCKED.test(k),
+        `khoá \`${k}\` sẽ bị sanitizeDetail CẮT IM LẶNG`,
+      ).toBe(false);
+    }
+    expect(
+      BLOCKED.test("moduleCode"),
+      "ca đối chứng: bộ lọc phải cắt `moduleCode`",
+    ).toBe(true);
+  });
+
+  it("`detail` KHÔNG mang id/tên tệp — chỉ SỐ LƯỢNG", async () => {
+    const alerts = makeAlerts();
+    const svc = makeService(alerts);
+    await svc.reportAttachGateDeny(denial(), COMPANY);
+    const [, signal] = alerts.emit.mock.calls[0] as [
+      string,
+      { detail: Record<string, unknown> },
+    ];
+    expect(Object.keys(signal.detail)).not.toContain("fileIds");
+    expect(JSON.stringify(signal.detail)).not.toContain("file");
+  });
+
+  it("khử trùng theo cửa sổ: hai lượt deny CÙNG đích ⇒ 1 alert · đích KHÁC ⇒ 2 alert", async () => {
+    const alerts = makeAlerts();
+    const svc = makeService(alerts);
+    await svc.reportAttachGateDeny(denial(), COMPANY);
+    await svc.reportAttachGateDeny(denial(), COMPANY);
+    expect(
+      alerts.emit,
+      "lượt thứ hai cùng đích phải bị khử trùng",
+    ).toHaveBeenCalledTimes(1);
+
+    await svc.reportAttachGateDeny(
+      denial("44444444-4444-4444-8444-444444444444"),
+      COMPANY,
+    );
+    expect(
+      alerts.emit,
+      "đích KHÁC là một tín hiệu khác — không được khử",
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  it("`emit` NÉM ⇒ reporter không làm hỏng luồng (deny vẫn là deny)", async () => {
+    const alerts = { emit: vi.fn().mockRejectedValue(new Error("DB sập")) };
+    const svc = makeService(alerts);
+    // 🔴 Reporter PHẢI nuốt (và log). Caller của nó là khối `catch` của `update()`, ném LẠI lỗi 403
+    // ngay sau — một ngoại lệ thoát ra từ đây sẽ THAY THẾ 403 bằng 500, tức để một sự cố hạ tầng
+    // ghi đè lên một quyết định an ninh. Ca này đỏ nếu ai bỏ try/catch trong reporter.
+    await expect(svc.reportAttachGateDeny(denial(), COMPANY)).resolves.toBeUndefined();
   });
 });

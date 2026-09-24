@@ -31,7 +31,42 @@ export interface SocialActor extends SocialViewerContext {
    * rộng hơn cổng MÀN HÌNH.
    */
   canManageGroups: boolean;
+  /**
+   * S16-SOCIAL-ATTDEBT-1 (F1) — ảnh chụp cặp `create:feed-*` của đường GẮN tệp, resolve SẴN trong
+   * cùng lượt nạp grant của `resolveActor` (thay vì mở transaction thứ hai ở `resolveAttachNewGate`).
+   *
+   * 🔴 **Field BẮT BUỘC, nhưng typecheck CHỈ bảo vệ được MỘT PHẦN** (plan §9.6 — đo thật, đừng
+   * tin bản tóm tắt nào khác): 2 trong 3 chỗ dựng `SocialActor` dùng `as SocialActor`, và hai chỗ
+   * đó cho hai kết quả KHÁC NHAU — `social-group-audience.int.spec.ts:117` (8 thuộc tính) TS2352
+   * ĐỎ, còn `social-news-noti-cap.spec.ts:52` (2 thuộc tính) **LỌT**, vì `SocialActor` assignable
+   * ngược về một kiểu literal đủ nhỏ nên assertion hợp lệ. Nghĩa là `attachNewGate` VẪN có thể là
+   * `undefined` lúc chạy dù khai `bắt buộc`. Vì vậy `resolveAttachNewGate` narrow **tường minh**
+   * `snap === undefined` — đọc `snap.resolved` thẳng sẽ là `TypeError` ⇒ **500 vô danh thay vì
+   * một quyết định DENY có thông điệp**, đúng kiểu hỏng tệ nhất mà `social-file.resolver.ts:169-175`
+   * đã ghi. Lưới duy nhất cho ca đó là spec `U1`, KHÔNG phải trình biên dịch.
+   */
+  attachNewGate: AttachNewGateSnapshot;
 }
+
+/**
+ * S16-SOCIAL-ATTDEBT-1 (F1, plan D-2) — ảnh chụp quyền của cổng gắn tệp, dạng **union phân biệt**.
+ *
+ * ┌─ VÌ SAO KHÔNG PHẢI `attachNewScope?: DataScope | null` ────────────────────────────────────────┐
+ * │ Đó đúng cái bẫy mà ba file crown-jewel đã ghi riêng (`social-access.service.ts:86-90`,          │
+ * │ `data-scope.service.ts:122-125`, `permission.service.ts:822-827`): `undefined` đọc y HỆT nhau ở │
+ * │ hai câu hoàn toàn khác nhau — «route này chưa hỏi cặp đó» và «hỏi rồi, không có grant» — và một │
+ * │ lượt "dọn dẹp" viết `!= null` biến DENY thành ALLOW mà typecheck câm.                           │
+ * │ Ở đây `resolved:false` là nhánh phải **chủ động thoát ra**, và `target` cho phép bắt ca «hỏi    │
+ * │ cặp comment bằng ảnh chụp của post» — hai lời khai độc lập phải khớp nhau, lệch ⇒ DENY ồn ào.   │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+export type AttachNewGateSnapshot =
+  | { readonly resolved: false }
+  | {
+      readonly resolved: true;
+      readonly target: SocialTargetType;
+      readonly scope: DataScope | null;
+    };
 
 /**
  * Phần NGỮ CẢNH XEM — đúng những gì `visiblePostCondition` cần và không hơn.

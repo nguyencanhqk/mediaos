@@ -8,6 +8,13 @@ export const SECURITY_ALERT_TYPES = [
   "repeated_reauth_failure",
   "repeated_cross_scope_deny",
   "anomalous_login",
+  // S16-SOCIAL-ATTDEBT-1 (C-5, owner ký S-3 ngày 24/09/2026) — DENY của cổng gắn tệp SOCIAL
+  // (`create:feed-post`/`create:feed-comment` trên đường SỬA `004`/`016`). Mirror CHECK ở mig 0588.
+  // 🔴 Loại DUY NHẤT ở đây KHÔNG mô tả một MẪU LẶP: ba loại trên đều là «repeated_*»/«anomalous»
+  // (đã có ngưỡng ở nơi phát). Vì `APP_GUARD` không có ThrottlerGuard nào và `security_alerts` nằm
+  // trong PROTECTED_TABLES của retention (không có đường dọn, app role chỉ SELECT+INSERT), đường
+  // phát loại này PHẢI tự khử trùng — xem `SocialAttachmentsService.reportAttachGateDeny`.
+  "attach_gate_deny",
 ] as const;
 export type SecurityAlertType = (typeof SECURITY_ALERT_TYPES)[number];
 

@@ -145,6 +145,12 @@ export const fileLinks = pgTable(
       .on(t.companyId, t.moduleCode, t.entityType, t.entityId, t.fileId, t.linkType)
       .where(sql`deleted_at IS NULL`),
     index("file_links_company_id_idx").on(t.companyId),
+    // S16-SOCIAL-ATTDEBT-1 (F4, mig 0587) — KHÔNG partial, CÓ CHỦ ĐÍCH. Câu «tệp này ĐÃ TỪNG có
+    // link nào chưa?» của `assertLinkableFilesTx` cố ý không lọc `deleted_at`, nên nó KHÔNG dùng
+    // được 4 index partial ở trên, và `file_links_company_id_idx` (company-only) khớp mọi hàng ở
+    // N=1 công ty ⇒ seq scan toàn bảng. Đo 24/09/2026 @200k hàng: 9.84ms/3572 buffers ⇒
+    // 0.215ms/9 buffers (Index Only Scan). Thêm `WHERE deleted_at IS NULL` = tái tạo đúng lỗ đã vá.
+    index("file_links_company_file_idx").on(t.companyId, t.fileId),
   ],
 );
 

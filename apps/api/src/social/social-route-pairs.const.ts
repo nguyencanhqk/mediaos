@@ -444,3 +444,29 @@ export const SOCIAL_MODERATION_FIELDS = [
   "pinned",
   "commentsLocked",
 ] as const satisfies readonly SocialModerationField[];
+
+/**
+ * S16-SOCIAL-ATTDEBT-1 (F1, plan D-1 lối (b) — owner ký S-1 ngày 24/09/2026) — **route nào được
+ * `resolveActor` PRE-RESOLVE cặp `create:feed-*` của đường gắn tệp**.
+ *
+ * ┌─ VÌ SAO LÀ MỘT BẢNG, KHÔNG PHẢI HAI NHÁNH `if` TRONG `resolveActor` ──────────────────────────┐
+ * │ Bảng này là **nguồn ĐỘC LẬP thứ hai** của đẳng thức «route pre-resolve  ==  method tiêu thụ    │
+ * │ cổng» mà ca census `G-TABLE` ép. Một chuỗi `if` nằm trong thân `resolveActor` thì lưới chỉ     │
+ * │ quét được chính thân hàm đó — tức là lưới và mã là MỘT nguồn, và nó chỉ chứng minh được mã     │
+ * │ bằng chính mã.                                                                                 │
+ * │ Bảng còn là nguồn của `route` trong `detail` của `security_alerts` (C-5): `reportAttachGate    │
+ * │ Deny` lấy NGHỊCH ĐẢO của bảng này thay vì nhận thêm một tham số `routeKey` — giữ `syncLinksTx` │
+ * │ đúng 7 đối số (xem docblock của nó về ca census S-1).                                          │
+ * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * 🔴 **Thêm một route vào đây là mở một cửa quyền**, không phải một tối ưu: `resolveActor` sẽ hỏi
+ * thêm cặp `create:feed-*` cho route đó. Bỏ một route ra là ĐÓNG cửa — `resolveAttachNewGate` sẽ
+ * DENY (fail-closed) vì ảnh chụp không có, và ca `G-TABLE` đỏ ngay.
+ *
+ * ⚠️ `Partial<Record<...>>` CÓ CHỦ ĐÍCH: 48 route còn lại tra ra `undefined` ⇒ `resolveActor` gửi
+ * mảng 4 phần tử **y hệt byte** như trước WO này (plan M3). Đừng "hoàn thiện" thành `Record` đầy đủ.
+ */
+export const ATTACH_GATE_ROUTE_TARGET = {
+  postUpdate: "post",
+  commentUpdate: "comment",
+} as const satisfies Partial<Record<SocialRouteKey, "post" | "comment">>;

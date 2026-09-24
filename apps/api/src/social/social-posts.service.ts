@@ -356,64 +356,79 @@ export class SocialPostsService {
             gate: await this.access.resolveAttachNewGate(actor, "post"),
           };
 
-    const result = await this.db.withTenant(actor.companyId, async (tx) => {
-      const post = await this.access.assertPostVisible(tx, actor, postId);
-      const asManager = this.access.assertCanMutateContent(actor, post.authorUserId);
+    // ┌─ S16-SOCIAL-ATTDEBT-1 (C-5) — VẾT BỀN CHO LƯỢT DENY CỔNG GẮN TỆP ───────────────────────┐
+    // │ Bọc ĐÚNG lời gọi `withTenant`, không rộng hơn: ngoại lệ phải được bắt SAU KHI tx đã cuộn  │
+    // │ (promise của `db.transaction` reject sau rollback) và TRƯỚC `decorate`/`emit*` phía dưới  │
+    // │ — bọc cả hai thứ đó sẽ nuốt nhầm ngữ cảnh của một lỗi hoàn toàn khác.                     │
+    // │ 🔴 TUYỆT ĐỐI KHÔNG dời lời gọi reporter vào TRONG callback `withTenant`: nó gọi `emit()`, │
+    // │ mà `emit()` tự mở `withTenant` ⇒ tx lồng tx ⇒ TREO IM LẶNG. Ca census `G-ALERT` ép đúng   │
+    // │ ba điều: đối số là chính binding của `catch` · khối catch có `throw` lại nó · lời gọi     │
+    // │ KHÔNG nằm trong callback `withTenant`.                                                     │
+    // └────────────────────────────────────────────────────────────────────────────────────────────┘
+    let result;
+    try {
+      result = await this.db.withTenant(actor.companyId, async (tx) => {
+        const post = await this.access.assertPostVisible(tx, actor, postId);
+        const asManager = this.access.assertCanMutateContent(actor, post.authorUserId);
 
-      const now = new Date();
-      await tx
-        .update(feedPosts)
-        .set({ body: dto.body, editedAt: now, updatedAt: now, updatedBy: actor.actorUserId })
-        .where(and(eq(feedPosts.id, postId), eq(feedPosts.companyId, actor.companyId)));
+        const now = new Date();
+        await tx
+          .update(feedPosts)
+          .set({ body: dto.body, editedAt: now, updatedAt: now, updatedBy: actor.actorUserId })
+          .where(and(eq(feedPosts.id, postId), eq(feedPosts.companyId, actor.companyId)));
 
-      // Quan ly SUA noi dung cua NGUOI KHAC => vao so, cung luat voi duong XOA (`remove`).
-      // Khong co dong nay thi dau vet bien mat hoan toan: `body` bi ghi de, `updated_by`/`edited_at`
-      // cung bi ghi de, va lan tac gia tu sua tiep XOA luon hai cot do. Sua loi nguoi khac la hanh
-      // dong quan trong khong kem xoa. (FULL gate PR #530 HIGH-2 — owner ky 22/09/2026; plan §4
-      // truoc do ghi audit `—` cho 004/016.)
-      if (asManager) {
-        await this.audit.record(tx, {
-          action: "social.post.update",
-          objectType: "feed_post",
-          objectId: postId,
-          actorUserId: actor.actorUserId,
-          moduleCode: "SOCIAL",
-          entityType: "feed_post",
-          entityId: postId,
-          resultStatus: "Success",
-          // KHONG cho noi dung bai — API-19 §8 chot payload audit chi mang id + truong doi.
-          metadata: { postId, authorUserId: post.authorUserId },
-        });
-      }
+        // Quan ly SUA noi dung cua NGUOI KHAC => vao so, cung luat voi duong XOA (`remove`).
+        // Khong co dong nay thi dau vet bien mat hoan toan: `body` bi ghi de, `updated_by`/`edited_at`
+        // cung bi ghi de, va lan tac gia tu sua tiep XOA luon hai cot do. Sua loi nguoi khac la hanh
+        // dong quan trong khong kem xoa. (FULL gate PR #530 HIGH-2 — owner ky 22/09/2026; plan §4
+        // truoc do ghi audit `—` cho 004/016.)
+        if (asManager) {
+          await this.audit.record(tx, {
+            action: "social.post.update",
+            objectType: "feed_post",
+            objectId: postId,
+            actorUserId: actor.actorUserId,
+            moduleCode: "SOCIAL",
+            entityType: "feed_post",
+            entityId: postId,
+            resultStatus: "Success",
+            // KHONG cho noi dung bai — API-19 §8 chot payload audit chi mang id + truong doi.
+            metadata: { postId, authorUserId: post.authorUserId },
+          });
+        }
 
-      await syncPostTags(tx, actor.companyId, postId, parseHashtags(dto.body));
+        await syncPostTags(tx, actor.companyId, postId, parseHashtags(dto.body));
 
-      const mentions = await resolveMentions(
-        tx,
-        actor,
-        { audience: post.audience, orgUnitId: post.orgUnitId, groupId: post.groupId },
-        dto.mentionedUserIds ?? [],
-      );
-      // CHỈ mention MỚI mới sinh thông báo — mỗi lần bấm Lưu không được bắn lại cho người cũ.
-      const fresh = await syncMentions(tx, actor.companyId, "post", postId, mentions.accepted);
-
-      if (attach) {
-        await this.attachments.syncLinksTx(
+        const mentions = await resolveMentions(
           tx,
-          actor.companyId,
-          actor.actorUserId,
-          "post",
-          postId,
-          attach.ids,
-          attach.gate,
+          actor,
+          { audience: post.audience, orgUnitId: post.orgUnitId, groupId: post.groupId },
+          dto.mentionedUserIds ?? [],
         );
-      }
+        // CHỈ mention MỚI mới sinh thông báo — mỗi lần bấm Lưu không được bắn lại cho người cũ.
+        const fresh = await syncMentions(tx, actor.companyId, "post", postId, mentions.accepted);
 
-      await this.enqueueMentionNotis(tx, actor, "post", postId, postId, fresh);
+        if (attach) {
+          await this.attachments.syncLinksTx(
+            tx,
+            actor.companyId,
+            actor.actorUserId,
+            "post",
+            postId,
+            attach.ids,
+            attach.gate,
+          );
+        }
 
-      const row = await this.repo.findVisible(tx, actor, postId);
-      return { row, dropped: mentions.dropped };
-    });
+        await this.enqueueMentionNotis(tx, actor, "post", postId, postId, fresh);
+
+        const row = await this.repo.findVisible(tx, actor, postId);
+        return { row, dropped: mentions.dropped };
+      });
+    } catch (err) {
+      await this.attachments.reportAttachGateDeny(err, actor.companyId);
+      throw err;
+    }
 
     if (!result.row) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
     const [dto2] = await this.decorate(actor, [result.row]);

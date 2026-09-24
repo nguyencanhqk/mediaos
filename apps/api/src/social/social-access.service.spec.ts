@@ -339,3 +339,169 @@ describe("visiblePostCondition — dựng được vị từ cho mọi tổ hợ
     expect(svc.visiblePostCondition(viewer(true, ["u1"]))).toBeDefined();
   });
 });
+/**
+ * S16-SOCIAL-ATTDEBT-1 (F1) — **U1/U2**: ảnh chụp cổng gắn tệp.
+ *
+ * Từ WO này `resolveAttachNewGate` KHÔNG còn hỏi DB — nó đọc ảnh chụp mà `resolveActor` đã nạp
+ * trong CÙNG lượt đọc grant. Hai nhóm ca dưới đây đo hai nửa của bất biến đó: ảnh chụp được DỰNG
+ * đúng (U2) và được ĐỌC fail-closed (U1).
+ */
+describe("S16-SOCIAL-ATTDEBT-1 — ảnh chụp cổng gắn tệp (F1)", () => {
+  const FILE_DENIED_POST = SOCIAL_ERR.FILE_TARGET_POST_DENIED;
+  const FILE_DENIED_COMMENT = SOCIAL_ERR.FILE_TARGET_COMMENT_DENIED;
+
+  /**
+   * U2 — `resolveActor` gửi phần tử thứ 5 CHỈ cho `postUpdate`/`commentUpdate`.
+   *
+   * 🔴 Ca «48 route còn lại gửi ĐÚNG 4 request» là lưới hồi quy ở mức đơn vị cho đường nóng: nếu ai
+   * gộp cặp VÔ ĐIỀU KIỆN (lối (a) đã bị loại), ca đó đỏ ngay mà không cần dựng DB.
+   */
+  it("U2 — `postUpdate` gửi 5 request, phần tử [4] là `create:feed-post` (bóc tay 3 field)", async () => {
+    const svc = makeService({
+      scopes: ["Company", null, null, null, "Company"],
+    });
+    const ds = (svc as unknown as { dataScope: DataScopeService }).dataScope;
+    await svc.resolveActor(USER, "postUpdate");
+    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock
+      .calls[0][2];
+    expect(requests).toHaveLength(5);
+    expect(requests[4]).toEqual({
+      action: "create",
+      resourceType: "feed-post",
+      isSensitive: false,
+    });
+    // [0..3] KHÔNG đổi thứ tự — chèn ở đầu/giữa là leo thang quyền (xem khối 🔴 ở `resolveActor`).
+    expect(requests[1]).toEqual({
+      action: "manage",
+      resourceType: "feed-post",
+      isSensitive: false,
+    });
+  });
+
+  it("U2 — `commentUpdate` gửi `create:feed-comment` ở [4]", async () => {
+    const svc = makeService({
+      scopes: ["Company", null, null, null, "Company"],
+    });
+    const ds = (svc as unknown as { dataScope: DataScopeService }).dataScope;
+    await svc.resolveActor(USER, "commentUpdate");
+    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock
+      .calls[0][2];
+    expect(requests[4]).toEqual({
+      action: "create",
+      resourceType: "feed-comment",
+      isSensitive: false,
+    });
+  });
+
+  it("U2 — route KHÔNG đính kèm gửi ĐÚNG 4 request (hồi quy 48 route)", async () => {
+    const svc = makeService({ scopes: ["Company", null, null, null] });
+    const ds = (svc as unknown as { dataScope: DataScopeService }).dataScope;
+    const actor = await svc.resolveActor(USER, "postCreate");
+    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock
+      .calls[0][2];
+    expect(requests).toHaveLength(4);
+    expect(actor.attachNewGate).toEqual({ resolved: false });
+  });
+
+  /**
+   * U1 — ma trận fail-CLOSED của `resolveAttachNewGate`.
+   *
+   * 🔴 Ca `undefined` KHÔNG phải phòng thủ thừa: 2 trong 3 chỗ dựng `SocialActor` dùng
+   * `as SocialActor`, và TypeScript chỉ bắt được MỘT trong hai (đo 24/09/2026 — site chỉ có vài
+   * thuộc tính thì assertion được chấp nhận, xem `social-news-noti-cap.spec.ts:52`). Hợp đồng ở ca
+   * này là **DENY có thông điệp**, KHÔNG phải `TypeError` (một 500 vô danh mô tả sai hoàn toàn).
+   */
+  const gateCases: Array<
+    [string, unknown, "post" | "comment", boolean, string]
+  > = [
+    [
+      "ảnh chụp VẮNG (actor dựng bằng `as` cast)",
+      undefined,
+      "post",
+      false,
+      FILE_DENIED_POST,
+    ],
+    [
+      "route KHÔNG pre-resolve",
+      { resolved: false },
+      "post",
+      false,
+      FILE_DENIED_POST,
+    ],
+    [
+      "ảnh chụp của target KHÁC (comment hỏi bằng ảnh của post)",
+      { resolved: true, target: "post", scope: "Company" },
+      "comment",
+      false,
+      FILE_DENIED_COMMENT,
+    ],
+    [
+      "scope null",
+      { resolved: true, target: "post", scope: null },
+      "post",
+      false,
+      FILE_DENIED_POST,
+    ],
+    [
+      "scope hẹp hơn Company (Department)",
+      { resolved: true, target: "post", scope: "Department" },
+      "post",
+      false,
+      FILE_DENIED_POST,
+    ],
+    [
+      "scope Company",
+      { resolved: true, target: "post", scope: "Company" },
+      "post",
+      true,
+      "",
+    ],
+    [
+      "scope System",
+      { resolved: true, target: "comment", scope: "System" },
+      "comment",
+      true,
+      "",
+    ],
+  ];
+
+  it.each(gateCases)("U1 — %s", async (_name, snap, target, allow, reason) => {
+    const svc = makeService({ scopes: ["Company", null, null, null] });
+    const actor = {
+      actorUserId: USER.id,
+      companyId: USER.companyId,
+      routeKey: target === "post" ? "postUpdate" : "commentUpdate",
+      routeScope: "Company",
+      canManagePosts: false,
+      canManageNews: false,
+      canManageGroups: false,
+      orgUnitIds: [],
+      attachNewGate: snap,
+    } as unknown as Parameters<SocialAccessService["resolveAttachNewGate"]>[0];
+
+    const gate = await svc.resolveAttachNewGate(actor, target);
+    expect(gate.allow).toBe(allow);
+    if (!allow) {
+      // Assert THAM CHIẾU HẰNG, không phải chuỗi gõ tay — hai hằng khác nhau theo target là cả
+      // điểm của ảnh chụp mang `target`.
+      expect(gate.allow === false && gate.reason).toBe(reason);
+    }
+  });
+
+  it("U1 — ảnh chụp VẮNG cho DENY, KHÔNG ném TypeError", async () => {
+    const svc = makeService({ scopes: ["Company", null, null, null] });
+    const actor = {
+      actorUserId: USER.id,
+      companyId: USER.companyId,
+      routeKey: "postUpdate",
+    };
+    await expect(
+      svc.resolveAttachNewGate(
+        actor as unknown as Parameters<
+          SocialAccessService["resolveAttachNewGate"]
+        >[0],
+        "post",
+      ),
+    ).resolves.toEqual({ allow: false, reason: FILE_DENIED_POST });
+  });
+});
