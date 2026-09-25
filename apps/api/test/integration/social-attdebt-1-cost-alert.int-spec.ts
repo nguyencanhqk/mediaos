@@ -33,6 +33,7 @@ import {
  * │   2. `SocialAccessService.resolveAttachNewGate`    ← thứ WO này gỡ bỏ                           │
  * │   3. `SocialFileResolver.canReadOwner`             (đường `decorate` ở CUỐI update)             │
  * │   4. `SocialAccessService.resolveViewerContext`    (cũng từ `decorate` → `signOne` → policy)    │
+ * │      ↳ S16-SOCIAL-PERMCOST-1 đã GỘP (4) vào (3): một lượt cho mỗi đính kèm (ca PERMCOST-1).    │
  * │ (3) và (4) chạy CHỈ KHI bài có đính kèm — mà ca đo BẮT BUỘC dùng bài có đính kèm. Vì vậy đại    │
  * │ lượng đúng là **DELTA giữa hai request trên CÙNG bài, CÙNG tập link sống**:                     │
  * │     `PATCH có attachmentIds`  −  `PATCH body-only`   ⇒ **trước = 1 · sau = 0**                  │
@@ -249,6 +250,47 @@ describe.skipIf(!hasLaneDb)(
         const { postId } = await postWithFile();
         const res = await auth(tAuthor)(http().get(`/social/posts/${postId}`));
         expect(res.status, JSON.stringify(res.body)).toBe(200);
+      });
+    });
+
+    // ═════════════════ S16-SOCIAL-PERMCOST-1 — ĐƯỜNG ĐỌC ═════════════════
+
+    describe("PERMCOST-1 — ký URL một đính kèm nạp grant ĐÚNG một lần", () => {
+      it("delta(GET bài 1 ảnh − GET bài 0 ảnh) = 1 lần nạp grant (trước WO = 2)", async () => {
+        const { postId: withFile } = await postWithFile();
+        const bare = await post(tAuthor, "/social/posts").send({
+          type: "share",
+          audience: "company",
+          body: "bài không ảnh",
+        });
+        expect(bare.status, JSON.stringify(bare.body)).toBe(201);
+        const withoutFile = bare.body.data.id as string;
+
+        const repo = app.get(PermissionRepository, { strict: false });
+        const spy = vi.spyOn(repo, "getCompanyRoleGrantsWithScope"); // CALL-THROUGH
+        const loadsFor = async (postId: string): Promise<{ n: number; body: unknown }> => {
+          spy.mockClear();
+          const res = await auth(tAuthor)(http().get(`/social/posts/${postId}`));
+          expect(res.status, JSON.stringify(res.body)).toBe(200);
+          return {
+            n: spy.mock.calls.filter(([uid]) => uid === authorUserId).length,
+            body: res.body,
+          };
+        };
+
+        const a = await loadsFor(withoutFile);
+        const b = await loadsFor(withFile);
+        spy.mockRestore();
+
+        // NEO CHỐNG-XANH-RỖNG: ca có ảnh phải THẬT SỰ ký được URL — một resolver deny cũng làm
+        // số lần nạp giảm, và đọc y hệt «đã tối ưu».
+        const attachments = (b.body as { data: { attachments?: { url?: string | null }[] } }).data
+          .attachments;
+        expect(attachments?.length, "bài phải trả đính kèm").toBe(1);
+        expect(attachments?.[0]?.url, "URL đính kèm phải ký được (ALLOW thật)").toBeTruthy();
+        expect(a.n, "spy phải bắt được lời gọi thật").toBeGreaterThan(0);
+        // 🔴 Phép đo chính: trước WO `canReadOwner` + `resolveViewerContext` = 2; sau = 1.
+        expect(b.n - a.n, `nạp grant: 0 ảnh=${a.n} · 1 ảnh=${b.n}`).toBe(1);
       });
     });
 

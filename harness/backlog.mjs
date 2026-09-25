@@ -17205,6 +17205,7 @@ export const backlog = [
     ],
     notes: [
       "TÁCH RA 24/09/2026 từ plan ATTDEBT-1 §7 B1. Phát hiện nhờ `plan-reviewer` bác phép đo gốc.",
+      "LÀM 25/09/2026 — vá CỤC BỘ, KHÔNG chờ PERMMEMO-1 (WO đó cần ADR, vùng đỏ). `SocialFileResolver` hỏi `view:feed` + `manage:feed-post` (+ cặp create ở `canAttach`) trong MỘT lượt `resolveManyOrNull`; `SocialAccessService.buildViewerContext` nhận scope manage caller đã resolve (hằng `MANAGE_POSTS_PAIR` dùng chung). Đo thật trên lane DB (`social-attdebt-1-cost-alert.int-spec.ts` ca PERMCOST-1, spy CALL-THROUGH): delta GET bài 1 ảnh − 0 ảnh **trước = 2 · sau = 1**; mutant (resolver cũ) đỏ đúng thông điệp `0 ảnh=1 · 1 ảnh=3`. Deny-path: `manage:feed-post` KHÔNG thay được `view:feed` (unit). PERMMEMO-1 vẫn mở cho các hàm khác.",
     ],
   },
   {

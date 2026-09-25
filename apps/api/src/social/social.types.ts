@@ -27,7 +27,7 @@ export interface SocialActor extends SocialViewerContext {
    *
    * 🔴 Cờ này **KHÔNG** nới `visiblePostCondition` (D9-ii): thấy NHÓM khác với đọc được BÀI trong
    * nhóm. Và nó nằm ở ĐÂY chứ không ở `SocialViewerContext` (W3) — đặt lên lớp cha là buộc
-   * `resolveViewerContext` (đường của `FilePolicyService`) phải resolve thêm cặp, làm cổng ĐƯỜNG TẢI
+   * `buildViewerContext` (đường của `FilePolicyService`) phải resolve thêm cặp, làm cổng ĐƯỜNG TẢI
    * rộng hơn cổng MÀN HÌNH.
    */
   canManageGroups: boolean;
@@ -173,7 +173,7 @@ export interface SocialGroupMembership {
  *
  * ⚠️ `canManageGroups` (`manage:feed-group`) chỉ được đặt trên `SocialActor`, **KHÔNG** trên
  * `SocialViewerContext` (W3/H2): `SocialActor extends SocialViewerContext`, nên đặt lên lớp cha là
- * buộc `resolveViewerContext` — đường của `FilePolicyService` — phải resolve thêm một cặp quyền, và
+ * buộc `buildViewerContext` — đường của `FilePolicyService` — phải resolve thêm một cặp quyền, và
  * cổng ĐƯỜNG TẢI sẽ rộng hơn cổng MÀN HÌNH đúng lớp lỗi mà resolver đó sinh ra để bịt.
  *
  * Cờ này mở `033`/`034`/`037`/`038`/`039` và cho NHÌN thấy nhóm `private`; nó **KHÔNG** nới

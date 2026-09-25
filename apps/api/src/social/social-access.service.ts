@@ -42,6 +42,17 @@ import type {
 } from "./social.types";
 
 /**
+ * Cặp của cờ `canManagePosts` trên đường KHÔNG-phải-route (`resolveViewerContext`/`buildViewerContext`).
+ * Export để `SocialFileResolver` hỏi nó CÙNG LƯỢT với `view:feed` (S16-SOCIAL-PERMCOST-1) mà không gõ
+ * lại literal — hai bản literal là hai luật trôi khỏi nhau.
+ */
+export const MANAGE_POSTS_PAIR = {
+  action: "manage",
+  resourceType: "feed-post",
+  isSensitive: false,
+} as const;
+
+/**
  * S16-SOCIAL-BE-1 — `SocialAccessService`: lớp phạm vi + **TẦNG GUARD THỨ HAI** của module SOCIAL
  * (SPEC-16 §11 · API-19 §8). Khuôn `RecruitAccessService`/`ChatAccessService`.
  *
@@ -411,8 +422,10 @@ export class SocialAccessService {
   }
 
   /**
-   * Ngữ cảnh XEM cho đường KHÔNG-phải-route-SOCIAL — hiện chỉ có `SocialFileResolver`
-   * (`FilePolicyService` hỏi quyền tệp qua route của FOUNDATION Files).
+   * Ngữ cảnh XEM cho đường KHÔNG-phải-route-SOCIAL. Từ S16-SOCIAL-PERMCOST-1 `SocialFileResolver`
+   * KHÔNG gọi hàm này nữa (nó tự resolve `MANAGE_POSTS_PAIR` cùng lượt với `view:feed` rồi gọi
+   * `buildViewerContext`) ⇒ hiện không còn caller production; giữ làm lối tiện dụng một-lượt-nạp cho
+   * caller chưa có sẵn scope manage.
    *
    * ⚠️ **KHÔNG assert cặp quyền nào** và đó là đúng, không phải thiếu sót: người gọi hàm này là
    * `FilePolicyService`, và resolver PHẢI tự hỏi cặp `view:feed` của nó (xem `SocialFileResolver`).
@@ -423,8 +436,22 @@ export class SocialAccessService {
    */
   async resolveViewerContext(userId: string, companyId: string): Promise<SocialViewerContext> {
     const [managePostsScope] = await this.dataScope.resolveManyOrNull(userId, companyId, [
-      { action: "manage", resourceType: "feed-post", isSensitive: false },
+      MANAGE_POSTS_PAIR,
     ]);
+    return this.buildViewerContext(userId, companyId, managePostsScope ?? null);
+  }
+
+  /**
+   * S16-SOCIAL-PERMCOST-1 — phần DỰNG của `resolveViewerContext`, nhận scope `manage:feed-post` mà
+   * CALLER đã resolve (ví dụ `SocialFileResolver` hỏi nó CÙNG LƯỢT với `view:feed` ⇒ một lần nạp ảnh
+   * chụp grant thay vì hai). Caller PHẢI lấy scope bằng đúng `MANAGE_POSTS_PAIR` — hàm này không tự
+   * kiểm lại, và một cặp khác truyền vào là đổi luật `hidden`/`manage` của vị từ visibility.
+   */
+  async buildViewerContext(
+    userId: string,
+    companyId: string,
+    managePostsScope: DataScope | null,
+  ): Promise<SocialViewerContext> {
     const ctx = await this.dataScope.resolveContext(userId, companyId);
     return {
       actorUserId: userId,
