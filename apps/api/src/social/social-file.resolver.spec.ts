@@ -42,7 +42,7 @@ interface Opts {
   canManagePosts?: boolean;
   /** Lỗi `assert*Visible` ném ra THAY cho 404 — dùng để đo nhánh leo-thang của `ownerContent`. */
   failVisibleWith?: unknown;
-  /** Lỗi `resolveViewerContext` ném ra — nằm NGOÀI `withTenant`, nhánh riêng. */
+  /** Lỗi `buildViewerContext` ném ra — nằm NGOÀI `withTenant`, nhánh riêng. */
   failViewerWith?: unknown;
 }
 
@@ -56,7 +56,12 @@ function makeResolver(o: Opts) {
   } as unknown as DatabaseService;
 
   const access = {
+    // S16-SOCIAL-PERMCOST-1 — resolver KHÔNG còn gọi `resolveViewerContext` (nó tự nạp grant lần
+    // hai). Giữ mock này để ca «một lượt nạp» chứng minh nó KHÔNG bị chạm.
     resolveViewerContext: vi.fn(async () => {
+      throw new Error("resolver không được gọi resolveViewerContext (nạp grant lần 2)");
+    }),
+    buildViewerContext: vi.fn(async () => {
       if (o.failViewerWith !== undefined) throw o.failViewerWith;
       return {
         actorUserId: ACTOR,
@@ -85,7 +90,8 @@ function makeResolver(o: Opts) {
     hasEverBeenLinkedTx: vi.fn().mockResolvedValue(o.everLinked ?? false),
   } as unknown as FileLinkRepository;
 
-  return new SocialFileResolver(db, dataScope, access, fileRepo, linkRepo);
+  const resolver = new SocialFileResolver(db, dataScope, access, fileRepo, linkRepo);
+  return Object.assign(resolver, { mocks: { dataScope, access } });
 }
 
 const input = (over: Partial<FilePermissionInput> = {}): FilePermissionInput =>
@@ -327,5 +333,101 @@ describe("ownerContent — 404 là câu TRẢ LỜI, lỗi khác là SỰ CỐ p
     const wrapped = { getStatus: () => 500 };
     const r = makeResolver({ scopes: ["Company"], failVisibleWith: wrapped });
     await expect(r.canDownloadFile(input())).rejects.toBe(wrapped);
+  });
+});
+
+/**
+ * S16-SOCIAL-PERMCOST-1 — đường ĐỌC từng nạp ảnh chụp grant HAI lần mỗi lượt ký URL: một cho
+ * `view:feed` (`canReadOwner`), một cho `manage:feed-post` (`resolveViewerContext`). Giờ mọi cổng
+ * hỏi đủ cặp trong MỘT lượt `resolveManyOrNull` (= một lần `getCompanyRoleGrantsWithScope`).
+ *
+ * Phép đo round-trip KHÔNG đủ (backlog `done_when`): gộp hai câu hỏi khác nhau phải giữ NGUYÊN ngữ
+ * nghĩa ⇒ các ca DENY bên dưới chứng minh `manage:feed-post` KHÔNG thay được `view:feed`.
+ */
+describe("PERMCOST-1 — một lượt nạp grant, ngữ nghĩa không đổi", () => {
+  const MANAGE = { action: "manage", resourceType: "feed-post", isSensitive: false };
+  const READ = { action: "view", resourceType: "feed", isSensitive: false };
+
+  it.each([
+    ["canViewFile", (r: SocialFileResolver) => r.canViewFile(input())],
+    ["canDownloadFile", (r: SocialFileResolver) => r.canDownloadFile(input())],
+    ["canDeleteFile", (r: SocialFileResolver) => r.canDeleteFile(input())],
+    ["canUnlinkFile", (r: SocialFileResolver) => r.canUnlinkFile(input())],
+  ])(
+    "%s — ĐÚNG một lượt resolveManyOrNull, hỏi cả `view:feed` lẫn `manage:feed-post`",
+    async (_n, call) => {
+      const r = makeResolver({ scopes: ["Company", "Company"], authorUserId: ACTOR });
+      await call(r);
+      const resolveMany = vi.mocked(r.mocks.dataScope.resolveManyOrNull);
+      expect(resolveMany).toHaveBeenCalledTimes(1);
+      expect(resolveMany.mock.calls[0]?.[2]).toEqual([READ, MANAGE]);
+      expect(r.mocks.access.resolveViewerContext).not.toHaveBeenCalled();
+    },
+  );
+
+  it("canLinkFile — ĐÚNG một lượt, hỏi cặp GHI + `view:feed` + `manage:feed-post`", async () => {
+    const r = makeResolver({
+      scopes: ["Company", "Company", "Company"],
+      file: OK_FILE,
+      authorUserId: ACTOR,
+    });
+    expect(await r.canLinkFile(input({ action: FilePolicyAction.Link }))).toBe(true);
+    const resolveMany = vi.mocked(r.mocks.dataScope.resolveManyOrNull);
+    expect(resolveMany).toHaveBeenCalledTimes(1);
+    expect(resolveMany.mock.calls[0]?.[2]).toEqual([
+      { action: "create", resourceType: "feed-post", isSensitive: false },
+      READ,
+      MANAGE,
+    ]);
+    expect(r.mocks.access.resolveViewerContext).not.toHaveBeenCalled();
+  });
+
+  it("scope `manage:feed-post` từ CÙNG lượt được chuyển nguyên vào dựng ngữ cảnh xem", async () => {
+    const r = makeResolver({ scopes: ["Company", "Department"], authorUserId: OTHER });
+    await r.canDownloadFile(input());
+    expect(r.mocks.access.buildViewerContext).toHaveBeenCalledWith(ACTOR, COMPANY, "Department");
+  });
+
+  it("DENY: có `manage:feed-post` nhưng THIẾU `view:feed` ⇒ đọc bị chặn, kể cả tác giả", async () => {
+    const r = makeResolver({
+      scopes: [null, "Company"],
+      authorUserId: ACTOR,
+      canManagePosts: true,
+    });
+    expect(await r.canDownloadFile(input())).toBe(false);
+    expect(await r.canViewFile(input())).toBe(false);
+    expect(await r.canDeleteFile(input())).toBe(false);
+    // Không dựng ngữ cảnh, không chạm DB bài khi cổng cặp đã từ chối.
+    expect(r.mocks.access.buildViewerContext).not.toHaveBeenCalled();
+  });
+
+  it("DENY: có `manage:feed-post` + `view:feed` nhưng THIẾU cặp GHI ⇒ không gắn được tệp", async () => {
+    const r = makeResolver({
+      scopes: [null, "Company", "Company"],
+      file: OK_FILE,
+      authorUserId: OTHER,
+      canManagePosts: true,
+    });
+    expect(await r.canLinkFile(input({ action: FilePolicyAction.Link }))).toBe(false);
+  });
+});
+
+describe("PERMCOST-1 — canLinkFile chuyển ĐÚNG scope `manage:feed-post` (chỉ số [2])", () => {
+  it("scope manage `Department` được chuyển nguyên ⇒ bài người khác KHÔNG gắn được tệp", async () => {
+    // Chống mutant «truyền `readScope` (Company) thay `managePostsScope`»: nó sẽ bật `canManagePosts`
+    // và cho gắn tệp vào bài bất kỳ. Mock ở đây suy cờ TỪ scope nhận được, như bản thật.
+    const r = makeResolver({
+      scopes: ["Company", "Company", "Department"],
+      file: OK_FILE,
+      authorUserId: OTHER,
+    });
+    vi.mocked(r.mocks.access.buildViewerContext).mockImplementation(async (_u, _c, scope) => ({
+      actorUserId: ACTOR,
+      companyId: COMPANY,
+      canManagePosts: scope === "Company" || scope === "System",
+      orgUnitIds: [],
+    }));
+    expect(await r.canLinkFile(input({ action: FilePolicyAction.Link }))).toBe(false);
+    expect(r.mocks.access.buildViewerContext).toHaveBeenCalledWith(ACTOR, COMPANY, "Department");
   });
 });

@@ -1,11 +1,12 @@
 import { Injectable } from "@nestjs/common";
+import type { DataScope } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { FileLinkRepository } from "../foundation/files/file-link.repository";
 import { FileRepository } from "../foundation/files/file.repository";
 import type { FilePermissionInput } from "../foundation/files/file-policy.types";
 import type { FileOwnerPermissionResolver } from "../foundation/files/resolvers/file-owner-permission-resolver";
 import { DataScopeService } from "../permission/data-scope.service";
-import { SocialAccessService } from "./social-access.service";
+import { MANAGE_POSTS_PAIR, SocialAccessService } from "./social-access.service";
 import type { SocialViewerContext } from "./social.types";
 
 export const SOCIAL_MODULE = "SOCIAL";
@@ -108,22 +109,39 @@ export class SocialFileResolver implements FileOwnerPermissionResolver {
 
   /** Cặp `view:feed` + vị từ visibility của CHÍNH bài/bình luận chứa tệp. */
   private async canReadOwner(input: FilePermissionInput): Promise<boolean> {
-    const [readScope] = await this.dataScope.resolveManyOrNull(input.userId, input.companyId, [
-      FEED_READ_PAIR,
-    ]);
-    if (readScope === null) return false;
-    return (await this.ownerContent(input)) !== null;
+    const scopes = await this.resolveReadScopes(input);
+    if (scopes === null) return false;
+    return (await this.ownerContent(input, scopes.managePostsScope)) !== null;
   }
 
   /** Đọc được + là tác giả (hoặc `manage:feed-post`). */
   private async canWriteOwner(input: FilePermissionInput): Promise<boolean> {
-    const [readScope] = await this.dataScope.resolveManyOrNull(input.userId, input.companyId, [
-      FEED_READ_PAIR,
-    ]);
-    if (readScope === null) return false;
-    const owner = await this.ownerContent(input);
+    const scopes = await this.resolveReadScopes(input);
+    if (scopes === null) return false;
+    const owner = await this.ownerContent(input, scopes.managePostsScope);
     if (owner === null) return false;
     return owner.authorUserId === input.userId || owner.viewer.canManagePosts;
+  }
+
+  /**
+   * S16-SOCIAL-PERMCOST-1 — `view:feed` (cổng) và `manage:feed-post` (NGUYÊN LIỆU vị từ visibility)
+   * trong MỘT lượt `resolveManyOrNull` = một lần nạp ảnh chụp grant. Trước đây `resolveViewerContext`
+   * nạp lại lần hai cho mỗi lượt ký URL đính kèm.
+   *
+   * Hai câu hỏi vẫn KHÁC NHAU và được đọc THEO CHỈ SỐ: `manage:feed-post` KHÔNG thay được `view:feed`
+   * — thiếu `view:feed` ⇒ `null` (deny) dù scope manage là gì.
+   */
+  private async resolveReadScopes(
+    input: FilePermissionInput,
+  ): Promise<{ managePostsScope: DataScope | null } | null> {
+    const [readScope, managePostsScope] = await this.dataScope.resolveManyOrNull(
+      input.userId,
+      input.companyId,
+      [FEED_READ_PAIR, MANAGE_POSTS_PAIR],
+    );
+    // `== null` CỐ Ý (không `=== null`): mảng trả ngắn hơn số cặp hỏi ⇒ `undefined` ⇒ phải DENY.
+    if (readScope == null) return null;
+    return { managePostsScope: managePostsScope ?? null };
   }
 
   private async canAttach(input: FilePermissionInput): Promise<boolean> {
@@ -133,12 +151,14 @@ export class SocialFileResolver implements FileOwnerPermissionResolver {
     // vế 6a — cặp GHI của đúng loại nội dung. Tệp gắn vào bình luận không mượn cặp tạo BÀI.
     const createPair =
       input.entityType === FEED_COMMENT_ENTITY ? FEED_COMMENT_CREATE_PAIR : FEED_POST_CREATE_PAIR;
-    const [createScope, readScope] = await this.dataScope.resolveManyOrNull(
+    // `manage:feed-post` hỏi CÙNG lượt (PERMCOST-1) — nó là nguyên liệu vị từ của vế 6b, không cấp phép.
+    const [createScope, readScope, managePostsScope] = await this.dataScope.resolveManyOrNull(
       input.userId,
       input.companyId,
-      [createPair, FEED_READ_PAIR],
+      [createPair, FEED_READ_PAIR, MANAGE_POSTS_PAIR],
     );
-    if (createScope === null || readScope === null) return false;
+    // `== null` CỐ Ý — `undefined` (mảng ngắn) phải fail-closed; `=== null` cũ để nó lọt.
+    if (createScope == null || readScope == null) return false;
 
     // vế 2-5 — trạng thái tệp, đọc trong MỘT tenant tx.
     const state = await this.db.withTenant(input.companyId, async (tx) => {
@@ -154,7 +174,7 @@ export class SocialFileResolver implements FileOwnerPermissionResolver {
     if (state.everLinked) return false; // vế 5
 
     // vế 6b — nội dung đích actor ghi được.
-    const owner = await this.ownerContent(input);
+    const owner = await this.ownerContent(input, managePostsScope ?? null);
     if (owner === null) return false;
     return owner.authorUserId === input.userId || owner.viewer.canManagePosts;
   }
@@ -166,7 +186,10 @@ export class SocialFileResolver implements FileOwnerPermissionResolver {
    * cố, nên nuốt nó là đúng: hợp đồng của resolver là boolean fail-closed, và "không tồn tại" ⇄ "không
    * có quyền" hợp nhất tự nhiên theo luật 404-cho-mọi-lý-do của đường REST.
    *
-   * MỌI lỗi khác (DB timeout, cạn pool, bug ở `resolveViewerContext`/`assert*Visible`) PHẢI ném tiếp.
+   * `managePostsScope` là scope `MANAGE_POSTS_PAIR` caller đã resolve CÙNG LƯỢT với cổng cặp — KHÔNG
+   * gọi `resolveViewerContext` ở đây (nó nạp ảnh chụp grant lần hai — S16-SOCIAL-PERMCOST-1).
+   *
+   * MỌI lỗi khác (DB timeout, cạn pool, bug ở `buildViewerContext`/`assert*Visible`) PHẢI ném tiếp.
    * Nuốt trắng như bản đầu là biến một sự cố hạ tầng thật thành "không có quyền" TRONG IM LẶNG:
    * `FilePolicyService.decideForLinkedFile` có try/catch riêng để xếp loại resolver-throw thành
    * `deny-error` CÓ LOG, và `SocialAttachmentsService.signOne` dựa ĐÚNG vào `reason` đó để
@@ -176,9 +199,14 @@ export class SocialFileResolver implements FileOwnerPermissionResolver {
    */
   private async ownerContent(
     input: FilePermissionInput,
+    managePostsScope: DataScope | null,
   ): Promise<{ authorUserId: string; viewer: SocialViewerContext } | null> {
     try {
-      const viewer = await this.access.resolveViewerContext(input.userId, input.companyId);
+      const viewer = await this.access.buildViewerContext(
+        input.userId,
+        input.companyId,
+        managePostsScope,
+      );
       return await this.db.withTenant(input.companyId, async (tx) => {
         if (input.entityType === FEED_COMMENT_ENTITY) {
           const comment = await this.access.assertCommentVisible(tx, viewer, input.entityId);

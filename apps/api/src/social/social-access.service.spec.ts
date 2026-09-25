@@ -312,6 +312,29 @@ describe("resolveViewerContext — đường cho `FilePolicyService` (không có
   });
 });
 
+describe("buildViewerContext — dựng từ scope caller đã resolve (S16-SOCIAL-PERMCOST-1)", () => {
+  it("dùng ĐÚNG scope truyền vào, KHÔNG tự nạp grant lại", async () => {
+    // Nếu hàm tự resolve lại, mock trả `Company` ⇒ cờ bật. Truyền `null` ⇒ phải TẮT.
+    const svc = makeService({ scopes: ["Company"], orgUnitId: "u1", headed: [] });
+    const viewer = await svc.buildViewerContext(USER.id, USER.companyId, null);
+    expect(viewer.canManagePosts).toBe(false);
+    expect(viewer.orgUnitIds).toEqual(["u1"]);
+  });
+
+  it("chỉ `Company`/`System` bật cờ — cùng SÀN với `resolveActor`", async () => {
+    const svc = makeService({ scopes: [], orgUnitId: null, headed: [] });
+    for (const [scope, expected] of [
+      ["Company", true],
+      ["System", true],
+      ["Department", false],
+      ["Own", false],
+    ] as const) {
+      const viewer = await svc.buildViewerContext(USER.id, USER.companyId, scope);
+      expect(viewer.canManagePosts, scope).toBe(expected);
+    }
+  });
+});
+
 describe("visiblePostCondition — dựng được vị từ cho mọi tổ hợp actor", () => {
   // Vế HÀNH VI của vị từ này chạy THẬT trên Postgres ở `social-be1-visibility.int-spec.ts`; ở đây
   // chỉ đảm bảo mọi NHÁNH dựng SQL đều chạy được và không ném.
@@ -362,8 +385,7 @@ describe("S16-SOCIAL-ATTDEBT-1 — ảnh chụp cổng gắn tệp (F1)", () => 
     });
     const ds = (svc as unknown as { dataScope: DataScopeService }).dataScope;
     await svc.resolveActor(USER, "postUpdate");
-    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock
-      .calls[0][2];
+    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock.calls[0][2];
     expect(requests).toHaveLength(5);
     expect(requests[4]).toEqual({
       action: "create",
@@ -384,8 +406,7 @@ describe("S16-SOCIAL-ATTDEBT-1 — ảnh chụp cổng gắn tệp (F1)", () => 
     });
     const ds = (svc as unknown as { dataScope: DataScopeService }).dataScope;
     await svc.resolveActor(USER, "commentUpdate");
-    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock
-      .calls[0][2];
+    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock.calls[0][2];
     expect(requests[4]).toEqual({
       action: "create",
       resourceType: "feed-comment",
@@ -397,8 +418,7 @@ describe("S16-SOCIAL-ATTDEBT-1 — ảnh chụp cổng gắn tệp (F1)", () => 
     const svc = makeService({ scopes: ["Company", null, null, null] });
     const ds = (svc as unknown as { dataScope: DataScopeService }).dataScope;
     const actor = await svc.resolveActor(USER, "postCreate");
-    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock
-      .calls[0][2];
+    const requests = (ds.resolveManyOrNull as ReturnType<typeof vi.fn>).mock.calls[0][2];
     expect(requests).toHaveLength(4);
     expect(actor.attachNewGate).toEqual({ resolved: false });
   });
@@ -411,23 +431,9 @@ describe("S16-SOCIAL-ATTDEBT-1 — ảnh chụp cổng gắn tệp (F1)", () => 
    * thuộc tính thì assertion được chấp nhận, xem `social-news-noti-cap.spec.ts:52`). Hợp đồng ở ca
    * này là **DENY có thông điệp**, KHÔNG phải `TypeError` (một 500 vô danh mô tả sai hoàn toàn).
    */
-  const gateCases: Array<
-    [string, unknown, "post" | "comment", boolean, string]
-  > = [
-    [
-      "ảnh chụp VẮNG (actor dựng bằng `as` cast)",
-      undefined,
-      "post",
-      false,
-      FILE_DENIED_POST,
-    ],
-    [
-      "route KHÔNG pre-resolve",
-      { resolved: false },
-      "post",
-      false,
-      FILE_DENIED_POST,
-    ],
+  const gateCases: Array<[string, unknown, "post" | "comment", boolean, string]> = [
+    ["ảnh chụp VẮNG (actor dựng bằng `as` cast)", undefined, "post", false, FILE_DENIED_POST],
+    ["route KHÔNG pre-resolve", { resolved: false }, "post", false, FILE_DENIED_POST],
     [
       "ảnh chụp của target KHÁC (comment hỏi bằng ảnh của post)",
       { resolved: true, target: "post", scope: "Company" },
@@ -449,20 +455,8 @@ describe("S16-SOCIAL-ATTDEBT-1 — ảnh chụp cổng gắn tệp (F1)", () => 
       false,
       FILE_DENIED_POST,
     ],
-    [
-      "scope Company",
-      { resolved: true, target: "post", scope: "Company" },
-      "post",
-      true,
-      "",
-    ],
-    [
-      "scope System",
-      { resolved: true, target: "comment", scope: "System" },
-      "comment",
-      true,
-      "",
-    ],
+    ["scope Company", { resolved: true, target: "post", scope: "Company" }, "post", true, ""],
+    ["scope System", { resolved: true, target: "comment", scope: "System" }, "comment", true, ""],
   ];
 
   it.each(gateCases)("U1 — %s", async (_name, snap, target, allow, reason) => {
@@ -497,9 +491,7 @@ describe("S16-SOCIAL-ATTDEBT-1 — ảnh chụp cổng gắn tệp (F1)", () => 
     };
     await expect(
       svc.resolveAttachNewGate(
-        actor as unknown as Parameters<
-          SocialAccessService["resolveAttachNewGate"]
-        >[0],
+        actor as unknown as Parameters<SocialAccessService["resolveAttachNewGate"]>[0],
         "post",
       ),
     ).resolves.toEqual({ allow: false, reason: FILE_DENIED_POST });
