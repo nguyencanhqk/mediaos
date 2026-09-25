@@ -1,0 +1,48 @@
+-- S16-SOCIAL-ATTDEBT-1 (F4) — index cho câu «vế 5: tệp này ĐÃ TỪNG có link nào chưa?»
+--
+-- Câu bị chậm nằm ở `SocialAttachmentsService.assertLinkableFilesTx`:
+--     SELECT file_id FROM file_links WHERE company_id = $1 AND file_id = ANY($2)
+-- Nó CỐ Ý **không** lọc `deleted_at` — câu hỏi là «đã TỪNG», không phải «đang». Mà MỌI index có
+-- `file_id` của bảng này đều PARTIAL `WHERE deleted_at IS NULL` (`idx_file_links_file`,
+-- `uq_file_links_entity_file_active`), nên planner KHÔNG dùng được chúng: Postgres chỉ dùng index
+-- partial khi chứng minh được WHERE của câu SUY RA vị từ của index. Còn lại đúng một index hợp lệ
+-- là `file_links_company_id_idx` (chỉ `company_id`) — ở N=1 công ty nó khớp MỌI hàng ⇒ vô dụng.
+--
+-- ─ SỐ ĐO (EXPLAIN ANALYZE, 24/09/2026, bench mô phỏng ĐÚNG index set thật, N=1 công ty, ~20% hàng
+--   đã xoá mềm) ────────────────────────────────────────────────────────────────────────────────
+--   200k hàng, index hiện có   : Parallel Seq Scan (2 worker) · 9.84 ms · 3572 buffers (~28 MB)
+--   200k hàng, + index dưới đây: Index Only Scan · Heap Fetches 0 · 0.215 ms · 9 buffers
+--   10k hàng,  index hiện có   : Seq Scan · 0.92 ms
+--   Kích thước index mới       : 9.7 MB / 200k hàng
+--   ⇒ planner chọn seq scan ở MỌI cỡ bảng ⇒ không có ngưỡng nào để «đợi tới khi đau».
+--
+-- 🔴 TRUNG THỰC: bảng `file_links` hôm nay có **7 hàng**. Đây là thắng lợi **DỰ PHÓNG**, KHÔNG phải
+--    chữa một cơn đau đang xảy ra. Lý lẽ quyết định làm NGAY (owner ký S-2) là chi phí KHOÁ, không
+--    phải chi phí đọc: migrator drizzle chạy migration **TRONG một transaction** ⇒ `CREATE INDEX
+--    CONCURRENTLY` không dùng được, nên làm khi bảng đã lớn sẽ khoá ghi `file_links` của **mọi**
+--    module (avatar · HR · CHAT · SOCIAL). Ở 7 hàng, lượt khoá này ~0 ms.
+--
+-- ⚠️ «Heap Fetches 0» chỉ đạt khi visibility map đã cập nhật (sau autovacuum). Bảng vừa ghi nhiều
+--    thì Index Only Scan vẫn fetch heap một thời gian — vẫn hơn seq scan, nhưng đừng hứa 0.215 ms
+--    trong mọi cảnh.
+--
+-- ⚠️ KHÔNG partial, CÓ CHỦ ĐÍCH: thêm `WHERE deleted_at IS NULL` sẽ tái tạo đúng lỗ đang vá.
+-- ⚠️ `file_links_company_id_idx` (mig 0433) nay là **tiền tố dư** của index này. CỐ Ý **KHÔNG drop**
+--    ở WO này (owner ký S-6): bán kính là mọi module đang dùng `file_links`. Đã ghi nợ ở backlog.
+-- ⚠️ KHÔNG backfill, KHÔNG đổi cột, KHÔNG đụng RLS/grant ⇒ luật «RLS policy + FORCE TRƯỚC backfill»
+--    (CLAUDE.md §3) không áp dụng cho migration này. Rollback: `DROP INDEX file_links_company_file_idx;`
+--
+-- 🔴 VÁ FULL GATE (database-reviewer MEDIUM-2, 24/09/2026) — `lock_timeout`. Lập luận «ở 7 hàng lượt
+--    khoá này ~0 ms» ở trên nói về THỜI GIAN GIỮ khoá, nhưng thời gian **CHỜ** lấy khoá KHÔNG bị
+--    chặn bởi kích thước bảng: `CREATE INDEX` lấy SHARE trên `file_links`, nên một transaction dài
+--    đang mở trên bảng đó (import HR · đường avatar · CHAT) làm migration đợi VÔ HẠN, và vì khoá
+--    xếp hàng, MỌI lệnh ghi `file_links` đến sau cũng kẹt sau nó ⇒ đường gắn tệp của **cả 4 module**
+--    đứng im suốt lượt deploy, không có gì tự cứu. Thà đỏ + chạy lại.
+-- ⚠️ PHẢI trả về DEFAULT sau đó: `SET LOCAL` sống tới hết TRANSACTION, mà drizzle bọc TẤT CẢ
+--    migration pending trong MỘT transaction ⇒ không trả thì nó rò sang mọi migration chạy sau
+--    trong cùng band (khuôn 0535:693-697 · 0547:342-345).
+SET LOCAL lock_timeout = '5s';
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS file_links_company_file_idx ON file_links (company_id, file_id);
+--> statement-breakpoint
+SET LOCAL lock_timeout = DEFAULT;

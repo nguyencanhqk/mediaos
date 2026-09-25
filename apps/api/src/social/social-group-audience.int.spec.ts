@@ -114,6 +114,9 @@ function actorOf(userId: string, companyId: string): SocialActor {
     routeScope: "Company",
     canManageNews: false,
     canManageGroups: false,
+    // S16-SOCIAL-ATTDEBT-1 (F1): `postCreate` KHÔNG pre-resolve cổng gắn tệp (đường TẠO ép cặp
+    // `create:feed-*` ở tầng 1 rồi) ⇒ `resolved:false` là giá trị ĐÚNG, không phải chỗ điền cho đủ.
+    attachNewGate: { resolved: false },
   } as SocialActor;
 }
 

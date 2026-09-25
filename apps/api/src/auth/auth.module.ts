@@ -16,7 +16,7 @@ import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { ReplayGuardService } from "./replay-guard.service";
 import { ResetPasswordMailService } from "./reset-password-mail.service";
-import { SecurityAlertService } from "./security-alert.service";
+import { SecurityAlertModule } from "./security-alert.module";
 import { SessionCookieService } from "./session-cookie.service";
 import { TokenService } from "./token.service";
 import { TotpService } from "./totp.service";
@@ -49,6 +49,10 @@ import { StepUpService } from "./step-up/step-up.service";
     // module LÁ (0 phụ thuộc nghiệp vụ) — cạnh này KHÔNG sinh cycle; chiều `Realtime → Auth` mới là chiều
     // RealtimeModule import AuthModule để lấy TokenService.
     RealtimeEmitterModule,
+    // S16-SOCIAL-ATTDEBT-1 (C-5, owner ký S-4): `SecurityAlertService` chuyển sang module LÁ để
+    // `SocialModule` dùng được mà KHÔNG phải import cả đồ thị AuthModule. Module này chỉ phụ thuộc
+    // `DatabaseModule` ⇒ KHÔNG sinh cycle. Xem docblock `security-alert.module.ts`.
+    SecurityAlertModule,
   ],
   // S2-AUTH-BE-5 (APPEND): AuthLogsViewerController = viewer READ-ONLY login_logs + user_security_events.
   controllers: [AuthController, AuthLogsViewerController],
@@ -68,7 +72,9 @@ import { StepUpService } from "./step-up/step-up.service";
     TwoFactorService,
     ReplayGuardService,
     ResetPasswordMailService,
-    SecurityAlertService,
+    // 🔴 `SecurityAlertService` CỐ Ý KHÔNG còn ở đây (S16-SOCIAL-ATTDEBT-1): nó do
+    // `SecurityAlertModule` cấp. Khai lại ở đây sẽ tạo instance THỨ HAI của một service
+    // crown-jewel append-only (Nest tạo provider theo MODULE).
     SessionCookieService,
     TwoFactorEnforcementGuard,
     // S10-AUTH-STEPUP-1 (APPEND). `revealClassPairsProvider.useValue` LÀ CHÍNH `REVEAL_CLASS_PAIRS`
@@ -85,7 +91,9 @@ import { StepUpService } from "./step-up/step-up.service";
     LoginRateLimiter,
     TwoFactorService,
     ReplayGuardService,
-    SecurityAlertService,
+    // Re-export MODULE (không phải service): mọi consumer cũ của `AuthModule` vẫn inject được
+    // `SecurityAlertService` y như trước, không đổi một dòng.
+    SecurityAlertModule,
     SecurityEventWriter,
     TwoFactorEnforcementGuard,
     // S10-AUTH-STEPUP-1 (APPEND): `ReauthGuard` (PermissionModule) ĐỌC cửa sổ qua service này — một

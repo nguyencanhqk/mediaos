@@ -218,8 +218,12 @@ export class SocialCommentsService {
     const actor = await this.access.resolveActor(user, "commentUpdate");
 
     // S16-SOCIAL-ATTGATE-1 — vế 6a. Khuôn + lý do đầy đủ: `SocialPostsService.update`. Tóm tắt:
-    // resolve quyền PHẢI ở ngoài `withTenant` (tx lồng tx = treo im lặng), áp quyết định trong tx
-    // và CHỈ khi có tệp MỚI, để vai `manage:feed-post` vẫn gỡ được đính kèm vi phạm.
+    // resolve quyền ở NGOÀI tx (ảnh chụp cặp `create:feed-*` chỉ được dựng ở `resolveActor`), áp
+    // quyết định TRONG tx và CHỈ khi có tệp MỚI, để vai `manage:feed-post` vẫn gỡ được đính kèm
+    // vi phạm.
+    // 🔴 ĐÍNH CHÍNH S16-SOCIAL-ATTDEBT-1 (F1, vá FULL gate M1): bản trước viết lý do là «tx lồng tx
+    // = treo im lặng». Câu đó NAY SAI — `resolveAttachNewGate` không còn chạm DB. Cơ chế thật: khối
+    // ĐÍNH CHÍNH trên `SocialAccessService.resolveAttachNewGate`.
     const attach =
       dto.attachmentIds === undefined
         ? null
@@ -228,71 +232,86 @@ export class SocialCommentsService {
             gate: await this.access.resolveAttachNewGate(actor, "comment"),
           };
 
-    const result = await this.db.withTenant(actor.companyId, async (tx) => {
-      const comment = await this.access.assertCommentVisible(tx, actor, commentId);
-      const asManager = this.access.assertCanMutateContent(actor, comment.authorUserId);
+    // ┌─ S16-SOCIAL-ATTDEBT-1 (C-5) — VẾT BỀN CHO LƯỢT DENY CỔNG GẮN TỆP ───────────────────────┐
+    // │ Bọc ĐÚNG lời gọi `withTenant`, không rộng hơn: ngoại lệ phải được bắt SAU KHI tx đã cuộn  │
+    // │ (promise của `db.transaction` reject sau rollback) và TRƯỚC `decorate`/`emit*` phía dưới  │
+    // │ — bọc cả hai thứ đó sẽ nuốt nhầm ngữ cảnh của một lỗi hoàn toàn khác.                     │
+    // │ 🔴 TUYỆT ĐỐI KHÔNG dời lời gọi reporter vào TRONG callback `withTenant`: nó gọi `emit()`, │
+    // │ mà `emit()` tự mở `withTenant` ⇒ tx lồng tx ⇒ TREO IM LẶNG. Ca census `G-ALERT` ép đúng   │
+    // │ ba điều: đối số là chính binding của `catch` · khối catch có `throw` lại nó · lời gọi     │
+    // │ KHÔNG nằm trong callback `withTenant`.                                                     │
+    // └────────────────────────────────────────────────────────────────────────────────────────────┘
+    let result;
+    try {
+      result = await this.db.withTenant(actor.companyId, async (tx) => {
+        const comment = await this.access.assertCommentVisible(tx, actor, commentId);
+        const asManager = this.access.assertCanMutateContent(actor, comment.authorUserId);
 
-      const now = new Date();
-      await tx
-        .update(feedComments)
-        .set({ body: dto.body, editedAt: now, updatedAt: now, updatedBy: actor.actorUserId })
-        .where(and(eq(feedComments.id, commentId), eq(feedComments.companyId, actor.companyId)));
+        const now = new Date();
+        await tx
+          .update(feedComments)
+          .set({ body: dto.body, editedAt: now, updatedAt: now, updatedBy: actor.actorUserId })
+          .where(and(eq(feedComments.id, commentId), eq(feedComments.companyId, actor.companyId)));
 
-      // Cung luat voi `remove` va voi 004 — xem lap luan o `SocialPostsService.update`.
-      if (asManager) {
-        await this.audit.record(tx, {
-          action: "social.comment.update",
-          objectType: "feed_comment",
-          objectId: commentId,
-          actorUserId: actor.actorUserId,
-          moduleCode: "SOCIAL",
-          entityType: "feed_comment",
-          entityId: commentId,
-          resultStatus: "Success",
-          metadata: { commentId, postId: comment.postId, authorUserId: comment.authorUserId },
-        });
-      }
+        // Cung luat voi `remove` va voi 004 — xem lap luan o `SocialPostsService.update`.
+        if (asManager) {
+          await this.audit.record(tx, {
+            action: "social.comment.update",
+            objectType: "feed_comment",
+            objectId: commentId,
+            actorUserId: actor.actorUserId,
+            moduleCode: "SOCIAL",
+            entityType: "feed_comment",
+            entityId: commentId,
+            resultStatus: "Success",
+            metadata: { commentId, postId: comment.postId, authorUserId: comment.authorUserId },
+          });
+        }
 
-      const mentions = await resolveMentions(
-        tx,
-        actor,
-        {
-          audience: comment.post.audience,
-          orgUnitId: comment.post.orgUnitId,
-          groupId: comment.post.groupId,
-        },
-        dto.mentionedUserIds ?? [],
-      );
-      const fresh = await syncMentions(
-        tx,
-        actor.companyId,
-        "comment",
-        commentId,
-        mentions.accepted,
-      );
-
-      // `dto.attachmentIds` là allowlist ĐẦY ĐỦ của lượt sửa (khuôn `SocialPostsService.update`, D18
-      // liệt kê 016 trong nhóm phải đồng bộ): kiểm `undefined` chứ KHÔNG `?.length` như nhánh tạo —
-      // mảng RỖNG ở đường sửa nghĩa là "bỏ hết đính kèm", nuốt nó đi là im lặng không gỡ link nào.
-      if (attach) {
-        await this.attachments.syncLinksTx(
+        const mentions = await resolveMentions(
+          tx,
+          actor,
+          {
+            audience: comment.post.audience,
+            orgUnitId: comment.post.orgUnitId,
+            groupId: comment.post.groupId,
+          },
+          dto.mentionedUserIds ?? [],
+        );
+        const fresh = await syncMentions(
           tx,
           actor.companyId,
-          actor.actorUserId,
           "comment",
           commentId,
-          attach.ids,
-          attach.gate,
+          mentions.accepted,
         );
-      }
 
-      if (dto.mentionedUserIds && fresh.length > 0) {
-        await this.enqueueMentionNotis(tx, actor, comment.postId, commentId, fresh);
-      }
+        // `dto.attachmentIds` là allowlist ĐẦY ĐỦ của lượt sửa (khuôn `SocialPostsService.update`, D18
+        // liệt kê 016 trong nhóm phải đồng bộ): kiểm `undefined` chứ KHÔNG `?.length` như nhánh tạo —
+        // mảng RỖNG ở đường sửa nghĩa là "bỏ hết đính kèm", nuốt nó đi là im lặng không gỡ link nào.
+        if (attach) {
+          await this.attachments.syncLinksTx(
+            tx,
+            actor.companyId,
+            actor.actorUserId,
+            "comment",
+            commentId,
+            attach.ids,
+            attach.gate,
+          );
+        }
 
-      const row = await this.repo.findById(tx, actor.companyId, commentId);
-      return { row, dropped: mentions.dropped };
-    });
+        if (dto.mentionedUserIds && fresh.length > 0) {
+          await this.enqueueMentionNotis(tx, actor, comment.postId, commentId, fresh);
+        }
+
+        const row = await this.repo.findById(tx, actor.companyId, commentId);
+        return { row, dropped: mentions.dropped };
+      });
+    } catch (err) {
+      await this.attachments.reportAttachGateDeny(err, actor.companyId);
+      throw err;
+    }
 
     if (!result.row) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
     const [dto2] = await this.decorate(actor, [result.row]);

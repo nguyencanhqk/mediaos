@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -15,6 +16,7 @@ import type { AttachNewGate } from "./social-attachments.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { visibleGroupPostExists } from "./social-group-predicates";
 import {
+  ATTACH_GATE_ROUTE_TARGET,
   SOCIAL_FILE_TARGET_PAIRS,
   SOCIAL_KUDOS_FLAG_PAIRS,
   SOCIAL_POST_TYPE_PAIRS,
@@ -29,6 +31,7 @@ import {
   SOCIAL_POST_TYPE_PAIR_DESYNC,
 } from "./social.errors";
 import type {
+  AttachNewGateSnapshot,
   SocialActor,
   SocialCommentAccess,
   SocialPostAccess,
@@ -73,6 +76,8 @@ import type {
  */
 @Injectable()
 export class SocialAccessService {
+  private readonly logger = new Logger(SocialAccessService.name);
+
   constructor(
     private readonly dataScope: DataScopeService,
     // Cổng quyền TRONG nhóm — chỉ nhận `tx`, không tự mở `withTenant` (xem docblock của nó).
@@ -91,19 +96,68 @@ export class SocialAccessService {
    */
   async resolveActor(user: SocialRequestUser, routeKey: SocialRouteKey): Promise<SocialActor> {
     const p = SOCIAL_ROUTE_PAIRS[routeKey];
-    const [routeScopeOrNull, managePostsScope, manageNewsScope, manageGroupsScope] =
-      await this.dataScope.resolveManyOrNull(user.id, user.companyId, [
-        // [0] cặp của route — cờ sensitive lấy từ BẢNG, không gõ lại literal.
-        { action: p.action, resourceType: p.resourceType, isSensitive: p.isSensitive },
-        // [1][2] hai cờ phụ — `isSensitive:false` TƯỜNG MINH (mirror catalog 0578). Khai tường minh
-        // để lần sau ai đổi cờ catalog thì thấy ngay chỗ phải đổi theo.
-        { action: "manage", resourceType: "feed-post", isSensitive: false },
-        { action: "manage", resourceType: "feed-news", isSensitive: false },
-        // [3] S16-SOCIAL-BE-2A (D9). CỐ Ý **không** thêm `create:feed-group` vào đây: nó đã là cặp
-        // của route `031` ở [0], và hỏi hai lần cùng một cặp là đúng cái bẫy "hai vai đè nhau" ghi
-        // ở docblock trên.
-        { action: "manage", resourceType: "feed-group", isSensitive: false },
-      ]);
+    const baseRequests = [
+      // [0] cặp của route — cờ sensitive lấy từ BẢNG, không gõ lại literal.
+      { action: p.action, resourceType: p.resourceType, isSensitive: p.isSensitive },
+      // [1][2] hai cờ phụ — `isSensitive:false` TƯỜNG MINH (mirror catalog 0578). Khai tường minh
+      // để lần sau ai đổi cờ catalog thì thấy ngay chỗ phải đổi theo.
+      { action: "manage", resourceType: "feed-post", isSensitive: false },
+      { action: "manage", resourceType: "feed-news", isSensitive: false },
+      // [3] S16-SOCIAL-BE-2A (D9). CỐ Ý **không** thêm `create:feed-group` vào đây: nó đã là cặp
+      // của route `031` ở [0], và hỏi hai lần cùng một cặp là đúng cái bẫy "hai vai đè nhau" ghi
+      // ở docblock trên.
+      { action: "manage", resourceType: "feed-group", isSensitive: false },
+    ];
+
+    // ┌─ S16-SOCIAL-ATTDEBT-1 (F1 · vá FULL gate M-1) — CHỈ SỐ SUY RA, TUYỆT ĐỐI KHÔNG GÕ SỐ ────┐
+    // │ Phần tử cổng gắn tệp được APPEND ngay sau `baseRequests`, nên chỉ số của nó **bằng chính  │
+    // │ `baseRequests.length`**. Bản đầu của WO này viết hằng `4`, và đó là một quả mìn hẹn giờ    │
+    // │ theo chiều **fail-OPEN**: WO sau append một cặp base thứ 5 — đúng việc file này ĐÃ làm một │
+    // │ lần ở `[3]` (BE-2A) — thì ảnh chụp cổng đọc scope của **cặp base mới** thay vì của         │
+    // │ `create:feed-*`. Vai giữ cặp mới đó @Company nhưng KHÔNG có `create:feed-post` sẽ lọt      │
+    // │ `isCompany(snap.scope)` ⇒ gắn tệp MỚI qua PATCH mà không có cặp `create` ⇒ mở lại ĐÚNG lỗ  │
+    // │ mà ATTGATE-1 vừa bịt. Không lưới nào bắt: typecheck câm (cả hai đều `DataScope | null`),   │
+    // │ `G-TABLE`/`D17` chỉ so tập ROUTE, còn `U2` sẽ được sửa máy móc (`requests[4]`→`[5]`,       │
+    // │ `toHaveLength(6)`) rồi xanh lại mà không ai đụng tới hằng. Suy từ `.length` là cách DUY     │
+    // │ NHẤT làm bất biến này TỰ GIỮ thay vì trông vào trí nhớ của lượt sau.                       │
+    // └────────────────────────────────────────────────────────────────────────────────────────────┘
+    const attachIdx = baseRequests.length;
+
+    // ┌─ S16-SOCIAL-ATTDEBT-1 (F1) — PHẦN TỬ THỨ 5, CHỈ CHO `004`/`016` ─────────────────────────┐
+    // │ 🔴 **APPEND Ở CUỐI, TUYỆT ĐỐI KHÔNG chèn vào đầu/giữa.** Mảng này được đọc THEO CHỈ SỐ     │
+    // │ CỨNG ngay dưới. Chèn ở đầu ⇒ `managePostsScope` nhận scope của `view:feed` ⇒ **mọi nhân    │
+    // │ viên có `view:feed` thành `canManagePosts = true`** ⇒ đọc bài `hidden` toàn công ty        │
+    // │ (`visiblePostCondition`) + sửa/xoá nội dung BẤT KỲ ai (`assertCanMutateContent`). Đó là    │
+    // │ leo thang quyền cho 100% nhân viên, và tầng-1 KHÔNG bắt được (cặp tầng-1 của `004` là      │
+    // │ `view:feed`, vai nào cũng có). Lưới thật cho ca này là int-spec H9, không phải typecheck.  │
+    // │                                                                                            │
+    // │ 48 route còn lại tra bảng ra `undefined` ⇒ gửi `baseRequests` **y hệt byte** như trước WO  │
+    // │ này ⇒ 0 chi phí, 0 đổi ngữ nghĩa. Ca `U2` ghim đúng điều đó.                               │
+    // └────────────────────────────────────────────────────────────────────────────────────────────┘
+    const attachTarget: SocialTargetType | undefined =
+      ATTACH_GATE_ROUTE_TARGET[routeKey as keyof typeof ATTACH_GATE_ROUTE_TARGET];
+    const requests =
+      attachTarget === undefined
+        ? baseRequests
+        : [
+            ...baseRequests,
+            // BÓC TAY 3 field, KHÔNG truyền nguyên object của bảng — cùng luật đã ghi ở
+            // `canApproveIdeas` bên dưới: `resolveStrongestScopes` spread nguyên vật vào
+            // `decideStrongestScope`, nên một field mới trùng tên sẽ đổi QUYẾT ĐỊNH PHÂN QUYỀN
+            // trong im lặng và typecheck không bắt.
+            {
+              action: SOCIAL_FILE_TARGET_PAIRS[attachTarget].action,
+              resourceType: SOCIAL_FILE_TARGET_PAIRS[attachTarget].resourceType,
+              isSensitive: SOCIAL_FILE_TARGET_PAIRS[attachTarget].isSensitive,
+            },
+          ];
+
+    const scopes = await this.dataScope.resolveManyOrNull(user.id, user.companyId, requests);
+    const [routeScopeOrNull, managePostsScope, manageNewsScope, manageGroupsScope] = scopes;
+    const attachNewGate: AttachNewGateSnapshot =
+      attachTarget === undefined
+        ? { resolved: false }
+        : { resolved: true, target: attachTarget, scope: scopes[attachIdx] ?? null };
 
     // Tầng 2 — assert cặp của route, ĐỘC LẬP với decorator. Deny ở đây để lại ZERO side-effect vì
     // nó chạy TRƯỚC mọi thao tác ghi. Chuỗi lỗi là hợp đồng với FE/QA, không phải văn bản tự do.
@@ -144,6 +198,11 @@ export class SocialAccessService {
       canManageGroups: SocialAccessService.isCompany(manageGroupsScope),
       // D13 (owner ký 21/09/2026) — đơn vị của chính actor ∪ đơn vị actor đứng đầu. KHÔNG cây con.
       orgUnitIds: this.dataScope.departmentOrgUnitIds(ctx),
+      // S16-SOCIAL-ATTDEBT-1 (F1) — ảnh chụp cổng gắn tệp. `scopes[attachIdx]` chỉ `undefined` được
+      // nếu hợp đồng «độ dài mảng trả == độ dài `requests`» của `resolveStrongestScopes` vỡ
+      // (`permission.service.ts:849-865` giữ nó kể cả ở nhánh lỗi hạ tầng) ⇒ quy về `null` =
+      // fail-CLOSED, KHÔNG phải một kiểm tra runtime trên đường nóng.
+      attachNewGate,
     };
   }
 
@@ -196,9 +255,17 @@ export class SocialAccessService {
    * một bảng hằng mà không call-site runtime nào đọc thì census/spec canh nó chỉ canh được một hằng
    * chết. Đọc bảng làm nó LOAD-BEARING.
    *
-   * ⚠️ **KHÔNG nhét cặp này vào batch `resolveActor`**: batch đó chạy cho CẢ 48 route, còn câu hỏi này
-   * chỉ có nghĩa với đúng một nhánh của một route GHI. Một round-trip quyền thêm trên nhánh đó là giá
-   * đúng để không phải trả nó trên 47 route còn lại.
+   * ⚠️ **TIÊU CHÍ GỘP-VÀO-BATCH (viết lại ở S16-SOCIAL-ATTDEBT-1, owner ký S-1 ngày 24/09/2026).**
+   * Câu cũ ở đây là «KHÔNG nhét cặp lẻ vào batch `resolveActor` vì batch chạy cho cả 48/50 route».
+   * Câu đó **không sai, nhưng thiếu chiều**: nó cấm cả những ca gộp được mà 48 route kia trả giá 0.
+   * Tiêu chí đầy đủ — gộp khi và chỉ khi **cả ba**:
+   *   1. cặp **suy được từ `routeKey`** (không cần `dto`) — `resolveActor` không nhìn thấy body;
+   *   2. gộp **CÓ ĐIỀU KIỆN**, chỉ thêm phần tử cho đúng route cần ⇒ route khác trả giá **0**;
+   *   3. lời gọi lẻ hiện tại đang mở một **transaction THỨ HAI trên đường GHI** (đo được).
+   *
+   * ⇒ Cặp `manage:feed-kudos` này **TRƯỢT điều (1)**: nó phụ thuộc cờ `isOfficial` trong BODY của
+   * `002`, mà `resolveActor` không thấy body ⇒ gộp sẽ resolve cho MỌI lượt `postCreate` kể cả bài
+   * không phải kudos. **GIỮ NGUYÊN lời gọi lẻ ở đây.**
    *
    * Scope ép SÀN `Company` qua `isCompany()` — `undefined`/`null` fail-closed.
    *
@@ -224,9 +291,14 @@ export class SocialAccessService {
    * │ bài vẫn bơm được tệp vào kho tenant, không giới hạn số lượt.                                      │
    * └────────────────────────────────────────────────────────────────────────────────────────────────┘
    *
-   * ⚠️ **KHÔNG nhét hai cặp này vào batch `resolveActor`** — cùng lý do đã ghi ở `assertKudosOfficial`:
-   * batch đó chạy cho CẢ 50 route, còn câu hỏi này chỉ có nghĩa với đúng hai route. Một round-trip
-   * quyền thêm trên hai route GHI là giá đúng để không phải trả nó trên 48 route còn lại.
+   * ⚠️ **TIÊU CHÍ GỘP-VÀO-BATCH** — bản đầy đủ ở docblock `assertKudosOfficial` phía trên
+   * (S16-SOCIAL-ATTDEBT-1, owner ký S-1). Cặp của `054`/`055` **TRƯỢT điều (1)**: `target` là một
+   * trường của REQUEST, nên gộp sẽ phải resolve CẢ HAI cặp cho cả hai route. **GIỮ NGUYÊN lời gọi
+   * lẻ ở đây** (và owner ký S-7 của ATTGATE-1 cấm đụng hai route đã ship này).
+   *
+   * 🔴 Đối chiếu: cặp của `004`/`016` (`resolveAttachNewGate` ngay dưới) **THOẢ cả ba** — `postUpdate`
+   * và `commentUpdate` là song ánh với target, nên nó ĐÃ được gộp vào batch. Hai hàm cạnh nhau, hai
+   * kết luận ngược nhau, cùng một tiêu chí — đó là chủ ý, không phải bất nhất.
    *
    * ⚠️ `target` là ĐẦU VÀO của cổng, KHÔNG phải một khẳng định được tin (plan §1 D1a): khai `'comment'`
    * rồi đem tệp gắn vào BÀI thì trên đường TẠO vẫn bị chặn — nhưng bởi **TẦNG 1 của route `002`/`015`**
@@ -254,12 +326,22 @@ export class SocialAccessService {
    * `create:feed-*` theo đích, trả về dưới dạng **quyết định** chứ không ném.
    *
    * ┌─ VÌ SAO TRẢ GIÁ TRỊ, KHÔNG NÉM ────────────────────────────────────────────────────────────┐
-   * │ Câu hỏi quyền phải hỏi NGOÀI transaction (hàm này mở `withTenant` riêng qua `dataScope`),   │
-   * │ nhưng câu trả lời chỉ được ÁP khi đã biết lượt sửa có thật sự THÊM tệp mới hay không — và   │
-   * │ điều đó chỉ tính được TRONG tx (`syncLinksTx` so tập link hiện có với tập client gửi). Ném  │
-   * │ ở đây = chặn cả lượt gỡ/giữ nguyên đính kèm ⇒ vai `manage:feed-post` mất khả năng gỡ ảnh    │
-   * │ vi phạm. Nên: resolve ở đây, ném ở đó.                                                      │
+   * │ Câu trả lời chỉ được ÁP khi đã biết lượt sửa có thật sự THÊM tệp mới hay không — và điều đó │
+   * │ chỉ tính được TRONG tx (`syncLinksTx` so tập link hiện có với tập client gửi). Ném ở đây =  │
+   * │ chặn cả lượt gỡ/giữ nguyên đính kèm ⇒ vai `manage:feed-post` mất khả năng gỡ ảnh vi phạm.   │
+   * │ Nên: quyết định ở đây, ném ở đó.                                                            │
    * └─────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * 🔴 **ĐÍNH CHÍNH S16-SOCIAL-ATTDEBT-1 (F1) — hàm này KHÔNG còn hỏi DB.** Bản ATTGATE-1 viết
+   * «hàm này mở `withTenant` riêng qua `dataScope`»; câu đó nay SAI. Cặp `create:feed-*` được
+   * `resolveActor` nạp SẴN trong CÙNG lượt đọc grant (`ATTACH_GATE_ROUTE_TARGET` quyết định route
+   * nào được nạp), và hàm này chỉ ĐỌC ảnh chụp đó. Lý do đổi: mỗi lời gọi `resolveManyOrNull` là
+   * một `db.withTenant` THẬT (không cache — `permission.cache.ts:95` là passthrough có chủ ý), nên
+   * bản cũ mở một transaction THỨ HAI trên mỗi PATCH có `attachmentIds`.
+   *
+   * ⚠️ Giữ kiểu trả `Promise<AttachNewGate>` dù thân hàm không còn `await`: hai call-site đang
+   * `await` nó: đổi sang đồng bộ là mở đường cho một lượt "dọn dẹp" bỏ `await` ⇒ `attach.gate`
+   * thành `Promise` ⇒ `!gate.allow` là `!undefined` ⇒ ném MỌI lượt (fail-closed nhưng route chết).
    *
    * ⚠️ **Owner chốt S-7 (24/09/2026): KHÔNG gộp hàm này với `assertFileTarget`.** Hai cửa (054/055
    * vs 004/016) dùng CHUNG hai bảng hằng `SOCIAL_FILE_TARGET_PAIRS` + `SOCIAL_FILE_TARGET_DENIED`,
@@ -269,12 +351,29 @@ export class SocialAccessService {
    * ⚠️ Fail-closed: `resolveManyOrNull` trả `null`/scope hẹp hơn Company ⇒ DENY. TUYỆT ĐỐI không
    * `!= null` (cùng luật với `assertKudosOfficial`/`assertFileTarget` ngay trên).
    */
-  async resolveAttachNewGate(actor: SocialActor, target: SocialTargetType): Promise<AttachNewGate> {
-    const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
-      SOCIAL_FILE_TARGET_PAIRS[target],
-    ]);
-    if (SocialAccessService.isCompany(scope)) return { allow: true };
-    return { allow: false, reason: SOCIAL_FILE_TARGET_DENIED[target] };
+  resolveAttachNewGate(actor: SocialActor, target: SocialTargetType): Promise<AttachNewGate> {
+    const snap = actor.attachNewGate;
+
+    // 🔴 `snap === undefined` KHÔNG PHẢI phòng thủ thừa (plan §7 B3, đã đo): 2 trong 3 chỗ dựng
+    // `SocialActor` dùng `as SocialActor` (type assertion), và TypeScript KHÔNG đòi đủ thuộc tính
+    // trong một assertion ⇒ field "bắt buộc" này có thể VẮNG lúc chạy. Đọc `snap.resolved` thẳng
+    // sẽ ném `TypeError` ⇒ **500 vô danh thay cho một quyết định DENY có thông điệp**.
+    //
+    // `snap.target !== target` là lưới runtime thứ hai: call-site khai Ý ĐỊNH (`"post"`/`"comment"`),
+    // ảnh chụp khai thứ ĐÃ RESOLVE. Hai lời khai độc lập lệch nhau ⇒ DENY ồn ào, không đoán bừa.
+    if (snap === undefined || snap.resolved !== true || snap.target !== target) {
+      // `error`, KHÔNG `warn`: đây là lỗi NỐI DÂY của lập trình viên (route quên khai trong
+      // `ATTACH_GATE_ROUTE_TARGET`), không phải một lượt deny nghiệp vụ bình thường. Trộn chung mức
+      // log là chôn nó vào tiếng ồn của deny thường.
+      this.logger.error(
+        `attach-gate KHÔNG pre-resolve: route=${actor.routeKey} target=${target} ` +
+          `snapshot=${snap === undefined ? "undefined" : JSON.stringify(snap)}`,
+      );
+      return Promise.resolve({ allow: false, reason: SOCIAL_FILE_TARGET_DENIED[target] });
+    }
+
+    if (SocialAccessService.isCompany(snap.scope)) return Promise.resolve({ allow: true });
+    return Promise.resolve({ allow: false, reason: SOCIAL_FILE_TARGET_DENIED[target] });
   }
 
   /**

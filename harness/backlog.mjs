@@ -17135,13 +17135,19 @@ export const backlog = [
     title:
       "Trả 3 khoản nợ FULL gate của S16-SOCIAL-ATTGATE-1: (F1) cổng đính kèm nạp LẠI ảnh chụp grant mà `resolveActor` vừa nạp ⇒ +1 transaction mỗi PATCH có `attachmentIds` · (F4) câu «vế 5 — đã TỪNG link» không lọc `deleted_at` nên rơi về `file_links_company_id_idx` · (C-5) nhánh DENY của cổng chỉ `logger.warn`, KHÔNG sinh `security_alerts`",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/social/**",
       "apps/api/src/foundation/**",
       "apps/api/migrations/**",
       "apps/api/src/db/schema/**",
       "apps/api/test/**",
+      // S-7 (owner ký 24/09/2026, plan §8): ba đường BẮT BUỘC mà bản seed thiếu —
+      // `auth/**` cho `SecurityAlertModule` (D-7) · `package.json` cho `test:cov:social` (nếu thiếu,
+      // cổng coverage MÙ với chính WO này) · `API Design/**` cho một dòng hợp đồng vận hành ở API-19.
+      "apps/api/src/auth/**",
+      "apps/api/package.json",
+      "docs/API Design/**",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
@@ -17153,17 +17159,86 @@ export const backlog = [
     ],
     done_when: [
       "🔴 ĐO TRƯỚC KHI SỬA — cả F1 lẫn F4 đều do reviewer nêu mà CHƯA chạy EXPLAIN/benchmark. F4: chạy EXPLAIN (ANALYZE) trên câu «đã TỪNG link» với dữ liệu thật trước khi thêm index; nếu planner đã dùng index hợp lý thì ĐÓNG F4 bằng số đo, KHÔNG thêm migration thừa",
-      "F1: gộp cặp quyền thứ 5 vào batch `resolveActor` thay vì mở transaction thứ hai — 🔴 đụng đường nóng của CẢ 50 route SOCIAL ⇒ phải có ca hồi quy cho route KHÔNG đính kèm (không được đổi số câu/ngữ nghĩa quyền của chúng), và đo lại số transaction mỗi PATCH (trước: 2 · sau: 1)",
+      "F1: gộp cặp quyền thứ 5 vào batch `resolveActor` thay vì mở transaction thứ hai — 🔴 đụng đường nóng của CẢ 50 route SOCIAL ⇒ phải có ca hồi quy cho route KHÔNG đính kèm (không được đổi số câu/ngữ nghĩa quyền của chúng). 🔴 ĐÍNH CHÍNH 24/09 (plan §7 B1, đã xác minh bằng đọc mã): phép đo «trước 2 · sau 1» KHÔNG ĐẠT ĐƯỢC — `decorate()` ở cuối `update()` nạp ảnh chụp grant THÊM 2 lần nữa cho cùng actor (`social-file.resolver.ts:111` `canReadOwner` + `:181` `ownerContent`→`resolveViewerContext`) ⇒ số tuyệt đối là 4/3. Đại lượng ĐÚNG là DELTA giữa hai request trên CÙNG bài, CÙNG tập link sống: `PATCH có attachmentIds` − `PATCH body-only` ⇒ **trước = 1 · sau = 0**",
       "F4 (nếu EXPLAIN xác nhận): migration đánh số NỐI TIẾP head lúc merge, index `(company_id, file_id)` KHÔNG-partial trên `file_links` — mọi index có `file_id` hiện nay đều PARTIAL `WHERE deleted_at IS NULL` nên câu hỏi «đã TỪNG link» (cố ý KHÔNG lọc `deleted_at`) không dùng được chúng",
       "C-5: nhánh DENY của `resolveAttachNewGate` sinh vết BỀN trong `security_alerts` (bảng append-only) kèm cặp quyền bị thiếu + route + actor, không chỉ `logger.warn`. Ca test phải đo HÀNG được ghi, không chỉ lời gọi logger",
       "Không đụng cửa 054/055 đã ship và KHÔNG refactor `assertFileTarget` (kế thừa chữ ký owner S-7 của ATTGATE-1)",
     ],
     notes: [
+      "✅ XONG 24/09/2026 (nhánh `feat/s16-social-attdebt-1`). Plan `docs/plans/S16-SOCIAL-ATTDEBT-1.md`: §7 sổ vá plan-review (verdict BLOCK, 5 BLOCKER + 1 HIGH — người thi công TỰ XÁC MINH cả 5 bằng đọc mã trước khi nhận) · §8 chữ ký owner · §9 bằng chứng đo THẬT + 5 mutant.",
+      "🔴 SỐ ĐO F1 — backlog CŨ ghi «trước 2 · sau 1» là SAI. Đo thật trên lane: nạp ảnh chụp grant mỗi PATCH là **3 (body-only) / 4 (có attachmentIds)** trước WO, vì đường `decorate` ở CUỐI `update()` nạp THÊM 2 lần nữa cho cùng actor (`social-file.resolver.ts:111` `canReadOwner` + `:181` `ownerContent`→`resolveViewerContext`). Đại lượng đúng là **DELTA** giữa hai request trên CÙNG bài, CÙNG tập link sống: trước = 1 · **sau = 0** (mutant khôi phục lời gọi DB ⇒ đỏ `expected 1 to be +0`).",
+      "🔴 LỖ LƯỚI TĨNH ĐÃ ĐÓNG (plan §7 B5): ca census `S-1` đọc `node.arguments[6]`, nên trước WO này **thêm một đối số thứ 8 cho `syncLinksTx` KHÔNG lưới nào bắt được**. Plan gốc còn định ghi câu SAI («thêm tham số làm vỡ S-1») vào docblock crown-jewel — đúng lớp lỗi `canlinkfile-not-on-attachment-write-path`. Đã thêm vế `argCount === 7` + đo bằng mutant.",
+      "🔴 C-5 ĐỔI so với plan gốc (owner ký S-5 sau PHÉP ĐO): `APP_GUARD` (`app.module.ts:143-145`) KHÔNG có `ThrottlerGuard` nào, và `security_alerts` nằm trong `PROTECTED_TABLES` của `retention.service.ts` (app role chỉ SELECT+INSERT) ⇒ «1 hàng mỗi deny, không ngưỡng» là vector phình VÔ HẠN, KHÔNG XOÁ ĐƯỢC. Đã thêm cửa sổ khử trùng TRONG-TIẾN-TRÌNH (60s, key `company:actor:target:targetId`) ở `reportAttachGateDeny` — 0 chi phí DB, KHÔNG đụng `SecurityAlertService`. Giá phải trả (khai thẳng): nhiều tiến trình / restart ⇒ cửa sổ mở lại; `logger.warn` vẫn ghi MỌI lượt.",
+      "🔴 BẪY `as SocialActor` (plan §9.6): TypeScript CHỈ bắt được MỘT trong hai site cast — site 8-thuộc-tính ra TS2352, site 2-thuộc-tính **LỌT** (kiểu đích assignable ngược về literal nhỏ). Vì vậy `resolveAttachNewGate` narrow TƯỜNG MINH `snap === undefined`; bỏ nhánh đó ⇒ `TypeError` ⇒ **500 vô danh thay cho DENY có thông điệp**.",
+      "Một lỗi tự tìm ra lúc viết test (không reviewer nào nêu): `reportAttachGateDeny` bản đầu không bọc `try/catch`, mà caller của nó là khối `catch` ném LẠI 403 ngay sau ⇒ một ngoại lệ từ reporter sẽ THAY THẾ 403 bằng 500. Đã bọc + ca U3 ghim.",
       "✍️ OWNER KÝ 24/09/2026: seed thành WO, CHƯA làm — xếp sau các WO S16 đang READY.",
       "🔴 NỢ THỨ TƯ (C-2/F-8) CỐ Ý KHÔNG nằm trong WO này vì nó là QUYẾT ĐỊNH SẢN PHẨM, không phải lỗi: vai `manage:feed-post` GỠ đính kèm của người khác là phá huỷ MỘT CHIỀU — link xoá mềm ⇒ `signOne` trả `null` kể cả với TÁC GIẢ, và vế 5 («đã TỪNG link») khiến tệp không bao giờ gắn lại được (422 vĩnh viễn). Owner đã ĐỌC và CHẤP NHẬN ở ATTGATE-1. Muốn đóng thì phải chốt NGỮ NGHĨA vế 5 trước (cho gắn lại sau khi gỡ? ai được gắn lại?) ⇒ tách WO có chữ ký owner, KHÔNG gộp vào WO kỹ thuật này.",
       "Bẫy đã trả giá ở ATTGATE-1, đừng lặp: lời gọi quyền BÊN TRONG transaction ⇒ `withTenant` lồng `withTenant` (`db.service.ts:83` không tái nhập, pool max 20) = TREO IM LẶNG. Resolve NGOÀI tx, áp TRONG tx.",
       "Bẫy lưới tĩnh (ATTGATE-1 §8): lưới đếm hằng/đếm call-site khoá ở «hằng xuất hiện ở đâu», KHÔNG ở «giá trị nào TỚI ĐƯỢC tham số cổng» ⇒ nếu WO này đổi hình dạng đối số thứ 7 của `syncLinksTx` thì phải cập nhật lưới AST `syncLinksGateArgShapes()` và đo lại bằng mutant.",
     ],
+  },
+  {
+    id: "S16-SOCIAL-PERMCOST-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Đường ĐỌC nạp ảnh chụp grant 2 lần mỗi lượt có đính kèm: `SocialFileResolver.canReadOwner` + `resolveViewerContext` (qua `decorate`→`signOne`→`FilePolicyService`) — khoản chi LỚN HƠN cả F1 của ATTDEBT-1",
+    module_note: "SOCIAL + FOUNDATION files",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/social/**", "apps/api/src/foundation/**", "apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-ATTDEBT-1"],
+    src: [
+      "Đo thật 24/09/2026 (plan `docs/plans/S16-SOCIAL-ATTDEBT-1.md` §9.1): một PATCH nạp ảnh chụp grant **3 lần** ngay cả SAU khi ATTDEBT-1 đã gỡ lần nạp của cổng đính kèm",
+    ],
+    done_when: [
+      "🔴 ĐO TRƯỚC: dựng lại phép đếm `PermissionRepository.getCompanyRoleGrantsWithScope` của `social-attdebt-1-cost-alert.int-spec.ts` (H1) — nó đã có sẵn khuôn spy CALL-THROUGH + neo chống-xanh-rỗng",
+      "Đây KHÔNG phải việc của riêng SOCIAL: `canReadOwner` và `resolveViewerContext` là hai câu hỏi KHÁC NHAU (quyền tệp vs ngữ cảnh visibility) nên gộp chúng phải giữ NGUYÊN ngữ nghĩa — ai đề xuất gộp phải chứng minh bằng ca deny-path, không bằng số round-trip",
+      "Cân lối MEMO ẢNH CHỤP THEO REQUEST (xem WO `S16-SOCIAL-PERMMEMO-1`) trước khi vá cục bộ ở đây — có thể WO này tự tan",
+    ],
+    notes: [
+      "TÁCH RA 24/09/2026 từ plan ATTDEBT-1 §7 B1. Phát hiện nhờ `plan-reviewer` bác phép đo gốc.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-PERMMEMO-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Memo ảnh chụp grant theo REQUEST (ALS hoặc request-scoped): đóng MỘT LƯỢT cả `assertCreatablePostType` · `assertKudosOfficial` · `assertFileTarget` · `canApproveIdeas` · `canReadOwner` · `resolveViewerContext` — mỗi hàm hiện là +1 transaction",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/permission/**", "apps/api/src/common/**", "apps/api/test/**", "docs/DECISIONS/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["security-review", "database-review"],
+    depends_on: ["S16-SOCIAL-ATTDEBT-1"],
+    src: ["plan `docs/plans/S16-SOCIAL-ATTDEBT-1.md` D-1 lối (c) — lối sửa ĐÚNG NHẤT về dài hạn, đã cân và hoãn"],
+    done_when: [
+      "🔴 CẦN ADR: `permission.cache.ts:95` là passthrough **CÓ CHỦ Ý**; đổi nó là quyết định cấp nền tảng, bán kính = MỌI module, KHÔNG phải một WO của SOCIAL",
+      "🔴 Ảnh chụp memo hoá phải HẾT HẠN trong phạm vi MỘT request — một grant bị thu hồi giữa chừng KHÔNG được tiếp tục cho phép. Ca test phải đo đúng điều đó, không chỉ đo số round-trip",
+      "Kho hiện KHÔNG có AsyncLocalStorage (đo ở ATTGATE-1 M8) ⇒ phải chọn cơ chế mang ngữ cảnh và chứng minh nó KHÔNG rò giữa hai request đồng thời (ca hai actor chạy song song)",
+    ],
+    notes: [
+      "TÁCH RA 24/09/2026 từ plan ATTDEBT-1 D-1 lối (c). Đóng luôn `S16-SOCIAL-PERMCOST-1` nếu làm lối này.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-IDXDEDUP-1",
+    module: "FOUNDATION",
+    layer: "DB",
+    title:
+      "`file_links_company_id_idx` (mig 0433) thành TIỀN TỐ DƯ của `file_links_company_file_idx` (mig 0587) — cân drop, bán kính là MỌI module dùng `file_links`",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/migrations/**", "apps/api/src/db/schema/**", "apps/api/test/**", "docs/DB/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["database-review"],
+    depends_on: ["S16-SOCIAL-ATTDEBT-1"],
+    src: ["plan `docs/plans/S16-SOCIAL-ATTDEBT-1.md` D-4 + owner ký S-6 («GIỮ, ghi nợ»)"],
+    done_when: [
+      "🔴 ĐO TRƯỚC KHI DROP: `pg_stat_user_indexes.idx_scan` của `file_links_company_id_idx` trên môi trường có tải THẬT — một index company-only vẫn có thể được dùng cho câu quét-theo-tenant mà index 2 cột không phục vụ tốt bằng",
+      "Drop index là thao tác MỘT CHIỀU trên bảng dùng chung (avatar · HR · CHAT · SOCIAL) ⇒ cần chữ ký owner riêng",
+    ],
+    notes: ["TÁCH RA 24/09/2026 từ ATTDEBT-1 (owner ký S-6: giữ nguyên ở WO đó)."],
   },
   {
     id: "S16-SOCIAL-BE-1D",

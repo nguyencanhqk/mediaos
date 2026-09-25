@@ -1,3 +1,4 @@
+import { SecurityAlertModule } from "../auth/security-alert.module";
 import { Module, type OnModuleInit } from "@nestjs/common";
 import { FilePolicyService } from "../foundation/files/file-policy.service";
 import { FilesModule } from "../foundation/files/files.module";
@@ -77,7 +78,18 @@ import {
  */
 @Module({
   // S16-SOCIAL-BE-2A: +`SeedModule` (exports `MasterDataSeederRegistry`) cho `SocialSeedRegistrar`.
-  imports: [PermissionModule, FilesModule, RealtimeEmitterModule, StorageModule, SeedModule],
+  // S16-SOCIAL-ATTDEBT-1 (C-5) — khối additive: `SecurityAlertModule` là module LÁ (chỉ phụ thuộc
+  // `DatabaseModule`), KHÔNG phải `AuthModule`. Lý do đầy đủ ở docblock `security-alert.module.ts`:
+  // import `AuthModule` kéo cả đồ thị auth vào injector của SOCIAL — đúng lớp việc mà khối ⚠️ ở
+  // docblock trên đã cảnh báo bằng tiền lệ `RealtimeModule` làm Nest sập lúc bootstrap.
+  imports: [
+    PermissionModule,
+    FilesModule,
+    RealtimeEmitterModule,
+    StorageModule,
+    SeedModule,
+    SecurityAlertModule,
+  ],
   controllers: [
     SocialPostsController,
     SocialReactionsController,

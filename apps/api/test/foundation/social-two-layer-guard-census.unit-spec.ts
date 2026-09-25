@@ -7,6 +7,7 @@ import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
 import {
+  ATTACH_GATE_ROUTE_TARGET,
   SOCIAL_FILE_TARGET_PAIRS,
   SOCIAL_MODERATION_FIELD_PAIRS,
   SOCIAL_POST_TYPE_PAIRS,
@@ -238,8 +239,13 @@ function serviceResolveActorCalls(): Array<{ site: string; key: string }> {
  * │ ⇒ Ca này là lưới KHÔNG-CẦN-DB duy nhất đo được cổng có thật sự được NỐI vào đường ghi.         │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
-function syncLinksGateArgShapes(): Array<{ site: string; shape: string; text: string }> {
-  const out: Array<{ site: string; shape: string; text: string }> = [];
+function syncLinksGateArgShapes(): Array<{
+  site: string;
+  shape: string;
+  text: string;
+  argCount: number;
+}> {
+  const out: Array<{ site: string; shape: string; text: string; argCount: number }> = [];
   for (const file of fs.readdirSync(SRC_SOCIAL)) {
     if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
     const text = fs.readFileSync(path.join(SRC_SOCIAL, file), "utf8");
@@ -265,7 +271,12 @@ function syncLinksGateArgShapes(): Array<{ site: string; shape: string; text: st
                 : ts.isObjectLiteralExpression(arg)
                   ? "object-literal"
                   : "other";
-        out.push({ site: `${nextCls}#${nextMethod}`, shape, text: arg?.getText(sf) ?? "" });
+        out.push({
+          site: `${nextCls}#${nextMethod}`,
+          shape,
+          text: arg?.getText(sf) ?? "",
+          argCount: node.arguments.length,
+        });
       }
       ts.forEachChild(node, (c) => visit(c, nextCls, nextMethod));
     };
@@ -317,6 +328,112 @@ const ATTACH_GATE_SITE_TO_KEY: Record<string, string> = {
   "SocialPostsService#update": "postUpdate",
   "SocialCommentsService#update": "commentUpdate",
 };
+/**
+ * S16-SOCIAL-ATTDEBT-1 (C-5) — call-site của `reportAttachGateDeny` ở mức `Class#method`, kèm HAI
+ * thuộc tính mà một lưới "tập bằng tập" thuần KHÔNG thấy được.
+ *
+ * 🔴 Vì sao không chỉ đếm tên method (bài học wave trước, plan §7 HIGH-1): một lưới chỉ so
+ * «method nào gọi reporter» vẫn XANH khi (a) khối `catch` gọi reporter rồi **quên `throw`** —
+ * biến một 403 thành **200**; (b) reporter nhận `new Error('x')` thay vì binding của `catch`;
+ * (c) lời gọi bị dời vào TRONG callback `this.db.withTenant` ⇒ `emit()` mở `withTenant` lồng
+ * `withTenant` ⇒ **TREO IM LẶNG**. (c) là bất biến R2, và đây là lưới TĨNH duy nhất mã hoá được nó.
+ */
+function attachGateReportSites(): {
+  site: string;
+  argIsCatchBinding: boolean;
+  rethrowsSameBinding: boolean;
+  insideWithTenant: boolean;
+}[] {
+  const out: {
+    site: string;
+    argIsCatchBinding: boolean;
+    rethrowsSameBinding: boolean;
+    insideWithTenant: boolean;
+  }[] = [];
+  for (const file of fs.readdirSync(SRC_SOCIAL)) {
+    if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
+    const text = fs.readFileSync(path.join(SRC_SOCIAL, file), "utf8");
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
+
+    const visit = (
+      node: ts.Node,
+      cls: string,
+      method: string,
+      inTenant: boolean,
+    ): void => {
+      let nextCls = cls;
+      let nextMethod = method;
+      const nextInTenant = inTenant;
+      if (ts.isClassDeclaration(node) && node.name) nextCls = node.name.text;
+      if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name))
+        nextMethod = node.name.text;
+      // Vào thân callback của `this.db.withTenant(...)` ⇒ đánh dấu, và cờ ĐI XUỐNG mọi node con.
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "withTenant"
+      ) {
+        for (const a of node.arguments) {
+          if (ts.isArrowFunction(a) || ts.isFunctionExpression(a)) {
+            ts.forEachChild(a, (c) => visit(c, nextCls, nextMethod, true));
+          }
+        }
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "reportAttachGateDeny"
+      ) {
+        const arg0 = node.arguments[0];
+        // Tìm khối `catch` bao quanh để đọc TÊN binding của nó.
+        let anc: ts.Node | undefined = node.parent;
+        let clause: ts.CatchClause | undefined;
+        while (anc) {
+          if (ts.isCatchClause(anc)) {
+            clause = anc;
+            break;
+          }
+          anc = anc.parent;
+        }
+        const bindName =
+          clause?.variableDeclaration &&
+          ts.isIdentifier(clause.variableDeclaration.name)
+            ? clause.variableDeclaration.name.text
+            : undefined;
+
+        let rethrows = false;
+        if (clause && bindName) {
+          const scan = (n: ts.Node): void => {
+            if (
+              ts.isThrowStatement(n) &&
+              n.expression &&
+              ts.isIdentifier(n.expression) &&
+              n.expression.text === bindName
+            ) {
+              rethrows = true;
+            }
+            ts.forEachChild(n, scan);
+          };
+          scan(clause.block);
+        }
+
+        out.push({
+          site: `${nextCls}#${nextMethod}`,
+          argIsCatchBinding:
+            arg0 !== undefined &&
+            ts.isIdentifier(arg0) &&
+            bindName !== undefined &&
+            arg0.text === bindName,
+          rethrowsSameBinding: rethrows,
+          insideWithTenant: nextInTenant,
+        });
+      }
+      ts.forEachChild(node, (c) => visit(c, nextCls, nextMethod, nextInTenant));
+    };
+    visit(sf, "?", "?", false);
+  }
+  return out;
+}
 
 /** Tên lớp có tham chiếu tới cờ cặp-KHÁC `canManageNews` — tín hiệu AST của một nhánh tầng-2. */
 function classesReferencingManageNews(): Set<string> {
@@ -504,6 +621,13 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     // Neo chống-xanh-rỗng: AST hỏng / đổi tên hàm ⇒ mảng rỗng ⇒ mọi assert dưới thành vacuous.
     expect(shapes.length, "phải thấy ĐỦ 4 call-site `syncLinksTx`").toBe(4);
     expect(shapes.every((x) => x.shape !== "MISSING"), "call-site thiếu đối số `gate`").toBe(true);
+    // S16-SOCIAL-ATTDEBT-1 (plan §7 B5) — ĐO ĐƯỢC, không phải lời khai: ca này đọc `arguments[6]`,
+    // nên một đối số thứ 8 ở index 7 KHÔNG bị bắt bởi bất kỳ vế nào ở trên. Dòng dưới đóng lỗ đó.
+    // (Plan gốc định ghi vào docblock `syncLinksTx` rằng «thêm tham số làm vỡ ca S-1» — câu đó SAI.)
+    expect(
+      shapes.every((x) => x.argCount === 7),
+      "`syncLinksTx` phải nhận ĐÚNG 7 đối số — ngữ cảnh DENY đi bằng ngoại lệ, KHÔNG bằng tham số thứ 8",
+    ).toBe(true);
 
     const bySite = new Map(shapes.map((x) => [x.site, x]));
     for (const site of ["SocialPostsService#create", "SocialCommentsService#create"]) {
@@ -517,6 +641,66 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
         `${site} phải truyền giá trị ĐÃ RESOLVE (attach.gate), không phải literal/hằng`,
       ).toBe("property-access");
       expect(bySite.get(site)?.text).toBe("attach.gate");
+    }
+  });
+
+  /**
+   * S16-SOCIAL-ATTDEBT-1 (F1) — **G-TABLE**: «route nào được PRE-RESOLVE cổng gắn tệp» phải BẰNG
+   * «method nào TIÊU THỤ cổng». Hai nguồn độc lập: bảng hằng `ATTACH_GATE_ROUTE_TARGET` (mã sản
+   * phẩm) và call-site AST của `resolveAttachNewGate`.
+   *
+   * 🔴 Lệch một chiều nào cũng là lỗ THẬT: thiếu trong bảng ⇒ ảnh chụp `resolved:false` ⇒ cổng DENY
+   * cả vai ĐỦ quyền (403 oan, route chết); thừa trong bảng ⇒ `resolveActor` hỏi thêm một cặp quyền
+   * cho một route không dùng tới (chi phí trên đường nóng + một cặp quyền không ai gác).
+   */
+  it("G-TABLE — tập route pre-resolve cổng đính kèm == tập route có call-site cổng", () => {
+    const fromTable = Object.keys(ATTACH_GATE_ROUTE_TARGET).sort();
+    const fromSites = [
+      ...new Set(
+        attachGateCallSites()
+          .filter((x) => !x.startsWith("SocialAccessService#"))
+          .map((x) => ATTACH_GATE_SITE_TO_KEY[x]),
+      ),
+    ]
+      .filter((x): x is string => Boolean(x))
+      .sort();
+
+    // Neo chống-xanh-rỗng ở CẢ HAI vế — hai tập rỗng cũng `toEqual` nhau.
+    expect(fromTable.length, "bảng ATTACH_GATE_ROUTE_TARGET không được rỗng").toBeGreaterThan(0);
+    expect(fromSites.length, "phải có call-site cổng đính kèm thật").toBeGreaterThan(0);
+    expect(fromSites).toEqual(fromTable);
+  });
+
+  /**
+   * S16-SOCIAL-ATTDEBT-1 (C-5) — **G-ALERT**: mọi method tiêu thụ cổng phải BÁO alert cho lượt DENY,
+   * và phải báo ĐÚNG CÁCH.
+   *
+   * 🔴 Ba vế dưới đây tồn tại vì một lưới «tập method == tập method» thuần vẫn XANH khi: quên
+   * `throw` (403 hoá 200), truyền một lỗi bịa thay vì binding của `catch`, hoặc dời lời gọi vào
+   * TRONG callback `withTenant` (⇒ `emit()` mở tx lồng tx ⇒ TREO IM LẶNG). Vế (iii) là lưới TĨNH
+   * duy nhất mã hoá được bất biến đó.
+   */
+  it("G-ALERT — method có cổng đính kèm phải báo alert: đúng binding, có rethrow, NGOÀI withTenant", () => {
+    const gateSites = [
+      ...new Set(attachGateCallSites().filter((x) => !x.startsWith("SocialAccessService#"))),
+    ].sort();
+    const reports = attachGateReportSites();
+    const reportSites = [...new Set(reports.map((r) => r.site))].sort();
+
+    expect(gateSites.length, "phải có call-site cổng đính kèm thật").toBeGreaterThan(0);
+    expect(reports.length, "phải có call-site reporter thật (AST không hỏng)").toBeGreaterThan(0);
+    expect(reportSites, "method có cổng đính kèm nhưng KHÔNG báo alert").toEqual(gateSites);
+
+    for (const r of reports) {
+      expect(r.argIsCatchBinding, `${r.site}: đối số 1 phải là CHÍNH binding của catch`).toBe(true);
+      expect(
+        r.rethrowsSameBinding,
+        `${r.site}: khối catch phải ném LẠI đúng binding đó — thiếu ⇒ 403 hoá 200`,
+      ).toBe(true);
+      expect(
+        r.insideWithTenant,
+        `${r.site}: lời gọi reporter KHÔNG được nằm trong callback withTenant (tx lồng tx = treo im lặng)`,
+      ).toBe(false);
     }
   });
 

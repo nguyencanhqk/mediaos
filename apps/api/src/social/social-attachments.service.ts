@@ -17,7 +17,9 @@ import { DatabaseService, type TenantTx } from "../db/db.service";
 import { fileLinks, files } from "../db/schema/files";
 import { FilePolicyService } from "../foundation/files/file-policy.service";
 import { FilePolicyAction } from "../foundation/files/file-policy.types";
+import { SecurityAlertService } from "../auth/security-alert.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../storage/storage-adapter.port";
+import { ATTACH_GATE_ROUTE_TARGET, SOCIAL_FILE_TARGET_PAIRS } from "./social-route-pairs.const";
 import { FEED_COMMENT_ENTITY, FEED_POST_ENTITY, SOCIAL_MODULE } from "./social-file.resolver";
 import { SOCIAL_ERR } from "./social.errors";
 import type { SocialTargetType, SocialViewerContext } from "./social.types";
@@ -34,6 +36,13 @@ import type { SocialTargetType, SocialViewerContext } from "./social.types";
  * │ `max: 20` ⇒ đủ request đồng thời là **TREO IM LẶNG, không lỗi, không log**. Cùng lý do đã ghi  │
  * │ ở docblock lớp bên dưới về `FileService.link()`.                                               │
  * │ ⇒ RESOLVE quyền NGOÀI tx (`SocialAccessService.resolveAttachNewGate`), ÁP quyết định TRONG tx. │
+ * │                                                                                                │
+ * │ 🔴 ĐÍNH CHÍNH S16-SOCIAL-ATTDEBT-1 (F1, vá FULL gate M1) — đoạn trên vẫn đúng NHƯ MỘT GIẢ ĐỊNH │
+ * │ («nếu hỏi quyền TẠI ĐÂY thì sẽ là tx lồng tx»), nhưng đừng đọc nó thành «`resolveAttachNewGate`│
+ * │ mở tx riêng»: từ WO này hàm đó **không chạm DB**, nó chỉ đọc ảnh chụp mà `resolveActor` đã nạp. │
+ * │ Bất biến «giá trị truyền vào, không phải lời gọi quyền tại chỗ» KHÔNG đổi, nhưng lý do giữ nó   │
+ * │ nay là «ảnh chụp chỉ dựng được ở `resolveActor`», không còn là «gọi ở đây sẽ treo». Cơ chế đầy  │
+ * │ đủ: khối ĐÍNH CHÍNH trên `SocialAccessService.resolveAttachNewGate`.                            │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * ⚠️ **Union phân biệt, KHÔNG phải `{ denyMessage: string | null }`** (plan F-2): hình dạng «vắng
@@ -44,6 +53,38 @@ import type { SocialTargetType, SocialViewerContext } from "./social.types";
 export type AttachNewGate =
   | { readonly allow: true }
   | { readonly allow: false; readonly reason: string };
+
+/**
+ * S16-SOCIAL-ATTDEBT-1 (C-5, plan D-5 lối (g)) — ngoại lệ của nhánh DENY cổng gắn tệp, **mang theo
+ * ngữ cảnh** để ghi vết BỀN sau khi transaction nghiệp vụ đã cuộn.
+ *
+ * ┌─ VÌ SAO PHẢI LÀ MỘT LỚP, KHÔNG PHẢI SO CHUỖI THÔNG ĐIỆP ────────────────────────────────────┐
+ * │ Cùng transaction đó còn ném `ForbiddenException` từ `assertCanMutateContent` (SOCIAL-ERR-003).│
+ * │ Phân biệt bằng `err.message.includes(...)` là một hợp đồng NGẦM: một lượt đổi câu chữ (đã có  │
+ * │ nợ D-4 của ATTGATE-1 muốn đổi đúng hai hằng đó!) giết lưới trong im lặng và alert ngừng ghi   │
+ * │ mà không ai biết. `instanceof` không có kiểu hỏng đó. Ca int-spec H9 đo đúng điều này.        │
+ * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠️ `super(reason)` ⇒ **hợp đồng HTTP KHÔNG đổi**: vẫn 403, vẫn đúng hằng `FILE_TARGET_*_DENIED`.
+ * Đây là lớp con thuần-thêm-dữ-liệu, không phải một mã lỗi mới.
+ *
+ * ⚠️ `signal` CỐ Ý **không** mang `route`: `syncLinksTx` không nhận `actor`/`routeKey` và thêm tham
+ * số cho nó là đường cụt (xem docblock `syncLinksTx`). `route` được DẪN XUẤT ở `reportAttachGateDeny`
+ * từ nghịch đảo `ATTACH_GATE_ROUTE_TARGET`.
+ */
+export class SocialAttachGateDeniedException extends ForbiddenException {
+  constructor(
+    reason: string,
+    readonly signal: {
+      readonly targetType: SocialTargetType;
+      readonly targetId: string;
+      readonly actorUserId: string;
+      readonly newFileCount: number;
+    },
+  ) {
+    super(reason);
+  }
+}
 
 /**
  * Cổng của ĐƯỜNG TẠO (`SOCIAL-API-002` / `015`): cặp `create:feed-post` / `create:feed-comment` đã
@@ -94,7 +135,122 @@ export class SocialAttachmentsService {
     private readonly db: DatabaseService,
     private readonly policy: FilePolicyService,
     @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
+    // S16-SOCIAL-ATTDEBT-1 (C-5) — từ `SecurityAlertModule` (module LÁ), KHÔNG từ `AuthModule`.
+    private readonly securityAlerts: SecurityAlertService,
   ) {}
+
+  /**
+   * S16-SOCIAL-ATTDEBT-1 (C-5) — cửa sổ KHỬ TRÙNG trong-tiến-trình cho alert của cổng gắn tệp.
+   *
+   * 🔴 **Vì sao cần** (phép đo 24/09/2026, ĐỔI kết luận của plan gốc — owner ký S-5): `APP_GUARD`
+   * (`app.module.ts:143-145`) chỉ có `JwtAuthGuard`/`CompanyGuard`/`TwoFactorEnforcementGuard` —
+   * **KHÔNG có `ThrottlerGuard`** ở bất kỳ đâu trong `src`; và `security_alerts` nằm trong
+   * `PROTECTED_TABLES` của `retention.service.ts` nên **không có đường dọn**, app role chỉ có
+   * `SELECT, INSERT`. Ghi một hàng cho MỖI lượt deny = vector phình **vô hạn, không xoá được**, do
+   * một vòng lặp PATCH của bất kỳ vai nào thiếu cặp `create:feed-*` kích hoạt. Nó cũng sẽ làm
+   * `attach_gate_deny` thành loại DUY NHẤT không-ngưỡng trong bảng mà 3 loại kia đều `repeated_*`.
+   *
+   * ⚠️ TRONG-TIẾN-TRÌNH, có chủ ý: 0 chi phí DB và KHÔNG đụng `SecurityAlertService` (crown-jewel
+   * của AUTH). Giá phải trả — khai thẳng: nhiều tiến trình / một lượt restart ⇒ cửa sổ mở lại. Đây
+   * là giảm-thiểu phòng-thủ-theo-chiều-sâu, KHÔNG phải một bảo đảm; `logger.warn` ở nhánh deny vẫn
+   * ghi MỌI lượt nên không có lượt deny nào biến mất khỏi mọi vết.
+   */
+  private static readonly ALERT_DEDUPE_MS = 60_000;
+  private readonly alertSeenAt = new Map<string, number>();
+
+  /**
+   * `true` nếu lượt deny này nên ghi alert (chưa thấy trong cửa sổ). Dọn khoá hết hạn ngay trong
+   * lượt quét — Map này KHÔNG được phép lớn vô hạn (đó là cùng lớp lỗi mà nó đang đi vá).
+   */
+  private shouldEmitAlert(key: string, now: number): boolean {
+    for (const [k, at] of this.alertSeenAt) {
+      if (now - at >= SocialAttachmentsService.ALERT_DEDUPE_MS) this.alertSeenAt.delete(k);
+    }
+    const seen = this.alertSeenAt.get(key);
+    if (seen !== undefined && now - seen < SocialAttachmentsService.ALERT_DEDUPE_MS) return false;
+    this.alertSeenAt.set(key, now);
+    return true;
+  }
+
+  /**
+   * S16-SOCIAL-ATTDEBT-1 (C-5) — ghi vết BỀN cho một lượt DENY của cổng gắn tệp.
+   *
+   * 🔴 **GỌI Ở NGOÀI `withTenant`, KHÔNG BAO GIỜ Ở TRONG.** Ba lối sai và vì sao:
+   *  - `audit.record(tx, …)` / `emitTx(tx, …)` tại chỗ ném ⇒ cú ném roll back cả tx ⇒ hàng biến mất
+   *    cùng lượt sửa (ca G15 của ATTGATE-1 assert đúng điều đó).
+   *  - `emit()` tại chỗ ném ⇒ nó **tự mở `withTenant`** trong khi tx nghiệp vụ còn giữ client ⇒
+   *    `withTenant` LỒNG `withTenant`; `db.service.ts:83` không tái nhập, pool `max:20` ⇒ **TREO IM
+   *    LẶNG**, không lỗi, không log. Đây là bẫy trung tâm của cả wave này.
+   *  ⇒ Đường đúng: ngoại lệ bay RA khỏi `withTenant` (tx đã cuộn xong), `update()` bắt bằng
+   *    `instanceof`, gọi hàm này, rồi **ném lại nguyên vật**.
+   *
+   * Best-effort: `emit()` nuốt lỗi ghi (đã log) ⇒ deny vẫn là deny. Hàm này KHÔNG được phép đổi
+   * outcome an ninh của caller.
+   */
+  async reportAttachGateDeny(err: unknown, companyId: string): Promise<void> {
+    // No-op cho MỌI ngoại lệ khác — `assertCanMutateContent` cũng ném `ForbiddenException` từ trong
+    // CÙNG tx, và nó KHÔNG phải một lượt deny của cổng gắn tệp.
+    if (!(err instanceof SocialAttachGateDeniedException)) return;
+
+    const { targetType, targetId, actorUserId, newFileCount } = err.signal;
+    const key = `${companyId}:${actorUserId}:${targetType}:${targetId}`;
+    if (!this.shouldEmitAlert(key, Date.now())) return;
+
+    // `route` DẪN XUẤT từ nghịch đảo bảng `ATTACH_GATE_ROUTE_TARGET` ⇒ 0 tham số mới cho
+    // `syncLinksTx`, và bảng đó thành load-bearing lần thứ hai (lần đầu: `resolveActor`).
+    const route =
+      Object.entries(ATTACH_GATE_ROUTE_TARGET).find(([, t]) => t === targetType)?.[0] ?? "unknown";
+    const pair = `${SOCIAL_FILE_TARGET_PAIRS[targetType].action}:${SOCIAL_FILE_TARGET_PAIRS[targetType].resourceType}`;
+
+    // 🔴 TỰ BỌC try/catch, KHÔNG dựa vào `emit()` nuốt hộ. `emit()` hôm nay nuốt lỗi ghi và trả
+    // `false`, nhưng caller của hàm này là khối `catch` của `update()` và nó ném LẠI lỗi 403 ngay
+    // sau. Nếu một ngày `emit` (hoặc một lớp chèn giữa) ném, ngoại lệ đó sẽ THAY THẾ lỗi 403 gốc ⇒
+    // người dùng nhận **500 thay vì 403**, tức một sự cố hạ tầng ghi đè lên một quyết định an ninh.
+    // Vết phòng-thủ-theo-chiều-sâu KHÔNG bao giờ được đổi outcome của thứ nó đang quan sát.
+    try {
+      const written = await this.securityAlerts.emit(companyId, {
+        alertType: "attach_gate_deny",
+        // `low`: một lượt deny lẻ không phải sự cố (owner ký S-3).
+        severity: "low",
+        subjectUserId: actorUserId,
+        // 🔴 TÊN KHOÁ phải sống sót `sanitizeDetail` — nó loại MỌI khoá khớp
+        // /(password|secret|token|code|otp|dek|cipher|hash|key)/i, **im lặng**. Vì thế là `route`
+        // chứ KHÔNG `routeCode`, `pair` chứ KHÔNG `pairKey`, và không `moduleCode` nào ở đây.
+        // Chỉ SỐ LƯỢNG tệp — không id, không tên tệp (cùng kỷ luật với `logger.warn` nhánh deny).
+        detail: { route, target: targetType, targetId, newFiles: newFileCount, pair },
+      });
+
+      // ┌─ VÁ FULL GATE M-2 — ĐỌC giá trị trả của `emit()`, TRẢ LẠI khoá khử trùng khi ghi hỏng ──┐
+      // │ `emit()` NUỐT lỗi ghi rồi trả `false` (`security-alert.service.ts:64-76`). Bản đầu của   │
+      // │ WO này vứt giá trị đó đi, trong khi `shouldEmitAlert` ĐÃ đóng cửa sổ 60s cho khoá này ⇒  │
+      // │ một lượt ghi hỏng (CHECK vỡ vì thiếu dòng journal · DB nghẽn · grant lệch) **ĐỐT TRỌN**  │
+      // │ 60 giây: mọi lượt deny cùng đích sau đó bị khử trùng, không lượt nào thử lại ⇒ alert mất │
+      // │ HẲN chứ không chỉ chậm. Trả khoá lại để lượt deny kế tiếp còn cửa ghi.                   │
+      // │ Và phải TỰ log định danh: dòng log của `emit()` chỉ mang `companyId` + `alertType` +     │
+      // │ stack, KHÔNG có actor/target (chúng nằm trong `detail`, mà `detail` không được log) ⇒    │
+      // │ không có dòng này thì không nối được «alert nào mất» với «deny nào», ngoài cách khớp tay │
+      // │ bằng dấu thời gian với `logger.warn` ở nhánh deny.                                       │
+      // └──────────────────────────────────────────────────────────────────────────────────────────┘
+      if (!written) {
+        this.alertSeenAt.delete(key);
+        this.logger.error(
+          `security_alert attach-gate DENY KHÔNG ghi được (outcome 403 giữ nguyên) — ` +
+            `company=${companyId} actor=${actorUserId} target=${targetType}:${targetId} route=${route}`,
+        );
+      }
+    } catch (alertErr) {
+      // KHÔNG nuốt IM: log rồi thôi. Deny vẫn là deny. Khoá cũng được trả lại vì đúng lý do ở khối
+      // trên — và log kèm `stack`: ca DUY NHẤT khối này bắt được là «`emit` hoặc một lớp chèn giữa
+      // NÉM», tức đúng loại lỗi cần stack nhất.
+      this.alertSeenAt.delete(key);
+      this.logger.error(
+        `Không ghi được security_alert cho attach-gate DENY (outcome 403 giữ nguyên) — ` +
+          `company=${companyId} actor=${actorUserId} target=${targetType}:${targetId}: ${
+            alertErr instanceof Error ? (alertErr.stack ?? alertErr.message) : String(alertErr)
+          }`,
+      );
+    }
+  }
 
   /**
    * Ép MỌI vế của đường gắn tệp, TRONG tx nghiệp vụ. Ném 422 `SOCIAL-ERR-007` ở mọi nhánh hỏng.
@@ -253,7 +409,15 @@ export class SocialAttachmentsService {
       this.logger.warn(
         `SOCIAL attach-gate DENY target=${targetType}:${targetId} actor=${userId} newFiles=${toAdd.length}`,
       );
-      throw new ForbiddenException(gate.reason);
+      // S16-SOCIAL-ATTDEBT-1 (C-5): ném LỚP MANG NGỮ CẢNH. Dòng `logger.warn` ngay trên GIỮ NGUYÊN,
+      // không thay bằng alert: hai vết hỏng theo hai cách khác nhau — `emit()` nuốt lỗi ghi alert
+      // (`security-alert.service.ts:64-76`), còn log thì không phụ thuộc DB.
+      throw new SocialAttachGateDeniedException(gate.reason, {
+        targetType,
+        targetId,
+        actorUserId: userId,
+        newFileCount: toAdd.length,
+      });
     }
 
     // Chỉ tệp MỚI mới đi qua cổng — tệp đã gắn từ trước đã qua rồi, và bắt nó qua lại sẽ đỏ ở vế 5
