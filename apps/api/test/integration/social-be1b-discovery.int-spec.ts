@@ -399,7 +399,13 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1B tìm kiếm/thẻ/profile/sinh nh�
 
       // `meta.timestamp` của envelope CÓ chứa năm hiện tại ⇒ chỉ grep phần `data`.
       const payload = JSON.stringify(res.body.data);
-      expect(payload, `năm sinh rò ra trong: ${payload}`).not.toMatch(/\b(19|20)\d{2}\b/);
+      // Gỡ UUID trước khi grep: nhóm 4-hex giữa hai gạch nối (`…-1991-…`) khớp `\b(19|20)\d{2}\b`
+      // ⇒ đỏ oan NGẪU NHIÊN theo id sinh ra (CI #542, 24/09). UUID không thể mang năm sinh.
+      const withoutUuids = payload.replace(
+        /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+        "<uuid>",
+      );
+      expect(withoutUuids, `năm sinh rò ra trong: ${payload}`).not.toMatch(/\b(19|20)\d{2}\b/);
       expect(payload).not.toContain("dateOfBirth");
       expect(payload).not.toContain("date_of_birth");
     });
