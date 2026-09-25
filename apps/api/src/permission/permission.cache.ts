@@ -9,6 +9,7 @@ import type {
   PermissionCatalogEntry,
 } from "./permission.types";
 import { ValkeyService } from "./valkey.service";
+import { bumpGrantSnapshotEpoch, GrantSnapshotMemo } from "./grant-snapshot-memo";
 
 const CACHE_TTL_SEC = 300; // 5 minutes (plan §3b)
 
@@ -26,6 +27,11 @@ type SerializedGrant = Omit<CompanyRoleGrant, "expiresAt"> & { expiresAt: string
  *
  * The service still re-checks expiresAt per can() call — cache just avoids repeated DB queries.
  * Invalidation via invalidateUser() is called when permission.changed event fires (<100ms target).
+ *
+ * S16-SOCIAL-PERMMEMO-1 (ADR `DECISIONS-15`) — tầng THỨ HAI, riêng cho `getCompanyRoleGrantsWithScope`:
+ * memo ảnh chụp grant-kèm-scope THEO REQUEST (AsyncLocalStorage mở bởi `grantMemoMiddleware`, trần tuổi
+ * 2000ms, epoch toàn tiến trình bump ở dòng đầu `invalidateUser`). Không phải cache Valkey, không sống qua
+ * request. Tham số `memo` OPTIONAL để spec dựng 2 đối số vẫn chạy (mặc định = memo thật).
  */
 @Injectable()
 export class CachedPermissionRepository implements IPermissionRepository {
@@ -34,6 +40,7 @@ export class CachedPermissionRepository implements IPermissionRepository {
   constructor(
     private readonly inner: IPermissionRepository,
     private readonly valkey: ValkeyService,
+    private readonly memo: GrantSnapshotMemo = new GrantSnapshotMemo(),
   ) {}
 
   private capKey(companyId: string, userId: string): string {
@@ -89,14 +96,21 @@ export class CachedPermissionRepository implements IPermissionRepository {
   }
 
   /**
-   * S2-AUTH-BE-1 — passthrough (KHÔNG cache): scopes chỉ dùng cho /auth/me bootstrap (ít gọi, KHÔNG nằm trên
-   * can() hot-path) → bỏ cache để tránh thêm khoá + vòng invalidation. RLS vẫn ép ở inner (withTenant).
+   * S16-SOCIAL-PERMMEMO-1 (ADR `DECISIONS-15`) — KHÔNG cache GIỮA các request (không Valkey, không khoá
+   * chia sẻ); TRONG một request HTTP được memo qua `GrantSnapshotMemo`: lượt đầu mỗi (companyId, userId)
+   * đọc DB, các lượt sau trong ≤`GRANT_MEMO_MAX_AGE_MS` (2000ms) dùng lại ảnh chụp (bản clone). Vô hiệu
+   * NGAY bởi `invalidateUser` (epoch toàn tiến trình). Ngoài request (job/outbox/WS/bootstrap) = passthrough.
+   * RLS vẫn ép ở inner (`withTenant`) — memo chỉ gom số lượt đọc, không bỏ qua lượt đọc đầu.
+   * D3 (owner ký): `getCompanyRoleGrants` (đường `can()`) KHÔNG đi qua memo này.
+   * (Lịch sử: S2-AUTH-BE-1 để hàm này passthrough vì «ít gọi»; tiền đề đó đã sai — xem ADR-15 §1.)
    */
   async getCompanyRoleGrantsWithScope(
     userId: string,
     companyId: string,
   ): Promise<CompanyRoleGrantWithScope[]> {
-    return this.inner.getCompanyRoleGrantsWithScope(userId, companyId);
+    return this.memo.read(companyId, userId, () =>
+      this.inner.getCompanyRoleGrantsWithScope(userId, companyId),
+    );
   }
 
   async getObjectGrants(
@@ -173,6 +187,9 @@ export class CachedPermissionRepository implements IPermissionRepository {
    * `--scan --pattern 'perm:cap:*'` = 0 dòng cho thấy cửa sổ đó đã qua. Còn đúng MỘT khoá.
    */
   async invalidateUser(companyId: string, userId: string): Promise<void> {
+    // ADR-15 D6 — DÒNG ĐẦU, trước DEL (DEL có thể ném bên dưới): memo request phải bị vô hiệu kể cả khi
+    // Valkey lỗi. Handler outbox chạy NGOÀI request ⇒ chỉ epoch toàn tiến trình với tới được memo.
+    bumpGrantSnapshotEpoch();
     const ok = await this.valkey.del(this.capKey(companyId, userId));
     if (!ok) {
       throw new Error(

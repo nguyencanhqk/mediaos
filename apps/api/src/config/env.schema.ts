@@ -166,6 +166,12 @@ export const envSchema = z
     // ('false'→true bẫy). LƯU Ý: scheduler còn TỰ TẮT khi NODE_ENV==='test' (belt-and-suspenders) — spec
     // worker gọi processBatch trực tiếp nên scheduler KHÔNG được tự tick trong vitest (đua/nhiễu test).
     WORKERS_SCHEDULER_ENABLED: z.enum(["true", "false"]).default("true"),
+
+    // ── S16-SOCIAL-PERMMEMO-1 (ADR DECISIONS-15) — memo ảnh chụp grant-kèm-scope THEO REQUEST ─────
+    // Kill-switch: 'false' ⇒ main.ts KHÔNG đăng ký grantMemoMiddleware ⇒ passthrough y hệt trước WO.
+    // Hướng an toàn: tắt = nhiều lượt đọc DB hơn, KHÔNG BAO GIỜ nới quyền ⇒ không cần chặn ở production
+    // (khác PERMISSION_GUARD_ENABLED). KHÔNG z.coerce.boolean ('false'→true bẫy). Rollback = đổi env + restart.
+    PERMISSION_GRANT_MEMO_ENABLED: z.enum(["true", "false"]).default("true"),
     // Chu kỳ poll (ms). Cận [250ms, 1h]: chặn footgun cấu hình (vd 1ms → hammer DB) + chặn poll quá thưa
     // làm job kẹt lâu. Mặc định 5s (outbox, độ trễ giao event) / 10s (export, ít gấp hơn → thưa hơn).
     OUTBOX_POLL_MS: z.coerce.number().int().min(250).max(3_600_000).default(5000),

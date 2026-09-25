@@ -17206,6 +17206,7 @@ export const backlog = [
     notes: [
       "TÁCH RA 24/09/2026 từ plan ATTDEBT-1 §7 B1. Phát hiện nhờ `plan-reviewer` bác phép đo gốc.",
       "LÀM 25/09/2026 — vá CỤC BỘ, KHÔNG chờ PERMMEMO-1 (WO đó cần ADR, vùng đỏ). `SocialFileResolver` hỏi `view:feed` + `manage:feed-post` (+ cặp create ở `canAttach`) trong MỘT lượt `resolveManyOrNull`; `SocialAccessService.buildViewerContext` nhận scope manage caller đã resolve (hằng `MANAGE_POSTS_PAIR` dùng chung). Đo thật trên lane DB (`social-attdebt-1-cost-alert.int-spec.ts` ca PERMCOST-1, spy CALL-THROUGH): delta GET bài 1 ảnh − 0 ảnh **trước = 2 · sau = 1**; mutant (resolver cũ) đỏ đúng thông điệp `0 ảnh=1 · 1 ảnh=3`. Deny-path: `manage:feed-post` KHÔNG thay được `view:feed` (unit). PERMMEMO-1 vẫn mở cho các hàm khác.",
+      "PERMMEMO-1 (25/09/2026) đưa GET bài 1 ảnh về 1 lượt/request khi có `grantMemoMiddleware` (đo appCtl=2 → appMemo=1); vá cục bộ của WO này VẪN giữ giá trị cho đường ngoài request (job/WS/outbox — memo passthrough ở đó) và cho int-spec không đăng ký middleware.",
     ],
   },
   {
@@ -17249,6 +17250,32 @@ export const backlog = [
     ],
     notes: [
       "TÁCH RA 24/09/2026 từ plan ATTDEBT-1 D-1 lối (c). Đóng luôn `S16-SOCIAL-PERMCOST-1` nếu làm lối này.",
+      "PLAN 25/09/2026 (`docs/plans/S16-SOCIAL-PERMMEMO-1.md`, plan-review PASS-WITH-FIXES) · ADR `DECISIONS-15` · trần tuổi 2000ms · epoch TOÀN TIẾN TRÌNH (bump dòng đầu `invalidateUser`) · ALS riêng mở bởi `grantMemoMiddleware` (main.ts, ngay sau requestIdMiddleware) · kill-switch `PERMISSION_GRANT_MEMO_ENABLED` (mặc định true; false ⇒ passthrough y hệt trước WO).",
+      "THI CÔNG 25/09/2026 — số đo THẬT (int-spec `permission-permmemo-1.int-spec.ts`, lane DB): PATCH bài có đính kèm appCtl=2 → appMemo=1 · GET bài 1 ảnh 2 → 1 · GET /auth/login-logs 2 → 1 · hai actor song song 10 request: A=5 · B=5 (1/request, không rò). 13/13 mutant X1–X13 đỏ đúng thông điệp (plan §9). ⚠️ Plan kỳ vọng PATCH «trước = 3» — thực đo 2 vì PERMCOST-1 (#543) đã gộp một lượt trước đó.",
+      "LỖI THỜI (ghi ở đây, KHÔNG sửa plan cũ): ATTGATE-1 M8 «kho KHÔNG có AsyncLocalStorage» — ALS có từ S10-FND-JSONLOG-1 (`common/logger/request-context.ts`).",
+      "Nợ để lại: 311 int-spec dựng app KHÔNG đăng ký middleware ⇒ bộ hồi quy rộng chỉ phủ passthrough ⇒ WO `S16-TEST-PIPELINE-PARITY-1`. Multer/busboy (upload multipart) CHƯA đo giữ ngữ cảnh ALS (SOCIAL không có route multipart) — hướng an toàn nếu mất (chỉ mất phần tiết kiệm).",
+    ],
+  },
+  {
+    id: "S16-TEST-PIPELINE-PARITY-1",
+    module: "FOUNDATION",
+    layer: "QA",
+    title:
+      "Helper bootstrap int-spec áp ĐÚNG middleware của `main.ts` (requestId + grantMemo) — hôm nay ~311 int-spec `createNestApplication` KHÔNG đăng ký middleware nào ⇒ bộ hồi quy rộng chỉ phủ đường passthrough",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: [],
+    depends_on: ["S16-SOCIAL-PERMMEMO-1"],
+    src: [
+      "plan `docs/plans/S16-SOCIAL-PERMMEMO-1.md` §6 R5 · ADR `DECISIONS-15` §6.5",
+    ],
+    done_when: [
+      "Một helper dùng chung (vd `test/helpers/bootstrap-app.ts`) dựng app y hệt thứ tự `main.ts` (middleware + interceptor + filter); có lưới tĩnh/AST so helper ↔ `main.ts` để hai nơi không trôi",
+      "Chuyển dần int-spec sang helper KHÔNG đổi số spy-count cũ vô tình: spec đo số lượt nạp grant (ATTDEBT H1, PERMCOST-1) phải được ĐO LẠI và ghi số mới, không sửa kỳ vọng mù",
+    ],
+    notes: [
+      "SEED 25/09/2026 bởi thi công PERMMEMO-1 (R5). Chưa làm.",
     ],
   },
   {

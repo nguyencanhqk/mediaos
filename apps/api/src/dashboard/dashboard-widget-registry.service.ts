@@ -204,7 +204,8 @@ export class DashboardWidgetRegistryService {
 
     // ── Pha 2: sàn scope — MỘT lượt đọc grant cho MỌI widget khai sàn ──────────────────────────────
     // ⟲ S14-PERF-DASHACTOR-1: trước đây mỗi widget khai sàn tốn MỘT `resolveOrNull` =
-    // `getCompanyRoleGrantsWithScope` (KHÔNG cache) ⇒ 3 query cho dashboard admin đủ 3 widget khai sàn.
+    // `getCompanyRoleGrantsWithScope` (không cache giữa request; memo ADR-15 trong request) ⇒ 3 query cho
+    // dashboard admin đủ 3 widget khai sàn.
     // Nay gom thành một `resolveManyOrNull`.
     //
     // Tính chất PHẢI GIỮ (comment gốc S11-OFFICE-DASH-1: «đa số không khai ⇒ không tốn round-trip thứ

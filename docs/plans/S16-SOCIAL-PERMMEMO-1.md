@@ -264,4 +264,88 @@ F1 HIGH khoá chỉ-`companyId` không ca nào bắt (U13 · H8 · X13) · F2 X3
 
 ## §9 — BẰNG CHỨNG ĐO THẬT
 
-_(người thi công điền: số trước/sau H1–H3, H4 A/B, bảng mutant X1–X12 với thông điệp đỏ THẬT, route mất ngữ cảnh nếu có)_
+> Thi công 25/09/2026 trên lane DB cô lập `mediaos_permmemo` (`scripts/lane-db-setup.sh permmemo --reset`, chain 0000→latest áp sạch). Mọi số dưới đây là số CHẠY THẬT, chép từ log vitest.
+
+### 9.0 — Xác minh tiền đề
+
+- **`OUTBOX_POLL_MS` PROD** (§0.1): `.env.prod:55` = `5000` (không override lên trên 2000ms) ⇒ lập luận M9 / ADR §4 giữ nguyên.
+- **ALS sống qua body-parser (M7/H7):** H1 là PATCH JSON trên appMemo và đo được **1** lượt ⇒ ngữ cảnh ALS đi qua `express.json`/raw-body. **Multer/busboy: CHƯA đo** — SOCIAL không có route multipart (tệp đi cửa presign của foundation); R1 còn mở cho `hr-import` (`FileInterceptor`) — hướng an toàn nếu mất ngữ cảnh (chỉ mất phần tiết kiệm).
+
+### 9.1 — Phase A (RED, stub passthrough, TS xanh)
+
+Stub `grant-snapshot-memo.ts` passthrough + middleware thật + tham số `memo` OPTIONAL ở constructor cache (chưa dùng). `pnpm --filter @mediaos/api typecheck` xanh. Chạy 5 file: **16 đỏ · 19 xanh / 35**, mọi ca đỏ là `AssertionError` đúng thông điệp (không lỗi biên dịch, không 500):
+
+| Ca | Thông điệp đỏ THẬT (Phase A) |
+| --- | --- |
+| U1 | `cùng (c,u) trong một request PHẢI đọc DB đúng 1 lần: expected 3 to be 1` |
+| U4 | `trong trần 2000ms PHẢI dùng memo: expected 2 to be 1` |
+| U5 | `expected 4 to be 2` |
+| U8 | `expected 2 to be 1` (vế single-flight: 2 caller đồng thời) |
+| U10 | `expected 3 to be 1` (số lượt inner) |
+| U12 | `expected 65 to be 64` |
+| C1 | `getCompanyRoleGrantsWithScope PHẢI đi qua memo trong request: expected "spy" to be called 1 times, but got 3 times` |
+| S1 ×2 | `main.ts PHẢI đăng ký grantMemoMiddleware: expected -1 to be greater than -1` · `env.schema PHẢI khai PERMISSION_GRANT_MEMO_ENABLED: expected undefined to be defined` |
+| middleware | `next() PHẢI chạy trong ngữ cảnh memo của middleware: expected 2 to be 1` |
+| H1 | `PATCH đính kèm: appCtl=2 · appMemo PHẢI = 1: expected 2 to be 1` |
+| H2 | `GET 1 ảnh: appCtl=2 · appMemo PHẢI = 1: expected 2 to be 1` |
+| H3 | `login-logs: appCtl=2 · appMemo PHẢI = 1: expected 2 to be 1` |
+| H4 | `memo KHÔNG được xuyên request: A=5 lượt: expected 10 to be 5` |
+| H5a / H5b | `H5a-giữ: trong trần 2000ms ảnh chụp còn hiệu lực (D1): expected null to be 'Company'` · `trong trần còn scope: expected null to be 'Company'` |
+
+Xanh ở Phase A (đúng thiết kế — chúng là lưới HỒI QUY, không phải ca RED): U2 · U3 · U6 · U7 · U9 · U11 · U13 · C2 · C3 · C4 · H6 · H8 ×2 (passthrough vốn đã «đúng» ở các vế này; chúng cắn MUTANT ở §9.3).
+
+### 9.2 — Số đếm TRƯỚC / SAU (spy CALL-THROUGH trên `PermissionRepository`, lọc theo userId)
+
+| Ca | appCtl (không middleware = hiện trạng) | appMemo (như `main.ts`) | Kỳ vọng plan |
+| --- | --- | --- | --- |
+| H1 PATCH bài có `attachmentIds` | **2** | **1** | trước 3 ⇒ ⚠️ LỆCH: thực đo **2** vì PERMCOST-1 (#543) đã gộp một lượt trước WO này. Neo `≥2` vẫn đúng |
+| H2 GET bài 1 ảnh | **2** | **1** | khớp |
+| H3 GET `/auth/login-logs` | **2** | **1** | khớp |
+| H4 10 request song song (A @Company, B @Own) | A=**10** · B=**10** (Phase A, 2 lượt/request) | A=**5** · B=**5** (1/request) | khớp; mọi response B KHÔNG chứa hàng của A, A THẤY hàng của B |
+
+### 9.3 — Mutant X1–X13 (Phase D — áp TỪNG CÁI, chạy ca nêu tên, khôi phục bằng bản sao, `diff -q` xác nhận mã sản phẩm đã về nguyên trạng)
+
+| # | Mutant (đã áp) | Ca đỏ THẬT | Thông điệp đỏ THẬT |
+| --- | --- | --- | --- |
+| X1 | `const key = userId` | U9 | `memo PHẢI tách công ty: (c1,u)+(c2,u) = 2 lượt đọc: expected [ { action: 'view', …(5) } ] to deeply equal []` |
+| X2 | `isFresh` bỏ vế tuổi | U4 · H5b (+U12 phụ) | `quá trần 2000ms PHẢI đọc lại DB: expected 1 to be 2` · H5b `quá trần 2000ms PHẢI đọc lại DB: expected 'Company' to be null` |
+| X3 | bỏ `bumpGrantSnapshotEpoch()` ở `invalidateUser` | C2 · C3 · H5a (U2 xanh — đúng dự đoán) | `sau invalidateUser lượt đọc PHẢI thấy thu hồi: expected "spy" to be called 2 times, but got 1 times` · H5a `…: expected 'Company' to be null` |
+| X4 | thân bump = `als.getStore()?.perMemo.clear()` | U3 (U2 xanh — đúng dự đoán) | `invalidate từ outbox (ngoài request) PHẢI với tới memo của request: expected 1 to be 2` |
+| X5 | bump dời xuống SAU `if (!ok) throw` | C3 | `DEL lỗi vẫn PHẢI vô hiệu memo: expected "spy" to be called 2 times, but got 1 times` |
+| X6 | bỏ `entry.promise.catch(…delete…)` | U8 | `lỗi hạ tầng KHÔNG được đầu độc phần còn lại của request: expected Error: db down to deeply equal [ … ]` |
+| X7 | trả promise lưu trữ, không clone | U10 | `caller sửa kết quả KHÔNG được đổi ảnh chụp: expected [ {…}, …(1) ] to deeply equal [ {…} ]` |
+| X8 | store cấp module thay ALS (trong request) | U6 · H4 (+H2 · H5b phụ) | `memo KHÔNG được xuyên request: A=5 lượt: expected 1 to be 2` · H4 `…: expected +0 to be 5` |
+| X9 | store dự phòng khi ngoài request | U7 · H6 (+neo H1–H3 phụ) | `ngoài request PHẢI passthrough: 3 lượt: expected 1 to be 3` (cả U7 và H6) |
+| X10 | epoch chụp lúc RESOLVE | U11 (+U8 phụ) | `bump khi đang bay PHẢI làm lượt sau đọc lại: expected 1 to be 2` |
+| X11 | gỡ khối `app.use(grantMemoMiddleware)` ở `main.ts` | S1 | `main.ts PHẢI đăng ký grantMemoMiddleware: expected -1 to be greater than -1` |
+| X12 | memo cả `getCompanyRoleGrants` | C4 | `D3: can() path KHÔNG memo: expected "spy" to be called 2 times, but got 1 times` |
+| X13 | `const key = companyId` | U13 · H8 (+U12 phụ) | U13 `memo PHẢI tách người dùng trong cùng công ty: expected 'Company' to be null` · H8 `memo PHẢI tách người dùng trong cùng công ty: {…201, mentions:[…]}: expected 201 to be 403` — tức actor MENTION được người không có `read:task` |
+
+13/13 đỏ đúng thông điệp. Sau mỗi mutant: `diff -q` bản sao ↔ `grant-snapshot-memo.ts` / `permission.cache.ts` / `main.ts` = giống hệt.
+
+### 9.4 — Coverage (`test:cov:sensitive`, LANE_DB, 79 file / 1162 ca xanh)
+
+| File | Stmts | Branch | Funcs | Lines |
+| --- | --- | --- | --- | --- |
+| `src/permission/grant-snapshot-memo.ts` | 100 | 100 | 100 | 100 |
+| `src/permission/permission.cache.ts` | 89.92 | 83.87 | 90 | 89.92 |
+| `src/common/middleware/grant-memo.middleware.ts` | 100 | 100 | 100 | 100 |
+
+Đọc tay ≥80% cả ba (script không có cờ ngưỡng — đúng như §2).
+
+### 9.5 — Lệch plan (ghi thẳng, không lặng lẽ)
+
+1. **H1 «trước = 3» → thực đo 2** (PERMCOST-1 đã gộp một lượt). Không đổi thiết kế; neo `≥2` giữ.
+2. **H5 dùng Valkey GIẢ (`del → true`), không `app.get(ValkeyService)`.** Plan giả định lane không có `VALKEY_URL`; thực tế `loadEnv()` đọc `.env` gốc ⇒ client ioredis thật với `lazyConnect:true` + `enableOfflineQueue:false` ⇒ DEL ĐẦU TIÊN trên client lạnh trả `false` ⇒ `invalidateUser` ném `Valkey DEL failed…`. Nhánh DEL-lỗi đã có C3 đo (và X5). ⚠️ Quan sát CHƯA xác minh ở PROD: cùng hình dạng client ⇒ lệnh Valkey đầu tiên sau boot có thể thất bại trước khi kết nối xong — hành vi có sẵn, ngoài phạm vi WO.
+3. **Phase A không «0 dòng mã sản phẩm» tuyệt đối:** thêm tham số `memo` OPTIONAL (chưa dùng) vào constructor `CachedPermissionRepository` để ca H5 dựng tay biên dịch được; middleware viết bản thật ngay (1 dòng, đỏ nhờ memo stub).
+4. **Hình dạng store:** `{ perMemo: Map<GrantSnapshotMemo, Map<string, Entry>>, capLogged }` thay vì `Map` trần — cần chỗ cho cờ «debug 1 lần mỗi store» (D-2). X4 vì vậy là `als.getStore()?.perMemo.clear()`.
+5. **U8** dùng `.catch((e) => e)` ở lượt thứ hai để mutant X6 đỏ ở assert CÓ thông điệp (bản đầu đỏ bằng `Error: db down` trần — đúng lớp «mutant đỏ phải khớp thông điệp»).
+6. **H7**: không có route multipart SOCIAL ⇒ không đo (xem 9.0).
+7. `test:cov:social` KHÔNG chạy riêng; chạy int-spec ATTDEBT (`social-attdebt-1-cost-alert.int-spec.ts`) = **8/8 xanh**, số spy-count cũ giữ nguyên (R7); `harness/check.sh --lane-db=permmemo` chạy toàn suite (9.6).
+8. Comment §5: ngoài bảng, sửa thêm 0 file; mọi mục trong bảng đã sửa (grep lại `permission.cache.ts:9` · `passthrough có chủ ý` · `passthrough cố ý` · `passthrough KHÔNG cache` = 0 hit).
+
+### 9.6 — Cổng cuối
+
+- `pnpm --filter @mediaos/api typecheck` = xanh · `lint` = 0 lỗi (warning có sẵn, không file nào của WO).
+- `bash harness/check.sh --lane-db=permmemo` lượt 1 = **ĐỎ 1 ca thật**: ratchet `supertest-listen-ratchet.unit-spec.ts` (S18-QA-SUPERTESTLISTEN-1) bắt int-spec mới bắn supertest trong `Promise.all` (H4) mà app chưa `listen(0)`. Sửa root-cause: init + `listen(0)` cả hai app ở `beforeAll` (census đọc theo tên biến, `afterAll` đã `close()`). Chạy lại 5 mutant dùng int-spec (X2 · X3 · X8 · X9 · X13) sau sửa: vẫn đỏ đúng thông điệp.
+- Lượt 2: **`XANH ✅`** — `@mediaos/api: 784/784 file chạy · 2 lần chạy lại (crash hạ tầng)`, mọi package xanh, `exit=0`.

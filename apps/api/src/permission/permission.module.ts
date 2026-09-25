@@ -106,6 +106,8 @@ class PermissionCacheInvalidator implements OnModuleInit {
  *
  * Guard pipeline: JwtAuthGuard → CompanyGuard → PermissionGuard.
  * Cache: CachedPermissionRepository (Valkey, TTL 300s) wraps PermissionRepository (DB).
+ * Memo theo request (ADR DECISIONS-15): riêng `getCompanyRoleGrantsWithScope` — ALS mở bởi
+ * `grantMemoMiddleware` (main.ts), trần 2000ms, `invalidateUser` bump epoch. KHÔNG áp cho đường `can()`.
  * Invalidation: permission.changed event → PermissionCacheInvalidator → DEL cap key (<100ms target).
  */
 @Module({

@@ -112,8 +112,9 @@ export class DataScopeService {
    * S14-PERF-DASHACTOR-1 — N cặp trong MỘT lượt đọc grant (`PermissionService.resolveStrongestScopes`).
    * Dùng khi một request hỏi NHIỀU cặp cùng (userId, companyId): `RecruitAccessService.resolveActor`
    * (cặp route + 3 cờ phụ = 4 query giống hệt nhau trước WO này) hay `filterByGatePair` (một query
-   * cho MỖI widget khai sàn). `getCompanyRoleGrantsWithScope` **KHÔNG được cache** (`permission.cache.ts:95`
-   * là passthrough có chủ ý), nên mỗi lời gọi lẻ = một round-trip DB thật.
+   * cho MỖI widget khai sàn). `getCompanyRoleGrantsWithScope` không cache GIỮA các request; TRONG một
+   * request HTTP được memo ≤2s (DECISIONS-15), nên mỗi lời gọi lẻ = một round-trip DB ở lần đầu mỗi
+   * request. Gom batch vẫn cần cho đường NGOÀI request (job/WS/outbox — memo passthrough ở đó).
    *
    * ⚠️ **KHÔNG NÉM** — cùng hợp đồng `resolveOrNull`, và cùng cảnh báo: đừng dùng cho route mà cặp
    * gate = cặp bound trừ khi bạn assert TAY ngay sau đó (`null` ở đó nghĩa là guard đã hỏng, phải
