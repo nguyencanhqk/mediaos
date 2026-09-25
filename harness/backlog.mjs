@@ -17186,7 +17186,13 @@ export const backlog = [
     module_note: "SOCIAL + FOUNDATION files",
     zone: "yellow",
     status: "todo",
-    paths: ["apps/api/src/social/**", "apps/api/src/foundation/**", "apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/src/foundation/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
     skills: ["security-review"],
     depends_on: ["S16-SOCIAL-ATTDEBT-1"],
     src: [
@@ -17209,10 +17215,19 @@ export const backlog = [
       "Memo ảnh chụp grant theo REQUEST (ALS hoặc request-scoped): đóng MỘT LƯỢT cả `assertCreatablePostType` · `assertKudosOfficial` · `assertFileTarget` · `canApproveIdeas` · `canReadOwner` · `resolveViewerContext` — mỗi hàm hiện là +1 transaction",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/permission/**", "apps/api/src/common/**", "apps/api/test/**", "docs/DECISIONS/**", "docs/plans/**", "harness/backlog.mjs"],
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/src/common/**",
+      "apps/api/test/**",
+      "docs/DECISIONS/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
     skills: ["security-review", "database-review"],
     depends_on: ["S16-SOCIAL-ATTDEBT-1"],
-    src: ["plan `docs/plans/S16-SOCIAL-ATTDEBT-1.md` D-1 lối (c) — lối sửa ĐÚNG NHẤT về dài hạn, đã cân và hoãn"],
+    src: [
+      "plan `docs/plans/S16-SOCIAL-ATTDEBT-1.md` D-1 lối (c) — lối sửa ĐÚNG NHẤT về dài hạn, đã cân và hoãn",
+    ],
     done_when: [
       "🔴 CẦN ADR: `permission.cache.ts:95` là passthrough **CÓ CHỦ Ý**; đổi nó là quyết định cấp nền tảng, bán kính = MỌI module, KHÔNG phải một WO của SOCIAL",
       "🔴 Ảnh chụp memo hoá phải HẾT HẠN trong phạm vi MỘT request — một grant bị thu hồi giữa chừng KHÔNG được tiếp tục cho phép. Ca test phải đo đúng điều đó, không chỉ đo số round-trip",
@@ -17230,7 +17245,14 @@ export const backlog = [
       "`file_links_company_id_idx` (mig 0433) thành TIỀN TỐ DƯ của `file_links_company_file_idx` (mig 0587) — cân drop, bán kính là MỌI module dùng `file_links`",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/migrations/**", "apps/api/src/db/schema/**", "apps/api/test/**", "docs/DB/**", "docs/plans/**", "harness/backlog.mjs"],
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/test/**",
+      "docs/DB/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
     skills: ["database-review"],
     depends_on: ["S16-SOCIAL-ATTDEBT-1"],
     src: ["plan `docs/plans/S16-SOCIAL-ATTDEBT-1.md` D-4 + owner ký S-6 («GIỮ, ghi nợ»)"],
@@ -19020,7 +19042,7 @@ export const backlog = [
     title:
       "GỠ CHẶN CI: nguồn image MinIO sụp HẲN (quay.io nay đòi auth — đường vá của S18-OPS-MINIOPIN-1 đã chết) ⇒ mọi PR chạm apps/api exit 125. Chuyển CI sang `bitnamilegacy/minio` ghim theo DIGEST + bỏ bước `mc`, thay bằng script ensure-bucket có ký SigV4. KHÔNG đụng PROD.",
     zone: "yellow",
-    status: "in_progress",
+    status: "done",
     paths: [
       ".github/workflows/api.yml",
       "apps/api/scripts/ci-ensure-bucket.mjs",
@@ -19043,6 +19065,8 @@ export const backlog = [
       "CI job «Build · Typecheck · Migrate · Test» XANH THẬT trên PR (job chạy đủ, không SKIP) ⇒ PR #541 hết kẹt",
     ],
     notes: [
+      "✅ ĐÃ MERGE #542 25/09/2026 (`9d0a6fb9`, --admin do owner chạy). CI xanh thật trên PR (run 36106343836) ⇒ #541 cập nhật từ master cũng xanh (run 36108989553) và merge `0f3103ec`.",
+      "Kèm một vá test ngoài phạm vi `paths` (commit `3cdb308c`): 026 `/social/birthdays` grep năm `\\b(19|20)\\d{2}\\b` khớp nhóm UUID `-1991-` ⇒ đỏ oan NGẪU NHIÊN; gỡ UUID trước khi grep (`social-be1b-discovery.int-spec.ts`). Lộ ra chỉ vì MinIO hết chặn nên suite chạy đủ lần đầu.",
       "🔴 Chặn cả hàng đợi: mọi PR chạm `apps/api` đều đỏ cho tới khi WO này merge.",
       "⚠️ Bất biến «CI = PROD» của S18-OPS-MINIOPIN-1 GÃY có chủ ý: PROD `RELEASE.2025-09-07`, CI bitnami `DEVELOPMENT.2025-05-24`. Ghi nợ, trả ở `S19-OPS-MINIOMIRROR-1`.",
       "🔴 Image PROD giờ CHỈ CÒN trong cache của đúng máy này — `docker image prune -a` = mất vĩnh viễn, không registry công khai nào còn phát. Đây là lý do WO mirror KHÔNG nên để lâu.",
