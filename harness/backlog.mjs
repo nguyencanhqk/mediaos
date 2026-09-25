@@ -17223,6 +17223,19 @@ export const backlog = [
       "docs/DECISIONS/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      // S-1 (owner ký 25/09/2026): nối dây + env + cổng coverage + chỉ mục ADR
+      "apps/api/src/main.ts",
+      "apps/api/src/config/env.schema.ts",
+      ".env.example",
+      "apps/api/package.json",
+      "docs/README.md",
+      // S-1 — CHỈ sửa comment mô tả cơ chế passthrough cũ (plan §5)
+      "apps/api/src/auth/auth-logs-viewer.service.ts",
+      "apps/api/src/auth/auth-logs-viewer.service.spec.ts",
+      "apps/api/src/dashboard/dashboard-widget-registry.service.ts",
+      "apps/api/src/foundation/audit/audit.service.ts",
+      "apps/api/src/recruit/recruit-access.service.ts",
+      "apps/api/src/social/social-access.service.ts",
     ],
     skills: ["security-review", "database-review"],
     depends_on: ["S16-SOCIAL-ATTDEBT-1"],
@@ -17231,8 +17244,8 @@ export const backlog = [
     ],
     done_when: [
       "🔴 CẦN ADR: `permission.cache.ts:95` là passthrough **CÓ CHỦ Ý**; đổi nó là quyết định cấp nền tảng, bán kính = MỌI module, KHÔNG phải một WO của SOCIAL",
-      "🔴 Ảnh chụp memo hoá phải HẾT HẠN trong phạm vi MỘT request — một grant bị thu hồi giữa chừng KHÔNG được tiếp tục cho phép. Ca test phải đo đúng điều đó, không chỉ đo số round-trip",
-      "Kho hiện KHÔNG có AsyncLocalStorage (đo ở ATTGATE-1 M8) ⇒ phải chọn cơ chế mang ngữ cảnh và chứng minh nó KHÔNG rò giữa hai request đồng thời (ca hai actor chạy song song)",
+      "🔴 Thu hồi CÓ BIÊN (D1 owner ký 25/09/2026, viết lại theo plan-review F4): ảnh chụp memo sống ≤`GRANT_MEMO_MAX_AGE_MS` (2000ms) kể từ lượt đọc đầu trong request, và bị bỏ NGAY khi `invalidateUser` chạy trong tiến trình (DECISIONS-15 §4). Test đo CẢ HAI vế (H5a/H5b), không chỉ đo số round-trip",
+      "Chứng minh memo KHÔNG rò giữa hai request đồng thời (ca hai actor song song) VÀ không lẫn giữa hai user cùng công ty trong MỘT request (U13/H8). ⚠️ LỖI THỜI: câu cũ «kho KHÔNG có AsyncLocalStorage» (ATTGATE-1 M8) — ALS có từ S10-FND-JSONLOG-1 (`common/logger/request-context.ts`); WO dùng ALS RIÊNG (plan D-1)",
     ],
     notes: [
       "TÁCH RA 24/09/2026 từ plan ATTDEBT-1 D-1 lối (c). Đóng luôn `S16-SOCIAL-PERMCOST-1` nếu làm lối này.",
