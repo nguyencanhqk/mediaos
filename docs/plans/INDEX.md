@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**515 WO** · có micro-plan: **319/515** · ⬜ 10 chờ · 🔵 0 đang làm · ✅ 504 xong · 🔴 1 chặn
+**523 WO** · có micro-plan: **324/523** · ⬜ 10 chờ · 🔵 0 đang làm · ✅ 512 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -564,22 +564,28 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S16-SOCIAL-DOC-1` | 🟢 | ✅ xong | [📄](S16-SOCIAL-WAVE.md) | — | Bộ tài liệu SOCIAL (mạng xã hội nội bộ): SPEC-16 đầy đủ (§5 phạm vi v1 |
-| `S16-SOCIAL-FBPOST-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-DOC-1 ✅S16-SOCIAL-FE-1 | Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối si |
+| `S16-SOCIAL-FBPOST-1` | 🟢 | ✅ xong | [📄](S16-SOCIAL-FBPOST-1.md) | ✅S16-SOCIAL-DOC-1 ✅S16-SOCIAL-FE-1 | Gộp tile «Đăng bài» (app vệ tinh fbpost) từ ô Home riêng → mục cuối si |
 | `S16-SOCIAL-DB-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-DB-1.md) | ✅S16-SOCIAL-DOC-1 | Schema + migration SOCIAL track A (nối tiếp head lúc merge): feed_post |
 | `S16-SOCIAL-BE-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-1.md) | ✅S16-SOCIAL-DB-1 ✅S16-SOCIAL-DB-2 | Module apps/api/src/social/ (mới — fbpost ở integrations/social/ giữ n |
 | `S16-SOCIAL-BE-1B` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-1B.md) | ✅S16-SOCIAL-BE-1 | Module apps/api/src/social/ Nhóm B (10 route, SOCIAL-API-020..029): ti |
 | `S16-SOCIAL-FE-1` | amber | ✅ xong | [📄](S16-SOCIAL-FE-1.md) | ✅S16-SOCIAL-BE-1 ✅S16-SOCIAL-BE-1B | FE track A: template cổng thông tin 3 cột (apps/app/src/layouts/portal |
-| `S16-SOCIAL-BE-1C` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1 | BE track A/bổ sung — ĐƯỜNG ĐĂNG KÝ TỆP cho bài & bình luận: 2 route bọ |
+| `S16-SOCIAL-BE-1C` | 🟡 | ✅ xong | [📄](S16-SOCIAL-BE-1C.md) | ✅S16-SOCIAL-BE-1 | BE track A/bổ sung — ĐƯỜNG ĐĂNG KÝ TỆP cho bài & bình luận: 2 route bọ |
+| `S16-SOCIAL-ATTGATE-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-ATTGATE-1.md) | ✅S16-SOCIAL-BE-1C | Đường GẮN tệp không hỏi cặp quyền: `assertLinkableFilesTx` chép vế 2-5 |
+| `S16-SOCIAL-ATTDEBT-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-ATTDEBT-1.md) | ✅S16-SOCIAL-ATTGATE-1 | Trả 3 khoản nợ FULL gate của S16-SOCIAL-ATTGATE-1: (F1) cổng đính kèm  |
+| `S16-SOCIAL-PERMCOST-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S16-SOCIAL-ATTDEBT-1 | Đường ĐỌC nạp ảnh chụp grant 2 lần mỗi lượt có đính kèm: `SocialFileRe |
+| `S16-SOCIAL-PERMMEMO-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-ATTDEBT-1 | Memo ảnh chụp grant theo REQUEST (ALS hoặc request-scoped): đóng MỘT L |
+| `S16-SOCIAL-IDXDEDUP-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-ATTDEBT-1 | `file_links_company_id_idx` (mig 0433) thành TIỀN TỐ DƯ của `file_link |
 | `S16-SOCIAL-BE-1D` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1 | BE track A/bổ sung — TRẢ MẢNG MENTION trong DTO bài & bình luận: feedP |
 | `S16-SOCIAL-DB-2` | 🔴 | ✅ xong | [📄](S16-SOCIAL-DB-2.md) | ✅S16-SOCIAL-DB-1 | Schema + migration SOCIAL track B: feed_groups · feed_group_members (r |
 | `S16-SOCIAL-BE-2A` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2A.md) | ✅S16-SOCIAL-DB-2 ✅S16-SOCIAL-BE-1 ✅S16-SOCIAL-BE-1B | BE track B/1 — NHÓM (SOCIAL-API-030..039 + nhánh audience='group' của  |
 | `S16-SOCIAL-BE-2B-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2B-1.md) | ✅S16-SOCIAL-BE-2A | BE track B/2a — BÌNH CHỌN (SOCIAL-API-040..044 + nhánh type='poll' của |
-| `S16-SOCIAL-BE-2B-2` | 🔴 | ⬜ chờ | [📄](S16-SOCIAL-BE-2B-2.md) | ✅S16-SOCIAL-BE-2B-1 | BE track B/2b — SÁNG KIẾN · VINH DANH (SOCIAL-API-045..048 + nhánh typ |
+| `S16-SOCIAL-BE-2B-2` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2B-2.md) | ✅S16-SOCIAL-BE-2B-1 | BE track B/2b — SÁNG KIẾN · VINH DANH (SOCIAL-API-045..048 + nhánh typ |
 | `S16-SOCIAL-BE-2C` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A | BE track B/3 — REALTIME room nhóm co:{c}:feedgroup:{id}: thêm feedUser |
-| `S16-SOCIAL-FE-2` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A ⏳S16-SOCIAL-BE-2B-2 ✅S16-SOCIAL-FE-1 | FE track B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm · thành viên · |
-| `S16-SOCIAL-BE-3` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A ⏳S16-SOCIAL-BE-2B-2 | BE track C: hàng đợi báo cáo (resolve/dismiss + hành động ẩn/khoá/xoá  |
+| `S16-SOCIAL-FE-2` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 ✅S16-SOCIAL-FE-1 | FE track B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm · thành viên · |
+| `S16-SOCIAL-BE-3` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 | BE track C: hàng đợi báo cáo (resolve/dismiss + hành động ẩn/khoá/xoá  |
 | `S16-SOCIAL-FE-3` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-BE-3 ⏳S16-SOCIAL-FE-2 | FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 01 |
 | `S16-SOCIAL-QA-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-3 | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
+| `S16-SOCIAL-TESTISO-1` | amber | ✅ xong | [📄](S16-SOCIAL-TESTISO-1.md) | — | Vá CÁCH LY TEST: Nhóm 13 của s16-social-db2-invariants chạy thân migra |
 | `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
 
 ## Sprint 17
@@ -620,6 +626,13 @@
 | `S18-SEC-AUDITGATE-1` | 🟡 | ✅ xong | [📄](S18-SEC-AUDITGATE-1.md) | — | Cổng `Dependency scan (pnpm audit)` ĐỎ trên master từ 09/09 — 5 adviso |
 | `S18-AUTH-490DEBT-1` | crown | ✅ xong | [📄](S18-AUTH-490DEBT-1.md) | — | Trả 3 nợ FULL-gate của #490 (owner chốt 11/09): §8.2 trần ghi audit nh |
 | `S18-OPS-MINIOPIN-1` | 🟡 | ✅ xong | — *(chưa)* | — | Ghim image MinIO của docker-compose.yml (container PROD `mediaos-minio |
+
+## Sprint 19
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `S19-OPS-MINIOSRC-1` | 🟡 | ✅ xong | — *(chưa)* | — | GỠ CHẶN CI: nguồn image MinIO sụp HẲN (quay.io nay đòi auth — đường vá |
+| `S19-OPS-MINIOMIRROR-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-MINIOSRC-1 | Mirror image MinIO đúng digest PROD (`sha256:14cea493…` = RELEASE.2025 |
 
 ---
 
