@@ -375,6 +375,56 @@ và máy đang chạy chỉ còn sống nhờ **image cache** — hỏng khi d�
 > **PROD và dev-online dùng CHUNG container này** — `.env`, `.env.dev`, `.env.prod` đều trỏ
 > `S3_ENDPOINT=http://localhost:9000` ⇒ mỗi lần recreate là cửa sổ gián đoạn của CẢ HAI môi trường.
 
+### 13.4 Nguồn image MinIO SỤP HẲN — CI tách khỏi PROD (24/09/2026, WO `S19-OPS-MINIOSRC-1`)
+
+§13.3 vá bằng cách chuyển sang `quay.io`. Đường đó **đã chết**: 24/09/2026 `quay.io/minio/*` bắt đầu ĐÒI AUTH
+(API repo trả **401**, không phải 404 ⇒ repo bị đóng chứ không phải mất tag) — CI exit 125 trở lại ở mọi PR
+chạm `apps/api`, chặn cứng hàng đợi.
+
+**Đo lại toàn bộ nguồn công khai (`docker manifest inspect`, 24/09/2026):**
+
+| Nguồn | Kết quả |
+| --- | --- |
+| Docker Hub `minio/minio` · `minio/mc` | `denied` (từ 13/09) |
+| `quay.io/minio/*` (kể cả tag ghim §13.3) | **401 đòi auth — MỚI** |
+| `mirror.gcr.io/minio/*` | không có |
+| `public.ecr.aws/minio/*` · `public.ecr.aws/bitnami/minio` | không có |
+| `dl.min.io` (tải binary server + mc) | **HTTP 410 Gone** |
+| `bitnamilegacy/minio` | ✅ còn kéo ẩn danh được |
+| `bitnamilegacy/mc` · `bitnami/minio` | `denied` |
+
+**Quyết định (owner chốt 24/09):** vá **CHỈ CI**, KHÔNG đụng PROD.
+
+- `.github/workflows/api.yml` → `bitnamilegacy/minio@sha256:451fe685…` **ghim theo digest** (giữ kỷ luật
+  "không `latest` ở đâu cả" của §13.3; càng cần vì `bitnamilegacy` là kho ĐÓNG BĂNG, tag có thể bị dời).
+- **Bỏ hẳn bước `mc`** (image `mc` không còn nguồn nào) → thay bằng `apps/api/scripts/ci-ensure-bucket.mjs`:
+  `CreateBucket` + `HeadBucket` qua `@aws-sdk` (đã có sẵn trong `apps/api`).
+- `docker-compose.yml` · `scripts/windows/02-infra-up.ps1` · container PROD `mediaos-minio`: **KHÔNG đổi gì**.
+
+**Bẫy XANH GIẢ đã đo và né:** ý tưởng "thay `mc` bằng `curl` kiểm tra bucket" là **hỏng**. Trên chính image
+đang dùng, MinIO trả `HTTP 403` + `<Code>AccessDenied</Code>` **Y HỆT NHAU** cho bucket CÓ THẬT và bucket
+KHÔNG tồn tại (chỉ khác `<BucketName>` — là thứ chính mình gửi lên). Mọi phép thử ẩn danh vì thế luôn xanh.
+Chỉ lời gọi **có ký SigV4** mới phân biệt được: `HeadBucket` ném `NotFound` khi bucket vắng.
+
+**Nghiệm thu trước khi mở PR (chạy thật trên máy dev, KHÔNG mở cổng 9000 vì PROD đang giữ):**
+
+1. Bucket có sẵn (`MINIO_DEFAULT_BUCKETS`) → script báo "đã sẵn có" + xác minh, `exit 0`.
+2. Container KHÔNG có bucket → script **tự tạo** + xác minh, `exit 0` (⇒ không phụ thuộc biến riêng của bitnami).
+3. **Đột biến — sai credential** → `exit 1` kèm `SignatureDoesNotMatch` (đỏ đúng lý do, không phải đỏ vì crash).
+4. **Đột biến — `HeadBucket` trên bucket không tồn tại** → ném `NotFound` ⇒ bước xác minh CÓ RĂNG thật.
+5. Diễn tập nguyên bước CI từ **thư mục gốc repo**: presign PUT/GET 200, chạy lại lần hai vẫn `exit 0` (idempotent).
+6. `mediaos-minio` (PROD) `healthy` suốt quá trình — không recreate, không đụng volume.
+
+**Nợ ghi nhận — CHƯA trả:**
+
+- ⚠️ **Bất biến "CI = PROD" của §13.3 ĐANG GÃY:** PROD chạy `RELEASE.2025-09-07T16-13-09Z`, CI chạy bản bitnami
+  `DEVELOPMENT.2025-05-24T17-08-30Z`. Chênh bản + chênh bản dựng (DEVELOPMENT, không phải RELEASE).
+- 🔴 **Image PROD giờ CHỈ CÒN TỒN TẠI trong cache của đúng máy này** (`sha256:14cea493…`) — không registry công
+  khai nào còn phát. `docker image prune -a` hoặc mất máy = **mất vĩnh viễn**, không dựng lại được.
+- `bitnamilegacy` là kho lưu trữ đóng băng ⇒ **không có bản vá bảo mật**, và có thể bị gỡ bất cứ lúc nào.
+- Hướng trả nợ đã seed: **`S19-OPS-MINIOMIRROR-1`** — mirror đúng digest PROD lên GHCR rồi trỏ CI + compose về đó
+  (cần owner cấp scope `write:packages`; token `gh` hiện chỉ có `gist, read:org, repo, workflow`).
+
 ## 14. Container network
 
 | Network | Service | Expose public |
