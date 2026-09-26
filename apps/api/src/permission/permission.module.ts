@@ -9,6 +9,7 @@ import { AuthModule } from "../auth/auth.module";
 import { PermissionService } from "./permission.service";
 import { PermissionRepository } from "./permission.repository";
 import { CachedPermissionRepository } from "./permission.cache";
+import { bumpGrantSnapshotEpoch } from "./grant-snapshot-memo";
 import { ValkeyService } from "./valkey.service";
 import { PermissionAdminController } from "./permission-admin.controller";
 import { PermissionAdminService } from "./permission-admin.service";
@@ -54,7 +55,7 @@ const CACHED_REPO = "CACHED_PERMISSION_REPO";
  * pre-seeded + granted to company-admin so the endpoints don't deny by default (F2/G4 catalog trap).
  */
 @Injectable()
-class PermissionCacheInvalidator implements OnModuleInit {
+export class PermissionCacheInvalidator implements OnModuleInit {
   private readonly logger = new Logger(PermissionCacheInvalidator.name);
 
   constructor(
@@ -72,6 +73,9 @@ class PermissionCacheInvalidator implements OnModuleInit {
           this.logger.warn("permission.changed event has non-object payload", {
             eventId: ctx.eventId,
           });
+          // Payload hỏng ⇒ không biết user nào ⇒ vô hiệu TOÀN BỘ memo request (ADR-15 D6):
+          // chỉ gây thêm lượt đọc DB, không bao giờ nới quyền (FULL gate security F2).
+          bumpGrantSnapshotEpoch();
           return;
         }
         const { userId, companyId } = payload as { userId?: string; companyId?: string };
@@ -79,6 +83,9 @@ class PermissionCacheInvalidator implements OnModuleInit {
           this.logger.warn("permission.changed event missing userId/companyId", {
             eventId: ctx.eventId,
           });
+          // Payload hỏng ⇒ không biết user nào ⇒ vô hiệu TOÀN BỘ memo request (ADR-15 D6):
+          // chỉ gây thêm lượt đọc DB, không bao giờ nới quyền (FULL gate security F2).
+          bumpGrantSnapshotEpoch();
           return;
         }
         try {

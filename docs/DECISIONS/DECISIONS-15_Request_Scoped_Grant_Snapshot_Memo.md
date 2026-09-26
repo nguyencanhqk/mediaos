@@ -76,6 +76,6 @@ Cái KHÔNG đảo: vẫn **không** cache GIỮA các request (không Valkey, k
 
 ## 8. Cổng NGƯỜI trước deploy PROD
 
-- FULL gate + santa-method xanh; bảng mutant X1–X12 của plan §9 đỏ đúng thông điệp.
+- FULL gate + santa-method xanh; bảng mutant X1–X13 của plan §9 (X13 = khoá chỉ `companyId`, thêm sau plan-review F1) đỏ đúng thông điệp.
 - Xác nhận `.env` PROD không override `OUTBOX_POLL_MS` lên trên 2000ms mà không cập nhật §4. Nếu có override, ghi giá trị thật vào §4 và cân lại trần.
 - Rollback đã diễn tập: `PERMISSION_GRANT_MEMO_ENABLED=false` + restart NSSM ⇒ `/health` xanh, số lượt đọc/request trở về như cũ.
