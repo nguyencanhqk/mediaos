@@ -349,3 +349,17 @@ Xanh ở Phase A (đúng thiết kế — chúng là lưới HỒI QUY, không p
 - `pnpm --filter @mediaos/api typecheck` = xanh · `lint` = 0 lỗi (warning có sẵn, không file nào của WO).
 - `bash harness/check.sh --lane-db=permmemo` lượt 1 = **ĐỎ 1 ca thật**: ratchet `supertest-listen-ratchet.unit-spec.ts` (S18-QA-SUPERTESTLISTEN-1) bắt int-spec mới bắn supertest trong `Promise.all` (H4) mà app chưa `listen(0)`. Sửa root-cause: init + `listen(0)` cả hai app ở `beforeAll` (census đọc theo tên biến, `afterAll` đã `close()`). Chạy lại 5 mutant dùng int-spec (X2 · X3 · X8 · X9 · X13) sau sửa: vẫn đỏ đúng thông điệp.
 - Lượt 2: **`XANH ✅`** — `@mediaos/api: 784/784 file chạy · 2 lần chạy lại (crash hạ tầng)`, mọi package xanh, `exit=0`.
+
+### 9.7 — FULL gate (chạy lại 26/09/2026 trên `master...HEAD`, Opus)
+
+Lượt 25/09 tìm ra **F2** (payload `permission.changed` hỏng không vô hiệu memo) — đã vá `06469906`: cả hai nhánh payload hỏng gọi `bumpGrantSnapshotEpoch()`; spec `permission-cache-invalidator.spec.ts` 4 ca; mutant gỡ bump đỏ `payload hỏng PHẢI bump epoch: lượt đọc sau về DB: expected 1 to be 2`. Danh sách finding còn lại của lượt 25/09 không được lưu ⇒ chạy lại toàn gate:
+
+| Reviewer | Verdict | Finding |
+| --- | --- | --- |
+| security-reviewer | PASS | 3 LOW: luật §6.3 chỉ là comment · ALS có thể bị tài nguyên lười bắt giữ (≤2s, cùng khoá — không rò định danh) · epoch theo tiến trình (ADR đã nhận) |
+| database-reviewer | PASS | LOW §6.3 (như trên) · INFO: `afterAll` dọn trước khi `close()` app · spy `mockRestore` ngoài `finally` |
+| silent-failure-hunter | PASS | LOW: trần 64 chỉ log `debug` (giữ — D-2) · LOW: mất ngữ cảnh sau body-parser ⇒ tắt memo im lặng — ĐÃ phủ bởi H1 chạy thật trên LANE_DB (§9.2) |
+| santa A (correctness) | PASS | **L1** `startedAt` trước `load()` không ca nào bắt → ĐÃ VÁ: U4b + mutant **X14** (chụp `startedAt` khi resolve) đỏ `tuổi PHẢI tính từ trước load(): 1500+500ms là hết hạn: expected 1 to be 2` · L2 hai mutant sống sót chỉ fail-safe (giữ) · **L3** docblock `permission.cache.ts` «≤2000ms»/«NGAY» → ĐÃ SỬA |
+| santa B (đối kháng) | PASS | LOW: sửa `role_permissions` qua role-admin không phát `permission.changed` (có từ trước WO; trần 2s bao) |
+
+Hội tụ: 5/5 PASS, 0 CRITICAL/HIGH/MEDIUM. Mọi reviewer xác nhận độc lập: KHÔNG route nào ghi grant rồi đọc scope trong cùng request (§6.3). **Nợ đề xuất WO riêng:** ratchet tĩnh ép luật §6.3 (file ghi `user_roles`/`role_permissions` + gọi `resolve*Scope` sau ghi ⇒ phải `bumpGrantSnapshotEpoch()`).

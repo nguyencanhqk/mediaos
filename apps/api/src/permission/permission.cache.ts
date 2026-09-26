@@ -98,8 +98,10 @@ export class CachedPermissionRepository implements IPermissionRepository {
   /**
    * S16-SOCIAL-PERMMEMO-1 (ADR `DECISIONS-15`) — KHÔNG cache GIỮA các request (không Valkey, không khoá
    * chia sẻ); TRONG một request HTTP được memo qua `GrantSnapshotMemo`: lượt đầu mỗi (companyId, userId)
-   * đọc DB, các lượt sau trong ≤`GRANT_MEMO_MAX_AGE_MS` (2000ms) dùng lại ảnh chụp (bản clone). Vô hiệu
-   * NGAY bởi `invalidateUser` (epoch toàn tiến trình). Ngoài request (job/outbox/WS/bootstrap) = passthrough.
+   * đọc DB, các lượt sau trong <`GRANT_MEMO_MAX_AGE_MS` (2000ms, tính từ TRƯỚC `load()`) dùng lại ảnh chụp
+   * (bản clone). Vô hiệu ngay khi `invalidateUser` CHẠY (epoch toàn tiến trình) — nhưng handler outbox chạy
+   * 0–`OUTBOX_POLL_MS` sau commit, nên biên thu hồi CHÍNH là trần tuổi (ADR-15 §4). Ngoài request
+   * (job/outbox/WS/bootstrap) = passthrough.
    * RLS vẫn ép ở inner (`withTenant`) — memo chỉ gom số lượt đọc, không bỏ qua lượt đọc đầu.
    * D3 (owner ký): `getCompanyRoleGrants` (đường `can()`) KHÔNG đi qua memo này.
    * (Lịch sử: S2-AUTH-BE-1 để hàm này passthrough vì «ít gọi»; tiền đề đó đã sai — xem ADR-15 §1.)

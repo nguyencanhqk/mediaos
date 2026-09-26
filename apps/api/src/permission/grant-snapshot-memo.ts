@@ -16,7 +16,7 @@ import type { CompanyRoleGrantWithScope } from "./permission.types";
  *     không đăng ký middleware) ⇒ passthrough y hệt trước WO (D-5, U7/H6/X9).
  *   • Thu hồi: EPOCH toàn tiến trình (`bumpGrantSnapshotEpoch`, gọi ở DÒNG ĐẦU `invalidateUser`) + trần
  *     tuổi `GRANT_MEMO_MAX_AGE_MS`. Handler outbox chạy NGOÀI request ⇒ «xoá store hiện tại» không với tới
- *     request nào; epoch thì có (U3/X4). Epoch + `startedAt` chụp TRƯỚC khi gọi `load()` (U11/X10).
+ *     request nào; epoch thì có (U3/X4). Epoch + `startedAt` chụp TRƯỚC khi gọi `load()` (U11/X10 · U4b/X14).
  *   • Single-flight theo promise; promise reject bị gỡ khỏi memo ngay (U8/X6).
  *   • Clone mỗi lần trả, kể cả caller đầu — `Date` được sao mới (U10/X7).
  *   • Tối đa `GRANT_MEMO_MAX_ENTRIES` khoá / (request × instance): tỉa entry hết hạn trước; vẫn đầy ⇒

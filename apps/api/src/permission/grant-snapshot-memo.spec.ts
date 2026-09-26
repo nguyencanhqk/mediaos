@@ -131,6 +131,23 @@ describe("GrantSnapshotMemo — memo ảnh chụp grant theo request (DECISIONS-
     expect(inner.calls.length, "quá trần 2000ms PHẢI đọc lại DB").toBe(2);
   });
 
+  it("U4b 🔴 tuổi tính từ lúc BẮT ĐẦU load — load chậm 1500ms + 500ms sau ⇒ đọc lại (gate santa L1)", async () => {
+    const c = clock();
+    const memo = new GrantSnapshotMemo({ now: c.now });
+    const calls: number[] = [];
+    const slowLoad = async () => {
+      calls.push(c.now());
+      c.advance(1_500);
+      return [allow()];
+    };
+    await runWithGrantMemo(async () => {
+      await memo.read(C1, U1, slowLoad);
+      c.advance(500);
+      await memo.read(C1, U1, slowLoad);
+    });
+    expect(calls.length, "tuổi PHẢI tính từ trước load(): 1500+500ms là hết hạn").toBe(2);
+  });
+
   it("U5 🔴 hai actor song song, inner resolve NGƯỢC thứ tự ⇒ mỗi ngữ cảnh nhận đúng grant của mình", async () => {
     const memo = new GrantSnapshotMemo();
     const dA = deferred<CompanyRoleGrantWithScope[]>();
