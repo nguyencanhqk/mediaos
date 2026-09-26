@@ -3,6 +3,7 @@ import { CachedPermissionRepository } from "./permission.cache";
 import type { CompanyRoleGrant, IPermissionRepository } from "./permission.types";
 import type { ValkeyService } from "./valkey.service";
 import { currentEnvScope, permCapKey, permObjKey } from "../common/valkey/valkey-key";
+import { runWithGrantMemo } from "./grant-snapshot-memo";
 
 /**
  * S10-FND-VALKEYSCOPE-1 — `perm:cap` là 253/288 khoá đang sống trên Valkey PROD và là cache QUYẾT ĐỊNH
@@ -98,5 +99,87 @@ describe("CachedPermissionRepository — khoá scoped + invalidate trúng đích
     const repo = new CachedPermissionRepository(fakeInner(), v);
     await repo.getObjectGrants(U, CO, "task", "r1");
     expect([...v.store.keys()][0]).toBe(permObjKey(CO, U, "task", "r1"));
+  });
+});
+
+/**
+ * S16-SOCIAL-PERMMEMO-1 — ca C1–C4 (plan §4.2, DECISIONS-15). Đo ĐƯỜNG NỐI cache ↔ memo: cơ chế
+ * epoch/trần tuổi đã có ca riêng ở `grant-snapshot-memo.spec.ts`; ở đây chỉ đo rằng
+ * `CachedPermissionRepository` thật sự đi qua memo, và `invalidateUser` thật sự bump.
+ */
+describe("CachedPermissionRepository — memo grant-kèm-scope theo request (ADR-15)", () => {
+  function scopedInner() {
+    return {
+      getCompanyRoleGrants: vi.fn(async () => [] as CompanyRoleGrant[]),
+      getCompanyRoleGrantsWithScope: vi.fn(async () => [
+        {
+          action: "view",
+          resourceType: "feed",
+          isSensitive: false,
+          effect: "ALLOW" as const,
+          expiresAt: null,
+          dataScope: "Company",
+        },
+      ]),
+      getObjectGrants: vi.fn(async () => []),
+    } as unknown as IPermissionRepository & {
+      getCompanyRoleGrants: ReturnType<typeof vi.fn>;
+      getCompanyRoleGrantsWithScope: ReturnType<typeof vi.fn>;
+    };
+  }
+
+  it("C1 — trong ngữ cảnh memo: N lời gọi ⇒ inner 1 lần", async () => {
+    const inner = scopedInner();
+    const repo = new CachedPermissionRepository(inner, fakeValkey());
+    await runWithGrantMemo(async () => {
+      for (let i = 0; i < 3; i += 1) await repo.getCompanyRoleGrantsWithScope(U, CO);
+    });
+    expect(
+      inner.getCompanyRoleGrantsWithScope,
+      "getCompanyRoleGrantsWithScope PHẢI đi qua memo trong request",
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it("C2 🔴 invalidateUser ⇒ lượt sau đọc lại DB", async () => {
+    const inner = scopedInner();
+    const repo = new CachedPermissionRepository(inner, fakeValkey());
+    await runWithGrantMemo(async () => {
+      await repo.getCompanyRoleGrantsWithScope(U, CO);
+      await repo.invalidateUser(CO, U);
+      await repo.getCompanyRoleGrantsWithScope(U, CO);
+    });
+    expect(
+      inner.getCompanyRoleGrantsWithScope,
+      "sau invalidateUser lượt đọc PHẢI thấy thu hồi",
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  it("C3 🔴 Valkey DEL lỗi ⇒ invalidateUser ném NHƯNG memo vẫn đã bị vô hiệu", async () => {
+    const inner = scopedInner();
+    const v = fakeValkey();
+    (v as unknown as { del: () => Promise<boolean> }).del = async () => false;
+    const repo = new CachedPermissionRepository(inner, v);
+    await runWithGrantMemo(async () => {
+      await repo.getCompanyRoleGrantsWithScope(U, CO);
+      await expect(repo.invalidateUser(CO, U)).rejects.toThrow(/Valkey DEL failed/);
+      await repo.getCompanyRoleGrantsWithScope(U, CO);
+    });
+    expect(
+      inner.getCompanyRoleGrantsWithScope,
+      "DEL lỗi vẫn PHẢI vô hiệu memo",
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  it("C4 🔴 (D3) getCompanyRoleGrants KHÔNG memo — cache Valkey trống, gọi 2 lần ⇒ inner 2", async () => {
+    const inner = scopedInner();
+    const v = fakeValkey();
+    // Valkey KHÔNG giữ gì (mô phỏng cache trống/tắt) ⇒ mọi lượt đọc rơi xuống inner nếu KHÔNG memo.
+    (v as unknown as { set: () => Promise<boolean> }).set = async () => true;
+    const repo = new CachedPermissionRepository(inner, v);
+    await runWithGrantMemo(async () => {
+      await repo.getCompanyRoleGrants(U, CO);
+      await repo.getCompanyRoleGrants(U, CO);
+    });
+    expect(inner.getCompanyRoleGrants, "D3: can() path KHÔNG memo").toHaveBeenCalledTimes(2);
   });
 });

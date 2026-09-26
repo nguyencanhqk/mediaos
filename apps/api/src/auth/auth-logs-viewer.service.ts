@@ -113,7 +113,7 @@ export class AuthLogsViewerService {
     if (scope === null) {
       // ⚠️ HAI nguyên nhân cho cùng một `null`, và log KHÔNG được chẩn đoán hộ chỉ một trong hai:
       //   • grant vừa bị gỡ — guard còn phục vụ từ cache 300s (`permission.cache.ts`) trong khi
-      //     `getCompanyRoleGrantsWithScope` đọc thẳng DB ⇒ hai tầng bất đồng trong cửa sổ đó;
+      //     `getCompanyRoleGrantsWithScope` đọc DB mỗi request ⇒ hai tầng bất đồng trong cửa sổ đó;
       //   • lỗi HẠ TẦNG — `resolveStrongestScope` bắt mọi exception và fail-closed về `null`, kèm
       //     một dòng `resolveStrongestScope() infrastructure error` của riêng nó.
       // Đối chiếu hai dòng log trên cùng một request mới ra được nguyên nhân; viết sẵn một chẩn đoán
@@ -149,8 +149,9 @@ export class AuthLogsViewerService {
    *
    * ⟲ S10-SEC-AUDITLOGROW-1 — TÁCH khỏi `identityGrantFor` cũ (phân giải + dựng grant trong một hàm).
    * Bản cũ hỏi lại cặp này cho MỖI vai, tức `/auth/security-events` bắn **hai** truy vấn y hệt nhau
-   * (chủ thể + người gây ra), mà `getCompanyRoleGrantsWithScope` **không được cache**
-   * (`permission.cache.ts` — passthrough cố ý). Thêm cặp `view:audit-log` nữa là ba lượt/request.
+   * (chủ thể + người gây ra), mà `getCompanyRoleGrantsWithScope` hồi đó **không được cache**. Thêm cặp
+   * `view:audit-log` nữa là ba lượt/request. (S16-SOCIAL-PERMMEMO-1: nay memo theo request — DECISIONS-15 —
+   * cũng gom các lượt này trong request HTTP; vẫn giữ tách lượt theo CẶP vì lý do VỊ TỪ của KI-054.)
    * Nay: một lượt cho mỗi CẶP, rồi dựng nhiều grant từ cùng một giá trị scope. Hai grant vẫn ĐỘC LẬP
    * và vẫn dựng trên cột của vai mình — lỗ B1 của KI-054 vẫn đóng; cái đổi là số lượt hỏi DB, không
    * phải vị từ.

@@ -2,8 +2,8 @@
  * S14-PERF-DASHACTOR-1 — **số đo** round-trip `getCompanyRoleGrantsWithScope` (done_when #2:
  * «Đo số round-trip TRƯỚC/SAU cho mỗi widget bằng spy đếm lệnh gọi … không nhận "đã tối ưu" bằng cảm giác»).
  *
- * Spy đặt ở `IPermissionRepository` — tầng REPO, DƯỚI passthrough cache (`permission.cache.ts:95` KHÔNG
- * cache method này) ⇒ mỗi lời gọi đếm được ở đây là một query DB thật ngoài đời.
+ * Spy đặt ở `IPermissionRepository` — tầng REPO, DƯỚI `CachedPermissionRepository` ⇒ mỗi lời gọi đếm
+ * được ở đây là một query DB thật ngoài đời (ngoài request; trong request HTTP memo ADR-15 gom thêm).
  *
  * Ca «TRƯỚC» tái dựng nguyên văn hình dạng cũ bằng `resolveOrNull` lẻ, nên bảng số không phải trí nhớ:
  * nếu bản gộp tuột về hình dạng cũ, ca SAU sẽ bằng ca TRƯỚC và spec đỏ.

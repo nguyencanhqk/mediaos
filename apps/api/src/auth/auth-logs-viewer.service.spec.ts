@@ -207,7 +207,7 @@ describe("AuthLogsViewerService.listSecurityEvents (mapping)", () => {
  *
  * VÌ SAO Ở TẦNG UNIT: nhánh này chỉ chạy khi guard cho qua NHƯNG `resolveStrongestScope` trả `null`
  * — một BẤT ĐỒNG giữa hai tầng (hình dạng thật: cửa sổ cache 300s của guard sau khi role vừa bị gỡ,
- * vì `getCompanyRoleGrantsWithScope` cố ý KHÔNG cache). Không int-spec nào dựng lại được trạng thái
+ * vì `getCompanyRoleGrantsWithScope` không cache giữa request). Không int-spec nào dựng lại được trạng thái
  * đó mà không phải giả lập chính cache, nên nếu không có ca ở đây thì nhánh 403 là code CHƯA TỪNG
  * CHẠY — đúng thứ WO này tồn tại để chống ("mô tả phạm vi mà không có gì ép nó").
  */

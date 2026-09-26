@@ -29,8 +29,9 @@ export class RecruitAccessService {
 
   /**
    * ⟲ S14-PERF-DASHACTOR-1 — 4 round-trip → **1**. Bốn câu hỏi scope ở đây luôn cùng
-   * `(user.id, user.companyId)` nên đọc CÙNG một tập grant; `getCompanyRoleGrantsWithScope` KHÔNG
-   * được cache (`permission.cache.ts:95` passthrough có chủ ý) ⇒ trước WO này mỗi `resolveActor` =
+   * `(user.id, user.companyId)` nên đọc CÙNG một tập grant; `getCompanyRoleGrantsWithScope` không
+   * cache giữa request (memo ADR-15 trong request; `CachedPermissionRepository.getCompanyRoleGrantsWithScope`)
+   * ⇒ trước WO này mỗi `resolveActor` =
    * 4 query DB giống hệt nhau (nặng nhất repo: `CandidatesService.summary` cho widget DASH).
    *
    * Đọc kết quả **THEO CHỈ SỐ**, KHÔNG theo khoá cặp — hai lý do, cả hai đều là lỗ nếu làm sai:

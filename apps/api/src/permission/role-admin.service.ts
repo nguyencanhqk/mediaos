@@ -201,8 +201,9 @@ export class RoleAdminService {
     //        phải DROP constraint đó trước. GIỮ nhánh phòng thủ, nhưng đừng để người trực ca
     //        đuổi theo một ngõ cụt: kiểm K2/K4 trước.
     //   K4 — lỗi HẠ TẦNG ở câu scope: `resolveStrongestScope` bắt MỌI exception rồi trả `null`, trong
-    //        khi `can()` có thể phục vụ hoàn toàn từ cache (`getCompanyRoleGrantsWithScope` là
-    //        passthrough KHÔNG cache) ⇒ một timeout riêng ở câu scope biến "200 + che cột" thành 403.
+    //        khi `can()` có thể phục vụ hoàn toàn từ cache (`getCompanyRoleGrantsWithScope` đọc DB
+    //        mỗi request — memo ≤2s TRONG request, DECISIONS-15) ⇒ một timeout riêng ở câu scope biến
+    //        "200 + che cột" thành 403.
     // Log CỐ Ý không chẩn đoán hộ một nguyên nhân — đối chiếu dòng
     // `resolveStrongestScope() infrastructure error` cùng request trước khi kết luận.
     if (scope === null) {
@@ -380,7 +381,7 @@ export class RoleAdminService {
    * CASCADE gỡ role khỏi MỌI thành viên (soft-delete user_roles). Gate delete:role (seed 0005 is_sensitive=
    * false, company-admin đã có ALLOW/Company). system role (is_system=true) → 400, KHÔNG xoá được (RLS WITH
    * CHECK cũng chặn ghi row company_id NULL). Role lạ/cross-tenant/đã xoá → 404. Ghi audit TRONG CÙNG tx
-   * (revokedMembers cho vết forensic). Thành viên MẤT quyền của role NGAY ở request kế (engine đọc thẳng DB).
+   * (revokedMembers cho vết forensic). Thành viên MẤT quyền của role NGAY ở request kế (engine đọc DB mỗi request — memo ≤2s TRONG request, DECISIONS-15).
    */
   async deleteRole(actor: RequestUser, roleId: string): Promise<RoleDeleteResultDto> {
     await this.assertCan(actor, "delete", "role", false);
