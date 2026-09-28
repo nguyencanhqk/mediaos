@@ -55,8 +55,11 @@ export class SocialStatsService {
     query: FeedEngagementQueryDto,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const actor = await this.access.resolveActor(user, "statsExport");
-    const collected = await this.db.withTenant(user.companyId, async (tx) => {
+    return this.db.withTenant(user.companyId, async (tx) => {
       const result = await this.collectTx(tx, actor, query, FEED_ENGAGEMENT_DEFAULT_WEEKS);
+      // Dựng tệp TRƯỚC câu audit (FULL gate BE-3B, LOW): exceljs hỏng ⇒ tx rollback ⇒ không có hàng
+      // audit «Success» cho một tệp chưa từng được giao.
+      const file = await buildEngagementWorkbook(result);
       await this.audit.record(tx, {
         action: "social.stats.exported",
         objectType: "feed_report",
@@ -72,9 +75,8 @@ export class SocialStatsService {
           format: "xlsx",
         },
       });
-      return result;
+      return file;
     });
-    return buildEngagementWorkbook(collected);
   }
 
   /**

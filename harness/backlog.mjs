@@ -17887,6 +17887,7 @@ export const backlog = [
     notes: [
       "🟢 LIGHT gate. Đóng wave S16: regen STATUS + memory.",
       "BÀN GIAO từ S16-SOCIAL-BE-3B (28/09/2026): SOCIAL-WIDGET-001 gọi `SocialStatsService.weeklyEngagementForWidget(user)` (đã export từ SocialModule; cùng cổng/sàn với 052). (a) MÂU THUẪN phải chốt: DASH cache widget theo `ttlSecondsFor` vs SOC-DEC-010 «thống kê KHÔNG cache» — chọn TTL=0/không cache hoặc xin owner nới. (b) `Own`/`Team` nhận số 0 chứ không 403 ⇒ DASH phải tự ẩn widget cho scope đó.",
+      "(c) NỢ HIỆU NĂNG (database-reviewer FULL gate BE-3B, MEDIUM): câu 052 quét TOÀN BỘ lịch sử feed của công ty mỗi lượt (biên lo/hi áp sau khi đọc; `feed_comments`/`feed_reactions` không có chỉ mục `(company_id, created_at)`; chỉ mục bài partial `status='published'` không phục vụ `hidden`) — widget 1 tuần cũng vậy, và không cache. Trước khi bật widget: WO migration thêm 2 chỉ mục + đẩy lo/hi vào nhánh `ev` dạng scalar.",
     ],
   },
   // ════════════════════ WAVE S17-CHAT-UX2 — nâng bố cục/thao tác Chat theo benchmark MISA AMIS Chat ════════════════════

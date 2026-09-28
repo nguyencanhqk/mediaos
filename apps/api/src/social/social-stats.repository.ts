@@ -31,9 +31,13 @@ export interface EngagementRange {
   readonly weeks: number;
 }
 
-/** `rows` của `tx.execute` — driver trả `{ rows }`, một số đường trả mảng trần. */
+/** `rows` của `tx.execute` — driver trả `{ rows }`, một số đường trả mảng trần; dạng khác ⇒ NÉM (không đọc nhầm thành «rỗng»). */
 function rowsOf<T>(res: unknown): T[] {
-  return ((res as { rows?: unknown[] }).rows ?? (res as unknown[])) as T[];
+  const rows = Array.isArray(res) ? res : (res as { rows?: unknown } | null)?.rows;
+  if (!Array.isArray(rows)) {
+    throw new Error("social-stats.repository: kết quả tx.execute không có dạng { rows } hay mảng");
+  }
+  return rows as T[];
 }
 
 /**
