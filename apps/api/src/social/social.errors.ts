@@ -133,12 +133,10 @@ export const SOCIAL_ERR = {
    * (`SocialAccessService.assertFileTarget`) vì tầng 1 của route chỉ gác SÀN `view:feed` — cặp thật
    * phụ thuộc `target` của request (plan §1 D1).
    */
-  FILE_TARGET_POST_DENIED:
-    "SOCIAL-ERR: cần quyền đăng bài để thêm tệp đính kèm cho bài viết.",
+  FILE_TARGET_POST_DENIED: "SOCIAL-ERR: cần quyền đăng bài để thêm tệp đính kèm cho bài viết.",
 
   /** (403) — như trên, trục BÌNH LUẬN: thiếu `create:feed-comment` @Company. */
-  FILE_TARGET_COMMENT_DENIED:
-    "SOCIAL-ERR: cần quyền bình luận để thêm tệp đính kèm cho bình luận.",
+  FILE_TARGET_COMMENT_DENIED: "SOCIAL-ERR: cần quyền bình luận để thêm tệp đính kèm cho bình luận.",
 
   /**
    * (403) — người gọi `confirm` KHÔNG sở hữu tệp.
@@ -426,6 +424,35 @@ export const SOCIAL_ERR = {
    * `resolveManyOrNull` trong `create()` vẫn để mọi census XANH.
    */
   KUDOS_OFFICIAL_DENIED: "SOCIAL-ERR: bạn không có quyền đăng vinh danh chính thức của công ty.",
+
+  // ─────────── S16-SOCIAL-BE-3A — hành động kèm của `029` · CRUD huy hiệu `049..051`/`056` ───────────
+  // Cả sáu **KHÔNG SỐ HOÁ** (cùng tiền lệ `REPORT_DUPLICATE_OPEN`): SPEC-16 §12 đóng ở `001..022`.
+
+  /**
+   * (403) — `029` với `action ≠ none` mà actor thiếu cặp của hành động (`SOCIAL_REPORT_ACTION_PAIRS`,
+   * hôm nay `manage:feed-post`). Hằng RIÊNG, không mượn `NOT_CONTENT_OWNER`: ở đây actor không sửa
+   * nội dung «của người khác» theo nghĩa route `005`, mà thiếu quyền KIỂM DUYỆT.
+   */
+  REPORT_ACTION_DENIED: "SOCIAL-ERR: bạn không có quyền thực hiện hành động kiểm duyệt này.",
+  /** (422) — hành động ngoài ma trận D2 cho loại đích (vd. `hide_post` trên báo cáo bình luận). */
+  REPORT_ACTION_INVALID_FOR_TARGET:
+    "SOCIAL-ERR: hành động này không áp dụng được cho loại nội dung bị báo cáo.",
+  /**
+   * (422) — đích không còn thao tác được qua cổng đọc thường: đã xoá · actor không thấy (nhóm riêng tư
+   * không phải thành viên — nợ D14 `S16-SOCIAL-GROUPMOD-1`) · vừa bị xoá bởi lượt đua. Báo cáo vẫn
+   * `open`; kết thúc được bằng `action: none`.
+   */
+  REPORT_ACTION_TARGET_UNAVAILABLE:
+    "SOCIAL-ERR: nội dung bị báo cáo không còn thao tác được; hãy xử lý báo cáo mà không kèm hành động.",
+  /**
+   * (409) — hết `lock_timeout` khi chờ khoá các báo cáo cùng đích (D8, SQLSTATE `55P03`). Lỗi TẠM,
+   * thử lại được — KHÁC `REPORT_ALREADY_DECIDED` (kết cục cuối).
+   */
+  REPORT_BUSY: "SOCIAL-ERR: báo cáo này đang được người khác xử lý, vui lòng thử lại.",
+  /** (409) — `049` với `code` đã có ở công ty (`feed_kudos_badges_company_code_uq`, gồm cả huy hiệu đã tắt). */
+  KUDOS_BADGE_CODE_TAKEN: "SOCIAL-ERR: mã huy hiệu đã tồn tại.",
+  /** (404) — `050`/`051` với huy hiệu không tồn tại hoặc thuộc công ty khác (một chuỗi cho mọi lý do). */
+  KUDOS_BADGE_NOT_FOUND: "SOCIAL-ERR: không tìm thấy huy hiệu.",
 } as const;
 
 /**
@@ -497,6 +524,9 @@ export const SOCIAL_CONSTRAINT = {
    * (trạng thái cuối đúng) trong khi lượt thua trả **500 chưa dịch** cho người dùng.
    */
   POLL_VOTE_PK: "feed_poll_votes_pk",
+
+  /** S16-SOCIAL-BE-3A — UNIQUE `(company_id, code)` của `feed_kudos_badges` (`049` code trùng). */
+  KUDOS_BADGE_CODE_UQ: "feed_kudos_badges_company_code_uq",
 } as const;
 
 /**

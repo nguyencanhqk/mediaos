@@ -282,6 +282,19 @@ export const listFeedReportsQuerySchema = z
 export type ListFeedReportsQueryDto = z.infer<typeof listFeedReportsQuerySchema>;
 
 /**
+ * S16-SOCIAL-BE-3A (D1/D2) — hành động kèm của `029`. Ma trận hợp lệ theo loại đích:
+ *   post    → none · hide_post · lock_comments · delete_target
+ *   comment → none · lock_comments (khoá bình luận BÀI CHA) · delete_target (xoá bình luận)
+ */
+export const feedReportActionSchema = z.enum([
+  "none",
+  "hide_post",
+  "lock_comments",
+  "delete_target",
+]);
+export type FeedReportActionDto = z.infer<typeof feedReportActionSchema>;
+
+/**
  * `SOCIAL-API-029` — `PATCH /social/reports/{id}`.
  *
  * `status` KHÔNG nhận `'open'`: đây là route KẾT THÚC một báo cáo, không phải route mở lại. Mở lại là
@@ -292,8 +305,20 @@ export const resolveFeedReportSchema = z
   .object({
     status: z.enum(["resolved", "dismissed"]),
     resolutionNote: z.string().trim().max(FEED_NOTE_MAX).optional(),
+    /**
+     * S16-SOCIAL-BE-3A (D1) — hành động KÈM khi kết thúc báo cáo, chạy CÙNG tx với đổi trạng thái.
+     * Vắng ⇒ `none` ⇒ hành vi y hệt trước BE-3A (client cũ không gãy). Hành động nào hợp lệ cho
+     * loại đích nào là luật SERVICE (ma trận D2, 422) — Zod chỉ gác hình dạng + luật `dismissed`.
+     */
+    action: feedReportActionSchema.default("none"),
   })
-  .strict();
+  .strict()
+  // `dismissed` = «báo cáo không có cơ sở» ⇒ không có gì để làm với nội dung. Nhận `dismissed` +
+  // `hide_post` là ghi vào sổ một quyết định tự mâu thuẫn.
+  .refine((v) => v.status === "resolved" || v.action === "none", {
+    message: "action khác 'none' chỉ đi cùng status='resolved'",
+    path: ["action"],
+  });
 export type ResolveFeedReportDto = z.infer<typeof resolveFeedReportSchema>;
 
 /** Danh tính một người trong DTO báo cáo — CÙNG hình dạng `feedAuthorSchema`, KHÔNG `userId`. */

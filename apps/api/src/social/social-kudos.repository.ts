@@ -402,7 +402,7 @@ export class SocialKudosRepository {
    *
    * `is_active = true` là HẰNG của route, không phải tham số: xem docblock `listKudosBadgesQuerySchema`.
    * `ORDER BY position, id` — `position` là `smallint NOT NULL` do seed đặt 1..5 và tenant sửa được
-   * qua BE-3, nên nó CÓ THỂ trùng ⇒ vẫn cần chốt cuối `id`.
+   * qua `050` (BE-3A), nên nó CÓ THỂ trùng ⇒ vẫn cần chốt cuối `id`.
    */
   async listBadgesTx(
     tx: TenantTx,
@@ -434,4 +434,149 @@ export class SocialKudosRepository {
     const [totalRow] = await tx.select({ n: count() }).from(feedKudosBadges).where(where);
     return { rows: page, total: Number(totalRow?.n ?? 0) };
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  S16-SOCIAL-BE-3A — CRUD catalog huy hiệu `049..051` + đọc quản trị `056` (hàm thuần nhận `tx`)
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Mọi câu mang `company_id = $companyId` TƯỜNG MINH dù RLS + FORCE đã lọc: vế SQL là lưới thứ hai,
+// và nó biến "uuid của tenant khác" thành 0 hàng ⇒ 404 cùng mã với "không tồn tại" (không lộ việc
+// uuid đó CÓ THẬT ở công ty khác). Không hàm nào tự mở `withTenant` (lồng = treo im lặng).
+
+/** Huy hiệu ở góc nhìn QUẢN TRỊ — hàng thô, service đổi `Date` → ISO. */
+export interface KudosBadgeAdminRow extends KudosBadgeRow {
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Tập trường sửa được của `050` — `code` KHÔNG có mặt (bất biến, Zod `.strict()` đã chặn). */
+export interface KudosBadgePatch {
+  name?: string;
+  description?: string | null;
+  icon?: string | null;
+  position?: number;
+  isActive?: boolean;
+}
+
+const badgeAdminColumns = {
+  id: feedKudosBadges.id,
+  code: feedKudosBadges.code,
+  name: feedKudosBadges.name,
+  description: feedKudosBadges.description,
+  icon: feedKudosBadges.icon,
+  position: feedKudosBadges.position,
+  isActive: feedKudosBadges.isActive,
+  createdAt: feedKudosBadges.createdAt,
+  updatedAt: feedKudosBadges.updatedAt,
+};
+
+const badgeOf = (companyId: string, badgeId: string) =>
+  and(eq(feedKudosBadges.companyId, companyId), eq(feedKudosBadges.id, badgeId));
+
+/**
+ * `049` — INSERT một huy hiệu. Trùng `code` ném `23505` trên `feed_kudos_badges_company_code_uq`;
+ * service dịch sang 409 bằng `isUniqueViolationOf` (theo TÊN constraint — bảng còn
+ * `feed_kudos_badges_company_id_id_uq` cũng ném `23505`).
+ */
+export async function createBadgeTx(
+  tx: TenantTx,
+  companyId: string,
+  actorUserId: string,
+  dto: { code: string; name: string; description?: string | null; icon?: string | null; position?: number },
+): Promise<KudosBadgeAdminRow> {
+  const [row] = await tx
+    .insert(feedKudosBadges)
+    .values({
+      companyId,
+      code: dto.code,
+      name: dto.name,
+      description: dto.description ?? null,
+      icon: dto.icon ?? null,
+      position: dto.position ?? 0,
+      createdBy: actorUserId,
+      updatedBy: actorUserId,
+    })
+    .returning(badgeAdminColumns);
+  return row;
+}
+
+/**
+ * Đọc MỘT huy hiệu trong tenant. `forUpdate` ⇒ `SELECT … FOR UPDATE`: `050` so trạng thái cũ để
+ * tính "trường THẬT SỰ đổi" rồi mới UPDATE — không khoá thì hai PATCH song song cùng đọc giá trị cũ
+ * và audit ghi hai lần cùng một `from`.
+ */
+export async function findBadgeTx(
+  tx: TenantTx,
+  companyId: string,
+  badgeId: string,
+  opts: { forUpdate?: boolean } = {},
+): Promise<KudosBadgeAdminRow | undefined> {
+  const q = tx.select(badgeAdminColumns).from(feedKudosBadges).where(badgeOf(companyId, badgeId));
+  const [row] = opts.forUpdate ? await q.for("update") : await q;
+  return row;
+}
+
+/** `050` — UPDATE các trường ĐÃ LỌC là thật sự đổi (caller bảo đảm `patch` không rỗng). */
+export async function updateBadgeTx(
+  tx: TenantTx,
+  companyId: string,
+  badgeId: string,
+  actorUserId: string,
+  patch: KudosBadgePatch,
+): Promise<KudosBadgeAdminRow | undefined> {
+  const [row] = await tx
+    .update(feedKudosBadges)
+    .set({ ...patch, updatedAt: sql`now()`, updatedBy: actorUserId })
+    .where(badgeOf(companyId, badgeId))
+    .returning(badgeAdminColumns);
+  return row;
+}
+
+/**
+ * `051` — "xoá" = TẮT (BẤT BIẾN #2; app role không có DELETE trên bảng này).
+ *
+ * Vế `is_active = true` là lưới KHÔNG-ĐIỀU-KIỆN của lượt gọi lặp: lượt hai khớp 0 hàng ⇒ `undefined`
+ * ⇒ service phân biệt "đã tắt sẵn" (200, KHÔNG audit) với "không tồn tại" (404) bằng `findBadgeTx`.
+ */
+export async function deactivateBadgeTx(
+  tx: TenantTx,
+  companyId: string,
+  badgeId: string,
+  actorUserId: string,
+): Promise<KudosBadgeAdminRow | undefined> {
+  const [row] = await tx
+    .update(feedKudosBadges)
+    .set({ isActive: false, updatedAt: sql`now()`, updatedBy: actorUserId })
+    .where(and(badgeOf(companyId, badgeId), eq(feedKudosBadges.isActive, true)))
+    .returning(badgeAdminColumns);
+  return row;
+}
+
+/**
+ * `056` — CẢ huy hiệu đã tắt (SOC-DEC-012), OFFSET. Khuôn `listBadgesTx`: `count(*) over ()` cùng ảnh
+ * chụp; `ORDER BY position, id` — `position` trùng được nên `id` là khoá phá-hoà BẮT BUỘC.
+ */
+export async function listBadgesAdminTx(
+  tx: TenantTx,
+  companyId: string,
+  opts: { limit: number; offset: number },
+): Promise<{ rows: KudosBadgeAdminRow[]; total: number }> {
+  const where = eq(feedKudosBadges.companyId, companyId);
+
+  const rows = await tx
+    .select({ ...badgeAdminColumns, total: sql<number>`count(*) over ()`.mapWith(Number) })
+    .from(feedKudosBadges)
+    .where(where)
+    .orderBy(asc(feedKudosBadges.position), asc(feedKudosBadges.id))
+    .limit(opts.limit)
+    .offset(opts.offset);
+
+  const page = rows.map(({ total: _total, ...row }) => row);
+  if (rows.length > 0) return { rows: page, total: rows[0].total };
+  if (opts.offset === 0) return { rows: page, total: 0 };
+
+  const [totalRow] = await tx.select({ n: count() }).from(feedKudosBadges).where(where);
+  return { rows: page, total: Number(totalRow?.n ?? 0) };
 }

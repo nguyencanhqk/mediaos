@@ -52,7 +52,12 @@ import { resolveActorName } from "./social-posts.service";
 import { SocialReactionsRepository } from "./social-reactions.repository";
 import { SOCIAL_ERR } from "./social.errors";
 import { toFeedCommentDto } from "./social.mapper";
-import type { SocialActor, SocialRequestUser, SocialViewerContext } from "./social.types";
+import type {
+  SocialActor,
+  SocialCommentAccess,
+  SocialRequestUser,
+  SocialViewerContext,
+} from "./social.types";
 
 /**
  * S16-SOCIAL-BE-1 — `SOCIAL-API-014..017` (bình luận 1 cấp).
@@ -332,35 +337,53 @@ export class SocialCommentsService {
 
     await this.db.withTenant(actor.companyId, async (tx) => {
       const comment = await this.access.assertCommentVisible(tx, actor, commentId);
-      const asManager = this.access.assertCanMutateContent(actor, comment.authorUserId);
-
-      const deleted = await softDeleteCommentTx(
-        tx,
-        actor.companyId,
-        commentId,
-        comment.postId,
-        actor.actorUserId,
-      );
-      if (!deleted) return;
-
-      await clearMentions(tx, actor.companyId, "comment", commentId);
-      await this.reactions.clearForTarget(tx, actor.companyId, "comment", commentId);
-
-      if (asManager) {
-        await this.audit.record(tx, {
-          action: "social.comment.delete",
-          objectType: "feed_comment",
-          objectId: commentId,
-          actorUserId: actor.actorUserId,
-          moduleCode: "SOCIAL",
-          entityType: "feed_comment",
-          entityId: commentId,
-          resultStatus: "Success",
-          metadata: { commentId, postId: comment.postId, authorUserId: comment.authorUserId },
-        });
-      }
+      await this.removeTx(tx, actor, comment);
     });
     return { deleted: true };
+  }
+
+  /**
+   * S16-SOCIAL-BE-3A (D5) — HÀM LÕI tầng tx của xoá mềm bình luận: `017` và `029 delete_target`
+   * (báo cáo bình luận) đi qua CHÍNH hàm này — cùng dọn mention/reaction, cùng hạ `comment_count`,
+   * cùng luật audit. Nhận `comment` ĐÃ qua cổng đọc — KHÔNG tự gọi cổng.
+   *
+   * @returns `true` ⇔ lượt này xoá được hàng (lượt đua thua ⇒ `false`, không dọn, không audit).
+   */
+  async removeTx(tx: TenantTx, actor: SocialActor, comment: SocialCommentAccess): Promise<boolean> {
+    const asManager = this.access.assertCanMutateContent(actor, comment.authorUserId);
+
+    // Thứ tự khoá «cảm xúc → bình luận» khớp đường gỡ cảm xúc `019` — xem `lockForTarget`.
+    await this.reactions.lockForTarget(tx, actor.companyId, "comment", comment.id);
+    const deleted = await softDeleteCommentTx(
+      tx,
+      actor.companyId,
+      comment.id,
+      comment.postId,
+      actor.actorUserId,
+    );
+    if (!deleted) return false;
+
+    await clearMentions(tx, actor.companyId, "comment", comment.id);
+    await this.reactions.clearForTarget(tx, actor.companyId, "comment", comment.id);
+
+    if (asManager) {
+      await this.audit.record(tx, {
+        action: "social.comment.delete",
+        objectType: "feed_comment",
+        objectId: comment.id,
+        actorUserId: actor.actorUserId,
+        moduleCode: "SOCIAL",
+        entityType: "feed_comment",
+        entityId: comment.id,
+        resultStatus: "Success",
+        metadata: {
+          commentId: comment.id,
+          postId: comment.postId,
+          authorUserId: comment.authorUserId,
+        },
+      });
+    }
+    return true;
   }
 
   // ─── nội bộ ──────────────────────────────────────────────────────────────────

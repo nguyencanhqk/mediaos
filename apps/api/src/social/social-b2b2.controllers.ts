@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
   Req,
   UseGuards,
@@ -12,16 +14,20 @@ import {
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
+import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { SocialIdeasService } from "./social-ideas.service";
 import { SocialKudosService } from "./social-kudos.service";
 import { SOCIAL_ROUTE_PAIRS as P } from "./social-route-pairs.const";
 import {
+  CreateKudosBadgeBody,
   ListIdeasQuery,
+  ListKudosBadgesAdminQuery,
   ListKudosBadgesQuery,
   ListKudosQuery,
   ReviewFeedIdeaBody,
+  UpdateKudosBadgeBody,
 } from "./social.dto";
 
 interface AuthenticatedRequest extends Request {
@@ -89,6 +95,13 @@ export class SocialIdeasController {
  * ⚠️ Controller RIÊNG (không gộp vào `SocialIdeasController`) vì `SOCIAL_CONTROLLERS` của census 2 tầng
  * là **DANH SÁCH TRẮNG**: tên không có ở đó ⇒ route VÔ HÌNH với cả bốn assert. Hai cụm nghiệp vụ = hai
  * tên, để một lượt gộp "cho gọn" không lặng lẽ xoá bốn route khỏi phép đo.
+ *
+ * **S16-SOCIAL-BE-3A** — thêm CRUD catalog `049..051` + đọc quản trị `056`, cả bốn `manage:feed-kudos`.
+ * ⚠️ **THỨ TỰ KHAI: `GET kudos-badges/manage` (TĨNH) TRƯỚC mọi route `kudos-badges/:badge_id`** — Express
+ * khớp theo thứ tự đăng ký; hôm nay chưa có `GET :badge_id` nhưng ai thêm nó SAU route tĩnh là an toàn,
+ * thêm TRƯỚC là nuốt `manage` thành một `badge_id` (ParseUUIDPipe ⇒ 400).
+ * `049` mang `@Idempotent()` (tạo hàng mới); `050`/`051` có lưới tầng dữ liệu (so trạng thái / `WHERE
+ * is_active = true`) nên lượt lặp là 200 không audit.
  */
 @Controller("social")
 export class SocialKudosController {
@@ -114,5 +127,48 @@ export class SocialKudosController {
   @UsePipes(ZodValidationPipe)
   listBadges(@Req() req: AuthenticatedRequest, @Query() query: ListKudosBadgesQuery) {
     return this.kudos.listBadges(req.user, { page: query.page, limit: query.limit });
+  }
+
+  /** 056 — GET /social/kudos-badges/manage (TĨNH — khai TRƯỚC `:badge_id`). CẢ huy hiệu đã tắt. */
+  @Get("kudos-badges/manage")
+  @UseGuards(PermissionGuard)
+  @RequirePermission(P.kudosBadgeAdminList.action, P.kudosBadgeAdminList.resourceType)
+  @UsePipes(ZodValidationPipe)
+  listBadgesAdmin(@Req() req: AuthenticatedRequest, @Query() query: ListKudosBadgesAdminQuery) {
+    return this.kudos.listBadgesAdmin(req.user, { page: query.page, limit: query.limit });
+  }
+
+  /** 049 — POST /social/kudos-badges. Trùng `code` ⇒ 409; audit cùng tx. */
+  @Post("kudos-badges")
+  @Idempotent()
+  @UseGuards(PermissionGuard)
+  @RequirePermission(P.kudosBadgeCreate.action, P.kudosBadgeCreate.resourceType)
+  @UsePipes(ZodValidationPipe)
+  createBadge(@Req() req: AuthenticatedRequest, @Body() dto: CreateKudosBadgeBody) {
+    return this.kudos.createBadge(req.user, dto);
+  }
+
+  /** 050 — PATCH /social/kudos-badges/{badge_id}. `code` BẤT BIẾN (400); `isActive:true` bật lại. */
+  @Patch("kudos-badges/:badge_id")
+  @UseGuards(PermissionGuard)
+  @RequirePermission(P.kudosBadgeUpdate.action, P.kudosBadgeUpdate.resourceType)
+  @UsePipes(ZodValidationPipe)
+  updateBadge(
+    @Req() req: AuthenticatedRequest,
+    @Param("badge_id", ParseUUIDPipe) badgeId: string,
+    @Body() dto: UpdateKudosBadgeBody,
+  ) {
+    return this.kudos.updateBadge(req.user, badgeId, dto);
+  }
+
+  /** 051 — DELETE /social/kudos-badges/{badge_id}. TẮT (`is_active=false`), KHÔNG hard-delete. */
+  @Delete("kudos-badges/:badge_id")
+  @UseGuards(PermissionGuard)
+  @RequirePermission(P.kudosBadgeDelete.action, P.kudosBadgeDelete.resourceType)
+  deactivateBadge(
+    @Req() req: AuthenticatedRequest,
+    @Param("badge_id", ParseUUIDPipe) badgeId: string,
+  ) {
+    return this.kudos.deactivateBadge(req.user, badgeId);
   }
 }

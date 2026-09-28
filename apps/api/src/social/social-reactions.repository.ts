@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import { feedReactions } from "../db/schema/social";
@@ -167,6 +167,34 @@ export class SocialReactionsRepository {
   }
 
   /** Gỡ mọi cảm xúc của một đích (dọn theo khi xoá mềm bình luận). */
+  /**
+   * S16-SOCIAL-BE-3A (FULL gate database MEDIUM-2) — khoá TRƯỚC mọi hàng cảm xúc của đích, `ORDER BY id`.
+   *
+   * Đường gỡ cảm xúc (`019`) khoá hàng cảm xúc RỒI mới UPDATE bộ đếm trên hàng bình luận; đường xoá
+   * bình luận (`017`/`029 delete_target`) trước vá UPDATE hàng bình luận RỒI mới DELETE cảm xúc ⇒ hai
+   * thứ tự ngược nhau ⇒ `40P01` ⇒ 500. Gọi hàm này ĐẦU `removeTx` đưa đường xoá về CÙNG thứ tự
+   * «cảm xúc → bình luận».
+   */
+  async lockForTarget(
+    tx: TenantTx,
+    companyId: string,
+    targetType: SocialTargetType,
+    targetId: string,
+  ): Promise<void> {
+    await tx
+      .select({ id: feedReactions.id })
+      .from(feedReactions)
+      .where(
+        and(
+          eq(feedReactions.companyId, companyId),
+          eq(feedReactions.targetType, targetType),
+          eq(feedReactions.targetId, targetId),
+        ),
+      )
+      .orderBy(asc(feedReactions.id))
+      .for("update");
+  }
+
   async clearForTarget(
     tx: TenantTx,
     companyId: string,

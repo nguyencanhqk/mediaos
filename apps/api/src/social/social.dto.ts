@@ -1,7 +1,10 @@
 import { createZodDto } from "nestjs-zod";
 import {
   listIdeasQuerySchema,
+  createKudosBadgeSchema,
+  listKudosBadgesAdminQuerySchema,
   listKudosBadgesQuerySchema,
+  updateKudosBadgeSchema,
   listKudosQuerySchema,
   listPollsQuerySchema,
   reviewFeedIdeaSchema,
@@ -95,6 +98,10 @@ export class ListIdeasQuery extends createZodDto(listIdeasQuerySchema) {}
 export class ReviewFeedIdeaBody extends createZodDto(reviewFeedIdeaSchema) {}
 export class ListKudosQuery extends createZodDto(listKudosQuerySchema) {}
 export class ListKudosBadgesQuery extends createZodDto(listKudosBadgesQuerySchema) {}
+// S16-SOCIAL-BE-3A — CRUD catalog huy hiệu `049..051` + đọc quản trị `056`.
+export class CreateKudosBadgeBody extends createZodDto(createKudosBadgeSchema) {}
+export class UpdateKudosBadgeBody extends createZodDto(updateKudosBadgeSchema) {}
+export class ListKudosBadgesAdminQuery extends createZodDto(listKudosBadgesAdminQuerySchema) {}
 
 // ─── S16-SOCIAL-BE-1C — cửa đăng ký tệp (SOCIAL-API-054/055) ───
 export class SocialFileUploadUrlBody extends createZodDto(socialFileUploadUrlInputSchema) {}

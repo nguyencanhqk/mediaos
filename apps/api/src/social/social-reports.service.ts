@@ -1,7 +1,16 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import { sql } from "drizzle-orm";
 import type {
   CreateFeedReportDto,
   DataScope,
+  FeedReportActionDto,
   FeedReportDto,
   FeedReportPageDto,
   FeedReportPersonDto,
@@ -14,13 +23,31 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { SocialAccessService } from "./social-access.service";
+import { SocialCommentsService } from "./social-comments.service";
+import { SocialPostsModerationService } from "./social-posts-moderation.service";
+import { SocialPostsService } from "./social-posts.service";
+import { canPerformReportAction, isReportActionValidForTarget } from "./social-report-actions";
 import { SOCIAL_EVENT_POST_REPORTED, type SocialPostReportedPayload } from "./social-noti.payload";
 import { SocialReportsRepository, type ReportRow } from "./social-reports.repository";
-import { SOCIAL_CONSTRAINT, SOCIAL_ERR, isUniqueViolationOf } from "./social.errors";
+import {
+  SOCIAL_CONSTRAINT,
+  SOCIAL_ERR,
+  isUniqueViolationOf,
+  socialPgErrorOf,
+} from "./social.errors";
 import type { SocialActor, SocialRequestUser } from "./social.types";
 
 /**
- * S16-SOCIAL-BE-1B — `SOCIAL-API-027..029` (báo cáo vi phạm).
+ * Trần CHỜ KHOÁ của `029` (D8) — khuôn #537/BE-2B-1. Có NGƯỜI đang chờ phản hồi HTTP; hết trần ⇒
+ * 409 `REPORT_BUSY` thay vì treo.
+ */
+const REPORT_RESOLVE_LOCK_TIMEOUT = "5s";
+
+/** `lock_not_available` — Postgres bắn khi `lock_timeout` hết mà chưa lấy được khoá. */
+const PG_LOCK_NOT_AVAILABLE = "55P03";
+
+/**
+ * S16-SOCIAL-BE-1B — `SOCIAL-API-027..029` (báo cáo vi phạm). BE-3A thêm hành động kèm ở `029`.
  *
  * 🔴 **CROWN-JEWEL.** Cụm rủi ro cao nhất của WO: IDOR đa hình trên `feed_reports.target_id`, phạm vi
  * Department ép trong SQL, và một bypass CÓ CHỦ Ý của cổng `visiblePostCondition` cho snapshot đích.
@@ -43,6 +70,11 @@ export class SocialReportsService {
     private readonly dataScope: DataScopeService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    // S16-SOCIAL-BE-3A (D5) — hàm lõi tầng tx của ba route gốc. Không vòng DI: không service nào
+    // trong ba cái này phụ thuộc ngược `SocialReportsService`.
+    private readonly moderation: SocialPostsModerationService,
+    private readonly posts: SocialPostsService,
+    private readonly comments: SocialCommentsService,
   ) {}
 
   /**
@@ -120,11 +152,26 @@ export class SocialReportsService {
   }
 
   /**
-   * `SOCIAL-API-029` — `PATCH /social/reports/{id}`.
+   * `SOCIAL-API-029` — `PATCH /social/reports/{id}` — kết thúc báo cáo, KÈM hành động (BE-3A).
    *
    * 404 TRƯỚC 409: báo cáo không đọc được (không tồn tại · tenant khác · ngoài phạm vi) trả 404 một
    * chuỗi duy nhất; CHỈ khi actor vốn đã đọc được nó mà nó đã kết thúc mới trả 409 — 409 lúc đó không
    * rò gì vì actor đã biết báo cáo tồn tại.
+   *
+   * ┌─ THỨ TỰ D8 (một tx, `lock_timeout` LOCAL) — ĐỔI THỨ TỰ LÀ ĐỔI NGỮ NGHĨA ──────────────────────┐
+   * │ 1. 404 báo cáo                                                                                 │
+   * │ 2. 403 cặp của hành động (`SOCIAL_REPORT_ACTION_PAIRS`) — TRƯỚC khoá (gate)                  │
+   * │ 3. KHOÁ thứ tự mọi báo cáo `open` cùng đích (`lockOpenReportsForTargetTx`)          │
+   * │ 4. 422 ma trận hành động × loại đích                                                            │
+   * │ 5. câu ghi có điều kiện ⇒ 409 `ERR-021`                                                         │
+   * │ 6. đọc đích qua cổng THƯỜNG ⇒ 422 · 7. thực thi qua HÀM LÕI của route gốc ⇒ 422 nếu 0 hàng      │
+   * │ 8. auto-resolve anh em (chỉ `delete_target`) · 9. audit                                         │
+   * │ Mọi throw sau bước 5 = rollback CẢ trạng thái báo cáo lẫn audit (`withTenant` = một tx).        │
+   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * 🔴 Đích đọc qua `findPostVisible`/`findCommentVisible` — CỔNG THƯỜNG, **không** đường snapshot
+   * bypass của hàng đợi (`findReport` đọc xuyên `visiblePostCondition` để HIỂN THỊ; dùng nó để
+   * HÀNH ĐỘNG là cho người xử lý sửa nội dung mà họ không được thấy — nợ D14 nhóm riêng tư).
    */
   async resolve(
     user: SocialRequestUser,
@@ -133,46 +180,190 @@ export class SocialReportsService {
   ): Promise<FeedReportDto> {
     const actor = await this.access.resolveActor(user, "reportResolve");
 
-    return this.db.withTenant(actor.companyId, async (tx) => {
-      const before = await this.repo.findReport(tx, actor, reportId);
-      if (!before) throw new NotFoundException(SOCIAL_ERR.REPORT_NOT_FOUND);
+    try {
+      return await this.db.withTenant(actor.companyId, (tx) =>
+        this.resolveTx(tx, actor, reportId, dto),
+      );
+    } catch (err) {
+      // Hết `lock_timeout` ở BẤT KỲ câu nào trong tx (khoá báo cáo ở bước 2 hoặc khoá hàng đích ở
+      // bước 7) ⇒ lỗi TẠM, thử lại được. Để nguyên `55P03` là 500 vô danh (lớp lỗi H-1 của BE-2B-1).
+      if (socialPgErrorOf(err)?.code === PG_LOCK_NOT_AVAILABLE) {
+        // Không im lặng (FULL gate silent-failure LOW-1): khoá hết hạn có thể nằm trên hàng BÀI/BÌNH
+        // LUẬN (một thao tác dài khác), không chỉ trên hàng báo cáo — log để truy được ai đang giữ.
+        this.logger.warn(
+          `029: hết lock_timeout ${REPORT_RESOLVE_LOCK_TIMEOUT} khi xử lý báo cáo ${reportId} (action=${dto.action}) — trả 409 REPORT_BUSY.`,
+        );
+        throw new ConflictException(SOCIAL_ERR.REPORT_BUSY);
+      }
+      throw err;
+    }
+  }
 
-      const won = await this.repo.resolveReport(tx, actor.companyId, reportId, {
-        status: dto.status,
-        resolutionNote: dto.resolutionNote ?? null,
-        actorUserId: actor.actorUserId,
-      });
-      // 0 hàng ⇒ ai đó vừa xử lý trước (hoặc nó đã kết thúc từ trước). Kiểm bằng CHÍNH câu ghi, không
-      // bằng `before.status`: hai lượt xử lý đồng thời thì chỉ một lượt thắng.
-      if (!won) throw new ConflictException(SOCIAL_ERR.REPORT_ALREADY_DECIDED);
+  private async resolveTx(
+    tx: TenantTx,
+    actor: SocialActor,
+    reportId: string,
+    dto: ResolveFeedReportDto,
+  ): Promise<FeedReportDto> {
+    // `SET LOCAL` không nhận bind param; hằng literal của module. Role app có `lock_timeout = 0`
+    // (đo ở BE-2B-1) ⇒ không đặt trần là TREO vô hạn sau một lượt đang giữ khoá.
+    await tx.execute(sql.raw(`set local lock_timeout = '${REPORT_RESOLVE_LOCK_TIMEOUT}'`));
 
-      await this.audit.record(tx, {
-        action: `social.report.${dto.status}`,
-        objectType: "feed_report",
-        objectId: reportId,
-        actorUserId: actor.actorUserId,
-        moduleCode: "SOCIAL",
-        entityType: "feed_report",
-        entityId: reportId,
-        resultStatus: "Success",
-        // KHÔNG nội dung bài, KHÔNG ghi chú xử lý (chữ tự do) — API-19 §8 chốt payload audit chỉ mang
-        // id + trường đổi.
-        metadata: {
-          reportId,
+    const before = await this.repo.findReport(tx, actor, reportId);
+    if (!before) throw new NotFoundException(SOCIAL_ERR.REPORT_NOT_FOUND);
+
+    // 403 TRƯỚC bước khoá (FULL gate security LOW): phép kiểm chỉ cần `actor` + `dto.action`, nên
+    // một lượt bị từ chối không có lý do gì để giữ khoá hàng báo cáo của người khác.
+    if (!canPerformReportAction(actor, dto.action)) {
+      throw new ForbiddenException(SOCIAL_ERR.REPORT_ACTION_DENIED);
+    }
+
+    const lockedIds = await this.repo.lockOpenReportsForTargetTx(
+      tx,
+      actor.companyId,
+      before.targetType,
+      before.targetId,
+    );
+    if (!isReportActionValidForTarget(before.targetType, dto.action)) {
+      throw new UnprocessableEntityException(SOCIAL_ERR.REPORT_ACTION_INVALID_FOR_TARGET);
+    }
+
+    const won = await this.repo.resolveReport(tx, actor.companyId, reportId, {
+      status: dto.status,
+      resolutionNote: dto.resolutionNote ?? null,
+      actorUserId: actor.actorUserId,
+    });
+    // 0 hàng ⇒ ai đó vừa xử lý trước (hoặc nó đã kết thúc từ trước). Kiểm bằng CHÍNH câu ghi, không
+    // bằng `before.status`: hai lượt xử lý đồng thời thì chỉ một lượt thắng.
+    if (!won) throw new ConflictException(SOCIAL_ERR.REPORT_ALREADY_DECIDED);
+
+    let siblings: string[] = [];
+    let effect: ActionEffect = "none";
+    if (dto.action !== "none") {
+      effect = await this.executeActionTx(
+        tx,
+        actor,
+        before.targetType,
+        before.targetId,
+        dto.action,
+      );
+      // D9 — CHỈ `delete_target`: đích biến mất ⇒ các báo cáo khác về nó không còn gì để xử lý.
+      // `hide`/`lock` để nguyên — báo cáo khác có thể nói về điều khác.
+      if (dto.action === "delete_target") {
+        siblings = await this.repo.resolveSiblingsTx(tx, actor.companyId, {
           targetType: before.targetType,
           targetId: before.targetId,
-          from: before.status,
-          to: dto.status,
-        },
-      });
+          exceptReportId: reportId,
+          actorUserId: actor.actorUserId,
+          lockedIds,
+        });
+      }
+    }
 
-      const after = await this.repo.findReport(tx, actor, reportId);
-      // Không thể trượt: vị từ phạm vi không đổi trong cùng tx. Ném rõ ràng thay vì `!` rồi nổ chỗ khác.
-      if (!after) throw new NotFoundException(SOCIAL_ERR.REPORT_NOT_FOUND);
-      // `029` có `companyFloor:true` ⇒ tới được đây thì `routeScope` đã là Company. Vẫn hỏi
-      // `isCompany` chứ KHÔNG viết thẳng `true`: nếu sàn ở `social-route-pairs` bị hạ, chỗ này đi
-      // theo thay vì ở lại thành lỗ lộ im lặng.
-      return toReportDto(after, SocialAccessService.isCompany(actor.routeScope));
+    // KHÔNG nội dung bài, KHÔNG ghi chú xử lý (chữ tự do) — API-19 §8 chốt payload audit chỉ mang
+    // id + trường đổi. `action` có mặt kể cả `none` (D3: hành động kèm CHỈ sống trong audit).
+    await this.recordReportAudit(tx, actor, reportId, dto.status, {
+      reportId,
+      targetType: before.targetType,
+      targetId: before.targetId,
+      from: before.status,
+      to: dto.status,
+      action: dto.action,
+      // FULL gate silent-failure MEDIUM-1 — hành động có ĐỔI dữ liệu không. `noop` = đích đã ở trạng
+      // thái đó (không có dòng audit trường đi kèm); không có cờ này thì sổ nói «đã ẩn» mà không có
+      // hiệu ứng nào tương ứng.
+      effect,
+    });
+    for (const siblingId of siblings) {
+      await this.recordReportAudit(tx, actor, siblingId, "resolved", {
+        reportId: siblingId,
+        targetType: before.targetType,
+        targetId: before.targetId,
+        // `from` của TỪNG hàng — `resolveSiblingsTx` chỉ chạm hàng `open`, không mượn của báo cáo gốc.
+        from: "open",
+        to: "resolved",
+        action: "delete_target",
+        effect: "applied",
+        via: reportId,
+      });
+    }
+
+    const after = await this.repo.findReport(tx, actor, reportId);
+    // Không thể trượt: vị từ phạm vi không đổi trong cùng tx. Ném rõ ràng thay vì `!` rồi nổ chỗ khác.
+    if (!after) throw new NotFoundException(SOCIAL_ERR.REPORT_NOT_FOUND);
+    // `029` có `companyFloor:true` ⇒ tới được đây thì `routeScope` đã là Company. Vẫn hỏi
+    // `isCompany` chứ KHÔNG viết thẳng `true`: nếu sàn ở `social-route-pairs` bị hạ, chỗ này đi
+    // theo thay vì ở lại thành lỗ lộ im lặng.
+    return toReportDto(after, SocialAccessService.isCompany(actor.routeScope));
+  }
+
+  /**
+   * D5/D6/D7 — thực thi hành động qua CHÍNH hàm lõi của route gốc (`006`/`005`/`017`), trên đích đọc
+   * qua cổng THƯỜNG. Mọi «không làm được» (không thấy · đã xoá · lượt đua vừa xoá) ⇒ MỘT mã 422
+   * `REPORT_ACTION_TARGET_UNAVAILABLE`; throw ⇒ rollback cả câu ghi báo cáo ở bước 5.
+   *
+   * Không `catch (NotFoundException)`: cổng dùng biến thể `find*` trả `null`, nên một 404 ném từ chỗ
+   * khác KHÔNG bị dịch nhầm thành 422.
+   */
+  private async executeActionTx(
+    tx: TenantTx,
+    actor: SocialActor,
+    targetType: "post" | "comment",
+    targetId: string,
+    action: Exclude<FeedReportActionDto, "none">,
+  ): Promise<ActionEffect> {
+    const unavailable = () =>
+      new UnprocessableEntityException(SOCIAL_ERR.REPORT_ACTION_TARGET_UNAVAILABLE);
+
+    if (targetType === "post") {
+      const post = await this.access.findPostVisible(tx, actor, targetId);
+      if (!post) throw unavailable();
+      if (action === "delete_target") {
+        if (!(await this.posts.removeTx(tx, actor, post))) throw unavailable();
+        return "applied";
+      }
+      return toEffect(
+        await this.moderation.moderateTx(
+          tx,
+          actor,
+          post,
+          action === "hide_post" ? { hidden: true } : { commentsLocked: true },
+        ),
+        unavailable,
+      );
+    }
+
+    const comment = await this.access.findCommentVisible(tx, actor, targetId);
+    if (!comment) throw unavailable();
+    // Ma trận D2 đã loại `hide_post` cho bình luận ở bước 4 — nhánh còn lại là `lock_comments` (khoá
+    // bình luận BÀI CHA) hoặc `delete_target` (xoá bình luận).
+    if (action === "delete_target") {
+      if (!(await this.comments.removeTx(tx, actor, comment))) throw unavailable();
+      return "applied";
+    }
+    return toEffect(
+      await this.moderation.moderateTx(tx, actor, comment.post, { commentsLocked: true }),
+      unavailable,
+    );
+  }
+
+  private async recordReportAudit(
+    tx: TenantTx,
+    actor: SocialActor,
+    reportId: string,
+    status: "resolved" | "dismissed",
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    await this.audit.record(tx, {
+      action: `social.report.${status}`,
+      objectType: "feed_report",
+      objectId: reportId,
+      actorUserId: actor.actorUserId,
+      moduleCode: "SOCIAL",
+      entityType: "feed_report",
+      entityId: reportId,
+      resultStatus: "Success",
+      metadata,
     });
   }
 
@@ -309,6 +500,20 @@ export class SocialReportsService {
     };
     await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_POST_REPORTED, payload });
   }
+}
+
+/**
+ * Hiệu ứng thật của hành động kèm, ghi vào metadata audit `social.report.*` (`effect`):
+ * `none` (không hành động) · `applied` (đã đổi dữ liệu) · `noop` (đích đã ở trạng thái đó).
+ */
+type ActionEffect = "none" | "applied" | "noop";
+
+function toEffect(
+  outcome: "ok" | "noop" | "gone",
+  unavailable: () => UnprocessableEntityException,
+): ActionEffect {
+  if (outcome === "gone") throw unavailable();
+  return outcome === "ok" ? "applied" : "noop";
 }
 
 /**

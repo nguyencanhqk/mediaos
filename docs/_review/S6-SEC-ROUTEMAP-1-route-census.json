@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 682,
+    "routes": 686,
     "controllers": 129,
-    "gated": 643,
+    "gated": 647,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -9408,6 +9408,38 @@
       "verdictWo": null
     },
     {
+      "key": "SocialKudosController#createBadge",
+      "httpMethod": "POST",
+      "path": "/api/v1/social/kudos-badges",
+      "hasPermission": true,
+      "permission": "manage:feed-kudos",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialKudosController#deactivateBadge",
+      "httpMethod": "DELETE",
+      "path": "/api/v1/social/kudos-badges/:badge_id",
+      "hasPermission": true,
+      "permission": "manage:feed-kudos",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
       "key": "SocialKudosController#list",
       "httpMethod": "GET",
       "path": "/api/v1/social/kudos",
@@ -9429,6 +9461,38 @@
       "path": "/api/v1/social/kudos-badges",
       "hasPermission": true,
       "permission": "view:feed",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialKudosController#listBadgesAdmin",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/kudos-badges/manage",
+      "hasPermission": true,
+      "permission": "manage:feed-kudos",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialKudosController#updateBadge",
+      "httpMethod": "PATCH",
+      "path": "/api/v1/social/kudos-badges/:badge_id",
+      "hasPermission": true,
+      "permission": "manage:feed-kudos",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

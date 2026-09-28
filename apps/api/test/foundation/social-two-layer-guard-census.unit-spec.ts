@@ -11,6 +11,7 @@ import {
   SOCIAL_FILE_TARGET_PAIRS,
   SOCIAL_MODERATION_FIELD_PAIRS,
   SOCIAL_POST_TYPE_PAIRS,
+  SOCIAL_REPORT_ACTION_PAIRS,
   SOCIAL_ROUTE_PAIRS,
   type SocialRouteKey,
 } from "../../src/social/social-route-pairs.const";
@@ -56,7 +57,7 @@ const SOCIAL_CONTROLLERS = new Set([
   "SocialFilesController",
 ]);
 
-/** Bảng route HTTP → key — fixture census, phủ ĐỦ 50 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 2 CỬA TỆP, API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 54 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -126,6 +127,11 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
   { method: "PATCH", path: "/api/v1/social/posts/:post_id/idea/review", key: "ideaReview" },
   { method: "GET", path: "/api/v1/social/kudos", key: "kudosList" },
   { method: "GET", path: "/api/v1/social/kudos-badges", key: "kudosBadgeList" },
+  // ── S16-SOCIAL-BE-3A — CRUD HUY HIEU 049..051 + DOC QUAN TRI 056 ──
+  { method: "POST", path: "/api/v1/social/kudos-badges", key: "kudosBadgeCreate" },
+  { method: "PATCH", path: "/api/v1/social/kudos-badges/:badge_id", key: "kudosBadgeUpdate" },
+  { method: "DELETE", path: "/api/v1/social/kudos-badges/:badge_id", key: "kudosBadgeDelete" },
+  { method: "GET", path: "/api/v1/social/kudos-badges/manage", key: "kudosBadgeAdminList" },
   // ── S16-SOCIAL-BE-1C — CUA DANG KY TEP 054..055 ──
   { method: "POST", path: "/api/v1/social/files/upload-url", key: "fileUploadUrl" },
   { method: "POST", path: "/api/v1/social/files/:id/confirm", key: "fileConfirm" },
@@ -192,6 +198,11 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "SocialIdeasService#review": ["ideaReview"],
   "SocialKudosService#list": ["kudosList"],
   "SocialKudosService#listBadges": ["kudosBadgeList"],
+  // S16-SOCIAL-BE-3A — 4 site moi cua catalog huy hieu (`manage:feed-kudos`).
+  "SocialKudosService#createBadge": ["kudosBadgeCreate"],
+  "SocialKudosService#updateBadge": ["kudosBadgeUpdate"],
+  "SocialKudosService#deactivateBadge": ["kudosBadgeDelete"],
+  "SocialKudosService#listBadgesAdmin": ["kudosBadgeAdminList"],
   // S16-SOCIAL-BE-1C — 2 site moi. Moi site MOT key literal: ternary chon key (vi du
   // `target === "comment" ? … : …`) se lam census MU voi dung hai route nay.
   "SocialFilesService#createUploadUrl": ["fileUploadUrl"],
@@ -478,8 +489,8 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
     expect(
       socialRoutes.length,
-      "app boot phải thấy 50 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 2 CỬA TỆP)",
-    ).toBe(50);
+      "app boot phải thấy 54 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP)",
+    ).toBe(54);
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -580,6 +591,16 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
       )
     ) {
       payloadDependent.push("fileUploadUrl", "fileConfirm");
+    }
+    // S16-SOCIAL-BE-3A (D4) — nguon DOC LAP cho `029`: bang `SOCIAL_REPORT_ACTION_PAIRS` anh xa
+    // `action` cua body → cap quyen THEM. Cung dieu kien "co cap nao KHAC cap san cua route khong":
+    // mot lan "don dep" dat ca bang ve `null`/`manage:feed-report` se keo dang thuc do.
+    if (
+      Object.values(SOCIAL_REPORT_ACTION_PAIRS).some(
+        (v) => v !== null && v.resourceType !== SOCIAL_ROUTE_PAIRS.reportResolve.resourceType,
+      )
+    ) {
+      payloadDependent.push("reportResolve");
     }
     // S16-SOCIAL-ATTGATE-1 — nguồn ĐỘC LẬP cho `004`/`016`: call-site AST của `resolveAttachNewGate`
     // ở mức `Class#method`. Không có bảng hằng nào để đọc ở đây (cổng là một QUYẾT ĐỊNH resolve
@@ -782,14 +803,14 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
   });
 
   /**
-   * C2-b (plan §5.1) — KHÔNG route nào của Nhóm B đặt `tier1IsFloor`.
+   * C2-b (plan §5.1) — trong Nhóm B, tier1IsFloor CHỈ ở `reportResolve`.
    *
-   * API-19 §5.1 không có route nào của `020..029` rẽ cặp quyền theo NỘI DUNG request (khác `002`
-   * theo `type` và `006` theo TRƯỜNG). Assert tập RỖNG chứ không bỏ qua: nếu một ngày ai đó đặt cờ
-   * đó ở đây mà không kèm bảng cặp-theo-payload, đẳng thức D17 ở trên sẽ đỏ — ca này chỉ nói ĐỎ ở
-   * đâu.
+   * Lúc BE-1B, không route nào của `020..029` rẽ cặp quyền theo NỘI DUNG request ⇒ tập RỖNG. ⟲
+   * **S16-SOCIAL-BE-3A (D4)** đổi `029` sang phe floor CÓ CHỦ Ý: `action` trong body đòi thêm cặp của
+   * hành động (`SOCIAL_REPORT_ACTION_PAIRS`). Assert ĐÚNG tập một phần tử — một route Nhóm B khác bật
+   * cờ mà không kèm bảng cặp-theo-payload thì D17 ở trên đỏ, ca này chỉ nói ĐỎ ở đâu.
    */
-  it("C2-b — 10 route Nhóm B không route nào tier1IsFloor", () => {
+  it("C2-b — Nhóm B: tier1IsFloor CHỈ ở reportResolve (BE-3A D4)", () => {
     const groupB = [
       "newsList",
       "postAck",
@@ -804,6 +825,6 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     ] as const;
     expect(groupB.length, "danh sách Nhóm B phải đủ 10 route").toBe(10);
     const flagged = groupB.filter((k) => SOCIAL_ROUTE_PAIRS[k].tier1IsFloor);
-    expect(flagged).toEqual([]);
+    expect(flagged).toEqual(["reportResolve"]);
   });
 });
