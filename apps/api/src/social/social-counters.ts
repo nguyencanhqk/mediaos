@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { feedComments, feedPostTags, feedPosts, feedTags } from "../db/schema/social";
 
@@ -97,32 +97,83 @@ export async function bumpTagUsage(
 }
 
 /**
- * Khôi phục một bài đã xoá mềm — **đối xứng THẬT với `softDeletePostTx`** (plan §2 D10).
+ * S16-SOCIAL-BE-3C (D4, owner ký O2 + O4) — status mà một bài ĐÃ XOÁ sẽ nhận khi khôi phục. MỘT hàm dựng SQL,
+ * dùng CHUNG cho `restorePostTx` (vế SET của câu UPDATE) và cột `restoreAs` của `SOCIAL-API-057` (SELECT) —
+ * hai nơi đọc hai bản luật là cách chắc chắn nhất để màn thùng rác hứa một status mà nút khôi phục cho ra
+ * status khác.
  *
- * ┌─ VÌ SAO HÀM NÀY TỒN TẠI DÙ BE-1 KHÔNG CÓ ROUTE RESTORE ────────────────────────────────────────┐
- * │ `done_when` đòi bài xoá mềm biến khỏi feed/đếm/saved TRONG CÙNG TX — tức lúc xoá, bộ đếm của     │
- * │ bài cha (và `feed_tags.usage_count`) bị GIẢM. SPEC-16 §16 lại đòi bộ đếm "đảo ngược được" khi     │
- * │ khôi phục. Hai vế đó chỉ cùng đúng khi có một hàm khôi phục đối xứng: `UPDATE … SET deleted_at    │
- * │ = NULL` làm tay chỉ dựng lại HÀNG, không dựng lại con số.                                        │
- * │ Không có hàm này thì ca test R18 hoặc đỏ, hoặc bị viết yếu cho xanh (chỉ kiểm cột `deleted_at`)   │
- * │ — tức xanh giả trên đúng bất biến nó phải gác.                                                   │
+ * ┌─ LUẬT (fail-closed: mọi ca KHÔNG chứng minh được «người khác xoá» đều về `hidden`) ─────────────┐
+ * │ (i)   `deleted_by = author_user_id` — TÁC GIẢ TỰ XOÁ (O4): tác giả đã rút nội dung; HR cứu được   │
+ * │       dữ liệu nhưng muốn bài hiện lại thì phải CHỦ Ý bỏ ẩn qua `006` (có audit).                │
+ * │ (ii)  `deleted_by IS NULL` — FK `ON DELETE SET NULL` đã xoá mất người xoá, hoặc hàng xoá bằng SQL │
+ * │       tay: KHÔNG chứng minh được đó là moderator ⇒ `hidden`.                                     │
+ * │ (iii) người KHÁC tác giả xoá (moderator qua `005`/`029 delete_target`) ⇒ status đã nhớ (O2).      │
+ * │ (iv)  legacy `status_before_delete IS NULL` (xoá trước mig 0589) ⇒ `hidden` — ⚠️ hệ quả PROD: mọi │
+ * │       bài xoá trước 0589 khôi phục thành `hidden` (ops note ở API-19 §5.1k).                     │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * ⚠️ **Owner chốt 21/09/2026: giữ lời hứa «thùng rác» của SPEC-16 §3.6/§13.1/§7** ⇒ route HTTP khôi
- * phục + đăng ký vào recycle-bin registry thuộc WO `S16-SOCIAL-BE-3C` (tách từ BE-3 ngày
- * 28/09/2026). Hàm này là nền cho nó; đừng xoá vì "chưa ai gọi".
+ * So `deleted_by` với `author_user_id` là bằng chứng CÙNG HÀNG, ghi trong CÙNG câu UPDATE xoá — không phụ
+ * thuộc `audit_logs` (audit chỉ ghi khi xoá bài NGƯỜI KHÁC, nên «không có audit» không phân biệt được ca (i)).
  *
- * Đếm lại TỪ NGUỒN (`COUNT(*)` trên hàng sống) chứ không cộng-ngược một `delta` đã nhớ: giữa lúc xoá
- * và lúc khôi phục, bình luận/cảm xúc có thể đã đổi, nên delta cũ là một con số hết hạn.
+ * ⚠️ Cột nội suy qua đối tượng cột Drizzle ⇒ luôn định danh THEO BẢNG (`"feed_posts"."deleted_by"`), không
+ * bao giờ là chữ `deleted_by` trần: `feed_groups` cũng có `deleted_by`, nên một hằng chuỗi dùng trong câu có
+ * JOIN nhóm sẽ mơ hồ (42702) hoặc bám nhầm bảng. `t` cho phép dùng lại khi `feed_posts` mang alias — khuôn
+ * `visiblePostCondition(actor, t)`. Trong UPDATE, mọi vế SET được tính trên hàng CŨ ⇒ gọi hàm này cạnh
+ * `deleted_by = NULL` trong CÙNG câu vẫn đọc người xoá trước khi bị dọn.
+ */
+export function restoreStatusSql(t: typeof feedPosts = feedPosts): SQL<"published" | "hidden"> {
+  return sql<"published" | "hidden">`(CASE
+    WHEN ${t.deletedBy} IS NOT NULL AND ${t.deletedBy} <> ${t.authorUserId}
+      THEN coalesce(${t.statusBeforeDelete}, 'hidden')
+    ELSE 'hidden'
+  END)`;
+}
+
+/**
+ * Khôi phục một bài đã xoá mềm — **đối xứng THẬT với `softDeletePostTx`** (BE-1 plan §2 D10).
+ *
+ * ⟲ **S16-SOCIAL-BE-3C** — hàm nay có route: `SOCIAL-API-058` (`POST /recycle-bin/feed-posts/{post_id}/restore`,
+ * `SocialRecycleBinService.restore`). Trước WO này caller DUY NHẤT là test (R18 · A1b) và hàm ghi CỨNG
+ * `status='published'` ⇒ lỗ «moderator ẩn → tác giả xoá → khôi phục → `published`». Nay status đi theo
+ * `restoreStatusSql()` (D4) — xem docblock hàm đó.
+ *
+ * Bộ đếm BÀI (like/comment/view) đếm lại TỪ NGUỒN (`COUNT(*)` trên hàng sống) chứ không cộng-ngược một delta
+ * đã nhớ: giữa lúc xoá và lúc khôi phục, bình luận/cảm xúc có thể đã đổi. An toàn trước ghi đồng thời vì mọi
+ * lượt ghi bộ đếm của bài đều khoá CHÍNH hàng bài (và `bumpPostCounter` lọc `deleted_at IS NULL`) — không
+ * lượt nào cộng vào bài đang nằm trong thùng rác.
+ *
+ * ┌─ 🔴 `feed_tags.usage_count` GIỮ DELTA +1 — KHÔNG đếm lại từ nguồn (plan v3 D5, rút lại đề xuất v2) ──┐
+ * │ `UPDATE feed_tags SET usage_count = (SELECT count(*) …)` dưới READ COMMITTED ĐUA với một bài mới      │
+ * │ cùng thẻ: tx kia giữ khoá hàng `feed_tags` sau `bumpTagUsage(+1)` (`social-mentions.ts`); lượt khôi  │
+ * │ phục chờ khoá rồi CHỈ đánh giá lại hàng đích, còn subquery đọc ảnh chụp CŨ ⇒ ghi đè mất +1 ⇒ lệch −1 │
+ * │ VĨNH VIỄN ⇒ lần xoá sau đụng `chk_feed_tags_usage` ⇒ 23514 → 500. Delta trong SQL là luật của file   │
+ * │ (khối đầu file) và đối xứng thật với đường xoá DUY NHẤT (`softDeletePostTx` −1).                     │
+ * │ Giới hạn nói thẳng: hàng bị xoá mềm bằng SQL TAY (không qua `softDeletePostTx`) mà có thẻ thì khôi   │
+ * │ phục đẩy `usage_count` lệch +1 — chỉ xảy ra ở fixture test; luật fixture: xoá tay KHÔNG gắn thẻ.     │
+ * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * KHÔNG bump `last_activity_at` (khôi phục không phải «hoạt động mới»). `updated_by = actorUserId`.
+ *
+ * @returns status SAU khôi phục (`RETURNING` trả giá trị mới), hoặc `null` khi không có hàng đã xoá nào khớp
+ *   (không tồn tại · tenant khác · CHƯA xoá · lượt đua đã khôi phục trước). Caller quyết định `null` nghĩa là gì.
  */
 export async function restorePostTx(
   tx: TenantTx,
   companyId: string,
   postId: string,
-): Promise<boolean> {
+  actorUserId: string,
+): Promise<"published" | "hidden" | null> {
   const restored = await tx
     .update(feedPosts)
-    .set({ deletedAt: null, deletedBy: null, status: "published", updatedAt: new Date() })
+    .set({
+      // Tính trên hàng CŨ (cùng câu với `deletedBy: null` bên dưới) — xem docblock `restoreStatusSql`.
+      status: restoreStatusSql(),
+      statusBeforeDelete: null,
+      deletedAt: null,
+      deletedBy: null,
+      updatedAt: new Date(),
+      updatedBy: actorUserId,
+    })
     .where(
       and(
         eq(feedPosts.id, postId),
@@ -130,10 +181,18 @@ export async function restorePostTx(
         sql`${feedPosts.deletedAt} IS NOT NULL`,
       ),
     )
-    .returning({ id: feedPosts.id });
-  if (restored.length === 0) return false;
+    .returning({ status: feedPosts.status });
+  const row = restored[0];
+  if (!row) return null;
+  if (row.status !== "published" && row.status !== "hidden") {
+    // Bất khả theo `restoreStatusSql` (CASE chỉ ra hai giá trị). Ném ⇒ cả tx quay lui — thà 500 ồn còn hơn
+    // một bài «sống» mang status lạ.
+    throw new Error(
+      `restorePostTx: status sau khôi phục ngoài tập {published,hidden}: ${row.status}`,
+    );
+  }
 
-  // Đếm lại từ nguồn — cùng tx, một câu cho mỗi bộ đếm.
+  // Đếm lại từ nguồn — cùng tx, một câu cho mọi bộ đếm của bài.
   await tx.execute(sql`
     UPDATE feed_posts p
        SET comment_count = (SELECT count(*) FROM feed_comments c
@@ -147,7 +206,7 @@ export async function restorePostTx(
      WHERE p.id = ${postId} AND p.company_id = ${companyId}
   `);
 
-  // Thẻ: bài sống lại thì mỗi thẻ còn gắn với nó được +1 lượt dùng.
+  // Thẻ: bài sống lại thì mỗi thẻ còn gắn với nó được +1 lượt dùng (delta — xem khối 🔴 ở docblock).
   const tagRows = await tx
     .select({ tagId: feedPostTags.tagId })
     .from(feedPostTags)
@@ -159,7 +218,7 @@ export async function restorePostTx(
     1,
   );
 
-  return true;
+  return row.status;
 }
 
 /**
@@ -169,6 +228,11 @@ export async function restorePostTx(
  * (`assertCommentVisible` JOIN `feed_posts` + `visiblePostCondition`), nên bài chết là cả cây bình
  * luận biến mất khỏi mọi đường đọc. Đánh dấu từng hàng sẽ làm việc khôi phục không phân biệt được
  * bình luận "chết theo bài" với bình luận "bị xoá riêng trước đó".
+ *
+ * ⟲ S16-SOCIAL-BE-3C (O2, D5) — nhớ `status_before_delete = status` bằng BIỂU THỨC SQL, KHÔNG đọc-rồi-ghi ở JS:
+ * PG tính vế SET trên phiên bản MỚI NHẤT của hàng sau khi chờ khoá — một lượt ẩn (`moderateTx`, `FOR UPDATE`)
+ * commit trước thì cột nhớ `hidden`, không nhớ một ảnh chụp đã cũ. Cả `005` lẫn `029 delete_target` đi qua
+ * đây (qua `SocialPostsService.removeTx`).
  */
 export async function softDeletePostTx(
   tx: TenantTx,
@@ -182,6 +246,8 @@ export async function softDeletePostTx(
     .set({
       deletedAt: now,
       deletedBy: actorUserId,
+      // Hàng CŨ — cùng câu với `status: "deleted"` ngay dưới (mọi vế SET đọc hàng trước khi ghi).
+      statusBeforeDelete: sql`${feedPosts.status}`,
       status: "deleted",
       updatedAt: now,
       updatedBy: actorUserId,
@@ -209,7 +275,6 @@ export async function softDeletePostTx(
 
   return true;
 }
-
 /**
  * Xoá mềm một bình luận + hạ `comment_count` của bài cha, CÙNG TX.
  *

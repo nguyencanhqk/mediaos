@@ -146,11 +146,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3B · thống kê tương tác 052/05
   }
 
   /** Người có hồ sơ nhân sự ở `orgUnitId` (null = chưa gán đơn vị). Không đăng nhập. */
-  async function person(
-    t: SeededTenant,
-    label: string,
-    orgUnitId: string | null,
-  ): Promise<string> {
+  async function person(t: SeededTenant, label: string, orgUnitId: string | null): Promise<string> {
     const userId = await seedUser(direct, t.companyId, `${label}@${t.slug}.test`, hash);
     await direct.query(
       `INSERT INTO employee_profiles (company_id, user_id, org_unit_id, status, work_type, employee_code)
@@ -170,7 +166,11 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3B · thống kê tương tác 052/05
   ): Promise<{ token: string; userId: string }> {
     const userId = await person(t, label, orgUnitId);
     if (scope !== null) {
-      const roleId = await seedRole(direct, t.companyId, `sb3b-${label}-${randomUUID().slice(0, 6)}`);
+      const roleId = await seedRole(
+        direct,
+        t.companyId,
+        `sb3b-${label}-${randomUUID().slice(0, 6)}`,
+      );
       const permId = await seedPermissionCatalog(direct, "view", "feed-report", false);
       await seedRolePermission(direct, roleId, permId, "ALLOW", scope);
       await seedUserRole(direct, userId, roleId, t.companyId);
@@ -544,7 +544,10 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3B · thống kê tương tác 052/05
 
       const wk1 = r.rows.filter((x) => x.weekStart === "2024-01-01");
       expect(wk1).toHaveLength(4);
-      expect(wk1.filter((x) => x.orgUnitId === null), "đúng MỘT hàng nhóm null").toHaveLength(1);
+      expect(
+        wk1.filter((x) => x.orgUnitId === null),
+        "đúng MỘT hàng nhóm null",
+      ).toHaveLength(1);
       expect(counts(cell("2024-01-01", uA)!)).toEqual({
         posts: 2,
         comments: 1,
@@ -575,7 +578,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3B · thống kê tương tác 052/05
       await db.withTenant(C.companyId, (tx) => softDeletePostTx(tx, C.companyId, postQ, pA1));
       expect((await stats(tHrC, q)).weekTotals.map(counts)).toEqual([ZERO]);
 
-      await db.withTenant(C.companyId, (tx) => restorePostTx(tx, C.companyId, postQ));
+      // S16-SOCIAL-BE-3C: tham số thứ 4 = người khôi phục. pA1 tự xoá ⇒ bài về `hidden` (O4) — thống kê đếm
+      // `status <> 'deleted'` nên `hidden` VẪN tính ⇒ kỳ vọng KHÔNG đổi.
+      await db.withTenant(C.companyId, (tx) => restorePostTx(tx, C.companyId, postQ, pA1));
       expect((await stats(tHrC, q)).weekTotals.map(counts)).toEqual([alive]);
     });
 
@@ -676,7 +681,13 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3B · thống kê tương tác 052/05
 
       const byWeek = await readSheet(res.body, "Theo tuần");
       expect(byWeek.slice(1)).toEqual(
-        json.weekTotals.map((w) => [w.weekStart, w.posts, w.comments, w.reactions, w.activeMembers]),
+        json.weekTotals.map((w) => [
+          w.weekStart,
+          w.posts,
+          w.comments,
+          w.reactions,
+          w.activeMembers,
+        ]),
       );
 
       expect(await exportAuditCount(C.companyId)).toBe(before + 1);
