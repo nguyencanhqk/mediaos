@@ -64,7 +64,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-001` | `GET /social/feed` | `view:feed` (+ `manage:feed-post` khi `status` khác `published`) | Lọc `type`/`audience`/`groupId`/`tag`/`authorId`/**`status`**, sắp xếp `latest`\|`active`; cursor-based. **`status` là nguồn dữ liệu của `SOC-SCREEN-010`** — `status` khác `published` đòi thêm `manage:feed-post` |
 | `SOCIAL-API-002` | `POST /social/posts` | **theo `type` — xem §5.1b** | `@Idempotent()`; parse hashtag + mention cùng tx. 5 loại bài dùng 5 cặp khác nhau |
 | `SOCIAL-API-003` | `GET /social/posts/{post_id}` | `view:feed` | `hidden` ⇒ 404 trừ tác giả / `manage:feed-post` |
-| `SOCIAL-API-004` | `PATCH /social/posts/{post_id}` | `view:feed` + chủ bài, **hoặc** `manage:feed-post`; **+ `create:feed-post` khi THÊM đính kèm mới — xem §5.1f** | Set `edited_at`; đồng bộ lại hashtag/mention |
+| `SOCIAL-API-004` | `PATCH /social/posts/{post_id}` | `view:feed` + chủ bài, **hoặc** `manage:feed-post`; **+ `create:feed-post` khi THÊM đính kèm mới — xem §5.1f** | Set `edited_at`; đồng bộ lại hashtag/mention (vắng `mentionedUserIds` = giữ nguyên — §5.1g) |
 | `SOCIAL-API-005` | `DELETE /social/posts/{post_id}` | như trên | Xoá **mềm** + recycle-bin |
 | `SOCIAL-API-006` | `PATCH /social/posts/{post_id}/moderation` | **theo TỪNG trường — xem §5.1c** | Body `{hidden?, pinned?, commentsLocked?}`; **mỗi trường đổi = 1 dòng audit** |
 | `SOCIAL-API-007` | `POST /social/posts/{post_id}/view` | `view:feed` (hàng `user_id = actor`) | `ON CONFLICT DO NOTHING` — reload không tăng |
@@ -77,7 +77,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | **Bình luận — Track A** ||||
 | `SOCIAL-API-014` | `GET /social/posts/{post_id}/comments` | `view:feed` | Phân trang; trả lời lồng 1 cấp |
 | `SOCIAL-API-015` | `POST /social/posts/{post_id}/comments` | `create:feed-comment` | `@Idempotent()`; bài khoá bình luận ⇒ 409 `ERR-004`; trả lời quá 1 cấp ⇒ 422 `ERR-005` |
-| `SOCIAL-API-016` | `PATCH /social/comments/{comment_id}` | chủ bình luận **hoặc** `manage:feed-post`; **+ `create:feed-comment` khi THÊM đính kèm mới — xem §5.1f** | |
+| `SOCIAL-API-016` | `PATCH /social/comments/{comment_id}` | chủ bình luận **hoặc** `manage:feed-post`; **+ `create:feed-comment` khi THÊM đính kèm mới — xem §5.1f** | Đồng bộ lại mention (vắng `mentionedUserIds` = giữ nguyên — §5.1g) |
 | `SOCIAL-API-017` | `DELETE /social/comments/{comment_id}` | như trên | Xoá mềm |
 | `SOCIAL-API-018` | `PUT /social/comments/{comment_id}/reaction` | `view:feed` (hàng `user_id = actor`) | |
 | `SOCIAL-API-019` | `DELETE /social/comments/{comment_id}/reaction` | như trên | |
@@ -221,6 +221,20 @@ Mỗi trường đổi = **một dòng audit riêng** (`{postId, field, from, to
 - **Actor audit** = actor hệ thống của `system-jobs` (cùng khuôn job hiện có); dòng audit ghi rõ nguồn là job, không phải người.
 - **Không** cấp thêm quyền ghi cho `mediaos_worker`: DB-17 §4 (nguyên tắc 3) giữ worker ở mức `SELECT`. Lý do chọn đường này thay vì cấp `UPDATE (status, closed_at)` cho worker — ít quyền hơn, và tái dùng nguyên tầng service đã có gate/audit/outbox thay vì mở một đường ghi thứ hai vào DB.
 - NOTI `NOTI-EVENT-035` phát qua **outbox trong cùng transaction** với việc đóng poll.
+
+### 5.1g `SOCIAL-API-004` / `016` — `mentionedUserIds` **vắng ≠ rỗng**
+
+> S16-SOCIAL-MENTIONSYNC-1 (28/09/2026). Trước bản này BE đọc `mentionedUserIds ?? []`, nên lượt sửa
+> chỉ đổi chữ âm thầm XOÁ mọi mention cũ. FE không vá được: DTO bài/bình luận không phơi `userId`
+> người được nhắc (§6.1), nên FE không có dữ liệu để gửi lại danh sách.
+
+| Lượt PATCH | `feed_mentions` | `NOTI-EVENT-028` | `droppedMentions` |
+| --- | --- | --- | --- |
+| Không gửi `mentionedUserIds` (chỉ sửa chữ) | **giữ nguyên** | không bắn | `[]` |
+| `mentionedUserIds: []` tường minh | xoá hết | không bắn | `[]` |
+| `mentionedUserIds` có giá trị | đồng bộ về đúng tập hợp lệ (ngoài audience bị bỏ im lặng — §6) | chỉ cho người **mới** được nhắc | người bị bỏ |
+
+Cùng khuôn `attachmentIds` ở §5.1f: khoá vắng = không đụng, mảng rỗng = gỡ hết.
 
 ### 5.2 Thứ tự khai báo route — bẫy đã biết
 

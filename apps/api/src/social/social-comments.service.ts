@@ -33,6 +33,7 @@ import {
   mentionsFor,
   parseHashtags,
   resolveMentions,
+  resyncEditedMentions,
   syncMentions,
   targetTypeLabel,
   type AudienceTarget,
@@ -273,7 +274,8 @@ export class SocialCommentsService {
           });
         }
 
-        const mentions = await resolveMentions(
+        // Vắng `mentionedUserIds` = giữ nguyên mention cũ (xem `resyncEditedMentions`).
+        const mentions = await resyncEditedMentions(
           tx,
           actor,
           {
@@ -281,15 +283,11 @@ export class SocialCommentsService {
             orgUnitId: comment.post.orgUnitId,
             groupId: comment.post.groupId,
           },
-          dto.mentionedUserIds ?? [],
-        );
-        const fresh = await syncMentions(
-          tx,
-          actor.companyId,
           "comment",
           commentId,
-          mentions.accepted,
+          dto.mentionedUserIds,
         );
+        const fresh = mentions.fresh;
 
         // `dto.attachmentIds` là allowlist ĐẦY ĐỦ của lượt sửa (khuôn `SocialPostsService.update`, D18
         // liệt kê 016 trong nhóm phải đồng bộ): kiểm `undefined` chứ KHÔNG `?.length` như nhánh tạo —
@@ -306,9 +304,7 @@ export class SocialCommentsService {
           );
         }
 
-        if (dto.mentionedUserIds && fresh.length > 0) {
-          await this.enqueueMentionNotis(tx, actor, comment.postId, commentId, fresh);
-        }
+        await this.enqueueMentionNotis(tx, actor, comment.postId, commentId, fresh);
 
         const row = await this.repo.findById(tx, actor.companyId, commentId);
         return { row, post: comment.post, dropped: mentions.dropped };

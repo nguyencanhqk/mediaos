@@ -532,7 +532,8 @@ export type CreateFeedPostDto = z.infer<typeof createFeedPostSchema>;
 /**
  * `SOCIAL-API-004` — `PATCH /social/posts/{id}`.
  *
- * CHỈ nội dung: `body` + danh sách mention/đính kèm thay thế. `audience`/`type`/`orgUnitId` KHÔNG sửa
+ * CHỈ nội dung: `body` + danh sách mention/đính kèm thay thế — khoá VẮNG = giữ nguyên, `[]` = gỡ hết
+ * (API-19 §5.1f/§5.1g). `audience`/`type`/`orgUnitId` KHÔNG sửa
  * được sau khi đăng — đổi audience của một bài đã có người đọc là đổi ngược phạm vi hiển thị của nội
  * dung đã phát tán, và các bản sao đã fan-out qua WS/NOTI không thu hồi được.
  */
@@ -587,7 +588,10 @@ export type CreateFeedCommentDto = z.infer<typeof createFeedCommentSchema>;
 /** Mức DB còn chịu được cho `feed_comments.body` — xem `createFeedCommentSchema`. */
 export const FEED_COMMENT_DB_BODY_MAX = FEED_COMMENT_BODY_MAX;
 
-/** `SOCIAL-API-016` — `PATCH /social/comments/{id}`. */
+/**
+ * `SOCIAL-API-016` — `PATCH /social/comments/{id}`. `mentionedUserIds`/`attachmentIds` VẮNG = giữ
+ * nguyên, `[]` = gỡ hết (API-19 §5.1f/§5.1g).
+ */
 export const updateFeedCommentSchema = z
   .object({
     body: feedBody(),

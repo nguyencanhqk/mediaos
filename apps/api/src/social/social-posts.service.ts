@@ -29,6 +29,7 @@ import {
   mentionsFor,
   parseHashtags,
   resolveMentions,
+  resyncEditedMentions,
   syncMentions,
   syncPostTags,
   targetTypeLabel,
@@ -407,14 +408,17 @@ export class SocialPostsService {
 
         await syncPostTags(tx, actor.companyId, postId, parseHashtags(dto.body));
 
-        const mentions = await resolveMentions(
+        // Vắng `mentionedUserIds` = giữ nguyên mention cũ (xem `resyncEditedMentions`). CHỈ mention
+        // MỚI mới sinh thông báo — mỗi lần bấm Lưu không được bắn lại cho người cũ.
+        const mentions = await resyncEditedMentions(
           tx,
           actor,
           { audience: post.audience, orgUnitId: post.orgUnitId, groupId: post.groupId },
-          dto.mentionedUserIds ?? [],
+          "post",
+          postId,
+          dto.mentionedUserIds,
         );
-        // CHỈ mention MỚI mới sinh thông báo — mỗi lần bấm Lưu không được bắn lại cho người cũ.
-        const fresh = await syncMentions(tx, actor.companyId, "post", postId, mentions.accepted);
+        const fresh = mentions.fresh;
 
         if (attach) {
           await this.attachments.syncLinksTx(

@@ -579,6 +579,31 @@ export async function syncMentions(
   return fresh;
 }
 
+/**
+ * Đường SỬA (004/016): đồng bộ mention CHỈ khi khoá `mentionedUserIds` CÓ MẶT trong DTO.
+ *
+ * `undefined` (vắng khoá) = GIỮ NGUYÊN mention cũ; `[]` tường minh = bỏ hết. Không được gộp hai ca
+ * bằng `?? []`: DTO bài/bình luận không phơi `userId` người được nhắc (API-19 §6.1), nên FE sửa chữ
+ * KHÔNG có dữ liệu để gửi lại danh sách — gộp lại là mỗi lần Lưu âm thầm xoá mọi mention
+ * (S16-SOCIAL-MENTIONSYNC-1).
+ *
+ * @returns `fresh` = user mới được nhắc ở lượt này (người nhận NOTI-028) · `dropped` = bị bỏ vì ngoài
+ *   audience. Vắng khoá ⇒ cả hai rỗng.
+ */
+export async function resyncEditedMentions(
+  tx: TenantTx,
+  actor: SocialActor,
+  target: AudienceTarget,
+  targetType: SocialTargetType,
+  targetId: string,
+  mentionedUserIds: readonly string[] | undefined,
+): Promise<{ fresh: ResolvedMention[]; dropped: ResolvedMention[] }> {
+  if (mentionedUserIds === undefined) return { fresh: [], dropped: [] };
+  const mentions = await resolveMentions(tx, actor, target, mentionedUserIds);
+  const fresh = await syncMentions(tx, actor.companyId, targetType, targetId, mentions.accepted);
+  return { fresh, dropped: mentions.dropped };
+}
+
 /** Gỡ mọi mention của một đích (dùng khi xoá mềm bình luận — bài thì đi qua vị từ của bài cha). */
 export async function clearMentions(
   tx: TenantTx,
