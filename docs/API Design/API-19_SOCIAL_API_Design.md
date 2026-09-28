@@ -122,8 +122,8 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-051` | `DELETE /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | `200` + DTO quản trị. Tắt (`is_active=false`), **không** hard-delete; đã tắt sẵn ⇒ 200 không audit; không tồn tại/tenant khác ⇒ 404 `KUDOS_BADGE_NOT_FOUND` |
 | `SOCIAL-API-056` | `GET /social/kudos-badges/manage` | `manage:feed-kudos` | **SOC-DEC-012 (BE-3A).** CẢ huy hiệu đã tắt + `isActive`; OFFSET; `ORDER BY position, id`. Khai TRƯỚC `…/{badge_id}` |
 | **Thống kê — Track C** ||||
-| `SOCIAL-API-052` | `GET /social/stats/engagement` | `view:feed-report` | Theo tuần & đơn vị; SQL set-based; **KHÔNG cache** |
-| `SOCIAL-API-053` | `GET /social/stats/engagement/export` | `view:feed-report` | XLSX; ghi audit |
+| `SOCIAL-API-052` | `GET /social/stats/engagement` | `view:feed-report` | Sàn scope `Company`; manager `Department`. Theo tuần & đơn vị; SQL set-based; **KHÔNG cache** — xem §5.1j |
+| `SOCIAL-API-053` | `GET /social/stats/engagement/export` | `view:feed-report` | Như `052`; XLSX; ghi audit cùng tx — xem §5.1j |
 | **Cửa đăng ký tệp đính kèm — `S16-SOCIAL-BE-1C`** ||||
 | `SOCIAL-API-054` | `POST /social/files/upload-url` | **SÀN `view:feed` + cặp theo `target` — xem §5.1e** | `@HttpCode(200)`; đăng ký tệp `Private` owned-by-token + presigned-PUT. **Không** `@Idempotent()` |
 | `SOCIAL-API-055` | `POST /social/files/{id}/confirm` | như trên | `Pending → Uploaded`; owner-check TRƯỚC khi chạm storage; 200 idempotent khi đã `Uploaded` |
@@ -274,6 +274,42 @@ Body: `{status, resolutionNote?, action?}`; `action ∈ none · hide_post · loc
   Seeder `ON CONFLICT DO NOTHING` không bật lại huy hiệu tenant đã tắt.
 - Huy hiệu tắt KHÔNG ảnh hưởng vinh danh cũ (`047` vẫn hiển thị); chỉ chặn chọn mới (`ERR-022`).
 - Audit cùng tx: `social.kudos_badge.create|update|deactivate`, payload id + trường đổi.
+
+### 5.1j `SOCIAL-API-052` / `053` — thống kê tương tác (`S16-SOCIAL-BE-3B`)
+
+**Tham số** (`.strict()`, lỗi ⇒ 400): `from` + `to` (`YYYY-MM-DD`, phải đi cùng nhau, `from ≤ to`), `orgUnitId` (uuid).
+Khoảng được **nắn về tuần ISO trọn vẹn** (thứ Hai → Chủ nhật): `from` lùi về thứ Hai, `to` tiến tới Chủ nhật; sau nắn
+≤ **26 tuần**. Vắng cả hai ⇒ **8 tuần tới hết tuần hiện tại**. Mọi mốc tính theo **múi giờ công ty** (`companies.timezone`),
+khoảng nửa mở `[from 00:00, to+1 00:00)` giờ địa phương.
+
+**Response `052`:** `{ range:{from,to,weeks}, units:[{orgUnitId,name,isDeleted}], rows:[{weekStart,orgUnitId,posts,comments,reactions,activeMembers}], weekTotals:[{weekStart,posts,comments,reactions,activeMembers}] }`.
+`rows` chỉ gồm ô tuần × đơn vị CÓ hoạt động; `weekTotals` đủ mọi tuần của khoảng (tuần 0 hoạt động = số 0). `activeMembers`
+của `weekTotals` là số người DISTINCT trong tuần, không phải tổng các đơn vị.
+
+**Định nghĩa đếm:**
+
+- **Quy thuộc đơn vị = đơn vị HIỆN TẠI của người thực hiện** (tác giả bài/bình luận, người thả cảm xúc) — không theo
+  `audience` của bài. Người đổi đơn vị thì lịch sử đi theo người. Người chưa gán đơn vị ⇒ `orgUnitId: null`.
+- «Bài còn sống» = chưa xoá mềm, `status ≠ deleted`, nhóm (nếu có) chưa xoá mềm. Bài `hidden` VẪN tính. Bài trong nhóm
+  riêng tư tính vào đơn vị của tác giả — chỉ là số đếm, không lộ nội dung.
+- `comments` = bình luận chưa xoá trên bài còn sống. `reactions` = cảm xúc (mọi emoji) có đích còn sống — nghĩa là
+  «cảm xúc HIỆN còn», không phải «số lần thả» (bỏ cảm xúc xoá cứng hàng). Cảm xúc trên một trả lời còn sống vẫn tính dù
+  bình luận cha đã xoá mềm (trả lời không bị xoá theo).
+- Mốc thời gian của mỗi loại là `created_at` của CHÍNH nó: bình luận tuần này trên bài tháng trước vẫn tính tuần này.
+- `activeMembers` = số người khác nhau có ít nhất một trong ba hoạt động.
+
+**Phạm vi:** `Company`/`System` ⇒ mọi đơn vị + nhóm `null`; `Department` ⇒ đơn vị của mình ∪ đơn vị mình đứng đầu
+(không cây con), KHÔNG có nhóm `null`, `weekTotals` chỉ tính trên phạm vi đó; `Own`/`Team` (vai tuỳ biến) ⇒ 200 rỗng.
+`units` là **tập `orgUnitId` hợp lệ duy nhất** (gồm cả đơn vị đã xoá mềm, `isDeleted:true`). `orgUnitId` ngoài tập đó
+⇒ **403 `SOCIAL-ERR: đơn vị nằm ngoài phạm vi thống kê của bạn.`** — một thông điệp cho mọi lý do (không oracle).
+
+**`053`:** CÙNG hàm thu thập với `052`; sheet «Theo đơn vị» + «Theo tuần»; tên đơn vị chống formula-injection; tệp
+`social-tuong-tac-{from}_{to}.xlsx`. Ghi ĐÚNG 1 audit cùng tx: `objectType feed_report` (giá trị CHECK sẵn có),
+`action social.stats.exported`, `entityType feed_engagement_stats`, metadata `{from,to,orgUnitId,rowCount,format}` — không
+số liệu. ⚠️ Nợ: thêm object type riêng ở lượt migrate CHECK `audit_logs.object_type` kế tiếp.
+
+**Widget `SOCIAL-WIDGET-001`:** `SocialStatsService.weeklyEngagementForWidget(user)` — cùng cổng/sàn với `052`, trả tổng
+tuần hiện tại. Handler/catalog DASH thuộc `S16-SOCIAL-DASH-1`.
 
 ### 5.2 Thứ tự khai báo route — bẫy đã biết
 

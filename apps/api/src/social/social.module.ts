@@ -45,6 +45,9 @@ import { SocialIdeasRepository } from "./social-ideas.repository";
 import { SocialIdeasService } from "./social-ideas.service";
 import { SocialKudosRepository } from "./social-kudos.repository";
 import { SocialKudosService } from "./social-kudos.service";
+import { SocialStatsController } from "./social-stats.controller";
+import { SocialStatsRepository } from "./social-stats.repository";
+import { SocialStatsService } from "./social-stats.service";
 import {
   SocialCommentsController,
   SocialPostsController,
@@ -114,6 +117,9 @@ import {
     // này PHẢI có mặt trong `SOCIAL_CONTROLLERS` của census 2 tầng — allowlist, quên thêm thì hai
     // route vô hình với phép đo mà mọi assert vẫn XANH.
     SocialFilesController,
+    // S16-SOCIAL-BE-3B — 052..053 (thống kê tương tác). Khối additive; PHẢI có trong `SOCIAL_CONTROLLERS`
+    // của census 2 tầng (allowlist).
+    SocialStatsController,
   ],
   providers: [
     SocialAccessService,
@@ -152,8 +158,12 @@ import {
     SocialIdeasService,
     SocialKudosRepository,
     SocialKudosService,
+    // S16-SOCIAL-BE-3B — khối additive (thống kê tương tác + hàm SOCIAL-WIDGET-001).
+    SocialStatsRepository,
+    SocialStatsService,
   ],
-  exports: [SocialAccessService],
+  // `SocialStatsService` export cho `S16-SOCIAL-DASH-1` (widget «Tương tác tuần» gọi `weeklyEngagementForWidget`).
+  exports: [SocialAccessService, SocialStatsService],
 })
 export class SocialModule implements OnModuleInit {
   constructor(

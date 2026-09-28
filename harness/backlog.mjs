@@ -17698,7 +17698,7 @@ export const backlog = [
     layer: "BE",
     title:
       "BE track C/2 — thống kê tương tác SOCIAL-API-052 (bài · bình luận · thích · thành viên hoạt động theo tuần & đơn vị — SQL set-based · sàn Company, manager Department · KHÔNG cache) + 053 xuất XLSX có audit · hàm service đã gate cho widget DASH",
-    zone: "amber",
+    zone: "red",
     status: "todo",
     paths: [
       "apps/api/src/social/**",
@@ -17722,7 +17722,7 @@ export const backlog = [
       "Route census + coverage social/ ≥85% giữ xanh",
     ],
     notes: [
-      "🟡 LIGHT gate nhưng chở số liệu toàn công ty. TÁCH từ S16-SOCIAL-BE-3 ngày 28/09/2026.",
+      "🔴 Nâng amber→red 28/09/2026 (plan-reviewer v1 #1): thêm 2 route `companyFloor:false` + vị từ Department viết tay + audit ⇒ FULL gate, tiền lệ `reportsList` (BE-1B) là red. TÁCH từ S16-SOCIAL-BE-3 ngày 28/09/2026.",
     ],
   },
   {
@@ -17884,7 +17884,11 @@ export const backlog = [
       "Migration catalog 2 widget (CHECK union additive, journal idx = max+1); gate: tương tác tuần = view:feed-report (sàn Company; manager Department) · tin chưa đọc = view:feed Own — mỗi widget ca deny RIÊNG",
       "SocialModule export CHỈ service cần thiết; FE useCanExact; slug-map ratchet xanh; int-spec LANE_DB + FE test; typecheck/build xanh",
     ],
-    notes: ["🟢 LIGHT gate. Đóng wave S16: regen STATUS + memory."],
+    notes: [
+      "🟢 LIGHT gate. Đóng wave S16: regen STATUS + memory.",
+      "BÀN GIAO từ S16-SOCIAL-BE-3B (28/09/2026): SOCIAL-WIDGET-001 gọi `SocialStatsService.weeklyEngagementForWidget(user)` (đã export từ SocialModule; cùng cổng/sàn với 052). (a) MÂU THUẪN phải chốt: DASH cache widget theo `ttlSecondsFor` vs SOC-DEC-010 «thống kê KHÔNG cache» — chọn TTL=0/không cache hoặc xin owner nới. (b) `Own`/`Team` nhận số 0 chứ không 403 ⇒ DASH phải tự ẩn widget cho scope đó.",
+      "(c) NỢ HIỆU NĂNG (database-reviewer FULL gate BE-3B, MEDIUM): câu 052 quét TOÀN BỘ lịch sử feed của công ty mỗi lượt (biên lo/hi áp sau khi đọc; `feed_comments`/`feed_reactions` không có chỉ mục `(company_id, created_at)`; chỉ mục bài partial `status='published'` không phục vụ `hidden`) — widget 1 tuần cũng vậy, và không cache. Trước khi bật widget: WO migration thêm 2 chỉ mục + đẩy lo/hi vào nhánh `ev` dạng scalar.",
+    ],
   },
   // ════════════════════ WAVE S17-CHAT-UX2 — nâng bố cục/thao tác Chat theo benchmark MISA AMIS Chat ════════════════════
   // Owner duyệt 02/09/2026 («ok tôi duyệt kế hoạch hãy seed các WO»). Hồ sơ: docs/plans/S17-CHAT-UX2-WAVE.md

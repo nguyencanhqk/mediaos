@@ -218,3 +218,5 @@ export * from "./social-api-polls";
 // Cùng luật: import NGƯỢC từ ./social, ./social-api, ./social-api-b — KHÔNG re-export tên nào của chúng.
 export * from "./social-api-ideas";
 export * from "./social-api-kudos";
+// S16-SOCIAL-BE-3B (additive): DTO thống kê tương tác `052..053`. Tự chứa — không import file social nào.
+export * from "./social-api-stats";

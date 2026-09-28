@@ -78,6 +78,8 @@ const STRONG_EVIDENCE: readonly string[] = [
   "REPORT_BUSY",
   "KUDOS_BADGE_CODE_TAKEN",
   "KUDOS_BADGE_NOT_FOUND",
+  // S16-SOCIAL-BE-3B — 403 `orgUnitId` ngoai pham vi thong ke (052/053). TANG A: khong co ma so.
+  "STATS_UNIT_OUT_OF_SCOPE",
 ];
 
 /**
