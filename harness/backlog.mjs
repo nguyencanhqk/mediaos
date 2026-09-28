@@ -17272,7 +17272,14 @@ export const backlog = [
       "Một helper dùng chung (vd `test/helpers/bootstrap-app.ts`) dựng app y hệt thứ tự `main.ts` (middleware + interceptor + filter); có lưới tĩnh/AST so helper ↔ `main.ts` để hai nơi không trôi",
       "Chuyển dần int-spec sang helper KHÔNG đổi số spy-count cũ vô tình: spec đo số lượt nạp grant (ATTDEBT H1, PERMCOST-1) phải được ĐO LẠI và ghi số mới, không sửa kỳ vọng mù",
     ],
-    notes: ["SEED 25/09/2026 bởi thi công PERMMEMO-1 (R5). Chưa làm."],
+    notes: [
+      "SEED 25/09/2026 bởi thi công PERMMEMO-1 (R5).",
+      "LÀM 28/09/2026: helper `test/helpers/bootstrap-app.ts` (`applyMainPipeline`, cờ `grantMemo` ghi đè kill-switch) · lưới AST `test/foundation/pipeline-parity.unit-spec.ts` (khâu · thứ tự · có-điều-kiện · cờ env ≡ `main.ts`; mọi lời gọi khác trên `app` phải nằm trong `MAIN_ONLY_CALLS` kèm lý do) · RATCHET số spec tự dựng tay = 269 (chỉ được giảm; spec MỚI phải dùng helper).",
+      "Chủ ý KHÔNG chép: setGlobalPrefix (int-spec gọi route không tiền tố) · CORS · trust proxy · WS adapter · Swagger · listen. CÓ chép `ZodValidationPipe` toàn cục (241 spec cũ thiếu — PROD có).",
+      "ĐO LẠI (lane DB): ATTDEBT F1 PATCH body-only/attachmentIds — kill-switch 2/2 (delta 0 giữ) · memo 1/1; PERMCOST GET 0/1 ảnh — kill-switch 1/2 (delta 1 giữ) · memo 1/1. Hai số cũ giữ trên app kill-switch, số memo là ca MỚI; mutant chạy ca memo trên appCtl ĐỎ đúng thông điệp.",
+      "LIGHT gate (typescript-reviewer): đã vá C1 (đảo chiều cờ memo trong helper không ca nào bắt ⇒ ca chạy helper THẬT với cờ vắng/'true'/'false'/'1', mutant đảo `===`→`!==` ĐỎ) · H2 (khâu nối chuỗi `app.use(a).use(b)` mù ⇒ cấm, có ca) · H3 (ratchet qua được bằng gọi helper lạc chỗ ⇒ MỌI `createNestApplication(` phải được bọc) · M4 (helper không gọi `loadEnv()` cả bộ, chỉ parse 1 cờ qua schema). Chưa vá (fail-safe, chỉ đếm dư): comment cuối dòng · import alias. Lỗ cấu trúc còn lại: census 1 file, không giải import — tách pipeline `main.ts` sang file khác ⇒ sàn ≥5 khâu + `MAIN_ONLY_CALLS` bắt, không phải thiết kế.",
+      "Còn lại: 269 spec chuyển DẦN (ratchet ép hạ mốc khi chuyển). Chuyển hàng loạt có rủi ro: ZodValidationPipe toàn cục + requestId có thể đổi hành vi spec cũ — chuyển theo cụm module, chạy LANE_DB mỗi cụm.",
+    ],
   },
   {
     id: "S16-SOCIAL-IDXDEDUP-1",

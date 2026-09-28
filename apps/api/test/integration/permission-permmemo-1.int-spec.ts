@@ -7,15 +7,12 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
-import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
-import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
-import { grantMemoMiddleware } from "../../src/common/middleware/grant-memo.middleware";
-import { requestIdMiddleware } from "../../src/common/middleware/request-id.middleware";
 import { GrantSnapshotMemo, runWithGrantMemo } from "../../src/permission/grant-snapshot-memo";
 import { CachedPermissionRepository } from "../../src/permission/permission.cache";
 import { PermissionRepository } from "../../src/permission/permission.repository";
 import { PermissionService } from "../../src/permission/permission.service";
 import type { ValkeyService } from "../../src/permission/valkey.service";
+import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -32,8 +29,10 @@ import {
  * S16-SOCIAL-PERMMEMO-1 — ca H1–H8 của plan §4.3 (DECISIONS-15), DB THẬT.
  *
  * HAI app Nest dựng từ `AppModule`:
- *   • appMemo — `app.use(requestIdMiddleware); app.use(grantMemoMiddleware)` y hệt `main.ts`;
- *   • appCtl  — KHÔNG middleware = hiện trạng của ~311 int-spec khác (plan M6) ⇒ passthrough.
+ *   • appMemo — `applyMainPipeline(app, { grantMemo: true })` = pipeline `main.ts` với cờ bật;
+ *   • appCtl  — `applyMainPipeline(app, { grantMemo: false })` = đường kill-switch
+ *     `PERMISSION_GRANT_MEMO_ENABLED=false` của PROD ⇒ passthrough (S16-TEST-PIPELINE-PARITY-1:
+ *     trước đây appCtl KHÔNG có middleware nào; giờ có `requestIdMiddleware` như PROD — memo vẫn tắt).
  * Spy CALL-THROUGH trên `PermissionRepository` (tầng DB, DƯỚI memo) của TỪNG app, lọc theo userId —
  * khuôn ATTDEBT H1. Spy thay ruột ⇒ grant giả ⇒ cổng trả lời sai ⇒ xanh/đỏ vì lý do khác.
  *
@@ -83,14 +82,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-PERMMEMO-1 — memo grant theo request (
   /** Dựng app CHƯA init — init + listen ở `beforeAll` (census S18-QA-SUPERTESTLISTEN-1 đọc theo tên biến). */
   async function buildApp(withMemo: boolean): Promise<INestApplication> {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    const built = moduleRef.createNestApplication();
-    if (withMemo) {
-      built.use(requestIdMiddleware);
-      built.use(grantMemoMiddleware);
-    }
-    built.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
-    built.useGlobalFilters(new AllExceptionsFilter());
-    return built;
+    return applyMainPipeline(moduleRef.createNestApplication(), { grantMemo: withMemo });
   }
 
   const http = (app: INestApplication) => request(app.getHttpServer());
