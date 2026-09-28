@@ -158,10 +158,15 @@ export interface MentionResolution {
 /** Đích của một mention — đủ để hỏi «người X có trong audience của nó không». */
 export type AudienceTarget = Pick<SocialPostAccess, "audience" | "orgUnitId" | "groupId">;
 
-/** Người được xét — `orgUnitId` là đơn vị trên hồ sơ nhân sự CÒN SỐNG (null nếu không có). */
+/** Người được xét — `orgUnitId`/`employeeStatus` lấy từ hồ sơ nhân sự CÒN SỐNG (null nếu không có). */
 export interface AudiencePerson {
   userId: string;
   orgUnitId: string | null;
+  /**
+   * `employee_profiles.status` — BẮT BUỘC truyền (không optional) để không đường gọi nào quên vế nghỉ
+   * việc. `null` = không có hồ sơ (tài khoản hệ thống) ⇒ vế này không áp; khác `'active'` ⇒ NGOÀI.
+   */
+  employeeStatus: string | null;
 }
 
 /**
@@ -193,6 +198,10 @@ export const audiencePairKey = (scopeId: string, userId: string): string =>
  *   • `audience='group'` ⇒ **thành viên `active` của chính nhóm đó**, nhân sự `active`, nhóm chưa xoá
  *     mềm (S16-SOCIAL-BE-2A D14-3/D13) — tập `groupMembers` đã mang cả ba vế (`loadActiveGroupMembers`).
  *
+ *   • MỌI audience ⇒ hồ sơ nhân sự (nếu có) phải `status='active'` (plan §7 Q1, owner chốt 28/09/2026):
+ *     tài khoản còn `active` của người đã nghỉ việc KHÔNG được link/nhận nhắc ở bài company/org_unit —
+ *     trước đây chỉ bài group rút (vế đó nằm trong `loadActiveGroupMembers`).
+ *
  * ⚠️ Luật «tự nhắc chính mình ⇒ bỏ» KHÔNG ở đây `[PR1-2]`: ở đường đọc, «actor» là NGƯỜI XEM — đưa
  * luật đó vào hàm chung là X đọc bài nhắc chính X sẽ thấy mình bị rút. Luật đó sống ở `resolveMentions`.
  *
@@ -205,13 +214,17 @@ export function classifyInAudience(
   heads: ReadonlySet<string>,
   groupMembers: ReadonlySet<string>,
 ): boolean {
+  // Chỉ nhận ĐÚNG hai giá trị biết là tốt — `undefined` (một projection quên chiếu cột, hàng mock) là
+  // NGOÀI chứ không lọt thành «không hồ sơ»: `!= null` sẽ tắt luật này trong im lặng.
+  if (person.employeeStatus !== "active" && person.employeeStatus !== null) return false;
   switch (target.audience) {
     case "company":
       return true;
     case "org_unit":
       return (
         target.orgUnitId != null &&
-        (person.orgUnitId === target.orgUnitId ||
+        // So không phân biệt hoa thường — `target.orgUnitId` có thể đến từ request (xem `audiencePairKey`).
+        (person.orgUnitId?.toLowerCase() === target.orgUnitId.toLowerCase() ||
           heads.has(audiencePairKey(target.orgUnitId, person.userId)))
       );
     case "group":
@@ -320,6 +333,7 @@ export async function resolveMentions(
       userId: users.id,
       employeeId: employeeProfiles.id,
       orgUnitId: employeeProfiles.orgUnitId,
+      employeeStatus: employeeProfiles.status,
     })
     .from(users)
     .leftJoin(
@@ -372,7 +386,7 @@ export async function resolveMentions(
     }
     const inAudience = classifyInAudience(
       post,
-      { userId: row.userId, orgUnitId: row.orgUnitId },
+      { userId: row.userId, orgUnitId: row.orgUnitId, employeeStatus: row.employeeStatus },
       heads,
       groupMembers,
     );
@@ -399,7 +413,7 @@ export interface MentionTarget extends AudienceTarget {
  *
  * Luật (D1, owner chốt O-1): phần tử có link ⇔ người được nhắc VẪN trong audience của đích tại lúc
  * ĐỌC (`classifyInAudience`, cùng vị từ lúc ghi) VÀ tài khoản còn `active`/chưa xoá VÀ còn hồ sơ nhân
- * sự sống VÀ có tên (D4). Trượt bất kỳ vế nào ⇒ `{withheld:true}` GIỮ vị trí (D8). Kết quả KHÔNG phụ
+ * sự sống, `status='active'` (Q1) VÀ có tên (D4). Trượt bất kỳ vế nào ⇒ `{withheld:true}` GIỮ vị trí (D8). Kết quả KHÔNG phụ
  * thuộc người xem — không có luật tự-nhắc ở đây.
  *
  * `users.status`/`deleted_at` là CỘT CHIẾU (đầu vào phân loại), KHÔNG phải WHERE `[PR1-6]`: lọc ở WHERE
@@ -427,6 +441,7 @@ export async function loadMentionsForTargets(
       label: users.fullName,
       employeeId: employeeProfiles.id,
       orgUnitId: employeeProfiles.orgUnitId,
+      employeeStatus: employeeProfiles.status,
     })
     .from(feedMentions)
     .leftJoin(
@@ -479,7 +494,12 @@ export async function loadMentionsForTargets(
       r.userDeletedAt == null &&
       employeeId != null &&
       label != null &&
-      classifyInAudience(target, { userId, orgUnitId: r.orgUnitId }, heads, groupMembers);
+      classifyInAudience(
+        target,
+        { userId, orgUnitId: r.orgUnitId, employeeStatus: r.employeeStatus },
+        heads,
+        groupMembers,
+      );
     list.push(linked ? { withheld: false, employeeId, label } : { withheld: true });
   }
   return out;

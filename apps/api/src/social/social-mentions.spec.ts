@@ -89,39 +89,72 @@ const none = new Set<string>();
 describe("classifyInAudience — 3 audience × {trong, ngoài}", () => {
   it("company ⇒ trong (người gọi đã lọc «còn sống»)", () => {
     const t = { audience: "company", orgUnitId: null, groupId: null };
-    expect(classifyInAudience(t, { userId: X, orgUnitId: null }, none, none)).toBe(true);
+    expect(
+      classifyInAudience(t, { userId: X, orgUnitId: null, employeeStatus: "active" }, none, none),
+    ).toBe(true);
   });
 
   it("org_unit: cùng đơn vị ⇒ trong · khác đơn vị ⇒ ngoài · không hồ sơ ⇒ ngoài", () => {
     const t = { audience: "org_unit", orgUnitId: U1, groupId: null };
-    expect(classifyInAudience(t, { userId: X, orgUnitId: U1 }, none, none)).toBe(true);
-    expect(classifyInAudience(t, { userId: X, orgUnitId: U2 }, none, none)).toBe(false);
-    expect(classifyInAudience(t, { userId: X, orgUnitId: null }, none, none)).toBe(false);
+    expect(
+      classifyInAudience(t, { userId: X, orgUnitId: U1, employeeStatus: "active" }, none, none),
+    ).toBe(true);
+    expect(
+      classifyInAudience(t, { userId: X, orgUnitId: U2, employeeStatus: "active" }, none, none),
+    ).toBe(false);
+    expect(
+      classifyInAudience(t, { userId: X, orgUnitId: null, employeeStatus: "active" }, none, none),
+    ).toBe(false);
   });
 
   it("org_unit: người ĐỨNG ĐẦU đơn vị (hồ sơ ở đơn vị khác) ⇒ trong", () => {
     const t = { audience: "org_unit", orgUnitId: U1, groupId: null };
     const heads = new Set([audiencePairKey(U1, H)]);
-    expect(classifyInAudience(t, { userId: H, orgUnitId: U2 }, heads, none)).toBe(true);
+    expect(
+      classifyInAudience(t, { userId: H, orgUnitId: U2, employeeStatus: "active" }, heads, none),
+    ).toBe(true);
   });
 
   it("[PR1-3] khoá CẶP: head của U1 xét cho bài U2 ⇒ ngoài", () => {
     const t = { audience: "org_unit", orgUnitId: U2, groupId: null };
     const heads = new Set([audiencePairKey(U1, H)]);
-    expect(classifyInAudience(t, { userId: H, orgUnitId: null }, heads, none)).toBe(false);
+    expect(
+      classifyInAudience(t, { userId: H, orgUnitId: null, employeeStatus: "active" }, heads, none),
+    ).toBe(false);
   });
 
   it("group: thành viên ⇒ trong · không thành viên ⇒ ngoài", () => {
     const t = { audience: "group", orgUnitId: null, groupId: G1 };
     const members = new Set([audiencePairKey(G1, Y)]);
-    expect(classifyInAudience(t, { userId: Y, orgUnitId: null }, none, members)).toBe(true);
-    expect(classifyInAudience(t, { userId: X, orgUnitId: null }, none, members)).toBe(false);
+    expect(
+      classifyInAudience(
+        t,
+        { userId: Y, orgUnitId: null, employeeStatus: "active" },
+        none,
+        members,
+      ),
+    ).toBe(true);
+    expect(
+      classifyInAudience(
+        t,
+        { userId: X, orgUnitId: null, employeeStatus: "active" },
+        none,
+        members,
+      ),
+    ).toBe(false);
   });
 
   it("[PR1-3] khoá CẶP: Y thuộc G1 xét cho bài G2 ⇒ ngoài", () => {
     const t = { audience: "group", orgUnitId: null, groupId: G2 };
     const members = new Set([audiencePairKey(G1, Y)]);
-    expect(classifyInAudience(t, { userId: Y, orgUnitId: null }, none, members)).toBe(false);
+    expect(
+      classifyInAudience(
+        t,
+        { userId: Y, orgUnitId: null, employeeStatus: "active" },
+        none,
+        members,
+      ),
+    ).toBe(false);
   });
 
   // FULL gate BE-1D: `dto.groupId`/`dto.orgUnitId` từ request có thể viết HOA (`z.string().uuid()`
@@ -131,18 +164,63 @@ describe("classifyInAudience — 3 audience × {trong, ngoài}", () => {
     const heads = new Set([audiencePairKey(U1, H)]);
     const group = { audience: "group", orgUnitId: null, groupId: G1.toUpperCase() };
     const unit = { audience: "org_unit", orgUnitId: U1.toUpperCase(), groupId: null };
-    expect(classifyInAudience(group, { userId: Y, orgUnitId: null }, none, members)).toBe(true);
-    expect(classifyInAudience(unit, { userId: H, orgUnitId: null }, heads, none)).toBe(true);
+    expect(
+      classifyInAudience(
+        group,
+        { userId: Y, orgUnitId: null, employeeStatus: "active" },
+        none,
+        members,
+      ),
+    ).toBe(true);
+    expect(
+      classifyInAudience(
+        unit,
+        { userId: H, orgUnitId: null, employeeStatus: "active" },
+        heads,
+        none,
+      ),
+    ).toBe(true);
   });
 
   it("audience lạ / thiếu id đơn vị-nhóm ⇒ ngoài (hướng an toàn)", () => {
-    const p = { userId: X, orgUnitId: U1 };
+    const p = { userId: X, orgUnitId: U1, employeeStatus: "active" };
     expect(classifyInAudience({ audience: "x", orgUnitId: U1, groupId: G1 }, p, none, none)).toBe(
       false,
     );
     expect(
       classifyInAudience({ audience: "org_unit", orgUnitId: null, groupId: null }, p, none, none),
     ).toBe(false);
+  });
+
+  it("id đơn vị HOA từ request vẫn khớp đơn vị trên hồ sơ (vế cùng-đơn-vị, không chỉ vế head)", () => {
+    const unit = { audience: "org_unit", orgUnitId: U1.toUpperCase(), groupId: null };
+    expect(
+      classifyInAudience(unit, { userId: X, orgUnitId: U1, employeeStatus: "active" }, none, none),
+    ).toBe(true);
+  });
+
+  // plan §7 Q1 (owner chốt 28/09): nhân sự nghỉ việc mà tài khoản còn `active` ⇒ NGOÀI mọi audience —
+  // trước đây chỉ bài nhóm rút (vế nằm trong `loadActiveGroupMembers`), bài company/org_unit vẫn link.
+  it.each(["inactive", "resigned", "terminated"])(
+    "hồ sơ nhân sự '%s' ⇒ ngoài ở company · org_unit (kể cả head) · group",
+    (status) => {
+      const p = { userId: H, orgUnitId: U1, employeeStatus: status };
+      const heads = new Set([audiencePairKey(U1, H)]);
+      const members = new Set([audiencePairKey(G1, H)]);
+      const company = { audience: "company", orgUnitId: null, groupId: null };
+      const unit = { audience: "org_unit", orgUnitId: U1, groupId: null };
+      const group = { audience: "group", orgUnitId: null, groupId: G1 };
+      expect(classifyInAudience(company, p, heads, members)).toBe(false);
+      expect(classifyInAudience(unit, p, heads, members)).toBe(false);
+      expect(classifyInAudience(group, p, heads, members)).toBe(false);
+    },
+  );
+
+  it("không có hồ sơ nhân sự (employeeStatus null) ⇒ company vẫn trong (tài khoản hệ thống)", () => {
+    const company = { audience: "company", orgUnitId: null, groupId: null };
+    expect(
+      classifyInAudience(company, { userId: X, orgUnitId: null, employeeStatus: null }, none, none),
+    ).toBe(true);
   });
 });
 
@@ -189,6 +267,7 @@ const alive = (targetId: string, userId: string, over: Record<string, unknown> =
   label: `Tên ${userId.slice(0, 2)}`,
   employeeId: EMP,
   orgUnitId: null,
+  employeeStatus: "active",
   ...over,
 });
 
@@ -239,8 +318,13 @@ describe("loadMentionsForTargets — ca biên ⇒ `withheld`, GIỮ vị trí (D
   it.each([
     ["tài khoản khoá", { userStatus: "locked" }],
     ["tài khoản xoá mềm", { userDeletedAt: new Date() }],
-    ["user không còn (LEFT JOIN rỗng)", { userId: null, label: null, employeeId: null }],
-    ["không hồ sơ nhân sự sống", { employeeId: null }],
+    [
+      "user không còn (LEFT JOIN rỗng)",
+      { userId: null, label: null, employeeId: null, employeeStatus: null },
+    ],
+    ["không hồ sơ nhân sự sống", { employeeId: null, employeeStatus: null }],
+    ["hồ sơ nghỉ việc (TK vẫn active — Q1)", { employeeStatus: "resigned" }],
+    ["hàng thiếu cột employeeStatus (undefined ⇒ fail-closed)", { employeeStatus: undefined }],
     ["tên rỗng", { label: "   " }],
     ["tên NULL", { label: null }],
   ])("%s ⇒ {withheld:true}", async (_n, over) => {

@@ -220,6 +220,52 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1D mảng mention theo audience (DB c
     expect(await mentionsOfPost(reader.token, postId)).toEqual([WITHHELD]);
   });
 
+  // plan §7 Q1 (owner chốt 28/09/2026): nghỉ việc mà tài khoản còn `active` ⇒ NGOÀI audience ở MỌI
+  // audience — trước đây chỉ bài group rút, bài company/org_unit vẫn link và vẫn nhận nhắc mới.
+  it("M12 — X nghỉ việc (hồ sơ `resigned`, TK vẫn `active`): bài company ⇒ `withheld` khi ĐỌC, bị BỎ khi GHI", async () => {
+    const author = await person("m12a", unit1);
+    const reader = await person("m12r", unit2);
+    const x = await mentioned("m12x", unit2);
+    const postId = await seedPost({ author: author.userId, audience: "company", mentions: [x] });
+    expect(await mentionsOfPost(reader.token, postId)).toEqual([link(x)]);
+
+    await direct.query(`UPDATE employee_profiles SET status = 'resigned' WHERE id = $1`, [
+      x.employeeId,
+    ]);
+    expect(await mentionsOfPost(reader.token, postId)).toEqual([WITHHELD]);
+
+    const created = await post(author.token, "/social/posts").send({
+      type: "share",
+      audience: "company",
+      body: "nhắc người đã nghỉ",
+      mentionedUserIds: [x.userId],
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    expect(created.body.data.mentions).toEqual([]);
+    expect(created.body.data.droppedMentions.length).toBe(1);
+  });
+
+  it("M12b — trưởng đơn vị H nghỉ việc ⇒ `withheld` ở bài org_unit (vế head cũng áp Q1)", async () => {
+    const author = await person("m12ba", unit1);
+    const h = await mentioned("m12bh", unit2);
+    await direct.query(`UPDATE org_units SET head_user_id = $1 WHERE id = $2`, [h.userId, unit1]);
+    try {
+      const postId = await seedPost({
+        author: author.userId,
+        audience: "org_unit",
+        orgUnitId: unit1,
+        mentions: [h],
+      });
+      expect(await mentionsOfPost(author.token, postId)).toEqual([link(h)]);
+      await direct.query(`UPDATE employee_profiles SET status = 'resigned' WHERE id = $1`, [
+        h.employeeId,
+      ]);
+      expect(await mentionsOfPost(author.token, postId)).toEqual([WITHHELD]);
+    } finally {
+      await direct.query(`UPDATE org_units SET head_user_id = NULL WHERE id = $1`, [unit1]);
+    }
+  });
+
   it("M3 — bài org_unit: X∈U và trưởng H đều link; X chuyển đơn vị ⇒ X `withheld`, H vẫn link", async () => {
     const author = await person("m3a", unit1);
     const reader = await person("m3r", unit1);
