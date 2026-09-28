@@ -82,8 +82,9 @@ export interface SocialPair {
    * thuộc `S16-SOCIAL-BE-1B`. Khi BE-1B mở, nó thêm hàng đó với `companyFloor:false` +
    * `dataScope:"Department"` và PHẢI ép vị từ phòng ban TRONG SQL.
    *
-   * ✅ **BE-1B (22/09/2026) đã mở đúng hàng đó** — `reportsList`. Tập `companyFloor:false` nay có
-   * ĐÚNG MỘT phần tử, và census ép nó phải kèm `dataScope` (xem field dưới).
+   * ✅ **BE-1B (22/09/2026) đã mở đúng hàng đó** — `reportsList`. **BE-3B (28/09/2026)** thêm hai route
+   * cùng cặp `view:feed-report` — `statsEngagement` (052) · `statsExport` (053). Tập `companyFloor:false`
+   * nay là ĐÚNG BA phần tử (census so ĐẲNG THỨC TẬP), và census ép mỗi phần tử phải kèm `dataScope`.
    */
   readonly companyFloor: boolean;
   /**
@@ -195,7 +196,8 @@ export const SOCIAL_ROUTE_PAIRS = {
   /**
    * 028 `GET /social/reports` — hàng đợi kiểm duyệt.
    *
-   * 🔴 ROUTE DUY NHẤT của SOCIAL có `companyFloor:false`. Seed `0578` cấp
+   * 🔴 Một trong BA route `companyFloor:false` (cùng `statsEngagement`/`statsExport` của BE-3B — cùng
+   * cặp `view:feed-report`). Seed `0578` cấp
    * `['manager','view','feed-report','Department']` — vai `manager` đọc hàng đợi của ĐƠN VỊ MÌNH.
    * Sàn Company sẽ 403 chính vai đó, nên cờ phải tắt; và vì tắt, `dataScope` bên dưới trở thành lời
    * hứa máy-kiểm-được rằng repository CÓ ép vị từ phòng ban trong SQL (`switch` vét cạn, mọi scope
@@ -222,6 +224,18 @@ export const SOCIAL_ROUTE_PAIRS = {
   // `manage:feed-post`) — cặp decorator không nhắc, phụ thuộc NỘI DUNG REQUEST: đúng định nghĩa hẹp
   // của cờ. Nguồn độc lập của đẳng thức D17 = chính bảng `SOCIAL_REPORT_ACTION_PAIRS`.
   reportResolve: pair("manage", "feed-report", true),
+
+  // ── Thống kê tương tác 052–053 (`S16-SOCIAL-BE-3B`) ──
+  //
+  // CÙNG cặp + CÙNG phạm vi với `028`: `view:feed-report`, `companyFloor:false`, `dataScope:"Department"`
+  // (seed `0578`: `hr`/`company-admin` @Company, `manager` @Department). Vị từ phạm vi là hàm thuần
+  // `statsScopeFilter` (`social-stats-scope.ts`, `switch` vét cạn: `Own`/`Team`/lạ ⇒ KHÔNG hàng nào),
+  // áp CÙNG kết quả cho metadata đơn vị lẫn số liệu. `tier1IsFloor=false` — không có cặp theo payload.
+  // ⚠️ C2-c của census chỉ chứng minh `dataScope` được KHAI; bằng chứng vị từ CHẠY là int-spec S2/S4.
+  /** 052 `GET /social/stats/engagement` — theo tuần & đơn vị; KHÔNG cache. */
+  statsEngagement: { ...pair("view", "feed-report", false, false), dataScope: "Department" },
+  /** 053 `GET /social/stats/engagement/export` — XLSX, CÙNG `collectTx` với 052; audit cùng tx. */
+  statsExport: { ...pair("view", "feed-report", false, false), dataScope: "Department" },
 
   // ══ NHÓM (`S16-SOCIAL-BE-2A`, API-19 §5.1 dòng 98-107) — 10 route `030..039` ══
   //

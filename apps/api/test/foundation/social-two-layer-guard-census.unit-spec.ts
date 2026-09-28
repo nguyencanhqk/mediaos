@@ -55,9 +55,11 @@ const SOCIAL_CONTROLLERS = new Set([
   "SocialKudosController",
   // S16-SOCIAL-BE-1C — 2 route cua dang ky tep (054..055), `social-files.controller.ts`.
   "SocialFilesController",
+  // S16-SOCIAL-BE-3B — 2 route thong ke tuong tac (052..053), `social-stats.controller.ts`.
+  "SocialStatsController",
 ]);
 
-/** Bảng route HTTP → key — fixture census, phủ ĐỦ 54 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP, API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 56 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -135,6 +137,9 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
   // ── S16-SOCIAL-BE-1C — CUA DANG KY TEP 054..055 ──
   { method: "POST", path: "/api/v1/social/files/upload-url", key: "fileUploadUrl" },
   { method: "POST", path: "/api/v1/social/files/:id/confirm", key: "fileConfirm" },
+  // ── S16-SOCIAL-BE-3B — THONG KE TUONG TAC 052..053 ──
+  { method: "GET", path: "/api/v1/social/stats/engagement", key: "statsEngagement" },
+  { method: "GET", path: "/api/v1/social/stats/engagement/export", key: "statsExport" },
 ];
 
 /**
@@ -207,6 +212,10 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   // `target === "comment" ? … : …`) se lam census MU voi dung hai route nay.
   "SocialFilesService#createUploadUrl": ["fileUploadUrl"],
   "SocialFilesService#confirmOwnUpload": ["fileConfirm"],
+  // S16-SOCIAL-BE-3B — 3 site. Widget SOCIAL-WIDGET-001 dung CHUNG cong voi 052 (cung cap + cung san).
+  "SocialStatsService#engagement": ["statsEngagement"],
+  "SocialStatsService#export": ["statsExport"],
+  "SocialStatsService#weeklyEngagementForWidget": ["statsEngagement"],
 };
 
 /** Mọi literal `resolveActor(<expr>, "<key>")` trong `social/**.ts`, kèm `Class#method` bao quanh. */
@@ -366,18 +375,12 @@ function attachGateReportSites(): {
     const text = fs.readFileSync(path.join(SRC_SOCIAL, file), "utf8");
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
 
-    const visit = (
-      node: ts.Node,
-      cls: string,
-      method: string,
-      inTenant: boolean,
-    ): void => {
+    const visit = (node: ts.Node, cls: string, method: string, inTenant: boolean): void => {
       let nextCls = cls;
       let nextMethod = method;
       const nextInTenant = inTenant;
       if (ts.isClassDeclaration(node) && node.name) nextCls = node.name.text;
-      if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name))
-        nextMethod = node.name.text;
+      if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name)) nextMethod = node.name.text;
       // Vào thân callback của `this.db.withTenant(...)` ⇒ đánh dấu, và cờ ĐI XUỐNG mọi node con.
       if (
         ts.isCallExpression(node) &&
@@ -407,8 +410,7 @@ function attachGateReportSites(): {
           anc = anc.parent;
         }
         const bindName =
-          clause?.variableDeclaration &&
-          ts.isIdentifier(clause.variableDeclaration.name)
+          clause?.variableDeclaration && ts.isIdentifier(clause.variableDeclaration.name)
             ? clause.variableDeclaration.name.text
             : undefined;
 
@@ -489,8 +491,8 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
     expect(
       socialRoutes.length,
-      "app boot phải thấy 54 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP)",
-    ).toBe(54);
+      "app boot phải thấy 56 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ)",
+    ).toBe(56);
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -641,7 +643,10 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
 
     // Neo chống-xanh-rỗng: AST hỏng / đổi tên hàm ⇒ mảng rỗng ⇒ mọi assert dưới thành vacuous.
     expect(shapes.length, "phải thấy ĐỦ 4 call-site `syncLinksTx`").toBe(4);
-    expect(shapes.every((x) => x.shape !== "MISSING"), "call-site thiếu đối số `gate`").toBe(true);
+    expect(
+      shapes.every((x) => x.shape !== "MISSING"),
+      "call-site thiếu đối số `gate`",
+    ).toBe(true);
     // S16-SOCIAL-ATTDEBT-1 (plan §7 B5) — ĐO ĐƯỢC, không phải lời khai: ca này đọc `arguments[6]`,
     // nên một đối số thứ 8 ở index 7 KHÔNG bị bắt bởi bất kỳ vế nào ở trên. Dòng dưới đóng lỗ đó.
     // (Plan gốc định ghi vào docblock `syncLinksTx` rằng «thêm tham số làm vỡ ca S-1» — câu đó SAI.)
@@ -759,19 +764,20 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
    * ⟲ **S16-SOCIAL-BE-1B đổi khẳng định này** (trước: tập `false` RỖNG cho 19 route Nhóm A).
    *
    * Seed `0578` cấp mọi cặp `feed-*` ở scope Company cho 4 vai canonical, TRỪ ĐÚNG MỘT dòng:
-   * `['manager','view','feed-report','Department']` — cặp của route `028`. BE-1B mở đúng route đó,
-   * nên tập `companyFloor:false` nay có ĐÚNG MỘT phần tử.
+   * `['manager','view','feed-report','Department']` — cặp của route `028`. BE-1B mở đúng route đó;
+   * **BE-3B (28/09/2026) thêm CÓ CHỦ ĐÍCH** `052`/`053` (`statsEngagement`/`statsExport`) — cùng cặp, cùng
+   * lý do, vị từ phạm vi là `statsScopeFilter` (int-spec S2/S4 đo nó CHẠY). Tập nay là ĐÚNG BA phần tử.
    *
    * `toEqual` một danh sách ĐÓNG chứ không `toBeLessThanOrEqual(1)`: tắt sàn Company là thao tác
    * nguy hiểm nhất của bảng hằng này (nó mở cho MỌI scope resolve được, kể cả `Own`/`Team`), nên mỗi
    * lần thêm một route như vậy phải là một sửa đổi CÓ CHỦ ĐÍCH đi qua FULL gate.
    */
-  it("companyFloor tắt ở ĐÚNG MỘT route — `reportsList` (028), không hơn", () => {
+  it("companyFloor tắt ở ĐÚNG BA route — `reportsList` (028) + `statsEngagement`/`statsExport` (052/053), không hơn", () => {
     const notFloored = Object.entries(SOCIAL_ROUTE_PAIRS)
       .filter(([, p]) => !p.companyFloor)
       .map(([k]) => k)
       .sort();
-    expect(notFloored).toEqual(["reportsList"]);
+    expect(notFloored).toEqual(["reportsList", "statsEngagement", "statsExport"]);
   });
 
   /**
@@ -800,6 +806,8 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
       0,
     );
     expect(SOCIAL_ROUTE_PAIRS.reportsList.dataScope).toBe("Department");
+    expect(SOCIAL_ROUTE_PAIRS.statsEngagement.dataScope).toBe("Department");
+    expect(SOCIAL_ROUTE_PAIRS.statsExport.dataScope).toBe("Department");
   });
 
   /**

@@ -17884,7 +17884,10 @@ export const backlog = [
       "Migration catalog 2 widget (CHECK union additive, journal idx = max+1); gate: tương tác tuần = view:feed-report (sàn Company; manager Department) · tin chưa đọc = view:feed Own — mỗi widget ca deny RIÊNG",
       "SocialModule export CHỈ service cần thiết; FE useCanExact; slug-map ratchet xanh; int-spec LANE_DB + FE test; typecheck/build xanh",
     ],
-    notes: ["🟢 LIGHT gate. Đóng wave S16: regen STATUS + memory."],
+    notes: [
+      "🟢 LIGHT gate. Đóng wave S16: regen STATUS + memory.",
+      "BÀN GIAO từ S16-SOCIAL-BE-3B (28/09/2026): SOCIAL-WIDGET-001 gọi `SocialStatsService.weeklyEngagementForWidget(user)` (đã export từ SocialModule; cùng cổng/sàn với 052). (a) MÂU THUẪN phải chốt: DASH cache widget theo `ttlSecondsFor` vs SOC-DEC-010 «thống kê KHÔNG cache» — chọn TTL=0/không cache hoặc xin owner nới. (b) `Own`/`Team` nhận số 0 chứ không 403 ⇒ DASH phải tự ẩn widget cho scope đó.",
+    ],
   },
   // ════════════════════ WAVE S17-CHAT-UX2 — nâng bố cục/thao tác Chat theo benchmark MISA AMIS Chat ════════════════════
   // Owner duyệt 02/09/2026 («ok tôi duyệt kế hoạch hãy seed các WO»). Hồ sơ: docs/plans/S17-CHAT-UX2-WAVE.md

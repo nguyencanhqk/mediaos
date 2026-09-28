@@ -453,6 +453,12 @@ export const SOCIAL_ERR = {
   KUDOS_BADGE_CODE_TAKEN: "SOCIAL-ERR: mã huy hiệu đã tồn tại.",
   /** (404) — `050`/`051` với huy hiệu không tồn tại hoặc thuộc công ty khác (một chuỗi cho mọi lý do). */
   KUDOS_BADGE_NOT_FOUND: "SOCIAL-ERR: không tìm thấy huy hiệu.",
+  /**
+   * (403) — `052`/`053` với `orgUnitId` NGOÀI tập đơn vị của người xem (S16-SOCIAL-BE-3B D6). MỘT chuỗi cho
+   * MỌI lý do — không tồn tại · công ty khác · ngoài Department · scope không định nghĩa (`Own`/`Team`) — để
+   * không thành oracle dò sự tồn tại của đơn vị. Tập hợp lệ = CHÍNH metadata `units` của response.
+   */
+  STATS_UNIT_OUT_OF_SCOPE: "SOCIAL-ERR: đơn vị nằm ngoài phạm vi thống kê của bạn.",
 } as const;
 
 /**
