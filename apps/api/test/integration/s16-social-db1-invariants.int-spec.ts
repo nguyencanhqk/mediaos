@@ -917,12 +917,15 @@ describe.skipIf(!hasDb)(
         expect(r.rows[0].n).toBe(0);
       });
 
-      it("seed quyền: 14 cặp (0 sensitive) · 43 grant · breakdown 7/8/14/14 · manager view:feed-report=Department", async () => {
+      // ⟲ S16-SOCIAL-BE-3C (28/09/2026) — bump CÓ CHỦ Ý: mig `0590` thêm cặp `restore:feed-post` (is_sensitive=false)
+      // + 2 grant @Company cho ĐÚNG tập vai giữ `manage:feed-post` (`hr` + `company-admin`, owner ký O1) ⇒
+      // 14 → 15 cặp · 43 → 45 grant · breakdown hr/company-admin 14 → 15. Không vai nào khác đổi.
+      it("seed quyền: 15 cặp (0 sensitive) · 45 grant · breakdown 7/8/15/15 · manager view:feed-report=Department", async () => {
         const perms = await direct.query(
           `SELECT count(*)::int AS n, count(*) FILTER (WHERE is_sensitive)::int AS sensitive
            FROM permissions WHERE resource_type = 'feed' OR resource_type LIKE 'feed-%'`,
         );
-        expect(perms.rows[0]).toEqual({ n: 14, sensitive: 0 });
+        expect(perms.rows[0]).toEqual({ n: 15, sensitive: 0 });
 
         const total = await direct.query(
           `SELECT count(*)::int AS n
@@ -954,7 +957,7 @@ describe.skipIf(!hasDb)(
         // │ tenant admin cấp quyền feed cho role TUỲ BIẾN, các census đó sẽ ĐỎ OAN — lúc đó phải thu   │
         // │ hẹp về `ro.company_id IS NULL`»).                                                          │
         // └───────────────────────────────────────────────────────────────────────────────────────────┘
-        expect(total.rows[0].n).toBe(43);
+        expect(total.rows[0].n).toBe(45);
 
         const perRole = await direct.query(
           `SELECT ro.name::text AS role_name, count(*)::int AS n
@@ -970,9 +973,9 @@ describe.skipIf(!hasDb)(
         // breakdown: sau bootstrap nó có đủ 14 cặp feed và tự thêm một dòng { super-admin, 14 } vào
         // kỳ vọng 4 dòng. Loại THEO TÊN như `total`/`scoped`.
         expect(perRole.rows).toEqual([
-          { role_name: "company-admin", n: 14 },
+          { role_name: "company-admin", n: 15 },
           { role_name: "employee", n: 7 },
-          { role_name: "hr", n: 14 },
+          { role_name: "hr", n: 15 },
           { role_name: "manager", n: 8 },
         ]);
 
