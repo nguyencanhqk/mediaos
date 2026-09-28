@@ -2,6 +2,7 @@ import type {
   FeedAttachmentDto,
   FeedAuthorDto,
   FeedCommentDto,
+  FeedMentionDto,
   FeedPostDto,
   FeedReactionSummaryDto,
 } from "@mediaos/contracts";
@@ -49,6 +50,8 @@ export function toFeedPostDto(
     attachments: readonly FeedAttachmentDto[];
     myReaction: string | null;
     savedByMe: boolean;
+    /** Vắng ⇒ khoá `mentions` VẮNG trên DTO (đường chưa nạp) — KHÔNG thành `[]` (vắng ≠ rỗng). */
+    mentions?: readonly FeedMentionDto[];
   },
 ): FeedPostDto {
   const isMine = row.authorUserId === viewer.actorUserId;
@@ -81,15 +84,20 @@ export function toFeedPostDto(
   if (isMine || viewer.canManagePosts) {
     dto.status = row.status as NonNullable<FeedPostDto["status"]>;
   }
+  if (extra.mentions) dto.mentions = extra.mentions.map(copyMention);
   return dto;
 }
 
 export function toFeedCommentDto(
   row: CommentRow,
   viewer: SocialViewerContext,
-  extra: { attachments: readonly FeedAttachmentDto[]; myReaction: string | null },
+  extra: {
+    attachments: readonly FeedAttachmentDto[];
+    myReaction: string | null;
+    mentions?: readonly FeedMentionDto[];
+  },
 ): FeedCommentDto {
-  return {
+  const dto: FeedCommentDto = {
     id: row.id,
     postId: row.postId,
     parentCommentId: row.parentCommentId,
@@ -102,6 +110,18 @@ export function toFeedCommentDto(
     editedAt: row.editedAt ? iso(row.editedAt) : null,
     createdAt: iso(row.createdAt),
   };
+  if (extra.mentions) dto.mentions = extra.mentions.map(copyMention);
+  return dto;
+}
+
+/**
+ * Chép một phần tử theo DANH SÁCH KHOÁ của từng nhánh — không spread: một khoá lạ (vd `userId`) lỡ
+ * gắn vào phần tử ở tầng dưới sẽ không đi được qua đây. Nhánh rút ra ĐÚNG `{withheld:true}`.
+ */
+function copyMention(m: FeedMentionDto): FeedMentionDto {
+  return m.withheld
+    ? { withheld: true }
+    : { withheld: false, employeeId: m.employeeId, label: m.label };
 }
 
 /** Tổng hợp cảm xúc theo emoji — `mine` là của RIÊNG actor. */

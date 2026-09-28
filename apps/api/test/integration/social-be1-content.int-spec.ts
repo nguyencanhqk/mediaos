@@ -408,6 +408,35 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 quy tắc nội dung + bộ đếm 
       expect(JSON.stringify(payload)).not.toContain("mention hợp lệ");
     });
 
+    // S16-SOCIAL-BE-1D [PR1-5] — lưới cho phép tách `classifyInAudience`: vế «người ĐỨNG ĐẦU đơn vị»
+    // chưa từng có ca riêng. Chạy XANH trên code CŨ trước khi tách hàm, rồi giữ nguyên kỳ vọng.
+    it("ALLOW: nhắc NGƯỜI ĐỨNG ĐẦU đơn vị (hồ sơ ở đơn vị KHÁC) trên bài org_unit ⇒ accepted", async () => {
+      const hash = await new PasswordService().hash(LOGIN_PW);
+      const head = await makeUser("chead", hash, orgUnitId);
+      await direct.query(`UPDATE org_units SET head_user_id = $1 WHERE id = $2`, [
+        head.userId,
+        unitId,
+      ]);
+      try {
+        const res = await post(tAuthor, "/social/posts").send({
+          type: "share",
+          audience: "org_unit",
+          orgUnitId: unitId,
+          body: "Bài của Tổ A nhắc trưởng đơn vị",
+          mentionedUserIds: [head.userId],
+        });
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+        expect(res.body.data.droppedMentions).toEqual([]);
+        const rows = await direct.query(
+          `SELECT mentioned_user_id FROM feed_mentions WHERE target_id = $1`,
+          [res.body.data.id],
+        );
+        expect(rows.rows.map((r) => r.mentioned_user_id)).toEqual([head.userId]);
+      } finally {
+        await direct.query(`UPDATE org_units SET head_user_id = NULL WHERE id = $1`, [unitId]);
+      }
+    });
+
     it("TỰ nhắc CHÍNH MÌNH bị bỏ (không ai cần thông báo về việc mình vừa gõ tên mình)", async () => {
       const me = await direct.query(`SELECT id FROM users WHERE company_id = $1 AND email = $2`, [
         A.companyId,

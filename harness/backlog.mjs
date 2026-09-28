@@ -17267,16 +17267,12 @@ export const backlog = [
     paths: ["apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
     skills: [],
     depends_on: ["S16-SOCIAL-PERMMEMO-1"],
-    src: [
-      "plan `docs/plans/S16-SOCIAL-PERMMEMO-1.md` §6 R5 · ADR `DECISIONS-15` §6.5",
-    ],
+    src: ["plan `docs/plans/S16-SOCIAL-PERMMEMO-1.md` §6 R5 · ADR `DECISIONS-15` §6.5"],
     done_when: [
       "Một helper dùng chung (vd `test/helpers/bootstrap-app.ts`) dựng app y hệt thứ tự `main.ts` (middleware + interceptor + filter); có lưới tĩnh/AST so helper ↔ `main.ts` để hai nơi không trôi",
       "Chuyển dần int-spec sang helper KHÔNG đổi số spy-count cũ vô tình: spec đo số lượt nạp grant (ATTDEBT H1, PERMCOST-1) phải được ĐO LẠI và ghi số mới, không sửa kỳ vọng mù",
     ],
-    notes: [
-      "SEED 25/09/2026 bởi thi công PERMMEMO-1 (R5). Chưa làm.",
-    ],
+    notes: ["SEED 25/09/2026 bởi thi công PERMMEMO-1 (R5). Chưa làm."],
   },
   {
     id: "S16-SOCIAL-IDXDEDUP-1",
@@ -17337,6 +17333,40 @@ export const backlog = [
       "TÁCH RA 23/09/2026 từ nợ D5 của plan S16-SOCIAL-FE-1 (owner ký lượt 2, chọn «chấp nhận span + ghi nợ BE»).",
       "⚠️ Sau WO này FE mới nối được @mention thành link. Tới lúc đó mention vẫn là SPAN ở FE-1/FE-2 — tiền lệ: MessageBubble của CHAT cũng không link mention.",
       "🔴 LEO LÊN FULL GATE nếu lúc thi công thấy bộ giải mention phải đọc NGOÀI tầm nhìn người xem rồi mới lọc — lúc đó nó thành đường đọc nhân sự, không còn là bổ sung DTO.",
+      "✍️ OWNER CHỐT 28/09/2026 — GHI ĐÈ tiêu đề + done_when #1: O-1 luật = «X VẪN trong audience bài đích lúc ĐỌC» (KHÔNG theo scope người xem); O-2 hình dạng = `{withheld:false, employeeId, label} | {withheld:true}` — KHÔNG `userId`, nhánh rút KHÔNG giữ label (label lấy từ DB, trả nó là trả đúng thứ đang rút). Plan `docs/plans/S16-SOCIAL-BE-1D.md` §2.",
+      "THI CÔNG 28/09/2026: vị từ audience tách thành `classifyInAudience` dùng CHUNG đường ghi/đọc; bộ nạp `loadMentionsForTargets` ≤3 câu/trang; WS bóc `mentions`; identity-projection `second-assert` 12→13. Lưới: R19 +1 ca head (xanh TRƯỚC refactor) · int-spec `social-be1d-mentions` 11 ca (M1–M11 + M6b sửa bình luận) · mutant vị-từ-luôn-true + bỏ-bóc-WS ⇒ 6 ca đỏ.",
+      "FULL gate 28/09/2026 4/4 PASS. HAI CÂU HỎI MỞ cho owner (plan §7): Q1 nhân sự nghỉ việc mà TK còn active vẫn link ở bài company/org_unit · Q2 người ngoài nhóm public suy được membership qua link/withheld. Nợ: social-posts.service.ts > 800 dòng — tách decorate/emit*.",
+      "NỢ R3 (FE, ngoài paths): đổi token `mention` → `<Link to=/feed/profiles/:employeeId>` khi khớp `label` với phần tử `withheld:false`; response kiểm duyệt `006` KHÔNG mang `mentions` ⇒ FE giữ mảng cũ trong cache khi merge. Gắn vào S16-SOCIAL-FE-2 hoặc WO FE nhỏ.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-MENTIONSYNC-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Nợ R2 của BE-1D: `PATCH` bài/bình luận KHÔNG gửi `mentionedUserIds` ⇒ `dto.mentionedUserIds ?? []` ⇒ `syncMentions` XOÁ mọi mention cũ — chỉ đồng bộ mention khi khoá CÓ MẶT trong DTO (`undefined` = giữ nguyên)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-1D"],
+    src: [
+      "docs/plans/S16-SOCIAL-BE-1D.md §6 R2 · social-posts.service.ts update · social-comments.service.ts update (`dto.mentionedUserIds ?? []`)",
+    ],
+    done_when: [
+      "Sửa bài/bình luận CHỈ đổi body (không khoá `mentionedUserIds`) ⇒ hàng `feed_mentions` GIỮ NGUYÊN + không bắn NOTI-028; gửi `mentionedUserIds: []` TƯỜNG MINH ⇒ xoá hết (ca ALLOW cạnh ca giữ-nguyên)",
+      "Vì DTO BE-1D không có `userId`, FE sửa bài không có dữ liệu để gửi lại danh sách — đây là lý do phải đổi ngữ nghĩa ở BE, không vá ở FE",
+      "Cập nhật API-19 §5 (004/016) ngữ nghĩa `mentionedUserIds` vắng ≠ rỗng",
+    ],
+    notes: [
+      "TÁCH RA 28/09/2026 từ nợ R2 của plan S16-SOCIAL-BE-1D (nợ có sẵn từ BE-1, không do BE-1D gây ra; ngoài done_when của BE-1D vì đổi ngữ nghĩa API-004/016).",
     ],
   },
   {

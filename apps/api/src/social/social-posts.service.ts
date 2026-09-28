@@ -25,6 +25,8 @@ import {
 import { bumpPostCounter, softDeletePostTx } from "./social-counters";
 import { decodeFeedCursor, encodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
 import {
+  loadMentionsForTargets,
+  mentionsFor,
   parseHashtags,
   resolveMentions,
   syncMentions,
@@ -685,17 +687,33 @@ export class SocialPostsService {
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.id);
 
-    const { tags, myReactions, saved } = await this.db.withTenant(viewer.companyId, async (tx) => ({
-      tags: await this.repo.tagsFor(tx, viewer.companyId, ids),
-      myReactions: await this.projections.myReactions(
-        tx,
-        viewer.companyId,
-        viewer.actorUserId,
-        "post",
-        ids,
-      ),
-      saved: await this.projections.savedPostIds(tx, viewer.companyId, viewer.actorUserId, ids),
-    }));
+    // `mentions` (S16-SOCIAL-BE-1D D7): CÙNG tx, ≤3 câu cho cả lô; audience lấy từ `PostRow` sẵn có.
+    // `rows` đã qua cổng đọc bài (điều kiện của `decorate`) — bộ nạp KHÔNG tự kiểm tầm nhìn.
+    const { tags, myReactions, saved, mentions } = await this.db.withTenant(
+      viewer.companyId,
+      async (tx) => ({
+        tags: await this.repo.tagsFor(tx, viewer.companyId, ids),
+        myReactions: await this.projections.myReactions(
+          tx,
+          viewer.companyId,
+          viewer.actorUserId,
+          "post",
+          ids,
+        ),
+        saved: await this.projections.savedPostIds(tx, viewer.companyId, viewer.actorUserId, ids),
+        mentions: await loadMentionsForTargets(
+          tx,
+          viewer.companyId,
+          "post",
+          rows.map((r) => ({
+            id: r.id,
+            audience: r.audience,
+            orgUnitId: r.orgUnitId,
+            groupId: r.groupId,
+          })),
+        ),
+      }),
+    );
     // NGOÀI tx — ký URL tự mở kết nối riêng (xem docblock `SocialAttachmentsService`).
     const attachments = await this.attachments.decorateMany(viewer, "post", ids);
 
@@ -705,6 +723,7 @@ export class SocialPostsService {
         attachments: attachments.get(row.id) ?? [],
         myReaction: myReactions.get(row.id) ?? null,
         savedByMe: saved.has(row.id),
+        mentions: mentionsFor(mentions, row.id),
       }),
     );
   }
@@ -748,7 +767,17 @@ export class SocialPostsService {
    */
   private emitPostCreated(actor: SocialActor, row: PostRow, dto: FeedPostDto): void {
     if (row.audience !== "company" || row.status !== "published") return;
-    const { myReaction: _mr, savedByMe: _sb, isMine: _im, status: _st, attachments, ...rest } = dto;
+    // `mentions` bóc tại nguồn (S16-SOCIAL-BE-1D D6) — schema WS cũng omit, nhưng `...rest` sẽ tự
+    // chở mọi khoá MỚI của DTO REST ra room nếu không bóc ở đây.
+    const {
+      myReaction: _mr,
+      savedByMe: _sb,
+      isMine: _im,
+      status: _st,
+      mentions: _mn,
+      attachments,
+      ...rest
+    } = dto;
     this.realtime.emitFeedPostCreated(actor.companyId, {
       ...rest,
       audience: "company",

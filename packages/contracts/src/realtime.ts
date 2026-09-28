@@ -348,7 +348,16 @@ export type WsFeedAttachment = z.infer<typeof wsFeedAttachmentSchema>;
 
 /** `feed:post.created` — bài mới. `audience` khoá cứng `company` (luật 3). */
 export const wsFeedPostCreatedEventSchema = feedPostSchema
-  .omit({ myReaction: true, savedByMe: true, isMine: true, status: true, attachments: true })
+  // `mentions` (S16-SOCIAL-BE-1D D6): chỉ REST mang — giữ cửa đổi luật tầm nhìn về sau mà không phải
+  // xét lại kênh phát cho cả room. FE nhận thẻ qua WS render span tới lần refetch. API-19 §7 KHÔNG đổi.
+  .omit({
+    myReaction: true,
+    savedByMe: true,
+    isMine: true,
+    status: true,
+    attachments: true,
+    mentions: true,
+  })
   .extend({
     audience: z.literal("company"),
     attachments: z.array(wsFeedAttachmentSchema),
@@ -357,7 +366,8 @@ export type WsFeedPostCreatedEvent = z.infer<typeof wsFeedPostCreatedEventSchema
 
 /** `feed:comment.created` — bình luận mới trên một bài ĐANG fan-out được. */
 export const wsFeedCommentCreatedEventSchema = feedCommentSchema
-  .omit({ myReaction: true, isMine: true, attachments: true })
+  // `mentions` — xem `wsFeedPostCreatedEventSchema` (S16-SOCIAL-BE-1D D6).
+  .omit({ myReaction: true, isMine: true, attachments: true, mentions: true })
   .extend({ attachments: z.array(wsFeedAttachmentSchema) });
 export type WsFeedCommentCreatedEvent = z.infer<typeof wsFeedCommentCreatedEventSchema>;
 

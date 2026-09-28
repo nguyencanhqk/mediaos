@@ -107,6 +107,20 @@ describe("R24 — `feed:comment.created` HẸP HƠN DTO REST", () => {
   });
 });
 
+// S16-SOCIAL-BE-1D D6 [PR1-9] — `mentions` chỉ ở REST. Neo dương: REST CÓ khoá (nếu REST mất khoá
+// thì vế «WS vắng» xanh-rỗng).
+describe("BE-1D D6 — `mentions` KHÔNG lên kênh WS", () => {
+  it("`feed:post.created` không có `mentions` (REST thì CÓ)", () => {
+    expect(keysOf(feedPostSchema)).toContain("mentions");
+    expect(keysOf(wsFeedPostCreatedEventSchema)).not.toContain("mentions");
+  });
+
+  it("`feed:comment.created` không có `mentions` (REST thì CÓ)", () => {
+    expect(keysOf(feedCommentSchema)).toContain("mentions");
+    expect(keysOf(wsFeedCommentCreatedEventSchema)).not.toContain("mentions");
+  });
+});
+
 describe("R24 — đính kèm trên kênh WS KHÔNG mang URL presign", () => {
   it("`url` VẮNG MẶT ở schema đính kèm của WS (REST thì CÓ)", () => {
     expect(keysOf(feedAttachmentSchema)).toContain("url");

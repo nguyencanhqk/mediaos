@@ -29,10 +29,13 @@ import { bumpPostCounter, softDeleteCommentTx } from "./social-counters";
 import { decodeFeedCursor, encodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
 import {
   clearMentions,
+  loadMentionsForTargets,
+  mentionsFor,
   parseHashtags,
   resolveMentions,
   syncMentions,
   targetTypeLabel,
+  type AudienceTarget,
   type ResolvedMention,
 } from "./social-mentions";
 import {
@@ -84,15 +87,17 @@ export class SocialCommentsService {
     const fingerprint = fingerprintFeedFilter(["comments", postId]);
     const cursor = query.cursor ? decodeFeedCursor(query.cursor, fingerprint) : null;
 
-    const rows = await this.db.withTenant(actor.companyId, async (tx) => {
-      // Cổng nằm ở BÀI: thấy được bài ⇒ đọc được bình luận của nó.
-      await this.access.assertPostVisible(tx, actor, postId);
-      return this.repo.listForPost(tx, actor.companyId, postId, query.limit, cursor);
+    const { rows, post } = await this.db.withTenant(actor.companyId, async (tx) => {
+      // Cổng nằm ở BÀI: thấy được bài ⇒ đọc được bình luận của nó. GIỮ kết quả: audience của bài
+      // cha là đầu vào của mention (S16-SOCIAL-BE-1D [PR2-2]).
+      const post = await this.access.assertPostVisible(tx, actor, postId);
+      const rows = await this.repo.listForPost(tx, actor.companyId, postId, query.limit, cursor);
+      return { rows, post };
     });
 
     const hasMore = rows.length > query.limit;
     const page = hasMore ? rows.slice(0, query.limit) : rows;
-    const data = await this.decorate(actor, page);
+    const data = await this.decorate(actor, page, post);
     const last = page[page.length - 1];
     return {
       data,
@@ -204,7 +209,7 @@ export class SocialCommentsService {
     });
 
     if (!result.row) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
-    const [dto2] = await this.decorate(actor, [result.row]);
+    const [dto2] = await this.decorate(actor, [result.row], result.post);
     this.emitCommentCreated(actor, result.post.audience, result.post.status, dto2);
     return { ...dto2, droppedMentions: toDropped(result.dropped) };
   }
@@ -306,7 +311,7 @@ export class SocialCommentsService {
         }
 
         const row = await this.repo.findById(tx, actor.companyId, commentId);
-        return { row, dropped: mentions.dropped };
+        return { row, post: comment.post, dropped: mentions.dropped };
       });
     } catch (err) {
       await this.attachments.reportAttachGateDeny(err, actor.companyId);
@@ -314,7 +319,7 @@ export class SocialCommentsService {
     }
 
     if (!result.row) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
-    const [dto2] = await this.decorate(actor, [result.row]);
+    const [dto2] = await this.decorate(actor, [result.row], result.post);
     return { ...dto2, droppedMentions: toDropped(result.dropped) };
   }
 
@@ -364,22 +369,46 @@ export class SocialCommentsService {
 
   // ─── nội bộ ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Row → DTO cho một LÔ bình luận CÙNG một bài. `parentPost` là bài cha ĐÃ qua cổng đọc
+   * (`assertPostVisible`/`assertCommentVisible`) — audience của nó quyết định mention (S16-SOCIAL-BE-1D
+   * D7). Bắt buộc, KHÔNG optional: truyền thiếu thì mọi mention thành `withheld` mà không lỗi gì.
+   */
   private async decorate(
     viewer: SocialViewerContext,
     rows: CommentRow[],
+    parentPost: AudienceTarget,
   ): Promise<FeedCommentDto[]> {
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.id);
 
-    const myReactions = await this.db.withTenant(viewer.companyId, (tx) =>
-      this.projections.myReactions(tx, viewer.companyId, viewer.actorUserId, "comment", ids),
-    );
+    const { myReactions, mentions } = await this.db.withTenant(viewer.companyId, async (tx) => ({
+      myReactions: await this.projections.myReactions(
+        tx,
+        viewer.companyId,
+        viewer.actorUserId,
+        "comment",
+        ids,
+      ),
+      mentions: await loadMentionsForTargets(
+        tx,
+        viewer.companyId,
+        "comment",
+        ids.map((id) => ({
+          id,
+          audience: parentPost.audience,
+          orgUnitId: parentPost.orgUnitId,
+          groupId: parentPost.groupId,
+        })),
+      ),
+    }));
     const attachments = await this.attachments.decorateMany(viewer, "comment", ids);
 
     return rows.map((row) =>
       toFeedCommentDto(row, viewer, {
         attachments: attachments.get(row.id) ?? [],
         myReaction: myReactions.get(row.id) ?? null,
+        mentions: mentionsFor(mentions, row.id),
       }),
     );
   }
@@ -487,7 +516,8 @@ export class SocialCommentsService {
     dto: FeedCommentDto,
   ): void {
     if (postAudience !== "company" || postStatus !== "published") return;
-    const { myReaction: _mr, isMine: _im, attachments, ...rest } = dto;
+    // `mentions` bóc tại nguồn — xem `SocialPostsService.emitPostCreated` (S16-SOCIAL-BE-1D D6).
+    const { myReaction: _mr, isMine: _im, mentions: _mn, attachments, ...rest } = dto;
     this.realtime.emitFeedCommentCreated(actor.companyId, {
       ...rest,
       attachments: attachments.map(({ url: _u, ...a }) => a),
