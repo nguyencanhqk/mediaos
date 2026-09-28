@@ -109,8 +109,8 @@ export async function bumpTagUsage(
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * ⚠️ **Owner chốt 21/09/2026: giữ lời hứa «thùng rác» của SPEC-16 §3.6/§13.1/§7** ⇒ route HTTP khôi
- * phục + đăng ký vào recycle-bin registry thuộc WO `S16-SOCIAL-BE-3`. Hàm này là nền cho nó; đừng
- * xoá vì "chưa ai gọi".
+ * phục + đăng ký vào recycle-bin registry thuộc WO `S16-SOCIAL-BE-3C` (tách từ BE-3 ngày
+ * 28/09/2026). Hàm này là nền cho nó; đừng xoá vì "chưa ai gọi".
  *
  * Đếm lại TỪ NGUỒN (`COUNT(*)` trên hàng sống) chứ không cộng-ngược một `delta` đã nhớ: giữa lúc xoá
  * và lúc khôi phục, bình luận/cảm xúc có thể đã đổi, nên delta cũ là một con số hết hạn.

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, count, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { DataScope } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
@@ -373,6 +373,97 @@ export class SocialReportsRepository {
       )
       .returning({ id: feedReports.id });
     return updated.length > 0;
+  }
+
+  /**
+   * S16-SOCIAL-BE-3A (D8) — KHOÁ THỨ TỰ mọi báo cáo `open` của CÙNG một đích, TRƯỚC câu ghi có
+   * điều kiện.
+   *
+   * ┌─ VÌ SAO KHOÁ CẢ TẬP ANH EM, VÀ VÌ SAO `ORDER BY id` ──────────────────────────────────────────┐
+   * │ `delete_target` tự resolve anh em (D9) ⇒ một lượt `029` GHI lên nhiều hàng báo cáo. Hai lượt  │
+   * │ trên hai báo cáo KHÁC nhau của cùng đích mà mỗi lượt khoá hàng CỦA MÌNH trước rồi mới đụng     │
+   * │ hàng kia là chu trình kinh điển ⇒ `40P01`. Khoá TOÀN tập theo CÙNG một thứ tự (`id`) trước mọi │
+   * │ câu ghi ⇒ lượt sau chờ ở hàng ĐẦU TIÊN, không bao giờ giữ một nửa tập. Sau khi lượt trước      │
+   * │ commit, READ COMMITTED đánh giá lại `status='open'` trên phiên bản mới ⇒ hàng đã resolve rơi   │
+   * │ khỏi tập, và câu ghi có điều kiện của lượt sau khớp 0 hàng ⇒ 409 `ERR-021`.                    │
+   * │ KHÔNG advisory lock: tiền lệ payroll (`pg_advisory_xact_lock`) là fail-open khi quên gọi ở một │
+   * │ đường; khoá HÀNG thì mọi câu `UPDATE feed_reports` đều phải xếp hàng, kể cả đường tương lai.   │
+   * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+   *
+   * Tập rỗng là hợp lệ (báo cáo đã kết thúc) — người gọi để câu ghi có điều kiện trả lời 409.
+   * Hết `lock_timeout` ⇒ `55P03` bay lên nguyên vẹn; service dịch sang 409 `REPORT_BUSY`.
+   */
+  async lockOpenReportsForTargetTx(
+    tx: TenantTx,
+    companyId: string,
+    targetType: "post" | "comment",
+    targetId: string,
+  ): Promise<string[]> {
+    const rows = await tx
+      .select({ id: feedReports.id })
+      .from(feedReports)
+      .where(
+        and(
+          eq(feedReports.companyId, companyId),
+          eq(feedReports.targetType, targetType),
+          eq(feedReports.targetId, targetId),
+          eq(feedReports.status, "open"),
+        ),
+      )
+      .orderBy(asc(feedReports.id))
+      .for("update");
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * S16-SOCIAL-BE-3A (D9) — `delete_target` thành công ⇒ mọi báo cáo `open` KHÁC cùng đích chuyển
+   * `resolved` (đích đã biến mất, không còn gì để xử lý). `resolution_note` NULL: ghi chú của báo
+   * cáo gốc là lời của người xử lý về báo cáo ĐÓ, chép sang hàng khác là bịa lời.
+   *
+   * Các hàng này ĐÃ bị khoá ở `lockOpenReportsForTargetTx` cùng tx ⇒ không lượt nào chen vào được.
+   * Vế `status='open'` giữ lại làm lưới — mọi hàng trả về vì vậy đều đi từ `open`.
+   */
+  async resolveSiblingsTx(
+    tx: TenantTx,
+    companyId: string,
+    input: {
+      targetType: "post" | "comment";
+      targetId: string;
+      exceptReportId: string;
+      actorUserId: string;
+      /**
+       * FULL gate database MEDIUM-1 — tập id ĐÃ khoá ở `lockOpenReportsForTargetTx`. Không giới hạn
+       * vào tập này thì một báo cáo `027` commit SAU bước khoá (id ngẫu nhiên có thể xếp TRƯỚC) bị
+       * UPDATE ngoài thứ tự khoá ⇒ chu trình với lượt `029` khác đang giữ nó ⇒ `40P01`. Báo cáo tới
+       * muộn ở lại `open` — kết thúc được bằng `action: none`.
+       */
+      lockedIds: readonly string[];
+    },
+  ): Promise<string[]> {
+    const ids = input.lockedIds.filter((id) => id !== input.exceptReportId);
+    if (ids.length === 0) return [];
+    const now = new Date();
+    const rows = await tx
+      .update(feedReports)
+      .set({
+        status: "resolved",
+        resolvedBy: input.actorUserId,
+        resolvedAt: now,
+        resolutionNote: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(feedReports.companyId, companyId),
+          eq(feedReports.targetType, input.targetType),
+          eq(feedReports.targetId, input.targetId),
+          eq(feedReports.status, "open"),
+          ne(feedReports.id, input.exceptReportId),
+          inArray(feedReports.id, ids),
+        ),
+      )
+      .returning({ id: feedReports.id });
+    return rows.map((r) => r.id).sort();
   }
 
   /**

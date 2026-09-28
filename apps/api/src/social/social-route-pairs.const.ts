@@ -1,4 +1,8 @@
-import type { FeedCreatableTypeDto, FeedTargetTypeDto } from "@mediaos/contracts";
+import type {
+  FeedCreatableTypeDto,
+  FeedReportActionDto,
+  FeedTargetTypeDto,
+} from "@mediaos/contracts";
 // An toàn về chu trình: `social.errors.ts` KHÔNG còn import gì từ file này (từ BE-2B-2 nó ghép kiểu
 // trực tiếp với enum Zod của contracts) ⇒ cạnh phụ thuộc chỉ đi MỘT chiều.
 import { SOCIAL_ERR } from "./social.errors";
@@ -212,7 +216,12 @@ export const SOCIAL_ROUTE_PAIRS = {
    * LUÔN là `true` (scope ở đây luôn Company/System). Nó vẫn phải có mặt — cùng một câu luật cho cả
    * hai đường — nhưng ca đo thật của `switch` vét cạn nằm ở unit spec, không ở int-spec của `029`.
    */
-  reportResolve: pair("manage", "feed-report"),
+  //
+  // ⟲ **S16-SOCIAL-BE-3A (D4) — ĐỔI PHE sang `tier1IsFloor: true`.** Từ WO này body mang `action`, và
+  // `action ≠ none` đòi THÊM cặp của hành động (`SOCIAL_REPORT_ACTION_PAIRS`, hôm nay
+  // `manage:feed-post`) — cặp decorator không nhắc, phụ thuộc NỘI DUNG REQUEST: đúng định nghĩa hẹp
+  // của cờ. Nguồn độc lập của đẳng thức D17 = chính bảng `SOCIAL_REPORT_ACTION_PAIRS`.
+  reportResolve: pair("manage", "feed-report", true),
 
   // ══ NHÓM (`S16-SOCIAL-BE-2A`, API-19 §5.1 dòng 98-107) — 10 route `030..039` ══
   //
@@ -290,9 +299,24 @@ export const SOCIAL_ROUTE_PAIRS = {
   /** 048 `GET /social/kudos-badges` — catalog huy hiệu ĐANG BẬT; OFFSET. */
   kudosBadgeList: pair("view", "feed"),
 
+  // ── CRUD catalog huy hiệu 049–051 + đọc quản trị 056 (`S16-SOCIAL-BE-3A`) ──
+  //
+  // Cả bốn `manage:feed-kudos`, `tier1IsFloor = false` (cặp decorator ĐÚNG là cặp gác route, không có
+  // bảng payload→cặp), `companyFloor = true` (seed `0578` cấp cặp này ở scope Company cho `hr` +
+  // `company-admin`). Catalog là dữ liệu cấp CÔNG TY — không có vị từ hàng nào ngoài `company_id`.
+  /** 049 `POST /social/kudos-badges` — tạo; code trùng ⇒ 409; audit cùng tx. */
+  kudosBadgeCreate: pair("manage", "feed-kudos"),
+  /** 050 `PATCH /social/kudos-badges/{id}` — sửa/bật lại; `code` BẤT BIẾN; audit cùng tx. */
+  kudosBadgeUpdate: pair("manage", "feed-kudos"),
+  /** 051 `DELETE /social/kudos-badges/{id}` — `is_active=false`, KHÔNG hard-delete; audit khi đổi. */
+  kudosBadgeDelete: pair("manage", "feed-kudos"),
+  /** 056 `GET /social/kudos-badges/manage` — CẢ huy hiệu đã tắt (SOC-DEC-012); OFFSET. */
+  kudosBadgeAdminList: pair("manage", "feed-kudos"),
+
   // ── Cửa đăng ký tệp đính kèm 054–055 (`S16-SOCIAL-BE-1C`) ──
   //
-  // 🔴 HAI ROUTE DUY NHẤT NGOÀI `002`/`006` mang `tier1IsFloor: true`, và chúng thoả ĐÚNG định nghĩa
+  // 🔴 Hai route mang `tier1IsFloor: true` (cùng `002`/`006`/`004`/`016`/`029` — tập đầy đủ do đẳng thức
+  // D17 của census ép), và chúng thoả ĐÚNG định nghĩa
   // HẸP của cờ: cặp quyền thật sự đòi PHỤ THUỘC NỘI DUNG REQUEST (`target`), vì
   // `SocialFileResolver.canLinkFile` hỏi `create:feed-post` cho `feed_post` và `create:feed-comment`
   // cho `feed_comment` (vế 6a) — hai cặp KHÁC NHAU mà `@RequirePermission` không khai nổi cùng lúc.
@@ -470,3 +494,27 @@ export const ATTACH_GATE_ROUTE_TARGET = {
   postUpdate: "post",
   commentUpdate: "comment",
 } as const satisfies Partial<Record<SocialRouteKey, "post" | "comment">>;
+
+/**
+ * S16-SOCIAL-BE-3A (D4) — cặp quyền THÊM của từng hành động kèm ở `SOCIAL-API-029`.
+ *
+ * Bảng này LOAD-BEARING: `SocialReportsService.resolve` đọc nó để quyết định 403
+ * `REPORT_ACTION_DENIED` — không phải một chuỗi `if` riêng. Nó cũng là nguồn độc lập của đẳng thức
+ * `tier1IsFloor` (D17) cho `reportResolve` trong census 2 tầng.
+ *
+ * `null` = hành động không đòi cặp nào ngoài sàn `manage:feed-report` (chỉ `none`). Kiểu
+ * `Record<FeedReportActionDto, …>` ⇒ thêm một hành động vào enum contracts mà quên khai ở đây là
+ * **TS đỏ**, không phải một hành động không cổng.
+ *
+ * ⚠️ Khác route gốc CÓ CHỦ Ý: qua `005` tác giả tự xoá bài mình không cần `manage:feed-post`; qua
+ * `029` thì CẦN — hành động kèm là thao tác KIỂM DUYỆT, không phải thao tác của chủ nội dung.
+ */
+export const SOCIAL_REPORT_ACTION_PAIRS = {
+  none: null,
+  hide_post: { action: "manage", resourceType: "feed-post", isSensitive: false },
+  lock_comments: { action: "manage", resourceType: "feed-post", isSensitive: false },
+  delete_target: { action: "manage", resourceType: "feed-post", isSensitive: false },
+} as const satisfies Record<
+  FeedReportActionDto,
+  { action: string; resourceType: string; isSensitive: boolean } | null
+>;

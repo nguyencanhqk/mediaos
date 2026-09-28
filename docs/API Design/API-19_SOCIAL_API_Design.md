@@ -23,7 +23,7 @@
 
 ## 2. Mục đích tài liệu
 
-Khoá bề mặt HTTP + WS của module SOCIAL: **53 route** `SOCIAL-API-001..053`, cặp quyền từng route, DTO có ràng buộc che dữ liệu, sự kiện realtime và quy ước lỗi. Rule nghiệp vụ **không** nhân bản ở đây — nguồn là SPEC-16.
+Khoá bề mặt HTTP + WS của module SOCIAL: **56 route** `SOCIAL-API-001..056` (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng `054`/`055` + route đọc quản trị huy hiệu `056` — SOC-DEC-012), cặp quyền từng route, DTO có ràng buộc che dữ liệu, sự kiện realtime và quy ước lỗi. Rule nghiệp vụ **không** nhân bản ở đây — nguồn là SPEC-16.
 
 ---
 
@@ -56,7 +56,7 @@ Bảng tin · bài (5 loại) · bình luận 1 cấp · cảm xúc · lưu · l
 
 Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-census gom đúng module qua `API_MODULE_TAGS` nhóm `SOCIAL`.
 
-### 5.1 Bảng endpoint — 55 route (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng)
+### 5.1 Bảng endpoint — 56 route (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng + `056` quản trị huy hiệu)
 
 | Mã | Method · Path | Cặp quyền | Ghi chú |
 | --- | --- | --- | --- |
@@ -93,7 +93,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | **Báo cáo & kiểm duyệt — Track A ghi · Track C xử lý** ||||
 | `SOCIAL-API-027` | `POST /social/reports` | `view:feed` (hàng `reporter_user_id = actor`) | Báo cáo bài/bình luận |
 | `SOCIAL-API-028` | `GET /social/reports` | `view:feed-report` | Sàn scope `Company`; manager `Department`. **`reporter` = `null` khi scope HẸP HƠN `Company`** (D13-a, owner ký 22/09/2026) — chỉ HR/company-admin thấy người tố giác; khoá vẫn có mặt |
-| `SOCIAL-API-029` | `PATCH /social/reports/{report_id}` | `manage:feed-report` | `resolve`/`dismiss` (+ hành động kèm); đã xử lý ⇒ 409 `ERR-021`; ghi audit |
+| `SOCIAL-API-029` | `PATCH /social/reports/{report_id}` | `manage:feed-report` **SÀN** + cặp theo `action` — xem §5.1h | `resolve`/`dismiss` + hành động kèm `action` (BE-3A); đã xử lý ⇒ 409 `ERR-021`; ghi audit |
 | **Nhóm — Track B** ||||
 | `SOCIAL-API-030` | `GET /social/groups` | `view:feed` | Nhóm `public` + nhóm actor là thành viên |
 | `SOCIAL-API-031` | `POST /social/groups` | `create:feed-group` | Người tạo thành `owner` cùng tx |
@@ -117,9 +117,10 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | **Vinh danh — Track B** ||||
 | `SOCIAL-API-047` | `GET /social/kudos` | `view:feed` | Vinh danh gần đây / theo tháng |
 | `SOCIAL-API-048` | `GET /social/kudos-badges` | `view:feed` | Catalog huy hiệu đang bật |
-| `SOCIAL-API-049` | `POST /social/kudos-badges` | `manage:feed-kudos` | audit |
-| `SOCIAL-API-050` | `PATCH /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | audit |
-| `SOCIAL-API-051` | `DELETE /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | Tắt (`is_active=false`), **không** hard-delete |
+| `SOCIAL-API-049` | `POST /social/kudos-badges` | `manage:feed-kudos` | `201` + DTO quản trị; `@Idempotent()`; `code` `^[a-z0-9-]{2,32}$` BẤT BIẾN; trùng (kể cả huy hiệu đã tắt) ⇒ 409 `KUDOS_BADGE_CODE_TAKEN`; audit — xem §5.1i |
+| `SOCIAL-API-050` | `PATCH /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | `200` + DTO quản trị; `{name?, description?, icon?, position?, isActive?}` strict, ≥1 trường; gửi `code` ⇒ 400; `isActive:true` bật lại; không đổi gì ⇒ 200 không audit |
+| `SOCIAL-API-051` | `DELETE /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | `200` + DTO quản trị. Tắt (`is_active=false`), **không** hard-delete; đã tắt sẵn ⇒ 200 không audit; không tồn tại/tenant khác ⇒ 404 `KUDOS_BADGE_NOT_FOUND` |
+| `SOCIAL-API-056` | `GET /social/kudos-badges/manage` | `manage:feed-kudos` | **SOC-DEC-012 (BE-3A).** CẢ huy hiệu đã tắt + `isActive`; OFFSET; `ORDER BY position, id`. Khai TRƯỚC `…/{badge_id}` |
 | **Thống kê — Track C** ||||
 | `SOCIAL-API-052` | `GET /social/stats/engagement` | `view:feed-report` | Theo tuần & đơn vị; SQL set-based; **KHÔNG cache** |
 | `SOCIAL-API-053` | `GET /social/stats/engagement/export` | `view:feed-report` | XLSX; ghi audit |
@@ -127,7 +128,11 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-054` | `POST /social/files/upload-url` | **SÀN `view:feed` + cặp theo `target` — xem §5.1e** | `@HttpCode(200)`; đăng ký tệp `Private` owned-by-token + presigned-PUT. **Không** `@Idempotent()` |
 | `SOCIAL-API-055` | `POST /social/files/{id}/confirm` | như trên | `Pending → Uploaded`; owner-check TRƯỚC khi chạm storage; 200 idempotent khi đã `Uploaded` |
 
-> **55 mã = 55 route HTTP** — không mã nào gói hai route.
+> **56 mã = 56 route HTTP** — không mã nào gói hai route.
+>
+> ⚠️ **`056` cũng NẰM NGOÀI 53 route của SPEC-16 §15** — thêm ở `S16-SOCIAL-BE-3A` theo SOC-DEC-012
+> (owner 28/09/2026): `048` CỐ Ý chỉ trả huy hiệu đang bật dưới cặp `view:feed`, nên màn quản trị cần
+> một route đọc riêng gác `manage:feed-kudos` để thấy và bật lại huy hiệu đã tắt.
 >
 > ⚠️ **`054`/`055` NẰM NGOÀI 53 route của SPEC-16 §15, CÓ CHỦ Ý.** Chúng là hạ tầng own-scope quanh
 > `FileService` (khuôn `POST /chat/files/*`), không phải một chức năng nghiệp vụ mới của SPEC-16: mọi
@@ -236,11 +241,45 @@ Mỗi trường đổi = **một dòng audit riêng** (`{postId, field, from, to
 
 Cùng khuôn `attachmentIds` ở §5.1f: khoá vắng = không đụng, mảng rỗng = gỡ hết.
 
+### 5.1h `SOCIAL-API-029` — hành động kèm khi xử lý báo cáo (`S16-SOCIAL-BE-3A`)
+
+Body: `{status, resolutionNote?, action?}`; `action ∈ none · hide_post · lock_comments · delete_target`,
+**vắng ⇒ `none`** (client cũ giữ nguyên hành vi). `status='dismissed'` + `action ≠ none` ⇒ **400**.
+
+| Loại đích | `none` | `hide_post` | `lock_comments` | `delete_target` |
+| --- | --- | --- | --- | --- |
+| `post` | ✓ | ẩn bài | khoá bình luận bài | xoá mềm bài |
+| `comment` | ✓ | ✗ 422 `REPORT_ACTION_INVALID_FOR_TARGET` | khoá bình luận **BÀI CHA** | xoá mềm bình luận |
+
+- **Cặp quyền theo `action`** (bảng `SOCIAL_REPORT_ACTION_PAIRS`, `tier1IsFloor=true`): mọi `action ≠ none` đòi
+  THÊM `manage:feed-post` @Company; thiếu ⇒ **403 `REPORT_ACTION_DENIED`**. Khác route gốc CÓ CHỦ Ý: qua `005`
+  tác giả tự xoá bài mình không cần `manage:feed-post`; qua `029` thì cần.
+- **Một transaction**: đổi trạng thái báo cáo + hành động + audit. Hành động chạy qua CÙNG hàm lõi của `006`/`005`/`017`
+  (cùng audit theo trường, cùng dọn mention/reaction, cùng luật «xoá nội dung của CHÍNH MÌNH không audit»).
+- Đích đọc qua **cổng thường** (không qua snapshot của hàng đợi). Không còn thao tác được (đã xoá · actor không thấy ·
+  vừa bị xoá bởi lượt đua) ⇒ **422 `REPORT_ACTION_TARGET_UNAVAILABLE`**, báo cáo vẫn `open` — kết thúc bằng `action: none`.
+  ⚠️ Nợ D14: bài/bình luận nhóm **riêng tư** mà người xử lý không phải thành viên rơi vào ca này (WO `S16-SOCIAL-GROUPMOD-1`).
+- **Báo cáo anh em (D9)**: `delete_target` thành công ⇒ mọi báo cáo `open` KHÁC cùng `(target_type, target_id)` tự
+  chuyển `resolved` (`resolved_by` = actor, `resolution_note` NULL), mỗi hàng một audit mang `via`. **Chỉ cùng đích**:
+  xoá bài KHÔNG đóng báo cáo về bình luận của bài đó (FE-3 hiển thị các báo cáo đó như thường). `hide`/`lock` không đóng anh em.
+- **Khoá**: mọi báo cáo `open` cùng đích bị khoá `FOR UPDATE ORDER BY id` trước câu ghi; `lock_timeout` 5s ⇒ hết hạn
+  **409 `REPORT_BUSY`** (tạm, thử lại được) — khác `409 ERR-021` (đã có người xử lý xong).
+- Hành động kèm **chỉ ghi trong audit** (không cột mới): `social.report.{resolved|dismissed}` metadata thêm `action` + `effect` (`none` · `applied` · `noop` = đích đã ở trạng thái đó, không có dòng audit trường đi kèm).
+
+### 5.1i `SOCIAL-API-049..051` + `056` — catalog huy hiệu (`S16-SOCIAL-BE-3A`)
+
+- DTO quản trị `{id, code, name, description, icon, position, isActive, createdAt, updatedAt}` cho `049`/`050`/`051`/`056`
+  (`048` giữ DTO công khai, không `isActive`).
+- Mọi huy hiệu — kể cả 5 huy hiệu hệ thống seed — tắt/bật lại được như nhau (SOC-DEC-011 không đặc cách).
+  Seeder `ON CONFLICT DO NOTHING` không bật lại huy hiệu tenant đã tắt.
+- Huy hiệu tắt KHÔNG ảnh hưởng vinh danh cũ (`047` vẫn hiển thị); chỉ chặn chọn mới (`ERR-022`).
+- Audit cùng tx: `social.kudos_badge.create|update|deactivate`, payload id + trường đổi.
+
 ### 5.2 Thứ tự khai báo route — bẫy đã biết
 
 Các route **tĩnh** phải khai **TRƯỚC** route có tham số cùng cấp, nếu không NestJS sẽ bắt nhầm (bài học `goals/tree`):
 
-- `GET /social/saved` · `GET /social/search` · `GET /social/tags` · `GET /social/news` · `GET /social/groups` · `GET /social/polls` · `GET /social/ideas` · `GET /social/kudos` · `GET /social/kudos-badges` · `GET /social/reports` · `GET /social/birthdays` · `GET /social/stats/*` — **trước** `GET /social/posts/{post_id}` và các route `{id}` khác.
+- `GET /social/saved` · `GET /social/search` · `GET /social/tags` · `GET /social/news` · `GET /social/groups` · `GET /social/polls` · `GET /social/ideas` · `GET /social/kudos` · `GET /social/kudos-badges` · `GET /social/kudos-badges/manage` (trước `…/{badge_id}`) · `GET /social/reports` · `GET /social/birthdays` · `GET /social/stats/*` — **trước** `GET /social/posts/{post_id}` và các route `{id}` khác.
 - `POST /social/posts` ở basePath `social/posts`, không đụng `social/{...}`.
 
 Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) — ratchet `param-uuid` không được tăng.
@@ -324,15 +363,15 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
 ### 6.4 Phân trang
 
 - **Feed và bình luận:** cursor-based (`cursor` + `limit`, `limit` ≤ 50) — dòng cuộn dài, offset sẽ trượt khi có bài mới.
-- **Danh sách quản trị** (báo cáo · nhóm · huy hiệu · thống kê · **bình chọn `040`** · **sáng kiến `045`** · **vinh danh `047`** · **catalog huy hiệu `048`**): offset (`page` + `limit`) theo API-01.
+- **Danh sách quản trị** (báo cáo · nhóm · huy hiệu · thống kê · **bình chọn `040`** · **sáng kiến `045`** · **vinh danh `047`** · **catalog huy hiệu `048`/`056`**): offset (`page` + `limit`) theo API-01.
 
 🔴 **Mọi danh sách offset PHẢI trả envelope `{data, page, limit, total}`** — không trả mảng trần. Thiếu `total` thì FE không phân biệt được «trang cuối» với «trang rỗng» và không dựng được pager; `030` đã theo đúng khuôn này. `040` được sửa cho khớp ngày 23/09/2026 (BE-2B-1, owner chốt **S5**) — trước đó nó trả mảng trần.
 
-⚠️ **Thứ tự phải có khoá phá-hoà DUY NHẤT.** OFFSET không có chốt cuối ổn định thì hàng **lặp hoặc MẤT** giữa hai trang mà không lỗi gì — `created_at` mặc định `now()` là mốc BẮT ĐẦU transaction nên mọi hàng tạo trong cùng một tx (seed/import) giống hệt nhau. `030` chốt bằng `id`; `040` chốt bằng `CASE WHEN status='open' … END, created_at DESC, id`; `045`/`047` chốt bằng `created_at DESC, id`; `048` bằng `position, id` (`position` là `smallint` tenant sửa được qua BE-3 nên nó **có thể trùng** — vẫn cần chốt cuối).
+⚠️ **Thứ tự phải có khoá phá-hoà DUY NHẤT.** OFFSET không có chốt cuối ổn định thì hàng **lặp hoặc MẤT** giữa hai trang mà không lỗi gì — `created_at` mặc định `now()` là mốc BẮT ĐẦU transaction nên mọi hàng tạo trong cùng một tx (seed/import) giống hệt nhau. `030` chốt bằng `id`; `040` chốt bằng `CASE WHEN status='open' … END, created_at DESC, id`; `045`/`047` chốt bằng `created_at DESC, id`; `048`/`056` bằng `position, id` (`position` là `smallint` tenant sửa được qua `050` nên nó **có thể trùng** — vẫn cần chốt cuối).
 
 ### 6.5 Envelope lỗi + mã
 
-Theo API-01. Mã nghiệp vụ `SOCIAL-ERR-001..022` (SPEC-16 §12). Quy ước then chốt:
+Theo API-01. Mã nghiệp vụ `SOCIAL-ERR-001..022` (SPEC-16 §12) + các hằng KHÔNG số hoá tiền tố `SOCIAL-ERR:` (nguồn: `social.errors.ts`; BE-3A thêm `REPORT_ACTION_DENIED` 403 · `REPORT_ACTION_INVALID_FOR_TARGET` 422 · `REPORT_ACTION_TARGET_UNAVAILABLE` 422 · `REPORT_BUSY` 409 · `KUDOS_BADGE_CODE_TAKEN` 409 · `KUDOS_BADGE_NOT_FOUND` 404). Quy ước then chốt:
 
 > **404 trước 403.** Mọi trường hợp «không được thấy» trả **404** (`ERR-001` bài / `ERR-012` nhóm). 403 chỉ dùng khi caller **đã** ở trong audience và chỉ thiếu quyền hành động. Trả 403 cho một bài mà caller không được thấy là **rò sự tồn tại**.
 >
@@ -373,7 +412,7 @@ Key **do client sinh khi mở composer/form**, TTL 15′, replay trả `Idempote
 ## 8. Hai tầng guard + audit
 
 - Cặp quyền khai ở **decorator route** *và* kiểm lại ở **service**; census QA so từng route theo MÃ ở cả hai tầng.
-- Ghi `audit_logs` **cùng transaction** cho: `006` moderation · `029` xử lý báo cáo · `038`/`039` thành viên nhóm · `046` xét duyệt sáng kiến · `049`/`050`/`051` huy hiệu · `053` export · **`002` CHỈ ở nhánh `type='kudos'` + `isOfficial=true`** (`social.kudos.official`).
+- Ghi `audit_logs` **cùng transaction** cho: `006` moderation · `029` xử lý báo cáo (+ audit của hành động kèm + một dòng/báo cáo anh em tự resolve) · `038`/`039` thành viên nhóm · `046` xét duyệt sáng kiến · `049`/`050`/`051` huy hiệu · `053` export · **`002` CHỈ ở nhánh `type='kudos'` + `isOfficial=true`** (`social.kudos.official`).
 - 🔴 **Vì sao `002` audit một nhánh chứ không cả route** (bổ sung 24/09/2026, `S16-SOCIAL-BE-2B-2`, owner ký **S8**): bài thường đã có tác giả + thời điểm trong chính hàng `feed_posts`, audit thêm chỉ làm sổ ngập thao tác thường. `isOfficial=true` thì khác — nó dùng năng lực `manage:feed-kudos` để xuất bản nội dung mang **DẤU CÔNG TY**, tức một người nói thay tổ chức, đúng hình dạng mà module đã audit ở mọi chỗ khác (`social.post.update` chỉ ghi khi qua nhánh `asManager` · `social.poll.close` kèm `viaManage`). Metadata `{postId, kudosId, recipientCount}` — **KHÔNG** `message` (chữ tự do) và **KHÔNG** `employee_id` người nhận: sổ audit có bề mặt đọc RIÊNG, rộng hơn `047`.
 - `object_type` audit mới: `feed_post` · `feed_comment` · `feed_group` · `feed_report` (UNION-ADD — DB-17 §3.2).
 - Payload audit **không** chứa nội dung bài đầy đủ, chỉ `{postId, field, from, to}`.

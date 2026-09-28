@@ -24,7 +24,7 @@ import type {
  *
  * IDEMPOTENT: `INSERT … ON CONFLICT (company_id, code) DO NOTHING` theo UNIQUE
  * `feed_kudos_badges_company_code_uq` (0580). Chạy lại KHÔNG nhân bản và KHÔNG đè tên/icon tenant đã
- * sửa (bảng có GRANT UPDATE — BE-3 cho tenant admin tự sửa catalog). `ctx.track()` payload chỉ
+ * sửa (bảng có GRANT UPDATE — `050` của BE-3A cho tenant admin tự sửa catalog). `ctx.track()` payload chỉ
  * master/config data (BẤT BIẾN #3), ổn định giữa các lần ⇒ checksum không đổi ⇒ lần 2 Skipped.
  *
  * KHÔNG hard-delete, KHÔNG mở/đóng batch (runner sở hữu vòng đời), INSERT trong `ctx.tx` — tenant tx
@@ -44,7 +44,7 @@ export interface SocialSystemBadge {
 /**
  * 5 huy hiệu hệ thống (DB-17 §7.9). Thứ tự = `position` 1..5, KHÔNG sắp lại và KHÔNG thêm mã thứ sáu
  * ở đây: danh sách này là bản sao có hợp đồng của `0582`, không phải nơi mở rộng catalog (tenant tự
- * thêm huy hiệu riêng qua route `manage:feed-kudos` của S16-SOCIAL-BE-3).
+ * thêm huy hiệu riêng qua route `049` (`manage:feed-kudos`) của S16-SOCIAL-BE-3A).
  */
 export const SOCIAL_SYSTEM_BADGES: readonly SocialSystemBadge[] = [
   {

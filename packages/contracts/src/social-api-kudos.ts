@@ -5,7 +5,7 @@ import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
  * S16-SOCIAL-BE-2B-2 — DTO của `SOCIAL-API-047..048` (VINH DANH · CATALOG HUY HIỆU).
  *
  * Nhánh `type='kudos'` của route `002` khai ở `createFeedPostSchema` (payload của `002`). Ba route
- * CRUD catalog `049..051` thuộc **BE-3**, không ở đây.
+ * CRUD catalog `049..051` + `056` thuộc **BE-3A** — khối cuối file.
  *
  * 🔴 Luật nghiệp vụ ném Ở SERVICE, không ở Zod: huy hiệu không có/đã tắt (`SOCIAL-ERR-022`), người
  * nhận trùng tác giả, trần 10 người nhận, `isOfficial` thiếu `manage:feed-kudos`. Zod chỉ gác HÌNH
@@ -60,3 +60,92 @@ export const listKudosBadgesQuerySchema = z
   })
   .strict();
 export type ListKudosBadgesQueryDto = z.infer<typeof listKudosBadgesQuerySchema>;
+
+// ─────────── S16-SOCIAL-BE-3A — CRUD catalog huy hiệu `049..051` + đọc quản trị `056` ───────────
+//
+// Cả bốn route gác `manage:feed-kudos` (sàn Company). «Xoá» (`051`) = `is_active=false` — bảng không có
+// `deleted_at` và app role KHÔNG có DELETE (BẤT BIẾN #2). Bật lại = `050 { isActive: true }` (D11).
+
+/**
+ * Trần độ dài — mirror cột `feed_kudos_badges` (`code varchar(32)` · `name varchar(255)` · `icon
+ * varchar(64)` · `position smallint`). `description` là cột `text`: trần 1000 là trần SẢN PHẨM, không phải DB.
+ */
+export const KUDOS_BADGE_NAME_MAX = 255;
+export const KUDOS_BADGE_DESCRIPTION_MAX = 1000;
+export const KUDOS_BADGE_ICON_MAX = 64;
+/** `smallint` dương: vượt trần phải là 400 ở Zod, KHÔNG 500 `22003` ở DB (ca K5). */
+export const KUDOS_BADGE_POSITION_MAX = 32767;
+
+/**
+ * `code` — khoá tự nhiên per-company (`feed_kudos_badges_company_code_uq`), BẤT BIẾN sau khi tạo.
+ * Chữ thường + số + gạch nối: nó đi vào URL/nhãn i18n ở FE, không phải văn bản tự do.
+ */
+export const kudosBadgeCodeSchema = z
+  .string()
+  .regex(/^[a-z0-9-]{2,32}$/, "code chỉ gồm a-z, 0-9, '-' và dài 2–32 ký tự");
+
+const badgeName = z.string().trim().min(1).max(KUDOS_BADGE_NAME_MAX);
+const badgeDescription = z.string().trim().max(KUDOS_BADGE_DESCRIPTION_MAX);
+const badgeIcon = z.string().trim().max(KUDOS_BADGE_ICON_MAX);
+const badgePosition = z.number().int().min(0).max(KUDOS_BADGE_POSITION_MAX);
+
+/** `049` — `POST /social/kudos-badges`. Vắng `position` ⇒ 0. */
+export const createKudosBadgeSchema = z
+  .object({
+    code: kudosBadgeCodeSchema,
+    name: badgeName,
+    description: badgeDescription.nullable().optional(),
+    icon: badgeIcon.nullable().optional(),
+    position: badgePosition.optional(),
+  })
+  .strict();
+export type CreateKudosBadgeDto = z.infer<typeof createKudosBadgeSchema>;
+
+/**
+ * `050` — `PATCH /social/kudos-badges/{id}`. `.strict()` ⇒ gửi `code` là **400** (code BẤT BIẾN, ca
+ * K4) chứ không bị lặng lẽ bỏ qua. Ít nhất một trường.
+ */
+export const updateKudosBadgeSchema = z
+  .object({
+    name: badgeName.optional(),
+    description: badgeDescription.nullable().optional(),
+    icon: badgeIcon.nullable().optional(),
+    position: badgePosition.optional(),
+    isActive: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: "phải có ít nhất một trường cần đổi",
+  });
+export type UpdateKudosBadgeDto = z.infer<typeof updateKudosBadgeSchema>;
+
+/** Huy hiệu ở góc nhìn QUẢN TRỊ (`049`/`050`/`056`) — khác `048`: có `isActive`. */
+export const kudosBadgeAdminSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  icon: z.string().nullable(),
+  position: z.number().int(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type KudosBadgeAdminDto = z.infer<typeof kudosBadgeAdminSchema>;
+
+/** `056` — `GET /social/kudos-badges/manage` (SOC-DEC-012): CẢ huy hiệu đã tắt; OFFSET. */
+export const listKudosBadgesAdminQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).max(FEED_PAGE_MAX).default(1),
+    limit: z.coerce.number().int().min(1).max(FEED_ADMIN_PAGE_LIMIT_MAX).default(50),
+  })
+  .strict();
+export type ListKudosBadgesAdminQueryDto = z.infer<typeof listKudosBadgesAdminQuerySchema>;
+
+export const kudosBadgeAdminPageSchema = z.object({
+  data: z.array(kudosBadgeAdminSchema),
+  page: z.number().int(),
+  limit: z.number().int(),
+  total: z.number().int(),
+});
+export type KudosBadgeAdminPageDto = z.infer<typeof kudosBadgeAdminPageSchema>;

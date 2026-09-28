@@ -54,7 +54,12 @@ import {
 } from "./social-posts.repository";
 import { SOCIAL_ERR } from "./social.errors";
 import { toFeedPostDto } from "./social.mapper";
-import type { SocialActor, SocialRequestUser, SocialViewerContext } from "./social.types";
+import type {
+  SocialActor,
+  SocialPostAccess,
+  SocialRequestUser,
+  SocialViewerContext,
+} from "./social.types";
 
 /**
  * S16-SOCIAL-BE-1 — `SOCIAL-API-001..005, 007..010` (kiểm duyệt `006` ở
@@ -460,26 +465,44 @@ export class SocialPostsService {
 
     await this.db.withTenant(actor.companyId, async (tx) => {
       const post = await this.access.assertPostVisible(tx, actor, postId);
-      const asManager = this.access.assertCanMutateContent(actor, post.authorUserId);
-
-      await softDeletePostTx(tx, actor.companyId, postId, actor.actorUserId);
-
-      if (asManager) {
-        await this.audit.record(tx, {
-          action: "social.post.delete",
-          objectType: "feed_post",
-          objectId: postId,
-          actorUserId: actor.actorUserId,
-          moduleCode: "SOCIAL",
-          entityType: "feed_post",
-          entityId: postId,
-          resultStatus: "Success",
-          // KHÔNG nội dung bài — API-19 §8 chốt payload audit chỉ mang id + trường đổi.
-          metadata: { postId, authorUserId: post.authorUserId },
-        });
-      }
+      // `false` (lượt đua đã xoá trước) VẪN trả `200 {deleted:true}` — hành vi quan sát được của
+      // `005` giữ nguyên từ BE-1 (D6b); chỉ dòng audit trùng biến mất.
+      await this.removeTx(tx, actor, post);
     });
     return { deleted: true };
+  }
+
+  /**
+   * S16-SOCIAL-BE-3A (D5) — HÀM LÕI tầng tx của xoá mềm bài: `005` và `029 delete_target` đi qua
+   * CHÍNH hàm này. Nhận `post` ĐÃ qua cổng đọc — KHÔNG tự gọi cổng.
+   *
+   * D6b — audit CHỈ khi câu xoá THẬT SỰ khớp một hàng (khớp nhánh bình luận). Trước vá, hai lượt xoá
+   * đua nhau cùng qua cổng đọc thì lượt thua (0 hàng) vẫn ghi `social.post.delete` ⇒ hai dòng xoá
+   * cho một lần xoá.
+   *
+   * @returns `true` ⇔ lượt này xoá được hàng.
+   */
+  async removeTx(tx: TenantTx, actor: SocialActor, post: SocialPostAccess): Promise<boolean> {
+    const asManager = this.access.assertCanMutateContent(actor, post.authorUserId);
+
+    const deleted = await softDeletePostTx(tx, actor.companyId, post.id, actor.actorUserId);
+    if (!deleted) return false;
+
+    if (asManager) {
+      await this.audit.record(tx, {
+        action: "social.post.delete",
+        objectType: "feed_post",
+        objectId: post.id,
+        actorUserId: actor.actorUserId,
+        moduleCode: "SOCIAL",
+        entityType: "feed_post",
+        entityId: post.id,
+        resultStatus: "Success",
+        // KHÔNG nội dung bài — API-19 §8 chốt payload audit chỉ mang id + trường đổi.
+        metadata: { postId: post.id, authorUserId: post.authorUserId },
+      });
+    }
+    return true;
   }
 
   /** `SOCIAL-API-007` — ghi lượt xem LẦN ĐẦU (`ON CONFLICT DO NOTHING`, reload không tăng). */

@@ -70,6 +70,14 @@ const STRONG_EVIDENCE: readonly string[] = [
   "FILE_TARGET_POST_DENIED",
   "FILE_TARGET_COMMENT_DENIED",
   "FILE_NOT_OWNED",
+  // S16-SOCIAL-BE-3A — 6 hang khong so hoa: hanh dong kem cua `029` + CRUD huy hieu. Deu o TANG A:
+  // khong co ma `SOCIAL-ERR-0XX` nen bang chung "theo chuoi ma" khong ton tai.
+  "REPORT_ACTION_DENIED",
+  "REPORT_ACTION_INVALID_FOR_TARGET",
+  "REPORT_ACTION_TARGET_UNAVAILABLE",
+  "REPORT_BUSY",
+  "KUDOS_BADGE_CODE_TAKEN",
+  "KUDOS_BADGE_NOT_FOUND",
 ];
 
 /**

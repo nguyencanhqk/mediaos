@@ -531,6 +531,23 @@ export class SocialAccessService {
     actor: SocialViewerContext,
     postId: string,
   ): Promise<SocialPostAccess> {
+    const post = await this.findPostVisible(tx, actor, postId);
+    if (!post) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+    return post;
+  }
+
+  /**
+   * S16-SOCIAL-BE-3A (D7) — biến thể KHÔNG ném của `assertPostVisible`: CÙNG một vị từ, trả `null`
+   * thay vì 404. `assertPostVisible` là wrapper mỏng của hàm này ⇒ hai đường KHÔNG thể trôi khỏi
+   * nhau. Tồn tại cho caller cần dịch «không thấy» sang mã KHÁC 404 (luồng báo cáo `029` ⇒ 422
+   * `REPORT_ACTION_TARGET_UNAVAILABLE`) mà không phải `catch (NotFoundException)` chung — bắt chung
+   * sẽ nuốt cả một 404 ném từ chỗ khác.
+   */
+  async findPostVisible(
+    tx: TenantTx,
+    actor: SocialViewerContext,
+    postId: string,
+  ): Promise<SocialPostAccess | null> {
     const rows = await tx
       .select({
         id: feedPosts.id,
@@ -558,9 +575,7 @@ export class SocialAccessService {
       )
       .limit(1);
 
-    const row = rows[0];
-    if (!row) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
-    return row as SocialPostAccess;
+    return (rows[0] as SocialPostAccess | undefined) ?? null;
   }
 
   /**
@@ -575,6 +590,17 @@ export class SocialAccessService {
     actor: SocialViewerContext,
     commentId: string,
   ): Promise<SocialCommentAccess> {
+    const comment = await this.findCommentVisible(tx, actor, commentId);
+    if (!comment) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
+    return comment;
+  }
+
+  /** S16-SOCIAL-BE-3A (D7) — biến thể KHÔNG ném của `assertCommentVisible` (xem `findPostVisible`). */
+  async findCommentVisible(
+    tx: TenantTx,
+    actor: SocialViewerContext,
+    commentId: string,
+  ): Promise<SocialCommentAccess | null> {
     const rows = await tx
       .select({
         id: feedComments.id,
@@ -614,7 +640,7 @@ export class SocialAccessService {
       .limit(1);
 
     const row = rows[0];
-    if (!row) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
+    if (!row) return null;
 
     return {
       id: row.id,

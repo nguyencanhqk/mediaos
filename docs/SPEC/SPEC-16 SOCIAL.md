@@ -445,7 +445,7 @@ Mọi màn §9 phải xử lý đủ: **loading** (skeleton thẻ bài) · **err
 
 ---
 
-## 15. Yêu cầu API cấp SPEC — 53 route
+## 15. Yêu cầu API cấp SPEC — 56 route
 
 Bảng endpoint đầy đủ kèm cặp quyền từng route, DTO và mã lỗi: **[API-19](<../API Design/API-19_SOCIAL_API_Design.md>)**. Tóm tắt cụm:
 
@@ -459,8 +459,12 @@ Bảng endpoint đầy đủ kèm cặp quyền từng route, DTO và mã lỗi:
 | Nhóm | `SOCIAL-API-030..039` | 10 |
 | Bình chọn | `SOCIAL-API-040..044` | 5 |
 | Sáng kiến | `SOCIAL-API-045..046` | 2 |
-| Vinh danh & huy hiệu | `SOCIAL-API-047..051` | 5 |
+| Vinh danh & huy hiệu | `SOCIAL-API-047..051` · `056` | 6 |
 | Thống kê | `SOCIAL-API-052..053` | 2 |
+| Đính kèm (hạ tầng own-scope) | `SOCIAL-API-054..055` | 2 |
+
+> 53 route cấp phát ban đầu (§5.1) + `054`/`055` (cửa tệp, `S16-SOCIAL-BE-1C` — nợ doc đóng ở đây) +
+> `056` (đọc quản trị huy hiệu — SOC-DEC-012, `S16-SOCIAL-BE-3A`) = **56**.
 
 ---
 
@@ -544,7 +548,7 @@ Mọi thao tác `manage:*` và `approve:feed-idea`: ẩn/hiện bài · ghim/b�
 
 1. 19 bảng có RLS + FORCE, composite tenant-FK, CHECK mirror contracts hai chiều.
 2. 14 cặp quyền seed `ON CONFLICT DO NOTHING`, grant per-(cặp, vai) đúng §11.1; ba cặp `social-*` của fbpost **không đổi**.
-3. 53 route có guard hai tầng + kiểm tra audience/membership; `manage/approve` ghi audit.
+3. 56 route (§15) có guard hai tầng + kiểm tra audience/membership; `manage/approve` ghi audit.
 4. 12 màn đủ loading/error/empty/forbidden; bố cục 3 cột gập đúng dưới 1024px.
 5. 9 sự kiện NOTI phát qua outbox, có mặt ở **cả hai** bảng catalog + template.
 6. Bài xoá mềm biến khỏi feed/đếm/tìm kiếm/thẻ/đã lưu; khôi phục trả lại đủ.
@@ -598,6 +602,7 @@ Mọi thao tác `manage:*` và `approve:feed-idea`: ẩn/hiện bài · ghim/b�
 | SOC-DEC-009 | Sáng kiến §17.19: `submitted → under_review → accepted / rejected` (`approve:feed-idea`, `reviewed_by/at/note`, NOTI tác giả), vết ở audit. Bình chọn §17.20: `open → closed`; 2–10 lựa chọn · 1/nhiều phiếu · ẩn danh tuỳ chọn (vẫn lưu `user_id` chống phiếu đôi, DTO không lộ kể cả admin) · hạn đóng bằng job `system-jobs`; đổi phiếu khi còn mở | theo đề xuất | ✅ chốt |
 | SOC-DEC-010 | Tìm kiếm PG `tsvector` cột sinh (`simple` + `unaccent` nếu extension có — đo ở DB-1, không thì ILIKE; KHÔNG `CREATE EXTENSION` mù), phạm vi tenant. Realtime v1 tối giản: `feed:post.created` · `feed:comment.created` · `feed:reaction.changed` vào room `co:{companyId}:feed` + `co:{companyId}:feedgroup:{groupId}`, payload = DTO đã mask; FE chỉ badge «N bài mới». Thống kê theo tuần & đơn vị: sàn scope Company (manager Department), KHÔNG cache, XLSX | theo đề xuất | ✅ chốt |
 | SOC-DEC-011 | **Danh tính người tố giác chỉ lộ ở scope `Company`** (`SOCIAL-API-028`/`029`): trường `reporter` của DTO báo cáo = `null` với mọi người đọc hẹp hơn Company — tức manager mang `view:feed-report@Department`. Lý do: vị từ phạm vi tính theo đơn vị của BÀI, nên khi tác giả bài bị tố chính là trưởng đơn vị đó, họ đọc được tên người vừa tố giác mình — kênh trả đũa trực tiếp. Trách nhiệm giải trình (chống báo cáo bừa) giữ nguyên: HR/company-admin — vai DUY NHẤT xử lý được báo cáo (`manage:feed-report` sàn `Company`) — vẫn thấy đủ. Khoá `reporter` VẪN có mặt, che bằng `null` chứ không bỏ khoá. **Kênh NOTI bịt cùng lượt:** `NOTI-EVENT-036` không đưa `actorUserId` (user_id người tố giác) vào `notifications.payload` — hàng thông báo sống lâu hơn grant, nên che ở DTO mà để hở ở thông báo là vô nghĩa (cột `created_by` vẫn giữ, làm neo điều tra — nó không nằm trong DTO thông báo). **Phạm vi của quyết định này là trường `reporter`, KHÔNG phải `note`** — chữ tự do do người tố giác viết vẫn trả nguyên cho mọi người đọc được hàng đợi, nên họ có thể tự lộ qua nội dung (nợ FE: cảnh báo lúc soạn báo cáo). _(Khác bình chọn ẩn danh ở SOC-DEC-009: đó là ẩn với MỌI người đọc; đây là che theo scope.)_ | owner ký 22/09/2026 (S16-SOCIAL-BE-1B, D13-a) | ✅ chốt |
+| SOC-DEC-012 | **Route đọc QUẢN TRỊ catalog huy hiệu `SOCIAL-API-056` `GET /social/kudos-badges/manage`** (`manage:feed-kudos`, OFFSET, `ORDER BY position, id`) trả CẢ huy hiệu đã tắt kèm `isActive`. Lý do: `048` CỐ Ý chỉ trả huy hiệu đang bật dưới cặp `view:feed` — thêm một cờ «xem cả huy hiệu tắt» vào `048` là mở một nửa màn quản trị (`SOC-SCREEN-012`) qua cặp mà mọi nhân viên đều có; không có route đọc riêng thì huy hiệu đã tắt qua `051` không bao giờ hiện lại để bật bằng `050`. Cùng lượt chốt: mọi huy hiệu (kể cả 5 huy hiệu hệ thống seed) tắt/bật lại được như nhau; `code` bất biến sau khi tạo; huy hiệu tắt không ảnh hưởng vinh danh cũ. Tổng route §15 thành 56. | owner ký 28/09/2026 (S16-SOCIAL-BE-3A, D11/D12) | ✅ chốt |
 
 **Ngoài phạm vi v1 (PARK-SOCIAL-001 cập nhật ở DOC-1):** đăng lại có trích dẫn · khảo sát nhiều câu (form builder) · story/video ngắn · push mobile · dịch tự động · sự kiện + RSVP · đăng chéo ra Facebook qua fbpost. **PARK-SOCIAL-002:** giới thiệu ứng viên — cần đường Own «gửi giới thiệu» vào RECRUIT (nguồn REFERRAL), là việc của RECRUIT.
 

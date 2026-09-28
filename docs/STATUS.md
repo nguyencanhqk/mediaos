@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-28 05:34Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-09-28 06:42Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -12,12 +12,15 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🔴 `S16-SOCIAL-IDXDEDUP-1` `file_links_company_id_idx` (mig 0433) thành TIỀN TỐ DƯ của `file_links_company_file_idx` (mig 0587) — cân drop, bán kính là MỌI module dùng `file_links`
 - 🔴 `S16-SOCIAL-BE-2C` BE track B/3 — REALTIME room nhóm co:{c}:feedgroup:{id}: thêm feedUserRoomName (room ĐÁNH DẤU đã qua cổng view:feed) + join/leave động theo membership · fan-out bài audience='group' · nới D8 và CẬP NHẬT API-19 §7
 -  `S16-SOCIAL-FE-2` FE track B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm · thành viên · xin vào/duyệt · cài đặt) · 007 Bình chọn (thẻ poll trong feed + trang danh sách) · 008 Sáng kiến (danh sách + xét duyệt) · 009 Vinh danh (thẻ kudos + huy hiệu) · rail phải: Bình chọn đang mở · Vinh danh tháng này · Nhóm của tôi (badge bài mới)
--  `S16-SOCIAL-BE-3` BE track C: hàng đợi báo cáo (resolve/dismiss + hành động ẩn/khoá/xoá kèm) · thống kê tương tác (bài · bình luận · thích · thành viên hoạt động theo tuần & đơn vị — SQL set-based · sàn scope Company, manager Department · XLSX · KHÔNG cache) · catalog huy hiệu CRUD (manage:feed-kudos) · dữ liệu widget DASH
+- 🔴 `S16-SOCIAL-BE-3A` BE track C/1 — resolve báo cáo KÈM HÀNH ĐỘNG (SOCIAL-API-029: ẩn bài · khoá bình luận · xoá · không làm gì) trong 1 tx + audit · CRUD huy hiệu vinh danh SOCIAL-API-049/050/051 + route đọc quản trị 056 (manage:feed-kudos; DELETE = is_active=false)
 - 🟡 `S19-OPS-MINIOMIRROR-1` Mirror image MinIO đúng digest PROD (`sha256:14cea493…` = RELEASE.2025-09-07T16-13-09Z) lên GHCR rồi trỏ CI + docker-compose về đó — dựng lại bất biến «CI = PROD» và cứu image khỏi chỗ chỉ-còn-trong-cache
 
 **CHỜ (kẹt phụ thuộc):**
-- `S16-SOCIAL-FE-3` FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 011 Thống kê tương tác (Recharts nếu S15-FE-4 đã cài, không thì stat-card + bảng) · 012 Thiết lập huy hiệu · dải ô liên kết nhanh theo useCan (Công việc · Nghỉ phép · Chấm công · Đặt phòng · Mục tiêu · Đào tạo · Đăng bài Facebook) · nhúng widget DASH «Nhân sự» vào rail phải theo quyền ⏳ cần: S16-SOCIAL-BE-3, S16-SOCIAL-FE-2
-- `S16-SOCIAL-QA-1` QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager · hr · company-admin · payroll-officer/recruiter không thêm gì) · IDOR: bài nhóm riêng tư · bài hidden/deleted · sửa/xoá bài người khác · ack giả · vote đôi · poll đóng · kết quả ẩn danh không lộ user_id · sinh nhật không lộ năm/ẩn theo preference · cross-tenant 2 công ty · fuzz mention/hashtag/emoji/body · race counters (2 like đồng thời, đối soát COUNT ↔ counter) · WS payload = DTO · soft-delete lan đủ · census mã lỗi theo MÃ · coverage social/ ≥85% LANE_DB ⏳ cần: S16-SOCIAL-FE-3
+- `S16-SOCIAL-GROUPMOD-1` Đường KIỂM DUYỆT nội dung nhóm RIÊNG TƯ: hôm nay bài/bình luận trong nhóm private mà người kiểm duyệt (manage:feed-post) không phải thành viên thì KHÔNG ai ngoài tác giả ẩn/xoá được — kể cả qua báo cáo 029 ⏳ cần: S16-SOCIAL-BE-3A
+- `S16-SOCIAL-BE-3B` BE track C/2 — thống kê tương tác SOCIAL-API-052 (bài · bình luận · thích · thành viên hoạt động theo tuần & đơn vị — SQL set-based · sàn Company, manager Department · KHÔNG cache) + 053 xuất XLSX có audit · hàm service đã gate cho widget DASH ⏳ cần: S16-SOCIAL-BE-3A
+- `S16-SOCIAL-BE-3C` BE track C/3 — route KHÔI PHỤC bài đã xoá mềm + mở registry recycle-bin (hiện hard-code employeeProfiles) và đăng ký SOCIAL vào đó ⏳ cần: S16-SOCIAL-BE-3A
+- `S16-SOCIAL-FE-3` FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 011 Thống kê tương tác (Recharts nếu S15-FE-4 đã cài, không thì stat-card + bảng) · 012 Thiết lập huy hiệu · dải ô liên kết nhanh theo useCan (Công việc · Nghỉ phép · Chấm công · Đặt phòng · Mục tiêu · Đào tạo · Đăng bài Facebook) · nhúng widget DASH «Nhân sự» vào rail phải theo quyền ⏳ cần: S16-SOCIAL-BE-3A, S16-SOCIAL-BE-3B, S16-SOCIAL-FE-2
+- `S16-SOCIAL-QA-1` QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager · hr · company-admin · payroll-officer/recruiter không thêm gì) · IDOR: bài nhóm riêng tư · bài hidden/deleted · sửa/xoá bài người khác · ack giả · vote đôi · poll đóng · kết quả ẩn danh không lộ user_id · sinh nhật không lộ năm/ẩn theo preference · cross-tenant 2 công ty · fuzz mention/hashtag/emoji/body · race counters (2 like đồng thời, đối soát COUNT ↔ counter) · WS payload = DTO · soft-delete lan đủ · census mã lỗi theo MÃ · coverage social/ ≥85% LANE_DB ⏳ cần: S16-SOCIAL-FE-3, S16-SOCIAL-BE-3C
 - `S16-SOCIAL-DASH-1` Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạt động) + «Tin tức chưa đọc» (Own, đếm tin yêu cầu ack chưa xác nhận) — catalog BE + SÀN scope 2 tầng + slug FE Grid + useCanExact, đăng ký SOCIAL-WIDGET-001/002 (SPEC-01 §9.9) ⏳ cần: S16-SOCIAL-QA-1
 
 **🛑 BLOCKED:**
@@ -28,7 +31,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 0
+- **branch**: `feat/s16-social-be-3a` · **file đang đổi (dirty)**: 3
 - **migration head**: idx 255 — `0588_s16socialattdebt1_security_alerts_attach_gate_deny` (256 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -37,6 +40,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `e0da0423` | 2026-09-28 | chore(docs): regen STATUS sau merge #547 (TEST-PIPELINE-PARITY-1) |
 | `04503140` | 2026-09-28 | test(foundation): S16-TEST-PIPELINE-PARITY-1 — helper int-spec dựng pipeline y hệt main.ts (#547) |
 | `fabf7efa` | 2026-09-28 | fix(social): S16-SOCIAL-MENTIONSYNC-1 — PATCH bài/bình luận vắng `mentionedUserIds` giữ nguyên mention (#546) |
 | `7e3cf37a` | 2026-09-28 | chore(docs): regen STATUS sau merge #544 (PERMMEMO-1) + #545 (BE-1D) |
@@ -48,7 +52,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `0f3103ec` | 2026-09-25 | feat(social): S16-SOCIAL-ATTDEBT-1 — trả 3 nợ FULL gate của ATTGATE-1 (F1 · F4 · C-5) (#541) |
 | `9d0a6fb9` | 2026-09-25 | fix(ci): S19-OPS-MINIOSRC-1 — nguồn image MinIO sụp hẳn (quay.io đòi auth), chuyển CI sang bitnamilegacy ghim digest + bỏ bước mc (#542) |
 | `90779efb` | 2026-09-24 | chore(docs): regen STATUS sau merge #539 (ATTGATE-1) + #540 (FBPOST-1) |
-| `e79b8b8a` | 2026-09-24 | feat(social): S16-SOCIAL-FBPOST-1 — «Đăng bài Facebook» từ ô Home vào rail SOCIAL (SOC-DEC-002) (#540) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
