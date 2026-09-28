@@ -357,16 +357,17 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · liệt kê thùng rác 057 (DB 
       expect(item!.groupDeleted).toBe(false);
     });
 
-    it("hàng company nhưng status cũ 'hidden' + actor KHÔNG manage:feed-post ⇒ bodyExcerpt null (author vẫn có vì audience=company thấy được)", async () => {
+    it("hàng company nhưng status cũ 'hidden' + actor KHÔNG manage:feed-post ⇒ bodyExcerpt null VÀ author null (bài ẩn không lộ tác giả qua thùng rác)", async () => {
       const res = await listOf(tView, { limit: "100" });
       const item = await itemOf(res, idHiddenMask);
       expect(item, "neo dương").toBeTruthy();
       expect(item!.statusBeforeDelete).toBe("hidden");
       expect(item!.bodyExcerpt).toBeNull();
-      expect(item!.author, "seen=true (audience company) ⇒ danh tính vẫn chiếu").toEqual({
-        employeeId: eAuthorC,
-        fullName: authorFullName,
-      });
+      // FULL gate BE-3C (security MEDIUM): khi bài còn sống, vế (b) `statusOk` của `visiblePostCondition`
+      // KHÔNG cho vai thiếu `manage:feed-post` thấy bài `hidden` của người khác ⇒ thùng rác không được
+      // chiếu tên tác giả của nó (sẽ lộ «bài của X từng bị kiểm duyệt ẩn»). Danh tính che CÙNG vị từ với
+      // `bodyExcerpt`, không chỉ theo `seen`.
+      expect(item!.author, "rò tác giả bài từng bị ẩn qua thùng rác").toBeNull();
       // Đối chứng "hàng company ⇒ ĐỦ" NGAY TRONG response của chính actor bị che — mutant che HẲN mọi
       // `bodyExcerpt` (kể cả `idFull`) vẫn phải bị bắt ở đây, không chỉ ở `it` case 7 riêng.
       const full = await itemOf(res, idFull);
@@ -378,6 +379,10 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · liệt kê thùng rác 057 (DB 
       const resManage = await listOf(tManageView, { limit: "100" });
       const itemManage = await itemOf(resManage, idHiddenMask);
       expect(itemManage!.bodyExcerpt).toBe("bài đã từng bị ẩn");
+      expect(itemManage!.author, "ALLOW đối chứng: manage:feed-post thấy tác giả bài ẩn").toEqual({
+        employeeId: eAuthorC,
+        fullName: authorFullName,
+      });
     });
 
     it("hàng org_unit của đơn vị KHÁC ⇒ author:null, orgUnitId:null, bodyExcerpt:null; hàng VẪN liệt kê", async () => {
@@ -417,6 +422,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · liệt kê thùng rác 057 (DB 
       const itemMember = await itemOf(resMember, idGroupPrivate);
       expect(itemMember!.author).not.toBeNull();
       expect(itemMember!.groupId).not.toBeNull();
+      // Mutant «che HẲN bodyExcerpt của mọi bài audience='group'» phải đỏ ở đây (FULL gate SF-L3).
+      expect(itemMember!.bodyExcerpt).toBe("bài thùng rác");
     });
 
     it("Không userId người xoá nào lọt response (grep JSON), và item không mang khoá deletedBy/userId", async () => {

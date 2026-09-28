@@ -57,8 +57,9 @@ export interface LockedDeletedPost {
  * │ `null` thay vì rò im lặng — chế độ hỏng ỒN ÀO có chủ đích (khuôn `recycle-bin.repository.ts`).      │
  * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Danh tính tác giả đi qua cơ chế chuẩn `identityColumns(fromScope(seen, "identity-gated", …))` (D11) — KHÔNG
- * `target`: `seen` nói về `feed_posts`, không về `users`, nên phép đối chiếu bảng không áp dụng. ⚠️ KHÔNG
+ * `author` + `bodyExcerpt` còn đòi thêm vế status ĐÃ NHỚ (`contentVisible` bên dưới) — `groupId`/`orgUnitId` chỉ
+ * theo `seen`. Danh tính tác giả đi qua cơ chế chuẩn `identityColumns(fromScope(contentVisible, "identity-gated",
+ * …))` (D11) — KHÔNG `target`: vị từ nói về `feed_posts`, không về `users`, nên phép đối chiếu bảng không áp dụng. ⚠️ KHÔNG
  * `"scoped-predicate"`: đó là điểm đúc vị từ chặn TẬP HÀNG (`ROW_SCOPE_MINT_PINS`, danh sách đúng-bằng) — ở đây
  * vị từ chỉ chặn CỘT, tập hàng theo cặp khác ⇒ đúng định nghĩa `identity-gated`.
  *
@@ -79,20 +80,12 @@ export class SocialRecycleBinRepository {
     limit: number,
   ): Promise<RecycleBinPostRow[]> {
     const seen = audienceCondition(actor);
-    const author = identityColumns(
-      fromScope(
-        seen,
-        "identity-gated",
-        "thùng rác bài viết (SOCIAL-API-057): tên tác giả chỉ hiện khi bài nằm trong audience người xem " +
-          "(cùng vị từ `visiblePostCondition` vế (c)); tập hàng gác `restore:feed-post` + sàn Company",
-      ),
-      { fullName: users.fullName, employeeId: employeeProfiles.id },
-      "authorInScope",
-    );
-    // Trích đoạn còn đòi thêm vế STATUS (D10-ii): bài từng `hidden` chỉ lộ nội dung cho người vốn đọc được bài
-    // `hidden` khi nó còn sống — `manage:feed-post` @Company hoặc chính tác giả. Legacy NULL ⇒ coi như chưa biết
-    // là `published` ⇒ che (fail-closed).
-    const excerptVisible: SQL = actor.canManagePosts
+    // Tác giả + trích đoạn đòi thêm vế STATUS (D10-ii, mirror vế (b) `statusOk` của `visiblePostCondition` trên
+    // status ĐÃ NHỚ): bài từng `hidden` chỉ lộ cho người vốn đọc được bài `hidden` khi nó còn sống —
+    // `manage:feed-post` hoặc chính tác giả. Legacy NULL ⇒ coi như chưa biết là `published` ⇒ che (fail-closed).
+    // ⚠️ Danh tính đi CÙNG vị từ này, không chỉ `seen` (FULL gate BE-3C security MEDIUM): chiếu tên tác giả
+    // của bài từng `hidden` cho vai thiếu `manage` là lộ «bài của X từng bị kiểm duyệt ẩn».
+    const contentVisible: SQL = actor.canManagePosts
       ? seen
       : (and(
           seen,
@@ -101,6 +94,17 @@ export class SocialRecycleBinRepository {
             eq(feedPosts.authorUserId, actor.actorUserId),
           ),
         ) ?? sql`false`);
+    const author = identityColumns(
+      fromScope(
+        contentVisible,
+        "identity-gated",
+        "thùng rác bài viết (SOCIAL-API-057): tên tác giả chỉ hiện khi actor vốn thấy bài lúc còn sống — " +
+          "audience (vế (c) `visiblePostCondition`) + status đã nhớ (vế (b)); tập hàng gác " +
+          "`restore:feed-post` + sàn Company",
+      ),
+      { fullName: users.fullName, employeeId: employeeProfiles.id },
+      "authorInScope",
+    );
 
     const rows = await tx
       .select({
@@ -112,7 +116,7 @@ export class SocialRecycleBinRepository {
         orgUnitId: sql<
           string | null
         >`case when (${seen}) then ${feedPosts.orgUnitId} else null end`,
-        bodyExcerpt: sql<string | null>`case when (${excerptVisible})
+        bodyExcerpt: sql<string | null>`case when (${contentVisible})
           then left(${feedPosts.body}, ${FEED_RECYCLE_EXCERPT_MAX}) else null end`,
         statusBeforeDelete: feedPosts.statusBeforeDelete,
         restoreAs: restoreStatusSql(),

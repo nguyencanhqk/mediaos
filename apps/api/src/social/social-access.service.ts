@@ -473,7 +473,8 @@ export class SocialAccessService {
    *   (a) **chưa xoá mềm** — `deleted_at IS NULL`. Không có ngoại lệ nào, kể cả `manage:feed-post`:
    *       một nhánh "manage thấy cả bài đã xoá" sẽ là đường đọc vào dữ liệu đã xoá mà không ai gác.
    *       ⟲ S16-SOCIAL-BE-3C: thùng rác (`057`/`058`) KHÔNG đi qua vị từ này — nó có cặp RIÊNG
-   *       (`restore:feed-post` + sàn Company) và chỉ mượn vế (c) để CHE tác giả/nội dung (D10).
+   *       (`restore:feed-post` + sàn Company) và chỉ mượn vế (c) — cộng bản mirror vế (b) trên status ĐÃ
+   *       NHỚ — để CHE tác giả/nội dung (D10).
    *   (b) **status** — `published` cho mọi người; `hidden` CHỈ cho tác giả hoặc `manage:feed-post`.
    *       `deleted` không bao giờ (đã chặn ở (a), giữ vế này để status là một tập đóng đọc được).
    *   (c) **audience** — `audienceCondition` (`social-audience.predicate.ts`, BE-3C D9): `company` cho

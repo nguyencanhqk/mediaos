@@ -360,10 +360,12 @@ tuần hiện tại. Handler/catalog DASH thuộc `S16-SOCIAL-DASH-1`.
   `groupDeleted` = nhóm của bài đã xoá mềm (khôi phục sẽ 409).
 - **Che theo vị từ audience** (`seen = audienceCondition(actor, feed_posts)` — CÙNG vị từ `visiblePostCondition`
   dùng cho feed, bỏ vế `deleted_at`/`status`): ngoài `seen` ⇒ `author: null` (qua `identityColumns`, basis
-  `identity-gated`), `groupId: null`, `orgUnitId: null`, `bodyExcerpt: null`. `bodyExcerpt` (≤ 200 ký tự, cắt ở
-  SQL) còn đòi thêm `status_before_delete = 'published'` ∨ actor giữ `manage:feed-post` ∨ actor là tác giả —
-  vai CHỈ có `restore:feed-post` không đọc được nội dung một bài vốn đã bị ẩn, hoặc không rõ status cũ (legacy
-  `status_before_delete IS NULL` ⇒ che, fail-closed). Lý do: `manage:feed-post` chỉ đọc
+  `identity-gated`), `groupId: null`, `orgUnitId: null`, `bodyExcerpt: null`. `author` **và** `bodyExcerpt`
+  (≤ 200 ký tự, cắt ở SQL) còn đòi thêm vế status trên status ĐÃ NHỚ — `status_before_delete = 'published'` ∨
+  actor giữ `manage:feed-post` ∨ actor là tác giả (mirror vế `statusOk` của `visiblePostCondition`) — vai CHỈ có
+  `restore:feed-post` không đọc được tác giả lẫn nội dung của một bài vốn đã bị ẩn (chiếu tên = lộ «bài của X
+  từng bị kiểm duyệt ẩn»), hoặc không rõ status cũ (legacy `status_before_delete IS NULL` ⇒ che, fail-closed).
+  `groupId`/`orgUnitId` chỉ theo `seen`. Lý do: `manage:feed-post` chỉ đọc
   tác giả/nội dung của bài QUA `visiblePostCondition` (bài nhóm riêng tư khi không là thành viên · bài `org_unit`
   đơn vị khác đều không thấy) — thùng rác **không được mở đường vòng qua SOC-DEC-006**.
 - **Hàng VẪN liệt kê** dù bị che: mọi khoá ngoài 4 trường che (`id` · `type` · `audience` · `groupDeleted` ·

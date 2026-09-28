@@ -46,8 +46,10 @@ export type FeedRecycleBinAuthorDto = z.infer<typeof feedRecycleBinAuthorSchema>
  * Một hàng thùng rác — tập khoá ĐÓNG (int-spec A6 assert bằng `toEqual` trên tập khoá).
  *
  * Bốn trường CHE theo vị từ audience (D10): `author` · `groupId` · `orgUnitId` · `bodyExcerpt` — `null` khi
- * người xem không thấy được bài nếu nó còn sống. `bodyExcerpt` còn `null` khi status cũ là `hidden` mà người
- * xem không có `manage:feed-post` và không phải tác giả. Các trường còn lại luôn có mặt.
+ * người xem không thấy được bài nếu nó còn sống. `author` và `bodyExcerpt` còn `null` khi status cũ là `hidden`
+ * (hoặc không rõ — legacy) mà người xem không có `manage:feed-post` và không phải tác giả. Các trường còn lại
+ * luôn có mặt. ⚠️ `bodyExcerpt: null` KHÔNG phân biệt «bị che» với «bài không có body» (poll/kudos) — FE
+ * không được suy «bị che» từ riêng giá trị này.
  */
 export const feedRecycleBinItemSchema = z.object({
   id: z.string().uuid(),

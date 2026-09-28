@@ -25,7 +25,7 @@ import { randomUUID } from "node:crypto";
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
@@ -47,6 +47,9 @@ import {
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = ["Passw0rd!socialbe3c", "restore"].join("-");
+
+/** Trần chờ một request HTTP rơi vào trạng thái CHỜ khoá hàng (khuôn `social-be3a-report-actions`). */
+const WAIT_LOCK_MS = 3_000;
 
 const LIST_URL = "/recycle-bin/feed-posts";
 const restoreUrl = (postId: string): string => `/recycle-bin/feed-posts/${postId}/restore`;
@@ -360,6 +363,38 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
     return Number(r.rows[0].n);
   }
 
+  /**
+   * Harness đua TẤT ĐỊNH (khuôn `social-be3a-report-actions.int-spec.ts`): poll tới khi có ≥ `n` backend
+   * (khác `excludePid`) ĐANG CHỜ khoá trên câu đụng `feed_`. Hết trần ⇒ `false` — caller PHẢI fail rõ
+   * ràng. Không bước chờ này thì hai request có thể chạy nối đuôi và ca «đồng thời» xanh-rỗng.
+   */
+  async function waitForLockWaiters(excludePid: number, n: number): Promise<boolean> {
+    const deadline = Date.now() + WAIT_LOCK_MS;
+    while (Date.now() < deadline) {
+      const r = await direct.query(
+        `SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND state = 'active'
+            AND wait_event_type = 'Lock' AND pid <> $1 AND query ILIKE '%feed_%'`,
+        [excludePid],
+      );
+      if (r.rows[0].n >= n) return true;
+      await new Promise((res) => setTimeout(res, 25));
+    }
+    return false;
+  }
+
+  /** Mở một tx trên `direct` và giữ khoá HÀNG bài (FOR UPDATE) cho tới khi caller nhả. */
+  async function holdPostLock(postId: string): Promise<{ client: PoolClient; pid: number }> {
+    const client = await direct.connect();
+    await client.query("BEGIN");
+    await client.query(`SELECT id FROM feed_posts WHERE id = $1 FOR UPDATE`, [postId]);
+    const pid = (await client.query(`SELECT pg_backend_pid() AS pid`)).rows[0].pid as number;
+    return { client, pid };
+  }
+
+  /** Phóng request NGAY (supertest chỉ gửi khi `.then`) — trả promise của response. */
+  const launch = (t: request.Test): Promise<request.Response> => t.then((r) => r);
+
   async function notificationsCount(userId: string): Promise<number> {
     const r = await direct.query(`SELECT count(*)::int AS n FROM notifications WHERE user_id = $1`, [
       userId,
@@ -655,14 +690,85 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
       expect(await auditRestoreRows(id)).toHaveLength(1);
     });
 
-    it("D6: hai lượt restore ĐỒNG THỜI (Promise.all) CÙNG một bài ⇒ đúng một 200 + một 404; ĐÚNG 1 audit", async () => {
+    /**
+     * 🔴 D6 đồng thời — harness TẤT ĐỊNH (FULL gate SF-L1): `Promise.all` trần có thể chạy nối đuôi và
+     * xanh cả khi mất `FOR UPDATE` ở `lockDeletedForRestoreTx`. Ở đây CẢ HAI lượt được xác nhận ĐANG CHỜ
+     * khoá hàng trước khi nhả ⇒ hai lượt thật sự chồng lấp; lượt thua phải đánh giá lại
+     * `deleted_at IS NOT NULL` trên phiên bản mới ⇒ 404, không phải 500 «khớp 0» hay 200 thứ hai.
+     */
+    it("D6: hai lượt restore ĐỒNG THỜI (cả hai xác nhận đang chờ khoá) CÙNG một bài ⇒ đúng một 200 + một 404; ĐÚNG 1 audit", async () => {
       const id = await createPost(tAuthor);
       await deleteAs(tHr, id);
 
-      const [r1, r2] = await Promise.all([post(tHr, restoreUrl(id)), post(tHr, restoreUrl(id))]);
-      const statuses = [r1.status, r2.status].sort((a, b) => a - b);
-      expect(statuses, JSON.stringify({ r1: r1.body, r2: r2.body })).toEqual([200, 404]);
+      const hold = await holdPostLock(id);
+      let released = false;
+      try {
+        const p1 = launch(post(tHr, restoreUrl(id)));
+        expect(await waitForLockWaiters(hold.pid, 1), "lượt 1 phải CHỜ khoá bài").toBe(true);
+        const p2 = launch(post(tHr, restoreUrl(id)));
+        expect(
+          await waitForLockWaiters(hold.pid, 2),
+          "lượt 2 phải CHỜ khoá bài — không chồng lấp ⇒ ĐỎ",
+        ).toBe(true);
+
+        await hold.client.query("ROLLBACK");
+        released = true;
+        const [r1, r2] = await Promise.all([p1, p2]);
+        const statuses = [r1.status, r2.status].sort((a, b) => a - b);
+        expect(statuses, JSON.stringify({ r1: r1.body, r2: r2.body })).toEqual([200, 404]);
+        const loser = r1.status === 404 ? r1 : r2;
+        expect(msg(loser)).toContain(SOCIAL_ERR.POST_NOT_FOUND);
+      } finally {
+        if (!released) await hold.client.query("ROLLBACK");
+        hold.client.release();
+      }
       expect(await auditRestoreRows(id)).toHaveLength(1);
+    });
+
+    /**
+     * 🔴 D7 — route SỬA bài `004` đua với XOÁ (FULL gate DB-M1). `assertPostVisible` đọc KHÔNG khoá, rồi
+     * UPDATE `body` chỉ lọc `id`+`company_id` ⇒ nếu lượt xoá commit giữa hai bước, lượt sửa vẫn ghi lên
+     * bài ĐÃ XOÁ và `syncPostTags` chỉnh `usage_count` lần nữa (thẻ cũ −1 lần hai, thẻ mới +1 trên bài
+     * chết). `058` cộng lại +1 cho MỌI thẻ đang gắn ⇒ lệch VĨNH VIỄN. Trình tự ép: khoá hàng → lượt xoá
+     * chờ → lượt sửa (đã qua cổng đọc) chờ SAU lượt xoá → nhả ⇒ xoá thắng, sửa phải 404 và không đụng thẻ.
+     */
+    it("D7: sửa bài (004) đua với xoá ⇒ lượt sửa 404 POST_NOT_FOUND; body + usage_count thẻ không lệch; khôi phục trả đúng số thẻ", async () => {
+      const id = await createPost(tAuthor, { body: "bài đua #d7cu" });
+      const cu0 = await tagUsage("d7cu");
+      const moi0 = await tagUsage("d7moi");
+
+      const hold = await holdPostLock(id);
+      let released = false;
+      try {
+        const pDel = launch(del(tHr, `/social/posts/${id}`));
+        expect(await waitForLockWaiters(hold.pid, 1), "lượt XOÁ phải CHỜ khoá bài").toBe(true);
+        const pEdit = launch(patch(tAuthor, `/social/posts/${id}`).send({ body: "đã sửa #d7moi" }));
+        expect(
+          await waitForLockWaiters(hold.pid, 2),
+          "lượt SỬA phải CHỜ (sau lượt xoá) — không chồng lấp ⇒ ĐỎ",
+        ).toBe(true);
+
+        await hold.client.query("ROLLBACK");
+        released = true;
+        const [rDel, rEdit] = await Promise.all([pDel, pEdit]);
+        expect(rDel.status, msg(rDel)).toBe(200);
+        expect(rEdit.status, msg(rEdit)).toBe(404);
+        expect(msg(rEdit)).toContain(SOCIAL_ERR.POST_NOT_FOUND);
+      } finally {
+        if (!released) await hold.client.query("ROLLBACK");
+        hold.client.release();
+      }
+
+      const body = await direct.query(`SELECT body, edited_at FROM feed_posts WHERE id = $1`, [id]);
+      expect(body.rows[0].body, "lượt sửa KHÔNG được ghi lên bài đã xoá").toBe("bài đua #d7cu");
+      expect(body.rows[0].edited_at).toBeNull();
+      expect(await tagUsage("d7cu"), "xoá −1 đúng MỘT lần").toBe(cu0 - 1);
+      expect(await tagUsage("d7moi"), "thẻ của lượt sửa bị từ chối không được +1").toBe(moi0);
+
+      const res = await post(tHr, restoreUrl(id));
+      expect(res.status, msg(res)).toBe(200);
+      expect(await tagUsage("d7cu"), "khôi phục trả về đúng số trước khi xoá").toBe(cu0);
+      expect(await tagUsage("d7moi")).toBe(moi0);
     });
   });
 
@@ -839,6 +945,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
       await deleteAs(tHr, mentionPost);
       const beforeRestore = await outboxCount("social.mentioned", mentionPost, "targetId");
       const anyBefore = await outboxCountAny(mentionPost);
+      // Mốc dương (FULL gate SF-L2): phép `LIKE` hỏng ⇒ 0 === 0 xanh-rỗng. Event `social.mentioned` ở trên
+      // mang postId ⇒ phép đếm «mọi event» PHẢI thấy nó.
+      expect(anyBefore, "neo dương: outboxCountAny phải thấy social.mentioned").toBeGreaterThanOrEqual(1);
       const res1 = await post(tHr, restoreUrl(mentionPost));
       expect(res1.status, msg(res1)).toBe(200);
       expect(await outboxCount("social.mentioned", mentionPost, "targetId")).toBe(beforeRestore);
@@ -859,6 +968,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
 
       await deleteAs(tHr, kudosPost);
       const anyBeforeKudos = await outboxCountAny(kudosPost);
+      expect(anyBeforeKudos, "neo dương: outboxCountAny phải thấy social.kudos_received").toBeGreaterThanOrEqual(1);
       const res2 = await post(tHr, restoreUrl(kudosPost));
       expect(res2.status, msg(res2)).toBe(200);
       expect(await outboxCount("social.kudos_received", kudosPost, "post_id")).toBe(1);
