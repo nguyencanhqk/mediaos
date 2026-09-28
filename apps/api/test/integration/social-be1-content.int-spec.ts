@@ -523,6 +523,98 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 quy tắc nội dung + bộ đếm 
       expect(edited.status).toBe(200);
       expect(await countFor(), "mention CŨ không được bắn lại").toBe(1);
     });
+
+    // S16-SOCIAL-MENTIONSYNC-1 — khoá `mentionedUserIds` VẮNG ≠ mảng RỖNG. DTO bài không phơi
+    // `userId` của người được nhắc, nên FE sửa bài không có gì để gửi lại: vắng phải là "giữ nguyên".
+    const mentionCount = async (targetId: string) =>
+      Number(
+        (
+          await direct.query(
+            `SELECT count(*)::int AS n FROM feed_mentions WHERE company_id = $1 AND target_id = $2`,
+            [A.companyId, targetId],
+          )
+        ).rows[0].n,
+      );
+    const mentionedOutbox = async (targetId: string) =>
+      Number(
+        (
+          await direct.query(
+            `SELECT count(*)::int AS n FROM outbox_events
+              WHERE company_id = $1 AND event_type = 'social.mentioned'
+                AND payload->>'targetId' = $2`,
+            [A.companyId, targetId],
+          )
+        ).rows[0].n,
+      );
+
+    it("SỬA bài CHỈ body (vắng `mentionedUserIds`) ⇒ mention GIỮ NGUYÊN + không bắn lại NOTI", async () => {
+      const created = await post(tAuthor, "/social/posts").send({
+        type: "share",
+        audience: "company",
+        body: "giữ mention khi sửa",
+        mentionedUserIds: [thirdUserId],
+      });
+      expect(created.status).toBe(201);
+      const id = created.body.data.id as string;
+
+      const edited = await patch(tAuthor, `/social/posts/${id}`).send({ body: "chỉ đổi chữ" });
+      expect(edited.status).toBe(200);
+      expect(edited.body.data.droppedMentions).toEqual([]);
+      expect(edited.body.data.mentions, "DTO sau sửa vẫn mang mention cũ").toHaveLength(1);
+      expect(await mentionCount(id), "vắng khoá KHÔNG được xoá mention cũ").toBe(1);
+      expect(await mentionedOutbox(id), "không bắn lại NOTI").toBe(1);
+    });
+
+    it("ALLOW đối chứng: SỬA bài gửi `mentionedUserIds: []` TƯỜNG MINH ⇒ xoá hết mention", async () => {
+      const created = await post(tAuthor, "/social/posts").send({
+        type: "share",
+        audience: "company",
+        body: "bỏ mention khi sửa",
+        mentionedUserIds: [thirdUserId],
+      });
+      expect(created.status).toBe(201);
+      const id = created.body.data.id as string;
+
+      const edited = await patch(tAuthor, `/social/posts/${id}`).send({
+        body: "bỏ hết mention",
+        mentionedUserIds: [],
+      });
+      expect(edited.status).toBe(200);
+      expect(edited.body.data.droppedMentions).toEqual([]);
+      expect(edited.body.data.mentions).toEqual([]);
+      expect(await mentionCount(id), "mảng rỗng tường minh = bỏ hết").toBe(0);
+      expect(await mentionedOutbox(id), "gỡ mention không bắn NOTI").toBe(1);
+    });
+
+    it("SỬA bình luận CHỈ body ⇒ mention GIỮ NGUYÊN; `[]` tường minh ⇒ xoá hết", async () => {
+      const p = await post(tAuthor, "/social/posts").send({
+        type: "share",
+        audience: "company",
+        body: "bài chứa bình luận có mention",
+      });
+      expect(p.status).toBe(201);
+      const id = p.body.data.id as string;
+      const c = await post(tPeer, `/social/posts/${id}/comments`).send({
+        body: "bình luận nhắc người",
+        mentionedUserIds: [thirdUserId],
+      });
+      expect(c.status).toBe(201);
+      const cid = c.body.data.id as string;
+
+      const bodyOnly = await patch(tPeer, `/social/comments/${cid}`).send({ body: "đổi chữ" });
+      expect(bodyOnly.status).toBe(200);
+      expect(await mentionCount(cid), "vắng khoá KHÔNG được xoá mention cũ").toBe(1);
+      expect(await mentionedOutbox(cid), "không bắn lại NOTI").toBe(1);
+
+      const cleared = await patch(tPeer, `/social/comments/${cid}`).send({
+        body: "bỏ nhắc",
+        mentionedUserIds: [],
+      });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.data.droppedMentions).toEqual([]);
+      expect(await mentionCount(cid), "mảng rỗng tường minh = bỏ hết").toBe(0);
+      expect(await mentionedOutbox(cid), "gỡ mention không bắn NOTI").toBe(1);
+    });
   });
 
   // ══════════════ R17 / R18 — bộ đếm ══════════════
