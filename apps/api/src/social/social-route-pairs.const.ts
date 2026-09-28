@@ -31,7 +31,8 @@ import { SOCIAL_ERR } from "./social.errors";
  * │ `company-admin`) ⇒ 0 tác động lên vai canonical. Dư lượng ghi nợ `S16-SOCIAL-BE-2`.             │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * ⚠️ **14 cặp `feed-*` đều `is_sensitive = false`** (migration `0578`) ⇒ wildcard `*:*` mở TẤT CẢ.
+ * ⚠️ **15 cặp `feed-*` đều `is_sensitive = false`** (migration `0578` — 14 cặp; `0590` — +`restore:feed-post`,
+ * S16-SOCIAL-BE-3C D1) ⇒ wildcard `*:*` mở TẤT CẢ.
  * Đó là hành vi **THIẾT KẾ CỦA ENGINE** (`permission.decide.ts` Priority 4), áp dụng toàn hệ thống,
  * KHÔNG phải lỗ của SOCIAL. **KHÔNG "vá" bằng cách đổi `isSensitive:true`** — đổi cờ ở đây mà catalog
  * DB vẫn `false` chỉ làm `permission.can()` hỏi một câu khác câu seed, và đánh `is_sensitive=true` ở
@@ -40,7 +41,7 @@ import { SOCIAL_ERR } from "./social.errors";
 export interface SocialPair {
   readonly action: string;
   readonly resourceType: string;
-  /** Mirror cờ catalog `0578` — cả 14 cặp `feed-*` đều false. Khai tường minh để không ai đoán. */
+  /** Mirror cờ catalog `0578` + `0590` — cả 15 cặp `feed-*` đều false. Khai tường minh để không ai đoán. */
   readonly isSensitive: boolean;
   /**
    * `true` = cặp của decorator là **SÀN**, tầng 2 còn kiểm thêm một cặp KHÁC.
@@ -343,6 +344,21 @@ export const SOCIAL_ROUTE_PAIRS = {
   fileUploadUrl: pair("view", "feed", true),
   /** 055 `POST /social/files/{id}/confirm` — SÀN; cùng luật `target` (D1), + owner-check ở service. */
   fileConfirm: pair("view", "feed", true),
+
+  // ── Thùng rác bài viết 057–058 (`S16-SOCIAL-BE-3C`) ──
+  //
+  // Cặp MỚI `restore:feed-post` (mig `0590`, owner ký O1 — KHÔNG tái dùng `manage:feed-post`): seed cho
+  // ĐÚNG tập vai giữ `manage:feed-post` (`hr` + `company-admin`) @Company. `tier1IsFloor = false` — cặp
+  // decorator ĐÚNG là cặp gác route, không bảng payload→cặp. `companyFloor = true` — grant hẹp hơn Company
+  // (`Department`/`Own`) ⇒ 403 `AUTH-ERR-SCOPE-DENIED` ở tầng 2 (int-spec D2/D2c').
+  //
+  // ⚠️ Route sống ở `recycle-bin/` (`RecycleBinFeedPostsController`, O3) nhưng cặp vẫn ở BẢNG NÀY: service
+  // (`SocialRecycleBinService`) nằm trong `social/` và assert qua `resolveActor`, và census 2 tầng đọc CHÍNH
+  // bảng này cho cả hai tầng. Decorator đọc hằng (import, không DI) — khuôn `ORG_EMPLOYEE_DIRECTORY`.
+  /** 057 `GET /recycle-bin/feed-posts` — bài đã xoá mềm; che tác giả/nội dung theo vị từ audience (D10). */
+  recycleFeedPostList: pair("restore", "feed-post"),
+  /** 058 `POST /recycle-bin/feed-posts/{post_id}/restore` — khôi phục (D4); audit LUÔN, cùng tx. */
+  recycleFeedPostRestore: pair("restore", "feed-post"),
 } as const satisfies Record<string, SocialPair>;
 
 export type SocialRouteKey = keyof typeof SOCIAL_ROUTE_PAIRS;

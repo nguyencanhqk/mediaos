@@ -57,9 +57,12 @@ const SOCIAL_CONTROLLERS = new Set([
   "SocialFilesController",
   // S16-SOCIAL-BE-3B — 2 route thong ke tuong tac (052..053), `social-stats.controller.ts`.
   "SocialStatsController",
+  // S16-SOCIAL-BE-3C — 2 route thung rac bai viet (057..058). Controller song o `recycle-bin/`
+  // (owner ky O3) nhung cap + service la cua SOCIAL; lop RIENG de 2 route employee khong lot vao phep do.
+  "RecycleBinFeedPostsController",
 ]);
 
-/** Bảng route HTTP → key — fixture census, phủ ĐỦ 56 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ, API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 58 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ + 2 THÙNG RÁC, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -140,6 +143,13 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
   // ── S16-SOCIAL-BE-3B — THONG KE TUONG TAC 052..053 ──
   { method: "GET", path: "/api/v1/social/stats/engagement", key: "statsEngagement" },
   { method: "GET", path: "/api/v1/social/stats/engagement/export", key: "statsExport" },
+  // ── S16-SOCIAL-BE-3C — THUNG RAC BAI VIET 057..058 (route o segment `recycle-bin`, O3) ──
+  { method: "GET", path: "/api/v1/recycle-bin/feed-posts", key: "recycleFeedPostList" },
+  {
+    method: "POST",
+    path: "/api/v1/recycle-bin/feed-posts/:post_id/restore",
+    key: "recycleFeedPostRestore",
+  },
 ];
 
 /**
@@ -216,6 +226,9 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "SocialStatsService#engagement": ["statsEngagement"],
   "SocialStatsService#export": ["statsExport"],
   "SocialStatsService#weeklyEngagementForWidget": ["statsEngagement"],
+  // S16-SOCIAL-BE-3C — 2 site cua handler `feed_post` trong thung rac (`restore:feed-post`).
+  "SocialRecycleBinService#list": ["recycleFeedPostList"],
+  "SocialRecycleBinService#restore": ["recycleFeedPostRestore"],
 };
 
 /** Mọi literal `resolveActor(<expr>, "<key>")` trong `social/**.ts`, kèm `Class#method` bao quanh. */
@@ -491,8 +504,8 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
     expect(
       socialRoutes.length,
-      "app boot phải thấy 56 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ)",
-    ).toBe(56);
+      "app boot phải thấy 58 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ + 2 THÙNG RÁC)",
+    ).toBe(58);
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(
@@ -751,7 +764,7 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     expect(classes).toEqual(["SocialPostsModerationService"]);
   });
 
-  it("cả 14 cặp feed-* đều is_sensitive=false trong bảng hằng (mirror catalog 0578)", () => {
+  it("cả 15 cặp feed-* đều is_sensitive=false trong bảng hằng (mirror catalog 0578 + 0590)", () => {
     // Hàng rào chống "vá" wildcard `*:*` bằng cách bật cờ ở TypeScript: cờ ở đây phải mirror catalog
     // DB, và đổi catalog là ĐỔI SPEC (phá SOC-DEC-004) — việc của một WO có chữ ký owner.
     const sensitive = Object.entries(SOCIAL_ROUTE_PAIRS)
