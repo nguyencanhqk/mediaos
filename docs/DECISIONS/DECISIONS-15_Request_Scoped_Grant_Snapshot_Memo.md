@@ -43,7 +43,7 @@ Cái KHÔNG đảo: vẫn **không** cache GIỮA các request (không Valkey, k
 ## 4. Biên thu hồi — con số và vì sao là 2000ms
 
 - **Cửa sổ có sẵn của `can()`:** sau khi thu hồi commit, `permission.changed` chỉ được xử lý ở nhịp outbox kế tiếp (`OUTBOX_POLL_MS` mặc định 5000ms). Tức là HÔM NAY guard đã có thể cho qua ≤~5s, và tới 300s nếu DEL Valkey lỗi.
-- **Trần 2000ms < 5000ms:** memo không bao giờ là cửa sổ dài nhất hệ thống.
+- **Trần 2000ms < 5000ms:** memo không bao giờ là cửa sổ dài nhất hệ thống. Điều kiện đúng chỉ khi `OUTBOX_POLL_MS` ≥ trần; `env.schema` cho phép xuống 250ms ⇒ hạ poll DƯỚI 2000ms mới là vi phạm. Giá trị PROD thật (đo 28/09/2026, `.env`/`.env.prod`): `OUTBOX_POLL_MS=5000`.
 - **p95 PROD ≤30ms** (DEVOPS-15): request thường đọc đúng MỘT lần; export/PDF lô chạy dài sẽ đọc lại mỗi 2s.
 - **Nói thẳng:** vì outbox trễ 0–5s, trong THỰC TẾ phần lớn thu hồi sẽ bị chặn bởi TRẦN TUỔI, không phải `invalidateUser`. `invalidateUser` là lớp phụ, vẫn bắt buộc (test đo).
 - `decideStrongestScope` kiểm `expiresAt` với `new Date()` ở MỖI lượt ⇒ grant hết hạn theo giờ không sống nhờ memo.
@@ -77,5 +77,5 @@ Cái KHÔNG đảo: vẫn **không** cache GIỮA các request (không Valkey, k
 ## 8. Cổng NGƯỜI trước deploy PROD
 
 - FULL gate + santa-method xanh; bảng mutant X1–X13 của plan §9 (X13 = khoá chỉ `companyId`, thêm sau plan-review F1) đỏ đúng thông điệp.
-- Xác nhận `.env` PROD không override `OUTBOX_POLL_MS` lên trên 2000ms mà không cập nhật §4. Nếu có override, ghi giá trị thật vào §4 và cân lại trần.
+- Xác nhận `.env` PROD không hạ `OUTBOX_POLL_MS` xuống DƯỚI 2000ms (= `GRANT_MEMO_MAX_AGE_MS`) mà không cập nhật §4 — ✅ 28/09/2026: PROD = 5000. Nếu có override, ghi giá trị thật vào §4 và cân lại trần.
 - Rollback đã diễn tập: `PERMISSION_GRANT_MEMO_ENABLED=false` + restart NSSM ⇒ `/health` xanh, số lượt đọc/request trở về như cũ.
