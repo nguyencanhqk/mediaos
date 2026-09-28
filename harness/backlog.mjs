@@ -17732,7 +17732,7 @@ export const backlog = [
     title:
       "BE track C/3 — route KHÔI PHỤC bài đã xoá mềm + mở registry recycle-bin (hiện hard-code employeeProfiles) và đăng ký SOCIAL vào đó",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/social/**",
       "apps/api/src/recycle-bin/**",
@@ -17743,6 +17743,10 @@ export const backlog = [
       "docs/API Design/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      // D16 (plan v3, 28/09/2026) — mở rộng đã chấp nhận: census route JSON · permission-matrix §9h · DB-17.
+      "docs/_review/S6-SEC-ROUTEMAP-1-route-census.json",
+      "docs/permission-matrix-spec.md",
+      "docs/DB/**",
     ],
     skills: ["security-review", "database-review"],
     depends_on: ["S16-SOCIAL-BE-3A"],
@@ -17759,6 +17763,8 @@ export const backlog = [
     notes: [
       "🔴 FULL gate: chạm FOUNDATION recycle-bin (dùng chung) + có thể có migration quyền. TÁCH từ S16-SOCIAL-BE-3 ngày 28/09/2026.",
       "➕ 21/09/2026 (owner ký, plan BE-1 §9.5): drift SPEC↔API recycle-bin ĐÃ CHỐT theo hướng GIỮ SPEC ⇒ route khôi phục thuộc nhánh này.",
+      "⏸ 28/09/2026: thi công ĐỦ plan v3 §2 bước 1–12 (mig 0589/0590 · 057/058 · registry · int-spec 32/32 · mutant M1–M10+M5b+M7a/b 12/12 đỏ đúng thông điệp — M7b chỉ D2c/D2c' bắt, census 2 tầng xanh như dự đoán · check.sh --all XANH trên lane be3c). Owner dừng vì chi phí ⇒ CÒN: FULL gate (security + database + silent-failure + santa) → vá (mỗi vá có ca RED) → push + PR. KHÔNG mở PR trước gate.",
+      "📌 Nợ tách ra (BE-3C): (1) employee vào RecycleBinRegistry — tuỳ chọn, 0 diff file employee là chủ ý; (2) route khôi phục NHÓM — bài thuộc nhóm đã xoá kẹt 409 RESTORE_GROUP_DELETED; (3) tag OpenAPI của 057/058 rơi vào HR (segment recycle-bin, config/openapi-modules.ts) — ngoài paths; (4) `test:cov:social` (apps/api/package.json) chưa gồm int-spec BE-3A/3B/3C; (5) SPEC-16 §15 (+057/058, tổng 58) và §11 (cặp thứ 15 restore:feed-post) chưa cập nhật — plan cấm sửa SPEC ở WO này; (6) chưa có test mirror `feedRestorableStatusSchema` ↔ CHECK `chk_feed_posts_status_before_delete` (khuôn contracts social.spec.ts).",
     ],
   },
   {
