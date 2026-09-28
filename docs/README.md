@@ -272,6 +272,7 @@ Mỗi module nghiệp vụ được mô tả xuyên suốt qua 5 nhóm tài li�
 | DECISIONS-01 | [Sổ Quyết định — Chốt câu hỏi mở trước triển khai](<DECISIONS/DECISIONS-01_Open_Decisions_Lock.md>) | Chốt 15 câu hỏi mở SPEC-01 §29 (D-01 → D-15) trước khi code | Đã có (mới) |
 | DECISIONS-02 | [Khóa Stack & Hiện thực 3 Bất biến](<DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md>) | **ĐÃ CHỐT** — ghi đè mọi nhắc Next.js/Prisma/Redis/Jest; bổ sung DDL RLS+FORCE / audit append-only / outbox + `withTenant`/`set_config` | Đã có (mới) |
 | DECISIONS-14 | [Ba thư viện của wave S15-PAYROLL-V2 — `decimal.js` · Recharts · `pdfmake`](<DECISIONS/DECISIONS-14_Payroll_V2_Library_Stack.md>) | **ĐÃ CHỐT** — số học tiền ở TS (`decimal.js`, cấm `Number`) · biểu đồ (Recharts) · PDF phiếu lương font Việt nhúng (`pdfmake`); MIT cả ba, phải nằm trong tầm quét SCA | Đã có (mới) |
+| DECISIONS-15 | [Memo ảnh chụp grant-kèm-scope THEO REQUEST (`getCompanyRoleGrantsWithScope`)](<DECISIONS/DECISIONS-15_Request_Scoped_Grant_Snapshot_Memo.md>) | **D1–D3 ĐÃ CHỐT** (owner 25/09/2026) — memo trong request, trần 2000ms, epoch toàn tiến trình bump ở `invalidateUser`, ngoài request passthrough, kill-switch `PERMISSION_GRANT_MEMO_ENABLED`; KHÔNG memo đường `can()` (WO `S16-SOCIAL-PERMMEMO-1`) | Đã có (mới) |
 
 > ⚠️ **Khoảng trống đo được 11/09/2026:** thư mục [`DECISIONS/`](<DECISIONS/>) có **DECISIONS-01 → DECISIONS-14**, nhưng bảng trên mới chỉ mục 01 · 02 · 14 — **03–13 chưa được chỉ mục ở đây** (nợ tài liệu có trước wave S15, ghi lại để không trôi; đọc thẳng thư mục cho tới khi có WO dọn).
 >

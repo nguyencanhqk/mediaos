@@ -9,6 +9,7 @@ import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-envelope.interceptor";
 import { JsonConsoleLogger } from "./common/logger/json-console-logger";
+import { grantMemoMiddleware } from "./common/middleware/grant-memo.middleware";
 import { requestIdMiddleware } from "./common/middleware/request-id.middleware";
 import { loadEnv } from "./config/env.schema";
 import { SWAGGER_PATH, setupSwagger } from "./config/swagger";
@@ -25,6 +26,11 @@ async function bootstrap(): Promise<void> {
   // SỚM NHẤT: gán req.requestId (Express middleware chạy trước routing/guard) để interceptor + filter
   // luôn có request_id cho meta — kể cả request bị guard từ chối sớm. KHÔNG dùng class middleware qua app.use.
   app.use(requestIdMiddleware);
+  // S16-SOCIAL-PERMMEMO-1 (ADR DECISIONS-15) — NGAY SAU requestIdMiddleware: mở ngữ cảnh memo ảnh chụp
+  // grant-kèm-scope cho phần còn lại của request (guard/service). Kill-switch 'false' ⇒ passthrough.
+  if (env.PERMISSION_GRANT_MEMO_ENABLED === "true") {
+    app.use(grantMemoMiddleware);
+  }
 
   // CS-9: thiết lập biên tin cậy cho `req.ip` — giá trị này quyết định NỘI DUNG `login_logs.ip_address`,
   // khoá bucket rate-limit per-IP, và vế so sánh của IP-allowlist. Mặc định "false" ⇒ KHÔNG tin

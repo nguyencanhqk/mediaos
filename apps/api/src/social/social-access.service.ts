@@ -347,7 +347,8 @@ export class SocialAccessService {
    * «hàm này mở `withTenant` riêng qua `dataScope`»; câu đó nay SAI. Cặp `create:feed-*` được
    * `resolveActor` nạp SẴN trong CÙNG lượt đọc grant (`ATTACH_GATE_ROUTE_TARGET` quyết định route
    * nào được nạp), và hàm này chỉ ĐỌC ảnh chụp đó. Lý do đổi: mỗi lời gọi `resolveManyOrNull` là
-   * một `db.withTenant` THẬT (không cache — `permission.cache.ts:95` là passthrough có chủ ý), nên
+   * một `db.withTenant` THẬT ở lần đầu mỗi request (không cache giữa request; memo ADR-15 trong request —
+   * `CachedPermissionRepository.getCompanyRoleGrantsWithScope`), nên
    * bản cũ mở một transaction THỨ HAI trên mỗi PATCH có `attachmentIds`.
    *
    * ⚠️ Giữ kiểu trả `Promise<AttachNewGate>` dù thân hàm không còn `await`: hai call-site đang

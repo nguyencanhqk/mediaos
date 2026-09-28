@@ -24,7 +24,7 @@
  * GIEO**, không nghiệm thu được bằng dữ liệu thật.
  *
  * ⚠️ Cache quyền TTL 300s + scheduler TẮT khi `NODE_ENV='test'` ⇒ mỗi actor gọi route BỊ GATE đúng
- * một lần, cache-lạnh. `resolveStrongestScope` đọc `getCompanyRoleGrantsWithScope` (KHÔNG cache) nên
+ * một lần, cache-lạnh. `resolveStrongestScope` đọc `getCompanyRoleGrantsWithScope` (không cache giữa request) nên
  * không dính bẫy này, nhưng `assertCan` thì có.
  *
  * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5).

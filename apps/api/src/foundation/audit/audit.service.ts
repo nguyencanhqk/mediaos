@@ -75,7 +75,8 @@ export class AuditQueryService {
    * không có cặp danh bạ" — nó nghĩa là **guard và trình phân giải scope BẤT ĐỒNG**, một trạng thái
    * không được im lặng ⇒ 403 fail-closed. Ba nguyên nhân đã biết cho cùng một `null`, và log KHÔNG
    * được chẩn đoán hộ chỉ một trong ba: (K1) kill-switch; (K2) grant vừa bị gỡ — guard còn phục vụ từ
-   * cache 300s trong khi `getCompanyRoleGrantsWithScope` đọc thẳng DB; (K3) `data_scope` trong DB
+   * cache 300s trong khi `getCompanyRoleGrantsWithScope` đọc DB mỗi request (không cache giữa request;
+   * memo ADR-15 ≤2s trong request); (K3) `data_scope` trong DB
    * không chuẩn hoá được ⇒ `resolveStrongestScope` fail-closed VĨNH VIỄN (không phải cửa sổ).
    *
    * VÌ SAO KHÔNG `resolveAndAssert` (nó ném đúng 403 này): hàm đó **không log một dòng nào**, nên 403
