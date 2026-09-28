@@ -145,6 +145,31 @@ export const feedReactionSummarySchema = z.object({
 });
 export type FeedReactionSummaryDto = z.infer<typeof feedReactionSummarySchema>;
 
+/**
+ * Một người được nhắc tên trong bài/bình luận (S16-SOCIAL-BE-1D, API-19 §6.1).
+ *
+ * ┌─ 🔴 HAI NHÁNH, VÀ NHÁNH RÚT KHÔNG MANG GÌ CẢ ────────────────────────────────────────────────────┐
+ * │ `withheld:false` ⇔ người đó VẪN trong audience của bài đích tại lúc ĐỌC (cùng vị từ lúc ghi —   │
+ * │ `classifyInAudience`). `withheld:true` ⇔ đã rời (đổi đơn vị · rời nhóm · khoá/xoá TK · mất hồ sơ) — │
+ * │ phần tử GIỮ vị trí, KHÔNG bị bỏ khỏi mảng (bỏ im lặng = FE không phân biệt được «không ai được  │
+ * │ nhắc» với «đã rút»).                                                                            │
+ * │ ⚠️ nghỉ việc CHỈ rút khi TK bị khoá (hoặc ở bài nhóm) — xem API-19 §6.1.                       │
+ * │ Nhánh rút KHÔNG có `label`: nhãn lấy từ `users.full_name` trong DB, trả nó ở đây là trả lại     │
+ * │ đúng thứ đang rút. FE giữ nguyên chữ `@…` trong `body` làm span.                                │
+ * │ KHÔNG `userId` ở nhánh nào — cùng luật `feedAuthorSchema` (khoá tài khoản không ra ngoài);      │
+ * │ đó cũng là cửa ĐỌC của oracle dò danh bạ mà SPEC-16 §12 `ERR-009` đóng ở cửa ghi.               │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+export const feedMentionSchema = z.discriminatedUnion("withheld", [
+  z.object({
+    withheld: z.literal(false),
+    employeeId: uuid(),
+    label: z.string().min(1),
+  }),
+  z.object({ withheld: z.literal(true) }),
+]);
+export type FeedMentionDto = z.infer<typeof feedMentionSchema>;
+
 // ═══════════════ Response — bài & bình luận ═══════════════
 
 /**
@@ -180,6 +205,11 @@ export const feedPostSchema = z.object({
   isMine: z.boolean(),
   /** CHỈ tác giả / `manage:feed-post`. Vắng mặt = người đọc thường. */
   status: feedPostStatusSchema.optional(),
+  /**
+   * Người được nhắc, thứ tự ổn định giữa các lần tải (không theo thứ tự trong body). OPTIONAL: đường dựng DTO riêng (response kiểm duyệt) không nạp
+   * nó, và payload WS KHÔNG mang nó (`wsFeedPostCreatedEventSchema`). Vắng ≠ rỗng.
+   */
+  mentions: z.array(feedMentionSchema).optional(),
   editedAt: z.string().datetime({ offset: true }).nullable(),
   publishedAt: z.string().datetime({ offset: true }),
   lastActivityAt: z.string().datetime({ offset: true }),
@@ -198,6 +228,8 @@ export const feedCommentSchema = z.object({
   likeCount: z.number().int().nonnegative(),
   myReaction: z.string().nullable(),
   isMine: z.boolean(),
+  /** Xem `feedPostSchema.mentions` — cùng luật, audience là của BÀI CHA. */
+  mentions: z.array(feedMentionSchema).optional(),
   editedAt: z.string().datetime({ offset: true }).nullable(),
   createdAt: z.string().datetime({ offset: true }),
 });

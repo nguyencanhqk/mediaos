@@ -80,3 +80,14 @@ Census: chạy `identity-projection` ratchet + route census/openapi (nếu respo
 | R2 | **Nợ có sẵn (không do WO này):** `PATCH` bài/bình luận không gửi `mentionedUserIds` ⇒ `dto.mentionedUserIds ?? []` ⇒ `syncMentions` XOÁ mọi mention cũ. Với D3 (không `userId`), FE sửa bài không có dữ liệu để gửi lại | GHI NỢ thành WO riêng (đề xuất: chỉ đồng bộ mention khi khoá `mentionedUserIds` CÓ MẶT trong DTO — `undefined` = giữ nguyên). KHÔNG sửa ở WO này (ngoài done_when, đổi ngữ nghĩa API-004/016) |
 | R3 | FE chưa nối link | Ngoài `paths` (apps/app). Ghi vào backlog: FE-2 (hoặc WO FE nhỏ) đổi token `mention` → `<Link>` khi khớp `label` với phần tử `withheld:false`. `[PR1-11]` Response KIỂM DUYỆT (`social-posts-moderation.service.ts:147`) không mang `mentions` ⇒ FE phải GIỮ mentions cũ trong cache khi merge response đó (hoặc chấp nhận link rơi về span tới lần refetch) |
 | R4 | Chi phí: +1..3 câu mỗi trang feed | Chấp nhận; câu (a) đi theo index `feed_mentions_uq` (tiền tố `company_id,target_type,target_id`) |
+
+## 7. Sau FULL gate (28/09/2026) — 4/4 PASS, câu hỏi MỞ cho owner
+
+Gate: security · database · silent-failure · typescript — 0 CRITICAL/HIGH. Đã vá: uuid viết HOA từ request làm khoá cặp lệch (mention hợp lệ bị bỏ im lặng ở đường ghi — hồi quy do refactor) · `?? []` thành `mentionsFor` NÉM · nhãn cắt khoảng trắng · câu chữ «thứ tự ghi» → «thứ tự ổn định `(created_at,id)`» · phạm vi route + M7 trong phán quyết identity-projection.
+
+| # | Câu hỏi | Hiện trạng (GIỮ, chưa đổi) | Phương án |
+|---|---|---|---|
+| Q1 | Nhân sự **nghỉ việc** (`employee_profiles.status` ≠ `active`) mà TK vẫn `active` | Bài `company`/`org_unit`: VẪN link (cùng vị từ đường ghi — người đó cũng vẫn được nhắc mới). Bài `group`: rút (vế nhân sự `active` của `loadActiveGroupMembers`). Tài liệu đã sửa cho khớp | (b) thêm vế `employee_profiles.status='active'` vào `classifyInAudience` cho CẢ ghi lẫn đọc — nhất quán 3 audience; đổi D1 ⇒ cần owner ký |
+| Q2 | Người NGOÀI nhóm **public** đọc bài nhóm ⇒ suy được «X còn là thành viên active» qua link/`withheld`, trong khi `037` trả 403 danh bạ thành viên cho họ | Chấp nhận TẠM: kênh hẹp + thụ động (chỉ người đã được nhắc, không chọn được ai để dò, `withheld` không nói lý do) — hệ quả trực tiếp của D1/M4a | Ký chấp nhận, HOẶC đổi D1 cho nhánh group: người xem không phải thành viên ⇒ mọi mention bài nhóm thành `withheld` |
+
+Nợ: `social-posts.service.ts` vượt trần 800 dòng (811 trước WO, 850+ sau) — tách `decorate`/`emit*` ra file riêng ở WO sau.

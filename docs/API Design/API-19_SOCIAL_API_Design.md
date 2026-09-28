@@ -255,6 +255,10 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
     "viewCount": 31,
     "myReaction": "👍",
     "savedByMe": false,
+    "mentions": [
+      { "withheld": false, "employeeId": "b34…", "label": "Trần Thị B" },
+      { "withheld": true }
+    ],
     "editedAt": null,
     "createdAt": "2026-09-18T03:12:00.000Z"
   },
@@ -264,6 +268,12 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
 
 - **Không** có `status`, `deletedAt`, `authorUserId` trong DTO của người đọc thường — chỉ tác giả và `manage:feed-post` nhận thêm `status`.
 - `myReaction` · `savedByMe` là **projection theo actor**, tính trong cùng câu truy vấn, không gọi thêm vòng.
+- **`mentions[]`** (bài **và** bình luận — `S16-SOCIAL-BE-1D`, owner chốt 28/09/2026) — người được nhắc, thứ tự ổn định `(created_at, id)` giữa các lần tải — KHÔNG theo thứ tự trong body, FE khớp theo `label`:
+  - **Luật tầm nhìn (O-1):** phần tử có link ⇔ người được nhắc **VẪN trong audience của bài đích tại lúc ĐỌC** (bình luận: audience của **bài cha**), dùng **cùng vị từ** với lúc ghi (`classifyInAudience`): `company` ⇒ mọi tài khoản `active`; `org_unit` ⇒ hồ sơ thuộc đơn vị hoặc là trưởng đơn vị; `group` ⇒ thành viên `active` + nhân sự `active` + nhóm chưa xoá. Kết quả **không phụ thuộc người xem** (không có luật tự-nhắc ở đường đọc).
+  - **Hình dạng (O-2):** `{withheld:false, employeeId, label}` | `{withheld:true}`. **KHÔNG `userId`** ở nhánh nào. Nhánh rút **không** mang `label` hay `employeeId` — FE giữ nguyên chữ `@…` trong `body` làm span.
+  - **Rút (`withheld`) khi:** người đó rời audience (đổi đơn vị · rời nhóm), tài khoản không `active`/đã xoá, **không còn hồ sơ nhân sự sống**, hoặc tên rỗng. ⚠️ **Nghỉ việc** (hồ sơ `resigned`/`terminated`) mà TK vẫn `active` ⇒ ở bài `company`/`org_unit` VẪN là link (cùng vị từ đường ghi); chỉ bài `group` rút (vế nhân sự `active`). Câu hỏi mở cho owner — plan BE-1D §7 Q1. Phần tử **giữ vị trí** — mảng không bị rút gọn.
+  - **Optional:** vắng khoá ≠ mảng rỗng. Response kiểm duyệt (`006`) không mang `mentions` ⇒ FE giữ mảng cũ trong cache khi merge.
+  - Nạp theo **lô** cho cả trang (≤ 3 câu, cùng tx với projection) — không N+1.
 
 ### 6.2 Envelope sinh nhật — PII đã cắt
 
@@ -340,6 +350,7 @@ Key **do client sinh khi mở composer/form**, TTL 15′, replay trả `Idempote
 | `feed:reaction.changed` | cả hai room trên | `{ targetType, targetId, likeCount }` | như trên |
 
 - **Payload = DTO của REST**, không bao giờ là hàng thô (`io.emit` thẳng row bị cấm — CLAUDE.md §5).
+- **KHÔNG mang `mentions`** (`S16-SOCIAL-BE-1D` D6) — bóc tại nguồn và `.omit` ở schema WS. FE nhận thẻ qua WS render `@…` thành span tới lần refetch REST.
 - Room nhóm cần gate **riêng** — có `view:feed` không đủ để vào room của nhóm riêng tư.
 - FE chỉ hiện badge «N bài mới» + cập nhật số đếm; **không** tự chèn bài vào dòng cuộn đang đọc.
 

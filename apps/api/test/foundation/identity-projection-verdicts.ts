@@ -777,6 +777,13 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
       "SOCIAL-API-047 — tên NGƯỜI ĐƯỢC VINH DANH. Truy vấn chỉ lọc `(company_id, kudos_id IN (…))` nên bằng chứng nằm ở ĐIỂM KHẲNG ĐỊNH, không ở vị từ của chính câu: tập `kudosId` truyền vào đến TRỰC TIẾP từ `listKudosTx` — câu ĐÃ mang `visiblePostCondition` — và CÙNG tx (cùng ảnh chụp). Không tồn tại đường public nào nhận `kudosId` rời từ caller, đúng khuôn D13-R của BE-1B. DTO người nhận đóng ĐÚNG 4 khoá `{employeeId, fullName, avatarUrl, isFormerEmployee}` — **KHÔNG `userId`** (ca `K-7`: assert thu hẹp theo uuid user của fixture + neo dương `employeeId` CÓ mặt). 🔴 PHƠI CÓ CHỦ ĐÍCH đã cân (owner ký **S6** 24/09/2026): người ĐÃ NGHỈ việc vẫn hiện ra, vì vinh danh là LỊCH SỬ và «cảm ơn lúc chia tay» là ca thật. Ba thứ giữ nó hẹp: (1) chỉ trong MỘT bài mà người xem VỐN ĐÃ thấy — hẹp hơn widget sinh nhật của BE-1B (danh bạ toàn công ty); (2) cờ `isFormerEmployee` nói rõ trạng thái thay vì để người xem đoán (ca `K-8`); (3) có ĐƯỜNG TỰ GỠ — xoá mềm bài (`003`) làm cả bài lẫn danh sách người nhận biến khỏi `047` (ca `K-9`). LEFT JOIN `users` vì `employee_profiles.user_id` nullable (mig `0442`): nhân sự chưa có tài khoản vẫn phải hiện ra, INNER JOIN sẽ làm bài vinh danh 3 người hiện 2 mà không lỗi gì (ca `K-4c`).",
     signedBy: "S16-SOCIAL-BE-2B-2",
   },
+  {
+    point: "social/social-mentions.ts#loadMentionsForTargets:users.fullName",
+    basis: "second-assert",
+    reason:
+      "SOCIAL-API-001/002/003/004/010/014/015/016 (+ 020/023/025 qua `decorateForViewer`/`toPageForViewer`) — NHÃN của người được nhắc tên trong bài/bình luận (S16-SOCIAL-BE-1D). Câu chỉ lọc `(company_id, target_type, target_id IN (…))` nên bằng chứng nằm ở ĐIỂM KHẲNG ĐỊNH: tập `targetId` đến TRỰC TIẾP từ hàng ĐÃ qua cổng đọc bài — `listFeed`/`findVisible` (mang `visiblePostCondition`) cho `SocialPostsService.decorate`, `assertPostVisible`/`assertCommentVisible` cho `SocialCommentsService.decorate` — không có đường public nào nhận `targetId` rời từ caller. Hàm KHÔNG tra danh bạ: chỉ đọc người ĐÃ có hàng `feed_mentions` trên những đích đó (plan §5 [PR2-4]). Luật D1 (owner chốt O-1): tên chỉ ra khi người được nhắc VẪN trong audience của bài (`classifyInAudience` — CÙNG vị từ đường ghi `resolveMentions`), tài khoản `active`, còn hồ sơ nhân sự sống; trượt ⇒ phần tử `{withheld:true}` KHÔNG mang tên/`employeeId` (mapper `copyMention` chép theo danh sách khoá). Người trong audience là người CŨNG đọc được bài ⇒ tên không vượt biên nào người xem chưa có (tên tác giả + link hồ sơ đã hiện cho mọi `view:feed`). DTO KHÔNG `userId` ở nhánh nào (D3). Ca đo: M1–M11 ở `social-be1d-mentions.int-spec.ts` — M7 quét MỌI response GET (không `userId` người được nhắc, nhánh rút đúng một khoá `withheld`); mảng trên response POST/PATCH (M1/M6/M6b/M9) đo bằng `toEqual` chính xác (khoá thừa ⇒ đỏ). POST/PATCH không vào lượt quét M7 vì `droppedMentions` CỐ Ý dội lại id caller vừa gửi.",
+    signedBy: "S16-SOCIAL-BE-1D",
+  },
 ];
 
 /**
@@ -817,7 +824,11 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // Nới CÓ CHỦ ĐÍCH qua FULL gate. Điểm mới KHÔNG mở bề mặt đọc nào ngoài MỘT bài mà actor vốn đã thấy
   // (tập `kudosId` đến từ câu đã mang `visiblePostCondition`, cùng tx); bề mặt phơi rộng nhất của nó —
   // tên người ĐÃ NGHỈ việc — là quyết định owner ký S6, kèm cờ `isFormerEmployee` và đường tự gỡ.
-  "second-assert": 12,
+  // 12 → 13 (S16-SOCIAL-BE-1D, 28/09/2026): `social-mentions.ts#loadMentionsForTargets` (nhãn mention
+  // trên DTO bài/bình luận). Nới CÓ CHỦ ĐÍCH qua FULL gate. Điểm mới KHÔNG mở bề mặt đọc nào ngoài
+  // người ĐÃ được nhắc trên bài actor vốn đã thấy, và chỉ khi họ VẪN trong audience bài đó (D1) —
+  // trượt thì phần tử rút, không tên. Không `userId` ra ngoài.
+  "second-assert": 13,
   // 7 → 8 (S10-SEC-LOGINLOG429-1, 25/08/2026): `recordLoginAttemptForUser:users.email`. Nới CÓ CHỦ
   // ĐÍCH và đi qua FULL gate đúng như dòng cảnh báo của cổng này đòi. Điểm mới KHÔNG mở bề mặt đọc
   // nào: email đọc ra chỉ rơi vào `login_logs.email` (cột vốn đã chứa email client tự khai), và bề

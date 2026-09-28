@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { FeedMentionDto } from "@mediaos/contracts";
+import type { CommentRow } from "./social-comments.repository";
 import type { PostRow } from "./social-posts.repository";
-import { toFeedPostDto, toReactionSummaries } from "./social.mapper";
+import { toFeedCommentDto, toFeedPostDto, toReactionSummaries } from "./social.mapper";
 import type { SocialViewerContext } from "./social.types";
 
 /**
@@ -122,4 +124,73 @@ describe("toReactionSummaries — `mine` là của RIÊNG actor", () => {
   it("actor chưa thả ⇒ KHÔNG dòng nào `mine`", () => {
     expect(toReactionSummaries(rows, null).every((r) => !r.mine)).toBe(true);
   });
+});
+
+// ══════════════ S16-SOCIAL-BE-1D — `mentions` (D3 · D5) ══════════════
+
+const MENTIONED_EMP = "66666666-6666-4666-8666-666666666666";
+const MENTIONED_USER = "77777777-7777-4777-8777-777777777777";
+
+const commentRow: CommentRow = {
+  id: "88888888-8888-4888-8888-888888888888",
+  postId: row.id,
+  parentCommentId: null,
+  authorUserId: AUTHOR,
+  authorEmployeeId: "44444444-4444-4444-8444-444444444444",
+  authorFullName: "Nguyễn Văn A",
+  authorAvatarUrl: null,
+  body: "@Trần Thị B chào",
+  likeCount: 0,
+  editedAt: null,
+  createdAt: new Date("2026-09-18T03:12:00.000Z"),
+  sortAt: "2026-09-18T03:12:00.000Z",
+};
+
+/**
+ * Phần tử tầng dưới LỠ mang khoá lạ (`userId`, `label` ở nhánh rút) — mapper phải chép theo danh sách
+ * khoá, không spread. Ép kiểu có chủ đích: đây là ca «tầng dưới sai», type không cho viết thẳng.
+ */
+const dirty = [
+  { withheld: false, employeeId: MENTIONED_EMP, label: "Trần Thị B", userId: MENTIONED_USER },
+  { withheld: true, label: "Lê Văn C", employeeId: MENTIONED_EMP, userId: MENTIONED_USER },
+] as unknown as FeedMentionDto[];
+
+const mentionBuilders = [
+  ["bài", () => toFeedPostDto(row, viewer(), { ...extra, mentions: dirty }).mentions],
+  [
+    "bình luận",
+    () =>
+      toFeedCommentDto(commentRow, viewer(), { attachments: [], myReaction: null, mentions: dirty })
+        .mentions,
+  ],
+] as const;
+
+describe("BE-1D — `mentions` trên DTO bài & bình luận", () => {
+  it("VẮNG khoá khi đường gọi không nạp mention (vắng ≠ rỗng — D5)", () => {
+    expect("mentions" in toFeedPostDto(row, viewer(), extra)).toBe(false);
+    const c = toFeedCommentDto(commentRow, viewer(), { attachments: [], myReaction: null });
+    expect("mentions" in c).toBe(false);
+  });
+
+  it("mảng rỗng được giữ là RỖNG (có khoá)", () => {
+    expect(toFeedPostDto(row, viewer(), { ...extra, mentions: [] }).mentions).toEqual([]);
+  });
+
+  for (const [name, build] of mentionBuilders) {
+    it(`${name}: nhánh link chở ĐÚNG {withheld, employeeId, label} — KHÔNG userId`, () => {
+      expect(build()?.[0]).toEqual({
+        withheld: false,
+        employeeId: MENTIONED_EMP,
+        label: "Trần Thị B",
+      });
+    });
+
+    it(`${name}: nhánh RÚT ra ĐÚNG {withheld:true}, GIỮ vị trí, không rò tên/id`, () => {
+      const out = build();
+      expect(out).toHaveLength(2);
+      expect(out?.[1]).toEqual({ withheld: true });
+      expect(JSON.stringify(out)).not.toContain(MENTIONED_USER);
+      expect(JSON.stringify(out)).not.toContain("Lê Văn C");
+    });
+  }
 });
