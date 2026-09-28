@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 686,
-    "controllers": 129,
-    "gated": 647,
+    "routes": 688,
+    "controllers": 130,
+    "gated": 649,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -9931,6 +9931,38 @@
         "PermissionGuard"
       ],
       "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialStatsController#engagement",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/stats/engagement",
+      "hasPermission": true,
+      "permission": "view:feed-report",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialStatsController#export",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/stats/engagement/export",
+      "hasPermission": true,
+      "permission": "view:feed-report",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
       "verdict": null,
       "verdictReason": null,
       "verdictWo": null
