@@ -17698,7 +17698,7 @@ export const backlog = [
     layer: "BE",
     title:
       "BE track C/2 — thống kê tương tác SOCIAL-API-052 (bài · bình luận · thích · thành viên hoạt động theo tuần & đơn vị — SQL set-based · sàn Company, manager Department · KHÔNG cache) + 053 xuất XLSX có audit · hàm service đã gate cho widget DASH",
-    zone: "amber",
+    zone: "red",
     status: "todo",
     paths: [
       "apps/api/src/social/**",
@@ -17722,7 +17722,7 @@ export const backlog = [
       "Route census + coverage social/ ≥85% giữ xanh",
     ],
     notes: [
-      "🟡 LIGHT gate nhưng chở số liệu toàn công ty. TÁCH từ S16-SOCIAL-BE-3 ngày 28/09/2026.",
+      "🔴 Nâng amber→red 28/09/2026 (plan-reviewer v1 #1): thêm 2 route `companyFloor:false` + vị từ Department viết tay + audit ⇒ FULL gate, tiền lệ `reportsList` (BE-1B) là red. TÁCH từ S16-SOCIAL-BE-3 ngày 28/09/2026.",
     ],
   },
   {
