@@ -12,6 +12,7 @@ import { socialKeys } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import {
   GROUP_ERR,
+  GROUP_ERR_LEGACY,
   GROUP_ID,
   makeGroup,
   makeMember,
@@ -167,6 +168,22 @@ describe("M1 — tab Thành viên", () => {
     );
   });
 
+  it("ALLOW admin KIÊM manage (S16-SOCIAL-GROUPERR-1): option «Chủ nhóm» BẬT ⇒ gửi {role:'owner'}", async () => {
+    decideMember.mockResolvedValue({ userId: MEMBER.userId, role: "owner", status: "active" });
+    renderWithProviders(<GroupMembersTab groupId={GROUP_ID} caps={capsFor("admin", true)} />);
+    const select = (await screen.findByTestId(
+      `group-member-role-${MEMBER.userId}`,
+    )) as HTMLSelectElement;
+    const ownerOpt = within(select).getByRole("option", {
+      name: t("groups.role.owner"),
+    }) as HTMLOptionElement;
+    expect(ownerOpt.disabled, "BE đã cấp được — option tắt là chặn oan").toBe(false);
+    fireEvent.change(select, { target: { value: "owner" } });
+    await waitFor(() =>
+      expect(decideMember).toHaveBeenCalledWith(GROUP_ID, MEMBER.userId, { role: "owner" }),
+    );
+  });
+
   it("tự hạ vai khi là chủ cuối ⇒ 409 ERR-015 ⇒ câu lý do + kéo lại nhóm", async () => {
     const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
     decideMember.mockRejectedValue(GROUP_ERR.lastOwner());
@@ -178,6 +195,18 @@ describe("M1 — tab Thành viên", () => {
     expect(banner).toHaveAttribute("data-reason", "lastOwner");
     expect(invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toContain(
       JSON.stringify(socialKeys.groups.allOf()),
+    );
+  });
+
+  it("API CŨ (mã chung + tiền tố, O4): tự hạ vai khi là chủ cuối ⇒ VẪN câu lý do lastOwner", async () => {
+    decideMember.mockRejectedValue(GROUP_ERR_LEGACY.lastOwner());
+    renderWithProviders(<GroupMembersTab groupId={GROUP_ID} caps={capsFor("owner")} />);
+    fireEvent.change(await screen.findByTestId(`group-member-role-${ME}`), {
+      target: { value: "member" },
+    });
+    expect(await screen.findByTestId("feed-action-error")).toHaveAttribute(
+      "data-reason",
+      "lastOwner",
     );
   });
 

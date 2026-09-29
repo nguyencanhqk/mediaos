@@ -5,7 +5,7 @@ import type {
 } from "@mediaos/contracts";
 // An toàn về chu trình: `social.errors.ts` KHÔNG còn import gì từ file này (từ BE-2B-2 nó ghép kiểu
 // trực tiếp với enum Zod của contracts) ⇒ cạnh phụ thuộc chỉ đi MỘT chiều.
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, type SocialErrorMessage } from "./social.errors";
 
 /**
  * S16-SOCIAL-BE-1 — BẢNG HẰNG route → cặp quyền, NGUỒN SỰ THẬT DUY NHẤT cho CẢ BA nơi (khuôn
@@ -126,7 +126,7 @@ export interface SocialPair {
    * │ hệ = WO riêng (plan §10 đã ghi nợ).                                                              │
    * └────────────────────────────────────────────────────────────────────────────────────────────────┘
    */
-  readonly denyMessage?: string;
+  readonly denyMessage?: SocialErrorMessage;
 }
 
 const pair = (

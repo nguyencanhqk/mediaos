@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { SOCIAL_ERR, SOCIAL_POST_TYPE_PAIR_DESYNC } from "./social.errors";
+import { SOCIAL_ERR } from "./social.errors";
 
 /**
  * S16-SOCIAL-BE-2B-2 · **C-7** — CENSUS "hằng lỗi SOCIAL ném ra mà KHÔNG ca test nào chạm"
@@ -82,6 +82,13 @@ const STRONG_EVIDENCE: readonly string[] = [
   "STATS_UNIT_OUT_OF_SCOPE",
   // S16-SOCIAL-BE-3C — 409 khoi phuc bai thuoc nhom da xoa mem (058, D12). TANG A: khong co ma so.
   "RESTORE_GROUP_DELETED",
+  // S16-SOCIAL-GROUPERR-1 — 2 sentinel nhom (O1) + 3 chuoi doi VAO bang (D11). `POST_TYPE_PAIR_DESYNC`
+  // KHONG o day: chan fail-closed, khong dung duoc qua HTTP khi hai bang khop ⇒ chi tang B + unit.
+  "GROUP_NAME_TAKEN",
+  "GROUP_MEMBER_NOT_FOUND",
+  "CURSOR_INVALID",
+  "CURSOR_FILTER_MISMATCH",
+  "PIN_NEWS_ONLY",
 ];
 
 /**
@@ -129,6 +136,13 @@ describe("S16-SOCIAL-BE-2B-2 · C-7 · census hằng lỗi SOCIAL", () => {
       errorsFile.includes("POST_NOT_FOUND:"),
       "regex strip khối SOCIAL_ERR đã KHÔNG khớp — census sẽ tha mọi hằng",
     ).toBe(false);
+    // …và KHÔNG cắt LỐ (plan GROUPERR-1 §6 H1): regex lười chạy tới `} as const;` KẾ TIẾP nếu khối
+    // SOCIAL_ERR đổi đuôi (vd `} as const satisfies …;`) ⇒ nuốt hai bảng throw-site bên dưới.
+    for (const table of ["SOCIAL_POST_TYPE_DENIED", "SOCIAL_FILE_TARGET_DENIED"]) {
+      expect(errorsFile.includes(`export const ${table}`), `strip cắt lố, nuốt mất ${table}`).toBe(
+        true,
+      );
+    }
     return `${impl}\n${errorsFile}`;
   })();
 
@@ -197,10 +211,8 @@ describe("S16-SOCIAL-BE-2B-2 · C-7 · census hằng lỗi SOCIAL", () => {
     },
   );
 
-  it("`SOCIAL_POST_TYPE_PAIR_DESYNC` (chân fail-closed, sống NGOÀI `SOCIAL_ERR`) cũng phải được ném", () => {
-    expect(throwSrc.includes("SOCIAL_POST_TYPE_PAIR_DESYNC")).toBe(true);
-    expect(SOCIAL_POST_TYPE_PAIR_DESYNC.trim().length).toBeGreaterThan(0);
-  });
+  // (S16-SOCIAL-GROUPERR-1 D11: ca riêng cho `SOCIAL_POST_TYPE_PAIR_DESYNC` đã gỡ — hằng rời được dời
+  // VÀO bảng thành `SOCIAL_ERR.POST_TYPE_PAIR_DESYNC`, nên tầng B canh nó như mọi khoá khác.)
 
   it("hai danh sách tha/ghim giữ ĐÚNG những gì chúng khai, và KHÔNG phình ra", () => {
     for (const name of NEVER_THROWN) {
@@ -217,5 +229,132 @@ describe("S16-SOCIAL-BE-2B-2 · C-7 · census hằng lỗi SOCIAL", () => {
     ).toBeLessThanOrEqual(2);
     // Không hằng nào vừa "phải có bằng chứng mạnh" vừa "không bao giờ ném".
     expect(STRONG_EVIDENCE.filter((n) => neverThrown.has(n))).toEqual([]);
+  });
+});
+
+/**
+ * S16-SOCIAL-GROUPERR-1 · **TẦNG C** — mọi lỗi HTTP ném ở `src/social` phải MANG MÃ SOCIAL lên
+ * `error.code` (plan §3 C-S + §6 B2).
+ *
+ * Lớp lỗi đang chặn là FAIL-QUIET: một chỗ `new XxxException(SOCIAL_ERR.K)` quên bọc `socialError(…)`
+ * vẫn trả đúng status + đúng thông điệp (mọi int-spec cũ assert theo thông điệp ⇒ XANH), chỉ `error.code`
+ * lặng lẽ rơi về mã chung — đúng hiện trạng trước WO này, và FE đọc mã sẽ hiểu sai mà không ai thấy.
+ *
+ * Quét TĨNH từng file (bỏ comment): mọi `new <X>Exception(` phải có đối số bắt đầu bằng `socialError(`
+ * (chịu xuống dòng — prettier bẻ dòng dài). Ngoại lệ là allowlist ĐÓNG: mỗi mục khớp ĐÚNG một chỗ, là lỗi
+ * THUẦN chung (không phải lỗi SOCIAL) — một mục trộn nhánh SOCIAL với nhánh chung là lỗ (B2).
+ * Bằng chứng runtime nằm ở `social-grouperr1-wire-codes.int-spec.ts` (W1–W13).
+ */
+describe("S16-SOCIAL-GROUPERR-1 · tầng C · lỗi SOCIAL mang mã lên error.code", () => {
+  /** Allowlist ĐÓNG — file + đầu đối số (đã gộp khoảng trắng) + lý do. */
+  const GENERIC_THROWS: ReadonlyArray<{ file: string; starts: string; why: string }> = [
+    {
+      file: "social-access.service.ts",
+      starts: 'new ForbiddenException("AUTH-ERR-FORBIDDEN:',
+      why: "resolveActor — route không có `denyMessage` riêng: mã AUTH chung (D13)",
+    },
+    {
+      file: "social-access.service.ts",
+      starts: 'new ForbiddenException("AUTH-ERR-SCOPE-DENIED:',
+      why: "resolveActor — sàn Company, route không có `denyMessage`: nợ S16-SOCIAL-SCOPEDENIEDCODE-1",
+    },
+    {
+      file: "social-files.service.ts",
+      starts: 'new NotFoundException("RESOURCE-ERR-NOT-FOUND:',
+      why: "055 confirm tệp không tồn tại — lỗi tệp dùng chung, không phải lỗi SOCIAL",
+    },
+    {
+      file: "social-attachments.service.ts",
+      starts: "new SocialAttachGateDeniedException(",
+      why: "lớp TỰ bọc trong ctor — ghim riêng bởi ca «super(socialError(reason))» bên dưới",
+    },
+  ];
+
+  /**
+   * Controller SOCIAL sống NGOÀI `src/social` (FULL gate silent-failure LOW-2): `057`/`058` phục vụ ở
+   * `/recycle-bin/feed-posts`. Hôm nay nó không ném gì — đưa vào tầm quét để một `throw` thêm sau này
+   * không vô hình với tầng C.
+   */
+  const SOCIAL_OUTSIDE_SRC = [
+    path.join(API_ROOT, "src", "recycle-bin", "recycle-bin-feed-posts.controller.ts"),
+  ];
+  const files = [
+    ...walk(SOCIAL_SRC).filter(
+      (p) =>
+        p.endsWith(".ts") && !p.endsWith(".spec.ts") && path.basename(p) !== "social.errors.ts",
+    ),
+    ...SOCIAL_OUTSIDE_SRC,
+  ];
+  const NEW_EXCEPTION = /new\s+\w+Exception\(/g;
+
+  const scan = (() => {
+    let wrapped = 0;
+    const bare: string[] = [];
+    const used = new Map<number, number>();
+    for (const p of files) {
+      const src = stripComments(fs.readFileSync(p, "utf8"));
+      for (const m of src.matchAll(NEW_EXCEPTION)) {
+        const after = src.slice(m.index + m[0].length, m.index + m[0].length + 200);
+        if (/^\s*socialError\(/.test(after)) {
+          wrapped += 1;
+          continue;
+        }
+        const site = `${m[0]}${after}`.replace(/\s+/g, " ").replace(/\(\s+/g, "(");
+        const hit = GENERIC_THROWS.findIndex(
+          (g) => g.file === path.basename(p) && site.startsWith(g.starts),
+        );
+        if (hit >= 0) used.set(hit, (used.get(hit) ?? 0) + 1);
+        else bare.push(`${path.basename(p)}: ${site.slice(0, 110)}`);
+      }
+    }
+    return { wrapped, bare, used };
+  })();
+
+  it("mọi `new XxxException(` ở src/social bọc `socialError(…)`, trừ allowlist lỗi THUẦN chung", () => {
+    expect(
+      scan.bare,
+      "chỗ ném KHÔNG bọc socialError ⇒ error.code rơi về mã chung im lặng. Bọc nó, hoặc nếu THẬT SỰ " +
+        "không phải lỗi SOCIAL thì khai GENERIC_THROWS kèm lý do",
+    ).toEqual([]);
+  });
+
+  it("neo dương: đếm được ≥ 95 chỗ đã bọc (đo 29/09/2026: 99) — phép quét KHÔNG rỗng", () => {
+    expect(files.length).toBeGreaterThan(20);
+    expect(scan.wrapped).toBeGreaterThanOrEqual(95);
+  });
+
+  it("allowlist ĐÓNG: ≤ 4 mục, mỗi mục khớp ĐÚNG một chỗ (mục mồ côi hoặc bị tái dùng ⇒ đỏ)", () => {
+    expect(GENERIC_THROWS.length).toBeLessThanOrEqual(4);
+    GENERIC_THROWS.forEach((g, i) => {
+      expect(scan.used.get(i) ?? 0, `${g.file} «${g.starts}» phải khớp đúng 1 chỗ`).toBe(1);
+    });
+  });
+
+  it("regex `new …Exception(` KHÔNG bị lách: không alias `XxxException as Y`, không lớp con nào ngoài lớp đã ghim", () => {
+    // FULL gate silent-failure LOW-3: `import { ForbiddenException as Deny }` hay `class X extends
+    // ForbiddenException` (tên không đuôi `Exception`) sẽ ném mà regex tầng C không nhìn thấy.
+    for (const p of files) {
+      const src = stripComments(fs.readFileSync(p, "utf8"));
+      expect(src, `${path.basename(p)}: alias exception làm tầng C mù`).not.toMatch(
+        /\w+Exception\s+as\s+\w+/,
+      );
+      for (const m of src.matchAll(/class\s+(\w+)\s+extends\s+\w*Exception\b/g)) {
+        expect(m[1], `${path.basename(p)}: lớp con exception chưa được ghim`).toBe(
+          "SocialAttachGateDeniedException",
+        );
+      }
+    }
+    expect(fs.existsSync(SOCIAL_OUTSIDE_SRC[0]), "controller 057/058 đã dời chỗ").toBe(true);
+  });
+
+  it("`SocialAttachGateDeniedException` TỰ bọc: ctor nhận `SocialErrorMessage` và gọi `super(socialError(reason))`", () => {
+    const src = stripComments(
+      fs.readFileSync(path.join(SOCIAL_SRC, "social-attachments.service.ts"), "utf8"),
+    );
+    const cls = src.slice(src.indexOf("class SocialAttachGateDeniedException"));
+    const body = cls.slice(0, cls.indexOf("\n}\n"));
+    expect(body, "lớp không còn trong file").not.toBe("");
+    expect(body).toMatch(/reason:\s*SocialErrorMessage/);
+    expect(body).toContain("super(socialError(reason))");
   });
 });

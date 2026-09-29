@@ -9,7 +9,7 @@ import {
   feedPolls,
 } from "../db/schema/social";
 import { assertActiveBadgeTx, assertRecipientsTx } from "./social-kudos.repository";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 
 /**
  * S16-SOCIAL-BE-2B-1 — phần thân RIÊNG THEO LOẠI BÀI của `SOCIAL-API-002`.
@@ -89,7 +89,7 @@ export async function createPollTx(
  */
 function assertPollInput(input: CreatePollInput): void {
   if (input.options.length < POLL_OPTIONS_MIN || input.options.length > POLL_OPTIONS_MAX) {
-    throw new UnprocessableEntityException(SOCIAL_ERR.POLL_OPTIONS_RANGE);
+    throw new UnprocessableEntityException(socialError(SOCIAL_ERR.POLL_OPTIONS_RANGE));
   }
 
   // 🔴 KHÔNG ép được ở Zod: `chk_feed_polls_closes_future` so `closes_at` với `created_at` — một
@@ -98,7 +98,7 @@ function assertPollInput(input: CreatePollInput): void {
   // nhập liệu hoàn toàn bình thường. So với `now()` chứ không với `created_at`: hai mốc chênh nhau
   // vài mili-giây và người dùng nghĩ theo đồng hồ của họ, không theo thời điểm INSERT.
   if (input.closesAt !== undefined && new Date(input.closesAt).getTime() <= Date.now()) {
-    throw new UnprocessableEntityException(SOCIAL_ERR.POLL_CLOSES_AT_PAST);
+    throw new UnprocessableEntityException(socialError(SOCIAL_ERR.POLL_CLOSES_AT_PAST));
   }
 }
 
@@ -174,13 +174,13 @@ export async function createKudosTx(
   // nghiệp vụ vô nghĩa ⇒ 422 có mã, không phải 400 vô danh của Zod.
   const distinct = [...new Set(input.recipientEmployeeIds.map((id) => id.toLowerCase()))];
   if (distinct.length < KUDOS_RECIPIENT_MIN || distinct.length > KUDOS_RECIPIENT_MAX) {
-    throw new UnprocessableEntityException(SOCIAL_ERR.KUDOS_RECIPIENT_LIMIT);
+    throw new UnprocessableEntityException(socialError(SOCIAL_ERR.KUDOS_RECIPIENT_LIMIT));
   }
 
   // (2) K1 — tự vinh danh. So SAU khi chuẩn hoá HOA/thường: `Set` so chuỗi, Postgres so `uuid`, nên
   // một `employee_id` gửi bằng chữ HOA sẽ lọt qua phép so trần rồi ghi được vào DB.
   if (authorEmployeeId != null && distinct.includes(authorEmployeeId.toLowerCase())) {
-    throw new UnprocessableEntityException(SOCIAL_ERR.KUDOS_SELF_RECIPIENT);
+    throw new UnprocessableEntityException(socialError(SOCIAL_ERR.KUDOS_SELF_RECIPIENT));
   }
 
   // (3) ERR-022 — huy hiệu tồn tại VÀ đang bật. (4) D12a — người nhận là nhân sự còn tồn tại.

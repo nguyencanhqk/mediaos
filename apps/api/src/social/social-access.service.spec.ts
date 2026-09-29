@@ -1,6 +1,6 @@
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
-import type { DataScope } from "@mediaos/contracts";
+import { SOCIAL_ERROR_CODES, type DataScope } from "@mediaos/contracts";
 import type { DataScopeService } from "../permission/data-scope.service";
 import { SocialAccessService } from "./social-access.service";
 import type { SocialGroupAccessService } from "./social-group-access.service";
@@ -86,6 +86,38 @@ describe("resolveActor — tầng guard THỨ HAI", () => {
       );
     }
   });
+
+  // S16-SOCIAL-GROUPERR-1 (plan §6 B2-5) — `denyMessage` đi lên `error.code` ở CẢ HAI nhánh. Nhánh (a)
+  // khó dựng qua HTTP (tầng-1 phải cho qua bằng grant cấp ĐỐI TƯỢNG); nhánh (b) có ca HTTP W12.
+  it.each([
+    ["(a) không resolve ra scope nào", [null, null, null, null]],
+    ["(b) sàn Company — grant @Department", ["Department", null, null, null]],
+  ] as const)(
+    "`ideaReview` %s ⇒ 403 mang mã SOCIAL-ERR-020 trong payload",
+    async (_label, scopes) => {
+      const svc = makeService({ scopes: [...scopes] });
+      const err = await svc.resolveActor(USER, "ideaReview").catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as ForbiddenException).message).toBe(SOCIAL_ERR.IDEA_APPROVE_REQUIRED);
+      expect((err as ForbiddenException).getResponse()).toMatchObject({
+        code: SOCIAL_ERROR_CODES.IDEA_APPROVE_REQUIRED,
+      });
+    },
+  );
+
+  it.each([
+    ["(a) không resolve ra scope nào", [null, null, null], /^AUTH-ERR-FORBIDDEN:/],
+    ["(b) sàn Company", ["Department", null, null], /^AUTH-ERR-SCOPE-DENIED:/],
+  ] as const)(
+    "route KHÔNG có `denyMessage` %s ⇒ chuỗi AUTH chung, payload KHÔNG mang mã SOCIAL",
+    async (_label, scopes, message) => {
+      const err = await makeService({ scopes: [...scopes] })
+        .resolveActor(USER, "feedList")
+        .catch((e: unknown) => e);
+      expect((err as ForbiddenException).message).toMatch(message);
+      expect((err as ForbiddenException).getResponse()).not.toHaveProperty("code");
+    },
+  );
 
   it("scope `System` được chấp nhận như `Company`", async () => {
     const svc = makeService({ scopes: ["System", null, null] });

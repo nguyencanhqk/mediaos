@@ -31,8 +31,8 @@ function expected(p: Profile, vis: Vis, manage: boolean) {
   return {
     canEdit: owner || admin || manage, // :144-148
     canDelete: owner || manage, // :190-191 (admin 403)
-    canModerate: owner || admin || manage, // :343-368 · :444-448
-    canGrantOwner: owner || (manage && !admin), // :404-406 + viaManage=false khi admin khớp
+    canModerate: owner || admin || manage, // :343-368 · :447-455
+    canGrantOwner: owner || manage, // D12 — owner hoặc manage BẤT KỂ vai (S16-SOCIAL-GROUPERR-1)
     canListMembers: active || manage, // :316-317
     canReadPosts: vis === "public" || active, // predicates — manage KHÔNG nới
     canPost: active, // social-access.service.ts:715-731
@@ -88,9 +88,14 @@ describe("G1 — các ca đơn lẻ đã từng là bẫy", () => {
     expect([c.canEdit, c.canDelete, c.canModerate, c.canListMembers]).toEqual([true, true, true, true]);
   });
 
-  it("kẽ BE: admin active KIÊM manage KHÔNG cấp được owner; manage không thuộc nhóm thì cấp được", () => {
+  it("cấp owner (GROUPERR-1): admin active KIÊM manage ⇒ ALLOW; admin KHÔNG manage ⇒ DENY; manage không thuộc nhóm ⇒ ALLOW", () => {
     expect(
       groupCapabilities({ visibility: "public", myRole: "admin", myStatus: "active" }, true).canGrantOwner,
+      "admin + manage — hôm trước là kẽ BE (403 oan), nay BE cấp được",
+    ).toBe(true);
+    expect(
+      groupCapabilities({ visibility: "public", myRole: "admin", myStatus: "active" }, false).canGrantOwner,
+      "admin thường KHÔNG tự nâng/cấp owner (D12)",
     ).toBe(false);
     expect(
       groupCapabilities({ visibility: "public", myRole: null, myStatus: null }, true).canGrantOwner,

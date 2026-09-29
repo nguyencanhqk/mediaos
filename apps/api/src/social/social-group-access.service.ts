@@ -7,7 +7,7 @@ import {
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { feedGroupMembers, feedGroups } from "../db/schema/social";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import type { FeedGroupRole, SocialGroupActor, SocialGroupMembership } from "./social.types";
 
 /**
@@ -89,14 +89,14 @@ export class SocialGroupAccessService {
         ),
       )
       .limit(1);
-    if (!group) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+    if (!group) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
 
     const membership = await this.getMembershipTx(tx, actor.companyId, groupId, actor.actorUserId);
     const isActiveMember = membership?.status === "active";
     // `manage:feed-group` NHÌN được mọi nhóm (để quản trị) — nhưng cờ này KHÔNG nới
     // `visiblePostCondition` (D9-ii): thấy NHÓM khác với đọc được BÀI trong nhóm.
     if (group.visibility === "private" && !isActiveMember && !actor.canManageGroups) {
-      throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+      throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
     }
     return { ...group, membership };
   }
@@ -124,7 +124,7 @@ export class SocialGroupAccessService {
       allowedRoles.includes(membership.role);
     if (hasRole) return { membership, viaManage: false };
     if (actor.canManageGroups) return { membership, viaManage: true };
-    throw new ForbiddenException(SOCIAL_ERR.GROUP_ROLE_REQUIRED);
+    throw new ForbiddenException(socialError(SOCIAL_ERR.GROUP_ROLE_REQUIRED));
   }
 
   /**
@@ -177,6 +177,6 @@ export class SocialGroupAccessService {
           ne(feedGroupMembers.userId, losingUserId),
         ),
       );
-    if ((row?.n ?? 0) < 1) throw new ConflictException(SOCIAL_ERR.GROUP_LAST_OWNER);
+    if ((row?.n ?? 0) < 1) throw new ConflictException(socialError(SOCIAL_ERR.GROUP_LAST_OWNER));
   }
 }

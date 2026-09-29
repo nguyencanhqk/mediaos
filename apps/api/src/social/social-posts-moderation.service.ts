@@ -17,7 +17,7 @@ import {
   type SocialModerationField,
 } from "./social-route-pairs.const";
 import { SocialActorProjectionRepository, SocialPostsRepository } from "./social-posts.repository";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import { toFeedPostDto } from "./social.mapper";
 import type { SocialActor, SocialPostAccess, SocialRequestUser } from "./social.types";
 
@@ -65,11 +65,11 @@ export class SocialPostsModerationService {
       const outcome = await this.moderateTx(tx, actor, post, dto);
       // `"noop"` (không trường nào đổi) là thành công bình thường của `006`.
       // D6a — bài vừa bị xoá bởi một lượt đua sau khi qua cổng đọc ⇒ cùng 404 như cổng đọc.
-      if (outcome === "gone") throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+      if (outcome === "gone") throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
       return this.repo.findVisible(tx, actor, postId);
     });
 
-    if (!row) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+    if (!row) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
     const { tags, myReaction, saved } = await this.db.withTenant(actor.companyId, async (tx) => ({
       tags: await this.repo.tagsFor(tx, actor.companyId, [row.id]),
@@ -134,16 +134,14 @@ export class SocialPostsModerationService {
     // xảy ra, và audit ghi một nửa sự thật.
     for (const field of requested) {
       if (!this.canChange(actor, field)) {
-        throw new ForbiddenException(SOCIAL_ERR.MODERATION_FIELD_DENIED);
+        throw new ForbiddenException(socialError(SOCIAL_ERR.MODERATION_FIELD_DENIED));
       }
     }
 
     // Chỉ ghim được bài `news` (mirror `chk_feed_posts_pinned_news` — chặn ở app TRƯỚC để không vỡ
     // CHECK thành 500 vô danh).
     if (dto.pinned === true && post.type !== "news") {
-      throw new UnprocessableEntityException(
-        "SOCIAL-ERR-010: chỉ ghim được bài tin tức (type='news').",
-      );
+      throw new UnprocessableEntityException(socialError(SOCIAL_ERR.PIN_NEWS_ONLY));
     }
 
     const [locked] = await tx

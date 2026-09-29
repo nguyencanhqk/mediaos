@@ -426,8 +426,9 @@ export default {
       memberRemove: "Không mời được thành viên ra khỏi nhóm. Vui lòng thử lại.",
     },
     /**
-     * S16-SOCIAL-FE-2B — lý do CỤ THỂ (thắng `forbidden`/`generic`). Đọc từ tiền tố `SOCIAL-ERR-0xx` của
-     * `message` hoặc từ ngữ cảnh route (`groups/lib/group-errors.ts`) vì server không đặt `code` riêng.
+     * S16-SOCIAL-FE-2B — lý do CỤ THỂ (thắng `forbidden`/`generic`). Đọc từ `error.code` SOCIAL
+     * (S16-SOCIAL-GROUPERR-1); với API cũ chưa redeploy thì từ tiền tố `message` + ngữ cảnh route
+     * (nhánh LEGACY-PREFIX của `groups/lib/group-errors.ts`).
      */
     reason: {
       lastOwner:

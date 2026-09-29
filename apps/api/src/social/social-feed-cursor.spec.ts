@@ -1,12 +1,8 @@
 import { BadRequestException } from "@nestjs/common";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import { describe, expect, it } from "vitest";
-import {
-  decodeFeedCursor,
-  encodeFeedCursor,
-  fingerprintFeedFilter,
-  SOCIAL_CURSOR_FILTER_MISMATCH,
-  SOCIAL_CURSOR_INVALID,
-} from "./social-feed-cursor";
+import { decodeFeedCursor, encodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
+import { SOCIAL_ERR } from "./social.errors";
 
 /**
  * S16-SOCIAL-BE-1 — con trỏ keyset. Hàm THUẦN, không DB.
@@ -64,7 +60,11 @@ describe("social-feed-cursor — dấu vân bộ lọc", () => {
       decodeFeedCursor(raw, fpB);
     } catch (e) {
       // Thông điệp RIÊNG cho "lệch bộ lọc" — phân biệt được với "con trỏ rác" khi đọc log.
-      expect((e as BadRequestException).message).toBe(SOCIAL_CURSOR_FILTER_MISMATCH);
+      expect((e as BadRequestException).message).toBe(SOCIAL_ERR.CURSOR_FILTER_MISMATCH);
+      // S16-SOCIAL-GROUPERR-1 — mã sentinel lên `error.code`, KHÔNG `SOCIAL-ERR-001` (mã 404).
+      expect((e as BadRequestException).getResponse()).toMatchObject({
+        code: SOCIAL_ERROR_CODES.CURSOR_FILTER_MISMATCH,
+      });
     }
   });
 });
@@ -90,7 +90,10 @@ describe("social-feed-cursor — đầu vào hỏng đều ra 400", () => {
       decodeFeedCursor(`${payload}.${FP}`, FP);
       expect.unreachable("phải ném");
     } catch (e) {
-      expect((e as BadRequestException).message).toBe(SOCIAL_CURSOR_INVALID);
+      expect((e as BadRequestException).message).toBe(SOCIAL_ERR.CURSOR_INVALID);
+      expect((e as BadRequestException).getResponse()).toMatchObject({
+        code: SOCIAL_ERROR_CODES.CURSOR_INVALID,
+      });
     }
   });
 

@@ -9,7 +9,7 @@ import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { SocialAccessService } from "./social-access.service";
 import { bumpCommentLikeCount, bumpPostCounter } from "./social-counters";
 import { SocialReactionsRepository } from "./social-reactions.repository";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import { toReactionSummaries } from "./social.mapper";
 import type { SocialActor, SocialRequestUser, SocialTargetType } from "./social.types";
 
@@ -263,7 +263,7 @@ export class SocialReactionsService {
 function parseEmoji(raw: string): string {
   const parsed = feedReactionEmojiSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new UnprocessableEntityException(SOCIAL_ERR.REACTION_EMOJI_INVALID);
+    throw new UnprocessableEntityException(socialError(SOCIAL_ERR.REACTION_EMOJI_INVALID));
   }
   return parsed.data;
 }

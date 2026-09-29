@@ -12,7 +12,7 @@ import { encodeFeedCursor, decodeFeedCursor, fingerprintFeedFilter } from "./soc
 import { SocialNewsRepository, type AckPersonRow } from "./social-news.repository";
 import { SocialPostsService } from "./social-posts.service";
 import { SocialPostsRepository, type PostRow } from "./social-posts.repository";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import type { SocialRequestUser } from "./social.types";
 
 /**
@@ -149,7 +149,7 @@ export class SocialNewsService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const post = await this.access.assertPostVisible(tx, actor, postId);
       if (post.type !== "news" || !post.requiresAck) {
-        throw new ConflictException(SOCIAL_ERR.ACK_NOT_APPLICABLE);
+        throw new ConflictException(socialError(SOCIAL_ERR.ACK_NOT_APPLICABLE));
       }
       const { firstTime, ackedAt } = await this.repo.ackPost(
         tx,

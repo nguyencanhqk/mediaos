@@ -12,7 +12,7 @@ import { SocialAccessService } from "./social-access.service";
 import { statsScopeFilter } from "./social-stats-scope";
 import { buildEngagementWorkbook } from "./social-stats-xlsx";
 import { SocialStatsRepository, type EngagementRange } from "./social-stats.repository";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import type { SocialActor, SocialRequestUser } from "./social.types";
 
 /**
@@ -113,7 +113,7 @@ export class SocialStatsService {
     const filter = statsScopeFilter(actor.routeScope, actor.orgUnitIds);
     const units = await this.repo.unitsTx(tx, actor.companyId, filter);
     if (query.orgUnitId !== undefined && !units.some((u) => u.orgUnitId === query.orgUnitId)) {
-      throw new ForbiddenException(SOCIAL_ERR.STATS_UNIT_OUT_OF_SCOPE);
+      throw new ForbiddenException(socialError(SOCIAL_ERR.STATS_UNIT_OUT_OF_SCOPE));
     }
     const range = await this.resolveRangeTx(tx, actor.companyId, query, defaultWeeks);
     const { rows, weekTotals } = await this.repo.engagementTx(

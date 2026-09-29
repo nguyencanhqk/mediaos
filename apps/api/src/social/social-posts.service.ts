@@ -52,7 +52,7 @@ import {
   SocialPostsRepository,
   type PostRow,
 } from "./social-posts.repository";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import { toFeedPostDto } from "./social.mapper";
 import type {
   SocialActor,
@@ -99,7 +99,7 @@ export class SocialPostsService {
     // (API-19 §5.1). 403 TƯỜNG MINH, KHÔNG im lặng ép về `published`: ép ngầm làm người vận hành
     // thấy dòng cuộn thường và kết luận "không có bài ẩn nào".
     if (query.status && query.status !== "published" && !actor.canManagePosts) {
-      throw new ForbiddenException(SOCIAL_ERR.MODERATION_FIELD_DENIED);
+      throw new ForbiddenException(socialError(SOCIAL_ERR.MODERATION_FIELD_DENIED));
     }
 
     const fingerprint = feedFingerprint(actor, query);
@@ -153,7 +153,7 @@ export class SocialPostsService {
     const row = await this.db.withTenant(actor.companyId, (tx) =>
       this.repo.findVisible(tx, actor, postId),
     );
-    if (!row) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+    if (!row) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
     const [dto] = await this.decorate(actor, [row]);
     return dto;
   }
@@ -331,7 +331,7 @@ export class SocialPostsService {
     // `findVisible` ngay sau INSERT trong CÙNG tx không thể trượt (vị từ visibility luôn cho tác giả
     // thấy bài của mình). Vẫn kiểm: `null` ở đây nghĩa là vị từ đã đổi theo cách người viết không
     // lường — ném rõ ràng còn hơn `!` rồi nổ ở chỗ khác.
-    if (!result.row) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+    if (!result.row) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
     const [dto2] = await this.decorate(actor, [result.row]);
     this.emitPostCreated(actor, result.row, dto2);
@@ -401,7 +401,8 @@ export class SocialPostsService {
             ),
           )
           .returning({ id: feedPosts.id });
-        if (edited.length === 0) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+        if (edited.length === 0)
+          throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
         // Quan ly SUA noi dung cua NGUOI KHAC => vao so, cung luat voi duong XOA (`remove`).
         // Khong co dong nay thi dau vet bien mat hoan toan: `body` bi ghi de, `updated_by`/`edited_at`
@@ -459,7 +460,7 @@ export class SocialPostsService {
       throw err;
     }
 
-    if (!result.row) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+    if (!result.row) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
     const [dto2] = await this.decorate(actor, [result.row]);
     return { ...dto2, droppedMentions: toDropped(result.dropped) };
   }

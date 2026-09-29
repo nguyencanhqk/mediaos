@@ -20,7 +20,7 @@ import {
   SocialRecycleBinRepository,
   type RecycleBinPostRow,
 } from "./social-recycle-bin.repository";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import type { SocialRequestUser } from "./social.types";
 
 /**
@@ -82,9 +82,9 @@ export class SocialRecycleBinService implements OnModuleInit, FeedPostRecycleBin
     const actor = await this.access.resolveActor(user, "recycleFeedPostRestore");
     return this.db.withTenant(actor.companyId, async (tx) => {
       const post = await this.repo.lockDeletedForRestoreTx(tx, actor.companyId, postId);
-      if (!post) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+      if (!post) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
       if (post.groupId !== null && post.groupDeletedAt !== null) {
-        throw new ConflictException(SOCIAL_ERR.RESTORE_GROUP_DELETED);
+        throw new ConflictException(socialError(SOCIAL_ERR.RESTORE_GROUP_DELETED));
       }
 
       const status = await restorePostTx(tx, actor.companyId, post.id, actor.actorUserId);

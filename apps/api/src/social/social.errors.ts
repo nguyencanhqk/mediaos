@@ -2,12 +2,26 @@
 // Trước bản này nó ghép với `SocialCreatablePostType` (= keyof bảng cặp) — đủ để giữ hai BẢNG khớp
 // nhau, nhưng KHÔNG bắt được ca cả hai bảng cùng thiếu một giá trị mà enum đã mở (fail-OPEN: route
 // `002` tạo được một loại bài không cặp nào gác). Ghép thẳng vào enum bịt chiều đó ở tầng kiểu.
-import type { FeedCreatableTypeDto, FeedTargetTypeDto } from "@mediaos/contracts";
+import {
+  SOCIAL_ERROR_CODES,
+  type FeedCreatableTypeDto,
+  type FeedTargetTypeDto,
+  type SocialErrorCode,
+  type SocialErrorKey,
+} from "@mediaos/contracts";
 
 /**
  * S16-SOCIAL-BE-1 — mã lỗi SOCIAL (SPEC-16 §12, quy ước SPEC-01 §9 `MODULE-ERR-XXX`).
  *
- * MỘT CHỖ duy nhất định nghĩa thông điệp ⇒ int-spec assert theo MÃ, không theo câu chữ.
+ * MỘT CHỖ duy nhất định nghĩa thông điệp ⇒ int-spec assert theo HẰNG (`SOCIAL_ERR.X`), không theo câu chữ.
+ *
+ * ┌─ MÃ NẰM Ở ĐÂU TRÊN DÂY (S16-SOCIAL-GROUPERR-1) ──────────────────────────────────────────────────┐
+ * │ `error.code` của envelope = `SOCIAL_ERROR_CODES[KHOÁ]` (packages/contracts): khoá có số ⇒          │
+ * │ `SOCIAL-ERR-0xx`; khoá không số ⇒ sentinel `SOCIAL-ERR-<KHOÁ>` (owner ký O1 — KHÔNG đánh số mới). │
+ * │ Chỉ tới được dây nếu ném qua `new XxxException(socialError(SOCIAL_ERR.KHOA))` — ném chuỗi trần là │
+ * │ `error.code` rơi về mã chung theo status (tầng C của census chặn). Thông điệp GIỮ tiền tố cũ:    │
+ * │ khoá có số ⇒ tiền tố = đúng mã; khoá sentinel ⇒ `SOCIAL-ERR: ` (FE cũ đọc tiền tố vẫn đúng).     │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * ┌─ `POST_NOT_FOUND` / `COMMENT_NOT_FOUND` LÀ HẰNG, KHÔNG PHẢI HÀM ───────────────────────────────┐
  * │ Mọi lý do "không đọc được bài" — không tồn tại · tenant khác · đã xoá mềm · `hidden` mà mình     │
@@ -466,7 +480,83 @@ export const SOCIAL_ERR = {
    * ở `057` (`groupDeleted: true`) nên nó không rò sự tồn tại.
    */
   RESTORE_GROUP_DELETED: "SOCIAL-ERR: nhóm của bài viết đã bị xoá — không thể khôi phục bài.",
+
+  // ─────────── S16-SOCIAL-GROUPERR-1 (D11) — 4 chuỗi trước đây sống NGOÀI bảng ───────────
+
+  /**
+   * (403) — hai bảng `SOCIAL_POST_TYPE_PAIRS` ↔ `SOCIAL_POST_TYPE_DENIED` LỆCH NHAU: loại bài có cặp
+   * quyền nhưng không có mã lỗi tương ứng. _(S16-SOCIAL-GROUPERR-1: dời VÀO bảng — trước là hằng rời
+   * `SOCIAL_POST_TYPE_PAIR_DESYNC` nên không mang mã nào lên dây.)_
+   *
+   * ⚠️ Đây **không phải nhánh chết mà là chân FAIL-CLOSED**. Cặp/mã lỗi được khai ở hai hằng khác
+   * nhau, `satisfies` ép ĐỦ KHOÁ nhưng KHÔNG ép được "non-null bên này ⇒ non-null bên kia". Nếu lệch,
+   * lựa chọn duy nhất khác là `return` — tức **bỏ qua cổng quyền vì một lỗi khai báo**. Chặn.
+   */
+  POST_TYPE_PAIR_DESYNC: "SOCIAL-ERR: cấu hình quyền theo loại bài không hợp lệ.",
+  /**
+   * (400) — con trỏ phân trang hỏng. Trước đây mang tiền tố `SOCIAL-ERR-001` (= mã **404** của SPEC-16
+   * §12) trên một **400** ⇒ FE đọc theo mã sẽ hiểu thành «không tìm thấy». Nay là sentinel.
+   */
+  CURSOR_INVALID: "SOCIAL-ERR: con trỏ phân trang không hợp lệ — hãy tải lại danh sách từ đầu.",
+  /** (400) — con trỏ thuộc một BỘ LỌC khác request hiện tại. Cùng lý do đổi tiền tố như trên. */
+  CURSOR_FILTER_MISMATCH:
+    "SOCIAL-ERR: con trỏ phân trang thuộc về một bộ lọc khác — hãy tải lại danh sách từ đầu.",
+  /**
+   * (422) — ghim một bài KHÔNG phải `news` (mirror `chk_feed_posts_pinned_news`). Trước đây literal
+   * tiền tố `SOCIAL-ERR-010` (= **403 thiếu quyền** của §12) trên một **422** — nói sai lý do.
+   */
+  PIN_NEWS_ONLY: "SOCIAL-ERR: chỉ ghim được bài tin tức (type='news').",
 } as const;
+
+/**
+ * 🔴 Tập khoá `SOCIAL_ERR` ≡ tập khoá `SOCIAL_ERROR_CODES` (contracts) — ép HAI chiều ở tầng kiểu (D8).
+ * Thêm một hằng lỗi mà quên mã (hoặc ngược lại) ⇒ `tsc` đỏ ngay, không có đường ship một lỗi SOCIAL
+ * không mã. Khai TÁCH khỏi khối `SOCIAL_ERR` để regex strip của census vẫn khớp `\n} as const;`.
+ */
+type SocialErrKeysMatch = [keyof typeof SOCIAL_ERR] extends [SocialErrorKey]
+  ? [SocialErrorKey] extends [keyof typeof SOCIAL_ERR]
+    ? true
+    : false
+  : false;
+const SOCIAL_ERR_KEYS_MATCH: SocialErrKeysMatch = true;
+void SOCIAL_ERR_KEYS_MATCH;
+
+/** Union literal các thông điệp của `SOCIAL_ERR` — `socialError` CHỈ nhận các giá trị này. */
+export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];
+
+/**
+ * Thông điệp → mã. Dựng từ `Object.keys(SOCIAL_ERR)` — KHÔNG liệt kê `SOCIAL_ERR.X` bằng tay: một bảng
+ * tay như vậy làm tầng B của census (`SOCIAL_ERR.<KHOÁ>` có ở nguồn ném không) tha MỌI hằng.
+ * Thông điệp đôi một khác nhau — ghim ở `social.errors.spec.ts` U2.
+ */
+const SOCIAL_CODE_BY_MESSAGE: ReadonlyMap<string, SocialErrorCode> = new Map(
+  (Object.keys(SOCIAL_ERR) as SocialErrorKey[]).map((k) => [SOCIAL_ERR[k], SOCIAL_ERROR_CODES[k]]),
+);
+// Hai khoá trùng thông điệp ⇒ Map nuốt một khoá và tra ra mã SAI mà không ai biết (plan §6 L3). Nổ
+// NGAY lúc nạp module (boot/test) thay vì để một lỗi mang nhầm mã lên dây.
+if (SOCIAL_CODE_BY_MESSAGE.size !== Object.keys(SOCIAL_ERR).length) {
+  throw new Error("SOCIAL_ERR có thông điệp TRÙNG — socialError() sẽ tra nhầm mã");
+}
+
+/**
+ * S16-SOCIAL-GROUPERR-1 — payload `{ code, message }` cho HttpException của SOCIAL, khuôn
+ * `roomErrorBody`/ASSET: `AllExceptionsFilter` đọc `payload.code` làm `error.code`; NestJS lấy
+ * `exception.message` từ `payload.message` ⇒ thông điệp trên dây BYTE-Y-HỆT bản chuỗi trần cũ.
+ *
+ * Cách dùng DUY NHẤT ở `src/social/**`: `new XxxException(socialError(SOCIAL_ERR.KHOA))` — ratchet
+ * tầng C của `social-error-code-census.spec.ts` chặn chỗ ném trần.
+ *
+ * Trả object MỚI mỗi lần (không chia sẻ tham chiếu giữa các lần ném). Chuỗi ngoài bảng chỉ tới được khi
+ * ai đó ép kiểu ⇒ ném `Error` (500 CÓ log) thay vì rơi im lặng về mã chung — fail-loud, không fail-quiet.
+ */
+export function socialError(message: SocialErrorMessage): {
+  code: SocialErrorCode;
+  message: SocialErrorMessage;
+} {
+  const code = SOCIAL_CODE_BY_MESSAGE.get(message);
+  if (!code) throw new Error(`socialError: thông điệp không thuộc SOCIAL_ERR — ${message}`);
+  return { code, message };
+}
 
 /**
  * Mã lỗi 403 cho từng LOẠI BÀI có cặp quyền phụ (`SOCIAL_POST_TYPE_PAIRS`).
@@ -488,17 +578,6 @@ export const SOCIAL_POST_TYPE_DENIED = {
 } as const satisfies Record<FeedCreatableTypeDto, string | null>;
 
 /**
- * (403) — hai bảng `SOCIAL_POST_TYPE_PAIRS` ↔ `SOCIAL_POST_TYPE_DENIED` LỆCH NHAU: loại bài có cặp
- * quyền nhưng không có mã lỗi tương ứng.
- *
- * ⚠️ Đây **không phải nhánh chết mà là chân FAIL-CLOSED**. Cặp/mã lỗi được khai ở hai hằng khác
- * nhau, `satisfies` ép ĐỦ KHOÁ nhưng KHÔNG ép được "non-null bên này ⇒ non-null bên kia". Nếu lệch,
- * lựa chọn duy nhất khác là `return` — tức **bỏ qua cổng quyền vì một lỗi khai báo**. Chặn.
- */
-export const SOCIAL_POST_TYPE_PAIR_DESYNC =
-  "SOCIAL-ERR: cấu hình quyền theo loại bài không hợp lệ.";
-
-/**
  * S16-SOCIAL-BE-1C — mã 403 theo `target` của cửa đăng ký tệp. Song ánh với
  * `SOCIAL_FILE_TARGET_PAIRS`: mỗi `target` có ĐÚNG một cặp quyền và ĐÚNG một thông điệp.
  *
@@ -511,8 +590,6 @@ export const SOCIAL_FILE_TARGET_DENIED = {
   post: SOCIAL_ERR.FILE_TARGET_POST_DENIED,
   comment: SOCIAL_ERR.FILE_TARGET_COMMENT_DENIED,
 } as const satisfies Record<FeedTargetTypeDto, string>;
-
-export type SocialErrorMessage = (typeof SOCIAL_ERR)[keyof typeof SOCIAL_ERR];
 
 /** Tên constraint DB mà SOCIAL DỊCH thành mã lỗi nghiệp vụ — nguồn sự thật một chỗ (D5). */
 export const SOCIAL_CONSTRAINT = {

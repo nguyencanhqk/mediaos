@@ -11,7 +11,8 @@
  *      sẽ IM LẶNG CHO QUA ở ca này (plan F-2).
  */
 
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, Logger } from "@nestjs/common";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { TenantTx } from "../db/db.service";
 import {
@@ -122,6 +123,27 @@ describe("SocialAttachmentsService — cổng `AttachNewGate` (S16-SOCIAL-ATTGAT
       makeService().syncLinksTx(tx, COMPANY, USER, "post", TARGET, [FILE_A], broken),
     ).rejects.toThrow(ForbiddenException);
     expect(insert, "không được ghi khi cổng không đọc được").not.toHaveBeenCalled();
+  });
+
+  it("GROUPERR-1 — cổng DENY THIẾU `reason` ⇒ vẫn 403 đúng đích NHƯNG ghi logger.error (lỗi đi dây, không phải deny thường)", async () => {
+    const { tx } = fakeTx([]);
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    try {
+      const broken = { allow: false } as AttachNewGate;
+      const err = await makeService()
+        .syncLinksTx(tx, COMPANY, USER, "post", TARGET, [FILE_A], broken)
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(SocialAttachGateDeniedException);
+      expect((err as ForbiddenException).getResponse()).toMatchObject({
+        code: SOCIAL_ERROR_CODES.FILE_TARGET_POST_DENIED,
+      });
+      expect(
+        error.mock.calls.some(([m]) => String(m).includes("thiếu `reason`")),
+        "cổng dựng hỏng phải ồn ở mức ERROR — deny thường chỉ là warn",
+      ).toBe(true);
+    } finally {
+      error.mockRestore();
+    }
   });
 });
 /**

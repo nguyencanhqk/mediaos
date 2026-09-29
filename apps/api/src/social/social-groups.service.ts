@@ -32,7 +32,7 @@ import {
   SOCIAL_EVENT_GROUP_JOIN_DECIDED,
   type SocialGroupJoinDecidedPayload,
 } from "./social-noti.payload";
-import { SOCIAL_CONSTRAINT, SOCIAL_ERR, isUniqueViolationOf } from "./social.errors";
+import { SOCIAL_CONSTRAINT, SOCIAL_ERR, isUniqueViolationOf, socialError } from "./social.errors";
 import type { FeedGroupRole, SocialActor, SocialRequestUser } from "./social.types";
 
 /**
@@ -95,7 +95,7 @@ export class SocialGroupsService {
         // W1 — khớp theo TÊN CONSTRAINT, KHÔNG `23505` trần: `feed_groups` còn
         // `feed_groups_company_id_id_uq` (ống nước FK composite) cũng ném `23505`.
         if (isUniqueViolationOf(err, SOCIAL_CONSTRAINT.GROUP_NAME_UQ)) {
-          throw new ConflictException(SOCIAL_ERR.GROUP_NAME_TAKEN);
+          throw new ConflictException(socialError(SOCIAL_ERR.GROUP_NAME_TAKEN));
         }
         throw err;
       }
@@ -158,12 +158,12 @@ export class SocialGroupsService {
         );
       } catch (err) {
         if (isUniqueViolationOf(err, SOCIAL_CONSTRAINT.GROUP_NAME_UQ)) {
-          throw new ConflictException(SOCIAL_ERR.GROUP_NAME_TAKEN);
+          throw new ConflictException(socialError(SOCIAL_ERR.GROUP_NAME_TAKEN));
         }
         throw err;
       }
       // 0 hàng ⇒ nhóm vừa bị xoá mềm giữa hai câu. Nói 404, KHÔNG trả về một DTO "đã cập nhật".
-      if (!updated) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+      if (!updated) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
 
       if (viaManage) {
         await this.recordGroupAudit(tx, actor, "social.group.updated", groupId, {
@@ -196,7 +196,7 @@ export class SocialGroupsService {
         groupId,
         actor.actorUserId,
       );
-      if (!deleted) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+      if (!deleted) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
 
       // 🔴 Audit LUÔN, không chỉ nhánh `viaManage` (FULL gate 22/09, `security-reviewer` MEDIUM-2).
       // Khuôn "chỉ ghi sổ khi thao tác lên nội dung NGƯỜI KHÁC" mượn từ BE-1, nơi đối tượng là BÀI
@@ -219,7 +219,7 @@ export class SocialGroupsService {
 
     return this.db.withTenant(actor.companyId, async (tx) => {
       const group = await this.groups.findLiveGroupTx(tx, actor.companyId, groupId);
-      if (!group) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+      if (!group) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
 
       // 🔴 THỨ TỰ KHOÁ (FULL gate 22/09, `security-reviewer` LOW-4). Không phải vì bất biến owner —
       // `035` không chạm nó — mà để mọi đường chạm cặp (`feed_groups`, `feed_group_members`) khoá
@@ -243,7 +243,7 @@ export class SocialGroupsService {
       } catch (err) {
         // H6 — theo TÊN CONSTRAINT (`feed_group_members_pk`), không `23505` trần.
         if (isUniqueViolationOf(err, SOCIAL_CONSTRAINT.GROUP_MEMBER_PK)) {
-          throw new ConflictException(SOCIAL_ERR.GROUP_MEMBERSHIP_EXISTS);
+          throw new ConflictException(socialError(SOCIAL_ERR.GROUP_MEMBERSHIP_EXISTS));
         }
         throw err;
       }
@@ -261,7 +261,7 @@ export class SocialGroupsService {
 
     await this.db.withTenant(actor.companyId, async (tx) => {
       const group = await this.groups.findLiveGroupTx(tx, actor.companyId, groupId);
-      if (!group) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+      if (!group) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
 
       // (b) — neo TRƯỚC câu đếm owner.
       await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
@@ -271,7 +271,7 @@ export class SocialGroupsService {
         groupId,
         actor.actorUserId,
       );
-      if (!mine) throw new NotFoundException(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND);
+      if (!mine) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND));
       if (mine.role === "owner" && mine.status === "active") {
         await this.groupAccess.assertOwnerRemainsTx(
           tx,
@@ -287,7 +287,7 @@ export class SocialGroupsService {
         groupId,
         actor.actorUserId,
       );
-      if (!removed) throw new NotFoundException(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND);
+      if (!removed) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND));
       await bumpGroupMemberCount(
         tx,
         actor.companyId,
@@ -364,7 +364,7 @@ export class SocialGroupsService {
         actor.actorUserId,
       );
       if (!viaManage && !(mine?.status === "active" && decideRoles.includes(mine.role))) {
-        throw new ForbiddenException(SOCIAL_ERR.GROUP_ROLE_REQUIRED);
+        throw new ForbiddenException(socialError(SOCIAL_ERR.GROUP_ROLE_REQUIRED));
       }
 
       const target = await this.groupAccess.getMembershipTx(
@@ -373,11 +373,11 @@ export class SocialGroupsService {
         groupId,
         targetUserId,
       );
-      if (!target) throw new NotFoundException(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND);
+      if (!target) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND));
 
       if ("decision" in dto) {
         if (target.status !== "pending") {
-          throw new ConflictException(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH);
+          throw new ConflictException(socialError(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH));
         }
         const result: FeedGroupMemberMutationDto =
           dto.decision === "approve"
@@ -399,11 +399,16 @@ export class SocialGroupsService {
 
       // ── Nhánh ĐỔI VAI TRÒ ──
       if (target.status !== "active") {
-        throw new ConflictException(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH);
+        throw new ConflictException(socialError(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH));
       }
+      // 🔴 D12 — CẤP `owner`: chỉ owner hiện tại HOẶC người giữ `manage:feed-group`, BẤT KỂ vai trong nhóm
+      // (S16-SOCIAL-GROUPERR-1). Đọc thẳng `actor.canManageGroups`, KHÔNG đọc `viaManage`: `viaManage`
+      // nghĩa là «vai HÀNG trượt nhưng manage cứu» — admin active kiêm manage có vai hàng KHỚP nên
+      // `viaManage=false`, và dùng nó ở đây là 403 oan đúng người có quyền (đo ở FE-2B, M10).
       const actorIsOwner = mine?.status === "active" && mine.role === "owner";
-      if (dto.role === "owner" && !actorIsOwner && !viaManage) {
-        throw new ForbiddenException(SOCIAL_ERR.GROUP_ROLE_REQUIRED);
+      const ownerGrantViaManage = dto.role === "owner" && !actorIsOwner;
+      if (ownerGrantViaManage && !actor.canManageGroups) {
+        throw new ForbiddenException(socialError(SOCIAL_ERR.GROUP_ROLE_REQUIRED));
       }
       // Hạ vai một owner ⇒ đường MẤT OWNER thứ hai (D6-ii). Neo `FOR UPDATE` đã giữ ở trên.
       if (target.role === "owner" && dto.role !== "owner") {
@@ -419,14 +424,16 @@ export class SocialGroupsService {
       );
       // Hàng vừa đổi trạng thái/biến mất giữa hai câu (dù đã khoá hàng CHA, hàng thành viên vẫn có
       // thể bị xoá bởi chính người đó qua `036`). KHÔNG coi là thành công rỗng.
-      if (!changed) throw new ConflictException(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH);
+      if (!changed)
+        throw new ConflictException(socialError(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH));
       // delta = 0 (active → active): CỐ Ý không gọi `bumpGroupMemberCount`.
 
       await this.recordGroupAudit(tx, actor, "social.group_member.role_changed", groupId, {
         targetUserId,
         from: target.role,
         to: dto.role,
-        viaManage,
+        // Cấp owner mà actor không phải owner ⇒ quyền THẬT đến từ `manage` dù vai hàng là admin.
+        viaManage: viaManage || ownerGrantViaManage,
       });
       return { userId: targetUserId, role: dto.role, status: "active" };
     });
@@ -454,13 +461,13 @@ export class SocialGroupsService {
         groupId,
         targetUserId,
       );
-      if (!target) throw new NotFoundException(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND);
+      if (!target) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND));
       if (target.role === "owner" && target.status === "active") {
         await this.groupAccess.assertOwnerRemainsTx(tx, actor.companyId, groupId, targetUserId);
       }
 
       const removed = await this.members.deleteMemberTx(tx, actor.companyId, groupId, targetUserId);
-      if (!removed) throw new NotFoundException(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND);
+      if (!removed) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND));
       await bumpGroupMemberCount(
         tx,
         actor.companyId,
@@ -489,7 +496,7 @@ export class SocialGroupsService {
     role: FeedGroupRole,
   ): Promise<FeedGroupMemberMutationDto> {
     const approved = await this.members.approveTx(tx, actor.companyId, groupId, targetUserId);
-    if (!approved) throw new ConflictException(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH);
+    if (!approved) throw new ConflictException(socialError(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH));
     await bumpGroupMemberCount(
       tx,
       actor.companyId,
@@ -507,7 +514,7 @@ export class SocialGroupsService {
     targetUserId: string,
   ): Promise<FeedGroupMemberMutationDto> {
     const removed = await this.members.deleteMemberTx(tx, actor.companyId, groupId, targetUserId);
-    if (!removed) throw new ConflictException(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH);
+    if (!removed) throw new ConflictException(socialError(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH));
     await bumpGroupMemberCount(
       tx,
       actor.companyId,
@@ -524,7 +531,7 @@ export class SocialGroupsService {
     groupId: string,
   ): Promise<FeedGroupDto> {
     const row = await this.groups.getGroupTx(tx, actor.companyId, actor.actorUserId, groupId);
-    if (!row) throw new NotFoundException(SOCIAL_ERR.GROUP_NOT_FOUND);
+    if (!row) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
     return toFeedGroupDto(row);
   }
 

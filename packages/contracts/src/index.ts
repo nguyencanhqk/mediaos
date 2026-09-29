@@ -223,3 +223,6 @@ export * from "./social-api-stats";
 // S16-SOCIAL-BE-3C (additive): DTO thùng rác bài viết `057..058`. Import NGƯỢC từ ./social, ./social-api-b —
 // KHÔNG re-export tên nào của chúng.
 export * from "./social-api-recycle";
+// S16-SOCIAL-GROUPERR-1 (additive): MÃ lỗi SOCIAL trên dây (`error.code`) — nguồn chung api ↔ web. Tự chứa;
+// tên export SOCIAL_ERROR_*/SocialError*/isSocialErrorCode KHÔNG trùng barrel hiện có.
+export * from "./social-errors";

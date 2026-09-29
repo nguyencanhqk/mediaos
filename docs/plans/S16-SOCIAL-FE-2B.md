@@ -308,6 +308,7 @@ Commit theo lát: T0 · T1 · T2+T3 · T4+T5 · T6 · T7 · T8 · T9 · T10+T11.
   gương; sửa ở BE ⇒ nới `canGrantOwner` + ca G1.
 - **N2 (BE)** mã SOCIAL chỉ ở `message` ⇒ FE đọc tiền tố (D3). Khuôn ROOM/ASSET đặt `code` vào payload
   — WO BE nên làm cho SOCIAL, khi đó D3 đổi sang `code`. (N1+N2 seed `S16-SOCIAL-GROUPERR-1`.)
+- ✅ **ĐÃ TRẢ 29/09/2026 ở `S16-SOCIAL-GROUPERR-1`**: N1 (BE đọc `canManageGroups`, FE `canGrantOwner = isOwner ∨ canManage`) · N2 (mã SOCIAL lên `error.code`, D3 đọc `code` + giữ nhánh LEGACY-PREFIX một bản — owner ký O4).
 - N3 badge bài mới theo nhóm ⇐ `S16-SOCIAL-BE-2C`.
 - N4 tên nhóm trên thẻ bài ngoài trang nhóm (Saved/News/polls/ideas lẫn bài nhóm) ⇐ DTO bài cần
   `group:{id,name}` (`BE-2D` hoặc WO mới).

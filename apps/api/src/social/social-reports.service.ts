@@ -34,6 +34,7 @@ import {
   SOCIAL_ERR,
   isUniqueViolationOf,
   socialPgErrorOf,
+  socialError,
 } from "./social.errors";
 import type { SocialActor, SocialRequestUser } from "./social.types";
 
@@ -108,7 +109,7 @@ export class SocialReportsService {
         // `feed_reports_company_id_id_uq` (ống nước FK composite) cũng ném `23505`, và nuốt mọi
         // `23505` thành "báo cáo trùng" là dịch SAI nguyên nhân rồi xoá lỗi thật khỏi log điều tra.
         if (isUniqueViolationOf(err, SOCIAL_CONSTRAINT.REPORT_OPEN_UQ)) {
-          throw new ConflictException(SOCIAL_ERR.REPORT_DUPLICATE_OPEN);
+          throw new ConflictException(socialError(SOCIAL_ERR.REPORT_DUPLICATE_OPEN));
         }
         throw err;
       }
@@ -193,7 +194,7 @@ export class SocialReportsService {
         this.logger.warn(
           `029: hết lock_timeout ${REPORT_RESOLVE_LOCK_TIMEOUT} khi xử lý báo cáo ${reportId} (action=${dto.action}) — trả 409 REPORT_BUSY.`,
         );
-        throw new ConflictException(SOCIAL_ERR.REPORT_BUSY);
+        throw new ConflictException(socialError(SOCIAL_ERR.REPORT_BUSY));
       }
       throw err;
     }
@@ -210,12 +211,12 @@ export class SocialReportsService {
     await tx.execute(sql.raw(`set local lock_timeout = '${REPORT_RESOLVE_LOCK_TIMEOUT}'`));
 
     const before = await this.repo.findReport(tx, actor, reportId);
-    if (!before) throw new NotFoundException(SOCIAL_ERR.REPORT_NOT_FOUND);
+    if (!before) throw new NotFoundException(socialError(SOCIAL_ERR.REPORT_NOT_FOUND));
 
     // 403 TRƯỚC bước khoá (FULL gate security LOW): phép kiểm chỉ cần `actor` + `dto.action`, nên
     // một lượt bị từ chối không có lý do gì để giữ khoá hàng báo cáo của người khác.
     if (!canPerformReportAction(actor, dto.action)) {
-      throw new ForbiddenException(SOCIAL_ERR.REPORT_ACTION_DENIED);
+      throw new ForbiddenException(socialError(SOCIAL_ERR.REPORT_ACTION_DENIED));
     }
 
     const lockedIds = await this.repo.lockOpenReportsForTargetTx(
@@ -225,7 +226,9 @@ export class SocialReportsService {
       before.targetId,
     );
     if (!isReportActionValidForTarget(before.targetType, dto.action)) {
-      throw new UnprocessableEntityException(SOCIAL_ERR.REPORT_ACTION_INVALID_FOR_TARGET);
+      throw new UnprocessableEntityException(
+        socialError(SOCIAL_ERR.REPORT_ACTION_INVALID_FOR_TARGET),
+      );
     }
 
     const won = await this.repo.resolveReport(tx, actor.companyId, reportId, {
@@ -235,7 +238,7 @@ export class SocialReportsService {
     });
     // 0 hàng ⇒ ai đó vừa xử lý trước (hoặc nó đã kết thúc từ trước). Kiểm bằng CHÍNH câu ghi, không
     // bằng `before.status`: hai lượt xử lý đồng thời thì chỉ một lượt thắng.
-    if (!won) throw new ConflictException(SOCIAL_ERR.REPORT_ALREADY_DECIDED);
+    if (!won) throw new ConflictException(socialError(SOCIAL_ERR.REPORT_ALREADY_DECIDED));
 
     let siblings: string[] = [];
     let effect: ActionEffect = "none";
@@ -290,7 +293,7 @@ export class SocialReportsService {
 
     const after = await this.repo.findReport(tx, actor, reportId);
     // Không thể trượt: vị từ phạm vi không đổi trong cùng tx. Ném rõ ràng thay vì `!` rồi nổ chỗ khác.
-    if (!after) throw new NotFoundException(SOCIAL_ERR.REPORT_NOT_FOUND);
+    if (!after) throw new NotFoundException(socialError(SOCIAL_ERR.REPORT_NOT_FOUND));
     // `029` có `companyFloor:true` ⇒ tới được đây thì `routeScope` đã là Company. Vẫn hỏi
     // `isCompany` chứ KHÔNG viết thẳng `true`: nếu sàn ở `social-route-pairs` bị hạ, chỗ này đi
     // theo thay vì ở lại thành lỗ lộ im lặng.
@@ -313,7 +316,7 @@ export class SocialReportsService {
     action: Exclude<FeedReportActionDto, "none">,
   ): Promise<ActionEffect> {
     const unavailable = () =>
-      new UnprocessableEntityException(SOCIAL_ERR.REPORT_ACTION_TARGET_UNAVAILABLE);
+      new UnprocessableEntityException(socialError(SOCIAL_ERR.REPORT_ACTION_TARGET_UNAVAILABLE));
 
     if (targetType === "post") {
       const post = await this.access.findPostVisible(tx, actor, targetId);
