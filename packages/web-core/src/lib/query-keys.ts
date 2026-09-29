@@ -1441,4 +1441,25 @@ export const socialKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.social, "ideas", "list", params] as const,
   },
+
+  /**
+   * S16-SOCIAL-FE-2B — nhóm (030..039).
+   *
+   * `lists()` là TIỀN TỐ riêng của mọi danh sách: TanStack v5 so khớp một phần theo PHẦN TỬ mảng, nên
+   * `list(undefined)` = `[…,"list",undefined]` KHÔNG khớp `list({membership:"mine"})` — muốn làm mới
+   * mọi danh sách mà giữ `detail` vừa ghi thì phải dùng `lists()`.
+   *
+   * `members` là nhánh RIÊNG khỏi `detail`: `037` có cổng vai-trò-nhóm mà `032` không có (khuôn
+   * `posts.acks`). Feed nhóm KHÔNG ở đây — nó là `feed.list({groupId, sort})`, nằm dưới `feed.allOf()`
+   * mà đăng/xoá/ẩn bài vốn đã invalidate.
+   */
+  groups: {
+    allOf: () => [...rootKeys.social, "groups"] as const,
+    lists: () => [...rootKeys.social, "groups", "list"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "groups", "list", params] as const,
+    detail: (groupId: string) => [...rootKeys.social, "groups", "detail", groupId] as const,
+    members: (groupId: string, params?: Record<string, unknown>) =>
+      [...rootKeys.social, "groups", "members", groupId, params] as const,
+  },
 };

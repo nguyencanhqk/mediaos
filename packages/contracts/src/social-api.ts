@@ -353,8 +353,10 @@ export type ListCommentsQueryDto = z.infer<typeof listCommentsQuerySchema>;
  *
  * Luật kéo theo `audience` ⇄ khoá được lặp lại ở đây (không dẫn xuất được từ `feedPostCoreSchema` —
  * xem docblock đầu file): giữ ĐÚNG hình dạng CHECK `chk_feed_posts_audience_*` của migration 0577.
- * `audience='group'` từ chối ở SERVICE (422 `SOCIAL-ERR-008`, plan D1) chứ không ở đây — Zod từ chối
- * sẽ trả 400 vô danh, còn đây là quyết định NGHIỆP VỤ "chưa mở" cần mã lỗi nói đúng lý do.
+ * `audience='group'` ĐÃ MỞ từ S16-SOCIAL-BE-2A: service chỉ cho thành viên `active` của nhóm đăng
+ * (`social-access.service.ts#assertWriteAudience`) — nhóm không thấy được ⇒ 404 `SOCIAL-ERR-012`,
+ * thấy mà không `active` (kể cả `pending`) ⇒ 403 `SOCIAL-ERR-002`. Thiếu `groupId` bị chặn NGAY ở
+ * `superRefine` dưới đây (400), nên nhánh 422 `SOCIAL-ERR-008` của service thực tế không tới được.
  */
 export const createFeedPostSchema = z
   .object({

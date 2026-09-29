@@ -2315,6 +2315,31 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 99,
   },
+  // S16-SOCIAL-FE-2B lát B — Nhóm (SOC-SCREEN-006). Cùng gate `view:feed`: vế phân quyền thật là VAI
+  // TRÒ HÀNG trong nhóm (SOC-DEC-006) gác bên trong màn từ DTO (`myRole`/`myStatus`). Path danh sách
+  // PHẢI đúng `/feed/groups` — `pruneUnbuiltScreens` so khớp path CHÍNH XÁC với mục `social.groups`
+  // đã khai sẵn ở `SOCIAL_SIDEBAR_V2`.
+  {
+    routeKey: "social.groups",
+    path: "/feed/groups",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-006",
+    titleKey: "routeTitle.socialGroups",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 100,
+  },
+  {
+    routeKey: "social.groupDetail",
+    path: "/feed/groups/$groupId",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-006",
+    titleKey: "routeTitle.socialGroupDetail",
+    requiredPermissions: ["view:feed"],
+    order: 101,
+  },
 
   // Account
   {

@@ -185,13 +185,18 @@ export const decideFeedGroupMemberSchema = z
 export type DecideFeedGroupMemberDto = z.infer<typeof decideFeedGroupMemberSchema>;
 
 /**
- * Kết quả `038`/`039` — MỘT hình dạng cho cả ba nhánh (duyệt · từ chối · đổi vai trò) và cho cả
- * `039` mời ra.
+ * Kết quả `038` — MỘT hình dạng cho cả ba nhánh (duyệt · từ chối · đổi vai trò).
  *
- * `role`/`status` **null ⇔ hàng thành viên KHÔNG CÒN** (từ chối yêu cầu và mời ra đều xoá CỨNG —
- * DB-17 §4.9). Một union ba nhánh sẽ buộc FE rẽ kiểu cho ba lời gọi vốn cùng một màn hình, còn một
- * `{ok:true}` trần thì không nói được "sau thao tác người này đang ở đâu" — thứ FE cần để vẽ lại
- * đúng một dòng trong danh sách mà không gọi lại `037`.
+ * `role`/`status` **null ⇔ hàng thành viên KHÔNG CÒN** (từ chối yêu cầu xoá CỨNG — DB-17 §4.9). Một
+ * union ba nhánh sẽ buộc FE rẽ kiểu cho ba lời gọi vốn cùng một màn hình, còn một `{ok:true}` trần
+ * thì không nói được "sau thao tác người này đang ở đâu" — thứ FE cần để vẽ lại đúng một dòng trong
+ * danh sách mà không gọi lại `037`.
+ *
+ * ⚠️ **`039` (mời ra) KHÔNG dùng schema này** — đo 29/09/2026 (S16-SOCIAL-FE-2B §1.a): service trả
+ * `{ deleted: true }` (`social-groups.service.ts#removeMember`), cùng hình dạng với `034` xoá nhóm.
+ * Bản docblock trước ghi "cho cả `039`" — parse phản hồi `039` bằng schema này sẽ NÉM ZodError SAU
+ * KHI người đó đã bị mời ra thật. `036` rời nhóm trả `{ left: true }`. Hai hình dạng literal đó
+ * khai ở `packages/web-core/src/lib/social-groups-api.ts` (khuôn `feedDeletedResultSchema`).
  */
 export const feedGroupMemberMutationSchema = z.object({
   userId: uuid(),
