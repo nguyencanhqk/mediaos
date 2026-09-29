@@ -16,17 +16,18 @@
  */
 import * as React from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Info, X } from "lucide-react";
-import { ApiError, socialApi, socialKeys, useCan } from "@mediaos/web-core";
-import type { CreateFeedPostDto, FeedPostDto, FeedSortDto } from "@mediaos/contracts";
+import { socialApi, socialKeys, useCan } from "@mediaos/web-core";
+import type { FeedPostDto, FeedSortDto } from "@mediaos/contracts";
 import { useFeedRealtime } from "@/hooks/use-feed-realtime";
 import { ActionErrorBanner } from "./components/ActionErrorBanner";
+import { CreatePostNotices } from "./components/CreatePostNotices";
 import { FeedComposer } from "./components/FeedComposer";
 import { FeedPostList } from "./components/FeedPostList";
 import { NewFeedPostsBadge } from "./components/NewFeedPostsBadge";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
+import { useCreatePost } from "./lib/use-create-post";
 
 interface FeedRouteSearch {
   sort?: FeedSortDto;
@@ -74,43 +75,14 @@ export function FeedPage(): React.ReactElement {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
 
-  /** Lỗi của lượt ĐĂNG BÀI. Tách khỏi `actions.actionError` vì hai đường ghi khác nhau. */
-  const [postError, setPostError] = React.useState<{ forbidden: boolean } | null>(null);
   /**
-   * Số lượt nhắc bị BỎ ở lượt đăng gần nhất — **thông tin, KHÔNG phải lỗi** (SPEC-16 §12 `ERR-009`).
-   *
-   * Server bỏ im lặng mention người ngoài audience rồi vẫn trả 201. Nuốt luôn con số này nghĩa là
-   * người đăng tin rằng cả ba đồng nghiệp họ vừa nhắc đều đã được báo, trong khi không ai nhận gì.
+   * Lượt ĐĂNG BÀI — `onError` · số lượt nhắc bị bỏ · invalidate theo loại sống ở `useCreatePost`
+   * (S16-SOCIAL-FE-2B tách ra để trang nhóm dùng chung). Lỗi đăng bài tách khỏi `actions.actionError`
+   * vì hai đường ghi khác nhau.
    */
-  const [droppedMentionCount, setDroppedMentionCount] = React.useState(0);
-
-  const createMutation = useMutation({
-    mutationFn: (dto: CreateFeedPostDto) => socialApi.createPost(dto),
-    // Lượt gửi MỚI dọn dấu vết lượt trước: một dải lỗi cũ treo cạnh bài vừa đăng xong là thông tin sai.
-    onMutate: () => {
-      setPostError(null);
-      setDroppedMentionCount(0);
-    },
-    onSuccess: (created) => {
-      void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
-      // S16-SOCIAL-FE-2 (plan §8 H5): bài poll/idea mới phải hiện ngay ở màn 007/008 + widget rail.
-      if (created.type === "poll") {
-        void queryClient.invalidateQueries({ queryKey: socialKeys.polls.allOf() });
-      } else if (created.type === "idea") {
-        void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
-      }
-      // Bài của CHÍNH mình vừa đăng cũng đi qua WS về lại; reset để badge không đếm nó.
-      resetNewPosts();
-      setDroppedMentionCount(created.droppedMentions.length);
-    },
-    /**
-     * 🔴 Thiếu `onError` = hỏng IM LẶNG TUYỆT ĐỐI: app không có hệ toast và `QueryClient` ở
-     * `main.tsx` không khai `MutationCache.onError`, nên một lượt đăng hỏng sẽ không sinh ra một ký
-     * tự nào trên màn hình. Người dùng bấm lại vài lần rồi kết luận nút hỏng.
-     */
-    onError: (err) => {
-      setPostError({ forbidden: err instanceof ApiError && err.status === 403 });
-    },
+  const createPost = useCreatePost({
+    // Bài của CHÍNH mình vừa đăng cũng đi qua WS về lại; reset để badge không đếm nó.
+    onCreated: () => resetNewPosts(),
   });
 
   const posts: FeedPostDto[] = React.useMemo(
@@ -168,34 +140,12 @@ export function FeedPage(): React.ReactElement {
         />
       )}
 
-      {postError && (
-        <ActionErrorBanner
-          kind="post"
-          forbidden={postError.forbidden}
-          onDismiss={() => setPostError(null)}
-        />
-      )}
-
-      {droppedMentionCount > 0 && (
-        <div
-          role="status"
-          data-testid="dropped-mentions-notice"
-          className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2"
-        >
-          <p className="flex items-start gap-2 text-sm text-muted-foreground">
-            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            {t("composer.droppedMentions", { count: droppedMentionCount })}
-          </p>
-          <button
-            type="button"
-            onClick={() => setDroppedMentionCount(0)}
-            aria-label={t("actionError.dismiss")}
-            className="rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      <CreatePostNotices
+        postError={createPost.postError}
+        clearPostError={createPost.clearPostError}
+        droppedMentionCount={createPost.droppedMentionCount}
+        clearDroppedMentions={createPost.clearDroppedMentions}
+      />
 
       {/*
         🔴 `mutateAsync`, KHÔNG phải `mutate`: ô soạn chỉ dọn nội dung khi promise RESOLVE. Đổi về
@@ -204,8 +154,8 @@ export function FeedPage(): React.ReactElement {
         unhandled rejection.
       */}
       <FeedComposer
-        onSubmit={(dto) => createMutation.mutateAsync(dto)}
-        isSubmitting={createMutation.isPending}
+        onSubmit={createPost.submit}
+        isSubmitting={createPost.isPending}
         prefillBody={search.wish ? t("birthday.wishPrefill", { name: search.wish }) : undefined}
       />
 

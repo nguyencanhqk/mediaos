@@ -12,10 +12,12 @@ import type { ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
-import { useAuthStore } from "@mediaos/web-core";
+import { ApiError, useAuthStore } from "@mediaos/web-core";
 import type {
   FeedBirthdayDto,
   FeedCommentDto,
+  FeedGroupDto,
+  FeedGroupMemberDto,
   FeedNewsItemDto,
   FeedPostDto,
 } from "@mediaos/contracts";
@@ -118,3 +120,62 @@ export const makeBirthday = (over: Partial<FeedBirthdayDto> = {}): FeedBirthdayD
 
 /** Trang keyset một trang, `nextCursor: null` = trang cuối. */
 export const page = <T,>(data: T[]) => ({ data, nextCursor: null });
+
+// ── S16-SOCIAL-FE-2B — nhóm. Hình dạng chép `toFeedGroupDto` / `toMemberDto` (social-groups.service.ts). ──
+
+export const GROUP_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+export function makeGroup(over: Partial<FeedGroupDto> = {}): FeedGroupDto {
+  return {
+    id: GROUP_ID,
+    name: "Bóng đá công ty",
+    description: "Đá mỗi thứ 5",
+    visibility: "public",
+    memberCount: 3,
+    myRole: null,
+    myStatus: null,
+    createdAt: "2026-09-01T00:00:00.000Z",
+    ...over,
+  };
+}
+
+export function makeMember(over: Partial<FeedGroupMemberDto> = {}): FeedGroupMemberDto {
+  return {
+    userId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    employeeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    fullName: "Trần Thị B",
+    avatarUrl: null,
+    role: "member",
+    status: "active",
+    joinedAt: "2026-09-02T00:00:00.000Z",
+    ...over,
+  };
+}
+
+/** Trang OFFSET `{data,page,limit,total}` của 030/037. */
+export const offsetPage = <T,>(data: T[], total = data.length) => ({ data, page: 1, limit: 20, total });
+
+/**
+ * Lỗi ĐÚNG hình dạng trên dây: `code` là mã CHUNG theo status (`AllExceptionsFilter`), mã SOCIAL chỉ ở
+ * tiền tố `message`. Chuỗi chép `social.errors.ts`.
+ */
+export const GROUP_ERR = {
+  lastOwner: () =>
+    new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR-015: nhóm phải còn ít nhất một chủ nhóm đang hoạt động."),
+  stateMismatch: () =>
+    new ApiError(
+      409,
+      "RESOURCE-ERR-CONFLICT",
+      "SOCIAL-ERR-013: thao tác không khớp trạng thái của thành viên này (chờ duyệt cần duyệt/từ chối, đang hoạt động mới đổi được vai trò).",
+    ),
+  exists: () =>
+    new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR-013: bạn đã tham gia hoặc đã gửi yêu cầu vào nhóm này."),
+  notFound: () => new ApiError(404, "RESOURCE-ERR-NOT-FOUND", "SOCIAL-ERR-012: không tìm thấy nhóm."),
+  memberGone: () =>
+    new ApiError(404, "RESOURCE-ERR-NOT-FOUND", "SOCIAL-ERR: người này không phải thành viên của nhóm."),
+  nameTaken: () =>
+    new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR: tên nhóm này đã được dùng trong công ty."),
+  forbidden: () =>
+    new ApiError(403, "AUTH-ERR-FORBIDDEN", "SOCIAL-ERR-014: bạn không có quyền thực hiện thao tác này trong nhóm."),
+  server: () => new ApiError(500, "INTERNAL", "boom"),
+};

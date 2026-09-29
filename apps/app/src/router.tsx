@@ -68,6 +68,15 @@ const indexRoute = createRoute({
 // ---------------------------------------------------------------------------
 import { ROUTE_REGISTRY } from "@mediaos/web-core";
 import { validateFeedRouteSearch } from "@/routes/social/feed/lib/feed-route-search";
+import {
+  validateGroupDetailRouteSearch,
+  validateGroupsRouteSearch,
+} from "@/routes/social/groups/lib/group-route-search";
+import {
+  LEGACY_SOCIAL_GROUP_REDIRECT,
+  LEGACY_SOCIAL_POST_REDIRECT,
+  legacyRedirectBeforeLoad,
+} from "@/routes/social/legacy-social-redirects";
 import { payrollInsuranceIssueEnum, type PayrollInsuranceIssue } from "@mediaos/contracts";
 
 export function getMeta(routeKey: string): RouteMeta {
@@ -3080,6 +3089,13 @@ const PollsPage = React.lazy(() =>
 const IdeasPage = React.lazy(() =>
   import("@/routes/social/ideas/IdeasPage").then((m) => ({ default: m.IdeasPage })),
 );
+// S16-SOCIAL-FE-2B lát B — SOC-SCREEN-006.
+const GroupsPage = React.lazy(() =>
+  import("@/routes/social/groups/GroupsPage").then((m) => ({ default: m.GroupsPage })),
+);
+const GroupPage = React.lazy(() =>
+  import("@/routes/social/groups/GroupPage").then((m) => ({ default: m.GroupPage })),
+);
 
 /**
  * Bộ lọc/sắp xếp sống trong URL (plan D6) — `validateSearch` rơi về mặc định thay vì NÉM khi gặp
@@ -3166,6 +3182,42 @@ const feedIdeasRoute = createRoute({
   path: "/feed/ideas",
   beforeLoad: authGuard,
   component: () => buildModuleRouteContent(feedIdeasMeta, "SOCIAL", <IdeasPage />),
+});
+
+// S16-SOCIAL-FE-2B lát B — Nhóm (SOC-SCREEN-006). Path danh sách ĐÚNG `/feed/groups` ⇒ mục sidebar
+// `social.groups` (đã khai sẵn) tự hiện qua `pruneUnbuiltScreens`. `validateSearch` KHÔNG ném và mọi
+// trường optional (xem `group-route-search.ts` — giá trị tới đó ĐÃ qua `JSON.parse`: `?invite=1` là số).
+const feedGroupsMeta = getMeta("social.groups");
+const feedGroupsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/groups",
+  beforeLoad: authGuard,
+  validateSearch: validateGroupsRouteSearch,
+  component: () => buildModuleRouteContent(feedGroupsMeta, "SOCIAL", <GroupsPage />),
+});
+
+const feedGroupDetailMeta = getMeta("social.groupDetail");
+const feedGroupDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/groups/$groupId",
+  beforeLoad: authGuard,
+  validateSearch: validateGroupDetailRouteSearch,
+  component: () => buildModuleRouteContent(feedGroupDetailMeta, "SOCIAL", <GroupPage />),
+});
+
+// S16-SOCIAL-FE-2B (owner ký O2) — link NOTI `/social/groups/{id}` · `/social/posts/{id}` đang rơi vào
+// 404 chung. Dựng TẠI ĐÂY từ dữ liệu thuần của `legacy-social-redirects.ts` (tự dựng ở file kia là
+// import vòng qua `rootRoute`). `socialRedirectRoute` (`/social` khớp đúng) KHÔNG đụng.
+// Hằng CÓ TÊN (không ghép theo vị trí mảng): `path` đọc từ chính mục đó ⇒ ca N1 đo đúng thứ router dùng.
+const legacySocialGroupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEGACY_SOCIAL_GROUP_REDIRECT.path,
+  beforeLoad: legacyRedirectBeforeLoad(LEGACY_SOCIAL_GROUP_REDIRECT),
+});
+const legacySocialPostRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEGACY_SOCIAL_POST_REDIRECT.path,
+  beforeLoad: legacyRedirectBeforeLoad(LEGACY_SOCIAL_POST_REDIRECT),
 });
 
 // S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
@@ -3568,6 +3620,11 @@ const routeTree = rootRoute.addChildren([
   // S16-SOCIAL-FE-2 lát A.
   feedPollsRoute,
   feedIdeasRoute,
+  // S16-SOCIAL-FE-2B lát B + 2 route chuyển hướng link NOTI (O2).
+  feedGroupsRoute,
+  feedGroupDetailRoute,
+  legacySocialGroupRoute,
+  legacySocialPostRoute,
   accountSetupTwoFactorRoute,
   accountProfileRoute,
   systemAuditLogsRoute,

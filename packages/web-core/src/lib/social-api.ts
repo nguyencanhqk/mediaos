@@ -87,7 +87,8 @@ import { idempotencyKeyFor } from "./api-idempotency";
  *  - `024 GET /social/tags` — không màn nào của FE-1 dùng; thêm hàm không call-site là mã chết.
  *  - `027..029` báo cáo vi phạm — owner ký 23/09/2026 GỠ khỏi FE-1 (plan §5.2 · N8); nút + hộp thoại
  *    + cảnh báo tự-lộ-danh-tính (SOC-DEC-011) đi **cùng một lượt** ở `S16-SOCIAL-FE-3`.
- *  - `030..044` nhóm + bình chọn (BE-2A #533 / BE-2B-1 #534 đã merge) — thuộc `S16-SOCIAL-FE-2`.
+ *  - `030..039` nhóm — ở `socialGroupsApi` (`./social-groups-api.ts`, S16-SOCIAL-FE-2B), file riêng.
+ *    `040..046` bình chọn + sáng kiến ĐÃ mirror ở cuối object này (S16-SOCIAL-FE-2 lát A).
  */
 
 /**
