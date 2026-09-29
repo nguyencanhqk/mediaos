@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 688,
-    "controllers": 130,
-    "gated": 649,
+    "routes": 690,
+    "controllers": 131,
+    "gated": 651,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -8231,6 +8231,38 @@
       "path": "/api/v1/recycle-bin/employees/:id/restore",
       "hasPermission": true,
       "permission": "restore:employee",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecycleBinFeedPostsController#list",
+      "httpMethod": "GET",
+      "path": "/api/v1/recycle-bin/feed-posts",
+      "hasPermission": true,
+      "permission": "restore:feed-post",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "RecycleBinFeedPostsController#restore",
+      "httpMethod": "POST",
+      "path": "/api/v1/recycle-bin/feed-posts/:post_id/restore",
+      "hasPermission": true,
+      "permission": "restore:feed-post",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [

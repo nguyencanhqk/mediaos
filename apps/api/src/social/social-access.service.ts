@@ -14,7 +14,8 @@ import { DataScopeService } from "../permission/data-scope.service";
 // theo FilePolicy + StorageAdapter); một import giá trị ở đây sẽ dựng vòng phụ thuộc runtime.
 import type { AttachNewGate } from "./social-attachments.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
-import { visibleGroupPostExists } from "./social-group-predicates";
+// S16-SOCIAL-BE-3C (D9) — vế audience tách ra hàm thuần, dùng chung với cổng che của thùng rác.
+import { audienceCondition } from "./social-audience.predicate";
 import {
   ATTACH_GATE_ROUTE_TARGET,
   SOCIAL_FILE_TARGET_PAIRS,
@@ -470,14 +471,15 @@ export class SocialAccessService {
    *
    * Ba vế, AND với nhau:
    *   (a) **chưa xoá mềm** — `deleted_at IS NULL`. Không có ngoại lệ nào, kể cả `manage:feed-post`:
-   *       BE-1 không có route thùng rác (plan §0.2), nên một nhánh "manage thấy cả bài đã xoá" sẽ là
-   *       đường đọc duy nhất vào dữ liệu đã xoá mà không ai gác.
+   *       một nhánh "manage thấy cả bài đã xoá" sẽ là đường đọc vào dữ liệu đã xoá mà không ai gác.
+   *       ⟲ S16-SOCIAL-BE-3C: thùng rác (`057`/`058`) KHÔNG đi qua vị từ này — nó có cặp RIÊNG
+   *       (`restore:feed-post` + sàn Company) và chỉ mượn vế (c) — cộng bản mirror vế (b) trên status ĐÃ
+   *       NHỚ — để CHE tác giả/nội dung (D10).
    *   (b) **status** — `published` cho mọi người; `hidden` CHỈ cho tác giả hoặc `manage:feed-post`.
    *       `deleted` không bao giờ (đã chặn ở (a), giữ vế này để status là một tập đóng đọc được).
-   *   (c) **audience** — `company` cho mọi người; `org_unit` chỉ khi `org_unit_id` ∈ tập của actor
-   *       (đúng-BẰNG, không cây con — D13); `group` **luôn FALSE ở BE-1** vì chưa có route quản lý
-   *       nhóm ⇒ không có cách nào biết actor có thuộc nhóm hay không, và "coi như thấy được" là
-   *       phát bài riêng tư ra cả công ty. Tác giả VẪN thấy bài của chính mình ở mọi audience.
+   *   (c) **audience** — `audienceCondition` (`social-audience.predicate.ts`, BE-3C D9): `company` cho
+   *       mọi người; `org_unit` chỉ khi `org_unit_id` ∈ tập của actor (đúng-BẰNG, không cây con — D13);
+   *       `group` qua `visibleGroupPostExists` (BE-2A D3); tác giả VẪN thấy bài của chính mình.
    *
    * ⚠️ `alias` cho phép dùng lại vị từ khi `feed_posts` được JOIN dưới một tên khác (đường bình
    * luận). KHÔNG mặc định truyền cột trần — quên alias ở một JOIN là vị từ bám nhầm bảng.
@@ -490,33 +492,11 @@ export class SocialAccessService {
         inArray(t.status, ["published", "hidden"])
       : (or(eq(t.status, "published"), and(eq(t.status, "hidden"), isAuthor)) ?? sql`false`);
 
-    const audienceOr: SQL[] = [eq(t.audience, "company")];
-    if (actor.orgUnitIds.length > 0) {
-      audienceOr.push(
-        and(eq(t.audience, "org_unit"), inArray(t.orgUnitId, [...actor.orgUnitIds])) ?? sql`false`,
-      );
-    }
-    // 🔴 S16-SOCIAL-BE-2A (D3) — nhánh `group`: thành viên `active` HOẶC nhóm `public`, nhóm CÒN SỐNG.
-    // Vị từ RIÊNG, không dùng chung với tập-người (`activeGroupMemberExists`): xem docblock của
-    // `visibleGroupPostExists` — nhóm public đọc được bởi mọi người nhưng chỉ THÀNH VIÊN mới là
-    // người nhận NOTI / người bị đếm "chưa đọc". EXISTS tương
-    // quan TRONG CÂU (không resolve mảng id trước: tập nhóm đổi liên tục, và một mảng đọc ở tx khác
-    // là TOCTOU). Vị từ dùng CHUNG với ba hàm tập-người — một luật, một bản (`social-group-
-    // predicates.ts`). Bám `t.groupId` theo tham số `alias`, KHÔNG `feedPosts.groupId` (M-g).
-    //
-    // ⚠️ Vị từ này phục vụ CẢ cổng màn hình LẪN cổng đường tải (`SocialFileResolver` dùng chung) —
-    // nới nhánh này là nới cả hai. `manage:feed-group` CỐ Ý không có mặt ở đây (D9-ii).
-    audienceOr.push(
-      and(
-        eq(t.audience, "group"),
-        visibleGroupPostExists(actor.companyId, t.groupId, actor.actorUserId),
-      ) ?? sql`false`,
-    );
-    // Tác giả luôn thấy bài của chính mình — kể cả `org_unit` của đơn vị họ vừa rời, kể cả `group`.
-    audienceOr.push(isAuthor);
-    const audienceOk = or(...audienceOr) ?? sql`false`;
-
-    return and(isNull(t.deletedAt), statusOk, audienceOk) ?? sql`false`;
+    // Vế (c) — S16-SOCIAL-BE-3C (D9): hàm THUẦN dùng CHUNG với cổng che của thùng rác (`057`). Bốn nhánh
+    // (company · org_unit · group qua `visibleGroupPostExists` · tác giả) + lý do từng nhánh ở docblock của
+    // nó. SQL sinh ra byte-identical với bản viết tại chỗ trước WO này — int-spec audience/group BE-1/BE-2A
+    // là lưới cho lần tách.
+    return and(isNull(t.deletedAt), statusOk, audienceCondition(actor, t)) ?? sql`false`;
   }
 
   /**

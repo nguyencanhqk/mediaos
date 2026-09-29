@@ -724,7 +724,7 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     point: "social/social-news.repository.ts#ackedPeople:users.fullName",
     basis: "second-assert",
     reason:
-      "SOCIAL-API-022 nửa «ĐÃ đọc». Truy vấn chỉ lọc `(company_id, post_id)` nên bằng chứng nằm ở điểm KHẲNG ĐỊNH, không ở vị từ của chính câu: route gate `manage:feed-news` (tầng 1 = bảng hằng, tầng 2 = `resolveActor(user,\"postAcksList\")`) và `social-news.service.ts#listAcks` gọi `assertPostVisible` TRƯỚC khi đọc — `manage:feed-news` KHÔNG phải giấy thông hành đọc bài của đơn vị khác. Tập hàng thêm nữa bị chặn bởi CHÍNH hành vi: chỉ người đã có hàng `feed_post_acks` cho bài này.",
+      'SOCIAL-API-022 nửa «ĐÃ đọc». Truy vấn chỉ lọc `(company_id, post_id)` nên bằng chứng nằm ở điểm KHẲNG ĐỊNH, không ở vị từ của chính câu: route gate `manage:feed-news` (tầng 1 = bảng hằng, tầng 2 = `resolveActor(user,"postAcksList")`) và `social-news.service.ts#listAcks` gọi `assertPostVisible` TRƯỚC khi đọc — `manage:feed-news` KHÔNG phải giấy thông hành đọc bài của đơn vị khác. Tập hàng thêm nữa bị chặn bởi CHÍNH hành vi: chỉ người đã có hàng `feed_post_acks` cho bài này.',
     signedBy: "S16-SOCIAL-BE-1B",
   },
   {
@@ -783,6 +783,13 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     reason:
       "SOCIAL-API-001/002/003/004/010/014/015/016 (+ 020/023/025 qua `decorateForViewer`/`toPageForViewer`) — NHÃN của người được nhắc tên trong bài/bình luận (S16-SOCIAL-BE-1D). Câu chỉ lọc `(company_id, target_type, target_id IN (…))` nên bằng chứng nằm ở ĐIỂM KHẲNG ĐỊNH: tập `targetId` đến TRỰC TIẾP từ hàng ĐÃ qua cổng đọc bài — `listFeed`/`findVisible` (mang `visiblePostCondition`) cho `SocialPostsService.decorate`, `assertPostVisible`/`assertCommentVisible` cho `SocialCommentsService.decorate` — không có đường public nào nhận `targetId` rời từ caller. Hàm KHÔNG tra danh bạ: chỉ đọc người ĐÃ có hàng `feed_mentions` trên những đích đó (plan §5 [PR2-4]). Luật D1 (owner chốt O-1): tên chỉ ra khi người được nhắc VẪN trong audience của bài (`classifyInAudience` — CÙNG vị từ đường ghi `resolveMentions`), tài khoản `active`, còn hồ sơ nhân sự sống; trượt ⇒ phần tử `{withheld:true}` KHÔNG mang tên/`employeeId` (mapper `copyMention` chép theo danh sách khoá). Người trong audience là người CŨNG đọc được bài ⇒ tên không vượt biên nào người xem chưa có (tên tác giả + link hồ sơ đã hiện cho mọi `view:feed`). DTO KHÔNG `userId` ở nhánh nào (D3). Ca đo: M1–M11 ở `social-be1d-mentions.int-spec.ts` — M7 quét MỌI response GET (không `userId` người được nhắc, nhánh rút đúng một khoá `withheld`); mảng trên response POST/PATCH (M1/M6/M6b/M9) đo bằng `toEqual` chính xác (khoá thừa ⇒ đỏ). POST/PATCH không vào lượt quét M7 vì `droppedMentions` CỐ Ý dội lại id caller vừa gửi.",
     signedBy: "S16-SOCIAL-BE-1D",
+  },
+  {
+    point: "social/social-recycle-bin.repository.ts#listDeletedTx:users.fullName",
+    basis: "identity-gated",
+    reason:
+      'SOCIAL-API-057 `GET /recycle-bin/feed-posts` — tên tác giả (+ `employeeId`) của bài trong thùng rác (S16-SOCIAL-BE-3C D10/D11). Tập HÀNG gác bởi cặp RIÊNG `restore:feed-post` + sàn Company ở tầng 2 (`SocialRecycleBinService.list` → `resolveActor(…, "recycleFeedPostList")`); CỘT danh tính gác bởi vị từ KHÁC — `contentVisible` = `audienceCondition(actor)` (`social-audience.predicate.ts`, CÙNG hàm với vế (c) của `visiblePostCondition`) ∧ (khi actor KHÔNG giữ `manage:feed-post`) `status_before_delete=\'published\'` ∨ actor là tác giả (mirror vế (b) `statusOk` trên status ĐÃ NHỚ) — qua `identityColumns(fromScope(contentVisible, "identity-gated", why), {fullName, employeeId}, "authorInScope")` ⇒ đúng định nghĩa `identity-gated` (`identity-projection.ts:46-49`). KHÔNG `target` (vị từ nói về `feed_posts`, không về `users`) và KHÔNG `scoped-predicate` (không đúc vị từ chặn TẬP HÀNG — `ROW_SCOPE_MINT_PINS` không đổi). Bài ngoài audience người xem (nhóm kín không là thành viên · `org_unit` đơn vị khác · nhóm đã xoá) ⇒ `author:null` cùng `groupId/orgUnitId/bodyExcerpt` null; bài từng `hidden` hoặc legacy status NULL với vai thiếu `manage:feed-post` ⇒ `author:null` + `bodyExcerpt:null` (FULL gate BE-3C security MEDIUM — bản đầu chỉ gác `seen` nên lời khai dưới đây từng SAI) — thùng rác KHÔNG mở đường vòng qua SOC-DEC-006: không lộ tên nào ngoài tên tác giả của bài mà actor vốn thấy nếu bài còn sống. KHÔNG avatar, KHÔNG `userId` người xoá. Ca đo: A6 ở `social-be3c-recycle-list.int-spec.ts` (thông điệp «rò tác giả/nhóm qua thùng rác» · «rò tác giả bài từng bị ẩn qua thùng rác» + ALLOW đối chứng `tManageView`) + mutant M5b.',
+    signedBy: "S16-SOCIAL-BE-3C",
   },
 ];
 
@@ -874,7 +881,12 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // điểm chiếu DUY NHẤT của module PAYROLL; cond thật từ resolveAndAssert theo cặp của route (bảng
   // hằng PAYROLL_ROUTE_PAIRS) + SÀN scope Company, fail-closed users.id=actor. Nới có chủ đích,
   // plan-review + FULL gate.
-  "identity-gated": 17,
+  // 17 → 18 (S16-SOCIAL-BE-3C, 28/09/2026): `social/social-recycle-bin.repository.ts#listDeletedTx` — tên tác
+  // giả bài trong thùng rác (route `057`); cột khử bằng `identityColumns` theo vị từ audience của feed, tập hàng
+  // gác `restore:feed-post` + sàn Company; KHÔNG mở bề mặt đọc ngoài tên tác giả của bài actor vốn thấy nếu bài
+  // còn sống. Mọi trần khác đã bão hoà (`scoped-predicate` 25/25 · `second-assert` 13/13) — plan-review v2 B2
+  // chọn basis này; nới CÓ CHỦ ĐÍCH qua FULL gate.
+  "identity-gated": 18,
 };
 
 /**

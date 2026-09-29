@@ -459,6 +459,13 @@ export const SOCIAL_ERR = {
    * không thành oracle dò sự tồn tại của đơn vị. Tập hợp lệ = CHÍNH metadata `units` của response.
    */
   STATS_UNIT_OUT_OF_SCOPE: "SOCIAL-ERR: đơn vị nằm ngoài phạm vi thống kê của bạn.",
+  /**
+   * (409) — `058` khôi phục bài thuộc một NHÓM đã xoá mềm (S16-SOCIAL-BE-3C D12). Khôi phục sẽ tạo một bài
+   * sống-mà-vô-hình (vị từ đọc loại nhóm chết) trong khi bộ đếm/thẻ đã được cộng lại. Chưa có route khôi phục
+   * NHÓM ⇒ bài kẹt trong thùng rác tới khi có (nợ API-19 §5.1k). KHÔNG phải 404: người gọi đã thấy hàng này
+   * ở `057` (`groupDeleted: true`) nên nó không rò sự tồn tại.
+   */
+  RESTORE_GROUP_DELETED: "SOCIAL-ERR: nhóm của bài viết đã bị xoá — không thể khôi phục bài.",
 } as const;
 
 /**

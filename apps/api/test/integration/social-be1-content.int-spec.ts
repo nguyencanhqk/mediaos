@@ -763,8 +763,26 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-1 quy tắc nội dung + bộ đếm 
 
       // ⚠️ Gọi HÀM THẬT, không `UPDATE … SET deleted_at = NULL` bằng tay: ca test chỉ flip cột sẽ
       // xanh mà không chứng minh gì về tính đối xứng của bộ đếm (plan §2 D10).
-      const restored = await db.withTenant(A.companyId, (tx) => restorePostTx(tx, A.companyId, id));
-      expect(restored).toBe(true);
+      // ⟲ S16-SOCIAL-BE-3C (O4): tác giả TỰ xoá ⇒ khôi phục về `hidden`, KHÔNG `published`. Tham số thứ 4 là
+      // người khôi phục (`updated_by`) — ở đây một user bất kỳ của tenant; đường HTTP `058` có ca riêng (be3c).
+      const restored = await db.withTenant(A.companyId, (tx) =>
+        restorePostTx(tx, A.companyId, id, thirdUserId),
+      );
+      expect(restored, "O4: tác giả tự xoá ⇒ khôi phục về `hidden`").toBe("hidden");
+      const row = await direct.query(
+        `SELECT status, status_before_delete, deleted_at, updated_by FROM feed_posts WHERE id = $1`,
+        [id],
+      );
+      expect(row.rows[0]).toEqual({
+        status: "hidden",
+        status_before_delete: null,
+        deleted_at: null,
+        updated_by: thirdUserId,
+      });
+      // Muốn bài hiện lại thì phải CHỦ Ý bỏ ẩn qua `006` (có audit) — siết, không nới: ca này vẫn kiểm
+      // đủ đếm/thẻ, nhưng trên một bài đã đi qua ĐÚNG đường mà HR phải đi.
+      const unhide = await patch(tAuthor, `/social/posts/${id}/moderation`).send({ hidden: false });
+      expect(unhide.status, JSON.stringify(unhide.body)).toBe(200);
 
       const seen = await get(tAuthor, `/social/posts/${id}`);
       expect(seen.status, JSON.stringify(seen.body)).toBe(200);

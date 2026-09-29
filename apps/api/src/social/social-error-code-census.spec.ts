@@ -80,6 +80,8 @@ const STRONG_EVIDENCE: readonly string[] = [
   "KUDOS_BADGE_NOT_FOUND",
   // S16-SOCIAL-BE-3B — 403 `orgUnitId` ngoai pham vi thong ke (052/053). TANG A: khong co ma so.
   "STATS_UNIT_OUT_OF_SCOPE",
+  // S16-SOCIAL-BE-3C — 409 khoi phuc bai thuoc nhom da xoa mem (058, D12). TANG A: khong co ma so.
+  "RESTORE_GROUP_DELETED",
 ];
 
 /**

@@ -15,7 +15,7 @@
 | Module code  | SOCIAL                                                              |
 | Tài liệu cha | DB-01 · SPEC-16                                                     |
 | Phiên bản    | v1.0                                                                |
-| Trạng thái   | Approved (thiết kế) — **CHƯA migrate**                              |
+| Trạng thái   | Approved (thiết kế) — **đã migrate** `0577`…`0588` (DB-1/DB-2 + bổ sung BE/FE/ATTDEBT) · BE-3C `0589`/`0590` |
 | Wave         | `S16-SOCIAL` — `DB-1` (Track A, 10 bảng) · `DB-2` (Track B, 9 bảng) |
 | Ngày tạo     | 18/09/2026                                                          |
 
@@ -54,6 +54,8 @@
 > ✅ **Recycle-bin — nợ ĐO ĐÃ ĐÓNG (đo 19/09/2026): KHÔNG CẦN ĐĂNG KÝ GÌ.**
 > Recycle-bin **không có registry và không có CHECK loại đối tượng**: `apps/api/src/recycle-bin/recycle-bin.repository.ts` **hard-code** `employeeProfiles`. Vì vậy DB-1 không có chỗ nào để UNION-ADD.
 > ⚠️ Hệ quả cho **BE-1**: «thùng rác bài viết» của SPEC-16 §13.1/§16 **không** tự động có — nó phải là **màn riêng của SOCIAL** (đường khôi phục dựng trong module SOCIAL), hoặc một WO riêng mở rộng recycle-bin thành registry. `done_when` của `S16-SOCIAL-BE-1` («recycle-bin khôi phục trả lại đủ») cần đọc theo nghĩa đó.
+>
+> 📌 **Cập nhật `S16-SOCIAL-BE-3C` (28/09/2026, owner ký O3):** chọn nhánh «mở rộng recycle-bin thành registry» — nhưng registry là **tầng ỨNG DỤNG** (`RecycleBinRegistry`, SOCIAL đăng ký handler `feed_post`), **không** phải object DB ⇒ kết luận «0 DDL phía recycle-bin» ở trên VẪN ĐÚNG. DDL duy nhất của BE-3C nằm trên `feed_posts` (cột `status_before_delete` + chỉ mục thùng rác — §6.1, mig `0589`) và seed cặp `restore:feed-post` (§9.2b, mig `0590`).
 
 ### 3.3 Bảng dùng lại — không tạo mới
 
@@ -168,6 +170,7 @@ feed_kudos  n─0..1 feed_kudos_badges (catalog)
 | `org_unit_id`                                   | UUID        | Không    | composite FK → `org_units (company_id, id)` NO ACTION                                                                                                 |
 | `body`                                          | TEXT        | Không    | nội dung; CHECK độ dài ≤ 20000. **Nullable** vì bài `poll` mang nội dung ở `feed_polls.question`, `kudos` ở `feed_kudos.message` — xem CHECK kéo theo |
 | `status`                                        | VARCHAR(16) | Có       | `published`/`hidden`/`deleted` (SPEC-01 §17.18), default `published`                                                                                  |
+| `status_before_delete`                          | VARCHAR(16) | Không    | `status` ngay TRƯỚC khi xoá mềm (`published`/`hidden`), do `softDeletePostTx` ghi; NULL trên hàng sống + hàng legacy — mig `0589` (xem dưới index)    |
 | `pinned`                                        | BOOLEAN     | Có       | default `false` — chỉ bài `news` được ghim                                                                                                            |
 | `comments_locked`                               | BOOLEAN     | Có       | default `false`                                                                                                                                       |
 | `requires_ack`                                  | BOOLEAN     | Có       | default `false` — chỉ bài `news`                                                                                                                      |
@@ -211,6 +214,13 @@ ALTER TABLE feed_posts ADD CONSTRAINT chk_feed_posts_body_required
 ALTER TABLE feed_posts ADD CONSTRAINT chk_feed_posts_counts
   CHECK (like_count >= 0 AND comment_count >= 0 AND view_count >= 0);
 ALTER TABLE feed_posts ADD CONSTRAINT feed_posts_company_id_id_uq UNIQUE (company_id, id);
+
+-- S16-SOCIAL-BE-3C (mig 0589, 28/09/2026) — nhớ status trước khi xoá mềm (O2). KHÔNG CHECK cặp — xem ghi chú dưới index
+ALTER TABLE feed_posts ADD CONSTRAINT chk_feed_posts_status_before_delete
+  CHECK (status_before_delete IN ('published','hidden'));
+-- chiều duy nhất ép được: hàng SỐNG không được mang giá trị (dấu vết của lượt khôi phục quên dọn cột)
+ALTER TABLE feed_posts ADD CONSTRAINT chk_feed_posts_status_before_delete_dead
+  CHECK (status_before_delete IS NULL OR deleted_at IS NOT NULL);
 ```
 
 ```sql
@@ -237,9 +247,24 @@ CREATE INDEX idx_feed_posts_company_activity ON feed_posts (company_id, last_act
   WHERE deleted_at IS NULL AND status = 'published';
 CREATE INDEX idx_feed_posts_company_published ON feed_posts (company_id, published_at DESC, id)
   WHERE deleted_at IS NULL AND status = 'published';
+
+-- thùng rác bài viết SOCIAL-API-057 — khớp ĐÚNG `ORDER BY deleted_at DESC, id DESC` (S16-SOCIAL-BE-3C, mig 0589)
+CREATE INDEX idx_feed_posts_company_deleted ON feed_posts (company_id, deleted_at DESC, id DESC)
+  WHERE deleted_at IS NOT NULL;
 ```
 
 GRANT app role: `SELECT, INSERT, UPDATE`. **Không** `DELETE` (soft delete).
+
+> 🗑️ **`status_before_delete` — S16-SOCIAL-BE-3C, mig `0589` (28/09/2026, owner ký O2/O4).**
+>
+> - **Ai ghi:** `softDeletePostTx` — đường xoá mềm DUY NHẤT (cả `SOCIAL-API-005` lẫn `029 delete_target`) — `SET status_before_delete = status` trong CÙNG câu UPDATE xoá (biểu thức SQL, không đọc-rồi-ghi JS ⇒ đua với lượt ẩn bài thì nhớ đúng phiên bản đã commit). `restorePostTx` (`SOCIAL-API-058`) dùng nó rồi trả về `NULL` cùng câu.
+> - **Nghĩa của `NULL`:** hàng SỐNG, **hoặc** hàng đã xoá TRƯỚC `0589` (legacy), **hoặc** hàng xoá mềm bằng SQL tay. Hàng chết mang `NULL` là trạng thái hợp lệ, KHÔNG phải hỏng — khôi phục về `hidden` (fail-closed). Luật đầy đủ (tác giả tự xoá ⇒ `hidden` bất kể cột · `deleted_by` NULL ⇒ `hidden` · moderator xoá ⇒ status đã nhớ) và OPS NOTE PROD: [API-19 §5.1k](<../API Design/API-19_SOCIAL_API_Design.md>).
+> - **Giá trị = `feedRestorableStatus`** (§8), ⊂ `feedPostStatus` — chỉ `published`/`hidden`; `deleted` bị CHECK chặn.
+> - **KHÔNG CHECK cặp** `(deleted_at IS NULL) = (status_before_delete IS NULL)` — CÓ CHỦ Ý: mọi hàng đã xoá trước `0589` (và ba fixture int-spec xoá mềm bằng SQL tay) mang `deleted_at` NOT NULL + cột `NULL` ⇒ `ADD CONSTRAINT` đỏ ngay lúc quét xác thực trên PROD. Chỉ ép chiều ngược (`_dead`).
+> - **KHÔNG backfill** — không có nguồn nào khôi phục được status cũ của hàng legacy. `ADD COLUMN` nullable, không DEFAULT ⇒ chỉ đổi catalog, không viết lại bảng.
+> - **`lock_timeout`:** `0589` MỞ bằng `SET LOCAL lock_timeout = '5s'` và ĐÓNG bằng `SET LOCAL lock_timeout = DEFAULT` (khuôn `0587`) — `ADD CONSTRAINT … CHECK` lấy ACCESS EXCLUSIVE + quét, `CREATE INDEX` lấy SHARE; drizzle bọc mọi migration pending trong MỘT tx nên không trả `DEFAULT` sẽ rò sang migration sau.
+> - RLS/FORCE không đổi; GRANT `feed_posts` ở mức BẢNG ⇒ cột mới tự thừa hưởng.
+> - **Rollback (tay, diễn tập trước PROD — plan §4, header `0589`):** chạy SAU khi đã rút code BE-3C (`softDeletePostTx`/`restorePostTx` đọc-ghi cột này ⇒ còn code mà mất cột thì mọi lượt xoá bài 500) theo thứ tự ngược lúc áp (sau rollback `0590` — §9.2b). Trong MỘT tx: `SET LOCAL lock_timeout = '5s'` → `DROP INDEX idx_feed_posts_company_deleted` → `DROP CONSTRAINT chk_feed_posts_status_before_delete_dead` → `DROP CONSTRAINT chk_feed_posts_status_before_delete` → `DROP COLUMN status_before_delete` → `SET LOCAL lock_timeout = DEFAULT`. Viết thành migration ⇒ cần cờ `DESTRUCTIVE-APPROVED` (`check-migration-no-drop.sh`). ⚠️ **Mất dữ liệu:** `DROP COLUMN` xoá vĩnh viễn status đã nhớ của MỌI bài đang nằm trong thùng rác — roll-forward lại thì các hàng đó mang `NULL` như legacy ⇒ khôi phục về `hidden`.
 
 > 🔴 **FK `group_id` HOÃN sang DB-2 — ngoại lệ DUY NHẤT của luật «mọi FK mới kèm composite tenant-FK».**
 > `feed_groups` thuộc Track B nên lúc `S16-SOCIAL-DB-1` chạy nó **chưa tồn tại**; migration `0577` vì thế tạo `group_id uuid NULL` **không kèm FK**, nhưng **giữ đủ 5 CHECK cặp** `audience` ở trên.
@@ -728,6 +753,7 @@ CREATE INDEX idx_feed_kudos_badges_company_active ON feed_kudos_badges (company_
 | `feedPostType`          | `share` · `news` · `idea` · `poll` · `kudos`                         | `feed_posts.type`                                   |
 | `feedAudience`          | `company` · `group` · `org_unit`                                     | `feed_posts.audience`                               |
 | `feedPostStatus`        | `published` · `hidden` · `deleted`                                   | `feed_posts.status` (SPEC-01 §17.18)                |
+| `feedRestorableStatus`  | `published` · `hidden`                                               | `feed_posts.status_before_delete` (mig `0589`, CHECK `chk_feed_posts_status_before_delete`) + DTO `057` `statusBeforeDelete`/`restoreAs`, `058` `status` — Zod `feedRestorableStatusSchema` (`social-api-recycle.ts`) |
 | `feedReactionTarget`    | `post` · `comment`                                                   | `feed_reactions` · `feed_mentions` · `feed_reports` |
 | `feedReportReason`      | `spam` · `harassment` · `inappropriate` · `misinformation` · `other` | `feed_reports.reason`                               |
 | `feedReportStatus`      | `open` · `resolved` · `dismissed`                                    | `feed_reports.status`                               |
@@ -777,9 +803,22 @@ Số migration **đo `apps/api/migrations/meta/_journal.json` lúc chạy** và 
 | `approve:feed-idea`                                                       | —        | —              | Company | Company       |
 | `view:feed-report`                                                        | —        | **Department** | Company | Company       |
 
-- **Tổng seed = 14 hàng `permissions` + 43 hàng `role_permissions`** (`employee` 7 · `manager` 8 · `hr` 14 · `company-admin` 14). Migration **verify fail-loud đúng số** như khuôn `0560`/`0565`; `super-admin` **không** enumerate (nhận qua `SuperAdminBootstrapService`). Các role hệ thống `payroll-officer`/`recruiter`/`asset-manager`/`office-admin` nhận **0 hàng** ở wave này.
+- **Tổng seed = 14 hàng `permissions` + 43 hàng `role_permissions`** (`employee` 7 · `manager` 8 · `hr` 14 · `company-admin` 14) — con số của `0578`; sau `0590` là 15 + 45, xem §9.2b. Migration **verify fail-loud đúng số** như khuôn `0560`/`0565`; `super-admin` **không** enumerate (nhận qua `SuperAdminBootstrapService`). Các role hệ thống `payroll-officer`/`recruiter`/`asset-manager`/`office-admin` nhận **0 hàng** ở wave này.
 - **KHÔNG đụng** ba cặp `social-*` của fbpost; migration `0544` có verify đếm grant `social*` của `employee` và sẽ RAISE nếu bị chạm.
 - Census grant phải phủ **4 hình dạng wildcard** (`*:*` · `verb:*` · `*:resource` · cặp tường minh) — quyền SOCIAL không được lọt vào vai nào qua đường wildcard ngoài ý muốn.
+
+### 9.2b `restore:feed-post` — +1 cặp (`S16-SOCIAL-BE-3C`, mig `0590`, 28/09/2026)
+
+Owner ký O1: cặp MỚI gác thùng rác bài viết (`SOCIAL-API-057`/`058`), **KHÔNG** tái dùng `manage:feed-post`. Khuôn `0476`/`0578`, `ON CONFLICT DO NOTHING` cho cả hai bảng; journal idx 257 (sau `0589` idx 256).
+
+| Cặp                 | `is_sensitive` | employee | manager | hr      | company-admin |
+| ------------------- | -------------- | -------- | ------- | ------- | ------------- |
+| `restore:feed-post` | false          | —        | —       | Company | Company       |
+
+- **Sau `0590`: 15 hàng `permissions` `feed-*` + 45 hàng `role_permissions`** (`employee` 7 · `manager` 8 · `hr` 15 · `company-admin` 15).
+- Role resolve theo thuộc tính (`name` · `company_id IS NULL` · `is_system` · `deleted_at IS NULL`), thiếu ⇒ `RAISE`. **Verify fail-loud:** cặp tồn tại `is_sensitive=false` · ĐÚNG 2 grant ALLOW @Company trên vai canonical (trừ `super-admin`) · **tập vai canonical giữ `restore:feed-post` = tập giữ `manage:feed-post`** · 0 grant cho `payroll-officer`/`recruiter`/`asset-manager`/`office-admin` · 0 hàng `object_permissions` trỏ cặp.
+- `is_sensitive=false` (nhất quán SOC-DEC-004) ⇒ vai `*:*` và `super-admin` tự nhận cặp — hệ quả wildcard có chủ ý, ghi ở [ma trận §9h](../permission-matrix-spec.md) + [API-19 §5.1k](<../API Design/API-19_SOCIAL_API_Design.md>).
+- Rollback (tay): `DELETE role_permissions` 2 hàng + `DELETE permissions` cặp.
 
 ### 9.3 NOTI catalog — **CHECK sống ở HAI bảng**
 

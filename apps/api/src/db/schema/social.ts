@@ -130,6 +130,14 @@ export const feedPosts = pgTable(
     updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
+    /**
+     * S16-SOCIAL-BE-3C (mig 0589, owner ký O2) — status NGAY TRƯỚC khi xoá mềm. `softDeletePostTx` ghi,
+     * `restorePostTx` dọn về NULL. NULL trên hàng SỐNG (CHECK `_dead`) và trên hàng legacy đã xoá trước
+     * 0589 (KHÔNG backfill — D4 quy NULL về `hidden`). Luật dùng cột: `restoreStatusSql()` (`social-counters.ts`).
+     */
+    statusBeforeDelete: varchar("status_before_delete", { length: 16 }).$type<
+      Extract<FeedPostStatus, "published" | "hidden">
+    >(),
     /** GENERATED ALWAYS — DB tự tính. Thiếu khai generated ⇒ INSERT đỏ "cannot insert into generated
      *  column". Dùng 'simple' + public.f_unaccent (IMMUTABLE, 0538) — phương án A của DB-17 §6.1b. */
     searchVector: tsvector("search_vector").generatedAlwaysAs(
@@ -157,6 +165,16 @@ export const feedPosts = pgTable(
     ),
     check("chk_feed_posts_body_len", sql`length(body) <= 20000`),
     check("chk_feed_posts_counts", sql`like_count >= 0 AND comment_count >= 0 AND view_count >= 0`),
+    // S16-SOCIAL-BE-3C (mig 0589) — KHÔNG CHECK cặp `(deleted_at IS NULL) = (status_before_delete IS NULL)`:
+    // fixture xoá tay + hàng legacy mang `deleted_at` mà cột NULL (D2). Chiều «hàng SỐNG mang giá trị» thì chặn.
+    check(
+      "chk_feed_posts_status_before_delete",
+      sql`status_before_delete IN ('published', 'hidden')`,
+    ),
+    check(
+      "chk_feed_posts_status_before_delete_dead",
+      sql`status_before_delete IS NULL OR deleted_at IS NOT NULL`,
+    ),
     // UNIQUE (company_id, id) — đích composite FK của comments/tags/views/acks/saved/reports (ở SQL).
     unique("feed_posts_company_id_id_uq").on(t.companyId, t.id),
     index("idx_feed_posts_company_created")
@@ -185,6 +203,10 @@ export const feedPosts = pgTable(
       .on(t.companyId, sql`${t.publishedAt} DESC`, t.id)
       .where(sql`deleted_at IS NULL AND status = 'published'`),
     index("idx_feed_posts_search").using("gin", t.searchVector),
+    // S16-SOCIAL-BE-3C (mig 0589) — thùng rác `SOCIAL-API-057`: khớp ĐÚNG `ORDER BY deleted_at DESC, id DESC`.
+    index("idx_feed_posts_company_deleted")
+      .on(t.companyId, sql`${t.deletedAt} DESC`, sql`${t.id} DESC`)
+      .where(sql`deleted_at IS NOT NULL`),
   ],
 );
 

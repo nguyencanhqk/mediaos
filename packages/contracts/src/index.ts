@@ -220,3 +220,6 @@ export * from "./social-api-ideas";
 export * from "./social-api-kudos";
 // S16-SOCIAL-BE-3B (additive): DTO thống kê tương tác `052..053`. Tự chứa — không import file social nào.
 export * from "./social-api-stats";
+// S16-SOCIAL-BE-3C (additive): DTO thùng rác bài viết `057..058`. Import NGƯỢC từ ./social, ./social-api-b —
+// KHÔNG re-export tên nào của chúng.
+export * from "./social-api-recycle";

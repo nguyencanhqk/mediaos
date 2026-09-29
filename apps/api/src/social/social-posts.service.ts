@@ -386,10 +386,22 @@ export class SocialPostsService {
         const asManager = this.access.assertCanMutateContent(actor, post.authorUserId);
 
         const now = new Date();
-        await tx
+        // `deleted_at IS NULL` ở CHÍNH câu ghi, không chỉ ở `assertPostVisible` (đọc KHÔNG khoá): lượt xoá
+        // commit giữa hai bước thì PG đánh giá lại WHERE trên phiên bản mới ⇒ 0 hàng ⇒ 404 CÙNG thông
+        // điệp cổng đọc. Thiếu vế này, lượt sửa ghi lên bài đã xoá và `syncPostTags` chỉnh `usage_count`
+        // lần hai — `058` cộng lại +1 mọi thẻ đang gắn ⇒ lệch vĩnh viễn (FULL gate BE-3C DB-M1, ca D7).
+        const edited = await tx
           .update(feedPosts)
           .set({ body: dto.body, editedAt: now, updatedAt: now, updatedBy: actor.actorUserId })
-          .where(and(eq(feedPosts.id, postId), eq(feedPosts.companyId, actor.companyId)));
+          .where(
+            and(
+              eq(feedPosts.id, postId),
+              eq(feedPosts.companyId, actor.companyId),
+              isNull(feedPosts.deletedAt),
+            ),
+          )
+          .returning({ id: feedPosts.id });
+        if (edited.length === 0) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
 
         // Quan ly SUA noi dung cua NGUOI KHAC => vao so, cung luat voi duong XOA (`remove`).
         // Khong co dong nay thi dau vet bien mat hoan toan: `body` bi ghi de, `updated_by`/`edited_at`

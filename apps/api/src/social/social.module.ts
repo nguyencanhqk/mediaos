@@ -6,6 +6,7 @@ import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { RealtimeEmitterModule } from "../realtime/realtime-emitter.module";
 import { StorageModule } from "../storage/storage.module";
+import { RecycleBinRegistryModule } from "../recycle-bin/recycle-bin-registry.module";
 import { SocialAccessService } from "./social-access.service";
 import { SocialAttachmentsService } from "./social-attachments.service";
 import { SocialFilesController } from "./social-files.controller";
@@ -48,6 +49,8 @@ import { SocialKudosService } from "./social-kudos.service";
 import { SocialStatsController } from "./social-stats.controller";
 import { SocialStatsRepository } from "./social-stats.repository";
 import { SocialStatsService } from "./social-stats.service";
+import { SocialRecycleBinRepository } from "./social-recycle-bin.repository";
+import { SocialRecycleBinService } from "./social-recycle-bin.service";
 import {
   SocialCommentsController,
   SocialPostsController,
@@ -92,6 +95,9 @@ import {
     StorageModule,
     SeedModule,
     SecurityAlertModule,
+    // S16-SOCIAL-BE-3C (D6) — khối additive: module LÁ của registry thùng rác (0 import). `RecycleBinModule`
+    // import CÙNG module ⇒ một singleton; KHÔNG import `RecycleBinModule` (không cạnh Social ↔ RecycleBin).
+    RecycleBinRegistryModule,
   ],
   controllers: [
     SocialPostsController,
@@ -161,6 +167,10 @@ import {
     // S16-SOCIAL-BE-3B — khối additive (thống kê tương tác + hàm SOCIAL-WIDGET-001).
     SocialStatsRepository,
     SocialStatsService,
+    // S16-SOCIAL-BE-3C — khối additive: handler `feed_post` của thùng rác (`057`/`058`), tự `register` ở
+    // `onModuleInit`. Controller sống ở `recycle-bin/` (O3) — tên lớp của nó PHẢI có trong `SOCIAL_CONTROLLERS`.
+    SocialRecycleBinRepository,
+    SocialRecycleBinService,
   ],
   // `SocialStatsService` export cho `S16-SOCIAL-DASH-1` (widget «Tương tác tuần» gọi `weeklyEngagementForWidget`).
   exports: [SocialAccessService, SocialStatsService],
