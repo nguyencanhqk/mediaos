@@ -5,6 +5,7 @@ import { feedPollOptions, feedPollVotes, feedPolls, feedPosts } from "../db/sche
 import { SocialAccessService } from "./social-access.service";
 import { SOCIAL_ERR, socialPgErrorOf, socialError } from "./social.errors";
 import type { SocialViewerContext } from "./social.types";
+import type { FeedPollStatusDto } from "@mediaos/contracts";
 
 /**
  * Trần CHỜ KHOÁ cho ba đường GHI của bình chọn (`041`/`042`/`044`) — xem `lockPollRowTx`.
@@ -465,44 +466,135 @@ export class SocialPollsRepository {
     pollId: string,
     userId: string,
   ): Promise<PollResults> {
-    const rows = await tx.execute<{
-      id: string;
-      label: string;
-      vote_count: number;
-      mine: boolean;
-      total_voters: number;
-    }>(
-      // `total_voters` là sub-query KHÔNG tương quan ⇒ PG nâng thành InitPlan, chạy ĐÚNG MỘT LẦN
-      // cho cả câu (không phải mỗi hàng option). `mine` thì tương quan theo `o.id` — đó là chủ ý.
-      sql`SELECT o.id,
-                 o.label,
-                 o.vote_count,
-                 EXISTS (SELECT 1
-                           FROM feed_poll_votes v
-                          WHERE v.company_id = ${companyId}
-                            AND v.poll_id = ${pollId}
-                            AND v.option_id = o.id
-                            AND v.user_id = ${userId}) AS mine,
-                 (SELECT COUNT(DISTINCT v2.user_id)
-                    FROM feed_poll_votes v2
-                   WHERE v2.company_id = ${companyId}
-                     AND v2.poll_id = ${pollId}) AS total_voters
-            FROM feed_poll_options o
-           WHERE o.company_id = ${companyId}
-             AND o.poll_id = ${pollId}
-           ORDER BY o.position`,
-    );
-
-    return {
-      options: rows.rows.map((r) => ({
-        id: r.id,
-        label: r.label,
-        voteCount: Number(r.vote_count),
-      })),
-      // Poll không có lựa chọn nào thì cũng KHÔNG THỂ có phiếu nào (`feed_poll_votes.option_id` là
-      // FK vào `feed_poll_options`) ⇒ `0` ở đây là sự thật, không phải một giá trị rơi về che lỗi.
-      totalVoters: Number(rows.rows[0]?.total_voters ?? 0),
-      myVote: rows.rows.filter((r) => r.mine).map((r) => r.id),
-    };
+    // S16-SOCIAL-BE-2D D5: ỦY QUYỀN cho CÙNG bộ dựng SQL của khối `poll` trên thẻ bài — một định
+    // nghĩa, hai đường (thẻ + 041..044) không trôi khỏi nhau. Vẫn MỘT câu ⇒ bất biến H-8 giữ nguyên.
+    const byPost = await pollResultsByTx(tx, companyId, userId, { pollIds: [pollId] });
+    const hit = [...byPost.values()][0];
+    // Trượt = poll không có hàng (không thể từ `041..044` — caller vừa đọc poll trong cùng tx). Trả
+    // đúng hành vi cũ của câu đi `FROM feed_poll_options` cho poll 0 lựa chọn, không `undefined` (500).
+    if (!hit) return { options: [], totalVoters: 0, myVote: [] };
+    return { options: hit.options, totalVoters: hit.totalVoters, myVote: hit.myVote };
   }
+}
+
+
+/**
+ * Tóm tắt bình chọn = ĐÚNG hình dạng `043` (`FeedPollResultsDto`), khoá theo `postId`.
+ */
+export interface PollSummary {
+  pollId: string;
+  postId: string;
+  question: string;
+  status: FeedPollStatusDto;
+  multipleChoice: boolean;
+  isAnonymous: boolean;
+  closesAt: string | null;
+  totalVoters: number;
+  myVote: string[];
+  options: { id: string; label: string; voteCount: number }[];
+}
+
+/**
+ * S16-SOCIAL-BE-2D D5 — kết quả bình chọn của MỘT LÔ poll trong **MỘT câu** (khối `poll` trên thẻ bài;
+ * `pollResultsTx` của `041..044` ủy quyền về đây).
+ *
+ * ┌─ 🔴 BA BẪY ĐÃ ĐO (plan BE-2D §9 V1/V2/V7) ─────────────────────────────────────────────────────┐
+ * │ 1. **MỘT câu** — đếm cử tri (`COUNT DISTINCT`) và bộ đếm lựa chọn cùng ảnh chụp, như           │
+ * │    `pollResultsTx` cũ (H-8: hai câu = hai ảnh chụp READ COMMITTED ⇒ Σ% > 100). Ca B10 + U7 ghim. │
+ * │    LATERAL bám `p` TRƯỚC khi JOIN lựa chọn ⇒ đếm một lần/poll, không một lần/lựa chọn.         │
+ * │ 2. `tx.execute` trả `timestamptz` là CHUỖI THÔ (`drizzle-orm/node-postgres/session.js` ép parser │
+ * │    thành `(v) => v`): `2026-09-29 08:46:14+00` — KHÔNG phải ISO có `T` ⇒ FE `datetime()` ZodError │
+ * │    trên HTTP 200 = feed trắng. ĐỔI bằng `new Date(raw).toISOString()`. `COUNT` về là chuỗi       │
+ * │    bigint ⇒ `Number()`.                                                                        │
+ * │ 3. Poll 0 lựa chọn (DB cho phép) ⇒ LEFT JOIN cho MỘT hàng option NULL: hàng đó chỉ góp cột poll │
+ * │    + `totalVoters`, KHÔNG góp option `{id:null}`.                                              │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * 🔴 `myVote` chỉ của `userId` truyền vào (NGƯỜI XEM). Không chiếu `user_id` cử tri nào (SOC-DEC-009).
+ * `company_id` tường minh ở MỌI bảng, cả LATERAL lẫn EXISTS (lưới thứ hai sau RLS).
+ * ⚠️ KHÔNG tự gác tầm nhìn — `postIds`/`pollIds` phải đến từ hàng ĐÃ qua cổng đọc bài.
+ */
+export async function pollResultsByTx(
+  tx: TenantTx,
+  companyId: string,
+  userId: string,
+  filter: { postIds: readonly string[] } | { pollIds: readonly string[] },
+): Promise<Map<string, PollSummary>> {
+  const out = new Map<string, PollSummary>();
+  const ids = "postIds" in filter ? filter.postIds : filter.pollIds;
+  if (ids.length === 0) return out;
+  const idList = sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const where =
+    "postIds" in filter ? sql`p.post_id IN (${idList})` : sql`p.id IN (${idList})`;
+
+  const rows = await tx.execute<{
+    poll_id: string;
+    post_id: string;
+    question: string;
+    status: FeedPollStatusDto;
+    multiple_choice: boolean;
+    is_anonymous: boolean;
+    closes_at: string | null;
+    total_voters: string | number;
+    option_id: string | null;
+    /** NULL CHỈ khi `option_id` NULL (poll 0 lựa chọn) — hàng đó bị bỏ trước khi đọc hai cột này. */
+    label: string;
+    vote_count: number;
+    mine: boolean;
+  }>(
+    sql`SELECT p.id AS poll_id,
+               p.post_id,
+               p.question,
+               p.status,
+               p.multiple_choice,
+               p.is_anonymous,
+               p.closes_at,
+               tv.total_voters,
+               o.id AS option_id,
+               o.label,
+               o.vote_count,
+               (o.id IS NOT NULL AND EXISTS (SELECT 1
+                                               FROM feed_poll_votes v
+                                              WHERE v.company_id = p.company_id
+                                                AND v.poll_id = p.id
+                                                AND v.option_id = o.id
+                                                AND v.user_id = ${userId})) AS mine
+          FROM feed_polls p
+          LEFT JOIN LATERAL (SELECT COUNT(DISTINCT v2.user_id) AS total_voters
+                               FROM feed_poll_votes v2
+                              WHERE v2.company_id = p.company_id
+                                AND v2.poll_id = p.id) tv ON true
+          LEFT JOIN feed_poll_options o
+                 ON o.company_id = p.company_id
+                AND o.poll_id = p.id
+         WHERE p.company_id = ${companyId}
+           AND ${where}
+         ORDER BY p.post_id, o.position`,
+  );
+
+  for (const r of rows.rows) {
+    let entry = out.get(r.post_id);
+    if (!entry) {
+      entry = {
+        pollId: r.poll_id,
+        postId: r.post_id,
+        question: r.question,
+        status: r.status,
+        multipleChoice: r.multiple_choice,
+        isAnonymous: r.is_anonymous,
+        closesAt: r.closes_at === null ? null : new Date(r.closes_at).toISOString(),
+        totalVoters: Number(r.total_voters),
+        myVote: [],
+        options: [],
+      };
+      out.set(r.post_id, entry);
+    }
+    if (r.option_id === null) continue;
+    entry.options.push({ id: r.option_id, label: r.label, voteCount: Number(r.vote_count) });
+    if (r.mine) entry.myVote.push(r.option_id);
+  }
+  return out;
 }

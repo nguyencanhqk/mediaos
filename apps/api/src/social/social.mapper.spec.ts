@@ -194,3 +194,55 @@ describe("BE-1D — `mentions` trên DTO bài & bình luận", () => {
     });
   }
 });
+
+// ══════════════ S16-SOCIAL-BE-2D — khối kudos/poll/idea (plan §5 U3) ══════════════
+
+describe("toFeedPostDto — khối theo loại bài: vắng ≠ rỗng, chép theo danh sách khoá", () => {
+  it("không truyền khối ⇒ ba khoá VẮNG hẳn (không null/undefined)", () => {
+    const dto = toFeedPostDto(row, viewer(), extra);
+    for (const k of ["kudos", "poll", "idea"]) expect(Object.keys(dto)).not.toContain(k);
+  });
+
+  it("khối có mặt ⇒ gán; khoá LẠ ở tầng dưới (userId, voters) KHÔNG đi qua", () => {
+    const dirtyRecipient = {
+      employeeId: "e1",
+      fullName: "A",
+      avatarUrl: null,
+      isFormerEmployee: false,
+      userId: AUTHOR,
+    };
+    const dto = toFeedPostDto(row, viewer(), {
+      ...extra,
+      kudos: {
+        kudosId: "k1",
+        message: null,
+        isOfficial: true,
+        badge: null,
+        recipients: [dirtyRecipient],
+      },
+      poll: {
+        pollId: "p1",
+        postId: row.id,
+        question: "?",
+        status: "open",
+        multipleChoice: false,
+        isAnonymous: true,
+        closesAt: null,
+        totalVoters: 0,
+        myVote: [],
+        options: [],
+        voters: [AUTHOR],
+      } as Parameters<typeof toFeedPostDto>[2]["poll"],
+      idea: { status: "accepted", reviewNote: "bí mật" } as Parameters<typeof toFeedPostDto>[2]["idea"],
+    });
+    expect(dto.kudos?.recipients[0]).toEqual({
+      employeeId: "e1",
+      fullName: "A",
+      avatarUrl: null,
+      isFormerEmployee: false,
+    });
+    expect(dto.poll).not.toHaveProperty("voters");
+    expect(dto.idea).toEqual({ status: "accepted" });
+    expect(JSON.stringify(dto)).not.toContain(AUTHOR);
+  });
+});

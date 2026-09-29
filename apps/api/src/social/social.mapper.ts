@@ -2,8 +2,11 @@ import type {
   FeedAttachmentDto,
   FeedAuthorDto,
   FeedCommentDto,
+  FeedKudosBlockDto,
   FeedMentionDto,
+  FeedPollResultsDto,
   FeedPostDto,
+  FeedPostIdeaBlockDto,
   FeedReactionSummaryDto,
 } from "@mediaos/contracts";
 import type { CommentRow } from "./social-comments.repository";
@@ -52,6 +55,10 @@ export function toFeedPostDto(
     savedByMe: boolean;
     /** Vắng ⇒ khoá `mentions` VẮNG trên DTO (đường chưa nạp) — KHÔNG thành `[]` (vắng ≠ rỗng). */
     mentions?: readonly FeedMentionDto[];
+    /** S16-SOCIAL-BE-2D — khối theo loại bài; vắng ⇒ khoá VẮNG (bài khác loại / đường không nạp / mồ côi). */
+    kudos?: FeedKudosBlockDto;
+    poll?: FeedPollResultsDto;
+    idea?: FeedPostIdeaBlockDto;
   },
 ): FeedPostDto {
   const isMine = row.authorUserId === viewer.actorUserId;
@@ -85,6 +92,9 @@ export function toFeedPostDto(
     dto.status = row.status as NonNullable<FeedPostDto["status"]>;
   }
   if (extra.mentions) dto.mentions = extra.mentions.map(copyMention);
+  if (extra.kudos) dto.kudos = copyKudos(extra.kudos);
+  if (extra.poll) dto.poll = copyPoll(extra.poll);
+  if (extra.idea) dto.idea = { status: extra.idea.status };
   return dto;
 }
 
@@ -122,6 +132,41 @@ function copyMention(m: FeedMentionDto): FeedMentionDto {
   return m.withheld
     ? { withheld: true }
     : { withheld: false, employeeId: m.employeeId, label: m.label };
+}
+
+/**
+ * S16-SOCIAL-BE-2D — chép khối theo DANH SÁCH KHOÁ (khuôn `copyMention`): không có serializer response
+ * nào phía sau (controller trả thẳng object), nên đây là lớp CHE cuối cùng — một `userId` lỡ gắn vào
+ * người nhận / một `voters` lỡ gắn vào poll ở tầng dưới không đi được qua đây.
+ */
+function copyKudos(k: FeedKudosBlockDto): FeedKudosBlockDto {
+  return {
+    kudosId: k.kudosId,
+    message: k.message,
+    isOfficial: k.isOfficial,
+    badge: k.badge ? { id: k.badge.id, code: k.badge.code, name: k.badge.name, icon: k.badge.icon } : null,
+    recipients: k.recipients.map((r) => ({
+      employeeId: r.employeeId,
+      fullName: r.fullName,
+      avatarUrl: r.avatarUrl,
+      isFormerEmployee: r.isFormerEmployee,
+    })),
+  };
+}
+
+function copyPoll(p: FeedPollResultsDto): FeedPollResultsDto {
+  return {
+    pollId: p.pollId,
+    postId: p.postId,
+    question: p.question,
+    status: p.status,
+    multipleChoice: p.multipleChoice,
+    isAnonymous: p.isAnonymous,
+    closesAt: p.closesAt,
+    totalVoters: p.totalVoters,
+    myVote: [...p.myVote],
+    options: p.options.map((o) => ({ id: o.id, label: o.label, voteCount: o.voteCount })),
+  };
 }
 
 /** Tổng hợp cảm xúc theo emoji — `mine` là của RIÊNG actor. */

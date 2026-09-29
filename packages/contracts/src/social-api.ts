@@ -6,6 +6,11 @@ import {
   feedTargetTypeSchema,
   FEED_COMMENT_BODY_MAX,
 } from "./social";
+import {
+  feedKudosBlockSchema,
+  feedPollResultsSchema,
+  feedPostIdeaBlockSchema,
+} from "./social-feed-blocks";
 
 /**
  * S16-SOCIAL-BE-1 — DTO request/response của **Nhóm A** (19 route `SOCIAL-API-001..019`: bảng tin/bài
@@ -210,6 +215,18 @@ export const feedPostSchema = z.object({
    * nó, và payload WS KHÔNG mang nó (`wsFeedPostCreatedEventSchema`). Vắng ≠ rỗng.
    */
   mentions: z.array(feedMentionSchema).optional(),
+  /**
+   * S16-SOCIAL-BE-2D — chi tiết theo loại bài, nạp theo LÔ ở `decorate` (≤4 câu/trang). OPTIONAL và
+   * **vắng là trạng thái DUY NHẤT của «không có»** (không bao giờ `null`): vắng khi bài khác loại, khi
+   * response `006` (dựng riêng, như `mentions`), trên payload WS (`wsFeedPostCreatedEventSchema` bóc cả
+   * ba), hoặc khi hàng con mồ côi (BE ghi `logger.error`). Bắt buộc là trang trắng khi FE tự deploy
+   * trước BE (memory `prod-3-way-drift`).
+   *
+   * `poll` là CHÍNH hình dạng `043` (có `myVote` của NGƯỜI XEM) ⇒ FE seed cache `043` từ thẻ.
+   */
+  kudos: feedKudosBlockSchema.optional(),
+  poll: feedPollResultsSchema.optional(),
+  idea: feedPostIdeaBlockSchema.optional(),
   editedAt: z.string().datetime({ offset: true }).nullable(),
   publishedAt: z.string().datetime({ offset: true }),
   lastActivityAt: z.string().datetime({ offset: true }),

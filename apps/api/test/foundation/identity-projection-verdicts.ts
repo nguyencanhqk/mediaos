@@ -774,8 +774,15 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     point: "social/social-kudos.repository.ts#recipientsOfTx:users.fullName",
     basis: "second-assert",
     reason:
-      "SOCIAL-API-047 — tên NGƯỜI ĐƯỢC VINH DANH. Truy vấn chỉ lọc `(company_id, kudos_id IN (…))` nên bằng chứng nằm ở ĐIỂM KHẲNG ĐỊNH, không ở vị từ của chính câu: tập `kudosId` truyền vào đến TRỰC TIẾP từ `listKudosTx` — câu ĐÃ mang `visiblePostCondition` — và CÙNG tx (cùng ảnh chụp). Không tồn tại đường public nào nhận `kudosId` rời từ caller, đúng khuôn D13-R của BE-1B. DTO người nhận đóng ĐÚNG 4 khoá `{employeeId, fullName, avatarUrl, isFormerEmployee}` — **KHÔNG `userId`** (ca `K-7`: assert thu hẹp theo uuid user của fixture + neo dương `employeeId` CÓ mặt). 🔴 PHƠI CÓ CHỦ ĐÍCH đã cân (owner ký **S6** 24/09/2026): người ĐÃ NGHỈ việc vẫn hiện ra, vì vinh danh là LỊCH SỬ và «cảm ơn lúc chia tay» là ca thật. Ba thứ giữ nó hẹp: (1) chỉ trong MỘT bài mà người xem VỐN ĐÃ thấy — hẹp hơn widget sinh nhật của BE-1B (danh bạ toàn công ty); (2) cờ `isFormerEmployee` nói rõ trạng thái thay vì để người xem đoán (ca `K-8`); (3) có ĐƯỜNG TỰ GỠ — xoá mềm bài (`003`) làm cả bài lẫn danh sách người nhận biến khỏi `047` (ca `K-9`). LEFT JOIN `users` vì `employee_profiles.user_id` nullable (mig `0442`): nhân sự chưa có tài khoản vẫn phải hiện ra, INNER JOIN sẽ làm bài vinh danh 3 người hiện 2 mà không lỗi gì (ca `K-4c`).",
+      "SOCIAL-API-047 + khối `kudos` trên thẻ bài (001/002/003/004/010 + 020/023/025 qua `decorateForViewer`/`toPageForViewer`, S16-SOCIAL-BE-2D) — tên NGƯỜI ĐƯỢC VINH DANH. Hàm TỰ DO (BE-2D đổi từ method, khoá giữ nguyên). Truy vấn chỉ lọc `(company_id, kudos_id IN (…))` nên bằng chứng nằm ở ĐIỂM KHẲNG ĐỊNH, HAI đường: (a) `047` — `kudosId` đến TRỰC TIẾP từ `listKudosTx` (câu mang `visiblePostCondition`) trong CÙNG tx; (b) thẻ bài — `kudosId` đến từ `kudosBlocksByPostIdsTx` trên `post_id` của hàng ĐÃ qua cổng đọc bài (`listFeed`/`findVisible`) ở một tx TRƯỚC `decorate` — cùng căn cứ với verdict `loadMentionsForTargets` (KHÔNG có vế «cùng ảnh chụp» ở đường này: bài xoá mềm giữa hai tx vẫn nạp người nhận một lần, cùng lớp đã chấp nhận của mention/tag). Không đường public nào nhận `kudosId`/`postId` rời từ caller. DTO người nhận đóng ĐÚNG 4 khoá `{employeeId, fullName, avatarUrl, isFormerEmployee}` — **KHÔNG `userId`** (ca `K-7` + `B1` của `social-be2d-blocks-recipients.int-spec.ts`: assert thu hẹp theo uuid user của fixture + neo dương). 🔴 PHƠI CÓ CHỦ ĐÍCH đã cân (owner ký **S6** 24/09/2026): người ĐÃ NGHỈ việc (và TK bị khoá) vẫn hiện tên, vì vinh danh là LỊCH SỬ. 🔴 Luật **K1** (owner ký 29/09/2026, BE-2D): hồ sơ HOẶC tài khoản đã XOÁ MỀM ⇒ tên + avatar bị CHE ngay trong SQL (`CASE`) + `isFormerEmployee:true` — trước BE-2D câu không lọc `deleted_at` nào nên hồ sơ xoá mềm còn `status='active'` hiện như nhân viên hiện tại (ca `B2`, trên CẢ thẻ lẫn `047`). Hàng rào: (1) chỉ trong MỘT bài người xem VỐN ĐÃ thấy — hẹp hơn danh bạ `059`; (2) cờ `isFormerEmployee`; (3) đường tự gỡ — xoá mềm bài (`005`) làm bài lẫn người nhận biến khỏi `047` và feed (ca `K-9`). LEFT JOIN `users` vì `employee_profiles.user_id` nullable (mig `0442`): nhân sự chưa có tài khoản vẫn hiện ra (ca `K-4c`).",
     signedBy: "S16-SOCIAL-BE-2B-2",
+  },
+  {
+    point: "social/social-kudos.repository.ts#searchKudosRecipientsTx:users.fullName",
+    basis: "waiver",
+    reason:
+      "SOCIAL-API-059 `GET /social/kudos/recipients?q=` — DANH BẠ cho ô chọn người nhận vinh danh (S16-SOCIAL-BE-2D, owner ký K2/K3 29/09/2026 — SOC-DEC-013). PHƠI CÓ CHỦ ĐÍCH ở phạm vi TOÀN CÔNG TY, cùng lớp widget sinh nhật `026`; CỐ Ý **không** khai `scoped-predicate`: vị từ là `company_id` + hồ sơ `active` chưa xoá + TK `active` chưa xoá + khớp đầu-từ trên họ tên, KHÔNG có vị từ `data_scope`. Hàng rào THẬT: (1) cặp `create:feed-kudos` @Company (không `view:feed`) — thu hồi quyền tạo vinh danh là đóng danh bạ; (2) DTO đóng ĐÚNG 3 khoá `{employeeId, fullName, avatarUrl}` — KHÔNG `userId`/email/mã NV/đơn vị (ca `R8`); (3) chỉ người ĐANG làm (ca `R5`); (4) `q` khớp CHỈ họ tên — không khớp email/mã nhân sự, vì vị từ trên cột không trả là oracle mà ratchet này KHÔNG đếm (ca `R9`); (5) loại chính người gọi. ⚠️ KHÔNG chống liệt kê: min-2-chữ + trần 20 + không phân trang chỉ là giới hạn UX/hiệu năng — API không có throttler, dò ~26² tiền tố 2 ký tự lấy được toàn danh bạ active + employeeId; owner chấp nhận (K2). ⚠️ Oracle dư chấp nhận có ghi: vắng khỏi danh bạ ⇒ suy ra TK bị khoá/treo (thẻ kudos/047 vẫn hiện tên người TK khoá — S6), cùng lớp `026` (tên null cho TK khoá). ⚠️ Bất đối xứng có ghi (ca `R1b`): vai chỉ có `create:feed-kudos` mở được danh bạ dù không tạo được kudos.",
+    signedBy: "S16-SOCIAL-BE-2D",
   },
   {
     point: "social/social-mentions.ts#loadMentionsForTargets:users.fullName",
@@ -811,7 +818,10 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // 7 → 8 (S16-SOCIAL-BE-1B, 22/09/2026): `social-discovery.repository.ts#birthdays` — widget sinh
   // nhật phơi tên/avatar ở phạm vi TOÀN CÔNG TY, đúng như SOC-DEC-007 ký. Nới CÓ CHỦ ĐÍCH qua FULL
   // gate. Hàng rào là DTO đóng 5 khoá (không năm sinh) + cờ tự-ẩn `user_preferences.show_birthday`.
-  waiver: 8,
+  // 8 → 9 (S16-SOCIAL-BE-2D, 29/09/2026): `social-kudos.repository.ts#searchKudosRecipientsTx` — danh bạ
+  // `059` cho ô chọn người nhận vinh danh (owner K2/K3, SOC-DEC-013). Nới CÓ CHỦ ĐÍCH qua FULL gate.
+  // Hàng rào: cặp `create:feed-kudos` + DTO 3 khoá không `userId` + chỉ người đang làm + khớp CHỈ họ tên.
+  waiver: 9,
   "no-actor": 7,
   // 3 → 5 (S16-SOCIAL-BE-1, 21/09/2026): `social-comments.repository.ts#COMMENT_COLUMNS` ·
   // `social-reactions.repository.ts#listReactors`. Nới CÓ CHỦ ĐÍCH qua FULL gate. Cả hai nằm trên

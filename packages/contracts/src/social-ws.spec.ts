@@ -121,6 +121,50 @@ describe("BE-1D D6 — `mentions` KHÔNG lên kênh WS", () => {
   });
 });
 
+// S16-SOCIAL-BE-2D D7 — ba khối chi tiết chỉ ở REST (`poll.myVote` là của TÁC GIẢ). Hai vế: `.shape`
+// (hợp đồng) VÀ `.parse` (emitter phát ĐẦU RA của parse — khoá thừa phải bị bóc thật). Neo dương REST.
+describe("BE-2D D7 — `kudos`/`poll`/`idea` KHÔNG lên kênh WS", () => {
+  const BLOCK_KEYS = ["kudos", "poll", "idea"] as const;
+
+  it.each(BLOCK_KEYS)("`%s`: REST CÓ khoá, WS KHÔNG", (k) => {
+    expect(keysOf(feedPostSchema)).toContain(k);
+    expect(keysOf(wsFeedPostCreatedEventSchema)).not.toContain(k);
+  });
+
+  it("`.parse` của WS BÓC cả ba khối khỏi payload (kể cả khi nguồn quên bóc)", () => {
+    const base = {
+      id: "11111111-1111-4111-8111-111111111111",
+      type: "poll",
+      audience: "company",
+      orgUnitId: null,
+      groupId: null,
+      author: { employeeId: null, fullName: null, avatarUrl: null },
+      body: null,
+      tags: [],
+      attachments: [],
+      pinned: false,
+      commentsLocked: false,
+      requiresAck: false,
+      likeCount: 0,
+      commentCount: 0,
+      viewCount: 0,
+      editedAt: null,
+      publishedAt: "2026-09-29T00:00:00.000Z",
+      lastActivityAt: "2026-09-29T00:00:00.000Z",
+      createdAt: "2026-09-29T00:00:00.000Z",
+    };
+    const leaked = {
+      ...base,
+      poll: { myVote: ["22222222-2222-4222-8222-222222222222"] },
+      kudos: { recipients: [] },
+      idea: { status: "submitted" },
+    };
+    const out = wsFeedPostCreatedEventSchema.parse(leaked) as Record<string, unknown>;
+    expect(out.id).toBe(base.id); // neo: parse thành công, không phải ném rồi bị nuốt
+    for (const k of BLOCK_KEYS) expect(out).not.toHaveProperty(k);
+  });
+});
+
 describe("R24 — đính kèm trên kênh WS KHÔNG mang URL presign", () => {
   it("`url` VẮNG MẶT ở schema đính kèm của WS (REST thì CÓ)", () => {
     expect(keysOf(feedAttachmentSchema)).toContain("url");

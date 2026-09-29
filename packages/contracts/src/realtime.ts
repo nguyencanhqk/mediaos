@@ -357,6 +357,13 @@ export const wsFeedPostCreatedEventSchema = feedPostSchema
     status: true,
     attachments: true,
     mentions: true,
+    // S16-SOCIAL-BE-2D D7: ba khối chi tiết chỉ REST mang. `poll.myVote` là của TÁC GIẢ (create()
+    // decorate bằng tác giả) — phát cho cả room là rò; `.omit` không chạm khoá LỒNG nên bóc NGUYÊN khối.
+    // FE chỉ ĐẾM `feed:post.created` (không vẽ thẻ từ payload) ⇒ bóc không tốn gì. Nguồn cũng bóc
+    // (`emitPostCreated`) — hai tầng độc lập, mỗi tầng một mình đều từng bị bỏ quên.
+    kudos: true,
+    poll: true,
+    idea: true,
   })
   .extend({
     audience: z.literal("company"),

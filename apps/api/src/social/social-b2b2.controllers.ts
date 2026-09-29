@@ -22,6 +22,7 @@ import { SocialKudosService } from "./social-kudos.service";
 import { SOCIAL_ROUTE_PAIRS as P } from "./social-route-pairs.const";
 import {
   CreateKudosBadgeBody,
+  KudosRecipientSearchQuery,
   ListIdeasQuery,
   ListKudosBadgesAdminQuery,
   ListKudosBadgesQuery,
@@ -118,6 +119,18 @@ export class SocialKudosController {
       page: query.page,
       limit: query.limit,
     });
+  }
+
+  /**
+   * 059 — GET /social/kudos/recipients?q= — danh bạ người nhận vinh danh (SOC-DEC-013). Đường TĨNH, không
+   * trùng route tham số nào của controller.
+   */
+  @Get("kudos/recipients")
+  @UseGuards(PermissionGuard)
+  @RequirePermission(P.kudosRecipientSearch.action, P.kudosRecipientSearch.resourceType)
+  @UsePipes(ZodValidationPipe)
+  searchRecipients(@Req() req: AuthenticatedRequest, @Query() query: KudosRecipientSearchQuery) {
+    return this.kudos.searchRecipients(req.user, { q: query.q });
   }
 
   /** 048 — GET /social/kudos-badges. Chỉ huy hiệu `is_active = true`. */

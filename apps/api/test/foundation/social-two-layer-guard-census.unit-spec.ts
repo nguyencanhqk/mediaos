@@ -62,7 +62,7 @@ const SOCIAL_CONTROLLERS = new Set([
   "RecycleBinFeedPostsController",
 ]);
 
-/** Bảng route HTTP → key — fixture census, phủ ĐỦ 58 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ + 2 THÙNG RÁC, API-19 §5.1). */
+/** Bảng route HTTP → key — fixture census, phủ ĐỦ 59 route (19 A + 10 B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ + 2 THÙNG RÁC + 1 DANH BẠ, API-19 §5.1). */
 const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRouteKey }> = [
   { method: "GET", path: "/api/v1/social/saved", key: "savedList" },
   { method: "GET", path: "/api/v1/social/feed", key: "feedList" },
@@ -132,6 +132,8 @@ const ROUTE_TO_KEY: ReadonlyArray<{ method: string; path: string; key: SocialRou
   { method: "PATCH", path: "/api/v1/social/posts/:post_id/idea/review", key: "ideaReview" },
   { method: "GET", path: "/api/v1/social/kudos", key: "kudosList" },
   { method: "GET", path: "/api/v1/social/kudos-badges", key: "kudosBadgeList" },
+  // ── S16-SOCIAL-BE-2D — DANH BA NGUOI NHAN VINH DANH 059 (create:feed-kudos, SOC-DEC-013) ──
+  { method: "GET", path: "/api/v1/social/kudos/recipients", key: "kudosRecipientSearch" },
   // ── S16-SOCIAL-BE-3A — CRUD HUY HIEU 049..051 + DOC QUAN TRI 056 ──
   { method: "POST", path: "/api/v1/social/kudos-badges", key: "kudosBadgeCreate" },
   { method: "PATCH", path: "/api/v1/social/kudos-badges/:badge_id", key: "kudosBadgeUpdate" },
@@ -213,6 +215,8 @@ const SERVICE_SITE_TO_KEYS: Readonly<Record<string, readonly string[]>> = {
   "SocialIdeasService#review": ["ideaReview"],
   "SocialKudosService#list": ["kudosList"],
   "SocialKudosService#listBadges": ["kudosBadgeList"],
+  // S16-SOCIAL-BE-2D — danh ba 059.
+  "SocialKudosService#searchRecipients": ["kudosRecipientSearch"],
   // S16-SOCIAL-BE-3A — 4 site moi cua catalog huy hieu (`manage:feed-kudos`).
   "SocialKudosService#createBadge": ["kudosBadgeCreate"],
   "SocialKudosService#updateBadge": ["kudosBadgeUpdate"],
@@ -504,8 +508,8 @@ describe("SOCIAL census 2 tầng — decorator + service so với SOCIAL_ROUTE_P
     // Chốt chặn xanh-RỖNG: scanner/boot hỏng ⇒ 0 route ⇒ mọi assert dưới vô nghĩa.
     expect(
       socialRoutes.length,
-      "app boot phải thấy 58 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ + 2 THÙNG RÁC)",
-    ).toBe(58);
+      "app boot phải thấy 59 route SOCIAL (19 Nhóm A + 10 Nhóm B + 10 NHÓM + 5 BÌNH CHỌN + 4 SÁNG KIẾN/VINH DANH + 4 HUY HIỆU + 2 CỬA TỆP + 2 THỐNG KÊ + 2 THÙNG RÁC + 1 DANH BẠ)",
+    ).toBe(59);
     const seen = new Set(socialRoutes.map((r) => `${r.httpMethod} ${r.path}`));
     const expected = new Set(ROUTE_TO_KEY.map((r) => `${r.method} ${r.path}`));
     expect(

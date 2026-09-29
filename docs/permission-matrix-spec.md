@@ -709,7 +709,7 @@ SOCIAL đứng riêng, **15 cặp** quyền per-(action, resource): **14 cặp**
 | `('create','feed-comment')` | false | Bình luận · trả lời 1 cấp | all | all | all | all |
 | `('create','feed-poll')` | false | Tạo bình chọn | all | all | all | all |
 | `('create','feed-idea')` | false | Gửi sáng kiến | all | all | all | all |
-| `('create','feed-kudos')` | false | Gửi lời vinh danh | all | all | all | all |
+| `('create','feed-kudos')` | false | Gửi lời vinh danh · **tra danh bạ người nhận `SOCIAL-API-059`** (tên + avatar + `employeeId` của người đang làm — SOC-DEC-013; ⚠️ cặp này MỘT MÌNH đã mở danh bạ, kể cả khi vai thiếu `create:feed-post`) | all | all | all | all |
 | `('create','feed-group')` | false | Tạo nhóm | all | all | all | all |
 | `('manage','feed-news')` | false | Đăng **tin tức** công ty · ghim «Tin nổi bật» · xem danh sách đã đọc | không | không | all | all |
 | `('manage','feed-post')` | false | Ẩn/hiện · ghim/bỏ ghim · khoá bình luận · xoá bài người khác | không | không | all | all |

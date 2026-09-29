@@ -1,5 +1,6 @@
+import type { FeedKudosBadgeRefDto } from "@mediaos/contracts";
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
-import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import { feedKudos, feedKudosBadges, feedKudosRecipients, feedPosts } from "../db/schema/social";
@@ -234,7 +235,10 @@ export interface KudosRecipientRow {
   employeeId: string;
   fullName: string | null;
   avatarUrl: string | null;
-  /** `employee_profiles.status <> 'active'` — người đã nghỉ (S6). FE hiển thị nhãn, không đoán. */
+  /**
+   * Hồ sơ không còn `active` (nghỉ việc — S6) HOẶC hồ sơ/tài khoản đã xoá mềm (owner K1, BE-2D). FE
+   * hiển thị nhãn, không đoán. Xem docblock `recipientsOfTx`.
+   */
   isFormerEmployee: boolean;
 }
 
@@ -341,63 +345,6 @@ export class SocialKudosRepository {
   }
 
   /**
-   * Người nhận của một LÔ vinh danh — MỘT câu cho cả trang (không N+1).
-   *
-   * ⚠️ Câu này KHÔNG tự gác tầm nhìn: nó lọc theo `kudosId` mà caller VỪA đọc được từ `listKudosTx`
-   * (câu đã mang `visiblePostCondition`). Đừng biến nó thành đường lấy người nhận theo id tuỳ ý — đó
-   * là lớp lỗi `reused-method-must-be-actor-scoped`.
-   *
-   * `isFormerEmployee` suy từ `status <> 'active'`, KHÔNG từ `deleted_at`: nghỉ việc không xoá mềm.
-   */
-  async recipientsOfTx(
-    tx: TenantTx,
-    companyId: string,
-    kudosIds: readonly string[],
-  ): Promise<KudosRecipientRow[]> {
-    if (kudosIds.length === 0) return [];
-
-    return (
-      tx
-        .select({
-          kudosId: feedKudosRecipients.kudosId,
-          employeeId: feedKudosRecipients.employeeId,
-          // Tên người sống ở `users.fullName` — `employee_profiles` KHÔNG có cột tên (chỉ
-          // `employee_code`). Chiếu `employee_code` thay tên là phơi mã nhân sự nội bộ ra một danh sách
-          // công khai, và vẫn không cho người xem biết ai được vinh danh.
-          fullName: users.fullName,
-          avatarUrl: employeeProfiles.avatarUrl,
-          isFormerEmployee: sql<boolean>`(${employeeProfiles.status} <> 'active')`.mapWith(Boolean),
-        })
-        .from(feedKudosRecipients)
-        .innerJoin(
-          employeeProfiles,
-          and(
-            eq(employeeProfiles.companyId, feedKudosRecipients.companyId),
-            eq(employeeProfiles.id, feedKudosRecipients.employeeId),
-          ),
-        )
-        // 🔴 LEFT JOIN, KHÔNG inner: `employee_profiles.user_id` nullable (mig `0442` — nhân sự tồn tại
-        // TRƯỚC khi được gán tài khoản). INNER JOIN ở đây làm người nhận KHÔNG CÓ TÀI KHOẢN biến mất
-        // khỏi `047` — bài vinh danh 3 người sẽ hiện 2, không lỗi gì cả. `fullName` null ⇒ FE hiển thị
-        // nhãn thay thế; ca `K-4c` đo đúng chỗ này.
-        .leftJoin(
-          users,
-          and(
-            eq(users.id, employeeProfiles.userId),
-            eq(users.companyId, employeeProfiles.companyId),
-          ),
-        )
-        .where(
-          and(
-            eq(feedKudosRecipients.companyId, companyId),
-            inArray(feedKudosRecipients.kudosId, [...kudosIds]),
-          ),
-        )
-        .orderBy(asc(feedKudosRecipients.employeeId))
-    );
-  }
-
-  /**
    * `048` — catalog huy hiệu ĐANG BẬT, phân trang OFFSET.
    *
    * `is_active = true` là HẰNG của route, không phải tham số: xem docblock `listKudosBadgesQuerySchema`.
@@ -434,6 +381,227 @@ export class SocialKudosRepository {
     const [totalRow] = await tx.select({ n: count() }).from(feedKudosBadges).where(where);
     return { rows: page, total: Number(totalRow?.n ?? 0) };
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  S16-SOCIAL-BE-2D — người nhận (MỘT luật cho `047` + thẻ bài) · khối vinh danh của thẻ · danh bạ `059`
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Người nhận của một LÔ vinh danh — MỘT câu cho cả lô (không N+1). Dùng CHUNG bởi `047`
+ * (`SocialKudosService.list`) và khối `kudos` trên thẻ bài (`social-post-blocks.ts`) ⇒ một luật
+ * hiển thị cho cả hai (owner K1, plan BE-2D D4). Hàm TỰ DO cùng tên với method cũ — khoá identity
+ * ratchet `recipientsOfTx:users.fullName` giữ nguyên.
+ *
+ * ⚠️ Câu này KHÔNG tự gác tầm nhìn: `kudosIds` phải đến từ `listKudosTx` (câu mang
+ * `visiblePostCondition`, CÙNG tx) HOẶC từ `kudosBlocksByPostIdsTx` trên `post_id` của hàng ĐÃ qua cổng
+ * đọc bài. Đừng biến nó thành đường lấy người nhận theo id tuỳ ý — lớp lỗi
+ * `reused-method-must-be-actor-scoped`.
+ *
+ * ┌─ 🔴 LUẬT HIỂN THỊ (owner K1 29/09/2026) ──────────────────────────────────────────────────────┐
+ * │ Hồ sơ HOẶC tài khoản đã XOÁ MỀM ⇒ `fullName`/`avatarUrl` NULL + `isFormerEmployee` true. Che     │
+ * │ TRONG SQL để danh tính của bản ghi đã xoá không rời DB. Trước BE-2D câu này không lọc           │
+ * │ `deleted_at` nào — mà xoá mềm HR (`softDeleteEmployeeTx`) CHỈ đặt `deleted_at`, `status` vẫn    │
+ * │ `active` ⇒ người đã bị xoá hiện tên + avatar như NHÂN VIÊN HIỆN TẠI.                            │
+ * │ Nghỉ việc (`status <> 'active'`) ⇒ GIỮ tên + cờ (S6). TK khoá/treo ⇒ GIỮ tên (vinh danh là lịch │
+ * │ sử; người nghỉ thường bị khoá TK). Không TK ⇒ `fullName` NULL (tên sống ở `users.full_name`).   │
+ * │ KHÔNG bỏ người nào khỏi mảng — bỏ là FE không phân biệt «2 người» với «3 người, 1 bị xoá».       │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ */
+export async function recipientsOfTx(
+  tx: TenantTx,
+  companyId: string,
+  kudosIds: readonly string[],
+): Promise<KudosRecipientRow[]> {
+  if (kudosIds.length === 0) return [];
+
+  // «Còn sống» — MỘT định nghĩa cho cả ba cột. LEFT JOIN `users`: không TK ⇒ `users.deleted_at` NULL
+  // ⇒ vẫn «sống» (tên vốn NULL), đúng ca `K-4c`.
+  const live = sql`(${employeeProfiles.deletedAt} IS NULL AND ${users.deletedAt} IS NULL)`;
+
+  return (
+    tx
+      .select({
+        kudosId: feedKudosRecipients.kudosId,
+        employeeId: feedKudosRecipients.employeeId,
+        // Tên người sống ở `users.fullName` — `employee_profiles` KHÔNG có cột tên (chỉ
+        // `employee_code`). Chiếu `employee_code` thay tên là phơi mã nhân sự nội bộ ra một danh sách
+        // công khai, và vẫn không cho người xem biết ai được vinh danh.
+        fullName: sql<string | null>`CASE WHEN ${live} THEN ${users.fullName} END`,
+        avatarUrl: sql<string | null>`CASE WHEN ${live} THEN ${employeeProfiles.avatarUrl} END`,
+        isFormerEmployee:
+          sql<boolean>`(NOT ${live} OR ${employeeProfiles.status} <> 'active')`.mapWith(Boolean),
+      })
+      .from(feedKudosRecipients)
+      .innerJoin(
+        employeeProfiles,
+        and(
+          eq(employeeProfiles.companyId, feedKudosRecipients.companyId),
+          eq(employeeProfiles.id, feedKudosRecipients.employeeId),
+        ),
+      )
+      // 🔴 LEFT JOIN, KHÔNG inner: `employee_profiles.user_id` nullable (mig `0442` — nhân sự tồn tại
+      // TRƯỚC khi được gán tài khoản). INNER JOIN ở đây làm người nhận KHÔNG CÓ TÀI KHOẢN biến mất
+      // khỏi `047` — bài vinh danh 3 người sẽ hiện 2, không lỗi gì cả (ca `K-4c`).
+      .leftJoin(
+        users,
+        and(eq(users.id, employeeProfiles.userId), eq(users.companyId, employeeProfiles.companyId)),
+      )
+      .where(
+        and(
+          eq(feedKudosRecipients.companyId, companyId),
+          inArray(feedKudosRecipients.kudosId, [...kudosIds]),
+        ),
+      )
+      .orderBy(asc(feedKudosRecipients.employeeId))
+  );
+}
+
+/** Hàng `feed_kudos` (+ huy hiệu LEFT JOIN) theo `post_id` — đầu vào khối `kudos` của thẻ bài. */
+export interface KudosBlockRow {
+  postId: string;
+  kudosId: string;
+  message: string | null;
+  isOfficial: boolean;
+  badgeId: string | null;
+  badgeCode: string | null;
+  badgeName: string | null;
+  badgeIcon: string | null;
+}
+
+/**
+ * Khối vinh danh cho một LÔ bài — MỘT câu (`feed_kudos_company_post_uq`), KHÔNG chiếu `users` (người
+ * nhận đi qua `recipientsOfTx` — không thêm điểm danh tính).
+ *
+ * ⚠️ `postIds` phải là id của hàng ĐÃ qua cổng đọc bài (điều kiện của `decorate`). Câu KHÔNG tự gác
+ * tầm nhìn — cùng luật `loadMentionsForTargets`.
+ */
+export async function kudosBlocksByPostIdsTx(
+  tx: TenantTx,
+  companyId: string,
+  postIds: readonly string[],
+): Promise<KudosBlockRow[]> {
+  if (postIds.length === 0) return [];
+  return (
+    tx
+      .select({
+        postId: feedKudos.postId,
+        kudosId: feedKudos.id,
+        message: feedKudos.message,
+        isOfficial: feedKudos.isOfficial,
+        badgeId: feedKudos.badgeId,
+        badgeCode: feedKudosBadges.code,
+        badgeName: feedKudosBadges.name,
+        badgeIcon: feedKudosBadges.icon,
+      })
+      .from(feedKudos)
+      // LEFT JOIN — huy hiệu ĐÃ TẮT vẫn hiện trên bài cũ (D13 của BE-2B-2), `badge_id` nullable.
+      .leftJoin(
+        feedKudosBadges,
+        and(
+          eq(feedKudosBadges.companyId, feedKudos.companyId),
+          eq(feedKudosBadges.id, feedKudos.badgeId),
+        ),
+      )
+      .where(and(eq(feedKudos.companyId, companyId), inArray(feedKudos.postId, [...postIds])))
+  );
+}
+
+/**
+ * Huy hiệu hiển thị của một dòng vinh danh — MỘT luật cho `047` và thẻ bài (plan BE-2D §9 V9).
+ *
+ * `badgeId` có mà thiếu `code`/`name` là BẤT KHẢ (FK tổ hợp cùng tenant + app role không có DELETE
+ * trên catalog) ⇒ `broken: true` để caller `logger.error` rồi bỏ huy hiệu — KHÔNG `?? ""` (một huy hiệu
+ * không tên vẽ ra im lặng là thành công RỖNG).
+ */
+export function badgeRefOf(r: {
+  badgeId: string | null;
+  badgeCode: string | null;
+  badgeName: string | null;
+  badgeIcon: string | null;
+}): { badge: FeedKudosBadgeRefDto | null; broken: boolean } {
+  if (r.badgeId === null) return { badge: null, broken: false };
+  if (r.badgeCode === null || r.badgeName === null) return { badge: null, broken: true };
+  return {
+    badge: { id: r.badgeId, code: r.badgeCode, name: r.badgeName, icon: r.badgeIcon },
+    broken: false,
+  };
+}
+
+/** Một người của danh bạ `059` — ĐÚNG ba cột, không `users.id`. */
+export interface KudosRecipientCandidateRow {
+  employeeId: string;
+  fullName: string;
+  avatarUrl: string | null;
+}
+
+/**
+ * Ký tự ngăn cách «trông như dấu cách» mà `f_unaccent` GIỮ NGUYÊN (đo PG 17: U+00A0 còn nguyên) — tên
+ * nhập từ Excel/HTML hay mang NBSP; không đổi thì «Đoàn␣Thị» không khớp `thi` (plan §9 D-F11).
+ */
+const NAME_SEPARATORS = "   \t";
+const NAME_SEPARATOR_SPACES = " ".repeat(NAME_SEPARATORS.length);
+
+/**
+ * `059` — danh bạ người nhận vinh danh (owner K2/K3, SOC-DEC-013).
+ *
+ * ┌─ 🔴 VÌ SAO `strpos`, KHÔNG `ILIKE` (plan BE-2D §9 V3) ───────────────────────────────────────────┐
+ * │ `f_unaccent` biến `％ ＿ ＼ ﹪ ﹨` thành `% _ \` — tức ký tự đại diện LIKE sinh ra SAU mọi bước thoát │
+ * │ phía JS (đo: `f_unaccent(U&'\FF05an')='%an'` ⇒ `％an` khớp «Tuấn»). `strpos` không có ký tự đại  │
+ * │ diện nào ⇒ không thoát, không mệnh đề `ESCAPE`, không lớp lỗi đó.                              │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Khớp **ĐẦU TỪ** (`' ' || tên` chứa `' ' || q`), bỏ dấu + chữ thường hai vế: «an» → «Nguyễn Văn An»,
+ * KHÔNG → «Trần Tuấn». CHỈ trên họ tên — khớp email / mã nhân sự là oracle trên cột không trả về (vị
+ * từ không bị identity ratchet đếm).
+ *
+ * «Đang làm» = hồ sơ `active` + chưa xoá mềm + TK `active` + chưa xoá mềm, `company_id` trên CẢ HAI
+ * bảng (lưới thứ hai sau RLS). Loại chính người gọi (`users.id <> actor`). `LIMIT cap+1` để biết
+ * `truncated`.
+ *
+ * Danh bạ cấp công ty là CÓ CHỦ ĐÍCH (owner K2) và KHÔNG chống được liệt kê (không throttler): trần
+ * + min-2 chỉ là giới hạn UX/hiệu năng — xem verdict identity + SOC-DEC-013.
+ */
+export async function searchKudosRecipientsTx(
+  tx: TenantTx,
+  companyId: string,
+  actorUserId: string,
+  needle: string,
+  opts: { limit: number; minLetters: number },
+): Promise<KudosRecipientCandidateRow[]> {
+  const normName = sql`regexp_replace(translate(public.f_unaccent(${users.fullName}), ${NAME_SEPARATORS}, ${NAME_SEPARATOR_SPACES}), ' {2,}', ' ', 'g')`;
+  const normNeedle = sql`lower(public.f_unaccent(${needle}))`;
+
+  const rows = await tx
+    .select({
+      employeeId: employeeProfiles.id,
+      fullName: users.fullName,
+      avatarUrl: employeeProfiles.avatarUrl,
+    })
+    .from(employeeProfiles)
+    .innerJoin(
+      users,
+      and(eq(users.id, employeeProfiles.userId), eq(users.companyId, employeeProfiles.companyId)),
+    )
+    .where(
+      and(
+        eq(employeeProfiles.companyId, companyId),
+        eq(employeeProfiles.status, "active"),
+        isNull(employeeProfiles.deletedAt),
+        eq(users.status, "active"),
+        isNull(users.deletedAt),
+        ne(users.id, actorUserId),
+        isNotNull(users.fullName),
+        // Lưới phụ (M10): needle co RỖNG sau `f_unaccent` ⇒ không khớp gì (Zod đã chặn ở biên).
+        sql`length(btrim(public.f_unaccent(${needle}))) >= ${opts.minLetters}`,
+        sql`strpos(' ' || lower(${normName}), ' ' || ${normNeedle}) > 0`,
+      ),
+    )
+    .orderBy(sql`lower(${normName})`, asc(employeeProfiles.id))
+    .limit(opts.limit + 1);
+
+  // `isNotNull(users.fullName)` ở WHERE ⇒ không hàng nào null; chỉ thu hẹp kiểu, không đổi dữ liệu.
+  return rows.filter((r): r is KudosRecipientCandidateRow => r.fullName !== null);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════

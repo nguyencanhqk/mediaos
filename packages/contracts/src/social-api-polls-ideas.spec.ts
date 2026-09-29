@@ -7,7 +7,8 @@
  * cử tri».
  */
 import { describe, expect, it } from "vitest";
-import { feedPollPageSchema, feedPollResultsSchema } from "./social-api-polls";
+import { feedPollPageSchema } from "./social-api-polls";
+import { feedPollResultsSchema } from "./social-feed-blocks";
 import {
   feedIdeaItemSchema,
   feedIdeaPageSchema,

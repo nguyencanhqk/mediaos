@@ -50,37 +50,8 @@ export type VotePollDto = z.infer<typeof votePollSchema>;
 // gì để parse. Service giờ khai kiểu trả về bằng CHÍNH các DTO dưới đây (plan D2, type-only) ⇒ lệch
 // một trường là TS đỏ lúc build ở `apps/api`, không phải ZodError lúc chạy ở trình duyệt.
 
-/** Một lựa chọn kèm số phiếu. KHÔNG có danh sách cử tri — kể cả với bình chọn công khai. */
-export const feedPollOptionResultSchema = z.object({
-  id: z.string().uuid(),
-  label: z.string(),
-  voteCount: z.number().int().min(0),
-});
-export type FeedPollOptionResultDto = z.infer<typeof feedPollOptionResultSchema>;
-
-/**
- * `041` (bỏ/đổi phiếu) · `042` (rút phiếu) · `043` (kết quả) · `044` (đóng tay) — MỘT hình dạng cho
- * cả bốn (`SocialPollsService.readResultsTx`), nên FE ghi thẳng kết quả mutation vào cache của `043`.
- *
- * 🔴 **Không trường nào chở danh tính cử tri** (SOC-DEC-009 — ẩn danh thì `user_id` không bao giờ ra
- * khỏi server, kể cả với `company-admin`). `myVote` là phiếu của CHÍNH người gọi. Thêm `voters` /
- * `userIds` vào đây là mở đúng đường rò mà bất biến đó cấm.
- *
- * `totalVoters` = số NGƯỜI đã bỏ phiếu (không phải tổng phiếu) — mẫu số của thanh %.
- */
-export const feedPollResultsSchema = z.object({
-  pollId: z.string().uuid(),
-  postId: z.string().uuid(),
-  question: z.string(),
-  status: feedPollStatusSchema,
-  multipleChoice: z.boolean(),
-  isAnonymous: z.boolean(),
-  closesAt: z.string().datetime({ offset: true }).nullable(),
-  totalVoters: z.number().int().min(0),
-  myVote: z.array(z.string().uuid()),
-  options: z.array(feedPollOptionResultSchema),
-});
-export type FeedPollResultsDto = z.infer<typeof feedPollResultsSchema>;
+// `feedPollOptionResultSchema` + `feedPollResultsSchema` (041..044) DỜI sang `./social-feed-blocks`
+// (S16-SOCIAL-BE-2D D1) — cùng định nghĩa là khối `poll?` trên thẻ bài; file lá tránh vòng import.
 
 /**
  * Một dòng của `040`. ⚠️ KHÔNG có `multipleChoice` và KHÔNG có số phiếu — danh sách chỉ đủ để mở bài;

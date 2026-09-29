@@ -6,6 +6,7 @@ import {
   listKudosBadgesQuerySchema,
   updateKudosBadgeSchema,
   listKudosQuerySchema,
+  kudosRecipientSearchQuerySchema,
   listPollsQuerySchema,
   reviewFeedIdeaSchema,
   votePollSchema,
@@ -98,6 +99,8 @@ export class ListIdeasQuery extends createZodDto(listIdeasQuerySchema) {}
 export class ReviewFeedIdeaBody extends createZodDto(reviewFeedIdeaSchema) {}
 export class ListKudosQuery extends createZodDto(listKudosQuerySchema) {}
 export class ListKudosBadgesQuery extends createZodDto(listKudosBadgesQuerySchema) {}
+/** `059` — lớp `createZodDto` (KHÔNG `z.infer`): kiểu trần làm pipe không kiểm gì (plan BE-2D D9). */
+export class KudosRecipientSearchQuery extends createZodDto(kudosRecipientSearchQuerySchema) {}
 // S16-SOCIAL-BE-3A — CRUD catalog huy hiệu `049..051` + đọc quản trị `056`.
 export class CreateKudosBadgeBody extends createZodDto(createKudosBadgeSchema) {}
 export class UpdateKudosBadgeBody extends createZodDto(updateKudosBadgeSchema) {}

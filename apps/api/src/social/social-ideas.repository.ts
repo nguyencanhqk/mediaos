@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { FeedIdeaStatusDto } from "@mediaos/contracts";
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { feedIdeas, feedPosts } from "../db/schema/social";
 import { users } from "../db/schema/users";
@@ -222,4 +222,24 @@ export class SocialIdeasRepository {
 
     return updated.length > 0;
   }
+}
+
+/**
+ * S16-SOCIAL-BE-2D D6 — trạng thái sáng kiến của một LÔ bài (khối `idea` trên thẻ bài), MỘT câu
+ * (`feed_ideas_company_post_uq`).
+ *
+ * CHỈ `status`: `reviewNote` che theo người xem (D19) và người duyệt là điểm danh tính riêng của `045`
+ * — không thứ nào trong đó lên thẻ. `status` vốn không che ở `045` (view:feed) nên thẻ không nới gì.
+ * ⚠️ KHÔNG tự gác tầm nhìn — `postIds` phải là id của hàng ĐÃ qua cổng đọc bài.
+ */
+export async function ideaStatusByPostIdsTx(
+  tx: TenantTx,
+  companyId: string,
+  postIds: readonly string[],
+): Promise<Array<{ postId: string; status: FeedIdeaStatusDto }>> {
+  if (postIds.length === 0) return [];
+  return tx
+    .select({ postId: feedIdeas.postId, status: feedIdeas.status })
+    .from(feedIdeas)
+    .where(and(eq(feedIdeas.companyId, companyId), inArray(feedIdeas.postId, [...postIds])));
 }
