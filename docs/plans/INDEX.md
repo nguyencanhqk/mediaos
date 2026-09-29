@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**533 WO** · có micro-plan: **332/533** · ⬜ 11 chờ · 🔵 0 đang làm · ✅ 519 xong · 🔴 2 chặn
+**537 WO** · có micro-plan: **333/537** · ⬜ 13 chờ · 🔵 0 đang làm · ✅ 522 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -583,16 +583,20 @@
 | `S16-SOCIAL-BE-2B-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2B-1.md) | ✅S16-SOCIAL-BE-2A | BE track B/2a — BÌNH CHỌN (SOCIAL-API-040..044 + nhánh type='poll' của |
 | `S16-SOCIAL-BE-2B-2` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2B-2.md) | ✅S16-SOCIAL-BE-2B-1 | BE track B/2b — SÁNG KIẾN · VINH DANH (SOCIAL-API-045..048 + nhánh typ |
 | `S16-SOCIAL-BE-2C` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2A | BE track B/3 — REALTIME room nhóm co:{c}:feedgroup:{id}: thêm feedUser |
-| `S16-SOCIAL-FE-2` | amber | 🔴 chặn | [📄](S16-SOCIAL-FE-2.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 ✅S16-SOCIAL-FE-1 | FE track B / lát A: SOC-SCREEN-007 Bình chọn (composer · khối poll tro |
-| `S16-SOCIAL-FE-2B` | amber | ⬜ chờ | [📄](S16-SOCIAL-FE-2.md) | ⏳S16-SOCIAL-FE-2 | FE track B / lát B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm = feed |
+| `S16-SOCIAL-FE-2` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 ✅S16-SOCIAL-FE-1 | FE track B / lát A: SOC-SCREEN-007 Bình chọn (composer · khối poll tro |
+| `S16-SOCIAL-FE-2B` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2B.md) | ✅S16-SOCIAL-FE-2 | FE track B / lát B: SOC-SCREEN-006 Nhóm (danh sách · trang nhóm = feed |
+| `S16-SOCIAL-GROUPERR-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-GROUPERR-1.md) | ✅S16-SOCIAL-FE-2B | Nợ BE nhóm do FE-2B đo: (1) admin nhóm ĐANG active + có manage:feed-gr |
+| `S16-SOCIAL-GROUPERR-FEFALLBACK-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | Gỡ nhánh LEGACY-PREFIX của `groups/lib/group-errors.ts` (đọc tiền tố ` |
+| `S16-SOCIAL-GROUPTOCTOU-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | `039` mời ra KHÔNG đọc lại vai ACTOR sau `lockGroupRowTx` (cùng lớp TO |
+| `S16-SOCIAL-SCOPEDENIEDCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | `SocialAccessService.resolveActor` nhánh sàn Company ném message `AUTH |
 | `S16-SOCIAL-BE-2D` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2B-2 | BE mở khoá lát C — (1) khối `kudos?` (người nhận · huy hiệu · lời nhắn |
-| `S16-SOCIAL-FE-2C` | amber | ⬜ chờ | [📄](S16-SOCIAL-FE-2.md) | ⏳S16-SOCIAL-FE-2 ⏳S16-SOCIAL-BE-2D | FE track B / lát C: SOC-SCREEN-009 Vinh danh — composer kudos (chọn ≤1 |
-| `S16-SOCIAL-FE-2D` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1C ✅S16-SOCIAL-BE-1D ⏳S16-SOCIAL-FE-2 | FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qu |
+| `S16-SOCIAL-FE-2C` | amber | ⬜ chờ | [📄](S16-SOCIAL-FE-2.md) | ✅S16-SOCIAL-FE-2 ⏳S16-SOCIAL-BE-2D | FE track B / lát C: SOC-SCREEN-009 Vinh danh — composer kudos (chọn ≤1 |
+| `S16-SOCIAL-FE-2D` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1C ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FE-2 | FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qu |
 | `S16-SOCIAL-BE-3A` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3A.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 | BE track C/1 — resolve báo cáo KÈM HÀNH ĐỘNG (SOCIAL-API-029: ẩn bài · |
 | `S16-SOCIAL-GROUPMOD-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A | Đường KIỂM DUYỆT nội dung nhóm RIÊNG TƯ: hôm nay bài/bình luận trong n |
 | `S16-SOCIAL-BE-3B` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3B.md) | ✅S16-SOCIAL-BE-3A | BE track C/2 — thống kê tương tác SOCIAL-API-052 (bài · bình luận · th |
 | `S16-SOCIAL-BE-3C` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3C.md) | ✅S16-SOCIAL-BE-3A | BE track C/3 — route KHÔI PHỤC bài đã xoá mềm + mở registry recycle-bi |
-| `S16-SOCIAL-FE-3` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A ✅S16-SOCIAL-BE-3B ⏳S16-SOCIAL-FE-2 ⏳S16-SOCIAL-FE-2B ⏳S16-SOCIAL-FE-2C | FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 01 |
+| `S16-SOCIAL-FE-3` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A ✅S16-SOCIAL-BE-3B ✅S16-SOCIAL-FE-2 ✅S16-SOCIAL-FE-2B ⏳S16-SOCIAL-FE-2C | FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 01 |
 | `S16-SOCIAL-QA-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-3 ✅S16-SOCIAL-BE-3C | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
 | `S16-SOCIAL-TESTISO-1` | amber | ✅ xong | [📄](S16-SOCIAL-TESTISO-1.md) | — | Vá CÁCH LY TEST: Nhóm 13 của s16-social-db2-invariants chạy thân migra |
 | `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
