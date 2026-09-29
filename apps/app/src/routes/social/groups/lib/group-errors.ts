@@ -1,19 +1,21 @@
 /**
- * S16-SOCIAL-FE-2B — đọc LÝ DO của một lỗi ghi ở màn Nhóm (plan D3 + §8 M7).
+ * S16-SOCIAL-FE-2B — đọc LÝ DO của một lỗi ghi ở màn Nhóm (plan D3 + §8 M7); S16-SOCIAL-GROUPERR-1 (D14)
+ * chuyển sang đọc MÃ.
  *
- * ┌─ VÌ SAO PHẢI ĐỌC TIỀN TỐ `message` ────────────────────────────────────────────────────────────┐
- * │ Service SOCIAL ném CHUỖI (`new ConflictException("SOCIAL-ERR-015: …")`), nên `AllExceptionsFilter`│
- * │ gán `error.code` = mã CHUNG theo status (`RESOURCE-ERR-CONFLICT` · `-NOT-FOUND` ·               │
- * │ `AUTH-ERR-FORBIDDEN`). Mã `SOCIAL-ERR-0xx` CHỈ còn ở đầu `message` — `ApiError.message` giữ     │
- * │ nguyên chuỗi đó. `038` trả 409 cho CẢ ERR-013 (lệch trạng thái) lẫn ERR-015 (chủ nhóm cuối) ⇒  │
- * │ status một mình không đủ để nói «hãy phong người khác làm chủ nhóm trước».                      │
- * │ Định dạng tiền tố được giữ phía BE bởi `social-error-code-census.spec.ts`. Nợ BE: đặt `code`   │
- * │ vào payload như ROOM/ASSET (`S16-SOCIAL-GROUPERR-1`) — khi đó đổi hàm này sang đọc `code`.      │
+ * ┌─ HAI HÌNH DẠNG TRÊN DÂY, CẢ HAI ĐANG THẬT ─────────────────────────────────────────────────────┐
+ * │ **API MỚI** (từ GROUPERR-1): `error.code` = `SOCIAL_ERROR_CODES[K]` (contracts) — có số         │
+ * │ `SOCIAL-ERR-0xx` hoặc sentinel `SOCIAL-ERR-<KHOÁ>`. Đọc thẳng mã, không đoán theo status.       │
+ * │ **API CŨ**: service ném CHUỖI ⇒ `error.code` là mã CHUNG theo status (`RESOURCE-ERR-*` ·        │
+ * │ `AUTH-ERR-FORBIDDEN`), mã chỉ ở tiền tố `message`. FE auto-deploy khi merge còn API deploy tay  │
+ * │ ⇒ có một khoảng FE mới gặp API cũ (owner ký O4): nhánh **LEGACY-PREFIX** giữ nguyên hành vi cũ   │
+ * │ cho hình dạng đó. Gỡ ở `S16-SOCIAL-GROUPERR-FEFALLBACK-1` SAU khi PROD API đã lên bản có mã.     │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Hai lỗi nhóm KHÔNG có số (`GROUP_NAME_TAKEN` · `GROUP_MEMBER_NOT_FOUND`, `social.errors.ts:203,214`)
- * được nhận theo NGỮ CẢNH route + status, KHÔNG theo câu chữ: câu chữ không số không có lưới nào giữ.
+ * `038` trả 409 cho CẢ `SOCIAL-ERR-013` (lệch trạng thái) lẫn `015` (chủ nhóm cuối) ⇒ status một mình
+ * không đủ để nói «hãy phong người khác làm chủ nhóm trước». `013` còn dùng chung cho «đã là thành viên»
+ * (join) và «lệch trạng thái» (038) ⇒ vẫn cần NGỮ CẢNH thao tác.
  */
+import { SOCIAL_ERROR_CODES, isSocialErrorCode, type SocialErrorCode } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
 import type { ActionErrorReason } from "../../feed/components/ActionErrorBanner";
 
@@ -35,19 +37,46 @@ export type GroupAction =
  */
 export type GroupErrorReason = ActionErrorReason;
 
+/** LEGACY-PREFIX — tiền tố có số của `message` (API cũ). */
 const SOCIAL_CODE_RE = /^SOCIAL-ERR-(\d{3}):/;
 /** Mã của interceptor idempotency CÓ đặt `code` vào payload (`contracts/idempotency.ts`). */
 const IDEMPOTENCY_CODE_PREFIX = "REQUEST-ERR-IDEMPOTENCY";
+const C = SOCIAL_ERROR_CODES;
 
-/** `"SOCIAL-ERR-015"` từ tiền tố `message` của một `ApiError`; `null` với mọi thứ khác (ZodError, Error…). */
+/**
+ * Mã SOCIAL của một `ApiError`: `code` khi đó là mã SOCIAL (API mới); NGƯỢC LẠI đọc tiền tố có số của
+ * `message` (LEGACY-PREFIX, API cũ); `null` với mọi thứ khác (ZodError, Error, lỗi không phải SOCIAL).
+ */
 export function socialErrorCode(err: unknown): string | null {
   if (!(err instanceof ApiError)) return null;
+  if (isSocialErrorCode(err.code)) return err.code;
   const m = SOCIAL_CODE_RE.exec(err.message);
   return m ? `SOCIAL-ERR-${m[1]}` : null;
 }
 
 export function groupErrorReason(action: GroupAction, err: unknown): GroupErrorReason | null {
   if (!(err instanceof ApiError)) return null;
+  if (isSocialErrorCode(err.code)) return reasonByCode(action, err.code);
+  return legacyPrefixReason(action, err);
+}
+
+/** API MỚI — chỉ mã, không heuristic status. Mã SOCIAL không thuộc nhóm ⇒ `null` (banner chung). */
+function reasonByCode(action: GroupAction, code: SocialErrorCode): GroupErrorReason | null {
+  if (code === C.GROUP_LAST_OWNER) return "lastOwner";
+  if (code === C.GROUP_NOT_FOUND) return "groupGone";
+  // `GROUP_MEMBERSHIP_EXISTS` và `GROUP_MEMBER_STATE_MISMATCH` CHUNG mã 013 — ngữ cảnh thao tác phân xử.
+  if (code === C.GROUP_MEMBERSHIP_EXISTS) return action === "join" ? "alreadyMember" : "stateChanged";
+  if (code === C.GROUP_NAME_TAKEN) return "nameTaken";
+  if (code === C.GROUP_MEMBER_NOT_FOUND) return "stateChanged";
+  return null;
+}
+
+/**
+ * LEGACY-PREFIX (API cũ, owner ký O4) — y nguyên hành vi trước GROUPERR-1. Hai lỗi KHÔNG số
+ * (`GROUP_NAME_TAKEN` · `GROUP_MEMBER_NOT_FOUND`) nhận theo NGỮ CẢNH route + status: API cũ không mang
+ * gì khác để phân biệt chúng.
+ */
+function legacyPrefixReason(action: GroupAction, err: ApiError): GroupErrorReason | null {
   const code = socialErrorCode(err);
   if (code === "SOCIAL-ERR-015") return "lastOwner";
   if (code === "SOCIAL-ERR-012") return "groupGone";

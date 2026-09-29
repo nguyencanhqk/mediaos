@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import { ApiError, useAuthStore } from "@mediaos/web-core";
 import type {
   FeedBirthdayDto,
@@ -156,26 +157,48 @@ export function makeMember(over: Partial<FeedGroupMemberDto> = {}): FeedGroupMem
 export const offsetPage = <T,>(data: T[], total = data.length) => ({ data, page: 1, limit: 20, total });
 
 /**
- * Lỗi ĐÚNG hình dạng trên dây: `code` là mã CHUNG theo status (`AllExceptionsFilter`), mã SOCIAL chỉ ở
- * tiền tố `message`. Chuỗi chép `social.errors.ts`.
+ * Lỗi ĐÚNG hình dạng trên dây của API MỚI (S16-SOCIAL-GROUPERR-1): `code` = `SOCIAL_ERROR_CODES[K]`,
+ * `message` chép nguyên văn `social.errors.ts` (tiền tố giữ nguyên). Hình dạng API CŨ (mã chung + tiền tố)
+ * được phủ riêng ở `groups/lib/group-errors.spec.ts` (nhánh LEGACY-PREFIX).
  */
 export const GROUP_ERR = {
   lastOwner: () =>
-    new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR-015: nhóm phải còn ít nhất một chủ nhóm đang hoạt động."),
+    new ApiError(
+      409,
+      SOCIAL_ERROR_CODES.GROUP_LAST_OWNER,
+      "SOCIAL-ERR-015: nhóm phải còn ít nhất một chủ nhóm đang hoạt động.",
+    ),
   stateMismatch: () =>
     new ApiError(
       409,
-      "RESOURCE-ERR-CONFLICT",
+      SOCIAL_ERROR_CODES.GROUP_MEMBER_STATE_MISMATCH,
       "SOCIAL-ERR-013: thao tác không khớp trạng thái của thành viên này (chờ duyệt cần duyệt/từ chối, đang hoạt động mới đổi được vai trò).",
     ),
   exists: () =>
-    new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR-013: bạn đã tham gia hoặc đã gửi yêu cầu vào nhóm này."),
-  notFound: () => new ApiError(404, "RESOURCE-ERR-NOT-FOUND", "SOCIAL-ERR-012: không tìm thấy nhóm."),
+    new ApiError(
+      409,
+      SOCIAL_ERROR_CODES.GROUP_MEMBERSHIP_EXISTS,
+      "SOCIAL-ERR-013: bạn đã tham gia hoặc đã gửi yêu cầu vào nhóm này.",
+    ),
+  notFound: () =>
+    new ApiError(404, SOCIAL_ERROR_CODES.GROUP_NOT_FOUND, "SOCIAL-ERR-012: không tìm thấy nhóm."),
   memberGone: () =>
-    new ApiError(404, "RESOURCE-ERR-NOT-FOUND", "SOCIAL-ERR: người này không phải thành viên của nhóm."),
+    new ApiError(
+      404,
+      SOCIAL_ERROR_CODES.GROUP_MEMBER_NOT_FOUND,
+      "SOCIAL-ERR: người này không phải thành viên của nhóm.",
+    ),
   nameTaken: () =>
-    new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR: tên nhóm này đã được dùng trong công ty."),
+    new ApiError(
+      409,
+      SOCIAL_ERROR_CODES.GROUP_NAME_TAKEN,
+      "SOCIAL-ERR: tên nhóm này đã được dùng trong công ty.",
+    ),
   forbidden: () =>
-    new ApiError(403, "AUTH-ERR-FORBIDDEN", "SOCIAL-ERR-014: bạn không có quyền thực hiện thao tác này trong nhóm."),
+    new ApiError(
+      403,
+      SOCIAL_ERROR_CODES.GROUP_ROLE_REQUIRED,
+      "SOCIAL-ERR-014: bạn không có quyền thực hiện thao tác này trong nhóm.",
+    ),
   server: () => new ApiError(500, "INTERNAL", "boom"),
 };

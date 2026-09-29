@@ -104,7 +104,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-035` | `POST /social/groups/{group_id}/join` | `view:feed` | `public` ⇒ `active` ngay; `private` ⇒ `pending`; trùng ⇒ 409 `ERR-013` |
 | `SOCIAL-API-036` | `POST /social/groups/{group_id}/leave` | `view:feed` (hàng của actor) | `owner` cuối cùng ⇒ 409 `ERR-015` |
 | `SOCIAL-API-037` | `GET /social/groups/{group_id}/members` | `view:feed` + membership | |
-| `SOCIAL-API-038` | `PATCH /social/groups/{group_id}/members/{user_id}` | `owner`\|`admin` nhóm **hoặc** `manage:feed-group` | Duyệt / từ chối / đổi vai trò; ghi audit; NOTI cho người xin vào |
+| `SOCIAL-API-038` | `PATCH /social/groups/{group_id}/members/{user_id}` | `owner`\|`admin` nhóm **hoặc** `manage:feed-group` | Duyệt / từ chối / đổi vai trò; ghi audit; NOTI cho người xin vào. **Cấp vai `owner`**: chỉ `owner` hiện tại **hoặc** `manage:feed-group` BẤT KỂ vai trong nhóm (admin kiêm manage cấp được — GROUPERR-1); audit `viaManage:true` khi quyền cấp đến từ manage |
 | `SOCIAL-API-039` | `DELETE /social/groups/{group_id}/members/{user_id}` | như trên | Mời ra khỏi nhóm |
 | **Bình chọn — Track B** ||||
 | `SOCIAL-API-040` | `GET /social/polls` | `view:feed` | Bình chọn đang mở / đã đóng |
@@ -544,7 +544,40 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
 
 ### 6.5 Envelope lỗi + mã
 
-Theo API-01. Mã nghiệp vụ `SOCIAL-ERR-001..022` (SPEC-16 §12) + các hằng KHÔNG số hoá tiền tố `SOCIAL-ERR:` (nguồn: `social.errors.ts`; BE-3A thêm `REPORT_ACTION_DENIED` 403 · `REPORT_ACTION_INVALID_FOR_TARGET` 422 · `REPORT_ACTION_TARGET_UNAVAILABLE` 422 · `REPORT_BUSY` 409 · `KUDOS_BADGE_CODE_TAKEN` 409 · `KUDOS_BADGE_NOT_FOUND` 404; BE-3C thêm `RESTORE_GROUP_DELETED` 409 — §5.1k). Quy ước then chốt:
+Theo API-01 §12/§13 `MODULE-ERR-CODE`. **Mã nằm ở `error.code`** của envelope (S16-SOCIAL-GROUPERR-1, 29/09/2026 — trước đó service ném chuỗi trần nên `error.code` là mã CHUNG theo status và mã SOCIAL chỉ ở tiền tố `message`). Nguồn sự thật MÃ dùng chung api ↔ web: `packages/contracts/src/social-errors.ts` (`SOCIAL_ERROR_CODES`, khoá = khoá `SOCIAL_ERR` của `social.errors.ts`). Namespace SOCIAL gồm **hai nhóm**:
+
+- **Đánh số** `SOCIAL-ERR-001`..`SOCIAL-ERR-022` — quy tắc nghiệp vụ, định nghĩa ở SPEC-16 §12. Nhiều hằng có thể CHUNG một số (vd `001` = bài · bình luận · báo cáo lạ; `013` = đã là thành viên · lệch trạng thái hàng) — FE phân xử bằng ngữ cảnh thao tác.
+- **Đặt tên** (sentinel, KHÔNG chiếm số — owner ký O1 29/09/2026: không đánh số mới, không sửa SPEC-16 §12) — dạng `SOCIAL-ERR-<KHOÁ>`, mỗi hằng một mã:
+
+| Mã sentinel | HTTP | Ý nghĩa |
+| --- | ---: | --- |
+| `SOCIAL-ERR-REPORT-DUPLICATE-OPEN` | 409 | Báo cáo trùng khi cái cũ còn `open` |
+| `SOCIAL-ERR-FILE-TARGET-POST-DENIED` · `-FILE-TARGET-COMMENT-DENIED` | 403 | `054` thiếu `create:feed-post` / `create:feed-comment` @Company (cả cổng gắn tệp của `004`/`016`) |
+| `SOCIAL-ERR-FILE-NOT-OWNED` | 403 | `055` xác nhận tệp không phải của mình |
+| `SOCIAL-ERR-GROUP-NAME-TAKEN` | 409 | `031`/`033` tên nhóm trùng (nhóm còn sống) |
+| `SOCIAL-ERR-GROUP-MEMBER-NOT-FOUND` | 404 | `036`/`038`/`039` người đó không có hàng thành viên — TÁCH khỏi `012` |
+| `SOCIAL-ERR-POLL-OPTION-NOT-FOUND` | 404 | Lựa chọn không thuộc bình chọn này |
+| `SOCIAL-ERR-POLL-CLOSES-AT-PAST` | 422 | Hạn đóng bình chọn ở quá khứ |
+| `SOCIAL-ERR-POLL-CREATE-REQUIRED` · `-IDEA-CREATE-REQUIRED` · `-KUDOS-CREATE-REQUIRED` | 403 | Thiếu cặp theo loại bài @Company |
+| `SOCIAL-ERR-POLL-WRITE-BUSY` · `SOCIAL-ERR-REPORT-BUSY` | 409 | Hết `lock_timeout` — tạm thời, thử lại được |
+| `SOCIAL-ERR-IDEA-REJECT-NOTE-REQUIRED` | 422 | Từ chối sáng kiến không ghi lý do |
+| `SOCIAL-ERR-KUDOS-SELF-RECIPIENT` · `-KUDOS-RECIPIENT-LIMIT` · `-KUDOS-RECIPIENT-INVALID` | 422 | Người nhận vinh danh không hợp lệ |
+| `SOCIAL-ERR-KUDOS-OFFICIAL-DENIED` | 403 | `isOfficial:true` thiếu `manage:feed-kudos` |
+| `SOCIAL-ERR-REPORT-ACTION-DENIED` | 403 | `029` hành động kèm thiếu cặp |
+| `SOCIAL-ERR-REPORT-ACTION-INVALID-FOR-TARGET` · `-REPORT-ACTION-TARGET-UNAVAILABLE` | 422 | `029` hành động không áp được / đích không còn thao tác được |
+| `SOCIAL-ERR-KUDOS-BADGE-CODE-TAKEN` | 409 | `049` mã huy hiệu trùng |
+| `SOCIAL-ERR-KUDOS-BADGE-NOT-FOUND` | 404 | `050`/`051` huy hiệu lạ |
+| `SOCIAL-ERR-STATS-UNIT-OUT-OF-SCOPE` | 403 | `052`/`053` đơn vị ngoài phạm vi thống kê |
+| `SOCIAL-ERR-RESTORE-GROUP-DELETED` | 409 | `058` bài thuộc nhóm đã xoá (§5.1k) |
+| `SOCIAL-ERR-CURSOR-INVALID` · `-CURSOR-FILTER-MISMATCH` | **400** | Con trỏ phân trang hỏng / thuộc bộ lọc khác. _(Trước GROUPERR-1 mang tiền tố `SOCIAL-ERR-001` — mã **404** — trên một 400.)_ |
+| `SOCIAL-ERR-PIN-NEWS-ONLY` | 422 | `006` ghim bài không phải `news`. _(Trước mang tiền tố `SOCIAL-ERR-010` — 403 thiếu quyền — trên một 422.)_ |
+| `SOCIAL-ERR-POST-TYPE-PAIR-DESYNC` | 403 | Chân fail-closed khi hai bảng cặp theo loại bài lệch nhau — không tới được khi cấu hình đúng |
+
+**Thông điệp** giữ nguyên tiền tố cũ: hằng có số ⇒ tiền tố `message` = đúng `error.code`; sentinel ⇒ tiền tố `SOCIAL-ERR: `. Client **bắt theo `error.code`**, không so câu chữ `message`.
+
+**KHÔNG mang mã SOCIAL** (giữ mã chung): 403 tầng-1 `PermissionGuard` (`AUTH-ERR-FORBIDDEN`, `Permission denied: …` — kể cả route `046`; `SOCIAL-ERR-020` chỉ ra ở nhánh có grant nhưng dưới sàn Company) · 403 tầng-2 `resolveActor` của route không có mã riêng (`AUTH-ERR-FORBIDDEN` / message `AUTH-ERR-SCOPE-DENIED` — nợ `S16-SOCIAL-SCOPEDENIEDCODE-1`) · 400 Zod/ParseUUID (`VALIDATION-ERR-001`) · 409 idempotency (`REQUEST-ERR-IDEMPOTENCY-*`) · lỗi của FileService.
+
+Quy ước then chốt:
 
 > **404 trước 403.** Mọi trường hợp «không được thấy» trả **404** (`ERR-001` bài / `ERR-012` nhóm). 403 chỉ dùng khi caller **đã** ở trong audience và chỉ thiếu quyền hành động. Trả 403 cho một bài mà caller không được thấy là **rò sự tồn tại**.
 >
