@@ -11,7 +11,8 @@ import type { SocialViewerContext } from "./social.types";
 export interface IdeaListRow {
   ideaId: string;
   postId: string;
-  status: string;
+  /** Cột drizzle đã `$type<FeedIdeaStatus>` — khai hẹp ở đây để DTO `045` khớp enum contracts (FE-2 D2). */
+  status: FeedIdeaStatusDto;
   body: string | null;
   authorUserId: string;
   reviewNote: string | null;

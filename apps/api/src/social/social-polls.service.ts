@@ -2,6 +2,7 @@
 // do `assertCanMutateContent` ném, file này không tự ném 403 ở đâu.
 import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { sql } from "drizzle-orm";
+import type { FeedPollPageDto, FeedPollResultsDto } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService, type NewEvent } from "../events/outbox.service";
@@ -54,7 +55,7 @@ export class SocialPollsService {
   async list(
     user: SocialRequestUser,
     query: { status?: "open" | "closed"; page: number; limit: number },
-  ) {
+  ): Promise<FeedPollPageDto> {
     const actor = await this.access.resolveActor(user, "pollList");
     const { page, limit } = query;
     const { rows, total } = await this.db.withTenant(actor.companyId, (tx) =>
@@ -88,7 +89,11 @@ export class SocialPollsService {
    * thao tác bình thường nhất của tính năng (người dùng đổi ý). Ca `P-4` + `C-2` gác bằng bất biến
    * `Σ vote_count == COUNT(*) phiếu` kiểm sau MỖI bước.
    */
-  async vote(user: SocialRequestUser, postId: string, optionIds: string[]) {
+  async vote(
+    user: SocialRequestUser,
+    postId: string,
+    optionIds: string[],
+  ): Promise<FeedPollResultsDto> {
     const actor = await this.access.resolveActor(user, "pollVote");
     // Khử trùng lặp TRƯỚC mọi thứ: `[A, A]` gửi lên sẽ làm `countOptionsOfPollTx` khớp 1/2 và ném
     // nhầm thành "option lạ", trong khi lỗi thật của người dùng là gửi trùng.
@@ -165,7 +170,7 @@ export class SocialPollsService {
    * Chưa có phiếu nào ⇒ **200 no-op**, không 404: DELETE là thao tác idempotent theo bản chất, và
    * một 404 ở đây chỉ nói với người dùng điều họ đã biết (họ chưa bỏ phiếu) bằng giọng của lỗi.
    */
-  async withdrawVote(user: SocialRequestUser, postId: string) {
+  async withdrawVote(user: SocialRequestUser, postId: string): Promise<FeedPollResultsDto> {
     const actor = await this.access.resolveActor(user, "pollVoteWithdraw");
     return this.db.withTenant(actor.companyId, async (tx) => {
       const poll = await this.openPollForWriteTx(tx, actor, postId);
@@ -181,7 +186,7 @@ export class SocialPollsService {
   }
 
   /** `043` — kết quả. Tập cột TƯỜNG MINH; không bao giờ có `user_id`. */
-  async results(user: SocialRequestUser, postId: string) {
+  async results(user: SocialRequestUser, postId: string): Promise<FeedPollResultsDto> {
     const actor = await this.access.resolveActor(user, "pollResults");
     return this.db.withTenant(actor.companyId, async (tx) => {
       await this.access.assertPostVisible(tx, actor, postId);
@@ -197,7 +202,7 @@ export class SocialPollsService {
    * Audit **LUÔN** (không chỉ khi `viaManage`): đóng bình chọn là hành động **không đảo ngược được**
    * — không có route nào mở lại. Đây là cùng bài học mà FULL gate của BE-2A rút ra cho `031`/`034`.
    */
-  async close(user: SocialRequestUser, postId: string) {
+  async close(user: SocialRequestUser, postId: string): Promise<FeedPollResultsDto> {
     const actor = await this.access.resolveActor(user, "pollClose");
     return this.db.withTenant(actor.companyId, async (tx) => {
       const post = await this.access.assertPostVisible(tx, actor, postId);
@@ -394,7 +399,11 @@ export class SocialPollsService {
    * tỉ lệ >100%. Gộp thành MỘT câu ở `pollResultsTx` — xem docblock ở đó để biết vì sao
    * `repeatable read`/`FOR SHARE` đều không phải đường đúng.
    */
-  private async readResultsTx(tx: TenantTx, actor: SocialActor, poll: PollForWrite) {
+  private async readResultsTx(
+    tx: TenantTx,
+    actor: SocialActor,
+    poll: PollForWrite,
+  ): Promise<FeedPollResultsDto> {
     const { options, totalVoters, myVote } = await this.repo.pollResultsTx(
       tx,
       actor.companyId,

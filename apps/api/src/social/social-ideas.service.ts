@@ -1,5 +1,11 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import type { FeedIdeaStatusDto, ReviewFeedIdeaDto } from "@mediaos/contracts";
+import type {
+  FeedIdeaItemDto,
+  FeedIdeaPageDto,
+  FeedIdeaReviewResultDto,
+  FeedIdeaStatusDto,
+  ReviewFeedIdeaDto,
+} from "@mediaos/contracts";
 import { UnprocessableEntityException } from "@nestjs/common";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
@@ -15,17 +21,13 @@ import {
 import { SOCIAL_ERR } from "./social.errors";
 import type { SocialActor, SocialRequestUser } from "./social.types";
 
-/** Một dòng của `045` sau khi service đã MASK `reviewNote` theo người xem (D19). */
-interface IdeaItemDto {
-  ideaId: string;
-  postId: string;
-  status: string;
-  body: string | null;
-  reviewNote: string | null;
-  reviewer: { fullName: string } | null;
-  reviewedAt: string | null;
-  createdAt: string;
-}
+/**
+ * Một dòng của `045` sau khi service đã MASK `reviewNote` theo người xem (D19).
+ *
+ * S16-SOCIAL-FE-2 (plan D2) — hình dạng giờ là DTO của contracts, không còn interface cục bộ: FE parse
+ * đúng schema này, nên lệch một trường phải là TS đỏ ở đây chứ không phải ZodError ở trình duyệt.
+ */
+type IdeaItemDto = FeedIdeaItemDto;
 
 /**
  * S16-SOCIAL-BE-2B-2 — `SOCIAL-API-045` (danh sách sáng kiến) · `046` (xét duyệt).
@@ -55,7 +57,7 @@ export class SocialIdeasService {
   async list(
     user: SocialRequestUser,
     query: { status?: FeedIdeaStatusDto; page: number; limit: number },
-  ) {
+  ): Promise<FeedIdeaPageDto> {
     const actor = await this.access.resolveActor(user, "ideaList");
     const { page, limit } = query;
 
@@ -97,7 +99,11 @@ export class SocialIdeasService {
    *   6. **`reviewTx`** (D5) — một câu 4 cột; 0 hàng ⇒ 409.
    *   7. **audit + NOTI-032** (D8) — CHỈ khi bước 6 thành công, CÙNG tx.
    */
-  async review(user: SocialRequestUser, postId: string, dto: ReviewFeedIdeaDto) {
+  async review(
+    user: SocialRequestUser,
+    postId: string,
+    dto: ReviewFeedIdeaDto,
+  ): Promise<FeedIdeaReviewResultDto> {
     // `resolveActor` LÀ tầng-2 của route này: nó tự resolve cặp `approve:feed-idea` (độc lập với
     // decorator) và ném **`SOCIAL-ERR-020`** ở cả hai nhánh — không có grant · scope hẹp hơn Company
     // (`SocialPair.denyMessage` của `ideaReview`). Một `assert…` thứ hai ở đây KHÔNG BAO GIỜ chạy tới:
