@@ -15,6 +15,7 @@ const navigateSpy = vi.fn();
 const listBirthdays = vi.fn();
 const listNews = vi.fn();
 const listPolls = vi.fn();
+const listGroups = vi.fn();
 /** Tham số URL mà `useSearch` trả về. Đặt trong từng ca để giả lập `/feed?q=...`. */
 let routeSearch: Record<string, unknown> = {};
 
@@ -44,6 +45,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       listNews: (...a: unknown[]) => listNews(...a),
       listPolls: (...a: unknown[]) => listPolls(...a),
     },
+    // S16-SOCIAL-FE-2B — widget «Nhóm của tôi». Không mock ⇒ `apiFetch` THẬT chạy trong test.
+    socialGroupsApi: {
+      ...actual.socialGroupsApi,
+      list: (...a: unknown[]) => listGroups(...a),
+    },
   };
 });
 
@@ -53,6 +59,7 @@ beforeEach(() => {
   listBirthdays.mockReset().mockResolvedValue({ data: [] });
   listNews.mockReset().mockResolvedValue(page([]));
   listPolls.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
+  listGroups.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
   routeSearch = {};
 });
 
@@ -298,5 +305,53 @@ describe("W1 — widget «Bình chọn đang mở» (S16-SOCIAL-FE-2, plan D9)",
     const list = await screen.findByTestId("open-polls-list");
     expect(list).toHaveTextContent("Còn mở");
     expect(list).not.toHaveTextContent("Quá hạn");
+  });
+});
+
+describe("W2 — widget «Nhóm của tôi» (S16-SOCIAL-FE-2B, plan D14)", () => {
+  const renderShell = () =>
+    renderWithProviders(
+      <SocialPortalShell moduleCode="SOCIAL">
+        <p>nội dung</p>
+      </SocialPortalShell>,
+    );
+
+  it("DENY: không `view:feed` ⇒ KHÔNG gọi `030` (spy 0 lần)", async () => {
+    setCaps({});
+    renderShell();
+    await waitFor(() => expect(screen.getByTestId("portal-layout")).toBeInTheDocument());
+    expect(listGroups).not.toHaveBeenCalled();
+  });
+
+  it("ALLOW: gọi `030` với `membership:'mine'` (mặc định `all` là SAI danh sách) + limit 5; rỗng ⇒ câu rỗng", async () => {
+    renderShell();
+    await waitFor(() => expect(listGroups).toHaveBeenCalled());
+    expect(listGroups.mock.calls[0]?.[0]).toEqual({ membership: "mine", limit: 5 });
+    expect(await screen.findByTestId("my-groups-empty")).toBeInTheDocument();
+  });
+
+  it("có nhóm ⇒ danh sách tên, KHÔNG có badge đếm bài mới (chờ BE-2C)", async () => {
+    listGroups.mockResolvedValue({
+      data: [
+        {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          name: "Bóng đá",
+          description: null,
+          visibility: "private",
+          memberCount: 4,
+          myRole: "member",
+          myStatus: "active",
+          createdAt: "2026-09-01T00:00:00.000Z",
+        },
+      ],
+      page: 1,
+      limit: 5,
+      total: 1,
+    });
+    renderShell();
+    const list = await screen.findByTestId("my-groups-list");
+    expect(list).toHaveTextContent("Bóng đá");
+    expect(list.textContent).not.toMatch(/\d+\s*bài mới/);
+    expect(list.querySelector("[data-testid*='badge']")).toBeNull();
   });
 });

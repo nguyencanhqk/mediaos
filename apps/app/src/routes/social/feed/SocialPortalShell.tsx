@@ -4,8 +4,8 @@
  * Mọi màn `/feed*` đi qua đây, nên hai rail **không đổi** khi chuyển màn — đúng nghĩa "cổng thông
  * tin" của UI-07 §34b (khác `ModuleWorkspaceLayout`, nơi chỉ có một sidebar và phần còn lại là trang).
  *
- * Rail phải (S16-SOCIAL-FE-2): Sinh nhật · Tin nổi bật · Bình chọn đang mở. «Vinh danh tháng này»
- * và «Nhóm của tôi» đến ở lát C / B.
+ * Rail phải: Sinh nhật · Tin nổi bật · Bình chọn đang mở (FE-2) · Nhóm của tôi (FE-2B, KHÔNG badge
+ * cho tới `S16-SOCIAL-BE-2C`). «Vinh danh tháng này» đến ở lát C.
  *
  * ┌─ 🔴 VỎ NÀY LÀ CỦA SOCIAL, KHÔNG PHẢI CỦA MỌI `MODULE_PORTAL` ────────────────────────────────┐
  * │ Rail phải chở widget Sinh nhật + Tin nổi bật — hai thứ chỉ SOCIAL có. Hôm nay SOCIAL là module │
@@ -18,7 +18,7 @@
 import * as React from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { socialApi, socialKeys, useCan, type ModuleCode } from "@mediaos/web-core";
+import { socialApi, socialGroupsApi, socialKeys, useCan, type ModuleCode } from "@mediaos/web-core";
 import type { FeedBirthdayDto, FeedBirthdayRangeDto } from "@mediaos/contracts";
 import { PortalLayout } from "@/layouts/portal/PortalLayout";
 import { PortalLeftRail } from "@/layouts/portal/PortalLeftRail";
@@ -26,12 +26,15 @@ import { PortalRightRail } from "@/layouts/portal/PortalRightRail";
 import { BirthdayWidget } from "./components/BirthdayWidget";
 import { HighlightNewsWidget } from "./components/HighlightNewsWidget";
 import { OpenPollsWidget } from "./components/OpenPollsWidget";
+import { MyGroupsWidget } from "./components/MyGroupsWidget";
 import { FeedSearchBox } from "./components/FeedSearchBox";
 
 /** Số tin nổi bật lấy về cho rail phải — rail hẹp, danh sách dài chỉ làm nó cuộn vô ích. */
 const HIGHLIGHT_LIMIT = 5;
 /** S16-SOCIAL-FE-2 — số bình chọn đang mở cho widget rail (cùng lý do với `HIGHLIGHT_LIMIT`). */
 const OPEN_POLLS_LIMIT = 5;
+/** S16-SOCIAL-FE-2B — số nhóm của tôi trên rail; danh sách đủ ở `/feed/groups?membership=mine`. */
+const MY_GROUPS_LIMIT = 5;
 
 interface SocialPortalShellProps {
   moduleCode: ModuleCode;
@@ -78,6 +81,17 @@ export function SocialPortalShell({
   const openPollsQuery = useQuery({
     queryKey: socialKeys.polls.list(openPollsParams),
     queryFn: () => socialApi.listPolls(openPollsParams),
+    enabled: canViewFeed,
+  });
+
+  /**
+   * S16-SOCIAL-FE-2B (plan D14) — `membership:'mine'` PHẢI truyền rõ: mặc định của `030` là `all`
+   * (public ∪ nhóm có hàng) ⇒ bỏ trống là liệt kê SAI danh sách. Cùng cổng `enabled: canViewFeed`.
+   */
+  const myGroupsParams = { membership: "mine" as const, limit: MY_GROUPS_LIMIT };
+  const myGroupsQuery = useQuery({
+    queryKey: socialKeys.groups.list(myGroupsParams),
+    queryFn: () => socialGroupsApi.list(myGroupsParams),
     enabled: canViewFeed,
   });
 
@@ -154,6 +168,11 @@ export function SocialPortalShell({
             items={openPollsQuery.data?.data ?? []}
             isLoading={openPollsQuery.isLoading}
             isError={openPollsQuery.isError}
+          />
+          <MyGroupsWidget
+            items={myGroupsQuery.data?.data ?? []}
+            isLoading={myGroupsQuery.isLoading}
+            isError={myGroupsQuery.isError}
           />
         </PortalRightRail>
       }

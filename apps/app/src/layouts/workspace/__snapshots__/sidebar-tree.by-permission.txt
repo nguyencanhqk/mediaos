@@ -124,6 +124,7 @@ social.news
 social.saved
 social.ideas
 social.polls
+social.groups
 ## ME_ONLY
 ### DASH
 (trống)
