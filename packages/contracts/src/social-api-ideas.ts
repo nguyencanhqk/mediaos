@@ -60,3 +60,51 @@ export const reviewFeedIdeaSchema = z
   })
   .strict();
 export type ReviewFeedIdeaDto = z.infer<typeof reviewFeedIdeaSchema>;
+
+// ─────────────── S16-SOCIAL-FE-2 — RESPONSE của `045..046` (plan D1) ───────────────
+//
+// Cùng lý do với khối response ở `social-api-polls.ts`: trước FE-2 hình dạng chỉ sống trong
+// `social-ideas.service.ts`; service giờ khai kiểu trả về bằng các DTO này (plan D2, type-only).
+
+/**
+ * Một dòng của `045`.
+ *
+ * 🔴 `reviewNote` đã được SERVER MASK (D19 của BE-2B-2): chỉ tác giả sáng kiến hoặc người giữ
+ * `approve:feed-idea` nhận chữ, người khác nhận `null`. FE vẽ theo đúng giá trị nhận được — không
+ * được suy «có ghi chú mà bị ẩn» từ `status='rejected'`.
+ *
+ * ⚠️ KHÔNG có tác giả: danh sách chỉ chở `postId`, danh tính tác giả đọc ở thẻ bài (`003`).
+ * `reviewer` chỉ chở `fullName` — không `userId` (luật `feedAuthorSchema`).
+ */
+export const feedIdeaItemSchema = z.object({
+  ideaId: z.string().uuid(),
+  postId: z.string().uuid(),
+  status: feedIdeaStatusSchema,
+  body: z.string().nullable(),
+  reviewNote: z.string().nullable(),
+  reviewer: z.object({ fullName: z.string() }).nullable(),
+  reviewedAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+export type FeedIdeaItemDto = z.infer<typeof feedIdeaItemSchema>;
+
+/** `045` — envelope OFFSET `{data,page,limit,total}`. */
+export const feedIdeaPageSchema = z.object({
+  data: z.array(feedIdeaItemSchema),
+  page: z.number().int().min(1),
+  limit: z.number().int().min(1),
+  total: z.number().int().min(0),
+});
+export type FeedIdeaPageDto = z.infer<typeof feedIdeaPageSchema>;
+
+/**
+ * `046` — kết quả xét duyệt. `status` là trạng thái ĐÍCH vừa ghi (không bao giờ `submitted`).
+ * Không chở `reviewNote`: người vừa gửi đã có nó, và response không phải chỗ phát lại chữ tự do.
+ */
+export const feedIdeaReviewResultSchema = z.object({
+  postId: z.string().uuid(),
+  ideaId: z.string().uuid(),
+  status: feedIdeaReviewTargetSchema,
+  reviewedAt: z.string().datetime({ offset: true }),
+});
+export type FeedIdeaReviewResultDto = z.infer<typeof feedIdeaReviewResultSchema>;

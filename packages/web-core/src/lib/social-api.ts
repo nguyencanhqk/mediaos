@@ -42,6 +42,18 @@ import {
   type SearchFeedQueryDto,
   type ListProfilePostsQueryDto,
   type ListBirthdaysQueryDto,
+  // ── Track B lát A (S16-SOCIAL-FE-2, SOCIAL-API-040..046) ──
+  feedPollPageSchema,
+  type FeedPollPageDto,
+  feedPollResultsSchema,
+  type FeedPollResultsDto,
+  feedIdeaPageSchema,
+  type FeedIdeaPageDto,
+  feedIdeaReviewResultSchema,
+  type FeedIdeaReviewResultDto,
+  type ListPollsQueryDto,
+  type ListIdeasQueryDto,
+  type ReviewFeedIdeaDto,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -313,4 +325,64 @@ export const socialApi = {
    */
   listBirthdays: (query?: Partial<ListBirthdaysQueryDto>): Promise<FeedBirthdayListDto> =>
     apiFetch(`/social/birthdays${buildQueryString(query ?? {})}`, feedBirthdayListSchema),
+
+  // ── 040..044 — bình chọn (S16-SOCIAL-FE-2) ─────────────────────────────────────────────────────
+
+  /** GET /social/polls (040) — màn `SOC-SCREEN-007` + widget «Bình chọn đang mở». OFFSET. */
+  listPolls: (query?: Partial<ListPollsQueryDto>): Promise<FeedPollPageDto> =>
+    apiFetch(`/social/polls${buildQueryString(query ?? {})}`, feedPollPageSchema),
+
+  /** GET /social/posts/:postId/poll/results (043) — khối bỏ phiếu trên thẻ bài. */
+  getPollResults: (postId: string): Promise<FeedPollResultsDto> =>
+    apiFetch(`/social/posts/${postId}/poll/results`, feedPollResultsSchema),
+
+  /**
+   * PUT /social/posts/:postId/poll/vote (041) — bỏ/ĐỔI phiếu.
+   *
+   * 🔴 `optionIds` là **CẢ TẬP** lựa chọn muốn giữ, không phải ô vừa bấm: service XOÁ mọi phiếu cũ
+   * của actor rồi ghi lại đúng tập này (`social-polls.service.ts#vote`). Gửi một ô ở bình chọn nhiều
+   * lựa chọn là âm thầm xoá các ô còn lại (plan FE-2 §8 H2). `[]` ⇔ rút phiếu.
+   */
+  votePoll: (postId: string, optionIds: readonly string[]): Promise<FeedPollResultsDto> =>
+    apiFetch(`/social/posts/${postId}/poll/vote`, feedPollResultsSchema, {
+      method: "PUT",
+      body: JSON.stringify({ optionIds }),
+    }),
+
+  /** DELETE /social/posts/:postId/poll/vote (042) — rút phiếu khi còn mở. */
+  withdrawPollVote: (postId: string): Promise<FeedPollResultsDto> =>
+    apiFetch(`/social/posts/${postId}/poll/vote`, feedPollResultsSchema, { method: "DELETE" }),
+
+  /**
+   * POST /social/posts/:postId/poll/close (044) — đóng TAY. Chủ bài hoặc `manage:feed-post`.
+   *
+   * Route mang `@Idempotent()` ⇒ gửi khoá suy-từ-nội-dung như `createPost`: lượt bấm lặp khi mạng
+   * chập chờn được server trả lại kết quả cũ thay vì 409 «đã kết thúc» cho chính lượt đóng của mình.
+   */
+  closePoll: (postId: string): Promise<FeedPollResultsDto> =>
+    apiFetch(
+      `/social/posts/${postId}/poll/close`,
+      feedPollResultsSchema,
+      { method: "POST" },
+      { idempotencyKey: idempotencyKeyFor("social-poll-close", { postId }) },
+    ),
+
+  // ── 045..046 — sáng kiến (S16-SOCIAL-FE-2) ─────────────────────────────────────────────────────
+
+  /**
+   * GET /social/ideas (045) — màn `SOC-SCREEN-008`. `reviewNote` đã được SERVER mask theo người xem;
+   * FE vẽ đúng giá trị nhận được.
+   */
+  listIdeas: (query?: Partial<ListIdeasQueryDto>): Promise<FeedIdeaPageDto> =>
+    apiFetch(`/social/ideas${buildQueryString(query ?? {})}`, feedIdeaPageSchema),
+
+  /**
+   * PATCH /social/posts/:postId/idea/review (046) — gate `approve:feed-idea` (sàn Company ở server).
+   * FSM + «từ chối bắt buộc lý do» ép ở server; FE chỉ đưa đích hợp lệ (`ideaReviewTargets`).
+   */
+  reviewIdea: (postId: string, body: ReviewFeedIdeaDto): Promise<FeedIdeaReviewResultDto> =>
+    apiFetch(`/social/posts/${postId}/idea/review`, feedIdeaReviewResultSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
 };

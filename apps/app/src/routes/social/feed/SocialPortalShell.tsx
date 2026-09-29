@@ -4,6 +4,9 @@
  * Mọi màn `/feed*` đi qua đây, nên hai rail **không đổi** khi chuyển màn — đúng nghĩa "cổng thông
  * tin" của UI-07 §34b (khác `ModuleWorkspaceLayout`, nơi chỉ có một sidebar và phần còn lại là trang).
  *
+ * Rail phải (S16-SOCIAL-FE-2): Sinh nhật · Tin nổi bật · Bình chọn đang mở. «Vinh danh tháng này»
+ * và «Nhóm của tôi» đến ở lát C / B.
+ *
  * ┌─ 🔴 VỎ NÀY LÀ CỦA SOCIAL, KHÔNG PHẢI CỦA MỌI `MODULE_PORTAL` ────────────────────────────────┐
  * │ Rail phải chở widget Sinh nhật + Tin nổi bật — hai thứ chỉ SOCIAL có. Hôm nay SOCIAL là module │
  * │ DUY NHẤT khai `layout: "MODULE_PORTAL"`, nên `router.tsx` trỏ thẳng nhánh đó vào đây. Khi có   │
@@ -22,10 +25,13 @@ import { PortalLeftRail } from "@/layouts/portal/PortalLeftRail";
 import { PortalRightRail } from "@/layouts/portal/PortalRightRail";
 import { BirthdayWidget } from "./components/BirthdayWidget";
 import { HighlightNewsWidget } from "./components/HighlightNewsWidget";
+import { OpenPollsWidget } from "./components/OpenPollsWidget";
 import { FeedSearchBox } from "./components/FeedSearchBox";
 
 /** Số tin nổi bật lấy về cho rail phải — rail hẹp, danh sách dài chỉ làm nó cuộn vô ích. */
 const HIGHLIGHT_LIMIT = 5;
+/** S16-SOCIAL-FE-2 — số bình chọn đang mở cho widget rail (cùng lý do với `HIGHLIGHT_LIMIT`). */
+const OPEN_POLLS_LIMIT = 5;
 
 interface SocialPortalShellProps {
   moduleCode: ModuleCode;
@@ -64,6 +70,14 @@ export function SocialPortalShell({
   const highlightQuery = useQuery({
     queryKey: socialKeys.news.list({ highlight: true, limit: HIGHLIGHT_LIMIT }),
     queryFn: () => socialApi.listNews({ limit: HIGHLIGHT_LIMIT }),
+    enabled: canViewFeed,
+  });
+
+  /** S16-SOCIAL-FE-2 (plan D9) — cùng cổng `enabled: canViewFeed` với hai query trên. */
+  const openPollsParams = { status: "open" as const, limit: OPEN_POLLS_LIMIT };
+  const openPollsQuery = useQuery({
+    queryKey: socialKeys.polls.list(openPollsParams),
+    queryFn: () => socialApi.listPolls(openPollsParams),
     enabled: canViewFeed,
   });
 
@@ -135,6 +149,11 @@ export function SocialPortalShell({
             items={(highlightQuery.data?.data ?? []).filter((n) => n.pinned)}
             isLoading={highlightQuery.isLoading}
             isError={highlightQuery.isError}
+          />
+          <OpenPollsWidget
+            items={openPollsQuery.data?.data ?? []}
+            isLoading={openPollsQuery.isLoading}
+            isError={openPollsQuery.isError}
           />
         </PortalRightRail>
       }

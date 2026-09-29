@@ -71,14 +71,16 @@ export function buildImageGrid(attachments: readonly FeedAttachmentDto[]): FeedI
 }
 
 /**
- * Loại bài mà FE-1 vẽ được ĐẦY ĐỦ.
+ * Loại bài mà thẻ vẽ được THÂN (`PostBody`).
  *
- * 🔴 **R16** — `feedPostSchema.type` là `z.string()`, KHÔNG phải enum đóng, và từ khi BE-2B-1 (#534)
- * merge thì bài `type:'poll'` **tạo được qua API** dù composer của FE-1 chỉ có 2 nút. Nghĩa là dòng
- * cuộn NÀY sẽ gặp `poll` (và sau này `idea`/`kudos`). Hàm này để `PostCard` biết khi nào chỉ nên vẽ
- * phần CHUNG (tác giả · thời gian · cảm xúc · bình luận) và bỏ phần thân đặc thù — **suy biến an
- * toàn**, không ném, và cũng KHÔNG phải là hiện thực poll (ca **C27** assert cả hai vế).
+ * 🔴 **R16** — `feedPostSchema.type` là `z.string()`, KHÔNG phải enum đóng. Hàm này để `PostCard` biết
+ * khi nào chỉ nên vẽ phần CHUNG (tác giả · thời gian · cảm xúc · bình luận) và bỏ phần thân đặc thù —
+ * **suy biến an toàn**, không ném (ca **C27**).
+ *
+ * S16-SOCIAL-FE-2 lát A: thêm `poll` (thân = MÔ TẢ tuỳ chọn, NULL thì `PostBody` tự không vẽ — plan
+ * §8 M8) và `idea` (thân BẮT BUỘC với idea). `kudos` và loại lạ vẫn `false` cho tới lát C: thân kudos
+ * NULL, lời nhắn nằm ở `feed_kudos` mà DTO bài không chở (plan §2 G1).
  */
 export function isFullyRenderableType(type: string): boolean {
-  return type === "share" || type === "news";
+  return type === "share" || type === "news" || type === "poll" || type === "idea";
 }

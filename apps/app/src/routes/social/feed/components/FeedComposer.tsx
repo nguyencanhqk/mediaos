@@ -1,36 +1,38 @@
 /**
- * S16-SOCIAL-FE-1 — ô soạn bài của `SOC-SCREEN-001` (SOCIAL-API-002).
+ * S16-SOCIAL-FE-1 → FE-2 — ô soạn bài của `SOC-SCREEN-001` (SOCIAL-API-002).
  *
- * ┌─ 🔴 ĐÚNG HAI NÚT — và lý do đã ĐỔI ở T0 23/09/2026, đọc kỹ trước khi thêm nút thứ ba ─────────┐
- * │ Plan D2 ban đầu lập luận «`feedCreatableTypeSchema` = `["share","news"]` nên BE từ chối 3 loại │
- * │ kia». Đo lại sau khi BE-2B-1 (#534) merge: enum nay là **`["share","news","poll"]`**.          │
- * │ ⇒ Chia làm hai vế:                                                                             │
- * │   • `idea`/`kudos` — contracts VẪN từ chối ⇒ render nút là UI dối, lập luận cũ còn nguyên.     │
- * │   • `poll`        — BE **nhận** rồi. Bỏ nút poll ở đây là **quyết định PHẠM VI của owner**,    │
- * │                     KHÔNG phải bất khả thi kỹ thuật. Cụm bình chọn cần 4 mảnh đi cùng nhau     │
- * │                     (nút · form soạn lựa chọn · thẻ bài dạng poll · màn bỏ phiếu); ship nửa    │
- * │                     cụm sẽ đẻ ra bài mà `PostCard` của FE-1 chỉ vẽ được phần vỏ (xem R16).     │
- * │                     Cả cụm thuộc `S16-SOCIAL-FE-2` (nợ N3).                                    │
- * │ Ca **C4** ghim đúng con số 2 — nó là cổng chống mở phạm vi, không phải một phép đếm vu vơ.     │
+ * ┌─ 🔴 BỐN NÚT (S16-SOCIAL-FE-2 lát A) — đọc kỹ trước khi thêm nút thứ năm ────────────────────────┐
+ * │ Chia sẻ · Tin tức (`manage:feed-news`) · Bình chọn (`create:feed-poll`) · Sáng kiến             │
+ * │ (`create:feed-idea`). Mỗi nút gác bằng ĐÚNG cặp tầng-2 của `SOCIAL_POST_TYPE_PAIRS` — không gate │
+ * │ thì người dùng soạn xong mới ăn 403.                                                          │
+ * │ «Vinh danh» VẮNG có chủ đích: ô chọn người nhận cần route tra người mà nhân viên thường chưa có │
+ * │ (plan FE-2 §2 G2 → `S16-SOCIAL-BE-2D`), và thẻ bài không vẽ được kudos (G1). Lát C          │
+ * │ (`S16-SOCIAL-FE-2C`) mở nó. Ca **C4** ghim tập 4 nút + vắng kudos.                            │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Gate: nút «Tin tức» bọc `manage:feed-news` vì route 002 có `tier1IsFloor` — decorator chỉ đòi
- * `create:feed-post`, còn nhánh `type='news'` đòi THÊM `manage:feed-news` ở tầng 2. Không gate thì
- * người dùng soạn xong mới ăn 403.
+ * Bình chọn: ô soạn chính thành MÔ TẢ tuỳ chọn (trống ⇒ BỎ khoá `body`, không gửi `""` — contracts
+ * `.trim().min(1)` từ chối chuỗi rỗng); các trường poll nằm ở `PollComposerFields`, nháp giữ TẠI ĐÂY
+ * để luật «không dọn khi chưa được xác nhận» áp cho cả chúng.
  *
- * ⚠️ **KHÔNG có nút đính kèm** (plan D8 · nợ N1): không tồn tại `POST /social/files/upload-url`, và
- * `foundation/files` đòi cặp `*:foundation-file` mà nhân viên thường KHÔNG có. Dựng UI cho một đường
- * 403-với-90%-người-dùng là làm giả. `S16-SOCIAL-BE-1C` mở đường, `FE-2` dựng UI.
+ * ⚠️ **KHÔNG có nút đính kèm**: UI đính kèm qua `SOCIAL-API-054/055` là nợ N1 của FE-1, giao
+ * `S16-SOCIAL-FE-2D`.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Megaphone, Share2 } from "lucide-react";
+import { BarChart3, Lightbulb, Megaphone, Share2 } from "lucide-react";
 import { Button, cn } from "@mediaos/ui";
 import { PermissionGate, useCan } from "@mediaos/web-core";
-import { FEED_BODY_MAX, type CreateFeedPostDto } from "@mediaos/contracts";
+import { FEED_BODY_MAX, FEED_POLL_QUESTION_MAX, type CreateFeedPostDto } from "@mediaos/contracts";
+import { PollComposerFields } from "./PollComposerFields";
+import {
+  EMPTY_POLL_DRAFT,
+  POLL_OPTION_LABEL_MAX,
+  validatePollDraft,
+  type PollDraft,
+} from "../lib/poll-draft";
 
-/** Hai loại bài mà FE-1 soạn được. Xem docblock đầu file trước khi thêm phần tử thứ ba. */
-type ComposerType = "share" | "news";
+/** Bốn loại bài soạn được ở lát A. Xem docblock đầu file trước khi thêm phần tử thứ năm. */
+type ComposerType = "share" | "news" | "poll" | "idea";
 
 /**
  * `then` là tín hiệu DUY NHẤT mà ô soạn có để biết "server đã nhận chưa". Không có nó thì mọi phán
@@ -77,6 +79,7 @@ export function FeedComposer({
   const [type, setType] = React.useState<ComposerType>("share");
   const [body, setBody] = React.useState(prefillBody ?? "");
   const [requiresAck, setRequiresAck] = React.useState(false);
+  const [pollDraft, setPollDraft] = React.useState<PollDraft>(EMPTY_POLL_DRAFT);
   const [touched, setTouched] = React.useState(false);
   /**
    * Lượt gửi của CHÍNH ô soạn đang bay. Tách khỏi `isSubmitting` của caller vì nó là vế còn lại của
@@ -111,19 +114,39 @@ export function FeedComposer({
   const trimmed = body.trim();
   const tooLong = trimmed.length > FEED_BODY_MAX;
   const busy = isSubmitting || sending;
-  // `share`/`news` BẮT BUỘC có body (`superRefine` của createFeedPostSchema) — chặn ở đây để người
-  // dùng thấy lý do, thay vì nhận 400 vô danh từ Zod của server.
-  const canSubmit = trimmed.length > 0 && !tooLong && !busy;
+  const isPoll = type === "poll";
+  const pollCheck = isPoll ? validatePollDraft(pollDraft) : null;
+  // `share`/`news`/`idea` BẮT BUỘC có body (`superRefine` của createFeedPostSchema); `poll` thì body là
+  // mô tả tuỳ chọn nhưng nháp poll phải hợp lệ. Chặn ở đây để người dùng thấy lý do, thay vì nhận 400
+  // vô danh từ Zod hoặc 422 từ service.
+  const contentReady = isPoll ? pollCheck?.ok === true : trimmed.length > 0;
+  const canSubmit = contentReady && !tooLong && !busy;
 
-  const submit = (): void => {
-    setTouched(true);
-    if (!canSubmit) return;
-    const result = onSubmit({
+  const buildDto = (): CreateFeedPostDto | null => {
+    if (isPoll) {
+      if (!pollCheck?.ok) return null;
+      return {
+        type: "poll",
+        audience: "company",
+        ...(trimmed.length > 0 ? { body: trimmed } : {}),
+        requiresAck: false,
+        poll: pollCheck.poll,
+      } as CreateFeedPostDto;
+    }
+    return {
       type,
       audience: "company",
       body: trimmed,
       requiresAck: type === "news" ? requiresAck : false,
-    } as CreateFeedPostDto);
+    } as CreateFeedPostDto;
+  };
+
+  const submit = (): void => {
+    setTouched(true);
+    if (!canSubmit) return;
+    const dto = buildDto();
+    if (!dto) return;
+    const result = onSubmit(dto);
 
     // Caller không hứa gì ⇒ giữ NGUYÊN nội dung (xem hộp ở `FeedComposerProps.onSubmit`).
     if (!isPromiseLike(result)) return;
@@ -133,6 +156,7 @@ export function FeedComposer({
       () => {
         setBody("");
         setRequiresAck(false);
+        setPollDraft(EMPTY_POLL_DRAFT);
         // Dọn cả `touched`: bỏ quên nó thì ngay sau một lượt đăng THÀNH CÔNG, ô rỗng + `touched`
         // còn bật sẽ bắn «Hãy nhập nội dung trước khi đăng» — một cảnh báo đỏ cho việc vừa xong.
         setTouched(false);
@@ -164,6 +188,15 @@ export function FeedComposer({
     </button>
   );
 
+  const placeholder =
+    type === "news"
+      ? t("composer.newsPlaceholder")
+      : type === "poll"
+        ? t("composer.pollDescriptionPlaceholder")
+        : type === "idea"
+          ? t("composer.ideaPlaceholder")
+          : t("composer.placeholder");
+
   return (
     <section
       data-testid="feed-composer"
@@ -184,16 +217,24 @@ export function FeedComposer({
         <PermissionGate action="manage" resourceType="feed-news">
           {typeButton("news", t("composer.typeNews"), Megaphone)}
         </PermissionGate>
+
+        {/* Cặp tầng-2 của `SOCIAL_POST_TYPE_PAIRS.poll` / `.idea` (ca P1/P2). */}
+        <PermissionGate action="create" resourceType="feed-poll">
+          {typeButton("poll", t("composer.typePoll"), BarChart3)}
+        </PermissionGate>
+        <PermissionGate action="create" resourceType="feed-idea">
+          {typeButton("idea", t("composer.typeIdea"), Lightbulb)}
+        </PermissionGate>
       </div>
 
       <label className="sr-only" htmlFor="feed-composer-body">
-        {type === "news" ? t("composer.newsPlaceholder") : t("composer.placeholder")}
+        {placeholder}
       </label>
       <textarea
         id="feed-composer-body"
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        placeholder={type === "news" ? t("composer.newsPlaceholder") : t("composer.placeholder")}
+        placeholder={placeholder}
         rows={3}
         className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
@@ -210,9 +251,26 @@ export function FeedComposer({
         </label>
       )}
 
-      {touched && trimmed.length === 0 && (
+      {isPoll && (
+        <PollComposerFields draft={pollDraft} onChange={setPollDraft} disabled={busy} />
+      )}
+
+      {touched && !isPoll && trimmed.length === 0 && (
         <p role="alert" className="mt-2 text-sm text-destructive">
           {t("composer.bodyRequired")}
+        </p>
+      )}
+      {/*
+        Hiện lý do ngay khi nháp poll đã bị SỬA (tham chiếu khác `EMPTY_POLL_DRAFT`), không đợi bấm
+        «Đăng»: nút khoá khi nháp chưa hợp lệ nên cú bấm không tới được `submit` để bật `touched` —
+        đợi nó là để người dùng nhìn một nút xám mà không biết vì sao.
+      */}
+      {(touched || pollDraft !== EMPTY_POLL_DRAFT) && pollCheck && !pollCheck.ok && (
+        <p role="alert" data-testid="composer-poll-error" className="mt-2 text-sm text-destructive">
+          {t(`composer.poll.${pollCheck.error}`, {
+            max:
+              pollCheck.error === "questionTooLong" ? FEED_POLL_QUESTION_MAX : POLL_OPTION_LABEL_MAX,
+          })}
         </p>
       )}
       {tooLong && (

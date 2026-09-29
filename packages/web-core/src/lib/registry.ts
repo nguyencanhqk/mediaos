@@ -2290,6 +2290,31 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredPermissions: ["view:feed"],
     order: 97,
   },
+  // S16-SOCIAL-FE-2 lát A — gate `view:feed` như 6 màn trên; cặp chặt hơn (`approve:feed-idea`,
+  // `create:feed-poll`…) gác BÊN TRONG màn, không nâng gate route (nâng là khoá cả màn với người lẽ
+  // ra đọc được).
+  {
+    routeKey: "social.polls",
+    path: "/feed/polls",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-007",
+    titleKey: "routeTitle.socialPolls",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 98,
+  },
+  {
+    routeKey: "social.ideas",
+    path: "/feed/ideas",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-008",
+    titleKey: "routeTitle.socialIdeas",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 99,
+  },
 
   // Account
   {

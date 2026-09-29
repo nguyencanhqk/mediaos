@@ -93,6 +93,12 @@ export function FeedPage(): React.ReactElement {
     },
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
+      // S16-SOCIAL-FE-2 (plan §8 H5): bài poll/idea mới phải hiện ngay ở màn 007/008 + widget rail.
+      if (created.type === "poll") {
+        void queryClient.invalidateQueries({ queryKey: socialKeys.polls.allOf() });
+      } else if (created.type === "idea") {
+        void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
+      }
       // Bài của CHÍNH mình vừa đăng cũng đi qua WS về lại; reset để badge không đếm nó.
       resetNewPosts();
       setDroppedMentionCount(created.droppedMentions.length);

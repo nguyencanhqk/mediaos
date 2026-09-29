@@ -122,6 +122,8 @@ payroll.statutoryRates
 social.feed
 social.news
 social.saved
+social.ideas
+social.polls
 ## ME_ONLY
 ### DASH
 (trống)

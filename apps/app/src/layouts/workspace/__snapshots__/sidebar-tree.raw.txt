@@ -121,3 +121,5 @@ payroll.statutoryRates | mod=PAYROLL | label=Tỉ lệ luật định | path=/pa
 social.feed | mod=SOCIAL | label=Bảng tin | path=/feed | icon=rss | group=overview | order=10 | any=[view:feed]
 social.news | mod=SOCIAL | label=Tin tức | path=/feed/news | icon=megaphone | group=overview | order=20 | any=[view:feed]
 social.saved | mod=SOCIAL | label=Đã lưu | path=/feed/saved | icon=bookmark | group=overview | order=30 | any=[view:feed]
+social.ideas | mod=SOCIAL | label=Sáng kiến | path=/feed/ideas | icon=lightbulb | group=operation | order=40 | any=[view:feed]
+social.polls | mod=SOCIAL | label=Bình chọn | path=/feed/polls | icon=vote | group=operation | order=50 | any=[view:feed]

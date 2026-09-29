@@ -32,7 +32,11 @@ export type ActionErrorKind =
   | "comment"
   | "commentDelete"
   | "post"
-  | "ack";
+  | "ack"
+  // S16-SOCIAL-FE-2 — chữ trung tính, xem `actionError.generic.vote` (plan §8 M6).
+  | "vote"
+  | "pollClose"
+  | "ideaReview";
 
 export interface ActionErrorBannerProps {
   kind: ActionErrorKind;
