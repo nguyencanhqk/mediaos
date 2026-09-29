@@ -3,7 +3,7 @@ import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { feedPollOptions, feedPollVotes, feedPolls, feedPosts } from "../db/schema/social";
 import { SocialAccessService } from "./social-access.service";
-import { SOCIAL_ERR, socialPgErrorOf } from "./social.errors";
+import { SOCIAL_ERR, socialPgErrorOf, socialError } from "./social.errors";
 import type { SocialViewerContext } from "./social.types";
 
 /**
@@ -128,7 +128,7 @@ export class SocialPollsRepository {
       );
     } catch (err) {
       if (socialPgErrorOf(err)?.code === PG_LOCK_NOT_AVAILABLE) {
-        throw new ConflictException(SOCIAL_ERR.POLL_WRITE_BUSY);
+        throw new ConflictException(socialError(SOCIAL_ERR.POLL_WRITE_BUSY));
       }
       throw err;
     }

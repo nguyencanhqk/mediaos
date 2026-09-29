@@ -18,7 +18,7 @@ import {
   SOCIAL_EVENT_IDEA_STATUS_CHANGED,
   type SocialIdeaStatusChangedPayload,
 } from "./social-noti.payload";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import type { SocialActor, SocialRequestUser } from "./social.types";
 
 /**
@@ -117,7 +117,7 @@ export class SocialIdeasService {
       // 🔴 404, KHÔNG 409. Bài `type='share'` đi QUA `assertPostVisible` (cổng đó chỉ gác tầm nhìn),
       // nên nếu để `reviewTx` 0-hàng nuốt ca này thì route trả «chuyển trạng thái sáng kiến sai» cho
       // một bài không hề là sáng kiến — sai mã, sai nghĩa, và che mất một 404 thật (ca `I-11`).
-      if (!idea) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+      if (!idea) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
       const from = idea.status;
       const to = dto.status;
@@ -128,7 +128,7 @@ export class SocialIdeasService {
       // hoàn toàn bình thường (ca `I-3`).
       const reviewNote = dto.reviewNote && dto.reviewNote.length > 0 ? dto.reviewNote : null;
       if (to === "rejected" && reviewNote === null) {
-        throw new UnprocessableEntityException(SOCIAL_ERR.IDEA_REJECT_NOTE_REQUIRED);
+        throw new UnprocessableEntityException(socialError(SOCIAL_ERR.IDEA_REJECT_NOTE_REQUIRED));
       }
 
       const now = new Date();
@@ -142,7 +142,7 @@ export class SocialIdeasService {
       });
       // 🔴 Vế này phải ở TRƯỚC audit + outbox. `audit_logs` là append-only (BẤT BIẾN #2): ghi trước
       // rồi mới kiểm là hai dòng audit cho một lượt chuyển, và không có đường gỡ lại.
-      if (!applied) throw new ConflictException(SOCIAL_ERR.IDEA_TRANSITION);
+      if (!applied) throw new ConflictException(socialError(SOCIAL_ERR.IDEA_TRANSITION));
 
       await this.audit.record(tx, {
         action: "social.idea.review",

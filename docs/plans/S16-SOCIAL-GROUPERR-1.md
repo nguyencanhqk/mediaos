@@ -168,6 +168,29 @@ SOCIAL; giữ 1 double dạng LEGACY cho ca fallback.
 - `S16-SOCIAL-SCOPEDENIEDCODE-1` — `resolveActor` nhánh sàn Company: message `AUTH-ERR-SCOPE-DENIED` nhưng
   `error.code` `AUTH-ERR-FORBIDDEN`.
 
-## 6. Changelog
+## 6. Vá plan-reviewer (lượt 1: BLOCK/REVISE) — ĐÈ lên §2/§3 ở những chỗ mâu thuẫn
+
+| # | Phát hiện (đã xác minh bằng code) | Vá |
+| --- | --- | --- |
+| B1 | Thứ tự §2 cho RED sai lý do: W/U gọi `SOCIAL_ERROR_CODES`/`socialError` ⇒ trên code cũ là lỗi biên dịch, không phải assert đỏ | Thứ tự MỚI: contracts + khung `socialError` + 4 khoá D11 (CHƯA bọc chỗ ném nào) → viết W → chạy thấy đỏ `expected 'RESOURCE-ERR-…' to be 'SOCIAL-ERR-…'` → mới bọc. Phần (1): R1/R8 ĐÃ đo đỏ `expected 403 to be 200` trên code cũ TRƯỚC vá (commit `77c04512`) — ghi chú quy trình của reviewer về điểm này là không đúng |
+| B2 | Ratchet C-S: regex `new \w+Exception(` không bao giờ khớp `super(` (mục allowlist mồ côi); lại khớp `new SocialAttachGateDeniedException(` (không có trong allowlist); `new ForbiddenException(p.denyMessage ?? "AUTH-ERR-…")` trộn nhánh SOCIAL với nhánh chung ⇒ allowlist theo đoạn làm gỡ wrapper nhánh `020` vẫn XANH | (1) Tách `resolveActor` ở CẢ HAI chỗ: `if (p.denyMessage) throw new ForbiddenException(socialError(p.denyMessage)); throw new ForbiddenException("AUTH-ERR-…")`. (2) Allowlist CHỈ 4 chỗ thuần-chung: `AUTH-ERR-FORBIDDEN` · `AUTH-ERR-SCOPE-DENIED` (`social-access.service.ts`) · `RESOURCE-ERR-NOT-FOUND` (`social-files.service.ts`) · lời gọi `new SocialAttachGateDeniedException(`. (3) Assert RIÊNG: thân class chứa `super(socialError(reason))` và tham số ctor kiểu `SocialErrorMessage`. (4) Regex chịu xuống dòng: `new\s+\w+Exception\(\s*socialError\(`. (5) Unit `social-access.service.spec.ts` (mock `dataScope`) cho CẢ HAI nhánh `resolveActor` — (a) `routeScopeOrNull == null` (khó tới qua HTTP) · (b) `companyFloor` — assert `getResponse().code === SOCIAL_ERROR_CODES.IDEA_APPROVE_REQUIRED` |
+| B3 | W12 ghi «khuôn I-1/I-2» nhưng I-2 là cổng TẦNG 1 (`Permission denied`, `AUTH-ERR-FORBIDDEN`, assert `.not.toContain(IDEA_APPROVE_REQUIRED)`); đường HTTP DUY NHẤT phát `020` là **I-2b** (`approve:feed-idea` @Department ⇒ tầng 1 cho qua, sàn Company chặn) | W12 theo I-2b; W13 (neo mã chung) theo I-2 |
+| H1 | D8 viết dạng `} as const satisfies …;` sẽ làm regex strip của census (lười) chạy tới `
+} as const;` của `SOCIAL_CONSTRAINT`, nuốt hai bảng throw-site | D8 đã thi công đúng dạng TÁCH khối (type-assert đứng riêng, khối giữ `
+} as const;`). Thêm tự-kiểm census: sau strip, `errorsFile` vẫn chứa `SOCIAL_POST_TYPE_DENIED` + `SOCIAL_FILE_TARGET_DENIED` |
+| M1 | Người dùng các hằng D11 gỡ chưa liệt kê | `social-error-code-census.spec.ts:4,200-203` (ca DESYNC riêng — thay bằng tầng A/B) · `social-feed-cursor.spec.ts:7-8,67,93` · comment `social-route-pairs.const.ts:380` · `social-post-type-pairs-structure.spec.ts:22` |
+| M2 | `done_when` (2) mâu thuẫn O2/O4, không chỉ O1 | Đã sửa cả ba trong commit `055f6b55` (toàn module · fallback O4 · sentinel O1) |
+| M3 | Helper pipeline không có tên | `applyMainPipeline(app)` — `apps/api/test/helpers/bootstrap-app.ts:34`; spec mới tuân luật `listen(0)` (S18-QA-SUPERTESTLISTEN-1). KHÔNG chép pipeline tay của be2a (thiếu `ZodValidationPipe`) cho W9/W13 |
+| L1 | Thiếu ghim audit D1 | + owner KIÊM manage cấp owner ⇒ `viaManage:false` · admin KIÊM manage đổi vai sang `admin` ⇒ `viaManage:false` (không dán nhãn thừa) |
+| L3 | Thông điệp trùng sẽ ánh xạ SAI mã im lặng | Map dựng lúc nạp module + `throw` nếu `size !== số khoá` (fail-loud ngay khi boot/test), U2 giữ |
+| L4 | dist contracts cũ ⇒ đỏ-giả | build contracts trước khi chạy test API (đã làm) |
+| L5 | Docblock/comment ngoài API-19 | `group-errors.ts:4-15` · `group-capabilities.ts:30-33` (đã sửa) · i18n `vi/social.ts:429` · header `social.errors.ts:8-11` · API-19 §6.5 liệt kê cả mã cursor-400 + pin-422 |
+
+Reviewer XÁC NHẬN: D1 không fail-open ở hồ sơ nào (thay đổi DUY NHẤT là {admin active + manage}); Nest 11.1.24 đúng như §0;
+tham số union literal ép được qua `as const`; D14 không hồi quy cho cả API cũ lẫn mới; `PIN_NEWS_ONLY` chỉ tới qua `006`
+(`029` chỉ truyền `{hidden}`/`{commentsLocked}` cho `moderateTx`); 101 chỗ ném = 91 thẳng + 10 khác.
+
+## 7. Changelog
 
 - v1 29/09/2026 — soạn sau workflow đọc 5 lane + 5 chữ ký owner O1–O5.
+- v2 29/09/2026 — vá plan-reviewer lượt 1 (B1–B3, H1, M1–M3, L1–L5) — §6.

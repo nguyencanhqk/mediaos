@@ -8,7 +8,7 @@ import { DatabaseService } from "../db/db.service";
 import { FileRepository } from "../foundation/files/file.repository";
 import { FileService } from "../foundation/files/files.service";
 import { SocialAccessService } from "./social-access.service";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import type { SocialRequestUser, SocialTargetType } from "./social.types";
 
 /**
@@ -147,7 +147,7 @@ export class SocialFilesService {
     );
     if (!file) throw new NotFoundException("RESOURCE-ERR-NOT-FOUND: file not found");
     if (file.ownerUserId !== actor.actorUserId) {
-      throw new ForbiddenException(SOCIAL_ERR.FILE_NOT_OWNED);
+      throw new ForbiddenException(socialError(SOCIAL_ERR.FILE_NOT_OWNED));
     }
     return this.files.confirmUpload(
       { id: actor.actorUserId, companyId: actor.companyId },

@@ -18,7 +18,7 @@ import {
   type KudosBadgeAdminRow,
   type KudosBadgePatch,
 } from "./social-kudos.repository";
-import { SOCIAL_CONSTRAINT, SOCIAL_ERR, isUniqueViolationOf } from "./social.errors";
+import { SOCIAL_CONSTRAINT, SOCIAL_ERR, isUniqueViolationOf, socialError } from "./social.errors";
 import type { SocialActor, SocialRequestUser } from "./social.types";
 
 /** Trường `050` sửa được — thứ tự cố định để `changes` của audit ổn định. */
@@ -170,7 +170,7 @@ export class SocialKudosService {
         row = await createBadgeTx(tx, actor.companyId, actor.actorUserId, dto);
       } catch (err) {
         if (isUniqueViolationOf(err, SOCIAL_CONSTRAINT.KUDOS_BADGE_CODE_UQ)) {
-          throw new ConflictException(SOCIAL_ERR.KUDOS_BADGE_CODE_TAKEN);
+          throw new ConflictException(socialError(SOCIAL_ERR.KUDOS_BADGE_CODE_TAKEN));
         }
         throw err;
       }
@@ -202,7 +202,7 @@ export class SocialKudosService {
     const actor = await this.access.resolveActor(user, "kudosBadgeUpdate");
     return this.db.withTenant(actor.companyId, async (tx) => {
       const current = await findBadgeTx(tx, actor.companyId, badgeId, { forUpdate: true });
-      if (!current) throw new NotFoundException(SOCIAL_ERR.KUDOS_BADGE_NOT_FOUND);
+      if (!current) throw new NotFoundException(socialError(SOCIAL_ERR.KUDOS_BADGE_NOT_FOUND));
 
       const { patch, changes, isNoop } = diffBadge(current, dto);
       if (isNoop) return toBadgeAdminDto(current);
@@ -210,7 +210,7 @@ export class SocialKudosService {
       const row = await updateBadgeTx(tx, actor.companyId, badgeId, actor.actorUserId, patch);
       // Hàng đã khoá `FOR UPDATE` và bảng không có DELETE ⇒ nhánh này không tới được hôm nay. Ném thay
       // vì trả `current`: một vị từ thêm vào UPDATE về sau không được biến thành 200 câm.
-      if (!row) throw new NotFoundException(SOCIAL_ERR.KUDOS_BADGE_NOT_FOUND);
+      if (!row) throw new NotFoundException(socialError(SOCIAL_ERR.KUDOS_BADGE_NOT_FOUND));
       await this.recordBadgeAudit(tx, actor, "social.kudos_badge.update", badgeId, {
         code: row.code,
         changes,
@@ -230,7 +230,7 @@ export class SocialKudosService {
       const row = await deactivateBadgeTx(tx, actor.companyId, badgeId, actor.actorUserId);
       if (!row) {
         const existing = await findBadgeTx(tx, actor.companyId, badgeId);
-        if (!existing) throw new NotFoundException(SOCIAL_ERR.KUDOS_BADGE_NOT_FOUND);
+        if (!existing) throw new NotFoundException(socialError(SOCIAL_ERR.KUDOS_BADGE_NOT_FOUND));
         return toBadgeAdminDto(existing);
       }
       await this.recordBadgeAudit(tx, actor, "social.kudos_badge.deactivate", badgeId, {

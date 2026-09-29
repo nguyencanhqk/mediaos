@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { BadRequestException } from "@nestjs/common";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 
 /**
  * S16-SOCIAL-BE-1 — con trỏ keyset của `GET /social/feed` · `/social/saved` · `…/comments`. Hàm THUẦN,
@@ -40,11 +41,11 @@ export interface SocialCursor {
   id: string;
 }
 
-/** Mã lỗi RIÊNG của SOCIAL — KHÔNG tái dùng chuỗi của CHAT. */
-export const SOCIAL_CURSOR_INVALID =
-  "SOCIAL-ERR-001: con trỏ phân trang không hợp lệ — hãy tải lại danh sách từ đầu.";
-export const SOCIAL_CURSOR_FILTER_MISMATCH =
-  "SOCIAL-ERR-001: con trỏ phân trang thuộc về một bộ lọc khác — hãy tải lại danh sách từ đầu.";
+/**
+ * Lỗi con trỏ sống ở `SOCIAL_ERR.CURSOR_INVALID` / `CURSOR_FILTER_MISMATCH` (S16-SOCIAL-GROUPERR-1 D11)
+ * — KHÔNG tái dùng chuỗi của CHAT. Trước đây là hai hằng rời mang tiền tố `SOCIAL-ERR-001` (mã **404**
+ * của SPEC-16 §12) trên một **400**; nay có mã sentinel riêng trên `error.code`.
+ */
 
 /** Bảng chữ base64url là `A-Za-z0-9-_` ⇒ `.` không bao giờ xuất hiện trong phần khoá. */
 const FP_SEPARATOR = ".";
@@ -87,7 +88,7 @@ export function encodeFeedCursor(cursor: SocialCursor, fingerprint: string): str
  */
 export function decodeFeedCursor(raw: string, fingerprint: string): SocialCursor {
   const invalid = (): never => {
-    throw new BadRequestException(SOCIAL_CURSOR_INVALID);
+    throw new BadRequestException(socialError(SOCIAL_ERR.CURSOR_INVALID));
   };
 
   const at = raw.lastIndexOf(FP_SEPARATOR);
@@ -96,7 +97,7 @@ export function decodeFeedCursor(raw: string, fingerprint: string): SocialCursor
   const got = raw.slice(at + FP_SEPARATOR.length);
   if (!FINGERPRINT_RE.test(got)) invalid();
   if (got !== fingerprint) {
-    throw new BadRequestException(SOCIAL_CURSOR_FILTER_MISMATCH);
+    throw new BadRequestException(socialError(SOCIAL_ERR.CURSOR_FILTER_MISMATCH));
   }
 
   let payload = "";

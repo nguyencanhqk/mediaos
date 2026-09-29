@@ -10,7 +10,7 @@ import { SocialAccessService } from "./social-access.service";
 import { bumpPollOptionVotes } from "./social-counters";
 import { SOCIAL_EVENT_POLL_CLOSED, type SocialPollClosedPayload } from "./social-noti.payload";
 import { SocialPollsRepository, type PollForWrite } from "./social-polls.repository";
-import { SOCIAL_CONSTRAINT, SOCIAL_ERR, isUniqueViolationOf } from "./social.errors";
+import { SOCIAL_CONSTRAINT, SOCIAL_ERR, isUniqueViolationOf, socialError } from "./social.errors";
 import type { SocialActor, SocialRequestUser } from "./social.types";
 
 /**
@@ -108,13 +108,13 @@ export class SocialPollsService {
       const poll = await this.openPollForWriteTx(tx, actor, postId);
 
       if (!poll.multipleChoice && wanted.length > 1) {
-        throw new ConflictException(SOCIAL_ERR.POLL_VOTE_DUPLICATE);
+        throw new ConflictException(socialError(SOCIAL_ERR.POLL_VOTE_DUPLICATE));
       }
 
       // Nợ (e) — TRƯỚC INSERT. Hai FK rời không ràng option thuộc poll.
       const belong = await this.repo.countOptionsOfPollTx(tx, actor.companyId, poll.id, wanted);
       if (belong !== wanted.length) {
-        throw new NotFoundException(SOCIAL_ERR.POLL_OPTION_NOT_FOUND);
+        throw new NotFoundException(socialError(SOCIAL_ERR.POLL_OPTION_NOT_FOUND));
       }
 
       // Vế `-1`: xoá phiếu cũ và trả về ĐÚNG những option vừa mất phiếu.
@@ -154,7 +154,7 @@ export class SocialPollsService {
           isUniqueViolationOf(err, SOCIAL_CONSTRAINT.POLL_VOTE_SINGLE_UQ) ||
           isUniqueViolationOf(err, SOCIAL_CONSTRAINT.POLL_VOTE_PK)
         ) {
-          throw new ConflictException(SOCIAL_ERR.POLL_VOTE_DUPLICATE);
+          throw new ConflictException(socialError(SOCIAL_ERR.POLL_VOTE_DUPLICATE));
         }
         throw err;
       }
@@ -191,7 +191,7 @@ export class SocialPollsService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       await this.access.assertPostVisible(tx, actor, postId);
       const poll = await this.repo.getPollByPostTx(tx, actor.companyId, postId);
-      if (!poll) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+      if (!poll) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
       return this.readResultsTx(tx, actor, poll);
     });
   }
@@ -209,14 +209,14 @@ export class SocialPollsService {
       const viaManage = this.access.assertCanMutateContent(actor, post.authorUserId);
 
       const poll = await this.repo.getPollByPostTx(tx, actor.companyId, postId);
-      if (!poll) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+      if (!poll) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
       await this.repo.lockPollRowTx(tx, actor.companyId, poll.id);
       const closed = await this.repo.closeManualTx(tx, actor.companyId, poll.id);
       // 🔴 `RETURNING` rỗng ⇒ poll đã đóng từ trước (tay hoặc job). KHÔNG audit, KHÔNG NOTI: cả hai
       // phải nằm SAU vế này, cùng tx. Ghi trước rồi mới kiểm là hai dòng audit cho một lần đóng —
       // và `audit_logs` append-only nên không gỡ lại được.
-      if (!closed) throw new ConflictException(SOCIAL_ERR.POLL_CLOSED);
+      if (!closed) throw new ConflictException(socialError(SOCIAL_ERR.POLL_CLOSED));
 
       await this.audit.record(tx, {
         action: "social.poll.close",
@@ -368,21 +368,21 @@ export class SocialPollsService {
     const probe = await this.repo.getPollByPostTx(tx, actor.companyId, postId);
     // Bài không mang bình chọn ⇒ 404 cùng chuỗi với "không thấy bài": phân biệt được tức là xác
     // nhận bài CÓ TỒN TẠI và chỉ là không phải poll.
-    if (!probe) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+    if (!probe) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
     await this.repo.lockPollRowTx(tx, actor.companyId, probe.id);
 
     // 🔴 ĐỌC LẠI SAU KHOÁ. Giá trị đọc ở `probe` là trước khoá — một `044`/job chen vào giữa đã có
     // thể đổi `status`. Dùng lại `probe` ở đây là đúng TOCTOU mà neo khoá sinh ra để đóng.
     const poll = await this.repo.getPollByPostTx(tx, actor.companyId, postId);
-    if (!poll) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+    if (!poll) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
-    if (poll.status !== "open") throw new ConflictException(SOCIAL_ERR.POLL_CLOSED);
+    if (poll.status !== "open") throw new ConflictException(socialError(SOCIAL_ERR.POLL_CLOSED));
     // 🔴 FULL gate 23/09/2026 (`santa-A` F1 · `santa-B` F3): `expired` tính TRONG SQL bằng đồng hồ
     // **DB** (xem docblock `PollForWrite.expired`). Bản cũ so `closesAt.getTime() <= Date.now()` —
     // đồng hồ **APP** — trong khi job so `closes_at <= now()` của DB: một bất biến, HAI đồng hồ. App
     // chậm hơn DB δ ⇒ phiếu vẫn được nhận trong δ sau khi hệ thống đã coi bình chọn hết hạn.
-    if (poll.expired) throw new ConflictException(SOCIAL_ERR.POLL_CLOSED);
+    if (poll.expired) throw new ConflictException(socialError(SOCIAL_ERR.POLL_CLOSED));
     return poll;
   }
 

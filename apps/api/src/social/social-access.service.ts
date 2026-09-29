@@ -29,7 +29,7 @@ import {
   SOCIAL_ERR,
   SOCIAL_FILE_TARGET_DENIED,
   SOCIAL_POST_TYPE_DENIED,
-  SOCIAL_POST_TYPE_PAIR_DESYNC,
+  socialError,
 } from "./social.errors";
 import type {
   AttachNewGateSnapshot,
@@ -177,16 +177,19 @@ export class SocialAccessService {
     // đó (hôm nay chỉ `046` — `SOCIAL-ERR-020`). `undefined` ⇒ giữ chuỗi chung cho 47 route còn lại.
     // Xem docblock `SocialPair.denyMessage`: đây là chỗ DUY NHẤT tới được, vì một assert thứ hai ở
     // service không bao giờ chạy tới (hai nhánh dưới đây đã chặn hết).
+    // S16-SOCIAL-GROUPERR-1 (plan §6 B2): nhánh SOCIAL (`denyMessage` — mã riêng lên `error.code`) và
+    // nhánh chung (`AUTH-ERR-*`, giữ mã chung) TÁCH thành HAI câu ném — một biểu thức `??` trộn hai
+    // nhánh làm ratchet tầng C không phân biệt được «quên bọc nhánh SOCIAL» với «chuỗi chung hợp lệ».
     if (routeScopeOrNull == null) {
-      throw new ForbiddenException(p.denyMessage ?? "AUTH-ERR-FORBIDDEN: out of permission scope");
+      if (p.denyMessage) throw new ForbiddenException(socialError(p.denyMessage));
+      throw new ForbiddenException("AUTH-ERR-FORBIDDEN: out of permission scope");
     }
     // SÀN SCOPE (khuôn RECRUIT/ROOM · memory `dash-widget-gate-needs-scope-floor`): cặp chỉ-Company
     // mà grant resolve ra hẹp hơn ⇒ TỪ CHỐI, KHÔNG "coi như" Company — một lần đổi `data_scope`
     // per-pair sau này không được âm thầm nới thành toàn công ty.
     if (p.companyFloor && !SocialAccessService.isCompany(routeScopeOrNull)) {
-      throw new ForbiddenException(
-        p.denyMessage ?? "AUTH-ERR-SCOPE-DENIED: cặp SOCIAL này chỉ hợp lệ ở scope Company",
-      );
+      if (p.denyMessage) throw new ForbiddenException(socialError(p.denyMessage));
+      throw new ForbiddenException("AUTH-ERR-SCOPE-DENIED: cặp SOCIAL này chỉ hợp lệ ở scope Company");
     }
 
     const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
@@ -247,14 +250,14 @@ export class SocialAccessService {
     if (denied === null) {
       // Hai bảng lệch nhau (có cặp mà không có mã lỗi). Lựa chọn khác duy nhất là `return` — tức
       // BỎ QUA cổng quyền vì một lỗi khai báo. Chặn.
-      throw new ForbiddenException(SOCIAL_POST_TYPE_PAIR_DESYNC);
+      throw new ForbiddenException(socialError(SOCIAL_ERR.POST_TYPE_PAIR_DESYNC));
     }
 
     const [scope] = await this.dataScope.resolveManyOrNull(actor.actorUserId, actor.companyId, [
       pair,
     ]);
     if (SocialAccessService.isCompany(scope)) return;
-    throw new ForbiddenException(denied);
+    throw new ForbiddenException(socialError(denied));
   }
 
   /**
@@ -288,7 +291,7 @@ export class SocialAccessService {
       SOCIAL_KUDOS_FLAG_PAIRS.isOfficial,
     ]);
     if (SocialAccessService.isCompany(scope)) return;
-    throw new ForbiddenException(SOCIAL_ERR.KUDOS_OFFICIAL_DENIED);
+    throw new ForbiddenException(socialError(SOCIAL_ERR.KUDOS_OFFICIAL_DENIED));
   }
 
   /**
@@ -330,7 +333,7 @@ export class SocialAccessService {
       SOCIAL_FILE_TARGET_PAIRS[target],
     ]);
     if (SocialAccessService.isCompany(scope)) return;
-    throw new ForbiddenException(SOCIAL_FILE_TARGET_DENIED[target]);
+    throw new ForbiddenException(socialError(SOCIAL_FILE_TARGET_DENIED[target]));
   }
 
   /**
@@ -512,7 +515,7 @@ export class SocialAccessService {
     postId: string,
   ): Promise<SocialPostAccess> {
     const post = await this.findPostVisible(tx, actor, postId);
-    if (!post) throw new NotFoundException(SOCIAL_ERR.POST_NOT_FOUND);
+    if (!post) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
     return post;
   }
 
@@ -571,7 +574,7 @@ export class SocialAccessService {
     commentId: string,
   ): Promise<SocialCommentAccess> {
     const comment = await this.findCommentVisible(tx, actor, commentId);
-    if (!comment) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
+    if (!comment) throw new NotFoundException(socialError(SOCIAL_ERR.COMMENT_NOT_FOUND));
     return comment;
   }
 
@@ -714,7 +717,7 @@ export class SocialAccessService {
   ): Promise<void> {
     if (audience === "group") {
       if (groupId == null) {
-        throw new UnprocessableEntityException(SOCIAL_ERR.AUDIENCE_KEY_MISSING);
+        throw new UnprocessableEntityException(socialError(SOCIAL_ERR.AUDIENCE_KEY_MISSING));
       }
       // 404 trước: cửa này nuốt cả "nhóm đã xoá mềm" (D13) và "private mà mình không thuộc".
       await this.groups.assertGroupVisibleTx(tx, actor, groupId);
@@ -726,18 +729,18 @@ export class SocialAccessService {
       );
       // `pending` KHÔNG phải thành viên: xin vào rồi là đăng được thì cổng nhóm kín vô nghĩa.
       if (membership?.status !== "active") {
-        throw new ForbiddenException(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE);
+        throw new ForbiddenException(socialError(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE));
       }
       return;
     }
     if (audience === "org_unit") {
       if (orgUnitId == null) {
-        throw new UnprocessableEntityException(SOCIAL_ERR.AUDIENCE_KEY_MISSING);
+        throw new UnprocessableEntityException(socialError(SOCIAL_ERR.AUDIENCE_KEY_MISSING));
       }
       // Đăng vào đơn vị mình không thuộc (và không đứng đầu) ⇒ 403. Tập rỗng ⇒ mọi đơn vị đều bị từ
       // chối (fail-closed) — đúng: người không thuộc đơn vị nào thì không có đơn vị nào để đăng vào.
       if (!actor.orgUnitIds.includes(orgUnitId)) {
-        throw new ForbiddenException(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE);
+        throw new ForbiddenException(socialError(SOCIAL_ERR.WRITE_OUT_OF_AUDIENCE));
       }
     }
   }
@@ -753,7 +756,7 @@ export class SocialAccessService {
   assertCanMutateContent(actor: SocialViewerContext, authorUserId: string): boolean {
     if (authorUserId === actor.actorUserId) return false;
     if (!actor.canManagePosts) {
-      throw new ForbiddenException(SOCIAL_ERR.NOT_CONTENT_OWNER);
+      throw new ForbiddenException(socialError(SOCIAL_ERR.NOT_CONTENT_OWNER));
     }
     return true;
   }

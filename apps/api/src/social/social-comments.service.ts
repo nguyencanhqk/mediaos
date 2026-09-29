@@ -50,7 +50,7 @@ import {
 import { SocialActorProjectionRepository } from "./social-posts.repository";
 import { resolveActorName } from "./social-posts.service";
 import { SocialReactionsRepository } from "./social-reactions.repository";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import { toFeedCommentDto } from "./social.mapper";
 import type {
   SocialActor,
@@ -132,7 +132,7 @@ export class SocialCommentsService {
     const result = await this.db.withTenant(actor.companyId, async (tx) => {
       const post = await this.access.assertPostVisible(tx, actor, postId);
       if (post.commentsLocked) {
-        throw new ConflictException(SOCIAL_ERR.COMMENTS_LOCKED);
+        throw new ConflictException(socialError(SOCIAL_ERR.COMMENTS_LOCKED));
       }
 
       let parentAuthorUserId: string | null = null;
@@ -144,9 +144,9 @@ export class SocialCommentsService {
           dto.parentCommentId,
         );
         // `undefined` = cha không tồn tại / không thuộc bài này ⇒ 404 (cùng luật che của bình luận).
-        if (parent === undefined) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
+        if (parent === undefined) throw new NotFoundException(socialError(SOCIAL_ERR.COMMENT_NOT_FOUND));
         // `null` = cha CHÍNH NÓ đã là một trả lời ⇒ quá 1 cấp.
-        if (parent === null) throw new UnprocessableEntityException(SOCIAL_ERR.REPLY_DEPTH);
+        if (parent === null) throw new UnprocessableEntityException(socialError(SOCIAL_ERR.REPLY_DEPTH));
         parentAuthorUserId = parent;
       }
 
@@ -214,7 +214,7 @@ export class SocialCommentsService {
       return { row, post, dropped: mentions.dropped };
     });
 
-    if (!result.row) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
+    if (!result.row) throw new NotFoundException(socialError(SOCIAL_ERR.COMMENT_NOT_FOUND));
     const [dto2] = await this.decorate(actor, [result.row], result.post);
     this.emitCommentCreated(actor, result.post.audience, result.post.status, dto2);
     return { ...dto2, droppedMentions: toDropped(result.dropped) };
@@ -319,7 +319,7 @@ export class SocialCommentsService {
       throw err;
     }
 
-    if (!result.row) throw new NotFoundException(SOCIAL_ERR.COMMENT_NOT_FOUND);
+    if (!result.row) throw new NotFoundException(socialError(SOCIAL_ERR.COMMENT_NOT_FOUND));
     const [dto2] = await this.decorate(actor, [result.row], result.post);
     return { ...dto2, droppedMentions: toDropped(result.dropped) };
   }

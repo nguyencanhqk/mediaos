@@ -21,7 +21,12 @@ import { SecurityAlertService } from "../auth/security-alert.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../storage/storage-adapter.port";
 import { ATTACH_GATE_ROUTE_TARGET, SOCIAL_FILE_TARGET_PAIRS } from "./social-route-pairs.const";
 import { FEED_COMMENT_ENTITY, FEED_POST_ENTITY, SOCIAL_MODULE } from "./social-file.resolver";
-import { SOCIAL_ERR } from "./social.errors";
+import {
+  SOCIAL_ERR,
+  SOCIAL_FILE_TARGET_DENIED,
+  socialError,
+  type SocialErrorMessage,
+} from "./social.errors";
 import type { SocialTargetType, SocialViewerContext } from "./social.types";
 
 /**
@@ -52,7 +57,7 @@ import type { SocialTargetType, SocialViewerContext } from "./social.types";
  */
 export type AttachNewGate =
   | { readonly allow: true }
-  | { readonly allow: false; readonly reason: string };
+  | { readonly allow: false; readonly reason: SocialErrorMessage };
 
 /**
  * S16-SOCIAL-ATTDEBT-1 (C-5, plan D-5 lối (g)) — ngoại lệ của nhánh DENY cổng gắn tệp, **mang theo
@@ -65,8 +70,10 @@ export type AttachNewGate =
  * │ mà không ai biết. `instanceof` không có kiểu hỏng đó. Ca int-spec H9 đo đúng điều này.        │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * ⚠️ `super(reason)` ⇒ **hợp đồng HTTP KHÔNG đổi**: vẫn 403, vẫn đúng hằng `FILE_TARGET_*_DENIED`.
- * Đây là lớp con thuần-thêm-dữ-liệu, không phải một mã lỗi mới.
+ * ⚠️ `super(socialError(reason))` ⇒ **hợp đồng HTTP KHÔNG đổi**: vẫn 403, vẫn đúng hằng
+ * `FILE_TARGET_*_DENIED`, nay kèm mã sentinel ở `error.code` (S16-SOCIAL-GROUPERR-1). Lớp TỰ bọc để
+ * mọi chỗ `new SocialAttachGateDeniedException(...)` không thể quên — ratchet tầng C của census ghim
+ * đúng câu `super(socialError(reason))` này. Đây là lớp con thuần-thêm-dữ-liệu, không phải mã lỗi mới.
  *
  * ⚠️ `signal` CỐ Ý **không** mang `route`: `syncLinksTx` không nhận `actor`/`routeKey` và thêm tham
  * số cho nó là đường cụt (xem docblock `syncLinksTx`). `route` được DẪN XUẤT ở `reportAttachGateDeny`
@@ -74,7 +81,7 @@ export type AttachNewGate =
  */
 export class SocialAttachGateDeniedException extends ForbiddenException {
   constructor(
-    reason: string,
+    reason: SocialErrorMessage,
     readonly signal: {
       readonly targetType: SocialTargetType;
       readonly targetId: string;
@@ -82,7 +89,7 @@ export class SocialAttachGateDeniedException extends ForbiddenException {
       readonly newFileCount: number;
     },
   ) {
-    super(reason);
+    super(socialError(reason));
   }
 }
 
@@ -296,17 +303,17 @@ export class SocialAttachmentsService {
     // Thiếu tệp nào ⇒ hỏng — KHÔNG "bỏ qua tệp không tìm thấy": bỏ qua im lặng làm người dùng đăng
     // bài rồi phát hiện ảnh biến mất, không lỗi, không cách nào biết vì sao.
     if (rows.length !== unique.length) {
-      throw new UnprocessableEntityException(SOCIAL_ERR.ATTACHMENT_INVALID);
+      throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_INVALID));
     }
     for (const f of rows) {
       if (f.ownerUserId !== userId)
-        throw new UnprocessableEntityException(SOCIAL_ERR.ATTACHMENT_INVALID); // vế 2
+        throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_INVALID)); // vế 2
       if (f.uploadStatus !== "Uploaded")
-        throw new UnprocessableEntityException(SOCIAL_ERR.ATTACHMENT_INVALID); // vế 3
+        throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_INVALID)); // vế 3
       if (!LINKABLE_SCAN.has(f.scanStatus))
-        throw new UnprocessableEntityException(SOCIAL_ERR.ATTACHMENT_INVALID); // vế 4
+        throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_INVALID)); // vế 4
       if (f.fileSizeBytes > FEED_MAX_ATTACHMENT_BYTES)
-        throw new UnprocessableEntityException(SOCIAL_ERR.ATTACHMENT_LIMIT);
+        throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_LIMIT));
     }
 
     // vế 5 — tệp CHƯA TỪNG có link nào (kể cả link đã gỡ). `deleted_at` KHÔNG lọc ở đây có chủ đích:
@@ -316,14 +323,14 @@ export class SocialAttachmentsService {
       .from(fileLinks)
       .where(and(eq(fileLinks.companyId, companyId), inArray(fileLinks.fileId, unique)));
     if (everLinked.length > 0) {
-      throw new UnprocessableEntityException(SOCIAL_ERR.ATTACHMENT_INVALID);
+      throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_INVALID));
     }
 
     // Giới hạn SPEC-16 §16 theo LOẠI.
     const images = rows.filter((f) => kindOf(f.mimeType) === "image").length;
     const videos = rows.filter((f) => kindOf(f.mimeType) === "video").length;
     if (images > FEED_MAX_IMAGES_PER_POST || videos > FEED_MAX_VIDEOS_PER_POST) {
-      throw new UnprocessableEntityException(SOCIAL_ERR.ATTACHMENT_LIMIT);
+      throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_LIMIT));
     }
 
     return rows;
@@ -412,7 +419,10 @@ export class SocialAttachmentsService {
       // S16-SOCIAL-ATTDEBT-1 (C-5): ném LỚP MANG NGỮ CẢNH. Dòng `logger.warn` ngay trên GIỮ NGUYÊN,
       // không thay bằng alert: hai vết hỏng theo hai cách khác nhau — `emit()` nuốt lỗi ghi alert
       // (`security-alert.service.ts:64-76`), còn log thì không phụ thuộc DB.
-      throw new SocialAttachGateDeniedException(gate.reason, {
+      // S16-SOCIAL-GROUPERR-1: `gate.reason` vắng chỉ xảy ra với object cổng dựng HỎNG (cast/Partial —
+      // ca FAIL-CLOSED của spec). Khi đó vẫn phải là 403 ĐÚNG đích, không phải 500 của `socialError`:
+      // cổng deny cho một `targetType` luôn mang đúng `SOCIAL_FILE_TARGET_DENIED[targetType]`.
+      throw new SocialAttachGateDeniedException(gate.reason ?? SOCIAL_FILE_TARGET_DENIED[targetType], {
         targetType,
         targetId,
         actorUserId: userId,

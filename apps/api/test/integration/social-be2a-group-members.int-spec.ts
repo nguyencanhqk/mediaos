@@ -624,6 +624,37 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2A · nhóm — vòng đời thành v
     expect(audits[0].metadata).toMatchObject({ targetUserId: u1.userId, viaManage: true });
   });
 
+  // L1 (plan-reviewer) — KHÔNG dán nhãn thừa: quyền đến từ vai HÀNG thì sổ ghi `viaManage:false`, kể cả
+  // khi actor cũng giữ `manage`.
+  it("GROUPERR-1 R9 — owner KIÊM manage cấp owner ⇒ audit viaManage:false (quyền từ hàng owner)", async () => {
+    const g = await seedGroup("private", [
+      { userId: manager.userId, role: "owner" },
+      { userId: u1.userId, role: "member" },
+    ]);
+    const res = await patch(manager.token, `/social/groups/${g}/members/${u1.userId}`).send({
+      role: "owner",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const audits = await roleChangedAudits(g);
+    expect(audits).toHaveLength(1);
+    expect(audits[0].metadata).toMatchObject({ to: "owner", viaManage: false });
+  });
+
+  it("GROUPERR-1 R10 — admin KIÊM manage đổi vai sang `admin` (không cấp owner) ⇒ audit viaManage:false", async () => {
+    const g = await seedGroup("private", [
+      { userId: owner.userId, role: "owner" },
+      { userId: manager.userId, role: "admin" },
+      { userId: u1.userId, role: "member" },
+    ]);
+    const res = await patch(manager.token, `/social/groups/${g}/members/${u1.userId}`).send({
+      role: "admin",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const audits = await roleChangedAudits(g);
+    expect(audits).toHaveLength(1);
+    expect(audits[0].metadata).toMatchObject({ to: "admin", viaManage: false });
+  });
+
   it("GROUPERR-1 R8 (owner ký O5) — admin KIÊM manage tự phong CHÍNH MÌNH owner ⇒ 200 + viaManage:true", async () => {
     const g = await seedGroup("private", [
       { userId: owner.userId, role: "owner" },

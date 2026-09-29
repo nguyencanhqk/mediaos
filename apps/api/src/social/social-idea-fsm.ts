@@ -1,6 +1,6 @@
 import { ConflictException } from "@nestjs/common";
 import type { FeedIdeaStatusDto } from "@mediaos/contracts";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 
 /**
  * S16-SOCIAL-BE-2B-2 — máy trạng thái SÁNG KIẾN (SPEC-16 §13.3 / SPEC-01 §17.19).
@@ -70,5 +70,5 @@ export const IDEA_STATUS_LABEL = {
  */
 export function assertIdeaTransition(from: FeedIdeaStatusDto, to: FeedIdeaStatusDto): void {
   const allowed = IDEA_TRANSITIONS.some((t) => t.from === from && t.to === to);
-  if (!allowed) throw new ConflictException(SOCIAL_ERR.IDEA_TRANSITION);
+  if (!allowed) throw new ConflictException(socialError(SOCIAL_ERR.IDEA_TRANSITION));
 }

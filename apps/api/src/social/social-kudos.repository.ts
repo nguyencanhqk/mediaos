@@ -5,7 +5,7 @@ import { employeeProfiles } from "../db/schema/employees";
 import { feedKudos, feedKudosBadges, feedKudosRecipients, feedPosts } from "../db/schema/social";
 import { users } from "../db/schema/users";
 import { SocialAccessService } from "./social-access.service";
-import { SOCIAL_ERR } from "./social.errors";
+import { SOCIAL_ERR, socialError } from "./social.errors";
 import type { SocialViewerContext } from "./social.types";
 
 /**
@@ -64,7 +64,7 @@ export async function assertActiveBadgeTx(
     )
     .limit(1);
 
-  if (!row) throw new UnprocessableEntityException(SOCIAL_ERR.KUDOS_BADGE_INVALID);
+  if (!row) throw new UnprocessableEntityException(socialError(SOCIAL_ERR.KUDOS_BADGE_INVALID));
 }
 
 /**
@@ -120,7 +120,7 @@ export async function assertRecipientsTx(
     );
 
   if (rows.length !== wanted.length) {
-    throw new UnprocessableEntityException(SOCIAL_ERR.KUDOS_RECIPIENT_INVALID);
+    throw new UnprocessableEntityException(socialError(SOCIAL_ERR.KUDOS_RECIPIENT_INVALID));
   }
   return wanted;
 }
