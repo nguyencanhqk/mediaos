@@ -1,18 +1,25 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type {
-  CreateKudosBadgeDto,
-  KudosBadgeAdminDto,
-  KudosBadgeAdminPageDto,
-  UpdateKudosBadgeDto,
+import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  KUDOS_RECIPIENT_QUERY_MIN,
+  KUDOS_RECIPIENT_SEARCH_CAP,
+  type CreateKudosBadgeDto,
+  type FeedKudosPageDto,
+  type KudosBadgeAdminDto,
+  type KudosBadgeAdminPageDto,
+  type KudosRecipientSearchResultDto,
+  type UpdateKudosBadgeDto,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { SocialAccessService } from "./social-access.service";
 import {
+  badgeRefOf,
   createBadgeTx,
   deactivateBadgeTx,
   findBadgeTx,
   listBadgesAdminTx,
+  recipientsOfTx,
+  searchKudosRecipientsTx,
   SocialKudosRepository,
   updateBadgeTx,
   type KudosBadgeAdminRow,
@@ -51,7 +58,10 @@ function diffBadge(current: KudosBadgeAdminRow, dto: UpdateKudosBadgeDto) {
   // `description` là chữ tự do (≤1000) ⇒ audit chỉ ghi CỜ đổi, không chép văn bản (API-19 §8 «id +
   // trường đổi»; FULL gate security LOW). Các trường còn lại ngắn, có cấu trúc ⇒ giữ `{from, to}`.
   const changes = Object.fromEntries(
-    changed.map((k) => [k, k === "description" ? { changed: true } : { from: current[k], to: dto[k] }]),
+    changed.map((k) => [
+      k,
+      k === "description" ? { changed: true } : { from: current[k], to: dto[k] },
+    ]),
   ) as Record<string, unknown>;
   return { patch, changes, isNoop: changed.length === 0 };
 }
@@ -74,6 +84,8 @@ function diffBadge(current: KudosBadgeAdminRow, dto: UpdateKudosBadgeDto) {
  */
 @Injectable()
 export class SocialKudosService {
+  private readonly logger = new Logger(SocialKudosService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly access: SocialAccessService,
@@ -92,7 +104,10 @@ export class SocialKudosService {
    * `userId`** (ca `K-7`). `isFormerEmployee` nói rõ người đó đã nghỉ (owner ký S6): đường ghi CHO
    * PHÉP vinh danh người đã nghỉ, nên đường đọc phải nói ra trạng thái thay vì để người xem tự đoán.
    */
-  async list(user: SocialRequestUser, query: { month?: string; page: number; limit: number }) {
+  async list(
+    user: SocialRequestUser,
+    query: { month?: string; page: number; limit: number },
+  ): Promise<FeedKudosPageDto> {
     const actor = await this.access.resolveActor(user, "kudosList");
     const { page, limit } = query;
 
@@ -102,7 +117,7 @@ export class SocialKudosService {
         limit,
         offset: (page - 1) * limit,
       });
-      const recips = await this.repo.recipientsOfTx(
+      const recips = await recipientsOfTx(
         tx,
         actor.companyId,
         listed.rows.map((r) => r.kudosId),
@@ -126,11 +141,9 @@ export class SocialKudosService {
         postId: r.postId,
         message: r.message,
         isOfficial: r.isOfficial,
-        badge: r.badgeId
-          ? { id: r.badgeId, code: r.badgeCode, name: r.badgeName, icon: r.badgeIcon }
-          : null,
+        badge: this.badgeOrLog(r),
         createdAt: r.createdAt.toISOString(),
-        recipients: (byKudos.get(r.kudosId) ?? []).map((p) => ({
+        recipients: this.recipientsOrLog(byKudos, r).map((p) => ({
           employeeId: p.employeeId,
           fullName: p.fullName,
           avatarUrl: p.avatarUrl,
@@ -141,6 +154,62 @@ export class SocialKudosService {
       limit,
       total,
     };
+  }
+
+  /**
+   * `059` — `GET /social/kudos/recipients?q=` — danh bạ cho ô chọn người nhận vinh danh (owner K2/K3,
+   * SOC-DEC-013). Tầng 2 hỏi lại ĐÚNG cặp của route (`create:feed-kudos`, sàn Company).
+   *
+   * `q` đã được Zod chuẩn hoá (NFC · gộp khoảng trắng · ≥2 chữ/số). Trả `{employeeId, fullName,
+   * avatarUrl}` — KHÔNG `userId`; `truncated` khi còn người khớp ngoài trần.
+   */
+  async searchRecipients(
+    user: SocialRequestUser,
+    query: { q: string },
+  ): Promise<KudosRecipientSearchResultDto> {
+    const actor = await this.access.resolveActor(user, "kudosRecipientSearch");
+    const rows = await this.db.withTenant(actor.companyId, (tx) =>
+      searchKudosRecipientsTx(tx, actor.companyId, actor.actorUserId, query.q, {
+        limit: KUDOS_RECIPIENT_SEARCH_CAP,
+        minLetters: KUDOS_RECIPIENT_QUERY_MIN,
+      }),
+    );
+    return {
+      // Chép theo DANH SÁCH KHOÁ — một cột lỡ thêm ở repository không đi được ra dây.
+      data: rows.slice(0, KUDOS_RECIPIENT_SEARCH_CAP).map((r) => ({
+        employeeId: r.employeeId,
+        fullName: r.fullName,
+        avatarUrl: r.avatarUrl,
+      })),
+      truncated: rows.length > KUDOS_RECIPIENT_SEARCH_CAP,
+    };
+  }
+
+  /**
+   * Người nhận của một dòng `047`. Vinh danh không còn hàng người nhận nào (DB không ép ≥1, app role có
+   * DELETE) ⇒ vẫn trả `[]` nhưng `logger.error` — cùng luật với khối thẻ bài (FULL gate silent-failure M1).
+   */
+  private recipientsOrLog<T>(
+    byKudos: Map<string, T[]>,
+    r: { kudosId: string; postId: string },
+  ): T[] {
+    const list = byKudos.get(r.kudosId);
+    if (list) return list;
+    this.logger.error(
+      `S16-SOCIAL-BE-2D: bài ${r.postId} vinh danh ${r.kudosId} KHÔNG còn người nhận nào`,
+    );
+    return [];
+  }
+
+  /** Huy hiệu của một dòng `047` — luật chung `badgeRefOf`; hàng hỏng ⇒ `logger.error` + bỏ huy hiệu. */
+  private badgeOrLog(r: Parameters<typeof badgeRefOf>[0] & { kudosId: string }) {
+    const { badge, broken } = badgeRefOf(r);
+    if (broken) {
+      this.logger.error(
+        `S16-SOCIAL-BE-2D: kudos ${r.kudosId} trỏ huy hiệu ${String(r.badgeId)} nhưng JOIN không ra code/name — bỏ huy hiệu`,
+      );
+    }
+    return badge;
   }
 
   /** `048` — `GET /social/kudos-badges`. Chỉ `is_active = true`; envelope OFFSET. */

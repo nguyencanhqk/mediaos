@@ -35,6 +35,7 @@ import {
   targetTypeLabel,
   type ResolvedMention,
 } from "./social-mentions";
+import { blocksFor, loadPostBlocksTx } from "./social-post-blocks";
 import { createIdeaTx, createKudosTx, createPollTx } from "./social-post-types";
 import { userIdsOfEmployeesTx } from "./social-kudos.repository";
 import { SocialNewsRepository } from "./social-news.repository";
@@ -729,7 +730,7 @@ export class SocialPostsService {
 
     // `mentions` (S16-SOCIAL-BE-1D D7): CÙNG tx, ≤3 câu cho cả lô; audience lấy từ `PostRow` sẵn có.
     // `rows` đã qua cổng đọc bài (điều kiện của `decorate`) — bộ nạp KHÔNG tự kiểm tầm nhìn.
-    const { tags, myReactions, saved, mentions } = await this.db.withTenant(
+    const { tags, myReactions, saved, mentions, blocks } = await this.db.withTenant(
       viewer.companyId,
       async (tx) => ({
         tags: await this.repo.tagsFor(tx, viewer.companyId, ids),
@@ -752,8 +753,25 @@ export class SocialPostsService {
             groupId: r.groupId,
           })),
         ),
+        // S16-SOCIAL-BE-2D D3: khối kudos/poll/idea — CÙNG tx, ≤4 câu/lô, chỉ bảng của loại có mặt.
+        blocks: await loadPostBlocksTx(tx, viewer.companyId, viewer.actorUserId, rows),
       }),
     );
+    for (const o of blocks.orphans) {
+      this.logger.error(
+        `S16-SOCIAL-BE-2D: bài ${o.postId} type=${o.type} KHÔNG nạp được khối (thiếu hàng con hoặc dữ liệu hỏng) — khối vắng`,
+      );
+    }
+    for (const k of blocks.emptyKudos) {
+      this.logger.error(
+        `S16-SOCIAL-BE-2D: bài ${k.postId} vinh danh ${k.kudosId} KHÔNG còn người nhận nào`,
+      );
+    }
+    for (const b of blocks.brokenBadges) {
+      this.logger.error(
+        `S16-SOCIAL-BE-2D: kudos ${b.kudosId} trỏ huy hiệu ${String(b.badgeId)} không ra code/name — bỏ huy hiệu`,
+      );
+    }
     // NGOÀI tx — ký URL tự mở kết nối riêng (xem docblock `SocialAttachmentsService`).
     const attachments = await this.attachments.decorateMany(viewer, "post", ids);
 
@@ -764,6 +782,7 @@ export class SocialPostsService {
         myReaction: myReactions.get(row.id) ?? null,
         savedByMe: saved.has(row.id),
         mentions: mentionsFor(mentions, row.id),
+        ...blocksFor(blocks, row),
       }),
     );
   }
@@ -815,6 +834,11 @@ export class SocialPostsService {
       isMine: _im,
       status: _st,
       mentions: _mn,
+      // S16-SOCIAL-BE-2D D7: `poll.myVote` là của TÁC GIẢ (dto này decorate bằng tác giả) — bóc cả ba
+      // khối tại nguồn; schema WS cũng `.omit` (hai tầng độc lập).
+      kudos: _kd,
+      poll: _pl,
+      idea: _id,
       attachments,
       ...rest
     } = dto;

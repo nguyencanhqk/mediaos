@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 690,
+    "routes": 691,
     "controllers": 131,
-    "gated": 651,
+    "gated": 652,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -9509,6 +9509,22 @@
       "path": "/api/v1/social/kudos-badges/manage",
       "hasPermission": true,
       "permission": "manage:feed-kudos",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [],
+      "routeGuards": [
+        "PermissionGuard"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "SocialKudosController#searchRecipients",
+      "httpMethod": "GET",
+      "path": "/api/v1/social/kudos/recipients",
+      "hasPermission": true,
+      "permission": "create:feed-kudos",
       "permissionLevel": "handler",
       "isPublic": false,
       "classGuards": [],

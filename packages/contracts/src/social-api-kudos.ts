@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
+import { feedKudosBlockSchema } from "./social-feed-blocks";
 
 /**
  * S16-SOCIAL-BE-2B-2 — DTO của `SOCIAL-API-047..048` (VINH DANH · CATALOG HUY HIỆU).
@@ -149,3 +150,84 @@ export const kudosBadgeAdminPageSchema = z.object({
   total: z.number().int(),
 });
 export type KudosBadgeAdminPageDto = z.infer<typeof kudosBadgeAdminPageSchema>;
+
+// ─────────── S16-SOCIAL-BE-2D — response `047` (có kiểu) + danh bạ người nhận `059` ───────────
+
+/** Một dòng của `047` = khối vinh danh của thẻ bài + `postId` + `createdAt` (plan BE-2D D11). */
+export const feedKudosListItemSchema = feedKudosBlockSchema.extend({
+  postId: z.string().uuid(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+export type FeedKudosListItemDto = z.infer<typeof feedKudosListItemSchema>;
+
+export const feedKudosPageSchema = z.object({
+  data: z.array(feedKudosListItemSchema),
+  page: z.number().int(),
+  limit: z.number().int(),
+  total: z.number().int(),
+});
+export type FeedKudosPageDto = z.infer<typeof feedKudosPageSchema>;
+
+/** `059` — số chữ/số TỐI THIỂU của `q` (owner K2). Đếm `\p{L}`/`\p{N}`, KHÔNG đếm dấu tổ hợp. */
+export const KUDOS_RECIPIENT_QUERY_MIN = 2;
+/** `059` — trần độ dài `q` sau chuẩn hoá. */
+export const KUDOS_RECIPIENT_QUERY_MAX = 100;
+/** `059` — trần kết quả (owner K2). Không phân trang: hết trần thì gõ thêm, không lật trang. */
+export const KUDOS_RECIPIENT_SEARCH_CAP = 20;
+
+/**
+ * Ký tự điều khiển (`\p{Cc}`) hoặc định dạng vô hình (`\p{Cf}` — zero-width, bidi). Tên người không
+ * chứa chúng; NUL đi vào `f_unaccent` là **500** (đo ở CHAT, `chat.ts` `hasControlChar`).
+ */
+const INVISIBLE_OR_CONTROL = /[\p{Cc}\p{Cf}]/u;
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/gu;
+
+/**
+ * `059` — `GET /social/kudos/recipients?q=` (danh bạ cho ô chọn người nhận vinh danh; owner K2/K3).
+ *
+ * ┌─ 🔴 VÌ SAO ĐẾM CHỮ/SỐ, KHÔNG `min(2)` TRÊN ĐỘ DÀI ─────────────────────────────────────────────┐
+ * │ Đo PG 17 (plan BE-2D M10): `f_unaccent(U&'\0301\0303')` dài **0** — chuỗi chỉ gồm dấu tổ hợp qua │
+ * │ được `min(2)` rồi co thành RỖNG ở DB ⇒ khớp TẤT CẢ. Cùng lớp với `'%%'` qua `min(2)` của CHAT.  │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Mọi phép biến đổi LUỸ ĐẲNG (NFC · gộp khoảng trắng · trim): `ZodValidationPipe` chạy HAI lần
+ * (`main.ts` + `@UsePipes`). Server khớp bằng `strpos` (không LIKE) ⇒ `%`/`_` là ký tự thường, không
+ * cần thoát. `.strict()`: không `page`/`limit` — tham số lật trang là đường vượt trần.
+ */
+export const kudosRecipientSearchQuerySchema = z
+  .object({
+    q: z
+      .string()
+      .transform((s) => s.normalize("NFC").replace(/\s+/gu, " ").trim())
+      .pipe(
+        z
+          .string()
+          .max(KUDOS_RECIPIENT_QUERY_MAX, `q tối đa ${KUDOS_RECIPIENT_QUERY_MAX} ký tự`)
+          .refine((s) => !INVISIBLE_OR_CONTROL.test(s), { message: "q chứa ký tự không hợp lệ" })
+          .refine((s) => (s.match(LETTER_OR_DIGIT)?.length ?? 0) >= KUDOS_RECIPIENT_QUERY_MIN, {
+            message: `q phải có ít nhất ${KUDOS_RECIPIENT_QUERY_MIN} chữ hoặc số`,
+          }),
+      ),
+  })
+  .strict();
+export type KudosRecipientSearchQueryDto = z.infer<typeof kudosRecipientSearchQuerySchema>;
+
+/**
+ * Một người trong danh bạ `059`. ĐÚNG ba khoá: **KHÔNG `userId`** (khoá tài khoản — cửa ĐỌC của oracle
+ * mà SPEC-16 `ERR-009` đóng ở cửa ghi), không email / mã nhân sự / đơn vị. `employeeId` là thứ
+ * `002` cần (`kudos.recipientEmployeeIds`). Chỉ người ĐANG làm (hồ sơ + tài khoản active) nên không có
+ * `isFormerEmployee`. `avatarUrl` là cột THÔ — xem `feedKudosRecipientSchema`.
+ */
+export const kudosRecipientCandidateSchema = z.object({
+  employeeId: z.string().uuid(),
+  fullName: z.string(),
+  avatarUrl: z.string().nullable(),
+});
+export type KudosRecipientCandidateDto = z.infer<typeof kudosRecipientCandidateSchema>;
+
+/** `truncated` = còn người khớp ngoài trần ⇒ FE nhắc «gõ thêm để thu hẹp». */
+export const kudosRecipientSearchResultSchema = z.object({
+  data: z.array(kudosRecipientCandidateSchema),
+  truncated: z.boolean(),
+});
+export type KudosRecipientSearchResultDto = z.infer<typeof kudosRecipientSearchResultSchema>;

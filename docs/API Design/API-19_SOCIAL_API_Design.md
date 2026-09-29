@@ -23,7 +23,7 @@
 
 ## 2. Mục đích tài liệu
 
-Khoá bề mặt HTTP + WS của module SOCIAL: **58 route** `SOCIAL-API-001..058` (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng `054`/`055` + route đọc quản trị huy hiệu `056` — SOC-DEC-012 + 2 route thùng rác bài viết `057`/`058` ở basePath `recycle-bin` — `S16-SOCIAL-BE-3C`, owner ký O1–O4 ngày 28/09/2026), cặp quyền từng route, DTO có ràng buộc che dữ liệu, sự kiện realtime và quy ước lỗi. Rule nghiệp vụ **không** nhân bản ở đây — nguồn là SPEC-16.
+Khoá bề mặt HTTP + WS của module SOCIAL: **59 route** `SOCIAL-API-001..059` (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng `054`/`055` + route đọc quản trị huy hiệu `056` — SOC-DEC-012 + 2 route thùng rác bài viết `057`/`058` ở basePath `recycle-bin` — `S16-SOCIAL-BE-3C`, owner ký O1–O4 ngày 28/09/2026 + danh bạ người nhận vinh danh `059` — SOC-DEC-013, `S16-SOCIAL-BE-2D`, owner ký K1–K4 ngày 29/09/2026), cặp quyền từng route, DTO có ràng buộc che dữ liệu, sự kiện realtime và quy ước lỗi. Rule nghiệp vụ **không** nhân bản ở đây — nguồn là SPEC-16.
 
 ---
 
@@ -57,7 +57,7 @@ Bảng tin · bài (5 loại) · bình luận 1 cấp · cảm xúc · lưu · l
 
 Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-census gom đúng module qua `API_MODULE_TAGS` nhóm `SOCIAL` — **trừ `057`/`058`** (thùng rác bài viết, basePath `recycle-bin/feed-posts` theo O3): route-census 2 tầng vẫn đếm chúng vào SOCIAL (allowlist theo tên lớp controller), nhưng tag OpenAPI rơi vào **HR** — xem §5.1k (D15).
 
-### 5.1 Bảng endpoint — 58 route (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng + `056` quản trị huy hiệu + `057`/`058` thùng rác bài viết)
+### 5.1 Bảng endpoint — 59 route (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng + `056` quản trị huy hiệu + `057`/`058` thùng rác bài viết + `059` danh bạ người nhận)
 
 | Mã | Method · Path | Cặp quyền | Ghi chú |
 | --- | --- | --- | --- |
@@ -118,6 +118,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | **Vinh danh — Track B** ||||
 | `SOCIAL-API-047` | `GET /social/kudos` | `view:feed` | Vinh danh gần đây / theo tháng |
 | `SOCIAL-API-048` | `GET /social/kudos-badges` | `view:feed` | Catalog huy hiệu đang bật |
+| `SOCIAL-API-059` | `GET /social/kudos/recipients?q=` | **`create:feed-kudos`** | **SOC-DEC-013 (BE-2D).** Danh bạ cho ô chọn người nhận vinh danh: `{data:[{employeeId, fullName, avatarUrl}], truncated}` — **KHÔNG `userId`**/email/mã NV. Chỉ nhân sự `active` + TK `active` (chưa xoá mềm ở cả hai), loại chính người gọi. `q` ≥ 2 chữ/số (NFC, dấu tổ hợp không tính), khớp **ĐẦU TỪ** chỉ trên họ tên (bỏ dấu, không phân biệt hoa thường; `strpos` — `%`/`_` là ký tự thường), trần **20**, không phân trang (`.strict()`: `limit`/`page` ⇒ 400). Xem §5.1l |
 | `SOCIAL-API-049` | `POST /social/kudos-badges` | `manage:feed-kudos` | `201` + DTO quản trị; `@Idempotent()`; `code` `^[a-z0-9-]{2,32}$` BẤT BIẾN; trùng (kể cả huy hiệu đã tắt) ⇒ 409 `KUDOS_BADGE_CODE_TAKEN`; audit — xem §5.1i |
 | `SOCIAL-API-050` | `PATCH /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | `200` + DTO quản trị; `{name?, description?, icon?, position?, isActive?}` strict, ≥1 trường; gửi `code` ⇒ 400; `isActive:true` bật lại; không đổi gì ⇒ 200 không audit |
 | `SOCIAL-API-051` | `DELETE /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | `200` + DTO quản trị. Tắt (`is_active=false`), **không** hard-delete; đã tắt sẵn ⇒ 200 không audit; không tồn tại/tenant khác ⇒ 404 `KUDOS_BADGE_NOT_FOUND` |
@@ -132,7 +133,15 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-057` | `GET /recycle-bin/feed-posts` | **`restore:feed-post`** — sàn scope `Company` | Bài đã xoá mềm của tenant; OFFSET `page`/`limit`, envelope `{data,page,limit,total}`, `ORDER BY deleted_at DESC, id DESC`; tác giả · nhóm · đơn vị · trích đoạn **che theo vị từ audience**; **KHÔNG audit** — xem §5.1k |
 | `SOCIAL-API-058` | `POST /recycle-bin/feed-posts/{post_id}/restore` | như trên | `200 {id, status}` — `status` ∈ `published`\|`hidden` theo luật §5.1k; **audit LUÔN**, cùng tx (`social.post.restore`); chưa xoá / không có / tenant khác ⇒ 404 `ERR-001`; nhóm đã xoá ⇒ 409 `RESTORE_GROUP_DELETED`; **không** `@Idempotent()` |
 
-> **58 mã = 58 route HTTP** — không mã nào gói hai route.
+> **59 mã = 59 route HTTP** — không mã nào gói hai route.
+
+#### 5.1l Danh bạ người nhận vinh danh `059` (S16-SOCIAL-BE-2D, SOC-DEC-013)
+
+- **Cặp `create:feed-kudos`** (owner K3 — thay `view:feed` của S3(a)): danh bạ chỉ phục vụ composer vinh danh; thu hồi quyền tạo vinh danh là đóng danh bạ. ⚠️ Bất đối xứng có ghi: vai tuỳ biến chỉ có `create:feed-kudos` (thiếu `create:feed-post`) tra được danh bạ nhưng không tạo được kudos.
+- **KHÔNG chống liệt kê** (owner K2): API không có throttler — dò ~26² tiền tố 2 ký tự lấy được toàn danh bạ active + `employeeId`. Min-2 / trần 20 / không phân trang là giới hạn UX-hiệu năng. Rào thật: chỉ tên + avatar + `employeeId` của người ĐANG làm, cặp `create:feed-kudos`, khớp CHỈ họ tên (khớp email/mã NV là oracle trên cột không trả về).
+- Oracle dư chấp nhận: vắng khỏi danh bạ ⇒ suy ra TK bị khoá/treo (thẻ kudos vẫn hiện tên người TK khoá — S6), cùng lớp `026`.
+- `avatarUrl` là cột THÔ `employee_profiles.avatar_url` (thường là fileId, không phải URL — owner K4 giữ nguyên như toàn module; nợ `S16-SOCIAL-AVATARPRESIGN-1`). FE KHÔNG vẽ nó làm `src`/`href`.
+- `q` quá ngắn / chỉ ký tự đặc biệt / ký tự điều khiển ⇒ **400** `VALIDATION-ERR-001` (lỗi hình dạng, không mã SOCIAL).
 >
 > ⚠️ **`057`/`058` NẰM NGOÀI 56 route của SPEC-16 §15 VÀ NGOÀI basePath `social`** — thêm ở `S16-SOCIAL-BE-3C`
 > (owner ký O3 ngày 28/09/2026): SPEC-16 §13.1/§16 nói bài xoá «vào recycle-bin», nên route sống ở
@@ -452,7 +461,7 @@ khôi phục đẩy `usage_count` lệch **+1** — chỉ xảy ra ở fixture; 
 
 Các route **tĩnh** phải khai **TRƯỚC** route có tham số cùng cấp, nếu không NestJS sẽ bắt nhầm (bài học `goals/tree`):
 
-- `GET /social/saved` · `GET /social/search` · `GET /social/tags` · `GET /social/news` · `GET /social/groups` · `GET /social/polls` · `GET /social/ideas` · `GET /social/kudos` · `GET /social/kudos-badges` · `GET /social/kudos-badges/manage` (trước `…/{badge_id}`) · `GET /social/reports` · `GET /social/birthdays` · `GET /social/stats/*` — **trước** `GET /social/posts/{post_id}` và các route `{id}` khác.
+- `GET /social/saved` · `GET /social/search` · `GET /social/tags` · `GET /social/news` · `GET /social/groups` · `GET /social/polls` · `GET /social/ideas` · `GET /social/kudos` · `GET /social/kudos/recipients` · `GET /social/kudos-badges` · `GET /social/kudos-badges/manage` (trước `…/{badge_id}`) · `GET /social/reports` · `GET /social/birthdays` · `GET /social/stats/*` — **trước** `GET /social/posts/{post_id}` và các route `{id}` khác.
 - `POST /social/posts` ở basePath `social/posts`, không đụng `social/{...}`.
 
 Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) — ratchet `param-uuid` không được tăng.
@@ -470,7 +479,7 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
     "id": "8f1c…",
     "type": "share",
     "audience": "company",
-    "author": { "employeeId": "a12…", "fullName": "Nguyễn Văn A", "avatarUrl": "https://…" },
+    "author": { "employeeId": "a12…", "fullName": "Nguyễn Văn A", "avatarUrl": "<cột thô employee_profiles.avatar_url — thường là fileId, KHÔNG phải URL; nợ S16-SOCIAL-AVATARPRESIGN-1>" },
     "body": "Chào cả nhà #tuyendung",
     "tags": ["tuyendung"],
     "attachments": [{ "fileId": "f01…", "kind": "image", "url": "https://…" }],
@@ -500,6 +509,11 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
   - **Rút (`withheld`) khi:** người đó rời audience (đổi đơn vị · rời nhóm), tài khoản không `active`/đã xoá, **không còn hồ sơ nhân sự sống**, **hồ sơ nhân sự không `active`** (nghỉ việc `resigned`/`terminated`/`inactive` — kể cả khi TK vẫn `active`, ở MỌI audience; owner chốt plan BE-1D §7 Q1 ngày 28/09/2026), hoặc tên rỗng. Cùng vị từ đó ở đường GHI: nhắc người đã nghỉ việc ⇒ bị bỏ vào `droppedMentions[]`. Phần tử **giữ vị trí** — mảng không bị rút gọn.
   - **Optional:** vắng khoá ≠ mảng rỗng. Response kiểm duyệt (`006`) không mang `mentions` ⇒ FE giữ mảng cũ trong cache khi merge.
   - Nạp theo **lô** cho cả trang (≤ 3 câu, cùng tx với projection) — không N+1.
+- **Khối theo loại bài `kudos?` · `poll?` · `idea?`** (`S16-SOCIAL-BE-2D`, owner ký K1–K4 29/09/2026) — OPTIONAL, **vắng là trạng thái duy nhất của «không có»** (không bao giờ `null`): vắng khi bài khác loại, trên response `006`, trên payload WS (§7), hoặc hàng con mồ côi (BE ghi `logger.error`, không 500 cả trang).
+  - `kudos` = `{kudosId, message, isOfficial, badge:{id,code,name,icon}|null, recipients:[{employeeId, fullName, avatarUrl, isFormerEmployee}]}` — CÙNG hình dạng + CÙNG luật người nhận với `047` (`047` = khối + `postId` + `createdAt`). **Luật K1:** hồ sơ HOẶC tài khoản đã **xoá mềm** ⇒ `fullName`/`avatarUrl` `null` + `isFormerEmployee:true`; nghỉ việc ⇒ giữ tên + cờ (S6); TK khoá ⇒ giữ tên; không TK ⇒ `fullName:null`. KHÔNG bỏ người nào khỏi mảng. Người nhận xếp theo `employeeId`. Huy hiệu đã tắt vẫn hiện.
+  - `poll` = **ĐÚNG hình dạng `043`** (`myVote` của NGƯỜI XEM, `totalVoters`, `options[{id,label,voteCount}]`, `status` y DB — vẫn `open` quá `closesAt` tới khi job đóng) ⇒ FE seed cache `043` từ thẻ. Không danh tính cử tri nào (SOC-DEC-009). Cùng MỘT câu SQL với `041..044` (bất biến H-8).
+  - `idea` = `{status}` DUY NHẤT (pill trạng thái). KHÔNG `reviewNote`, KHÔNG người duyệt.
+  - Nạp theo **lô**: kudos 2 câu · poll 1 · idea 1 — chỉ bảng của loại có mặt ⇒ ≤ 4 câu/trang bất kể số bài, 0 khi trang không có ba loại đó.
 
 ### 6.2 Envelope sinh nhật — PII đã cắt
 
@@ -597,6 +611,8 @@ Key **do client sinh khi mở composer/form**, TTL 15′, replay trả `Idempote
 
 `PUT …/reaction` và `PUT …/poll/vote` idempotent **theo bản chất** (đặt trạng thái, không cộng dồn) nên không cần decorator.
 
+Replay `002` trả **thẻ LÚC TẠO** (khối `poll` đếm 0, tên người nhận tại thời điểm đó) — hành vi sẵn có của interceptor cho mọi trường thẻ; replay chỉ trả cho chính người tạo (khoá theo user) nên `poll.myVote` không rò (S16-SOCIAL-BE-2D D13).
+
 `058` (khôi phục bài) **không** `@Idempotent()`: lưới tầng dữ liệu là khoá `… deleted_at IS NOT NULL FOR UPDATE` — lượt hai không còn khớp hàng đã xoá ⇒ 404, không sinh audit thứ hai (§5.1k).
 
 ---
@@ -612,6 +628,7 @@ Key **do client sinh khi mở composer/form**, TTL 15′, replay trả `Idempote
 
 - **Payload = DTO của REST**, không bao giờ là hàng thô (`io.emit` thẳng row bị cấm — CLAUDE.md §5).
 - **KHÔNG mang `mentions`** (`S16-SOCIAL-BE-1D` D6) — bóc tại nguồn và `.omit` ở schema WS. FE nhận thẻ qua WS render `@…` thành span tới lần refetch REST.
+- **KHÔNG mang `kudos` · `poll` · `idea`** (`S16-SOCIAL-BE-2D` D7) — `poll.myVote` là của TÁC GIẢ (thẻ phát ra được decorate bằng tác giả), phát cho cả room là rò; `.omit` không chạm khoá lồng nên bóc nguyên khối, ở CẢ nguồn (`emitPostCreated`) lẫn schema WS. FE chỉ đếm sự kiện nên không mất gì.
 - Room nhóm cần gate **riêng** — có `view:feed` không đủ để vào room của nhóm riêng tư.
 - **Xoá (`005`) và khôi phục (`058`) bài KHÔNG phát sự kiện nào** — phát lại `feed:post.created` lúc khôi phục sẽ đẩy một bài có thể đang `hidden` ra audience (§5.1k, D14).
 - FE chỉ hiện badge «N bài mới» + cập nhật số đếm; **không** tự chèn bài vào dòng cuộn đang đọc.

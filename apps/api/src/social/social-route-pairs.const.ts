@@ -313,6 +313,17 @@ export const SOCIAL_ROUTE_PAIRS = {
   kudosList: pair("view", "feed"),
   /** 048 `GET /social/kudos-badges` — catalog huy hiệu ĐANG BẬT; OFFSET. */
   kudosBadgeList: pair("view", "feed"),
+  /**
+   * 059 `GET /social/kudos/recipients?q=` — DANH BẠ cho ô chọn người nhận vinh danh (S16-SOCIAL-BE-2D,
+   * owner K2/K3 29/09/2026 — **SOC-DEC-013**).
+   *
+   * 🔴 Cặp là `create:feed-kudos`, KHÔNG `view:feed` (K3 thay S3(a)): danh bạ tồn tại CHỈ để phục vụ
+   * composer vinh danh ⇒ thu hồi quyền tạo vinh danh là đóng luôn danh bạ, và nghĩa của `view:feed`
+   * không nở thêm. ⚠️ Bất đối xứng CÓ GHI (ca R1b): vai tuỳ biến chỉ có `create:feed-kudos` (thiếu
+   * `create:feed-post`) mở được danh bạ dù KHÔNG tạo được kudos — «tra được danh bạ» KHÔNG suy ra
+   * «tạo được kudos». Danh bạ cấp công ty KHÔNG chống được liệt kê (không throttler) — xem SOC-DEC-013.
+   */
+  kudosRecipientSearch: pair("create", "feed-kudos"),
 
   // ── CRUD catalog huy hiệu 049–051 + đọc quản trị 056 (`S16-SOCIAL-BE-3A`) ──
   //

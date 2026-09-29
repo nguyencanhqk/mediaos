@@ -213,6 +213,9 @@ export * from "./social-api-b";
 // S16-SOCIAL-BE-2A (additive): DTO 10 route NHÓM (API-19 §5.1 dòng 97-107). Tách khỏi ./social-api-b
 // theo cùng luật trần 800 dòng; import NGƯỢC, KHÔNG re-export tên nào của ba file kia.
 export * from "./social-api-groups";
+// S16-SOCIAL-BE-2D (additive): khối kudos/poll/idea của thẻ bài + DTO kết quả poll 041..044 (DỜI từ
+// ./social-api-polls). File LÁ — chỉ import ./social; KHÔNG file social nào được re-export tên của nó.
+export * from "./social-feed-blocks";
 export * from "./social-api-polls";
 // S16-SOCIAL-BE-2B-2 (additive): DTO 2 route SÁNG KIẾN (`045..046`) + 2 route VINH DANH (`047..048`).
 // Cùng luật: import NGƯỢC từ ./social, ./social-api, ./social-api-b — KHÔNG re-export tên nào của chúng.
