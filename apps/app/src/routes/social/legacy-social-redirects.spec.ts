@@ -8,7 +8,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { isRedirect } from "@tanstack/react-router";
-import { LEGACY_SOCIAL_REDIRECTS, legacyRedirectBeforeLoad } from "./legacy-social-redirects";
+import {
+  LEGACY_SOCIAL_GROUP_REDIRECT,
+  LEGACY_SOCIAL_POST_REDIRECT,
+  LEGACY_SOCIAL_REDIRECTS,
+  legacyRedirectBeforeLoad,
+} from "./legacy-social-redirects";
 
 /** Template link của NOTI SOCIAL (migration 0581) có route FE đích trong lát này. */
 const NOTI_TEMPLATES_COVERED = ["/social/groups/{group_id}", "/social/posts/{post_id}"];
@@ -37,6 +42,19 @@ describe("N1 — chuyển hướng link NOTI cũ", () => {
     expect(opts.to).toBe(entry.to);
     expect(opts.params).toEqual({ [entry.param]: id });
     expect(opts.replace).toBe(true);
+  });
+
+  it("hằng có tên KHÔNG ghép chéo: nhóm → nhóm, bài → bài (router đọc `path` từ chính hằng)", () => {
+    expect(LEGACY_SOCIAL_GROUP_REDIRECT).toMatchObject({
+      path: "/social/groups/$groupId",
+      to: "/feed/groups/$groupId",
+      param: "groupId",
+    });
+    expect(LEGACY_SOCIAL_POST_REDIRECT).toMatchObject({
+      path: "/social/posts/$postId",
+      to: "/feed/posts/$postId",
+      param: "postId",
+    });
   });
 
   it("đường cũ dưới `/social/…`, đích dưới `/feed/…` (không đè route SSO `/social` khớp đúng)", () => {

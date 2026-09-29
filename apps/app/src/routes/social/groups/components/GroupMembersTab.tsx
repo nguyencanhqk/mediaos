@@ -98,8 +98,9 @@ export function GroupMembersTab({ groupId, caps }: GroupMembersTabProps): React.
           ))}
         </div>
       ) : query.isError || !query.data ? (
-        <div data-testid="group-members-error" className="rounded-lg border border-border bg-card p-4 text-sm">
+        <div role="alert" data-testid="group-members-error" className="rounded-lg border border-border bg-card p-4 text-sm">
           <p className="font-medium text-foreground">{t("groups.members.errorTitle")}</p>
+          <p className="text-muted-foreground">{t("state.errorBody")}</p>
           <Button size="sm" variant="outline" className="mt-2" onClick={() => void query.refetch()}>
             {t("state.retry")}
           </Button>
@@ -136,9 +137,11 @@ export function GroupMembersTab({ groupId, caps }: GroupMembersTabProps): React.
                       data-testid={`group-member-role-${m.userId}`}
                       value={m.role}
                       disabled={busy}
-                      onChange={(e) =>
-                        roleMutation.mutate({ userId: m.userId, role: e.target.value as GroupRoleValue })
-                      }
+                      onChange={(e) => {
+                        // Thu hẹp từ giá trị DOM về đúng union — không ép kiểu một chuỗi tuỳ ý.
+                        const role = GROUP_ROLE_OPTIONS.find((r) => r === e.target.value);
+                        if (role && role !== m.role) roleMutation.mutate({ userId: m.userId, role });
+                      }}
                       className="h-8 w-40"
                     >
                       {GROUP_ROLE_OPTIONS.map((r) => (

@@ -114,7 +114,7 @@ export function GroupSettingsTab({ group, caps }: GroupSettingsTabProps): React.
         className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (canSave) update.mutate(changes as UpdateFeedGroupDto);
+          if (canSave) update.mutate(changes);
         }}
       >
         <h2 className="text-sm font-semibold text-foreground">{t("groups.settings.title")}</h2>

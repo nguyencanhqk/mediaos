@@ -95,9 +95,12 @@ export function GroupPostsTab({ group, caps }: GroupPostsTabProps): React.ReactE
         clearDroppedMentions={createPost.clearDroppedMentions}
       />
 
-      {caps.canPost ? (
+      {caps.canPost && (
         <FeedComposer groupId={group.id} onSubmit={createPost.submit} isSubmitting={createPost.isPending} />
-      ) : (
+      )}
+      {/* Chỉ khi THỰC SỰ bấm «Tham gia» được: hàng `pending` trên nhóm public (sau khi nhóm kín đổi
+          sang công khai, `033` không tự duyệt) chỉ có «Huỷ yêu cầu» — mời «tham gia» là 409. */}
+      {caps.canJoin && (
         <p data-testid="group-join-to-post" className="text-sm text-muted-foreground">
           {t("groups.actions.publicNonMemberHint")}
         </p>

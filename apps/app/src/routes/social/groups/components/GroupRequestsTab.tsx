@@ -65,8 +65,9 @@ export function GroupRequestsTab({ groupId }: GroupRequestsTabProps): React.Reac
       {query.isLoading ? (
         <div role="status" aria-label={t("groups.requests.loadingAria")} className="h-12 animate-pulse rounded-lg bg-muted" />
       ) : query.isError || !query.data ? (
-        <div data-testid="group-requests-error" className="rounded-lg border border-border bg-card p-4 text-sm">
+        <div role="alert" data-testid="group-requests-error" className="rounded-lg border border-border bg-card p-4 text-sm">
           <p className="font-medium text-foreground">{t("groups.requests.errorTitle")}</p>
+          <p className="text-muted-foreground">{t("state.errorBody")}</p>
           <Button size="sm" variant="outline" className="mt-2" onClick={() => void query.refetch()}>
             {t("state.retry")}
           </Button>

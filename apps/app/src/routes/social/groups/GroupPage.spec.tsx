@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import { createFeedPostSchema } from "@mediaos/contracts";
+import { socialKeys } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import {
   GROUP_ERR,
@@ -79,7 +80,7 @@ function renderPage() {
     </QueryClientProvider>
   );
   const utils = render(tree());
-  return { ...utils, rerenderPage: () => utils.rerender(tree()) };
+  return { ...utils, client, rerenderPage: () => utils.rerender(tree()) };
 }
 
 beforeEach(() => {
@@ -348,11 +349,17 @@ describe("🔴 H2 — đổi `$groupId` KHÔNG mang state của nhóm cũ sang",
         }),
       ),
     );
-    const { rerenderPage } = renderPage();
+    const { rerenderPage, client } = renderPage();
     await screen.findByText("Nhóm A");
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Nháp cho nhóm A" } });
     expect(screen.getByRole("textbox")).toHaveValue("Nháp cho nhóm A");
 
+    // B ĐÃ có trong cache (đi A → B → A trong gcTime) ⇒ không qua skeleton; chỉ `key` mới dọn state
+    // (gate LIGHT TS M1: không có dòng này thì ca xanh cả khi gỡ `key`).
+    client.setQueryData(
+      socialKeys.groups.detail(OTHER_ID),
+      makeGroup({ id: OTHER_ID, name: "Nhóm B", myRole: "member", myStatus: "active" }),
+    );
     mockParams = { groupId: OTHER_ID };
     rerenderPage();
     await screen.findByText("Nhóm B");
@@ -371,11 +378,87 @@ describe("🔴 H2 — đổi `$groupId` KHÔNG mang state của nhóm cũ sang",
         }),
       ),
     );
-    const { rerenderPage } = renderPage();
+    const { rerenderPage, client } = renderPage();
     expect(await screen.findByTestId("group-settings-name")).toHaveValue("Nhóm A");
     fireEvent.change(screen.getByTestId("group-settings-name"), { target: { value: "Sửa dở A" } });
+    client.setQueryData(
+      socialKeys.groups.detail(OTHER_ID),
+      makeGroup({ id: OTHER_ID, name: "Nhóm B", myRole: "owner", myStatus: "active" }),
+    );
     mockParams = { groupId: OTHER_ID };
     rerenderPage();
     await waitFor(() => expect(screen.getByTestId("group-settings-name")).toHaveValue("Nhóm B"));
+  });
+});
+
+describe("🔴 gate LIGHT HIGH-1 — state lời mời SỐNG qua lượt refetch `032` đang 404", () => {
+  it("409 khi xin vào ⇒ banner lý do VẪN CÒN, `032` KHÔNG bị kéo lại (không nháy skeleton)", async () => {
+    routeSearch = { invite: true };
+    // Lượt 2 (nếu có) treo mãi ⇒ nếu code invalidate chi tiết, trang kẹt skeleton và ca đỏ.
+    get.mockRejectedValueOnce(GROUP_ERR.notFound()).mockImplementation(() => new Promise(() => {}));
+    join.mockRejectedValue(GROUP_ERR.exists());
+    renderPage();
+    fireEvent.click(await screen.findByTestId("group-invite-request"));
+    expect(await screen.findByTestId("feed-action-error")).toHaveAttribute("data-reason", "alreadyMember");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("group-not-found")).toBeTruthy();
+    expect(screen.getByTestId("feed-action-error")).toHaveAttribute("data-reason", "alreadyMember");
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("«đã gửi» sống qua một lượt refetch `032` thật (vd invalidate từ nơi khác) — state ở GroupPageBody", async () => {
+    routeSearch = { invite: true };
+    // Lượt refetch trả 404 SAU 30ms: mock từ chối ngay trong microtask thì trạng thái `pending` chưa kịp
+    // render và ca xanh cả khi state nằm trong `GroupNotFound` (bẫy gate LIGHT đã chỉ).
+    get
+      .mockRejectedValueOnce(GROUP_ERR.notFound())
+      .mockImplementation(
+        () => new Promise((_, reject) => setTimeout(() => reject(GROUP_ERR.notFound()), 30)),
+      );
+    join.mockResolvedValue(makeGroup({ visibility: "private", myRole: "member", myStatus: "pending" }));
+    const { client } = renderPage();
+    fireEvent.click(await screen.findByTestId("group-invite-request"));
+    await screen.findByTestId("group-invite-sent");
+    void client.invalidateQueries({ queryKey: socialKeys.groups.detail(GROUP_ID) });
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    // Trong lúc chờ: trang đang ở skeleton (query không có data ⇒ status 'pending').
+    await waitFor(() => expect(screen.queryByTestId("group-not-found")).toBeNull());
+    expect(await screen.findByTestId("group-invite-sent")).toBeTruthy();
+    expect(screen.queryByTestId("group-invite-request")).toBeNull();
+  });
+});
+
+describe("🔴 gate LIGHT MEDIUM-1 — refetch nền hỏng KHÔNG thay cả trang bằng khối lỗi", () => {
+  it("đã có dữ liệu + lượt kéo lại 500 ⇒ GIỮ header + nháp ô soạn, hiện cảnh báo nhỏ", async () => {
+    get.mockResolvedValueOnce(makeGroup({ myRole: "member", myStatus: "active" }));
+    const { client } = renderPage();
+    await screen.findByTestId("group-posts");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Nháp đang gõ" } });
+    get.mockRejectedValue(GROUP_ERR.server());
+    await client.invalidateQueries({ queryKey: socialKeys.groups.detail(GROUP_ID) });
+    expect(await screen.findByTestId("group-refresh-error")).toBeTruthy();
+    expect(screen.queryByTestId("group-error")).toBeNull();
+    expect(screen.getByTestId("group-header")).toBeTruthy();
+    expect(screen.getByRole("textbox")).toHaveValue("Nháp đang gõ");
+  });
+});
+
+describe("gate LIGHT LOW — gợi ý «Tham gia để đăng bài» CHỈ khi bấm «Tham gia» được", () => {
+  it("hàng `pending` trên nhóm public (nhóm kín vừa đổi sang công khai) ⇒ KHÔNG gợi ý", async () => {
+    get.mockResolvedValue(makeGroup({ myRole: "member", myStatus: "pending" }));
+    renderPage();
+    await screen.findByTestId("group-cancel-request");
+    expect(screen.queryByTestId("group-join-to-post")).toBeNull();
+  });
+
+  it("manage rời nhóm KÍN ⇒ KHÔNG bị đẩy ra danh sách (vẫn xem được nhóm)", async () => {
+    setCaps({ "view:feed": true, "create:feed-post": true, "manage:feed-group": true });
+    get.mockResolvedValue(makeGroup({ visibility: "private", myRole: "member", myStatus: "active" }));
+    leave.mockResolvedValue({ left: true });
+    renderPage();
+    fireEvent.click(await screen.findByTestId("group-leave"));
+    confirmInDialog(t("groups.actions.leave"));
+    await waitFor(() => expect(leave).toHaveBeenCalledTimes(1));
+    expect(navigateSpy).not.toHaveBeenCalledWith({ to: "/feed/groups", replace: true });
   });
 });

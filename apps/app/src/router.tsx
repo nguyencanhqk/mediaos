@@ -73,7 +73,8 @@ import {
   validateGroupsRouteSearch,
 } from "@/routes/social/groups/lib/group-route-search";
 import {
-  LEGACY_SOCIAL_REDIRECTS,
+  LEGACY_SOCIAL_GROUP_REDIRECT,
+  LEGACY_SOCIAL_POST_REDIRECT,
   legacyRedirectBeforeLoad,
 } from "@/routes/social/legacy-social-redirects";
 import { payrollInsuranceIssueEnum, type PayrollInsuranceIssue } from "@mediaos/contracts";
@@ -3207,16 +3208,16 @@ const feedGroupDetailRoute = createRoute({
 // S16-SOCIAL-FE-2B (owner ký O2) — link NOTI `/social/groups/{id}` · `/social/posts/{id}` đang rơi vào
 // 404 chung. Dựng TẠI ĐÂY từ dữ liệu thuần của `legacy-social-redirects.ts` (tự dựng ở file kia là
 // import vòng qua `rootRoute`). `socialRedirectRoute` (`/social` khớp đúng) KHÔNG đụng.
-const [legacySocialGroupRedirect, legacySocialPostRedirect] = LEGACY_SOCIAL_REDIRECTS;
+// Hằng CÓ TÊN (không ghép theo vị trí mảng): `path` đọc từ chính mục đó ⇒ ca N1 đo đúng thứ router dùng.
 const legacySocialGroupRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/social/groups/$groupId",
-  beforeLoad: legacyRedirectBeforeLoad(legacySocialGroupRedirect!),
+  path: LEGACY_SOCIAL_GROUP_REDIRECT.path,
+  beforeLoad: legacyRedirectBeforeLoad(LEGACY_SOCIAL_GROUP_REDIRECT),
 });
 const legacySocialPostRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/social/posts/$postId",
-  beforeLoad: legacyRedirectBeforeLoad(legacySocialPostRedirect!),
+  path: LEGACY_SOCIAL_POST_REDIRECT.path,
+  beforeLoad: legacyRedirectBeforeLoad(LEGACY_SOCIAL_POST_REDIRECT),
 });
 
 // S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ

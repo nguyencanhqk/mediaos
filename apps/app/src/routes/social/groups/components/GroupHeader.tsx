@@ -27,11 +27,13 @@ import { useGroupMembership } from "../lib/use-group-membership";
 interface GroupHeaderProps {
   group: FeedGroupDto;
   caps: GroupCapabilities;
+  /** `manage:feed-group` vẫn xem được nhóm kín sau khi rời ⇒ KHÔNG đẩy ra danh sách. */
+  canManage: boolean;
 }
 
 type CopyState = "idle" | "copied" | "fallback";
 
-export function GroupHeader({ group, caps }: GroupHeaderProps): React.ReactElement {
+export function GroupHeader({ group, caps, canManage }: GroupHeaderProps): React.ReactElement {
   const { t } = useTranslation("social");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -41,7 +43,7 @@ export function GroupHeader({ group, caps }: GroupHeaderProps): React.ReactEleme
   const membership = useGroupMembership(group.id, {
     onLeft: async () => {
       setConfirmLeave(false);
-      if (group.visibility === "private") {
+      if (group.visibility === "private" && !canManage) {
         await navigate({ to: "/feed/groups", replace: true });
         queryClient.removeQueries({ queryKey: socialKeys.groups.detail(group.id) });
       }

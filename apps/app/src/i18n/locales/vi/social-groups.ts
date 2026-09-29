@@ -84,6 +84,7 @@ export default {
     myRole: "Vai trò của bạn: {{role}}",
     loadingAria: "Đang tải nhóm",
     errorTitle: "Không tải được nhóm",
+    refreshError: "Không làm mới được thông tin nhóm — đang hiện dữ liệu gần nhất.",
     manageViewer:
       "Bạn đang xem nhóm riêng tư này với quyền quản trị. Bài viết của nhóm chỉ hiển thị với thành viên.",
     emptyPosts: "Nhóm chưa có bài viết nào.",

@@ -9,43 +9,25 @@
  * │ người đã cầm UUID 122-bit — BE đã chấp nhận (`social-groups.repository.ts#findLiveGroupTx`).   │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Luật cứng hoá (plan §8 M6): `join` CHỈ chạy khi BẤM (link không được ép nạn nhân gửi yêu cầu) ·
- * `groupId` không phải UUID ⇒ không có nút · DTO 201 của `035` (mang tên/mô tả nhóm kín) KHÔNG hiện và
- * KHÔNG ghi vào cache chi tiết · «đã gửi» là state CỦA COMPONENT NÀY nên sống qua lượt refetch.
+ * Component TRÌNH BÀY thuần: lượt xin vào + «đã gửi» + lỗi sống ở `useInviteRequest` do
+ * `GroupPageBody` giữ (gate LIGHT HIGH-1). Lý do: query `032` đang 404 thì KHÔNG có `data`, và
+ * TanStack v5 đặt lại `status:'pending'` cho mọi lượt refetch của query không có `data`
+ * (`query-core` `fetchState`) ⇒ trang vẽ skeleton, component này UNMOUNT — state đặt ở đây sẽ mất
+ * (banner lý do nháy rồi biến, nút bật lại như chưa bấm).
  */
-import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Button } from "@mediaos/ui";
-import { socialGroupsApi, socialKeys } from "@mediaos/web-core";
 import { ActionErrorBanner } from "../../feed/components/ActionErrorBanner";
-import { useGroupErrorState } from "../lib/use-group-membership";
+import type { UseInviteRequestResult } from "../lib/use-invite-request";
 
 interface GroupNotFoundProps {
-  /** `null` khi `$groupId` không phải UUID — khi đó KHÔNG có đường xin vào. */
-  groupId: string | null;
-  invite: boolean;
+  /** Vắng/`null` ⇒ không có đường xin vào (không `?invite=1`, hoặc `$groupId` không phải UUID). */
+  invite?: UseInviteRequestResult | null;
 }
 
-export function GroupNotFound({ groupId, invite }: GroupNotFoundProps): React.ReactElement {
+export function GroupNotFound({ invite }: GroupNotFoundProps): React.ReactElement {
   const { t } = useTranslation("social");
-  const queryClient = useQueryClient();
-  const { error, setError, fail } = useGroupErrorState();
-  const [sent, setSent] = React.useState(false);
-
-  const request = useMutation({
-    mutationFn: (id: string) => socialGroupsApi.join(id),
-    onMutate: () => setError(null),
-    // CHỦ Ý bỏ qua DTO trả về (tên/mô tả nhóm kín) — chỉ làm mới DANH SÁCH (hàng `pending` giờ hiện ở 030).
-    onSuccess: () => {
-      setSent(true);
-      void queryClient.invalidateQueries({ queryKey: socialKeys.groups.lists() });
-    },
-    onError: fail("groupJoin", "join"),
-  });
-
-  const canRequest = invite && groupId !== null;
 
   return (
     <div
@@ -55,30 +37,30 @@ export function GroupNotFound({ groupId, invite }: GroupNotFoundProps): React.Re
       <h1 className="text-lg font-semibold text-foreground">{t("groups.notFound.title")}</h1>
       <p className="text-sm text-muted-foreground">{t("groups.notFound.body")}</p>
 
-      {canRequest && !sent && (
+      {invite && !invite.sent && (
         <>
           <p className="text-sm text-muted-foreground">{t("groups.notFound.inviteBody")}</p>
           <Button
             size="sm"
             data-testid="group-invite-request"
-            disabled={request.isPending}
-            onClick={() => request.mutate(groupId)}
+            disabled={invite.isPending}
+            onClick={invite.request}
           >
-            {request.isPending ? t("groups.actions.working") : t("groups.notFound.inviteSubmit")}
+            {invite.isPending ? t("groups.actions.working") : t("groups.notFound.inviteSubmit")}
           </Button>
         </>
       )}
-      {sent && (
+      {invite?.sent && (
         <p role="status" data-testid="group-invite-sent" className="text-sm text-foreground">
           {t("groups.notFound.inviteSent")}
         </p>
       )}
-      {error && (
+      {invite?.error && (
         <ActionErrorBanner
-          kind={error.kind}
-          forbidden={error.forbidden}
-          reason={error.reason}
-          onDismiss={() => setError(null)}
+          kind={invite.error.kind}
+          forbidden={invite.error.forbidden}
+          reason={invite.error.reason}
+          onDismiss={invite.clearError}
         />
       )}
 

@@ -29,6 +29,16 @@ import { GroupRequestsTab } from "./components/GroupRequestsTab";
 import { GroupSettingsTab } from "./components/GroupSettingsTab";
 import { groupCapabilities, type GroupCapabilities } from "./lib/group-capabilities";
 import { isGroupId, type GroupDetailRouteSearch, type GroupTab } from "./lib/group-route-search";
+import { useInviteRequest } from "./lib/use-invite-request";
+
+/** Query `032` đang là 404 ĐÃ BIẾT (không có dữ liệu) — kéo lại không nói thêm gì. */
+function isKnownNotFound(query: { state: { error: unknown; data: unknown } }): boolean {
+  return (
+    query.state.data === undefined &&
+    query.state.error instanceof ApiError &&
+    query.state.error.status === 404
+  );
+}
 
 export function GroupPage(): React.ReactElement {
   const { groupId } = useParams({ strict: false }) as { groupId?: string };
@@ -36,7 +46,7 @@ export function GroupPage(): React.ReactElement {
   const invite = search.invite === true;
 
   // Không phải UUID ⇒ `032` trả 400 (ParseUUIDPipe) chứ không 404 — màn 404 NGAY, không gọi API, không nút mời.
-  if (!isGroupId(groupId)) return <GroupNotFound groupId={null} invite={false} />;
+  if (!isGroupId(groupId)) return <GroupNotFound />;
   return <GroupPageBody key={groupId} groupId={groupId} tab={search.tab} invite={invite} />;
 }
 
@@ -59,12 +69,18 @@ function GroupPageBody({ groupId, tab, invite }: GroupPageBodyProps): React.Reac
   const { t } = useTranslation("social");
   const navigate = useNavigate();
   const canManage = useCan("manage", "feed-group");
+  // Ở ĐÂY chứ không trong `GroupNotFound`: query 404 không có `data` ⇒ mỗi lượt refetch TanStack v5 đặt
+  // lại `status:'pending'` ⇒ `GroupNotFound` unmount ⇒ «đã gửi»/lý do lỗi mất (gate LIGHT HIGH-1).
+  const inviteRequest = useInviteRequest(groupId);
 
   const groupQuery = useQuery({
     queryKey: socialKeys.groups.detail(groupId),
     queryFn: () => socialGroupsApi.get(groupId),
     // 404 là CÂU TRẢ LỜI, không phải sự cố — thử lại chỉ làm màn «không tìm thấy» hiện chậm.
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+    // …và cũng không kéo lại khi quay lại tab / có mạng lại: màn 404 sẽ nháy skeleton vô ích.
+    refetchOnWindowFocus: (query) => !isKnownNotFound(query),
+    refetchOnReconnect: (query) => !isKnownNotFound(query),
   });
 
   if (groupQuery.isLoading) {
@@ -77,10 +93,13 @@ function GroupPageBody({ groupId, tab, invite }: GroupPageBodyProps): React.Reac
   }
 
   if (groupQuery.error instanceof ApiError && groupQuery.error.status === 404) {
-    return <GroupNotFound groupId={groupId} invite={invite} />;
+    return <GroupNotFound invite={invite ? inviteRequest : null} />;
   }
 
-  if (groupQuery.isError || !groupQuery.data) {
+  // CHỈ khi CHƯA có dữ liệu. Có dữ liệu mà lượt refetch nền hỏng (5xx/timeout sau khi mutation
+  // invalidate) ⇒ GIỮ trang + cảnh báo nhỏ bên dưới: thay cả trang bằng khối lỗi là unmount ô soạn
+  // và form cài đặt — mất nháp của người dùng vì một lượt tải lại phụ (gate LIGHT MEDIUM-1).
+  if (!groupQuery.data) {
     return (
       <div role="alert" data-testid="group-error" className="rounded-lg border border-border bg-card p-4 text-sm">
         <p className="font-medium text-foreground">{t("groups.page.errorTitle")}</p>
@@ -105,7 +124,19 @@ function GroupPageBody({ groupId, tab, invite }: GroupPageBodyProps): React.Reac
 
   return (
     <div className="flex flex-col gap-4" data-testid="group-page">
-      <GroupHeader group={group} caps={caps} />
+      {groupQuery.isError && (
+        <div
+          role="alert"
+          data-testid="group-refresh-error"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+        >
+          <span>{t("groups.page.refreshError")}</span>
+          <Button size="sm" variant="outline" onClick={() => void groupQuery.refetch()}>
+            {t("state.retry")}
+          </Button>
+        </div>
+      )}
+      <GroupHeader group={group} caps={caps} canManage={canManage} />
 
       {tabs.length > 1 && (
         <div role="group" aria-label={t("groups.page.tabsAria")} className="flex flex-wrap gap-2">

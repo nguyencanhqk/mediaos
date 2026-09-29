@@ -128,6 +128,7 @@ export function GroupsPage(): React.ReactElement {
         </div>
       ) : query.isError || !query.data ? (
         <div
+          role="alert"
           data-testid="groups-error"
           className="rounded-lg border border-border bg-card p-4 text-sm"
         >

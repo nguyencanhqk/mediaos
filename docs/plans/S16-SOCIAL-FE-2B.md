@@ -341,3 +341,45 @@ client) · mọi file trong `paths`.
 | L | `-u` snapshot CHỈ file sidebar: `pnpm --filter @mediaos/app exec vitest run src/layouts/workspace/sidebar-registry.snapshot.spec.ts -u` · L1 thêm ca ALLOW (hàng active/public CÓ `href=/feed/groups/<id>`, mock `Link` thay `$groupId`) và assert SAU trạng thái đã tải · ca socket/badge render `GroupPage` chứ không chỉ tab · R1 thêm 404 không số (người khác đã xử lý) · 1 ca lặp mọi kind × {forbidden, generic} + mọi `reason` không ra khoá thô · `lastOwner` nhắc «hoặc xoá nhóm» · S1 tên rỗng/khoảng trắng ⇒ khoá Lưu · spec riêng `group-route-search` · D10 chỉ tách khi `FeedPage.spec` giữ NGUYÊN không sửa ca nào |
 | D1 (tự vá) | Tiền lệ `feedDeletedResultSchema` (`web-core/social-api.ts:93-103`: BE trả literal thẳng từ service, không qua contracts) ⇒ `feedGroupLeftResultSchema` khai ở `social-groups-api.ts` (web-core), `.strict()` + `literal(true)` như tiền lệ; contracts chỉ sửa docblock (đã làm). K1 chuyển thành ca trong spec web-core |
 | Open Q | FE-2 literal `in_progress` — ledger đã `finished` (#551) 29/09 03:07Z ⇒ overlay = done; STATUS xác nhận FE-2B không còn «cần FE-2» |
+
+## 9. Sổ vết thi công (29/09/2026)
+
+| Bước | Commit | Đo |
+| --- | --- | --- |
+| T0 plan v2 + backlog + seed `S16-SOCIAL-GROUPERR-1` | `6a4cab0f` | backlog 534 item, 0 trùng id |
+| T1–T3 contracts docblock + `socialGroupsApi` + `socialKeys.groups` + registry | `959081df` | web-core 188/188 (13 ca mới), typecheck sạch |
+| T4–T5 lõi thuần + i18n + `ActionErrorBanner.reason` | `83af0400` | 98 ca (G1 vét cạn 20 tổ hợp, E1 chuỗi BE thật, H1 parser router thật, mọi kind/reason không ra khoá thô) |
+| T6 composer nhóm + `useCreatePost` | `06015a21` | `FeedPage.spec` + `FeedComposer.spec` cũ xanh KHÔNG sửa ca nào (48/48) + 9 ca mới |
+| T7–T9 + T11 router màn Nhóm | `46b06c4b` | GroupsPage 16 · GroupPage 21 (gồm H2 remount) · tab quản trị 16 · redirect 4 |
+| T10–T11 widget + wiring + prune + snapshot | `548938d7` | snapshot +1 dòng mỗi file (đúng dự đoán) |
+
+- `test:social-cov`: **550/550**, 97.56 / 92.03 / 86.77 / 97.56 (ngưỡng 80). `check.sh --quick` XANH.
+- Mutant (sao lưu file trước khi cấy): M1 bỏ `onError` leave ⇒ đỏ đúng ca «chủ nhóm cuối» · M2
+  `canReadPosts ∨ canManage` ⇒ 3 ca G1 · M3 join gửi khoá ⇒ 1 ca W1 · M4 gộp nhánh 404 ⇒ 3 ca D1 · M5 bỏ
+  vế `myStatus` ⇒ 5 ca G1. Không mutant nào đỏ vì lỗi biên dịch.
+- **Lệch plan có chủ ý:** (a) D15 `039` mời ra chỉ invalidate `groups.allOf()` (không `socialKeys.all`):
+  mời NGƯỜI KHÁC ra không đổi quyền đọc bài của chính actor; (b) D1 `feedGroupLeftResultSchema` ở web-core
+  (tiền lệ `feedDeletedResultSchema`), contracts chỉ sửa docblock; (c) thêm `useGroupErrorState`/
+  `useGroupMembership` dùng chung hàng danh sách + header + các tab (một đường lỗi/cache).
+- Nợ phát hiện khi thi công: `feed-route-search.ts` (FE-1) cùng lỗi H1 — `?q=2024` qua `JSON.parse` thành
+  số rồi bị bỏ (`typeof === "string"`) ⇒ tìm kiếm số trên `/feed` mất từ khoá. Ngoài `paths` lát này? — nằm
+  trong `routes/social/**` nhưng thuộc màn FE-1; ghi PR, chưa vá.
+
+### 9.1 Gate LIGHT (29/09/2026) — typescript-reviewer PASS · react-reviewer BLOCK ⇒ đã vá
+
+Cả hai reviewer xác nhận độc lập: bảng D4 khớp cổng BE từng dòng · D3 khớp tiền tố + hình dạng dây ·
+D2 bỏ khoá join/leave đúng · oracle 404 trung tính · không suy diễn vai ngoài `group-capabilities.ts`.
+`check.sh --all --lane-db=socialfe2b` XANH 9/9 trên `548938d7` (2 flake có sẵn không nổ lượt này).
+
+| Finding | Vá | RED (spec mới chạy trên code `548938d7`) |
+| --- | --- | --- |
+| **HIGH** (react) lỗi/«đã gửi» ở màn 404 mời BIẾN MẤT: `fail()` invalidate `groups.allOf()` ⇒ refetch `032` không `data` ⇒ TanStack v5 `fetchState` đặt `status:'pending'` ⇒ `GroupNotFound` unmount | state + mutation dời vào `useInviteRequest` do `GroupPageBody` giữ; lỗi mời KHÔNG invalidate chi tiết; query 404 đã biết không tự refetch khi focus/reconnect | 2 ca đỏ (ca «đã gửi sống qua refetch» phải treo lượt refetch 30ms — mock từ chối trong microtask thì `pending` không kịp render, xanh giả) |
+| **MEDIUM** (react) refetch nền hỏng khi ĐÃ có dữ liệu ⇒ cả trang thành khối lỗi ⇒ mất nháp ô soạn/form | khối lỗi chỉ khi `!data`; có dữ liệu ⇒ cảnh báo nhỏ `group-refresh-error` + «Thử lại» | 1 ca đỏ |
+| **MEDIUM** (ts) ca H2 xanh cả khi gỡ `key` (B chưa có cache ⇒ skeleton tự unmount) | seed B vào cache trước rerender | mutant gỡ `key` ⇒ 2 ca H2 đỏ |
+| **MEDIUM** (ts) + LOW (react) route chuyển hướng ghép theo VỊ TRÍ mảng + `!` + `as never`, `path` hard-code | union phân biệt + 2 hằng có tên; router đọc `path` từ hằng; `beforeLoad` rẽ theo `kind` (không `as`) | ca N1 thêm «không ghép chéo» |
+| LOW (react) gợi ý «Tham gia để đăng bài» với hàng `pending` public | chỉ khi `canJoin` | 1 ca đỏ |
+| LOW (ts) manage rời nhóm kín bị đẩy ra danh sách dù vẫn xem được | điều hướng chỉ khi `!canManage` | 1 ca đỏ |
+| LOW khối lỗi thiếu `role="alert"`/thân · ép kiểu `e.target.value as` · `changes as` | thêm `role="alert"` + `state.errorBody`; thu hẹp bằng `GROUP_ROLE_OPTIONS.find`; bỏ `as` | — |
+| LOW (ts) «điều hướng trước rồi invalidate» không bảo đảm trang cũ đã unmount (Transitioner + Suspense) | GHI NỢ — thẩm mỹ (nháy 1 lượt refetch), không mất dữ liệu | — |
+
+Sau vá: `test:social-cov` **556/556**, 97.42 / 92.08 / 85.9 / 97.42 · `check.sh --quick` XANH.
