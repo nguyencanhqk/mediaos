@@ -9,8 +9,9 @@
  * │ thì bài `type:'poll'` TẠO ĐƯỢC qua API — dù composer của FE-1 chỉ có 2 nút. Bài như thế nằm    │
  * │ ngay trong cùng danh sách mà thẻ này render, và `body` của nó được phép **NULL**               │
  * │ (`chk_feed_posts_body_required` cho phép NULL đúng với `poll`/`kudos`).                        │
- * │ ⇒ Thẻ vẫn vẽ phần CHUNG, bỏ phần thân đặc thù, và **không** vẽ chữ "null". Đây KHÔNG phải mở   │
- * │ phạm vi sang poll: không nút bỏ phiếu, không kết quả, không form (đó là `S16-SOCIAL-FE-2`).    │
+ * │ ⇒ Thẻ vẫn vẽ phần CHUNG, bỏ phần thân đặc thù, và **không** vẽ chữ "null".                    │
+ * │ S16-SOCIAL-FE-2 lát A: `poll` có khối bỏ phiếu (`PollBlock`), `idea` có nhãn + link màn 008.   │
+ * │ `kudos` (và mọi loại lạ) VẪN suy biến như trên cho tới lát C (`S16-SOCIAL-FE-2C`).            │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Phân quyền: xem `PostCardMenu` — mọi quyết định gate của thẻ tập trung ở đó.
@@ -18,12 +19,13 @@
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Bookmark, MessageSquare, Pin } from "lucide-react";
+import { Bookmark, Lightbulb, MessageSquare, Pin } from "lucide-react";
 import { Avatar, cn } from "@mediaos/ui";
 import type { FeedPostDto, FeedReactionEmojiDto, FeedReactionSummaryDto } from "@mediaos/contracts";
 import { PostBody } from "./PostBody";
 import { FeedReactionBar } from "./FeedReactionBar";
 import { PostCardMenu, type PostCardMenuActions } from "./PostCardMenu";
+import { PollBlock } from "./PollBlock";
 import {
   authorDisplayName,
   buildImageGrid,
@@ -124,11 +126,29 @@ export function PostCard({
       </header>
 
       {/*
-        Thân bài. `renderBody === false` (loại lạ / poll) ⇒ bỏ hẳn khối này — xem R16 ở đầu file.
-        `PostBody` cũng tự trả `null` khi `body` rỗng/NULL, nên hai lưới chồng nhau là CỐ Ý.
+        Thân bài. `renderBody === false` (loại lạ / kudos) ⇒ bỏ hẳn khối này — xem R16 ở đầu file.
+        `PostBody` cũng tự trả `null` khi `body` rỗng/NULL (poll không mô tả), nên hai lưới chồng
+        nhau là CỐ Ý.
       */}
       {renderBody && (
         <PostBody body={post.body} collapsible={variant === "feed"} className="mt-3" />
+      )}
+
+      {post.type === "poll" && <PollBlock postId={post.id} isMine={post.isMine} className="mt-3" />}
+
+      {/*
+        Sáng kiến: pill TRẠNG THÁI không có ở đây — `feedPostSchema` không chở nó (plan §2 G4, chờ
+        BE-2D). Nhãn + link sang màn 008, nơi trạng thái và kết quả xét duyệt hiện đầy đủ.
+      */}
+      {post.type === "idea" && (
+        <Link
+          to="/feed/ideas"
+          data-testid="post-idea-badge"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-xs text-accent-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Lightbulb className="h-3.5 w-3.5" aria-hidden="true" />
+          {t("idea.label")} · {t("idea.viewAll")}
+        </Link>
       )}
 
       {grid.shown.length > 0 && (

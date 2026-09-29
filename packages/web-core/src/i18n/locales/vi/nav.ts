@@ -209,6 +209,8 @@ export default {
     socialPostDetail: "Chi tiết bài viết",
     socialNews: "Tin tức",
     socialSaved: "Đã lưu",
+    socialPolls: "Bình chọn",
+    socialIdeas: "Sáng kiến",
     socialProfilePosts: "Trang cá nhân",
     socialMyPosts: "Bài viết của tôi",
     forbidden: "Không có quyền truy cập",

@@ -28,8 +28,9 @@ export default {
 
   // ── Composer (SOC-SCREEN-001) ───────────────────────────────────────────────
   //
-  // ⚠️ ĐÚNG HAI nút: «Chia sẻ» + «Tin tức» (plan D2). Ca C4 assert đúng con số 2. Bình chọn / Sáng
-  // kiến / Vinh danh KHÔNG có khoá ở đây — thêm khoá là bước đầu của việc lén mở phạm vi sang FE-2.
+  // ⚠️ S16-SOCIAL-FE-2 lát A: BỐN nút — «Chia sẻ» · «Tin tức» · «Bình chọn» · «Sáng kiến». Ca C4 assert
+  // tập đó. «Vinh danh» KHÔNG có khoá ở đây cho tới lát C (`S16-SOCIAL-FE-2C`, chặn bởi BE-2D) — thêm
+  // khoá trước là bước đầu của việc lén dựng một nút mà người dùng thường không dùng được.
   composer: {
     placeholder: "Bạn đang nghĩ gì?",
     newsPlaceholder: "Nội dung tin tức gửi tới công ty…",
@@ -50,6 +51,103 @@ export default {
     droppedMentions_other: "Đã bỏ {{count}} lượt nhắc tới người không nằm trong phạm vi bài.",
     bodyTooLong: "Nội dung vượt quá {{max}} ký tự.",
     bodyRequired: "Hãy nhập nội dung trước khi đăng.",
+    typePoll: "Bình chọn",
+    typeIdea: "Sáng kiến",
+    ideaPlaceholder: "Mô tả sáng kiến của bạn…",
+    /** Poll: ô soạn chính là MÔ TẢ TUỲ CHỌN (plan §8 M8) — bỏ trống thì không gửi `body`. */
+    pollDescriptionPlaceholder: "Mô tả thêm (không bắt buộc)…",
+    poll: {
+      question: "Câu hỏi",
+      questionPlaceholder: "Bạn muốn hỏi mọi người điều gì?",
+      optionLabel: "Lựa chọn {{index}}",
+      addOption: "Thêm lựa chọn",
+      removeOption: "Bỏ lựa chọn {{index}}",
+      multipleChoice: "Cho chọn nhiều đáp án",
+      anonymous: "Bỏ phiếu ẩn danh",
+      closesAt: "Hạn kết thúc (không bắt buộc)",
+      /** 🔒 SPEC-16 §13.4 — hai cờ và các lựa chọn BẤT BIẾN sau khi đăng. */
+      immutableHint: "Sau khi đăng, không sửa được lựa chọn, kiểu chọn và chế độ ẩn danh.",
+      questionRequired: "Hãy nhập câu hỏi.",
+      questionTooLong: "Câu hỏi tối đa {{max}} ký tự.",
+      optionsRange: "Bình chọn cần từ 2 đến 10 lựa chọn.",
+      optionEmpty: "Có lựa chọn đang để trống.",
+      optionTooLong: "Mỗi lựa chọn tối đa {{max}} ký tự.",
+      optionDuplicate: "Có hai lựa chọn giống nhau.",
+      closesAtPast: "Hạn kết thúc phải ở tương lai.",
+    },
+  },
+
+  // ── Khối bình chọn trên thẻ bài (SOC-SCREEN-007, plan D5) ─────────────────
+  poll: {
+    anonymous: "Ẩn danh",
+    multipleHint: "Chọn được nhiều đáp án",
+    singleHint: "Chọn một đáp án",
+    totalVoters_one: "{{count}} người đã bỏ phiếu",
+    totalVoters_other: "{{count}} người đã bỏ phiếu",
+    percent: "{{percent}}%",
+    myChoice: "Lựa chọn của bạn",
+    vote: "Bỏ phiếu",
+    changeVote: "Đổi phiếu",
+    voting: "Đang gửi…",
+    withdraw: "Rút phiếu",
+    close: "Kết thúc bình chọn",
+    closing: "Đang kết thúc…",
+    closed: "Đã kết thúc",
+    /** Quá `closesAt` nhưng job chưa chạy — server đã từ chối phiếu (plan §8 H4). */
+    expired: "Đã hết hạn",
+    closesIn: "Kết thúc {{when}}",
+    loadingAria: "Đang tải bình chọn",
+    errorTitle: "Không tải được bình chọn",
+    optionsAria: "Các lựa chọn của bình chọn",
+  },
+
+  // ── Sáng kiến (SOC-SCREEN-008, plan D6/D8) ─────────────────────────────────
+  idea: {
+    label: "Sáng kiến",
+    viewAll: "Xem danh sách sáng kiến",
+    status: {
+      submitted: "Đã gửi",
+      under_review: "Đang xem xét",
+      accepted: "Được chấp nhận",
+      rejected: "Không được chấp nhận",
+    },
+    review: "Xét duyệt",
+    reviewTitle: "Xét duyệt sáng kiến",
+    targetLabel: "Chuyển sang",
+    note: "Ghi chú xét duyệt",
+    notePlaceholder: "Nhận xét gửi tới tác giả…",
+    noteRequired: "Từ chối bắt buộc ghi lý do.",
+    noteTooLong: "Ghi chú tối đa {{max}} ký tự.",
+    /** D21 của BE: mỗi lượt xét duyệt GHI ĐÈ ghi chú cũ (plan §8 L14). */
+    noteReplaces: "Ghi chú mới sẽ thay cho ghi chú hiện có.",
+    submit: "Lưu kết quả",
+    submitting: "Đang lưu…",
+    cancel: "Huỷ",
+    reviewedBy: "Xét duyệt bởi {{name}}",
+    openPost: "Mở bài viết",
+  },
+
+  // ── Màn danh sách bình chọn / sáng kiến ────────────────────────────────────
+  polls: {
+    title: "Bình chọn",
+    tabOpen: "Đang mở",
+    tabClosed: "Đã kết thúc",
+    tabAll: "Tất cả",
+    filterAria: "Lọc bình chọn theo trạng thái",
+    empty: "Chưa có bình chọn nào.",
+    emptyOpen: "Không có bình chọn nào đang mở.",
+  },
+  ideas: {
+    title: "Sáng kiến",
+    filterAll: "Tất cả",
+    filterAria: "Lọc sáng kiến theo trạng thái",
+    empty: "Chưa có sáng kiến nào.",
+    emptyFiltered: "Không có sáng kiến nào ở trạng thái này.",
+  },
+  pagination: {
+    prev: "Trang trước",
+    next: "Trang sau",
+    pageOf: "Trang {{page}}/{{pages}}",
   },
 
   // ── Thẻ bài (UI-07 §34b.4) ─────────────────────────────────────────────────
@@ -220,6 +318,11 @@ export default {
     /** `date` đã được server chuẩn hoá; FE chỉ định dạng hiển thị. */
     onDate: "Ngày {{date}}",
   },
+  openPolls: {
+    title: "Bình chọn đang mở",
+    empty: "Không có bình chọn nào đang mở.",
+    viewAll: "Xem tất cả bình chọn",
+  },
   highlight: {
     title: "Tin nổi bật",
     empty: "Chưa có tin nổi bật.",
@@ -278,6 +381,9 @@ export default {
       commentDelete: "Bạn không có quyền xoá bình luận này.",
       post: "Bạn không có quyền đăng loại bài này.",
       ack: "Bạn không còn quyền xác nhận tin này.",
+      vote: "Bạn không còn quyền bỏ phiếu ở bình chọn này.",
+      pollClose: "Bạn không có quyền kết thúc bình chọn này.",
+      ideaReview: "Bạn không có quyền xét duyệt sáng kiến.",
     },
     generic: {
       reaction: "Không gửi được cảm xúc. Vui lòng thử lại.",
@@ -288,6 +394,11 @@ export default {
       commentDelete: "Không xoá được bình luận. Vui lòng thử lại.",
       post: "Không đăng được bài. Nội dung bạn gõ vẫn còn trong ô soạn.",
       ack: "Không ghi nhận được xác nhận của bạn. Vui lòng thử lại.",
+      // Plan FE-2 §8 M6: server ném mã 016/017/«đang xử lý» cùng một `code` HTTP ⇒ FE KHÔNG phân biệt
+      // được. Chữ trung tính + khối tự tải lại trạng thái (poll vừa đóng sẽ tự hiện «Đã kết thúc»).
+      vote: "Không ghi nhận được phiếu. Trạng thái bình chọn vừa được tải lại — vui lòng kiểm tra rồi thử lại.",
+      pollClose: "Không kết thúc được bình chọn. Trạng thái vừa được tải lại — vui lòng thử lại.",
+      ideaReview: "Không lưu được kết quả xét duyệt. Danh sách vừa được tải lại — có thể người khác đã duyệt trước.",
     },
     dismiss: "Đóng thông báo",
   },

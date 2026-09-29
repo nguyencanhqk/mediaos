@@ -1423,4 +1423,22 @@ export const socialKeys = {
   /** 026 — widget sinh nhật rail phải. `range` = today|week|month nằm trong `params`. */
   birthdays: (params?: Record<string, unknown>) =>
     [...rootKeys.social, "birthdays", params] as const,
+
+  /**
+   * S16-SOCIAL-FE-2 — bình chọn. `list` (040) và `results` (043) là hai nhánh RIÊNG: kết quả của MỘT
+   * poll được ghi thẳng từ phản hồi 041/042/044 (cùng hình dạng), còn danh sách chỉ cần invalidate.
+   */
+  polls: {
+    allOf: () => [...rootKeys.social, "polls"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "polls", "list", params] as const,
+    results: (postId: string) => [...rootKeys.social, "polls", "results", postId] as const,
+  },
+
+  /** S16-SOCIAL-FE-2 — sáng kiến (045). */
+  ideas: {
+    allOf: () => [...rootKeys.social, "ideas"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "ideas", "list", params] as const,
+  },
 };

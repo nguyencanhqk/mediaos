@@ -16,10 +16,24 @@ import type { ReactNode } from "react";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
 import type { FeedPostDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
 import { PostCard } from "./PostCard";
+
+/**
+ * S16-SOCIAL-FE-2 — thẻ `poll` giờ dựng `PollBlock`, khối này tự gọi `043`. Chỉ thay ĐÚNG hàm đó:
+ * `useCan` đọc store thật qua `../stores/auth`, không qua barrel, nên spread `actual` giữ nguyên nó.
+ */
+const getPollResults = vi.fn();
+vi.mock("@mediaos/web-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@mediaos/web-core")>();
+  return {
+    ...actual,
+    socialApi: { ...actual.socialApi, getPollResults: (id: string) => getPollResults(id) },
+  };
+});
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -76,15 +90,18 @@ const noopActions = {
 };
 
 function renderCard(post: Partial<FeedPostDto> = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <I18nextProvider i18n={i18n}>
-      <PostCard
-        post={{ ...BASE_POST, ...post }}
-        onReactionChange={vi.fn()}
-        onToggleSave={vi.fn()}
-        menuActions={noopActions}
-      />
-    </I18nextProvider>,
+    <QueryClientProvider client={client}>
+      <I18nextProvider i18n={i18n}>
+        <PostCard
+          post={{ ...BASE_POST, ...post }}
+          onReactionChange={vi.fn()}
+          onToggleSave={vi.fn()}
+          menuActions={noopActions}
+        />
+      </I18nextProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -177,35 +194,76 @@ describe("C7 — thích/lưu KHÔNG có cặp riêng (SPEC-16 §11.2)", () => {
   });
 });
 
-describe("C27 — bài `type:'poll'` lọt vào dòng cuộn phải SUY BIẾN AN TOÀN (R16)", () => {
-  it("`{type:'poll', body:null}` ⇒ KHÔNG ném, vẫn vẽ tác giả · thời gian · cảm xúc · bình luận", () => {
-    // Từ khi BE-2B-1 (#534) merge, bài poll TẠO ĐƯỢC qua API dù composer FE-1 chỉ có 2 nút.
-    expect(() => renderCard({ type: "poll", body: null })).not.toThrow();
-
+describe("C27 — loại bài CHƯA dựng (kudos · loại lạ) phải SUY BIẾN AN TOÀN (R16)", () => {
+  it("`{type:'kudos', body:null}` ⇒ KHÔNG ném, vẫn vẽ tác giả · cảm xúc · lưu", () => {
+    // Lát C (`S16-SOCIAL-FE-2C`) mới dựng khối kudos — DTO bài không chở người nhận (plan §2 G1).
+    expect(() => renderCard({ type: "kudos", body: null })).not.toThrow();
     expect(screen.getByText("An Nguyễn")).toBeInTheDocument();
     expect(screen.getByTestId("feed-reaction-bar")).toBeInTheDocument();
     expect(screen.getByTestId("post-save-toggle")).toBeInTheDocument();
   });
 
-  it("`body:null` ⇒ KHÔNG render khối thân, và tuyệt đối không in ra chữ «null»", () => {
-    renderCard({ type: "poll", body: null });
+  it("`kudos` / loại lạ ⇒ KHÔNG khối thân, KHÔNG chữ «null», KHÔNG gọi `043`", () => {
+    renderCard({ type: "kudos", body: null });
     expect(screen.queryByTestId("post-body")).toBeNull();
     expect(screen.queryByText(/null|undefined/)).toBeNull();
+    expect(screen.queryByTestId("poll-block")).toBeNull();
+    expect(getPollResults).not.toHaveBeenCalled();
   });
 
-  it("KHÔNG mở phạm vi sang poll: không có khối bỏ phiếu / kết quả nào được vẽ", () => {
-    // Vế ngược của suy biến an toàn: «chịu được bài poll» KHÔNG có nghĩa là «hiện thực poll».
-    // Cụm bình chọn đầy đủ là S16-SOCIAL-FE-2 (nợ N3).
-    renderCard({ type: "poll", body: null });
-    const card = screen.getByTestId("post-card");
-    expect(card.getAttribute("data-post-type")).toBe("poll");
-    expect(within(card).queryByRole("radiogroup")).toBeNull();
-    expect(within(card).queryByTestId("poll-options")).toBeNull();
+  it("loại LẠ có `body` ⇒ vẫn KHÔNG vẽ thân (không đoán nghĩa của loại chưa biết)", () => {
+    renderCard({ type: "announcement", body: "không nên hiện" });
+    expect(screen.queryByTestId("post-body")).toBeNull();
   });
 
-  it("bài `share` bình thường ⇒ thân bài CÓ render (đối chứng cho hai ca trên)", () => {
+  it("bài `share` bình thường ⇒ thân bài CÓ render (đối chứng)", () => {
     renderCard();
     expect(screen.getByTestId("post-body")).toHaveTextContent("xin chào công ty");
+  });
+});
+
+describe("S16-SOCIAL-FE-2 — thẻ `poll` / `idea`", () => {
+  it("`poll` ⇒ dựng khối bỏ phiếu, gọi `043` đúng `postId`", async () => {
+    getPollResults.mockResolvedValue({
+      pollId: "22222222-2222-4222-8222-222222222222",
+      postId: BASE_POST.id,
+      question: "Ăn trưa ở đâu?",
+      status: "open",
+      multipleChoice: false,
+      isAnonymous: false,
+      closesAt: null,
+      totalVoters: 0,
+      myVote: [],
+      options: [],
+    });
+    renderCard({ type: "poll", body: null });
+    expect(await screen.findByTestId("poll-block")).toHaveTextContent("Ăn trưa ở đâu?");
+    expect(getPollResults).toHaveBeenCalledWith(BASE_POST.id);
+  });
+
+  it("`poll` có mô tả ⇒ thân HIỆN (plan §8 M8); không mô tả ⇒ không khối thân", () => {
+    getPollResults.mockReturnValue(new Promise(() => {}));
+    renderCard({ type: "poll", body: "Chọn giúp chỗ liên hoan" });
+    expect(screen.getByTestId("post-body")).toHaveTextContent("Chọn giúp chỗ liên hoan");
+    cleanup();
+    renderCard({ type: "poll", body: null });
+    expect(screen.queryByTestId("post-body")).toBeNull();
+  });
+
+  it("`idea` ⇒ thân + nhãn «Sáng kiến» trỏ `/feed/ideas`", () => {
+    renderCard({ type: "idea", body: "Lắp thêm máy lọc nước" });
+    expect(screen.getByTestId("post-body")).toHaveTextContent("Lắp thêm máy lọc nước");
+    // `Link` bị mock thành `<a href={to}>` trần (bỏ `data-testid`) ⇒ tìm theo nhãn i18n thật.
+    const t = i18n.getFixedT("vi", "social");
+    const badge = screen.getByText(new RegExp(`^${t("idea.label")} ·`)).closest("a");
+    expect(badge).toHaveAttribute("href", "/feed/ideas");
+    expect(screen.queryByTestId("poll-block")).toBeNull();
+  });
+
+  it("thẻ `share` KHÔNG có nhãn sáng kiến, KHÔNG khối poll (đối chứng)", () => {
+    renderCard();
+    expect(screen.queryByText(/^Sáng kiến ·/)).toBeNull();
+    expect(screen.queryByTestId("poll-block")).toBeNull();
   });
 });
 
