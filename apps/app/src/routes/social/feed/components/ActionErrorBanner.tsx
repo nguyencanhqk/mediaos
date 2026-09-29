@@ -24,24 +24,51 @@ import { cn } from "@mediaos/ui";
  * Rộng hơn `FeedActionKind` của `use-feed-actions`: dải này còn phục vụ các đường ghi KHÔNG đi qua
  * hook đó (đăng bài · bình luận · xác nhận đã đọc). Giữ một bộ khoá i18n duy nhất cho tất cả.
  */
-export type ActionErrorKind =
-  | "reaction"
-  | "save"
-  | "moderate"
-  | "delete"
-  | "comment"
-  | "commentDelete"
-  | "post"
-  | "ack"
+export const ACTION_ERROR_KINDS = [
+  "reaction",
+  "save",
+  "moderate",
+  "delete",
+  "comment",
+  "commentDelete",
+  "post",
+  "ack",
   // S16-SOCIAL-FE-2 — chữ trung tính, xem `actionError.generic.vote` (plan §8 M6).
-  | "vote"
-  | "pollClose"
-  | "ideaReview";
+  "vote",
+  "pollClose",
+  "ideaReview",
+  // S16-SOCIAL-FE-2B — màn Nhóm.
+  "groupJoin",
+  "groupLeave",
+  "groupCreate",
+  "groupUpdate",
+  "groupDelete",
+  "memberDecide",
+  "memberRole",
+  "memberRemove",
+] as const;
+export type ActionErrorKind = (typeof ACTION_ERROR_KINDS)[number];
+
+/**
+ * S16-SOCIAL-FE-2B — lý do CỤ THỂ đọc được từ lỗi (`groups/lib/group-errors.ts`). Có `reason` thì câu
+ * chữ nói ĐÚNG lý do (vd «phải còn một chủ nhóm») thay cho câu forbidden/generic — done_when #1 của
+ * FE-2B: 409 ERR-015 phải hiện lý do, không phải «vui lòng thử lại» (thử lại là vô ích).
+ */
+export const ACTION_ERROR_REASONS = [
+  "lastOwner",
+  "alreadyMember",
+  "stateChanged",
+  "groupGone",
+  "nameTaken",
+] as const;
+export type ActionErrorReason = (typeof ACTION_ERROR_REASONS)[number];
 
 export interface ActionErrorBannerProps {
   kind: ActionErrorKind;
   /** 403 — người dùng cần đi hỏi quản trị, thử lại là vô ích. */
   forbidden: boolean;
+  /** Thắng `forbidden`: render `actionError.reason.<reason>`. */
+  reason?: ActionErrorReason | null;
   onDismiss?: () => void;
   className?: string;
 }
@@ -49,23 +76,26 @@ export interface ActionErrorBannerProps {
 export function ActionErrorBanner({
   kind,
   forbidden,
+  reason,
   onDismiss,
   className,
 }: ActionErrorBannerProps): React.ReactElement {
   const { t } = useTranslation("social");
   const group = forbidden ? "forbidden" : "generic";
+  const text = reason ? t(`actionError.reason.${reason}`) : t(`actionError.${group}.${kind}`);
 
   return (
     <div
       role="alert"
       data-testid="feed-action-error"
       data-kind={kind}
+      data-reason={reason ?? undefined}
       className={cn(
         "flex items-start justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2",
         className,
       )}
     >
-      <p className="text-sm text-destructive">{t(`actionError.${group}.${kind}`)}</p>
+      <p className="text-sm text-destructive">{text}</p>
       {onDismiss && (
         <button
           type="button"

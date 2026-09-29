@@ -16,6 +16,8 @@
  * │ không ra") đẩy người dùng đi sửa nhầm thứ. Đừng "gọn hoá" thành một khoá dùng chung.            │
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
+import groups from "./social-groups";
+
 export default {
   // ── Khung portal ────────────────────────────────────────────────────────────
   portal: {
@@ -34,6 +36,9 @@ export default {
   composer: {
     placeholder: "Bạn đang nghĩ gì?",
     newsPlaceholder: "Nội dung tin tức gửi tới công ty…",
+    /** S16-SOCIAL-FE-2B — composer trên trang nhóm (`audience='group'`). */
+    groupPlaceholder: "Viết gì đó cho nhóm…",
+    groupNewsPlaceholder: "Nội dung tin tức gửi tới các thành viên nhóm…",
     typeShare: "Chia sẻ",
     typeNews: "Tin tức",
     typeAria: "Chọn loại bài",
@@ -371,6 +376,9 @@ export default {
   //
   // Tách ĐÔI mỗi hành động thành `forbidden` (403) và lỗi chung, vì hai ca đòi hai hành vi khác
   // nhau: mất quyền thì thử lại bao nhiêu lần cũng vô ích, lỗi mạng/500 thì thử lại là đúng.
+  // ── S16-SOCIAL-FE-2B — màn Nhóm (SOC-SCREEN-006), file riêng `social-groups.ts` ──
+  groups,
+
   actionError: {
     forbidden: {
       reaction: "Bạn không còn quyền bày tỏ cảm xúc ở bài này.",
@@ -384,6 +392,15 @@ export default {
       vote: "Bạn không còn quyền bỏ phiếu ở bình chọn này.",
       pollClose: "Bạn không có quyền kết thúc bình chọn này.",
       ideaReview: "Bạn không có quyền xét duyệt sáng kiến.",
+      // S16-SOCIAL-FE-2B — nhóm. 403 ở đây thường nghĩa là vai của bạn trong nhóm vừa đổi.
+      groupJoin: "Bạn không có quyền tham gia nhóm này.",
+      groupLeave: "Bạn không thể rời nhóm lúc này.",
+      groupCreate: "Bạn không có quyền tạo nhóm.",
+      groupUpdate: "Bạn không còn quyền sửa thông tin nhóm này.",
+      groupDelete: "Chỉ chủ nhóm mới xoá được nhóm.",
+      memberDecide: "Bạn không còn quyền duyệt yêu cầu tham gia của nhóm này.",
+      memberRole: "Bạn không có quyền đổi vai trò này.",
+      memberRemove: "Bạn không còn quyền mời thành viên ra khỏi nhóm này.",
     },
     generic: {
       reaction: "Không gửi được cảm xúc. Vui lòng thử lại.",
@@ -399,6 +416,27 @@ export default {
       vote: "Không ghi nhận được phiếu. Trạng thái bình chọn vừa được tải lại — vui lòng kiểm tra rồi thử lại.",
       pollClose: "Không kết thúc được bình chọn. Trạng thái vừa được tải lại — vui lòng thử lại.",
       ideaReview: "Không lưu được kết quả xét duyệt. Danh sách vừa được tải lại — có thể người khác đã duyệt trước.",
+      groupJoin: "Không tham gia được nhóm. Vui lòng thử lại.",
+      groupLeave: "Không rời được nhóm. Vui lòng thử lại.",
+      groupCreate: "Không tạo được nhóm. Thông tin bạn nhập vẫn còn — vui lòng thử lại.",
+      groupUpdate: "Không lưu được thay đổi. Vui lòng thử lại.",
+      groupDelete: "Không xoá được nhóm. Nhóm vẫn còn — vui lòng thử lại.",
+      memberDecide: "Không xử lý được yêu cầu tham gia. Vui lòng thử lại.",
+      memberRole: "Không đổi được vai trò. Vui lòng thử lại.",
+      memberRemove: "Không mời được thành viên ra khỏi nhóm. Vui lòng thử lại.",
+    },
+    /**
+     * S16-SOCIAL-FE-2B — lý do CỤ THỂ (thắng `forbidden`/`generic`). Đọc từ tiền tố `SOCIAL-ERR-0xx` của
+     * `message` hoặc từ ngữ cảnh route (`groups/lib/group-errors.ts`) vì server không đặt `code` riêng.
+     */
+    reason: {
+      lastOwner:
+        "Nhóm phải luôn còn ít nhất một chủ nhóm. Hãy phong một thành viên khác làm Chủ nhóm trước — hoặc xoá nhóm nếu không còn cần.",
+      alreadyMember: "Bạn đã là thành viên hoặc đã gửi yêu cầu vào nhóm này.",
+      stateChanged:
+        "Trạng thái vừa thay đổi (có thể người khác đã xử lý trước). Dữ liệu đã được tải lại.",
+      groupGone: "Không tìm thấy nhóm.",
+      nameTaken: "Tên nhóm này đã được dùng trong công ty. Hãy chọn tên khác.",
     },
     dismiss: "Đóng thông báo",
   },
