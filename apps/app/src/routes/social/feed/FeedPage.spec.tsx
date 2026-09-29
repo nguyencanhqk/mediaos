@@ -338,3 +338,29 @@ describe("đăng bài", () => {
     });
   });
 });
+
+describe("S16-SOCIAL-FE-2 — plan §8 H5: đăng bài poll/idea làm mới màn 007/008 + widget", () => {
+  it.each([
+    ["poll", ["polls"]],
+    ["idea", ["ideas"]],
+    ["share", []],
+  ] as const)("tạo bài `%s` ⇒ invalidate đúng nhánh %j (không thừa, không thiếu)", async (type, expected) => {
+    const { QueryClient } = await import("@tanstack/react-query");
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    setCaps({ "view:feed": true, "create:feed-post": true });
+    createPost.mockResolvedValue({ ...makePost({ type }), droppedMentions: [] });
+    renderWithProviders(<FeedPage />);
+
+    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "nội dung" } });
+    fireEvent.click(screen.getByTestId("composer-submit"));
+    await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => {
+      const branches = spy.mock.calls
+        .map((c) => (c[0]?.queryKey as readonly unknown[] | undefined)?.[1])
+        .filter((b) => b === "polls" || b === "ideas");
+      expect(branches).toEqual(expected);
+    });
+    spy.mockRestore();
+  });
+});

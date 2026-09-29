@@ -73,10 +73,19 @@ export function useFeedActions(): FeedActions {
     setActionError({ kind, forbidden: err instanceof ApiError && err.status === 403 });
   };
 
-  /** Làm mới đúng hai nhánh mà một thay đổi trên bài có thể ảnh hưởng. */
+  /**
+   * Làm mới đúng các nhánh mà một thay đổi trên bài có thể ảnh hưởng.
+   *
+   * S16-SOCIAL-FE-2 (plan §8 H5): thêm danh sách bình chọn (040) + sáng kiến (045) — xoá/ẩn một bài
+   * poll/idea mà hai danh sách đó không làm mới thì màn 007/008 và widget rail còn một dòng trỏ vào
+   * bài đã 404. Không biết loại bài ở đây (`remove`/`moderate` chỉ có `postId`) nên làm mới cả hai;
+   * hai danh sách ngắn, phân trang OFFSET — rẻ hơn một dòng chết.
+   */
   const invalidatePostLists = (postId?: string): void => {
     void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
     void queryClient.invalidateQueries({ queryKey: socialKeys.saved() });
+    void queryClient.invalidateQueries({ queryKey: socialKeys.polls.allOf() });
+    void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
     if (postId) {
       void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
     }

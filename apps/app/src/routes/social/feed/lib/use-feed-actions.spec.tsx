@@ -249,3 +249,27 @@ describe("buildPostMenuActions — sáu hành động dùng chung của menu ⋯
     expect(actions.moderate).toHaveBeenCalledWith(POST_ID, { hidden: true });
   });
 });
+
+describe("S16-SOCIAL-FE-2 — plan §8 H5: xoá/ẩn bài làm mới danh sách bình chọn + sáng kiến", () => {
+  it("xoá thành công ⇒ invalidate `polls.allOf()` VÀ `ideas.allOf()` (không để dòng trỏ vào bài 404)", async () => {
+    deletePost.mockResolvedValue({ deleted: true });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const spy = vi.spyOn(client, "invalidateQueries");
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+    act(() => result.current.remove(POST_ID));
+
+    await waitFor(() => expect(deletePost).toHaveBeenCalledWith(POST_ID));
+    const { socialKeys } = await import("@mediaos/web-core");
+    await waitFor(() => {
+      const keys = spy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
+      expect(keys).toContain(JSON.stringify(socialKeys.polls.allOf()));
+      expect(keys).toContain(JSON.stringify(socialKeys.ideas.allOf()));
+    });
+  });
+});

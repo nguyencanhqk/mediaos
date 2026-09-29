@@ -1,14 +1,15 @@
 /**
- * S16-SOCIAL-FE-1 — ca **C3 · C4 · C26** trên `FeedComposer`.
+ * S16-SOCIAL-FE-1/FE-2 — ca **C3 · C4 · C26 · P1 · P2 · P3** trên `FeedComposer`.
  *
- * **C4 là cổng CHỐNG MỞ PHẠM VI**, không phải một phép đếm vu vơ: từ khi BE-2B-1 (#534) merge,
- * `feedCreatableTypeSchema` đã nhận `poll`, nên «không có nút bình chọn» chỉ còn được giữ bởi quyết
- * định phạm vi của owner + chính ca này. Xoá nó đi là mở cửa cho FE-2 tràn ngược vào FE-1.
+ * **C4 là cổng CHỐNG MỞ PHẠM VI**, không phải một phép đếm vu vơ: lát A của FE-2 mở ĐÚNG hai nút
+ * (Bình chọn · Sáng kiến). «Vinh danh» phải vắng cho tới lát C (`S16-SOCIAL-FE-2C`) — ca này là thứ
+ * giữ lời hứa đó khi ai đó thấy `create:feed-kudos` có sẵn trong seed.
  */
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
 import { useAuthStore } from "@mediaos/web-core";
+import { createFeedPostSchema } from "@mediaos/contracts";
 import i18n from "@/i18n";
 import { FeedComposer } from "./FeedComposer";
 
@@ -64,35 +65,162 @@ describe("C3 — nút «Tin tức» gác bằng `manage:feed-news`", () => {
   });
 });
 
-describe("C4 — composer có ĐÚNG 2 nút loại bài (chặn scope creep)", () => {
-  it("người có TẤT CẢ quyền feed vẫn chỉ thấy 2 nút — không có poll/idea/kudos", () => {
+describe("C4 — composer có ĐÚNG 4 nút loại bài, KHÔNG «Vinh danh» (chặn scope creep)", () => {
+  it("người có TẤT CẢ quyền feed thấy đúng share · news · poll · idea — không kudos", () => {
     setCaps({
       "view:feed": true,
       "create:feed-post": true,
       "manage:feed-news": true,
-      // Các cặp của track B: có đủ quyền cũng KHÔNG được sinh thêm nút ở FE-1.
       "create:feed-poll": true,
       "create:feed-idea": true,
+      // Có cặp kudos cũng KHÔNG sinh nút ở lát A (plan FE-2 §2 G1/G2).
       "create:feed-kudos": true,
     });
     renderComposer();
 
     const group = screen.getByTestId("composer-type-group");
-    expect(group.querySelectorAll("button")).toHaveLength(2);
-    expect(screen.getByTestId("composer-type-share")).toBeInTheDocument();
-    expect(screen.getByTestId("composer-type-news")).toBeInTheDocument();
-
-    for (const absent of ["poll", "idea", "kudos"]) {
-      expect(screen.queryByTestId(`composer-type-${absent}`)).toBeNull();
+    expect(group.querySelectorAll("button")).toHaveLength(4);
+    for (const present of ["share", "news", "poll", "idea"]) {
+      expect(screen.getByTestId(`composer-type-${present}`)).toBeInTheDocument();
     }
+    expect(screen.queryByTestId("composer-type-kudos")).toBeNull();
   });
 
-  it("wildcard `*:*` cũng KHÔNG sinh thêm nút nào", () => {
+  it("wildcard `*:*` mở GATE (4 nút) nhưng KHÔNG mở PHẠM VI (vẫn không kudos)", () => {
     // Cả 14 cặp `feed-*` đều non-sensitive nên `useCan` có fallback wildcard — đúng thiết kế engine.
-    // Ca này chốt: wildcard mở GATE, không mở PHẠM VI.
     setCaps({ "*:*": true });
     renderComposer();
-    expect(screen.getByTestId("composer-type-group").querySelectorAll("button")).toHaveLength(2);
+    expect(screen.getByTestId("composer-type-group").querySelectorAll("button")).toHaveLength(4);
+    expect(screen.queryByTestId("composer-type-kudos")).toBeNull();
+  });
+});
+
+describe("P1/P2 — nút «Bình chọn» / «Sáng kiến» gác bằng cặp tầng-2 của route 002", () => {
+  it("DENY: chỉ `create:feed-post` ⇒ không nút poll/idea (nút «Chia sẻ» vẫn có — đối chứng)", () => {
+    renderComposer();
+    expect(screen.getByTestId("composer-type-share")).toBeInTheDocument();
+    expect(screen.queryByTestId("composer-type-poll")).toBeNull();
+    expect(screen.queryByTestId("composer-type-idea")).toBeNull();
+  });
+
+  it("ALLOW: `create:feed-poll` ⇒ CHỈ nút poll hiện", () => {
+    setCaps({ "view:feed": true, "create:feed-post": true, "create:feed-poll": true });
+    renderComposer();
+    expect(screen.getByTestId("composer-type-poll")).toBeInTheDocument();
+    expect(screen.queryByTestId("composer-type-idea")).toBeNull();
+  });
+
+  it("ALLOW: `create:feed-idea` ⇒ CHỈ nút idea hiện", () => {
+    setCaps({ "view:feed": true, "create:feed-post": true, "create:feed-idea": true });
+    renderComposer();
+    expect(screen.getByTestId("composer-type-idea")).toBeInTheDocument();
+    expect(screen.queryByTestId("composer-type-poll")).toBeNull();
+  });
+});
+
+describe("P3 — soạn bình chọn / sáng kiến", () => {
+  const POLL_CAPS = {
+    "view:feed": true,
+    "create:feed-post": true,
+    "create:feed-poll": true,
+    "create:feed-idea": true,
+  };
+
+  const fillPoll = (): void => {
+    fireEvent.click(screen.getByTestId("composer-type-poll"));
+    fireEvent.change(screen.getByTestId("composer-poll-question"), {
+      target: { value: "Ăn trưa ở đâu?" },
+    });
+    fireEvent.change(screen.getByTestId("composer-poll-option-0"), { target: { value: "Cơm" } });
+    fireEvent.change(screen.getByTestId("composer-poll-option-1"), { target: { value: "Phở" } });
+  };
+
+  it("nháp poll chưa đủ (1 ô trống) ⇒ nút Đăng KHOÁ, bấm không gọi gì", () => {
+    setCaps(POLL_CAPS);
+    const { onSubmit } = renderComposer();
+    fireEvent.click(screen.getByTestId("composer-type-poll"));
+    fireEvent.change(screen.getByTestId("composer-poll-question"), { target: { value: "Q" } });
+    fireEvent.change(screen.getByTestId("composer-poll-option-0"), { target: { value: "A" } });
+    expect(screen.getByTestId("composer-submit")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("composer-submit"));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("tối đa 10 lựa chọn: tới 10 thì nút «Thêm» khoá; tối thiểu 2: nút «Bỏ» khoá", () => {
+    setCaps(POLL_CAPS);
+    renderComposer();
+    fireEvent.click(screen.getByTestId("composer-type-poll"));
+    expect(screen.getByTestId("composer-poll-remove-0")).toBeDisabled();
+    for (let i = 0; i < 8; i += 1) fireEvent.click(screen.getByTestId("composer-poll-add"));
+    expect(screen.getAllByTestId(/^composer-poll-option-/)).toHaveLength(10);
+    expect(screen.getByTestId("composer-poll-add")).toBeDisabled();
+  });
+
+  it("gửi poll KHÔNG mô tả ⇒ payload KHÔNG có `body`, parse được bằng createFeedPostSchema", async () => {
+    setCaps(POLL_CAPS);
+    const onSubmit = vi.fn(() => Promise.resolve({ ok: true }));
+    renderComposer({ onSubmit });
+    fillPoll();
+    fireEvent.click(screen.getByTestId("composer-poll-multiple"));
+    fireEvent.click(screen.getByTestId("composer-submit"));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const dto = (onSubmit.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
+    expect(dto).not.toHaveProperty("body");
+    expect(dto).toMatchObject({
+      type: "poll",
+      poll: { question: "Ăn trưa ở đâu?", options: ["Cơm", "Phở"], multipleChoice: true },
+    });
+    expect(createFeedPostSchema.safeParse(dto).success).toBe(true);
+  });
+
+  it("gửi poll HỎNG ⇒ câu hỏi + lựa chọn VẪN CÒN (luật H2 áp cho cả trường poll)", async () => {
+    setCaps(POLL_CAPS);
+    const onSubmit = vi.fn(() => Promise.reject(new Error("mạng rớt")));
+    renderComposer({ onSubmit });
+    fillPoll();
+    fireEvent.click(screen.getByTestId("composer-submit"));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId("composer-submit")).not.toBeDisabled());
+    expect(screen.getByTestId("composer-poll-question")).toHaveValue("Ăn trưa ở đâu?");
+    expect(screen.getByTestId("composer-poll-option-1")).toHaveValue("Phở");
+  });
+
+  it("gửi poll THÀNH CÔNG ⇒ nháp poll về rỗng", async () => {
+    setCaps(POLL_CAPS);
+    const onSubmit = vi.fn(() => Promise.resolve({ ok: true }));
+    renderComposer({ onSubmit });
+    fillPoll();
+    fireEvent.click(screen.getByTestId("composer-submit"));
+    await waitFor(() => expect(screen.getByTestId("composer-poll-question")).toHaveValue(""));
+  });
+
+  it("nhãn trùng ⇒ hiện lý do đã dịch (không phải khoá i18n thô)", () => {
+    setCaps(POLL_CAPS);
+    renderComposer();
+    fillPoll();
+    fireEvent.change(screen.getByTestId("composer-poll-option-1"), { target: { value: " cơm " } });
+    fireEvent.click(screen.getByTestId("composer-submit"));
+    const t = i18n.getFixedT("vi", "social");
+    expect(screen.getByTestId("composer-poll-error")).toHaveTextContent(
+      t("composer.poll.optionDuplicate"),
+    );
+  });
+
+  it("sáng kiến ⇒ BẮT BUỘC nội dung; gửi `{type:'idea', body}` parse được", async () => {
+    setCaps(POLL_CAPS);
+    const onSubmit = vi.fn(() => Promise.resolve({ ok: true }));
+    renderComposer({ onSubmit });
+    fireEvent.click(screen.getByTestId("composer-type-idea"));
+    expect(screen.getByTestId("composer-submit")).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Lắp máy lọc nước" } });
+    fireEvent.click(screen.getByTestId("composer-submit"));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const dto = (onSubmit.mock.calls[0] as unknown[])[0];
+    expect(dto).toMatchObject({ type: "idea", body: "Lắp máy lọc nước" });
+    expect(createFeedPostSchema.safeParse(dto).success).toBe(true);
   });
 });
 
