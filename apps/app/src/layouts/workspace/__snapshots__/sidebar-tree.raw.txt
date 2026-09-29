@@ -123,4 +123,5 @@ social.news | mod=SOCIAL | label=Tin tức | path=/feed/news | icon=megaphone | 
 social.saved | mod=SOCIAL | label=Đã lưu | path=/feed/saved | icon=bookmark | group=overview | order=30 | any=[view:feed]
 social.ideas | mod=SOCIAL | label=Sáng kiến | path=/feed/ideas | icon=lightbulb | group=operation | order=40 | any=[view:feed]
 social.polls | mod=SOCIAL | label=Bình chọn | path=/feed/polls | icon=vote | group=operation | order=50 | any=[view:feed]
+social.kudos | mod=SOCIAL | label=Vinh danh | path=/feed/kudos | icon=award | group=operation | order=55 | any=[view:feed]
 social.groups | mod=SOCIAL | label=Nhóm | path=/feed/groups | icon=users | group=operation | order=60 | any=[view:feed]

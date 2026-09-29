@@ -37,19 +37,20 @@ describe("C20 — mọi mục sidebar SOCIAL trỏ tới route CÓ THẬT", () =
     expect(dead.map((i) => `${i.sidebarKey} → ${i.path}`)).toEqual([]);
   });
 
-  it("S16-SOCIAL-FE-2B R2: ĐỦ 6 mục V2 đã có màn ⇒ bản đăng ký = V2 (gồm «Nhóm»)", () => {
+  it("S16-SOCIAL-FE-2C: ĐỦ 7 mục V2 đã có màn ⇒ bản đăng ký = V2 (gồm «Vinh danh» giữa Bình chọn và Nhóm)", () => {
     /**
      * Lát B dựng màn cuối cùng (`/feed/groups`) ⇒ ở SOCIAL không còn mục nào để cắt, nên ca này KHÔNG
      * còn chứng minh được `pruneUnbuiltScreens` có cắt thật. Vế «cắt thật» chuyển sang
      * `layouts/workspace/sidebar/prune-unbuilt.spec.ts` (mục giả trỏ đường chưa dựng — plan FE-2B D19).
      */
-    expect(SOCIAL_SIDEBAR_V2).toHaveLength(6);
+    expect(SOCIAL_SIDEBAR_V2).toHaveLength(7);
     expect(SOCIAL_SIDEBAR.map((i) => i.sidebarKey)).toEqual([
       "social.feed",
       "social.news",
       "social.saved",
       "social.ideas",
       "social.polls",
+      "social.kudos",
       "social.groups",
     ]);
   });
@@ -85,9 +86,9 @@ describe("C20 — hai mục ME mới KHÔNG được là link chết (không có
   });
 });
 
-describe("C20 / R1 / R2 — cổng quyền của 10 route SOCIAL (6 FE-1 + 2 FE-2 lát A + 2 FE-2B lát B)", () => {
-  it("đủ 10 route và KHÔNG route nào `isPublic`", () => {
-    expect(SOCIAL_ROUTES).toHaveLength(10);
+describe("C20 / R1 / R2 / R3 — cổng quyền của 11 route SOCIAL (6 FE-1 + 2 FE-2 lát A + 2 FE-2B + 1 FE-2C)", () => {
+  it("đủ 11 route và KHÔNG route nào `isPublic`", () => {
+    expect(SOCIAL_ROUTES).toHaveLength(11);
     expect(SOCIAL_ROUTES.filter((r) => r.isPublic)).toEqual([]);
   });
 
@@ -99,7 +100,7 @@ describe("C20 / R1 / R2 — cổng quyền của 10 route SOCIAL (6 FE-1 + 2 FE-
     }
   });
 
-  it("cả 10 khai `layout: MODULE_PORTAL` — nhánh này KHÔNG còn trơ (plan D3)", () => {
+  it("cả 11 khai `layout: MODULE_PORTAL` — nhánh này KHÔNG còn trơ (plan D3)", () => {
     // `buildModuleRouteContent` dispatch qua `LAYOUT_CONTENT_BUILDERS` (Record vét cạn), nên giá trị
     // này QUYẾT ĐỊNH khung được dựng. Khai nhầm `MODULE_WORKSPACE` ⇒ portal mất hai rail, im lặng.
     for (const r of SOCIAL_ROUTES) {
@@ -113,12 +114,13 @@ describe("C20 / R1 / R2 — cổng quyền của 10 route SOCIAL (6 FE-1 + 2 FE-
     }
   });
 
-  it("chỉ 6 route danh sách hiện trên sidebar; route động (chi tiết bài/nhóm) và `me` thì không", () => {
+  it("chỉ 7 route danh sách hiện trên sidebar; route động (chi tiết bài/nhóm) và `me` thì không", () => {
     const inSidebar = SOCIAL_ROUTES.filter((r) => r.showInSidebar).map((r) => r.routeKey);
     expect(inSidebar.sort()).toEqual([
       "social.feed",
       "social.groups",
       "social.ideas",
+      "social.kudos",
       "social.news",
       "social.polls",
       "social.saved",
@@ -141,6 +143,17 @@ describe("C20 / R1 / R2 — cổng quyền của 10 route SOCIAL (6 FE-1 + 2 FE-
       requiredPermissions: ["view:feed"],
     });
     expect(byKey.get("social.groupDetail")?.showInSidebar).toBeFalsy();
+  });
+
+  it("R3 — `/feed/kudos` = SOC-SCREEN-009, gate ĐÚNG `view:feed` (cặp kudos gác TRONG composer)", () => {
+    const byKey = new Map(SOCIAL_ROUTES.map((r) => [r.routeKey, r]));
+    expect(byKey.get("social.kudos")).toMatchObject({
+      path: "/feed/kudos",
+      screenCode: "SOC-SCREEN-009",
+      requiredPermissions: ["view:feed"],
+      layout: "MODULE_PORTAL",
+      showInSidebar: true,
+    });
   });
 
   it("R1 — `/feed/polls` = SOC-SCREEN-007, `/feed/ideas` = SOC-SCREEN-008, gate ĐÚNG `view:feed`", () => {

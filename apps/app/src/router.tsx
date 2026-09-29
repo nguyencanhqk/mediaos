@@ -72,6 +72,7 @@ import {
   validateGroupDetailRouteSearch,
   validateGroupsRouteSearch,
 } from "@/routes/social/groups/lib/group-route-search";
+import { validateKudosRouteSearch } from "@/routes/social/kudos/lib/kudos-route-search";
 import {
   LEGACY_SOCIAL_GROUP_REDIRECT,
   LEGACY_SOCIAL_POST_REDIRECT,
@@ -3089,6 +3090,10 @@ const PollsPage = React.lazy(() =>
 const IdeasPage = React.lazy(() =>
   import("@/routes/social/ideas/IdeasPage").then((m) => ({ default: m.IdeasPage })),
 );
+// S16-SOCIAL-FE-2C lát C — SOC-SCREEN-009.
+const KudosPage = React.lazy(() =>
+  import("@/routes/social/kudos/KudosPage").then((m) => ({ default: m.KudosPage })),
+);
 // S16-SOCIAL-FE-2B lát B — SOC-SCREEN-006.
 const GroupsPage = React.lazy(() =>
   import("@/routes/social/groups/GroupsPage").then((m) => ({ default: m.GroupsPage })),
@@ -3182,6 +3187,17 @@ const feedIdeasRoute = createRoute({
   path: "/feed/ideas",
   beforeLoad: authGuard,
   component: () => buildModuleRouteContent(feedIdeasMeta, "SOCIAL", <IdeasPage />),
+});
+
+// S16-SOCIAL-FE-2C lát C — Vinh danh (SOC-SCREEN-009). `validateSearch` KHÔNG ném, mọi trường optional
+// (`kudos-route-search.ts` — giá trị tới đó ĐÃ qua `JSON.parse`: `?month=202609` là số, bị bỏ).
+const feedKudosMeta = getMeta("social.kudos");
+const feedKudosRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/kudos",
+  beforeLoad: authGuard,
+  validateSearch: validateKudosRouteSearch,
+  component: () => buildModuleRouteContent(feedKudosMeta, "SOCIAL", <KudosPage />),
 });
 
 // S16-SOCIAL-FE-2B lát B — Nhóm (SOC-SCREEN-006). Path danh sách ĐÚNG `/feed/groups` ⇒ mục sidebar
@@ -3620,6 +3636,8 @@ const routeTree = rootRoute.addChildren([
   // S16-SOCIAL-FE-2 lát A.
   feedPollsRoute,
   feedIdeasRoute,
+  // S16-SOCIAL-FE-2C lát C.
+  feedKudosRoute,
   // S16-SOCIAL-FE-2B lát B + 2 route chuyển hướng link NOTI (O2).
   feedGroupsRoute,
   feedGroupDetailRoute,

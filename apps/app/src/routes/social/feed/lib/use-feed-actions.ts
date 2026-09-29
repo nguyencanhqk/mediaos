@@ -86,6 +86,8 @@ export function useFeedActions(): FeedActions {
     void queryClient.invalidateQueries({ queryKey: socialKeys.saved() });
     void queryClient.invalidateQueries({ queryKey: socialKeys.polls.allOf() });
     void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
+    // S16-SOCIAL-FE-2C — bài kudos bị xoá/ẩn cũng phải rời màn 009 + widget «Vinh danh tháng này».
+    void queryClient.invalidateQueries({ queryKey: socialKeys.kudos.lists() });
     if (postId) {
       void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
     }
@@ -151,8 +153,7 @@ export function useFeedActions(): FeedActions {
     moderate: (postId, patch) => moderateMutation.mutate({ postId, patch }),
     // `onDone` đi vào tuỳ chọn của CHÍNH LƯỢT mutate ⇒ React Query chỉ gọi nó sau khi server xác
     // nhận. Đặt nó cạnh `mutate()` là bug đã có thật: điều hướng chạy trước cả khi request rời máy.
-    remove: (postId, onDone) =>
-      deleteMutation.mutate(postId, { onSuccess: () => onDone?.() }),
+    remove: (postId, onDone) => deleteMutation.mutate(postId, { onSuccess: () => onDone?.() }),
     pendingReactionPostId: reactionMutation.isPending
       ? (reactionMutation.variables?.postId ?? null)
       : null,

@@ -78,9 +78,12 @@ export function buildImageGrid(attachments: readonly FeedAttachmentDto[]): FeedI
  * **suy biến an toàn**, không ném (ca **C27**).
  *
  * S16-SOCIAL-FE-2 lát A: thêm `poll` (thân = MÔ TẢ tuỳ chọn, NULL thì `PostBody` tự không vẽ — plan
- * §8 M8) và `idea` (thân BẮT BUỘC với idea). `kudos` và loại lạ vẫn `false` cho tới lát C: thân kudos
- * NULL, lời nhắn nằm ở `feed_kudos` mà DTO bài không chở (plan §2 G1).
+ * §8 M8) và `idea` (thân BẮT BUỘC với idea). S16-SOCIAL-FE-2C: thêm `kudos` — thân kudos tuỳ chọn (composer
+ * của FE KHÔNG gửi, lời nhắn nằm trong `post.kudos.message`); client khác gửi `body` thì vẫn hiện, NULL thì
+ * `PostBody` tự không vẽ. Loại lạ vẫn `false`.
  */
 export function isFullyRenderableType(type: string): boolean {
-  return type === "share" || type === "news" || type === "poll" || type === "idea";
+  return (
+    type === "share" || type === "news" || type === "poll" || type === "idea" || type === "kudos"
+  );
 }

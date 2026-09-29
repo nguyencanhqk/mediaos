@@ -413,3 +413,5 @@ export {
   feedGroupLeftResultSchema,
   type FeedGroupLeftResultDto,
 } from "./lib/social-groups-api";
+// S16-SOCIAL-FE-2C — vinh danh (047 · 048 · 059).
+export { socialKudosApi, KUDOS_BADGE_FETCH_LIMIT } from "./lib/social-kudos-api";

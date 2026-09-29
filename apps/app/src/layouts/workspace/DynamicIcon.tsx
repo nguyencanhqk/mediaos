@@ -64,6 +64,8 @@ import {
   Bookmark,
   Lightbulb,
   Vote,
+  // S16-SOCIAL-FE-2C — mục «Vinh danh» (`social.kudos`).
+  Award,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -75,6 +77,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   bookmark: Bookmark,
   lightbulb: Lightbulb,
   vote: Vote,
+  award: Award,
   "layout-dashboard": LayoutDashboard,
   users: Users,
   user: User,

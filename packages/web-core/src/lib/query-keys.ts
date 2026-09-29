@@ -1462,4 +1462,17 @@ export const socialKeys = {
     members: (groupId: string, params?: Record<string, unknown>) =>
       [...rootKeys.social, "groups", "members", groupId, params] as const,
   },
+  /**
+   * S16-SOCIAL-FE-2C — vinh danh (047 · 048 · 059). `lists()` là tiền tố của MỌI danh sách 047 (màn 009 +
+   * widget) — lý do như `groups.lists()`. `badges()` KHÔNG tham số (client lấy một trang cỡ trần) ⇒ khoá
+   * duy nhất, invalidate khớp chắc. `recipients(q)` nhận `q` ĐÃ chuẩn hoá (đầu ra của schema 059).
+   */
+  kudos: {
+    allOf: () => [...rootKeys.social, "kudos"] as const,
+    lists: () => [...rootKeys.social, "kudos", "list"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "kudos", "list", params] as const,
+    recipients: (q: string) => [...rootKeys.social, "kudos", "recipients", q] as const,
+    badges: () => [...rootKeys.social, "kudos", "badges"] as const,
+  },
 };

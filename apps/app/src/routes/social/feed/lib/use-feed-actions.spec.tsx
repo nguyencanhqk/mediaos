@@ -272,4 +272,22 @@ describe("S16-SOCIAL-FE-2 — plan §8 H5: xoá/ẩn bài làm mới danh sách 
       expect(keys).toContain(JSON.stringify(socialKeys.ideas.allOf()));
     });
   });
+
+  it("S16-SOCIAL-FE-2C: xoá bài ⇒ khoá THẬT của widget/màn vinh danh bị invalidate", async () => {
+    deletePost.mockResolvedValue({ deleted: true });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const { socialKeys } = await import("@mediaos/web-core");
+    const widgetKey = socialKeys.kudos.list({ month: "2026-09", limit: 5 });
+    client.setQueryData(widgetKey, { data: [], page: 1, limit: 5, total: 0 });
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+    act(() => result.current.remove(POST_ID));
+
+    await waitFor(() => expect(client.getQueryState(widgetKey)?.isInvalidated).toBe(true));
+  });
 });
