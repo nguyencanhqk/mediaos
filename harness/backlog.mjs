@@ -17715,7 +17715,9 @@ export const backlog = [
     paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
     skills: ["code-review"],
     depends_on: ["S16-SOCIAL-GROUPERR-1"],
-    src: ["plan S16-SOCIAL-GROUPERR-1 §1 D14 + owner ký O4 29/09/2026 (FE auto-deploy khi merge, API deploy tay)"],
+    src: [
+      "plan S16-SOCIAL-GROUPERR-1 §1 D14 + owner ký O4 29/09/2026 (FE auto-deploy khi merge, API deploy tay)",
+    ],
     done_when: [
       "ĐO TRƯỚC: PROD API trả `error.code` = SOCIAL-ERR-* cho một lỗi nhóm thật (vd 409 ERR-015) — chưa thấy thì CHƯA gỡ",
       "Gỡ nhánh fallback + ca LEGACY trong group-errors.spec; heuristic status+action cũ đi theo",
@@ -17749,14 +17751,25 @@ export const backlog = [
       "`SocialAccessService.resolveActor` nhánh sàn Company ném message `AUTH-ERR-SCOPE-DENIED: …` nhưng `error.code` trên dây là `AUTH-ERR-FORBIDDEN` (chuỗi trần) — quyết định có phát đúng mã `AUTH-ERR-SCOPE-DENIED` không (FE `api-error-kind` sẽ đổi `kind` sang SCOPE_DENIED)",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/social/**", "apps/api/test/**", "apps/app/src/routes/social/**", "docs/API Design/**", "docs/plans/**", "harness/backlog.mjs"],
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "apps/app/src/routes/social/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
     skills: ["security-review"],
     depends_on: ["S16-SOCIAL-GROUPERR-1"],
-    src: ["workflow đọc S16-SOCIAL-GROUPERR-1 lane be-string-consumers: social-access.service.ts resolveActor fallback · plan GROUPERR-1 §1 D13"],
+    src: [
+      "workflow đọc S16-SOCIAL-GROUPERR-1 lane be-string-consumers: social-access.service.ts resolveActor fallback · plan GROUPERR-1 §1 D13",
+    ],
     done_when: [
       "Owner chốt: giữ AUTH-ERR-FORBIDDEN (sửa message cho khớp) HOẶC phát AUTH-ERR-SCOPE-DENIED (khuôn ROOM viewScopeDenied) + đo mọi màn SOCIAL đọc `kind`",
     ],
-    notes: ["Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1. Không phải lỗi SOCIAL-ERR nên nằm ngoài GROUPERR-1 (D13)."],
+    notes: [
+      "Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1. Không phải lỗi SOCIAL-ERR nên nằm ngoài GROUPERR-1 (D13).",
+    ],
   },
   {
     id: "S16-SOCIAL-BE-2D",
@@ -17772,16 +17785,21 @@ export const backlog = [
       "packages/contracts/**",
       "docs/API Design/**",
       "docs/spec/**",
+      "docs/SPEC/**",
+      "docs/_review/**",
+      "docs/permission-matrix-spec.md",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
     skills: ["security-review"],
     depends_on: ["S16-SOCIAL-BE-2B-2"],
+    plan: "docs/plans/S16-SOCIAL-BE-2D.md",
     src: [
       "plan S16-SOCIAL-FE-2 §2 G1/G2/G4 (đo 29/09/2026: feedPostSchema không chở kudos; 047 không lọc postId; vai employee giữ read:employee@Own ⇒ picker HR chỉ thấy chính mình; /org/employees đòi view:user)",
+      "Owner ký 29/09/2026 (phiên mở WO): K1 một luật người nhận cho 047 + thẻ bài, vá hồ sơ xoá mềm hiện như nhân viên hiện tại · K2 N=2 / trần 20 / chỉ họ tên / active-only / loại chính mình · K3 GET /social/kudos/recipients gác create:feed-kudos (thay view:feed của S3(a)) · K4 avatar giữ raw + seed WO nợ",
     ],
     done_when: [
-      "✍️ Owner ký S3(a) 29/09/2026: route tra người MỚI dưới view:feed — tên + avatar nhân sự ĐANG LÀM, `q` tối thiểu N ký tự, trần kết quả, KHÔNG userId. Là quyết định DANH BẠ (cùng lớp oracle ERR-009) ⇒ FULL gate + identity-projection ratchet",
+      "✍️ Owner ký S3(a) 29/09/2026, chỉnh bởi K2/K3 cùng ngày: route MỚI `SOCIAL-API-059 GET /social/kudos/recipients?q=` gác `create:feed-kudos` (KHÔNG view:feed) — `{employeeId, fullName, avatarUrl}` của nhân sự active + TK active, `q` ≥2 chữ/số, khớp ĐẦU TỪ chỉ trên họ tên (bỏ dấu, không phân biệt hoa thường), trần 20 + `truncated`, loại chính mình, KHÔNG userId/email/mã NV, không phân trang. Quyết định DANH BẠ (cùng lớp oracle ERR-009) ⇒ FULL gate + identity-projection ratchet (waiver 8→9) + SOC-DEC-013",
       "Khối kudos/poll/idea trên DTO bài: OPTIONAL (vắng ≠ rỗng), nạp theo LÔ ≤ hằng số câu/trang (khuôn loadMentionsForTargets BE-1D), payload WS bóc hoặc giữ CÓ CHỦ ĐÍCH",
       "Người nhận kudos: {employeeId, fullName, avatarUrl, isFormerEmployee} — cùng luật 047, không userId",
     ],
@@ -17813,7 +17831,10 @@ export const backlog = [
       "Người nhận đã nghỉ (isFormerEmployee) hiện nhãn; không tự vinh danh mình (lọc khỏi ô chọn + hiện 422 nếu lọt)",
       "C4 của composer đổi thành đủ 5 nút theo quyền",
     ],
-    notes: ["Tách từ S16-SOCIAL-FE-2 (owner ký S1 29/09/2026). Chặn bởi S16-SOCIAL-BE-2D (G1/G2)."],
+    notes: [
+      "Tách từ S16-SOCIAL-FE-2 (owner ký S1 29/09/2026). Chặn bởi S16-SOCIAL-BE-2D (G1/G2).",
+      "⚠️ BE-2D (plan §9 V15): `avatarUrl` của 059 / 047 / khối kudos trên thẻ là cột RAW `employee_profiles.avatar_url` (fileId hoặc URL tuỳ ý — cột đa-người-ghi, đầu độc được) ⇒ KHÔNG vẽ làm `src`/`href`, chỉ chữ cái đầu, tới khi `S16-SOCIAL-AVATARPRESIGN-1` xong. Ô chọn người gọi `GET /social/kudos/recipients?q=` (≥2 chữ, trần 20, `truncated`), server đã loại chính mình.",
+    ],
   },
   {
     id: "S16-SOCIAL-FE-2D",
@@ -19553,5 +19574,54 @@ export const backlog = [
       "⚠️ PROD + dev-online dùng CHUNG `mediaos-minio` (cả 3 file env đều trỏ localhost:9000) ⇒ recreate là cửa sổ gián đoạn của CẢ HAI.",
       "Hướng thay thế nếu owner không muốn tự host image: chọn object storage S3-compatible khác (quyết định treo từ S18-OPS-MINIOPIN-1) — nhưng việc đó KHÔNG cứu được image PROD hiện có, nên bước đẩy GHCR vẫn nên làm trước.",
     ],
+  },
+  {
+    id: "S16-SOCIAL-AVATARPRESIGN-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "`avatarUrl` của TOÀN module SOCIAL (tác giả bài/bình luận · người thả cảm xúc · xác nhận tin · thành viên nhóm · sinh nhật · người nhận vinh danh · danh bạ 059) trả RAW `employee_profiles.avatar_url` — thực chất là fileId, không phải URL ⇒ FE không tải được ảnh; ký qua `AvatarPresignService`",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-2D"],
+    src: [
+      'Owner ký K4 29/09/2026 ở S16-SOCIAL-BE-2D: giữ raw ở BE-2D cho nhất quán, seed WO nợ riêng. Đo: `me-avatar.service.ts:36` ghi fileId vào cột; HR/CHAT/TASK ký qua `AvatarPresignService.resolveEmployeeAvatars` (xác minh cặp employeeId↔fileId, HMAC cục bộ, nhận callerTx); KHÔNG file SOCIAL nào gọi nó; API-19 §6.1 ví dụ `"https://…"` là sai với code.',
+    ],
+    done_when: [
+      "Mọi điểm chiếu avatar SOCIAL đi qua `resolveEmployeeAvatars(companyId, subjects, callerTx)` — KHÔNG lồng `withTenant`; fail-soft về null (chữ cái đầu) khi cặp không xác minh được",
+      "URL ký là capability có TTL ⇒ BÓC khỏi payload WS (khuôn CHAT `peer.avatarUrl`) — `.omit` không chạm khoá lồng, cần schema lồng riêng",
+      "Đếm câu/trang: +1 câu/trang, không N+1 (ĐO bằng `captureQueries`)",
+      "Cột `avatar_url` đa-người-ghi, có thể bị đầu độc (fileId khác, URL `javascript:` — `employees.ts:28` nhận `z.string().url()`) ⇒ BẮT BUỘC đi `resolveEmployeeAvatars` (xác minh cặp employeeId↔fileId); URL http(s) passthrough phải lọc scheme",
+    ],
+    notes: ["🔴 FULL gate (đường ký file). Seed 29/09/2026 từ S16-SOCIAL-BE-2D (owner K4)."],
+  },
+  {
+    id: "S16-SOCIAL-FEMODPAYLOAD-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Menu ẩn/hiện bài (`use-feed-actions.ts:126-130`) gửi `{status:'hidden'|'published'}` vào `006` trong khi `moderateFeedPostSchema` là `.strict()` với `{hidden, pinned, commentsLocked}` ⇒ (đọc tĩnh) 400; spec FE `use-feed-actions.spec.tsx:122-133` ghim đúng body sai",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Critic workflow Understand của S16-SOCIAL-BE-2D 29/09/2026 (C9): xác nhận TĨNH — `packages/contracts/src/social-api.ts:558-569` (.strict) · `apps/api/src/social/social.dto.ts:52` · FE gửi qua ép kiểu `as`.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: gọi thật `PATCH /social/posts/:id/moderation` với body FE đang gửi (dev-online hoặc int-spec) — 400 thật thì mới vá; xanh thì đóng WO kèm lý do",
+      "Vá: FE gửi `{hidden:boolean}`; bỏ `as`; spec ghim body ĐÚNG hợp đồng (parse bằng `moderateFeedPostSchema.safeParse` trong test)",
+    ],
+    notes: ["Seed 29/09/2026 từ S16-SOCIAL-BE-2D (ngoài phạm vi WO đó)."],
   },
 ];
