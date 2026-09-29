@@ -329,7 +329,10 @@ export function FeedComposer({
           })}
         </p>
       )}
-      {(touched || kudosDraft !== EMPTY_KUDOS_DRAFT) && kudosCheck && !kudosCheck.ok && (
+      {/* Lời nhắn nằm NGOÀI nháp kudos ⇒ gõ lời nhắn cũng là «đã bắt đầu soạn» (gate LIGHT React LOW-2). */}
+      {(touched || kudosDraft !== EMPTY_KUDOS_DRAFT || (isKudos && trimmed.length > 0)) &&
+        kudosCheck &&
+        !kudosCheck.ok && (
         <p role="alert" data-testid="composer-kudos-error" className="mt-2 text-sm text-destructive">
           {t(`composer.kudos.${kudosCheck.error}`, {
             max: kudosCheck.error === "messageTooLong" ? FEED_BODY_MAX : KUDOS_RECIPIENT_MAX,

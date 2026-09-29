@@ -6,6 +6,10 @@
  * `lucide-react` bằng chuỗi tự do (kéo cả bộ icon vào bundle và biến dữ liệu thành đường chọn code).
  * Không khớp / `null` ⇒ `Award`. Emoji vẽ như CHỮ trong `<bdi>` (cô lập hướng chữ — ký tự bidi lẫn
  * trong chuỗi không được đảo tên huy hiệu đứng cạnh).
+ *
+ * 🔴 Tra bằng `Object.hasOwn`, KHÔNG `BADGE_ICONS[key]` trần (gate LIGHT H1): icon `constructor` trả hàm
+ * `Object`, `__proto__` trả `Object.prototype` — cả hai truthy, React render là NÉM, và widget nằm trên
+ * rail của MỌI màn `/feed*` ⇒ một huy hiệu quản trị đặt tên như thế làm sập cả cổng cho mọi người.
  */
 import type * as React from "react";
 import {
@@ -50,7 +54,8 @@ interface KudosBadgeIconProps {
 
 export function KudosBadgeIcon({ icon, className }: KudosBadgeIconProps): React.ReactElement {
   const key = icon?.trim() ?? "";
-  const Icon = BADGE_ICONS[key.toLowerCase()];
+  const lookup = key.toLowerCase();
+  const Icon = Object.hasOwn(BADGE_ICONS, lookup) ? BADGE_ICONS[lookup] : undefined;
   if (Icon) {
     return <Icon data-testid="kudos-badge-icon" className={cn("h-4 w-4", className)} aria-hidden="true" />;
   }

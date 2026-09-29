@@ -236,6 +236,18 @@ describe("KS — gửi lời vinh danh qua `FeedComposer`", () => {
     expect(screen.getByPlaceholderText(t("composer.kudosPlaceholder"))).toHaveValue("");
   });
 
+  it("gate LIGHT React LOW-2: chỉ gõ lời nhắn, chưa chọn ai ⇒ nói lý do (không để nút xám câm)", () => {
+    renderWithProviders(<FeedComposer onSubmit={vi.fn()} isSubmitting={false} />);
+    fireEvent.click(screen.getByTestId("composer-type-kudos"));
+    fireEvent.change(screen.getByPlaceholderText(t("composer.kudosPlaceholder")), {
+      target: { value: "Cảm ơn!" },
+    });
+    expect(screen.getByTestId("composer-kudos-error")).toHaveTextContent(
+      t("composer.kudos.recipientsRequired"),
+    );
+    expect(screen.getByTestId("composer-submit")).toBeDisabled();
+  });
+
   it("§8 M-e: có người nhận, lời nhắn rỗng ⇒ ĐÚNG MỘT alert (của nháp kudos), nút khoá", async () => {
     renderWithProviders(<FeedComposer onSubmit={vi.fn()} isSubmitting={false} />);
     fireEvent.click(screen.getByTestId("composer-type-kudos"));

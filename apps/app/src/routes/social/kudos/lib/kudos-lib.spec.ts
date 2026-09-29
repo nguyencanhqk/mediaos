@@ -83,6 +83,7 @@ describe("KD — nháp vinh danh", () => {
   it("badgeId null ⇒ VẮNG khoá; có ⇒ gửi", () => {
     const d = addKudosRecipient(EMPTY_KUDOS_DRAFT, person(1));
     const none = validateKudosDraft(d, "hi", false);
+    expect(none.ok).toBe(true);
     expect(none.ok && "badgeId" in none.kudos).toBe(false);
     const badge = "55555555-5555-4555-8555-555555555555";
     const withBadge = validateKudosDraft({ ...d, badgeId: badge }, "hi", false);
@@ -93,8 +94,9 @@ describe("KD — nháp vinh danh", () => {
     const d = { ...addKudosRecipient(EMPTY_KUDOS_DRAFT, person(1)), isOfficial: true };
     const deny = validateKudosDraft(d, "hi", false);
     const allow = validateKudosDraft(d, "hi", true);
-    expect(deny.ok && deny.kudos.isOfficial).toBe(false);
-    expect(allow.ok && allow.kudos.isOfficial).toBe(true);
+    // Bỏ cờ IM LẶNG (nháp vẫn hợp lệ), không từ chối cả lời vinh danh (gate LIGHT L1).
+    expect(deny).toMatchObject({ ok: true, kudos: { isOfficial: false } });
+    expect(allow).toMatchObject({ ok: true, kudos: { isOfficial: true } });
   });
 
   it("payload ĐẦY ĐỦ qua `createFeedPostSchema` (không so object tay)", () => {

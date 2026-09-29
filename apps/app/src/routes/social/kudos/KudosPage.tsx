@@ -36,7 +36,12 @@ export function KudosPage(): React.ReactElement {
   const query = useQuery({
     queryKey: socialKeys.kudos.list(params),
     queryFn: () => socialKudosApi.list(params),
-    placeholderData: keepPreviousData,
+    // Giữ dữ liệu cũ CHỈ khi lật trang trong CÙNG tháng (gate LIGHT M1): đổi tháng mà giữ thì danh sách
+    // tháng trước hiện dưới nhãn tháng mới cho tới khi tải xong — đọc như dữ liệu của tháng mới.
+    placeholderData: (prev, prevQuery) =>
+      (prevQuery?.queryKey.at(-1) as { month?: string } | undefined)?.month === month
+        ? keepPreviousData(prev)
+        : undefined,
   });
 
   /** Mặc định (tháng hiện tại · trang 1) KHÔNG ghi lên URL — link chia sẻ gọn, «tháng này» vẫn là tháng này. */

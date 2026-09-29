@@ -11,10 +11,8 @@
  * bao giờ ném — URL sửa tay thì mất bộ lọc, không mất trang. Optional để `<Link to="/feed/kudos">` không
  * phải truyền `search`.
  */
+import { FEED_PAGE_MAX } from "@mediaos/contracts";
 import { isKudosMonth } from "./kudos-month";
-
-/** Trần `page` của `listKudosQuerySchema` (`FEED_PAGE_MAX`) — vượt là 400 từ server. */
-const PAGE_MAX = 10_000;
 
 export interface KudosRouteSearch {
   month?: string;
@@ -23,7 +21,8 @@ export interface KudosRouteSearch {
 
 function pageParam(v: unknown): number | undefined {
   const n = typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v) ? Number(v) : NaN;
-  return Number.isInteger(n) && n >= 2 && n <= PAGE_MAX ? n : undefined;
+  // Trần `page` của `listKudosQuerySchema` — vượt là 400 từ server, nên bỏ tại đây.
+  return Number.isInteger(n) && n >= 2 && n <= FEED_PAGE_MAX ? n : undefined;
 }
 
 export function validateKudosRouteSearch(raw: Record<string, unknown>): KudosRouteSearch {

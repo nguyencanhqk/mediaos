@@ -24,5 +24,5 @@ const KUDOS_REASON_BY_CODE: Readonly<Record<string, ActionErrorReason>> = {
 
 export function kudosErrorReason(err: unknown): ActionErrorReason | null {
   const code = socialErrorCode(err);
-  return code ? (KUDOS_REASON_BY_CODE[code] ?? null) : null;
+  return code && Object.hasOwn(KUDOS_REASON_BY_CODE, code) ? KUDOS_REASON_BY_CODE[code] : null;
 }

@@ -80,12 +80,17 @@ describe("KB — người nhận", () => {
   it("DENY/ALLOW nhãn «Đã nghỉ việc»: chỉ theo `isFormerEmployee`", () => {
     renderBlock(
       block({
-        recipients: [recipient(), recipient({ employeeId: EMP_B, fullName: "Cường Lê", isFormerEmployee: true })],
+        recipients: [
+          recipient(),
+          recipient({ employeeId: EMP_B, fullName: "Cường Lê", isFormerEmployee: true }),
+        ],
       }),
     );
     const items = screen.getAllByTestId("kudos-recipient");
     expect(within(items[0]).queryByTestId("kudos-former")).toBeNull();
-    expect(within(items[1]).getByTestId("kudos-former")).toHaveTextContent(t("kudos.formerEmployee"));
+    expect(within(items[1]).getByTestId("kudos-former")).toHaveTextContent(
+      t("kudos.formerEmployee"),
+    );
     // Người đã nghỉ (hồ sơ còn) vẫn giữ tên + link — vinh danh là lịch sử.
     expect(within(items[1]).getByRole("link").getAttribute("href")).toBe(`/feed/profiles/${EMP_B}`);
   });
@@ -101,7 +106,9 @@ describe("KB — người nhận", () => {
 
   it("`fullName:null` + đã nghỉ (hồ sơ xoá mềm) ⇒ «Đồng nghiệp» + nhãn, KHÔNG link", () => {
     renderBlock(
-      block({ recipients: [recipient({ fullName: null, avatarUrl: null, isFormerEmployee: true })] }),
+      block({
+        recipients: [recipient({ fullName: null, avatarUrl: null, isFormerEmployee: true })],
+      }),
     );
     const item = screen.getByTestId("kudos-recipient");
     expect(within(item).getByTestId("kudos-former")).toBeInTheDocument();
@@ -137,6 +144,14 @@ describe("KB — huy hiệu · chính thức · lời nhắn", () => {
     renderBlock(block({ badge: { ...block().badge!, icon: "🏆" } }));
     expect(screen.getByTestId("kudos-badge-emoji")).toHaveTextContent("🏆");
   });
+
+  it.each([["constructor"], ["__proto__"], ["toString"], ["hasOwnProperty"]])(
+    "🔴 gate LIGHT H1: icon do quản trị nhập = %j (thuộc tính kế thừa của Object) ⇒ KHÔNG ném, icon mặc định",
+    (icon) => {
+      expect(() => renderBlock(block({ badge: { ...block().badge!, icon } }))).not.toThrow();
+      expect(screen.getByTestId("kudos-badge-icon-default")).toBeInTheDocument();
+    },
+  );
 
   it("DENY/ALLOW pill «Chính thức» theo `isOfficial`", () => {
     renderBlock(block());

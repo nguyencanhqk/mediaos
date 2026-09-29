@@ -7,8 +7,9 @@
  * - Mock `Link` NỘI SUY params: link «Xem bài» phải mang `postId`, không `kudosId`.
  * - Fixture mang `avatarUrl` thật ⇒ ca «không `<img>`» có nghĩa.
  */
+import * as React from "react";
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeedKudosListItemDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
@@ -76,6 +77,17 @@ const item = (over: Partial<FeedKudosListItemDto> = {}): FeedKudosListItemDto =>
   ],
   ...over,
 });
+/**
+ * Ép render lại TRONG cùng cây provider: `rerender` của `renderWithProviders` thay cả cây ⇒ mất
+ * `QueryClientProvider` (đỏ vì lý do khác). Đổi `routeSearch` rồi gọi `bump()` = URL đổi dưới chân màn.
+ */
+let bump: () => void = () => undefined;
+function Harness(): React.ReactElement {
+  const [, setN] = React.useState(0);
+  bump = () => setN((n) => n + 1);
+  return <KudosPage />;
+}
+
 const pageOf = (data: FeedKudosListItemDto[], total = data.length, page = 1) => ({
   data,
   page,
@@ -128,6 +140,28 @@ describe("KP — màn 009 theo tháng", () => {
     });
     fireEvent.click(screen.getByTestId("kudos-next-month"));
     expect(navigateSpy).toHaveBeenLastCalledWith({ to: "/feed/kudos", search: {} });
+  });
+
+  it("gate LIGHT M1: đổi THÁNG ⇒ KHÔNG giữ danh sách tháng cũ dưới nhãn tháng mới (skeleton tới khi tải xong)", async () => {
+    renderWithProviders(<Harness />);
+    await screen.findByTestId("kudos-list");
+    list.mockImplementationOnce(() => new Promise(() => undefined)); // tháng mới tải mãi không xong
+    routeSearch = { month: "2026-09" };
+    act(() => bump());
+    expect(screen.getByTestId("kudos-month-label")).toHaveTextContent(
+      t("kudos.page.monthLabel", { month: 9, year: 2026 }),
+    );
+    await waitFor(() => expect(screen.queryByTestId("kudos-list")).toBeNull());
+  });
+
+  it("đối chứng: lật TRANG trong cùng tháng ⇒ giữ danh sách cũ trong lúc tải (không nháy trắng)", async () => {
+    renderWithProviders(<Harness />);
+    await screen.findByTestId("kudos-list");
+    list.mockImplementationOnce(() => new Promise(() => undefined));
+    routeSearch = { page: 2 };
+    act(() => bump());
+    await waitFor(() => expect(list).toHaveBeenCalledWith({ month: "2026-10", page: 2, limit: 20 }));
+    expect(screen.getByTestId("kudos-list")).toBeInTheDocument();
   });
 
   it("DENY: › khoá ở tháng hiện tại (không lật sang tương lai)", async () => {
