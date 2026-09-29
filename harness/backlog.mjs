@@ -17820,12 +17820,14 @@ export const backlog = [
       "apps/app/src/router.tsx",
       "packages/web-core/**",
       "packages/contracts/**",
+      // Owner ký O4 29/09/2026 — neo kiểu `048` TYPE-ONLY (chú thích kiểu trả về `listBadges`).
+      "apps/api/src/social/social-kudos.service.ts",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
     depends_on: ["S16-SOCIAL-FE-2", "S16-SOCIAL-BE-2D"],
-    plan: "docs/plans/S16-SOCIAL-FE-2.md",
+    plan: "docs/plans/S16-SOCIAL-FE-2C.md",
     src: ["plan S16-SOCIAL-FE-2 §0 lát C · API-19 047/048 · SPEC-16 §13.4b"],
     done_when: [
       "Người nhận đã nghỉ (isFormerEmployee) hiện nhãn; không tự vinh danh mình (lọc khỏi ô chọn + hiện 422 nếu lọt)",
@@ -17834,6 +17836,8 @@ export const backlog = [
     notes: [
       "Tách từ S16-SOCIAL-FE-2 (owner ký S1 29/09/2026). Chặn bởi S16-SOCIAL-BE-2D (G1/G2).",
       "⚠️ BE-2D (plan §9 V15): `avatarUrl` của 059 / 047 / khối kudos trên thẻ là cột RAW `employee_profiles.avatar_url` (fileId hoặc URL tuỳ ý — cột đa-người-ghi, đầu độc được) ⇒ KHÔNG vẽ làm `src`/`href`, chỉ chữ cái đầu, tới khi `S16-SOCIAL-AVATARPRESIGN-1` xong. Ô chọn người gọi `GET /social/kudos/recipients?q=` (≥2 chữ, trần 20, `truncated`), server đã loại chính mình.",
+      "Owner ký 29/09/2026 (plan FE-2C §0): O1 widget = 5 lượt mới nhất của tháng (047?month=&limit=5, không gộp theo người) · O2 thêm mục sidebar «Vinh danh» /feed/kudos · O3 ẩn nút «Vinh danh» ở composer NHÓM · O4 neo kiểu 048 type-only ở `social-kudos.service.ts`.",
+      "Điều kiện MERGE: PROD API ≥ #555 (BE-2D) — FE auto-deploy, API deploy tay; API cũ ⇒ 059 404 + thẻ kudos suy biến.",
     ],
   },
   {
@@ -19588,6 +19592,8 @@ export const backlog = [
       "apps/api/test/**",
       "packages/contracts/**",
       "docs/API Design/**",
+      // Vế FE (plan S16-SOCIAL-FE-2C §7 N1): bật lại `src` ở bề mặt kudos/059 sau khi URL đã ký.
+      "apps/app/src/routes/social/**",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
@@ -19601,6 +19607,7 @@ export const backlog = [
       "URL ký là capability có TTL ⇒ BÓC khỏi payload WS (khuôn CHAT `peer.avatarUrl`) — `.omit` không chạm khoá lồng, cần schema lồng riêng",
       "Đếm câu/trang: +1 câu/trang, không N+1 (ĐO bằng `captureQueries`)",
       "Cột `avatar_url` đa-người-ghi, có thể bị đầu độc (fileId khác, URL `javascript:` — `employees.ts:28` nhận `z.string().url()`) ⇒ BẮT BUỘC đi `resolveEmployeeAvatars` (xác minh cặp employeeId↔fileId); URL http(s) passthrough phải lọc scheme",
+      "Vế FE: S16-SOCIAL-FE-2C cố ý CHỈ vẽ chữ cái đầu ở mọi bề mặt kudos/059 (khối thẻ · màn 009 · widget · ô chọn người nhận, spec assert không `<img>`) ⇒ sau khi `avatarUrl` là URL đã ký, bật lại `src` ở đó (và cập nhật các ca no-img). Các chỗ ĐANG truyền cột thô làm `src` (`PostCard.tsx:82` · `CommentList.tsx:67` · `BirthdayWidget.tsx:90` · `GroupMembersTab.tsx:123` · `GroupRequestsTab.tsx:88`) tự đúng khi URL đã ký — xác minh bằng spec.",
     ],
     notes: ["🔴 FULL gate (đường ký file). Seed 29/09/2026 từ S16-SOCIAL-BE-2D (owner K4)."],
   },
@@ -19623,5 +19630,31 @@ export const backlog = [
       "Vá: FE gửi `{hidden:boolean}`; bỏ `as`; spec ghim body ĐÚNG hợp đồng (parse bằng `moderateFeedPostSchema.safeParse` trong test)",
     ],
     notes: ["Seed 29/09/2026 từ S16-SOCIAL-BE-2D (ngoài phạm vi WO đó)."],
+  },
+  {
+    id: "S16-SOCIAL-FEBLOCKSEED-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Thẻ bài đọc khối BE-2D đã chở: `PollBlock` seed cache `043` từ `post.poll` (hôm nay mỗi thẻ poll tự gọi `043` — N request/trang) · pill trạng thái sáng kiến trên thẻ từ `post.idea` (hôm nay chỉ nhãn + link màn 008)",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-BE-2D"],
+    src: [
+      "Workflow Understand của S16-SOCIAL-FE-2C 29/09/2026: `PostCard.tsx:137` chỉ truyền `postId`/`isMine`, `PollBlock.tsx:57-62` tự `useQuery` 043 không `initialData`; contract `social-feed-blocks.ts:77-78` + plan BE-2D D5 hứa «FE seed cache 043 thẳng từ thẻ» — không WO nào sở hữu.",
+    ],
+    done_when: [
+      "`post.poll` có ⇒ `PollBlock` KHÔNG gọi `043` lúc mount (spy 0 lần) và vẽ đúng số liệu; `post.poll` vắng (006 · WS · API cũ) ⇒ vẫn tự tải `043` như hôm nay",
+      "Kết quả mutation 041..044 vẫn ghi cache `results(postId)`; cache seed không đè kết quả mới hơn (so `updatedAt`/thứ tự nạp — ĐO trước khi chọn luật)",
+      "Pill trạng thái sáng kiến trên thẻ từ `post.idea.status` (4 trạng thái), vắng khối ⇒ giữ nhãn + link như cũ",
+    ],
+    notes: ["Seed 29/09/2026 từ plan S16-SOCIAL-FE-2C §7 N2 (ngoài phạm vi WO đó)."],
   },
 ];
