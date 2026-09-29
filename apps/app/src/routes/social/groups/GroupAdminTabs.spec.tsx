@@ -167,6 +167,22 @@ describe("M1 — tab Thành viên", () => {
     );
   });
 
+  it("ALLOW admin KIÊM manage (S16-SOCIAL-GROUPERR-1): option «Chủ nhóm» BẬT ⇒ gửi {role:'owner'}", async () => {
+    decideMember.mockResolvedValue({ userId: MEMBER.userId, role: "owner", status: "active" });
+    renderWithProviders(<GroupMembersTab groupId={GROUP_ID} caps={capsFor("admin", true)} />);
+    const select = (await screen.findByTestId(
+      `group-member-role-${MEMBER.userId}`,
+    )) as HTMLSelectElement;
+    const ownerOpt = within(select).getByRole("option", {
+      name: t("groups.role.owner"),
+    }) as HTMLOptionElement;
+    expect(ownerOpt.disabled, "BE đã cấp được — option tắt là chặn oan").toBe(false);
+    fireEvent.change(select, { target: { value: "owner" } });
+    await waitFor(() =>
+      expect(decideMember).toHaveBeenCalledWith(GROUP_ID, MEMBER.userId, { role: "owner" }),
+    );
+  });
+
   it("tự hạ vai khi là chủ cuối ⇒ 409 ERR-015 ⇒ câu lý do + kéo lại nhóm", async () => {
     const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
     decideMember.mockRejectedValue(GROUP_ERR.lastOwner());

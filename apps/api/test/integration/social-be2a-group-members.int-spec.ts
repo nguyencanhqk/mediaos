@@ -515,4 +515,132 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2A · nhóm — vòng đời thành v
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     await assertCount(g, 2, "manage duyệt");
   });
+
+  // ─────────── S16-SOCIAL-GROUPERR-1 (1) — cấp `owner` qua `manage:feed-group` BẤT KỂ vai trong nhóm ───────────
+  //
+  // Kẽ đo ở FE-2B (M10): `assertGroupRoleTx` trả `viaManage:false` ngay khi vai HÀNG khớp `owner|admin`,
+  // nên admin ĐANG active kiêm `manage` bị 403 khi cấp owner — trong khi người manage KHÔNG là thành viên
+  // lại cấp được. Luật (SPEC-16 §12 ERR-014 · D12 BE-2A): chỉ `owner` hiện tại HOẶC `manage:feed-group`.
+
+  async function roleOf(groupId: string, userId: string): Promise<string | undefined> {
+    const r = await direct.query(
+      `SELECT role FROM feed_group_members WHERE company_id = $1 AND group_id = $2 AND user_id = $3`,
+      [A.companyId, groupId, userId],
+    );
+    return (r.rows[0] as { role: string } | undefined)?.role;
+  }
+
+  async function roleChangedAudits(
+    groupId: string,
+  ): Promise<Array<{ actor: string; metadata: Record<string, unknown> }>> {
+    const r = await direct.query(
+      `SELECT actor_user_id AS actor, metadata FROM audit_logs
+        WHERE company_id = $1 AND object_type = 'feed_group' AND object_id = $2
+          AND action = 'social.group_member.role_changed'
+        ORDER BY created_at ASC`,
+      [A.companyId, groupId],
+    );
+    return r.rows as Array<{ actor: string; metadata: Record<string, unknown> }>;
+  }
+
+  it("GROUPERR-1 R1 (RED trước vá) — admin ĐANG active KIÊM manage cấp owner cho người khác ⇒ 200 + audit viaManage:true", async () => {
+    const g = await seedGroup("private", [
+      { userId: owner.userId, role: "owner" },
+      { userId: manager.userId, role: "admin" },
+      { userId: u1.userId, role: "member" },
+    ]);
+    const res = await patch(manager.token, `/social/groups/${g}/members/${u1.userId}`).send({
+      role: "owner",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data).toMatchObject({ userId: u1.userId, role: "owner", status: "active" });
+    expect(await roleOf(g, u1.userId)).toBe("owner");
+    await assertCount(g, 3, "R1 đổi vai ⇒ delta 0");
+
+    const audits = await roleChangedAudits(g);
+    expect(audits).toHaveLength(1);
+    expect(audits[0].actor).toBe(manager.userId);
+    // Quyền cấp owner đến từ `manage` (vai hàng `admin` KHÔNG đủ) ⇒ sổ phải nói đúng nguồn quyền.
+    expect(audits[0].metadata).toMatchObject({
+      groupId: g,
+      targetUserId: u1.userId,
+      from: "member",
+      to: "owner",
+      viaManage: true,
+    });
+  });
+
+  it("GROUPERR-1 R2 (DENY) — admin KHÔNG manage cấp owner cho NGƯỜI KHÁC ⇒ 403 ERR-014, không đổi gì, không audit", async () => {
+    const g = await seedGroup("private", [
+      { userId: owner.userId, role: "owner" },
+      { userId: adminUser.userId, role: "admin" },
+      { userId: u1.userId, role: "member" },
+    ]);
+    const res = await patch(adminUser.token, `/social/groups/${g}/members/${u1.userId}`).send({
+      role: "owner",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(JSON.stringify(res.body)).toContain(SOCIAL_ERR.GROUP_ROLE_REQUIRED);
+    expect(await roleOf(g, u1.userId)).toBe("member");
+    expect(await roleChangedAudits(g)).toHaveLength(0);
+  });
+
+  it("GROUPERR-1 R3 (ALLOW) — owner cấp owner ⇒ 200 + audit viaManage:false (quyền từ vai hàng)", async () => {
+    const g = await seedGroup("private", [
+      { userId: owner.userId, role: "owner" },
+      { userId: u1.userId, role: "member" },
+    ]);
+    const res = await patch(owner.token, `/social/groups/${g}/members/${u1.userId}`).send({
+      role: "owner",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(await roleOf(g, u1.userId)).toBe("owner");
+    const audits = await roleChangedAudits(g);
+    expect(audits).toHaveLength(1);
+    expect(audits[0].metadata).toMatchObject({ to: "owner", viaManage: false });
+  });
+
+  // R4–R6: GHIM hành vi ĐÃ SHIP (hôm nay đã xanh) — bản vá không được thu hẹp nó.
+  it.each([
+    ["R4 · manage KHÔNG là thành viên", null],
+    ["R5 · manage đang CHỜ DUYỆT (nhóm kín)", { role: "member" as const, status: "pending" }],
+    ["R6 · manage là member active", { role: "member" as const, status: "active" }],
+  ])("GROUPERR-1 %s cấp owner ⇒ 200 + audit viaManage:true", async (_label, managerRow) => {
+    const members: Array<{ userId: string; role: "owner" | "admin" | "member"; status?: string }> =
+      [
+        { userId: owner.userId, role: "owner" },
+        { userId: u1.userId, role: "member" },
+      ];
+    if (managerRow) members.push({ userId: manager.userId, ...managerRow });
+    const g = await seedGroup("private", members);
+
+    const res = await patch(manager.token, `/social/groups/${g}/members/${u1.userId}`).send({
+      role: "owner",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(await roleOf(g, u1.userId)).toBe("owner");
+    const audits = await roleChangedAudits(g);
+    expect(audits).toHaveLength(1);
+    expect(audits[0].metadata).toMatchObject({ targetUserId: u1.userId, viaManage: true });
+  });
+
+  it("GROUPERR-1 R8 (owner ký O5) — admin KIÊM manage tự phong CHÍNH MÌNH owner ⇒ 200 + viaManage:true", async () => {
+    const g = await seedGroup("private", [
+      { userId: owner.userId, role: "owner" },
+      { userId: manager.userId, role: "admin" },
+    ]);
+    const res = await patch(manager.token, `/social/groups/${g}/members/${manager.userId}`).send({
+      role: "owner",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(await roleOf(g, manager.userId)).toBe("owner");
+    const audits = await roleChangedAudits(g);
+    expect(audits).toHaveLength(1);
+    expect(audits[0].metadata).toMatchObject({
+      targetUserId: manager.userId,
+      from: "admin",
+      to: "owner",
+      viaManage: true,
+    });
+  });
 });

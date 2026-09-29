@@ -27,9 +27,9 @@ export interface GroupCapabilities {
   /** 038/039 — duyệt · từ chối · đổi vai · mời ra: owner/admin hoặc manage (`:343-368`, `:444-448`). */
   canModerate: boolean;
   /**
-   * 038 `{role:'owner'}` — owner, HOẶC manage mà KHÔNG đang là admin active (`:404-406`).
-   * Kẽ BE (nợ `S16-SOCIAL-GROUPERR-1`): admin active kiêm manage ⇒ `assertGroupRoleTx` trả
-   * `viaManage:false` vì vai admin đã khớp ⇒ 403. Soi gương để không hiện lựa chọn chắc chắn hỏng.
+   * 038 `{role:'owner'}` — owner hiện tại HOẶC manage, BẤT KỂ vai trong nhóm (D12). Kẽ BE «admin active
+   * kiêm manage bị 403» đã vá ở `S16-SOCIAL-GROUPERR-1` (BE đọc `canManageGroups`, không đọc `viaManage`)
+   * ⇒ FE hết soi gương kẽ đó; hai phía PHẢI ship cùng PR.
    */
   canGrantOwner: boolean;
   /** 037 — mọi thành viên active hoặc manage (`:316-317`). */
@@ -68,7 +68,7 @@ export function groupCapabilities(
     canEdit: isOwnerOrAdmin || canManage,
     canDelete: isOwner || canManage,
     canModerate: isOwnerOrAdmin || canManage,
-    canGrantOwner: isOwner || (canManage && role !== "admin"),
+    canGrantOwner: isOwner || canManage,
     canListMembers: role !== null || canManage,
     canReadPosts: isPublic || role !== null,
     canPost: role !== null,

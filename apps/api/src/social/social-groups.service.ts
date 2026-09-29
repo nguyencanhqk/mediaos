@@ -401,8 +401,13 @@ export class SocialGroupsService {
       if (target.status !== "active") {
         throw new ConflictException(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH);
       }
+      // 🔴 D12 — CẤP `owner`: chỉ owner hiện tại HOẶC người giữ `manage:feed-group`, BẤT KỂ vai trong nhóm
+      // (S16-SOCIAL-GROUPERR-1). Đọc thẳng `actor.canManageGroups`, KHÔNG đọc `viaManage`: `viaManage`
+      // nghĩa là «vai HÀNG trượt nhưng manage cứu» — admin active kiêm manage có vai hàng KHỚP nên
+      // `viaManage=false`, và dùng nó ở đây là 403 oan đúng người có quyền (đo ở FE-2B, M10).
       const actorIsOwner = mine?.status === "active" && mine.role === "owner";
-      if (dto.role === "owner" && !actorIsOwner && !viaManage) {
+      const ownerGrantViaManage = dto.role === "owner" && !actorIsOwner;
+      if (ownerGrantViaManage && !actor.canManageGroups) {
         throw new ForbiddenException(SOCIAL_ERR.GROUP_ROLE_REQUIRED);
       }
       // Hạ vai một owner ⇒ đường MẤT OWNER thứ hai (D6-ii). Neo `FOR UPDATE` đã giữ ở trên.
@@ -426,7 +431,8 @@ export class SocialGroupsService {
         targetUserId,
         from: target.role,
         to: dto.role,
-        viaManage,
+        // Cấp owner mà actor không phải owner ⇒ quyền THẬT đến từ `manage` dù vai hàng là admin.
+        viaManage: viaManage || ownerGrantViaManage,
       });
       return { userId: targetUserId, role: dto.role, status: "active" };
     });
