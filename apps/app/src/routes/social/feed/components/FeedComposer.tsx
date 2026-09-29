@@ -16,6 +16,10 @@
  *
  * ⚠️ **KHÔNG có nút đính kèm**: UI đính kèm qua `SOCIAL-API-054/055` là nợ N1 của FE-1, giao
  * `S16-SOCIAL-FE-2D`.
+ *
+ * S16-SOCIAL-FE-2B — `groupId` ⇒ MỌI loại bài đăng vào nhóm (`audience:'group'`). KHÔNG có ô chọn
+ * phạm vi ở bảng tin chung: bài nhóm bị LOẠI khỏi `001` feed chung (D-OWNER-5 của BE-2A), nên đăng
+ * vào nhóm từ `/feed` là bài «biến mất» ngay sau khi đăng. Ô soạn nhóm chỉ sống trên trang nhóm.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -64,6 +68,8 @@ interface FeedComposerProps {
   isSubmitting: boolean;
   /** Nội dung điền sẵn (widget Sinh nhật «Gửi lời chúc» — D12: chỉ MỞ composer, không tự đăng). */
   prefillBody?: string;
+  /** S16-SOCIAL-FE-2B — có ⇒ `audience:'group', groupId` cho mọi loại bài; vắng ⇒ `audience:'company'`. */
+  groupId?: string;
   className?: string;
 }
 
@@ -71,6 +77,7 @@ export function FeedComposer({
   onSubmit,
   isSubmitting,
   prefillBody,
+  groupId,
   className,
 }: FeedComposerProps): React.ReactElement | null {
   const { t } = useTranslation("social");
@@ -122,12 +129,18 @@ export function FeedComposer({
   const contentReady = isPoll ? pollCheck?.ok === true : trimmed.length > 0;
   const canSubmit = contentReady && !tooLong && !busy;
 
+  // `groupId` vắng ⇒ y hệt trước FE-2B (`audience:'company'`, không khoá `groupId` — contracts từ chối
+  // `groupId` đi kèm `company`).
+  const audience = groupId
+    ? ({ audience: "group", groupId } as const)
+    : ({ audience: "company" } as const);
+
   const buildDto = (): CreateFeedPostDto | null => {
     if (isPoll) {
       if (!pollCheck?.ok) return null;
       return {
         type: "poll",
-        audience: "company",
+        ...audience,
         ...(trimmed.length > 0 ? { body: trimmed } : {}),
         requiresAck: false,
         poll: pollCheck.poll,
@@ -135,7 +148,7 @@ export function FeedComposer({
     }
     return {
       type,
-      audience: "company",
+      ...audience,
       body: trimmed,
       requiresAck: type === "news" ? requiresAck : false,
     } as CreateFeedPostDto;
@@ -188,14 +201,15 @@ export function FeedComposer({
     </button>
   );
 
+  // Hai câu nói «gửi tới công ty» là SAI trong nhóm — đổi riêng ở chế độ nhóm; poll/idea thì trung tính.
   const placeholder =
     type === "news"
-      ? t("composer.newsPlaceholder")
+      ? t(groupId ? "composer.groupNewsPlaceholder" : "composer.newsPlaceholder")
       : type === "poll"
         ? t("composer.pollDescriptionPlaceholder")
         : type === "idea"
           ? t("composer.ideaPlaceholder")
-          : t("composer.placeholder");
+          : t(groupId ? "composer.groupPlaceholder" : "composer.placeholder");
 
   return (
     <section

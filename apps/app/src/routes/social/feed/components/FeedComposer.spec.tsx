@@ -374,3 +374,66 @@ describe("D8 — KHÔNG có nút đính kèm ở FE-1", () => {
     expect(container.querySelector('input[type="file"]')).toBeNull();
   });
 });
+
+describe("S16-SOCIAL-FE-2B P1 — chế độ nhóm (`groupId`)", () => {
+  const GROUP_ID = "11111111-1111-4111-8111-111111111111";
+  const CAPS = {
+    "view:feed": true,
+    "create:feed-post": true,
+    "create:feed-poll": true,
+    "manage:feed-news": true,
+  };
+
+  it("chia sẻ trong nhóm ⇒ `audience:'group', groupId` và parse được bằng createFeedPostSchema", async () => {
+    setCaps(CAPS);
+    const onSubmit = vi.fn(() => Promise.resolve({ ok: true }));
+    renderComposer({ onSubmit, groupId: GROUP_ID });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Chào cả nhóm" } });
+    fireEvent.click(screen.getByTestId("composer-submit"));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const dto = (onSubmit.mock.calls[0] as unknown[])[0];
+    expect(dto).toMatchObject({ type: "share", audience: "group", groupId: GROUP_ID, body: "Chào cả nhóm" });
+    expect(createFeedPostSchema.safeParse(dto).success).toBe(true);
+  });
+
+  it("bình chọn trong nhóm cũng mang `audience:'group'` (mọi loại, không chỉ chia sẻ)", async () => {
+    setCaps(CAPS);
+    const onSubmit = vi.fn(() => Promise.resolve({ ok: true }));
+    renderComposer({ onSubmit, groupId: GROUP_ID });
+    fireEvent.click(screen.getByTestId("composer-type-poll"));
+    fireEvent.change(screen.getByTestId("composer-poll-question"), { target: { value: "Đá bóng tối nào?" } });
+    fireEvent.change(screen.getByTestId("composer-poll-option-0"), { target: { value: "Thứ 3" } });
+    fireEvent.change(screen.getByTestId("composer-poll-option-1"), { target: { value: "Thứ 5" } });
+    fireEvent.click(screen.getByTestId("composer-submit"));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const dto = (onSubmit.mock.calls[0] as unknown[])[0];
+    expect(dto).toMatchObject({ type: "poll", audience: "group", groupId: GROUP_ID });
+    expect(createFeedPostSchema.safeParse(dto).success).toBe(true);
+  });
+
+  it("placeholder nói về NHÓM (câu «gửi tới công ty» là sai trong nhóm)", () => {
+    setCaps(CAPS);
+    renderComposer({ groupId: GROUP_ID });
+    const t = i18n.getFixedT("vi", "social");
+    expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe(t("composer.groupPlaceholder"));
+    fireEvent.click(screen.getByTestId("composer-type-news"));
+    expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe(
+      t("composer.groupNewsPlaceholder"),
+    );
+  });
+
+  it("ĐỐI CHỨNG: không `groupId` ⇒ `audience:'company'` và KHÔNG có khoá `groupId`", async () => {
+    setCaps(CAPS);
+    const onSubmit = vi.fn(() => Promise.resolve({ ok: true }));
+    renderComposer({ onSubmit });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Chào công ty" } });
+    fireEvent.click(screen.getByTestId("composer-submit"));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const dto = (onSubmit.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
+    expect(dto.audience).toBe("company");
+    expect(dto).not.toHaveProperty("groupId");
+  });
+});
