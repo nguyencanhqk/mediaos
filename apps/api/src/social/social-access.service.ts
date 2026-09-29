@@ -189,7 +189,9 @@ export class SocialAccessService {
     // per-pair sau này không được âm thầm nới thành toàn công ty.
     if (p.companyFloor && !SocialAccessService.isCompany(routeScopeOrNull)) {
       if (p.denyMessage) throw new ForbiddenException(socialError(p.denyMessage));
-      throw new ForbiddenException("AUTH-ERR-SCOPE-DENIED: cặp SOCIAL này chỉ hợp lệ ở scope Company");
+      throw new ForbiddenException(
+        "AUTH-ERR-SCOPE-DENIED: cặp SOCIAL này chỉ hợp lệ ở scope Company",
+      );
     }
 
     const ctx = await this.dataScope.resolveContext(user.id, user.companyId);

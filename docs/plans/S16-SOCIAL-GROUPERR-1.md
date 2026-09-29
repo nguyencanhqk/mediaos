@@ -190,7 +190,17 @@ Reviewer XÁC NHẬN: D1 không fail-open ở hồ sơ nào (thay đổi DUY NH�
 tham số union literal ép được qua `as const`; D14 không hồi quy cho cả API cũ lẫn mới; `PIN_NEWS_ONLY` chỉ tới qua `006`
 (`029` chỉ truyền `{hidden}`/`{commentsLocked}` cho `moderateTx`); 101 chỗ ném = 91 thẳng + 10 khác.
 
-## 7. Changelog
+## 7. FULL gate O3 (29/09/2026) — 4/4 PASS, 0 CRITICAL/HIGH
+
+| Reviewer | Verdict | Đã vá (mỗi vá thay đổi hành vi có ca RED đo trước) |
+| --- | --- | --- |
+| security-reviewer | PASS (2 LOW) | LOW-2 cổng gắn tệp thiếu `reason` ⇒ `logger.error` (ca RED spec attachments) · LOW-1 dist contracts cũ làm API không boot ⇒ ghi PR: release PHẢI build contracts trước api |
+| silent-failure-hunter | PASS (3 LOW) | LOW-1 heuristic LEGACY chỉ cho mã chung API cũ (ca RED group-errors) · LOW-2 tầng C quét thêm `recycle-bin-feed-posts.controller.ts` · LOW-3 tầng C chặn alias `XxxException as Y` + lớp con chưa ghim (mutant `SocialSneaky` đỏ đúng) |
+| typescript-reviewer | PASS (3 LOW) | LOW-1 = security LOW-2 · LOW-2 prettier CHỈ trên file vốn sạch ở master (file master đã lệch giữ nguyên để diff không phình) · LOW-3 `SOCIAL_ERROR_CODES` `satisfies Record<string, \`SOCIAL-ERR-${string}\`>` |
+| react (general-purpose) | PASS (1 MEDIUM, 4 LOW) | M1 FE bật «Chủ nhóm» cho admin+manage trước khi API lên ⇒ docblock + PR: **API deploy NGAY sau merge** · L1 double `GROUP_ERR_LEGACY` + ca component API cũ · L2 = silent LOW-1 · L3 số dòng BE · L4 docblock GroupMembersTab |
+
+## 8. Changelog
 
 - v1 29/09/2026 — soạn sau workflow đọc 5 lane + 5 chữ ký owner O1–O5.
 - v2 29/09/2026 — vá plan-reviewer lượt 1 (B1–B3, H1, M1–M3, L1–L5) — §6.
+- v3 29/09/2026 — FULL gate O3 4/4 PASS + vá gate — §7.

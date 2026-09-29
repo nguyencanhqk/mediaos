@@ -424,7 +424,8 @@ export class SocialGroupsService {
       );
       // Hàng vừa đổi trạng thái/biến mất giữa hai câu (dù đã khoá hàng CHA, hàng thành viên vẫn có
       // thể bị xoá bởi chính người đó qua `036`). KHÔNG coi là thành công rỗng.
-      if (!changed) throw new ConflictException(socialError(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH));
+      if (!changed)
+        throw new ConflictException(socialError(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH));
       // delta = 0 (active → active): CỐ Ý không gọi `bumpGroupMemberCount`.
 
       await this.recordGroupAudit(tx, actor, "social.group_member.role_changed", groupId, {

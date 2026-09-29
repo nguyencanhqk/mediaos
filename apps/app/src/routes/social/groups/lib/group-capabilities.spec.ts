@@ -31,7 +31,7 @@ function expected(p: Profile, vis: Vis, manage: boolean) {
   return {
     canEdit: owner || admin || manage, // :144-148
     canDelete: owner || manage, // :190-191 (admin 403)
-    canModerate: owner || admin || manage, // :343-368 · :444-448
+    canModerate: owner || admin || manage, // :343-368 · :447-455
     canGrantOwner: owner || manage, // D12 — owner hoặc manage BẤT KỂ vai (S16-SOCIAL-GROUPERR-1)
     canListMembers: active || manage, // :316-317
     canReadPosts: vis === "public" || active, // predicates — manage KHÔNG nới

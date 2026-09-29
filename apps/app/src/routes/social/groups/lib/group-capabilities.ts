@@ -24,12 +24,14 @@ export interface GroupCapabilities {
   canEdit: boolean;
   /** 034 — owner MỘT MÌNH hoặc manage; admin 403 (`:190-191`). */
   canDelete: boolean;
-  /** 038/039 — duyệt · từ chối · đổi vai · mời ra: owner/admin hoặc manage (`:343-368`, `:444-448`). */
+  /** 038/039 — duyệt · từ chối · đổi vai · mời ra: owner/admin hoặc manage (`:343-368`, `:447-455`). */
   canModerate: boolean;
   /**
    * 038 `{role:'owner'}` — owner hiện tại HOẶC manage, BẤT KỂ vai trong nhóm (D12). Kẽ BE «admin active
    * kiêm manage bị 403» đã vá ở `S16-SOCIAL-GROUPERR-1` (BE đọc `canManageGroups`, không đọc `viaManage`)
-   * ⇒ FE hết soi gương kẽ đó; hai phía PHẢI ship cùng PR.
+   * ⇒ FE hết soi gương kẽ đó. Hai phía PHẢI ship cùng PR **và cùng đợt deploy**: FE auto-deploy khi merge
+   * còn API deploy tay ⇒ API phải lên NGAY sau merge, nếu không admin kiêm manage bấm «Chủ nhóm» vẫn
+   * nhận 403 của API cũ (fail-closed, FULL gate react M1).
    */
   canGrantOwner: boolean;
   /** 037 — mọi thành viên active hoặc manage (`:316-317`). */

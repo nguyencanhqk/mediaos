@@ -188,7 +188,12 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPERR-1 · mã lỗi SOCIAL trên dâ
   // ───────────────────────── NHÓM (`031..039`) ─────────────────────────
 
   it("W1 — 404 nhóm lạ ⇒ SOCIAL-ERR-012", async () => {
-    expectSocial(await get(u1.token, `/social/groups/${randomUUID()}`), 404, SOCIAL_ERR.GROUP_NOT_FOUND, SOCIAL_ERROR_CODES.GROUP_NOT_FOUND);
+    expectSocial(
+      await get(u1.token, `/social/groups/${randomUUID()}`),
+      404,
+      SOCIAL_ERR.GROUP_NOT_FOUND,
+      SOCIAL_ERROR_CODES.GROUP_NOT_FOUND,
+    );
   });
 
   it("W2 — 403 vai nhóm không đủ (member mời người ra `039`) ⇒ SOCIAL-ERR-014", async () => {
@@ -199,13 +204,19 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPERR-1 · mã lỗi SOCIAL trên dâ
     expectSocial(
       await del(u1.token, `/social/groups/${g}/members/${owner.userId}`),
       403,
-      SOCIAL_ERR.GROUP_ROLE_REQUIRED, SOCIAL_ERROR_CODES.GROUP_ROLE_REQUIRED,
+      SOCIAL_ERR.GROUP_ROLE_REQUIRED,
+      SOCIAL_ERROR_CODES.GROUP_ROLE_REQUIRED,
     );
   });
 
   it("W3 — 409 owner cuối rời nhóm ⇒ SOCIAL-ERR-015", async () => {
     const g = await seedGroup("public", [{ userId: owner.userId, role: "owner" }]);
-    expectSocial(await post(owner.token, `/social/groups/${g}/leave`), 409, SOCIAL_ERR.GROUP_LAST_OWNER, SOCIAL_ERROR_CODES.GROUP_LAST_OWNER);
+    expectSocial(
+      await post(owner.token, `/social/groups/${g}/leave`),
+      409,
+      SOCIAL_ERR.GROUP_LAST_OWNER,
+      SOCIAL_ERROR_CODES.GROUP_LAST_OWNER,
+    );
   });
 
   it("W4 — 409 vào nhóm lần hai ⇒ SOCIAL-ERR-013", async () => {
@@ -216,7 +227,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPERR-1 · mã lỗi SOCIAL trên dâ
     expectSocial(
       await post(u1.token, `/social/groups/${g}/join`),
       409,
-      SOCIAL_ERR.GROUP_MEMBERSHIP_EXISTS, SOCIAL_ERROR_CODES.GROUP_MEMBERSHIP_EXISTS,
+      SOCIAL_ERR.GROUP_MEMBERSHIP_EXISTS,
+      SOCIAL_ERROR_CODES.GROUP_MEMBERSHIP_EXISTS,
     );
   });
 
@@ -226,7 +238,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPERR-1 · mã lỗi SOCIAL trên dâ
     expectSocial(
       await post(u1.token, "/social/groups").send({ name, visibility: "public" }),
       409,
-      SOCIAL_ERR.GROUP_NAME_TAKEN, SOCIAL_ERROR_CODES.GROUP_NAME_TAKEN,
+      SOCIAL_ERR.GROUP_NAME_TAKEN,
+      SOCIAL_ERROR_CODES.GROUP_NAME_TAKEN,
     );
   });
 
@@ -235,7 +248,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPERR-1 · mã lỗi SOCIAL trên dâ
     expectSocial(
       await del(owner.token, `/social/groups/${g}/members/${u2.userId}`),
       404,
-      SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND, SOCIAL_ERROR_CODES.GROUP_MEMBER_NOT_FOUND,
+      SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND,
+      SOCIAL_ERROR_CODES.GROUP_MEMBER_NOT_FOUND,
     );
   });
 
@@ -256,12 +270,18 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPERR-1 · mã lỗi SOCIAL trên dâ
         parentCommentId: reply.body.data.id,
       }),
       422,
-      SOCIAL_ERR.REPLY_DEPTH, SOCIAL_ERROR_CODES.REPLY_DEPTH,
+      SOCIAL_ERR.REPLY_DEPTH,
+      SOCIAL_ERROR_CODES.REPLY_DEPTH,
     );
   });
 
   it("W8 — 404 bài lạ ⇒ SOCIAL-ERR-001", async () => {
-    expectSocial(await get(u1.token, `/social/posts/${randomUUID()}`), 404, SOCIAL_ERR.POST_NOT_FOUND, SOCIAL_ERROR_CODES.POST_NOT_FOUND);
+    expectSocial(
+      await get(u1.token, `/social/posts/${randomUUID()}`),
+      404,
+      SOCIAL_ERR.POST_NOT_FOUND,
+      SOCIAL_ERROR_CODES.POST_NOT_FOUND,
+    );
   });
 
   it("W9 — 400 con trỏ hỏng ⇒ sentinel SOCIAL-ERR-CURSOR-INVALID (KHÔNG `001` — 001 là mã 404)", async () => {
@@ -289,7 +309,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPERR-1 · mã lỗi SOCIAL trên dâ
         poll: { question: "Chọn gì?", options: ["A", "B"] },
       }),
       403,
-      SOCIAL_ERR.POLL_CREATE_REQUIRED, SOCIAL_ERROR_CODES.POLL_CREATE_REQUIRED,
+      SOCIAL_ERR.POLL_CREATE_REQUIRED,
+      SOCIAL_ERROR_CODES.POLL_CREATE_REQUIRED,
     );
     // Neo dương: CÙNG user tạo được bài `share` ⇒ 403 ở trên là do cặp theo loại bài, không do vai hỏng.
     await createPost(noPoll.token, { type: "share", body: "neo dương W11" });
@@ -302,7 +323,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPERR-1 · mã lỗi SOCIAL trên dâ
         status: "under_review",
       }),
       403,
-      SOCIAL_ERR.IDEA_APPROVE_REQUIRED, SOCIAL_ERROR_CODES.IDEA_APPROVE_REQUIRED,
+      SOCIAL_ERR.IDEA_APPROVE_REQUIRED,
+      SOCIAL_ERROR_CODES.IDEA_APPROVE_REQUIRED,
     );
   });
 

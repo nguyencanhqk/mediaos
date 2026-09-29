@@ -202,3 +202,13 @@ export const GROUP_ERR = {
     ),
   server: () => new ApiError(500, "INTERNAL", "boom"),
 };
+
+/**
+ * Hình dạng API CŨ (PROD chưa redeploy sau merge — owner ký O4): `code` là mã CHUNG theo status, mã SOCIAL
+ * chỉ ở tiền tố `message`. Đây là thứ PROD phục vụ ĐẦU TIÊN sau khi FE lên ⇒ component spec phải có ít nhất
+ * một ca chạy trên nó (FULL gate react L1). Gỡ cùng nhánh LEGACY-PREFIX (`S16-SOCIAL-GROUPERR-FEFALLBACK-1`).
+ */
+export const GROUP_ERR_LEGACY = {
+  lastOwner: () =>
+    new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR-015: nhóm phải còn ít nhất một chủ nhóm đang hoạt động."),
+};

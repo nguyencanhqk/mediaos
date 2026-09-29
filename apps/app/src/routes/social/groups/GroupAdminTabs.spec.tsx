@@ -12,6 +12,7 @@ import { socialKeys } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import {
   GROUP_ERR,
+  GROUP_ERR_LEGACY,
   GROUP_ID,
   makeGroup,
   makeMember,
@@ -194,6 +195,18 @@ describe("M1 — tab Thành viên", () => {
     expect(banner).toHaveAttribute("data-reason", "lastOwner");
     expect(invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toContain(
       JSON.stringify(socialKeys.groups.allOf()),
+    );
+  });
+
+  it("API CŨ (mã chung + tiền tố, O4): tự hạ vai khi là chủ cuối ⇒ VẪN câu lý do lastOwner", async () => {
+    decideMember.mockRejectedValue(GROUP_ERR_LEGACY.lastOwner());
+    renderWithProviders(<GroupMembersTab groupId={GROUP_ID} caps={capsFor("owner")} />);
+    fireEvent.change(await screen.findByTestId(`group-member-role-${ME}`), {
+      target: { value: "member" },
+    });
+    expect(await screen.findByTestId("feed-action-error")).toHaveAttribute(
+      "data-reason",
+      "lastOwner",
     );
   });
 

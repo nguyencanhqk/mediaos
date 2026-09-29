@@ -5,7 +5,7 @@
  * - Ô chọn vai chỉ với `canModerate`. Option «Chủ nhóm» LUÔN render, `disabled` khi `!canGrantOwner`:
  *   gỡ hẳn option thì admin nhìn hàng CHỦ NHÓM thấy select hiện «Thành viên» (sai vai hiện tại) và
  *   chọn «Thành viên» không bắn `change` (plan §8 M2). Admin HẠ/MỜI RA được chủ nhóm (trừ chủ cuối) —
- *   đúng cổng BE, chỉ phong chủ là không.
+ *   đúng cổng BE, chỉ phong chủ là không (trừ khi kiêm `manage:feed-group` — S16-SOCIAL-GROUPERR-1).
  * - Hàng của CHÍNH MÌNH: không «Mời ra» (dùng «Rời nhóm» ở đầu trang), VẪN đổi vai được — đó là đường
  *   tự hạ sau khi phong người khác làm chủ (chuyển owner = hai bước, BE không có route nguyên tử).
  * - 409 chủ nhóm cuối / trạng thái đổi ⇒ lý do cụ thể + kéo lại (`useGroupErrorState`).

@@ -421,13 +421,23 @@ export class SocialAttachmentsService {
       // (`security-alert.service.ts:64-76`), còn log thì không phụ thuộc DB.
       // S16-SOCIAL-GROUPERR-1: `gate.reason` vắng chỉ xảy ra với object cổng dựng HỎNG (cast/Partial —
       // ca FAIL-CLOSED của spec). Khi đó vẫn phải là 403 ĐÚNG đích, không phải 500 của `socialError`:
-      // cổng deny cho một `targetType` luôn mang đúng `SOCIAL_FILE_TARGET_DENIED[targetType]`.
-      throw new SocialAttachGateDeniedException(gate.reason ?? SOCIAL_FILE_TARGET_DENIED[targetType], {
-        targetType,
-        targetId,
-        actorUserId: userId,
-        newFileCount: toAdd.length,
-      });
+      // cổng deny cho một `targetType` luôn mang đúng `SOCIAL_FILE_TARGET_DENIED[targetType]`. Nhưng đó là
+      // LỖI ĐI DÂY, không phải deny thường ⇒ ồn ở mức ERROR (khuôn `resolveAttachNewGate`), để một cổng
+      // dựng hỏng không lẫn vào tiếng ồn `warn` của deny nghiệp vụ.
+      if (gate.reason === undefined) {
+        this.logger.error(
+          `attach-gate DENY thiếu \`reason\` (cổng dựng hỏng — lỗi đi dây) target=${targetType}:${targetId}`,
+        );
+      }
+      throw new SocialAttachGateDeniedException(
+        gate.reason ?? SOCIAL_FILE_TARGET_DENIED[targetType],
+        {
+          targetType,
+          targetId,
+          actorUserId: userId,
+          newFileCount: toAdd.length,
+        },
+      );
     }
 
     // Chỉ tệp MỚI mới đi qua cổng — tệp đã gắn từ trước đã qua rồi, và bắt nó qua lại sẽ đỏ ở vế 5

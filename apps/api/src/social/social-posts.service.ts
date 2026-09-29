@@ -401,7 +401,8 @@ export class SocialPostsService {
             ),
           )
           .returning({ id: feedPosts.id });
-        if (edited.length === 0) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
+        if (edited.length === 0)
+          throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
         // Quan ly SUA noi dung cua NGUOI KHAC => vao so, cung luat voi duong XOA (`remove`).
         // Khong co dong nay thi dau vet bien mat hoan toan: `body` bi ghi de, `updated_by`/`edited_at`

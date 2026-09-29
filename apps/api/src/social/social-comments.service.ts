@@ -144,9 +144,11 @@ export class SocialCommentsService {
           dto.parentCommentId,
         );
         // `undefined` = cha không tồn tại / không thuộc bài này ⇒ 404 (cùng luật che của bình luận).
-        if (parent === undefined) throw new NotFoundException(socialError(SOCIAL_ERR.COMMENT_NOT_FOUND));
+        if (parent === undefined)
+          throw new NotFoundException(socialError(SOCIAL_ERR.COMMENT_NOT_FOUND));
         // `null` = cha CHÍNH NÓ đã là một trả lời ⇒ quá 1 cấp.
-        if (parent === null) throw new UnprocessableEntityException(socialError(SOCIAL_ERR.REPLY_DEPTH));
+        if (parent === null)
+          throw new UnprocessableEntityException(socialError(SOCIAL_ERR.REPLY_DEPTH));
         parentAuthorUserId = parent;
       }
 

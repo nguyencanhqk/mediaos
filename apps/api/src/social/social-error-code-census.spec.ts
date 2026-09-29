@@ -270,9 +270,21 @@ describe("S16-SOCIAL-GROUPERR-1 · tầng C · lỗi SOCIAL mang mã lên error.
     },
   ];
 
-  const files = walk(SOCIAL_SRC).filter(
-    (p) => p.endsWith(".ts") && !p.endsWith(".spec.ts") && path.basename(p) !== "social.errors.ts",
-  );
+  /**
+   * Controller SOCIAL sống NGOÀI `src/social` (FULL gate silent-failure LOW-2): `057`/`058` phục vụ ở
+   * `/recycle-bin/feed-posts`. Hôm nay nó không ném gì — đưa vào tầm quét để một `throw` thêm sau này
+   * không vô hình với tầng C.
+   */
+  const SOCIAL_OUTSIDE_SRC = [
+    path.join(API_ROOT, "src", "recycle-bin", "recycle-bin-feed-posts.controller.ts"),
+  ];
+  const files = [
+    ...walk(SOCIAL_SRC).filter(
+      (p) =>
+        p.endsWith(".ts") && !p.endsWith(".spec.ts") && path.basename(p) !== "social.errors.ts",
+    ),
+    ...SOCIAL_OUTSIDE_SRC,
+  ];
   const NEW_EXCEPTION = /new\s+\w+Exception\(/g;
 
   const scan = (() => {
@@ -316,6 +328,23 @@ describe("S16-SOCIAL-GROUPERR-1 · tầng C · lỗi SOCIAL mang mã lên error.
     GENERIC_THROWS.forEach((g, i) => {
       expect(scan.used.get(i) ?? 0, `${g.file} «${g.starts}» phải khớp đúng 1 chỗ`).toBe(1);
     });
+  });
+
+  it("regex `new …Exception(` KHÔNG bị lách: không alias `XxxException as Y`, không lớp con nào ngoài lớp đã ghim", () => {
+    // FULL gate silent-failure LOW-3: `import { ForbiddenException as Deny }` hay `class X extends
+    // ForbiddenException` (tên không đuôi `Exception`) sẽ ném mà regex tầng C không nhìn thấy.
+    for (const p of files) {
+      const src = stripComments(fs.readFileSync(p, "utf8"));
+      expect(src, `${path.basename(p)}: alias exception làm tầng C mù`).not.toMatch(
+        /\w+Exception\s+as\s+\w+/,
+      );
+      for (const m of src.matchAll(/class\s+(\w+)\s+extends\s+\w*Exception\b/g)) {
+        expect(m[1], `${path.basename(p)}: lớp con exception chưa được ghim`).toBe(
+          "SocialAttachGateDeniedException",
+        );
+      }
+    }
+    expect(fs.existsSync(SOCIAL_OUTSIDE_SRC[0]), "controller 057/058 đã dời chỗ").toBe(true);
   });
 
   it("`SocialAttachGateDeniedException` TỰ bọc: ctor nhận `SocialErrorMessage` và gọi `super(socialError(reason))`", () => {

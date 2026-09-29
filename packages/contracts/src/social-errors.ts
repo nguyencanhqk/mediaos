@@ -79,7 +79,7 @@ export const SOCIAL_ERROR_CODES = {
   CURSOR_INVALID: "SOCIAL-ERR-CURSOR-INVALID",
   CURSOR_FILTER_MISMATCH: "SOCIAL-ERR-CURSOR-FILTER-MISMATCH",
   PIN_NEWS_ONLY: "SOCIAL-ERR-PIN-NEWS-ONLY",
-} as const;
+} as const satisfies Record<string, `SOCIAL-ERR-${string}`>;
 
 export type SocialErrorKey = keyof typeof SOCIAL_ERROR_CODES;
 export type SocialErrorCode = (typeof SOCIAL_ERROR_CODES)[SocialErrorKey];

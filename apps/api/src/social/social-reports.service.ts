@@ -226,7 +226,9 @@ export class SocialReportsService {
       before.targetId,
     );
     if (!isReportActionValidForTarget(before.targetType, dto.action)) {
-      throw new UnprocessableEntityException(socialError(SOCIAL_ERR.REPORT_ACTION_INVALID_FOR_TARGET));
+      throw new UnprocessableEntityException(
+        socialError(SOCIAL_ERR.REPORT_ACTION_INVALID_FOR_TARGET),
+      );
     }
 
     const won = await this.repo.resolveReport(tx, actor.companyId, reportId, {

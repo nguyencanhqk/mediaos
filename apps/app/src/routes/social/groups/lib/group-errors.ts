@@ -39,8 +39,13 @@ export type GroupErrorReason = ActionErrorReason;
 
 /** LEGACY-PREFIX — tiền tố có số của `message` (API cũ). */
 const SOCIAL_CODE_RE = /^SOCIAL-ERR-(\d{3}):/;
-/** Mã của interceptor idempotency CÓ đặt `code` vào payload (`contracts/idempotency.ts`). */
-const IDEMPOTENCY_CODE_PREFIX = "REQUEST-ERR-IDEMPOTENCY";
+/**
+ * Mã CHUNG mà API cũ gán theo status (`apps/api/src/common/errors/error-codes.ts`). Heuristic status CHỈ
+ * áp cho đúng hai mã này — mã khác (idempotency `REQUEST-ERR-IDEMPOTENCY-*`, module khác…) KHÔNG phải
+ * lỗi nhóm của API cũ nên không được đoán thành «tên trùng»/«trạng thái đổi» (FULL gate react L2).
+ */
+const LEGACY_CONFLICT_CODE = "RESOURCE-ERR-CONFLICT";
+const LEGACY_NOT_FOUND_CODE = "RESOURCE-ERR-NOT-FOUND";
 const C = SOCIAL_ERROR_CODES;
 
 /**
@@ -81,11 +86,11 @@ function legacyPrefixReason(action: GroupAction, err: ApiError): GroupErrorReaso
   if (code === "SOCIAL-ERR-015") return "lastOwner";
   if (code === "SOCIAL-ERR-012") return "groupGone";
   if (code === "SOCIAL-ERR-013") return action === "join" ? "alreadyMember" : "stateChanged";
-  if (err.status === 409 && (action === "create" || action === "update")) {
-    // 031/033: 409 duy nhất của service là tên trùng; 409 idempotency mang `code` riêng.
-    return err.code.startsWith(IDEMPOTENCY_CODE_PREFIX) ? null : "nameTaken";
+  if (err.code === LEGACY_CONFLICT_CODE && (action === "create" || action === "update")) {
+    // 031/033: 409 duy nhất của service là tên trùng; 409 idempotency mang `code` riêng ⇒ không khớp.
+    return "nameTaken";
   }
-  if (err.status === 404 && (action === "leave" || action === "decide" || action === "role" || action === "remove")) {
+  if (err.code === LEGACY_NOT_FOUND_CODE && (action === "leave" || action === "decide" || action === "role" || action === "remove")) {
     // 404 KHÔNG số = `GROUP_MEMBER_NOT_FOUND` — người đó không còn hàng (người khác đã xử lý trước).
     return "stateChanged";
   }

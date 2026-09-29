@@ -78,6 +78,11 @@ describe("groupErrorReason — API MỚI: đọc `error.code` (GROUPERR-1 D14)",
     );
   });
 
+  it("mã KHÔNG phải SOCIAL và KHÔNG phải mã chung của API cũ ⇒ null — heuristic status CHỈ cho hình dạng API cũ", () => {
+    expect(groupErrorReason("create", new ApiError(409, "OTHER-ERR-CONFLICT", "x"))).toBeNull();
+    expect(groupErrorReason("leave", new ApiError(404, "OTHER-ERR-NOT-FOUND", "x"))).toBeNull();
+  });
+
   it("mã SOCIAL KHÔNG liên quan nhóm ⇒ null, KHÔNG rơi xuống heuristic status (vd 409 bình chọn ở create)", () => {
     expect(groupErrorReason("create", wire(409, C.POLL_CLOSED, "SOCIAL-ERR-016: x"))).toBeNull();
     expect(groupErrorReason("leave", wire(404, C.POST_NOT_FOUND, "SOCIAL-ERR-001: x"))).toBeNull();
