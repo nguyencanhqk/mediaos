@@ -14,6 +14,7 @@ import { page, renderWithProviders, resetCaps, setCaps } from "./social-test-dou
 const navigateSpy = vi.fn();
 const listBirthdays = vi.fn();
 const listNews = vi.fn();
+const listPolls = vi.fn();
 /** Tham số URL mà `useSearch` trả về. Đặt trong từng ca để giả lập `/feed?q=...`. */
 let routeSearch: Record<string, unknown> = {};
 
@@ -41,6 +42,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.socialApi,
       listBirthdays: (...a: unknown[]) => listBirthdays(...a),
       listNews: (...a: unknown[]) => listNews(...a),
+      listPolls: (...a: unknown[]) => listPolls(...a),
     },
   };
 });
@@ -50,6 +52,7 @@ beforeEach(() => {
   navigateSpy.mockReset();
   listBirthdays.mockReset().mockResolvedValue({ data: [] });
   listNews.mockReset().mockResolvedValue(page([]));
+  listPolls.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
   routeSearch = {};
 });
 
@@ -246,5 +249,54 @@ describe("SocialPortalShell — ô tìm kiếm đồng bộ từ URL", () => {
 
     const box = await screen.findByTestId("feed-search-box");
     expect((box.querySelector("input") as HTMLInputElement).value).toBe("");
+  });
+});
+
+describe("W1 — widget «Bình chọn đang mở» (S16-SOCIAL-FE-2, plan D9)", () => {
+  const renderShell = () =>
+    renderWithProviders(
+      <SocialPortalShell moduleCode="SOCIAL">
+        <p>nội dung</p>
+      </SocialPortalShell>,
+    );
+
+  it("DENY: không `view:feed` ⇒ KHÔNG gọi `040` (spy 0 lần)", async () => {
+    setCaps({});
+    renderShell();
+    await waitFor(() => expect(screen.getByTestId("portal-layout")).toBeInTheDocument());
+    expect(listPolls).not.toHaveBeenCalled();
+  });
+
+  it("ALLOW: có `view:feed` ⇒ gọi `040` với `status=open`", async () => {
+    renderShell();
+    await waitFor(() => expect(listPolls).toHaveBeenCalled());
+    expect(listPolls.mock.calls[0]?.[0]).toMatchObject({ status: "open" });
+    expect(await screen.findByTestId("open-polls-empty")).toBeInTheDocument();
+  });
+
+  it("🔴 poll `open` nhưng QUÁ HẠN bị lọc khỏi widget (plan §8 H4)", async () => {
+    const row = (pollId: string, question: string, closesAt: string | null) => ({
+      pollId,
+      postId: pollId,
+      question,
+      status: "open",
+      isAnonymous: false,
+      closesAt,
+      closedAt: null,
+      createdAt: "2026-09-01T00:00:00.000Z",
+    });
+    listPolls.mockResolvedValue({
+      data: [
+        row("11111111-1111-4111-8111-111111111111", "Còn mở", null),
+        row("22222222-2222-4222-8222-222222222222", "Quá hạn", "2020-01-01T00:00:00.000Z"),
+      ],
+      page: 1,
+      limit: 5,
+      total: 2,
+    });
+    renderShell();
+    const list = await screen.findByTestId("open-polls-list");
+    expect(list).toHaveTextContent("Còn mở");
+    expect(list).not.toHaveTextContent("Quá hạn");
   });
 });

@@ -3073,6 +3073,13 @@ const SavedPage = React.lazy(() =>
 const ProfilePostsPage = React.lazy(() =>
   import("@/routes/social/feed/ProfilePostsPage").then((m) => ({ default: m.ProfilePostsPage })),
 );
+// S16-SOCIAL-FE-2 lát A — SOC-SCREEN-007/008.
+const PollsPage = React.lazy(() =>
+  import("@/routes/social/polls/PollsPage").then((m) => ({ default: m.PollsPage })),
+);
+const IdeasPage = React.lazy(() =>
+  import("@/routes/social/ideas/IdeasPage").then((m) => ({ default: m.IdeasPage })),
+);
 
 /**
  * Bộ lọc/sắp xếp sống trong URL (plan D6) — `validateSearch` rơi về mặc định thay vì NÉM khi gặp
@@ -3140,6 +3147,25 @@ const feedProfilePostsRoute = createRoute({
   path: "/feed/profiles/$employeeId",
   beforeLoad: authGuard,
   component: () => buildModuleRouteContent(feedProfilePostsMeta, "SOCIAL", <ProfilePostsPage />),
+});
+
+// S16-SOCIAL-FE-2 lát A — Bình chọn (SOC-SCREEN-007) · Sáng kiến (SOC-SCREEN-008). Thêm route là mục
+// sidebar `social.polls`/`social.ideas` (đã khai sẵn ở `SOCIAL_SIDEBAR_V2`) tự hiện qua
+// `pruneUnbuiltScreens`; `social.groups` vẫn bị cắt cho tới lát B.
+const feedPollsMeta = getMeta("social.polls");
+const feedPollsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/polls",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(feedPollsMeta, "SOCIAL", <PollsPage />),
+});
+
+const feedIdeasMeta = getMeta("social.ideas");
+const feedIdeasRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/ideas",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(feedIdeasMeta, "SOCIAL", <IdeasPage />),
 });
 
 // S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
@@ -3539,6 +3565,9 @@ const routeTree = rootRoute.addChildren([
   feedPostDetailRoute,
   feedMyPostsRoute,
   feedProfilePostsRoute,
+  // S16-SOCIAL-FE-2 lát A.
+  feedPollsRoute,
+  feedIdeasRoute,
   accountSetupTwoFactorRoute,
   accountProfileRoute,
   systemAuditLogsRoute,
