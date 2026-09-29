@@ -33,6 +33,12 @@ export interface PostBlocks {
   orphans: Array<{ postId: string; type: BlockType }>;
   /** Vinh danh trỏ huy hiệu mà JOIN không ra code/name (bất khả theo FK) — caller `logger.error`. */
   brokenBadges: Array<{ kudosId: string; badgeId: string | null }>;
+  /**
+   * Vinh danh KHÔNG còn hàng người nhận nào (đường ghi đòi ≥1, nhưng DB không ép và app role có DELETE
+   * trên `feed_kudos_recipients`) — khối vẫn trả `recipients: []` (FE không ZodError) nhưng caller
+   * `logger.error` (FULL gate silent-failure M1: không để «vinh danh 0 người» im lặng).
+   */
+  emptyKudos: Array<{ postId: string; kudosId: string }>;
 }
 
 type BlockType = "kudos" | "poll" | "idea";
@@ -50,6 +56,7 @@ export async function loadPostBlocksTx(
     idea: new Map(),
     orphans: [],
     brokenBadges: [],
+    emptyKudos: [],
   };
   const idsOf = (t: BlockType) => rows.filter((r) => r.type === t).map((r) => r.id);
   const kudosPostIds = idsOf("kudos");
@@ -79,12 +86,14 @@ export async function loadPostBlocksTx(
     for (const b of blocks) {
       const { badge, broken } = badgeRefOf(b);
       if (broken) out.brokenBadges.push({ kudosId: b.kudosId, badgeId: b.badgeId });
+      const recips = byKudos.get(b.kudosId);
+      if (!recips) out.emptyKudos.push({ postId: b.postId, kudosId: b.kudosId });
       out.kudos.set(b.postId, {
         kudosId: b.kudosId,
         message: b.message,
         isOfficial: b.isOfficial,
         badge,
-        recipients: byKudos.get(b.kudosId) ?? [],
+        recipients: recips ?? [],
       });
     }
   }

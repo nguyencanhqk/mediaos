@@ -460,18 +460,26 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2D · khối thẻ bài + danh bạ 0
       const emitter = app.get(RealtimeEmitterService);
       const spy = vi.spyOn(emitter, "emitFeedPostCreated");
       try {
-        const res = await post(author.token, "/social/posts").send({
-          type: "poll",
-          audience: "company",
-          poll: { question: "WS?", options: ["A", "B"] },
-        });
-        expect(res.status, JSON.stringify(res.body)).toBe(201);
-        expect(res.body.data.poll, "neo dương: REST CÓ khối").toBeTruthy();
-        const payload = spy.mock.calls.find(
-          (c) => (c[1] as { id: string }).id === res.body.data.id,
-        )?.[1];
-        expect(payload, "sự kiện đã phát").toBeTruthy();
-        for (const k of ["kudos", "poll", "idea"]) expect(payload).not.toHaveProperty(k);
+        // Cả BA loại — mỗi loại một khoá bóc riêng ở nguồn (gate security LOW: bản đầu chỉ phủ poll).
+        const bodies = [
+          { type: "poll", audience: "company", poll: { question: "WS?", options: ["A", "B"] } },
+          {
+            type: "kudos",
+            audience: "company",
+            kudos: { recipientEmployeeIds: [viewer.employeeId], message: "ws" },
+          },
+          { type: "idea", audience: "company", body: "ws idea" },
+        ] as const;
+        for (const body of bodies) {
+          const res = await post(author.token, "/social/posts").send(body);
+          expect(res.status, JSON.stringify(res.body)).toBe(201);
+          expect(res.body.data[body.type], `neo dương: REST CÓ khối ${body.type}`).toBeTruthy();
+          const payload = spy.mock.calls.find(
+            (c) => (c[1] as { id: string }).id === res.body.data.id,
+          )?.[1];
+          expect(payload, `sự kiện ${body.type} đã phát`).toBeTruthy();
+          for (const k of ["kudos", "poll", "idea"]) expect(payload).not.toHaveProperty(k);
+        }
       } finally {
         spy.mockRestore();
       }
@@ -565,7 +573,12 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2D · khối thẻ bài + danh bạ 0
         const d = await detail(viewer.token, orphanId);
         expect(d.dto.id, "neo: bài vẫn trả về").toBe(orphanId);
         expect(d.dto).not.toHaveProperty("poll");
-        const logged = errSpy.mock.calls.some((c) => JSON.stringify(c).includes(orphanId));
+        const logged = errSpy.mock.calls.some((c) => {
+          const s = JSON.stringify(c);
+          return (
+            s.includes(orphanId) && s.includes("type=poll") && s.includes("KHÔNG nạp được khối")
+          );
+        });
         expect(logged, "fail-LOUD ở log: logger.error nhắc id bài mồ côi").toBe(true);
       } finally {
         errSpy.mockRestore();

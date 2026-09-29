@@ -758,7 +758,14 @@ export class SocialPostsService {
       }),
     );
     for (const o of blocks.orphans) {
-      this.logger.error(`S16-SOCIAL-BE-2D: bài ${o.postId} type=${o.type} KHÔNG có hàng con — khối vắng`);
+      this.logger.error(
+        `S16-SOCIAL-BE-2D: bài ${o.postId} type=${o.type} KHÔNG nạp được khối (thiếu hàng con hoặc dữ liệu hỏng) — khối vắng`,
+      );
+    }
+    for (const k of blocks.emptyKudos) {
+      this.logger.error(
+        `S16-SOCIAL-BE-2D: bài ${k.postId} vinh danh ${k.kudosId} KHÔNG còn người nhận nào`,
+      );
     }
     for (const b of blocks.brokenBadges) {
       this.logger.error(

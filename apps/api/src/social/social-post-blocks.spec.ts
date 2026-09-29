@@ -142,14 +142,26 @@ describe("U2 — accessor + mồ côi", () => {
   });
 
   it("poll 0 lựa chọn (hàng option NULL) ⇒ options=[], KHÔNG {id:null}", async () => {
-    const f = fakeTx([], [{ ...pollRow, option_id: null, label: null, vote_count: null, mine: false, total_voters: "0" }]);
+    const f = fakeTx(
+      [],
+      [
+        {
+          ...pollRow,
+          option_id: null,
+          label: null,
+          vote_count: null,
+          mine: false,
+          total_voters: "0",
+        },
+      ],
+    );
     const blocks = await loadPostBlocksTx(f.tx, CO, VIEWER, [{ id: P_P, type: "poll" }]);
     expect(blocks.poll.get(P_P)?.options).toEqual([]);
     expect(blocks.poll.get(P_P)?.totalVoters).toBe(0);
     expect(blocks.orphans).toEqual([]);
   });
 
-  it("huy hiệu trỏ id mà JOIN không ra tên ⇒ badge null + `brokenBadges` (không `?? \"\"`)", async () => {
+  it('huy hiệu trỏ id mà JOIN không ra tên ⇒ badge null + `brokenBadges` (không `?? ""`)', async () => {
     const BADGE = "d1000000-0000-4000-8000-000000000001";
     const f = fakeTx([[{ ...kudosRow, badgeId: BADGE }], [recipientRow]]);
     const blocks = await loadPostBlocksTx(f.tx, CO, VIEWER, [{ id: P_K, type: "kudos" }]);
@@ -177,16 +189,32 @@ describe("U7 — H-8: `pollResultsTx` (041..044) là ĐÚNG MỘT câu", () => {
     const res = await repo.pollResultsTx(f.tx, CO, POLL, VIEWER);
     expect(f.execute).toHaveBeenCalledTimes(1);
     expect(f.select).not.toHaveBeenCalled();
-    expect(res).toEqual({ options: [{ id: OPT, label: "x", voteCount: 1 }], totalVoters: 1, myVote: [OPT] });
+    expect(res).toEqual({
+      options: [{ id: OPT, label: "x", voteCount: 1 }],
+      totalVoters: 1,
+      myVote: [OPT],
+    });
   });
 
-  it("trượt (không hàng) ⇒ kết quả rỗng như poll 0 lựa chọn, KHÔNG undefined", async () => {
+  it("trượt (không hàng) ⇒ NÉM có tên poll — không trả kết quả rỗng trông hợp lệ (gate M2)", async () => {
     const f = fakeTx([], []);
     const repo = new SocialPollsRepository({} as never);
-    expect(await repo.pollResultsTx(f.tx, CO, POLL, VIEWER)).toEqual({
-      options: [],
-      totalVoters: 0,
-      myVote: [],
-    });
+    await expect(repo.pollResultsTx(f.tx, CO, POLL, VIEWER)).rejects.toThrow(POLL);
+  });
+});
+
+describe("gate — dữ liệu hỏng: báo lên, không 500 cả trang, không im lặng", () => {
+  it("vinh danh KHÔNG còn người nhận ⇒ `recipients: []` + `emptyKudos` (M1)", async () => {
+    const f = fakeTx([[kudosRow], []]);
+    const blocks = await loadPostBlocksTx(f.tx, CO, VIEWER, [{ id: P_K, type: "kudos" }]);
+    expect(blocks.kudos.get(P_K)?.recipients).toEqual([]);
+    expect(blocks.emptyKudos).toEqual([{ postId: P_K, kudosId: KUDOS }]);
+  });
+
+  it("`closes_at = 'infinity'` ⇒ khối poll VẮNG + mồ côi, KHÔNG RangeError (DB LOW-1)", async () => {
+    const f = fakeTx([], [{ ...pollRow, closes_at: "infinity" }]);
+    const blocks = await loadPostBlocksTx(f.tx, CO, VIEWER, [{ id: P_P, type: "poll" }]);
+    expect(blocks.poll.has(P_P)).toBe(false);
+    expect(blocks.orphans).toEqual([{ postId: P_P, type: "poll" }]);
   });
 });

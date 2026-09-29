@@ -470,13 +470,17 @@ export class SocialPollsRepository {
     // nghĩa, hai đường (thẻ + 041..044) không trôi khỏi nhau. Vẫn MỘT câu ⇒ bất biến H-8 giữ nguyên.
     const byPost = await pollResultsByTx(tx, companyId, userId, { pollIds: [pollId] });
     const hit = [...byPost.values()][0];
-    // Trượt = poll không có hàng (không thể từ `041..044` — caller vừa đọc poll trong cùng tx). Trả
-    // đúng hành vi cũ của câu đi `FROM feed_poll_options` cho poll 0 lựa chọn, không `undefined` (500).
-    if (!hit) return { options: [], totalVoters: 0, myVote: [] };
+    // Trượt = BUG (caller vừa đọc poll trong CÙNG tx; poll 0 lựa chọn vẫn ra một hàng nhờ LEFT JOIN).
+    // NÉM (FULL gate silent-failure M2): trả kết quả rỗng trông hợp lệ thì một lượt `041` thành công
+    // hiện «0 cử tri, phiếu của bạn biến mất» với HTTP 200 và không log nào.
+    if (!hit) {
+      throw new Error(
+        `S16-SOCIAL-BE-2D: pollResultsTx không ra hàng cho poll ${pollId} (company ${companyId})`,
+      );
+    }
     return { options: hit.options, totalVoters: hit.totalVoters, myVote: hit.myVote };
   }
 }
-
 
 /**
  * Tóm tắt bình chọn = ĐÚNG hình dạng `043` (`FeedPollResultsDto`), khoá theo `postId`.
@@ -527,8 +531,7 @@ export async function pollResultsByTx(
     ids.map((id) => sql`${id}`),
     sql`, `,
   );
-  const where =
-    "postIds" in filter ? sql`p.post_id IN (${idList})` : sql`p.id IN (${idList})`;
+  const where = "postIds" in filter ? sql`p.post_id IN (${idList})` : sql`p.id IN (${idList})`;
 
   const rows = await tx.execute<{
     poll_id: string;
@@ -575,9 +578,19 @@ export async function pollResultsByTx(
          ORDER BY p.post_id, o.position`,
   );
 
+  // Poll có `closes_at` không đổi được sang ISO (vd `'infinity'` — CHECK `closes_at > created_at` cho
+  // phép) ⇒ BỎ khối của bài đó (caller báo mồ côi + log), KHÔNG để `RangeError` làm 500 cả trang
+  // (FULL gate DB LOW-1 · silent-failure L3).
+  const badPosts = new Set<string>();
   for (const r of rows.rows) {
+    if (badPosts.has(r.post_id)) continue;
     let entry = out.get(r.post_id);
     if (!entry) {
+      const closesAt = r.closes_at === null ? null : new Date(r.closes_at);
+      if (closesAt !== null && Number.isNaN(closesAt.getTime())) {
+        badPosts.add(r.post_id);
+        continue;
+      }
       entry = {
         pollId: r.poll_id,
         postId: r.post_id,
@@ -585,7 +598,7 @@ export async function pollResultsByTx(
         status: r.status,
         multipleChoice: r.multiple_choice,
         isAnonymous: r.is_anonymous,
-        closesAt: r.closes_at === null ? null : new Date(r.closes_at).toISOString(),
+        closesAt: closesAt === null ? null : closesAt.toISOString(),
         totalVoters: Number(r.total_voters),
         myVote: [],
         options: [],

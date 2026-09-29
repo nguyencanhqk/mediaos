@@ -58,7 +58,10 @@ function diffBadge(current: KudosBadgeAdminRow, dto: UpdateKudosBadgeDto) {
   // `description` là chữ tự do (≤1000) ⇒ audit chỉ ghi CỜ đổi, không chép văn bản (API-19 §8 «id +
   // trường đổi»; FULL gate security LOW). Các trường còn lại ngắn, có cấu trúc ⇒ giữ `{from, to}`.
   const changes = Object.fromEntries(
-    changed.map((k) => [k, k === "description" ? { changed: true } : { from: current[k], to: dto[k] }]),
+    changed.map((k) => [
+      k,
+      k === "description" ? { changed: true } : { from: current[k], to: dto[k] },
+    ]),
   ) as Record<string, unknown>;
   return { patch, changes, isNoop: changed.length === 0 };
 }
@@ -140,7 +143,7 @@ export class SocialKudosService {
         isOfficial: r.isOfficial,
         badge: this.badgeOrLog(r),
         createdAt: r.createdAt.toISOString(),
-        recipients: (byKudos.get(r.kudosId) ?? []).map((p) => ({
+        recipients: this.recipientsOrLog(byKudos, r).map((p) => ({
           employeeId: p.employeeId,
           fullName: p.fullName,
           avatarUrl: p.avatarUrl,
@@ -180,6 +183,22 @@ export class SocialKudosService {
       })),
       truncated: rows.length > KUDOS_RECIPIENT_SEARCH_CAP,
     };
+  }
+
+  /**
+   * Người nhận của một dòng `047`. Vinh danh không còn hàng người nhận nào (DB không ép ≥1, app role có
+   * DELETE) ⇒ vẫn trả `[]` nhưng `logger.error` — cùng luật với khối thẻ bài (FULL gate silent-failure M1).
+   */
+  private recipientsOrLog<T>(
+    byKudos: Map<string, T[]>,
+    r: { kudosId: string; postId: string },
+  ): T[] {
+    const list = byKudos.get(r.kudosId);
+    if (list) return list;
+    this.logger.error(
+      `S16-SOCIAL-BE-2D: bài ${r.postId} vinh danh ${r.kudosId} KHÔNG còn người nhận nào`,
+    );
+    return [];
   }
 
   /** Huy hiệu của một dòng `047` — luật chung `badgeRefOf`; hàng hỏng ⇒ `logger.error` + bỏ huy hiệu. */

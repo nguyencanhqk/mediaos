@@ -536,11 +536,12 @@ export interface KudosRecipientCandidateRow {
 }
 
 /**
- * Ký tự ngăn cách «trông như dấu cách» mà `f_unaccent` GIỮ NGUYÊN (đo PG 17: U+00A0 còn nguyên) — tên
- * nhập từ Excel/HTML hay mang NBSP; không đổi thì «Đoàn␣Thị» không khớp `thi` (plan §9 D-F11).
+ * Mọi chuỗi khoảng trắng (ASCII + Unicode) trong TÊN gộp thành MỘT dấu cách — `f_unaccent` GIỮ NGUYÊN
+ * NBSP (đo PG 17), tên nhập từ Excel/HTML hay mang nó; không gộp thì «Đoàn␣Thị» không khớp `thi`
+ * (plan §9 D-F11). Cùng tập với `\s` của JS mà Zod dùng gộp `q` (FULL gate DB LOW-2: bản đầu chỉ đổi
+ * 4 ký tự ⇒ U+2000–U+200A/U+3000/xuống dòng trong tên làm trượt khớp đầu-từ). Truyền làm THAM SỐ.
  */
-const NAME_SEPARATORS = "   \t";
-const NAME_SEPARATOR_SPACES = " ".repeat(NAME_SEPARATORS.length);
+const NAME_WHITESPACE_RE = "[\\s   -     　﻿]+";
 
 /**
  * `059` — danh bạ người nhận vinh danh (owner K2/K3, SOC-DEC-013).
@@ -569,7 +570,7 @@ export async function searchKudosRecipientsTx(
   needle: string,
   opts: { limit: number; minLetters: number },
 ): Promise<KudosRecipientCandidateRow[]> {
-  const normName = sql`regexp_replace(translate(public.f_unaccent(${users.fullName}), ${NAME_SEPARATORS}, ${NAME_SEPARATOR_SPACES}), ' {2,}', ' ', 'g')`;
+  const normName = sql`regexp_replace(public.f_unaccent(${users.fullName}), ${NAME_WHITESPACE_RE}, ' ', 'g')`;
   const normNeedle = sql`lower(public.f_unaccent(${needle}))`;
 
   const rows = await tx
@@ -652,7 +653,13 @@ export async function createBadgeTx(
   tx: TenantTx,
   companyId: string,
   actorUserId: string,
-  dto: { code: string; name: string; description?: string | null; icon?: string | null; position?: number },
+  dto: {
+    code: string;
+    name: string;
+    description?: string | null;
+    icon?: string | null;
+    position?: number;
+  },
 ): Promise<KudosBadgeAdminRow> {
   const [row] = await tx
     .insert(feedKudosBadges)
