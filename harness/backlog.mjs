@@ -17749,6 +17749,40 @@ export const backlog = [
     notes: ["Seed 29/09/2026 từ plan-reviewer FE-2 (M9) — gom 3 nợ mồ côi trỏ vào FE-2."],
   },
   {
+    id: "S18-QA-CHECKALLFLAKE-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Hai flake CÓ SẴN làm `check.sh --all` đỏ oan theo cách chia chunk: (1) PAYROLL `s15-payroll-db1-seed` E4 TẮT trigger `salary_component_system_freeze` TOÀN CỤC bằng DDL autocommit ⇒ `s15-payroll-be3-migration` đọc `tgenabled='D'`; (2) SOCIAL `social-attdebt-1-cost-alert` H9 đếm `security_alerts` KHÔNG lọc hàng sở hữu",
+    zone: "yellow",
+    status: "ready",
+    paths: [
+      "apps/api/test/integration/s15-payroll-db1-seed.int-spec.ts",
+      "apps/api/test/integration/social-attdebt-1-cost-alert.int-spec.ts",
+      "apps/api/test/helpers/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "ĐO 29/09/2026 khi chạy `check.sh --all --lane-db=socialfe2` cho S16-SOCIAL-FE-2 (nhánh chạm 0 file PAYROLL/DB): lượt 1 đỏ 1/575 = attdebt H9 (chạy riêng xanh 10/10); lượt 2 đỏ 1 ca = `s15-payroll-be3-migration` M8 nhận `[0575] DUNG: trigger salary_component_system_freeze vang mat hoac KHONG o trang thai bat (O)` thay vì thông điệp preflight (0f). Hai lượt đỏ HAI ca KHÁC nhau ⇒ cổng mất độ tin.",
+      "PAYROLL — tái hiện TẤT ĐỊNH: chạy cụm `s15-payroll-be3-migration` + `s15-payroll-be3-binding-gates` + `s15-payroll-db1-seed` cùng lúc ⇒ 3/3 lượt đỏ đúng 4 ca (`tgenabled 'D'` + thông điệp [0575] DUNG); chạy riêng be3-migration ⇒ 3/3 lượt xanh 9/9. Cơ chế: `s15-payroll-db1-seed.int-spec.ts:117-119` phát `ALTER TABLE … DISABLE TRIGGER` trên `direct` (Pool ⇒ autocommit) ⇒ DDL commit ngay, mọi phiên của cụm thấy trigger TẮT cho tới `finally` (`:139-141`). Memory `payroll-freeze-trigger-parallel-race`.",
+      "SOCIAL — `social-attdebt-1-cost-alert.int-spec.ts:382-400` (H9) đếm `count(*) FROM security_alerts WHERE alert_type='attach_gate_deny'` TOÀN BẢNG trước/sau; spec khác sinh `attach_gate_deny` giữa hai mốc (chunk song song cùng lane DB) ⇒ thừa 1. Các ca khác của file đã lọc theo người qua `alertsOf(userId)` (`:162`) — H9 là ngoại lệ. Memory `invariant-count-must-filter-owned-rows`.",
+    ],
+    done_when: [
+      "PAYROLL: E4 KHÔNG còn tắt trigger TOÀN CỤC. ⚠️ Lối «bọc DISABLE/UPDATE/ENABLE vào MỘT tx» (khuôn binding-gates `:143-149`) KHÔNG dùng được cho E4: `runner.reconcileCompany` đọc bằng connection RIÊNG nên không thấy UPDATE chưa commit, và `ALTER TABLE` giữ khoá ACCESS EXCLUSIVE tới hết tx ⇒ runner tự chặn chính nó. Hướng đề xuất: GIEO tiền đề trên MỘT client với `SET session_replication_role = replica` (trigger chỉ tắt cho phiên đó; UPDATE commit bình thường) — khuôn `seedCrossTenantViolation` ở `test/helpers/seed.ts`, reset về DEFAULT + `release(true)` khi reset hỏng. Nếu hàm trigger/đường khác không tắt được bằng replica thì ĐO rồi chọn đường khác, ghi lý do.",
+      "PAYROLL — ĐO CỔNG: chạy cụm 3 file ở `src` ≥3 lượt ⇒ XANH cả 3 (trước vá: đỏ 3/3). E4 vẫn phải ĐỎ khi `assertSeedIntegrity()` bị gỡ (ca vẫn đo được lớp thứ hai, không thành cổng rỗng). E4b giữ nguyên nghĩa (trigger đang bật sau fixture).",
+      "SOCIAL H9: đếm lọc theo hàng SỞ HỮU của ca (actor `tPlain` qua `alertsOf(plainUserId)`, hoặc theo `postId` đích nếu alert mang được) — KHÔNG đếm toàn bảng. ĐO CỔNG: mutant «reporter phân biệt bằng `err.message.includes(...)` thay vì `instanceof`» vẫn làm H9 ĐỎ đúng thông điệp `403 KHÁC không được sinh alert` (memory `mutant-red-must-match-expected-message`).",
+      "Quét cùng họ trong `apps/api/test/**`: (a) mọi `DISABLE TRIGGER` chạy trên pool autocommit; (b) mọi `count(*)` trên bảng append-only dùng chung (`security_alerts`, `audit_logs`, `login_logs`…) không lọc hàng sở hữu. Ghi census vào notes; vá trong PR này những chỗ cùng file, còn lại ghi nợ.",
+      "`bash harness/check.sh --all --lane-db=<lane>` XANH trên lane SẠCH (`--reset`) HAI lượt liên tiếp",
+    ],
+    notes: [
+      "🟡 LIGHT gate — chỉ sửa spec/helper test, KHÔNG chạm code sản phẩm hay migration. CẤM «vá» bằng retry, `describe.skip`, nới assert, hay đẩy file ra shard riêng mà không gỡ nguồn race (đẩy shard chỉ đổi xác suất).",
+      "⚠️ Vì sao đáng làm dù là test: hai lượt `check.sh --all` liên tiếp đỏ ở HAI ca khác nhau, cả hai không liên quan diff — một ĐỎ THẬT sẽ trốn sau chúng (fail-open của chính cổng xác minh). Cùng lý do với `S16-SOCIAL-TESTISO-1`.",
+      "Seed 29/09/2026 từ phiên S16-SOCIAL-FE-2 lát A (owner chọn gộp hai flake vào một WO).",
+    ],
+  },
+  {
     id: "S16-SOCIAL-BE-3A",
     module: "SOCIAL",
     layer: "BE",
