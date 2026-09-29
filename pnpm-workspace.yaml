@@ -64,7 +64,13 @@ overrides:
   # Đỏ trên MỌI PR **và trên master** (2 lần Security gần nhất trên master đều failure trên commit
   # docs-only) ⇒ nợ có sẵn, KHÔNG do PR nào sinh ra. 28 đường tới, tất cả là devDependency qua
   # `@nestjs/cli > @angular-devkit/core > ajv` — KHÔNG vào runtime bundle của API.
-  "fast-uri@<3.1.6": "^3.1.6"
+  # 2026-09-29 — NỚI tiếp dải lên `<3.1.7` (lần thứ BA cùng hình dạng): HAI advisory HIGH mới phủ đúng
+  # bản 3.1.6 mà override trên vừa ép lên — GHSA-qw65-cvwx-89v3 («authority injection via an
+  # unvalidated port in serialize», `>=3.0.0 <3.1.7`) và GHSA-58mr-gqgx-xq4g (`=3.1.6`). Đo 29/09: đỏ
+  # trên CI của #551 (PR chạm 0 file deps) ⇒ nợ có sẵn của master. Đường tới vẫn nguyên `@nestjs/cli
+  # > @angular-devkit/core > ajv`. Resolve ra 3.1.8 (phát hành 15/09 — đã quá tuổi phát hành tối thiểu,
+  # không cần miễn trừ). Sau vá: `pnpm audit --audit-level high` = 0 HIGH/CRITICAL.
+  "fast-uri@<3.1.7": "^3.1.7"
   # 2026-08-07 — NỚI dải từ `<4.3.0` lên `<4.3.1`: advisory MỚI `GHSA-5p4m-2wfm-xmqj`
   # (CVE-2026-59870, quadratic CPU trong `!!omap`) phủ CẢ 4.3.0 mà override cũ vừa ép lên.
   # Đo 07/08: đỏ trên MỌI PR (đã tái hiện ở máy + trên CI của #361/#363), đường tới là
