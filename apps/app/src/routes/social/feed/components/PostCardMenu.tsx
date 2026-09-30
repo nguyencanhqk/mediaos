@@ -7,9 +7,12 @@
  * │ «Chỉnh sửa» / «Xoá bài»      → `post.isMine` (SỞ HỮU HÀNG, không phải quyền) **hoặc**          │
  * │                                `manage:feed-post` cho bài NGƯỜI KHÁC.                          │
  * │ «Ẩn/bỏ ẩn», «Khoá bình luận» → `manage:feed-post`.                                             │
- * │ «Ghim / bỏ ghim»             → 🔴 `manage:feed-news`, **KHÔNG** `manage:feed-post`.            │
- * │                                `SOCIAL_MODERATION_FIELD_PAIRS` của BE ánh xạ `pinned` →        │
- * │                                `manage:feed-news` ở TẦNG 2; gate nhầm ⇒ mục hiện ra, bấm 403.  │
+ * │ «Ghim / bỏ ghim»             → 🔴 `manage:feed-news` (TẦNG 2 — `SOCIAL_MODERATION_FIELD_PAIRS` │
+ * │                                ánh xạ `pinned` → `manage:feed-news`; gate bằng `feed-post` thay │
+ * │                                vào ⇒ mục hiện ra, bấm 403) **VÀ** `manage:feed-post` (SÀN tầng │
+ * │                                1 của route 006 cho MỌI trường — thiếu là 403 trước cả tầng 2)   │
+ * │                                **VÀ** `post.type === "news"` (chỉ ghim được tin tức — CHECK     │
+ * │                                `chk_feed_posts_pinned_news`; bài khác ⇒ 422 PIN-NEWS-ONLY).     │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * ⚠️ **«Báo cáo» CỐ Ý VẮNG.** Owner ký 23/09/2026 (plan §5.2 · N8): nút + hộp thoại soạn + cảnh báo
@@ -61,6 +64,13 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
 
   const canEditOwn = post.isMine;
   const canModerate = canManagePost;
+  /**
+   * Ba vế, mỗi vế là MỘT lý do server từ chối — thiếu vế nào là mục hiện ra mà bấm CHẮC CHẮN hỏng
+   * (`S16-SOCIAL-FEMODPAYLOAD-1`, review 30/09/2026: bản đầu chỉ xét `canManageNews` ⇒ «Ghim» hiện
+   * trên MỌI bài chia sẻ/bình chọn/sáng kiến/vinh danh của hr + company-admin, bấm là 422).
+   * Không cần nhánh «bỏ ghim bài không phải tin»: CHECK DB cấm trạng thái đó tồn tại.
+   */
+  const canPin = canManageNews && canManagePost && post.type === "news";
 
   const item = (key: string, label: string, onClick: () => void) => (
     <button
@@ -117,8 +127,8 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
               actions.onToggleComments,
             )}
 
-          {/* 🔴 `manage:feed-news` — KHÔNG phải `manage:feed-post`. Xem bảng gate ở đầu file. */}
-          {canManageNews &&
+          {/* 🔴 `manage:feed-news` + sàn `manage:feed-post` + bài `news`. Xem bảng gate ở đầu file. */}
+          {canPin &&
             item(
               "toggle-pinned",
               post.pinned ? t("post.menu.unpin") : t("post.menu.pin"),

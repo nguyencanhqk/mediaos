@@ -2,9 +2,11 @@
  * S16-SOCIAL-FE-1 — `useFeedActions`: cảm xúc · lưu · kiểm duyệt · xoá, dùng chung cho 5 màn.
  *
  * Hai luật ca này giữ:
- *  1. **Ánh xạ payload kiểm duyệt phải ĐÚNG.** `moderate({hidden:true})` → `{status:"hidden"}`;
- *     `{hidden:false}` → `{status:"published"}`. Gửi thẳng `hidden` là 400 `.strict()`, còn nhầm
- *     chiều là ẩn bài khi người dùng bấm "bỏ ẩn" — không lỗi, chỉ sai.
+ *  1. **Body kiểm duyệt phải QUA ĐƯỢC hợp đồng `006`** (`moderateFeedPostSchema` — `.strict()`,
+ *     `{hidden?, pinned?, commentsLocked?}`, API-19 §5.1c). Kiểm bằng CHÍNH schema đó, không bằng
+ *     một object kỳ vọng tự chép: bản đầu ghim `{status:"hidden"}` — khoá mà schema KHÔNG có — và ca
+ *     xanh suốt trong khi server trả 400 cho MỌI lượt ẩn/bỏ ẩn (đo thật trên lane DB 30/09/2026,
+ *     `S16-SOCIAL-FEMODPAYLOAD-1`: `VALIDATION-ERR-001` · `Unrecognized key(s) in object: 'status'`).
  *  2. **Chỉ gửi trường người dùng THỰC SỰ đổi.** Route 006 gác per-field ở tầng 2 (`pinned` đòi
  *     `manage:feed-news`), nên kèm thừa một khoá là biến một thao tác hợp lệ thành **403**.
  */
@@ -12,6 +14,7 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { moderateFeedPostSchema, type FeedPostDto } from "@mediaos/contracts";
 import { buildPostMenuActions, useFeedActions } from "./use-feed-actions";
 
 const putPostReaction = vi.fn();
@@ -119,23 +122,93 @@ describe("lưu — 008 / 009", () => {
 describe("kiểm duyệt — 006 (gác PER-FIELD ở tầng 2)", () => {
   beforeEach(() => moderatePost.mockResolvedValue({ id: POST_ID }));
 
-  it("`{hidden:true}` ⇒ `{status:'hidden'}`; `{hidden:false}` ⇒ `{status:'published'}`", async () => {
+  type MenuPost = Pick<FeedPostDto, "id" | "status" | "commentsLocked" | "pinned">;
+  const basePost: MenuPost = {
+    id: POST_ID,
+    status: "published",
+    commentsLocked: false,
+    pinned: false,
+  };
+
+  /**
+   * Đi TRỌN đường người kiểm duyệt bấm: menu ⋯ (`buildPostMenuActions`) → hook THẬT → `moderatePost`.
+   * Lỗi `FEMODPAYLOAD` sống ở khâu GIỮA (ánh xạ trong hook); ca chỉ gọi `moderate()` trực tiếp hoặc chỉ
+   * thử `buildPostMenuActions` với mock sẽ bỏ lọt đúng khâu đó.
+   */
+  async function bodySentBy(
+    post: MenuPost,
+    pick: (m: ReturnType<typeof buildPostMenuActions>) => () => void,
+  ): Promise<unknown> {
     const { result } = renderHook(() => useFeedActions(), { wrapper });
+    act(() => pick(buildPostMenuActions(post, { actions: result.current }))());
+    await waitFor(() => expect(moderatePost).toHaveBeenCalledTimes(1));
+    const [postId, body] = moderatePost.mock.calls[0] as [string, unknown];
+    expect(postId).toBe(POST_ID);
+    return body;
+  }
 
-    act(() => result.current.moderate(POST_ID, { hidden: true }));
-    await waitFor(() => expect(moderatePost).toHaveBeenCalledWith(POST_ID, { status: "hidden" }));
+  it.each([
+    {
+      name: "ẩn bài đang hiển thị",
+      post: basePost,
+      pick: (m: ReturnType<typeof buildPostMenuActions>) => m.onToggleHidden,
+      body: { hidden: true },
+    },
+    {
+      name: "ẩn bài khi `status` VẮNG (người đọc thường — trường optional)",
+      post: { ...basePost, status: undefined },
+      pick: (m: ReturnType<typeof buildPostMenuActions>) => m.onToggleHidden,
+      body: { hidden: true },
+    },
+    {
+      name: "BỎ ẩn bài đang ẩn (nhầm chiều = ẩn tiếp, không lỗi — chỉ sai)",
+      post: { ...basePost, status: "hidden" as const },
+      pick: (m: ReturnType<typeof buildPostMenuActions>) => m.onToggleHidden,
+      body: { hidden: false },
+    },
+    {
+      name: "khoá bình luận",
+      post: basePost,
+      pick: (m: ReturnType<typeof buildPostMenuActions>) => m.onToggleComments,
+      body: { commentsLocked: true },
+    },
+    {
+      name: "mở khoá bình luận",
+      post: { ...basePost, commentsLocked: true },
+      pick: (m: ReturnType<typeof buildPostMenuActions>) => m.onToggleComments,
+      body: { commentsLocked: false },
+    },
+    {
+      name: "ghim",
+      post: basePost,
+      pick: (m: ReturnType<typeof buildPostMenuActions>) => m.onTogglePinned,
+      body: { pinned: true },
+    },
+    {
+      name: "bỏ ghim",
+      post: { ...basePost, pinned: true },
+      pick: (m: ReturnType<typeof buildPostMenuActions>) => m.onTogglePinned,
+      body: { pinned: false },
+    },
+  ])("menu «$name» ⇒ body QUA `moderateFeedPostSchema` và đúng giá trị", async (c) => {
+    const body = await bodySentBy(c.post, c.pick);
 
-    moderatePost.mockClear();
-    act(() => result.current.moderate(POST_ID, { hidden: false }));
-    await waitFor(() =>
-      expect(moderatePost).toHaveBeenCalledWith(POST_ID, { status: "published" }),
-    );
+    // Vế hợp đồng: `.strict()` ⇒ một khoá lạ (như `status` của bản đầu) là `success:false`.
+    const parsed = moderateFeedPostSchema.safeParse(body);
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+    // Vế giá trị: đúng MỘT khoá, đúng chiều — chỉ qua schema thì `{hidden:false}` khi muốn ẩn vẫn xanh.
+    expect(body).toStrictEqual(c.body);
+  });
+
+  it("đối chứng — schema THẬT SỰ từ chối body của bản đầu (ca trên không xanh-rỗng)", () => {
+    expect(moderateFeedPostSchema.safeParse({ status: "hidden" }).success).toBe(false);
+    expect(moderateFeedPostSchema.safeParse({ status: "published" }).success).toBe(false);
   });
 
   it("🔴 CHỈ gửi trường được đổi — kèm thừa `pinned` là 403 cho người không có `manage:feed-news`", async () => {
     const { result } = renderHook(() => useFeedActions(), { wrapper });
 
-    act(() => result.current.moderate(POST_ID, { locked: true }));
+    act(() => result.current.moderate(POST_ID, { commentsLocked: true }));
     await waitFor(() => expect(moderatePost).toHaveBeenCalled());
 
     const body = moderatePost.mock.calls[0][1] as Record<string, unknown>;
@@ -238,7 +311,7 @@ describe("buildPostMenuActions — sáu hành động dùng chung của menu ⋯
     m.onToggleHidden();
     expect(actions.moderate).toHaveBeenLastCalledWith(POST_ID, { hidden: false });
     m.onToggleComments();
-    expect(actions.moderate).toHaveBeenLastCalledWith(POST_ID, { locked: false });
+    expect(actions.moderate).toHaveBeenLastCalledWith(POST_ID, { commentsLocked: false });
     m.onTogglePinned();
     expect(actions.moderate).toHaveBeenLastCalledWith(POST_ID, { pinned: false });
   });
