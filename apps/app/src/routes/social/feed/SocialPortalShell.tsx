@@ -4,8 +4,8 @@
  * Mọi màn `/feed*` đi qua đây, nên hai rail **không đổi** khi chuyển màn — đúng nghĩa "cổng thông
  * tin" của UI-07 §34b (khác `ModuleWorkspaceLayout`, nơi chỉ có một sidebar và phần còn lại là trang).
  *
- * Rail phải: Sinh nhật · Tin nổi bật · Bình chọn đang mở (FE-2) · Nhóm của tôi (FE-2B, KHÔNG badge
- * cho tới `S16-SOCIAL-BE-2C`). «Vinh danh tháng này» đến ở lát C.
+ * Rail phải: Sinh nhật · Tin nổi bật · Bình chọn đang mở (FE-2) · Vinh danh tháng này (FE-2C) · Nhóm
+ * của tôi (FE-2B, KHÔNG badge cho tới `S16-SOCIAL-BE-2C`) — thứ tự UI-07.
  *
  * ┌─ 🔴 VỎ NÀY LÀ CỦA SOCIAL, KHÔNG PHẢI CỦA MỌI `MODULE_PORTAL` ────────────────────────────────┐
  * │ Rail phải chở widget Sinh nhật + Tin nổi bật — hai thứ chỉ SOCIAL có. Hôm nay SOCIAL là module │
@@ -18,7 +18,14 @@
 import * as React from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { socialApi, socialGroupsApi, socialKeys, useCan, type ModuleCode } from "@mediaos/web-core";
+import {
+  socialApi,
+  socialGroupsApi,
+  socialKeys,
+  socialKudosApi,
+  useCan,
+  type ModuleCode,
+} from "@mediaos/web-core";
 import type { FeedBirthdayDto, FeedBirthdayRangeDto } from "@mediaos/contracts";
 import { PortalLayout } from "@/layouts/portal/PortalLayout";
 import { PortalLeftRail } from "@/layouts/portal/PortalLeftRail";
@@ -27,6 +34,8 @@ import { BirthdayWidget } from "./components/BirthdayWidget";
 import { HighlightNewsWidget } from "./components/HighlightNewsWidget";
 import { OpenPollsWidget } from "./components/OpenPollsWidget";
 import { MyGroupsWidget } from "./components/MyGroupsWidget";
+import { KudosThisMonthWidget } from "../kudos/components/KudosThisMonthWidget";
+import { currentKudosMonth } from "../kudos/lib/kudos-month";
 import { FeedSearchBox } from "./components/FeedSearchBox";
 
 /** Số tin nổi bật lấy về cho rail phải — rail hẹp, danh sách dài chỉ làm nó cuộn vô ích. */
@@ -35,6 +44,8 @@ const HIGHLIGHT_LIMIT = 5;
 const OPEN_POLLS_LIMIT = 5;
 /** S16-SOCIAL-FE-2B — số nhóm của tôi trên rail; danh sách đủ ở `/feed/groups?membership=mine`. */
 const MY_GROUPS_LIMIT = 5;
+/** S16-SOCIAL-FE-2C (owner ký O1) — 5 lượt vinh danh mới nhất của tháng; đủ ở `/feed/kudos`. */
+const KUDOS_WIDGET_LIMIT = 5;
 
 interface SocialPortalShellProps {
   moduleCode: ModuleCode;
@@ -92,6 +103,17 @@ export function SocialPortalShell({
   const myGroupsQuery = useQuery({
     queryKey: socialKeys.groups.list(myGroupsParams),
     queryFn: () => socialGroupsApi.list(myGroupsParams),
+    enabled: canViewFeed,
+  });
+
+  /**
+   * S16-SOCIAL-FE-2C (plan D12) — `month` TƯỜNG MINH theo giờ công ty: `047` vắng `month` là «gần đây»,
+   * không phải «tháng này». Tính lại mỗi render (qua nửa đêm cuối tháng tự sang khoá tháng mới).
+   */
+  const kudosParams = { month: currentKudosMonth(), limit: KUDOS_WIDGET_LIMIT };
+  const kudosQuery = useQuery({
+    queryKey: socialKeys.kudos.list(kudosParams),
+    queryFn: () => socialKudosApi.list(kudosParams),
     enabled: canViewFeed,
   });
 
@@ -168,6 +190,11 @@ export function SocialPortalShell({
             items={openPollsQuery.data?.data ?? []}
             isLoading={openPollsQuery.isLoading}
             isError={openPollsQuery.isError}
+          />
+          <KudosThisMonthWidget
+            items={kudosQuery.data?.data ?? []}
+            isLoading={kudosQuery.isLoading}
+            isError={kudosQuery.isError}
           />
           <MyGroupsWidget
             items={myGroupsQuery.data?.data ?? []}

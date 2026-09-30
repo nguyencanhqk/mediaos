@@ -8,18 +8,24 @@
  *  2. số lượt nhắc bị BỎ (`droppedMentions`, SPEC-16 §12 `ERR-009`) — càng cần trong nhóm: server bỏ
  *     im lặng mọi mention người NGOÀI nhóm rồi vẫn trả 201;
  *  3. invalidate đúng danh sách (`feed.allOf()` gồm cả feed nhóm `feed.list({groupId,…})`, + màn
- *     007/008 theo loại — plan FE-2 §8 H5).
+ *     007/008 theo loại — plan FE-2 §8 H5; + màn 009/widget vinh danh — FE-2C).
  *
- * Chế độ nhóm (`groupId`): lỗi còn mang `reason` (404 ERR-012 ⇒ `groupGone`) và 403/404/409 kéo lại
- * nhóm — 403 `SOCIAL-ERR-002` nghĩa là tư cách thành viên của tôi đã mất, header phải hiện lại đúng.
- * Không `groupId` ⇒ hành vi y hệt trước FE-2B (không `reason`).
+ * `reason`: lỗi vinh danh (`SOCIAL-ERR-KUDOS-*` · `022`) mang lý do CỤ THỂ ở CẢ bảng tin lẫn nhóm
+ * (S16-SOCIAL-FE-2C, `kudos-errors.ts` — các mã này chỉ phát ra từ nhánh kudos). Mã khác: chế độ nhóm
+ * (`groupId`) đọc lý do nhóm (404 ERR-012 ⇒ `groupGone`) và 403/404/409 kéo lại nhóm — 403
+ * `SOCIAL-ERR-002` nghĩa là tư cách thành viên của tôi đã mất; không `groupId` ⇒ `reason:null`.
  */
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { socialApi, socialKeys } from "@mediaos/web-core";
 import type { CreateFeedPostDto, FeedPostCreatedDto } from "@mediaos/contracts";
 import type { ActionErrorReason } from "../components/ActionErrorBanner";
-import { groupErrorReason, isForbiddenError, isStaleStateError } from "../../groups/lib/group-errors";
+import { kudosErrorReason } from "../../kudos/lib/kudos-errors";
+import {
+  groupErrorReason,
+  isForbiddenError,
+  isStaleStateError,
+} from "../../groups/lib/group-errors";
 
 export interface CreatePostError {
   forbidden: boolean;
@@ -43,7 +49,10 @@ export interface UseCreatePostResult {
   clearDroppedMentions: () => void;
 }
 
-export function useCreatePost({ groupId, onCreated }: UseCreatePostOptions = {}): UseCreatePostResult {
+export function useCreatePost({
+  groupId,
+  onCreated,
+}: UseCreatePostOptions = {}): UseCreatePostResult {
   const queryClient = useQueryClient();
   const [postError, setPostError] = React.useState<CreatePostError | null>(null);
   const [droppedMentionCount, setDroppedMentionCount] = React.useState(0);
@@ -62,15 +71,23 @@ export function useCreatePost({ groupId, onCreated }: UseCreatePostOptions = {})
         void queryClient.invalidateQueries({ queryKey: socialKeys.polls.allOf() });
       } else if (created.type === "idea") {
         void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
+      } else if (created.type === "kudos") {
+        // `lists()` là TIỀN TỐ — khớp cả màn 009 `list({month,page,limit})` lẫn widget `list({month,limit})`.
+        void queryClient.invalidateQueries({ queryKey: socialKeys.kudos.lists() });
       }
       onCreated?.(created);
       setDroppedMentionCount(created.droppedMentions.length);
     },
     onError: (err) => {
+      const kudosReason = kudosErrorReason(err);
       setPostError({
         forbidden: isForbiddenError(err),
-        reason: groupId ? groupErrorReason("post", err) : null,
+        reason: kudosReason ?? (groupId ? groupErrorReason("post", err) : null),
       });
+      // 022 — huy hiệu vừa bị tắt: tải lại catalog để ô chọn thôi mời huy hiệu đó (và nháp bỏ chọn nó).
+      if (kudosReason === "kudosBadgeInvalid") {
+        void queryClient.invalidateQueries({ queryKey: socialKeys.kudos.badges() });
+      }
       if (groupId && isStaleStateError(err)) {
         void queryClient.invalidateQueries({ queryKey: socialKeys.groups.detail(groupId) });
       }

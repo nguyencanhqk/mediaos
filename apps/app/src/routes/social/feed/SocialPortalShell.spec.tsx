@@ -16,6 +16,7 @@ const listBirthdays = vi.fn();
 const listNews = vi.fn();
 const listPolls = vi.fn();
 const listGroups = vi.fn();
+const listKudos = vi.fn();
 /** Tham số URL mà `useSearch` trả về. Đặt trong từng ca để giả lập `/feed?q=...`. */
 let routeSearch: Record<string, unknown> = {};
 
@@ -50,6 +51,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.socialGroupsApi,
       list: (...a: unknown[]) => listGroups(...a),
     },
+    // S16-SOCIAL-FE-2C — widget «Vinh danh tháng này». Không mock ⇒ `apiFetch` THẬT chạy trong test.
+    socialKudosApi: {
+      ...actual.socialKudosApi,
+      list: (...a: unknown[]) => listKudos(...a),
+    },
   };
 });
 
@@ -60,6 +66,7 @@ beforeEach(() => {
   listNews.mockReset().mockResolvedValue(page([]));
   listPolls.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
   listGroups.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
+  listKudos.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
   routeSearch = {};
 });
 
@@ -256,6 +263,36 @@ describe("SocialPortalShell — ô tìm kiếm đồng bộ từ URL", () => {
 
     const box = await screen.findByTestId("feed-search-box");
     expect((box.querySelector("input") as HTMLInputElement).value).toBe("");
+  });
+});
+
+describe("W3 — widget «Vinh danh tháng này» (S16-SOCIAL-FE-2C, plan D12 · owner O1)", () => {
+  const renderShell = () =>
+    renderWithProviders(
+      <SocialPortalShell moduleCode="SOCIAL">
+        <p>nội dung</p>
+      </SocialPortalShell>,
+    );
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("DENY: không `view:feed` ⇒ KHÔNG gọi `047` (spy 0 lần)", async () => {
+    setCaps({});
+    renderShell();
+    await waitFor(() => expect(screen.getByTestId("portal-layout")).toBeInTheDocument());
+    expect(listKudos).not.toHaveBeenCalled();
+  });
+
+  it("ALLOW: gọi `047` với `month` TƯỜNG MINH theo giờ công ty (literal 2026-10) + limit 5", async () => {
+    // 00:30 ngày 1/10 giờ VN — máy/CI chạy UTC mà code đọc đồng hồ máy thì ra 2026-09.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-30T17:30:00Z"));
+    renderShell();
+    await waitFor(() => expect(listKudos).toHaveBeenCalled());
+    expect(listKudos.mock.calls[0]?.[0]).toEqual({ month: "2026-10", limit: 5 });
+    expect(await screen.findByTestId("kudos-widget-empty")).toBeInTheDocument();
   });
 });
 

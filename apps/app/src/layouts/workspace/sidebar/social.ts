@@ -5,18 +5,19 @@ import { pruneUnbuiltScreens } from "./prune-unbuilt";
 // SOCIAL — sidebar v2 (S16-SOCIAL-FE-1 · D10 · SPEC-16 §9/§11/§14 · UI-07 §34b.6)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Khuôn y hệt `PAYROLL_SIDEBAR_V2` (S15-UI-SHELL-1): khai **ĐẦY ĐỦ 6 mục** của CẢ track A (FE-1,
-// đang dựng) VÀ track B (FE-2, chưa dựng), rồi `pruneUnbuiltScreens` (D9) cắt mục chưa có route
+// Khuôn y hệt `PAYROLL_SIDEBAR_V2` (S15-UI-SHELL-1): khai **ĐẦY ĐỦ 7 mục** của CẢ track A (FE-1)
+// VÀ track B (FE-2/2B/2C), rồi `pruneUnbuiltScreens` (D9) cắt mục chưa có route
 // trước khi đăng ký vào `SIDEBAR_REGISTRY`. Mục nào có route sống trong `ROUTE_REGISTRY` thì hiện,
 // mục nào chưa thì tự ẩn — WO track B sau chỉ cần thêm route là mục tự xuất hiện, không phải quay
 // lại sửa file này lần nữa (đúng lời hứa UI-07 §34b.6: "mục chưa có màn tự ẩn").
 //
 // Track A (S16-SOCIAL-FE-1 — 3 mục đầu): Bảng tin `/feed` (SOC-SCREEN-001) · Tin tức `/feed/news`
 // (SOC-SCREEN-003) · Đã lưu `/feed/saved` (SOC-SCREEN-004).
-// Track B (S16-SOCIAL-FE-2 — 3 mục sau, CHƯA có route ở WO này): Sáng kiến `/feed/ideas` · Bình chọn
-// `/feed/polls` · Nhóm `/feed/groups`.
+// Track B (S16-SOCIAL-FE-2/2B/2C — 4 mục sau): Sáng kiến `/feed/ideas` · Bình chọn `/feed/polls` ·
+// Vinh danh `/feed/kudos` (FE-2C, owner ký O2 — UI-07 rail trái không liệt kê, chấp nhận lệch) · Nhóm
+// `/feed/groups`.
 //
-// Gate: TẤT CẢ 6 mục dùng `requiredAnyPermissions: ["view:feed"]` (SPEC-16 §5.2 — chỉ cần vào được
+// Gate: TẤT CẢ 7 mục dùng `requiredAnyPermissions: ["view:feed"]` (SPEC-16 §5.2 — chỉ cần vào được
 // module là thấy mục điều hướng; gate CHẶT hơn cho từng hành động nằm BÊN TRONG từng màn, ví dụ
 // «Danh sách đã đọc» của Tin tức đòi `manage:feed-news`). Cặp `view:feed` là cặp THẬT trong seed
 // `0578` — KHÔNG bịa cặp khác (SPEC-16 §11.2: thích/lưu/xem/đọc KHÔNG có cặp riêng, chỉ theo
@@ -84,6 +85,17 @@ export const SOCIAL_SIDEBAR_V2: readonly SidebarItemMeta[] = [
     icon: "vote",
     group: "operation",
     order: 50,
+    requiredAnyPermissions: ["view:feed"],
+  },
+  {
+    // SOC-SCREEN-009 — S16-SOCIAL-FE-2C (owner ký O2).
+    sidebarKey: "social.kudos",
+    moduleCode: "SOCIAL",
+    label: "Vinh danh",
+    path: "/feed/kudos",
+    icon: "award",
+    group: "operation",
+    order: 55,
     requiredAnyPermissions: ["view:feed"],
   },
   {

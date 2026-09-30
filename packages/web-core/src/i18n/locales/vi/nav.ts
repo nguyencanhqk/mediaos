@@ -213,6 +213,7 @@ export default {
     socialIdeas: "Sáng kiến",
     socialGroups: "Nhóm",
     socialGroupDetail: "Trang nhóm",
+    socialKudos: "Vinh danh",
     socialProfilePosts: "Trang cá nhân",
     socialMyPosts: "Bài viết của tôi",
     forbidden: "Không có quyền truy cập",

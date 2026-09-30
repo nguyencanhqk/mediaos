@@ -17,6 +17,7 @@
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 import groups from "./social-groups";
+import kudos from "./social-kudos";
 
 export default {
   // ── Khung portal ────────────────────────────────────────────────────────────
@@ -30,9 +31,8 @@ export default {
 
   // ── Composer (SOC-SCREEN-001) ───────────────────────────────────────────────
   //
-  // ⚠️ S16-SOCIAL-FE-2 lát A: BỐN nút — «Chia sẻ» · «Tin tức» · «Bình chọn» · «Sáng kiến». Ca C4 assert
-  // tập đó. «Vinh danh» KHÔNG có khoá ở đây cho tới lát C (`S16-SOCIAL-FE-2C`, chặn bởi BE-2D) — thêm
-  // khoá trước là bước đầu của việc lén dựng một nút mà người dùng thường không dùng được.
+  // S16-SOCIAL-FE-2C: NĂM nút — «Chia sẻ» · «Tin tức» · «Bình chọn» · «Sáng kiến» · «Vinh danh». Ca C4''
+  // assert tập đó; «Vinh danh» vắng ở composer NHÓM (owner ký O3).
   composer: {
     placeholder: "Bạn đang nghĩ gì?",
     newsPlaceholder: "Nội dung tin tức gửi tới công ty…",
@@ -59,6 +59,32 @@ export default {
     typePoll: "Bình chọn",
     typeIdea: "Sáng kiến",
     ideaPlaceholder: "Mô tả sáng kiến của bạn…",
+    typeKudos: "Vinh danh",
+    /** Kudos: ô soạn chính là LỜI NHẮN (bắt buộc) — không gửi `body`. */
+    kudosPlaceholder: "Lời cảm ơn / ghi nhận của bạn…",
+    kudos: {
+      searchLabel: "Người được vinh danh",
+      searchPlaceholder: "Gõ tên đồng nghiệp…",
+      searchHint: "Gõ ít nhất 2 chữ để tìm.",
+      searchLoading: "Đang tìm…",
+      searchError: "Không tải được danh bạ. Vui lòng thử lại.",
+      searchEmpty: "Không tìm thấy ai khớp.",
+      searchTruncated: "Còn nhiều người khớp hơn — gõ thêm để thu hẹp.",
+      resultsAria: "Kết quả tìm người",
+      selectedAria: "Người đã chọn",
+      selectedCount: "Đã chọn {{count}}/{{max}}",
+      full: "Đã đủ {{max}} người.",
+      remove: "Bỏ {{name}}",
+      badge: "Huy hiệu",
+      noBadge: "Không gắn huy hiệu",
+      badgeLoading: "Đang tải huy hiệu…",
+      badgeError: "Không tải được danh sách huy hiệu — vẫn gửi được không kèm huy hiệu.",
+      official: "Vinh danh chính thức (dấu công ty)",
+      recipientsRequired: "Hãy chọn ít nhất một người được vinh danh.",
+      recipientsTooMany: "Chỉ vinh danh tối đa {{max}} người một lần.",
+      messageRequired: "Hãy nhập lời nhắn vinh danh.",
+      messageTooLong: "Lời nhắn tối đa {{max}} ký tự.",
+    },
     /** Poll: ô soạn chính là MÔ TẢ TUỲ CHỌN (plan §8 M8) — bỏ trống thì không gửi `body`. */
     pollDescriptionPlaceholder: "Mô tả thêm (không bắt buộc)…",
     poll: {
@@ -378,6 +404,8 @@ export default {
   // nhau: mất quyền thì thử lại bao nhiêu lần cũng vô ích, lỗi mạng/500 thì thử lại là đúng.
   // ── S16-SOCIAL-FE-2B — màn Nhóm (SOC-SCREEN-006), file riêng `social-groups.ts` ──
   groups,
+  // ── S16-SOCIAL-FE-2C — Vinh danh (SOC-SCREEN-009), file riêng `social-kudos.ts` ──
+  kudos,
 
   actionError: {
     forbidden: {
@@ -438,6 +466,16 @@ export default {
         "Trạng thái vừa thay đổi (có thể người khác đã xử lý trước). Dữ liệu đã được tải lại.",
       groupGone: "Không tìm thấy nhóm.",
       nameTaken: "Tên nhóm này đã được dùng trong công ty. Hãy chọn tên khác.",
+      // S16-SOCIAL-FE-2C — lời vinh danh (`kudos/lib/kudos-errors.ts`).
+      kudosCreateDenied: "Bạn không có quyền gửi lời vinh danh.",
+      kudosOfficialDenied:
+        "Bạn không có quyền gửi vinh danh CHÍNH THỨC. Bỏ chọn «Vinh danh chính thức» rồi gửi lại.",
+      kudosSelf: "Không thể tự vinh danh chính mình. Hãy bỏ bạn khỏi danh sách người nhận.",
+      kudosRecipientLimit: "Mỗi lời vinh danh cần từ 1 đến 10 người nhận.",
+      kudosRecipientInvalid:
+        "Có người nhận không còn hợp lệ (hồ sơ đã bị xoá). Hãy bỏ người đó rồi gửi lại.",
+      kudosBadgeInvalid:
+        "Huy hiệu vừa chọn không còn dùng được. Danh sách huy hiệu đã được tải lại — hãy chọn lại.",
     },
     dismiss: "Đóng thông báo",
   },

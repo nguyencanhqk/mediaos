@@ -1,9 +1,10 @@
 /**
- * S16-SOCIAL-FE-1/FE-2 — ca **C3 · C4 · C26 · P1 · P2 · P3** trên `FeedComposer`.
+ * S16-SOCIAL-FE-1/FE-2/FE-2C — ca **C3 · C4 · G1 · C26 · P1 · P2 · P3** trên `FeedComposer`.
  *
- * **C4 là cổng CHỐNG MỞ PHẠM VI**, không phải một phép đếm vu vơ: lát A của FE-2 mở ĐÚNG hai nút
- * (Bình chọn · Sáng kiến). «Vinh danh» phải vắng cho tới lát C (`S16-SOCIAL-FE-2C`) — ca này là thứ
- * giữ lời hứa đó khi ai đó thấy `create:feed-kudos` có sẵn trong seed.
+ * **C4 là cổng CHỐNG MỞ PHẠM VI**, không phải một phép đếm vu vơ: tập nút là ĐÚNG năm loại
+ * (Chia sẻ · Tin tức · Bình chọn · Sáng kiến · Vinh danh — S16-SOCIAL-FE-2C mở nút cuối). Nút thứ sáu
+ * xuất hiện là ca này đỏ. **G1**: «Vinh danh» VẮNG ở composer nhóm (owner ký O3).
+ * Ca soạn kudos (ô chọn người nhận · gửi) ở `kudos/components/KudosComposerFields.spec.tsx`.
  */
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,33 +66,69 @@ describe("C3 — nút «Tin tức» gác bằng `manage:feed-news`", () => {
   });
 });
 
-describe("C4 — composer có ĐÚNG 4 nút loại bài, KHÔNG «Vinh danh» (chặn scope creep)", () => {
-  it("người có TẤT CẢ quyền feed thấy đúng share · news · poll · idea — không kudos", () => {
+describe("C4 — composer có ĐÚNG 5 nút loại bài (chặn scope creep)", () => {
+  it("người có TẤT CẢ quyền feed thấy đúng share · news · poll · idea · kudos", () => {
     setCaps({
       "view:feed": true,
       "create:feed-post": true,
       "manage:feed-news": true,
       "create:feed-poll": true,
       "create:feed-idea": true,
-      // Có cặp kudos cũng KHÔNG sinh nút ở lát A (plan FE-2 §2 G1/G2).
       "create:feed-kudos": true,
     });
     renderComposer();
 
     const group = screen.getByTestId("composer-type-group");
-    expect(group.querySelectorAll("button")).toHaveLength(4);
-    for (const present of ["share", "news", "poll", "idea"]) {
+    expect(group.querySelectorAll("button")).toHaveLength(5);
+    for (const present of ["share", "news", "poll", "idea", "kudos"]) {
       expect(screen.getByTestId(`composer-type-${present}`)).toBeInTheDocument();
     }
-    expect(screen.queryByTestId("composer-type-kudos")).toBeNull();
   });
 
-  it("wildcard `*:*` mở GATE (4 nút) nhưng KHÔNG mở PHẠM VI (vẫn không kudos)", () => {
+  it("wildcard `*:*` ⇒ ĐÚNG 5 nút gồm kudos", () => {
     // Cả 14 cặp `feed-*` đều non-sensitive nên `useCan` có fallback wildcard — đúng thiết kế engine.
     setCaps({ "*:*": true });
     renderComposer();
+    expect(screen.getByTestId("composer-type-group").querySelectorAll("button")).toHaveLength(5);
+    expect(screen.getByTestId("composer-type-kudos")).toBeInTheDocument();
+  });
+
+  it("DENY: đủ quyền TRỪ `create:feed-kudos` ⇒ 4 nút, vắng kudos", () => {
+    setCaps({
+      "view:feed": true,
+      "create:feed-post": true,
+      "manage:feed-news": true,
+      "create:feed-poll": true,
+      "create:feed-idea": true,
+    });
+    renderComposer();
     expect(screen.getByTestId("composer-type-group").querySelectorAll("button")).toHaveLength(4);
     expect(screen.queryByTestId("composer-type-kudos")).toBeNull();
+  });
+
+  it("ALLOW: chỉ `create:feed-post` + `create:feed-kudos` ⇒ đúng {share, kudos}", () => {
+    setCaps({ "view:feed": true, "create:feed-post": true, "create:feed-kudos": true });
+    renderComposer();
+    const buttons = screen.getByTestId("composer-type-group").querySelectorAll("button");
+    expect([...buttons].map((b) => b.getAttribute("data-testid"))).toEqual([
+      "composer-type-share",
+      "composer-type-kudos",
+    ]);
+  });
+});
+
+describe("G1 — «Vinh danh» VẮNG ở composer NHÓM (owner ký O3)", () => {
+  it("DENY: `groupId` + đủ quyền ⇒ không nút kudos (poll/idea vẫn có — đối chứng)", () => {
+    setCaps({ "*:*": true });
+    renderComposer({ groupId: "77777777-7777-4777-8777-777777777777" });
+    expect(screen.queryByTestId("composer-type-kudos")).toBeNull();
+    expect(screen.getByTestId("composer-type-poll")).toBeInTheDocument();
+  });
+
+  it("ALLOW: bảng tin (không `groupId`) + cùng quyền ⇒ nút kudos CÓ", () => {
+    setCaps({ "*:*": true });
+    renderComposer();
+    expect(screen.getByTestId("composer-type-kudos")).toBeInTheDocument();
   });
 });
 

@@ -194,21 +194,47 @@ describe("C7 — thích/lưu KHÔNG có cặp riêng (SPEC-16 §11.2)", () => {
   });
 });
 
-describe("C27 — loại bài CHƯA dựng (kudos · loại lạ) phải SUY BIẾN AN TOÀN (R16)", () => {
-  it("`{type:'kudos', body:null}` ⇒ KHÔNG ném, vẫn vẽ tác giả · cảm xúc · lưu", () => {
-    // Lát C (`S16-SOCIAL-FE-2C`) mới dựng khối kudos — DTO bài không chở người nhận (plan §2 G1).
+describe("C27 — kudos VẮNG khối (006 · WS · API cũ · mồ côi) / loại lạ phải SUY BIẾN AN TOÀN (R16)", () => {
+  it("`{type:'kudos', body:null}` không `kudos` ⇒ KHÔNG ném, vẫn vẽ tác giả · cảm xúc · lưu", () => {
+    // S16-SOCIAL-FE-2C: khối kudos chỉ vẽ khi DTO chở `post.kudos` — ca này là nhánh VẮNG khối.
     expect(() => renderCard({ type: "kudos", body: null })).not.toThrow();
     expect(screen.getByText("An Nguyễn")).toBeInTheDocument();
     expect(screen.getByTestId("feed-reaction-bar")).toBeInTheDocument();
     expect(screen.getByTestId("post-save-toggle")).toBeInTheDocument();
   });
 
-  it("`kudos` / loại lạ ⇒ KHÔNG khối thân, KHÔNG chữ «null», KHÔNG gọi `043`", () => {
+  it("`kudos` vắng khối / loại lạ ⇒ KHÔNG khối thân, KHÔNG chữ «null», KHÔNG gọi `043`", () => {
     renderCard({ type: "kudos", body: null });
     expect(screen.queryByTestId("post-body")).toBeNull();
+    expect(screen.queryByTestId("kudos-block")).toBeNull();
     expect(screen.queryByText(/null|undefined/)).toBeNull();
     expect(screen.queryByTestId("poll-block")).toBeNull();
     expect(getPollResults).not.toHaveBeenCalled();
+  });
+
+  it("S16-SOCIAL-FE-2C: `kudos` CÓ `post.kudos` ⇒ vẽ `kudos-block` (người nhận + lời nhắn)", () => {
+    renderCard({
+      type: "kudos",
+      body: null,
+      kudos: {
+        kudosId: "44444444-4444-4444-8444-444444444444",
+        message: "Cảm ơn đã hỗ trợ!",
+        isOfficial: false,
+        badge: null,
+        recipients: [
+          {
+            employeeId: "33333333-3333-4333-8333-333333333333",
+            fullName: "Bình Trần",
+            avatarUrl: "https://x.invalid/p.png",
+            isFormerEmployee: false,
+          },
+        ],
+      },
+    });
+    expect(screen.getByTestId("kudos-block")).toBeInTheDocument();
+    expect(screen.getByText("Bình Trần")).toBeInTheDocument();
+    expect(screen.getByText("Cảm ơn đã hỗ trợ!")).toBeInTheDocument();
+    expect(screen.queryByTestId("post-body")).toBeNull();
   });
 
   it("loại LẠ có `body` ⇒ vẫn KHÔNG vẽ thân (không đoán nghĩa của loại chưa biết)", () => {

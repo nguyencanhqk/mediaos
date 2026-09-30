@@ -2340,6 +2340,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredPermissions: ["view:feed"],
     order: 101,
   },
+  // S16-SOCIAL-FE-2C lát C — Vinh danh (SOC-SCREEN-009). Gate `view:feed` (047 gác đúng cặp đó);
+  // `create:feed-kudos`/`manage:feed-kudos` gác BÊN TRONG composer. Mục sidebar `social.kudos` khai ở
+  // `SOCIAL_SIDEBAR_V2` (owner ký O2) và hiện qua `pruneUnbuiltScreens` khi path này có ở đây.
+  {
+    routeKey: "social.kudos",
+    path: "/feed/kudos",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-009",
+    titleKey: "routeTitle.socialKudos",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 102,
+  },
 
   // Account
   {

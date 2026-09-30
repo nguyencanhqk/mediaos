@@ -6,6 +6,7 @@ import {
   type FeedKudosPageDto,
   type KudosBadgeAdminDto,
   type KudosBadgeAdminPageDto,
+  type KudosBadgePageDto,
   type KudosRecipientSearchResultDto,
   type UpdateKudosBadgeDto,
 } from "@mediaos/contracts";
@@ -212,8 +213,14 @@ export class SocialKudosService {
     return badge;
   }
 
-  /** `048` — `GET /social/kudos-badges`. Chỉ `is_active = true`; envelope OFFSET. */
-  async listBadges(user: SocialRequestUser, query: { page: number; limit: number }) {
+  /**
+   * `048` — `GET /social/kudos-badges`. Chỉ `is_active = true`; envelope OFFSET.
+   * Kiểu trả về neo vào contracts (S16-SOCIAL-FE-2C D2, owner ký O4 — TYPE-ONLY): FE parse đúng schema này.
+   */
+  async listBadges(
+    user: SocialRequestUser,
+    query: { page: number; limit: number },
+  ): Promise<KudosBadgePageDto> {
     const actor = await this.access.resolveActor(user, "kudosBadgeList");
     const { page, limit } = query;
 

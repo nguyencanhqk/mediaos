@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  KUDOS_RECIPIENT_MAX,
+  KUDOS_RECIPIENT_MIN,
   KUDOS_RECIPIENT_QUERY_MIN,
+  kudosBadgeAdminSchema,
+  kudosBadgePageSchema,
   kudosRecipientCandidateSchema,
   kudosRecipientSearchQuerySchema,
 } from "./social-api-kudos";
@@ -97,5 +101,40 @@ describe("hình dạng không chở danh tính tài khoản", () => {
     expect(
       feedPollResultsSchema.safeParse({ ...base, closesAt: "2026-10-05 03:00:00+00" }).success,
     ).toBe(false);
+  });
+});
+
+describe("S16-SOCIAL-FE-2C — catalog huy hiệu 048 + trần người nhận (plan K1)", () => {
+  const row = {
+    id: "33333333-3333-4333-8333-333333333333",
+    code: "team-player",
+    name: "Đồng đội",
+    description: null,
+    icon: null,
+    position: 1,
+  };
+
+  it("parse đúng hình `KudosBadgeRow` (description/icon null)", () => {
+    const r = kudosBadgePageSchema.safeParse({ data: [row], page: 1, limit: 100, total: 1 });
+    expect(r.success).toBe(true);
+  });
+
+  it("từ chối `id` không phải uuid", () => {
+    const r = kudosBadgePageSchema.safeParse({
+      data: [{ ...row, id: "x" }],
+      page: 1,
+      limit: 100,
+      total: 1,
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("đối chứng: schema QUẢN TRỊ ném với hàng 048 (thiếu isActive/createdAt) — đừng dùng nó cho 048", () => {
+    expect(kudosBadgeAdminSchema.safeParse(row).success).toBe(false);
+  });
+
+  it("trần người nhận mirror service: 1..10", () => {
+    expect(KUDOS_RECIPIENT_MIN).toBe(1);
+    expect(KUDOS_RECIPIENT_MAX).toBe(10);
   });
 });

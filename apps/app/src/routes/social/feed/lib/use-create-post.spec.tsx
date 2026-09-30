@@ -1,6 +1,7 @@
 /**
  * S16-SOCIAL-FE-2B — `useCreatePost` (tách từ FeedPage, plan D10 + §8 M3). Hai chế độ:
- *  - bảng tin (không `groupId`): lỗi KHÔNG mang `reason`, không đụng cache nhóm — y hệt trước FE-2B;
+ *  - bảng tin (không `groupId`): lỗi KHÔNG mang `reason` (trừ mã vinh danh — S16-SOCIAL-FE-2C), không
+ *    đụng cache nhóm;
  *  - trang nhóm: 404 ERR-012 ⇒ `groupGone`; 403 (mất tư cách thành viên) ⇒ banner forbidden + kéo lại
  *    nhóm; 201 có `droppedMentions` ⇒ đếm (server bỏ im lặng mention người ngoài nhóm).
  */
@@ -9,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { ApiError, socialKeys } from "@mediaos/web-core";
-import type { CreateFeedPostDto } from "@mediaos/contracts";
+import { SOCIAL_ERROR_CODES, type CreateFeedPostDto } from "@mediaos/contracts";
 import { useCreatePost } from "./use-create-post";
 
 const createPost = vi.fn();
@@ -35,7 +36,7 @@ function setup(opts: Parameters<typeof useCreatePost>[0] = {}) {
   );
   const hook = renderHook(() => useCreatePost(opts), { wrapper });
   const keys = () => invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
-  return { ...hook, keys };
+  return { ...hook, keys, client };
 }
 
 afterEach(() => {
@@ -81,7 +82,7 @@ describe("useCreatePost — chế độ nhóm", () => {
 });
 
 describe("useCreatePost — bảng tin (không groupId) giữ hành vi cũ", () => {
-  it("lỗi KHÔNG mang reason, KHÔNG đụng cache nhóm", async () => {
+  it("lỗi không phải vinh danh (ERR-012) ⇒ KHÔNG mang reason, KHÔNG đụng cache nhóm", async () => {
     createPost.mockRejectedValue(new ApiError(404, "RESOURCE-ERR-NOT-FOUND", "SOCIAL-ERR-012: không tìm thấy nhóm."));
     const { result, keys } = setup();
     await act(async () => {
@@ -105,5 +106,86 @@ describe("useCreatePost — bảng tin (không groupId) giữ hành vi cũ", () 
       await result.current.submit(DTO);
     });
     expect(keys()).toContain(JSON.stringify(socialKeys.ideas.allOf()));
+  });
+});
+
+/**
+ * S16-SOCIAL-FE-2C — ca KE. Cache kiểm trên KHOÁ THẬT mà màn/widget dùng (plan §8 H1): so chuỗi khoá
+ * invalidate với chính đầu ra factory thì xanh cả khi khoá đó KHÔNG khớp query nào (tiền tố so theo PHẦN
+ * TỬ mảng). Seed dữ liệu vào khoá thật rồi đọc `isInvalidated`.
+ */
+describe("useCreatePost — vinh danh (S16-SOCIAL-FE-2C)", () => {
+  const KUDOS_DTO = {
+    type: "kudos",
+    audience: "company",
+    requiresAck: false,
+    kudos: { recipientEmployeeIds: [GROUP_ID], message: "x", isOfficial: false },
+  } as CreateFeedPostDto;
+  const C = SOCIAL_ERROR_CODES;
+
+  it("422 SELF-RECIPIENT ở BẢNG TIN ⇒ reason kudosSelf (không bị nuốt thành câu chung)", async () => {
+    createPost.mockRejectedValue(new ApiError(422, C.KUDOS_SELF_RECIPIENT, `${C.KUDOS_SELF_RECIPIENT}: x`));
+    const { result } = setup();
+    await act(async () => {
+      await result.current.submit(KUDOS_DTO).catch(() => undefined);
+    });
+    await waitFor(() => expect(result.current.postError).toEqual({ forbidden: false, reason: "kudosSelf" }));
+  });
+
+  it("403 OFFICIAL-DENIED ⇒ forbidden + reason kudosOfficialDenied", async () => {
+    createPost.mockRejectedValue(new ApiError(403, C.KUDOS_OFFICIAL_DENIED, `${C.KUDOS_OFFICIAL_DENIED}: x`));
+    const { result } = setup();
+    await act(async () => {
+      await result.current.submit(KUDOS_DTO).catch(() => undefined);
+    });
+    await waitFor(() =>
+      expect(result.current.postError).toEqual({ forbidden: true, reason: "kudosOfficialDenied" }),
+    );
+  });
+
+  it("422 `022` (huy hiệu tắt) ⇒ reason kudosBadgeInvalid + catalog 048 THẬT bị invalidate", async () => {
+    createPost.mockRejectedValue(new ApiError(422, C.KUDOS_BADGE_INVALID, `${C.KUDOS_BADGE_INVALID}: x`));
+    const { result, client } = setup();
+    client.setQueryData(socialKeys.kudos.badges(), { data: [], page: 1, limit: 100, total: 0 });
+    await act(async () => {
+      await result.current.submit(KUDOS_DTO).catch(() => undefined);
+    });
+    await waitFor(() =>
+      expect(result.current.postError).toEqual({ forbidden: false, reason: "kudosBadgeInvalid" }),
+    );
+    expect(client.getQueryState(socialKeys.kudos.badges())?.isInvalidated).toBe(true);
+  });
+
+  it("DENY: lỗi KHÁC 022 ⇒ catalog huy hiệu KHÔNG bị invalidate", async () => {
+    createPost.mockRejectedValue(new ApiError(422, C.KUDOS_SELF_RECIPIENT, `${C.KUDOS_SELF_RECIPIENT}: x`));
+    const { result, client } = setup();
+    client.setQueryData(socialKeys.kudos.badges(), { data: [], page: 1, limit: 100, total: 0 });
+    await act(async () => {
+      await result.current.submit(KUDOS_DTO).catch(() => undefined);
+    });
+    await waitFor(() => expect(result.current.postError).not.toBeNull());
+    expect(client.getQueryState(socialKeys.kudos.badges())?.isInvalidated).toBe(false);
+  });
+
+  it("201 kudos ⇒ khoá THẬT của widget + màn 009 bị invalidate; bài share thì KHÔNG", async () => {
+    const widgetKey = socialKeys.kudos.list({ month: "2026-09", limit: 5 });
+    const pageKey = socialKeys.kudos.list({ month: "2026-09", page: 2, limit: 20 });
+    const empty = { data: [], page: 1, limit: 5, total: 0 };
+
+    createPost.mockResolvedValueOnce({ id: "p0", type: "share", droppedMentions: [] });
+    const { result, client } = setup();
+    client.setQueryData(widgetKey, empty);
+    client.setQueryData(pageKey, empty);
+    await act(async () => {
+      await result.current.submit(DTO);
+    });
+    expect(client.getQueryState(widgetKey)?.isInvalidated).toBe(false);
+
+    createPost.mockResolvedValueOnce({ id: "p1", type: "kudos", droppedMentions: [] });
+    await act(async () => {
+      await result.current.submit(KUDOS_DTO);
+    });
+    expect(client.getQueryState(widgetKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(pageKey)?.isInvalidated).toBe(true);
   });
 });

@@ -1,14 +1,16 @@
 /**
  * S16-SOCIAL-FE-1 → FE-2 — ô soạn bài của `SOC-SCREEN-001` (SOCIAL-API-002).
  *
- * ┌─ 🔴 BỐN NÚT (S16-SOCIAL-FE-2 lát A) — đọc kỹ trước khi thêm nút thứ năm ────────────────────────┐
+ * ┌─ 🔴 NĂM NÚT (S16-SOCIAL-FE-2C) — đọc kỹ trước khi thêm nút thứ sáu ──────────────────────────────┐
  * │ Chia sẻ · Tin tức (`manage:feed-news`) · Bình chọn (`create:feed-poll`) · Sáng kiến             │
- * │ (`create:feed-idea`). Mỗi nút gác bằng ĐÚNG cặp tầng-2 của `SOCIAL_POST_TYPE_PAIRS` — không gate │
- * │ thì người dùng soạn xong mới ăn 403.                                                          │
- * │ «Vinh danh» VẮNG có chủ đích: ô chọn người nhận cần route tra người mà nhân viên thường chưa có │
- * │ (plan FE-2 §2 G2 → `S16-SOCIAL-BE-2D`), và thẻ bài không vẽ được kudos (G1). Lát C          │
- * │ (`S16-SOCIAL-FE-2C`) mở nó. Ca **C4** ghim tập 4 nút + vắng kudos.                            │
+ * │ (`create:feed-idea`) · Vinh danh (`create:feed-kudos`). Mỗi nút gác bằng ĐÚNG cặp tầng-2 của     │
+ * │ `SOCIAL_POST_TYPE_PAIRS` — không gate thì người dùng soạn xong mới ăn 403. Ca **C4** ghim tập 5. │
+ * │ «Vinh danh» VẮNG ở composer NHÓM (`groupId`, owner ký O3): người nhận ngoài nhóm kín vẫn nhận   │
+ * │ NOTI-033 trỏ tới bài họ không mở được. Ca **G1** ghim điều đó.                                  │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Vinh danh: ô soạn chính thành LỜI NHẮN (bắt buộc — `kudos.message`), KHÔNG gửi `body`; người nhận ·
+ * huy hiệu · cờ «chính thức» ở `KudosComposerFields`, nháp giữ TẠI ĐÂY (cùng luật với poll bên dưới).
  *
  * Bình chọn: ô soạn chính thành MÔ TẢ tuỳ chọn (trống ⇒ BỎ khoá `body`, không gửi `""` — contracts
  * `.trim().min(1)` từ chối chuỗi rỗng); các trường poll nằm ở `PollComposerFields`, nháp giữ TẠI ĐÂY
@@ -23,11 +25,18 @@
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, Lightbulb, Megaphone, Share2 } from "lucide-react";
+import { Award, BarChart3, Lightbulb, Megaphone, Share2 } from "lucide-react";
 import { Button, cn } from "@mediaos/ui";
 import { PermissionGate, useCan } from "@mediaos/web-core";
-import { FEED_BODY_MAX, FEED_POLL_QUESTION_MAX, type CreateFeedPostDto } from "@mediaos/contracts";
+import {
+  FEED_BODY_MAX,
+  FEED_POLL_QUESTION_MAX,
+  KUDOS_RECIPIENT_MAX,
+  type CreateFeedPostDto,
+} from "@mediaos/contracts";
 import { PollComposerFields } from "./PollComposerFields";
+import { KudosComposerFields } from "../../kudos/components/KudosComposerFields";
+import { EMPTY_KUDOS_DRAFT, validateKudosDraft, type KudosDraft } from "../../kudos/lib/kudos-draft";
 import {
   EMPTY_POLL_DRAFT,
   POLL_OPTION_LABEL_MAX,
@@ -35,8 +44,8 @@ import {
   type PollDraft,
 } from "../lib/poll-draft";
 
-/** Bốn loại bài soạn được ở lát A. Xem docblock đầu file trước khi thêm phần tử thứ năm. */
-type ComposerType = "share" | "news" | "poll" | "idea";
+/** Năm loại bài soạn được. Xem docblock đầu file trước khi thêm phần tử thứ sáu. */
+type ComposerType = "share" | "news" | "poll" | "idea" | "kudos";
 
 /**
  * `then` là tín hiệu DUY NHẤT mà ô soạn có để biết "server đã nhận chưa". Không có nó thì mọi phán
@@ -82,11 +91,14 @@ export function FeedComposer({
 }: FeedComposerProps): React.ReactElement | null {
   const { t } = useTranslation("social");
   const canCreatePost = useCan("create", "feed-post");
+  /** Cờ «chính thức» chỉ đi vào payload khi CÒN quyền (xem `validateKudosDraft`). */
+  const canOfficialKudos = useCan("manage", "feed-kudos");
 
   const [type, setType] = React.useState<ComposerType>("share");
   const [body, setBody] = React.useState(prefillBody ?? "");
   const [requiresAck, setRequiresAck] = React.useState(false);
   const [pollDraft, setPollDraft] = React.useState<PollDraft>(EMPTY_POLL_DRAFT);
+  const [kudosDraft, setKudosDraft] = React.useState<KudosDraft>(EMPTY_KUDOS_DRAFT);
   const [touched, setTouched] = React.useState(false);
   /**
    * Lượt gửi của CHÍNH ô soạn đang bay. Tách khỏi `isSubmitting` của caller vì nó là vế còn lại của
@@ -123,10 +135,16 @@ export function FeedComposer({
   const busy = isSubmitting || sending;
   const isPoll = type === "poll";
   const pollCheck = isPoll ? validatePollDraft(pollDraft) : null;
+  const isKudos = type === "kudos";
+  const kudosCheck = isKudos ? validateKudosDraft(kudosDraft, body, canOfficialKudos) : null;
   // `share`/`news`/`idea` BẮT BUỘC có body (`superRefine` của createFeedPostSchema); `poll` thì body là
-  // mô tả tuỳ chọn nhưng nháp poll phải hợp lệ. Chặn ở đây để người dùng thấy lý do, thay vì nhận 400
-  // vô danh từ Zod hoặc 422 từ service.
-  const contentReady = isPoll ? pollCheck?.ok === true : trimmed.length > 0;
+  // mô tả tuỳ chọn nhưng nháp poll phải hợp lệ; `kudos` thì nháp (người nhận + lời nhắn) phải hợp lệ.
+  // Chặn ở đây để người dùng thấy lý do, thay vì nhận 400 vô danh từ Zod hoặc 422 từ service.
+  const contentReady = isPoll
+    ? pollCheck?.ok === true
+    : isKudos
+      ? kudosCheck?.ok === true
+      : trimmed.length > 0;
   const canSubmit = contentReady && !tooLong && !busy;
 
   // `groupId` vắng ⇒ y hệt trước FE-2B (`audience:'company'`, không khoá `groupId` — contracts từ chối
@@ -136,6 +154,16 @@ export function FeedComposer({
     : ({ audience: "company" } as const);
 
   const buildDto = (): CreateFeedPostDto | null => {
+    if (isKudos) {
+      if (!kudosCheck?.ok) return null;
+      // O3: nút kudos không có ở chế độ nhóm ⇒ luôn `company`, không `body` (lời nhắn là `kudos.message`).
+      return {
+        type: "kudos",
+        audience: "company",
+        requiresAck: false,
+        kudos: kudosCheck.kudos,
+      } as CreateFeedPostDto;
+    }
     if (isPoll) {
       if (!pollCheck?.ok) return null;
       return {
@@ -170,6 +198,7 @@ export function FeedComposer({
         setBody("");
         setRequiresAck(false);
         setPollDraft(EMPTY_POLL_DRAFT);
+        setKudosDraft(EMPTY_KUDOS_DRAFT);
         // Dọn cả `touched`: bỏ quên nó thì ngay sau một lượt đăng THÀNH CÔNG, ô rỗng + `touched`
         // còn bật sẽ bắn «Hãy nhập nội dung trước khi đăng» — một cảnh báo đỏ cho việc vừa xong.
         setTouched(false);
@@ -209,7 +238,9 @@ export function FeedComposer({
         ? t("composer.pollDescriptionPlaceholder")
         : type === "idea"
           ? t("composer.ideaPlaceholder")
-          : t(groupId ? "composer.groupPlaceholder" : "composer.placeholder");
+          : type === "kudos"
+            ? t("composer.kudosPlaceholder")
+            : t(groupId ? "composer.groupPlaceholder" : "composer.placeholder");
 
   return (
     <section
@@ -239,7 +270,17 @@ export function FeedComposer({
         <PermissionGate action="create" resourceType="feed-idea">
           {typeButton("idea", t("composer.typeIdea"), Lightbulb)}
         </PermissionGate>
+        {/* S16-SOCIAL-FE-2C — `SOCIAL_POST_TYPE_PAIRS.kudos`; VẮNG ở composer nhóm (O3, ca G1). */}
+        {!groupId && (
+          <PermissionGate action="create" resourceType="feed-kudos">
+            {typeButton("kudos", t("composer.typeKudos"), Award)}
+          </PermissionGate>
+        )}
       </div>
+
+      {isKudos && (
+        <KudosComposerFields draft={kudosDraft} onChange={setKudosDraft} disabled={busy} />
+      )}
 
       <label className="sr-only" htmlFor="feed-composer-body">
         {placeholder}
@@ -269,7 +310,8 @@ export function FeedComposer({
         <PollComposerFields draft={pollDraft} onChange={setPollDraft} disabled={busy} />
       )}
 
-      {touched && !isPoll && trimmed.length === 0 && (
+      {/* Kudos KHÔNG dùng hai alert chung (rỗng/quá dài) — nháp kudos sở hữu lỗi lời nhắn (§8 M-e). */}
+      {touched && !isPoll && !isKudos && trimmed.length === 0 && (
         <p role="alert" className="mt-2 text-sm text-destructive">
           {t("composer.bodyRequired")}
         </p>
@@ -287,7 +329,17 @@ export function FeedComposer({
           })}
         </p>
       )}
-      {tooLong && (
+      {/* Lời nhắn nằm NGOÀI nháp kudos ⇒ gõ lời nhắn cũng là «đã bắt đầu soạn» (gate LIGHT React LOW-2). */}
+      {(touched || kudosDraft !== EMPTY_KUDOS_DRAFT || (isKudos && trimmed.length > 0)) &&
+        kudosCheck &&
+        !kudosCheck.ok && (
+        <p role="alert" data-testid="composer-kudos-error" className="mt-2 text-sm text-destructive">
+          {t(`composer.kudos.${kudosCheck.error}`, {
+            max: kudosCheck.error === "messageTooLong" ? FEED_BODY_MAX : KUDOS_RECIPIENT_MAX,
+          })}
+        </p>
+      )}
+      {tooLong && !isKudos && (
         <p role="alert" className="mt-2 text-sm text-destructive">
           {t("composer.bodyTooLong", { max: FEED_BODY_MAX })}
         </p>

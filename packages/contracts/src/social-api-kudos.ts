@@ -62,6 +62,32 @@ export const listKudosBadgesQuerySchema = z
   .strict();
 export type ListKudosBadgesQueryDto = z.infer<typeof listKudosBadgesQuerySchema>;
 
+/**
+ * S16-SOCIAL-FE-2C (plan D1) — một huy hiệu của catalog `048` ở góc nhìn NGƯỜI SOẠN: KHÔNG `isActive`
+ * (route chỉ trả huy hiệu đang bật), không mốc giờ. Hình dạng = `KudosBadgeRow` của repo; neo kiểu ở
+ * `SocialKudosService.listBadges` (owner ký O4) ⇒ BE lệch tên/nullability là TS đỏ lúc build.
+ *
+ * ⚠️ Đừng parse `048` bằng `kudosBadgeAdminSchema` — nó đòi `isActive/createdAt/updatedAt` ⇒ NÉM.
+ * `icon`: tên icon lucide HOẶC emoji (DB-17) — FE vẽ qua map CỐ ĐỊNH, không tra cứu tự do.
+ */
+export const kudosBadgeSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  icon: z.string().nullable(),
+  position: z.number().int(),
+});
+export type KudosBadgeDto = z.infer<typeof kudosBadgeSchema>;
+
+export const kudosBadgePageSchema = z.object({
+  data: z.array(kudosBadgeSchema),
+  page: z.number().int(),
+  limit: z.number().int(),
+  total: z.number().int(),
+});
+export type KudosBadgePageDto = z.infer<typeof kudosBadgePageSchema>;
+
 // ─────────── S16-SOCIAL-BE-3A — CRUD catalog huy hiệu `049..051` + đọc quản trị `056` ───────────
 //
 // Cả bốn route gác `manage:feed-kudos` (sàn Company). «Xoá» (`051`) = `is_active=false` — bảng không có
@@ -167,6 +193,17 @@ export const feedKudosPageSchema = z.object({
   total: z.number().int(),
 });
 export type FeedKudosPageDto = z.infer<typeof feedKudosPageSchema>;
+
+/**
+ * Số người nhận của một lời vinh danh (`002` `type='kudos'`): 1..10 người KHÁC NHAU sau khi server
+ * lowercase + khử trùng. Luật ở SERVICE (422 `SOCIAL-ERR-KUDOS-RECIPIENT-LIMIT`), Zod payload cố ý không
+ * trần độ dài — đây là BẢN SAO cho FE chặn sớm (khuôn `POLL_OPTIONS_MAX`).
+ *
+ * ⚠️ Nguồn: `apps/api/src/social/social-post-types.ts` `KUDOS_RECIPIENT_MIN/MAX`. Không lưới tự động
+ * bắt hai nơi lệch nhau — sửa một thì sửa cả hai.
+ */
+export const KUDOS_RECIPIENT_MIN = 1;
+export const KUDOS_RECIPIENT_MAX = 10;
 
 /** `059` — số chữ/số TỐI THIỂU của `q` (owner K2). Đếm `\p{L}`/`\p{N}`, KHÔNG đếm dấu tổ hợp. */
 export const KUDOS_RECIPIENT_QUERY_MIN = 2;

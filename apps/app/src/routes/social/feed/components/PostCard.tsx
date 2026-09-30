@@ -11,7 +11,8 @@
  * │ (`chk_feed_posts_body_required` cho phép NULL đúng với `poll`/`kudos`).                        │
  * │ ⇒ Thẻ vẫn vẽ phần CHUNG, bỏ phần thân đặc thù, và **không** vẽ chữ "null".                    │
  * │ S16-SOCIAL-FE-2 lát A: `poll` có khối bỏ phiếu (`PollBlock`), `idea` có nhãn + link màn 008.   │
- * │ `kudos` (và mọi loại lạ) VẪN suy biến như trên cho tới lát C (`S16-SOCIAL-FE-2C`).            │
+ * │ S16-SOCIAL-FE-2C: `kudos` có `KudosBlock` khi DTO chở `post.kudos`; khối VẮNG (006 · WS · API  │
+ * │ cũ · hàng mồ côi) ⇒ vẫn suy biến như trên. Loại lạ khác cũng vậy.                              │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Phân quyền: xem `PostCardMenu` — mọi quyết định gate của thẻ tập trung ở đó.
@@ -26,6 +27,7 @@ import { PostBody } from "./PostBody";
 import { FeedReactionBar } from "./FeedReactionBar";
 import { PostCardMenu, type PostCardMenuActions } from "./PostCardMenu";
 import { PollBlock } from "./PollBlock";
+import { KudosBlock } from "../../kudos/components/KudosBlock";
 import {
   authorDisplayName,
   buildImageGrid,
@@ -126,7 +128,7 @@ export function PostCard({
       </header>
 
       {/*
-        Thân bài. `renderBody === false` (loại lạ / kudos) ⇒ bỏ hẳn khối này — xem R16 ở đầu file.
+        Thân bài. `renderBody === false` (loại lạ) ⇒ bỏ hẳn khối này — xem R16 ở đầu file.
         `PostBody` cũng tự trả `null` khi `body` rỗng/NULL (poll không mô tả), nên hai lưới chồng
         nhau là CỐ Ý.
       */}
@@ -135,6 +137,9 @@ export function PostCard({
       )}
 
       {post.type === "poll" && <PollBlock postId={post.id} isMine={post.isMine} className="mt-3" />}
+
+      {/* S16-SOCIAL-FE-2C — khối vinh danh. Vắng `post.kudos` ⇒ không vẽ gì (C27). */}
+      {post.type === "kudos" && post.kudos && <KudosBlock block={post.kudos} className="mt-3" />}
 
       {/*
         Sáng kiến: pill TRẠNG THÁI không có ở đây — `feedPostSchema` không chở nó (plan §2 G4, chờ
