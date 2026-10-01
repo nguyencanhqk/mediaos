@@ -121,25 +121,60 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("C5 — «Ghim» gác bằng `manage:feed-news`, KHÔNG phải `manage:feed-post`", () => {
-  it("ALLOW: có `manage:feed-news` ⇒ MỤC «Ghim bài» CÓ trong menu", () => {
-    setCaps({ "view:feed": true, "manage:feed-news": true });
-    renderCard();
+/**
+ * «Ghim» có BA lý do bị server từ chối, mỗi ca DENY dưới đây gỡ ĐÚNG MỘT vế và giữ hai vế kia:
+ *  - thiếu `manage:feed-news` ⇒ 403 tầng 2 (`SOCIAL_MODERATION_FIELD_PAIRS.pinned`);
+ *  - thiếu `manage:feed-post` ⇒ 403 tầng 1 (SÀN decorator route 006, `tier1IsFloor`);
+ *  - bài không phải `news` ⇒ 422 `SOCIAL-ERR-PIN-NEWS-ONLY` (CHECK `chk_feed_posts_pinned_news`).
+ * Bản đầu chỉ xét vế 1 và ca ALLOW của nó dựng đúng trạng thái hỏng (bài `share`, không `feed-post`)
+ * — xanh trong khi mục hiện ra mà bấm là lỗi (`S16-SOCIAL-FEMODPAYLOAD-1`).
+ */
+describe("C5 — «Ghim» = `manage:feed-news` + sàn `manage:feed-post` + bài `news`", () => {
+  const MODERATOR = { "view:feed": true, "manage:feed-post": true, "manage:feed-news": true };
+
+  it("ALLOW: đủ hai cặp (vai canonical hr/company-admin) + bài `news` ⇒ mục «Ghim» CÓ", () => {
+    setCaps(MODERATOR);
+    renderCard({ type: "news" });
+    expect(within(openMenu()).getByTestId("post-menu-toggle-pinned")).toBeInTheDocument();
+  });
+
+  it("ALLOW: bài `news` ĐANG ghim ⇒ vẫn có mục (để bỏ ghim)", () => {
+    setCaps(MODERATOR);
+    renderCard({ type: "news", pinned: true });
     expect(within(openMenu()).getByTestId("post-menu-toggle-pinned")).toBeInTheDocument();
   });
 
   it("DENY: có `manage:feed-post` nhưng KHÔNG có `manage:feed-news` ⇒ mục «Ghim» VẮNG", () => {
-    // Đây là ca phân biệt hai cặp. `SOCIAL_MODERATION_FIELD_PAIRS` của BE ánh xạ trường `pinned` →
-    // `manage:feed-news` ở TẦNG 2, trong khi decorator của route 006 chỉ là SÀN `manage:feed-post`.
-    // Gate nhầm ở FE ⇒ mục hiện ra, bấm vào ăn 403.
     setCaps({ "view:feed": true, "manage:feed-post": true });
-    renderCard();
+    renderCard({ type: "news" });
     const menu = openMenu();
 
     expect(within(menu).queryByTestId("post-menu-toggle-pinned")).toBeNull();
     // Đối chứng: menu KHÔNG rỗng — các mục của `manage:feed-post` vẫn ở đó.
     expect(within(menu).getByTestId("post-menu-toggle-hidden")).toBeInTheDocument();
   });
+
+  it("DENY: CHỈ `manage:feed-news` (vai tuỳ biến, thiếu SÀN tầng 1) ⇒ mục «Ghim» VẮNG", () => {
+    setCaps({ "view:feed": true, "manage:feed-news": true });
+    renderCard({ type: "news" });
+    const menu = openMenu();
+
+    expect(within(menu).queryByTestId("post-menu-toggle-pinned")).toBeNull();
+    expect(within(menu).getByTestId("post-menu-copy-link")).toBeInTheDocument();
+  });
+
+  it.each(["share", "poll", "idea", "kudos"] as const)(
+    "DENY: đủ hai cặp nhưng bài `%s` (không phải tin) ⇒ mục «Ghim» VẮNG",
+    (type) => {
+      setCaps(MODERATOR);
+      renderCard({ type, body: "nội dung" });
+      const menu = openMenu();
+
+      expect(within(menu).queryByTestId("post-menu-toggle-pinned")).toBeNull();
+      // Đối chứng: cùng actor vẫn thấy mục kiểm duyệt khác — vắng «Ghim» là do LOẠI BÀI.
+      expect(within(menu).getByTestId("post-menu-toggle-hidden")).toBeInTheDocument();
+    },
+  );
 });
 
 describe("C6 — xoá bài NGƯỜI KHÁC cần `manage:feed-post`", () => {

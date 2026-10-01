@@ -19629,7 +19629,10 @@ export const backlog = [
       "ĐO TRƯỚC: gọi thật `PATCH /social/posts/:id/moderation` với body FE đang gửi (dev-online hoặc int-spec) — 400 thật thì mới vá; xanh thì đóng WO kèm lý do",
       "Vá: FE gửi `{hidden:boolean}`; bỏ `as`; spec ghim body ĐÚNG hợp đồng (parse bằng `moderateFeedPostSchema.safeParse` trong test)",
     ],
-    notes: ["Seed 29/09/2026 từ S16-SOCIAL-BE-2D (ngoài phạm vi WO đó)."],
+    notes: [
+      "Seed 29/09/2026 từ S16-SOCIAL-BE-2D (ngoài phạm vi WO đó).",
+      "ĐO 30/09/2026 (lane `mediaos_femodpay`, int-spec tạm đã gỡ): `{status:'hidden'|'published'}` ⇒ 400 `VALIDATION-ERR-001` (unrecognized key `status` + refine), bài KHÔNG đổi; `{hidden:true|false}` ⇒ 200. Lỗi THẬT ⇒ vá. Owner 30/09 gộp thêm gate «Ghim» của `PostCardMenu` (review LIGHT: hiện trên MỌI loại bài ⇒ 422 PIN-NEWS-ONLY; thiếu sàn `manage:feed-post` ⇒ 403). Plan `docs/plans/S16-SOCIAL-FEMODPAYLOAD-1.md`.",
+    ],
   },
   {
     id: "S16-SOCIAL-FEBLOCKSEED-1",
@@ -19656,5 +19659,72 @@ export const backlog = [
       "Pill trạng thái sáng kiến trên thẻ từ `post.idea.status` (4 trạng thái), vắng khối ⇒ giữ nhãn + link như cũ",
     ],
     notes: ["Seed 29/09/2026 từ plan S16-SOCIAL-FE-2C §7 N2 (ngoài phạm vi WO đó)."],
+  },
+  {
+    id: "S16-SOCIAL-FESEARCHBOUNDS-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Tham số URL/ô tìm kiếm của bảng tin không theo biên hợp đồng: `q` > `FEED_SEARCH_QUERY_MAX` (200) ⇒ `023` 400 · `tag` toàn khoảng trắng / > 64 ký tự và `type` > 16 ký tự ⇒ `001` 400 ⇒ màn bảng tin hiện trạng thái LỖI thay vì bỏ lọc",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Review LIGHT của S16-SOCIAL-FEMODPAYLOAD-1 30/09/2026 (quét lệch hợp đồng FE↔BE, 2/2 skeptic xác nhận): `FeedSearchBox.tsx:46-52,68-75` không `maxLength` · `feed-route-search.ts:57-59` chuyển `q`/`tag`/`type` nguyên xi (chỉ `wish` bị cắt theo `FEED_WISH_MAX`) · `listFeedQuerySchema` (`social-api.ts:320-343`, `.strict()`, `tag` trim+min1+max64, `type` max16) · `searchFeedQuerySchema` (`social-api-b.ts:176-182`).",
+    ],
+    done_when: [
+      "`validateFeedRouteSearch` trim `tag` và BỎ khi rỗng/quá dài; `type` chỉ nhận giá trị của enum loại bài; `q` cắt/giới hạn theo `FEED_SEARCH_QUERY_MAX` — giữ luật «bỏ, không ném»",
+      "Spec: tham số chuyển tiếp qua `listFeedQuerySchema.safeParse` / `searchFeedQuerySchema.safeParse` cho ca khoảng trắng · quá dài · type lạ (RED trên code cũ)",
+    ],
+    notes: ["LOW — chạm được qua link chia sẻ/sửa tay URL, không qua chip UI thường."],
+  },
+  {
+    id: "S16-SOCIAL-FEMODERRMSG-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Lỗi kiểm duyệt KHÔNG phải 403 (404 bài đã xoá · 422 · 409) hiện câu chung «Vui lòng thử lại» dù thử lại không bao giờ thành — `onActionError` chỉ phân 403/không-403, chưa đọc mã SOCIAL như `group-errors.ts`/`kudos-errors.ts`",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Review LIGHT của S16-SOCIAL-FEMODPAYLOAD-1 30/09/2026 (2/2 skeptic xác nhận, LOW): `use-feed-actions.ts:84-86` chỉ đặt `{kind, forbidden}` · `ActionErrorBanner.tsx:58-79` ĐÃ có prop `reason` nhưng `FeedPage.tsx:135-140` không truyền · câu `generic.moderate` ở `i18n/locales/vi/social.ts:436`.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: liệt kê mã lỗi `005`/`006` trả được theo SPEC-16 §12 + `social.errors.ts`; chỉ thêm câu cho mã mà người dùng CHẠM được từ UI (sau FEMODPAYLOAD-1, 422 PIN-NEWS-ONLY không còn chạm được từ menu)",
+      "`FeedActionError` mang `reason` từ `error.code`; banner nói lý do thay cho «thử lại» khi thử lại vô ích; spec RED trước",
+    ],
+    notes: ["LOW. Giá trị chính còn lại: ca bài bị người khác xoá/ẩn giữa chừng (404)."],
+  },
+  {
+    id: "S18-FE-LEAVEDRAFTCAST-1",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "Form nghỉ phép gửi body nháp qua `as Parameters<typeof leaveApi.createDraft|updateDraft>` — CÙNG khuôn ép kiểu đã che lỗi 400 của S16-SOCIAL-FEMODPAYLOAD-1; hôm nay body ĐÚNG, rủi ro tiềm ẩn",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/app/src/routes/leave/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Review LIGHT của S16-SOCIAL-FEMODPAYLOAD-1 30/09/2026 (2/2 skeptic xác nhận, LOW): `LeaveRequestForm.tsx:239,242` ép kiểu; nguyên nhân là mapper `leave-form-schema.ts:111-123,140-151` khai `durationType: string` / `halfDaySession?: string` — NỚI enum mà form schema (`:14-27`) đã hẹp; đích `leave-api.ts:102,115` là `CreateLeaveRequestDraft`/`UpdateLeaveRequestDraft`.",
+    ],
+    done_when: [
+      "`toCreateDraftBody`/`toUpdateDraftBody` khai kiểu trả về là DTO hợp đồng (enum hẹp) ⇒ xoá hai `as`; `tsc` xanh không ép kiểu",
+      "Mutant: cấy một khoá lạ vào mapper ⇒ `tsc` ĐỎ (TS2353) — chứng minh lưới compile-time có răng",
+    ],
+    notes: [
+      "LOW — không lỗi hôm nay. Màn master-data HR (`MasterDataCrudScreen.tsx` `as never`) cũng xoá liên kết kiểu nhưng skeptic bác (2/2) vì mọi mapper khai đúng DTO — KHÔNG gộp.",
+    ],
   },
 ];

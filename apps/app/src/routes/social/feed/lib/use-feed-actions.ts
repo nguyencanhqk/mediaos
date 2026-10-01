@@ -10,7 +10,12 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, socialApi, socialKeys } from "@mediaos/web-core";
-import type { FeedPostDto, FeedReactionEmojiDto, FeedReactionSummaryDto } from "@mediaos/contracts";
+import type {
+  FeedPostDto,
+  FeedReactionEmojiDto,
+  FeedReactionSummaryDto,
+  ModerateFeedPostDto,
+} from "@mediaos/contracts";
 import type { PostCardMenuActions } from "../components/PostCardMenu";
 
 /**
@@ -39,10 +44,17 @@ export interface FeedActions {
   reactionSummaries: Record<string, readonly FeedReactionSummaryDto[]>;
   setReaction: (postId: string, emoji: FeedReactionEmojiDto | null) => void;
   toggleSave: (postId: string, currentlySaved: boolean) => void;
-  moderate: (
-    postId: string,
-    patch: { hidden?: boolean; locked?: boolean; pinned?: boolean },
-  ) => void;
+  /**
+   * `patch` CHÍNH LÀ body `006` (`ModerateFeedPostDto`), đi thẳng xuống API — KHÔNG có lớp ánh xạ.
+   *
+   * Bản đầu nhận `{hidden, locked, pinned}` rồi dịch `hidden` → `{status:"hidden"|"published"}` và
+   * ép kiểu `as` cho qua; `006` là `.strict()` nên MỌI lượt ẩn/bỏ ẩn đều 400 (`S16-SOCIAL-FEMODPAYLOAD-1`,
+   * đo thật 30/09/2026). Nhận đúng kiểu hợp đồng thì literal ở chỗ gọi được kiểm excess-property:
+   * một khoá lạ là lỗi `tsc`, không phải lỗi người kiểm duyệt gặp trên PROD.
+   *
+   * Chỉ đưa trường THỰC SỰ đổi: `pinned` gác cặp riêng (`manage:feed-news`) ở tầng 2, kèm thừa nó là 403.
+   */
+  moderate: (postId: string, patch: ModerateFeedPostDto) => void;
   /**
    * `onDone` chạy trong `onSuccess` của mutation, KHÔNG chạy ngay sau khi gọi. Ca hỏng mà chữ ký này
    * sinh ra để chặn: màn chi tiết truyền `() => navigate({to:"/feed"})`; gọi nó cạnh `mutate()` sẽ
@@ -118,18 +130,8 @@ export function useFeedActions(): FeedActions {
   });
 
   const moderateMutation = useMutation({
-    mutationFn: ({
-      postId,
-      patch,
-    }: {
-      postId: string;
-      patch: { hidden?: boolean; locked?: boolean; pinned?: boolean };
-    }) =>
-      socialApi.moderatePost(postId, {
-        ...(patch.hidden !== undefined ? { status: patch.hidden ? "hidden" : "published" } : {}),
-        ...(patch.locked !== undefined ? { commentsLocked: patch.locked } : {}),
-        ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
-      } as Parameters<typeof socialApi.moderatePost>[1]),
+    mutationFn: ({ postId, patch }: { postId: string; patch: ModerateFeedPostDto }) =>
+      socialApi.moderatePost(postId, patch),
     onSuccess: (post) => {
       invalidatePostLists(post.id);
       setActionError(null);
@@ -198,7 +200,8 @@ export function buildPostMenuActions(
     // `afterDelete` truyền XUỐNG `remove` chứ không gọi cạnh nó — xem docblock của `FeedActions.remove`.
     onDelete: () => deps.actions.remove(post.id, deps.afterDelete),
     onToggleHidden: () => deps.actions.moderate(post.id, { hidden: post.status !== "hidden" }),
-    onToggleComments: () => deps.actions.moderate(post.id, { locked: !post.commentsLocked }),
+    onToggleComments: () =>
+      deps.actions.moderate(post.id, { commentsLocked: !post.commentsLocked }),
     onTogglePinned: () => deps.actions.moderate(post.id, { pinned: !post.pinned }),
   };
 }
