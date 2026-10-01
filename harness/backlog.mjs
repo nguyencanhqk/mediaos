@@ -19762,4 +19762,38 @@ export const backlog = [
       "🔴 vì nâng MAJOR một dep runtime có thể nằm trên đường AUTH (email reset). `apps/lms` cũng có nodemailer ^8 nhưng là repo riêng, cổng SCA không quét (memory sca-gate-blind-to-lms-and-fbpost).",
     ],
   },
+  {
+    id: "S19-SEC-MAILCREDEXFIL-1",
+    module: "FOUNDATION",
+    layer: "SEC",
+    title:
+      "Mật khẩu SMTP ĐÃ LƯU (write-only secret) bị gửi tới host DO CLIENT CHỌN — 2 đường: `POST /settings/mail/test` vắng password ⇒ decrypt mật khẩu đã lưu rồi AUTH tới `dto.host`; `PUT` đổi host/port/username/secure mà vắng password ⇒ GIỮ envelope cũ ⇒ lời mời kế tiếp AUTH mật khẩu cũ tới host mới",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/settings/**",
+      "packages/contracts/src/mail-config.ts",
+      "apps/api/test/**",
+      "apps/app/src/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-OPS-AUDITHIGH-1"],
+    src: [
+      "FULL gate security-reviewer của S19-OPS-AUDITHIGH-1 (01/10/2026), MEDIUM có sẵn — xác minh: `apps/api/src/settings/mail-config.service.ts:96-124` (`testConnection`: `password === undefined` ⇒ `decryptSecret(existing)` ⇒ `transport.test({ host: dto.host, port: dto.port, username: dto.username, secure: dto.secure ?? true, password })`).",
+      "Đường thứ hai (đọc docblock `mail-config.repository.ts:65-72`): «row tồn tại + KHÔNG envelope (vắng password) → UPDATE cột non-secret, GIỮ envelope cũ» ⇒ PUT trỏ host về server kẻ tấn công + 1 lời mời bất kỳ ⇒ `InviteMailService` AUTH mật khẩu đã lưu tới đó.",
+      "Cả GET/PUT/test cùng gác `configure-mail` (isSensitive) — `mail-config.controller.ts:28,34,40`. Mật khẩu là write-only (không vào DTO — bất biến #3) ⇒ người giữ quyền cấu hình KHÔNG được ĐỌC ra được nó; hai đường trên cho đọc gián tiếp. `secure:false` ⇒ AUTH PLAIN plaintext trên dây; `errorMessage` của test còn là oracle dò cổng nội bộ (SSRF nhẹ).",
+    ],
+    done_when: [
+      "Deny-path RED TRƯỚC: (a) test vắng password với host/port/username/secure KHÁC hàng đã lưu ⇒ 400, server SMTP giả (`test/helpers/fake-smtp-server.ts`) KHÔNG nhận AUTH nào; (b) PUT đổi bất kỳ trường đích (host/port/username/secure) mà vắng password ⇒ 400, envelope cũ không bị gắn với đích mới",
+      "Đối chứng dương: test vắng password với đích KHỚP NGUYÊN hàng đã lưu ⇒ vẫn dùng mật khẩu đã lưu (giữ UX «Kiểm tra kết nối» không bắt nhập lại); PUT chỉ đổi from_name/from_email vắng password ⇒ vẫn giữ envelope",
+      "Mã lỗi theo SPEC (tra docs/spec + docs/API cho mail config, KHÔNG tự đặt); FE form mail: đổi đích ⇒ bắt nhập mật khẩu, thông báo rõ",
+      "Rà oracle dò cổng của `errorMessage` (host nội bộ/loopback/link-local) — quyết chặn hay chấp nhận, ghi lý do",
+      "FULL gate (security + silent-failure) TRƯỚC khi mở PR; owner merge",
+    ],
+    notes: [
+      "🔴 secret. Không phải lỗi của S19-OPS-AUDITHIGH-1 (có từ CS-8) — nâng nodemailer không đổi gì ở đây. Tác nhân cần quyền nhạy cảm `configure-mail` ⇒ mối đe doạ là người trong/tài khoản admin bị chiếm, mục tiêu là mật khẩu hộp thư công ty (thường dùng chung cho dịch vụ khác).",
+    ],
+  },
 ];
