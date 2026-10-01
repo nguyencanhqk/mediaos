@@ -201,7 +201,29 @@ describe("nodemailer THẬT qua SMTP — S19-OPS-AUDITHIGH-1", () => {
       );
     });
 
-    it("rớt kết nối GIỮA DATA ⇒ {sent:false} settle nhanh (10.0.12: settle mọi lần gửi khi lỗi kết nối)", async () => {
+    it("lỗi LẬP TRÌNH trong `try` ⇒ {sent:false}, log `error` chỉ kèm frame stack — KHÔNG kèm message (có thể mang dữ liệu)", async () => {
+      const server = await start();
+      // `buildBodyHtml` → `escapeHtml(fullName)` gọi `.replace` TRONG `try` ⇒ TypeError mang bí mật trong message.
+      const poisonedName = {
+        toString: () => "A",
+        replace: () => {
+          throw new TypeError(`boom ${INVITE_TOKEN}`);
+        },
+      } as unknown as string;
+
+      const res = await inviteService(InviteMailService, server.port).sendActivationEmail({
+        ...SEND_PARAMS,
+        fullName: poisonedName,
+      });
+
+      expect(res).toEqual({ sent: false, reason: "send_failed" });
+      expect(vi.mocked(Logger.prototype.error)).toHaveBeenCalledTimes(1);
+      expect(logText()).toContain(`Gửi email mời tới ${LOCALHOST} thất bại (name=TypeError code=-`);
+      expect(logText()).toMatch(/^\s+at /m);
+      expect(logText()).not.toContain(INVITE_TOKEN);
+    });
+
+    it("rớt kết nối ở lệnh DATA ⇒ {sent:false} settle nhanh (10.0.12: settle mọi lần gửi khi lỗi kết nối)", async () => {
       const server = await start({ dropAfterData: true });
       const startedAt = Date.now();
 

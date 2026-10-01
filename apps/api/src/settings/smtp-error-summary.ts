@@ -22,7 +22,19 @@ const ERROR_NAME = /^[A-Za-z]{1,40}$/;
 const ERROR_CODE = /^E[A-Z0-9]{2,24}$/;
 /** `command` của nodemailer là hằng (`CONN`, `API`, `AUTH PLAIN`, `AUTH CRAM-MD5`, `MAIL FROM`, `RCPT TO`, `DATA`…). */
 const ERROR_COMMAND = /^[A-Z]{2,12}(?: [A-Z0-9-]{2,12})?$/;
-const SYSCALL = /^[a-z]{2,16}$/;
+/**
+ * `syscall` của lỗi net/dns/tls của Node — TẬP LIỆT KÊ, không phải regex: `^[a-z]{2,16}$` khớp cả hình dạng
+ * mật khẩu ứng dụng Gmail (16 chữ thường) — an toàn chỉ nhờ nguồn gốc trường thì không phải allowlist.
+ */
+const SYSCALLS = new Set([
+  "connect",
+  "read",
+  "write",
+  "shutdown",
+  "getaddrinfo",
+  "queryA",
+  "queryAaaa",
+]);
 /** `reason` của OpenSSL — chữ thường, không dấu `:`/`.` ⇒ không lọt tên host hay chứng chỉ. */
 const TLS_REASON = /^[a-z0-9 ,_-]{1,64}$/;
 const SMTP_REPLY_MIN = 200;
@@ -69,9 +81,22 @@ export function describeSmtpError(err: unknown): string {
     `responseCode=${replyCode(e.responseCode)}`,
     `command=${matching(e.command, ERROR_COMMAND)}`,
     `errno=${systemErrorName(e.errno)}`,
-    `syscall=${matching(e.syscall, SYSCALL)}`,
+    `syscall=${typeof e.syscall === "string" && SYSCALLS.has(e.syscall) ? e.syscall : MISSING}`,
     `tlsReason=${matching(e.reason, TLS_REASON)}`,
   ].join(" ");
+}
+
+/**
+ * CHỈ các dòng frame `at …` của stack. Dòng đầu của `err.stack` LẶP LẠI `err.message` — và V8 dựng chuỗi stack
+ * MUỘN (lần đọc đầu), nên cả phần nodemailer nối thêm (`err.message += ': ' + response`) cũng có mặt; lỗi
+ * `ERR_INVALID_ARG_*` của Node còn mang tới 25 ký tự của giá trị. Lọc theo `at`, KHÔNG `slice(1)`: message
+ * có thể nhiều dòng.
+ */
+export function stackFramesOf(err: Error): string {
+  return (err.stack ?? "")
+    .split("\n")
+    .filter((line) => /^\s+at /.test(line))
+    .join("\n");
 }
 
 /** TypeError/RangeError/ReferenceError — lỗi code của mình hoặc của thư viện, không phải lỗi SMTP. */
