@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**537 WO** · có micro-plan: **333/537** · ⬜ 13 chờ · 🔵 0 đang làm · ✅ 522 xong · 🔴 1 chặn
+**544 WO** · có micro-plan: **335/544** · ⬜ 17 chờ · 🔵 0 đang làm · ✅ 525 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -589,17 +589,22 @@
 | `S16-SOCIAL-GROUPERR-FEFALLBACK-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | Gỡ nhánh LEGACY-PREFIX của `groups/lib/group-errors.ts` (đọc tiền tố ` |
 | `S16-SOCIAL-GROUPTOCTOU-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | `039` mời ra KHÔNG đọc lại vai ACTOR sau `lockGroupRowTx` (cùng lớp TO |
 | `S16-SOCIAL-SCOPEDENIEDCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | `SocialAccessService.resolveActor` nhánh sàn Company ném message `AUTH |
-| `S16-SOCIAL-BE-2D` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2B-2 | BE mở khoá lát C — (1) khối `kudos?` (người nhận · huy hiệu · lời nhắn |
-| `S16-SOCIAL-FE-2C` | amber | ⬜ chờ | [📄](S16-SOCIAL-FE-2.md) | ✅S16-SOCIAL-FE-2 ⏳S16-SOCIAL-BE-2D | FE track B / lát C: SOC-SCREEN-009 Vinh danh — composer kudos (chọn ≤1 |
+| `S16-SOCIAL-BE-2D` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2D.md) | ✅S16-SOCIAL-BE-2B-2 | BE mở khoá lát C — (1) khối `kudos?` (người nhận · huy hiệu · lời nhắn |
+| `S16-SOCIAL-FE-2C` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2C.md) | ✅S16-SOCIAL-FE-2 ✅S16-SOCIAL-BE-2D | FE track B / lát C: SOC-SCREEN-009 Vinh danh — composer kudos (chọn ≤1 |
 | `S16-SOCIAL-FE-2D` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1C ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FE-2 | FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qu |
 | `S16-SOCIAL-BE-3A` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3A.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 | BE track C/1 — resolve báo cáo KÈM HÀNH ĐỘNG (SOCIAL-API-029: ẩn bài · |
 | `S16-SOCIAL-GROUPMOD-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A | Đường KIỂM DUYỆT nội dung nhóm RIÊNG TƯ: hôm nay bài/bình luận trong n |
 | `S16-SOCIAL-BE-3B` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3B.md) | ✅S16-SOCIAL-BE-3A | BE track C/2 — thống kê tương tác SOCIAL-API-052 (bài · bình luận · th |
 | `S16-SOCIAL-BE-3C` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3C.md) | ✅S16-SOCIAL-BE-3A | BE track C/3 — route KHÔI PHỤC bài đã xoá mềm + mở registry recycle-bi |
-| `S16-SOCIAL-FE-3` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A ✅S16-SOCIAL-BE-3B ✅S16-SOCIAL-FE-2 ✅S16-SOCIAL-FE-2B ⏳S16-SOCIAL-FE-2C | FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 01 |
+| `S16-SOCIAL-FE-3` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A ✅S16-SOCIAL-BE-3B ✅S16-SOCIAL-FE-2 ✅S16-SOCIAL-FE-2B ✅S16-SOCIAL-FE-2C | FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 01 |
 | `S16-SOCIAL-QA-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-3 ✅S16-SOCIAL-BE-3C | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
 | `S16-SOCIAL-TESTISO-1` | amber | ✅ xong | [📄](S16-SOCIAL-TESTISO-1.md) | — | Vá CÁCH LY TEST: Nhóm 13 của s16-social-db2-invariants chạy thân migra |
 | `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
+| `S16-SOCIAL-AVATARPRESIGN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2D | `avatarUrl` của TOÀN module SOCIAL (tác giả bài/bình luận · người thả  |
+| `S16-SOCIAL-FEMODPAYLOAD-1` | amber | ✅ xong | [📄](S16-SOCIAL-FEMODPAYLOAD-1.md) | — | Menu ẩn/hiện bài (`use-feed-actions.ts:126-130`) gửi `{status:'hidden' |
+| `S16-SOCIAL-FEBLOCKSEED-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-2D | Thẻ bài đọc khối BE-2D đã chở: `PollBlock` seed cache `043` từ `post.p |
+| `S16-SOCIAL-FESEARCHBOUNDS-1` | amber | ⬜ chờ | — *(chưa)* | — | Tham số URL/ô tìm kiếm của bảng tin không theo biên hợp đồng: `q` > `F |
+| `S16-SOCIAL-FEMODERRMSG-1` | amber | ⬜ chờ | — *(chưa)* | — | Lỗi kiểm duyệt KHÔNG phải 403 (404 bài đã xoá · 422 · 409) hiện câu ch |
 
 ## Sprint 18
 
@@ -625,6 +630,7 @@
 | `S18-SEC-AUDITGATE-1` | 🟡 | ✅ xong | [📄](S18-SEC-AUDITGATE-1.md) | — | Cổng `Dependency scan (pnpm audit)` ĐỎ trên master từ 09/09 — 5 adviso |
 | `S18-AUTH-490DEBT-1` | crown | ✅ xong | [📄](S18-AUTH-490DEBT-1.md) | — | Trả 3 nợ FULL-gate của #490 (owner chốt 11/09): §8.2 trần ghi audit nh |
 | `S18-OPS-MINIOPIN-1` | 🟡 | ✅ xong | — *(chưa)* | — | Ghim image MinIO của docker-compose.yml (container PROD `mediaos-minio |
+| `S18-FE-LEAVEDRAFTCAST-1` | amber | ⬜ chờ | — *(chưa)* | — | Form nghỉ phép gửi body nháp qua `as Parameters<typeof leaveApi.create |
 
 ## Sprint 17
 
@@ -647,6 +653,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `S19-OPS-MINIOSRC-1` | 🟡 | ✅ xong | — *(chưa)* | — | GỠ CHẶN CI: nguồn image MinIO sụp HẲN (quay.io nay đòi auth — đường vá |
 | `S19-OPS-MINIOMIRROR-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-MINIOSRC-1 | Mirror image MinIO đúng digest PROD (`sha256:14cea493…` = RELEASE.2025 |
+| `S19-OPS-AUDITHIGH-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên MỌI PR  |
 
 ---
 

@@ -19727,4 +19727,37 @@ export const backlog = [
       "LOW — không lỗi hôm nay. Màn master-data HR (`MasterDataCrudScreen.tsx` `as never`) cũng xoá liên kết kiểu nhưng skeptic bác (2/2) vì mọi mapper khai đúng DTO — KHÔNG gộp.",
     ],
   },
+  {
+    id: "S19-OPS-AUDITHIGH-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên MỌI PR + master: 6 advisory HIGH — brace-expansion ×4 (dev-tooling) · engine.io <6.6.10 (RUNTIME Socket.IO) · nodemailer <=10.0.5 (RUNTIME, dep TRỰC TIẾP `apps/api` ^9.1.1 ⇒ vá DUY NHẤT là nâng MAJOR 9→10)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "pnpm-workspace.yaml",
+      "pnpm-lock.yaml",
+      "apps/api/package.json",
+      "apps/api/src/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review", "security-review"],
+    depends_on: [],
+    src: [
+      "Đo 30/09/2026 trên CI của PR #557 (chạm 0 file deps) + `pnpm audit` local master `fa498aa9`: GHSA-qhr7-859c-m2p7 (brace-expansion `>=2.0.0 <2.1.6` · `>=4.0.0 <5.0.11`) · GHSA-6j4f-fj2g-mc7p (`<2.1.5` · `<5.0.10`) — cây có 2.1.4 + 5.0.9, đường tới eslint/typescript-eslint > minimatch · GHSA-2gc4-cqfq-p2gv (engine.io `>=6.6.0 <6.6.10`, cây có 6.6.8 qua socket.io của API) · GHSA-v53p-9fqp-m79j (nodemailer `<=10.0.5`, cây có 9.1.1). #557 merge bằng `--admin` (owner 30/09) vì cổng này là nợ chung, không do PR.",
+      "Bản vá đủ tuổi phát hành (minimumReleaseAge): brace-expansion 2.1.6/2.1.7 · 5.0.11/5.0.12 (14/09) · engine.io 6.6.10 (03/09) · nodemailer 10.0.6+ (11/09).",
+    ],
+    done_when: [
+      "brace-expansion: nới 2 override per-major hiện có (`<2.1.3`→`<2.1.6`, `>=3.0.0 <5.0.8`→`<5.0.11`) — GIỮ per-major (minimatch@3/@9 gọi `require()()` như HÀM); `scripts/check-brace-expansion-guard.mjs` vẫn XANH (đo THẬT entry `main` có guard); rà lại `auditConfig.ignoreGhsas` GHSA-mh99 còn cần không",
+      "engine.io: override `>=6.6.0 <6.6.10` → `^6.6.10`; int-spec realtime/WS (chat · call · noti) XANH trên LANE_DB",
+      "nodemailer 9→10: ĐỌC changelog breaking của 10.x TRƯỚC; liệt kê mọi call-site gửi mail ở `apps/api` (đặt lại mật khẩu = vùng AUTH ⇒ FULL gate); int-spec gửi mail XANH; KHÔNG suppress GHSA (owner 07-25: «luôn vá, không ỉm»)",
+      "`pnpm install --frozen-lockfile` sạch · `pnpm audit --audit-level high` exit 0 · CI Security XANH",
+    ],
+    notes: [
+      "🔴 vì nâng MAJOR một dep runtime có thể nằm trên đường AUTH (email reset). `apps/lms` cũng có nodemailer ^8 nhưng là repo riêng, cổng SCA không quét (memory sca-gate-blind-to-lms-and-fbpost).",
+    ],
+  },
 ];
