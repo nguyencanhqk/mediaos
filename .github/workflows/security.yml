@@ -102,9 +102,9 @@ jobs:
       - name: pnpm audit (fail on high|critical)
         run: pnpm audit --audit-level=high
 
-      # Vật thay thế cho phần audit bị ignore (pnpm-workspace.yaml → auditConfig.ignoreGhsas):
-      # GHSA-mh99-v99m-4gvg dùng dải `<=5.0.7` nên cờ cả bản ĐÃ VÁ ⇒ phải ignore để cổng dùng được.
-      # Bù lại, bước này CHẠY THẬT expand() trên đúng file mà require() nạp và ĐỎ nếu lọt bản chưa vá —
-      # bắt được cả ca hiểm "số hiệu đã vá nhưng entry `main` vẫn là code cũ" (1.1.16/2.1.2, đo 2026-07-29).
+      # Bước này CHẠY THẬT expand() trên đúng file mà require() nạp và ĐỎ nếu lọt bản chưa vá — bắt được
+      # ca hiểm mà audit theo số hiệu KHÔNG thấy: "số hiệu đã vá nhưng entry `main` vẫn là code cũ"
+      # (1.1.16/2.1.2, đo 2026-07-29). Từng là vật thay thế cho `auditConfig.ignoreGhsas` GHSA-mh99; ignore
+      # đã gỡ 2026-10-01 (thượng nguồn sửa dải advisory 31/07) nhưng bước này GIỮ làm lưới thứ hai.
       - name: Chốt hồi quy brace-expansion (GHSA-mh99-v99m-4gvg)
         run: node scripts/check-brace-expansion-guard.mjs

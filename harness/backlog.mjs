@@ -19743,6 +19743,7 @@ export const backlog = [
       "apps/api/test/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      ".github/workflows/security.yml",
     ],
     skills: ["code-review", "security-review"],
     depends_on: [],
@@ -19752,11 +19753,12 @@ export const backlog = [
     ],
     done_when: [
       "brace-expansion: nới 2 override per-major hiện có (`<2.1.3`→`<2.1.6`, `>=3.0.0 <5.0.8`→`<5.0.11`) — GIỮ per-major (minimatch@3/@9 gọi `require()()` như HÀM); `scripts/check-brace-expansion-guard.mjs` vẫn XANH (đo THẬT entry `main` có guard); rà lại `auditConfig.ignoreGhsas` GHSA-mh99 còn cần không",
-      "engine.io: override `>=6.6.0 <6.6.10` → `^6.6.10`; int-spec realtime/WS (chat · call · noti) XANH trên LANE_DB",
-      "nodemailer 9→10: ĐỌC changelog breaking của 10.x TRƯỚC; liệt kê mọi call-site gửi mail ở `apps/api` (đặt lại mật khẩu = vùng AUTH ⇒ FULL gate); int-spec gửi mail XANH; KHÔNG suppress GHSA (owner 07-25: «luôn vá, không ỉm»)",
+      "engine.io: bump LOCKFILE trong range lên ≥6.6.10 (`socket.io@4.8.3` khai `engine.io: ~6.6.0` ⇒ 6.6.10+ nằm TRONG range — tiền lệ #335; khối overrides KHÔNG có dòng engine.io nào để nới, thêm override mới trái luật 'nới dải cũ, không thêm dòng'); 5 spec mở socket thật (realtime.gateway.io · call-signalling.gateway · chat-rt0-ws-adapter · chat-rt1-realtime · chat-s7-call-rt1-signalling) XANH trên LANE_DB  [sửa câu chữ 01/10 — owner chốt ở PR; bản gốc: «override `>=6.6.0 <6.6.10` → `^6.6.10`»]",
+      "nodemailer 9→10: ĐỌC changelog breaking của 10.x TRƯỚC; liệt kê mọi call-site gửi mail ở `apps/api` (đặt lại mật khẩu = vùng AUTH ⇒ FULL gate); spec chạy nodemailer THẬT qua SMTP (`invite-mail.smtp.spec.ts` — cả entry ESM lẫn CJS) XANH; KHÔNG suppress GHSA (owner 07-25: «luôn vá, không ỉm»)  [sửa câu chữ 01/10 — owner chốt ở PR; bản gốc: «int-spec gửi mail XANH» — KHÔNG int-spec nào chạy nodemailer: user-invites-flow mock toàn phần InviteMailService]",
       "`pnpm install --frozen-lockfile` sạch · `pnpm audit --audit-level high` exit 0 · CI Security XANH",
     ],
     notes: [
+      "Plan: docs/plans/S19-OPS-AUDITHIGH-1.md (plan-reviewer 3 lượt → PASS). Đo 01/10: email đặt lại mật khẩu KHÔNG đi qua nodemailer (reset-password-mail.service.ts còn stub) — đường đỏ thật là token KÍCH HOẠT trong InviteMailService; log của nó từng chứa NGUYÊN token+username khi server echo (vá trong WO). PROD chạy trên node_modules của checkout chính ⇒ thi công trong worktree, deploy cần `pnpm install --frozen-lockfile` TRƯỚC `m prod-update api` (plan §7).",
       "🔴 vì nâng MAJOR một dep runtime có thể nằm trên đường AUTH (email reset). `apps/lms` cũng có nodemailer ^8 nhưng là repo riêng, cổng SCA không quét (memory sca-gate-blind-to-lms-and-fbpost).",
     ],
   },

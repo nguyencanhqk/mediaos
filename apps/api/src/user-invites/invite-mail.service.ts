@@ -4,6 +4,7 @@ import { SMTP_SECRET_PURPOSE } from "@mediaos/contracts";
 import { loadEnv } from "../config/env.schema";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import { MailConfigRepository } from "../settings/mail-config.repository";
+import { describeSmtpError, isProgrammerError } from "../settings/smtp-error-summary";
 
 /** Handshake+gửi timeout (ms). */
 const SMTP_SEND_TIMEOUT_MS = 10000;
@@ -103,9 +104,11 @@ export class InviteMailService {
       });
       return { sent: true };
     } catch (err: unknown) {
-      // Log diagnostic KHÔNG kèm credential/token (chỉ host + lý do chung).
-      const reason = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Gửi email mời tới ${config.host} thất bại: ${reason}`);
+      // KHÔNG log `err.message`: nodemailer NỐI phản hồi server vào đó, và server có thể echo token/link
+      // (bộ lọc spam "550 blocked URL …?token=…") hoặc username (535). Chỉ log trường máy-sinh.
+      const summary = `Gửi email mời tới ${config.host} thất bại (${describeSmtpError(err)})`;
+      if (isProgrammerError(err)) this.logger.error(summary, err.stack);
+      else this.logger.warn(summary);
       return { sent: false, reason: "send_failed" };
     } finally {
       transporter.close();
