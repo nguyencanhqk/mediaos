@@ -17870,6 +17870,7 @@ export const backlog = [
       "Owner ký 02/10/2026 (plan §6, mọi khuyến nghị): D1 (a) lát B render-only theo done_when + seed BE `S16-SOCIAL-MENTIONDIR-1` · D2 (b) `accept` = allowlist MIME mặc định (không video), client vẫn ép trần 1 video; seed WO cấu hình `S16-SOCIAL-VIDEOMIME-1` (video/mp4 + migration); (c) `accept` động từ settings FOUNDATION ghi nợ · D3 (a) invalidate-only, ghim K1 + mutant mK — ĐO LẠI M30 02/10 trên `f1cc08f5` (chứa #559 `d88f7270`): 0 ghi `socialKeys.posts.*` (chỉ `initialData` của `polls.results`) · D4 (a) đính kèm video/tệp `url:null` ẩn HẲN như ảnh · D5 (a) nút đính kèm cho cả 5 loại bài · D6 (a) một câu FE gộp cho `SOCIAL-ERR-007` + nợ BE `S16-SOCIAL-ATTERRSPLIT-1` · D7 (a) dựng trên #559 (nhánh restack lên `feat/s16-social-feblockseed-1`) · D8 (a) «Đang tải lên…» không % · D9 (b) HAI PR — lát B trước, rồi lát A · D10 (a) khoá/mất quyền ⇒ huỷ lượt tải đang bay + dọn khay, GIỮ chữ · D11 (a) điều kiện MERGE theo bản API PROD (dưới). Plan: docs/plans/S16-SOCIAL-FE-2D.md.",
       "✍️ TÁCH LÁT 02/10/2026 (owner D9 (b)): lát B — mention thành link · `droppedMentions` bình luận · ghim K1 cache `006` (vế mention của done_when dòng 2) — chuyển sang `S16-SOCIAL-MENTIONLINK-1` (PR riêng, đi TRƯỚC). WO này còn lát A (đính kèm 054/055: composer + bình luận + vẽ).",
       "Điều kiện MERGE (D11): lát A (WO này) chỉ khi PROD API ≥ #554 `a1dbe7f0` (054/055 #538 + cổng gắn #539/#541 + mã SOCIAL trên `error.code`); lát B (`S16-SOCIAL-MENTIONLINK-1`) ≥ #545 `7bfb3f96`. FE auto-deploy, API deploy tay; API cũ ⇒ 054 404 (mọi tệp thành ô lỗi) hoặc lý do lỗi rơi về câu chung. Kiểm: `GET /api/v1/health` → `data.build.commit` = `<c>`; `git merge-base --is-ancestor a1dbe7f0 <c>` phải exit 0.",
+      "FULL gate lượt 1 (02/10/2026 — typescript-reviewer PASS · security-reviewer PASS, 0 CRITICAL/HIGH; xử lý: plan §11). 🔴 Điều kiện bổ sung (G8, security-reviewer MEDIUM): tải về KHÔNG có `Content-Disposition` trong khi allowlist MIME đổi được THEO CÔNG TY lúc chạy (`company_settings`, không migration) ⇒ XSS lưu trữ trên origin storage qua link tệp của WO này nếu admin thêm `text/html`/`image/svg+xml`/… — `S16-SOCIAL-FILEDISPOSITION-1` PHẢI merge TRƯỚC khi BẤT KỲ admin nào mở rộng `file.allowed_mime_types` (hoặc proxy storage về cùng origin app); mặc định hôm nay an toàn (`setting-defaults.ts:41-56`). Ẩn đính kèm `url:null` là lưới CLIENT — server vẫn trả `fileName`/`sizeBytes`/`kind`/`fileId` và WS phát metadata cho cả công ty ⇒ `S16-SOCIAL-ATTMETAMASK-1`. Tệp `Uploaded` chưa bao giờ link (gỡ khỏi khay sau 055, bỏ nháp, D10) không job nào dọn ⇒ `S16-SOCIAL-ORPHANUPLOAD-1`. Kiểm thêm lúc merge (D11): trình duyệt người dùng phải TỚI ĐƯỢC host trong URL ký PUT/GET — DEVOPS-03 §13.3 ghi PROD/dev-online `S3_ENDPOINT=http://localhost:9000`; nếu đúng vậy, mọi tệp chọn từ máy khác thành ô `uploadFailed` (mỗi lượt vẫn tạo hàng `files` Pending + audit).",
     ],
   },
   {
@@ -17955,12 +17956,12 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["security-review", "code-review"],
-    depends_on: ["S16-SOCIAL-FE-2D"],
+    depends_on: ["S16-SOCIAL-FE-2D", "S16-SOCIAL-FILEDISPOSITION-1"],
     src: [
       "Plan S16-SOCIAL-FE-2D §2 M14 (đọc `0435_foundation_db5_retention_seed_modules.sql:316` + `setting-defaults.ts:41-56`) · M32 (`object-storage.service.ts:199-206` ký GET KHÔNG `ResponseContentDisposition` ⇒ phục vụ inline theo Content-Type đã khai) · nợ G2 + G8. Owner ký D2 (b) 02/10/2026.",
     ],
     done_when: [
-      "TRƯỚC (nợ G8): URL ký GET kèm `ResponseContentDisposition: attachment` cho loại KHÔNG phải ảnh/video (+ `nosniff` nếu storage hỗ trợ); chặn MIME `text/html`/`image/svg+xml` không phụ thuộc đuôi — RED trước",
+      "TRƯỚC: `S16-SOCIAL-FILEDISPOSITION-1` (nợ G8 — `Content-Disposition: attachment` cho loại không phải ảnh/video + chặn MIME nội dung chủ động không phụ thuộc allowlist) ĐÃ merge — tách thành WO riêng ở FULL gate lượt 1 của FE-2D, KHÔNG làm lại ở đây",
       "Thêm `video/mp4` vào allowlist mặc định + `MIME_TO_EXTENSIONS` bằng migration seed (append, `ON CONFLICT DO NOTHING`); công ty đã tự sửa allowlist KHÔNG bị ghi đè",
       "FE: `accept` của khay đính kèm (`S16-SOCIAL-FE-2D`, D2 (b)) mở `video/mp4`; trần 1 video/bài phía client giữ nguyên",
     ],
@@ -17998,6 +17999,100 @@ export const backlog = [
       "RED trước: int-spec vượt trần ⇒ mã LIMIT, tệp đã link ⇒ mã INVALID MỚI; FE `attachmentErrorReason` đọc hai câu riêng (khi API PROD ≥ PR của WO này)",
     ],
     notes: ["LOW — UX. Seed 02/10/2026 từ plan S16-SOCIAL-FE-2D D6."],
+  },
+  {
+    id: "S16-SOCIAL-FILEDISPOSITION-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "URL ký GET của tệp KHÔNG có `Content-Disposition` (`object-storage.service.ts` `createDownloadUrl` — `GetObjectCommand({Bucket, Key})`) trong khi allowlist MIME đổi được THEO CÔNG TY lúc chạy ⇒ admin thêm `text/html`/`image/svg+xml` là mở XSS lưu trữ trên origin storage qua link tệp người dùng của bảng tin (S16-SOCIAL-FE-2D)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/storage/**",
+      "apps/api/src/foundation/files/**",
+      "apps/api/src/foundation/settings/**",
+      "apps/api/src/social/**",
+      "apps/api/src/chat/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: [],
+    src: [
+      "FULL gate lượt 1 của S16-SOCIAL-FE-2D (02/10/2026, security-reviewer MEDIUM; plan FE-2D §2 M32 · nợ G8): `files.service.ts:889-893` `loadUploadLimits` đọc `file.allowed_mime_types` qua `settings.resolveMany(companyId, …)` (company > system > default, KHÔNG cần migration); `isExtensionConsistentWithMime` (`mime-extension.ts:37-41`) trả `true` khi tệp KHÔNG có đuôi hoặc MIME ngoài `MIME_TO_EXTENSIONS`; blocklist chỉ xét ĐUÔI ⇒ khi allowlist có `text/html`, tệp HTML khai `text/html` đặt tên `bao-cao.pdf` lọt cả ba lớp. FE-2D là chỗ ĐẦU TIÊN cả bảng tin mở link tệp người dùng (`<a href target=_blank>`) — byte phục vụ INLINE theo Content-Type đã khai. Mặc định hôm nay an toàn (`setting-defaults.ts:41-56` không có loại nội dung chủ động).",
+    ],
+    done_when: [
+      "RED trước: URL ký GET cho loại KHÔNG phải ảnh/video kèm `ResponseContentDisposition: attachment` (tên tệp mã hoá RFC 5987); ảnh/video giữ inline để `<img>`/`<video>` vẽ được; `X-Content-Type-Options: nosniff` nếu storage (MinIO/R2) cho đặt qua tham số ký — ghi rõ kết quả ĐO, không đoán",
+      "Server TỪ CHỐI (415, mã FOUNDATION có sẵn hoặc append catalog) MIME nội dung chủ động `text/html` · `application/xhtml+xml` · `image/svg+xml` · `text/xml` · `application/xml` ở MỌI đường register (054 SOCIAL · `/foundation/files` · chat) KHÔNG phụ thuộc allowlist công ty; đuôi tương ứng vào blocklist cứng",
+      "Áp ở `createDownloadUrl` dùng chung (mọi module), không chỉ SOCIAL; int-spec deny-path + FULL gate",
+    ],
+    notes: [
+      "🔴 Seed 02/10/2026 từ FULL gate lượt 1 của S16-SOCIAL-FE-2D (security-reviewer MEDIUM) — tách G8 khỏi tiền điều kiện của `S16-SOCIAL-VIDEOMIME-1` (giờ chờ WO này). ĐIỀU KIỆN: PHẢI merge TRƯỚC khi BẤT KỲ admin nào mở rộng `file.allowed_mime_types` hoặc proxy storage về cùng origin app (khi đó script trong tệp đọc được cookie CSRF và gọi `/auth/refresh` = chiếm tài khoản). SVG an toàn trong `<img>` nhưng CHẠY script khi mở ở tab mới.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-ATTMETAMASK-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Đính kèm bị TỪ CHỐI presign (`url: null`) vẫn trả `fileName`/`sizeBytes`/`kind`/`fileId` cho người xem (`social-attachments.service.ts` `decorateMany`), và payload WS bài/bình luận mới phát metadata đính kèm cho CẢ phòng công ty không qua quyết định theo người xem ⇒ «ẩn tệp không xem được» (D4 của S16-SOCIAL-FE-2D) chỉ là lưới CLIENT",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: [],
+    src: [
+      "FULL gate lượt 1 của S16-SOCIAL-FE-2D (02/10/2026, security-reviewer MEDIUM — hành vi BE CÓ SẴN, không do diff FE): `social-attachments.service.ts:541-550` đẩy `{fileId, kind, fileName, sizeBytes, url: null}` khi `signOne` trả null (luật AND `decideForLinkedFile` trên MỌI link của tệp · tệp nhiễm/cách ly · lỗi storage); WS bóc riêng `url` (`social-posts.service.ts:848`, `social-comments.service.ts:544`) nhưng giữ tên/cỡ/loại. Ví dụ: tệp gắn bài còn link sang thực thể module khác mà người xem không có quyền ⇒ thẻ bài đúng là KHÔNG vẽ gì, nhưng devtools vẫn thấy «Quyết định kỷ luật NV A.pdf» + cỡ + loại.",
+    ],
+    done_when: [
+      "RED trước: người xem bị từ chối presign ⇒ phần tử VẮNG khỏi `attachments` (hoặc `fileName`/`sizeBytes` = null — chốt MỘT, ghi lý do) trên mọi đường đọc dùng `decorateMany` (bài · bình luận · tin · `006`); ca ALLOW cạnh bên (người xem được ⇒ đủ trường)",
+      "Payload WS không mang `fileName`/`sizeBytes` (FE đọc thân bài từ REST — WS = DTO, `use-feed-realtime` chỉ đếm); contracts realtime cập nhật",
+      "FE giữ lọc `url !== null` của `splitAttachments` làm lưới thứ hai — không sửa FE trong WO này",
+    ],
+    notes: [
+      "🔴 Seed 02/10/2026 từ FULL gate lượt 1 của S16-SOCIAL-FE-2D (security-reviewer MEDIUM). Plan FE-2D §3 đã sửa lời: ẩn `url:null` là ở CLIENT cho tới khi WO này xong. Phơi nhiễm thực tế thấp (url chủ yếu null sau lỗi storage · tệp nhiễm/cách ly · luật AND qua link khác).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-ORPHANUPLOAD-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Tệp đã `Uploaded` mà KHÔNG BAO GIỜ được link (gỡ khỏi khay sau khi 055 xong · bỏ nháp · bình luận bị khoá — D10 của S16-SOCIAL-FE-2D · chat tương tự) sống MÃI trên storage + bảng `files`: `TEMP_FILE_CLEANUP` (S2-FND-JOBS-1) chỉ dọn `Pending` quá TTL và tệp tạm hết hạn",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/src/foundation/settings/**",
+      "apps/api/src/social/**",
+      "apps/api/src/chat/**",
+      "apps/api/migrations/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: [],
+    src: [
+      "FULL gate lượt 1 của S16-SOCIAL-FE-2D (02/10/2026, security-reviewer LOW): khay tải NGAY khi chọn (054 → PUT → 055); gỡ ô sau khi confirm xong ⇒ bytes + hàng `files` `Uploaded` ở lại. Đọc vị từ `eligibleWhere` (`temp-file-cleanup.repository.ts:115-133`): chỉ `is_temporary AND expires_at < now` hoặc `upload_status='Pending' AND created_at < cutoff`, cả hai kèm NOT EXISTS link ⇒ `Uploaded` chưa link KHÔNG đủ điều kiện. Docblock `files.service.ts:59-64` (TODO S2-FND-JOBS-1) đã cũ — JOBS-1 done nhưng không phủ ca này. Nợ G5 plan FE-2D.",
+    ],
+    done_when: [
+      "Chốt luật (DEC): tệp `Uploaded` CHƯA BAO GIỜ có link sau N giờ (setting) ⇒ soft-delete hệ thống + xoá object; ĐO trước tập loại trừ — tệp có đường sở hữu hợp lệ khác (FOUNDATION độc lập, avatar, export…) KHÔNG được đụng",
+      "Mở rộng `eligibleWhere` + `isStillEligibleTx` CÙNG vị từ (TOCTOU) — RED trước: tệp vừa được link giữa lúc liệt kê và lúc xoá KHÔNG bị xoá; BẤT BIẾN #2 (soft-delete hàng, không hard-delete); FULL gate (xoá dữ liệu người dùng)",
+    ],
+    notes: [
+      "LOW — Seed 02/10/2026 từ FULL gate lượt 1 của S16-SOCIAL-FE-2D (security-reviewer LOW). Không có đường nào làm tệp mồ côi rò ra NGOÀI (không link ⇒ không route SOCIAL nào ký GET cho nó); rủi ro là lưu trữ phình + tệp nhạy cảm chọn nhầm vẫn nằm trên storage (đọc được bởi quản trị storage / quyền FOUNDATION file).",
+    ],
   },
   {
     id: "S18-QA-CHECKALLFLAKE-1",
