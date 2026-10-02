@@ -2,12 +2,14 @@
 
 > Trạng thái: **plan v2 (02/10/2026)** — đã vá `plan-reviewer` lượt 1 (PASS, 3 MAJOR + 7 MINOR — §10); owner ký §6
 > 02/10/2026 (mọi khuyến nghị). FULL gate lượt 1 (typescript-reviewer + security-reviewer, cả hai PASS) — xử lý ở §11.
+> FULL gate lượt 2 (security-reviewer 1 HIGH + 1 MEDIUM: tiền đề «tải về an toàn với cấu hình mặc định» SAI) — xử lý ở §12.
 > Nhánh `feat/s16-social-fe-2d` cắt từ master `14afbb5f`. Zone amber. Gate: lát **B** = LIGHT (`typescript-reviewer` +
 > `react-reviewer` + `quality-gate`); lát **A** = LIGHT **+ `security-reviewer`** (tệp người dùng + PUT ra storage ngoài —
 > luật kích hoạt security chung, §10 #10). FE-only: KHÔNG migration, KHÔNG cặp quyền mới, KHÔNG sửa `apps/api`. Quyền chỉ
 > qua `useCan`/`PermissionGate`. Nguồn: nợ N1 plan FE-1 (đính kèm) · nợ R3 plan BE-1D (mention link) · nợ «droppedMentions
 > bình luận» FE-1 §9 · plan-reviewer FE-2 M9. Đề xuất **hai lát**: **A** đính kèm (composer + bình luận + vẽ) · **B** mention
-> link + `droppedMentions` bình luận + ghim ngữ nghĩa cache `006`. **Điều kiện MERGE: PROD API đủ mới (D11, §8 bước 0b).**
+> link + `droppedMentions` bình luận + ghim ngữ nghĩa cache `006`. **Điều kiện MERGE: PROD API đủ mới (D11, §8 bước 0b);
+> lát A thêm: API PROD có `S16-SOCIAL-FILEDISPOSITION-1` (§12 H1).**
 
 ## 1. Bối cảnh — cái gì đang sai (code HIỆN TẠI, `14afbb5f`)
 
@@ -76,7 +78,7 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | M10 | Trần tổng ở Zod | probe P5b: `createFeedPostSchema` 11 vs 12 `attachmentIds` | `FEED_MAX_ATTACHMENTS=11`; 11 ⇒ OK · 12 ⇒ **400 vô danh** (không phải 422) ⇒ FE PHẢI chặn tổng >11 phía client |
 | M11 | Body bắt buộc | probe P5c | bình luận `body:""` + 1 tệp ⇒ từ chối; bài `share` không body ⇒ từ chối ⇒ **không có bài/bình luận CHỈ ảnh** |
 | M12 | Thứ tự `attachmentIds` & idempotency | probe P5a `idempotencyKeyFor("social-post", …)` đảo thứ tự 2 id | khoá KHÁC ⇒ giữ thứ tự CHỌN ổn định; không sắp xếp lại giữa các lượt thử |
-| M13 | Tầng FOUNDATION ở 054 | đọc `files.service.ts:123-161,225-229` | MIME ∉ allowlist ⇒ 415 `FOUNDATION-FILE-ERR-MIME` · đuôi bị chặn ⇒ 415 `-BLOCKED` · đuôi≠MIME ⇒ 415 `-EXTENSION` · >`file.max_upload_size_mb` (mặc định **25**) ⇒ 413 `-SIZE`; presign PUT ký KÈM `ContentType` + `ContentLength` (`object-storage.service.ts:150-157`) ⇒ PUT phải gửi đúng `Content-Type` đã khai. Mã nằm ở `error.code` — đo TĨNH: int-spec `files-e2e-confirm.int-spec.ts:243,258` + `me-preferences-avatar.int-spec.ts:410` (xanh trên CI master, KHÔNG chạy lại ở plan này) |
+| M13 | Tầng FOUNDATION ở 054 | đọc `files.service.ts:123-161,225-229` | MIME ∉ allowlist ⇒ 415 `FOUNDATION-FILE-ERR-MIME` · đuôi bị chặn ⇒ 415 `-BLOCKED` · đuôi≠MIME ⇒ 415 `-EXTENSION` · >`file.max_upload_size_mb` (mặc định **25**) ⇒ 413 `-SIZE`; presign PUT ký `ContentLength` nhưng **KHÔNG ký `Content-Type`** (sửa ở FULL gate lượt 2 — M36; bản trước ghi «ký KÈM `ContentType`» theo `object-storage.service.ts:150-157` là SAI) ⇒ FE vẫn gửi đúng `Content-Type` đã khai (ý định thiết kế), nhưng storage KHÔNG ép. Mã nằm ở `error.code` — đo TĨNH: int-spec `files-e2e-confirm.int-spec.ts:243,258` + `me-preferences-avatar.int-spec.ts:410` (xanh trên CI master, KHÔNG chạy lại ở plan này) |
 | M14 | Allowlist MIME thực tế | đọc `0435_…seed_modules.sql:316` + `setting-defaults.ts:41-56` | `png·jpeg·webp·pdf·docx·xlsx·csv·txt` — **KHÔNG có `video/*`, KHÔNG `image/gif`** ⇒ với cấu hình mặc định MỌI video ăn 415 ở 054; trần «1 video» chỉ chạm được khi công ty tự mở allowlist |
 | M15 | Cổng tầng-2 054/055 | đọc `social-access.service.ts:333-339` | `create:feed-post`/`create:feed-comment` phải ở scope **Company**, thiếu ⇒ 403 `SOCIAL-ERR-FILE-TARGET-POST-DENIED`/`-COMMENT-DENIED`; tầng-1 (`view:feed`) thiếu ⇒ 403 `PermissionGuard` câu cố định, KHÔNG mã SOCIAL. `useCan` mù scope ⇒ vai tuỳ biến @Department thấy nút rồi ăn 403 |
 | M16 | jsdom | probe P4a/P4b/P4c | `new File([...],"x.heic").type === ""`; **`URL.createObjectURL` = `undefined`** (phải stub — tiền lệ `MessageComposer.attach.spec.tsx:70`); `accept` KHÔNG lọc khi dispatch `change` ⇒ kiểm client phải ở JS, không dựa `accept` |
@@ -95,10 +97,11 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | M29 | `setQueryData` vs `isInvalidated` | probe P7a/P7b (`review1`) | invalidate RỒI `setQueryData` ⇒ `isInvalidated:false`; `setQueryData` RỒI invalidate ⇒ `true`; `mentions` MẤT ở cả hai ⇒ thông điệp mK phụ thuộc thứ tự assert (K1 ghim `mentions` TRƯỚC) |
 | M30 | Đo lại M5 trên PR #559 | `git grep -nE "(setQueryData\|setQueriesData)[^;]*posts\.\|initialData"` trên `feat/s16-social-feblockseed-1` @ `d88f7270` và `master`, `apps/app/src` + `packages/web-core/src`, bỏ spec | master: 0 dòng; #559: chỉ `initialData: seed` của `polls.results` (`PollBlock.tsx:86` nhánh) — **0 ghi `socialKeys.posts.*`**. WS bỏ `mentions` (contracts `realtime.ts:350-377`) ⇒ tiền đề D3(a) đứng trên head #559 hiện tại; **PHẢI đo lại sau rebase** (§8 bước 0) |
 | M31 | Chuỗi phụ thuộc BE (điều kiện merge) | `git log --oneline master -- social-files.controller.ts social-files.service.ts social-access.service.ts`; `git log -S withheld` / `-S droppedMentions` contracts; `git show --stat a1dbe7f0` | 054/055 = **#538** `188d6404`; cổng gắn 004/016 = #539 `87e04955` + #541 `0f3103ec`; `mentions[]`/`withheld` = **#545** `7bfb3f96`; `droppedMentions` có từ #530; mã SOCIAL lên `error.code` = **#554** `a1dbe7f0` — commit ghi RED cũ «expected 'RESOURCE-ERR-…' to be 'SOCIAL-ERR-…'» ⇒ API < #554 thì `attachDenied`/`attachmentRejected` rơi về chung. **Commit API PROD: KHÔNG đo** (luật không chạm PROD) — lệnh cho owner: `GET /api/v1/health` → `data.build.commit` (`apps/api/src/health/build-info.ts`) rồi `git merge-base --is-ancestor <sha-PR> <commit>` |
-| M32 | Tải về đính kèm phục vụ thế nào | đọc `object-storage.service.ts:199-206`; `social-api.ts:136-142`; `setting-defaults.ts:69-97`; `mime-extension.ts` (`isExtensionConsistentWithMime`) | `GetObjectCommand({Bucket,Key})` KHÔNG `ResponseContentDisposition` ⇒ inline theo Content-Type đã khai; `feedAttachmentSchema.url = z.string().nullable()` — không kiểm lược đồ; blocklist mặc định có `html`·`svg` nhưng tệp KHÔNG đuôi được thả lỏng (`extension===null ⇒ true`) ⇒ an toàn hôm nay dựa vào allowlist mặc định (M14) + storage KHÁC origin app (giả định — không đo được, env PROD) |
+| M32 | Tải về đính kèm phục vụ thế nào | đọc `object-storage.service.ts:199-206`; `social-api.ts:136-142`; `setting-defaults.ts:69-97`; `mime-extension.ts` (`isExtensionConsistentWithMime`) | `GetObjectCommand({Bucket,Key})` KHÔNG `ResponseContentDisposition` ⇒ inline theo Content-Type đã khai; `feedAttachmentSchema.url = z.string().nullable()` — không kiểm lược đồ; blocklist mặc định có `html`·`svg` nhưng tệp KHÔNG đuôi được thả lỏng (`extension===null ⇒ true`) ⇒ an toàn hôm nay dựa vào allowlist mặc định (M14) + storage KHÁC origin app (giả định — không đo được, env PROD). ⚠️ **Sửa ở FULL gate lượt 2 (M36):** vế «an toàn nhờ allowlist» SAI — kiểu PHỤC VỤ là Content-Type LƯU lúc PUT, mà PUT không ký kiểu ⇒ tệp khai `application/pdf` (qua allowlist) vẫn lưu được `text/html`; allowlist chỉ chặn MIME KHAI |
 | M33 | Lưới ảnh hiện tại với URL không http(s) | probe P11 (`scheme`) | `buildImageGrid` giữ cả `javascript:alert(1)` lẫn `data:image/svg+xml,…` (`shown.length=2`); React 19 vẽ `src` NGUYÊN VĂN ⇒ R5 đỏ trên code cũ |
 | M34 | `.csv` trên Windows | **KHÔNG đo** (phụ thuộc trình duyệt/registry — lời reviewer) | code: allowlist chỉ `text/csv` (`setting-defaults.ts:49`), `MIME_TO_EXTENSIONS` không có `application/vnd.ms-excel` (`mime-extension.ts:18-27`) ⇒ NẾU trình duyệt báo MIME đó thì 054 ⇒ 415 MIME ⇒ `unsupportedType`. Ghi nợ G9, không chặn |
 | M35 | `<video onError>` trong jsdom | probe P10 (`review1`) | `fireEvent.error(video)` ⇒ `onError` 1 lần ⇒ ca R2b dựng được |
+| M36 | (FULL gate lượt 2) Header nào được KÝ trong URL presign; confirm có so kiểu không | probe `presign-headers.probe.cjs` (scratchpad — ký URL bằng đúng SDK của worktree, `@aws-sdk/s3-request-presigner` 3.1068.0, KHÔNG mạng); đọc `dist-cjs/index.js:49` · `files.service.ts:276-294` · `object-storage.service.ts:138,199-206,217-225` | PUT như `createUploadUrl` ⇒ `X-Amz-SignedHeaders=content-length;host` (`prepareRequest` gọi `unsignableHeaders.add("content-type")`); thêm `signableHeaders: new Set(['content-type'])` ⇒ `content-length;content-type;host`. GET như `createDownloadUrl` ⇒ 0 tham số `response-*`; thêm `ResponseContentType`/`ResponseContentDisposition` ⇒ có trong query đã ký. Confirm chỉ kiểm tồn tại · cỡ · checksum; `statObject` bỏ `ContentType`. Docblock `:138` («pins content-type») SAI. Phía storage (kiểu lưu = header của PUT) là ngữ nghĩa S3 chuẩn — KHÔNG đo (không chạm storage; owner kiểm trên bucket lane/dev, §12) |
 
 ## 3. Bất biến phải giữ
 
@@ -120,10 +123,13 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
   — lưới thứ hai nếu sau này ai mở khoá khay.
 - **Không XSS**: không `dangerouslySetInnerHTML`; link tệp `target=_blank rel="noopener noreferrer"`; URL tệp chỉ từ server
   **VÀ** phải khớp `^https?://` (không phân biệt hoa thường — cùng tư thế `URL_RE`, `parse-feed-body.ts:52`) — lệch ⇒ coi
-  như `url:null` (không vẽ). **Giả định ghi rõ (M32):** (a) allowlist MIME không có `text/html`/`image/svg+xml`; (b) storage
-  phục vụ ở origin KHÁC app. Hai giả định này là của BE/cấu hình, FE không ép được ⇒ nợ G8 (Content-Disposition
-  `attachment` cho loại không phải media) PHẢI xong trước khi bất kỳ công ty nào mở rộng allowlist — WO riêng
-  `S16-SOCIAL-FILEDISPOSITION-1` (seed ở FULL gate lượt 1, §11; allowlist đổi được THEO CÔNG TY lúc chạy, không migration).
+  như `url:null` (không vẽ). **Tải về KHÔNG an toàn với cấu hình mặc định (sửa ở FULL gate lượt 2, §12 H1 — v2 và lượt 1
+  ghi SAI):** v2 giả định (a) allowlist MIME không có `text/html`/`image/svg+xml` là đủ — SAI: storage phục vụ theo
+  Content-Type LƯU lúc PUT, mà PUT ký sẵn KHÔNG ký `Content-Type` (M36) ⇒ tệp khai `application/pdf` (qua allowlist) vẫn lưu
+  được `text/html`, bấm link tệp ⇒ HTML chạy trên origin storage; (b) storage ở origin KHÁC app chỉ hạ mức (không chiếm
+  phiên), không chặn. FE không ép được kiểu storage phục vụ ⇒ vá ở BE `S16-SOCIAL-FILEDISPOSITION-1` (ký `Content-Type` PUT ·
+  confirm so kiểu · `ResponseContentType` + `Content-Disposition: attachment` ở GET; seed lượt 1, mở rộng lượt 2) — **điều
+  kiện MERGE của lát A** (D11 bổ sung) và phải lên PROD trước khi storage mở cho trình duyệt.
 - **Không rò storage credential**: PUT lên storage qua `putBytesToStorage` (`credentials:'omit'`), không qua `apiFetch`.
 - **Không tải ngầm khi ô soạn không dùng được** (v2, D10): `locked`/mất quyền lật ⇒ huỷ lượt tải đang bay + dọn khay.
 
@@ -344,10 +350,12 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 - **G6 (BE)** TTL ký GET 300 s ⇒ FE chỉ giảm nhẹ bằng ô trung tính cho ẢNH **và VIDEO** (A8); video hết hạn GIỮA lúc phát/tua
   (range request 403) ⇒ ô trung tính thay trình phát, mất vị trí phát — sửa gốc là TTL/refetch-on-error ở BE.
 - **G7 (sản phẩm)** không có bài/bình luận CHỈ ảnh (M11).
-- **G8 (BE, v2)** URL ký GET không `ResponseContentDisposition` (M32) ⇒ tệp phục vụ inline; cần `attachment` (+ `nosniff`
-  nếu storage hỗ trợ) cho loại KHÔNG phải ảnh/video, và chặn MIME `text/html`/`image/svg+xml` không phụ thuộc đuôi — PHẢI
-  xong trước khi mở allowlist (D2 đường video) hoặc proxy storage về cùng origin. Tách thành WO đỏ riêng
-  `S16-SOCIAL-FILEDISPOSITION-1` ở FULL gate lượt 1 (§11); `S16-SOCIAL-VIDEOMIME-1` giờ chờ WO đó.
+- **G8 (BE, v2 — nâng ở FULL gate lượt 2)** byte phục vụ inline theo Content-Type LƯU lúc PUT; PUT không ký kiểu (M36),
+  confirm không so kiểu, URL ký GET không `ResponseContentType`/`ResponseContentDisposition` (M32) ⇒ khai thác được với
+  cấu hình MẶC ĐỊNH, không cần mở allowlist. Cần: ký `Content-Type` PUT + confirm so kiểu + `ResponseContentType` = MIME đã
+  đăng ký + `attachment` (+ `nosniff` nếu storage hỗ trợ) cho loại KHÔNG phải ảnh/video + chặn MIME nội dung chủ động không
+  phụ thuộc đuôi. WO đỏ riêng `S16-SOCIAL-FILEDISPOSITION-1` (seed lượt 1 §11, mở rộng lượt 2 §12) — **điều kiện MERGE của
+  lát A**, và phải lên PROD TRƯỚC khi storage mở cho trình duyệt (chat có sẵn đường bấm); `S16-SOCIAL-VIDEOMIME-1` chờ WO đó.
 - **G9 (UX, v2)** `.csv` có thể bị trình duyệt Windows báo `application/vnd.ms-excel` (M34, CHƯA đo) ⇒ 415 `unsupportedType`
   dù CSV nằm trong allowlist. Sửa ở BE (thêm alias MIME) hoặc FE ánh xạ theo đuôi — quyết định của WO sau, kèm phép đo thật.
 - **FE**: UI sửa bài/bình luận kèm tệp (chưa có UI sửa — grep `updatePost` app = 0) · kéo-thả/dán tệp · lightbox ảnh ·
@@ -365,6 +373,8 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 0b. (D11) **Điều kiện MERGE** — owner: `GET /api/v1/health` PROD → `data.build.commit` = `<c>`; trên master
    `git merge-base --is-ancestor 7bfb3f96 <c>` (lát B) và `git merge-base --is-ancestor a1dbe7f0 <c>` (lát A) phải exit 0.
    Chép thành dòng `notes` «Điều kiện MERGE: PROD API ≥ #545 (lát B) / ≥ #554 (lát A)» vào WO lúc mở PR.
+   **Bổ sung FULL gate lượt 2 (lát A, §12 H1):** `git merge-base --is-ancestor <sha merge của S16-SOCIAL-FILEDISPOSITION-1>
+   <c>` cũng phải exit 0.
 1. **Lát B** (D9b): RED P1–P7 · PU1–PU3 · B1–B3 · D1 · K1 → B1–B4 → GREEN → mutant mB1–mB9 + mK.
 2. **Lát A**: STUB (§5) → A1–A2 + spec web-core (RED W/S trên assert) → rebuild web-core → A3–A4 + spec C/U → A5–A7 + spec
    F/K1c–K3c → A8 + spec R/R2b/R5 → A9–A10 + spec E/I1 → mutant mA1–mA18.
@@ -396,7 +406,7 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | R8 | 20 MB trên mạng chậm, không timeout PUT | nút gỡ = abort (F6) |
 | R9 (v2) | FE lên PROD trước API (M31) ⇒ nút đính kèm hiện mà 054 404, hoặc lý do lỗi rơi về chung | D11 — điều kiện merge theo `data.build.commit` |
 | R10 (v2) | Thân gõ kiểu «Unicode tổ hợp» (NFD/trộn) | B1 so nhãn qua NFC + biên `\p{M}` (PU1/PU2); hiển thị nguyên văn |
-| R11 (v2) | Giả định bảo mật tải về (allowlist hẹp + storage khác origin) không do FE ép | guard `^https?://` (R5) + nợ G8 chặn việc mở allowlist |
+| R11 (v2 · nâng lượt 2) | Tải về phục vụ theo kiểu do người tải lên chọn (PUT không ký `Content-Type` — M36) ⇒ XSS lưu trữ trên origin storage với cấu hình MẶC ĐỊNH | guard `^https?://` (R5) chỉ chặn lược đồ; chặn thật = BE `S16-SOCIAL-FILEDISPOSITION-1`, điều kiện MERGE lát A (§12 H1) |
 
 **Kích thước ước lượng (v2):** Lát A ≈ 16 file (8 mới: `social-files-api.ts`+spec · `storage-upload.spec.ts` ·
 `attachment-draft.ts`+spec · `use-attachment-uploads.ts`+spec (U1/U2) · `ComposerAttachmentTray.tsx` · `PostAttachments.tsx`+spec
@@ -435,10 +445,25 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | G5 | ts · LOW | a11y: (a) `trayAria` nói «bài» cả ở ô bình luận · (b) mọi «Thử lại» cùng tên · (c) `<video>` không tên · (d) vùng `role=status` mount CÙNG chữ | **Xác nhận** cả 4 (`ComposerAttachmentTray.tsx:76,121,155-163`, `PostAttachments.tsx:85`) | Lát A — vá ở commit lát A |
 | G6 | ts · LOW | Câu `attachmentRejected` chép cứng «10 ảnh · 1 video · 20 MB» — bản thứ hai không nối với hằng contracts | **Xác nhận** (`social.ts:484`) | Lát A — vá ở commit lát A |
 | G7 | ts · LOW | `findMentionLink(base)` dò lại MỌI `@` còn lại sau MỖI token ⇒ O(token × @) (probe R-B4 ~74 ms/lượt) | **Xác nhận** + đo lại (Node 24, `@A` × 2000 + 50 nhãn): **59,7 ms** trung vị; nhánh không `mentions` 1,6 ms | **Lát B — ĐÃ VÁ:** con trỏ (lượt dò trước còn hiệu lực tới khi `from` vượt match) ⇒ mỗi `@` đi qua một lần: **1,8 ms**. Ca **P8** đếm `indexOf("@")` (tất định). RED code cũ: `expected 80600 to be less than or equal to 800`. Mutant tắt con trỏ ⇒ P8 đỏ đúng thông điệp, đầu ra không đổi |
-| G8 | sec · MEDIUM | Tải về không `Content-Disposition` + allowlist MIME đổi được THEO CÔNG TY lúc chạy ⇒ XSS lưu trữ trên origin storage khi admin mở `text/html`/`image/svg+xml` | **Xác nhận** (`files.service.ts:889-893` `resolveMany(companyId…)`; `mime-extension.ts:37-41` thả lỏng khi không đuôi / MIME ngoài map); mặc định an toàn (`setting-defaults.ts:41-56`) | Ngoài phạm vi FE ⇒ seed 🔴 **`S16-SOCIAL-FILEDISPOSITION-1`** (BE) + ghi điều kiện merge vào notes FE-2D; `S16-SOCIAL-VIDEOMIME-1` chờ nó |
+| G8 | sec · MEDIUM | Tải về không `Content-Disposition` + allowlist MIME đổi được THEO CÔNG TY lúc chạy ⇒ XSS lưu trữ trên origin storage khi admin mở `text/html`/`image/svg+xml` | **Xác nhận** (`files.service.ts:889-893` `resolveMany(companyId…)`; `mime-extension.ts:37-41` thả lỏng khi không đuôi / MIME ngoài map); mặc định an toàn (`setting-defaults.ts:41-56`) — ⚠️ **SAI** (FULL gate lượt 2, §12 H1: khai thác được với cấu hình MẶC ĐỊNH vì Content-Type của PUT không được ký — M36) | Ngoài phạm vi FE ⇒ seed 🔴 **`S16-SOCIAL-FILEDISPOSITION-1`** (BE) + ghi điều kiện merge vào notes FE-2D; `S16-SOCIAL-VIDEOMIME-1` chờ nó |
 | G9 | sec · MEDIUM | Phần tử `url:null` vẫn mang `fileName`/`sizeBytes`/`kind`/`fileId`; WS phát metadata cho cả công ty ⇒ «masking ở server» của §3 là sai | **Xác nhận** (`social-attachments.service.ts:541-550`; `social-posts.service.ts:848`; `social-comments.service.ts:544`) | Ngoài phạm vi FE ⇒ seed 🔴 **`S16-SOCIAL-ATTMETAMASK-1`** (BE); §3 sửa lời |
 | G10 | sec · LOW | Gỡ ô sau khi 055 xong ⇒ bytes + hàng `files` `Uploaded` ở lại mãi | **Xác nhận** + đo lại: `TEMP_FILE_CLEANUP` (S2-FND-JOBS-1 done) chỉ dọn `Pending` quá TTL + tệp tạm (`temp-file-cleanup.repository.ts:115-133`) | Ngoài phạm vi FE ⇒ seed **`S16-SOCIAL-ORPHANUPLOAD-1`** (BE, LOW); G5 §7 sửa lời |
 
 Ghi chú không phải phát hiện: (1) security-reviewer — DEVOPS-03 §13.3 ghi PROD/dev-online `S3_ENDPOINT=http://localhost:9000`;
 nếu đúng, URL ký PUT/GET trỏ về localhost của MÁY NGƯỜI DÙNG ⇒ ghi thành mục kiểm lúc merge (D11) trong notes FE-2D.
 (2) typescript-reviewer — tên tệp có ký tự đảo chiều (RTLO) hiển thị không cô lập; xử lý ở lát A.
+
+## 12. FULL gate lượt 2 — xử lý (02/10/2026)
+
+> Re-gate sau lượt 1. `security-reviewer`: 1 HIGH + 1 MEDIUM, cùng một gốc — tiền đề «tải về an toàn với cấu hình mặc định»
+> của §3 (M32 (a)) và §11 G8 SAI. Kiểm lại trên code + đo (M36) trước khi xử lý. Gốc ở BE (kiểu storage phục vụ), FE không ép
+> được ⇒ KHÔNG vá BE trong WO FE; chọn đường (a) của reviewer: WO BE thành điều kiện MERGE của lát A (lý do ở H1).
+
+| # | Nguồn · mức | Phát hiện (tóm) | Kiểm lại | Xử lý |
+| --- | --- | --- | --- | --- |
+| H1 | sec · HIGH | Nhân viên bất kỳ làm link tệp của bảng tin phục vụ HTML của mình INLINE từ storage với cấu hình mặc định: PUT không ký `Content-Type`, confirm không so kiểu, GET không `response-*`; link `<a target=_blank>` của lát A là đường bấm cho CẢ công ty (chat đã có cùng gốc) | **Xác nhận** — M36 (SDK 3.1068.0: `X-Amz-SignedHeaders=content-length;host`; `signableHeaders` ⇒ thêm `content-type`); `files.service.ts:276-294`; `object-storage.service.ts:199-206,217-225`; chat `MessageBubble.tsx:144,161` · `RoomFilesTab.tsx:128,145`. Phía storage (kiểu lưu = header của PUT) là ngữ nghĩa S3 — không đo (không chạm storage) | **Đường (a):** `S16-SOCIAL-FILEDISPOSITION-1` mở rộng (ký `Content-Type` PUT · confirm so kiểu · `ResponseContentType` = MIME đã đăng ký + `attachment` cho loại không phải media · sửa docblock `:138`) và thành **điều kiện MERGE D11 bổ sung của lát A** (`notes` FE-2D + §8 bước 0b). Không `depends_on`: harness dùng nó cho READY lúc BẮT ĐẦU (`gen-status.mjs:91`), không chặn merge. Lát A: luật 3 trong docblock `PostAttachments.tsx` ghi tiền đề đúng + điều kiện MERGE (chỉ chú thích, không đổi hành vi). **Không chọn (b) vá FE tạm:** chỉ phủ `kind=file` — ảnh khai `image/png` mà PUT `image/svg+xml` vẫn vẽ trong `<img>` (script tắt) rồi CHẠY script khi «mở ảnh trong tab mới» (lưới `object-cover`, không lightbox); fetch→blob lại cần CORS GET của bucket (repo chưa có — `task-file-api.ts:29-36`). Giá của (a) ≈ 0: lát A chỉ chạy được khi storage tới được từ trình duyệt (mục kiểm D11), mà storage không được mở trước WO BE đó (chat) |
+| H2 | sec · MEDIUM | Kiểm soát G8 ghi ở lượt 1 không chặn merge lát A; done_when của WO seed bỏ ngỏ (chặn MIME lúc register không chống kiểu chọn lúc PUT, không dòng nào gắn kiểu lưu/phục vụ với MIME đã đăng ký); §3 M32 (a) + §11 G8 lặp tiền đề sai; docblock `object-storage.service.ts:138` sai | **Xác nhận** cả 4 (`backlog.mjs` notes FE-2D + `S16-SOCIAL-FILEDISPOSITION-1`; §3; §11 G8; `:138` đối chiếu M36). Cùng niềm tin sai ở 7 docblock FE («lệch ⇒ 403 SignatureDoesNotMatch» — `storage-upload.ts:17` · `chat-upload.ts:64` · …): ý định thiết kế là KÝ, SDK lặng lẽ không ký | `backlog.mjs`: notes FE-2D sửa vế «mặc định an toàn» + dòng FULL gate lượt 2 (đường tấn công · điều kiện MERGE · kiểm owner); `S16-SOCIAL-FILEDISPOSITION-1` — tiêu đề, src lượt 2, done_when 1–3 (ký PUT · confirm so kiểu · GET `ResponseContentType`; đều RED trước, ca trên bucket lane/dev) + 6 (docblock `:138`; 7 docblock FE chỉ đúng SAU khi ký), notes điều kiện siết (trước khi mở storage cho trình duyệt · trước merge lát A · trước mở allowlist); `S16-SOCIAL-VIDEOMIME-1` done_when 1 + src theo phạm vi mới. Plan: đầu trang · M13 · M32 · M36 mới · §3 · §7 G8 · §8 bước 0b · R11 · §11 G8 sửa lời |
+
+Phép đo cho owner (KHÔNG PROD): trên bucket lane/dev, presign PUT `application/pdf` rồi PUT kèm `Content-Type: text/html`
+⇒ HEAD phải thấy `text/html` (xác nhận vế storage của H1); sau `S16-SOCIAL-FILEDISPOSITION-1` ⇒ 403. Nếu storage PROD ĐÃ tới
+được từ trình duyệt (khác DEVOPS-03 §13.3) thì chat phơi NGAY HÔM NAY ⇒ WO đó đi trước mọi việc khác.
