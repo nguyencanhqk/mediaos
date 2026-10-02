@@ -424,3 +424,13 @@ M10/M16) · service «lỗi LẬP TRÌNH ném nguyên» (khoá mutant «bắt m�
 Lượt RED đầu có 32 đỏ: P-B1 đỏ vì LỖI TEST (`E.connections` cộng dồn cả file — P3 kết nối E) ⇒ sửa đo E TRONG phần
 act (`connectionsDuring`) rồi chạy lại: P-B1 xanh trên base như thiết kế. Spy log đặt `mockName` để thông điệp đỏ
 nêu đúng mức (`logger.error` / `Logger.error`) thay vì `"spy"` chung.
+
+### 11.3 Bước 3 — GREEN
+
+Helper `smtpSecretContext` + thẻ `SMTP_ENVELOPE_UNUSABLE_TAG` + `MailDestinationNotPersistedError`
+(`mail-destination.ts`) → 3 call-site (PUT encrypt, `testConnection` decrypt, lời mời decrypt) + ca 3b → D2 (câu)
+· D3 (`logger.error` + thẻ + company + config ở cả hai nơi) → D4 (`assertPersistedAsBound` ở hai nhánh INSERT của
+repo: id lệch ⇒ `Error` lập trình, đích lệch ⇒ 400) → docblock (repo, service, `EncryptCtx`, schema D5).
+`pnpm --filter @mediaos/api typecheck` sạch. Cùng lệnh §8 bước 2, MỘT lần, cùng lane ⇒ `Test Files 11 passed (11)`
+· `Tests 156 passed (156)` (credexfil int-spec 26 ca chạy thật, envelope 7, `mail-destination.spec` 11).
+B2 grep: `SMTP_SECRET_PURPOSE` trong `apps/api/src/**/*.ts` không-spec chỉ còn ở `mail-destination.ts`.

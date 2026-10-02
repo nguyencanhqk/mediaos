@@ -4,7 +4,12 @@ import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { companyMailConfigs, type CompanyMailConfig } from "../db/schema";
 import { AuditService } from "../events/audit.service";
-import { MailPasswordRequiredError } from "./mail-destination";
+import {
+  destinationOf,
+  MailDestinationNotPersistedError,
+  MailPasswordRequiredError,
+  sameDestination,
+} from "./mail-destination";
 
 /** Non-secret config fields persisted on a mail config (mirror DTO — KHÔNG password/envelope). */
 export interface MailConfigFields {
@@ -35,6 +40,30 @@ function auditSnapshot(row: CompanyMailConfig | undefined) {
     fromEmail: row.fromEmail,
     hasPassword: true, // envelope cột NOT NULL → có row = có password
   };
+}
+
+/**
+ * B4 (S19-SEC-MAILAADBIND-1, owner D4): bộ giá trị PG THẬT SỰ lưu (`RETURNING`) phải bằng bộ đã gắn vào ngữ
+ * cảnh mã hoá ở caller — id + 4 trường đích (`smtpSecretContext`). Lệch ⇒ envelope vừa ghi không bao giờ mở
+ * được («nhập lại mật khẩu» cũng không chữa: cùng đầu vào) ⇒ ném TRONG tx để rollback (audit ghi sau, nên chưa
+ * có). So trong JS trên hàng `RETURNING` sẵn có — không thêm truy vấn.
+ *   - id lệch ⇒ LỖI LẬP TRÌNH (service luôn `randomUUID()` chữ thường; PG trả uuid chữ thường bất kể đầu vào)
+ *     ⇒ 500 qua filter, KHÔNG gói thành 400. Message không mang id/ngữ cảnh.
+ *   - đích lệch (vd surrogate lẻ ⇒ PG lưu U+FFFD) ⇒ `MailDestinationNotPersistedError` ⇒ service 400.
+ */
+function assertPersistedAsBound(
+  row: CompanyMailConfig,
+  recordId: string,
+  fields: MailConfigFields,
+): void {
+  if (row.id !== recordId) {
+    throw new Error(
+      "Mail config: recordId gắn vào ngữ cảnh mã hoá không khớp id PG lưu (lỗi lập trình — recordId phải là uuid chữ thường app-gen).",
+    );
+  }
+  if (!sameDestination(destinationOf(row), fields)) {
+    throw new MailDestinationNotPersistedError();
+  }
 }
 
 @Injectable()
@@ -81,10 +110,15 @@ export class MailConfigRepository {
    * envelope với đích khác. Vị từ đích trong WHERE biến yêu cầu "đổi đích mà giữ mật khẩu" thành LỖI thay vì 200
    * im lặng bỏ qua đích mới; đua với DELETE+INSERT đang dở ⇒ UPDATE chờ khoá, hàng cũ đã bị xoá nên bị bỏ qua
    * (hàng mới ngoài snapshot câu lệnh) ⇒ 0 hàng ⇒ lỗi. DB: `mediaos_app` hết quyền UPDATE cột đích (mig 0591 —
-   * chỉ chặn đường UPDATE; AAD không gắn đích ⇒ ĐỪNG viết DELETE+INSERT tái dùng id + envelope cũ). Thua đua ⇒
-   * 400 "cần mật khẩu / tải lại" dù không đổi đích — chấp nhận (fail-closed).
+   * chỉ chặn đường UPDATE). Thua đua ⇒ 400 "cần mật khẩu / tải lại" dù không đổi đích — chấp nhận (fail-closed).
    *
-   * `recordId` = id của hàng sẽ ghi (app-gen TRƯỚC encrypt ở caller → AAD bind). KHÔNG ghi secret vào audit.
+   * S19-SEC-MAILAADBIND-1: id + đích nằm trong ngữ cảnh mã hoá của envelope (B1 — `smtpSecretContext`) ⇒ một
+   * đường DELETE+INSERT tái dùng id + chép envelope sang đích khác (0591 không chặn INSERT/DELETE) chỉ cho ra
+   * hàng KHÔNG giải mã được — fail-closed, không rò. Hai nhánh INSERT so `RETURNING` với bộ đã gắn (B4 —
+   * `assertPersistedAsBound`): lệch ⇒ ném trong tx ⇒ rollback.
+   *
+   * `recordId` = id của hàng sẽ ghi (app-gen TRƯỚC encrypt ở caller → gắn vào ngữ cảnh). KHÔNG ghi secret vào
+   * audit.
    */
   async upsert(
     companyId: string,
@@ -125,6 +159,7 @@ export class MailConfigRepository {
             encAlgo: envelope!.encAlgo,
           })
           .returning();
+        assertPersistedAsBound(row, recordId, fields);
         afterRow = row;
       } else if (envelope) {
         // Đổi password: DELETE + INSERT cả hàng (envelope frozen, id mới = recordId đã bind AAD).
@@ -157,6 +192,7 @@ export class MailConfigRepository {
             encAlgo: envelope.encAlgo,
           })
           .returning();
+        assertPersistedAsBound(row, recordId, fields);
         afterRow = row;
       } else {
         // Giữ password cũ: UPDATE CHỈ from_name/from_email — KHÔNG cột đích (I2). Đích phải khớp hàng.

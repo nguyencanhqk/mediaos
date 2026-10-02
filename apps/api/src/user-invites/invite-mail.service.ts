@@ -1,9 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
-import { SMTP_SECRET_PURPOSE } from "@mediaos/contracts";
 import { loadEnv } from "../config/env.schema";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import { MailConfigRepository } from "../settings/mail-config.repository";
+import { SMTP_ENVELOPE_UNUSABLE_TAG, smtpSecretContext } from "../settings/mail-destination";
 import {
   describeSmtpError,
   isProgrammerError,
@@ -73,16 +73,17 @@ export class InviteMailService {
 
     let password: string;
     try {
-      // Decrypt JIT — plaintext chỉ trong RAM; AAD bind theo cột PERSISTED (config.companyId/config.id).
-      password = await this.secrets.decryptSecret(config, {
-        companyId: config.companyId,
-        recordId: config.id,
-        purpose: SMTP_SECRET_PURPOSE,
-      });
+      // Decrypt JIT — plaintext chỉ trong RAM. Ngữ cảnh = id + đích PERSISTED của hàng (helper duy nhất — B1):
+      // đích bị đổi ngoài app mà không mã hoá lại ⇒ không mở được ⇒ không AUTH tới đâu cả.
+      password = await this.secrets.decryptSecret(
+        config,
+        smtpSecretContext(config.companyId, config.id, config),
+      );
     } catch {
-      // KHÔNG lộ chi tiết crypto. Tamper/corruption → không gửi được.
-      this.logger.warn(
-        `Giải mã mật khẩu SMTP của ${params.companyId} thất bại — không gửi được email mời.`,
+      // KHÔNG lộ chi tiết crypto/ngữ cảnh. Vi phạm toàn vẹn (đích đổi ngoài app, envelope hỏng hoặc mã hoá dưới
+      // ngữ cảnh cũ, mất KEK) ⇒ `error` + thẻ cố định + config id (owner D3); chưa tạo transporter nào.
+      this.logger.error(
+        `${SMTP_ENVELOPE_UNUSABLE_TAG}: không mở được mật khẩu SMTP đã lưu — không gửi được email mời, cần nhập lại mật khẩu (company=${params.companyId} config=${config.id})`,
       );
       return { sent: false, reason: "decrypt_failed" };
     }

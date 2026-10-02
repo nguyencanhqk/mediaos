@@ -32,7 +32,10 @@ export interface SealedSecret {
   algo: string; // 'AES-256-GCM'
 }
 
-/** Context needed to (re)build the AAD and select the key. recordId = app-gen platform_account id. */
+/**
+ * Context needed to (re)build the AAD and select the key. recordId = app-gen platform_account id.
+ * `smtp_password`: recordId là bộ năm JSON `[id, host, port, username, secure]` do `smtpSecretContext` dựng — KHÔNG phải id trần.
+ */
 export interface EncryptCtx {
   companyId: string;
   recordId: string;

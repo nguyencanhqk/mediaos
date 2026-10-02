@@ -25,7 +25,7 @@ const bytea = customType<{ data: Buffer }>({
  *
  * BẤT BIẾN #1: company_id NOT NULL DEFAULT current_setting + RLS ENABLE/FORCE + policy tenant_isolation.
  * BẤT BIẾN #2: SMTP password reversible → 7 cột envelope (secret_ciphertext/encrypted_dek/dek_key_version/
- *   kms_key_id/iv_nonce/auth_tag/enc_algo). KHÔNG cột plaintext. AAD = companyId‖id (recordId=id).
+ *   kms_key_id/iv_nonce/auth_tag/enc_algo). KHÔNG cột plaintext. AAD = companyId‖JSON[id, host, port, username, secure] (smtpSecretContext).
  * BẤT BIẾN #3: app UPDATE CHỈ cột non-secret; đổi password = DELETE+INSERT cả hàng (envelope frozen).
  */
 export const companyMailConfigs = pgTable(
