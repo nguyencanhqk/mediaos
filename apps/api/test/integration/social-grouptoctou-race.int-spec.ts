@@ -51,6 +51,7 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = ["Passw0rd", "sgtoctou", "x"].join("!");
 const BASE_PAIRS = ["view:feed", "create:feed-group"] as const;
+const MANAGE_PAIRS = [...BASE_PAIRS, "manage:feed-group"] as const;
 
 /** Trần chờ request vào trạng thái bị holder chặn — PHẢI < `lock_timeout` 5s của tx giữ khoá. */
 const WAIT_LOCK_MS = 3_000;
@@ -77,6 +78,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
   let owner: Actor;
   let adminA: Actor;
   let adminB: Actor;
+  /** Admin của nhóm KIÊM `manage:feed-group` — ca D1. */
+  let mgr: Actor;
   let u1: Actor;
 
   const http = () => request(app.getHttpServer());
@@ -324,6 +327,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
     owner = await makeUser("owner", hash);
     adminA = await makeUser("admina", hash);
     adminB = await makeUser("adminb", hash);
+    mgr = await makeUser("mgr", hash, MANAGE_PAIRS);
     u1 = await makeUser("u1", hash);
   }, 240_000);
 
@@ -463,6 +467,89 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
       expect(await memberRow(g, u1.userId), "target KHÔNG được nâng vai").toEqual({
         role: "member",
         status: "active",
+      });
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  // ─────────── D1=(a) (owner ký 02/10/2026): «vai HOẶC manage» trên hàng đọc SAU khoá ───────────
+
+  /**
+   * A-1 — L2: admin KIÊM `manage:feed-group` bị hạ vai giữa chừng. API-19 `:107` cho `manage` qua «BẤT
+   * KỂ vai trong nhóm» ⇒ 200, audit `viaManage:true` (nguồn quyền THẬT lúc commit). Trước vá: 403 (đo
+   * M6) trong khi cùng người gửi lại 1ms sau là 200 (M7) — kết quả theo THỜI ĐIỂM, không theo quyền.
+   */
+  it(
+    "A-1: `038` — admin kiêm manage bị hạ vai giữa chừng, {role:'admin'} ⇒ 200; target = admin; audit viaManage:true",
+    async () => {
+      const g = await groupWithAdmin(mgr);
+      const res = await raceGroup(
+        g,
+        () => patch(mgr.token, `/social/groups/${g}/members/${u1.userId}`).send({ role: "admin" }),
+        demote(g, mgr.userId, "member"),
+      );
+      expect(
+        res.status,
+        `038: manage cho qua BẤT KỂ vai hàng (D1) — ${JSON.stringify(res.body)}`,
+      ).toBe(200);
+      expect(await memberRow(g, u1.userId)).toEqual({ role: "admin", status: "active" });
+      const rows = await auditRows(g, "social.group_member.role_changed");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].metadata, "nguồn quyền lúc commit là manage").toMatchObject({
+        targetUserId: u1.userId,
+        from: "member",
+        to: "admin",
+        viaManage: true,
+      });
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  /** A-2 — như A-1 nhưng cấp `owner` (D12: manage cấp được owner). Trước vá: 403 (đo M7b). */
+  it(
+    "A-2: `038` — admin kiêm manage bị hạ vai giữa chừng, {role:'owner'} ⇒ 200; target = owner; audit viaManage:true",
+    async () => {
+      const g = await groupWithAdmin(mgr);
+      const res = await raceGroup(
+        g,
+        () => patch(mgr.token, `/social/groups/${g}/members/${u1.userId}`).send({ role: "owner" }),
+        demote(g, mgr.userId, "member"),
+      );
+      expect(res.status, `038: manage cấp được owner (D1/D12) — ${JSON.stringify(res.body)}`).toBe(
+        200,
+      );
+      expect(await memberRow(g, u1.userId)).toEqual({ role: "owner", status: "active" });
+      const rows = await auditRows(g, "social.group_member.role_changed");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].metadata).toMatchObject({
+        targetUserId: u1.userId,
+        to: "owner",
+        viaManage: true,
+      });
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  /**
+   * A-3 — L3: `039` cùng ca. Thao tác ĐI QUA cả trước vá (nhờ manage) nhưng sổ append-only ghi
+   * `viaManage:false` — sai nguồn quyền lúc commit (đo M8).
+   */
+  it(
+    "A-3: `039` — admin kiêm manage bị hạ vai giữa chừng ⇒ 200; target bị mời ra; audit viaManage:true",
+    async () => {
+      const g = await groupWithAdmin(mgr);
+      const res = await raceGroup(
+        g,
+        () => del(mgr.token, `/social/groups/${g}/members/${u1.userId}`),
+        demote(g, mgr.userId, "member"),
+      );
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(await memberRow(g, u1.userId), "target phải bị mời ra").toBeNull();
+      const rows = await auditRows(g, "social.group_member.removed");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].metadata, "audit phải ghi nguồn quyền LÚC COMMIT (manage)").toMatchObject({
+        targetUserId: u1.userId,
+        viaManage: true,
       });
     },
     RACE_TIMEOUT_MS,
