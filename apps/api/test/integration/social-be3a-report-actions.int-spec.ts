@@ -28,6 +28,7 @@ import { PasswordService } from "../../src/auth/password.service";
 import { SOCIAL_ERR } from "../../src/social/social.errors";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { waitForBlockedBy } from "../helpers/lock-wait";
 import {
   cleanupTenants,
   seedCompany,
@@ -185,22 +186,12 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3A 029 resolve kèm hành động (DB
   }
 
   /**
-   * Poll tới khi có ≥ `n` backend (khác `excludePid`) ĐANG CHỜ khoá trên câu đụng `feed_`. Hết trần ⇒
-   * `false` — caller PHẢI fail rõ ràng.
+   * Poll tới khi có ≥ `n` backend bị CHÍNH `holderPid` chặn (trực tiếp hoặc bắc cầu — `pg_blocking_pids`,
+   * helper `lock-wait.ts`). Hết trần ⇒ `false` — caller PHẢI fail rõ ràng. KHÔNG khớp chữ `%feed_%`:
+   * waiter của spec khác chạy song song thoả được vị từ đó (S16-SOCIAL-GROUPTOCTOU-1 §2 M20/M25).
    */
-  async function waitForLockWaiters(excludePid: number, n: number): Promise<boolean> {
-    const deadline = Date.now() + WAIT_LOCK_MS;
-    while (Date.now() < deadline) {
-      const r = await direct.query(
-        `SELECT count(*)::int AS n FROM pg_stat_activity
-          WHERE datname = current_database() AND state = 'active'
-            AND wait_event_type = 'Lock' AND pid <> $1 AND query ILIKE '%feed_%'`,
-        [excludePid],
-      );
-      if (r.rows[0].n >= n) return true;
-      await new Promise((res) => setTimeout(res, 25));
-    }
-    return false;
+  async function waitForLockWaiters(holderPid: number, n: number): Promise<boolean> {
+    return waitForBlockedBy(direct, holderPid, n, { timeoutMs: WAIT_LOCK_MS });
   }
 
   /** Mở một tx trên `direct` và giữ khoá HÀNG bài (FOR UPDATE) cho tới khi caller nhả. */
