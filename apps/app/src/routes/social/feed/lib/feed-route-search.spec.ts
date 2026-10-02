@@ -41,9 +41,29 @@ describe("validateFeedRouteSearch — trần của `wish`", () => {
     expect(validateFeedRouteSearch({ wish: "An Nguyễn" }).wish).toBe("An Nguyễn");
   });
 
-  it("không có `wish` ⇒ khoá vắng hẳn, không phải chuỗi rỗng", () => {
-    expect("wish" in validateFeedRouteSearch({})).toBe(false);
-    expect("wish" in validateFeedRouteSearch({ wish: "" })).toBe(false);
+  it("không có `wish` ⇒ `undefined`, không phải chuỗi rỗng", () => {
+    // Khoá CÓ MẶT với `undefined` (để đè giá trị thô khi router gộp — xem khối «đủ năm khoá» dưới).
+    expect(validateFeedRouteSearch({}).wish).toBeUndefined();
+    expect(validateFeedRouteSearch({ wish: "" }).wish).toBeUndefined();
+  });
+});
+
+/**
+ * S16-SOCIAL-FESEARCHBOUNDS-1 (vá review LIGHT) — router gộp `{ ...thô, ...đầuRa }`, nên khoá «bị bỏ»
+ * phải có mặt với `undefined` mới đè được giá trị thô. Ca ở đây giữ CƠ CHẾ ở mức hàm; hành vi thật
+ * (tham số `FeedPage` gửi lên `001`/`023`) đo qua router thật ở `FeedPage.router.spec.tsx`.
+ */
+describe("validateFeedRouteSearch — đủ năm khoá, kể cả `undefined`", () => {
+  it("URL trống ⇒ vẫn đủ năm khoá đã biết, tất cả `undefined`", () => {
+    const out = validateFeedRouteSearch({});
+    expect(Object.keys(out).sort()).toEqual(["q", "sort", "tag", "type", "wish"]);
+    expect(Object.values(out).every((v) => v === undefined)).toBe(true);
+  });
+
+  it("gộp kiểu router `{ ...thô, ...đầuRa }` ⇒ không giá trị thô hỏng nào sống sót", () => {
+    const raw = { sort: "popular", tag: "   ", type: "x".repeat(40), q: 2026, wish: 7 };
+    const merged: Record<string, unknown> = { ...raw, ...validateFeedRouteSearch(raw) };
+    for (const key of Object.keys(raw)) expect(merged[key]).toBeUndefined();
   });
 });
 
@@ -76,15 +96,17 @@ describe("validateFeedRouteSearch — KHÔNG NÉM với URL rác (C17)", () => {
 const parse = (qs: string) => defaultParseSearch(qs) as Record<string, unknown>;
 
 /**
- * Đúng phần `FeedPage` gửi lên `001`: mọi khoá TRỪ `q`/`wish` (tham số chỉ của FE). Trả danh sách
- * issue thay cho boolean để ca đỏ in ra ĐÚNG trường nào làm server trả 400.
+ * Phần ĐẦU RA của bộ lọc ứng với tham số `001`: mọi khoá TRỪ `q`/`wish` (tham số chỉ của FE). Trả
+ * danh sách issue thay cho boolean để ca đỏ in ra ĐÚNG trường nào làm server trả 400.
+ * ⚠️ Đây là đầu ra của HÀM, KHÔNG phải thứ `FeedPage` gửi: màn đọc search ĐÃ GỘP của router
+ * (`{ ...thô, ...đầuRa }`) — ca đầu-cuối đo đối số gửi lên thật nằm ở `FeedPage.router.spec.tsx`.
  */
 function listIssues(out: FeedRouteSearch) {
   const { q: _q, wish: _wish, ...forwarded } = out;
   return listFeedQuerySchema.safeParse(forwarded).error?.issues ?? [];
 }
 
-/** Đúng phần `FeedPage` gửi lên `023` (chỉ khi có `q`). */
+/** Phần đầu ra ứng với `023` (chỉ khi có `q`) — cùng ⚠️ với `listIssues`. */
 function searchIssues(out: FeedRouteSearch) {
   if (out.q === undefined) return [];
   return searchFeedQuerySchema.safeParse({ q: out.q }).error?.issues ?? [];
@@ -105,7 +127,7 @@ describe("validateFeedRouteSearch — `tag` theo biên của 001", () => {
     expect(raw.tag).toBe("   "); // tiền đề: parser giữ nguyên chuỗi khoảng trắng
     const out = validateFeedRouteSearch(raw);
     expect(listIssues(out)).toEqual([]);
-    expect(out).not.toHaveProperty("tag");
+    expect(out.tag).toBeUndefined();
   });
 
   it("`tag` đệm khoảng trắng ⇒ giữ bản ĐÃ trim (đối chứng dương)", () => {
@@ -120,7 +142,7 @@ describe("validateFeedRouteSearch — `tag` theo biên của 001", () => {
 
     const over = validateFeedRouteSearch({ tag: `${atMax}t` });
     expect(listIssues(over)).toEqual([]);
-    expect(over).not.toHaveProperty("tag");
+    expect(over.tag).toBeUndefined();
   });
 
   it("đo độ dài SAU trim: đệm khoảng trắng quanh thẻ đúng trần vẫn giữ", () => {
@@ -133,7 +155,7 @@ describe("validateFeedRouteSearch — `type` chỉ nhận enum loại bài", () 
   it("`type` dài hơn trần của 001 ⇒ BỎ (gửi lên là 400)", () => {
     const out = validateFeedRouteSearch(parse(`?type=${"x".repeat(40)}`));
     expect(listIssues(out)).toEqual([]);
-    expect(out).not.toHaveProperty("type");
+    expect(out.type).toBeUndefined();
   });
 
   it("`type` ngắn nhưng KHÔNG thuộc enum ⇒ BỎ (server nhận nhưng trả tập rỗng vĩnh viễn)", () => {
@@ -186,8 +208,10 @@ describe("validateFeedRouteSearch — `q` theo biên của 023", () => {
     expect(validateFeedRouteSearch({ q: `${head}😀tail` }).q).toBe(head);
   });
 
-  it("`q` toàn khoảng trắng ⇒ BỎ (023 đòi min 1)", () => {
-    expect(validateFeedRouteSearch(parse("?q=%20%20"))).not.toHaveProperty("q");
+  it("`q` toàn khoảng trắng ⇒ BỎ (dọn dẹp, KHÔNG phải vá 400)", () => {
+    // `FeedPage` vốn KHÔNG gửi `q` khoảng trắng lên `023` (`isSearching` đã trim trước) — ca này giữ
+    // lời hứa của kiểu `FeedRouteSearch.q` («gửi thẳng lên 023 được»), không chặn một 400 có thật.
+    expect(validateFeedRouteSearch(parse("?q=%20%20")).q).toBeUndefined();
   });
 
   it("`q` ngắn hợp lệ ⇒ giữ nguyên (đối chứng dương)", () => {

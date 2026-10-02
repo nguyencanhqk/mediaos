@@ -29,7 +29,9 @@ import { NewFeedPostsBadge } from "./components/NewFeedPostsBadge";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 import { useCreatePost } from "./lib/use-create-post";
 // Kiểu tham số URL lấy từ CHÍNH bộ lọc `validateSearch` (trước đây màn này khai bản sao riêng
-// `type?: string` — lệch với bộ lọc đã thu hẹp `type` về enum loại bài).
+// `type?: string` — lệch với bộ lọc đã thu hẹp `type` về enum loại bài). Ép kiểu `useSearch` về nó là
+// ĐÚNG chỉ vì bộ lọc trả đủ năm khoá (kể cả `undefined`) để ĐÈ giá trị thô trong phép gộp search của
+// router — xem docblock `validateFeedRouteSearch` + `FeedPage.router.spec.tsx`.
 import type { FeedRouteSearch } from "./lib/feed-route-search";
 
 export function FeedPage(): React.ReactElement {

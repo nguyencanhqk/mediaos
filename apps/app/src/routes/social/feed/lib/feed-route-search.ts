@@ -48,7 +48,11 @@ import type { ZodType } from "zod";
  */
 export const FEED_WISH_MAX = 120;
 
-/** Tham số URL của `/feed` — bộ lọc (D6) + hai tham số CHỈ của FE (`q` tìm kiếm, `wish` lời chúc). */
+/**
+ * Tham số URL của `/feed` — bộ lọc (D6) + hai tham số CHỈ của FE (`q` tìm kiếm, `wish` lời chúc).
+ * Kiểu này ĐÚNG với `useSearch` của route `/feed` vì bộ lọc luôn trả đủ năm khoá (xem
+ * `validateFeedRouteSearch`) — giá trị thô của URL không còn đường nào lọt qua phép gộp của router.
+ */
 export interface FeedRouteSearch {
   sort?: "active" | "latest";
   /** ĐÃ trim, nằm trong trần của `listFeedQuerySchema.tag` — gửi thẳng lên `001` được. */
@@ -102,6 +106,15 @@ function boundSearchQuery(value: string | undefined): string | undefined {
  * `safeParse` của schema TRƯỜNG rồi bỏ khoá lạ/hỏng: URL rác thì mất bộ lọc, chứ không mất cả trang.
  * `q`/`wish` cũng không nằm trong schema đó và KHÔNG được gửi lên `001` — `FeedPage` lọc chúng ra
  * trước khi gọi (`q` đi `023`).
+ *
+ * 🔴 «BỎ» một khoá = trả nó với giá trị `undefined` TƯỜNG MINH, KHÔNG phải không trả. TanStack Router
+ * dựng `search` của match bằng `{ ...searchThôCủaCha, ...đầuRaHàmNày }` (router-core `router.ts`, khối
+ * «Validate the search params») và `useSearch` trả CHÍNH object gộp đó. Khoá vắng trong đầu ra thì
+ * giá trị THÔ của URL sống sót qua phép gộp — `/feed?tag=%20` từng đi thẳng lên `001` (400 ⇒ màn LỖI),
+ * `/feed?q=2026` (parser JSON ra SỐ) từng làm `search.q.trim()` NÉM — dù đầu ra hàm này đúng. Khoá có
+ * mặt với `undefined` mới ĐÈ được giá trị thô; `stringifySearch` bỏ khoá `undefined` nên URL không
+ * mang theo chuỗi `undefined` nào. Khoá LẠ (`?limit=abc`) vẫn sống trong object gộp nhưng `FeedPage`
+ * không đọc chúng. Ca đo qua router thật: `FeedPage.router.spec.tsx`.
  */
 export function validateFeedRouteSearch(raw: Record<string, unknown>): FeedRouteSearch {
   const str = (k: string): string | undefined =>
@@ -113,12 +126,7 @@ export function validateFeedRouteSearch(raw: Record<string, unknown>): FeedRoute
   // rỗng vĩnh viễn — bỏ để người dùng thấy bảng tin thay vì một «không có bài nào» giả.
   const type = accepted(feedPostTypeSchema, str("type"));
   const q = boundSearchQuery(str("q"));
-  const wish = str("wish");
-  return {
-    ...(sort ? { sort } : {}),
-    ...(tag ? { tag } : {}),
-    ...(type ? { type } : {}),
-    ...(q ? { q } : {}),
-    ...(wish ? { wish: wish.slice(0, FEED_WISH_MAX) } : {}),
-  };
+  const wish = str("wish")?.slice(0, FEED_WISH_MAX);
+  // Đủ CẢ NĂM khoá, kể cả khi `undefined` — xem 🔴 ở docblock.
+  return { sort, tag, type, q, wish };
 }
