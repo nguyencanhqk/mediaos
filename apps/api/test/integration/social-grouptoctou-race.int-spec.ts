@@ -25,6 +25,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool, PoolClient } from "pg";
@@ -32,6 +33,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
+import { SOCIAL_ERR } from "../../src/social/social.errors";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { countBlockedBy, waitForBlockedBy } from "../helpers/lock-wait";
@@ -74,10 +76,12 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
 
   let owner: Actor;
   let adminA: Actor;
+  let adminB: Actor;
   let u1: Actor;
 
   const http = () => request(app.getHttpServer());
   const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+  const patch = (t: string, u: string) => http().patch(u).set(auth(t));
   const del = (t: string, u: string) => http().delete(u).set(auth(t));
 
   async function makeUser(
@@ -187,6 +191,126 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
     return false;
   }
 
+  /**
+   * Ca đua: giữ khoá hàng nhóm → phóng `fire()` → chờ ĐÚNG 1 backend bị CHÍNH holder chặn → `mutate`
+   * TRONG tx giữ khoá → `COMMIT` → trả response.
+   *
+   * `finally` (plan §10 F3): nhả tx (ROLLBACK nếu chưa COMMIT) TRƯỚC khi chờ request — request đang chờ
+   * chính khoá này và route nhóm KHÔNG có `lock_timeout` (M12) — rồi chờ request xong. `allSettled` gắn
+   * NGAY lúc phóng ⇒ request không bao giờ mồ côi, kể cả khi poll hết trần hay một `expect` ném
+   * (memory `vitest-unhandled-rejection-after-teardown`).
+   */
+  async function raceGroup(
+    groupId: string,
+    fire: () => request.Test,
+    mutate: (c: PoolClient) => Promise<void>,
+  ): Promise<request.Response> {
+    const hold = await holdGroupLock(groupId);
+    let committed = false;
+    let settled: Promise<unknown> | undefined;
+    try {
+      const reqP = fire().then((r) => r);
+      settled = Promise.allSettled([reqP]);
+      expect(
+        await waitForBlockedBy(direct, hold.pid, 1, { exact: true, timeoutMs: WAIT_LOCK_MS }),
+        "request phải bị CHÍNH holder chặn (pg_blocking_pids) — không chồng lấp ⇒ ĐỎ",
+      ).toBe(true);
+      await mutate(hold.client);
+      await hold.client.query("COMMIT");
+      committed = true;
+      return await reqP;
+    } finally {
+      await releaseHeld(hold, !committed);
+      if (settled) await settled;
+    }
+  }
+
+  /** Đúng hình dạng một `038` thật: đổi hàng thành viên TRONG tx đang giữ khoá hàng nhóm. */
+  const demote =
+    (groupId: string, userId: string, role: GroupRole) =>
+    async (c: PoolClient): Promise<void> => {
+      const r = await c.query(
+        `UPDATE feed_group_members SET role = $3
+          WHERE company_id = $1 AND group_id = $2 AND user_id = $4`,
+        [A.companyId, groupId, role, userId],
+      );
+      expect(r.rowCount, "hạ vai phải đổi ĐÚNG 1 hàng").toBe(1);
+    };
+
+  /** Hàng của actor BIẾN MẤT giữa chừng (bị mời ra / tự rời song song). */
+  const dropMember =
+    (groupId: string, userId: string) =>
+    async (c: PoolClient): Promise<void> => {
+      const r = await c.query(
+        `DELETE FROM feed_group_members WHERE company_id = $1 AND group_id = $2 AND user_id = $3`,
+        [A.companyId, groupId, userId],
+      );
+      expect(r.rowCount, "xoá hàng actor phải xoá ĐÚNG 1 hàng").toBe(1);
+    };
+
+  /** Đối chứng: harness chạy ĐỦ (giữ khoá, chờ, COMMIT) nhưng không đổi gì. */
+  const noChange = (): Promise<void> => Promise.resolve();
+
+  async function memberRow(
+    groupId: string,
+    userId: string,
+  ): Promise<{ role: string; status: string } | null> {
+    const r = await direct.query(
+      `SELECT role, status FROM feed_group_members
+        WHERE company_id = $1 AND group_id = $2 AND user_id = $3`,
+      [A.companyId, groupId, userId],
+    );
+    return (r.rows[0] as { role: string; status: string } | undefined) ?? null;
+  }
+
+  async function groupRow(groupId: string): Promise<{
+    visibility: string;
+    member_count: number;
+    deleted_at: Date | null;
+    updated_at: Date;
+    updated_by: string | null;
+  }> {
+    const r = await direct.query(
+      `SELECT visibility, member_count, deleted_at, updated_at, updated_by
+         FROM feed_groups WHERE company_id = $1 AND id = $2`,
+      [A.companyId, groupId],
+    );
+    return r.rows[0];
+  }
+
+  /** MỘT câu tra cho cả ca «0 dòng» lẫn đối chứng dương của nó (plan §10 F5). */
+  async function auditRows(
+    groupId: string,
+    action: string,
+  ): Promise<{ action: string; metadata: Record<string, unknown> }[]> {
+    const r = await direct.query(
+      `SELECT action, metadata FROM audit_logs
+        WHERE object_type = 'feed_group' AND object_id = $1 AND action = $2
+        ORDER BY created_at, id`,
+      [groupId, action],
+    );
+    return r.rows;
+  }
+
+  /** 403 ĐÚNG lý do vai nhóm — 403/409/500 vì lý do khác KHÔNG lọt (mã máy + thông điệp, #554). */
+  function expectRoleDenied(res: request.Response, label: string): void {
+    expect(res.status, `${label} — ${JSON.stringify(res.body)}`).toBe(403);
+    expect(res.body?.error?.code, `${label}: error.code`).toBe(
+      SOCIAL_ERROR_CODES.GROUP_ROLE_REQUIRED,
+    );
+    expect(res.body?.error?.message, `${label}: error.message`).toBe(
+      SOCIAL_ERR.GROUP_ROLE_REQUIRED,
+    );
+  }
+
+  /** Nhóm kín chuẩn của ca `038`/`039`: owner + một admin + target `u1`. */
+  const groupWithAdmin = (admin: Actor): Promise<string> =>
+    seedGroup("private", [
+      { userId: owner.userId, role: "owner" },
+      { userId: admin.userId, role: "admin" },
+      { userId: u1.userId, role: "member" },
+    ]);
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = applyMainPipeline(moduleRef.createNestApplication());
@@ -199,6 +323,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
 
     owner = await makeUser("owner", hash);
     adminA = await makeUser("admina", hash);
+    adminB = await makeUser("adminb", hash);
     u1 = await makeUser("u1", hash);
   }, 240_000);
 
@@ -220,11 +345,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
     async () => {
       const X = await seedGroup("private", []);
       const Z = await seedGroup("private", []);
-      const Y = await seedGroup("private", [
-        { userId: owner.userId, role: "owner" },
-        { userId: adminA.userId, role: "admin" },
-        { userId: u1.userId, role: "member" },
-      ]);
+      const Y = await groupWithAdmin(adminA);
 
       const aux = directPool();
       const opened: Held[] = [];
@@ -275,6 +396,99 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
         await Promise.all(pending);
         await aux.end();
       }
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  // ───────────────────────── deny-path (RED trước) ─────────────────────────
+
+  /** 🔴 D-1 (`done_when`) — L1 của plan: đo M3/M22. Đối chứng dương của «0 audit»: C-0. */
+  it(
+    "D-1: `039` — actor bị hạ vai (admin → member) giữa chừng ⇒ 403 ERR-014; target còn; member_count + audit không đổi",
+    async () => {
+      const g = await groupWithAdmin(adminA);
+      const res = await raceGroup(
+        g,
+        () => del(adminA.token, `/social/groups/${g}/members/${u1.userId}`),
+        demote(g, adminA.userId, "member"),
+      );
+      expectRoleDenied(res, "039: actor bị hạ vai giữa chừng phải 403");
+      expect(await memberRow(g, u1.userId), "hàng target phải CÒN").toEqual({
+        role: "member",
+        status: "active",
+      });
+      expect((await groupRow(g)).member_count, "member_count không đổi").toBe(3);
+      expect(
+        await auditRows(g, "social.group_member.removed"),
+        "0 audit mời ra (đối chứng dương: C-0 — CÙNG câu tra)",
+      ).toHaveLength(0);
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  /** 🔴 D-2 — hàng actor biến mất giữa chừng trên nhóm KÍN ⇒ 403, không 404 (owner ký D3=(a)). Đo M4. */
+  it(
+    "D-2: `039` — hàng actor BIẾN MẤT giữa chừng (nhóm kín) ⇒ 403 ERR-014; target còn",
+    async () => {
+      const g = await groupWithAdmin(adminA);
+      const res = await raceGroup(
+        g,
+        () => del(adminA.token, `/social/groups/${g}/members/${u1.userId}`),
+        dropMember(g, adminA.userId),
+      );
+      expectRoleDenied(res, "039: hàng actor biến mất giữa chừng phải 403 (D3)");
+      expect(await memberRow(g, u1.userId), "hàng target phải CÒN").toEqual({
+        role: "member",
+        status: "active",
+      });
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  /**
+   * PIN-1 — `038` admin THƯỜNG (không manage) bị hạ vai giữa chừng. XANH từ BE-2A §14.1 (đo M5/M22) —
+   * đây là lưới TẤT ĐỊNH đầu tiên cho bản vá đó (BE-2A ghi «không có test tất định»).
+   */
+  it(
+    "PIN-1: `038` — admin thường bị hạ vai giữa chừng ⇒ 403 ERR-014; target vẫn `member`",
+    async () => {
+      const g = await groupWithAdmin(adminB);
+      const res = await raceGroup(
+        g,
+        () =>
+          patch(adminB.token, `/social/groups/${g}/members/${u1.userId}`).send({ role: "admin" }),
+        demote(g, adminB.userId, "member"),
+      );
+      expectRoleDenied(res, "038: actor bị hạ vai giữa chừng phải 403");
+      expect(await memberRow(g, u1.userId), "target KHÔNG được nâng vai").toEqual({
+        role: "member",
+        status: "active",
+      });
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  // ───────────────────────── đối chứng ─────────────────────────
+
+  /**
+   * C-0 — chống xanh-rỗng của D-1: CÙNG harness (giữ khoá, chờ bị chặn, COMMIT) nhưng không đổi vai ⇒
+   * phải 200. Chứng minh 403 ở D-1 không do harness gây ra và `auditRows` tìm ra dòng thật.
+   */
+  it(
+    "C-0: `039` qua harness ĐỦ mà không đổi vai ⇒ 200; target bị mời ra; 1 audit `removed` viaManage:false",
+    async () => {
+      const g = await groupWithAdmin(adminA);
+      const res = await raceGroup(
+        g,
+        () => del(adminA.token, `/social/groups/${g}/members/${u1.userId}`),
+        noChange,
+      );
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(await memberRow(g, u1.userId), "target phải bị mời ra").toBeNull();
+      expect((await groupRow(g)).member_count).toBe(2);
+      const rows = await auditRows(g, "social.group_member.removed");
+      expect(rows, "CÙNG câu tra của D-1 phải tìm ra dòng").toHaveLength(1);
+      expect(rows[0].metadata).toMatchObject({ targetUserId: u1.userId, viaManage: false });
     },
     RACE_TIMEOUT_MS,
   );
