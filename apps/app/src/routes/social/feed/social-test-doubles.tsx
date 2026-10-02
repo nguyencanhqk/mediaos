@@ -214,7 +214,7 @@ export const GROUP_ERR_LEGACY = {
 };
 
 /**
- * S16-SOCIAL-FEMODERRMSG-1 — lỗi của các đường ghi TRÊN BÀI (`005`/`006`/`009`/`010`/`011`/`012`), đúng
+ * S16-SOCIAL-FEMODERRMSG-1 — lỗi của các đường ghi TRÊN BÀI (`005`/`006`/`008`/`009`/`011`/`012`), đúng
  * hình dạng trên dây. `message` chép nguyên văn `social.errors.ts`.
  *
  * `goneLegacy` = API CŨ (trước #554, PROD deploy API tay): `code` là mã CHUNG theo status, mã SOCIAL chỉ ở

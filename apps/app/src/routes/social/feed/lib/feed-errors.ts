@@ -6,7 +6,7 @@
  * API cũ chỉ có tiền tố số của `message`) rồi tra một bảng mã → lý do. Mã không có trong bảng ⇒ `null`
  * (banner rơi về câu forbidden/generic như cũ).
  *
- * ┌─ ĐO 02/10/2026 — `005`/`006` (+ `009`/`010`/`011`/`012`) TRẢ ĐƯỢC NHỮNG GÌ ─────────────────────────┐
+ * ┌─ ĐO 02/10/2026 — `005`/`006` (+ `008`/`009`/`011`/`012`) TRẢ ĐƯỢC NHỮNG GÌ ─────────────────────────┐
  * │ 404 `SOCIAL-ERR-001` (`POST_NOT_FOUND`) — `assertPostVisible` + nhánh đua `"gone"` của `006`: bài  │
  * │   đã bị xoá / bị ẩn / không còn trong audience. Thử lại KHÔNG BAO GIỜ thành ⇒ cần lý do. ✅ ở đây.  │
  * │ 403 (`AUTH-ERR-FORBIDDEN` tầng 1/2 · `SOCIAL-ERR-010` per-field · `SOCIAL-ERR-003` xoá bài người    │

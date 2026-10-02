@@ -27,6 +27,16 @@ import { postActionErrorReason } from "./feed-errors";
  */
 export type FeedActionKind = "reaction" | "save" | "moderate" | "delete";
 
+/**
+ * Tiền tố MỌI danh sách `025` (trang cá nhân ĐỒNG NGHIỆP, mọi `employeeId`) = `["social","profile-posts"]`.
+ *
+ * Nhánh này KHÔNG nằm dưới `feed.allOf()` (chỉ `/feed/profiles/me` đi `feed.list`), và web-core chưa có
+ * `allOf` cho nó ⇒ CẮT từ chính `socialKeys.profilePosts` thay vì chép literal: đổi tên khoá ở web-core
+ * thì tiền tố đổi theo, không trôi im lặng. Review LIGHT 02/10/2026 (FEMODERRMSG-1): thiếu nó thì bài bị
+ * xoá/ẩn vẫn nằm trên trang đồng nghiệp — cả sau lượt kiểm duyệt THÀNH CÔNG lẫn sau 404 «postGone».
+ */
+const PROFILE_POSTS_PREFIX = socialKeys.profilePosts("").slice(0, socialKeys.all.length + 1);
+
 export interface FeedActionError {
   kind: FeedActionKind;
   /**
@@ -99,6 +109,8 @@ export function useFeedActions(): FeedActions {
     void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
     // S16-SOCIAL-FE-2C — bài kudos bị xoá/ẩn cũng phải rời màn 009 + widget «Vinh danh tháng này».
     void queryClient.invalidateQueries({ queryKey: socialKeys.kudos.lists() });
+    // S16-SOCIAL-FEMODERRMSG-1 — trang cá nhân đồng nghiệp (`025`), xem `PROFILE_POSTS_PREFIX`.
+    void queryClient.invalidateQueries({ queryKey: PROFILE_POSTS_PREFIX });
     if (postId) {
       void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
     }

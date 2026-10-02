@@ -117,10 +117,16 @@ describe("🔴 hành động ghi hỏng phải phát ra tín hiệu", () => {
     );
   });
 
-  it("S16-SOCIAL-FEMODERRMSG-1: lưu bài đã bị xoá (404 `SOCIAL-ERR-001`) ⇒ dải nói LÝ DO, không «thử lại»", async () => {
+  /**
+   * Trang của ĐỒNG NGHIỆP đọc khoá `profilePosts(employeeId)` = `["social","profile-posts",…]` — KHÔNG
+   * nằm dưới `feed.allOf()`. Review LIGHT 02/10/2026: bản đầu chỉ kiểm dải lỗi, nên dải nói «Dữ liệu đã
+   * được tải lại» trong khi danh sách này KHÔNG hề được kéo lại và thẻ bài đã mất vẫn nằm đó. Ca dưới
+   * vì vậy kiểm CẢ việc thẻ cũ rời màn, như ba màn còn lại.
+   */
+  it("S16-SOCIAL-FEMODERRMSG-1: lưu bài đã bị xoá (404 `SOCIAL-ERR-001`) ⇒ dải nói LÝ DO + thẻ cũ rời trang", async () => {
     const t = i18n.getFixedT("vi", "social");
     mockParams = { employeeId: "22222222-2222-4222-8222-222222222222" };
-    listProfilePosts.mockResolvedValue(page([makePost()]));
+    listProfilePosts.mockResolvedValueOnce(page([makePost()])).mockResolvedValue(page([]));
     savePost.mockRejectedValue(POST_ERR.gone());
     renderWithProviders(<ProfilePostsPage />);
 
@@ -130,6 +136,9 @@ describe("🔴 hành động ghi hỏng phải phát ra tín hiệu", () => {
     expect(banner).toHaveAttribute("data-reason", "postGone");
     expect(banner).toHaveTextContent(t("actionError.reason.postGone"));
     expect(banner).not.toHaveTextContent(t("actionError.generic.save"));
+    // Danh sách `025` được kéo lại ⇒ thẻ trỏ vào bài đã mất tự rời trang (lời «đã tải lại» là thật).
+    await waitFor(() => expect(screen.queryByTestId("post-card")).toBeNull());
+    expect(listProfilePosts.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
 

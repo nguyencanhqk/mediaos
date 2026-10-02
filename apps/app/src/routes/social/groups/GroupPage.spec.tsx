@@ -91,6 +91,9 @@ beforeEach(() => {
   routeSearch = {};
   setCaps({ "view:feed": true, "create:feed-post": true });
   listFeed.mockResolvedValue(page([]));
+  // `vi.clearAllMocks()` ở `afterEach` chỉ xoá LỊCH SỬ gọi, GIỮ cài đặt ⇒ `mockRejectedValue(404)` của
+  // ca «lưu bài nhóm đã bị xoá» sẽ rò sang mọi ca sau bấm «Lưu». Reset tường minh (review LIGHT 02/10).
+  savePost.mockReset();
 });
 afterEach(() => {
   cleanup();

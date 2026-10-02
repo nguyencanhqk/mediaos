@@ -369,7 +369,7 @@ describe("S16-SOCIAL-FE-2 — plan §8 H5: xoá/ẩn bài làm mới danh sách 
 /**
  * S16-SOCIAL-FEMODERRMSG-1 — lỗi mang LÝ DO đọc từ `error.code`.
  *
- * Đo trên `005`/`006` (+ `009`/`010`/`011`/`012` cùng cổng đọc `assertPostVisible`): lỗi KHÔNG-403 duy nhất
+ * Đo trên `005`/`006` (+ `008`/`009`/`011`/`012` cùng cổng đọc `assertPostVisible`): lỗi KHÔNG-403 duy nhất
  * người dùng chạm được từ menu là **404 `SOCIAL-ERR-001`** — bài đã bị người khác xoá/ẩn giữa chừng. Câu
  * chung «vui lòng thử lại» ở đây là lời khuyên SAI: thử lại bao nhiêu lần cũng 404.
  */
@@ -408,7 +408,7 @@ describe("S16-SOCIAL-FEMODERRMSG-1 — lỗi trên bài mang LÝ DO từ `error.
       kind: "delete",
     },
     {
-      name: "lưu bài (009)",
+      name: "lưu bài (008)",
       mock: savePost,
       run: (h: Hook) => h.toggleSave(POST_ID, false),
       kind: "save",
@@ -477,6 +477,53 @@ describe("S16-SOCIAL-FEMODERRMSG-1 — lỗi trên bài mang LÝ DO từ `error.
     const keys = spy.mock.calls.map((call) => JSON.stringify(call[0]?.queryKey));
     expect(keys).toContain(JSON.stringify(socialKeys.feed.allOf()));
     expect(keys).toContain(JSON.stringify(socialKeys.posts.detail(POST_ID)));
+  });
+
+  /**
+   * Review LIGHT 02/10/2026 (MEDIUM): trang cá nhân ĐỒNG NGHIỆP đọc `profilePosts(employeeId)` =
+   * `["social","profile-posts",…]` — không nằm dưới tiền tố nào mà `invalidatePostLists` từng làm mới.
+   * Đo bằng KHOÁ THẬT trong cache (`isInvalidated`), không bằng chuỗi tự chép: khuôn ca kudos ở trên.
+   */
+  it("«postGone» ⇒ danh sách trang cá nhân đồng nghiệp (`025`, khoá THẬT) cũng bị kéo lại", async () => {
+    moderatePost.mockRejectedValue(POST_ERR.gone());
+    const { socialKeys } = await import("@mediaos/web-core");
+    const profileKey = socialKeys.profilePosts("22222222-2222-4222-8222-222222222222");
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    client.setQueryData(profileKey, { pages: [], pageParams: [] });
+    // Đối chứng ĐÍCH DANH: widget sinh nhật không liên quan tới bài ⇒ KHÔNG được làm mới. Tiền tố cắt
+    // hụt một phần tử (`["social"]`) sẽ làm mới cả nó — ca này đỏ khi đó.
+    const birthdaysKey = socialKeys.birthdays({ range: "week" });
+    client.setQueryData(birthdaysKey, []);
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+
+    await waitFor(() => expect(result.current.actionError?.reason).toBe("postGone"));
+    expect(client.getQueryState(profileKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(birthdaysKey)?.isInvalidated).toBe(false);
+  });
+
+  it("đường THÀNH CÔNG cũng vậy — người kiểm duyệt xoá bài từ trang đồng nghiệp ⇒ khoá `025` bị kéo lại", async () => {
+    deletePost.mockResolvedValue({ deleted: true });
+    const { socialKeys } = await import("@mediaos/web-core");
+    const profileKey = socialKeys.profilePosts("22222222-2222-4222-8222-222222222222");
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    client.setQueryData(profileKey, { pages: [], pageParams: [] });
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+
+    act(() => result.current.remove(POST_ID));
+
+    await waitFor(() => expect(client.getQueryState(profileKey)?.isInvalidated).toBe(true));
   });
 
   it("đối chứng — 500 ⇒ KHÔNG kéo lại gì (dữ liệu chưa chắc đã cũ; người dùng tự thử lại)", async () => {
