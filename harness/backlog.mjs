@@ -19778,6 +19778,38 @@ export const backlog = [
     ],
   },
   {
+    id: "S18-QA-NOTIGLOBALLEAK-1",
+    module: "QA",
+    layer: "BE",
+    title:
+      "`notifications-noti-core-tenant-isolation` gieo event + template GLOBAL (`company_id NULL`, mã `NOTI_EVT_*`/`NOTI_TPL_*`) và chỉ dọn ở `afterAll` ⇒ worker crash `ERR_IPC_CHANNEL_CLOSED` giữa spec để lại hàng GLOBAL VĨNH VIỄN trên lane ⇒ `noti-seed-catalog-permissions` (A — event lạ) + `s5-noti-fix1-deeplink` ((a) — template GLOBAL `target_url` NULL) ĐỎ ở mọi lượt sau trên lane đó",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/integration/notifications-noti-core-tenant-isolation.int-spec.ts",
+      "apps/api/test/integration/**",
+      "apps/api/test/helpers/**",
+      "docs/plans/S18-QA-NOTIGLOBALLEAK-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Verify cuối S16-SOCIAL-AVATARPRESIGN-1 02/10/2026 (`check.sh --all --lane-db=avatarpresign` trên lane vừa `--reset`, plan §12): chunk 16 crash `ERR_IPC_CHANNEL_CLOSED` 4 lượt khi `notifications-noti-core-tenant-isolation` đang chạy ⇒ lane còn `NOTI_EVT_071d9e7c` + `NOTI_TPL_0ec188e7` (GLOBAL) ⇒ hai spec catalog ĐỎ (chunk 16 + chunk 19). Chạy riêng trên lane bẩn: đỏ y hệt; xoá đúng 2 hàng ⇒ 2/2 file · 229/229 XANH hai lượt.",
+      "memory fresh-lane-db-exposes-teardown-ri-race · flake-rate-tracks-lane-db-dirtiness · vitest-worker-crash-chunked-runs",
+    ],
+    done_when: [
+      "TÁI HIỆN có kiểm soát TRƯỚC khi vá: bỏ `afterAll` (hoặc giết worker giữa spec) rồi chạy hai spec catalog ⇒ ĐỎ đúng thông điệp `event LẠ trong DB (ngoài registry)` / `KHÔNG template global nào được phép còn target_url NULL`",
+      "Hàng GLOBAL do spec gieo KHÔNG sống sót qua crash — vd dọn TÀN DƯ theo tiền tố mã riêng của spec ở ĐẦU `beforeAll` (ĐO an toàn khi hai lượt cùng spec chạy song song trên MỘT lane) hoặc cách khác có đo; KHÔNG nới assert của hai spec catalog, KHÔNG thêm miễn trừ mã `NOTI_EVT_*` vào registry",
+      "Quét cùng họ trong `apps/api/test/**`: mọi spec gieo hàng `company_id IS NULL` (catalog · permission · template dùng chung) mà chỉ dọn ở `afterAll` — liệt kê, vá theo LỚP",
+      "ĐO CỔNG sau vá: kịch bản tái hiện ở trên ⇒ hai spec catalog XANH",
+    ],
+    notes: [
+      "🟡 LIGHT — chỉ sửa spec/helper test, KHÔNG chạm code sản phẩm hay migration. Cùng lý do với S18-QA-CHECKALLFLAKE-1: lane bẩn làm `check.sh --all` đỏ oan ở ca KHÔNG liên quan diff ⇒ một ĐỎ THẬT có thể trốn sau chúng.",
+      "Seed 02/10/2026 từ verify cuối S16-SOCIAL-AVATARPRESIGN-1 (phát hiện ngoài phạm vi; WO đó không chạm NOTI).",
+    ],
+  },
+  {
     id: "S16-SOCIAL-FEMODPAYLOAD-1",
     module: "SOCIAL",
     layer: "FE",

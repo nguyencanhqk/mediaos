@@ -545,3 +545,32 @@ khoản («vắng ≠ che»), nên `026` ghép một khuôn mặt HR đặt vớ
   + `test/foundation/identity-projection-ratchet.unit-spec.ts`, SAU mọi vá): Test Files 64 passed (64) · Tests 1299
   passed (1299) · 0 skipped — gồm `social-avatarpresign-1.int-spec.ts` 28 (T-029-SP chạy với signer mới) ·
   `-count` 18 · `social-be1b-discovery` 24 · identity ratchet 9 · `avatar-presign` int 9.
+
+## 12. Verify cuối `check.sh --all` (02/10/2026 tối) — 1 đỏ do WO (đã vá), 2 đỏ CÓ SẴN
+
+Lane `mediaos_avatarpresign` vừa `--reset`; `bash harness/check.sh --all --lane-db=avatarpresign` trên `efcab4d5`:
+secret-literals · lint (0 lỗi) · typecheck · migration-no-drop · tooling-tests 177/177 · build · prod-tenant-check ·
+db-readiness XANH; **test ĐỎ** — `@mediaos/api` 766/806 file chạy · 6 lượt chạy lại (crash hạ tầng) · 3 ĐỎ THẬT; app
+338/338 · auth 4/4 · console 22/22 · contracts 45/45 · ui 24/24 · web-core 48/48.
+
+- **ĐỎ DO WO — tripwire `S18-QA-SUPERTESTLISTEN-1` (`test/foundation/supertest-listen-ratchet.unit-spec.ts`):**
+  `sharedRequestHelpers()` = `["social-avatar-world.ts"]` — helper mới của WO chứa `getHttpServer`, tripwire bắt theo
+  CHUỖI. Lượt module ở §11.3 không chạy `test/foundation/**` nên lọt. Helper tự `init()` + `listen(0)` + `close()` app
+  của nó ⇒ mọi request nó trao cho int-spec tới server ĐANG NGHE — khuyết tật cổng đo (`ECONNRESET`) không sinh được qua
+  nó. **Vá = nâng census, KHÔNG giấu chuỗi:** `analyzeHelperSource` (AST) miễn helper TỰ CHỨA — MỌI lần chạm
+  `getHttpServer` là `<X>.getHttpServer` với `<X>` khai báo đúng 1 lần trong file và được chính file `init` + `listen` +
+  `close`; builder trên app nhận từ ngoài · thiếu listen/close · trùng tên · chạm qua chuỗi vẫn ĐỎ. Đã cân và BỎ: tiêm
+  `http` từ int-spec, dời helper khỏi `test/helpers/` — cả hai chỉ làm tripwire mù.
+  - RED (code cũ): `expected [ 'social-avatar-world.ts' ] to deeply equal []` — Tests 1 failed | 13 passed (14).
+  - GREEN: 21/21 (+7 ca tổng hợp «bộ phân loại helper dùng chung»).
+  - Mutant (sao lưu `cp`, khôi phục `cp` + sha1): W-nolisten · W-noclose · W-extbuilder trên helper THẬT ⇒ tripwire đỏ
+    đúng thông điệp «KHÔNG tự chứa»; C-nodeclcount ⇒ ca «TRÙNG TÊN» đỏ · C-nolistencheck ⇒ «THIẾU listen» đỏ ·
+    C-nostringbranch ⇒ «CHUỖI» đỏ (mỗi mutant: Tests 1 failed | 20 passed (21)). eslint 0 · api typecheck sạch.
+- **CÓ SẴN — `noti-seed-catalog-permissions` (A: `event LẠ … NOTI_EVT_071d9e7c`) + `s5-noti-fix1-deeplink` ((a):
+  template GLOBAL `target_url` NULL):** chunk 16 crash `ERR_IPC_CHANNEL_CLOSED` 4 lượt khi
+  `notifications-noti-core-tenant-isolation` đang chạy ⇒ `afterAll` không chạy ⇒ lane còn event `NOTI_EVT_071d9e7c` +
+  template `NOTI_TPL_0ec188e7` GLOBAL (tạo 22:56:51). Chạy riêng trên lane bẩn: đỏ y hệt; xoá đúng 2 hàng ⇒ 2/2 file ·
+  229/229 XANH hai lượt. WO không chạm NOTI. Seed `S18-QA-NOTIGLOBALLEAK-1`.
+- **Crash hạ tầng — chunk 19 (40 file, gồm hai int-spec của WO) không ra kết quả:** chạy lại đủ 40 file trên lane
+  (`--maxWorkers=4`): Test Files 40 passed (40) · Tests 990 passed (990) · 0 skip — `social-avatarpresign-1` 28 ·
+  `-count` 18 · `s16-social-db1-invariants` 45.

@@ -271,23 +271,125 @@ export function listenWithoutClose(
   return scans.filter((s) => s.appsListenedNotClosed.length > 0);
 }
 
+/** Một helper dùng chung (`test/helpers/*.ts`) dưới con mắt tripwire. */
+export interface HelperScan {
+  readonly file: string;
+  /** CHẠM `getHttpServer` trong MÃ (định danh hoặc chuỗi; comment không tính) ⇒ dựng được request. */
+  readonly touchesHttpServer: boolean;
+  /**
+   * Helper TỰ CHỨA: MỌI lần chạm `getHttpServer` đều là `<X>.getHttpServer` với `<X>` khai báo ĐÚNG
+   * MỘT lần trong file và được CHÍNH file đó `init()` + `listen()` + `close()`.
+   */
+  readonly selfContained: boolean;
+}
+
+/** Số lần mỗi TÊN được khai báo trong file (biến · tham số · destructure · hàm · import). */
+function declarationCounts(sf: ts.SourceFile): Map<string, number> {
+  const out = new Map<string, number>();
+  const add = (name: ts.Node | undefined): void => {
+    if (name && ts.isIdentifier(name)) out.set(name.text, (out.get(name.text) ?? 0) + 1);
+  };
+  const visit = (n: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(n) ||
+      ts.isParameter(n) ||
+      ts.isBindingElement(n) ||
+      ts.isFunctionDeclaration(n) ||
+      ts.isImportClause(n) ||
+      ts.isImportSpecifier(n) ||
+      ts.isNamespaceImport(n)
+    )
+      add(n.name);
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+
 /**
- * TRIPWIRE cho lỗ CÒN LẠI: census phân tích TỪNG FILE, không giải import.
+ * Phân tích MỘT helper dùng chung — tách khỏi I/O để ca tổng hợp đo được bộ phân loại.
  *
- * Hôm nay mọi builder request đều là helper CỤC BỘ trong chính int-spec ⇒ vết lan được. Ngày ai đó
- * gom `http()/authGet()/authPost()` về một `test/helpers/*.ts` dùng chung (đúng quy ước DRY của repo
- * này), MỌI file đã chuyển sẽ hoá vô hình với `touchesSupertest` — và các ca chống-xanh-rỗng đếm
- * theo TOÀN CORPUS vẫn sẽ xanh. Đó đúng là họ `refactor-to-helper-blinds-syntax-census`.
- *
- * Không vá được rẻ (phải giải import + taint xuyên file), nên thay vì im lặng chịu rủi ro, cổng
- * PHÁT HIỆN ĐÚNG NGÀY rủi ro thành hiện thực: helper dùng chung nào chạm `getHttpServer` ⇒ ĐỎ, kèm
- * yêu cầu nâng census. Danh sách rỗng = tiền đề "mọi builder là cục bộ" còn đúng.
+ * Vì sao helper TỰ CHỨA không phải lỗ mù: khuyết tật cổng này đo là request bay song song tới app
+ * CHƯA `listen`. Helper tự `init()` + `listen()` chính app nó dựng request lên thì mọi request nó
+ * trao cho int-spec đều tới một server ĐANG NGHE — `Promise.all` của int-spec trên các request đó
+ * không thể `ECONNRESET`, dù census per-file không thấy vết. Phán quyết đi theo TỪNG receiver (như
+ * `receiversOf`), và receiver phải khai báo ĐÚNG MỘT lần: `export const http = (app) =>
+ * request(app.getHttpServer())` đặt cạnh một `const app` đã listen vẫn ĐỎ vì `app` có hai khai báo.
+ * Chạm qua chuỗi (`app["getHttpServer"]`), destructure, hay receiver không phải định danh ⇒ không
+ * chứng minh được ⇒ ĐỎ.
  */
-export function sharedRequestHelpers(): string[] {
+export function analyzeHelperSource(file: string, text: string): HelperScan {
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, /* setParentNodes */ true);
+  const inited = receiversOf(sf, "init");
+  const listened = receiversOf(sf, "listen");
+  const closed = receiversOf(sf, "close");
+  const decls = declarationCounts(sf);
+  const ownsListenedApp = (name: string): boolean =>
+    decls.get(name) === 1 && inited.has(name) && listened.has(name) && closed.has(name);
+
+  let touches = false;
+  let allOwned = true;
+  const visit = (n: ts.Node): void => {
+    if (ts.isIdentifier(n) && n.text === "getHttpServer") {
+      touches = true;
+      const p = n.parent;
+      let recv: ts.Node | undefined =
+        p && ts.isPropertyAccessExpression(p) && p.name === n ? p.expression : undefined;
+      while (recv && (ts.isNonNullExpression(recv) || ts.isParenthesizedExpression(recv)))
+        recv = recv.expression;
+      if (!(recv && ts.isIdentifier(recv) && ownsListenedApp(recv.text))) allOwned = false;
+    } else if (
+      (ts.isStringLiteralLike(n) ||
+        ts.isTemplateHead(n) ||
+        ts.isTemplateMiddle(n) ||
+        ts.isTemplateTail(n)) &&
+      n.text.includes("getHttpServer")
+    ) {
+      touches = true;
+      allOwned = false;
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return {
+    file: path.basename(file),
+    touchesHttpServer: touches,
+    selfContained: touches && allOwned,
+  };
+}
+
+/** Quét mọi `apps/api/test/helpers/*.ts`. */
+export function scanSharedHelpers(): readonly HelperScan[] {
   const dir = path.join(__dirname, "..", "helpers");
   return fs
     .readdirSync(dir)
     .filter((f) => f.endsWith(".ts"))
-    .filter((f) => fs.readFileSync(path.join(dir, f), "utf8").includes("getHttpServer"))
+    .sort()
+    .map((f) => analyzeHelperSource(f, fs.readFileSync(path.join(dir, f), "utf8")));
+}
+
+/**
+ * TRIPWIRE cho lỗ CÒN LẠI: census phân tích TỪNG FILE, không giải import.
+ *
+ * Hôm nay mọi builder request trên app CHƯA chắc đã listen đều là helper CỤC BỘ trong chính int-spec
+ * ⇒ vết lan được. Ngày ai đó gom `http()/authGet()/authPost()` về một `test/helpers/*.ts` dùng chung
+ * (đúng quy ước DRY của repo này), MỌI file đã chuyển sẽ hoá vô hình với `touchesSupertest` — và các
+ * ca chống-xanh-rỗng đếm theo TOÀN CORPUS vẫn sẽ xanh. Đó đúng là họ
+ * `refactor-to-helper-blinds-syntax-census`.
+ *
+ * Không vá được rẻ (phải giải import + taint xuyên file), nên thay vì im lặng chịu rủi ro, cổng
+ * PHÁT HIỆN ĐÚNG NGÀY rủi ro thành hiện thực: helper dùng chung nào chạm `getHttpServer` mà KHÔNG tự
+ * chứa (`analyzeHelperSource`) ⇒ ĐỎ, kèm yêu cầu nâng census. Danh sách rỗng = tiền đề "mọi builder
+ * trên app chưa chắc đã listen là cục bộ" còn đúng.
+ *
+ * S16-SOCIAL-AVATARPRESIGN-1 (02/10/2026): bản đầu bắt theo CHUỖI (`includes("getHttpServer")`) nên
+ * đỏ cả với `social-avatar-world.ts` — helper tự dựng, tự `listen(0)`, tự `close()` app của nó, tức
+ * KHÔNG thể sinh khuyết tật cổng này. Nâng thành phân tích AST: helper TỰ CHỨA được miễn; mọi hình
+ * dạng khác (builder trên app nhận từ ngoài, thiếu listen/close, chạm qua chuỗi) vẫn ĐỎ.
+ */
+export function sharedRequestHelpers(scans: readonly HelperScan[] = scanSharedHelpers()): string[] {
+  return scans
+    .filter((s) => s.touchesHttpServer && !s.selfContained)
+    .map((s) => s.file)
     .sort();
 }
