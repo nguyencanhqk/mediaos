@@ -264,9 +264,16 @@ vẹn. Mật khẩu SMTP nhập bằng `Read-Host -AsSecureString`, KHÔNG gõ `
 ### 7.2 Deploy (sau merge, trong checkout chính)
 
 `m dev-online-stop` nếu :3200 đang chạy (TRƯỚC install — watch không được phản ứng giữa lúc pnpm đổi
-`node_modules`) → `git switch master && git pull` → **`pnpm install --frozen-lockfile`** (bước mà `m
+`node_modules`) → `git switch master && git pull --ff-only` → **`pnpm install --frozen-lockfile`** (bước mà `m
 prod-update` không làm) → **ngay** `m prod-update api` (giữa hai bước, một lần restart sẽ chạy release cũ
 trên deps mới — giữ cửa sổ ngắn).
+
+⚠️ `git pull` là bước KÉO lockfile mới về checkout chính — bỏ nó thì `pnpm install --frozen-lockfile` cài
+lại ĐÚNG lockfile cũ đang có (no-op, exit 0, im lặng) và `m prod-update api` build code mới trên deps cũ.
+Checkout chính thường bẩn hai file SINH `docs/STATUS.md` + `docs/plans/INDEX.md` (tracked, regen liên tục)
+⇒ `git pull` từ chối ("would be overwritten by merge") ⇒ bỏ thay đổi của RIÊNG hai file đó trước
+(`git restore docs/STATUS.md docs/plans/INDEX.md` — sinh lại được). Xác nhận đã kéo: `git log -1 --format=%h`
+= commit merge trên `origin/master`.
 
 ### 7.3 Smoke sau deploy
 
@@ -279,8 +286,66 @@ trên deps mới — giữ cửa sổ ngắn).
 
 ### 7.4 Rollback
 
-`m prod-rollback <stamp>` **KHÔNG đủ** cho WO này (đổi dist, giữ deps mới). Đường đúng: revert trên master
-→ `git pull` → `pnpm install --frozen-lockfile` → `m prod-update api`. Không có migration ⇒ không đụng DB.
+`m prod-rollback <stamp>` **KHÔNG đủ** cho WO này: nó chỉ đổi junction `current` + restart (`mediaos.ps1`
+`Invoke-ProdRollback`), `node_modules` của checkout chính GIỮ deps mới (§7.0). Không có migration ⇒ không
+đụng DB.
+
+**KHÔNG revert NGUYÊN squash `95f5ad8f`** (sửa 02/10 — S19-GOV-BOOKKEEPRE-1; bản cũ ghi "revert trên master").
+Squash gộp CẢ vá log §4.6: revert nguyên ⇒ `invite-mail.service.ts` quay về
+``this.logger.warn(`Gửi email mời tới ${config.host} thất bại: ${reason}`)`` với `reason = err.message`
+⇒ **MỞ LẠI lỗ token kích hoạt + username vào log** (bất biến #3). ĐO 02/10 (spec dò tạm, server SMTP giả
+echo link + username, nodemailer 10.0.12): code TRƯỚC squash ⇒ cả 3 ca 535 AUTH · 550 RCPT · 550 DATA log
+`… thất bại: Invalid login: 535 5.7.8 … ?company=acme&token=<token> for <username>`; code SAU squash cùng
+kịch bản ⇒ `… thất bại (name=Error code=EAUTH responseCode=535 command=AUTH PLAIN errno=- syscall=- tlsReason=-)`,
+không token, không username. Việc nodemailer NỐI phản hồi server vào `err.message` có ở CẢ 9.1.1 (§9 dòng 1)
+lẫn 10.0.12 ⇒ hạ deps KHÔNG kéo theo (và KHÔNG được kéo theo) hạ code log.
+
+**Chỉ revert 3 file deps** — đúng bộ file deps trong `git show --stat 95f5ad8f`, và đi CÙNG nhau (lockfile ghi
+lại khối `overrides` của workspace; lệch nhau thì `--frozen-lockfile` ĐỎ):
+
+| File                    | Revert đưa về                                                                                                              |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/package.json` | `nodemailer` `^9.1.1` · trả lại `@types/nodemailer` `^8.0.1`                                                               |
+| `pnpm-lock.yaml`        | nodemailer 9.1.1 · engine.io 6.6.8 · brace-expansion 2.1.4 / 5.0.9                                                         |
+| `pnpm-workspace.yaml`   | override brace-expansion `<2.1.3` / `>=3.0.0 <5.0.8` · `auditConfig.ignoreGhsas` GHSA-mh99 · `minimumReleaseAgeExclude` cũ |
+
+GIỮ NGUYÊN: `apps/api/src/**` (`smtp-error-summary.ts` + 2 call-site — chỉ đọc trường lỗi chung, không
+phụ thuộc major) · `apps/api/test/helpers/fake-smtp-server.ts` + 2 spec (ca CJS chấp nhận cả `lib/` của 9.x
+lẫn `dist/cjs/` của 10.x) · `.github/workflows/security.yml` (chỉ đổi chú thích) · docs · harness.
+
+1. **Trong worktree RIÊNG** (KHÔNG trong checkout chính — §7.0):
+
+   ```bash
+   git fetch origin
+   git switch -c revert/s19-audithigh-deps origin/master
+   git revert --no-commit 95f5ad8f
+   git restore --staged --worktree --source=HEAD -- .github apps/api/src apps/api/test docs harness
+   git status --short   # ⇒ ĐÚNG 3 dòng: apps/api/package.json · pnpm-lock.yaml · pnpm-workspace.yaml
+   pnpm install --frozen-lockfile
+   pnpm --filter @mediaos/api typecheck
+   pnpm --filter @mediaos/api exec vitest run src/user-invites/invite-mail.smtp.spec.ts \
+     src/settings/smtp-error-summary.spec.ts src/settings/mail-transport.service.spec.ts \
+     src/settings/mail-config.service.spec.ts
+   ```
+
+   Thủ tục đã chạy thử 02/10 trên `origin/master` `14afbb5f` (rồi `git revert --abort`): `git status` ra đúng
+   3 file trên. Nếu `git revert` báo XUNG ĐỘT ở `pnpm-lock.yaml` (commit sau đã đổi deps khác) ⇒ DỪNG, KHÔNG
+   sửa tay lockfile: chỉ trả specifier ở `package.json`/`pnpm-workspace.yaml` rồi `pnpm install` (không
+   frozen) để sinh lại, kiểm `pnpm why nodemailer -r` = 9.1.1. Ca "rớt kết nối ở lệnh DATA" chỉ từng đo
+   trên 10.0.12 (10.0.12 "settle every send on a connection error") — trên 9.1.1 CHƯA đo; đỏ thì ghi vào PR,
+   KHÔNG sửa spec trong PR rollback.
+
+2. PR → CI. Cổng `Dependency scan` sẽ ĐỎ lại (7 HIGH quay về — cái giá có chủ ý của rollback) ⇒ owner merge
+   `--admin`.
+
+3. **Deploy trong CHECKOUT CHÍNH `C:\dev 2\MediaOS`** — y khuôn §7.2, KHÔNG bỏ bước nào:
+   `m dev-online-stop` (nếu :3200 chạy) → `git restore docs/STATUS.md docs/plans/INDEX.md` nếu bẩn →
+   `git switch master && git pull --ff-only` (**bắt buộc** — thiếu nó thì bước dưới cài lại lockfile 10.x
+   đang có, exit 0, không đổi gì) → **`pnpm install --frozen-lockfile`** (`m prod-update` KHÔNG install,
+   `m prod-rollback` KHÔNG đổi deps) → **ngay** `m prod-update api`.
+
+4. Smoke như §7.3 với số kỳ vọng ĐẢO: nodemailer `9.1.1` · engine.io `6.6.8` · `data.build.commit` = commit
+   merge của PR rollback · "Kiểm tra kết nối" trên PROD.
 
 ## 8. Thứ tự
 
