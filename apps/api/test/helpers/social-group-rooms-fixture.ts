@@ -56,14 +56,20 @@ export interface SeededActor {
   email: string;
 }
 
-/** User + hồ sơ nhân sự đang hoạt động + một vai TUỲ BIẾN chứa đúng `pairs` (KHÔNG super-admin). */
+export type SeedScope = "Own" | "Team" | "Department" | "Company" | "System";
+
+/**
+ * User + hồ sơ nhân sự đang hoạt động + một vai TUỲ BIẾN chứa đúng `pairs` (KHÔNG super-admin). Mọi cặp
+ * @Company trừ cặp ghi ở `opts.scopes` (FULL gate lượt 1: dựng `view:feed@Department` — cấu hình role-admin
+ * CHO PHÉP gán, chỉ chặn `System`).
+ */
 export async function seedActor(
   direct: Pool,
   tenant: SeededTenant,
   label: string,
   passwordHash: string,
   pairs: readonly string[],
-  opts: { orgUnitId?: string | null } = {},
+  opts: { orgUnitId?: string | null; scopes?: Readonly<Record<string, SeedScope>> } = {},
 ): Promise<SeededActor> {
   const email = `${label}-${randomUUID().slice(0, 8)}@${tenant.slug}.test`;
   const userId = await seedUser(direct, tenant.companyId, email, passwordHash);
@@ -81,7 +87,7 @@ export async function seedActor(
   for (const key of pairs) {
     const [action, resource] = key.split(":") as [string, string];
     const permId = await seedPermissionCatalog(direct, action, resource, false);
-    await seedRolePermission(direct, roleId, permId, "ALLOW", "Company");
+    await seedRolePermission(direct, roleId, permId, "ALLOW", opts.scopes?.[key] ?? "Company");
   }
   await seedUserRole(direct, userId, roleId, tenant.companyId);
   return { userId, email };
@@ -171,6 +177,19 @@ export async function pollUntil(
     await sleep(20);
   }
   throw new Error(`hết giờ chờ: ${what}`);
+}
+
+/**
+ * Như `pollUntil` nhưng TRẢ kết quả cuối thay vì ném — để ca ĐỎ bằng một `expect` mang thông điệp HÀNH VI
+ * («X phải rời room»), không bằng một lỗi hết giờ.
+ */
+export async function becomes(check: () => Promise<boolean>, timeoutMs = 3000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await check()) return true;
+    await sleep(20);
+  }
+  return check();
 }
 
 /** Nối `/ws` bằng client thật; resolve khi client nhận `connect` (CHƯA chắc server xong `handleConnection`). */

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -24,12 +24,44 @@ const stripComments = (text: string): string =>
 const read = (dir: string, file: string): string =>
   stripComments(readFileSync(join(dir, file), "utf8"));
 
-/** Mọi module specifier của các câu `import … from "…"` (kể cả `import type`). */
+/**
+ * Mọi module specifier mà file KÉO VÀO: `import … from "…"` (kể cả `import type` / `export … from`),
+ * `import "…"` (side-effect), `import("…")` (động) và `require("…")`.
+ *
+ * FULL gate lượt 1 (typescript-reviewer LOW): bản đầu chỉ khớp `from "…"` ⇒ một `await import(
+ * "../social/social-groups.service")` «cho khỏi vòng DI» trong gateway dựng lại ĐÚNG cạnh Realtime→SOCIAL
+ * mà module lá tồn tại để chặn, và S1 vẫn xanh. Ca «bộ quét» bên dưới ghim cả bốn dạng.
+ */
 const importsOf = (code: string): string[] =>
-  [...code.matchAll(/from\s+["']([^"']+)["']/g)].map((m) => m[1] as string);
+  [
+    ...code.matchAll(
+      /(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)["']([^"']+)["']/gm,
+    ),
+  ].map((m) => m[1] as string);
 
 const LEAF_READER = "social-group-rooms.reader.ts";
 const LEAF_MODULE = "social-group-rooms.module.ts";
+
+describe("bộ quét import — ghim CẢ BỐN dạng kéo module vào (nếu không, S1/S2 mù)", () => {
+  it("`from` · side-effect · `import()` động · `require()` đều được thấy", () => {
+    const code = [
+      `import { A } from "../social/a";`,
+      `import type { B } from "../social/b";`,
+      `import "../social/c";`,
+      `const d = await import("../social/d");`,
+      `const e = require("../social/e");`,
+      `export { F } from "../social/f";`,
+    ].join("\n");
+    expect(importsOf(code).sort()).toEqual([
+      "../social/a",
+      "../social/b",
+      "../social/c",
+      "../social/d",
+      "../social/e",
+      "../social/f",
+    ]);
+  });
+});
 
 describe("S1 — realtime/** chỉ chạm social/** qua MODULE LÁ liệt kê nhóm", () => {
   it("gateway + RealtimeModule import từ `../social/` ĐÚNG reader/module lá (neo dương: có import thật)", () => {
@@ -107,5 +139,59 @@ describe("S2 — reader/module liệt kê nhóm THẬT SỰ là lá", () => {
         `${file} import ngược`,
       ).toEqual([]);
     }
+  });
+});
+
+/** Mọi file .ts (bỏ spec) dưới `apps/api/src`, đường dẫn tương đối dùng `/`, đã bỏ comment. */
+function allSources(): { rel: string; text: string }[] {
+  const out: { rel: string; text: string }[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".spec.ts")) {
+        out.push({
+          rel: p.slice(SRC.length + 1).replace(/\\/g, "/"),
+          text: stripComments(readFileSync(p, "utf8")),
+        });
+      }
+    }
+  };
+  walk(SRC);
+  return out;
+}
+
+/**
+ * S3 — FULL gate lượt 1 (silent-failure-hunter LOW): room nhóm bám membership CHỈ vì mọi lời ghi
+ * `feed_group_members` hôm nay đi qua 5 route của `SocialGroupsService`, và cả 5 gọi
+ * `syncFeedGroupMembership` (AC1–AC6 ghim TỪNG route). Không gì nối «ghi membership» với «đồng bộ room»
+ * về CẤU TRÚC: một writer MỚI ở chỗ khác (khôi phục nhóm, dọn thành viên khi nghỉ việc, import hàng loạt)
+ * biên dịch được, xanh mọi ca, và để socket của người bị gỡ ở lại room nhóm kín tới khi disconnect.
+ * Hai tập dưới đây biến writer mới thành một quyết định NHÌN THẤY ĐƯỢC: mở rộng tập ⇒ phải trả lời «room
+ * của người đó được đồng bộ ở đâu?».
+ */
+describe("S3 — lời GHI `feed_group_members` chỉ có MỘT cửa (đồng bộ room nằm ở cửa đó)", () => {
+  const sources = allSources();
+  const WRITE =
+    /\.(?:insert|update|delete)\(\s*feedGroupMembers\b|\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+"?feed_group_members\b/i;
+
+  it("file GHI bảng `feed_group_members` (drizzle hoặc SQL thô) = ĐÚNG repository thành viên nhóm", () => {
+    const writers = sources.filter((s) => WRITE.test(s.text)).map((s) => s.rel);
+    expect(writers).toEqual(["social/social-group-members.repository.ts"]);
+  });
+
+  it("file dùng `SocialGroupMembersRepository` = repository · service nhóm (5 route, mỗi route đồng bộ room) · module", () => {
+    const users = sources
+      .filter((s) => /\bSocialGroupMembersRepository\b/.test(s.text))
+      .map((s) => s.rel)
+      .sort();
+    expect(users).toEqual([
+      "social/social-group-members.repository.ts",
+      "social/social-groups.service.ts",
+      "social/social.module.ts",
+    ]);
+    // Neo dương: service — cửa DUY NHẤT — thật sự gọi đồng bộ room.
+    const service = sources.find((s) => s.rel === "social/social-groups.service.ts");
+    expect(service?.text).toContain("syncFeedGroupMembership(");
   });
 });

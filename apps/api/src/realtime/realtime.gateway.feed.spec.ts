@@ -1,5 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DATA_SCOPES, type DataScope } from "@mediaos/contracts";
 import { RealtimeGateway } from "./realtime.gateway";
 import {
   chatRoomName,
@@ -9,6 +10,7 @@ import {
   feedUserRoomName,
   userRoomName,
 } from "./rooms";
+import { SocialAccessService } from "../social/social-access.service";
 import type { TokenService } from "../auth/token.service";
 import type { RealtimeEmitterService } from "./realtime-emitter.service";
 import type { PermissionService } from "../permission/permission.service";
@@ -23,6 +25,11 @@ import type { DatabaseService } from "../db/db.service";
  * UNIT có chủ ý (không DB, không socket.io thật): hai cửa sổ đua (connect↔`038` duyệt, connect↔`036/039`
  * gỡ) được khoá TẤT ĐỊNH bằng THỨ TỰ (GW3) + kịch bản đọc lại (GW4) + lỗi ở lần đọc lại (GW5b) — thứ mà
  * một int-spec chỉ bắt được khi trúng giờ.
+ *
+ * FULL gate lượt 1 (HIGH — security-reviewer + typescript-reviewer): cổng là SÀN SCOPE Company của cặp
+ * `view:feed` (GW2b/GW2c), KHÔNG `can()` — `can()` không đọc `data_scope`, nên một grant
+ * `view:feed@Department` bị REST trả 403 ở MỌI route SOCIAL (`companyFloor`) mà vẫn vào được room nhóm kín.
+ * Stub `can` dưới đây mô phỏng ĐÚNG engine thật: có grant ALLOW ở BẤT KỲ scope nào ⇒ allow.
  */
 
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -59,8 +66,13 @@ function makeSocket(opts: { leaveThrowsFor?: (room: string) => boolean } = {}) {
   };
 }
 
-function makeGateway(over: { feedAllow?: boolean; chatAllow?: boolean; reads?: Read[] }) {
+/**
+ * `feedScope` = scope MẠNH NHẤT của cặp `view:feed` mà engine trả (`null` = không có grant / bị DENY).
+ * Mặc định `Company` — vai canonical (mig 0578) đều giữ `view:feed@Company`.
+ */
+function makeGateway(over: { feedScope?: DataScope | null; chatAllow?: boolean; reads?: Read[] }) {
   const reads = over.reads ?? [[]];
+  const feedScope = over.feedScope === undefined ? "Company" : over.feedScope;
   let call = 0;
   let socketSeq: string[] | null = null;
   const listActiveGroupIds = vi.fn(async (_companyId: string, _userId: string) => {
@@ -71,11 +83,18 @@ function makeGateway(over: { feedAllow?: boolean; chatAllow?: boolean; reads?: R
     return r;
   });
   const permissions = {
+    // `can()` KHÔNG đọc `data_scope` (`getCompanyRoleGrants` không SELECT cột đó) ⇒ grant ở scope NÀO
+    // cũng cho qua — đúng thứ làm cổng cũ fail-OPEN với `view:feed@Department`.
     can: vi.fn(async (q: { resourceType: string }) => ({
-      allow: q.resourceType === "feed" ? (over.feedAllow ?? true) : (over.chatAllow ?? true),
+      allow: q.resourceType === "feed" ? feedScope !== null : (over.chatAllow ?? true),
       reason: "ok",
       auditRequired: false,
     })),
+    // Chỉ trả scope cho ĐÚNG cặp `view:feed` — hỏi nhầm cặp ⇒ `null` (fail-closed) ⇒ ca ĐỎ.
+    resolveStrongestScope: vi.fn(
+      async (_userId: string, _companyId: string, action: string, resourceType: string) =>
+        action === "view" && resourceType === "feed" ? feedScope : null,
+    ),
   } as unknown as PermissionService;
   const listRoomsForUser = vi.fn(async () => [{ id: ROOM_1 }]);
   const db = {
@@ -143,7 +162,7 @@ describe("RealtimeGateway.handleConnection — khối bảng tin (S16-SOCIAL-BE-
   });
 
   it("🔒 GW2 THIẾU view:feed (chat vẫn cho) ⇒ 0 room bảng tin nào, reader KHÔNG được gọi; NOTI + CHAT sống", async () => {
-    const { connect, listActiveGroupIds } = makeGateway({ feedAllow: false, reads: [[G1]] });
+    const { connect, listActiveGroupIds } = makeGateway({ feedScope: null, reads: [[G1]] });
     const client = makeSocket();
 
     await connect(client);
@@ -157,6 +176,52 @@ describe("RealtimeGateway.handleConnection — khối bảng tin (S16-SOCIAL-BE-
     // Không tra nhóm cho người đã bị cổng chặn — membership KHÔNG thay được cặp quyền.
     expect(listActiveGroupIds).not.toHaveBeenCalled();
     expect(client.disconnect).not.toHaveBeenCalled();
+  });
+
+  // ─── FULL gate lượt 1 (HIGH) — SÀN SCOPE Company, CÙNG sàn REST `companyFloor` ──────────────────
+  it.each(["Department", "Team", "Own"] as const)(
+    "🔒 GW2b `view:feed` @%s (HẸP hơn Company) ⇒ 0 room bảng tin, reader KHÔNG gọi — REST 403 SCOPE-DENIED thì WS cũng không vào",
+    async (scope) => {
+      const { connect, listActiveGroupIds } = makeGateway({ feedScope: scope, reads: [[G1]] });
+      const client = makeSocket();
+
+      await connect(client);
+
+      // Neo dương: phiên sống tới hết khối CHAT — «0 room bảng tin» không phải vì chết sớm.
+      expect(client.joined).toContain(userRoomName(COMPANY, USER));
+      expect(client.joined).toContain(chatUserRoomName(COMPANY, USER));
+      expect(client.joined).not.toContain(feedUserRoomName(COMPANY, USER));
+      expect(client.joined).not.toContain(feedRoomName(COMPANY));
+      expect(groupRooms(client.joined)).toEqual([]);
+      expect(listActiveGroupIds).not.toHaveBeenCalled();
+      expect(client.disconnect).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([...DATA_SCOPES, null])(
+    "GW2c scope `%s` ⇒ có room bảng tin ⇔ `SocialAccessService.isCompany(scope)` (CÙNG vị từ với REST)",
+    async (scope) => {
+      const { connect } = makeGateway({ feedScope: scope, reads: [[G1]] });
+      const client = makeSocket();
+
+      await connect(client);
+
+      const expected = SocialAccessService.isCompany(scope);
+      expect(client.joined.includes(feedUserRoomName(COMPANY, USER))).toBe(expected);
+      expect(client.joined.includes(feedRoomName(COMPANY))).toBe(expected);
+      expect(client.joined.includes(feedGroupRoomName(COMPANY, G1))).toBe(expected);
+    },
+  );
+
+  it("GW2d cổng hỏi scope TƯƠI của ĐÚNG cặp `view:feed` cho (user, company) của socket — KHÔNG qua `can()` (cache 300 s, mù scope)", async () => {
+    const { connect, permissions } = makeGateway({ reads: [[G1]] });
+
+    await connect(makeSocket());
+
+    expect(permissions.resolveStrongestScope).toHaveBeenCalledWith(USER, COMPANY, "view", "feed");
+    expect(permissions.can).not.toHaveBeenCalledWith(
+      expect.objectContaining({ resourceType: "feed" }),
+    );
   });
 
   it("GW3 room đánh dấu `feeduser` được join TRƯỚC lần đọc nhóm đầu tiên (đóng đua với `038` duyệt)", async () => {
@@ -176,7 +241,7 @@ describe("RealtimeGateway.handleConnection — khối bảng tin (S16-SOCIAL-BE-
   it("GW4 tự vá: nhóm biến mất giữa hai lần đọc ⇒ RỜI đúng room đó, giữ room còn hợp lệ", async () => {
     // Đua connect ↔ `036/039`: lệnh leave sau-commit chạy lúc socket CHƯA join room nhóm (no-op), rồi
     // vòng join của gateway mới đưa socket vào room vừa bị gỡ.
-    const { connect } = makeGateway({ reads: [[G1, G2], [G2]] });
+    const { connect, listActiveGroupIds } = makeGateway({ reads: [[G1, G2], [G2]] });
     const client = makeSocket();
 
     await connect(client);
@@ -184,9 +249,28 @@ describe("RealtimeGateway.handleConnection — khối bảng tin (S16-SOCIAL-BE-
     expect(client.left).toEqual([feedGroupRoomName(COMPANY, G1)]);
     expect(client.joined).toContain(feedGroupRoomName(COMPANY, G2));
     expect(client.left).not.toContain(feedGroupRoomName(COMPANY, G2));
+    // Neo cho GW7: có room nhóm để rời ⇒ ĐỌC LẠI xảy ra.
+    expect(listActiveGroupIds).toHaveBeenCalledTimes(2);
   });
 
-  it("GW5a lần đọc ĐẦU ném ⇒ feed + feeduser vẫn ở, 0 room nhóm; warn (không error), KHÔNG ngắt; CHAT vẫn join", async () => {
+  it("GW7 lần đọc ĐẦU trả [] ⇒ KHÔNG đọc lại (không có room nhóm nào để rời — bớt 1 tx/connect)", async () => {
+    // FULL gate lượt 1 (database-reviewer LOW): lần đọc lại chỉ dẫn tới `leave` các room của lần đọc
+    // ĐẦU; danh sách rỗng ⇒ lần đọc thứ hai không đổi được trạng thái nào. Duyệt commit xen giữa vẫn tới
+    // nhờ `socketsJoin` sau-commit của `038/035/031` qua `feeduser` (đã join TRƯỚC lần đọc đầu — GW3).
+    const { connect, listActiveGroupIds } = makeGateway({ reads: [[]] });
+    const client = makeSocket();
+
+    await connect(client);
+
+    expect(listActiveGroupIds).toHaveBeenCalledTimes(1);
+    // Neo: khối bảng tin VẪN chạy trọn (room đánh dấu có mặt) — không phải dừng sớm vì lỗi.
+    expect(client.joined).toContain(feedUserRoomName(COMPANY, USER));
+    expect(client.left).toEqual([]);
+  });
+
+  it("GW5a lần đọc ĐẦU ném ⇒ feed + feeduser vẫn ở, 0 room nhóm; ERROR (một lần), KHÔNG ngắt; CHAT vẫn join", async () => {
+    // FULL gate lượt 1 (silent-failure-hunter LOW): lỗi reader = realtime nhóm CHẾT cho phiên này — lỗi
+    // HỆ THỐNG (vd mất GRANT trên `feed_groups`) phải nhìn thấy được, không lẫn vào `warn`.
     const { connect } = makeGateway({ reads: [new Error("DB down")] });
     const client = makeSocket();
 
@@ -196,8 +280,8 @@ describe("RealtimeGateway.handleConnection — khối bảng tin (S16-SOCIAL-BE-
     expect(client.joined).toContain(feedRoomName(COMPANY));
     expect(groupRooms(client.joined)).toEqual([]);
     expect(client.left).toEqual([]);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(error).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
     expect(client.disconnect).not.toHaveBeenCalled();
     // Neo: một trục trặc bảng tin KHÔNG được ngắt phiên chat (Q-GWFAIL).
     expect(client.joined).toContain(chatUserRoomName(COMPANY, USER));
@@ -217,8 +301,8 @@ describe("RealtimeGateway.handleConnection — khối bảng tin (S16-SOCIAL-BE-
     );
     expect(client.left).not.toContain(feedUserRoomName(COMPANY, USER));
     expect(client.left).not.toContain(feedRoomName(COMPANY));
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(error).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
     expect(client.disconnect).not.toHaveBeenCalled();
     expect(client.joined).toContain(chatUserRoomName(COMPANY, USER));
   });
@@ -232,9 +316,11 @@ describe("RealtimeGateway.handleConnection — khối bảng tin (S16-SOCIAL-BE-
     await connect(client);
 
     expect(client.disconnect).toHaveBeenCalledWith(true);
-    expect(error).toHaveBeenCalledTimes(1);
-    // Khối CHAT không chạy: `can` đúng MỘT lần (cổng feed), không tra phòng chat.
-    expect(permissions.can).toHaveBeenCalledTimes(1);
+    // Hai dòng error: lỗi đọc lại (khối bảng tin) + lỗi dọn room (fail-closed cuối).
+    expect(error).toHaveBeenCalledTimes(2);
+    // Khối CHAT không chạy: cổng bảng tin hỏi scope ĐÚNG một lần, `can` (cổng CHAT) KHÔNG lần nào.
+    expect(permissions.resolveStrongestScope).toHaveBeenCalledTimes(1);
+    expect(permissions.can).not.toHaveBeenCalled();
     expect(listRoomsForUser).not.toHaveBeenCalled();
   });
 

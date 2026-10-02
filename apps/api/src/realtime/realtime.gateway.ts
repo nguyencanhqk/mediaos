@@ -7,7 +7,7 @@ import {
   WebSocketServer,
 } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
-import { WS_NAMESPACE } from "@mediaos/contracts";
+import { WS_NAMESPACE, type DataScope } from "@mediaos/contracts";
 import { loadEnv } from "../config/env.schema";
 import { TokenService } from "../auth/token.service";
 import { DatabaseService } from "../db/db.service";
@@ -34,6 +34,23 @@ const CHAT_READ_PAIR = { action: "view", resourceType: "chat-room" } as const;
  * `is_sensitive = false` (mig 0578) ⇒ không cần `ctx` reauth.
  */
 const FEED_READ_PAIR = { action: "view", resourceType: "feed" } as const;
+
+/**
+ * S16-SOCIAL-BE-2C · FULL gate lượt 1 (HIGH — security-reviewer + typescript-reviewer) — SÀN SCOPE của
+ * cổng bảng tin WS: CÙNG vị từ với `SocialAccessService.isCompany` mà REST ép qua `companyFloor` ở MỌI
+ * route SOCIAL (`resolveActor` ném 403 `AUTH-ERR-SCOPE-DENIED` khi scope hẹp hơn Company). Spec
+ * `realtime.gateway.feed.spec.ts` GW2c so HÀNH VI cổng với `isCompany` trên MỌI scope (+ `null`) — hai bản
+ * không trôi khỏi nhau được.
+ *
+ * Vì sao KHÔNG `can()`: `can()` đọc grant qua `getCompanyRoleGrants` — không SELECT `data_scope` — nên grant
+ * `view:feed` ở scope NÀO cũng cho qua. Role-admin cho gán `view:feed@Department` (chỉ chặn `System`) ⇒ vai
+ * đó bị REST 403 toàn bộ bảng tin/nhóm, nhưng WS cũ vẫn đưa socket vào `feed`, `feeduser` và MỌI room nhóm
+ * kín mà người đó là thành viên — đúng lỗ HIGH-1 của FULL gate BE-1, nay mở rộng sang nội dung nhóm kín.
+ * Không import `SocialAccessService`: gateway chỉ được chạm `social/**` qua module lá (S1).
+ */
+function meetsFeedScopeFloor(scope: DataScope | null): boolean {
+  return scope === "Company" || scope === "System";
+}
 
 /** Người dùng đã verify ở handshake — gắn vào socket.data (server-side, KHÔNG đọc từ payload client). */
 interface SocketUser {
@@ -136,8 +153,9 @@ export class RealtimeGateway
    *
    * Các bước, thứ tự có ý nghĩa:
    *   (0) join `userRoomName` — đích `notification:new`, phải sống kể cả khi CHAT bị từ chối;
-   *   (0b) khối bảng tin RIÊNG (`joinFeedRooms` — S16-SOCIAL-BE-1/BE-2C): cổng `view:feed` → room công
-   *       ty + room đánh dấu `feeduser` → room nhóm đọc từ DB + đọc lại; chạy XONG trước khối CHAT;
+   *   (0b) khối bảng tin RIÊNG (`joinFeedRooms` — S16-SOCIAL-BE-1/BE-2C): cổng `view:feed` @Company (sàn
+   *       REST) → room công ty + room đánh dấu `feeduser` → room nhóm đọc từ DB + đọc lại; chạy XONG trước
+   *       khối CHAT;
    *   (A) cổng quyền `view:chat-room` — thiếu cặp thì DỪNG ở đây (fail-SOFT: không disconnect);
    *   (B) tra danh sách phòng + join, kèm `chatUserRoomName` đánh dấu "socket này đã qua cổng";
    *   (C) đọc LẠI danh sách và rời phòng nào vừa biến mất — tự vá đua với `removeMember`.
@@ -284,18 +302,26 @@ export class RealtimeGateway
    * phải NGẮT socket ⇒ caller `return` (không chạy khối CHAT trên một socket đã ngắt).
    *
    * Thứ tự có ý nghĩa:
-   *   1. Cổng `view:feed` — NGOÀI mọi tx (`can()` tự mở `withTenant`; lồng tx là treo IM LẶNG). Từ chối
-   *      ⇒ dừng, fail-SOFT, KHÔNG tra nhóm: membership không thay được cặp quyền.
+   *   1. Cổng `view:feed` **@Company** — `resolveStrongestScope` + `meetsFeedScopeFloor` (CÙNG sàn REST
+   *      `companyFloor`; FULL gate lượt 1, HIGH). Đọc grant TƯƠI: ngoài request HTTP, memo ảnh chụp grant
+   *      là passthrough ⇒ mỗi lần connect một lượt DB, KHÔNG qua cache Valkey 300 s của `can()`. NGOÀI mọi
+   *      tx (hàm tự mở `withTenant`; lồng tx là treo IM LẶNG). Thiếu cặp, scope hẹp hơn Company, hay lỗi hạ
+   *      tầng (hàm trả `null` — fail-closed) ⇒ dừng, fail-SOFT, KHÔNG tra nhóm: membership không thay được
+   *      cặp quyền.
    *   2. Join `feedRoomName` rồi `feedUserRoomName` (room ĐÁNH DẤU) **TRƯỚC** khi đọc membership — đóng
    *      đua với `038` duyệt: hoặc `socketsJoin` sau-commit của `038` thấy socket đã ở room đánh dấu,
    *      hoặc lần đọc ở bước 3 (sau commit đó) thấy hàng `active`.
    *   3. Đọc nhóm (server tra DB — KHÔNG từ handshake) → GHI `joinedGroupRooms` TRƯỚC vòng join → join.
+   *      Danh sách RỖNG ⇒ xong (bỏ bước 4 — không có room nào để rời; FULL gate lượt 1, database-reviewer:
+   *      bớt một tx/connect cho đa số nhân viên không thuộc nhóm nào).
    *   4. Đọc LẠI → rời nhóm vừa biến mất (đua với `036/039`: lệnh leave sau-commit chạy lúc socket chưa
    *      join là no-op, rồi bước 3 đưa socket vào room vừa bị gỡ). Khuôn bước (C) của CHAT.
-   *   5. Lỗi Ở BẤT KỲ bước nào ⇒ `warn` (KHÔNG `error`) + rời MỌI room nhóm đã join — owner ký Q-GWFAIL
-   *      (a), bất biến 10. Lỗi ở bước 4 xảy ra SAU vòng join của bước 3: socket ĐÃ ở mọi room của lần đọc
-   *      1, kể cả room vừa bị `036/039` gỡ — chỉ `warn` mà không dọn là fail-OPEN. Phiên + `feed` +
-   *      `feeduser` vẫn sống (mất badge nhóm tới reconnect; lần `038/035/031` sau vẫn kéo vào được).
+   *   5. Lỗi Ở BẤT KỲ bước nào ⇒ `error` + rời MỌI room nhóm đã join — owner ký Q-GWFAIL (a), bất biến 10.
+   *      Lỗi ở bước 4 xảy ra SAU vòng join của bước 3: socket ĐÃ ở mọi room của lần đọc 1, kể cả room vừa
+   *      bị `036/039` gỡ — log mà không dọn là fail-OPEN. Phiên + `feed` + `feeduser` vẫn sống (mất badge
+   *      nhóm tới reconnect; lần `038/035/031` sau vẫn kéo vào được). `error` chứ không `warn` (FULL gate
+   *      lượt 1, silent-failure-hunter): lỗi reader HỆ THỐNG (mất GRANT, RLS sửa hỏng) làm chết realtime
+   *      nhóm của CẢ công ty — phải nhìn thấy được, không lẫn vào cảnh báo thường.
    *
    * Phần dư KHÔNG đóng (API-19 §7, plan R8): khe giữa join ở bước 3 và leave ở bước 4 — một bài commit
    * SAU `039` trong khe đó vẫn tới người vừa bị gỡ (cùng hình dạng phần dư bước (C) của CHAT).
@@ -303,19 +329,23 @@ export class RealtimeGateway
   private async joinFeedRooms(client: Socket, user: SocketUser): Promise<boolean> {
     const joinedGroupRooms: string[] = [];
     try {
-      const decision = await this.permissions.can({
-        userId: user.id,
-        companyId: user.companyId,
-        ...FEED_READ_PAIR,
-      });
-      if (!decision.allow) {
-        this.logger.debug(`WS: user=${user.id} thiếu cặp view:feed — không join room bảng tin`);
+      const scope = await this.permissions.resolveStrongestScope(
+        user.id,
+        user.companyId,
+        FEED_READ_PAIR.action,
+        FEED_READ_PAIR.resourceType,
+      );
+      if (!meetsFeedScopeFloor(scope)) {
+        this.logger.debug(
+          `WS: user=${user.id} thiếu view:feed @Company (scope=${scope ?? "∅"}) — không join room bảng tin`,
+        );
         return true;
       }
       await client.join(feedRoomName(user.companyId));
       await client.join(feedUserRoomName(user.companyId, user.id));
 
       const groupIds = await this.feedGroupRooms.listActiveGroupIds(user.companyId, user.id);
+      if (groupIds.length === 0) return true;
       joinedGroupRooms.push(...groupIds.map((g) => feedGroupRoomName(user.companyId, g)));
       await Promise.all(joinedGroupRooms.map((room) => client.join(room)));
 
@@ -327,7 +357,7 @@ export class RealtimeGateway
       );
       return true;
     } catch (err) {
-      this.logger.warn(
+      this.logger.error(
         "WS: khối bảng tin lỗi lúc connect — rời mọi room nhóm vừa join, phiên vẫn sống",
         {
           userId: user.id,

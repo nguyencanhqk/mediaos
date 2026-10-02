@@ -59,6 +59,9 @@ function makeGateway(over: {
       reason: "ok",
       auditRequired: false,
     })),
+    // S16-SOCIAL-BE-2C (FULL gate lượt 1): cổng bảng tin hỏi scope `view:feed` (sàn Company), không qua
+    // `can` — cùng quyết định với `allow` như trước khi tách (spec này đo CHAT).
+    resolveStrongestScope: vi.fn(async () => ((over.allow ?? true) ? "Company" : null)),
   } as unknown as PermissionService;
   const db = {
     withTenant:

@@ -117,8 +117,47 @@ describe("BE-2C — `feed:post.created` là union theo `audience` (company · gr
     ["org_unit (D21 — không room nào)", { audience: "org_unit", groupId: null }, false],
     ["company · orgUnitId UUID", { audience: "company", groupId: null, orgUnitId: OU }, false],
     ["group · orgUnitId UUID", { audience: "group", groupId: G, orgUnitId: OU }, false],
+    // FULL gate lượt 1 (typescript-reviewer LOW): mọi fixture khác đều dùng uuid hợp lệ ⇒ nới
+    // `groupId: z.string()` (bỏ `.uuid()`) xanh khắp kho. Bài nhóm PHẢI mang id định tuyến được.
+    ["group · groupId KHÔNG phải uuid", { audience: "group", groupId: "g1" }, false],
   ] as const)("C1 %s ⇒ parse %s", (_label, patch, ok) => {
     expect(wsFeedPostCreatedEventSchema.safeParse({ ...base, ...patch }).success).toBe(ok);
+  });
+});
+
+/**
+ * FULL gate lượt 1 (security-reviewer LOW) — DANH SÁCH CHO PHÉP ghim tường minh.
+ *
+ * Lõi WS dựng bằng `feedPostSchema.omit({…})` = danh sách CHẶN: mọi khoá MỚI thêm vào DTO REST (vd một cờ
+ * theo-người-xem `canEdit`) TỰ ĐỘNG lên kênh phát cho CẢ room — từ BE-2C là cả room nhóm kín — trong khi
+ * các ca «bóc đúng danh sách cũ» và «hai option cùng tập khoá» vẫn xanh. Ca này làm mỗi khoá mới thành
+ * một quyết định CÓ CHỦ ĐÍCH: thêm vào đây (kèm lý do) hoặc `.omit` nó.
+ */
+const WS_POST_ALLOWED_KEYS = [
+  "attachments",
+  "audience",
+  "author",
+  "body",
+  "commentCount",
+  "commentsLocked",
+  "createdAt",
+  "editedAt",
+  "groupId",
+  "id",
+  "lastActivityAt",
+  "likeCount",
+  "orgUnitId",
+  "pinned",
+  "publishedAt",
+  "requiresAck",
+  "tags",
+  "type",
+  "viewCount",
+] as const;
+
+describe("FULL gate lượt 1 — tập khoá `feed:post.created` là DANH SÁCH CHO PHÉP (19)", () => {
+  it.each(AUDIENCES)("option `%s`: tập khoá ĐÚNG BẰNG danh sách cho phép", (aud) => {
+    expect(keysOf(optionFor(aud))).toEqual([...WS_POST_ALLOWED_KEYS]);
   });
 });
 

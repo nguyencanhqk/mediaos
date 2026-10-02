@@ -22,13 +22,30 @@ const COMPANY = "c0000000-0000-0000-0000-00000000000a";
 const OTHER_COMPANY = "c0000000-0000-0000-0000-00000000000b";
 const GROUP = "61000000-0000-4000-8000-000000000001";
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+/** Nhóm có CHỮ hex (a–f) — `GROUP` toàn số nên `.toUpperCase()` không đổi gì (ca chữ HOA sẽ xanh-rỗng). */
+const GROUP_HEX = "6b1f0c2e-9d3a-4e5f-8a7b-c0d1e2f3a4b5";
 
+/**
+ * Fake `Server`: ghi THỨ TỰ room-op (`order`) của CẢ HAI kênh — `server.in(...)` (toàn cụm: dưới adapter
+ * Valkey = publish, có thể MẤT) và `server.local.in(...)` (cục bộ, đồng bộ — không đi qua pub/sub).
+ */
 function makeServer() {
   const emit = vi.fn();
   const socketsJoin = vi.fn();
   const socketsLeave = vi.fn();
   const toTargets: unknown[] = [];
   const inTargets: string[] = [];
+  const order: string[] = [];
+  const opsFor = (kind: "cluster" | "local", selector: string) => ({
+    socketsJoin: (target: string) => {
+      order.push(`${kind}:join:${selector}>${target}`);
+      if (kind === "cluster") socketsJoin(target);
+    },
+    socketsLeave: (target: string) => {
+      order.push(`${kind}:leave:${selector}>${target}`);
+      if (kind === "cluster") socketsLeave(target);
+    },
+  });
   const server = {
     to: vi.fn((t: unknown) => {
       toTargets.push(t);
@@ -36,10 +53,11 @@ function makeServer() {
     }),
     in: vi.fn((t: string) => {
       inTargets.push(t);
-      return { socketsJoin, socketsLeave };
+      return opsFor("cluster", t);
     }),
+    local: { in: vi.fn((t: string) => opsFor("local", t)) },
   };
-  return { server, emit, socketsJoin, socketsLeave, toTargets, inTargets };
+  return { server, emit, socketsJoin, socketsLeave, toTargets, inTargets, order };
 }
 
 function makeEmitter() {
@@ -58,7 +76,7 @@ describe("RealtimeEmitterService — room nhóm bảng tin (S16-SOCIAL-BE-2C)", 
 
   // ─── W1 — bộ chọn của join/leave ───────────────────────────────────────────────
   it("🔒 W1a syncFeedGroupMembership('join') quét FEED-USER-room — socket trượt view:feed không bị kéo vào nhóm", () => {
-    const { svc, server, socketsJoin, socketsLeave, inTargets } = makeEmitter();
+    const { svc, server, socketsJoin, socketsLeave, inTargets, order } = makeEmitter();
 
     svc.syncFeedGroupMembership(COMPANY, GROUP, USER, "join");
 
@@ -70,17 +88,48 @@ describe("RealtimeEmitterService — room nhóm bảng tin (S16-SOCIAL-BE-2C)", 
     expect(inTargets).toEqual([feedUserRoomName(COMPANY, USER)]);
     expect(socketsJoin).toHaveBeenCalledWith(feedGroupRoomName(COMPANY, GROUP));
     expect(socketsLeave).not.toHaveBeenCalled();
+    // Join KHÔNG có vế cục bộ: join mất dưới Valkey chỉ là thiếu badge (fail-closed), không phải rò.
+    expect(order).toEqual([
+      `cluster:join:${feedUserRoomName(COMPANY, USER)}>${feedGroupRoomName(COMPANY, GROUP)}`,
+    ]);
   });
 
-  it("W1b syncFeedGroupMembership('leave') quét user-room (RỘNG HƠN) — rời nhầm là fail-safe, sót là rò", () => {
-    const { svc, server, socketsJoin, socketsLeave } = makeEmitter();
+  it("🔒 W1b leave quét user-room (RỘNG HƠN), CỤC BỘ TRƯỚC rồi mới toàn cụm — lệnh cục bộ không đi qua pub/sub nên KHÔNG mất được", () => {
+    // FULL gate lượt 1 (MEDIUM — security-reviewer + silent-failure-hunter): dưới redis-adapter 8.3.0,
+    // `socketsLeave` không cờ `local` CHỈ publish REMOTE_LEAVE; node giữ socket chỉ áp khi NHẬN LẠI qua
+    // kết nối SUBSCRIBE (pub/sub at-most-once). Sub rớt ⇒ CẢ HAI lần leave của 036/039 mất VĨNH VIỄN.
+    const { svc, server, socketsJoin, socketsLeave, order } = makeEmitter();
 
     svc.syncFeedGroupMembership(COMPANY, GROUP, USER, "leave");
 
-    expect(server.in).toHaveBeenCalledWith(userRoomName(COMPANY, USER));
+    const sel = userRoomName(COMPANY, USER);
+    const target = feedGroupRoomName(COMPANY, GROUP);
+    expect(order).toEqual([`local:leave:${sel}>${target}`, `cluster:leave:${sel}>${target}`]);
     expect(server.in).not.toHaveBeenCalledWith(feedUserRoomName(COMPANY, USER));
-    expect(socketsLeave).toHaveBeenCalledWith(feedGroupRoomName(COMPANY, GROUP));
+    expect(socketsLeave).toHaveBeenCalledWith(target);
     expect(socketsJoin).not.toHaveBeenCalled();
+  });
+
+  it("🔒 W1d id CHỮ HOA (route `ParseUUIDPipe` trả nguyên văn) ⇒ room-op dùng id CHỮ THƯỜNG — khớp room gateway dựng từ DB/JWT", () => {
+    // FULL gate lượt 1 (HIGH — database-reviewer): Postgres so uuid KHÔNG phân biệt hoa thường nên ghi DB
+    // của `039`/`036` vẫn thành công; tên room là CHUỖI ⇒ leave với id chữ HOA không khớp room nào ⇒
+    // người bị gỡ ở lại room nhóm kín (fail-OPEN). Khuôn `audiencePairKey` (`social-mentions.ts`).
+    const { svc, order } = makeEmitter();
+    const [C, G, U] = [COMPANY, GROUP_HEX, USER].map((s) => s.toUpperCase()) as [
+      string,
+      string,
+      string,
+    ];
+
+    svc.syncFeedGroupMembership(C, G, U, "leave");
+    svc.syncFeedGroupMembership(C, G, U, "join");
+
+    const target = feedGroupRoomName(COMPANY, GROUP_HEX);
+    expect(order).toEqual([
+      `local:leave:${userRoomName(COMPANY, USER)}>${target}`,
+      `cluster:leave:${userRoomName(COMPANY, USER)}>${target}`,
+      `cluster:join:${feedUserRoomName(COMPANY, USER)}>${target}`,
+    ]);
   });
 
   it("W1c chưa setServer (REALTIME_ENABLED=false / gateway chưa init) ⇒ no-op, KHÔNG ném", () => {
@@ -91,7 +140,13 @@ describe("RealtimeEmitterService — room nhóm bảng tin (S16-SOCIAL-BE-2C)", 
     }).not.toThrow();
   });
 
-  it("room-op NÉM ⇒ nuốt + warn, KHÔNG ném lên caller (caller có thể đang ở trong tx — Q-LEAVE)", () => {
+  /**
+   * ⚠️ CHỈ đo nhánh NÉM ĐỒNG BỘ (vd lỗi lập trình, server dở dang). Lỗi THẬT của adapter Valkey — publish
+   * reject / thông điệp mất — là BẤT ĐỒNG BỘ, KHÔNG BAO GIỜ rơi vào `catch` của emitter (FULL gate lượt 1,
+   * silent-failure-hunter LOW: bản cũ của ca này đọc như thể room-op hỏng luôn để lại dấu `warn`). Lưới cho
+   * lệnh MẤT là vế CỤC BỘ (W1b + `realtime-emitter.feed.io.spec.ts`), không phải log.
+   */
+  it("lệnh room NÉM ĐỒNG BỘ ⇒ nuốt, KHÔNG ném lên caller (caller có thể đang ở trong tx — Q-LEAVE)", () => {
     const { svc, server } = makeEmitter();
     server.in.mockImplementation(() => {
       throw new Error("adapter down");
@@ -99,6 +154,20 @@ describe("RealtimeEmitterService — room nhóm bảng tin (S16-SOCIAL-BE-2C)", 
 
     expect(() => svc.syncFeedGroupMembership(COMPANY, GROUP, USER, "leave")).not.toThrow();
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("vế CỤC BỘ ném ⇒ log ERROR (vế an ninh) NHƯNG vế toàn cụm VẪN chạy — hai nghĩa vụ độc lập", () => {
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const { svc, server, order } = makeEmitter();
+    server.local.in.mockImplementation(() => {
+      throw new Error("local adapter down");
+    });
+
+    expect(() => svc.syncFeedGroupMembership(COMPANY, GROUP, USER, "leave")).not.toThrow();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(order).toEqual([
+      `cluster:leave:${userRoomName(COMPANY, USER)}>${feedGroupRoomName(COMPANY, GROUP)}`,
+    ]);
   });
 
   // ─── N1 — tên room ─────────────────────────────────────────────────────────────
@@ -133,11 +202,25 @@ describe("RealtimeEmitterService — room nhóm bảng tin (S16-SOCIAL-BE-2C)", 
  *     (chứa `.parse`) được tính (M27) — vô hại khi đích cố định, nhưng là lỗ khi đích suy từ payload.
  */
 describe("RealtimeEmitterService.emitFeedPostCreated — định tuyến theo audience (S16-SOCIAL-BE-2C W3)", () => {
-  let warn: ReturnType<typeof vi.spyOn>;
+  let error: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
-    warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
   });
   afterEach(() => vi.restoreAllMocks());
+
+  /**
+   * FULL gate lượt 1 (silent-failure-hunter LOW): parse ném ở đây = hợp đồng builder ↔ union TRÔI (builder
+   * dựng payload để parse ĐƯỢC) ⇒ ERROR kèm bài nào · audience nào · nhóm nào. Thiếu ba khoá đó thì mất
+   * toàn bộ fan-out nhóm chỉ để lại một chuỗi `failed` không truy được về bài.
+   */
+  const expectDriftLogged = (postId: string, audience: string, groupId: string | null) => {
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      "emitFeedPostCreated failed",
+      expect.objectContaining({ companyId: COMPANY, postId, audience, groupId }),
+    );
+  };
 
   const POST_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
   const base = {
@@ -181,24 +264,24 @@ describe("RealtimeEmitterService.emitFeedPostCreated — định tuyến theo au
     expect(emit).toHaveBeenCalledTimes(1);
   });
 
-  it("🔒 W3c bài org_unit ⇒ parse ném ⇒ KHÔNG chạm `.to()`, 0 emit, warn, KHÔNG ném", () => {
+  it("🔒 W3c bài org_unit ⇒ parse ném ⇒ KHÔNG chạm `.to()`, 0 emit, ERROR có ngữ cảnh, KHÔNG ném", () => {
     const { svc, emit, toTargets } = makeEmitter();
     expect(() =>
       svc.emitFeedPostCreated(COMPANY, { ...base, audience: "org_unit", groupId: null } as never),
     ).not.toThrow();
     expect(toTargets).toEqual([]);
     expect(emit).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledTimes(1);
+    expectDriftLogged(POST_ID, "org_unit", null);
   });
 
-  it("🔒 W3d bài group THIẾU groupId ⇒ không định tuyến được ⇒ `toTargets = []`, 0 emit, warn", () => {
+  it("🔒 W3d bài group THIẾU groupId ⇒ không định tuyến được ⇒ `toTargets = []`, 0 emit, ERROR có ngữ cảnh", () => {
     const { svc, emit, toTargets } = makeEmitter();
     expect(() =>
       svc.emitFeedPostCreated(COMPANY, { ...groupPost, groupId: null } as never),
     ).not.toThrow();
     expect(toTargets).toEqual([]);
     expect(emit).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledTimes(1);
+    expectDriftLogged(POST_ID, "group", null);
   });
 
   it("W3e payload group mang khoá theo-actor/khối/URL ⇒ khoá đó bị BÓC khỏi thứ phát ra", () => {

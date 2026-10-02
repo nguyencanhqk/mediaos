@@ -52,6 +52,8 @@ function makeDeps() {
   // Ca của RT-1 tự override từng cái khi cần.
   const permissions = {
     can: vi.fn(async () => ({ allow: true, reason: "ok", auditRequired: false })),
+    // S16-SOCIAL-BE-2C (FULL gate lượt 1): cổng bảng tin hỏi scope `view:feed` (sàn Company) — "đường thông".
+    resolveStrongestScope: vi.fn(async () => "Company"),
   } as unknown as PermissionService;
   const listRoomsForUser = vi.fn(async () => [] as { id: string }[]);
   const chatRooms = { listRoomsForUser } as unknown as ChatRoomsRepository;

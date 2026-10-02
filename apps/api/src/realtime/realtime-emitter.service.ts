@@ -348,9 +348,25 @@ export class RealtimeEmitterService {
    *
    * ⚠️ Thời điểm gọi do caller quyết (`social-groups.service.ts`): `join` CHỈ SAU commit; `leave` gọi CẢ
    * TRONG tx lẫn SAU commit (owner ký Q-LEAVE (a)) — ngoại lệ có chủ đích của luật «gọi sau commit» đầu
-   * file, cùng lập luận `evictFromCallRoom`. Dưới adapter Valkey, `socketsJoin/Leave` KHÔNG áp ngay mà đi
-   * vòng pub/sub (bất đồng bộ ≈ RTT, kể cả trên cùng instance — M23): lệnh `leave` trong tx được publish
-   * TRƯỚC commit nên gần như chắc đã áp khi sự kiện sau-commit đầu tiên chảy; phần dư ghi API-19 §7.
+   * file, cùng lập luận `evictFromCallRoom`.
+   *
+   * ┌─ FULL gate lượt 1 — HAI lớp vá ở ĐÚNG cửa này (mọi room-op của room nhóm đều đi qua đây) ───────┐
+   * │ (1) CHỮ THƯỜNG (database-reviewer HIGH). `groupId`/`userId` của `035/036/038/039` tới từ ROUTE:  │
+   * │     `ParseUUIDPipe` nhận chữ HOA và trả NGUYÊN VĂN. Postgres so uuid không phân biệt hoa thường ⇒ │
+   * │     lời ghi DB vẫn thành công, nhưng tên room là CHUỖI và room của gateway dựng từ DB/JWT (luôn  │
+   * │     thường) ⇒ leave chữ HOA khớp 0 socket ⇒ người bị gỡ Ở LẠI room nhóm kín (fail-OPEN); join     │
+   * │     chữ HOA vào room ma (fail-closed). Khuôn `audiencePairKey` (`social-mentions.ts`).          │
+   * │ (2) `leave` CỤC BỘ TRƯỚC (security-reviewer + silent-failure-hunter MEDIUM). Dưới adapter Valkey │
+   * │     (redis-adapter 8.3.0) `socketsLeave` không cờ `local` CHỈ publish REMOTE_LEAVE; chính node   │
+   * │     giữ socket chỉ áp khi NHẬN LẠI qua kết nối SUBSCRIBE. Pub/sub là at-most-once: kết nối sub   │
+   * │     rớt (vượt `client-output-buffer-limit pubsub`, Valkey khởi động lại) ⇒ lệnh MẤT VĨNH VIỄN —   │
+   * │     không phải trễ «≈ RTT» như bản đầu ghi — trong khi broadcast vẫn phát CỤC BỘ, ĐỒNG BỘ ⇒      │
+   * │     người bị mời ra nhận bài nhóm kín tới khi disconnect. `server.local…socketsLeave` áp ĐỒNG BỘ │
+   * │     trên node này, không qua pub/sub ⇒ không mất được; lệnh toàn cụm phía sau vẫn chạy cho node  │
+   * │     khác. Phần dư (API-19 §7.3 (c)): đa-instance + sub rớt ⇒ socket ở node KHÁC còn ở room.      │
+   * │     `join` KHÔNG có vế cục bộ: join mất chỉ là thiếu badge (fail-closed).                       │
+   * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+   * CHAT `syncRoomMembership` CỐ Ý chưa đổi (cùng hai lớp lỗi — nợ seed `S17-CHAT-RTROOMOPS-1`).
    */
   syncFeedGroupMembership(
     companyId: string,
@@ -358,15 +374,38 @@ export class RealtimeEmitterService {
     userId: string,
     action: "join" | "leave",
   ): void {
-    this.syncSocketRoom(
-      {
-        join: feedUserRoomName(companyId, userId),
-        leave: userRoomName(companyId, userId),
-        target: feedGroupRoomName(companyId, groupId),
-      },
-      action,
-      { label: "syncFeedGroupMembership", groupId, userId },
-    );
+    const [c, g, u] = [companyId.toLowerCase(), groupId.toLowerCase(), userId.toLowerCase()];
+    const rooms = {
+      join: feedUserRoomName(c, u),
+      leave: userRoomName(c, u),
+      target: feedGroupRoomName(c, g),
+    };
+    const logCtx = { label: "syncFeedGroupMembership", groupId: g, userId: u };
+    if (action === "leave") this.leaveLocally(rooms.leave, rooms.target, logCtx);
+    this.syncSocketRoom(rooms, action, logCtx);
+  }
+
+  /**
+   * Vế AN NINH của `syncFeedGroupMembership('leave')`: rời room TRÊN NODE NÀY, đồng bộ, không qua pub/sub
+   * (`server.local` = cờ `local` ⇒ redis-adapter gọi thẳng `super.delSockets`). try/catch RIÊNG — vế này
+   * ném KHÔNG được bỏ qua lệnh toàn cụm (cùng lý do hai khối riêng của `severUserSessions`), và log `error`
+   * như `evictFromCallRoom`: sót lại một socket là RÒ, không phải suy giảm UX.
+   */
+  private leaveLocally(
+    selector: string,
+    target: string,
+    logCtx: { label: string } & Record<string, string>,
+  ): void {
+    if (!this.server) return;
+    try {
+      this.server.local.in(selector).socketsLeave(target);
+    } catch (err) {
+      const { label, ...ctx } = logCtx;
+      this.logger.error(`${label} leave CỤC BỘ thất bại — socket có thể còn ở room nhóm`, {
+        ...ctx,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /**
@@ -374,6 +413,12 @@ export class RealtimeEmitterService {
    * do CALLER truyền, có chủ đích BẤT ĐỐI XỨNG (xem docblock `syncRoomMembership`): join quét room đánh
    * dấu HẸP của cổng tương ứng, leave quét `userRoomName` RỘNG. No-op khi chưa có server; KHÔNG BAO GIỜ
    * ném lên caller (caller có thể đang ở trong transaction — ném = rollback một thao tác đã đúng).
+   *
+   * ⚠️ `try/catch` CHỈ phủ nhánh ném ĐỒNG BỘ (FULL gate lượt 1, silent-failure-hunter — chép cảnh báo của
+   * `evictFromCallRoom`). Với adapter Valkey, lệnh không cờ `local` là một `publish` không ai await: reject
+   * KHÔNG rơi vào `catch` (thành `unhandledRejection`), và thông điệp MẤT trên đường pub/sub thì không để lại
+   * dòng log nào. «Không thấy `failed` trong log» KHÔNG có nghĩa room-op đã áp — lưới cho lệnh mất là vế
+   * cục bộ của caller (`leaveLocally`), không phải log này.
    */
   private syncSocketRoom(
     rooms: { join: string; leave: string; target: string },
@@ -575,7 +620,12 @@ export class RealtimeEmitterService {
    *
    * ⚠️ KHÁC `emitToFeed`: ở đó `.to(feedRoomName)` chạy TRƯỚC khi `build()` (chứa `.parse`) được tính
    * (plan M27) — vô hại khi đích cố định, nhưng là lỗ khi đích SUY TỪ payload. Ở đây parse ném ⇒ KHÔNG
-   * chạm `.to()` nào (bất biến 7), nuốt + `warn` (hợp đồng «không ném lên caller» giữ nguyên).
+   * chạm `.to()` nào (bất biến 7), nuốt (hợp đồng «không ném lên caller» giữ nguyên) + `error`.
+   *
+   * `error` kèm `postId`/`audience`/`groupId` (FULL gate lượt 1, silent-failure-hunter): builder
+   * `buildWsPostCreatedEvent` dựng payload ĐỂ parse được, nên parse ném ở đây = hợp đồng builder ↔ union
+   * đã TRÔI (vd một khoá bắt buộc mới của DTO) — mọi bài cùng dạng mất fan-out. Một dòng `warn` không bài,
+   * không audience thì không phân biệt nổi với nhiễu.
    */
   emitFeedPostCreated(companyId: string, payload: WsFeedPostCreatedEvent): void {
     if (!this.server) return;
@@ -583,8 +633,11 @@ export class RealtimeEmitterService {
       const parsed = wsFeedPostCreatedEventSchema.parse(payload);
       this.server.to(feedPostRoomName(companyId, parsed)).emit(WS_EVENTS.FEED_POST_CREATED, parsed);
     } catch (err) {
-      this.logger.warn("emitFeedPostCreated failed", {
+      this.logger.error("emitFeedPostCreated failed", {
         companyId,
+        postId: payload.id,
+        audience: payload.audience,
+        groupId: payload.groupId,
         error: err instanceof Error ? err.message : String(err),
       });
     }

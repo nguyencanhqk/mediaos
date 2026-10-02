@@ -1,6 +1,16 @@
-import type { FeedPostDto, WsFeedPostCreatedEvent } from "@mediaos/contracts";
+import type {
+  FeedAudienceDto,
+  FeedPostDto,
+  FeedPostStatusDto,
+  WsFeedPostCreatedEvent,
+} from "@mediaos/contracts";
 
-/** Ba cột của HÀNG DB quyết định bài có được phát không và phát vào room nào. */
+/**
+ * Ba cột của HÀNG DB quyết định bài có được phát không và phát vào room nào. Giữ `string` vì đó là kiểu
+ * cột `text` mà repository trả (`PostRow`); các LITERAL so sánh bên dưới mới là thứ phải được trình biên
+ * dịch kiểm (`satisfies` — FULL gate lượt 1, typescript-reviewer LOW): gõ nhầm `"publish"` hay đổi tên một
+ * giá trị enum ở contracts là ĐỎ lúc BIÊN DỊCH, không phải một builder trả `null` cho MỌI bài trong im lặng.
+ */
 export interface WsPostRouteRow {
   audience: string;
   status: string;
@@ -30,7 +40,7 @@ export function buildWsPostCreatedEvent(
   row: WsPostRouteRow,
   dto: FeedPostDto,
 ): WsFeedPostCreatedEvent | null {
-  if (row.status !== "published") return null;
+  if (row.status !== ("published" satisfies FeedPostStatusDto)) return null;
   const {
     myReaction: _mr,
     savedByMe: _sb,
@@ -49,10 +59,10 @@ export function buildWsPostCreatedEvent(
   } = dto;
   const base = { ...rest, attachments: attachments.map(({ url: _u, ...a }) => a) };
 
-  if (row.audience === "company") {
+  if (row.audience === ("company" satisfies FeedAudienceDto)) {
     return { ...base, audience: "company", groupId: null, orgUnitId: null };
   }
-  if (row.audience === "group" && row.groupId) {
+  if (row.audience === ("group" satisfies FeedAudienceDto) && row.groupId) {
     return { ...base, audience: "group", groupId: row.groupId, orgUnitId: null };
   }
   return null;

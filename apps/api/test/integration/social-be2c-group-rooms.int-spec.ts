@@ -18,6 +18,7 @@ import "reflect-metadata";
 import type { AddressInfo } from "node:net";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool } from "pg";
 import type { Namespace } from "socket.io";
 import type { Socket as ClientSocket } from "socket.io-client";
@@ -26,8 +27,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
 import { loadEnv } from "../../src/config/env.schema";
+import * as schema from "../../src/db/schema";
 import { RealtimeEmitterService } from "../../src/realtime/realtime-emitter.service";
-import { feedGroupRoomName, feedUserRoomName } from "../../src/realtime/rooms";
+import { feedGroupRoomName, feedRoomName, feedUserRoomName } from "../../src/realtime/rooms";
 import { setupWebSocketAdapter } from "../../src/realtime/setup-websocket-adapter";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { directPool, hasDb } from "../helpers/integration-db";
@@ -35,6 +37,7 @@ import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../hel
 import {
   FEED_MEMBER_PAIRS,
   NO_FEED_PAIRS,
+  becomes,
   connectReady,
   gatewayNamespace,
   isMember,
@@ -42,6 +45,7 @@ import {
   seedActor,
   seedGroup,
   type FeedRecorder,
+  type SeedScope,
 } from "../helpers/social-group-rooms-fixture";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
@@ -75,13 +79,21 @@ describe.skipIf(!hasLaneDb)(
     let NV: Who; // vai KHÔNG có `view:feed` — thành viên `active` của K sau khi O duyệt (M18)
     let M4: Who;
     let Bb: Who; // công ty B
+    // FULL gate lượt 1 — Dm: `view:feed` @Department (REST 403 SCOPE-DENIED), thành viên active của KS ·
+    // Mu/Mv: thành viên active của KU, bị gỡ bằng route có id CHỮ HOA.
+    let Dm: Who;
+    let Mu: Who;
+    let Mv: Who;
     let K = "";
     let P = "";
+    let KS = "";
+    let KU = "";
     /** Socket sống qua nhiều ca (thứ tự ca CÓ ý nghĩa — file chạy tuần tự). */
     const sock: Record<string, FeedRecorder> = {};
 
     const http = () => request(app.getHttpServer());
     const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+    const get = (t: string, u: string) => http().get(u).set(auth(t));
     const post = (t: string, u: string) => http().post(u).set(auth(t));
     const patch = (t: string, u: string) => http().patch(u).set(auth(t));
     const del = (t: string, u: string) => http().delete(u).set(auth(t));
@@ -91,8 +103,9 @@ describe.skipIf(!hasLaneDb)(
       label: string,
       hash: string,
       pairs: readonly string[] = FEED_MEMBER_PAIRS,
+      scopes?: Readonly<Record<string, SeedScope>>,
     ): Promise<Who> {
-      const { userId, email } = await seedActor(direct, tenant, label, hash, pairs);
+      const { userId, email } = await seedActor(direct, tenant, label, hash, pairs, { scopes });
       const res = await http()
         .post("/auth/login")
         .send({ companySlug: tenant.slug, email, password: LOGIN_PW });
@@ -142,6 +155,9 @@ describe.skipIf(!hasLaneDb)(
       NV = await actor(A, "nv", hash, NO_FEED_PAIRS);
       M4 = await actor(A, "m4", hash);
       Bb = await actor(B, "bb", hash);
+      Dm = await actor(A, "dm", hash, FEED_MEMBER_PAIRS, { "view:feed": "Department" });
+      Mu = await actor(A, "mu", hash);
+      Mv = await actor(A, "mv", hash);
 
       K = await seedGroup(direct, A.companyId, "private", [
         { userId: O.userId, role: "owner" },
@@ -152,6 +168,16 @@ describe.skipIf(!hasLaneDb)(
         { userId: NV.userId, role: "member", status: "pending" },
       ]);
       P = await seedGroup(direct, A.companyId, "public", [{ userId: O.userId, role: "owner" }]);
+      // Dm có thể đã vào KS TRƯỚC khi vai bị hạ scope (hoặc qua `031`/`038`) — gieo thẳng `active`.
+      KS = await seedGroup(direct, A.companyId, "private", [
+        { userId: O.userId, role: "owner" },
+        { userId: Dm.userId, role: "member" },
+      ]);
+      KU = await seedGroup(direct, A.companyId, "private", [
+        { userId: O.userId, role: "owner" },
+        { userId: Mu.userId, role: "member" },
+        { userId: Mv.userId, role: "member" },
+      ]);
     }, 180_000);
 
     afterAll(async () => {
@@ -183,9 +209,15 @@ describe.skipIf(!hasLaneDb)(
       let KR = "";
       let PR = "";
       let QR = "";
+      let Ub = "";
+      let KB = "";
 
       beforeAll(async () => {
         U = await seedUser(direct, R.companyId, `u@${R.slug}.test`);
+        // Neo dương ở TENANT B (FULL gate lượt 1, database-reviewer LOW): «tenant khác ⇒ []» chỉ có nghĩa
+        // khi reader CHẠY ĐƯỢC ở tenant đó cho một thành viên thật của nó.
+        Ub = await seedUser(direct, B.companyId, `ub-${Date.now()}@${B.slug}.test`);
+        KB = await seedGroup(direct, B.companyId, "private", [{ userId: Ub, role: "owner" }]);
         Vp = await seedUser(direct, R.companyId, `v@${R.slug}.test`);
         W = await seedUser(direct, R.companyId, `w@${R.slug}.test`);
         Z = await seedUser(direct, R.companyId, `z@${R.slug}.test`);
@@ -229,10 +261,25 @@ describe.skipIf(!hasLaneDb)(
         expect(await (await reader()).listActiveGroupIds(R.companyId, Z)).toEqual([]);
       });
 
-      it("🔒 R5 CHỊU LỰC: đúng CHÍNH XÁC [K] — không P (mở, không thuộc), không Q (pending); tenant khác ⇒ []", async () => {
+      it("🔒 R5 CHỊU LỰC: đúng CHÍNH XÁC [K] — không P (mở, không thuộc), không Q (pending); tenant khác ⇒ [] (RLS FORCE), neo dương tenant B ⇒ [KB]", async () => {
         const r = await reader();
         expect(await r.listActiveGroupIds(R.companyId, U)).toEqual([KR]);
+        // Vế này do RLS + FORCE của `withTenant(B)` gác (hàng của U ở tenant R vô hình trong tx của B) —
+        // KHÔNG đo vế `company_id` tường minh của reader; vế đó đo ở R5b dưới phiên bỏ qua RLS.
         expect(await r.listActiveGroupIds(B.companyId, U)).toEqual([]);
+        expect(await r.listActiveGroupIds(B.companyId, Ub)).toEqual([KB]);
+      });
+
+      it("🔒 R5b vế `company_id` TƯỜNG MINH của reader (bất biến 1) — đo dưới phiên superuser BỎ QUA RLS", async () => {
+        // FULL gate lượt 1 (database-reviewer LOW): ca tenant-B ở R5 chỉ đỏ nếu FORCE RLS vỡ. Ở đây RLS
+        // KHÔNG lọc gì (superuser) ⇒ chỉ còn `eq(feed_groups.company_id)` + `gm.company_id` của vị từ
+        // chặn được hàng tenant R khi hỏi bằng companyId B. Bỏ CẢ HAI ⇒ trả [KR] (đỏ).
+        const { listActiveFeedGroupIdsTx } =
+          await import("../../src/social/social-group-rooms.reader");
+        const superDb = drizzle(direct, { schema });
+        // Neo dương: cùng phiên, đúng công ty ⇒ thấy nhóm (câu chạy thật, không rỗng vì lỗi).
+        expect(await listActiveFeedGroupIdsTx(superDb as never, R.companyId, U)).toEqual([KR]);
+        expect(await listActiveFeedGroupIdsTx(superDb as never, B.companyId, U)).toEqual([]);
       });
     });
 
@@ -388,6 +435,63 @@ describe.skipIf(!hasLaneDb)(
       });
       expect(write.status, JSON.stringify(write.body)).toBe(404);
       expect(write.body.error?.code).toBe("SOCIAL-ERR-012");
+    });
+
+    // ═══════════════ FULL gate lượt 1 ═══════════════
+    it("🔒 E10m `view:feed` @Department (REST 403 SCOPE-DENIED) ⇒ KHÔNG room bảng tin nào dù là thành viên active của nhóm kín", async () => {
+      // HIGH (security-reviewer + typescript-reviewer): cổng cũ `can()` mù `data_scope` ⇒ Dm vào `feed`,
+      // `feeduser` và room nhóm kín, nhận trọn payload bài trong khi MỌI route SOCIAL trả 403 cho Dm.
+      const rest = await get(Dm.token, `/social/groups/${KS}`);
+      expect(rest.status, JSON.stringify(rest.body)).toBe(403);
+      expect(JSON.stringify(rest.body)).toContain("AUTH-ERR-SCOPE-DENIED");
+      // Neo dương: thành viên @Company của CÙNG nhóm vào room KS lúc connect (reader/room chạy thật).
+      const oFresh = await ready(O);
+      expect(await inRoom(feedGroupRoomName(A.companyId, KS), oFresh)).toBe(true);
+
+      // Readiness (`chatuser`) ⇒ khối bảng tin của `handleConnection` đã xong — membership âm là tất định.
+      const dm = await ready(Dm);
+      expect(
+        await inRoom(feedUserRoomName(A.companyId, Dm.userId), dm),
+        "Dm @Department KHÔNG được ở room đánh dấu feeduser (038 về sau sẽ kéo vào nhóm qua nó)",
+      ).toBe(false);
+      expect(await inRoom(feedRoomName(A.companyId), dm), "Dm KHÔNG ở room công ty").toBe(false);
+      expect(
+        await inRoom(feedGroupRoomName(A.companyId, KS), dm),
+        "Dm KHÔNG ở room nhóm kín KS",
+      ).toBe(false);
+    });
+
+    it("🔒 E11m `039` với id CHỮ HOA (ParseUUIDPipe nhận /i, trả nguyên văn) ⇒ người bị mời ra VẪN rời room nhóm", async () => {
+      // HIGH (database-reviewer): Postgres so uuid không phân biệt hoa thường ⇒ xoá hàng thành công (200),
+      // nhưng tên room là CHUỖI ⇒ leave cũ khớp `co:A:user:{MU-HOA}` thay vì room thật ⇒ Mu ở lại KU.
+      const mu = await ready(Mu);
+      expect(await inRoom(feedGroupRoomName(A.companyId, KU), mu), "neo: Mu ở KU trước 039").toBe(
+        true,
+      );
+
+      const res = await del(
+        O.token,
+        `/social/groups/${KU.toUpperCase()}/members/${Mu.userId.toUpperCase()}`,
+      );
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(
+        await becomes(async () => !(await inRoom(feedGroupRoomName(A.companyId, KU), mu))),
+        "E11m: Mu PHẢI rời room KU sau 039 với id CHỮ HOA",
+      ).toBe(true);
+    });
+
+    it("🔒 E12m `036` với id nhóm CHỮ HOA ⇒ người tự rời VẪN rời room nhóm", async () => {
+      const mv = await ready(Mv);
+      expect(await inRoom(feedGroupRoomName(A.companyId, KU), mv), "neo: Mv ở KU trước 036").toBe(
+        true,
+      );
+
+      const res = await post(Mv.token, `/social/groups/${KU.toUpperCase()}/leave`);
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(
+        await becomes(async () => !(await inRoom(feedGroupRoomName(A.companyId, KU), mv))),
+        "E12m: Mv PHẢI rời room KU sau 036 với id nhóm CHỮ HOA",
+      ).toBe(true);
     });
   },
 );

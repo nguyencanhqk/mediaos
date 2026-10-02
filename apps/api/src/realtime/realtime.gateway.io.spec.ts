@@ -49,7 +49,11 @@ describe("RealtimeGateway (socket.io integration)", () => {
       new RealtimeEmitterService(),
       // S7-CHAT-RT-1: spec này dựng server socket.io TRẦN (không AppModule, không DB) — 3 phụ thuộc mới
       // chỉ cần đủ để `handleConnection` chạy tới hết. Cổng quyền cho qua, 0 phòng chat.
-      { can: async () => ({ allow: true, reason: "ok", auditRequired: false }) } as never,
+      {
+        can: async () => ({ allow: true, reason: "ok", auditRequired: false }),
+        // S16-SOCIAL-BE-2C (FULL gate lượt 1): cổng bảng tin hỏi scope `view:feed` (sàn Company).
+        resolveStrongestScope: async () => "Company",
+      } as never,
       { listRoomsForUser: async () => [] } as never,
       { withTenant: async (_c: string, fn: (tx: unknown) => Promise<unknown>) => fn({}) } as never,
       // S8-CHAT-UX-RT-1: presence no-op — spec này đo handshake/room, không đo presence.

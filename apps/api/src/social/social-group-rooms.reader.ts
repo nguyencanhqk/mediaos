@@ -50,8 +50,9 @@ export async function listActiveFeedGroupIdsTx(
  * Bề mặt DI của reader cho `RealtimeGateway` — lớp DUY NHẤT của `social/**` mà tầng realtime được
  * chạm (module lá `SocialGroupRoomsModule`; ratchet `feed-realtime-structure.spec.ts` S1/S2).
  *
- * Mở `withTenant` RIÊNG (RLS + FORCE) và gateway gọi nó NGOÀI mọi tx khác, tuần tự với `can()`
- * (M10 — `PermissionService.can` tự mở `withTenant`; lồng hai tx là treo IM LẶNG trên PgBouncer).
+ * Mở `withTenant` RIÊNG (RLS + FORCE) và gateway gọi nó NGOÀI mọi tx khác, tuần tự với cổng scope
+ * `view:feed` (M10 — `PermissionService.resolveStrongestScope` tự mở `withTenant`; lồng hai tx là treo IM
+ * LẶNG trên PgBouncer).
  */
 @Injectable()
 export class SocialGroupRoomsReader {

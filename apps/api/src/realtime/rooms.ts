@@ -64,7 +64,8 @@ export function callRoomName(companyId: string, callId: string): string {
 }
 
 /**
- * S16-SOCIAL-BE-1 — bảng tin nội bộ của MỘT công ty. Mọi socket đã qua cổng `view:feed` join room này.
+ * S16-SOCIAL-BE-1 — bảng tin nội bộ của MỘT công ty. Mọi socket đã qua cổng `view:feed` join room này
+ * (BE-2C FULL gate lượt 1: cổng = scope MẠNH NHẤT của cặp ≥ Company — CÙNG sàn `companyFloor` của REST).
  *
  * ⚠️ **CHỈ bài `audience='company'` được phát vào đây.** Room này chứa cả công ty, nên một bài
  * `audience='org_unit'` hay `'group'` bắn vào nó là phát đúng nội dung mà REST trả 404 cho chính những
@@ -84,8 +85,8 @@ export function feedRoomName(companyId: string): string {
 /**
  * S16-SOCIAL-BE-2C (D-OWNER-2, owner chốt 22/09/2026) — room riêng cho 1 user **TRONG PHẠM VI BẢNG
  * TIN**. Đây là room **ĐÁNH DẤU**, KHÔNG phải đích phát sự kiện nào: socket chỉ join khi **đã qua cổng
- * quyền `view:feed`** ở `RealtimeGateway.handleConnection`, còn `userRoomName` thì MỌI socket đã xác
- * thực đều join để nhận `notification:new`.
+ * quyền `view:feed` @Company** (sàn scope của REST) ở `RealtimeGateway.handleConnection`, còn
+ * `userRoomName` thì MỌI socket đã xác thực đều join để nhận `notification:new`.
  *
  * Nó tồn tại cho ĐÚNG MỘT chỗ dùng: **bộ chọn socket của `syncFeedGroupMembership('join')`** (lệnh
  * `in(feedUserRoomName).socketsJoin(feedGroupRoomName)`). Cùng lập luận với `chatUserRoomName` ở trên:
@@ -101,7 +102,7 @@ export function feedUserRoomName(companyId: string, userId: string): string {
 
 /**
  * S16-SOCIAL-BE-2C — room của MỘT nhóm bảng tin: đích `feed:post.created` của bài `audience='group'`
- * (API-19 §7). Chỉ chứa socket thoả CẢ HAI: (a) đã qua cổng `view:feed` lúc connect, và (b) của thành
+ * (API-19 §7). Chỉ chứa socket thoả CẢ HAI: (a) đã qua cổng `view:feed` @Company lúc connect, và (b) của thành
  * viên `status='active'` của nhóm CÒN SỐNG (`deleted_at IS NULL`), cùng `company_id` — kể cả nhóm
  * `public` (người ngoài đọc được bài nhóm public qua REST, nhưng KHÔNG có room: feed chính loại bài nhóm
  * và WS một chiều không cho client tự xin room).
