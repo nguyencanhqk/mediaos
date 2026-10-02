@@ -26,17 +26,13 @@ import { Bookmark, Lightbulb, MessageSquare, Pin } from "lucide-react";
 import { Avatar, cn } from "@mediaos/ui";
 import type { FeedPostDto, FeedReactionEmojiDto, FeedReactionSummaryDto } from "@mediaos/contracts";
 import { PostBody } from "./PostBody";
+import { PostAttachments } from "./PostAttachments";
 import { FeedReactionBar } from "./FeedReactionBar";
 import { PostCardMenu, type PostCardMenuActions } from "./PostCardMenu";
 import { PollBlock } from "./PollBlock";
 import { KudosBlock } from "../../kudos/components/KudosBlock";
 import { IdeaStatusPill } from "../../ideas/components/IdeaStatusPill";
-import {
-  authorDisplayName,
-  buildImageGrid,
-  isFullyRenderableType,
-  relativeTime,
-} from "../lib/feed-format";
+import { authorDisplayName, isFullyRenderableType, relativeTime } from "../lib/feed-format";
 
 interface PostCardProps {
   post: FeedPostDto;
@@ -70,7 +66,6 @@ export function PostCard({
   const { t } = useTranslation("social");
 
   const name = authorDisplayName(post.author, t("post.unknownAuthor"));
-  const grid = buildImageGrid(post.attachments);
   const renderBody = isFullyRenderableType(post.type);
 
   return (
@@ -174,28 +169,11 @@ export function PostCard({
         </div>
       )}
 
-      {grid.shown.length > 0 && (
-        <div
-          data-testid="post-image-grid"
-          className={cn("mt-3 grid gap-1", grid.columns === 1 ? "grid-cols-1" : "grid-cols-2")}
-        >
-          {grid.shown.map((att, i) => (
-            <div key={att.fileId} className="relative overflow-hidden rounded-md bg-muted">
-              <img
-                src={att.url ?? undefined}
-                alt={t("post.imageAlt", { index: i + 1, total: grid.shown.length })}
-                loading="lazy"
-                className="h-full w-full object-cover"
-              />
-              {i === grid.shown.length - 1 && grid.overflow > 0 && (
-                <span className="absolute inset-0 flex items-center justify-center bg-foreground/60 text-lg font-semibold text-background">
-                  {t("post.moreImages", { count: grid.overflow })}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {/*
+        S16-SOCIAL-FE-2D — lưới ảnh · video · tệp. `url:null` / lược đồ lạ ⇒ không vẽ; ảnh/video hết hạn
+        ký ⇒ ô trung tính (xem docblock `PostAttachments`).
+      */}
+      <PostAttachments attachments={post.attachments} className="mt-3" />
 
       <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3">
         <FeedReactionBar

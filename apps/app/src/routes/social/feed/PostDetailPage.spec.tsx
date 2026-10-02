@@ -261,6 +261,38 @@ describe("S16-SOCIAL-MENTIONLINK-1 — D1: `droppedMentions` của bình luận 
   });
 });
 
+describe("S16-SOCIAL-FE-2D — E2: lỗi gửi bình luận kèm tệp nói ĐÚNG lý do", () => {
+  it("015 ném 422 `SOCIAL-ERR-007` ⇒ dải lỗi mang `data-reason=attachmentRejected` (không «thử lại»)", async () => {
+    getPost.mockResolvedValue(makePost());
+    createComment.mockRejectedValue(
+      new ApiError(422, "SOCIAL-ERR-007", "SOCIAL-ERR-007: tệp đính kèm không hợp lệ."),
+    );
+    renderWithProviders(<PostDetailPage />);
+
+    await waitFor(() => expect(screen.getByTestId("comment-composer")).toBeInTheDocument());
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "kèm tệp" } });
+    fireEvent.click(screen.getByTestId("comment-submit"));
+
+    const banner = await screen.findByTestId("feed-action-error");
+    expect(banner.getAttribute("data-reason")).toBe("attachmentRejected");
+    expect(banner).toHaveTextContent(t("actionError.reason.attachmentRejected"));
+  });
+
+  it("đối chứng: lỗi bình luận KHÔNG phải tệp ⇒ không `reason` (câu chung như cũ)", async () => {
+    getPost.mockResolvedValue(makePost());
+    createComment.mockRejectedValue(serverError());
+    renderWithProviders(<PostDetailPage />);
+
+    await waitFor(() => expect(screen.getByTestId("comment-composer")).toBeInTheDocument());
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "x" } });
+    fireEvent.click(screen.getByTestId("comment-submit"));
+
+    const banner = await screen.findByTestId("feed-action-error");
+    expect(banner.getAttribute("data-reason")).toBeNull();
+    expect(banner.getAttribute("data-kind")).toBe("comment");
+  });
+});
+
 describe("C8 — DENY: bài đã xoá / không được xem", () => {
   it("404 ⇒ trạng thái RỖNG có nghĩa + lối về bảng tin, KHÔNG phải màn lỗi", async () => {
     getPost.mockRejectedValue(notFound());

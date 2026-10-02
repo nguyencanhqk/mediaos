@@ -68,6 +68,9 @@ export const ACTION_ERROR_REASONS = [
   "kudosRecipientLimit",
   "kudosRecipientInvalid",
   "kudosBadgeInvalid",
+  // S16-SOCIAL-FE-2D — đính kèm (`SOCIAL-ERR-007` · `SOCIAL-ERR-FILE-TARGET-*-DENIED`).
+  "attachmentRejected",
+  "attachDenied",
 ] as const;
 export type ActionErrorReason = (typeof ACTION_ERROR_REASONS)[number];
 

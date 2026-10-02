@@ -174,6 +174,32 @@ describe("S16-SOCIAL-MENTIONLINK-1 — B3: bình luận truyền `mentions` xu�
   });
 });
 
+describe("S16-SOCIAL-FE-2D — R3: bình luận VẼ đính kèm (trước đây bỏ qua dù DTO luôn chở)", () => {
+  it("bình luận có ảnh ⇒ khối `comment-attachments` chứa ảnh; `url:null` không vẽ", () => {
+    renderList([
+      base({
+        attachments: [
+          {
+            fileId: "i1",
+            kind: "image",
+            fileName: "a.png",
+            sizeBytes: 9,
+            url: "https://cdn.invalid/a.png",
+          },
+          { fileId: "i2", kind: "image", fileName: "b.png", sizeBytes: 9, url: null },
+        ],
+      }),
+    ]);
+    const box = screen.getByTestId("comment-attachments");
+    expect(box.querySelectorAll("img")).toHaveLength(1);
+  });
+
+  it("đối chứng: bình luận KHÔNG tệp ⇒ không có khối đính kèm rỗng", () => {
+    renderList([base({})]);
+    expect(screen.queryByTestId("comment-attachments")).toBeNull();
+  });
+});
+
 /**
  * ┌─ H5 · BA TRẠNG THÁI CỦA DANH SÁCH BÌNH LUẬN ────────────────────────────────────────────────┐
  * │ Trước bản vá, `commentsQuery.isLoading` và `.isError` KHÔNG được dùng ở đâu trong             │
@@ -354,8 +380,18 @@ describe("CommentComposer — cổng quyền + trần độ dài", () => {
     expect(screen.getByTestId("comment-submit")).toBeDisabled();
   });
 
-  it("KHÔNG có nút đính kèm (D8 · nợ N1)", () => {
-    const { container } = wrap(<CommentComposer onSubmit={vi.fn()} isSubmitting={false} />);
-    expect(container.querySelector('input[type="file"]')).toBeNull();
+  /**
+   * S16-SOCIAL-FE-2D thay lời hứa D8 cũ («KHÔNG có nút đính kèm» — khi đó chưa có route SOCIAL nào cho
+   * tệp): từ BE-1C (#538) `054/055` gác `create:feed-comment` — CÙNG cặp mà ô soạn đã đòi. Ca tải/khoá ở
+   * `CommentComposer.attach.spec.tsx`.
+   */
+  it("nút đính kèm sống TRONG ô soạn: có cặp ⇒ có input tệp; thiếu cặp ⇒ không (ẩn cả ô)", () => {
+    const view = wrap(<CommentComposer onSubmit={vi.fn()} isSubmitting={false} />);
+    expect(view.container.querySelector('input[type="file"]')).not.toBeNull();
+    view.unmount();
+
+    setCaps({ "view:feed": true });
+    const denied = wrap(<CommentComposer onSubmit={vi.fn()} isSubmitting={false} />);
+    expect(denied.container.querySelector('input[type="file"]')).toBeNull();
   });
 });

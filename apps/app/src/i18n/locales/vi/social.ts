@@ -18,6 +18,7 @@
  */
 import groups from "./social-groups";
 import kudos from "./social-kudos";
+import attachment from "./social-attachments";
 
 export default {
   // ── Khung portal ────────────────────────────────────────────────────────────
@@ -406,6 +407,8 @@ export default {
   groups,
   // ── S16-SOCIAL-FE-2C — Vinh danh (SOC-SCREEN-009), file riêng `social-kudos.ts` ──
   kudos,
+  // ── S16-SOCIAL-FE-2D — Đính kèm (054/055 + vẽ tệp), file riêng `social-attachments.ts` ──
+  attachment,
 
   actionError: {
     forbidden: {
@@ -476,6 +479,11 @@ export default {
         "Có người nhận không còn hợp lệ (hồ sơ đã bị xoá). Hãy bỏ người đó rồi gửi lại.",
       kudosBadgeInvalid:
         "Huy hiệu vừa chọn không còn dùng được. Danh sách huy hiệu đã được tải lại — hãy chọn lại.",
+      // S16-SOCIAL-FE-2D — đính kèm (`feed/lib/attachment-draft.ts`). `SOCIAL-ERR-007` gộp «vượt trần»
+      // và «tệp không hợp lệ» (owner ký D6 (a)) ⇒ MỘT câu nói cả hai.
+      attachmentRejected:
+        "Tệp đính kèm không được chấp nhận: vượt giới hạn (10 ảnh · 1 video · 20 MB mỗi tệp) hoặc tệp đã được dùng / không còn hợp lệ. Gỡ tệp đó, đính kèm lại rồi gửi.",
+      attachDenied: "Bạn không có quyền đính kèm tệp ở đây.",
     },
     dismiss: "Đóng thông báo",
   },

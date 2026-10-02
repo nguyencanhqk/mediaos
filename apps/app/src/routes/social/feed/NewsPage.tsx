@@ -24,6 +24,7 @@ import { Avatar, Button, Skeleton, cn } from "@mediaos/ui";
 import { ApiError, PermissionGate, socialApi, socialKeys, useCan } from "@mediaos/web-core";
 import type { FeedAckPersonDto, FeedNewsItemDto } from "@mediaos/contracts";
 import { PostBody } from "./components/PostBody";
+import { PostAttachments } from "./components/PostAttachments";
 import { ActionErrorBanner } from "./components/ActionErrorBanner";
 import { authorDisplayName, relativeTime } from "./lib/feed-format";
 
@@ -270,6 +271,8 @@ function NewsRow({ item }: { item: FeedNewsItemDto }): React.ReactElement {
       </header>
 
       <PostBody body={item.body} mentions={item.mentions} collapsible className="mt-2" />
+      {/* S16-SOCIAL-FE-2D — tin là bài: cùng luật vẽ đính kèm với thẻ bài. */}
+      <PostAttachments attachments={item.attachments} compact className="mt-2" />
 
       <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3">
         {/*

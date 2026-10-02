@@ -30,13 +30,20 @@ import type {
 import { PostCard } from "./components/PostCard";
 import { CommentList } from "./components/CommentList";
 import { CommentComposer } from "./components/CommentComposer";
-import { ActionErrorBanner, type ActionErrorKind } from "./components/ActionErrorBanner";
+import {
+  ActionErrorBanner,
+  type ActionErrorKind,
+  type ActionErrorReason,
+} from "./components/ActionErrorBanner";
 import { DroppedMentionsNotice } from "./components/DroppedMentionsNotice";
+import { attachmentErrorReason } from "./lib/attachment-draft";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
 interface LocalActionError {
   kind: ActionErrorKind;
   forbidden: boolean;
+  /** S16-SOCIAL-FE-2D — lý do CỤ THỂ (khuôn `CreatePostError`); hiện chỉ lượt gửi bình luận đặt nó. */
+  reason?: ActionErrorReason | null;
 }
 
 export function PostDetailPage(): React.ReactElement {
@@ -68,7 +75,12 @@ export function PostDetailPage(): React.ReactElement {
   const reportLocalError = (kind: ActionErrorKind) => (err: unknown) => {
     // Lỗi MỚI thay lỗi cũ: giữ lại lỗi của hook sẽ hiện câu của một hành động khác, đã xảy ra trước.
     clearActionError();
-    setLocalError({ kind, forbidden: err instanceof ApiError && err.status === 403 });
+    setLocalError({
+      kind,
+      forbidden: err instanceof ApiError && err.status === 403,
+      // S16-SOCIAL-FE-2D — `015` kèm tệp: 422 `SOCIAL-ERR-007` nói ĐÚNG lý do thay «thử lại» vô ích.
+      reason: kind === "comment" ? attachmentErrorReason(err) : null,
+    });
   };
 
   // Chiều ngược lại: hook vừa báo lỗi ⇒ lỗi cục bộ cũ hết hiệu lực.
@@ -226,6 +238,7 @@ export function PostDetailPage(): React.ReactElement {
         <ActionErrorBanner
           kind={shownError.kind}
           forbidden={shownError.forbidden}
+          reason={shownError.reason ?? null}
           onDismiss={() => {
             clearActionError();
             setLocalError(null);

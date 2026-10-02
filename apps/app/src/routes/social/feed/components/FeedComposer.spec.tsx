@@ -401,14 +401,14 @@ describe("gate soạn bài — forbidden là ẨN, không phải disabled", () =
   });
 });
 
-describe("D8 — KHÔNG có nút đính kèm ở FE-1", () => {
-  it("composer không render input file nào (đường đăng ký tệp chưa tồn tại — nợ N1)", () => {
-    // `POST /social/files/upload-url` KHÔNG tồn tại (đo lại ở T0/W7), và `foundation/files` đòi cặp
-    // `*:foundation-file` mà nhân viên thường không có. Nút đính kèm sẽ 403 cho đúng nhóm người
-    // dùng chính ⇒ dựng UI cho nó là làm giả. Ca này giữ lời hứa đó.
-    setCaps({ "view:feed": true, "create:feed-post": true, "*:foundation-file": true });
+describe("S16-SOCIAL-FE-2D — nút đính kèm (thay lời hứa D8 cũ của FE-1)", () => {
+  it("chỉ cần `create:feed-post` (KHÔNG cặp `*:foundation-file`) ⇒ ô soạn có input tệp", () => {
+    // Lời hứa D8 cũ («KHÔNG có nút đính kèm») đứng trên việc chưa có route SOCIAL cho tệp. Từ BE-1C
+    // (#538) `054/055` gác `create:feed-post` @Company — CÙNG cặp mà ô soạn đã đòi — nên nút không còn
+    // là UI giả. Ca tải/khoá/trần ở `FeedComposer.attach.spec.tsx`.
+    setCaps({ "view:feed": true, "create:feed-post": true });
     const { container } = renderComposer();
-    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
   });
 });
 

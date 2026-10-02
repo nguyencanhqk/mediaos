@@ -4,8 +4,9 @@
  * Gate `create:feed-comment` — cặp RIÊNG, khác `create:feed-post`. Không có ⇒ **ẩn ô soạn**, không
  * hiện rồi báo lỗi (SPEC-16 §14).
  *
- * ⚠️ **KHÔNG có nút đính kèm** — cùng lý do với `FeedComposer` (plan D8 · nợ N1): đường đăng ký tệp
- * cho SOCIAL chưa tồn tại và `foundation/files` đòi cặp mà nhân viên thường không có.
+ * Đính kèm (S16-SOCIAL-FE-2D): khay `ComposerAttachmentTray` (`target:'comment'` ⇒ 054/055 hỏi
+ * `create:feed-comment`). `body` VẪN bắt buộc — server không nhận bình luận chỉ có tệp (đo M11). Bài bị
+ * khoá / mất quyền giữa chừng ⇒ huỷ lượt tải + dọn khay, GIỮ chữ (owner ký D10 (a)).
  *
  * ⚠️ Bài bị KHOÁ bình luận (`commentsLocked`) ⇒ ẩn ô soạn và nói rõ lý do. Hiện ô rồi để người ta gõ
  * xong mới ăn 409 là phí công của họ.
@@ -23,6 +24,8 @@ import { useCan } from "@mediaos/web-core";
  * thứ 4001 — đúng kiểu lỗi mà người dùng không hiểu và dev không tìm ra vì "FE có kiểm rồi mà".
  */
 import { FEED_BODY_MAX, type CreateFeedCommentDto } from "@mediaos/contracts";
+import { ComposerAttachmentTray } from "./ComposerAttachmentTray";
+import { useAttachmentUploads } from "../lib/use-attachment-uploads";
 
 /** Cùng lý do với `FeedComposer` — `then` là tín hiệu DUY NHẤT để biết server đã nhận hay chưa. */
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -68,6 +71,18 @@ export function CommentComposer({
   /** Lượt gửi của chính ô soạn đang bay — vế chống bấm-đúp còn lại khi ô không còn tự dọn rỗng. */
   const [sending, setSending] = React.useState(false);
 
+  /** S16-SOCIAL-FE-2D — khay đính kèm. Gọi TRƯỚC các lệnh `return` sớm bên dưới (luật hook — đo M24). */
+  const uploads = useAttachmentUploads({ target: "comment" });
+  const { reset: resetUploads } = uploads;
+  /**
+   * D10 (owner ký (a)): bài bị KHOÁ bình luận / mất `create:feed-comment` khi khay còn tệp ⇒ huỷ lượt tải
+   * đang bay + dọn khay; `body` GIỮ NGUYÊN (hành vi cũ). Cổng lật KHÔNG tháo component (chỉ đổi JSX) —
+   * thiếu effect này thì vòng tải chạy tiếp NGẦM cho một bình luận không gửi được.
+   */
+  React.useEffect(() => {
+    if (locked || !canComment) resetUploads();
+  }, [locked, canComment, resetUploads]);
+
   if (locked) {
     return (
       <p className={cn("text-sm text-muted-foreground", className)} data-testid="comment-locked">
@@ -79,13 +94,18 @@ export function CommentComposer({
 
   const trimmed = body.trim();
   const busy = isSubmitting || sending;
-  const canSubmit = trimmed.length > 0 && trimmed.length <= FEED_BODY_MAX && !busy;
+  const canSubmit =
+    trimmed.length > 0 && trimmed.length <= FEED_BODY_MAX && !busy && uploads.submitState.ready;
 
   const submit = (): void => {
     if (!canSubmit) return;
+    // CHỤP đúng các tệp đi vào DTO — resolve chỉ gỡ CHÚNG (`clear(ids)`), không `reset()` mù.
+    const ids = uploads.submitState.ready ? uploads.submitState.ids : [];
     const result = onSubmit({
       body: trimmed,
       parentCommentId: replyTo?.commentId ?? null,
+      // VẮNG khoá khi không có tệp ⇒ payload + khoá idempotency như trước FE-2D.
+      ...(ids.length > 0 ? { attachmentIds: [...ids] } : {}),
     } as CreateFeedCommentDto);
 
     // Caller không hứa gì ⇒ giữ NGUYÊN nội dung và giữ NGUYÊN đích trả lời.
@@ -95,6 +115,7 @@ export function CommentComposer({
     result.then(
       () => {
         setBody("");
+        uploads.clear(ids);
         setSending(false);
         // Gỡ đích trả lời CHỈ khi đã gửi được — gỡ sớm làm lượt thử lại rơi xuống cấp 1.
         onCancelReply?.();
@@ -131,6 +152,9 @@ export function CommentComposer({
         rows={2}
         className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
+
+      {/* S16-SOCIAL-FE-2D — KHOÁ suốt lượt gửi (plan §10 #1). */}
+      <ComposerAttachmentTray uploads={uploads} disabled={busy} testIdPrefix="comment" />
 
       <div className="flex justify-end">
         {/* Khoá khi đang gửi — cùng lý do C26 ở `FeedComposer`. */}

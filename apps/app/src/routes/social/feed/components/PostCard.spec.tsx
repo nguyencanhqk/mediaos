@@ -451,6 +451,83 @@ describe("S16-SOCIAL-MENTIONLINK-1 — B2: thẻ bài truyền `post.mentions` x
   });
 });
 
+/**
+ * S16-SOCIAL-FE-2D — vẽ đính kèm (plan §4 A8 · ca **R1 · R2 · R2b · R5**).
+ *
+ * `url:null` (presign bị từ chối cho NGƯỜI XEM này) ⇒ KHÔNG vẽ gì cho tệp đó — ảnh, video lẫn tệp (D4):
+ * một ô «có tệp mà bạn không xem được» là rò sự tồn tại. URL khác `^https?://` coi như `null` (§3).
+ */
+describe("S16-SOCIAL-FE-2D — đính kèm ảnh · video · tệp trên thẻ bài", () => {
+  const att = (
+    fileId: string,
+    kind: "image" | "video" | "file",
+    url: string | null,
+    fileName: string | null = `${fileId}.bin`,
+  ) => ({ fileId, kind, fileName, sizeBytes: 2048, url });
+
+  it("R1: [ảnh·null·video·null·tệp·null] ⇒ 1 img · 1 video · 1 link tệp an toàn; tên tệp `null` không lộ", () => {
+    const { container } = renderCard({
+      attachments: [
+        att("i1", "image", "https://cdn.invalid/i1.png"),
+        att("i2", "image", null),
+        att("v1", "video", "https://cdn.invalid/v1.mp4"),
+        att("v2", "video", null),
+        att("d1", "file", "https://cdn.invalid/d1.pdf", "bao-cao.pdf"),
+        att("d2", "file", null, "bi-mat.pdf"),
+      ],
+    });
+
+    expect(container.querySelectorAll("video").length).toBe(1);
+    expect(container.querySelector("video")?.getAttribute("src")).toBe(
+      "https://cdn.invalid/v1.mp4",
+    );
+    expect(container.querySelectorAll("img").length).toBe(1);
+
+    const link = screen.getByRole("link", { name: /bao-cao\.pdf/ });
+    expect(link.getAttribute("href")).toBe("https://cdn.invalid/d1.pdf");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(container.textContent).not.toContain("bi-mat.pdf");
+  });
+
+  it("R2: ảnh tải hỏng (URL ký 300 s đã hết hạn) ⇒ ô trung tính thay icon vỡ", () => {
+    const { container } = renderCard({
+      attachments: [att("i1", "image", "https://cdn.invalid/i1.png")],
+    });
+    fireEvent.error(container.querySelector("img") as HTMLImageElement);
+
+    expect(screen.getByTestId("attachment-image-unavailable")).toBeInTheDocument();
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("R2b: video phát/tua sau khi URL hết hạn ⇒ ô trung tính thay trình phát", () => {
+    const { container } = renderCard({
+      attachments: [att("v1", "video", "https://cdn.invalid/v1.mp4")],
+    });
+    const video = container.querySelector("video");
+    if (video) fireEvent.error(video);
+
+    expect(screen.getByTestId("attachment-video-unavailable")).toBeInTheDocument();
+    expect(container.querySelector("video")).toBeNull();
+  });
+
+  it("R5 DENY: URL không phải http(s) (`javascript:` · `data:` · `//`) ⇒ KHÔNG vẽ; `HTTPS://` hoa vẫn vẽ", () => {
+    const { container } = renderCard({
+      attachments: [
+        att("i1", "image", "javascript:alert(1)"),
+        att("d1", "file", "data:text/html,x", "doc-hai.html"),
+        att("v1", "video", "//evil.invalid/x.mp4"),
+        att("i2", "image", "HTTPS://ok.invalid/a.png"),
+      ],
+    });
+
+    expect(container.querySelectorAll("img").length).toBe(1);
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("HTTPS://ok.invalid/a.png");
+    expect(container.querySelectorAll("video").length).toBe(0);
+    expect(container.textContent).not.toContain("doc-hai.html");
+  });
+});
+
 describe("tương tác thật trên thẻ bài", () => {
   it("chọn một emoji ⇒ gọi `onReactionChange` với đúng mã", () => {
     const onReactionChange = vi.fn();

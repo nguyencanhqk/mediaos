@@ -16,8 +16,9 @@
  * `.trim().min(1)` từ chối chuỗi rỗng); các trường poll nằm ở `PollComposerFields`, nháp giữ TẠI ĐÂY
  * để luật «không dọn khi chưa được xác nhận» áp cho cả chúng.
  *
- * ⚠️ **KHÔNG có nút đính kèm**: UI đính kèm qua `SOCIAL-API-054/055` là nợ N1 của FE-1, giao
- * `S16-SOCIAL-FE-2D`.
+ * Đính kèm (S16-SOCIAL-FE-2D): khay `ComposerAttachmentTray` cho CẢ 5 loại bài (owner ký D5 (a)) —
+ * 054 → PUT → 055 (`useAttachmentUploads`), `attachmentIds` theo thứ tự chọn, VẮNG khi rỗng. Khay KHOÁ
+ * suốt lượt gửi (`disabled={busy}`); resolve chỉ gỡ đúng các tệp đã vào DTO (`clear(ids)`).
  *
  * S16-SOCIAL-FE-2B — `groupId` ⇒ MỌI loại bài đăng vào nhóm (`audience:'group'`). KHÔNG có ô chọn
  * phạm vi ở bảng tin chung: bài nhóm bị LOẠI khỏi `001` feed chung (D-OWNER-5 của BE-2A), nên đăng
@@ -35,6 +36,8 @@ import {
   type CreateFeedPostDto,
 } from "@mediaos/contracts";
 import { PollComposerFields } from "./PollComposerFields";
+import { ComposerAttachmentTray } from "./ComposerAttachmentTray";
+import { useAttachmentUploads } from "../lib/use-attachment-uploads";
 import { KudosComposerFields } from "../../kudos/components/KudosComposerFields";
 import { EMPTY_KUDOS_DRAFT, validateKudosDraft, type KudosDraft } from "../../kudos/lib/kudos-draft";
 import {
@@ -108,6 +111,19 @@ export function FeedComposer({
   const [sending, setSending] = React.useState(false);
 
   /**
+   * S16-SOCIAL-FE-2D — khay đính kèm (054/055). Gọi TRƯỚC lệnh `return null` bên dưới (luật hook — đo M24).
+   */
+  const uploads = useAttachmentUploads({ target: "post" });
+  const { reset: resetUploads } = uploads;
+  /**
+   * D10 (owner ký (a)): mất `create:feed-post` khi khay còn tệp ⇒ huỷ lượt tải đang bay + dọn khay. Cổng
+   * lật KHÔNG tháo component (chỉ đổi JSX) — thiếu effect này thì vòng tải chạy tiếp NGẦM.
+   */
+  React.useEffect(() => {
+    if (!canCreatePost) resetUploads();
+  }, [canCreatePost, resetUploads]);
+
+  /**
    * Nạp nội dung điền sẵn khi người dùng bấm «Gửi lời chúc» ở widget Sinh nhật.
    *
    * Hai luật, cả hai đều để KHÔNG ăn mất chữ người dùng đang gõ:
@@ -145,7 +161,8 @@ export function FeedComposer({
     : isKudos
       ? kudosCheck?.ok === true
       : trimmed.length > 0;
-  const canSubmit = contentReady && !tooLong && !busy;
+  // Còn tệp đang tải / lỗi ⇒ chưa gửi (khay nói lý do). Gửi thiếu tệp = mất tệp người dùng đã chọn.
+  const canSubmit = contentReady && !tooLong && !busy && uploads.submitState.ready;
 
   // `groupId` vắng ⇒ y hệt trước FE-2B (`audience:'company'`, không khoá `groupId` — contracts từ chối
   // `groupId` đi kèm `company`).
@@ -153,7 +170,9 @@ export function FeedComposer({
     ? ({ audience: "group", groupId } as const)
     : ({ audience: "company" } as const);
 
-  const buildDto = (): CreateFeedPostDto | null => {
+  const buildDto = (attachmentIds: readonly string[]): CreateFeedPostDto | null => {
+    // VẮNG khoá khi không có tệp ⇒ payload + khoá idempotency của bài không tệp y như trước FE-2D.
+    const attachments = attachmentIds.length > 0 ? { attachmentIds: [...attachmentIds] } : {};
     if (isKudos) {
       if (!kudosCheck?.ok) return null;
       // O3: nút kudos không có ở chế độ nhóm ⇒ luôn `company`, không `body` (lời nhắn là `kudos.message`).
@@ -162,6 +181,7 @@ export function FeedComposer({
         audience: "company",
         requiresAck: false,
         kudos: kudosCheck.kudos,
+        ...attachments,
       } as CreateFeedPostDto;
     }
     if (isPoll) {
@@ -172,6 +192,7 @@ export function FeedComposer({
         ...(trimmed.length > 0 ? { body: trimmed } : {}),
         requiresAck: false,
         poll: pollCheck.poll,
+        ...attachments,
       } as CreateFeedPostDto;
     }
     return {
@@ -179,13 +200,16 @@ export function FeedComposer({
       ...audience,
       body: trimmed,
       requiresAck: type === "news" ? requiresAck : false,
+      ...attachments,
     } as CreateFeedPostDto;
   };
 
   const submit = (): void => {
     setTouched(true);
     if (!canSubmit) return;
-    const dto = buildDto();
+    // CHỤP đúng các tệp đi vào DTO — resolve chỉ gỡ CHÚNG (`clear(ids)`), không `reset()` mù (§3 H2-ii).
+    const ids = uploads.submitState.ready ? uploads.submitState.ids : [];
+    const dto = buildDto(ids);
     if (!dto) return;
     const result = onSubmit(dto);
 
@@ -199,6 +223,7 @@ export function FeedComposer({
         setRequiresAck(false);
         setPollDraft(EMPTY_POLL_DRAFT);
         setKudosDraft(EMPTY_KUDOS_DRAFT);
+        uploads.clear(ids);
         // Dọn cả `touched`: bỏ quên nó thì ngay sau một lượt đăng THÀNH CÔNG, ô rỗng + `touched`
         // còn bật sẽ bắn «Hãy nhập nội dung trước khi đăng» — một cảnh báo đỏ cho việc vừa xong.
         setTouched(false);
@@ -344,6 +369,14 @@ export function FeedComposer({
           {t("composer.bodyTooLong", { max: FEED_BODY_MAX })}
         </p>
       )}
+
+      {/* S16-SOCIAL-FE-2D — khay cho MỌI loại bài (D5); KHOÁ suốt lượt gửi (plan §10 #1). */}
+      <ComposerAttachmentTray
+        uploads={uploads}
+        disabled={busy}
+        testIdPrefix="composer"
+        className="mt-3"
+      />
 
       <div className="mt-3 flex justify-end">
         {/*

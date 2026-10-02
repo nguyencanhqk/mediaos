@@ -21,6 +21,7 @@ import { Avatar, Button, Skeleton, cn } from "@mediaos/ui";
 import type { FeedCommentDto, FeedReactionEmojiDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PostBody } from "./PostBody";
+import { PostAttachments } from "./PostAttachments";
 import { FeedReactionBar } from "./FeedReactionBar";
 import { authorDisplayName, relativeTime } from "../lib/feed-format";
 
@@ -76,6 +77,13 @@ function CommentRow({
             </span>
           </div>
           <PostBody body={comment.body} mentions={comment.mentions} />
+          {/* S16-SOCIAL-FE-2D — DTO luôn chở `attachments`; trước đây hàng bình luận bỏ qua chúng. */}
+          <PostAttachments
+            attachments={comment.attachments}
+            compact
+            testId="comment-attachments"
+            className="mt-2"
+          />
         </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-2">
