@@ -106,8 +106,12 @@ export class SocialAvatarSigner {
     try {
       return await tx.transaction((sp) => this.signChosen(sp, companyId, chosen));
     } catch (err) {
-      const code = socialPgErrorOf(err)?.code;
-      const reason = err instanceof Error ? err.message : String(err);
+      // Lý do lấy từ lỗi DRIVER (`pg`), KHÔNG từ `err.message` của drizzle: thông điệp đó nhúng nguyên câu
+      // SQL + tham số bind (companyId + fileId của cả lô) vào log.
+      const pg = socialPgErrorOf(err) as { code?: unknown; message?: unknown } | null;
+      const code = pg?.code;
+      const reason =
+        typeof pg?.message === "string" ? pg.message : err instanceof Error ? err.name : "unknown";
       this.logger.warn(
         `signInSavepointTx[company=${companyId}]: ký avatar lỗi (pg=${String(code ?? "none")}) — ` +
           `rollback SAVEPOINT, ${chosen.size} avatar về initials, tx ghi vẫn commit. Reason: ${reason}`,

@@ -206,6 +206,23 @@ describe("D10 — lỗi câu cổng: signTx NÉM, signInSavepointTx nuốt TRONG
     expect(String(warn.mock.calls[0]![0])).toContain("22012");
   });
 
+  it("signInSavepointTx — log lấy lý do từ lỗi DRIVER, KHÔNG nhúng câu SQL + tham số bind của drizzle", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    const pgErr = Object.assign(new Error("division by zero"), { code: "22012" });
+    const { signer } = makeSigner(async () => {
+      throw Object.assign(new Error(`Failed query: select 1/0\nparams: ${COMPANY},${FILE_1}`), {
+        cause: pgErr,
+      });
+    });
+    const { tx } = fakeTx();
+    const out = await signer.signInSavepointTx(tx, COMPANY, [ref(EMP_X, FILE_1)]);
+    expect(out.urlOf(ref(EMP_X, FILE_1)), "neo: nuốt trong SAVEPOINT").toBeNull();
+    const msg = String(warn.mock.calls[0]![0]);
+    expect(msg).toContain("22012");
+    expect(msg).toContain("division by zero");
+    expect(msg).not.toContain(FILE_1);
+  });
+
   it("signInSavepointTx — không có fileId nào ⇒ KHÔNG mở SAVEPOINT (0 câu thêm)", async () => {
     const { signer, resolveEmployeeAvatars } = makeSigner();
     const { tx, transaction } = fakeTx();
