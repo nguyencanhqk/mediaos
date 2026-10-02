@@ -51,9 +51,9 @@ export type ActionErrorKind = (typeof ACTION_ERROR_KINDS)[number];
 
 /**
  * S16-SOCIAL-FE-2B — lý do CỤ THỂ đọc được từ lỗi (`groups/lib/group-errors.ts`; S16-SOCIAL-FE-2C thêm
- * `kudos/lib/kudos-errors.ts`). Có `reason` thì câu chữ nói ĐÚNG lý do (vd «phải còn một chủ nhóm»)
- * thay cho câu forbidden/generic — done_when #1 của FE-2B: 409 ERR-015 phải hiện lý do, không phải
- * «vui lòng thử lại» (thử lại là vô ích).
+ * `kudos/lib/kudos-errors.ts`; S16-SOCIAL-FEMODERRMSG-1 thêm `feed/lib/feed-errors.ts`). Có `reason`
+ * thì câu chữ nói ĐÚNG lý do (vd «phải còn một chủ nhóm») thay cho câu forbidden/generic — done_when
+ * #1 của FE-2B: 409 ERR-015 phải hiện lý do, không phải «vui lòng thử lại» (thử lại là vô ích).
  */
 export const ACTION_ERROR_REASONS = [
   "lastOwner",
@@ -68,6 +68,8 @@ export const ACTION_ERROR_REASONS = [
   "kudosRecipientLimit",
   "kudosRecipientInvalid",
   "kudosBadgeInvalid",
+  // S16-SOCIAL-FEMODERRMSG-1 — hành động trên bài gặp 404 `SOCIAL-ERR-001` (`feed/lib/feed-errors.ts`).
+  "postGone",
 ] as const;
 export type ActionErrorReason = (typeof ACTION_ERROR_REASONS)[number];
 

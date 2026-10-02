@@ -212,3 +212,28 @@ export const GROUP_ERR_LEGACY = {
   lastOwner: () =>
     new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR-015: nhóm phải còn ít nhất một chủ nhóm đang hoạt động."),
 };
+
+/**
+ * S16-SOCIAL-FEMODERRMSG-1 — lỗi của các đường ghi TRÊN BÀI (`005`/`006`/`009`/`010`/`011`/`012`), đúng
+ * hình dạng trên dây. `message` chép nguyên văn `social.errors.ts`.
+ *
+ * `goneLegacy` = API CŨ (trước #554, PROD deploy API tay): `code` là mã CHUNG theo status, mã SOCIAL chỉ ở
+ * tiền tố `message` — cùng khuôn `GROUP_ERR_LEGACY`.
+ */
+export const POST_ERR = {
+  gone: () =>
+    new ApiError(
+      404,
+      SOCIAL_ERROR_CODES.POST_NOT_FOUND,
+      "SOCIAL-ERR-001: không tìm thấy bài viết.",
+    ),
+  goneLegacy: () =>
+    new ApiError(404, "RESOURCE-ERR-NOT-FOUND", "SOCIAL-ERR-001: không tìm thấy bài viết."),
+  fieldDenied: () =>
+    new ApiError(
+      403,
+      SOCIAL_ERROR_CODES.MODERATION_FIELD_DENIED,
+      "SOCIAL-ERR-010: bạn không có quyền thay đổi trường kiểm duyệt này.",
+    ),
+  server: () => new ApiError(500, "INTERNAL", "boom"),
+};

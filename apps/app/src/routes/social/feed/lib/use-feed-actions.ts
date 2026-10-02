@@ -17,6 +17,8 @@ import type {
   ModerateFeedPostDto,
 } from "@mediaos/contracts";
 import type { PostCardMenuActions } from "../components/PostCardMenu";
+import type { ActionErrorReason } from "../components/ActionErrorBanner";
+import { postActionErrorReason } from "./feed-errors";
 
 /**
  * Hành động nào vừa hỏng. Dùng để chọn CÂU nói với người dùng — «không ghim được bài» khác hẳn
@@ -32,6 +34,12 @@ export interface FeedActionError {
    * bao nhiêu lần cũng vô ích (đi hỏi quản trị), còn lỗi mạng/500 thì thử lại là đúng.
    */
   forbidden: boolean;
+  /**
+   * S16-SOCIAL-FEMODERRMSG-1 — lý do CỤ THỂ đọc từ `error.code` (`postActionErrorReason`); thắng
+   * `forbidden` ở banner. `null` ⇒ câu forbidden/generic. Hôm nay chỉ có `"postGone"` (404
+   * `SOCIAL-ERR-001`): bài đã bị xoá/ẩn giữa chừng — «vui lòng thử lại» ở đây là lời khuyên sai.
+   */
+  reason: ActionErrorReason | null;
 }
 
 export interface FeedActions {
@@ -77,15 +85,6 @@ export function useFeedActions(): FeedActions {
   const [actionError, setActionError] = React.useState<FeedActionError | null>(null);
 
   /**
-   * Một `onError` cho cả bốn mutation. KHÔNG bỏ trống cái nào: app này không có hệ toast và
-   * `QueryClient` ở `main.tsx` không khai `MutationCache.onError`, nên mutation thiếu `onError` là
-   * hỏng IM LẶNG TUYỆT ĐỐI — nút nhả ra như cũ, không một ký tự nào xuất hiện.
-   */
-  const onActionError = (kind: FeedActionKind) => (err: unknown) => {
-    setActionError({ kind, forbidden: err instanceof ApiError && err.status === 403 });
-  };
-
-  /**
    * Làm mới đúng các nhánh mà một thay đổi trên bài có thể ảnh hưởng.
    *
    * S16-SOCIAL-FE-2 (plan §8 H5): thêm danh sách bình chọn (040) + sáng kiến (045) — xoá/ẩn một bài
@@ -105,6 +104,21 @@ export function useFeedActions(): FeedActions {
     }
   };
 
+  /**
+   * Một `onError` cho cả bốn mutation. KHÔNG bỏ trống cái nào: app này không có hệ toast và
+   * `QueryClient` ở `main.tsx` không khai `MutationCache.onError`, nên mutation thiếu `onError` là
+   * hỏng IM LẶNG TUYỆT ĐỐI — nút nhả ra như cũ, không một ký tự nào xuất hiện.
+   *
+   * S16-SOCIAL-FEMODERRMSG-1 — `"postGone"` (bài đã mất dưới chân) ⇒ kéo lại các danh sách + chi tiết
+   * bài: thẻ đang hiện là dữ liệu CŨ, để nó nằm đó là mời người dùng bấm lại một thao tác chắc chắn
+   * 404. Lỗi khác (500, mạng, 403) KHÔNG kéo lại — chưa có gì cho thấy dữ liệu đã cũ.
+   */
+  const onActionError = (kind: FeedActionKind, err: unknown, postId: string): void => {
+    const reason = postActionErrorReason(err);
+    setActionError({ kind, forbidden: err instanceof ApiError && err.status === 403, reason });
+    if (reason === "postGone") invalidatePostLists(postId);
+  };
+
   const reactionMutation = useMutation({
     mutationFn: ({ postId, emoji }: { postId: string; emoji: FeedReactionEmojiDto | null }) =>
       emoji === null
@@ -116,7 +130,7 @@ export function useFeedActions(): FeedActions {
       invalidatePostLists(result.targetId);
       setActionError(null);
     },
-    onError: onActionError("reaction"),
+    onError: (err, { postId }) => onActionError("reaction", err, postId),
   });
 
   const saveMutation = useMutation({
@@ -126,7 +140,7 @@ export function useFeedActions(): FeedActions {
       invalidatePostLists(result.postId);
       setActionError(null);
     },
-    onError: onActionError("save"),
+    onError: (err, { postId }) => onActionError("save", err, postId),
   });
 
   const moderateMutation = useMutation({
@@ -136,7 +150,7 @@ export function useFeedActions(): FeedActions {
       invalidatePostLists(post.id);
       setActionError(null);
     },
-    onError: onActionError("moderate"),
+    onError: (err, { postId }) => onActionError("moderate", err, postId),
   });
 
   const deleteMutation = useMutation({
@@ -145,7 +159,7 @@ export function useFeedActions(): FeedActions {
       invalidatePostLists();
       setActionError(null);
     },
-    onError: onActionError("delete"),
+    onError: (err, postId) => onActionError("delete", err, postId),
   });
 
   return {

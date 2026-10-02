@@ -30,12 +30,21 @@ import type {
 import { PostCard } from "./components/PostCard";
 import { CommentList } from "./components/CommentList";
 import { CommentComposer } from "./components/CommentComposer";
-import { ActionErrorBanner, type ActionErrorKind } from "./components/ActionErrorBanner";
+import {
+  ActionErrorBanner,
+  type ActionErrorKind,
+  type ActionErrorReason,
+} from "./components/ActionErrorBanner";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
 interface LocalActionError {
   kind: ActionErrorKind;
   forbidden: boolean;
+  /**
+   * Chỉ lỗi của `useFeedActions` (hành động trên BÀI) mang lý do — S16-SOCIAL-FEMODERRMSG-1. Lỗi
+   * bình luận cục bộ để vắng: `SOCIAL-ERR-001` ở đó có thể là bình luận đã mất, không phải bài.
+   */
+  reason?: ActionErrorReason | null;
 }
 
 export function PostDetailPage(): React.ReactElement {
@@ -216,6 +225,7 @@ export function PostDetailPage(): React.ReactElement {
         <ActionErrorBanner
           kind={shownError.kind}
           forbidden={shownError.forbidden}
+          reason={shownError.reason}
           onDismiss={() => {
             clearActionError();
             setLocalError(null);

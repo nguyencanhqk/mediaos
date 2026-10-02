@@ -136,6 +136,7 @@ export function FeedPage(): React.ReactElement {
         <ActionErrorBanner
           kind={actions.actionError.kind}
           forbidden={actions.actionError.forbidden}
+          reason={actions.actionError.reason}
           onDismiss={actions.clearActionError}
         />
       )}

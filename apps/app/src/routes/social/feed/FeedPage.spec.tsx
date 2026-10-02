@@ -12,12 +12,20 @@ import { WS_EVENTS } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { FeedPage } from "./FeedPage";
-import { makePost, page, renderWithProviders, resetCaps, setCaps } from "./social-test-doubles";
+import {
+  makePost,
+  page,
+  POST_ERR,
+  renderWithProviders,
+  resetCaps,
+  setCaps,
+} from "./social-test-doubles";
 
 const listFeed = vi.fn();
 const search = vi.fn();
 const createPost = vi.fn();
 const savePost = vi.fn();
+const moderatePost = vi.fn();
 let mockSearch: Record<string, unknown> = {};
 
 type Handler = (payload: unknown) => void;
@@ -56,6 +64,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       search: (...a: unknown[]) => search(...a),
       createPost: (...a: unknown[]) => createPost(...a),
       savePost: (...a: unknown[]) => savePost(...a),
+      moderatePost: (...a: unknown[]) => moderatePost(...a),
     },
   };
 });
@@ -76,6 +85,7 @@ beforeEach(() => {
   search.mockReset();
   createPost.mockReset();
   savePost.mockReset();
+  moderatePost.mockReset();
   listFeed.mockResolvedValue(page([makePost()]));
 });
 
@@ -317,6 +327,31 @@ describe("lỗi HÀNH ĐỘNG trên bài (useFeedActions) phải hiện ở màn
     expect(screen.getByTestId("feed-action-error")).toHaveTextContent(
       i18n.getFixedT("vi", "social")("actionError.generic.save"),
     );
+  });
+
+  /**
+   * S16-SOCIAL-FEMODERRMSG-1 — người kiểm duyệt bấm «Ẩn bài» trên thẻ mà người khác vừa xoá. Thử lại
+   * bao nhiêu lần cũng 404 ⇒ dải phải nói LÝ DO, không phải «vui lòng thử lại»; và thẻ cũ phải rời màn.
+   */
+  it("ẩn bài qua menu ⋯ ⇒ 404 `SOCIAL-ERR-001` ⇒ dải nói «bài không còn» (KHÔNG «thử lại») + thẻ cũ biến mất", async () => {
+    const t = i18n.getFixedT("vi", "social");
+    setCaps({ "view:feed": true, "manage:feed-post": true });
+    listFeed.mockReset();
+    listFeed.mockResolvedValueOnce(page([makePost()])).mockResolvedValue(page([]));
+    moderatePost.mockRejectedValue(POST_ERR.gone());
+    renderWithProviders(<FeedPage />);
+
+    fireEvent.click(await screen.findByTestId("post-menu-trigger"));
+    fireEvent.click(screen.getByTestId("post-menu-toggle-hidden"));
+
+    const banner = await screen.findByTestId("feed-action-error");
+    expect(banner).toHaveAttribute("data-kind", "moderate");
+    expect(banner).toHaveAttribute("data-reason", "postGone");
+    expect(banner).toHaveTextContent(t("actionError.reason.postGone"));
+    expect(banner).not.toHaveTextContent(t("actionError.generic.moderate"));
+    // Danh sách được kéo lại ⇒ thẻ trỏ vào bài đã mất tự rời màn.
+    await waitFor(() => expect(screen.queryByTestId("post-card")).toBeNull());
+    expect(listFeed.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
 

@@ -476,6 +476,11 @@ export default {
         "Có người nhận không còn hợp lệ (hồ sơ đã bị xoá). Hãy bỏ người đó rồi gửi lại.",
       kudosBadgeInvalid:
         "Huy hiệu vừa chọn không còn dùng được. Danh sách huy hiệu đã được tải lại — hãy chọn lại.",
+      // S16-SOCIAL-FEMODERRMSG-1 — 404 `SOCIAL-ERR-001` khi thả cảm xúc/lưu/kiểm duyệt/xoá bài
+      // (`feed/lib/feed-errors.ts`). MỘT câu cho cả «đã xoá» lẫn «không còn được xem» — cùng luật
+      // chống-oracle của `detail.notFoundBody`.
+      postGone:
+        "Bài viết này không còn: có thể đã bị xoá hoặc bạn không còn quyền xem. Dữ liệu đã được tải lại.",
     },
     dismiss: "Đóng thông báo",
   },

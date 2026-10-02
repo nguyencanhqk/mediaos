@@ -10,7 +10,14 @@ import { screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { ProfilePostsPage } from "./ProfilePostsPage";
-import { makePost, page, renderWithProviders, resetCaps, setCaps } from "./social-test-doubles";
+import {
+  makePost,
+  page,
+  POST_ERR,
+  renderWithProviders,
+  resetCaps,
+  setCaps,
+} from "./social-test-doubles";
 
 const listFeed = vi.fn();
 const listProfilePosts = vi.fn();
@@ -108,6 +115,21 @@ describe("🔴 hành động ghi hỏng phải phát ra tín hiệu", () => {
     expect(screen.getByTestId("feed-action-error")).toHaveTextContent(
       i18n.getFixedT("vi", "social")("actionError.generic.save"),
     );
+  });
+
+  it("S16-SOCIAL-FEMODERRMSG-1: lưu bài đã bị xoá (404 `SOCIAL-ERR-001`) ⇒ dải nói LÝ DO, không «thử lại»", async () => {
+    const t = i18n.getFixedT("vi", "social");
+    mockParams = { employeeId: "22222222-2222-4222-8222-222222222222" };
+    listProfilePosts.mockResolvedValue(page([makePost()]));
+    savePost.mockRejectedValue(POST_ERR.gone());
+    renderWithProviders(<ProfilePostsPage />);
+
+    fireEvent.click(await screen.findByTestId("post-save-toggle"));
+
+    const banner = await screen.findByTestId("feed-action-error");
+    expect(banner).toHaveAttribute("data-reason", "postGone");
+    expect(banner).toHaveTextContent(t("actionError.reason.postGone"));
+    expect(banner).not.toHaveTextContent(t("actionError.generic.save"));
   });
 });
 

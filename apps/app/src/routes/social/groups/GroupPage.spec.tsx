@@ -16,6 +16,7 @@ import {
   makeGroup,
   makePost,
   page,
+  POST_ERR,
   resetCaps,
   setCaps,
 } from "../feed/social-test-doubles";
@@ -26,6 +27,7 @@ const join = vi.fn();
 const leave = vi.fn();
 const listFeed = vi.fn();
 const createPost = vi.fn();
+const savePost = vi.fn();
 const getAppSocket = vi.fn(() => null);
 const navigateSpy = vi.fn();
 let mockParams: Record<string, string> = { groupId: GROUP_ID };
@@ -40,6 +42,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.socialApi,
       listFeed: (...a: unknown[]) => listFeed(...a),
       createPost: (...a: unknown[]) => createPost(...a),
+      savePost: (...a: unknown[]) => savePost(...a),
     },
     socialGroupsApi: {
       ...actual.socialGroupsApi,
@@ -310,6 +313,21 @@ describe("P1 — tab Bài viết", () => {
     expect(await screen.findByTestId("feed-action-error")).toHaveTextContent(
       t("actionError.forbidden.post"),
     );
+  });
+
+  it("S16-SOCIAL-FEMODERRMSG-1: lưu bài nhóm đã bị xoá (404 `SOCIAL-ERR-001`) ⇒ dải nói LÝ DO + thẻ cũ rời tab", async () => {
+    get.mockResolvedValue(makeGroup({ myRole: "member", myStatus: "active" }));
+    listFeed.mockResolvedValueOnce(page([makePost()])).mockResolvedValue(page([]));
+    savePost.mockRejectedValue(POST_ERR.gone());
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("post-save-toggle"));
+
+    const banner = await screen.findByTestId("feed-action-error");
+    expect(banner).toHaveAttribute("data-reason", "postGone");
+    expect(banner).toHaveTextContent(t("actionError.reason.postGone"));
+    expect(banner).not.toHaveTextContent(t("actionError.generic.save"));
+    await waitFor(() => expect(screen.queryByTestId("post-card")).toBeNull());
   });
 });
 
