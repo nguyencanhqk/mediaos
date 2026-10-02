@@ -74,9 +74,17 @@ function mailConfigRow(port: number): CompanyMailConfig {
   } satisfies Partial<CompanyMailConfig> as CompanyMailConfig;
 }
 
-function inviteService(Service: typeof InviteMailService, port: number): InviteMailService {
+/** `decryptSecret` giả — ghi lại (hàng, ngữ cảnh) để ca đo ngữ cảnh giải mã (S19-SEC-MAILAADBIND-1). */
+const fakeSecrets = (decrypt: () => Promise<string> = async () => SMTP_PASSWORD) => ({
+  decryptSecret: vi.fn(async (_row: unknown, _ctx: unknown) => decrypt()),
+});
+
+function inviteService(
+  Service: typeof InviteMailService,
+  port: number,
+  secrets: ReturnType<typeof fakeSecrets> = fakeSecrets(),
+): InviteMailService {
   const repo = { findByScope: vi.fn(async () => mailConfigRow(port)) };
-  const secrets = { decryptSecret: vi.fn(async () => SMTP_PASSWORD) };
   return new Service(
     repo as unknown as MailConfigRepository,
     secrets as unknown as SecretEncryptionService,
@@ -131,12 +139,29 @@ describe("nodemailer THẬT qua SMTP — S19-OPS-AUDITHIGH-1", () => {
   describe("InviteMailService.sendActivationEmail", () => {
     it("gửi thật: AUTH bằng mật khẩu đã giải mã · phong bì đúng · thân thư mang link kích hoạt", async () => {
       const server = await start();
+      const secrets = fakeSecrets();
 
-      const res = await inviteService(InviteMailService, server.port).sendActivationEmail(
+      const res = await inviteService(InviteMailService, server.port, secrets).sendActivationEmail(
         SEND_PARAMS,
       );
 
       expect(res).toEqual({ sent: true });
+      // S19-SEC-MAILAADBIND-1 (B1): ngữ cảnh giải mã = bộ năm (id, host, port, username, secure) của HÀNG —
+      // dựng LITERAL ở đây, không gọi helper (so helper với chính nó là tautology).
+      expect(secrets.decryptSecret).toHaveBeenCalledOnce();
+      const [envelopeArg, ctx] = secrets.decryptSecret.mock.calls[0];
+      expect(envelopeArg).toEqual(mailConfigRow(server.port));
+      expect(ctx).toEqual({
+        companyId: COMPANY_ID,
+        recordId: JSON.stringify([
+          "00000000-0000-4000-8000-0000000000aa",
+          LOCALHOST,
+          server.port,
+          SMTP_USERNAME,
+          false,
+        ]),
+        purpose: "smtp_password",
+      });
       expect(server.auths).toEqual([
         expect.objectContaining({ username: SMTP_USERNAME, password: SMTP_PASSWORD }),
       ]);
@@ -186,6 +211,34 @@ describe("nodemailer THẬT qua SMTP — S19-OPS-AUDITHIGH-1", () => {
         }
       },
     );
+
+    it("giải mã mật khẩu đã lưu THẤT BẠI ⇒ {sent:false, reason:'decrypt_failed'}, 0 kết nối SMTP; ĐÚNG 1 dòng `error` (thẻ · company · config), KHÔNG `warn`", async () => {
+      // S19-SEC-MAILAADBIND-1 (owner D3): giải mã hỏng = vi phạm toàn vẹn (đích bị đổi ngoài app, envelope hỏng
+      // / định dạng cũ, mất KEK) ⇒ mức `error` + thẻ cố định + config id. Mảng `logged` gộp 5 mức ⇒ đo MỨC
+      // bằng spy RIÊNG của từng mức, không bằng chữ.
+      const server = await start();
+      const secrets = fakeSecrets(async () => {
+        throw new Error("decrypt failed");
+      });
+
+      const res = await inviteService(InviteMailService, server.port, secrets).sendActivationEmail(
+        SEND_PARAMS,
+      );
+
+      expect(res).toEqual({ sent: false, reason: "decrypt_failed" });
+      expect(secrets.decryptSecret).toHaveBeenCalledOnce();
+      expect(server.connections).toBe(0);
+      const error = vi.mocked(Logger.prototype.error).mockName("Logger.error");
+      expect(error).toHaveBeenCalledOnce();
+      const line = String(error.mock.calls[0]?.[0] ?? "");
+      expect(line).toContain("smtp-envelope-unusable");
+      expect(line).toContain(`company=${COMPANY_ID}`);
+      expect(line).toContain("config=00000000-0000-4000-8000-0000000000aa");
+      expect(vi.mocked(Logger.prototype.warn).mockName("Logger.warn")).not.toHaveBeenCalled();
+      for (const secret of [SMTP_PASSWORD, INVITE_TOKEN, EXPECTED_LINK, "decrypt failed"]) {
+        expect(logText()).not.toContain(secret);
+      }
+    });
 
     it("cổng ĐÃ ĐÓNG ⇒ {sent:false} (không treo), log nêu đúng ECONNREFUSED", async () => {
       const server = await start();

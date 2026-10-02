@@ -386,3 +386,41 @@ Mọi finding được xác minh lại trên code/lane trước khi sửa (probe
 
 **Bác toàn phần: không có.** Bác một phần: F2 (lập luận «gộp đóng cửa sổ»), F10 (cơ chế «đóng dấu nhầm WO này»),
 F3 (giả thuyết role CI — M22). Mọi phần xác nhận đã sửa vào plan.
+
+## 11. Nhật ký thi công (02/10/2026, worktree `C:\dev 2\MediaOS-mailaad`, lane `mediaos_mailaad`)
+
+### 11.1 Bước 1 — chữ ký owner
+
+Owner ký 02/10/2026 MỌI khuyến nghị §6 (D1 (a) + ký trước (a') · D2 · D3 · D4 (a) · D5 · D6 đủ 4 reviewer) — ghi
+vào `notes` của WO trong `harness/backlog.mjs` + thêm `apps/api/src/db/schema/mail-config.ts` vào `paths` (D5).
+Không seed WO nào (job mã hoá lại D1-c chỉ seed nếu PROD có hàng mà thiếu mật khẩu lúc deploy).
+
+### 11.2 Bước 2 — RED trên base (code sản phẩm chưa vá)
+
+Lệnh §8 bước 2 (runner lane `mailaad`) ⇒ `Test Files 5 failed | 6 passed (11)` · `Tests 31 failed | 125 passed (156)`
+(baseline trước khi thêm test: `10 passed (10)` · `128 passed (128)` — khớp M17).
+
+**ĐỎ HÀNH VI (bằng chứng deny-path — đỏ đúng ở hành vi được assert):**
+
+- service «CÓ password» — `expected '<uuid>' to be '["<uuid>",…'` (ngữ cảnh encrypt là id trần).
+- service «VẮNG password + đích KHỚP» — `expected '11111111-…' to be '["11111111-…'` (ngữ cảnh decrypt là id trần).
+- service «decrypt thất bại» — `expected 'Không giải mã được mật khẩu đã lưu.' to be 'Không dùng được mật khẩu đã lưu — vui…'` (D2).
+- service ca `:342` đã sửa — `expected "logger.error" to be called once, but got 0 times` (D3; base log `warn`).
+- invite «gửi thật» — diff `recordId: "00000000-0000-4000-8000-0000000000aa"` ≠ bộ năm JSON.
+- invite ca mới «giải mã THẤT BẠI» — `expected "Logger.error" to be called once, but got 0 times` (D3; base `warn`, thiếu config id — M9).
+- R-B1 port / username / host — `expected { ok: true } to deeply equal { ok: false, …(1) }` (mật khẩu đã lưu tới đích đã bị sửa); R-B1 secure — `errorMessage` TLS («Lỗi TLS/chứng chỉ …») ≠ câu D2 (đã mở TLS tới L).
+- R-B2 port / username / host — `expected { sent: true } to deeply equal { sent: false, …(1) }`; R-B2 secure — `expected { sent: false, reason: 'send_failed' } to deeply equal …`.
+- R-B4 — `expected { sent: true } to deeply equal { sent: false, …(1) }` (DELETE+INSERT tái dùng id + chép envelope qua được — M3).
+- R-B5 host / username — `expected 200 to be 400` (body 200 mang `host "a�b.test"` / `username "mailer�@…"` — PG lưu U+FFFD, M11).
+- R-B7 — `promise resolved "{ …(18) }" instead of rejecting` (id chữ HOA bị thay bằng id chữ thường — M24).
+
+**ĐỎ CẤU TRÚC (export chưa có — M18; KHÔNG tính là bằng chứng deny-path):** `mail-destination.spec.ts` 11/11
+`TypeError: (0 , smtpSecretContext) is not a function` · service ca D4 `TypeError: MailDestinationNotPersistedError is
+not a constructor` · envelope ca 3b `TypeError: (0 , smtpSecretContext) is not a function`.
+
+**XANH trên base có chủ ý:** R-B6 (id đã gắn từ trước — khoá mutant M5) · P-B1 (đối chứng dương — khoá mutant
+M10/M16) · service «lỗi LẬP TRÌNH ném nguyên» (khoá mutant «bắt mọi lỗi thành 400»).
+
+Lượt RED đầu có 32 đỏ: P-B1 đỏ vì LỖI TEST (`E.connections` cộng dồn cả file — P3 kết nối E) ⇒ sửa đo E TRONG phần
+act (`connectionsDuring`) rồi chạy lại: P-B1 xanh trên base như thiết kế. Spy log đặt `mockName` để thông điệp đỏ
+nêu đúng mức (`logger.error` / `Logger.error`) thay vì `"spy"` chung.

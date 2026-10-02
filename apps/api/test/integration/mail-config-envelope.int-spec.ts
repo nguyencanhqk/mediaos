@@ -17,6 +17,7 @@ import { LocalKekProvider } from "../../src/crypto/local-kek.provider";
 import { AuditService } from "../../src/events/audit.service";
 import { MailConfigRepository } from "../../src/settings/mail-config.repository";
 import { MailConfigService } from "../../src/settings/mail-config.service";
+import { smtpSecretContext } from "../../src/settings/mail-destination";
 import { MailTransportService } from "../../src/settings/mail-transport.service";
 import { SMTP_SECRET_PURPOSE } from "@mediaos/contracts";
 import { directPool, hasDb } from "../helpers/integration-db";
@@ -141,12 +142,12 @@ describe.skipIf(!hasDb)("CS-8 mail-config — envelope round-trip + audit + RLS 
     expect(Buffer.compare(after.rows[0].secret_ciphertext, before.rows[0].secret_ciphertext)).not.toBe(0);
 
     // decrypt JIT (qua testConnection path) phải trả pw mới — verify() sẽ fail (host giả) nhưng decrypt phải thành công.
+    // S19-SEC-MAILAADBIND-1 (B2): decrypt hàng ĐÃ LƯU đi qua helper ngữ cảnh duy nhất (bộ năm id + đích của hàng).
     const stored = await repo.findByScope(A.companyId, "default");
-    const decrypted = await secrets.decryptSecret(stored!, {
-      companyId: stored!.companyId,
-      recordId: stored!.id,
-      purpose: SMTP_SECRET_PURPOSE,
-    });
+    const decrypted = await secrets.decryptSecret(
+      stored!,
+      smtpSecretContext(stored!.companyId, stored!.id, stored!),
+    );
     expect(decrypted).toBe(NEW);
   });
 
