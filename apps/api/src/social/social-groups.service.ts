@@ -41,10 +41,12 @@ import type { FeedGroupRole, SocialActor, SocialRequestUser } from "./social.typ
  * Khuôn chung của module (`social-reports.service.ts`), theo ĐÚNG thứ tự này ở mọi route ghi:
  *   1. `access.resolveActor(user, routeKey)` — guard tầng 2, **TRƯỚC** khi mở tx (mỗi lượt hỏi engine
  *      quyền tự mở `withTenant` riêng; hỏi trong tx ghi là lồng transaction ⇒ treo IM LẶNG).
- *   2. `withTenant` → cổng NHÓM (`assertGroupVisibleTx` 404 → `assertGroupRoleTx` 403) → **neo
- *      `lockGroupRowTx`** nếu thao tác có thể lấy đi owner → ghi → bộ đếm → audit → outbox.
+ *   2. `withTenant` → cổng NHÓM: `assertGroupVisibleTx` (404) → route GHI theo vai
+ *      (`033`/`034`/`038`/`039`) gọi `lockAndAssertGroupRoleTx` (khoá hàng nhóm RỒI đọc vai — 403);
+ *      route không theo vai (`035`/`036`) neo `lockGroupRowTx` trực tiếp → ghi → bộ đếm → audit →
+ *      outbox. `037` (chỉ đọc) dùng `assertGroupRoleTx` trần.
  *
- * ┌─ 🔴 BA LUẬT KHÔNG ĐƯỢC ĐỔI THỨ TỰ ────────────────────────────────────────────────────────────┐
+ * ┌─ 🔴 BỐN LUẬT KHÔNG ĐƯỢC ĐỔI THỨ TỰ ───────────────────────────────────────────────────────────┐
  * │ (a) **404 TRƯỚC 403**: hỏi "có thấy nhóm này không" trước "có vai trò không". Ngược lại thì một │
  * │     người ngoài dò được sự tồn tại của nhóm kín qua sự khác nhau giữa 403 và 404.              │
  * │ (b) **`lockGroupRowTx` TRƯỚC mọi câu đếm owner** (D6-ii/C3). Đọc `COUNT` rồi ghi mà không khoá  │
@@ -53,6 +55,10 @@ import type { FeedGroupRole, SocialActor, SocialRequestUser } from "./social.typ
  * │ (c) **Bộ đếm suy từ CHUYỂN TRẠNG THÁI HÀNG THẬT** (`groupMemberCountDelta`), không từ tên       │
  * │     route: mọi lời gọi `bumpGroupMemberCount` ở file này lấy `before`/`after` từ giá trị DB vừa │
  * │     trả về, không từ giả định của người viết route.                                             │
+ * │ (d) **Vai ACTOR đọc SAU khoá** ở mọi route GHI theo vai (`033`/`034`/`038`/`039`) —             │
+ * │     `lockAndAssertGroupRoleTx`. Đọc vai TRƯỚC khoá là TOCTOU: một `038` song song hạ vai actor  │
+ * │     giữa hai câu ⇒ người VỪA mất quyền vẫn mời ra / xoá nhóm / mở nhóm kín (đo M3/M9/M10 của    │
+ * │     S16-SOCIAL-GROUPTOCTOU-1). Lưới: `social-group-role-lock.spec.ts` (U3) + race int-spec.     │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 @Injectable()
@@ -142,7 +148,9 @@ export class SocialGroupsService {
 
     return this.db.withTenant(actor.companyId, async (tx) => {
       await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const { viaManage } = await this.groupAccess.assertGroupRoleTx(tx, actor, groupId, [
+      // (d) — vai actor đọc SAU khoá (S16-SOCIAL-GROUPTOCTOU-1): admin vừa bị hạ vai giữa chừng KHÔNG
+      // đổi được nhóm kín thành công khai (đo M10). `updateGroupTx` ghi lên hàng chính tx này đã khoá.
+      const { viaManage } = await this.groupAccess.lockAndAssertGroupRoleTx(tx, actor, groupId, [
         "owner",
         "admin",
       ]);
@@ -188,7 +196,11 @@ export class SocialGroupsService {
 
     await this.db.withTenant(actor.companyId, async (tx) => {
       await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const { viaManage } = await this.groupAccess.assertGroupRoleTx(tx, actor, groupId, ["owner"]);
+      // (d) — vai actor đọc SAU khoá (S16-SOCIAL-GROUPTOCTOU-1): owner vừa bị hạ vai giữa chừng KHÔNG
+      // xoá mềm được nhóm (đo M9 — không có route khôi phục nhóm).
+      const { viaManage } = await this.groupAccess.lockAndAssertGroupRoleTx(tx, actor, groupId, [
+        "owner",
+      ]);
 
       const deleted = await this.groups.softDeleteGroupTx(
         tx,
