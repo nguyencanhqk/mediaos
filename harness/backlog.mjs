@@ -20333,6 +20333,7 @@ export const backlog = [
       "apps/api/src/user-invites/invite-mail.service.ts",
       "apps/api/src/user-invites/invite-mail.smtp.spec.ts",
       "apps/api/src/crypto/**",
+      "apps/api/src/db/schema/mail-config.ts",
       "apps/api/test/**",
       "docs/plans/**",
       "harness/backlog.mjs",
@@ -20351,6 +20352,7 @@ export const backlog = [
     ],
     notes: [
       "Owner chốt 02/10/2026: làm WO riêng, SỚM — trước khi PROD lưu cấu hình SMTP đầu tiên (rẻ nhất lúc này).",
+      "Owner ký 02/10/2026 (plan §6 — mọi khuyến nghị): D1 (a) fail-closed với envelope mã hoá dưới ngữ cảnh cũ + câu «nhập lại mật khẩu» rõ + log `error`; cửa deploy «PROD phải 0 hàng, có hàng ⇒ DỪNG» — ký TRƯỚC (a'): PROD 1–vài hàng mà có người giữ mật khẩu của TỪNG hàng ⇒ deploy rồi nhập lại mật khẩu SMTP NGAY trên console + «Kiểm tra kết nối» vắng mật khẩu ⇒ `ok:true` (nới done_when «có hàng ⇒ DỪNG»); thiếu mật khẩu ⇒ DỪNG + seed WO job mã hoá lại (c) · D2 câu route test khi giải mã hỏng = «Không dùng được mật khẩu đã lưu — vui lòng nhập lại mật khẩu SMTP rồi bấm Lưu.» · D3 `logger.error` thẻ cố định `smtp-envelope-unusable` + company + config id ở CẢ HAI nơi (sửa ca service ~:342; ghim mức bằng spy riêng từng mức) · D4 (a) repo so `RETURNING` với recordId + 4 trường đích: lệch id ⇒ 500 lỗi lập trình (rollback), lệch đích ⇒ 400 `VALIDATION-ERR-001` · D5 mở `paths` cho `apps/api/src/db/schema/mail-config.ts` CHỈ sửa docblock (không db:generate) · D6 FULL gate đủ 4: security + database + silent-failure + santa-method (review security độc lập lần hai). Plan: docs/plans/S19-SEC-MAILAADBIND-1.md.",
     ],
   },
   {
