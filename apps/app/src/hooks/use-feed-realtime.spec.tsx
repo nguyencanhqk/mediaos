@@ -141,6 +141,28 @@ describe("C15 — badge ĐẾM, KHÔNG chèn bài (D7 · SOC-DEC-010)", () => {
     // để lại dấu vết nào.
     expect(spy).toHaveBeenCalled();
   });
+
+  it("S16-SOCIAL-AVATARPRESIGN-1 (D3-b) — `author.avatarUrl` null (API mới) HOẶC chuỗi (API cũ) đều đếm", () => {
+    // Ca canh 4 tổ hợp deploy (FE tự deploy, API tay): API mới phát `null`; API CŨ còn phát chuỗi
+    // (fileId thô) — schema WS mới nhận cả hai (ép về `null`), nên huy hiệu «bài mới» không chết.
+    const { result } = renderHook(() => useFeedRealtime());
+    act(() => {
+      emit(WS_EVENTS.FEED_POST_CREATED, {
+        ...WS_POST,
+        author: { employeeId: null, fullName: "An", avatarUrl: null },
+      });
+      emit(WS_EVENTS.FEED_POST_CREATED, {
+        ...WS_POST,
+        id: "22222222-2222-4222-8222-222222222222",
+        author: {
+          employeeId: null,
+          fullName: "An",
+          avatarUrl: "44444444-4444-4444-8444-444444444444",
+        },
+      });
+    });
+    expect(result.current.newPostCount).toBe(2);
+  });
 });
 
 describe("C16 — cổng quyền + gỡ listener đối xứng", () => {

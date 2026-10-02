@@ -4,7 +4,8 @@
  *
  * - Ca DENY «không gọi 059» chờ QUA nhịp debounce (§8 M-b): assert ngay sau khi gõ thì xanh hiển nhiên
  *   vì debounce chưa nổ — mutant cổng `q.length>=2` cũng xanh theo. Ca ALLOW cùng nhịp.
- * - Ứng viên mang `avatarUrl` KHÁC rỗng (§8 M-a) — ca «không `<img>`» mới có nghĩa.
+ * - Ứng viên mang `avatarUrl` URL ký ⇒ ứng viên + chip VẼ ảnh (S16-SOCIAL-AVATARPRESIGN-1, owner D4);
+ *   ca «không `<img>`» dùng fileId thô (khác rỗng) — với `null` thì code lỡ truyền thô vẫn xanh.
  * - `<select>` huy hiệu nạp bất đồng bộ: đợi option xuất hiện rồi mới `change` (bẫy race đã ghi).
  */
 import * as React from "react";
@@ -112,14 +113,36 @@ describe("KF — cổng gọi 059 (schema + cặp `create:feed-kudos`)", () => {
 });
 
 describe("KF — chọn người nhận", () => {
-  it("bấm ứng viên ⇒ thành chip; ứng viên đã chọn bị khoá; KHÔNG `<img>` ở đâu cả", async () => {
+  it("bấm ứng viên ⇒ thành chip; ứng viên đã chọn bị khoá; ảnh ứng viên + chip = URL ký", async () => {
+    renderWithProviders(<Harness />);
+    typeQuery("an");
+    const [first] = await screen.findAllByTestId("kudos-candidate");
+    expect(within(first).getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
+      "src",
+      "https://x.invalid/p.png",
+    );
+    fireEvent.click(first);
+    expect(draftState().ids).toEqual([person(1).employeeId]);
+    const chips = screen.getAllByTestId("kudos-selected");
+    expect(chips).toHaveLength(1);
+    expect(within(chips[0]!).getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
+      "src",
+      "https://x.invalid/p.png",
+    );
+    expect(screen.getAllByTestId("kudos-candidate")[0]).toBeDisabled();
+  });
+
+  it("fileId THÔ (API chưa ký) ⇒ ứng viên + chip KHÔNG `<img>` (chữ cái đầu)", async () => {
+    searchRecipients.mockResolvedValue({
+      data: [{ ...person(1, "An Nguyễn"), avatarUrl: "00000001-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
+      truncated: false,
+    });
     const { container } = renderWithProviders(<Harness />);
     typeQuery("an");
     const [first] = await screen.findAllByTestId("kudos-candidate");
+    expect(first).toHaveTextContent("AN");
     fireEvent.click(first);
-    expect(draftState().ids).toEqual([person(1).employeeId]);
     expect(screen.getAllByTestId("kudos-selected")).toHaveLength(1);
-    expect(screen.getAllByTestId("kudos-candidate")[0]).toBeDisabled();
     expect(container.querySelector("img")).toBeNull();
   });
 

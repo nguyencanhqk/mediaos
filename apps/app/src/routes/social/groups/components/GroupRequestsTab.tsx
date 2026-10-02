@@ -14,6 +14,7 @@ import type { FeedGroupMemberDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ActionErrorBanner } from "../../feed/components/ActionErrorBanner";
 import { OffsetPager } from "../../feed/components/OffsetPager";
+import { avatarSrc } from "../../feed/lib/feed-format";
 import { useGroupErrorState } from "../lib/use-group-membership";
 import { GROUP_MEMBERS_PAGE_SIZE } from "./GroupMembersTab";
 
@@ -85,7 +86,7 @@ export function GroupRequestsTab({ groupId }: GroupRequestsTabProps): React.Reac
                 data-testid={`group-request-${m.userId}`}
                 className="flex flex-wrap items-center gap-3 p-3"
               >
-                <Avatar name={nameOf(m)} src={m.avatarUrl} size="sm" />
+                <Avatar name={nameOf(m)} src={avatarSrc(m.avatarUrl)} size="sm" />
                 <p className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{nameOf(m)}</p>
                 <Button
                   size="sm"

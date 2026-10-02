@@ -327,3 +327,28 @@ describe("CommentComposer — cổng quyền + trần độ dài", () => {
     expect(container.querySelector('input[type="file"]')).toBeNull();
   });
 });
+
+// S16-SOCIAL-AVATARPRESIGN-1 — ảnh tác giả bình luận: URL ký ⇒ `<img>`; fileId thô ⇒ chữ cái đầu.
+describe("AVATARPRESIGN — ảnh tác giả bình luận qua `avatarSrc`", () => {
+  it("URL ký ⇒ `<img>` đúng `src`; fileId THÔ ⇒ KHÔNG `<img>`", () => {
+    renderList([
+      base({
+        id: "c1",
+        author: { employeeId: null, fullName: "An Nguyễn", avatarUrl: "https://x.invalid/p.png" },
+      }),
+      base({
+        id: "c2",
+        author: {
+          employeeId: null,
+          fullName: "Bình Trần",
+          avatarUrl: "44444444-4444-4444-8444-444444444444",
+        },
+      }),
+    ]);
+    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
+      "src",
+      "https://x.invalid/p.png",
+    );
+    expect(screen.queryByRole("img", { name: "Bình Trần" })).toBeNull();
+  });
+});

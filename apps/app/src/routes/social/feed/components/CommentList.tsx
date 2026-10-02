@@ -22,7 +22,7 @@ import type { FeedCommentDto, FeedReactionEmojiDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PostBody } from "./PostBody";
 import { FeedReactionBar } from "./FeedReactionBar";
-import { authorDisplayName, relativeTime } from "../lib/feed-format";
+import { authorDisplayName, avatarSrc, relativeTime } from "../lib/feed-format";
 
 interface CommentListProps {
   comments: readonly FeedCommentDto[];
@@ -64,7 +64,7 @@ function CommentRow({
       data-testid={isReply ? "comment-reply" : "comment-row"}
       className={cn("flex gap-2", isReply && "ml-8")}
     >
-      <Avatar name={name} src={comment.author.avatarUrl ?? undefined} size="sm" />
+      <Avatar name={name} src={avatarSrc(comment.author.avatarUrl)} size="sm" />
 
       <div className="min-w-0 flex-1">
         <div className="rounded-lg bg-muted px-3 py-2">

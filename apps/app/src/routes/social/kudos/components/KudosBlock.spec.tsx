@@ -3,8 +3,9 @@
  *
  * - Mock `Link` NỘI SUY `params` (khuôn `PollsPage.spec`): mock `<a href={to}>` trần chỉ in khuôn
  *   `/feed/profiles/$employeeId` ⇒ link trỏ nhầm id vẫn xanh.
- * - Fixture «không `<img>`» mang `avatarUrl` KHÁC rỗng: với `avatarUrl:null` thì code lỡ truyền `src`
- *   vẫn không vẽ ảnh ⇒ ca xanh vì sai lý do.
+ * - Ảnh (S16-SOCIAL-AVATARPRESIGN-1): `avatarUrl` URL ký ⇒ `<img>`; `null` / fileId thô ⇒ chữ cái đầu.
+ *   Ca «không `<img>`» dùng giá trị KHÁC rỗng (fileId) — với `null` thì code lỡ truyền thô vẫn không
+ *   vẽ ảnh ⇒ ca xanh vì sai lý do.
  */
 import type { ReactNode } from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
@@ -115,8 +116,22 @@ describe("KB — người nhận", () => {
     expect(within(item).queryByRole("link")).toBeNull();
   });
 
-  it("🔴 KHÔNG `<img>` dù `avatarUrl` có giá trị (cột THÔ — chỉ chữ cái đầu)", () => {
-    const { container } = renderBlock(block());
+  // ⟲ S16-SOCIAL-AVATARPRESIGN-1 (owner D4) — `avatarUrl` giờ là URL ĐÃ KÝ ⇒ vẽ ảnh. Vệ sinh render
+  // (`avatarSrc`): chỉ http(s) thành `src`; `null` / fileId thô (API cũ) ⇒ chữ cái đầu, KHÔNG `<img>`.
+  it("`avatarUrl` URL ký ⇒ `<img>` đúng `src`", () => {
+    renderBlock(block());
+    expect(screen.getByRole("img", { name: "Bình Trần" })).toHaveAttribute("src", RAW_AVATAR);
+  });
+
+  it("`avatarUrl:null` ⇒ chữ cái đầu, KHÔNG `<img>`", () => {
+    const { container } = renderBlock(block({ recipients: [recipient({ avatarUrl: null })] }));
+    expect(screen.getByTestId("kudos-recipient")).toHaveTextContent("BT");
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it('fileId THÔ (API chưa ký) ⇒ KHÔNG `<img src="<uuid>">` (URL tương đối = ảnh vỡ)', () => {
+    const { container } = renderBlock(block({ recipients: [recipient({ avatarUrl: EMP_B })] }));
+    expect(screen.getByTestId("kudos-recipient")).toHaveTextContent("BT");
     expect(container.querySelector("img")).toBeNull();
   });
 

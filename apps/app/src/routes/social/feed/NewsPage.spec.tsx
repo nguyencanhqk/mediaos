@@ -359,3 +359,28 @@ describe("C9 — trạng thái của màn", () => {
     await waitFor(() => expect(screen.getByTestId("news-error")).toBeInTheDocument());
   });
 });
+
+// S16-SOCIAL-AVATARPRESIGN-1 (owner D4) — danh sách đã/chưa đọc vẽ ảnh khi `avatarUrl` là URL ký.
+describe("AVATARPRESIGN — ảnh người đã/chưa đọc qua `avatarSrc`", () => {
+  beforeEach(() => {
+    setCaps({ "view:feed": true, "manage:feed-news": true });
+    listNews.mockResolvedValue(page([makeNews({ requiresAck: true })]));
+  });
+
+  it("URL ký ⇒ `<img>` đúng `src`; fileId THÔ (API chưa ký) ⇒ chữ cái đầu, KHÔNG `<img>`", async () => {
+    mockAcks(() =>
+      ackPage([
+        person({ fullName: "An Nguyễn", avatarUrl: "https://x.invalid/p.png" }),
+        person({ fullName: "Bình Trần", avatarUrl: "44444444-4444-4444-8444-444444444444" }),
+      ]),
+    );
+    renderWithProviders(<NewsPage />);
+    await openReaders();
+    const list = await screen.findByTestId("news-readers-list");
+    expect(within(list).getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
+      "src",
+      "https://x.invalid/p.png",
+    );
+    expect(within(list).queryByRole("img", { name: "Bình Trần" })).toBeNull();
+  });
+});

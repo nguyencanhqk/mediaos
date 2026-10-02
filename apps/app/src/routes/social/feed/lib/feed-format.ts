@@ -23,6 +23,22 @@ export function authorDisplayName(author: FeedAuthorDto, fallback: string): stri
   return name && name.length > 0 ? name : fallback;
 }
 
+/** `http://` hoặc `https://` ở đầu chuỗi — scheme duy nhất được thành `src` của ảnh đại diện. */
+const AVATAR_SRC_RE = /^https?:\/\//i;
+
+/**
+ * S16-SOCIAL-AVATARPRESIGN-1 (owner D8) — `src` cho `Avatar` từ `avatarUrl`/`avatar` của SOCIAL.
+ *
+ * Server trả URL ĐÃ KÝ hoặc `null` (che dữ liệu là việc của SERVER — hàm này KHÔNG phải lớp che). Đây là
+ * vệ sinh render: chỉ chuỗi `http(s)://` mới thành `src`, mọi thứ khác ⇒ `undefined` ⇒ chữ cái đầu.
+ * Lý do tồn tại: FE tự deploy khi merge còn API PROD deploy tay — trong khe đó API cũ vẫn trả fileId
+ * thô, và `<img src="<uuid>">` là URL TƯƠNG ĐỐI ⇒ ảnh vỡ (+ một request rác tới chính app). Với
+ * helper, thứ tự deploy nào cũng vô hại: FE trước ⇒ chữ cái đầu, API trước ⇒ ảnh.
+ */
+export function avatarSrc(value: string | null | undefined): string | undefined {
+  return value && AVATAR_SRC_RE.test(value) ? value : undefined;
+}
+
 /**
  * Mốc thời gian tương đối («3 phút trước»).
  *

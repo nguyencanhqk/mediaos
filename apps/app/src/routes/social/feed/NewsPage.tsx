@@ -25,7 +25,7 @@ import { ApiError, PermissionGate, socialApi, socialKeys, useCan } from "@mediao
 import type { FeedAckPersonDto, FeedNewsItemDto } from "@mediaos/contracts";
 import { PostBody } from "./components/PostBody";
 import { ActionErrorBanner } from "./components/ActionErrorBanner";
-import { authorDisplayName, relativeTime } from "./lib/feed-format";
+import { authorDisplayName, avatarSrc, relativeTime } from "./lib/feed-format";
 
 /**
  * Hai NỬA của 022 — tên phải trùng `listPostAcksQuerySchema.state` của contracts.
@@ -218,7 +218,12 @@ function NewsReadersBody({
     <ul className="flex flex-col gap-1" data-testid="news-readers-list">
       {people.map((p, i) => (
         <li key={readerKey(p, i)} className="flex items-center gap-2 text-sm">
-          <Avatar name={p.fullName ?? t("post.unknownAuthor")} size="sm" />
+          {/* S16-SOCIAL-AVATARPRESIGN-1 (owner D4): `avatarUrl` = URL ký hoặc null (che theo tên). */}
+          <Avatar
+            name={p.fullName ?? t("post.unknownAuthor")}
+            src={avatarSrc(p.avatarUrl)}
+            size="sm"
+          />
           <span className="flex-1 truncate text-foreground">
             {p.fullName ?? t("post.unknownAuthor")}
           </span>

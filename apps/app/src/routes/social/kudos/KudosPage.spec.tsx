@@ -5,7 +5,8 @@
  *   chạy timer thật): «tháng hiện tại» phải là literal `2026-10`. Máy/CI chạy UTC mà code đọc đồng hồ
  *   máy thì ra `2026-09` ⇒ đỏ.
  * - Mock `Link` NỘI SUY params: link «Xem bài» phải mang `postId`, không `kudosId`.
- * - Fixture mang `avatarUrl` thật ⇒ ca «không `<img>`» có nghĩa.
+ * - Fixture mang `avatarUrl` URL ký: màn 009 VẼ ảnh (S16-SOCIAL-AVATARPRESIGN-1, owner D4); widget tháng
+ *   GIỮ chỉ tên ⇒ ca «không `<img>`» của widget có nghĩa (giá trị khác rỗng mà vẫn không vẽ).
  */
 import * as React from "react";
 import type { ReactNode } from "react";
@@ -120,12 +121,15 @@ describe("KP — màn 009 theo tháng", () => {
     );
   });
 
-  it("dòng: link «Xem bài» mang `postId` (KHÔNG `kudosId`); không `<img>`", async () => {
-    const { container } = renderWithProviders(<KudosPage />);
+  it("dòng: link «Xem bài» mang `postId` (KHÔNG `kudosId`); ảnh người nhận = URL ký", async () => {
+    renderWithProviders(<KudosPage />);
     const link = await screen.findByTestId("kudos-view-post");
     expect(link.getAttribute("href")).toBe(`/feed/posts/${POST_ID}`);
     expect(link.getAttribute("href")).not.toContain(KUDOS_ID);
-    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByRole("img", { name: "Bình Trần" })).toHaveAttribute(
+      "src",
+      "https://x.invalid/p.png",
+    );
   });
 
   it("tháng từ URL + ‹ ⇒ tháng trước, BỎ `page`; › ⇒ tháng sau (về tháng hiện tại ⇒ bỏ `month`)", async () => {

@@ -86,6 +86,32 @@ describe("C21 — BirthdayWidget: hai bẫy của DTO sinh nhật", () => {
     expect(PERSON).not.toHaveProperty("avatarUrl");
   });
 
+  it("S16-SOCIAL-AVATARPRESIGN-1 — `avatar` URL ký ⇒ `<img>`; fileId THÔ ⇒ chữ cái đầu", () => {
+    wrap(
+      <BirthdayWidget
+        range="today"
+        onRangeChange={vi.fn()}
+        items={[
+          { ...PERSON, avatar: "https://x.invalid/p.png" },
+          {
+            ...PERSON,
+            employeeId: "33333333-3333-4333-8333-333333333333",
+            fullName: "Bình Trần",
+            avatar: "44444444-4444-4444-8444-444444444444",
+          },
+        ]}
+        isLoading={false}
+        isError={false}
+        onWish={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
+      "src",
+      "https://x.invalid/p.png",
+    );
+    expect(screen.queryByRole("img", { name: "Bình Trần" })).toBeNull();
+  });
+
   it("KHÔNG hiện năm sinh/tuổi — chỉ ngày/tháng (SOC-DEC-007)", () => {
     wrap(
       <BirthdayWidget
