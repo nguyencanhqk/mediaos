@@ -434,3 +434,28 @@ repo: id lệch ⇒ `Error` lập trình, đích lệch ⇒ 400) → docblock (r
 `pnpm --filter @mediaos/api typecheck` sạch. Cùng lệnh §8 bước 2, MỘT lần, cùng lane ⇒ `Test Files 11 passed (11)`
 · `Tests 156 passed (156)` (credexfil int-spec 26 ca chạy thật, envelope 7, `mail-destination.spec` 11).
 B2 grep: `SMTP_SECRET_PURPOSE` trong `apps/api/src/**/*.ts` không-spec chỉ còn ở `mail-destination.ts`.
+
+### 11.4 Bước 4 — mutant M1–M16 (§5.3)
+
+Mỗi mutant: `cp` sao lưu → cấy (script Python, không qua Edit/formatter) → chạy NGUYÊN lệnh §8 bước 2 trên lane
+`mailaad` → `cp` khôi phục → `cmp` với bản sao lưu + `git diff --quiet` (không bao giờ `git checkout --`). 16/16
+ĐỎ, đều đỏ ở hành vi được assert (không 500/biên dịch/timeout); sau cả loạt `git status` sạch.
+
+- M1 bỏ `host` — `4 failed | 7 passed` file · `8 failed` ca: R-B1/R-B2 host (`expected { ok: true }` / `{ sent: true }`), unit «đổi host», ctx LITERAL service/invite.
+- M2 bỏ `port` — 9 đỏ: R-B1/R-B2 port, **R-B4** (`expected { sent: true } …`), unit «đổi port», ctx LITERAL.
+- M3 bỏ `username` — 8 đỏ: R-B1/R-B2 username (`{ ok: true }` — L nhận AUTH EVIL_USER/STORED), unit. Lượt chạy đầu
+  của M3 gặp `ERR_IPC_CHANNEL_CLOSED` (worker chết, file credexfil không báo) ⇒ chạy lại 1 lần: hoàn tất, kết quả trên.
+- M4 bỏ `secure` — 8 đỏ: R-B1 secure (câu TLS ≠ câu D2), R-B2 secure (`send_failed` ≠ `decrypt_failed`), unit.
+- M5 bỏ `id` — 7 đỏ: **R-B6** (`expected { sent: true } to deeply equal { sent: false, …(1) }`), unit «đổi id».
+- M6 lời mời giữ ctx cũ — 3 đỏ: R3 có sẵn (`expected { sent: false, …(1) } to deeply equal { sent: true }`), P-B1, unit invite ctx.
+- M7 `testConnection` giữ ctx cũ — 4 đỏ: P1/P3 có sẵn + P-B1 (`expected { ok: false, …(1) } to deeply equal { ok: true }`), unit service ctx.
+- M8 PUT encrypt giữ ctx cũ — 6 đỏ: P1 · R3 · P3 · P-B1, envelope ca 3b (`Error: decrypt failed`), unit service ctx.
+- M9 `.join("|")` — 7 đỏ: unit cặp va chạm (`expected '…|…' not to be '…|…'`), ca ký tự điều khiển, ca `[`, ctx LITERAL. (Int-spec xanh — encrypt/decrypt cùng ngữ cảnh; chỉ unit bắt được, đúng §5.3.)
+- M10 gắn thêm `fromEmail` — 7 đỏ: **P-B1** (`expected { sent: false, …(1) } to deeply equal { sent: true }`), unit «nguồn là HÀNG đủ cột».
+- M11 bỏ vế đích của B4 — 2 đỏ: R-B5 host + username (`expected 200 to be 400`).
+- M12 log lời mời bỏ `config=` — 1 đỏ: `expected 'smtp-envelope-unusable: …' to contain 'config=00000000-…'`.
+- M13 log lời mời về `warn` — 1 đỏ: `expected "Logger.error" to be called once, but got 0 times`.
+- M14 log `testConnection` về `warn` — 1 đỏ: `expected "logger.error" to be called once, but got 0 times`.
+- M15 bỏ vế `row.id === recordId` — 1 đỏ: R-B7 `promise resolved "{ …(18) }" instead of rejecting`.
+- M16 (mutant của TEST) WHERE bước sửa hàng `scope='khong-co'` — 9 đỏ: P-B1 + mọi R-B1/R-B2 ở
+  `bước sửa hàng phải chạm đúng 1 hàng: expected +0 to be 1` — tiền điều kiện không xanh-rỗng.
