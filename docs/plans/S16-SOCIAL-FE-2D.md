@@ -1,11 +1,12 @@
 # S16-SOCIAL-FE-2D — FE nợ nội dung SOCIAL: đính kèm (054/055) · @mention thành link · `droppedMentions` của bình luận
 
-> Trạng thái: **plan v1 (02/10/2026)** — chờ `plan-reviewer` + owner ký §6. Nhánh `feat/s16-social-fe-2d` cắt từ
-> master `14afbb5f`. Zone amber, gate **LIGHT** (`typescript-reviewer` + `react-reviewer` + `quality-gate`).
-> FE-only: KHÔNG migration, KHÔNG cặp quyền mới, KHÔNG sửa `apps/api`. Quyền chỉ qua `useCan`/`PermissionGate`.
-> Nguồn: nợ N1 plan FE-1 (đính kèm) · nợ R3 plan BE-1D (mention link) · nợ «droppedMentions bình luận» FE-1 §9 ·
-> plan-reviewer FE-2 M9. Đề xuất **hai lát**: **A** đính kèm (composer + bình luận + vẽ) · **B** mention link +
-> `droppedMentions` bình luận + ghim ngữ nghĩa cache `006`.
+> Trạng thái: **plan v2 (02/10/2026)** — đã vá `plan-reviewer` lượt 1 (PASS, 3 MAJOR + 7 MINOR — §10); chờ owner ký §6.
+> Nhánh `feat/s16-social-fe-2d` cắt từ master `14afbb5f`. Zone amber. Gate: lát **B** = LIGHT (`typescript-reviewer` +
+> `react-reviewer` + `quality-gate`); lát **A** = LIGHT **+ `security-reviewer`** (tệp người dùng + PUT ra storage ngoài —
+> luật kích hoạt security chung, §10 #10). FE-only: KHÔNG migration, KHÔNG cặp quyền mới, KHÔNG sửa `apps/api`. Quyền chỉ
+> qua `useCan`/`PermissionGate`. Nguồn: nợ N1 plan FE-1 (đính kèm) · nợ R3 plan BE-1D (mention link) · nợ «droppedMentions
+> bình luận» FE-1 §9 · plan-reviewer FE-2 M9. Đề xuất **hai lát**: **A** đính kèm (composer + bình luận + vẽ) · **B** mention
+> link + `droppedMentions` bình luận + ghim ngữ nghĩa cache `006`. **Điều kiện MERGE: PROD API đủ mới (D11, §8 bước 0b).**
 
 ## 1. Bối cảnh — cái gì đang sai (code HIỆN TẠI, `14afbb5f`)
 
@@ -18,22 +19,33 @@
   sizeBytes}.strict()` và `socialFileConfirmInputSchema` `{target}.strict()` (`contracts social-api.ts:688-707`) —
   **KHÁC chat** (`/chat/files/:id/confirm` body `{}`). Response = `RegisterFileResponse`/`ConfirmUploadResponse` của
   FOUNDATION (`social-files.service.ts:2-6,109,141`). 0 client trong `packages/web-core` (grep `social/files` = 0).
+- Ô soạn chỉ khoá NÚT GỬI khi đang gửi: `busy` (`FeedComposer.tsx:135`) đi vào `PollComposerFields`/`KudosComposerFields
+  disabled={busy}` (`:282,310`) và nút (`:354`); `textarea` KHÔNG khoá (`:288-295`; `CommentComposer.tsx:126-133`). Khay
+  đính kèm mới mà làm theo khuôn textarea thì thêm được tệp GIỮA lượt gửi (§10 #1).
+- Cả hai ô soạn có lệnh `return` sớm SAU khối hook: `FeedComposer.tsx:131` (`!canCreatePost ⇒ null`), `CommentComposer.tsx:71-78`
+  (`locked` / `!canComment`) — hook tải tệp phải đặt TRƯỚC các lệnh này (M24).
 
 **Đính kèm — đọc:**
 
 - `PostCard.tsx:70,159-180` CHỈ vẽ lưới ẢNH (`buildImageGrid` lọc `url !== null`, `feed-format.ts:63-71`). Đính kèm
-  `kind:'video'`/`'file'` **không được vẽ ở đâu cả** (biến mất im lặng).
+  `kind:'video'`/`'file'` **không được vẽ ở đâu cả** (biến mất im lặng). `buildImageGrid` KHÔNG kiểm lược đồ URL —
+  `javascript:`/`data:` lọt nguyên văn (M33).
 - `CommentList.tsx:62-79` (`CommentRow`) **không vẽ đính kèm nào** dù `feedCommentSchema.attachments` luôn có mặt.
 - `NewsPage.tsx:272` vẽ tin bằng `PostBody` trần — không ảnh, không mention.
 - `<img>` lưới ảnh không có `onError` (`PostCard.tsx:166-171`); URL ký GET sống **300 s** (`object-storage.service.ts:92`
-  `S3_PRESIGN_TTL_SEC ?? 300`) ⇒ ảnh `loading="lazy"` cuộn tới sau 5 phút = ô ảnh VỠ dù `url` khác null.
+  `S3_PRESIGN_TTL_SEC ?? 300`) ⇒ ảnh `loading="lazy"` cuộn tới sau 5 phút = ô ảnh VỠ dù `url` khác null. Video cũng
+  vậy khi phát/tua sau 300 s (§10 #6).
+- URL ký GET không kèm `ResponseContentDisposition` (`object-storage.service.ts:199-206`) ⇒ tệp phục vụ INLINE theo
+  Content-Type đã khai (M32).
 
 **Mention:**
 
 - `PostBody.tsx:58-68` vẽ token `mention` thành SPAN; docblock `parse-feed-body.ts:12-23` nói «contract không trả
   mảng mention» — **đã SAI từ BE-1D**: `feedPostSchema.mentions?`/`feedCommentSchema.mentions?` =
   `discriminatedUnion("withheld", [{withheld:false, employeeId, label}, {withheld:true}])` (`social-api.ts:168-175,217,249`).
-- `MENTION_RE` (`parse-feed-body.ts:67`) chỉ bắt MỘT chữ: `@Nguyễn Văn An` ⇒ token `@Nguyễn` + text ` Văn An` (đo P2a).
+- `MENTION_RE` (`parse-feed-body.ts:67`) chỉ bắt MỘT chữ: `@Nguyễn Văn An` ⇒ token `@Nguyễn` + text «␠Văn An» (đo P2a).
+- Tokenizer cắt `rest` sau mỗi token (`parse-feed-body.ts:119-136`) ⇒ lookbehind mất ngữ cảnh trái: `#tag@An` ⇒ mention
+  `@An` trong khi `tag@An` ⇒ text (M27).
 - `PostCard.tsx:136`, `CommentList.tsx:78`, `NewsPage.tsx:272` không truyền `mentions` xuống `PostBody`.
 
 **`droppedMentions` bình luận:** `PostDetailPage.tsx:95-104` `createComment.onSuccess` vứt response; bài thì đã có
@@ -46,7 +58,8 @@
 ## 2. Phép đo (02/10/2026, worktree `MediaOS-fe2d` @ `14afbb5f`)
 
 Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app`): `pnpm exec vitest run --config
-<probe>/vitest.probe.config.mts` ⇒ **Test Files 2 passed · Tests 13 passed** (lượt cuối).
+<probe>/vitest.probe.config.mts` ⇒ v1: **Test Files 2 passed · Tests 13 passed**; lượt 1 plan-review thêm
+`review1.probe.spec.tsx` (**9 passed**) · `msg2.probe.spec.ts` (**1 passed**) · `scheme.probe.spec.tsx` (**1 passed**).
 
 | # | Khẳng định | Cách đo | Kết quả |
 | --- | --- | --- | --- |
@@ -54,7 +67,7 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | M2 | `setQueryData` thay NGUYÊN object | probe P1a: seed detail có `mentions` → `setQueryData(detail, dto006)` | data sau = `{"id":"p1","body":…,"status":"hidden"}` — **`mentions` MẤT** ⇒ mọi merge tương lai phải giữ khoá vắng |
 | M3 | `invalidateQueries` trên query KHÔNG observer | probe P1b | `isInvalidated:true`, queryFn 0 lần, **data cũ GIỮ NGUYÊN** (mentions còn) |
 | M4 | `invalidateQueries` trên query CÓ observer | probe P1c (đợi `status:'success'` trước) | refetch, data = kết quả queryFn MỚI. ⚠️ Lượt đầu của probe invalidate KHI lượt fetch đầu còn bay ⇒ không thấy lượt gọi thứ 2 trong 1 s — ca test phải đợi `success` rồi mới invalidate |
-| M5 | Hiện trạng `006` trong cache | đọc `use-feed-actions.ts:132-140` + grep `setQueryData` `routes/social` (bỏ spec) | chỉ 2 chỗ: `PollBlock.tsx:69` (kết quả 043) · `GroupSettingsTab.tsx:84` (nhóm) — **KHÔNG chỗ nào ghi DTO bài vào cache** ⇒ hôm nay `006` không thể làm mất `mentions` |
+| M5 | Hiện trạng `006` trong cache | đọc `use-feed-actions.ts:132-140` + grep `setQueryData` `routes/social` (bỏ spec) | chỉ 2 chỗ: `PollBlock.tsx:69` (kết quả 043) · `GroupSettingsTab.tsx:84` (nhóm) — **KHÔNG chỗ nào ghi DTO bài vào cache** ⇒ hôm nay `006` không thể làm mất `mentions`. Đo lại trên #559: M30 |
 | M6 | Tokenizer hiện tại | probe P2a/P2b/P2c | `"@Nguyễn Văn An"` ⇒ `mention "@Nguyễn"` + text; `a@b.com` ⇒ không mention (lookbehind); `"Cảm ơn @An."` ⇒ token `"@An."` (dấu chấm DÍNH vào token) |
 | M7 | Ai sinh ra mention trên web? | `grep -rn mentionedUserIds apps/app/src packages/web-core/src` (bỏ dòng comment) | **0 call-site**. Composer SOCIAL KHÔNG có ô chọn mention; mọi SOCIAL DTO cố ý KHÔNG trả `userId` (grep `userId` contracts `social-api*.ts` — chỉ ngoại lệ nhóm `037`) ⇒ web KHÔNG tạo được mention ⇒ `mentions` luôn `[]` và `droppedMentions` luôn `[]` với nội dung đăng từ web |
 | M8 | Nhãn mention | đọc `social-mentions.ts:426-503` | `label = users.full_name.trim()`, thứ tự `(created_at,id)` (KHÔNG theo vị trí trong body); TK đổi tên ⇒ `label` ≠ chữ trong body ⇒ không khớp (an toàn: rơi về span) |
@@ -66,25 +79,47 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | M14 | Allowlist MIME thực tế | đọc `0435_…seed_modules.sql:316` + `setting-defaults.ts:41-56` | `png·jpeg·webp·pdf·docx·xlsx·csv·txt` — **KHÔNG có `video/*`, KHÔNG `image/gif`** ⇒ với cấu hình mặc định MỌI video ăn 415 ở 054; trần «1 video» chỉ chạm được khi công ty tự mở allowlist |
 | M15 | Cổng tầng-2 054/055 | đọc `social-access.service.ts:333-339` | `create:feed-post`/`create:feed-comment` phải ở scope **Company**, thiếu ⇒ 403 `SOCIAL-ERR-FILE-TARGET-POST-DENIED`/`-COMMENT-DENIED`; tầng-1 (`view:feed`) thiếu ⇒ 403 `PermissionGuard` câu cố định, KHÔNG mã SOCIAL. `useCan` mù scope ⇒ vai tuỳ biến @Department thấy nút rồi ăn 403 |
 | M16 | jsdom | probe P4a/P4b/P4c | `new File([...],"x.heic").type === ""`; **`URL.createObjectURL` = `undefined`** (phải stub — tiền lệ `MessageComposer.attach.spec.tsx:70`); `accept` KHÔNG lọc khi dispatch `change` ⇒ kiểm client phải ở JS, không dựa `accept` |
-| M17 | Khuôn upload sẵn có | đọc `chat-upload.ts:45-81`, `storage-upload.ts:24-40`, `use-attachment-previews.ts` | 3 pha register→PUT→confirm, ném ngay ở pha lỗi; `putBytesToStorage(url,file,contentType)` `credentials:'omit'`, **KHÔNG nhận `signal`**; `useAttachmentPreviews` (sổ thu hồi blob URL) generic, tái dùng được |
+| M17 | Khuôn upload sẵn có | đọc `chat-upload.ts:45-81`, `storage-upload.ts:24-40`, `use-attachment-previews.ts` | 3 pha register→PUT→confirm, ném ngay ở pha lỗi; `putBytesToStorage(url,file,contentType)` `credentials:'omit'`, **KHÔNG nhận `signal`**, và **bọc MỌI lỗi mạng thành `Error` chung** (`storage-upload.ts:36-38`) ⇒ một `try/catch` đi tiếp sang confirm là dạng hồi quy thực tế nhất (mA9); `useAttachmentPreviews` (sổ thu hồi blob URL) generic, tái dùng được |
 | M18 | Response `006` | đọc `social-posts-moderation.service.ts:73-92` | dựng `toFeedPostDto` với `tags`+`attachments`+`myReaction`+`savedByMe` — KHÔNG `mentions`/`kudos`/`poll`/`idea` |
 | M19 | Bề mặt vẽ thân bài | `grep -rn "<PostBody\|<PostCard" routes/social` (bỏ spec) | 3 chỗ: `PostCard.tsx:136` · `CommentList.tsx:78` · `NewsPage.tsx:272`. Mọi màn khác đi qua `FeedPostList → PostCard` |
 | M20 | Va chạm nhánh đang mở | `git diff --stat master...feat/s16-social-feblockseed-1` (PR #559) | chạm `PostCard.tsx` (+34/-) · `PostCard.spec.tsx` · `social-test-doubles.tsx` · `FeedPage.spec.tsx` — TRÙNG file với lát A/B |
 | M21 | `apiFetch` + env test web-core | đọc `packages/web-core/vitest.config.ts`; `node -e "typeof File"` | env `node`, `File` global có (Node v24.15.0 máy này; CI Node ≥20); spec mock `./api-client` (khuôn `social-kudos-api.spec.ts:12-15`) |
+| M22 | Khoá ô soạn khi đang gửi | đọc `FeedComposer.tsx:135,282,288-295,310,354` · `CommentComposer.tsx:81,126-133,141` | `busy` chỉ khoá nút gửi + `PollComposerFields`/`KudosComposerFields`; textarea KHÔNG khoá ⇒ khay mới KHÔNG tự khoá nếu không truyền `disabled` |
+| M23 | React 19 + `fireEvent` trên phần tử `disabled` | probe P9 (`review1`) | `fireEvent.change` trên `<input type=file disabled>` ⇒ **`onChange` CHẠY 1 lần**; `fireEvent.click` trên `<button disabled>` ⇒ 0 lần ⇒ thuộc tính `disabled` chặn người dùng thật (nút mở hộp chọn bị khoá) nhưng KHÔNG chặn đường jsdom ⇒ handler phải TỰ kiểm `disabled` thì ca hành vi mới cắn |
+| M24 | Lệnh `return` sớm vs hook | đọc `FeedComposer.tsx:96-131` · `CommentComposer.tsx:65-78` | hook cuối ở `:120-124` rồi `return null` `:131`; `CommentComposer` hook `:65-69` rồi `return` `:71-78` ⇒ hook tải phải gọi TRƯỚC. Khi `locked` lật, component VẪN mount (chỉ đổi JSX) ⇒ tải tiếp NGẦM nếu không xử lý (D10) |
+| M25 | Thông điệp vitest (để mutant khai đúng chữ) | probe P8 (`review1`) + P8b (`msg2`) | `expected "spy" to not be called at all, but actually been called 1 times` · `promise resolved "{ fileId: 'f1' }" instead of rejecting` · `promise rejected "Error: chưa thi công" instead of resolving` · `expected Error: … to be Error: … // Object.is equality` · `expected [Function] to throw error matching /HTTP 403/ but got 'chưa thi công'` · `expected undefined to deeply equal [ { a: 1 } ]` · `expected [ 1, 2, 3 ] to have a length of 2 but got 3` · `expected "spy" to be called 2 times, but got 1 times` · `expected false to be true // Object.is equality` · jest-dom: `expect(element).toBeDisabled()` |
+| M26 | Biên Unicode của nhãn | probe P6a/P6b (`review1`) | U+0309 ∉ `[\p{L}\p{N}_]`, ∈ `\p{M}`; thân **NFD toàn phần** + nhãn NFC ⇒ `indexOf` = **-1** (không link — an toàn nhưng mất link); dạng **TRỘN** (dựng sẵn tới `A` + U+0309 rời — kiểu gõ «Unicode tổ hợp») ⇒ `indexOf` = **0**, ký tự kế U+0309 LỌT lớp biên `[\p{L}\p{N}_]` ⇒ nhãn `Nguyễn Văn A` link lên thân hiển thị `@Nguyễn Văn Ả` (NGƯỜI KHÁC); lớp `[\p{L}\p{M}\p{N}_]` ⇒ chặn; NFC của dạng trộn = NFC của `@Nguyễn Văn Ả` |
+| M27 | Tokenizer hiện tại với NFD + ngữ cảnh trái | probe P6c/P6d (`review1`) | thân NFD `Chào @Nguyễn Văn An` ⇒ `[text 6cp, mention 6cp, text 11cp]` — span `@Nguye` cắt GIỮA chữ (dấu rời sang text; lỗi CÓ SẴN của nhánh span); `#tag@An` ⇒ `[tag, mention "@An"]` còn `tag@An` ⇒ `[text]` — lookbehind chạy trên `rest` |
+| M28 | BE có chuẩn hoá thẻ không | đọc `social-mentions.ts:37,55-56`; grep `\.normalize(` trong `apps/api/src/social` + `routes/social` (bỏ spec) | thẻ BE = `HASHTAG_RE` trên body THÔ + `toLowerCase()`, **0** lệnh `normalize` ⇒ FE KHÔNG được NFC cả luồng token (thẻ NFD sẽ thành link lọc NFC ≠ thẻ BE lưu). Chỉ PHÉP SO nhãn mới chuẩn hoá (B1) |
+| M29 | `setQueryData` vs `isInvalidated` | probe P7a/P7b (`review1`) | invalidate RỒI `setQueryData` ⇒ `isInvalidated:false`; `setQueryData` RỒI invalidate ⇒ `true`; `mentions` MẤT ở cả hai ⇒ thông điệp mK phụ thuộc thứ tự assert (K1 ghim `mentions` TRƯỚC) |
+| M30 | Đo lại M5 trên PR #559 | `git grep -nE "(setQueryData\|setQueriesData)[^;]*posts\.\|initialData"` trên `feat/s16-social-feblockseed-1` @ `d88f7270` và `master`, `apps/app/src` + `packages/web-core/src`, bỏ spec | master: 0 dòng; #559: chỉ `initialData: seed` của `polls.results` (`PollBlock.tsx:86` nhánh) — **0 ghi `socialKeys.posts.*`**. WS bỏ `mentions` (contracts `realtime.ts:350-377`) ⇒ tiền đề D3(a) đứng trên head #559 hiện tại; **PHẢI đo lại sau rebase** (§8 bước 0) |
+| M31 | Chuỗi phụ thuộc BE (điều kiện merge) | `git log --oneline master -- social-files.controller.ts social-files.service.ts social-access.service.ts`; `git log -S withheld` / `-S droppedMentions` contracts; `git show --stat a1dbe7f0` | 054/055 = **#538** `188d6404`; cổng gắn 004/016 = #539 `87e04955` + #541 `0f3103ec`; `mentions[]`/`withheld` = **#545** `7bfb3f96`; `droppedMentions` có từ #530; mã SOCIAL lên `error.code` = **#554** `a1dbe7f0` — commit ghi RED cũ «expected 'RESOURCE-ERR-…' to be 'SOCIAL-ERR-…'» ⇒ API < #554 thì `attachDenied`/`attachmentRejected` rơi về chung. **Commit API PROD: KHÔNG đo** (luật không chạm PROD) — lệnh cho owner: `GET /api/v1/health` → `data.build.commit` (`apps/api/src/health/build-info.ts`) rồi `git merge-base --is-ancestor <sha-PR> <commit>` |
+| M32 | Tải về đính kèm phục vụ thế nào | đọc `object-storage.service.ts:199-206`; `social-api.ts:136-142`; `setting-defaults.ts:69-97`; `mime-extension.ts` (`isExtensionConsistentWithMime`) | `GetObjectCommand({Bucket,Key})` KHÔNG `ResponseContentDisposition` ⇒ inline theo Content-Type đã khai; `feedAttachmentSchema.url = z.string().nullable()` — không kiểm lược đồ; blocklist mặc định có `html`·`svg` nhưng tệp KHÔNG đuôi được thả lỏng (`extension===null ⇒ true`) ⇒ an toàn hôm nay dựa vào allowlist mặc định (M14) + storage KHÁC origin app (giả định — không đo được, env PROD) |
+| M33 | Lưới ảnh hiện tại với URL không http(s) | probe P11 (`scheme`) | `buildImageGrid` giữ cả `javascript:alert(1)` lẫn `data:image/svg+xml,…` (`shown.length=2`); React 19 vẽ `src` NGUYÊN VĂN ⇒ R5 đỏ trên code cũ |
+| M34 | `.csv` trên Windows | **KHÔNG đo** (phụ thuộc trình duyệt/registry — lời reviewer) | code: allowlist chỉ `text/csv` (`setting-defaults.ts:49`), `MIME_TO_EXTENSIONS` không có `application/vnd.ms-excel` (`mime-extension.ts:18-27`) ⇒ NẾU trình duyệt báo MIME đó thì 054 ⇒ 415 MIME ⇒ `unsupportedType`. Ghi nợ G9, không chặn |
+| M35 | `<video onError>` trong jsdom | probe P10 (`review1`) | `fireEvent.error(video)` ⇒ `onError` 1 lần ⇒ ca R2b dựng được |
 
 ## 3. Bất biến phải giữ
 
 - **company_id / RLS**: FE không gửi `companyId`; tenant do server lấy từ token (`social-files.service.ts:110-121`).
 - **Masking ở SERVER**: đính kèm `url:null` (presign bị từ chối) ⇒ **KHÔNG vẽ gì** cho tệp đó (ảnh · video · tệp) — một ô
   «có tệp mà bạn không xem được» là rò sự tồn tại (luật `buildImageGrid`, `feed-format.ts:55-62`), mở rộng cho cả video/tệp.
-- **Mention chỉ link khi server nói `withheld:false`**; đích link lấy từ `employeeId` của SERVER, chữ hiển thị là chữ trong
-  `body`. `withheld:true` ⇒ SPAN, không tra theo tên ở FE (oracle `ERR-009`).
+- **Mention chỉ link khi server nói `withheld:false`**; đích link lấy từ `employeeId` của SERVER, chữ hiển thị là chữ NGUYÊN
+  VĂN trong `body` (không chuẩn hoá chuỗi hiển thị, M28). `withheld:true` ⇒ SPAN, không tra theo tên ở FE (oracle `ERR-009`).
 - **WS = DTO**: FE không đọc thân bài từ payload WS (`use-feed-realtime` chỉ đếm) — không đổi.
 - **Permission fail-closed**: nút đính kèm sống TRONG ô soạn đã gác `create:feed-post` / `create:feed-comment` (ẩn hẳn khi
   thiếu); 403 của 054 đọc theo `error.code`, không theo câu chữ.
 - **Không mất dữ liệu người dùng** (hợp đồng H2 FE-1): ô soạn chỉ dọn chữ + tệp khi Promise RESOLVE; REJECT giữ nguyên.
-- **Không XSS**: không `dangerouslySetInnerHTML`; link tệp `target=_blank rel="noopener noreferrer"`; URL tệp chỉ từ server.
+  **Bổ sung v2:** (i) khay **KHOÁ** (thêm · gỡ · thử lại) suốt `busy`, và handler `onChange` TỰ kiểm `disabled` (M23) —
+  không có tệp nào vào khay giữa lượt gửi; (ii) resolve ⇒ `clear(ids)` CHỈ gỡ đúng các id đã vào DTO, không `reset()` mù
+  — lưới thứ hai nếu sau này ai mở khoá khay.
+- **Không XSS**: không `dangerouslySetInnerHTML`; link tệp `target=_blank rel="noopener noreferrer"`; URL tệp chỉ từ server
+  **VÀ** phải khớp `^https?://` (không phân biệt hoa thường — cùng tư thế `URL_RE`, `parse-feed-body.ts:52`) — lệch ⇒ coi
+  như `url:null` (không vẽ). **Giả định ghi rõ (M32):** (a) allowlist MIME không có `text/html`/`image/svg+xml`; (b) storage
+  phục vụ ở origin KHÁC app. Hai giả định này là của BE/cấu hình, FE không ép được ⇒ nợ G8 (Content-Disposition
+  `attachment` cho loại không phải media) PHẢI xong trước khi bất kỳ công ty nào mở rộng allowlist.
 - **Không rò storage credential**: PUT lên storage qua `putBytesToStorage` (`credentials:'omit'`), không qua `apiFetch`.
+- **Không tải ngầm khi ô soạn không dùng được** (v2, D10): `locked`/mất quyền lật ⇒ huỷ lượt tải đang bay + dọn khay.
 
 ## 4. Thiết kế
 
@@ -96,8 +131,9 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
   parse `registerFileResponseSchema`; `.confirm(fileId, target)` → `POST /social/files/${id}/confirm` body `{target}` parse
   `confirmUploadResponseSchema`; `uploadSocialAttachment(file, target, {signal})` = 3 pha (khuôn `uploadChatAttachment`):
   `declaredMimeType = file.type || DEFAULT_UPLOAD_MIME` → register → PUT (cùng `Content-Type`) → confirm → trả
-  `{fileId, kind, name, sizeBytes, mimeType}`. Pha nào lỗi ⇒ NÉM, không confirm/không trả `fileId`. `signal` đi vào cả 3 pha.
-  Export ở `index.ts` (khối additive cạnh `socialKudosApi`).
+  `{fileId, kind, name, sizeBytes, mimeType}`. Pha nào lỗi ⇒ NÉM **nguyên lỗi** (không bọc lại — `ApiError.code` phải tới
+  được `attachmentUploadErrorReason`), không confirm/không trả `fileId`; KHÔNG `try/catch` quanh PUT. `signal` đi vào cả
+  3 pha. Export ở `index.ts` (khối additive cạnh `socialKudosApi`).
 - **A3 · thuần `routes/social/feed/lib/attachment-draft.ts` (MỚI)**:
   - `attachmentKindOf(mime)` — mirror `kindOf` BE (`toLowerCase().startsWith("image/"|"video/")`, rỗng ⇒ `file`).
   - `planAttachmentAdds(items, files)` ⇒ `{accepted: File[], rejected: {name, reason}[]}`; đếm trên item CHƯA lỗi; luật
@@ -108,21 +144,34 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
     `unsupportedType` · `-SIZE` ⇒ `tooLargeServer` · `SOCIAL-ERR-FILE-TARGET-*-DENIED` ⇒ `attachDenied` · còn lại (PUT hỏng,
     `-CONFIRM-*`, mạng) ⇒ `uploadFailed`.
 - **A4 · hook `routes/social/feed/lib/use-attachment-uploads.ts` (MỚI)** `({target})` ⇒ `{items, add(FileList), remove(id),
-  retry(id), reset(), submitState, rejections}`: tải TUẦN TỰ (khuôn chat); mỗi item một `AbortController`; `remove` hủy +
-  thu hồi preview; unmount ⇒ abort hết + `revokeAll` (dùng lại `@/components/chat/composer/use-attachment-previews` — chỉ
-  IMPORT); `isMountedRef` chặn `setState` sau unmount.
-- **A5 · `components/ComposerAttachmentTray.tsx` (MỚI)**: input `type=file multiple` ẩn + nút «Đính kèm» (icon `Paperclip`,
-  `aria-label`), `accept` = gợi ý theo D2; khay ô: ảnh ⇒ `<img src=blob:>`, khác ⇒ chip tên + dung lượng; trạng thái
-  «Đang tải…» / lỗi (chữ theo reason) + «Thử lại» / nút gỡ. Một alert `composer-attach-error` cho các tệp bị từ chối trước
-  khi tải (tên + lý do, `{{max}}` = 20 MB / 10 / 1 / 11).
-- **A6 · `FeedComposer`**: mount khay cho MỌI loại bài (D5) + `target:"post"`; `canSubmit &&= submitState.ready`; dòng lý do
-  khi `uploading`/`hasErrors`; `buildDto` thêm `attachmentIds` CHỈ khi khác rỗng (vắng khoá ⇒ payload + khoá idempotency
-  của bài không tệp y như hôm nay); resolve ⇒ `reset()`; reject ⇒ giữ. Sửa docblock `:19-20`.
-- **A7 · `CommentComposer`**: như A6 với `target:"comment"`; body vẫn bắt buộc (M11); sửa docblock `:7-8`.
+  retry(id), clear(ids), reset(), submitState, rejections}`:
+  - tải TUẦN TỰ (khuôn chat) qua hàng đợi; mỗi item một `AbortController`; **`remove(id)` trên item CÒN XẾP HÀNG (chưa
+    bắt đầu) ⇒ gỡ khỏi hàng đợi, KHÔNG bao giờ khởi động nó** (vòng tải đọc lại tập item sống trước mỗi lượt — ca U2);
+    `remove` item đang tải ⇒ abort + thu hồi preview.
+  - **`clear(ids)`** = gỡ ĐÚNG các id truyền vào (abort nếu lỡ còn bay + thu hồi preview), item khác GIỮ NGUYÊN — đường dọn
+    sau resolve (§3 H2-ii); `reset()` = abort hết + `revokeAll` + rỗng — CHỈ cho unmount và gate lật (D10).
+  - unmount ⇒ abort hết + `revokeAll` (dùng lại `@/components/chat/composer/use-attachment-previews` — chỉ IMPORT);
+    `isMountedRef` chặn `setState` sau unmount. `reset`/`clear` ổn định (`useCallback`) để làm deps của effect.
+- **A5 · `components/ComposerAttachmentTray.tsx` (MỚI)**: prop **`disabled`**; input `type=file multiple` ẩn + nút «Đính
+  kèm» (icon `Paperclip`, `aria-label`), `accept` = gợi ý theo D2; khay ô: ảnh ⇒ `<img src=blob:>`, khác ⇒ chip tên + dung
+  lượng; trạng thái «Đang tải…» / lỗi (chữ theo reason) + «Thử lại» / nút gỡ. `disabled` ⇒ nút đính kèm · input · gỡ ·
+  thử lại đều `disabled`, **và `onChange` trả về sớm khi `disabled`** (M23 — `fireEvent.change` vẫn tới handler). Một alert
+  `composer-attach-error` cho các tệp bị từ chối trước khi tải (tên + lý do, `{{max}}` = 20 MB / 10 / 1 / 11).
+- **A6 · `FeedComposer`**: gọi `useAttachmentUploads({target:"post"})` **ngay sau `useState(sending)` (`:108`), TRƯỚC
+  `return null` (`:131`)** (M24); effect gate-lật `useEffect(() => { if (!canCreatePost) uploads.reset(); }, [canCreatePost,
+  uploads.reset])` cũng đặt trước `:131` (D10). Mount khay cho MỌI loại bài (D5) + **`disabled={busy}`** (khuôn
+  `:282,310`); `canSubmit &&= submitState.ready`; dòng lý do khi `uploading`/`hasErrors`; `buildDto` thêm `attachmentIds`
+  CHỈ khi khác rỗng (vắng khoá ⇒ payload + khoá idempotency của bài không tệp y như hôm nay); `submit` CHỤP `ids` vào
+  biến cục bộ cùng lúc dựng DTO; resolve ⇒ `uploads.clear(ids)`; reject ⇒ giữ. Sửa docblock `:19-20`.
+- **A7 · `CommentComposer`**: như A6 với `target:"comment"`; hook + effect `useEffect(() => { if (locked || !canComment)
+  uploads.reset(); }, [locked, canComment, uploads.reset])` đặt **sau `useState(sending)` (`:69`), TRƯỚC `if (locked)`
+  (`:71`)**; body vẫn bắt buộc (M11); `body` GIỮ khi `locked` lật (hành vi hôm nay, không đổi). Sửa docblock `:7-8`.
 - **A8 · `components/PostAttachments.tsx` (MỚI)** + `feed-format.ts` `splitAttachments(atts)` ⇒ `{grid, videos, files}` —
-  CẢ BA lọc `url !== null` (§3). Lưới ảnh giữ `buildImageGrid`; ảnh `onError` ⇒ thay bằng ô trung tính
-  `attachment-image-unavailable` (không icon vỡ — M ở §1, TTL 300 s); video ⇒ `<video controls preload="metadata">`;
-  tệp ⇒ `<a href target=_blank rel="noopener noreferrer">` tên + dung lượng. Biến thể `compact` cho bình luận.
+  CẢ BA lọc `url !== null` **VÀ `isSafeAttachmentUrl(url)` (`/^https?:\/\//i`)** (§3); `buildImageGrid` nhận cùng vị từ
+  (một hàm, không nhân bản). Lưới ảnh giữ `buildImageGrid`; ảnh `onError` ⇒ thay bằng ô trung tính
+  `attachment-image-unavailable` (không icon vỡ — TTL 300 s); video ⇒ `<video controls preload="metadata" onError>` —
+  `onError` ⇒ ô trung tính `attachment-video-unavailable` (M35; phủ cả hết hạn lúc phát/tua — vị trí phát mất, chấp nhận,
+  gốc ở G6); tệp ⇒ `<a href target=_blank rel="noopener noreferrer">` tên + dung lượng. Biến thể `compact` cho bình luận.
   `PostCard` thay khối `:159-180` bằng `<PostAttachments>`; `CommentRow` + `NewsPage` row thêm `<PostAttachments compact>`.
 - **A9 · lỗi gửi**: `ACTION_ERROR_REASONS` + `attachmentRejected` (`SOCIAL-ERR-007` — một câu cho cả LIMIT lẫn INVALID,
   M9) · `attachDenied`. `use-create-post.ts` onError: `kudosErrorReason ?? attachmentErrorReason ?? group…`;
@@ -133,37 +182,58 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 ### Lát B — mention + `droppedMentions` + cache `006`
 
 - **B1 · `parse-feed-body.ts`**: `parseFeedBody(body, mentions?)`; token mới `{kind:"mentionLink", value, employeeId}`.
-  Bảng nhãn = phần tử `withheld === false` (đọc qua narrowing, không đọc `label` ở nhánh rút); nhãn trùng mà `employeeId`
-  KHÁC ⇒ loại (mơ hồ ⇒ span). Ứng viên = `"@" + label` dò bằng `indexOf` (không regex — nhãn có `(`,`.`), biên trái giống
-  `MENTION_RE` (không sau `[\p{L}\p{N}_]`), biên phải: ký tự kế KHÔNG phải `[\p{L}\p{N}_]`. Cùng vị trí ⇒ nhãn DÀI hơn
-  thắng, `mentionLink` thắng `mention`. `mentions` vắng/`[]` ⇒ token y hệt hôm nay (C14 giữ xanh). Viết lại docblock `:12-23`, `:57-66`.
+  - Bảng nhãn = phần tử `withheld === false` (đọc qua narrowing, không đọc `label` ở nhánh rút), nhãn chuẩn hoá
+    `label.normalize("NFC")`; nhãn (NFC) trùng mà `employeeId` KHÁC ⇒ loại (mơ hồ ⇒ span). Bảng rỗng ⇒ đường code y hệt
+    hôm nay (P7).
+  - **Lớp ký tự chữ** `WORD = /[\p{L}\p{M}\p{N}_]/u` (thêm `\p{M}` — M26) dùng cho CẢ HAI biên.
+  - **Dò trên CHUỖI GỐC với offset TUYỆT ĐỐI** (vòng lặp giữ `base` = vị trí đầu `rest` trong `body`): ứng viên tại mỗi
+    `@` ở offset `i ≥ base` có **biên trái** `i === 0 || !WORD.test(body[i-1])` — đọc `body`, KHÔNG đọc `rest` (M27).
+  - **So nhãn không phụ thuộc dạng chuẩn, KHÔNG chuẩn hoá chuỗi hiển thị** (M28: thẻ BE không NFC): với nhãn `L` (NFC, dài
+    trước), tìm `j` trong `[i+1+|L|, i+1+3·|L|]` sao cho `body.slice(i+1, j).normalize("NFC") === L` **và biên phải**
+    `j === body.length || !WORD.test(body[j])`. Vì `WORD` có `\p{M}`, `j` cắt giữa một chuỗi kết hợp sẽ trượt biên ⇒ dạng
+    trộn (M26) không link. Token `value = body.slice(i, j)` — NGUYÊN VĂN (NFD vẫn hiển thị NFD).
+  - Cùng vị trí ⇒ nhãn DÀI hơn thắng, `mentionLink` thắng `mention`. Không regex dựng từ nhãn (nhãn có `(`,`.`). Kích thước:
+    thân ≤ 4000, nhãn ≤ vài chục ⇒ O(n·k·|L|) không đáng kể.
+  - Nhánh span (`MENTION_RE`) GIỮ NGUYÊN — lỗi NFD/ngữ cảnh trái của span là nợ FE (§7), không sửa để P7 giữ nghiêm.
+  - Viết lại docblock `:12-23`, `:57-66`.
 - **B2 · `PostBody`** prop `mentions?: readonly FeedMentionDto[]`; `mentionLink` ⇒ `<Link to="/feed/profiles/$employeeId">`;
   `mention` vẫn span. `PostCard.tsx:136` · `CommentList.tsx:78` · `NewsPage.tsx:272` truyền `x.mentions`.
 - **B3 · `droppedMentions` bình luận**: tách `components/DroppedMentionsNotice.tsx` từ `CreatePostNotices.tsx:33-53`
   (giữ `data-testid="dropped-mentions-notice"` cho bài); `PostDetailPage` giữ `droppedCount` từ `createComment.onSuccess`,
   dọn ở `onMutate`, vẽ notice testid `comment-dropped-mentions-notice` cạnh ô soạn.
-- **B4 · cache `006` (D3)**: KHÔNG thêm merge — giữ invalidate-only (M3/M5). Ghim bằng ca K1 + docblock cảnh báo tại
+- **B4 · cache `006` (D3)**: KHÔNG thêm merge — giữ invalidate-only (M3/M5/M30). Ghim bằng ca K1 + docblock cảnh báo tại
   `moderateMutation` («`006` không mang `mentions`/`kudos`/`poll`/`idea` — muốn cập nhật cache tức thì thì PHẢI merge giữ khoá vắng, M2»).
 
 ## 5. Test RED trước (deny-path trước, mỗi ca DENY đứng cạnh ca ALLOW)
 
 > Spec mới đặt trong glob được nạp: `apps/app/src/**/*.spec.{ts,tsx}` · `packages/web-core/src/**/*.spec.{ts,tsx}`.
-> RED do «module chưa tồn tại» là **lỗi NẠP FILE** (đọc dòng `Test Files … failed` + 0 `Tests`), không phải assert — ghi rõ
-> trong sổ thi công; mọi ca khác phải đỏ ĐÚNG thông điệp ghi dưới.
+> **v2 — STUB TRƯỚC, không đỏ bằng lỗi nạp:** trước khi viết W/C/U, tạo khung module trong cây làm việc (KHÔNG commit
+> riêng): `social-files-api.ts` — `uploadSocialAttachment`/`requestUploadUrl`/`confirm` đều `throw new Error("chưa thi
+> công")`; `attachment-draft.ts` — `planAttachmentAdds ⇒ {accepted:[], rejected:[]}`, `attachmentSubmitState ⇒ {ready:true,
+> ids:[]}`, `attachmentKindOf ⇒ "file"`, `attachmentUploadErrorReason ⇒ "uploadFailed"`; `use-attachment-uploads.ts` — hook
+> trả item rỗng, mọi hàm no-op. ⇒ mọi ca W/C/U đỏ trên **ASSERT** với thông điệp ghi dưới (M25). Ca nào vẫn chỉ đỏ được
+> bằng lỗi nạp thì ghi rõ trong sổ thi công (đọc dòng `Test Files … failed` + 0 `Tests`).
+> **Thứ tự assert trong ca điều phối tải:** W2/W3/W5 dùng `const settled = await p.then(() => "resolved", (e) => e)` ⇒
+> assert SPY trước (`fetch`/confirm), assert LỖI sau (`expect(settled).toBe(err)` hoặc `expect(() => { throw settled;
+> }).toThrow(/…/)`) — để mutant «đi tiếp sau lỗi» đỏ ở đúng spy, không ở dòng lỗi. W5 assert `fetch` nhận đúng `signal`
+> TRƯỚC khi abort. W4 dùng thẳng `await expect(p).rejects.toBe(confirmErr)`. W1 assert confirm `toHaveBeenCalledTimes(1)`
+> trước `resolves.toEqual`.
 
 ### Ca test lát A
 
-| # | Ca | Đỏ trên code hiện tại vì |
+| # | Ca | Đỏ trên code hiện tại (sau STUB) vì |
 | --- | --- | --- |
-| W2 | `uploadSocialAttachment` — register ném `ApiError(415,"FOUNDATION-FILE-ERR-MIME")` ⇒ `fetch` 0 lần, confirm 0 lần, reject ĐÚNG lỗi đó | load fail (module mới) |
-| W3 | PUT trả 403 ⇒ confirm 0 lần, reject | load fail |
-| W4 | confirm ném ⇒ reject, không trả `fileId` | load fail |
-| W5 | `signal` abort giữa PUT ⇒ reject, confirm 0 lần; `fetch` nhận đúng `signal` | load fail |
-| W1 | ALLOW: thứ tự gọi `054` body `{target:"post",originalName,declaredMimeType:"image/png",sizeBytes}` → PUT `Content-Type:image/png` + `credentials:"omit"` → `055` body `{target:"post"}`; chạy schema đã truyền trên payload hình BE | load fail |
-| W6 | `file.type===""` ⇒ khai + PUT `application/octet-stream` | load fail |
+| W2 | **DENY** `uploadSocialAttachment` — register ném `ApiError(415,"FOUNDATION-FILE-ERR-MIME")` ⇒ `fetch` 0 lần, confirm 0 lần, lỗi ngã ngũ LÀ (`toBe`) đúng `ApiError` đó | `expected Error: chưa thi công to be … // Object.is equality` |
+| W3 | **DENY** PUT trả 403 ⇒ confirm 0 lần; lỗi khớp `/HTTP 403/` | `expected [Function] to throw error matching /HTTP 403/ but got 'chưa thi công'` (spy confirm 0 lần xanh-giả trên stub ⇒ giá trị ở mA9) |
+| W4 | **DENY** confirm ném ⇒ promise REJECT (không trả `fileId`), lỗi `toBe` lỗi confirm | `expected Error: chưa thi công to be … // Object.is equality` (giá trị ở mA10) |
+| W5 | **DENY** `signal` abort giữa PUT ⇒ reject, confirm 0 lần; `fetch` nhận đúng `signal` | `… but got 'chưa thi công'` (assert lỗi abort) |
+| W1 | ALLOW: thứ tự gọi `054` body `{target:"post",originalName,declaredMimeType:"image/png",sizeBytes}` → PUT `Content-Type:image/png` + `credentials:"omit"` → `055` body `{target:"post"}`; chạy schema đã truyền trên payload hình BE; `resolves.toEqual({fileId,…})` | `promise rejected "Error: chưa thi công" instead of resolving` |
+| W6 | `file.type===""` ⇒ khai + PUT `application/octet-stream` | `promise rejected "Error: chưa thi công" instead of resolving` |
 | S1 | `putBytesToStorage(…, signal)` chuyển `signal` vào `fetch` | `expected undefined to be <signal>` |
-| C1 | `planAttachmentAdds`: 11 ảnh ⇒ 10 nhận + `tooManyImages`; video thứ 2 ⇒ `tooManyVideos`; `20MB+1` ⇒ `tooLarge`, đúng `20MB` ⇒ nhận; 10 ảnh+1 video+1 pdf ⇒ pdf `tooManyFiles`; item `error` không tính; `IMAGE/PNG` ⇒ image | load fail |
-| C2 | `attachmentSubmitState`: có `uploading` ⇒ not ready; có `error` ⇒ `hasErrors`; ids theo thứ tự chọn | load fail |
+| C1 | `planAttachmentAdds`: 11 ảnh ⇒ 10 nhận + `tooManyImages`; video thứ 2 ⇒ `tooManyVideos`; `20MB+1` ⇒ `tooLarge`, đúng `20MB` ⇒ nhận; 10 ảnh+1 video+1 pdf ⇒ pdf `tooManyFiles`; item `error` không tính; `IMAGE/PNG` ⇒ image | `expected [] to have a length of 10 but got 0` |
+| C2 | `attachmentSubmitState`: có `uploading` ⇒ not ready; có `error` ⇒ `hasErrors`; ids theo thứ tự chọn | `expected true to be false // Object.is equality` |
+| U1 | hook `clear(ids)`: A xong, chụp `[A]`, thêm B (đang tải) ⇒ `clear([A])` ⇒ `items` = `[B]`, `signal` của B `aborted === false` | `expected [] to have a length of 1 but got 0` (stub item rỗng) |
+| U2 | **DENY** hook xoá item XẾP HÀNG: thêm A (tải treo bằng deferred) + B; `remove(B)`; resolve A ⇒ spy tải đúng **1** lần, `items` = `[A done]` | `expected "spy" to be called 1 times, but got 0 times` |
 | F1 | **DENY** FeedComposer chọn tệp `20MB+1` ⇒ spy `uploadSocialAttachment` 0 lần + alert lý do `tooLarge` | `Unable to find … [data-testid="composer-attach-input"]` |
 | F2 | 11 ảnh ⇒ spy đúng 10 lần (target `"post"`) + 1 dòng từ chối | như F1 |
 | F3 | **DENY** upload ném `ApiError(403,"SOCIAL-ERR-FILE-TARGET-POST-DENIED")` ⇒ ô lỗi chữ `attachDenied`, nút Đăng KHOÁ; gỡ ô ⇒ mở; `415 MIME` ⇒ `unsupportedType` | như F1 |
@@ -171,13 +241,18 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | F5 | `onSubmit` reject ⇒ khay giữ; resolve ⇒ khay rỗng + `URL.revokeObjectURL` gọi đúng blob URL (stub `createObjectURL` — M16) | như F1 |
 | F6 | unmount khi đang tải ⇒ `signal.aborted === true` | như F1 |
 | F7 | composer NHÓM (`groupId`) có nút đính kèm, target `"post"` | như F1 |
+| **F8** | **DENY (§10 #1)** 1 tệp xong; `onSubmit` trả deferred CHƯA resolve; bấm Đăng ⇒ `composer-attach-button` + `composer-attach-input` **`toBeDisabled()`**; `fireEvent.change(input, 1 tệp mới)` ⇒ spy tải **KHÔNG** gọi thêm (M23); resolve ⇒ khay rỗng | như F1 |
 | K1c | CommentComposer: target `"comment"`; có tệp mà body rỗng ⇒ nút KHOÁ (M11); payload `attachmentIds` | `Unable to find … [data-testid="comment-attach-input"]` |
+| **K2c** | **DENY (§10 #1)** như F8 trên CommentComposer (`comment-attach-*`) | như K1c |
+| **K3c** | **DENY (§10 #8, D10)** CommentComposer tải treo; `rerender` với `locked` ⇒ `signal.aborted === true`; `rerender` mở khoá ⇒ 0 `comment-attach-item`; `body` cũ còn trong textarea | như K1c |
 | E1 | `use-create-post`: `ApiError(422,"SOCIAL-ERR-007")` ở bảng tin ⇒ `reason:"attachmentRejected"` (cạnh ca ERR-012 bảng tin vẫn `null`) | `expected null to be 'attachmentRejected'` |
 | E2 | `PostDetailPage`: `createComment` ném `ApiError(422,"SOCIAL-ERR-007")` ⇒ banner `data-reason="attachmentRejected"` | `expected null to be 'attachmentRejected'` (`getAttribute`) |
 | R1 | `PostAttachments`/PostCard: `[ảnh url, ảnh null, video url, video null, tệp url, tệp null]` ⇒ 1 `img` · 1 `video` (src đúng) · 1 `a[href=url]` tên tệp, `rel` đủ, `target=_blank` · tên tệp `null` KHÔNG xuất hiện ở đâu | `expected 0 to be 1` (`querySelectorAll("video")`) |
 | R2 | `fireEvent.error(img)` ⇒ không còn `img`, có `attachment-image-unavailable` | `Unable to find … attachment-image-unavailable` |
+| **R2b** | **(§10 #6)** `fireEvent.error(video)` ⇒ không còn `video`, có `attachment-video-unavailable` (M35) | `Unable to find … attachment-video-unavailable` |
 | R3 | CommentList: bình luận có ảnh ⇒ `comment-attachments` chứa `img` | `Unable to find … comment-attachments` |
 | R4 | NewsPage: tin có ảnh ⇒ `img` trong `news-row` | `expected null not to be null` |
+| **R5** | **DENY (§10 #5)** PostCard: `[ảnh "javascript:alert(1)", tệp "data:text/html,x", video "//evil/x.mp4", ảnh "HTTPS://ok/a.png"]` ⇒ đúng 1 `img` (src `HTTPS://ok/a.png`), 0 `a` tệp, 0 `video`, tên tệp `data:` không xuất hiện | `expected 2 to be 1` (`img` — M33: lưới hiện tại giữ cả `javascript:`) |
 | I1 | `ActionErrorBanner.spec` (lặp tập reason) với 2 reason mới — chữ ≠ khoá thô | xanh tự động sau A9/A10 (đỏ nếu quên i18n) |
 
 ### Ca test lát B
@@ -187,7 +262,10 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | P2 | **DENY** chỉ `{withheld:true}` ⇒ KHÔNG `mentionLink`; phần tử bị nhét lậu `{withheld:true, employeeId, label}` (cast) ⇒ vẫn không link | xanh-giả trên code cũ (không có link nào) ⇒ chỉ có giá trị cạnh P1 + mutant mB1 |
 | P3 | **DENY** 2 phần tử `withheld:false` cùng nhãn, KHÁC `employeeId` ⇒ span | như P2 |
 | P4 | **DENY** biên phải: `"@Nguyễn Văn Anh"` với nhãn `"Nguyễn Văn An"` ⇒ không link; `"x@Nguyễn Văn An"` ⇒ không link | như P2 |
+| **PU1** | **DENY (§10 #4)** dạng TRỘN: nhãn `"Nguyễn Văn A"`, thân `"@Nguyễn Văn Ả ơi"` ⇒ KHÔNG `mentionLink` | như P2 (giá trị ở mB7) |
+| **PU3** | **DENY (§10 #4)** ngữ cảnh trái: `"#tag@Nguyễn Văn An"` (nhãn khớp) ⇒ KHÔNG `mentionLink`; cạnh ALLOW `"#tag @Nguyễn Văn An"` ⇒ link | vế DENY xanh-giả (giá trị ở mB9); vế ALLOW: `toEqual` lệch |
 | P1 | ALLOW: `parseFeedBody("Chào @Nguyễn Văn An!", [{withheld:false, employeeId:E1, label:"Nguyễn Văn An"}])` ⇒ `[text "Chào ", {mentionLink "@Nguyễn Văn An", E1}, text "!"]` | `toEqual` lệch: nhận `{kind:"mention", value:"@Nguyễn"}` (M6) |
+| **PU2** | **ALLOW (§10 #4)** thân NFD `"Chào @Nguyễn Văn An!".normalize("NFD")`, nhãn NFC ⇒ `mentionLink` với `value` = chuỗi con NFD NGUYÊN VĂN (`value === body.slice(i,j)`), `employeeId` E1 | `toEqual` lệch: nhận `mention` `@Nguye` (M27) |
 | P5 | nhãn `"An"` + `"An Nguyễn"`: `"@An Nguyễn và @An."` ⇒ link E(An Nguyễn) rồi link E(An), `"."` là text | `toEqual` lệch |
 | P6 | nhãn có ký tự regex `"Lê (HR)"` ⇒ khớp nguyên văn | `toEqual` lệch |
 | P7 | `mentions` vắng / `[]` ⇒ token y hệt bản cũ (13 ca C14 cũ giữ xanh, chạy lại nguyên file) | xanh (lưới hồi quy) |
@@ -196,30 +274,56 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | B3 | CommentList / NewsPage truyền `mentions` ⇒ link | `Unable to find role link` |
 | D1 | PostDetailPage: `createComment` resolve `{…, droppedMentions:[a,b]}` ⇒ `comment-dropped-mentions-notice` chữ `count:2`; lượt gửi mới dọn; `[]` ⇒ vắng | `Unable to find … comment-dropped-mentions-notice` |
 | D2 | `FeedPage.spec` M7 cũ (`dropped-mentions-notice` của bài) xanh sau khi tách component | xanh (hồi quy) |
-| K1 | `use-feed-actions`: seed `posts.detail(p1)` có `mentions`; `moderatePost` resolve DTO hình `006` (không `mentions`) ⇒ sau `onSuccess`: `getQueryData(detail).mentions` NGUYÊN + `isInvalidated:true` | **xanh trên code hiện tại (ghim)** — giá trị nằm ở mutant mK |
+| K1 | `use-feed-actions`: seed `posts.detail(p1)` có `mentions`; `moderatePost` resolve DTO hình `006` (không `mentions`) ⇒ sau `onSuccess`, **THỨ TỰ ASSERT GHIM**: (1) `getQueryData(detail).mentions` `toEqual` seed — TRƯỚC; (2) `getQueryState(detail).isInvalidated` `toBe(true)` — SAU (M29) | **xanh trên code hiện tại (ghim)** — giá trị nằm ở mutant mK |
 
-**Mutant (sao lưu → cấy → khôi phục bằng bản sao, KHÔNG `git checkout --`; đỏ ĐÚNG ca, ĐÚNG thông điệp):**
-mA1 bỏ `planAttachmentAdds` trước khi tải ⇒ F1 (`expected spy to not be called`) · mA2 bỏ lọc `url!==null` cho video ⇒ R1
-(`expected 2 to be 1`) · mA3 bỏ pha confirm ⇒ W1 · mA4 gửi `attachmentIds:[]` khi rỗng ⇒ F4 · mA5 bỏ `submitState.ready` khỏi
-`canSubmit` ⇒ F4/F3 · mA6 bỏ ánh xạ `007` ⇒ E1+E2 · mA7 không nối `signal` ⇒ F6/W5 · mA8 bỏ `onError` ảnh ⇒ R2 ·
-mB1 bỏ vế `withheld===false` (đọc `label` qua cast) ⇒ P2 · mB2 bỏ biên phải ⇒ P4 · mB3 bỏ loại nhãn mơ hồ ⇒ P3 ·
-mB4 nhãn NGẮN trước ⇒ P5 · mB5 `PostCard` không truyền `mentions` ⇒ B2 · mB6 bỏ notice bình luận ⇒ D1 ·
-mK thêm `queryClient.setQueryData(socialKeys.posts.detail(post.id), post)` vào `moderateMutation.onSuccess` ⇒ K1
-(`expected undefined to deeply equal [...]`).
+**Mutant (sao lưu → cấy → khôi phục bằng bản sao, KHÔNG `git checkout --`; đỏ ĐÚNG ca, ĐÚNG thông điệp — M25):**
+
+| # | Cấy | Đỏ ca · thông điệp |
+| --- | --- | --- |
+| mA1 | bỏ `planAttachmentAdds` trước khi tải | F1 · `expected "spy" to not be called at all, but actually been called 1 times` |
+| mA2 | bỏ lọc `url!==null` cho video | R1 · `expected 2 to be 1` |
+| mA3 | bỏ pha confirm | W1 · `expected "spy" to be called 1 times, but got 0 times` |
+| mA4 | gửi `attachmentIds:[]` khi rỗng | F4 · `expected true to be false` (`"attachmentIds" in dto`) |
+| mA5 | bỏ `submitState.ready` khỏi `canSubmit` | F4/F3 · `expect(element).toBeDisabled()` |
+| mA6 | bỏ ánh xạ `007` | E1+E2 · `expected null to be 'attachmentRejected'` |
+| mA7 | không nối `signal` | F6 · `expected false to be true // Object.is equality` · W5 · `expected undefined to be … // Object.is equality` (assert `signal` trước abort) |
+| mA8 | bỏ `onError` ảnh | R2 · `Unable to find … attachment-image-unavailable` |
+| **mA9** | `try { await putBytesToStorage(…) } catch { /* đi tiếp */ }` rồi confirm | W3 · `expected "spy" to not be called at all, but actually been called 1 times` (spy confirm) |
+| **mA10** | `try { await confirm(…) } catch { return {fileId: reg.fileId, …} }` | W4 · `promise resolved "{ fileId: … }" instead of rejecting` (W4 dùng `rejects.toBe` — M25) |
+| **mA11** | bọc cả 3 pha `try/catch` rồi `throw new Error("Tải tệp thất bại")` (xoá `ApiError.code`) | W2 · `expected Error: Tải tệp thất bại to be … // Object.is equality`; F3 · `Unable to find …` chữ `unsupportedType` |
+| **mA12** | bỏ `disabled={busy}` khỏi khay (cả hai ô soạn) | F8/K2c · `expect(element).toBeDisabled()` |
+| **mA13** | bỏ dòng `if (disabled) return` trong `onChange` (giữ thuộc tính) | F8/K2c · `expected "spy" to not be called at all, but actually been called 1 times` |
+| **mA14** | resolve gọi `reset()` thay `clear(ids)` | U1 · `expected [] to have a length of 1 but got 0` |
+| **mA15** | vòng tải không đọc lại tập item sống (khởi động item đã gỡ) | U2 · `expected "spy" to be called 1 times, but got 2 times` |
+| **mA16** | bỏ effect gate-lật (A7) | K3c · `expected false to be true // Object.is equality` |
+| **mA17** | bỏ `isSafeAttachmentUrl` | R5 · `expected 2 to be 1` |
+| **mA18** | bỏ `onError` video | R2b · `Unable to find … attachment-video-unavailable` |
+| mB1 | bỏ vế `withheld===false` (đọc `label` qua cast) | P2 · `toEqual` lệch (có `mentionLink`) |
+| mB2 | bỏ biên phải | P4 · `toEqual` lệch |
+| mB3 | bỏ loại nhãn mơ hồ | P3 · `toEqual` lệch |
+| mB4 | nhãn NGẮN trước | P5 · `toEqual` lệch |
+| mB5 | `PostCard` không truyền `mentions` | B2 · `Unable to find role link` |
+| mB6 | bỏ notice bình luận | D1 · `Unable to find … comment-dropped-mentions-notice` |
+| **mB7** | lớp biên bỏ `\p{M}` (về `[\p{L}\p{N}_]`) | PU1 · `toEqual` lệch (có `mentionLink`) |
+| **mB8** | so `body.slice(i+1,j) === L` không `normalize("NFC")` | PU2 · `toEqual` lệch (không `mentionLink`) |
+| **mB9** | biên trái đọc `rest[idx-1]` thay `body[i-1]` | PU3 vế DENY · `toEqual` lệch (có `mentionLink`) |
+| mK | thêm `queryClient.setQueryData(socialKeys.posts.detail(post.id), post)` vào `moderateMutation.onSuccess` — **TRƯỚC hay SAU `invalidatePostLists` đều được** | K1 · `expected undefined to deeply equal [ { withheld: false, … } ]` — assert (1) chạy trước nên thông điệp KHÔNG phụ thuộc vị trí cấy; cấy SAU thì `isInvalidated` cũng lật `false` (M29) nhưng assert (2) không tới |
 
 ## 6. Quyết định owner
 
 | # | Câu hỏi | Phương án | Khuyến nghị · lý do | Chặn? |
 | --- | --- | --- | --- | --- |
-| **D1** | Lát B «ngủ»: web KHÔNG sinh được mention (M7) ⇒ link + `droppedMentions` chỉ sáng khi có nguồn khác | (a) làm render-only như done_when + seed WO BE «danh bạ nhắc tên» · (b) hoãn lát B tới khi có ô chọn mention · (c) mở rộng WO dựng ô chọn (không làm được: không route SOCIAL nào trả `userId` cho bài công ty) | **(a)** — rẻ (~400 LOC gồm test), đúng done_when, tự sáng khi BE có danh bạ; seed **`S16-SOCIAL-MENTIONDIR-1`** (BE: 002/015 nhận `mentionedEmployeeIds` hoặc danh bạ nhắc tên kiểu 059 — quyết định oracle `ERR-009` là của WO đó) | **Có — chỉ lát B** |
-| **D2** | Video: allowlist mặc định KHÔNG có `video/*` (M14) | (a) `accept` mời cả `video/*`, server 415 ⇒ «định dạng chưa hỗ trợ» · (b) `accept` = allowlist mặc định (không video), trần 1 video vẫn kiểm client · (c) dựng `accept` động từ `GET /foundation/settings/public?category=File` | **(b)** + seed WO cấu hình (thêm `video/mp4` vào allowlist + `MIME_TO_EXTENSIONS`, có migration seed). (c) đúng nhất nhưng thêm phụ thuộc FOUNDATION + map `Record<string,unknown>` không kiểu — ghi nợ | Không |
-| **D3** | done_when «006 không mang mentions ⇒ giữ mảng cũ khi merge cache» — hôm nay KHÔNG có merge (M5) | (a) giữ invalidate-only, ghim K1 + mutant mK · (b) thêm `mergeModeratedPost(old,fresh)` giữ `mentions/kudos/poll/idea` + `setQueryData` để UI đổi tức thì | **(a)** — vế done_when thoả bằng thiết kế, có lưới chống ai đó thêm `setQueryData` trần; (b) thêm một đường ghi cache cần chống cũ-đè-mới (memory TanStack) cho lợi ích vài trăm ms | Không |
+| **D1** | Lát B «ngủ»: web KHÔNG sinh được mention (M7) ⇒ link + `droppedMentions` chỉ sáng khi có nguồn khác | (a) làm render-only như done_when + seed WO BE «danh bạ nhắc tên» · (b) hoãn lát B tới khi có ô chọn mention · (c) mở rộng WO dựng ô chọn (không làm được: không route SOCIAL nào trả `userId` cho bài công ty) | **(a)** — rẻ (~450 LOC gồm test), đúng done_when, tự sáng khi BE có danh bạ; seed **`S16-SOCIAL-MENTIONDIR-1`** (BE: 002/015 nhận `mentionedEmployeeIds` hoặc danh bạ nhắc tên kiểu 059 — quyết định oracle `ERR-009` là của WO đó) | **Có — chỉ lát B** |
+| **D2** | Video: allowlist mặc định KHÔNG có `video/*` (M14) | (a) `accept` mời cả `video/*`, server 415 ⇒ «định dạng chưa hỗ trợ» · (b) `accept` = allowlist mặc định (không video), trần 1 video vẫn kiểm client · (c) dựng `accept` động từ `GET /foundation/settings/public?category=File` | **(b)** + seed WO cấu hình (thêm `video/mp4` vào allowlist + `MIME_TO_EXTENSIONS`, có migration seed). (c) đúng nhất nhưng thêm phụ thuộc FOUNDATION + map `Record<string,unknown>` không kiểu — ghi nợ. Cùng lớp: `.csv` báo `application/vnd.ms-excel` (M34, chưa đo) ⇒ nợ G9 | Không |
+| **D3** | done_when «006 không mang mentions ⇒ giữ mảng cũ khi merge cache» — hôm nay KHÔNG có merge (M5, M30) | (a) giữ invalidate-only, ghim K1 + mutant mK · (b) thêm `mergeModeratedPost(old,fresh)` giữ `mentions/kudos/poll/idea` + `setQueryData` để UI đổi tức thì | **(a)** — vế done_when thoả bằng thiết kế, có lưới chống ai đó thêm `setQueryData` trần; (b) thêm một đường ghi cache cần chống cũ-đè-mới (memory TanStack) cho lợi ích vài trăm ms. **Mở lại D3 nếu đo lại M30 sau rebase thấy ghi `socialKeys.posts.*`** | Không |
 | **D4** | Đính kèm `url:null` loại video/tệp | (a) ẩn hẳn như ảnh · (b) chip «không xem được» | **(a)** — (b) rò sự tồn tại (cùng lý do `buildImageGrid`) | Không |
 | **D5** | Loại bài có nút đính kèm | (a) cả 5 loại (server nhận mọi loại — `social-posts.service.ts:300`) · (b) chỉ share/news/idea | **(a)** — một đường mã, không đặc cách | Không |
 | **D6** | `SOCIAL-ERR-007` chung cho LIMIT và INVALID (M9) | (a) một câu gộp ở FE · (b) đọc `message` | **(a)** (cấm so câu chữ) + ghi nợ BE tách sentinel `ATTACHMENT_INVALID` | Không |
-| **D7** | Va chạm PR #559 FEBLOCKSEED-1 (M20) | (a) thi công SAU khi #559 merge, rebase master · (b) làm song song, giải xung đột lúc PR | **(a)** — 4 file trùng, `PostCard.tsx` cả hai lát đều sửa | Không (khuyến nghị thứ tự) |
+| **D7** | Va chạm PR #559 FEBLOCKSEED-1 (M20) | (a) thi công SAU khi #559 merge, rebase master · (b) làm song song, giải xung đột lúc PR | **(a)** — 4 file trùng, `PostCard.tsx` cả hai lát đều sửa; sau rebase đo lại M30 TRƯỚC khi viết K1 | Không (khuyến nghị thứ tự) |
 | **D8** | Tiến độ tải | (a) «Đang tải…» không % (dùng `putBytesToStorage`) · (b) XHR có % (khuôn `employee-file-api`) | **(a)** — trần 20 MB, KISS; % ghi nợ | Không |
 | **D9** | Tách PR | (a) 1 PR 2 commit (A rồi B) · (b) 2 PR — **B trước** (nhỏ, ít rủi ro) rồi A | **(b)** nếu D1=(a); nếu D1=(b) thì chỉ còn lát A | Không |
+| **D10** (v2) | Ô soạn bình luận bị KHOÁ (`locked`) hoặc mất quyền (`!canComment`/`!canCreatePost`) khi đang có tệp tải dở/đã tải (M24) | (a) huỷ lượt tải đang bay + dọn khay (`reset()`), GIỮ `body` như hôm nay · (b) giữ khay ngầm, tải tiếp (mở khoá lại thì còn) · (c) tách ô soạn thành vỏ-gate + ruột-form (ruột unmount ⇒ mất cả `body`) | **(a)** — không tải ngầm cho thứ không gửi được; tệp `Uploaded` mồ côi là G5 sẵn có; (b) tốn băng thông vô hình; (c) đổi hành vi `body` hiện có | Không |
+| **D11** (v2) | Điều kiện MERGE theo bản API PROD (FE auto-deploy, API deploy tay — M31) | (a) chỉ merge khi `data.build.commit` của PROD chứa: lát **A** ≥ **#554** `a1dbe7f0` (054/055 #538 + cổng #539/#541 + mã `error.code` #554), lát **B** ≥ **#545** `7bfb3f96` · (b) merge ngay, chấp nhận suy biến: API < #538 ⇒ MỌI tệp thành ô `uploadFailed` (404) sau một nút hiện rõ; #538–#553 ⇒ `attachDenied`/`attachmentRejected` rơi về chữ chung | **(a)** — khuôn FE-2C (`backlog.mjs:17840` «Điều kiện MERGE: PROD API ≥ #555»); chép vào `notes` của WO lúc mở PR | **Có — chặn MERGE** (không chặn thi công) |
 
 ## 7. Ngoài phạm vi / nợ (ghi vào PR; KHÔNG sửa BE trong WO này)
 
@@ -228,45 +332,81 @@ mK thêm `queryClient.setQueryData(socialKeys.posts.detail(post.id), post)` vào
 - **G3 (BE)** `SOCIAL-ERR-007` gộp LIMIT + INVALID (M9) ⇒ D6.
 - **G4 (BE)** đường SỬA `004`/`016` chỉ đếm trần trên tệp MỚI (`assertLinkableFilesTx(toAdd)`, `social-attachments.service.ts:445`)
   ⇒ 10 ảnh cũ + 1 ảnh mới = 11 ảnh lọt. FE chưa có UI sửa nên chưa chạm.
-- **G5 (BE)** tệp `Pending`/`Uploaded` mồ côi khi người dùng gỡ/bỏ nháp — job dọn chưa có (`files.service.ts:59-64`, TODO S2-FND-JOBS-1).
-- **G6 (BE)** TTL ký GET 300 s ⇒ FE chỉ giảm nhẹ bằng ô trung tính (A8); sửa gốc là TTL/refetch.
+- **G5 (BE)** tệp `Pending`/`Uploaded` mồ côi khi người dùng gỡ/bỏ nháp/khoá bình luận (D10) — job dọn chưa có
+  (`files.service.ts:59-64`, TODO S2-FND-JOBS-1).
+- **G6 (BE)** TTL ký GET 300 s ⇒ FE chỉ giảm nhẹ bằng ô trung tính cho ẢNH **và VIDEO** (A8); video hết hạn GIỮA lúc phát/tua
+  (range request 403) ⇒ ô trung tính thay trình phát, mất vị trí phát — sửa gốc là TTL/refetch-on-error ở BE.
 - **G7 (sản phẩm)** không có bài/bình luận CHỈ ảnh (M11).
+- **G8 (BE, v2)** URL ký GET không `ResponseContentDisposition` (M32) ⇒ tệp phục vụ inline; cần `attachment` (+ `nosniff`
+  nếu storage hỗ trợ) cho loại KHÔNG phải ảnh/video, và chặn MIME `text/html`/`image/svg+xml` không phụ thuộc đuôi — PHẢI
+  xong trước khi mở allowlist (D2 đường video) hoặc proxy storage về cùng origin.
+- **G9 (UX, v2)** `.csv` có thể bị trình duyệt Windows báo `application/vnd.ms-excel` (M34, CHƯA đo) ⇒ 415 `unsupportedType`
+  dù CSV nằm trong allowlist. Sửa ở BE (thêm alias MIME) hoặc FE ánh xạ theo đuôi — quyết định của WO sau, kèm phép đo thật.
 - **FE**: UI sửa bài/bình luận kèm tệp (chưa có UI sửa — grep `updatePost` app = 0) · kéo-thả/dán tệp · lightbox ảnh ·
-  % tiến độ (D8) · `accept` động (D2c) · avatar `src` thô (`S16-SOCIAL-AVATARPRESIGN-1`, không đụng).
+  % tiến độ (D8) · `accept` động (D2c) · avatar `src` thô (`S16-SOCIAL-AVATARPRESIGN-1`, không đụng) · **(v2)** textarea
+  KHÔNG khoá khi `busy` (`FeedComposer.tsx:288-295`, `CommentComposer.tsx:126-133`) ⇒ chữ gõ thêm GIỮA lượt gửi bị
+  `setBody("")` xoá khi resolve — lỗi H2 CÓ SẴN, cùng lớp §10 #1 nhưng ngoài phạm vi · **(v2)** nhánh span `MENTION_RE`
+  cắt giữa chữ với thân NFD + mất ngữ cảnh trái (M27) — không sửa để P7 giữ nghiêm.
 
 ## 8. Thứ tự thi công + lệnh verify
 
-0. (D7) chờ #559 merge → `git rebase master` trong worktree. Lane DB: `bash scripts/lane-db-setup.sh fe2d` (chỉ cho `--all`).
-1. **Lát B** (D9b): RED P1–P7 · B1–B3 · D1 · K1 → B1–B4 → GREEN → mutant mB1–mB6 + mK.
-2. **Lát A**: A1–A2 + spec web-core (RED W/S) → rebuild web-core → A3–A4 + spec C → A5–A7 + spec F/K1c → A8 + spec R →
-   A9–A10 + spec E/I1 → mutant mA1–mA8.
+0. (D7) chờ #559 merge → `git rebase master` trong worktree → **đo lại M30** (`git grep -nE
+   "(setQueryData|setQueriesData)[^;]*posts\.|initialData" -- apps/app/src packages/web-core/src`, bỏ spec) TRƯỚC khi viết
+   K1; thấy ghi `socialKeys.posts.*` (vd seed `posts.detail` từ dòng danh sách/WS thiếu `mentions`) ⇒ DỪNG, mở lại D3.
+   Lane DB: `bash scripts/lane-db-setup.sh fe2d` (chỉ cho `--all`).
+0b. (D11) **Điều kiện MERGE** — owner: `GET /api/v1/health` PROD → `data.build.commit` = `<c>`; trên master
+   `git merge-base --is-ancestor 7bfb3f96 <c>` (lát B) và `git merge-base --is-ancestor a1dbe7f0 <c>` (lát A) phải exit 0.
+   Chép thành dòng `notes` «Điều kiện MERGE: PROD API ≥ #545 (lát B) / ≥ #554 (lát A)» vào WO lúc mở PR.
+1. **Lát B** (D9b): RED P1–P7 · PU1–PU3 · B1–B3 · D1 · K1 → B1–B4 → GREEN → mutant mB1–mB9 + mK.
+2. **Lát A**: STUB (§5) → A1–A2 + spec web-core (RED W/S trên assert) → rebuild web-core → A3–A4 + spec C/U → A5–A7 + spec
+   F/K1c–K3c → A8 + spec R/R2b/R5 → A9–A10 + spec E/I1 → mutant mA1–mA18.
 3. Lệnh (mọi lệnh bắt đầu `cd "/c/dev 2/MediaOS-fe2d"`; đọc dòng `Test Files` + `Tests`):
    - `pnpm --filter @mediaos/web-core exec vitest run src/lib/social-files-api.spec.ts src/lib/storage-upload.spec.ts`
    - `pnpm --filter @mediaos/contracts build && pnpm --filter @mediaos/web-core build` (web-core `exports` trỏ `dist`)
    - `pnpm --filter @mediaos/app exec vitest run src/routes/social` — **TẤT CẢ spec module trong MỘT lượt** (ERR_IPC ⇒ `--no-file-parallelism`)
    - `pnpm --filter @mediaos/app test:social-cov` — đọc 4 số, sàn 80
    - `pnpm typecheck && pnpm lint` · `bash harness/check.sh --quick`
-   - Gate LIGHT: `typescript-reviewer` + `react-reviewer` + `quality-gate` trên diff
+   - Gate lát B: `typescript-reviewer` + `react-reviewer` + `quality-gate`; gate lát A: như B **+ `security-reviewer`**
+     (đầu vào tệp người dùng · PUT ra storage ngoài · bất biến `credentials:'omit'` · lược đồ URL)
    - Trước PR: `bash harness/check.sh --all --lane-db=fe2d` (FE-only, nhưng thiếu `LANE_DB` ⇒ «XANH KHÔNG ĐỦ BẰNG CHỨNG» exit 1)
 4. Bẫy đã kiểm: withTenant lồng · timestamptz thô · RETURNING · resigned — **không áp** (FE-only, không chạm `apps/api`).
    **Áp**: `PermissionGuard` câu cố định (403 tầng-1 của 054 không mã SOCIAL ⇒ rơi về `uploadFailed`/forbidden chung) ·
-   mã SOCIAL ở `error.code` (E1/E2/F3) · spec đúng glob · chạy cả module một lượt · `ActionErrorBanner.spec` là lưới
-   ratchet reason (thêm, không nới).
+   mã SOCIAL ở `error.code` (E1/E2/F3 — và chỉ trên API ≥ #554, D11) · spec đúng glob · chạy cả module một lượt ·
+   `ActionErrorBanner.spec` là lưới ratchet reason (thêm, không nới) · RED do lỗi nạp ≠ RED do assert (STUB §5).
 
 ## 9. Rủi ro + kích thước
 
 | # | Rủi ro | Xử lý |
 | --- | --- | --- |
-| R1 | Xung đột #559 (M20) | D7 — rebase sau merge |
+| R1 | Xung đột #559 (M20) | D7 — rebase sau merge; đo lại M30 |
 | R2 | Lát B ngủ (M7) | D1 — nói rõ trong PR; seed MENTIONDIR-1 |
 | R3 | Sửa chữ sau một lượt gửi mà server đã tạo bài (mất response) ⇒ khoá idempotency mới ⇒ tệp đã link ⇒ 422 `007` | câu `attachmentRejected` nói «tệp đã dùng / không hợp lệ»; ghi PR |
-| R4 | `useCan` mù scope (M15) ⇒ vai @Department thấy nút rồi 403 ở 054 | reason `attachDenied` nói đúng lý do |
+| R4 | `useCan` mù scope (M15) ⇒ vai @Department thấy nút rồi 403 ở 054 | reason `attachDenied` nói đúng lý do (API ≥ #554) |
 | R5 | jsdom thiếu `createObjectURL` (M16), cảnh báo `act` với tải bất đồng bộ | stub trong spec; chờ trạng thái ô trước khi kết thúc ca |
 | R6 | Trùng tên người: phần tử `withheld` vô danh + phần tử link cùng nhãn ⇒ có thể link nhầm người cùng tên | chấp nhận có ghi — không lộ thêm gì (người được link vốn hiện được); nhãn trùng giữa 2 phần tử link ⇒ span (P3) |
 | R7 | Import chéo `@/components/chat/composer/use-attachment-previews` | chỉ import; TS bắt khi chat dời file |
 | R8 | 20 MB trên mạng chậm, không timeout PUT | nút gỡ = abort (F6) |
+| R9 (v2) | FE lên PROD trước API (M31) ⇒ nút đính kèm hiện mà 054 404, hoặc lý do lỗi rơi về chung | D11 — điều kiện merge theo `data.build.commit` |
+| R10 (v2) | Thân gõ kiểu «Unicode tổ hợp» (NFD/trộn) | B1 so nhãn qua NFC + biên `\p{M}` (PU1/PU2); hiển thị nguyên văn |
+| R11 (v2) | Giả định bảo mật tải về (allowlist hẹp + storage khác origin) không do FE ép | guard `^https?://` (R5) + nợ G8 chặn việc mở allowlist |
 
-**Kích thước ước lượng:** Lát A ≈ 15 file (7 mới: `social-files-api.ts`+spec · `storage-upload.spec.ts` · `attachment-draft.ts`+spec ·
-`use-attachment-uploads.ts` · `ComposerAttachmentTray.tsx` · `PostAttachments.tsx`+spec · `social-attachments.ts` i18n), ~**+1.150/−40 LOC**
-(~650 test), **~40 ca**. Lát B ≈ 9 file (1 mới `DroppedMentionsNotice.tsx`), ~**+420/−30 LOC** (~260 test), **~22 ca**.
-Tổng ≈ 24 file · ~1.550 LOC · ~62 ca mới; `FeedComposer.tsx` 360→~420, `PostDetailPage.tsx` 292→~330 (dưới trần 800).
+**Kích thước ước lượng (v2):** Lát A ≈ 16 file (8 mới: `social-files-api.ts`+spec · `storage-upload.spec.ts` ·
+`attachment-draft.ts`+spec · `use-attachment-uploads.ts`+spec (U1/U2) · `ComposerAttachmentTray.tsx` · `PostAttachments.tsx`+spec
+· `social-attachments.ts` i18n), ~**+1.330/−45 LOC** (~770 test), **~47 ca**. Lát B ≈ 9 file (1 mới `DroppedMentionsNotice.tsx`),
+~**+480/−30 LOC** (~300 test), **~25 ca**. Tổng ≈ 25 file · ~1.810 LOC · ~72 ca mới; `FeedComposer.tsx` 360→~435,
+`CommentComposer.tsx` 149→~200, `PostDetailPage.tsx` 292→~330 (dưới trần 800).
+
+## 10. plan-review lượt 1 — xử lý (verdict PASS · 3 MAJOR + 7 MINOR · cả 10 XÁC NHẬN, 0 bác)
+
+| # | Mức · mục | Phát hiện (tóm) | Kiểm lại trên code | Xử lý trong v2 |
+| --- | --- | --- | --- | --- |
+| 1 | MAJOR · §4 A4–A7, §3 H2 | Khay đổi được giữa lượt gửi ⇒ `reset()` khi resolve nuốt tệp thêm sau, để lại `Pending` mồ côi | **Xác nhận.** `busy` chỉ vào nút + Poll/Kudos (`FeedComposer.tsx:135,282,310,354`), textarea không khoá (M22); v1 không có `disabled` cho khay. Đo thêm: `fireEvent.change` trên input `disabled` VẪN gọi `onChange` (M23) ⇒ chỉ thuộc tính là chưa đủ để ca hành vi cắn | §3 H2 (i)(ii); A5 prop `disabled` + `onChange` tự kiểm; A6/A7 `disabled={busy}` + chụp `ids` + `clear(ids)`; A4 `clear(ids)`; ca F8 · K2c · U1; mutant mA12 · mA13 · mA14. Lỗi cùng lớp ở textarea (có sẵn) ghi nợ §7 |
+| 2 | MAJOR · §5 W2–W6/C1–C2 | W/C chỉ đỏ bằng lỗi nạp; W2/W3/W4 không có mutant chứng minh assert cắn | **Xác nhận.** v1 tự ghi «load fail»; `putBytesToStorage` bọc mọi lỗi mạng thành `Error` chung (`storage-upload.ts:36-38`, M17) ⇒ `try/catch` đi tiếp là hồi quy thực tế | §5 STUB TRƯỚC (W/C/U đỏ trên assert, thông điệp đo ở M25); thứ tự assert `settled` → spy → lỗi; mutant mA9 (W3) · mA10 (W4) · mA11 (W2+F3); A2 cấm bọc lại lỗi |
+| 3 | MAJOR · §8/§9 | Không có điều kiện merge theo bản API PROD | **Xác nhận + nâng ngưỡng.** Tiền lệ `backlog.mjs:17840`. Đo chuỗi phụ thuộc (M31): ngoài #541/#545 reviewer nêu, ánh xạ lý do lỗi cần mã SOCIAL trên `error.code` — chỉ có từ **#554** (`a1dbe7f0`; trước đó dây mang `RESOURCE-ERR-…`) | D11 (chặn MERGE): A ≥ #554, B ≥ #545; §8 bước 0b lệnh `data.build.commit` + `merge-base --is-ancestor`; R9. **Không sửa `backlog.mjs` ở pha plan** (luật lane) — chép vào `notes` lúc mở PR, báo trong kết quả trả về |
+| 4 | MINOR · §4 B1 | Biên phải thiếu `\p{M}`, không chuẩn hoá; biên trái đọc `rest` | **Xác nhận một phần, sửa theo đo.** P6b: NFD TOÀN PHẦN không link nhầm (`indexOf` −1 — chỉ mất link); dạng TRỘN thì link NHẦM người (M26). Biên trái mất ngữ cảnh thật (P6d, M27). **Điều chỉnh đề xuất:** KHÔNG NFC cả thân — thẻ BE không chuẩn hoá (M28) nên NFC luồng token làm hỏng link thẻ NFD | B1 viết lại: `WORD=[\p{L}\p{M}\p{N}_]` hai biên; dò trên `body` offset tuyệt đối; so `slice.normalize("NFC") === nhãnNFC`, token giữ nguyên văn; ca PU1 · PU2 · PU3; mutant mB7 · mB8 · mB9; nợ span §7 |
+| 5 | MINOR · §3/§4 A8 | Link tệp mở byte người dùng inline; giả định ngầm | **Xác nhận.** `object-storage.service.ts:199-206` không `ResponseContentDisposition`; `url` là `z.string()` trần; blocklist có html/svg nhưng tệp không đuôi được thả lỏng (M32); lưới hiện tại giữ `javascript:` (M33) | §3 ghi 2 giả định + guard `^https?://`; A8 `isSafeAttachmentUrl` dùng chung cho lưới/video/tệp; ca R5 (đỏ trên code cũ `expected 2 to be 1`); mutant mA17; nợ G8; R11 |
+| 6 | MINOR · §4 A8/G6 | Giảm nhẹ TTL chỉ cho ảnh; video vỡ sau 300 s | **Xác nhận** (`object-storage.service.ts:92`; `onError` video chạy được trong jsdom — M35) | A8 `<video onError>` ⇒ `attachment-video-unavailable`; ca R2b; mutant mA18; G6 ghi rõ hết hạn giữa lúc phát là nợ BE |
+| 7 | MINOR · §5 K1/mK | Thông điệp mK phụ thuộc thứ tự assert vì `setQueryData` xoá `isInvalidated` | **Xác nhận** bằng đo P7a/P7b (M29) | K1 ghim thứ tự assert (`mentions` trước, `isInvalidated` sau); mK khai rõ cấy trước/sau đều cho cùng thông điệp |
+| 8 | MINOR · §4 A6/A7 | Không nói hook đặt đâu; `return` sớm | **Xác nhận** (`FeedComposer.tsx:131`, `CommentComposer.tsx:71-78`, M24) | A6/A7 chỉ chỗ đặt (sau `useState(sending)`, trước `return`); effect gate-lật; D10 (khuyến nghị huỷ + dọn khay, giữ `body`); ca K3c; mutant mA16 |
+| 9 | MINOR · §2 M5/D7 | M5 đo trên master, thi công sau #559 | **Xác nhận.** Đo trước trên head #559 `d88f7270` (M30): 0 ghi `socialKeys.posts.*`, chỉ `initialData` của `polls.results` ⇒ tiền đề đứng **hôm nay** | M30; §8 bước 0 đo lại sau rebase, thấy ghi `posts.*` ⇒ dừng, mở lại D3 |
+| 10 | MINOR · §4 A3/A4 | Thiếu ca: gỡ item xếp hàng; MIME csv Windows; security-reviewer | (1) **Xác nhận** — v1 không nói vòng tải xử lý item đã gỡ. (2) **Ghi nhận, CHƯA đo được** (phụ thuộc trình duyệt) — chỉ suy từ code (M34). (3) **Chấp nhận** — luật security chung phủ tệp/API ngoài | (1) A4 hàng đợi đọc lại tập sống; ca U2; mutant mA15. (2) nợ G9 + chú thích D2. (3) gate lát A thêm `security-reviewer` (đầu trang, §8) — zone giữ amber |
