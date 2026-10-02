@@ -344,3 +344,42 @@ describe("F8 — DENY (plan §10 #1): khay KHOÁ suốt lượt gửi", () => {
     await waitFor(() => expect(trayItems()).toHaveLength(0));
   });
 });
+
+/** FULL gate lượt 1 (typescript-reviewer LOW — G5): khay đọc được bằng trình đọc màn hình. */
+describe("G5 — a11y khay đính kèm (ô soạn bài)", () => {
+  it("G5a đối chứng: danh sách tệp của ô soạn BÀI có tên nói «bài»", async () => {
+    renderComposer();
+    pick(pdf("mot.pdf"));
+    await waitFor(() => expect(trayItems()[0]?.getAttribute("data-status")).toBe("done"));
+
+    const list = within(screen.getByTestId("composer-attach-tray")).getByRole("list");
+    expect(list.getAttribute("aria-label")).toMatch(/bài/);
+  });
+
+  it("G5b: nút «Thử lại» mang TÊN TỆP trong tên truy cập (ba ô lỗi ≠ ba nút giống hệt)", async () => {
+    upload.mockRejectedValueOnce(new Error("Tải tệp lên storage thất bại (HTTP 500)."));
+    renderComposer();
+    pick(pdf("tam.pdf"));
+    await screen.findByText(t("attachment.error.uploadFailed"));
+
+    const retry = screen.getByTestId("composer-attach-retry");
+    expect(retry).toHaveAccessibleName(/tam\.pdf/);
+    expect(retry).toHaveTextContent(t("attachment.retry"));
+  });
+
+  it("G5d: vùng `role=status` có SẴN trước lượt tải đầu — lần đổi chữ ĐẦU được đọc, cùng một node", async () => {
+    const d1 = deferred<ReturnType<typeof doneOf>>();
+    upload.mockImplementationOnce(() => d1.promise);
+    renderComposer();
+    const tray = () => screen.getByTestId("composer-attach-tray");
+    const status = within(tray()).getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+
+    pick(pdf("mot.pdf"));
+    await waitFor(() => expect(status).toHaveTextContent(t("attachment.blocked.uploading")));
+    expect(within(tray()).getByRole("status")).toBe(status);
+
+    await act(async () => d1.resolve(doneOf(F1, pdf("mot.pdf"))));
+    await waitFor(() => expect(status).toBeEmptyDOMElement());
+  });
+});

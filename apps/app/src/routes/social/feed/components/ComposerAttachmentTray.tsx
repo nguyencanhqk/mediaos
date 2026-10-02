@@ -14,26 +14,18 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, Paperclip, X } from "lucide-react";
-import {
-  FEED_MAX_ATTACHMENTS,
-  FEED_MAX_IMAGES_PER_POST,
-  FEED_MAX_VIDEOS_PER_POST,
-} from "@mediaos/contracts";
 import { cn } from "@mediaos/ui";
 import { formatFileSize } from "@/components/chat/chat-format";
-import {
-  ATTACHMENT_ACCEPT,
-  ATTACHMENT_MAX_MB,
-  type AttachmentRejectReason,
-} from "../lib/attachment-draft";
+import { ATTACHMENT_ACCEPT, type AttachmentRejectReason } from "../lib/attachment-draft";
+import { ATTACHMENT_LIMIT_PARAMS } from "../lib/attachment-limits";
 import type { AttachmentUploads } from "../lib/use-attachment-uploads";
 
-/** `{{max}}` của từng lý do từ chối — chỉ hằng contracts. */
+/** `{{max}}` của từng lý do từ chối — CÙNG nguồn với dải lỗi 422 (`attachment-limits.ts`). */
 const REJECT_MAX: Readonly<Record<AttachmentRejectReason, string | number>> = {
-  tooLarge: `${ATTACHMENT_MAX_MB} MB`,
-  tooManyImages: FEED_MAX_IMAGES_PER_POST,
-  tooManyVideos: FEED_MAX_VIDEOS_PER_POST,
-  tooManyFiles: FEED_MAX_ATTACHMENTS,
+  tooLarge: ATTACHMENT_LIMIT_PARAMS.maxSize,
+  tooManyImages: ATTACHMENT_LIMIT_PARAMS.images,
+  tooManyVideos: ATTACHMENT_LIMIT_PARAMS.videos,
+  tooManyFiles: ATTACHMENT_LIMIT_PARAMS.files,
 };
 
 interface ComposerAttachmentTrayProps {
@@ -73,7 +65,7 @@ export function ComposerAttachmentTray({
       data-testid={`${testIdPrefix}-attach-tray`}
     >
       {items.length > 0 && (
-        <ul aria-label={t("attachment.trayAria")} className="flex flex-wrap gap-2">
+        <ul aria-label={t(`attachment.trayAria.${testIdPrefix}`)} className="flex flex-wrap gap-2">
           {items.map((item) => (
             <li
               key={item.id}
@@ -115,6 +107,7 @@ export function ComposerAttachmentTray({
                   type="button"
                   onClick={() => retry(item.id)}
                   disabled={disabled}
+                  aria-label={t("attachment.retryNamed", { name: item.name })}
                   data-testid={`${testIdPrefix}-attach-retry`}
                   className="shrink-0 rounded px-1 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -152,15 +145,15 @@ export function ComposerAttachmentTray({
         </div>
       )}
 
-      {!submitState.ready && (
-        <p
-          role="status"
-          data-testid={`${testIdPrefix}-attach-blocked`}
-          className="text-xs text-muted-foreground"
-        >
-          {t(`attachment.blocked.${submitState.reason}`)}
-        </p>
-      )}
+      {/* Vùng `role=status` LUÔN mount, chỉ đổi chữ (FULL gate lượt 1, G5d): trình đọc màn hình đọc THAY ĐỔI
+          của một vùng đã có sẵn — mount cùng lúc với chữ thì câu «Đang tải tệp lên…» đầu tiên hay bị bỏ qua. */}
+      <p
+        role="status"
+        data-testid={`${testIdPrefix}-attach-blocked`}
+        className={submitState.ready ? "sr-only" : "text-xs text-muted-foreground"}
+      >
+        {submitState.ready ? null : t(`attachment.blocked.${submitState.reason}`)}
+      </p>
 
       <div>
         <input

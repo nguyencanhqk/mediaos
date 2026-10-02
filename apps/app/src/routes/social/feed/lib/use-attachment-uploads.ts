@@ -2,13 +2,15 @@
  * S16-SOCIAL-FE-2D (plan §4 A4) — khay đính kèm của ô soạn bài/bình luận: chọn → kiểm trần → tải TUẦN TỰ
  * (`uploadSocialAttachment`: 054 → PUT → 055) → `fileId` cho DTO.
  *
- * ┌─ 🔴 BỐN LUẬT, MỖI LUẬT MỘT CA GHIM ──────────────────────────────────────────────────────────────┐
+ * ┌─ 🔴 NĂM LUẬT, MỖI LUẬT MỘT CA GHIM ──────────────────────────────────────────────────────────────┐
  * │ 1. Vòng tải đọc lại tập ô SỐNG trước MỖI lượt (`itemsRef`) — ô bị gỡ khi còn xếp hàng KHÔNG BAO   │
  * │    GIỜ được khởi động (U2): tải nó là đẩy một tệp người dùng đã bỏ lên storage.                    │
  * │ 2. Mỗi ô một `AbortController`; gỡ ô đang tải ⇒ huỷ đúng lượt đó.                                 │
  * │ 3. `clear(ids)` CHỈ gỡ các tệp đã vào DTO (U1) — đường dọn sau khi gửi xong; `reset()` (huỷ hết + │
  * │    thu hồi hết) CHỈ cho unmount và cổng lật (khoá bình luận / mất quyền — owner ký D10 (a)).       │
  * │ 4. Tháo cây ⇒ huỷ mọi lượt đang bay; `isMountedRef` chặn `setState` sau unmount.                  │
+ * │ 5. «Thử lại» KIỂM LẠI trần như một lượt chọn mới (G1) — ô lỗi không tính vào trần nên chỗ của nó  │
+ * │    có thể đã bị tệp khác lấp; đưa thẳng về hàng đợi là vượt trần.                                 │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Blob URL xem trước đi qua `useAttachmentPreviews` của CHAT (sổ thu hồi DUY NHẤT — chỉ IMPORT, không chép).
@@ -34,7 +36,7 @@ export interface UseAttachmentUploadsOptions {
 
 export interface AttachmentUploads {
   items: readonly AttachmentItem[];
-  /** Tệp bị từ chối ở LƯỢT CHỌN gần nhất (trước khi tải) — rỗng ⇒ không có gì để báo. */
+  /** Tệp bị từ chối ở lượt chọn — hoặc lượt «Thử lại» — gần nhất (trước khi tải); rỗng ⇒ không báo gì. */
   rejections: readonly AttachmentRejection[];
   submitState: AttachmentSubmitState;
   add: (files: FileList | readonly File[]) => void;
@@ -169,7 +171,14 @@ export function useAttachmentUploads({ target }: UseAttachmentUploadsOptions): A
 
   const retry = React.useCallback(
     (id: string) => {
-      if (!itemsRef.current.some((i) => i.id === id && i.status === "error")) return;
+      const failed = itemsRef.current.find((i) => i.id === id && i.status === "error");
+      if (!failed) return;
+      // Luật 5: ô lỗi KHÔNG tính vào trần (`planAttachmentAdds`) ⇒ trong lúc nó nằm lỗi, chỗ của nó có thể
+      // đã bị tệp khác lấp. Kiểm lại như một lượt chọn MỚI; bị từ chối ⇒ ô GIỮ lỗi + báo lý do (gỡ bớt rồi
+      // thử lại) — không thì 12 tệp ⇒ 400 vô danh, 11 ảnh ⇒ 422 (FULL gate lượt 1, G1).
+      const plan = planAttachmentAdds(itemsRef.current, [failed.file]);
+      setRejections(plan.rejected.length > 0 ? plan.rejected : NO_REJECTIONS);
+      if (plan.accepted.length === 0) return;
       patchItem(id, { status: "queued", error: null });
       void pump();
     },

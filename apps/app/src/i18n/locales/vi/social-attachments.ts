@@ -12,8 +12,14 @@ export default {
   uploading: "Đang tải lên…",
   remove: "Gỡ tệp {{name}}",
   retry: "Thử lại",
+  /** Tên truy cập được của nút «Thử lại» — chứa chữ hiển thị + tên tệp (nhiều ô lỗi ≠ nhiều nút giống hệt). */
+  retryNamed: "Thử lại tải lên «{{name}}»",
   previewAlt: "Ảnh sắp đính kèm: {{name}}",
-  trayAria: "Tệp đính kèm của bài đang soạn",
+  /** Tên danh sách tệp theo ĐÚNG ô soạn (`testIdPrefix` của khay). */
+  trayAria: {
+    composer: "Tệp đính kèm của bài đang soạn",
+    comment: "Tệp đính kèm của bình luận đang soạn",
+  },
   /** Tệp KHÔNG có tên từ server (`fileName: null`). */
   unnamed: "Tệp đính kèm",
   filesAria: "Tệp đính kèm",

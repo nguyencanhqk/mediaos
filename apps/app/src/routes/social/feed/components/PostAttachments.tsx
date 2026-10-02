@@ -6,7 +6,8 @@
  * │    cho tệp đó — ảnh, video lẫn tệp (owner ký D4 (a)); một ô «có mà không xem được» là rò sự tồn   │
  * │    tại. Luật sống ở `splitAttachments` (một vị từ cho cả ba).                                     │
  * │ 2. URL ký GET sống 300 s (`S3_PRESIGN_TTL_SEC`): ảnh `lazy` cuộn tới / video tua sau đó ⇒ lỗi tải │
- * │    ⇒ ô TRUNG TÍNH thay icon vỡ (`onError`). Gốc là TTL/refetch-on-error ở BE (nợ G6).            │
+ * │    ⇒ ô TRUNG TÍNH thay icon vỡ (`onError`). Gốc là TTL/refetch-on-error ở BE (nợ G6). Ô media GIỮ  │
+ * │    URL đầu suốt vòng đời và chỉ đổi URL khi URL đang dùng đã lỗi — `useSignedMediaUrl`.           │
  * │ 3. Link tệp `target=_blank rel="noopener noreferrer"` — bytes do người dùng tải lên, KHÔNG tin.   │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  */
@@ -46,10 +47,28 @@ function UnavailableCell({
   );
 }
 
+/**
+ * URL ký GET của MỘT ô media (FULL gate lượt 1 — G2 · G3).
+ *
+ * Mỗi lần refetch server ký URL MỚI (`getSignedUrl` không ghim `signingDate`), và `invalidatePostLists`
+ * chạy sau thả cảm xúc · lưu · bình luận ⇒ để `src` đi theo prop là bắt trình duyệt NẠP LẠI media: video về
+ * 0:00 giữa lúc xem, ảnh tải lại toàn bộ. Nên:
+ *  - GIỮ URL đầu tiên suốt vòng đời ô (`key = fileId`);
+ *  - URL đang dùng LỖI (hết hạn) ⇒ `url: null` (ô trung tính) — và hễ prop mang URL KHÁC (server đã ký lại,
+ *    trước hay sau lúc lỗi) ⇒ nhận URL đó, vẽ lại media. Bản đầu dùng cờ `failed` dính tới khi remount.
+ */
+function useSignedMediaUrl(src: string): { url: string | null; onError: () => void } {
+  const [inUse, setInUse] = React.useState(src);
+  const [failed, setFailed] = React.useState<string | null>(null);
+  // Chỉnh state theo prop NGAY lúc render (mẫu chuẩn của React) — điều kiện tự tắt sau một lượt.
+  if (failed === inUse && src !== inUse) setInUse(src);
+  return { url: failed === inUse ? null : inUse, onError: () => setFailed(inUse) };
+}
+
 function AttachmentImage({ src, alt }: { src: string; alt: string }): React.ReactElement {
   const { t } = useTranslation("social");
-  const [failed, setFailed] = React.useState(false);
-  if (failed) {
+  const media = useSignedMediaUrl(src);
+  if (media.url === null) {
     return (
       <UnavailableCell
         testId="attachment-image-unavailable"
@@ -60,19 +79,28 @@ function AttachmentImage({ src, alt }: { src: string; alt: string }): React.Reac
   }
   return (
     <img
-      src={src}
+      src={media.url}
       alt={alt}
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={media.onError}
       className="h-full w-full object-cover"
     />
   );
 }
 
-function AttachmentVideo({ src, compact }: { src: string; compact: boolean }): React.ReactElement {
+function AttachmentVideo({
+  src,
+  label,
+  compact,
+}: {
+  src: string;
+  /** Tên truy cập được (tên tệp) — `<video controls>` không có tên thì trình đọc màn hình chỉ nói «video». */
+  label: string;
+  compact: boolean;
+}): React.ReactElement {
   const { t } = useTranslation("social");
-  const [failed, setFailed] = React.useState(false);
-  if (failed) {
+  const media = useSignedMediaUrl(src);
+  if (media.url === null) {
     return (
       <UnavailableCell
         testId="attachment-video-unavailable"
@@ -83,10 +111,11 @@ function AttachmentVideo({ src, compact }: { src: string; compact: boolean }): R
   }
   return (
     <video
-      src={src}
+      src={media.url}
+      aria-label={label}
       controls
       preload="metadata"
-      onError={() => setFailed(true)}
+      onError={media.onError}
       className={cn("w-full rounded-md bg-muted", compact ? "max-h-48" : "max-h-96")}
     />
   );
@@ -131,7 +160,12 @@ export function PostAttachments({
       )}
 
       {videos.map((v) => (
-        <AttachmentVideo key={v.fileId} src={v.url} compact={compact} />
+        <AttachmentVideo
+          key={v.fileId}
+          src={v.url}
+          label={v.fileName ?? t("attachment.unnamed")}
+          compact={compact}
+        />
       ))}
 
       {files.length > 0 && (
@@ -145,7 +179,8 @@ export function PostAttachments({
                 className="inline-flex max-w-full items-center gap-2 rounded-md border border-border px-2 py-1 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="truncate">{f.fileName ?? t("attachment.unnamed")}</span>
+                {/* `<bdi>`: tên tệp do người dùng đặt — ký tự đảo chiều (RTLO) không lật được chữ quanh nó. */}
+                <bdi className="truncate">{f.fileName ?? t("attachment.unnamed")}</bdi>
                 {f.sizeBytes !== null && (
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatFileSize(f.sizeBytes)}

@@ -7,7 +7,7 @@
  *  - **K3c** bài bị KHOÁ bình luận giữa chừng (D10, owner ký (a)): huỷ lượt tải đang bay + dọn khay, GIỮ
  *    chữ — không tải ngầm cho thứ không gửi được.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
 import { createFeedCommentSchema } from "@mediaos/contracts";
@@ -142,5 +142,17 @@ describe("K3c — DENY (D10): bài bị KHOÁ bình luận giữa lượt tải"
     act(() => setCaps({ "view:feed": true }));
     await waitFor(() => expect(signal?.aborted).toBe(true));
     expect(screen.queryByTestId("comment-composer")).toBeNull();
+  });
+});
+
+/** FULL gate lượt 1 (typescript-reviewer LOW — G5a): tên khay theo ĐÚNG ô soạn. */
+describe("G5a — khay của ô BÌNH LUẬN không tự xưng là «bài đang soạn»", () => {
+  it("danh sách tệp của ô bình luận có tên nói «bình luận»", async () => {
+    render(ui({}));
+    pick(pdf("mot.pdf"));
+    await waitFor(() => expect(trayItems()[0]?.getAttribute("data-status")).toBe("done"));
+
+    const list = within(screen.getByTestId("comment-attach-tray")).getByRole("list");
+    expect(list.getAttribute("aria-label")).toMatch(/bình luận/);
   });
 });

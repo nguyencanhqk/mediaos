@@ -19,6 +19,7 @@ import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { cn } from "@mediaos/ui";
+import { ATTACHMENT_LIMIT_PARAMS } from "../lib/attachment-limits";
 
 /**
  * Rộng hơn `FeedActionKind` của `use-feed-actions`: dải này còn phục vụ các đường ghi KHÔNG đi qua
@@ -74,6 +75,16 @@ export const ACTION_ERROR_REASONS = [
 ] as const;
 export type ActionErrorReason = (typeof ACTION_ERROR_REASONS)[number];
 
+/**
+ * Tham số nội suy của câu lý do (S16-SOCIAL-FE-2D, FULL gate lượt 1 — G6): con số TRẦN đọc từ hằng
+ * contracts, KHÔNG chép cứng vào bản dịch. Reason vắng ở đây ⇒ câu không có biến (`ActionErrorBanner.spec`
+ * chặn `{{` lọt ra màn hình cho MỌI reason).
+ */
+type ReasonParams = Readonly<Record<string, string | number>>;
+const REASON_PARAMS: Partial<Record<ActionErrorReason, ReasonParams>> = {
+  attachmentRejected: ATTACHMENT_LIMIT_PARAMS,
+};
+
 export interface ActionErrorBannerProps {
   kind: ActionErrorKind;
   /** 403 — người dùng cần đi hỏi quản trị, thử lại là vô ích. */
@@ -93,7 +104,9 @@ export function ActionErrorBanner({
 }: ActionErrorBannerProps): React.ReactElement {
   const { t } = useTranslation("social");
   const group = forbidden ? "forbidden" : "generic";
-  const text = reason ? t(`actionError.reason.${reason}`) : t(`actionError.${group}.${kind}`);
+  const text = reason
+    ? t(`actionError.reason.${reason}`, REASON_PARAMS[reason])
+    : t(`actionError.${group}.${kind}`);
 
   return (
     <div

@@ -23,6 +23,7 @@ import { ApiError } from "@mediaos/web-core";
 import i18n from "@/i18n";
 
 import { PostDetailPage } from "./PostDetailPage";
+import { ATTACHMENT_LIMIT_PARAMS } from "./lib/attachment-limits";
 import {
   makeComment,
   makePost,
@@ -275,7 +276,10 @@ describe("S16-SOCIAL-FE-2D — E2: lỗi gửi bình luận kèm tệp nói ĐÚ
 
     const banner = await screen.findByTestId("feed-action-error");
     expect(banner.getAttribute("data-reason")).toBe("attachmentRejected");
-    expect(banner).toHaveTextContent(t("actionError.reason.attachmentRejected"));
+    // Câu có tham số trần (FULL gate lượt 1, G6) — dải truyền ĐÚNG bộ tham số này.
+    expect(banner).toHaveTextContent(
+      t("actionError.reason.attachmentRejected", ATTACHMENT_LIMIT_PARAMS),
+    );
   });
 
   it("đối chứng: lỗi bình luận KHÔNG phải tệp ⇒ không `reason` (câu chung như cũ)", async () => {

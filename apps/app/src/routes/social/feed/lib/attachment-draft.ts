@@ -42,9 +42,6 @@ export const ATTACHMENT_ACCEPT = [
   "text/plain",
 ].join(",");
 
-/** Trần dung lượng/tệp tính theo MB — để câu thông báo nói «20 MB», không «20971520 byte». */
-export const ATTACHMENT_MAX_MB = FEED_MAX_ATTACHMENT_BYTES / (1024 * 1024);
-
 /** Lý do tệp bị từ chối TRƯỚC khi tải (không tốn một byte băng thông). */
 export type AttachmentRejectReason =
   | "tooLarge"

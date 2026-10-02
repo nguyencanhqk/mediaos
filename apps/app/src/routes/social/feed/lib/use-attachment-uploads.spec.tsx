@@ -9,6 +9,7 @@
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FEED_MAX_ATTACHMENTS, FEED_MAX_IMAGES_PER_POST } from "@mediaos/contracts";
 import { useAttachmentUploads } from "./use-attachment-uploads";
 
 const upload = vi.fn();
@@ -153,6 +154,28 @@ describe("vòng đời một ô", () => {
     expect(upload).toHaveBeenCalledTimes(2);
   });
 
+  it("«Thử lại» thành công ⇒ dọn danh sách từ chối cũ (nó nói về lượt trước, không về ô đang tải)", async () => {
+    const tooBig = pdf("lon.pdf");
+    Object.defineProperty(tooBig, "size", { value: 21 * 1024 * 1024 });
+    upload.mockRejectedValueOnce(new Error("Tải tệp lên storage thất bại (HTTP 500)."));
+    upload.mockResolvedValueOnce(done(FA, "a.pdf"));
+    const { result } = renderHook(() => useAttachmentUploads({ target: "post" }));
+
+    await act(async () => {
+      result.current.add([pdf("a.pdf"), tooBig]);
+      await flush();
+    });
+    await waitFor(() => expect(result.current.items[0]?.status).toBe("error"));
+    expect(result.current.rejections).toEqual([{ name: "lon.pdf", reason: "tooLarge" }]);
+
+    await act(async () => {
+      result.current.retry(result.current.items[0]?.id ?? "");
+      await flush();
+    });
+    await waitFor(() => expect(result.current.submitState).toEqual({ ready: true, ids: [FA] }));
+    expect(result.current.rejections).toEqual([]);
+  });
+
   it("`reset()` huỷ MỌI lượt đang bay và dọn sạch khay + danh sách từ chối", async () => {
     let signalA: AbortSignal | undefined;
     upload.mockImplementationOnce((_f: File, _t: string, opts?: { signal?: AbortSignal }) => {
@@ -174,5 +197,127 @@ describe("vòng đời một ô", () => {
     expect(signalA?.aborted).toBe(true);
     expect(result.current.items).toEqual([]);
     expect(result.current.rejections).toEqual([]);
+  });
+});
+
+/**
+ * FULL gate lượt 1 (typescript-reviewer + security-reviewer cùng nêu — G1): ô LỖI không tính vào trần
+ * (`planAttachmentAdds`, cố ý — tính nó là chặn oan), nên trong lúc nó nằm lỗi người dùng thêm được tệp vào
+ * chỗ trống. «Thử lại» mà đưa ô lỗi về hàng đợi KHÔNG kiểm lại trần ⇒ 12 tệp (Zod `.max(11)` ⇒ 400 VÔ
+ * DANH — đo M10) hoặc 11 ảnh (422 `SOCIAL-ERR-007`), lượt gửi nào cũng hỏng mà không ai nói phải gỡ tệp.
+ */
+describe("G1 — DENY: «Thử lại» KHÔNG đẩy khay vượt trần", () => {
+  const fileIdOf = (n: number) => `${String(n).padStart(8, "0")}-0000-4000-8000-000000000000`;
+  const png = (name: string): File => new File(["abc"], name, { type: "image/png" });
+
+  beforeEach(() => {
+    // Ảnh ⇒ xem trước bằng blob URL; jsdom KHÔNG có hai hàm này (đo M16).
+    URL.createObjectURL = vi.fn(() => "blob:preview") as unknown as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
+  });
+
+  /** Ô #1 lỗi TẠM, các ô còn lại xong — trả `id` ô lỗi. */
+  async function trayWithFirstFailed(
+    result: { current: ReturnType<typeof useAttachmentUploads> },
+    files: File[],
+  ): Promise<string> {
+    let n = 0;
+    upload.mockImplementation((file: File) => {
+      n += 1;
+      if (n === 1) return Promise.reject(new Error("Tải tệp lên storage thất bại (HTTP 500)."));
+      return Promise.resolve(done(fileIdOf(n), file.name));
+    });
+    await act(async () => {
+      result.current.add(files);
+      await flush();
+    });
+    await waitFor(() =>
+      expect(result.current.items.filter((i) => i.status === "done")).toHaveLength(
+        files.length - 1,
+      ),
+    );
+    const failed = result.current.items[0];
+    expect(failed?.status).toBe("error");
+    expect(failed?.error).toBe("uploadFailed");
+    return failed?.id ?? "";
+  }
+
+  it("11 tệp, #1 lỗi · thêm 1 tệp vào chỗ trống · «Thử lại» #1 ⇒ KHÔNG tải, #1 GIỮ lỗi, báo `tooManyFiles`", async () => {
+    const { result } = renderHook(() => useAttachmentUploads({ target: "post" }));
+    const failedId = await trayWithFirstFailed(
+      result,
+      Array.from({ length: FEED_MAX_ATTACHMENTS }, (_, i) => pdf(`d${i}.pdf`)),
+    );
+
+    // Ô lỗi KHÔNG tính vào trần ⇒ tệp thay chỗ được nhận (thiết kế — không chặn oan).
+    await act(async () => {
+      result.current.add([pdf("thay.pdf")]);
+      await flush();
+    });
+    await waitFor(() =>
+      expect(result.current.items.filter((i) => i.status === "done")).toHaveLength(
+        FEED_MAX_ATTACHMENTS,
+      ),
+    );
+    upload.mockClear();
+
+    await act(async () => {
+      result.current.retry(failedId);
+      await flush();
+    });
+
+    expect(upload).not.toHaveBeenCalled();
+    expect(result.current.items.find((i) => i.id === failedId)?.status).toBe("error");
+    expect(result.current.rejections).toEqual([{ name: "d0.pdf", reason: "tooManyFiles" }]);
+    expect(result.current.submitState).toEqual({ ready: false, reason: "hasErrors" });
+  });
+
+  it("10 ảnh, #1 lỗi · thêm 1 ảnh · «Thử lại» #1 ⇒ KHÔNG tải, báo `tooManyImages`", async () => {
+    const { result } = renderHook(() => useAttachmentUploads({ target: "post" }));
+    const failedId = await trayWithFirstFailed(
+      result,
+      Array.from({ length: FEED_MAX_IMAGES_PER_POST }, (_, i) => png(`a${i}.png`)),
+    );
+    await act(async () => {
+      result.current.add([png("thay.png")]);
+      await flush();
+    });
+    await waitFor(() =>
+      expect(result.current.items.filter((i) => i.status === "done")).toHaveLength(
+        FEED_MAX_IMAGES_PER_POST,
+      ),
+    );
+    upload.mockClear();
+
+    await act(async () => {
+      result.current.retry(failedId);
+      await flush();
+    });
+
+    expect(upload).not.toHaveBeenCalled();
+    expect(result.current.rejections).toEqual([{ name: "a0.png", reason: "tooManyImages" }]);
+  });
+
+  it("đối chứng ALLOW: trần CÒN chỗ (11 tệp, #1 lỗi, không thêm gì) ⇒ «Thử lại» tải lại, đủ 11 id đúng THỨ TỰ CHỌN", async () => {
+    const { result } = renderHook(() => useAttachmentUploads({ target: "post" }));
+    const failedId = await trayWithFirstFailed(
+      result,
+      Array.from({ length: FEED_MAX_ATTACHMENTS }, (_, i) => pdf(`d${i}.pdf`)),
+    );
+    upload.mockClear();
+    upload.mockResolvedValueOnce(done(fileIdOf(99), "d0.pdf"));
+
+    await act(async () => {
+      result.current.retry(failedId);
+      await flush();
+    });
+
+    expect(upload).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.submitState.ready).toBe(true));
+    const state = result.current.submitState;
+    expect(state.ready ? state.ids : []).toEqual([
+      fileIdOf(99),
+      ...Array.from({ length: FEED_MAX_ATTACHMENTS - 1 }, (_, i) => fileIdOf(i + 2)),
+    ]);
   });
 });
