@@ -331,12 +331,12 @@ describe("S16-SOCIAL-FE-2 — thẻ `poll` / `idea`", () => {
 // S16-SOCIAL-AVATARPRESIGN-1 (owner D8) — `author.avatarUrl` là URL ký; vệ sinh render `avatarSrc`:
 // API chưa deploy (FE tự deploy trước) còn trả fileId thô ⇒ KHÔNG `<img src="<uuid>">` (ảnh vỡ).
 describe("AVATARPRESIGN — ảnh tác giả qua `avatarSrc`", () => {
+  /** URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật. */
+  const SIGNED = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
+
   it("URL ký ⇒ `<img>` đúng `src`", () => {
-    renderCard({ author: { ...BASE_POST.author, avatarUrl: "https://x.invalid/p.png" } });
-    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
-      "src",
-      "https://x.invalid/p.png",
-    );
+    renderCard({ author: { ...BASE_POST.author, avatarUrl: SIGNED } });
+    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute("src", SIGNED);
   });
 
   it("fileId THÔ ⇒ chữ cái đầu, KHÔNG `<img>`", () => {

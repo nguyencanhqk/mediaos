@@ -9,6 +9,7 @@
  *   • D10 — `signTx` KHÔNG nuốt lỗi; chỉ `signInSavepointTx` nuốt, và chỉ bên trong `tx.transaction`.
  */
 import { Logger } from "@nestjs/common";
+import { DrizzleQueryError } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TenantTx } from "../db/db.service";
 import type {
@@ -221,6 +222,72 @@ describe("D10 — lỗi câu cổng: signTx NÉM, signInSavepointTx nuốt TRONG
     expect(msg).toContain("22012");
     expect(msg).toContain("division by zero");
     expect(msg).not.toContain(FILE_1);
+  });
+
+  it("signInSavepointTx — câu `savepoint` ném (tx cha ĐÃ hỏng, 25P02) ⇒ NÉM tiếp, không nuốt", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    const { signer, resolveEmployeeAvatars } = makeSigner();
+    const aborted = Object.assign(
+      new Error("current transaction is aborted, commands ignored until end of transaction block"),
+      { code: "25P02" },
+    );
+    // drizzle chạy `savepoint spN` NGOÀI try của nó ⇒ lỗi này tới caller TRƯỚC khi callback chạy.
+    const transaction = vi.fn(async () => {
+      throw aborted;
+    });
+    const tx = { transaction } as unknown as TenantTx;
+    await expect(signer.signInSavepointTx(tx, COMPANY, [ref(EMP_X, FILE_1)])).rejects.toBe(aborted);
+    expect(transaction, "neo: đã thử mở SAVEPOINT").toHaveBeenCalledTimes(1);
+    expect(resolveEmployeeAvatars).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("signInSavepointTx — lỗi lập trình KHÔNG mã PG (TypeError) ⇒ logger.error có thông điệp + stack, không warn", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const bug = new TypeError("urls.get is not a function");
+    const { signer } = makeSigner(async () => {
+      throw bug;
+    });
+    const { tx } = fakeTx();
+    const out = await signer.signInSavepointTx(tx, COMPANY, [ref(EMP_X, FILE_1)]);
+    expect(error).toHaveBeenCalledTimes(1);
+    const [msg, stack] = error.mock.calls[0]!;
+    expect(String(msg)).toContain(COMPANY);
+    expect(String(msg)).toContain("urls.get is not a function");
+    expect(stack).toBe(bug.stack);
+    expect(warn).not.toHaveBeenCalled();
+    expect(out.urlOf(ref(EMP_X, FILE_1)), "vẫn nuốt TRONG SAVEPOINT (D10)").toBeNull();
+  });
+
+  it("signInSavepointTx — DrizzleQueryError KHÔNG mã PG (mất kết nối) ⇒ log lý do + stack của `cause`, KHÔNG câu SQL / tham số", async () => {
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const cause = new Error("Connection terminated unexpectedly");
+    const { signer } = makeSigner(async () => {
+      throw new DrizzleQueryError(
+        'select "file_id" from "file_links" where …',
+        [COMPANY, FILE_1],
+        cause,
+      );
+    });
+    const { tx } = fakeTx();
+    const out = await signer.signInSavepointTx(tx, COMPANY, [ref(EMP_X, FILE_1)]);
+    expect(error).toHaveBeenCalledTimes(1);
+    const [msg, stack] = error.mock.calls[0]!;
+    expect(String(msg)).toContain("Connection terminated unexpectedly");
+    expect(String(msg)).not.toContain("Failed query");
+    expect(String(msg)).not.toContain(FILE_1);
+    expect(stack).toBe(cause.stack);
+    expect(out.urlOf(ref(EMP_X, FILE_1))).toBeNull();
+  });
+
+  it("lưới cuối dưới signInSavepointTx — nhãn log là `signInSavepointTx`, không `signTx`", async () => {
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const { signer } = makeSigner(async () => new Map([[EMP_X, "javascript:alert(1)"]]));
+    const { tx } = fakeTx();
+    await signer.signInSavepointTx(tx, COMPANY, [ref(EMP_X, FILE_1)]);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(String(error.mock.calls[0]![0])).toMatch(/^signInSavepointTx\[/);
   });
 
   it("signInSavepointTx — không có fileId nào ⇒ KHÔNG mở SAVEPOINT (0 câu thêm)", async () => {

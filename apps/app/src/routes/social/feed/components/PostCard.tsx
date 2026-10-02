@@ -79,9 +79,9 @@ export function PostCard({
     >
       <header className="flex items-start gap-3">
         {/*
-          `avatarUrl` = URL ký hoặc null — `Avatar` tự rơi về chữ cái đầu của `name`. `avatarSrc` chỉ
-          nhận http(s): không chuỗi rỗng (`<img src="">` tải lại chính trang), không fileId thô của API
-          chưa deploy (S16-SOCIAL-AVATARPRESIGN-1 D8).
+          `avatarUrl` = URL ký hoặc null — `Avatar` tự rơi về chữ cái đầu của `name`. `avatarSrc` CHỈ
+          nhận URL presign: không chuỗi rỗng (`<img src="">` tải lại chính trang), không fileId thô hay
+          URL http(s) ngoài của API chưa deploy (S16-SOCIAL-AVATARPRESIGN-1 D8 + FULL gate lượt 1).
         */}
         <Avatar name={name} src={avatarSrc(post.author.avatarUrl)} size="md" />
 

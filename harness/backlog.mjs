@@ -19617,6 +19617,9 @@ export const backlog = [
       "🔴 FULL gate (đường ký file). Seed 29/09/2026 từ S16-SOCIAL-BE-2D (owner K4).",
       "Owner ký 02/10/2026 (plan §6, mọi khuyến nghị): D1=(a) avatar directory-class trên CẢ 10 trường SOCIAL (gồm 022-chưa-đọc · 059 · 026) · D2=(b) SOCIAL chỉ ký fileId, bỏ mọi URL http(s) ⇒ chữ cái đầu (`isUuid` export sẵn, lọc trong `apps/api/src/social/**`, không sửa foundation) · D3=(b) WS GIỮ khoá `author.avatarUrl`, ép `null` bằng `.transform` của schema lồng VÀ nguồn viết `null` · D4 bật `src` ở KudosBlock + composer + NewsPage `022`; widget tháng giữ CHỈ tên · D5=(a) hợp đồng REST giữ `z.string()` · D6=(a) chấp nhận TTL 300 s, seed nợ fallback `onError` ở packages/ui · D7=(a) thêm `docs/spec/**` vào paths (git track `docs/SPEC/**`) + sửa dòng SOC-DEC-013 SPEC-16 · D8=(a) helper `avatarSrc` + MỘT PR · D9=(a) ảnh theo vị từ che tên trong SQL (`CASE WHEN users.id IS NOT NULL OR employee_profiles.user_id IS NULL THEN avatar_url END`) ở `026` + `022`-chưa-đọc · D10=(a) `029` ký qua `signInSavepointTx` (SAVEPOINT + catch ⇒ initials + `logger.warn`), KHÔNG BAO GIỜ catch không SAVEPOINT. Plan: docs/plans/S16-SOCIAL-AVATARPRESIGN-1.md.",
       "Seed nợ 02/10/2026 (plan §7): S19-HR-AVATARWRITE-1 (N1) · S19-UI-AVATARFALLBACK-1 (N2, theo D6) · S19-OPS-AVATARCENSUS-1 (N3) · S16-SOCIAL-POSTSSPLIT-1 (N4) · S16-SOCIAL-BDAYMASKED-1 (N6) · S16-SOCIAL-IDENTITYLIVE-1 (N7). N5 (ảnh nhóm `feed_groups.avatar_file_id`) là tính năng riêng — không seed.",
+      "Owner SỬA D9 02/10/2026 ~19:20 (AskUserQuestion — trả lời finding MEDIUM của security-reviewer FULL gate lượt 1 tại `social-discovery.repository.ts:90`): D9 HẸP LẠI CHỈ ở SOCIAL-API-026 (widget sinh nhật) — hồ sơ KHÔNG có tài khoản (`employee_profiles.user_id IS NULL`) ⇒ `avatar: null` (chữ cái đầu), vì người đó không có đường tự ẩn `show_birthday`; ở `026` ảnh chỉ giữ khi TK SỐNG (`users.id IS NOT NULL` sau JOIN liveness). Mọi bề mặt khác (022-chưa-đọc · kudos · mentions …) giữ NGUYÊN D9 đã ký («vắng ≠ che»). Thi công: `acctLive` ở `social-discovery.repository.ts#birthdays`; ca RED D-NAMEMASK `026` (hồ sơ không TK ⇒ ảnh null + fileId ∉ tham số câu cổng; neo dương: người sống ký) + 2 mutant (khôi phục vị từ cũ ⇒ đỏ ở ảnh · che ở JS thay vì SQL ⇒ đỏ ở tham số câu cổng). Plan §11.",
+      "FULL gate lượt 1 (02/10/2026) — security-reviewer PASS (1 MEDIUM ⇒ owner sửa D9 ở trên · 3 LOW) · silent-failure-hunter PASS (2 LOW) · database-reviewer (2 LOW) · typescript-reviewer (1 MEDIUM · 2 LOW): 11 finding, gộp trùng còn 7 mục, VÁ HẾT — 0 bác, 0 hoãn (bảng ở plan §11): `avatarSrc` CHỈ nhận URL presign SigV4 (sửa nhận định D8 «thứ tự deploy nào cũng vô hại» — chỉ đúng với fileId) + spec trực tiếp + neo có-mặt · `signInSavepointTx` NÉM khi SAVEPOINT chưa mở (tx cha đã hỏng — `25P02`), lỗi không mã PG log `error` + message/stack (DrizzleQueryError lấy `cause`), bỏ ép kiểu `as` · S1 đếm theo MỌI alias của `employeeProfiles` + S1b cấm SQL thô `avatar_url` · IDENTITYLIVE-1/BDAYMASKED-1 ghi ngoại lệ `026`.",
+      "⚠️ THỨ TỰ DEPLOY (FULL gate lượt 1, ghi vào mô tả PR): `avatarSrc` chặn fileId + URL http(s) chưa ký của API cũ, nhưng một giá trị CỐ Ý giả hình dạng presign (vd `https://host-lạ/p.gif?X-Amz-Signature=<64 hex>` qua đề xuất đổi hồ sơ — M20) vẫn được vẽ tới khi API ≥ WO này chạy (server D2-b trả `null`) ⇒ deploy API PROD TRƯỚC hoặc CÙNG đợt merge FE.",
     ],
   },
   {
@@ -19735,10 +19738,11 @@ export const backlog = [
     ],
     done_when: [
       "Owner chốt câu hỏi sản phẩm (bỏ dòng · giữ ẩn danh · khác) TRƯỚC khi code",
-      "Nếu bỏ dòng: vị từ TRONG SQL (không lọc ở JS), ca RED trước cho TK khoá + TK xoá mềm; hồ sơ KHÔNG tài khoản giữ nguyên (vắng ≠ che, K1)",
+      "Nếu bỏ dòng: vị từ TRONG SQL (không lọc ở JS), ca RED trước cho TK khoá + TK xoá mềm; dòng hồ sơ KHÔNG tài khoản: owner chốt giữ hay bỏ cùng lượt — ảnh của họ ở `026` ĐÃ `null` từ AVATARPRESIGN (owner sửa D9 02/10/2026), KHÔNG khôi phục",
     ],
     notes: [
       "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (nợ N6 — D9-b không chọn trong WO đó vì đổi tập hàng là câu hỏi sản phẩm riêng).",
+      "Owner sửa D9 02/10/2026 (AVATARPRESIGN FULL gate lượt 1): ở `026` ảnh của hồ sơ KHÔNG có tài khoản giờ cũng `null` (chỉ TK sống mới có ảnh — `acctLive` ở `social-discovery.repository.ts#birthdays`) ⇒ câu hỏi còn lại của WO này CHỈ là có bỏ những dòng vô danh/vô ảnh đó (TK khoá/xoá mềm · hồ sơ không TK) hay không.",
     ],
   },
   {
@@ -19766,9 +19770,11 @@ export const backlog = [
     done_when: [
       "Owner chốt MỘT luật (vd TK xoá mềm ⇒ che tên + ảnh ở MỌI điểm chiếu; TK khoá ⇒ ?) TRƯỚC khi code",
       "MỘT hàm SQL dùng chung cho vị từ sống (khuôn `live`/`nameLive`), spec cấu trúc đếm mọi điểm dùng nó; ca RED theo từng điểm chiếu (bài · bình luận · cảm xúc · đã đọc · báo cáo) cho TK xoá mềm; identity ratchet cập nhật CÓ CHỦ ĐÍCH",
+      "NGOẠI LỆ CÓ CHỦ ĐÍCH — ảnh ở `026`: vị từ `acctLive` (`users.id IS NOT NULL`, owner sửa D9 02/10/2026: hồ sơ KHÔNG tài khoản cũng không ảnh, vì không có đường tự ẩn `show_birthday`). Hàm dùng chung KHÔNG được nới `026` về «vắng ≠ che»; ca D-NAMEMASK `026` (`social-avatarpresign-1.int-spec.ts`: ảnh null + fileId ∉ tham số câu cổng) phải còn đỏ nếu nới — KHÔNG «cập nhật có chủ đích» ca đó",
     ],
     notes: [
       "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (nợ N7). WO đó chỉ bảo đảm che ẢNH ⊆ che TÊN; WO này thống nhất chính vị từ che TÊN.",
+      "Owner sửa D9 02/10/2026 (AVATARPRESIGN FULL gate lượt 1, database-reviewer): `026` là ngoại lệ — ảnh chỉ đi kèm TK SỐNG; mọi điểm khác giữ «vắng ≠ che» (K1/D9). Xem mục «NGOẠI LỆ CÓ CHỦ ĐÍCH» ở done_when.",
     ],
   },
   {

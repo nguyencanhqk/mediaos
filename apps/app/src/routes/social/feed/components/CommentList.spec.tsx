@@ -330,11 +330,14 @@ describe("CommentComposer — cổng quyền + trần độ dài", () => {
 
 // S16-SOCIAL-AVATARPRESIGN-1 — ảnh tác giả bình luận: URL ký ⇒ `<img>`; fileId thô ⇒ chữ cái đầu.
 describe("AVATARPRESIGN — ảnh tác giả bình luận qua `avatarSrc`", () => {
+  /** URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật. */
+  const SIGNED = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
+
   it("URL ký ⇒ `<img>` đúng `src`; fileId THÔ ⇒ KHÔNG `<img>`", () => {
     renderList([
       base({
         id: "c1",
-        author: { employeeId: null, fullName: "An Nguyễn", avatarUrl: "https://x.invalid/p.png" },
+        author: { employeeId: null, fullName: "An Nguyễn", avatarUrl: SIGNED },
       }),
       base({
         id: "c2",
@@ -345,10 +348,9 @@ describe("AVATARPRESIGN — ảnh tác giả bình luận qua `avatarSrc`", () =
         },
       }),
     ]);
-    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
-      "src",
-      "https://x.invalid/p.png",
-    );
+    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute("src", SIGNED);
+    // Neo CÓ MẶT: dòng «Bình Trần» thật sự vẽ (Avatar rơi về chữ cái đầu) — không thì vế dưới xanh-rỗng.
+    expect(screen.getByText("BT")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Bình Trần" })).toBeNull();
   });
 });

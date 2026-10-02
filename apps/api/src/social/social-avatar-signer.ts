@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { FeedKudosRecipientDto } from "@mediaos/contracts";
+import { DrizzleQueryError } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import {
   AvatarPresignService,
@@ -29,14 +30,16 @@ import { socialPgErrorOf } from "./social.errors";
  * │ `signTx` KHÔNG bắt lỗi: trong tx không SAVEPOINT, một câu lỗi làm hỏng cả tx — `catch` ở đó khiến │
  * │ COMMIT thành ROLLBACK IM LẶNG, route trả 200 mà mất ghi (plan M21). `signInSavepointTx` CHỈ cho tx │
  * │ có GHI (`029`): bọc `tx.transaction` (SAVEPOINT — cùng kết nối, 0 `begin` thêm, plan M19); lỗi ⇒ │
- * │ `rollback to savepoint`, ảnh về initials + `logger.warn`, quyết định kiểm duyệt vẫn commit.        │
+ * │ `rollback to savepoint`, ảnh về initials + log (`warn` lỗi DB · `error` lỗi không mã PG), quyết   │
+ * │ định kiểm duyệt vẫn commit. Lỗi khi MỞ SAVEPOINT (tx cha đã hỏng — `25P02`) thì NÉM tiếp.          │
  * │ 🔴 Cấm `try/catch` quanh `signTx` — đó là đúng bản vá ngây thơ M21 (mutant của T-029-SP).          │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * ┌─ CHE ẢNH ⊆ CHE TÊN — LUẬT CHO MỌI ĐIỂM SELECT (plan §1.1, 12 điểm; R12) ───────────────────────────┐
  * │ Ký biến một fileId trơ thành ảnh THẬT ⇒ ở mọi điểm, vị từ che ảnh phải chặt BẰNG hoặc HƠN vị từ   │
- * │ che tên. Che xảy ra TRONG SQL (`CASE WHEN live …` của K1 · `CASE WHEN nameLive …` của D9 ở `026`  │
- * │ và `022`-chưa-đọc) hoặc TRƯỚC khi dựng refs (D13-a: reporter ẩn không vào lô) — người đã bị che   │
+ * │ che tên. Che xảy ra TRONG SQL (`CASE WHEN live …` của K1 · `CASE WHEN nameLive …` của D9 ở        │
+ * │ `022`-chưa-đọc · `026` CHẶT HƠN: `CASE WHEN acctLive …` — owner sửa D9 02/10, hồ sơ không TK cũng │
+ * │ không ảnh) hoặc TRƯỚC khi dựng refs (D13-a: reporter ẩn không vào lô) — người đã bị che           │
  * │ không phát sinh URL và fileId của họ không vào tham số câu cổng. Thêm một điểm SELECT avatar mới:  │
  * │ đặt cột thô dưới khoá `…AvatarRaw` (spec cấu trúc S1 đếm), và che ảnh theo đúng vị từ che tên.    │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -89,12 +92,18 @@ export class SocialAvatarSigner {
   ): Promise<SignedAvatars> {
     const chosen = chooseSubjects(refs);
     if (chosen.size === 0) return NO_AVATARS;
-    return this.signChosen(tx, companyId, chosen);
+    return this.signChosen(tx, companyId, chosen, "signTx");
   }
 
   /**
-   * CHỈ cho tx có GHI (`029`): ký trong SAVEPOINT. Lỗi bất kỳ ⇒ `NO_AVATARS` + `logger.warn` (companyId
-   * + mã PG); tx cha còn sống và commit quyết định kiểm duyệt. Không fileId nào ⇒ không mở SAVEPOINT.
+   * CHỈ cho tx có GHI (`029`): ký trong SAVEPOINT. Lỗi TRONG SAVEPOINT ⇒ `NO_AVATARS` + log (companyId +
+   * lý do an toàn); drizzle đã `rollback to savepoint` nên tx cha còn sống. Không fileId nào ⇒ không mở
+   * SAVEPOINT.
+   *
+   * 🔴 Lỗi khi MỞ SAVEPOINT thì NÉM tiếp: drizzle chạy câu `savepoint spN` NGOÀI try của nó, nên lỗi đó
+   * tới đây TRƯỚC khi callback chạy — tx cha đã hỏng từ trước (`25P02`: một câu trước đó lỗi và bị nuốt
+   * không SAVEPOINT) hoặc kết nối đã chết. Nuốt nó là để COMMIT thành ROLLBACK im lặng mà route vẫn 200
+   * (plan M21) — đúng thứ D10 cấm.
    */
   async signInSavepointTx(
     tx: TenantTx,
@@ -103,27 +112,48 @@ export class SocialAvatarSigner {
   ): Promise<SignedAvatars> {
     const chosen = chooseSubjects(refs);
     if (chosen.size === 0) return NO_AVATARS;
+    let opened = false;
     try {
-      return await tx.transaction((sp) => this.signChosen(sp, companyId, chosen));
+      return await tx.transaction((sp) => {
+        opened = true;
+        return this.signChosen(sp, companyId, chosen, "signInSavepointTx");
+      });
     } catch (err) {
-      // Lý do lấy từ lỗi DRIVER (`pg`), KHÔNG từ `err.message` của drizzle: thông điệp đó nhúng nguyên câu
-      // SQL + tham số bind (companyId + fileId của cả lô) vào log.
-      const pg = socialPgErrorOf(err) as { code?: unknown; message?: unknown } | null;
-      const code = pg?.code;
-      const reason =
-        typeof pg?.message === "string" ? pg.message : err instanceof Error ? err.name : "unknown";
-      this.logger.warn(
-        `signInSavepointTx[company=${companyId}]: ký avatar lỗi (pg=${String(code ?? "none")}) — ` +
-          `rollback SAVEPOINT, ${chosen.size} avatar về initials, tx ghi vẫn commit. Reason: ${reason}`,
-      );
+      if (!opened) throw err;
+      this.logSavepointFailure(companyId, chosen.size, err);
       return NO_AVATARS;
     }
+  }
+
+  /**
+   * Log lỗi ký đã nuốt trong SAVEPOINT — KHÔNG BAO GIỜ nhúng câu SQL + tham số bind (thông điệp của
+   * `DrizzleQueryError` = `Failed query: <sql>\nparams: <companyId, fileId của cả lô>`):
+   *  • có mã PG (lỗi DB thường ngày — vd `55P03` dưới `lock_timeout`) ⇒ `warn`, lý do = thông điệp lỗi DRIVER;
+   *  • KHÔNG mã PG ⇒ `error` + stack: `DrizzleQueryError` (vd mất kết nối) dùng thông điệp/stack của `cause`;
+   *    lỗi khác là BUG trong đường ký (TypeError…) — không được trông như một lock_timeout thường ngày.
+   * Không khẳng định tx ghi sẽ commit: lớp này không biết (COMMIT vẫn có thể hỏng vì lý do khác).
+   */
+  private logSavepointFailure(companyId: string, count: number, err: unknown): void {
+    const head = `signInSavepointTx[company=${companyId}]: ký avatar lỗi — rollback SAVEPOINT, ${count} avatar về initials`;
+    const pg = socialPgErrorOf(err);
+    if (pg) {
+      const reason = "message" in pg && typeof pg.message === "string" ? pg.message : "unknown";
+      this.logger.warn(`${head} (pg=${String(pg.code)}). Reason: ${reason}`);
+      return;
+    }
+    const own = err instanceof DrizzleQueryError ? err.cause : err;
+    if (own instanceof Error) {
+      this.logger.error(`${head} (pg=none). Reason: ${own.name}: ${own.message}`, own.stack);
+      return;
+    }
+    this.logger.error(`${head} (pg=none). Reason: giá trị ném không phải Error (${typeof own})`);
   }
 
   private async signChosen(
     tx: TenantTx,
     companyId: string,
     chosen: ReadonlyMap<string, string>,
+    entry: "signTx" | "signInSavepointTx",
   ): Promise<SignedAvatars> {
     const subjects: AvatarSubject[] = [...chosen].map(([employeeId, avatarUrl]) => ({
       employeeId,
@@ -137,7 +167,7 @@ export class SocialAvatarSigner {
       if (url === undefined) continue; // cặp không xác minh / storage lỗi (dịch vụ đã log) ⇒ initials
       if (!SIGNED_URL_RE.test(url)) {
         this.logger.error(
-          `signTx[company=${companyId}]: dịch vụ ký trả URL không http(s) cho nhân viên ${employeeId} — bỏ (initials)`,
+          `${entry}[company=${companyId}]: dịch vụ ký trả URL không http(s) cho nhân viên ${employeeId} — bỏ (initials)`,
         );
         continue;
       }

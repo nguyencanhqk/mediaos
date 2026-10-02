@@ -432,18 +432,28 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-AVATARPRESIGN-1 · ký avatar SOCIAL (DB
         }
       }
 
-      it("026 GET /social/birthdays — và hồ sơ KHÔNG tài khoản (vắng ≠ che) vẫn được ký", async () => {
+      /**
+       * Owner SỬA D9 02/10/2026 (FULL gate lượt 1, CHỈ `026`): hồ sơ KHÔNG tài khoản không có đường tự ẩn
+       * (`show_birthday` sống ở TK) ⇒ trên widget sinh nhật cả công ty, ảnh chỉ đi kèm TK SỐNG. Mọi bề
+       * mặt khác giữ D9 như đã ký («vắng ≠ che»). Dòng VẪN ra — bỏ dòng là câu hỏi của
+       * S16-SOCIAL-BDAYMASKED-1. Neo dương: người sống ký + fileId của họ vào câu cổng (`expectNameMask`).
+       */
+      it("026 GET /social/birthdays — hồ sơ KHÔNG tài khoản ⇒ ảnh null, fileId KHÔNG vào câu cổng (owner sửa D9)", async () => {
         const { out: res, qs } = await captured(async () =>
           w.get(w.viewer.token, "/social/birthdays?range=today"),
         );
         expect(res.status, JSON.stringify(res.body)).toBe(200);
         feedBirthdayListSchema.parse(res.body.data);
         const rows = res.body.data.data as Json[];
-        expectNameMask(rows, gateValues(qs), "avatar", "026");
-        expect(
-          rows.find((r) => r.employeeId === noAcc.employeeId)?.avatar,
-          "026: hồ sơ không TK ⇒ ký",
-        ).toMatch(SIGNED_RE);
+        const values = gateValues(qs);
+        expectNameMask(rows, values, "avatar", "026");
+        const row = rows.find((r) => r.employeeId === noAcc.employeeId);
+        expect(row, "026: hồ sơ không TK vẫn có dòng (không đổi tập hàng)").toBeTruthy();
+        expect(row!.fullName, "026: hồ sơ không TK — tên vắng").toBeNull();
+        expect(row!.avatar, "026: hồ sơ không TK — ảnh null (owner sửa D9)").toBeNull();
+        expect(values, "026: fileId hồ sơ không TK không rời SQL").not.toContain(
+          files.get(noAcc.employeeId),
+        );
       });
 
       it("022 GET /social/posts/:id/acks?state=unacked", async () => {

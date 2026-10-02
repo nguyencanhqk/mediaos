@@ -154,7 +154,8 @@ export class SocialDiscoveryService {
         return prefs.get(r.userId)?.showBirthday !== false;
       });
       // S16-SOCIAL-AVATARPRESIGN-1: ký SAU lọc `showBirthday` (chỉ dòng hiển thị), CÙNG tx; raw đã che
-      // theo tên trong SQL (D9) ⇒ TK khoá/xoá mềm không phát sinh URL.
+      // trong SQL (D9 + owner sửa D9 cho `026`) ⇒ TK khoá/xoá mềm VÀ hồ sơ KHÔNG có TK (nhánh
+      // `r.userId == null` ở trên — không có cờ để tự ẩn) không phát sinh URL, fileId không vào câu cổng.
       return { rows: shown, avatars: await this.avatarSigner.signTx(tx, actor.companyId, shown) };
     });
 

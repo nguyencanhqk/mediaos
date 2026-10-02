@@ -23,20 +23,27 @@ export function authorDisplayName(author: FeedAuthorDto, fallback: string): stri
   return name && name.length > 0 ? name : fallback;
 }
 
-/** `http://` hoặc `https://` ở đầu chuỗi — scheme duy nhất được thành `src` của ảnh đại diện. */
-const AVATAR_SRC_RE = /^https?:\/\//i;
+/** `http(s)://` CHỮ THƯỜNG ở ĐẦU chuỗi, không khoảng trắng (dịch vụ ký chỉ phát dạng này). */
+const AVATAR_URL_RE = /^https?:\/\/\S+$/;
+/** Chữ ký SigV4 TRONG query (trước `#`), đúng 64 hex thường — dấu của URL presign. */
+const SIGV4_SIGNATURE_RE = /^[^#]*[?&]X-Amz-Signature=[0-9a-f]{64}(?:[&#]|$)/;
 
 /**
  * S16-SOCIAL-AVATARPRESIGN-1 (owner D8) — `src` cho `Avatar` từ `avatarUrl`/`avatar` của SOCIAL.
  *
  * Server trả URL ĐÃ KÝ hoặc `null` (che dữ liệu là việc của SERVER — hàm này KHÔNG phải lớp che). Đây là
- * vệ sinh render: chỉ chuỗi `http(s)://` mới thành `src`, mọi thứ khác ⇒ `undefined` ⇒ chữ cái đầu.
- * Lý do tồn tại: FE tự deploy khi merge còn API PROD deploy tay — trong khe đó API cũ vẫn trả fileId
- * thô, và `<img src="<uuid>">` là URL TƯƠNG ĐỐI ⇒ ảnh vỡ (+ một request rác tới chính app). Với
- * helper, thứ tự deploy nào cũng vô hại: FE trước ⇒ chữ cái đầu, API trước ⇒ ảnh.
+ * vệ sinh render: CHỈ hình dạng API phát ra cho avatar SOCIAL — URL presign SigV4 của `ObjectStorageService`
+ * (owner D2-b: server bỏ mọi URL http(s) khác) — mới thành `src`; mọi thứ khác ⇒ `undefined` ⇒ chữ cái đầu.
+ *
+ * Lý do tồn tại: FE tự deploy khi merge còn API PROD deploy tay — trong khe đó API CŨ trả NGUYÊN cột
+ * `employee_profiles.avatar_url`: fileId (`<img src="<uuid>">` = URL tương đối ⇒ ảnh vỡ) hoặc URL http(s)
+ * NGOÀI (beacon ghi IP/UA người xem — đúng thứ D2-b chặn). Chỉ nhận hình dạng presign ⇒ cả hai thành chữ
+ * cái đầu (FULL gate lượt 1 sửa nhận định cũ «thứ tự deploy nào cũng vô hại» — chỉ đúng với fileId).
+ * ⚠️ Còn sót có ghi: một giá trị CỐ Ý dựng giả hình dạng presign vẫn qua tới khi API ≥ WO này được deploy
+ * ⇒ deploy API PROD TRƯỚC hoặc CÙNG đợt FE (ghi ở notes WO).
  */
 export function avatarSrc(value: string | null | undefined): string | undefined {
-  return value && AVATAR_SRC_RE.test(value) ? value : undefined;
+  return value && AVATAR_URL_RE.test(value) && SIGV4_SIGNATURE_RE.test(value) ? value : undefined;
 }
 
 /**

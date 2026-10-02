@@ -8,8 +8,10 @@
  *
  * ┌─ AVATAR (S16-SOCIAL-AVATARPRESIGN-1, owner D4/D8) ──────────────────────────────────────────────┐
  * │ `recipients[].avatarUrl` = URL ĐÃ KÝ (server chỉ ký avatar đã xác minh, che theo K1) hoặc `null`. │
- * │ `src` đi qua `avatarSrc` — vệ sinh render: API cũ (chưa deploy) còn trả fileId thô ⇒ chữ cái đầu,│
- * │ không `<img src="<uuid>">` (URL tương đối = ảnh vỡ). Che dữ liệu vẫn là việc của SERVER.         │
+ * │ `src` đi qua `avatarSrc` — vệ sinh render, CHỈ URL presign: API cũ (chưa deploy) còn trả cột thô │
+ * │ — fileId (`<img src="<uuid>">` = ảnh vỡ) hoặc URL http(s) ngoài (beacon host lạ, owner D2-b) —    │
+ * │ cả hai ⇒ chữ cái đầu. Một giá trị CỐ Ý giả hình dạng presign vẫn qua tới khi API ≥ AVATARPRESIGN │
+ * │ được deploy ⇒ deploy API TRƯỚC/CÙNG FE. Che dữ liệu vẫn là việc của SERVER.                      │
  * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Người nhận: `fullName ?? "Đồng nghiệp"` (null ⇔ hồ sơ/TK đã xoá mềm HOẶC không có TK — cờ theo

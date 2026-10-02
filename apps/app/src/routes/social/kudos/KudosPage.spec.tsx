@@ -60,6 +60,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 const t = i18n.getFixedT("vi", "social");
 const POST_ID = "11111111-1111-4111-8111-111111111111";
 const KUDOS_ID = "44444444-4444-4444-8444-444444444444";
+/** URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật. */
+const SIGNED_AVATAR = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
 
 const item = (over: Partial<FeedKudosListItemDto> = {}): FeedKudosListItemDto => ({
   kudosId: KUDOS_ID,
@@ -72,7 +74,7 @@ const item = (over: Partial<FeedKudosListItemDto> = {}): FeedKudosListItemDto =>
     {
       employeeId: "33333333-3333-4333-8333-333333333333",
       fullName: "Bình Trần",
-      avatarUrl: "https://x.invalid/p.png",
+      avatarUrl: SIGNED_AVATAR,
       isFormerEmployee: false,
     },
   ],
@@ -128,7 +130,7 @@ describe("KP — màn 009 theo tháng", () => {
     expect(link.getAttribute("href")).not.toContain(KUDOS_ID);
     expect(screen.getByRole("img", { name: "Bình Trần" })).toHaveAttribute(
       "src",
-      "https://x.invalid/p.png",
+      SIGNED_AVATAR,
     );
   });
 
@@ -204,7 +206,7 @@ describe("KW — widget «Vinh danh tháng này» (trình bày)", () => {
     Array.from({ length: n }, (_, i) => ({
       employeeId: `${String(i + 1).padStart(8, "0")}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
       fullName: i === 1 ? null : `Người ${i + 1}`,
-      avatarUrl: "https://x.invalid/p.png",
+      avatarUrl: SIGNED_AVATAR,
       isFormerEmployee: false,
     }));
 

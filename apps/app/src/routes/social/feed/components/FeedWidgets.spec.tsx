@@ -87,12 +87,14 @@ describe("C21 — BirthdayWidget: hai bẫy của DTO sinh nhật", () => {
   });
 
   it("S16-SOCIAL-AVATARPRESIGN-1 — `avatar` URL ký ⇒ `<img>`; fileId THÔ ⇒ chữ cái đầu", () => {
+    // URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật.
+    const signed = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
     wrap(
       <BirthdayWidget
         range="today"
         onRangeChange={vi.fn()}
         items={[
-          { ...PERSON, avatar: "https://x.invalid/p.png" },
+          { ...PERSON, avatar: signed },
           {
             ...PERSON,
             employeeId: "33333333-3333-4333-8333-333333333333",
@@ -105,10 +107,9 @@ describe("C21 — BirthdayWidget: hai bẫy của DTO sinh nhật", () => {
         onWish={vi.fn()}
       />,
     );
-    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
-      "src",
-      "https://x.invalid/p.png",
-    );
+    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute("src", signed);
+    // Neo CÓ MẶT: dòng «Bình Trần» thật sự vẽ (Avatar rơi về chữ cái đầu) — không thì vế dưới xanh-rỗng.
+    expect(screen.getByText("BT")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Bình Trần" })).toBeNull();
   });
 

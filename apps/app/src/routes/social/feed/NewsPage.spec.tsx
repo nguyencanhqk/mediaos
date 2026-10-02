@@ -367,20 +367,24 @@ describe("AVATARPRESIGN — ảnh người đã/chưa đọc qua `avatarSrc`", (
     listNews.mockResolvedValue(page([makeNews({ requiresAck: true })]));
   });
 
-  it("URL ký ⇒ `<img>` đúng `src`; fileId THÔ (API chưa ký) ⇒ chữ cái đầu, KHÔNG `<img>`", async () => {
+  it("URL ký ⇒ `<img>` đúng `src`; fileId THÔ / URL http(s) CHƯA ký (API cũ) ⇒ chữ cái đầu, KHÔNG `<img>`", async () => {
+    // URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật.
+    const signed = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
     mockAcks(() =>
       ackPage([
-        person({ fullName: "An Nguyễn", avatarUrl: "https://x.invalid/p.png" }),
+        person({ fullName: "An Nguyễn", avatarUrl: signed }),
         person({ fullName: "Bình Trần", avatarUrl: "44444444-4444-4444-8444-444444444444" }),
+        person({ fullName: "Cường Lê", avatarUrl: "https://tracker.example/p.gif" }),
       ]),
     );
     renderWithProviders(<NewsPage />);
     await openReaders();
     const list = await screen.findByTestId("news-readers-list");
-    expect(within(list).getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
-      "src",
-      "https://x.invalid/p.png",
-    );
+    expect(within(list).getByRole("img", { name: "An Nguyễn" })).toHaveAttribute("src", signed);
+    // Neo CÓ MẶT: hai dòng thật sự vẽ (Avatar rơi về chữ cái đầu) — không thì vế phủ định xanh-rỗng.
+    expect(within(list).getByText("BT")).toBeInTheDocument();
+    expect(within(list).getByText("CL")).toBeInTheDocument();
     expect(within(list).queryByRole("img", { name: "Bình Trần" })).toBeNull();
+    expect(within(list).queryByRole("img", { name: "Cường Lê" })).toBeNull();
   });
 });

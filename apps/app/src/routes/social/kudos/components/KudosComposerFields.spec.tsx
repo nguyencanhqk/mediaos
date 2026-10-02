@@ -35,10 +35,12 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 
 const t = i18n.getFixedT("vi", "social");
 const BADGE_ID = "55555555-5555-4555-8555-555555555555";
+/** URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật. */
+const SIGNED_AVATAR = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
 const person = (n: number, name = `Người ${n}`): KudosRecipientCandidateDto => ({
   employeeId: `${String(n).padStart(8, "0")}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
   fullName: name,
-  avatarUrl: "https://x.invalid/p.png",
+  avatarUrl: SIGNED_AVATAR,
 });
 const badgePage = {
   data: [{ id: BADGE_ID, code: "team-player", name: "Đồng đội", description: null, icon: "users-round", position: 1 }],
@@ -119,7 +121,7 @@ describe("KF — chọn người nhận", () => {
     const [first] = await screen.findAllByTestId("kudos-candidate");
     expect(within(first).getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
       "src",
-      "https://x.invalid/p.png",
+      SIGNED_AVATAR,
     );
     fireEvent.click(first);
     expect(draftState().ids).toEqual([person(1).employeeId]);
@@ -127,7 +129,7 @@ describe("KF — chọn người nhận", () => {
     expect(chips).toHaveLength(1);
     expect(within(chips[0]!).getByRole("img", { name: "An Nguyễn" })).toHaveAttribute(
       "src",
-      "https://x.invalid/p.png",
+      SIGNED_AVATAR,
     );
     expect(screen.getAllByTestId("kudos-candidate")[0]).toBeDisabled();
   });

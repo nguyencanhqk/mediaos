@@ -235,7 +235,8 @@ describe("M1 — tab Thành viên", () => {
 
 // S16-SOCIAL-AVATARPRESIGN-1 — ảnh thành viên / người xin: URL ký ⇒ `<img>`; fileId thô ⇒ chữ cái đầu.
 describe("AVATARPRESIGN — ảnh trong tab Thành viên / Yêu cầu qua `avatarSrc`", () => {
-  const SIGNED = "https://x.invalid/p.png";
+  /** URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật. */
+  const SIGNED = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
   const FILE_ID = "44444444-4444-4444-8444-444444444444";
 
   it("tab Thành viên: URL ký ⇒ `<img>`; fileId THÔ ⇒ KHÔNG `<img>`", async () => {
@@ -248,6 +249,8 @@ describe("AVATARPRESIGN — ảnh trong tab Thành viên / Yêu cầu qua `avata
     renderWithProviders(<GroupMembersTab groupId={GROUP_ID} caps={capsFor("member")} />);
     await screen.findByText("Chủ Nhóm");
     expect(screen.getByRole("img", { name: "Chủ Nhóm" })).toHaveAttribute("src", SIGNED);
+    // Neo CÓ MẶT: dòng «Thành Viên» thật sự vẽ (Avatar rơi về chữ cái đầu) — không thì vế dưới xanh-rỗng.
+    expect(screen.getByText("TV")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Thành Viên" })).toBeNull();
   });
 

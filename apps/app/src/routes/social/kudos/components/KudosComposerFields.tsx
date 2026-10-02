@@ -13,7 +13,8 @@
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Avatar (S16-SOCIAL-AVATARPRESIGN-1, owner D4): `avatarUrl` của `059` = URL ĐÃ KÝ hoặc `null`; ứng viên
- * và chip vẽ ảnh qua `avatarSrc` (fileId thô của API chưa deploy ⇒ chữ cái đầu) — xem `KudosBlock`.
+ * và chip vẽ ảnh qua `avatarSrc` (CHỈ URL presign — fileId thô / URL http(s) ngoài của API chưa deploy
+ * ⇒ chữ cái đầu) — xem `KudosBlock`.
  * Tự vinh danh: server đã loại chính người gọi khỏi `059`; FE không lọc được (auth store không có
  * `employeeId`) — nhánh 422 `KUDOS-SELF-RECIPIENT` hiện qua `ActionErrorBanner` nếu lọt.
  */

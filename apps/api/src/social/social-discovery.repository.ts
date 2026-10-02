@@ -84,17 +84,21 @@ export class SocialDiscoveryRepository {
     range: FeedBirthdayRangeDto,
     today: Date,
   ): Promise<BirthdayRow[]> {
-    // S16-SOCIAL-AVATARPRESIGN-1 (owner D9) — ảnh che theo CÙNG vị từ che TÊN: TK khoá/xoá mềm ⇒ JOIN
-    // `users` trượt ⇒ tên NULL ⇒ ảnh cũng NULL, ngay trong SQL. Hồ sơ KHÔNG có TK: tên vắng chứ không
-    // bị che ⇒ ảnh GIỮ (ngữ nghĩa «vắng ≠ che» của K1, `social-kudos.repository.ts#recipientsOfTx`).
-    const nameLive = sql`(${users.id} IS NOT NULL OR ${employeeProfiles.userId} IS NULL)`;
+    // S16-SOCIAL-AVATARPRESIGN-1 — ảnh CHỈ đi kèm TÀI KHOẢN SỐNG, ngay trong SQL (che ảnh ⊆ che tên):
+    //  • D9: TK khoá/xoá mềm ⇒ JOIN `users` trượt ⇒ tên NULL ⇒ ảnh NULL;
+    //  • owner SỬA D9 02/10/2026 (FULL gate lượt 1, RIÊNG route này): hồ sơ KHÔNG có TK cũng ⇒ ảnh NULL.
+    //    Họ không có đường tự ẩn (`show_birthday` sống ở TK; service mặc định HIỆN dòng của họ) ⇒ widget
+    //    cả công ty không được ghép khuôn mặt HR đặt với ngày/tháng sinh. Các bề mặt KHÁC giữ «vắng ≠ che»
+    //    của K1 (`nameLive` ở `social-news.repository.ts`). Dòng vẫn ra — bỏ dòng: S16-SOCIAL-BDAYMASKED-1.
+    // Tên hằng ngắn có chủ đích: khoá + cột thô phải nằm trên MỘT dòng (spec cấu trúc S1 đọc theo dòng).
+    const acctLive = sql`${users.id} IS NOT NULL`;
 
     const rows = await tx
       .select({
         employeeId: employeeProfiles.id,
         userId: employeeProfiles.userId,
         fullName: users.fullName,
-        avatarRaw: sql<string | null>`CASE WHEN ${nameLive} THEN ${employeeProfiles.avatarUrl} END`,
+        avatarRaw: sql<string | null>`CASE WHEN ${acctLive} THEN ${employeeProfiles.avatarUrl} END`,
         day: sql<number>`EXTRACT(DAY FROM ${employeeProfiles.dateOfBirth})::int`,
         month: sql<number>`EXTRACT(MONTH FROM ${employeeProfiles.dateOfBirth})::int`,
       })
@@ -148,7 +152,10 @@ export interface BirthdayRow {
   /** Khoá tra `user_preferences.show_birthday`. **KHÔNG ra DTO** (5 khoá đóng — SPEC-16 §3.5). */
   userId: string | null;
   fullName: string | null;
-  /** Cột THÔ ĐÃ che theo D9 — ký qua `SocialAvatarSigner`; khoá DTO vẫn là `avatar` (SPEC-16 §3.5). */
+  /**
+   * Cột THÔ, `NULL` trừ khi TÀI KHOẢN sống (D9 + owner sửa D9 cho `026`: TK khoá/xoá mềm VÀ hồ sơ không TK
+   * ⇒ `NULL`) — ký qua `SocialAvatarSigner`; khoá DTO vẫn là `avatar` (SPEC-16 §3.5).
+   */
   avatarRaw: string | null;
   day: number;
   month: number;

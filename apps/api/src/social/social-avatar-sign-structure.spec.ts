@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
  * │ WO này — không đưa cột thô `employee_profiles.avatar_url` lên dây là HAI luật tên khoá:          │
  * │   S1 — mọi điểm SELECT cột thô đặt nó dưới khoá `…AvatarRaw`/`avatarRaw` (không bao giờ dưới      │
  * │        `avatarUrl`/`avatar`, tên của khoá DTO) ⇒ đổi tên = trình biên dịch liệt kê mọi chỗ dựng; │
+ * │        đếm theo `employeeProfiles` + MỌI alias của nó; S1b — không SQL thô `avatar_url`;          │
  * │   S2 — không dòng nào gán thẳng một `…avatarRaw` vào khoá DTO `avatarUrl`/`avatar`;              │
  * │   S3 — `resolveEmployeeAvatars(` có ĐÚNG MỘT điểm gọi (trong signer), luôn 3 đối số (tx của     │
  * │        caller — lồng `withTenant` = treo PgBouncer); `signInSavepointTx(` chỉ dùng ở `029`.      │
@@ -47,6 +48,20 @@ function linesOf(): { where: string; line: string }[] {
   return socialSources().flatMap(({ file, text }) =>
     text.split("\n").map((line, i) => ({ where: `${file}:${i + 1}`, line })),
   );
+}
+
+/**
+ * Mọi TÊN trỏ bảng `employee_profiles` trong nguồn SOCIAL: `employeeProfiles` + mọi biến
+ * `alias(employeeProfiles, …)` (khuôn `social-reports.repository.ts`). S1 đếm theo tên THẬT thay cho
+ * mẫu tên (`r\w*Emp` cũ): một alias mới đặt tên tuỳ ý (`const ep = alias(employeeProfiles, "ep")`) không
+ * lọt khỏi số đếm và luật khoá (FULL gate lượt 1 — security-reviewer).
+ */
+function profileTableNames(): string[] {
+  const names = new Set(["employeeProfiles"]);
+  for (const { text } of socialSources()) {
+    for (const m of text.matchAll(/\b(\w+)\s*=\s*alias\(\s*employeeProfiles\b/g)) names.add(m[1]!);
+  }
+  return [...names];
 }
 
 /** Đối số cấp-một của lời gọi bắt đầu tại `openIdx` (vị trí dấu `(`). */
@@ -92,9 +107,8 @@ function callSites(name: string): { file: string; args: string[] }[] {
 
 describe("S16-SOCIAL-AVATARPRESIGN-1 · cấu trúc đường avatar SOCIAL", () => {
   it(`S1 — đúng ${RAW_AVATAR_SELECT_POINTS} dòng SELECT cột thô, mỗi dòng đặt dưới khoá …AvatarRaw`, () => {
-    const selects = linesOf().filter((l) =>
-      /\b(employeeProfiles|r\w*Emp)\.avatarUrl\b/.test(l.line),
-    );
+    const rawColumn = new RegExp(`\\b(${profileTableNames().join("|")})\\.avatarUrl\\b`);
+    const selects = linesOf().filter((l) => rawColumn.test(l.line));
     expect(
       selects.map((s) => s.where),
       "số điểm SELECT `employee_profiles.avatar_url` đổi — đọc plan §1.1 (che ảnh ⊆ che tên) rồi mới nâng số",
@@ -105,6 +119,16 @@ describe("S16-SOCIAL-AVATARPRESIGN-1 · cấu trúc đường avatar SOCIAL", ()
     expect(
       badKeys,
       "cột thô phải nằm dưới khoá `…AvatarRaw` — tên `avatarUrl`/`avatar` là tên khoá DTO (ký qua SocialAvatarSigner.urlOf)",
+    ).toEqual([]);
+  });
+
+  it("S1b — không dòng MÃ nào viết tên cột SQL thô `avatar_url` (sql`…` vòng qua tham chiếu cột)", () => {
+    const raw = linesOf()
+      .filter((l) => /\bavatar_url\b/.test(l.line))
+      .map((l) => `${l.where} → ${l.line.trim()}`);
+    expect(
+      raw,
+      "cột avatar chỉ được chọn qua `employeeProfiles.avatarUrl` / alias của nó — S1 đếm được, che ảnh ⊆ che tên đọc được",
     ).toEqual([]);
   });
 
