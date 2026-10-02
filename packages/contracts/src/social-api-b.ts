@@ -146,7 +146,11 @@ export const listPostAcksQuerySchema = z
   .strict();
 export type ListPostAcksQueryDto = z.infer<typeof listPostAcksQuerySchema>;
 
-/** Một người trong danh sách đã/chưa xác nhận đọc. `ackedAt` null ⇔ thuộc nửa «chưa đọc». */
+/**
+ * Một người trong danh sách đã/chưa xác nhận đọc. `ackedAt` null ⇔ thuộc nửa «chưa đọc».
+ * `avatarUrl` = URL ĐÃ KÝ hoặc `null` (xem `feedAuthorSchema`); nửa «chưa đọc» che ảnh theo CÙNG vị
+ * từ che tên (TK khoá/xoá mềm ⇒ cả hai `null` — owner D9).
+ */
 export const feedAckPersonSchema = z.object({
   employeeId: uuid().nullable(),
   fullName: z.string().nullable(),
@@ -235,6 +239,8 @@ export type ListBirthdaysQueryDto = z.infer<typeof listBirthdaysQuerySchema>;
  *
  * ⚠️ Khoá là `avatar` (KHÔNG `avatarUrl` như phần còn lại của module) vì SPEC-16 §3.5 + SOC-DEC-007 +
  * `done_when` viết đúng chữ đó, và ca test khoá bằng `toEqual` trên tập khoá. Lệch tên là ĐỎ.
+ * Giá trị (S16-SOCIAL-AVATARPRESIGN-1) = URL ĐÃ KÝ hoặc `null` — cùng luật `feedAuthorSchema`; tài
+ * khoản khoá/xoá mềm ⇒ `fullName` VÀ `avatar` cùng `null` (owner D9: che ảnh theo vị từ che tên).
  */
 export const feedBirthdaySchema = z
   .object({

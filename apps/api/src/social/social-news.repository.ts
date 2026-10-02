@@ -130,7 +130,7 @@ export class SocialNewsRepository {
       .select({
         employeeId: employeeProfiles.id,
         fullName: users.fullName,
-        avatarUrl: employeeProfiles.avatarUrl,
+        avatarRaw: employeeProfiles.avatarUrl,
         ackedAt: feedPostAcks.ackedAt,
       })
       .from(feedPostAcks)
@@ -219,11 +219,16 @@ export class SocialNewsRepository {
 
     const [totalRow] = await tx.select({ n: count() }).from(employeeProfiles).where(where);
 
+    // S16-SOCIAL-AVATARPRESIGN-1 (owner D9) — ảnh che theo CÙNG vị từ che TÊN: JOIN `users` (sống +
+    // active) trượt ⇒ tên NULL ⇒ ảnh cũng NULL, ngay trong SQL (fileId không rời DB, không vào câu cổng
+    // ký). Vế `user_id IS NULL` không bao giờ đúng ở đây (WHERE đã loại) — giữ CÙNG biểu thức với `026`.
+    const nameLive = sql`(${users.id} IS NOT NULL OR ${employeeProfiles.userId} IS NULL)`;
+
     const rows = await tx
       .select({
         employeeId: employeeProfiles.id,
         fullName: users.fullName,
-        avatarUrl: employeeProfiles.avatarUrl,
+        avatarRaw: sql<string | null>`CASE WHEN ${nameLive} THEN ${employeeProfiles.avatarUrl} END`,
         // Nửa «chưa đọc» KHÔNG có mốc — `null` là câu trả lời đúng, không phải dữ liệu thiếu.
         ackedAt: sql<Date | null>`NULL::timestamptz`,
       })
@@ -315,6 +320,7 @@ export class SocialNewsRepository {
 export interface AckPersonRow {
   employeeId: string | null;
   fullName: string | null;
-  avatarUrl: string | null;
+  /** Cột THÔ (nửa «chưa đọc»: ĐÃ che theo D9) — ký qua `SocialAvatarSigner` trước khi lên DTO. */
+  avatarRaw: string | null;
   ackedAt: Date | null;
 }

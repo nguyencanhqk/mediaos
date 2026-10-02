@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FeedMentionDto } from "@mediaos/contracts";
+import { NO_AVATARS, type SignedAvatars } from "./social-avatar-signer";
 import type { CommentRow } from "./social-comments.repository";
 import type { PostRow } from "./social-posts.repository";
 import { toFeedCommentDto, toFeedPostDto, toReactionSummaries } from "./social.mapper";
@@ -22,7 +23,7 @@ const row: PostRow = {
   authorUserId: AUTHOR,
   authorEmployeeId: "44444444-4444-4444-8444-444444444444",
   authorFullName: "Nguyễn Văn A",
-  authorAvatarUrl: "https://example.test/a.png",
+  authorAvatarRaw: "99999999-9999-4999-8999-999999999999",
   type: "share",
   audience: "company",
   orgUnitId: null,
@@ -50,7 +51,13 @@ const viewer = (over: Partial<SocialViewerContext> = {}): SocialViewerContext =>
   ...over,
 });
 
-const extra = { tags: ["tuyendung"], attachments: [], myReaction: null, savedByMe: false };
+const extra = {
+  tags: ["tuyendung"],
+  attachments: [],
+  myReaction: null,
+  savedByMe: false,
+  avatars: NO_AVATARS,
+};
 
 describe("toFeedPostDto — khoá KHÔNG BAO GIỜ lộ", () => {
   it("KHÔNG có `authorUserId` ở bất kỳ nhánh nào — kể cả với `manage:feed-post`", () => {
@@ -138,7 +145,7 @@ const commentRow: CommentRow = {
   authorUserId: AUTHOR,
   authorEmployeeId: "44444444-4444-4444-8444-444444444444",
   authorFullName: "Nguyễn Văn A",
-  authorAvatarUrl: null,
+  authorAvatarRaw: null,
   body: "@Trần Thị B chào",
   likeCount: 0,
   editedAt: null,
@@ -160,15 +167,23 @@ const mentionBuilders = [
   [
     "bình luận",
     () =>
-      toFeedCommentDto(commentRow, viewer(), { attachments: [], myReaction: null, mentions: dirty })
-        .mentions,
+      toFeedCommentDto(commentRow, viewer(), {
+        attachments: [],
+        myReaction: null,
+        mentions: dirty,
+        avatars: NO_AVATARS,
+      }).mentions,
   ],
 ] as const;
 
 describe("BE-1D — `mentions` trên DTO bài & bình luận", () => {
   it("VẮNG khoá khi đường gọi không nạp mention (vắng ≠ rỗng — D5)", () => {
     expect("mentions" in toFeedPostDto(row, viewer(), extra)).toBe(false);
-    const c = toFeedCommentDto(commentRow, viewer(), { attachments: [], myReaction: null });
+    const c = toFeedCommentDto(commentRow, viewer(), {
+      attachments: [],
+      myReaction: null,
+      avatars: NO_AVATARS,
+    });
     expect("mentions" in c).toBe(false);
   });
 
@@ -205,9 +220,10 @@ describe("toFeedPostDto — khối theo loại bài: vắng ≠ rỗng, chép th
 
   it("khối có mặt ⇒ gán; khoá LẠ ở tầng dưới (userId, voters) KHÔNG đi qua", () => {
     const dirtyRecipient = {
+      kudosId: "k1",
       employeeId: "e1",
       fullName: "A",
-      avatarUrl: null,
+      avatarRaw: null,
       isFormerEmployee: false,
       userId: AUTHOR,
     };
@@ -244,5 +260,58 @@ describe("toFeedPostDto — khối theo loại bài: vắng ≠ rỗng, chép th
     expect(dto.poll).not.toHaveProperty("voters");
     expect(dto.idea).toEqual({ status: "accepted" });
     expect(JSON.stringify(dto)).not.toContain(AUTHOR);
+  });
+});
+
+// ══════════════ S16-SOCIAL-AVATARPRESIGN-1 — avatar CHỈ qua `avatars.urlOf` ══════════════
+
+describe("AVATARPRESIGN — `avatarUrl` chỉ đến từ bộ ký, KHÔNG từ cột thô", () => {
+  const SIGNED = "http://minio.local/a.png?X-Amz-Signature=abc";
+  const AUTHOR_EMP = row.authorEmployeeId!;
+  const RAW = row.authorAvatarRaw!;
+  /** Bộ ký giả: ký ĐÚNG cặp (tác giả, raw của hàng) — mọi cặp khác ⇒ null. */
+  const signedFor = (employeeId: string, raw: string): SignedAvatars => ({
+    urlOf: (ref) => (ref.employeeId === employeeId && ref.avatarRaw === raw ? SIGNED : null),
+  });
+
+  it("bài + bình luận: tác giả ⇒ URL ký của CHÍNH cặp; cột thô không lên dây", () => {
+    const avatars = signedFor(AUTHOR_EMP, RAW);
+    const post = toFeedPostDto(row, viewer(), { ...extra, avatars });
+    expect(post.author.avatarUrl).toBe(SIGNED);
+    expect(JSON.stringify(post)).not.toContain(RAW);
+    const comment = toFeedCommentDto({ ...commentRow, authorAvatarRaw: RAW }, viewer(), {
+      attachments: [],
+      myReaction: null,
+      avatars,
+    });
+    expect(comment.author.avatarUrl).toBe(SIGNED);
+  });
+
+  it("NO_AVATARS ⇒ null (chữ cái đầu) kể cả khi hàng có raw", () => {
+    expect(toFeedPostDto(row, viewer(), extra).author.avatarUrl).toBeNull();
+  });
+
+  it("F1 — người nhận kudos đã che (raw null) ⇒ null dù CÙNG người được ký ở ô tác giả", () => {
+    const dto = toFeedPostDto(row, viewer(), {
+      ...extra,
+      avatars: signedFor(AUTHOR_EMP, RAW),
+      kudos: {
+        kudosId: "k1",
+        message: null,
+        isOfficial: false,
+        badge: null,
+        recipients: [
+          {
+            kudosId: "k1",
+            employeeId: AUTHOR_EMP,
+            fullName: null,
+            avatarRaw: null,
+            isFormerEmployee: true,
+          },
+        ],
+      },
+    });
+    expect(dto.author.avatarUrl, "neo: ô tác giả được ký").toBe(SIGNED);
+    expect(dto.kudos?.recipients[0]?.avatarUrl).toBeNull();
   });
 });

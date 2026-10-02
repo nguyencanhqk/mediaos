@@ -234,7 +234,11 @@ export interface KudosRecipientRow {
   kudosId: string;
   employeeId: string;
   fullName: string | null;
-  avatarUrl: string | null;
+  /**
+   * Cột THÔ `employee_profiles.avatar_url` ĐÃ che theo K1 (null khi hồ sơ/TK xoá mềm). KHÔNG lên DTO —
+   * ký qua `SocialAvatarSigner` + `kudosRecipientDto` (S16-SOCIAL-AVATARPRESIGN-1).
+   */
+  avatarRaw: string | null;
   /**
    * Hồ sơ không còn `active` (nghỉ việc — S6) HOẶC hồ sơ/tài khoản đã xoá mềm (owner K1, BE-2D). FE
    * hiển thị nhãn, không đoán. Xem docblock `recipientsOfTx`.
@@ -428,7 +432,7 @@ export async function recipientsOfTx(
         // `employee_code`). Chiếu `employee_code` thay tên là phơi mã nhân sự nội bộ ra một danh sách
         // công khai, và vẫn không cho người xem biết ai được vinh danh.
         fullName: sql<string | null>`CASE WHEN ${live} THEN ${users.fullName} END`,
-        avatarUrl: sql<string | null>`CASE WHEN ${live} THEN ${employeeProfiles.avatarUrl} END`,
+        avatarRaw: sql<string | null>`CASE WHEN ${live} THEN ${employeeProfiles.avatarUrl} END`,
         isFormerEmployee:
           sql<boolean>`(NOT ${live} OR ${employeeProfiles.status} <> 'active')`.mapWith(Boolean),
       })
@@ -532,7 +536,8 @@ export function badgeRefOf(r: {
 export interface KudosRecipientCandidateRow {
   employeeId: string;
   fullName: string;
-  avatarUrl: string | null;
+  /** Cột THÔ — ký qua `SocialAvatarSigner` trước khi lên DTO (S16-SOCIAL-AVATARPRESIGN-1). */
+  avatarRaw: string | null;
 }
 
 /**
@@ -577,7 +582,7 @@ export async function searchKudosRecipientsTx(
     .select({
       employeeId: employeeProfiles.id,
       fullName: users.fullName,
-      avatarUrl: employeeProfiles.avatarUrl,
+      avatarRaw: employeeProfiles.avatarUrl,
     })
     .from(employeeProfiles)
     .innerJoin(

@@ -11,6 +11,7 @@ import { feedPosts } from "../db/schema/social";
 import { AuditService } from "../events/audit.service";
 import { SocialAccessService } from "./social-access.service";
 import { SocialAttachmentsService } from "./social-attachments.service";
+import { SocialAvatarSigner } from "./social-avatar-signer";
 import {
   SOCIAL_MODERATION_FIELDS,
   SOCIAL_MODERATION_FIELD_PAIRS,
@@ -51,6 +52,7 @@ export class SocialPostsModerationService {
     private readonly projections: SocialActorProjectionRepository,
     private readonly attachments: SocialAttachmentsService,
     private readonly audit: AuditService,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   async moderate(
@@ -71,17 +73,26 @@ export class SocialPostsModerationService {
 
     if (!row) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
-    const { tags, myReaction, saved } = await this.db.withTenant(actor.companyId, async (tx) => ({
-      tags: await this.repo.tagsFor(tx, actor.companyId, [row.id]),
-      myReaction: await this.projections.myReactions(
-        tx,
-        actor.companyId,
-        actor.actorUserId,
-        "post",
-        [row.id],
-      ),
-      saved: await this.projections.savedPostIds(tx, actor.companyId, actor.actorUserId, [row.id]),
-    }));
+    // Tx ĐỌC thứ hai (tx ghi ở trên đã commit) — S16-SOCIAL-AVATARPRESIGN-1 ký avatar tác giả CÙNG tx này.
+    const { tags, myReaction, saved, avatars } = await this.db.withTenant(
+      actor.companyId,
+      async (tx) => ({
+        tags: await this.repo.tagsFor(tx, actor.companyId, [row.id]),
+        myReaction: await this.projections.myReactions(
+          tx,
+          actor.companyId,
+          actor.actorUserId,
+          "post",
+          [row.id],
+        ),
+        saved: await this.projections.savedPostIds(tx, actor.companyId, actor.actorUserId, [
+          row.id,
+        ]),
+        avatars: await this.avatarSigner.signTx(tx, actor.companyId, [
+          { employeeId: row.authorEmployeeId, avatarRaw: row.authorAvatarRaw },
+        ]),
+      }),
+    );
     const attachments = await this.attachments.decorateMany(actor, "post", [row.id]);
 
     return toFeedPostDto(row, actor, {
@@ -89,6 +100,7 @@ export class SocialPostsModerationService {
       attachments: attachments.get(row.id) ?? [],
       myReaction: myReaction.get(row.id) ?? null,
       savedByMe: saved.has(row.id),
+      avatars,
     });
   }
 

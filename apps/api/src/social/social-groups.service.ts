@@ -21,6 +21,7 @@ import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { SocialAccessService } from "./social-access.service";
+import { SocialAvatarSigner, type SignedAvatars } from "./social-avatar-signer";
 import { bumpGroupMemberCount, groupMemberCountDelta } from "./social-counters";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import {
@@ -67,6 +68,7 @@ export class SocialGroupsService {
     private readonly members: SocialGroupMembersRepository,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   /** `030` — `GET /social/groups`. Phạm vi nhìn thấy ép TRONG SQL (xem `listGroups`). */
@@ -312,12 +314,19 @@ export class SocialGroupsService {
   ): Promise<FeedGroupMemberPageDto> {
     const actor = await this.access.resolveActor(user, "groupMembersList");
 
-    const { rows, total } = await this.db.withTenant(actor.companyId, async (tx) => {
+    const { rows, total, avatars } = await this.db.withTenant(actor.companyId, async (tx) => {
       await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
       await this.groupAccess.assertGroupRoleTx(tx, actor, groupId, ["owner", "admin", "member"]);
-      return this.members.listMembersTx(tx, actor.companyId, groupId, query);
+      const page = await this.members.listMembersTx(tx, actor.companyId, groupId, query);
+      // S16-SOCIAL-AVATARPRESIGN-1: ký trong CÙNG tx — MỘT câu cổng cho cả trang.
+      return { ...page, avatars: await this.avatarSigner.signTx(tx, actor.companyId, page.rows) };
     });
-    return { data: rows.map(toFeedGroupMemberDto), page: query.page, limit: query.limit, total };
+    return {
+      data: rows.map((r) => toFeedGroupMemberDto(r, avatars)),
+      page: query.page,
+      limit: query.limit,
+      total,
+    };
   }
 
   /**
@@ -636,12 +645,12 @@ function toFeedGroupDto(row: FeedGroupRow): FeedGroupDto {
   };
 }
 
-function toFeedGroupMemberDto(row: FeedGroupMemberRow) {
+function toFeedGroupMemberDto(row: FeedGroupMemberRow, avatars: SignedAvatars) {
   return {
     userId: row.userId,
     employeeId: row.employeeId,
     fullName: row.fullName,
-    avatarUrl: row.avatarUrl,
+    avatarUrl: avatars.urlOf(row),
     role: row.role,
     status: row.status,
     joinedAt: row.joinedAt ? row.joinedAt.toISOString() : null,

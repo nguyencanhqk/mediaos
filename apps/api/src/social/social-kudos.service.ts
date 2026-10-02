@@ -13,6 +13,7 @@ import {
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { SocialAccessService } from "./social-access.service";
+import { SocialAvatarSigner, kudosRecipientDto } from "./social-avatar-signer";
 import {
   badgeRefOf,
   createBadgeTx,
@@ -92,6 +93,7 @@ export class SocialKudosService {
     private readonly access: SocialAccessService,
     private readonly repo: SocialKudosRepository,
     private readonly audit: AuditService,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   /**
@@ -112,19 +114,24 @@ export class SocialKudosService {
     const actor = await this.access.resolveActor(user, "kudosList");
     const { page, limit } = query;
 
-    const { rows, total, recipients } = await this.db.withTenant(actor.companyId, async (tx) => {
-      const listed = await this.repo.listKudosTx(tx, actor, {
-        month: query.month,
-        limit,
-        offset: (page - 1) * limit,
-      });
-      const recips = await recipientsOfTx(
-        tx,
-        actor.companyId,
-        listed.rows.map((r) => r.kudosId),
-      );
-      return { ...listed, recipients: recips };
-    });
+    const { rows, total, recipients, avatars } = await this.db.withTenant(
+      actor.companyId,
+      async (tx) => {
+        const listed = await this.repo.listKudosTx(tx, actor, {
+          month: query.month,
+          limit,
+          offset: (page - 1) * limit,
+        });
+        const recips = await recipientsOfTx(
+          tx,
+          actor.companyId,
+          listed.rows.map((r) => r.kudosId),
+        );
+        // S16-SOCIAL-AVATARPRESIGN-1: ký CÙNG tx, MỘT câu cổng; raw đã che theo K1 trong SQL.
+        const avatars = await this.avatarSigner.signTx(tx, actor.companyId, recips);
+        return { ...listed, recipients: recips, avatars };
+      },
+    );
 
     // Gom theo `kudosId` ở tầng service, KHÔNG bằng một câu SQL thứ ba với `json_agg`: giữ SQL đơn
     // giản và giữ luật "cột tường minh" (DB-17 §11 R6) — `json_agg` trên một hàng JOIN rất dễ kéo
@@ -144,12 +151,8 @@ export class SocialKudosService {
         isOfficial: r.isOfficial,
         badge: this.badgeOrLog(r),
         createdAt: r.createdAt.toISOString(),
-        recipients: this.recipientsOrLog(byKudos, r).map((p) => ({
-          employeeId: p.employeeId,
-          fullName: p.fullName,
-          avatarUrl: p.avatarUrl,
-          isFormerEmployee: p.isFormerEmployee,
-        })),
+        // MỘT luật người nhận với khối kudos của thẻ bài (BE-2D D4) — `kudosRecipientDto`.
+        recipients: this.recipientsOrLog(byKudos, r).map((p) => kudosRecipientDto(p, avatars)),
       })),
       page,
       limit,
@@ -169,18 +172,21 @@ export class SocialKudosService {
     query: { q: string },
   ): Promise<KudosRecipientSearchResultDto> {
     const actor = await this.access.resolveActor(user, "kudosRecipientSearch");
-    const rows = await this.db.withTenant(actor.companyId, (tx) =>
-      searchKudosRecipientsTx(tx, actor.companyId, actor.actorUserId, query.q, {
+    const { rows, avatars } = await this.db.withTenant(actor.companyId, async (tx) => {
+      const found = await searchKudosRecipientsTx(tx, actor.companyId, actor.actorUserId, query.q, {
         limit: KUDOS_RECIPIENT_SEARCH_CAP,
         minLetters: KUDOS_RECIPIENT_QUERY_MIN,
-      }),
-    );
+      });
+      // S16-SOCIAL-AVATARPRESIGN-1: chỉ ký ≤ trần dòng TRẢ VỀ (hàng `cap+1` chỉ để biết `truncated`).
+      const shown = found.slice(0, KUDOS_RECIPIENT_SEARCH_CAP);
+      return { rows: found, avatars: await this.avatarSigner.signTx(tx, actor.companyId, shown) };
+    });
     return {
       // Chép theo DANH SÁCH KHOÁ — một cột lỡ thêm ở repository không đi được ra dây.
       data: rows.slice(0, KUDOS_RECIPIENT_SEARCH_CAP).map((r) => ({
         employeeId: r.employeeId,
         fullName: r.fullName,
-        avatarUrl: r.avatarUrl,
+        avatarUrl: avatars.urlOf(r),
       })),
       truncated: rows.length > KUDOS_RECIPIENT_SEARCH_CAP,
     };

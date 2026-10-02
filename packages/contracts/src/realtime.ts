@@ -9,6 +9,7 @@ import { chatCallKindSchema, chatCallStatusSchema } from "./chat-call";
 import { notificationSchema } from "./notification";
 import {
   feedAttachmentSchema,
+  feedAuthorSchema,
   feedCommentSchema,
   feedPostSchema,
   feedReactionSummarySchema,
@@ -346,6 +347,25 @@ export type WsNotificationReadEvent = z.infer<typeof wsNotificationReadEventSche
 export const wsFeedAttachmentSchema = feedAttachmentSchema.omit({ url: true });
 export type WsFeedAttachment = z.infer<typeof wsFeedAttachmentSchema>;
 
+/**
+ * S16-SOCIAL-AVATARPRESIGN-1 (D3-b, owner ký 02/10/2026) — tác giả trên kênh WS: `avatarUrl` LUÔN `null`.
+ *
+ * REST trả `author.avatarUrl` là URL ĐÃ KÝ (TTL ngắn) — một capability: ai cầm cũng tải được ảnh, và
+ * client hay giữ sự kiện lâu hơn TTL. Cùng lý do luật 2 (`url` đính kèm) — KHÔNG lên room.
+ *
+ * ⚠️ GIỮ khoá, ép GIÁ TRỊ (không `.omit` như khuôn CHAT `wsChatRoomPeerSchema`): `feedAuthorSchema` cũ
+ * BẮT BUỘC `avatarUrl` ⇒ bỏ khoá làm bundle FE cũ (tab mở trước deploy FE) từ chối MỌI
+ * `feed:post.created` (plan M18). `.transform` ⇒ kiểu ĐẦU RA là `null` ⇒ nguồn bắt buộc viết `null`
+ * (trình biên dịch ép), và emitter `.parse()` trước khi phát ⇒ kể cả nguồn hồi quy, dây vẫn `null`.
+ * `.omit` không với tới khoá LỒNG — schema lồng riêng này là cách duy nhất (tiền lệ `wsChatRoomPeerSchema`).
+ */
+const wsFeedAuthorSchema = feedAuthorSchema.extend({
+  avatarUrl: z
+    .string()
+    .nullable()
+    .transform((): null => null),
+});
+
 /** `feed:post.created` — bài mới. `audience` khoá cứng `company` (luật 3). */
 export const wsFeedPostCreatedEventSchema = feedPostSchema
   // `mentions` (S16-SOCIAL-BE-1D D6): chỉ REST mang — giữ cửa đổi luật tầm nhìn về sau mà không phải
@@ -368,6 +388,8 @@ export const wsFeedPostCreatedEventSchema = feedPostSchema
   .extend({
     audience: z.literal("company"),
     attachments: z.array(wsFeedAttachmentSchema),
+    // S16-SOCIAL-AVATARPRESIGN-1 (D3-b) — URL ký không lên room; xem `wsFeedAuthorSchema`.
+    author: wsFeedAuthorSchema,
   });
 export type WsFeedPostCreatedEvent = z.infer<typeof wsFeedPostCreatedEventSchema>;
 
@@ -375,7 +397,8 @@ export type WsFeedPostCreatedEvent = z.infer<typeof wsFeedPostCreatedEventSchema
 export const wsFeedCommentCreatedEventSchema = feedCommentSchema
   // `mentions` — xem `wsFeedPostCreatedEventSchema` (S16-SOCIAL-BE-1D D6).
   .omit({ myReaction: true, isMine: true, attachments: true, mentions: true })
-  .extend({ attachments: z.array(wsFeedAttachmentSchema) });
+  // S16-SOCIAL-AVATARPRESIGN-1 (D3-b) — `author` qua bản đã ép `avatarUrl: null` (xem `wsFeedAuthorSchema`).
+  .extend({ attachments: z.array(wsFeedAttachmentSchema), author: wsFeedAuthorSchema });
 export type WsFeedCommentCreatedEvent = z.infer<typeof wsFeedCommentCreatedEventSchema>;
 
 /**

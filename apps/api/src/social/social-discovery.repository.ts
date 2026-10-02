@@ -84,12 +84,17 @@ export class SocialDiscoveryRepository {
     range: FeedBirthdayRangeDto,
     today: Date,
   ): Promise<BirthdayRow[]> {
+    // S16-SOCIAL-AVATARPRESIGN-1 (owner D9) — ảnh che theo CÙNG vị từ che TÊN: TK khoá/xoá mềm ⇒ JOIN
+    // `users` trượt ⇒ tên NULL ⇒ ảnh cũng NULL, ngay trong SQL. Hồ sơ KHÔNG có TK: tên vắng chứ không
+    // bị che ⇒ ảnh GIỮ (ngữ nghĩa «vắng ≠ che» của K1, `social-kudos.repository.ts#recipientsOfTx`).
+    const nameLive = sql`(${users.id} IS NOT NULL OR ${employeeProfiles.userId} IS NULL)`;
+
     const rows = await tx
       .select({
         employeeId: employeeProfiles.id,
         userId: employeeProfiles.userId,
         fullName: users.fullName,
-        avatar: employeeProfiles.avatarUrl,
+        avatarRaw: sql<string | null>`CASE WHEN ${nameLive} THEN ${employeeProfiles.avatarUrl} END`,
         day: sql<number>`EXTRACT(DAY FROM ${employeeProfiles.dateOfBirth})::int`,
         month: sql<number>`EXTRACT(MONTH FROM ${employeeProfiles.dateOfBirth})::int`,
       })
@@ -143,7 +148,8 @@ export interface BirthdayRow {
   /** Khoá tra `user_preferences.show_birthday`. **KHÔNG ra DTO** (5 khoá đóng — SPEC-16 §3.5). */
   userId: string | null;
   fullName: string | null;
-  avatar: string | null;
+  /** Cột THÔ ĐÃ che theo D9 — ký qua `SocialAvatarSigner`; khoá DTO vẫn là `avatar` (SPEC-16 §3.5). */
+  avatarRaw: string | null;
   day: number;
   month: number;
 }

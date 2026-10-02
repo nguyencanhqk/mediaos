@@ -138,7 +138,7 @@ export class SocialReactionsRepository {
       .select({
         employeeId: employeeProfiles.id,
         fullName: users.fullName,
-        avatarUrl: employeeProfiles.avatarUrl,
+        avatarRaw: employeeProfiles.avatarUrl,
         emoji: feedReactions.emoji,
         createdAt: feedReactions.createdAt,
       })
@@ -216,7 +216,7 @@ export class SocialReactionsRepository {
 export interface ReactorRow {
   employeeId: string | null;
   fullName: string | null;
-  avatarUrl: string | null;
+  avatarRaw: string | null;
   emoji: string;
   createdAt: Date;
 }

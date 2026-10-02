@@ -26,8 +26,8 @@ import { feedIdeaStatusSchema, feedPollStatusSchema } from "./social";
  * `isFormerEmployee` = hồ sơ không còn `active` HOẶC hồ sơ/tài khoản đã xoá mềm — FE hiện nhãn, không
  * đoán. Tài khoản bị KHOÁ vẫn giữ tên (S6: người nghỉ việc thường bị khoá TK, vinh danh là lịch sử).
  *
- * ⚠️ `avatarUrl` là cột THÔ `employee_profiles.avatar_url` (thường là fileId, không phải URL; cột
- * đa-người-ghi) — KHÔNG vẽ làm `src`/`href` tới khi `S16-SOCIAL-AVATARPRESIGN-1` xong (owner K4).
+ * `avatarUrl` (S16-SOCIAL-AVATARPRESIGN-1, owner K4) = URL ĐÃ KÝ (TTL ngắn) hoặc `null` = chữ cái đầu —
+ * cùng luật `feedAuthorSchema`. Che theo CÙNG vị từ với tên (K1): người bị che tên không có ảnh.
  */
 export const feedKudosRecipientSchema = z.object({
   employeeId: z.string().uuid(),

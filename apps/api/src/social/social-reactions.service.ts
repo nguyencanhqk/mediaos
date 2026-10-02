@@ -7,6 +7,7 @@ import {
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { SocialAccessService } from "./social-access.service";
+import { SocialAvatarSigner } from "./social-avatar-signer";
 import { bumpCommentLikeCount, bumpPostCounter } from "./social-counters";
 import { SocialReactionsRepository } from "./social-reactions.repository";
 import { SOCIAL_ERR, socialError } from "./social.errors";
@@ -40,6 +41,7 @@ export class SocialReactionsService {
     private readonly access: SocialAccessService,
     private readonly repo: SocialReactionsRepository,
     private readonly realtime: RealtimeEmitterService,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   /**
@@ -158,14 +160,16 @@ export class SocialReactionsService {
   /** `SOCIAL-API-013` — danh sách người đã thả (danh tính NHÂN SỰ, không `userId`). */
   async listReactors(user: SocialRequestUser, postId: string): Promise<FeedReactorDto[]> {
     const actor = await this.access.resolveActor(user, "postReactionList");
-    const rows = await this.db.withTenant(actor.companyId, async (tx) => {
+    const { rows, avatars } = await this.db.withTenant(actor.companyId, async (tx) => {
       await this.access.assertPostVisible(tx, actor, postId);
-      return this.repo.listReactors(tx, actor.companyId, "post", postId);
+      const rows = await this.repo.listReactors(tx, actor.companyId, "post", postId);
+      // S16-SOCIAL-AVATARPRESIGN-1: ký trong CÙNG tx — MỘT câu cổng cho cả danh sách (≤100 hàng).
+      return { rows, avatars: await this.avatarSigner.signTx(tx, actor.companyId, rows) };
     });
     return rows.map((r) => ({
       employeeId: r.employeeId,
       fullName: r.fullName,
-      avatarUrl: r.avatarUrl,
+      avatarUrl: avatars.urlOf(r),
       emoji: r.emoji,
       createdAt: r.createdAt.toISOString(),
     }));

@@ -9,7 +9,9 @@ import type {
   FeedPostIdeaBlockDto,
   FeedReactionSummaryDto,
 } from "@mediaos/contracts";
+import { kudosRecipientDto, type SignedAvatars } from "./social-avatar-signer";
 import type { CommentRow } from "./social-comments.repository";
+import type { PostKudosBlock } from "./social-post-blocks";
 import type { PostRow } from "./social-posts.repository";
 import type { SocialViewerContext } from "./social.types";
 
@@ -30,15 +32,22 @@ import type { SocialViewerContext } from "./social.types";
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 
-function authorOf(row: {
-  authorEmployeeId: string | null;
-  authorFullName: string | null;
-  authorAvatarUrl: string | null;
-}): FeedAuthorDto {
+/**
+ * S16-SOCIAL-AVATARPRESIGN-1 — `avatarUrl` CHỈ đến từ `avatars.urlOf` (URL đã ký cho ĐÚNG cặp của tác
+ * giả hàng này). Cột thô `authorAvatarRaw` không bao giờ lên DTO (spec cấu trúc S2 canh).
+ */
+function authorOf(
+  row: {
+    authorEmployeeId: string | null;
+    authorFullName: string | null;
+    authorAvatarRaw: string | null;
+  },
+  avatars: SignedAvatars,
+): FeedAuthorDto {
   return {
     employeeId: row.authorEmployeeId,
     fullName: row.authorFullName,
-    avatarUrl: row.authorAvatarUrl,
+    avatarUrl: avatars.urlOf({ employeeId: row.authorEmployeeId, avatarRaw: row.authorAvatarRaw }),
   };
 }
 
@@ -56,9 +65,14 @@ export function toFeedPostDto(
     /** Vắng ⇒ khoá `mentions` VẮNG trên DTO (đường chưa nạp) — KHÔNG thành `[]` (vắng ≠ rỗng). */
     mentions?: readonly FeedMentionDto[];
     /** S16-SOCIAL-BE-2D — khối theo loại bài; vắng ⇒ khoá VẮNG (bài khác loại / đường không nạp / mồ côi). */
-    kudos?: FeedKudosBlockDto;
+    kudos?: PostKudosBlock;
     poll?: FeedPollResultsDto;
     idea?: FeedPostIdeaBlockDto;
+    /**
+     * S16-SOCIAL-AVATARPRESIGN-1 — avatar ĐÃ KÝ của lô (tác giả + người nhận kudos). BẮT BUỘC: mọi lối
+     * dựng DTO bài phải đi qua bộ ký (`NO_AVATARS` khi cố ý không ký) — quên là lỗi biên dịch.
+     */
+    avatars: SignedAvatars;
   },
 ): FeedPostDto {
   const isMine = row.authorUserId === viewer.actorUserId;
@@ -68,7 +82,7 @@ export function toFeedPostDto(
     audience: row.audience as FeedPostDto["audience"],
     orgUnitId: row.orgUnitId,
     groupId: row.groupId,
-    author: authorOf(row),
+    author: authorOf(row, extra.avatars),
     body: row.body,
     tags: [...extra.tags],
     attachments: [...extra.attachments],
@@ -92,7 +106,7 @@ export function toFeedPostDto(
     dto.status = row.status as NonNullable<FeedPostDto["status"]>;
   }
   if (extra.mentions) dto.mentions = extra.mentions.map(copyMention);
-  if (extra.kudos) dto.kudos = copyKudos(extra.kudos);
+  if (extra.kudos) dto.kudos = copyKudos(extra.kudos, extra.avatars);
   if (extra.poll) dto.poll = copyPoll(extra.poll);
   if (extra.idea) dto.idea = { status: extra.idea.status };
   return dto;
@@ -105,13 +119,15 @@ export function toFeedCommentDto(
     attachments: readonly FeedAttachmentDto[];
     myReaction: string | null;
     mentions?: readonly FeedMentionDto[];
+    /** S16-SOCIAL-AVATARPRESIGN-1 — BẮT BUỘC, xem `toFeedPostDto`. */
+    avatars: SignedAvatars;
   },
 ): FeedCommentDto {
   const dto: FeedCommentDto = {
     id: row.id,
     postId: row.postId,
     parentCommentId: row.parentCommentId,
-    author: authorOf(row),
+    author: authorOf(row, extra.avatars),
     body: row.body,
     attachments: [...extra.attachments],
     likeCount: row.likeCount,
@@ -138,19 +154,16 @@ function copyMention(m: FeedMentionDto): FeedMentionDto {
  * S16-SOCIAL-BE-2D — chép khối theo DANH SÁCH KHOÁ (khuôn `copyMention`): không có serializer response
  * nào phía sau (controller trả thẳng object), nên đây là lớp CHE cuối cùng — một `userId` lỡ gắn vào
  * người nhận / một `voters` lỡ gắn vào poll ở tầng dưới không đi được qua đây.
+ * Người nhận đi qua `kudosRecipientDto` (S16-SOCIAL-AVATARPRESIGN-1): MỘT luật cho thẻ + `047`, avatar
+ * ký theo CẶP của chính người nhận (raw đã che K1 ⇒ `null`, kể cả khi cùng người được ký ở ô tác giả).
  */
-function copyKudos(k: FeedKudosBlockDto): FeedKudosBlockDto {
+function copyKudos(k: PostKudosBlock, avatars: SignedAvatars): FeedKudosBlockDto {
   return {
     kudosId: k.kudosId,
     message: k.message,
     isOfficial: k.isOfficial,
     badge: k.badge ? { id: k.badge.id, code: k.badge.code, name: k.badge.name, icon: k.badge.icon } : null,
-    recipients: k.recipients.map((r) => ({
-      employeeId: r.employeeId,
-      fullName: r.fullName,
-      avatarUrl: r.avatarUrl,
-      isFormerEmployee: r.isFormerEmployee,
-    })),
+    recipients: k.recipients.map((r) => kudosRecipientDto(r, avatars)),
   };
 }
 

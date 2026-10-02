@@ -1,12 +1,17 @@
 import type {
   FeedKudosBlockDto,
-  FeedKudosRecipientDto,
   FeedPollResultsDto,
   FeedPostIdeaBlockDto,
 } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
+import type { SocialAvatarRef } from "./social-avatar-signer";
 import { ideaStatusByPostIdsTx } from "./social-ideas.repository";
-import { badgeRefOf, kudosBlocksByPostIdsTx, recipientsOfTx } from "./social-kudos.repository";
+import {
+  badgeRefOf,
+  kudosBlocksByPostIdsTx,
+  recipientsOfTx,
+  type KudosRecipientRow,
+} from "./social-kudos.repository";
 import { pollResultsByTx } from "./social-polls.repository";
 
 /**
@@ -25,8 +30,17 @@ import { pollResultsByTx } from "./social-polls.repository";
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 
+/**
+ * Khối kudos ở dạng NỘI BỘ: người nhận còn mang cột thô `avatarRaw` (đã che K1 trong SQL). DTO
+ * (`FeedKudosBlockDto`) CHỈ dựng ở mapper, sau khi ký (S16-SOCIAL-AVATARPRESIGN-1) — thô không có
+ * đường nào lên dây từ đây.
+ */
+export type PostKudosBlock = Omit<FeedKudosBlockDto, "recipients"> & {
+  recipients: KudosRecipientRow[];
+};
+
 export interface PostBlocks {
-  kudos: Map<string, FeedKudosBlockDto>;
+  kudos: Map<string, PostKudosBlock>;
   poll: Map<string, FeedPollResultsDto>;
   idea: Map<string, FeedPostIdeaBlockDto>;
   /** Bài có loại khớp mà KHÔNG có hàng con — caller ghi `logger.error`. */
@@ -70,18 +84,12 @@ export async function loadPostBlocksTx(
       companyId,
       blocks.map((b) => b.kudosId),
     );
-    const byKudos = new Map<string, FeedKudosRecipientDto[]>();
+    // Hàng THÔ — chép theo danh sách khoá + ký avatar ở mapper (`kudosRecipientDto`), không ở đây.
+    const byKudos = new Map<string, KudosRecipientRow[]>();
     for (const r of recipients) {
-      // Chép theo DANH SÁCH KHOÁ — `kudosId` (khoá gom) và mọi cột lạ ở tầng dưới không ra dây.
-      const item: FeedKudosRecipientDto = {
-        employeeId: r.employeeId,
-        fullName: r.fullName,
-        avatarUrl: r.avatarUrl,
-        isFormerEmployee: r.isFormerEmployee,
-      };
       const list = byKudos.get(r.kudosId);
-      if (list) list.push(item);
-      else byKudos.set(r.kudosId, [item]);
+      if (list) list.push(r);
+      else byKudos.set(r.kudosId, [r]);
     }
     for (const b of blocks) {
       const { badge, broken } = badgeRefOf(b);
@@ -117,11 +125,31 @@ export async function loadPostBlocksTx(
   return out;
 }
 
+/**
+ * S16-SOCIAL-AVATARPRESIGN-1 — mọi điểm chiếu avatar của MỘT trang thẻ bài: tác giả + người nhận kudos.
+ * `decorate` ký cả lô bằng MỘT lời gọi (≤1 câu cổng/trang). Ref người nhận mang raw ĐÃ che (K1) — nên
+ * cùng một người vừa là tác giả (không che) vừa là người nhận đã che vẫn ra `null` ở ô người nhận
+ * (`urlOf` khoá theo cặp — plan F1).
+ */
+export function avatarRefsOfPage(
+  rows: ReadonlyArray<{ authorEmployeeId: string | null; authorAvatarRaw: string | null }>,
+  blocks: PostBlocks,
+): SocialAvatarRef[] {
+  const refs: SocialAvatarRef[] = rows.map((r) => ({
+    employeeId: r.authorEmployeeId,
+    avatarRaw: r.authorAvatarRaw,
+  }));
+  for (const k of blocks.kudos.values()) {
+    for (const r of k.recipients) refs.push({ employeeId: r.employeeId, avatarRaw: r.avatarRaw });
+  }
+  return refs;
+}
+
 /** Khối của MỘT bài — chỉ khoá khớp `type` và đã nạp được; còn lại VẮNG (vắng ≠ rỗng). */
 export function blocksFor(
   blocks: PostBlocks,
   row: { id: string; type: string },
-): { kudos?: FeedKudosBlockDto; poll?: FeedPollResultsDto; idea?: FeedPostIdeaBlockDto } {
+): { kudos?: PostKudosBlock; poll?: FeedPollResultsDto; idea?: FeedPostIdeaBlockDto } {
   switch (row.type) {
     case "kudos": {
       const kudos = blocks.kudos.get(row.id);

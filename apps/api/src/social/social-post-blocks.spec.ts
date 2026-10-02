@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TenantTx } from "../db/db.service";
-import { blocksFor, loadPostBlocksTx } from "./social-post-blocks";
+import { NO_AVATARS, kudosRecipientDto } from "./social-avatar-signer";
+import { avatarRefsOfPage, blocksFor, loadPostBlocksTx } from "./social-post-blocks";
 import { SocialPollsRepository } from "./social-polls.repository";
 
 /**
@@ -57,7 +58,7 @@ const recipientRow = {
   kudosId: KUDOS,
   employeeId: EMP,
   fullName: "A",
-  avatarUrl: null,
+  avatarRaw: null,
   isFormerEmployee: false,
 };
 const pollRow = {
@@ -169,15 +170,37 @@ describe("U2 — accessor + mồ côi", () => {
     expect(blocks.brokenBadges).toEqual([{ kudosId: KUDOS, badgeId: BADGE }]);
   });
 
-  it("người nhận chép theo DANH SÁCH KHOÁ — `kudosId` (khoá gom) không lên khối", async () => {
+  // ⟲ S16-SOCIAL-AVATARPRESIGN-1 — khối giữ hàng THÔ (còn `avatarRaw`, chưa ký); DTO người nhận dựng ở
+  // mapper qua `kudosRecipientDto` — luật «chép theo DANH SÁCH KHOÁ» đo ở ĐÚNG lối dựng DTO đó.
+  it("người nhận chép theo DANH SÁCH KHOÁ khi dựng DTO — `kudosId`/`userId`/`avatarRaw` không lên dây", async () => {
     const f = fakeTx([[kudosRow], [{ ...recipientRow, userId: "rò-rỉ" }]]);
     const blocks = await loadPostBlocksTx(f.tx, CO, VIEWER, [{ id: P_K, type: "kudos" }]);
-    const r = blocks.kudos.get(P_K)?.recipients[0];
-    expect(Object.keys(r ?? {}).sort()).toEqual([
+    const raw = blocks.kudos.get(P_K)?.recipients[0];
+    expect(raw, "neo: khối có người nhận").toBeTruthy();
+    expect(Object.keys(kudosRecipientDto(raw!, NO_AVATARS)).sort()).toEqual([
       "avatarUrl",
       "employeeId",
       "fullName",
       "isFormerEmployee",
+    ]);
+  });
+
+  it("avatarRefsOfPage — MỘT lô ref: tác giả mọi thẻ + người nhận kudos (raw đã che giữ `null`)", async () => {
+    const masked = { ...recipientRow, employeeId: "e2000000-0000-4000-8000-000000000002" };
+    const f = fakeTx([[kudosRow], [{ ...recipientRow, avatarRaw: "f1" }, masked]]);
+    const blocks = await loadPostBlocksTx(f.tx, CO, VIEWER, [{ id: P_K, type: "kudos" }]);
+    const refs = avatarRefsOfPage(
+      [
+        { authorEmployeeId: "e9", authorAvatarRaw: "f9" },
+        { authorEmployeeId: null, authorAvatarRaw: null },
+      ],
+      blocks,
+    );
+    expect(refs).toEqual([
+      { employeeId: "e9", avatarRaw: "f9" },
+      { employeeId: null, avatarRaw: null },
+      { employeeId: EMP, avatarRaw: "f1" },
+      { employeeId: masked.employeeId, avatarRaw: null },
     ]);
   });
 });

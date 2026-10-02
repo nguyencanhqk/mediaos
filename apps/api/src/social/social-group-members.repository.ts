@@ -108,7 +108,7 @@ export class SocialGroupMembersRepository {
         userId: feedGroupMembers.userId,
         employeeId: employeeProfiles.id,
         fullName: users.fullName,
-        avatarUrl: employeeProfiles.avatarUrl,
+        avatarRaw: employeeProfiles.avatarUrl,
         role: feedGroupMembers.role,
         status: feedGroupMembers.status,
         joinedAt: feedGroupMembers.joinedAt,
@@ -220,7 +220,7 @@ export interface FeedGroupMemberRow {
   userId: string;
   employeeId: string | null;
   fullName: string | null;
-  avatarUrl: string | null;
+  avatarRaw: string | null;
   role: FeedGroupRole;
   status: "active" | "pending";
   joinedAt: Date | null;

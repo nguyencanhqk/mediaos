@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   feedAttachmentSchema,
+  feedAuthorSchema,
   feedCommentSchema,
   feedPostSchema,
   feedReactionSummarySchema,
@@ -162,6 +163,73 @@ describe("BE-2D D7 — `kudos`/`poll`/`idea` KHÔNG lên kênh WS", () => {
     const out = wsFeedPostCreatedEventSchema.parse(leaked) as Record<string, unknown>;
     expect(out.id).toBe(base.id); // neo: parse thành công, không phải ném rồi bị nuốt
     for (const k of BLOCK_KEYS) expect(out).not.toHaveProperty(k);
+  });
+});
+
+// S16-SOCIAL-AVATARPRESIGN-1 (D3-b) — `author.avatarUrl` là URL KÝ (capability TTL) ⇒ KHÔNG lên room.
+// GIỮ khoá (bundle FE cũ đòi khoá — plan M18), ép giá trị `null` bằng `.transform` của schema LỒNG
+// (`.omit` không với tới khoá lồng). Hai vế: `.parse` bóc giá trị VÀ đầu ra vẫn hợp lệ với schema CŨ.
+describe("AVATARPRESIGN D3-b — `author.avatarUrl` trên WS luôn `null`", () => {
+  const signed = "https://signed.example/avatar.png?X-Amz-Signature=abc";
+  const author = {
+    employeeId: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    fullName: "Tác Giả",
+    avatarUrl: signed,
+  };
+  const post = {
+    id: "11111111-1111-4111-8111-111111111111",
+    type: "share",
+    audience: "company",
+    orgUnitId: null,
+    groupId: null,
+    author,
+    body: "x",
+    tags: [],
+    attachments: [],
+    pinned: false,
+    commentsLocked: false,
+    requiresAck: false,
+    likeCount: 0,
+    commentCount: 0,
+    viewCount: 0,
+    editedAt: null,
+    publishedAt: "2026-10-02T00:00:00.000Z",
+    lastActivityAt: "2026-10-02T00:00:00.000Z",
+    createdAt: "2026-10-02T00:00:00.000Z",
+  };
+  const comment = {
+    id: "22222222-2222-4222-8222-222222222222",
+    postId: post.id,
+    parentCommentId: null,
+    author,
+    body: "y",
+    attachments: [],
+    likeCount: 0,
+    editedAt: null,
+    createdAt: "2026-10-02T00:00:00.000Z",
+  };
+
+  it("`feed:post.created` — URL ký trên nguồn ⇒ đầu ra `null`, GIỮ đủ ba khoá tác giả", () => {
+    const out = wsFeedPostCreatedEventSchema.parse(post);
+    expect(out.id, "neo: parse thành công").toBe(post.id);
+    expect(out.author.avatarUrl).toBeNull();
+    expect(Object.keys(out.author)).toEqual(["employeeId", "fullName", "avatarUrl"]);
+  });
+
+  it("`feed:comment.created` — URL ký trên nguồn ⇒ đầu ra `null`, GIỮ đủ ba khoá tác giả", () => {
+    const out = wsFeedCommentCreatedEventSchema.parse(comment);
+    expect(out.id, "neo: parse thành công").toBe(comment.id);
+    expect(out.author.avatarUrl).toBeNull();
+    expect(Object.keys(out.author)).toEqual(["employeeId", "fullName", "avatarUrl"]);
+  });
+
+  it("tương thích bundle FE cũ — đầu ra của schema MỚI vẫn parse được bằng `feedAuthorSchema` cũ", () => {
+    for (const out of [
+      wsFeedPostCreatedEventSchema.parse(post).author,
+      wsFeedCommentCreatedEventSchema.parse(comment).author,
+    ]) {
+      expect(feedAuthorSchema.safeParse(out).success).toBe(true);
+    }
   });
 });
 

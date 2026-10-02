@@ -299,7 +299,7 @@ const POST_COLUMNS = {
   authorUserId: feedPosts.authorUserId,
   authorEmployeeId: feedPosts.authorEmployeeId,
   authorFullName: users.fullName,
-  authorAvatarUrl: employeeProfiles.avatarUrl,
+  authorAvatarRaw: employeeProfiles.avatarUrl,
   type: feedPosts.type,
   audience: feedPosts.audience,
   orgUnitId: feedPosts.orgUnitId,
@@ -323,7 +323,7 @@ export interface PostRow {
   authorUserId: string;
   authorEmployeeId: string | null;
   authorFullName: string | null;
-  authorAvatarUrl: string | null;
+  authorAvatarRaw: string | null;
   type: string;
   audience: string;
   orgUnitId: string | null;
