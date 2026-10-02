@@ -11,6 +11,7 @@ import * as React from "react";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { cn } from "@mediaos/ui";
+import type { FeedMentionDto } from "@mediaos/contracts";
 import { parseFeedBody, type FeedBodyToken } from "../lib/parse-feed-body";
 
 /** UI-07 §34b.4 — quá 6 dòng thì gập lại. */
@@ -18,6 +19,11 @@ const CLAMP_LINES = 6;
 
 interface PostBodyProps {
   body: string | null | undefined;
+  /**
+   * S16-SOCIAL-MENTIONLINK-1 — `mentions` của DTO bài/bình luận (BE-1D). Vắng (response 006 · WS · API
+   * cũ) ⇒ mọi `@…` là span như trước. Luật link nằm ở `parseFeedBody`.
+   */
+  mentions?: readonly FeedMentionDto[];
   /** Bình luận không gập (chúng vốn ngắn); bài thì có. */
   collapsible?: boolean;
   className?: string;
@@ -57,27 +63,41 @@ function renderToken(token: FeedBodyToken, index: number): React.ReactNode {
 
     case "mention":
       /**
-       * SPAN, KHÔNG PHẢI LINK — có lý do, xem docblock `parse-feed-body.ts`: hợp đồng không trả
-       * danh sách mention nên FE không có `employeeId` để trỏ tới, và tra theo TÊN vừa sai (trùng
-       * tên) vừa mở lại đúng oracle dò danh bạ mà SPEC-16 §12 `ERR-009` đóng.
+       * SPAN, KHÔNG PHẢI LINK: `@…` không khớp phần tử `withheld:false` nào của server (hoặc DTO
+       * không mang `mentions`). Tra theo TÊN ở FE vừa sai (trùng tên) vừa mở lại đúng oracle dò danh
+       * bạ mà SPEC-16 §12 `ERR-009` đóng — xem docblock `parse-feed-body.ts`.
        */
       return (
         <span key={index} className="font-medium text-primary">
           {token.value}
         </span>
       );
+
+    case "mentionLink":
+      // Đích = `employeeId` của SERVER (phần tử `withheld:false`), chữ = nguyên văn trong bài.
+      return (
+        <Link
+          key={index}
+          to="/feed/profiles/$employeeId"
+          params={{ employeeId: token.employeeId }}
+          className="rounded font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {token.value}
+        </Link>
+      );
   }
 }
 
 export function PostBody({
   body,
+  mentions,
   collapsible = false,
   className,
 }: PostBodyProps): React.ReactElement | null {
   const { t } = useTranslation("social");
   const [expanded, setExpanded] = React.useState(false);
 
-  const tokens = React.useMemo(() => parseFeedBody(body), [body]);
+  const tokens = React.useMemo(() => parseFeedBody(body, mentions), [body, mentions]);
 
   /**
    * Mảng rỗng ⇒ KHÔNG render gì (kể cả khung). `body` được phép NULL với bài `poll`/`kudos`

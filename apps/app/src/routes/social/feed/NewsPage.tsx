@@ -274,7 +274,7 @@ function NewsRow({ item }: { item: FeedNewsItemDto }): React.ReactElement {
         )}
       </header>
 
-      <PostBody body={item.body} collapsible className="mt-2" />
+      <PostBody body={item.body} mentions={item.mentions} collapsible className="mt-2" />
 
       <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3">
         {/*

@@ -36,11 +36,27 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   };
 });
 
+/**
+ * `Link` NỘI SUY `params` (S16-SOCIAL-MENTIONLINK-1, khuôn `KudosBlock.spec`): mock trần `href={to}` in
+ * khuôn `/feed/profiles/$employeeId` cho mọi id ⇒ ca «link mention đúng người» không đo được gì.
+ */
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
   return {
     ...actual,
-    Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
+    Link: ({
+      children,
+      to,
+      params,
+    }: {
+      children: ReactNode;
+      to: string;
+      params?: Record<string, string>;
+    }) => (
+      <a href={Object.entries(params ?? {}).reduce((h, [k, v]) => h.replace(`$${k}`, v), to)}>
+        {children}
+      </a>
+    ),
   };
 });
 
@@ -432,6 +448,26 @@ describe("lưới ảnh — đính kèm bị từ chối presign (`url: null`) K
       attachments: [{ fileId: "f2", kind: "image", fileName: "b.png", sizeBytes: 1, url: null }],
     });
     expect(screen.queryByTestId("post-image-grid")).toBeNull();
+  });
+});
+
+describe("S16-SOCIAL-MENTIONLINK-1 — B2: thẻ bài truyền `post.mentions` xuống thân", () => {
+  const E1 = "33333333-3333-4333-8333-333333333333";
+
+  it("ALLOW: bài CÓ `mentions` (`withheld:false`) ⇒ link hồ sơ đúng người trong thân bài", () => {
+    renderCard({
+      body: "Chào @Nguyễn Văn An!",
+      mentions: [{ withheld: false, employeeId: E1, label: "Nguyễn Văn An" }],
+    });
+    const link = within(screen.getByTestId("post-body")).getByRole("link", {
+      name: "@Nguyễn Văn An",
+    });
+    expect(link.getAttribute("href")).toBe(`/feed/profiles/${E1}`);
+  });
+
+  it("bài KHÔNG có khoá `mentions` (006 · WS · API cũ) ⇒ span như cũ, 0 link trong thân", () => {
+    renderCard({ body: "Chào @Nguyễn Văn An!" });
+    expect(within(screen.getByTestId("post-body")).queryAllByRole("link")).toHaveLength(0);
   });
 });
 

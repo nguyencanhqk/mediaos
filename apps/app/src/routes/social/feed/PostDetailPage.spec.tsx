@@ -201,6 +201,70 @@ describe("C8 — ALLOW: bài + bình luận render", () => {
   });
 });
 
+/**
+ * S16-SOCIAL-MENTIONLINK-1 — D1 (plan FE-2D §4 B3): `droppedMentions` của `015` là THÔNG TIN (SPEC-16
+ * §12 `ERR-009` — mention ngoài audience của bài cha bị bỏ im lặng, request vẫn 201). Bài đã nói ra từ
+ * FE-1 (`FeedPage` M7); bình luận từng vứt nguyên response.
+ */
+describe("S16-SOCIAL-MENTIONLINK-1 — D1: `droppedMentions` của bình luận KHÔNG bị nuốt", () => {
+  const UA = "44444444-4444-4444-8444-444444444444";
+  const UB = "55555555-5555-4555-8555-555555555555";
+
+  async function submitComment(text: string): Promise<void> {
+    await waitFor(() => expect(screen.getByTestId("comment-composer")).toBeInTheDocument());
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: text } });
+    fireEvent.click(screen.getByTestId("comment-submit"));
+  }
+
+  it("201 kèm 2 lượt nhắc bị bỏ ⇒ dải THÔNG TIN cạnh ô soạn, nói đúng số 2", async () => {
+    getPost.mockResolvedValue(makePost());
+    createComment.mockResolvedValue({ ...makeComment(), droppedMentions: [UA, UB] });
+    renderWithProviders(<PostDetailPage />);
+
+    await submitComment("chào");
+
+    const notice = await screen.findByTestId("comment-dropped-mentions-notice");
+    expect(notice).toHaveTextContent(t("composer.droppedMentions", { count: 2 }));
+    // Thông tin, không phải lỗi: không có dải lỗi nào đi kèm.
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("lượt gửi MỚI dọn dải của lượt trước; lượt mới không bỏ ai ⇒ dải VẮNG", async () => {
+    getPost.mockResolvedValue(makePost());
+    createComment.mockResolvedValueOnce({ ...makeComment(), droppedMentions: [UA] });
+    renderWithProviders(<PostDetailPage />);
+
+    await submitComment("lượt một");
+    await screen.findByTestId("comment-dropped-mentions-notice");
+
+    let resolveSecond: ((v: unknown) => void) | undefined;
+    createComment.mockImplementationOnce(
+      () =>
+        new Promise((res) => {
+          resolveSecond = res;
+        }),
+    );
+    await submitComment("lượt hai");
+    // Đang gửi lượt hai: dải của lượt một đã hết hiệu lực.
+    await waitFor(() => expect(screen.queryByTestId("comment-dropped-mentions-notice")).toBeNull());
+
+    resolveSecond?.({ ...makeComment({ id: "c2" }), droppedMentions: [] });
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+    expect(screen.queryByTestId("comment-dropped-mentions-notice")).toBeNull();
+  });
+
+  it("đối chứng: `droppedMentions: []` ⇒ KHÔNG hiện dải nào", async () => {
+    getPost.mockResolvedValue(makePost());
+    createComment.mockResolvedValue({ ...makeComment(), droppedMentions: [] });
+    renderWithProviders(<PostDetailPage />);
+
+    await submitComment("chào");
+    await waitFor(() => expect(createComment).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+    expect(screen.queryByTestId("comment-dropped-mentions-notice")).toBeNull();
+  });
+});
+
 describe("C8 — DENY: bài đã xoá / không được xem", () => {
   it("404 ⇒ trạng thái RỖNG có nghĩa + lối về bảng tin, KHÔNG phải màn lỗi", async () => {
     getPost.mockRejectedValue(notFound());
