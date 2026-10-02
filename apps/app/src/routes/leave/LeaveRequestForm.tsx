@@ -231,16 +231,13 @@ export function LeaveRequestForm({
   }, [durationType, isHalfDay, isHourly, setValue, watch]);
 
   // Submit handler — create (POST) hoặc edit (PATCH update-draft), tuỳ `mode`.
+  // S18-FE-LEAVEDRAFTCAST-1: mapper trả ĐÚNG DTO hợp đồng ⇒ truyền thẳng, KHÔNG ép kiểu body (cú ép từng nuốt
+  // mọi lệch khoá/enum giữa mapper và hợp đồng).
   const createMutation = useMutation({
     mutationFn: (values: LeaveFormValues) =>
       isEdit
-        ? leaveApi.updateDraft(
-            requestId as string,
-            toUpdateDraftBody(values) as Parameters<typeof leaveApi.updateDraft>[1],
-          )
-        : leaveApi.createDraft(
-            toCreateDraftBody(values) as Parameters<typeof leaveApi.createDraft>[0],
-          ),
+        ? leaveApi.updateDraft(requestId as string, toUpdateDraftBody(values))
+        : leaveApi.createDraft(toCreateDraftBody(values)),
     onSuccess: (result) => {
       // S5-BE-CONTRACT-1 (§13.3): dùng helper chung thay vì liệt kê tay — trước đây thiếu lịch nghỉ +
       // widget dashboard nên tạo đơn xong quay ra hai màn đó vẫn thấy dữ liệu cũ.
