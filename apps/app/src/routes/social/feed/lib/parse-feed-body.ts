@@ -15,7 +15,8 @@
  * │ (`packages/contracts/src/social-api.ts` `feedMentionSchema`). Luật:                             │
  * │  · CHỈ phần tử `withheld:false` làm được link; đích = `employeeId` của SERVER. Phần tử rút giữ  │
  * │    span — FE KHÔNG tra theo tên (trùng tên + mở lại oracle dò danh bạ SPEC-16 §12 `ERR-009`).   │
- * │  · Hai phần tử cùng nhãn (NFC) mà KHÁC người ⇒ mơ hồ ⇒ span (không đoán ai).                    │
+ * │  · Hai phần tử cùng nhãn (NFC) mà KHÁC người ⇒ mơ hồ ⇒ span (không đoán ai) — và nhãn mơ hồ     │
+ * │    CHẶN nhãn ngắn hơn ở cùng vị trí (không link nửa tên sang người thứ ba).                     │
  * │  · `label` = `users.full_name` lúc ĐỌC, thứ tự KHÔNG theo vị trí trong body; TK đổi tên ⇒ nhãn  │
  * │    không còn khớp chữ trong body ⇒ rơi về span (an toàn: mất link, không link nhầm).            │
  * │  · Chữ hiển thị là chữ NGUYÊN VĂN trong body — không chuẩn hoá chuỗi hiển thị. Chỉ PHÉP SO nhãn │
@@ -97,7 +98,8 @@ interface Match {
 interface MentionLabel {
   /** Nhãn của server, ĐÃ NFC. */
   label: string;
-  employeeId: string;
+  /** `null` = MƠ HỒ (hai người cùng nhãn) — không link, nhưng CHẶN nhãn ngắn hơn ở cùng vị trí. */
+  employeeId: string | null;
   /** Số code point KHÔNG phải dấu trong NFD của nhãn — xem `baseCountPrefix`. */
   baseCount: number;
 }
@@ -180,8 +182,14 @@ function isWordCharBefore(body: string, i: number): boolean {
 
 /**
  * Bảng nhãn dùng được: CHỈ phần tử `withheld:false` (đọc qua narrowing — nhánh rút không có `label`
- * trong hợp đồng, và một phần tử rút bị nhét lậu nhãn cũng KHÔNG được đọc). Nhãn NFC trùng mà khác
- * `employeeId` ⇒ loại hẳn. Sắp nhãn DÀI trước: cùng vị trí thì `@An Nguyễn` thắng `@An`.
+ * trong hợp đồng, và một phần tử rút bị nhét lậu nhãn cũng KHÔNG được đọc). Sắp nhãn DÀI trước: cùng
+ * vị trí thì `@An Nguyễn` thắng `@An`.
+ *
+ * Nhãn NFC trùng mà khác `employeeId` ⇒ MƠ HỒ (`employeeId: null`): KHÔNG link, nhưng VẪN ở trong bảng
+ * làm CHẶN. Loại hẳn nó (bản đầu) thì ở `@Nguyễn Văn An Bình` — tên TRỌN của một trong hai người trùng
+ * tên — nhãn ngắn `Nguyễn Văn An` của người THỨ BA khớp nửa tên và link sang người đó (FULL gate lượt 1,
+ * probe R-B2; ca P3b). Phần tử RÚT không có nhãn nên không chặn được theo cách này — giới hạn đã ghi ở
+ * plan FE-2D §9 R6.
  */
 function buildMentionLabels(mentions: readonly FeedMentionDto[] | undefined): MentionLabel[] {
   if (!mentions || mentions.length === 0) return [];
@@ -199,7 +207,7 @@ function buildMentionLabels(mentions: readonly FeedMentionDto[] | undefined): Me
 
   const out: MentionLabel[] = [];
   for (const [label, employeeId] of byLabel) {
-    if (employeeId !== null) out.push({ label, employeeId, baseCount: countBase(label) });
+    out.push({ label, employeeId, baseCount: countBase(label) });
   }
   return out.sort((a, b) => b.label.length - a.label.length);
 }
@@ -209,16 +217,23 @@ function buildMentionLabels(mentions: readonly FeedMentionDto[] | undefined): Me
  *
  * Trả hàm `(from) ⇒ match đầu tiên có offset ≥ from`. Biên TRÁI đọc `body[i-1]` — KHÔNG đọc phần còn
  * lại sau token trước (đo M27: `#tag@An` thì `tag@An` mới là ngữ cảnh thật, `@An` không có biên trái).
- * Phần đắt (so nhãn) không phụ thuộc `from` ⇒ nhớ theo vị trí `@`, mỗi vị trí tính ĐÚNG một lần.
+ *
+ * CON TRỎ (FULL gate lượt 1, ca P8): `from` chỉ TĂNG (`base` của `parseFeedBody`). Lượt dò trước đã
+ * chứng minh KHÔNG có link nào trong `[scannedFrom, hit.index)` ⇒ mọi `from` trong `[scannedFrom,
+ * hit.index]` có cùng đáp án — trả lại `hit`, không dò lại. Chỉ dò tiếp khi `from` đã VƯỢT `hit` (token
+ * khác nuốt mất nó) ⇒ mỗi vị trí `@` được đi qua MỘT lần cho cả bài. Bản đầu dò lại MỌI `@` còn lại sau
+ * MỖI token: `@A@A…` 4000 ký tự + 50 nhãn ≈ 60 ms/lượt parse, lặp lại ở mỗi lần refetch.
  */
 function createMentionLinkFinder(
   body: string,
   labels: readonly MentionLabel[],
 ): (from: number) => Match | null {
   const bases = baseCountPrefix(body);
-  const memo = new Map<number, Match | null>();
 
-  /** Nhãn khớp TRỌN ngay sau `@` ở vị trí `i` (biên phải + so NFC), dài trước. */
+  /**
+   * Nhãn khớp TRỌN ngay sau `@` ở vị trí `i` (biên phải + so NFC), dài trước. Nhãn khớp ĐẦU TIÊN quyết
+   * vị trí: mơ hồ ⇒ `null` và KHÔNG thử nhãn ngắn hơn (ca P3b — xem `buildMentionLabels`).
+   */
   const labelMatchAt = (i: number): Match | null => {
     const start = i + 1;
     for (const { label, employeeId, baseCount } of labels) {
@@ -227,6 +242,7 @@ function createMentionLinkFinder(
         if (bases[j] - bases[start] !== baseCount) continue; // điều kiện CẦN, O(1)
         if (isWordCharAt(body, j)) continue; // biên PHẢI — `\p{M}` chặn cắt giữa chuỗi kết hợp
         if (body.slice(start, j).normalize("NFC") !== label) continue;
+        if (employeeId === null) return null; // CHẶN: tên trọn ở đây là của một người trùng tên
         return {
           index: i,
           length: j - i,
@@ -237,17 +253,21 @@ function createMentionLinkFinder(
     return null;
   };
 
+  let scannedFrom: number | null = null;
+  let hit: Match | null = null;
+
   return (from) => {
+    if (scannedFrom !== null && from >= scannedFrom && (hit === null || hit.index >= from)) {
+      return hit;
+    }
+    scannedFrom = from;
+    hit = null;
     for (let i = body.indexOf("@", from); i !== -1; i = body.indexOf("@", i + 1)) {
       if (isWordCharBefore(body, i)) continue; // biên TRÁI trên chuỗi GỐC
-      let hit = memo.get(i);
-      if (hit === undefined) {
-        hit = labelMatchAt(i);
-        memo.set(i, hit);
-      }
-      if (hit) return hit;
+      hit = labelMatchAt(i);
+      if (hit) break;
     }
-    return null;
+    return hit;
   };
 }
 

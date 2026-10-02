@@ -5,7 +5,7 @@
  *  1. Nội dung người dùng gõ vào **không bao giờ** trở thành markup — kể cả chuỗi trông như thẻ HTML.
  *  2. `#thẻ` khớp ĐÚNG luật mà BE dùng để lưu thẻ (lệch luật ⇒ link dẫn tới bộ lọc rỗng).
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FeedMentionDto } from "@mediaos/contracts";
 import { parseFeedBody, type FeedBodyToken } from "./parse-feed-body";
 
@@ -233,5 +233,65 @@ describe("MENTIONLINK — parseFeedBody(body, mentions): link CHỈ khi server n
       expect(parseFeedBody(body, [])).toEqual(legacy);
       expect(parseFeedBody(body, [{ withheld: true }])).toEqual(legacy);
     }
+  });
+
+  /**
+   * FULL gate lượt 1 (typescript-reviewer LOW, probe R-B2): nhãn mơ hồ từng bị LOẠI HẲN khỏi bảng ⇒ ở
+   * vị trí mà tên TRỌN là của một trong hai người trùng tên, nhãn NGẮN của người thứ ba vẫn khớp phần
+   * đầu tên ⇒ nửa tên bị link sang người khác. Nhãn mơ hồ giờ là CHẶN: khớp ở đâu thì vị trí đó không
+   * link (span như bản cũ), nhãn ngắn hơn KHÔNG được thử tiếp tại đó.
+   */
+  it("P3b DENY: nhãn DÀI mơ hồ CHẶN nhãn ngắn ở cùng vị trí — không link nửa tên sang người khác", () => {
+    const E3 = "77777777-7777-4777-8777-777777777777";
+    const binh1 = { withheld: false, employeeId: E1, label: "Nguyễn Văn An Bình" } as const;
+    const binh2 = { withheld: false, employeeId: E2, label: "Nguyễn Văn An Bình" } as const;
+    const an3 = { withheld: false, employeeId: E3, label: "Nguyễn Văn An" } as const;
+    const body = "Chào @Nguyễn Văn An Bình nhé";
+
+    expect(parseFeedBody(body, [binh1, binh2, an3])).toEqual(parseFeedBody(body));
+
+    // Đối chứng: nhãn dài KHÔNG mơ hồ ⇒ link TRỌN tên, đúng người.
+    expect(parseFeedBody(body, [binh1, an3])).toEqual([
+      { kind: "text", value: "Chào " },
+      { kind: "mentionLink", value: "@Nguyễn Văn An Bình", employeeId: E1 },
+      { kind: "text", value: " nhé" },
+    ]);
+    // Đối chứng: chỗ nhãn mơ hồ KHÔNG khớp thì nhãn ngắn vẫn link — chặn đúng vị trí, không chặn cả bài.
+    expect(parseFeedBody("Chào @Nguyễn Văn An nhé", [binh1, binh2, an3])).toEqual([
+      { kind: "text", value: "Chào " },
+      { kind: "mentionLink", value: "@Nguyễn Văn An", employeeId: E3 },
+      { kind: "text", value: " nhé" },
+    ]);
+  });
+
+  /**
+   * FULL gate lượt 1 (typescript-reviewer LOW, probe R-B4): `@A@A…` — mỗi `@A` là một token span nhưng
+   * KHÔNG `@` nào khớp nhãn ⇒ bản cũ dò lại MỌI `@` còn lại sau MỖI token = O(token × @) (đo 02/10:
+   * 4000 ký tự + 50 nhãn ≈ 60 ms/lượt, nhân số thẻ trên trang, lặp lại mỗi lần refetch). Đếm lượt
+   * `indexOf("@")` thay vì bấm giờ — tất định, không đỏ oan khi máy CI bận.
+   */
+  it("P8: mỗi vị trí `@` được dò MỘT lần dù thân có hàng trăm token — không quét lại theo từng token", () => {
+    const n = 400;
+    const body = "@A".repeat(n);
+    const labels: FeedMentionDto[] = Array.from({ length: 50 }, (_, k) => ({
+      withheld: false,
+      employeeId: E1,
+      label: `A${"x".repeat(k + 1)}`,
+    }));
+
+    const spy = vi.spyOn(String.prototype, "indexOf");
+    let atScans = -1;
+    let tokens: FeedBodyToken[] = [];
+    try {
+      tokens = parseFeedBody(body, labels);
+      atScans = spy.mock.calls.filter((args) => args[0] === "@").length;
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Đối chứng: không nhãn nào khớp ⇒ token Y HỆT bản không `mentions` (n span).
+    expect(tokens).toEqual(parseFeedBody(body));
+    expect(atScans).toBeGreaterThan(0);
+    expect(atScans).toBeLessThanOrEqual(2 * n);
   });
 });
