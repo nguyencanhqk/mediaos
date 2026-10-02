@@ -459,3 +459,32 @@ Mỗi mutant: `cp` sao lưu → cấy (script Python, không qua Edit/formatter)
 - M15 bỏ vế `row.id === recordId` — 1 đỏ: R-B7 `promise resolved "{ …(18) }" instead of rejecting`.
 - M16 (mutant của TEST) WHERE bước sửa hàng `scope='khong-co'` — 9 đỏ: P-B1 + mọi R-B1/R-B2 ở
   `bước sửa hàng phải chạm đúng 1 hàng: expected +0 to be 1` — tiền điều kiện không xanh-rỗng.
+
+### 11.5 Bước 5 — cổng kiểm (`check.sh`) + lượt chạy toàn module
+
+**Lệch có chủ ý so với §8 bước 5:** KHÔNG chạy nguyên `--all`. Hai bước chỉ có ở `--all` đọc URL từ tệp env của
+worktree khi biến môi trường trống: `db-readiness` lấy `.env` ⇒ DB `mediaos` (PROD — `test/db-target.ts:8`),
+`prod-tenant-check` lấy `.env.prod` (worktree không có ⇒ tự bỏ qua). Luật phiên cấm trỏ bất cứ thứ gì vào
+`mediaos`/`mediaos_dev` ⇒ chạy tương đương từng phần:
+
+- `REQUIRE_LANE_DB=1 bash harness/check.sh --lane-db=mailaad` (tầng mặc định + lane-db-guard ép ĐỎ như `--all`):
+  ✅ secret-literals · ✅ lint (0 error; 50 warning có sẵn, không cái nào ở tệp của WO) · ✅ typecheck ·
+  ✅ migration-no-drop · ✅ tooling-tests · ❌ test [chunked] — `@mediaos/api 765/805 file · 16 lần chạy lại (crash
+  hạ tầng) · 1 ĐỎ THẬT`, thiếu 40 file (chunk 19 chết `ERR_IPC_CHANNEL_CLOSED` nên không có báo cáo JSON);
+  app 337/337 · auth 4/4 · console 22/22 · contracts 45/45 · ui 24/24 · web-core 48/48 xanh.
+- **Gốc của 1 đỏ (không thuộc WO này):** `s16-social-db1-invariants` › «census wildcard» quét MỌI role và thấy
+  `ki074-w-view-star-…` (`view:*`) của tenant test `ki074a-89b38c3c` tạo LÚC chạy (09:07:57Z) — fixture của
+  `role-member-del-oracle.int-spec.ts` (KI-074). Lượt chạy lại 1 của chunk 17 chết giữa tệp đó (không có dòng ✓
+  của nó ở lượt ấy) ⇒ `afterAll` không chạy ⇒ rò vào lane. Đọc bằng truy vấn chỉ-đọc trên `mediaos_mailaad`.
+- Dọn đúng teardown của spec KI-074 trên lane (spec tạm, xoá ngay): 2 tenant (`ki074a-…`, `ki074b-…`) + 1 role
+  system ⇒ chạy lại NGUYÊN 40 file của chunk 19 (tái tạo danh sách như `chunk-test.mjs`) một lượt
+  `--no-file-parallelism` ⇒ `Test Files 40 passed (40)` · `Tests 966 passed (966)` (census xanh). Tổng phủ API:
+  765 + 40 = 805/805 file.
+- `db-readiness` chạy riêng với `DATABASE_DIRECT_URL` trỏ `mediaos_mailaad` ⇒ ✅ (index 12/12 · FORCE RLS 0 thiếu ·
+  append-only 0 grant thừa). `pnpm build` ⇒ `Tasks: 7 successful, 7 total`.
+
+**Lượt chạy toàn module (một lần, cùng lane):** unit `src/settings` + `src/user-invites` + `src/crypto` và 12
+int-spec chạm mail-config / route settings / lời mời / người dùng envelope (credexfil-http · envelope ·
+security-mailconfig-http · routehttp3-foundation-settings · ui-config-deny · chat-be7-oversight · user-invites-flow
+· reset-token-envelope · secret-provisioning · secret-rotation · two-factor · two-factor-login) ⇒
+`Test Files 23 passed (23)` · `Tests 302 passed (302)`, 0 skip.
