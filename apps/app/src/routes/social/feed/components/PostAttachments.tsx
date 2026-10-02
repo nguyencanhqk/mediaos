@@ -10,6 +10,14 @@
  * │    URL đầu suốt vòng đời và chỉ đổi URL khi URL đang dùng đã lỗi — `useSignedMediaUrl`.           │
  * │ 3. Link tệp `target=_blank rel="noopener noreferrer"` — bytes do người dùng tải lên, KHÔNG tin.   │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠️ Luật 3 KHÔNG làm link an toàn (FULL gate lượt 2 — plan §12 H1): bấm = điều hướng tới URL ký GET, storage
+ * phục vụ INLINE theo Content-Type LƯU lúc PUT — mà URL PUT ký sẵn KHÔNG ký `Content-Type`
+ * (`@aws-sdk/s3-request-presigner` ép nó vào `unsignableHeaders`) ⇒ tệp khai `application/pdf` vẫn lưu được
+ * `text/html` ⇒ HTML chạy trên origin storage; `noopener noreferrer` không chặn được việc đó. Link này chỉ an toàn
+ * khi API PROD có `S16-SOCIAL-FILEDISPOSITION-1` (ký `Content-Type` PUT · confirm so kiểu · `ResponseContentType` +
+ * `attachment` ở GET) — ĐIỀU KIỆN MERGE của lát A (D11 bổ sung). Đừng mở thêm đường điều hướng tới URL storage
+ * (lightbox, link quanh ảnh/video) trước điều kiện đó.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
