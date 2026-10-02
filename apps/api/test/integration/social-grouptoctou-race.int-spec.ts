@@ -16,8 +16,10 @@
  * │ Hết trần chờ ⇒ ĐỎ rõ ràng («không chồng lấp»), không bao giờ xanh-rỗng.                        │
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Mọi assert «0 dòng audit» có đối chứng dương dùng CHÍNH câu tra `auditRows` (C-0 cho D-1, C-3 cho
- * D-3). `app.listen(0)` sau `init()`: request song song + supertest (memory
+ * Mọi assert «0 dòng audit» có đối chứng dương dùng CHÍNH câu tra `auditRows` (C-0 cho D-1 và O-039,
+ * C-3 cho D-3 và O-034, A-1 cho O-038). O-x/P-x (FULL gate lượt 1): người NGOÀI nhóm kín nhận 404
+ * TRƯỚC khoá ở cả 4 route ghi, đối chứng bằng thành viên thường (xếp hàng sau khoá rồi 403).
+ * `app.listen(0)` sau `init()`: request song song + supertest (memory
  * `supertest-closes-shared-server-on-first-response`).
  *
  * GATE CỨNG `hasDb && LANE_DB` — chỉ chạy trên DB cô lập lane (CLAUDE.md §9.5).
@@ -53,8 +55,13 @@ const LOGIN_PW = ["Passw0rd", "sgtoctou", "x"].join("!");
 const BASE_PAIRS = ["view:feed", "create:feed-group"] as const;
 const MANAGE_PAIRS = [...BASE_PAIRS, "manage:feed-group"] as const;
 
-/** Trần chờ request vào trạng thái bị holder chặn — PHẢI < `lock_timeout` 5s của tx giữ khoá. */
+/**
+ * Trần chờ request vào trạng thái bị holder chặn. (`lock_timeout` 5s của tx giữ khoá chỉ chặn trên
+ * lúc CHÍNH holder chờ khoá — câu `mutate` — KHÔNG giới hạn thời gian nó giữ khoá; khoá nhả ở `finally`.)
+ */
 const WAIT_LOCK_MS = 3_000;
+/** Trần phân định «trả lời» hay «xếp hàng sau khoá» (O-x/P-x) — ca đúng thoát sớm, chỉ ca hỏng chạm trần. */
+const DECIDE_MS = 10_000;
 /** Ca đua: route nhóm KHÔNG có `lock_timeout` (plan §2 M12) — trần riêng rộng hơn `testTimeout`. */
 const RACE_TIMEOUT_MS = 30_000;
 
@@ -82,6 +89,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
   /** Admin của nhóm KIÊM `manage:feed-group` — ca D1. */
   let mgr: Actor;
   let u1: Actor;
+  /** Cặp nền, KHÔNG có hàng trong nhóm nào — ca O-x (404 TRƯỚC khoá). */
+  let outsider: Actor;
 
   const http = () => request(app.getHttpServer());
   const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
@@ -229,6 +238,49 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
     }
   }
 
+  /**
+   * Phóng request KHI holder đang giữ khoá hàng nhóm (CHƯA nhả) rồi phân định điều nào xảy ra TRƯỚC:
+   * response về (`queued:false` — request KHÔNG chạm khoá) hay request bị CHÍNH holder chặn
+   * (`queued:true`). Route nhóm không có `lock_timeout` (plan §2 M12) ⇒ request đã xếp hàng KHÔNG thể
+   * trả lời trước khi khoá nhả: phân định tất định, không dựa vào thời gian. Sau đó `ROLLBACK` (không
+   * đổi gì) và trả response. `finally` cùng khuôn `raceGroup`: nhả khoá TRƯỚC, rồi chờ request.
+   */
+  async function fireUnderLock(
+    groupId: string,
+    fire: () => request.Test,
+  ): Promise<{ queued: boolean; res: request.Response }> {
+    const hold = await holdGroupLock(groupId);
+    let released = false;
+    let settled: Promise<unknown> | undefined;
+    try {
+      let responded = false;
+      const reqP = fire().then(
+        (r) => {
+          responded = true;
+          return r;
+        },
+        (err: unknown) => {
+          responded = true;
+          throw err;
+        },
+      );
+      settled = Promise.allSettled([reqP]);
+      let queued = false;
+      const deadline = Date.now() + DECIDE_MS;
+      while (!responded && !queued && Date.now() < deadline) {
+        queued = (await countBlockedBy(direct, hold.pid)) > 0;
+        if (!queued && !responded) await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(responded || queued, "request phải TRẢ LỜI hoặc BỊ holder chặn trong trần").toBe(true);
+      await releaseHeld(hold, true);
+      released = true;
+      return { queued, res: await reqP };
+    } finally {
+      if (!released) await releaseHeld(hold, true);
+      if (settled) await settled;
+    }
+  }
+
   /** Đúng hình dạng một `038` thật: đổi hàng thành viên TRONG tx đang giữ khoá hàng nhóm. */
   const demote =
     (groupId: string, userId: string, role: GroupRole) =>
@@ -307,6 +359,48 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
     );
   }
 
+  /** 404 «không tìm thấy nhóm» — byte giống hệt nhóm không tồn tại (luật (a) 404 TRƯỚC 403). */
+  function expectGroupHidden(res: request.Response, label: string): void {
+    expect(res.status, `${label} — ${JSON.stringify(res.body)}`).toBe(404);
+    expect(res.body?.error?.code, `${label}: error.code`).toBe(SOCIAL_ERROR_CODES.GROUP_NOT_FOUND);
+    expect(res.body?.error?.message, `${label}: error.message`).toBe(SOCIAL_ERR.GROUP_NOT_FOUND);
+  }
+
+  /**
+   * Bốn route GHI theo vai cho ca O-x/P-x, trên nhóm của `groupWithAdmin(adminA)`; `038`/`039` nhắm
+   * `adminA` (CÓ hàng trong nhóm ⇒ 404 chỉ có thể đến từ cổng nhìn-thấy-nhóm). `audit` = action route
+   * ghi khi thành công; `033` không assert sổ: chỉ ghi khi `viaManage` ⇒ rỗng cả khi 200 (plan §10 F5).
+   */
+  const WRITE_ROUTES: ReadonlyArray<{
+    route: string;
+    audit: string | null;
+    fire: (who: Actor, g: string) => request.Test;
+  }> = [
+    {
+      route: "033",
+      audit: null,
+      fire: (who, g) => patch(who.token, `/social/groups/${g}`).send({ visibility: "public" }),
+    },
+    {
+      route: "034",
+      audit: "social.group.deleted",
+      fire: (who, g) => del(who.token, `/social/groups/${g}`),
+    },
+    {
+      route: "038",
+      audit: "social.group_member.role_changed",
+      fire: (who, g) =>
+        patch(who.token, `/social/groups/${g}/members/${adminA.userId}`).send({ role: "member" }),
+    },
+    {
+      route: "039",
+      audit: "social.group_member.removed",
+      fire: (who, g) => del(who.token, `/social/groups/${g}/members/${adminA.userId}`),
+    },
+  ];
+  /** `[mã route, ca]` — `%s` cho tên ca không ngoặc (`-t "O-033"` lọc được). */
+  const ROUTE_CASES = WRITE_ROUTES.map((r) => [r.route, r] as const);
+
   /** Nhóm kín có HAI owner (ca `034`): hạ vai/xoá không chạm bất biến ≥1 owner. */
   const groupWithTwoOwners = (): Promise<string> =>
     seedGroup("private", [
@@ -338,6 +432,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
     adminB = await makeUser("adminb", hash);
     mgr = await makeUser("mgr", hash, MANAGE_PAIRS);
     u1 = await makeUser("u1", hash);
+    outsider = await makeUser("outsider", hash);
   }, 240_000);
 
   afterAll(async () => {
@@ -525,6 +620,47 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
         role: "member",
         status: "active",
       });
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  // ──────── 404 TRƯỚC khoá (security-reviewer, FULL gate lượt 1) — luật (a) + plan §3 ────────
+
+  /**
+   * 🔴 O-x — người NGOÀI nhóm KÍN trên route GHI theo vai: 404 ERR-012 (không phải 403 — phân biệt
+   * được là xác nhận nhóm kín tồn tại) và trả lời KHI khoá hàng nhóm còn bị giữ (cổng 404 chạy TRƯỚC
+   * khoá ⇒ không bao giờ xếp hàng chặn `035`–`039`/`002` của nhóm). Đối chứng: P-x.
+   */
+  it.each(ROUTE_CASES)(
+    "O-%s: người NGOÀI nhóm kín ⇒ 404 ERR-012 ngay khi khoá hàng nhóm còn giữ; không đổi gì",
+    async (_route, { fire, audit }) => {
+      const g = await groupWithAdmin(adminA);
+      const before = await groupRow(g);
+      const { queued, res } = await fireUnderLock(g, () => fire(outsider, g));
+      expectGroupHidden(res, "người ngoài nhóm kín phải 404 (404 TRƯỚC 403)");
+      expect(queued, "người ngoài nhóm kín KHÔNG được chạm khoá hàng nhóm").toBe(false);
+      expect(await groupRow(g), "hàng nhóm không đổi").toEqual(before);
+      expect(await memberRow(g, adminA.userId)).toEqual({ role: "admin", status: "active" });
+      if (audit) expect(await auditRows(g, audit), `0 audit ${audit}`).toHaveLength(0);
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  /**
+   * P-x — đối chứng của O-x: THÀNH VIÊN thường qua được cổng 404 nên XẾP HÀNG sau khoá (chứng minh
+   * phép phân định «trả lời / xếp hàng» thấy được việc chạm khoá) rồi nhận 403 ERR-014 (nhánh 403 tới
+   * được ⇒ 404 ở O-x là do cổng nhìn-thấy-nhóm, không do route hỏng).
+   */
+  it.each(ROUTE_CASES)(
+    "P-%s: thành viên thường XẾP HÀNG sau khoá rồi 403 ERR-014 (đối chứng của O-x cùng route)",
+    async (_route, { fire }) => {
+      const g = await groupWithAdmin(adminA);
+      const before = await groupRow(g);
+      const { queued, res } = await fireUnderLock(g, () => fire(u1, g));
+      expect(queued, "thành viên PHẢI tới khoá hàng nhóm (đọc vai SAU khoá)").toBe(true);
+      expectRoleDenied(res, "thành viên thường phải 403");
+      expect(await groupRow(g), "hàng nhóm không đổi").toEqual(before);
+      expect(await memberRow(g, adminA.userId)).toEqual({ role: "admin", status: "active" });
     },
     RACE_TIMEOUT_MS,
   );

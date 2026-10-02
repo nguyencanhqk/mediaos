@@ -149,13 +149,23 @@ export class SocialGroupAccessService {
    *
    * ⚠️ **CỐ Ý KHÔNG lọc `deleted_at IS NULL`** — miễn trừ DUY NHẤT của luật D13 (W4). Neo phải khoá
    * được cả nhóm vừa bị xoá mềm; thêm vế đó vào là mở lại cửa đua đúng lúc nhóm đang bị xoá.
+   *
+   * @throws NotFoundException (404 `SOCIAL-ERR-012`) khi câu khoá khớp 0 hàng (S16-SOCIAL-GROUPTOCTOU-1,
+   *   FULL gate lượt 1). Hôm nay không tới được — mọi caller đã thấy nhóm còn sống, `company_id` bất
+   *   biến, không xoá cứng. Nhưng một policy RLS tách riêng cho UPDATE (PG áp `USING` của nó lên
+   *   `SELECT … FOR UPDATE`) hay `companyId` lệch sẽ biến neo thành khoá RỖNG: «đọc vai SAU khoá» chỉ
+   *   còn là tên gọi, TOCTOU trở lại mà không lỗi, không log. Đếm theo hàng TỒN TẠI, không theo
+   *   `deleted_at` ⇒ miễn trừ W4 giữ nguyên.
    */
   async lockGroupRowTx(tx: TenantTx, companyId: string, groupId: string): Promise<void> {
-    await tx.execute(
+    const locked = await tx.execute(
       sql`SELECT 1 FROM ${feedGroups}
            WHERE company_id = ${companyId} AND id = ${groupId}
            FOR UPDATE`,
     );
+    if (locked.rows.length !== 1) {
+      throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
+    }
   }
 
   /**
@@ -173,7 +183,12 @@ export class SocialGroupAccessService {
    * (API-19 §5.1 dòng 107), đánh giá trên hàng đọc SAU khoá (owner ký D1=(a) 02/10/2026). Hàng của actor
    * biến mất giữa chừng ⇒ 403 `ERR-014`, không 404 (D3=(a)): actor đã qua cổng 404 lúc request bắt đầu.
    *
-   * ⚠️ Gọi SAU `assertGroupVisibleTx` (404 TRƯỚC 403): người ngoài nhóm kín không bao giờ chạm khoá.
+   * ⚠️ Gọi SAU `assertGroupVisibleTx` (404 TRƯỚC 403): người ngoài nhóm kín không bao giờ chạm khoá
+   * (lưới: U3 thứ tự cổng + ca O-x/P-x của `social-grouptoctou-race.int-spec.ts`).
+   *
+   * ⚠️ Dựa vào READ COMMITTED (mặc định của `withTenant`, đo M1): mỗi câu một snapshot MỚI nên câu đọc
+   * vai sau khoá thấy thay đổi tx giữ khoá đã commit. Dưới REPEATABLE READ nó dùng lại snapshot TRƯỚC
+   * khoá — vai cũ, không 40001 vì tx giữ khoá chỉ khoá hàng nhóm (D-1 sẽ đỏ).
    *
    * @returns `{ membership, viaManage }` của lượt đọc SAU khoá — `viaManage` là nguồn quyền LÚC COMMIT,
    *   caller ghi đúng giá trị này vào `audit_logs`.

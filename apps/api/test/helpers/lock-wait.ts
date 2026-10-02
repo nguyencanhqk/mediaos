@@ -25,17 +25,25 @@ import type { Pool } from "pg";
  * ⚠️ `directPool()` có `max: 4` (`integration-db.ts`). Ca nào giữ NHIỀU client cùng lúc (holder +
  * waiter tự dựng) phải lấy chúng từ pool RIÊNG rồi `end()` trong `finally` — giữ đủ 4 client của
  * `direct` rồi gọi hàm ở đây là câu đếm thứ 5 TREO tới hết `testTimeout` (M26).
+ *
+ * ⚠️ `pg_blocking_pids()` lấy LWLock của lock manager TOÀN instance (instance này cũng phục vụ DB
+ * PROD). Câu đếm vì vậy CHỐT trước tập ứng viên — backend CÙNG DB đang chờ khoá nặng
+ * (`wait_event_type='Lock'`; chỉ chúng mới có thể bị chặn) — trong CTE `MATERIALIZED`, rồi mới gọi
+ * hàm trên tập đó. Bản đầu gọi hàm cho MỌI backend của cluster: planner đặt filter chứa hàm lên
+ * function scan `pg_stat_get_activity`, TRƯỚC phép nối lọc `datname` (database-reviewer, FULL gate
+ * lượt 1 — `EXPLAIN (ANALYZE, VERBOSE)`: «Rows Removed by Filter» = mọi backend của 2 DB).
  */
 
 const POLL_MS = 25;
 
 /** Bao đóng bắc cầu của «bị `$1` chặn», chỉ trong DB hiện tại. KHÔNG đọc `query`. */
-const BLOCKED_BY_SQL = `WITH RECURSIVE blocked(pid) AS (
+const BLOCKED_BY_SQL = `WITH RECURSIVE lane AS MATERIALIZED (
     SELECT a.pid FROM pg_stat_activity a
-     WHERE a.datname = current_database() AND $1::int = ANY(pg_blocking_pids(a.pid))
+     WHERE a.datname = current_database() AND a.wait_event_type = 'Lock'
+  ), blocked(pid) AS (
+    SELECT l.pid FROM lane l WHERE $1::int = ANY(pg_blocking_pids(l.pid))
     UNION
-    SELECT a.pid FROM pg_stat_activity a JOIN blocked b ON b.pid = ANY(pg_blocking_pids(a.pid))
-     WHERE a.datname = current_database()
+    SELECT l.pid FROM lane l JOIN blocked b ON b.pid = ANY(pg_blocking_pids(l.pid))
   ) SELECT count(*)::int AS n FROM blocked`;
 
 /** Số backend CÙNG DB bị `holderPid` chặn trực tiếp hoặc bắc cầu. */

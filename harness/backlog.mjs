@@ -17751,7 +17751,7 @@ export const backlog = [
     module: "SOCIAL",
     layer: "BE",
     title:
-      "Route nhóm `033`–`039` (+ `002` bài nhóm) chờ khoá hàng `feed_groups` KHÔNG cận trên (`lock_timeout=0`) — một tx treo làm đứng mọi thao tác của nhóm, không lỗi/không log",
+      "Route nhóm `033`–`039` (+ `002` bài nhóm) chờ khoá hàng `feed_groups` KHÔNG cận trên (`lock_timeout=0`) — một tx treo làm đứng mọi thao tác của nhóm, và khi waiter dồn lại thì CẢ API (mỗi waiter giữ 1/20 kết nối pool, không `connectionTimeoutMillis`), không lỗi/không log",
     zone: "red",
     status: "todo",
     paths: [
@@ -17768,9 +17768,11 @@ export const backlog = [
     src: ["plan S16-SOCIAL-GROUPTOCTOU-1 D4/N1 — đo M1/M12/M23"],
     done_when: [
       "`SET LOCAL lock_timeout` trên mọi tx route nhóm khoá `feed_groups` + dịch `55P03` ⇒ 409 mã sentinel (khuôn `029` REPORT_BUSY) + census mã lỗi + FE xử lý; ca tất định (harness `test/helpers/lock-wait.ts`): holder giữ khoá quá trần ⇒ 409 đúng mã, không 500, không treo",
+      "N6 (database-reviewer, FULL gate lượt 1 của GROUPTOCTOU-1): đo rồi quyết hạ `lockGroupRowTx` xuống `FOR NO KEY UPDATE` — `FOR UPDATE` xung đột `FOR KEY SHARE` của RI khi `002`/`035` INSERT ⇒ từ GROUPTOCTOU-1 `033`/`034` chờ MỌI bài nhóm đang đăng và bài mới xếp hàng sau chúng (probe: holder INSERT `feed_group_members` chưa commit ⇒ `SELECT … FOR UPDATE` 55P03 sau 704ms ở `lock_timeout` 700ms; `FOR NO KEY UPDATE` qua). Ca LM-1 (`social-group-access.int.spec.ts` — hai `lockGroupRowTx` PHẢI chặn nhau) phải còn XANH; hạ mode thì vá N2 (`S16-SOCIAL-POSTGROUPTOCTOU-1`) PHẢI khoá nhóm bằng `FOR SHARE` (KEY SHARE không xung đột NO KEY UPDATE)",
     ],
     notes: [
       "🔴 FULL gate. Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (plan §6 D4 — owner ký (a): WO riêng). Bề mặt khoá rộng thêm từ GROUPTOCTOU-1: `033`/`034` nay cũng `FOR UPDATE` hàng nhóm trước khi đọc vai.",
+      "FULL gate lượt 1 của GROUPTOCTOU-1 (02/10/2026): + N6 (done_when 2) · tầm ảnh hưởng sửa ở title — waiter xếp hàng mỗi cái giữ một kết nối pool (`db/index.ts` max 20) ⇒ một holder kẹt có thể đứng CẢ API, không chỉ một nhóm.",
     ],
   },
   {
@@ -17795,10 +17797,32 @@ export const backlog = [
     ],
     done_when: [
       "Kiểm `deleted_at` SAU khoá ở `038`/`039` ⇒ 404 `SOCIAL-ERR-012`, KHÔNG đổi `lockGroupRowTx` (miễn trừ W4 giữ nguyên — lý lẽ ghi vào plan); ca tất định bằng harness `test/helpers/lock-wait.ts` (holder `UPDATE feed_groups SET deleted_at = now()` trong tx giữ khoá) ⇒ 404 + hàng thành viên không đổi + 0 audit, có đối chứng dương",
-      "Rà `035`/`036`: cùng hình dạng (`findLiveGroupTx` TRƯỚC `lockGroupRowTx`) — CHƯA đo; đo rồi quyết gộp hay tách",
+      "Rà `035`/`036`: cùng hình dạng (`findLiveGroupTx` TRƯỚC `lockGroupRowTx`) — CHƯA đo `deleted_at`; KÈM `035` quyết `status` từ `visibility` đọc TRƯỚC khoá: nhóm `public→private` commit trong lúc join chờ khoá ⇒ hàng `active` trong nhóm ĐÃ kín, bỏ qua duyệt (security-reviewer FULL gate lượt 1 GROUPTOCTOU-1 đo bằng `lock-wait.ts`: 201, `visibility='private'`, `myStatus='active'`; trạng thái cuối khớp thứ tự tuần tự «join rồi đổi» ⇒ độ trễ thu hồi cùng lớp, không lộ thêm) — đo rồi quyết gộp hay tách",
     ],
     notes: [
       "🔴 FULL gate (đụng neo khoá D6-ii của BE-2A). Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (plan §6 D5 — owner ký (a): WO riêng; không phải lỗi quyền).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-POSTGROUPTOCTOU-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "`002` đăng bài vào nhóm: `assertWriteAudience` đọc membership KHÔNG khoá hàng nhóm rồi `INSERT feed_posts` — INSERT chờ khoá RI sau một `039` mời ra rồi chạy tiếp ⇒ người VỪA bị mời ra vẫn đăng được bài vào nhóm kín (cùng lớp TOCTOU của GROUPTOCTOU-1, nợ N2)",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/social/**", "apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-GROUPTOCTOU-1"],
+    src: [
+      "plan S16-SOCIAL-GROUPTOCTOU-1 §7 N2 — đo M23 (`insert into feed_posts` chờ khoá hàng nhóm, `transactionid`: RI `FOR KEY SHARE` của FK `feed_posts.group_id`) · FULL gate lượt 1 (security-reviewer LOW · silent-failure-hunter MEDIUM): `social-access.service.ts` `assertWriteAudience` nhánh `group` → `social-posts.service.ts` `create` rồi INSERT",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (RED) bằng harness `test/helpers/lock-wait.ts`: holder khoá hàng nhóm kín + `DELETE` hàng thành viên X trong CÙNG tx (hình dạng `039`); X `POST /social/posts {audience:'group', groupId}` bị CHÍNH holder chặn ⇒ `COMMIT` ⇒ hôm nay 201 (bài của người KHÔNG còn là thành viên nằm trong nhóm kín)",
+      "Vá: nhánh `group` của `002` khoá hàng `feed_groups` bằng `FOR SHARE` SAU cổng 404 (`assertGroupVisibleTx` — người ngoài nhóm kín không chạm khoá, luật (a)) và TRƯỚC câu đọc membership ⇒ X bị mời ra giữa chừng nhận 403 `SOCIAL-ERR-002` (khuôn D3=(a) của GROUPTOCTOU-1). `FOR SHARE` chờ sau `FOR UPDATE`/`FOR NO KEY UPDATE` của `038`/`039` mà KHÔNG serialize các bài đăng đồng thời; KHÔNG dùng `FOR KEY SHARE` (không xung đột `FOR NO KEY UPDATE` nếu GROUPLOCKTIMEOUT-1 hạ mode khoá — N6). Đối chứng dương (thành viên còn ⇒ 201) + mutant bỏ khoá ⇒ đỏ đúng thông điệp",
+    ],
+    notes: [
+      "🔴 FULL gate (cổng ghi bài vào nhóm). Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (FULL gate lượt 1; owner D7=(a): seed nợ trong CÙNG PR).",
     ],
   },
   {

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import type { TenantTx } from "../db/db.service";
 import { SocialGroupAccessService } from "./social-group-access.service";
@@ -16,7 +16,9 @@ import type { FeedGroupRole, SocialGroupActor, SocialGroupMembership } from "./s
  * - U1: `lockAndAssertGroupRoleTx` KHOÁ rồi mới ĐỌC (đảo thứ tự = TOCTOU nguyên vẹn).
  * - U2: nguồn quyền (`viaManage`) suy từ hàng ĐỌC SAU khoá (owner ký D1=(a)).
  * - U3: CẤU TRÚC theo THÂN HÀM của `social-groups.service.ts` — route nào gọi cổng nào. Đếm theo
- *   file thì hoán đổi cổng giữa hai route vẫn xanh (plan §10 F4, mutant M-8).
+ *   file thì hoán đổi cổng giữa hai route vẫn xanh (plan §10 F4, mutant M-8). Kèm thứ tự cổng 404
+ *   TRƯỚC khoá ở 4 route ghi (FULL gate lượt 1 — lưới HTTP: ca O-x/P-x của race int-spec).
+ * - U4: `lockGroupRowTx` khớp 0 hàng ⇒ 404, không «khoá» rỗng im lặng (FULL gate lượt 1).
  */
 
 const TX = {} as TenantTx;
@@ -105,6 +107,40 @@ describe("U2 — nguồn quyền theo hàng ĐỌC SAU khoá (D1=(a): «vai ho�
   });
 });
 
+describe("U4 — lockGroupRowTx khoá ĐÚNG một hàng, không thì 404 (neo rỗng = TOCTOU trở lại im lặng)", () => {
+  /** `tx` giả: `execute` trả `rows` cho trước (hàm thật, chỉ câu SQL bị thay). */
+  const txReturning = (rows: unknown[]) => {
+    const execute = vi.fn().mockResolvedValue({ rows });
+    return { tx: { execute } as unknown as TenantTx, execute };
+  };
+
+  it("khớp 0 hàng (tenant lệch · policy RLS chặn FOR UPDATE · không tồn tại) ⇒ 404 SOCIAL-ERR-012", async () => {
+    const { tx, execute } = txReturning([]);
+    const err = await new SocialGroupAccessService()
+      .lockGroupRowTx(tx, actor(false).companyId, GROUP_ID)
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(err, "neo khoá khớp 0 hàng phải NÉM — không được coi như đã khoá").toBeInstanceOf(
+      NotFoundException,
+    );
+    expect((err as NotFoundException).getResponse()).toEqual({
+      code: "SOCIAL-ERR-012",
+      message: SOCIAL_ERR.GROUP_NOT_FOUND,
+    });
+  });
+
+  it("đối chứng: khớp đúng 1 hàng ⇒ trả về bình thường", async () => {
+    const { tx, execute } = txReturning([{ "?column?": 1 }]);
+    await expect(
+      new SocialGroupAccessService().lockGroupRowTx(tx, actor(false).companyId, GROUP_ID),
+    ).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ─────────────────────────────── U3 — cấu trúc ───────────────────────────────
 
 /** Bỏ comment — luật nói về CODE, không về văn xuôi giải thích luật (khuôn `social-poll-flags-structure.spec.ts`). */
@@ -175,6 +211,22 @@ describe("U3 — cổng vai nhóm theo THÂN HÀM của social-groups.service.ts
       expect(lockAt, `${name}: lockAndAssertGroupRoleTx`).toBeGreaterThanOrEqual(0);
       expect(targetReadAt, `${name}: getMembershipTx (target)`).toBeGreaterThanOrEqual(0);
       expect(lockAt, `${name}: khoá phải trước đọc target`).toBeLessThan(targetReadAt);
+    },
+  );
+
+  /**
+   * Luật (a) «404 TRƯỚC 403» ở 4 route GHI theo vai: cổng nhìn-thấy-nhóm chạy ĐÚNG một lần và ĐỨNG
+   * TRƯỚC khoá + đọc vai ⇒ người ngoài nhóm kín nhận 404 và không bao giờ chạm khoá hàng nhóm.
+   */
+  it.each(["update", "remove", "decideMember", "removeMember"])(
+    "%s: cổng 404 `assertGroupVisibleTx` ĐỨNG TRƯỚC `lockAndAssertGroupRoleTx`",
+    (name) => {
+      const text = BODIES.get(name) ?? "";
+      expect(countOf(text, /\bassertGroupVisibleTx\(/g), `${name}: assertGroupVisibleTx`).toBe(1);
+      const visibleAt = text.search(/\bassertGroupVisibleTx\(/);
+      const lockAt = text.search(/\blockAndAssertGroupRoleTx\(/);
+      expect(lockAt, `${name}: lockAndAssertGroupRoleTx`).toBeGreaterThanOrEqual(0);
+      expect(visibleAt, `${name}: cổng 404 phải đứng TRƯỚC khoá + đọc vai`).toBeLessThan(lockAt);
     },
   );
 
