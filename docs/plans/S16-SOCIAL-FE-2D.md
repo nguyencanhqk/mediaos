@@ -1,6 +1,7 @@
 # S16-SOCIAL-FE-2D — FE nợ nội dung SOCIAL: đính kèm (054/055) · @mention thành link · `droppedMentions` của bình luận
 
-> Trạng thái: **plan v2 (02/10/2026)** — đã vá `plan-reviewer` lượt 1 (PASS, 3 MAJOR + 7 MINOR — §10); chờ owner ký §6.
+> Trạng thái: **plan v2 (02/10/2026)** — đã vá `plan-reviewer` lượt 1 (PASS, 3 MAJOR + 7 MINOR — §10); owner ký §6
+> 02/10/2026 (mọi khuyến nghị). FULL gate lượt 1 (typescript-reviewer + security-reviewer, cả hai PASS) — xử lý ở §11.
 > Nhánh `feat/s16-social-fe-2d` cắt từ master `14afbb5f`. Zone amber. Gate: lát **B** = LIGHT (`typescript-reviewer` +
 > `react-reviewer` + `quality-gate`); lát **A** = LIGHT **+ `security-reviewer`** (tệp người dùng + PUT ra storage ngoài —
 > luật kích hoạt security chung, §10 #10). FE-only: KHÔNG migration, KHÔNG cặp quyền mới, KHÔNG sửa `apps/api`. Quyền chỉ
@@ -102,8 +103,12 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 ## 3. Bất biến phải giữ
 
 - **company_id / RLS**: FE không gửi `companyId`; tenant do server lấy từ token (`social-files.service.ts:110-121`).
-- **Masking ở SERVER**: đính kèm `url:null` (presign bị từ chối) ⇒ **KHÔNG vẽ gì** cho tệp đó (ảnh · video · tệp) — một ô
-  «có tệp mà bạn không xem được» là rò sự tồn tại (luật `buildImageGrid`, `feed-format.ts:55-62`), mở rộng cho cả video/tệp.
+- **Ẩn ở CLIENT — server CHƯA che metadata** (sửa lời ở FULL gate lượt 1, §11): đính kèm `url:null` (presign bị từ chối)
+  ⇒ **KHÔNG vẽ gì** cho tệp đó (ảnh · video · tệp) — một ô «có tệp mà bạn không xem được» là rò sự tồn tại (luật
+  `buildImageGrid`, `feed-format.ts:55-62`), mở rộng cho cả video/tệp. ⚠️ Bản v2 ghi «Masking ở SERVER» là SAI: server vẫn
+  trả `fileId`/`kind`/`fileName`/`sizeBytes` của phần tử `url:null` (`social-attachments.service.ts:541-550`) và payload
+  WS phát metadata đính kèm cho cả công ty (`social-posts.service.ts:848`, `social-comments.service.ts:544`) ⇒ lọc của FE
+  là lưới DUY NHẤT hôm nay; che ở server = nợ BE `S16-SOCIAL-ATTMETAMASK-1`.
 - **Mention chỉ link khi server nói `withheld:false`**; đích link lấy từ `employeeId` của SERVER, chữ hiển thị là chữ NGUYÊN
   VĂN trong `body` (không chuẩn hoá chuỗi hiển thị, M28). `withheld:true` ⇒ SPAN, không tra theo tên ở FE (oracle `ERR-009`).
 - **WS = DTO**: FE không đọc thân bài từ payload WS (`use-feed-realtime` chỉ đếm) — không đổi.
@@ -117,7 +122,8 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
   **VÀ** phải khớp `^https?://` (không phân biệt hoa thường — cùng tư thế `URL_RE`, `parse-feed-body.ts:52`) — lệch ⇒ coi
   như `url:null` (không vẽ). **Giả định ghi rõ (M32):** (a) allowlist MIME không có `text/html`/`image/svg+xml`; (b) storage
   phục vụ ở origin KHÁC app. Hai giả định này là của BE/cấu hình, FE không ép được ⇒ nợ G8 (Content-Disposition
-  `attachment` cho loại không phải media) PHẢI xong trước khi bất kỳ công ty nào mở rộng allowlist.
+  `attachment` cho loại không phải media) PHẢI xong trước khi bất kỳ công ty nào mở rộng allowlist — WO riêng
+  `S16-SOCIAL-FILEDISPOSITION-1` (seed ở FULL gate lượt 1, §11; allowlist đổi được THEO CÔNG TY lúc chạy, không migration).
 - **Không rò storage credential**: PUT lên storage qua `putBytesToStorage` (`credentials:'omit'`), không qua `apiFetch`.
 - **Không tải ngầm khi ô soạn không dùng được** (v2, D10): `locked`/mất quyền lật ⇒ huỷ lượt tải đang bay + dọn khay.
 
@@ -332,14 +338,16 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 - **G3 (BE)** `SOCIAL-ERR-007` gộp LIMIT + INVALID (M9) ⇒ D6.
 - **G4 (BE)** đường SỬA `004`/`016` chỉ đếm trần trên tệp MỚI (`assertLinkableFilesTx(toAdd)`, `social-attachments.service.ts:445`)
   ⇒ 10 ảnh cũ + 1 ảnh mới = 11 ảnh lọt. FE chưa có UI sửa nên chưa chạm.
-- **G5 (BE)** tệp `Pending`/`Uploaded` mồ côi khi người dùng gỡ/bỏ nháp/khoá bình luận (D10) — job dọn chưa có
-  (`files.service.ts:59-64`, TODO S2-FND-JOBS-1).
+- **G5 (BE)** tệp `Pending`/`Uploaded` mồ côi khi người dùng gỡ/bỏ nháp/khoá bình luận (D10). Sửa lời ở FULL gate lượt 1
+  (§11): `TEMP_FILE_CLEANUP` CÓ (S2-FND-JOBS-1 done) nhưng chỉ dọn `Pending` quá TTL + tệp tạm hết hạn
+  (`temp-file-cleanup.repository.ts:115-133`); tệp `Uploaded` chưa bao giờ link KHÔNG ai dọn ⇒ `S16-SOCIAL-ORPHANUPLOAD-1`.
 - **G6 (BE)** TTL ký GET 300 s ⇒ FE chỉ giảm nhẹ bằng ô trung tính cho ẢNH **và VIDEO** (A8); video hết hạn GIỮA lúc phát/tua
   (range request 403) ⇒ ô trung tính thay trình phát, mất vị trí phát — sửa gốc là TTL/refetch-on-error ở BE.
 - **G7 (sản phẩm)** không có bài/bình luận CHỈ ảnh (M11).
 - **G8 (BE, v2)** URL ký GET không `ResponseContentDisposition` (M32) ⇒ tệp phục vụ inline; cần `attachment` (+ `nosniff`
   nếu storage hỗ trợ) cho loại KHÔNG phải ảnh/video, và chặn MIME `text/html`/`image/svg+xml` không phụ thuộc đuôi — PHẢI
-  xong trước khi mở allowlist (D2 đường video) hoặc proxy storage về cùng origin.
+  xong trước khi mở allowlist (D2 đường video) hoặc proxy storage về cùng origin. Tách thành WO đỏ riêng
+  `S16-SOCIAL-FILEDISPOSITION-1` ở FULL gate lượt 1 (§11); `S16-SOCIAL-VIDEOMIME-1` giờ chờ WO đó.
 - **G9 (UX, v2)** `.csv` có thể bị trình duyệt Windows báo `application/vnd.ms-excel` (M34, CHƯA đo) ⇒ 415 `unsupportedType`
   dù CSV nằm trong allowlist. Sửa ở BE (thêm alias MIME) hoặc FE ánh xạ theo đuôi — quyết định của WO sau, kèm phép đo thật.
 - **FE**: UI sửa bài/bình luận kèm tệp (chưa có UI sửa — grep `updatePost` app = 0) · kéo-thả/dán tệp · lightbox ảnh ·
@@ -383,7 +391,7 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | R3 | Sửa chữ sau một lượt gửi mà server đã tạo bài (mất response) ⇒ khoá idempotency mới ⇒ tệp đã link ⇒ 422 `007` | câu `attachmentRejected` nói «tệp đã dùng / không hợp lệ»; ghi PR |
 | R4 | `useCan` mù scope (M15) ⇒ vai @Department thấy nút rồi 403 ở 054 | reason `attachDenied` nói đúng lý do (API ≥ #554) |
 | R5 | jsdom thiếu `createObjectURL` (M16), cảnh báo `act` với tải bất đồng bộ | stub trong spec; chờ trạng thái ô trước khi kết thúc ca |
-| R6 | Trùng tên người: phần tử `withheld` vô danh + phần tử link cùng nhãn ⇒ có thể link nhầm người cùng tên | chấp nhận có ghi — không lộ thêm gì (người được link vốn hiện được); nhãn trùng giữa 2 phần tử link ⇒ span (P3) |
+| R6 | Trùng tên người: phần tử `withheld` vô danh + phần tử link cùng nhãn ⇒ có thể link nhầm người cùng tên | chấp nhận có ghi — không lộ thêm gì (người được link vốn hiện được); nhãn trùng giữa 2 phần tử link ⇒ span (P3). **FULL gate lượt 1:** cùng lớp với TIỀN TỐ — `@Nguyễn Văn An Bình` mà tên trọn là của phần tử rút (không nhãn) thì nhãn `Nguyễn Văn An` của người khác vẫn link nửa tên (probe R-B1): FE KHÔNG chặn được vì server không gửi nhãn cho phần tử rút (và không được gửi — oracle `ERR-009`) ⇒ chấp nhận có ghi. Tên trọn MƠ HỒ giữa hai phần tử link thì CHẶN được (R-B2 — ca P3b, §11) |
 | R7 | Import chéo `@/components/chat/composer/use-attachment-previews` | chỉ import; TS bắt khi chat dời file |
 | R8 | 20 MB trên mạng chậm, không timeout PUT | nút gỡ = abort (F6) |
 | R9 (v2) | FE lên PROD trước API (M31) ⇒ nút đính kèm hiện mà 054 404, hoặc lý do lỗi rơi về chung | D11 — điều kiện merge theo `data.build.commit` |
@@ -410,3 +418,27 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 | 8 | MINOR · §4 A6/A7 | Không nói hook đặt đâu; `return` sớm | **Xác nhận** (`FeedComposer.tsx:131`, `CommentComposer.tsx:71-78`, M24) | A6/A7 chỉ chỗ đặt (sau `useState(sending)`, trước `return`); effect gate-lật; D10 (khuyến nghị huỷ + dọn khay, giữ `body`); ca K3c; mutant mA16 |
 | 9 | MINOR · §2 M5/D7 | M5 đo trên master, thi công sau #559 | **Xác nhận.** Đo trước trên head #559 `d88f7270` (M30): 0 ghi `socialKeys.posts.*`, chỉ `initialData` của `polls.results` ⇒ tiền đề đứng **hôm nay** | M30; §8 bước 0 đo lại sau rebase, thấy ghi `posts.*` ⇒ dừng, mở lại D3 |
 | 10 | MINOR · §4 A3/A4 | Thiếu ca: gỡ item xếp hàng; MIME csv Windows; security-reviewer | (1) **Xác nhận** — v1 không nói vòng tải xử lý item đã gỡ. (2) **Ghi nhận, CHƯA đo được** (phụ thuộc trình duyệt) — chỉ suy từ code (M34). (3) **Chấp nhận** — luật security chung phủ tệp/API ngoài | (1) A4 hàng đợi đọc lại tập sống; ca U2; mutant mA15. (2) nợ G9 + chú thích D2. (3) gate lát A thêm `security-reviewer` (đầu trang, §8) — zone giữ amber |
+
+## 11. FULL gate lượt 1 — xử lý (02/10/2026)
+
+> Reviewer: `typescript-reviewer` (PASS — 3 MEDIUM + 4 LOW) · `security-reviewer` (PASS — 3 MEDIUM + 1 LOW). Trùng: «Thử
+> lại vượt trần» do CẢ HAI nêu ⇒ 10 phát hiện riêng. Mỗi dòng đã kiểm lại trên code trước khi xử lý; vá hành vi đều có ca
+> RED đo trên code CŨ + mutant đỏ đúng thông điệp (sao lưu → cấy → khôi phục bằng bản sao + `cmp`). Lát B
+> (`S16-SOCIAL-MENTIONLINK-1`) vá trên `feat/s16-social-fe-2d`; lát A rebase lên đó rồi vá trên `feat/s16-social-fe-2d-a`.
+
+| # | Nguồn · mức | Phát hiện (tóm) | Kiểm lại | Xử lý |
+| --- | --- | --- | --- | --- |
+| G1 | ts + sec · MEDIUM | `retry(id)` đưa ô lỗi về hàng đợi KHÔNG kiểm lại trần; `planAttachmentAdds` không đếm ô lỗi ⇒ 11 tệp, 1 lỗi, thêm 1, «Thử lại» ⇒ 12 id (400 vô danh — M10) / 11 ảnh (422) | **Xác nhận** (`use-attachment-uploads.ts:170-177`, `attachment-draft.ts:96`) | Lát A — vá ở commit lát A (chi tiết điền ở đó) |
+| G2 | ts · MEDIUM | `<video src>` nhận URL ký MỚI mỗi lần refetch (`getSignedUrl` không ghim `signingDate`) ⇒ phần tử giữ nguyên, `src` đổi ⇒ trình duyệt nạp lại, mất vị trí phát | **Xác nhận** (`PostAttachments.tsx:85`; `invalidatePostLists` sau thả cảm xúc/lưu/bình luận…) — ngủ tới khi mở `video/*` | Lát A — vá ở commit lát A |
+| G3 | ts · MEDIUM | `failed` là boolean dính chặt — refetch mang URL mới vẫn không hồi ô ảnh/video | **Xác nhận** (`PostAttachments.tsx:51,74`) | Lát A — vá ở commit lát A |
+| G4 | ts · LOW | Nhãn mơ hồ bị LOẠI HẲN ⇒ nhãn ngắn của người thứ ba khớp nửa tên trọn (probe R-B2) | **Xác nhận** — `buildMentionLabels` bỏ nhãn `null` | **Lát B — ĐÃ VÁ:** nhãn mơ hồ giữ trong bảng làm CHẶN (`employeeId: null`; khớp đầu tiên mơ hồ ⇒ không link, không thử nhãn ngắn hơn). Ca **P3b** (DENY + 2 đối chứng). RED code cũ: `expected [ …(3) ] to deeply equal [ …(3) ]` (nhận link «@Nguyễn Văn An» → E3). Mutant lọc lại nhãn mơ hồ ⇒ P3b đỏ đúng thông điệp. Biến thể phần tử RÚT (R-B1): không chặn được — ghi R6 |
+| G5 | ts · LOW | a11y: (a) `trayAria` nói «bài» cả ở ô bình luận · (b) mọi «Thử lại» cùng tên · (c) `<video>` không tên · (d) vùng `role=status` mount CÙNG chữ | **Xác nhận** cả 4 (`ComposerAttachmentTray.tsx:76,121,155-163`, `PostAttachments.tsx:85`) | Lát A — vá ở commit lát A |
+| G6 | ts · LOW | Câu `attachmentRejected` chép cứng «10 ảnh · 1 video · 20 MB» — bản thứ hai không nối với hằng contracts | **Xác nhận** (`social.ts:484`) | Lát A — vá ở commit lát A |
+| G7 | ts · LOW | `findMentionLink(base)` dò lại MỌI `@` còn lại sau MỖI token ⇒ O(token × @) (probe R-B4 ~74 ms/lượt) | **Xác nhận** + đo lại (Node 24, `@A` × 2000 + 50 nhãn): **59,7 ms** trung vị; nhánh không `mentions` 1,6 ms | **Lát B — ĐÃ VÁ:** con trỏ (lượt dò trước còn hiệu lực tới khi `from` vượt match) ⇒ mỗi `@` đi qua một lần: **1,8 ms**. Ca **P8** đếm `indexOf("@")` (tất định). RED code cũ: `expected 80600 to be less than or equal to 800`. Mutant tắt con trỏ ⇒ P8 đỏ đúng thông điệp, đầu ra không đổi |
+| G8 | sec · MEDIUM | Tải về không `Content-Disposition` + allowlist MIME đổi được THEO CÔNG TY lúc chạy ⇒ XSS lưu trữ trên origin storage khi admin mở `text/html`/`image/svg+xml` | **Xác nhận** (`files.service.ts:889-893` `resolveMany(companyId…)`; `mime-extension.ts:37-41` thả lỏng khi không đuôi / MIME ngoài map); mặc định an toàn (`setting-defaults.ts:41-56`) | Ngoài phạm vi FE ⇒ seed 🔴 **`S16-SOCIAL-FILEDISPOSITION-1`** (BE) + ghi điều kiện merge vào notes FE-2D; `S16-SOCIAL-VIDEOMIME-1` chờ nó |
+| G9 | sec · MEDIUM | Phần tử `url:null` vẫn mang `fileName`/`sizeBytes`/`kind`/`fileId`; WS phát metadata cho cả công ty ⇒ «masking ở server» của §3 là sai | **Xác nhận** (`social-attachments.service.ts:541-550`; `social-posts.service.ts:848`; `social-comments.service.ts:544`) | Ngoài phạm vi FE ⇒ seed 🔴 **`S16-SOCIAL-ATTMETAMASK-1`** (BE); §3 sửa lời |
+| G10 | sec · LOW | Gỡ ô sau khi 055 xong ⇒ bytes + hàng `files` `Uploaded` ở lại mãi | **Xác nhận** + đo lại: `TEMP_FILE_CLEANUP` (S2-FND-JOBS-1 done) chỉ dọn `Pending` quá TTL + tệp tạm (`temp-file-cleanup.repository.ts:115-133`) | Ngoài phạm vi FE ⇒ seed **`S16-SOCIAL-ORPHANUPLOAD-1`** (BE, LOW); G5 §7 sửa lời |
+
+Ghi chú không phải phát hiện: (1) security-reviewer — DEVOPS-03 §13.3 ghi PROD/dev-online `S3_ENDPOINT=http://localhost:9000`;
+nếu đúng, URL ký PUT/GET trỏ về localhost của MÁY NGƯỜI DÙNG ⇒ ghi thành mục kiểm lúc merge (D11) trong notes FE-2D.
+(2) typescript-reviewer — tên tệp có ký tự đảo chiều (RTLO) hiển thị không cô lập; xử lý ở lát A.
