@@ -8,7 +8,13 @@
  * UUID trần của TOTP/reset — tách miền).
  */
 import { describe, expect, it } from "vitest";
-import { smtpSecretContext, type MailDestination } from "./mail-destination";
+import {
+  assertPersistedAsBound,
+  MailDestinationNotPersistedError,
+  smtpSecretContext,
+  type MailDestination,
+  type PersistedMailDestination,
+} from "./mail-destination";
 
 const COMPANY = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -123,4 +129,92 @@ describe("smtpSecretContext — ngữ cảnh mã hoá gắn (id, host, port, use
   it("luôn mở đầu bằng `[` — không bao giờ trùng recordId UUID trần của TOTP/reset (tách miền)", () => {
     expect(smtpSecretContext(COMPANY, ID, DEST).recordId.startsWith("[")).toBe(true);
   });
+});
+
+/**
+ * B4 (owner D4) + FULL gate lượt 1: bộ PG THẬT SỰ lưu (`RETURNING`) phải bằng bộ đã gắn vào ngữ cảnh mã hoá —
+ * companyId + id + 4 trường đích. Phân loại lỗi theo AI gây ra: đầu vào người dùng làm lệch được CHỈ host/
+ * username (chuỗi tự do — surrogate lẻ ⇒ PG lưu U+FFFD) ⇒ lỗi miền 400 mang TÊN trường; companyId/id/port/secure
+ * lệch thì không đầu vào nào gây ra được (uuid app-gen · số nguyên/boolean đã qua Zod) ⇒ lỗi lập trình/hệ thống
+ * (500 + stack ở filter), KHÔNG gói thành 400 «ký tự không hợp lệ».
+ */
+describe("assertPersistedAsBound — B4: bộ PG lưu = bộ đã gắn vào ngữ cảnh mã hoá", () => {
+  const BOUND = { companyId: COMPANY, recordId: ID };
+  const persisted = (over: Partial<PersistedMailDestination> = {}): PersistedMailDestination => ({
+    id: ID,
+    companyId: COMPANY,
+    ...DEST,
+    ...over,
+  });
+  const thrownBy = (act: () => void): unknown => {
+    try {
+      act();
+    } catch (err) {
+      return err;
+    }
+    return undefined;
+  };
+  const REPLACEMENT_CHAR = String.fromCharCode(0xfffd);
+  const OTHER_ID = "11111111-1111-4111-8111-111111111112";
+
+  it("đối chứng dương: companyId + id + 4 trường đích khớp ⇒ không ném", () => {
+    expect(thrownBy(() => assertPersistedAsBound(persisted(), BOUND, DEST))).toBeUndefined();
+  });
+
+  it("companyId đã gắn là chữ HOA (PG lưu company_id chữ thường) ⇒ lỗi LẬP TRÌNH (500), không phải lỗi miền 400; message không mang giá trị", () => {
+    const upper = COMPANY.toUpperCase();
+    expect(upper, "tiền điều kiện: hai dạng phải khác nhau").not.toBe(COMPANY);
+
+    const err = thrownBy(() =>
+      assertPersistedAsBound(persisted(), { ...BOUND, companyId: upper }, DEST),
+    );
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(MailDestinationNotPersistedError);
+    expect((err as Error).message).toMatch(/companyId/);
+    expect((err as Error).message.toLowerCase()).not.toContain(COMPANY);
+  });
+
+  it("id đã gắn KHÁC id PG lưu ⇒ lỗi LẬP TRÌNH (500), không phải lỗi miền 400", () => {
+    const err = thrownBy(() =>
+      assertPersistedAsBound(persisted(), { ...BOUND, recordId: OTHER_ID }, DEST),
+    );
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(MailDestinationNotPersistedError);
+    expect((err as Error).message).toMatch(/recordId/);
+  });
+
+  it.each([
+    ["port", { port: 588 }, "588"],
+    ["secure", { secure: true }, "true"],
+    ["port", { host: "smtp.other.test", port: 588 }, "smtp.other.test"],
+  ] as const)(
+    "PG lưu %s KHÁC giá trị đã gắn (đầu vào đã qua Zod không làm lệch được) ⇒ lỗi hệ thống (500) nêu TÊN trường, KHÔNG 400 «ký tự không hợp lệ»",
+    (field, drift, value) => {
+      const err = thrownBy(() => assertPersistedAsBound(persisted(drift), BOUND, DEST));
+
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(MailDestinationNotPersistedError);
+      expect((err as Error).message).toContain(field);
+      expect((err as Error).message).not.toContain(value);
+    },
+  );
+
+  it.each([
+    ["host", { host: `a${REPLACEMENT_CHAR}b.test` }, ["host"]],
+    ["username", { username: `mailer${REPLACEMENT_CHAR}@example.test` }, ["username"]],
+    ["host + username", { host: "h.test", username: "u@h.test" }, ["host", "username"]],
+  ] as const)(
+    "PG lưu %s KHÁC giá trị đã gắn (surrogate lẻ ⇒ U+FFFD) ⇒ MailDestinationNotPersistedError mang TÊN trường, không giá trị",
+    (_label, drift, fields) => {
+      const err = thrownBy(() => assertPersistedAsBound(persisted(drift), BOUND, DEST));
+
+      expect(err).toBeInstanceOf(MailDestinationNotPersistedError);
+      expect((err as MailDestinationNotPersistedError).changedFields).toEqual(fields);
+      for (const value of Object.values(drift)) {
+        expect((err as Error).message).not.toContain(String(value));
+      }
+    },
+  );
 });

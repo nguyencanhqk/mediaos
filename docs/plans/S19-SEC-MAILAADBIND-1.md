@@ -263,6 +263,12 @@ hai bên bằng nhau trừ ca surrogate lẻ (đã chặn ở B4).
   không nói cách chữa. Đề xuất: «Không dùng được mật khẩu đã lưu — vui lòng nhập lại mật khẩu SMTP rồi bấm Lưu.»
   FE in nguyên văn (M10) ⇒ không đổi FE/i18n. KHÔNG nói «đích đã bị đổi» (không phân biệt được với tamper/mất KEK,
   và không cần cho kẻ dò). **Khuyến nghị: đổi.**
+  **KÝ LẠI 02/10/2026 ~19:20** (owner, AskUserQuestion — trả lời FULL gate silent-failure HIGH, §12 G1): câu trên
+  bảo nhập lại mật khẩu NGAY, mà form console nạp sẵn đích của HÀNG (có thể đã bị tráo ngoài ứng dụng) ⇒ làm theo
+  là hoàn tất vụ rò B1 vừa chặn. Câu MỚI, nguyên văn: «Không dùng được mật khẩu đã lưu. Kiểm tra lại máy chủ, cổng,
+  tên đăng nhập và TLS (có thể đã bị thay đổi ngoài ứng dụng) trước khi nhập lại mật khẩu SMTP rồi bấm Lưu.» Hai
+  dòng log thẻ `smtp-envelope-unusable` (D3) thành TRUNG LẬP về nguyên nhân + bắt xác minh đích trước khi nhập lại.
+  Phát hiện tráo đích (so hàng với ảnh chụp audit, cảnh báo an ninh) = WO riêng `S19-SEC-MAILTAMPERDETECT-1`.
 - **D3 — Mức log giải mã thất bại** (không chặn). Sau WO, giải mã thất bại = vi phạm toàn vẹn (đích bị đổi ngoài
   app, envelope bị sửa, mất KEK) hoặc envelope định dạng cũ — không bao giờ là chuyện thường. Đề xuất `logger.error`
   có thẻ cố định (vd `smtp-envelope-unusable`) + company + config id ở CẢ HAI nơi (lời mời hiện thiếu config id —
@@ -339,10 +345,17 @@ hai bên bằng nhau trừ ca surrogate lẻ (đã chặn ở B4).
      gộp một lần** nếu #560 chưa deploy khi WO này merge — một lần đếm, một lần restart, không có bản PROD trung
      gian phải đếm lại. (Cửa sổ «PROD lưu cấu hình đầu tiên dưới ngữ cảnh cũ» đang mở ngay trên bản PROD hiện tại;
      gộp không tự đóng nó — thứ thu hẹp nó là deploy SỚM sau merge.)
-   - (c) **Cửa đếm**, ngay trước `m prod-update api`: `SELECT count(*) FROM company_mail_configs;` trên PROD
-     `mediaos`. **> 0 ⇒ theo D1 đã ký**: (a') nhập lại mật khẩu ngay sau deploy rồi «Kiểm tra kết nối» vắng mật
-     khẩu ⇒ `ok:true`; hoặc DỪNG + seed job (c). Đếm thêm trên DB dev-online: > 0 ⇒ sau deploy nhập lại mật khẩu
-     SMTP trên console (hoặc chấp nhận `emailSent:false` tới khi nhập).
+   - (c) **Cửa đếm**, ngay trước `m prod-update api`, trên PROD `mediaos` — câu TỰ CHỨNG MINH nó thấy mọi hàng
+     (§12 G8: FORCE RLS trả 0 GIẢ, không lỗi, cho role không bypass RLS hoặc qua PgBouncer không GUC):
+     `SELECT current_user, (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypasses_rls, (SELECT count(*) FROM public.company_mail_configs) AS n;`
+     — chỉ tin `n` khi `bypasses_rls = true` (khác ⇒ DỪNG, chạy lại bằng superuser qua kết nối DIRECT). Đối chứng
+     theo tenant (MAILCREDEXFIL §6), đi ĐÚNG đường RLS: với từng `id` của `SELECT id FROM companies`,
+     `BEGIN; SET LOCAL ROLE mediaos_app; SELECT set_config('app.current_company_id', '<id>', true); SELECT count(*) FROM company_mail_configs; COMMIT;`
+     — tổng phải bằng `n`. **`n` > 0 ⇒ theo D1 đã ký**: (a') sau deploy, admin công ty XÁC MINH đích (máy chủ/cổng/
+     tên đăng nhập/TLS) với nhà cung cấp hộp thư TRƯỚC (D2 ký lại), rồi nhập lại mật khẩu + «Kiểm tra kết nối» vắng
+     mật khẩu ⇒ `ok:true`; hoặc DỪNG + seed job (c). Đếm thêm trên DB dev-online (cùng câu): > 0 ⇒ sau deploy nhập
+     lại mật khẩu SMTP trên console (hoặc chấp nhận `emailSent:false` tới khi nhập). PUT «chỉ đổi người gửi» KHÔNG
+     kiểm envelope (trả 200 dù envelope ngữ cảnh cũ) — xác nhận chỉ bằng «Kiểm tra kết nối».
    - Diff WO này không thêm migration/route/FE; `m prod-update api` vẫn áp MỌI migration đang chờ (đó là cách 0591
      lên PROD ở (b)).
 
@@ -488,3 +501,99 @@ int-spec chạm mail-config / route settings / lời mời / người dùng enve
 security-mailconfig-http · routehttp3-foundation-settings · ui-config-deny · chat-be7-oversight · user-invites-flow
 · reset-token-envelope · secret-provisioning · secret-rotation · two-factor · two-factor-login) ⇒
 `Test Files 23 passed (23)` · `Tests 302 passed (302)`, 0 skip.
+
+## 12. FULL gate lượt 1 — xử lý (02/10/2026, tối)
+
+Nguồn (gộp trùng thành G1–G11): (1) ba reviewer xong TRƯỚC khi phiên điều phối khởi động lại 19:10 — security
+PASS (6 LOW) · database PASS (1 MEDIUM + 3 LOW) · silent-failure **BLOCK** (1 HIGH + 2 MEDIUM + 2 LOW); (2)
+security-reviewer lượt chạy lại (1 MEDIUM + 3 LOW). Mọi mục xác minh trên code TRƯỚC khi sửa. **§12 thắng §4.3,
+§5 và D4 ở §6 nơi khác nhau.**
+
+| #   | Mức (nguồn)                                                   | Phát hiện                                                                                                              | Xác minh                                                                                                                                                                                                                                                                                                                                                                   | Xử lý                                                                                                                                                                                                                                                                                                                         |
+| --- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1  | **HIGH** (silent-failure)                                     | Câu D2 + 2 dòng log bảo «nhập lại mật khẩu» ⇒ tín hiệu DUY NHẤT của một vụ tráo đích đọc như việc thường; làm theo = hoàn tất rò | **XÁC NHẬN**: console nạp sẵn đích của HÀNG (`apps/console/src/routes/settings/mail-config.tsx:167-171`); test CÓ mật khẩu đi thẳng tới đích trong body (`mail-config.service.ts:186-188`); PUT có mật khẩu gắn envelope MỚI với đích bị tráo (B4 qua)                                                                                                                    | Owner **KÝ LẠI D2** (§6) — câu mới nguyên văn ở service + 2 spec; 2 dòng log TRUNG LẬP nguyên nhân qua MỘT helper `smtpEnvelopeUnusableLogLine` (`mail-destination.ts`); seed `S19-SEC-MAILTAMPERDETECT-1`                                                                                                                       |
+| G2  | MEDIUM (security, lượt chạy lại)                              | `done_when` của WO phát hiện tráo phải fail-closed: neo audit GIẢ được; id mới không có ảnh chụp                         | **XÁC NHẬN**: `0003_audit_outbox.sql:35` GRANT SELECT, INSERT `audit_logs` cho `mediaos_app`; `0472…:131-140` trigger chỉ UPDATE/DELETE + cấp lại; audit không chuỗi băm/ký; unique (company_id, scope) `0380:52`. Stem `audit-masker.service.ts:45-66` hôm nay KHÔNG khớp host/port/username/secure (đọc từng stem) — nhưng không test nào ghim | `done_when` của WO seed: (a) không ảnh chụp ⇒ coi là TRÁO + ca RED id mới; (b) neo giả được ⇒ nhánh «khớp» giữ câu kiểm-tra-trước, không bao giờ nói nhập lại là an toàn; (c) test masker; neo mạnh hơn (blob niêm phong AAD = companyId‖id / MAC khoá-KMS) thuộc WO đó; quy tắc giám sát neo đầu dòng |
+| G3  | MEDIUM (database, silent-failure) · LOW (security ×2)         | B4 ở nhánh INSERT MỚI (đường cấu hình đầu tiên của PROD) không ca nào chạm — bỏ lời gọi `:162` mà suite vẫn xanh       | **XÁC NHẬN**: `beforeEach` `putStored()` (int-spec `:190-195`) ⇒ R-B5/R-B7 chỉ vào nhánh DELETE+INSERT; M11/M15 cấy trong hàm dùng chung                                                                                                                                                                                                                                  | Ca **R-B5b** ×2: superuser xoá hàng (`rowCount` 1) ⇒ PUT surrogate lẻ ⇒ 400 `VALIDATION-ERR-001`, vẫn 0 hàng, audit y nguyên (đối chứng `> 0`). Xanh trên code trước vá (lời gọi có sẵn) — đo bằng mutant **F1**                                                                                                                         |
+| G4  | LOW (security ×2, database)                                   | B4 không so `companyId` (cũng nằm trong AAD)                                                                           | **XÁC NHẬN + ĐO** (R-B8): `z.string().uuid()` nhận chữ HOA (`db.service.ts:16`), RLS ép `::uuid` (`0380:59-60`) ⇒ `withTenant(companyId HOA)` đọc được hàng, PG trả company_id chữ thường; trước vá `repo.upsert` RESOLVE (hàng bị thay bằng envelope gắn chuỗi HOA — không bao giờ mở được)                                                                                | `assertPersistedAsBound` so thêm companyId ⇒ 500 lỗi lập trình. Unit + R-B8                                                                                                                                                                                                                                                  |
+| G5  | MEDIUM (silent-failure) · LOW (security)                      | Nhánh B4 400 không log, mất tên trường; câu đổ cho host/username cả khi port/secure lệch                                | **XÁC NHẬN**: filter chỉ log 5xx (`all-exceptions.filter.ts:44`); console hiện «Lưu thất bại.» cho mọi lỗi Lưu không phải MAIL-PASSWORD-REQUIRED (`mail-config.tsx:406-410`); port (int 1..65535) / secure (boolean) qua Zod — đầu vào không làm lệch được                                                                                                                       | `MailDestinationNotPersistedError.changedFields` (CHỈ tên) + `logger.warn` company · actor · scope · changed; **tinh chỉnh D4** (cùng nguyên tắc «lỗi lập trình ⇒ 500, không gói 400» của chính D4): port/secure lệch ⇒ 500, CHỈ host/username ⇒ 400. `assertPersistedAsBound` dời vào `mail-destination.ts` (hàm thuần, test unit). Phần FE ⇒ seed `S19-FE-MAILSAVEERR-1` |
+| G6  | LOW (security, silent-failure)                                | `smtpSecretContext` gọi TRONG `try` ⇒ lỗi dựng ngữ cảnh (vd port BigInt) bị log dưới thẻ toàn vẹn + «nhập lại mật khẩu» | **XÁC NHẬN + ĐO**: port BigInt ⇒ trước vá `{ok:false}` / `decrypt_failed` + dòng thẻ                                                                                                                                                                                                                                                                                     | Dựng ctx NGOÀI `try` ở cả hai nơi ⇒ ném nguyên (500 + stack ở filter / như lỗi DB của `findByScope`). Phần «`decryptSecret` gắn pha `kms_unwrap`/`aead_open`» **HOÃN** — đổi `SecretEncryptionService` dùng chung (§3 cấm ở WO này) ⇒ ứng viên trong notes `S19-SEC-MAILTAMPERDETECT-1`                                               |
+| G7  | LOW (security)                                                | Docblock `buildAad` còn «recordId là id platform_account / UUID không có 0x00»                                         | **XÁC NHẬN**                                                                                                                                                                                                                                                                                                                                                               | Docblock nêu TIỀN ĐIỀU KIỆN «không trường nào có U+0000 thô»; SMTP giữ nhờ `JSON.stringify` của `smtpSecretContext`                                                                                                                                                                                                         |
+| G8  | LOW (security, database)                                      | Cửa đếm deploy (§8 7c) không tự chứng minh nó thấy mọi hàng                                                            | **XÁC NHẬN** (FORCE RLS cho 0 GIẢ, không lỗi)                                                                                                                                                                                                                                                                                                                              | §8 bước 7(c) viết lại: câu trả `bypasses_rls` + `n`, chỉ tin `n` khi `true`; đối chứng theo tenant đi đúng đường RLS (`SET LOCAL ROLE mediaos_app` + GUC)                                                                                                                                                                    |
+| G9  | LOW (database)                                                | `reinsertAsApp` không có đối chứng dương thường trực; rủi ro tồn dư M28 không ca nào ghim                              | **XÁC NHẬN một phần — bác ví dụ**: «tráo iv_nonce/auth_tag» bị DB chặn (CHECK độ dài `0380:49-50` — đo F10: INSERT lỗi ngay); nhưng `dek_key_version` sai LỌT DB và R-B4/R-B6 vẫn xanh (đo F10b)                                                                                                                                                                          | Ca **P-B2**: role app chép lại NGUYÊN ảnh chụp ⇒ `{sent:true}`, L nhận AUTH STORED — đối chứng bản chép + ghim M28 (thêm độ tươi thì đổi ca này có chủ đích)                                                                                                                                                                 |
+| G10 | LOW (silent-failure)                                          | PUT «giữ mật khẩu» trả 200 `hasPassword:true` dù envelope không mở được                                                | **XÁC NHẬN**                                                                                                                                                                                                                                                                                                                                                               | **HOÃN**: đổi hành vi PUT, ngoài mục tiêu ràng buộc của WO; §8 7(c) ghi rõ chỉ «Kiểm tra kết nối» xác nhận được; ứng viên (so đích↔audit không cần giải mã / thử giải mã cục bộ) trong notes `S19-SEC-MAILTAMPERDETECT-1`                                                                                                   |
+| G11 | LOW (security, lượt chạy lại)                                 | Thẻ D3 là chữ thường ⇒ tenant chèn được nguyên chữ thẻ qua host vào dòng log khác ⇒ giám sát khớp chuỗi con bị lừa       | **XÁC NHẬN**: host THÔ ở log lỗi gửi mời (`invite-mail.service.ts:115`); `logSafe` (route test) không thoát ký tự ASCII; log JSON chặn CR/LF                                                                                                                                                                                                                                | Quy tắc giám sát NEO (`level=error` + `context` + `message` BẮT ĐẦU bằng thẻ) ở docblock thẻ + `done_when` WO tamper; test ghim thẻ đứng đầu dòng (cả hai nơi); `logSafe` dời vào `smtp-error-summary.ts` dùng chung và áp cho host ở log lỗi gửi mời (bidi/U+2028)                                                                    |
+
+Bác toàn phần: không. Bác một phần: G9 (ví dụ tráo iv/tag — DB CHECK chặn trước).
+
+### 12.1 RED — đo trên code CHƯA vá
+
+Bước 0 (tái cấu trúc, hành vi y nguyên): dời `assertPersistedAsBound` từ repo sang `mail-destination.ts`, chữ ký
+`(row, {companyId, recordId}, destination)` — chỉ để test unit hàm thuần đo được ĐỎ HÀNH VI (không phải «export
+thiếu»). Runner lane `mailaad`, 4 spec (`mail-destination.spec` · `mail-config.service.spec` ·
+`invite-mail.smtp.spec` · credexfil int-spec) ⇒ `Test Files 4 failed (4)` · `Tests 27 failed | 66 passed (93)`:
+
+- unit B4 — companyId HOA: `expected undefined to be an instance of Error`; port ×2 / secure: `expected
+  MailDestinationNotPersistedError: … to not be an instance of MailDestinationNotPersistedError`; host / username /
+  host+username: `expected undefined to deeply equal [ 'host' ]` (…).
+- service — D2: `expected 'Không dùng được mật khẩu đã lưu — vui…' to be 'Không dùng được mật khẩu đã lưu. Kiểm…'`;
+  ctx ném: `promise resolved "{ ok: false, …(1) }" instead of rejecting`; log D3: `expected 'smtp-envelope-unusable:
+  không mở được…' not to contain 'cần nhập lại mật khẩu'`; B4 warn: `expected "logger.warn" to be called once, but
+  got 0 times`.
+- lời mời — log D3: như trên; ctx ném: `promise resolved "{ sent: false, …(1) }" instead of rejecting`; bidi:
+  `expected 'Gửi email mời tới evil‮.example\…' not to contain '‮'`; 6 ca ghim dòng lỗi gửi: `expected
+  'Gửi email mời tới 127.0.0.1 thất bại …' to contain 'Gửi email mời tới "127.0.0.1" thất bạ…'`.
+- int-spec — R-B1 ×4 + R-B4: `expected { ok: false, …(1) } to deeply equal { ok: false, …(1) }` (câu D2); R-B8:
+  `promise resolved "{ …(18) }" instead of rejecting` (tiền điều kiện của chính ca xanh: `withTenant` chữ HOA đọc
+  được hàng, PG trả company_id chữ thường).
+- 1 đỏ là LỖI TEST, không tính: unit «id lệch» dùng `ID.toUpperCase()` mà ID toàn chữ số ⇒ không đổi; sửa sang id
+  khác ⇒ xanh trên code chưa vá (đúng — vế id có sẵn). Đo lại riêng spec đó: `7 failed | 13 passed (20)`.
+- XANH trên code chưa vá có chủ ý: R-B5b ×2 (lời gọi B4 nhánh INSERT mới có sẵn — đo bằng F1), P-B2 (đối chứng
+  dương — đo bằng F10b), unit «id lệch» + đối chứng dương.
+
+### 12.2 GREEN
+
+`pnpm --filter @mediaos/api typecheck` sạch (tsconfig gồm `src` + `test`); eslint 10 tệp sạch; tệp vốn sạch
+prettier vẫn sạch (service spec + `secret-encryption.service.ts` vốn KHÔNG sạch prettier ⇒ sửa bằng thay chuỗi, không
+format lại vùng không đụng). Cùng 4 spec ⇒ `Test Files 4 passed (4)` · `Tests 93 passed (93)` (credexfil 30 ca chạy
+thật).
+
+### 12.3 Mutant F1–F10b (cấy bằng script thay chuỗi → runner lane `mailaad` → `cp` khôi phục + so byte; không `git checkout --`)
+
+- F1 bỏ lời gọi B4 CHỈ ở nhánh INSERT mới — 2 đỏ: R-B5b host/username ở `expected 200 to be 400` (body 200 mang
+  `host "a�b.test"` / `username "mailer�@…"` — PG lưu U+FFFD).
+- F2 bỏ vế companyId — 2 đỏ: unit companyId (`expected undefined to be an instance of Error`) + R-B8 (`promise
+  resolved "{ …(18) }" instead of rejecting`).
+- F3 port/secure quay về lỗi miền 400 — 3 đỏ: unit port ×2 / secure (`… to not be an instance of
+  MailDestinationNotPersistedError`).
+- F4 bỏ `logger.warn` của nhánh B4 400 — 1 đỏ: `expected "logger.warn" to be called once, but got 0 times`.
+- F5 `testConnection` dựng ctx lại TRONG `try` — 1 đỏ: `promise resolved "{ ok: false, …(1) }" instead of
+  rejecting`. (Lượt cấy đầu chỉ chuyển lời gọi vào `try` mà sót dòng dựng ngoài ⇒ SỐNG — lỗi của mutant, không của
+  test; cấy lại bỏ cả dòng ngoài ⇒ đỏ.)
+- F6 lời mời dựng ctx lại TRONG `try` — 1 đỏ: `promise resolved "{ sent: false, …(1) }" instead of rejecting`.
+- F7 thẻ không còn đứng đầu dòng — 2 đỏ (service + lời mời): `expected '[mail] smtp-envelope-unusable: không …' to
+  match /^smtp-envelope-unusable: /`.
+- F8 dòng log quay về «cần nhập lại mật khẩu», bỏ «xác minh đích TRƯỚC» — 2 đỏ: `… not to contain 'cần nhập lại mật
+  khẩu'`.
+- F9 bỏ `logSafe` ở host của log lỗi gửi mời — 7 đỏ: bidi (`… not to contain '‮'`) + 6 ca ghim dòng.
+- F10 (mutant của TEST) bản chép `reinsertAsApp` tráo iv_nonce/auth_tag — R-B4 · R-B6 · P-B2 đỏ ở `Failed query:
+  INSERT INTO company_mail_configs` (CHECK độ dài của DB chặn — bản chép không hỏng im lặng theo cách này).
+- F10b (mutant của TEST) bản chép ghi `dek_key_version + 1` (lọt DB) — **CHỈ P-B2 đỏ** (`expected { sent: false,
+  …(1) } to deeply equal { sent: true }`); R-B4/R-B6 vẫn xanh ⇒ đúng lỗ G9 mô tả, P-B2 là thứ bắt nó.
+
+Sau cả loạt: mọi tệp khôi phục `cmp` y hệt bản GREEN; `git status` chỉ còn các tệp của lượt vá.
+
+### 12.4 Lượt chạy toàn module (một lần, cùng lane)
+
+Unit `src/settings` + `src/user-invites` + `src/crypto` (12 tệp) + 13 int-spec (credexfil-http · envelope ·
+mail-config-permission · security-mailconfig-http · routehttp3-foundation-settings · chat-be7-oversight ·
+user-invites-flow · invite-apikeys-http · reset-token-envelope · secret-provisioning · secret-rotation · two-factor ·
+two-factor-login; `ui-config-deny` bị `vitest.config` exclude theo phase — §11.5 liệt kê nó nhưng nó chưa từng chạy) ⇒
+`Test Files 25 passed (25)` · `Tests 336 passed (336)`, 0 skip.
+
+### 12.5 Kích thước + rủi ro còn lại
+
+- credexfil int-spec chạm **800 dòng** (trần CLAUDE.md §5) — bảng `DEST_TAMPERS` gọn bằng `tamperOf` (hành vi R-B1/R-B2
+  y nguyên) để có chỗ; ca mới về sau phải sang tệp mới.
+- Tinh chỉnh D4 (G5) đổi mã HTTP của port/secure lệch 400 → 500 — chỉ tới được khi hệ thống đổi giá trị (trigger,
+  kiểu cột); phát hiện + rollback không đổi. Owner xem lại khi duyệt PR.
+- Câu D2 ký lại + log trung lập là lớp chặn TẠM; phát hiện tráo đích thật = `S19-SEC-MAILTAMPERDETECT-1`.

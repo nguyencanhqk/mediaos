@@ -198,7 +198,7 @@ describe("nodemailer THẬT qua SMTP — S19-OPS-AUDITHIGH-1", () => {
         expect(res).toEqual({ sent: false, reason: "send_failed" });
         expect(server.messages).toHaveLength(0);
         expect(logText()).toContain(
-          `Gửi email mời tới ${LOCALHOST} thất bại (name=Error ${diagnostic} errno=- syscall=- tlsReason=-)`,
+          `Gửi email mời tới "${LOCALHOST}" thất bại (name=Error ${diagnostic} errno=- syscall=- tlsReason=-)`,
         );
         for (const secret of [
           INVITE_TOKEN,
@@ -234,10 +234,36 @@ describe("nodemailer THẬT qua SMTP — S19-OPS-AUDITHIGH-1", () => {
       expect(line).toContain("smtp-envelope-unusable");
       expect(line).toContain(`company=${COMPANY_ID}`);
       expect(line).toContain("config=00000000-0000-4000-8000-0000000000aa");
+      // Sửa đổi owner 02/10 (FULL gate silent-failure HIGH): TRUNG LẬP về nguyên nhân — không bảo nhập lại mật
+      // khẩu; nêu các nguyên nhân có thể và bắt xác minh đích TRƯỚC (nhập lại vào đích bị tráo = hoàn tất vụ rò).
+      expect(line).not.toContain("cần nhập lại mật khẩu");
+      expect(line).toContain("ngữ cảnh cũ");
+      expect(line).toContain("đổi ngoài ứng dụng");
+      expect(line).toContain("khoá mã hoá");
+      expect(line).toContain("xác minh đích");
+      expect(line).toContain("TRƯỚC khi nhập lại mật khẩu");
+      // Giám sát NEO đầu dòng (FULL gate security LOW): host do tenant chọn chỉ xuất hiện GIỮA các dòng khác.
+      expect(line).toMatch(/^smtp-envelope-unusable: /);
       expect(vi.mocked(Logger.prototype.warn).mockName("Logger.warn")).not.toHaveBeenCalled();
       for (const secret of [SMTP_PASSWORD, INVITE_TOKEN, EXPECTED_LINK, "decrypt failed"]) {
         expect(logText()).not.toContain(secret);
       }
+    });
+
+    it("dựng ngữ cảnh NÉM (lỗi lập trình — vd port BigInt sau một lần đổi kiểu cột) ⇒ ném NGUYÊN, KHÔNG chẩn đoán nhầm thành «envelope không dùng được»", async () => {
+      // Chỉ lỗi GIẢI MÃ mới mang thẻ toàn vẹn smtp-envelope-unusable (FULL gate security + silent-failure LOW):
+      // `JSON.stringify` của ngữ cảnh ném với BigInt — lỗi đó phải nổi lên nguyên dạng, không thành decrypt_failed.
+      const secrets = fakeSecrets();
+      const bigPortRow = { ...mailConfigRow(25), port: 25n as unknown as number };
+      const repo = { findByScope: vi.fn(async () => bigPortRow) };
+      const service = new InviteMailService(
+        repo as unknown as MailConfigRepository,
+        secrets as unknown as SecretEncryptionService,
+      );
+
+      await expect(service.sendActivationEmail(SEND_PARAMS)).rejects.toThrow(TypeError);
+      expect(secrets.decryptSecret).not.toHaveBeenCalled();
+      expect(logText()).not.toContain("smtp-envelope-unusable");
     });
 
     it("cổng ĐÃ ĐÓNG ⇒ {sent:false} (không treo), log nêu đúng ECONNREFUSED", async () => {
@@ -250,7 +276,7 @@ describe("nodemailer THẬT qua SMTP — S19-OPS-AUDITHIGH-1", () => {
 
       expect(res).toEqual({ sent: false, reason: "send_failed" });
       expect(logText()).toContain(
-        `Gửi email mời tới ${LOCALHOST} thất bại (name=Error code=ESOCKET responseCode=- command=CONN errno=ECONNREFUSED syscall=connect tlsReason=-)`,
+        `Gửi email mời tới "${LOCALHOST}" thất bại (name=Error code=ESOCKET responseCode=- command=CONN errno=ECONNREFUSED syscall=connect tlsReason=-)`,
       );
     });
 
@@ -271,9 +297,44 @@ describe("nodemailer THẬT qua SMTP — S19-OPS-AUDITHIGH-1", () => {
 
       expect(res).toEqual({ sent: false, reason: "send_failed" });
       expect(vi.mocked(Logger.prototype.error)).toHaveBeenCalledTimes(1);
-      expect(logText()).toContain(`Gửi email mời tới ${LOCALHOST} thất bại (name=TypeError code=-`);
+      expect(logText()).toContain(
+        `Gửi email mời tới "${LOCALHOST}" thất bại (name=TypeError code=-`,
+      );
       expect(logText()).toMatch(/^\s+at /m);
       expect(logText()).not.toContain(INVITE_TOKEN);
+    });
+
+    it("host (do tenant chọn) chứa ký tự bidi / U+2028 ⇒ dòng log lỗi gửi mời ASCII-hoá host như route test (logSafe — FULL gate security LOW)", async () => {
+      // Dựng ký tự bằng mã (không viết literal): U+202E RIGHT-TO-LEFT OVERRIDE · U+2028 LINE SEPARATOR.
+      const RLO = String.fromCharCode(0x202e);
+      const LINE_SEP = String.fromCharCode(0x2028);
+      const BACKSLASH = String.fromCharCode(0x5c);
+      const repo = {
+        findByScope: vi.fn(async () => ({
+          ...mailConfigRow(25),
+          host: `evil${RLO}.example${LINE_SEP}x`,
+        })),
+      };
+      const service = new InviteMailService(
+        repo as unknown as MailConfigRepository,
+        fakeSecrets() as unknown as SecretEncryptionService,
+      );
+      // Lỗi LẬP TRÌNH trong `try` (như ca trên) ⇒ dòng tóm tắt được log TRƯỚC mọi kết nối — không phụ thuộc DNS.
+      const poisonedName = {
+        toString: () => "A",
+        replace: () => {
+          throw new TypeError("boom");
+        },
+      } as unknown as string;
+
+      const res = await service.sendActivationEmail({ ...SEND_PARAMS, fullName: poisonedName });
+
+      expect(res).toEqual({ sent: false, reason: "send_failed" });
+      // Dương TRƯỚC: dòng tóm tắt thật sự được log (không có nó, các `not.toContain` dưới xanh-rỗng).
+      expect(logText()).toContain("Gửi email mời tới ");
+      for (const raw of [RLO, LINE_SEP]) expect(logText()).not.toContain(raw);
+      expect(logText()).toContain(`${BACKSLASH}u202e`);
+      expect(logText()).toContain(`${BACKSLASH}u2028`);
     });
 
     it("rớt kết nối ở lệnh DATA ⇒ {sent:false} settle nhanh (10.0.12: settle mọi lần gửi khi lỗi kết nối)", async () => {
@@ -287,7 +348,7 @@ describe("nodemailer THẬT qua SMTP — S19-OPS-AUDITHIGH-1", () => {
       expect(res).toEqual({ sent: false, reason: "send_failed" });
       expect(Date.now() - startedAt).toBeLessThan(SETTLE_BUDGET_MS);
       expect(server.messages).toHaveLength(0);
-      expect(logText()).toContain(`Gửi email mời tới ${LOCALHOST} thất bại (name=Error code=E`);
+      expect(logText()).toContain(`Gửi email mời tới "${LOCALHOST}" thất bại (name=Error code=E`);
     });
 
     it("ENTRY CJS: code service chạy trên đúng object `require('nodemailer')` mà PROD nạp", async () => {

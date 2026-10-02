@@ -17,11 +17,12 @@ import {
   destinationOf,
   MailDestinationNotPersistedError,
   MailPasswordRequiredError,
-  SMTP_ENVELOPE_UNUSABLE_TAG,
+  smtpEnvelopeUnusableLogLine,
   smtpSecretContext,
   type MailDestination,
 } from "./mail-destination";
 import { MailTransportService } from "./mail-transport.service";
+import { logSafe } from "./smtp-error-summary";
 
 const DEFAULT_SCOPE = "default";
 
@@ -41,25 +42,19 @@ function passwordRequired(message: string): BadRequestException {
 }
 
 /**
- * Câu route test khi mật khẩu đã lưu không mở được (owner D2) — nói cách CHỮA; KHÔNG nói «đích đã bị đổi»
- * (không phân biệt được với envelope hỏng / mất KEK, và không cần cho kẻ dò). FE in nguyên văn.
+ * Câu route test khi mật khẩu đã lưu không mở được — owner D2, KÝ LẠI 02/10/2026 (FULL gate silent-failure HIGH):
+ * giải mã hỏng có thể là đích bị đổi NGOÀI ứng dụng (đúng ca B1 chặn), mà form console nạp sẵn đích của HÀNG ⇒
+ * bảo «nhập lại mật khẩu» thẳng là dắt admin hoàn tất vụ rò ⇒ bảo KIỂM TRA ĐÍCH TRƯỚC. Không khẳng định nguyên
+ * nhân (không phân biệt được với envelope ngữ cảnh cũ / sự cố khoá). FE in nguyên văn.
  */
 const STORED_PASSWORD_UNUSABLE =
-  "Không dùng được mật khẩu đã lưu — vui lòng nhập lại mật khẩu SMTP rồi bấm Lưu.";
-
-/** Câu 400 khi đích PG lưu khác giá trị đã gắn vào ngữ cảnh (owner D4) — không mã module ⇒ VALIDATION-ERR-001. */
-const DESTINATION_NOT_PERSISTED = "Máy chủ hoặc tên đăng nhập SMTP chứa ký tự không hợp lệ.";
+  "Không dùng được mật khẩu đã lưu. Kiểm tra lại máy chủ, cổng, tên đăng nhập và TLS (có thể đã bị thay đổi ngoài ứng dụng) trước khi nhập lại mật khẩu SMTP rồi bấm Lưu.";
 
 /**
- * Giá trị do CLIENT chọn trước khi vào log: `JSON.stringify` thoát CR/LF/nháy, rồi mọi ký tự ngoài ASCII in
- * được ⇒ `\uXXXX` — chặn giả dòng log bằng ký tự bidi (U+202E), U+2028/2029, NEL (FULL gate security LOW).
+ * Câu 400 khi host/username PG lưu khác giá trị đã gắn vào ngữ cảnh (owner D4) — không mã module ⇒
+ * VALIDATION-ERR-001. Chỉ host/username tới được đây: port/secure lệch là lỗi hệ thống (500 — `assertPersistedAsBound`).
  */
-function logSafe(value: string): string {
-  return JSON.stringify(value).replace(
-    /[^\x20-\x7e]/g,
-    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
-  );
-}
+const DESTINATION_NOT_PERSISTED = "Máy chủ hoặc tên đăng nhập SMTP chứa ký tự không hợp lệ.";
 
 /** Map row DB → view DTO (KHÔNG password / KHÔNG cột envelope). `hasPassword` = luôn true (envelope NOT NULL). */
 function toDto(row: CompanyMailConfig): MailConfigDto {
@@ -102,8 +97,8 @@ export class MailConfigService {
   /**
    * PUT — upsert theo (company, scope). password OPTIONAL:
    *   - có → encrypt envelope mới, ngữ cảnh gắn (recordId = id app-gen TRƯỚC encrypt, host, port, username,
-   *     secure) qua `smtpSecretContext` (B1); repo ép bộ PG lưu = bộ đã gắn (B4: đích lệch ⇒ 400, id lệch ⇒
-   *     500 lỗi lập trình); đổi đích được;
+   *     secure) qua `smtpSecretContext` (B1); repo ép bộ PG lưu = bộ đã gắn (B4: host/username lệch ⇒ 400 + log
+   *     tên trường; companyId/id/port/secure lệch ⇒ 500 lỗi lập trình/hệ thống); đổi đích được;
    *   - vắng + đã tồn tại + đích KHỚP → giữ envelope cũ (chỉ sửa from_name/from_email);
    *   - vắng + đích khác hàng, hoặc tạo MỚI → 400 `MAIL_PASSWORD_REQUIRED`.
    */
@@ -149,8 +144,12 @@ export class MailConfigService {
       return toDto(row);
     } catch (err: unknown) {
       if (err instanceof MailDestinationNotPersistedError) {
-        // B4 (owner D4): PG lưu đích KHÁC giá trị đã gắn vào ngữ cảnh (vd surrogate lẻ ⇒ U+FFFD) ⇒ envelope sẽ
-        // không bao giờ mở được; tx đã rollback (không ghi, không audit). Do đầu vào ⇒ 400, không mã module.
+        // B4 (owner D4): host/username PG lưu KHÁC giá trị đã gắn vào ngữ cảnh (vd surrogate lẻ ⇒ U+FFFD) ⇒
+        // envelope sẽ không bao giờ mở được; tx đã rollback (không ghi, không audit). Do đầu vào ⇒ 400, không mã
+        // module. Filter KHÔNG log 4xx ⇒ dấu vết ở đây: CHỈ TÊN trường (giá trị do client chọn).
+        this.logger.warn(
+          `PUT mail-config: đích PG lưu khác giá trị đã gắn vào ngữ cảnh mã hoá — không ghi (company=${companyId} actor=${actorUserId} scope=${scope} changed=${err.changedFields.join(",")})`,
+        );
         throw new BadRequestException(DESTINATION_NOT_PERSISTED);
       }
       if (!(err instanceof MailPasswordRequiredError)) throw err;
@@ -167,8 +166,8 @@ export class MailConfigService {
    * POST test — kiểm tra kết nối SMTP. Body CÓ password → test đích trong body bằng password đó. Body VẮNG
    * password → dùng mật khẩu ĐÃ LƯU, nên chỉ cho test ĐÍCH CỦA HÀNG ĐÃ LƯU (I1); đích khác → 400 trước cả
    * khi giải mã. Giải mã bằng ngữ cảnh của HÀNG (B1): id/đích bị đổi ngoài app ⇒ không mở được ⇒ `{ok:false}`
-   * câu «nhập lại mật khẩu» + log `error`, không kết nối nào. `errorMessage` là câu cố định theo loại lỗi
-   * (MailTransportService).
+   * câu «kiểm tra đích TRƯỚC khi nhập lại mật khẩu» (D2 ký lại) + log `error` trung lập nguyên nhân, không kết
+   * nối nào. `errorMessage` là câu cố định theo loại lỗi (MailTransportService).
    */
   async testConnection(
     companyId: string,
@@ -191,20 +190,18 @@ export class MailConfigService {
     if (!existing) throw passwordRequired(PASSWORD_REQUIRED.noConfigToTest);
     this.assertStoredDestination("test", { companyId, actorUserId, scope }, existing, requested);
 
+    // Ngữ cảnh từ HÀNG (companyId/id + đích PERSISTED), không từ body: đích của hàng bị đổi ngoài app mà không mã
+    // hoá lại ⇒ GCM từ chối (B1). Dựng NGOÀI try: chỉ lỗi GIẢI MÃ mang thẻ toàn vẹn — lỗi dựng ngữ cảnh là lỗi lập
+    // trình ⇒ ném nguyên (500 + stack ở filter), không bị chẩn đoán nhầm (FULL gate security + silent-failure LOW).
+    const ctx = smtpSecretContext(existing.companyId, existing.id, existing);
     let password: string;
     try {
-      // Decrypt JIT — plaintext chỉ trong RAM lúc test. Ngữ cảnh từ HÀNG (companyId/id + đích PERSISTED), không
-      // từ body: đích của hàng bị đổi ngoài app mà không mã hoá lại ⇒ GCM từ chối (B1).
-      password = await this.secrets.decryptSecret(
-        existing,
-        smtpSecretContext(existing.companyId, existing.id, existing),
-      );
+      // Decrypt JIT — plaintext chỉ trong RAM lúc test.
+      password = await this.secrets.decryptSecret(existing, ctx);
     } catch {
-      // KHÔNG lộ chi tiết crypto/ngữ cảnh ra client/log. Vi phạm toàn vẹn (đích đổi ngoài app, envelope hỏng
-      // hoặc mã hoá dưới ngữ cảnh cũ, mất KEK) ⇒ mức `error` + thẻ cố định (owner D3).
-      this.logger.error(
-        `${SMTP_ENVELOPE_UNUSABLE_TAG}: không mở được mật khẩu SMTP đã lưu khi kiểm tra kết nối — cần nhập lại mật khẩu (company=${companyId} config=${existing.id})`,
-      );
+      // KHÔNG lộ chi tiết crypto/ngữ cảnh ra client/log. Mức `error` + thẻ cố định (owner D3), lời TRUNG LẬP về
+      // nguyên nhân + bắt xác minh đích trước khi nhập lại (sửa đổi owner 02/10).
+      this.logger.error(smtpEnvelopeUnusableLogLine("kiểm tra kết nối", companyId, existing.id));
       return { ok: false, errorMessage: STORED_PASSWORD_UNUSABLE };
     }
 

@@ -20353,6 +20353,78 @@ export const backlog = [
     notes: [
       "Owner chốt 02/10/2026: làm WO riêng, SỚM — trước khi PROD lưu cấu hình SMTP đầu tiên (rẻ nhất lúc này).",
       "Owner ký 02/10/2026 (plan §6 — mọi khuyến nghị): D1 (a) fail-closed với envelope mã hoá dưới ngữ cảnh cũ + câu «nhập lại mật khẩu» rõ + log `error`; cửa deploy «PROD phải 0 hàng, có hàng ⇒ DỪNG» — ký TRƯỚC (a'): PROD 1–vài hàng mà có người giữ mật khẩu của TỪNG hàng ⇒ deploy rồi nhập lại mật khẩu SMTP NGAY trên console + «Kiểm tra kết nối» vắng mật khẩu ⇒ `ok:true` (nới done_when «có hàng ⇒ DỪNG»); thiếu mật khẩu ⇒ DỪNG + seed WO job mã hoá lại (c) · D2 câu route test khi giải mã hỏng = «Không dùng được mật khẩu đã lưu — vui lòng nhập lại mật khẩu SMTP rồi bấm Lưu.» · D3 `logger.error` thẻ cố định `smtp-envelope-unusable` + company + config id ở CẢ HAI nơi (sửa ca service ~:342; ghim mức bằng spy riêng từng mức) · D4 (a) repo so `RETURNING` với recordId + 4 trường đích: lệch id ⇒ 500 lỗi lập trình (rollback), lệch đích ⇒ 400 `VALIDATION-ERR-001` · D5 mở `paths` cho `apps/api/src/db/schema/mail-config.ts` CHỈ sửa docblock (không db:generate) · D6 FULL gate đủ 4: security + database + silent-failure + santa-method (review security độc lập lần hai). Plan: docs/plans/S19-SEC-MAILAADBIND-1.md.",
+      "Owner KÝ LẠI D2 02/10/2026 ~19:20 (AskUserQuestion — trả lời FULL gate silent-failure HIGH `mail-config.service.ts:47`: câu cũ bảo nhập lại mật khẩu ngay, mà form console nạp sẵn đích của HÀNG — có thể đã bị tráo ngoài ứng dụng ⇒ làm theo là hoàn tất vụ rò B1 vừa chặn): câu route test khi giải mã hỏng = «Không dùng được mật khẩu đã lưu. Kiểm tra lại máy chủ, cổng, tên đăng nhập và TLS (có thể đã bị thay đổi ngoài ứng dụng) trước khi nhập lại mật khẩu SMTP rồi bấm Lưu.» (thay câu D2 ký sáng 02/10) · hai dòng log thẻ `smtp-envelope-unusable` (`invite-mail.service.ts` · `mail-config.service.ts`) TRUNG LẬP nguyên nhân: giữ thẻ + company + config id, bỏ «cần nhập lại mật khẩu», nêu nguyên nhân có thể (envelope ghi dưới ngữ cảnh cũ · đích bị đổi ngoài ứng dụng · sự cố khoá) + bắt xác minh đích TRƯỚC khi nhập lại · seed WO đỏ `S19-SEC-MAILTAMPERDETECT-1` (depends_on WO này). Plan §6 D2 + §12.",
+      "FULL gate lượt 1 (02/10/2026 — security PASS · database PASS · silent-failure BLOCK; + security lượt chạy lại sau khi phiên điều phối khởi động lại): vá 1 HIGH (D2 ký lại ở trên) + 3 MEDIUM + các LOW rẻ trong phạm vi, mỗi vá có ca RED + mutant — plan §12. Tinh chỉnh D4 theo CHÍNH nguyên tắc của D4 («lỗi lập trình ⇒ 500, không gói 400 ký tự không hợp lệ»): B4 so thêm companyId (lệch ⇒ 500); port/secure lệch ⇒ 500 lỗi hệ thống (đầu vào qua Zod không gây ra được); CHỈ host/username lệch ⇒ 400 `VALIDATION-ERR-001` + log warn TÊN trường — phát hiện + rollback không đổi. Seed `S19-FE-MAILSAVEERR-1` (console hiện câu server cho 400 khi Lưu).",
+    ],
+  },
+  {
+    id: "S19-SEC-MAILTAMPERDETECT-1",
+    module: "FOUNDATION",
+    layer: "SEC",
+    title:
+      "Giải mã mật khẩu SMTP hỏng vì ĐÍCH BỊ TRÁO ngoài ứng dụng hiện y hệt envelope ngữ cảnh cũ / sự cố khoá — chỉ có câu «kiểm tra đích trước khi nhập lại» + log `smtp-envelope-unusable`, không cảnh báo an ninh, không phân biệt ca tráo đích (nơi nhập lại mật khẩu = gửi nó cho kẻ tấn công)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/settings/**",
+      "apps/api/src/user-invites/invite-mail.service.ts",
+      "apps/api/src/user-invites/invite-mail.smtp.spec.ts",
+      "apps/api/src/auth/security-alert.service.ts",
+      "apps/api/src/db/schema/security-alerts.ts",
+      "apps/api/src/crypto/**",
+      "apps/api/src/events/audit-masker.service.spec.ts",
+      "apps/api/migrations/**",
+      "packages/contracts/src/mail-config.ts",
+      "apps/console/src/routes/settings/**",
+      "apps/console/src/i18n/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-SEC-MAILAADBIND-1"],
+    src: [
+      "FULL gate S19-SEC-MAILAADBIND-1 lượt 1 (02/10/2026) — silent-failure HIGH `mail-config.service.ts:47`: sau WO đó, envelope mật khẩu SMTP gắn (id, host, port, username, secure) vào ngữ cảnh mã hoá ⇒ đích bị tráo ngoài app (superuser/DBA, hoặc role app DELETE+INSERT — 0591 không chặn INSERT/DELETE) chỉ còn là MỘT tín hiệu: giải mã hỏng, đọc y hệt envelope ngữ cảnh cũ (D1) hay sự cố khoá. Console nạp sẵn đích của HÀNG (`apps/console/src/routes/settings/mail-config.tsx:167-171`) ⇒ admin nhập lại mật khẩu vào form = PUT gắn envelope MỚI với đích bị tráo ⇒ lời mời kế tiếp AUTH mật khẩu thật tới kẻ tấn công. Owner ký lại D2 (câu «kiểm tra đích TRƯỚC») làm lớp chặn tạm; phát hiện thật = WO này.",
+      "Neo có sẵn: mỗi lần ghi hợp lệ để `MailConfigCreated`/`MailConfigUpdated` trong `audit_logs` CÙNG tx, `after` = đích (`mail-config.repository.ts` `auditSnapshot`). NHƯNG neo này GIẢ ĐƯỢC bởi chính kẻ tấn công của WO trước (security MEDIUM lượt 1): `mediaos_app` có SELECT, INSERT trên `audit_logs` (`0003_audit_outbox.sql:35`, cấp lại `0472_s2_fnddb2_index_uq_audit_trigger.sql:140`); `trg_audit_logs_block_mutation` chỉ chặn UPDATE/DELETE (`0472:131-134`); hàng audit không chuỗi băm/không ký (`events/audit.service.ts`); một hàng/(company, scope) (`0380:52`) ⇒ DELETE + INSERT id MỚI không cần superuser.",
+    ],
+    done_when: [
+      "RED trước (int-spec, deny-path): giải mã hỏng ở route test VÀ lời mời ⇒ so 4 trường đích của HÀNG với `after` của audit `MailConfigCreated`/`MailConfigUpdated` MỚI NHẤT có `object_id = id hàng` (cùng company) ⇒ KHÁC ⇒ log `error` thẻ RIÊNG `smtp-destination-tampered` đứng ĐẦU dòng (company + config id, không giá trị đích) + `SecurityAlertService.emit` (alert_type mới: UNION-ADD vào CHECK `alert_type` theo mẫu 0588 + `SecurityAlertType`) + câu route test bảo admin KHÔNG nhập lại mật khẩu (kiểm tra với bộ phận an ninh / nhà cung cấp hộp thư); ca tamper kiểu R-B1 (superuser đổi đích, giữ id + envelope) ⇒ thẻ + 1 hàng `security_alerts` + câu không-nhập-lại; đối chứng dương: envelope ngữ cảnh cũ với đích = ảnh chụp audit ⇒ KHÔNG vào nhánh tamper (giữ câu D2 ký lại)",
+      "FAIL-CLOSED — KHÔNG có ảnh chụp audit cho id hàng ⇒ coi là TRÁO (không bao giờ «không khác»): ca RED role app DELETE + INSERT id NGẪU NHIÊN MỚI + đích kẻ tấn công + envelope chép/rác (không cần superuser) ⇒ nhánh tamper + alert, không bao giờ câu thường",
+      "Neo audit GIẢ ĐƯỢC ⇒ nhánh «khớp» GIỮ nguyên câu kiểm-tra-trước (D2 ký lại), KHÔNG BAO GIỜ nói nhập lại là an toàn và không bao giờ được trình bày như bằng chứng «không bị tráo»: ca RED role app INSERT một hàng `MailConfigUpdated` giả (object_type `mail_config`, object_id = id hàng bị tráo, after = đích kẻ tấn công) ⇒ câu vẫn kiểm-tra-trước. Neo mạnh hơn (owner chọn trong plan): blob niêm phong thứ hai chứa đích với AAD = companyId‖id, hoặc MAC khoá-KMS trên (id, đích) — cả hai cần cột/migration, thuộc phạm vi WO này",
+      "Test ghim host/port/username/secure SỐNG SÓT qua `AuditMaskerService` (stem ở `audit-masker.service.ts:45`, append-only — một stem mới kiểu `host`/`user` sẽ che chúng và làm phép so im lặng sai)",
+      "Quy tắc giám sát cho CẢ HAI thẻ (`smtp-envelope-unusable`, `smtp-destination-tampered`): `level=error` VÀ `context` ∈ {`MailConfigService`, `InviteMailService`} VÀ `message` BẮT ĐẦU bằng thẻ — không bao giờ khớp chuỗi con (host do tenant chọn xuất hiện giữa các dòng log khác); ghi vào runbook/công cụ log ops",
+      "FULL gate (security + database + silent-failure + santa-method) TRƯỚC khi mở PR; owner merge",
+    ],
+    notes: [
+      "Seed 02/10/2026 theo sửa đổi owner (AskUserQuestion ~19:20) khi trả lời FULL gate silent-failure HIGH của S19-SEC-MAILAADBIND-1 — cùng lúc ký lại D2 (câu kiểm-tra-đích-trước) + log trung lập nguyên nhân. 🔴 secret.",
+      "Ứng viên gộp từ FULL gate lượt 1 của S19-SEC-MAILAADBIND-1 (HOÃN ở đó — owner chọn trong plan WO này): (i) silent-failure LOW — `decryptSecret` gom mọi nguyên nhân thành `decrypt failed` (`secret-encryption.service.ts`); gắn pha KHÔNG bí mật (`kms_unwrap` | `aead_open`) vào lỗi rồi đưa vào dòng log có thẻ — đổi `SecretEncryptionService` dùng chung TOTP/reset/platform_account ⇒ deny-test của các purpose đó phải giữ xanh; (ii) silent-failure LOW — PUT «giữ mật khẩu» (vắng password) trả 200 `hasPassword:true` dù envelope không mở được: chạy cùng phép so đích↔audit (không cần giải mã) và/hoặc thử giải mã cục bộ trước khi trả 200.",
+    ],
+  },
+  {
+    id: "S19-FE-MAILSAVEERR-1",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "Console «Cấu hình mail server»: lỗi Lưu KHÔNG phải MAIL-PASSWORD-REQUIRED hiện câu chung «Lưu thất bại.» — 400 `VALIDATION-ERR-001` của B4 (host/username PG lưu ≠ giá trị đã gắn vào ngữ cảnh mã hoá) mang câu server cố định mà admin không bao giờ thấy",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/console/src/routes/settings/**",
+      "apps/console/src/i18n/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-SEC-MAILAADBIND-1"],
+    src: [
+      "FULL gate S19-SEC-MAILAADBIND-1 lượt 1 (02/10/2026), silent-failure MEDIUM (phần FE, ngoài `paths` của WO đó): `apps/console/src/routes/settings/mail-config.tsx:406-410` — `isSaveError` ⇒ `isPasswordRequired(saveError) ? t('mailConfig.passwordRequiredServer') : t('mailConfig.saveError')` ⇒ mọi 400 khác (B4 «Máy chủ hoặc tên đăng nhập SMTP chứa ký tự không hợp lệ.», Zod) chỉ hiện «Lưu thất bại.» ⇒ admin thử lại mãi. Phía server đã có log warn (tên trường) từ lượt vá đó.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: liệt kê lỗi PUT `/settings/mail-config` chạm được từ form (400 B4 câu cố định · 400 Zod có `details` · 403 · 5xx); chỉ hiện câu SERVER cho 400 `VALIDATION-ERR-001` (câu cố định của server — không nối dữ liệu client), giữ câu chung cho 5xx/lỗi mạng",
+      "Spec console RED trước: 400 `VALIDATION-ERR-001` từ PUT ⇒ hiện đúng câu server; 500 ⇒ vẫn «Lưu thất bại.»; MAIL-PASSWORD-REQUIRED giữ nguyên hành vi",
+    ],
+    notes: [
+      "LOW–MEDIUM: B4 400 hiếm (surrogate lẻ ở host/username — đầu vào bất thường); giá trị chính là admin thấy lý do thay cho «thử lại».",
     ],
   },
   {

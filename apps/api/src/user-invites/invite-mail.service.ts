@@ -3,10 +3,11 @@ import * as nodemailer from "nodemailer";
 import { loadEnv } from "../config/env.schema";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import { MailConfigRepository } from "../settings/mail-config.repository";
-import { SMTP_ENVELOPE_UNUSABLE_TAG, smtpSecretContext } from "../settings/mail-destination";
+import { smtpEnvelopeUnusableLogLine, smtpSecretContext } from "../settings/mail-destination";
 import {
   describeSmtpError,
   isProgrammerError,
+  logSafe,
   stackFramesOf,
 } from "../settings/smtp-error-summary";
 
@@ -71,19 +72,23 @@ export class InviteMailService {
       return { sent: false, reason: "no_mail_config" };
     }
 
+    // Ngữ cảnh = id + đích PERSISTED của hàng (helper duy nhất — B1): đích bị đổi ngoài app mà không mã hoá lại ⇒
+    // không mở được ⇒ không AUTH tới đâu cả. Dựng NGOÀI try: chỉ lỗi GIẢI MÃ mang thẻ toàn vẹn — lỗi dựng ngữ cảnh
+    // là lỗi lập trình ⇒ ném nguyên như lỗi DB của `findByScope` (FULL gate security + silent-failure LOW).
+    const ctx = smtpSecretContext(config.companyId, config.id, config);
     let password: string;
     try {
-      // Decrypt JIT — plaintext chỉ trong RAM. Ngữ cảnh = id + đích PERSISTED của hàng (helper duy nhất — B1):
-      // đích bị đổi ngoài app mà không mã hoá lại ⇒ không mở được ⇒ không AUTH tới đâu cả.
-      password = await this.secrets.decryptSecret(
-        config,
-        smtpSecretContext(config.companyId, config.id, config),
-      );
+      // Decrypt JIT — plaintext chỉ trong RAM.
+      password = await this.secrets.decryptSecret(config, ctx);
     } catch {
-      // KHÔNG lộ chi tiết crypto/ngữ cảnh. Vi phạm toàn vẹn (đích đổi ngoài app, envelope hỏng hoặc mã hoá dưới
-      // ngữ cảnh cũ, mất KEK) ⇒ `error` + thẻ cố định + config id (owner D3); chưa tạo transporter nào.
+      // KHÔNG lộ chi tiết crypto/ngữ cảnh. `error` + thẻ cố định + config id (owner D3), lời TRUNG LẬP về nguyên
+      // nhân + bắt xác minh đích trước khi nhập lại (sửa đổi owner 02/10); chưa tạo transporter nào.
       this.logger.error(
-        `${SMTP_ENVELOPE_UNUSABLE_TAG}: không mở được mật khẩu SMTP đã lưu — không gửi được email mời, cần nhập lại mật khẩu (company=${params.companyId} config=${config.id})`,
+        smtpEnvelopeUnusableLogLine(
+          "gửi email mời — email KHÔNG được gửi",
+          params.companyId,
+          config.id,
+        ),
       );
       return { sent: false, reason: "decrypt_failed" };
     }
@@ -111,8 +116,9 @@ export class InviteMailService {
       return { sent: true };
     } catch (err: unknown) {
       // KHÔNG log `err.message`: nodemailer NỐI phản hồi server vào đó, và server có thể echo token/link
-      // (bộ lọc spam "550 blocked URL …?token=…") hoặc username (535). Chỉ log trường máy-sinh.
-      const summary = `Gửi email mời tới ${config.host} thất bại (${describeSmtpError(err)})`;
+      // (bộ lọc spam "550 blocked URL …?token=…") hoặc username (535). Chỉ log trường máy-sinh. Host do tenant
+      // chọn ⇒ qua `logSafe` (ký tự bidi/U+2028 không giả được dòng log — như route test).
+      const summary = `Gửi email mời tới ${logSafe(config.host)} thất bại (${describeSmtpError(err)})`;
       if (isProgrammerError(err)) this.logger.error(summary, stackFramesOf(err));
       else this.logger.warn(summary);
       return { sent: false, reason: "send_failed" };

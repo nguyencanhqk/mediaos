@@ -76,12 +76,30 @@ export function smtpSecretContext(
 }
 
 /**
- * Thẻ CỐ ĐỊNH của dòng log `error` khi envelope mật khẩu SMTP đã lưu không mở được (owner D3) — giám sát bắt
- * theo thẻ này. Giải mã hỏng = vi phạm toàn vẹn (đích bị đổi ngoài app, envelope hỏng hoặc mã hoá dưới ngữ cảnh
- * cũ, mất KEK), không bao giờ là chuyện thường. Dòng log chỉ mang company + config id — KHÔNG ngữ cảnh/đích/chi
- * tiết crypto.
+ * Thẻ CỐ ĐỊNH đứng ĐẦU dòng log `error` khi envelope mật khẩu SMTP đã lưu không mở được (owner D3). Giải mã
+ * hỏng không bao giờ là chuyện thường: envelope ghi dưới ngữ cảnh cũ (trước WO), đích bị đổi NGOÀI ứng dụng
+ * (đúng ca B1 chặn), envelope hỏng, sự cố khoá mã hoá. Dòng chỉ mang company + config id — KHÔNG ngữ cảnh/đích/
+ * chi tiết crypto.
+ *
+ * Quy tắc giám sát (chưa dựng — WO S19-SEC-MAILTAMPERDETECT-1): `level=error` VÀ `context` ∈
+ * {`MailConfigService`, `InviteMailService`} VÀ `message` BẮT ĐẦU bằng thẻ. KHÔNG khớp chuỗi con: host do tenant
+ * chọn xuất hiện GIỮA các dòng log khác (lỗi gửi mời, từ chối đích) nên chèn được nguyên chữ của thẻ vào đó.
  */
 export const SMTP_ENVELOPE_UNUSABLE_TAG = "smtp-envelope-unusable";
+
+/**
+ * Dòng log của thẻ trên — TRUNG LẬP về nguyên nhân (sửa đổi owner 02/10/2026, FULL gate silent-failure HIGH):
+ * KHÔNG bảo «nhập lại mật khẩu» — nếu đích đã bị tráo ngoài ứng dụng, nhập lại mật khẩu vào form (đã nạp sẵn
+ * đích bị tráo) là hoàn tất chính vụ rò B1 vừa chặn ⇒ bắt xác minh đích TRƯỚC. `action` là chữ cố định của
+ * server; chỉ uuid (company/config) — không giá trị do tenant chọn ⇒ thẻ luôn đứng đầu dòng.
+ */
+export function smtpEnvelopeUnusableLogLine(
+  action: string,
+  companyId: string,
+  configId: string,
+): string {
+  return `${SMTP_ENVELOPE_UNUSABLE_TAG}: không mở được envelope mật khẩu SMTP đã lưu dưới đích/ngữ cảnh hiện tại (${action}) — nguyên nhân có thể: envelope ghi dưới ngữ cảnh cũ, đích bị đổi ngoài ứng dụng, sự cố khoá mã hoá (KEK); xác minh đích (máy chủ, cổng, tên đăng nhập, TLS) TRƯỚC khi nhập lại mật khẩu (company=${companyId} config=${configId})`;
+}
 
 /**
  * Lỗi miền: muốn dùng mật khẩu đã lưu cho một đích khác hàng đã lưu. Repo ném (không ném HttpException);
@@ -95,13 +113,64 @@ export class MailPasswordRequiredError extends Error {
 }
 
 /**
- * Lỗi miền (B4, owner D4): đích PG THẬT SỰ lưu khác đích đã gắn vào ngữ cảnh mã hoá lúc encrypt (vd surrogate
- * lẻ ⇒ PG lưu U+FFFD) ⇒ envelope vừa ghi sẽ không bao giờ mở được, «nhập lại mật khẩu» cũng không chữa. Repo
- * ném trong tx (rollback, chưa audit); service map sang 400 không mã module (`VALIDATION-ERR-001`).
+ * Lỗi miền (B4, owner D4): host/username PG THẬT SỰ lưu khác giá trị đã gắn vào ngữ cảnh mã hoá lúc encrypt (vd
+ * surrogate lẻ ⇒ PG lưu U+FFFD) ⇒ envelope vừa ghi sẽ không bao giờ mở được, «nhập lại mật khẩu» cũng không chữa
+ * (cùng đầu vào). Repo ném trong tx (rollback, chưa audit); service log TÊN trường rồi map sang 400 không mã module
+ * (`VALIDATION-ERR-001`). `changedFields` chỉ mang TÊN trường — giá trị do client chọn không vào message/log.
  */
 export class MailDestinationNotPersistedError extends Error {
-  constructor(message = "Đích SMTP PG lưu khác giá trị đã gắn vào ngữ cảnh mã hoá.") {
-    super(message);
+  constructor(readonly changedFields: readonly string[]) {
+    super(
+      `Đích SMTP PG lưu khác giá trị đã gắn vào ngữ cảnh mã hoá (trường: ${changedFields.join(",")}).`,
+    );
     this.name = "MailDestinationNotPersistedError";
   }
+}
+
+/** Hàng PG trả về (`RETURNING`) — đủ trường để so với bộ đã gắn vào ngữ cảnh mã hoá. */
+export type PersistedMailDestination = MailDestination & { id: string; companyId: string };
+
+/** Bộ caller đã gắn vào ngữ cảnh lúc encrypt — `smtpSecretContext(companyId, recordId, destination)`. */
+export interface BoundSmtpContext {
+  companyId: string;
+  recordId: string;
+}
+
+/** Trường đích mà đầu vào hợp lệ KHÔNG làm lệch được: số nguyên / boolean đã qua Zod, cột integer / boolean. */
+const SYSTEM_ONLY_DRIFT: ReadonlySet<string> = new Set(["port", "secure"]);
+
+/**
+ * B4 (owner D4 + FULL gate lượt 1): bộ PG THẬT SỰ lưu (`RETURNING`) phải bằng bộ đã gắn vào ngữ cảnh mã hoá —
+ * companyId + id + 4 trường đích (`smtpSecretContext`). Lệch ⇒ envelope vừa ghi không bao giờ mở được ⇒ repo gọi
+ * TRONG tx ở CẢ HAI nhánh INSERT ⇒ ném = rollback (audit ghi sau). So trong JS trên hàng sẵn có, không truy vấn.
+ * Phân loại theo AI gây ra được:
+ *   - companyId / id lệch ⇒ LỖI LẬP TRÌNH (companyId của JWT/khoá API lấy từ DB; id = `randomUUID()` chữ thường;
+ *     PG trả uuid chữ thường bất kể đầu vào) ⇒ 500 qua filter (log + stack), KHÔNG gói thành 400;
+ *   - port / secure lệch ⇒ LỖI HỆ THỐNG (trigger chuẩn hoá, đổi kiểu cột — đầu vào không gây ra được) ⇒ 500;
+ *   - CHỈ host / username lệch (chuỗi tự do — surrogate lẻ ⇒ U+FFFD) ⇒ `MailDestinationNotPersistedError` ⇒ 400.
+ * Message chỉ mang TÊN trường — không id, không giá trị.
+ */
+export function assertPersistedAsBound(
+  row: PersistedMailDestination,
+  bound: BoundSmtpContext,
+  destination: MailDestination,
+): void {
+  if (row.companyId !== bound.companyId) {
+    throw new Error(
+      "Mail config: companyId gắn vào ngữ cảnh mã hoá không khớp company_id PG lưu (lỗi lập trình — companyId phải là uuid chữ thường).",
+    );
+  }
+  if (row.id !== bound.recordId) {
+    throw new Error(
+      "Mail config: recordId gắn vào ngữ cảnh mã hoá không khớp id PG lưu (lỗi lập trình — recordId phải là uuid chữ thường app-gen).",
+    );
+  }
+  const changed = changedDestinationFields(destinationOf(row), destination);
+  if (changed.length === 0) return;
+  if (changed.some((field) => SYSTEM_ONLY_DRIFT.has(field))) {
+    throw new Error(
+      `Mail config: PG lưu ${changed.join(",")} khác giá trị đã gắn vào ngữ cảnh mã hoá (lỗi hệ thống — đầu vào hợp lệ không gây ra được).`,
+    );
+  }
+  throw new MailDestinationNotPersistedError(changed);
 }
