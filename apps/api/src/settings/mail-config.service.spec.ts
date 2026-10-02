@@ -278,3 +278,101 @@ describe("MailConfigService.testConnection — mật khẩu đã lưu CHỈ tớ
     expect(transport.test).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Dấu vết khi từ chối — FULL gate silent-failure M-2: route test không ghi audit, nên `logger.warn` là cơ chế
+ * phát hiện DUY NHẤT của một lần thử dẫn mật khẩu công ty đi nơi khác. Gỡ log ⇒ các ca này phải đỏ.
+ */
+describe("MailConfigService — log khi từ chối / thất bại (ghim nội dung)", () => {
+  function spyWarn(svc: MailConfigService) {
+    const logger = (svc as unknown as { logger: { warn: (message: string) => void } }).logger;
+    return vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+  }
+  const lineOf = (warn: ReturnType<typeof spyWarn>): string => String(warn.mock.calls[0]?.[0] ?? "");
+
+  it("test vắng password, đích lệch ⇒ đúng 1 dòng: route=test · actor · changed=<tên trường> · đích yêu cầu; KHÔNG mật khẩu", async () => {
+    const { svc } = makeService();
+    const warn = spyWarn(svc);
+
+    await svc.testConnection(COMPANY, { ...STORED_DEST, host: "smtp.attacker.example" }, ACTOR).catch(() => undefined);
+
+    expect(warn).toHaveBeenCalledOnce();
+    const line = lineOf(warn);
+    expect(line).toContain("route=test");
+    expect(line).toContain(`company=${COMPANY}`);
+    expect(line).toContain(`actor=${ACTOR}`);
+    expect(line).toContain("changed=host ");
+    expect(line).toContain('requestedHost="smtp.attacker.example"');
+    expect(line).not.toContain("decrypted-pw");
+  });
+
+  it("PUT vắng password, đổi port + secure ⇒ route=put · changed=port,secure", async () => {
+    const { svc } = makeService();
+    const warn = spyWarn(svc);
+
+    await svc
+      .upsert(COMPANY, { ...STORED_DEST, port: 2525, secure: false, fromEmail: "f@x.com" }, ACTOR)
+      .catch(() => undefined);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(lineOf(warn)).toContain("route=put");
+    expect(lineOf(warn)).toContain("changed=port,secure ");
+    expect(lineOf(warn)).toContain("requestedPort=2525");
+  });
+
+  it("host chứa xuống dòng + ký tự bidi ⇒ log ASCII-hoá (không giả được dòng log)", async () => {
+    // Dựng ký tự bằng mã (không viết literal): U+202E RIGHT-TO-LEFT OVERRIDE · U+2028 LINE SEPARATOR.
+    const RLO = String.fromCharCode(0x202e);
+    const LINE_SEP = String.fromCharCode(0x2028);
+    const BACKSLASH = String.fromCharCode(0x5c);
+    const { svc } = makeService();
+    const warn = spyWarn(svc);
+
+    await svc
+      .testConnection(COMPANY, { ...STORED_DEST, host: `evil.example${RLO}\nFAKE level=info${LINE_SEP}` }, ACTOR)
+      .catch(() => undefined);
+
+    const line = lineOf(warn);
+    for (const raw of ["\n", "\r", RLO, LINE_SEP]) expect(line).not.toContain(raw);
+    expect(line).toContain(`${BACKSLASH}u202e`);
+    expect(line).toContain(`${BACKSLASH}n`);
+    expect(line).toContain(`${BACKSLASH}u2028`);
+  });
+
+  it("giải mã mật khẩu đã lưu thất bại ⇒ warn có config=<id> (trước WO: nuốt im lặng)", async () => {
+    const { svc } = makeService({
+      secrets: { decryptSecret: vi.fn().mockRejectedValue(new Error("decrypt failed")) },
+    });
+    const warn = spyWarn(svc);
+
+    await svc.testConnection(COMPANY, STORED_DEST, ACTOR);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(lineOf(warn)).toContain(`config=${row().id}`);
+    expect(lineOf(warn)).not.toContain("decrypt failed");
+  });
+
+  it("repo báo 0 hàng (thua đua) ⇒ warn + 400 mang câu đúng cho CẢ 'hàng vừa bị thay' lẫn 'đích lệch'", async () => {
+    const { svc } = makeService({
+      repo: { upsert: vi.fn().mockRejectedValue(new MailPasswordRequiredError()) },
+    });
+    const warn = spyWarn(svc);
+
+    const err = await svc
+      .upsert(COMPANY, { ...STORED_DEST, fromEmail: "f@x.com" }, ACTOR)
+      .then(() => null, (e: unknown) => e);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(lineOf(warn)).toContain(`actor=${ACTOR}`);
+    expect(((err as BadRequestException).getResponse() as { message: string }).message).toMatch(
+      /thay đổi ở nơi khác hoặc đích không khớp/,
+    );
+  });
+
+  it("lỗi repo KHÔNG thuộc miền (DB sập, 23505, 42501…) ⇒ ném NGUYÊN lỗi, KHÔNG đổi thành 400 'cần mật khẩu'", async () => {
+    const dbDown = new Error("connection terminated unexpectedly");
+    const { svc } = makeService({ repo: { upsert: vi.fn().mockRejectedValue(dbDown) } });
+
+    await expect(svc.upsert(COMPANY, { ...STORED_DEST, fromEmail: "f@x.com" }, ACTOR)).rejects.toBe(dbDown);
+  });
+});

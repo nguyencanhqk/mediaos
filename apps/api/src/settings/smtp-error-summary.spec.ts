@@ -203,6 +203,12 @@ describe("classifySmtpTestError — câu cố định theo loại lỗi, không 
     }
   });
 
+  it("lỗi lập trình (TypeError/RangeError) ⇒ câu 'lỗi nội bộ', KHÔNG giả làm lỗi SMTP", () => {
+    for (const bug of [new TypeError(`x ${LEAK}`), new RangeError(`y ${LEAK}`)]) {
+      expect(classifySmtpTestError(bug)).toBe("Lỗi nội bộ khi kiểm tra kết nối — xem log máy chủ.");
+    }
+  });
+
   it("thứ không phải Error (string/null/object trần) ⇒ câu chung, không ném", () => {
     for (const thrown of [`raw ${LEAK}`, null, undefined, { message: LEAK, code: "EAUTH" }]) {
       const out = classifySmtpTestError(thrown);

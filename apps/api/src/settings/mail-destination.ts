@@ -5,7 +5,10 @@
  * chính hàng chứa nó. Hai bất biến dựa trên module này:
  *   - I1: mật khẩu ĐÃ LƯU chỉ được gửi tới đích của chính hàng đó (route "Kiểm tra kết nối" vắng mật khẩu);
  *   - I2: cột đích chỉ được ghi cùng envelope MỚI — nhánh "giữ mật khẩu cũ" của PUT không ghi được cột đích
- *     (repo dùng vị từ đích; DB thu hồi quyền UPDATE cột đích của `mediaos_app` — mig 0591).
+ *     (repo: SET không có cột đích + vị từ đích; DB: `mediaos_app` hết quyền UPDATE cột đích — mig 0591).
+ *     ⚠️ Lớp DB chỉ chặn ĐƯỜNG UPDATE: AAD envelope gắn companyId‖id, KHÔNG gắn đích, nên một đường ghi mới kiểu
+ *     DELETE+INSERT tái dùng id + chép envelope cũ vẫn mang được mật khẩu sang đích mới — đừng viết đường đó;
+ *     gắn đích vào AAD = WO `S19-SEC-MAILAADBIND-1`.
  *
  * So sánh CHÍNH XÁC (không chuẩn hoá hoa/thường/khoảng trắng): lệch thì bắt nhập lại mật khẩu — fail-closed.
  */

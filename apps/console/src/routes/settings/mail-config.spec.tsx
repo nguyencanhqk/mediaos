@@ -53,7 +53,9 @@ describe("MailConfigForm — submit", () => {
     const onSubmit = vi.fn();
     render(<MailConfigForm initial={null} scopeTab="default" onSubmit={onSubmit} />);
     fireEvent.click(screen.getByRole("button", { name: /Thiết lập/i }));
-    fireEvent.change(screen.getByPlaceholderText("smtp.example.com"), { target: { value: "smtp.x.com" } });
+    fireEvent.change(screen.getByPlaceholderText("smtp.example.com"), {
+      target: { value: "smtp.x.com" },
+    });
     const emails = screen.getAllByPlaceholderText("noreply@example.com");
     fireEvent.change(emails[0], { target: { value: "u@x.com" } }); // username
     fireEvent.change(emails[emails.length - 1], { target: { value: "from@x.com" } }); // fromEmail
@@ -66,8 +68,12 @@ describe("MailConfigForm — submit", () => {
     const onSubmit = vi.fn();
     render(<MailConfigForm initial={null} scopeTab="default" onSubmit={onSubmit} />);
     fireEvent.click(screen.getByRole("button", { name: /Thiết lập/i }));
-    fireEvent.change(screen.getByPlaceholderText("smtp.example.com"), { target: { value: "smtp.x.com" } });
-    fireEvent.change(screen.getAllByPlaceholderText("noreply@example.com")[0], { target: { value: "u@x.com" } });
+    fireEvent.change(screen.getByPlaceholderText("smtp.example.com"), {
+      target: { value: "smtp.x.com" },
+    });
+    fireEvent.change(screen.getAllByPlaceholderText("noreply@example.com")[0], {
+      target: { value: "u@x.com" },
+    });
     // fromEmail (ô email thứ 2)
     const emails = screen.getAllByPlaceholderText("noreply@example.com");
     fireEvent.change(emails[emails.length - 1], { target: { value: "from@x.com" } });
@@ -81,15 +87,31 @@ describe("MailConfigForm — submit", () => {
 describe("MailConfigForm — test connection hiển thị kết quả ĐÃ sanitize", () => {
   it("test thành công → hiện thông báo thành công", async () => {
     const runTest = vi.fn().mockResolvedValue({ ok: true });
-    render(<MailConfigForm initial={makeConfig()} scopeTab="default" onSubmit={vi.fn()} runTest={runTest} />);
+    render(
+      <MailConfigForm
+        initial={makeConfig()}
+        scopeTab="default"
+        onSubmit={vi.fn()}
+        runTest={runTest}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /Kiểm tra kết nối/i }));
     await waitFor(() => expect(screen.getByText(/Kết nối SMTP thành công/i)).toBeInTheDocument());
     expect(runTest).toHaveBeenCalledOnce();
   });
 
   it("test thất bại → hiện errorMessage server trả (đã sanitize), KHÔNG lộ credential", async () => {
-    const runTest = vi.fn().mockResolvedValue({ ok: false, errorMessage: "Xác thực SMTP thất bại" });
-    render(<MailConfigForm initial={makeConfig()} scopeTab="default" onSubmit={vi.fn()} runTest={runTest} />);
+    const runTest = vi
+      .fn()
+      .mockResolvedValue({ ok: false, errorMessage: "Xác thực SMTP thất bại" });
+    render(
+      <MailConfigForm
+        initial={makeConfig()}
+        scopeTab="default"
+        onSubmit={vi.fn()}
+        runTest={runTest}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /Kiểm tra kết nối/i }));
     await waitFor(() => expect(screen.getByText("Xác thực SMTP thất bại")).toBeInTheDocument());
   });
@@ -195,5 +217,52 @@ describe("MailConfigForm — đổi đích BẮT nhập lại mật khẩu", () 
     );
     fireEvent.click(screen.getByRole("button", { name: /Kiểm tra kết nối/i }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(REENTER_PW));
+  });
+});
+
+// FULL gate silent-failure L-3 / L-5.
+describe("MailConfigForm — lỗi không lẫn vào nhau", () => {
+  it("cổng trống + ô mật khẩu trống → báo lỗi CỔNG, không báo nhầm 'đã đổi đích'", () => {
+    const onSubmit = vi.fn();
+    render(<MailConfigForm initial={makeConfig()} scopeTab="default" onSubmit={onSubmit} />);
+    fireEvent.change(screen.getByDisplayValue("587"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu cấu hình/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/port/i);
+    expect(alert).not.toHaveTextContent(REENTER_PW);
+  });
+
+  it("request kiểm tra KHÔNG tới được bước SMTP (mạng/phiên/500) → câu riêng, KHÁC 'Kiểm tra kết nối thất bại.'", async () => {
+    const runTest = vi.fn().mockRejectedValue(new ApiError(500, "SYSTEM-ERR-001", "boom"));
+    render(
+      <MailConfigForm
+        initial={makeConfig()}
+        scopeTab="default"
+        onSubmit={vi.fn()}
+        runTest={runTest}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Kiểm tra kết nối/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(/Không gửi được yêu cầu kiểm tra/),
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent("Kiểm tra kết nối thất bại.");
+  });
+
+  it("Kiểm tra bị server đòi mật khẩu → gọi onPasswordRequired (container tải lại đích mới)", async () => {
+    const onPasswordRequired = vi.fn();
+    const runTest = vi.fn().mockRejectedValue(new ApiError(400, MAIL_PASSWORD_REQUIRED, "x"));
+    render(
+      <MailConfigForm
+        initial={makeConfig()}
+        scopeTab="default"
+        onSubmit={vi.fn()}
+        runTest={runTest}
+        onPasswordRequired={onPasswordRequired}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Kiểm tra kết nối/i }));
+    await waitFor(() => expect(onPasswordRequired).toHaveBeenCalledOnce());
   });
 });

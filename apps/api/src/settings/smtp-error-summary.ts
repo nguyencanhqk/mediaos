@@ -119,6 +119,7 @@ export function isProgrammerError(err: unknown): err is Error {
  *   - `530`/`538` ở AUTH = máy chủ đòi mã hoá trước khi đăng nhập, không phải sai mật khẩu.
  */
 const TEST_MESSAGES = {
+  internal: "Lỗi nội bộ khi kiểm tra kết nối — xem log máy chủ.",
   auth: "Xác thực SMTP thất bại",
   authNeedsTls:
     "Máy chủ yêu cầu kết nối mã hoá trước khi đăng nhập — bật «Dùng TLS» hoặc dùng cổng hỗ trợ STARTTLS.",
@@ -138,6 +139,9 @@ const isPresent = (value: unknown): boolean => typeof value === "string" && valu
 
 /** Một câu cố định theo loại lỗi `verify()` — an toàn để trả cho client (không byte nào của server). */
 export function classifySmtpTestError(err: unknown): string {
+  // Lỗi lập trình (TypeError… khi nâng major thư viện) KHÔNG phải lỗi SMTP — câu riêng để admin không sửa
+  // cấu hình vô ích; chi tiết (stack) chỉ ở log máy chủ (MailTransportService log `error`).
+  if (isProgrammerError(err)) return TEST_MESSAGES.internal;
   const e = fieldsOf(err);
   const code = matching(e.code, ERROR_CODE);
   const reply = replyCode(e.responseCode);

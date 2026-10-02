@@ -30,12 +30,11 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
-import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
-import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { DatabaseService } from "../../src/db/db.service";
 import { AuditService } from "../../src/events/audit.service";
 import { MailConfigRepository } from "../../src/settings/mail-config.repository";
 import { InviteMailService } from "../../src/user-invites/invite-mail.service";
+import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { startFakeSmtpServer, type FakeSmtpServer } from "../helpers/fake-smtp-server";
 import { loginPasswordFixture, smtpPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
@@ -134,7 +133,7 @@ describe.skipIf(!hasLaneDb)(
     };
 
     /** Số kết nối TCP mỗi server nhận được TRONG phần "act" của một ca. */
-    const connectionsDuring = async <T,>(act: () => PromiseLike<T>) => {
+    const connectionsDuring = async <T>(act: () => PromiseLike<T>) => {
       const before = { L: L.connections, E: E.connections };
       const result = await act();
       return { result, L: L.connections - before.L, E: E.connections - before.E };
@@ -150,10 +149,10 @@ describe.skipIf(!hasLaneDb)(
 
     beforeAll(async () => {
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-      app = moduleRef.createNestApplication();
-      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
-      app.useGlobalFilters(new AllExceptionsFilter());
+      // Pipeline y hệt main.ts (lưới S16-TEST-PIPELINE-PARITY-1) + listen(0) (census S18-QA-SUPERTESTLISTEN-1).
+      app = applyMainPipeline(moduleRef.createNestApplication());
       await app.init();
+      await app.listen(0);
 
       direct = directPool();
       L = await startFakeSmtpServer();
@@ -345,6 +344,8 @@ describe.skipIf(!hasLaneDb)(
     it("R4: repo.upsert(envelope=null) với đích lệch ⇒ ném MailPasswordRequiredError, hàng y nguyên, KHÔNG audit", async () => {
       const before = await storedRow();
       const auditBefore = await mailAuditCount();
+      // Đối chứng dương: beforeEach vừa PUT (có audit) — 0 ở đây = bộ đếm mù (vd RLS che) ⇒ "0 == 0" xanh-rỗng.
+      expect(auditBefore, "bộ đếm audit phải thấy các lần PUT trước").toBeGreaterThan(0);
 
       const attempt = app.get(MailConfigRepository).upsert(
         A.companyId,
@@ -403,21 +404,24 @@ describe.skipIf(!hasLaneDb)(
 
     // ── Lớp DB (owner D5, mig 0591): mediaos_app KHÔNG còn quyền UPDATE cột đích ───────────────────
 
-    it("D5a: catalog — mediaos_app không UPDATE được host/port/username/secure, vẫn UPDATE được from_*/updated_at", async () => {
-      const res = await direct.query(
-        `SELECT c AS col, has_column_privilege('mediaos_app', 'company_mail_configs', c, 'UPDATE') AS can
-           FROM unnest(ARRAY['host','port','username','secure','from_name','from_email','updated_at']) AS c`,
+    it("D5a: catalog — tập cột mediaos_app UPDATE được ĐÚNG BẰNG {from_email, from_name, updated_at}; không UPDATE cấp bảng", async () => {
+      // Duyệt MỌI cột (không chỉ 7 cột đã biết): một grant cột mới về sau (id, scope, company_id, envelope…) cũng đỏ.
+      const cols = await direct.query(
+        `SELECT a.attname::text AS col
+           FROM pg_attribute a
+          WHERE a.attrelid = 'public.company_mail_configs'::regclass AND a.attnum > 0 AND NOT a.attisdropped
+            AND has_column_privilege('mediaos_app', a.attrelid, a.attnum, 'UPDATE')
+          ORDER BY 1`,
       );
-      const can = Object.fromEntries(res.rows.map((r) => [r.col as string, r.can as boolean]));
-      expect(can).toEqual({
-        host: false,
-        port: false,
-        username: false,
-        secure: false,
-        from_name: true,
-        from_email: true,
-        updated_at: true,
-      });
+      expect(cols.rows.map((r) => r.col as string)).toEqual([
+        "from_email",
+        "from_name",
+        "updated_at",
+      ]);
+      const table = await direct.query(
+        `SELECT has_table_privilege('mediaos_app', 'public.company_mail_configs', 'UPDATE') AS can`,
+      );
+      expect(table.rows[0].can).toBe(false);
     });
 
     it("D5b: UPDATE cột đích THẬT bằng role app (withTenant) ⇒ 42501, hàng y nguyên", async () => {

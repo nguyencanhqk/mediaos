@@ -76,11 +76,13 @@ export class MailConfigRepository {
    *   - row tồn tại + KHÔNG envelope (vắng password) → UPDATE CHỈ from_name/from_email, GIỮ envelope cũ, và
    *     chỉ khi đích trong `fields` KHỚP hàng (vị từ trong WHERE). 0 hàng ⇒ `MailPasswordRequiredError`.
    *
-   * S19-SEC-MAILCREDEXFIL-1 (I2): nhánh giữ-envelope về CẤU TRÚC không ghi được cột đích — mật khẩu đã lưu
-   * không thể bị gắn với đích khác. Vị từ nằm trong chính câu UPDATE (không so trước rồi mới ghi): READ
-   * COMMITTED đánh giá lại vị từ trên phiên bản hàng thật sự bị ghi, nên một PUT có mật khẩu chen giữa
-   * (DELETE+INSERT) không lách được. DB ép thêm một lớp: `mediaos_app` không còn quyền UPDATE cột đích (mig
-   * 0591). Thua đua ⇒ người gọi nhận 400 "cần mật khẩu" dù không đổi đích — chấp nhận (fail-closed).
+   * S19-SEC-MAILCREDEXFIL-1 (I2): nhánh giữ-envelope về CẤU TRÚC không ghi được cột đích ⇒ đích của một hàng
+   * BẤT BIẾN suốt đời hàng (chỉ DELETE+INSERT với id + envelope mới mới đổi được) — vì thế không đan xen nào gắn
+   * envelope với đích khác. Vị từ đích trong WHERE biến yêu cầu "đổi đích mà giữ mật khẩu" thành LỖI thay vì 200
+   * im lặng bỏ qua đích mới; đua với DELETE+INSERT đang dở ⇒ UPDATE chờ khoá, hàng cũ đã bị xoá nên bị bỏ qua
+   * (hàng mới ngoài snapshot câu lệnh) ⇒ 0 hàng ⇒ lỗi. DB: `mediaos_app` hết quyền UPDATE cột đích (mig 0591 —
+   * chỉ chặn đường UPDATE; AAD không gắn đích ⇒ ĐỪNG viết DELETE+INSERT tái dùng id + envelope cũ). Thua đua ⇒
+   * 400 "cần mật khẩu / tải lại" dù không đổi đích — chấp nhận (fail-closed).
    *
    * `recordId` = id của hàng sẽ ghi (app-gen TRƯỚC encrypt ở caller → AAD bind). KHÔNG ghi secret vào audit.
    */

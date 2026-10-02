@@ -28,10 +28,25 @@ const PASSWORD_REQUIRED = {
   newConfig: "Cấu hình mới yêu cầu mật khẩu SMTP.",
   noConfigToTest: "Chưa có cấu hình để kiểm tra — vui lòng nhập mật khẩu SMTP.",
   destinationChanged: "Đã đổi máy chủ, cổng, tên đăng nhập hoặc TLS — cần nhập lại mật khẩu SMTP.",
+  // Repo ném khi vị từ đích của câu UPDATE ra 0 hàng: đích lệch HOẶC hàng vừa bị thay ở nơi khác (PUT kèm mật
+  // khẩu chen giữa, kể cả khi KHÔNG đổi đích) — không phân biệt được ở đây nên câu phải đúng cho cả hai.
+  storedRowChanged:
+    "Cấu hình máy chủ thư vừa thay đổi ở nơi khác hoặc đích không khớp — tải lại trang rồi thử lại (nhập mật khẩu nếu đổi đích).",
 } as const;
 
 function passwordRequired(message: string): BadRequestException {
   return new BadRequestException({ code: FOUNDATION_ERROR_CODES.MAIL_PASSWORD_REQUIRED, message });
+}
+
+/**
+ * Giá trị do CLIENT chọn trước khi vào log: `JSON.stringify` thoát CR/LF/nháy, rồi mọi ký tự ngoài ASCII in
+ * được ⇒ `\uXXXX` — chặn giả dòng log bằng ký tự bidi (U+202E), U+2028/2029, NEL (FULL gate security LOW).
+ */
+function logSafe(value: string): string {
+  return JSON.stringify(value).replace(
+    /[^\x20-\x7e]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 }
 
 /** Map row DB → view DTO (KHÔNG password / KHÔNG cột envelope). `hasPassword` = luôn true (envelope NOT NULL). */
@@ -120,11 +135,12 @@ export class MailConfigService {
       return toDto(row);
     } catch (err: unknown) {
       if (!(err instanceof MailPasswordRequiredError)) throw err;
-      // Thua đua: hàng đổi đích (PUT có mật khẩu chen giữa) sau lần đọc ở trên ⇒ vị từ đích 0 hàng.
+      // Vị từ đích của câu UPDATE ra 0 hàng sau khi phép so ở trên đã khớp ⇒ hàng vừa bị thay ở nơi khác (PUT kèm
+      // mật khẩu chen giữa — đích có thể giữ nguyên) hoặc đích đã lệch. Không ghi gì; báo đúng cả hai khả năng.
       this.logger.warn(
-        `PUT mail-config giữ mật khẩu cũ thua đua — đích của hàng đã đổi giữa chừng (company=${companyId} actor=${actorUserId} scope=${scope})`,
+        `PUT mail-config giữ mật khẩu cũ không ghi được — hàng vừa bị thay ở nơi khác hoặc đích không khớp (company=${companyId} actor=${actorUserId} scope=${scope})`,
       );
-      throw passwordRequired(PASSWORD_REQUIRED.destinationChanged);
+      throw passwordRequired(PASSWORD_REQUIRED.storedRowChanged);
     }
   }
 
@@ -177,7 +193,8 @@ export class MailConfigService {
 
   /**
    * Vắng password ⇒ đích yêu cầu phải KHỚP NGUYÊN hàng đã lưu. Lệch ⇒ log (actor + tên trường + đích yêu cầu
-   * — để điều tra ai định gửi mật khẩu công ty đi đâu; host qua JSON.stringify chống chèn dòng log) rồi 400.
+   * — để điều tra ai định gửi mật khẩu công ty đi đâu; host qua `logSafe`) rồi 400. Route test không ghi audit
+   * nên dòng log này là dấu vết DUY NHẤT của một lần thử dẫn mật khẩu đi nơi khác (test ghim nội dung).
    */
   private assertStoredDestination(
     route: "put" | "test",
@@ -188,7 +205,7 @@ export class MailConfigService {
     const changed = changedDestinationFields(stored, requested);
     if (changed.length === 0) return;
     this.logger.warn(
-      `Từ chối dùng mật khẩu SMTP đã lưu cho đích khác (route=${route} company=${ctx.companyId} actor=${ctx.actorUserId} scope=${ctx.scope} changed=${changed.join(",")} requestedHost=${JSON.stringify(requested.host)} requestedPort=${requested.port})`,
+      `Từ chối dùng mật khẩu SMTP đã lưu cho đích khác (route=${route} company=${ctx.companyId} actor=${ctx.actorUserId} scope=${ctx.scope} changed=${changed.join(",")} requestedHost=${logSafe(requested.host)} requestedPort=${requested.port})`,
     );
     throw passwordRequired(PASSWORD_REQUIRED.destinationChanged);
   }
