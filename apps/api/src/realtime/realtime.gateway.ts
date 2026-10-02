@@ -134,7 +134,7 @@ export class RealtimeGateway
    * S7-CHAT-RT-1 — join phòng lúc handshake. Danh sách phòng đọc TỪ DB PHÍA SERVER; KHÔNG có đường nào
    * nhận `roomId` từ payload/handshake của client.
    *
-   * Bốn bước, thứ tự có ý nghĩa:
+   * Các bước, thứ tự có ý nghĩa:
    *   (0) join `userRoomName` — đích `notification:new`, phải sống kể cả khi CHAT bị từ chối;
    *   (0b) khối bảng tin RIÊNG (`joinFeedRooms` — S16-SOCIAL-BE-1/BE-2C): cổng `view:feed` → room công
    *       ty + room đánh dấu `feeduser` → room nhóm đọc từ DB + đọc lại; chạy XONG trước khối CHAT;

@@ -370,6 +370,104 @@ Mỗi finding được đối chiếu với code TRƯỚC khi sửa plan; bằng
 
 Không finding nào bị BÁC TOÀN PHẦN; F8 bác một vế (sơ tán không đóng được khe (b)) — bằng chứng trên.
 
+## 11. Thi công 02/10/2026 — sổ vết (owner ký §6 cùng ngày: cả 10 đề xuất)
+
+Nhánh `feat/s16-social-be-2c`, lane DB `mediaos_be2c`. Commit A `9cb07928` (room + join/leave + reader + gateway + backlog) · commit B `8fffdde7` (union contracts + builder + định tuyến emitter + FE + API-19). Seed: `S16-SOCIAL-RTGROUPCR-1` (Q-CR) · `S16-SOCIAL-GROUPPOSTDEL-1` (Q-EVAC (c)).
+
+### 11.1 RED (T1 — sau T1a, code chưa sửa) — đỏ đúng HÀNH VI trừ các ca ghi «cấu trúc»
+
+| Ca                                    | Thông điệp đo được                                                                                                                                                                                                                                                                                                                        | So với cột «Đỏ…» §5                                                     |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| W1a · W1b                             | `TypeError: svc.syncFeedGroupMembership is not a function`                                                                                                                                                                                                                                                                                | khớp (M26)                                                              |
+| W1c                                   | `expected [Function] to not throw … 'TypeError: svc.syncFeedGroupMembershi…' was thrown`                                                                                                                                                                                                                                                  | khớp («như trên»)                                                       |
+| N1                                    | XANH sau T1a                                                                                                                                                                                                                                                                                                                              | khớp                                                                    |
+| W3a                                   | XANH (neo hồi quy)                                                                                                                                                                                                                                                                                                                        | khớp                                                                    |
+| W3b                                   | `expected ['co:A:feed'] to deeply equal ['co:A:feedgroup:G']` (diff in đủ chuỗi)                                                                                                                                                                                                                                                          | khớp (M27)                                                              |
+| W3c · W3d                             | `expected [ Array(1) ] to deeply equal []` (= `['co:A:feed']`)                                                                                                                                                                                                                                                                            | khớp                                                                    |
+| W3e                                   | `expected undefined to be defined`                                                                                                                                                                                                                                                                                                        | khớp                                                                    |
+| GW1 · GW3 · GW5a · GW6                | `expected [ …(4) ] to deeply equal ArrayContaining{…}` · `… to include 'join:co:…:feeduser:…'` · `… to include 'co:…:feeduser:…'` · `… to include 'co:…:feedgroup:…'`                                                                                                                                                                     | khớp                                                                    |
+| GW2                                   | XANH-rỗng (reader chưa có) — đỏ dưới M12b                                                                                                                                                                                                                                                                                                 | khớp                                                                    |
+| GW4 · GW5b                            | `expected [] to deeply equal [ Array(1) ]` · `expected [] to deeply equal ArrayContaining{…}`                                                                                                                                                                                                                                             | khớp                                                                    |
+| GW5d                                  | `expected "spy" to be called with arguments: [ true ]`                                                                                                                                                                                                                                                                                    | khớp                                                                    |
+| P1–P5                                 | `Cannot find module './social-ws-payload'` ⇒ file không nạp (CẤU TRÚC)                                                                                                                                                                                                                                                                    | khớp                                                                    |
+| AC (commit OK)                        | join: `expected "spy" to be called 1 times, but got 0 times` · leave: `expected [] to have a length of 2 but got +0` / `… length of 1 …`                                                                                                                                                                                                  | khớp; các ca «commit hỏng ⇒ 0 join» XANH-rỗng hôm nay — đỏ dưới M8      |
+| S1 / S2                               | `expected [ '@nestjs/common', …(11) ] to include '../social/social-group-rooms.reader'` · `expected false to be true` + ENOENT (CẤU TRÚC)                                                                                                                                                                                                 | khớp                                                                    |
+| contracts C1                          | group/G `expected false to be true`; **thêm** company/G và company/orgUnit=UUID `expected true to be false` (schema cũ nhận hai tổ hợp đó); ca shape: TypeError trên `.options` (CẤU TRÚC)                                                                                                                                                | khớp + 2 ca hành vi                                                     |
+| FE ca bài nhóm                        | `expected "error" to not be called at all, but actually been called 1 times`                                                                                                                                                                                                                                                              | **lệch** — xem 11.4 (2)                                                 |
+| int file 1                            | R1–R5 `Cannot find module '…/social-group-rooms.reader'` (CẤU TRÚC, từng ca — import lười) · E0m/E1m `expected false to be true` · E2m/E4m `syncFeedGroupMembership does not exist` · E6m/E7m `expected false to be true` (tiền đề M∈K) · E8m `hết giờ chờ: E8m: O vào room N sau 031` · E9m `neo: TRƯỚC 034 … expected false to be true` | khớp; E6m/E7m đỏ sớm hơn ở tiền đề; E9m nay có neo dương (xem 11.4 (1)) |
+| int file 2 — đo ở TRẠNG THÁI commit A | mọi ca E\*/W2/W2b: `hết giờ chờ sự kiện feed:post.created id=…` (B1) — mọi poll membership đã ĐẠT; W4 XANH (neo hồi quy)                                                                                                                                                                                                                  | khớp — hai lát tách sạch                                                |
+
+### 11.2 XANH
+
+- Trạng thái commit A: unit `src/realtime` + `src/social` **39 file / 710 ca** · int file 1 + lưới CHAT/BE-2A **8 file / 86 ca** · `pipeline-parity` + `supertest-listen` **2 / 32** · `tsc --noEmit` sạch.
+- Trạng thái commit B: unit **40 / 720** · contracts **45 / 730** · FE hook **9 / 9** · int (2 file mới + BE-2D + BE-1D + BE-1 visibility + chat-rt1) **6 / 105**.
+- **T5 — MỘT lượt chung trên lane**: `src/realtime src/social chat-rt1 social-*.int-spec (28) s16-social-*.int-spec (2) pipeline-parity` ⇒ **Test Files 76 passed (76) · Tests 1414 passed (1414)**, 0 skip. `chat-rt1-realtime` 3 lượt liền: 14/14 ×3 (R1 không nổ).
+- T6 (từng bước, xem 11.4 (5)): secret-literals 0 vi phạm · tooling `node --test` 177/177 · migration-no-drop OK · typecheck 7/7 package · lint 0 lỗi (0 cảnh báo ở file của WO) · build 7/7 · bộ test toàn workspace chia chunk trên lane: **KHÔNG có kết quả ghi lại** — máy sập (BSOD 16:35) trước khi ghi; lượt phục hồi KHÔNG chạy lại toàn workspace (chỉ thị tải máy) — xem 11.6.
+
+### 11.3 Mutant (T4 — sao lưu → cấy → chạy → `cp` hoàn tác → `cmp` khớp)
+
+| #                        | Ca đỏ · thông điệp                                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1                       | W1a `expected "spy" to not be called with arguments: [ 'co:…:user:…' ]` + **E2m** `NV trượt view:feed KHÔNG được ở room nhóm: expected true to be false`            |
+| M2                       | W1b `expected "spy" to be called with arguments: [ 'co:…:user:…' ]`                                                                                                 |
+| M3                       | W3b + E0e/E1e `X không thuộc K: expected 1 to be +0` (+ E4e/E6e/E7e)                                                                                                |
+| M4                       | C1 group/null `expected true to be false`                                                                                                                           |
+| M5                       | R3 `expected [ Array(1) ] to deeply equal []` + E1m (X ∈ P) (+ R2/R4/R5/E0m/E8m)                                                                                    |
+| M6                       | R2 + R5 + E1m (Pd ∈ K)                                                                                                                                              |
+| M7                       | **không đỏ** (13/13) — vế `g.deleted_at` trong vị từ giữ, đúng dự đoán                                                                                              |
+| M7′                      | R4 `expected [ Array(1) ] to deeply equal []` + E9m                                                                                                                 |
+| M8                       | AC1 commit hỏng `expected "spy" to not be called at all, but actually been called 1 times`                                                                          |
+| M9 / M9b (`036` / `039`) | AC commit OK `expected [ … ] to have a length of 2 but got 1` + commit hỏng `… length of 1 but got +0`                                                              |
+| M10 / M10b               | AC commit OK `… length of 2 but got 1`                                                                                                                              |
+| M11                      | AC3 `expected "spy" to not be called at all …` + E4m (Pd2 ∈ K sau rào)                                                                                              |
+| M12a                     | GW3 `expected 3 to be less than 2` (+ GW5a)                                                                                                                         |
+| M12b                     | GW2 `expected "spy" to not be called at all, but actually been called 1 times`                                                                                      |
+| M13                      | GW4 `expected [] to deeply equal [ Array(1) ]` (+ GW5b/GW5d)                                                                                                        |
+| M14                      | P1/P2 tập khoá lệch (`…(19)` vs `…(17)`) — **W2/W2b KHÔNG đỏ**, xem 11.4 (3)                                                                                        |
+| M15                      | FE `expected 2 to be 1`                                                                                                                                             |
+| M16                      | P3 `expected { …(19) } to be null` + W4 `expected 1 to be +0`                                                                                                       |
+| M17                      | GW5b `expected [] to deeply equal ArrayContaining{…}` (+ GW5d)                                                                                                      |
+| M18                      | P2 `expected 'company' to be 'group'` + E0e (M nhận nhãn company) + W2 `khoá chung «audience» … 'company' … 'group'` + E4e/E6e/E7e (người ngoài nhận bài nhóm)      |
+| M19                      | R5 `expected [ …(3) ] to deeply equal [ Array(1) ]` (= K,P,Q như M28) + R3 + E0m (M ∈ P)                                                                            |
+| M20                      | C1 company/orgUnit=UUID + group/orgUnit=UUID `expected true to be false`                                                                                            |
+| M21                      | GW5d `expected "spy" to be called with arguments: [ true ]`                                                                                                         |
+| MC (lưới CHAT)           | xoá bước (C) của CHAT ⇒ `realtime.gateway.chat.spec.ts` «bước (C) ném → VẪN disconnect» + «phòng biến mất…» ĐỎ — bộ đếm `withTenant` của spec CHAT KHÔNG lệch (M11) |
+
+### 11.4 Lệch so với plan (theo bằng chứng, giữ ý quyết định owner)
+
+1. **E9m dùng Pd, không dùng M**: M đã bị mời ra ở E6m ⇒ «socket mới của M ∉ K» xanh-rỗng dưới M7′. Pd (được duyệt ở E2m) là thành viên active còn lại; thêm neo dương «TRƯỚC `034` socket mới của Pd ∈ K».
+2. **Ca FE đỏ khác thông điệp dự đoán**: trên schema CŨ payload nhóm bị từ chối (literal) ⇒ `console.error`; ca khẳng định payload nhóm hợp lệ KHÔNG bị log ⇒ đỏ `expected "error" to not be called…`. Thông điệp `expected 2 to be 1` của plan xuất hiện đúng ở mutant M15 (union đã có, thiếu bộ lọc).
+3. **M14 chỉ bị P1/P2 giết**: W2/W2b không đỏ vì `.parse()` của emitter BÓC `status`/`poll` độc lập (hai tầng) — đo, không suy.
+4. Contracts spec tra option TRONG ca (`optionFor`) thay cho `it.each(.options.map(...))` lúc collect (bảng dựng lúc collect làm CẢ FILE không nạp trên schema cũ, che C1). Int file 1 import reader LƯỜI (`import()` trong ca R) cùng lý do; fixture R ở công ty RIÊNG.
+5. **T6 không gọi `check.sh --all`**: bước `db-readiness` đọc `DATABASE_DIRECT_URL` từ `.env` của worktree (DB chính — luật cấm chạm), `prod-tenant-check` tự bỏ qua (không `.env.prod`). Chạy từng bước còn lại trên lane / không DB. `pnpm typecheck` song song (turbo) sập `0xC0000005` hai lần ở HAI package khác nhau (console, rồi app) — từng package riêng đều exit 0 (hạ tầng, họ KI-014).
+6. Ca thêm ngoài §5: emitter «room-op ném ⇒ warn, không ném» · «CHAT không quét `feeduser`» · AC «`034` 0 room-op» (neo dương) · S1 «emitter vẫn là lá». E0e/E1e và E2m/E3m gộp một `it` (E3m là rào của E2m).
+7. `decideMember`: kết quả tx gán vào biến ⇒ thêm `as const` cho đúng MỘT literal thay vì gói lại cả hàm (giữ diff hẹp).
+
+### 11.5 Còn lại / theo dõi
+
+- **T7 FULL gate** (security + database + silent-failure + typescript + `santa-method` + `react-reviewer`) — phiên điều phối chạy trước khi mở PR.
+- Adapter Valkey: CI của PR là phép đo (M24) — local chạy in-memory.
+- WO FE badge theo nhóm (§7) chưa seed — không có quyết định owner nào đòi; đề xuất seed khi mở FE-2B G3.
+- `social-posts.service.ts` 904 → 881 dòng (vẫn > 800 — nợ có sẵn).
+- Docblock `GroupPostsTab.tsx:11-13` còn tả trạng thái TRƯỚC BE-2C (`audience = literal('company')`, «chờ BE-2C») — ngoài `paths` của WO; §7 giao cho WO FE badge theo nhóm (chưa seed).
+
+### 11.6 Phục hồi sau sự cố máy (BSOD 16:35) — đo lại cùng ngày
+
+Trạng thái tìm thấy: commit A `9cb07928` + B `8fffdde7` nguyên vẹn; CHƯA commit: sổ vết §11 này + một chữ ở docblock `handleConnection` («Bốn bước» → «Các bước» — khối (0b) làm danh sách thành 5 bước). Không mutant nào còn cấy (`git status` chỉ hai file đó, không file lạ). Đối chiếu plan ⇒ giữ cả hai, commit thành lát C (chỉ tài liệu/chú thích).
+
+Mọi lượt vitest đo lại chạy TUẦN TỰ với `--maxWorkers=4` (chỉ thị tải máy sau hai lần BSOD):
+
+- **MỘT lượt chung trên lane `mediaos_be2c`**: `src/realtime src/social` + 8 spec CHAT dùng emitter (`chat-call-emit-guard` · `chat-call-rest-emit-guard` · `chat-calls.invite-cooldown` · `chat-calls.stale-active-sweep` · `chat-reactions.service` · `chat-realtime-after-commit` · `chat-room-prefs.service` · `chat-typing.service`) + `notifications.spec` + 3 int-spec mở socket thật (`chat-rt0-ws-adapter` · `chat-rt1-realtime` · `chat-s7-call-rt1-signalling`) + 28 `social-*.int-spec` + 2 `s16-social-*.int-spec` + `pipeline-parity` ⇒ **Test Files 87 passed (87) · Tests 1597 passed (1597)**, 0 skip (file 1: 13 ca · file 2: 10 ca · chat-rt1 14 · call-rt1 40 · rt0 10).
+- contracts toàn package **45 / 730** (`social-ws.spec.ts` 33 ca) · FE `use-feed-realtime.spec` + `FeedPage.spec` **2 / 31** · typecheck `api` · `app` · `contracts` exit 0 · `node --test harness/id-uniqueness.test.mjs` **14 / 14**.
+- **Mutant đo LẠI** (mẫu crown-jewel; sao lưu → cấy → chạy → `cp` hoàn tác → `cmp` khớp) — cả 6 khớp 11.3:
+  - M1: W1a `expected "spy" to not be called with arguments: [ Array(1) ]` + E2m `NV trượt view:feed KHÔNG được ở room nhóm: expected true to be false`. Lượt đầu chết ngay sau dòng `RUN` (0 dòng kết quả — hạ tầng); chạy lại một lần cho kết quả này.
+  - M3: W3b `expected [ Array(1) ] to deeply equal [ Array(1) ]` + E0e/E1e `X không thuộc K: expected 1 to be +0` (+ E4e/E6e/E7e).
+  - M17: GW5b `expected [] to deeply equal ArrayContaining{…}` (+ GW5d).
+  - M18 (nhánh group giữ hằng `company` của BE-1): P2 `expected 'company' to be 'group'` + E0e `expected { …(19) } to match object { …(4) }` + W2 `khoá chung «audience» phải BẰNG REST: expected 'company' to deeply equal 'group'` (+ E4e/E6e/E7e).
+  - M19: R3 + R5 `expected [ …(3) ] to deeply equal [ Array(1) ]` + E0m `expected true to be false`.
+  - M21: GW5d `expected "spy" to be called with arguments: [ true ]`.
+- KHÔNG chạy: `check.sh --all` (lý do 11.4 (5)) và bộ test toàn workspace (chỉ thị tải máy) — phép đo đó thuộc CI của PR + phiên điều phối (T6/T7).
+
 ## Phụ lục A — tái lập probe (không cần file scratchpad)
 
 Mọi probe chỉ ĐỌC kho; chạy từ `apps/api` của worktree để `require.resolve` thấy `node_modules`.
