@@ -2,14 +2,22 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { MailConfigDto, UpsertMailConfigRequest } from "@mediaos/contracts";
-import { upsertMailConfigSchema } from "@mediaos/contracts";
-import { PermissionGate } from "@mediaos/web-core";
+import { FOUNDATION_ERROR_CODES, upsertMailConfigSchema } from "@mediaos/contracts";
+import { ApiError, PermissionGate } from "@mediaos/web-core";
 import { Button, Input } from "@mediaos/ui";
 import { mailConfigApi } from "@/lib/mail-config-api";
 
 const DEFAULT_SCOPE = "default";
 
 type ScopeTab = "default" | "app";
+
+/**
+ * Server từ chối dùng mật khẩu ĐÃ LƯU (đổi đích / chưa có cấu hình) — S19-SEC-MAILCREDEXFIL-1. Mật khẩu
+ * SMTP gắn với đúng host/port/username/TLS đã lưu; server là nguồn sự thật, form chỉ chặn sớm.
+ */
+function isPasswordRequired(err: unknown): boolean {
+  return err instanceof ApiError && err.code === FOUNDATION_ERROR_CODES.MAIL_PASSWORD_REQUIRED;
+}
 
 // ── Container ───────────────────────────────────────────────────────────────────
 
@@ -30,6 +38,11 @@ export function MailConfigPage() {
   const upsert = useMutation({
     mutationFn: (payload: UpsertMailConfigRequest) => mailConfigApi.upsert(payload),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["settings", "mail-config"] }),
+    // Đích của hàng có thể vừa đổi ở nơi khác (PUT có mật khẩu chen giữa) ⇒ tải lại để form so với đích MỚI.
+    onError: (err) => {
+      if (isPasswordRequired(err))
+        void qc.invalidateQueries({ queryKey: ["settings", "mail-config"] });
+    },
   });
 
   const active = tab === "default" ? defaultConfig : appConfigs[0];
@@ -88,6 +101,7 @@ export function MailConfigPage() {
             isSaving={upsert.isPending}
             isSaved={upsert.isSuccess}
             isSaveError={upsert.isError}
+            saveError={upsert.error}
           />
         </PermissionGate>
       )}
@@ -104,6 +118,8 @@ interface MailConfigFormProps {
   isSaving?: boolean;
   isSaved?: boolean;
   isSaveError?: boolean;
+  /** Lỗi của lần lưu gần nhất — để hiện thông điệp riêng khi server đòi nhập lại mật khẩu. */
+  saveError?: unknown;
   /** Test-connection runner — mặc định gọi API; cho phép inject trong test. */
   runTest?: (payload: import("@mediaos/contracts").TestMailConfigRequest) => Promise<{
     ok: boolean;
@@ -118,6 +134,7 @@ export function MailConfigForm({
   isSaving = false,
   isSaved = false,
   isSaveError = false,
+  saveError,
   runTest = mailConfigApi.test,
 }: MailConfigFormProps) {
   const { t } = useTranslation("settings");
@@ -154,6 +171,17 @@ export function MailConfigForm({
     );
   }
 
+  // Mật khẩu đã lưu chỉ dùng được cho ĐÚNG đích đã lưu (server so chính xác, `secure` vắng = true) ⇒ đổi
+  // scope/host/port/username/TLS mà ô mật khẩu trống thì chặn ngay, khỏi gửi một request chắc chắn 400.
+  const destinationChanged =
+    initial !== null &&
+    (scope.trim() !== initial.scope ||
+      host.trim() !== initial.host ||
+      Number(port) !== initial.port ||
+      username.trim() !== initial.username ||
+      secure !== initial.secure);
+  const needsPassword = (isNew || destinationChanged) && password.length === 0;
+
   const buildPayload = (withPassword: boolean): UpsertMailConfigRequest | null => {
     const raw: Record<string, unknown> = {
       scope: scope.trim(),
@@ -177,8 +205,10 @@ export function MailConfigForm({
 
   const handleSubmit = () => {
     // Tạo mới BẮT BUỘC có password (server từ chối nếu thiếu). Cập nhật thì optional.
-    if (isNew && password.length === 0) {
-      setErrors([t("mailConfig.passwordRequiredNew")]);
+    if (needsPassword) {
+      setErrors([
+        t(isNew ? "mailConfig.passwordRequiredNew" : "mailConfig.passwordRequiredDestChanged"),
+      ]);
       return;
     }
     const payload = buildPayload(true);
@@ -187,6 +217,13 @@ export function MailConfigForm({
 
   const handleTest = async () => {
     setTestResult(null);
+    if (needsPassword) {
+      setErrors([
+        t(isNew ? "mailConfig.passwordRequiredNew" : "mailConfig.passwordRequiredDestChanged"),
+      ]);
+      return;
+    }
+    setErrors([]);
     const raw: Record<string, unknown> = {
       scope: scope.trim(),
       host: host.trim(),
@@ -199,8 +236,13 @@ export function MailConfigForm({
     try {
       const res = await runTest(raw as import("@mediaos/contracts").TestMailConfigRequest);
       setTestResult(res);
-    } catch {
-      setTestResult({ ok: false, errorMessage: t("mailConfig.testFailedGeneric") });
+    } catch (err: unknown) {
+      setTestResult({
+        ok: false,
+        errorMessage: isPasswordRequired(err)
+          ? t("mailConfig.passwordRequiredServer")
+          : t("mailConfig.testFailedGeneric"),
+      });
     } finally {
       setTesting(false);
     }
@@ -269,7 +311,13 @@ export function MailConfigForm({
           autoComplete="new-password"
         />
         {initial?.hasPassword && (
-          <span className="text-xs text-muted-foreground">{t("mailConfig.passwordKeepHint")}</span>
+          <span className="text-xs text-muted-foreground">
+            {t(
+              destinationChanged
+                ? "mailConfig.passwordDestChangedHint"
+                : "mailConfig.passwordKeepHint",
+            )}
+          </span>
         )}
       </label>
 
@@ -328,7 +376,9 @@ export function MailConfigForm({
         )}
         {isSaveError && (
           <p role="alert" className="text-sm text-destructive">
-            {t("mailConfig.saveError")}
+            {isPasswordRequired(saveError)
+              ? t("mailConfig.passwordRequiredServer")
+              : t("mailConfig.saveError")}
           </p>
         )}
       </div>

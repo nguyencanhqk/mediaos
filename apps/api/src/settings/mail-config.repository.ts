@@ -4,6 +4,7 @@ import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { companyMailConfigs, type CompanyMailConfig } from "../db/schema";
 import { AuditService } from "../events/audit.service";
+import { MailPasswordRequiredError } from "./mail-destination";
 
 /** Non-secret config fields persisted on a mail config (mirror DTO — KHÔNG password/envelope). */
 export interface MailConfigFields {
@@ -48,7 +49,11 @@ export class MailConfigRepository {
   }
 
   /** Đọc 1 config theo scope (trong tx — dùng cho test-connection decrypt). */
-  findByScopeTx(tx: TenantTx, companyId: string, scope: string): Promise<CompanyMailConfig | undefined> {
+  findByScopeTx(
+    tx: TenantTx,
+    companyId: string,
+    scope: string,
+  ): Promise<CompanyMailConfig | undefined> {
     return tx
       .select()
       .from(companyMailConfigs)
@@ -66,8 +71,16 @@ export class MailConfigRepository {
    * Upsert theo (company, scope), audit-in-tx (BẤT BIẾN #3):
    *   - row CHƯA tồn tại  → INSERT (envelope BẮT BUỘC).
    *   - row tồn tại + envelope mới → DELETE + INSERT cả hàng (id mới = recordId mới đã bind AAD ở caller;
-   *     cột envelope frozen, không UPDATE được → re-INSERT là đường đổi password đúng).
-   *   - row tồn tại + KHÔNG envelope (vắng password) → UPDATE cột non-secret, GIỮ envelope cũ.
+   *     cột envelope frozen, không UPDATE được → re-INSERT là đường đổi password ĐÚNG và là đường DUY NHẤT
+   *     đổi đích host/port/username/secure).
+   *   - row tồn tại + KHÔNG envelope (vắng password) → UPDATE CHỈ from_name/from_email, GIỮ envelope cũ, và
+   *     chỉ khi đích trong `fields` KHỚP hàng (vị từ trong WHERE). 0 hàng ⇒ `MailPasswordRequiredError`.
+   *
+   * S19-SEC-MAILCREDEXFIL-1 (I2): nhánh giữ-envelope về CẤU TRÚC không ghi được cột đích — mật khẩu đã lưu
+   * không thể bị gắn với đích khác. Vị từ nằm trong chính câu UPDATE (không so trước rồi mới ghi): READ
+   * COMMITTED đánh giá lại vị từ trên phiên bản hàng thật sự bị ghi, nên một PUT có mật khẩu chen giữa
+   * (DELETE+INSERT) không lách được. DB ép thêm một lớp: `mediaos_app` không còn quyền UPDATE cột đích (mig
+   * 0591). Thua đua ⇒ người gọi nhận 400 "cần mật khẩu" dù không đổi đích — chấp nhận (fail-closed).
    *
    * `recordId` = id của hàng sẽ ghi (app-gen TRƯỚC encrypt ở caller → AAD bind). KHÔNG ghi secret vào audit.
    */
@@ -115,7 +128,12 @@ export class MailConfigRepository {
         // Đổi password: DELETE + INSERT cả hàng (envelope frozen, id mới = recordId đã bind AAD).
         await tx
           .delete(companyMailConfigs)
-          .where(and(eq(companyMailConfigs.companyId, companyId), eq(companyMailConfigs.scope, fields.scope)));
+          .where(
+            and(
+              eq(companyMailConfigs.companyId, companyId),
+              eq(companyMailConfigs.scope, fields.scope),
+            ),
+          );
         const [row] = await tx
           .insert(companyMailConfigs)
           .values({
@@ -139,20 +157,26 @@ export class MailConfigRepository {
           .returning();
         afterRow = row;
       } else {
-        // Giữ password cũ: UPDATE CHỈ cột non-secret.
+        // Giữ password cũ: UPDATE CHỈ from_name/from_email — KHÔNG cột đích (I2). Đích phải khớp hàng.
         const [row] = await tx
           .update(companyMailConfigs)
           .set({
-            host: fields.host,
-            port: fields.port,
-            username: fields.username,
-            secure: fields.secure,
             fromName: fields.fromName,
             fromEmail: fields.fromEmail,
             updatedAt: new Date(),
           })
-          .where(and(eq(companyMailConfigs.companyId, companyId), eq(companyMailConfigs.scope, fields.scope)))
+          .where(
+            and(
+              eq(companyMailConfigs.companyId, companyId),
+              eq(companyMailConfigs.scope, fields.scope),
+              eq(companyMailConfigs.host, fields.host),
+              eq(companyMailConfigs.port, fields.port),
+              eq(companyMailConfigs.username, fields.username),
+              eq(companyMailConfigs.secure, fields.secure),
+            ),
+          )
           .returning();
+        if (!row) throw new MailPasswordRequiredError();
         afterRow = row;
       }
 

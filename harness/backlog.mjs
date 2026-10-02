@@ -19773,8 +19773,11 @@ export const backlog = [
     paths: [
       "apps/api/src/settings/**",
       "packages/contracts/src/mail-config.ts",
+      "packages/contracts/src/foundation/error-codes.ts",
       "apps/api/test/**",
-      "apps/app/src/**",
+      "apps/api/migrations/**",
+      "apps/console/src/**",
+      "docs/BACKEND/BACKEND-12_API_Integration_Contract_OpenAPI_Swagger.md",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
@@ -19793,6 +19796,7 @@ export const backlog = [
       "FULL gate (security + silent-failure) TRƯỚC khi mở PR; owner merge",
     ],
     notes: [
+      "Owner ký 02/10/2026 (plan §8): D1 mã mới `FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED` (append catalog + BACKEND-12 §21.3) · D2 `errorMessage` = câu cố định từ trường máy-sinh (đo: route test echo dòng đầu banner mọi cổng TCP) · D3 chấp nhận phần dò cổng còn lại · D4 paths: FE thật ở `apps/console` (backlog cũ ghi nhầm `apps/app`) · D5 (sau plan-review) mig 0591 REVOKE UPDATE cột đích của `mediaos_app` — DB ép bất biến «cột đích chỉ đổi cùng envelope mới». Plan: docs/plans/S19-SEC-MAILCREDEXFIL-1.md.",
       "🔴 secret. Không phải lỗi của S19-OPS-AUDITHIGH-1 (có từ CS-8) — nâng nodemailer không đổi gì ở đây. Tác nhân cần quyền nhạy cảm `configure-mail` ⇒ mối đe doạ là người trong/tài khoản admin bị chiếm, mục tiêu là mật khẩu hộp thư công ty (thường dùng chung cho dịch vụ khác).",
     ],
   },

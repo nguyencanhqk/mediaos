@@ -3,7 +3,8 @@
  *
  * Kiểm chứng trên DB thật những bất biến KHÔNG mock được:
  *   1. Envelope round-trip purpose 'smtp_password' (cần seed encryption_keys row + CHECK ở mig 0380).
- *   2. password KHÔNG bao giờ ra DTO; PUT vắng password GIỮ envelope cũ (DB không thay cột secret).
+ *   2. password KHÔNG bao giờ ra DTO; PUT vắng password chỉ đổi from GIỮ envelope cũ (DB không thay cột
+ *      secret); PUT vắng password mà đổi đích bị TỪ CHỐI (S19-SEC-MAILCREDEXFIL-1).
  *   3. audit 'mail_config' ghi before/after KHÔNG chứa secret/cột envelope.
  *   4. RLS 2-tenant: config công ty A KHÔNG lộ sang công ty B (FORCE RLS).
  */
@@ -75,26 +76,51 @@ describe.skipIf(!hasDb)("CS-8 mail-config — envelope round-trip + audit + RLS 
     expect(serialized.toLowerCase()).not.toContain("ciphertext");
   });
 
-  it("3. PUT vắng password → GIỮ envelope cũ (cột secret DB không đổi)", async () => {
+  it("3. PUT vắng password, CHỈ đổi from (đích giữ nguyên) → GIỮ envelope cũ (cột secret DB không đổi)", async () => {
     const before = await direct.query(
-      "SELECT secret_ciphertext, encrypted_dek FROM company_mail_configs WHERE company_id=$1 AND scope='default'",
+      "SELECT id, secret_ciphertext, encrypted_dek FROM company_mail_configs WHERE company_id=$1 AND scope='default'",
       [A.companyId],
     );
     expect(before.rows.length).toBe(1);
 
     await service.upsert(
       A.companyId,
-      { host: "smtp.a2.com", port: 465, username: "ua@t.local", fromEmail: "ua@t.local" },
+      { host: "smtp.a.com", port: 587, username: "ua@t.local", secure: true, fromName: "HR", fromEmail: "hr@t.local" },
       actorA,
     );
     const after = await direct.query(
-      "SELECT host, secret_ciphertext, encrypted_dek FROM company_mail_configs WHERE company_id=$1 AND scope='default'",
+      "SELECT id, from_email, secret_ciphertext, encrypted_dek FROM company_mail_configs WHERE company_id=$1 AND scope='default'",
       [A.companyId],
     );
-    expect(after.rows[0].host).toBe("smtp.a2.com"); // non-secret updated
+    expect(after.rows[0].from_email).toBe("hr@t.local"); // non-secret updated
+    expect(after.rows[0].id).toBe(before.rows[0].id);
     // envelope unchanged (giữ password cũ).
     expect(Buffer.compare(after.rows[0].secret_ciphertext, before.rows[0].secret_ciphertext)).toBe(0);
     expect(Buffer.compare(after.rows[0].encrypted_dek, before.rows[0].encrypted_dek)).toBe(0);
+  });
+
+  it("3a. PUT vắng password mà ĐỔI ĐÍCH → từ chối, hàng (đích + envelope) y nguyên (S19-SEC-MAILCREDEXFIL-1)", async () => {
+    // Trước WO, ca này GHIM chính lỗ hổng: host đổi sang smtp.a2.com mà envelope cũ được giữ ⇒ lời mời
+    // kế tiếp AUTH mật khẩu cũ tới host mới. Đã LẬT — đổi đích phải đi kèm mật khẩu mới (ca 3b).
+    const before = await direct.query(
+      "SELECT id, host, port, secret_ciphertext FROM company_mail_configs WHERE company_id=$1 AND scope='default'",
+      [A.companyId],
+    );
+
+    await expect(
+      service.upsert(
+        A.companyId,
+        { host: "smtp.a2.com", port: 465, username: "ua@t.local", fromEmail: "ua@t.local" },
+        actorA,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+
+    const after = await direct.query(
+      "SELECT id, host, port, secret_ciphertext FROM company_mail_configs WHERE company_id=$1 AND scope='default'",
+      [A.companyId],
+    );
+    expect(after.rows[0]).toMatchObject({ id: before.rows[0].id, host: "smtp.a.com", port: 587 });
+    expect(Buffer.compare(after.rows[0].secret_ciphertext, before.rows[0].secret_ciphertext)).toBe(0);
   });
 
   it("3b. đổi password → envelope mới (re-encrypt) + test-connection decrypt khớp pw mới", async () => {

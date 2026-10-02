@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { MailConfigDto } from "@mediaos/contracts";
+import { ApiError } from "@mediaos/web-core";
 import { MailConfigForm } from "./mail-config";
 
 function makeConfig(over: Partial<MailConfigDto> = {}): MailConfigDto {
@@ -91,5 +92,108 @@ describe("MailConfigForm — test connection hiển thị kết quả ĐÃ sanit
     render(<MailConfigForm initial={makeConfig()} scopeTab="default" onSubmit={vi.fn()} runTest={runTest} />);
     fireEvent.click(screen.getByRole("button", { name: /Kiểm tra kết nối/i }));
     await waitFor(() => expect(screen.getByText("Xác thực SMTP thất bại")).toBeInTheDocument());
+  });
+});
+
+// S19-SEC-MAILCREDEXFIL-1 — mật khẩu đã lưu chỉ dùng được cho ĐÚNG đích đã lưu. Đổi máy chủ/cổng/tên
+// đăng nhập/TLS mà không nhập lại mật khẩu ⇒ FE chặn sớm (server vẫn là nguồn sự thật: 400 mã riêng).
+const MAIL_PASSWORD_REQUIRED = "FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED";
+const REENTER_PW = /nhập lại mật khẩu/i;
+
+describe("MailConfigForm — đổi đích BẮT nhập lại mật khẩu", () => {
+  const changeHost = () =>
+    fireEvent.change(screen.getByPlaceholderText("smtp.example.com"), {
+      target: { value: "smtp.attacker.example" },
+    });
+
+  it.each([
+    ["host", () => changeHost()],
+    [
+      "cổng",
+      () => fireEvent.change(screen.getByDisplayValue("587"), { target: { value: "2525" } }),
+    ],
+    [
+      "tên đăng nhập",
+      () =>
+        fireEvent.change(screen.getAllByPlaceholderText("noreply@example.com")[0], {
+          target: { value: "other@example.com" },
+        }),
+    ],
+    ["TLS", () => fireEvent.click(screen.getByRole("checkbox"))],
+  ])("đổi %s, ô mật khẩu trống → Lưu bị chặn + thông báo, KHÔNG submit", (_label, mutate) => {
+    const onSubmit = vi.fn();
+    render(<MailConfigForm initial={makeConfig()} scopeTab="default" onSubmit={onSubmit} />);
+    mutate();
+    fireEvent.click(screen.getByRole("button", { name: /Lưu cấu hình/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(REENTER_PW);
+  });
+
+  it("đổi host, ô mật khẩu trống → Kiểm tra kết nối bị chặn, KHÔNG gọi runTest", async () => {
+    const runTest = vi.fn().mockResolvedValue({ ok: true });
+    render(
+      <MailConfigForm
+        initial={makeConfig()}
+        scopeTab="default"
+        onSubmit={vi.fn()}
+        runTest={runTest}
+      />,
+    );
+    changeHost();
+    fireEvent.click(screen.getByRole("button", { name: /Kiểm tra kết nối/i }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(REENTER_PW));
+    expect(runTest).not.toHaveBeenCalled();
+  });
+
+  it("đổi host CÓ nhập mật khẩu → submit payload mang password mới", () => {
+    const onSubmit = vi.fn();
+    render(<MailConfigForm initial={makeConfig()} scopeTab="default" onSubmit={onSubmit} />);
+    changeHost();
+    fireEvent.change(screen.getByPlaceholderText(/Để trống để giữ/i), {
+      target: { value: "new-pw" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu cấu hình/i }));
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      host: "smtp.attacker.example",
+      password: "new-pw",
+    });
+  });
+
+  it("CHỈ đổi tên người gửi → vẫn lưu được mà không cần mật khẩu", () => {
+    const onSubmit = vi.fn();
+    render(<MailConfigForm initial={makeConfig()} scopeTab="default" onSubmit={onSubmit} />);
+    fireEvent.change(screen.getByDisplayValue("Funtime"), { target: { value: "Phòng Nhân sự" } });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu cấu hình/i }));
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onSubmit.mock.calls[0][0].password).toBeUndefined();
+  });
+
+  it("server trả 400 mã MAIL-PASSWORD-REQUIRED khi lưu → hiện thông báo nhập lại mật khẩu", () => {
+    const saveError = new ApiError(400, MAIL_PASSWORD_REQUIRED, "server message");
+    render(
+      <MailConfigForm
+        initial={makeConfig()}
+        scopeTab="default"
+        onSubmit={vi.fn()}
+        isSaveError
+        saveError={saveError}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(REENTER_PW);
+  });
+
+  it("runTest ném 400 mã MAIL-PASSWORD-REQUIRED → hiện thông báo nhập lại mật khẩu", async () => {
+    const runTest = vi.fn().mockRejectedValue(new ApiError(400, MAIL_PASSWORD_REQUIRED, "x"));
+    render(
+      <MailConfigForm
+        initial={makeConfig()}
+        scopeTab="default"
+        onSubmit={vi.fn()}
+        runTest={runTest}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Kiểm tra kết nối/i }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(REENTER_PW));
   });
 });

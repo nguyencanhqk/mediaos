@@ -33,6 +33,11 @@ export interface FakeSmtpMessage {
 
 export interface FakeSmtpServer {
   port: number;
+  /**
+   * Số kết nối TCP đã nhận (kể cả kết nối chưa kịp gửi lệnh nào) — để khẳng định "KHÔNG một kết nối" chặt hơn
+   * `commands` rỗng (S19-SEC-MAILCREDEXFIL-1).
+   */
+  readonly connections: number;
   /** Mọi lệnh SMTP nhận được, theo thứ tự (dòng AUTH chỉ giữ "AUTH <METHOD>" — che credential). */
   commands: string[];
   auths: FakeSmtpAuth[];
@@ -217,8 +222,10 @@ class FakeSmtpSession {
 export function startFakeSmtpServer(options: FakeSmtpOptions = {}): Promise<FakeSmtpServer> {
   const sinks: FakeSmtpSinks = { commands: [], auths: [], messages: [] };
   const sockets = new Set<Socket>();
+  let connections = 0;
 
   const server = createServer((socket) => {
+    connections += 1;
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
     // Client đóng giữa chừng (vd. nodemailer `close()` sau lỗi) — không phải lỗi của server giả. Lỗi phía
@@ -236,6 +243,9 @@ export function startFakeSmtpServer(options: FakeSmtpOptions = {}): Promise<Fake
       const { port } = server.address() as AddressInfo;
       resolve({
         port,
+        get connections() {
+          return connections;
+        },
         ...sinks,
         close: () =>
           new Promise<void>((done) => {

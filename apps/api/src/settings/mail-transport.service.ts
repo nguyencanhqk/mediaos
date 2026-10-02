@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
-import { describeSmtpError } from "./smtp-error-summary";
+import { classifySmtpTestError, describeSmtpError } from "./smtp-error-summary";
 
 /** Handshake-only SMTP timeout (ms) — `verify()` chỉ bắt tay, KHÔNG gửi mail. */
 const SMTP_VERIFY_TIMEOUT_MS = 8000;
@@ -21,39 +21,14 @@ export interface SmtpTestResult {
 }
 
 /**
- * Sanitize 1 chuỗi lỗi SMTP trước khi trả/log (BẤT BIẾN #4 plan §4):
- *   - thay MỌI lần xuất hiện của username/password (nếu non-empty) bằng '***';
- *   - lỗi auth (EAUTH / 535 / "auth"/"credentials"/"username and password") → message CHUNG, không chi tiết.
- * KHÔNG bao giờ để credential lọt vào message trả về hay log.
- */
-export function sanitizeSmtpError(rawMessage: string, username: string, password: string): string {
-  const lower = rawMessage.toLowerCase();
-  // Lỗi xác thực → message chung, KHÔNG kèm bất kỳ chi tiết server nào.
-  if (
-    lower.includes("eauth") ||
-    lower.includes("invalid login") ||
-    lower.includes("authentication") ||
-    lower.includes("credentials") ||
-    lower.includes("username and password") ||
-    /\b535\b/.test(rawMessage)
-  ) {
-    return "Xác thực SMTP thất bại";
-  }
-
-  let safe = rawMessage;
-  // Thay credential nếu lỡ xuất hiện trong message (host/port/timeout error đôi khi nhúng URI có cred).
-  for (const secret of [password, username]) {
-    if (secret && secret.length > 0) {
-      safe = safe.split(secret).join("***");
-    }
-  }
-  return safe;
-}
-
-/**
  * MailTransportService — kiểm tra kết nối SMTP bằng nodemailer `transporter.verify()` (handshake-only,
- * KHÔNG `sendMail`). Plaintext password chỉ tồn tại trong RAM lúc test (KHÔNG lưu, KHÔNG log). Kết quả lỗi
- * ĐÃ sanitize (KHÔNG chứa username/password). CẤM log credential.
+ * KHÔNG `sendMail`). Plaintext password chỉ tồn tại trong RAM lúc test (KHÔNG lưu, KHÔNG log). CẤM log
+ * credential.
+ *
+ * `errorMessage` = câu CỐ ĐỊNH theo loại lỗi (`classifySmtpTestError`), KHÔNG phải lời văn server: route
+ * test cho người giữ `configure-mail` trỏ tới bất kỳ host:port nào API với tới, nên lời văn = đọc được
+ * banner dịch vụ nội bộ (S19-SEC-MAILCREDEXFIL-1 §2). Thứ còn lại — phân biệt cổng mở/đóng/im lặng — được
+ * chấp nhận có chủ ý (owner D3: tác nhân đã giữ quyền nhạy cảm; chặn dải nội bộ phá relay nội bộ hợp lệ).
  */
 @Injectable()
 export class MailTransportService {
@@ -74,13 +49,10 @@ export class MailTransportService {
       await transporter.verify(); // handshake only — KHÔNG gửi mail
       return { ok: true };
     } catch (err: unknown) {
-      const raw = err instanceof Error ? err.message : String(err);
-      const errorMessage = sanitizeSmtpError(raw, params.username, params.password);
-      // Log CHỈ trường máy-sinh (allowlist — `smtp-error-summary.ts`), KHÔNG lời văn của server: sanitize
-      // theo danh sách giá trị đã biết sót blob AUTH PLAIN/chữ đã mã hoá. Lời văn đã sanitize chỉ trả về
-      // cho admin đang bấm "Kiểm tra kết nối" (họ cần nó để sửa cấu hình).
+      // Cả log lẫn câu trả client CHỈ từ trường máy-sinh (allowlist — `smtp-error-summary.ts`), KHÔNG
+      // `err.message`: nodemailer nối phản hồi server vào đó (banner, echo username, blob AUTH PLAIN).
       this.logger.warn(`SMTP verify thất bại (${describeSmtpError(err)})`);
-      return { ok: false, errorMessage };
+      return { ok: false, errorMessage: classifySmtpTestError(err) };
     } finally {
       transporter.close();
     }
