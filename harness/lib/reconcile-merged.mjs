@@ -98,11 +98,38 @@ const tokenRe = (id) => new RegExp(`(^|[^\\w-])${esc(id)}([^\\w-]|$)`);
 //   trong 5 commit ngoài 273a980e (S5-LMS-UI-2/UI-3 · S5-LMS-APP-2 · S10-HR-STATUSUI-1 ·
 //   S10-ATT-NOTIPROD-1) đều đã `status: "done"` LITERAL trong backlog ⇒ shouldAutoStamp bỏ qua ⇒
 //   nới luật KHÔNG làm WO nào mất dấu.
+//
+// Vì sao `chore(backlog)` + THÂN "bàn giao …"/"handoff …" cũng phải nằm đây (thêm 2026-10-02 —
+// S19-GOV-BOOKKEEPRE-1; lỗ MỞ SẴN, đóng trước khi có ca bệnh mới):
+//   `chore(backlog)` = seed/sửa mục trong backlog.mjs — theo ĐỊNH NGHĨA là ghi sổ, subject nêu tên
+//   đúng WO CHƯA làm. Scope này đã dùng THẬT trên first-parent của master: 87a84e3c
+//   `chore(backlog): S16-SOCIAL-ATTGATE-1 — đóng dấu owner duyệt 24/09 (chưa thi công) + …` (subject
+//   TỰ KHAI chưa thi công) và 8bc722ae `chore(backlog): seed S2-AUTH-BRAND-1 …` (ngoài cửa sổ 400).
+//   Chắn theo SCOPE chứ không theo chữ "seed": `chore(lms): seed + code S5-LMS-UI-4` (21a782f3) seed
+//   VÀ thi công trong cùng commit ⇒ thân "seed" KHÔNG đáng tin.
+//   Thân "bàn giao|handoff" dưới `docs(<scope bất kỳ>)`: commit bàn giao ghi TRẠNG THÁI phiên, kể cả
+//   WO đang dở — eb6508de `docs(harness): bàn giao — S14-SEC-CATALOGSNAP-HARDEN-1 PR #478 mở; …` nêu
+//   tên WO khi PR CÒN MỞ ⇒ từ lúc nó vào master tới khi #478 merge (d4b37200) reconcile đọc nó thành
+//   "đã ship". Chắn theo THÂN như lần 4 (scope `harness` chỉ là quy ước). "bàn giao" cũng là SẢN PHẨM
+//   của WO phát hành (bộ bàn giao go-live) — các commit đó mở thân bằng `<WO-ID> — …` nên luật neo
+//   ngay sau dấu hai chấm KHÔNG nuốt.
+//   Đo trước khi vá (400 commit đầu origin/master, đo CẢ `git log -400` lẫn `--first-parent -400` —
+//   hai cửa sổ ra cùng kết quả): luật mới bắt thêm ĐÚNG 4 subject — 87a84e3c (S16-SOCIAL-ATTGATE-1,
+//   literal done) · eb6508de (S14-SEC-CATALOGSNAP-HARDEN-1, literal todo — nhưng d4b37200 `fix(permission)`
+//   mới hơn vẫn stamp nó) · 1685f9e5 (S14-SEC-DASHGATE-WILDCARD-1, literal done; nguồn stamp chuyển
+//   sang commit ship thật 092fc6e7) · 5f055eb2 (không nêu mã WO nào). Mô phỏng `mergedCommits` cũ↔mới:
+//   0 WO mất nguồn stamp ⇒ nới luật KHÔNG làm WO nào mất dấu.
+//   Scope ghi-sổ KHÁC đã đo mà KHÔNG thêm: `chore(ledger|status|plan)` · `docs(backlog|ledger|index)`
+//   xuất hiện 0 lần trong TOÀN lịch sử master (YAGNI); `chore(task): <WO> → done` (6abcf067, e37aa255)
+//   là scope DOMAIN và đóng dấu WO đã xong thật; `chore(s2): backlog reconcile … + topbar rebrand`
+//   (83f028c0) trộn code; `docs(<domain>): seed wave …` (3 commit 20–21/07) mơ hồ giữa seed và ship
+//   tài liệu — cả ba nhóm nằm ngoài cửa sổ 400.
 const BOOKKEEPING_RE =
-  /^(chore\((harness|docs|gov)\)|docs\((plan|status)\)|docs\([^)]+\):\s*(plan|kế hoạch)\b)/i;
+  /^(chore\((harness|docs|gov|backlog)\)|docs\((plan|status)\)|docs\([^)]+\):\s*(plan|kế hoạch|bàn giao|handoff)\b)/i;
 
 // Subject có phải commit ghi sổ/quản trị (KHÔNG BAO GIỜ là "WO này đã ship") không?
-// Tách riêng để test soi được — đây là lớp chắn đã thủng 2 lần (S6-SEC-MV-1 · S6-SEC-IDENTITY-PROJ-1).
+// Tách riêng để test soi được — đây là lớp chắn đã thủng 4 lần (S6-SEC-MV-1 · S6-SEC-IDENTITY-PROJ-1 ·
+// S10-ATT-NOTIPROD-1 · S10-SEC-FKCATALOG-1) và được bịt sẵn lần 5 (chore(backlog) · thân bàn giao).
 export function isBookkeeping(subject) {
   return BOOKKEEPING_RE.test(subject || "");
 }
