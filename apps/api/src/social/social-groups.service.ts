@@ -341,31 +341,17 @@ export class SocialGroupsService {
 
     return this.db.withTenant(actor.companyId, async (tx) => {
       const group = await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const decideRoles: readonly FeedGroupRole[] = ["owner", "admin"];
-      const { viaManage } = await this.groupAccess.assertGroupRoleTx(
+      // 🔴 (d) TOCTOU CỦA CHÍNH ACTOR (BE-2A §14.1 → S16-SOCIAL-GROUPTOCTOU-1): vai actor đọc MỘT lần,
+      // SAU khoá hàng nhóm. Một `038`/`039` song song hạ vai/mời actor ra đã commit trước lượt đọc này
+      // ⇒ người VỪA mất quyền không phong được `owner` (D12) hay đổi vai ai. Admin KIÊM
+      // `manage:feed-group` bị hạ vai giữa chừng vẫn qua với `viaManage:true` — luật «vai HOẶC manage»
+      // đánh giá trên hàng đọc sau khoá (owner ký D1=(a)). `target` cũng đọc SAU khoá (bên dưới).
+      const { membership: mine, viaManage } = await this.groupAccess.lockAndAssertGroupRoleTx(
         tx,
         actor,
         groupId,
-        decideRoles,
+        ["owner", "admin"],
       );
-      await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
-
-      // 🔴 TOCTOU CỦA CHÍNH ACTOR — `security-reviewer` và `silent-failure-hunter` HỘI TỤ ĐỘC LẬP
-      // (FULL gate 22/09). `assertGroupRoleTx` ở trên đọc vai của actor TRƯỚC khi khoá hàng CHA.
-      // Dưới READ COMMITTED, một `038`/`039` song song hạ vai (hoặc mời ra) chính actor ĐÚNG trong
-      // khoảng giữa hai câu đó vẫn để actor đi tiếp với vai CŨ ⇒ người VỪA mất quyền vẫn phong được
-      // `owner` cho người khác (D12 thủng), và người đó xoá được nhóm qua cổng owner-only của `034`.
-      // `target` đã đọc lại sau khoá ngay từ bản đầu — vế bỏ sót là chính actor. Đọc lại SAU khoá
-      // thì mọi đường đổi vai trò đã bị serialize qua đúng một hàng `feed_groups`.
-      const mine = await this.groupAccess.getMembershipTx(
-        tx,
-        actor.companyId,
-        groupId,
-        actor.actorUserId,
-      );
-      if (!viaManage && !(mine?.status === "active" && decideRoles.includes(mine.role))) {
-        throw new ForbiddenException(socialError(SOCIAL_ERR.GROUP_ROLE_REQUIRED));
-      }
 
       const target = await this.groupAccess.getMembershipTx(
         tx,
@@ -449,11 +435,12 @@ export class SocialGroupsService {
 
     await this.db.withTenant(actor.companyId, async (tx) => {
       await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const { viaManage } = await this.groupAccess.assertGroupRoleTx(tx, actor, groupId, [
+      // (d) — vai actor đọc SAU khoá hàng nhóm (S16-SOCIAL-GROUPTOCTOU-1): actor vừa bị hạ vai/mời ra
+      // giữa chừng ⇒ 403; `viaManage` là nguồn quyền LÚC COMMIT (audit bên dưới ghi đúng giá trị này).
+      const { viaManage } = await this.groupAccess.lockAndAssertGroupRoleTx(tx, actor, groupId, [
         "owner",
         "admin",
       ]);
-      await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
 
       const target = await this.groupAccess.getMembershipTx(
         tx,
