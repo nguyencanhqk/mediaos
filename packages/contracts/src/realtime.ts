@@ -321,6 +321,7 @@ export type WsNotificationReadEvent = z.infer<typeof wsNotificationReadEventSche
 // `S7-CHAT-RT-1` xoá cùng cụm hai-chiều — xem ghi chú ở `WS_EVENTS`.
 
 // ═══════════════ S16-SOCIAL-BE-1 — 3 sự kiện bảng tin (room `co:{companyId}:feed`) ═══════════════
+// S16-SOCIAL-BE-2C: `feed:post.created` của bài nhóm đi room `co:{companyId}:feedgroup:{groupId}`.
 //
 // ┌─ BA LUẬT CỦA PAYLOAD BẢNG TIN — ĐỌC TRƯỚC KHI THÊM KHOÁ ───────────────────────────────────────┐
 // │ 1. **HẸP HƠN DTO REST, không bao giờ rộng hơn.** Bốn khoá của `feedPostSchema` là projection    │
@@ -334,20 +335,29 @@ export type WsNotificationReadEvent = z.infer<typeof wsNotificationReadEventSche
 // │    cầm cũng tải được, không qua guard nào nữa, không sinh `file_access_logs`. Phát nó cho cả     │
 // │    room là đi vòng qua `FilePolicyService` — nguyên văn lỗ mà FULL gate S7-CHAT-BE-GATE-3 bắt    │
 // │    được. FE nhận sự kiện rồi gọi REST để lấy URL của CHÍNH MÌNH.                                │
-// │ 3. **Chỉ bài `audience='company'` + `status='published'` mới được fan-out** (quyết định BE-1,    │
-// │    xem plan §2 D21). API-19 §7 chỉ khai 2 room: `co:{c}:feed` (cả công ty) và                    │
-// │    `co:{c}:feedgroup:{groupId}`; KHÔNG có room cho `audience='org_unit'`. Phát một bài org_unit  │
-// │    vào room cả-công-ty là rò đúng nội dung mà REST trả 404 cho chính những người đó. Lưới nằm ở  │
-// │    SERVICE (`social-posts.service.ts`) vì schema không biết audience của bài cha ở 2 sự kiện     │
-// │    kia; ràng buộc `audience` ở đây là vế thứ hai của cùng một luật.                              │
+// │ 3. **Chỉ bài `status='published'` của audience CÓ ROOM mới được fan-out**: `company` → room     │
+// │    `co:{c}:feed`; `group` → room `co:{c}:feedgroup:{groupId}` (S16-SOCIAL-BE-2C — nới D21 CÓ    │
+// │    CHỦ ĐÍCH, owner ký Q-SCHEMA = P1 02/10/2026: room nhóm có cổng MEMBERSHIP riêng — chỉ thành  │
+// │    viên `active` của nhóm còn sống, đã qua `view:feed` lúc connect). KHÔNG có room cho          │
+// │    `audience='org_unit'` (Q-ORG — API-19 §7): bài org_unit vẫn KHÔNG parse được, vế thứ hai của  │
+// │    D21 giữ nguyên cho nó. Emitter ĐỊNH TUYẾN theo `audience` của payload ĐÃ parse, nên schema    │
+// │    phải từ chối mọi tổ hợp vô nghĩa: union theo `audience` (không phải `z.enum` — enum nhận      │
+// │    `group` + `groupId:null` = bài nhóm không có đích, và `company` + `groupId` = bài công ty     │
+// │    mang nhóm) + `orgUnitId: z.null()` ở CẢ HAI option (CHECK DB bảo đảm hàng hợp lệ luôn null). │
+// │    Lưới thứ nhất ở SERVICE (`buildWsPostCreatedEvent`), vì chỉ tầng đó biết hàng DB; 2 sự kiện  │
+// │    bình luận/cảm xúc vẫn CHỈ bài company (Q-CR — nợ `S16-SOCIAL-RTGROUPCR-1`).                   │
 // └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 /** Đính kèm trên kênh WS — **CỐ TÌNH KHÔNG CÓ `url`** (luật 2). */
 export const wsFeedAttachmentSchema = feedAttachmentSchema.omit({ url: true });
 export type WsFeedAttachment = z.infer<typeof wsFeedAttachmentSchema>;
 
-/** `feed:post.created` — bài mới. `audience` khoá cứng `company` (luật 3). */
-export const wsFeedPostCreatedEventSchema = feedPostSchema
+/**
+ * Lõi CHUNG của hai biến thể `feed:post.created` — HẸP hơn DTO REST (luật 1 + 2). Hai option chỉ khác
+ * nhau ở ba khoá định tuyến (`audience`/`groupId`/`orgUnitId`) ⇒ TẬP KHOÁ BẰNG NHAU: room nhóm không
+ * bao giờ nhận payload rộng hơn room công ty.
+ */
+const wsFeedPostCreatedCoreSchema = feedPostSchema
   // `mentions` (S16-SOCIAL-BE-1D D6): chỉ REST mang — giữ cửa đổi luật tầm nhìn về sau mà không phải
   // xét lại kênh phát cho cả room. FE nhận thẻ qua WS render span tới lần refetch. API-19 §7 KHÔNG đổi.
   .omit({
@@ -360,15 +370,41 @@ export const wsFeedPostCreatedEventSchema = feedPostSchema
     // S16-SOCIAL-BE-2D D7: ba khối chi tiết chỉ REST mang. `poll.myVote` là của TÁC GIẢ (create()
     // decorate bằng tác giả) — phát cho cả room là rò; `.omit` không chạm khoá LỒNG nên bóc NGUYÊN khối.
     // FE chỉ ĐẾM `feed:post.created` (không vẽ thẻ từ payload) ⇒ bóc không tốn gì. Nguồn cũng bóc
-    // (`emitPostCreated`) — hai tầng độc lập, mỗi tầng một mình đều từng bị bỏ quên.
+    // (`buildWsPostCreatedEvent`) — hai tầng độc lập, mỗi tầng một mình đều từng bị bỏ quên.
     kudos: true,
     poll: true,
     idea: true,
-  })
-  .extend({
-    audience: z.literal("company"),
-    attachments: z.array(wsFeedAttachmentSchema),
   });
+
+/** Biến thể bài CÔNG TY → room `co:{c}:feed`. Không mang nhóm, không mang đơn vị. */
+export const wsFeedCompanyPostCreatedEventSchema = wsFeedPostCreatedCoreSchema.extend({
+  audience: z.literal("company"),
+  groupId: z.null(),
+  orgUnitId: z.null(),
+  attachments: z.array(wsFeedAttachmentSchema),
+});
+export type WsFeedCompanyPostCreatedEvent = z.infer<typeof wsFeedCompanyPostCreatedEventSchema>;
+
+/**
+ * Biến thể bài NHÓM → room `co:{c}:feedgroup:{groupId}` (S16-SOCIAL-BE-2C). `groupId` BẮT BUỘC: bài nhóm
+ * không có id là bài không định tuyến được — parse lỗi ⇒ emitter không chạm `.to()`.
+ */
+export const wsFeedGroupPostCreatedEventSchema = wsFeedPostCreatedCoreSchema.extend({
+  audience: z.literal("group"),
+  groupId: z.string().uuid(),
+  orgUnitId: z.null(),
+  attachments: z.array(wsFeedAttachmentSchema),
+});
+export type WsFeedGroupPostCreatedEvent = z.infer<typeof wsFeedGroupPostCreatedEventSchema>;
+
+/**
+ * `feed:post.created` — bài mới. Union theo `audience` (luật 3): `company` | `group`; `org_unit` KHÔNG
+ * parse được. ⚠️ Là `ZodDiscriminatedUnion` ⇒ KHÔNG có `.shape` — đo hình dạng qua `.options`.
+ */
+export const wsFeedPostCreatedEventSchema = z.discriminatedUnion("audience", [
+  wsFeedCompanyPostCreatedEventSchema,
+  wsFeedGroupPostCreatedEventSchema,
+]);
 export type WsFeedPostCreatedEvent = z.infer<typeof wsFeedPostCreatedEventSchema>;
 
 /** `feed:comment.created` — bình luận mới trên một bài ĐANG fan-out được. */

@@ -54,6 +54,7 @@ import {
   type PostRow,
 } from "./social-posts.repository";
 import { SOCIAL_ERR, socialError } from "./social.errors";
+import { buildWsPostCreatedEvent } from "./social-ws-payload";
 import { toFeedPostDto } from "./social.mapper";
 import type {
   SocialActor,
@@ -814,39 +815,15 @@ export class SocialPostsService {
   }
 
   /**
-   * Phát `feed:post.created`.
+   * Phát `feed:post.created` — S16-SOCIAL-BE-2C: bài `company` → room công ty, bài `group` → room NHÓM
+   * (chỉ thành viên `active`, đã qua `view:feed`); `org_unit` / không `published` ⇒ KHÔNG phát (D21).
    *
-   * ⚠️ **CHỈ bài `audience='company'` + `status='published'`** (plan §2 D21). Room `co:{c}:feed` chứa
-   * CẢ công ty và API-19 §7 không khai room nào cho `org_unit` ⇒ phát một bài org_unit vào đó là rò
-   * đúng nội dung mà REST trả 404 cho chính những người đó.
-   *
-   * Bốn khoá projection-theo-actor (`myReaction`/`savedByMe`/`isMine`/`status`) bị BỎ tại nguồn dù
-   * schema WS cũng strip chúng: bỏ ở đây để không ai đọc code này mà tưởng cả công ty đang nhận cờ
-   * của người vừa đăng (khuôn `ChatReactionsService.broadcast`).
+   * Quyết định + bóc khoá nằm ở hàm THUẦN `buildWsPostCreatedEvent` (`social-ws-payload.ts` — nhãn
+   * `audience`/`groupId` lấy TỪ HÀNG DB, không từ hằng); emitter định tuyến theo payload ĐÃ parse.
    */
   private emitPostCreated(actor: SocialActor, row: PostRow, dto: FeedPostDto): void {
-    if (row.audience !== "company" || row.status !== "published") return;
-    // `mentions` bóc tại nguồn (S16-SOCIAL-BE-1D D6) — schema WS cũng omit, nhưng `...rest` sẽ tự
-    // chở mọi khoá MỚI của DTO REST ra room nếu không bóc ở đây.
-    const {
-      myReaction: _mr,
-      savedByMe: _sb,
-      isMine: _im,
-      status: _st,
-      mentions: _mn,
-      // S16-SOCIAL-BE-2D D7: `poll.myVote` là của TÁC GIẢ (dto này decorate bằng tác giả) — bóc cả ba
-      // khối tại nguồn; schema WS cũng `.omit` (hai tầng độc lập).
-      kudos: _kd,
-      poll: _pl,
-      idea: _id,
-      attachments,
-      ...rest
-    } = dto;
-    this.realtime.emitFeedPostCreated(actor.companyId, {
-      ...rest,
-      audience: "company",
-      attachments: attachments.map(({ url: _u, ...a }) => a),
-    });
+    const ev = buildWsPostCreatedEvent(row, dto);
+    if (ev) this.realtime.emitFeedPostCreated(actor.companyId, ev);
   }
 }
 

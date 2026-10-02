@@ -1,7 +1,14 @@
 import { Logger } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WS_EVENTS } from "@mediaos/contracts";
 import { RealtimeEmitterService } from "./realtime-emitter.service";
-import { chatUserRoomName, feedGroupRoomName, feedUserRoomName, userRoomName } from "./rooms";
+import {
+  chatUserRoomName,
+  feedGroupRoomName,
+  feedRoomName,
+  feedUserRoomName,
+  userRoomName,
+} from "./rooms";
 
 /**
  * S16-SOCIAL-BE-2C — room nhóm bảng tin ở tầng EMITTER (plan §5 W1 · N1).
@@ -113,5 +120,118 @@ describe("RealtimeEmitterService — room nhóm bảng tin (S16-SOCIAL-BE-2C)", 
     const { svc, server } = makeEmitter();
     svc.syncRoomMembership(COMPANY, GROUP, USER, "join");
     expect(server.in).not.toHaveBeenCalledWith(feedUserRoomName(COMPANY, USER));
+  });
+});
+
+/**
+ * S16-SOCIAL-BE-2C — W3: `emitFeedPostCreated` ĐỊNH TUYẾN theo payload ĐÃ PARSE (plan §4.2, bất biến 7).
+ *
+ * Hai luật, cả hai đo bằng `toTargets` (đích thật của `.to()`), không bằng «có emit»:
+ *   • đích suy từ `audience` của payload SAU `.parse()` — company ⇒ room công ty, group ⇒ room NHÓM, không
+ *     bao giờ cả hai;
+ *   • parse ném ⇒ KHÔNG chạm `.to()` (`toTargets = []`). Code BE-1 gọi `.to(feed)` TRƯỚC khi `build()`
+ *     (chứa `.parse`) được tính (M27) — vô hại khi đích cố định, nhưng là lỗ khi đích suy từ payload.
+ */
+describe("RealtimeEmitterService.emitFeedPostCreated — định tuyến theo audience (S16-SOCIAL-BE-2C W3)", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const POST_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+  const base = {
+    id: POST_ID,
+    type: "share",
+    orgUnitId: null,
+    author: { employeeId: null, fullName: "A", avatarUrl: null },
+    body: "x",
+    tags: [],
+    attachments: [],
+    pinned: false,
+    commentsLocked: false,
+    requiresAck: false,
+    likeCount: 0,
+    commentCount: 0,
+    viewCount: 0,
+    editedAt: null,
+    publishedAt: "2026-10-02T00:00:00.000Z",
+    lastActivityAt: "2026-10-02T00:00:00.000Z",
+    createdAt: "2026-10-02T00:00:00.000Z",
+  };
+  const companyPost = { ...base, audience: "company", groupId: null };
+  const groupPost = { ...base, audience: "group", groupId: GROUP };
+
+  it("W3a bài company ⇒ đích ĐÚNG room công ty, 1 emit (neo hồi quy)", () => {
+    const { svc, emit, toTargets } = makeEmitter();
+    svc.emitFeedPostCreated(COMPANY, companyPost as never);
+    expect(toTargets).toEqual([feedRoomName(COMPANY)]);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.FEED_POST_CREATED,
+      expect.objectContaining({ id: POST_ID }),
+    );
+  });
+
+  it("🔒 W3b bài group ⇒ đích CHỈ room nhóm — KHÔNG room công ty", () => {
+    const { svc, emit, toTargets } = makeEmitter();
+    svc.emitFeedPostCreated(COMPANY, groupPost as never);
+    expect(toTargets).toEqual([feedGroupRoomName(COMPANY, GROUP)]);
+    expect(toTargets.flat()).not.toContain(feedRoomName(COMPANY));
+    expect(emit).toHaveBeenCalledTimes(1);
+  });
+
+  it("🔒 W3c bài org_unit ⇒ parse ném ⇒ KHÔNG chạm `.to()`, 0 emit, warn, KHÔNG ném", () => {
+    const { svc, emit, toTargets } = makeEmitter();
+    expect(() =>
+      svc.emitFeedPostCreated(COMPANY, { ...base, audience: "org_unit", groupId: null } as never),
+    ).not.toThrow();
+    expect(toTargets).toEqual([]);
+    expect(emit).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("🔒 W3d bài group THIẾU groupId ⇒ không định tuyến được ⇒ `toTargets = []`, 0 emit, warn", () => {
+    const { svc, emit, toTargets } = makeEmitter();
+    expect(() =>
+      svc.emitFeedPostCreated(COMPANY, { ...groupPost, groupId: null } as never),
+    ).not.toThrow();
+    expect(toTargets).toEqual([]);
+    expect(emit).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("W3e payload group mang khoá theo-actor/khối/URL ⇒ khoá đó bị BÓC khỏi thứ phát ra", () => {
+    const { svc, emit } = makeEmitter();
+    svc.emitFeedPostCreated(COMPANY, {
+      ...groupPost,
+      status: "published",
+      myReaction: "like",
+      savedByMe: true,
+      isMine: true,
+      poll: { myVote: ["22222222-2222-4222-8222-222222222222"] },
+      attachments: [
+        {
+          fileId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          kind: "image",
+          fileName: "a.png",
+          sizeBytes: 10,
+          url: "https://signed.example/secret",
+        },
+      ],
+    } as never);
+
+    const payload = emit.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(payload).toBeDefined();
+    // Neo dương: parse thành công VÀ là đúng bài nhóm (không phải payload rỗng xanh mọi vế âm).
+    expect(payload?.id).toBe(POST_ID);
+    expect(payload?.groupId).toBe(GROUP);
+    for (const k of ["status", "myReaction", "savedByMe", "isMine", "poll"]) {
+      expect(payload).not.toHaveProperty(k);
+    }
+    const att = (payload?.attachments as Record<string, unknown>[])[0];
+    expect(att?.fileId).toBe("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    expect(att).not.toHaveProperty("url");
+    expect(JSON.stringify(payload)).not.toContain("signed.example");
   });
 });

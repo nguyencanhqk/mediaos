@@ -556,23 +556,38 @@ export class RealtimeEmitterService {
     }
   }
 
-  // ═══════════ S16-SOCIAL-BE-1 — 3 sự kiện bảng tin (room `co:{companyId}:feed`) ═══════════
+  // ═══════════ S16-SOCIAL-BE-1/BE-2C — 3 sự kiện bảng tin ═══════════
   //
   // ⚠️ **CHỈ GỌI SAU KHI TRANSACTION ĐÃ COMMIT** — như mọi method của lớp này (xem docblock đầu file).
   //
-  // ⚠️ **CHỈ bài `audience='company'` + `status='published'` được đưa tới đây.** Room này chứa cả
-  // công ty; lưới nằm ở `SocialPostsService`/`SocialCommentsService` vì chỉ tầng đó biết audience
-  // của bài cha. Schema `wsFeedPostCreatedEventSchema` khoá cứng `audience: 'company'` làm vế thứ
-  // hai — một bài org_unit lọt tới đây sẽ NÉM ở `.parse()` (và `emitToFeed` nuốt + log), chứ không
-  // âm thầm phát ra. Xem `rooms.ts::feedRoomName`.
+  // ⚠️ Hai room đích (API-19 §7): `co:{c}:feed` (cả công ty — bài `company`) và
+  // `co:{c}:feedgroup:{groupId}` (thành viên `active` của nhóm — bài `group`, S16-SOCIAL-BE-2C). KHÔNG có
+  // room cho `org_unit` (D21/Q-ORG). Lưới thứ nhất ở SERVICE (`buildWsPostCreatedEvent` —
+  // chỉ tầng đó biết hàng DB); lưới thứ hai là `.parse()` ở đây: union theo `audience` từ chối
+  // `org_unit` và mọi tổ hợp vô nghĩa, và **đích suy từ payload ĐÃ PARSE** — không bao giờ từ tham số
+  // caller, không bao giờ cả hai room, không bao giờ `.to([])`.
+  //
+  // `feed:comment.created`/`feed:reaction.changed` vẫn CHỈ room công ty, bài company (owner ký Q-CR (a)
+  // — nợ `S16-SOCIAL-RTGROUPCR-1`); lưới ở `SocialCommentsService`/`SocialReactionsService`.
 
+  /**
+   * `feed:post.created` — `.parse()` TRƯỚC, rồi mới chọn room từ `audience` của kết quả parse.
+   *
+   * ⚠️ KHÁC `emitToFeed`: ở đó `.to(feedRoomName)` chạy TRƯỚC khi `build()` (chứa `.parse`) được tính
+   * (plan M27) — vô hại khi đích cố định, nhưng là lỗ khi đích SUY TỪ payload. Ở đây parse ném ⇒ KHÔNG
+   * chạm `.to()` nào (bất biến 7), nuốt + `warn` (hợp đồng «không ném lên caller» giữ nguyên).
+   */
   emitFeedPostCreated(companyId: string, payload: WsFeedPostCreatedEvent): void {
-    this.emitToFeed(
-      companyId,
-      WS_EVENTS.FEED_POST_CREATED,
-      () => wsFeedPostCreatedEventSchema.parse(payload),
-      "emitFeedPostCreated",
-    );
+    if (!this.server) return;
+    try {
+      const parsed = wsFeedPostCreatedEventSchema.parse(payload);
+      this.server.to(feedPostRoomName(companyId, parsed)).emit(WS_EVENTS.FEED_POST_CREATED, parsed);
+    } catch (err) {
+      this.logger.warn("emitFeedPostCreated failed", {
+        companyId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   emitFeedCommentCreated(companyId: string, payload: WsFeedCommentCreatedEvent): void {
@@ -594,9 +609,11 @@ export class RealtimeEmitterService {
   }
 
   /**
-   * Khuôn chung của 3 emit bảng tin. Cùng hợp đồng `emitToRoom` (no-op khi chưa có server ·
-   * `.parse()` TRƯỚC emit · KHÔNG BAO GIỜ throw lên caller) nhưng nhắm `feedRoomName` thay vì
-   * `chatRoomName` — `emitToRoom` hard-code phòng chat nên không dùng lại được.
+   * Khuôn chung của 2 emit bảng tin CÒN LẠI (bình luận · cảm xúc — chỉ bài company, Q-CR). Cùng hợp đồng
+   * `emitToRoom` (no-op khi chưa có server · `.parse()` TRƯỚC emit · KHÔNG BAO GIỜ throw lên caller) nhưng
+   * nhắm `feedRoomName` thay vì `chatRoomName` — `emitToRoom` hard-code phòng chat nên không dùng lại được.
+   * ⚠️ Đích CỐ ĐỊNH nên thứ tự `.to()` trước `build()` vô hại ở đây; sự kiện có đích SUY TỪ payload
+   * (như `feed:post.created`) KHÔNG được đi qua khuôn này.
    */
   private emitToFeed(companyId: string, event: string, build: () => unknown, label: string): void {
     if (!this.server) return;
@@ -630,5 +647,20 @@ export class RealtimeEmitterService {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+}
+
+/**
+ * S16-SOCIAL-BE-2C — room đích của `feed:post.created`, suy từ payload ĐÃ PARSE. `switch` vét cạn trên
+ * union `audience`: thêm một option vào schema mà quên định tuyến là ĐỎ lúc BIÊN DỊCH (thiếu `return`),
+ * không phải một nhánh `else` lặng lẽ đưa bài ra room cả công ty. Luôn MỘT chuỗi room cụ thể — không
+ * bao giờ mảng (mảng rỗng = phát cả namespace).
+ */
+function feedPostRoomName(companyId: string, ev: WsFeedPostCreatedEvent): string {
+  switch (ev.audience) {
+    case "company":
+      return feedRoomName(companyId);
+    case "group":
+      return feedGroupRoomName(companyId, ev.groupId);
   }
 }

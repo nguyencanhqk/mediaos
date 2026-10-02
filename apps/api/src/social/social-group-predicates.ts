@@ -28,6 +28,12 @@ import { feedGroupMembers, feedGroups } from "../db/schema/social";
  * repository tập-người truyền group literal + CỘT `employee_profiles.user_id`.
  * EXISTS tương quan TRONG CÂU, KHÔNG resolve mảng id trước: tập nhóm đổi liên tục nên không chặn
  * trước được như `orgUnitIds`, và một mảng đọc ở tx khác là TOCTOU.
+ *
+ * 🔴 S16-SOCIAL-BE-2C (M28) — hộ tiêu thụ MỚI `listActiveFeedGroupIdsTx` (`social-group-rooms.reader`)
+ * truyền CHÍNH cột `feed_groups.id` của câu ngoài: khi caller truyền cột của `feed_groups`/
+ * `feed_group_members`, alias `g`/`gm` bên dưới là thứ DUY NHẤT giữ tương quan (alias che tên bảng ⇒
+ * `"feed_groups"."id"` bind bảng NGOÀI). Đổi/bỏ alias ⇒ reader trả MỌI nhóm sống của công ty — mutant
+ * M19, ca R5 của `social-be2c-group-rooms.int-spec.ts` ghim.
  */
 export function activeGroupMemberExists(
   companyId: string,
