@@ -13,6 +13,8 @@
  * │ S16-SOCIAL-FE-2 lát A: `poll` có khối bỏ phiếu (`PollBlock`), `idea` có nhãn + link màn 008.   │
  * │ S16-SOCIAL-FE-2C: `kudos` có `KudosBlock` khi DTO chở `post.kudos`; khối VẮNG (006 · WS · API  │
  * │ cũ · hàng mồ côi) ⇒ vẫn suy biến như trên. Loại lạ khác cũng vậy.                              │
+ * │ S16-SOCIAL-FEBLOCKSEED-1: `post.poll` seed `PollBlock` (không gọi `043`); `post.idea` thêm pill │
+ * │ trạng thái cạnh link. Khối vắng ⇒ `PollBlock` tự tải / chỉ nhãn + link, như trước.             │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Phân quyền: xem `PostCardMenu` — mọi quyết định gate của thẻ tập trung ở đó.
@@ -28,6 +30,7 @@ import { FeedReactionBar } from "./FeedReactionBar";
 import { PostCardMenu, type PostCardMenuActions } from "./PostCardMenu";
 import { PollBlock } from "./PollBlock";
 import { KudosBlock } from "../../kudos/components/KudosBlock";
+import { IdeaStatusPill } from "../../ideas/components/IdeaStatusPill";
 import {
   authorDisplayName,
   buildImageGrid,
@@ -136,24 +139,33 @@ export function PostCard({
         <PostBody body={post.body} collapsible={variant === "feed"} className="mt-3" />
       )}
 
-      {post.type === "poll" && <PollBlock postId={post.id} isMine={post.isMine} className="mt-3" />}
+      {/* `post.poll` vắng ⇒ `seed` undefined ⇒ khối tự tải `043` (xem docblock `PollBlock`). */}
+      {post.type === "poll" && (
+        <PollBlock postId={post.id} isMine={post.isMine} seed={post.poll} className="mt-3" />
+      )}
 
       {/* S16-SOCIAL-FE-2C — khối vinh danh. Vắng `post.kudos` ⇒ không vẽ gì (C27). */}
       {post.type === "kudos" && post.kudos && <KudosBlock block={post.kudos} className="mt-3" />}
 
       {/*
-        Sáng kiến: pill TRẠNG THÁI không có ở đây — `feedPostSchema` không chở nó (plan §2 G4, chờ
-        BE-2D). Nhãn + link sang màn 008, nơi trạng thái và kết quả xét duyệt hiện đầy đủ.
+        Sáng kiến: nhãn + link sang màn 008 (nơi ghi chú xét duyệt + người duyệt hiện đầy đủ — mặt nạ D19
+        sống ở `045`). Pill trạng thái từ `post.idea.status` (BE-2D D6: không mask dưới `view:feed` ⇒
+        KHÔNG gate). Pill là ANH EM của link, không lồng trong nó — lồng thì trạng thái thành một phần
+        tên truy cập của link. Đọc `post.idea`, KHÔNG BAO GIỜ `post.status` (trường kiểm duyệt).
+        Khối vắng ⇒ chỉ nhãn + link, không đoán trạng thái.
       */}
       {post.type === "idea" && (
-        <Link
-          to="/feed/ideas"
-          data-testid="post-idea-badge"
-          className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-xs text-accent-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Lightbulb className="h-3.5 w-3.5" aria-hidden="true" />
-          {t("idea.label")} · {t("idea.viewAll")}
-        </Link>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Link
+            to="/feed/ideas"
+            data-testid="post-idea-badge"
+            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-xs text-accent-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Lightbulb className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("idea.label")} · {t("idea.viewAll")}
+          </Link>
+          {post.idea && <IdeaStatusPill status={post.idea.status} />}
+        </div>
       )}
 
       {grid.shown.length > 0 && (

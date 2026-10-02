@@ -1,7 +1,7 @@
 /**
  * S16-SOCIAL-FE-2 — `SOC-SCREEN-008` Sáng kiến (SOCIAL-API-045 + xét duyệt 046, plan D8).
  *
- * - Pill trạng thái sống Ở ĐÂY (thẻ bài feed chưa có nó — plan §2 G4, chờ BE-2D).
+ * - Pill trạng thái: `IdeaStatusPill` — dùng chung với thẻ bài feed (khối `post.idea`, S16-SOCIAL-FEBLOCKSEED-1).
  * - `reviewNote` vẽ ĐÚNG giá trị server trả: server đã mask cho người không phải tác giả / không có
  *   `approve:feed-idea` (D19 của BE-2B-2). `null` ⇒ không vẽ khối, không đoán «có mà bị ẩn».
  * - Nút «Xét duyệt» bọc `PermissionGate approve:feed-idea` VÀ chỉ hiện khi FSM còn đích (trạng thái
@@ -23,18 +23,12 @@ import {
 import { OffsetPager } from "../feed/components/OffsetPager";
 import { relativeTime } from "../feed/lib/feed-format";
 import { IdeaReviewDialog } from "./IdeaReviewDialog";
+import { IdeaStatusPill } from "./components/IdeaStatusPill";
 import { ideaReviewTargets } from "./lib/idea-review";
 
 const PAGE_SIZE = 20;
 type IdeaFilter = FeedIdeaStatusDto | "all";
 const FILTERS: readonly IdeaFilter[] = ["all", ...feedIdeaStatusSchema.options];
-
-const PILL_CLASS: Record<FeedIdeaStatusDto, string> = {
-  submitted: "bg-muted text-muted-foreground",
-  under_review: "bg-accent text-accent-foreground",
-  accepted: "bg-primary/15 text-primary",
-  rejected: "bg-destructive/10 text-destructive",
-};
 
 export function IdeasPage(): React.ReactElement {
   const { t } = useTranslation("social");
@@ -117,15 +111,7 @@ export function IdeasPage(): React.ReactElement {
                       {idea.body ?? ""}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span
-                        data-testid="idea-status-pill"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 font-medium",
-                          PILL_CLASS[idea.status],
-                        )}
-                      >
-                        {t(`idea.status.${idea.status}`)}
-                      </span>
+                      <IdeaStatusPill status={idea.status} />
                       <span>{relativeTime(idea.createdAt)}</span>
                       {idea.reviewer && (
                         <span>
