@@ -17567,6 +17567,10 @@ export const backlog = [
       "docs/API Design/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      // Q-FE (a) — owner ký 02/10/2026: badge feed chính chỉ đếm bài `audience='company'` (feed chính
+      // LOẠI bài nhóm, D-OWNER-6) ⇒ mở đúng 2 file FE; gate thêm `react-reviewer`.
+      "apps/app/src/hooks/use-feed-realtime.ts",
+      "apps/app/src/hooks/use-feed-realtime.spec.tsx",
     ],
     status: "todo",
     skills: ["security-review"],
@@ -17589,6 +17593,71 @@ export const backlog = [
     notes: [
       "🔴 FULL gate + Opus (room = cổng đọc ở tầng realtime). Nối tiếp BE-2A.",
       "⚠️ TÁCH RA để không treo BE-2A/BE-2B: phần này bị chặn bởi quyết định room-đánh-dấu và bởi việc phải sửa tài liệu chuẩn API-19.",
+      "✍️ OWNER KÝ 02/10/2026 (plan §6, cả 10 đề xuất — sau plan-review lượt 1 verdict BLOCK, 12 finding đã vá vào plan §10): Q-SCHEMA = P1 `z.discriminatedUnion('audience')` với `orgUnitId: z.null()` ở CẢ HAI option (viết lại `social-ws.spec.ts` CÓ CHỦ ĐÍCH, danh sách M32) · Q-FE = (a) lọc `audience==='company'` ở `use-feed-realtime.ts` + spec, mở `paths` 2 file FE · Q-CR = (a) HOÃN comment/reaction vào room nhóm, seed `S16-SOCIAL-RTGROUPCR-1` · Q-LEAVE = (a) `leave` TRONG tx và LẦN NỮA sau commit · Q-PUBLIC = (a) bài nhóm `public` chỉ tới thành viên `active` (room nhóm) · Q-EVAC = (a) `034` KHÔNG sơ tán room, ghi phần dư R9 ở API-19 §7, seed `S16-SOCIAL-GROUPPOSTDEL-1` (`FOR SHARE` hàng nhóm ở cổng ghi `002`) · Q-SPEC = (a) KHÔNG sửa SPEC-16 · Q-SLICE = (a) 1 PR, 2 commit, int-spec tách 2 file (commit A tự xanh) · Q-FLAG = (a) KHÔNG cờ env · Q-GWFAIL = (a) lỗi khối feed lúc connect ⇒ rời MỌI room nhóm vừa join, phiên sống; chỉ ngắt kết nối khi chính bước dọn lỗi. D-OWNER-2 (22/09) giữ nguyên: `feedUserRoomName` + tái dùng cơ chế `syncRoomMembership`, KHÔNG BAO GIỜ `userRoomName` làm bộ chọn join.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-RTGROUPCR-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Fan-out `feed:comment.created` / `feed:reaction.changed` của bài `audience='group'` vào room nhóm `co:{c}:feedgroup:{groupId}` — hôm nay hai sự kiện đó CHỈ phát cho bài company (fail-closed có chủ đích của BE-2C, Q-CR)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/realtime/**",
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "plan S16-SOCIAL-BE-2C §6 Q-CR (owner ký (a) 02/10/2026) + §7 · API-19 §7 (bảng sau BE-2C ghi «chỉ room công ty, bài company») · SPEC-16 §13.7 («comment/reaction như trên»)",
+      "Hướng plan BE-2C đã đo: thêm `postGroupId` vào `SocialTargetAccess` (`social.types.ts`) ⇒ chạm `social-access.service.ts` (crown) + `social-comments.service.ts` + `social-reactions.service.ts` + 2 schema WS",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: có consumer FE thật của hai sự kiện này (M5 của plan BE-2C đo 0 consumer ngày 02/10) — chưa có thì giữ todo (YAGNI)",
+      "Định tuyến suy từ payload ĐÃ parse (khuôn `emitFeedPostCreated` của BE-2C): bài company ⇒ `feedRoomName`, bài group ⇒ `feedGroupRoomName`, `org_unit` ⇒ KHÔNG phát; parse lỗi ⇒ KHÔNG chạm `.to()`; không bao giờ `.to([])`",
+      "Deny-path RED trước: người ngoài nhóm kín / người `pending` / tenant khác nhận 0 sự kiện comment/reaction của bài nhóm — mỗi ca «nhận 0» có NEO DƯƠNG trên chính socket đó",
+      "API-19 §7 + SPEC-16 §13.7 khớp lại (SPEC đúng sau WO này — Q-SPEC của BE-2C)",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-BE-2C (owner ký Q-CR = (a)). 🔴 FULL gate: chạm cổng truy cập crown-jewel `social-access.service.ts`.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GROUPPOSTDEL-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Đua `034` xoá nhóm ↔ `002` đăng bài nhóm: cổng ghi `002` đọc nhóm KHÔNG khoá ⇒ bài commit được vào nhóm VỪA xoá mềm (REST ẩn bài mồ côi, nhưng từ BE-2C bài đó ĐƯỢC PHÁT vào room nhóm ⇒ thành viên cũ nhận payload mà REST đã ẩn) — khoá `FOR SHARE` hàng nhóm ở cổng ghi",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "database-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "plan S16-SOCIAL-BE-2C §2 M30 + §9 R9 + §6 Q-EVAC (owner ký (a)+(c) 02/10/2026): `034` UPDATE `deleted_at` ⇒ `FOR NO KEY UPDATE`; FK `feed_posts.group_id` ⇒ `FOR KEY SHARE` — KHÔNG xung đột; `assertWriteAudience` → `assertGroupVisibleTx`/`getMembershipTx` là SELECT không khoá (`social-access.service.ts` · `social-group-access.service.ts`)",
+      "Kết luận M30 mới từ ĐỌC MÃ + ma trận khoá PostgreSQL — CHƯA đo bằng harness đua",
+    ],
+    done_when: [
+      "🔴 ĐO TRƯỚC KHI SỬA bằng harness đua TẤT ĐỊNH (khuôn BE-3A: giữ khoá hàng + poll `pg_stat_activity`): `002` đọc nhóm sống TRƯỚC commit của `034` ⇒ hôm nay commit được bài vào nhóm đã xoá — RED phải đỏ đúng thông điệp đó",
+      "Cổng ghi `002` (và mọi đường ghi khác vào nhóm: `004` đổi audience nếu có, `016` bình luận nếu cần) khoá `FOR SHARE` hàng `feed_groups` ⇒ một bên chờ bên kia; READ COMMITTED đọc lại `deleted_at` sau khi chờ ⇒ 404 `SOCIAL-ERR-012`",
+      "Không deadlock mới với `lockGroupRowTx` (`FOR UPDATE`) của `035..039` — ca song song đo",
+      "API-19 §7 bỏ dòng phần dư R9 khi đã đóng",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-BE-2C (owner ký Q-EVAC = (a) + seed (c)). Sơ tán room sau `034` (Q-EVAC (b)) chỉ THU HẸP khe — emit của `002` và sơ tán của `034` chạy sau HAI commit độc lập — nên chỗ đóng thật là khoá ở tầng DB.",
     ],
   },
   {

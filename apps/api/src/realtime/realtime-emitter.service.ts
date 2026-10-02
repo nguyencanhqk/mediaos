@@ -35,7 +35,9 @@ import {
   callUserRoomName,
   chatRoomName,
   chatUserRoomName,
+  feedGroupRoomName,
   feedRoomName,
+  feedUserRoomName,
   userRoomName,
 } from "./rooms";
 
@@ -324,18 +326,71 @@ export class RealtimeEmitterService {
     userId: string,
     action: "join" | "leave",
   ): void {
+    this.syncSocketRoom(
+      {
+        join: chatUserRoomName(companyId, userId),
+        leave: userRoomName(companyId, userId),
+        target: chatRoomName(companyId, roomId),
+      },
+      action,
+      { label: "syncRoomMembership", roomId, userId },
+    );
+  }
+
+  /**
+   * S16-SOCIAL-BE-2C (D-OWNER-2) — ép socket của MỘT user vào/ra room của MỘT nhóm bảng tin
+   * (`feedGroupRoomName`) ngay khi membership đổi (`031`/`035`/`036`/`038`/`039`). Room-ops, không phát
+   * payload nào. CÙNG cơ chế với `syncRoomMembership` (lõi `syncSocketRoom`), khác đúng bộ ba room:
+   *   • `join`  → quét `feedUserRoomName` — CHỈ socket đã qua cổng `view:feed` lúc connect. **KHÔNG BAO
+   *     GIỜ `userRoomName`**: room đó chứa cả socket đã TRƯỢT cổng ⇒ lần duyệt kế tiếp kéo họ vào room
+   *     nhóm (đo thật — plan M2 a′). Cũng KHÔNG `chatUserRoomName`: đó là dấu của cổng `view:chat-room`.
+   *   • `leave` → quét `userRoomName` (RỘNG HƠN): rời nhầm là fail-safe, sót là rò.
+   *
+   * ⚠️ Thời điểm gọi do caller quyết (`social-groups.service.ts`): `join` CHỈ SAU commit; `leave` gọi CẢ
+   * TRONG tx lẫn SAU commit (owner ký Q-LEAVE (a)) — ngoại lệ có chủ đích của luật «gọi sau commit» đầu
+   * file, cùng lập luận `evictFromCallRoom`. Dưới adapter Valkey, `socketsJoin/Leave` KHÔNG áp ngay mà đi
+   * vòng pub/sub (bất đồng bộ ≈ RTT, kể cả trên cùng instance — M23): lệnh `leave` trong tx được publish
+   * TRƯỚC commit nên gần như chắc đã áp khi sự kiện sau-commit đầu tiên chảy; phần dư ghi API-19 §7.
+   */
+  syncFeedGroupMembership(
+    companyId: string,
+    groupId: string,
+    userId: string,
+    action: "join" | "leave",
+  ): void {
+    this.syncSocketRoom(
+      {
+        join: feedUserRoomName(companyId, userId),
+        leave: userRoomName(companyId, userId),
+        target: feedGroupRoomName(companyId, groupId),
+      },
+      action,
+      { label: "syncFeedGroupMembership", groupId, userId },
+    );
+  }
+
+  /**
+   * LÕI chung của hai lệnh đồng bộ membership (tái dùng cơ chế — D-OWNER-2). Bộ chọn `join` và `leave`
+   * do CALLER truyền, có chủ đích BẤT ĐỐI XỨNG (xem docblock `syncRoomMembership`): join quét room đánh
+   * dấu HẸP của cổng tương ứng, leave quét `userRoomName` RỘNG. No-op khi chưa có server; KHÔNG BAO GIỜ
+   * ném lên caller (caller có thể đang ở trong transaction — ném = rollback một thao tác đã đúng).
+   */
+  private syncSocketRoom(
+    rooms: { join: string; leave: string; target: string },
+    action: "join" | "leave",
+    logCtx: { label: string } & Record<string, string>,
+  ): void {
     if (!this.server) return;
     try {
-      const target = chatRoomName(companyId, roomId);
       if (action === "join") {
-        this.server.in(chatUserRoomName(companyId, userId)).socketsJoin(target);
+        this.server.in(rooms.join).socketsJoin(rooms.target);
       } else {
-        this.server.in(userRoomName(companyId, userId)).socketsLeave(target);
+        this.server.in(rooms.leave).socketsLeave(rooms.target);
       }
     } catch (err) {
-      this.logger.warn("syncRoomMembership failed", {
-        roomId,
-        userId,
+      const { label, ...ctx } = logCtx;
+      this.logger.warn(`${label} failed`, {
+        ...ctx,
         action,
         error: err instanceof Error ? err.message : String(err),
       });

@@ -81,6 +81,9 @@ function makeGateway(over: {
     { listRoomsForUser } as unknown as ChatRoomsRepository,
     db,
     presence as never,
+    // S16-SOCIAL-BE-2C: reader nhóm bảng tin tiêm DI (KHÔNG qua `db`) — bộ đếm `withTenant` của các ca
+    // dưới (bước B/C của CHAT) không lệch (plan M11). 0 nhóm: spec này đo CHAT.
+    { listActiveGroupIds: vi.fn(async () => [] as string[]) } as never,
   );
   return { gw, permissions, listRoomsForUser, presence };
 }

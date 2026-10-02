@@ -67,7 +67,19 @@ function makeDeps() {
     markOffline: vi.fn(async () => {}),
     refreshLocal: vi.fn(async () => {}),
   };
-  return { tokens, emitter, permissions, chatRooms, db, listRoomsForUser, presence };
+  // S16-SOCIAL-BE-2C: reader liệt kê nhóm bảng tin — "đường thông", 0 nhóm (ca của BE-2C ở
+  // `realtime.gateway.feed.spec.ts`).
+  const feedGroupRooms = { listActiveGroupIds: vi.fn(async () => [] as string[]) };
+  return {
+    tokens,
+    emitter,
+    permissions,
+    chatRooms,
+    db,
+    listRoomsForUser,
+    presence,
+    feedGroupRooms,
+  };
 }
 
 /** Dựng gateway với bộ phụ thuộc đầy đủ — 1 chỗ duy nhất phải sửa khi constructor đổi. */
@@ -79,6 +91,7 @@ function makeGateway(d: ReturnType<typeof makeDeps>): RealtimeGateway {
     d.chatRooms,
     d.db,
     d.presence as never,
+    d.feedGroupRooms as never,
   );
 }
 

@@ -13,9 +13,17 @@ import { TokenService } from "../auth/token.service";
 import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import { ChatRoomsRepository } from "../chat/chat-rooms.repository";
+import { SocialGroupRoomsReader } from "../social/social-group-rooms.reader";
 import { RealtimeEmitterService } from "./realtime-emitter.service";
 import { ChatPresenceService, PRESENCE_HEARTBEAT_MS } from "./chat-presence.service";
-import { chatRoomName, chatUserRoomName, feedRoomName, userRoomName } from "./rooms";
+import {
+  chatRoomName,
+  chatUserRoomName,
+  feedGroupRoomName,
+  feedRoomName,
+  feedUserRoomName,
+  userRoomName,
+} from "./rooms";
 
 /** Cặp quyền đường ĐỌC của CHAT — CÙNG cặp mà `chat-rooms.controller.ts` bắt buộc cho mọi route đọc. */
 const CHAT_READ_PAIR = { action: "view", resourceType: "chat-room" } as const;
@@ -74,6 +82,10 @@ export class RealtimeGateway
     private readonly db: DatabaseService,
     // ── S8-CHAT-UX-RT-1 (additive) ── "đang online" theo vòng đời kết nối (CHAT-DEC-017).
     private readonly presence: ChatPresenceService,
+    // ── S16-SOCIAL-BE-2C (additive, CUỐI — 3 spec dựng tay theo vị trí) ── liệt kê nhóm bảng tin của
+    // user lúc connect. Tiêm DI, KHÔNG qua `this.db`: khối CHAT bên dưới đếm lượt `db.withTenant` (spec
+    // `realtime.gateway.chat.spec.ts`), và một lượt của bảng tin chen vào sẽ làm ca đó đo sai bước.
+    private readonly feedGroupRooms: SocialGroupRoomsReader,
   ) {}
 
   afterInit(server: Server): void {
@@ -124,6 +136,8 @@ export class RealtimeGateway
    *
    * Bốn bước, thứ tự có ý nghĩa:
    *   (0) join `userRoomName` — đích `notification:new`, phải sống kể cả khi CHAT bị từ chối;
+   *   (0b) khối bảng tin RIÊNG (`joinFeedRooms` — S16-SOCIAL-BE-1/BE-2C): cổng `view:feed` → room công
+   *       ty + room đánh dấu `feeduser` → room nhóm đọc từ DB + đọc lại; chạy XONG trước khối CHAT;
    *   (A) cổng quyền `view:chat-room` — thiếu cặp thì DỪNG ở đây (fail-SOFT: không disconnect);
    *   (B) tra danh sách phòng + join, kèm `chatUserRoomName` đánh dấu "socket này đã qua cổng";
    *   (C) đọc LẠI danh sách và rời phòng nào vừa biến mất — tự vá đua với `removeMember`.
@@ -142,32 +156,15 @@ export class RealtimeGateway
     // (0) Đích NOTI — join TRƯỚC mọi bước có thể thất bại, và KHÔNG phụ thuộc cặp quyền CHAT.
     await client.join(userRoomName(user.companyId, user.id));
 
-    // ── (0b) Cổng quyền đường đọc WS của SOCIAL — S16-SOCIAL-BE-1 ────────────────
+    // ── (0b) Khối bảng tin — S16-SOCIAL-BE-1 (cổng `view:feed`) + BE-2C (room nhóm) ──────────
     // ⚠️ KHỐI RIÊNG, ĐẶT TRƯỚC khối CHAT có chủ đích. Khối CHAT `return` sớm khi thiếu
     // `view:chat-room`; gộp cổng feed vào trong đó sẽ làm mọi người KHÔNG có quyền chat mất luôn bảng
     // tin — hai cặp quyền độc lập, hai quyết định độc lập.
     //
-    // Fail-SOFT, và `catch` là BẮT BUỘC chứ không thừa: khối CHAT bên dưới fail-LOUD (`disconnect`)
-    // vì "connected mà 0 phòng chat" là trạng thái sống dối. Bảng tin KHÔNG thuộc nhóm đó — FE chỉ
-    // mất badge «N bài mới» và tự thấy khi tải lại. Để một lỗi ở đây rơi vào `catch` chung nghĩa là
-    // một trục trặc của bảng tin sẽ NGẮT phiên chat của mọi người.
-    try {
-      const feedDecision = await this.permissions.can({
-        userId: user.id,
-        companyId: user.companyId,
-        ...FEED_READ_PAIR,
-      });
-      if (feedDecision.allow) {
-        await client.join(feedRoomName(user.companyId));
-      } else {
-        this.logger.debug(`WS: user=${user.id} thiếu cặp view:feed — không join room bảng tin`);
-      }
-    } catch (err) {
-      this.logger.warn("WS: cổng quyền bảng tin lỗi — bỏ qua room bảng tin, phiên vẫn sống", {
-        userId: user.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+    // Fail-SOFT cho phiên: một trục trặc của bảng tin KHÔNG được ngắt phiên chat của mọi người. Ngoại
+    // lệ DUY NHẤT (BE-2C, fail-CLOSED cho room nhóm): dọn room nhóm sau lỗi mà cũng lỗi ⇒ socket có thể
+    // còn ở room nhóm dựa trên một lần đọc CHƯA được xác nhận lại ⇒ `joinFeedRooms` đã ngắt ⇒ dừng ở đây.
+    if (!(await this.joinFeedRooms(client, user))) return;
 
     try {
       // ── (A) Cổng quyền đường đọc WS ──────────────────────────────────────────────
@@ -281,6 +278,90 @@ export class RealtimeGateway
   }
 
   // ─── helpers ─────────────────────────────────────────────────────────────────
+
+  /**
+   * S16-SOCIAL-BE-1 + BE-2C — khối bảng tin của `handleConnection` (plan BE-2C §4.4). Trả `false` ⇔ đã
+   * phải NGẮT socket ⇒ caller `return` (không chạy khối CHAT trên một socket đã ngắt).
+   *
+   * Thứ tự có ý nghĩa:
+   *   1. Cổng `view:feed` — NGOÀI mọi tx (`can()` tự mở `withTenant`; lồng tx là treo IM LẶNG). Từ chối
+   *      ⇒ dừng, fail-SOFT, KHÔNG tra nhóm: membership không thay được cặp quyền.
+   *   2. Join `feedRoomName` rồi `feedUserRoomName` (room ĐÁNH DẤU) **TRƯỚC** khi đọc membership — đóng
+   *      đua với `038` duyệt: hoặc `socketsJoin` sau-commit của `038` thấy socket đã ở room đánh dấu,
+   *      hoặc lần đọc ở bước 3 (sau commit đó) thấy hàng `active`.
+   *   3. Đọc nhóm (server tra DB — KHÔNG từ handshake) → GHI `joinedGroupRooms` TRƯỚC vòng join → join.
+   *   4. Đọc LẠI → rời nhóm vừa biến mất (đua với `036/039`: lệnh leave sau-commit chạy lúc socket chưa
+   *      join là no-op, rồi bước 3 đưa socket vào room vừa bị gỡ). Khuôn bước (C) của CHAT.
+   *   5. Lỗi Ở BẤT KỲ bước nào ⇒ `warn` (KHÔNG `error`) + rời MỌI room nhóm đã join — owner ký Q-GWFAIL
+   *      (a), bất biến 10. Lỗi ở bước 4 xảy ra SAU vòng join của bước 3: socket ĐÃ ở mọi room của lần đọc
+   *      1, kể cả room vừa bị `036/039` gỡ — chỉ `warn` mà không dọn là fail-OPEN. Phiên + `feed` +
+   *      `feeduser` vẫn sống (mất badge nhóm tới reconnect; lần `038/035/031` sau vẫn kéo vào được).
+   *
+   * Phần dư KHÔNG đóng (API-19 §7, plan R8): khe giữa join ở bước 3 và leave ở bước 4 — một bài commit
+   * SAU `039` trong khe đó vẫn tới người vừa bị gỡ (cùng hình dạng phần dư bước (C) của CHAT).
+   */
+  private async joinFeedRooms(client: Socket, user: SocketUser): Promise<boolean> {
+    const joinedGroupRooms: string[] = [];
+    try {
+      const decision = await this.permissions.can({
+        userId: user.id,
+        companyId: user.companyId,
+        ...FEED_READ_PAIR,
+      });
+      if (!decision.allow) {
+        this.logger.debug(`WS: user=${user.id} thiếu cặp view:feed — không join room bảng tin`);
+        return true;
+      }
+      await client.join(feedRoomName(user.companyId));
+      await client.join(feedUserRoomName(user.companyId, user.id));
+
+      const groupIds = await this.feedGroupRooms.listActiveGroupIds(user.companyId, user.id);
+      joinedGroupRooms.push(...groupIds.map((g) => feedGroupRoomName(user.companyId, g)));
+      await Promise.all(joinedGroupRooms.map((room) => client.join(room)));
+
+      const fresh = new Set(await this.feedGroupRooms.listActiveGroupIds(user.companyId, user.id));
+      await Promise.all(
+        groupIds
+          .filter((g) => !fresh.has(g))
+          .map((g) => client.leave(feedGroupRoomName(user.companyId, g))),
+      );
+      return true;
+    } catch (err) {
+      this.logger.warn(
+        "WS: khối bảng tin lỗi lúc connect — rời mọi room nhóm vừa join, phiên vẫn sống",
+        {
+          userId: user.id,
+          groupRooms: joinedGroupRooms.length,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
+      return this.leaveFeedGroupRooms(client, user, joinedGroupRooms);
+    }
+  }
+
+  /**
+   * Bước dọn của `joinFeedRooms` (fail-CLOSED cho room nhóm). `client.leave` là thao tác adapter CỤC BỘ,
+   * đồng bộ, nên gần như không thể lỗi — nhưng NẾU lỗi thì socket có thể còn ở một room nhóm mà không ai
+   * xác nhận được ⇒ `error` + `disconnect(true)` (client chắc chắn nhận và tự reconnect qua cổng lần nữa —
+   * khuôn fail-LOUD của khối CHAT).
+   */
+  private async leaveFeedGroupRooms(
+    client: Socket,
+    user: SocketUser,
+    rooms: readonly string[],
+  ): Promise<boolean> {
+    try {
+      await Promise.all(rooms.map((room) => client.leave(room)));
+      return true;
+    } catch (err) {
+      this.logger.error("WS: dọn room nhóm bảng tin THẤT BẠI — ngắt kết nối (fail-closed)", {
+        userId: user.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      client.disconnect(true);
+      return false;
+    }
+  }
 
   /**
    * Id các phòng đang hoạt động của user (không lưu trữ).

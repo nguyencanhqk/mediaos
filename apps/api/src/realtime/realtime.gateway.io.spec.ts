@@ -58,6 +58,8 @@ describe("RealtimeGateway (socket.io integration)", () => {
         markOffline: async () => {},
         refreshLocal: async () => {},
       } as never,
+      // S16-SOCIAL-BE-2C: reader nhóm bảng tin — 0 nhóm (spec này đo handshake/user-room).
+      { listActiveGroupIds: async () => [] } as never,
     );
 
     httpServer = createServer();
