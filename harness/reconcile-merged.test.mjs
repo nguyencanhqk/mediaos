@@ -107,9 +107,14 @@ test("B1e — docs(<scope>): bàn giao|handoff … là bookkeeping ⇒ bị lo�
 //   - "bàn giao" cũng là SẢN PHẨM của WO phát hành (bộ bàn giao go-live) — ship bằng `<WO-ID> — …`
 //     ngay sau dấu hai chấm nên luật neo-đầu-thân KHÔNG nuốt;
 //   - thân "seed …" KHÔNG phải bookkeeping: `chore(lms): seed + code S5-LMS-UI-4` (21a782f3) seed
-//     VÀ thi công trong cùng commit ⇒ chắn backlog theo SCOPE, không theo chữ "seed".
+//     VÀ thi công trong cùng commit ⇒ chắn backlog theo SCOPE, không theo chữ "seed";
+//   - KHÔNG được "rút gọn" B1e thành scope `docs(harness)` (thêm `harness` vào nhóm `docs\((plan|status)\)`):
+//     WO tài liệu ship bằng `docs(<scope>): <WO-ID> — …` (c667c15d `docs(social): S16-SOCIAL-DOC-1 — bộ tài
+//     liệu SOCIAL …`), nên một WO tài liệu harness ship bằng `docs(harness): <WO-ID> — …` sẽ không bao giờ
+//     được đóng dấu. Ca dưới khoá quyết định "chắn theo THÂN, không theo scope" (review LIGHT 02/10).
 test("B1d/B1e-đối chứng — bàn giao/seed KHÔNG ở vị trí ghi sổ ⇒ vẫn là commit ship", () => {
   const cases = [
+    "docs(harness): S20-GOV-X-1 — tài liệu cơ chế reconcile + sổ backlog",
     "docs(release): S6-REL-1 — bàn giao vận hành + hồ sơ phát hành",
     "feat(release): S6-GOLIVE-1 — WS10: biên bản Go/No-go + bộ bàn giao 10/10, vá lỗ backup chặn go-live (#315)",
     "chore(lms): seed + code S5-LMS-UI-4 — LMS hòa chrome vào MediaOS",
