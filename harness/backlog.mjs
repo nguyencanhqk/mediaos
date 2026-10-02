@@ -17741,7 +17741,65 @@ export const backlog = [
     done_when: [
       "Ca đua TẤT ĐỊNH (khuôn harness khoá hàng + poll pg_stat_activity của social-be3a-report-actions.int-spec): admin bị hạ vai giữa hai câu ⇒ `039` phải 403; mutant bỏ đọc-lại ⇒ đỏ đúng thông điệp",
     ],
-    notes: ["🔴 FULL gate (cổng vai nhóm). Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1."],
+    notes: [
+      "🔴 FULL gate (cổng vai nhóm). Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1.",
+      "Owner ký 02/10/2026 (plan §6, mọi khuyến nghị): D1=(a) admin KIÊM `manage:feed-group` bị hạ vai giữa chừng ⇒ đánh giá lại «vai nhóm HOẶC manage» trên hàng đọc SAU khoá, cho qua + audit `viaManage:true` (API-19:107) · D2=(a) gộp `033`/`034` vào WO này (+2 call-site, ca D-3/D-4/C-3, +2 mutant) · D3=(a) hàng actor biến mất giữa chừng trên nhóm kín ⇒ 403 `SOCIAL-ERR-014` · D4=(a) `lock_timeout` + map `55P03` là WO riêng — seed `S16-SOCIAL-GROUPLOCKTIMEOUT-1` · D5=(a) `038`/`039` ghi vào nhóm bị xoá mềm giữa chừng là WO riêng — seed `S16-SOCIAL-GROUPDELRACE-1` · D6=(a) gia cố vị từ chờ khoá be3a/be3c qua `test/helpers/lock-wait.ts` (call-site/ngưỡng/assert giữ nguyên) · D7=(a) seed nợ trong CÙNG PR. Plan: docs/plans/S16-SOCIAL-GROUPTOCTOU-1.md.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GROUPLOCKTIMEOUT-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Route nhóm `033`–`039` (+ `002` bài nhóm) chờ khoá hàng `feed_groups` KHÔNG cận trên (`lock_timeout=0`) — một tx treo làm đứng mọi thao tác của nhóm, không lỗi/không log",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/src/**",
+      "apps/app/src/routes/social/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-GROUPTOCTOU-1"],
+    src: ["plan S16-SOCIAL-GROUPTOCTOU-1 D4/N1 — đo M1/M12/M23"],
+    done_when: [
+      "`SET LOCAL lock_timeout` trên mọi tx route nhóm khoá `feed_groups` + dịch `55P03` ⇒ 409 mã sentinel (khuôn `029` REPORT_BUSY) + census mã lỗi + FE xử lý; ca tất định (harness `test/helpers/lock-wait.ts`): holder giữ khoá quá trần ⇒ 409 đúng mã, không 500, không treo",
+    ],
+    notes: [
+      "🔴 FULL gate. Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (plan §6 D4 — owner ký (a): WO riêng). Bề mặt khoá rộng thêm từ GROUPTOCTOU-1: `033`/`034` nay cũng `FOR UPDATE` hàng nhóm trước khi đọc vai.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GROUPDELRACE-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "`038`/`039` vẫn ghi thành viên vào nhóm bị XOÁ MỀM giữa chừng — `lockGroupRowTx` cố ý không lọc `deleted_at` (miễn trừ W4 của neo D6-ii) và không route nào kiểm lại `deleted_at` sau khoá",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-GROUPTOCTOU-1"],
+    src: [
+      "plan S16-SOCIAL-GROUPTOCTOU-1 D5/N3 — đo M14: `039` trên nhóm bị xoá mềm trong tx giữ khoá ⇒ 200, target bị mời ra khỏi nhóm ĐÃ xoá",
+    ],
+    done_when: [
+      "Kiểm `deleted_at` SAU khoá ở `038`/`039` ⇒ 404 `SOCIAL-ERR-012`, KHÔNG đổi `lockGroupRowTx` (miễn trừ W4 giữ nguyên — lý lẽ ghi vào plan); ca tất định bằng harness `test/helpers/lock-wait.ts` (holder `UPDATE feed_groups SET deleted_at = now()` trong tx giữ khoá) ⇒ 404 + hàng thành viên không đổi + 0 audit, có đối chứng dương",
+      "Rà `035`/`036`: cùng hình dạng (`findLiveGroupTx` TRƯỚC `lockGroupRowTx`) — CHƯA đo; đo rồi quyết gộp hay tách",
+    ],
+    notes: [
+      "🔴 FULL gate (đụng neo khoá D6-ii của BE-2A). Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (plan §6 D5 — owner ký (a): WO riêng; không phải lỗi quyền).",
+    ],
   },
   {
     id: "S16-SOCIAL-SCOPEDENIEDCODE-1",
