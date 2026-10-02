@@ -19743,6 +19743,7 @@ export const backlog = [
       "apps/api/test/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      ".github/workflows/security.yml",
     ],
     skills: ["code-review", "security-review"],
     depends_on: [],
@@ -19752,12 +19753,47 @@ export const backlog = [
     ],
     done_when: [
       "brace-expansion: nới 2 override per-major hiện có (`<2.1.3`→`<2.1.6`, `>=3.0.0 <5.0.8`→`<5.0.11`) — GIỮ per-major (minimatch@3/@9 gọi `require()()` như HÀM); `scripts/check-brace-expansion-guard.mjs` vẫn XANH (đo THẬT entry `main` có guard); rà lại `auditConfig.ignoreGhsas` GHSA-mh99 còn cần không",
-      "engine.io: override `>=6.6.0 <6.6.10` → `^6.6.10`; int-spec realtime/WS (chat · call · noti) XANH trên LANE_DB",
-      "nodemailer 9→10: ĐỌC changelog breaking của 10.x TRƯỚC; liệt kê mọi call-site gửi mail ở `apps/api` (đặt lại mật khẩu = vùng AUTH ⇒ FULL gate); int-spec gửi mail XANH; KHÔNG suppress GHSA (owner 07-25: «luôn vá, không ỉm»)",
+      "engine.io: bump LOCKFILE trong range lên ≥6.6.10 (`socket.io@4.8.3` khai `engine.io: ~6.6.0` ⇒ 6.6.10+ nằm TRONG range — tiền lệ #335; khối overrides KHÔNG có dòng engine.io nào để nới, thêm override mới trái luật 'nới dải cũ, không thêm dòng'); 5 spec mở socket thật (realtime.gateway.io · call-signalling.gateway · chat-rt0-ws-adapter · chat-rt1-realtime · chat-s7-call-rt1-signalling) XANH trên LANE_DB  [sửa câu chữ 01/10 — owner chốt ở PR; bản gốc: «override `>=6.6.0 <6.6.10` → `^6.6.10`»]",
+      "nodemailer 9→10: ĐỌC changelog breaking của 10.x TRƯỚC; liệt kê mọi call-site gửi mail ở `apps/api` (đặt lại mật khẩu = vùng AUTH ⇒ FULL gate); spec chạy nodemailer THẬT qua SMTP (`invite-mail.smtp.spec.ts` — cả entry ESM lẫn CJS) XANH; KHÔNG suppress GHSA (owner 07-25: «luôn vá, không ỉm»)  [sửa câu chữ 01/10 — owner chốt ở PR; bản gốc: «int-spec gửi mail XANH» — KHÔNG int-spec nào chạy nodemailer: user-invites-flow mock toàn phần InviteMailService]",
       "`pnpm install --frozen-lockfile` sạch · `pnpm audit --audit-level high` exit 0 · CI Security XANH",
     ],
     notes: [
+      "Plan: docs/plans/S19-OPS-AUDITHIGH-1.md (plan-reviewer 3 lượt → PASS). Đo 01/10: email đặt lại mật khẩu KHÔNG đi qua nodemailer (reset-password-mail.service.ts còn stub) — đường đỏ thật là token KÍCH HOẠT trong InviteMailService; log của nó từng chứa NGUYÊN token+username khi server echo (vá trong WO). PROD chạy trên node_modules của checkout chính ⇒ thi công trong worktree, deploy cần `pnpm install --frozen-lockfile` TRƯỚC `m prod-update api` (plan §7).",
       "🔴 vì nâng MAJOR một dep runtime có thể nằm trên đường AUTH (email reset). `apps/lms` cũng có nodemailer ^8 nhưng là repo riêng, cổng SCA không quét (memory sca-gate-blind-to-lms-and-fbpost).",
+    ],
+  },
+  {
+    id: "S19-SEC-MAILCREDEXFIL-1",
+    module: "FOUNDATION",
+    layer: "SEC",
+    title:
+      "Mật khẩu SMTP ĐÃ LƯU (write-only secret) bị gửi tới host DO CLIENT CHỌN — 2 đường: `POST /settings/mail/test` vắng password ⇒ decrypt mật khẩu đã lưu rồi AUTH tới `dto.host`; `PUT` đổi host/port/username/secure mà vắng password ⇒ GIỮ envelope cũ ⇒ lời mời kế tiếp AUTH mật khẩu cũ tới host mới",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/settings/**",
+      "packages/contracts/src/mail-config.ts",
+      "apps/api/test/**",
+      "apps/app/src/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-OPS-AUDITHIGH-1"],
+    src: [
+      "FULL gate security-reviewer của S19-OPS-AUDITHIGH-1 (01/10/2026), MEDIUM có sẵn — xác minh: `apps/api/src/settings/mail-config.service.ts:96-124` (`testConnection`: `password === undefined` ⇒ `decryptSecret(existing)` ⇒ `transport.test({ host: dto.host, port: dto.port, username: dto.username, secure: dto.secure ?? true, password })`).",
+      "Đường thứ hai (đọc docblock `mail-config.repository.ts:65-72`): «row tồn tại + KHÔNG envelope (vắng password) → UPDATE cột non-secret, GIỮ envelope cũ» ⇒ PUT trỏ host về server kẻ tấn công + 1 lời mời bất kỳ ⇒ `InviteMailService` AUTH mật khẩu đã lưu tới đó.",
+      "Cả GET/PUT/test cùng gác `configure-mail` (isSensitive) — `mail-config.controller.ts:28,34,40`. Mật khẩu là write-only (không vào DTO — bất biến #3) ⇒ người giữ quyền cấu hình KHÔNG được ĐỌC ra được nó; hai đường trên cho đọc gián tiếp. `secure:false` ⇒ AUTH PLAIN plaintext trên dây; `errorMessage` của test còn là oracle dò cổng nội bộ (SSRF nhẹ).",
+    ],
+    done_when: [
+      "Deny-path RED TRƯỚC: (a) test vắng password với host/port/username/secure KHÁC hàng đã lưu ⇒ 400, server SMTP giả (`test/helpers/fake-smtp-server.ts`) KHÔNG nhận AUTH nào; (b) PUT đổi bất kỳ trường đích (host/port/username/secure) mà vắng password ⇒ 400, envelope cũ không bị gắn với đích mới",
+      "Đối chứng dương: test vắng password với đích KHỚP NGUYÊN hàng đã lưu ⇒ vẫn dùng mật khẩu đã lưu (giữ UX «Kiểm tra kết nối» không bắt nhập lại); PUT chỉ đổi from_name/from_email vắng password ⇒ vẫn giữ envelope",
+      "Mã lỗi theo SPEC (tra docs/spec + docs/API cho mail config, KHÔNG tự đặt); FE form mail: đổi đích ⇒ bắt nhập mật khẩu, thông báo rõ",
+      "Rà oracle dò cổng của `errorMessage` (host nội bộ/loopback/link-local) — quyết chặn hay chấp nhận, ghi lý do",
+      "FULL gate (security + silent-failure) TRƯỚC khi mở PR; owner merge",
+    ],
+    notes: [
+      "🔴 secret. Không phải lỗi của S19-OPS-AUDITHIGH-1 (có từ CS-8) — nâng nodemailer không đổi gì ở đây. Tác nhân cần quyền nhạy cảm `configure-mail` ⇒ mối đe doạ là người trong/tài khoản admin bị chiếm, mục tiêu là mật khẩu hộp thư công ty (thường dùng chung cho dịch vụ khác).",
     ],
   },
 ];

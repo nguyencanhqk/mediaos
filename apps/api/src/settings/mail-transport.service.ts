@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
+import { describeSmtpError } from "./smtp-error-summary";
 
 /** Handshake-only SMTP timeout (ms) — `verify()` chỉ bắt tay, KHÔNG gửi mail. */
 const SMTP_VERIFY_TIMEOUT_MS = 8000;
@@ -75,8 +76,10 @@ export class MailTransportService {
     } catch (err: unknown) {
       const raw = err instanceof Error ? err.message : String(err);
       const errorMessage = sanitizeSmtpError(raw, params.username, params.password);
-      // Log dạng ĐÃ sanitize (no-credential). Diagnostic = kết nối thất bại; KHÔNG kèm password/username.
-      this.logger.warn(`SMTP verify thất bại: ${errorMessage}`);
+      // Log CHỈ trường máy-sinh (allowlist — `smtp-error-summary.ts`), KHÔNG lời văn của server: sanitize
+      // theo danh sách giá trị đã biết sót blob AUTH PLAIN/chữ đã mã hoá. Lời văn đã sanitize chỉ trả về
+      // cho admin đang bấm "Kiểm tra kết nối" (họ cần nó để sửa cấu hình).
+      this.logger.warn(`SMTP verify thất bại (${describeSmtpError(err)})`);
       return { ok: false, errorMessage };
     } finally {
       transporter.close();
