@@ -129,6 +129,13 @@ export function useFeedActions(): FeedActions {
     onError: onActionError("save"),
   });
 
+  /**
+   * ⚠️ INVALIDATE-ONLY — CỐ Ý (S16-SOCIAL-MENTIONLINK-1, plan FE-2D D3 (a)). Response `006` dựng RIÊNG
+   * (`social-posts-moderation.service.ts`) và KHÔNG mang `mentions`/`kudos`/`poll`/`idea`, còn
+   * `setQueryData` THAY NGUYÊN object (đo M2) ⇒ ghi thẳng `post` vào `posts.detail` làm link mention,
+   * khối vinh danh/bình chọn/sáng kiến trên màn chi tiết biến mất tới lượt tải sau. Muốn cập nhật cache
+   * tức thì thì PHẢI merge giữ các khoá VẮNG (vắng ≠ rỗng) và chống ghi cũ đè mới. Ca K1 ghim điều này.
+   */
   const moderateMutation = useMutation({
     mutationFn: ({ postId, patch }: { postId: string; patch: ModerateFeedPostDto }) =>
       socialApi.moderatePost(postId, patch),

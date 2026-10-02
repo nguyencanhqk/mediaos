@@ -11,6 +11,10 @@ import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 import { PostBody } from "./PostBody";
 
+/**
+ * Mock `Link` NỘI SUY `params` (khuôn `KudosBlock.spec` — bài học H2 FE-2C): mock trần `href={to}` in
+ * khuôn `/feed/profiles/$employeeId` cho MỌI id ⇒ link mention trỏ nhầm người vẫn xanh.
+ */
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
   return {
@@ -19,12 +23,21 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
       children,
       to,
       search,
+      params,
     }: {
       children: React.ReactNode;
       to: string;
       search?: Record<string, unknown>;
+      params?: Record<string, string>;
     }) => (
-      <a href={search?.tag ? `${to}?tag=${String(search.tag)}` : to} data-router-link="1">
+      <a
+        href={
+          search?.tag
+            ? `${to}?tag=${String(search.tag)}`
+            : Object.entries(params ?? {}).reduce((h, [k, v]) => h.replace(`$${k}`, v), to)
+        }
+        data-router-link="1"
+      >
         {children}
       </a>
     ),
@@ -66,11 +79,34 @@ describe("C14 (render) — không có đường nào biến nội dung thành ma
     expect(a.getAttribute("href")).toContain("tag=tuyểndụng");
   });
 
-  it("🔴 `@mention` là SPAN, KHÔNG phải link (contract không trả employeeId)", () => {
+  it("🔴 `@mention` KHÔNG có `mentions` của server ⇒ SPAN, KHÔNG phải link", () => {
     const { container } = wrap(<PostBody body="chào @an.nguyen" />);
     const links = Array.from(container.querySelectorAll("a"));
     expect(links).toHaveLength(0);
     expect(screen.getByTestId("post-body")).toHaveTextContent("@an.nguyen");
+  });
+});
+
+describe("S16-SOCIAL-MENTIONLINK-1 — B1: mention thành link hồ sơ CHỈ khi server nói `withheld:false`", () => {
+  const E1 = "33333333-3333-4333-8333-333333333333";
+
+  it("ALLOW: phần tử `withheld:false` ⇒ link tới hồ sơ ĐÚNG `employeeId`, chữ = nguyên văn trong bài", () => {
+    wrap(
+      <PostBody
+        body="Chào @Nguyễn Văn An!"
+        mentions={[{ withheld: false, employeeId: E1, label: "Nguyễn Văn An" }]}
+      />,
+    );
+    const link = screen.getByRole("link", { name: "@Nguyễn Văn An" });
+    expect(link.getAttribute("href")).toBe(`/feed/profiles/${E1}`);
+  });
+
+  it("DENY: chỉ phần tử `withheld:true` ⇒ span, 0 thẻ `a`", () => {
+    const { container } = wrap(
+      <PostBody body="Chào @Nguyễn Văn An!" mentions={[{ withheld: true }]} />,
+    );
+    expect(container.querySelectorAll("a")).toHaveLength(0);
+    expect(screen.getByTestId("post-body")).toHaveTextContent("Chào @Nguyễn Văn An!");
   });
 });
 

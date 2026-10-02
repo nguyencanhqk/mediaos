@@ -15,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { moderateFeedPostSchema, type FeedPostDto } from "@mediaos/contracts";
+import { socialKeys } from "@mediaos/web-core";
+import { makePost } from "../social-test-doubles";
 import { buildPostMenuActions, useFeedActions } from "./use-feed-actions";
 
 const putPostReaction = vi.fn();
@@ -221,6 +223,43 @@ describe("kiểm duyệt — 006 (gác PER-FIELD ở tầng 2)", () => {
     const { result } = renderHook(() => useFeedActions(), { wrapper });
     act(() => result.current.moderate(POST_ID, { pinned: true }));
     await waitFor(() => expect(moderatePost).toHaveBeenCalledWith(POST_ID, { pinned: true }));
+  });
+
+  /**
+   * S16-SOCIAL-MENTIONLINK-1 — ca **K1** (plan FE-2D §4 B4 · D3 (a)): response `006` dựng riêng, KHÔNG
+   * mang `mentions`/`kudos`/`poll`/`idea` (`social-posts-moderation.service.ts`). Ghi nó thẳng vào cache
+   * (`setQueryData` THAY NGUYÊN object — đo M2) làm link mention trên màn chi tiết biến thành span tới lượt
+   * tải sau. Ca này XANH trên code hiện tại (invalidate-only) — giá trị nằm ở mutant mK.
+   *
+   * ⚠️ THỨ TỰ ASSERT GHIM (đo M29): `setQueryData` xoá cờ `isInvalidated` nếu chạy SAU invalidate, nên
+   * assert `mentions` PHẢI đứng trước ⇒ mK đỏ cùng một thông điệp dù cấy trước hay sau `invalidatePostLists`.
+   */
+  it("K1 — 006 thành công ⇒ entry chi tiết GIỮ `mentions` cũ (không ghi DTO 006), chỉ bị đánh dấu invalidated", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const detailKey = socialKeys.posts.detail(POST_ID);
+    const seedMentions = [
+      { withheld: false as const, employeeId: "33333333-3333-4333-8333-333333333333", label: "An" },
+    ];
+    client.setQueryData(detailKey, makePost({ id: POST_ID, mentions: seedMentions }));
+    // Hình dạng THẬT của 006: không khoá `mentions` (vắng ≠ rỗng).
+    const dto006 = makePost({ id: POST_ID, status: "hidden" });
+    expect("mentions" in dto006).toBe(false);
+    moderatePost.mockResolvedValue(dto006);
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: detailKey }));
+
+    // (1) TRƯỚC: dữ liệu cũ còn nguyên `mentions`.
+    expect(client.getQueryData<FeedPostDto>(detailKey)?.mentions).toEqual(seedMentions);
+    // (2) SAU: entry được đánh dấu cũ ⇒ lượt mount kế tiếp tải lại từ `003` (có `mentions`).
+    expect(client.getQueryState(detailKey)?.isInvalidated).toBe(true);
   });
 });
 

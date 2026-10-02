@@ -41,12 +41,23 @@ const NEWS_ID = "11111111-1111-4111-8111-111111111111";
 /** Phải khớp `READERS_PAGE_SIZE` của NewsPage: chính con số này tách lời gọi DANH SÁCH khỏi lời gọi ĐẾM. */
 const LIST_LIMIT = 50;
 
+/** `Link` NỘI SUY `params` (S16-SOCIAL-MENTIONLINK-1) — mock trần in khuôn `$employeeId` cho mọi id. */
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
   return {
     ...actual,
-    Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-      <a href={to}>{children}</a>
+    Link: ({
+      children,
+      to,
+      params,
+    }: {
+      children: React.ReactNode;
+      to: string;
+      params?: Record<string, string>;
+    }) => (
+      <a href={Object.entries(params ?? {}).reduce((h, [k, v]) => h.replace(`$${k}`, v), to)}>
+        {children}
+      </a>
     ),
     useNavigate: () => vi.fn(),
   };
@@ -150,6 +161,36 @@ describe("C9 — nút «Xác nhận đã đọc» gác bằng `view:feed` (khôn
     await waitFor(() => expect(screen.getByTestId("news-list")).toBeInTheDocument());
     expect(screen.queryByTestId("news-ack-button")).toBeNull();
     expect(screen.queryByTestId("news-acked")).toBeNull();
+  });
+});
+
+describe("S16-SOCIAL-MENTIONLINK-1 — B3: tin tức truyền `mentions` xuống thân", () => {
+  const E1 = "33333333-3333-4333-8333-333333333333";
+
+  it("ALLOW: tin CÓ `mentions` (`withheld:false`) ⇒ link hồ sơ đúng người trong hàng tin", async () => {
+    listNews.mockResolvedValue(
+      page([
+        makeNews({
+          body: "Chúc mừng @Nguyễn Văn An!",
+          mentions: [{ withheld: false, employeeId: E1, label: "Nguyễn Văn An" }],
+        }),
+      ]),
+    );
+    renderWithProviders(<NewsPage />);
+
+    const row = await screen.findByTestId("news-row");
+    const link = within(row).getByRole("link", { name: "@Nguyễn Văn An" });
+    expect(link.getAttribute("href")).toBe(`/feed/profiles/${E1}`);
+  });
+
+  it("DENY: tin chỉ có phần tử `withheld:true` ⇒ 0 link mention trong hàng", async () => {
+    listNews.mockResolvedValue(
+      page([makeNews({ body: "Chúc mừng @Nguyễn Văn An!", mentions: [{ withheld: true }] })]),
+    );
+    renderWithProviders(<NewsPage />);
+
+    const row = await screen.findByTestId("news-row");
+    expect(within(row).queryAllByRole("link", { name: /Nguyễn/ })).toHaveLength(0);
   });
 });
 

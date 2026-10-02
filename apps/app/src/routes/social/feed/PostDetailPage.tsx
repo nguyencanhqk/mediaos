@@ -31,6 +31,7 @@ import { PostCard } from "./components/PostCard";
 import { CommentList } from "./components/CommentList";
 import { CommentComposer } from "./components/CommentComposer";
 import { ActionErrorBanner, type ActionErrorKind } from "./components/ActionErrorBanner";
+import { DroppedMentionsNotice } from "./components/DroppedMentionsNotice";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
 interface LocalActionError {
@@ -56,6 +57,13 @@ export function PostDetailPage(): React.ReactElement {
    */
   const [localError, setLocalError] = React.useState<LocalActionError | null>(null);
   const { actionError: hookError, clearActionError } = actions;
+
+  /**
+   * S16-SOCIAL-MENTIONLINK-1 — số lượt nhắc `015` vừa BỎ (`droppedMentions`, SPEC-16 §12 `ERR-009`:
+   * ngoài audience của bài cha ⇒ bỏ im lặng, vẫn 201). Thông tin, không phải lỗi ⇒ dải riêng, KHÔNG
+   * đi vào `localError`. Lượt gửi mới dọn số của lượt trước (khuôn `useCreatePost`).
+   */
+  const [droppedMentionCount, setDroppedMentionCount] = React.useState(0);
 
   const reportLocalError = (kind: ActionErrorKind) => (err: unknown) => {
     // Lỗi MỚI thay lỗi cũ: giữ lại lỗi của hook sẽ hiện câu của một hành động khác, đã xảy ra trước.
@@ -94,9 +102,11 @@ export function PostDetailPage(): React.ReactElement {
 
   const createComment = useMutation({
     mutationFn: (dto: CreateFeedCommentDto) => socialApi.createComment(postId, dto),
-    onSuccess: () => {
+    onMutate: () => setDroppedMentionCount(0),
+    onSuccess: (created) => {
       invalidateComments();
       setLocalError(null);
+      setDroppedMentionCount(created.droppedMentions.length);
     },
     // Thiếu `onError` ở đây là câm TUYỆT ĐỐI: app không có hệ toast và `QueryClient` ở `main.tsx`
     // không khai `MutationCache.onError` ⇒ nút nhả ra như cũ, không một ký tự nào xuất hiện.
@@ -252,6 +262,13 @@ export function PostDetailPage(): React.ReactElement {
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           locked={post.commentsLocked}
+          className="mb-4"
+        />
+
+        <DroppedMentionsNotice
+          count={droppedMentionCount}
+          onDismiss={() => setDroppedMentionCount(0)}
+          testId="comment-dropped-mentions-notice"
           className="mb-4"
         />
 

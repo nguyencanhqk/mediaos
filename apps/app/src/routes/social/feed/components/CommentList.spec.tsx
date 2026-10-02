@@ -22,12 +22,23 @@ import i18n from "@/i18n";
 import { CommentList } from "./CommentList";
 import { CommentComposer } from "./CommentComposer";
 
+/** `Link` NỘI SUY `params` (S16-SOCIAL-MENTIONLINK-1) — mock trần in khuôn `$employeeId` cho mọi id. */
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
   return {
     ...actual,
-    Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-      <a href={to}>{children}</a>
+    Link: ({
+      children,
+      to,
+      params,
+    }: {
+      children: React.ReactNode;
+      to: string;
+      params?: Record<string, string>;
+    }) => (
+      <a href={Object.entries(params ?? {}).reduce((h, [k, v]) => h.replace(`$${k}`, v), to)}>
+        {children}
+      </a>
     ),
   };
 });
@@ -139,6 +150,27 @@ describe("CommentList — gom MỘT cấp", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /trả lời/i }));
     expect(onReply).toHaveBeenCalledWith(mine);
+  });
+});
+
+describe("S16-SOCIAL-MENTIONLINK-1 — B3: bình luận truyền `mentions` xuống thân", () => {
+  const E1 = "33333333-3333-4333-8333-333333333333";
+
+  it("ALLOW: bình luận CÓ `mentions` (`withheld:false`) ⇒ link hồ sơ đúng người", () => {
+    renderList([
+      base({
+        body: "Cảm ơn @Nguyễn Văn An nhé",
+        mentions: [{ withheld: false, employeeId: E1, label: "Nguyễn Văn An" }],
+      }),
+    ]);
+    const row = screen.getByTestId("comment-row");
+    const link = within(row).getByRole("link", { name: "@Nguyễn Văn An" });
+    expect(link.getAttribute("href")).toBe(`/feed/profiles/${E1}`);
+  });
+
+  it("DENY: phần tử `withheld:true` ⇒ 0 link trong hàng (span)", () => {
+    renderList([base({ body: "Cảm ơn @Nguyễn Văn An nhé", mentions: [{ withheld: true }] })]);
+    expect(within(screen.getByTestId("comment-row")).queryAllByRole("link")).toHaveLength(0);
   });
 });
 

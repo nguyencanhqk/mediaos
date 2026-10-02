@@ -75,7 +75,7 @@ function CommentRow({
               {comment.editedAt ? ` · ${t("post.edited")}` : ""}
             </span>
           </div>
-          <PostBody body={comment.body} />
+          <PostBody body={comment.body} mentions={comment.mentions} />
         </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-2">
