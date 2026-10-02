@@ -136,30 +136,31 @@ function PreviewBox({
 
 // ─── Main form component ──────────────────────────────────────────────────────
 
-export interface LeaveRequestFormProps {
+interface LeaveRequestFormBaseProps {
   onSuccess: (id: string, status: string) => void;
   onCancel: () => void;
-  /**
-   * "create" (mặc định) → POST /leave/requests. "edit" → PATCH /leave/requests/:id (chỉ Draft,
-   * S3-LEAVE-BE-2 update-draft:leave, luôn OWN — server 404 nếu request.userId khác actor).
-   * `requestId` BẮT BUỘC khi mode="edit".
-   */
-  mode?: "create" | "edit";
-  requestId?: string;
   /** Giá trị khởi tạo form khi edit (map từ LeaveRequestDetailView qua fromDraftDetailToFormValues). */
   initialValues?: LeaveFormValues;
 }
 
-export function LeaveRequestForm({
-  onSuccess,
-  onCancel,
-  mode = "create",
-  requestId,
-  initialValues,
-}: LeaveRequestFormProps) {
+/**
+ * "create" (mặc định) → POST /leave/requests. "edit" → PATCH /leave/requests/:id (chỉ Draft,
+ * S3-LEAVE-BE-2 update-draft:leave, luôn OWN — server 404 nếu request.userId khác actor).
+ *
+ * S18-FE-LEAVEDRAFTCAST-1 (vá review LIGHT): union phân biệt theo `mode` — `requestId` BẮT BUỘC khi
+ * mode="edit" và KHÔNG có ở nhánh tạo mới, ép bằng kiểu chứ không bằng comment. Trước đây `requestId?: string`
+ * + `requestId as string` ở call-site PATCH ⇒ `<LeaveRequestForm mode="edit" />` thiếu id vẫn biên dịch xanh
+ * và gửi PATCH `/leave/requests/undefined`. Khoá bằng LeaveRequestForm.props.spec.ts.
+ */
+export type LeaveRequestFormProps = LeaveRequestFormBaseProps &
+  ({ mode?: "create"; requestId?: undefined } | { mode: "edit"; requestId: string });
+
+export function LeaveRequestForm(props: LeaveRequestFormProps) {
+  // KHÔNG destructure `mode`/`requestId`: tách khỏi `props` thì tsc mất liên kết union ⇒ lại phải ép kiểu.
+  const { onSuccess, onCancel, initialValues } = props;
   const { t } = useTranslation("leave");
   const queryClient = useQueryClient();
-  const isEdit = mode === "edit";
+  const isEdit = props.mode === "edit";
 
   // Leave types (for select)
   const { data: leaveTypes, isLoading: typesLoading } = useQuery({
@@ -232,11 +233,11 @@ export function LeaveRequestForm({
 
   // Submit handler — create (POST) hoặc edit (PATCH update-draft), tuỳ `mode`.
   // S18-FE-LEAVEDRAFTCAST-1: mapper trả ĐÚNG DTO hợp đồng ⇒ truyền thẳng, KHÔNG ép kiểu body (cú ép từng nuốt
-  // mọi lệch khoá/enum giữa mapper và hợp đồng).
+  // mọi lệch khoá/enum giữa mapper và hợp đồng); `requestId` thu hẹp qua union `props.mode` — không `as string`.
   const createMutation = useMutation({
     mutationFn: (values: LeaveFormValues) =>
-      isEdit
-        ? leaveApi.updateDraft(requestId as string, toUpdateDraftBody(values))
+      props.mode === "edit"
+        ? leaveApi.updateDraft(props.requestId, toUpdateDraftBody(values))
         : leaveApi.createDraft(toCreateDraftBody(values)),
     onSuccess: (result) => {
       // S5-BE-CONTRACT-1 (§13.3): dùng helper chung thay vì liệt kê tay — trước đây thiếu lịch nghỉ +
@@ -244,8 +245,10 @@ export function LeaveRequestForm({
       for (const queryKey of leaveInvalidation.createRequest()) {
         void queryClient.invalidateQueries({ queryKey });
       }
-      if (isEdit && requestId) {
-        void queryClient.invalidateQueries({ queryKey: leaveKeys.requests.detail(requestId) });
+      if (props.mode === "edit" && props.requestId) {
+        void queryClient.invalidateQueries({
+          queryKey: leaveKeys.requests.detail(props.requestId),
+        });
       }
       onSuccess(result.id, result.status);
     },
