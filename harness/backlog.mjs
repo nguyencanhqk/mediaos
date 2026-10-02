@@ -19658,7 +19658,81 @@ export const backlog = [
       "Kết quả mutation 041..044 vẫn ghi cache `results(postId)`; cache seed không đè kết quả mới hơn (so `updatedAt`/thứ tự nạp — ĐO trước khi chọn luật)",
       "Pill trạng thái sáng kiến trên thẻ từ `post.idea.status` (4 trạng thái), vắng khối ⇒ giữ nhãn + link như cũ",
     ],
-    notes: ["Seed 29/09/2026 từ plan S16-SOCIAL-FE-2C §7 N2 (ngoài phạm vi WO đó)."],
+    plan: "docs/plans/S16-SOCIAL-FEBLOCKSEED-1.md",
+    notes: [
+      "Seed 29/09/2026 từ plan S16-SOCIAL-FE-2C §7 N2 (ngoài phạm vi WO đó).",
+      "ĐO 02/10/2026 (probe vitest+jsdom trên @tanstack/react-query 5.101.0, plan §0): thời điểm TỚI của client KHÔNG xếp được thứ tự đọc của server (GET gửi trước lượt bỏ phiếu về sau +47ms; danh sách vô hạn một `dataUpdatedAt` cho mọi trang) và `setQueryData` không tự chặn ghi cũ ⇒ LUẬT CHỐT: `initialData: seed` (chỉ lấp cache RỖNG — entry đã có data LUÔN thắng thẻ) + `staleTime` 30s CẤP KHỐI (client test 0 ⇒ seed cũ ngay ⇒ 1 lần gọi). Không `initialDataUpdatedAt` — xét lại khi `PollBlock` mount muộn hơn dữ liệu nguồn.",
+      "Đảm bảo chính xác: 0×043 lúc mount khi thẻ chở `post.poll` VÀ `results(postId)` chưa có data. Pill: `IdeaStatusPill` dùng chung màn 008, anh em của link, không gate (BE-2D D6). Đổi dòng H5 plan FE-2 §8: `IdeaReviewDialog` invalidate thêm feed/saved/posts.detail(postId).",
+      "❓ Owner (không chặn): mốc phiên bản kết quả bình chọn ở BE (bump `feed_polls.updated_at` ở 041/042/044 + chiếu vào DTO) ⇒ FE mới an toàn ưu tiên `post.poll` mới hơn entry cũ và thu hẹp `polls.allOf()` trong `invalidatePostLists` (hôm nay mỗi lượt thích/lưu làm MỌI khối poll đang mount gọi lại 043).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEPOLLRACE-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "`PollBlock` không huỷ `043` đang bay trước khi bỏ/rút phiếu/đóng bình chọn: một refetch (vd `invalidatePostLists` sau lượt thích — tiền tố `polls.allOf()`) về SAU kết quả `041/042/044` ⇒ đè phiếu vừa bỏ bằng ảnh chụp trước-bỏ-phiếu",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FEBLOCKSEED-1"],
+    src: [
+      "Probe E5 trong workflow Understand của S16-SOCIAL-FEBLOCKSEED-1 (02/10/2026, query-core 5.101.0): ghi kết quả bỏ phiếu bằng `setQueryData` rồi để refetch đang bay về ⇒ entry = ảnh chụp trước-bỏ-phiếu (fetch thành công gọi `setData` vô điều kiện); `isBusy` của `PollBlock` chỉ xét mutation. Có TỪ TRƯỚC WO đó — seed chỉ thu hẹp cửa sổ (không còn fetch lúc mount).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC — ca RED: `043` treo (promise chưa về) + bỏ phiếu thành công + thả `043` với số CŨ ⇒ hôm nay khối hiện số cũ",
+      "Vá: `onMutate` của 041/042/044 `await queryClient.cancelQueries({ queryKey: resultsKey })` (tiền lệ `apps/app/src/routes/tasks/hooks/use-task-action-mutation.ts`); mutant bỏ `cancelQueries` ⇒ ca RED đỏ đúng thông điệp",
+    ],
+    notes: ["LOW — cần một invalidate (thích/lưu/kiểm duyệt) trùng đúng lúc đang bỏ phiếu."],
+  },
+  {
+    id: "S16-SOCIAL-FESTALELISTS-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "`invalidatePostLists` (use-feed-actions) · `useCreatePost` · `IdeaReviewDialog` không chạm `socialKeys.search({q})` và `socialKeys.profilePosts(id)` ⇒ hai danh sách đó giữ `likeCount`/`savedByMe`/khối poll/pill sáng kiến CŨ tới khi mount lại sau `staleTime`",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FEBLOCKSEED-1"],
+    src: [
+      "Workflow Understand của S16-SOCIAL-FEBLOCKSEED-1 (02/10/2026): khoá `['social','search',…]` và `['social','profile-posts',…]` không nằm dưới `feed.allOf()`; `use-feed-actions.ts` invalidate feed/saved/posts.detail mà không có hai nhánh này. FEBLOCKSEED-1 thêm pill (đọc cùng cache) ⇒ lộ thêm một trường cũ.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC — ca RED: sau thích/lưu/xoá/kiểm duyệt/xét duyệt sáng kiến, entry `search(...)`/`profilePosts(...)` được đánh dấu invalidated (đo `getQueryState().isInvalidated`, không spy)",
+      "Gom vào MỘT helper dùng chung (không chép 3 nơi); ca đối chứng: khoá không liên quan KHÔNG bị chạm",
+    ],
+    notes: ["LOW — có từ trước WO FEBLOCKSEED-1."],
+  },
+  {
+    id: "S16-SOCIAL-IDEALABEL-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Nhãn trạng thái sáng kiến lệch giữa thông báo NOTI-032 (`IDEA_STATUS_LABEL` ở `apps/api/src/social/social-idea-fsm.ts`: «Đang xét duyệt» · «Được duyệt» · «Từ chối») và i18n FE `idea.status.*` («Đang xem xét» · «Được chấp nhận» · «Không được chấp nhận») ⇒ thông báo và pill gọi cùng một trạng thái bằng hai tên",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "apps/app/src/i18n/**",
+      "apps/app/src/routes/social/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Đối chiếu 02/10/2026 trong S16-SOCIAL-FEBLOCKSEED-1 (pill lên thẻ bài làm lệch nhãn hiện ra ở hai nơi người dùng cùng thấy): `social-idea-fsm.ts` `IDEA_STATUS_LABEL` vs `apps/app/src/i18n/locales/vi/social.ts` `idea.status.*` — lệch 3/4 trạng thái (chỉ `submitted` = «Đã gửi» khớp).",
+    ],
+    done_when: [
+      "Chốt MỘT bộ nhãn theo SPEC-16/UI doc (tra, không tự đặt; spec im lặng ⇒ owner chọn)",
+      "Lưới chống trôi: spec so hai bảng (hoặc một nguồn chung) — mutant đổi một nhãn ⇒ đỏ",
+      "ĐO TRƯỚC: nhãn chỉ nằm trong code (template `0581` dùng placeholder `{status_label}`) — xác nhận không cần migration",
+    ],
+    notes: ["LOW — copy, không đổi hành vi."],
   },
   {
     id: "S16-SOCIAL-FESEARCHBOUNDS-1",

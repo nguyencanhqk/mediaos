@@ -87,7 +87,28 @@ Hạ tầng test (additive): `renderWithProviders(node, client?)` render qua `wr
 
 ## 4. Kết quả
 
-_(điền sau GREEN: số RED/GREEN, mutant, gate LIGHT, `check.sh`)_
+Đo 02/10/2026 trong worktree `MediaOS-feblockseed`:
+
+- **RED trên code cũ:** 13 ca đỏ đúng lý do (S1–S10, S6 ×4 trạng thái); 81 ca cũ vẫn xanh ⇒ đổi harness
+  không hồi quy.
+- **GREEN:** 4 spec 94/94 · `tsc` + `eslint` sạch.
+- **Mutant 15/15 bị giết đúng thông điệp** (runner giữ bản gốc trong bộ nhớ, không `git checkout --`):
+  M1 bỏ `initialData` · M2 bỏ `staleTime` cấp khối («called 1/2 times» — đúng hiểm hoạ §0 M2) · M3 re-seed
+  bằng effect (số trước-bỏ-phiếu đè phiếu — S2/S3) · M4 `enabled: seed === undefined` (S4 mất lượt tải lại) ·
+  M5 `enabled: !!seed` (19 ca fallback) · M6 thẻ thôi truyền seed (S5; S8 «called 2 times») · M7 gate pill ·
+  M8 pill trong link · M9 đọc `post.status` · M10 pill mặc định khi vắng khối · M11 gán cứng trạng thái ·
+  M12/M13 bỏ invalidate · M14 invalidate quá rộng (`posts.allOf()` chạm bài đối chứng) · M15 mất testid.
+- **`test:social-cov`:** 40 file / 689 ca · 97.79% stmt · 92.54% branch (sàn 80%). File đổi: `PollBlock`
+  99.4% · `PostCard` 95.8% · `IdeaReviewDialog` 97.3% · `IdeasPage` 100% · `IdeaStatusPill` 100%. Lượt đầu
+  chết vì tinypool `ERR_IPC_CHANNEL_CLOSED` (KI-014, 0 ca được báo) — chạy lại xanh.
+- **`harness/check.sh`:** XANH mọi bước (`apps/app` 337/337 file). 431 int-spec API skip vì thiếu
+  `LANE_DB` — diff không chạm file API nào.
+- **Gate LIGHT:** reviewer Opus độc lập (lens đối kháng ngữ nghĩa cache + TS/React) — **PASS**, 0
+  CRITICAL/HIGH/MEDIUM. 1 LOW đã vá: docblock `KudosPage.spec` khai «`rerender` mất provider» — sai sau
+  khi harness render qua `wrapper`. Reviewer xác nhận thêm: chỉ một đường làm entry `results` rỗng trong khi
+  danh sách còn ảnh cũ (nhánh lỗi của `FeedPostList`) và đường thoát nó luôn tải lại TRỌN trang ⇒ không
+  có chuỗi nào cho seed cũ hiện ra. Lượt gate 3 reviewer đầu bị hook chi phí cắt giữa chừng («INCOMPLETE»
+  — không tính).
 
 ## 5. Nợ tách WO / câu hỏi owner
 
@@ -101,4 +122,4 @@ _(điền sau GREEN: số RED/GREEN, mutant, gate LIGHT, `check.sh`)_
   nhận») ⇒ thông báo và pill gọi cùng một trạng thái bằng hai tên.
 - ❓ Owner: có muốn mốc phiên bản kết quả bình chọn ở BE (bump `feed_polls.updated_at` ở 041/042/044, chiếu
   vào DTO)? Có nó FE mới an toàn ưu tiên `post.poll` mới hơn entry cũ và thu hẹp `polls.allOf()` trong
-  `invalidatePostLists` (hôm nay mỗi lượt thích/lưu làm MỌI khối poll đang mount gọi lại 043). Không chặn WO này.
+  `invalidatePostLists` lẫn `useCreatePost` khi tạo bài poll (hôm nay mỗi lượt thích/lưu/đăng poll làm MỌI khối poll đang mount gọi lại 043). Không chặn WO này.
