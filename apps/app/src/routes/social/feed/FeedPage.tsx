@@ -28,16 +28,9 @@ import { FeedPostList } from "./components/FeedPostList";
 import { NewFeedPostsBadge } from "./components/NewFeedPostsBadge";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 import { useCreatePost } from "./lib/use-create-post";
-
-interface FeedRouteSearch {
-  sort?: FeedSortDto;
-  tag?: string;
-  type?: string;
-  /** Từ khoá tìm kiếm (SOCIAL-API-023). Có ⇒ màn chuyển sang chế độ kết quả. */
-  q?: string;
-  /** Lời chúc sinh nhật điền sẵn vào composer — THAM SỐ CHỈ CỦA FE, không gửi lên API. */
-  wish?: string;
-}
+// Kiểu tham số URL lấy từ CHÍNH bộ lọc `validateSearch` (trước đây màn này khai bản sao riêng
+// `type?: string` — lệch với bộ lọc đã thu hẹp `type` về enum loại bài).
+import type { FeedRouteSearch } from "./lib/feed-route-search";
 
 export function FeedPage(): React.ReactElement {
   const { t } = useTranslation("social");
