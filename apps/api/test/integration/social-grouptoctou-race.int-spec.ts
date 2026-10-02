@@ -76,6 +76,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
   let A: SeededTenant;
 
   let owner: Actor;
+  let owner2: Actor;
   let adminA: Actor;
   let adminB: Actor;
   /** Admin của nhóm KIÊM `manage:feed-group` — ca D1. */
@@ -306,7 +307,14 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
     );
   }
 
-  /** Nhóm kín chuẩn của ca `038`/`039`: owner + một admin + target `u1`. */
+  /** Nhóm kín có HAI owner (ca `034`): hạ vai/xoá không chạm bất biến ≥1 owner. */
+  const groupWithTwoOwners = (): Promise<string> =>
+    seedGroup("private", [
+      { userId: owner.userId, role: "owner" },
+      { userId: owner2.userId, role: "owner" },
+    ]);
+
+  /** Nhóm kín chuẩn của ca `033`/`038`/`039`: owner + một admin + target `u1`. */
   const groupWithAdmin = (admin: Actor): Promise<string> =>
     seedGroup("private", [
       { userId: owner.userId, role: "owner" },
@@ -325,6 +333,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
     A = await seedCompany(direct, "sgtoctou");
 
     owner = await makeUser("owner", hash);
+    owner2 = await makeUser("owner2", hash);
     adminA = await makeUser("admina", hash);
     adminB = await makeUser("adminb", hash);
     mgr = await makeUser("mgr", hash, MANAGE_PAIRS);
@@ -445,6 +454,54 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
         role: "member",
         status: "active",
       });
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  /**
+   * 🔴 D-3 (D2=(a), owner ký 02/10/2026) — L4: `034` không khoá hàng nhóm trước khi đọc vai; UPDATE của
+   * chính nó chờ khoá của `038` song song rồi chạy tiếp trên vai CŨ ⇒ owner vừa bị hạ vai xoá mềm được
+   * nhóm (không có route khôi phục nhóm). Đo M9/M22. Đối chứng dương của «0 audit»: C-3.
+   */
+  it(
+    "D-3: `034` — owner bị hạ vai giữa chừng ⇒ 403 ERR-014; nhóm KHÔNG bị xoá mềm; 0 audit",
+    async () => {
+      const g = await groupWithTwoOwners();
+      const res = await raceGroup(
+        g,
+        () => del(owner.token, `/social/groups/${g}`),
+        demote(g, owner.userId, "member"),
+      );
+      expectRoleDenied(res, "034: owner bị hạ vai giữa chừng phải 403");
+      expect((await groupRow(g)).deleted_at, "nhóm KHÔNG được xoá mềm").toBeNull();
+      expect(
+        await auditRows(g, "social.group.deleted"),
+        "0 audit xoá nhóm (đối chứng dương: C-3 — CÙNG câu tra)",
+      ).toHaveLength(0);
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  /**
+   * 🔴 D-4 (D2=(a)) — L4: `033` admin vừa bị hạ vai đổi nhóm kín thành công khai ⇒ mọi bài nhóm hiện
+   * cho CẢ công ty. Đo M10/M22. KHÔNG assert audit: `033` chỉ ghi sổ khi `viaManage` ⇒ admin thường
+   * cho 0 dòng CẢ KHI 200 — tập rỗng vô nghĩa (plan §10 F5); assert TRẠNG THÁI HÀNG thay thế.
+   */
+  it(
+    "D-4: `033` — admin bị hạ vai giữa chừng, PATCH {visibility:'public'} ⇒ 403 ERR-014; nhóm vẫn kín; updated_* không đổi",
+    async () => {
+      const g = await groupWithAdmin(adminA);
+      const before = await groupRow(g);
+      const res = await raceGroup(
+        g,
+        () => patch(adminA.token, `/social/groups/${g}`).send({ visibility: "public" }),
+        demote(g, adminA.userId, "member"),
+      );
+      expectRoleDenied(res, "033: admin bị hạ vai giữa chừng phải 403");
+      const after = await groupRow(g);
+      expect(after.visibility, "nhóm kín KHÔNG được thành công khai").toBe("private");
+      expect(after.updated_at, "updated_at không đổi").toEqual(before.updated_at);
+      expect(after.updated_by, "updated_by không đổi").toBe(before.updated_by);
     },
     RACE_TIMEOUT_MS,
   );
@@ -576,6 +633,24 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-GROUPTOCTOU-1 · vai actor sau khoá (DB
       const rows = await auditRows(g, "social.group_member.removed");
       expect(rows, "CÙNG câu tra của D-1 phải tìm ra dòng").toHaveLength(1);
       expect(rows[0].metadata).toMatchObject({ targetUserId: u1.userId, viaManage: false });
+    },
+    RACE_TIMEOUT_MS,
+  );
+
+  /**
+   * C-3 — đối chứng dương của D-3: `034` qua harness ĐỦ mà không đổi vai ⇒ 200 + ĐÚNG 1 dòng
+   * `social.group.deleted` (`034` ghi sổ LUÔN — `social-groups.service.ts` khối audit của `remove`).
+   */
+  it(
+    "C-3: `034` qua harness ĐỦ mà không đổi vai ⇒ 200; nhóm xoá mềm; 1 audit `social.group.deleted` viaManage:false",
+    async () => {
+      const g = await groupWithTwoOwners();
+      const res = await raceGroup(g, () => del(owner.token, `/social/groups/${g}`), noChange);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect((await groupRow(g)).deleted_at, "nhóm phải bị xoá mềm").not.toBeNull();
+      const rows = await auditRows(g, "social.group.deleted");
+      expect(rows, "CÙNG câu tra của D-3 phải tìm ra dòng").toHaveLength(1);
+      expect(rows[0].metadata).toMatchObject({ groupId: g, viaManage: false });
     },
     RACE_TIMEOUT_MS,
   );
