@@ -29,7 +29,8 @@ REVOKE UPDATE (host, port, username, secure) ON public.company_mail_configs FROM
 
 -- VERIFY fail-loud (khuôn 0540 mục E): (1) không có UPDATE cấp bảng; (2) tập cột mediaos_app UPDATE được — duyệt
 -- MỌI cột qua has_column_privilege (tính cả grant cấp bảng, PUBLIC, role kế thừa) — ĐÚNG BẰNG {from_email,
--- from_name, updated_at}. Một grant cột mới về sau (id, scope, company_id, cột envelope…) cũng làm khối này đỏ.
+-- from_name, updated_at}. Khối này chỉ ép TẠI THỜI ĐIỂM ÁP (chạy một lần); một grant cột mới trong migration về
+-- sau (id, scope, company_id, cột envelope…) do int-spec D5a (`mail-config-credexfil-http.int-spec.ts`) bắt.
 -- REVOKE không có tác dụng (migrator không phải owner ⇒ chỉ WARNING) ⇒ (2) RAISE, chặn deploy.
 DO $$
 DECLARE
