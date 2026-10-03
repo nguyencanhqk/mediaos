@@ -19580,6 +19580,37 @@ export const backlog = [
     ],
   },
   {
+    id: "S19-SEC-NEXTRCE-1",
+    module: "DEVOPS",
+    layer: "SEC",
+    title:
+      "Nâng `next` lên ≥15.5.24 ở HAI app vệ tinh public sau Cloudflare chạy trên máy Windows PROD — `apps/fbpost` (MediaOS-Social) + `apps/lms` (MediaOS-LMS, repo git RIÊNG, nhánh `fix/next-15.5.24`) — vá GHSA-p293-qw3h-jr36 (RCE không xác thực trên server Windows) + GHSA-2xp9-vwfh-vxw4 (RCE Image Optimization khi dùng AVIF), CRITICAL, KHÔNG có workaround",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/fbpost/package.json", "apps/fbpost/package-lock.json", "harness/backlog.mjs"],
+    skills: ["security-review", "code-review"],
+    depends_on: [],
+    src: [
+      "GHSA-p293-qw3h-jr36 (CVE-2026-75604, CRITICAL, CVSS 9.0): «Unauthenticated Remote Code Execution on windows-hosted servers» — next `>=13.4.0 <15.5.24` (+ `>=16.0.0 <16.3.3`). GHSA-2xp9-vwfh-vxw4 (CRITICAL, CVSS v4 9.5): RCE trong Image Optimization API khi dùng AVIF — next `>=10.0.0 <15.5.24`. Cả hai vá ở 15.5.24 (Vercel phát hành 25/08/2026, vào GitHub Advisory DB 08/09); KHÔNG có workaround.",
+      "Đo 02/10/2026: checkout chính `apps/fbpost` khai `next: ^15.5.4`, lock + node_modules = 15.5.22 ⇒ DÍNH cả hai. NSSM `MediaOS-Social` (:3500) và `MediaOS-LMS` (:3400) phục vụ THẲNG từ checkout chính trên chính máy Windows này, public qua Cloudflare ⇒ đúng bề mặt của advisory Windows.",
+      "Đo 02/10/2026 `gh api repos/vercel/next.js/security-advisories`: 15.5.24 CÒN 2 advisory MEDIUM Vercel công bố 30/09 nhưng CHƯA vào GitHub Advisory DB (`npm audit` chưa thấy): GHSA-4jqv-mc3x-m676 (cache poisoning SSG/ISR — Pages Router, self-hosted) · GHSA-mcj8-r9mp-w47p (cache poisoning SSG/ISR qua catch-all gốc). Vá ở 15.5.27 (30/09). fbpost chỉ App Router, không catch-all ⇒ không chạm điều kiện, nhưng ghim 15.5.27 để khỏi deploy vòng 2 khi DB cập nhật.",
+    ],
+    done_when: [
+      "fbpost: `apps/fbpost/package.json` `next` sàn `^15.5.27` (≥15.5.24 ⇒ cài mới KHÔNG resolve được bản dính); lock `next` + `@next/env` + `@next/swc-*` = 15.5.27 (không có `@next/*`/`eslint-config-next` khai trực tiếp cần căn)",
+      "lms: `next` ≥15.5.24 trong repo git RIÊNG `apps/lms` (pnpm, nhánh `fix/next-15.5.24`); căn `eslint-config-next`/`@next/*` nếu đang ghim theo bản next cũ",
+      "Cả hai app: typecheck + test + build XANH ở worktree/nhánh (KHÔNG build thử trong checkout chính — `.next` ở đó là thứ dịch vụ đang phục vụ); audit (`npm audit --omit=dev` fbpost · `pnpm audit --prod` lms) KHÔNG còn GHSA-p293-qw3h-jr36 + GHSA-2xp9-vwfh-vxw4",
+      "Owner deploy CẢ HAI dịch vụ — fbpost: sau merge + `git pull` ở checkout chính, `npm ci` trong `apps/fbpost` (`m prod-update social` KHÔNG install — bỏ bước này là build lại trên next 15.5.22) rồi build + restart `MediaOS-Social`; lms: theo bước deploy của lane LMS (merge `fix/next-15.5.24` trong repo riêng ⇒ install + build ⇒ restart `MediaOS-LMS`)",
+      "Nghiệm thu tại ORIGIN (không qua domain — Cloudflare cache che): `node_modules/next/package.json` của checkout chính ≥15.5.24 ở cả hai app · `http://localhost:3500/login` 200 + `/api/pages` 401 (cổng phiên) · `http://localhost:3400` phản hồi",
+    ],
+    notes: [
+      "🔴 RCE không xác thực trên dịch vụ public ⇒ ưu tiên trên mọi WO khác. fbpost thi công ở worktree `MediaOS-fbpostnext`, nhánh `fix/s19-sec-nextrce-1`.",
+      "Thủ tục deploy fbpost THẬT: `scripts/windows/09-social-media-library.ps1` KHÔNG install/build (chỉ Stop/Start `MediaOS-Social` quanh việc dời kho + tự kiểm `/api/library` 401). Đường build + restart là `mediaos.ps1 prod-update social` (menu [27], chạy từ checkout chính vì `$Root = $PSScriptRoot`): `npm run build` trong `apps/fbpost` ⇒ `Restart-Service MediaOS-Social` ⇒ chờ `/login` ⇒ kiểm `/api/pages` = 401. Dừng dịch vụ TRƯỚC `npm ci` (Windows khoá file `.node` đang nạp ⇒ EPERM giữa chừng, node_modules dở dang).",
+      "lms: `apps/lms` LÀ thư mục PROD (không có thư mục deploy riêng) ⇒ install/build ở đó là đụng PROD — dừng `MediaOS-LMS` trước, backup `data/app.db` (memory lms-next-build-shares-prod-dist).",
+      "Nợ cổng: SCA (`security.yml` `pnpm audit`) MÙ với `apps/lms` + `apps/fbpost` (lockfile riêng, loại khỏi workspace) — advisory CRITICAL này không cổng CI nào bắt được; cần WO follow-up thêm step `npm audit` (fbpost) + `pnpm audit` (lms) (memory sca-gate-blind-to-lms-and-fbpost).",
+      "Advisory CÒN LẠI ở fbpost sau nâng (có sẵn, ngoài phạm vi): sharp 0.34.5 HIGH ×2 (GHSA-f88m-g3jw-g9cj · GHSA-rgj7-g3m4-5g8c — next 15.5.27 nay cho phép `sharp ^0.35.4`) · postcss HIGH/MODERATE · brace-expansion · nanoid · uuid — follow-up.",
+    ],
+  },
+  {
     id: "S16-SOCIAL-AVATARPRESIGN-1",
     module: "SOCIAL",
     layer: "BE",
