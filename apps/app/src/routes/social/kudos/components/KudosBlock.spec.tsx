@@ -3,8 +3,9 @@
  *
  * - Mock `Link` NỘI SUY `params` (khuôn `PollsPage.spec`): mock `<a href={to}>` trần chỉ in khuôn
  *   `/feed/profiles/$employeeId` ⇒ link trỏ nhầm id vẫn xanh.
- * - Fixture «không `<img>`» mang `avatarUrl` KHÁC rỗng: với `avatarUrl:null` thì code lỡ truyền `src`
- *   vẫn không vẽ ảnh ⇒ ca xanh vì sai lý do.
+ * - Ảnh (S16-SOCIAL-AVATARPRESIGN-1): `avatarUrl` URL ký ⇒ `<img>`; `null` / fileId thô ⇒ chữ cái đầu.
+ *   Ca «không `<img>`» dùng giá trị KHÁC rỗng (fileId) — với `null` thì code lỡ truyền thô vẫn không
+ *   vẽ ảnh ⇒ ca xanh vì sai lý do.
  */
 import type { ReactNode } from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
@@ -37,12 +38,13 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 const t = i18n.getFixedT("vi", "social");
 const EMP_A = "33333333-3333-4333-8333-333333333333";
 const EMP_B = "66666666-6666-4666-8666-666666666666";
-const RAW_AVATAR = "https://x.invalid/p.png";
+/** URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật. */
+const SIGNED_AVATAR = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
 
 const recipient = (over: Partial<FeedKudosRecipientDto> = {}): FeedKudosRecipientDto => ({
   employeeId: EMP_A,
   fullName: "Bình Trần",
-  avatarUrl: RAW_AVATAR,
+  avatarUrl: SIGNED_AVATAR,
   isFormerEmployee: false,
   ...over,
 });
@@ -115,8 +117,31 @@ describe("KB — người nhận", () => {
     expect(within(item).queryByRole("link")).toBeNull();
   });
 
-  it("🔴 KHÔNG `<img>` dù `avatarUrl` có giá trị (cột THÔ — chỉ chữ cái đầu)", () => {
-    const { container } = renderBlock(block());
+  // ⟲ S16-SOCIAL-AVATARPRESIGN-1 (owner D4) — `avatarUrl` giờ là URL ĐÃ KÝ ⇒ vẽ ảnh. Vệ sinh render
+  // (`avatarSrc`): CHỈ URL presign thành `src`; `null` / fileId thô / URL http(s) chưa ký (cột thô của
+  // API cũ khi FE deploy trước) ⇒ chữ cái đầu, KHÔNG `<img>`.
+  it("`avatarUrl` URL ký ⇒ `<img>` đúng `src`", () => {
+    renderBlock(block());
+    expect(screen.getByRole("img", { name: "Bình Trần" })).toHaveAttribute("src", SIGNED_AVATAR);
+  });
+
+  it("URL http(s) CHƯA ký (cột thô API cũ — beacon host lạ) ⇒ chữ cái đầu, KHÔNG `<img>`", () => {
+    const { container } = renderBlock(
+      block({ recipients: [recipient({ avatarUrl: "https://tracker.example/p.gif" })] }),
+    );
+    expect(screen.getByTestId("kudos-recipient")).toHaveTextContent("BT");
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("`avatarUrl:null` ⇒ chữ cái đầu, KHÔNG `<img>`", () => {
+    const { container } = renderBlock(block({ recipients: [recipient({ avatarUrl: null })] }));
+    expect(screen.getByTestId("kudos-recipient")).toHaveTextContent("BT");
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it('fileId THÔ (API chưa ký) ⇒ KHÔNG `<img src="<uuid>">` (URL tương đối = ảnh vỡ)', () => {
+    const { container } = renderBlock(block({ recipients: [recipient({ avatarUrl: EMP_B })] }));
+    expect(screen.getByTestId("kudos-recipient")).toHaveTextContent("BT");
     expect(container.querySelector("img")).toBeNull();
   });
 

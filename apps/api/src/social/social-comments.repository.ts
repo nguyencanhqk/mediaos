@@ -142,7 +142,7 @@ const COMMENT_COLUMNS = {
   authorUserId: feedComments.authorUserId,
   authorEmployeeId: feedComments.authorEmployeeId,
   authorFullName: users.fullName,
-  authorAvatarUrl: employeeProfiles.avatarUrl,
+  authorAvatarRaw: employeeProfiles.avatarUrl,
   body: feedComments.body,
   likeCount: feedComments.likeCount,
   editedAt: feedComments.editedAt,
@@ -156,7 +156,7 @@ export interface CommentRow {
   authorUserId: string;
   authorEmployeeId: string | null;
   authorFullName: string | null;
-  authorAvatarUrl: string | null;
+  authorAvatarRaw: string | null;
   body: string;
   likeCount: number;
   editedAt: Date | null;

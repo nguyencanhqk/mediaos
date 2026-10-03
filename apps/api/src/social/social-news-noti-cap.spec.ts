@@ -45,6 +45,7 @@ function makeService(audience: { userIds: string[]; total: number }) {
     { enqueue } as never, // outbox
     null as never, // realtime
     { audienceUserIds } as never, // news
+    null as never, // avatarSigner (S16-SOCIAL-AVATARPRESIGN-1 — nhánh trần NOTI không ký avatar)
   );
   return { service, enqueue, audienceUserIds };
 }

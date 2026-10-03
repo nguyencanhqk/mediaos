@@ -29,6 +29,7 @@ import { RealtimeEmitterService } from "../../src/realtime/realtime-emitter.serv
 import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { captureQueries, type CapturedQuery } from "../helpers/query-capture";
+import { SIGNED_RE, giveVerifiedAvatar } from "../helpers/social-avatar-fixtures";
 import {
   cleanupTenants,
   seedCompany,
@@ -242,8 +243,13 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2D · khối thẻ bài + danh bạ 0
 
   describe("B — khối kudos/poll/idea trên DTO bài", () => {
     it("B1+B2 — khối kudos: đủ trường · một luật người nhận cho thẻ VÀ 047 · không userId", async () => {
+      // ⟲ S16-SOCIAL-AVATARPRESIGN-1 (sửa CÓ CHỦ ĐÍCH, plan §5): `AV` là UUID ngẫu nhiên KHÔNG có tệp
+      // ⇒ không xác minh được ⇒ `null` (chữ cái đầu), không còn là cột thô. Người nhận `verified` có
+      // avatar ĐÃ XÁC MINH ⇒ URL ký — neo dương cho mọi `null` ở trên.
       const AV = randomUUID();
       const live = await person(A, "Sống Nhậnmột", { avatar: AV });
+      const verified = await person(A, "Xácminh Nhận");
+      await giveVerifiedAvatar(direct, A.companyId, verified.employeeId, verified.userId);
       const resigned = await person(A, "Nghỉviệc Nhận", { employeeStatus: "resigned", avatar: AV });
       const delProfile = await person(A, "Xoáhồsơ Nhận", { avatar: AV });
       const delUser = await person(A, "Xoátk Nhận", { avatar: AV });
@@ -268,6 +274,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2D · khối thẻ bài + danh bạ 0
             delUser.employeeId,
             locked.employeeId,
             ghost,
+            verified.employeeId,
           ],
           badgeId: badge,
           message: "Cảm ơn cả đội",
@@ -281,17 +288,23 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2D · khối thẻ bài + danh bạ 0
 
       const expectRule = (recipients: Array<Record<string, unknown>>, where: string) => {
         const by = new Map(recipients.map((r) => [r.employeeId as string, r]));
-        expect(by.size, `${where}: đủ 6 người nhận (không bỏ ai)`).toBe(6);
-        expect(by.get(live.employeeId), `${where}: sống`).toEqual({
+        expect(by.size, `${where}: đủ 7 người nhận (không bỏ ai)`).toBe(7);
+        expect(by.get(verified.employeeId), `${where}: neo — avatar ĐÃ XÁC MINH ⇒ URL ký`).toEqual({
+          employeeId: verified.employeeId,
+          fullName: "Xácminh Nhận",
+          avatarUrl: expect.stringMatching(SIGNED_RE),
+          isFormerEmployee: false,
+        });
+        expect(by.get(live.employeeId), `${where}: sống — fileId không xác minh ⇒ null`).toEqual({
           employeeId: live.employeeId,
           fullName: "Sống Nhậnmột",
-          avatarUrl: AV,
+          avatarUrl: null,
           isFormerEmployee: false,
         });
         expect(by.get(resigned.employeeId), `${where}: nghỉ việc GIỮ tên (S6)`).toEqual({
           employeeId: resigned.employeeId,
           fullName: "Nghỉviệc Nhận",
-          avatarUrl: AV,
+          avatarUrl: null,
           isFormerEmployee: true,
         });
         expect(by.get(delProfile.employeeId), `${where}: hồ sơ xoá mềm ⇒ che (K1)`).toEqual({
@@ -309,7 +322,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2D · khối thẻ bài + danh bạ 0
         expect(by.get(locked.employeeId), `${where}: TK khoá GIỮ tên (S6)`).toEqual({
           employeeId: locked.employeeId,
           fullName: "Khoátk Nhận",
-          avatarUrl: AV,
+          avatarUrl: null,
           isFormerEmployee: false,
         });
         expect(by.get(ghost), `${where}: không TK ⇒ tên null, vẫn là nhân viên`).toEqual({
@@ -333,7 +346,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2D · khối thẻ bài + danh bạ 0
         icon: "users",
       });
       expectRule(kudos.recipients as Array<Record<string, unknown>>, "003");
-      for (const u of [live, resigned, delProfile, delUser, locked, author]) {
+      for (const u of [live, resigned, delProfile, delUser, locked, verified, author]) {
         expect(d.raw, "không `users.id` nào trên dây").not.toContain(u.userId);
       }
       expect(d.dto).not.toHaveProperty("poll");
@@ -346,7 +359,10 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2D · khối thẻ bài + danh bạ 0
       const card = (feed.body.data.data as Array<Record<string, unknown>>).find(
         (p) => p.id === postId,
       );
-      expect(card?.kudos, "001 mang khối kudos").toEqual(kudos);
+      // URL ký mang `X-Amz-Date` theo giây — hai request khác nhau so sau khi thay URL ký bằng nhãn.
+      const unsign = (v: unknown) =>
+        JSON.parse(JSON.stringify(v).replace(/"https?:[^"]*X-Amz-Signature=[^"]*"/g, '"<signed>"'));
+      expect(unsign(card?.kudos), "001 mang khối kudos").toEqual(unsign(kudos));
 
       // 047 — MỘT luật (K1)
       const list = await get(viewer.token, "/social/kudos?page=1&limit=50");

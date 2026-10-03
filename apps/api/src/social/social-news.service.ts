@@ -8,6 +8,7 @@ import type {
 } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { SocialAccessService } from "./social-access.service";
+import { SocialAvatarSigner, type SignedAvatars } from "./social-avatar-signer";
 import { encodeFeedCursor, decodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
 import { SocialNewsRepository, type AckPersonRow } from "./social-news.repository";
 import { SocialPostsService } from "./social-posts.service";
@@ -31,6 +32,7 @@ export class SocialNewsService {
     private readonly repo: SocialNewsRepository,
     private readonly posts: SocialPostsRepository,
     private readonly postsService: SocialPostsService,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   /**
@@ -193,9 +195,11 @@ export class SocialNewsService {
               },
               query,
             );
+      // S16-SOCIAL-AVATARPRESIGN-1: ký trong CÙNG tx — nửa «chưa đọc» mang raw ĐÃ che theo tên (D9).
+      const avatars = await this.avatarSigner.signTx(tx, actor.companyId, rows);
 
       return {
-        data: rows.map(toAckPerson),
+        data: rows.map((r) => toAckPerson(r, avatars)),
         page: query.page,
         limit: query.limit,
         total,
@@ -204,11 +208,11 @@ export class SocialNewsService {
   }
 }
 
-function toAckPerson(r: AckPersonRow) {
+function toAckPerson(r: AckPersonRow, avatars: SignedAvatars) {
   return {
     employeeId: r.employeeId,
     fullName: r.fullName,
-    avatarUrl: r.avatarUrl,
+    avatarUrl: avatars.urlOf(r),
     ackedAt: r.ackedAt ? new Date(r.ackedAt).toISOString() : null,
   };
 }

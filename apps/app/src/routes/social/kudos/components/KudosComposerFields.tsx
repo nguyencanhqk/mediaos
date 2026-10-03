@@ -12,7 +12,9 @@
  * │ «  An » là một khoá. Route gác `create:feed-kudos` (KHÔNG `view:feed`) ⇒ `enabled` gác đúng cặp đó.  │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Avatar: CHỈ chữ cái đầu (không `src`) — `avatarUrl` của `059` là cột THÔ, xem `KudosBlock`.
+ * Avatar (S16-SOCIAL-AVATARPRESIGN-1, owner D4): `avatarUrl` của `059` = URL ĐÃ KÝ hoặc `null`; ứng viên
+ * và chip vẽ ảnh qua `avatarSrc` (CHỈ URL presign — fileId thô / URL http(s) ngoài của API chưa deploy
+ * ⇒ chữ cái đầu) — xem `KudosBlock`.
  * Tự vinh danh: server đã loại chính người gọi khỏi `059`; FE không lọc được (auth store không có
  * `employeeId`) — nhánh 422 `KUDOS-SELF-RECIPIENT` hiện qua `ActionErrorBanner` nếu lọt.
  */
@@ -28,6 +30,7 @@ import {
   type KudosRecipientCandidateDto,
 } from "@mediaos/contracts";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { avatarSrc } from "../../feed/lib/feed-format";
 import {
   addKudosRecipient,
   removeKudosRecipient,
@@ -97,7 +100,7 @@ export function KudosComposerFields({
                 data-testid="kudos-selected"
                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card py-0.5 pl-0.5 pr-1 text-sm"
               >
-                <Avatar name={r.fullName} size="sm" />
+                <Avatar name={r.fullName} src={avatarSrc(r.avatarUrl)} size="sm" />
                 <span>{r.fullName}</span>
                 <button
                   type="button"
@@ -265,7 +268,7 @@ function RecipientResults({
                   "disabled:cursor-not-allowed disabled:opacity-60",
                 )}
               >
-                <Avatar name={c.fullName} size="sm" />
+                <Avatar name={c.fullName} src={avatarSrc(c.avatarUrl)} size="sm" />
                 <span className="min-w-0 flex-1 truncate">{c.fullName}</span>
               </button>
             </li>

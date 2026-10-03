@@ -140,7 +140,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 - **Cặp `create:feed-kudos`** (owner K3 — thay `view:feed` của S3(a)): danh bạ chỉ phục vụ composer vinh danh; thu hồi quyền tạo vinh danh là đóng danh bạ. ⚠️ Bất đối xứng có ghi: vai tuỳ biến chỉ có `create:feed-kudos` (thiếu `create:feed-post`) tra được danh bạ nhưng không tạo được kudos.
 - **KHÔNG chống liệt kê** (owner K2): API không có throttler — dò ~26² tiền tố 2 ký tự lấy được toàn danh bạ active + `employeeId`. Min-2 / trần 20 / không phân trang là giới hạn UX-hiệu năng. Rào thật: chỉ tên + avatar + `employeeId` của người ĐANG làm, cặp `create:feed-kudos`, khớp CHỈ họ tên (khớp email/mã NV là oracle trên cột không trả về).
 - Oracle dư chấp nhận: vắng khỏi danh bạ ⇒ suy ra TK bị khoá/treo (thẻ kudos vẫn hiện tên người TK khoá — S6), cùng lớp `026`.
-- `avatarUrl` là cột THÔ `employee_profiles.avatar_url` (thường là fileId, không phải URL — owner K4 giữ nguyên như toàn module; nợ `S16-SOCIAL-AVATARPRESIGN-1`). FE KHÔNG vẽ nó làm `src`/`href`.
+- `avatarUrl` = URL ĐÃ KÝ (TTL ngắn) hoặc `null` (chữ cái đầu) — cùng luật avatar của toàn module (§6.1, `S16-SOCIAL-AVATARPRESIGN-1`, owner ký K4 + D1–D10 02/10/2026). Chỉ ký ≤ trần 20 dòng trả về, MỘT câu cổng.
 - `q` quá ngắn / chỉ ký tự đặc biệt / ký tự điều khiển ⇒ **400** `VALIDATION-ERR-001` (lỗi hình dạng, không mã SOCIAL).
 >
 > ⚠️ **`057`/`058` NẰM NGOÀI 56 route của SPEC-16 §15 VÀ NGOÀI basePath `social`** — thêm ở `S16-SOCIAL-BE-3C`
@@ -479,7 +479,7 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
     "id": "8f1c…",
     "type": "share",
     "audience": "company",
-    "author": { "employeeId": "a12…", "fullName": "Nguyễn Văn A", "avatarUrl": "<cột thô employee_profiles.avatar_url — thường là fileId, KHÔNG phải URL; nợ S16-SOCIAL-AVATARPRESIGN-1>" },
+    "author": { "employeeId": "a12…", "fullName": "Nguyễn Văn A", "avatarUrl": "https://…/avatar.png?X-Amz-Signature=…" },
     "body": "Chào cả nhà #tuyendung",
     "tags": ["tuyendung"],
     "attachments": [{ "fileId": "f01…", "kind": "image", "url": "https://…" }],
@@ -502,6 +502,13 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
 ```
 
 - **Không** có `status`, `deletedAt`, `authorUserId` trong DTO của người đọc thường — chỉ tác giả và `manage:feed-post` nhận thêm `status`.
+- **Avatar — luật CHUNG của 10 trường danh tính SOCIAL** (`author.avatarUrl` bài/bình luận · người thả cảm xúc `013` · đã/chưa đọc `022` · `avatar` sinh nhật `026` · thành viên nhóm `037` · người nhận vinh danh trên thẻ + `047` · danh bạ `059` · reporter/resolver/tác giả đích `028`/`029`) — `S16-SOCIAL-AVATARPRESIGN-1`, owner ký 02/10/2026:
+  - Giá trị = **URL ĐÃ KÝ (TTL ngắn, mặc định 300 s)** hoặc **`null`** (FE vẽ chữ cái đầu). **Không bao giờ** là cột thô `employee_profiles.avatar_url` (fileId — cột đa-người-ghi, đầu độc được).
+  - Chỉ ký khi CẶP `(employeeId, fileId)` khớp một avatar **ĐÃ XÁC MINH** (link `ME/avatar` sống · `image/*` · `Uploaded` · không `Infected` · người tạo link sở hữu tệp) — fileId của người khác / tenant khác / tệp không link ⇒ `null`. **D2-b:** URL `http(s)` do quản trị đặt và mọi scheme khác (`javascript:`, `data:`…) ⇒ `null` trên SOCIAL (HR/CHAT/TASK vẫn passthrough URL — lệch có chủ ý).
+  - **Che ảnh ⊆ che tên** ở mọi điểm: người bị che tên (K1 kudos · D9 `026`/`022`-chưa-đọc: TK khoá/xoá mềm · D13-a reporter với scope < Company) thì ảnh cũng `null`, và fileId của họ không vào câu ký. **`026` chặt hơn** (owner sửa D9 02/10/2026): `avatar` chỉ khi tài khoản SỐNG — hồ sơ KHÔNG có tài khoản cũng ⇒ `null` (không có đường tự ẩn `showBirthday`); mọi bề mặt khác giữ «vắng ≠ che».
+  - **FE** (`avatarSrc`) chỉ vẽ `src` cho URL có hình dạng presign (`X-Amz-Signature=` 64 hex) — fileId / URL http(s) ngoài của API cũ (FE tự deploy trước API) ⇒ chữ cái đầu. Giá trị cố ý giả hình dạng presign chỉ bị chặn khi API ≥ `S16-SOCIAL-AVATARPRESIGN-1` chạy ⇒ **deploy API trước hoặc cùng FE**.
+  - Ký trong tx sẵn có của route: **+1 câu/request** bất kể số dòng, 0 transaction thêm; 0 câu khi trang không có avatar fileId. `029` ký trong SAVEPOINT — lỗi ký ⇒ ảnh `null`, quyết định kiểm duyệt vẫn lưu (D10).
+  - Kiểu giữ `string | null` (D5) — hình dạng ép ở BE, không `.url()` ở hợp đồng.
 - `myReaction` · `savedByMe` là **projection theo actor**, tính trong cùng câu truy vấn, không gọi thêm vòng.
 - **`mentions[]`** (bài **và** bình luận — `S16-SOCIAL-BE-1D`, owner chốt 28/09/2026) — người được nhắc, thứ tự ổn định `(created_at, id)` giữa các lần tải — KHÔNG theo thứ tự trong body, FE khớp theo `label`:
   - **Luật tầm nhìn (O-1):** phần tử có link ⇔ người được nhắc **VẪN trong audience của bài đích tại lúc ĐỌC** (bình luận: audience của **bài cha**), dùng **cùng vị từ** với lúc ghi (`classifyInAudience`): `company` ⇒ mọi tài khoản `active`; `org_unit` ⇒ hồ sơ thuộc đơn vị hoặc là trưởng đơn vị; `group` ⇒ thành viên `active` + nhân sự `active` + nhóm chưa xoá. Kết quả **không phụ thuộc người xem** (không có luật tự-nhắc ở đường đọc).
@@ -510,7 +517,7 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
   - **Optional:** vắng khoá ≠ mảng rỗng. Response kiểm duyệt (`006`) không mang `mentions` ⇒ FE giữ mảng cũ trong cache khi merge.
   - Nạp theo **lô** cho cả trang (≤ 3 câu, cùng tx với projection) — không N+1.
 - **Khối theo loại bài `kudos?` · `poll?` · `idea?`** (`S16-SOCIAL-BE-2D`, owner ký K1–K4 29/09/2026) — OPTIONAL, **vắng là trạng thái duy nhất của «không có»** (không bao giờ `null`): vắng khi bài khác loại, trên response `006`, trên payload WS (§7), hoặc hàng con mồ côi (BE ghi `logger.error`, không 500 cả trang).
-  - `kudos` = `{kudosId, message, isOfficial, badge:{id,code,name,icon}|null, recipients:[{employeeId, fullName, avatarUrl, isFormerEmployee}]}` — CÙNG hình dạng + CÙNG luật người nhận với `047` (`047` = khối + `postId` + `createdAt`). **Luật K1:** hồ sơ HOẶC tài khoản đã **xoá mềm** ⇒ `fullName`/`avatarUrl` `null` + `isFormerEmployee:true`; nghỉ việc ⇒ giữ tên + cờ (S6); TK khoá ⇒ giữ tên; không TK ⇒ `fullName:null`. KHÔNG bỏ người nào khỏi mảng. Người nhận xếp theo `employeeId`. Huy hiệu đã tắt vẫn hiện.
+  - `kudos` = `{kudosId, message, isOfficial, badge:{id,code,name,icon}|null, recipients:[{employeeId, fullName, avatarUrl, isFormerEmployee}]}` — CÙNG hình dạng + CÙNG luật người nhận với `047` (`047` = khối + `postId` + `createdAt`). **Luật K1:** hồ sơ HOẶC tài khoản đã **xoá mềm** ⇒ `fullName`/`avatarUrl` `null` + `isFormerEmployee:true`; nghỉ việc ⇒ giữ tên + cờ (S6); TK khoá ⇒ giữ tên; không TK ⇒ `fullName:null`. KHÔNG bỏ người nào khỏi mảng. Người nhận xếp theo `employeeId`. Huy hiệu đã tắt vẫn hiện. `avatarUrl` = URL ĐÃ KÝ hoặc `null` (luật avatar ở trên) — ký theo CẶP của chính người nhận: cùng một người vừa là tác giả thẻ (được ký) vừa là người nhận đã che K1 trên CÙNG trang vẫn ra `null` ở ô người nhận.
   - `poll` = **ĐÚNG hình dạng `043`** (`myVote` của NGƯỜI XEM, `totalVoters`, `options[{id,label,voteCount}]`, `status` y DB — vẫn `open` quá `closesAt` tới khi job đóng) ⇒ FE seed cache `043` từ thẻ. Không danh tính cử tri nào (SOC-DEC-009). Cùng MỘT câu SQL với `041..044` (bất biến H-8).
   - `idea` = `{status}` DUY NHẤT (pill trạng thái). KHÔNG `reviewNote`, KHÔNG người duyệt.
   - Nạp theo **lô**: kudos 2 câu · poll 1 · idea 1 — chỉ bảng của loại có mặt ⇒ ≤ 4 câu/trang bất kể số bài, 0 khi trang không có ba loại đó.
@@ -520,7 +527,7 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
 ```json
 {
   "success": true,
-  "data": [{ "employeeId": "a12…", "fullName": "Nguyễn Văn A", "avatarUrl": "https://…", "day": 18, "month": 9 }],
+  "data": [{ "employeeId": "a12…", "fullName": "Nguyễn Văn A", "avatar": "https://…/avatar.png?X-Amz-Signature=…", "day": 18, "month": 9 }],
   "error": null
 }
 ```
@@ -633,6 +640,7 @@ Replay `002` trả **thẻ LÚC TẠO** (khối `poll` đếm 0, tên người n
 - **Payload = DTO của REST**, không bao giờ là hàng thô (`io.emit` thẳng row bị cấm — CLAUDE.md §5).
 - **KHÔNG mang `mentions`** (`S16-SOCIAL-BE-1D` D6) — bóc tại nguồn và `.omit` ở schema WS. FE nhận thẻ qua WS render `@…` thành span tới lần refetch REST.
 - **KHÔNG mang `kudos` · `poll` · `idea`** (`S16-SOCIAL-BE-2D` D7) — `poll.myVote` là của TÁC GIẢ (thẻ phát ra được decorate bằng tác giả), phát cho cả room là rò; `.omit` không chạm khoá lồng nên bóc nguyên khối, ở CẢ nguồn (`buildWsPostCreatedEvent`) lẫn schema WS. FE chỉ đếm sự kiện nên không mất gì. Áp cho CẢ HAI biến thể.
+- **`author.avatarUrl` LUÔN `null`** trên `feed:post.created` — **CẢ HAI biến thể** (room công ty lẫn room nhóm `co:{companyId}:feedgroup:{groupId}`) — và `feed:comment.created` (`S16-SOCIAL-AVATARPRESIGN-1` D3-b) — REST trả URL ĐÃ KÝ, là capability có TTL (ai cầm cũng tải được); không lên room nào. GIỮ khoá (bundle FE cũ đòi khoá — bỏ khoá làm bundle cũ từ chối mọi sự kiện), ép giá trị `null` ở CẢ nguồn (`wsAuthorOf` — gọi trong `buildWsPostCreatedEvent` cho bài, `emitCommentCreated` cho bình luận) lẫn schema lồng `wsFeedAuthorSchema` (`.transform`) đặt ở LÕI chung của union ⇒ mọi option kế thừa. Ảnh lấy ở lần refetch REST.
 - **`feed:post.created` là union theo `audience`** (`S16-SOCIAL-BE-2C`, owner ký Q-SCHEMA = P1): `company` (`groupId: null`, `orgUnitId: null`) | `group` (`groupId` uuid BẮT BUỘC, `orgUnitId: null`); hai biến thể CÙNG tập khoá (room nhóm không nhận payload rộng hơn room công ty). `org_unit`, `group` thiếu `groupId`, `company` mang `groupId`, mọi `orgUnitId` khác `null` ⇒ **không parse được**. Emitter `.parse()` TRƯỚC rồi mới chọn room từ `audience` của kết quả — parse lỗi ⇒ không phát vào đâu.
 - **Room nhóm có gate RIÊNG** — `view:feed` KHÔNG đủ: chỉ thành viên `status='active'` (vị từ tập người `activeGroupMemberExists`, KHÔNG vị từ đọc) của nhóm còn sống, cùng công ty. `pending` không phải thành viên. Nhóm **`public` cũng chỉ thành viên** (owner ký Q-PUBLIC (a)): feed chính loại bài nhóm (D-OWNER-6) và WS một chiều không cho client tự xin room — người ngoài xem trang nhóm public không có badge.
 - **KHÔNG có room `org_unit`** (quyết định tường minh, done_when #8 — Q-ORG): (1) tài liệu chuẩn không khai room nào cho nó; (2) «thuộc đơn vị» là phân công HR (resolve theo request từ data scope), đổi bởi writer của module khác — giữ room đồng bộ phải móc vào MỌI writer đó; (3) FE không có consumer; (4) không room ⇒ bài `org_unit` tiếp tục KHÔNG phát vào đâu (fail-closed D21) — thiếu badge, không rò.

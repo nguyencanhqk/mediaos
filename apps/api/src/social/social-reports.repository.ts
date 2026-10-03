@@ -80,15 +80,15 @@ const REPORT_COLUMNS = {
   updatedAt: feedReports.updatedAt,
   reporterEmployeeId: rReporterEmp.id,
   reporterFullName: rReporterUser.fullName,
-  reporterAvatarUrl: rReporterEmp.avatarUrl,
+  reporterAvatarRaw: rReporterEmp.avatarUrl,
   resolverEmployeeId: rResolverEmp.id,
   resolverFullName: rResolverUser.fullName,
-  resolverAvatarUrl: rResolverEmp.avatarUrl,
+  resolverAvatarRaw: rResolverEmp.avatarUrl,
   targetPostId: rPost.id,
   targetOrgUnitId: rPost.orgUnitId,
   targetAuthorEmployeeId: rAuthorEmp.id,
   targetAuthorFullName: rAuthorUser.fullName,
-  targetAuthorAvatarUrl: rAuthorEmp.avatarUrl,
+  targetAuthorAvatarRaw: rAuthorEmp.avatarUrl,
   targetStatus: rPost.status,
   targetDeletedAt: rPost.deletedAt,
   /**
@@ -115,16 +115,16 @@ export interface ReportRow {
   updatedAt: Date;
   reporterEmployeeId: string | null;
   reporterFullName: string | null;
-  reporterAvatarUrl: string | null;
+  reporterAvatarRaw: string | null;
   resolverEmployeeId: string | null;
   resolverFullName: string | null;
-  resolverAvatarUrl: string | null;
+  resolverAvatarRaw: string | null;
   /** `null` ⇔ đích không còn hàng nào (bài bị xoá CỨNG) ⇒ DTO trả `targetSnapshot: null`. */
   targetPostId: string | null;
   targetOrgUnitId: string | null;
   targetAuthorEmployeeId: string | null;
   targetAuthorFullName: string | null;
-  targetAuthorAvatarUrl: string | null;
+  targetAuthorAvatarRaw: string | null;
   targetStatus: string | null;
   targetDeletedAt: Date | null;
   targetBodyExcerpt: string | null;

@@ -110,6 +110,9 @@ function build(opts: BuildOpts) {
     outbox as never,
     // S16-SOCIAL-BE-2C — tham số MỚI ở cuối constructor (plan M12: 0 chỗ dựng tay khác).
     realtime as never,
+    // S16-SOCIAL-AVATARPRESIGN-1 — `avatarSigner` (CUỐI, sau `realtime`). Chỉ `037` ký avatar — không
+    // route nào của spec này chạm nó; stub rỗng để một lời gọi lạc ĐỎ (`signTx is not a function`).
+    {} as never,
   );
   return { svc, realtime };
 }

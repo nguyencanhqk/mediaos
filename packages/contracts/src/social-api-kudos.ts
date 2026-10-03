@@ -253,7 +253,7 @@ export type KudosRecipientSearchQueryDto = z.infer<typeof kudosRecipientSearchQu
  * Một người trong danh bạ `059`. ĐÚNG ba khoá: **KHÔNG `userId`** (khoá tài khoản — cửa ĐỌC của oracle
  * mà SPEC-16 `ERR-009` đóng ở cửa ghi), không email / mã nhân sự / đơn vị. `employeeId` là thứ
  * `002` cần (`kudos.recipientEmployeeIds`). Chỉ người ĐANG làm (hồ sơ + tài khoản active) nên không có
- * `isFormerEmployee`. `avatarUrl` là cột THÔ — xem `feedKudosRecipientSchema`.
+ * `isFormerEmployee`. `avatarUrl` = URL ĐÃ KÝ hoặc `null` (chữ cái đầu) — xem `feedAuthorSchema`.
  */
 export const kudosRecipientCandidateSchema = z.object({
   employeeId: z.string().uuid(),

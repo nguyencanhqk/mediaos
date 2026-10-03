@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   wsFeedCompanyPostCreatedEventSchema,
@@ -108,6 +110,35 @@ describe("buildWsPostCreatedEvent (S16-SOCIAL-BE-2C)", () => {
     ).toBeNull();
   });
 
+  /**
+   * Hợp nhất S16-SOCIAL-AVATARPRESIGN-1 (D3-b) × BE-2C: `dto` của `create()` mang `author.avatarUrl` là
+   * URL ĐÃ KÝ của REST (capability TTL). Nguồn ép `null` cho CẢ HAI biến thể — room nhóm không nhận thứ
+   * room công ty không nhận. Neo: tên + `employeeId` GIỮ nguyên (chép tường minh, không mất khoá).
+   */
+  it.each([
+    ["company", { audience: "company", status: "published", groupId: null }, {}],
+    [
+      "group",
+      { audience: "group", status: "published", groupId: G },
+      { audience: "group", groupId: G },
+    ],
+  ] as const)(
+    "P6 biến thể %s — `author.avatarUrl` ký trên DTO ⇒ payload `null` (S16-SOCIAL-AVATARPRESIGN-1 D3-b)",
+    (_aud, row, over) => {
+      const signed = `https://minio.example/a.png?X-Amz-Signature=${"ab".repeat(32)}`;
+      const ev = buildWsPostCreatedEvent(
+        row,
+        restDto({
+          ...over,
+          author: { employeeId: POST, fullName: "Tác giả", avatarUrl: signed },
+        }),
+      );
+      expect(ev?.audience, "neo: đúng biến thể").toBe(row.audience);
+      expect(ev?.author).toEqual({ employeeId: POST, fullName: "Tác giả", avatarUrl: null });
+      expect(JSON.stringify(ev)).not.toContain("X-Amz-Signature");
+    },
+  );
+
   it("P5 bài group THIẾU groupId ⇒ null (không có đích để định tuyến)", () => {
     expect(
       buildWsPostCreatedEvent(
@@ -115,5 +146,39 @@ describe("buildWsPostCreatedEvent (S16-SOCIAL-BE-2C)", () => {
         restDto({ audience: "group" }),
       ),
     ).toBeNull();
+  });
+});
+
+/** Bỏ comment — luật nói về CODE, không về văn xuôi giải thích luật (khuôn `feed-realtime-structure`). */
+const stripComments = (text: string): string =>
+  text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+/** Mọi module specifier file KÉO VÀO: `from "…"` (kể cả `import type`/`export … from`), side-effect, `import()`, `require()`. */
+const importsOf = (file: string): string[] =>
+  [
+    ...stripComments(readFileSync(join(__dirname, file), "utf8")).matchAll(
+      /(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)["']([^"']+)["']/gm,
+    ),
+  ].map((m) => m[1] as string);
+
+/**
+ * Hợp nhất S16-SOCIAL-AVATARPRESIGN-1 × BE-2C — builder là hàm THUẦN (plan BE-2C §4.7). `wsAuthorOf` từng
+ * được import từ `social-avatar-signer.ts` ⇒ module thuần kéo theo Nest DI · drizzle · presign/S3 của
+ * signer. Không ca runtime nào thấy cạnh đó (hành vi y hệt) — chỉ quét nguồn mới gác nổi.
+ */
+describe("S16-SOCIAL-AVATARPRESIGN-1 — `social-ws-payload.ts` là module THUẦN (plan BE-2C §4.7)", () => {
+  it("builder chỉ kéo `@mediaos/contracts` + `./social-ws-author` (neo: CÓ dùng lại `wsAuthorOf`); module tác giả không kéo gì ngoài contracts", () => {
+    const specs = importsOf("social-ws-payload.ts");
+    for (const s of specs) {
+      expect(s, "social-ws-payload.ts import ngoài allowlist").toMatch(
+        /^(@mediaos\/contracts|\.\/social-ws-author)$/,
+      );
+    }
+    // Neo dương — builder BÀI dùng lại `wsAuthorOf` (không bản chép). Ca này CHỈ ghim đường bài; bình luận
+    // (`social-comments.service.ts`) đi qua re-export của `social-avatar-signer.ts`, không được ghim ở đây.
+    expect(specs).toContain("./social-ws-author");
+    for (const s of importsOf("social-ws-author.ts")) {
+      expect(s, "social-ws-author.ts import ngoài contracts").toBe("@mediaos/contracts");
+    }
   });
 });

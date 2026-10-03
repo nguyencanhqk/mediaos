@@ -24,6 +24,7 @@ import {
   ATTACH_GATE_ENFORCED_BY_TIER1,
   SocialAttachmentsService,
 } from "./social-attachments.service";
+import { SocialAvatarSigner, wsAuthorOf } from "./social-avatar-signer";
 import { SocialCommentsRepository, type CommentRow } from "./social-comments.repository";
 import { bumpPostCounter, softDeleteCommentTx } from "./social-counters";
 import { decodeFeedCursor, encodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
@@ -81,6 +82,7 @@ export class SocialCommentsService {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly realtime: RealtimeEmitterService,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   /** `SOCIAL-API-014` — `GET /social/posts/{id}/comments`. */
@@ -403,26 +405,35 @@ export class SocialCommentsService {
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.id);
 
-    const { myReactions, mentions } = await this.db.withTenant(viewer.companyId, async (tx) => ({
-      myReactions: await this.projections.myReactions(
-        tx,
-        viewer.companyId,
-        viewer.actorUserId,
-        "comment",
-        ids,
-      ),
-      mentions: await loadMentionsForTargets(
-        tx,
-        viewer.companyId,
-        "comment",
-        ids.map((id) => ({
-          id,
-          audience: parentPost.audience,
-          orgUnitId: parentPost.orgUnitId,
-          groupId: parentPost.groupId,
-        })),
-      ),
-    }));
+    const { myReactions, mentions, avatars } = await this.db.withTenant(
+      viewer.companyId,
+      async (tx) => ({
+        myReactions: await this.projections.myReactions(
+          tx,
+          viewer.companyId,
+          viewer.actorUserId,
+          "comment",
+          ids,
+        ),
+        mentions: await loadMentionsForTargets(
+          tx,
+          viewer.companyId,
+          "comment",
+          ids.map((id) => ({
+            id,
+            audience: parentPost.audience,
+            orgUnitId: parentPost.orgUnitId,
+            groupId: parentPost.groupId,
+          })),
+        ),
+        // S16-SOCIAL-AVATARPRESIGN-1: tác giả của cả lô — MỘT câu cổng, CÙNG tx.
+        avatars: await this.avatarSigner.signTx(
+          tx,
+          viewer.companyId,
+          rows.map((r) => ({ employeeId: r.authorEmployeeId, avatarRaw: r.authorAvatarRaw })),
+        ),
+      }),
+    );
     const attachments = await this.attachments.decorateMany(viewer, "comment", ids);
 
     return rows.map((row) =>
@@ -430,6 +441,7 @@ export class SocialCommentsService {
         attachments: attachments.get(row.id) ?? [],
         myReaction: myReactions.get(row.id) ?? null,
         mentions: mentionsFor(mentions, row.id),
+        avatars,
       }),
     );
   }
@@ -538,10 +550,12 @@ export class SocialCommentsService {
   ): void {
     if (postAudience !== "company" || postStatus !== "published") return;
     // `mentions` bóc tại nguồn — xem `SocialPostsService.emitPostCreated` (S16-SOCIAL-BE-1D D6).
-    const { myReaction: _mr, isMine: _im, mentions: _mn, attachments, ...rest } = dto;
+    const { myReaction: _mr, isMine: _im, mentions: _mn, attachments, author, ...rest } = dto;
     this.realtime.emitFeedCommentCreated(actor.companyId, {
       ...rest,
       attachments: attachments.map(({ url: _u, ...a }) => a),
+      // S16-SOCIAL-AVATARPRESIGN-1 (D3-b): URL ký là capability TTL — `avatarUrl: null` TẠI NGUỒN.
+      author: wsAuthorOf(author),
     });
   }
 }

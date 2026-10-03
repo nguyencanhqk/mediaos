@@ -19842,6 +19842,10 @@ export const backlog = [
       "docs/API Design/**",
       // Vế FE (plan S16-SOCIAL-FE-2C §7 N1): bật lại `src` ở bề mặt kudos/059 sau khi URL đã ký.
       "apps/app/src/routes/social/**",
+      // Plan §5 FE: ca canh WS `author.avatarUrl:null` vẫn đếm (D3-b) — spec của hook bảng tin.
+      "apps/app/src/hooks/use-feed-realtime.spec.tsx",
+      // Owner D7=(a) 02/10/2026: sửa dòng SOC-DEC-013 của SPEC-16 (avatar không còn là cột thô).
+      "docs/SPEC/**",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
@@ -19857,7 +19861,201 @@ export const backlog = [
       "Cột `avatar_url` đa-người-ghi, có thể bị đầu độc (fileId khác, URL `javascript:` — `employees.ts:28` nhận `z.string().url()`) ⇒ BẮT BUỘC đi `resolveEmployeeAvatars` (xác minh cặp employeeId↔fileId); URL http(s) passthrough phải lọc scheme",
       "Vế FE: S16-SOCIAL-FE-2C cố ý CHỈ vẽ chữ cái đầu ở mọi bề mặt kudos/059 (khối thẻ · màn 009 · widget · ô chọn người nhận, spec assert không `<img>`) ⇒ sau khi `avatarUrl` là URL đã ký, bật lại `src` ở đó (và cập nhật các ca no-img). Các chỗ ĐANG truyền cột thô làm `src` (`PostCard.tsx:82` · `CommentList.tsx:67` · `BirthdayWidget.tsx:90` · `GroupMembersTab.tsx:123` · `GroupRequestsTab.tsx:88`) tự đúng khi URL đã ký — xác minh bằng spec.",
     ],
-    notes: ["🔴 FULL gate (đường ký file). Seed 29/09/2026 từ S16-SOCIAL-BE-2D (owner K4)."],
+    notes: [
+      "🔴 FULL gate (đường ký file). Seed 29/09/2026 từ S16-SOCIAL-BE-2D (owner K4).",
+      "Owner ký 02/10/2026 (plan §6, mọi khuyến nghị): D1=(a) avatar directory-class trên CẢ 10 trường SOCIAL (gồm 022-chưa-đọc · 059 · 026) · D2=(b) SOCIAL chỉ ký fileId, bỏ mọi URL http(s) ⇒ chữ cái đầu (`isUuid` export sẵn, lọc trong `apps/api/src/social/**`, không sửa foundation) · D3=(b) WS GIỮ khoá `author.avatarUrl`, ép `null` bằng `.transform` của schema lồng VÀ nguồn viết `null` · D4 bật `src` ở KudosBlock + composer + NewsPage `022`; widget tháng giữ CHỈ tên · D5=(a) hợp đồng REST giữ `z.string()` · D6=(a) chấp nhận TTL 300 s, seed nợ fallback `onError` ở packages/ui · D7=(a) thêm `docs/spec/**` vào paths (git track `docs/SPEC/**`) + sửa dòng SOC-DEC-013 SPEC-16 · D8=(a) helper `avatarSrc` + MỘT PR · D9=(a) ảnh theo vị từ che tên trong SQL (`CASE WHEN users.id IS NOT NULL OR employee_profiles.user_id IS NULL THEN avatar_url END`) ở `026` + `022`-chưa-đọc · D10=(a) `029` ký qua `signInSavepointTx` (SAVEPOINT + catch ⇒ initials + `logger.warn`), KHÔNG BAO GIỜ catch không SAVEPOINT. Plan: docs/plans/S16-SOCIAL-AVATARPRESIGN-1.md.",
+      "Seed nợ 02/10/2026 (plan §7): S19-HR-AVATARWRITE-1 (N1) · S19-UI-AVATARFALLBACK-1 (N2, theo D6) · S19-OPS-AVATARCENSUS-1 (N3) · S16-SOCIAL-POSTSSPLIT-1 (N4) · S16-SOCIAL-BDAYMASKED-1 (N6) · S16-SOCIAL-IDENTITYLIVE-1 (N7). N5 (ảnh nhóm `feed_groups.avatar_file_id`) là tính năng riêng — không seed.",
+      "Owner SỬA D9 02/10/2026 ~19:20 (AskUserQuestion — trả lời finding MEDIUM của security-reviewer FULL gate lượt 1 tại `social-discovery.repository.ts:90`): D9 HẸP LẠI CHỈ ở SOCIAL-API-026 (widget sinh nhật) — hồ sơ KHÔNG có tài khoản (`employee_profiles.user_id IS NULL`) ⇒ `avatar: null` (chữ cái đầu), vì người đó không có đường tự ẩn `show_birthday`; ở `026` ảnh chỉ giữ khi TK SỐNG (`users.id IS NOT NULL` sau JOIN liveness). Mọi bề mặt khác (022-chưa-đọc · kudos · mentions …) giữ NGUYÊN D9 đã ký («vắng ≠ che»). Thi công: `acctLive` ở `social-discovery.repository.ts#birthdays`; ca RED D-NAMEMASK `026` (hồ sơ không TK ⇒ ảnh null + fileId ∉ tham số câu cổng; neo dương: người sống ký) + 2 mutant (khôi phục vị từ cũ ⇒ đỏ ở ảnh · che ở JS thay vì SQL ⇒ đỏ ở tham số câu cổng). Plan §11.",
+      "FULL gate lượt 1 (02/10/2026) — security-reviewer PASS (1 MEDIUM ⇒ owner sửa D9 ở trên · 3 LOW) · silent-failure-hunter PASS (2 LOW) · database-reviewer (2 LOW) · typescript-reviewer (1 MEDIUM · 2 LOW): 11 finding, gộp trùng còn 7 mục, VÁ HẾT — 0 bác, 0 hoãn (bảng ở plan §11): `avatarSrc` CHỈ nhận URL presign SigV4 (sửa nhận định D8 «thứ tự deploy nào cũng vô hại» — chỉ đúng với fileId) + spec trực tiếp + neo có-mặt · `signInSavepointTx` NÉM khi SAVEPOINT chưa mở (tx cha đã hỏng — `25P02`), lỗi không mã PG log `error` + message/stack (DrizzleQueryError lấy `cause`), bỏ ép kiểu `as` · S1 đếm theo MỌI alias của `employeeProfiles` + S1b cấm SQL thô `avatar_url` · IDENTITYLIVE-1/BDAYMASKED-1 ghi ngoại lệ `026`.",
+      "⚠️ THỨ TỰ DEPLOY (FULL gate lượt 1, ghi vào mô tả PR): `avatarSrc` chặn fileId + URL http(s) chưa ký của API cũ, nhưng một giá trị CỐ Ý giả hình dạng presign (vd `https://host-lạ/p.gif?X-Amz-Signature=<64 hex>` qua đề xuất đổi hồ sơ — M20) vẫn được vẽ tới khi API ≥ WO này chạy (server D2-b trả `null`) ⇒ deploy API PROD TRƯỚC hoặc CÙNG đợt merge FE.",
+    ],
+  },
+  {
+    id: "S19-HR-AVATARWRITE-1",
+    module: "HR",
+    layer: "BE",
+    title:
+      "Đường GHI `employee_profiles.avatar_url` nhận chuỗi tuỳ ý: `createEmployeeProfileSchema`/`updateEmployeeProfileSchema.avatarUrl` (`z.string().url()`) nhận `javascript:`/`data:`/`http://host-lạ`; đề xuất đổi hồ sơ của NHÂN VIÊN (`avatar_file_id`) ghi NGUYÊN giá trị vào cột khi HR duyệt",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "packages/contracts/src/employees.ts",
+      "packages/contracts/src/hr/**",
+      "apps/api/src/employees/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S16-SOCIAL-AVATARPRESIGN-1"],
+    src: [
+      "Plan S16-SOCIAL-AVATARPRESIGN-1 §7 N1 (đo M5/M20 02/10/2026): `employees.ts:88`·`:106` `.url()` ⇒ `javascript:alert(1)` / `data:image/png;base64,…` / `http://tracker…` safeParse TRUE; `profile-change-request.ts:77` `newValues: z.record(z.string(), z.unknown())` + `FIELD_TO_COLUMN.avatar_file_id → avatarUrl` (`profile-change-request.repository.ts:115`) + `applyChangesToEmployeeTx` ghi nguyên (`:314-339`), service không kiểm hình dạng (`profile-change-request.service.ts:139-153`).",
+    ],
+    done_when: [
+      "Deny-path RED trước: HR create/update `avatarUrl` = `javascript:` / `data:` / URL host lạ ⇒ 400; đề xuất `avatar_file_id` không phải fileId đã link `ME/avatar` của CHÍNH nhân viên ⇒ 422 — HOẶC bỏ hẳn `avatar_file_id` khỏi `PROFILE_CHANGE_ALLOWED_FIELDS` (đã có luồng `MeAvatarService`): owner chốt hướng TRƯỚC khi code",
+      "Đối chứng dương: `MeAvatarService.setAvatar` + `HrEmployeeAvatarService` (fileId đã xác minh) vẫn ghi được; PATCH hồ sơ đang mang URL cũ không bị 400 oan (đọc số đo của S19-OPS-AVATARCENSUS-1 trước)",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (plan §7 N1). SOCIAL đã tự vệ ở đường ĐỌC (chỉ ký fileId xác minh, bỏ mọi URL — D2-b); HR/CHAT/TASK vẫn passthrough URL http(s) ⇒ đường GHI là nơi đóng lỗ cho MỌI module.",
+    ],
+  },
+  {
+    id: "S19-UI-AVATARFALLBACK-1",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      '`Avatar` (`packages/ui`) không có `onError` ⇒ URL ký hết hạn (TTL 300 s, `loading="lazy"`) hoặc ảnh tải lỗi hiện ẢNH VỠ thay vì rơi về chữ cái đầu — ảnh hưởng HR · CHAT · TASK · SOCIAL',
+    zone: "yellow",
+    status: "todo",
+    paths: ["packages/ui/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      'Plan S16-SOCIAL-AVATARPRESIGN-1 §7 N2 + owner D6=(a) 02/10/2026 (đo M10/M13): `packages/ui/src/components/ui/avatar.tsx:27-44` vẽ `<img src loading="lazy">` khi `src` truthy, KHÔNG `onError`; `S3_PRESIGN_TTL_SEC` mặc định 300 s (`storage/object-storage.service.ts:92`, đo `X-Amz-Expires=300`); `apps/app/src/main.tsx:25-32` staleTime 30s · gcTime 5\' · refetchOnWindowFocus false ⇒ ngồi >5′ rồi cuộn tới ảnh lazy ⇒ storage từ chối ⇒ ảnh vỡ.',
+    ],
+    done_when: [
+      "Spec RED trước: `fireEvent.error` trên `<img>` ⇒ hiện chữ cái đầu của `name`; không vòng lặp tải lại",
+      "Đổi `src` (URL ký mới sau refetch) ⇒ thử lại ảnh; API của `Avatar` không đổi (mọi call-site HR/CHAT/TASK/SOCIAL không sửa)",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (owner D6=(a): chấp nhận TTL 300 s như HR/CHAT/TASK, sửa ở `packages/ui` lợi cho mọi module thay vì xin TTL riêng cho avatar).",
+    ],
+  },
+  {
+    id: "S19-OPS-AVATARCENSUS-1",
+    module: "DEVOPS",
+    layer: "DEVOPS",
+    title:
+      "Đếm trên PROD (owner chạy câu ĐỌC): số hồ sơ có `avatar_url` dạng UUID mà KHÔNG có link `ME/avatar` sống (hiện chữ cái đầu ở mọi bề mặt ký) + số hồ sơ `avatar_url` http(s) (hiện chữ cái đầu ở SOCIAL theo D2-b)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["docs/plans/**", "harness/backlog.mjs"],
+    skills: [],
+    depends_on: ["S16-SOCIAL-AVATARPRESIGN-1"],
+    src: [
+      "Plan S16-SOCIAL-AVATARPRESIGN-1 §7 N3 / R4 — không đo được trong WO (cấm chạm DB PROD). Điều kiện «đã xác minh» = `FileRepository.findVerifiedAvatarsTx` (link `ME/avatar/Avatar` sống · `image/%` · `Uploaded` · `<> Infected` · tệp chưa xoá · `files.owner_user_id = file_links.created_by` · `link.entity_id = employee_profiles.id`).",
+    ],
+    done_when: [
+      "Owner chạy hai câu `SELECT count(*)` (KHÔNG in giá trị cột) trên PROD, ghi hai con số vào notes của WO này",
+      "Số > 0 ⇒ chốt: chuyển dữ liệu cũ sang luồng `MeAvatarService` (tệp + link) hay chấp nhận chữ cái đầu; ghi kết luận (đầu vào cho S19-HR-AVATARWRITE-1)",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (nợ N3). Chữ cái đầu cho dữ liệu cũ là ĐÚNG thiết kế self-defending — số đo chỉ cho biết bao nhiêu người thấy thay đổi.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-POSTSSPLIT-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "`apps/api/src/social/social-posts.service.ts` vượt trần 800 dòng (904 trước S16-SOCIAL-AVATARPRESIGN-1; không cổng nào ép): tách `decorate` / `emit*` / enqueue NOTI ra file riêng",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/social/**", "apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-AVATARPRESIGN-1"],
+    src: ["Plan S16-SOCIAL-AVATARPRESIGN-1 §7 N4 / R1 (memory: file >800 không cổng nào ép)."],
+    done_when: [
+      "Tách KHÔNG đổi hành vi: mọi spec `src/social` + `test/integration/social-*` xanh trong MỘT lượt trên lane DB",
+      "Census 2 tầng · identity ratchet · spec cấu trúc avatar (`social-avatar-sign-structure.spec.ts` S1–S3) xanh — khoá `file#function` của ratchet đổi CÓ CHỦ ĐÍCH nếu hàm dời file",
+      "Mỗi file ≤ 800 dòng",
+    ],
+    notes: ["Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (nợ N4)."],
+  },
+  {
+    id: "S16-SOCIAL-BDAYMASKED-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "`026` vẫn hiện dòng sinh nhật (ngày/tháng) của người có TK khoá/xoá mềm với tên + ảnh `null` — «một người vô danh sinh ngày 20/10» cho cả công ty: có nên bỏ hẳn dòng?",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/SPEC/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-AVATARPRESIGN-1"],
+    src: [
+      "Plan S16-SOCIAL-AVATARPRESIGN-1 §7 N6 / D9-b (đo M16): `social-discovery.repository.ts#birthdays` JOIN `users` (sống + active) ⇒ TK khoá/xoá mềm ⇒ `fullName:null`; sau AVATARPRESIGN ảnh cũng `null` (D9-a) nhưng `day`/`month` vẫn ra, `total` không đổi. `026` mặc định hiện (`social-discovery.service.ts`).",
+    ],
+    done_when: [
+      "Owner chốt câu hỏi sản phẩm (bỏ dòng · giữ ẩn danh · khác) TRƯỚC khi code",
+      "Nếu bỏ dòng: vị từ TRONG SQL (không lọc ở JS), ca RED trước cho TK khoá + TK xoá mềm; dòng hồ sơ KHÔNG tài khoản: owner chốt giữ hay bỏ cùng lượt — ảnh của họ ở `026` ĐÃ `null` từ AVATARPRESIGN (owner sửa D9 02/10/2026), KHÔNG khôi phục",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (nợ N6 — D9-b không chọn trong WO đó vì đổi tập hàng là câu hỏi sản phẩm riêng).",
+      "Owner sửa D9 02/10/2026 (AVATARPRESIGN FULL gate lượt 1): ở `026` ảnh của hồ sơ KHÔNG có tài khoản giờ cũng `null` (chỉ TK sống mới có ảnh — `acctLive` ở `social-discovery.repository.ts#birthdays`) ⇒ câu hỏi còn lại của WO này CHỈ là có bỏ những dòng vô danh/vô ảnh đó (TK khoá/xoá mềm · hồ sơ không TK) hay không.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-IDENTITYLIVE-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Vị từ «danh tính còn sống» KHÔNG thống nhất trong SOCIAL: tác giả bài/bình luận · người thả cảm xúc · đã đọc · báo cáo hiện TÊN người có TK xoá mềm; kudos (K1) và `026`/`022`-chưa-đọc thì che — thống nhất MỘT luật + MỘT hàm SQL dùng chung",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/SPEC/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S16-SOCIAL-AVATARPRESIGN-1"],
+    src: [
+      "Plan S16-SOCIAL-AVATARPRESIGN-1 §1.1 (bảng 12 điểm SELECT «che tên vs che ảnh») + §7 N7: điểm #1–#4 và #10–#12 join `users` chỉ theo id+company (TK xoá mềm vẫn hiện tên); #5/#6 (D9) và #8 (K1) che theo TK. Ảnh đã đi theo tên ở MỌI điểm sau AVATARPRESIGN (docblock `social-avatar-signer.ts`).",
+    ],
+    done_when: [
+      "Owner chốt MỘT luật (vd TK xoá mềm ⇒ che tên + ảnh ở MỌI điểm chiếu; TK khoá ⇒ ?) TRƯỚC khi code",
+      "MỘT hàm SQL dùng chung cho vị từ sống (khuôn `live`/`nameLive`), spec cấu trúc đếm mọi điểm dùng nó; ca RED theo từng điểm chiếu (bài · bình luận · cảm xúc · đã đọc · báo cáo) cho TK xoá mềm; identity ratchet cập nhật CÓ CHỦ ĐÍCH",
+      "NGOẠI LỆ CÓ CHỦ ĐÍCH — ảnh ở `026`: vị từ `acctLive` (`users.id IS NOT NULL`, owner sửa D9 02/10/2026: hồ sơ KHÔNG tài khoản cũng không ảnh, vì không có đường tự ẩn `show_birthday`). Hàm dùng chung KHÔNG được nới `026` về «vắng ≠ che»; ca D-NAMEMASK `026` (`social-avatarpresign-1.int-spec.ts`: ảnh null + fileId ∉ tham số câu cổng) phải còn đỏ nếu nới — KHÔNG «cập nhật có chủ đích» ca đó",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (nợ N7). WO đó chỉ bảo đảm che ẢNH ⊆ che TÊN; WO này thống nhất chính vị từ che TÊN.",
+      "Owner sửa D9 02/10/2026 (AVATARPRESIGN FULL gate lượt 1, database-reviewer): `026` là ngoại lệ — ảnh chỉ đi kèm TK SỐNG; mọi điểm khác giữ «vắng ≠ che» (K1/D9). Xem mục «NGOẠI LỆ CÓ CHỦ ĐÍCH» ở done_when.",
+    ],
+  },
+  {
+    id: "S18-QA-NOTIGLOBALLEAK-1",
+    module: "QA",
+    layer: "BE",
+    title:
+      "`notifications-noti-core-tenant-isolation` gieo event + template GLOBAL (`company_id NULL`, mã `NOTI_EVT_*`/`NOTI_TPL_*`) và chỉ dọn ở `afterAll` ⇒ worker crash `ERR_IPC_CHANNEL_CLOSED` giữa spec để lại hàng GLOBAL VĨNH VIỄN trên lane ⇒ `noti-seed-catalog-permissions` (A — event lạ) + `s5-noti-fix1-deeplink` ((a) — template GLOBAL `target_url` NULL) ĐỎ ở mọi lượt sau trên lane đó",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/integration/notifications-noti-core-tenant-isolation.int-spec.ts",
+      "apps/api/test/integration/**",
+      "apps/api/test/helpers/**",
+      "docs/plans/S18-QA-NOTIGLOBALLEAK-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Verify cuối S16-SOCIAL-AVATARPRESIGN-1 02/10/2026 (`check.sh --all --lane-db=avatarpresign` trên lane vừa `--reset`, plan §12): chunk 16 crash `ERR_IPC_CHANNEL_CLOSED` 4 lượt khi `notifications-noti-core-tenant-isolation` đang chạy ⇒ lane còn `NOTI_EVT_071d9e7c` + `NOTI_TPL_0ec188e7` (GLOBAL) ⇒ hai spec catalog ĐỎ (chunk 16 + chunk 19). Chạy riêng trên lane bẩn: đỏ y hệt; xoá đúng 2 hàng ⇒ 2/2 file · 229/229 XANH hai lượt.",
+      "memory fresh-lane-db-exposes-teardown-ri-race · flake-rate-tracks-lane-db-dirtiness · vitest-worker-crash-chunked-runs",
+    ],
+    done_when: [
+      "TÁI HIỆN có kiểm soát TRƯỚC khi vá: bỏ `afterAll` (hoặc giết worker giữa spec) rồi chạy hai spec catalog ⇒ ĐỎ đúng thông điệp `event LẠ trong DB (ngoài registry)` / `KHÔNG template global nào được phép còn target_url NULL`",
+      "Hàng GLOBAL do spec gieo KHÔNG sống sót qua crash — vd dọn TÀN DƯ theo tiền tố mã riêng của spec ở ĐẦU `beforeAll` (ĐO an toàn khi hai lượt cùng spec chạy song song trên MỘT lane) hoặc cách khác có đo; KHÔNG nới assert của hai spec catalog, KHÔNG thêm miễn trừ mã `NOTI_EVT_*` vào registry",
+      "Quét cùng họ trong `apps/api/test/**`: mọi spec gieo hàng `company_id IS NULL` (catalog · permission · template dùng chung) mà chỉ dọn ở `afterAll` — liệt kê, vá theo LỚP",
+      "ĐO CỔNG sau vá: kịch bản tái hiện ở trên ⇒ hai spec catalog XANH",
+    ],
+    notes: [
+      "🟡 LIGHT — chỉ sửa spec/helper test, KHÔNG chạm code sản phẩm hay migration. Cùng lý do với S18-QA-CHECKALLFLAKE-1: lane bẩn làm `check.sh --all` đỏ oan ở ca KHÔNG liên quan diff ⇒ một ĐỎ THẬT có thể trốn sau chúng.",
+      "Seed 02/10/2026 từ verify cuối S16-SOCIAL-AVATARPRESIGN-1 (phát hiện ngoài phạm vi; WO đó không chạm NOTI).",
+    ],
   },
   {
     id: "S16-SOCIAL-FEMODPAYLOAD-1",

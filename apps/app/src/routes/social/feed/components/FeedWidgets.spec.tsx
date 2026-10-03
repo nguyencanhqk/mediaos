@@ -87,6 +87,33 @@ describe("C21 — BirthdayWidget: hai bẫy của DTO sinh nhật", () => {
     expect(PERSON).not.toHaveProperty("avatarUrl");
   });
 
+  it("S16-SOCIAL-AVATARPRESIGN-1 — `avatar` URL ký ⇒ `<img>`; fileId THÔ ⇒ chữ cái đầu", () => {
+    // URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật.
+    const signed = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
+    wrap(
+      <BirthdayWidget
+        range="today"
+        onRangeChange={vi.fn()}
+        items={[
+          { ...PERSON, avatar: signed },
+          {
+            ...PERSON,
+            employeeId: "33333333-3333-4333-8333-333333333333",
+            fullName: "Bình Trần",
+            avatar: "44444444-4444-4444-8444-444444444444",
+          },
+        ]}
+        isLoading={false}
+        isError={false}
+        onWish={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("img", { name: "An Nguyễn" })).toHaveAttribute("src", signed);
+    // Neo CÓ MẶT: dòng «Bình Trần» thật sự vẽ (Avatar rơi về chữ cái đầu) — không thì vế dưới xanh-rỗng.
+    expect(screen.getByText("BT")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Bình Trần" })).toBeNull();
+  });
+
   it("KHÔNG hiện năm sinh/tuổi — chỉ ngày/tháng (SOC-DEC-007)", () => {
     wrap(
       <BirthdayWidget

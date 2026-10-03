@@ -3,8 +3,9 @@
  * của tháng hiện tại theo giờ công ty (`047?month=&limit=5`) — KHÔNG gộp theo người (047 không có tổng
  * hợp). Trình bày thuần: `SocialPortalShell` nạp dữ liệu (khuôn `OpenPollsWidget`).
  *
- * Mỗi dòng: icon huy hiệu + tối đa 3 tên người nhận + «+N» ⇒ link bài (`postId`). Không avatar (không
- * `src` thô — xem `KudosBlock`). Tên rỗng ⇒ «Đồng nghiệp», cùng luật với khối.
+ * Mỗi dòng: icon huy hiệu + tối đa 3 tên người nhận + «+N» ⇒ link bài (`postId`). Không avatar — CHỦ Ý
+ * thiết kế (widget chưa từng có `Avatar`; owner D4 của S16-SOCIAL-AVATARPRESIGN-1 giữ CHỈ tên dù
+ * `avatarUrl` đã là URL ký). Tên rỗng ⇒ «Đồng nghiệp», cùng luật với khối.
  */
 import type * as React from "react";
 import { Link } from "@tanstack/react-router";

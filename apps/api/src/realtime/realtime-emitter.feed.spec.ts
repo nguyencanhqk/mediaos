@@ -317,4 +317,34 @@ describe("RealtimeEmitterService.emitFeedPostCreated — định tuyến theo au
     expect(att).not.toHaveProperty("url");
     expect(JSON.stringify(payload)).not.toContain("signed.example");
   });
+
+  /**
+   * S16-SOCIAL-AVATARPRESIGN-1 (D3-b) — TẦNG HAI ở emitter: `.parse()` qua `wsFeedAuthorSchema`
+   * (`.transform` ⇒ `null`) ép `author.avatarUrl` về `null` cho CẢ HAI biến thể, kể cả khi nguồn
+   * (`buildWsPostCreatedEvent` → `wsAuthorOf`) hồi quy và để lọt URL ĐÃ KÝ của REST. Đo trên thứ THẬT SỰ
+   * phát vào room (`emit`) + đích (`toTargets`), không trên đầu ra schema.
+   */
+  it.each([
+    ["company", companyPost, feedRoomName(COMPANY)],
+    ["group", groupPost, feedGroupRoomName(COMPANY, GROUP)],
+  ] as const)(
+    "🔒 W3f biến thể %s — `author.avatarUrl` ĐÃ KÝ lọt tới emitter ⇒ room nhận `null` (D3-b tầng 2)",
+    (_aud, post, room) => {
+      const { svc, emit, toTargets } = makeEmitter();
+      const signed = `https://minio.example/a.png?X-Amz-Signature=${"ab".repeat(32)}`;
+
+      svc.emitFeedPostCreated(COMPANY, {
+        ...post,
+        author: { employeeId: USER, fullName: "A", avatarUrl: signed },
+      } as never);
+
+      // Neo dương: parse thành công, phát ĐÚNG một lần vào ĐÚNG room của biến thể.
+      expect(toTargets).toEqual([room]);
+      expect(emit).toHaveBeenCalledTimes(1);
+      const payload = emit.mock.calls[0]?.[1] as { author?: Record<string, unknown> } | undefined;
+      expect(payload?.author?.fullName, "neo: tác giả còn nguyên").toBe("A");
+      expect(payload?.author?.avatarUrl, "URL ký lên room").toBeNull();
+      expect(JSON.stringify(payload)).not.toContain("X-Amz-Signature");
+    },
+  );
 });

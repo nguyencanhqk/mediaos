@@ -33,6 +33,7 @@ import { KudosBlock } from "../../kudos/components/KudosBlock";
 import { IdeaStatusPill } from "../../ideas/components/IdeaStatusPill";
 import {
   authorDisplayName,
+  avatarSrc,
   buildImageGrid,
   isFullyRenderableType,
   relativeTime,
@@ -81,10 +82,11 @@ export function PostCard({
     >
       <header className="flex items-start gap-3">
         {/*
-          `avatarUrl` nullable trong `feedAuthorSchema` — `Avatar` tự rơi về chữ cái đầu của `name`.
-          Không ép chuỗi rỗng thành `src`: một `<img src="">` khiến trình duyệt tải lại chính trang.
+          `avatarUrl` = URL ký hoặc null — `Avatar` tự rơi về chữ cái đầu của `name`. `avatarSrc` CHỈ
+          nhận URL presign: không chuỗi rỗng (`<img src="">` tải lại chính trang), không fileId thô hay
+          URL http(s) ngoài của API chưa deploy (S16-SOCIAL-AVATARPRESIGN-1 D8 + FULL gate lượt 1).
         */}
-        <Avatar name={name} src={post.author.avatarUrl ?? undefined} size="md" />
+        <Avatar name={name} src={avatarSrc(post.author.avatarUrl)} size="md" />
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

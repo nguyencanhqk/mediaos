@@ -23,6 +23,11 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { SocialAccessService } from "./social-access.service";
+import {
+  SocialAvatarSigner,
+  type SignedAvatars,
+  type SocialAvatarRef,
+} from "./social-avatar-signer";
 import { SocialCommentsService } from "./social-comments.service";
 import { SocialPostsModerationService } from "./social-posts-moderation.service";
 import { SocialPostsService } from "./social-posts.service";
@@ -76,6 +81,7 @@ export class SocialReportsService {
     private readonly moderation: SocialPostsModerationService,
     private readonly posts: SocialPostsService,
     private readonly comments: SocialCommentsService,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   /**
@@ -133,19 +139,22 @@ export class SocialReportsService {
   async list(user: SocialRequestUser, query: ListFeedReportsQueryDto): Promise<FeedReportPageDto> {
     const actor = await this.access.resolveActor(user, "reportsList");
 
-    const { rows, total } = await this.db.withTenant(actor.companyId, (tx) =>
-      this.repo.listReports(tx, actor, {
+    // D13-a — che danh tính người tố giác với mọi scope HẸP HƠN Company (manager @Department). Tính
+    // TRƯỚC tx: quyết định che đi trước lô ký (S16-SOCIAL-AVATARPRESIGN-1 — reporter ẩn không vào lô).
+    const revealReporter = SocialAccessService.isCompany(actor.routeScope);
+
+    const { rows, total, avatars } = await this.db.withTenant(actor.companyId, async (tx) => {
+      const page = await this.repo.listReports(tx, actor, {
         status: query.status,
         page: query.page,
         limit: query.limit,
-      }),
-    );
-
-    // D13-a — che danh tính người tố giác với mọi scope HẸP HƠN Company (manager @Department).
-    const revealReporter = SocialAccessService.isCompany(actor.routeScope);
+      });
+      const refs = reportAvatarRefs(page.rows, revealReporter);
+      return { ...page, avatars: await this.avatarSigner.signTx(tx, actor.companyId, refs) };
+    });
 
     return {
-      data: rows.map((r) => toReportDto(r, revealReporter)),
+      data: rows.map((r) => toReportDto(r, revealReporter, avatars)),
       page: query.page,
       limit: query.limit,
       total,
@@ -297,7 +306,18 @@ export class SocialReportsService {
     // `029` có `companyFloor:true` ⇒ tới được đây thì `routeScope` đã là Company. Vẫn hỏi
     // `isCompany` chứ KHÔNG viết thẳng `true`: nếu sàn ở `social-route-pairs` bị hạ, chỗ này đi
     // theo thay vì ở lại thành lỗ lộ im lặng.
-    return toReportDto(after, SocialAccessService.isCompany(actor.routeScope));
+    const revealReporter = SocialAccessService.isCompany(actor.routeScope);
+    // 🔴 S16-SOCIAL-AVATARPRESIGN-1 (owner D10) — câu CUỐI của tx ghi (khoá hàng + quyết định + audit):
+    // ký trong SAVEPOINT. Ảnh là mỹ phẩm, quyết định là dữ liệu: lỗi câu cổng (kể cả `55P03` dưới
+    // `lock_timeout`) ⇒ rollback TỚI SAVEPOINT, initials + warn, quyết định vẫn commit. TUYỆT ĐỐI KHÔNG
+    // `try/catch` quanh `signTx` ở đây — tx không SAVEPOINT đã hỏng thì COMMIT thành ROLLBACK im lặng,
+    // trả 200 mà mất quyết định (plan M21, mutant của ca T-029-SP).
+    const avatars = await this.avatarSigner.signInSavepointTx(
+      tx,
+      actor.companyId,
+      reportAvatarRefs([after], revealReporter),
+    );
+    return toReportDto(after, revealReporter, avatars);
   }
 
   /**
@@ -541,9 +561,25 @@ const REPORT_REASON_LABEL: Record<FeedReportReasonDto, string> = {
 function person(
   employeeId: string | null,
   fullName: string | null,
-  avatarUrl: string | null,
+  avatarRaw: string | null,
+  avatars: SignedAvatars,
 ): FeedReportPersonDto {
-  return { employeeId, fullName, avatarUrl };
+  return { employeeId, fullName, avatarUrl: avatars.urlOf({ employeeId, avatarRaw }) };
+}
+
+/**
+ * S16-SOCIAL-AVATARPRESIGN-1 — điểm chiếu avatar của các dòng báo cáo: tác giả đích + người xử lý +
+ * người tố giác **CHỈ KHI** `revealReporter` (D13-a). Che xảy ra TRƯỚC khi dựng refs: fileId của người
+ * tố giác bị che không thành tham số của câu cổng ký (ca D-REPORTER đo `values` của câu đó).
+ */
+function reportAvatarRefs(rows: readonly ReportRow[], revealReporter: boolean): SocialAvatarRef[] {
+  return rows.flatMap((r) => [
+    { employeeId: r.targetAuthorEmployeeId, avatarRaw: r.targetAuthorAvatarRaw },
+    { employeeId: r.resolverEmployeeId, avatarRaw: r.resolverAvatarRaw },
+    ...(revealReporter
+      ? [{ employeeId: r.reporterEmployeeId, avatarRaw: r.reporterAvatarRaw }]
+      : []),
+  ]);
 }
 
 /**
@@ -558,7 +594,7 @@ function person(
  * MỚI phải TỰ QUYẾT — mặc định `true` thì quên là lộ lại mà typecheck vẫn xanh (fail-OPEN im lặng).
  * Nguồn luật DUY NHẤT là `SocialAccessService.isCompany(actor.routeScope)`, KHÔNG `scope !== null`.
  */
-function toReportDto(r: ReportRow, revealReporter: boolean): FeedReportDto {
+function toReportDto(r: ReportRow, revealReporter: boolean, avatars: SignedAvatars): FeedReportDto {
   return {
     id: r.id,
     targetType: r.targetType,
@@ -570,7 +606,10 @@ function toReportDto(r: ReportRow, revealReporter: boolean): FeedReportDto {
             postId: r.targetPostId,
             authorEmployeeId: r.targetAuthorEmployeeId,
             authorFullName: r.targetAuthorFullName,
-            avatarUrl: r.targetAuthorAvatarUrl,
+            avatarUrl: avatars.urlOf({
+              employeeId: r.targetAuthorEmployeeId,
+              avatarRaw: r.targetAuthorAvatarRaw,
+            }),
             bodyExcerpt: r.targetBodyExcerpt,
             // `targetPostId != null` ⇒ hàng bài CÓ tồn tại ⇒ `status` là một trong ba giá trị CHECK
             // `chk_feed_posts_status`. `?? "deleted"` là lưới cho nhánh không thể xảy ra (cột NOT
@@ -579,7 +618,7 @@ function toReportDto(r: ReportRow, revealReporter: boolean): FeedReportDto {
             deletedAt: r.targetDeletedAt ? r.targetDeletedAt.toISOString() : null,
           },
     reporter: revealReporter
-      ? person(r.reporterEmployeeId, r.reporterFullName, r.reporterAvatarUrl)
+      ? person(r.reporterEmployeeId, r.reporterFullName, r.reporterAvatarRaw, avatars)
       : null,
     reason: r.reason as FeedReportReasonDto,
     note: r.note,
@@ -587,7 +626,7 @@ function toReportDto(r: ReportRow, revealReporter: boolean): FeedReportDto {
     resolvedBy:
       r.resolverEmployeeId == null && r.resolverFullName == null
         ? null
-        : person(r.resolverEmployeeId, r.resolverFullName, r.resolverAvatarUrl),
+        : person(r.resolverEmployeeId, r.resolverFullName, r.resolverAvatarRaw, avatars),
     resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
     resolutionNote: r.resolutionNote,
     createdAt: r.createdAt.toISOString(),

@@ -119,6 +119,12 @@ const attachmentIds = () => z.array(uuid()).max(FEED_MAX_ATTACHMENTS).optional()
  * `authorUserId` là khoá định danh tài khoản; DTO bài chỉ cần danh tính NHÂN SỰ. Phơi `userId` ra thẻ
  * bài biến mọi dòng cuộn thành bản đồ user-id của cả công ty, và nó là thứ duy nhất cần để dò các
  * đường `users/*`. Quyền sở hữu ("bài này của tôi") trả bằng cờ `isMine`, không bằng so sánh id ở FE.
+ *
+ * `avatarUrl` (S16-SOCIAL-AVATARPRESIGN-1) = URL ĐÃ KÝ (TTL ngắn) của avatar ĐÃ XÁC MINH, hoặc `null`
+ * = chữ cái đầu. KHÔNG BAO GIỜ là cột thô `employee_profiles.avatar_url` (fileId/chuỗi tuỳ ý — cột
+ * đa-người-ghi); URL http(s) do quản trị đặt cũng về `null` trên SOCIAL (owner D2-b). Kiểu giữ
+ * `z.string()` (D5): một giá trị lệch không được làm ZodError trắng cả trang FE. Trên kênh WS khoá
+ * này LUÔN `null` (`wsFeedAuthorSchema` — URL ký là capability, không lên room).
  */
 export const feedAuthorSchema = z.object({
   employeeId: uuid().nullable(),

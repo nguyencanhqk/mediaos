@@ -5,7 +5,8 @@
  *   chạy timer thật): «tháng hiện tại» phải là literal `2026-10`. Máy/CI chạy UTC mà code đọc đồng hồ
  *   máy thì ra `2026-09` ⇒ đỏ.
  * - Mock `Link` NỘI SUY params: link «Xem bài» phải mang `postId`, không `kudosId`.
- * - Fixture mang `avatarUrl` thật ⇒ ca «không `<img>`» có nghĩa.
+ * - Fixture mang `avatarUrl` URL ký: màn 009 VẼ ảnh (S16-SOCIAL-AVATARPRESIGN-1, owner D4); widget tháng
+ *   GIỮ chỉ tên ⇒ ca «không `<img>`» của widget có nghĩa (giá trị khác rỗng mà vẫn không vẽ).
  */
 import * as React from "react";
 import type { ReactNode } from "react";
@@ -59,6 +60,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 const t = i18n.getFixedT("vi", "social");
 const POST_ID = "11111111-1111-4111-8111-111111111111";
 const KUDOS_ID = "44444444-4444-4444-8444-444444444444";
+/** URL presign GIẢ (hình dạng `avatarSrc` nhận); chữ ký lặp `ab…` — không phải bí mật. */
+const SIGNED_AVATAR = `https://x.invalid/p.png?X-Amz-Signature=${"ab".repeat(32)}`;
 
 const item = (over: Partial<FeedKudosListItemDto> = {}): FeedKudosListItemDto => ({
   kudosId: KUDOS_ID,
@@ -71,7 +74,7 @@ const item = (over: Partial<FeedKudosListItemDto> = {}): FeedKudosListItemDto =>
     {
       employeeId: "33333333-3333-4333-8333-333333333333",
       fullName: "Bình Trần",
-      avatarUrl: "https://x.invalid/p.png",
+      avatarUrl: SIGNED_AVATAR,
       isFormerEmployee: false,
     },
   ],
@@ -122,12 +125,12 @@ describe("KP — màn 009 theo tháng", () => {
     );
   });
 
-  it("dòng: link «Xem bài» mang `postId` (KHÔNG `kudosId`); không `<img>`", async () => {
-    const { container } = renderWithProviders(<KudosPage />);
+  it("dòng: link «Xem bài» mang `postId` (KHÔNG `kudosId`); ảnh người nhận = URL ký", async () => {
+    renderWithProviders(<KudosPage />);
     const link = await screen.findByTestId("kudos-view-post");
     expect(link.getAttribute("href")).toBe(`/feed/posts/${POST_ID}`);
     expect(link.getAttribute("href")).not.toContain(KUDOS_ID);
-    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByRole("img", { name: "Bình Trần" })).toHaveAttribute("src", SIGNED_AVATAR);
   });
 
   it("tháng từ URL + ‹ ⇒ tháng trước, BỎ `page`; › ⇒ tháng sau (về tháng hiện tại ⇒ bỏ `month`)", async () => {
@@ -204,7 +207,7 @@ describe("KW — widget «Vinh danh tháng này» (trình bày)", () => {
     Array.from({ length: n }, (_, i) => ({
       employeeId: `${String(i + 1).padStart(8, "0")}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
       fullName: i === 1 ? null : `Người ${i + 1}`,
-      avatarUrl: "https://x.invalid/p.png",
+      avatarUrl: SIGNED_AVATAR,
       isFormerEmployee: false,
     }));
 

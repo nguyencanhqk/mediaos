@@ -12,6 +12,7 @@ import type {
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import { SocialAccessService } from "./social-access.service";
+import { SocialAvatarSigner } from "./social-avatar-signer";
 import { SocialDiscoveryRepository } from "./social-discovery.repository";
 import { decodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
 import { getPreferencesForUsers } from "./social-preferences";
@@ -34,6 +35,7 @@ export class SocialDiscoveryService {
     private readonly repo: SocialDiscoveryRepository,
     private readonly posts: SocialPostsRepository,
     private readonly postsService: SocialPostsService,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   /**
@@ -140,24 +142,28 @@ export class SocialDiscoveryService {
   ): Promise<FeedBirthdayListDto> {
     const actor = await this.access.resolveActor(user, "birthdays");
 
-    const rows = await this.db.withTenant(actor.companyId, async (tx) => {
+    const { rows, avatars } = await this.db.withTenant(actor.companyId, async (tx) => {
       const found = await this.repo.birthdays(tx, actor.companyId, query.range, new Date());
       const prefs = await getPreferencesForUsers(
         tx,
         actor.companyId,
         found.map((r) => r.userId).filter((id): id is string => id != null),
       );
-      return found.filter((r) => {
+      const shown = found.filter((r) => {
         if (r.userId == null) return true; // Không có tài khoản ⇒ không có preference ⇒ mặc định hiện.
         return prefs.get(r.userId)?.showBirthday !== false;
       });
+      // S16-SOCIAL-AVATARPRESIGN-1: ký SAU lọc `showBirthday` (chỉ dòng hiển thị), CÙNG tx; raw đã che
+      // trong SQL (D9 + owner sửa D9 cho `026`) ⇒ TK khoá/xoá mềm VÀ hồ sơ KHÔNG có TK (nhánh
+      // `r.userId == null` ở trên — không có cờ để tự ẩn) không phát sinh URL, fileId không vào câu cổng.
+      return { rows: shown, avatars: await this.avatarSigner.signTx(tx, actor.companyId, shown) };
     });
 
     return {
       data: rows.map((r) => ({
         employeeId: r.employeeId,
         fullName: r.fullName,
-        avatar: r.avatar,
+        avatar: avatars.urlOf(r),
         day: r.day,
         month: r.month,
       })),

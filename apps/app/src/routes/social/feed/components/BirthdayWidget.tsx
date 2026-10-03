@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { Avatar, cn } from "@mediaos/ui";
 import type { FeedBirthdayDto, FeedBirthdayRangeDto } from "@mediaos/contracts";
 import { PortalWidgetBlock } from "@/layouts/portal/PortalRightRail";
+import { avatarSrc } from "../lib/feed-format";
 
 const RANGES: readonly FeedBirthdayRangeDto[] = ["today", "week", "month"];
 
@@ -87,7 +88,7 @@ export function BirthdayWidget({
             return (
               <li key={person.employeeId} className="flex items-center gap-2">
                 {/* Khoá `avatar`, không phải `avatarUrl` — xem bẫy #1 ở đầu file. */}
-                <Avatar name={name} src={person.avatar ?? undefined} size="sm" />
+                <Avatar name={name} src={avatarSrc(person.avatar)} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-foreground">{name}</p>
                   <p className="text-xs text-muted-foreground">

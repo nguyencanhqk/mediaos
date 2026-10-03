@@ -9,6 +9,7 @@ import { StorageModule } from "../storage/storage.module";
 import { RecycleBinRegistryModule } from "../recycle-bin/recycle-bin-registry.module";
 import { SocialAccessService } from "./social-access.service";
 import { SocialAttachmentsService } from "./social-attachments.service";
+import { SocialAvatarSigner } from "./social-avatar-signer";
 import { SocialFilesController } from "./social-files.controller";
 import { SocialFilesService } from "./social-files.service";
 import { SocialCommentsRepository } from "./social-comments.repository";
@@ -171,6 +172,9 @@ import {
     // `onModuleInit`. Controller sống ở `recycle-bin/` (O3) — tên lớp của nó PHẢI có trong `SOCIAL_CONTROLLERS`.
     SocialRecycleBinRepository,
     SocialRecycleBinService,
+    // S16-SOCIAL-AVATARPRESIGN-1 — khối additive: điểm ký avatar DUY NHẤT của module. Phụ thuộc
+    // `AvatarPresignService` đến từ `FilesModule` (ĐÃ có trong `imports`, export sẵn).
+    SocialAvatarSigner,
   ],
   // `SocialStatsService` export cho `S16-SOCIAL-DASH-1` (widget «Tương tác tuần» gọi `weeklyEngagementForWidget`).
   exports: [SocialAccessService, SocialStatsService],

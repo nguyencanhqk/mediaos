@@ -35,7 +35,8 @@ import {
   targetTypeLabel,
   type ResolvedMention,
 } from "./social-mentions";
-import { blocksFor, loadPostBlocksTx } from "./social-post-blocks";
+import { SocialAvatarSigner } from "./social-avatar-signer";
+import { avatarRefsOfPage, blocksFor, loadPostBlocksTx } from "./social-post-blocks";
 import { createIdeaTx, createKudosTx, createPollTx } from "./social-post-types";
 import { userIdsOfEmployeesTx } from "./social-kudos.repository";
 import { SocialNewsRepository } from "./social-news.repository";
@@ -91,6 +92,7 @@ export class SocialPostsService {
     private readonly realtime: RealtimeEmitterService,
     // ⟲ S16-SOCIAL-BE-1B — chỉ dùng cho tập người nhận NOTI-031 (`audienceUserIds`).
     private readonly news: SocialNewsRepository,
+    private readonly avatarSigner: SocialAvatarSigner,
   ) {}
 
   /** `SOCIAL-API-001` — `GET /social/feed`. */
@@ -731,32 +733,37 @@ export class SocialPostsService {
 
     // `mentions` (S16-SOCIAL-BE-1D D7): CÙNG tx, ≤3 câu cho cả lô; audience lấy từ `PostRow` sẵn có.
     // `rows` đã qua cổng đọc bài (điều kiện của `decorate`) — bộ nạp KHÔNG tự kiểm tầm nhìn.
-    const { tags, myReactions, saved, mentions, blocks } = await this.db.withTenant(
+    const { tags, myReactions, saved, mentions, blocks, avatars } = await this.db.withTenant(
       viewer.companyId,
-      async (tx) => ({
-        tags: await this.repo.tagsFor(tx, viewer.companyId, ids),
-        myReactions: await this.projections.myReactions(
-          tx,
-          viewer.companyId,
-          viewer.actorUserId,
-          "post",
-          ids,
-        ),
-        saved: await this.projections.savedPostIds(tx, viewer.companyId, viewer.actorUserId, ids),
-        mentions: await loadMentionsForTargets(
-          tx,
-          viewer.companyId,
-          "post",
-          rows.map((r) => ({
-            id: r.id,
-            audience: r.audience,
-            orgUnitId: r.orgUnitId,
-            groupId: r.groupId,
-          })),
-        ),
-        // S16-SOCIAL-BE-2D D3: khối kudos/poll/idea — CÙNG tx, ≤4 câu/lô, chỉ bảng của loại có mặt.
-        blocks: await loadPostBlocksTx(tx, viewer.companyId, viewer.actorUserId, rows),
-      }),
+      async (tx) => {
+        const loaded = {
+          tags: await this.repo.tagsFor(tx, viewer.companyId, ids),
+          myReactions: await this.projections.myReactions(
+            tx,
+            viewer.companyId,
+            viewer.actorUserId,
+            "post",
+            ids,
+          ),
+          saved: await this.projections.savedPostIds(tx, viewer.companyId, viewer.actorUserId, ids),
+          mentions: await loadMentionsForTargets(
+            tx,
+            viewer.companyId,
+            "post",
+            rows.map((r) => ({
+              id: r.id,
+              audience: r.audience,
+              orgUnitId: r.orgUnitId,
+              groupId: r.groupId,
+            })),
+          ),
+          // S16-SOCIAL-BE-2D D3: khối kudos/poll/idea — CÙNG tx, ≤4 câu/lô, chỉ bảng của loại có mặt.
+          blocks: await loadPostBlocksTx(tx, viewer.companyId, viewer.actorUserId, rows),
+        };
+        // S16-SOCIAL-AVATARPRESIGN-1: tác giả + người nhận kudos của CẢ lô — MỘT câu cổng, CÙNG tx.
+        const refs = avatarRefsOfPage(rows, loaded.blocks);
+        return { ...loaded, avatars: await this.avatarSigner.signTx(tx, viewer.companyId, refs) };
+      },
     );
     for (const o of blocks.orphans) {
       this.logger.error(
@@ -784,6 +791,7 @@ export class SocialPostsService {
         savedByMe: saved.has(row.id),
         mentions: mentionsFor(mentions, row.id),
         ...blocksFor(blocks, row),
+        avatars,
       }),
     );
   }
@@ -820,6 +828,8 @@ export class SocialPostsService {
    *
    * Quyết định + bóc khoá nằm ở hàm THUẦN `buildWsPostCreatedEvent` (`social-ws-payload.ts` — nhãn
    * `audience`/`groupId` lấy TỪ HÀNG DB, không từ hằng); emitter định tuyến theo payload ĐÃ parse.
+   * S16-SOCIAL-AVATARPRESIGN-1 (D3-b): builder cũng ép `author.avatarUrl: null` cho CẢ HAI biến thể
+   * (room công ty lẫn room nhóm) — `dto` mang URL ĐÃ KÝ của REST, capability đó không lên room.
    */
   private emitPostCreated(actor: SocialActor, row: PostRow, dto: FeedPostDto): void {
     const ev = buildWsPostCreatedEvent(row, dto);

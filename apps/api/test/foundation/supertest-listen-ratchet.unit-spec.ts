@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  analyzeHelperSource,
   analyzeSource,
   listenWithoutClose,
   offenders,
   scanIntegrationSpecs,
+  scanSharedHelpers,
   sharedRequestHelpers,
 } from "./supertest-listen-census";
 
@@ -71,15 +73,22 @@ describe("S18-QA-SUPERTESTLISTEN-1 — supertest song song đòi app.listen(0)",
 
   /**
    * Lỗ CÒN LẠI của cổng, có tripwire chứ không im lặng: census phân tích TỪNG FILE, không giải
-   * import. Hôm nay 0 helper dùng chung nào dựng request nên vết luôn nằm trong file; ngày điều đó
-   * đổi, ca này ĐỎ và người sửa buộc phải nâng census thay vì nhận một cổng đã hoá mù.
+   * import. Helper dùng chung chỉ được dựng request trên app CHÍNH nó `init()` + `listen()` +
+   * `close()` (TỰ CHỨA — request của nó luôn tới server đang nghe) nên vết đua còn lại luôn nằm
+   * trong file; ngày điều đó đổi, ca này ĐỎ và người sửa buộc phải nâng census thay vì nhận một
+   * cổng đã hoá mù.
    */
-  it("tiền đề của cổng còn đúng: KHÔNG helper dùng chung nào dựng request supertest", () => {
+  it("tiền đề của cổng còn đúng: KHÔNG helper dùng chung nào dựng request supertest trên app nó KHÔNG tự listen", () => {
+    expect(
+      scanSharedHelpers().length,
+      "không đọc được apps/api/test/helpers/*.ts ⇒ ca dưới xanh RỖNG",
+    ).toBeGreaterThan(5);
     expect(
       sharedRequestHelpers(),
-      "Có helper dùng chung chạm `getHttpServer` ⇒ census per-file KHÔNG còn thấy vết supertest của " +
-        "các file dùng nó. PHẢI nâng `supertestTaint` thành phân tích xuyên file (giải import) TRƯỚC " +
-        "khi chuyển tiếp int-spec sang helper đó.",
+      "Có helper dùng chung chạm `getHttpServer` mà KHÔNG tự chứa (tự init + listen + close app nó " +
+        "dựng request lên) ⇒ census per-file KHÔNG còn thấy vết supertest của các file dùng nó. PHẢI " +
+        "nâng `supertestTaint` thành phân tích xuyên file (giải import) TRƯỚC khi chuyển tiếp int-spec " +
+        "sang helper đó — hoặc để helper tự `listen(0)` + `close()` chính app của nó.",
     ).toEqual([]);
   });
 
@@ -242,6 +251,98 @@ describe("S18-QA-SUPERTESTLISTEN-1 — supertest song song đòi app.listen(0)",
       );
       expect(s.appsListenedNotClosed).toEqual([]);
       expect(listenWithoutClose([s])).toEqual([]);
+    });
+  });
+
+  // ── Bộ phân loại helper dùng chung (tripwire) — đo bằng nguồn TỔNG HỢP ──────────────────────────
+  describe("bộ phân loại helper dùng chung", () => {
+    const flagged = (file: string, text: string): string[] =>
+      sharedRequestHelpers([analyzeHelperSource(file, text)]);
+
+    it("ÂM — helper TỰ CHỨA: tự init + listen(0) + close đúng app nó dựng request lên", () => {
+      const s = analyzeHelperSource(
+        "synthetic-world.ts",
+        `export async function boot() {
+          const app = moduleRef.createNestApplication();
+          await app.init();
+          await app.listen(0);
+          const http = () => request(app.getHttpServer());
+          return { get: (u: string) => http().get(u), close: async () => { await app.close(); } };
+        }`,
+      );
+      expect(s.touchesHttpServer).toBe(true);
+      expect(s.selfContained).toBe(true);
+      expect(sharedRequestHelpers([s])).toEqual([]);
+    });
+
+    it("DƯƠNG — builder trên app NHẬN TỪ NGOÀI (đúng hình dạng làm census mù)", () => {
+      expect(
+        flagged(
+          "synthetic-http.ts",
+          `export const http = (a: INestApplication) => request(a.getHttpServer());`,
+        ),
+      ).toEqual(["synthetic-http.ts"]);
+    });
+
+    it("DƯƠNG — tự init nhưng THIẾU listen", () => {
+      expect(
+        flagged(
+          "synthetic-nolisten.ts",
+          `const app = moduleRef.createNestApplication();
+          await app.init();
+          export const http = () => request(app.getHttpServer());
+          export const close = () => app.close();`,
+        ),
+      ).toEqual(["synthetic-nolisten.ts"]);
+    });
+
+    it("DƯƠNG — listen nhưng THIẾU close", () => {
+      expect(
+        flagged(
+          "synthetic-noclose.ts",
+          `const app = moduleRef.createNestApplication();
+          await app.init();
+          await app.listen(0);
+          export const http = () => request(app.getHttpServer());`,
+        ),
+      ).toEqual(["synthetic-noclose.ts"]);
+    });
+
+    it("DƯƠNG — TRÙNG TÊN: tham số `app` của builder không phải `const app` đã listen", () => {
+      expect(
+        flagged(
+          "synthetic-shadow.ts",
+          `const app = moduleRef.createNestApplication();
+          await app.init();
+          await app.listen(0);
+          export const close = () => app.close();
+          export const http = (app: INestApplication) => request(app.getHttpServer());`,
+        ),
+        "phán theo TÊN thuần sẽ dán nhãn an toàn cho builder trên app nhận từ ngoài",
+      ).toEqual(["synthetic-shadow.ts"]);
+    });
+
+    it("DƯƠNG — chạm qua CHUỖI (`app['getHttpServer']`) không chứng minh được ⇒ ĐỎ", () => {
+      expect(
+        flagged(
+          "synthetic-string.ts",
+          `const app = moduleRef.createNestApplication();
+          await app.init();
+          await app.listen(0);
+          export const close = () => app.close();
+          export const http = () => request(app["getHttpServer"]());`,
+        ),
+      ).toEqual(["synthetic-string.ts"]);
+    });
+
+    it("ÂM — chỉ NHẮC `getHttpServer` trong comment thì không dựng request", () => {
+      const s = analyzeHelperSource(
+        "synthetic-comment.ts",
+        `// helper này KHÔNG gọi getHttpServer — int-spec tự dựng request.
+        export const seed = () => 1;`,
+      );
+      expect(s.touchesHttpServer).toBe(false);
+      expect(sharedRequestHelpers([s])).toEqual([]);
     });
   });
 });

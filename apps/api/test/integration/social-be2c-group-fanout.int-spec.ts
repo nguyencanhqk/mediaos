@@ -244,6 +244,15 @@ describe.skipIf(!hasLaneDb)(
       expect(Object.keys(ws).sort()).toEqual(restKeys.sort());
       for (const k of restKeys) {
         if (k === "attachments") continue;
+        if (k === "author") {
+          // S16-SOCIAL-AVATARPRESIGN-1 (D3-b): WS GIỮ khoá `avatarUrl` nhưng LUÔN `null` (REST: URL ký —
+          // capability TTL, không lên room nhóm). Mọi khoá khác của tác giả BẰNG REST.
+          expect(ws.author, "tác giả WS = REST, `avatarUrl` ép null").toEqual({
+            ...(rest.author as Record<string, unknown>),
+            avatarUrl: null,
+          });
+          continue;
+        }
         expect(ws[k], `khoá chung «${k}» phải BẰNG REST`).toEqual(rest[k]);
       }
       const restAtt = rest.attachments as Record<string, unknown>[];

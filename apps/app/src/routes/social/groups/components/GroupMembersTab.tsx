@@ -19,7 +19,7 @@ import type { FeedGroupMemberDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ActionErrorBanner } from "../../feed/components/ActionErrorBanner";
 import { OffsetPager } from "../../feed/components/OffsetPager";
-import { relativeTime } from "../../feed/lib/feed-format";
+import { avatarSrc, relativeTime } from "../../feed/lib/feed-format";
 import type { GroupCapabilities } from "../lib/group-capabilities";
 import {
   GROUP_ROLE_LABEL_KEY,
@@ -120,7 +120,7 @@ export function GroupMembersTab({ groupId, caps }: GroupMembersTabProps): React.
                   data-testid={`group-member-${m.userId}`}
                   className="flex flex-wrap items-center gap-3 p-3"
                 >
-                  <Avatar name={nameOf(m)} src={m.avatarUrl} size="sm" />
+                  <Avatar name={nameOf(m)} src={avatarSrc(m.avatarUrl)} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="break-words text-sm font-medium text-foreground">
                       {nameOf(m)} {isMe && <span className="text-muted-foreground">{t("groups.members.you")}</span>}

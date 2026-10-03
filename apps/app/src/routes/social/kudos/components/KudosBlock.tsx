@@ -6,10 +6,12 @@
  * trên DTO bài. Khối VẮNG (006 · WS · API cũ · hàng mồ côi) ⇒ caller không render khối này (thẻ suy biến
  * an toàn — ca C27).
  *
- * ┌─ 🔴 AVATAR: CHỈ CHỮ CÁI ĐẦU, KHÔNG BAO GIỜ `src` ────────────────────────────────────────────────┐
- * │ `recipients[].avatarUrl` là cột THÔ `employee_profiles.avatar_url` — thường là fileId, có thể là  │
- * │ chuỗi tuỳ ý (cột đa-người-ghi). Làm `src` ⇒ ảnh vỡ hoặc tải ảnh từ host lạ. `Avatar` chỉ vẽ `<img>`│
- * │ khi có `src`, nên KHÔNG truyền `src` là đủ. Bật lại khi `S16-SOCIAL-AVATARPRESIGN-1` ký URL.       │
+ * ┌─ AVATAR (S16-SOCIAL-AVATARPRESIGN-1, owner D4/D8) ──────────────────────────────────────────────┐
+ * │ `recipients[].avatarUrl` = URL ĐÃ KÝ (server chỉ ký avatar đã xác minh, che theo K1) hoặc `null`. │
+ * │ `src` đi qua `avatarSrc` — vệ sinh render, CHỈ URL presign: API cũ (chưa deploy) còn trả cột thô │
+ * │ — fileId (`<img src="<uuid>">` = ảnh vỡ) hoặc URL http(s) ngoài (beacon host lạ, owner D2-b) —    │
+ * │ cả hai ⇒ chữ cái đầu. Một giá trị CỐ Ý giả hình dạng presign vẫn qua tới khi API ≥ AVATARPRESIGN │
+ * │ được deploy ⇒ deploy API TRƯỚC/CÙNG FE. Che dữ liệu vẫn là việc của SERVER.                      │
  * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Người nhận: `fullName ?? "Đồng nghiệp"` (null ⇔ hồ sơ/TK đã xoá mềm HOẶC không có TK — cờ theo
@@ -22,6 +24,7 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Avatar, cn } from "@mediaos/ui";
 import type { FeedKudosBlockDto, FeedKudosRecipientDto } from "@mediaos/contracts";
+import { avatarSrc } from "../../feed/lib/feed-format";
 import { KudosBadgeIcon } from "./KudosBadgeIcon";
 
 interface KudosBlockProps {
@@ -83,8 +86,7 @@ function KudosRecipient({ recipient }: { recipient: FeedKudosRecipientDto }): Re
       data-testid="kudos-recipient"
       className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card py-0.5 pl-0.5 pr-2"
     >
-      {/* Không `src` — xem hộp 🔴 đầu file. */}
-      <Avatar name={name} size="sm" />
+      <Avatar name={name} src={avatarSrc(recipient.avatarUrl)} size="sm" />
       {recipient.fullName !== null ? (
         <Link
           to="/feed/profiles/$employeeId"

@@ -4,6 +4,8 @@ import type {
   FeedPostStatusDto,
   WsFeedPostCreatedEvent,
 } from "@mediaos/contracts";
+// THUẦN: KHÔNG import `social-avatar-signer` (kéo Nest DI · drizzle · presign/S3 theo).
+import { wsAuthorOf } from "./social-ws-author";
 
 /**
  * Ba cột của HÀNG DB quyết định bài có được phát không và phát vào room nào. Giữ `string` vì đó là kiểu
@@ -34,7 +36,11 @@ export interface WsPostRouteRow {
  *   • 4 khoá projection-theo-actor (`myReaction`/`savedByMe`/`isMine`/`status`) — `dto` decorate bằng
  *     TÁC GIẢ; phát cho room là gửi cờ của người vừa đăng tới mọi người;
  *   • `mentions` (BE-1D D6) · `kudos`/`poll`/`idea` (BE-2D D7 — `poll.myVote` là của tác giả);
- *   • `url` của đính kèm — presign KÝ CHO MỘT NGƯỜI, là bearer capability (luật 2).
+ *   • `url` của đính kèm — presign KÝ CHO MỘT NGƯỜI, là bearer capability (luật 2);
+ *   • `author.avatarUrl` (S16-SOCIAL-AVATARPRESIGN-1 D3-b) — `dto.author.avatarUrl` là URL ĐÃ KÝ của REST
+ *     (capability TTL) ⇒ `author` dựng lại TƯỜNG MINH qua `wsAuthorOf` (`avatarUrl: null`, giữ khoá cho
+ *     bundle FE cũ) cho CẢ HAI biến thể — room nhóm không được nhận thứ room công ty không nhận. Kiểu ĐẦU
+ *     RA của `wsFeedAuthorSchema` là `null` ⇒ trả `dto.author` nguyên văn là ĐỎ lúc biên dịch.
  */
 export function buildWsPostCreatedEvent(
   row: WsPostRouteRow,
@@ -55,9 +61,15 @@ export function buildWsPostCreatedEvent(
     groupId: _gi,
     orgUnitId: _ou,
     attachments,
+    author,
     ...rest
   } = dto;
-  const base = { ...rest, attachments: attachments.map(({ url: _u, ...a }) => a) };
+  const base = {
+    ...rest,
+    // S16-SOCIAL-AVATARPRESIGN-1 (D3-b): URL ký là capability TTL — `avatarUrl: null` TẠI NGUỒN.
+    author: wsAuthorOf(author),
+    attachments: attachments.map(({ url: _u, ...a }) => a),
+  };
 
   if (row.audience === ("company" satisfies FeedAudienceDto)) {
     return { ...base, audience: "company", groupId: null, orgUnitId: null };
