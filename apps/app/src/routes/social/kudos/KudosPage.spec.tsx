@@ -81,8 +81,10 @@ const item = (over: Partial<FeedKudosListItemDto> = {}): FeedKudosListItemDto =>
   ...over,
 });
 /**
- * Ép render lại TRONG cùng cây provider: `rerender` của `renderWithProviders` thay cả cây ⇒ mất
- * `QueryClientProvider` (đỏ vì lý do khác). Đổi `routeSearch` rồi gọi `bump()` = URL đổi dưới chân màn.
+ * Ép render lại TRONG cùng cây: đổi `routeSearch` rồi gọi `bump()` = URL đổi dưới chân màn (màn KHÔNG
+ * remount). Lịch sử: harness này ra đời khi `rerender` của `renderWithProviders` còn thay cả cây và làm
+ * mất `QueryClientProvider`; từ S16-SOCIAL-FEBLOCKSEED-1 helper render qua `wrapper` nên `rerender` cũng
+ * giữ provider + CÙNG client — `bump()` giữ lại vì nó nói đúng ý «chỉ URL đổi».
  */
 let bump: () => void = () => undefined;
 function Harness(): React.ReactElement {
@@ -128,10 +130,7 @@ describe("KP — màn 009 theo tháng", () => {
     const link = await screen.findByTestId("kudos-view-post");
     expect(link.getAttribute("href")).toBe(`/feed/posts/${POST_ID}`);
     expect(link.getAttribute("href")).not.toContain(KUDOS_ID);
-    expect(screen.getByRole("img", { name: "Bình Trần" })).toHaveAttribute(
-      "src",
-      SIGNED_AVATAR,
-    );
+    expect(screen.getByRole("img", { name: "Bình Trần" })).toHaveAttribute("src", SIGNED_AVATAR);
   });
 
   it("tháng từ URL + ‹ ⇒ tháng trước, BỎ `page`; › ⇒ tháng sau (về tháng hiện tại ⇒ bỏ `month`)", async () => {
@@ -166,7 +165,9 @@ describe("KP — màn 009 theo tháng", () => {
     list.mockImplementationOnce(() => new Promise(() => undefined));
     routeSearch = { page: 2 };
     act(() => bump());
-    await waitFor(() => expect(list).toHaveBeenCalledWith({ month: "2026-10", page: 2, limit: 20 }));
+    await waitFor(() =>
+      expect(list).toHaveBeenCalledWith({ month: "2026-10", page: 2, limit: 20 }),
+    );
     expect(screen.getByTestId("kudos-list")).toBeInTheDocument();
   });
 

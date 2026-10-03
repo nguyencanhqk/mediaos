@@ -39,6 +39,6 @@ export class MailConfigController {
   @Post("test")
   @RequirePermission(CONFIGURE_MAIL_ACTION, CONFIGURE_MAIL_RESOURCE_TYPE, { isSensitive: true })
   test(@Req() req: AuthenticatedRequest, @Body() dto: TestMailConfigDto) {
-    return this.mail.testConnection(req.user.companyId, dto);
+    return this.mail.testConnection(req.user.companyId, dto, req.user.id);
   }
 }

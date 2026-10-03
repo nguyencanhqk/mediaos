@@ -17567,6 +17567,10 @@ export const backlog = [
       "docs/API Design/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      // Q-FE (a) — owner ký 02/10/2026: badge feed chính chỉ đếm bài `audience='company'` (feed chính
+      // LOẠI bài nhóm, D-OWNER-6) ⇒ mở đúng 2 file FE; gate thêm `react-reviewer`.
+      "apps/app/src/hooks/use-feed-realtime.ts",
+      "apps/app/src/hooks/use-feed-realtime.spec.tsx",
     ],
     status: "todo",
     skills: ["security-review"],
@@ -17589,6 +17593,137 @@ export const backlog = [
     notes: [
       "🔴 FULL gate + Opus (room = cổng đọc ở tầng realtime). Nối tiếp BE-2A.",
       "⚠️ TÁCH RA để không treo BE-2A/BE-2B: phần này bị chặn bởi quyết định room-đánh-dấu và bởi việc phải sửa tài liệu chuẩn API-19.",
+      "✍️ OWNER KÝ 02/10/2026 (plan §6, cả 10 đề xuất — sau plan-review lượt 1 verdict BLOCK, 12 finding đã vá vào plan §10): Q-SCHEMA = P1 `z.discriminatedUnion('audience')` với `orgUnitId: z.null()` ở CẢ HAI option (viết lại `social-ws.spec.ts` CÓ CHỦ ĐÍCH, danh sách M32) · Q-FE = (a) lọc `audience==='company'` ở `use-feed-realtime.ts` + spec, mở `paths` 2 file FE · Q-CR = (a) HOÃN comment/reaction vào room nhóm, seed `S16-SOCIAL-RTGROUPCR-1` · Q-LEAVE = (a) `leave` TRONG tx và LẦN NỮA sau commit · Q-PUBLIC = (a) bài nhóm `public` chỉ tới thành viên `active` (room nhóm) · Q-EVAC = (a) `034` KHÔNG sơ tán room, ghi phần dư R9 ở API-19 §7, seed `S16-SOCIAL-GROUPPOSTDEL-1` (`FOR SHARE` hàng nhóm ở cổng ghi `002`) · Q-SPEC = (a) KHÔNG sửa SPEC-16 · Q-SLICE = (a) 1 PR, 2 commit, int-spec tách 2 file (commit A tự xanh) · Q-FLAG = (a) KHÔNG cờ env · Q-GWFAIL = (a) lỗi khối feed lúc connect ⇒ rời MỌI room nhóm vừa join, phiên sống; chỉ ngắt kết nối khi chính bước dọn lỗi. D-OWNER-2 (22/09) giữ nguyên: `feedUserRoomName` + tái dùng cơ chế `syncRoomMembership`, KHÔNG BAO GIỜ `userRoomName` làm bộ chọn join.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-RTGROUPCR-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Fan-out `feed:comment.created` / `feed:reaction.changed` của bài `audience='group'` vào room nhóm `co:{c}:feedgroup:{groupId}` — hôm nay hai sự kiện đó CHỈ phát cho bài company (fail-closed có chủ đích của BE-2C, Q-CR)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/realtime/**",
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "plan S16-SOCIAL-BE-2C §6 Q-CR (owner ký (a) 02/10/2026) + §7 · API-19 §7 (bảng sau BE-2C ghi «chỉ room công ty, bài company») · SPEC-16 §13.7 («comment/reaction như trên»)",
+      "Hướng plan BE-2C đã đo: thêm `postGroupId` vào `SocialTargetAccess` (`social.types.ts`) ⇒ chạm `social-access.service.ts` (crown) + `social-comments.service.ts` + `social-reactions.service.ts` + 2 schema WS",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: có consumer FE thật của hai sự kiện này (M5 của plan BE-2C đo 0 consumer ngày 02/10) — chưa có thì giữ todo (YAGNI)",
+      "Định tuyến suy từ payload ĐÃ parse (khuôn `emitFeedPostCreated` của BE-2C): bài company ⇒ `feedRoomName`, bài group ⇒ `feedGroupRoomName`, `org_unit` ⇒ KHÔNG phát; parse lỗi ⇒ KHÔNG chạm `.to()`; không bao giờ `.to([])`",
+      "Deny-path RED trước: người ngoài nhóm kín / người `pending` / tenant khác nhận 0 sự kiện comment/reaction của bài nhóm — mỗi ca «nhận 0» có NEO DƯƠNG trên chính socket đó",
+      "API-19 §7 + SPEC-16 §13.7 khớp lại (SPEC đúng sau WO này — Q-SPEC của BE-2C)",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-BE-2C (owner ký Q-CR = (a)). 🔴 FULL gate: chạm cổng truy cập crown-jewel `social-access.service.ts`.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GROUPPOSTDEL-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Đua `034` xoá nhóm ↔ `002` đăng bài nhóm: cổng ghi `002` đọc nhóm KHÔNG khoá ⇒ bài commit được vào nhóm VỪA xoá mềm (REST ẩn bài mồ côi, nhưng từ BE-2C bài đó ĐƯỢC PHÁT vào room nhóm ⇒ thành viên cũ nhận payload mà REST đã ẩn) — khoá `FOR SHARE` hàng nhóm ở cổng ghi",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "database-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "plan S16-SOCIAL-BE-2C §2 M30 + §9 R9 + §6 Q-EVAC (owner ký (a)+(c) 02/10/2026): `034` UPDATE `deleted_at` ⇒ `FOR NO KEY UPDATE`; FK `feed_posts.group_id` ⇒ `FOR KEY SHARE` — KHÔNG xung đột; `assertWriteAudience` → `assertGroupVisibleTx`/`getMembershipTx` là SELECT không khoá (`social-access.service.ts` · `social-group-access.service.ts`)",
+      "Kết luận M30 mới từ ĐỌC MÃ + ma trận khoá PostgreSQL — CHƯA đo bằng harness đua",
+    ],
+    done_when: [
+      "🔴 ĐO TRƯỚC KHI SỬA bằng harness đua TẤT ĐỊNH (khuôn BE-3A: giữ khoá hàng + poll `pg_stat_activity`): `002` đọc nhóm sống TRƯỚC commit của `034` ⇒ hôm nay commit được bài vào nhóm đã xoá — RED phải đỏ đúng thông điệp đó",
+      "Cổng ghi `002` (và mọi đường ghi khác vào nhóm: `004` đổi audience nếu có, `016` bình luận nếu cần) khoá `FOR SHARE` hàng `feed_groups` ⇒ một bên chờ bên kia; READ COMMITTED đọc lại `deleted_at` sau khi chờ ⇒ 404 `SOCIAL-ERR-012`",
+      "Không deadlock mới với `lockGroupRowTx` (`FOR UPDATE`) của `035..039` — ca song song đo",
+      "API-19 §7 bỏ dòng phần dư R9 khi đã đóng",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-BE-2C (owner ký Q-EVAC = (a) + seed (c)). Sơ tán room sau `034` (Q-EVAC (b)) chỉ THU HẸP khe — emit của `002` và sơ tán của `034` chạy sau HAI commit độc lập — nên chỗ đóng thật là khoá ở tầng DB.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEGROUPBADGE-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Badge «N bài mới» THEO NHÓM — tiêu thụ biến thể `audience:'group'` của `feed:post.created` (room `co:{c}:feedgroup:{g}` có từ BE-2C) ở trang nhóm + «Nhóm của tôi»; viết lại docblock `GroupPostsTab.tsx` đang tả trạng thái TRƯỚC BE-2C",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/hooks/**",
+      "apps/app/src/layouts/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "plan S16-SOCIAL-BE-2C §7 («WO FE badge theo nhóm» — đề xuất, chưa seed tới FULL gate) · API-19 §7 (badge feed chính chỉ đếm biến thể `company`; badge THEO NHÓM là WO FE riêng)",
+      "`apps/app/src/routes/social/groups/components/GroupPostsTab.tsx:11-13` — docblock còn ghi `wsFeedPostCreatedEventSchema.audience = literal('company')` và «chờ BE-2C»: SAI sau khi BE-2C merge (FULL gate BE-2C lượt 1, typescript-reviewer LOW)",
+      "`apps/app/src/hooks/use-feed-realtime.ts` — `safeParse` rồi BỎ QUA im lặng mọi payload `audience !== 'company'` (Q-FE (a) của BE-2C): hook nhóm phải đếm ĐÚNG phần mà hook feed chính bỏ, theo `groupId`",
+    ],
+    done_when: [
+      "Đếm theo `groupId` của payload ĐÃ `safeParse` (không đọc khoá thô); payload sai hợp đồng ⇒ không đếm (khuôn `use-feed-realtime.ts`); bấm badge ⇒ refetch `001?groupId=` của đúng nhóm",
+      "Badge nhóm A KHÔNG tăng khi bài thuộc nhóm B (ca test hai nhóm) · badge feed chính KHÔNG tăng vì bài nhóm (giữ Q-FE (a) của BE-2C — ca hồi quy)",
+      "Viết lại docblock `GroupPostsTab.tsx:11-13` theo hiện trạng sau BE-2C (union `audience` · room nhóm có cổng membership + sàn scope Company)",
+      "Loading/error/empty như mọi màn FE; không hard-code quyền (badge chỉ có nghĩa khi socket đã qua cổng `view:feed` @Company — server quyết, client không suy diễn)",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ FULL gate S16-SOCIAL-BE-2C lượt 1 (typescript-reviewer LOW: docblock `GroupPostsTab.tsx` trôi sau merge, nằm NGOÀI `paths` của BE-2C và WO FE badge của plan §7 chưa được seed ⇒ không gì theo dõi). 🟡 LIGHT gate + react-reviewer.",
+    ],
+  },
+  {
+    id: "S17-CHAT-RTROOMOPS-1",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Room-op CHAT có HAI lớp lỗi mà BE-2C đã vá cho room nhóm SOCIAL: (1) id route chữ HOA ⇒ `syncRoomMembership`/`evictFromCallRoom` dựng tên room không khớp ⇒ người bị gỡ Ở LẠI phòng chat/cuộc gọi; (2) dưới adapter Valkey `socketsLeave` chỉ publish ⇒ lệnh leave có thể MẤT (sub rớt) ⇒ người bị gỡ tiếp tục nhận tin",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/**",
+      "apps/api/src/realtime/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "(1) `chat/chat-rooms.controller.ts` `removeMember`/`updateMember` — `@Param('id'|'userId', ParseUUIDPipe)` nhận chữ HOA (regex /i) và trả NGUYÊN VĂN → `chat-members.service.ts` `syncRoomMembership(companyId, roomId, targetUserId, 'leave')` + `evictFromCallRoom(...)` ⇒ `userRoomName`/`chatRoomName`/`callUserRoomName` chữ HOA ≠ room gateway dựng từ DB/JWT (chữ thường) ⇒ leave khớp 0 socket. Postgres so uuid không phân biệt hoa thường nên ghi DB vẫn thành công (FULL gate S16-SOCIAL-BE-2C lượt 1, database-reviewer HIGH — đo ở SOCIAL bằng probe AppModule thật; CHAT CHƯA đo)",
+      "(2) `@socket.io/redis-adapter` 8.3.0 `delSockets` không cờ `local` CHỈ publish REMOTE_LEAVE; node giữ socket chỉ áp khi nhận lại qua SUBSCRIBE (pub/sub at-most-once) — `syncRoomMembership('leave')` + `evictFromCallRoom` (namespace `/ws-call`) cùng lớp (security-reviewer + silent-failure-hunter MEDIUM ở BE-2C)",
+      "Khuôn vá đã có: `RealtimeEmitterService.syncFeedGroupMembership` (BE-2C) — chuẩn hoá chữ thường ở cửa room-op + `server.local.in(…).socketsLeave(…)` TRƯỚC lệnh toàn cụm; spec `realtime-emitter.feed.io.spec.ts` (adapter NUỐT room-op không-local) tái dùng được",
+    ],
+    done_when: [
+      "🔴 RED TRƯỚC (deny-path): int-spec `DELETE /chat/rooms/{ID-HOA}/members/{UID-HOA}` ⇒ hôm nay socket người bị gỡ VẪN ở `chatRoomName` (poll membership phía server, khuôn BE-2C E11m) — sau vá rời phòng; ca tương tự cho `evictFromCallRoom` (`/ws-call`)",
+      "Chuẩn hoá chữ thường ở CỬA room-op (hoặc ở builder `rooms.ts` nếu quyết định canonical hoá MỌI tên room — kèm lý do + đo toàn bộ realtime/CHAT/CALL), KHÔNG rải `.toLowerCase()` ở từng caller",
+      "`leave` CỤC BỘ đồng bộ trước lệnh toàn cụm cho `syncRoomMembership` + `evictFromCallRoom`; ca adapter-nuốt-thông-điệp ĐỎ trước vá; giữ nguyên bất đối xứng bộ chọn join/leave và cặp số lời gọi của `chat-realtime-after-commit.spec.ts`",
+      "Ghi phần dư đa-instance (node KHÁC vẫn chỉ qua pub/sub) + `unhandledRejection` khi pub rớt (có sẵn ở mọi emit) vào API CHAT §7",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ FULL gate S16-SOCIAL-BE-2C lượt 1. BE-2C CỐ Ý không đổi CHAT (`syncRoomMembership` giữ nguyên chữ ký + hành vi, lưới `realtime-emitter.chat.spec.ts`): vá ở `syncFeedGroupMembership` chỉ phủ room nhóm. 🔴 FULL gate (cổng đọc realtime CHAT).",
     ],
   },
   {
@@ -17741,7 +17876,89 @@ export const backlog = [
     done_when: [
       "Ca đua TẤT ĐỊNH (khuôn harness khoá hàng + poll pg_stat_activity của social-be3a-report-actions.int-spec): admin bị hạ vai giữa hai câu ⇒ `039` phải 403; mutant bỏ đọc-lại ⇒ đỏ đúng thông điệp",
     ],
-    notes: ["🔴 FULL gate (cổng vai nhóm). Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1."],
+    notes: [
+      "🔴 FULL gate (cổng vai nhóm). Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1.",
+      "Owner ký 02/10/2026 (plan §6, mọi khuyến nghị): D1=(a) admin KIÊM `manage:feed-group` bị hạ vai giữa chừng ⇒ đánh giá lại «vai nhóm HOẶC manage» trên hàng đọc SAU khoá, cho qua + audit `viaManage:true` (API-19:107) · D2=(a) gộp `033`/`034` vào WO này (+2 call-site, ca D-3/D-4/C-3, +2 mutant) · D3=(a) hàng actor biến mất giữa chừng trên nhóm kín ⇒ 403 `SOCIAL-ERR-014` · D4=(a) `lock_timeout` + map `55P03` là WO riêng — seed `S16-SOCIAL-GROUPLOCKTIMEOUT-1` · D5=(a) `038`/`039` ghi vào nhóm bị xoá mềm giữa chừng là WO riêng — seed `S16-SOCIAL-GROUPDELRACE-1` · D6=(a) gia cố vị từ chờ khoá be3a/be3c qua `test/helpers/lock-wait.ts` (call-site/ngưỡng/assert giữ nguyên) · D7=(a) seed nợ trong CÙNG PR. Plan: docs/plans/S16-SOCIAL-GROUPTOCTOU-1.md.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GROUPLOCKTIMEOUT-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Route nhóm `033`–`039` (+ `002` bài nhóm) chờ khoá hàng `feed_groups` KHÔNG cận trên (`lock_timeout=0`) — một tx treo làm đứng mọi thao tác của nhóm, và khi waiter dồn lại thì CẢ API (mỗi waiter giữ 1/20 kết nối pool, không `connectionTimeoutMillis`), không lỗi/không log",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/src/**",
+      "apps/app/src/routes/social/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-GROUPTOCTOU-1"],
+    src: ["plan S16-SOCIAL-GROUPTOCTOU-1 D4/N1 — đo M1/M12/M23"],
+    done_when: [
+      "`SET LOCAL lock_timeout` trên mọi tx route nhóm khoá `feed_groups` + dịch `55P03` ⇒ 409 mã sentinel (khuôn `029` REPORT_BUSY) + census mã lỗi + FE xử lý; ca tất định (harness `test/helpers/lock-wait.ts`): holder giữ khoá quá trần ⇒ 409 đúng mã, không 500, không treo",
+      "N6 (database-reviewer, FULL gate lượt 1 của GROUPTOCTOU-1): đo rồi quyết hạ `lockGroupRowTx` xuống `FOR NO KEY UPDATE` — `FOR UPDATE` xung đột `FOR KEY SHARE` của RI khi `002`/`035` INSERT ⇒ từ GROUPTOCTOU-1 `033`/`034` chờ MỌI bài nhóm đang đăng và bài mới xếp hàng sau chúng (probe: holder INSERT `feed_group_members` chưa commit ⇒ `SELECT … FOR UPDATE` 55P03 sau 704ms ở `lock_timeout` 700ms; `FOR NO KEY UPDATE` qua). Ca LM-1 (`social-group-access.int.spec.ts` — hai `lockGroupRowTx` PHẢI chặn nhau) phải còn XANH; hạ mode thì vá N2 (`S16-SOCIAL-POSTGROUPTOCTOU-1`) PHẢI khoá nhóm bằng `FOR SHARE` (KEY SHARE không xung đột NO KEY UPDATE)",
+    ],
+    notes: [
+      "🔴 FULL gate. Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (plan §6 D4 — owner ký (a): WO riêng). Bề mặt khoá rộng thêm từ GROUPTOCTOU-1: `033`/`034` nay cũng `FOR UPDATE` hàng nhóm trước khi đọc vai.",
+      "FULL gate lượt 1 của GROUPTOCTOU-1 (02/10/2026): + N6 (done_when 2) · tầm ảnh hưởng sửa ở title — waiter xếp hàng mỗi cái giữ một kết nối pool (`db/index.ts` max 20) ⇒ một holder kẹt có thể đứng CẢ API, không chỉ một nhóm.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GROUPDELRACE-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "`038`/`039` vẫn ghi thành viên vào nhóm bị XOÁ MỀM giữa chừng — `lockGroupRowTx` cố ý không lọc `deleted_at` (miễn trừ W4 của neo D6-ii) và không route nào kiểm lại `deleted_at` sau khoá",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-GROUPTOCTOU-1"],
+    src: [
+      "plan S16-SOCIAL-GROUPTOCTOU-1 D5/N3 — đo M14: `039` trên nhóm bị xoá mềm trong tx giữ khoá ⇒ 200, target bị mời ra khỏi nhóm ĐÃ xoá",
+    ],
+    done_when: [
+      "Kiểm `deleted_at` SAU khoá ở `038`/`039` ⇒ 404 `SOCIAL-ERR-012`, KHÔNG đổi `lockGroupRowTx` (miễn trừ W4 giữ nguyên — lý lẽ ghi vào plan); ca tất định bằng harness `test/helpers/lock-wait.ts` (holder `UPDATE feed_groups SET deleted_at = now()` trong tx giữ khoá) ⇒ 404 + hàng thành viên không đổi + 0 audit, có đối chứng dương",
+      "Rà `035`/`036`: cùng hình dạng (`findLiveGroupTx` TRƯỚC `lockGroupRowTx`) — CHƯA đo `deleted_at`; KÈM `035` quyết `status` từ `visibility` đọc TRƯỚC khoá: nhóm `public→private` commit trong lúc join chờ khoá ⇒ hàng `active` trong nhóm ĐÃ kín, bỏ qua duyệt (security-reviewer FULL gate lượt 1 GROUPTOCTOU-1 đo bằng `lock-wait.ts`: 201, `visibility='private'`, `myStatus='active'`; trạng thái cuối khớp thứ tự tuần tự «join rồi đổi» ⇒ độ trễ thu hồi cùng lớp, không lộ thêm) — đo rồi quyết gộp hay tách",
+    ],
+    notes: [
+      "🔴 FULL gate (đụng neo khoá D6-ii của BE-2A). Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (plan §6 D5 — owner ký (a): WO riêng; không phải lỗi quyền).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-POSTGROUPTOCTOU-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "`002` đăng bài vào nhóm: `assertWriteAudience` đọc membership KHÔNG khoá hàng nhóm rồi `INSERT feed_posts` — INSERT chờ khoá RI sau một `039` mời ra rồi chạy tiếp ⇒ người VỪA bị mời ra vẫn đăng được bài vào nhóm kín (cùng lớp TOCTOU của GROUPTOCTOU-1, nợ N2)",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/social/**", "apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-GROUPTOCTOU-1"],
+    src: [
+      "plan S16-SOCIAL-GROUPTOCTOU-1 §7 N2 — đo M23 (`insert into feed_posts` chờ khoá hàng nhóm, `transactionid`: RI `FOR KEY SHARE` của FK `feed_posts.group_id`) · FULL gate lượt 1 (security-reviewer LOW · silent-failure-hunter MEDIUM): `social-access.service.ts` `assertWriteAudience` nhánh `group` → `social-posts.service.ts` `create` rồi INSERT",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (RED) bằng harness `test/helpers/lock-wait.ts`: holder khoá hàng nhóm kín + `DELETE` hàng thành viên X trong CÙNG tx (hình dạng `039`); X `POST /social/posts {audience:'group', groupId}` bị CHÍNH holder chặn ⇒ `COMMIT` ⇒ hôm nay 201 (bài của người KHÔNG còn là thành viên nằm trong nhóm kín)",
+      "Vá: nhánh `group` của `002` khoá hàng `feed_groups` bằng `FOR SHARE` SAU cổng 404 (`assertGroupVisibleTx` — người ngoài nhóm kín không chạm khoá, luật (a)) và TRƯỚC câu đọc membership ⇒ X bị mời ra giữa chừng nhận 403 `SOCIAL-ERR-002` (khuôn D3=(a) của GROUPTOCTOU-1). `FOR SHARE` chờ sau `FOR UPDATE`/`FOR NO KEY UPDATE` của `038`/`039` mà KHÔNG serialize các bài đăng đồng thời; KHÔNG dùng `FOR KEY SHARE` (không xung đột `FOR NO KEY UPDATE` nếu GROUPLOCKTIMEOUT-1 hạ mode khoá — N6). Đối chứng dương (thành viên còn ⇒ 201) + mutant bỏ khoá ⇒ đỏ đúng thông điệp",
+    ],
+    notes: [
+      "🔴 FULL gate (cổng ghi bài vào nhóm). Seed 02/10/2026 từ S16-SOCIAL-GROUPTOCTOU-1 (FULL gate lượt 1; owner D7=(a): seed nợ trong CÙNG PR).",
+    ],
   },
   {
     id: "S16-SOCIAL-SCOPEDENIEDCODE-1",
@@ -19580,6 +19797,37 @@ export const backlog = [
     ],
   },
   {
+    id: "S19-SEC-NEXTRCE-1",
+    module: "DEVOPS",
+    layer: "SEC",
+    title:
+      "Nâng `next` lên ≥15.5.24 ở HAI app vệ tinh public sau Cloudflare chạy trên máy Windows PROD — `apps/fbpost` (MediaOS-Social) + `apps/lms` (MediaOS-LMS, repo git RIÊNG, nhánh `fix/next-15.5.24`) — vá GHSA-p293-qw3h-jr36 (RCE không xác thực trên server Windows) + GHSA-2xp9-vwfh-vxw4 (RCE Image Optimization khi dùng AVIF), CRITICAL, KHÔNG có workaround",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/fbpost/package.json", "apps/fbpost/package-lock.json", "harness/backlog.mjs"],
+    skills: ["security-review", "code-review"],
+    depends_on: [],
+    src: [
+      "GHSA-p293-qw3h-jr36 (CVE-2026-75604, CRITICAL, CVSS 9.0): «Unauthenticated Remote Code Execution on windows-hosted servers» — next `>=13.4.0 <15.5.24` (+ `>=16.0.0 <16.3.3`). GHSA-2xp9-vwfh-vxw4 (CRITICAL, CVSS v4 9.5): RCE trong Image Optimization API khi dùng AVIF — next `>=10.0.0 <15.5.24`. Cả hai vá ở 15.5.24 (Vercel phát hành 25/08/2026, vào GitHub Advisory DB 08/09); KHÔNG có workaround.",
+      "Đo 02/10/2026: checkout chính `apps/fbpost` khai `next: ^15.5.4`, lock + node_modules = 15.5.22 ⇒ DÍNH cả hai. NSSM `MediaOS-Social` (:3500) và `MediaOS-LMS` (:3400) phục vụ THẲNG từ checkout chính trên chính máy Windows này, public qua Cloudflare ⇒ đúng bề mặt của advisory Windows.",
+      "Đo 02/10/2026 `gh api repos/vercel/next.js/security-advisories`: 15.5.24 CÒN 2 advisory MEDIUM Vercel công bố 30/09 nhưng CHƯA vào GitHub Advisory DB (`npm audit` chưa thấy): GHSA-4jqv-mc3x-m676 (cache poisoning SSG/ISR — Pages Router, self-hosted) · GHSA-mcj8-r9mp-w47p (cache poisoning SSG/ISR qua catch-all gốc). Vá ở 15.5.27 (30/09). fbpost chỉ App Router, không catch-all ⇒ không chạm điều kiện, nhưng ghim 15.5.27 để khỏi deploy vòng 2 khi DB cập nhật.",
+    ],
+    done_when: [
+      "fbpost: `apps/fbpost/package.json` `next` sàn `^15.5.27` (≥15.5.24 ⇒ cài mới KHÔNG resolve được bản dính); lock `next` + `@next/env` + `@next/swc-*` = 15.5.27 (không có `@next/*`/`eslint-config-next` khai trực tiếp cần căn)",
+      "lms: `next` ≥15.5.24 trong repo git RIÊNG `apps/lms` (pnpm, nhánh `fix/next-15.5.24`); căn `eslint-config-next`/`@next/*` nếu đang ghim theo bản next cũ",
+      "Cả hai app: typecheck + test + build XANH ở worktree/nhánh (KHÔNG build thử trong checkout chính — `.next` ở đó là thứ dịch vụ đang phục vụ); audit (`npm audit --omit=dev` fbpost · `pnpm audit --prod` lms) KHÔNG còn GHSA-p293-qw3h-jr36 + GHSA-2xp9-vwfh-vxw4",
+      "Owner deploy CẢ HAI dịch vụ — fbpost: sau merge + `git pull` ở checkout chính, `npm ci` trong `apps/fbpost` (`m prod-update social` KHÔNG install — bỏ bước này là build lại trên next 15.5.22) rồi build + restart `MediaOS-Social`; lms: theo bước deploy của lane LMS (merge `fix/next-15.5.24` trong repo riêng ⇒ install + build ⇒ restart `MediaOS-LMS`)",
+      "Nghiệm thu tại ORIGIN (không qua domain — Cloudflare cache che): `node_modules/next/package.json` của checkout chính ≥15.5.24 ở cả hai app · `http://localhost:3500/login` 200 + `/api/pages` 401 (cổng phiên) · `http://localhost:3400` phản hồi",
+    ],
+    notes: [
+      "🔴 RCE không xác thực trên dịch vụ public ⇒ ưu tiên trên mọi WO khác. fbpost thi công ở worktree `MediaOS-fbpostnext`, nhánh `fix/s19-sec-nextrce-1`.",
+      "Thủ tục deploy fbpost THẬT: `scripts/windows/09-social-media-library.ps1` KHÔNG install/build (chỉ Stop/Start `MediaOS-Social` quanh việc dời kho + tự kiểm `/api/library` 401). Đường build + restart là `mediaos.ps1 prod-update social` (menu [27], chạy từ checkout chính vì `$Root = $PSScriptRoot`): `npm run build` trong `apps/fbpost` ⇒ `Restart-Service MediaOS-Social` ⇒ chờ `/login` ⇒ kiểm `/api/pages` = 401. Dừng dịch vụ TRƯỚC `npm ci` (Windows khoá file `.node` đang nạp ⇒ EPERM giữa chừng, node_modules dở dang).",
+      "lms: `apps/lms` LÀ thư mục PROD (không có thư mục deploy riêng) ⇒ install/build ở đó là đụng PROD — dừng `MediaOS-LMS` trước, backup `data/app.db` (memory lms-next-build-shares-prod-dist).",
+      "Nợ cổng: SCA (`security.yml` `pnpm audit`) MÙ với `apps/lms` + `apps/fbpost` (lockfile riêng, loại khỏi workspace) — advisory CRITICAL này không cổng CI nào bắt được; cần WO follow-up thêm step `npm audit` (fbpost) + `pnpm audit` (lms) (memory sca-gate-blind-to-lms-and-fbpost).",
+      "Advisory CÒN LẠI ở fbpost sau nâng (có sẵn, ngoài phạm vi): sharp 0.34.5 HIGH ×2 (GHSA-f88m-g3jw-g9cj · GHSA-rgj7-g3m4-5g8c — next 15.5.27 nay cho phép `sharp ^0.35.4`) · postcss HIGH/MODERATE · brace-expansion · nanoid · uuid — follow-up.",
+    ],
+  },
+  {
     id: "S16-SOCIAL-AVATARPRESIGN-1",
     module: "SOCIAL",
     layer: "BE",
@@ -19856,7 +20104,81 @@ export const backlog = [
       "Kết quả mutation 041..044 vẫn ghi cache `results(postId)`; cache seed không đè kết quả mới hơn (so `updatedAt`/thứ tự nạp — ĐO trước khi chọn luật)",
       "Pill trạng thái sáng kiến trên thẻ từ `post.idea.status` (4 trạng thái), vắng khối ⇒ giữ nhãn + link như cũ",
     ],
-    notes: ["Seed 29/09/2026 từ plan S16-SOCIAL-FE-2C §7 N2 (ngoài phạm vi WO đó)."],
+    plan: "docs/plans/S16-SOCIAL-FEBLOCKSEED-1.md",
+    notes: [
+      "Seed 29/09/2026 từ plan S16-SOCIAL-FE-2C §7 N2 (ngoài phạm vi WO đó).",
+      "ĐO 02/10/2026 (probe vitest+jsdom trên @tanstack/react-query 5.101.0, plan §0): thời điểm TỚI của client KHÔNG xếp được thứ tự đọc của server (GET gửi trước lượt bỏ phiếu về sau +47ms; danh sách vô hạn một `dataUpdatedAt` cho mọi trang) và `setQueryData` không tự chặn ghi cũ ⇒ LUẬT CHỐT: `initialData: seed` (chỉ lấp cache RỖNG — entry đã có data LUÔN thắng thẻ) + `staleTime` 30s CẤP KHỐI (client test 0 ⇒ seed cũ ngay ⇒ 1 lần gọi). Không `initialDataUpdatedAt` — xét lại khi `PollBlock` mount muộn hơn dữ liệu nguồn.",
+      "Đảm bảo chính xác: 0×043 lúc mount khi thẻ chở `post.poll` VÀ `results(postId)` chưa có data. Pill: `IdeaStatusPill` dùng chung màn 008, anh em của link, không gate (BE-2D D6). Đổi dòng H5 plan FE-2 §8: `IdeaReviewDialog` invalidate thêm feed/saved/posts.detail(postId).",
+      "❓ Owner (không chặn): mốc phiên bản kết quả bình chọn ở BE (bump `feed_polls.updated_at` ở 041/042/044 + chiếu vào DTO) ⇒ FE mới an toàn ưu tiên `post.poll` mới hơn entry cũ và thu hẹp `polls.allOf()` trong `invalidatePostLists` (hôm nay mỗi lượt thích/lưu làm MỌI khối poll đang mount gọi lại 043).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEPOLLRACE-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "`PollBlock` không huỷ `043` đang bay trước khi bỏ/rút phiếu/đóng bình chọn: một refetch (vd `invalidatePostLists` sau lượt thích — tiền tố `polls.allOf()`) về SAU kết quả `041/042/044` ⇒ đè phiếu vừa bỏ bằng ảnh chụp trước-bỏ-phiếu",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FEBLOCKSEED-1"],
+    src: [
+      "Probe E5 trong workflow Understand của S16-SOCIAL-FEBLOCKSEED-1 (02/10/2026, query-core 5.101.0): ghi kết quả bỏ phiếu bằng `setQueryData` rồi để refetch đang bay về ⇒ entry = ảnh chụp trước-bỏ-phiếu (fetch thành công gọi `setData` vô điều kiện); `isBusy` của `PollBlock` chỉ xét mutation. Có TỪ TRƯỚC WO đó — seed chỉ thu hẹp cửa sổ (không còn fetch lúc mount).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC — ca RED: `043` treo (promise chưa về) + bỏ phiếu thành công + thả `043` với số CŨ ⇒ hôm nay khối hiện số cũ",
+      "Vá: `onMutate` của 041/042/044 `await queryClient.cancelQueries({ queryKey: resultsKey })` (tiền lệ `apps/app/src/routes/tasks/hooks/use-task-action-mutation.ts`); mutant bỏ `cancelQueries` ⇒ ca RED đỏ đúng thông điệp",
+    ],
+    notes: ["LOW — cần một invalidate (thích/lưu/kiểm duyệt) trùng đúng lúc đang bỏ phiếu."],
+  },
+  {
+    id: "S16-SOCIAL-FESTALELISTS-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "`invalidatePostLists` (use-feed-actions) · `useCreatePost` · `IdeaReviewDialog` không chạm `socialKeys.search({q})` và `socialKeys.profilePosts(id)` ⇒ hai danh sách đó giữ `likeCount`/`savedByMe`/khối poll/pill sáng kiến CŨ tới khi mount lại sau `staleTime`",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FEBLOCKSEED-1"],
+    src: [
+      "Workflow Understand của S16-SOCIAL-FEBLOCKSEED-1 (02/10/2026): khoá `['social','search',…]` và `['social','profile-posts',…]` không nằm dưới `feed.allOf()`; `use-feed-actions.ts` invalidate feed/saved/posts.detail mà không có hai nhánh này. FEBLOCKSEED-1 thêm pill (đọc cùng cache) ⇒ lộ thêm một trường cũ.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC — ca RED: sau thích/lưu/xoá/kiểm duyệt/xét duyệt sáng kiến, entry `search(...)`/`profilePosts(...)` được đánh dấu invalidated (đo `getQueryState().isInvalidated`, không spy)",
+      "Gom vào MỘT helper dùng chung (không chép 3 nơi); ca đối chứng: khoá không liên quan KHÔNG bị chạm",
+    ],
+    notes: ["LOW — có từ trước WO FEBLOCKSEED-1."],
+  },
+  {
+    id: "S16-SOCIAL-IDEALABEL-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Nhãn trạng thái sáng kiến lệch giữa thông báo NOTI-032 (`IDEA_STATUS_LABEL` ở `apps/api/src/social/social-idea-fsm.ts`: «Đang xét duyệt» · «Được duyệt» · «Từ chối») và i18n FE `idea.status.*` («Đang xem xét» · «Được chấp nhận» · «Không được chấp nhận») ⇒ thông báo và pill gọi cùng một trạng thái bằng hai tên",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "apps/app/src/i18n/**",
+      "apps/app/src/routes/social/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Đối chiếu 02/10/2026 trong S16-SOCIAL-FEBLOCKSEED-1 (pill lên thẻ bài làm lệch nhãn hiện ra ở hai nơi người dùng cùng thấy): `social-idea-fsm.ts` `IDEA_STATUS_LABEL` vs `apps/app/src/i18n/locales/vi/social.ts` `idea.status.*` — lệch 3/4 trạng thái (chỉ `submitted` = «Đã gửi» khớp).",
+    ],
+    done_when: [
+      "Chốt MỘT bộ nhãn theo SPEC-16/UI doc (tra, không tự đặt; spec im lặng ⇒ owner chọn)",
+      "Lưới chống trôi: spec so hai bảng (hoặc một nguồn chung) — mutant đổi một nhãn ⇒ đỏ",
+      "ĐO TRƯỚC: nhãn chỉ nằm trong code (template `0581` dùng placeholder `{status_label}`) — xác nhận không cần migration",
+    ],
+    notes: ["LOW — copy, không đổi hành vi."],
   },
   {
     id: "S16-SOCIAL-FESEARCHBOUNDS-1",
@@ -19971,8 +20293,11 @@ export const backlog = [
     paths: [
       "apps/api/src/settings/**",
       "packages/contracts/src/mail-config.ts",
+      "packages/contracts/src/foundation/error-codes.ts",
       "apps/api/test/**",
-      "apps/app/src/**",
+      "apps/api/migrations/**",
+      "apps/console/src/**",
+      "docs/BACKEND/BACKEND-12_API_Integration_Contract_OpenAPI_Swagger.md",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
@@ -19991,7 +20316,41 @@ export const backlog = [
       "FULL gate (security + silent-failure) TRƯỚC khi mở PR; owner merge",
     ],
     notes: [
+      "Owner ký 02/10/2026 (plan §8): D1 mã mới `FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED` (append catalog + BACKEND-12 §21.3) · D2 `errorMessage` = câu cố định từ trường máy-sinh (đo: route test echo dòng đầu banner mọi cổng TCP) · D3 chấp nhận phần dò cổng còn lại · D4 paths: FE thật ở `apps/console` (backlog cũ ghi nhầm `apps/app`) · D5 (sau plan-review) mig 0591 REVOKE UPDATE cột đích của `mediaos_app` — DB ép bất biến «cột đích chỉ đổi cùng envelope mới». Plan: docs/plans/S19-SEC-MAILCREDEXFIL-1.md.",
       "🔴 secret. Không phải lỗi của S19-OPS-AUDITHIGH-1 (có từ CS-8) — nâng nodemailer không đổi gì ở đây. Tác nhân cần quyền nhạy cảm `configure-mail` ⇒ mối đe doạ là người trong/tài khoản admin bị chiếm, mục tiêu là mật khẩu hộp thư công ty (thường dùng chung cho dịch vụ khác).",
+    ],
+  },
+  {
+    id: "S19-SEC-MAILAADBIND-1",
+    module: "FOUNDATION",
+    layer: "SEC",
+    title:
+      "Gắn ĐÍCH SMTP (host/port/username/secure) vào AAD của envelope mật khẩu — đổi đích mà không mã hoá lại thì giải mã THẤT BẠI (bất biến I2 của S19-SEC-MAILCREDEXFIL-1 thành mật mã học, chặn cả hồi quy DELETE+INSERT tái dùng id + chép envelope)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/settings/**",
+      "apps/api/src/user-invites/invite-mail.service.ts",
+      "apps/api/src/user-invites/invite-mail.smtp.spec.ts",
+      "apps/api/src/crypto/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-SEC-MAILCREDEXFIL-1"],
+    src: [
+      "FULL gate S19-SEC-MAILCREDEXFIL-1 (02/10/2026) — security MEDIUM + database M3 hội tụ: AAD envelope SMTP chỉ gắn `companyId‖recordId(=id)‖encAlgo‖dekKeyVersion` (`secret-encryption.service.ts:24-25`), KHÔNG gắn đích; mig 0591 chỉ thu hồi UPDATE cột đích, `mediaos_app` vẫn INSERT/DELETE cả bảng ⇒ một đường ghi mới `DELETE; INSERT {...hàng cũ, host mới}` giữ id + envelope cũ thì mật khẩu cũ tới đích mới, lọt cả 0591 lẫn AAD. Code hiện tại KHÔNG có đường đó (DELETE+INSERT luôn `randomUUID()` + envelope mới).",
+      "Đo 02/10: PROD `mediaos` có 0 hàng `company_mail_configs` ⇒ đổi AAD lúc này KHÔNG cần job mã hoá lại; sau khi PROD có hàng đầu tiên thì cần backfill (decrypt AAD cũ → encrypt AAD mới).",
+    ],
+    done_when: [
+      "Ngữ cảnh mã hoá SMTP gắn bộ bốn đích (vd `recordId = JSON.stringify([id, host, port, username, secure])` — KHÔNG dùng ký tự phân cách tự chọn vì host không validate), dùng CHUNG một helper ở encrypt (PUT) và MỌI nơi decrypt (`MailConfigService.testConnection`, `InviteMailService`)",
+      "RED trước: int-spec sửa đích TRỰC TIẾP ở DB (superuser UPDATE host, giữ envelope) ⇒ test vắng password + gửi lời mời đều KHÔNG tới host mới (giải mã thất bại, log, `{sent:false, reason:'decrypt_failed'}`); đối chứng dương: đích khớp vẫn giải mã được",
+      "Đo lại PROD 0 hàng ngay trước deploy; có hàng ⇒ DỪNG, cần job mã hoá lại",
+      "FULL gate (security + silent-failure) TRƯỚC khi mở PR; owner merge",
+    ],
+    notes: [
+      "Owner chốt 02/10/2026: làm WO riêng, SỚM — trước khi PROD lưu cấu hình SMTP đầu tiên (rẻ nhất lúc này).",
     ],
   },
 ];

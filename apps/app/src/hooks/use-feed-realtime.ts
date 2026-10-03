@@ -15,9 +15,11 @@
  * connect, sau khi tự kiểm `view:feed`, và **fail-SOFT** (thiếu quyền ⇒ chỉ không join, phiên vẫn
  * sống). Hook chỉ `socket.on(...)`.
  *
- * ⚠️ Chỉ có room CÔNG TY (`co:{companyId}:feed`) — **không** có room nhóm / đơn vị (chưa hiện thực
- * phía BE). Nghĩa là badge chỉ đếm bài `audience='company'`. Đây là giới hạn của BE hôm nay, ghi ra
- * để không ai đi tìm lỗi ở FE (nợ N6).
+ * ⚠️ Badge feed chính CHỈ đếm bài `audience='company'` — có CHỦ ĐÍCH (S16-SOCIAL-BE-2C, owner ký Q-FE):
+ * từ BE-2C thành viên nhóm cũng nhận `feed:post.created` biến thể `group` (room `co:{c}:feedgroup:{g}`),
+ * nhưng feed chính LOẠI bài nhóm (D-OWNER-6) ⇒ đếm nó là badge chỉ tới bài bấm vào không thấy. Bỏ qua
+ * IM LẶNG (payload hợp lệ, không phải lỗi hợp đồng). Badge THEO NHÓM là việc của màn nhóm (WO FE riêng).
+ * Không có room đơn vị (`org_unit`) nào — BE không phát bài đơn vị.
  *
  * ⚠️ WS MỘT CHIỀU: hook chỉ ĐĂNG KÝ listener, không bao giờ `emit`. Muốn ghi thì gọi REST.
  */
@@ -69,6 +71,8 @@ export function useFeedRealtime(): FeedRealtime {
         warnBadPayload(WS_EVENTS.FEED_POST_CREATED, parsed.error);
         return;
       }
+      // Bài nhóm không thuộc feed chính (D-OWNER-6) — xem docblock đầu file.
+      if (parsed.data.audience !== "company") return;
       setNewPostCount((n) => n + 1);
     };
 

@@ -6,8 +6,11 @@ import { z } from "zod";
  * BẤT BIẾN SECRET (#1 plan §4):
  *   - SMTP password = reversible → envelope-KMS server-side (purpose 'smtp_password'). DTO view (GET) KHÔNG
  *     bao giờ chứa password hay cột envelope; chỉ host/port/username/from/secure/scope + cờ `hasPassword`.
- *   - PUT: password OPTIONAL. Có → re-encrypt; vắng → giữ envelope cũ (KHÔNG xoá secret).
- *   - test connection: kết quả ĐÃ sanitize — KHÔNG echo credential vào message/log.
+ *   - PUT: password OPTIONAL. Có → re-encrypt; vắng → giữ envelope cũ (KHÔNG xoá secret) — CHỈ khi đích
+ *     (host/port/username/secure) khớp nguyên hàng đã lưu (S19-SEC-MAILCREDEXFIL-1).
+ *   - Mật khẩu ĐÃ LƯU chỉ dùng cho ĐÚNG đích đã lưu: đổi đích ⇒ phải gửi password mới, không thì 400
+ *     `FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED` (PUT lẫn test). `secure` vắng = `true` khi so.
+ *   - test connection: `errorMessage` là câu cố định theo loại lỗi — KHÔNG mang chữ nào của server.
  *
  * companyId LẤY TỪ JWT (server) — KHÔNG nhận từ body/param (chống cross-tenant).
  */
@@ -55,8 +58,11 @@ export type MailConfigListDto = z.infer<typeof mailConfigListSchema>;
 
 /**
  * PUT /settings/mail-config — upsert theo (company, scope). `password` OPTIONAL:
- *   - có → re-encrypt thành envelope mới;
- *   - vắng (undefined) → giữ envelope cũ NẾU đã tồn tại; nếu tạo MỚI mà vắng password → server từ chối.
+ *   - có → re-encrypt thành envelope mới (đổi đích được);
+ *   - vắng (undefined) → giữ envelope cũ NẾU đã tồn tại VÀ host/port/username/secure khớp nguyên hàng đã lưu
+ *     (chỉ đổi from_name/from_email); đổi đích hoặc tạo MỚI mà vắng password → 400
+ *     `FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED`. `secure` vắng = `true` ⇒ client khác FE phải gửi `secure`
+ *     tường minh khi hàng đang `false`.
  * companyId KHÔNG nhận từ client (lấy từ JWT).
  */
 export const upsertMailConfigSchema = z.object({
@@ -74,7 +80,9 @@ export type UpsertMailConfigRequest = z.infer<typeof upsertMailConfigSchema>;
 
 /**
  * POST /settings/mail-config/test — kiểm tra kết nối SMTP (handshake `verify()`, KHÔNG gửi mail).
- * Dùng config đang gửi; nếu vắng `password` thì server decrypt từ envelope đã lưu để test.
+ * Có `password` → test đích trong body bằng password đó. Vắng `password` → server decrypt envelope đã lưu
+ * và test ĐÍCH CỦA HÀNG ĐÃ LƯU; đích trong body khác hàng (hoặc chưa có cấu hình) → 400
+ * `FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED`, không kết nối đi đâu cả.
  */
 export const testMailConfigSchema = z.object({
   scope: mailConfigScopeSchema.optional(),
@@ -87,7 +95,9 @@ export const testMailConfigSchema = z.object({
 export type TestMailConfigRequest = z.infer<typeof testMailConfigSchema>;
 
 /**
- * Kết quả test — ĐÃ sanitize. `errorMessage` KHÔNG chứa username/password (server lọc trước khi trả).
+ * Kết quả test. `errorMessage` = câu cố định theo loại lỗi (dựng từ trường máy-sinh) — KHÔNG mang byte nào
+ * do đầu bên kia gửi (banner, lời từ chối, chuỗi OpenSSL), nên route test không thành công cụ đọc banner
+ * dịch vụ nội bộ.
  */
 export const mailTestResultSchema = z.object({
   ok: z.boolean(),

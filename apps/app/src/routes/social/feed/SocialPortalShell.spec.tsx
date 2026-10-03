@@ -264,6 +264,26 @@ describe("SocialPortalShell — ô tìm kiếm đồng bộ từ URL", () => {
     const box = await screen.findByTestId("feed-search-box");
     expect((box.querySelector("input") as HTMLInputElement).value).toBe("");
   });
+
+  it("`q` KHÔNG phải chuỗi (`?q=2026` qua parser JSON của router = SỐ) ⇒ ô rỗng, Enter KHÔNG ném", async () => {
+    /**
+     * S16-SOCIAL-FESEARCHBOUNDS-1 (vá review LIGHT). Shell render dưới MỌI route `/feed*`, kể cả route
+     * không có `validateSearch` — ở đó `useSearch` trả giá trị THÔ. Trước bản vá số `2026` đi thẳng
+     * vào `FeedSearchBox` làm `draft`, và Enter gọi `draft.trim()` trên một số ⇒ TypeError.
+     */
+    routeSearch = { q: 2026 };
+    renderWithProviders(
+      <SocialPortalShell moduleCode="SOCIAL">
+        <div>nội dung</div>
+      </SocialPortalShell>,
+    );
+
+    const box = await screen.findByTestId("feed-search-box");
+    expect((box.querySelector("input") as HTMLInputElement).value).toBe("");
+    // Ô rỗng + Enter = «xoá bộ lọc» (nhánh `onClear` của ô) — điều hướng, không ném.
+    fireEvent.submit(box);
+    expect(navigateSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("W3 — widget «Vinh danh tháng này» (S16-SOCIAL-FE-2C, plan D12 · owner O1)", () => {

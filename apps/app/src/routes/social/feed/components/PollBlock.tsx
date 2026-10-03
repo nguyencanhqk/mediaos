@@ -1,9 +1,15 @@
 /**
  * S16-SOCIAL-FE-2 — khối bình chọn trong thẻ bài (`SOC-SCREEN-007`, plan D5 + §8).
  *
- * Khối TỰ tải `043` theo `postId`: `feedPostSchema` không chở chi tiết poll (plan §1 M1), nên N thẻ
- * poll trên một trang = N request. Chấp nhận ở lát A; gỡ khi `S16-SOCIAL-BE-2D` nhúng tóm tắt poll
- * vào DTO bài.
+ * ┌─ S16-SOCIAL-FEBLOCKSEED-1 — SEED TỪ THẺ, CHỈ VÀO CACHE RỖNG (plan §0–§1) ─────────────────────┐
+ * │ Thẻ chở `post.poll` (BE-2D — CÙNG bộ dựng với `043`) ⇒ truyền làm `seed` ⇒ `initialData`. TanStack │
+ * │ CHỈ dùng `initialData` khi `results(postId)` chưa có data: entry đã có (kết quả `041..044`, một   │
+ * │ `043` trước đó) LUÔN thắng thẻ, kể cả khi thẻ mới hơn ⇒ seed không bao giờ đè kết quả mới hơn.    │
+ * │ KHÔNG `setQueryData` từ thẻ: thời điểm TỚI của client không xếp được thứ tự đọc của server (GET  │
+ * │ gửi trước lượt bỏ phiếu, về sau; danh sách vô hạn dùng MỘT `dataUpdatedAt` cho mọi trang), server  │
+ * │ không có mốc phiên bản, và `setQueryData` không tự chặn ghi cũ đè mới. Vắng `seed` (006 · WS · API │
+ * │ trước #555 · hàng mồ côi) ⇒ khối TỰ tải `043` như trước.                                          │
+ * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * ┌─ 🔴 PUT GỬI CẢ TẬP, KHÔNG GỬI Ô VỪA BẤM (plan §8 H2) ─────────────────────────────────────────┐
  * │ `041` XOÁ mọi phiếu cũ của actor rồi GHI đúng `optionIds`. Bình chọn nhiều lựa chọn mà gửi mỗi  │
@@ -38,10 +44,28 @@ import {
   toggleSelection,
 } from "../lib/poll-format";
 
+/**
+ * Bằng `staleTime` mặc định của app (`main.tsx`, FRONTEND-04 §16.1) — nhưng khai Ở ĐÂY: hợp đồng «thẻ chở
+ * `post.poll` ⇒ 0 lần gọi `043` lúc mount» phải sống trong component, không mượn của client bọc nó (client
+ * `staleTime` 0 thì seed cũ ngay và mount gọi `043` — plan §0 M2). Con số trùng mặc định ⇒ đường tự tải
+ * (vắng seed) giữ nguyên hành vi.
+ */
+const POLL_RESULTS_STALE_MS = 30_000;
+
 interface PollBlockProps {
   postId: string;
   /** Bài do chính actor đăng — cờ `isMine` của DTO bài, KHÔNG tự so id ở FE. */
   isMine: boolean;
+  /**
+   * Khối `post.poll` của thẻ — CÙNG hình dạng `043`. Chỉ làm `initialData` (lấp cache RỖNG), không bao
+   * giờ ghi đè một entry đã có data.
+   *
+   * KHÔNG kèm `initialDataUpdatedAt` ⇒ seed được tính là vừa tải lúc entry được tạo. Đúng vì thẻ chỉ mount
+   * CÙNG LÚC dữ liệu nguồn vừa về (5 nơi vẽ thẻ hôm nay — plan §1). Khi `PollBlock` mount MUỘN hơn dữ liệu
+   * nguồn (danh sách ảo hoá, thẻ gập/lười, widget đọc danh sách trong cache) ⇒ truyền `dataUpdatedAt` của
+   * query nguồn làm `initialDataUpdatedAt` (coi `0` của `placeholderData` là KHÔNG BIẾT).
+   */
+  seed?: FeedPollResultsDto;
   className?: string;
 }
 
@@ -50,7 +74,7 @@ interface PollActionError {
   forbidden: boolean;
 }
 
-export function PollBlock({ postId, isMine, className }: PollBlockProps): React.ReactElement {
+export function PollBlock({ postId, isMine, seed, className }: PollBlockProps): React.ReactElement {
   const { t } = useTranslation("social");
   const queryClient = useQueryClient();
   const canManagePost = useCan("manage", "feed-post");
@@ -59,6 +83,8 @@ export function PollBlock({ postId, isMine, className }: PollBlockProps): React.
   const query = useQuery({
     queryKey: resultsKey,
     queryFn: () => socialApi.getPollResults(postId),
+    initialData: seed,
+    staleTime: POLL_RESULTS_STALE_MS,
   });
 
   /** `null` = chưa chỉnh gì ⇒ form phản chiếu `myVote` của server. */

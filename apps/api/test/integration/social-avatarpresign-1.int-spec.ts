@@ -572,7 +572,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-AVATARPRESIGN-1 · ký avatar SOCIAL (DB
 
   // ═══════════════════════ WS (D3-b) — URL ký KHÔNG lên room ═══════════════════════
 
-  describe("WS — `author.avatarUrl` trên kênh phát cho cả công ty là null tại NGUỒN", () => {
+  describe("WS — `author.avatarUrl` trên kênh phát (room công ty · room nhóm) là null tại NGUỒN", () => {
     it("WS-POST — feed:post.created", async () => {
       const spy = vi.spyOn(w.app.get(RealtimeEmitterService), "emitFeedPostCreated");
       try {
@@ -583,6 +583,26 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-AVATARPRESIGN-1 · ký avatar SOCIAL (DB
         expect(spy, "bài company + published được phát").toHaveBeenCalledTimes(1);
         const payload = spy.mock.calls[0]![1] as unknown as Json;
         expect((payload.author as Json).avatarUrl, "WS: URL ký là capability TTL").toBeNull();
+        expect((res.body.data.author as Json).avatarUrl, "neo: REST 002 ký").toMatch(SIGNED_RE);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    // Hợp nhất S16-SOCIAL-BE-2C: bài `audience='group'` giờ CŨNG được phát (room `co:{c}:feedgroup:{g}`,
+    // biến thể `group` của union) — nguồn `buildWsPostCreatedEvent` phải ép `null` cho CẢ biến thể này.
+    it("WS-POST-GROUP — feed:post.created biến thể NHÓM (BE-2C) cũng `author.avatarUrl` null", async () => {
+      const spy = vi.spyOn(w.app.get(RealtimeEmitterService), "emitFeedPostCreated");
+      try {
+        const res = await w
+          .post(w.author.token, "/social/posts")
+          .send({ type: "share", audience: "group", groupId: w.groupId, body: "WS bài nhóm" });
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+        expect(spy, "bài nhóm + published được phát (BE-2C)").toHaveBeenCalledTimes(1);
+        const payload = spy.mock.calls[0]![1] as unknown as Json;
+        expect(payload.audience, "neo: biến thể nhóm").toBe("group");
+        expect(payload.groupId, "neo: đích là nhóm của bài").toBe(w.groupId);
+        expect((payload.author as Json).avatarUrl, "WS nhóm: URL ký không lên room").toBeNull();
         expect((res.body.data.author as Json).avatarUrl, "neo: REST 002 ký").toMatch(SIGNED_RE);
       } finally {
         spy.mockRestore();

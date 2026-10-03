@@ -1,4 +1,9 @@
 import { z } from "zod";
+import type {
+  CreateLeaveRequestDraft,
+  LeaveCalculateRequest,
+  UpdateLeaveRequestDraft,
+} from "@mediaos/contracts";
 import { LEAVE_DURATION_TYPE, LEAVE_HALF_DAY_SESSION } from "./constants";
 
 // Clock-time regex (HH:MM)
@@ -107,20 +112,15 @@ export const EMPTY_LEAVE_FORM: LeaveFormValues = {
   submitNow: false,
 };
 
+/*
+ * S18-FE-LEAVEDRAFTCAST-1 — kiểu trả về của các mapper body dưới đây LÀ DTO hợp đồng (`@mediaos/contracts`),
+ * KHÔNG tự khai lại hình dạng. Trước đây mapper khai `durationType: string` (nới enum) ⇒ call-site phải ép
+ * `as Parameters<typeof leaveApi...>` và cú ép nuốt mọi lệch (khoá lạ, giá trị enum sai). Giờ literal trả về
+ * bị tsc soát thẳng với DTO: khoá lạ ⇒ TS2353, enum sai ⇒ TS2322. Khoá bằng leave-form-schema.spec.ts.
+ */
+
 /** Chuyển form values → body POST /leave/requests */
-export function toCreateDraftBody(values: LeaveFormValues): {
-  leaveTypeId: string;
-  durationType: string;
-  startDate: string;
-  endDate: string;
-  halfDaySession?: string;
-  startTime?: string;
-  endTime?: string;
-  reason?: string;
-  handoverNote?: string;
-  contactDuringLeave?: string;
-  submitNow: boolean;
-} {
+export function toCreateDraftBody(values: LeaveFormValues): CreateLeaveRequestDraft {
   return {
     leaveTypeId: values.leaveTypeId,
     durationType: values.durationType,
@@ -137,18 +137,7 @@ export function toCreateDraftBody(values: LeaveFormValues): {
 }
 
 /** Chuyển form values → body PATCH /leave/requests/:id (update-draft — KHÔNG có submitNow). */
-export function toUpdateDraftBody(values: LeaveFormValues): {
-  leaveTypeId: string;
-  durationType: string;
-  startDate: string;
-  endDate: string;
-  halfDaySession?: string;
-  startTime?: string;
-  endTime?: string;
-  reason?: string;
-  handoverNote?: string;
-  contactDuringLeave?: string;
-} {
+export function toUpdateDraftBody(values: LeaveFormValues): UpdateLeaveRequestDraft {
   return {
     leaveTypeId: values.leaveTypeId,
     durationType: values.durationType,
@@ -207,7 +196,7 @@ export function toCalculateBody(
     | "startTime"
     | "endTime"
   >,
-) {
+): LeaveCalculateRequest {
   return {
     leaveTypeId: values.leaveTypeId,
     durationType: values.durationType,

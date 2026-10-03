@@ -52,6 +52,13 @@ export const FOUNDATION_ERROR_CODES = {
   // ── Retention (retention.service) ──
   /** 404 — chính sách lưu trữ id không tồn tại cho tenant. */
   RETENTION_POLICY_NOT_FOUND: "FOUNDATION-ERR-RETENTION-POLICY-NOT-FOUND",
+
+  // ── Mail config (CS-8 mail-config.service — S19-SEC-MAILCREDEXFIL-1) ──
+  /**
+   * 400 — thao tác cần mật khẩu SMTP mà body vắng: tạo cấu hình mới · "Kiểm tra kết nối" khi chưa có cấu
+   * hình · dùng mật khẩu ĐÃ LƯU cho đích (host/port/username/secure) KHÁC hàng đã lưu (PUT hoặc test).
+   */
+  MAIL_PASSWORD_REQUIRED: "FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED",
 } as const;
 
 export type FoundationErrorCode =

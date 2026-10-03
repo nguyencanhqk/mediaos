@@ -15,6 +15,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Search, X } from "lucide-react";
+import { FEED_SEARCH_QUERY_MAX } from "@mediaos/contracts";
 import { cn } from "@mediaos/ui";
 import { useCan } from "@mediaos/web-core";
 
@@ -65,9 +66,14 @@ export function FeedSearchBox({
           className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
           aria-hidden="true"
         />
+        {/*
+         * `maxLength` = trần `q` của 023 (S16-SOCIAL-FESEARCHBOUNDS-1): vượt trần là 400 ⇒ màn LỖI.
+         * Link sửa tay đi đường khác và được `validateFeedRouteSearch` cắt về CÙNG trần.
+         */}
         <input
           type="search"
           value={draft}
+          maxLength={FEED_SEARCH_QUERY_MAX}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t("search.placeholder")}
           aria-label={t("search.aria")}
