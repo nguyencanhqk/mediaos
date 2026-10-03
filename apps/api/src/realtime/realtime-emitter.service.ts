@@ -35,7 +35,9 @@ import {
   callUserRoomName,
   chatRoomName,
   chatUserRoomName,
+  feedGroupRoomName,
   feedRoomName,
+  feedUserRoomName,
   userRoomName,
 } from "./rooms";
 
@@ -324,18 +326,116 @@ export class RealtimeEmitterService {
     userId: string,
     action: "join" | "leave",
   ): void {
+    this.syncSocketRoom(
+      {
+        join: chatUserRoomName(companyId, userId),
+        leave: userRoomName(companyId, userId),
+        target: chatRoomName(companyId, roomId),
+      },
+      action,
+      { label: "syncRoomMembership", roomId, userId },
+    );
+  }
+
+  /**
+   * S16-SOCIAL-BE-2C (D-OWNER-2) — ép socket của MỘT user vào/ra room của MỘT nhóm bảng tin
+   * (`feedGroupRoomName`) ngay khi membership đổi (`031`/`035`/`036`/`038`/`039`). Room-ops, không phát
+   * payload nào. CÙNG cơ chế với `syncRoomMembership` (lõi `syncSocketRoom`), khác đúng bộ ba room:
+   *   • `join`  → quét `feedUserRoomName` — CHỈ socket đã qua cổng `view:feed` lúc connect. **KHÔNG BAO
+   *     GIỜ `userRoomName`**: room đó chứa cả socket đã TRƯỢT cổng ⇒ lần duyệt kế tiếp kéo họ vào room
+   *     nhóm (đo thật — plan M2 a′). Cũng KHÔNG `chatUserRoomName`: đó là dấu của cổng `view:chat-room`.
+   *   • `leave` → quét `userRoomName` (RỘNG HƠN): rời nhầm là fail-safe, sót là rò.
+   *
+   * ⚠️ Thời điểm gọi do caller quyết (`social-groups.service.ts`): `join` CHỈ SAU commit; `leave` gọi CẢ
+   * TRONG tx lẫn SAU commit (owner ký Q-LEAVE (a)) — ngoại lệ có chủ đích của luật «gọi sau commit» đầu
+   * file, cùng lập luận `evictFromCallRoom`.
+   *
+   * ┌─ FULL gate lượt 1 — HAI lớp vá ở ĐÚNG cửa này (mọi room-op của room nhóm đều đi qua đây) ───────┐
+   * │ (1) CHỮ THƯỜNG (database-reviewer HIGH). `groupId`/`userId` của `035/036/038/039` tới từ ROUTE:  │
+   * │     `ParseUUIDPipe` nhận chữ HOA và trả NGUYÊN VĂN. Postgres so uuid không phân biệt hoa thường ⇒ │
+   * │     lời ghi DB vẫn thành công, nhưng tên room là CHUỖI và room của gateway dựng từ DB/JWT (luôn  │
+   * │     thường) ⇒ leave chữ HOA khớp 0 socket ⇒ người bị gỡ Ở LẠI room nhóm kín (fail-OPEN); join     │
+   * │     chữ HOA vào room ma (fail-closed). Khuôn `audiencePairKey` (`social-mentions.ts`).          │
+   * │ (2) `leave` CỤC BỘ TRƯỚC (security-reviewer + silent-failure-hunter MEDIUM). Dưới adapter Valkey │
+   * │     (redis-adapter 8.3.0) `socketsLeave` không cờ `local` CHỈ publish REMOTE_LEAVE; chính node   │
+   * │     giữ socket chỉ áp khi NHẬN LẠI qua kết nối SUBSCRIBE. Pub/sub là at-most-once: kết nối sub   │
+   * │     rớt (vượt `client-output-buffer-limit pubsub`, Valkey khởi động lại) ⇒ lệnh MẤT VĨNH VIỄN —   │
+   * │     không phải trễ «≈ RTT» như bản đầu ghi — trong khi broadcast vẫn phát CỤC BỘ, ĐỒNG BỘ ⇒      │
+   * │     người bị mời ra nhận bài nhóm kín tới khi disconnect. `server.local…socketsLeave` áp ĐỒNG BỘ │
+   * │     trên node này, không qua pub/sub ⇒ không mất được; lệnh toàn cụm phía sau vẫn chạy cho node  │
+   * │     khác. Phần dư (API-19 §7.3 (c)): đa-instance + sub rớt ⇒ socket ở node KHÁC còn ở room.      │
+   * │     `join` KHÔNG có vế cục bộ: join mất chỉ là thiếu badge (fail-closed).                       │
+   * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+   * CHAT `syncRoomMembership` CỐ Ý chưa đổi (cùng hai lớp lỗi — nợ seed `S17-CHAT-RTROOMOPS-1`).
+   */
+  syncFeedGroupMembership(
+    companyId: string,
+    groupId: string,
+    userId: string,
+    action: "join" | "leave",
+  ): void {
+    const [c, g, u] = [companyId.toLowerCase(), groupId.toLowerCase(), userId.toLowerCase()];
+    const rooms = {
+      join: feedUserRoomName(c, u),
+      leave: userRoomName(c, u),
+      target: feedGroupRoomName(c, g),
+    };
+    const logCtx = { label: "syncFeedGroupMembership", groupId: g, userId: u };
+    if (action === "leave") this.leaveLocally(rooms.leave, rooms.target, logCtx);
+    this.syncSocketRoom(rooms, action, logCtx);
+  }
+
+  /**
+   * Vế AN NINH của `syncFeedGroupMembership('leave')`: rời room TRÊN NODE NÀY, đồng bộ, không qua pub/sub
+   * (`server.local` = cờ `local` ⇒ redis-adapter gọi thẳng `super.delSockets`). try/catch RIÊNG — vế này
+   * ném KHÔNG được bỏ qua lệnh toàn cụm (cùng lý do hai khối riêng của `severUserSessions`), và log `error`
+   * như `evictFromCallRoom`: sót lại một socket là RÒ, không phải suy giảm UX.
+   */
+  private leaveLocally(
+    selector: string,
+    target: string,
+    logCtx: { label: string } & Record<string, string>,
+  ): void {
     if (!this.server) return;
     try {
-      const target = chatRoomName(companyId, roomId);
+      this.server.local.in(selector).socketsLeave(target);
+    } catch (err) {
+      const { label, ...ctx } = logCtx;
+      this.logger.error(`${label} leave CỤC BỘ thất bại — socket có thể còn ở room nhóm`, {
+        ...ctx,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * LÕI chung của hai lệnh đồng bộ membership (tái dùng cơ chế — D-OWNER-2). Bộ chọn `join` và `leave`
+   * do CALLER truyền, có chủ đích BẤT ĐỐI XỨNG (xem docblock `syncRoomMembership`): join quét room đánh
+   * dấu HẸP của cổng tương ứng, leave quét `userRoomName` RỘNG. No-op khi chưa có server; KHÔNG BAO GIỜ
+   * ném lên caller (caller có thể đang ở trong transaction — ném = rollback một thao tác đã đúng).
+   *
+   * ⚠️ `try/catch` CHỈ phủ nhánh ném ĐỒNG BỘ (FULL gate lượt 1, silent-failure-hunter — chép cảnh báo của
+   * `evictFromCallRoom`). Với adapter Valkey, lệnh không cờ `local` là một `publish` không ai await: reject
+   * KHÔNG rơi vào `catch` (thành `unhandledRejection`), và thông điệp MẤT trên đường pub/sub thì không để lại
+   * dòng log nào. «Không thấy `failed` trong log» KHÔNG có nghĩa room-op đã áp — lưới cho lệnh mất là vế
+   * cục bộ của caller (`leaveLocally`), không phải log này.
+   */
+  private syncSocketRoom(
+    rooms: { join: string; leave: string; target: string },
+    action: "join" | "leave",
+    logCtx: { label: string } & Record<string, string>,
+  ): void {
+    if (!this.server) return;
+    try {
       if (action === "join") {
-        this.server.in(chatUserRoomName(companyId, userId)).socketsJoin(target);
+        this.server.in(rooms.join).socketsJoin(rooms.target);
       } else {
-        this.server.in(userRoomName(companyId, userId)).socketsLeave(target);
+        this.server.in(rooms.leave).socketsLeave(rooms.target);
       }
     } catch (err) {
-      this.logger.warn("syncRoomMembership failed", {
-        roomId,
-        userId,
+      const { label, ...ctx } = logCtx;
+      this.logger.warn(`${label} failed`, {
+        ...ctx,
         action,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -501,23 +601,46 @@ export class RealtimeEmitterService {
     }
   }
 
-  // ═══════════ S16-SOCIAL-BE-1 — 3 sự kiện bảng tin (room `co:{companyId}:feed`) ═══════════
+  // ═══════════ S16-SOCIAL-BE-1/BE-2C — 3 sự kiện bảng tin ═══════════
   //
   // ⚠️ **CHỈ GỌI SAU KHI TRANSACTION ĐÃ COMMIT** — như mọi method của lớp này (xem docblock đầu file).
   //
-  // ⚠️ **CHỈ bài `audience='company'` + `status='published'` được đưa tới đây.** Room này chứa cả
-  // công ty; lưới nằm ở `SocialPostsService`/`SocialCommentsService` vì chỉ tầng đó biết audience
-  // của bài cha. Schema `wsFeedPostCreatedEventSchema` khoá cứng `audience: 'company'` làm vế thứ
-  // hai — một bài org_unit lọt tới đây sẽ NÉM ở `.parse()` (và `emitToFeed` nuốt + log), chứ không
-  // âm thầm phát ra. Xem `rooms.ts::feedRoomName`.
+  // ⚠️ Hai room đích (API-19 §7): `co:{c}:feed` (cả công ty — bài `company`) và
+  // `co:{c}:feedgroup:{groupId}` (thành viên `active` của nhóm — bài `group`, S16-SOCIAL-BE-2C). KHÔNG có
+  // room cho `org_unit` (D21/Q-ORG). Lưới thứ nhất ở SERVICE (`buildWsPostCreatedEvent` —
+  // chỉ tầng đó biết hàng DB); lưới thứ hai là `.parse()` ở đây: union theo `audience` từ chối
+  // `org_unit` và mọi tổ hợp vô nghĩa, và **đích suy từ payload ĐÃ PARSE** — không bao giờ từ tham số
+  // caller, không bao giờ cả hai room, không bao giờ `.to([])`.
+  //
+  // `feed:comment.created`/`feed:reaction.changed` vẫn CHỈ room công ty, bài company (owner ký Q-CR (a)
+  // — nợ `S16-SOCIAL-RTGROUPCR-1`); lưới ở `SocialCommentsService`/`SocialReactionsService`.
 
+  /**
+   * `feed:post.created` — `.parse()` TRƯỚC, rồi mới chọn room từ `audience` của kết quả parse.
+   *
+   * ⚠️ KHÁC `emitToFeed`: ở đó `.to(feedRoomName)` chạy TRƯỚC khi `build()` (chứa `.parse`) được tính
+   * (plan M27) — vô hại khi đích cố định, nhưng là lỗ khi đích SUY TỪ payload. Ở đây parse ném ⇒ KHÔNG
+   * chạm `.to()` nào (bất biến 7), nuốt (hợp đồng «không ném lên caller» giữ nguyên) + `error`.
+   *
+   * `error` kèm `postId`/`audience`/`groupId` (FULL gate lượt 1, silent-failure-hunter): builder
+   * `buildWsPostCreatedEvent` dựng payload ĐỂ parse được, nên parse ném ở đây = hợp đồng builder ↔ union
+   * đã TRÔI (vd một khoá bắt buộc mới của DTO) — mọi bài cùng dạng mất fan-out. Một dòng `warn` không bài,
+   * không audience thì không phân biệt nổi với nhiễu.
+   */
   emitFeedPostCreated(companyId: string, payload: WsFeedPostCreatedEvent): void {
-    this.emitToFeed(
-      companyId,
-      WS_EVENTS.FEED_POST_CREATED,
-      () => wsFeedPostCreatedEventSchema.parse(payload),
-      "emitFeedPostCreated",
-    );
+    if (!this.server) return;
+    try {
+      const parsed = wsFeedPostCreatedEventSchema.parse(payload);
+      this.server.to(feedPostRoomName(companyId, parsed)).emit(WS_EVENTS.FEED_POST_CREATED, parsed);
+    } catch (err) {
+      this.logger.error("emitFeedPostCreated failed", {
+        companyId,
+        postId: payload.id,
+        audience: payload.audience,
+        groupId: payload.groupId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   emitFeedCommentCreated(companyId: string, payload: WsFeedCommentCreatedEvent): void {
@@ -539,9 +662,11 @@ export class RealtimeEmitterService {
   }
 
   /**
-   * Khuôn chung của 3 emit bảng tin. Cùng hợp đồng `emitToRoom` (no-op khi chưa có server ·
-   * `.parse()` TRƯỚC emit · KHÔNG BAO GIỜ throw lên caller) nhưng nhắm `feedRoomName` thay vì
-   * `chatRoomName` — `emitToRoom` hard-code phòng chat nên không dùng lại được.
+   * Khuôn chung của 2 emit bảng tin CÒN LẠI (bình luận · cảm xúc — chỉ bài company, Q-CR). Cùng hợp đồng
+   * `emitToRoom` (no-op khi chưa có server · `.parse()` TRƯỚC emit · KHÔNG BAO GIỜ throw lên caller) nhưng
+   * nhắm `feedRoomName` thay vì `chatRoomName` — `emitToRoom` hard-code phòng chat nên không dùng lại được.
+   * ⚠️ Đích CỐ ĐỊNH nên thứ tự `.to()` trước `build()` vô hại ở đây; sự kiện có đích SUY TỪ payload
+   * (như `feed:post.created`) KHÔNG được đi qua khuôn này.
    */
   private emitToFeed(companyId: string, event: string, build: () => unknown, label: string): void {
     if (!this.server) return;
@@ -575,5 +700,20 @@ export class RealtimeEmitterService {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+}
+
+/**
+ * S16-SOCIAL-BE-2C — room đích của `feed:post.created`, suy từ payload ĐÃ PARSE. `switch` vét cạn trên
+ * union `audience`: thêm một option vào schema mà quên định tuyến là ĐỎ lúc BIÊN DỊCH (thiếu `return`),
+ * không phải một nhánh `else` lặng lẽ đưa bài ra room cả công ty. Luôn MỘT chuỗi room cụ thể — không
+ * bao giờ mảng (mảng rỗng = phát cả namespace).
+ */
+function feedPostRoomName(companyId: string, ev: WsFeedPostCreatedEvent): string {
+  switch (ev.audience) {
+    case "company":
+      return feedRoomName(companyId);
+    case "group":
+      return feedGroupRoomName(companyId, ev.groupId);
   }
 }

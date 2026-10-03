@@ -9,6 +9,7 @@ import { RealtimeGateway } from "./realtime.gateway";
 import { CallSignallingGateway } from "./call-signalling.gateway";
 import { CallSignallingViolationWriter } from "./call-signalling-violation.writer";
 import { ChatCallCooldownService } from "../chat/chat-call-cooldown.service";
+import { SocialGroupRoomsModule } from "../social/social-group-rooms.module";
 
 /**
  * RealtimeModule (G10-1) — wire WebSocket gateway namespace `/ws`.
@@ -35,6 +36,10 @@ import { ChatCallCooldownService } from "../chat/chat-call-cooldown.service";
     ChatPresenceReaderModule,
     ChatModule,
     PermissionModule,
+    // S16-SOCIAL-BE-2C — khối additive: module LÁ (0 import) cấp `SocialGroupRoomsReader` — gateway liệt
+    // kê nhóm bảng tin của user lúc connect. CỐ Ý KHÔNG import `SocialModule` (nó import ngược
+    // `RealtimeEmitterModule` và kéo cả đồ thị SOCIAL vào injector — ratchet `feed-realtime-structure`).
+    SocialGroupRoomsModule,
   ],
   // `ChatPresenceService` sống ở RealtimeModule (KHÔNG ở ChatModule): nó được lái bởi vòng đời kết nối WS,
   // và đặt nó trong `chat/**` sẽ buộc file đó import ngược `realtime.gateway` — đúng cạnh mà ratchet

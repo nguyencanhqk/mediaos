@@ -13,6 +13,7 @@ import { ApiError } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { FeedPage } from "./FeedPage";
 import {
+  makePollResults,
   makePost,
   page,
   POST_ERR,
@@ -26,6 +27,7 @@ const search = vi.fn();
 const createPost = vi.fn();
 const savePost = vi.fn();
 const moderatePost = vi.fn();
+const getPollResults = vi.fn();
 let mockSearch: Record<string, unknown> = {};
 
 type Handler = (payload: unknown) => void;
@@ -65,6 +67,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       createPost: (...a: unknown[]) => createPost(...a),
       savePost: (...a: unknown[]) => savePost(...a),
       moderatePost: (...a: unknown[]) => moderatePost(...a),
+      getPollResults: (...a: unknown[]) => getPollResults(...a),
     },
   };
 });
@@ -353,6 +356,33 @@ describe("lỗi HÀNH ĐỘNG trên bài (useFeedActions) phải hiện ở màn
     await waitFor(() => expect(screen.queryByTestId("post-card")).toBeNull());
     expect(listFeed.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
+
+  /**
+   * Review LIGHT 03/10/2026 (LOW): ở `/feed?q=…` danh sách là `023` dưới khoá `socialKeys.search({q})` =
+   * `["social","search",…]` — KHÔNG nằm dưới tiền tố nào mà `invalidatePostLists` làm mới. Dải nói
+   * «Dữ liệu đã được tải lại» trong khi thẻ của bài đã mất vẫn nằm trên kết quả tìm kiếm.
+   */
+  it("đang TÌM KIẾM (`?q=`) ⇒ 404 `SOCIAL-ERR-001` ⇒ kết quả `023` được kéo lại + thẻ cũ biến mất", async () => {
+    const t = i18n.getFixedT("vi", "social");
+    setCaps({ "view:feed": true, "manage:feed-post": true });
+    mockSearch = { q: "nghỉ lễ" };
+    search.mockResolvedValueOnce(page([makePost()])).mockResolvedValue(page([]));
+    moderatePost.mockRejectedValue(POST_ERR.gone());
+    renderWithProviders(<FeedPage />);
+
+    fireEvent.click(await screen.findByTestId("post-menu-trigger"));
+    fireEvent.click(screen.getByTestId("post-menu-toggle-hidden"));
+
+    const banner = await screen.findByTestId("feed-action-error");
+    expect(banner).toHaveAttribute("data-reason", "postGone");
+    expect(banner).toHaveTextContent(t("actionError.reason.postGone"));
+    // Đếm lượt gọi `023` TRƯỚC: hồi quy thì thông điệp đỏ là «gọi 1 lần» — đúng thứ bị thiếu.
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+    expect(search.mock.calls[1][0]).toMatchObject({ q: "nghỉ lễ" });
+    await waitFor(() => expect(screen.queryByTestId("post-card")).toBeNull());
+    // Đang tìm kiếm thì `001` không có mặt trên màn — kéo lại nó không xoá được thẻ nào.
+    expect(listFeed).not.toHaveBeenCalled();
+  });
 });
 
 describe("đăng bài", () => {
@@ -379,23 +409,68 @@ describe("S16-SOCIAL-FE-2 — plan §8 H5: đăng bài poll/idea làm mới màn
     ["poll", ["polls"]],
     ["idea", ["ideas"]],
     ["share", []],
-  ] as const)("tạo bài `%s` ⇒ invalidate đúng nhánh %j (không thừa, không thiếu)", async (type, expected) => {
-    const { QueryClient } = await import("@tanstack/react-query");
-    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
-    setCaps({ "view:feed": true, "create:feed-post": true });
-    createPost.mockResolvedValue({ ...makePost({ type }), droppedMentions: [] });
+  ] as const)(
+    "tạo bài `%s` ⇒ invalidate đúng nhánh %j (không thừa, không thiếu)",
+    async (type, expected) => {
+      const { QueryClient } = await import("@tanstack/react-query");
+      const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+      setCaps({ "view:feed": true, "create:feed-post": true });
+      createPost.mockResolvedValue({ ...makePost({ type }), droppedMentions: [] });
+      renderWithProviders(<FeedPage />);
+
+      fireEvent.change(await screen.findByRole("textbox"), { target: { value: "nội dung" } });
+      fireEvent.click(screen.getByTestId("composer-submit"));
+      await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1));
+
+      await waitFor(() => {
+        const branches = spy.mock.calls
+          .map((c) => (c[0]?.queryKey as readonly unknown[] | undefined)?.[1])
+          .filter((b) => b === "polls" || b === "ideas");
+        expect(branches).toEqual(expected);
+      });
+      spy.mockRestore();
+    },
+  );
+});
+
+/**
+ * S16-SOCIAL-FEBLOCKSEED-1 — nghiệm thu done_when #1 ở CẤP TRANG: N thẻ bình chọn/trang từng là N lần gọi
+ * `043`; thẻ chở `post.poll` (BE-2D) thì khối vẽ từ thẻ, 0 lần gọi. Client test KHÔNG có `staleTime` ⇒ ca
+ * này chỉ xanh khi `PollBlock` tự khai `staleTime`.
+ */
+describe("FEBLOCKSEED — S8: trang có N bài bình chọn chở `post.poll` ⇒ 0 lần gọi `043`", () => {
+  it("2 bài poll có khối ⇒ 2 khối vẽ đúng câu hỏi, `getPollResults` KHÔNG được gọi", async () => {
+    const P1 = "11111111-1111-4111-8111-1111111111a1";
+    const P2 = "11111111-1111-4111-8111-1111111111a2";
+    getPollResults.mockResolvedValue(makePollResults({ question: "SAI — số của 043" }));
+    listFeed.mockResolvedValue(
+      page([
+        makePost({
+          id: P1,
+          type: "poll",
+          body: null,
+          poll: makePollResults({ postId: P1, question: "Câu hỏi 1" }),
+        }),
+        makePost({
+          id: P2,
+          type: "poll",
+          body: null,
+          poll: makePollResults({ postId: P2, question: "Câu hỏi 2" }),
+        }),
+      ]),
+    );
     renderWithProviders(<FeedPage />);
 
-    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "nội dung" } });
-    fireEvent.click(screen.getByTestId("composer-submit"));
-    await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1));
-
-    await waitFor(() => {
-      const branches = spy.mock.calls
-        .map((c) => (c[0]?.queryKey as readonly unknown[] | undefined)?.[1])
-        .filter((b) => b === "polls" || b === "ideas");
-      expect(branches).toEqual(expected);
+    // Đếm request TRƯỚC (thông điệp đỏ khi hồi quy = «gọi N lần» — đúng thứ done_when đo), rồi mới xem vẽ.
+    await screen.findByTestId("feed-post-list");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    spy.mockRestore();
+    expect(getPollResults).not.toHaveBeenCalled();
+
+    const blocks = screen.getAllByTestId("poll-block");
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toHaveTextContent("Câu hỏi 1");
+    expect(blocks[1]).toHaveTextContent("Câu hỏi 2");
   });
 });

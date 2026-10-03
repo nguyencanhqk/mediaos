@@ -64,13 +64,15 @@ export function callRoomName(companyId: string, callId: string): string {
 }
 
 /**
- * S16-SOCIAL-BE-1 — bảng tin nội bộ của MỘT công ty. Mọi socket đã qua cổng `view:feed` join room này.
+ * S16-SOCIAL-BE-1 — bảng tin nội bộ của MỘT công ty. Mọi socket đã qua cổng `view:feed` join room này
+ * (BE-2C FULL gate lượt 1: cổng = scope MẠNH NHẤT của cặp ≥ Company — CÙNG sàn `companyFloor` của REST).
  *
  * ⚠️ **CHỈ bài `audience='company'` được phát vào đây.** Room này chứa cả công ty, nên một bài
- * `audience='org_unit'` bắn vào nó là phát đúng nội dung mà REST trả 404 cho chính những người đó —
- * cổng quyền bị đi vòng qua kênh phụ. API-19 §7 khai thêm `co:{c}:feedgroup:{groupId}` cho bài nhóm;
- * BE-1 chưa mở nhóm (`audience='group'` bị từ chối 422) nên room đó chưa tồn tại, và **chưa có room
- * nào cho `org_unit`** — lưới nằm ở `SocialPostsService` (memory `ws-permission-gate-needs-its-own-room`).
+ * `audience='org_unit'` hay `'group'` bắn vào nó là phát đúng nội dung mà REST trả 404 cho chính những
+ * người đó — cổng quyền bị đi vòng qua kênh phụ. Bài nhóm đi room RIÊNG `feedGroupRoomName` (S16-SOCIAL-
+ * BE-2C — cổng membership); **không có room nào cho `org_unit`** (Q-ORG). Lưới hai tầng:
+ * `buildWsPostCreatedEvent` (nguồn) + `.parse()` rồi mới chọn room ở `emitFeedPostCreated` (memory
+ * `ws-permission-gate-needs-its-own-room`).
  *
  * ⚠️ **Ở TRONG ROOM KHÔNG PHẢI LÀ QUYỀN.** Socket join ngay sau cổng quyền ở handshake, nhưng cổng đó
  * chỉ có tác dụng ĐÚNG MỘT LẦN lúc connect: người bị thu hồi `view:feed` giữa phiên vẫn ở lại room
@@ -78,4 +80,36 @@ export function callRoomName(companyId: string, callId: string): string {
  */
 export function feedRoomName(companyId: string): string {
   return `co:${companyId}:feed`;
+}
+
+/**
+ * S16-SOCIAL-BE-2C (D-OWNER-2, owner chốt 22/09/2026) — room riêng cho 1 user **TRONG PHẠM VI BẢNG
+ * TIN**. Đây là room **ĐÁNH DẤU**, KHÔNG phải đích phát sự kiện nào: socket chỉ join khi **đã qua cổng
+ * quyền `view:feed` @Company** (sàn scope của REST) ở `RealtimeGateway.handleConnection`, còn
+ * `userRoomName` thì MỌI socket đã xác thực đều join để nhận `notification:new`.
+ *
+ * Nó tồn tại cho ĐÚNG MỘT chỗ dùng: **bộ chọn socket của `syncFeedGroupMembership('join')`** (lệnh
+ * `in(feedUserRoomName).socketsJoin(feedGroupRoomName)`). Cùng lập luận với `chatUserRoomName` ở trên:
+ * ép join qua `userRoomName` sẽ kéo cả socket đã TRƯỢT cổng `view:feed` vào room nhóm — cổng chỉ có tác
+ * dụng đúng một lần lúc connect, rồi lần đổi thành viên kế tiếp (`038` duyệt, `035` vào nhóm mở) mở lại
+ * cửa. Đo thật (plan BE-2C M2 a′): `in(user:B).socketsJoin(...)` kéo socket B trượt cổng vào room nhóm.
+ *
+ * Nhánh `leave` CỐ Ý vẫn quét theo `userRoomName` (rộng hơn): rời nhầm là fail-safe, sót lại là rò.
+ */
+export function feedUserRoomName(companyId: string, userId: string): string {
+  return `co:${companyId}:feeduser:${userId}`;
+}
+
+/**
+ * S16-SOCIAL-BE-2C — room của MỘT nhóm bảng tin: đích `feed:post.created` của bài `audience='group'`
+ * (API-19 §7). Chỉ chứa socket thoả CẢ HAI: (a) đã qua cổng `view:feed` @Company lúc connect, và (b) của thành
+ * viên `status='active'` của nhóm CÒN SỐNG (`deleted_at IS NULL`), cùng `company_id` — kể cả nhóm
+ * `public` (người ngoài đọc được bài nhóm public qua REST, nhưng KHÔNG có room: feed chính loại bài nhóm
+ * và WS một chiều không cho client tự xin room).
+ *
+ * ⚠️ **Ở TRONG ROOM KHÔNG PHẢI LÀ QUYỀN.** Thu hồi `view:feed` giữa phiên KHÔNG đá socket ra (cùng giới
+ * hạn của `feedRoomName` ở trên) — payload WS vì thế phải HẸP hơn DTO REST và không mang URL presign.
+ */
+export function feedGroupRoomName(companyId: string, groupId: string): string {
+  return `co:${companyId}:feedgroup:${groupId}`;
 }

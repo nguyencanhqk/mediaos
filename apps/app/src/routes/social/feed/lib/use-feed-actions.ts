@@ -37,6 +37,16 @@ export type FeedActionKind = "reaction" | "save" | "moderate" | "delete";
  */
 const PROFILE_POSTS_PREFIX = socialKeys.profilePosts("").slice(0, socialKeys.all.length + 1);
 
+/**
+ * Tiền tố MỌI kết quả tìm kiếm `023` (mọi `q`) = `["social","search"]` — `/feed?q=…` đọc
+ * `socialKeys.search({q})`, KHÔNG nằm dưới `feed.allOf()`. Cắt từ chính `socialKeys.search` như
+ * `PROFILE_POSTS_PREFIX`; KHÔNG dùng `socialKeys.search()` trần: `[…,"search",undefined]` không khớp một
+ * phần `[…,"search",{q}]` (cùng lý do `socialKeys.groups.lists()`). Review LIGHT 03/10/2026
+ * (FEMODERRMSG-1, LOW): thiếu nó thì ở chế độ tìm kiếm, thẻ của bài đã mất vẫn nằm trên màn trong khi
+ * dải «postGone» nói dữ liệu đã được tải lại.
+ */
+const SEARCH_PREFIX = socialKeys.search().slice(0, socialKeys.all.length + 1);
+
 export interface FeedActionError {
   kind: FeedActionKind;
   /**
@@ -111,6 +121,11 @@ export function useFeedActions(): FeedActions {
     void queryClient.invalidateQueries({ queryKey: socialKeys.kudos.lists() });
     // S16-SOCIAL-FEMODERRMSG-1 — trang cá nhân đồng nghiệp (`025`), xem `PROFILE_POSTS_PREFIX`.
     void queryClient.invalidateQueries({ queryKey: PROFILE_POSTS_PREFIX });
+    // S16-SOCIAL-FEMODERRMSG-1 — kết quả tìm kiếm (`023`, `/feed?q=…`), xem `SEARCH_PREFIX`.
+    void queryClient.invalidateQueries({ queryKey: SEARCH_PREFIX });
+    // S16-SOCIAL-FEMODERRMSG-1 — tin tức (`020`): khung portal luôn hiện «tin nổi bật» qua
+    // `news.list({ highlight })`, nên bài tin đã mất phải rời cả khung (cùng khoá `NewsPage` tự làm mới).
+    void queryClient.invalidateQueries({ queryKey: socialKeys.news.allOf() });
     if (postId) {
       void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
     }

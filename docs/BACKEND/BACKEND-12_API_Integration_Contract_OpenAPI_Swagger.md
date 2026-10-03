@@ -1330,6 +1330,7 @@ Nội dung:
 | FOUNDATION-ERR-HOLIDAY-NOT-FOUND | NotFoundError | 404 | Không tìm thấy ngày nghỉ. | FOUNDATION | holidays.service |
 | FOUNDATION-ERR-HOLIDAY-DUPLICATE | ConflictError | 409 | Ngày nghỉ trùng (mã + ngày). | FOUNDATION | holidays.service |
 | FOUNDATION-ERR-RETENTION-POLICY-NOT-FOUND | NotFoundError | 404 | Không tìm thấy chính sách lưu trữ… | FOUNDATION | retention.service |
+| FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED | ValidationError | 400 | Đã đổi máy chủ, cổng, tên đăng nhập hoặc TLS — cần nhập lại mật khẩu SMTP. | FOUNDATION | mail-config.service (CS-8): vắng password khi tạo mới / test chưa có cấu hình / đích khác hàng đã lưu (S19-SEC-MAILCREDEXFIL-1) |
 | VALIDATION-ERR-001 | ValidationError | 422 | Dữ liệu không hợp lệ | (chung) | validation_schema setting → GIỮ prefix VALIDATION-ERR (web-core kind-match) |
 
 > **Nguồn sự thật catalog FOUNDATION-ERR-*** = `packages/contracts/src/foundation/error-codes.ts`

@@ -13,12 +13,16 @@ import type { FeedGroupRole, SocialGroupActor, SocialGroupMembership } from "./s
 /**
  * S16-SOCIAL-BE-2A — cổng QUYỀN TRONG NHÓM (vai trò là HÀNG, không phải grant).
  *
- * ┌─ 🔴 HAI LUẬT BẤT DI BẤT DỊCH CỦA FILE NÀY ─────────────────────────────────────────────────────┐
+ * ┌─ 🔴 BA LUẬT BẤT DI BẤT DỊCH CỦA FILE NÀY ──────────────────────────────────────────────────────┐
  * │ 1. **CHỈ NHẬN `tx`, TUYỆT ĐỐI KHÔNG tự mở `withTenant`.** Mọi method ở đây chạy TRONG tx ghi của │
  * │    caller. `withTenant` lồng nhau = TREO IM LẶNG trên PgBouncer transaction-mode (pool `max:20`, │
  * │    không `connectionTimeoutMillis`): tx ngoài giữ connection, tx trong xin connection thứ hai,   │
  * │    cạn pool là cả tiến trình đứng — không lỗi, không log. Đã cắn thật ở BE-1B (hai hình dạng).   │
  * │ 2. **KHÔNG kiểm ở tx riêng rồi ghi sau** — đó là TOCTOU. Kiểm và ghi phải cùng MỘT tx.           │
+ * │ 3. **Route GHI theo vai ĐỌC VAI SAU KHOÁ** — gọi `lockAndAssertGroupRoleTx`, KHÔNG gọi           │
+ * │    `assertGroupRoleTx` rồi mới khoá. Cùng tx vẫn CHƯA đủ: dưới READ COMMITTED vai đọc TRƯỚC khoá │
+ * │    có thể bị một `038`/`039` song song đổi lúc ta chờ khoá ⇒ người VỪA mất quyền vẫn ghi được    │
+ * │    (S16-SOCIAL-GROUPTOCTOU-1 §2: `039` M3, `038` admin kiêm manage M6).                          │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Khuôn: `tasks/project-access.service.ts` (`assertProjectRoleTx(..., allowedRoles)`) — tập vai trò
@@ -104,9 +108,13 @@ export class SocialGroupAccessService {
   /**
    * 403 `SOCIAL-ERR-014` khi actor không phải thành viên `active` mang vai trò thuộc `allowedRoles`.
    *
+   * ⚠️ Route GHI theo vai (`033`/`034`/`038`/`039`) KHÔNG gọi trần hàm này — gọi
+   * `lockAndAssertGroupRoleTx` (luật 3: khoá hàng nhóm RỒI mới đọc vai). Gọi trần chỉ dành cho route
+   * CHỈ ĐỌC (`037`), nơi không có gì để ghi bằng một vai đã cũ.
+   *
    * @param allowedRoles tập vai trò CHO TỪNG ROUTE (`033`→`['owner','admin']`, **`034`→`['owner']`**,
-   *   `038`/`039`→`['owner','admin']`). KHÔNG có giá trị mặc định: quên truyền phải là lỗi biên dịch,
-   *   không phải một tập rộng im lặng.
+   *   `037`→cả ba, `038`/`039`→`['owner','admin']`). KHÔNG có giá trị mặc định: quên truyền phải là
+   *   lỗi biên dịch, không phải một tập rộng im lặng.
    * @returns `viaManage: true` khi actor đi qua nhánh thoát `manage:feed-group` trên nhóm KHÔNG phải
    *   của mình — caller dùng nó để quyết định ghi `audit_logs` (API-19 §8: chỉ thao tác lên nội dung
    *   người khác mới vào sổ).
@@ -141,13 +149,58 @@ export class SocialGroupAccessService {
    *
    * ⚠️ **CỐ Ý KHÔNG lọc `deleted_at IS NULL`** — miễn trừ DUY NHẤT của luật D13 (W4). Neo phải khoá
    * được cả nhóm vừa bị xoá mềm; thêm vế đó vào là mở lại cửa đua đúng lúc nhóm đang bị xoá.
+   *
+   * @throws NotFoundException (404 `SOCIAL-ERR-012`) khi câu khoá khớp 0 hàng (S16-SOCIAL-GROUPTOCTOU-1,
+   *   FULL gate lượt 1). Hôm nay không tới được — mọi caller đã thấy nhóm còn sống, `company_id` bất
+   *   biến, không xoá cứng. Nhưng một policy RLS tách riêng cho UPDATE (PG áp `USING` của nó lên
+   *   `SELECT … FOR UPDATE`) hay `companyId` lệch sẽ biến neo thành khoá RỖNG: «đọc vai SAU khoá» chỉ
+   *   còn là tên gọi, TOCTOU trở lại mà không lỗi, không log. Đếm theo hàng TỒN TẠI, không theo
+   *   `deleted_at` ⇒ miễn trừ W4 giữ nguyên.
    */
   async lockGroupRowTx(tx: TenantTx, companyId: string, groupId: string): Promise<void> {
-    await tx.execute(
+    const locked = await tx.execute(
       sql`SELECT 1 FROM ${feedGroups}
            WHERE company_id = ${companyId} AND id = ${groupId}
            FOR UPDATE`,
     );
+    if (locked.rows.length !== 1) {
+      throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
+    }
+  }
+
+  /**
+   * 🔴 Cổng vai của MỌI route GHI theo vai nhóm (`033`/`034`/`038`/`039`) — luật 3 ở đầu file: KHOÁ hàng
+   * `feed_groups` (`lockGroupRowTx`) RỒI MỚI đọc vai actor (`assertGroupRoleTx`). MỘT lượt đọc, SAU khoá.
+   *
+   * Vì sao (S16-SOCIAL-GROUPTOCTOU-1, đo plan §2): vai là HÀNG, không phải grant. Một `038` song song
+   * (khoá nhóm → hạ vai actor → commit) chen giữa «đọc vai» và «khoá» ⇒ actor VỪA mất quyền vẫn ghi
+   * bằng vai CŨ — `039` mời người khác ra (M3), `034` xoá mềm nhóm (M9), `033` đổi nhóm kín thành công
+   * khai (M10). Đọc SAU khoá thì mọi đường đổi vai đã serialize qua đúng hàng nhóm này. Cũng KHÔNG
+   * «đọc trước + đọc lại sau khoá rồi đối chiếu»: hai lượt đọc cho hai câu trả lời, và chính chỗ đối
+   * chiếu sinh 403 oan cho admin kiêm manage (M6) cùng audit sai nguồn quyền (M8).
+   *
+   * Luật quyền KHÔNG đổi: vai hàng ∈ `allowedRoles` HOẶC `manage:feed-group` «BẤT KỂ vai trong nhóm»
+   * (API-19 §5.1 dòng 107), đánh giá trên hàng đọc SAU khoá (owner ký D1=(a) 02/10/2026). Hàng của actor
+   * biến mất giữa chừng ⇒ 403 `ERR-014`, không 404 (D3=(a)): actor đã qua cổng 404 lúc request bắt đầu.
+   *
+   * ⚠️ Gọi SAU `assertGroupVisibleTx` (404 TRƯỚC 403): người ngoài nhóm kín không bao giờ chạm khoá
+   * (lưới: U3 thứ tự cổng + ca O-x/P-x của `social-grouptoctou-race.int-spec.ts`).
+   *
+   * ⚠️ Dựa vào READ COMMITTED (mặc định của `withTenant`, đo M1): mỗi câu một snapshot MỚI nên câu đọc
+   * vai sau khoá thấy thay đổi tx giữ khoá đã commit. Dưới REPEATABLE READ nó dùng lại snapshot TRƯỚC
+   * khoá — vai cũ, không 40001 vì tx giữ khoá chỉ khoá hàng nhóm (D-1 sẽ đỏ).
+   *
+   * @returns `{ membership, viaManage }` của lượt đọc SAU khoá — `viaManage` là nguồn quyền LÚC COMMIT,
+   *   caller ghi đúng giá trị này vào `audit_logs`.
+   */
+  async lockAndAssertGroupRoleTx(
+    tx: TenantTx,
+    actor: SocialGroupActor,
+    groupId: string,
+    allowedRoles: readonly FeedGroupRole[],
+  ): Promise<{ membership: SocialGroupMembership | null; viaManage: boolean }> {
+    await this.lockGroupRowTx(tx, actor.companyId, groupId);
+    return this.assertGroupRoleTx(tx, actor, groupId, allowedRoles);
   }
 
   /**

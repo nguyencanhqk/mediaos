@@ -508,6 +508,33 @@ describe("S16-SOCIAL-FEMODERRMSG-1 — lỗi trên bài mang LÝ DO từ `error.
     expect(client.getQueryState(birthdaysKey)?.isInvalidated).toBe(false);
   });
 
+  /**
+   * Review delta 03/10/2026 (MEDIUM): khung portal (`SocialPortalShell`) luôn hiện «tin nổi bật» qua
+   * `news.list({ highlight })` = `["social","news",…]` — ngoài mọi tiền tố `invalidatePostLists` từng
+   * làm mới ⇒ bài tin đã mất vẫn nằm trên khung trong khi banner nói «đã tải lại». Khoá THẬT như ca `025`.
+   */
+  it("«postGone» ⇒ tin nổi bật trên khung portal (`news.list`, khoá THẬT) cũng bị kéo lại", async () => {
+    moderatePost.mockRejectedValue(POST_ERR.gone());
+    const { socialKeys } = await import("@mediaos/web-core");
+    const newsKey = socialKeys.news.list({ highlight: true, limit: 5 });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    client.setQueryData(newsKey, { items: [] });
+    const birthdaysKey = socialKeys.birthdays({ range: "week" });
+    client.setQueryData(birthdaysKey, []);
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+
+    await waitFor(() => expect(result.current.actionError?.reason).toBe("postGone"));
+    expect(client.getQueryState(newsKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(birthdaysKey)?.isInvalidated).toBe(false);
+  });
+
   it("đường THÀNH CÔNG cũng vậy — người kiểm duyệt xoá bài từ trang đồng nghiệp ⇒ khoá `025` bị kéo lại", async () => {
     deletePost.mockResolvedValue({ deleted: true });
     const { socialKeys } = await import("@mediaos/web-core");

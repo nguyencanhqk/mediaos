@@ -128,6 +128,30 @@ describe("C15 — badge ĐẾM, KHÔNG chèn bài (D7 · SOC-DEC-010)", () => {
     expect(result.current.newPostCount).toBe(0);
   });
 
+  it("🔒 bài NHÓM (payload ĐÚNG hợp đồng) KHÔNG đếm vào badge feed chính — chỉ bài công ty (S16-SOCIAL-BE-2C Q-FE)", () => {
+    /**
+     * Feed chính LOẠI bài nhóm (D-OWNER-6). Từ BE-2C, thành viên nhóm nhận `feed:post.created` biến thể
+     * `group` qua room nhóm; đếm nó là badge «N bài mới» chỉ tới bài mà bấm vào KHÔNG thấy — đúng lớp
+     * lỗi «badge nói dối». Bỏ qua IM LẶNG (không `console.error`): payload hợp lệ, chỉ không thuộc feed này.
+     */
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result } = renderHook(() => useFeedRealtime());
+
+    act(() => {
+      emit(WS_EVENTS.FEED_POST_CREATED, {
+        ...WS_POST,
+        id: "44444444-4444-4444-8444-444444444444",
+        audience: "group",
+        groupId: "61000000-0000-4000-8000-000000000001",
+      });
+      emit(WS_EVENTS.FEED_POST_CREATED, WS_POST);
+    });
+
+    // Neo dương: bài công ty VẪN đếm — 0 không phải vì listener chết.
+    expect(result.current.newPostCount).toBe(1);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("payload SAI hợp đồng ⇒ KHÔNG đếm, KHÔNG ném, nhưng CÓ log", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { result } = renderHook(() => useFeedRealtime());

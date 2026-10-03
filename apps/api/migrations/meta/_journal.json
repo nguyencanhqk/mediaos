@@ -1807,6 +1807,13 @@
       "when": 1717587379000,
       "tag": "0590_s16socialbe3c_seed_restore_feed_post",
       "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1717587380000,
+      "tag": "0591_s19secmailcred_revoke_mail_dest_update",
+      "breakpoints": true
     }
   ]
 }

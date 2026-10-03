@@ -8,6 +8,7 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
 import { useAuthStore } from "@mediaos/web-core";
+import { FEED_SEARCH_QUERY_MAX } from "@mediaos/contracts";
 import type { FeedBirthdayDto, FeedNewsItemDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
 import { BirthdayWidget } from "./BirthdayWidget";
@@ -226,6 +227,16 @@ describe("C24 — FeedSearchBox", () => {
     fireEvent.submit(screen.getByTestId("feed-search-box"));
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it("ô có `maxLength` = trần `q` của 023 — gõ/dán dài không biến tìm kiếm thành màn LỖI 400", () => {
+    /**
+     * S16-SOCIAL-FESEARCHBOUNDS-1. Đường URL đã được `validateFeedRouteSearch` cắt về trần; ô này chặn
+     * ngay lúc gõ để người dùng THẤY giới hạn thay vì bị cắt im lặng sau khi bấm Enter.
+     */
+    wrap(<FeedSearchBox value="" onSubmit={vi.fn()} onClear={vi.fn()} />);
+    const input = screen.getByRole("searchbox") as HTMLInputElement;
+    expect(input.maxLength).toBe(FEED_SEARCH_QUERY_MAX);
   });
 
   it("DENY: KHÔNG có `view:feed` ⇒ ô KHÔNG render (không phải disabled)", () => {
