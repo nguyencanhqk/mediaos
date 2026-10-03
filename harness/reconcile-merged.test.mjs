@@ -71,6 +71,60 @@ test("B1c-đối chứng — chữ 'plan' KHÔNG ở đầu thân ⇒ vẫn là 
   }
 });
 
+// ── B1d: chore(backlog) là bookkeeping (lỗ mở sẵn — ĐO 02/10/2026, S19-GOV-BOOKKEEPRE-1) ────────
+// Seed/sửa một mục trong `harness/backlog.mjs` theo ĐỊNH NGHĨA là ghi sổ: commit seed nêu tên đúng WO
+// CHƯA làm. Scope `backlog` từng dùng THẬT trên first-parent của master: 87a84e3c (subject tự khai
+// «chưa thi công») + 8bc722ae (seed). Lọt vào nhánh tích hợp (vd rebase-merge một commit seed) ⇒
+// reconcile đóng dấu 'finished' cho WO đỏ mới chỉ được SEED.
+test("B1d — chore(backlog) là bookkeeping ⇒ bị loại khỏi nguồn stamp", () => {
+  const cases = [
+    "chore(backlog): seed S19-SEC-MAILCREDEXFIL-1 — mật khẩu SMTP đã lưu gửi tới host do client chọn",
+    "chore(backlog): S16-SOCIAL-ATTGATE-1 — đóng dấu owner duyệt 24/09 (chưa thi công) + regen STATUS sau merge #538",
+    "chore(backlog): seed S2-AUTH-BRAND-1 — TOTP issuer rebrand MediaOS→FUNTIME MEDIA (follow-up #37) (#38)",
+  ];
+  for (const s of cases) {
+    assert.ok(isBookkeeping(s), `phải nhận là bookkeeping: ${s}`);
+  }
+});
+
+// ── B1e: THÂN "bàn giao …"/"handoff …" là bookkeeping (lỗ mở sẵn — ĐO 02/10/2026) ──────────────
+// Commit bàn giao ghi TRẠNG THÁI phiên, kể cả WO đang dở: eb6508de
+// `docs(harness): bàn giao — S14-SEC-CATALOGSNAP-HARDEN-1 PR #478 mở; …` nêu tên WO khi PR CÒN MỞ ⇒
+// từ lúc nó vào master tới khi #478 merge (d4b37200), reconcile đọc nó thành "WO đã ship". Chắn theo
+// THÂN (như B1c), không theo scope `docs(harness)`: scope chỉ là quy ước đặt tên.
+test("B1e — docs(<scope>): bàn giao|handoff … là bookkeeping ⇒ bị loại khỏi nguồn stamp", () => {
+  const cases = [
+    "docs(harness): bàn giao — S14-SEC-CATALOGSNAP-HARDEN-1 PR #478 mở; census FE + cổng người của 2 WO S14 còn lại",
+    "docs(harness): bàn giao — S14-SEC-DASHGATE-WILDCARD-1 đã merge, 2 WO kế mở khoá",
+    "docs(chat): handoff — S8-CHAT-UX-FE-2 PR mở, chờ CI",
+  ];
+  for (const s of cases) {
+    assert.ok(isBookkeeping(s), `phải nhận là bookkeeping: ${s}`);
+  }
+});
+
+// Đối chứng cho B1d/B1e: KHÔNG được vá quá tay.
+//   - "bàn giao" cũng là SẢN PHẨM của WO phát hành (bộ bàn giao go-live) — ship bằng `<WO-ID> — …`
+//     ngay sau dấu hai chấm nên luật neo-đầu-thân KHÔNG nuốt;
+//   - thân "seed …" KHÔNG phải bookkeeping: `chore(lms): seed + code S5-LMS-UI-4` (21a782f3) seed
+//     VÀ thi công trong cùng commit ⇒ chắn backlog theo SCOPE, không theo chữ "seed";
+//   - KHÔNG được "rút gọn" B1e thành scope `docs(harness)` (thêm `harness` vào nhóm `docs\((plan|status)\)`):
+//     WO tài liệu ship bằng `docs(<scope>): <WO-ID> — …` (c667c15d `docs(social): S16-SOCIAL-DOC-1 — bộ tài
+//     liệu SOCIAL …`), nên một WO tài liệu harness ship bằng `docs(harness): <WO-ID> — …` sẽ không bao giờ
+//     được đóng dấu. Ca dưới khoá quyết định "chắn theo THÂN, không theo scope" (review LIGHT 02/10).
+test("B1d/B1e-đối chứng — bàn giao/seed KHÔNG ở vị trí ghi sổ ⇒ vẫn là commit ship", () => {
+  const cases = [
+    "docs(harness): S20-GOV-X-1 — tài liệu cơ chế reconcile + sổ backlog",
+    "docs(release): S6-REL-1 — bàn giao vận hành + hồ sơ phát hành",
+    "feat(release): S6-GOLIVE-1 — WS10: biên bản Go/No-go + bộ bàn giao 10/10, vá lỗ backup chặn go-live (#315)",
+    "chore(lms): seed + code S5-LMS-UI-4 — LMS hòa chrome vào MediaOS",
+    "fix(harness): S19-GOV-BOOKKEEPRE-1 — reconcile không đọc chore(backlog) thành WO đã ship",
+  ];
+  for (const s of cases) {
+    assert.ok(!isBookkeeping(s), `KHÔNG được coi là bookkeeping: ${s}`);
+  }
+});
+
 // ── B2: commit SHIP THẬT vẫn phải lọt qua (không được vá quá tay) ───────────────────────────
 // Nếu luật lọc nới rộng tới mức nuốt cả commit ship, board sẽ kẹt ready dù việc đã vào master —
 // đúng bẫy ngược mà chính reconcile sinh ra để chữa (S2-INT-1 · S2-INT-2).

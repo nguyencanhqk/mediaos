@@ -20054,7 +20054,7 @@ export const backlog = [
     module: "DEVOPS",
     layer: "OPS",
     title:
-      "Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên MỌI PR + master: 6 advisory HIGH — brace-expansion ×4 (dev-tooling) · engine.io <6.6.10 (RUNTIME Socket.IO) · nodemailer <=10.0.5 (RUNTIME, dep TRỰC TIẾP `apps/api` ^9.1.1 ⇒ vá DUY NHẤT là nâng MAJOR 9→10)",
+      "Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên MỌI PR + master: 7 advisory HIGH — brace-expansion ×4 (dev-tooling) · engine.io <6.6.10 (RUNTIME Socket.IO) · nodemailer ×2 <=10.0.5 · >=9.1.0 <=10.0.4 (RUNTIME, dep TRỰC TIẾP `apps/api` ^9.1.1 ⇒ vá DUY NHẤT là nâng MAJOR 9→10)",
     zone: "red",
     status: "todo",
     paths: [
@@ -20153,6 +20153,69 @@ export const backlog = [
     ],
     notes: [
       "Owner chốt 02/10/2026: làm WO riêng, SỚM — trước khi PROD lưu cấu hình SMTP đầu tiên (rẻ nhất lúc này).",
+    ],
+  },
+  {
+    id: "S19-GOV-BOOKKEEPRE-1",
+    module: "GOV",
+    layer: "QA",
+    title:
+      "Nợ sổ sách sau #558: `BOOKKEEPING_RE` của reconcile thiếu `chore(backlog)` ⇒ commit SEED một WO đỏ lọt first-parent master bị đóng dấu «đã ship» · runbook rollback §7.4 của S19-OPS-AUDITHIGH-1 bảo revert NGUYÊN squash (mở lại lỗ token vào log) và không nói rõ `git pull` · title backlog ghi 6 advisory thay vì 7",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "harness/lib/reconcile-merged.mjs",
+      "harness/reconcile-merged.test.mjs",
+      "docs/plans/S19-OPS-AUDITHIGH-1.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-OPS-AUDITHIGH-1"],
+    src: [
+      "Nợ để lại của S19-OPS-AUDITHIGH-1 (#558, squash `95f5ad8f`, 02/10/2026): squash gộp 1 commit `chore(backlog): seed S19-SEC-MAILCREDEXFIL-1 …` — nếu merge kiểu rebase, commit đó vào first-parent và `harness/lib/reconcile-merged.mjs` đóng dấu 'finished' cho WO đỏ mới chỉ SEED (scope `backlog` không có trong `BOOKKEEPING_RE`).",
+      "ĐO 02/10 (400 commit đầu origin/master, cả `git log -400` lẫn `--first-parent -400`): `chore(backlog)` đã dùng THẬT — 87a84e3c (subject tự khai «chưa thi công») · 8bc722ae (seed, ngoài cửa sổ). Cùng lớp: thân `docs(<scope>): bàn giao|handoff` — eb6508de nêu S14-SEC-CATALOGSNAP-HARDEN-1 khi PR #478 còn mở.",
+      "`pnpm audit --json` trên lockfile TRƯỚC squash (đo lại 02/10): 7 HIGH — brace-expansion ×4 · engine.io ×1 · nodemailer ×2 (GHSA-v53p-9fqp-m79j + GHSA-prgh-xp8r-p3m5); title seed 30/09 ghi 6 vì GHSA-prgh lên registry sau.",
+    ],
+    done_when: [
+      'RED trước: `harness/reconcile-merged.test.mjs` có ca `isBookkeeping("chore(backlog): seed …")` + ca thân bàn giao ĐỎ trên code cũ đúng assert; có ca đối chứng (bàn giao/seed KHÔNG ở vị trí ghi sổ ⇒ vẫn là commit ship); mutant từng vế đỏ đúng ca của nó',
+      "Đo trước khi nới (khuôn của khối chú thích trên `BOOKKEEPING_RE`): liệt kê subject MỚI bị loại + mọi WO chúng nêu; mô phỏng `mergedCommits` cũ↔mới ⇒ 0 WO mất nguồn stamp. Scope ghi-sổ khác chỉ thêm khi ĐO được là có dùng VÀ thật sự là ghi sổ; phần còn lại ghi vào chú thích",
+      "`node --test` của job CI «Tooling tests (node --test)» xanh",
+      "Plan S19-OPS-AUDITHIGH-1 §7.4: chỉ revert 3 file deps (KHÔNG revert nguyên squash — kiểm chứng bằng đọc + chạy code trong 95f5ad8f, không chép lại lời khẳng định); `git pull` + `pnpm install --frozen-lockfile` tường minh ở mọi bước cập nhật checkout chính",
+      "Title S19-OPS-AUDITHIGH-1 ghi đúng 7 advisory",
+    ],
+    notes: [
+      "🟡 LIGHT gate. Chỉ chạm harness + docs, KHÔNG code sản phẩm, KHÔNG migration.",
+      "Subject commit của WO này CHỈ mang mã S19-GOV-BOOKKEEPRE-1 — nhắc mã WO khác trong subject là tái tạo đúng lỗi đang vá.",
+    ],
+  },
+  {
+    id: "S19-LMS-NODEMAILER-1",
+    module: "LMS",
+    layer: "SEC",
+    title:
+      '`apps/lms` (repo git RIÊNG, ngoài cổng SCA) ghim `nodemailer ^8.0.7` — trong dải GHSA-v53p-9fqp-m79j (`<=10.0.5`); `lib/platform/email.ts` trả `"[smtp] " + error.message` mà nodemailer NỐI phản hồi server vào message ⇒ cùng lớp rò #558 đã vá ở API bằng allowlist',
+    zone: "red",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-OPS-AUDITHIGH-1"],
+    src: [
+      'Nợ §6.1 của plan S19-OPS-AUDITHIGH-1: «`apps/lms` vẫn khai `nodemailer ^8` — ngoài workspace, cổng SCA không quét (memory `sca-gate-blind-to-lms-and-fbpost`)». Bàn giao 02/10 (lane S19-GOV-BOOKKEEPRE-1): `^8.0.7` + passthrough `"[smtp] " + error.message` ở `apps/lms/lib/platform/email.ts` — lane seed KHÔNG đọc lại apps/lms (PROD LMS phục vụ từ đó) ⇒ ĐO lại trước khi thi công.',
+      "Khuôn vá đã có ở API: `apps/api/src/settings/smtp-error-summary.ts` (`describeSmtpError` — mỗi trường máy-sinh khớp đúng hình dạng, lệch ⇒ `-`; lỗi lập trình chỉ giữ frame stack). Đo 02/10 trên API: code log `err.message` + server echo ⇒ dòng log chứa nguyên link `?token=` + username ở cả 535 AUTH · 550 RCPT · 550 DATA (plan S19-OPS-AUDITHIGH-1 §7.4).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: lockfile LMS phân giải nodemailer bản nào; `email.ts` đưa chuỗi `[smtp] …` tới đâu (log · response API · UI) — ghi vào plan",
+      "Thi công trong worktree của repo LMS `C:\\dev 2\\lms-nodemailer`, nhánh `fix/nodemailer-10` — KHÔNG sửa/build trong `apps/lms`",
+      "Nâng lên 10.x ĐÃ VÁ — sàn `^10.0.12` theo bài học #558 (10.0.0–10.0.10 lệch entry CJS; 10.0.12 settle mọi lần gửi khi lỗi kết nối)",
+      "Thay passthrough `error.message` bằng allowlist trường máy-sinh (khuôn `smtp-error-summary.ts`); chuỗi tự do của server KHÔNG còn tới log/response",
+      "`tsc` + lint + build XANH trong worktree",
+      "Bước owner deploy: merge vào master của repo LMS (repo LOCAL, KHÔNG remote ⇒ không có `git pull`: trong `apps/lms` `git merge --ff-only fix/nodemailer-10` — nhánh của worktree dùng chung repo) → sao lưu `data/app.db` → trong `apps/lms`: `pnpm install --frozen-lockfile` → `pnpm build` → `m prod-restart lms` → kiểm trên origin `localhost:3400`",
+    ],
+    notes: [
+      "🔴 vùng đỏ như S19-OPS-AUDITHIGH-1: nâng MAJOR dep runtime trên đường gửi mail + rò phản hồi server.",
+      "⚠️ KHÔNG build trong `apps/lms` — PROD LMS phục vụ `.next` của chính thư mục đó (memory `lms-next-build-shares-prod-dist` · `next-dev-clobbers-prod-next-evalerror`).",
+      "⚠️ `mediaos.ps1` chú thích `Invoke-ProdUpdate` khai «Deps LMS đổi thì tự chạy 'pnpm install' trong apps\\lms trước» nhưng khối `$doLms` CHỈ chạy `pnpm build` (đọc 02/10) ⇒ `pnpm install --frozen-lockfile` là bước TAY bắt buộc.",
+      "⚠️ THỨ TỰ trong repo LMS (gắn 03/10 khi gộp đợt): nhánh `fix/next-15.5.27` của S19-SEC-NEXTRCE-1 (vá RCE next, PR #565 phần LMS) merge + deploy TRƯỚC; nhánh `fix/nodemailer-10` của WO này rebase lên master LMS SAU đó — cả hai cùng đổi `package.json` + `pnpm-lock.yaml` của LMS (đo merge-tree 02/10: tự hợp nhất sạch, vẫn phải chạy lại `pnpm install --frozen-lockfile` + build).",
     ],
   },
 ];
