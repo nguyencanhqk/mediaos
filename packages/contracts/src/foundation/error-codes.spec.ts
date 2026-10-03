@@ -28,6 +28,10 @@ describe("FOUNDATION_ERROR_CODES catalog", () => {
     expect(FOUNDATION_ERROR_CODES.RETENTION_POLICY_NOT_FOUND).toBe(
       "FOUNDATION-ERR-RETENTION-POLICY-NOT-FOUND",
     );
+    // FE (console mail-config) bắt theo chuỗi này — đổi = vỡ hợp đồng dây.
+    expect(FOUNDATION_ERROR_CODES.MAIL_PASSWORD_REQUIRED).toBe(
+      "FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED",
+    );
   });
 
   it("KHÔNG giẫm namespace mã domain file (catalog tách biệt)", () => {

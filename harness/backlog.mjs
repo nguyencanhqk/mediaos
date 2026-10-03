@@ -19804,8 +19804,11 @@ export const backlog = [
     paths: [
       "apps/api/src/settings/**",
       "packages/contracts/src/mail-config.ts",
+      "packages/contracts/src/foundation/error-codes.ts",
       "apps/api/test/**",
-      "apps/app/src/**",
+      "apps/api/migrations/**",
+      "apps/console/src/**",
+      "docs/BACKEND/BACKEND-12_API_Integration_Contract_OpenAPI_Swagger.md",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
@@ -19824,7 +19827,41 @@ export const backlog = [
       "FULL gate (security + silent-failure) TRƯỚC khi mở PR; owner merge",
     ],
     notes: [
+      "Owner ký 02/10/2026 (plan §8): D1 mã mới `FOUNDATION-ERR-MAIL-PASSWORD-REQUIRED` (append catalog + BACKEND-12 §21.3) · D2 `errorMessage` = câu cố định từ trường máy-sinh (đo: route test echo dòng đầu banner mọi cổng TCP) · D3 chấp nhận phần dò cổng còn lại · D4 paths: FE thật ở `apps/console` (backlog cũ ghi nhầm `apps/app`) · D5 (sau plan-review) mig 0591 REVOKE UPDATE cột đích của `mediaos_app` — DB ép bất biến «cột đích chỉ đổi cùng envelope mới». Plan: docs/plans/S19-SEC-MAILCREDEXFIL-1.md.",
       "🔴 secret. Không phải lỗi của S19-OPS-AUDITHIGH-1 (có từ CS-8) — nâng nodemailer không đổi gì ở đây. Tác nhân cần quyền nhạy cảm `configure-mail` ⇒ mối đe doạ là người trong/tài khoản admin bị chiếm, mục tiêu là mật khẩu hộp thư công ty (thường dùng chung cho dịch vụ khác).",
+    ],
+  },
+  {
+    id: "S19-SEC-MAILAADBIND-1",
+    module: "FOUNDATION",
+    layer: "SEC",
+    title:
+      "Gắn ĐÍCH SMTP (host/port/username/secure) vào AAD của envelope mật khẩu — đổi đích mà không mã hoá lại thì giải mã THẤT BẠI (bất biến I2 của S19-SEC-MAILCREDEXFIL-1 thành mật mã học, chặn cả hồi quy DELETE+INSERT tái dùng id + chép envelope)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/settings/**",
+      "apps/api/src/user-invites/invite-mail.service.ts",
+      "apps/api/src/user-invites/invite-mail.smtp.spec.ts",
+      "apps/api/src/crypto/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-SEC-MAILCREDEXFIL-1"],
+    src: [
+      "FULL gate S19-SEC-MAILCREDEXFIL-1 (02/10/2026) — security MEDIUM + database M3 hội tụ: AAD envelope SMTP chỉ gắn `companyId‖recordId(=id)‖encAlgo‖dekKeyVersion` (`secret-encryption.service.ts:24-25`), KHÔNG gắn đích; mig 0591 chỉ thu hồi UPDATE cột đích, `mediaos_app` vẫn INSERT/DELETE cả bảng ⇒ một đường ghi mới `DELETE; INSERT {...hàng cũ, host mới}` giữ id + envelope cũ thì mật khẩu cũ tới đích mới, lọt cả 0591 lẫn AAD. Code hiện tại KHÔNG có đường đó (DELETE+INSERT luôn `randomUUID()` + envelope mới).",
+      "Đo 02/10: PROD `mediaos` có 0 hàng `company_mail_configs` ⇒ đổi AAD lúc này KHÔNG cần job mã hoá lại; sau khi PROD có hàng đầu tiên thì cần backfill (decrypt AAD cũ → encrypt AAD mới).",
+    ],
+    done_when: [
+      "Ngữ cảnh mã hoá SMTP gắn bộ bốn đích (vd `recordId = JSON.stringify([id, host, port, username, secure])` — KHÔNG dùng ký tự phân cách tự chọn vì host không validate), dùng CHUNG một helper ở encrypt (PUT) và MỌI nơi decrypt (`MailConfigService.testConnection`, `InviteMailService`)",
+      "RED trước: int-spec sửa đích TRỰC TIẾP ở DB (superuser UPDATE host, giữ envelope) ⇒ test vắng password + gửi lời mời đều KHÔNG tới host mới (giải mã thất bại, log, `{sent:false, reason:'decrypt_failed'}`); đối chứng dương: đích khớp vẫn giải mã được",
+      "Đo lại PROD 0 hàng ngay trước deploy; có hàng ⇒ DỪNG, cần job mã hoá lại",
+      "FULL gate (security + silent-failure) TRƯỚC khi mở PR; owner merge",
+    ],
+    notes: [
+      "Owner chốt 02/10/2026: làm WO riêng, SỚM — trước khi PROD lưu cấu hình SMTP đầu tiên (rẻ nhất lúc này).",
     ],
   },
 ];
