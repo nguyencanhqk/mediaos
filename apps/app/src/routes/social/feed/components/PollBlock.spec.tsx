@@ -1,14 +1,24 @@
 /**
  * S16-SOCIAL-FE-2 — ca P4 · P4b · P4c · P5 · P6 trên `PollBlock` (plan D5 + §8 H2/H4/M6).
+ * S16-SOCIAL-FEBLOCKSEED-1 — ca S1–S4: seed cache `043` từ khối `post.poll` của thẻ (plan §1).
  *
  * Quyền đặt bằng store THẬT (`setCaps`), chỉ `socialApi` bị thay — khuôn `PostCard.spec`.
+ * Client test KHÔNG có `staleTime` (= 0) — cố ý: S1–S3 chứng minh khối TỰ khai `staleTime`.
  */
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@mediaos/web-core";
+import { ApiError, socialKeys } from "@mediaos/web-core";
 import type { FeedPollResultsDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
-import { renderWithProviders, resetCaps, setCaps } from "../social-test-doubles";
+import {
+  POLL_OPTION_A,
+  POLL_OPTION_B,
+  makePollResults,
+  makeTestQueryClient,
+  renderWithProviders,
+  resetCaps,
+  setCaps,
+} from "../social-test-doubles";
 import { PollBlock } from "./PollBlock";
 
 const api = {
@@ -33,26 +43,32 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 const POST_ID = "11111111-1111-4111-8111-111111111111";
-const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const A = POLL_OPTION_A;
+const B = POLL_OPTION_B;
 const t = i18n.getFixedT("vi", "social");
 
-const makeResults = (over: Partial<FeedPollResultsDto> = {}): FeedPollResultsDto => ({
-  pollId: "22222222-2222-4222-8222-222222222222",
-  postId: POST_ID,
-  question: "Ăn trưa ở đâu?",
-  status: "open",
-  multipleChoice: false,
-  isAnonymous: false,
-  closesAt: null,
-  totalVoters: 0,
-  myVote: [],
-  options: [
-    { id: A, label: "Cơm", voteCount: 0 },
-    { id: B, label: "Phở", voteCount: 0 },
-  ],
-  ...over,
-});
+/** Fixture CHUNG (`postId` = `POST_ID`) — cùng hình dạng cho `043`, `041..044` và khối `post.poll`. */
+const makeResults = makePollResults;
+
+/** Kết quả với số phiếu cho từng ô — `totalVoters` truyền riêng (số NGƯỜI, không phải tổng phiếu). */
+const tally = (a: number, b: number, totalVoters: number, myVote: string[] = []) =>
+  makeResults({
+    totalVoters,
+    myVote,
+    options: [
+      { id: A, label: "Cơm", voteCount: a },
+      { id: B, label: "Phở", voteCount: b },
+    ],
+  });
+
+/**
+ * Cho mọi fetch-lúc-mount (nếu có) kịp bắn VÀ về rồi mới khẳng định «không gọi 043» — khẳng định ngay
+ * sau `render` là xanh-rỗng vì refetch chạy trong effect của observer.
+ */
+const settle = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
 
 const optionInput = (id: string): HTMLInputElement =>
   within(screen.getByTestId(`poll-option-${id}`)).getByRole(
@@ -83,7 +99,9 @@ describe("P4 — kiểu chọn · thanh % · bỏ phiếu", () => {
     expect(within(screen.getByTestId(`poll-option-${A}`)).getByRole("radio")).toBeInTheDocument();
     cleanup();
     await renderBlock(makeResults({ multipleChoice: true }));
-    expect(within(screen.getByTestId(`poll-option-${A}`)).getByRole("checkbox")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId(`poll-option-${A}`)).getByRole("checkbox"),
+    ).toBeInTheDocument();
   });
 
   it("chưa ai bỏ phiếu ⇒ 0%, KHÔNG «NaN%»", async () => {
@@ -244,5 +262,91 @@ describe("P6 — ghi hỏng KHÔNG im lặng", () => {
     api.getPollResults.mockResolvedValue(makeResults());
     fireEvent.click(within(box).getByRole("button"));
     expect(await screen.findByTestId("poll-block")).toBeInTheDocument();
+  });
+});
+
+/**
+ * S16-SOCIAL-FEBLOCKSEED-1 — seed `results(postId)` từ khối `post.poll` (plan §1).
+ *
+ * Mọi ca ĐẶT `getPollResults` tường minh với số KHÁC seed (hoặc promise không bao giờ về): `clearAllMocks`
+ * giữ implementation của ca trước, và một 043 trùng số với seed sẽ làm ca «vẽ từ seed» xanh-rỗng.
+ */
+describe("FEBLOCKSEED — seed cache `043` từ `post.poll`", () => {
+  it("S1 — có seed ⇒ vẽ NGAY lượt render đầu từ khối thẻ, 0 lần gọi 043 (client `staleTime` 0)", async () => {
+    api.getPollResults.mockResolvedValue(tally(9, 0, 9));
+    renderWithProviders(<PollBlock postId={POST_ID} isMine={false} seed={tally(2, 1, 3, [A])} />);
+
+    // Lượt render ĐẦU — không skeleton, không chờ mạng.
+    expect(screen.queryByTestId("poll-block-loading")).toBeNull();
+    expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(
+      t("poll.totalVoters", { count: 3 }),
+    );
+    expect(screen.getByTestId(`poll-option-${A}`)).toHaveTextContent("67%");
+    expect(screen.getByTestId(`poll-option-${A}`)).toHaveTextContent(t("poll.myChoice"));
+    expect(screen.getByTestId(`poll-option-${B}`)).toHaveTextContent("33%");
+
+    await settle();
+    expect(api.getPollResults).not.toHaveBeenCalled();
+    // Số không bị một 043 về muộn thay mất.
+    expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(
+      t("poll.totalVoters", { count: 3 }),
+    );
+  });
+
+  it("S2 — entry ĐÃ có data (mới hơn) THẮNG seed cũ hơn — không vẽ số của seed, 0 lần gọi 043", async () => {
+    const client = makeTestQueryClient();
+    client.setQueryData(socialKeys.polls.results(POST_ID), tally(5, 0, 5, [A]));
+    api.getPollResults.mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(
+      <PollBlock postId={POST_ID} isMine={false} seed={tally(1, 0, 1)} />,
+      client,
+    );
+    expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(
+      t("poll.totalVoters", { count: 5 }),
+    );
+
+    await settle();
+    expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(
+      t("poll.totalVoters", { count: 5 }),
+    );
+    expect(client.getQueryData(socialKeys.polls.results(POST_ID))).toEqual(tally(5, 0, 5, [A]));
+    expect(api.getPollResults).not.toHaveBeenCalled();
+  });
+
+  it("S3 — kết quả bỏ phiếu SỐNG qua re-render với seed CŨ (object mới, nội dung trước-bỏ-phiếu)", async () => {
+    api.getPollResults.mockReturnValue(new Promise(() => {}));
+    api.votePoll.mockResolvedValue(tally(1, 0, 1, [A]));
+    const { rerender } = renderWithProviders(
+      <PollBlock postId={POST_ID} isMine={false} seed={makeResults()} />,
+    );
+
+    fireEvent.click(optionInput(A));
+    fireEvent.click(screen.getByTestId("poll-vote"));
+    await waitFor(() => expect(screen.getByTestId(`poll-option-${A}`)).toHaveTextContent("100%"));
+
+    // Danh sách cha render lại với ảnh chụp CŨ của thẻ (vd GET gửi trước lượt bỏ phiếu, về sau — plan §0 E6).
+    rerender(<PollBlock postId={POST_ID} isMine={false} seed={makeResults()} />);
+    await settle();
+    expect(screen.getByTestId(`poll-option-${A}`)).toHaveTextContent("100%");
+    expect(screen.getByTestId("poll-total-voters")).toHaveTextContent(
+      t("poll.totalVoters", { count: 1 }),
+    );
+    expect(api.getPollResults).not.toHaveBeenCalled();
+  });
+
+  it("S4 — có seed + bỏ phiếu 409 ⇒ banner VÀ đúng 1 lần tải lại 043 (khối không bị tắt fetch)", async () => {
+    api.votePoll.mockRejectedValue(new ApiError(409, "CONFLICT", "SOCIAL-ERR-016"));
+    api.getPollResults.mockResolvedValue(makeResults({ status: "closed" }));
+    renderWithProviders(<PollBlock postId={POST_ID} isMine={false} seed={makeResults()} />);
+
+    fireEvent.click(optionInput(A));
+    fireEvent.click(screen.getByTestId("poll-vote"));
+
+    expect(await screen.findByTestId("feed-action-error")).toHaveAttribute("data-kind", "vote");
+    await waitFor(() =>
+      expect(screen.getByTestId("poll-status-label")).toHaveTextContent(t("poll.closed")),
+    );
+    expect(api.getPollResults).toHaveBeenCalledTimes(1);
   });
 });

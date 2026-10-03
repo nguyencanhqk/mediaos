@@ -6,10 +6,16 @@
 import type { ReactNode } from "react";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@mediaos/web-core";
+import type { QueryClient } from "@tanstack/react-query";
+import { ApiError, socialKeys } from "@mediaos/web-core";
 import type { FeedIdeaItemDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
-import { renderWithProviders, resetCaps, setCaps } from "../feed/social-test-doubles";
+import {
+  makeTestQueryClient,
+  renderWithProviders,
+  resetCaps,
+  setCaps,
+} from "../feed/social-test-doubles";
 import { IdeasPage } from "./IdeasPage";
 
 const listIdeas = vi.fn();
@@ -193,5 +199,73 @@ describe("L1 — lọc · rỗng · lỗi", () => {
     listIdeas.mockRejectedValue(new Error("500"));
     renderWithProviders(<IdeasPage />);
     expect(await screen.findByTestId("ideas-error")).toHaveTextContent(t("state.retry"));
+  });
+});
+
+/**
+ * S16-SOCIAL-FEBLOCKSEED-1 — pill trạng thái giờ có trên THẺ BÀI (đọc `post.idea` từ cache danh sách/chi
+ * tiết bài) ⇒ xét duyệt phải làm tươi cả các cache đó, không chỉ `ideas.allOf()`. Đổi dòng H5 của plan
+ * FE-2 §8 (viết trước khi thẻ có pill). Đo bằng trạng thái THẬT của cache (`isInvalidated`), không spy.
+ */
+describe("FEBLOCKSEED — xét duyệt làm tươi pill trên thẻ bài", () => {
+  const OTHER_POST = "33333333-3333-4333-8333-333333333333";
+
+  /** Gieo các cache mà pill trên thẻ đọc + một khoá ĐỐI CHỨNG (bài khác) không được chạm. */
+  function renderSeeded(): QueryClient {
+    const client = makeTestQueryClient();
+    client.setQueryData(socialKeys.feed.list({}), { pages: [], pageParams: [] });
+    client.setQueryData(socialKeys.saved(), { pages: [], pageParams: [] });
+    client.setQueryData(socialKeys.posts.detail(POST_ID), { id: POST_ID });
+    client.setQueryData(socialKeys.posts.detail(OTHER_POST), { id: OTHER_POST });
+    listIdeas.mockResolvedValue(pageOf([idea()]));
+    renderWithProviders(<IdeasPage />, client);
+    return client;
+  }
+
+  const isInvalidated = (client: QueryClient, key: readonly unknown[]): boolean =>
+    client.getQueryState(key)?.isInvalidated === true;
+
+  function expectCardCachesInvalidated(client: QueryClient): void {
+    expect(isInvalidated(client, socialKeys.feed.list({}))).toBe(true);
+    expect(isInvalidated(client, socialKeys.saved())).toBe(true);
+    expect(isInvalidated(client, socialKeys.posts.detail(POST_ID))).toBe(true);
+    // Chính xác, không rộng: chi tiết của bài KHÁC giữ nguyên.
+    expect(isInvalidated(client, socialKeys.posts.detail(OTHER_POST))).toBe(false);
+  }
+
+  it("S9 — 046 thành công ⇒ invalidate `feed.allOf()` · `saved()` · `posts.detail(postId)`", async () => {
+    setCaps(APPROVER);
+    reviewIdea.mockResolvedValue({
+      postId: POST_ID,
+      ideaId: IDEA_ID,
+      status: "under_review",
+      reviewedAt: "2026-09-29T00:00:00.000Z",
+    });
+    const client = renderSeeded();
+    await screen.findByTestId("ideas-list");
+    // Đối chứng: trước khi duyệt, không cache thẻ nào bị đánh dấu.
+    expect(isInvalidated(client, socialKeys.feed.list({}))).toBe(false);
+
+    fireEvent.click(screen.getByTestId("idea-review-open"));
+    fireEvent.click(screen.getByTestId("idea-review-submit"));
+    await waitFor(() => expect(screen.queryByTestId("idea-review-dialog")).toBeNull());
+
+    expectCardCachesInvalidated(client);
+  });
+
+  it("S10 — 409 (người khác vừa đổi trạng thái) ⇒ cùng tập cache thẻ bị invalidate, banner vẫn hiện", async () => {
+    setCaps(APPROVER);
+    reviewIdea.mockRejectedValue(new ApiError(409, "CONFLICT", "SOCIAL-ERR-019"));
+    const client = renderSeeded();
+    await screen.findByTestId("ideas-list");
+
+    fireEvent.click(screen.getByTestId("idea-review-open"));
+    fireEvent.click(screen.getByTestId("idea-review-submit"));
+
+    expect(await screen.findByTestId("feed-action-error")).toHaveAttribute(
+      "data-kind",
+      "ideaReview",
+    );
+    await waitFor(() => expectCardCachesInvalidated(client));
   });
 });

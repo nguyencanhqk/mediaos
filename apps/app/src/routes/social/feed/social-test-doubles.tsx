@@ -20,6 +20,7 @@ import type {
   FeedGroupDto,
   FeedGroupMemberDto,
   FeedNewsItemDto,
+  FeedPollResultsDto,
   FeedPostDto,
 } from "@mediaos/contracts";
 import i18n from "@/i18n";
@@ -47,19 +48,32 @@ export function resetCaps(): void {
  * của vitest và **đỏ vì HẾT GIỜ chứ không vì assert** — đọc y hệt một ca đỏ thật, nhưng dẫn người
  * sửa đi sai hướng hoàn toàn. `retryDelay` thì CHỈ đặt được ở cấp default, nên nó phải nằm ở đây.
  * Cùng họ [[mutant-red-must-match-expected-message]].
+ *
+ * ⚠️ KHÔNG đặt `staleTime` ở đây (mặc định thư viện = 0, khác `main.tsx` = 30s): ca nào cần hành vi «không
+ * gọi lại lúc mount» phải tự chứng minh component TỰ khai `staleTime`, không mượn của client bọc nó
+ * (S16-SOCIAL-FEBLOCKSEED-1 — `PollBlock`).
  */
-export function renderWithProviders(node: ReactNode) {
-  const client = new QueryClient({
+export function makeTestQueryClient(): QueryClient {
+  return new QueryClient({
     defaultOptions: {
       queries: { retry: false, retryDelay: 0 },
       mutations: { retry: false, retryDelay: 0 },
     },
   });
-  return render(
+}
+
+/**
+ * Render qua `wrapper` (không bọc thẳng `node`) ⇒ `rerender(newNode)` GIỮ provider và CÙNG client. Bản cũ
+ * bọc thẳng nên `rerender` thay cả cây, mất `QueryClientProvider` (bẫy ghi ở `KudosPage.spec`).
+ * `client` truyền vào được để ca test gieo cache TRƯỚC khi render; trả kèm để ca đọc lại cache.
+ */
+export function renderWithProviders(node: ReactNode, client: QueryClient = makeTestQueryClient()) {
+  const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <I18nextProvider i18n={i18n}>{node}</I18nextProvider>
-    </QueryClientProvider>,
+      <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
+    </QueryClientProvider>
   );
+  return { ...render(node, { wrapper }), client };
 }
 
 export const makePost = (over: Partial<FeedPostDto> = {}): FeedPostDto => ({
@@ -122,6 +136,28 @@ export const makeBirthday = (over: Partial<FeedBirthdayDto> = {}): FeedBirthdayD
 /** Trang keyset một trang, `nextCursor: null` = trang cuối. */
 export const page = <T,>(data: T[]) => ({ data, nextCursor: null });
 
+// ── S16-SOCIAL-FEBLOCKSEED-1 — kết quả bình chọn: CÙNG hình dạng cho `041..044` và khối `post.poll`. ──
+
+export const POLL_OPTION_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+export const POLL_OPTION_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+export const makePollResults = (over: Partial<FeedPollResultsDto> = {}): FeedPollResultsDto => ({
+  pollId: "22222222-2222-4222-8222-222222222222",
+  postId: "11111111-1111-4111-8111-111111111111",
+  question: "Ăn trưa ở đâu?",
+  status: "open",
+  multipleChoice: false,
+  isAnonymous: false,
+  closesAt: null,
+  totalVoters: 0,
+  myVote: [],
+  options: [
+    { id: POLL_OPTION_A, label: "Cơm", voteCount: 0 },
+    { id: POLL_OPTION_B, label: "Phở", voteCount: 0 },
+  ],
+  ...over,
+});
+
 // ── S16-SOCIAL-FE-2B — nhóm. Hình dạng chép `toFeedGroupDto` / `toMemberDto` (social-groups.service.ts). ──
 
 export const GROUP_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -154,7 +190,12 @@ export function makeMember(over: Partial<FeedGroupMemberDto> = {}): FeedGroupMem
 }
 
 /** Trang OFFSET `{data,page,limit,total}` của 030/037. */
-export const offsetPage = <T,>(data: T[], total = data.length) => ({ data, page: 1, limit: 20, total });
+export const offsetPage = <T,>(data: T[], total = data.length) => ({
+  data,
+  page: 1,
+  limit: 20,
+  total,
+});
 
 /**
  * Lỗi ĐÚNG hình dạng trên dây của API MỚI (S16-SOCIAL-GROUPERR-1): `code` = `SOCIAL_ERROR_CODES[K]`,
@@ -210,5 +251,9 @@ export const GROUP_ERR = {
  */
 export const GROUP_ERR_LEGACY = {
   lastOwner: () =>
-    new ApiError(409, "RESOURCE-ERR-CONFLICT", "SOCIAL-ERR-015: nhóm phải còn ít nhất một chủ nhóm đang hoạt động."),
+    new ApiError(
+      409,
+      "RESOURCE-ERR-CONFLICT",
+      "SOCIAL-ERR-015: nhóm phải còn ít nhất một chủ nhóm đang hoạt động.",
+    ),
 };

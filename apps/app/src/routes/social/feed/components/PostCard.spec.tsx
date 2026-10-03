@@ -13,13 +13,14 @@
  * nó; mock chính `useCan` thì ca này sẽ đo cái mock chứ không đo luật phân quyền thật.
  */
 import type { ReactNode } from "react";
-import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { act, render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
-import type { FeedPostDto } from "@mediaos/contracts";
+import { feedIdeaStatusSchema, type FeedPostDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
+import { makePollResults } from "../social-test-doubles";
 import { PostCard } from "./PostCard";
 
 /**
@@ -284,7 +285,7 @@ describe("C27 — kudos VẮNG khối (006 · WS · API cũ · mồ côi) / lo�
 });
 
 describe("S16-SOCIAL-FE-2 — thẻ `poll` / `idea`", () => {
-  it("`poll` ⇒ dựng khối bỏ phiếu, gọi `043` đúng `postId`", async () => {
+  it("`poll` KHÔNG có khối `post.poll` (006 · WS · API cũ) ⇒ dựng khối bỏ phiếu, tự gọi `043` đúng `postId`", async () => {
     getPollResults.mockResolvedValue({
       pollId: "22222222-2222-4222-8222-222222222222",
       postId: BASE_POST.id,
@@ -311,7 +312,7 @@ describe("S16-SOCIAL-FE-2 — thẻ `poll` / `idea`", () => {
     expect(screen.queryByTestId("post-body")).toBeNull();
   });
 
-  it("`idea` ⇒ thân + nhãn «Sáng kiến» trỏ `/feed/ideas`", () => {
+  it("`idea` KHÔNG có khối `post.idea` ⇒ thân + nhãn «Sáng kiến» trỏ `/feed/ideas`, KHÔNG pill", () => {
     renderCard({ type: "idea", body: "Lắp thêm máy lọc nước" });
     expect(screen.getByTestId("post-body")).toHaveTextContent("Lắp thêm máy lọc nước");
     // `Link` bị mock thành `<a href={to}>` trần (bỏ `data-testid`) ⇒ tìm theo nhãn i18n thật.
@@ -319,12 +320,72 @@ describe("S16-SOCIAL-FE-2 — thẻ `poll` / `idea`", () => {
     const badge = screen.getByText(new RegExp(`^${t("idea.label")} ·`)).closest("a");
     expect(badge).toHaveAttribute("href", "/feed/ideas");
     expect(screen.queryByTestId("poll-block")).toBeNull();
+    // Khối vắng ⇒ KHÔNG đoán trạng thái (không pill mặc định).
+    expect(screen.queryByTestId("idea-status-pill")).toBeNull();
   });
 
   it("thẻ `share` KHÔNG có nhãn sáng kiến, KHÔNG khối poll (đối chứng)", () => {
     renderCard();
     expect(screen.queryByText(/^Sáng kiến ·/)).toBeNull();
     expect(screen.queryByTestId("poll-block")).toBeNull();
+  });
+});
+
+/**
+ * S16-SOCIAL-FEBLOCKSEED-1 — thẻ đọc khối BE-2D đã chở (plan §1–§2).
+ *
+ * `renderCard` dùng client KHÔNG `staleTime` (= 0) ⇒ ca S5 chỉ xanh khi `PollBlock` TỰ khai `staleTime`.
+ */
+describe("FEBLOCKSEED — thẻ đọc `post.poll` / `post.idea`", () => {
+  const t = i18n.getFixedT("vi", "social");
+  /** Sau một nhịp: mọi fetch-lúc-mount (nếu có) đã bắn — khẳng định «0 lần gọi» mới có nghĩa. */
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+  it("S5 — `poll` CÓ `post.poll` ⇒ khối vẽ ngay từ thẻ, 0 lần gọi `043`", async () => {
+    getPollResults.mockResolvedValue(makePollResults({ question: "SAI — số của 043" }));
+    renderCard({
+      type: "poll",
+      body: null,
+      poll: makePollResults({ postId: BASE_POST.id, question: "Ăn trưa ở đâu?", totalVoters: 3 }),
+    });
+
+    const block = screen.getByTestId("poll-block");
+    expect(block).toHaveTextContent("Ăn trưa ở đâu?");
+    expect(block).toHaveTextContent(t("poll.totalVoters", { count: 3 }));
+
+    await settle();
+    expect(getPollResults).not.toHaveBeenCalled();
+    expect(screen.getByTestId("poll-block")).not.toHaveTextContent("SAI — số của 043");
+  });
+
+  it.each(feedIdeaStatusSchema.options)(
+    "S6 — `idea` CÓ `post.idea.status='%s'` ⇒ pill đúng nhãn, NGOÀI link; link giữ nguyên; chỉ cần `view:feed`",
+    (status) => {
+      renderCard({ type: "idea", body: "Lắp thêm máy lọc nước", idea: { status } });
+
+      const pill = screen.getByTestId("idea-status-pill");
+      expect(pill).toHaveTextContent(t(`idea.status.${status}`));
+      // Pill là ANH EM của link — lồng vào thì trạng thái thành một phần tên truy cập của link.
+      expect(pill.closest("a")).toBeNull();
+      const link = screen.getByText(new RegExp(`^${t("idea.label")} ·`)).closest("a");
+      expect(link).toHaveAttribute("href", "/feed/ideas");
+    },
+  );
+
+  it("S7 — pill đọc `post.idea.status`, KHÔNG BAO GIỜ `post.status` (trường kiểm duyệt)", () => {
+    renderCard({ type: "idea", body: "x", status: "hidden", idea: { status: "accepted" } });
+    const pill = screen.getByTestId("idea-status-pill");
+    expect(pill).toHaveTextContent(t("idea.status.accepted"));
+    expect(pill).not.toHaveTextContent("hidden");
+  });
+
+  it("đối chứng: `post.idea` trên bài KHÔNG phải `idea` ⇒ không pill, không nhãn sáng kiến", () => {
+    renderCard({ type: "share", idea: { status: "accepted" } });
+    expect(screen.queryByTestId("idea-status-pill")).toBeNull();
+    expect(screen.queryByText(/^Sáng kiến ·/)).toBeNull();
   });
 });
 

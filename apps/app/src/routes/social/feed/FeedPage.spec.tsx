@@ -12,12 +12,20 @@ import { WS_EVENTS } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { FeedPage } from "./FeedPage";
-import { makePost, page, renderWithProviders, resetCaps, setCaps } from "./social-test-doubles";
+import {
+  makePollResults,
+  makePost,
+  page,
+  renderWithProviders,
+  resetCaps,
+  setCaps,
+} from "./social-test-doubles";
 
 const listFeed = vi.fn();
 const search = vi.fn();
 const createPost = vi.fn();
 const savePost = vi.fn();
+const getPollResults = vi.fn();
 let mockSearch: Record<string, unknown> = {};
 
 type Handler = (payload: unknown) => void;
@@ -56,6 +64,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       search: (...a: unknown[]) => search(...a),
       createPost: (...a: unknown[]) => createPost(...a),
       savePost: (...a: unknown[]) => savePost(...a),
+      getPollResults: (...a: unknown[]) => getPollResults(...a),
     },
   };
 });
@@ -344,23 +353,68 @@ describe("S16-SOCIAL-FE-2 — plan §8 H5: đăng bài poll/idea làm mới màn
     ["poll", ["polls"]],
     ["idea", ["ideas"]],
     ["share", []],
-  ] as const)("tạo bài `%s` ⇒ invalidate đúng nhánh %j (không thừa, không thiếu)", async (type, expected) => {
-    const { QueryClient } = await import("@tanstack/react-query");
-    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
-    setCaps({ "view:feed": true, "create:feed-post": true });
-    createPost.mockResolvedValue({ ...makePost({ type }), droppedMentions: [] });
+  ] as const)(
+    "tạo bài `%s` ⇒ invalidate đúng nhánh %j (không thừa, không thiếu)",
+    async (type, expected) => {
+      const { QueryClient } = await import("@tanstack/react-query");
+      const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+      setCaps({ "view:feed": true, "create:feed-post": true });
+      createPost.mockResolvedValue({ ...makePost({ type }), droppedMentions: [] });
+      renderWithProviders(<FeedPage />);
+
+      fireEvent.change(await screen.findByRole("textbox"), { target: { value: "nội dung" } });
+      fireEvent.click(screen.getByTestId("composer-submit"));
+      await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1));
+
+      await waitFor(() => {
+        const branches = spy.mock.calls
+          .map((c) => (c[0]?.queryKey as readonly unknown[] | undefined)?.[1])
+          .filter((b) => b === "polls" || b === "ideas");
+        expect(branches).toEqual(expected);
+      });
+      spy.mockRestore();
+    },
+  );
+});
+
+/**
+ * S16-SOCIAL-FEBLOCKSEED-1 — nghiệm thu done_when #1 ở CẤP TRANG: N thẻ bình chọn/trang từng là N lần gọi
+ * `043`; thẻ chở `post.poll` (BE-2D) thì khối vẽ từ thẻ, 0 lần gọi. Client test KHÔNG có `staleTime` ⇒ ca
+ * này chỉ xanh khi `PollBlock` tự khai `staleTime`.
+ */
+describe("FEBLOCKSEED — S8: trang có N bài bình chọn chở `post.poll` ⇒ 0 lần gọi `043`", () => {
+  it("2 bài poll có khối ⇒ 2 khối vẽ đúng câu hỏi, `getPollResults` KHÔNG được gọi", async () => {
+    const P1 = "11111111-1111-4111-8111-1111111111a1";
+    const P2 = "11111111-1111-4111-8111-1111111111a2";
+    getPollResults.mockResolvedValue(makePollResults({ question: "SAI — số của 043" }));
+    listFeed.mockResolvedValue(
+      page([
+        makePost({
+          id: P1,
+          type: "poll",
+          body: null,
+          poll: makePollResults({ postId: P1, question: "Câu hỏi 1" }),
+        }),
+        makePost({
+          id: P2,
+          type: "poll",
+          body: null,
+          poll: makePollResults({ postId: P2, question: "Câu hỏi 2" }),
+        }),
+      ]),
+    );
     renderWithProviders(<FeedPage />);
 
-    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "nội dung" } });
-    fireEvent.click(screen.getByTestId("composer-submit"));
-    await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1));
-
-    await waitFor(() => {
-      const branches = spy.mock.calls
-        .map((c) => (c[0]?.queryKey as readonly unknown[] | undefined)?.[1])
-        .filter((b) => b === "polls" || b === "ideas");
-      expect(branches).toEqual(expected);
+    // Đếm request TRƯỚC (thông điệp đỏ khi hồi quy = «gọi N lần» — đúng thứ done_when đo), rồi mới xem vẽ.
+    await screen.findByTestId("feed-post-list");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    spy.mockRestore();
+    expect(getPollResults).not.toHaveBeenCalled();
+
+    const blocks = screen.getAllByTestId("poll-block");
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toHaveTextContent("Câu hỏi 1");
+    expect(blocks[1]).toHaveTextContent("Câu hỏi 2");
   });
 });
