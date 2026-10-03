@@ -17567,6 +17567,10 @@ export const backlog = [
       "docs/API Design/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      // Q-FE (a) — owner ký 02/10/2026: badge feed chính chỉ đếm bài `audience='company'` (feed chính
+      // LOẠI bài nhóm, D-OWNER-6) ⇒ mở đúng 2 file FE; gate thêm `react-reviewer`.
+      "apps/app/src/hooks/use-feed-realtime.ts",
+      "apps/app/src/hooks/use-feed-realtime.spec.tsx",
     ],
     status: "todo",
     skills: ["security-review"],
@@ -17589,6 +17593,137 @@ export const backlog = [
     notes: [
       "🔴 FULL gate + Opus (room = cổng đọc ở tầng realtime). Nối tiếp BE-2A.",
       "⚠️ TÁCH RA để không treo BE-2A/BE-2B: phần này bị chặn bởi quyết định room-đánh-dấu và bởi việc phải sửa tài liệu chuẩn API-19.",
+      "✍️ OWNER KÝ 02/10/2026 (plan §6, cả 10 đề xuất — sau plan-review lượt 1 verdict BLOCK, 12 finding đã vá vào plan §10): Q-SCHEMA = P1 `z.discriminatedUnion('audience')` với `orgUnitId: z.null()` ở CẢ HAI option (viết lại `social-ws.spec.ts` CÓ CHỦ ĐÍCH, danh sách M32) · Q-FE = (a) lọc `audience==='company'` ở `use-feed-realtime.ts` + spec, mở `paths` 2 file FE · Q-CR = (a) HOÃN comment/reaction vào room nhóm, seed `S16-SOCIAL-RTGROUPCR-1` · Q-LEAVE = (a) `leave` TRONG tx và LẦN NỮA sau commit · Q-PUBLIC = (a) bài nhóm `public` chỉ tới thành viên `active` (room nhóm) · Q-EVAC = (a) `034` KHÔNG sơ tán room, ghi phần dư R9 ở API-19 §7, seed `S16-SOCIAL-GROUPPOSTDEL-1` (`FOR SHARE` hàng nhóm ở cổng ghi `002`) · Q-SPEC = (a) KHÔNG sửa SPEC-16 · Q-SLICE = (a) 1 PR, 2 commit, int-spec tách 2 file (commit A tự xanh) · Q-FLAG = (a) KHÔNG cờ env · Q-GWFAIL = (a) lỗi khối feed lúc connect ⇒ rời MỌI room nhóm vừa join, phiên sống; chỉ ngắt kết nối khi chính bước dọn lỗi. D-OWNER-2 (22/09) giữ nguyên: `feedUserRoomName` + tái dùng cơ chế `syncRoomMembership`, KHÔNG BAO GIỜ `userRoomName` làm bộ chọn join.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-RTGROUPCR-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Fan-out `feed:comment.created` / `feed:reaction.changed` của bài `audience='group'` vào room nhóm `co:{c}:feedgroup:{groupId}` — hôm nay hai sự kiện đó CHỈ phát cho bài company (fail-closed có chủ đích của BE-2C, Q-CR)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/realtime/**",
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "plan S16-SOCIAL-BE-2C §6 Q-CR (owner ký (a) 02/10/2026) + §7 · API-19 §7 (bảng sau BE-2C ghi «chỉ room công ty, bài company») · SPEC-16 §13.7 («comment/reaction như trên»)",
+      "Hướng plan BE-2C đã đo: thêm `postGroupId` vào `SocialTargetAccess` (`social.types.ts`) ⇒ chạm `social-access.service.ts` (crown) + `social-comments.service.ts` + `social-reactions.service.ts` + 2 schema WS",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: có consumer FE thật của hai sự kiện này (M5 của plan BE-2C đo 0 consumer ngày 02/10) — chưa có thì giữ todo (YAGNI)",
+      "Định tuyến suy từ payload ĐÃ parse (khuôn `emitFeedPostCreated` của BE-2C): bài company ⇒ `feedRoomName`, bài group ⇒ `feedGroupRoomName`, `org_unit` ⇒ KHÔNG phát; parse lỗi ⇒ KHÔNG chạm `.to()`; không bao giờ `.to([])`",
+      "Deny-path RED trước: người ngoài nhóm kín / người `pending` / tenant khác nhận 0 sự kiện comment/reaction của bài nhóm — mỗi ca «nhận 0» có NEO DƯƠNG trên chính socket đó",
+      "API-19 §7 + SPEC-16 §13.7 khớp lại (SPEC đúng sau WO này — Q-SPEC của BE-2C)",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-BE-2C (owner ký Q-CR = (a)). 🔴 FULL gate: chạm cổng truy cập crown-jewel `social-access.service.ts`.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GROUPPOSTDEL-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Đua `034` xoá nhóm ↔ `002` đăng bài nhóm: cổng ghi `002` đọc nhóm KHÔNG khoá ⇒ bài commit được vào nhóm VỪA xoá mềm (REST ẩn bài mồ côi, nhưng từ BE-2C bài đó ĐƯỢC PHÁT vào room nhóm ⇒ thành viên cũ nhận payload mà REST đã ẩn) — khoá `FOR SHARE` hàng nhóm ở cổng ghi",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "database-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "plan S16-SOCIAL-BE-2C §2 M30 + §9 R9 + §6 Q-EVAC (owner ký (a)+(c) 02/10/2026): `034` UPDATE `deleted_at` ⇒ `FOR NO KEY UPDATE`; FK `feed_posts.group_id` ⇒ `FOR KEY SHARE` — KHÔNG xung đột; `assertWriteAudience` → `assertGroupVisibleTx`/`getMembershipTx` là SELECT không khoá (`social-access.service.ts` · `social-group-access.service.ts`)",
+      "Kết luận M30 mới từ ĐỌC MÃ + ma trận khoá PostgreSQL — CHƯA đo bằng harness đua",
+    ],
+    done_when: [
+      "🔴 ĐO TRƯỚC KHI SỬA bằng harness đua TẤT ĐỊNH (khuôn BE-3A: giữ khoá hàng + poll `pg_stat_activity`): `002` đọc nhóm sống TRƯỚC commit của `034` ⇒ hôm nay commit được bài vào nhóm đã xoá — RED phải đỏ đúng thông điệp đó",
+      "Cổng ghi `002` (và mọi đường ghi khác vào nhóm: `004` đổi audience nếu có, `016` bình luận nếu cần) khoá `FOR SHARE` hàng `feed_groups` ⇒ một bên chờ bên kia; READ COMMITTED đọc lại `deleted_at` sau khi chờ ⇒ 404 `SOCIAL-ERR-012`",
+      "Không deadlock mới với `lockGroupRowTx` (`FOR UPDATE`) của `035..039` — ca song song đo",
+      "API-19 §7 bỏ dòng phần dư R9 khi đã đóng",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ S16-SOCIAL-BE-2C (owner ký Q-EVAC = (a) + seed (c)). Sơ tán room sau `034` (Q-EVAC (b)) chỉ THU HẸP khe — emit của `002` và sơ tán của `034` chạy sau HAI commit độc lập — nên chỗ đóng thật là khoá ở tầng DB.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEGROUPBADGE-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Badge «N bài mới» THEO NHÓM — tiêu thụ biến thể `audience:'group'` của `feed:post.created` (room `co:{c}:feedgroup:{g}` có từ BE-2C) ở trang nhóm + «Nhóm của tôi»; viết lại docblock `GroupPostsTab.tsx` đang tả trạng thái TRƯỚC BE-2C",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/hooks/**",
+      "apps/app/src/layouts/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "plan S16-SOCIAL-BE-2C §7 («WO FE badge theo nhóm» — đề xuất, chưa seed tới FULL gate) · API-19 §7 (badge feed chính chỉ đếm biến thể `company`; badge THEO NHÓM là WO FE riêng)",
+      "`apps/app/src/routes/social/groups/components/GroupPostsTab.tsx:11-13` — docblock còn ghi `wsFeedPostCreatedEventSchema.audience = literal('company')` và «chờ BE-2C»: SAI sau khi BE-2C merge (FULL gate BE-2C lượt 1, typescript-reviewer LOW)",
+      "`apps/app/src/hooks/use-feed-realtime.ts` — `safeParse` rồi BỎ QUA im lặng mọi payload `audience !== 'company'` (Q-FE (a) của BE-2C): hook nhóm phải đếm ĐÚNG phần mà hook feed chính bỏ, theo `groupId`",
+    ],
+    done_when: [
+      "Đếm theo `groupId` của payload ĐÃ `safeParse` (không đọc khoá thô); payload sai hợp đồng ⇒ không đếm (khuôn `use-feed-realtime.ts`); bấm badge ⇒ refetch `001?groupId=` của đúng nhóm",
+      "Badge nhóm A KHÔNG tăng khi bài thuộc nhóm B (ca test hai nhóm) · badge feed chính KHÔNG tăng vì bài nhóm (giữ Q-FE (a) của BE-2C — ca hồi quy)",
+      "Viết lại docblock `GroupPostsTab.tsx:11-13` theo hiện trạng sau BE-2C (union `audience` · room nhóm có cổng membership + sàn scope Company)",
+      "Loading/error/empty như mọi màn FE; không hard-code quyền (badge chỉ có nghĩa khi socket đã qua cổng `view:feed` @Company — server quyết, client không suy diễn)",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ FULL gate S16-SOCIAL-BE-2C lượt 1 (typescript-reviewer LOW: docblock `GroupPostsTab.tsx` trôi sau merge, nằm NGOÀI `paths` của BE-2C và WO FE badge của plan §7 chưa được seed ⇒ không gì theo dõi). 🟡 LIGHT gate + react-reviewer.",
+    ],
+  },
+  {
+    id: "S17-CHAT-RTROOMOPS-1",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Room-op CHAT có HAI lớp lỗi mà BE-2C đã vá cho room nhóm SOCIAL: (1) id route chữ HOA ⇒ `syncRoomMembership`/`evictFromCallRoom` dựng tên room không khớp ⇒ người bị gỡ Ở LẠI phòng chat/cuộc gọi; (2) dưới adapter Valkey `socketsLeave` chỉ publish ⇒ lệnh leave có thể MẤT (sub rớt) ⇒ người bị gỡ tiếp tục nhận tin",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/chat/**",
+      "apps/api/src/realtime/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-2C"],
+    src: [
+      "(1) `chat/chat-rooms.controller.ts` `removeMember`/`updateMember` — `@Param('id'|'userId', ParseUUIDPipe)` nhận chữ HOA (regex /i) và trả NGUYÊN VĂN → `chat-members.service.ts` `syncRoomMembership(companyId, roomId, targetUserId, 'leave')` + `evictFromCallRoom(...)` ⇒ `userRoomName`/`chatRoomName`/`callUserRoomName` chữ HOA ≠ room gateway dựng từ DB/JWT (chữ thường) ⇒ leave khớp 0 socket. Postgres so uuid không phân biệt hoa thường nên ghi DB vẫn thành công (FULL gate S16-SOCIAL-BE-2C lượt 1, database-reviewer HIGH — đo ở SOCIAL bằng probe AppModule thật; CHAT CHƯA đo)",
+      "(2) `@socket.io/redis-adapter` 8.3.0 `delSockets` không cờ `local` CHỈ publish REMOTE_LEAVE; node giữ socket chỉ áp khi nhận lại qua SUBSCRIBE (pub/sub at-most-once) — `syncRoomMembership('leave')` + `evictFromCallRoom` (namespace `/ws-call`) cùng lớp (security-reviewer + silent-failure-hunter MEDIUM ở BE-2C)",
+      "Khuôn vá đã có: `RealtimeEmitterService.syncFeedGroupMembership` (BE-2C) — chuẩn hoá chữ thường ở cửa room-op + `server.local.in(…).socketsLeave(…)` TRƯỚC lệnh toàn cụm; spec `realtime-emitter.feed.io.spec.ts` (adapter NUỐT room-op không-local) tái dùng được",
+    ],
+    done_when: [
+      "🔴 RED TRƯỚC (deny-path): int-spec `DELETE /chat/rooms/{ID-HOA}/members/{UID-HOA}` ⇒ hôm nay socket người bị gỡ VẪN ở `chatRoomName` (poll membership phía server, khuôn BE-2C E11m) — sau vá rời phòng; ca tương tự cho `evictFromCallRoom` (`/ws-call`)",
+      "Chuẩn hoá chữ thường ở CỬA room-op (hoặc ở builder `rooms.ts` nếu quyết định canonical hoá MỌI tên room — kèm lý do + đo toàn bộ realtime/CHAT/CALL), KHÔNG rải `.toLowerCase()` ở từng caller",
+      "`leave` CỤC BỘ đồng bộ trước lệnh toàn cụm cho `syncRoomMembership` + `evictFromCallRoom`; ca adapter-nuốt-thông-điệp ĐỎ trước vá; giữ nguyên bất đối xứng bộ chọn join/leave và cặp số lời gọi của `chat-realtime-after-commit.spec.ts`",
+      "Ghi phần dư đa-instance (node KHÁC vẫn chỉ qua pub/sub) + `unhandledRejection` khi pub rớt (có sẵn ở mọi emit) vào API CHAT §7",
+    ],
+    notes: [
+      "Seed 02/10/2026 từ FULL gate S16-SOCIAL-BE-2C lượt 1. BE-2C CỐ Ý không đổi CHAT (`syncRoomMembership` giữ nguyên chữ ký + hành vi, lưới `realtime-emitter.chat.spec.ts`): vá ở `syncFeedGroupMembership` chỉ phủ room nhóm. 🔴 FULL gate (cổng đọc realtime CHAT).",
     ],
   },
   {

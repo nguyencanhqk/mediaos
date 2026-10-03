@@ -621,17 +621,55 @@ Replay `002` trả **thẻ LÚC TẠO** (khối `poll` đếm 0, tên người n
 
 | Event | Room | Payload | Gate lúc join |
 | --- | --- | --- | --- |
-| `feed:post.created` | `co:{companyId}:feed` | DTO bài §6.1 đã mask | `view:feed` |
-| `feed:post.created` | `co:{companyId}:feedgroup:{groupId}` | như trên | `view:feed` **+ membership** |
-| `feed:comment.created` | cả hai room trên | DTO bình luận đã mask | như trên |
-| `feed:reaction.changed` | cả hai room trên | `{ targetType, targetId, likeCount }` | như trên |
+| `feed:post.created` | `co:{companyId}:feed` | DTO bài §6.1 đã mask — biến thể `audience:'company'` | `view:feed` **@Company** (cùng sàn REST) |
+| `feed:post.created` | `co:{companyId}:feedgroup:{groupId}` | như trên — biến thể `audience:'group'` + `groupId` | `view:feed` **@Company** lúc connect **+ thành viên `active` của nhóm còn sống** (kể cả nhóm `public`) |
+| `feed:comment.created` | **CHỈ** `co:{companyId}:feed` (bài `company`) | DTO bình luận đã mask | `view:feed` **@Company** |
+| `feed:reaction.changed` | **CHỈ** `co:{companyId}:feed` (bài `company`) | `{ targetType, targetId, postId, likeCount, reactions[] }` | `view:feed` **@Company** |
+
+> **Gate lúc join = CÙNG sàn REST** (FULL gate `S16-SOCIAL-BE-2C` lượt 1, HIGH): mọi route đọc SOCIAL ép sàn scope Company (`companyFloor` — `resolveActor` ném 403 `AUTH-ERR-SCOPE-DENIED`), nên cổng WS hỏi scope MẠNH NHẤT của cặp `view:feed` (`resolveStrongestScope`, grant đọc TƯƠI mỗi lần connect — KHÔNG qua cache 300 s của `can()`) và chỉ cho qua `Company`/`System` (cùng vị từ `SocialAccessService.isCompany`). Trước bản vá cổng là `can()` — mù `data_scope` — nên một vai `view:feed@Department` (role-admin cho gán) bị REST 403 toàn bộ bảng tin/nhóm mà WS vẫn đưa vào `feed`, `feeduser` và MỌI room nhóm kín của người đó.
+
+> Trạng thái từ **`S16-SOCIAL-BE-2C` (02/10/2026)** — bảng trên là HIỆN TRẠNG code. Bình luận / cảm xúc của bài nhóm **chưa** phát vào room nhóm (owner ký Q-CR (a): FE chưa có consumer nào — nợ `S16-SOCIAL-RTGROUPCR-1`); SPEC-16 §13.7 mô tả ĐÍCH («như trên») và không sửa ở WO này (Q-SPEC (a)).
 
 - **Payload = DTO của REST**, không bao giờ là hàng thô (`io.emit` thẳng row bị cấm — CLAUDE.md §5).
 - **KHÔNG mang `mentions`** (`S16-SOCIAL-BE-1D` D6) — bóc tại nguồn và `.omit` ở schema WS. FE nhận thẻ qua WS render `@…` thành span tới lần refetch REST.
-- **KHÔNG mang `kudos` · `poll` · `idea`** (`S16-SOCIAL-BE-2D` D7) — `poll.myVote` là của TÁC GIẢ (thẻ phát ra được decorate bằng tác giả), phát cho cả room là rò; `.omit` không chạm khoá lồng nên bóc nguyên khối, ở CẢ nguồn (`emitPostCreated`) lẫn schema WS. FE chỉ đếm sự kiện nên không mất gì.
-- Room nhóm cần gate **riêng** — có `view:feed` không đủ để vào room của nhóm riêng tư.
+- **KHÔNG mang `kudos` · `poll` · `idea`** (`S16-SOCIAL-BE-2D` D7) — `poll.myVote` là của TÁC GIẢ (thẻ phát ra được decorate bằng tác giả), phát cho cả room là rò; `.omit` không chạm khoá lồng nên bóc nguyên khối, ở CẢ nguồn (`buildWsPostCreatedEvent`) lẫn schema WS. FE chỉ đếm sự kiện nên không mất gì. Áp cho CẢ HAI biến thể.
+- **`feed:post.created` là union theo `audience`** (`S16-SOCIAL-BE-2C`, owner ký Q-SCHEMA = P1): `company` (`groupId: null`, `orgUnitId: null`) | `group` (`groupId` uuid BẮT BUỘC, `orgUnitId: null`); hai biến thể CÙNG tập khoá (room nhóm không nhận payload rộng hơn room công ty). `org_unit`, `group` thiếu `groupId`, `company` mang `groupId`, mọi `orgUnitId` khác `null` ⇒ **không parse được**. Emitter `.parse()` TRƯỚC rồi mới chọn room từ `audience` của kết quả — parse lỗi ⇒ không phát vào đâu.
+- **Room nhóm có gate RIÊNG** — `view:feed` KHÔNG đủ: chỉ thành viên `status='active'` (vị từ tập người `activeGroupMemberExists`, KHÔNG vị từ đọc) của nhóm còn sống, cùng công ty. `pending` không phải thành viên. Nhóm **`public` cũng chỉ thành viên** (owner ký Q-PUBLIC (a)): feed chính loại bài nhóm (D-OWNER-6) và WS một chiều không cho client tự xin room — người ngoài xem trang nhóm public không có badge.
+- **KHÔNG có room `org_unit`** (quyết định tường minh, done_when #8 — Q-ORG): (1) tài liệu chuẩn không khai room nào cho nó; (2) «thuộc đơn vị» là phân công HR (resolve theo request từ data scope), đổi bởi writer của module khác — giữ room đồng bộ phải móc vào MỌI writer đó; (3) FE không có consumer; (4) không room ⇒ bài `org_unit` tiếp tục KHÔNG phát vào đâu (fail-closed D21) — thiếu badge, không rò.
 - **Xoá (`005`) và khôi phục (`058`) bài KHÔNG phát sự kiện nào** — phát lại `feed:post.created` lúc khôi phục sẽ đẩy một bài có thể đang `hidden` ra audience (§5.1k, D14).
-- FE chỉ hiện badge «N bài mới» + cập nhật số đếm; **không** tự chèn bài vào dòng cuộn đang đọc.
+- FE chỉ hiện badge «N bài mới» + cập nhật số đếm; **không** tự chèn bài vào dòng cuộn đang đọc. Badge feed chính chỉ đếm biến thể `company` (bài nhóm bỏ qua im lặng — Q-FE (a)); badge THEO NHÓM là WO FE riêng.
+
+### 7.1 Room nội bộ — KHÔNG phải đích phát (nới D8 «chỉ 2 room», `S16-SOCIAL-BE-2C`)
+
+| Room | Ai join (server-side, lúc connect) | Dùng làm |
+| --- | --- | --- |
+| `co:{companyId}:user:{userId}` | MỌI socket đã xác thực | đích NOTI · **bộ chọn `leave`** khỏi room nhóm (RỘNG) |
+| `co:{companyId}:feeduser:{userId}` | CHỈ socket đã qua cổng `view:feed` @Company | **bộ chọn `join`** vào room nhóm (HẸP) — owner chốt D-OWNER-2 22/09/2026 |
+
+Vì sao cần room đánh dấu: lệnh `in(X).socketsJoin(feedgroup)` của đường đổi membership kéo MỌI socket trong `X`. Dùng `user:{u}` làm `X` là kéo cả socket đã TRƯỢT cổng `view:feed` vào room nhóm (đo thật — plan BE-2C M2 a′): cổng quyền chỉ có tác dụng một lần lúc connect, rồi lần duyệt kế tiếp mở lại cửa. **Bất đối xứng có chủ đích**: `leave` quét `user:{u}` (rời nhầm = fail-safe, sót = rò).
+
+### 7.2 Join / leave room nhóm
+
+- **Lúc connect** (`RealtimeGateway.joinFeedRooms`): cổng `view:feed` **@Company** (sàn REST, grant đọc tươi) → join `feed` + `feeduser` **TRƯỚC** khi đọc membership (đóng đua với `038` duyệt) → server tra DB danh sách nhóm (không bao giờ nhận id nhóm từ client) → join → **đọc LẠI** và rời nhóm vừa biến mất (đua với `036/039`; danh sách đầu RỖNG ⇒ bỏ lần đọc lại — không có room nào để rời). **Lỗi giữa chừng ⇒ rời MỌI room nhóm vừa join, phiên vẫn sống, log `error`** (fail-closed cho room nhóm, fail-soft cho phiên — owner ký Q-GWFAIL (a)); **dọn mà cũng lỗi ⇒ ngắt kết nối**.
+- **Khi membership đổi** (`syncFeedGroupMembership`): `join` CHỈ **sau commit**; `leave` **trong tx VÀ sau commit** (owner ký Q-LEAVE (a)). Hai lớp vá ở chính cửa này (FULL gate lượt 1): (1) id nhóm/người **chuẩn hoá CHỮ THƯỜNG** — route nhận uuid chữ HOA (`ParseUUIDPipe` không phân biệt hoa thường, trả nguyên văn) trong khi room của gateway dựng từ DB/JWT; trước bản vá `039`/`036` với id chữ HOA xoá hàng thành công mà KHÔNG gỡ socket nào; (2) `leave` áp **CỤC BỘ, ĐỒNG BỘ trước** (`server.local`), rồi mới phát toàn cụm — xem §7.3 (c).
+
+| Route | Chuyển trạng thái | Room-op |
+| --- | --- | --- |
+| `031` tạo nhóm | ∅ → người tạo `owner/active` | `join` người tạo |
+| `035` xin vào | `public` ∅→`active` · `private` ∅→`pending` | `public`: `join` · `private`: **không gì** |
+| `036` rời | `active`/`pending` → ∅ | `leave` (trong tx + sau commit) |
+| `038` quyết định | duyệt `pending→active` · từ chối · đổi vai | duyệt: `join` · từ chối / đổi vai: **không gì** |
+| `039` mời ra | `active`/`pending` → ∅ | `leave` (trong tx + sau commit) |
+| `034` xoá nhóm | nhóm xoá mềm | **KHÔNG sơ tán** (owner ký Q-EVAC (a)) — socket đang ở room còn lại tới disconnect, nhưng không bài nào mới vào được nhóm đã xoá trừ phần dư (b) dưới |
+
+- **Ở trong room không phải là quyền**: thu hồi `view:feed` — hoặc HẠ `data_scope` của nó xuống dưới Company — giữa phiên KHÔNG đá socket khỏi `feed`/`feeduser`/`feedgroup` (cùng giới hạn của CHAT) — hiệu lực từ lần connect sau. Câu «lần connect sau» đúng cho CẢ HAI dạng thu hồi chỉ từ FULL gate lượt 1: cổng lúc connect đọc grant TƯƠI và ép sàn Company, nên grant đã hạ scope không vào lại được khi reconnect (trước đó `can()` mù scope cho vai `view:feed@Department` vào lại ở MỌI lần reconnect — lỗ SỐNG QUA reconnect, không phải giới hạn giữa phiên).
+
+### 7.3 Phần dư đua đã biết (`S16-SOCIAL-BE-2C`)
+
+- **(a) Khe join → đọc-lại lúc connect** (plan R8): một bài commit SAU `039` trong khe giữa vòng join và lần đọc lại vẫn tới người vừa bị gỡ — bề rộng một lượt đọc DB (cùng hình dạng phần dư bước (C) của CHAT).
+- **(b) `034` ↔ `002` đồng thời** (R9): cổng ghi `002` đọc nhóm KHÔNG khoá; `034` UPDATE `deleted_at` (`FOR NO KEY UPDATE`) không xung đột với khoá FK của INSERT bài (`FOR KEY SHARE`) ⇒ bài commit được vào nhóm VỪA xoá ⇒ được phát vào room nhóm ⇒ thành viên CŨ nhận payload mà REST đã ẩn (D13). Có từ trước ở REST (bài mồ côi ẩn); đóng ở tầng DB bằng `S16-SOCIAL-GROUPPOSTDEL-1` (`FOR SHARE` hàng nhóm ở cổng ghi). Kết luận từ đọc mã + ma trận khoá — CHƯA đo bằng harness đua.
+- **(c) Room-op toàn cụm dưới adapter Valkey có thể MẤT, không chỉ trễ** (R10 — sửa ở FULL gate lượt 1): `@socket.io/redis-adapter` 8.3.0 chỉ `publish` REMOTE_JOIN/LEAVE; node giữ socket (kể cả chính node phát) chỉ áp khi NHẬN LẠI qua kết nối SUBSCRIBE, và pub/sub là at-most-once ⇒ kết nối sub rớt (vượt `client-output-buffer-limit pubsub`, Valkey khởi động lại) là lệnh MẤT VĨNH VIỄN, trong khi broadcast vẫn phát cục bộ, đồng bộ. Bản đầu ghi «khe ≈ RTT» — SAI cho ca mất. **Đã vá phía rò**: `leave` khỏi room nhóm áp **CỤC BỘ, ĐỒNG BỘ trước** (`server.local…socketsLeave` — không qua pub/sub) rồi mới phát toàn cụm ⇒ trên node giữ socket (= toàn bộ PROD một instance) lệnh leave không mất được. **Phần dư**: (i) đa-instance — socket ở node KHÁC vẫn chỉ nhận leave qua pub/sub ⇒ sub của node đó rớt thì ở lại room tới disconnect; (ii) `join` vẫn chỉ toàn cụm — mất = thiếu badge (fail-closed); (iii) pub rớt ⇒ `publish` reject không ai bắt (`unhandledRejection` — có sẵn ở MỌI emit, không riêng room nhóm); (iv) CHAT `syncRoomMembership`/`evictFromCallRoom` CHƯA có vế cục bộ (cùng lớp — nợ `S17-CHAT-RTROOMOPS-1`).
+- **(d)** `join` sau-commit của `038` bị lịch event-loop xếp SAU `leave` của một `039` kế tiếp (R4) — hai commit đã tuần tự qua khoá hàng nhóm (`lockGroupRowTx`), và hai lệnh đi CÙNG kênh áp theo thứ tự publish ⇒ chỉ còn lịch event-loop; kẹt tới disconnect nếu xảy ra.
 
 ---
 
@@ -655,6 +693,7 @@ Replay `002` trả **thẻ LÚC TẠO** (khối `poll` đếm 0, tên người n
 | `packages/contracts/src/social/feed*.ts` | *(cũ — 18/09)* Chưa có — `S16-SOCIAL-DB-1` · **đã land** ở DB-1..BE-3B (thực tế là file phẳng `packages/contracts/src/social.ts` + `social-api*.ts`, không có thư mục `social/`) |
 | Route-census | *(cũ — 18/09)* Chưa có mục SOCIAL nội bộ; thêm 53 lúc BE-1..BE-3 land · **đã land** ở BE-1..BE-3B (56 route `/api/v1/social/*`) |
 | Thùng rác bài viết `057`/`058` | **`S16-SOCIAL-BE-3C` (28/09/2026)** — `recycle-bin/recycle-bin-feed-posts.controller.ts` + registry `recycle-bin/recycle-bin.registry.ts` (handler `feed_post` do `social/social-recycle-bin.service.ts` đăng ký); mig `0589` (cột `feed_posts.status_before_delete` + 2 CHECK + chỉ mục thùng rác) · `0590` (cặp `restore:feed-post`, 2 grant); census 2 tầng SOCIAL 56 → **58**. Nợ: khôi phục NHÓM · tag OpenAPI HR · employee vào registry |
+| Room nhóm realtime (§7) | **`S16-SOCIAL-BE-2C` (02/10/2026)** — `realtime/rooms.ts` (`feedUserRoomName` + `feedGroupRoomName`) · `realtime/realtime.gateway.ts` (`joinFeedRooms`) · `realtime/realtime-emitter.service.ts` (`syncFeedGroupMembership`; `feed:post.created` định tuyến theo payload đã parse) · `social/social-group-rooms.reader.ts` + module lá `social-group-rooms.module.ts` · `social/social-ws-payload.ts`; contracts `wsFeedPostCreatedEventSchema` thành union `company`/`group`. KHÔNG migration. FULL gate lượt 1: cổng WS ép sàn scope Company như REST · id room-op chữ thường · `leave` cục bộ trước toàn cụm. Nợ: `S16-SOCIAL-RTGROUPCR-1` (bình luận/cảm xúc bài nhóm) · `S16-SOCIAL-GROUPPOSTDEL-1` (đua `034`↔`002`) · `S16-SOCIAL-FEGROUPBADGE-1` (badge theo nhóm ở FE) · `S17-CHAT-RTROOMOPS-1` (CHAT cùng hai lớp lỗi room-op) |
 
 ---
 
