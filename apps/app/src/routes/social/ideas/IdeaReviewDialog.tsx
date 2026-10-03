@@ -7,6 +7,12 @@
  *
  * Người mở hộp thoại đã qua `PermissionGate approve:feed-idea` ở màn 008; server vẫn là cổng cuối
  * (403 `SOCIAL-ERR-020` — `useCan` bỏ qua scope, BE đòi sàn Company; seed chỉ cấp Company).
+ *
+ * S16-SOCIAL-FEBLOCKSEED-1 — đổi dòng H5 của plan FE-2 §8 (viết khi thẻ chưa có pill): thẻ bài giờ vẽ
+ * pill từ `post.idea` trong cache DANH SÁCH/CHI TIẾT bài ⇒ xét duyệt (thành công, hoặc lỗi — 409 ERR-019
+ * = người khác vừa đổi trạng thái) invalidate CẢ các cache đó, không chỉ `ideas.allOf()`. Thiếu ⇒ quay
+ * lại `/feed` trong `staleTime` 30s thấy pill cũ. Trên màn 008 chúng không có observer ⇒ chỉ bị đánh dấu,
+ * 0 request thừa. (Nợ: `search` · `profilePosts` — cùng khe hở với `invalidatePostLists`.)
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -37,16 +43,24 @@ export function IdeaReviewDialog({ idea, onClose }: IdeaReviewDialogProps): Reac
   const [note, setNote] = React.useState("");
   const [error, setError] = React.useState<{ forbidden: boolean } | null>(null);
 
+  /** Màn 008 + mọi cache mà pill trên thẻ bài đọc (docblock đầu file). */
+  const invalidateIdeaViews = (): void => {
+    void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
+    void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
+    void queryClient.invalidateQueries({ queryKey: socialKeys.saved() });
+    void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(idea.postId) });
+  };
+
   const mutation = useMutation({
     mutationFn: (body: ReviewFeedIdeaDto) => socialApi.reviewIdea(idea.postId, body),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
+      invalidateIdeaViews();
       onClose();
     },
     onError: (err: unknown) => {
       setError({ forbidden: err instanceof ApiError && err.status === 403 });
       // 409 ERR-019 = người khác vừa duyệt trước ⇒ tải lại để thấy trạng thái thật.
-      void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
+      invalidateIdeaViews();
     },
   });
 

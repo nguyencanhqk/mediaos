@@ -18,6 +18,7 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DatabaseService } from "../db/db.service";
 import { directPool, hasDb } from "../../test/helpers/integration-db";
+import { waitForBlockedBy } from "../../test/helpers/lock-wait";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../../test/helpers/seed";
 import { SocialGroupAccessService } from "./social-group-access.service";
 import { SOCIAL_ERR } from "./social.errors";
@@ -27,6 +28,15 @@ const runDb = hasDb && Boolean(process.env.LANE_DB);
 
 function actor(userId: string, companyId: string, canManageGroups = false): SocialGroupActor {
   return { actorUserId: userId, companyId, canManageGroups };
+}
+
+/** Promise mở tay — `resolve` gọi từ ngoài (giữ tx mở · báo «đã khoá»). */
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
 }
 
 describe.skipIf(!runDb)("S16-SOCIAL-BE-2A SocialGroupAccessService (DB cô lập)", () => {
@@ -222,5 +232,46 @@ describe.skipIf(!runDb)("S16-SOCIAL-BE-2A SocialGroupAccessService (DB cô lập
     // Bất biến ĐẾM ĐƯỢC — không phải "409 HOẶC hội tụ": hai tx xếp thế nào cũng KHÔNG được về 0.
     expect(await countActiveOwners(raceGroup)).toBeGreaterThanOrEqual(1);
     expect(results.filter((r) => r === "ok").length).toBe(1);
+  });
+
+  /**
+   * 🔴 LM-1 — KIỂU KHOÁ của `lockGroupRowTx` TỰ XUNG ĐỘT (S16-SOCIAL-GROUPTOCTOU-1, FULL gate lượt 1 —
+   * silent-failure-hunter). G5d trên kia chỉ đỏ khi hai tx TÌNH CỜ chồng lấp; holder của mọi ca đua
+   * trong `social-grouptoctou-race.int-spec.ts` khoá bằng SQL TỰ VIẾT (`FOR UPDATE`) nên đúng với BẤT
+   * KỲ kiểu khoá nào request lấy. Cả neo D6-ii lẫn luật «đọc vai SAU khoá» dựa trên việc HAI lời gọi
+   * `lockGroupRowTx` thật CHẶN NHAU — ca này ghim TẤT ĐỊNH điều đó (`pg_blocking_pids`): hạ xuống
+   * `FOR SHARE`/`FOR KEY SHARE` (không tự xung đột) ⇒ ĐỎ; `FOR NO KEY UPDATE` (nợ N6 —
+   * `S16-SOCIAL-GROUPLOCKTIMEOUT-1`) vẫn xanh.
+   */
+  it("LM-1 🔴 — hai tx cùng gọi `lockGroupRowTx` trên MỘT nhóm ⇒ tx sau BỊ tx trước chặn", async () => {
+    const g = await mkGroup(`Khoá ${randomUUID().slice(0, 8)}`, "private");
+    const gate = deferred<void>();
+    const locked = deferred<number>();
+    const first = dbsvc.withTenant(A.companyId, async (tx) => {
+      await svc.lockGroupRowTx(tx, A.companyId, g);
+      const r = await tx.execute<{ pid: number }>(sql`SELECT pg_backend_pid() AS pid`);
+      locked.resolve(Number(r.rows[0].pid));
+      await gate.promise;
+    });
+    const waits: Promise<unknown>[] = [Promise.allSettled([first])];
+    try {
+      // tx1 hỏng TRƯỚC khi báo đã khoá ⇒ ném ngay, không treo tới hết testTimeout.
+      const holderPid = await Promise.race([
+        locked.promise,
+        first.then(() => Promise.reject(new Error("tx1 kết thúc trước khi báo đã khoá"))),
+      ]);
+      const second = dbsvc.withTenant(A.companyId, (tx) => svc.lockGroupRowTx(tx, A.companyId, g));
+      waits.push(Promise.allSettled([second]));
+      expect(
+        await waitForBlockedBy(direct, holderPid, 1, { exact: true, timeoutMs: 3_000 }),
+        "tx thứ hai phải BỊ tx thứ nhất chặn — khoá không tự xung đột thì «đọc vai sau khoá» KHÔNG serialize với `038`/`039` thật",
+      ).toBe(true);
+      gate.resolve();
+      await first;
+      await second;
+    } finally {
+      gate.resolve();
+      await Promise.all(waits);
+    }
   });
 });

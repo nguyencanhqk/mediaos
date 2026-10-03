@@ -20,6 +20,7 @@ import type {
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
+import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 import { SocialAccessService } from "./social-access.service";
 import { bumpGroupMemberCount, groupMemberCountDelta } from "./social-counters";
 import { SocialGroupAccessService } from "./social-group-access.service";
@@ -41,10 +42,12 @@ import type { FeedGroupRole, SocialActor, SocialRequestUser } from "./social.typ
  * Khuôn chung của module (`social-reports.service.ts`), theo ĐÚNG thứ tự này ở mọi route ghi:
  *   1. `access.resolveActor(user, routeKey)` — guard tầng 2, **TRƯỚC** khi mở tx (mỗi lượt hỏi engine
  *      quyền tự mở `withTenant` riêng; hỏi trong tx ghi là lồng transaction ⇒ treo IM LẶNG).
- *   2. `withTenant` → cổng NHÓM (`assertGroupVisibleTx` 404 → `assertGroupRoleTx` 403) → **neo
- *      `lockGroupRowTx`** nếu thao tác có thể lấy đi owner → ghi → bộ đếm → audit → outbox.
+ *   2. `withTenant` → cổng NHÓM: `assertGroupVisibleTx` (404) → route GHI theo vai
+ *      (`033`/`034`/`038`/`039`) gọi `lockAndAssertGroupRoleTx` (khoá hàng nhóm RỒI đọc vai — 403);
+ *      route không theo vai (`035`/`036`) neo `lockGroupRowTx` trực tiếp → ghi → bộ đếm → audit →
+ *      outbox. `037` (chỉ đọc) dùng `assertGroupRoleTx` trần.
  *
- * ┌─ 🔴 BA LUẬT KHÔNG ĐƯỢC ĐỔI THỨ TỰ ────────────────────────────────────────────────────────────┐
+ * ┌─ 🔴 BỐN LUẬT KHÔNG ĐƯỢC ĐỔI THỨ TỰ ───────────────────────────────────────────────────────────┐
  * │ (a) **404 TRƯỚC 403**: hỏi "có thấy nhóm này không" trước "có vai trò không". Ngược lại thì một │
  * │     người ngoài dò được sự tồn tại của nhóm kín qua sự khác nhau giữa 403 và 404.              │
  * │ (b) **`lockGroupRowTx` TRƯỚC mọi câu đếm owner** (D6-ii/C3). Đọc `COUNT` rồi ghi mà không khoá  │
@@ -53,6 +56,22 @@ import type { FeedGroupRole, SocialActor, SocialRequestUser } from "./social.typ
  * │ (c) **Bộ đếm suy từ CHUYỂN TRẠNG THÁI HÀNG THẬT** (`groupMemberCountDelta`), không từ tên       │
  * │     route: mọi lời gọi `bumpGroupMemberCount` ở file này lấy `before`/`after` từ giá trị DB vừa │
  * │     trả về, không từ giả định của người viết route.                                             │
+ * │ (d) **Vai ACTOR đọc SAU khoá** ở mọi route GHI theo vai (`033`/`034`/`038`/`039`) —             │
+ * │     `lockAndAssertGroupRoleTx`. Đọc vai TRƯỚC khoá là TOCTOU: một `038` song song hạ vai actor  │
+ * │     giữa hai câu ⇒ người VỪA mất quyền vẫn mời ra / xoá nhóm / mở nhóm kín (đo M3/M9/M10 của    │
+ * │     S16-SOCIAL-GROUPTOCTOU-1). Lưới: `social-group-role-lock.spec.ts` (U3) + race int-spec.     │
+ * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌─ S16-SOCIAL-BE-2C — ROOM NHÓM REALTIME BÁM MEMBERSHIP (plan §4.5, `syncFeedGroupMembership`) ──┐
+ * │ • `join` CHỈ SAU commit — `031` (người tạo) · `035` nhóm `public` · `038` duyệt. Join trước     │
+ * │   commit rồi rollback = socket ở room nhóm của một membership không tồn tại (RÒ).               │
+ * │ • `leave` TRONG tx (ngay sau ghi thành công) **VÀ** SAU commit — `036` · `039` (owner ký        │
+ * │   Q-LEAVE (a)). Trong tx đóng khe «đã rời mà còn nhận bài đăng ngay sau»; sau commit đóng khe    │
+ * │   «gateway đọc trước commit rồi join sau lần leave thứ nhất». Rollback sau leave = mất realtime  │
+ * │   tới reconnect (fail-safe). Room-op luỹ đẳng.                                                   │
+ * │ • KHÔNG room-op: `035` nhóm kín (`pending` ≠ thành viên) · `038` từ chối (chưa từng ở room) ·    │
+ * │   `038` đổi vai (active→active) · `034` xoá nhóm (Q-EVAC (a) — phần dư đua R9 ở API-19 §7).      │
+ * │ Đếm lời gọi ở `social-groups.realtime.spec.ts` (commit hỏng ⇒ 0 join / 1 leave · OK ⇒ 1 / 2).   │
  * └─────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 @Injectable()
@@ -67,6 +86,8 @@ export class SocialGroupsService {
     private readonly members: SocialGroupMembersRepository,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    // S16-SOCIAL-BE-2C (additive, CUỐI) — room-op của room nhóm bảng tin (module LÁ, xem social.module).
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   /** `030` — `GET /social/groups`. Phạm vi nhìn thấy ép TRONG SQL (xem `listGroups`). */
@@ -87,7 +108,7 @@ export class SocialGroupsService {
   async create(user: SocialRequestUser, dto: CreateFeedGroupDto): Promise<FeedGroupDto> {
     const actor = await this.access.resolveActor(user, "groupCreate");
 
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const createdDto = await this.db.withTenant(actor.companyId, async (tx) => {
       let created: { id: string };
       try {
         created = await this.groups.createGroupTx(tx, actor.companyId, actor.actorUserId, dto);
@@ -121,6 +142,14 @@ export class SocialGroupsService {
       });
       return this.readGroupDto(tx, actor, created.id);
     });
+    // BE-2C — người tạo là `owner/active` ⇒ vào room nhóm. SAU commit (xem docblock lớp).
+    this.realtime.syncFeedGroupMembership(
+      actor.companyId,
+      createdDto.id,
+      actor.actorUserId,
+      "join",
+    );
+    return createdDto;
   }
 
   /** `032` — `GET /social/groups/{id}`. Nhóm kín + không phải thành viên ⇒ 404 `ERR-012`. */
@@ -142,7 +171,9 @@ export class SocialGroupsService {
 
     return this.db.withTenant(actor.companyId, async (tx) => {
       await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const { viaManage } = await this.groupAccess.assertGroupRoleTx(tx, actor, groupId, [
+      // (d) — vai actor đọc SAU khoá (S16-SOCIAL-GROUPTOCTOU-1): admin vừa bị hạ vai giữa chừng KHÔNG
+      // đổi được nhóm kín thành công khai (đo M10). `updateGroupTx` ghi lên hàng chính tx này đã khoá.
+      const { viaManage } = await this.groupAccess.lockAndAssertGroupRoleTx(tx, actor, groupId, [
         "owner",
         "admin",
       ]);
@@ -188,7 +219,11 @@ export class SocialGroupsService {
 
     await this.db.withTenant(actor.companyId, async (tx) => {
       await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const { viaManage } = await this.groupAccess.assertGroupRoleTx(tx, actor, groupId, ["owner"]);
+      // (d) — vai actor đọc SAU khoá (S16-SOCIAL-GROUPTOCTOU-1): owner vừa bị hạ vai giữa chừng KHÔNG
+      // xoá mềm được nhóm (đo M9 — không có route khôi phục nhóm).
+      const { viaManage } = await this.groupAccess.lockAndAssertGroupRoleTx(tx, actor, groupId, [
+        "owner",
+      ]);
 
       const deleted = await this.groups.softDeleteGroupTx(
         tx,
@@ -217,7 +252,7 @@ export class SocialGroupsService {
   async join(user: SocialRequestUser, groupId: string): Promise<FeedGroupDto> {
     const actor = await this.access.resolveActor(user, "groupJoin");
 
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const { dto, status } = await this.db.withTenant(actor.companyId, async (tx) => {
       const group = await this.groups.findLiveGroupTx(tx, actor.companyId, groupId);
       if (!group) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_NOT_FOUND));
 
@@ -248,8 +283,15 @@ export class SocialGroupsService {
         throw err;
       }
       await bumpGroupMemberCount(tx, actor.companyId, groupId, groupMemberCountDelta(null, status));
-      return this.readGroupDto(tx, actor, groupId);
+      // `status` trả ra NGOÀI tx để quyết định room-op sau commit (plan §4.5).
+      return { dto: await this.readGroupDto(tx, actor, groupId), status };
     });
+    // BE-2C — CHỈ nhóm `public` (∅→active). Nhóm kín ⇒ `pending`: yêu cầu chờ duyệt KHÔNG phải thành
+    // viên, nên KHÔNG room-op nào (mutant M11). SAU commit.
+    if (status === "active") {
+      this.realtime.syncFeedGroupMembership(actor.companyId, groupId, actor.actorUserId, "join");
+    }
+    return dto;
   }
 
   /**
@@ -288,6 +330,8 @@ export class SocialGroupsService {
         actor.actorUserId,
       );
       if (!removed) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND));
+      // BE-2C — `leave` lần 1, TRONG tx ngay sau ghi thành công (Q-LEAVE (a), xem docblock lớp).
+      this.realtime.syncFeedGroupMembership(actor.companyId, groupId, actor.actorUserId, "leave");
       await bumpGroupMemberCount(
         tx,
         actor.companyId,
@@ -295,6 +339,8 @@ export class SocialGroupsService {
         groupMemberCountDelta(removed.status, null),
       );
     });
+    // BE-2C — `leave` lần 2, SAU commit (đóng khe gateway đọc trước commit rồi join sau lần 1).
+    this.realtime.syncFeedGroupMembership(actor.companyId, groupId, actor.actorUserId, "leave");
     return { left: true };
   }
 
@@ -339,33 +385,19 @@ export class SocialGroupsService {
   ): Promise<FeedGroupMemberMutationDto> {
     const actor = await this.access.resolveActor(user, "groupMemberDecide");
 
-    return this.db.withTenant(actor.companyId, async (tx) => {
+    const result = await this.db.withTenant(actor.companyId, async (tx) => {
       const group = await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const decideRoles: readonly FeedGroupRole[] = ["owner", "admin"];
-      const { viaManage } = await this.groupAccess.assertGroupRoleTx(
+      // 🔴 (d) TOCTOU CỦA CHÍNH ACTOR (BE-2A §14.1 → S16-SOCIAL-GROUPTOCTOU-1): vai actor đọc MỘT lần,
+      // SAU khoá hàng nhóm. Một `038`/`039` song song hạ vai/mời actor ra đã commit trước lượt đọc này
+      // ⇒ người VỪA mất quyền không phong được `owner` (D12) hay đổi vai ai. Admin KIÊM
+      // `manage:feed-group` bị hạ vai giữa chừng vẫn qua với `viaManage:true` — luật «vai HOẶC manage»
+      // đánh giá trên hàng đọc sau khoá (owner ký D1=(a)). `target` cũng đọc SAU khoá (bên dưới).
+      const { membership: mine, viaManage } = await this.groupAccess.lockAndAssertGroupRoleTx(
         tx,
         actor,
         groupId,
-        decideRoles,
+        ["owner", "admin"],
       );
-      await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
-
-      // 🔴 TOCTOU CỦA CHÍNH ACTOR — `security-reviewer` và `silent-failure-hunter` HỘI TỤ ĐỘC LẬP
-      // (FULL gate 22/09). `assertGroupRoleTx` ở trên đọc vai của actor TRƯỚC khi khoá hàng CHA.
-      // Dưới READ COMMITTED, một `038`/`039` song song hạ vai (hoặc mời ra) chính actor ĐÚNG trong
-      // khoảng giữa hai câu đó vẫn để actor đi tiếp với vai CŨ ⇒ người VỪA mất quyền vẫn phong được
-      // `owner` cho người khác (D12 thủng), và người đó xoá được nhóm qua cổng owner-only của `034`.
-      // `target` đã đọc lại sau khoá ngay từ bản đầu — vế bỏ sót là chính actor. Đọc lại SAU khoá
-      // thì mọi đường đổi vai trò đã bị serialize qua đúng một hàng `feed_groups`.
-      const mine = await this.groupAccess.getMembershipTx(
-        tx,
-        actor.companyId,
-        groupId,
-        actor.actorUserId,
-      );
-      if (!viaManage && !(mine?.status === "active" && decideRoles.includes(mine.role))) {
-        throw new ForbiddenException(socialError(SOCIAL_ERR.GROUP_ROLE_REQUIRED));
-      }
 
       const target = await this.groupAccess.getMembershipTx(
         tx,
@@ -435,8 +467,15 @@ export class SocialGroupsService {
         // Cấp owner mà actor không phải owner ⇒ quyền THẬT đến từ `manage` dù vai hàng là admin.
         viaManage: viaManage || ownerGrantViaManage,
       });
-      return { userId: targetUserId, role: dto.role, status: "active" };
+      // `as const`: kết quả tx gán vào biến (không còn `return` thẳng ⇒ mất ngữ cảnh kiểu của method).
+      return { userId: targetUserId, role: dto.role, status: "active" as const };
     });
+    // BE-2C — CHỈ nhánh DUYỆT (pending→active) đổi tư cách thành viên. Từ chối: hàng pending chưa từng
+    // ở room · đổi vai: active→active. Tới được đây ⇒ duyệt đã commit (thất bại thì đã ném 409). SAU commit.
+    if ("decision" in dto && dto.decision === "approve") {
+      this.realtime.syncFeedGroupMembership(actor.companyId, groupId, targetUserId, "join");
+    }
+    return result;
   }
 
   /** `039` — `DELETE …/members/{uid}` (mời ra). Audit LUÔN: thao tác lên người khác. */
@@ -449,11 +488,12 @@ export class SocialGroupsService {
 
     await this.db.withTenant(actor.companyId, async (tx) => {
       await this.groupAccess.assertGroupVisibleTx(tx, actor, groupId);
-      const { viaManage } = await this.groupAccess.assertGroupRoleTx(tx, actor, groupId, [
+      // (d) — vai actor đọc SAU khoá hàng nhóm (S16-SOCIAL-GROUPTOCTOU-1): actor vừa bị hạ vai/mời ra
+      // giữa chừng ⇒ 403; `viaManage` là nguồn quyền LÚC COMMIT (audit bên dưới ghi đúng giá trị này).
+      const { viaManage } = await this.groupAccess.lockAndAssertGroupRoleTx(tx, actor, groupId, [
         "owner",
         "admin",
       ]);
-      await this.groupAccess.lockGroupRowTx(tx, actor.companyId, groupId);
 
       const target = await this.groupAccess.getMembershipTx(
         tx,
@@ -468,6 +508,8 @@ export class SocialGroupsService {
 
       const removed = await this.members.deleteMemberTx(tx, actor.companyId, groupId, targetUserId);
       if (!removed) throw new NotFoundException(socialError(SOCIAL_ERR.GROUP_MEMBER_NOT_FOUND));
+      // BE-2C — `leave` lần 1, TRONG tx ngay sau ghi thành công (Q-LEAVE (a), xem docblock lớp).
+      this.realtime.syncFeedGroupMembership(actor.companyId, groupId, targetUserId, "leave");
       await bumpGroupMemberCount(
         tx,
         actor.companyId,
@@ -482,6 +524,8 @@ export class SocialGroupsService {
         viaManage,
       });
     });
+    // BE-2C — `leave` lần 2, SAU commit.
+    this.realtime.syncFeedGroupMembership(actor.companyId, groupId, targetUserId, "leave");
     return { deleted: true };
   }
 

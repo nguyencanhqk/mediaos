@@ -59,6 +59,9 @@ function makeGateway(over: {
       reason: "ok",
       auditRequired: false,
     })),
+    // S16-SOCIAL-BE-2C (FULL gate lượt 1): cổng bảng tin hỏi scope `view:feed` (sàn Company), không qua
+    // `can` — cùng quyết định với `allow` như trước khi tách (spec này đo CHAT).
+    resolveStrongestScope: vi.fn(async () => ((over.allow ?? true) ? "Company" : null)),
   } as unknown as PermissionService;
   const db = {
     withTenant:
@@ -81,6 +84,9 @@ function makeGateway(over: {
     { listRoomsForUser } as unknown as ChatRoomsRepository,
     db,
     presence as never,
+    // S16-SOCIAL-BE-2C: reader nhóm bảng tin tiêm DI (KHÔNG qua `db`) — bộ đếm `withTenant` của các ca
+    // dưới (bước B/C của CHAT) không lệch (plan M11). 0 nhóm: spec này đo CHAT.
+    { listActiveGroupIds: vi.fn(async () => [] as string[]) } as never,
   );
   return { gw, permissions, listRoomsForUser, presence };
 }

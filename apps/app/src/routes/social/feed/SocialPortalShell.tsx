@@ -37,6 +37,7 @@ import { MyGroupsWidget } from "./components/MyGroupsWidget";
 import { KudosThisMonthWidget } from "../kudos/components/KudosThisMonthWidget";
 import { currentKudosMonth } from "../kudos/lib/kudos-month";
 import { FeedSearchBox } from "./components/FeedSearchBox";
+import { validateFeedRouteSearch } from "./lib/feed-route-search";
 
 /** Số tin nổi bật lấy về cho rail phải — rail hẹp, danh sách dài chỉ làm nó cuộn vô ích. */
 const HIGHLIGHT_LIMIT = 5;
@@ -145,9 +146,14 @@ export function SocialPortalShell({
    *
    * `strict: false` vì shell render dưới NHIỀU route `/feed*`, không chỉ `/feed` — route con không
    * khai `q` thì `useSearch` strict sẽ ném.
+   *
+   * 🔴 Và cũng vì thế mà `search.q` ở đây có thể là giá trị THÔ: route `/feed/news`, `/feed/saved`…
+   * KHÔNG có `validateSearch`, parser JSON của router biến `?q=2026` thành SỐ, và số đó từng đi thẳng
+   * vào ô tìm kiếm ⇒ Enter gọi `draft.trim()` trên một số ⇒ NÉM (S16-SOCIAL-FESEARCHBOUNDS-1). Lọc qua
+   * CHÍNH bộ lọc của `/feed` — đích mà ô này điều hướng tới — để ô hiện đúng từ khoá `/feed` sẽ tìm.
    */
-  const search = useSearch({ strict: false }) as { q?: string };
-  const currentQuery = search.q ?? "";
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
+  const currentQuery = validateFeedRouteSearch(search).q ?? "";
 
   const onSearch = (q: string): void => {
     void navigate({ to: "/feed", search: (prev: Record<string, unknown>) => ({ ...prev, q }) });

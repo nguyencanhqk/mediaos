@@ -103,3 +103,62 @@ export function stackFramesOf(err: Error): string {
 export function isProgrammerError(err: unknown): err is Error {
   return err instanceof Error && PROGRAMMER_ERRORS.has(err.name);
 }
+
+/**
+ * Câu trả cho admin ở "Kiểm tra kết nối" — S19-SEC-MAILCREDEXFIL-1.
+ *
+ * Đo trước WO: route test trả nguyên `err.message`, mà nodemailer nối phản hồi server vào đó ⇒ trỏ test vào
+ * BẤT KỲ cổng TCP nào API với tới là đọc được dòng đầu banner (phiên bản SSH, hostname/IP relay nội bộ, chuỗi
+ * và đường dẫn file OpenSSL). Từ nay thông điệp là HẰNG theo loại lỗi; các trường chỉ được XÉT (có/không,
+ * thuộc tập hằng), không bao giờ được nối vào kết quả — trừ `responseCode` đã qua `replyCode` (số 200–599).
+ *
+ * Hình dạng lỗi là ĐO THẬT trên nodemailer 10.0.12 (docs/plans/S19-SEC-MAILCREDEXFIL-1.md §2):
+ *   - TLS lệch cổng: `ESOCKET` + `reason`; sai altname: `ESOCKET` + `reason` (có `:`/`.`); cert tự ký:
+ *     `ESOCKET` TRẦN — không `reason`/`errno`/`syscall` (nodemailer ghi đè mã gốc của Node) ⇒ suy ra TLS
+ *     từ việc THIẾU trường mạng, vì lỗi socket thật luôn mang `errno` + `syscall`;
+ *   - `530`/`538` ở AUTH = máy chủ đòi mã hoá trước khi đăng nhập, không phải sai mật khẩu.
+ */
+const TEST_MESSAGES = {
+  internal: "Lỗi nội bộ khi kiểm tra kết nối — xem log máy chủ.",
+  auth: "Xác thực SMTP thất bại",
+  authNeedsTls:
+    "Máy chủ yêu cầu kết nối mã hoá trước khi đăng nhập — bật «Dùng TLS» hoặc dùng cổng hỗ trợ STARTTLS.",
+  timeout: "Hết thời gian chờ máy chủ SMTP — kiểm tra máy chủ, cổng và tường lửa.",
+  dns: "Không phân giải được tên máy chủ SMTP.",
+  refused: "Máy chủ từ chối kết nối — kiểm tra máy chủ và cổng.",
+  network: "Lỗi mạng khi kết nối tới máy chủ SMTP — kiểm tra mạng, máy chủ và cổng.",
+  tls: "Lỗi TLS/chứng chỉ — kiểm tra tuỳ chọn «Dùng TLS», cổng (465 dùng TLS, 587 dùng STARTTLS) và chứng chỉ máy chủ.",
+  protocol: "Máy chủ không trả lời theo giao thức SMTP — kiểm tra cổng.",
+  generic: "Kiểm tra kết nối thất bại.",
+} as const;
+
+/** `responseCode` ở AUTH nghĩa là "mã hoá trước đã" (RFC 3207 530 · RFC 4954 538). */
+const AUTH_NEEDS_TLS_REPLIES = new Set(["530", "538"]);
+
+const isPresent = (value: unknown): boolean => typeof value === "string" && value.length > 0;
+
+/** Một câu cố định theo loại lỗi `verify()` — an toàn để trả cho client (không byte nào của server). */
+export function classifySmtpTestError(err: unknown): string {
+  // Lỗi lập trình (TypeError… khi nâng major thư viện) KHÔNG phải lỗi SMTP — câu riêng để admin không sửa
+  // cấu hình vô ích; chi tiết (stack) chỉ ở log máy chủ (MailTransportService log `error`).
+  if (isProgrammerError(err)) return TEST_MESSAGES.internal;
+  const e = fieldsOf(err);
+  const code = matching(e.code, ERROR_CODE);
+  const reply = replyCode(e.responseCode);
+  const errno = systemErrorName(e.errno);
+  const hasSyscall = typeof e.syscall === "string" && SYSCALLS.has(e.syscall);
+
+  if (code === "EAUTH") {
+    return AUTH_NEEDS_TLS_REPLIES.has(reply) ? TEST_MESSAGES.authNeedsTls : TEST_MESSAGES.auth;
+  }
+  if (code === "ETIMEDOUT" || errno === "ETIMEDOUT") return TEST_MESSAGES.timeout;
+  if (code === "EDNS" || e.syscall === "getaddrinfo") return TEST_MESSAGES.dns;
+  if (errno === "ECONNREFUSED") return TEST_MESSAGES.refused;
+  if (errno !== MISSING) return TEST_MESSAGES.network;
+  if (code === "ETLS" || isPresent(e.reason) || (code === "ESOCKET" && !hasSyscall)) {
+    return TEST_MESSAGES.tls;
+  }
+  if (reply !== MISSING) return `Máy chủ SMTP từ chối (mã ${reply}).`;
+  if (code === "EPROTOCOL") return TEST_MESSAGES.protocol;
+  return TEST_MESSAGES.generic;
+}

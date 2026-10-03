@@ -312,9 +312,18 @@ lại khối `overrides` của workspace; lệch nhau thì `--frozen-lockfile` �
 | `pnpm-lock.yaml`        | nodemailer 9.1.1 · engine.io 6.6.8 · brace-expansion 2.1.4 / 5.0.9                                                         |
 | `pnpm-workspace.yaml`   | override brace-expansion `<2.1.3` / `>=3.0.0 <5.0.8` · `auditConfig.ignoreGhsas` GHSA-mh99 · `minimumReleaseAgeExclude` cũ |
 
-GIỮ NGUYÊN: `apps/api/src/**` (`smtp-error-summary.ts` + 2 call-site — chỉ đọc trường lỗi chung, không
+GIỮ NGUYÊN: `apps/api/src/**` (`smtp-error-summary.ts` + call-site — chỉ đọc trường lỗi chung, không
 phụ thuộc major) · `apps/api/test/helpers/fake-smtp-server.ts` + 2 spec (ca CJS chấp nhận cả `lib/` của 9.x
 lẫn `dist/cjs/` của 10.x) · `.github/workflows/security.yml` (chỉ đổi chú thích) · docs · harness.
+
+⚠️ **Từ khi S19-SEC-MAILCREDEXFIL-1 (#560) vào master, câu «không phụ thuộc major» ở trên KHÔNG còn đúng
+trọn vẹn.** `classifySmtpTestError` (`smtp-error-summary.ts`) suy loại lỗi từ hình dạng ĐO trên nodemailer
+**10.0.12** — `ESOCKET` TRẦN (không `reason`/`syscall`) được đọc là lỗi TLS — và được gọi từ
+`mail-transport.service.ts` (nút «Kiểm tra kết nối») lẫn `invite-mail.service.ts`. Hạ về 9.1.1 thì tổ hợp
+«code #560 + nodemailer 9» CHƯA từng được đo: thông điệp là câu cố định (không rò bí mật), nhưng có thể
+xếp sai loại lỗi. Spec `mail-transport.oracle.spec.ts` chạy nodemailer THẬT ⇒ PHẢI có trong lượt chạy cục
+bộ ở bước 1 (CI chạy nó vì `src/**/*.spec.ts`); đỏ ở đó = hình dạng lỗi 9.x khác 10.x ⇒ DỪNG, đánh giá
+trước khi merge bản hạ.
 
 1. **Trong worktree RIÊNG** (KHÔNG trong checkout chính — §7.0), Git Bash. Đảo ĐÚNG phần diff của 3 file
    deps — KHÔNG `git revert 95f5ad8f` (xem dưới khối lệnh):
@@ -330,7 +339,7 @@ lẫn `dist/cjs/` của 10.x) · `.github/workflows/security.yml` (chỉ đổi 
    pnpm --filter @mediaos/api typecheck
    pnpm --filter @mediaos/api exec vitest run src/user-invites/invite-mail.smtp.spec.ts \
      src/settings/smtp-error-summary.spec.ts src/settings/mail-transport.service.spec.ts \
-     src/settings/mail-config.service.spec.ts
+     src/settings/mail-config.service.spec.ts src/settings/mail-transport.oracle.spec.ts
    git add apps/api/package.json pnpm-lock.yaml pnpm-workspace.yaml
    git commit -m "fix(deps): hạ deps về trước 95f5ad8f — nodemailer 9.1.1 · engine.io 6.6.8 · brace-expansion"
    git push -u origin revert/s19-audithigh-deps
