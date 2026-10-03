@@ -65,6 +65,13 @@ function build(opts: BuildOpts) {
         ? (opts.actorMembership ?? { role: "owner", status: "active" })
         : (opts.targetMembership ?? { role: "member", status: "pending" }),
     ),
+    // S16-SOCIAL-GROUPTOCTOU-1 (#566) đổi cổng vai của `033`/`034`/`038`/`039` sang hàm này (khoá hàng
+    // nhóm RỒI đọc vai, trả `{ membership, viaManage }` của lượt đọc sau khoá). Thiếu nó thì cây gộp với
+    // #566 ném TypeError ở 7 ca dưới đây; nhánh này đứng riêng thì service chưa gọi tới — vô hại.
+    lockAndAssertGroupRoleTx: vi.fn(async () => ({
+      membership: opts.actorMembership ?? { role: "owner", status: "active" },
+      viaManage: false,
+    })),
   };
   const groups = {
     createGroupTx: vi.fn(async () => ({ id: G })),
