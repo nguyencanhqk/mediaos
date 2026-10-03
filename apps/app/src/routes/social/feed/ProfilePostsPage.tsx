@@ -95,6 +95,7 @@ export function ProfilePostsPage({ isMe = false }: ProfilePostsPageProps): React
         <ActionErrorBanner
           kind={actions.actionError.kind}
           forbidden={actions.actionError.forbidden}
+          reason={actions.actionError.reason}
           onDismiss={actions.clearActionError}
         />
       )}

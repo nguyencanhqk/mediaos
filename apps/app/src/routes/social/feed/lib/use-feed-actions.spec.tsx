@@ -16,6 +16,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { moderateFeedPostSchema, type FeedPostDto } from "@mediaos/contracts";
 import { buildPostMenuActions, useFeedActions } from "./use-feed-actions";
+import { POST_ERR } from "../social-test-doubles";
 
 const putPostReaction = vi.fn();
 const deletePostReaction = vi.fn();
@@ -362,5 +363,203 @@ describe("S16-SOCIAL-FE-2 — plan §8 H5: xoá/ẩn bài làm mới danh sách 
     act(() => result.current.remove(POST_ID));
 
     await waitFor(() => expect(client.getQueryState(widgetKey)?.isInvalidated).toBe(true));
+  });
+});
+
+/**
+ * S16-SOCIAL-FEMODERRMSG-1 — lỗi mang LÝ DO đọc từ `error.code`.
+ *
+ * Đo trên `005`/`006` (+ `008`/`009`/`011`/`012` cùng cổng đọc `assertPostVisible`): lỗi KHÔNG-403 duy nhất
+ * người dùng chạm được từ menu là **404 `SOCIAL-ERR-001`** — bài đã bị người khác xoá/ẩn giữa chừng. Câu
+ * chung «vui lòng thử lại» ở đây là lời khuyên SAI: thử lại bao nhiêu lần cũng 404.
+ */
+describe("S16-SOCIAL-FEMODERRMSG-1 — lỗi trên bài mang LÝ DO từ `error.code`", () => {
+  type Hook = ReturnType<typeof useFeedActions>;
+
+  function setup() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const spy = vi.spyOn(client, "invalidateQueries");
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+    return { result, spy };
+  }
+
+  const cases = [
+    {
+      name: "ẩn bài (006)",
+      mock: moderatePost,
+      run: (h: Hook) => h.moderate(POST_ID, { hidden: true }),
+      kind: "moderate",
+    },
+    {
+      name: "khoá bình luận (006)",
+      mock: moderatePost,
+      run: (h: Hook) => h.moderate(POST_ID, { commentsLocked: true }),
+      kind: "moderate",
+    },
+    {
+      name: "xoá bài (005)",
+      mock: deletePost,
+      run: (h: Hook) => h.remove(POST_ID),
+      kind: "delete",
+    },
+    {
+      name: "lưu bài (008)",
+      mock: savePost,
+      run: (h: Hook) => h.toggleSave(POST_ID, false),
+      kind: "save",
+    },
+    {
+      name: "thả cảm xúc (011)",
+      mock: putPostReaction,
+      run: (h: Hook) => h.setReaction(POST_ID, "like"),
+      kind: "reaction",
+    },
+  ] as const;
+
+  it.each(cases)("$name: 404 `SOCIAL-ERR-001` ⇒ reason «postGone»", async (c) => {
+    c.mock.mockRejectedValue(POST_ERR.gone());
+    const { result } = setup();
+
+    act(() => c.run(result.current));
+
+    await waitFor(() => expect(result.current.actionError).not.toBeNull());
+    expect(result.current.actionError).toEqual({
+      kind: c.kind,
+      forbidden: false,
+      reason: "postGone",
+    });
+  });
+
+  it("API CŨ (mã chung `RESOURCE-ERR-NOT-FOUND`, mã SOCIAL ở tiền tố `message`) ⇒ VẪN «postGone»", async () => {
+    moderatePost.mockRejectedValue(POST_ERR.goneLegacy());
+    const { result } = setup();
+
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+
+    await waitFor(() => expect(result.current.actionError).not.toBeNull());
+    expect(result.current.actionError?.reason).toBe("postGone");
+  });
+
+  it.each([
+    { name: "500 (thử lại là ĐÚNG)", err: POST_ERR.server, forbidden: false },
+    {
+      name: "403 `SOCIAL-ERR-010` (thiếu cặp theo trường)",
+      err: POST_ERR.fieldDenied,
+      forbidden: true,
+    },
+  ])("đối chứng — $name ⇒ KHÔNG có reason (câu forbidden/generic như cũ)", async (c) => {
+    moderatePost.mockRejectedValue(c.err());
+    const { result } = setup();
+
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+
+    await waitFor(() => expect(result.current.actionError).not.toBeNull());
+    expect(result.current.actionError).toEqual({
+      kind: "moderate",
+      forbidden: c.forbidden,
+      reason: null,
+    });
+  });
+
+  it("«postGone» ⇒ kéo lại danh sách + chi tiết bài ⇒ thẻ cũ tự biến mất", async () => {
+    moderatePost.mockRejectedValue(POST_ERR.gone());
+    const { result, spy } = setup();
+
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+
+    await waitFor(() => expect(result.current.actionError?.reason).toBe("postGone"));
+    const { socialKeys } = await import("@mediaos/web-core");
+    const keys = spy.mock.calls.map((call) => JSON.stringify(call[0]?.queryKey));
+    expect(keys).toContain(JSON.stringify(socialKeys.feed.allOf()));
+    expect(keys).toContain(JSON.stringify(socialKeys.posts.detail(POST_ID)));
+  });
+
+  /**
+   * Review LIGHT 02/10/2026 (MEDIUM): trang cá nhân ĐỒNG NGHIỆP đọc `profilePosts(employeeId)` =
+   * `["social","profile-posts",…]` — không nằm dưới tiền tố nào mà `invalidatePostLists` từng làm mới.
+   * Đo bằng KHOÁ THẬT trong cache (`isInvalidated`), không bằng chuỗi tự chép: khuôn ca kudos ở trên.
+   */
+  it("«postGone» ⇒ danh sách trang cá nhân đồng nghiệp (`025`, khoá THẬT) cũng bị kéo lại", async () => {
+    moderatePost.mockRejectedValue(POST_ERR.gone());
+    const { socialKeys } = await import("@mediaos/web-core");
+    const profileKey = socialKeys.profilePosts("22222222-2222-4222-8222-222222222222");
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    client.setQueryData(profileKey, { pages: [], pageParams: [] });
+    // Đối chứng ĐÍCH DANH: widget sinh nhật không liên quan tới bài ⇒ KHÔNG được làm mới. Tiền tố cắt
+    // hụt một phần tử (`["social"]`) sẽ làm mới cả nó — ca này đỏ khi đó.
+    const birthdaysKey = socialKeys.birthdays({ range: "week" });
+    client.setQueryData(birthdaysKey, []);
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+
+    await waitFor(() => expect(result.current.actionError?.reason).toBe("postGone"));
+    expect(client.getQueryState(profileKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(birthdaysKey)?.isInvalidated).toBe(false);
+  });
+
+  /**
+   * Review delta 03/10/2026 (MEDIUM): khung portal (`SocialPortalShell`) luôn hiện «tin nổi bật» qua
+   * `news.list({ highlight })` = `["social","news",…]` — ngoài mọi tiền tố `invalidatePostLists` từng
+   * làm mới ⇒ bài tin đã mất vẫn nằm trên khung trong khi banner nói «đã tải lại». Khoá THẬT như ca `025`.
+   */
+  it("«postGone» ⇒ tin nổi bật trên khung portal (`news.list`, khoá THẬT) cũng bị kéo lại", async () => {
+    moderatePost.mockRejectedValue(POST_ERR.gone());
+    const { socialKeys } = await import("@mediaos/web-core");
+    const newsKey = socialKeys.news.list({ highlight: true, limit: 5 });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    client.setQueryData(newsKey, { items: [] });
+    const birthdaysKey = socialKeys.birthdays({ range: "week" });
+    client.setQueryData(birthdaysKey, []);
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+
+    await waitFor(() => expect(result.current.actionError?.reason).toBe("postGone"));
+    expect(client.getQueryState(newsKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(birthdaysKey)?.isInvalidated).toBe(false);
+  });
+
+  it("đường THÀNH CÔNG cũng vậy — người kiểm duyệt xoá bài từ trang đồng nghiệp ⇒ khoá `025` bị kéo lại", async () => {
+    deletePost.mockResolvedValue({ deleted: true });
+    const { socialKeys } = await import("@mediaos/web-core");
+    const profileKey = socialKeys.profilePosts("22222222-2222-4222-8222-222222222222");
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    client.setQueryData(profileKey, { pages: [], pageParams: [] });
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useFeedActions(), { wrapper: localWrapper });
+
+    act(() => result.current.remove(POST_ID));
+
+    await waitFor(() => expect(client.getQueryState(profileKey)?.isInvalidated).toBe(true));
+  });
+
+  it("đối chứng — 500 ⇒ KHÔNG kéo lại gì (dữ liệu chưa chắc đã cũ; người dùng tự thử lại)", async () => {
+    moderatePost.mockRejectedValue(POST_ERR.server());
+    const { result, spy } = setup();
+
+    act(() => result.current.moderate(POST_ID, { hidden: true }));
+
+    await waitFor(() => expect(result.current.actionError).not.toBeNull());
+    expect(spy).not.toHaveBeenCalled();
   });
 });

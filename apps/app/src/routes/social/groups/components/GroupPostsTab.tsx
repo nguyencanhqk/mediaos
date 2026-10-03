@@ -85,6 +85,7 @@ export function GroupPostsTab({ group, caps }: GroupPostsTabProps): React.ReactE
         <ActionErrorBanner
           kind={actions.actionError.kind}
           forbidden={actions.actionError.forbidden}
+          reason={actions.actionError.reason}
           onDismiss={actions.clearActionError}
         />
       )}

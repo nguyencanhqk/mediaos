@@ -14,7 +14,7 @@
  *  · **H6** cảm xúc trên bình luận là mutation có `onError`, không phải promise trần.
  *  · **H1** tạo/xoá bình luận có `onError` — app KHÔNG có hệ toast, thiếu `onError` là câm tuyệt đối.
  */
-import { render, screen, cleanup, waitFor, fireEvent, within } from "@testing-library/react";
+import { act, render, screen, cleanup, waitFor, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
@@ -27,6 +27,7 @@ import {
   makeComment,
   makePost,
   page,
+  POST_ERR,
   renderWithProviders,
   resetCaps,
   setCaps,
@@ -67,6 +68,7 @@ const deleteComment = vi.fn();
 const putCommentReaction = vi.fn();
 const deleteCommentReaction = vi.fn();
 const savePost = vi.fn();
+const deletePost = vi.fn();
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -93,6 +95,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       putCommentReaction: (...a: unknown[]) => putCommentReaction(...a),
       deleteCommentReaction: (...a: unknown[]) => deleteCommentReaction(...a),
       savePost: (...a: unknown[]) => savePost(...a),
+      deletePost: (...a: unknown[]) => deletePost(...a),
     },
   };
 });
@@ -143,6 +146,7 @@ beforeEach(() => {
   putCommentReaction.mockReset();
   deleteCommentReaction.mockReset();
   savePost.mockReset();
+  deletePost.mockReset();
   listComments.mockResolvedValue(page([]));
 });
 
@@ -219,6 +223,35 @@ describe("C8 — DENY: bài đã xoá / không được xem", () => {
     await waitFor(() => expect(screen.getByTestId("post-detail-not-found")).toBeInTheDocument());
     const text = screen.getByTestId("post-detail-not-found").textContent ?? "";
     expect(text).not.toMatch(/đã xoá|đã xóa|không có quyền|403/i);
+  });
+
+  /**
+   * S16-SOCIAL-FEMODERRMSG-1 — tác giả bấm «Xoá» trên bài mà người kiểm duyệt vừa xoá trước. Câu chung
+   * cũ («Bài vẫn còn — vui lòng thử lại») là lời nói dối: bài KHÔNG còn, và thử lại bao nhiêu lần cũng 404.
+   */
+  it("xoá bài đã bị xoá (404 `SOCIAL-ERR-001`) ⇒ dải nói LÝ DO trong lúc kéo lại, rồi màn «không tìm thấy»", async () => {
+    let failRefetch: ((err: unknown) => void) | undefined;
+    getPost.mockResolvedValueOnce(makePost({ isMine: true }));
+    getPost.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          failRefetch = reject;
+        }),
+    );
+    deletePost.mockRejectedValue(POST_ERR.gone());
+    renderDetail();
+
+    fireEvent.click(await screen.findByTestId("post-menu-trigger"));
+    fireEvent.click(screen.getByTestId("post-menu-delete"));
+
+    const banner = await screen.findByTestId("feed-action-error");
+    expect(banner).toHaveAttribute("data-reason", "postGone");
+    expect(banner).toHaveTextContent(t("actionError.reason.postGone"));
+    expect(banner).not.toHaveTextContent(t("actionError.generic.delete"));
+    // Chi tiết bài được kéo lại (không đợi người dùng tự F5) ⇒ 404 ⇒ khối «không tìm thấy».
+    await waitFor(() => expect(getPost).toHaveBeenCalledTimes(2));
+    act(() => failRefetch?.(POST_ERR.gone()));
+    expect(await screen.findByTestId("post-detail-not-found")).toBeInTheDocument();
   });
 
   it("bài KHOÁ bình luận ⇒ ô soạn ẩn, hiện lý do", async () => {

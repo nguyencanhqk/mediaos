@@ -17,6 +17,8 @@ import type {
   ModerateFeedPostDto,
 } from "@mediaos/contracts";
 import type { PostCardMenuActions } from "../components/PostCardMenu";
+import type { ActionErrorReason } from "../components/ActionErrorBanner";
+import { postActionErrorReason } from "./feed-errors";
 
 /**
  * Hành động nào vừa hỏng. Dùng để chọn CÂU nói với người dùng — «không ghim được bài» khác hẳn
@@ -25,6 +27,26 @@ import type { PostCardMenuActions } from "../components/PostCardMenu";
  */
 export type FeedActionKind = "reaction" | "save" | "moderate" | "delete";
 
+/**
+ * Tiền tố MỌI danh sách `025` (trang cá nhân ĐỒNG NGHIỆP, mọi `employeeId`) = `["social","profile-posts"]`.
+ *
+ * Nhánh này KHÔNG nằm dưới `feed.allOf()` (chỉ `/feed/profiles/me` đi `feed.list`), và web-core chưa có
+ * `allOf` cho nó ⇒ CẮT từ chính `socialKeys.profilePosts` thay vì chép literal: đổi tên khoá ở web-core
+ * thì tiền tố đổi theo, không trôi im lặng. Review LIGHT 02/10/2026 (FEMODERRMSG-1): thiếu nó thì bài bị
+ * xoá/ẩn vẫn nằm trên trang đồng nghiệp — cả sau lượt kiểm duyệt THÀNH CÔNG lẫn sau 404 «postGone».
+ */
+const PROFILE_POSTS_PREFIX = socialKeys.profilePosts("").slice(0, socialKeys.all.length + 1);
+
+/**
+ * Tiền tố MỌI kết quả tìm kiếm `023` (mọi `q`) = `["social","search"]` — `/feed?q=…` đọc
+ * `socialKeys.search({q})`, KHÔNG nằm dưới `feed.allOf()`. Cắt từ chính `socialKeys.search` như
+ * `PROFILE_POSTS_PREFIX`; KHÔNG dùng `socialKeys.search()` trần: `[…,"search",undefined]` không khớp một
+ * phần `[…,"search",{q}]` (cùng lý do `socialKeys.groups.lists()`). Review LIGHT 03/10/2026
+ * (FEMODERRMSG-1, LOW): thiếu nó thì ở chế độ tìm kiếm, thẻ của bài đã mất vẫn nằm trên màn trong khi
+ * dải «postGone» nói dữ liệu đã được tải lại.
+ */
+const SEARCH_PREFIX = socialKeys.search().slice(0, socialKeys.all.length + 1);
+
 export interface FeedActionError {
   kind: FeedActionKind;
   /**
@@ -32,6 +54,12 @@ export interface FeedActionError {
    * bao nhiêu lần cũng vô ích (đi hỏi quản trị), còn lỗi mạng/500 thì thử lại là đúng.
    */
   forbidden: boolean;
+  /**
+   * S16-SOCIAL-FEMODERRMSG-1 — lý do CỤ THỂ đọc từ `error.code` (`postActionErrorReason`); thắng
+   * `forbidden` ở banner. `null` ⇒ câu forbidden/generic. Hôm nay chỉ có `"postGone"` (404
+   * `SOCIAL-ERR-001`): bài đã bị xoá/ẩn giữa chừng — «vui lòng thử lại» ở đây là lời khuyên sai.
+   */
+  reason: ActionErrorReason | null;
 }
 
 export interface FeedActions {
@@ -77,15 +105,6 @@ export function useFeedActions(): FeedActions {
   const [actionError, setActionError] = React.useState<FeedActionError | null>(null);
 
   /**
-   * Một `onError` cho cả bốn mutation. KHÔNG bỏ trống cái nào: app này không có hệ toast và
-   * `QueryClient` ở `main.tsx` không khai `MutationCache.onError`, nên mutation thiếu `onError` là
-   * hỏng IM LẶNG TUYỆT ĐỐI — nút nhả ra như cũ, không một ký tự nào xuất hiện.
-   */
-  const onActionError = (kind: FeedActionKind) => (err: unknown) => {
-    setActionError({ kind, forbidden: err instanceof ApiError && err.status === 403 });
-  };
-
-  /**
    * Làm mới đúng các nhánh mà một thay đổi trên bài có thể ảnh hưởng.
    *
    * S16-SOCIAL-FE-2 (plan §8 H5): thêm danh sách bình chọn (040) + sáng kiến (045) — xoá/ẩn một bài
@@ -100,9 +119,31 @@ export function useFeedActions(): FeedActions {
     void queryClient.invalidateQueries({ queryKey: socialKeys.ideas.allOf() });
     // S16-SOCIAL-FE-2C — bài kudos bị xoá/ẩn cũng phải rời màn 009 + widget «Vinh danh tháng này».
     void queryClient.invalidateQueries({ queryKey: socialKeys.kudos.lists() });
+    // S16-SOCIAL-FEMODERRMSG-1 — trang cá nhân đồng nghiệp (`025`), xem `PROFILE_POSTS_PREFIX`.
+    void queryClient.invalidateQueries({ queryKey: PROFILE_POSTS_PREFIX });
+    // S16-SOCIAL-FEMODERRMSG-1 — kết quả tìm kiếm (`023`, `/feed?q=…`), xem `SEARCH_PREFIX`.
+    void queryClient.invalidateQueries({ queryKey: SEARCH_PREFIX });
+    // S16-SOCIAL-FEMODERRMSG-1 — tin tức (`020`): khung portal luôn hiện «tin nổi bật» qua
+    // `news.list({ highlight })`, nên bài tin đã mất phải rời cả khung (cùng khoá `NewsPage` tự làm mới).
+    void queryClient.invalidateQueries({ queryKey: socialKeys.news.allOf() });
     if (postId) {
       void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
     }
+  };
+
+  /**
+   * Một `onError` cho cả bốn mutation. KHÔNG bỏ trống cái nào: app này không có hệ toast và
+   * `QueryClient` ở `main.tsx` không khai `MutationCache.onError`, nên mutation thiếu `onError` là
+   * hỏng IM LẶNG TUYỆT ĐỐI — nút nhả ra như cũ, không một ký tự nào xuất hiện.
+   *
+   * S16-SOCIAL-FEMODERRMSG-1 — `"postGone"` (bài đã mất dưới chân) ⇒ kéo lại các danh sách + chi tiết
+   * bài: thẻ đang hiện là dữ liệu CŨ, để nó nằm đó là mời người dùng bấm lại một thao tác chắc chắn
+   * 404. Lỗi khác (500, mạng, 403) KHÔNG kéo lại — chưa có gì cho thấy dữ liệu đã cũ.
+   */
+  const onActionError = (kind: FeedActionKind, err: unknown, postId: string): void => {
+    const reason = postActionErrorReason(err);
+    setActionError({ kind, forbidden: err instanceof ApiError && err.status === 403, reason });
+    if (reason === "postGone") invalidatePostLists(postId);
   };
 
   const reactionMutation = useMutation({
@@ -116,7 +157,7 @@ export function useFeedActions(): FeedActions {
       invalidatePostLists(result.targetId);
       setActionError(null);
     },
-    onError: onActionError("reaction"),
+    onError: (err, { postId }) => onActionError("reaction", err, postId),
   });
 
   const saveMutation = useMutation({
@@ -126,7 +167,7 @@ export function useFeedActions(): FeedActions {
       invalidatePostLists(result.postId);
       setActionError(null);
     },
-    onError: onActionError("save"),
+    onError: (err, { postId }) => onActionError("save", err, postId),
   });
 
   const moderateMutation = useMutation({
@@ -136,7 +177,7 @@ export function useFeedActions(): FeedActions {
       invalidatePostLists(post.id);
       setActionError(null);
     },
-    onError: onActionError("moderate"),
+    onError: (err, { postId }) => onActionError("moderate", err, postId),
   });
 
   const deleteMutation = useMutation({
@@ -145,7 +186,7 @@ export function useFeedActions(): FeedActions {
       invalidatePostLists();
       setActionError(null);
     },
-    onError: onActionError("delete"),
+    onError: (err, postId) => onActionError("delete", err, postId),
   });
 
   return {
