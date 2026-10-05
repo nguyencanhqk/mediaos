@@ -44,8 +44,66 @@ export default {
     reportDuplicate: "Bạn đã báo cáo nội dung này và báo cáo đó đang chờ xử lý. Không cần gửi lại.",
     reportTargetGone: "Nội dung bạn muốn báo cáo không còn tồn tại hoặc bạn không còn xem được.",
   },
+  // ── Báo cáo vi phạm — nhãn dùng chung cho hàng đợi (010) và hộp thoại «Báo cáo» (027) ──
+  report: {
+    /** Khoá = đúng một giá trị của `feedReportReasonSchema` (contracts). */
+    reason: {
+      spam: "Spam hoặc quảng cáo",
+      harassment: "Quấy rối hoặc xúc phạm",
+      inappropriate: "Nội dung không phù hợp",
+      misinformation: "Thông tin sai lệch",
+      other: "Lý do khác",
+    },
+  },
   // ── Kiểm duyệt `SOC-SCREEN-010` ──
   moderation: {
+    /** Hàng đợi báo cáo (028) — `ReportQueue`. Bốn câu rỗng KHÁC nhau: mỗi bộ lọc trả lời một câu hỏi riêng. */
+    queue: {
+      listAria: "Danh sách báo cáo vi phạm",
+      loadingAria: "Đang tải hàng đợi báo cáo",
+      empty: {
+        open: "Không có báo cáo nào đang chờ xử lý.",
+        resolved: "Chưa có báo cáo nào được giải quyết.",
+        dismissed: "Chưa có báo cáo nào bị bỏ qua.",
+        all: "Chưa có báo cáo vi phạm nào trong phạm vi xem của bạn.",
+      },
+      pageOutOfRange: "Trang này không còn báo cáo nào.",
+      backToFirstPage: "Về trang 1",
+    },
+    /**
+     * Thẻ báo cáo — `ReportRow`.
+     *
+     * ⚠️ `identity.*` và `state.*` tách THEO LOẠI ĐÍCH: với báo cáo BÌNH LUẬN, server chỉ trả tác giả và
+     * trạng thái của BÀI CHA (plan M2b) ⇒ câu phải nói về bài, không được ghi như thể đó là tác giả hay
+     * trạng thái của chính bình luận.
+     * ⚠️ `reporterMasked` (bị che theo phạm vi) và `profileGone` (hồ sơ nhân sự không còn) là hai sự thật
+     * KHÁC nhau — không gộp thành một nhãn.
+     */
+    row: {
+      targetType: { post: "Bài viết", comment: "Bình luận" },
+      identity: {
+        post: "Bài của {{name}}",
+        comment: "Bình luận trong bài của {{name}}",
+      },
+      nameUnknown: "người không rõ tên",
+      state: {
+        post: { hidden: "[đã ẩn]", deleted: "[đã xoá]" },
+        comment: {
+          hidden: "[bài chứa bình luận đã ẩn]",
+          deleted: "[bài chứa bình luận đã xoá]",
+        },
+      },
+      contentGone: "Nội dung không còn",
+      viewInContext: "Xem trong ngữ cảnh",
+      reporterLabel: "Người báo cáo:",
+      reporterMasked: "Ẩn theo phạm vi xem của bạn",
+      profileGone: "(hồ sơ không còn)",
+      noteLabel: "Ghi chú của người báo cáo",
+      resolvedByLabel: "Người xử lý:",
+      resolutionNoteLabel: "Ghi chú xử lý",
+      status: { resolved: "Đã giải quyết", dismissed: "Đã bỏ qua" },
+      resolve: "Xử lý",
+    },
     /**
      * Hành động kèm khi kết thúc báo cáo (029). Khoá đi theo `moderation/lib/report-actions.ts`
      * (`REPORT_ACTION_LABEL_KEYS`): MỖI loại đích một bộ nhãn riêng — cùng hành động `lock_comments` /
