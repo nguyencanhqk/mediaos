@@ -1,11 +1,16 @@
 import {
+  type CreateKudosBadgeDto,
   feedKudosPageSchema,
   type FeedKudosPageDto,
+  type KudosBadgeAdminDto,
+  type KudosBadgeAdminPageDto,
   kudosBadgePageSchema,
   type KudosBadgePageDto,
   kudosRecipientSearchResultSchema,
   type KudosRecipientSearchResultDto,
+  type ListKudosBadgesAdminQueryDto,
   type ListKudosQueryDto,
+  type UpdateKudosBadgeDto,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -47,4 +52,19 @@ export const socialKudosApi = {
       `/social/kudos-badges${buildQueryString({ limit: KUDOS_BADGE_FETCH_LIMIT })}`,
       kudosBadgePageSchema,
     ),
+
+  // ── S16-SOCIAL-FE-3 (L1) — KHUNG huy hiệu quản trị `056` · `049` · `050` · `051`; thân ở commit GREEN ──
+
+  listBadgesAdmin: (
+    _query?: Partial<ListKudosBadgesAdminQueryDto>,
+  ): Promise<KudosBadgeAdminPageDto> => Promise.resolve({ data: [], page: 1, limit: 50, total: 0 }),
+
+  createBadge: (_body: CreateKudosBadgeDto, _attemptId: string): Promise<KudosBadgeAdminDto> =>
+    Promise.resolve({} as KudosBadgeAdminDto),
+
+  updateBadge: (_badgeId: string, _body: UpdateKudosBadgeDto): Promise<KudosBadgeAdminDto> =>
+    Promise.resolve({} as KudosBadgeAdminDto),
+
+  deactivateBadge: (_badgeId: string): Promise<KudosBadgeAdminDto> =>
+    Promise.resolve({} as KudosBadgeAdminDto),
 };

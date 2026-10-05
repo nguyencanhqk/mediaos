@@ -407,6 +407,15 @@ export { closeCallSocket, getCallSocket } from "./lib/realtime-socket";
 // S16-SOCIAL-FE-1 — SOCIAL API client (SPEC-16 · API-19 §5.1). Mirror SOCIAL-API-001..026.
 // Tiền tố BE là `/social`; đường dẫn ROUTE của FE là `/feed` (plan D1) — KHÁC NHAU CÓ CHỦ ĐÍCH.
 export { socialApi, feedDeletedResultSchema, type FeedDeletedResultDto } from "./lib/social-api";
+// S16-SOCIAL-FE-3 — kiểm duyệt (027 · 028 · 029) + thống kê tương tác (052 · 053). Huy hiệu quản trị
+// (056 · 049 · 050 · 051) nằm trong `socialKudosApi` bên dưới.
+export {
+  socialModerationApi,
+  feedReportCreatedSchema,
+  type FeedReportCreatedDto,
+  type ResolveFeedReportBody,
+} from "./lib/social-moderation-api";
+export { socialStatsApi, type FeedEngagementParams } from "./lib/social-stats-api";
 // S16-SOCIAL-FE-2B — nhóm (SOCIAL-API-030..039).
 export {
   socialGroupsApi,

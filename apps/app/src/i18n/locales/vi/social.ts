@@ -16,6 +16,7 @@
  * │ không ra") đẩy người dùng đi sửa nhầm thứ. Đừng "gọn hoá" thành một khoá dùng chung.            │
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
+import admin from "./social-admin";
 import groups from "./social-groups";
 import kudos from "./social-kudos";
 
@@ -402,6 +403,8 @@ export default {
   //
   // Tách ĐÔI mỗi hành động thành `forbidden` (403) và lỗi chung, vì hai ca đòi hai hành vi khác
   // nhau: mất quyền thì thử lại bao nhiêu lần cũng vô ích, lỗi mạng/500 thì thử lại là đúng.
+  // ── S16-SOCIAL-FE-3 — Kiểm duyệt · Thống kê · Huy hiệu · Báo cáo, file riêng `social-admin.ts` ──
+  admin,
   // ── S16-SOCIAL-FE-2B — màn Nhóm (SOC-SCREEN-006), file riêng `social-groups.ts` ──
   groups,
   // ── S16-SOCIAL-FE-2C — Vinh danh (SOC-SCREEN-009), file riêng `social-kudos.ts` ──

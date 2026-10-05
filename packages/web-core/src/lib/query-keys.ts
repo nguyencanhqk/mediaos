@@ -1474,5 +1474,22 @@ export const socialKeys = {
       [...rootKeys.social, "kudos", "list", params] as const,
     recipients: (q: string) => [...rootKeys.social, "kudos", "recipients", q] as const,
     badges: () => [...rootKeys.social, "kudos", "badges"] as const,
+    // S16-SOCIAL-FE-3 (L1) — KHUNG: khoá thật ở commit GREEN.
+    badgesAdminAll: (): readonly unknown[] => [],
+    badgesAdmin: (_params?: Record<string, unknown>): readonly unknown[] => [],
+  },
+
+  // S16-SOCIAL-FE-3 (L1) — KHUNG kiểm duyệt + thống kê: khoá thật ở commit GREEN.
+  moderation: {
+    allOf: (): readonly unknown[] => [],
+    reports: {
+      lists: (): readonly unknown[] => [],
+      list: (_params?: Record<string, unknown>): readonly unknown[] => [],
+    },
+    hiddenPosts: (): readonly unknown[] => [],
+  },
+  stats: {
+    allOf: (): readonly unknown[] => [],
+    engagement: (_params?: Record<string, unknown>): readonly unknown[] => [],
   },
 };

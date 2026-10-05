@@ -18,6 +18,7 @@ import {
   meKeys,
   notificationKeys,
   notificationPreferenceKeys,
+  socialKeys,
   taskKeys,
   taskSubtaskInvalidation,
   goalKeys,
@@ -424,5 +425,76 @@ describe("goalKeys / goalInvalidation (S5-GOAL-FE-2 append)", () => {
     const keys = goalInvalidation.taskProgress("g-1").map((k) => JSON.stringify(k));
     expect(keys).not.toContain(JSON.stringify(taskKeys.detail("t-1")));
     expect(keys.some((k) => k.includes("kanban"))).toBe(false);
+  });
+});
+
+// ── S16-SOCIAL-FE-3 (APPEND, ca A3) — kiểm duyệt · thống kê · huy hiệu quản trị ─────────────────────
+//
+// TanStack v5 so khớp một phần theo PHẦN TỬ mảng ⇒ «A là tiền tố của B» ⇔ invalidate A làm mới B.
+// Mọi ca dưới đo đúng quan hệ đó, không so chuỗi.
+describe("socialKeys — moderation / stats / badges-admin (S16-SOCIAL-FE-3 append)", () => {
+  const isPrefix = (prefix: readonly unknown[], key: readonly unknown[]): boolean =>
+    prefix.length <= key.length &&
+    prefix.every((part, i) => JSON.stringify(part) === JSON.stringify(key[i]));
+
+  it("moderation.reports.lists() là tiền tố của MỌI reports.list(params), và khoá đổi theo params", () => {
+    const lists = socialKeys.moderation.reports.lists();
+    const open2 = socialKeys.moderation.reports.list({ status: "open", page: 2 });
+    expect(lists.length).toBeGreaterThan(0);
+    expect(isPrefix(lists, open2)).toBe(true);
+    expect(isPrefix(lists, socialKeys.moderation.reports.list({ page: 1 }))).toBe(true);
+    expect(open2).toEqual(socialKeys.moderation.reports.list({ status: "open", page: 2 }));
+    expect(open2).not.toEqual(socialKeys.moderation.reports.list({ status: "open", page: 3 }));
+    expect(open2).not.toEqual(socialKeys.moderation.reports.list({ status: "resolved", page: 2 }));
+  });
+
+  it("moderation.allOf() nằm dưới root social và phủ cả danh sách báo cáo lẫn bài đang ẩn", () => {
+    const all = socialKeys.moderation.allOf();
+    expect(isPrefix(socialKeys.all, all)).toBe(true);
+    expect(all.length).toBeGreaterThan(socialKeys.all.length);
+    expect(isPrefix(all, socialKeys.moderation.reports.lists())).toBe(true);
+    expect(isPrefix(all, socialKeys.moderation.hiddenPosts())).toBe(true);
+  });
+
+  it("hiddenPosts() là nhánh RIÊNG: không nằm dưới reports.lists() cũng KHÔNG nằm dưới feed.allOf()", () => {
+    const hidden = socialKeys.moderation.hiddenPosts();
+    expect(hidden.length).toBeGreaterThan(socialKeys.moderation.allOf().length);
+    expect(isPrefix(socialKeys.moderation.reports.lists(), hidden)).toBe(false);
+    // 001 `status=hidden` gác thêm `manage:feed-post` — không được nằm chung nhánh với dòng cuộn mà
+    // `view:feed` đọc (khuôn `posts.acks`).
+    expect(isPrefix(socialKeys.feed.allOf(), hidden)).toBe(false);
+    expect(hidden).not.toEqual(socialKeys.feed.list({ status: "hidden", sort: "latest" }));
+  });
+
+  it("stats.allOf() là tiền tố của engagement(params); khoá đổi theo params; tách khỏi moderation", () => {
+    const all = socialKeys.stats.allOf();
+    const w8 = socialKeys.stats.engagement({});
+    const ranged = socialKeys.stats.engagement({ from: "2026-08-10", to: "2026-10-04" });
+    expect(isPrefix(socialKeys.all, all)).toBe(true);
+    expect(all.length).toBeGreaterThan(socialKeys.all.length);
+    expect(isPrefix(all, w8)).toBe(true);
+    expect(isPrefix(all, ranged)).toBe(true);
+    expect(ranged).not.toEqual(w8);
+    expect(isPrefix(socialKeys.moderation.allOf(), ranged)).toBe(false);
+  });
+
+  it("kudos.badgesAdminAll() là tiền tố của badgesAdmin(params) và nằm dưới kudos.allOf()", () => {
+    const adminAll = socialKeys.kudos.badgesAdminAll();
+    const page2 = socialKeys.kudos.badgesAdmin({ page: 2, limit: 50 });
+    expect(adminAll.length).toBeGreaterThan(socialKeys.kudos.allOf().length);
+    expect(isPrefix(socialKeys.kudos.allOf(), adminAll)).toBe(true);
+    expect(isPrefix(adminAll, page2)).toBe(true);
+    expect(page2).not.toEqual(socialKeys.kudos.badgesAdmin({ page: 1, limit: 50 }));
+  });
+
+  it("badgesAdminAll() KHÔNG là tiền tố của badges() và NGƯỢC LẠI — 056 (`manage:feed-kudos`) và 048 (`view:feed`) không chung nhánh cache", () => {
+    const adminAll = socialKeys.kudos.badgesAdminAll();
+    const page1 = socialKeys.kudos.badgesAdmin({ page: 1, limit: 50 });
+    const publicBadges = socialKeys.kudos.badges();
+    expect(isPrefix(adminAll, publicBadges)).toBe(false);
+    expect(isPrefix(publicBadges, adminAll)).toBe(false);
+    expect(isPrefix(publicBadges, page1)).toBe(false);
+    // Khoá công khai giữ nguyên hình dạng cũ — composer đang invalidate đúng khoá này.
+    expect(publicBadges).toEqual(["social", "kudos", "badges"]);
   });
 });

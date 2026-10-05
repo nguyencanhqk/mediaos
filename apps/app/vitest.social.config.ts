@@ -53,6 +53,8 @@ export default defineConfig({
         // Khung test dùng chung (tiền lệ `chat/call/call-test-doubles.ts`) — công cụ, không phải mã
         // sản phẩm. Tính vào mẫu số sẽ làm con số coverage nói về một thứ khác.
         "src/routes/social/feed/social-test-doubles.tsx",
+        // S16-SOCIAL-FE-3 (plan D19) — cùng lý do: file CHỈ chứa factory/fixture của cụm quản trị.
+        "src/routes/social/admin/admin-test-doubles.tsx",
       ],
       thresholds: { statements: 80, branches: 80, functions: 80, lines: 80 },
     },
