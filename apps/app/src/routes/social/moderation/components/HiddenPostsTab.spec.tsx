@@ -88,7 +88,7 @@ const POST_GONE_TEXT =
 
 const LOAD_FAILED_TEXT = "Không tải được danh sách do lỗi hệ thống hoặc kết nối. Vui lòng thử lại.";
 const OUTCOME_UNKNOWN_TEXT =
-  "Chưa xác nhận được kết quả: không nhận được phản hồi đọc được từ máy chủ, nhưng thao tác có thể đã được ghi. Hãy kiểm tra lại danh sách trước khi thực hiện lần nữa.";
+  "Chưa xác nhận được kết quả: máy chủ không phản hồi hoặc báo lỗi hệ thống, nhưng thao tác có thể đã được ghi. Hãy kiểm tra lại danh sách trước khi thực hiện lần nữa.";
 
 const HIDDEN_QUERY = { status: "hidden", sort: "latest" };
 
@@ -612,7 +612,7 @@ describe("Lỗi của 006 «Hiện lại»", () => {
     expect(rowsIn(screen.getByRole("list", { name: LIST }))).toHaveLength(1);
   });
 
-  it("E11: 500 ⇒ `generic` + «Thử lại» GỬI LẠI đúng bài đó (hàng THỨ HAI, không phải bài đầu danh sách); lượt hai thành công ⇒ dải lỗi mất", async () => {
+  it("E11: 500 ⇒ `outcomeUnknown` (5xx không chứng minh «chưa ghi»), danh sách được đọc lại NGAY + «Thử lại» GỬI LẠI đúng bài đó (hàng THỨ HAI, không phải bài đầu danh sách); lượt hai thành công ⇒ dải lỗi mất", async () => {
     moderatePost.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.server()));
     listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([first(), second()])));
     renderTab();
@@ -620,7 +620,9 @@ describe("Lỗi của 006 «Hiện lại»", () => {
 
     fireEvent.click(within(rows[1] as HTMLElement).getByRole("button", { name: UNHIDE }));
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(alert).toHaveAttribute("data-reason", "outcomeUnknown");
+    expect(alert).toHaveTextContent(OUTCOME_UNKNOWN_TEXT);
+    await waitFor(() => expect(listFeed).toHaveBeenCalledTimes(2));
     expect(moderatePost.mock.calls[0]).toEqual([SECOND_POST_ID, { hidden: false }]);
 
     fireEvent.click(within(alert).getByRole("button", { name: RETRY }));

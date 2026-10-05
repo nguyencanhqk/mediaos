@@ -15,6 +15,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onlineManager } from "@tanstack/react-query";
+import { ApiError } from "@mediaos/web-core";
 import { FEED_NOTE_MAX, resolveFeedReportSchema, type FeedReportDto } from "@mediaos/contracts";
 import { renderWithProviders, resetCaps, setCaps } from "../../feed/social-test-doubles";
 import { ADMIN_ERR, makeReport } from "../../admin/admin-test-doubles";
@@ -214,14 +215,14 @@ describe("Lỗi GIỮ hộp thoại — dải lỗi nằm trong hộp thoại, k
     expect(resolveFeedReportSchema.safeParse(sentBody(0)).success).toBe(true);
   });
 
-  it("E11 — 500: `generic` + «Thử lại» gửi lại; ghi chú đã nhập còn nguyên", async () => {
+  it("E11 — 500: `outcomeUnknown` (5xx không chứng minh «chưa ghi») + «Thử lại» gửi lại; ghi chú đã nhập còn nguyên", async () => {
     resolveReport.mockRejectedValueOnce(ADMIN_ERR.server());
     const { onOutcome } = renderDialog();
     pick(DISMISSED);
     fireEvent.change(noteBox(), { target: { value: "Đã trao đổi trực tiếp" } });
     clickSubmit();
 
-    await waitFor(() => expect(alertReason()).toBe("generic"));
+    await waitFor(() => expect(alertReason()).toBe("outcomeUnknown"));
     expect(noteBox()).toHaveValue("Đã trao đổi trực tiếp");
     expect(onOutcome).not.toHaveBeenCalled();
 
@@ -263,7 +264,13 @@ const KEPT_ERRORS = [
     picks: [RESOLVED, "Ẩn bài"],
   },
   { name: "E10 (400)", err: ADMIN_ERR.badRequest, reason: "invalidRequest", picks: [DISMISSED] },
-  { name: "E11 (500)", err: ADMIN_ERR.server, reason: "generic", picks: [DISMISSED] },
+  { name: "E11 (500)", err: ADMIN_ERR.server, reason: "outcomeUnknown", picks: [DISMISSED] },
+  {
+    name: "4xx mã lạ",
+    err: () => new ApiError(409, "SOME-UNKNOWN-CONFLICT", "x"),
+    reason: "generic",
+    picks: [DISMISSED],
+  },
 ];
 
 // Cờ chặn gửi-đúp phải nhả sau MỌI lỗi giữ hộp thoại. Kẹt ⇒ «Xác nhận» trông bấm được mà không gửi gì,
@@ -540,12 +547,35 @@ describe("`onStale` — lỗi giữ hộp thoại báo trang rằng hàng đợi
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  // 5xx không chứng minh «chưa ghi»: 502/503/504 của reverse proxy (API restart / treo) hoặc 500 nổ sau
+  // commit ⇒ upstream có thể ĐÃ kết thúc báo cáo kèm ẩn / xoá bài (gate SF vòng 2, SF-02R-GATEWAY-5XX).
+  it.each([
+    ["E11 (500 có envelope)", ADMIN_ERR.server],
+    ["502 `HTTP_ERROR`", () => new ApiError(502, "HTTP_ERROR", "502 /social/reports/x: <html>")],
+    ["504 `HTTP_ERROR`", () => new ApiError(504, "HTTP_ERROR", "504 /social/reports/x:")],
+  ])(
+    "%s ⇒ dải `outcomeUnknown`, `onStale` đúng 1 lần KÈM bề mặt bài; không kết cục, không đóng",
+    async (_label, makeError) => {
+      resolveReport.mockRejectedValueOnce(makeError());
+      const { onClose, onOutcome, onStale } = renderDialog();
+      pick(RESOLVED);
+      pick("Ẩn bài");
+      clickSubmit();
+
+      await waitFor(() => expect(alertReason()).toBe("outcomeUnknown"));
+      expect(onStale).toHaveBeenCalledTimes(1);
+      expect(onStale).toHaveBeenCalledWith({ invalidatePosts: true });
+      expect(onOutcome).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     ["E2", ADMIN_ERR.reportBusy],
     ["E3", ADMIN_ERR.reportActionDenied],
     ["E4", ADMIN_ERR.reportActionInvalid],
     ["E10", ADMIN_ERR.badRequest],
-    ["E11", ADMIN_ERR.server],
+    ["4xx mã lạ", () => new ApiError(409, "SOME-UNKNOWN-CONFLICT", "x")],
   ])(
     "%s ⇒ KHÔNG gọi `onStale` (không có gì chứng minh hàng đợi đã cũ)",
     async (_label, makeError) => {

@@ -12,6 +12,7 @@ import { ZodError } from "zod";
 import {
   ADMIN_ERROR_REASONS,
   adminErrorReason,
+  isDefiniteRefusal,
   type AdminErrorReason,
   type AdminErrorTable,
 } from "./admin-errors";
@@ -155,6 +156,18 @@ describe("adminErrorReason — tra theo MÃ trước, status sau", () => {
     expect(adminErrorReason(new TypeError("Failed to fetch"), RESOLVE_TABLE)).toBe("generic");
     expect(adminErrorReason(new ZodError([]), RESOLVE_TABLE)).toBe("generic");
     expect(adminErrorReason(undefined, RESOLVE_TABLE)).toBe("generic");
+  });
+
+  it("`isDefiniteRefusal`: CHỈ `ApiError` 4xx là lời từ chối xác định; 5xx (kể cả 502/503/504 `HTTP_ERROR` của proxy) · status 0 · không phải `ApiError` thì không", () => {
+    for (const status of [400, 403, 404, 409, 422, 429, 499]) {
+      expect(isDefiniteRefusal(new ApiError(status, "ANY", "x"))).toBe(true);
+    }
+    for (const status of [0, 399, 500, 502, 503, 504, 599]) {
+      expect(isDefiniteRefusal(new ApiError(status, "HTTP_ERROR", "x"))).toBe(false);
+    }
+    for (const err of [new TypeError("Failed to fetch"), new ZodError([]), undefined, "boom"]) {
+      expect(isDefiniteRefusal(err)).toBe(false);
+    }
   });
 
   it("tra bằng `Object.hasOwn`: mã trùng tên thuộc tính của Object.prototype KHÔNG ra giá trị lạ", () => {

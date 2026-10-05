@@ -14,7 +14,7 @@ import type { ReactNode } from "react";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryClient } from "@tanstack/react-query";
-import { socialKeys } from "@mediaos/web-core";
+import { ApiError, socialKeys } from "@mediaos/web-core";
 import { resolveFeedReportSchema, type FeedReportDto } from "@mediaos/contracts";
 import {
   makeTestQueryClient,
@@ -86,7 +86,7 @@ const ALREADY_DECIDED_TEXT =
   "Báo cáo này đã được xử lý trước khi yêu cầu của bạn hoàn tất. Danh sách đã được làm mới.";
 const LOAD_FAILED_TEXT = "Không tải được danh sách do lỗi hệ thống hoặc kết nối. Vui lòng thử lại.";
 const OUTCOME_UNKNOWN_TEXT =
-  "Chưa xác nhận được kết quả: không nhận được phản hồi đọc được từ máy chủ, nhưng thao tác có thể đã được ghi. Hãy kiểm tra lại danh sách trước khi thực hiện lần nữa.";
+  "Chưa xác nhận được kết quả: máy chủ không phản hồi hoặc báo lỗi hệ thống, nhưng thao tác có thể đã được ghi. Hãy kiểm tra lại danh sách trước khi thực hiện lần nữa.";
 const FORBIDDEN_TEXT =
   "Bạn không có quyền thực hiện thao tác này. Nếu cần, hãy liên hệ quản trị viên để được cấp quyền.";
 
@@ -451,6 +451,37 @@ describe("Kết cục của lượt GHI không bị lượt ĐỌC LẠI che m�
     expect(invalidated("birthdays")).toBe(false);
   });
 
+  // 502/504 do reverse proxy sinh (API restart / treo) cũng là `ApiError` — upstream có thể ĐÃ commit 029
+  // kèm ẩn / xoá bài. `refetchOnWindowFocus` tắt ⇒ không đọc lại ngay thì bấm «Huỷ» xong hàng cũ vẫn `open`.
+  it.each([
+    ["502", 502],
+    ["504", 504],
+    ["500 có envelope", 500],
+  ])(
+    "SF-02R — 029 nhận %s ⇒ hộp thoại CÒN với dải `outcomeUnknown` + «Thử lại»; hàng đợi VÀ bề mặt bài được đọc lại NGAY, không câu «Không thực hiện được»",
+    async (_label, status) => {
+      resolveReport.mockImplementation(() =>
+        Promise.reject(new ApiError(status, "HTTP_ERROR", `${status} /social/reports/x: <html>`)),
+      );
+      const { invalidated } = await renderPage();
+
+      dismissReport();
+
+      const dialog = screen.getByRole("dialog", { name: DIALOG });
+      await waitFor(() =>
+        expect(within(dialog).getByRole("alert")).toHaveAttribute("data-reason", "outcomeUnknown"),
+      );
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(OUTCOME_UNKNOWN_TEXT);
+      expect(within(dialog).getByRole("button", { name: RETRY })).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent("Không thực hiện được");
+      await waitFor(() => expect(listReports).toHaveBeenCalledTimes(2));
+      expect(invalidated("otherReportPage")).toBe(true);
+      expect(invalidated("feedList")).toBe(true);
+      expect(invalidated("postDetail")).toBe(true);
+      expect(invalidated("birthdays")).toBe(false);
+    },
+  );
+
   it("SF-05 — 029 trả 2xx mà báo cáo VẪN `open` ⇒ dải `outcomeUnknown` ở trang (không «Thử lại»), hàng đợi được đọc lại — không im lặng", async () => {
     resolveReport.mockImplementation(() => Promise.resolve(makeReport({ status: "open" })));
     const { invalidated } = await renderPage();
@@ -508,7 +539,7 @@ describe("Lỗi GIỮ hộp thoại — trang không vẽ dải; chỉ E5 làm m
     ["E3 `REPORT-ACTION-DENIED`", ADMIN_ERR.reportActionDenied, "reportActionDenied"],
     ["E4 `REPORT-ACTION-INVALID-FOR-TARGET`", ADMIN_ERR.reportActionInvalid, "reportActionInvalid"],
     ["E10 400", ADMIN_ERR.badRequest, "invalidRequest"],
-    ["E11 500", ADMIN_ERR.server, "generic"],
+    ["4xx mã lạ", () => new ApiError(409, "SOME-UNKNOWN-CONFLICT", "x"), "generic"],
   ])(
     "%s: hộp thoại CÒN, dải duy nhất nằm TRONG hộp thoại, `listReports` không gọi lại",
     async (_label, makeError, reason) => {

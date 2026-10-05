@@ -17,10 +17,10 @@
  *   3. 400 ⇒ `invalidRequest`.
  *   4. còn lại (5xx · mạng · ZodError · không phải Error) ⇒ `generic`.
  *
- * ⚠️ `generic` gộp hai thứ KHÁC nhau: server ĐÃ trả lỗi (`ApiError` — kết cục xác định) và KHÔNG có câu
- * trả lời đọc được (mất phản hồi · hết hạn chờ · 2xx mà thân hỏng schema — server có thể đã ghi). Lời gọi
- * nào mà khác biệt đó đổi việc phải làm (lượt GHI không idempotent: 029 · 006) thì hỏi `isServerAnswer`
- * TRƯỚC và dùng reason `outcomeUnknown` cho nhánh sau — xem `moderation-errors`.
+ * ⚠️ `generic` gộp hai thứ KHÁC nhau: server ĐÃ TỪ CHỐI (4xx — kết cục xác định: chưa ghi) và KHÔNG có
+ * gì chứng minh điều đó (5xx · mất phản hồi · hết hạn chờ · 2xx mà thân hỏng schema — server có thể đã
+ * ghi). Lời gọi nào mà khác biệt đó đổi việc phải làm (lượt GHI không idempotent: 029 · 006) thì hỏi
+ * `isDefiniteRefusal` TRƯỚC và dùng reason `outcomeUnknown` cho nhánh sau — xem `moderation-errors`.
  *
  * Kết quả LUÔN là một reason của tập đóng — `AdminErrorNotice` chỉ nhận reason, không nhận chuỗi, nên
  * `message` của server không có đường nào lên màn hình.
@@ -65,6 +65,8 @@ export type AdminErrorTable = Readonly<Record<string, AdminErrorReason>>;
 
 const HTTP_FORBIDDEN = 403;
 const HTTP_BAD_REQUEST = 400;
+const HTTP_CLIENT_ERROR_MIN = 400;
+const HTTP_SERVER_ERROR_MIN = 500;
 
 /**
  * Mã dùng để tra bảng: mã SOCIAL nếu đọc được (kể cả hình dạng API cũ — mã chỉ nằm ở tiền tố `message`,
@@ -75,16 +77,25 @@ function lookupCode(err: ApiError): string {
 }
 
 /**
- * Server ĐÃ trả lời bằng một lỗi đọc được ⇒ kết cục của yêu cầu là xác định. `false` = không có câu trả
- * lời đọc được (lỗi mạng · hết hạn chờ · `ZodError` trên thân 2xx · thứ không phải `Error`): với một lượt
- * GHI, server có thể đã ghi.
+ * Server ĐÃ TỪ CHỐI yêu cầu bằng một 4xx ⇒ kết cục xác định: chưa ghi. `false` = không có gì chứng minh
+ * điều đó — với một lượt GHI, server có thể đã ghi:
+ *   · không phải `ApiError`: lỗi mạng · hết hạn chờ · `ZodError` trên thân 2xx · thứ không phải `Error`;
+ *   · `ApiError` 5xx: `api-client` biến MỌI phản hồi non-2xx thành `ApiError`, kể cả 502/503/504 do
+ *     reverse proxy sinh khi API restart / treo (thân không phải envelope ⇒ mã `HTTP_ERROR`) — upstream có
+ *     thể đã commit rồi mới mất đường về; 500 có envelope cũng có thể nổ SAU commit (lúc dựng phản hồi);
+ *   · `ApiError` không mang status HTTP (0).
+ * `instanceof ApiError` một mình KHÔNG trả lời được câu hỏi này.
  */
-export function isServerAnswer(err: unknown): err is ApiError {
-  return err instanceof ApiError;
+export function isDefiniteRefusal(err: unknown): err is ApiError {
+  return (
+    err instanceof ApiError &&
+    err.status >= HTTP_CLIENT_ERROR_MIN &&
+    err.status < HTTP_SERVER_ERROR_MIN
+  );
 }
 
 export function adminErrorReason(err: unknown, table: AdminErrorTable): AdminErrorReason {
-  if (!isServerAnswer(err)) return "generic";
+  if (!(err instanceof ApiError)) return "generic";
 
   const code = lookupCode(err);
   // `Object.hasOwn`, KHÔNG `table[code]` trần: `code` đến từ server, và một mã trùng tên thuộc tính của

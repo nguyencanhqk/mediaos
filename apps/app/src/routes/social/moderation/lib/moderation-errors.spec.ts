@@ -203,18 +203,18 @@ describe("lỗi chung (E9–E11)", () => {
     });
   });
 
-  it("E11 · 500 ⇒ thử lại được ở CẢ ba lời gọi: lượt GHI ra `generic` (029 giữ hộp thoại, KHÔNG làm mới gì), lượt ĐỌC ra `loadFailed`", () => {
+  it("E11 · 500 ⇒ thử lại được ở CẢ ba lời gọi: lượt GHI ra `outcomeUnknown` (029 giữ hộp thoại, làm mới NGAY), lượt ĐỌC ra `loadFailed`", () => {
     expect(describeResolveReportError(ADMIN_ERR.server())).toStrictEqual({
-      reason: "generic",
+      reason: "outcomeUnknown",
       dialog: "keep",
       resetAction: false,
-      invalidate: false,
-      invalidatePosts: false,
+      invalidate: true,
+      invalidatePosts: true,
       retryable: true,
     });
     expect(describeUnhidePostError(ADMIN_ERR.server())).toStrictEqual({
-      reason: "generic",
-      invalidate: false,
+      reason: "outcomeUnknown",
+      invalidate: true,
       retryable: true,
     });
     expect(describeModerationReadError(ADMIN_ERR.server())).toStrictEqual({
@@ -223,8 +223,34 @@ describe("lỗi chung (E9–E11)", () => {
     });
   });
 
-  // Server ĐÃ trả lỗi (`ApiError`) ⇒ kết cục xác định: chưa ghi. KHÔNG có câu trả lời đọc được (mất phản
-  // hồi · hết hạn chờ · 2xx mà thân hỏng schema) ⇒ server có thể — ca thứ ba: chắc chắn — ĐÃ ghi, kể cả
+  // `api-client` biến MỌI phản hồi non-2xx thành `ApiError`, kể cả 502/503/504 do reverse proxy sinh khi
+  // API restart / treo (thân không phải envelope ⇒ mã `HTTP_ERROR`) — lúc đó upstream có thể ĐÃ commit 029
+  // kèm ẩn / xoá bài. `instanceof ApiError` một mình không chứng minh «chưa ghi» (gate SF vòng 2,
+  // SF-02R-GATEWAY-5XX).
+  it.each([
+    ["502 `HTTP_ERROR` (thân HTML của proxy)", new ApiError(502, "HTTP_ERROR", "502 /x: <html>")],
+    ["503 `HTTP_ERROR`", new ApiError(503, "HTTP_ERROR", "503 /x:")],
+    ["504 `HTTP_ERROR`", new ApiError(504, "HTTP_ERROR", "504 /x:")],
+    ["503 có envelope", new ApiError(503, "SERVICE-UNAVAILABLE", "x")],
+    ["`ApiError` không mang status HTTP (0)", new ApiError(0, "HTTP_ERROR", "x")],
+  ])("lượt GHI nhận %s ⇒ `outcomeUnknown`: làm mới NGAY, vẫn thử lại được", (_label, err) => {
+    expect(describeResolveReportError(err)).toStrictEqual({
+      reason: "outcomeUnknown",
+      dialog: "keep",
+      resetAction: false,
+      invalidate: true,
+      invalidatePosts: true,
+      retryable: true,
+    });
+    expect(describeUnhidePostError(err)).toStrictEqual({
+      reason: "outcomeUnknown",
+      invalidate: true,
+      retryable: true,
+    });
+  });
+
+  // Server TỪ CHỐI bằng 4xx ⇒ kết cục xác định: chưa ghi. 5xx · KHÔNG có câu trả lời đọc được (mất phản
+  // hồi · hết hạn chờ · 2xx mà thân hỏng schema) ⇒ server có thể — ca cuối: chắc chắn — ĐÃ ghi, kể cả
   // xoá bài. Gộp hai thứ thành «Không thực hiện được» là khẳng định điều không biết (gate SF, SF-02).
   it("lượt GHI không có câu trả lời đọc được (mạng · ZodError · hết hạn · không phải Error) ⇒ `outcomeUnknown`: làm mới NGAY, vẫn thử lại được", () => {
     const timeout = new Error("Guarded mutation timed out");
@@ -245,14 +271,33 @@ describe("lỗi chung (E9–E11)", () => {
     }
   });
 
-  it("đối chứng: `ApiError` 500 của lượt GHI KHÔNG phải `outcomeUnknown` — server đã trả lời, không làm mới gì", () => {
-    expect(describeResolveReportError(ADMIN_ERR.server()).reason).toBe("generic");
-    expect(describeResolveReportError(ADMIN_ERR.server()).invalidate).toBe(false);
-    expect(describeUnhidePostError(ADMIN_ERR.server())).toStrictEqual({
-      reason: "generic",
-      invalidate: false,
-      retryable: true,
-    });
+  it("đối chứng: 4xx mã LẠ của lượt GHI KHÔNG phải `outcomeUnknown` — server đã từ chối, `generic`, không làm mới gì", () => {
+    for (const err of [
+      new ApiError(409, "SOME-UNKNOWN-CONFLICT", "x"),
+      new ApiError(429, "RATE-LIMITED", "x"),
+      new ApiError(499, "HTTP_ERROR", "x"),
+    ]) {
+      expect(describeResolveReportError(err)).toStrictEqual({
+        reason: "generic",
+        dialog: "keep",
+        resetAction: false,
+        invalidate: false,
+        invalidatePosts: false,
+        retryable: true,
+      });
+      expect(describeUnhidePostError(err)).toStrictEqual({
+        reason: "generic",
+        invalidate: false,
+        retryable: true,
+      });
+    }
+  });
+
+  it("5xx KHÔNG nuốt mã đã khai của 4xx: 409 `SOCIAL-ERR-021` vẫn là `reportAlreadyDecided`, 403 vẫn `forbidden`", () => {
+    expect(describeResolveReportError(ADMIN_ERR.reportAlreadyDecided()).reason).toBe(
+      "reportAlreadyDecided",
+    );
+    expect(describeUnhidePostError(ADMIN_ERR.forbidden()).reason).toBe("forbidden");
   });
 
   it("lượt ĐỌC không có câu trả lời đọc được ⇒ `loadFailed` + thử lại được (không có gì để «chưa rõ đã ghi»)", () => {

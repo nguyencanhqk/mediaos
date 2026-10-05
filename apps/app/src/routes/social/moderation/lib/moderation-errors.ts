@@ -7,8 +7,9 @@
  * đóng; `REPORT-BUSY` = tạm thời, giữ + bấm lại), cùng 403 có hai nghĩa (`REPORT-ACTION-DENIED` = bỏ
  * hành động kèm là gửi được; 403 khác = mất quyền, đóng). Suy tại chỗ gọi là gộp nhầm.
  *
- * Hai lượt GHI (029 · 006) không idempotent ⇒ lỗi KHÔNG có câu trả lời đọc được của chúng là
- * `outcomeUnknown` (có thể đã ghi), không phải `generic`; lượt ĐỌC hỏng là `loadFailed`.
+ * Hai lượt GHI (029 · 006) không idempotent ⇒ lỗi KHÔNG phải một lời từ chối 4xx của server (5xx — kể cả
+ * 502/503/504 của reverse proxy — · mất phản hồi · hết hạn chờ · thân 2xx hỏng schema) là `outcomeUnknown`
+ * (có thể đã ghi), không phải `generic`; lượt ĐỌC hỏng là `loadFailed`.
  *
  * Ba lời gọi, ba hàm:
  *   · `describeResolveReportError`  — 029 `PATCH /social/reports/:id` (hộp thoại xử lý báo cáo)
@@ -21,7 +22,7 @@
 import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import {
   adminErrorReason,
-  isServerAnswer,
+  isDefiniteRefusal,
   type AdminErrorReason,
   type AdminErrorTable,
 } from "../../admin/lib/admin-errors";
@@ -130,11 +131,12 @@ export const RESOLVE_REPORT_ERROR_BEHAVIOR: BehaviorTable<ResolveReportErrorBeha
   forbidden: CLOSE,
   // E10
   invalidRequest: KEEP,
-  // E11 — server ĐÃ trả 5xx: chưa ghi, gửi lại được.
+  // 4xx mã lạ — server ĐÃ từ chối: chưa ghi, gửi lại được. (E11 · 5xx KHÔNG rơi vào đây — xem hàng dưới.)
   generic: { ...KEEP, retryable: true },
-  // Không có câu trả lời đọc được (mất phản hồi · hết hạn chờ · 2xx mà thân hỏng schema): server có thể —
-  // ca thứ ba: chắc chắn — ĐÃ ghi, kể cả ẩn / xoá bài. Đọc lại hàng đợi + bề mặt bài NGAY (người dùng có
-  // thể bấm «Huỷ» chứ không «Thử lại»); gửi lại vẫn an toàn: đã ghi rồi thì lượt lặp nhận E1.
+  // E11 + không có câu trả lời đọc được (5xx — kể cả 502/503/504 của reverse proxy khi API restart / treo
+  // — · mất phản hồi · hết hạn chờ · 2xx mà thân hỏng schema): server có thể — ca cuối: chắc chắn — ĐÃ
+  // ghi, kể cả ẩn / xoá bài. Đọc lại hàng đợi + bề mặt bài NGAY (người dùng có thể bấm «Huỷ» chứ không
+  // «Thử lại», và app tắt `refetchOnWindowFocus`); gửi lại vẫn an toàn: đã ghi rồi thì lượt lặp nhận E1.
   outcomeUnknown: { ...KEEP, invalidate: true, invalidatePosts: true, retryable: true },
 };
 
@@ -180,11 +182,12 @@ function behaviorOf<B>(table: BehaviorTable<B>, reason: AdminErrorReason): B {
 }
 
 /**
- * Reason của một lượt GHI không idempotent (029 · 006): tách «server đã trả lỗi» khỏi «không có câu trả
- * lời đọc được» TRƯỚC khi tra bảng — nhánh sau không được nói «Không thực hiện được».
+ * Reason của một lượt GHI không idempotent (029 · 006): tách «server đã TỪ CHỐI (4xx)» khỏi «không có
+ * gì chứng minh là chưa ghi» (5xx · không có câu trả lời đọc được) TRƯỚC khi tra bảng — nhánh sau không
+ * được nói «Không thực hiện được».
  */
 function writeErrorReason(err: unknown, table: AdminErrorTable): AdminErrorReason {
-  return isServerAnswer(err) ? adminErrorReason(err, table) : "outcomeUnknown";
+  return isDefiniteRefusal(err) ? adminErrorReason(err, table) : "outcomeUnknown";
 }
 
 export function describeResolveReportError(err: unknown): ResolveReportErrorOutcome {

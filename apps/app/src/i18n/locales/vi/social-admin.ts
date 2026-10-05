@@ -26,10 +26,10 @@ export default {
     invalidRequest:
       "Yêu cầu không hợp lệ nên chưa được thực hiện. Hãy kiểm tra lại thông tin đã nhập.",
     busy: "Yêu cầu trước của bạn vẫn đang được xử lý. Vui lòng chờ giây lát rồi thử lại.",
-    // Lượt GHI không nhận được câu trả lời đọc được (mất phản hồi · hết hạn chờ · thân phản hồi hỏng):
+    // Lượt GHI không được server từ chối rõ ràng (5xx · mất phản hồi · hết hạn chờ · thân phản hồi hỏng):
     // server có thể ĐÃ ghi ⇒ KHÔNG được nói «không thực hiện được», và không hứa «đã làm mới».
     outcomeUnknown:
-      "Chưa xác nhận được kết quả: không nhận được phản hồi đọc được từ máy chủ, nhưng thao tác có thể đã được ghi. Hãy kiểm tra lại danh sách trước khi thực hiện lần nữa.",
+      "Chưa xác nhận được kết quả: máy chủ không phản hồi hoặc báo lỗi hệ thống, nhưng thao tác có thể đã được ghi. Hãy kiểm tra lại danh sách trước khi thực hiện lần nữa.",
     // Lượt ĐỌC danh sách hỏng — câu riêng: dải này có thể đứng cạnh câu xác nhận của một lượt ghi vừa xong.
     loadFailed: "Không tải được danh sách do lỗi hệ thống hoặc kết nối. Vui lòng thử lại.",
     // ── 029 — kết thúc báo cáo ──
