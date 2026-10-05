@@ -139,6 +139,11 @@ describe("S16-SOCIAL-FE-3 — huy hiệu quản trị", () => {
     expect(parsed.data[0]?.createdAt).toBe(ISO);
   });
 
+  it("056 khoá CÓ MẶT mang `undefined` ⇒ KHÔNG lọt lên URL: `page: undefined` + limit 50 ⇒ `?limit=50`", async () => {
+    await socialKudosApi.listBadgesAdmin({ page: undefined, limit: 50 });
+    expect(lastCallFull()[0]).toBe("/social/kudos-badges/manage?limit=50");
+  });
+
   it("049 createBadge ⇒ POST /social/kudos-badges KÈM Idempotency-Key; trả DTO quản trị", async () => {
     await socialKudosApi.createBadge(CREATE_BODY, "attempt-1");
     const [url, schema, init, opts] = lastCallFull();

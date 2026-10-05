@@ -16,6 +16,8 @@ vi.mock("./api-client", async (importOriginal) => {
 });
 
 const UNIT = "77777777-7777-4777-8777-777777777777";
+/** Hình dạng parser URL-search trả khi chưa chọn gì: đủ khoá, mọi giá trị `undefined`. */
+const ALL_UNDEFINED = { from: undefined, to: undefined, orgUnitId: undefined };
 
 const ENGAGEMENT = {
   range: { from: "2026-08-10", to: "2026-10-04", weeks: 8 },
@@ -60,6 +62,7 @@ describe("052 — engagement", () => {
     expect(url).toBe(`/social/stats/engagement?from=2026-08-10&to=2026-10-04&orgUnitId=${UNIT}`);
     expect(init?.method ?? "GET").toBe("GET");
 
+    expect(schema.safeParse(ENGAGEMENT).success).toBe(true);
     const parsed = schema.parse(ENGAGEMENT) as typeof ENGAGEMENT;
     expect(parsed.range.weeks).toBe(8);
     expect(parsed.units[0]?.name).toBe("Phòng Kỹ thuật");
@@ -72,6 +75,18 @@ describe("052 — engagement", () => {
   it("vắng tham số ⇒ không có query string (server tự lấy 8 tuần gần nhất)", async () => {
     await socialStatsApi.engagement();
     expect(lastFetch()[0]).toBe("/social/stats/engagement");
+  });
+
+  // Parser URL-search của màn trả ĐỦ ba khoá kể cả khi chưa chọn gì. Query của 052 là `.strict()`:
+  // `from=undefined` lọt lên URL là 400.
+  it("cả ba khoá CÓ MẶT mang `undefined` ⇒ không có query string", async () => {
+    await socialStatsApi.engagement(ALL_UNDEFINED);
+    expect(lastFetch()[0]).toBe("/social/stats/engagement");
+  });
+
+  it("chỉ `orgUnitId` có giá trị (from/to mang `undefined`) ⇒ ĐÚNG một khoá trên URL", async () => {
+    await socialStatsApi.engagement({ from: undefined, to: undefined, orgUnitId: UNIT });
+    expect(lastFetch()[0]).toBe(`/social/stats/engagement?orgUnitId=${UNIT}`);
   });
 });
 
@@ -91,6 +106,8 @@ describe("053 — exportEngagement", () => {
     expect(blobCalls[0]?.[0]).toBe(
       `/social/stats/engagement/export?from=2026-08-10&to=2026-10-04&orgUnitId=${UNIT}`,
     );
+    // Route 053 chỉ có `@Get`: không truyền `init` ⇒ `apiFetchBlob` dùng GET mặc định.
+    expect(blobCalls[0]?.[1]).toBeUndefined();
     expect(out).toBe(result);
     expect(vi.mocked(apiClient.apiFetch)).not.toHaveBeenCalled();
   });
@@ -98,8 +115,17 @@ describe("053 — exportEngagement", () => {
   it("vắng tham số ⇒ …/export không có query string", async () => {
     vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({ blob: new Blob([]), filename: "a.xlsx" });
     await socialStatsApi.exportEngagement();
-    expect(vi.mocked(apiClient.apiFetchBlob).mock.calls[0]?.[0]).toBe(
-      "/social/stats/engagement/export",
-    );
+    const blobCalls = vi.mocked(apiClient.apiFetchBlob).mock.calls;
+    expect(blobCalls).toHaveLength(1);
+    expect(blobCalls[0]?.[0]).toBe("/social/stats/engagement/export");
+    expect(blobCalls[0]?.[1]).toBeUndefined();
+  });
+
+  it("cả ba khoá CÓ MẶT mang `undefined` ⇒ …/export không có query string", async () => {
+    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({ blob: new Blob([]), filename: null });
+    await socialStatsApi.exportEngagement(ALL_UNDEFINED);
+    const blobCalls = vi.mocked(apiClient.apiFetchBlob).mock.calls;
+    expect(blobCalls).toHaveLength(1);
+    expect(blobCalls[0]?.[0]).toBe("/social/stats/engagement/export");
   });
 });

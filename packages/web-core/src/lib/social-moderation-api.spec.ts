@@ -77,7 +77,9 @@ describe("028 — listReports", () => {
     expect(url).toBe("/social/reports?status=open&page=2");
     expect(init?.method ?? "GET").toBe("GET");
 
-    const parsed = schema.parse({ data: [REPORT_ROW], page: 2, limit: 20, total: 21 }) as {
+    const page = { data: [REPORT_ROW], page: 2, limit: 20, total: 21 };
+    expect(schema.safeParse(page).success).toBe(true);
+    const parsed = schema.parse(page) as {
       data: { id: string; reporter: unknown }[];
       total: number;
     };
@@ -91,6 +93,13 @@ describe("028 — listReports", () => {
   it("vắng tham số ⇒ không có query string (server tự mặc định page=1, limit=20, mọi trạng thái)", async () => {
     await socialModerationApi.listReports();
     expect(lastCall()[0]).toBe("/social/reports");
+  });
+
+  // Parser URL-search của màn trả ĐỦ khoá, kể cả khoá mang `undefined` (bộ lọc «Tất cả»). Query của 028
+  // là `.strict()` + enum ⇒ `status=undefined` lọt lên URL là 400 cho cả hàng đợi.
+  it("khoá CÓ MẶT mang `undefined` ⇒ KHÔNG lọt lên URL: chỉ còn `?page=1&limit=20`", async () => {
+    await socialModerationApi.listReports({ status: undefined, page: 1, limit: 20 });
+    expect(lastCall()[0]).toBe("/social/reports?page=1&limit=20");
   });
 });
 
@@ -111,6 +120,7 @@ describe("029 — resolveReport", () => {
       resolvedAt: ISO,
       resolutionNote: "Đã ẩn bài",
     };
+    expect(schema.safeParse(resolved).success).toBe(true);
     const parsed = schema.parse(resolved) as { id: string; status: string };
     expect(parsed.id).toBe(REPORT);
     expect(parsed.status).toBe("resolved");
