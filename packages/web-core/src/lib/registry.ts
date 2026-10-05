@@ -2354,6 +2354,12 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 102,
   },
+  // S16-SOCIAL-FE-3 — Kiểm duyệt (SOC-SCREEN-010). Cổng route = cặp của LỜI GỌI ĐẦU TIÊN của màn
+  // (`SOCIAL-API-028` gác `view:feed-report`) + cặp vào module, ĐỦ CẢ HAI. KHÔNG gác bằng
+  // `manage:feed-report` (manager được đọc hàng đợi, chỉ không xử lý được — nút «Xử lý» gác TRONG màn),
+  // và checker ở đây khớp đúng-bằng nên có `manage` KHÔNG tự suy ra `view`. KHÔNG khai `requiredScopes`:
+  // phạm vi (Department/Company) do 028 tự xét. Mục rail `social.moderation` ở `SOCIAL_SIDEBAR_V2` khai
+  // Y HỆT cặp này (ghim ở `social-wiring.spec.ts` ca W1).
   {
     routeKey: "social.moderation",
     path: "/feed/moderation",
@@ -2361,7 +2367,7 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     moduleCode: "SOCIAL",
     screenCode: "SOC-SCREEN-010",
     titleKey: "routeTitle.socialModeration",
-    requiredPermissions: ["view:feed"],
+    requiredPermissions: ["view:feed", "view:feed-report"],
     showInSidebar: true,
     order: 103,
   },

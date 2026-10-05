@@ -125,3 +125,4 @@ social.ideas | mod=SOCIAL | label=Sáng kiến | path=/feed/ideas | icon=lightbu
 social.polls | mod=SOCIAL | label=Bình chọn | path=/feed/polls | icon=vote | group=operation | order=50 | any=[view:feed]
 social.kudos | mod=SOCIAL | label=Vinh danh | path=/feed/kudos | icon=award | group=operation | order=55 | any=[view:feed]
 social.groups | mod=SOCIAL | label=Nhóm | path=/feed/groups | icon=users | group=operation | order=60 | any=[view:feed]
+social.moderation | mod=SOCIAL | label=Kiểm duyệt | path=/feed/moderation | icon=shield-alert | group=management | order=70 | all=[view:feed,view:feed-report]
