@@ -396,4 +396,26 @@ describe("DC1 — 029 không idempotent: bấm đúp chỉ gửi MỘT lần", (
       expect(onOutcome).not.toHaveBeenCalled();
     },
   );
+
+  // `isPending` tới màn sau một nhịp ⇒ cú đóng CÙNG NHỊP với «Xác nhận» chỉ bị cờ đồng bộ chặn.
+  it.each([
+    { name: "Esc", trigger: () => fireEvent.keyDown(document, { key: "Escape" }) },
+    {
+      name: "bấm ra ngoài",
+      trigger: () => fireEvent.click(dialog().parentElement as HTMLElement),
+    },
+  ])(
+    "$name CÙNG NHỊP với «Xác nhận» (nút chưa kịp khoá) ⇒ KHÔNG đóng: lượt mở đó chỉ báo kết cục",
+    async ({ trigger }) => {
+      const { onClose, onOutcome } = renderDialog();
+      pick(DISMISSED);
+
+      clickSubmit();
+      trigger();
+
+      await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
+      expect(resolveReport).toHaveBeenCalledTimes(1);
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
 });

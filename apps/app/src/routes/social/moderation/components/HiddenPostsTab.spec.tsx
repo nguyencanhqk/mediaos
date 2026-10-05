@@ -280,6 +280,28 @@ describe("UH1 — «Hiện lại»", () => {
     expect(invalidated("birthdays")).toBe(false);
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  // Cờ «đang gửi» phải nhả cả sau lượt THÀNH CÔNG: không nhả thì nút còn lại trông bấm được mà không gửi gì.
+  it("hai lượt thành công LIÊN TIẾP: hiện lại bài một xong, «Hiện lại» của bài còn lại VẪN gửi 006 cho đúng bài đó", async () => {
+    listFeed.mockImplementationOnce(() => Promise.resolve(makeHiddenPostPage([first(), second()])));
+    listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([second()])));
+    renderTab();
+    const rows = rowsIn(await list());
+
+    fireEvent.click(within(rows[0] as HTMLElement).getByRole("button", { name: UNHIDE }));
+
+    expect(await screen.findByText(UNHIDDEN)).toBeInTheDocument();
+    await waitFor(() => expect(rowsIn(screen.getByRole("list", { name: LIST }))).toHaveLength(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: UNHIDE })).toBeEnabled());
+    expect(moderatePost).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
+
+    await waitFor(() => expect(moderatePost).toHaveBeenCalledTimes(2));
+    expect(moderatePost.mock.calls[0]).toEqual([HIDDEN_POST_ID, { hidden: false }]);
+    expect(moderatePost.mock.calls[1]).toEqual([SECOND_POST_ID, { hidden: false }]);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 describe("DC1 — bấm đúp «Hiện lại»", () => {
