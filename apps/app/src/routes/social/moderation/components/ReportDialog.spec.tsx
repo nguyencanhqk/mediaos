@@ -10,6 +10,7 @@
  */
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { onlineManager } from "@tanstack/react-query";
 import { createFeedReportSchema, FEED_NOTE_MAX } from "@mediaos/contracts";
 import { socialKeys } from "@mediaos/web-core";
 import {
@@ -436,5 +437,31 @@ describe("DC2 — bấm đúp 027 chỉ gửi MỘT lần", () => {
     await findSentStatus();
     expect(onClose).not.toHaveBeenCalled();
     expect(createReport).toHaveBeenCalledTimes(1);
+  });
+});
+
+// `networkMode` mặc định của react-query là `online`: trình duyệt báo mất mạng thì `mutate()` bị TẠM DỪNG
+// — `isPending` mà không `onError`. Hộp thoại chặn mọi đường đóng khi đang gửi ⇒ modal không lối ra, không
+// một dòng báo lỗi, cho tới khi có mạng lại (gate TS, TS-03).
+describe("Mất mạng (trình duyệt báo offline)", () => {
+  afterEach(() => {
+    onlineManager.setOnline(true);
+  });
+
+  it("027 VẪN lên dây và hỏng ngay ⇒ dải `generic` + «Thử lại», «Huỷ» đóng được", async () => {
+    createReport.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
+    const { onClose } = renderDialog();
+    pick("Spam hoặc quảng cáo");
+    onlineManager.setOnline(false);
+
+    clickSubmit();
+
+    await waitFor(() => expect(createReport).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(alertReason()).toBe("generic"));
+    expect(within(dialog()).getByRole("button", { name: RETRY })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: CANCEL })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole("button", { name: CANCEL }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

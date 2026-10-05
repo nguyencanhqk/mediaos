@@ -488,3 +488,70 @@ describe("DC1 — bấm đúp 029 từ màn", () => {
     expect(listReports).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * Focus nằm ở (vỏ của) `element`. Vế «không phải body» là BẮT BUỘC: `body` chứa mọi phần tử, nên
+ * `toContainElement` một mình vẫn xanh khi focus đã rơi về đầu trang.
+ */
+const expectFocusAround = (element: HTMLElement): void => {
+  expect(document.activeElement).not.toBe(document.body);
+  expect(document.activeElement).toContainElement(element);
+};
+
+// Hộp thoại đóng ⇒ `Dialog` trả focus về nút «Xử lý» của hàng vừa xử lý; refetch gỡ hàng đó (hoặc gỡ
+// nút) ⇒ focus rơi về `body`: người dùng bàn phím / trình đọc màn hình mất chỗ sau MỖI báo cáo (gate TS,
+// TS-02). Sau kết cục, focus phải nằm ở dải kết cục — thứ còn lại trên màn sau khi làm mới.
+describe("Focus sau kết cục của 029 — không rơi về đầu trang", () => {
+  /** Như người dùng bàn phím: nút «Xử lý» ĐANG giữ focus lúc mở hộp thoại. */
+  const openDialogByKeyboard = (): void => {
+    const button = screen.getByRole("button", { name: RESOLVE });
+    button.focus();
+    fireEvent.click(button);
+  };
+
+  it("thành công: focus nằm ở dải kết cục, và CÒN ở đó sau khi hàng vừa xử lý rời danh sách", async () => {
+    await renderPage();
+    listReports.mockImplementation(() => Promise.resolve(makeReportPage([])));
+
+    openDialogByKeyboard();
+    pick(DISMISSED);
+    clickSubmit();
+    await dialogGone();
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent(DONE_DISMISSED);
+    expectFocusAround(status);
+
+    expect(await screen.findByText(EMPTY_OPEN)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: RESOLVE })).toBeNull();
+    expectFocusAround(screen.getByRole("status"));
+  });
+
+  it("E1 (kết cục lỗi, hộp thoại đóng): focus nằm ở dải lỗi của trang", async () => {
+    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportAlreadyDecided());
+    await renderPage();
+    listReports.mockImplementation(() => Promise.resolve(makeReportPage([])));
+
+    openDialogByKeyboard();
+    pick(DISMISSED);
+    clickSubmit();
+    await dialogGone();
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(ALREADY_DECIDED_TEXT);
+    expectFocusAround(alert);
+
+    expect(await screen.findByText(EMPTY_OPEN)).toBeInTheDocument();
+    expectFocusAround(screen.getByRole("alert"));
+  });
+
+  it("đối chứng: người dùng TỰ đóng hộp thoại (Esc) ⇒ focus về lại nút «Xử lý», không bị kéo đi", async () => {
+    await renderPage();
+
+    openDialogByKeyboard();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await dialogGone();
+
+    expect(screen.getByRole("button", { name: RESOLVE })).toHaveFocus();
+  });
+});

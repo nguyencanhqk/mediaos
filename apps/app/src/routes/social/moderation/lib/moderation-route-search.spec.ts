@@ -7,10 +7,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { defaultParseSearch } from "@tanstack/react-router";
+import { socialKeys } from "@mediaos/web-core";
 import { FEED_PAGE_MAX, listFeedReportsQuerySchema } from "@mediaos/contracts";
 import {
   activeModerationTab,
   activeStatusFilter,
+  isReportListKeyOfSameFilter,
   reportListParams,
   searchForPage,
   searchForStatusFilter,
@@ -227,5 +229,59 @@ describe("searchForTab — đổi tab", () => {
     const next = searchForTab({ tab: "hidden", status: "all", page: 2 }, "reports");
     expect(next).toStrictEqual({ tab: undefined, status: "all", page: 2 });
     expect(Object.hasOwn(next, "tab")).toBe(true);
+  });
+});
+
+// Luật 2 của màn («chỉ giữ trang cũ trong CÙNG bộ lọc») đọc bộ lọc của trang cũ từ KHOÁ CACHE của nó.
+// Khoá dựng bằng hàm khoá THẬT của web-core + `reportListParams` — không dựng mảng tay.
+describe("isReportListKeyOfSameFilter — khoá cache của trang cũ có cùng bộ lọc không", () => {
+  const keyOf = (search: Parameters<typeof reportListParams>[0]) =>
+    socialKeys.moderation.reports.list(reportListParams(search));
+
+  it("cùng bộ lọc, KHÁC trang ⇒ true (lật trang giữ trang cũ)", () => {
+    expect(
+      isReportListKeyOfSameFilter(
+        keyOf({ status: "resolved" }),
+        reportListParams({ status: "resolved", page: 2 }),
+      ),
+    ).toBe(true);
+    expect(isReportListKeyOfSameFilter(keyOf({}), reportListParams({ page: 3 }))).toBe(true);
+  });
+
+  it("khác bộ lọc ⇒ false (đổi bộ lọc ra skeleton, không giữ hàng của bộ lọc cũ)", () => {
+    expect(isReportListKeyOfSameFilter(keyOf({}), reportListParams({ status: "resolved" }))).toBe(
+      false,
+    );
+    expect(isReportListKeyOfSameFilter(keyOf({ status: "dismissed" }), reportListParams({}))).toBe(
+      false,
+    );
+  });
+
+  it("«Tất cả» (khoá KHÔNG có `status`): chỉ cùng bộ lọc với «Tất cả»", () => {
+    const all = reportListParams({ status: "all" });
+    expect(Object.hasOwn(all, "status")).toBe(false);
+    expect(isReportListKeyOfSameFilter(keyOf({ status: "all", page: 2 }), all)).toBe(true);
+    expect(isReportListKeyOfSameFilter(keyOf({}), all)).toBe(false);
+    expect(isReportListKeyOfSameFilter(keyOf({ status: "all" }), reportListParams({}))).toBe(false);
+  });
+
+  // Đọc «phần tử cuối» của khoá: nối thêm một phần tử là `status` ra `undefined` — trùng đúng «Tất cả».
+  it("khoá bị nối thêm phần tử SAU tham số ⇒ vẫn đọc đúng bộ lọc (không dựa vào vị trí cuối)", () => {
+    const all = reportListParams({ status: "all" });
+    const extended = [...keyOf({ status: "resolved" }), "extra"];
+    expect(isReportListKeyOfSameFilter(extended, all)).toBe(false);
+    expect(isReportListKeyOfSameFilter(extended, reportListParams({ status: "resolved" }))).toBe(
+      true,
+    );
+  });
+
+  it("không có khoá · khoá không mang tham số (tiền tố `lists()`) ⇒ false, kể cả với «Tất cả»", () => {
+    const all = reportListParams({ status: "all" });
+    expect(isReportListKeyOfSameFilter(undefined, all)).toBe(false);
+    expect(isReportListKeyOfSameFilter(socialKeys.moderation.reports.lists(), all)).toBe(false);
+    expect(isReportListKeyOfSameFilter(socialKeys.moderation.reports.list(), all)).toBe(false);
+    expect(isReportListKeyOfSameFilter([...socialKeys.moderation.reports.lists(), "x"], all)).toBe(
+      false,
+    );
   });
 });

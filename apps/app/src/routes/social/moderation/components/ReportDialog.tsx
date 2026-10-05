@@ -8,6 +8,8 @@
  * │      (1) hộp thoại dùng `useMutation` ⇒ cần `QueryClientProvider`; mount lười để nơi chứa (thẻ     │
  * │          bài, dòng bình luận) vẫn vẽ được ở chỗ không có provider (plan B14);                      │
  * │      (2) MỖI LƯỢT MOUNT = MỘT `attemptId` (xem dưới) — giữ sẵn thì mọi lượt mở dùng chung một khoá.│
+ * │  · Nơi mount có thể đổi ĐÍCH mà không mount lại (thẻ bài nhận bài khác) ⇒ phải đóng hộp thoại khi  │
+ * │    đích đổi và đặt `key` theo id đích: nháp + `attemptId` thuộc về MỘT đích (`PostCardMenu`).       │
  * │  · `onClose()` — người dùng đóng (nút «Huỷ» / «Đóng» · Esc · bấm ra ngoài). Nơi mount chỉ cần      │
  * │    unmount. KHÔNG được gọi khi đang gửi. Hộp thoại KHÔNG tự đóng sau khi gửi xong: nó đổi sang câu │
  * │    xác nhận, người dùng bấm «Đóng».                                                                │
@@ -100,6 +102,10 @@ export function ReportDialog({
   const isSendingRef = React.useRef(false);
 
   const mutation = useMutation({
+    // Mất mạng thì HỎNG NGAY (rơi vào `onError` ⇒ `generic` + «Thử lại», CÙNG `attemptId`), không «tạm
+    // dừng»: mặc định `online` giữ `isPending` vô hạn mà không gọi `onError`, trong khi hộp thoại chặn mọi
+    // đường đóng lúc đang gửi — modal không lối ra, không một dòng báo lỗi.
+    networkMode: "always",
     // Mọi thứ gửi đi nằm trong `variables` — thân hàm KHÔNG đọc state (v5 nạp lại closure trong effect).
     mutationFn: ({ body, attemptId }: CreateVariables) =>
       socialModerationApi.createReport(body, attemptId),

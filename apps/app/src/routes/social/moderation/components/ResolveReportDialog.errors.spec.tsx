@@ -14,6 +14,7 @@
  */
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { onlineManager } from "@tanstack/react-query";
 import { FEED_NOTE_MAX, resolveFeedReportSchema, type FeedReportDto } from "@mediaos/contracts";
 import { renderWithProviders, resetCaps, setCaps } from "../../feed/social-test-doubles";
 import { ADMIN_ERR, makeReport } from "../../admin/admin-test-doubles";
@@ -401,4 +402,59 @@ describe("Kết cục ĐÓNG hộp thoại — báo lên trang qua `onOutcome`, 
       expect(submitButton()).toBeDisabled();
     },
   );
+});
+
+// «Thử lại» trong dải lỗi gửi NHÁP ĐANG THẤY (cùng việc với «Xác nhận»). Nháp chưa gửi được (đổi sang
+// «Xoá bài» nhưng chưa tick) mà nút vẫn đứng đó thì bấm vào KHÔNG có gì xảy ra (gate TS, TS-05).
+describe("«Thử lại» chỉ có khi nháp đang thấy GỬI ĐƯỢC", () => {
+  it("E2 rồi đổi sang «Xoá bài» (chưa tick) ⇒ KHÔNG còn nút «Thử lại», dải lỗi vẫn còn; tick ⇒ nút trở lại và gửi đúng nháp đang thấy", async () => {
+    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportBusy());
+    renderDialog();
+    pick(RESOLVED);
+    pick("Ẩn bài");
+    clickSubmit();
+    await waitFor(() => expect(alertReason()).toBe("reportBusy"));
+    await waitFor(() => expect(submitButton()).toBeEnabled());
+    expect(within(dialog()).getByRole("button", { name: RETRY })).toBeInTheDocument();
+
+    pick("Xoá bài");
+
+    expect(submitButton()).toBeDisabled();
+    expect(alertReason()).toBe("reportBusy");
+    expect(within(dialog()).queryByRole("button", { name: RETRY })).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: TARGETS.post.confirmLabel }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: RETRY }));
+
+    await waitFor(() => expect(resolveReport).toHaveBeenCalledTimes(2));
+    expect(sentBody(0)).toEqual({ status: "resolved", action: "hide_post" });
+    expect(sentBody(1)).toEqual({ status: "resolved", action: "delete_target" });
+  });
+});
+
+// `networkMode` mặc định của react-query là `online`: trình duyệt báo mất mạng thì `mutate()` bị TẠM DỪNG
+// — `isPending` mà không `onError`. Hộp thoại chặn mọi đường đóng khi đang gửi ⇒ modal không lối ra, không
+// một dòng báo lỗi, cho tới khi có mạng lại (gate TS, TS-03).
+describe("Mất mạng (trình duyệt báo offline)", () => {
+  afterEach(() => {
+    onlineManager.setOnline(true);
+  });
+
+  it("029 VẪN lên dây và hỏng ngay ⇒ dải `generic` + «Thử lại», «Huỷ» đóng được", async () => {
+    resolveReport.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
+    const { onClose, onOutcome } = renderDialog();
+    pick(DISMISSED);
+    onlineManager.setOnline(false);
+
+    clickSubmit();
+
+    await waitFor(() => expect(resolveReport).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(alertReason()).toBe("generic"));
+    expect(within(dialog()).getByRole("button", { name: RETRY })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: CANCEL })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole("button", { name: CANCEL }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onOutcome).not.toHaveBeenCalled();
+  });
 });

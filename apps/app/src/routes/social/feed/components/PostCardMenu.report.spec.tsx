@@ -206,6 +206,87 @@ describe("P1 — bấm «Báo cáo» mở hộp thoại cho ĐÚNG bài đó", (
     expect(trigger).toHaveFocus();
   });
 
+  // Trang chi tiết bài KHÔNG mount lại khi chỉ đổi `$postId` (router không khai `remountDeps`, thẻ bài
+  // không có `key`): bấm Back của trình duyệt lúc hộp thoại đang mở là thẻ nhận bài KHÁC ngay dưới hộp
+  // thoại. Nháp viết cho bài A mà gửi được cho bài B là một lượt GHI nhầm đích (gate TS, TS-01).
+  describe("thẻ đổi sang BÀI KHÁC khi hộp thoại đang mở", () => {
+    const OTHER_POST_ID = "77777777-7777-4777-8777-777777777777";
+    const NOTE = "Ghi chú thêm (không bắt buộc)";
+
+    function openWithDraft() {
+      const view = renderWithProviders(
+        <PostCardMenu post={makePost({ id: POST_ID, isMine: false })} actions={makeActions()} />,
+      );
+      fireEvent.click(within(openMenu()).getByRole("menuitem", { name: REPORT }));
+      fireEvent.click(screen.getByRole("radio", { name: "Quấy rối hoặc xúc phạm" }));
+      fireEvent.change(screen.getByRole("textbox", { name: NOTE }), {
+        target: { value: "viết cho bài A" },
+      });
+      return view;
+    }
+
+    it("hộp thoại ĐÓNG, 0 lời gọi 027; mở lại trên bài mới ⇒ nháp TRẮNG và đích là bài MỚI", async () => {
+      const { rerender } = openWithDraft();
+
+      rerender(
+        <PostCardMenu
+          post={makePost({ id: OTHER_POST_ID, isMine: false })}
+          actions={makeActions()}
+        />,
+      );
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(createReport).not.toHaveBeenCalled();
+
+      fireEvent.click(within(openMenu()).getByRole("menuitem", { name: REPORT }));
+      expect(screen.getByRole("radio", { name: "Quấy rối hoặc xúc phạm" })).not.toBeChecked();
+      expect(screen.getByRole("textbox", { name: NOTE })).toHaveValue("");
+      fireEvent.click(screen.getByRole("radio", { name: "Spam hoặc quảng cáo" }));
+      fireEvent.click(screen.getByRole("button", { name: SUBMIT }));
+      await waitFor(() => expect(createReport).toHaveBeenCalledTimes(1));
+      expect(createReport.mock.calls[0]?.[0]).toEqual({
+        targetType: "post",
+        targetId: OTHER_POST_ID,
+        reason: "spam",
+      });
+    });
+
+    it("đổi sang bài khác rồi QUAY LẠI bài cũ ⇒ hộp thoại vẫn đóng (không tự bật lại)", () => {
+      const { rerender } = openWithDraft();
+      const menuFor = (id: string) => (
+        <PostCardMenu post={makePost({ id, isMine: false })} actions={makeActions()} />
+      );
+
+      rerender(menuFor(OTHER_POST_ID));
+      rerender(menuFor(POST_ID));
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("CÙNG bài nhưng thẻ biết đó là bài của CHÍNH MÌNH ⇒ hộp thoại đóng (cổng `isMine` xét cả hộp thoại đã mở)", () => {
+      const { rerender } = openWithDraft();
+
+      rerender(
+        <PostCardMenu post={makePost({ id: POST_ID, isMine: true })} actions={makeActions()} />,
+      );
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(createReport).not.toHaveBeenCalled();
+    });
+
+    it("đối chứng: vẽ lại với CÙNG bài (object mới, cùng id) ⇒ hộp thoại và nháp còn nguyên", () => {
+      const { rerender } = openWithDraft();
+
+      rerender(
+        <PostCardMenu post={makePost({ id: POST_ID, isMine: false })} actions={makeActions()} />,
+      );
+
+      expect(screen.getByRole("dialog", { name: DIALOG_TITLE })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "Quấy rối hoặc xúc phạm" })).toBeChecked();
+      expect(screen.getByRole("textbox", { name: NOTE })).toHaveValue("viết cho bài A");
+    });
+  });
+
   it("gửi xong, đóng, mở lại và gửi CÙNG nội dung ⇒ `attemptId` MỚI (không phát lại phản hồi cũ)", async () => {
     renderWithProviders(
       <PostCardMenu post={makePost({ id: POST_ID, isMine: false })} actions={makeActions()} />,

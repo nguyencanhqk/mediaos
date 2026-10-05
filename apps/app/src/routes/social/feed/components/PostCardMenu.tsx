@@ -53,7 +53,17 @@ interface PostCardMenuProps {
 export function PostCardMenu({ post, actions, className }: PostCardMenuProps): React.ReactElement {
   const { t } = useTranslation("social");
   const [open, setOpen] = React.useState(false);
-  const [isReportOpen, setIsReportOpen] = React.useState(false);
+  /**
+   * Id của bài mà hộp thoại báo cáo được MỞ CHO — không phải cờ `boolean`. Thẻ bài có thể nhận một bài
+   * KHÁC mà không mount lại (trang chi tiết chỉ đổi `$postId`: router không khai `remountDeps`, `PostCard`
+   * không có `key`); cờ trần thì hộp thoại vẫn mở với đích mới và nháp viết cho bài cũ — «Gửi báo cáo» là
+   * một lượt GHI nhầm bài. Hộp thoại chỉ mở khi id này KHỚP bài đang vẽ và bài không phải của chính mình.
+   */
+  const [reportPostId, setReportPostId] = React.useState<string | null>(null);
+  const isReportOpen = reportPostId === post.id && !post.isMine;
+  // Thẻ đã sang bài khác (hoặc hoá ra là bài của mình) ⇒ BỎ hẳn yêu cầu mở, không chỉ che: quay lại bài cũ
+  // hộp thoại không tự bật lên. Đặt state ngay trong lượt vẽ (khuôn «đổi state khi prop đổi» của React).
+  if (reportPostId !== null && !isReportOpen) setReportPostId(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
 
   /**
@@ -63,7 +73,7 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
    */
   const openReport = (): void => {
     triggerRef.current?.focus();
-    setIsReportOpen(true);
+    setReportPostId(post.id);
   };
 
   // `useCan` (có fallback wildcard), KHÔNG `useCanExact`: cả 14 cặp `feed-*` đều `is_sensitive=false`
@@ -158,9 +168,15 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
         </div>
       )}
 
-      {/* Mount LƯỜI — unmount khi đóng (mỗi lượt mount là một khoá idempotency của 027). */}
+      {/* Mount LƯỜI — unmount khi đóng (mỗi lượt mount là một khoá idempotency của 027). `key` theo bài:
+          lưới thứ hai cho «nháp của bài này không sống sang bài khác» (khuôn `ResolveReportDialog`). */}
       {isReportOpen && (
-        <ReportDialog targetType="post" targetId={post.id} onClose={() => setIsReportOpen(false)} />
+        <ReportDialog
+          key={post.id}
+          targetType="post"
+          targetId={post.id}
+          onClose={() => setReportPostId(null)}
+        />
       )}
     </div>
   );

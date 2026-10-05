@@ -11,7 +11,7 @@
 import type { ReactNode } from "react";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { QueryClient } from "@tanstack/react-query";
+import { onlineManager, QueryClient } from "@tanstack/react-query";
 import { socialKeys } from "@mediaos/web-core";
 import { feedPostPageSchema, moderateFeedPostSchema } from "@mediaos/contracts";
 import {
@@ -582,5 +582,71 @@ describe("Lỗi của 006 «Hiện lại»", () => {
     expect(moderatePost.mock.calls[1]).toEqual([SECOND_POST_ID, { hidden: false }]);
     expect(await screen.findByText(UNHIDDEN)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+/**
+ * Focus nằm ở (vỏ của) `element`. Vế «không phải body» là BẮT BUỘC: `body` chứa mọi phần tử, nên
+ * `toContainElement` một mình vẫn xanh khi focus đã rơi về đầu trang.
+ */
+const expectFocusAround = (element: HTMLElement): void => {
+  expect(document.activeElement).not.toBe(document.body);
+  expect(document.activeElement).toContainElement(element);
+};
+
+// «Hiện lại» thành công gỡ NGAY hàng đang giữ focus ⇒ focus rơi về `body` (gate TS, TS-02).
+describe("Focus sau «Hiện lại» — không rơi về đầu trang", () => {
+  it("thành công: hàng biến mất, focus nằm ở câu xác nhận", async () => {
+    listFeed.mockImplementationOnce(() => Promise.resolve(makeHiddenPostPage([first(), second()])));
+    listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([second()])));
+    renderTab();
+    const [row] = rowsIn(await list());
+    const button = within(row as HTMLElement).getByRole("button", { name: UNHIDE });
+    button.focus();
+
+    fireEvent.click(button);
+
+    const status = await screen.findByText(UNHIDDEN);
+    await waitFor(() => expect(rowsIn(screen.getByRole("list", { name: LIST }))).toHaveLength(1));
+    expectFocusAround(status);
+  });
+
+  it("E7 (bài không còn — hàng sắp bị gỡ khi làm mới): focus nằm ở dải lỗi", async () => {
+    moderatePost.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.postGone()));
+    listFeed.mockImplementationOnce(() => Promise.resolve(makeHiddenPostPage([first()])));
+    listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([])));
+    renderTab();
+    const button = within((await list()) as HTMLElement).getByRole("button", { name: UNHIDE });
+    button.focus();
+
+    fireEvent.click(button);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(POST_GONE_TEXT);
+    expect(await screen.findByText(EMPTY)).toBeInTheDocument();
+    expectFocusAround(screen.getByRole("alert"));
+  });
+});
+
+// `networkMode` mặc định của react-query là `online`: trình duyệt báo mất mạng thì `mutate()` bị TẠM DỪNG
+// — `isPending` mà không `onError`: mọi nút «Hiện lại» khoá, không dải lỗi nào (gate TS, TS-03).
+describe("Mất mạng (trình duyệt báo offline)", () => {
+  afterEach(() => {
+    onlineManager.setOnline(true);
+  });
+
+  it("«Hiện lại» VẪN lên dây và hỏng ngay ⇒ dải `generic` + «Thử lại»; nút không kẹt ở trạng thái khoá", async () => {
+    moderatePost.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
+    renderTab();
+    await list();
+    onlineManager.setOnline(false);
+
+    fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
+
+    await waitFor(() => expect(moderatePost).toHaveBeenCalledTimes(1));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(within(alert).getByRole("button", { name: RETRY })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: UNHIDE })).toBeEnabled());
   });
 });

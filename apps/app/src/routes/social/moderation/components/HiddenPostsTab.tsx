@@ -42,6 +42,7 @@ import type { AdminErrorReason } from "../../admin/lib/admin-errors";
 import { authorDisplayName, relativeTime } from "../../feed/lib/feed-format";
 import { describeModerationReadError, describeUnhidePostError } from "../lib/moderation-errors";
 import { invalidatePostSurfaces } from "../lib/moderation-invalidation";
+import { OUTCOME_FOCUS_CLASS, useOutcomeFocus } from "../lib/use-outcome-focus";
 
 type HiddenFeedQuery = Pick<ListFeedQueryDto, "status" | "sort"> &
   Partial<Pick<ListFeedQueryDto, "cursor">>;
@@ -139,6 +140,9 @@ export function HiddenPostsTab(): React.ReactElement | null {
   // hai kích hoạt sát nhau (bấm đúp, Enter giữ phím) đều thấy `false` và đều gửi; 006 không `@Idempotent`.
   // `disabled` của nút vẫn theo `isPending` — đó là thứ người dùng THẤY, cờ này là thứ chặn.
   const isSendingRef = React.useRef(false);
+  // Hàng vừa «Hiện lại» (hoặc hàng của bài không còn) bị gỡ khi nút của nó đang giữ focus ⇒ đưa focus tới
+  // dải kết quả; dải không được vẽ (lượt đọc đang lỗi) ⇒ tới chính vùng của tab.
+  const outcomeFocus = useOutcomeFocus<HTMLDivElement, HTMLElement>();
 
   const query = useInfiniteQuery({
     queryKey: socialKeys.moderation.hiddenPosts(),
@@ -152,10 +156,14 @@ export function HiddenPostsTab(): React.ReactElement | null {
   });
 
   const unhide = useMutation({
+    // Mất mạng thì HỎNG NGAY (rơi vào `onError` ⇒ dải `generic` + «Thử lại»), không «tạm dừng»: mặc định
+    // `online` giữ `isPending` vô hạn mà không báo gì — mọi nút «Hiện lại» khoá cho tới khi có mạng lại.
+    networkMode: "always",
     // Mọi thứ gửi đi nằm trong `variables` — thân hàm KHÔNG đọc state (v5 nạp lại closure trong effect).
     mutationFn: (postId: string) => socialApi.moderatePost(postId, unhideBody()),
     onSuccess: (_post, postId) => {
       setNotice({ kind: "done" });
+      outcomeFocus.requestFocus();
       // Gỡ hàng ngay: trong lúc chờ refetch, nút «Hiện lại» của bài vừa hiện không còn để bấm lần nữa.
       queryClient.setQueryData<HiddenPostsData>(socialKeys.moderation.hiddenPosts(), (current) =>
         withoutPost(current, postId),
@@ -168,6 +176,9 @@ export function HiddenPostsTab(): React.ReactElement | null {
       const { reason, invalidate, retryable } = describeUnhidePostError(err);
       setNotice({ kind: "failed", reason, retryPostId: retryable ? postId : null });
       if (invalidate) {
+        // Hàng đang giữ focus sắp bị gỡ khi danh sách làm mới. Lỗi KHÔNG làm mới thì hàng còn nguyên —
+        // để focus ở nút của nó.
+        outcomeFocus.requestFocus();
         void queryClient.invalidateQueries({ queryKey: socialKeys.moderation.hiddenPosts() });
       }
     },
@@ -241,12 +252,22 @@ export function HiddenPostsTab(): React.ReactElement | null {
   };
 
   return (
-    <section className="flex flex-col gap-3">
+    <section
+      ref={outcomeFocus.fallbackRef}
+      tabIndex={-1}
+      className="flex flex-col gap-3 focus-visible:outline-none"
+    >
       <p className="text-xs text-muted-foreground">{t("admin.moderation.hidden.limitNote")}</p>
 
       {/* Lượt đọc đang LỖI ⇒ không vẽ dải của 006: «danh sách đã được làm mới» cạnh «không tải được». */}
       {notice !== null && !query.isError && (
-        <ActionNoticeBar notice={notice} onRetry={handleUnhide} onDismiss={() => setNotice(null)} />
+        <div ref={outcomeFocus.noticeRef} tabIndex={-1} className={OUTCOME_FOCUS_CLASS}>
+          <ActionNoticeBar
+            notice={notice}
+            onRetry={handleUnhide}
+            onDismiss={() => setNotice(null)}
+          />
+        </div>
       )}
 
       {renderBody()}

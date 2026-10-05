@@ -141,6 +141,10 @@ export function ResolveReportDialog({
   };
 
   const mutation = useMutation({
+    // Mất mạng thì HỎNG NGAY (rơi vào `onError` ⇒ E11 `generic` + «Thử lại»), không «tạm dừng»: mặc định
+    // `online` giữ `isPending` vô hạn mà không gọi `onError`, trong khi hộp thoại chặn mọi đường đóng lúc
+    // đang gửi — modal không lối ra, không một dòng báo lỗi.
+    networkMode: "always",
     // Mọi thứ gửi đi nằm trong `variables` — thân hàm KHÔNG đọc state (v5 nạp lại closure trong effect).
     mutationFn: ({ reportId, body }: ResolveVariables) =>
       socialModerationApi.resolveReport(reportId, body),
@@ -304,11 +308,13 @@ export function ResolveReportDialog({
           </p>
         </div>
 
+        {/* «Thử lại» = «Xác nhận» trên NHÁP ĐANG THẤY. Nháp chưa gửi được (vd vừa đổi sang «Xoá» mà chưa
+            tick) ⇒ không vẽ nút: `submit` sẽ thoát ngay, bấm vào không có gì xảy ra. */}
         {error && (
           <AdminErrorNotice
             reason={error.reason}
             onDismiss={() => setError(null)}
-            {...(error.retryable ? { onRetry: submit } : {})}
+            {...(error.retryable && canSubmit ? { onRetry: submit } : {})}
           />
         )}
       </div>

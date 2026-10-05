@@ -25,6 +25,8 @@
  *     mount dưới nó) biến mất — dải đặt ở đó mất theo (plan B6).
  *  4. Lượt đọc đang LỖI ⇒ không vẽ dải kết cục: câu «danh sách đã được làm mới» đứng cạnh «không tải
  *     được danh sách» là nói hai điều trái nhau. Thử lại xong thì dải hiện lại.
+ *  5. Sau kết cục của 029, focus được đưa tới dải kết cục (`useOutcomeFocus`): hộp thoại đóng thì `Dialog`
+ *     trả focus về nút «Xử lý» của hàng vừa xử lý — đúng thứ refetch sắp gỡ — và focus rơi về `body`.
  */
 import * as React from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -49,6 +51,7 @@ import {
   activeModerationTab,
   activeStatusFilter,
   DEFAULT_MODERATION_TAB,
+  isReportListKeyOfSameFilter,
   MODERATION_STATUS_FILTERS,
   MODERATION_TABS,
   reportListParams,
@@ -58,9 +61,9 @@ import {
   validateModerationRouteSearch,
   type ModerationRouteSearch,
   type ModerationTab,
-  type ReportListParams,
 } from "./lib/moderation-route-search";
 import { NO_REPORT_ACTION } from "./lib/report-actions";
+import { OUTCOME_FOCUS_CLASS, useOutcomeFocus } from "./lib/use-outcome-focus";
 
 type ClosedReportStatus = Exclude<FeedReportStatusDto, "open">;
 
@@ -142,6 +145,8 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
   const filterId = React.useId();
   const [resolving, setResolving] = React.useState<FeedReportDto | null>(null);
   const [notice, setNotice] = React.useState<OutcomeNotice | null>(null);
+  // Luật 5 ở docblock: sau kết cục, focus tới dải kết cục; dải không được vẽ (luật 4) ⇒ tới ô lọc.
+  const outcomeFocus = useOutcomeFocus<HTMLDivElement, HTMLSelectElement>();
 
   const statusFilter = activeStatusFilter(search);
   const params = reportListParams(search);
@@ -150,7 +155,7 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
     queryFn: () => socialModerationApi.listReports(params),
     // Luật 2 ở docblock: chỉ giữ trang cũ khi nó thuộc CÙNG bộ lọc.
     placeholderData: (previous: FeedReportPageDto | undefined, previousQuery) =>
-      (previousQuery?.queryKey.at(-1) as ReportListParams | undefined)?.status === params.status
+      isReportListKeyOfSameFilter(previousQuery?.queryKey, params)
         ? keepPreviousData(previous)
         : undefined,
     // Hàng đợi kiểm duyệt cũ mà trông như mới là mời người ta xử lý báo cáo đã đổi trạng thái.
@@ -171,6 +176,7 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
     setResolving(null);
     invalidateAfterOutcome(queryClient, outcome);
     setNotice(noticeOf(outcome));
+    outcomeFocus.requestFocus();
   };
 
   return (
@@ -181,6 +187,7 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
         </label>
         <select
           id={filterId}
+          ref={outcomeFocus.fallbackRef}
           value={statusFilter}
           onChange={handleFilterChange}
           className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -194,7 +201,9 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
       </div>
 
       {notice !== null && !query.isError && (
-        <OutcomeNoticeBar notice={notice} onDismiss={() => setNotice(null)} />
+        <div ref={outcomeFocus.noticeRef} tabIndex={-1} className={OUTCOME_FOCUS_CLASS}>
+          <OutcomeNoticeBar notice={notice} onDismiss={() => setNotice(null)} />
+        </div>
       )}
 
       <ReportQueue
@@ -311,9 +320,9 @@ export function ModerationPage(): React.ReactElement {
   const handleSearchChange = (next: ModerationRouteSearch): void => {
     // `to: "."` = ở lại CHÍNH route đang mount màn này, chỉ thay search (thay TOÀN BỘ, không gộp với
     // search cũ: `next` luôn mang đủ ba khoá). Màn không tự chép đường dẫn của mình — `path` chỉ khai
-    // một chỗ, ở `router.tsx`.
-    const nextSearch: Record<string, unknown> = { ...next };
-    void navigate({ to: ".", search: () => nextSearch });
+    // một chỗ, ở `router.tsx`. Truyền `next` NGUYÊN KIỂU (không nới thành `Record<string, unknown>`):
+    // router kiểm khoá search lúc biên dịch — khoá lạ là TS đỏ.
+    void navigate({ to: ".", search: next });
   };
 
   const reportsPanel = <ReportsPanel search={search} onSearchChange={handleSearchChange} />;

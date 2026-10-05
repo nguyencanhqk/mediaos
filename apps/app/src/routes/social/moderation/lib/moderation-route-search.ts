@@ -92,6 +92,30 @@ export function reportListParams(search: ModerationRouteSearch): ReportListParam
   return filter === "all" ? paging : { status: filter, ...paging };
 }
 
+/** Phần tử của khoá cache mang tham số 028: object có `page` là SỐ (hình dạng `reportListParams` trả). */
+function isListParamsPart(part: unknown): part is Record<string, unknown> {
+  return (
+    typeof part === "object" && part !== null && "page" in part && typeof part.page === "number"
+  );
+}
+
+/**
+ * `queryKey` có phải khoá `socialKeys.moderation.reports.list(…)` của CÙNG bộ lọc trạng thái với `params`
+ * không (trang khác nhau vẫn là cùng bộ lọc). Màn dùng để quyết định giữ trang cũ lúc đang tải.
+ *
+ * Tìm phần tử tham số theo HÌNH DẠNG, không theo vị trí, và không ép kiểu: khoá bị nối thêm phần tử sau
+ * `params` mà đọc «phần tử cuối» thì `status` ra `undefined` — trùng đúng giá trị của bộ lọc «Tất cả», tức
+ * «Tất cả» sẽ giữ trang cũ của MỌI bộ lọc. Khoá không mang tham số (vd tiền tố `lists()`) ⇒ `false`.
+ */
+export function isReportListKeyOfSameFilter(
+  queryKey: readonly unknown[] | undefined,
+  params: ReportListParams,
+): boolean {
+  const keyParams = queryKey?.find(isListParamsPart);
+  if (keyParams === undefined) return false;
+  return keyParams.status === params.status;
+}
+
 /** Search kế tiếp khi đổi bộ lọc trạng thái: về trang 1 (bỏ `page`); `open` là mặc định ⇒ không ghi. */
 export function searchForStatusFilter(
   search: ModerationRouteSearch,
