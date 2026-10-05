@@ -78,6 +78,7 @@ const DISMISSED = "Bỏ qua";
 const SUBMIT = "Xác nhận";
 const RETRY = "Thử lại";
 const DISMISS_NOTICE = "Đóng thông báo";
+const EMPTY_OPEN = "Không có báo cáo nào đang chờ xử lý.";
 const DONE_RESOLVED = "Đã giải quyết báo cáo.";
 const DONE_DISMISSED = "Đã bỏ qua báo cáo.";
 const ALREADY_DECIDED_TEXT =
@@ -342,6 +343,40 @@ describe("Kết cục LỖI — hộp thoại đóng, dải ở TRANG", () => {
     await screen.findByRole("list", { name: LIST });
     expect(listReports).toHaveBeenCalledTimes(3);
     expect(screen.getByRole("alert")).toHaveTextContent(ALREADY_DECIDED_TEXT);
+  });
+});
+
+// Đường CHÍNH ngoài thực tế với bộ lọc mặc định «Đang chờ xử lý»: xử lý xong ⇒ lượt đọc lại KHÔNG còn
+// hàng đó. Dải kết cục là state của trang nên phải còn cạnh câu rỗng (plan B6) — các ca phía trên cho
+// lượt đọc lại trả chính hàng cũ nên không đo được vế này.
+describe("Dải kết cục CÒN khi hàng vừa xử lý biến mất khỏi hàng đợi (plan B6)", () => {
+  it("thành công: lượt đọc lại trả trang RỖNG ⇒ câu rỗng của «Đang chờ xử lý» VÀ dải «Đã bỏ qua báo cáo.» cùng hiện", async () => {
+    await renderPage();
+    listReports.mockImplementation(() => Promise.resolve(makeReportPage([])));
+
+    dismissReport();
+
+    expect(await screen.findByText(EMPTY_OPEN)).toBeInTheDocument();
+    expect(listReports).toHaveBeenCalledTimes(2);
+    expect(screen.queryAllByTestId("report-row")).toHaveLength(0);
+    expect(screen.getByRole("status")).toHaveTextContent(DONE_DISMISSED);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("E1: lượt đọc lại trả trang RỖNG ⇒ dải `reportAlreadyDecided` còn cạnh câu rỗng", async () => {
+    resolveReport.mockImplementation(() => Promise.reject(ADMIN_ERR.reportAlreadyDecided()));
+    await renderPage();
+    listReports.mockImplementation(() => Promise.resolve(makeReportPage([])));
+
+    dismissReport();
+
+    expect(await screen.findByText(EMPTY_OPEN)).toBeInTheDocument();
+    expect(listReports).toHaveBeenCalledTimes(2);
+    expect(screen.queryAllByTestId("report-row")).toHaveLength(0);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "reportAlreadyDecided");
+    expect(alert).toHaveTextContent(ALREADY_DECIDED_TEXT);
+    expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
   });
 });
 

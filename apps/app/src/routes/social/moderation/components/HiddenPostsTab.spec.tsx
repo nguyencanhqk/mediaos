@@ -344,6 +344,62 @@ describe("HP1–HP3 — trạng thái riêng của tab", () => {
     expect(listFeed).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("400 của lượt đọc ⇒ `invalidRequest`, KHÔNG «Thử lại» (gửi lại nguyên yêu cầu vẫn 400)", async () => {
+    listFeed.mockImplementation(() => Promise.reject(ADMIN_ERR.badRequest()));
+    renderTab();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "invalidRequest");
+    expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
+    expect(screen.queryByText(EMPTY)).toBeNull();
+  });
+});
+
+// App không có toast: lượt «Tải thêm» hỏng mà không vẽ gì là hỏng IM LẶNG — nút nhả ra như chưa bấm.
+describe("Lượt «Tải thêm» bị từ chối", () => {
+  it("500 ⇒ dải `generic` + «Thử lại» GỌI LẠI 001; danh sách và «Tải thêm» hiện lại", async () => {
+    listFeed.mockImplementationOnce(() =>
+      Promise.resolve(makeHiddenPostPage([first()], "cursor-1")),
+    );
+    listFeed.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.server()));
+    listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([first()], "cursor-1")));
+    renderTab();
+    await list();
+
+    fireEvent.click(screen.getByRole("button", { name: LOAD_MORE }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(listFeed).toHaveBeenCalledTimes(2);
+    expect(listFeed.mock.calls[1]?.[0]).toStrictEqual({ ...HIDDEN_QUERY, cursor: "cursor-1" });
+
+    fireEvent.click(within(alert).getByRole("button", { name: RETRY }));
+
+    expect(rowsIn(await list())).toHaveLength(1);
+    expect(listFeed).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("button", { name: LOAD_MORE })).toBeEnabled();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("403 ⇒ dải `forbidden` bằng chữ của FE, KHÔNG «Thử lại»", async () => {
+    const error = ADMIN_ERR.forbidden();
+    listFeed.mockImplementationOnce(() =>
+      Promise.resolve(makeHiddenPostPage([first()], "cursor-1")),
+    );
+    listFeed.mockImplementation(() => Promise.reject(error));
+    renderTab();
+    await list();
+
+    fireEvent.click(screen.getByRole("button", { name: LOAD_MORE }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "forbidden");
+    expect(alert).toHaveTextContent(FORBIDDEN_TEXT);
+    expect(document.body).not.toHaveTextContent(error.message);
+    expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
+    expect(listFeed).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("E8 — 001 trả 403", () => {
@@ -413,19 +469,60 @@ describe("Lỗi của 006 «Hiện lại»", () => {
     expect(screen.getByRole("button", { name: UNHIDE })).toBeEnabled();
   });
 
-  it("E11: 500 ⇒ `generic` + «Thử lại» GỬI LẠI đúng bài đó; lượt hai thành công ⇒ dải lỗi mất", async () => {
-    moderatePost.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.server()));
+  it("E7 mà lượt tải lại HỎNG: chỉ còn MỘT dải (lỗi tải + «Thử lại»), không giữ câu «danh sách đã được làm mới»; thử lại xong thì dải `postGone` hiện lại", async () => {
+    moderatePost.mockImplementation(() => Promise.reject(ADMIN_ERR.postGone()));
+    listFeed.mockImplementationOnce(() => Promise.resolve(makeHiddenPostPage([first()])));
+    listFeed.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.server()));
+    listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([])));
     renderTab();
     await list();
 
     fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveAttribute("data-reason", "generic"),
+    );
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.queryByText(POST_GONE_TEXT)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: RETRY }));
+
+    expect(await screen.findByText(EMPTY)).toBeInTheDocument();
+    expect(listFeed).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("alert")).toHaveTextContent(POST_GONE_TEXT);
+  });
+
+  it("400 ⇒ `invalidRequest`, KHÔNG «Thử lại», KHÔNG làm mới gì; hàng còn", async () => {
+    moderatePost.mockImplementation(() => Promise.reject(ADMIN_ERR.badRequest()));
+    const { invalidated } = renderTab();
+    await list();
+
+    fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "invalidRequest");
+    expect(within(alert).queryByRole("button", { name: RETRY })).toBeNull();
+    await settle();
+    expect(listFeed).toHaveBeenCalledTimes(1);
+    expect(invalidated("feedList")).toBe(false);
+    expect(rowsIn(screen.getByRole("list", { name: LIST }))).toHaveLength(1);
+  });
+
+  it("E11: 500 ⇒ `generic` + «Thử lại» GỬI LẠI đúng bài đó (hàng THỨ HAI, không phải bài đầu danh sách); lượt hai thành công ⇒ dải lỗi mất", async () => {
+    moderatePost.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.server()));
+    listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([first(), second()])));
+    renderTab();
+    const rows = rowsIn(await list());
+
+    fireEvent.click(within(rows[1] as HTMLElement).getByRole("button", { name: UNHIDE }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(moderatePost.mock.calls[0]).toEqual([SECOND_POST_ID, { hidden: false }]);
 
     fireEvent.click(within(alert).getByRole("button", { name: RETRY }));
 
     await waitFor(() => expect(moderatePost).toHaveBeenCalledTimes(2));
-    expect(moderatePost.mock.calls[1]).toEqual([HIDDEN_POST_ID, { hidden: false }]);
+    expect(moderatePost.mock.calls[1]).toEqual([SECOND_POST_ID, { hidden: false }]);
     expect(await screen.findByText(UNHIDDEN)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
