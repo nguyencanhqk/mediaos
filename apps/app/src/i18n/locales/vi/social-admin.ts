@@ -127,5 +127,24 @@ export default {
       post: "Tôi hiểu bài sẽ bị xoá; hiện chưa có màn khôi phục",
       comment: "Tôi hiểu bình luận sẽ bị xoá; hiện chưa có màn khôi phục",
     },
+    /**
+     * Hộp thoại kết thúc báo cáo (029) — `ResolveReportDialog`.
+     *
+     * `targetUnavailableHint` chỉ hiện sau 422 `REPORT-ACTION-TARGET-UNAVAILABLE`: câu ở `error.*` nói VÌ
+     * SAO hỏng, câu này nói hộp thoại vừa TỰ đổi gì và bước tiếp theo — nhắc đúng tên lựa chọn + tên nút.
+     */
+    resolve: {
+      title: "Xử lý báo cáo",
+      subject: "{{targetType}} · {{reason}}",
+      decisionLabel: "Quyết định",
+      decision: { resolved: "Giải quyết", dismissed: "Bỏ qua" },
+      actionLabel: "Hành động kèm",
+      targetUnavailableHint:
+        "Nội dung bị báo cáo không còn thao tác được nên hành động kèm đã được đưa về «Không kèm hành động». Bấm «Xác nhận» để kết thúc báo cáo mà không kèm hành động.",
+      noteLabel: "Ghi chú xử lý (không bắt buộc)",
+      noteHint: "Tối đa {{max}} ký tự.",
+      cancel: "Huỷ",
+      submit: "Xác nhận",
+    },
   },
 };

@@ -1,12 +1,12 @@
 /**
  * S16-SOCIAL-FE-3 (L2) — hộp thoại kết thúc báo cáo `ResolveReportDialog` (SOCIAL-API-029): ca B1 · B2 ·
- * G3 · DC1 (vế 029) · E1–E6 · E9–E11 của plan §4 + kết cục báo lên TRANG.
+ * G3 · DC1 (vế 029) của plan §4. Nhóm ca LỖI + KẾT CỤC (E1–E6 · E9–E11) ở
+ * `ResolveReportDialog.errors.spec.tsx`.
  *
  * - Quyền đặt trên store THẬT (`setCaps`) TRƯỚC render — đo luật `useCan` thật, không đo mock.
  * - i18n THẬT; vế kỳ vọng là chữ tiếng Việt VIẾT TAY ⇒ thiếu khoá (i18next trả khoá thô) là đỏ (plan B18).
  * - Body gửi đi so `toEqual` với literal VIẾT TAY rồi qua CHÍNH `resolveFeedReportSchema` của contracts.
  * - «0 lời gọi» luôn đứng TRƯỚC một vế ALLOW cùng ca (bấm tiếp ⇒ có lời gọi) — vế vắng mặt có đối chứng.
- * - Hộp thoại KHÔNG invalidate và KHÔNG vẽ dải «kết cục»: ca kết cục chỉ đo thứ nó báo qua `onOutcome`.
  */
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ import {
   type FeedReportDto,
 } from "@mediaos/contracts";
 import { renderWithProviders, resetCaps, setCaps } from "../../feed/social-test-doubles";
-import { ADMIN_ERR, makeReport, REPORT_ID } from "../../admin/admin-test-doubles";
+import { makeReport, REPORT_ID } from "../../admin/admin-test-doubles";
 import { ResolveReportDialog } from "./ResolveReportDialog";
 
 const resolveReport = vi.fn();
@@ -48,9 +48,6 @@ const NO_ACTION = "Không kèm hành động";
 const NOTE = "Ghi chú xử lý (không bắt buộc)";
 const SUBMIT = "Xác nhận";
 const CANCEL = "Huỷ";
-const RETRY = "Thử lại";
-const UNAVAILABLE_HINT =
-  "Nội dung bị báo cáo không còn thao tác được nên hành động kèm đã được đưa về «Không kèm hành động». Bấm «Xác nhận» để kết thúc báo cáo mà không kèm hành động.";
 
 type TargetType = FeedReportDto["targetType"];
 
@@ -107,8 +104,6 @@ const clickSubmit = (): void => {
   fireEvent.click(submitButton());
 };
 const noteBox = (): HTMLElement => screen.getByRole("textbox", { name: NOTE });
-const alertReason = (): string | null =>
-  within(dialog()).getByRole("alert").getAttribute("data-reason");
 const sentBody = (call = 0): unknown => resolveReport.mock.calls[call]?.[1];
 
 /** Nhãn hiển thị của các radio trong một nhóm, theo thứ tự DOM. */
@@ -349,177 +344,4 @@ describe("DC1 — 029 không idempotent: bấm đúp chỉ gửi MỘT lần", (
     expect(submitButton()).toBeDisabled();
     expect(onClose).not.toHaveBeenCalled();
   });
-});
-
-describe("Lỗi GIỮ hộp thoại — dải lỗi nằm trong hộp thoại, không báo kết cục", () => {
-  it("E2 `REPORT-BUSY`: hộp thoại CÒN, bấm «Xác nhận» lại được; không lộ thông điệp server", async () => {
-    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportBusy());
-    const { onOutcome, onClose } = renderDialog();
-    pick(DISMISSED);
-    clickSubmit();
-
-    await waitFor(() => expect(alertReason()).toBe("reportBusy"));
-    expect(dialog()).not.toHaveTextContent("SOCIAL-ERR");
-    expect(onOutcome).not.toHaveBeenCalled();
-    expect(onClose).not.toHaveBeenCalled();
-    expect(submitButton()).toBeEnabled();
-
-    await submitAndWait(2);
-    expect(sentBody(1)).toEqual({ status: "dismissed" });
-    await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
-  });
-
-  it("E3 `REPORT-ACTION-DENIED`: hành động về «không», không nút thử lại, không gợi ý của E5; gửi lại ⇒ không `action`", async () => {
-    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportActionDenied());
-    const { onOutcome } = renderDialog();
-    pick(RESOLVED);
-    pick("Ẩn bài");
-    clickSubmit();
-
-    await waitFor(() => expect(alertReason()).toBe("reportActionDenied"));
-    expect(sentBody(0)).toEqual({ status: "resolved", action: "hide_post" });
-    expect(radio(NO_ACTION)).toBeChecked();
-    expect(radio("Ẩn bài")).not.toBeChecked();
-    expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
-    expect(screen.queryByText(UNAVAILABLE_HINT)).toBeNull();
-    expect(onOutcome).not.toHaveBeenCalled();
-
-    await submitAndWait(2);
-    expect(sentBody(1)).toEqual({ status: "resolved" });
-  });
-
-  it("E4 `REPORT-ACTION-INVALID-FOR-TARGET`: giữ hộp thoại VÀ giữ lựa chọn để người dùng tự đổi", async () => {
-    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportActionInvalid());
-    const { onOutcome } = renderDialog();
-    pick(RESOLVED);
-    pick("Khoá bình luận của bài");
-    clickSubmit();
-
-    await waitFor(() => expect(alertReason()).toBe("reportActionInvalid"));
-    expect(radio("Khoá bình luận của bài")).toBeChecked();
-    expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
-    expect(onOutcome).not.toHaveBeenCalled();
-  });
-
-  it("E5 `REPORT-ACTION-TARGET-UNAVAILABLE`: hành động về «không», ô tick mất, có gợi ý kết thúc không kèm hành động", async () => {
-    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportTargetUnavailable());
-    const { onOutcome } = renderDialog();
-    pick(RESOLVED);
-    expect(screen.queryByText(UNAVAILABLE_HINT)).toBeNull();
-    pick("Xoá bài");
-    fireEvent.click(screen.getByRole("checkbox", { name: TARGETS.post.confirmLabel }));
-    clickSubmit();
-
-    await waitFor(() => expect(alertReason()).toBe("reportTargetUnavailable"));
-    expect(radio(NO_ACTION)).toBeChecked();
-    expect(screen.queryByRole("checkbox")).toBeNull();
-    expect(screen.getByText(UNAVAILABLE_HINT)).toBeInTheDocument();
-    expect(onOutcome).not.toHaveBeenCalled();
-
-    await submitAndWait(2);
-    expect(sentBody(1)).toEqual({ status: "resolved" });
-  });
-
-  it("E10 — 400 của server: `invalidRequest`, giữ hộp thoại, không nút thử lại", async () => {
-    resolveReport.mockRejectedValueOnce(ADMIN_ERR.badRequest());
-    const { onOutcome } = renderDialog();
-    pick(DISMISSED);
-    clickSubmit();
-
-    await waitFor(() => expect(alertReason()).toBe("invalidRequest"));
-    expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
-    expect(onOutcome).not.toHaveBeenCalled();
-  });
-
-  it("E10 — body không qua schema contracts (ghi chú quá trần) ⇒ KHÔNG gửi, báo `invalidRequest`; sửa lại ⇒ gửi được", async () => {
-    renderDialog();
-    pick(DISMISSED);
-    fireEvent.change(noteBox(), { target: { value: "a".repeat(FEED_NOTE_MAX + 1) } });
-    clickSubmit();
-
-    expect(alertReason()).toBe("invalidRequest");
-    expect(resolveReport).not.toHaveBeenCalled();
-
-    fireEvent.change(noteBox(), { target: { value: "a".repeat(FEED_NOTE_MAX) } });
-    await submitAndWait();
-    expect(resolveFeedReportSchema.safeParse(sentBody()).success).toBe(true);
-  });
-
-  it("E11 — 500: `generic` + «Thử lại» gửi lại; ghi chú đã nhập còn nguyên", async () => {
-    resolveReport.mockRejectedValueOnce(ADMIN_ERR.server());
-    const { onOutcome } = renderDialog();
-    pick(DISMISSED);
-    fireEvent.change(noteBox(), { target: { value: "Đã trao đổi trực tiếp" } });
-    clickSubmit();
-
-    await waitFor(() => expect(alertReason()).toBe("generic"));
-    expect(noteBox()).toHaveValue("Đã trao đổi trực tiếp");
-    expect(onOutcome).not.toHaveBeenCalled();
-
-    fireEvent.click(within(dialog()).getByRole("button", { name: RETRY }));
-    await waitFor(() => expect(resolveReport).toHaveBeenCalledTimes(2));
-    expect(sentBody(1)).toEqual({ status: "dismissed", resolutionNote: "Đã trao đổi trực tiếp" });
-  });
-});
-
-describe("Kết cục ĐÓNG hộp thoại — báo lên trang qua `onOutcome`, hộp thoại không tự vẽ dải", () => {
-  it("thành công kèm hành động ⇒ `done` mang báo cáo gốc, bản server trả và hành động ĐÃ gửi", async () => {
-    const updated = makeReport({ status: "resolved", resolutionNote: "ok" });
-    resolveReport.mockResolvedValueOnce(updated);
-    const { report, onOutcome, onClose } = renderDialog();
-    pick(RESOLVED);
-    pick("Ẩn bài");
-    clickSubmit();
-
-    await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
-    expect(onOutcome).toHaveBeenCalledWith({ kind: "done", report, updated, action: "hide_post" });
-    expect(onClose).not.toHaveBeenCalled();
-    expect(submitButton()).toBeDisabled();
-  });
-
-  it("thành công không kèm hành động ⇒ `action: none`", async () => {
-    const updated = makeReport({ status: "dismissed" });
-    resolveReport.mockResolvedValueOnce(updated);
-    const { report, onOutcome } = renderDialog();
-    pick(DISMISSED);
-    clickSubmit();
-
-    await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
-    expect(onOutcome).toHaveBeenCalledWith({ kind: "done", report, updated, action: "none" });
-  });
-
-  it.each([
-    {
-      name: "E1 409 `SOCIAL-ERR-021`",
-      err: ADMIN_ERR.reportAlreadyDecided,
-      reason: "reportAlreadyDecided",
-      invalidate: true,
-    },
-    {
-      name: "E6 404 `SOCIAL-ERR-001`",
-      err: ADMIN_ERR.reportGone,
-      reason: "reportGone",
-      invalidate: true,
-    },
-    {
-      name: "E9 403 `AUTH-ERR-FORBIDDEN`",
-      err: ADMIN_ERR.forbidden,
-      reason: "forbidden",
-      invalidate: false,
-    },
-  ])(
-    "$name ⇒ `failed` với reason + cờ invalidate; không có dải lỗi trong hộp thoại",
-    async ({ err, reason, invalidate }) => {
-      resolveReport.mockRejectedValueOnce(err());
-      const { report, onOutcome, onClose } = renderDialog();
-      pick(DISMISSED);
-      clickSubmit();
-
-      await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
-      expect(onOutcome).toHaveBeenCalledWith({ kind: "failed", report, reason, invalidate });
-      expect(onClose).not.toHaveBeenCalled();
-      expect(screen.queryByRole("alert")).toBeNull();
-      expect(submitButton()).toBeDisabled();
-    },
-  );
 });
