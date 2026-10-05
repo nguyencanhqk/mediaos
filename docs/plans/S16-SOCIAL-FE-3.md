@@ -647,3 +647,60 @@ M19 + B29 ghi phụ thuộc thứ tự merge. O4 · O5 · D1 · D14 · D16 · D1
 **Cập nhật của phiên thi công — 05/10/2026 17:55:** owner ký **O4 = a** (tab «Bài đang ẩn» giao kèm dòng giới hạn) và
 **O5 = a** (`delete_target` giao kèm ô tick xác nhận) qua hộp hỏi ⇒ hai ô đó đã tick ở §0. D1 · D14 · D16 · D17 vẫn chờ
 owner tick khi duyệt PR-A.
+
+**Sổ vết thi công PR-A — 05/10/2026** (L1 → L3 trên `feat/s16-social-fe-3`, `4de805a9..5cca4d96`; diff với `origin/master` = 63 file, chỉ-FE). Ba lượt kiểm toán độc lập có mutant (nhóm A · B · C) + gate `typescript-reviewer` (2 vòng, PASS) · `code-reviewer` (2 vòng, PASS) · `security-reviewer` (1 vòng + vá). Các mục §0–§9 phía trên giữ nguyên chữ lúc plan-review; chỗ nào nay lệch thì ghi Ở ĐÂY. `GATE-CODE-1.md` và `GATE-SEC-1.md` không có trong thư mục báo cáo — finding vòng 1 của hai gate đó chỉ còn trong văn bản giao việc + báo cáo vá.
+
+**(1) Bước → commit**
+
+| Bước | RED (khung + ca) | GREEN | Siết ca / vá sau kiểm toán |
+| --- | --- | --- | --- |
+| Backlog | — | `b03ee142` (tách FE-3/3B/3C · seed nợ) · `32c1a7bf` (O4 · O5) | — |
+| L1 nền client | `5615a0a3` | `8e00d032` | `0a33fd43` · `50be0c32` (mutant X1) |
+| L2 lib (search · body 029 · lỗi) | `643a50cc` | `d538aa43` | — |
+| L2 `ReportRow` · `ReportQueue` | `25c6660e` | `a4606559` | — |
+| L2 `ResolveReportDialog` | `3baa4d60` | `9d30d7da` | `3d03547b` (ca, nhóm A) · `0da01e60` (vá gợi ý sau 422) |
+| L2 `ModerationPage` tab «Báo cáo» | `10d588c9` | `ce3cb692` | `8fbcef04` (`staleTime: 0`) |
+| L2 `HiddenPostsTab` + thanh tab | `0b1b9814` | `c97126fd` | `31eb2be1` (ca, nhóm B) · `13ad8d12` → `4bc3d988` · `19c7a70a` → `0883bcbf` |
+| L2 route · rail · chuyển hướng | `c349e0a1` | `c8369e1f` | — |
+| L3 nút «Báo cáo» + `ReportDialog` | `55c89735` | `3a521684` | `e1499bdc` → `62271d06` (nhóm C: focus về nút ⋯) |
+| Trước gate (đóng mục còn mở) | `486bfa97` | `672d81e8` (refactor) | `dee3e7ac` (router THẬT + ca LOW) |
+| Gate TS · code · bảo mật | — | — | `e16198db` · `2140c46c` · `5cca4d96` |
+
+**(2) Lệch plan ĐÃ thi công** (plan viết → đã làm → vì sao → ghim)
+
+| # | Plan viết | Đã làm | Vì sao | Ca / commit ghim |
+| --- | --- | --- | --- | --- |
+| 1 | §3 L2 «Ghi» + hàng R3: sau hành động kèm invalidate 3 khoá (`hiddenPosts()` · `feed.allOf()` · `posts.detail`) | `invalidatePostSurfaces` làm mới 9 nhánh (thêm `saved` · `news` · `polls` · `ideas` · `kudos.lists()` · trang cá nhân · tìm kiếm) + `posts.detail` + `posts.comments(postId)`; dùng cho 029 kèm hành động VÀ 006 «Hiện lại» | rail của portal luôn mount các bề mặt đó, `refetchOnWindowFocus` tắt ⇒ bài vừa ẩn/xoá còn hiện; phải khớp đường menu ⋯ | `4bc3d988` · ca R3 seed thêm 7 bề mặt + đối chứng `kudos.badges()` · ratchet `moderation-invalidation.spec.tsx` |
+| 2 | D20 (i) / B23 / DC1: nút gửi `disabled` khi `isPending` | thêm cờ ĐỒNG BỘ chặn gửi-đúp trước khi nút kịp khoá; `close()` cũng hỏi cờ; nhả ở MỘT chỗ (`onSettled`), cờ kết cục riêng; gom thành hook `useGuardedMutation` cho 027 · 029 · 006 | đo được 2 lời gọi 029 khi bấm đúp cùng nhịp; hộp thoại từng đóng được cùng nhịp với «Xác nhận» | `4bc3d988` · `0883bcbf` · `672d81e8` · `2140c46c` |
+| 3 | «Xem trong ngữ cảnh»: bài ẩn ⇒ link HOẶC nhãn | bài ẩn + có `manage:feed-post` ⇒ vẽ CẢ link LẪN nhãn «[đã ẩn]» | người kiểm duyệt cần biết bài đang ẩn trước khi bấm | `a4606559` · `ReportRow.spec.tsx` |
+| 4 | bài «đã xoá» ⇔ `deletedAt !== null` | `status === "deleted"` cũng coi là đã xoá dù `deletedAt === null` | fail-closed | `a4606559` (CHƯA có ca riêng cho vế này) |
+| 5 | (không nêu) | hộp thoại xử lý mở ra CHƯA chọn quyết định nào; đổi quyết định bỏ luôn tick xác nhận xoá | buộc chọn có chủ ý | `9d30d7da` |
+| 6 | search `page`: «số nguyên ≥ 2» | thêm trần `FEED_PAGE_MAX`; vượt trần ⇒ bỏ khoá, về trang 1 | vượt trần thì 028 trả 400 ⇒ màn lỗi | `d538aa43` · `moderation-route-search.spec.ts` |
+| 7 | Query `keepPreviousData` | `placeholderData` chỉ giữ trang cũ khi CÙNG bộ lọc | tránh hàng «đang chờ» còn nút «Xử lý» dưới nhãn bộ lọc khác | `ce3cb692` · `e16198db` (`isReportListKeyOfSameFilter`) |
+| 8 | bảng lỗi: E1 «invalidate» (hàng đợi) · E5 «giữ» | E1 làm mới CẢ bề mặt bài + chi tiết + bình luận; E5 giữ hộp thoại + nháp nhưng đọc lại hàng đợi (`onStale`); câu E1 trung tính, không còn «bởi người khác» | hai lỗi đó tự chứng minh dữ liệu đang cũ | `2140c46c` |
+| 9 | (không nêu) | 027 · 029 · 006: hạn chờ 30 giây (029 · 027 huỷ `signal`; 006 CHƯA nối `signal`) + `networkMode: "always"` | yêu cầu treo / mất mạng từng khoá hộp thoại không lối ra, không dải lỗi | `e16198db` · `2140c46c` |
+| 10 | «dải lỗi/kết cục» ở trang | có thêm dải XÁC NHẬN thành công (`role="status"`, đóng được) ở cả hai tab; lượt đọc đang lỗi ⇒ ẩn dải; sau kết cục focus chuyển về dải (`useOutcomeFocus`) | hàng vừa xử lý biến mất khỏi bộ lọc mặc định; hàng bị gỡ thì focus rơi về `body` | `ce3cb692` · `c97126fd` · `e16198db` |
+| 11 | tab: 3 role + `aria-selected` | thêm phím ← → Home End + roving tabindex; thiếu `manage:feed-post` ⇒ không vẽ thanh tab | một tab thì `tablist` vô nghĩa | `c97126fd` · `dee3e7ac` |
+| 12 | `PostCardMenu` giữ cờ mở hộp thoại | giữ `reportPostId` + `key={post.id}`; đóng hộp thoại trả focus về nút ⋯ | thẻ đổi sang bài khác khi đang mở ⇒ từng gửi báo cáo NHẦM bài | `62271d06` · `e16198db` |
+| 13 | L3: chỉ hộp thoại soạn báo cáo có cảnh báo SOC-DEC-011 | ô ghi chú XỬ LÝ (029) cũng có cảnh báo «đừng nêu người báo cáo» | `resolutionNote` trả nguyên văn cho người đang bị che tên người báo cáo | `5cca4d96` |
+
+File ngoài danh sách «TẠO» của §3 L2: `moderation/lib/{moderation-invalidation,use-outcome-focus}.ts` · `moderation/components/{dialog-fields,DoneNotice}.tsx` · `moderation/components/list-states.ts` · `admin/lib/use-guarded-mutation.ts`. Nhãn mục rail «Kiểm duyệt» là chuỗi trong `sidebar/social.ts` (quy ước sẵn có: sidebar không dùng khoá i18n), không nằm ở `social-admin.ts`. Mục «Kiểm duyệt» cũng tự hiện ở `PortalTabBar` (< 1024px) vì dùng chung bộ lọc sidebar.
+
+**(3) CHỜ OWNER DUYỆT chữ / hành vi** (chép lên mô tả PR-A)
+
+- ☐ Câu cảnh báo SOC-DEC-011 ở hộp thoại báo cáo có THÊM vế «Người kiểm duyệt cấp công ty thấy tên người báo cáo; quản lý đơn vị thì không» — đúng SPEC-16:608 nhưng là lời hứa về che danh tính; chữ do phiên thi công soạn (AUD-C-04).
+- ☐ Gửi báo cáo thành công: hộp thoại KHÔNG tự đóng, người dùng bấm «Đóng» (plan: «câu xác nhận trong hộp thoại rồi đóng»).
+- ☐ Nhãn nút là «Gửi báo cáo» (plan viết «Gửi»); nhãn `lock_comments` của đích bình luận viết thường «bài» (plan in hoa «BÀI»).
+- ☐ Câu cảnh báo mới ở ô ghi chú xử lý (`admin.moderation.resolve.noteWarning`) và câu E1 mới («…đã được xử lý trước khi yêu cầu của bạn hoàn tất…») — chữ do phiên thi công soạn.
+- ☐ Sau mỗi kết cục trang cuộn về dải thông báo (focus không kèm `preventScroll`): lợi cho bàn phím / trình đọc màn hình, đổi hành vi với người dùng chuột đang ở cuối danh sách (GATE-TS-2 L3).
+- ☐ D1 · D14 · D16 · D17 ở §0 vẫn chờ tick.
+- Chi phí: các bước gate báo phiên ở ≈ 946 USD, vượt ước tính lúc owner trả lời hộp hỏi 17:55 (tổng ≈ 560–680 USD).
+
+**(4) Nợ phát sinh CHƯA có Work Order** (seed ở `harness/backlog.mjs` trước / ngay sau khi mở PR-A)
+
+- **Một nguồn cho tập khoá «mọi bề mặt vẽ bài»**: `moderation-invalidation.ts` và `invalidatePostLists` của `feed/lib/use-feed-actions.ts` là hai bản chép tay; chiều ngược (menu ⋯ chưa làm mới `moderation.hiddenPosts()` / `reports.lists()`) còn mở; `socialApi.moderatePost` chưa nhận `signal`. Chờ FE-2D (PR #571) merge vì nhánh đó đang sửa file `feed/**`. ⚠️ Ca «NỢ ĐÃ BIẾT» + ca ratchet của `moderation-invalidation.spec.tsx` sẽ ĐỎ lúc rebase nếu FE-2D đổi tập khoá — đúng thiết kế. Seed xong thì thay cụm «CHƯA có Work Order» ở `query-keys.ts` và các chú thích mang nhãn vòng gate («TS-04», «CODE-01…05» — chỉ tra được trong scratchpad) bằng mã WO.
+- **Cổng FE chỉ hỏi «có cặp», server đòi sàn Company cho 029** (SEC-02, LOW, fail-closed: nút hiện rồi gặp 403 đã có chữ): đóng hẳn phải đưa scopes của `/auth/me` vào auth store + hook kiểm sàn — vùng đỏ `packages/web-core` (auth), cần plan + FULL gate riêng.
+- Hết hạn chờ 30 giây rồi bấm «Huỷ»: hàng đợi không được đọc lại dù server có thể ĐÃ ghi (GATE-CODE-2 LOW-1).
+- Phần dư focus: nút trong dải tự gỡ chính nó (X · «Thử lại») ⇒ focus về `body`; 006 kéo focus cả khi người dùng đã rời đi; nhánh fallback + bộ đếm của `useOutcomeFocus` chưa có ca (GATE-TS-2 L1 · L2 · L4).
+- Chưa ai nhìn trên trình duyệt thật: trả focus của hai hộp thoại (mới đo jsdom) · `Dialog` `position: fixed` nằm TRONG cây thẻ bài (không portal) · nút đang focus thành `disabled` trên Chrome / Safari.
+- PR-B: `BadgeFormDialog` và «Ngừng dùng / Bật lại» dùng `useGuardedMutation`, không viết bản thứ tư; helper tua fake timer đang chép 4 nơi ⇒ đưa vào `admin-test-doubles.tsx`.
