@@ -25,6 +25,11 @@ const sizeClass: Record<NonNullable<AvatarProps["size"]>, string> = {
 };
 
 export function Avatar({ name, src, size = "md", className, ...props }: AvatarProps) {
+  // Lưu URL ĐÃ HỎNG (không phải cờ boolean): cờ boolean sẽ kẹt `true` sau một lần lỗi ⇒ URL ký MỚI
+  // (sau refetch) không bao giờ được thử lại. Cùng mẫu `BrandLogo` của apps/app.
+  const [failedSrc, setFailedSrc] = React.useState<string | null>(null);
+  const imageSrc = src && src !== failedSrc ? src : null;
+
   return (
     <span
       className={cn(
@@ -34,9 +39,17 @@ export function Avatar({ name, src, size = "md", className, ...props }: AvatarPr
       )}
       {...props}
     >
-      {src ? (
+      {imageSrc ? (
         // loading=lazy: bảng/danh sách dài không tải ảnh ngoài viewport (P1 perf).
-        <img src={src} alt={name ?? ""} loading="lazy" className="h-full w-full object-cover" />
+        // onError: URL ký TTL ngắn có thể hết hạn trước khi ảnh lazy được tải ⇒ rơi về chữ cái đầu
+        // thay vì để icon ảnh vỡ.
+        <img
+          src={imageSrc}
+          alt={name ?? ""}
+          loading="lazy"
+          className="h-full w-full object-cover"
+          onError={() => setFailedSrc(imageSrc)}
+        />
       ) : (
         initialsFrom(name)
       )}
