@@ -6,7 +6,8 @@
  * │ `ModerationPage` = VỎ: tiêu đề + đọc search của route + thanh tab + chọn tấm (panel) theo tab.    │
  * │ Mọi thứ của hàng đợi báo cáo (query 028 · ô lọc · hộp thoại · dải kết cục) nằm trong              │
  * │ `ReportsPanel`; mọi thứ của bài đang ẩn (001 · 006) nằm trong `HiddenPostsTab`. Chỉ tấm ĐANG MỞ   │
- * │ được mount ⇒ tab không mở thì không phát lời gọi của nó.                                          │
+ * │ được mount ⇒ tab không mở thì không phát lời gọi của nó. Ngoại lệ DUY NHẤT sống ở vỏ: state dải   │
+ * │ kết quả của 006 (`hiddenNoticeState`) — lượt «Hiện lại» có thể có kết cục sau khi tấm đã unmount.│
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Cổng: màn KHÔNG tự gác quyền đọc hàng đợi — route gác `view:feed` + `view:feed-report` (bước nối dây),
@@ -23,8 +24,10 @@
  *     khi dữ liệu của nó về (hợp đồng prop `page` của `ReportQueue`).
  *  3. Kết cục của 029 xử lý Ở ĐÂY, không ở hộp thoại / hàng: sau khi làm mới, hàng vừa xử lý (và mọi thứ
  *     mount dưới nó) biến mất — dải đặt ở đó mất theo (plan B6).
- *  4. Lượt đọc đang LỖI ⇒ không vẽ dải kết cục: câu «danh sách đã được làm mới» đứng cạnh «không tải
- *     được danh sách» là nói hai điều trái nhau. Thử lại xong thì dải hiện lại.
+ *  4. Lượt đọc đang LỖI ⇒ không vẽ dải kết cục CÓ câu «danh sách đã được làm mới» (E1 · E6 —
+ *     `claimsListRefreshed`): đứng cạnh «không tải được danh sách» là nói hai điều trái nhau; thử lại xong
+ *     thì dải hiện lại. Dải THÀNH CÔNG và mọi dải lỗi khác LUÔN vẽ: 029 đã xong mà chỉ còn một dải lỗi
+ *     trên màn là bảo người kiểm duyệt rằng chính lượt xử lý vừa hỏng.
  *  5. Sau kết cục của 029, focus được đưa tới dải kết cục (`useOutcomeFocus`): hộp thoại đóng thì `Dialog`
  *     trả focus về nút «Xử lý» của hàng vừa xử lý — đúng thứ refetch sắp gỡ — và focus rơi về `body`.
  */
@@ -43,9 +46,14 @@ import type { FeedReportDto, FeedReportPageDto, FeedReportStatusDto } from "@med
 import { AdminErrorNotice } from "../admin/components/AdminErrorNotice";
 import type { AdminErrorReason } from "../admin/lib/admin-errors";
 import { DoneNotice } from "./components/DoneNotice";
-import { HiddenPostsTab } from "./components/HiddenPostsTab";
+import { HiddenPostsTab, type HiddenPostsNotice } from "./components/HiddenPostsTab";
 import { ReportQueue } from "./components/ReportQueue";
-import { ResolveReportDialog, type ResolveReportOutcome } from "./components/ResolveReportDialog";
+import {
+  ResolveReportDialog,
+  type ResolveReportOutcome,
+  type ResolveReportStaleScope,
+} from "./components/ResolveReportDialog";
+import { claimsListRefreshed } from "./lib/moderation-errors";
 import { invalidatePostSurfaces } from "./lib/moderation-invalidation";
 import {
   activeModerationTab,
@@ -109,10 +117,22 @@ function invalidateAfterOutcome(queryClient: QueryClient, outcome: ResolveReport
   if (outcome.action !== NO_REPORT_ACTION) invalidateReportedPost(queryClient, outcome.report);
 }
 
-function noticeOf(outcome: ResolveReportOutcome): OutcomeNotice | null {
+/**
+ * 2xx mà báo cáo VẪN `open` là hợp đồng bị vi phạm (server hiện tại luôn đổi trạng thái hoặc ném): không
+ * biết lượt ghi đã ăn hay chưa ⇒ nói đúng điều đó (`outcomeUnknown`), KHÔNG đóng hộp thoại trong im lặng.
+ * Hàng đợi vẫn được đọc lại (nhánh `done` của `invalidateAfterOutcome`).
+ */
+function noticeOf(outcome: ResolveReportOutcome): OutcomeNotice {
   if (outcome.kind === "failed") return { kind: "failed", reason: outcome.reason };
   const { status } = outcome.updated;
-  return status === "open" ? null : { kind: "done", status };
+  return status === "open"
+    ? { kind: "failed", reason: "outcomeUnknown" }
+    : { kind: "done", status };
+}
+
+/** Luật 4 ở docblock. */
+function isNoticeContradictedByReadError(notice: OutcomeNotice, isReadError: boolean): boolean {
+  return isReadError && notice.kind === "failed" && claimsListRefreshed(notice.reason);
 }
 
 function OutcomeNoticeBar({
@@ -123,7 +143,7 @@ function OutcomeNoticeBar({
   onDismiss: () => void;
 }): React.ReactElement {
   const { t } = useTranslation("social");
-  // Kết cục lỗi (E1 · E6 · E9) là cuối cùng — KHÔNG truyền `onRetry`.
+  // Kết cục lỗi (E1 · E6 · E9 · 2xx còn `open`) là cuối cùng — KHÔNG truyền `onRetry`.
   if (notice.kind === "failed") {
     return <AdminErrorNotice reason={notice.reason} onDismiss={onDismiss} />;
   }
@@ -180,6 +200,12 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
     outcomeFocus.requestFocus();
   };
 
+  // Lỗi GIỮ hộp thoại báo thứ đang thấy đã / có thể đã cũ: E5 ⇒ hàng đợi; `outcomeUnknown` ⇒ thêm bài.
+  const handleStale = (report: FeedReportDto, scope: ResolveReportStaleScope): void => {
+    invalidateReportLists(queryClient);
+    if (scope.invalidatePosts) invalidateReportedPost(queryClient, report);
+  };
+
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -201,7 +227,7 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
         </select>
       </div>
 
-      {notice !== null && !query.isError && (
+      {notice !== null && !isNoticeContradictedByReadError(notice, query.isError) && (
         <div ref={outcomeFocus.noticeRef} tabIndex={-1} className={OUTCOME_FOCUS_CLASS}>
           <OutcomeNoticeBar notice={notice} onDismiss={() => setNotice(null)} />
         </div>
@@ -227,7 +253,7 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
           report={resolving}
           onClose={() => setResolving(null)}
           onOutcome={handleOutcome}
-          onStale={() => invalidateReportLists(queryClient)}
+          onStale={(scope) => handleStale(resolving, scope)}
         />
       )}
     </section>
@@ -327,26 +353,38 @@ export function ModerationPage(): React.ReactElement {
     void navigate({ to: ".", search: next });
   };
 
+  // Dải kết quả của 006 sống Ở ĐÂY, cao hơn tấm «Bài đang ẩn»: tấm bị unmount khi đổi tab, mà lượt «Hiện
+  // lại» có thể hỏng SAU đó (treo tới hạn 30 giây) — kết cục phải còn chờ ở lần mở tab kế tiếp.
+  const hiddenNoticeState = React.useState<HiddenPostsNotice | null>(null);
+  const [, setHiddenNotice] = hiddenNoticeState;
+
   const reportsPanel = <ReportsPanel search={search} onSearchChange={handleSearchChange} />;
   // Tab URL yêu cầu chỉ có hiệu lực khi người xem CÓ tab đó; thiếu `manage:feed-post` ⇒ luôn là hàng đợi.
   const activeTab = canManagePosts ? activeModerationTab(search) : DEFAULT_MODERATION_TAB;
+
+  const handleTabChange = (tab: ModerationTab): void => {
+    // Dải ĐANG THẤY lúc RỜI tab «Bài đang ẩn» đã được đọc — không theo về. Kết cục tới SAU cú rời tab thì
+    // được giữ: chỉ xoá ở chiều rời, không xoá ở chiều quay lại.
+    if (activeTab === "hidden") setHiddenNotice(null);
+    handleSearchChange(searchForTab(search, tab));
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-foreground">{t("admin.moderation.page.title")}</h1>
       {canManagePosts ? (
         <>
-          <ModerationTabs
-            baseId={tabsId}
-            active={activeTab}
-            onChange={(tab) => handleSearchChange(searchForTab(search, tab))}
-          />
+          <ModerationTabs baseId={tabsId} active={activeTab} onChange={handleTabChange} />
           <div
             role="tabpanel"
             id={panelDomId(tabsId, activeTab)}
             aria-labelledby={tabDomId(tabsId, activeTab)}
           >
-            {activeTab === "hidden" ? <HiddenPostsTab /> : reportsPanel}
+            {activeTab === "hidden" ? (
+              <HiddenPostsTab noticeState={hiddenNoticeState} />
+            ) : (
+              reportsPanel
+            )}
           </div>
         </>
       ) : (

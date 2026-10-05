@@ -56,6 +56,26 @@ describe("AdminErrorNotice — nút hành động", () => {
     expect(screen.queryByRole("button", { name: "Thử lại" })).toBeNull();
   });
 
+  it("`isRetrying` ⇒ «Thử lại» khoá + dải `aria-busy`; nút đóng vẫn bấm được. Không `isRetrying` ⇒ không `aria-busy`", () => {
+    const onRetry = vi.fn();
+    const onDismiss = vi.fn();
+    const { unmount } = renderWithProviders(
+      <AdminErrorNotice reason="loadFailed" onRetry={onRetry} onDismiss={onDismiss} isRetrying />,
+    );
+    const retry = screen.getByRole("button", { name: "Thử lại" });
+    expect(retry).toBeDisabled();
+    fireEvent.click(retry);
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-busy", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Đóng thông báo" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    unmount();
+
+    renderWithProviders(<AdminErrorNotice reason="loadFailed" onRetry={onRetry} />);
+    expect(screen.getByRole("button", { name: "Thử lại" })).toBeEnabled();
+    expect(screen.getByRole("alert")).not.toHaveAttribute("aria-busy");
+  });
+
   it("có `onDismiss` ⇒ nút đóng có tên trợ năng, gọi đúng 1 lần; không truyền ⇒ không có nút đóng", () => {
     const onDismiss = vi.fn();
     const { unmount } = renderWithProviders(

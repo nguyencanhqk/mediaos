@@ -84,6 +84,9 @@ const DONE_RESOLVED = "Đã giải quyết báo cáo.";
 const DONE_DISMISSED = "Đã bỏ qua báo cáo.";
 const ALREADY_DECIDED_TEXT =
   "Báo cáo này đã được xử lý trước khi yêu cầu của bạn hoàn tất. Danh sách đã được làm mới.";
+const LOAD_FAILED_TEXT = "Không tải được danh sách do lỗi hệ thống hoặc kết nối. Vui lòng thử lại.";
+const OUTCOME_UNKNOWN_TEXT =
+  "Chưa xác nhận được kết quả: không nhận được phản hồi đọc được từ máy chủ, nhưng thao tác có thể đã được ghi. Hãy kiểm tra lại danh sách trước khi thực hiện lần nữa.";
 const FORBIDDEN_TEXT =
   "Bạn không có quyền thực hiện thao tác này. Nếu cần, hãy liên hệ quản trị viên để được cấp quyền.";
 
@@ -396,7 +399,7 @@ describe("Kết cục LỖI — hộp thoại đóng, dải ở TRANG", () => {
     dismissReport();
 
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveAttribute("data-reason", "generic"),
+      expect(screen.getByRole("alert")).toHaveAttribute("data-reason", "loadFailed"),
     );
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.queryByText(ALREADY_DECIDED_TEXT)).toBeNull();
@@ -407,6 +410,61 @@ describe("Kết cục LỖI — hộp thoại đóng, dải ở TRANG", () => {
     await screen.findByRole("list", { name: LIST });
     expect(listReports).toHaveBeenCalledTimes(3);
     expect(screen.getByRole("alert")).toHaveTextContent(ALREADY_DECIDED_TEXT);
+  });
+});
+
+// Lượt GHI có kết cục riêng của nó; lượt ĐỌC LẠI ngay sau đó hỏng là chuyện khác. Gỡ câu «Đã … báo cáo» và
+// chỉ để lại một dải lỗi là bảo người kiểm duyệt rằng chính lượt xử lý vừa hỏng — họ sẽ xử lý lại một báo
+// cáo đã xong (gate silent-failure, SF-01 · SF-02 · SF-05).
+describe("Kết cục của lượt GHI không bị lượt ĐỌC LẠI che mất (gate SF)", () => {
+  it("SF-01 — 029 thành công mà đọc lại 500 ⇒ câu «Đã bỏ qua báo cáo.» CÒN, cạnh dải lỗi TẢI; không câu nào nói thao tác hỏng", async () => {
+    await renderPage();
+    listReports.mockImplementation(() => Promise.reject(ADMIN_ERR.server()));
+
+    dismissReport();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "loadFailed");
+    expect(alert).toHaveTextContent(LOAD_FAILED_TEXT);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent(DONE_DISMISSED);
+    expect(document.body).not.toHaveTextContent("Không thực hiện được");
+  });
+
+  it("SF-02 — 029 không có câu trả lời đọc được (mất phản hồi) ⇒ hộp thoại CÒN với dải `outcomeUnknown` + «Thử lại»; hàng đợi VÀ bề mặt bài được đọc lại NGAY", async () => {
+    resolveReport.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
+    const { invalidated } = await renderPage();
+
+    dismissReport();
+
+    const dialog = screen.getByRole("dialog", { name: DIALOG });
+    await waitFor(() =>
+      expect(within(dialog).getByRole("alert")).toHaveAttribute("data-reason", "outcomeUnknown"),
+    );
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(OUTCOME_UNKNOWN_TEXT);
+    expect(within(dialog).getByRole("button", { name: RETRY })).toBeInTheDocument();
+    // Server CÓ THỂ đã ghi (kể cả ẩn / xoá bài) ⇒ không chờ người dùng bấm «Thử lại» mới đọc lại.
+    await waitFor(() => expect(listReports).toHaveBeenCalledTimes(2));
+    expect(invalidated("otherReportPage")).toBe(true);
+    expect(invalidated("feedList")).toBe(true);
+    expect(invalidated("postDetail")).toBe(true);
+    expect(invalidated("birthdays")).toBe(false);
+  });
+
+  it("SF-05 — 029 trả 2xx mà báo cáo VẪN `open` ⇒ dải `outcomeUnknown` ở trang (không «Thử lại»), hàng đợi được đọc lại — không im lặng", async () => {
+    resolveReport.mockImplementation(() => Promise.resolve(makeReport({ status: "open" })));
+    const { invalidated } = await renderPage();
+
+    dismissReport();
+
+    await dialogGone();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "outcomeUnknown");
+    expect(alert).toHaveTextContent(OUTCOME_UNKNOWN_TEXT);
+    expect(screen.queryByRole("button", { name: RETRY })).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    await waitFor(() => expect(listReports).toHaveBeenCalledTimes(2));
+    expect(invalidated("otherReportPage")).toBe(true);
   });
 });
 

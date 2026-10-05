@@ -23,6 +23,11 @@ export interface AdminErrorNoticeProps {
   reason: AdminErrorReason;
   /** Có ⇒ vẽ nút «Thử lại». Chỉ truyền khi thử lại CÓ thể thành công. */
   onRetry?: () => void;
+  /**
+   * Lượt thử lại ĐANG chạy mà dải vẫn còn trên màn (react-query giữ `status: "error"` suốt lượt đọc lại
+   * khi cache đã có dữ liệu) ⇒ khoá «Thử lại» + `aria-busy`: «đang thử» không được trông như «nút không ăn».
+   */
+  isRetrying?: boolean;
   /** Có ⇒ vẽ nút đóng dải. */
   onDismiss?: () => void;
   className?: string;
@@ -31,6 +36,7 @@ export interface AdminErrorNoticeProps {
 export function AdminErrorNotice({
   reason,
   onRetry,
+  isRetrying = false,
   onDismiss,
   className,
 }: AdminErrorNoticeProps): React.ReactElement {
@@ -41,6 +47,7 @@ export function AdminErrorNotice({
       role="alert"
       data-testid="admin-error-notice"
       data-reason={reason}
+      aria-busy={isRetrying ? true : undefined}
       className={cn(
         "flex items-start justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2",
         className,
@@ -53,7 +60,8 @@ export function AdminErrorNotice({
             <button
               type="button"
               onClick={onRetry}
-              className="rounded px-2 py-0.5 text-sm font-medium text-destructive underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+              disabled={isRetrying}
+              className="rounded px-2 py-0.5 text-sm font-medium text-destructive underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
             >
               {t("admin.notice.retry")}
             </button>

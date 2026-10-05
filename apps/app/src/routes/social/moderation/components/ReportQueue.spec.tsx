@@ -96,12 +96,25 @@ describe("ST1 — trạng thái của hàng đợi", () => {
     expect(screen.queryByRole("list", { name: LIST_NAME })).toBeNull();
   });
 
-  it("lỗi 500 ⇒ dải `generic` + «Thử lại» gọi `onRetry` đúng 1 lần; KHÔNG vẽ danh sách cũ", () => {
+  it("lỗi 500 ⇒ dải `loadFailed` + «Thử lại» gọi `onRetry` đúng 1 lần; KHÔNG vẽ danh sách cũ", () => {
     const { props } = renderQueue({ error: ADMIN_ERR.server() });
-    expect(screen.getByRole("alert").getAttribute("data-reason")).toBe("generic");
+    expect(screen.getByRole("alert").getAttribute("data-reason")).toBe("loadFailed");
     fireEvent.click(screen.getByRole("button", { name: RETRY }));
     expect(props.onRetry).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("list", { name: LIST_NAME })).toBeNull();
+  });
+
+  // Lỗi tải khi cache ĐÃ có dữ liệu: react-query giữ `status: "error"` suốt lượt đọc lại ⇒ dải lỗi đứng
+  // nguyên. Nút không khoá thì «đang thử» trông y hệt «nút không ăn», bấm lần nữa là huỷ lượt đang bay
+  // (gate SF, SF-04). Ca ngay trên là đối chứng: không đang tải ⇒ nút bấm được.
+  it("lỗi + ĐANG đọc lại (`isFetching`) ⇒ «Thử lại» khoá, dải mang `aria-busy`, bấm không gọi `onRetry`", () => {
+    const { props } = renderQueue({ error: ADMIN_ERR.server(), isFetching: true });
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveAttribute("aria-busy", "true");
+    const retry = screen.getByRole("button", { name: RETRY });
+    expect(retry).toBeDisabled();
+    fireEvent.click(retry);
+    expect(props.onRetry).not.toHaveBeenCalled();
   });
 
   it("lỗi 403 ⇒ dải `forbidden`, KHÔNG nút «Thử lại», KHÔNG hiện `message` của server", () => {

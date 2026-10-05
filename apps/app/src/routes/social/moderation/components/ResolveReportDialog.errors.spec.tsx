@@ -455,7 +455,7 @@ describe("Mất mạng (trình duyệt báo offline)", () => {
     onlineManager.setOnline(true);
   });
 
-  it("029 VẪN lên dây và hỏng ngay ⇒ dải `generic` + «Thử lại», «Huỷ» đóng được", async () => {
+  it("029 VẪN lên dây và hỏng ngay ⇒ dải `outcomeUnknown` + «Thử lại», «Huỷ» đóng được", async () => {
     resolveReport.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
     const { onClose, onOutcome } = renderDialog();
     pick(DISMISSED);
@@ -464,7 +464,7 @@ describe("Mất mạng (trình duyệt báo offline)", () => {
     clickSubmit();
 
     await waitFor(() => expect(resolveReport).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(alertReason()).toBe("generic"));
+    await waitFor(() => expect(alertReason()).toBe("outcomeUnknown"));
     expect(within(dialog()).getByRole("button", { name: RETRY })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: CANCEL })).toBeEnabled());
 
@@ -486,9 +486,9 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
       await vi.advanceTimersByTimeAsync(ms);
     });
 
-  it("029 treo: trước 30 giây còn khoá; quá hạn ⇒ dải `generic` + «Thử lại», yêu cầu bị huỷ, «Huỷ» đóng được", async () => {
+  it("029 treo: trước 30 giây còn khoá; quá hạn ⇒ dải `outcomeUnknown` + «Thử lại», yêu cầu bị huỷ, trang được báo đọc lại, «Huỷ» đóng được", async () => {
     resolveReport.mockImplementation(() => new Promise<never>(() => undefined));
-    const { onClose, onOutcome } = renderDialog();
+    const { onClose, onOutcome, onStale } = renderDialog();
     pick(DISMISSED);
     fireEvent.change(noteBox(), { target: { value: "ghi chú còn nguyên" } });
     vi.useFakeTimers();
@@ -502,11 +502,16 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
     expect((signal as AbortSignal).aborted).toBe(false);
     expect(within(dialog()).queryByRole("alert")).toBeNull();
     expect(screen.getByRole("button", { name: CANCEL })).toBeDisabled();
+    expect(onStale).not.toHaveBeenCalled();
 
     await advance(1);
     await advance(0);
 
-    expect(alertReason()).toBe("generic");
+    expect(alertReason()).toBe("outcomeUnknown");
+    // Hết hạn KHÔNG có nghĩa server chưa ghi (có thể đã ẩn / xoá bài) ⇒ trang đọc lại hàng đợi + bề mặt bài
+    // NGAY, không chờ người dùng bấm «Thử lại» — họ có thể bấm «Huỷ» (gate SF, SF-02).
+    expect(onStale).toHaveBeenCalledTimes(1);
+    expect(onStale).toHaveBeenCalledWith({ invalidatePosts: true });
     expect((signal as AbortSignal).aborted).toBe(true);
     expect(within(dialog()).getByRole("button", { name: RETRY })).toBeInTheDocument();
     expect(noteBox()).toHaveValue("ghi chú còn nguyên");
@@ -530,6 +535,7 @@ describe("`onStale` — lỗi giữ hộp thoại báo trang rằng hàng đợi
 
     await waitFor(() => expect(alertReason()).toBe("reportTargetUnavailable"));
     expect(onStale).toHaveBeenCalledTimes(1);
+    expect(onStale).toHaveBeenCalledWith({ invalidatePosts: false });
     expect(onOutcome).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });

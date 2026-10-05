@@ -11,10 +11,12 @@ import { ApiError } from "@mediaos/web-core";
 import { ZodError } from "zod";
 import { ADMIN_ERR } from "../../admin/admin-test-doubles";
 import { ADMIN_ERROR_REASONS } from "../../admin/lib/admin-errors";
+import socialAdmin from "../../../../i18n/locales/vi/social-admin";
 import {
   MODERATION_READ_ERROR_TABLE,
   RESOLVE_REPORT_ERROR_TABLE,
   UNHIDE_POST_ERROR_TABLE,
+  claimsListRefreshed,
   describeModerationReadError,
   describeResolveReportError,
   describeUnhidePostError,
@@ -144,9 +146,9 @@ describe("đọc 028/001 (E8)", () => {
     }
   });
 
-  it("404 ở đường đọc KHÔNG phải «bài/báo cáo không còn» ⇒ `generic` + thử lại được", () => {
+  it("404 ở đường đọc KHÔNG phải «bài/báo cáo không còn» ⇒ `loadFailed` + thử lại được", () => {
     expect(describeModerationReadError(ADMIN_ERR.postGone())).toStrictEqual({
-      reason: "generic",
+      reason: "loadFailed",
       retryable: true,
     });
   });
@@ -201,7 +203,7 @@ describe("lỗi chung (E9–E11)", () => {
     });
   });
 
-  it("E11 · 500 ⇒ `generic` + «Thử lại» ở CẢ ba lời gọi; 029 giữ hộp thoại", () => {
+  it("E11 · 500 ⇒ thử lại được ở CẢ ba lời gọi: lượt GHI ra `generic` (029 giữ hộp thoại, KHÔNG làm mới gì), lượt ĐỌC ra `loadFailed`", () => {
     expect(describeResolveReportError(ADMIN_ERR.server())).toStrictEqual({
       reason: "generic",
       dialog: "keep",
@@ -216,24 +218,62 @@ describe("lỗi chung (E9–E11)", () => {
       retryable: true,
     });
     expect(describeModerationReadError(ADMIN_ERR.server())).toStrictEqual({
-      reason: "generic",
+      reason: "loadFailed",
       retryable: true,
     });
   });
 
-  it("E11 · lỗi mạng · ZodError · không phải Error ⇒ `generic` + thử lại được", () => {
-    for (const err of [new TypeError("Failed to fetch"), new ZodError([]), undefined, "boom"]) {
-      expect(describeResolveReportError(err)).toMatchObject({
-        reason: "generic",
+  // Server ĐÃ trả lỗi (`ApiError`) ⇒ kết cục xác định: chưa ghi. KHÔNG có câu trả lời đọc được (mất phản
+  // hồi · hết hạn chờ · 2xx mà thân hỏng schema) ⇒ server có thể — ca thứ ba: chắc chắn — ĐÃ ghi, kể cả
+  // xoá bài. Gộp hai thứ thành «Không thực hiện được» là khẳng định điều không biết (gate SF, SF-02).
+  it("lượt GHI không có câu trả lời đọc được (mạng · ZodError · hết hạn · không phải Error) ⇒ `outcomeUnknown`: làm mới NGAY, vẫn thử lại được", () => {
+    const timeout = new Error("Guarded mutation timed out");
+    for (const err of [new TypeError("Failed to fetch"), new ZodError([]), timeout, undefined]) {
+      expect(describeResolveReportError(err)).toStrictEqual({
+        reason: "outcomeUnknown",
         dialog: "keep",
+        resetAction: false,
+        invalidate: true,
+        invalidatePosts: true,
         retryable: true,
       });
-      expect(describeUnhidePostError(err)).toMatchObject({ reason: "generic", retryable: true });
-      expect(describeModerationReadError(err)).toMatchObject({
-        reason: "generic",
+      expect(describeUnhidePostError(err)).toStrictEqual({
+        reason: "outcomeUnknown",
+        invalidate: true,
         retryable: true,
       });
     }
+  });
+
+  it("đối chứng: `ApiError` 500 của lượt GHI KHÔNG phải `outcomeUnknown` — server đã trả lời, không làm mới gì", () => {
+    expect(describeResolveReportError(ADMIN_ERR.server()).reason).toBe("generic");
+    expect(describeResolveReportError(ADMIN_ERR.server()).invalidate).toBe(false);
+    expect(describeUnhidePostError(ADMIN_ERR.server())).toStrictEqual({
+      reason: "generic",
+      invalidate: false,
+      retryable: true,
+    });
+  });
+
+  it("lượt ĐỌC không có câu trả lời đọc được ⇒ `loadFailed` + thử lại được (không có gì để «chưa rõ đã ghi»)", () => {
+    for (const err of [new TypeError("Failed to fetch"), new ZodError([]), undefined, "boom"]) {
+      expect(describeModerationReadError(err)).toStrictEqual({
+        reason: "loadFailed",
+        retryable: true,
+      });
+    }
+  });
+});
+
+describe("`claimsListRefreshed` — câu của reason có nói «danh sách đã được làm mới» không (gate SF, SF-01)", () => {
+  it("đúng ba reason E1 · E6 · E7 (viết tay) — và chữ i18n của đúng ba reason đó mang câu ấy", () => {
+    const claiming = ADMIN_ERROR_REASONS.filter(claimsListRefreshed);
+    expect([...claiming].sort()).toEqual(["postGone", "reportAlreadyDecided", "reportGone"]);
+    const sentences: Record<string, string> = socialAdmin.error;
+    const withSentence = ADMIN_ERROR_REASONS.filter((reason) =>
+      (sentences[reason] ?? "").includes("Danh sách đã được làm mới"),
+    );
+    expect([...withSentence].sort()).toEqual([...claiming].sort());
   });
 });
 
@@ -306,11 +346,12 @@ describe("bảng mã theo TỪNG lời gọi", () => {
       describeModerationReadError(err).reason,
     ]);
     for (const reason of reasons) expect(known).toContain(reason);
-    // Đường đọc chỉ ra ba reason chung — không bao giờ ra reason riêng của 029/006/027.
+    // Đường đọc chỉ ra ba reason — không bao giờ ra reason riêng của 029/006/027, và không ra `generic`
+    // («Không thực hiện được» là câu của lượt GHI).
     expect([...new Set(errors.map((e) => describeModerationReadError(e).reason))].sort()).toEqual([
       "forbidden",
-      "generic",
       "invalidRequest",
+      "loadFailed",
     ]);
   });
 });

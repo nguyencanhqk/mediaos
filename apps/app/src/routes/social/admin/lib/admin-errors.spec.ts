@@ -39,13 +39,15 @@ const CREATE_TABLE = {
 const UNHIDE_TABLE = { [C.POST_NOT_FOUND]: expected("postGone") } satisfies AdminErrorTable;
 
 describe("ADMIN_ERROR_REASONS — tập đóng của PR-A (L2 + L3)", () => {
-  it("đúng 13 reason, đúng tên (danh sách viết tay)", () => {
+  it("đúng 15 reason, đúng tên (danh sách viết tay)", () => {
     expect([...ADMIN_ERROR_REASONS].sort()).toEqual(
       [
         "busy",
         "forbidden",
         "generic",
         "invalidRequest",
+        "loadFailed",
+        "outcomeUnknown",
         "postGone",
         "reportActionDenied",
         "reportActionInvalid",
@@ -57,7 +59,7 @@ describe("ADMIN_ERROR_REASONS — tập đóng của PR-A (L2 + L3)", () => {
         "reportTargetUnavailable",
       ].sort(),
     );
-    expect(new Set(ADMIN_ERROR_REASONS).size).toBe(13);
+    expect(new Set(ADMIN_ERROR_REASONS).size).toBe(15);
   });
 });
 

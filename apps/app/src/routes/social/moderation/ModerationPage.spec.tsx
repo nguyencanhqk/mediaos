@@ -288,12 +288,12 @@ describe("ST1 — trạng thái của màn", () => {
 });
 
 describe("Lỗi trên đường ĐỌC 028", () => {
-  it("E11: 500 ⇒ `generic` + «Thử lại» GỌI LẠI và hàng đợi hiện ra", async () => {
+  it("E11: 500 ⇒ `loadFailed` (câu của lượt ĐỌC) + «Thử lại» GỌI LẠI và hàng đợi hiện ra", async () => {
     listReports.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.server()));
     renderPage();
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(alert).toHaveAttribute("data-reason", "loadFailed");
     expect(screen.queryAllByTestId("report-row")).toHaveLength(0);
 
     fireEvent.click(within(alert).getByRole("button", { name: RETRY }));

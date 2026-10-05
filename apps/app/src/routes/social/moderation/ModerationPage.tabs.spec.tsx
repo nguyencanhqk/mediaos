@@ -6,10 +6,11 @@
  * Search của route là bản GIẢ CÓ PHẢN ỨNG (`routeSearchDouble`). i18n THẬT, chữ kỳ vọng VIẾT TAY.
  */
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders, resetCaps, setCaps } from "../feed/social-test-doubles";
 import {
+  ADMIN_ERR,
   makeHiddenPost,
   makeHiddenPostPage,
   makeReport,
@@ -20,6 +21,7 @@ import { ModerationPage } from "./ModerationPage";
 
 const listReports = vi.fn();
 const listFeed = vi.fn();
+const moderatePost = vi.fn();
 const navigateSpy = vi.fn();
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -33,6 +35,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     socialApi: {
       ...actual.socialApi,
       listFeed: (...a: unknown[]) => listFeed(...a),
+      moderatePost: (...a: unknown[]) => moderatePost(...a),
     },
   };
 });
@@ -80,6 +83,7 @@ beforeEach(() => {
   setCaps(FULL_MODERATOR);
   listReports.mockReset();
   listFeed.mockReset();
+  moderatePost.mockReset();
   navigateSpy.mockReset();
   listReports.mockImplementation(() => Promise.resolve(makeReportPage([makeReport()])));
   listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([makeHiddenPost()])));
@@ -231,5 +235,54 @@ describe("Thanh tab — ARIA + URL", () => {
     fireEvent.keyDown(tab(TAB_REPORTS), { key: "Home" });
     expect(navigateSpy).toHaveBeenCalledTimes(navigations);
     expect(tab(TAB_REPORTS)).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+// Trang chỉ mount tấm đang mở. Dải kết quả của 006 mà là state của tấm thì lượt «Hiện lại» hỏng SAU khi
+// người dùng đã sang tab khác rơi vào một component đã unmount: không dải nào, quay lại chỉ thấy bài vẫn
+// nằm đó (gate silent-failure, SF-03).
+describe("Kết quả của «Hiện lại» sống qua lần đổi tab (gate SF, SF-03)", () => {
+  const UNHIDE = "Hiện lại";
+  const UNHIDDEN = "Đã hiện lại bài viết.";
+
+  it("bấm «Hiện lại» → sang «Báo cáo» khi yêu cầu CÒN BAY → 006 hỏng 403 → quay lại: dải `forbidden` hiện ở tab «Bài đang ẩn»", async () => {
+    let rejectUnhide: (error: unknown) => void = () => undefined;
+    moderatePost.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectUnhide = reject;
+        }),
+    );
+    renderPage({ tab: "hidden" });
+    await hiddenList();
+    fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
+    await waitFor(() => expect(moderatePost).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(tab(TAB_REPORTS));
+    await reportList();
+    await act(async () => {
+      rejectUnhide(ADMIN_ERR.forbidden());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.click(tab(TAB_HIDDEN));
+
+    await hiddenList();
+    expect(screen.getByRole("alert")).toHaveAttribute("data-reason", "forbidden");
+  });
+
+  it("đối chứng: dải ĐANG THẤY lúc rời tab không theo về — «Đã hiện lại bài viết.» không hiện lại ở lần mở sau", async () => {
+    moderatePost.mockImplementation(() => Promise.resolve(makeHiddenPost()));
+    renderPage({ tab: "hidden" });
+    await hiddenList();
+    fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
+    expect(await screen.findByText(UNHIDDEN)).toBeInTheDocument();
+
+    fireEvent.click(tab(TAB_REPORTS));
+    await reportList();
+    fireEvent.click(tab(TAB_HIDDEN));
+
+    await hiddenList();
+    expect(screen.queryByText(UNHIDDEN)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

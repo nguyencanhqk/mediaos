@@ -86,6 +86,10 @@ const FORBIDDEN_TEXT =
 const POST_GONE_TEXT =
   "Bài viết này không còn tồn tại nên không thể hiện lại. Danh sách đã được làm mới.";
 
+const LOAD_FAILED_TEXT = "Không tải được danh sách do lỗi hệ thống hoặc kết nối. Vui lòng thử lại.";
+const OUTCOME_UNKNOWN_TEXT =
+  "Chưa xác nhận được kết quả: không nhận được phản hồi đọc được từ máy chủ, nhưng thao tác có thể đã được ghi. Hãy kiểm tra lại danh sách trước khi thực hiện lần nữa.";
+
 const HIDDEN_QUERY = { status: "hidden", sort: "latest" };
 
 const first = () => makeHiddenPost();
@@ -383,12 +387,12 @@ describe("HP1–HP3 — trạng thái riêng của tab", () => {
     expect(screen.queryByRole("button", { name: LOAD_MORE })).toBeNull();
   });
 
-  it("HP3: lỗi khác 403 ⇒ `generic` + «Thử lại» GỌI LẠI và danh sách hiện ra", async () => {
+  it("HP3: lỗi khác 403 ⇒ `loadFailed` + «Thử lại» GỌI LẠI và danh sách hiện ra", async () => {
     listFeed.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.server()));
     renderTab();
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(alert).toHaveAttribute("data-reason", "loadFailed");
     expect(screen.getByText(LIMIT_NOTE)).toBeInTheDocument();
     expect(screen.queryByText(EMPTY)).toBeNull();
 
@@ -412,7 +416,7 @@ describe("HP1–HP3 — trạng thái riêng của tab", () => {
 
 // App không có toast: lượt «Tải thêm» hỏng mà không vẽ gì là hỏng IM LẶNG — nút nhả ra như chưa bấm.
 describe("Lượt «Tải thêm» bị từ chối", () => {
-  it("500 ⇒ dải `generic` + «Thử lại» GỌI LẠI 001; danh sách và «Tải thêm» hiện lại", async () => {
+  it("500 ⇒ dải `loadFailed` + «Thử lại» GỌI LẠI 001; danh sách và «Tải thêm» hiện lại", async () => {
     listFeed.mockImplementationOnce(() =>
       Promise.resolve(makeHiddenPostPage([first()], "cursor-1")),
     );
@@ -424,7 +428,7 @@ describe("Lượt «Tải thêm» bị từ chối", () => {
     fireEvent.click(screen.getByRole("button", { name: LOAD_MORE }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(alert).toHaveAttribute("data-reason", "loadFailed");
     expect(listFeed).toHaveBeenCalledTimes(2);
     expect(listFeed.mock.calls[1]?.[0]).toStrictEqual({ ...HIDDEN_QUERY, cursor: "cursor-1" });
 
@@ -434,6 +438,30 @@ describe("Lượt «Tải thêm» bị từ chối", () => {
     expect(listFeed).toHaveBeenCalledTimes(3);
     expect(screen.getByRole("button", { name: LOAD_MORE })).toBeEnabled();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  // Cache ĐÃ có dữ liệu ⇒ react-query giữ `status: "error"` suốt lượt đọc lại, dải lỗi đứng nguyên. Nút
+  // không khoá thì «đang thử» trông y hệt «nút không ăn»; bấm lần nữa là huỷ lượt đang bay (gate SF, SF-04).
+  it("«Thử lại» với lượt đọc TREO ⇒ nút khoá + dải `aria-busy`; bấm lần hai KHÔNG phát thêm lời gọi", async () => {
+    listFeed.mockImplementationOnce(() =>
+      Promise.resolve(makeHiddenPostPage([first()], "cursor-1")),
+    );
+    listFeed.mockImplementationOnce(() => Promise.reject(ADMIN_ERR.server()));
+    listFeed.mockImplementation(() => pending());
+    renderTab();
+    await list();
+    fireEvent.click(screen.getByRole("button", { name: LOAD_MORE }));
+    const alert = await screen.findByRole("alert");
+    const retry = within(alert).getByRole("button", { name: RETRY });
+    expect(retry).toBeEnabled();
+
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(within(alert).getByRole("button", { name: RETRY })).toBeDisabled());
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-busy", "true");
+    fireEvent.click(within(alert).getByRole("button", { name: RETRY }));
+    await settle();
+    expect(listFeed).toHaveBeenCalledTimes(3);
   });
 
   it("403 ⇒ dải `forbidden` bằng chữ của FE, KHÔNG «Thử lại»", async () => {
@@ -537,7 +565,7 @@ describe("Lỗi của 006 «Hiện lại»", () => {
     fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
 
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveAttribute("data-reason", "generic"),
+      expect(screen.getByRole("alert")).toHaveAttribute("data-reason", "loadFailed"),
     );
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.queryByText(POST_GONE_TEXT)).toBeNull();
@@ -547,6 +575,25 @@ describe("Lỗi của 006 «Hiện lại»", () => {
     expect(await screen.findByText(EMPTY)).toBeInTheDocument();
     expect(listFeed).toHaveBeenCalledTimes(3);
     expect(screen.getByRole("alert")).toHaveTextContent(POST_GONE_TEXT);
+  });
+
+  // 006 đã 2xx; lượt đọc lại ngay sau đó hỏng là chuyện KHÁC. Gỡ câu «Đã hiện lại bài viết.» và chỉ để
+  // lại một dải lỗi là bảo người kiểm duyệt rằng chính lượt «Hiện lại» vừa hỏng (gate SF, SF-01).
+  it("«Hiện lại» THÀNH CÔNG mà lượt đọc lại HỎNG ⇒ câu «Đã hiện lại bài viết.» CÒN, cạnh dải lỗi TẢI", async () => {
+    moderatePost.mockImplementation(() => Promise.resolve(first()));
+    listFeed.mockImplementationOnce(() => Promise.resolve(makeHiddenPostPage([first(), second()])));
+    listFeed.mockImplementation(() => Promise.reject(ADMIN_ERR.server()));
+    renderTab();
+    const rows = rowsIn(await list());
+
+    fireEvent.click(within(rows[0] as HTMLElement).getByRole("button", { name: UNHIDE }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "loadFailed");
+    expect(alert).toHaveTextContent(LOAD_FAILED_TEXT);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent(UNHIDDEN);
+    expect(document.body).not.toHaveTextContent("Không thực hiện được");
   });
 
   it("400 ⇒ `invalidRequest`, KHÔNG «Thử lại», KHÔNG làm mới gì; hàng còn", async () => {
@@ -635,7 +682,7 @@ describe("Mất mạng (trình duyệt báo offline)", () => {
     onlineManager.setOnline(true);
   });
 
-  it("«Hiện lại» VẪN lên dây và hỏng ngay ⇒ dải `generic` + «Thử lại»; nút không kẹt ở trạng thái khoá", async () => {
+  it("«Hiện lại» VẪN lên dây và hỏng ngay ⇒ dải `outcomeUnknown` + «Thử lại»; nút không kẹt ở trạng thái khoá", async () => {
     moderatePost.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
     renderTab();
     await list();
@@ -645,7 +692,7 @@ describe("Mất mạng (trình duyệt báo offline)", () => {
 
     await waitFor(() => expect(moderatePost).toHaveBeenCalledTimes(1));
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(alert).toHaveAttribute("data-reason", "outcomeUnknown");
     expect(within(alert).getByRole("button", { name: RETRY })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: UNHIDE })).toBeEnabled());
   });
@@ -657,7 +704,7 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
     vi.useRealTimers();
   });
 
-  it("006 treo quá 30 giây ⇒ dải `generic` + «Thử lại»; nút «Hiện lại» mở lại", async () => {
+  it("006 treo quá 30 giây ⇒ dải `outcomeUnknown` + «Thử lại», danh sách được đọc lại NGAY (server có thể đã ghi); nút «Hiện lại» mở lại", async () => {
     moderatePost.mockImplementation(() => new Promise<never>(() => undefined));
     renderTab();
     await list();
@@ -678,8 +725,10 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
       await vi.advanceTimersByTimeAsync(0);
     });
     const alert = screen.getByRole("alert");
-    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(alert).toHaveAttribute("data-reason", "outcomeUnknown");
+    expect(alert).toHaveTextContent(OUTCOME_UNKNOWN_TEXT);
     expect(within(alert).getByRole("button", { name: RETRY })).toBeInTheDocument();
+    expect(listFeed).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("button", { name: UNHIDE })).toBeEnabled();
   });
 });

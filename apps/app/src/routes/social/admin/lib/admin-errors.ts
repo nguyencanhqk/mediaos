@@ -17,6 +17,11 @@
  *   3. 400 ⇒ `invalidRequest`.
  *   4. còn lại (5xx · mạng · ZodError · không phải Error) ⇒ `generic`.
  *
+ * ⚠️ `generic` gộp hai thứ KHÁC nhau: server ĐÃ trả lỗi (`ApiError` — kết cục xác định) và KHÔNG có câu
+ * trả lời đọc được (mất phản hồi · hết hạn chờ · 2xx mà thân hỏng schema — server có thể đã ghi). Lời gọi
+ * nào mà khác biệt đó đổi việc phải làm (lượt GHI không idempotent: 029 · 006) thì hỏi `isServerAnswer`
+ * TRƯỚC và dùng reason `outcomeUnknown` cho nhánh sau — xem `moderation-errors`.
+ *
  * Kết quả LUÔN là một reason của tập đóng — `AdminErrorNotice` chỉ nhận reason, không nhận chuỗi, nên
  * `message` của server không có đường nào lên màn hình.
  */
@@ -33,6 +38,10 @@ export const ADMIN_ERROR_REASONS = [
   "forbidden",
   "invalidRequest",
   "busy",
+  // Lượt GHI không có câu trả lời đọc được: chưa rõ server đã ghi hay chưa (KHÔNG phải «không thực hiện được»).
+  "outcomeUnknown",
+  // Lượt ĐỌC danh sách hỏng — câu riêng, để không lẫn với lỗi của một lượt ghi đứng cạnh nó.
+  "loadFailed",
   // 029 — kết thúc báo cáo.
   "reportAlreadyDecided",
   "reportBusy",
@@ -65,8 +74,17 @@ function lookupCode(err: ApiError): string {
   return socialErrorCode(err) ?? err.code;
 }
 
+/**
+ * Server ĐÃ trả lời bằng một lỗi đọc được ⇒ kết cục của yêu cầu là xác định. `false` = không có câu trả
+ * lời đọc được (lỗi mạng · hết hạn chờ · `ZodError` trên thân 2xx · thứ không phải `Error`): với một lượt
+ * GHI, server có thể đã ghi.
+ */
+export function isServerAnswer(err: unknown): err is ApiError {
+  return err instanceof ApiError;
+}
+
 export function adminErrorReason(err: unknown, table: AdminErrorTable): AdminErrorReason {
-  if (!(err instanceof ApiError)) return "generic";
+  if (!isServerAnswer(err)) return "generic";
 
   const code = lookupCode(err);
   // `Object.hasOwn`, KHÔNG `table[code]` trần: `code` đến từ server, và một mã trùng tên thuộc tính của

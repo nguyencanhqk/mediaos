@@ -13,7 +13,10 @@
  * │ 3. Giới hạn của nguồn (server loại bài trong NHÓM khi vắng `groupId`, không trả tổng — plan M4)    │
  * │    LUÔN ghi trên màn, kể cả khi rỗng: «Không có bài nào đang ẩn» mà thiếu câu đó là nói quá.       │
  * │ 4. Dải kết quả của 006 sống ở TAB, không ở hàng: sau khi làm mới, hàng vừa bấm biến mất và mọi thứ │
- * │    mount dưới nó mất theo (plan B6).                                                               │
+ * │    mount dưới nó mất theo (plan B6). Màn (`ModerationPage`) còn giữ state đó CAO hơn tab qua prop  │
+ * │    `noticeState`: tab bị unmount khi đổi tab, mà 006 có thể hỏng SAU đó — xem prop.               │
+ * │    Dải LUÔN vẽ, trừ dải có câu «danh sách đã được làm mới» khi lượt đọc lại đang lỗi                │
+ * │    (`claimsListRefreshed`): lượt ghi đã xong không được trông như vừa hỏng.                        │
  * │ 5. Avatar chỉ vẽ theo TÊN, không truyền `src` (plan D8). Body vẽ như văn bản thuần.                │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
@@ -38,7 +41,11 @@ import { useGuardedMutation } from "../../admin/lib/use-guarded-mutation";
 import { DoneNotice } from "./DoneNotice";
 import { PLACEHOLDER_CLASS, SKELETON_ROWS } from "./list-states";
 import { authorDisplayName, relativeTime } from "../../feed/lib/feed-format";
-import { describeModerationReadError, describeUnhidePostError } from "../lib/moderation-errors";
+import {
+  claimsListRefreshed,
+  describeModerationReadError,
+  describeUnhidePostError,
+} from "../lib/moderation-errors";
 import { invalidatePostSurfaces } from "../lib/moderation-invalidation";
 import { OUTCOME_FOCUS_CLASS, useOutcomeFocus } from "../lib/use-outcome-focus";
 
@@ -47,9 +54,24 @@ type HiddenFeedQuery = Pick<ListFeedQueryDto, "status" | "sort"> &
 type HiddenPostsData = InfiniteData<FeedPostPageDto, string | undefined>;
 
 /** Dải kết quả của lượt 006 gần nhất. `retryPostId` có ⇔ gửi lại NGUYÊN yêu cầu đó có thể thành công. */
-type ActionNotice =
+export type HiddenPostsNotice =
   | { kind: "done" }
   | { kind: "failed"; reason: AdminErrorReason; retryPostId: string | null };
+
+/** Cặp `[giá trị, hàm đặt]` của dải kết quả — đúng hình `React.useState` trả về. */
+export type HiddenPostsNoticeState = readonly [
+  HiddenPostsNotice | null,
+  (next: HiddenPostsNotice | null) => void,
+];
+
+export interface HiddenPostsTabProps {
+  /**
+   * State của dải kết quả do NƠI MOUNT giữ. Màn chỉ mount tấm đang mở: bấm «Hiện lại» rồi sang tab khác
+   * khi yêu cầu còn bay thì `onError` chạy trên một tab ĐÃ unmount — state nằm trong tab là lỗi rơi mất,
+   * quay lại chỉ thấy bài vẫn nằm đó không lời giải thích. Vắng ⇒ tab tự giữ (dùng độc lập).
+   */
+  noticeState?: HiddenPostsNoticeState;
+}
 
 const HIDDEN_FEED_QUERY = { status: "hidden", sort: "latest" } as const;
 
@@ -126,13 +148,16 @@ function HiddenPostRow({ post, isBusy, onUnhide }: HiddenPostRowProps): React.Re
   );
 }
 
-export function HiddenPostsTab(): React.ReactElement | null {
+export function HiddenPostsTab({
+  noticeState,
+}: HiddenPostsTabProps = {}): React.ReactElement | null {
   const { t } = useTranslation("social");
   const queryClient = useQueryClient();
   const canManagePosts = useCan("manage", "feed-post");
-  const [notice, setNotice] = React.useState<ActionNotice | null>(null);
+  const ownNoticeState = React.useState<HiddenPostsNotice | null>(null);
+  const [notice, setNotice] = noticeState ?? ownNoticeState;
   // Hàng vừa «Hiện lại» (hoặc hàng của bài không còn) bị gỡ khi nút của nó đang giữ focus ⇒ đưa focus tới
-  // dải kết quả; dải không được vẽ (lượt đọc đang lỗi) ⇒ tới chính vùng của tab.
+  // dải kết quả; dải không được vẽ (E7 khi lượt đọc lại đang lỗi) ⇒ tới chính vùng của tab.
   const outcomeFocus = useOutcomeFocus<HTMLDivElement, HTMLElement>();
 
   const query = useInfiniteQuery({
@@ -147,7 +172,7 @@ export function HiddenPostsTab(): React.ReactElement | null {
   });
 
   // `useGuardedMutation`: khoá ĐỒNG BỘ (006 không `@Idempotent`; `isPending` tới màn sau một nhịp nên bấm
-  // đúp / Enter giữ phím đều lọt), hỏng ngay khi offline, hết hạn chờ thì rơi vào `generic` + «Thử lại»
+  // đúp / Enter giữ phím đều lọt), hỏng ngay khi offline, hết hạn chờ thì rơi vào `outcomeUnknown` + «Thử lại»
   // thay vì khoá mọi nút «Hiện lại» vô hạn. Khoá nhả sau MỌI kết cục — hành động này lặp lại được.
   // `socialApi.moderatePost` chưa nhận `signal`: hết hạn chỉ nhả màn, yêu cầu treo không bị huỷ; lượt lặp
   // `{ hidden: false }` không đổi gì thêm.
@@ -191,6 +216,8 @@ export function HiddenPostsTab(): React.ReactElement | null {
         <AdminErrorNotice
           reason={reason}
           onRetry={retryable ? () => void query.refetch() : undefined}
+          // Cache đã có dữ liệu ⇒ lỗi CÒN đó suốt lượt đọc lại: khoá nút để «đang thử» ≠ «nút không ăn».
+          isRetrying={query.isFetching}
         />
       );
     }
@@ -245,8 +272,7 @@ export function HiddenPostsTab(): React.ReactElement | null {
     >
       <p className="text-xs text-muted-foreground">{t("admin.moderation.hidden.limitNote")}</p>
 
-      {/* Lượt đọc đang LỖI ⇒ không vẽ dải của 006: «danh sách đã được làm mới» cạnh «không tải được». */}
-      {notice !== null && !query.isError && (
+      {notice !== null && !isNoticeContradictedByReadError(notice, query.isError) && (
         <div ref={outcomeFocus.noticeRef} tabIndex={-1} className={OUTCOME_FOCUS_CLASS}>
           <ActionNoticeBar
             notice={notice}
@@ -261,8 +287,16 @@ export function HiddenPostsTab(): React.ReactElement | null {
   );
 }
 
+/**
+ * Lượt đọc đang LỖI mà câu của dải nói «danh sách đã được làm mới» (E7) ⇒ hai điều trái nhau, không vẽ;
+ * thử lại xong thì dải hiện lại. Dải thành công và mọi dải lỗi khác LUÔN vẽ.
+ */
+function isNoticeContradictedByReadError(notice: HiddenPostsNotice, isReadError: boolean): boolean {
+  return isReadError && notice.kind === "failed" && claimsListRefreshed(notice.reason);
+}
+
 interface ActionNoticeBarProps {
-  notice: ActionNotice;
+  notice: HiddenPostsNotice;
   onRetry: (postId: string) => void;
   onDismiss: () => void;
 }

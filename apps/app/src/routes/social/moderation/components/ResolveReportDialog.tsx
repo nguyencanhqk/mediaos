@@ -33,9 +33,10 @@
  * │    nhận thêm `onClose`.                                                                          │
  * │                                                                                                  │
  * │ MỘT CALLBACK GIỮA CHỪNG — không kết thúc lượt mở                                                  │
- * │  · `onStale()` — một lỗi GIỮ hộp thoại vừa chứng minh hàng đợi đang thấy đã cũ (E5: đích không còn│
- * │    thao tác được). TRANG invalidate `reports.lists()`; hộp thoại vẫn mở, nháp còn nguyên (hộp     │
- * │    thoại giữ bản `report` trang đã truyền, refetch không đụng tới nó).                            │
+ * │  · `onStale(scope)` — một lỗi GIỮ hộp thoại cho thấy thứ đang thấy đã / có thể đã cũ. E5 (đích    │
+ * │    không còn thao tác được): TRANG invalidate `reports.lists()`. `outcomeUnknown` (không có câu    │
+ * │    trả lời đọc được — server có thể ĐÃ ghi, kể cả ẩn / xoá bài): `scope.invalidatePosts` ⇒ THÊM   │
+ * │    bộ khoá bài. Hộp thoại vẫn mở, nháp còn nguyên (nó giữ bản `report` trang đã truyền).          │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Cổng: ô «Hành động kèm» ⇔ quyết định «Giải quyết» && `useCan("manage", "feed-post")` — cặp THÊM mà
@@ -47,7 +48,7 @@
  *
  * 029 KHÔNG idempotent ở server: bấm đúp sinh 409 `SOCIAL-ERR-021` («đã được xử lý») cho chính lượt của
  * mình ⇒ nút gửi khoá khi đang gửi (plan D20 · B23), và lượt ghi đi qua `useGuardedMutation`: khoá đồng bộ
- * cho khoảng trước khi nút kịp khoá, hỏng ngay khi offline, hết hạn chờ thì rơi vào E11 thay vì treo.
+ * cho khoảng trước khi nút kịp khoá, hỏng ngay khi offline, hết hạn chờ thì rơi vào `outcomeUnknown` thay vì treo.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -95,6 +96,11 @@ export type ResolveReportOutcome =
       invalidatePosts: boolean;
     };
 
+/** Phạm vi phải làm mới khi một lỗi GIỮ hộp thoại báo `onStale`. */
+export interface ResolveReportStaleScope {
+  invalidatePosts: boolean;
+}
+
 export interface ResolveReportDialogProps {
   /** Báo cáo ĐANG MỞ cần kết thúc. Trang mount hộp thoại với `key={report.id}`. */
   report: FeedReportDto;
@@ -102,8 +108,11 @@ export interface ResolveReportDialogProps {
   onClose: () => void;
   /** 029 đã có kết cục cuối — trang unmount hộp thoại, invalidate và vẽ dải (nếu `failed`). */
   onOutcome: (outcome: ResolveReportOutcome) => void;
-  /** Hàng đợi đang thấy đã cũ nhưng hộp thoại CÒN mở — trang invalidate `reports.lists()`. */
-  onStale: () => void;
+  /**
+   * Thứ đang thấy đã (hoặc có thể đã) cũ nhưng hộp thoại CÒN mở — trang invalidate `reports.lists()`;
+   * `invalidatePosts` ⇒ THÊM bộ khoá bài của nhánh `done` có hành động kèm.
+   */
+  onStale: (scope: ResolveReportStaleScope) => void;
 }
 
 interface ResolveVariables {
@@ -159,7 +168,7 @@ export function ResolveReportDialog({
         setIsDeleteConfirmed(false);
       }
       if (reason === "reportTargetUnavailable") setIsTargetUnavailable(true);
-      if (invalidate) onStale();
+      if (invalidate) onStale({ invalidatePosts });
       setError({ reason, retryable });
     },
   });

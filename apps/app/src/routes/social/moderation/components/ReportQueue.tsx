@@ -8,6 +8,8 @@
  *   1. `error`            ⇒ dải lỗi, KHÔNG vẽ trang cũ — hàng đợi kiểm duyệt cũ mà trông như mới là mời
  *                           người ta xử lý một báo cáo đã đổi trạng thái. 403 ⇒ chữ của FE, không nút
  *                           «Thử lại» (`describeModerationReadError`); `message` của server không được vẽ.
+ *                           Cache đã có dữ liệu thì lỗi CÒN đó suốt lượt đọc lại ⇒ «Thử lại» khoá theo
+ *                           `isFetching`.
  *   2. chưa có `page`     ⇒ skeleton.
  *   3. trang rỗng, `total > 0` ⇒ `page` trên URL đã quá trang cuối (hàng vừa được xử lý, hoặc URL gõ
  *                           tay) ⇒ nút «Về trang 1». KHÔNG dùng câu rỗng: hàng đợi KHÔNG rỗng.
@@ -36,7 +38,7 @@ export interface ReportQueueProps {
   page: FeedReportPageDto | undefined;
   /** Lượt tải ĐẦU (chưa có dữ liệu nào). */
   isLoading: boolean;
-  /** Đang tải nền (đổi trang/bộ lọc) ⇒ khoá bộ chuyển trang. */
+  /** Đang tải nền (đổi trang/bộ lọc · đọc lại sau lỗi) ⇒ khoá bộ chuyển trang và nút «Thử lại» của dải lỗi. */
   isFetching?: boolean;
   /** Lỗi của lượt đọc gần nhất; không lỗi ⇒ `null`. */
   error: unknown;
@@ -63,7 +65,13 @@ export function ReportQueue({
 
   if (error !== null && error !== undefined) {
     const { reason, retryable } = describeModerationReadError(error);
-    return <AdminErrorNotice reason={reason} onRetry={retryable ? onRetry : undefined} />;
+    return (
+      <AdminErrorNotice
+        reason={reason}
+        onRetry={retryable ? onRetry : undefined}
+        isRetrying={isFetching}
+      />
+    );
   }
 
   if (isLoading || page === undefined) {
