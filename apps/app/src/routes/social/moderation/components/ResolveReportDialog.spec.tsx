@@ -9,7 +9,7 @@
  * - «0 lời gọi» của một cú bấm bị chặn đo bằng TỔNG lời gọi sau khi vế ALLOW cùng ca đã xong (đúng 1, đúng
  *   body của vế ALLOW) — `mutationFn` chạy trễ vài nhịp microtask nên đếm ngay sau cú bấm thì luôn bằng 0.
  */
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FEED_NOTE_MAX,
@@ -351,6 +351,23 @@ describe("DC1 — 029 không idempotent: bấm đúp chỉ gửi MỘT lần", (
     expect(resolveReport).toHaveBeenCalledTimes(1);
     expect(submitButton()).toBeDisabled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // `isPending` tới màn sau một nhịp của react-query ⇒ giữa hai kích hoạt sát nhau nút CHƯA `disabled`.
+  it("hai kích hoạt LIỀN NHAU trước khi màn kịp vẽ lại ⇒ vẫn chỉ MỘT lời gọi", async () => {
+    resolveReport.mockImplementation(() => new Promise<never>(() => undefined));
+    renderDialog();
+    pick(DISMISSED);
+
+    clickSubmit();
+    clickSubmit();
+
+    await waitFor(() => expect(submitButton()).toBeDisabled());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(resolveReport).toHaveBeenCalledTimes(1);
+    expect(sentBody()).toEqual({ status: "dismissed" });
   });
 
   // Nút «Huỷ» tự khoá khi đang gửi nên không tới được lưới trong `close()`; Esc và bấm ra ngoài thì tới.

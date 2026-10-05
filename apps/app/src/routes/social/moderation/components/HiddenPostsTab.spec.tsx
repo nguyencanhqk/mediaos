@@ -22,6 +22,7 @@ import {
 } from "../../feed/social-test-doubles";
 import {
   ADMIN_ERR,
+  AUTHOR_EMPLOYEE_ID,
   HIDDEN_POST_ID,
   makeHiddenPost,
   makeHiddenPostPage,
@@ -110,9 +111,29 @@ const KEY = {
   feedList: socialKeys.feed.list({ sort: "latest" }),
   postDetail: socialKeys.posts.detail(HIDDEN_POST_ID),
   otherPostDetail: socialKeys.posts.detail(SECOND_POST_ID),
+  // Mọi bề mặt KHÁC đang vẽ bài (rail của khung portal mount tin nổi bật · bình chọn · vinh danh cạnh tab).
+  newsHighlight: socialKeys.news.list({ highlight: true }),
+  pollsList: socialKeys.polls.list({ page: 1 }),
+  ideasList: socialKeys.ideas.list({ page: 1 }),
+  kudosList: socialKeys.kudos.list({ month: "2026-10" }),
+  saved: socialKeys.saved(),
+  profilePosts: socialKeys.profilePosts(AUTHOR_EMPLOYEE_ID, { sort: "latest" }),
+  search: socialKeys.search({ q: "tin" }),
+  // Đối chứng: không phải danh sách bài.
+  kudosBadges: socialKeys.kudos.badges(),
   birthdays: socialKeys.birthdays({ range: "week" }),
 };
 type SeededKey = keyof typeof KEY;
+
+const OTHER_POST_SURFACES: readonly SeededKey[] = [
+  "newsHighlight",
+  "pollsList",
+  "ideasList",
+  "kudosList",
+  "saved",
+  "profilePosts",
+  "search",
+];
 
 function renderTab(client: QueryClient = makeTestQueryClient()) {
   Object.values(KEY).forEach((key) => client.setQueryData(key, { seeded: true }));
@@ -249,8 +270,13 @@ describe("UH1 — «Hiện lại»", () => {
     expect(screen.getByText("Bài thứ hai đang ẩn")).toBeInTheDocument();
     expect(invalidated("feedList")).toBe(true);
     expect(invalidated("postDetail")).toBe(true);
+    // Bài vừa hiện lại phải xuất hiện ở MỌI bề mặt đang vẽ bài, không chỉ dòng cuộn.
+    expect(OTHER_POST_SURFACES.map((key) => [key, invalidated(key)])).toEqual(
+      OTHER_POST_SURFACES.map((key) => [key, true]),
+    );
     // Đối chứng: không quét sạch cache.
     expect(invalidated("otherPostDetail")).toBe(false);
+    expect(invalidated("kudosBadges")).toBe(false);
     expect(invalidated("birthdays")).toBe(false);
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -263,13 +289,19 @@ describe("DC1 — bấm đúp «Hiện lại»", () => {
     renderTab();
     await list();
 
+    // Ba kích hoạt TRƯỚC khi `isPending` tới màn (react-query báo sau một nhịp): nút chưa `disabled`, chỉ cờ
+    // đồng bộ trong handler chặn được — kể cả cú bấm sang hàng KHÁC.
     fireEvent.click(unhideButtons()[0] as HTMLElement);
-    // `isPending` tới màn sau một nhịp thông báo của react-query — chờ nút khoá rồi mới bấm lần hai.
-    await waitFor(() => expect(unhideButtons()[0]).toBeDisabled());
     fireEvent.click(unhideButtons()[0] as HTMLElement);
     fireEvent.click(unhideButtons()[1] as HTMLElement);
+    await waitFor(() => expect(unhideButtons()[0]).toBeDisabled());
+    // …và sau khi nút đã khoá.
+    fireEvent.click(unhideButtons()[0] as HTMLElement);
+    fireEvent.click(unhideButtons()[1] as HTMLElement);
+    await settle();
 
     expect(moderatePost).toHaveBeenCalledTimes(1);
+    expect(moderatePost.mock.calls[0]).toEqual([HIDDEN_POST_ID, { hidden: false }]);
     expect(unhideButtons()[1]).toBeDisabled();
   });
 });
@@ -444,9 +476,12 @@ describe("Lỗi của 006 «Hiện lại»", () => {
     expect(await screen.findByText(EMPTY)).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveAttribute("data-reason", "postGone");
     expect(document.body).not.toHaveTextContent(error.message);
-    // Bài không được hiện lại ⇒ dòng feed và chi tiết bài KHÔNG bị làm mới.
+    // Bài không được hiện lại ⇒ dòng feed, chi tiết bài và các bề mặt bài khác KHÔNG bị làm mới.
     expect(invalidated("feedList")).toBe(false);
     expect(invalidated("postDetail")).toBe(false);
+    expect(OTHER_POST_SURFACES.map((key) => [key, invalidated(key)])).toEqual(
+      OTHER_POST_SURFACES.map((key) => [key, false]),
+    );
   });
 
   it("E9: 403 ⇒ `forbidden` bằng chữ của FE, KHÔNG «Thử lại», KHÔNG làm mới gì; hàng còn", async () => {

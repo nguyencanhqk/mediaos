@@ -11,7 +11,7 @@
  * «0 lời gọi lại» (E9 · lỗi giữ hộp thoại) đứng cạnh ca ALLOW cùng khung (E1) — nơi cùng spy đó lên 2.
  */
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryClient } from "@tanstack/react-query";
 import { socialKeys } from "@mediaos/web-core";
@@ -24,6 +24,7 @@ import {
 } from "../feed/social-test-doubles";
 import {
   ADMIN_ERR,
+  AUTHOR_EMPLOYEE_ID,
   makeReport,
   makeReportPage,
   REPORTED_POST_ID,
@@ -94,9 +95,36 @@ const KEY = {
   postDetail: socialKeys.posts.detail(REPORTED_POST_ID),
   postComments: socialKeys.posts.comments(REPORTED_POST_ID),
   commentAsPostDetail: socialKeys.posts.detail(COMMENT_ID),
+  // Mọi bề mặt KHÁC đang vẽ bài: rail của khung portal luôn mount tin nổi bật · bình chọn · vinh danh
+  // ngay cạnh hàng đợi, và observer đang mount không tự đọc lại (`refetchOnWindowFocus` tắt).
+  newsHighlight: socialKeys.news.list({ highlight: true }),
+  pollsList: socialKeys.polls.list({ page: 1 }),
+  ideasList: socialKeys.ideas.list({ page: 1 }),
+  kudosList: socialKeys.kudos.list({ month: "2026-10" }),
+  saved: socialKeys.saved(),
+  profilePosts: socialKeys.profilePosts(AUTHOR_EMPLOYEE_ID, { sort: "latest" }),
+  search: socialKeys.search({ q: "tin" }),
+  // Đối chứng: không phải danh sách bài.
+  kudosBadges: socialKeys.kudos.badges(),
   birthdays: socialKeys.birthdays({ range: "week" }),
 };
 type SeededKey = keyof typeof KEY;
+
+const OTHER_POST_SURFACES: readonly SeededKey[] = [
+  "newsHighlight",
+  "pollsList",
+  "ideasList",
+  "kudosList",
+  "saved",
+  "profilePosts",
+  "search",
+];
+
+/** Một nhịp macrotask: mọi `mutationFn` đã xếp hàng đều đã chạy — dùng trước khi đếm «đúng 1 lời gọi». */
+const settle = (): Promise<void> =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 
 function seededClient(): QueryClient {
   const client = makeTestQueryClient();
@@ -165,9 +193,36 @@ describe("Thành công — trang invalidate đúng phạm vi", () => {
     expect(invalidated("postDetail")).toBe(false);
     expect(invalidated("postComments")).toBe(false);
     expect(invalidated("birthdays")).toBe(false);
+    // Không bài nào đổi ⇒ không bề mặt bài nào bị làm mới (vế DENY của ca «mọi bề mặt» bên dưới).
+    expect(OTHER_POST_SURFACES.map((key) => [key, invalidated(key)])).toEqual(
+      OTHER_POST_SURFACES.map((key) => [key, false]),
+    );
     expect(screen.getByRole("status")).toHaveTextContent(DONE_DISMISSED);
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it.each(["Ẩn bài", "Xoá bài"])(
+    "hành động kèm «%s» ⇒ MỌI bề mặt đang vẽ bài đều `isInvalidated` (tin · bình chọn · sáng kiến · vinh danh · đã lưu · trang cá nhân · tìm kiếm); catalog huy hiệu + sinh nhật thì KHÔNG",
+    async (actionLabel) => {
+      resolveReport.mockImplementation(() => Promise.resolve(makeReport({ status: "resolved" })));
+      const { invalidated } = await renderPage();
+
+      openDialog();
+      pick(RESOLVED);
+      pick(actionLabel);
+      const confirm = screen.queryByRole("checkbox");
+      if (confirm !== null) fireEvent.click(confirm);
+      clickSubmit();
+
+      await dialogGone();
+      expect(invalidated("feedList")).toBe(true);
+      expect(OTHER_POST_SURFACES.map((key) => [key, invalidated(key)])).toEqual(
+        OTHER_POST_SURFACES.map((key) => [key, true]),
+      );
+      expect(invalidated("kudosBadges")).toBe(false);
+      expect(invalidated("birthdays")).toBe(false);
+    },
+  );
 
   it("R3 — sau `delete_target` (bài): báo cáo · bài đang ẩn · feed · chi tiết bài đều `isInvalidated`; sinh nhật thì KHÔNG", async () => {
     resolveReport.mockImplementation(() => Promise.resolve(makeReport({ status: "resolved" })));
@@ -413,17 +468,19 @@ describe("Lỗi GIỮ hộp thoại — trang không vẽ dải, không làm m�
 });
 
 describe("DC1 — bấm đúp 029 từ màn", () => {
-  it("promise treo: bấm «Xác nhận» 2 lần ⇒ `resolveReport` 1 lần, nút khoá, hộp thoại còn", async () => {
+  it("promise treo: bấm «Xác nhận» 2 lần LIỀN NHAU (màn chưa kịp vẽ lại) rồi 1 lần sau khi nút khoá ⇒ `resolveReport` 1 lần, nút khoá, hộp thoại còn", async () => {
     resolveReport.mockImplementation(() => new Promise(() => undefined));
     await renderPage();
 
     openDialog();
     pick(DISMISSED);
+    // Hai kích hoạt TRƯỚC khi `isPending` tới màn (react-query báo sau một nhịp): nút chưa `disabled`, chỉ
+    // cờ đồng bộ trong handler chặn được lượt hai. Lọt ⇒ lượt hai nhận 409 `021` cho chính mình (plan B23).
     clickSubmit();
-    // Cùng khuôn ca DC1 của hộp thoại: `isPending` tới màn sau một nhịp thông báo của react-query — chờ nút
-    // khoá rồi mới bấm lần hai (hai sự kiện click THẬT của một cú bấm đúp cách nhau hàng chục ms).
+    clickSubmit();
     await waitFor(() => expect(screen.getByRole("button", { name: SUBMIT })).toBeDisabled());
     clickSubmit();
+    await settle();
 
     expect(resolveReport).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: SUBMIT })).toBeDisabled();
