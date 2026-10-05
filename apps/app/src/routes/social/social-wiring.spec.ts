@@ -321,6 +321,24 @@ describe("W3 — `router.tsx` nối ĐÚNG meta và lắp route vào cây (đọ
     expect(body).toContain("validateSearch: validateModerationRouteSearch,");
   });
 
+  it("hằng lazy `ModerationPage` nạp ĐÚNG module của màn Kiểm duyệt (không phải màn khác đội tên)", () => {
+    /**
+     * `<ModerationPage />` trong khối route chỉ là TÊN HẰNG: hằng đó `React.lazy` nạp module nào là
+     * literal thứ ba, rời hai literal kia. Nạp nhầm `groups/GroupsPage` thì `/feed/moderation` vẽ màn
+     * Nhóm sau đúng cổng của màn Kiểm duyệt — kiểu hợp lệ nên tsc không thấy, và ca cổng G1 import thẳng
+     * component nên cũng không thấy (kiểm toán nhóm C, AUD-C-01).
+     */
+    const lazyBody =
+      /const ModerationPage = React\.lazy\(\(\) =>\n([\s\S]*?)\n\);/.exec(routerSrc)?.[1] ?? "";
+    expect(lazyBody, "không đọc được khối `const ModerationPage = React.lazy(…)`").not.toBe("");
+    expect(lazyBody).toContain('import("@/routes/social/moderation/ModerationPage")');
+    expect(lazyBody).toContain("default: m.ModerationPage,");
+    // Đối chứng cho phép đo: cùng regex đọc khối của màn Nhóm ra đúng module của nó.
+    const groupsBody =
+      /const GroupsPage = React\.lazy\(\(\) =>\n([\s\S]*?)\n\);/.exec(routerSrc)?.[1] ?? "";
+    expect(groupsBody).toContain('import("@/routes/social/groups/GroupsPage")');
+  });
+
   it("route `/feed/moderation` CÓ trong `rootRoute.addChildren([…])`", () => {
     const name = blocksWith('path: "/feed/moderation",')[0]?.name ?? "";
     expect(inTree(name), `route '${name}' chưa được lắp vào cây`).toBe(true);

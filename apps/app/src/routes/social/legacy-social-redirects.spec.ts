@@ -60,6 +60,33 @@ describe("N1 — chuyển hướng link NOTI cũ", () => {
     expect(opts.replace).toBe(true);
   });
 
+  it.each(WITH_PARAM)(
+    "CÓ tham số — $path mà router không trao tham số ⇒ vẫn chuyển hướng, tham số là chuỗi rỗng (không `undefined`)",
+    (entry) => {
+      const opts = redirectThrownBy(entry, {});
+      expect(opts.to).toBe(entry.to);
+      expect(opts.params).toEqual({ [entry.param]: "" });
+      expect(opts.replace).toBe(true);
+    },
+  );
+
+  it("`kind` lạ lọt qua kiểu (dữ liệu ép kiểu) ⇒ NÉM lỗi có tên file, không lặng lẽ chuyển hướng bừa", () => {
+    const alien = {
+      kind: "comment",
+      path: "/social/x",
+      to: "/feed",
+    } as unknown as LegacySocialRedirect;
+    let thrown: unknown;
+    try {
+      legacyRedirectBeforeLoad(alien)({ params: {} });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(isRedirect(thrown)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toContain("[legacy-social-redirects] kind chưa xử lý");
+  });
+
   it("KHÔNG tham số — `/social/reports` ⇒ `/feed/moderation`, replace, không mang `params`", () => {
     const opts = redirectThrownBy(LEGACY_SOCIAL_REPORTS_REDIRECT, {});
     expect(opts.to).toBe("/feed/moderation");

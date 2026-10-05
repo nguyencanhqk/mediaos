@@ -310,6 +310,50 @@ describe("P3 — lỗi 027: hộp thoại CÒN, nội dung còn", () => {
   });
 });
 
+describe("lưới cuối trước khi lên dây + đóng dải lỗi (kiểm toán nhóm C, AUD-C-02)", () => {
+  const DISMISS = "Đóng thông báo";
+
+  it("`targetId` KHÔNG phải UUID (nơi mount truyền sai) ⇒ `invalidRequest`, 0 lời gọi, không mời «Thử lại»", async () => {
+    const onClose = vi.fn();
+    renderWithProviders(
+      <ReportDialog targetType="post" targetId="khong-phai-uuid" onClose={onClose} />,
+    );
+    pick("Spam hoặc quảng cáo");
+    typeNote("ghi chú giữ lại");
+    clickSubmit();
+
+    expect(alertReason()).toBe("invalidRequest");
+    expect(within(dialog()).queryByRole("button", { name: RETRY })).toBeNull();
+    // Cho react-query một nhịp: lời gọi (nếu lưới thủng) chạy SAU cú bấm, không cùng nhịp.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(createReport).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(noteBox()).toHaveValue("ghi chú giữ lại");
+  });
+
+  it("đóng dải lỗi ⇒ dải biến mất; hộp thoại còn, nháp còn nguyên, gửi lại được với CÙNG `attemptId`", async () => {
+    createReport.mockRejectedValueOnce(ADMIN_ERR.server());
+    const { onClose } = renderDialog();
+    pick("Thông tin sai lệch");
+    typeNote("nháp của tôi");
+    clickSubmit();
+    await waitFor(() => expect(alertReason()).toBe("generic"));
+
+    fireEvent.click(within(dialog()).getByRole("button", { name: DISMISS }));
+    expect(within(dialog()).queryByRole("alert")).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(radio("Thông tin sai lệch")).toBeChecked();
+    expect(noteBox()).toHaveValue("nháp của tôi");
+    expect(createReport).toHaveBeenCalledTimes(1);
+
+    await submitAndWait(2);
+    expect(sentAttemptId(1)).toBe(sentAttemptId(0));
+  });
+});
+
 describe("`attemptId` — một lượt MOUNT một giá trị (plan D20 · B22)", () => {
   it("unmount rồi mount lại, gửi CÙNG body ⇒ `attemptId` KHÁC lượt trước và khác rỗng", async () => {
     const first = renderDialog();

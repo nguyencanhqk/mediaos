@@ -147,6 +147,41 @@ describe("P1 — bấm «Báo cáo» mở hộp thoại cho ĐÚNG bài đó", (
     expect(screen.getByRole("radio", { name: "Lý do khác" })).not.toBeChecked();
   });
 
+  // Mục menu vừa bấm bị gỡ cùng nhịp hộp thoại mở ⇒ `Dialog` không còn «phần tử kích hoạt» nào để trả
+  // focus; không ai trả thì người dùng bàn phím rơi về đầu trang (kiểm toán nhóm C, AUD-C-05).
+  it.each([
+    { name: "«Huỷ»", close: () => fireEvent.click(screen.getByRole("button", { name: CANCEL })) },
+    { name: "Esc", close: () => fireEvent.keyDown(document, { key: "Escape" }) },
+  ])("đóng hộp thoại bằng $name ⇒ focus trở về nút ⋯ của ĐÚNG thẻ bài đó", ({ close }) => {
+    renderWithProviders(
+      <PostCardMenu post={makePost({ id: POST_ID, isMine: false })} actions={makeActions()} />,
+    );
+    const trigger = screen.getByRole("button", { name: TRIGGER });
+    fireEvent.click(within(openMenu()).getByRole("menuitem", { name: REPORT }));
+    // Đang mở: focus nằm TRONG hộp thoại, không ở nút ⋯.
+    expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
+
+    close();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("gửi xong rồi «Đóng» ⇒ focus trở về nút ⋯ (hộp thoại đã mount lại sang câu xác nhận)", async () => {
+    renderWithProviders(
+      <PostCardMenu post={makePost({ id: POST_ID, isMine: false })} actions={makeActions()} />,
+    );
+    const trigger = screen.getByRole("button", { name: TRIGGER });
+    fireEvent.click(within(openMenu()).getByRole("menuitem", { name: REPORT }));
+    fireEvent.click(screen.getByRole("radio", { name: "Spam hoặc quảng cáo" }));
+    fireEvent.click(screen.getByRole("button", { name: SUBMIT }));
+
+    const closeButton = await screen.findByRole("button", { name: CLOSE });
+    expect(closeButton).toHaveFocus();
+    fireEvent.click(closeButton);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
   it("gửi xong, đóng, mở lại và gửi CÙNG nội dung ⇒ `attemptId` MỚI (không phát lại phản hồi cũ)", async () => {
     renderWithProviders(
       <PostCardMenu post={makePost({ id: POST_ID, isMine: false })} actions={makeActions()} />,
