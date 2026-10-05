@@ -98,10 +98,18 @@ export const routeSearchDouble = {
     routeSearchValue = next;
     routeSearchListeners.forEach((listener) => listener());
   },
-  /** Thế chỗ hàm `navigate` của router: chỉ áp `search` (object), bỏ qua `to`. */
-  navigate(options: { search?: unknown }): void {
-    const next = options.search;
+  /**
+   * Thế chỗ hàm `navigate` của router: chỉ áp `search`, bỏ qua `to`. Như router thật, `search` là object
+   * HOẶC hàm nhận search hiện tại. Trả search ĐÃ ÁP để spec ghi lại mà không phải tự gọi hàm đó.
+   */
+  navigate(options: { search?: unknown }): RouteSearchValue {
+    const raw: unknown = options.search;
+    const next: unknown =
+      typeof raw === "function"
+        ? (raw as (current: RouteSearchValue) => unknown)(routeSearchValue)
+        : raw;
     routeSearchDouble.set(typeof next === "object" && next !== null ? { ...next } : {});
+    return routeSearchValue;
   },
   reset(): void {
     routeSearchDouble.set({});

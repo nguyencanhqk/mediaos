@@ -385,9 +385,12 @@ describe("DC1 — bấm đúp 029 từ màn", () => {
     openDialog();
     pick(DISMISSED);
     clickSubmit();
+    // Cùng khuôn ca DC1 của hộp thoại: `isPending` tới màn sau một nhịp thông báo của react-query — chờ nút
+    // khoá rồi mới bấm lần hai (hai sự kiện click THẬT của một cú bấm đúp cách nhau hàng chục ms).
+    await waitFor(() => expect(screen.getByRole("button", { name: SUBMIT })).toBeDisabled());
     clickSubmit();
 
-    await waitFor(() => expect(resolveReport).toHaveBeenCalledTimes(1));
+    expect(resolveReport).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: SUBMIT })).toBeDisabled();
     expect(screen.getByRole("dialog", { name: DIALOG })).toBeInTheDocument();
     expect(listReports).toHaveBeenCalledTimes(1);

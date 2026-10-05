@@ -57,6 +57,27 @@ export default {
   },
   // ── Kiểm duyệt `SOC-SCREEN-010` ──
   moderation: {
+    /**
+     * Khung của màn — `ModerationPage`.
+     *
+     * `filter.*`: khoá = đúng một phần tử của `MODERATION_STATUS_FILTERS`. `outcome.*`: câu xác nhận sau
+     * khi 029 THÀNH CÔNG, khoá = trạng thái server trả (báo cáo vừa xử lý thường biến mất khỏi bộ lọc
+     * «Đang chờ xử lý» — không có câu này thì người kiểm duyệt không biết lượt ghi đã ăn).
+     */
+    page: {
+      title: "Kiểm duyệt",
+      filterLabel: "Trạng thái báo cáo",
+      filter: {
+        open: "Đang chờ xử lý",
+        resolved: "Đã giải quyết",
+        dismissed: "Đã bỏ qua",
+        all: "Tất cả",
+      },
+      outcome: {
+        resolved: "Đã giải quyết báo cáo.",
+        dismissed: "Đã bỏ qua báo cáo.",
+      },
+    },
     /** Hàng đợi báo cáo (028) — `ReportQueue`. Bốn câu rỗng KHÁC nhau: mỗi bộ lọc trả lời một câu hỏi riêng. */
     queue: {
       listAria: "Danh sách báo cáo vi phạm",

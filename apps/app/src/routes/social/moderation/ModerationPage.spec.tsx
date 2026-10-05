@@ -45,8 +45,8 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     ...actual,
     Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
     useNavigate: () => (options: { search?: unknown }) => {
-      navigateSpy(options);
-      doubles.routeSearchDouble.navigate(options);
+      // Ghi lại search ĐÃ ÁP (router nhận cả object lẫn hàm) — ca đọc `lastNavigation().search`.
+      navigateSpy({ ...options, search: doubles.routeSearchDouble.navigate(options) });
     },
     useSearch: () => doubles.useRouteSearchDouble(),
   };
@@ -143,7 +143,8 @@ describe("FL1 — lọc trạng thái", () => {
     await waitFor(() => expect(listReports).toHaveBeenCalledTimes(2));
     expect(Object.keys(lastListArg() as object).sort()).toEqual(["limit", "page"]);
     expect(lastListArg()).toStrictEqual({ page: 1, limit: 20 });
-    expect(lastNavigation().to).toBe("/feed/moderation");
+    // Ở lại chính route đang mount màn — màn không tự chép đường dẫn của mình.
+    expect(lastNavigation().to).toBe(".");
     expect(lastNavigation().search?.status).toBe("all");
     expect(filterSelect().value).toBe("all");
   });
