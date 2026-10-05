@@ -88,6 +88,16 @@ const alertReason = (): string | null =>
 const sentBody = (call = 0): unknown => createReport.mock.calls[call]?.[0];
 const sentAttemptId = (call = 0): unknown => createReport.mock.calls[call]?.[1];
 
+/**
+ * Chờ câu xác nhận TRƯỚC rồi mới tìm hộp thoại: sang trạng thái «đã gửi» hộp thoại được mount lại (phần tử
+ * DOM mới), nên `within(<hộp thoại lấy từ trước>)` sẽ tìm trong một nút đã rời khỏi cây.
+ */
+async function findSentStatus(): Promise<HTMLElement> {
+  const status = await screen.findByRole("status");
+  expect(dialog()).toContainElement(status);
+  return status;
+}
+
 async function submitAndWait(calls = 1): Promise<void> {
   clickSubmit();
   await waitFor(() => expect(createReport).toHaveBeenCalledTimes(calls));
@@ -186,11 +196,13 @@ describe("P2 — luật gửi + kết cục thành công", () => {
     pick("Thông tin sai lệch");
     clickSubmit();
 
-    const status = await within(dialog()).findByRole("status");
+    const status = await findSentStatus();
     expect(status).toHaveTextContent(SENT);
     expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByRole("button", { name: SUBMIT })).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
+    // Nút đang giữ focus vừa biến mất — focus phải ở lại TRONG hộp thoại, không rơi ra `body`.
+    expect(screen.getByRole("button", { name: CLOSE })).toHaveFocus();
 
     fireEvent.click(screen.getByRole("button", { name: CLOSE }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -207,7 +219,7 @@ describe("P2 — luật gửi + kết cục thành công", () => {
     pick("Spam hoặc quảng cáo");
     clickSubmit();
 
-    await within(dialog()).findByRole("status");
+    await findSentStatus();
     expect(client.getQueryState(feedKey)?.isInvalidated).toBe(false);
     expect(client.getQueryState(detailKey)?.isInvalidated).toBe(false);
   });
@@ -267,7 +279,7 @@ describe("P3 — lỗi 027: hộp thoại CÒN, nội dung còn", () => {
     expect(String(sentAttemptId(0)).length).toBeGreaterThan(0);
     expect(sentAttemptId(1)).toBe(sentAttemptId(0));
 
-    await within(dialog()).findByRole("status");
+    await findSentStatus();
     expect(within(dialog()).queryByRole("alert")).toBeNull();
   });
 
@@ -377,7 +389,7 @@ describe("DC2 — bấm đúp 027 chỉ gửi MỘT lần", () => {
     clickSubmit();
     fireEvent.keyDown(document, { key: "Escape" });
 
-    await within(dialog()).findByRole("status");
+    await findSentStatus();
     expect(onClose).not.toHaveBeenCalled();
     expect(createReport).toHaveBeenCalledTimes(1);
   });

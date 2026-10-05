@@ -54,6 +54,28 @@ export default {
       misinformation: "Thông tin sai lệch",
       other: "Lý do khác",
     },
+    /** Nhãn của lối vào hộp thoại — mục menu ⋯ của thẻ bài (L3); nút ở bình luận dùng lại (L8). */
+    trigger: "Báo cáo",
+    /**
+     * Hộp thoại soạn báo cáo (027) — `ReportDialog`.
+     *
+     * ⚠️ `warning` LUÔN hiện từ lúc mở (SOC-DEC-011): server che TÊN người báo cáo với người đọc hẹp hơn
+     * phạm vi công ty, nhưng trả NGUYÊN VĂN ghi chú cho mọi người đọc được hàng đợi — người báo cáo có
+     * thể tự lộ qua chính chữ mình viết. Đừng rút gọn thành lời hứa «báo cáo ẩn danh»: người kiểm duyệt
+     * cấp công ty vẫn thấy tên.
+     */
+    dialog: {
+      title: { post: "Báo cáo bài viết", comment: "Báo cáo bình luận" },
+      reasonLabel: "Lý do báo cáo",
+      noteLabel: "Ghi chú thêm (không bắt buộc)",
+      noteHint: "Tối đa {{max}} ký tự.",
+      warning:
+        "Người kiểm duyệt cấp công ty thấy tên người báo cáo; quản lý đơn vị thì không. Ghi chú của bạn được hiển thị nguyên văn cho mọi người kiểm duyệt, kể cả quản lý đơn vị — đừng viết điều có thể tự làm lộ danh tính của bạn.",
+      cancel: "Huỷ",
+      submit: "Gửi báo cáo",
+      sent: "Đã gửi báo cáo. Người kiểm duyệt sẽ xem xét nội dung này.",
+      close: "Đóng",
+    },
   },
   // ── Kiểm duyệt `SOC-SCREEN-010` ──
   moderation: {

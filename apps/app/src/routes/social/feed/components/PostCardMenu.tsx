@@ -15,9 +15,13 @@
  * │                                `chk_feed_posts_pinned_news`; bài khác ⇒ 422 PIN-NEWS-ONLY).     │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * ⚠️ **«Báo cáo» CỐ Ý VẮNG.** Owner ký 23/09/2026 (plan §5.2 · N8): nút + hộp thoại soạn + cảnh báo
- * tự-lộ-danh-tính của SOC-DEC-011 đi **cùng một lượt** ở `S16-SOCIAL-FE-3`. Ship nút mà thiếu cảnh
- * báo là đúng cái hại mà spec đã lường trước — đừng "tiện tay thêm".
+ * **«Báo cáo»** (`S16-SOCIAL-FE-3`, L3) → KHÔNG cặp nào: `SOCIAL-API-027` gác bằng `view:feed`, cặp mà
+ * ai đang thấy bài cũng đã có. Ẩn với bài của CHÍNH MÌNH (`post.isMine` — sở hữu hàng, không phải quyền).
+ * Mục + hộp thoại soạn + cảnh báo tự-lộ-danh-tính của SOC-DEC-011 đi **cùng một lượt** (owner ký
+ * 23/09/2026, plan §5.2 · N8): cảnh báo nằm TRONG `ReportDialog`, đừng mở đường báo cáo nào không qua nó.
+ * Hộp thoại mount **LƯỜI** (chỉ khi mở) và menu này tự giữ state mở — KHÔNG đi qua `PostCardMenuActions`:
+ * `ReportDialog` dùng `useMutation`, mount sẵn là mọi nơi vẽ thẻ bài đều phải có `QueryClientProvider`;
+ * và mỗi lượt mount của nó là MỘT khoá idempotency (giữ sẵn ⇒ mọi lượt mở dùng chung khoá).
  *
  * ⚠️ **Bẫy «nút ⋯ vắng ≠ mục vắng»** (đã dính ở S15-PAYROLL-FE-7): ca deny phải mở menu ra rồi assert
  * MỤC không có. Vì vậy nút ⋯ ở đây **luôn render** (luôn có ít nhất «Sao chép liên kết»), và ca C6
@@ -29,6 +33,7 @@ import { MoreHorizontal } from "lucide-react";
 import { cn } from "@mediaos/ui";
 import { useCan } from "@mediaos/web-core";
 import type { FeedPostDto } from "@mediaos/contracts";
+import { ReportDialog } from "../../moderation/components/ReportDialog";
 
 export interface PostCardMenuActions {
   onCopyLink: () => void;
@@ -48,6 +53,7 @@ interface PostCardMenuProps {
 export function PostCardMenu({ post, actions, className }: PostCardMenuProps): React.ReactElement {
   const { t } = useTranslation("social");
   const [open, setOpen] = React.useState(false);
+  const [isReportOpen, setIsReportOpen] = React.useState(false);
 
   // `useCan` (có fallback wildcard), KHÔNG `useCanExact`: cả 14 cặp `feed-*` đều `is_sensitive=false`
   // trong seed `0578`, nên hành vi đúng — khớp BE — là có wildcard.
@@ -134,7 +140,15 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
               post.pinned ? t("post.menu.unpin") : t("post.menu.pin"),
               actions.onTogglePinned,
             )}
+
+          {/* Không cần quyền; ẩn với bài của chính mình. Xem «Báo cáo» ở đầu file. */}
+          {!post.isMine && item("report", t("admin.report.trigger"), () => setIsReportOpen(true))}
         </div>
+      )}
+
+      {/* Mount LƯỜI — unmount khi đóng (mỗi lượt mount là một khoá idempotency của 027). */}
+      {isReportOpen && (
+        <ReportDialog targetType="post" targetId={post.id} onClose={() => setIsReportOpen(false)} />
       )}
     </div>
   );
