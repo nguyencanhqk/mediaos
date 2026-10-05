@@ -206,4 +206,30 @@ describe("Thanh tab — ARIA + URL", () => {
     expect(lastNavigation().search?.tab).toBeUndefined();
     expect(tab(TAB_REPORTS)).toHaveFocus();
   });
+
+  it("bàn phím: End tới tab CUỐI, Home về tab ĐẦU; → ở tab cuối và ← ở tab đầu VÒNG lại; phím khác không điều hướng", async () => {
+    renderPage();
+    await reportList();
+
+    fireEvent.keyDown(tab(TAB_REPORTS), { key: "End" });
+    await waitFor(() => expect(tab(TAB_HIDDEN)).toHaveAttribute("aria-selected", "true"));
+    expect(tab(TAB_HIDDEN)).toHaveFocus();
+
+    fireEvent.keyDown(tab(TAB_HIDDEN), { key: "Home" });
+    await waitFor(() => expect(tab(TAB_REPORTS)).toHaveAttribute("aria-selected", "true"));
+    expect(tab(TAB_REPORTS)).toHaveFocus();
+
+    fireEvent.keyDown(tab(TAB_REPORTS), { key: "ArrowLeft" });
+    await waitFor(() => expect(tab(TAB_HIDDEN)).toHaveAttribute("aria-selected", "true"));
+    expect(tab(TAB_HIDDEN)).toHaveFocus();
+
+    fireEvent.keyDown(tab(TAB_HIDDEN), { key: "ArrowRight" });
+    await waitFor(() => expect(tab(TAB_REPORTS)).toHaveAttribute("aria-selected", "true"));
+
+    const navigations = navigateSpy.mock.calls.length;
+    fireEvent.keyDown(tab(TAB_REPORTS), { key: "a" });
+    fireEvent.keyDown(tab(TAB_REPORTS), { key: "Home" });
+    expect(navigateSpy).toHaveBeenCalledTimes(navigations);
+    expect(tab(TAB_REPORTS)).toHaveAttribute("aria-selected", "true");
+  });
 });

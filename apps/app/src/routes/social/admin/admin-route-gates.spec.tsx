@@ -8,7 +8,7 @@
  * 403 của server; ca DENY ở đây đỏ trước khi chuyện đó tới tay người dùng.
  *
  * ┌─ GIỚI HẠN ĐÃ BIẾT ───────────────────────────────────────────────────────────────────────────────┐
- * │ · Ca KHÔNG đi qua cây route: `routeKey` truyền cho `getMeta` ở đây là bản chép TAY của literal    │
+ * │ · Ca G1 KHÔNG đi qua cây route (riêng describe «Router THẬT» ở cuối file thì có): `routeKey` truyền cho `getMeta` ở đây là bản chép TAY của literal    │
  * │   trong `router.tsx`. Vế «route `/feed/moderation` dùng đúng `getMeta("social.moderation")` và đã │
  * │   lắp vào cây» đo ở `social-wiring.spec.ts` (ca W3, đọc nguồn).                                   │
  * │ · `useTranslation` bị thay bằng bản trả KHOÁ (tiền lệ `ProtectedRoute.spec.tsx`) để đọc được lý   │
@@ -20,9 +20,10 @@
  * `ProtectedRoute` đọc store bằng `getState()` ⇒ quyền đặt TRƯỚC khi render (plan B5).
  */
 import type { ReactElement, ReactNode } from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider } from "@tanstack/react-router";
 import { makeTestQueryClient, resetCaps, setCaps } from "../feed/social-test-doubles";
 import { makeReport, makeReportPage } from "./admin-test-doubles";
 import { ModerationPage } from "../moderation/ModerationPage";
@@ -55,13 +56,28 @@ vi.mock("react-i18next", async (importOriginal) => {
   };
 });
 
+/**
+ * Ca G1 dựng nội dung route NGOÀI router ⇒ `Link` / `useNavigate` / `useSearch` phải là bản giả. Ca
+ * «router THẬT» bật cờ này TRƯỚC khi render để chính màn đó dùng bản thật của thư viện. Cờ cố định suốt
+ * một lượt render nên thứ tự hook không đổi giữa các lần vẽ.
+ */
+const routerMode = vi.hoisted(() => ({ isReal: false }));
+
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
+  const FakeLink = ({ children, to }: { children: ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  );
+  type AnyHook = (...args: unknown[]) => unknown;
+  const RealLink = actual.Link as unknown as typeof FakeLink;
   return {
     ...actual,
-    Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
-    useNavigate: () => () => undefined,
-    useSearch: () => ({}),
+    Link: (props: Parameters<typeof FakeLink>[0]) =>
+      routerMode.isReal ? <RealLink {...props} /> : <FakeLink {...props} />,
+    useNavigate: (...args: unknown[]) =>
+      routerMode.isReal ? (actual.useNavigate as AnyHook)(...args) : () => undefined,
+    useSearch: (...args: unknown[]) =>
+      routerMode.isReal ? (actual.useSearch as AnyHook)(...args) : {},
   };
 });
 
@@ -72,6 +88,7 @@ const ROUTER_IMPORT_TIMEOUT = 20_000;
 const FORBIDDEN_TITLE = "forbidden.title";
 const FORBIDDEN_NO_PERMISSION = "forbidden.reason.NO_PERMISSION";
 const MODERATION_TITLE = "admin.moderation.page.title";
+const FILTER_LABEL = "admin.moderation.page.filterLabel";
 
 async function renderRoute(routeKey: string, page: ReactElement): Promise<void> {
   const { buildModuleRouteContent, getMeta } = await import("@/router");
@@ -89,6 +106,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   resetCaps();
+  routerMode.isReal = false;
 });
 
 describe("G1 — cổng route `/feed/moderation` (SOC-SCREEN-010) = `view:feed` + `view:feed-report`", () => {
@@ -159,6 +177,48 @@ describe("G1 — cổng route `/feed/moderation` (SOC-SCREEN-010) = `view:feed` 
 
       expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
       expect(listReports).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+});
+
+// `ModerationPage` đổi bộ lọc / trang / tab bằng `navigate({ to: "." })` — chỗ DUY NHẤT trong app dùng
+// đường dẫn tương đối đó. Sai một nét là đổi bộ lọc xong người kiểm duyệt bị đưa khỏi màn; các spec của
+// màn dùng `navigate` giả nên chỉ so được literal. Ca này đi qua CHÍNH `router` của app (cây route thật,
+// `validateSearch` thật, màn nạp qua `React.lazy` thật) và đọc URL router ghi ra.
+describe("Router THẬT — đổi bộ lọc ở `/feed/moderation` ở lại đúng màn, thay TOÀN BỘ search", () => {
+  it(
+    "ALLOW — mở `?status=dismissed&page=3`, chọn «Đã giải quyết» ⇒ pathname còn `/feed/moderation`, search = ĐÚNG `?status=resolved`, 028 gọi lại với bộ lọc mới",
+    async () => {
+      routerMode.isReal = true;
+      setCaps({ "view:feed": true, "view:feed-report": true });
+      const { router } = await import("@/router");
+      router.history.push("/feed/moderation?status=dismissed&page=3");
+      await router.load();
+
+      render(
+        <QueryClientProvider client={makeTestQueryClient()}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+
+      // Đối chứng: URL dán vào tới được 028 nguyên vẹn (`page` là SỐ) ⇒ search của route đang sống thật.
+      await waitFor(() =>
+        expect(listReports).toHaveBeenLastCalledWith({ status: "dismissed", page: 3, limit: 20 }),
+      );
+      expect(router.state.location.pathname).toBe("/feed/moderation");
+
+      fireEvent.change(await screen.findByRole("combobox", { name: FILTER_LABEL }), {
+        target: { value: "resolved" },
+      });
+
+      await waitFor(() => expect(router.state.location.searchStr).toBe("?status=resolved"));
+      expect(router.state.location.pathname).toBe("/feed/moderation");
+      await waitFor(() =>
+        expect(listReports).toHaveBeenLastCalledWith({ status: "resolved", page: 1, limit: 20 }),
+      );
+      expect(screen.getByRole("heading", { name: MODERATION_TITLE })).toBeInTheDocument();
+      expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
     },
     ROUTER_IMPORT_TIMEOUT,
   );

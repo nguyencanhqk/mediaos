@@ -313,9 +313,12 @@ describe("W3 — `router.tsx` nối ĐÚNG meta và lắp route vào cây (đọ
     const metaVar = /buildModuleRouteContent\((\w+), "SOCIAL", <ModerationPage \/>\)/.exec(
       body,
     )?.[1];
-    expect(metaVar, "khối route không dựng <ModerationPage /> qua buildModuleRouteContent").toMatch(
-      /^\w+$/,
-    );
+    // `toMatch` trên `undefined` ném TypeError và nuốt mất thông điệp viết tay ⇒ hỏi «có không» trước.
+    expect(
+      metaVar,
+      "khối route không dựng <ModerationPage /> qua buildModuleRouteContent",
+    ).toBeDefined();
+    expect(metaVar).toMatch(/^\w+$/);
     expect(routerSrc).toContain(`const ${metaVar} = getMeta("social.moderation");`);
     expect(body).toContain("beforeLoad: authGuard,");
     expect(body).toContain("validateSearch: validateModerationRouteSearch,");

@@ -166,6 +166,30 @@ describe("P1 — bấm «Báo cáo» mở hộp thoại cho ĐÚNG bài đó", (
     expect(trigger).toHaveFocus();
   });
 
+  // Một thẻ thì «nút ⋯ của ĐÚNG thẻ đó» không phân biệt được với «nút ⋯ đầu tiên của trang».
+  it("HAI thẻ bài, báo cáo từ thẻ THỨ HAI rồi «Huỷ» ⇒ focus về nút ⋯ của thẻ thứ hai, không phải thẻ đầu", () => {
+    const OTHER_POST_ID = "77777777-7777-4777-8777-777777777777";
+    renderWithProviders(
+      <>
+        <PostCardMenu
+          post={makePost({ id: OTHER_POST_ID, isMine: false })}
+          actions={makeActions()}
+        />
+        <PostCardMenu post={makePost({ id: POST_ID, isMine: false })} actions={makeActions()} />
+      </>,
+    );
+    const [firstTrigger, secondTrigger] = screen.getAllByRole("button", { name: TRIGGER });
+    fireEvent.click(secondTrigger as HTMLElement);
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: REPORT }));
+    expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
+
+    fireEvent.click(screen.getByRole("button", { name: CANCEL }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(secondTrigger).toHaveFocus();
+    expect(firstTrigger).not.toHaveFocus();
+  });
+
   it("gửi xong rồi «Đóng» ⇒ focus trở về nút ⋯ (hộp thoại đã mount lại sang câu xác nhận)", async () => {
     renderWithProviders(
       <PostCardMenu post={makePost({ id: POST_ID, isMine: false })} actions={makeActions()} />,

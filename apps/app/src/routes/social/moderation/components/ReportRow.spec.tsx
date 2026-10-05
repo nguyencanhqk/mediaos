@@ -367,6 +367,13 @@ describe("Trường `null` có thật trên dây — tên · trích đoạn · n
     );
   });
 
+  it("tên TÁC GIẢ toàn khoảng trắng coi như không có tên ⇒ «Bài của người không rõ tên», không phải «Bài của »", () => {
+    renderRow(makeReport({ targetSnapshot: snapshot({ authorFullName: "   " }) }));
+    expect(screen.getByTestId("report-target-identity").textContent).toBe(
+      `Bài của ${NAME_UNKNOWN}`,
+    );
+  });
+
   it("người xử lý `fullName: null` ⇒ «người không rõ tên» ở dòng người xử lý, KHÔNG lan sang người báo cáo", () => {
     renderRow(
       closedReport({
