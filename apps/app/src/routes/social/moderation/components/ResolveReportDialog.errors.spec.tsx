@@ -159,6 +159,24 @@ describe("Lỗi GIỮ hộp thoại — dải lỗi nằm trong hộp thoại, k
     expect(sentBody(1)).toEqual({ status: "resolved" });
   });
 
+  it("E5 — gợi ý chỉ đúng khi hành động CÒN ở «không»: chọn lại một hành động ⇒ gợi ý biến mất, hành động đi vào body", async () => {
+    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportTargetUnavailable());
+    renderDialog();
+    pick(RESOLVED);
+    pick("Khoá bình luận của bài");
+    clickSubmit();
+
+    await waitFor(() => expect(alertReason()).toBe("reportTargetUnavailable"));
+    expect(screen.getByText(UNAVAILABLE_HINT)).toBeInTheDocument();
+
+    pick("Ẩn bài");
+    expect(radio("Ẩn bài")).toBeChecked();
+    expect(screen.queryByText(UNAVAILABLE_HINT)).toBeNull();
+
+    await submitAndWait(2);
+    expect(sentBody(1)).toEqual({ status: "resolved", action: "hide_post" });
+  });
+
   it("E10 — 400 của server: `invalidRequest`, giữ hộp thoại, không nút thử lại", async () => {
     resolveReport.mockRejectedValueOnce(ADMIN_ERR.badRequest());
     const { onOutcome } = renderDialog();
@@ -171,17 +189,21 @@ describe("Lỗi GIỮ hộp thoại — dải lỗi nằm trong hộp thoại, k
   });
 
   it("E10 — body không qua schema contracts (ghi chú quá trần) ⇒ KHÔNG gửi, báo `invalidRequest`; sửa lại ⇒ gửi được", async () => {
-    renderDialog();
+    const { onOutcome } = renderDialog();
     pick(DISMISSED);
     fireEvent.change(noteBox(), { target: { value: "a".repeat(FEED_NOTE_MAX + 1) } });
     clickSubmit();
 
     expect(alertReason()).toBe("invalidRequest");
-    expect(resolveReport).not.toHaveBeenCalled();
 
     fireEvent.change(noteBox(), { target: { value: "a".repeat(FEED_NOTE_MAX) } });
     await submitAndWait();
-    expect(resolveFeedReportSchema.safeParse(sentBody()).success).toBe(true);
+    // «KHÔNG gửi» của cú bấm quá trần đo SAU khi lượt hợp lệ xong: `mutationFn` chạy sau vài nhịp
+    // microtask nên đếm ngay sau cú bấm thì luôn bằng 0.
+    await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
+    expect(resolveReport).toHaveBeenCalledTimes(1);
+    expect(sentBody(0)).toEqual({ status: "dismissed", resolutionNote: "a".repeat(FEED_NOTE_MAX) });
+    expect(resolveFeedReportSchema.safeParse(sentBody(0)).success).toBe(true);
   });
 
   it("E11 — 500: `generic` + «Thử lại» gửi lại; ghi chú đã nhập còn nguyên", async () => {

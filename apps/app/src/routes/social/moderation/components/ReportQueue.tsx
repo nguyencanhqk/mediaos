@@ -25,7 +25,13 @@ import type { ModerationStatusFilter } from "../lib/moderation-route-search";
 import { ReportRow } from "./ReportRow";
 
 export interface ReportQueueProps {
-  /** Trang 028 đang có (kể cả trang giữ lại bởi `keepPreviousData`); chưa có ⇒ `undefined`. */
+  /**
+   * Trang 028 đang có (kể cả trang giữ lại bởi `keepPreviousData`); chưa có ⇒ `undefined`.
+   *
+   * ⚠️ NƠI GỌI: câu rỗng đọc `statusFilter` chứ không đọc bộ lọc đã sinh ra `page`. Khi vừa đổi bộ lọc mà
+   * trang giữ lại RỖNG (`isPlaceholderData` && `total === 0`) thì phải truyền `undefined` + `isLoading`
+   * (skeleton) — nếu không, câu rỗng của bộ lọc MỚI hiện ra trước khi dữ liệu của nó về.
+   */
   page: FeedReportPageDto | undefined;
   /** Lượt tải ĐẦU (chưa có dữ liệu nào). */
   isLoading: boolean;

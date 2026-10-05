@@ -162,8 +162,11 @@ export function ResolveReportDialog({
     setDecision(next);
     setIsDeleteConfirmed(false);
   };
+  // Gợi ý sau E5 nói «hành động kèm đã được đưa về Không kèm hành động» — người dùng tự chọn lại thì câu
+  // đó hết đúng ⇒ tắt.
   const chooseAction = (next: FeedReportActionDto): void => {
     setAction(next);
+    setIsTargetUnavailable(false);
     setIsDeleteConfirmed(false);
   };
 
