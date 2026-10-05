@@ -18571,6 +18571,90 @@ export const backlog = [
     ],
   },
   {
+    id: "S16-SOCIAL-RESNOTEMASK-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "SOCIAL-API-028 trả resolutionNote NGUYÊN VĂN cho mọi người đọc hàng đợi, kể cả quản lý scope Department đang bị che reporter ⇒ ghi chú xử lý của HR có thể làm lộ người báo cáo; che resolutionNote theo CÙNG vị từ đang che reporter (hoặc trả cờ đã-che) — FE hiện chỉ có dòng cảnh báo ở ô nhập",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "apps/app/src/routes/social/moderation/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-3A", "S16-SOCIAL-FE-3"],
+    src: [
+      "Gate security-reviewer của PR-A S16-SOCIAL-FE-3 (05/10/2026): finding SEC-01 + ghi nhận vòng 2 · social-reports.service.ts:620-631 (resolutionNote trả ở mọi scope) · SOC-DEC-011",
+    ],
+    done_when: [
+      "Người xem 028 ở scope hẹp hơn Company KHÔNG nhận resolutionNote nguyên văn của báo cáo mà reporter đang bị che với họ (null hoặc cờ đã-che — chốt ở plan) — deny-path RED trước (manager Department trong đơn vị · ngoài đơn vị · cross-tenant) kèm ca ALLOW cho HR / company-admin",
+      "Contracts + API-19 cập nhật; FE màn Kiểm duyệt vẽ đúng trạng thái đã-che (không vẽ khối ghi chú rỗng) và GIỮ dòng cảnh báo ở ô nhập; route census + coverage social/ giữ xanh",
+    ],
+    notes: [
+      "🔴 FULL gate (đường đọc danh tính trên route companyFloor:false). Seed 05/10/2026 từ gate PR-A của S16-SOCIAL-FE-3: dòng cảnh báo ở ô ghi chú xử lý chỉ là lời nhắc phía FE, không phải lưới chặn.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEMODINVAL-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Một nguồn cho tập khoá cache «mọi bề mặt đang vẽ bài»: moderation-invalidation.ts (màn Kiểm duyệt) và invalidatePostLists của feed/lib/use-feed-actions.ts là hai bản chép tay; chiều ngược còn thiếu (ẩn / xoá bài từ menu ⋯ chưa làm mới hàng đợi + tab «Bài đang ẩn»); «Hiện lại» chưa nối signal để huỷ yêu cầu treo",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "packages/web-core/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3"],
+    src: [
+      "Gate PR-A S16-SOCIAL-FE-3 (05/10/2026): TS-04 · CODE-02 · AUD-B-04 — hoãn vì feed/lib/use-feed-actions.ts đang bị hai nhánh FE-2D sửa; ca ghim hiện trạng ở moderation-invalidation.spec.tsx",
+    ],
+    done_when: [
+      "MỘT hàm / hằng dùng chung cho cả menu ⋯ của thẻ bài lẫn màn Kiểm duyệt; ca so tập khoá thay cho hai danh sách viết tay; ẩn / xoá từ menu ⋯ làm mới moderation.reports.lists() + moderation.hiddenPosts()",
+      "«Hiện lại» huỷ được yêu cầu treo (nối signal theo khuôn useGuardedMutation); test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT. Phụ thuộc THẬT còn có FE-2D lát B (S16-SOCIAL-MENTIONLINK-1, PR #571 — nhánh đó sửa use-feed-actions.ts); id đó chưa có trong backlog lúc seed ⇒ thêm vào depends_on khi #571 vào master. Seed 05/10/2026 từ gate PR-A.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEMODSCOPE-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Cổng FE của nút «Xử lý» / hành động kèm ở màn Kiểm duyệt chỉ hỏi CÓ cặp manage:feed-report / manage:feed-post, trong khi server đòi sàn Company cho 029 ⇒ người có cặp ở scope hẹp thấy nút rồi nhận 403 (fail-closed, đã có chữ); đóng hẳn cần đưa scope của /auth/me vào auth store + hook kiểm sàn",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "packages/web-core/**",
+      "apps/app/src/routes/social/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-FE-3"],
+    src: [
+      "Gate security-reviewer của PR-A S16-SOCIAL-FE-3 (05/10/2026): finding SEC-02 (LOW) · social-route-pairs.const.ts:209-216 (sàn Company của 029) · web-core hooks/use-can.ts + stores/auth.ts không giữ scope",
+    ],
+    done_when: [
+      "Plan riêng qua plan-review TRƯỚC khi code (chạm auth store + use-can = vùng đỏ); hook kiểm sàn scope có ca DENY (cặp ở scope Department ⇒ không nút, 0 lời gọi) đứng cạnh ca ALLOW (scope Company)",
+      "Không đổi hành vi của các cổng useCan hiện có ở module khác; test FE + typecheck/build xanh; FULL gate PASS",
+    ],
+    notes: [
+      "🔴 FULL gate (sửa stores/auth + use-can của web-core). Ưu tiên THẤP: vai canonical (hr · company-admin) đều ở scope Company nên hôm nay không ai gặp; chỉ lộ khi có grant tuỳ biến ở scope hẹp. Seed 05/10/2026 từ gate PR-A.",
+    ],
+  },
+  {
     id: "S16-SOCIAL-QA-1",
     module: "SOCIAL",
     layer: "QA",

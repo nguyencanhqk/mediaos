@@ -704,3 +704,10 @@ File ngoài danh sách «TẠO» của §3 L2: `moderation/lib/{moderation-inval
 - Phần dư focus: nút trong dải tự gỡ chính nó (X · «Thử lại») ⇒ focus về `body`; 006 kéo focus cả khi người dùng đã rời đi; nhánh fallback + bộ đếm của `useOutcomeFocus` chưa có ca (GATE-TS-2 L1 · L2 · L4).
 - Chưa ai nhìn trên trình duyệt thật: trả focus của hai hộp thoại (mới đo jsdom) · `Dialog` `position: fixed` nằm TRONG cây thẻ bài (không portal) · nút đang focus thành `disabled` trên Chrome / Safari.
 - PR-B: `BadgeFormDialog` và «Ngừng dùng / Bật lại» dùng `useGuardedMutation`, không viết bản thứ tư; helper tua fake timer đang chép 4 nơi ⇒ đưa vào `admin-test-doubles.tsx`.
+
+**Bổ sung sau gate `silent-failure-hunter` — 06/10/2026** (hai commit `df5cc6be` · `d82b7372`; gate chạy vì SEC-01 kích điều kiện nâng FULL của §6):
+
+- **E11 tách đôi** (lệch bảng lỗi §3 L2): lượt GHI 029 / 006 gặp 5xx (kể cả 502 / 503 / 504 của proxy), hết hạn 30 giây, mất phản hồi hoặc 2xx mà thân hỏng schema ⇒ reason mới `outcomeUnknown` («chưa xác nhận được kết quả»), tự đọc lại hàng đợi + các bề mặt bài; chỉ 4xx mới là «không thực hiện được».
+- Lượt ĐỌC hỏng có reason riêng `loadFailed`; dải thành công của lượt ghi luôn được giữ, kể cả khi lượt đọc lại ngay sau đó hỏng (trước đó bị gỡ ⇒ đọc như chính lượt ghi hỏng).
+- Dải kết quả của «Hiện lại» do `ModerationPage` giữ (sống qua lần đổi tab); nút «Thử lại» khoá khi đang đọc lại; 2xx mà báo cáo vẫn `open` hiện dải lỗi thay vì đóng im lặng.
+- Seed thêm 3 WO nợ: `S16-SOCIAL-RESNOTEMASK-1` (🔴 BE — che `resolutionNote` theo scope) · `S16-SOCIAL-FEMODINVAL-1` (🟡 FE — một nguồn khoá invalidate + chiều ngược menu ⋯) · `S16-SOCIAL-FEMODSCOPE-1` (🔴 FE — cổng FE kiểm sàn scope, SEC-02).
