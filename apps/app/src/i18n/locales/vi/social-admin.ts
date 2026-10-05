@@ -44,4 +44,30 @@ export default {
     reportDuplicate: "Bạn đã báo cáo nội dung này và báo cáo đó đang chờ xử lý. Không cần gửi lại.",
     reportTargetGone: "Nội dung bạn muốn báo cáo không còn tồn tại hoặc bạn không còn xem được.",
   },
+  // ── Kiểm duyệt `SOC-SCREEN-010` ──
+  moderation: {
+    /**
+     * Hành động kèm khi kết thúc báo cáo (029). Khoá đi theo `moderation/lib/report-actions.ts`
+     * (`REPORT_ACTION_LABEL_KEYS`): MỖI loại đích một bộ nhãn riêng — cùng hành động `lock_comments` /
+     * `delete_target` nhưng tác động lên thứ KHÁC nhau (bài ↔ bài chứa bình luận ↔ chính bình luận),
+     * dùng chung một nhãn là người kiểm duyệt xoá/khoá nhầm đối tượng. Đích `comment` KHÔNG có `hide_post`.
+     */
+    action: {
+      none: "Không kèm hành động",
+      post: {
+        hide_post: "Ẩn bài",
+        lock_comments: "Khoá bình luận của bài",
+        delete_target: "Xoá bài",
+      },
+      comment: {
+        lock_comments: "Khoá bình luận của bài chứa bình luận này",
+        delete_target: "Xoá bình luận này",
+      },
+    },
+    /** Chữ ô tick BẮT BUỘC trước khi gửi `delete_target` — nói rõ xoá CÁI GÌ và chưa khôi phục được. */
+    deleteConfirm: {
+      post: "Tôi hiểu bài sẽ bị xoá; hiện chưa có màn khôi phục",
+      comment: "Tôi hiểu bình luận sẽ bị xoá; hiện chưa có màn khôi phục",
+    },
+  },
 };
