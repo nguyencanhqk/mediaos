@@ -54,6 +54,17 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
   const { t } = useTranslation("social");
   const [open, setOpen] = React.useState(false);
   const [isReportOpen, setIsReportOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  /**
+   * Mục «Báo cáo» bị gỡ khỏi DOM cùng nhịp hộp thoại mount ⇒ lúc `Dialog` ghi «phần tử kích hoạt», focus
+   * đã rơi về `body` và lúc đóng nó không còn gì để trả. Đưa focus về nút ⋯ TRƯỚC khi mở: `Dialog` ghi
+   * đúng nút đó và tự trả focus ở MỌI đường đóng («Huỷ» · Esc · bấm ra ngoài · «Đóng» sau khi gửi).
+   */
+  const openReport = (): void => {
+    triggerRef.current?.focus();
+    setIsReportOpen(true);
+  };
 
   // `useCan` (có fallback wildcard), KHÔNG `useCanExact`: cả 14 cặp `feed-*` đều `is_sensitive=false`
   // trong seed `0578`, nên hành vi đúng — khớp BE — là có wildcard.
@@ -97,6 +108,7 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
   return (
     <div className={cn("relative", className)}>
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -142,7 +154,7 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
             )}
 
           {/* Không cần quyền; ẩn với bài của chính mình. Xem «Báo cáo» ở đầu file. */}
-          {!post.isMine && item("report", t("admin.report.trigger"), () => setIsReportOpen(true))}
+          {!post.isMine && item("report", t("admin.report.trigger"), openReport)}
         </div>
       )}
 
