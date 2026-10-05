@@ -2,7 +2,7 @@
 
 > Trạng thái: **plan v2 (05/10/2026)** — ĐÃ QUA plan-review lượt 1 ngày 05/10/2026: 3 reviewer (đối kháng · kiểm chứng
 > khẳng định · đối chiếu spec) đều **PASS_WITH_FIXES**, 0 BLOCKER/HIGH. 41 finding (12 MEDIUM · 27 LOW · 2 không xác
-> minh được): **nhận 39 · nhận một phần 2 · bác 0** — sổ vết §9. Owner đã ký O1 = B · O2 = a · O3 = a (§0); còn 6 ô ☐
+> minh được): **nhận 39 · nhận một phần 2 · bác 0** — sổ vết §9. Owner đã ký O1 = B · O2 = a · O3 = a · O4 = a · O5 = a (§0); còn 4 ô ☐
 > chờ owner tick khi duyệt merge PR-A. Nhánh `feat/s16-social-fe-3` cắt từ `origin/master` `b637f3d6`. Zone amber, gate
 > LIGHT (+ `security-reviewer` riêng PR-A). Quyền chỉ qua `useCan`/`PermissionGate`/`useCanExact` và `ROUTE_REGISTRY`;
 > masking là việc của server; KHÔNG thêm dependency.
@@ -36,16 +36,17 @@ O3 = a — ở PR-C, sau FE-2D lát B).
 > rebase + mở PR song song. PR-A/PR-B của FE-3 KHÔNG chạm file nào của lát B; với lát A (`…-fe-2d-a`) chỉ chung
 > `W/index.ts` + `i18n/…/social.ts` + `harness/backlog.mjs`, chèn ở vị trí đã chỉ định (M19 · D6 · D18). PR-C đi SAU lát B.
 >
-> ☐ **Chờ owner tick — owner CHƯA được hỏi; KHÔNG áp «im lặng = đồng ý».** Sáu ô dưới không chặn thi công; chúng
+> ☐ **Chờ owner tick — KHÔNG áp «im lặng = đồng ý».** O4 · O5 owner ĐÃ KÝ 05/10/2026 17:55 (hộp hỏi của phiên thi công,
+> cả hai chọn a). Bốn ô D1 · D14 · D16 · D17 owner CHƯA được hỏi; chúng không chặn thi công và
 > được chép lên ĐẦU mô tả PR-A để owner tick khi duyệt merge (owner là người bấm merge). Chưa tick ⇒ PR ghi rõ
 > «lệch chữ `done_when` ↔ SPEC / giao thiếu so với SPEC, chờ owner».
-> ☐ **O4** (D11) Tab «Bài đang ẩn» KHÔNG liệt kê bài trong NHÓM (server loại bài nhóm khi vắng `groupId`, M4).
+> ☑ **O4** (D11) Tab «Bài đang ẩn» KHÔNG liệt kê bài trong NHÓM (server loại bài nhóm khi vắng `groupId`, M4).
 > Người dùng mất: bài nhóm đã ẩn không tìm lại được ở màn 010 để «Hiện lại» — chỉ còn tới qua link trực tiếp của bài
-> hoặc «Xem trong ngữ cảnh» ở dòng báo cáo.  ☐ a giao kèm dòng giới hạn ghi rõ trên màn + nợ BE
+> hoặc «Xem trong ngữ cảnh» ở dòng báo cáo.  ☑ **a giao kèm dòng giới hạn ghi rõ trên màn** + nợ BE
 > `S16-SOCIAL-GROUPMOD-1` (khuyến nghị)  ☐ b hoãn tab tới khi BE mở nguồn bài nhóm.
-> ☐ **O5** (D10) `delete_target` từ hàng đợi xoá mềm bài/bình luận trong khi FE CHƯA có màn khôi phục (057/058).
+> ☑ **O5** (D10) `delete_target` từ hàng đợi xoá mềm bài/bình luận trong khi FE CHƯA có màn khôi phục (057/058).
 > Người dùng mất: xoá nhầm không hoàn tác được trên giao diện (dữ liệu còn ở server; cùng giới hạn với «Xoá bài» ở
-> menu ⋯ hiện có).  ☐ a giao kèm ô tick xác nhận + nợ `S16-SOCIAL-FERECYCLE-1` (khuyến nghị)  ☐ b ẩn lựa chọn
+> menu ⋯ hiện có).  ☑ **a giao kèm ô tick xác nhận** + nợ `S16-SOCIAL-FERECYCLE-1` (khuyến nghị)  ☐ b ẩn lựa chọn
 > `delete_target` tới khi có thùng rác.
 > ☐ **D1** sửa chữ `done_when` #1 theo SPEC-16:236 — manager vào màn 010 CHỈ-ĐỌC (§8.1).
 > ☐ **D14** sửa chữ `done_when` #2 — ô fbpost gác MỘT cặp, khớp chữ ký `S16-SOCIAL-FBPOST-1.md:56` (§8.2).
@@ -130,11 +131,11 @@ Viết tắt: `S/` = `apps/api/src/social/` · `C/` = `packages/contracts/src/` 
   PROD = nợ §8.9.
 - **D9 — hình dạng danh sách [KỸ THUẬT].** Hàng đợi = danh sách THẺ (trích đoạn + ghi chú nhiều dòng, cột giữa
   hẹp) + `OffsetPager`; 011/012 = `<table>` thuần trong khung cuộn ngang (2–7 cột số). Không kéo `DataTable`.
-- **D10 — mặc định hàng đợi [KỸ THUẬT · O5 chờ tick].** Lọc mặc định `open` (không ghi lên URL), có «Tất cả» (=
+- **D10 — mặc định hàng đợi [KỸ THUẬT · O5 = a, owner ký 05/10].** Lọc mặc định `open` (không ghi lên URL), có «Tất cả» (=
   không gửi `status`); đổi bộ lọc ⇒ về trang 1. Ghi chú xử lý TUỲ CHỌN như server. `delete_target` buộc tick xác nhận
   trong hộp thoại, chữ tick nói rõ xoá CÁI GÌ và «chưa có màn khôi phục» (bảng loại đích, L2). «Bỏ qua» ⇒ ẩn ô hành
   động và KHÔNG gửi khoá `action`.
-- **D11 — tab «Bài đang ẩn» [KỸ THUẬT · O4 chờ tick].** Nguồn 001 `{status:"hidden", sort:"latest"}`,
+- **D11 — tab «Bài đang ẩn» [KỸ THUẬT · O4 = a, owner ký 05/10].** Nguồn 001 `{status:"hidden", sort:"latest"}`,
   `useInfiniteQuery`, nhánh khoá RIÊNG `socialKeys.moderation.hiddenPosts()`, `staleTime: 0`, `enabled` theo
   `manage:feed-post`. Dòng GỌN tự vẽ (tác giả · trích body · thời gian · «Xem bài» · «Hiện lại») — không dùng
   `PostCard`/`useFeedActions` (file FE-2D). «Hiện lại» gửi ĐÚNG `{hidden:false}`. Trạng thái RIÊNG của tab: skeleton
@@ -502,7 +503,7 @@ Cột **Mutant:** ★ = BẮT BUỘC chạy (§6); mọi hàng có `V` đều �
   (KHÔNG `git checkout --`) → chạy lại xanh. Mutant không ★ là gợi ý, chạy khi reviewer nghi ngờ ca đó.
 - **Không đo được trong kho — KHÔNG hứa:** a11y tự động (không có axe) · tương phản màu · bố cục 300px / breakpoint
   (jsdom không layout) · layout Recharts · hành vi thật trên PROD · ratchet khoá i18n.
-- **Điều kiện MERGE:** API PROD ≥ `14afbb5f` (đã thoả — M1, đo 05/10 08:47). Ghi đầu PR-A: 6 ô ☐ của §0 · avatar vẽ
+- **Điều kiện MERGE:** API PROD ≥ `14afbb5f` (đã thoả — M1, đo 05/10 08:47). Ghi đầu PR-A: 4 ô ☐ còn lại của §0 (D1 · D14 · D16 · D17) · avatar vẽ
   chữ cái đầu (D8) · tab «Bài đang ẩn» không gồm bài nhóm (O4) · xoá từ hàng đợi chưa có khôi phục (O5) · kết quả
   phép đo «chỉ-FE» + lý do không chạy `check.sh --all` · 4 số coverage trước/sau dòng exclude (D19).
 
@@ -642,3 +643,7 @@ spec SPC). 41 finding: nhận 39 · nhận một phần 2 · bác 0. Bằng ch�
 **Cập nhật của phiên điều phối — 05/10/2026** (đến trong lúc vá plan): owner ký O1 = B · O2 = a · O3 = a và đồng ý mở
 lại FE-2D lát B ⇒ L7 hết điều kiện · L8 thành lát thi công thật ở PR-C · bỏ dòng nợ `S16-SOCIAL-FECOMMENTREPORT-1` ·
 M19 + B29 ghi phụ thuộc thứ tự merge. O4 · O5 · D1 · D14 · D16 · D17 owner CHƯA được hỏi ⇒ để ô ☐ ở §0.
+
+**Cập nhật của phiên thi công — 05/10/2026 17:55:** owner ký **O4 = a** (tab «Bài đang ẩn» giao kèm dòng giới hạn) và
+**O5 = a** (`delete_target` giao kèm ô tick xác nhận) qua hộp hỏi ⇒ hai ô đó đã tick ở §0. D1 · D14 · D16 · D17 vẫn chờ
+owner tick khi duyệt PR-A.
