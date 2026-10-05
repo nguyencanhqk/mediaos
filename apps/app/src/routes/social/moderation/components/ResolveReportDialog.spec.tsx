@@ -6,7 +6,8 @@
  * - Quyền đặt trên store THẬT (`setCaps`) TRƯỚC render — đo luật `useCan` thật, không đo mock.
  * - i18n THẬT; vế kỳ vọng là chữ tiếng Việt VIẾT TAY ⇒ thiếu khoá (i18next trả khoá thô) là đỏ (plan B18).
  * - Body gửi đi so `toEqual` với literal VIẾT TAY rồi qua CHÍNH `resolveFeedReportSchema` của contracts.
- * - «0 lời gọi» luôn đứng TRƯỚC một vế ALLOW cùng ca (bấm tiếp ⇒ có lời gọi) — vế vắng mặt có đối chứng.
+ * - «0 lời gọi» của một cú bấm bị chặn đo bằng TỔNG lời gọi sau khi vế ALLOW cùng ca đã xong (đúng 1, đúng
+ *   body của vế ALLOW) — `mutationFn` chạy trễ vài nhịp microtask nên đếm ngay sau cú bấm thì luôn bằng 0.
  */
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -139,13 +140,17 @@ describe("Khung + trợ năng", () => {
   });
 
   it("chưa chọn quyết định ⇒ «Xác nhận» khoá, bấm không gửi; chọn rồi ⇒ gửi được", async () => {
-    renderDialog();
+    const { onOutcome } = renderDialog();
     expect(submitButton()).toBeDisabled();
     clickSubmit();
-    expect(resolveReport).not.toHaveBeenCalled();
 
     pick(DISMISSED);
     await submitAndWait();
+    // «0 lời gọi» của cú bấm khi nút còn khoá đo ở ĐÂY, sau khi lượt hợp lệ đã xong: `mutationFn` chạy
+    // sau vài nhịp microtask nên đếm ngay sau cú bấm thì luôn bằng 0, kể cả khi lượt gửi đã khởi động.
+    await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
+    expect(resolveReport).toHaveBeenCalledTimes(1);
+    expect(sentBody(0)).toEqual({ status: "dismissed" });
   });
 
   it("«Huỷ» gọi `onClose`, không gửi gì, không báo kết cục", () => {
@@ -257,18 +262,21 @@ describe("B2 — `delete_target` buộc tick xác nhận", () => {
     "đích `%s`: chưa tick ⇒ nút khoá + 0 lời gọi; tick ⇒ gửi `delete_target`",
     async (targetType) => {
       const target = TARGETS[targetType];
-      renderDialog(target.report());
+      const { onOutcome } = renderDialog(target.report());
       pick(RESOLVED);
       pick(target.deleteLabel);
 
       expect(submitButton()).toBeDisabled();
       clickSubmit();
-      expect(resolveReport).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByRole("checkbox", { name: target.confirmLabel }));
       expect(submitButton()).toBeEnabled();
       await submitAndWait();
-      expect(sentBody()).toEqual({ status: "resolved", action: "delete_target" });
+      // Cú bấm lúc CHƯA tick không được sinh lời gọi nào: đếm sau khi lượt đã tick xong (xem ca «chưa
+      // chọn quyết định» về lý do không đếm ngay sau cú bấm).
+      await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
+      expect(resolveReport).toHaveBeenCalledTimes(1);
+      expect(sentBody(0)).toEqual({ status: "resolved", action: "delete_target" });
     },
   );
 
@@ -344,4 +352,31 @@ describe("DC1 — 029 không idempotent: bấm đúp chỉ gửi MỘT lần", (
     expect(submitButton()).toBeDisabled();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  // Nút «Huỷ» tự khoá khi đang gửi nên không tới được lưới trong `close()`; Esc và bấm ra ngoài thì tới.
+  // Lọt lưới ⇒ trang nhận CẢ `onClose` lẫn `onOutcome` cho cùng một lượt mở.
+  it.each([
+    { name: "Esc", act: () => fireEvent.keyDown(document, { key: "Escape" }) },
+    {
+      name: "bấm ra ngoài",
+      act: () => fireEvent.click(dialog().parentElement as HTMLElement),
+    },
+  ])(
+    "$name: trước khi gửi ⇒ `onClose` 1 lần (đối chứng); đang gửi ⇒ KHÔNG đóng được",
+    async ({ act }) => {
+      resolveReport.mockImplementation(() => new Promise<never>(() => undefined));
+      const { onClose, onOutcome } = renderDialog();
+      act();
+      expect(onClose).toHaveBeenCalledTimes(1);
+
+      pick(DISMISSED);
+      clickSubmit();
+      await waitFor(() => expect(submitButton()).toBeDisabled());
+      act();
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(resolveReport).toHaveBeenCalledTimes(1);
+      expect(onOutcome).not.toHaveBeenCalled();
+    },
+  );
 });

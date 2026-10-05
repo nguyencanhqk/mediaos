@@ -220,6 +220,40 @@ describe("R2 — «Xem trong ngữ cảnh» trỏ về BÀI (`targetSnapshot.pos
     expect(screen.getByTestId("report-target-state").textContent).toBe("[đã ẩn]");
   });
 
+  // Hai vế của «đã xoá» đo RIÊNG: DB không có CHECK buộc `status = deleted` ⇔ `deleted_at` (hàng xoá mềm
+  // bằng SQL tay có thật) ⇒ fixture mang cả hai cùng lúc không cho biết vế nào đang gác. Caps có
+  // `manage:feed-post` để link chỉ có thể mất vì «đã xoá», không phải vì cổng bài ẩn.
+  it.each([
+    { name: "`deletedAt ≠ null` dù `status` còn `published`", status: "published" as const },
+    { name: "`deletedAt ≠ null` dù `status` là `hidden`", status: "hidden" as const },
+  ])("CHỈ vế thời điểm — $name ⇒ KHÔNG có link + «[đã xoá]»", ({ status }) => {
+    setCaps({ ...POST_MANAGER, "manage:feed-report": true });
+    renderRow(
+      makeReport({ targetSnapshot: snapshot({ status, deletedAt: "2026-10-02T00:00:00.000Z" }) }),
+    );
+    expect(screen.getByTestId("report-target-state").textContent).toBe("[đã xoá]");
+    expect(screen.queryByRole("link", { name: VIEW_IN_CONTEXT })).toBeNull();
+    // Thẻ vẫn là thẻ đang mở, xử lý được — chỉ link ngữ cảnh mất.
+    expect(screen.getByRole("button", { name: RESOLVE })).toBeInTheDocument();
+  });
+
+  it("CHỈ vế trạng thái — `status: deleted` + `deletedAt: null` ⇒ KHÔNG có link + «[đã xoá]»", () => {
+    setCaps({ ...POST_MANAGER, "manage:feed-report": true });
+    renderRow(makeReport({ targetSnapshot: snapshot({ status: "deleted", deletedAt: null }) }));
+    expect(screen.getByTestId("report-target-state").textContent).toBe("[đã xoá]");
+    expect(screen.queryByRole("link", { name: VIEW_IN_CONTEXT })).toBeNull();
+    expect(screen.getByRole("button", { name: RESOLVE })).toBeInTheDocument();
+  });
+
+  it("đối chứng cùng caps — bài `published`, `deletedAt: null` ⇒ CÓ link, không nhãn trạng thái", () => {
+    setCaps({ ...POST_MANAGER, "manage:feed-report": true });
+    renderRow(makeReport({ targetSnapshot: snapshot({ status: "published", deletedAt: null }) }));
+    expect(screen.getByRole("link", { name: VIEW_IN_CONTEXT }).getAttribute("href")).toBe(
+      `/feed/posts/${REPORTED_POST_ID}`,
+    );
+    expect(screen.queryByTestId("report-target-state")).toBeNull();
+  });
+
   it("`targetSnapshot: null` ⇒ «Nội dung không còn», KHÔNG có link", () => {
     setCaps(POST_MANAGER);
     const { card } = renderRow(makeReport({ targetSnapshot: null }));
@@ -250,6 +284,24 @@ describe("R4 — đích BÌNH LUẬN: tác giả/trạng thái là của BÀI CH
     expect(card().textContent ?? "").not.toContain("[đã xoá]");
   });
 
+  it.each([
+    {
+      name: "CHỈ vế thời điểm (`published` + `deletedAt ≠ null`)",
+      over: { status: "published" as const, deletedAt: "2026-10-02T00:00:00.000Z" },
+    },
+    {
+      name: "CHỈ vế trạng thái (`deleted` + `deletedAt: null`)",
+      over: { status: "deleted" as const, deletedAt: null },
+    },
+  ])("bài cha đã xoá — $name ⇒ «[bài chứa bình luận đã xoá]», KHÔNG có link", ({ over }) => {
+    setCaps(POST_MANAGER);
+    renderRow(commentReport({ targetSnapshot: snapshot(over) }));
+    expect(screen.getByTestId("report-target-state").textContent).toBe(
+      "[bài chứa bình luận đã xoá]",
+    );
+    expect(screen.queryByRole("link", { name: VIEW_IN_CONTEXT })).toBeNull();
+  });
+
   it("bài cha đang ẨN ⇒ «[bài chứa bình luận đã ẩn]» — không có «[đã ẩn]» trần", () => {
     const { card } = renderRow(commentReport({ targetSnapshot: snapshot({ status: "hidden" }) }));
     expect(screen.getByTestId("report-target-state").textContent).toBe(
@@ -278,6 +330,82 @@ describe("R4 — đích BÌNH LUẬN: tác giả/trạng thái là của BÀI CH
     );
     expect(screen.getByTestId("report-excerpt").textContent).toBe("<i>trích đoạn</i> bình luận");
     expect(container.querySelector("i")).toBeNull();
+  });
+});
+
+describe("Trường `null` có thật trên dây — tên · trích đoạn · người xử lý", () => {
+  const NAME_UNKNOWN = "người không rõ tên";
+
+  it("người báo cáo `fullName: null` + `employeeId: null` ⇒ «người không rõ tên» + «(hồ sơ không còn)»", () => {
+    renderRow(makeReport({ reporter: { employeeId: null, fullName: null, avatarUrl: null } }));
+    const reporter = screen.getByTestId("report-reporter");
+    expect(reporter).toHaveTextContent(`${NAME_UNKNOWN}${PROFILE_GONE}`);
+    expect(reporter).not.toHaveTextContent(REPORTER_MASKED);
+  });
+
+  it("tên toàn khoảng trắng coi như không có tên (người báo cáo còn hồ sơ ⇒ không nhãn hồ sơ)", () => {
+    renderRow(
+      makeReport({
+        reporter: { employeeId: REPORTER_EMPLOYEE_ID, fullName: "   ", avatarUrl: null },
+      }),
+    );
+    const reporter = screen.getByTestId("report-reporter");
+    expect(reporter).toHaveTextContent(NAME_UNKNOWN);
+    expect(reporter).not.toHaveTextContent(PROFILE_GONE);
+  });
+
+  it("`authorFullName: null` ⇒ «Bài của người không rõ tên» / «Bình luận trong bài của người không rõ tên»", () => {
+    const first = renderRow(makeReport({ targetSnapshot: snapshot({ authorFullName: null }) }));
+    expect(screen.getByTestId("report-target-identity").textContent).toBe(
+      `Bài của ${NAME_UNKNOWN}`,
+    );
+    first.unmount();
+
+    renderRow(commentReport({ targetSnapshot: snapshot({ authorFullName: null }) }));
+    expect(screen.getByTestId("report-target-identity").textContent).toBe(
+      `Bình luận trong bài của ${NAME_UNKNOWN}`,
+    );
+  });
+
+  it("người xử lý `fullName: null` ⇒ «người không rõ tên» ở dòng người xử lý, KHÔNG lan sang người báo cáo", () => {
+    renderRow(
+      closedReport({
+        resolvedBy: { employeeId: RESOLVER_EMPLOYEE_ID, fullName: null, avatarUrl: null },
+      }),
+    );
+    expect(screen.getByTestId("report-resolved-by")).toHaveTextContent(NAME_UNKNOWN);
+    expect(screen.getByTestId("report-reporter")).not.toHaveTextContent(NAME_UNKNOWN);
+  });
+
+  it("`bodyExcerpt: null` ⇒ KHÔNG vẽ trích đoạn; dòng danh tính vẫn hiện (đối chứng: có trích đoạn ⇒ vẽ)", () => {
+    const first = renderRow(makeReport({ targetSnapshot: snapshot({ bodyExcerpt: null }) }));
+    expect(screen.getByTestId("report-target-identity").textContent).toBe("Bài của Trần Thị Bình");
+    expect(screen.queryByTestId("report-excerpt")).toBeNull();
+    first.unmount();
+
+    renderRow(makeReport());
+    expect(screen.getByTestId("report-excerpt").textContent).toBe("Nội dung bài viết bị báo cáo");
+  });
+
+  it("`resolvedBy: null` + có `resolvedAt` ⇒ chỉ vẽ thời điểm, KHÔNG có nhãn «Người xử lý:»", () => {
+    renderRow(closedReport({ resolvedBy: null }));
+    const resolvedBy = screen.getByTestId("report-resolved-by");
+    expect(resolvedBy.textContent).toBe("3 giờ trước");
+    expect(screen.getByTestId("report-status-pill").textContent).toBe("Đã giải quyết");
+  });
+
+  it("có `resolvedBy`, `resolvedAt: null` ⇒ nhãn + tên, không thời điểm", () => {
+    renderRow(closedReport({ resolvedAt: null }));
+    const resolvedBy = screen.getByTestId("report-resolved-by");
+    expect(resolvedBy).toHaveTextContent("Người xử lý:");
+    expect(resolvedBy).toHaveTextContent("Phạm Thị Hoa");
+    expect(resolvedBy.querySelector("time")).toBeNull();
+  });
+
+  it("`resolvedBy: null` + `resolvedAt: null` ⇒ KHÔNG vẽ dòng người xử lý; pill trạng thái vẫn có", () => {
+    renderRow(closedReport({ resolvedBy: null, resolvedAt: null }));
+    expect(screen.getByTestId("report-status-pill").textContent).toBe("Đã giải quyết");
+    expect(screen.queryByTestId("report-resolved-by")).toBeNull();
   });
 });
 
