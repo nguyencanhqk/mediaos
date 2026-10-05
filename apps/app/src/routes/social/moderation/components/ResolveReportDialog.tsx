@@ -18,7 +18,7 @@
  * │  · `onOutcome(outcome)` — 029 đã có kết cục cuối. TRANG phải: (1) unmount hộp thoại, (2) làm theo │
  * │    `outcome`:                                                                                    │
  * │      `kind: "done"`   ⇒ invalidate `socialKeys.moderation.reports.lists()`; nếu `action !== "none"`│
- * │                         thì THÊM `moderation.hiddenPosts()` · `feed.allOf()` ·                    │
+ * │                         thì THÊM `invalidatePostSurfaces()` (mọi bề mặt đang vẽ bài) ·            │
  * │                         `posts.detail(report.targetSnapshot.postId)` (khi có snapshot).           │
  * │                         `action` là hành động ĐÃ GỬI (`"none"` khi body không có khoá `action`).  │
  * │                         `updated` là báo cáo server trả sau khi đổi.                              │
@@ -36,7 +36,8 @@
  * làm sau mỗi lỗi ĐỌC từ `lib/moderation-errors` — file này không tự suy từ status/mã.
  *
  * 029 KHÔNG idempotent ở server: bấm đúp sinh 409 `SOCIAL-ERR-021` («đã có người xử lý») cho chính lượt
- * của mình ⇒ nút gửi khoá khi đang gửi (plan D20 · B23).
+ * của mình ⇒ nút gửi khoá khi đang gửi (plan D20 · B23), và `submit` tự chặn lượt hai bằng cờ đồng bộ
+ * cho khoảng trước khi nút kịp khoá.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -122,6 +123,11 @@ export function ResolveReportDialog({
   const [error, setError] = React.useState<KeptError | null>(null);
   const [isTargetUnavailable, setIsTargetUnavailable] = React.useState(false);
   const [hasOutcome, setHasOutcome] = React.useState(false);
+  // Cờ «đang gửi» đặt ĐỒNG BỘ trong `submit`. `mutation.isPending` tới màn sau một nhịp của react-query,
+  // nên hai kích hoạt sát nhau đều thấy `canSubmit === true` và đều gửi — lượt hai nhận 409 `021` cho
+  // chính lượt của mình (plan B23). Chỉ gỡ khi lỗi GIỮ hộp thoại (còn gửi lại được); đã có kết cục thì
+  // giữ nguyên tới khi trang unmount.
+  const isSendingRef = React.useRef(false);
 
   const mutation = useMutation({
     // Mọi thứ gửi đi nằm trong `variables` — thân hàm KHÔNG đọc state (v5 nạp lại closure trong effect).
@@ -143,6 +149,7 @@ export function ResolveReportDialog({
         });
         return;
       }
+      isSendingRef.current = false;
       if (outcome.resetAction) {
         setAction(NO_REPORT_ACTION);
         setIsDeleteConfirmed(false);
@@ -179,6 +186,8 @@ export function ResolveReportDialog({
       setError({ reason: "invalidRequest", retryable: false });
       return;
     }
+    if (isSendingRef.current) return;
+    isSendingRef.current = true;
     setError(null);
     mutation.mutate({ reportId: report.id, body });
   };

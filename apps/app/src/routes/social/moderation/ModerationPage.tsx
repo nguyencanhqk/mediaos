@@ -44,6 +44,7 @@ import type { AdminErrorReason } from "../admin/lib/admin-errors";
 import { HiddenPostsTab } from "./components/HiddenPostsTab";
 import { ReportQueue } from "./components/ReportQueue";
 import { ResolveReportDialog, type ResolveReportOutcome } from "./components/ResolveReportDialog";
+import { invalidatePostSurfaces } from "./lib/moderation-invalidation";
 import {
   activeModerationTab,
   activeStatusFilter,
@@ -71,9 +72,10 @@ type OutcomeNotice =
 /**
  * Làm mới cache sau một kết cục của 029.
  *  · Trạng thái báo cáo đã đổi (hoặc thứ đang thấy đã cũ — E1 · E6) ⇒ MỌI trang của hàng đợi.
- *  · Có hành động kèm ⇒ bài đã bị ẩn / khoá bình luận / xoá (hoặc một bình luận của nó bị xoá) ⇒ thêm tab
- *    «Bài đang ẩn», dòng cuộn feed, chi tiết + bình luận của bài. Id bài lấy từ `targetSnapshot.postId`:
- *    với báo cáo BÌNH LUẬN, `targetId` là id bình luận chứ không phải id bài (plan M2b).
+ *  · Có hành động kèm ⇒ bài đã bị ẩn / khoá bình luận / xoá (hoặc một bình luận của nó bị xoá) ⇒ thêm MỌI
+ *    bề mặt đang vẽ bài (`invalidatePostSurfaces`: tab «Bài đang ẩn», dòng cuộn, tin, bình chọn, …) và
+ *    chi tiết + bình luận của bài. Id bài lấy từ `targetSnapshot.postId`: với báo cáo BÌNH LUẬN,
+ *    `targetId` là id bình luận chứ không phải id bài (plan M2b).
  */
 function invalidateAfterOutcome(queryClient: QueryClient, outcome: ResolveReportOutcome): void {
   if (outcome.kind === "failed") {
@@ -84,8 +86,7 @@ function invalidateAfterOutcome(queryClient: QueryClient, outcome: ResolveReport
   }
   void queryClient.invalidateQueries({ queryKey: socialKeys.moderation.reports.lists() });
   if (outcome.action === NO_REPORT_ACTION) return;
-  void queryClient.invalidateQueries({ queryKey: socialKeys.moderation.hiddenPosts() });
-  void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
+  invalidatePostSurfaces(queryClient);
   const postId = outcome.report.targetSnapshot?.postId;
   if (postId === undefined) return;
   void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });

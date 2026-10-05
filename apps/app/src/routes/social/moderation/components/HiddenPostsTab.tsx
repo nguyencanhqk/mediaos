@@ -41,6 +41,7 @@ import { AdminErrorNotice } from "../../admin/components/AdminErrorNotice";
 import type { AdminErrorReason } from "../../admin/lib/admin-errors";
 import { authorDisplayName, relativeTime } from "../../feed/lib/feed-format";
 import { describeModerationReadError, describeUnhidePostError } from "../lib/moderation-errors";
+import { invalidatePostSurfaces } from "../lib/moderation-invalidation";
 
 type HiddenFeedQuery = Pick<ListFeedQueryDto, "status" | "sort"> &
   Partial<Pick<ListFeedQueryDto, "cursor">>;
@@ -134,6 +135,10 @@ export function HiddenPostsTab(): React.ReactElement | null {
   const queryClient = useQueryClient();
   const canManagePosts = useCan("manage", "feed-post");
   const [notice, setNotice] = React.useState<ActionNotice | null>(null);
+  // Cờ «đang gửi» đặt ĐỒNG BỘ trong handler. `unhide.isPending` tới màn sau một nhịp của react-query, nên
+  // hai kích hoạt sát nhau (bấm đúp, Enter giữ phím) đều thấy `false` và đều gửi; 006 không `@Idempotent`.
+  // `disabled` của nút vẫn theo `isPending` — đó là thứ người dùng THẤY, cờ này là thứ chặn.
+  const isSendingRef = React.useRef(false);
 
   const query = useInfiniteQuery({
     queryKey: socialKeys.moderation.hiddenPosts(),
@@ -155,8 +160,8 @@ export function HiddenPostsTab(): React.ReactElement | null {
       queryClient.setQueryData<HiddenPostsData>(socialKeys.moderation.hiddenPosts(), (current) =>
         withoutPost(current, postId),
       );
-      void queryClient.invalidateQueries({ queryKey: socialKeys.moderation.hiddenPosts() });
-      void queryClient.invalidateQueries({ queryKey: socialKeys.feed.allOf() });
+      // Bài vừa hiện lại phải xuất hiện ở mọi bề mặt đang vẽ bài (gồm cả danh sách bài ẩn này).
+      invalidatePostSurfaces(queryClient);
       void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
     },
     onError: (err: unknown, postId) => {
@@ -166,12 +171,16 @@ export function HiddenPostsTab(): React.ReactElement | null {
         void queryClient.invalidateQueries({ queryKey: socialKeys.moderation.hiddenPosts() });
       }
     },
+    onSettled: () => {
+      isSendingRef.current = false;
+    },
   });
 
   if (!canManagePosts) return null;
 
   const handleUnhide = (postId: string): void => {
-    if (unhide.isPending) return;
+    if (isSendingRef.current) return;
+    isSendingRef.current = true;
     setNotice(null);
     unhide.mutate(postId);
   };
