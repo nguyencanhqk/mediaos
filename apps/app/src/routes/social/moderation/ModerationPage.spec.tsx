@@ -11,6 +11,8 @@
 import type { ReactNode } from "react";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient } from "@tanstack/react-query";
+import { socialKeys } from "@mediaos/web-core";
 import { feedReportPageSchema, type FeedReportPageDto } from "@mediaos/contracts";
 import { renderWithProviders, resetCaps, setCaps } from "../feed/social-test-doubles";
 import {
@@ -120,6 +122,25 @@ describe("Khung của màn", () => {
         .map((option) => option.textContent),
     ).toEqual(FILTER_OPTIONS);
     expect(within(await list()).getAllByTestId("report-row")).toHaveLength(1);
+  });
+});
+
+describe("Hàng đợi không dùng lại bản cache còn «tươi»", () => {
+  it("client mặc định `staleTime` 30 s (như `main.tsx`) + cache đã có trang ⇒ vào màn VẪN gọi 028", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+    });
+    client.setQueryData(
+      socialKeys.moderation.reports.list({ status: "open", page: 1, limit: 20 }),
+      onePage(),
+    );
+    routeSearchDouble.set({});
+    renderWithProviders(<ModerationPage />, client);
+
+    // Trang trong cache vẽ ngay (chứng minh khoá seed ĐÚNG là khoá màn đọc)…
+    expect(screen.getAllByTestId("report-row")).toHaveLength(1);
+    // …nhưng màn không tin nó: hàng đợi kiểm duyệt cũ là mời xử lý báo cáo đã đổi trạng thái.
+    await waitFor(() => expect(listReports).toHaveBeenCalledTimes(1));
   });
 });
 
