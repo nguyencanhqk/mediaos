@@ -1,17 +1,19 @@
 /**
- * S16-SOCIAL-FE-3 (L2) — màn Kiểm duyệt `SOC-SCREEN-010`, tab «Báo cáo» (đọc `SOCIAL-API-028`, kết thúc
- * báo cáo bằng `SOCIAL-API-029` qua `ResolveReportDialog`).
+ * S16-SOCIAL-FE-3 (L2) — màn Kiểm duyệt `SOC-SCREEN-010`: tab «Báo cáo» (đọc `SOCIAL-API-028`, kết thúc
+ * báo cáo bằng `SOCIAL-API-029` qua `ResolveReportDialog`) + tab «Bài đang ẩn» (`HiddenPostsTab`, plan D11).
  *
- * ┌─ CẤU TRÚC — chỗ cắm cho tab «Bài đang ẩn» ───────────────────────────────────────────────────────┐
- * │ `ModerationPage` = VỎ: tiêu đề + đọc search của route + chọn tấm (panel) theo tab. Mọi thứ của    │
- * │ hàng đợi báo cáo (query 028 · ô lọc · hộp thoại · dải kết cục) nằm trong `ReportsPanel`. Thêm tab  │
- * │ thứ hai = thêm thanh tab + một nhánh ở vỏ (`activeModerationTab` + `searchForTab` đã có sẵn ở     │
- * │ `lib/moderation-route-search`), KHÔNG phải viết lại `ReportsPanel`.                               │
+ * ┌─ CẤU TRÚC ───────────────────────────────────────────────────────────────────────────────────────┐
+ * │ `ModerationPage` = VỎ: tiêu đề + đọc search của route + thanh tab + chọn tấm (panel) theo tab.    │
+ * │ Mọi thứ của hàng đợi báo cáo (query 028 · ô lọc · hộp thoại · dải kết cục) nằm trong              │
+ * │ `ReportsPanel`; mọi thứ của bài đang ẩn (001 · 006) nằm trong `HiddenPostsTab`. Chỉ tấm ĐANG MỞ   │
+ * │ được mount ⇒ tab không mở thì không phát lời gọi của nó.                                          │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Cổng: màn KHÔNG tự gác quyền đọc — route gác `view:feed` + `view:feed-report` (bước nối dây), server
- * là cổng cuối (403 của 028 ⇒ dải `forbidden`). Nút «Xử lý» do `ReportRow` gác (`manage:feed-report`), ô
- * hành động kèm do hộp thoại gác (`manage:feed-post`).
+ * Cổng: màn KHÔNG tự gác quyền đọc hàng đợi — route gác `view:feed` + `view:feed-report` (bước nối dây),
+ * server là cổng cuối (403 của 028 ⇒ dải `forbidden`). Nút «Xử lý» do `ReportRow` gác
+ * (`manage:feed-report`), ô hành động kèm do hộp thoại gác (`manage:feed-post`).
+ * Tab «Bài đang ẩn» ⇔ `manage:feed-post` (001 `status=hidden` thiếu cặp đó là 403). Thiếu ⇒ KHÔNG có
+ * thanh tab, `?tab=hidden` rơi về hàng đợi báo cáo và 001 không được gọi. KHÔNG suy từ quyền khác.
  *
  * BỐN LUẬT của tấm «Báo cáo»:
  *  1. Tham số 028 và search kế tiếp CHỈ suy bằng hàm thuần của `moderation-route-search` — «Tất cả» không
@@ -34,20 +36,27 @@ import {
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
-import { socialKeys, socialModerationApi } from "@mediaos/web-core";
+import { cn } from "@mediaos/ui";
+import { socialKeys, socialModerationApi, useCan } from "@mediaos/web-core";
 import type { FeedReportDto, FeedReportPageDto, FeedReportStatusDto } from "@mediaos/contracts";
 import { AdminErrorNotice } from "../admin/components/AdminErrorNotice";
 import type { AdminErrorReason } from "../admin/lib/admin-errors";
+import { HiddenPostsTab } from "./components/HiddenPostsTab";
 import { ReportQueue } from "./components/ReportQueue";
 import { ResolveReportDialog, type ResolveReportOutcome } from "./components/ResolveReportDialog";
 import {
+  activeModerationTab,
   activeStatusFilter,
+  DEFAULT_MODERATION_TAB,
   MODERATION_STATUS_FILTERS,
+  MODERATION_TABS,
   reportListParams,
   searchForPage,
   searchForStatusFilter,
+  searchForTab,
   validateModerationRouteSearch,
   type ModerationRouteSearch,
+  type ModerationTab,
   type ReportListParams,
 } from "./lib/moderation-route-search";
 import { NO_REPORT_ACTION } from "./lib/report-actions";
@@ -213,9 +222,88 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
   );
 }
 
+const tabDomId = (baseId: string, tab: ModerationTab): string => `${baseId}-tab-${tab}`;
+const panelDomId = (baseId: string, tab: ModerationTab): string => `${baseId}-panel-${tab}`;
+
+/** Phím → tab kế tiếp theo khuôn `tablist` của WAI-ARIA (vòng lại ở hai đầu). Phím khác ⇒ `null`. */
+function tabForKey(current: ModerationTab, key: string): ModerationTab | null {
+  const count = MODERATION_TABS.length;
+  const index = MODERATION_TABS.indexOf(current);
+  switch (key) {
+    case "ArrowRight":
+      return MODERATION_TABS[(index + 1) % count] ?? null;
+    case "ArrowLeft":
+      return MODERATION_TABS[(index + count - 1) % count] ?? null;
+    case "Home":
+      return MODERATION_TABS[0];
+    case "End":
+      return MODERATION_TABS[count - 1] ?? null;
+    default:
+      return null;
+  }
+}
+
+interface ModerationTabsProps {
+  baseId: string;
+  active: ModerationTab;
+  onChange: (tab: ModerationTab) => void;
+}
+
+/** Thanh tab: `tablist` + roving tabindex (chỉ tab đang chọn nằm trong thứ tự Tab), mũi tên đổi tab. */
+function ModerationTabs({ baseId, active, onChange }: ModerationTabsProps): React.ReactElement {
+  const { t } = useTranslation("social");
+
+  const select = (tab: ModerationTab): void => {
+    if (tab !== active) onChange(tab);
+  };
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
+    const next = tabForKey(active, event.key);
+    if (next === null) return;
+    event.preventDefault();
+    select(next);
+    document.getElementById(tabDomId(baseId, next))?.focus();
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label={t("admin.moderation.tabs.aria")}
+      className="flex gap-1 border-b border-border"
+    >
+      {MODERATION_TABS.map((tab) => {
+        const isSelected = tab === active;
+        return (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            id={tabDomId(baseId, tab)}
+            aria-selected={isSelected}
+            // Chỉ tấm ĐANG MỞ được mount ⇒ chỉ tab đang chọn trỏ được tới một id có thật.
+            aria-controls={isSelected ? panelDomId(baseId, tab) : undefined}
+            tabIndex={isSelected ? 0 : -1}
+            onClick={() => select(tab)}
+            onKeyDown={handleKeyDown}
+            className={cn(
+              "-mb-px border-b-2 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              isSelected
+                ? "border-primary font-medium text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t(`admin.moderation.tabs.${tab}`)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ModerationPage(): React.ReactElement {
   const { t } = useTranslation("social");
   const navigate = useNavigate();
+  const tabsId = React.useId();
+  const canManagePosts = useCan("manage", "feed-post");
   // Lọc lại bằng CHÍNH `validateSearch` của route: màn không phụ thuộc việc route đã nối validator hay chưa.
   const search = validateModerationRouteSearch(useSearch({ strict: false }));
 
@@ -227,10 +315,31 @@ export function ModerationPage(): React.ReactElement {
     void navigate({ to: ".", search: () => nextSearch });
   };
 
+  const reportsPanel = <ReportsPanel search={search} onSearchChange={handleSearchChange} />;
+  // Tab URL yêu cầu chỉ có hiệu lực khi người xem CÓ tab đó; thiếu `manage:feed-post` ⇒ luôn là hàng đợi.
+  const activeTab = canManagePosts ? activeModerationTab(search) : DEFAULT_MODERATION_TAB;
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-foreground">{t("admin.moderation.page.title")}</h1>
-      <ReportsPanel search={search} onSearchChange={handleSearchChange} />
+      {canManagePosts ? (
+        <>
+          <ModerationTabs
+            baseId={tabsId}
+            active={activeTab}
+            onChange={(tab) => handleSearchChange(searchForTab(search, tab))}
+          />
+          <div
+            role="tabpanel"
+            id={panelDomId(tabsId, activeTab)}
+            aria-labelledby={tabDomId(tabsId, activeTab)}
+          >
+            {activeTab === "hidden" ? <HiddenPostsTab /> : reportsPanel}
+          </div>
+        </>
+      ) : (
+        reportsPanel
+      )}
     </div>
   );
 }

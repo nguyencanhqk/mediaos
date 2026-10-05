@@ -78,6 +78,31 @@ export default {
         dismissed: "Đã bỏ qua báo cáo.",
       },
     },
+    /** Thanh tab của màn. Khoá = đúng một phần tử của `MODERATION_TABS`. */
+    tabs: {
+      aria: "Các mục kiểm duyệt",
+      reports: "Báo cáo",
+      hidden: "Bài đang ẩn",
+    },
+    /**
+     * Tab «Bài đang ẩn» (001 `status=hidden` + 006) — `HiddenPostsTab`.
+     *
+     * `limitNote` LUÔN hiện, kể cả khi rỗng: server loại bài trong nhóm khỏi lượt đọc này và không trả
+     * tổng số (plan M4) — thiếu câu này thì «Không có bài nào đang ẩn» đọc thành một khẳng định về toàn
+     * bộ hệ thống.
+     */
+    hidden: {
+      limitNote: "Danh sách này không gồm bài trong nhóm và không hiển thị tổng số bài đang ẩn.",
+      loadingAria: "Đang tải danh sách bài đang ẩn",
+      listAria: "Danh sách bài đang ẩn",
+      empty: "Không có bài nào đang ẩn.",
+      loadMore: "Tải thêm",
+      authorUnknown: "Người dùng không rõ tên",
+      noBody: "(Bài không có nội dung chữ)",
+      viewPost: "Xem bài",
+      unhide: "Hiện lại",
+      unhidden: "Đã hiện lại bài viết.",
+    },
     /** Hàng đợi báo cáo (028) — `ReportQueue`. Bốn câu rỗng KHÁC nhau: mỗi bộ lọc trả lời một câu hỏi riêng. */
     queue: {
       listAria: "Danh sách báo cáo vi phạm",
