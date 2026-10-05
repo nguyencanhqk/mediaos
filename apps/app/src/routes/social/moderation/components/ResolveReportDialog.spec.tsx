@@ -89,10 +89,16 @@ const TARGET_TYPES: TargetType[] = ["post", "comment"];
 function renderDialog(report: FeedReportDto = makeReport()) {
   const onClose = vi.fn();
   const onOutcome = vi.fn();
+  const onStale = vi.fn();
   renderWithProviders(
-    <ResolveReportDialog report={report} onClose={onClose} onOutcome={onOutcome} />,
+    <ResolveReportDialog
+      report={report}
+      onClose={onClose}
+      onOutcome={onOutcome}
+      onStale={onStale}
+    />,
   );
-  return { report, onClose, onOutcome };
+  return { report, onClose, onOutcome, onStale };
 }
 
 const dialog = (): HTMLElement => screen.getByRole("dialog", { name: TITLE });

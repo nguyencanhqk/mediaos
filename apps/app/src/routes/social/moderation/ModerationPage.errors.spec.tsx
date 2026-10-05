@@ -83,7 +83,7 @@ const EMPTY_OPEN = "Không có báo cáo nào đang chờ xử lý.";
 const DONE_RESOLVED = "Đã giải quyết báo cáo.";
 const DONE_DISMISSED = "Đã bỏ qua báo cáo.";
 const ALREADY_DECIDED_TEXT =
-  "Báo cáo này đã được xử lý bởi người khác trước khi bạn xác nhận. Danh sách đã được làm mới.";
+  "Báo cáo này đã được xử lý trước khi yêu cầu của bạn hoàn tất. Danh sách đã được làm mới.";
 const FORBIDDEN_TEXT =
   "Bạn không có quyền thực hiện thao tác này. Nếu cần, hãy liên hệ quản trị viên để được cấp quyền.";
 
@@ -295,12 +295,15 @@ describe("Thành công — trang invalidate đúng phạm vi", () => {
 });
 
 describe("Kết cục LỖI — hộp thoại đóng, dải ở TRANG", () => {
+  // E1 (`021`) KHÁC E6 ở các bề mặt BÀI: báo cáo đã có người kết thúc — người khác, hoặc CHÍNH lượt trước của
+  // mình đã ghi mà mất phản hồi (hạn chờ) rồi bấm «Thử lại» — có thể kèm ẩn / xoá bài ⇒ rail và mọi danh
+  // sách bài cũng đã cũ. E6 (báo cáo không còn / ra khỏi phạm vi) không nói gì về bài.
   it.each([
-    ["E1 `SOCIAL-ERR-021`", ADMIN_ERR.reportAlreadyDecided, "reportAlreadyDecided"],
-    ["E6 `SOCIAL-ERR-001`", ADMIN_ERR.reportGone, "reportGone"],
+    ["E1 `SOCIAL-ERR-021`", ADMIN_ERR.reportAlreadyDecided, "reportAlreadyDecided", true],
+    ["E6 `SOCIAL-ERR-001`", ADMIN_ERR.reportGone, "reportGone", false],
   ])(
     "%s: đóng hộp thoại · dải ở trang KHÔNG «Thử lại» · làm mới mọi trang báo cáo · danh sách đang mở gọi lại",
-    async (_label, makeError, reason) => {
+    async (_label, makeError, reason, postsRefreshed) => {
       const error = makeError();
       resolveReport.mockImplementation(() => Promise.reject(error));
       const { invalidated } = await renderPage();
@@ -314,9 +317,15 @@ describe("Kết cục LỖI — hộp thoại đóng, dải ở TRANG", () => {
       expect(document.body).not.toHaveTextContent(error.message);
       await waitFor(() => expect(listReports).toHaveBeenCalledTimes(2));
       expect(invalidated("otherReportPage")).toBe(true);
-      // Chưa có hành động nào được thực hiện ⇒ không có lý do làm mới feed / bài đang ẩn.
-      expect(invalidated("hiddenPosts")).toBe(false);
-      expect(invalidated("feedList")).toBe(false);
+      expect(invalidated("hiddenPosts")).toBe(postsRefreshed);
+      expect(invalidated("feedList")).toBe(postsRefreshed);
+      expect(invalidated("postDetail")).toBe(postsRefreshed);
+      expect(invalidated("postComments")).toBe(postsRefreshed);
+      expect(OTHER_POST_SURFACES.map((key) => [key, invalidated(key)])).toEqual(
+        OTHER_POST_SURFACES.map((key) => [key, postsRefreshed]),
+      );
+      // Đối chứng: không quét sạch cache.
+      expect(invalidated("kudosBadges")).toBe(false);
       expect(invalidated("birthdays")).toBe(false);
       expect(screen.queryByRole("status")).toBeNull();
     },
@@ -435,16 +444,11 @@ describe("Dải kết cục CÒN khi hàng vừa xử lý biến mất khỏi h�
   });
 });
 
-describe("Lỗi GIỮ hộp thoại — trang không vẽ dải, không làm mới", () => {
+describe("Lỗi GIỮ hộp thoại — trang không vẽ dải; chỉ E5 làm mới hàng đợi", () => {
   it.each([
     ["E2 `REPORT-BUSY`", ADMIN_ERR.reportBusy, "reportBusy"],
     ["E3 `REPORT-ACTION-DENIED`", ADMIN_ERR.reportActionDenied, "reportActionDenied"],
     ["E4 `REPORT-ACTION-INVALID-FOR-TARGET`", ADMIN_ERR.reportActionInvalid, "reportActionInvalid"],
-    [
-      "E5 `REPORT-ACTION-TARGET-UNAVAILABLE`",
-      ADMIN_ERR.reportTargetUnavailable,
-      "reportTargetUnavailable",
-    ],
     ["E10 400", ADMIN_ERR.badRequest, "invalidRequest"],
     ["E11 500", ADMIN_ERR.server, "generic"],
   ])(
@@ -465,6 +469,40 @@ describe("Lỗi GIỮ hộp thoại — trang không vẽ dải, không làm m�
       expect(listReports).toHaveBeenCalledTimes(1);
     },
   );
+
+  // E5 tự chứng minh hàng đang thấy đã cũ: đích không còn thao tác được, mà hàng vẫn vẽ nó như còn sống và
+  // «Xem trong ngữ cảnh» dẫn tới 404. Hàng đợi được đọc lại NGAY (kể cả khi người dùng bấm «Huỷ» sau đó);
+  // hộp thoại giữ bản báo cáo riêng nên nháp không mất.
+  it("E5 `REPORT-ACTION-TARGET-UNAVAILABLE`: hộp thoại CÒN + nháp còn, hàng đợi ĐƯỢC đọc lại; bề mặt bài không bị đụng", async () => {
+    resolveReport.mockImplementation(() => Promise.reject(ADMIN_ERR.reportTargetUnavailable()));
+    const { invalidated } = await renderPage();
+
+    openDialog();
+    pick(RESOLVED);
+    pick("Ẩn bài");
+    fireEvent.change(screen.getByRole("textbox", { name: "Ghi chú xử lý (không bắt buộc)" }), {
+      target: { value: "đã kiểm tra" },
+    });
+    clickSubmit();
+
+    const dialog = screen.getByRole("dialog", { name: DIALOG });
+    await waitFor(() =>
+      expect(within(dialog).getByRole("alert")).toHaveAttribute(
+        "data-reason",
+        "reportTargetUnavailable",
+      ),
+    );
+    await waitFor(() => expect(listReports).toHaveBeenCalledTimes(2));
+    expect(invalidated("otherReportPage")).toBe(true);
+    expect(invalidated("feedList")).toBe(false);
+    expect(invalidated("hiddenPosts")).toBe(false);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: DIALOG })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Ghi chú xử lý (không bắt buộc)" })).toHaveValue(
+      "đã kiểm tra",
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
 });
 
 describe("DC1 — bấm đúp 029 từ màn", () => {

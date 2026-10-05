@@ -9,6 +9,11 @@
  * invalidate thì bài còn đó tới khi rail mount lại.
  *
  * Thêm so với đường menu: `moderation.hiddenPosts()` — nhánh riêng, không nằm dưới `feed.allOf()`.
+ *
+ * ⚠️ Hai tập đang được CHÉP TAY ở hai nơi (file này và `use-feed-actions.ts`). Lưới chống trôi:
+ * `moderation-invalidation.spec.tsx` chạy THẬT đường menu ⋯, thu mọi khoá nó invalidate và đòi tập ở đây
+ * phủ đủ — nối thêm khoá vào `invalidatePostLists` mà quên file này là ca đó đỏ. Gộp về MỘT nguồn (để
+ * `use-feed-actions.ts` đọc cùng tập) là việc của WO sau: file đó ngoài phạm vi PR này.
  * Chi tiết / bình luận của MỘT bài do nơi gọi tự làm mới (chỉ nơi gọi biết id bài).
  */
 import type { QueryClient, QueryKey } from "@tanstack/react-query";

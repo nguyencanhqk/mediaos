@@ -57,7 +57,10 @@ export const MODERATION_READ_ERROR_TABLE = {} as const satisfies AdminErrorTable
  *    đã nhập, dải lỗi nằm TRONG hộp thoại.
  *  · `resetAction` ⇒ đưa ô «Hành động kèm» về «không» (hành động đã chọn không thực hiện được; kết thúc
  *    báo cáo không kèm hành động thì được).
- *  · `invalidate` ⇒ invalidate `socialKeys.moderation.reports.lists()` (thứ đang thấy đã cũ).
+ *  · `invalidate` ⇒ invalidate `socialKeys.moderation.reports.lists()` (thứ đang thấy đã cũ). Với lỗi
+ *    `"close"` trang làm việc này khi nhận kết cục; với lỗi `"keep"` hộp thoại báo trang qua `onStale`.
+ *  · `invalidatePosts` ⇒ THÊM mọi bề mặt đang vẽ bài + chi tiết / bình luận của bài bị báo cáo: báo cáo
+ *    đã được kết thúc ở nơi khác, có thể kèm ẩn / xoá bài.
  *  · `retryable` ⇒ gửi lại NGUYÊN yêu cầu đó có thể thành công: vẽ «Thử lại» / mời bấm lại. `false` ⇒
  *    KHÔNG truyền `onRetry` cho `AdminErrorNotice` (câu chữ của reason đó cũng không hứa thử lại).
  */
@@ -65,6 +68,7 @@ export interface ResolveReportErrorBehavior {
   dialog: "close" | "keep";
   resetAction: boolean;
   invalidate: boolean;
+  invalidatePosts: boolean;
   retryable: boolean;
 }
 export interface ResolveReportErrorOutcome extends ResolveReportErrorBehavior {
@@ -94,22 +98,26 @@ const KEEP: ResolveReportErrorBehavior = {
   dialog: "keep",
   resetAction: false,
   invalidate: false,
+  invalidatePosts: false,
   retryable: false,
 };
 const CLOSE: ResolveReportErrorBehavior = { ...KEEP, dialog: "close" };
 
 /** Cột «Hành vi» của E1–E6 + E9–E11 cho 029. Reason không có hàng ⇒ dùng hàng `generic`. */
 export const RESOLVE_REPORT_ERROR_BEHAVIOR: BehaviorTable<ResolveReportErrorBehavior> = {
-  // E1 — người khác đã xử lý trước: kết cục cuối.
-  reportAlreadyDecided: { ...CLOSE, invalidate: true },
+  // E1 — báo cáo đã được kết thúc trước: kết cục cuối. «Trước» có thể là người khác, hoặc CHÍNH lượt
+  // trước của mình đã ghi mà mất phản hồi (hết hạn chờ) rồi bấm «Thử lại». Lượt đó có thể kèm ẩn / xoá
+  // bài ⇒ làm mới cả các bề mặt bài, không chỉ hàng đợi.
+  reportAlreadyDecided: { ...CLOSE, invalidate: true, invalidatePosts: true },
   // E2 — hàng đang bị giao dịch khác giữ: tạm thời, bấm lại được.
   reportBusy: { ...KEEP, retryable: true },
   // E3 — thiếu quyền cho HÀNH ĐỘNG KÈM (không phải cho việc kết thúc báo cáo).
   reportActionDenied: { ...KEEP, resetAction: true },
   // E4 — hành động không hợp loại đích: người dùng tự chọn lại.
   reportActionInvalid: KEEP,
-  // E5 — đích không còn thao tác được: chỉ còn đường kết thúc không kèm hành động.
-  reportTargetUnavailable: { ...KEEP, resetAction: true },
+  // E5 — đích không còn thao tác được: chỉ còn đường kết thúc không kèm hành động. Hàng đang thấy vẫn vẽ
+  // đích như còn sống (link «Xem trong ngữ cảnh» dẫn tới 404) ⇒ đọc lại hàng đợi; hộp thoại vẫn giữ.
+  reportTargetUnavailable: { ...KEEP, resetAction: true, invalidate: true },
   // E6 — báo cáo không còn (hoặc ra khỏi phạm vi).
   reportGone: { ...CLOSE, invalidate: true },
   // E9 — 403 tầng 1/2: mất quyền giữa chừng, thử lại vô ích.

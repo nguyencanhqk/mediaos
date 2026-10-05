@@ -22,12 +22,7 @@
  */
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-  type InfiniteData,
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Avatar, Button } from "@mediaos/ui";
 import { socialApi, socialKeys, useCan } from "@mediaos/web-core";
@@ -39,6 +34,9 @@ import type {
 } from "@mediaos/contracts";
 import { AdminErrorNotice } from "../../admin/components/AdminErrorNotice";
 import type { AdminErrorReason } from "../../admin/lib/admin-errors";
+import { useGuardedMutation } from "../../admin/lib/use-guarded-mutation";
+import { DoneNotice } from "./DoneNotice";
+import { PLACEHOLDER_CLASS, SKELETON_ROWS } from "./list-states";
 import { authorDisplayName, relativeTime } from "../../feed/lib/feed-format";
 import { describeModerationReadError, describeUnhidePostError } from "../lib/moderation-errors";
 import { invalidatePostSurfaces } from "../lib/moderation-invalidation";
@@ -54,9 +52,6 @@ type ActionNotice =
   | { kind: "failed"; reason: AdminErrorReason; retryPostId: string | null };
 
 const HIDDEN_FEED_QUERY = { status: "hidden", sort: "latest" } as const;
-const SKELETON_ROWS = [0, 1, 2] as const;
-const PLACEHOLDER_CLASS =
-  "rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground";
 
 /** Tham số 001: con trỏ CHỈ có mặt từ lượt hai (khoá vắng, không phải `undefined`). */
 function hiddenFeedQuery(cursor: string | undefined): HiddenFeedQuery {
@@ -136,10 +131,6 @@ export function HiddenPostsTab(): React.ReactElement | null {
   const queryClient = useQueryClient();
   const canManagePosts = useCan("manage", "feed-post");
   const [notice, setNotice] = React.useState<ActionNotice | null>(null);
-  // Cờ «đang gửi» đặt ĐỒNG BỘ trong handler. `unhide.isPending` tới màn sau một nhịp của react-query, nên
-  // hai kích hoạt sát nhau (bấm đúp, Enter giữ phím) đều thấy `false` và đều gửi; 006 không `@Idempotent`.
-  // `disabled` của nút vẫn theo `isPending` — đó là thứ người dùng THẤY, cờ này là thứ chặn.
-  const isSendingRef = React.useRef(false);
   // Hàng vừa «Hiện lại» (hoặc hàng của bài không còn) bị gỡ khi nút của nó đang giữ focus ⇒ đưa focus tới
   // dải kết quả; dải không được vẽ (lượt đọc đang lỗi) ⇒ tới chính vùng của tab.
   const outcomeFocus = useOutcomeFocus<HTMLDivElement, HTMLElement>();
@@ -155,12 +146,13 @@ export function HiddenPostsTab(): React.ReactElement | null {
     staleTime: 0,
   });
 
-  const unhide = useMutation({
-    // Mất mạng thì HỎNG NGAY (rơi vào `onError` ⇒ dải `generic` + «Thử lại»), không «tạm dừng»: mặc định
-    // `online` giữ `isPending` vô hạn mà không báo gì — mọi nút «Hiện lại» khoá cho tới khi có mạng lại.
-    networkMode: "always",
-    // Mọi thứ gửi đi nằm trong `variables` — thân hàm KHÔNG đọc state (v5 nạp lại closure trong effect).
-    mutationFn: (postId: string) => socialApi.moderatePost(postId, unhideBody()),
+  // `useGuardedMutation`: khoá ĐỒNG BỘ (006 không `@Idempotent`; `isPending` tới màn sau một nhịp nên bấm
+  // đúp / Enter giữ phím đều lọt), hỏng ngay khi offline, hết hạn chờ thì rơi vào `generic` + «Thử lại»
+  // thay vì khoá mọi nút «Hiện lại» vô hạn. Khoá nhả sau MỌI kết cục — hành động này lặp lại được.
+  // `socialApi.moderatePost` chưa nhận `signal`: hết hạn chỉ nhả màn, yêu cầu treo không bị huỷ; lượt lặp
+  // `{ hidden: false }` không đổi gì thêm.
+  const unhide = useGuardedMutation<FeedPostDto, string>({
+    mutationFn: (postId) => socialApi.moderatePost(postId, unhideBody()),
     onSuccess: (_post, postId) => {
       setNotice({ kind: "done" });
       outcomeFocus.requestFocus();
@@ -172,7 +164,7 @@ export function HiddenPostsTab(): React.ReactElement | null {
       invalidatePostSurfaces(queryClient);
       void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
     },
-    onError: (err: unknown, postId) => {
+    onError: (err, postId) => {
       const { reason, invalidate, retryable } = describeUnhidePostError(err);
       setNotice({ kind: "failed", reason, retryPostId: retryable ? postId : null });
       if (invalidate) {
@@ -182,18 +174,12 @@ export function HiddenPostsTab(): React.ReactElement | null {
         void queryClient.invalidateQueries({ queryKey: socialKeys.moderation.hiddenPosts() });
       }
     },
-    onSettled: () => {
-      isSendingRef.current = false;
-    },
   });
 
   if (!canManagePosts) return null;
 
   const handleUnhide = (postId: string): void => {
-    if (isSendingRef.current) return;
-    isSendingRef.current = true;
-    setNotice(null);
-    unhide.mutate(postId);
+    if (unhide.start(postId)) setNotice(null);
   };
 
   const posts = (query.data?.pages ?? []).flatMap((page) => page.data);
@@ -293,9 +279,5 @@ function ActionNoticeBar({ notice, onRetry, onDismiss }: ActionNoticeBarProps): 
       />
     );
   }
-  return (
-    <p role="status" className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
-      {t("admin.moderation.hidden.unhidden")}
-    </p>
-  );
+  return <DoneNotice message={t("admin.moderation.hidden.unhidden")} onDismiss={onDismiss} />;
 }

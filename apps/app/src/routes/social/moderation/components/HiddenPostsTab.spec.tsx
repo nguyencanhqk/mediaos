@@ -650,3 +650,53 @@ describe("Mất mạng (trình duyệt báo offline)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: UNHIDE })).toBeEnabled());
   });
 });
+
+// `apiFetch` không có timeout: 006 treo thì MỌI nút «Hiện lại» khoá tới khi TCP cắt (gate code, CODE-01).
+describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không trả lời", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("006 treo quá 30 giây ⇒ dải `generic` + «Thử lại»; nút «Hiện lại» mở lại", async () => {
+    moderatePost.mockImplementation(() => new Promise<never>(() => undefined));
+    renderTab();
+    await list();
+    vi.useFakeTimers();
+
+    fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(29_999);
+    });
+    expect(moderatePost).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: UNHIDE })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveAttribute("data-reason", "generic");
+    expect(within(alert).getByRole("button", { name: RETRY })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: UNHIDE })).toBeEnabled();
+  });
+});
+
+describe("Dải «Đã hiện lại bài viết» — đóng được như dải kết cục của tab Báo cáo (gate code, CODE-05)", () => {
+  it("nút «Đóng thông báo» gỡ dải; danh sách còn nguyên", async () => {
+    listFeed.mockImplementationOnce(() => Promise.resolve(makeHiddenPostPage([first(), second()])));
+    listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([second()])));
+    renderTab();
+    const rows = rowsIn(await list());
+    fireEvent.click(within(rows[0] as HTMLElement).getByRole("button", { name: UNHIDE }));
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent(UNHIDDEN);
+
+    fireEvent.click(within(status).getByRole("button", { name: "Đóng thông báo" }));
+
+    expect(screen.queryByText(UNHIDDEN)).toBeNull();
+    expect(screen.getByRole("list", { name: LIST })).toBeInTheDocument();
+  });
+});

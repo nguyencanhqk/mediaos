@@ -465,3 +465,50 @@ describe("Mất mạng (trình duyệt báo offline)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+// `apiFetch` không có timeout: yêu cầu treo (rớt Wi-Fi / VPN khi trình duyệt vẫn báo online) giữ `isPending`
+// tới khi TCP cắt, mà hộp thoại chặn mọi đường đóng lúc đang gửi ⇒ lớp phủ không lối ra (gate code, CODE-01).
+describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không trả lời", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const advance = (ms: number): Promise<void> =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+
+  it("027 treo: trước 30 giây còn khoá; quá hạn ⇒ dải `generic`, yêu cầu bị huỷ, «Thử lại» gửi CÙNG `attemptId`", async () => {
+    createReport.mockImplementationOnce(() => new Promise<never>(() => undefined));
+    const { onClose } = renderDialog();
+    pick("Spam hoặc quảng cáo");
+    vi.useFakeTimers();
+
+    clickSubmit();
+    await advance(29_999);
+
+    expect(createReport).toHaveBeenCalledTimes(1);
+    const signal: unknown = createReport.mock.calls[0]?.[2];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+    expect(within(dialog()).queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: CANCEL })).toBeDisabled();
+
+    await advance(1);
+    await advance(0);
+
+    expect(alertReason()).toBe("generic");
+    expect((signal as AbortSignal).aborted).toBe(true);
+    expect(screen.getByRole("button", { name: CANCEL })).toBeEnabled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Server có thể ĐÃ ghi lượt treo ⇒ lượt lặp phải mang cùng khoá idempotency (cùng `attemptId`).
+    fireEvent.click(within(dialog()).getByRole("button", { name: RETRY }));
+    await advance(0);
+
+    expect(createReport).toHaveBeenCalledTimes(2);
+    expect(sentAttemptId(1)).toBe(sentAttemptId(0));
+    expect(sentBody(1)).toEqual(sentBody(0));
+    expect(screen.getByRole("status")).toHaveTextContent(SENT);
+  });
+});

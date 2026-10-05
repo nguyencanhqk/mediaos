@@ -15,7 +15,7 @@
  * Tab «Bài đang ẩn» ⇔ `manage:feed-post` (001 `status=hidden` thiếu cặp đó là 403). Thiếu ⇒ KHÔNG có
  * thanh tab, `?tab=hidden` rơi về hàng đợi báo cáo và 001 không được gọi. KHÔNG suy từ quyền khác.
  *
- * BỐN LUẬT của tấm «Báo cáo»:
+ * NĂM LUẬT của tấm «Báo cáo»:
  *  1. Tham số 028 và search kế tiếp CHỈ suy bằng hàm thuần của `moderation-route-search` — «Tất cả» không
  *     gửi `status`, mặc định không ghi lên URL, đổi bộ lọc về trang 1 đều nằm ở đó.
  *  2. Giữ trang cũ trong lúc tải CHỈ khi lật trang trong CÙNG bộ lọc. Đổi bộ lọc mà giữ thì hàng «đang
@@ -37,12 +37,12 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
 import { cn } from "@mediaos/ui";
 import { socialKeys, socialModerationApi, useCan } from "@mediaos/web-core";
 import type { FeedReportDto, FeedReportPageDto, FeedReportStatusDto } from "@mediaos/contracts";
 import { AdminErrorNotice } from "../admin/components/AdminErrorNotice";
 import type { AdminErrorReason } from "../admin/lib/admin-errors";
+import { DoneNotice } from "./components/DoneNotice";
 import { HiddenPostsTab } from "./components/HiddenPostsTab";
 import { ReportQueue } from "./components/ReportQueue";
 import { ResolveReportDialog, type ResolveReportOutcome } from "./components/ResolveReportDialog";
@@ -72,28 +72,41 @@ type OutcomeNotice =
   | { kind: "done"; status: ClosedReportStatus }
   | { kind: "failed"; reason: AdminErrorReason };
 
-/**
- * Làm mới cache sau một kết cục của 029.
- *  · Trạng thái báo cáo đã đổi (hoặc thứ đang thấy đã cũ — E1 · E6) ⇒ MỌI trang của hàng đợi.
- *  · Có hành động kèm ⇒ bài đã bị ẩn / khoá bình luận / xoá (hoặc một bình luận của nó bị xoá) ⇒ thêm MỌI
- *    bề mặt đang vẽ bài (`invalidatePostSurfaces`: tab «Bài đang ẩn», dòng cuộn, tin, bình chọn, …) và
- *    chi tiết + bình luận của bài. Id bài lấy từ `targetSnapshot.postId`: với báo cáo BÌNH LUẬN,
- *    `targetId` là id bình luận chứ không phải id bài (plan M2b).
- */
-function invalidateAfterOutcome(queryClient: QueryClient, outcome: ResolveReportOutcome): void {
-  if (outcome.kind === "failed") {
-    if (outcome.invalidate) {
-      void queryClient.invalidateQueries({ queryKey: socialKeys.moderation.reports.lists() });
-    }
-    return;
-  }
+function invalidateReportLists(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: socialKeys.moderation.reports.lists() });
-  if (outcome.action === NO_REPORT_ACTION) return;
+}
+
+/**
+ * Bài bị báo cáo (hoặc bài CHA của bình luận bị báo cáo) đã / có thể đã đổi ⇒ MỌI bề mặt đang vẽ bài
+ * (`invalidatePostSurfaces`: tab «Bài đang ẩn», dòng cuộn, tin, bình chọn, …) + chi tiết + bình luận của
+ * bài. Id bài lấy từ `targetSnapshot.postId`: với báo cáo BÌNH LUẬN, `targetId` là id bình luận chứ không
+ * phải id bài (plan M2b).
+ */
+function invalidateReportedPost(queryClient: QueryClient, report: FeedReportDto): void {
   invalidatePostSurfaces(queryClient);
-  const postId = outcome.report.targetSnapshot?.postId;
+  const postId = report.targetSnapshot?.postId;
   if (postId === undefined) return;
   void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
   void queryClient.invalidateQueries({ queryKey: socialKeys.posts.comments(postId) });
+}
+
+/**
+ * Làm mới cache sau một kết cục của 029.
+ *  · Trạng thái báo cáo đã đổi (hoặc thứ đang thấy đã cũ — E1 · E6) ⇒ MỌI trang của hàng đợi.
+ *  · Có hành động kèm ⇒ bài đã bị ẩn / khoá bình luận / xoá (hoặc một bình luận của nó bị xoá) ⇒ thêm
+ *    `invalidateReportedPost`.
+ *  · E1 (`invalidatePosts`): báo cáo đã được kết thúc ở nơi khác — người khác, hoặc chính lượt trước của
+ *    mình đã ghi mà mất phản hồi — có thể kèm ẩn / xoá ⇒ cũng `invalidateReportedPost`. Khoá không có
+ *    observer chỉ bị đánh dấu cũ, không phát lời gọi nào.
+ */
+function invalidateAfterOutcome(queryClient: QueryClient, outcome: ResolveReportOutcome): void {
+  if (outcome.kind === "failed") {
+    if (outcome.invalidate) invalidateReportLists(queryClient);
+    if (outcome.invalidatePosts) invalidateReportedPost(queryClient, outcome.report);
+    return;
+  }
+  invalidateReportLists(queryClient);
+  if (outcome.action !== NO_REPORT_ACTION) invalidateReportedPost(queryClient, outcome.report);
 }
 
 function noticeOf(outcome: ResolveReportOutcome): OutcomeNotice | null {
@@ -115,22 +128,10 @@ function OutcomeNoticeBar({
     return <AdminErrorNotice reason={notice.reason} onDismiss={onDismiss} />;
   }
   return (
-    <div
-      role="status"
-      className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2"
-    >
-      <p className="text-sm text-foreground">
-        {t(`admin.moderation.page.outcome.${notice.status}`)}
-      </p>
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label={t("admin.notice.dismiss")}
-        className="rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <X className="h-4 w-4" aria-hidden="true" />
-      </button>
-    </div>
+    <DoneNotice
+      message={t(`admin.moderation.page.outcome.${notice.status}`)}
+      onDismiss={onDismiss}
+    />
   );
 }
 
@@ -226,6 +227,7 @@ function ReportsPanel({ search, onSearchChange }: ReportsPanelProps): React.Reac
           report={resolving}
           onClose={() => setResolving(null)}
           onOutcome={handleOutcome}
+          onStale={() => invalidateReportLists(queryClient)}
         />
       )}
     </section>

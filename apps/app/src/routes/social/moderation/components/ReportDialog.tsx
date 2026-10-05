@@ -31,7 +31,6 @@
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation } from "@tanstack/react-query";
 import { Button, Dialog } from "@mediaos/ui";
 import { createIdempotencyKey, socialModerationApi } from "@mediaos/web-core";
 import {
@@ -43,8 +42,9 @@ import {
   type FeedTargetTypeDto,
 } from "@mediaos/contracts";
 import { AdminErrorNotice } from "../../admin/components/AdminErrorNotice";
-import type { AdminErrorReason } from "../../admin/lib/admin-errors";
+import { useGuardedMutation } from "../../admin/lib/use-guarded-mutation";
 import { describeCreateReportError } from "../lib/report-create-errors";
+import { ChoiceFieldset, DialogActions, NoteField, type KeptError } from "./dialog-fields";
 
 export interface ReportDialogProps {
   /** Loại nội dung bị báo cáo — đi nguyên vào body. */
@@ -60,16 +60,8 @@ interface CreateVariables {
   attemptId: string;
 }
 
-interface KeptError {
-  reason: AdminErrorReason;
-  retryable: boolean;
-}
-
 /** Thứ tự vẽ = thứ tự khai của enum contracts (`chk_feed_reports_reason`). */
 const REASONS: readonly FeedReportReasonDto[] = feedReportReasonSchema.options;
-
-const LEGEND_CLASS = "mb-1 text-sm font-medium text-foreground";
-const CHOICE_CLASS = "flex items-center gap-2 text-sm text-foreground";
 
 /** Ghi chú rỗng sau khi cắt khoảng trắng ⇒ KHÔNG có khoá `note` (server coi vắng = không ghi chú). */
 function buildCreateBody(
@@ -79,7 +71,12 @@ function buildCreateBody(
   note: string,
 ): CreateFeedReportDto {
   const trimmed = note.trim();
-  return { targetType, targetId, reason, ...(trimmed === "" ? {} : { note: trimmed }) };
+  return {
+    targetType,
+    targetId,
+    reason,
+    ...(trimmed === "" ? {} : { note: trimmed }),
+  };
 }
 
 export function ReportDialog({
@@ -97,29 +94,24 @@ export function ReportDialog({
 
   // MỘT giá trị cho cả lượt mount (xem 🔴 ở đầu file). Khởi tạo lười để không sinh UUID mỗi lần vẽ lại.
   const attemptIdRef = React.useRef<string | null>(null);
-  // Cờ «đang gửi» đặt ĐỒNG BỘ trong `submit`: `mutation.isPending` tới màn sau một nhịp của react-query,
-  // nên hai kích hoạt sát nhau đều thấy nút còn mở. Gỡ khi lỗi (còn gửi lại được); gửi xong thì giữ.
-  const isSendingRef = React.useRef(false);
 
-  const mutation = useMutation({
-    // Mất mạng thì HỎNG NGAY (rơi vào `onError` ⇒ `generic` + «Thử lại», CÙNG `attemptId`), không «tạm
-    // dừng»: mặc định `online` giữ `isPending` vô hạn mà không gọi `onError`, trong khi hộp thoại chặn mọi
-    // đường đóng lúc đang gửi — modal không lối ra, không một dòng báo lỗi.
-    networkMode: "always",
-    // Mọi thứ gửi đi nằm trong `variables` — thân hàm KHÔNG đọc state (v5 nạp lại closure trong effect).
-    mutationFn: ({ body, attemptId }: CreateVariables) =>
-      socialModerationApi.createReport(body, attemptId),
+  // `useGuardedMutation`: khoá đồng bộ chống gửi đúp, hỏng ngay khi offline, hết hạn chờ thì rơi vào
+  // `generic` + «Thử lại» (CÙNG `attemptId` ⇒ cùng khoá idempotency, server đã ghi thì phát lại phản hồi).
+  // `keepLockAfterSuccess`: một lượt mount gửi được ĐÚNG MỘT báo cáo — gửi xong thì khoá giữ nguyên.
+  const send = useGuardedMutation<unknown, CreateVariables>({
+    keepLockAfterSuccess: true,
+    mutationFn: ({ body, attemptId }, signal) =>
+      socialModerationApi.createReport(body, attemptId, signal),
     onSuccess: () => {
       setError(null);
       setIsSent(true);
     },
-    onError: (err: unknown) => {
-      isSendingRef.current = false;
+    onError: (err) => {
       setError(describeCreateReportError(err));
     },
   });
 
-  const canSubmit = reason !== null && !mutation.isPending && !isSent;
+  const canSubmit = reason !== null && !send.isPending && !isSent;
 
   const submit = (): void => {
     if (!canSubmit || reason === null) return;
@@ -129,17 +121,15 @@ export function ReportDialog({
       setError({ reason: "invalidRequest", retryable: false });
       return;
     }
-    if (isSendingRef.current) return;
-    isSendingRef.current = true;
+    if (send.isLocked()) return;
     attemptIdRef.current ??= createIdempotencyKey();
-    setError(null);
-    mutation.mutate({ body, attemptId: attemptIdRef.current });
+    if (send.start({ body, attemptId: attemptIdRef.current })) setError(null);
   };
 
   // Hỏi CẢ cờ đồng bộ: Esc / bấm ra ngoài cùng nhịp với «Gửi báo cáo» thấy `isPending` còn `false`; lọt
   // thì hộp thoại đóng trước khi người gửi biết lượt gửi thành hay hỏng. Gửi xong (`isSent`) thì đóng được.
   const close = (): void => {
-    if (isSent || (!mutation.isPending && !isSendingRef.current)) onClose();
+    if (isSent || (!send.isPending && !send.isLocked())) onClose();
   };
 
   const title = t(`admin.report.dialog.title.${targetType}`);
@@ -173,61 +163,36 @@ export function ReportDialog({
       onClose={close}
       title={title}
       footer={
-        <>
-          <Button type="button" variant="outline" disabled={mutation.isPending} onClick={close}>
-            {t("admin.report.dialog.cancel")}
-          </Button>
-          <Button
-            type="button"
-            disabled={!canSubmit}
-            aria-busy={mutation.isPending}
-            onClick={submit}
-          >
-            {t("admin.report.dialog.submit")}
-          </Button>
-        </>
+        <DialogActions
+          cancelLabel={t("admin.report.dialog.cancel")}
+          submitLabel={t("admin.report.dialog.submit")}
+          isPending={send.isPending}
+          canSubmit={canSubmit}
+          onCancel={close}
+          onSubmit={submit}
+        />
       }
     >
       <div className="flex flex-col gap-4" data-testid="report-dialog">
-        <fieldset className="flex flex-col gap-2">
-          <legend className={LEGEND_CLASS}>{t("admin.report.dialog.reasonLabel")}</legend>
-          {REASONS.map((value) => (
-            <label key={value} className={CHOICE_CLASS}>
-              <input
-                type="radio"
-                name={`${fieldId}-reason`}
-                checked={reason === value}
-                onChange={() => setReason(value)}
-              />
-              {t(`admin.report.reason.${value}`)}
-            </label>
-          ))}
-        </fieldset>
+        <ChoiceFieldset
+          legend={t("admin.report.dialog.reasonLabel")}
+          name={`${fieldId}-reason`}
+          options={REASONS.map((value) => ({
+            value,
+            label: t(`admin.report.reason.${value}`),
+          }))}
+          value={reason}
+          onChange={setReason}
+        />
 
-        <div className="flex flex-col gap-1 text-sm">
-          <label htmlFor={`${fieldId}-note`} className="font-medium text-foreground">
-            {t("admin.report.dialog.noteLabel")}
-          </label>
-          <p
-            id={`${fieldId}-warning`}
-            role="note"
-            className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground"
-          >
-            {t("admin.report.dialog.warning")}
-          </p>
-          <textarea
-            id={`${fieldId}-note`}
-            aria-describedby={`${fieldId}-warning ${fieldId}-note-hint`}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            maxLength={FEED_NOTE_MAX}
-            rows={3}
-            className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <p id={`${fieldId}-note-hint`} className="text-xs text-muted-foreground">
-            {t("admin.report.dialog.noteHint", { max: FEED_NOTE_MAX })}
-          </p>
-        </div>
+        <NoteField
+          id={fieldId}
+          label={t("admin.report.dialog.noteLabel")}
+          hint={t("admin.report.dialog.noteHint", { max: FEED_NOTE_MAX })}
+          warning={t("admin.report.dialog.warning")}
+          value={note}
+          onChange={setNote}
+        />
 
         {error && (
           <AdminErrorNotice

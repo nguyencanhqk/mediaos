@@ -23,12 +23,13 @@ import {
 const C = SOCIAL_ERROR_CODES;
 
 describe("029 — kết thúc báo cáo (E1–E6)", () => {
-  it("E1 · 409 `SOCIAL-ERR-021` ⇒ `reportAlreadyDecided`: ĐÓNG hộp thoại · invalidate · không thử lại", () => {
+  it("E1 · 409 `SOCIAL-ERR-021` ⇒ `reportAlreadyDecided`: ĐÓNG hộp thoại · invalidate hàng đợi LẪN bề mặt bài · không thử lại", () => {
     expect(describeResolveReportError(ADMIN_ERR.reportAlreadyDecided())).toStrictEqual({
       reason: "reportAlreadyDecided",
       dialog: "close",
       resetAction: false,
       invalidate: true,
+      invalidatePosts: true,
       retryable: false,
     });
   });
@@ -39,6 +40,7 @@ describe("029 — kết thúc báo cáo (E1–E6)", () => {
       dialog: "keep",
       resetAction: false,
       invalidate: false,
+      invalidatePosts: false,
       retryable: true,
     });
   });
@@ -60,6 +62,7 @@ describe("029 — kết thúc báo cáo (E1–E6)", () => {
       dialog: "keep",
       resetAction: true,
       invalidate: false,
+      invalidatePosts: false,
       retryable: false,
     });
   });
@@ -70,16 +73,18 @@ describe("029 — kết thúc báo cáo (E1–E6)", () => {
       dialog: "keep",
       resetAction: false,
       invalidate: false,
+      invalidatePosts: false,
       retryable: false,
     });
   });
 
-  it("E5 · 422 `…ACTION-TARGET-UNAVAILABLE` ⇒ `reportTargetUnavailable`: GIỮ · về «không»", () => {
+  it("E5 · 422 `…ACTION-TARGET-UNAVAILABLE` ⇒ `reportTargetUnavailable`: GIỮ · về «không» · invalidate hàng đợi", () => {
     expect(describeResolveReportError(ADMIN_ERR.reportTargetUnavailable())).toStrictEqual({
       reason: "reportTargetUnavailable",
       dialog: "keep",
       resetAction: true,
-      invalidate: false,
+      invalidate: true,
+      invalidatePosts: false,
       retryable: false,
     });
   });
@@ -90,6 +95,7 @@ describe("029 — kết thúc báo cáo (E1–E6)", () => {
       dialog: "close",
       resetAction: false,
       invalidate: true,
+      invalidatePosts: false,
       retryable: false,
     });
   });
@@ -153,6 +159,7 @@ describe("lỗi chung (E9–E11)", () => {
       dialog: "close",
       resetAction: false,
       invalidate: false,
+      invalidatePosts: false,
       retryable: false,
     });
   });
@@ -180,6 +187,7 @@ describe("lỗi chung (E9–E11)", () => {
       dialog: "keep",
       resetAction: false,
       invalidate: false,
+      invalidatePosts: false,
       retryable: false,
     });
     expect(describeUnhidePostError(ADMIN_ERR.badRequest())).toStrictEqual({
@@ -199,6 +207,7 @@ describe("lỗi chung (E9–E11)", () => {
       dialog: "keep",
       resetAction: false,
       invalidate: false,
+      invalidatePosts: false,
       retryable: true,
     });
     expect(describeUnhidePostError(ADMIN_ERR.server())).toStrictEqual({
@@ -240,6 +249,7 @@ describe("hình dạng API CŨ — mã SOCIAL chỉ nằm ở tiền tố `messa
       dialog: "close",
       resetAction: false,
       invalidate: true,
+      invalidatePosts: true,
       retryable: false,
     });
   });

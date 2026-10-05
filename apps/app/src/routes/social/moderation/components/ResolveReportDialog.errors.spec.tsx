@@ -12,7 +12,7 @@
  * i18n THẬT, chữ kỳ vọng VIẾT TAY; lỗi dựng bằng `ADMIN_ERR` (đúng hình dạng trên dây, `message` là chữ
  * của SERVER — ca E2 assert nó không lên màn).
  */
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onlineManager } from "@tanstack/react-query";
 import { FEED_NOTE_MAX, resolveFeedReportSchema, type FeedReportDto } from "@mediaos/contracts";
@@ -57,10 +57,16 @@ const TARGETS = {
 function renderDialog(report: FeedReportDto = makeReport()) {
   const onClose = vi.fn();
   const onOutcome = vi.fn();
+  const onStale = vi.fn();
   renderWithProviders(
-    <ResolveReportDialog report={report} onClose={onClose} onOutcome={onOutcome} />,
+    <ResolveReportDialog
+      report={report}
+      onClose={onClose}
+      onOutcome={onOutcome}
+      onStale={onStale}
+    />,
   );
-  return { report, onClose, onOutcome };
+  return { report, onClose, onOutcome, onStale };
 }
 
 const dialog = (): HTMLElement => screen.getByRole("dialog", { name: TITLE });
@@ -374,29 +380,38 @@ describe("Kết cục ĐÓNG hộp thoại — báo lên trang qua `onOutcome`, 
       err: ADMIN_ERR.reportAlreadyDecided,
       reason: "reportAlreadyDecided",
       invalidate: true,
+      invalidatePosts: true,
     },
     {
       name: "E6 404 `SOCIAL-ERR-001`",
       err: ADMIN_ERR.reportGone,
       reason: "reportGone",
       invalidate: true,
+      invalidatePosts: false,
     },
     {
       name: "E9 403 `AUTH-ERR-FORBIDDEN`",
       err: ADMIN_ERR.forbidden,
       reason: "forbidden",
       invalidate: false,
+      invalidatePosts: false,
     },
   ])(
-    "$name ⇒ `failed` với reason + cờ invalidate; không có dải lỗi trong hộp thoại",
-    async ({ err, reason, invalidate }) => {
+    "$name ⇒ `failed` với reason + HAI cờ invalidate; không có dải lỗi trong hộp thoại",
+    async ({ err, reason, invalidate, invalidatePosts }) => {
       resolveReport.mockRejectedValueOnce(err());
       const { report, onOutcome, onClose } = renderDialog();
       pick(DISMISSED);
       clickSubmit();
 
       await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
-      expect(onOutcome).toHaveBeenCalledWith({ kind: "failed", report, reason, invalidate });
+      expect(onOutcome).toHaveBeenCalledWith({
+        kind: "failed",
+        report,
+        reason,
+        invalidate,
+        invalidatePosts,
+      });
       expect(onClose).not.toHaveBeenCalled();
       expect(screen.queryByRole("alert")).toBeNull();
       expect(submitButton()).toBeDisabled();
@@ -456,5 +471,99 @@ describe("Mất mạng (trình duyệt báo offline)", () => {
     fireEvent.click(screen.getByRole("button", { name: CANCEL }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onOutcome).not.toHaveBeenCalled();
+  });
+});
+
+// `apiFetch` không có timeout: yêu cầu treo (rớt Wi-Fi / VPN khi trình duyệt vẫn báo online) giữ `isPending`
+// tới khi TCP cắt, mà hộp thoại chặn mọi đường đóng lúc đang gửi ⇒ lớp phủ không lối ra (gate code, CODE-01).
+describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không trả lời", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const advance = (ms: number): Promise<void> =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+
+  it("029 treo: trước 30 giây còn khoá; quá hạn ⇒ dải `generic` + «Thử lại», yêu cầu bị huỷ, «Huỷ» đóng được", async () => {
+    resolveReport.mockImplementation(() => new Promise<never>(() => undefined));
+    const { onClose, onOutcome } = renderDialog();
+    pick(DISMISSED);
+    fireEvent.change(noteBox(), { target: { value: "ghi chú còn nguyên" } });
+    vi.useFakeTimers();
+
+    clickSubmit();
+    await advance(29_999);
+
+    expect(resolveReport).toHaveBeenCalledTimes(1);
+    const signal: unknown = resolveReport.mock.calls[0]?.[2];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect((signal as AbortSignal).aborted).toBe(false);
+    expect(within(dialog()).queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: CANCEL })).toBeDisabled();
+
+    await advance(1);
+    await advance(0);
+
+    expect(alertReason()).toBe("generic");
+    expect((signal as AbortSignal).aborted).toBe(true);
+    expect(within(dialog()).getByRole("button", { name: RETRY })).toBeInTheDocument();
+    expect(noteBox()).toHaveValue("ghi chú còn nguyên");
+    expect(screen.getByRole("button", { name: CANCEL })).toBeEnabled();
+    expect(onOutcome).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: CANCEL }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Lỗi GIỮ hộp thoại mà tự chứng minh thứ đang thấy đã cũ (E5: đích không còn thao tác được) ⇒ báo trang
+// làm mới hàng đợi qua `onStale`; hộp thoại vẫn không tự invalidate (gate code, CODE-04).
+describe("`onStale` — lỗi giữ hộp thoại báo trang rằng hàng đợi đã cũ", () => {
+  it("E5 ⇒ `onStale` đúng 1 lần, không kết cục, không đóng", async () => {
+    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportTargetUnavailable());
+    const { onClose, onOutcome, onStale } = renderDialog();
+    pick(RESOLVED);
+    pick("Ẩn bài");
+    clickSubmit();
+
+    await waitFor(() => expect(alertReason()).toBe("reportTargetUnavailable"));
+    expect(onStale).toHaveBeenCalledTimes(1);
+    expect(onOutcome).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["E2", ADMIN_ERR.reportBusy],
+    ["E3", ADMIN_ERR.reportActionDenied],
+    ["E4", ADMIN_ERR.reportActionInvalid],
+    ["E10", ADMIN_ERR.badRequest],
+    ["E11", ADMIN_ERR.server],
+  ])(
+    "%s ⇒ KHÔNG gọi `onStale` (không có gì chứng minh hàng đợi đã cũ)",
+    async (_label, makeError) => {
+      resolveReport.mockRejectedValueOnce(makeError());
+      const { onStale } = renderDialog();
+      pick(RESOLVED);
+      pick("Ẩn bài");
+      clickSubmit();
+
+      await waitFor(() => expect(within(dialog()).getByRole("alert")).toBeInTheDocument());
+      expect(onStale).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["E1", ADMIN_ERR.reportAlreadyDecided],
+    ["E6", ADMIN_ERR.reportGone],
+  ])("%s (kết cục ĐÓNG) ⇒ đi qua `onOutcome`, KHÔNG qua `onStale`", async (_label, makeError) => {
+    resolveReport.mockRejectedValueOnce(makeError());
+    const { onOutcome, onStale } = renderDialog();
+    pick(DISMISSED);
+    clickSubmit();
+
+    await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
+    expect(onStale).not.toHaveBeenCalled();
   });
 });

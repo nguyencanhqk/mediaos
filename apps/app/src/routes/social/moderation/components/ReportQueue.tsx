@@ -22,6 +22,7 @@ import { AdminErrorNotice } from "../../admin/components/AdminErrorNotice";
 import { OffsetPager } from "../../feed/components/OffsetPager";
 import { describeModerationReadError } from "../lib/moderation-errors";
 import type { ModerationStatusFilter } from "../lib/moderation-route-search";
+import { PLACEHOLDER_CLASS, SKELETON_ROWS } from "./list-states";
 import { ReportRow } from "./ReportRow";
 
 export interface ReportQueueProps {
@@ -47,9 +48,6 @@ export interface ReportQueueProps {
 }
 
 const FIRST_PAGE = 1;
-const SKELETON_ROWS = [0, 1, 2] as const;
-const PLACEHOLDER_CLASS =
-  "rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground";
 
 export function ReportQueue({
   page,

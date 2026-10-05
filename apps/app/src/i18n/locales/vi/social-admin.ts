@@ -28,7 +28,7 @@ export default {
     busy: "Yêu cầu trước của bạn vẫn đang được xử lý. Vui lòng chờ giây lát rồi thử lại.",
     // ── 029 — kết thúc báo cáo ──
     reportAlreadyDecided:
-      "Báo cáo này đã được xử lý bởi người khác trước khi bạn xác nhận. Danh sách đã được làm mới.",
+      "Báo cáo này đã được xử lý trước khi yêu cầu của bạn hoàn tất. Danh sách đã được làm mới.",
     reportBusy: "Báo cáo này đang được người khác xử lý. Vui lòng thử lại sau giây lát.",
     reportActionDenied:
       "Bạn không có quyền thực hiện hành động kèm đã chọn. Bạn vẫn có thể kết thúc báo cáo mà không kèm hành động.",

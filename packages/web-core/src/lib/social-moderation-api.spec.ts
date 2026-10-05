@@ -20,6 +20,7 @@ vi.mock("./api-client", async (importOriginal) => {
 interface FetchInit {
   method?: string;
   body?: string;
+  signal?: AbortSignal;
 }
 
 function lastCall(): [
@@ -128,11 +129,35 @@ describe("029 — resolveReport", () => {
       false,
     );
   });
+
+  // `apiFetch` không có timeout ⇒ nơi gọi đặt hạn chờ bằng `signal`; không tới được `fetch` thì yêu cầu
+  // treo vẫn chạy tiếp sau khi màn đã báo lỗi.
+  it("`signal` của nơi gọi đi NGUYÊN vào init của `apiFetch`; vắng ⇒ init KHÔNG có khoá `signal`", async () => {
+    const body = { status: "dismissed" } as const;
+    const controller = new AbortController();
+    await socialModerationApi.resolveReport(REPORT, body, controller.signal);
+    expect(lastCall()[2]?.signal).toBe(controller.signal);
+    expect(lastCall()[2]?.method).toBe("PATCH");
+
+    await socialModerationApi.resolveReport(REPORT, body);
+    expect(Object.keys(lastCall()[2] ?? {}).sort()).toEqual(["body", "method"]);
+  });
 });
 
 describe("027 — createReport", () => {
   const BODY = { targetType: "post", targetId: POST, reason: "spam", note: "Spam" } as const;
   const keyOf = (): string | undefined => lastCall()[3]?.idempotencyKey;
+
+  it("`signal` của nơi gọi đi NGUYÊN vào init, khoá idempotency KHÔNG đổi theo `signal`", async () => {
+    await socialModerationApi.createReport(BODY, "attempt-1");
+    const withoutSignal = keyOf();
+    expect(Object.keys(lastCall()[2] ?? {}).sort()).toEqual(["body", "method"]);
+
+    const controller = new AbortController();
+    await socialModerationApi.createReport(BODY, "attempt-1", controller.signal);
+    expect(lastCall()[2]?.signal).toBe(controller.signal);
+    expect(keyOf()).toBe(withoutSignal);
+  });
 
   it("POST /social/reports với đúng body, KÈM Idempotency-Key, parse `{ id }`", async () => {
     await socialModerationApi.createReport(BODY, "attempt-1");

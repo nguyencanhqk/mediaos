@@ -42,6 +42,11 @@ export type ResolveFeedReportBody = z.input<typeof resolveFeedReportSchema>;
 export const feedReportCreatedSchema = z.object({ id: z.string().uuid() });
 export type FeedReportCreatedDto = z.infer<typeof feedReportCreatedSchema>;
 
+/** Khoá `signal` CHỈ có mặt khi nơi gọi truyền — init không mang `signal: undefined`. */
+function withSignal(signal: AbortSignal | undefined): Pick<RequestInit, "signal"> {
+  return signal === undefined ? {} : { signal };
+}
+
 export const socialModerationApi = {
   /**
    * GET /social/reports (028) — hàng đợi kiểm duyệt, phân trang OFFSET `{ data, page, limit, total }`.
@@ -57,11 +62,19 @@ export const socialModerationApi = {
    *
    * ⚠️ KHÔNG `@Idempotent()` ở server ⇒ không gửi khoá. Bấm đúp sinh 409 `SOCIAL-ERR-021` («đã có người
    * xử lý») cho chính lượt của mình — nút gửi phải `disabled` khi đang gửi (plan D20).
+   *
+   * `signal`: `apiFetch` KHÔNG có timeout ⇒ nơi gọi tự đặt hạn chờ và huỷ qua đây. Huỷ ở client KHÔNG có
+   * nghĩa server chưa ghi: lượt lặp sau khi huỷ có thể nhận 409 `021` cho chính lượt trước của mình.
    */
-  resolveReport: (reportId: string, body: ResolveFeedReportBody): Promise<FeedReportDto> =>
+  resolveReport: (
+    reportId: string,
+    body: ResolveFeedReportBody,
+    signal?: AbortSignal,
+  ): Promise<FeedReportDto> =>
     apiFetch(`/social/reports/${reportId}`, feedReportSchema, {
       method: "PATCH",
       body: JSON.stringify(body),
+      ...withSignal(signal),
     }),
 
   /**
@@ -73,12 +86,19 @@ export const socialModerationApi = {
    *
    * `attemptId` do nơi gọi sinh MỘT lần cho mỗi lượt mở hộp thoại và giữ nguyên qua các lần thử lại
    * trong lượt đó: thử lại ⇒ cùng khoá (không tạo báo cáo thứ hai); mở lại hộp thoại ⇒ khoá mới.
+   *
+   * `signal`: như `resolveReport` — hạn chờ của nơi gọi. Khoá idempotency KHÔNG phụ thuộc `signal`, nên
+   * lượt lặp sau khi huỷ vẫn mang cùng khoá.
    */
-  createReport: (body: CreateFeedReportDto, attemptId: string): Promise<FeedReportCreatedDto> =>
+  createReport: (
+    body: CreateFeedReportDto,
+    attemptId: string,
+    signal?: AbortSignal,
+  ): Promise<FeedReportCreatedDto> =>
     apiFetch(
       "/social/reports",
       feedReportCreatedSchema,
-      { method: "POST", body: JSON.stringify(body) },
+      { method: "POST", body: JSON.stringify(body), ...withSignal(signal) },
       { idempotencyKey: idempotencyKeyFor("social-report", { attemptId, body }) },
     ),
 };
