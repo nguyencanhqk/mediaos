@@ -210,6 +210,10 @@ export default {
       targetUnavailableHint:
         "Nội dung bị báo cáo không còn thao tác được nên hành động kèm đã được đưa về «Không kèm hành động». Bấm «Xác nhận» để kết thúc báo cáo mà không kèm hành động.",
       noteLabel: "Ghi chú xử lý (không bắt buộc)",
+      // Ghi chú xử lý được vẽ nguyên văn ở mọi hàng đã kết thúc cho MỌI người đọc hàng đợi (028), kể cả
+      // người đang bị che tên người báo cáo — người xử lý (thấy tên) phải được nhắc TRƯỚC khi gõ.
+      noteWarning:
+        "Ghi chú này hiện nguyên văn cho mọi người xem được hàng đợi báo cáo, kể cả người không được thấy tên người báo cáo. Đừng nêu tên hay chi tiết giúp nhận ra người báo cáo.",
       noteHint: "Tối đa {{max}} ký tự.",
       cancel: "Huỷ",
       submit: "Xác nhận",

@@ -267,10 +267,13 @@ export function ResolveReportDialog({
           </ChoiceFieldset>
         )}
 
+        {/* Cảnh báo LUÔN có: `resolutionNote` được vẽ nguyên văn cho mọi người đọc hàng đợi (`ReportRow`),
+            kể cả người server đang che tên người báo cáo — ghi chú nêu tên là lộ danh tính người tố giác. */}
         <NoteField
           id={fieldId}
           label={t("admin.moderation.resolve.noteLabel")}
           hint={t("admin.moderation.resolve.noteHint", { max: FEED_NOTE_MAX })}
+          warning={t("admin.moderation.resolve.noteWarning")}
           value={note}
           onChange={setNote}
         />
