@@ -128,4 +128,14 @@ describe("053 — exportEngagement", () => {
     expect(blobCalls).toHaveLength(1);
     expect(blobCalls[0]?.[0]).toBe("/social/stats/engagement/export");
   });
+
+  // Người xem lọc theo đơn vị mà KHÔNG chọn khoảng tuần: tệp xuất phải mang đúng bộ lọc đang xem.
+  // Một bản chỉ dựng query khi có đủ `from` + `to` sẽ lặng lẽ xuất số liệu của MỌI đơn vị.
+  it("chỉ `orgUnitId` có giá trị (from/to mang `undefined`) ⇒ …/export mang ĐÚNG một khoá", async () => {
+    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({ blob: new Blob([]), filename: null });
+    await socialStatsApi.exportEngagement({ from: undefined, to: undefined, orgUnitId: UNIT });
+    const blobCalls = vi.mocked(apiClient.apiFetchBlob).mock.calls;
+    expect(blobCalls).toHaveLength(1);
+    expect(blobCalls[0]?.[0]).toBe(`/social/stats/engagement/export?orgUnitId=${UNIT}`);
+  });
 });
