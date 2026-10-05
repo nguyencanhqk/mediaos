@@ -14,10 +14,13 @@ import { IDEMPOTENCY_ERROR_CODES, SOCIAL_ERROR_CODES } from "@mediaos/contracts"
 import { ApiError } from "@mediaos/web-core";
 import type {
   FeedEngagementResponseDto,
+  FeedPostDto,
+  FeedPostPageDto,
   FeedReportDto,
   FeedReportPageDto,
   KudosBadgeAdminDto,
 } from "@mediaos/contracts";
+import { makePost } from "../feed/social-test-doubles";
 
 export const REPORT_ID = "66666666-6666-4666-8666-666666666666";
 export const REPORTED_POST_ID = "11111111-1111-4111-8111-111111111111";
@@ -72,6 +75,36 @@ export const makeReportPage = (
   data: FeedReportDto[],
   over: Partial<Omit<FeedReportPageDto, "data">> = {},
 ): FeedReportPageDto => ({ data, page: 1, limit: 20, total: data.length, ...over });
+
+export const HIDDEN_POST_ID = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+
+/**
+ * Một bài ĐANG ẨN như 001 `status=hidden` trả cho người có `manage:feed-post` (DTO mang `status`).
+ *
+ * 🔴 `author.avatarUrl` KHÁC rỗng có chủ ý — cùng lý do với `makeReport` (plan D8 · B7): dòng «Bài đang
+ * ẩn» không được vẽ `<img>` từ trường này.
+ */
+export const makeHiddenPost = (over: Partial<FeedPostDto> = {}): FeedPostDto =>
+  makePost({
+    id: HIDDEN_POST_ID,
+    status: "hidden",
+    author: {
+      employeeId: AUTHOR_EMPLOYEE_ID,
+      fullName: "Trần Thị Bình",
+      avatarUrl: "https://cdn.example.test/avatars/author.png",
+    },
+    body: "Nội dung bài đang bị ẩn",
+    publishedAt: ISO,
+    lastActivityAt: ISO,
+    createdAt: ISO,
+    ...over,
+  });
+
+/** Trang KEYSET của 001 (`{data,nextCursor}`, không có `total`); `nextCursor: null` = trang cuối. */
+export const makeHiddenPostPage = (
+  data: FeedPostDto[],
+  nextCursor: string | null = null,
+): FeedPostPageDto => ({ data, nextCursor });
 
 /**
  * Search của route GIẢ nhưng CÓ PHẢN ỨNG: `navigate({ search })` đổi giá trị và màn đang đọc
