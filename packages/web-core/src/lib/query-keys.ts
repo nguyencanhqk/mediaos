@@ -1474,22 +1474,45 @@ export const socialKeys = {
       [...rootKeys.social, "kudos", "list", params] as const,
     recipients: (q: string) => [...rootKeys.social, "kudos", "recipients", q] as const,
     badges: () => [...rootKeys.social, "kudos", "badges"] as const,
-    // S16-SOCIAL-FE-3 (L1) — KHUNG: khoá thật ở commit GREEN.
-    badgesAdminAll: (): readonly unknown[] => [],
-    badgesAdmin: (_params?: Record<string, unknown>): readonly unknown[] => [],
+    /**
+     * S16-SOCIAL-FE-3 — catalog ở góc nhìn QUẢN TRỊ (056, cả huy hiệu đã tắt).
+     *
+     * 🔴 Phần tử `"badges-admin"` RIÊNG, không phải `["kudos","badges","admin",…]`: 056 gác
+     * `manage:feed-kudos` còn 048 (`badges()`) chỉ gác `view:feed`. Lồng dưới `badges()` thì invalidate
+     * khoá công khai sẽ kéo theo cả nhánh quản trị và ngược lại, và dữ liệu của cổng CHẶT nằm dưới tiền
+     * tố của cổng LỎNG (khuôn `posts.acks`). Sau một lượt ghi huy hiệu, nơi gọi invalidate CẢ HAI khoá.
+     */
+    badgesAdminAll: () => [...rootKeys.social, "kudos", "badges-admin"] as const,
+    badgesAdmin: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "kudos", "badges-admin", params] as const,
   },
 
-  // S16-SOCIAL-FE-3 (L1) — KHUNG kiểm duyệt + thống kê: khoá thật ở commit GREEN.
+  /**
+   * S16-SOCIAL-FE-3 — kiểm duyệt (`SOC-SCREEN-010`).
+   *
+   * `reports.lists()` là TIỀN TỐ của mọi `reports.list(params)` (lý do như `groups.lists()`): sau khi
+   * kết thúc một báo cáo, mọi trang · mọi bộ lọc trạng thái đều phải làm mới.
+   *
+   * `hiddenPosts()` là nhánh RIÊNG, KHÔNG phải `feed.list({ status: "hidden" })`: 001 với `status=hidden`
+   * đòi thêm `manage:feed-post`, nên dữ liệu đó không được nằm dưới `feed.allOf()` mà mọi người có
+   * `view:feed` đang đọc. Hệ quả: ẩn/hiện/xoá bài ở nơi khác phải invalidate đích danh khoá này.
+   */
   moderation: {
-    allOf: (): readonly unknown[] => [],
+    allOf: () => [...rootKeys.social, "moderation"] as const,
     reports: {
-      lists: (): readonly unknown[] => [],
-      list: (_params?: Record<string, unknown>): readonly unknown[] => [],
+      lists: () => [...rootKeys.social, "moderation", "reports", "list"] as const,
+      /** 028 — `params` = `{ status?, page }` đã chuẩn hoá từ URL search. */
+      list: (params?: Record<string, unknown>) =>
+        [...rootKeys.social, "moderation", "reports", "list", params] as const,
     },
-    hiddenPosts: (): readonly unknown[] => [],
+    /** 001 `status=hidden` — keyset, con trỏ thuộc `useInfiniteQuery` nên KHÔNG nằm trong khoá. */
+    hiddenPosts: () => [...rootKeys.social, "moderation", "hidden-posts"] as const,
   },
+
+  /** S16-SOCIAL-FE-3 — thống kê tương tác (052). `params` = `{ from?, to?, orgUnitId? }` từ URL search. */
   stats: {
-    allOf: (): readonly unknown[] => [],
-    engagement: (_params?: Record<string, unknown>): readonly unknown[] => [],
+    allOf: () => [...rootKeys.social, "stats"] as const,
+    engagement: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "stats", "engagement", params] as const,
   },
 };
