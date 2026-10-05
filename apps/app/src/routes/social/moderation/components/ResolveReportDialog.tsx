@@ -25,7 +25,8 @@
  * │      `kind: "failed"` ⇒ vẽ `<AdminErrorNotice reason={outcome.reason} />` ở TRANG, KHÔNG truyền   │
  * │                         `onRetry` (E1 · E6 · E9 đều là kết cục, thử lại vô ích);                  │
  * │                         `invalidate === true` (E1 · E6) ⇒ invalidate `reports.lists()`.           │
- * │    Sau `onOutcome` nút gửi tự khoá — trang chậm unmount cũng không gửi được lượt hai.             │
+ * │    Sau `onOutcome` hộp thoại tự khoá — trang chậm unmount cũng không gửi được lượt hai và không   │
+ * │    nhận thêm `onClose`.                                                                          │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Cổng: ô «Hành động kèm» ⇔ quyết định «Giải quyết» && `useCan("manage", "feed-post")` — cặp THÊM mà
@@ -123,25 +124,33 @@ export function ResolveReportDialog({
   const [error, setError] = React.useState<KeptError | null>(null);
   const [isTargetUnavailable, setIsTargetUnavailable] = React.useState(false);
   const [hasOutcome, setHasOutcome] = React.useState(false);
-  // Cờ «đang gửi» đặt ĐỒNG BỘ trong `submit`. `mutation.isPending` tới màn sau một nhịp của react-query,
-  // nên hai kích hoạt sát nhau đều thấy `canSubmit === true` và đều gửi — lượt hai nhận 409 `021` cho
-  // chính lượt của mình (plan B23). Chỉ gỡ khi lỗi GIỮ hộp thoại (còn gửi lại được); đã có kết cục thì
-  // giữ nguyên tới khi trang unmount.
+  // Hai cờ ĐỒNG BỘ — `mutation.isPending` và state `hasOutcome` tới màn sau một nhịp, nên hai kích hoạt
+  // sát nhau đều thấy giá trị cũ: lượt gửi hai nhận 409 `021` cho chính lượt của mình (plan B23), cú
+  // đóng cùng nhịp làm trang nhận cả `onClose` lẫn `onOutcome`.
+  //  · `isSendingRef` = MỘT lượt gửi đang bay. Đặt ở `submit`, nhả ở ĐÚNG MỘT chỗ — `onSettled`, chạy cho
+  //    mọi kết cục — nên không nhánh lỗi nào (kể cả nhánh thêm sau này) để quên được.
+  //  · `hasOutcomeRef` = lượt mở này ĐÃ có kết cục cuối. Đặt ở `finish`, không bao giờ nhả.
   const isSendingRef = React.useRef(false);
+  const hasOutcomeRef = React.useRef(false);
+  const isLocked = (): boolean => isSendingRef.current || hasOutcomeRef.current;
+
+  const finish = (outcome: ResolveReportOutcome): void => {
+    hasOutcomeRef.current = true;
+    setHasOutcome(true);
+    onOutcome(outcome);
+  };
 
   const mutation = useMutation({
     // Mọi thứ gửi đi nằm trong `variables` — thân hàm KHÔNG đọc state (v5 nạp lại closure trong effect).
     mutationFn: ({ reportId, body }: ResolveVariables) =>
       socialModerationApi.resolveReport(reportId, body),
     onSuccess: (updated, { body }) => {
-      setHasOutcome(true);
-      onOutcome({ kind: "done", report, updated, action: body.action ?? NO_REPORT_ACTION });
+      finish({ kind: "done", report, updated, action: body.action ?? NO_REPORT_ACTION });
     },
     onError: (err: unknown) => {
       const outcome = describeResolveReportError(err);
       if (outcome.dialog === "close") {
-        setHasOutcome(true);
-        onOutcome({
+        finish({
           kind: "failed",
           report,
           reason: outcome.reason,
@@ -149,13 +158,15 @@ export function ResolveReportDialog({
         });
         return;
       }
-      isSendingRef.current = false;
       if (outcome.resetAction) {
         setAction(NO_REPORT_ACTION);
         setIsDeleteConfirmed(false);
       }
       if (outcome.reason === "reportTargetUnavailable") setIsTargetUnavailable(true);
       setError({ reason: outcome.reason, retryable: outcome.retryable });
+    },
+    onSettled: () => {
+      isSendingRef.current = false;
     },
   });
 
@@ -186,16 +197,17 @@ export function ResolveReportDialog({
       setError({ reason: "invalidRequest", retryable: false });
       return;
     }
-    if (isSendingRef.current) return;
+    if (isLocked()) return;
     isSendingRef.current = true;
     setError(null);
     mutation.mutate({ reportId: report.id, body });
   };
 
-  // Hỏi CẢ cờ đồng bộ: Esc / bấm ra ngoài cùng nhịp với «Xác nhận» thấy `isPending` còn `false`, lọt thì
-  // trang nhận cả `onClose` lẫn `onOutcome` cho một lượt mở.
+  // Hỏi CẢ hai cờ đồng bộ: Esc / bấm ra ngoài / «Huỷ» cùng nhịp với «Xác nhận» thấy `isPending` còn
+  // `false`, lọt thì trang nhận cả `onClose` lẫn `onOutcome` cho một lượt mở. Sau một lỗi GIỮ hộp thoại cả
+  // hai cờ đều đã nhả ⇒ đóng được.
   const close = (): void => {
-    if (!mutation.isPending && !isSendingRef.current) onClose();
+    if (!mutation.isPending && !isLocked()) onClose();
   };
 
   const subject = t("admin.moderation.resolve.subject", {
