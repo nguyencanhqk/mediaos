@@ -192,8 +192,10 @@ export function ResolveReportDialog({
     mutation.mutate({ reportId: report.id, body });
   };
 
+  // Hỏi CẢ cờ đồng bộ: Esc / bấm ra ngoài cùng nhịp với «Xác nhận» thấy `isPending` còn `false`, lọt thì
+  // trang nhận cả `onClose` lẫn `onOutcome` cho một lượt mở.
   const close = (): void => {
-    if (!mutation.isPending) onClose();
+    if (!mutation.isPending && !isSendingRef.current) onClose();
   };
 
   const subject = t("admin.moderation.resolve.subject", {
