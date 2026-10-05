@@ -2354,6 +2354,17 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 102,
   },
+  {
+    routeKey: "social.moderation",
+    path: "/feed/moderation",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-010",
+    titleKey: "routeTitle.socialModeration",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 103,
+  },
 
   // Account
   {

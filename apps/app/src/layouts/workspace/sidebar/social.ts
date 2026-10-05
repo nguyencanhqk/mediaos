@@ -108,6 +108,17 @@ export const SOCIAL_SIDEBAR_V2: readonly SidebarItemMeta[] = [
     order: 60,
     requiredAnyPermissions: ["view:feed"],
   },
+  {
+    // SOC-SCREEN-010 — S16-SOCIAL-FE-3 (owner ký O2 = a).
+    sidebarKey: "social.moderation",
+    moduleCode: "SOCIAL",
+    label: "Kiểm duyệt",
+    path: "/feed/moderation",
+    icon: "shield-alert",
+    group: "management",
+    order: 70,
+    requiredAnyPermissions: ["view:feed"],
+  },
 ];
 
 /**

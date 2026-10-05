@@ -3101,6 +3101,12 @@ const GroupsPage = React.lazy(() =>
 const GroupPage = React.lazy(() =>
   import("@/routes/social/groups/GroupPage").then((m) => ({ default: m.GroupPage })),
 );
+// S16-SOCIAL-FE-3 — SOC-SCREEN-010.
+const ModerationPage = React.lazy(() =>
+  import("@/routes/social/moderation/ModerationPage").then((m) => ({
+    default: m.ModerationPage,
+  })),
+);
 
 /**
  * Bộ lọc/sắp xếp sống trong URL (plan D6) — `validateSearch` rơi về mặc định thay vì NÉM khi gặp
@@ -3219,6 +3225,14 @@ const feedGroupDetailRoute = createRoute({
   beforeLoad: authGuard,
   validateSearch: validateGroupDetailRouteSearch,
   component: () => buildModuleRouteContent(feedGroupDetailMeta, "SOCIAL", <GroupPage />),
+});
+
+const feedModerationMeta = getMeta("social.moderation");
+const feedModerationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/moderation",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(feedModerationMeta, "SOCIAL", <ModerationPage />),
 });
 
 // S16-SOCIAL-FE-2B (owner ký O2) — link NOTI `/social/groups/{id}` · `/social/posts/{id}` đang rơi vào
@@ -3641,6 +3655,7 @@ const routeTree = rootRoute.addChildren([
   // S16-SOCIAL-FE-2B lát B + 2 route chuyển hướng link NOTI (O2).
   feedGroupsRoute,
   feedGroupDetailRoute,
+  feedModerationRoute,
   legacySocialGroupRoute,
   legacySocialPostRoute,
   accountSetupTwoFactorRoute,

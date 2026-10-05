@@ -31,7 +31,15 @@ interface LegacyPostRedirect {
   readonly notiTemplate: "/social/posts/{post_id}";
 }
 
-export type LegacySocialRedirect = LegacyGroupRedirect | LegacyPostRedirect;
+/** NOTI-036 «có báo cáo vi phạm mới» — đường KHÔNG tham số, đích là màn Kiểm duyệt. */
+interface LegacyReportsRedirect {
+  readonly kind: "reports";
+  readonly path: "/social/reports";
+  readonly to: "/feed/moderation";
+  readonly notiTemplate: "/social/reports";
+}
+
+export type LegacySocialRedirect = LegacyGroupRedirect | LegacyPostRedirect | LegacyReportsRedirect;
 
 export const LEGACY_SOCIAL_GROUP_REDIRECT: LegacyGroupRedirect = {
   kind: "group",
@@ -49,6 +57,13 @@ export const LEGACY_SOCIAL_POST_REDIRECT: LegacyPostRedirect = {
   notiTemplate: "/social/posts/{post_id}",
 };
 
+export const LEGACY_SOCIAL_REPORTS_REDIRECT: LegacyReportsRedirect = {
+  kind: "reports",
+  path: "/social/reports",
+  to: "/feed/moderation",
+  notiTemplate: "/social/reports",
+};
+
 export const LEGACY_SOCIAL_REDIRECTS: readonly LegacySocialRedirect[] = [
   LEGACY_SOCIAL_GROUP_REDIRECT,
   LEGACY_SOCIAL_POST_REDIRECT,
@@ -62,10 +77,26 @@ export function legacyRedirectBeforeLoad(
   entry: LegacySocialRedirect,
 ): (ctx: { params: Record<string, string> }) => never {
   return ({ params }) => {
-    const value = params[entry.param] ?? "";
-    if (entry.kind === "group") {
-      throw redirect({ to: entry.to, params: { groupId: value }, replace: true });
+    switch (entry.kind) {
+      case "group":
+        throw redirect({
+          to: entry.to,
+          params: { groupId: params[entry.param] ?? "" },
+          replace: true,
+        });
+      case "post":
+        throw redirect({
+          to: entry.to,
+          params: { postId: params[entry.param] ?? "" },
+          replace: true,
+        });
+      case "reports":
+        // KHUNG (bước RED): nhánh chưa hiện thực — chưa trỏ tới màn Kiểm duyệt.
+        throw redirect({ to: "/feed", replace: true });
+      default: {
+        const exhaustive: never = entry;
+        throw new Error(`[legacy-social-redirects] kind chưa xử lý: ${String(exhaustive)}`);
+      }
     }
-    throw redirect({ to: entry.to, params: { postId: value }, replace: true });
   };
 }

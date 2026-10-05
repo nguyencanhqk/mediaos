@@ -214,6 +214,7 @@ export default {
     socialGroups: "Nhóm",
     socialGroupDetail: "Trang nhóm",
     socialKudos: "Vinh danh",
+    socialModeration: "Kiểm duyệt",
     socialProfilePosts: "Trang cá nhân",
     socialMyPosts: "Bài viết của tôi",
     forbidden: "Không có quyền truy cập",

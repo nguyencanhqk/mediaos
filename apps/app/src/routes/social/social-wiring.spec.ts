@@ -11,9 +11,16 @@
  * │ Đó chính là lỗi mà plan-reviewer bắt được ở bản plan đầu (finding #2). Ca này là lưới cho nó.   │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  */
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { APP_REGISTRY, ROUTE_REGISTRY } from "@mediaos/web-core";
-import type { SidebarItemMeta } from "@mediaos/web-core";
+import {
+  APP_REGISTRY,
+  createPermissionChecker,
+  filterSidebarItems,
+  ROUTE_REGISTRY,
+} from "@mediaos/web-core";
+import type { SessionContext, SidebarItemMeta, UserPermission } from "@mediaos/web-core";
 import {
   ME_SIDEBAR,
   SOCIAL_SIDEBAR,
@@ -37,13 +44,15 @@ describe("C20 — mọi mục sidebar SOCIAL trỏ tới route CÓ THẬT", () =
     expect(dead.map((i) => `${i.sidebarKey} → ${i.path}`)).toEqual([]);
   });
 
-  it("S16-SOCIAL-FE-2C: ĐỦ 7 mục V2 đã có màn ⇒ bản đăng ký = V2 (gồm «Vinh danh» giữa Bình chọn và Nhóm)", () => {
+  it("S16-SOCIAL-FE-3: ĐỦ 8 mục V2 đã có màn ⇒ bản đăng ký = V2 («Kiểm duyệt» đứng CUỐI, sau Nhóm)", () => {
     /**
      * Lát B dựng màn cuối cùng (`/feed/groups`) ⇒ ở SOCIAL không còn mục nào để cắt, nên ca này KHÔNG
      * còn chứng minh được `pruneUnbuiltScreens` có cắt thật. Vế «cắt thật» chuyển sang
      * `layouts/workspace/sidebar/prune-unbuilt.spec.ts` (mục giả trỏ đường chưa dựng — plan FE-2B D19).
      */
-    expect(SOCIAL_SIDEBAR_V2).toHaveLength(7);
+    // Thứ tự VIẾT TAY. «Kiểm duyệt» sai một ký tự ở `path` là `pruneUnbuiltScreens` cắt nó IM LẶNG
+    // (plan B3) ⇒ mảng dưới còn 7 khoá và ca này đỏ.
+    expect(SOCIAL_SIDEBAR_V2).toHaveLength(8);
     expect(SOCIAL_SIDEBAR.map((i) => i.sidebarKey)).toEqual([
       "social.feed",
       "social.news",
@@ -52,6 +61,7 @@ describe("C20 — mọi mục sidebar SOCIAL trỏ tới route CÓ THẬT", () =
       "social.polls",
       "social.kudos",
       "social.groups",
+      "social.moderation",
     ]);
   });
 });
@@ -86,9 +96,9 @@ describe("C20 — hai mục ME mới KHÔNG được là link chết (không có
   });
 });
 
-describe("C20 / R1 / R2 / R3 — cổng quyền của 11 route SOCIAL (6 FE-1 + 2 FE-2 lát A + 2 FE-2B + 1 FE-2C)", () => {
-  it("đủ 11 route và KHÔNG route nào `isPublic`", () => {
-    expect(SOCIAL_ROUTES).toHaveLength(11);
+describe("C20 / R1 / R2 / R3 — cổng quyền của 12 route SOCIAL (6 FE-1 + 2 FE-2 lát A + 2 FE-2B + 1 FE-2C + 1 FE-3)", () => {
+  it("đủ 12 route và KHÔNG route nào `isPublic`", () => {
+    expect(SOCIAL_ROUTES).toHaveLength(12);
     expect(SOCIAL_ROUTES.filter((r) => r.isPublic)).toEqual([]);
   });
 
@@ -100,7 +110,7 @@ describe("C20 / R1 / R2 / R3 — cổng quyền của 11 route SOCIAL (6 FE-1 + 
     }
   });
 
-  it("cả 11 khai `layout: MODULE_PORTAL` — nhánh này KHÔNG còn trơ (plan D3)", () => {
+  it("cả 12 khai `layout: MODULE_PORTAL` — nhánh này KHÔNG còn trơ (plan D3)", () => {
     // `buildModuleRouteContent` dispatch qua `LAYOUT_CONTENT_BUILDERS` (Record vét cạn), nên giá trị
     // này QUYẾT ĐỊNH khung được dựng. Khai nhầm `MODULE_WORKSPACE` ⇒ portal mất hai rail, im lặng.
     for (const r of SOCIAL_ROUTES) {
@@ -114,13 +124,14 @@ describe("C20 / R1 / R2 / R3 — cổng quyền của 11 route SOCIAL (6 FE-1 + 
     }
   });
 
-  it("chỉ 7 route danh sách hiện trên sidebar; route động (chi tiết bài/nhóm) và `me` thì không", () => {
+  it("chỉ 8 route danh sách hiện trên sidebar; route động (chi tiết bài/nhóm) và `me` thì không", () => {
     const inSidebar = SOCIAL_ROUTES.filter((r) => r.showInSidebar).map((r) => r.routeKey);
     expect(inSidebar.sort()).toEqual([
       "social.feed",
       "social.groups",
       "social.ideas",
       "social.kudos",
+      "social.moderation",
       "social.news",
       "social.polls",
       "social.saved",
@@ -168,6 +179,161 @@ describe("C20 / R1 / R2 / R3 — cổng quyền của 11 route SOCIAL (6 FE-1 + 
       screenCode: "SOC-SCREEN-008",
       requiredPermissions: ["view:feed"],
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S16-SOCIAL-FE-3 (L2) — nối dây màn Kiểm duyệt `SOC-SCREEN-010` (plan D2 · D3 · ca W1 · W3 · W4)
+// ---------------------------------------------------------------------------
+
+/** Cặp của LỜI GỌI ĐẦU TIÊN của màn (028 gác `view:feed-report`) + cặp vào module. Viết tay. */
+const MODERATION_GATE = ["view:feed", "view:feed-report"];
+
+const OLD_RAIL_KEYS = [
+  "social.feed",
+  "social.news",
+  "social.saved",
+  "social.ideas",
+  "social.polls",
+  "social.kudos",
+  "social.groups",
+];
+
+describe("W1 — `social.moderation`: route và mục rail khai CÙNG một cổng đủ-hết", () => {
+  const route = SOCIAL_ROUTES.find((r) => r.routeKey === "social.moderation");
+  const item = SOCIAL_SIDEBAR_V2.find((i) => i.sidebarKey === "social.moderation");
+
+  it("route = `/feed/moderation` · SOC-SCREEN-010 · order 103 · đòi ĐỦ `view:feed` + `view:feed-report`", () => {
+    expect(route).toMatchObject({
+      path: "/feed/moderation",
+      screenCode: "SOC-SCREEN-010",
+      layout: "MODULE_PORTAL",
+      order: 103,
+      showInSidebar: true,
+    });
+    expect(route?.requiredPermissions).toEqual(MODERATION_GATE);
+    // any-of ở route = vào được bằng MỘT trong hai cặp; phạm vi (Department) thì 028 tự xét.
+    expect(route?.requiredAnyPermissions).toBeUndefined();
+    expect(route?.requiredScopes).toBeUndefined();
+  });
+
+  it("mục rail trỏ ĐÚNG path của route, nhóm `management`, order 70, icon `shield-alert`", () => {
+    expect(item).toMatchObject({
+      moduleCode: "SOCIAL",
+      label: "Kiểm duyệt",
+      path: "/feed/moderation",
+      group: "management",
+      order: 70,
+      icon: "shield-alert",
+    });
+    expect(item?.path).toBe(route?.path);
+  });
+
+  it("mục rail khai `requiredPermissions` Y HỆT route và KHÔNG khai `requiredAnyPermissions`", () => {
+    // Chép khuôn any-of của 7 mục cũ (`[view:feed, view:feed-report]`) là MỌI nhân viên thấy mục
+    // «Kiểm duyệt», bấm vào thì 403 (plan B2 · B25).
+    expect(item?.requiredPermissions).toEqual(MODERATION_GATE);
+    expect(item?.requiredPermissions).toEqual(route?.requiredPermissions);
+    expect(item?.requiredAnyPermissions).toBeUndefined();
+  });
+});
+
+describe("W4 — mục rail «Kiểm duyệt» theo quyền (hành vi của `filterSidebarItems`)", () => {
+  const SESSION: SessionContext = {
+    status: "authenticated",
+    user: null,
+    company: null,
+    modules: [{ moduleCode: "SOCIAL", status: "active" }],
+  };
+
+  function visibleKeys(pairs: readonly string[]): string[] {
+    const granted: UserPermission[] = pairs.map((permission) => ({
+      permission,
+      scopes: ["Company"],
+    }));
+    return filterSidebarItems(SOCIAL_SIDEBAR, createPermissionChecker(granted), SESSION).map(
+      (i) => i.sidebarKey,
+    );
+  }
+
+  it("ALLOW — `view:feed` + `view:feed-report` ⇒ 7 mục cũ + «Kiểm duyệt»", () => {
+    expect(visibleKeys(["view:feed", "view:feed-report"])).toEqual([
+      ...OLD_RAIL_KEYS,
+      "social.moderation",
+    ]);
+  });
+
+  it("DENY — chỉ `view:feed` (nhân viên thường) ⇒ ĐÚNG 7 mục cũ, không có «Kiểm duyệt»", () => {
+    expect(visibleKeys(["view:feed"])).toEqual(OLD_RAIL_KEYS);
+  });
+
+  it("DENY — có `manage:feed-report` + `manage:feed-post` nhưng thiếu `view:feed-report` ⇒ không suy manage ⇒ view", () => {
+    expect(visibleKeys(["view:feed", "manage:feed-report", "manage:feed-post"])).toEqual(
+      OLD_RAIL_KEYS,
+    );
+  });
+
+  it("DENY — chỉ `view:feed-report`, thiếu `view:feed` ⇒ không mục nào", () => {
+    expect(visibleKeys(["view:feed-report"])).toEqual([]);
+  });
+});
+
+describe("W3 — `router.tsx` nối ĐÚNG meta và lắp route vào cây (đọc NGUỒN)", () => {
+  /**
+   * `path` và `getMeta("…")` trong `router.tsx` là hai literal RỜI: route `/feed/moderation` dựng bằng
+   * meta của màn khác thì gác bằng cổng của màn khác — không ca render nào thấy (plan B26). Kho không có
+   * spec dựng cây route thật ⇒ đọc nguồn, theo khuôn `asset-wiring.spec.ts`.
+   */
+  const routerSrc = fs
+    .readFileSync(path.resolve(__dirname, "../../router.tsx"), "utf8")
+    .replaceAll("\r\n", "\n");
+  const tree = routerSrc.slice(routerSrc.indexOf("rootRoute.addChildren(["));
+
+  /** Mọi khối `const X = createRoute({ … });` của nguồn: tên hằng + thân. */
+  const routeBlocks = [
+    ...routerSrc.matchAll(/const (\w+) = createRoute\(\{\n([\s\S]*?)\n\}\);/g),
+  ].map((m) => ({ name: m[1] ?? "", body: m[2] ?? "" }));
+  const blocksWith = (needle: string) => routeBlocks.filter((b) => b.body.includes(needle));
+  const inTree = (name: string): boolean => name !== "" && tree.includes(`\n  ${name},\n`);
+
+  it("đối chứng cho phép đo: route `/feed/kudos` có sẵn đọc ra đúng tên + meta + có trong cây", () => {
+    // Regex đọc nguồn mà trượt thì các ca dưới đỏ vì LÝ DO KHÁC; ca này tách hai chuyện đó ra.
+    const blocks = blocksWith('path: "/feed/kudos",');
+    expect(blocks.map((b) => b.name)).toEqual(["feedKudosRoute"]);
+    expect(blocks[0]?.body).toContain("buildModuleRouteContent(feedKudosMeta,");
+    expect(inTree("feedKudosRoute")).toBe(true);
+    expect(inTree("khongCoRouteNay")).toBe(false);
+  });
+
+  it('đúng MỘT khối có `path: "/feed/moderation"`, dựng bằng `getMeta("social.moderation")` + validator của màn', () => {
+    const blocks = blocksWith('path: "/feed/moderation",');
+    expect(blocks).toHaveLength(1);
+    const body = blocks[0]?.body ?? "";
+
+    const metaVar = /buildModuleRouteContent\((\w+), "SOCIAL", <ModerationPage \/>\)/.exec(
+      body,
+    )?.[1];
+    expect(metaVar, "khối route không dựng <ModerationPage /> qua buildModuleRouteContent").toMatch(
+      /^\w+$/,
+    );
+    expect(routerSrc).toContain(`const ${metaVar} = getMeta("social.moderation");`);
+    expect(body).toContain("beforeLoad: authGuard,");
+    expect(body).toContain("validateSearch: validateModerationRouteSearch,");
+  });
+
+  it("route `/feed/moderation` CÓ trong `rootRoute.addChildren([…])`", () => {
+    const name = blocksWith('path: "/feed/moderation",')[0]?.name ?? "";
+    expect(inTree(name), `route '${name}' chưa được lắp vào cây`).toBe(true);
+  });
+
+  it("route chuyển hướng `/social/reports` dựng từ hằng CÓ TÊN và CÓ trong cây", () => {
+    const blocks = blocksWith("path: LEGACY_SOCIAL_REPORTS_REDIRECT.path,");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.body).toContain(
+      "beforeLoad: legacyRedirectBeforeLoad(LEGACY_SOCIAL_REPORTS_REDIRECT),",
+    );
+    const name = blocks[0]?.name ?? "";
+    expect(inTree(name), `route '${name}' chưa được lắp vào cây`).toBe(true);
   });
 });
 
