@@ -9,11 +9,13 @@
  * Dữ liệu mặc định của MỖI factory đi qua chính schema contracts (`admin-test-doubles.spec.ts`): fixture
  * lệch hợp đồng làm mọi spec màn xanh trên một hình dạng server không bao giờ trả.
  */
+import { useSyncExternalStore } from "react";
 import { IDEMPOTENCY_ERROR_CODES, SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
 import type {
   FeedEngagementResponseDto,
   FeedReportDto,
+  FeedReportPageDto,
   KudosBadgeAdminDto,
 } from "@mediaos/contracts";
 
@@ -64,6 +66,51 @@ export const makeReport = (over: Partial<FeedReportDto> = {}): FeedReportDto => 
   updatedAt: ISO,
   ...over,
 });
+
+/** Trang 028 (`{data,page,limit,total}`); `total` mặc định = số hàng ⇒ một trang, không có bộ chuyển trang. */
+export const makeReportPage = (
+  data: FeedReportDto[],
+  over: Partial<Omit<FeedReportPageDto, "data">> = {},
+): FeedReportPageDto => ({ data, page: 1, limit: 20, total: data.length, ...over });
+
+/**
+ * Search của route GIẢ nhưng CÓ PHẢN ỨNG: `navigate({ search })` đổi giá trị và màn đang đọc
+ * `useRouteSearchDouble()` vẽ lại — như router thật. Spec của màn nối nó vào mock `@tanstack/react-router`
+ * (`useSearch` → `useRouteSearchDouble`, `useNavigate` → hàm gọi `routeSearchDouble.navigate`).
+ *
+ * Nhờ vậy ca «đổi bộ lọc ⇒ gọi lại với trang 1» đo được HẾT vòng (bấm → navigate → search mới → tham số
+ * gửi đi), không dừng ở «navigate được gọi với gì». Nhớ `routeSearchDouble.reset()` giữa các ca.
+ */
+type RouteSearchValue = Record<string, unknown>;
+let routeSearchValue: RouteSearchValue = {};
+const routeSearchListeners = new Set<() => void>();
+const subscribeRouteSearch = (listener: () => void): (() => void) => {
+  routeSearchListeners.add(listener);
+  return () => {
+    routeSearchListeners.delete(listener);
+  };
+};
+const readRouteSearch = (): RouteSearchValue => routeSearchValue;
+
+export const routeSearchDouble = {
+  get: readRouteSearch,
+  set(next: RouteSearchValue): void {
+    routeSearchValue = next;
+    routeSearchListeners.forEach((listener) => listener());
+  },
+  /** Thế chỗ hàm `navigate` của router: chỉ áp `search` (object), bỏ qua `to`. */
+  navigate(options: { search?: unknown }): void {
+    const next = options.search;
+    routeSearchDouble.set(typeof next === "object" && next !== null ? { ...next } : {});
+  },
+  reset(): void {
+    routeSearchDouble.set({});
+  },
+};
+
+export function useRouteSearchDouble(): RouteSearchValue {
+  return useSyncExternalStore(subscribeRouteSearch, readRouteSearch);
+}
 
 /**
  * Thống kê 2 tuần, 2 đơn vị (một đã xoá) + một hàng «chưa gán đơn vị» (`orgUnitId: null`). `rows` THƯA
