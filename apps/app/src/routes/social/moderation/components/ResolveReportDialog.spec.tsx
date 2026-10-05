@@ -404,6 +404,11 @@ describe("DC1 — 029 không idempotent: bấm đúp chỉ gửi MỘT lần", (
       name: "bấm ra ngoài",
       trigger: () => fireEvent.click(dialog().parentElement as HTMLElement),
     },
+    // Cùng nhịp thì nút «Huỷ» CHƯA `disabled` ⇒ cú bấm tới được `close()` (khác ca promise treo ở trên).
+    {
+      name: "nút «Huỷ»",
+      trigger: () => fireEvent.click(screen.getByRole("button", { name: CANCEL })),
+    },
   ])(
     "$name CÙNG NHỊP với «Xác nhận» (nút chưa kịp khoá) ⇒ KHÔNG đóng: lượt mở đó chỉ báo kết cục",
     async ({ trigger }) => {

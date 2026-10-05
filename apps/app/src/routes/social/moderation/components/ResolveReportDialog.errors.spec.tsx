@@ -45,6 +45,7 @@ const DISMISSED = "Bỏ qua";
 const NO_ACTION = "Không kèm hành động";
 const NOTE = "Ghi chú xử lý (không bắt buộc)";
 const SUBMIT = "Xác nhận";
+const CANCEL = "Huỷ";
 const RETRY = "Thử lại";
 const UNAVAILABLE_HINT =
   "Nội dung bị báo cáo không còn thao tác được nên hành động kèm đã được đưa về «Không kèm hành động». Bấm «Xác nhận» để kết thúc báo cáo mà không kèm hành động.";
@@ -223,7 +224,124 @@ describe("Lỗi GIỮ hộp thoại — dải lỗi nằm trong hộp thoại, k
   });
 });
 
+/** Ba đường đóng của hộp thoại — cả ba đều đi qua `close()`. */
+const CLOSERS = [
+  { closer: "Esc", close: () => fireEvent.keyDown(document, { key: "Escape" }) },
+  { closer: "bấm ra ngoài", close: () => fireEvent.click(dialog().parentElement as HTMLElement) },
+  {
+    closer: "nút «Huỷ»",
+    close: () => fireEvent.click(screen.getByRole("button", { name: CANCEL })),
+  },
+];
+
+/** Mỗi lỗi «giữ hộp thoại» của bảng lỗi plan §3 L2: cách dựng nháp để lượt gửi đầu nhận đúng lỗi đó. */
+const KEPT_ERRORS = [
+  { name: "E2", err: ADMIN_ERR.reportBusy, reason: "reportBusy", picks: [DISMISSED] },
+  {
+    name: "E3",
+    err: ADMIN_ERR.reportActionDenied,
+    reason: "reportActionDenied",
+    picks: [RESOLVED, "Ẩn bài"],
+  },
+  {
+    name: "E4",
+    err: ADMIN_ERR.reportActionInvalid,
+    reason: "reportActionInvalid",
+    picks: [RESOLVED, "Khoá bình luận của bài"],
+  },
+  {
+    name: "E5",
+    err: ADMIN_ERR.reportTargetUnavailable,
+    reason: "reportTargetUnavailable",
+    picks: [RESOLVED, "Ẩn bài"],
+  },
+  { name: "E10 (400)", err: ADMIN_ERR.badRequest, reason: "invalidRequest", picks: [DISMISSED] },
+  { name: "E11 (500)", err: ADMIN_ERR.server, reason: "generic", picks: [DISMISSED] },
+];
+
+// Cờ chặn gửi-đúp phải nhả sau MỌI lỗi giữ hộp thoại. Kẹt ⇒ «Xác nhận» trông bấm được mà không gửi gì,
+// và `close()` (cũng hỏi cờ đó) không đóng nữa: hộp thoại modal không lối ra.
+describe("Sau lỗi GIỮ hộp thoại — cờ chặn gửi-đúp đã nhả: gửi lại được, đóng được", () => {
+  it("E4: đổi sang hành động khác rồi «Xác nhận» ⇒ lượt HAI lên dây với hành động mới", async () => {
+    resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportActionInvalid());
+    const { onOutcome } = renderDialog();
+    pick(RESOLVED);
+    pick("Khoá bình luận của bài");
+    clickSubmit();
+    await waitFor(() => expect(alertReason()).toBe("reportActionInvalid"));
+
+    pick("Ẩn bài");
+    await waitFor(() => expect(submitButton()).toBeEnabled());
+    await submitAndWait(2);
+
+    expect(sentBody(0)).toEqual({ status: "resolved", action: "lock_comments" });
+    expect(sentBody(1)).toEqual({ status: "resolved", action: "hide_post" });
+    await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
+  });
+
+  it("E10 (400 của server): sửa ghi chú rồi «Xác nhận» ⇒ lượt HAI lên dây với ghi chú mới", async () => {
+    resolveReport.mockRejectedValueOnce(ADMIN_ERR.badRequest());
+    const { onOutcome } = renderDialog();
+    pick(DISMISSED);
+    fireEvent.change(noteBox(), { target: { value: "bản đầu" } });
+    clickSubmit();
+    await waitFor(() => expect(alertReason()).toBe("invalidRequest"));
+
+    fireEvent.change(noteBox(), { target: { value: "bản đã sửa" } });
+    await waitFor(() => expect(submitButton()).toBeEnabled());
+    await submitAndWait(2);
+
+    expect(sentBody(0)).toEqual({ status: "dismissed", resolutionNote: "bản đầu" });
+    expect(sentBody(1)).toEqual({ status: "dismissed", resolutionNote: "bản đã sửa" });
+    await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
+  });
+
+  describe.each(KEPT_ERRORS)("$name `$reason`", ({ err, reason, picks }) => {
+    it.each(CLOSERS)("$closer ⇒ đóng được: `onClose` 1 lần, không kết cục", async ({ close }) => {
+      resolveReport.mockRejectedValueOnce(err());
+      const { onClose, onOutcome } = renderDialog();
+      picks.forEach(pick);
+      clickSubmit();
+      await waitFor(() => expect(alertReason()).toBe(reason));
+      // Dải lỗi lên màn TRƯỚC khi `isPending` về `false` — đóng ngay lúc đó là đo nhầm lưới «đang gửi».
+      await waitFor(() => expect(screen.getByRole("button", { name: CANCEL })).toBeEnabled());
+
+      close();
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onOutcome).not.toHaveBeenCalled();
+      expect(resolveReport).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
 describe("Kết cục ĐÓNG hộp thoại — báo lên trang qua `onOutcome`, hộp thoại không tự vẽ dải", () => {
+  // Hợp đồng «mỗi lượt mở kết thúc bằng ĐÚNG MỘT trong hai»: trang chậm unmount sau `onOutcome` thì ba
+  // đường đóng cũng không được báo thêm `onClose`.
+  it.each([
+    { name: "thành công", arrange: () => resolveReport.mockResolvedValueOnce(makeReport()) },
+    {
+      name: "E1 409 (kết cục lỗi)",
+      arrange: () => resolveReport.mockRejectedValueOnce(ADMIN_ERR.reportAlreadyDecided()),
+    },
+  ])(
+    "sau kết cục ($name), hộp thoại CHƯA bị unmount ⇒ Esc · bấm ra ngoài · «Huỷ» KHÔNG gọi `onClose`",
+    async ({ arrange }) => {
+      arrange();
+      const { onClose, onOutcome } = renderDialog();
+      pick(DISMISSED);
+      clickSubmit();
+      await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByRole("button", { name: CANCEL })).toBeEnabled());
+
+      CLOSERS.forEach(({ close }) => close());
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onOutcome).toHaveBeenCalledTimes(1);
+      expect(resolveReport).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("thành công kèm hành động ⇒ `done` mang báo cáo gốc, bản server trả và hành động ĐÃ gửi", async () => {
     const updated = makeReport({ status: "resolved", resolutionNote: "ok" });
     resolveReport.mockResolvedValueOnce(updated);
