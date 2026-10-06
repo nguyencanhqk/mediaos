@@ -311,9 +311,14 @@ describe("lỗi chung (E9–E11)", () => {
 });
 
 describe("`claimsListRefreshed` — câu của reason có nói «danh sách đã được làm mới» không (gate SF, SF-01)", () => {
-  it("đúng ba reason E1 · E6 · E7 (viết tay) — và chữ i18n của đúng ba reason đó mang câu ấy", () => {
+  it("đúng bốn reason — E1 · E6 · E7 + `badgeGone` của màn huy hiệu (viết tay) — và chữ i18n của đúng các reason đó mang câu ấy", () => {
     const claiming = ADMIN_ERROR_REASONS.filter(claimsListRefreshed);
-    expect([...claiming].sort()).toEqual(["postGone", "reportAlreadyDecided", "reportGone"]);
+    expect([...claiming].sort()).toEqual([
+      "badgeGone",
+      "postGone",
+      "reportAlreadyDecided",
+      "reportGone",
+    ]);
     const sentences: Record<string, string> = socialAdmin.error;
     const withSentence = ADMIN_ERROR_REASONS.filter((reason) =>
       (sentences[reason] ?? "").includes("Danh sách đã được làm mới"),

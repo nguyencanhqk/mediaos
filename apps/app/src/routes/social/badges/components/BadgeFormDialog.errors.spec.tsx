@@ -1,6 +1,6 @@
 /**
  * S16-SOCIAL-FE-3B (L4) — `BadgeFormDialog`, đường LỖI của lượt ghi: ca F3 (mã lỗi 049 / 050 lên màn) · DC3
- * (vế hộp thoại: bấm đúp «Lưu») · mất mạng · yêu cầu TREO · focus khi đóng.
+ * (vế hộp thoại: bấm đúp «Lưu») · mất mạng · yêu cầu TREO. Focus khi đóng: `BadgeFormDialog.focus.spec.tsx`.
  *
  * Bài học gate PR-A áp cho lượt GHI: tách «server ĐÃ từ chối» (4xx — chưa ghi) khỏi «chưa xác nhận được kết
  * quả» (5xx · hết hạn · mất phản hồi · 2xx sai schema — có thể ĐÃ ghi ⇒ báo trang đọc lại danh sách), và
@@ -8,8 +8,7 @@
  *
  * i18n THẬT; lỗi dựng bằng `ADMIN_ERR` (`message` là chữ của SERVER — không được lên màn).
  */
-import * as React from "react";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onlineManager } from "@tanstack/react-query";
 import { ZodError } from "zod";
@@ -255,13 +254,18 @@ describe("DC3 — bấm đúp «Lưu» chỉ gửi MỘT lần", () => {
   });
 
   // `isPending` tới màn sau một nhịp của react-query ⇒ giữa hai kích hoạt sát nhau nút CHƯA `disabled`.
-  it("hai kích hoạt LIỀN NHAU trước khi màn kịp vẽ lại ⇒ vẫn chỉ MỘT lời gọi (049)", async () => {
+  // Hai cú bấm nằm trong CÙNG một `act`: `fireEvent` bọc `act` riêng cho từng cú, kịp vẽ lại nút đã khoá
+  // giữa hai cú — khi đó ca xanh nhờ `disabled` chứ không nhờ khoá đồng bộ, và mutant «bỏ khoá» sống sót.
+  it("hai kích hoạt TRONG CÙNG MỘT NHỊP (màn chưa kịp vẽ lại) ⇒ vẫn chỉ MỘT lời gọi (049)", async () => {
     createBadge.mockImplementation(hang);
     renderDialog();
     fillValidCreate();
+    const button = saveButton();
 
-    clickSave();
-    clickSave();
+    act(() => {
+      button.click();
+      button.click();
+    });
 
     await waitFor(() => expect(saveButton()).toBeDisabled());
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -270,9 +274,13 @@ describe("DC3 — bấm đúp «Lưu» chỉ gửi MỘT lần", () => {
 
   it("Esc CÙNG NHỊP với «Lưu» (nút chưa kịp khoá) ⇒ KHÔNG đóng; trang nhận ĐÚNG một kết cục", async () => {
     const { onClose, onOutcome } = renderEditWithChange();
+    const button = saveButton();
 
-    clickSave();
-    fireEvent.keyDown(document, { key: "Escape" });
+    // Cùng MỘT `act` — lý do như ca «hai kích hoạt trong cùng một nhịp» ở trên.
+    act(() => {
+      button.click();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
 
     await waitFor(() => expect(onOutcome).toHaveBeenCalledTimes(1));
     expect(onClose).not.toHaveBeenCalled();
@@ -347,56 +355,5 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
     expect(onStale).toHaveBeenCalledTimes(1);
     fireEvent.click(cancelButton());
     expect(onClose).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("Focus — đóng hộp thoại trả focus về nút đã mở", () => {
-  function Host(): React.ReactElement {
-    const [target, setTarget] = React.useState<KudosBadgeAdminDto | null | undefined>(undefined);
-    return (
-      <>
-        <button type="button" onClick={() => setTarget(makeBadgeAdmin())}>
-          mở sửa
-        </button>
-        {target !== undefined && (
-          <BadgeFormDialog
-            badge={target}
-            onClose={() => setTarget(undefined)}
-            onOutcome={() => setTarget(undefined)}
-            onStale={() => undefined}
-          />
-        )}
-      </>
-    );
-  }
-  const trigger = (): HTMLElement => screen.getByRole("button", { name: "mở sửa" });
-  const open = (): void => {
-    trigger().focus();
-    fireEvent.click(trigger());
-  };
-
-  it("mở ⇒ focus vào TRONG hộp thoại; «Huỷ» ⇒ hộp thoại gỡ, focus về nút đã mở", () => {
-    renderWithProviders(<Host />);
-    open();
-    expect(dialog()).toContainElement(document.activeElement as HTMLElement);
-
-    fireEvent.click(cancelButton());
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(trigger()).toHaveFocus();
-  });
-
-  it("Esc · lưu thành công ⇒ cũng trả focus về nút đã mở", async () => {
-    renderWithProviders(<Host />);
-    open();
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(trigger()).toHaveFocus();
-
-    open();
-    type(NAME, "Tên mới");
-    clickSave();
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(trigger()).toHaveFocus();
-    expect(updateBadge).toHaveBeenCalledTimes(1);
   });
 });

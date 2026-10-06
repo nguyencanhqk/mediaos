@@ -43,8 +43,12 @@ const BADGE_ICONS: Readonly<Record<string, LucideIcon>> = {
   rocket: Rocket,
 };
 
-/** S16-SOCIAL-FE-3B (L4) — KHUNG (lượt RED): tên icon mà form huy hiệu cho chọn. Thân thật ở commit GREEN. */
-export const KUDOS_BADGE_ICON_NAMES: readonly string[] = [];
+/**
+ * S16-SOCIAL-FE-3B (L4) — tên icon mà form huy hiệu (`SOC-SCREEN-012`) cho chọn = ĐÚNG khoá của
+ * `BADGE_ICONS`, theo thứ tự khai. Suy từ map chứ không viết tay danh sách thứ hai: tên có trong ô chọn
+ * mà thiếu trong map thì huy hiệu lưu xong vẽ ra icon mặc định.
+ */
+export const KUDOS_BADGE_ICON_NAMES: readonly string[] = Object.keys(BADGE_ICONS);
 
 const PICTOGRAPHIC = /\p{Extended_Pictographic}/u;
 /** Trần code point của một «emoji» (gồm ZWJ / biến thể) — dài hơn là chữ, không phải icon. */

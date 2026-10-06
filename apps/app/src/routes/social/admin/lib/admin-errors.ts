@@ -29,8 +29,9 @@ import { ApiError } from "@mediaos/web-core";
 import { socialErrorCode } from "../../groups/lib/group-errors";
 
 /**
- * Tập ĐÓNG các lý do mà PR-A (lát L2 Kiểm duyệt + L3 Báo cáo) dùng. Mỗi phần tử có đúng một câu ở
- * `social:admin.error.<reason>`. Lát sau (Thống kê · Huy hiệu) tự nối reason của mình vào đây.
+ * Tập ĐÓNG các lý do của cụm quản trị: PR-A (lát L2 Kiểm duyệt + L3 Báo cáo) + PR-B (lát L4 Huy hiệu).
+ * Mỗi phần tử có đúng một câu ở `social:admin.error.<reason>`. Lát sau (Thống kê) tự nối reason của mình
+ * vào đây.
  */
 export const ADMIN_ERROR_REASONS = [
   // Dùng chung.
@@ -54,6 +55,10 @@ export const ADMIN_ERROR_REASONS = [
   // 027 — gửi báo cáo.
   "reportDuplicate",
   "reportTargetGone",
+  // 049 — tạo huy hiệu.
+  "badgeCodeTaken",
+  // 050 · 051 — sửa / ngừng dùng / bật lại huy hiệu.
+  "badgeGone",
 ] as const;
 export type AdminErrorReason = (typeof ADMIN_ERROR_REASONS)[number];
 
@@ -108,4 +113,37 @@ export function adminErrorReason(err: unknown, table: AdminErrorTable): AdminErr
   if (err.status === HTTP_FORBIDDEN) return "forbidden";
   if (err.status === HTTP_BAD_REQUEST) return "invalidRequest";
   return "generic";
+}
+
+/**
+ * Reason của một lượt GHI mà «đã ghi hay chưa» đổi việc phải làm (029 · 006 · 049 · 050 · 051): tách
+ * «server đã TỪ CHỐI (4xx)» khỏi «không có gì chứng minh là chưa ghi» (5xx · không có câu trả lời đọc
+ * được) TRƯỚC khi tra bảng — nhánh sau là `outcomeUnknown`, không được nói «Không thực hiện được».
+ */
+export function writeErrorReason(err: unknown, table: AdminErrorTable): AdminErrorReason {
+  return isDefiniteRefusal(err) ? adminErrorReason(err, table) : "outcomeUnknown";
+}
+
+/**
+ * Reason của một lượt ĐỌC danh sách: không bao giờ ra `generic` — «Không thực hiện được…» là câu của một
+ * lượt ghi, mà dải lỗi tải có thể đứng ngay cạnh dải kết cục của lượt ghi vừa XONG. Mọi lỗi không khớp
+ * bảng và không phải 403 / 400 ⇒ `loadFailed`.
+ */
+export function readErrorReason(err: unknown, table: AdminErrorTable): AdminErrorReason {
+  const reason = adminErrorReason(err, table);
+  return reason === "generic" ? "loadFailed" : reason;
+}
+
+/**
+ * Bảng «việc phải làm sau lỗi» theo reason của MỘT lời gọi. Hàng `generic` BẮT BUỘC: reason không có
+ * hàng riêng dùng hàng đó (giữ nguyên hiện trạng + cho thử lại).
+ */
+export type AdminBehaviorTable<B> = Readonly<Partial<Record<AdminErrorReason, B>>> & {
+  readonly generic: B;
+};
+
+/** Hàng của `reason`; tra bằng `Object.hasOwn` như `adminErrorReason`. */
+export function behaviorOf<B>(table: AdminBehaviorTable<B>, reason: AdminErrorReason): B {
+  const rows: Readonly<Partial<Record<AdminErrorReason, B>>> = table;
+  return (Object.hasOwn(rows, reason) ? rows[reason] : undefined) ?? table.generic;
 }
