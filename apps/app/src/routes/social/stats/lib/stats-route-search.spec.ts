@@ -7,10 +7,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { feedEngagementQuerySchema } from "@mediaos/contracts";
+import { socialKeys } from "@mediaos/web-core";
 import { UNIT_ID } from "../../admin/admin-test-doubles";
 import {
   engagementParams,
   hasCustomRange,
+  isEngagementKeyOfSameUnit,
   searchForOrgUnit,
   searchForRange,
   validateStatsRouteSearch,
@@ -145,5 +147,46 @@ describe("search kế tiếp", () => {
   it("`hasCustomRange`: có cặp ngày ⇒ true; mặc định ⇒ false", () => {
     expect(hasCustomRange(current)).toBe(true);
     expect(hasCustomRange({ ...NONE, orgUnitId: UNIT_ID })).toBe(false);
+  });
+});
+
+describe("isEngagementKeyOfSameUnit — giữ số liệu cũ CHỈ khi cùng bộ lọc đơn vị (L5b)", () => {
+  const OTHER_UNIT = "99999999-9999-4999-8999-999999999999";
+  const RANGE = { from: "2026-09-21", to: "2026-10-04" };
+  const key = socialKeys.stats.engagement;
+
+  it("ALLOW — cùng «tất cả đơn vị», khoảng khác nhau ⇒ true", () => {
+    expect(isEngagementKeyOfSameUnit(key({}), {})).toBe(true);
+    expect(isEngagementKeyOfSameUnit(key({}), RANGE)).toBe(true);
+    expect(isEngagementKeyOfSameUnit(key(RANGE), {})).toBe(true);
+  });
+
+  it("ALLOW — cùng MỘT đơn vị, khoảng khác nhau ⇒ true", () => {
+    expect(isEngagementKeyOfSameUnit(key({ orgUnitId: UNIT_ID }), { orgUnitId: UNIT_ID })).toBe(
+      true,
+    );
+    expect(
+      isEngagementKeyOfSameUnit(key({ ...RANGE, orgUnitId: UNIT_ID }), { orgUnitId: UNIT_ID }),
+    ).toBe(true);
+  });
+
+  it("DENY — khác đơn vị (kể cả một bên là «tất cả») ⇒ false", () => {
+    expect(isEngagementKeyOfSameUnit(key({ orgUnitId: UNIT_ID }), {})).toBe(false);
+    expect(isEngagementKeyOfSameUnit(key({}), { orgUnitId: UNIT_ID })).toBe(false);
+    expect(isEngagementKeyOfSameUnit(key({ orgUnitId: OTHER_UNIT }), { orgUnitId: UNIT_ID })).toBe(
+      false,
+    );
+  });
+
+  it("DENY — không có khoá trước / khoá không mang tham số (tiền tố) ⇒ false, kể cả khi đang xem «tất cả»", () => {
+    expect(isEngagementKeyOfSameUnit(undefined, {})).toBe(false);
+    expect(isEngagementKeyOfSameUnit(socialKeys.stats.allOf(), {})).toBe(false);
+    expect(isEngagementKeyOfSameUnit(key(), {})).toBe(false);
+  });
+
+  it("tìm tham số theo HÌNH DẠNG: khoá bị nối thêm phần tử sau tham số vẫn đọc đúng đơn vị", () => {
+    const extended = [...key({ orgUnitId: UNIT_ID }), "them"];
+    expect(isEngagementKeyOfSameUnit(extended, { orgUnitId: UNIT_ID })).toBe(true);
+    expect(isEngagementKeyOfSameUnit(extended, {})).toBe(false);
   });
 });

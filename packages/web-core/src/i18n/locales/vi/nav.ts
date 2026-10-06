@@ -216,6 +216,7 @@ export default {
     socialGroupDetail: "Trang nhóm",
     socialKudos: "Vinh danh",
     socialModeration: "Kiểm duyệt",
+    socialStats: "Thống kê tương tác",
     socialKudosBadges: "Thiết lập huy hiệu",
     socialProfilePosts: "Trang cá nhân",
     socialMyPosts: "Bài viết của tôi",

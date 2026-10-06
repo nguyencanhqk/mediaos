@@ -67,7 +67,18 @@ export function engagementParams(search: StatsRouteSearch): FeedEngagementParams
   return { ...range, ...unit };
 }
 
-/** Search kế tiếp khi đổi khoảng: `null` = về mặc định của server (bỏ `from` + `to`). Giữ đơn vị. */
+/**
+ * `queryKey` có phải khoá `socialKeys.stats.engagement(…)` của CÙNG bộ lọc đơn vị với `params` không (khoảng
+ * tuần khác nhau vẫn là cùng bộ lọc). Màn dùng để quyết định giữ số liệu cũ lúc đang tải.
+ */
+export function isEngagementKeyOfSameUnit(
+  _queryKey: readonly unknown[] | undefined,
+  _params: FeedEngagementParams,
+): boolean {
+  return false;
+}
+
+/** Search kế tiếp khi đổi khoảng:`null` = về mặc định của server (bỏ `from` + `to`). Giữ đơn vị. */
 export function searchForRange(
   search: StatsRouteSearch,
   range: StatsDateRange | null,
