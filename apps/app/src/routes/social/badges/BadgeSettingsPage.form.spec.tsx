@@ -62,6 +62,8 @@ const EDIT_ROW = "Sửa huy hiệu Đồng đội";
 const DIALOG = { create: "Thêm huy hiệu", edit: "Sửa huy hiệu" };
 const CODE = "Mã huy hiệu";
 const NAME = "Tên huy hiệu";
+const EMOJI = "Emoji (không bắt buộc)";
+const POSITION = "Thứ tự hiển thị";
 const SAVE = "Lưu";
 const CANCEL = "Huỷ";
 const DONE_CREATED = "Đã thêm huy hiệu «Sáng tạo».";
@@ -76,6 +78,8 @@ const KEY = {
 };
 type SeededKey = keyof typeof KEY;
 const REFRESHED = { badges: true, otherAdminPage: true, kudosList: false };
+/** Sửa TÊN / BIỂU TƯỢNG: thêm mọi bề mặt đang vẽ lời vinh danh mang huy hiệu đó. */
+const REFRESHED_WITH_KUDOS = { ...REFRESHED, kudosList: true };
 const UNTOUCHED = { badges: false, otherAdminPage: false, kudosList: false };
 
 async function renderPage() {
@@ -182,7 +186,7 @@ describe("Kết cục THÀNH CÔNG — trang gỡ hộp thoại, làm mới hai 
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("sửa (050) ⇒ 050 nhận ĐÚNG id của hàng + chỉ trường đã đổi; hai khoá `isInvalidated`; dải «Đã lưu…» mang tên server trả", async () => {
+  it("sửa TÊN (050) ⇒ 050 nhận ĐÚNG id của hàng + chỉ trường đã đổi; hai khoá catalog VÀ danh sách vinh danh `isInvalidated` (lời vinh danh cũ mang tên huy hiệu do server ghép lúc đọc); dải «Đã lưu…» mang tên server trả", async () => {
     const { snapshot } = await renderPage();
     openEditAndRename();
 
@@ -190,9 +194,35 @@ describe("Kết cục THÀNH CÔNG — trang gỡ hộp thoại, làm mới hai 
 
     await dialogGone();
     expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { name: "Đồng đội mới" }]]);
-    expect(snapshot()).toEqual(REFRESHED);
+    expect(snapshot()).toEqual(REFRESHED_WITH_KUDOS);
     await waitFor(() => expect(listBadgesAdmin).toHaveBeenCalledTimes(2));
     expect(screen.getByRole("status")).toHaveTextContent(DONE_UPDATED);
+  });
+
+  it("sửa BIỂU TƯỢNG (050) ⇒ danh sách vinh danh cũng `isInvalidated`", async () => {
+    updateBadge.mockImplementation(() => Promise.resolve(makeBadgeAdmin({ icon: "🎉" })));
+    const { snapshot } = await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: EDIT_ROW }));
+    type(EMOJI, "🎉");
+
+    clickSave();
+
+    await dialogGone();
+    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { icon: "🎉" }]]);
+    expect(snapshot()).toEqual(REFRESHED_WITH_KUDOS);
+  });
+
+  it("đối chứng — sửa THỨ TỰ (tên + biểu tượng giữ nguyên) ⇒ chỉ hai khoá catalog; danh sách vinh danh KHÔNG bị làm mới", async () => {
+    updateBadge.mockImplementation(() => Promise.resolve(makeBadgeAdmin({ position: 7 })));
+    const { snapshot } = await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: EDIT_ROW }));
+    type(POSITION, "7");
+
+    clickSave();
+
+    await dialogGone();
+    expect(updateBadge.mock.calls).toEqual([[BADGE_ID, { position: 7 }]]);
+    expect(snapshot()).toEqual(REFRESHED);
   });
 
   it("sau kết cục, focus nằm ở dải thông báo, không rơi về `body`", async () => {

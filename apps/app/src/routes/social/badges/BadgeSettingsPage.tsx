@@ -9,7 +9,8 @@
  *
  * BỐN LUẬT của màn:
  *  1. Sau MỖI lượt ghi (và mỗi lỗi báo «thứ đang thấy đã cũ») làm mới HAI khoá qua `invalidateBadgeCatalogs`:
- *     nhánh quản trị VÀ `kudos.badges()` — ô chọn huy hiệu của composer vinh danh (plan D13).
+ *     nhánh quản trị VÀ `kudos.badges()` — ô chọn huy hiệu của composer vinh danh (plan D13). Lượt SỬA đổi tên
+ *     hoặc biểu tượng làm mới thêm mọi bề mặt đang vẽ lời vinh danh (`invalidateBadgeDisplaySurfaces`).
  *  2. Hộp xác nhận «Ngừng dùng» hỏi CẢ cờ đồng bộ của lượt ghi trước khi đóng: «Huỷ» / Esc cùng nhịp với «Ngừng
  *     dùng» thấy `isPending` còn `false`, đóng được là yêu cầu đã lên dây mà người dùng tưởng đã huỷ.
  *  3. Dải kết cục vẽ ở TRANG: hộp thoại đã đóng, còn hàng vừa bấm thì đổi nút (hoặc biến mất) sau lượt đọc lại
@@ -32,7 +33,11 @@ import { claimsListRefreshed } from "../moderation/lib/moderation-errors";
 import { OUTCOME_FOCUS_CLASS, useOutcomeFocus } from "../moderation/lib/use-outcome-focus";
 import { BadgeFormDialog, type BadgeFormOutcome } from "./components/BadgeFormDialog";
 import { BadgeList } from "./components/BadgeList";
-import { invalidateBadgeCatalogs } from "./lib/badge-invalidation";
+import {
+  invalidateBadgeCatalogs,
+  invalidateBadgeDisplaySurfaces,
+  isBadgeDisplayChanged,
+} from "./lib/badge-invalidation";
 import {
   badgeListParams,
   searchForBadgePage,
@@ -189,7 +194,16 @@ export function BadgeSettingsPage(): React.ReactElement {
     setFormTarget({ badge });
   };
   const handleFormOutcome = (outcome: BadgeFormOutcome): void => {
+    const opened = formTarget?.badge ?? null;
     setFormTarget(null);
+    // So hàng SERVER trả với hàng lúc mở: tên / biểu tượng đổi ⇒ lời vinh danh cũ trên các bề mặt khác đã cũ.
+    if (
+      outcome.kind === "done" &&
+      opened !== null &&
+      isBadgeDisplayChanged(opened, outcome.badge)
+    ) {
+      invalidateBadgeDisplaySurfaces(queryClient);
+    }
     settle(noticeOfForm(outcome), outcome.kind === "done" || outcome.invalidate);
     // Nút «Sửa» đã mở hộp thoại có thể không còn sau lượt đọc lại; lỗi không làm mới vẫn cần đọc dải ở trang.
     outcomeFocus.requestFocus();
