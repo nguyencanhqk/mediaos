@@ -20978,6 +20978,36 @@ export const backlog = [
     ],
   },
   {
+    id: "S19-OPS-SCASATELLITE-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Cổng `Dependency scan` chỉ quét workspace pnpm chính — `apps/fbpost` (npm, lockfile riêng) và `apps/lms` (repo git riêng) KHÔNG có SCA nào soi: thêm bước audit cho hai app vệ tinh + gỡ các advisory mức high trên dependency chạy thật của chúng",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      ".github/workflows/security.yml",
+      "apps/fbpost/package.json",
+      "apps/fbpost/package-lock.json",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Đo 06/10/2026 sau khi hai app đã lên next 15.5.27 (S19-SEC-NEXTRCE-1): `npm audit` trong `apps/fbpost` và `pnpm audit --prod` trong `apps/lms` đều còn advisory mức high (0 critical trên dependency chạy thật), trong khi cổng CI của repo xanh vì `pnpm-workspace.yaml` loại hai app này. Danh sách gói: chạy lại hai lệnh trên tại chỗ — KHÔNG chép vào backlog (repo public).",
+      "`docs/plans/S18-SEC-AUDITGATE-1.md` §6.2 — đề xuất mở rộng `security.yml` sang hai app có lockfile riêng.",
+    ],
+    done_when: [
+      "`security.yml` có bước `npm audit --audit-level=high` chạy trên ĐÚNG lockfile npm của `apps/fbpost`, fail khi có high/critical; phép đo cổng: hạ một gói về bản dính advisory ⇒ bước ĐỎ thật, trả lại ⇒ xanh",
+      "`apps/fbpost`: 0 advisory high/critical trên dependency chạy thật (bump trong dải gói cha hoặc override range-scoped — không suppress); typecheck + build + test của fbpost xanh; owner deploy `m prod-update social` SAU `npm ci`",
+      "`apps/lms` (repo riêng, không có CI ở kho này): chốt cách quét định kỳ (lệnh `m` hoặc một bước trong runbook deploy) + gỡ các advisory high trên dependency chạy thật ở nhánh riêng của repo LMS; owner deploy `m prod-update lms` sau `pnpm install --frozen-lockfile`",
+    ],
+    notes: [
+      "🟡 Vùng vàng nhưng chạm CI + dependency của hai dịch vụ public ⇒ cần plan + diễn tập cài/build trước khi deploy (khuôn S19-SEC-NEXTRCE-1). Seed 06/10/2026. Hai dịch vụ deploy TAY ⇒ merge xong phải deploy ngay; không ghi tên gói/phiên bản dính lỗi vào tiêu đề commit hay backlog trước khi PROD đã vá.",
+    ],
+  },
+  {
     id: "S19-SEC-MAILCREDEXFIL-1",
     module: "FOUNDATION",
     layer: "SEC",
