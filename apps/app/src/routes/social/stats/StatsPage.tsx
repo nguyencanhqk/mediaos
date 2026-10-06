@@ -15,10 +15,12 @@
  *     «không có quyền» (đó là 403). Có đơn vị mà toàn số 0 thì vẫn vẽ bảng số 0.
  *  4. ĐANG LỖI ⇒ chỉ còn dải lỗi: số liệu của lượt trước (kể cả bản còn trong cache) đứng dưới dải lỗi đọc
  *     như số liệu của bộ lọc đang chọn.
- *  5. Lúc đang tải chỉ giữ số liệu cũ khi CÙNG bộ lọc đơn vị (`isEngagementKeyOfSameUnit`); trong lúc đó vùng
- *     số liệu mang `aria-busy` và nút xuất khoá — tham số đã đổi, thứ trên màn chưa.
+ *  5. Lúc đang tải chỉ giữ SỐ LIỆU cũ khi CÙNG bộ lọc đơn vị (`isEngagementKeyOfSameUnit`); trong lúc đó vùng
+ *     số liệu mang `aria-busy` và nút xuất khoá — tham số đã đổi, thứ trên màn chưa. Đổi ĐƠN VỊ thì vùng số
+ *     liệu nhường chỗ cho khung chờ, còn THANH BỘ LỌC ở lại (dựng từ lượt đọc xong gần nhất — `units` không
+ *     đổi theo bộ lọc đơn vị): gỡ ô «Đơn vị» đang thao tác là đẩy focus về `body` sau MỖI lần chọn.
  */
-import type * as React from "react";
+import * as React from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -79,13 +81,13 @@ function TableSection({ title, children }: TableSectionProps): React.ReactElemen
 
 interface StatsDataProps {
   data: FeedEngagementResponseDto;
-  search: StatsRouteSearch;
+  /** Đơn vị đang lọc (từ URL). */
+  orgUnitId: string | undefined;
   /** Số liệu đang vẽ là của khoảng TRƯỚC, lượt đọc khoảng mới chưa về (luật 5). */
   isStale: boolean;
-  onSearchChange: (next: StatsRouteSearch) => void;
 }
 
-function StatsData({ data, search, isStale, onSearchChange }: StatsDataProps): React.ReactElement {
+function StatsData({ data, orgUnitId, isStale }: StatsDataProps): React.ReactElement {
   const { t } = useTranslation("social");
   return (
     <div
@@ -93,21 +95,13 @@ function StatsData({ data, search, isStale, onSearchChange }: StatsDataProps): R
       aria-busy={isStale ? true : undefined}
       className={cn("flex flex-col gap-4", isStale && "opacity-60")}
     >
-      <StatsFilters
-        range={data.range}
-        units={data.units}
-        orgUnitId={search.orgUnitId}
-        isCustomRange={hasCustomRange(search)}
-        onRangeChange={(range) => onSearchChange(searchForRange(search, range))}
-        onOrgUnitChange={(orgUnitId) => onSearchChange(searchForOrgUnit(search, orgUnitId))}
-      />
       <StatsSummary weekTotals={data.weekTotals} />
       <EngagementTrendChart weekTotals={data.weekTotals} />
       <TableSection title={t("admin.stats.weekTable.caption")}>
         <WeekTotalsTable weekTotals={data.weekTotals} />
       </TableSection>
       <TableSection title={t("admin.stats.unitTable.caption")}>
-        <UnitTotalsTable rows={unitTotals(data, search.orgUnitId)} />
+        <UnitTotalsTable rows={unitTotals(data, orgUnitId)} />
       </TableSection>
     </div>
   );
@@ -143,6 +137,14 @@ export function StatsPage(): React.ReactElement {
   // Nút xuất không có cổng riêng — chỉ khoá khi CHƯA có số liệu của đúng thứ đang xem (hoặc đang xuất).
   const exportRange = isShowingCurrent && !isEngagementEmpty(data) ? data.range : null;
 
+  // Lượt đọc XONG gần nhất — nguồn của thanh bộ lọc khi vùng số liệu đang là khung chờ (luật 5). Cập nhật
+  // ngay trong lượt vẽ (khuôn «đổi state theo dữ liệu vừa tới» của React), không qua effect: không có nhịp
+  // nào thanh bộ lọc vắng mặt giữa hai lượt đọc.
+  const [lastSettled, setLastSettled] = React.useState<FeedEngagementResponseDto>();
+  if (isShowingCurrent && data !== lastSettled) setLastSettled(data);
+  // Luật 4: đang lỗi thì không còn gì của lượt trước, kể cả bộ lọc.
+  const filterSource = query.isError ? undefined : (data ?? lastSettled);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -159,6 +161,16 @@ export function StatsPage(): React.ReactElement {
           onResetRange={() => go(searchForRange(search, null))}
         />
       )}
+      {filterSource !== undefined && !isEngagementEmpty(filterSource) && (
+        <StatsFilters
+          range={filterSource.range}
+          units={filterSource.units}
+          orgUnitId={search.orgUnitId}
+          isCustomRange={hasCustomRange(search)}
+          onRangeChange={(range) => go(searchForRange(search, range))}
+          onOrgUnitChange={(orgUnitId) => go(searchForOrgUnit(search, orgUnitId))}
+        />
+      )}
       {!query.isError && data === undefined && <StatsSkeleton />}
       {data !== undefined && isEngagementEmpty(data) && (
         <p data-testid="stats-empty-scope" className={PLACEHOLDER_CLASS}>
@@ -166,12 +178,7 @@ export function StatsPage(): React.ReactElement {
         </p>
       )}
       {data !== undefined && !isEngagementEmpty(data) && (
-        <StatsData
-          data={data}
-          search={search}
-          isStale={query.isPlaceholderData}
-          onSearchChange={go}
-        />
+        <StatsData data={data} orgUnitId={search.orgUnitId} isStale={query.isPlaceholderData} />
       )}
     </div>
   );

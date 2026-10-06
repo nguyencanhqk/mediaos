@@ -76,12 +76,17 @@ const recoveryButtons = (): string[] =>
     (name) => screen.queryByRole("button", { name }) !== null,
   );
 
-/** Không còn gì của lượt đọc trước: bảng · dải thẻ · bộ lọc · biểu đồ. */
-function expectNoStaleData(): void {
+/** Không còn SỐ LIỆU nào của lượt đọc trước: bảng · dải thẻ · biểu đồ. */
+function expectNoStaleNumbers(): void {
   expect(screen.queryAllByRole("table")).toHaveLength(0);
   expect(screen.queryByRole("list", { name: SUMMARY })).toBeNull();
-  expect(screen.queryByRole("group", { name: FILTERS })).toBeNull();
   expect(screen.queryByTestId("stats-chart-double")).toBeNull();
+}
+
+/** ĐANG LỖI: không còn gì của lượt đọc trước — số liệu lẫn bộ lọc. */
+function expectNoStaleData(): void {
+  expectNoStaleNumbers();
+  expect(screen.queryByRole("group", { name: FILTERS })).toBeNull();
 }
 
 /** Lời gọi treo: trả hàm nhả để ca tự quyết lúc nào phản hồi về. */
@@ -263,16 +268,22 @@ describe("Giữ số liệu cũ lúc đang tải — CHỈ khi cùng bộ lọc 
     expect(exportButton()).toBeEnabled();
   });
 
-  it("DENY — đổi ĐƠN VỊ ⇒ KHÔNG giữ số liệu của bộ lọc cũ: khung chờ thay cho bảng", async () => {
+  it("DENY — đổi ĐƠN VỊ ⇒ KHÔNG giữ SỐ LIỆU của bộ lọc cũ (khung chờ thay cho bảng / thẻ / biểu đồ), nhưng thanh bộ lọc CÒN và ô «Đơn vị» vẫn giữ focus", async () => {
     renderPage();
     const select = within(await filters()).getByRole("combobox", { name: UNIT });
     await within(select).findByRole("option", { name: "Phòng Kỹ thuật" });
     hangEngagement();
+    select.focus();
 
     fireEvent.change(select, { target: { value: UNIT_ID } });
 
     await waitFor(() => expect(lastArg()).toStrictEqual({ orgUnitId: UNIT_ID }));
     expect(screen.getByRole("status", { name: LOADING })).toBeInTheDocument();
-    expectNoStaleData();
+    expectNoStaleNumbers();
+    // Ô đang thao tác không được biến mất: người dùng bàn phím nhấn ↓ tiếp được sang đơn vị kế.
+    const bar = screen.getByRole("group", { name: FILTERS });
+    expect(within(bar).getByRole("combobox", { name: UNIT })).toBe(select);
+    expect(select).toHaveFocus();
+    expect(select).toHaveValue(UNIT_ID);
   });
 });
