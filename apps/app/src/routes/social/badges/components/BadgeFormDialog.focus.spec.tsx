@@ -26,7 +26,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   };
 });
 
+const CODE = "Mã huy hiệu";
 const NAME = "Tên huy hiệu";
+const POSITION = "Thứ tự hiển thị";
 const dialog = (): HTMLElement => screen.getByRole("dialog");
 const cancelButton = (): HTMLElement => screen.getByRole("button", { name: "Huỷ" });
 const clickSave = (): void => {
@@ -44,6 +46,50 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   resetCaps();
+});
+
+describe("Bàn phím — focus mở đầu và Enter để lưu", () => {
+  const noop = (): void => undefined;
+  const renderDialog = (badge: KudosBadgeAdminDto | null): void => {
+    renderWithProviders(
+      <BadgeFormDialog badge={badge} onClose={noop} onOutcome={noop} onStale={noop} />,
+    );
+  };
+  const box = (name: string): HTMLInputElement => screen.getByRole("textbox", { name });
+
+  it("SỬA: mở ra focus ở ô TÊN — ô đầu tiên sửa được, không phải ô mã chỉ đọc", () => {
+    renderDialog(makeBadgeAdmin());
+
+    expect(box(CODE)).toHaveAttribute("readonly");
+    expect(box(NAME)).toHaveFocus();
+  });
+
+  it("đối chứng — TẠO: mở ra focus ở ô MÃ (ô đầu tiên, nhập được)", () => {
+    renderDialog(null);
+
+    expect(box(CODE)).toHaveFocus();
+  });
+
+  it("các ô nằm trong MỘT `<form>` và «Lưu» là nút submit của chính form đó ⇒ Enter trong ô là lưu; submit form gửi 050 đúng một lần", async () => {
+    renderDialog(makeBadgeAdmin());
+    const save = screen.getByRole<HTMLButtonElement>("button", { name: "Lưu" });
+    const form = box(NAME).form;
+
+    expect(form).not.toBeNull();
+    expect(box(POSITION).form).toBe(form);
+    expect(save.type).toBe("submit");
+    expect(save.form).toBe(form);
+
+    type(NAME, "Tên mới");
+    fireEvent.submit(form as HTMLFormElement);
+    // Cùng nhịp: lượt hai bị khoá đồng bộ từ chối.
+    fireEvent.submit(form as HTMLFormElement);
+
+    await waitFor(() => expect(updateBadge).toHaveBeenCalledTimes(1));
+    expect(updateBadge.mock.calls[0]?.[1]).toEqual({ name: "Tên mới" });
+    // «Huỷ» KHÔNG phải nút submit: Enter trên nó là huỷ, không lưu.
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Huỷ" }).type).toBe("button");
+  });
 });
 
 describe("Focus — đóng hộp thoại trả focus về nút đã mở", () => {

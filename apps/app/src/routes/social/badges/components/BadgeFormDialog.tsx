@@ -163,9 +163,17 @@ function BadgeFormDialogBody({
   const attemptIdRef = React.useRef<string | null>(null);
   const nextAttemptId = (): string => (attemptIdRef.current ??= createIdempotencyKey());
 
+  const formElementId = `${formId}-form`;
+
   const focusField = (field: BadgeField): void => {
     document.getElementById(badgeInputId(formId, field))?.focus();
   };
+
+  // `Dialog` focus phần tử focusable ĐẦU TIÊN khi mở — ở chế độ sửa đó là ô mã chỉ-đọc. Effect của component
+  // cha chạy SAU effect của `Dialog` (con) nên lượt focus này thắng; `Dialog` đã kịp nhớ nút kích hoạt.
+  React.useEffect(() => {
+    if (opened !== null) document.getElementById(badgeInputId(formId, "name"))?.focus();
+  }, [opened, formId]);
 
   const finish = (outcome: BadgeFormOutcome): void => {
     hasOutcomeRef.current = true;
@@ -245,20 +253,32 @@ function BadgeFormDialogBody({
           canSubmit={canSubmit}
           onCancel={close}
           onSubmit={submit}
+          submitFormId={formElementId}
         />
       }
     >
       <div className="flex flex-col gap-4" data-testid="badge-form-dialog" data-mode={mode}>
-        <BadgeFormFields
-          formId={formId}
-          isCodeLocked={mode === "edit"}
-          draft={draft}
-          invalid={invalid}
-          codeNotice={
-            error?.field === "code" ? <AdminErrorNotice reason={error.reason} /> : undefined
-          }
-          onChange={change}
-        />
+        {/* `<form>` thật: Enter trong một ô là lưu. Kiểm tra là việc của `planSave` (`noValidate`). */}
+        <form
+          id={formElementId}
+          noValidate
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <BadgeFormFields
+            formId={formId}
+            isCodeLocked={mode === "edit"}
+            draft={draft}
+            invalid={invalid}
+            codeNotice={
+              error?.field === "code" ? <AdminErrorNotice reason={error.reason} /> : undefined
+            }
+            onChange={change}
+          />
+        </form>
 
         {error !== null && error.field === null && (
           <AdminErrorNotice
