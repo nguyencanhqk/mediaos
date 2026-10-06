@@ -128,6 +128,17 @@ export const SOCIAL_SIDEBAR_V2: readonly SidebarItemMeta[] = [
     order: 70,
     requiredPermissions: ["view:feed", "view:feed-report"],
   },
+  {
+    // SOC-SCREEN-012 — S16-SOCIAL-FE-3B, owner ký O2 = a.
+    sidebarKey: "social.kudosBadges",
+    moduleCode: "SOCIAL",
+    label: "Thiết lập huy hiệu",
+    path: "/feed/kudos-badges",
+    icon: "settings",
+    group: "settings",
+    order: 90,
+    requiredAnyPermissions: ["view:feed"],
+  },
 ];
 
 /**

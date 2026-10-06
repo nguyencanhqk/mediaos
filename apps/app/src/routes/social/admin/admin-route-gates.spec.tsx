@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * S16-SOCIAL-FE-3 — ca **G1**: cổng ROUTE của màn quản trị SOCIAL, đo trên đường dựng THẬT của router.
+ * S16-SOCIAL-FE-3 / FE-3B — ca **G1** (màn 010) · **G5** (màn 012): cổng ROUTE của màn quản trị SOCIAL, đo
+ * trên đường dựng THẬT của router.
  *
  * Mỗi ca dựng đúng thứ `router.tsx` dựng cho route đó — `buildModuleRouteContent(getMeta(<routeKey>),
  * "SOCIAL", <màn thật />)` — rồi đo HAI thứ cùng lúc: `ProtectedRoute` vẽ gì, và lời gọi ĐẦU TIÊN của màn
@@ -25,10 +26,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { makeTestQueryClient, resetCaps, setCaps } from "../feed/social-test-doubles";
-import { makeReport, makeReportPage } from "./admin-test-doubles";
+import {
+  makeBadgeAdmin,
+  makeBadgeAdminPage,
+  makeReport,
+  makeReportPage,
+} from "./admin-test-doubles";
+import { BadgeSettingsPage } from "../badges/BadgeSettingsPage";
 import { ModerationPage } from "../moderation/ModerationPage";
 
 const listReports = vi.fn();
+const listBadgesAdmin = vi.fn();
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -37,6 +45,10 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     socialModerationApi: {
       ...actual.socialModerationApi,
       listReports: (...a: unknown[]) => listReports(...a),
+    },
+    socialKudosApi: {
+      ...actual.socialKudosApi,
+      listBadgesAdmin: (...a: unknown[]) => listBadgesAdmin(...a),
     },
   };
 });
@@ -89,6 +101,11 @@ const FORBIDDEN_TITLE = "forbidden.title";
 const FORBIDDEN_NO_PERMISSION = "forbidden.reason.NO_PERMISSION";
 const MODERATION_TITLE = "admin.moderation.page.title";
 const FILTER_LABEL = "admin.moderation.page.filterLabel";
+const BADGES_TITLE = "admin.badges.page.title";
+const NEXT_PAGE = "pagination.next";
+
+/** Cỡ trang của màn 012 (056 mặc định 50). Viết tay. */
+const BADGES_LIMIT = 50;
 
 async function renderRoute(routeKey: string, page: ReactElement): Promise<void> {
   const { buildModuleRouteContent, getMeta } = await import("@/router");
@@ -102,6 +119,8 @@ async function renderRoute(routeKey: string, page: ReactElement): Promise<void> 
 beforeEach(() => {
   listReports.mockReset();
   listReports.mockImplementation(() => Promise.resolve(makeReportPage([makeReport()])));
+  listBadgesAdmin.mockReset();
+  listBadgesAdmin.mockImplementation(() => Promise.resolve(makeBadgeAdminPage([makeBadgeAdmin()])));
 });
 afterEach(() => {
   cleanup();
@@ -182,6 +201,87 @@ describe("G1 — cổng route `/feed/moderation` (SOC-SCREEN-010) = `view:feed` 
   );
 });
 
+describe("G5 — cổng route `/feed/kudos-badges` (SOC-SCREEN-012) = `view:feed` + `manage:feed-kudos`", () => {
+  const renderBadges = (): Promise<void> =>
+    renderRoute("social.kudosBadges", <BadgeSettingsPage />);
+
+  it(
+    "ALLOW — `view:feed` + `manage:feed-kudos` ⇒ màn mount, 056 được gọi ĐÚNG 1 lần",
+    async () => {
+      setCaps({ "view:feed": true, "manage:feed-kudos": true });
+
+      await renderBadges();
+
+      await waitFor(() => expect(listBadgesAdmin).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole("heading", { name: BADGES_TITLE })).toBeInTheDocument();
+      expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
+      // Màn 012 không đọc gì của màn 010.
+      expect(listReports).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — chỉ `view:feed` (nhân viên thường) ⇒ trang cấm NO_PERMISSION, màn KHÔNG mount, 056 gọi 0 lần",
+    async () => {
+      setCaps({ "view:feed": true });
+
+      await renderBadges();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: BADGES_TITLE })).not.toBeInTheDocument();
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — người kiểm duyệt (`view:feed-report` + `manage:feed-report` + `manage:feed-post`) và người được gửi vinh danh (`create:feed-kudos`) nhưng thiếu `manage:feed-kudos` ⇒ cấm, 056 gọi 0 lần",
+    async () => {
+      setCaps({
+        "view:feed": true,
+        "view:feed-report": true,
+        "manage:feed-report": true,
+        "manage:feed-post": true,
+        "create:feed-kudos": true,
+      });
+
+      await renderBadges();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: BADGES_TITLE })).not.toBeInTheDocument();
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — có `manage:feed-kudos` nhưng thiếu `view:feed` (không vào được module) ⇒ cấm, 056 gọi 0 lần",
+    async () => {
+      setCaps({ "manage:feed-kudos": true });
+
+      await renderBadges();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — chỉ có wildcard `*:*` ⇒ cấm: cổng route khớp ĐÚNG-BẰNG, không ăn wildcard",
+    async () => {
+      setCaps({ "*:*": true });
+
+      await renderBadges();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+});
+
 // `ModerationPage` đổi bộ lọc / trang / tab bằng `navigate({ to: "." })` — chỗ DUY NHẤT trong app dùng
 // đường dẫn tương đối đó. Sai một nét là đổi bộ lọc xong người kiểm duyệt bị đưa khỏi màn; các spec của
 // màn dùng `navigate` giả nên chỉ so được literal. Ca này đi qua CHÍNH `router` của app (cây route thật,
@@ -218,6 +318,49 @@ describe("Router THẬT — đổi bộ lọc ở `/feed/moderation` ở lại �
         expect(listReports).toHaveBeenLastCalledWith({ status: "resolved", page: 1, limit: 20 }),
       );
       expect(screen.getByRole("heading", { name: MODERATION_TITLE })).toBeInTheDocument();
+      expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+});
+
+// `BadgeSettingsPage` lật trang bằng cùng lối `navigate({ to: "." })`. Ca này đi qua CHÍNH `router` của app:
+// route `/feed/kudos-badges` có trong cây, `validateSearch` của nó sống thật (`page` tới 056 là SỐ), màn nạp
+// qua `React.lazy` đúng module, và lật trang không đưa người dùng khỏi màn.
+describe("Router THẬT — lật trang ở `/feed/kudos-badges` ở lại đúng màn, search = ĐÚNG `?page=…`", () => {
+  it(
+    "ALLOW — mở `?page=2` (3 trang), bấm «Trang sau» ⇒ pathname còn `/feed/kudos-badges`, search = `?page=3`, 056 gọi lại với trang 3",
+    async () => {
+      routerMode.isReal = true;
+      setCaps({ "view:feed": true, "manage:feed-kudos": true });
+      listBadgesAdmin.mockImplementation((query: { page: number }) =>
+        Promise.resolve(
+          makeBadgeAdminPage([makeBadgeAdmin()], { page: query.page, total: BADGES_LIMIT * 3 }),
+        ),
+      );
+      const { router } = await import("@/router");
+      router.history.push("/feed/kudos-badges?page=2");
+      await router.load();
+
+      render(
+        <QueryClientProvider client={makeTestQueryClient()}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() =>
+        expect(listBadgesAdmin).toHaveBeenLastCalledWith({ page: 2, limit: BADGES_LIMIT }),
+      );
+      expect(router.state.location.pathname).toBe("/feed/kudos-badges");
+
+      fireEvent.click(await screen.findByRole("button", { name: NEXT_PAGE }));
+
+      await waitFor(() => expect(router.state.location.searchStr).toBe("?page=3"));
+      expect(router.state.location.pathname).toBe("/feed/kudos-badges");
+      await waitFor(() =>
+        expect(listBadgesAdmin).toHaveBeenLastCalledWith({ page: 3, limit: BADGES_LIMIT }),
+      );
+      expect(screen.getByRole("heading", { name: BADGES_TITLE })).toBeInTheDocument();
       expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
     },
     ROUTER_IMPORT_TIMEOUT,

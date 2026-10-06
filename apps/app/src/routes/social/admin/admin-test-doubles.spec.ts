@@ -7,6 +7,7 @@ import {
   feedEngagementResponseSchema,
   feedReportSchema,
   IDEMPOTENCY_ERROR_CODES,
+  kudosBadgeAdminPageSchema,
   kudosBadgeAdminSchema,
   SOCIAL_ERROR_CODES,
 } from "@mediaos/contracts";
@@ -16,6 +17,7 @@ import {
   ADMIN_ERR,
   advanceFakeTimers,
   makeBadgeAdmin,
+  makeBadgeAdminPage,
   makeEngagement,
   makeReport,
 } from "./admin-test-doubles";
@@ -73,6 +75,18 @@ describe("admin-test-doubles — factory khớp hợp đồng", () => {
     expect(makeBadgeAdmin({ isActive: false, code: "da-tat" })).toMatchObject({
       isActive: false,
       code: "da-tat",
+    });
+  });
+
+  it("makeBadgeAdminPage(): qua `kudosBadgeAdminPageSchema`; `total` mặc định = số hàng, ghi đè được", () => {
+    const page = makeBadgeAdminPage([makeBadgeAdmin()]);
+    expect(kudosBadgeAdminPageSchema.parse(page)).toEqual(page);
+    expect(page).toMatchObject({ page: 1, limit: 50, total: 1 });
+    expect(makeBadgeAdminPage([], { page: 2, total: 120 })).toEqual({
+      data: [],
+      page: 2,
+      limit: 50,
+      total: 120,
     });
   });
 });

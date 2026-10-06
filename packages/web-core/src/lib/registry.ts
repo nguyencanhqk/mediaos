@@ -2371,6 +2371,23 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 103,
   },
+  // S16-SOCIAL-FE-3B — Thiết lập huy hiệu (SOC-SCREEN-012). Cổng route = cặp của LỜI GỌI ĐẦU TIÊN của màn
+  // (`SOCIAL-API-056` gác `manage:feed-kudos`) + cặp vào module, ĐỦ CẢ HAI; bốn route của màn (056 · 049 ·
+  // 050 · 051) chung cặp đó nên trong màn không còn cổng phụ. Đường dẫn `/feed/kudos-badges`, KHÔNG
+  // `/feed/kudos/badges`: luật «active» của rail so tiền tố nên đường lồng làm mục «Vinh danh» sáng cùng
+  // lúc. KHÔNG khai `requiredScopes`. Mục rail `social.kudosBadges` ở `SOCIAL_SIDEBAR_V2` khai Y HỆT cặp
+  // này (ghim ở `social-wiring.spec.ts` ca W1). Order 104 để dành cho `social.stats` (SOC-SCREEN-011).
+  {
+    routeKey: "social.kudosBadges",
+    path: "/feed/kudos-badges",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-012",
+    titleKey: "routeTitle.socialKudosBadges",
+    requiredPermissions: ["view:feed"],
+    showInSidebar: true,
+    order: 105,
+  },
 
   // Account
   {

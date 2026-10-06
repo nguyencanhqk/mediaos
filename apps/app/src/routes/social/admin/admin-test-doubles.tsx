@@ -21,6 +21,7 @@ import type {
   FeedReportDto,
   FeedReportPageDto,
   KudosBadgeAdminDto,
+  KudosBadgeAdminPageDto,
 } from "@mediaos/contracts";
 import { makePost } from "../feed/social-test-doubles";
 
@@ -221,6 +222,12 @@ export const makeBadgeAdmin = (over: Partial<KudosBadgeAdminDto> = {}): KudosBad
   updatedAt: ISO,
   ...over,
 });
+
+/** Trang 056 (`{data,page,limit,total}`); `total` mặc định = số hàng ⇒ một trang, không có bộ chuyển trang. */
+export const makeBadgeAdminPage = (
+  data: KudosBadgeAdminDto[],
+  over: Partial<Omit<KudosBadgeAdminPageDto, "data">> = {},
+): KudosBadgeAdminPageDto => ({ data, page: 1, limit: 50, total: data.length, ...over });
 
 /**
  * Tua fake timer của vitest BÊN TRONG `act`: timer + microtask chạy hết rồi React mới vẽ lại, nên dòng

@@ -46,7 +46,8 @@ export default {
     goals: "Mục tiêu phòng ban, dự án và nhân viên theo kỳ — cây, tiến độ và chốt kỳ.",
     lms: "Khóa học, bài kiểm tra và lộ trình đào tạo (mở hệ LMS).",
     chat: "Nhắn tin nội bộ theo phòng ban, dự án và hội thoại riêng.",
-    social: "Bảng tin nội bộ: chia sẻ, tin tức công ty, bình luận, thả cảm xúc và sinh nhật đồng nghiệp.",
+    social:
+      "Bảng tin nội bộ: chia sẻ, tin tức công ty, bình luận, thả cảm xúc và sinh nhật đồng nghiệp.",
     fbpost: "Soạn, hẹn giờ và đăng bài lên các trang Facebook của công ty.",
     assets: "Danh mục tài sản, cấp phát, thu hồi, bảo trì và kiểm kê theo đợt.",
     rooms: "Lịch phòng họp theo tuần, đặt phòng, huỷ lịch và quản trị phòng.",
@@ -215,6 +216,7 @@ export default {
     socialGroupDetail: "Trang nhóm",
     socialKudos: "Vinh danh",
     socialModeration: "Kiểm duyệt",
+    socialKudosBadges: "Thiết lập huy hiệu",
     socialProfilePosts: "Trang cá nhân",
     socialMyPosts: "Bài viết của tôi",
     forbidden: "Không có quyền truy cập",
