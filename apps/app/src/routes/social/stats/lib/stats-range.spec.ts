@@ -4,7 +4,9 @@
  * Mọi phép tính là số học trên CHUỖI ngày `YYYY-MM-DD`; chỉ «tuần hiện tại» đọc đồng hồ, và đọc theo MÚI GIỜ
  * CÔNG TY. Mốc chọn sao cho UTC và giờ VN rơi vào HAI TUẦN khác nhau (plan B10): `2026-10-04T17:30:00Z` là
  * Chủ nhật 04/10 theo UTC nhưng đã là 00:30 thứ Hai 05/10 giờ VN ⇒ tuần hiện tại kết thúc `2026-10-11`.
- * Tính theo UTC / giờ máy thì ra `2026-10-04` — ca đỏ trên MỌI máy, không chỉ máy ngoài giờ VN.
+ * Tính theo UTC thì ra `2026-10-04` — ca đỏ trên MỌI máy. Vế «tính theo giờ MÁY» thì file này KHÔNG bắt được
+ * trên máy ở giờ VN (múi mặc định của công ty trùng offset với máy); răng của vế đó nằm ở
+ * `stats-range.company-tz.spec.ts`, nơi `companyTimeZone()` bị ghim về một múi xa cả UTC lẫn UTC+7.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { feedEngagementQuerySchema } from "@mediaos/contracts";
