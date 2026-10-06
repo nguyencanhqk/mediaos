@@ -138,7 +138,13 @@ export function PostCard({
         nhau là CỐ Ý.
       */}
       {renderBody && (
-        <PostBody body={post.body} collapsible={variant === "feed"} className="mt-3" />
+        <PostBody
+          body={post.body}
+          // S16-SOCIAL-MENTIONLINK-1 — vắng (006 · WS · API cũ) ⇒ span như trước.
+          mentions={post.mentions}
+          collapsible={variant === "feed"}
+          className="mt-3"
+        />
       )}
 
       {/* `post.poll` vắng ⇒ `seed` undefined ⇒ khối tự tải `043` (xem docblock `PollBlock`). */}
