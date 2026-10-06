@@ -1,6 +1,26 @@
-/** S16-SOCIAL-FE-3B (L5a) — KHUNG cho lượt RED: mọi hàm trả giá trị rỗng đúng kiểu, chưa có luật nào. */
+/**
+ * S16-SOCIAL-FE-3B (L5) — tham số URL của `/feed/stats` (`SOC-SCREEN-011`) và tham số gửi `052` / `053`.
+ *
+ * Màn KHÔNG tự suy lại gì ở đây: đọc search, dựng tham số gửi đi, dựng search kế tiếp khi đổi khoảng / đơn vị
+ * đều qua các hàm thuần của file này (khuôn `moderation/lib/moderation-route-search.ts` — đọc docblock ở đó).
+ *
+ * ┌─ BỐN LUẬT ──────────────────────────────────────────────────────────────────────────────────────────┐
+ * │ 1. `from` / `to` là MỘT cặp. 052 trả 400 khi lẻ một vế · ngày không tồn tại · `from > to` · quá 26     │
+ * │    tuần sau khi nắn về tuần ISO. Cặp nào không qua CHÍNH `feedEngagementQuerySchema` thì bỏ CẢ HAI —   │
+ * │    màn rơi về mặc định của server thay vì gọi 052 với tham số chắc chắn 400.                           │
+ * │ 2. Mỗi phần (cặp ngày · `orgUnitId`) được xét RIÊNG: phần này hỏng không kéo theo phần kia.            │
+ * │ 3. «Bỏ» một khoá = trả nó với `undefined` TƯỜNG MINH. Router gộp `{ ...thô, ...đầuRa }`; khoá vắng     │
+ * │    trong đầu ra thì giá trị THÔ sống sót. Mọi hàm trả search ở đây LUÔN trả đủ ba khoá.                │
+ * │ 4. Không ném. `validateSearch` ném = màn lỗi thay cho số liệu chỉ vì URL sửa tay.                      │
+ * └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Cặp ngày hợp lệ được GIỮ NGUYÊN VĂN (không nắn về thứ Hai / Chủ nhật ở đây): server tự nắn, và nhãn khoảng
+ * trên màn lấy từ `range` server trả — không lấy từ URL.
+ */
+import { feedEngagementQuerySchema } from "@mediaos/contracts";
 import type { FeedEngagementParams } from "@mediaos/web-core";
 
+/** Một khoảng ngày lịch `YYYY-MM-DD` (hai đầu đều tính). */
 export interface StatsDateRange {
   from: string;
   to: string;
@@ -12,28 +32,53 @@ export interface StatsRouteSearch {
   orgUnitId?: string;
 }
 
-export function validateStatsRouteSearch(_raw: Record<string, unknown>): StatsRouteSearch {
-  return {};
+/** Cặp ngày của URL nếu nó qua được schema của 052; ngược lại `null` (bỏ cả hai). */
+function datePairOf(from: unknown, to: unknown): StatsDateRange | null {
+  if (typeof from !== "string" || typeof to !== "string") return null;
+  return feedEngagementQuerySchema.safeParse({ from, to }).success ? { from, to } : null;
 }
 
-export function hasCustomRange(_search: StatsRouteSearch): boolean {
-  return false;
+function orgUnitIdOf(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return feedEngagementQuerySchema.safeParse({ orgUnitId: value }).success ? value : undefined;
 }
 
-export function engagementParams(_search: StatsRouteSearch): FeedEngagementParams {
-  return {};
+/** `validateSearch` của route. Không ném; LUÔN trả đủ ba khoá (luật 3). */
+export function validateStatsRouteSearch(raw: Record<string, unknown>): StatsRouteSearch {
+  const pair = datePairOf(raw.from, raw.to);
+  return { from: pair?.from, to: pair?.to, orgUnitId: orgUnitIdOf(raw.orgUnitId) };
 }
 
+/** URL đang mang một khoảng tự chọn (khác mặc định «8 tuần tới hết tuần hiện tại» của server). */
+export function hasCustomRange(search: StatsRouteSearch): boolean {
+  return search.from !== undefined && search.to !== undefined;
+}
+
+/**
+ * Tham số gửi `052` / `053` (cũng là `params` của khoá cache `socialKeys.stats.engagement`). Khoá không có
+ * giá trị thì VẮNG hẳn (không phải `undefined`): mặc định ⇒ `{}`. `from` lẻ ⇒ không gửi vế nào (luật 1).
+ */
+export function engagementParams(search: StatsRouteSearch): FeedEngagementParams {
+  const range =
+    search.from !== undefined && search.to !== undefined
+      ? { from: search.from, to: search.to }
+      : {};
+  const unit = search.orgUnitId !== undefined ? { orgUnitId: search.orgUnitId } : {};
+  return { ...range, ...unit };
+}
+
+/** Search kế tiếp khi đổi khoảng: `null` = về mặc định của server (bỏ `from` + `to`). Giữ đơn vị. */
 export function searchForRange(
-  _search: StatsRouteSearch,
-  _range: StatsDateRange | null,
+  search: StatsRouteSearch,
+  range: StatsDateRange | null,
 ): StatsRouteSearch {
-  return {};
+  return { from: range?.from, to: range?.to, orgUnitId: search.orgUnitId };
 }
 
+/** Search kế tiếp khi đổi / bỏ lọc đơn vị. Giữ khoảng. */
 export function searchForOrgUnit(
-  _search: StatsRouteSearch,
-  _orgUnitId: string | undefined,
+  search: StatsRouteSearch,
+  orgUnitId: string | undefined,
 ): StatsRouteSearch {
-  return {};
+  return { from: search.from, to: search.to, orgUnitId };
 }

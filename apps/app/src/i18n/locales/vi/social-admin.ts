@@ -12,7 +12,12 @@
  * │ Câu nào hứa «thử lại» thì lỗi đó phải thật sự thử lại được (`reportBusy` · `busy` · `generic`);│
  * │ lỗi kết cục (`reportAlreadyDecided` · `forbidden`…) KHÔNG mời thử lại.                         │
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Cụm `stats` (Thống kê tương tác) nằm ở file riêng `social-admin-stats.ts` để file này dưới trần 400 dòng
+ * (plan D18).
  */
+import stats from "./social-admin-stats";
+
 export default {
   notice: {
     retry: "Thử lại",
@@ -55,6 +60,11 @@ export default {
     // ── 050 · 051 — sửa / ngừng dùng / bật lại huy hiệu ──
     badgeGone:
       "Không tìm thấy huy hiệu này — có thể nó không còn tồn tại. Danh sách đã được làm mới.",
+    // ── 052 · 053 — thống kê tương tác ── (403 mang mã riêng: KHÁC «không có quyền vào màn»)
+    statsUnitOutOfScope:
+      "Bạn không có quyền xem thống kê của đơn vị này. Hãy bỏ lọc đơn vị hoặc chọn đơn vị khác.",
+    statsRangeInvalid:
+      "Khoảng thời gian thống kê không hợp lệ (tối đa 26 tuần). Hãy chọn lại khoảng thời gian.",
   },
   // ── Báo cáo vi phạm — nhãn dùng chung cho hàng đợi (010) và hộp thoại «Báo cáo» (027) ──
   report: {
@@ -338,4 +348,6 @@ export default {
       rocket: "Tên lửa",
     },
   },
+  // ── Thống kê tương tác `SOC-SCREEN-011` — file riêng ──
+  stats,
 };
