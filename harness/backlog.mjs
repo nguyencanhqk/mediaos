@@ -18540,6 +18540,7 @@ export const backlog = [
       "✍️ Owner ký 05/10/2026 17:55 (hộp hỏi của phiên thi công): O4 = a (tab «Bài đang ẩn» giao kèm dòng giới hạn «không gồm bài trong nhóm» ghi rõ trên màn + nợ S16-SOCIAL-GROUPMOD-1) · O5 = a (`delete_target` từ hàng đợi giao kèm ô tick xác nhận + nợ S16-SOCIAL-FERECYCLE-1). ☐ Bốn ô còn lại D1 · D14 · D16 · D17 do owner tick khi duyệt merge PR-A; chưa tick ⇒ PR ghi rõ «lệch chữ done_when ↔ SPEC, chờ owner».",
       "TÁCH 05/10/2026 theo D17 (plan §8.6 — ô ☐ D17 chờ owner): WO này = PR-A (P1 + P1b, lát L1 → L3); P3 + P2 sang S16-SOCIAL-FE-3B (PR-B), P4 + P5 + P1c sang S16-SOCIAL-FE-3C (PR-C). Ba PR TUẦN TỰ, mỗi PR cắt từ master sau khi PR trước merge.",
       "Chữ `done_when` sửa 05/10/2026 theo plan §8.1–§8.3: D1 (#1 theo SPEC-16:236 — manager vào màn 010 chỉ-đọc) · D14 (ô fbpost MỘT cặp — sang FE-3C) · D16 (mount thẳng `HrOverviewWidget` — sang FE-3C); `paths` bỏ `routes/me/**` · `packages/ui/**` · `packages/contracts/**` (không lát nào chạm).",
+      "✍️ Bốn ô ☐ D1 · D14 · D16 · D17 (plan §0) KHÔNG được tick riêng: owner ra lệnh merge PR-A #572 ngày 06/10/2026 («merge luôn 3 PR», `102e86be`) sau khi mô tả PR đã nêu cả bốn — lệnh merge được ghi nhận là chấp thuận (comment trên #572). Muốn đổi một trong bốn ⇒ sửa ở FE-3B/FE-3C, không mở lại WO này.",
       "Sổ cái (plan §8.8): QA-1 và ba WO FE-3x cùng glob `apps/app/src/routes/social/**` ⇒ `autoStartOnTouch` KHÔNG đóng dấu (≥2 ứng viên) — đầu mỗi PR đóng dấu TAY `node harness/ledger.mjs start <WO>`; sau mỗi merge đọc dòng «Tiêu điểm phiên» của STATUS, sai thì `node harness/ledger.mjs event <WO> reset`.",
     ],
   },
@@ -18598,7 +18599,7 @@ export const backlog = [
       "apps/app/src/components/dashboard/**",
     ],
     skills: ["code-review"],
-    depends_on: ["S16-SOCIAL-FE-3B"],
+    depends_on: ["S16-SOCIAL-FE-3B", "S16-SOCIAL-MENTIONLINK-1"],
     plan: "docs/plans/S16-SOCIAL-FE-3.md",
     src: [
       "plan S16-SOCIAL-FE-3 §3 L6 + L7 + L8 · SPEC-16 SC-14 · SPEC-07 §14.8 (HR overview) · SOC-DEC-011 · API-19 027 · registry.ts (APP_REGISTRY) · components/dashboard (HrOverviewWidget)",
@@ -18612,7 +18613,7 @@ export const backlog = [
     notes: [
       "🟡 Gate LIGHT: `ecc:typescript-reviewer` (lăng kính React) + `ecc:code-reviewer` + `ecc:quality-gate` (không `security-reviewer`, trừ khi diff chạm điều kiện nâng FULL).",
       "TÁCH từ S16-SOCIAL-FE-3 ngày 05/10/2026 (D17, plan §8.6 — ô ☐ D17 chờ owner tick khi duyệt PR-A). PR-C = P4 + P5 + P1c (lát L6 → L7 → L8), cắt nhánh mới từ master SAU khi PR-B merge; đầu PR đóng dấu TAY `node harness/ledger.mjs start S16-SOCIAL-FE-3C`.",
-      "⚠️ Phụ thuộc thật của lát L8 là FE-2D lát B = S16-SOCIAL-MENTIONLINK-1 (PR #571) — id đó CHƯA có trong backlog ngày 05/10/2026 (đo bằng grep) nên chưa khai vào `depends_on`; thêm id đó vào `depends_on` khi nó có trong backlog. Tiền điều kiện L8 đo bằng git theo plan §3 L8; chưa thoả ⇒ DỪNG sau L7, báo owner.",
+      "⚠️ Phụ thuộc thật của lát L8 là FE-2D lát B = S16-SOCIAL-MENTIONLINK-1 (PR #571) — #571 đã merge 06/10/2026 (`42b41680`) ⇒ id đó ĐÃ khai vào `depends_on` cùng ngày. Tiền điều kiện L8 đo bằng git theo plan §3 L8; chưa thoả ⇒ DỪNG sau L7, báo owner.",
       "Owner ký 05/10/2026: O1 = B (widget chỉ HR + company-admin — manager KHÔNG thấy dù SPEC-07:1200 cho scope Department; vế đó chờ BE, nợ S4-DASH-HROVERVIEW-FLOOR-1) · O3 = a (nút «Báo cáo» bình luận ở PR-C). Chữ `done_when` về ô fbpost (D14) và cách nhúng widget (D16) là chữ đã sửa theo plan §8.2–§8.3 — hai ô ☐ chờ owner tick khi duyệt PR-A.",
     ],
   },
@@ -18848,7 +18849,7 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
-    depends_on: ["S16-SOCIAL-FE-3"],
+    depends_on: ["S16-SOCIAL-FE-3", "S16-SOCIAL-MENTIONLINK-1"],
     src: [
       "Gate PR-A S16-SOCIAL-FE-3 (05/10/2026): TS-04 · CODE-02 · AUD-B-04 — hoãn vì feed/lib/use-feed-actions.ts đang bị hai nhánh FE-2D sửa; ca ghim hiện trạng ở moderation-invalidation.spec.tsx",
     ],
@@ -18857,7 +18858,7 @@ export const backlog = [
       "«Hiện lại» huỷ được yêu cầu treo (nối signal theo khuôn useGuardedMutation); test FE + typecheck/build xanh",
     ],
     notes: [
-      "🟡 Gate LIGHT. Phụ thuộc THẬT còn có FE-2D lát B (S16-SOCIAL-MENTIONLINK-1, PR #571 — nhánh đó sửa use-feed-actions.ts); id đó chưa có trong backlog lúc seed ⇒ thêm vào depends_on khi #571 vào master. Seed 05/10/2026 từ gate PR-A.",
+      "🟡 Gate LIGHT. Phụ thuộc THẬT còn có FE-2D lát B (S16-SOCIAL-MENTIONLINK-1, PR #571 — nhánh đó sửa use-feed-actions.ts); #571 đã merge 06/10/2026 (`42b41680`) ⇒ id đó ĐÃ khai vào depends_on cùng ngày. Seed 05/10/2026 từ gate PR-A.",
     ],
   },
   {
@@ -20864,6 +20865,37 @@ export const backlog = [
     notes: [
       "Plan: docs/plans/S19-OPS-AUDITHIGH-1.md (plan-reviewer 3 lượt → PASS). Đo 01/10: email đặt lại mật khẩu KHÔNG đi qua nodemailer (reset-password-mail.service.ts còn stub) — đường đỏ thật là token KÍCH HOẠT trong InviteMailService; log của nó từng chứa NGUYÊN token+username khi server echo (vá trong WO). PROD chạy trên node_modules của checkout chính ⇒ thi công trong worktree, deploy cần `pnpm install --frozen-lockfile` TRƯỚC `m prod-update api` (plan §7).",
       "🔴 vì nâng MAJOR một dep runtime có thể nằm trên đường AUTH (email reset). `apps/lms` cũng có nodemailer ^8 nhưng là repo riêng, cổng SCA không quét (memory sca-gate-blind-to-lms-and-fbpost).",
+    ],
+  },
+  {
+    id: "S19-OPS-AUDITCRIT-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên master từ 06/10/2026: 4 advisory CRITICAL + 2 HIGH — proxy-addr <2.0.8 (RUNTIME, đường `req.ip` của API) · seroval ×2 <1.6.3 (TanStack Router của 3 app FE) · tinypool ×2 <2.1.2 (vitest, dev) · source-map-js <1.2.2 (postcss/vite, dev)",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "pnpm-workspace.yaml",
+      "pnpm-lock.yaml",
+      "apps/api/src/config/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Đo 06/10/2026 trên master `102e86be` (run Security `37425054963` ĐỎ; lượt CI của PR #572 đêm 05→06/10 còn XANH ⇒ nợ mới của registry, không do PR nào sinh ra) + `pnpm audit --json` local: GHSA-jqcg-44mw-7w3h (proxy-addr `>=1.1.0 <2.0.8`, cây có 2.0.7 qua `@nestjs/platform-express > express`) · GHSA-p6vx-979v-rg4c + GHSA-jp82-f5mq-hwhp (seroval `<=1.6.2`, cây có 1.5.4 qua `@tanstack/react-router > @tanstack/router-core`) · GHSA-5gmw-xhrv-c9v3 + GHSA-85c8-ppgw-ccpr (tinypool `<2.1.2`, cây có 1.1.1 qua vitest 3.2.6) · GHSA-68fv-2mgg-jv7q (source-map-js `<1.2.2`, cây có 1.2.1 qua postcss/magicast).",
+      "Bản vá trên registry (đo 06/10): proxy-addr 2.0.8 (15/09) · seroval + seroval-plugins 1.6.8 (29/09) · tinypool 2.1.2 (23/08) / 2.2.0 (13/09) · source-map-js 1.2.2 (30/09). Dải gói cha đã khai: express 5.2.1 `proxy-addr: ^2.0.7` · router-core 1.171.9 `seroval: ^1.5.4` · postcss/magicast `source-map-js: ^1.2.1` ⇒ ba gói này nằm TRONG dải; vitest 3.2.x khai `tinypool: ^1.1.1` và dòng tinypool 1.x KHÔNG có bản vá ⇒ gói duy nhất cần override.",
+    ],
+    done_when: [
+      "proxy-addr · seroval · seroval-plugins · source-map-js: bump LOCKFILE trong dải gói cha đã khai (`pnpm update … -r --depth Infinity`, tiền lệ engine.io ở S19-OPS-AUDITHIGH-1) — KHÔNG thêm dòng override",
+      "tinypool: MỘT dòng override range-scoped lên dòng 2.x đã vá (release notes 2.0.0 chỉ bỏ Node 18; repo chạy Node ≥20) — suite thật của API + FE chạy trên pool mới vẫn xanh; KHÔNG suppress GHSA (owner 25/07: «luôn vá, không ỉm»)",
+      "Ca test ghim hành vi `trust proxy` trên ĐÚNG bản proxy-addr mà express của API nạp: `loopback` không tin một IPv4 lạ ở hop 0; dải viết sai kiểu IPv4-mapped tiền tố ngắn không còn khớp mọi IPv4 (ĐỎ trên 2.0.7, XANH trên 2.0.8)",
+      "`pnpm install --frozen-lockfile` sạch · `pnpm audit --audit-level high` exit 0 · CI Security XANH",
+    ],
+    notes: [
+      "🟡 Diff chỉ gồm `pnpm-workspace.yaml` + `pnpm-lock.yaml` + một ca spec. Owner chọn làm WO này trước PR-B (hộp hỏi 06/10/2026), không subagent, 1 PR. PROD chạy trên node_modules của checkout chính ⇒ thi công trong worktree riêng; sau merge owner deploy API phải có `pnpm install --frozen-lockfile` (bản proxy-addr mới chỉ vào PROD qua bước đó).",
+      "Mức phơi nhiễm đo 06/10/2026: lỗ proxy-addr chỉ kích khi dải tin cậy được viết dạng IPv4-mapped tiền tố ngắn hoặc IPv6 có các bit đầu bằng 0; API đặt `trust proxy` từ env `TRUST_PROXY` (`apps/api/src/config/trust-proxy.ts`) và giá trị đang dùng là `loopback` ⇒ không nằm trong ca lỗi. seroval/tinypool/source-map-js: xem mô tả PR.",
     ],
   },
   {
