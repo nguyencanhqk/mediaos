@@ -159,19 +159,21 @@ export function BadgeSettingsPage(): React.ReactElement {
     staleTime: 0,
   });
 
-  /** Luật 1: kết cục nào cho thấy cache đã cũ thì làm mới, và focus rời hàng sắp đổi. */
+  /** Luật 1: kết cục nào cho thấy cache đã cũ thì làm mới. */
   const settle = (next: PageNotice, isStale: boolean): void => {
-    if (isStale) {
-      invalidateBadgeCatalogs(queryClient);
-      outcomeFocus.requestFocus();
-    }
+    if (isStale) invalidateBadgeCatalogs(queryClient);
     setNotice(next);
   };
 
   const toggle = useBadgeToggle((result) => {
+    const isStale = result.kind === "done" || result.invalidate;
     setConfirming(null);
-    // Lỗi KHÔNG làm mới (403 · 400 · 4xx lạ) ⇒ hàng còn nguyên, focus ở lại nút của nó.
-    settle(noticeOfToggle(result), result.kind === "done" || result.invalidate);
+    settle(noticeOfToggle(result), isStale);
+    // Hàng sắp đổi ⇒ focus rời nút của nó tới dải kết cục. Lỗi KHÔNG làm mới (403 · 400 · 4xx lạ) ⇒ hàng còn
+    // nguyên, focus ở lại. Hộp thoại tạo / sửa ĐANG MỞ («Sửa» · «Thêm huy hiệu» không khoá theo lượt tắt / bật)
+    // ⇒ KHÔNG kéo: focus đang ở trong modal, kéo ra sau lớp phủ là phím gõ tiếp rơi mất và Tab đi vào bảng
+    // phía sau. Dải vẫn vẽ; đóng hộp thoại thì focus về nút đã mở nó.
+    if (isStale && formTarget === null) outcomeFocus.requestFocus();
   });
 
   /** `start` là CỔNG gửi-đúp duy nhất: lượt hai trong cùng nhịp nhận `false`, không có gì lên dây. */

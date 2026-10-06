@@ -272,6 +272,45 @@ describe("Lỗi GIỮ hộp thoại báo dữ liệu cũ (`onStale`) — trang l
   });
 });
 
+describe("Kết cục của nút hàng về khi hộp thoại tạo / sửa ĐANG MỞ", () => {
+  const OFF_ID = "88888888-8888-4888-8888-888888888888";
+  const REACTIVATE_ROW = "Bật lại huy hiệu Tiên phong";
+  const DONE_ON = "Đã bật lại huy hiệu «Tiên phong».";
+  const inactive = makeBadgeAdmin({
+    id: OFF_ID,
+    code: "da-tat",
+    name: "Tiên phong",
+    isActive: false,
+  });
+
+  it("«Bật lại» còn treo → mở «Sửa» hàng khác → phản hồi về ⇒ dải vẫn vẽ nhưng focus KHÔNG bị kéo ra khỏi hộp thoại đang nhập", async () => {
+    listBadgesAdmin.mockImplementation(() =>
+      Promise.resolve(makeBadgeAdminPage([existing, inactive])),
+    );
+    let release: (badge: unknown) => void = () => undefined;
+    updateBadge.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: REACTIVATE_ROW }));
+    await waitFor(() => expect(updateBadge).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: EDIT_ROW }));
+    const dialog = screen.getByRole("dialog", { name: DIALOG.edit });
+    await waitFor(() => expect(dialog).toContainElement(document.activeElement as HTMLElement));
+
+    release({ ...inactive, isActive: true });
+
+    expect(await screen.findByText(DONE_ON)).toBeInTheDocument();
+    await waitFor(() => expect(listBadgesAdmin).toHaveBeenCalledTimes(2));
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    expect(screen.getByRole("dialog", { name: DIALOG.edit })).toBe(dialog);
+  });
+});
+
 describe("Dải của trang không sống qua lượt mở hộp thoại kế tiếp", () => {
   it("có dải «Đã thêm…» rồi mở hộp thoại sửa ⇒ dải được gỡ", async () => {
     await renderPage();
