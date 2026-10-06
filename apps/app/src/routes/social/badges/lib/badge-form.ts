@@ -12,6 +12,8 @@
  * │ 3. Icon là MỘT trường của server nhưng HAI ô ở form: ô chọn tên icon trong danh mục và ô emoji. Ô    │
  * │    emoji có chữ thì THẮNG. Giá trị cũ không thuộc danh mục (emoji, tên lạ, chữ hoa) nằm NGUYÊN VĂN ở │
  * │    ô emoji — form không tự «sửa hộ» thành một giá trị khác rồi gửi đi như thể người dùng đã đổi.     │
+ * │    Người dùng CHỌN một icon trong danh mục thì hộp thoại xoá ô emoji (hành động của họ, không phải   │
+ * │    form sửa hộ) — nếu không lựa chọn đó thua emoji cũ và «Lưu» ra `unchanged`.                       │
  * └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
 import {

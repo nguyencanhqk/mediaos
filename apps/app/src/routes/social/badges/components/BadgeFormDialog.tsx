@@ -210,7 +210,10 @@ function BadgeFormDialogBody({
 
   const change = (key: keyof BadgeDraft, value: string): void => {
     const field = FIELD_OF_DRAFT_KEY[key];
-    setDraft((current) => ({ ...current, [key]: value }));
+    // Ô emoji THẮNG ô chọn (`draftIcon`): CHỌN một biểu tượng mà emoji cũ còn đó thì lựa chọn không có hiệu
+    // lực và «Lưu» ở chế độ sửa ra «không đổi gì». Lựa chọn có giá trị là ý muốn tường minh ⇒ thay emoji.
+    const replacesEmoji = key === "iconName" && value !== "";
+    setDraft((current) => ({ ...current, [key]: value, ...(replacesEmoji ? { emoji: "" } : {}) }));
     // Dấu lỗi chỉ đúng cho giá trị đã bị từ chối: gõ lại ô nào thì gỡ dấu của CHÍNH ô đó.
     setInvalid((current) => current.filter((item) => item !== field));
     setError((current) => (current !== null && current.field === field ? null : current));

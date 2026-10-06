@@ -275,6 +275,30 @@ describe("F4 — icon", () => {
     await saveAndWait(createBadge);
     expect(sentCreate()).toEqual({ code: "sang-tao", name: "Sáng tạo", icon: "🎉", position: 0 });
   });
+
+  it("SỬA huy hiệu đang mang emoji → CHỌN một biểu tượng trong danh mục ⇒ ô emoji được xoá, xem trước vẽ icon, «Lưu» gửi `{ icon }` (không đóng im lặng)", async () => {
+    const { onClose } = renderDialog(makeBadgeAdmin({ icon: "🎉" }));
+    expect(box(EMOJI)).toHaveValue("🎉");
+    expect(iconSelect()).toHaveValue("");
+
+    fireEvent.change(iconSelect(), { target: { value: "star" } });
+    expect(box(EMOJI)).toHaveValue("");
+    expect(within(dialog("edit")).getByTestId("kudos-badge-icon")).toBeInTheDocument();
+    expect(within(dialog("edit")).queryByTestId("kudos-badge-emoji")).toBeNull();
+
+    await saveAndWait(updateBadge);
+    expect(updateBadge.mock.calls[0]?.[0]).toBe(BADGE_ID);
+    expect(updateBadge.mock.calls[0]?.[1]).toEqual({ icon: "star" });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("chọn lại «Mặc định» ở ô biểu tượng KHÔNG xoá ô emoji (chỉ lựa chọn có giá trị mới thay emoji)", () => {
+    renderDialog(makeBadgeAdmin({ icon: "🎉" }));
+    fireEvent.change(iconSelect(), { target: { value: "star" } });
+    type(EMOJI, "🔥");
+    fireEvent.change(iconSelect(), { target: { value: "" } });
+    expect(box(EMOJI)).toHaveValue("🔥");
+  });
 });
 
 describe("gắn ĐÚNG huy hiệu khi đích đổi (PR-A: nháp sống qua lần đổi đích từng ghi NHẦM đối tượng)", () => {
