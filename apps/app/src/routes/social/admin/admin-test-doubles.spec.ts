@@ -104,6 +104,7 @@ describe("ADMIN_ERR — lỗi đúng hình dạng trên dây", () => {
     ["idempotencyInProgress", 409, IDEMPOTENCY_ERROR_CODES.IN_PROGRESS],
     ["badgeCodeTaken", 409, C.KUDOS_BADGE_CODE_TAKEN],
     ["badgeGone", 404, C.KUDOS_BADGE_NOT_FOUND],
+    ["statsUnitOutOfScope", 403, C.STATS_UNIT_OUT_OF_SCOPE],
     ["moderationDenied", 403, C.MODERATION_FIELD_DENIED],
     ["forbidden", 403, "AUTH-ERR-FORBIDDEN"],
     ["badRequest", 400, "VALIDATION-ERR-001"],
@@ -111,7 +112,7 @@ describe("ADMIN_ERR — lỗi đúng hình dạng trên dây", () => {
   ];
   const table: Record<string, (() => ApiError) | undefined> = ADMIN_ERR;
 
-  it("đúng 15 lỗi, đúng tên (danh sách viết tay)", () => {
+  it("đúng 16 lỗi, đúng tên (danh sách viết tay)", () => {
     expect(Object.keys(ADMIN_ERR).sort()).toEqual(EXPECTED.map(([name]) => name).sort());
   });
 

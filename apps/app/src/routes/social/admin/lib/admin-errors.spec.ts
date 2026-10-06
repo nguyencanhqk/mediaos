@@ -39,8 +39,8 @@ const CREATE_TABLE = {
 
 const UNHIDE_TABLE = { [C.POST_NOT_FOUND]: expected("postGone") } satisfies AdminErrorTable;
 
-describe("ADMIN_ERROR_REASONS — tập đóng của PR-A (L2 + L3) + PR-B (L4 huy hiệu)", () => {
-  it("đúng 17 reason, đúng tên (danh sách viết tay)", () => {
+describe("ADMIN_ERROR_REASONS — tập đóng của PR-A (L2 + L3) + PR-B (L4 huy hiệu · L5 thống kê)", () => {
+  it("đúng 19 reason, đúng tên (danh sách viết tay)", () => {
     expect([...ADMIN_ERROR_REASONS].sort()).toEqual(
       [
         "badgeCodeTaken",
@@ -60,9 +60,11 @@ describe("ADMIN_ERROR_REASONS — tập đóng của PR-A (L2 + L3) + PR-B (L4 h
         "reportGone",
         "reportTargetGone",
         "reportTargetUnavailable",
+        "statsRangeInvalid",
+        "statsUnitOutOfScope",
       ].sort(),
     );
-    expect(new Set(ADMIN_ERROR_REASONS).size).toBe(17);
+    expect(new Set(ADMIN_ERROR_REASONS).size).toBe(19);
   });
 });
 

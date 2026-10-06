@@ -298,6 +298,13 @@ export const ADMIN_ERR = {
   /** 050 · 051 — huy hiệu không còn (hoặc thuộc công ty khác — một mã cho mọi lý do). */
   badgeGone: () =>
     new ApiError(404, C.KUDOS_BADGE_NOT_FOUND, "SOCIAL-ERR: không tìm thấy huy hiệu."),
+  /** 052 · 053 — `orgUnitId` đang lọc nằm ngoài phạm vi thống kê của người xem. */
+  statsUnitOutOfScope: () =>
+    new ApiError(
+      403,
+      C.STATS_UNIT_OUT_OF_SCOPE,
+      "SOCIAL-ERR: đơn vị nằm ngoài phạm vi thống kê của bạn.",
+    ),
   /** 001 `status=hidden` thiếu `manage:feed-post` (tầng 2). */
   moderationDenied: () =>
     new ApiError(

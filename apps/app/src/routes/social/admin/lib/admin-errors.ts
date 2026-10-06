@@ -29,9 +29,8 @@ import { ApiError } from "@mediaos/web-core";
 import { socialErrorCode } from "../../groups/lib/group-errors";
 
 /**
- * Tập ĐÓNG các lý do của cụm quản trị: PR-A (lát L2 Kiểm duyệt + L3 Báo cáo) + PR-B (lát L4 Huy hiệu).
- * Mỗi phần tử có đúng một câu ở `social:admin.error.<reason>`. Lát sau (Thống kê) tự nối reason của mình
- * vào đây.
+ * Tập ĐÓNG các lý do của cụm quản trị: PR-A (lát L2 Kiểm duyệt + L3 Báo cáo) + PR-B (lát L4 Huy hiệu ·
+ * lát L5 Thống kê). Mỗi phần tử có đúng một câu ở `social:admin.error.<reason>`.
  */
 export const ADMIN_ERROR_REASONS = [
   // Dùng chung.
@@ -59,6 +58,10 @@ export const ADMIN_ERROR_REASONS = [
   "badgeCodeTaken",
   // 050 · 051 — sửa / ngừng dùng / bật lại huy hiệu.
   "badgeGone",
+  // 052 · 053 — thống kê tương tác: đơn vị đang lọc nằm ngoài phạm vi của người xem.
+  "statsUnitOutOfScope",
+  // 052 · 053 — khoảng ngày đang gửi bị server từ chối.
+  "statsRangeInvalid",
 ] as const;
 export type AdminErrorReason = (typeof ADMIN_ERROR_REASONS)[number];
 
