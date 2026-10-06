@@ -18613,6 +18613,7 @@ export const backlog = [
     notes: [
       "🟡 Gate LIGHT: `ecc:typescript-reviewer` (lăng kính React) + `ecc:code-reviewer` + `ecc:quality-gate` (không `security-reviewer`, trừ khi diff chạm điều kiện nâng FULL).",
       "TÁCH từ S16-SOCIAL-FE-3 ngày 05/10/2026 (D17, plan §8.6 — ô ☐ D17 chờ owner tick khi duyệt PR-A). PR-C = P4 + P5 + P1c (lát L6 → L7 → L8), cắt nhánh mới từ master SAU khi PR-B merge; đầu PR đóng dấu TAY `node harness/ledger.mjs start S16-SOCIAL-FE-3C`.",
+      "Trước khi nối ca của PR-C: TÁCH theo màn hai file spec đã phình sau PR-B — `apps/app/src/routes/social/social-wiring.spec.ts` (627 dòng) và `admin/admin-route-gates.spec.tsx` (501 dòng) — finding AUD-SPEC400 của kiểm toán PR-B (06/10/2026); trần 800 dòng của CLAUDE.md §5 không có cổng nào ép.",
       "⚠️ Phụ thuộc thật của lát L8 là FE-2D lát B = S16-SOCIAL-MENTIONLINK-1 (PR #571) — #571 đã merge 06/10/2026 (`42b41680`) ⇒ id đó ĐÃ khai vào `depends_on` cùng ngày. Tiền điều kiện L8 đo bằng git theo plan §3 L8; chưa thoả ⇒ DỪNG sau L7, báo owner.",
       "Owner ký 05/10/2026: O1 = B (widget chỉ HR + company-admin — manager KHÔNG thấy dù SPEC-07:1200 cho scope Department; vế đó chờ BE, nợ S4-DASH-HROVERVIEW-FLOOR-1) · O3 = a (nút «Báo cáo» bình luận ở PR-C). Chữ `done_when` về ô fbpost (D14) và cách nhúng widget (D16) là chữ đã sửa theo plan §8.2–§8.3 — hai ô ☐ chờ owner tick khi duyệt PR-A.",
     ],
@@ -18955,10 +18956,12 @@ export const backlog = [
     depends_on: ["S16-SOCIAL-FE-3B", "S16-SOCIAL-FE-3C", "S16-SOCIAL-FEMODINVAL-1"],
     src: [
       "Gate PR-B S16-SOCIAL-FE-3B (06/10/2026): finding R6 của reviewer code vòng 1 (LOW, chưa vá) · báo cáo bước L4a mục «Còn mở» (ReportDialog.spec.tsx · ResolveReportDialog.spec.tsx · HiddenPostsTab.spec.tsx: khuôn hai fireEvent rời xanh nhờ nút disabled, mutant bỏ khoá đồng bộ của useGuardedMutation sống) · báo cáo bước L4b (BadgeSettingsPage ≈ 105 dòng)",
+      "Gate PR-B (06/10/2026), ba mục LOW còn thiếu WO lúc mở PR: TSR-02 của `ecc:typescript-reviewer` vòng 2 (`DialogActions` bắt buộc `onSubmit` nhưng bỏ qua nó khi có `submitFormId`; `BadgeFormDialog` đang truyền cả hai) · AUD-FN50 của kiểm toán mutant (thân hàm > 50 dòng, đo bằng AST: BadgeFormDialogBody 133 · BadgeFormFields 128 · BadgeSettingsPage 116 · BadgeRow 79 · BadgeList 74 · StatsPage 63 · StatsFilters 61 — phần lớn là JSX) · câu lỗi `statsRangeInvalid` viết cứng «26 tuần» (mô tả PR-B, mục Nợ)",
     ],
     done_when: [
       "Thứ dùng chung dời về `routes/social/admin/**` (moderation · badges · stats cùng import một nguồn); `LIST_REFRESH_CLAIMING_REASONS` không còn nằm ở file của riêng màn Kiểm duyệt; MỘT `<ListSkeleton>` · MỘT helper `hangOnce(spy)` · MỘT hằng FIRST_PAGE — KHÔNG đổi hành vi, mọi spec hiện có giữ xanh",
       "Ba spec PR-A gom hai kích hoạt vào MỘT `act` và mutant «bỏ khoá đồng bộ» ĐỎ đúng thông điệp «called 2 times» ở từng spec; BadgeSettingsPage tách tới dưới 50 dòng / hàm; test FE + typecheck/build xanh",
+      "`DialogActions` nhận `onSubmit` HOẶC `submitFormId` (union loại trừ nhau ở kiểu — truyền cả hai là lỗi biên dịch) và `BadgeFormDialog` bỏ `onSubmit` thừa; sáu component còn lại của AUD-FN50 tách tới dưới 50 dòng / hàm hoặc ghi lý do giữ ở sổ vết; câu `statsRangeInvalid` lấy số tuần tối đa từ hằng của contracts thay vì viết cứng",
     ],
     notes: [
       "🟡 Gate LIGHT — refactor thuần + siết ca, không đổi cổng quyền. Seed 06/10/2026 từ gate PR-B. `depends_on` S16-SOCIAL-FEMODINVAL-1 vì WO đó sửa `moderation-invalidation.ts` (một nguồn tập khoá) — dời file TRƯỚC khi nó xong là xung đột chắc chắn; `depends_on` S16-SOCIAL-FE-3C vì chạm glob `apps/app/src/routes/social/**`.",
