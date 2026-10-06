@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { advanceFakeTimers } from "../admin-test-doubles";
 import {
   GuardedMutationTimeoutError,
   useGuardedMutation,
@@ -42,10 +43,7 @@ function setup(mutationFn: Fn, keepLockAfterSuccess?: boolean) {
 }
 
 /** Chạy hết microtask + timer 0 của react-query. */
-const flush = (ms = 0): Promise<void> =>
-  act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
+const flush = advanceFakeTimers;
 
 afterEach(() => {
   cleanup();

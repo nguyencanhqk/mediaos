@@ -10,6 +10,8 @@
  * lệch hợp đồng làm mọi spec màn xanh trên một hình dạng server không bao giờ trả.
  */
 import { useSyncExternalStore } from "react";
+import { act } from "@testing-library/react";
+import { vi } from "vitest";
 import { IDEMPOTENCY_ERROR_CODES, SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
 import type {
@@ -220,6 +222,18 @@ export const makeBadgeAdmin = (over: Partial<KudosBadgeAdminDto> = {}): KudosBad
   ...over,
 });
 
+/**
+ * Tua fake timer của vitest BÊN TRONG `act`: timer + microtask chạy hết rồi React mới vẽ lại, nên dòng
+ * `expect` ngay sau đó đọc màn đã ổn định. `ms = 0` = chỉ xả hàng đợi (microtask + timer 0 của react-query).
+ * Ca gọi tự bật `vi.useFakeTimers()` trước và trả `vi.useRealTimers()` ở `afterEach`.
+ *
+ * MỘT bản cho mọi spec của cụm quản trị (trước đây chép tay ở bốn spec của PR-A — plan §9 mục (4)).
+ */
+export const advanceFakeTimers = (ms = 0): Promise<void> =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+
 const C = SOCIAL_ERROR_CODES;
 
 /**
@@ -271,6 +285,12 @@ export const ADMIN_ERR = {
       IDEMPOTENCY_ERROR_CODES.IN_PROGRESS,
       "Yêu cầu cùng khoá idempotency đang được xử lý.",
     ),
+  /** 049 — mã huy hiệu đã có trong công ty (kể cả ở một huy hiệu đang ngừng dùng). */
+  badgeCodeTaken: () =>
+    new ApiError(409, C.KUDOS_BADGE_CODE_TAKEN, "SOCIAL-ERR: mã huy hiệu đã tồn tại."),
+  /** 050 · 051 — huy hiệu không còn (hoặc thuộc công ty khác — một mã cho mọi lý do). */
+  badgeGone: () =>
+    new ApiError(404, C.KUDOS_BADGE_NOT_FOUND, "SOCIAL-ERR: không tìm thấy huy hiệu."),
   /** 001 `status=hidden` thiếu `manage:feed-post` (tầng 2). */
   moderationDenied: () =>
     new ApiError(

@@ -43,6 +43,9 @@ const BADGE_ICONS: Readonly<Record<string, LucideIcon>> = {
   rocket: Rocket,
 };
 
+/** S16-SOCIAL-FE-3B (L4) — KHUNG (lượt RED): tên icon mà form huy hiệu cho chọn. Thân thật ở commit GREEN. */
+export const KUDOS_BADGE_ICON_NAMES: readonly string[] = [];
+
 const PICTOGRAPHIC = /\p{Extended_Pictographic}/u;
 /** Trần code point của một «emoji» (gồm ZWJ / biến thể) — dài hơn là chữ, không phải icon. */
 const EMOJI_MAX_CODEPOINTS = 8;
@@ -57,14 +60,30 @@ export function KudosBadgeIcon({ icon, className }: KudosBadgeIconProps): React.
   const lookup = key.toLowerCase();
   const Icon = Object.hasOwn(BADGE_ICONS, lookup) ? BADGE_ICONS[lookup] : undefined;
   if (Icon) {
-    return <Icon data-testid="kudos-badge-icon" className={cn("h-4 w-4", className)} aria-hidden="true" />;
+    return (
+      <Icon
+        data-testid="kudos-badge-icon"
+        className={cn("h-4 w-4", className)}
+        aria-hidden="true"
+      />
+    );
   }
   if (PICTOGRAPHIC.test(key) && [...key].length <= EMOJI_MAX_CODEPOINTS) {
     return (
-      <bdi data-testid="kudos-badge-emoji" aria-hidden="true" className={cn("leading-none", className)}>
+      <bdi
+        data-testid="kudos-badge-emoji"
+        aria-hidden="true"
+        className={cn("leading-none", className)}
+      >
         {key}
       </bdi>
     );
   }
-  return <Award data-testid="kudos-badge-icon-default" className={cn("h-4 w-4", className)} aria-hidden="true" />;
+  return (
+    <Award
+      data-testid="kudos-badge-icon-default"
+      className={cn("h-4 w-4", className)}
+      aria-hidden="true"
+    />
+  );
 }
