@@ -15,9 +15,13 @@
  * │                                `chk_feed_posts_pinned_news`; bài khác ⇒ 422 PIN-NEWS-ONLY).     │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * ⚠️ **«Báo cáo» CỐ Ý VẮNG.** Owner ký 23/09/2026 (plan §5.2 · N8): nút + hộp thoại soạn + cảnh báo
- * tự-lộ-danh-tính của SOC-DEC-011 đi **cùng một lượt** ở `S16-SOCIAL-FE-3`. Ship nút mà thiếu cảnh
- * báo là đúng cái hại mà spec đã lường trước — đừng "tiện tay thêm".
+ * **«Báo cáo»** (`S16-SOCIAL-FE-3`, L3) → KHÔNG cặp nào: `SOCIAL-API-027` gác bằng `view:feed`, cặp mà
+ * ai đang thấy bài cũng đã có. Ẩn với bài của CHÍNH MÌNH (`post.isMine` — sở hữu hàng, không phải quyền).
+ * Mục + hộp thoại soạn + cảnh báo tự-lộ-danh-tính của SOC-DEC-011 đi **cùng một lượt** (owner ký
+ * 23/09/2026, plan §5.2 · N8): cảnh báo nằm TRONG `ReportDialog`, đừng mở đường báo cáo nào không qua nó.
+ * Hộp thoại mount **LƯỜI** (chỉ khi mở) và menu này tự giữ state mở — KHÔNG đi qua `PostCardMenuActions`:
+ * `ReportDialog` dùng `useMutation`, mount sẵn là mọi nơi vẽ thẻ bài đều phải có `QueryClientProvider`;
+ * và mỗi lượt mount của nó là MỘT khoá idempotency (giữ sẵn ⇒ mọi lượt mở dùng chung khoá).
  *
  * ⚠️ **Bẫy «nút ⋯ vắng ≠ mục vắng»** (đã dính ở S15-PAYROLL-FE-7): ca deny phải mở menu ra rồi assert
  * MỤC không có. Vì vậy nút ⋯ ở đây **luôn render** (luôn có ít nhất «Sao chép liên kết»), và ca C6
@@ -29,6 +33,7 @@ import { MoreHorizontal } from "lucide-react";
 import { cn } from "@mediaos/ui";
 import { useCan } from "@mediaos/web-core";
 import type { FeedPostDto } from "@mediaos/contracts";
+import { ReportDialog } from "../../moderation/components/ReportDialog";
 
 export interface PostCardMenuActions {
   onCopyLink: () => void;
@@ -48,6 +53,28 @@ interface PostCardMenuProps {
 export function PostCardMenu({ post, actions, className }: PostCardMenuProps): React.ReactElement {
   const { t } = useTranslation("social");
   const [open, setOpen] = React.useState(false);
+  /**
+   * Id của bài mà hộp thoại báo cáo được MỞ CHO — không phải cờ `boolean`. Thẻ bài có thể nhận một bài
+   * KHÁC mà không mount lại (trang chi tiết chỉ đổi `$postId`: router không khai `remountDeps`, `PostCard`
+   * không có `key`); cờ trần thì hộp thoại vẫn mở với đích mới và nháp viết cho bài cũ — «Gửi báo cáo» là
+   * một lượt GHI nhầm bài. Hộp thoại chỉ mở khi id này KHỚP bài đang vẽ và bài không phải của chính mình.
+   */
+  const [reportPostId, setReportPostId] = React.useState<string | null>(null);
+  const isReportOpen = reportPostId === post.id && !post.isMine;
+  // Thẻ đã sang bài khác (hoặc hoá ra là bài của mình) ⇒ BỎ hẳn yêu cầu mở, không chỉ che: quay lại bài cũ
+  // hộp thoại không tự bật lên. Đặt state ngay trong lượt vẽ (khuôn «đổi state khi prop đổi» của React).
+  if (reportPostId !== null && !isReportOpen) setReportPostId(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  /**
+   * Mục «Báo cáo» bị gỡ khỏi DOM cùng nhịp hộp thoại mount ⇒ lúc `Dialog` ghi «phần tử kích hoạt», focus
+   * đã rơi về `body` và lúc đóng nó không còn gì để trả. Đưa focus về nút ⋯ TRƯỚC khi mở: `Dialog` ghi
+   * đúng nút đó và tự trả focus ở MỌI đường đóng («Huỷ» · Esc · bấm ra ngoài · «Đóng» sau khi gửi).
+   */
+  const openReport = (): void => {
+    triggerRef.current?.focus();
+    setReportPostId(post.id);
+  };
 
   // `useCan` (có fallback wildcard), KHÔNG `useCanExact`: cả 14 cặp `feed-*` đều `is_sensitive=false`
   // trong seed `0578`, nên hành vi đúng — khớp BE — là có wildcard.
@@ -91,6 +118,7 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
   return (
     <div className={cn("relative", className)}>
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -134,7 +162,21 @@ export function PostCardMenu({ post, actions, className }: PostCardMenuProps): R
               post.pinned ? t("post.menu.unpin") : t("post.menu.pin"),
               actions.onTogglePinned,
             )}
+
+          {/* Không cần quyền; ẩn với bài của chính mình. Xem «Báo cáo» ở đầu file. */}
+          {!post.isMine && item("report", t("admin.report.trigger"), openReport)}
         </div>
+      )}
+
+      {/* Mount LƯỜI — unmount khi đóng (mỗi lượt mount là một khoá idempotency của 027). `key` theo bài:
+          lưới thứ hai cho «nháp của bài này không sống sang bài khác» (khuôn `ResolveReportDialog`). */}
+      {isReportOpen && (
+        <ReportDialog
+          key={post.id}
+          targetType="post"
+          targetId={post.id}
+          onClose={() => setReportPostId(null)}
+        />
       )}
     </div>
   );

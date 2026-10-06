@@ -76,8 +76,10 @@ import { validateKudosRouteSearch } from "@/routes/social/kudos/lib/kudos-route-
 import {
   LEGACY_SOCIAL_GROUP_REDIRECT,
   LEGACY_SOCIAL_POST_REDIRECT,
+  LEGACY_SOCIAL_REPORTS_REDIRECT,
   legacyRedirectBeforeLoad,
 } from "@/routes/social/legacy-social-redirects";
+import { validateModerationRouteSearch } from "@/routes/social/moderation/lib/moderation-route-search";
 import { payrollInsuranceIssueEnum, type PayrollInsuranceIssue } from "@mediaos/contracts";
 
 export function getMeta(routeKey: string): RouteMeta {
@@ -3101,6 +3103,12 @@ const GroupsPage = React.lazy(() =>
 const GroupPage = React.lazy(() =>
   import("@/routes/social/groups/GroupPage").then((m) => ({ default: m.GroupPage })),
 );
+// S16-SOCIAL-FE-3 — SOC-SCREEN-010.
+const ModerationPage = React.lazy(() =>
+  import("@/routes/social/moderation/ModerationPage").then((m) => ({
+    default: m.ModerationPage,
+  })),
+);
 
 /**
  * Bộ lọc/sắp xếp sống trong URL (plan D6) — `validateSearch` rơi về mặc định thay vì NÉM khi gặp
@@ -3221,6 +3229,19 @@ const feedGroupDetailRoute = createRoute({
   component: () => buildModuleRouteContent(feedGroupDetailMeta, "SOCIAL", <GroupPage />),
 });
 
+// S16-SOCIAL-FE-3 — Kiểm duyệt (SOC-SCREEN-010). Cổng `view:feed` + `view:feed-report` đi theo meta
+// (`ProtectedRoute` trong `buildModuleRouteContent`). `path` và `getMeta("…")` là hai literal RỜI — ca
+// W3 của `social-wiring.spec.ts` ghim cặp này + việc route có trong cây. `validateSearch` KHÔNG ném,
+// luôn trả đủ ba khoá (`moderation-route-search.ts`: `?page=2` tới đó là SỐ).
+const feedModerationMeta = getMeta("social.moderation");
+const feedModerationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/moderation",
+  beforeLoad: authGuard,
+  validateSearch: validateModerationRouteSearch,
+  component: () => buildModuleRouteContent(feedModerationMeta, "SOCIAL", <ModerationPage />),
+});
+
 // S16-SOCIAL-FE-2B (owner ký O2) — link NOTI `/social/groups/{id}` · `/social/posts/{id}` đang rơi vào
 // 404 chung. Dựng TẠI ĐÂY từ dữ liệu thuần của `legacy-social-redirects.ts` (tự dựng ở file kia là
 // import vòng qua `rootRoute`). `socialRedirectRoute` (`/social` khớp đúng) KHÔNG đụng.
@@ -3234,6 +3255,12 @@ const legacySocialPostRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: LEGACY_SOCIAL_POST_REDIRECT.path,
   beforeLoad: legacyRedirectBeforeLoad(LEGACY_SOCIAL_POST_REDIRECT),
+});
+// S16-SOCIAL-FE-3 — NOTI-036 «có báo cáo vi phạm mới» mang link `/social/reports` ⇒ màn Kiểm duyệt.
+const legacySocialReportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEGACY_SOCIAL_REPORTS_REDIRECT.path,
+  beforeLoad: legacyRedirectBeforeLoad(LEGACY_SOCIAL_REPORTS_REDIRECT),
 });
 
 // S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
@@ -3643,6 +3670,9 @@ const routeTree = rootRoute.addChildren([
   feedGroupDetailRoute,
   legacySocialGroupRoute,
   legacySocialPostRoute,
+  // S16-SOCIAL-FE-3 — màn Kiểm duyệt + route chuyển hướng link NOTI-036.
+  feedModerationRoute,
+  legacySocialReportsRoute,
   accountSetupTwoFactorRoute,
   accountProfileRoute,
   systemAuditLogsRoute,

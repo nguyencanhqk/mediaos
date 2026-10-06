@@ -18415,7 +18415,10 @@ export const backlog = [
       "Owner chốt MỘT đường: (a) owner/admin nhóm kiểm duyệt nội dung nhóm mình · (b) manage:feed-post đi xuyên vị từ nhóm CHỈ trên đường GHI kiểm duyệt (không đọc feed) · (c) giữ nguyên + ghi rủi ro",
       "Nếu mở đường mới: deny-path RED (người ngoài nhóm không có quyền · cross-tenant · nhóm đã xoá) + census cặp + audit",
     ],
-    notes: ["🔴 FULL gate — nới cổng đọc/ghi nhóm riêng tư."],
+    notes: [
+      "🔴 FULL gate — nới cổng đọc/ghi nhóm riêng tư.",
+      "➕ 05/10/2026 (plan S16-SOCIAL-FE-3 §8.9 · ô O4): SOCIAL-API-001 với `status=hidden` mà vắng `groupId` thì LOẠI bài nhóm (`social-posts.service.ts:124`) ⇒ tab «Bài đang ẩn» của SOC-SCREEN-010 (FE-3) KHÔNG liệt kê bài nhóm đã ẩn — người kiểm duyệt chỉ tới được bài đó qua link trực tiếp hoặc «Xem trong ngữ cảnh» ở dòng báo cáo. Khi chốt đường kiểm duyệt nhóm ở WO này: mở luôn nguồn bài nhóm đã ẩn cho màn 010 (tham số/route riêng, có sàn quyền) rồi gỡ dòng giới hạn trên màn.",
+    ],
   },
   {
     id: "S16-SOCIAL-BE-3B",
@@ -18499,21 +18502,20 @@ export const backlog = [
     module: "SOCIAL",
     layer: "FE",
     title:
-      "FE track C: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo + bài ẩn) · 011 Thống kê tương tác (Recharts nếu S15-FE-4 đã cài, không thì stat-card + bảng) · 012 Thiết lập huy hiệu · dải ô liên kết nhanh theo useCan (Công việc · Nghỉ phép · Chấm công · Đặt phòng · Mục tiêu · Đào tạo · Đăng bài Facebook) · nhúng widget DASH «Nhân sự» vào rail phải theo quyền",
+      "FE track C / PR-A: SOC-SCREEN-010 Kiểm duyệt (hàng đợi báo cáo 028/029 + tab bài đang ẩn 001/006) · nút «Báo cáo» trên thẻ BÀI + hộp thoại soạn + cảnh báo SOC-DEC-011 (027) · nền client/khoá cache web-core cho cả ba cụm kiểm duyệt · thống kê · huy hiệu quản trị",
     zone: "amber",
     status: "todo",
     paths: [
       "apps/app/src/routes/social/**",
       "apps/app/src/layouts/**",
-      "apps/app/src/routes/me/**",
       "apps/app/src/i18n/**",
       "apps/app/src/router.tsx",
       "packages/web-core/**",
-      "packages/ui/**",
-      "packages/contracts/**",
       "docs/plans/**",
       "harness/backlog.mjs",
       "apps/app/src/components/dashboard/**",
+      // D19 (plan v2, 05/10/2026) — thêm MỘT dòng exclude cho `admin/admin-test-doubles.tsx`.
+      "apps/app/vitest.social.config.ts",
     ],
     skills: ["code-review"],
     depends_on: [
@@ -18525,15 +18527,364 @@ export const backlog = [
     ],
     plan: "docs/plans/S16-SOCIAL-FE-3.md",
     src: [
-      "SPEC-16 §9 SOC-SCREEN-010..012 · SOC-DEC-004/005/010 · registry.ts (APP_REGISTRY + useCan) · components/dashboard (widget grid) · memory sensitive-pair-widget-needs-usecanexact",
+      "SPEC-16 §9 SOC-SCREEN-010..012 · SOC-DEC-004/005/010/011 · API-19 027/028/029/052/053/056 · registry.ts (APP_REGISTRY + ROUTE_REGISTRY) · components/dashboard (HrOverviewWidget)",
     ],
     done_when: [
-      "Kiểm duyệt chỉ hiện với manage:feed-report/manage:feed-post; hàng đợi có lọc trạng thái, xử lý kèm hành động, xem bài trong ngữ cảnh; bài ẩn có nút hiện lại",
-      "Thống kê: bộ lọc tuần/đơn vị, xuất XLSX, thông điệp «không có quyền đơn vị này» rõ; dải ô liên kết nhanh lấy từ APP_REGISTRY theo quyền (không hard-code), ô fbpost dùng gate 3 cặp cũ",
-      "Widget DASH Nhân sự nhúng qua cùng component grid + useCanExact — không gọi API DASH khi không có quyền; test FE + typecheck/build xanh",
+      "Kiểm duyệt: màn vào bằng `view:feed-report` (manager chỉ-đọc theo đơn vị, người tố giác bị che); nút xử lý gác `manage:feed-report`; hành động kèm + tab bài ẩn + hiện lại gác `manage:feed-post`; hàng đợi có lọc trạng thái, xử lý kèm hành động, xem bài trong ngữ cảnh; bài ẩn có nút hiện lại",
+      "Nút «Báo cáo» trên thẻ bài: ẩn với bài của mình · cảnh báo SOC-DEC-011 luôn hiện · báo cáo trùng đang mở có thông điệp riêng (409)",
+      "Test FE + typecheck/build xanh",
     ],
     notes: [
-      "🟡 LIGHT gate. Không tự cài Recharts trong WO này nếu S15-PAYROLL-FE-4 chưa cài — dùng stat-card + bảng.",
+      "🟡 Gate LIGHT: `ecc:typescript-reviewer` (lăng kính React) + `ecc:code-reviewer` + `ecc:quality-gate`; PR-A thêm `security-reviewer`.",
+      "✍️ Owner ký 05/10/2026 (plan §0): O1 = B (widget «Nhân sự» chỉ HR + company-admin) · O2 = a (thêm cả 3 mục rail «Kiểm duyệt» · «Thống kê tương tác» · «Thiết lập huy hiệu») · O3 = a (nút «Báo cáo» trên bình luận làm ở PR-C, sau FE-2D lát B). Nút «Báo cáo» (027) cho bài + bình luận thuộc cụm WO này — N8 plan FE-1.",
+      "✍️ Owner ký 05/10/2026 17:55 (hộp hỏi của phiên thi công): O4 = a (tab «Bài đang ẩn» giao kèm dòng giới hạn «không gồm bài trong nhóm» ghi rõ trên màn + nợ S16-SOCIAL-GROUPMOD-1) · O5 = a (`delete_target` từ hàng đợi giao kèm ô tick xác nhận + nợ S16-SOCIAL-FERECYCLE-1). ☐ Bốn ô còn lại D1 · D14 · D16 · D17 do owner tick khi duyệt merge PR-A; chưa tick ⇒ PR ghi rõ «lệch chữ done_when ↔ SPEC, chờ owner».",
+      "TÁCH 05/10/2026 theo D17 (plan §8.6 — ô ☐ D17 chờ owner): WO này = PR-A (P1 + P1b, lát L1 → L3); P3 + P2 sang S16-SOCIAL-FE-3B (PR-B), P4 + P5 + P1c sang S16-SOCIAL-FE-3C (PR-C). Ba PR TUẦN TỰ, mỗi PR cắt từ master sau khi PR trước merge.",
+      "Chữ `done_when` sửa 05/10/2026 theo plan §8.1–§8.3: D1 (#1 theo SPEC-16:236 — manager vào màn 010 chỉ-đọc) · D14 (ô fbpost MỘT cặp — sang FE-3C) · D16 (mount thẳng `HrOverviewWidget` — sang FE-3C); `paths` bỏ `routes/me/**` · `packages/ui/**` · `packages/contracts/**` (không lát nào chạm).",
+      "Sổ cái (plan §8.8): QA-1 và ba WO FE-3x cùng glob `apps/app/src/routes/social/**` ⇒ `autoStartOnTouch` KHÔNG đóng dấu (≥2 ứng viên) — đầu mỗi PR đóng dấu TAY `node harness/ledger.mjs start <WO>`; sau mỗi merge đọc dòng «Tiêu điểm phiên» của STATUS, sai thì `node harness/ledger.mjs event <WO> reset`.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FE-3B",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "FE track C / PR-B: SOC-SCREEN-012 Thiết lập huy hiệu (056 đọc quản trị · 049 tạo · 050 sửa/bật lại · 051 ngừng dùng) · SOC-SCREEN-011 Thống kê tương tác (052 — stat-card + bảng theo tuần/đơn vị + biểu đồ Recharts (đã cài) · xuất XLSX 053)",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/layouts/**",
+      "apps/app/src/i18n/**",
+      "apps/app/src/router.tsx",
+      "packages/web-core/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+      "apps/app/src/components/dashboard/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3"],
+    plan: "docs/plans/S16-SOCIAL-FE-3.md",
+    src: [
+      "plan S16-SOCIAL-FE-3 §3 L4 + L5 · SPEC-16 §9 SOC-SCREEN-011/012 · SOC-DEC-010 · API-19 049/050/051/052/053/056",
+    ],
+    done_when: [
+      "Thống kê: bộ lọc tuần/đơn vị, xuất XLSX; đơn vị ngoài phạm vi báo theo mã `SOCIAL-ERR-STATS-UNIT-OUT-OF-SCOPE`, tách khỏi 200 rỗng",
+      "Thiết lập huy hiệu: đọc 056 (cả huy hiệu đã tắt) · `code` khoá khi sửa · ngừng dùng/bật lại · sau mỗi lượt ghi ô chọn huy hiệu của composer được làm mới",
+      "Test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT: `ecc:typescript-reviewer` (lăng kính React) + `ecc:code-reviewer` + `ecc:quality-gate` (không `security-reviewer`, trừ khi diff chạm điều kiện nâng FULL).",
+      "TÁCH từ S16-SOCIAL-FE-3 ngày 05/10/2026 (D17, plan §8.6 — ô ☐ D17 chờ owner tick khi duyệt PR-A). PR-B = P3 + P2 (lát L4 → L5), cắt nhánh mới từ master SAU khi PR-A merge; đầu PR đóng dấu TAY `node harness/ledger.mjs start S16-SOCIAL-FE-3B`. Client + khoá cache web-core của hai màn đã có từ PR-A (D6); PR-B chỉ thêm mục `ROUTE_REGISTRY` + `routeTitle` ⇒ vẫn phải build lại web-core và chạy `registry.spec`.",
+      "Owner ký O2 = a (05/10/2026): hai mục rail «Thống kê tương tác» + «Thiết lập huy hiệu» thuộc PR này, mỗi mục khai `requiredPermissions` Y HỆT route (D2/D3).",
+      "Ghi chú múi giờ (plan §8.9, KHÔNG seed WO): `companyTimeZone()` của FE là hằng `DEFAULT_TIMEZONE` (`apps/app/src/routes/rooms/room-time.ts:31-33`) còn server tính tuần theo TZ công ty (`packages/contracts/src/social-api-stats.ts:6-8`) — N=1 chưa lệch; khi session mang `company.timezone` chỉ sửa MỘT hàm đó, ca T1 đã ghim biên tuần.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FE-3C",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "FE track C / PR-C: dải ô liên kết nhanh trên /feed theo `APP_REGISTRY` (Công việc · Nghỉ phép · Chấm công · Phòng họp · Mục tiêu · Đào tạo · Đăng bài Facebook) · widget DASH «Nhân sự» ở rail phải theo quyền (O1 = B) · nút «Báo cáo» trên BÌNH LUẬN (027)",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/layouts/**",
+      "apps/app/src/i18n/**",
+      "apps/app/src/router.tsx",
+      "packages/web-core/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+      "apps/app/src/components/dashboard/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3B"],
+    plan: "docs/plans/S16-SOCIAL-FE-3.md",
+    src: [
+      "plan S16-SOCIAL-FE-3 §3 L6 + L7 + L8 · SPEC-16 SC-14 · SPEC-07 §14.8 (HR overview) · SOC-DEC-011 · API-19 027 · registry.ts (APP_REGISTRY) · components/dashboard (HrOverviewWidget)",
+    ],
+    done_when: [
+      "Dải ô liên kết nhanh lấy từ `APP_REGISTRY` theo quyền (không hard-code); ô fbpost gác đúng MỘT cặp `view:social-post` lấy từ `APP_REGISTRY`",
+      "Widget DASH Nhân sự: mount thẳng `HrOverviewWidget` (không `DashboardWidgetGrid`, không `/dashboard/me`), cổng ngoài `useCanExact` đủ `view:feed` + `read:dashboard` + `read:employee` + `update:employee` (O1 = B: chỉ HR + company-admin) — không gọi API DASH khi không có quyền",
+      "Nút «Báo cáo» trên bình luận: ẩn với bình luận của mình, dùng chung hộp thoại + cảnh báo",
+      "Test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT: `ecc:typescript-reviewer` (lăng kính React) + `ecc:code-reviewer` + `ecc:quality-gate` (không `security-reviewer`, trừ khi diff chạm điều kiện nâng FULL).",
+      "TÁCH từ S16-SOCIAL-FE-3 ngày 05/10/2026 (D17, plan §8.6 — ô ☐ D17 chờ owner tick khi duyệt PR-A). PR-C = P4 + P5 + P1c (lát L6 → L7 → L8), cắt nhánh mới từ master SAU khi PR-B merge; đầu PR đóng dấu TAY `node harness/ledger.mjs start S16-SOCIAL-FE-3C`.",
+      "⚠️ Phụ thuộc thật của lát L8 là FE-2D lát B = S16-SOCIAL-MENTIONLINK-1 (PR #571) — id đó CHƯA có trong backlog ngày 05/10/2026 (đo bằng grep) nên chưa khai vào `depends_on`; thêm id đó vào `depends_on` khi nó có trong backlog. Tiền điều kiện L8 đo bằng git theo plan §3 L8; chưa thoả ⇒ DỪNG sau L7, báo owner.",
+      "Owner ký 05/10/2026: O1 = B (widget chỉ HR + company-admin — manager KHÔNG thấy dù SPEC-07:1200 cho scope Department; vế đó chờ BE, nợ S4-DASH-HROVERVIEW-FLOOR-1) · O3 = a (nút «Báo cáo» bình luận ở PR-C). Chữ `done_when` về ô fbpost (D14) và cách nhúng widget (D16) là chữ đã sửa theo plan §8.2–§8.3 — hai ô ☐ chờ owner tick khi duyệt PR-A.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FERECYCLE-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "FE nợ SOCIAL: màn thùng rác bài viết (SOCIAL-API-057 liệt kê · 058 khôi phục, gác `restore:feed-post`) — hôm nay `delete_target` từ hàng đợi kiểm duyệt và «Xoá bài» ở menu ⋯ KHÔNG có đường khôi phục trên giao diện",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/layouts/**",
+      "apps/app/src/i18n/**",
+      "apps/app/src/router.tsx",
+      "packages/web-core/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C", "S16-SOCIAL-BE-3C"],
+    src: [
+      "Nợ plan S16-SOCIAL-FE-3 §8.9 (ô O5 · D10) · SPEC-16 §3.6/§7/§13.1 · API-19 057/058 · notes 📌 FE của S16-SOCIAL-BE-3C (`bodyExcerpt: null` mang 3 nghĩa)",
+    ],
+    done_when: [
+      "Màn thùng rác chỉ hiện với `restore:feed-post` (route + mục rail cùng cặp, ca deny RIÊNG); liệt kê 057, khôi phục 058 có xác nhận; 409 `RESTORE_GROUP_DELETED` có thông điệp riêng",
+      "KHÔNG suy «bị che» từ riêng `bodyExcerpt: null`; sau khi có màn: sửa chữ ô tick xác nhận `delete_target` của SOC-SCREEN-010 (bỏ câu «chưa có màn khôi phục»)",
+      "Test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟡 LIGHT gate. Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9. `depends_on` S16-SOCIAL-FE-3C để không thành READY chen giữa ba PR của FE-3 (cùng glob `apps/app/src/routes/social/**`).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-REPORTSNAPSHOT-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Snapshot báo cáo BÌNH LUẬN (SOCIAL-API-028) thiếu tác giả + `deletedAt` của CHÍNH bình luận: `postId` · `author*` · `status` · `deletedAt` hiện là của BÀI CHA, chỉ `bodyExcerpt` là của bình luận ⇒ FE không đánh dấu được bình luận đã xoá dưới bài còn sống (bấm hành động mới gặp 422)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-3A"],
+    src: [
+      "Nợ plan S16-SOCIAL-FE-3 §8.9 · phép đo M2b (`social-reports.repository.ts:57-67,87-102,217-228` · `social-reports.service.ts:606-618` · API-19:282-284) · finding SPC-1 của plan-review 05/10/2026",
+    ],
+    done_when: [
+      "DTO `targetSnapshot` của báo cáo bình luận mang THÊM tác giả bình luận + `deletedAt` của bình luận, tách khỏi trường của bài cha; che danh tính theo CÙNG vị từ scope/hiển thị với các trường hiện có — deny-path RED trước (manager Department ngoài đơn vị · cross-tenant)",
+      "Contracts + API-19 cập nhật; tập khoá DTO vẫn ĐÓNG; route census + coverage social/ ≥85% giữ xanh",
+    ],
+    notes: [
+      "🔴 FULL gate (đường đọc danh tính trên route `companyFloor:false`). Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9. FE (SOC-SCREEN-010) bật nhãn «bình luận đã xoá» sau khi WO này lên PROD.",
+    ],
+  },
+  {
+    id: "S4-DASH-HROVERVIEW-FLOOR-1",
+    module: "DASH",
+    layer: "BE",
+    title:
+      "Widget DASH `HR_OVERVIEW` KHÔNG có sàn scope và không phát tín hiệu scope cho FE (`dashboard-widget-catalog.const.ts:435`) — lệch SPEC-07 §14.8: nhân viên có `read:employee` gọi được số liệu, còn FE phải gác thay bằng cặp `update:employee`",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: [],
+    src: [
+      "Nợ plan S16-SOCIAL-FE-3 §8.9 (O1 = B · D15 · phép đo M18) · SPEC-07 §14.8 + `SPEC-07 DASH.md:1198-1200` · memory dash-widget-gate-needs-scope-floor",
+    ],
+    done_when: [
+      "`HR_OVERVIEW` có SÀN scope ở CẢ metadata lẫn data (Company cho HR/Admin; manager Department chỉ phòng mình theo SPEC-07:1200; Own/Team không nhận số liệu) — deny-path RED trước, mỗi scope một ca",
+      "Có tín hiệu để FE biết ai được xem mà không cần cặp thay thế; sau đó mở WO FE nhỏ bỏ vế `update:employee` ở `HrOverviewRailSlot` (S16-SOCIAL-FE-3C) và mở widget cho manager theo phòng",
+    ],
+    notes: [
+      "🔴 FULL gate (cổng đọc số liệu nhân sự). Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9. Đây là điều kiện để bỏ cặp thay thế của O1 = B.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-REPORTMATRIX-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "Đưa `REPORT_ACTION_MATRIX` (loại đích → hành động kèm hợp lệ của SOCIAL-API-029) vào `packages/contracts` để FE/BE đọc chung — hiện FE chép tay ở `moderation/lib/report-actions.ts` (D7 plan FE-3)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "apps/app/src/routes/social/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-BE-3A", "S16-SOCIAL-FE-3C"],
+    src: [
+      "Nợ plan S16-SOCIAL-FE-3 §8.9 (D7 · phép đo M3) · `apps/api/src/social/social-report-actions.ts:20-23`",
+    ],
+    done_when: [
+      "MỘT hằng trong contracts; `social-report-actions.ts` và `moderation/lib/report-actions.ts` cùng import nó (xoá bản chép tay); hành vi 029 không đổi — test BE + FE hiện có giữ xanh",
+    ],
+    notes: [
+      "🟢 LIGHT gate — chỉ dời hằng, KHÔNG đổi cổng quyền (`SOCIAL_REPORT_ACTION_PAIRS` giữ nguyên chỗ). Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9; `depends_on` S16-SOCIAL-FE-3C vì chạm glob `apps/app/src/routes/social/**`.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEAVATAR-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "FE nợ SOCIAL: bật lại `src` avatar cho bề mặt của FE-3 (hàng đợi báo cáo · bài đang ẩn) qua `avatarSrc` có sẵn (`feed/lib/feed-format.ts:45`) — CHỜ #568 (ký URL avatar) lên PROD",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C", "S16-SOCIAL-AVATARPRESIGN-1"],
+    src: [
+      "Nợ plan S16-SOCIAL-FE-3 §8.9 (D8 · phép đo M1 — PROD 05/10/2026 còn ở `14afbb5f`, trước #568 `f72ea8f2`) · finding ADV-13",
+    ],
+    done_when: [
+      "ĐO trước: `GET /api/v1/health` của PROD trả commit ≥ `f72ea8f2`; chưa thoả ⇒ KHÔNG làm",
+      "Bề mặt FE-3 vẽ avatar qua `avatarSrc` (chỉ URL đã ký; giá trị khác ⇒ chữ cái đầu); các spec «không có <img>» của FE-3 đổi thành ca ALLOW (URL ký) + DENY (giá trị thô)",
+    ],
+    notes: ["🟢 LIGHT gate. Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9."],
+  },
+  {
+    id: "S16-SOCIAL-DOC-2",
+    module: "SOCIAL",
+    layer: "DOC",
+    title:
+      "Đồng bộ tài liệu SOCIAL sau FE-3: UI-07 §34b.2 (3 mục rail quản trị) · §34b.6 («không sửa layouts/workspace/» · fbpost «ba cặp») · SPEC-16 §9 (đường dẫn 3 màn 010/011/012) · SC-14 «Đặt phòng» ↔ nhãn «Phòng họp» · IMPLEMENTATION-02 STORY-218 · S16-SOCIAL-WAVE.md · docs/README.md",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "docs/SPEC/**",
+      "docs/spec/**",
+      "docs/UI/**",
+      "docs/IMPLEMENTATION/**",
+      "docs/README.md",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["plan-review"],
+    depends_on: ["S16-SOCIAL-FE-3C"],
+    src: [
+      "Nợ plan S16-SOCIAL-FE-3 §8.9 (D2 · D3 · D14 · finding SPC-15) — các file này ngoài `paths` của FE-3",
+      "Chỗ lệch đã đo: `UI-07_Module_Workspace_Template_Design.md:2223,2225` · `SPEC-16 SOCIAL.md:131` · `IMPLEMENTATION-02:886` · `docs/plans/S16-SOCIAL-WAVE.md:39,55` · `docs/README.md:97,234` («53 route · chưa hiện thực»)",
+    ],
+    done_when: [
+      "Mỗi chỗ lệch nêu ở `src` được sửa theo code ĐÃ merge của FE-3/3B/3C (đường dẫn · cặp quyền của route · MỘT cặp fbpost · nhãn «Phòng họp») — đối chiếu bằng `ROUTE_REGISTRY`/`APP_REGISTRY`, không chép từ plan",
+    ],
+    notes: [
+      "🟢 Docs-only. Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9; `depends_on` S16-SOCIAL-FE-3C để tài liệu chép theo trạng thái cuối của cả ba PR.",
+    ],
+  },
+  {
+    id: "S1-FND-CORS-EXPOSE-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "CORS của API không khai `exposedHeaders: [«Content-Disposition»]` (`apps/api/src/main.ts:43`) ⇒ khi cross-origin, FE không đọc được tên tệp server đặt cho file tải về và phải tự dựng tên dự phòng",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/api/src/main.ts", "apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Nợ plan S16-SOCIAL-FE-3 §8.9 · phép đo M15 (`packages/web-core/src/lib/api-client.ts:587-591,612-620,630` — `filename` có thể null) · nút mẫu `ExportAttendanceButton.tsx`",
+    ],
+    done_when: [
+      "`enableCors` khai `exposedHeaders` chứa `Content-Disposition`; có ca test đọc header `Access-Control-Expose-Headers` trên một route xuất file; KHÔNG nới `origin`/`credentials`",
+    ],
+    notes: [
+      "🟢 LIGHT gate. Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9. Tên dự phòng phía FE (xuất XLSX 053, chấm công…) GIỮ làm lưới — không gỡ.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-RESNOTEMASK-1",
+    module: "SOCIAL",
+    layer: "BE",
+    title:
+      "SOCIAL-API-028 trả resolutionNote NGUYÊN VĂN cho mọi người đọc hàng đợi, kể cả quản lý scope Department đang bị che reporter ⇒ ghi chú xử lý của HR có thể làm lộ người báo cáo; che resolutionNote theo CÙNG vị từ đang che reporter (hoặc trả cờ đã-che) — FE hiện chỉ có dòng cảnh báo ở ô nhập",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "apps/app/src/routes/social/moderation/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-BE-3A", "S16-SOCIAL-FE-3"],
+    src: [
+      "Gate security-reviewer của PR-A S16-SOCIAL-FE-3 (05/10/2026): finding SEC-01 + ghi nhận vòng 2 · social-reports.service.ts:620-631 (resolutionNote trả ở mọi scope) · SOC-DEC-011",
+    ],
+    done_when: [
+      "Người xem 028 ở scope hẹp hơn Company KHÔNG nhận resolutionNote nguyên văn của báo cáo mà reporter đang bị che với họ (null hoặc cờ đã-che — chốt ở plan) — deny-path RED trước (manager Department trong đơn vị · ngoài đơn vị · cross-tenant) kèm ca ALLOW cho HR / company-admin",
+      "Contracts + API-19 cập nhật; FE màn Kiểm duyệt vẽ đúng trạng thái đã-che (không vẽ khối ghi chú rỗng) và GIỮ dòng cảnh báo ở ô nhập; route census + coverage social/ giữ xanh",
+    ],
+    notes: [
+      "🔴 FULL gate (đường đọc danh tính trên route companyFloor:false). Seed 05/10/2026 từ gate PR-A của S16-SOCIAL-FE-3: dòng cảnh báo ở ô ghi chú xử lý chỉ là lời nhắc phía FE, không phải lưới chặn.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEMODINVAL-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Một nguồn cho tập khoá cache «mọi bề mặt đang vẽ bài»: moderation-invalidation.ts (màn Kiểm duyệt) và invalidatePostLists của feed/lib/use-feed-actions.ts là hai bản chép tay; chiều ngược còn thiếu (ẩn / xoá bài từ menu ⋯ chưa làm mới hàng đợi + tab «Bài đang ẩn»); «Hiện lại» chưa nối signal để huỷ yêu cầu treo",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "packages/web-core/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3"],
+    src: [
+      "Gate PR-A S16-SOCIAL-FE-3 (05/10/2026): TS-04 · CODE-02 · AUD-B-04 — hoãn vì feed/lib/use-feed-actions.ts đang bị hai nhánh FE-2D sửa; ca ghim hiện trạng ở moderation-invalidation.spec.tsx",
+    ],
+    done_when: [
+      "MỘT hàm / hằng dùng chung cho cả menu ⋯ của thẻ bài lẫn màn Kiểm duyệt; ca so tập khoá thay cho hai danh sách viết tay; ẩn / xoá từ menu ⋯ làm mới moderation.reports.lists() + moderation.hiddenPosts()",
+      "«Hiện lại» huỷ được yêu cầu treo (nối signal theo khuôn useGuardedMutation); test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT. Phụ thuộc THẬT còn có FE-2D lát B (S16-SOCIAL-MENTIONLINK-1, PR #571 — nhánh đó sửa use-feed-actions.ts); id đó chưa có trong backlog lúc seed ⇒ thêm vào depends_on khi #571 vào master. Seed 05/10/2026 từ gate PR-A.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEMODSCOPE-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Cổng FE của nút «Xử lý» / hành động kèm ở màn Kiểm duyệt chỉ hỏi CÓ cặp manage:feed-report / manage:feed-post, trong khi server đòi sàn Company cho 029 ⇒ người có cặp ở scope hẹp thấy nút rồi nhận 403 (fail-closed, đã có chữ); đóng hẳn cần đưa scope của /auth/me vào auth store + hook kiểm sàn",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "packages/web-core/**",
+      "apps/app/src/routes/social/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-FE-3"],
+    src: [
+      "Gate security-reviewer của PR-A S16-SOCIAL-FE-3 (05/10/2026): finding SEC-02 (LOW) · social-route-pairs.const.ts:209-216 (sàn Company của 029) · web-core hooks/use-can.ts + stores/auth.ts không giữ scope",
+    ],
+    done_when: [
+      "Plan riêng qua plan-review TRƯỚC khi code (chạm auth store + use-can = vùng đỏ); hook kiểm sàn scope có ca DENY (cặp ở scope Department ⇒ không nút, 0 lời gọi) đứng cạnh ca ALLOW (scope Company)",
+      "Không đổi hành vi của các cổng useCan hiện có ở module khác; test FE + typecheck/build xanh; FULL gate PASS",
+    ],
+    notes: [
+      "🔴 FULL gate (sửa stores/auth + use-can của web-core). Ưu tiên THẤP: vai canonical (hr · company-admin) đều ở scope Company nên hôm nay không ai gặp; chỉ lộ khi có grant tuỳ biến ở scope hẹp. Seed 05/10/2026 từ gate PR-A.",
     ],
   },
   {
@@ -18554,7 +18905,7 @@ export const backlog = [
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
-    depends_on: ["S16-SOCIAL-FE-3", "S16-SOCIAL-BE-3C"],
+    depends_on: ["S16-SOCIAL-FE-3", "S16-SOCIAL-FE-3B", "S16-SOCIAL-FE-3C", "S16-SOCIAL-BE-3C"],
     plan: "docs/plans/S16-SOCIAL-QA-1.md",
     src: [
       "Khuôn S13-PAYROLL-QA-1 (195 ca, per-pair ma trận, census mã lỗi) · QA-05 permission/scope · memory coverage-high-but-error-code-untested · deny-cases-vacuous-without-allow-case · same-builder-twice-makes-unit-spec-vacuous",

@@ -1,0 +1,141 @@
+/**
+ * social-stats-api.spec.ts — ranh giới hợp đồng của `socialStatsApi` (S16-SOCIAL-FE-3, ca A2:
+ * `SOCIAL-API-052` · `053`).
+ *
+ * 052 đi `apiFetch` (JSON + Zod); 053 đi `apiFetchBlob` — `apiFetch` sẽ cố parse JSON một thân XLSX và
+ * làm hỏng tệp (plan B12). Hai hàm được mock RIÊNG để đo đúng hàm nào được gọi.
+ */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { z } from "zod";
+import { socialStatsApi } from "./social-stats-api";
+import * as apiClient from "./api-client";
+
+vi.mock("./api-client", async (importOriginal) => {
+  const mod = await importOriginal<typeof apiClient>();
+  return { ...mod, apiFetch: vi.fn(), apiFetchBlob: vi.fn() };
+});
+
+const UNIT = "77777777-7777-4777-8777-777777777777";
+/** Hình dạng parser URL-search trả khi chưa chọn gì: đủ khoá, mọi giá trị `undefined`. */
+const ALL_UNDEFINED = { from: undefined, to: undefined, orgUnitId: undefined };
+
+const ENGAGEMENT = {
+  range: { from: "2026-08-10", to: "2026-10-04", weeks: 8 },
+  units: [{ orgUnitId: UNIT, name: "Phòng Kỹ thuật", isDeleted: false }],
+  rows: [
+    {
+      weekStart: "2026-09-28",
+      orgUnitId: UNIT,
+      posts: 3,
+      comments: 5,
+      reactions: 9,
+      activeMembers: 4,
+    },
+    {
+      weekStart: "2026-09-28",
+      orgUnitId: null,
+      posts: 1,
+      comments: 0,
+      reactions: 2,
+      activeMembers: 1,
+    },
+  ],
+  weekTotals: [{ weekStart: "2026-09-28", posts: 4, comments: 5, reactions: 11, activeMembers: 5 }],
+};
+
+function lastFetch(): [string, z.ZodType<unknown>, { method?: string } | undefined] {
+  const calls = vi.mocked(apiClient.apiFetch).mock.calls;
+  expect(calls.length).toBeGreaterThan(0);
+  return calls[calls.length - 1] as never;
+}
+
+beforeEach(() => {
+  vi.mocked(apiClient.apiFetch).mockReset();
+  vi.mocked(apiClient.apiFetch).mockResolvedValue(undefined as never);
+  vi.mocked(apiClient.apiFetchBlob).mockReset();
+});
+
+describe("052 — engagement", () => {
+  it("GET /social/stats/engagement với from + to + orgUnitId; parse `{range,units,rows,weekTotals}`", async () => {
+    await socialStatsApi.engagement({ from: "2026-08-10", to: "2026-10-04", orgUnitId: UNIT });
+    const [url, schema, init] = lastFetch();
+    expect(url).toBe(`/social/stats/engagement?from=2026-08-10&to=2026-10-04&orgUnitId=${UNIT}`);
+    expect(init?.method ?? "GET").toBe("GET");
+
+    expect(schema.safeParse(ENGAGEMENT).success).toBe(true);
+    const parsed = schema.parse(ENGAGEMENT) as typeof ENGAGEMENT;
+    expect(parsed.range.weeks).toBe(8);
+    expect(parsed.units[0]?.name).toBe("Phòng Kỹ thuật");
+    // Hàng «chưa gán đơn vị» (`orgUnitId: null`) là dữ liệu hợp lệ — schema phải giữ nó.
+    expect(parsed.rows[1]?.orgUnitId).toBeNull();
+    expect(parsed.weekTotals[0]?.activeMembers).toBe(5);
+    expect(vi.mocked(apiClient.apiFetchBlob)).not.toHaveBeenCalled();
+  });
+
+  it("vắng tham số ⇒ không có query string (server tự lấy 8 tuần gần nhất)", async () => {
+    await socialStatsApi.engagement();
+    expect(lastFetch()[0]).toBe("/social/stats/engagement");
+  });
+
+  // Parser URL-search của màn trả ĐỦ ba khoá kể cả khi chưa chọn gì. Query của 052 là `.strict()`:
+  // `from=undefined` lọt lên URL là 400.
+  it("cả ba khoá CÓ MẶT mang `undefined` ⇒ không có query string", async () => {
+    await socialStatsApi.engagement(ALL_UNDEFINED);
+    expect(lastFetch()[0]).toBe("/social/stats/engagement");
+  });
+
+  it("chỉ `orgUnitId` có giá trị (from/to mang `undefined`) ⇒ ĐÚNG một khoá trên URL", async () => {
+    await socialStatsApi.engagement({ from: undefined, to: undefined, orgUnitId: UNIT });
+    expect(lastFetch()[0]).toBe(`/social/stats/engagement?orgUnitId=${UNIT}`);
+  });
+});
+
+describe("053 — exportEngagement", () => {
+  it("đi `apiFetchBlob` (KHÔNG `apiFetch`) tới …/export với CÙNG tham số, trả nguyên `{blob, filename}`", async () => {
+    const result = { blob: new Blob(["xlsx"]), filename: null };
+    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue(result);
+
+    const out = await socialStatsApi.exportEngagement({
+      from: "2026-08-10",
+      to: "2026-10-04",
+      orgUnitId: UNIT,
+    });
+
+    const blobCalls = vi.mocked(apiClient.apiFetchBlob).mock.calls;
+    expect(blobCalls).toHaveLength(1);
+    expect(blobCalls[0]?.[0]).toBe(
+      `/social/stats/engagement/export?from=2026-08-10&to=2026-10-04&orgUnitId=${UNIT}`,
+    );
+    // Route 053 chỉ có `@Get`: không truyền `init` ⇒ `apiFetchBlob` dùng GET mặc định.
+    expect(blobCalls[0]?.[1]).toBeUndefined();
+    expect(out).toBe(result);
+    expect(vi.mocked(apiClient.apiFetch)).not.toHaveBeenCalled();
+  });
+
+  it("vắng tham số ⇒ …/export không có query string", async () => {
+    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({ blob: new Blob([]), filename: "a.xlsx" });
+    await socialStatsApi.exportEngagement();
+    const blobCalls = vi.mocked(apiClient.apiFetchBlob).mock.calls;
+    expect(blobCalls).toHaveLength(1);
+    expect(blobCalls[0]?.[0]).toBe("/social/stats/engagement/export");
+    expect(blobCalls[0]?.[1]).toBeUndefined();
+  });
+
+  it("cả ba khoá CÓ MẶT mang `undefined` ⇒ …/export không có query string", async () => {
+    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({ blob: new Blob([]), filename: null });
+    await socialStatsApi.exportEngagement(ALL_UNDEFINED);
+    const blobCalls = vi.mocked(apiClient.apiFetchBlob).mock.calls;
+    expect(blobCalls).toHaveLength(1);
+    expect(blobCalls[0]?.[0]).toBe("/social/stats/engagement/export");
+  });
+
+  // Người xem lọc theo đơn vị mà KHÔNG chọn khoảng tuần: tệp xuất phải mang đúng bộ lọc đang xem.
+  // Một bản chỉ dựng query khi có đủ `from` + `to` sẽ lặng lẽ xuất số liệu của MỌI đơn vị.
+  it("chỉ `orgUnitId` có giá trị (from/to mang `undefined`) ⇒ …/export mang ĐÚNG một khoá", async () => {
+    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({ blob: new Blob([]), filename: null });
+    await socialStatsApi.exportEngagement({ from: undefined, to: undefined, orgUnitId: UNIT });
+    const blobCalls = vi.mocked(apiClient.apiFetchBlob).mock.calls;
+    expect(blobCalls).toHaveLength(1);
+    expect(blobCalls[0]?.[0]).toBe(`/social/stats/engagement/export?orgUnitId=${UNIT}`);
+  });
+});

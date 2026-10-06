@@ -1474,5 +1474,53 @@ export const socialKeys = {
       [...rootKeys.social, "kudos", "list", params] as const,
     recipients: (q: string) => [...rootKeys.social, "kudos", "recipients", q] as const,
     badges: () => [...rootKeys.social, "kudos", "badges"] as const,
+    /**
+     * S16-SOCIAL-FE-3 — catalog ở góc nhìn QUẢN TRỊ (056, cả huy hiệu đã tắt).
+     *
+     * 🔴 Phần tử `"badges-admin"` RIÊNG, không phải `["kudos","badges","admin",…]`: 056 gác
+     * `manage:feed-kudos` còn 048 (`badges()`) chỉ gác `view:feed`. Lồng dưới `badges()` thì invalidate
+     * khoá công khai sẽ kéo theo cả nhánh quản trị và ngược lại, và dữ liệu của cổng CHẶT nằm dưới tiền
+     * tố của cổng LỎNG (khuôn `posts.acks`). Sau một lượt ghi huy hiệu, nơi gọi invalidate CẢ HAI khoá.
+     */
+    badgesAdminAll: () => [...rootKeys.social, "kudos", "badges-admin"] as const,
+    badgesAdmin: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "kudos", "badges-admin", params] as const,
+  },
+
+  /**
+   * S16-SOCIAL-FE-3 — kiểm duyệt (`SOC-SCREEN-010`).
+   *
+   * `reports.lists()` là TIỀN TỐ của mọi `reports.list(params)` (lý do như `groups.lists()`): sau khi
+   * kết thúc một báo cáo, mọi trang · mọi bộ lọc trạng thái đều phải làm mới.
+   *
+   * `hiddenPosts()` là nhánh RIÊNG, KHÔNG phải `feed.list({ status: "hidden" })`: 001 với `status=hidden`
+   * đòi thêm `manage:feed-post`, nên dữ liệu đó không được nằm dưới `feed.allOf()` mà mọi người có
+   * `view:feed` đang đọc. Hệ quả: ẩn/hiện/xoá bài ở nơi khác phải invalidate đích danh khoá này.
+   *
+   * ⚠️ HIỆN TRẠNG (S16-SOCIAL-FE-3, gate TS vòng 1 mục TS-04 · gate code vòng 1 mục CODE-02 — CHƯA trả,
+   * CHƯA có Work Order; ca «NỢ ĐÃ BIẾT» ở `moderation/lib/moderation-invalidation.spec.tsx` của apps/app
+   * ghim đúng hiện trạng này, trả nợ thì ca đó phải đổi): màn Kiểm duyệt đã làm
+   * (`moderation-invalidation.ts`); đường menu ⋯ của thẻ bài (`feed/lib/use-feed-actions.ts`,
+   * `invalidatePostLists`) CHƯA invalidate `hiddenPosts()` lẫn `reports.lists()`. Hai query đó `staleTime: 0`
+   * và chỉ mount ở màn Kiểm duyệt nên hôm nay chỉ lộ MỘT nhịp dữ liệu cũ khi quay lại màn (mount lại là
+   * đọc lại). Thêm một nơi mount khác cho hai khoá này thì phải trả nợ trước.
+   */
+  moderation: {
+    allOf: () => [...rootKeys.social, "moderation"] as const,
+    reports: {
+      lists: () => [...rootKeys.social, "moderation", "reports", "list"] as const,
+      /** 028 — `params` = `{ status?, page }` đã chuẩn hoá từ URL search. */
+      list: (params?: Record<string, unknown>) =>
+        [...rootKeys.social, "moderation", "reports", "list", params] as const,
+    },
+    /** 001 `status=hidden` — keyset, con trỏ thuộc `useInfiniteQuery` nên KHÔNG nằm trong khoá. */
+    hiddenPosts: () => [...rootKeys.social, "moderation", "hidden-posts"] as const,
+  },
+
+  /** S16-SOCIAL-FE-3 — thống kê tương tác (052). `params` = `{ from?, to?, orgUnitId? }` từ URL search. */
+  stats: {
+    allOf: () => [...rootKeys.social, "stats"] as const,
+    engagement: (params?: Record<string, unknown>) =>
+      [...rootKeys.social, "stats", "engagement", params] as const,
   },
 };

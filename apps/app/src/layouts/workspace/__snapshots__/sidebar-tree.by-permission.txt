@@ -126,6 +126,7 @@ social.ideas
 social.polls
 social.kudos
 social.groups
+social.moderation
 ## ME_ONLY
 ### DASH
 (trống)
