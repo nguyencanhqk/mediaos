@@ -369,4 +369,25 @@ describe("Nút «Xuất Excel» — xuất ĐÚNG thứ đang xem", () => {
       "social-tuong-tac-2026-09-21_2026-10-04.xlsx",
     );
   });
+
+  it("URL mặc định (052 gọi với `{}`) ⇒ 053 vẫn nhận ĐÚNG khoảng server đã trả cho bảng đang vẽ; tên tệp cùng khoảng đó", async () => {
+    engagement.mockImplementation(() => Promise.resolve(makeEngagement({ range: DEFAULT_RANGE })));
+    exportEngagement.mockImplementation(() =>
+      Promise.resolve({ blob: new Blob(["PK-xlsx-bytes"], { type: XLSX_MIME }), filename: null }),
+    );
+    renderPage();
+    await weekTable();
+    expect(lastArg()).toStrictEqual({});
+
+    fireEvent.click(exportButton());
+
+    await waitFor(() => expect(triggerBlobDownload).toHaveBeenCalledTimes(1));
+    expect(exportEngagement.mock.calls[0]?.[0]).toStrictEqual({
+      from: "2026-08-17",
+      to: "2026-10-11",
+    });
+    expect(triggerBlobDownload.mock.calls[0]?.[1]).toBe(
+      "social-tuong-tac-2026-08-17_2026-10-11.xlsx",
+    );
+  });
 });

@@ -7,7 +7,10 @@
  * │ của cùng cặp. Server vẫn là cổng thật: 403 ra dải lỗi, không tải tệp.                                │
  * └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
- * Xuất ĐÚNG thứ đang xem: `params` là tham số của lượt đọc 052 đang hiển thị — nút không tự suy khoảng.
+ * Xuất ĐÚNG thứ đang xem: 053 nhận KHOẢNG của response 052 đang vẽ (`range`) + đơn vị đang lọc — KHÔNG
+ * chuyển nguyên tham số URL. URL mặc định là `{}`, và 053 nhận `{}` thì server tính lại «8 tuần tới hết tuần
+ * hiện tại» LÚC XUẤT: tab mở qua ranh tuần sẽ ra tệp của khoảng khác bảng đang vẽ, dưới tên dự phòng mang
+ * khoảng cũ. Nút không tự suy khoảng — chỉ gửi lại đúng thứ server đã trả.
  *
  * Lượt xuất đi qua `useGuardedMutation` (một cơ chế cho mọi lượt gửi của cụm quản trị — bài học PR-A):
  *  · khoá ĐỒNG BỘ ⇒ bấm đúp cùng nhịp vẫn là MỘT lời gọi (mỗi lời gọi 053 ghi một dòng audit);
@@ -37,7 +40,7 @@ import {
 import type { StatsDateRange } from "../lib/stats-route-search";
 
 export interface ExportEngagementButtonProps {
-  /** Tham số của lượt đọc 052 đang hiển thị — gửi NGUYÊN cho 053. */
+  /** Tham số của lượt đọc 052 đang hiển thị — 053 chỉ lấy `orgUnitId` từ đây (khoảng lấy từ `range`). */
   params: FeedEngagementParams;
   /** `range` của response đang hiển thị; `null` = chưa có dữ liệu ⇒ nút khoá. */
   range: StatsDateRange | null;
@@ -69,6 +72,15 @@ function isUsableFile(blob: Blob): boolean {
 /** Nhận diện một bộ tham số (thứ tự khoá cố định) — để biết dải lỗi còn thuộc về thứ đang xem không. */
 function paramsKeyOf(params: FeedEngagementParams): string {
   return JSON.stringify([params.from ?? null, params.to ?? null, params.orgUnitId ?? null]);
+}
+
+/** Tham số 053 = khoảng server đã trả cho thứ đang vẽ + đơn vị đang lọc (khoá vắng hẳn khi không lọc). */
+function exportParamsOf(params: FeedEngagementParams, range: StatsDateRange): FeedEngagementParams {
+  return {
+    from: range.from,
+    to: range.to,
+    ...(params.orgUnitId === undefined ? {} : { orgUnitId: params.orgUnitId }),
+  };
 }
 
 async function fetchExport(request: ExportRequest): Promise<ApiBlobResult> {
@@ -103,13 +115,18 @@ function useEngagementExport({ params, range }: ExportEngagementButtonProps): En
     },
   });
 
+  const exportParams = range === null ? null : exportParamsOf(params, range);
+
   const runExport = (): void => {
-    if (range === null) return;
-    if (start({ params, fallbackFilename: fallbackFilenameFor(range) })) setFailure(null);
+    if (range === null || exportParams === null) return;
+    if (start({ params: exportParams, fallbackFilename: fallbackFilenameFor(range) })) {
+      setFailure(null);
+    }
   };
 
   // Dải lỗi của một lượt xuất CŨ không được đứng cạnh số liệu của bộ lọc khác.
-  const isCurrent = failure !== null && failure.paramsKey === paramsKeyOf(params);
+  const isCurrent =
+    failure !== null && exportParams !== null && failure.paramsKey === paramsKeyOf(exportParams);
   return {
     isPending,
     failure: isCurrent ? failure : null,

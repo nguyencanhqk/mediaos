@@ -98,12 +98,33 @@ describe("ALLOW — xuất đúng thứ đang xem", () => {
     expect(feedEngagementQuerySchema.safeParse(sent).success).toBe(true);
   });
 
-  it("đang xem mặc định (không tham số) ⇒ gọi với object KHÔNG khoá nào", async () => {
-    exportEngagement.mockResolvedValueOnce(fileResult());
+  it("đang xem mặc định (URL không mang ngày) ⇒ 053 nhận KHOẢNG của response đang vẽ, không phải `{}` (server sẽ tính lại «tuần hiện tại» lúc xuất — tab mở qua ranh tuần ra tệp khác bảng)", async () => {
+    const result = fileResult(null);
+    exportEngagement.mockResolvedValueOnce(result);
     renderButton({ params: {} });
     clickExport();
     await waitFor(() => expect(triggerBlobDownload).toHaveBeenCalledTimes(1));
-    expect(exportEngagement.mock.calls[0]?.[0]).toStrictEqual({});
+    const sent: unknown = exportEngagement.mock.calls[0]?.[0];
+    // Không có khoá `orgUnitId` (kể cả `undefined`): tệp và tên dự phòng cùng MỘT khoảng.
+    expect(sent).toStrictEqual(RANGE);
+    expect(feedEngagementQuerySchema.safeParse(sent).success).toBe(true);
+    expect(triggerBlobDownload).toHaveBeenCalledWith(result.blob, FALLBACK_NAME);
+  });
+
+  it("URL chỉ mang đơn vị ⇒ khoảng của response + đơn vị đó", async () => {
+    exportEngagement.mockResolvedValueOnce(fileResult());
+    renderButton({ params: { orgUnitId: UNIT_ID } });
+    clickExport();
+    await waitFor(() => expect(triggerBlobDownload).toHaveBeenCalledTimes(1));
+    expect(exportEngagement.mock.calls[0]?.[0]).toStrictEqual({ ...RANGE, orgUnitId: UNIT_ID });
+  });
+
+  it("`range` của response LỆCH tham số URL (server nắn về tuần ISO) ⇒ gửi khoảng của RESPONSE", async () => {
+    exportEngagement.mockResolvedValueOnce(fileResult());
+    renderButton({ params: { from: "2026-09-23", to: "2026-10-01", orgUnitId: UNIT_ID } });
+    clickExport();
+    await waitFor(() => expect(triggerBlobDownload).toHaveBeenCalledTimes(1));
+    expect(exportEngagement.mock.calls[0]?.[0]).toStrictEqual(PARAMS);
   });
 
   it("`filename: null` (header bị trình duyệt giấu) ⇒ tên dự phòng `social-tuong-tac-<from>_<to>.xlsx` theo `range`", async () => {
