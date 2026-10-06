@@ -15,11 +15,15 @@ const DEK_BYTES = 32; // AES-256 key
 
 /**
  * AAD (pinned, §6a): utf8(companyId)‖0x00‖utf8(recordId)‖0x00‖utf8(encAlgo)‖0x00‖utf8(dekKeyVersion).
- * NUL-delimited so the four fields cannot ambiguously re-segment — a UUID, the algo token, and an
- * integer version never contain 0x00 — making the binding collision-free BY CONSTRUCTION rather than
- * relying on enc_algo staying a single literal (FULL-gate F1). Byte-identical between seal and open or
- * GCM verification fails — composition is frozen here.
- * `recordId` MUST be the app-generated platform_account id (passed in EncryptCtx), never the DB default.
+ * NUL-delimited so the four fields cannot ambiguously re-segment — PRECONDITION: no field holds a raw
+ * U+0000. A UUID, the CHECK-constrained algo token and an integer version never do; `smtp_password`'s
+ * recordId is the JSON tuple built by `smtpSecretContext` (S19-SEC-MAILAADBIND-1), whose `JSON.stringify`
+ * escapes U+0000 and lone surrogates — any new purpose with a free-form recordId must keep that property.
+ * This makes the binding collision-free BY CONSTRUCTION rather than relying on enc_algo staying a single
+ * literal (FULL-gate F1). Byte-identical between seal and open or GCM verification fails — composition is
+ * frozen here.
+ * `recordId` MUST be app-generated before encrypt (platform_account / user id, or the SMTP tuple led by the
+ * app-generated row id), never the DB default.
  */
 export function buildAad(companyId: string, recordId: string, encAlgo: string, dekKeyVersion: number): Buffer {
   return Buffer.from(`${companyId}\x00${recordId}\x00${encAlgo}\x00${dekKeyVersion}`, 'utf8');

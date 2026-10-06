@@ -16,6 +16,10 @@
  *
  * Lớp DB (owner D5, mig 0591): `mediaos_app` không còn quyền UPDATE cột đích — đo ở describe cuối.
  *
+ * Lớp MẬT MÃ (E) — S19-SEC-MAILAADBIND-1: id + đích là NGỮ CẢNH MÃ HOÁ của envelope ⇒ kẻ ghi «ngoài app»
+ * (superuser/DBA, hoặc một đường DELETE+INSERT của role app — 0591 không chặn INSERT/DELETE) đổi đích mà không
+ * mã hoá lại thì giải mã HỎNG: route test trả câu «nhập lại mật khẩu», lời mời `decrypt_failed`, 0 kết nối SMTP.
+ *
  * GATE CỨNG `hasDb && LANE_DB` — cần Postgres thật cho withTenant/RLS + envelope + grant.
  */
 
@@ -30,6 +34,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
+import { SecretEncryptionService } from "../../src/crypto/secret-encryption.service";
 import { DatabaseService } from "../../src/db/db.service";
 import { AuditService } from "../../src/events/audit.service";
 import { MailConfigRepository } from "../../src/settings/mail-config.repository";
@@ -443,6 +448,353 @@ describe.skipIf(!hasLaneDb)(
       expect(pgCodeOf(err)).toBe("42501");
       const after = await storedRow();
       expect(after.port).toBe(before.port);
+    });
+
+    // ── (E) Lớp MẬT MÃ — S19-SEC-MAILAADBIND-1: id + đích là ngữ cảnh mã hoá của envelope ────────────
+
+    /** Câu route test khi mật khẩu đã lưu không mở được (owner D2, KÝ LẠI 02/10: kiểm tra đích TRƯỚC) — LITERAL. */
+    const DECRYPT_MSG =
+      "Không dùng được mật khẩu đã lưu. Kiểm tra lại máy chủ, cổng, tên đăng nhập và TLS (có thể đã bị thay đổi ngoài ứng dụng) trước khi nhập lại mật khẩu SMTP rồi bấm Lưu.";
+    /** Hợp đồng dây của 400 không mã module (filter `httpStatusToCode(400)`) + câu của B4 — ghim LITERAL. */
+    const VALIDATION_ERROR = "VALIDATION-ERR-001";
+    const NOT_PERSISTED_MSG = "Máy chủ hoặc tên đăng nhập SMTP chứa ký tự không hợp lệ.";
+    /** Surrogate lẻ: đi được qua JSON/Zod nhưng PG lưu thành U+FFFD ⇒ giá trị lưu ≠ giá trị đã gắn (M11). */
+    const LONE_SURROGATE = String.fromCharCode(0xd800);
+
+    type Destination = ReturnType<typeof legitDest>;
+    type StoredRow = Awaited<ReturnType<typeof storedRow>>;
+
+    const destOfRow = (r: StoredRow): Destination => ({
+      host: r.host,
+      port: r.port,
+      username: r.username,
+      secure: r.secure,
+    });
+
+    /** Số hàng cấu hình (mọi scope) của công ty A — đọc bằng superuser, không qua RLS. */
+    const configCount = async (): Promise<number> => {
+      const res = await direct.query(
+        `SELECT count(*)::int AS n FROM company_mail_configs WHERE company_id = $1`,
+        [A.companyId],
+      );
+      return res.rows[0].n as number;
+    };
+
+    const sendInvite = () => {
+      vi.stubEnv("INVITE_ACTIVATION_URL", "https://app.example.test/activate");
+      return app.get(InviteMailService).sendActivationEmail({
+        companyId: A.companyId,
+        companySlug: A.slug,
+        companyName: "MCX",
+        email: "nhanvien.moi@legit.example.test",
+        fullName: "Nguyễn Văn A",
+        token: INVITE_TOKEN,
+      });
+    };
+
+    /**
+     * Kẻ ghi «ngoài app» sửa hàng bằng superuser (`direct` — bỏ qua 0591 có chủ ý), GIỮ id + envelope. Tiền điều
+     * kiện ép ở đây cho MỌI ca (M21: WHERE trượt ra 0 hàng KHÔNG ném lỗi ⇒ thiếu assert thì ca xanh-rỗng): chạm
+     * ĐÚNG 1 hàng, trường đổi đúng giá trị (`expectAfter`), id + envelope giữ nguyên từng byte.
+     */
+    const tamperAsSuperuser = async (
+      setSql: string,
+      params: unknown[],
+      expectAfter: (after: StoredRow) => void,
+    ) => {
+      const before = await storedRow();
+      const res = await direct.query(
+        `UPDATE company_mail_configs SET ${setSql} WHERE company_id = $1 AND scope = 'default'`,
+        [A.companyId, ...params],
+      );
+      expect(res.rowCount, "bước sửa hàng phải chạm đúng 1 hàng").toBe(1);
+      const after = await storedRow();
+      expectAfter(after);
+      expect(after.id).toBe(before.id);
+      expect(after.secret_ciphertext.equals(before.secret_ciphertext)).toBe(true);
+      expect(after.encrypted_dek.equals(before.encrypted_dek)).toBe(true);
+      return { before, after };
+    };
+
+    /**
+     * Role APP (withTenant) DELETE rồi INSERT chép NGUYÊN 7 cột envelope sang hàng mang `id`/`port` cho trước —
+     * đúng đường hồi quy WO nêu (0591 chỉ thu hồi UPDATE). `rowCount` 1 cho CẢ HAI câu (M23) + đọc lại.
+     */
+    const reinsertAsApp = async (over: { id: string; port: number }) => {
+      const snap = await direct.query(
+        `SELECT * FROM company_mail_configs WHERE company_id = $1 AND scope = 'default'`,
+        [A.companyId],
+      );
+      expect(snap.rows, "phải có đúng 1 hàng để chép").toHaveLength(1);
+      const o = snap.rows[0];
+      const counts = await app.get(DatabaseService).withTenant(A.companyId, async (tx) => {
+        const del = await tx.execute(
+          sql`DELETE FROM company_mail_configs WHERE company_id = ${A.companyId} AND scope = 'default'`,
+        );
+        const ins = await tx.execute(sql`INSERT INTO company_mail_configs
+            (id, company_id, scope, host, port, username, secure, from_name, from_email,
+             secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id, iv_nonce, auth_tag, enc_algo)
+          VALUES (${over.id}, ${o.company_id}, ${o.scope}, ${o.host}, ${over.port}, ${o.username}, ${o.secure},
+             ${o.from_name}, ${o.from_email}, ${o.secret_ciphertext}, ${o.encrypted_dek}, ${o.dek_key_version},
+             ${o.kms_key_id}, ${o.iv_nonce}, ${o.auth_tag}, ${o.enc_algo})`);
+        return { del: del.rowCount, ins: ins.rowCount };
+      });
+      expect(counts.del, "DELETE phải xoá đúng 1 hàng").toBe(1);
+      expect(counts.ins, "INSERT phải chèn đúng 1 hàng").toBe(1);
+      const after = await storedRow();
+      expect(after.id).toBe(over.id);
+      expect(after.port).toBe(over.port);
+      expect(after.secret_ciphertext.equals(o.secret_ciphertext as Buffer)).toBe(true);
+      expect(after.encrypted_dek.equals(o.encrypted_dek as Buffer)).toBe(true);
+      return { beforeId: o.id as string, after };
+    };
+
+    /** Mỗi trường đích đổi MỘT MÌNH (giữ id + envelope); `dest` = đích MỚI của hàng sau khi sửa. */
+    const tamperOf = (column: keyof Destination, value: () => unknown) => ({
+      setSql: `${column} = $2`,
+      value,
+      dest: () => ({ ...legitDest(), [column]: value() }) as Destination,
+    });
+    const DEST_TAMPERS: Array<[string, ReturnType<typeof tamperOf>]> = [
+      ["port → E", tamperOf("port", () => E.port)],
+      ["username → tài khoản kẻ tấn công", tamperOf("username", () => EVIL_USER)],
+      ["secure → true", tamperOf("secure", () => true)],
+      ["host → localhost", tamperOf("host", () => "localhost")],
+    ];
+
+    it.each(DEST_TAMPERS)(
+      "R-B1: superuser đổi %s, giữ id + envelope ⇒ test vắng password tới đích MỚI của hàng: {ok:false, câu nhập lại}, 0 kết nối L/E",
+      async (_label, t) => {
+        await tamperAsSuperuser(t.setSql, [t.value()], (after) =>
+          expect(destOfRow(after)).toEqual(t.dest()),
+        );
+
+        const {
+          result: res,
+          L: toL,
+          E: toE,
+        } = await connectionsDuring(() => authPost("/settings/mail-config/test").send(t.dest()));
+
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+        expect(res.body.data).toEqual({ ok: false, errorMessage: DECRYPT_MSG });
+        expect(toL).toBe(0);
+        expect(toE).toBe(0);
+        expect(L.auths).toEqual([]);
+        expect(E.auths).toEqual([]);
+      },
+    );
+
+    it.each(DEST_TAMPERS)(
+      "R-B2: superuser đổi %s, giữ id + envelope ⇒ lời mời {sent:false, reason:'decrypt_failed'}, 0 kết nối L/E",
+      async (_label, t) => {
+        await tamperAsSuperuser(t.setSql, [t.value()], (after) =>
+          expect(destOfRow(after)).toEqual(t.dest()),
+        );
+
+        const { result: sent, L: toL, E: toE } = await connectionsDuring(() => sendInvite());
+
+        expect(sent).toEqual({ sent: false, reason: "decrypt_failed" });
+        expect(toL).toBe(0);
+        expect(toE).toBe(0);
+        expect(L.auths).toEqual([]);
+        expect(E.auths).toEqual([]);
+      },
+    );
+
+    it("R-B4: role app DELETE+INSERT tái dùng id + chép envelope, port → E ⇒ lời mời decrypt_failed · test vắng password {ok:false, câu nhập lại} · E 0 kết nối", async () => {
+      const before = await storedRow();
+      await reinsertAsApp({ id: before.id, port: E.port });
+
+      const invite = await connectionsDuring(() => sendInvite());
+      const test = await connectionsDuring(() =>
+        authPost("/settings/mail-config/test").send({ ...legitDest(), port: E.port }),
+      );
+
+      expect(invite.result).toEqual({ sent: false, reason: "decrypt_failed" });
+      expect(test.result.status, JSON.stringify(test.result.body)).toBe(201);
+      expect(test.result.body.data).toEqual({ ok: false, errorMessage: DECRYPT_MSG });
+      expect([invite.L, invite.E, test.L, test.E]).toEqual([0, 0, 0, 0]);
+      expect(E.auths).toEqual([]);
+    });
+
+    it("R-B6: role app chép envelope sang hàng id MỚI, CÙNG đích ⇒ lời mời decrypt_failed (id là một phần ngữ cảnh)", async () => {
+      const { beforeId, after } = await reinsertAsApp({ id: randomUUID(), port: L.port });
+      expect(after.id, "tiền điều kiện: id phải đổi").not.toBe(beforeId);
+      expect(destOfRow(after)).toEqual(legitDest());
+
+      const { result: sent, L: toL } = await connectionsDuring(() => sendInvite());
+
+      expect(sent).toEqual({ sent: false, reason: "decrypt_failed" });
+      expect(toL).toBe(0);
+      expect(L.auths).toEqual([]);
+    });
+
+    it("P-B2 (đối chứng dương của reinsertAsApp · ghim rủi ro tồn dư M28): role app DELETE+INSERT lại NGUYÊN ảnh chụp (cùng id + cùng đích + chép envelope) ⇒ lời mời {sent:true}, L nhận AUTH bằng mật khẩu đã lưu", async () => {
+      // Bản chép giữ envelope nguyên vẹn ⇒ R-B4/R-B6 đỏ vì NGỮ CẢNH, không vì bản chép hỏng. Ghim rủi ro tồn dư
+      // CHẤP NHẬN (plan §7, M28): KHÔNG chống phát lại — thêm độ tươi thì đổi ca này + docblock có chủ đích.
+      const before = await storedRow();
+      await reinsertAsApp({ id: before.id, port: L.port });
+
+      const invite = await connectionsDuring(() => sendInvite());
+
+      expect(invite.result).toEqual({ sent: true });
+      expect(L.auths).toEqual([
+        expect.objectContaining({ username: LEGIT_USER, password: SMTP_PW_STORED }),
+      ]);
+      expect(invite.E).toBe(0);
+    });
+
+    it("P-B1 (đối chứng dương): superuser CHỈ đổi from_name/from_email/updated_at ⇒ lời mời {sent:true} + test vắng password {ok:true}, L nhận AUTH bằng mật khẩu đã lưu", async () => {
+      // Không gắn quá tay: from_* / updated_at không phải ĐÍCH của mật khẩu (PUT «chỉ đổi người gửi» giữ envelope).
+      await tamperAsSuperuser(
+        "from_name = $2, from_email = $3, updated_at = now() - interval '1 day'",
+        ["Ban Kiểm soát", "bks@legit.example.test"],
+        (after) => {
+          expect(after.from_name).toBe("Ban Kiểm soát");
+          expect(destOfRow(after)).toEqual(legitDest());
+        },
+      );
+
+      const invite = await connectionsDuring(() => sendInvite());
+      const test = await connectionsDuring(() =>
+        authPost("/settings/mail-config/test").send(legitDest()),
+      );
+
+      expect(invite.result).toEqual({ sent: true });
+      // from_email đổi THẬT (thư đi bằng địa chỉ mới) — bước sửa hàng không trượt.
+      expect(L.messages.map((m) => m.mailFrom)).toEqual(["bks@legit.example.test"]);
+      expect(test.result.status, JSON.stringify(test.result.body)).toBe(201);
+      expect(test.result.body.data).toEqual({ ok: true });
+      expect(L.auths).toEqual([
+        expect.objectContaining({ username: LEGIT_USER, password: SMTP_PW_STORED }),
+        expect.objectContaining({ username: LEGIT_USER, password: SMTP_PW_STORED }),
+      ]);
+      // `E.connections` cộng dồn cả file (P3 kết nối E) ⇒ đo TRONG phần act.
+      expect([invite.E, test.E]).toEqual([0, 0]);
+    });
+
+    it.each([
+      ["host", () => ({ host: `a${LONE_SURROGATE}b.test` })],
+      ["username", () => ({ username: `mailer${LONE_SURROGATE}@legit.example.test` })],
+    ] as const)(
+      "R-B5: PUT có password mà %s chứa surrogate lẻ (PG lưu U+FFFD ≠ giá trị đã gắn) ⇒ 400 VALIDATION-ERR-001; hàng + audit y nguyên",
+      async (_field, over) => {
+        const before = await storedRow();
+        const auditBefore = await mailAuditCount();
+        expect(auditBefore, "bộ đếm audit phải thấy các lần PUT trước").toBeGreaterThan(0);
+
+        const res = await putStored({ ...over(), password: SMTP_PW_ROTATED });
+
+        expect(res.status, JSON.stringify(res.body)).toBe(400);
+        expect(res.body.error?.code).toBe(VALIDATION_ERROR);
+        expect(res.body.error?.message).toBe(NOT_PERSISTED_MSG);
+        const after = await storedRow();
+        expect(after.id).toBe(before.id);
+        expect(destOfRow(after)).toEqual(legitDest());
+        expect(after.secret_ciphertext.equals(before.secret_ciphertext)).toBe(true);
+        expect(await mailAuditCount()).toBe(auditBefore);
+      },
+    );
+
+    it("R-B7: repo.upsert với recordId CHỮ HOA (PG trả uuid chữ thường ≠ id đã gắn vào ngữ cảnh) ⇒ REJECT lỗi lập trình; hàng + audit y nguyên", async () => {
+      const before = await storedRow();
+      const auditBefore = await mailAuditCount();
+      expect(auditBefore, "bộ đếm audit phải thấy các lần PUT trước").toBeGreaterThan(0);
+      const upperId = randomUUID().toUpperCase();
+      const envelope = await app.get(SecretEncryptionService).encryptSecret(SMTP_PW_ROTATED, {
+        companyId: A.companyId,
+        recordId: JSON.stringify([upperId, LOCALHOST, L.port, LEGIT_USER, false]),
+        purpose: "smtp_password",
+      });
+
+      const attempt = app
+        .get(MailConfigRepository)
+        .upsert(
+          A.companyId,
+          upperId,
+          { scope: "default", ...legitDest(), fromName: null, fromEmail: FROM_EMAIL },
+          envelope,
+          { audit: app.get(AuditService), actorUserId: adminUserId },
+        );
+
+      await expect(attempt).rejects.toThrow(/recordId/);
+      const err = (await attempt.catch((e: unknown) => e)) as Error;
+      expect(err.name, "lỗi LẬP TRÌNH (500), không phải lỗi miền 400").not.toBe(
+        "MailDestinationNotPersistedError",
+      );
+      expect(err.message).not.toContain(upperId);
+      expect(err.message).not.toContain(upperId.toLowerCase());
+      const after = await storedRow();
+      expect(after.id).toBe(before.id);
+      expect(after.secret_ciphertext.equals(before.secret_ciphertext)).toBe(true);
+      expect(await mailAuditCount()).toBe(auditBefore);
+    });
+
+    it.each([
+      ["host", () => ({ host: `a${LONE_SURROGATE}b.test` })],
+      ["username", () => ({ username: `mailer${LONE_SURROGATE}@legit.example.test` })],
+    ] as const)(
+      "R-B5b: CHƯA có hàng (nhánh INSERT MỚI — đường cấu hình ĐẦU TIÊN của PROD), PUT có password mà %s chứa surrogate lẻ ⇒ 400 VALIDATION-ERR-001; vẫn 0 hàng; audit y nguyên",
+      async (_field, over) => {
+        const auditBefore = await mailAuditCount();
+        expect(auditBefore, "bộ đếm audit phải thấy các lần PUT trước").toBeGreaterThan(0);
+        // Bỏ hàng của beforeEach bằng superuser ⇒ PUT đi nhánh INSERT mới (R-B5 chỉ chạm nhánh DELETE+INSERT).
+        const del = await direct.query(
+          `DELETE FROM company_mail_configs WHERE company_id = $1 AND scope = 'default'`,
+          [A.companyId],
+        );
+        expect(del.rowCount, "bước xoá hàng phải chạm đúng 1 hàng").toBe(1);
+        expect(await configCount(), "tiền điều kiện: công ty chưa có cấu hình nào").toBe(0);
+
+        const res = await putStored({ ...over(), password: SMTP_PW_ROTATED });
+
+        expect(res.status, JSON.stringify(res.body)).toBe(400);
+        expect(res.body.error?.code).toBe(VALIDATION_ERROR);
+        expect(res.body.error?.message).toBe(NOT_PERSISTED_MSG);
+        expect(await configCount()).toBe(0);
+        expect(await mailAuditCount()).toBe(auditBefore);
+      },
+    );
+
+    it("R-B8: repo.upsert với companyId CHỮ HOA (PG lưu company_id chữ thường ≠ companyId đã gắn vào ngữ cảnh) ⇒ REJECT lỗi lập trình; hàng + audit y nguyên", async () => {
+      const before = await storedRow();
+      const auditBefore = await mailAuditCount();
+      expect(auditBefore, "bộ đếm audit phải thấy các lần PUT trước").toBeGreaterThan(0);
+      const upperCompany = A.companyId.toUpperCase();
+      expect(upperCompany, "tiền điều kiện: có chữ cái để đổi hoa").not.toBe(A.companyId);
+      // Tiền điều kiện: withTenant + RLS CHẤP NHẬN companyId chữ hoa (zod uuid không phân biệt hoa/thường; RLS ép
+      // `::uuid`) — thiếu nó, ca có thể đỏ vì InvalidCompanyIdError (message cũng chứa "companyId") thay vì B4.
+      const seen = await app.get(MailConfigRepository).findByScope(upperCompany, "default");
+      expect(seen?.id, "withTenant(chữ hoa) đọc được hàng của chính công ty").toBe(before.id);
+      expect(seen?.companyId, "PG trả company_id chữ thường").toBe(A.companyId);
+      const recordId = randomUUID();
+      // Envelope gắn đúng chuỗi companyId CHỮ HOA — y như một caller tương lai lấy companyId không chuẩn hoá.
+      const envelope = await app.get(SecretEncryptionService).encryptSecret(SMTP_PW_ROTATED, {
+        companyId: upperCompany,
+        recordId: JSON.stringify([recordId, LOCALHOST, L.port, LEGIT_USER, false]),
+        purpose: "smtp_password",
+      });
+
+      const attempt = app
+        .get(MailConfigRepository)
+        .upsert(
+          upperCompany,
+          recordId,
+          { scope: "default", ...legitDest(), fromName: null, fromEmail: FROM_EMAIL },
+          envelope,
+          { audit: app.get(AuditService), actorUserId: adminUserId },
+        );
+
+      await expect(attempt).rejects.toThrow(/companyId gắn vào ngữ cảnh/);
+      const err = (await attempt.catch((e: unknown) => e)) as Error;
+      expect(err.name, "lỗi LẬP TRÌNH (500), không phải 400").not.toBe(
+        "MailDestinationNotPersistedError",
+      );
+      expect(err.message.toLowerCase()).not.toContain(A.companyId);
+      const after = await storedRow();
+      expect(after.id).toBe(before.id);
+      expect(after.secret_ciphertext.equals(before.secret_ciphertext)).toBe(true);
+      expect(await mailAuditCount()).toBe(auditBefore);
     });
   },
 );

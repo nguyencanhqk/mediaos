@@ -105,6 +105,18 @@ export function isProgrammerError(err: unknown): err is Error {
 }
 
 /**
+ * Giá trị do CLIENT/tenant chọn (host…) trước khi vào log: `JSON.stringify` thoát CR/LF/nháy, rồi mọi ký tự ngoài
+ * ASCII in được ⇒ `\uXXXX` — chặn giả dòng log bằng ký tự bidi (U+202E), U+2028/2029, NEL. Dùng chung cho route
+ * test (từ chối đích) và lời mời (lỗi gửi) — S19-SEC-MAILCREDEXFIL-1 / S19-SEC-MAILAADBIND-1 FULL gate LOW.
+ */
+export function logSafe(value: string): string {
+  return JSON.stringify(value).replace(
+    /[^\x20-\x7e]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
+/**
  * Câu trả cho admin ở "Kiểm tra kết nối" — S19-SEC-MAILCREDEXFIL-1.
  *
  * Đo trước WO: route test trả nguyên `err.message`, mà nodemailer nối phản hồi server vào đó ⇒ trỏ test vào

@@ -8,7 +8,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { MailConfigService } from "./mail-config.service";
-import { MailPasswordRequiredError } from "./mail-destination";
+import { MailDestinationNotPersistedError, MailPasswordRequiredError } from "./mail-destination";
 
 const COMPANY = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const ACTOR = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -145,6 +145,15 @@ describe("MailConfigService.upsert — password optional", () => {
     expect(envArg).not.toBeNull();
     // purpose phải là 'smtp_password'.
     expect(secrets.encryptSecret.mock.calls[0][1].purpose).toBe("smtp_password");
+    // S19-SEC-MAILAADBIND-1 (B1): ngữ cảnh gắn bộ năm (id hàng SẼ ghi, host, port, username, secure) — dựng
+    // LITERAL ở đây, KHÔNG gọi helper (so helper với chính nó là tautology). secure vắng ⇒ true.
+    const ctx = secrets.encryptSecret.mock.calls[0][1];
+    expect(ctx.recordId).toBe(JSON.stringify([recordId, "smtp.x", 465, "u", true]));
+    expect(ctx).toEqual({
+      companyId: COMPANY,
+      recordId: JSON.stringify([recordId, "smtp.x", 465, "u", true]),
+      purpose: "smtp_password",
+    });
   });
 
   it("VẮNG password + đích KHỚP hàng đã lưu, chỉ đổi from → GIỮ envelope cũ (envelope=null cho repo)", async () => {
@@ -209,6 +218,30 @@ describe("MailConfigService.upsert — password optional", () => {
     expect(code).toBe(MAIL_PASSWORD_REQUIRED);
   });
 
+  it("repo ném MailDestinationNotPersistedError (đích PG lưu ≠ đích đã gắn vào ngữ cảnh) → 400 KHÔNG mã module (filter ⇒ VALIDATION-ERR-001)", async () => {
+    const { svc } = makeService({
+      repo: { upsert: vi.fn().mockRejectedValue(new MailDestinationNotPersistedError(["host"])) },
+    });
+    const err = await svc
+      .upsert(COMPANY, { ...STORED_DEST, fromEmail: "f@x.com", password: "p" }, ACTOR)
+      .then(() => null, (e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(((err as BadRequestException).getResponse() as { code?: unknown }).code).toBeUndefined();
+    expect((err as BadRequestException).message).toBe(
+      "Máy chủ hoặc tên đăng nhập SMTP chứa ký tự không hợp lệ.",
+    );
+  });
+
+  it("repo ném lỗi LẬP TRÌNH (recordId lệch id PG lưu) ⇒ ném NGUYÊN (500 qua filter), KHÔNG gói thành 400", async () => {
+    const programmerError = new Error("Mail config: recordId không khớp id PG lưu");
+    const { svc } = makeService({ repo: { upsert: vi.fn().mockRejectedValue(programmerError) } });
+
+    await expect(
+      svc.upsert(COMPANY, { ...STORED_DEST, fromEmail: "f@x.com", password: "p" }, ACTOR),
+    ).rejects.toBe(programmerError);
+  });
+
   it("DTO trả về KHÔNG có password", async () => {
     const { svc } = makeService();
     const dto = await svc.upsert(
@@ -245,6 +278,17 @@ describe("MailConfigService.testConnection — mật khẩu đã lưu CHỈ tớ
     await svc.testConnection(COMPANY, STORED_DEST, ACTOR);
     expect(secrets.decryptSecret).toHaveBeenCalledOnce();
     expect(transport.test).toHaveBeenCalledWith({ ...STORED_DEST, password: "decrypted-pw" });
+    // S19-SEC-MAILAADBIND-1 (B1): ngữ cảnh giải mã = bộ năm của HÀNG (dựng LITERAL, không gọi helper).
+    const [envelopeArg, ctx] = secrets.decryptSecret.mock.calls[0];
+    expect(ctx.recordId).toBe(
+      JSON.stringify([row().id, "smtp.example.com", 587, "noreply@example.com", true]),
+    );
+    expect(ctx).toEqual({
+      companyId: COMPANY,
+      recordId: JSON.stringify([row().id, "smtp.example.com", 587, "noreply@example.com", true]),
+      purpose: "smtp_password",
+    });
+    expect(envelopeArg).toEqual(row());
   });
 
   it.each(DEST_DRIFTS)(
@@ -268,13 +312,38 @@ describe("MailConfigService.testConnection — mật khẩu đã lưu CHỈ tớ
     expect(code).toBe(MAIL_PASSWORD_REQUIRED);
   });
 
-  it("decrypt thất bại (đích khớp) → { ok:false } message generic (KHÔNG lộ crypto)", async () => {
+  it("decrypt thất bại (đích khớp) → { ok:false } câu cố định bảo KIỂM TRA ĐÍCH TRƯỚC khi nhập lại mật khẩu (owner D2 ký lại 02/10), KHÔNG lộ crypto", async () => {
+    // Giải mã hỏng có thể là đích bị đổi NGOÀI ứng dụng (B1 chặn đúng ca đó): «nhập lại mật khẩu» ngay vào form
+    // đã nạp sẵn đích bị tráo là hoàn tất vụ rò ⇒ câu phải bảo kiểm tra đích trước (FULL gate silent-failure HIGH).
     const { svc, transport } = makeService({
       secrets: { decryptSecret: vi.fn().mockRejectedValue(new Error("decrypt failed")) },
     });
     const res = await svc.testConnection(COMPANY, STORED_DEST, ACTOR);
     expect(res.ok).toBe(false);
-    expect(res.errorMessage).toBe("Không giải mã được mật khẩu đã lưu.");
+    expect(res.errorMessage).toBe(
+      "Không dùng được mật khẩu đã lưu. Kiểm tra lại máy chủ, cổng, tên đăng nhập và TLS (có thể đã bị thay đổi ngoài ứng dụng) trước khi nhập lại mật khẩu SMTP rồi bấm Lưu.",
+    );
+    expect(transport.test).not.toHaveBeenCalled();
+  });
+
+  it("dựng ngữ cảnh NÉM (lỗi lập trình — vd port BigInt sau một lần đổi kiểu cột) ⇒ ném NGUYÊN (500), KHÔNG chẩn đoán nhầm thành «envelope không dùng được»", async () => {
+    // Chỉ lỗi GIẢI MÃ mới mang thẻ toàn vẹn smtp-envelope-unusable (FULL gate security + silent-failure LOW):
+    // `JSON.stringify` của ngữ cảnh ném với BigInt — lỗi đó phải nổi lên nguyên dạng (filter log 500 + stack).
+    const bigPort = 587n as unknown as number;
+    const { svc, secrets, transport } = makeService({
+      repo: { findByScope: vi.fn().mockResolvedValue(row({ port: bigPort })) },
+    });
+    const logger = (svc as unknown as { logger: { error: (m: string) => void; warn: (m: string) => void } })
+      .logger;
+    const error = vi.spyOn(logger, "error").mockImplementation(() => undefined).mockName("logger.error");
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined).mockName("logger.warn");
+
+    await expect(svc.testConnection(COMPANY, { ...STORED_DEST, port: bigPort }, ACTOR)).rejects.toThrow(
+      TypeError,
+    );
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(secrets.decryptSecret).not.toHaveBeenCalled();
     expect(transport.test).not.toHaveBeenCalled();
   });
 });
@@ -287,6 +356,11 @@ describe("MailConfigService — log khi từ chối / thất bại (ghim nội d
   function spyWarn(svc: MailConfigService) {
     const logger = (svc as unknown as { logger: { warn: (message: string) => void } }).logger;
     return vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+  }
+  /** Spy RIÊNG mức `error` — ghim MỨC log (owner D3), không chỉ chữ. */
+  function spyError(svc: MailConfigService) {
+    const logger = (svc as unknown as { logger: { error: (message: string) => void } }).logger;
+    return vi.spyOn(logger, "error").mockImplementation(() => undefined).mockName("logger.error");
   }
   const lineOf = (warn: ReturnType<typeof spyWarn>): string => String(warn.mock.calls[0]?.[0] ?? "");
 
@@ -339,17 +413,59 @@ describe("MailConfigService — log khi từ chối / thất bại (ghim nội d
     expect(line).toContain(`${BACKSLASH}u2028`);
   });
 
-  it("giải mã mật khẩu đã lưu thất bại ⇒ warn có config=<id> (trước WO: nuốt im lặng)", async () => {
+  it("giải mã mật khẩu đã lưu thất bại ⇒ ĐÚNG 1 dòng `error` (thẻ smtp-envelope-unusable ĐẦU dòng · company · config=<id> · TRUNG LẬP nguyên nhân), KHÔNG warn (owner D3 + sửa đổi 02/10)", async () => {
+    // S19-SEC-MAILAADBIND-1: đích gắn vào ngữ cảnh ⇒ giải mã hỏng = vi phạm toàn vẹn (đích bị đổi ngoài app,
+    // envelope hỏng / định dạng cũ, mất KEK) — không bao giờ là chuyện thường ⇒ mức `error`, thẻ cố định.
     const { svc } = makeService({
       secrets: { decryptSecret: vi.fn().mockRejectedValue(new Error("decrypt failed")) },
     });
-    const warn = spyWarn(svc);
+    const warn = spyWarn(svc).mockName("logger.warn");
+    const error = spyError(svc);
 
     await svc.testConnection(COMPANY, STORED_DEST, ACTOR);
 
+    expect(error).toHaveBeenCalledOnce();
+    const line = lineOf(error);
+    expect(line).toContain("smtp-envelope-unusable");
+    expect(line).toContain(`company=${COMPANY}`);
+    expect(line).toContain(`config=${row().id}`);
+    // Sửa đổi owner 02/10 (FULL gate silent-failure HIGH): TRUNG LẬP về nguyên nhân — không bảo nhập lại mật khẩu;
+    // nêu các nguyên nhân có thể và bắt xác minh đích TRƯỚC (nhập lại vào đích bị tráo = hoàn tất vụ rò).
+    expect(line).not.toContain("cần nhập lại mật khẩu");
+    expect(line).toContain("ngữ cảnh cũ");
+    expect(line).toContain("đổi ngoài ứng dụng");
+    expect(line).toContain("khoá mã hoá");
+    expect(line).toContain("xác minh đích");
+    expect(line).toContain("TRƯỚC khi nhập lại mật khẩu");
+    // Giám sát NEO đầu dòng (FULL gate security LOW): host do tenant chọn chỉ xuất hiện GIỮA các dòng log khác.
+    expect(line).toMatch(/^smtp-envelope-unusable: /);
+    expect(line).not.toContain("decrypt failed");
+    expect(line).not.toContain("decrypted-pw");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("repo ném MailDestinationNotPersistedError (B4: host/username PG lưu ≠ giá trị đã gắn) ⇒ ĐÚNG 1 dòng warn company · actor · scope · changed=<TÊN trường>, KHÔNG giá trị (4xx không qua log của filter)", async () => {
+    const { svc } = makeService({
+      repo: {
+        upsert: vi.fn().mockRejectedValue(new MailDestinationNotPersistedError(["host", "username"])),
+      },
+    });
+    const warn = spyWarn(svc).mockName("logger.warn");
+    const evilHost = "smtp.attacker.example";
+
+    const err = await svc
+      .upsert(COMPANY, { ...STORED_DEST, host: evilHost, fromEmail: "f@x.com", password: "typed-pw" }, ACTOR)
+      .then(() => null, (e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
     expect(warn).toHaveBeenCalledOnce();
-    expect(lineOf(warn)).toContain(`config=${row().id}`);
-    expect(lineOf(warn)).not.toContain("decrypt failed");
+    const line = lineOf(warn);
+    expect(line).toContain(`company=${COMPANY}`);
+    expect(line).toContain(`actor=${ACTOR}`);
+    expect(line).toContain("scope=default");
+    expect(line).toContain("changed=host,username");
+    expect(line).not.toContain(evilHost);
+    expect(line).not.toContain("typed-pw");
   });
 
   it("repo báo 0 hàng (thua đua) ⇒ warn + 400 mang câu đúng cho CẢ 'hàng vừa bị thay' lẫn 'đích lệch'", async () => {
