@@ -41,6 +41,7 @@ import {
   engagementParams,
   hasCustomRange,
   isEngagementKeyOfSameUnit,
+  isSameStatsSearch,
   searchForOrgUnit,
   searchForRange,
   validateStatsRouteSearch,
@@ -127,7 +128,14 @@ export function StatsPage(): React.ReactElement {
   });
 
   // `to: "."` = ở lại CHÍNH route đang mount màn này, thay TOÀN BỘ search (search kế tiếp luôn đủ ba khoá).
+  // Đích TRÙNG search đang đứng ⇒ navigate không đổi khoá, không lượt đọc nào chạy: đọc lại thay vì đứng im.
+  // Ca thật: tab mở ở URL mặc định qua ranh tuần — số liệu còn của tuần trước, › mở, mà đích của nó (8 tuần
+  // tới hết tuần hiện tại) lại chính là URL mặc định.
   const go = (next: StatsRouteSearch): void => {
+    if (isSameStatsSearch(next, search)) {
+      void query.refetch();
+      return;
+    }
     void navigate({ to: ".", search: next });
   };
 

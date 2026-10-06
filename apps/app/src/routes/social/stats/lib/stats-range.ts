@@ -69,7 +69,8 @@ function rangeEndingAt(to: string, weeks: number): StatsDateRange | null {
 
 /**
  * Chủ nhật của tuần hiện tại theo giờ CÔNG TY. Tính lại mỗi lần gọi (không memo) — tab mở qua nửa đêm Chủ
- * nhật tự sang tuần mới.
+ * nhật thì TRẠNG THÁI NÚT tự sang tuần mới ở lượt vẽ kế. Số liệu thì không tự đọc lại: bấm › khi đó cho đích
+ * trùng URL mặc định, và trang đọc lại 052 (`StatsPage` — `go`).
  */
 export function currentWeekEnd(now: Date = new Date()): string {
   const today = localDateOf(now, companyTimeZone());

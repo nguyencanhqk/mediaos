@@ -216,6 +216,22 @@ describe("T1 — khoảng tuần (vế màn)", () => {
     expect(within(bar).getByRole("button", { name: RESET })).toBeDisabled();
   });
 
+  it("tab mở qua ranh tuần ở URL mặc định (số liệu còn kết thúc 04/10, tuần hiện tại đã là 11/10): › ⇒ đích trùng CHÍNH URL đang đứng ⇒ không navigate mà ĐỌC LẠI 052; nhãn sang khoảng mới", async () => {
+    const lastWeek = { from: "2026-08-10", to: "2026-10-04", weeks: 8 };
+    engagement.mockImplementationOnce(() => Promise.resolve(makeEngagement({ range: lastWeek })));
+    engagement.mockImplementation(() => Promise.resolve(makeEngagement({ range: DEFAULT_RANGE })));
+    renderPage();
+    const bar = await filters();
+    expect(within(bar).getByText("10/08/2026 – 04/10/2026")).toBeInTheDocument();
+
+    fireEvent.click(within(bar).getByRole("button", { name: "Tiến 8 tuần" }));
+
+    await waitFor(() => expect(engagement).toHaveBeenCalledTimes(2));
+    expect(lastArg()).toStrictEqual({});
+    expect(navigateSpy).not.toHaveBeenCalled();
+    expect(await within(await filters()).findByText("17/08/2026 – 11/10/2026")).toBeInTheDocument();
+  });
+
   it("URL mang cặp ngày ⇒ 052 nhận đúng cặp; «Về hiện tại» bỏ CẢ HAI khỏi URL và 052 được gọi lại không ngày", async () => {
     renderPage({ from: "2026-09-21", to: "2026-10-04" });
     const bar = await filters();

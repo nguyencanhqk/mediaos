@@ -91,6 +91,11 @@ export function isEngagementKeyOfSameUnit(
   return keyParams.orgUnitId === params.orgUnitId;
 }
 
+/** Hai search mang CÙNG ba giá trị ⇒ navigate từ cái này sang cái kia không đổi URL, không đổi khoá cache. */
+export function isSameStatsSearch(a: StatsRouteSearch, b: StatsRouteSearch): boolean {
+  return a.from === b.from && a.to === b.to && a.orgUnitId === b.orgUnitId;
+}
+
 /** Search kế tiếp khi đổi khoảng:`null` = về mặc định của server (bỏ `from` + `to`). Giữ đơn vị. */
 export function searchForRange(
   search: StatsRouteSearch,

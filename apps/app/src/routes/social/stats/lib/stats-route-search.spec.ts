@@ -14,6 +14,7 @@ import {
   engagementParams,
   hasCustomRange,
   isEngagementKeyOfSameUnit,
+  isSameStatsSearch,
   searchForOrgUnit,
   searchForRange,
   validateStatsRouteSearch,
@@ -215,4 +216,20 @@ describe("Qua parser / serializer THẬT của router (`defaultParseSearch` · `
   it("DENY — `?from=2026&to=2027`: parser đưa hai SỐ ⇒ bỏ cả cặp (không gửi tham số chắc chắn 400)", () => {
     expect(validateStatsRouteSearch(parse("?from=2026&to=2027"))).toStrictEqual(NONE);
   });
+});
+
+describe("isSameStatsSearch", () => {
+  const FULL = { from: "2026-09-21", to: "2026-10-04", orgUnitId: UNIT_ID };
+
+  it("cùng ba giá trị ⇒ true (khoá vắng và khoá `undefined` là một)", () => {
+    expect(isSameStatsSearch(NONE, {})).toBe(true);
+    expect(isSameStatsSearch(FULL, { ...FULL })).toBe(true);
+  });
+
+  it.each([{ from: "2026-09-14" }, { to: "2026-09-27" }, { orgUnitId: undefined }])(
+    "khác một vế %j ⇒ false",
+    (over) => {
+      expect(isSameStatsSearch(FULL, { ...FULL, ...over })).toBe(false);
+    },
+  );
 });
