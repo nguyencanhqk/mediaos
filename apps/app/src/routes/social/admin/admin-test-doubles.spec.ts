@@ -7,12 +7,20 @@ import {
   feedEngagementResponseSchema,
   feedReportSchema,
   IDEMPOTENCY_ERROR_CODES,
+  kudosBadgeAdminPageSchema,
   kudosBadgeAdminSchema,
   SOCIAL_ERROR_CODES,
 } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
-import { describe, expect, it } from "vitest";
-import { ADMIN_ERR, makeBadgeAdmin, makeEngagement, makeReport } from "./admin-test-doubles";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  ADMIN_ERR,
+  advanceFakeTimers,
+  makeBadgeAdmin,
+  makeBadgeAdminPage,
+  makeEngagement,
+  makeReport,
+} from "./admin-test-doubles";
 
 const C = SOCIAL_ERROR_CODES;
 
@@ -69,6 +77,18 @@ describe("admin-test-doubles — factory khớp hợp đồng", () => {
       code: "da-tat",
     });
   });
+
+  it("makeBadgeAdminPage(): qua `kudosBadgeAdminPageSchema`; `total` mặc định = số hàng, ghi đè được", () => {
+    const page = makeBadgeAdminPage([makeBadgeAdmin()]);
+    expect(kudosBadgeAdminPageSchema.parse(page)).toEqual(page);
+    expect(page).toMatchObject({ page: 1, limit: 50, total: 1 });
+    expect(makeBadgeAdminPage([], { page: 2, total: 120 })).toEqual({
+      data: [],
+      page: 2,
+      limit: 50,
+      total: 120,
+    });
+  });
 });
 
 describe("ADMIN_ERR — lỗi đúng hình dạng trên dây", () => {
@@ -82,6 +102,9 @@ describe("ADMIN_ERR — lỗi đúng hình dạng trên dây", () => {
     ["postGone", 404, C.POST_NOT_FOUND],
     ["reportDuplicate", 409, C.REPORT_DUPLICATE_OPEN],
     ["idempotencyInProgress", 409, IDEMPOTENCY_ERROR_CODES.IN_PROGRESS],
+    ["badgeCodeTaken", 409, C.KUDOS_BADGE_CODE_TAKEN],
+    ["badgeGone", 404, C.KUDOS_BADGE_NOT_FOUND],
+    ["statsUnitOutOfScope", 403, C.STATS_UNIT_OUT_OF_SCOPE],
     ["moderationDenied", 403, C.MODERATION_FIELD_DENIED],
     ["forbidden", 403, "AUTH-ERR-FORBIDDEN"],
     ["badRequest", 400, "VALIDATION-ERR-001"],
@@ -89,7 +112,7 @@ describe("ADMIN_ERR — lỗi đúng hình dạng trên dây", () => {
   ];
   const table: Record<string, (() => ApiError) | undefined> = ADMIN_ERR;
 
-  it("đúng 13 lỗi, đúng tên (danh sách viết tay)", () => {
+  it("đúng 16 lỗi, đúng tên (danh sách viết tay)", () => {
     expect(Object.keys(ADMIN_ERR).sort()).toEqual(EXPECTED.map(([name]) => name).sort());
   });
 
@@ -106,4 +129,36 @@ describe("ADMIN_ERR — lỗi đúng hình dạng trên dây", () => {
       expect(make?.()).not.toBe(first);
     },
   );
+});
+
+describe("advanceFakeTimers — MỘT helper tua fake timer cho mọi spec của cụm quản trị", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("tua đúng số mili-giây: timer chưa tới hạn KHÔNG chạy, tới hạn thì chạy; mặc định 0 chỉ xả hàng đợi", async () => {
+    vi.useFakeTimers();
+    const late = vi.fn();
+    const now = vi.fn();
+    setTimeout(late, 30_000);
+    setTimeout(now, 0);
+
+    await advanceFakeTimers();
+    expect(now).toHaveBeenCalledTimes(1);
+    expect(late).not.toHaveBeenCalled();
+
+    await advanceFakeTimers(29_999);
+    expect(late).not.toHaveBeenCalled();
+    await advanceFakeTimers(1);
+    expect(late).toHaveBeenCalledTimes(1);
+  });
+
+  it("chờ cả microtask nối sau timer (promise `.then` của lời gọi vừa được nhả)", async () => {
+    vi.useFakeTimers();
+    const settled = vi.fn();
+    void new Promise<void>((resolve) => setTimeout(resolve, 10)).then(settled);
+
+    await advanceFakeTimers(10);
+    expect(settled).toHaveBeenCalledTimes(1);
+  });
 });

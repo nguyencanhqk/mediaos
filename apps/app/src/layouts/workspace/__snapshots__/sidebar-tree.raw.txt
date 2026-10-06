@@ -126,3 +126,5 @@ social.polls | mod=SOCIAL | label=Bình chọn | path=/feed/polls | icon=vote | 
 social.kudos | mod=SOCIAL | label=Vinh danh | path=/feed/kudos | icon=award | group=operation | order=55 | any=[view:feed]
 social.groups | mod=SOCIAL | label=Nhóm | path=/feed/groups | icon=users | group=operation | order=60 | any=[view:feed]
 social.moderation | mod=SOCIAL | label=Kiểm duyệt | path=/feed/moderation | icon=shield-alert | group=management | order=70 | all=[view:feed,view:feed-report]
+social.stats | mod=SOCIAL | label=Thống kê tương tác | path=/feed/stats | icon=bar-chart-3 | group=report | order=80 | all=[view:feed,view:feed-report]
+social.kudosBadges | mod=SOCIAL | label=Thiết lập huy hiệu | path=/feed/kudos-badges | icon=settings | group=settings | order=90 | all=[view:feed,manage:feed-kudos]

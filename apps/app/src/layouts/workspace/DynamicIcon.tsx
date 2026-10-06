@@ -66,6 +66,9 @@ import {
   Vote,
   // S16-SOCIAL-FE-2C — mục «Vinh danh» (`social.kudos`).
   Award,
+  // S16-SOCIAL-FE-3B — mục «Thống kê tương tác» (`social.stats`); ba mục báo cáo ATT / LEAVE / PAYROLL đã
+  // khai `bar-chart-3` từ trước nhưng map thiếu khoá nên đang đeo vòng tròn mặc định.
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -78,6 +81,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   lightbulb: Lightbulb,
   vote: Vote,
   award: Award,
+  "bar-chart-3": BarChart3,
   "layout-dashboard": LayoutDashboard,
   users: Users,
   user: User,

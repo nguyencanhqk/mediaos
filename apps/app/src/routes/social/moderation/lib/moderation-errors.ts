@@ -21,8 +21,10 @@
  */
 import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import {
-  adminErrorReason,
-  isDefiniteRefusal,
+  behaviorOf,
+  readErrorReason,
+  writeErrorReason,
+  type AdminBehaviorTable,
   type AdminErrorReason,
   type AdminErrorTable,
 } from "../../admin/lib/admin-errors";
@@ -99,8 +101,6 @@ export interface ModerationReadErrorOutcome extends ModerationReadErrorBehavior 
   reason: AdminErrorReason;
 }
 
-type BehaviorTable<B> = Readonly<Partial<Record<AdminErrorReason, B>>> & { readonly generic: B };
-
 const KEEP: ResolveReportErrorBehavior = {
   dialog: "keep",
   resetAction: false,
@@ -111,7 +111,7 @@ const KEEP: ResolveReportErrorBehavior = {
 const CLOSE: ResolveReportErrorBehavior = { ...KEEP, dialog: "close" };
 
 /** Cột «Hành vi» của E1–E6 + E9–E11 cho 029. Reason không có hàng ⇒ dùng hàng `generic`. */
-export const RESOLVE_REPORT_ERROR_BEHAVIOR: BehaviorTable<ResolveReportErrorBehavior> = {
+export const RESOLVE_REPORT_ERROR_BEHAVIOR: AdminBehaviorTable<ResolveReportErrorBehavior> = {
   // E1 — báo cáo đã được kết thúc trước: kết cục cuối. «Trước» có thể là người khác, hoặc CHÍNH lượt
   // trước của mình đã ghi mà mất phản hồi (hết hạn chờ) rồi bấm «Thử lại». Lượt đó có thể kèm ẩn / xoá
   // bài ⇒ làm mới cả các bề mặt bài, không chỉ hàng đợi.
@@ -141,7 +141,7 @@ export const RESOLVE_REPORT_ERROR_BEHAVIOR: BehaviorTable<ResolveReportErrorBeha
 };
 
 /** Cột «Hành vi» của E7 + E9–E11 cho 006. */
-export const UNHIDE_POST_ERROR_BEHAVIOR: BehaviorTable<UnhidePostErrorBehavior> = {
+export const UNHIDE_POST_ERROR_BEHAVIOR: AdminBehaviorTable<UnhidePostErrorBehavior> = {
   postGone: { invalidate: true, retryable: false },
   forbidden: { invalidate: false, retryable: false },
   invalidRequest: { invalidate: false, retryable: false },
@@ -152,7 +152,7 @@ export const UNHIDE_POST_ERROR_BEHAVIOR: BehaviorTable<UnhidePostErrorBehavior> 
 };
 
 /** Cột «Hành vi» của E8 + E10–E11 cho đường đọc. */
-export const MODERATION_READ_ERROR_BEHAVIOR: BehaviorTable<ModerationReadErrorBehavior> = {
+export const MODERATION_READ_ERROR_BEHAVIOR: AdminBehaviorTable<ModerationReadErrorBehavior> = {
   forbidden: { retryable: false },
   invalidRequest: { retryable: false },
   loadFailed: { retryable: true },
@@ -160,7 +160,8 @@ export const MODERATION_READ_ERROR_BEHAVIOR: BehaviorTable<ModerationReadErrorBe
 };
 
 /**
- * Các reason mà CÂU của chúng nói «Danh sách đã được làm mới» (E1 · E6 · E7). Khi lượt đọc lại đang LỖI,
+ * Các reason mà CÂU của chúng nói «Danh sách đã được làm mới» (E1 · E6 · E7 + `badgeGone` của màn Thiết
+ * lập huy hiệu — tập này phủ CẢ cụm quản trị, vì ca ghim nó quét toàn bộ câu i18n). Khi lượt đọc lại đang LỖI,
  * dải của các reason này không được vẽ — câu đó đứng cạnh «không tải được danh sách» là nói hai điều trái
  * nhau. MỌI dải khác (thành công · `forbidden` · `outcomeUnknown`…) không nói gì về danh sách ⇒ luôn vẽ:
  * giấu chúng đi là để lượt ghi đã xong trông như vừa hỏng. Spec ghim tập này khớp với chữ i18n.
@@ -169,25 +170,11 @@ const LIST_REFRESH_CLAIMING_REASONS: ReadonlySet<AdminErrorReason> = new Set<Adm
   "reportAlreadyDecided",
   "reportGone",
   "postGone",
+  "badgeGone",
 ]);
 
 export function claimsListRefreshed(reason: AdminErrorReason): boolean {
   return LIST_REFRESH_CLAIMING_REASONS.has(reason);
-}
-
-/** Hàng của `reason`; reason không có hàng ⇒ hàng `generic` (giữ nguyên hiện trạng + cho thử lại). */
-function behaviorOf<B>(table: BehaviorTable<B>, reason: AdminErrorReason): B {
-  const rows: Readonly<Partial<Record<AdminErrorReason, B>>> = table;
-  return (Object.hasOwn(rows, reason) ? rows[reason] : undefined) ?? table.generic;
-}
-
-/**
- * Reason của một lượt GHI không idempotent (029 · 006): tách «server đã TỪ CHỐI (4xx)» khỏi «không có
- * gì chứng minh là chưa ghi» (5xx · không có câu trả lời đọc được) TRƯỚC khi tra bảng — nhánh sau không
- * được nói «Không thực hiện được».
- */
-function writeErrorReason(err: unknown, table: AdminErrorTable): AdminErrorReason {
-  return isDefiniteRefusal(err) ? adminErrorReason(err, table) : "outcomeUnknown";
 }
 
 export function describeResolveReportError(err: unknown): ResolveReportErrorOutcome {
@@ -205,7 +192,6 @@ export function describeUnhidePostError(err: unknown): UnhidePostErrorOutcome {
  * thể đứng ngay cạnh dải kết cục của lượt ghi vừa XONG. Mọi lỗi không phải 403/400 ⇒ `loadFailed`.
  */
 export function describeModerationReadError(err: unknown): ModerationReadErrorOutcome {
-  const tableReason = adminErrorReason(err, MODERATION_READ_ERROR_TABLE);
-  const reason = tableReason === "generic" ? "loadFailed" : tableReason;
+  const reason = readErrorReason(err, MODERATION_READ_ERROR_TABLE);
   return { reason, ...behaviorOf(MODERATION_READ_ERROR_BEHAVIOR, reason) };
 }

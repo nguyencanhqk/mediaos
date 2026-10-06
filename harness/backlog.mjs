@@ -18613,6 +18613,7 @@ export const backlog = [
     notes: [
       "🟡 Gate LIGHT: `ecc:typescript-reviewer` (lăng kính React) + `ecc:code-reviewer` + `ecc:quality-gate` (không `security-reviewer`, trừ khi diff chạm điều kiện nâng FULL).",
       "TÁCH từ S16-SOCIAL-FE-3 ngày 05/10/2026 (D17, plan §8.6 — ô ☐ D17 chờ owner tick khi duyệt PR-A). PR-C = P4 + P5 + P1c (lát L6 → L7 → L8), cắt nhánh mới từ master SAU khi PR-B merge; đầu PR đóng dấu TAY `node harness/ledger.mjs start S16-SOCIAL-FE-3C`.",
+      "Trước khi nối ca của PR-C: TÁCH theo màn hai file spec đã phình sau PR-B — `apps/app/src/routes/social/social-wiring.spec.ts` (627 dòng) và `admin/admin-route-gates.spec.tsx` (501 dòng) — finding AUD-SPEC400 của kiểm toán PR-B (06/10/2026); trần 800 dòng của CLAUDE.md §5 không có cổng nào ép.",
       "⚠️ Phụ thuộc thật của lát L8 là FE-2D lát B = S16-SOCIAL-MENTIONLINK-1 (PR #571) — #571 đã merge 06/10/2026 (`42b41680`) ⇒ id đó ĐÃ khai vào `depends_on` cùng ngày. Tiền điều kiện L8 đo bằng git theo plan §3 L8; chưa thoả ⇒ DỪNG sau L7, báo owner.",
       "Owner ký 05/10/2026: O1 = B (widget chỉ HR + company-admin — manager KHÔNG thấy dù SPEC-07:1200 cho scope Department; vế đó chờ BE, nợ S4-DASH-HROVERVIEW-FLOOR-1) · O3 = a (nút «Báo cáo» bình luận ở PR-C). Chữ `done_when` về ô fbpost (D14) và cách nhúng widget (D16) là chữ đã sửa theo plan §8.2–§8.3 — hai ô ☐ chờ owner tick khi duyệt PR-A.",
     ],
@@ -18886,6 +18887,84 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate (sửa stores/auth + use-can của web-core). Ưu tiên THẤP: vai canonical (hr · company-admin) đều ở scope Company nên hôm nay không ai gặp; chỉ lộ khi có grant tuỳ biến ở scope hẹp. Seed 05/10/2026 từ gate PR-A.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEADMINSIGNAL-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Lượt ghi của hai màn quản trị SOCIAL (049 tạo · 050 sửa/bật lại · 051 ngừng dùng huy hiệu) và lượt xuất 053 chưa nhận signal: hết hạn chờ 30 giây màn được nhả nhưng yêu cầu vẫn chạy trên dây; riêng 053 server vẫn ghi một dòng audit cho lượt đã bị bỏ và «Thử lại» thêm một dòng nữa",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "packages/web-core/**",
+      "apps/app/src/routes/social/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3B", "S16-SOCIAL-FE-3C"],
+    src: [
+      "Gate PR-B S16-SOCIAL-FE-3B (06/10/2026), plan S16-SOCIAL-FE-3 §9 «Bổ sung sổ vết PR-B» mục (4b): `packages/web-core/src/lib/social-kudos-api.ts` (createBadge · updateBadge · deactivateBadge) · `social-stats-api.ts` (exportEngagement) không có tham số signal; nơi gọi: `badges/components/BadgeFormDialog.tsx` · `badges/lib/use-badge-toggle.ts` · `stats/components/ExportEngagementButton.tsx`",
+    ],
+    done_when: [
+      "Bốn hàm client nhận `signal` và useGuardedMutation của ba nơi gọi truyền signal theo khuôn 027 / 029 của PR-A; ca đo yêu cầu BỊ HUỶ khi hết hạn chờ (signal.aborted) đứng cạnh ca đối chứng lượt thành công không bị huỷ",
+      "Hành vi `outcomeUnknown` của lượt ghi giữ nguyên (huỷ trên dây KHÔNG chứng minh server chưa ghi ⇒ vẫn đọc lại); build lại web-core; test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT. Seed 06/10/2026 từ gate PR-B (báo cáo bước L4a · L4b · L5a). Cùng lớp nợ với `socialApi.moderatePost` đã nằm ở S16-SOCIAL-FEMODINVAL-1 — làm chung một PR được nếu hai WO cùng READY. `depends_on` S16-SOCIAL-FE-3C vì chạm glob `apps/app/src/routes/social/**`.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FESTATSBUSY-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Màn Thống kê tương tác: trong lúc tải khoảng mới thanh bộ lọc dựng từ response CŨ (bấm ‹ / › lần hai trước khi phản hồi về không dịch thêm · ô «Số tuần» bật về giá trị cũ); phần dư focus của hai màn quản trị (nút lối thoát tự gỡ chính nó ⇒ focus về body · 403 của hộp thoại sửa huy hiệu kéo focus về dải dù hàng không đổi); nút «Xuất Excel» chưa báo «đã tải xong» cho trình đọc màn hình",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3B", "S16-SOCIAL-FE-3C"],
+    src: [
+      "Gate PR-B S16-SOCIAL-FE-3B (06/10/2026): finding R3 của reviewer code vòng 1 (LOW, chưa vá — plan S16-SOCIAL-FE-3 §9 «Sổ vết thi công PR-B» mục (3)) · mục «Còn mở» của báo cáo bước L4b · L5a · L5b · `stats/StatsPage.tsx` · `stats/components/StatsFilters.tsx` · `stats/components/StatsLoadError.tsx` · `stats/components/ExportEngagementButton.tsx`",
+    ],
+    done_when: [
+      "Hai cú bấm ‹ / › liên tiếp trước khi phản hồi về dịch ĐÚNG hai bước (hoặc bước thứ hai bị chặn có chủ ý bằng `aria-disabled`, KHÔNG `disabled` trên nút đang giữ focus); ô «Số tuần» giữ giá trị vừa chọn suốt lượt tải — ca RED trước, mutant đỏ đúng thông điệp",
+      'Sau mỗi lối thoát («Bỏ lọc đơn vị» · «Về mặc định» · «Thử lại») và sau 403 của hộp thoại sửa, focus nằm ở phần tử có nghĩa (không phải body); xuất xong có thông báo `role="status"`; đã nhìn trên trình duyệt thật ở cả bàn phím lẫn chuột',
+    ],
+    notes: [
+      "🟡 Gate LIGHT. Seed 06/10/2026 từ gate PR-B. R3 CHƯA vá ở PR-B vì cách vá đề xuất (`disabled` ‹ / › lúc bận) khoá đúng nút người dùng bàn phím vừa bấm — cùng lớp lỗi focus với TSB-01 / TSB-02; phải chọn giữa `aria-disabled` và dựng thanh bộ lọc từ khoảng ĐÍCH. Không sinh số liệu sai: vùng số liệu đã `aria-busy`, nút xuất khoá. `depends_on` S16-SOCIAL-FE-3C vì chạm glob `apps/app/src/routes/social/**`.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEADMINSHARED-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Dọn thứ dùng chung của cụm quản trị SOCIAL: DoneNotice · useOutcomeFocus · list-states · DialogActions · claimsListRefreshed · invalidatePostSurfaces còn nằm dưới moderation/** dù màn huy hiệu + thống kê cùng dùng; khung chờ SKELETON_ROWS.map 4 bản · helper «lời gọi treo» 2 bản · FIRST_PAGE = 1 4 bản; ba spec PR-A còn khuôn hai fireEvent rời để mutant «bỏ khoá đồng bộ» sống; BadgeSettingsPage() vượt mốc 50 dòng / hàm",
+    zone: "amber",
+    status: "todo",
+    paths: ["apps/app/src/routes/social/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3B", "S16-SOCIAL-FE-3C", "S16-SOCIAL-FEMODINVAL-1"],
+    src: [
+      "Gate PR-B S16-SOCIAL-FE-3B (06/10/2026): finding R6 của reviewer code vòng 1 (LOW, chưa vá) · báo cáo bước L4a mục «Còn mở» (ReportDialog.spec.tsx · ResolveReportDialog.spec.tsx · HiddenPostsTab.spec.tsx: khuôn hai fireEvent rời xanh nhờ nút disabled, mutant bỏ khoá đồng bộ của useGuardedMutation sống) · báo cáo bước L4b (BadgeSettingsPage ≈ 105 dòng)",
+      "Gate PR-B (06/10/2026), ba mục LOW còn thiếu WO lúc mở PR: TSR-02 của `ecc:typescript-reviewer` vòng 2 (`DialogActions` bắt buộc `onSubmit` nhưng bỏ qua nó khi có `submitFormId`; `BadgeFormDialog` đang truyền cả hai) · AUD-FN50 của kiểm toán mutant (thân hàm > 50 dòng, đo bằng AST: BadgeFormDialogBody 133 · BadgeFormFields 128 · BadgeSettingsPage 116 · BadgeRow 79 · BadgeList 74 · StatsPage 63 · StatsFilters 61 — phần lớn là JSX) · câu lỗi `statsRangeInvalid` viết cứng «26 tuần» (mô tả PR-B, mục Nợ)",
+    ],
+    done_when: [
+      "Thứ dùng chung dời về `routes/social/admin/**` (moderation · badges · stats cùng import một nguồn); `LIST_REFRESH_CLAIMING_REASONS` không còn nằm ở file của riêng màn Kiểm duyệt; MỘT `<ListSkeleton>` · MỘT helper `hangOnce(spy)` · MỘT hằng FIRST_PAGE — KHÔNG đổi hành vi, mọi spec hiện có giữ xanh",
+      "Ba spec PR-A gom hai kích hoạt vào MỘT `act` và mutant «bỏ khoá đồng bộ» ĐỎ đúng thông điệp «called 2 times» ở từng spec; BadgeSettingsPage tách tới dưới 50 dòng / hàm; test FE + typecheck/build xanh",
+      "`DialogActions` nhận `onSubmit` HOẶC `submitFormId` (union loại trừ nhau ở kiểu — truyền cả hai là lỗi biên dịch) và `BadgeFormDialog` bỏ `onSubmit` thừa; sáu component còn lại của AUD-FN50 tách tới dưới 50 dòng / hàm hoặc ghi lý do giữ ở sổ vết; câu `statsRangeInvalid` lấy số tuần tối đa từ hằng của contracts thay vì viết cứng",
+    ],
+    notes: [
+      "🟡 Gate LIGHT — refactor thuần + siết ca, không đổi cổng quyền. Seed 06/10/2026 từ gate PR-B. `depends_on` S16-SOCIAL-FEMODINVAL-1 vì WO đó sửa `moderation-invalidation.ts` (một nguồn tập khoá) — dời file TRƯỚC khi nó xong là xung đột chắc chắn; `depends_on` S16-SOCIAL-FE-3C vì chạm glob `apps/app/src/routes/social/**`.",
     ],
   },
   {

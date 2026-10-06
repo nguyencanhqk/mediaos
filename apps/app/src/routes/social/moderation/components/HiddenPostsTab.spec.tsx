@@ -22,6 +22,7 @@ import {
 } from "../../feed/social-test-doubles";
 import {
   ADMIN_ERR,
+  advanceFakeTimers,
   AUTHOR_EMPLOYEE_ID,
   HIDDEN_POST_ID,
   makeHiddenPost,
@@ -713,19 +714,13 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
     vi.useFakeTimers();
 
     fireEvent.click(screen.getByRole("button", { name: UNHIDE }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(29_999);
-    });
+    await advanceFakeTimers(29_999);
     expect(moderatePost).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByRole("button", { name: UNHIDE })).toBeDisabled();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await advanceFakeTimers(1);
+    await advanceFakeTimers(0);
     const alert = screen.getByRole("alert");
     expect(alert).toHaveAttribute("data-reason", "outcomeUnknown");
     expect(alert).toHaveTextContent(OUTCOME_UNKNOWN_TEXT);

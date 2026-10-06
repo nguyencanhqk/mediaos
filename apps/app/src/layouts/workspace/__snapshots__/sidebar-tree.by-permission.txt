@@ -127,6 +127,8 @@ social.polls
 social.kudos
 social.groups
 social.moderation
+social.stats
+social.kudosBadges
 ## ME_ONLY
 ### DASH
 (trống)

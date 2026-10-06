@@ -19,7 +19,7 @@ import {
   resetCaps,
   setCaps,
 } from "../../feed/social-test-doubles";
-import { ADMIN_ERR } from "../../admin/admin-test-doubles";
+import { ADMIN_ERR, advanceFakeTimers } from "../../admin/admin-test-doubles";
 import { ReportDialog } from "./ReportDialog";
 
 const createReport = vi.fn();
@@ -473,10 +473,7 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
     vi.useRealTimers();
   });
 
-  const advance = (ms: number): Promise<void> =>
-    act(async () => {
-      await vi.advanceTimersByTimeAsync(ms);
-    });
+  const advance = advanceFakeTimers;
 
   it("027 treo: trước 30 giây còn khoá; quá hạn ⇒ dải `generic`, yêu cầu bị huỷ, «Thử lại» gửi CÙNG `attemptId`", async () => {
     createReport.mockImplementationOnce(() => new Promise<never>(() => undefined));

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * S16-SOCIAL-FE-3 — ca **G1**: cổng ROUTE của màn quản trị SOCIAL, đo trên đường dựng THẬT của router.
+ * S16-SOCIAL-FE-3 / FE-3B — ca **G1** (màn 010) · **G5** (màn 012) · **G6** (màn 011): cổng ROUTE của màn quản trị SOCIAL, đo
+ * trên đường dựng THẬT của router.
  *
  * Mỗi ca dựng đúng thứ `router.tsx` dựng cho route đó — `buildModuleRouteContent(getMeta(<routeKey>),
  * "SOCIAL", <màn thật />)` — rồi đo HAI thứ cùng lúc: `ProtectedRoute` vẽ gì, và lời gọi ĐẦU TIÊN của màn
@@ -25,10 +26,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { makeTestQueryClient, resetCaps, setCaps } from "../feed/social-test-doubles";
-import { makeReport, makeReportPage } from "./admin-test-doubles";
+import {
+  UNIT_ID,
+  makeBadgeAdmin,
+  makeBadgeAdminPage,
+  makeEngagement,
+  makeReport,
+  makeReportPage,
+} from "./admin-test-doubles";
+import { BadgeSettingsPage } from "../badges/BadgeSettingsPage";
 import { ModerationPage } from "../moderation/ModerationPage";
+import { StatsPage } from "../stats/StatsPage";
 
 const listReports = vi.fn();
+const listBadgesAdmin = vi.fn();
+const engagement = vi.fn();
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -38,8 +50,21 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.socialModerationApi,
       listReports: (...a: unknown[]) => listReports(...a),
     },
+    socialKudosApi: {
+      ...actual.socialKudosApi,
+      listBadgesAdmin: (...a: unknown[]) => listBadgesAdmin(...a),
+    },
+    socialStatsApi: {
+      ...actual.socialStatsApi,
+      engagement: (...a: unknown[]) => engagement(...a),
+    },
   };
 });
+
+// Recharts trong jsdom không có layout (plan B13) — biểu đồ không thuộc phép đo cổng.
+vi.mock("@/routes/social/stats/components/EngagementTrendChart", () => ({
+  EngagementTrendChart: () => null,
+}));
 
 vi.mock("@/layouts/protected/ProtectedShell", () => ({
   ProtectedShell: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -89,6 +114,14 @@ const FORBIDDEN_TITLE = "forbidden.title";
 const FORBIDDEN_NO_PERMISSION = "forbidden.reason.NO_PERMISSION";
 const MODERATION_TITLE = "admin.moderation.page.title";
 const FILTER_LABEL = "admin.moderation.page.filterLabel";
+const BADGES_TITLE = "admin.badges.page.title";
+const NEXT_PAGE = "pagination.next";
+const STATS_TITLE = "admin.stats.page.title";
+const STATS_EXPORT = "admin.stats.export.button";
+const STATS_UNIT_LABEL = "admin.stats.filters.unitLabel";
+
+/** Cỡ trang của màn 012 (056 mặc định 50). Viết tay. */
+const BADGES_LIMIT = 50;
 
 async function renderRoute(routeKey: string, page: ReactElement): Promise<void> {
   const { buildModuleRouteContent, getMeta } = await import("@/router");
@@ -102,6 +135,10 @@ async function renderRoute(routeKey: string, page: ReactElement): Promise<void> 
 beforeEach(() => {
   listReports.mockReset();
   listReports.mockImplementation(() => Promise.resolve(makeReportPage([makeReport()])));
+  listBadgesAdmin.mockReset();
+  listBadgesAdmin.mockImplementation(() => Promise.resolve(makeBadgeAdminPage([makeBadgeAdmin()])));
+  engagement.mockReset();
+  engagement.mockImplementation(() => Promise.resolve(makeEngagement()));
 });
 afterEach(() => {
   cleanup();
@@ -182,6 +219,165 @@ describe("G1 — cổng route `/feed/moderation` (SOC-SCREEN-010) = `view:feed` 
   );
 });
 
+describe("G5 — cổng route `/feed/kudos-badges` (SOC-SCREEN-012) = `view:feed` + `manage:feed-kudos`", () => {
+  const renderBadges = (): Promise<void> =>
+    renderRoute("social.kudosBadges", <BadgeSettingsPage />);
+
+  it(
+    "ALLOW — `view:feed` + `manage:feed-kudos` ⇒ màn mount, 056 được gọi ĐÚNG 1 lần",
+    async () => {
+      setCaps({ "view:feed": true, "manage:feed-kudos": true });
+
+      await renderBadges();
+
+      await waitFor(() => expect(listBadgesAdmin).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole("heading", { name: BADGES_TITLE })).toBeInTheDocument();
+      expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
+      // Màn 012 không đọc gì của màn 010.
+      expect(listReports).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — chỉ `view:feed` (nhân viên thường) ⇒ trang cấm NO_PERMISSION, màn KHÔNG mount, 056 gọi 0 lần",
+    async () => {
+      setCaps({ "view:feed": true });
+
+      await renderBadges();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: BADGES_TITLE })).not.toBeInTheDocument();
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — người kiểm duyệt (`view:feed-report` + `manage:feed-report` + `manage:feed-post`) và người được gửi vinh danh (`create:feed-kudos`) nhưng thiếu `manage:feed-kudos` ⇒ cấm, 056 gọi 0 lần",
+    async () => {
+      setCaps({
+        "view:feed": true,
+        "view:feed-report": true,
+        "manage:feed-report": true,
+        "manage:feed-post": true,
+        "create:feed-kudos": true,
+      });
+
+      await renderBadges();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: BADGES_TITLE })).not.toBeInTheDocument();
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — có `manage:feed-kudos` nhưng thiếu `view:feed` (không vào được module) ⇒ cấm, 056 gọi 0 lần",
+    async () => {
+      setCaps({ "manage:feed-kudos": true });
+
+      await renderBadges();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — chỉ có wildcard `*:*` ⇒ cấm: cổng route khớp ĐÚNG-BẰNG, không ăn wildcard",
+    async () => {
+      setCaps({ "*:*": true });
+
+      await renderBadges();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+});
+
+describe("G6 — cổng route `/feed/stats` (SOC-SCREEN-011) = `view:feed` + `view:feed-report`", () => {
+  const renderStats = (): Promise<void> => renderRoute("social.stats", <StatsPage />);
+
+  it(
+    "ALLOW — `view:feed` + `view:feed-report` (manager) ⇒ màn mount, 052 được gọi ĐÚNG 1 lần, có nút Xuất",
+    async () => {
+      setCaps({ "view:feed": true, "view:feed-report": true });
+
+      await renderStats();
+
+      await waitFor(() => expect(engagement).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole("heading", { name: STATS_TITLE })).toBeInTheDocument();
+      // Nút xuất KHÔNG có cổng riêng: ai vào được màn (manager) thì thấy nút.
+      expect(await screen.findByRole("button", { name: STATS_EXPORT })).toBeEnabled();
+      expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
+      // Màn 011 không đọc gì của màn 010 / 012.
+      expect(listReports).toHaveBeenCalledTimes(0);
+      expect(listBadgesAdmin).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — chỉ `view:feed` (nhân viên thường) ⇒ trang cấm NO_PERMISSION, màn KHÔNG mount, 052 gọi 0 lần, không nút Xuất",
+    async () => {
+      setCaps({ "view:feed": true });
+
+      await renderStats();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: STATS_TITLE })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: STATS_EXPORT })).not.toBeInTheDocument();
+      expect(engagement).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — có `manage:feed-report` + `manage:feed-kudos` nhưng thiếu `view:feed-report` ⇒ cấm (không suy manage ⇒ view), 052 gọi 0 lần",
+    async () => {
+      setCaps({ "view:feed": true, "manage:feed-report": true, "manage:feed-kudos": true });
+
+      await renderStats();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: STATS_TITLE })).not.toBeInTheDocument();
+      expect(engagement).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — có `view:feed-report` nhưng thiếu `view:feed` (không vào được module) ⇒ cấm, 052 gọi 0 lần",
+    async () => {
+      setCaps({ "view:feed-report": true });
+
+      await renderStats();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(engagement).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+
+  it(
+    "DENY — chỉ có wildcard `*:*` ⇒ cấm: cổng route khớp ĐÚNG-BẰNG, không ăn wildcard",
+    async () => {
+      setCaps({ "*:*": true });
+
+      await renderStats();
+
+      expect(await screen.findByText(FORBIDDEN_NO_PERMISSION)).toBeInTheDocument();
+      expect(engagement).toHaveBeenCalledTimes(0);
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+});
+
 // `ModerationPage` đổi bộ lọc / trang / tab bằng `navigate({ to: "." })` — chỗ DUY NHẤT trong app dùng
 // đường dẫn tương đối đó. Sai một nét là đổi bộ lọc xong người kiểm duyệt bị đưa khỏi màn; các spec của
 // màn dùng `navigate` giả nên chỉ so được literal. Ca này đi qua CHÍNH `router` của app (cây route thật,
@@ -218,6 +414,85 @@ describe("Router THẬT — đổi bộ lọc ở `/feed/moderation` ở lại �
         expect(listReports).toHaveBeenLastCalledWith({ status: "resolved", page: 1, limit: 20 }),
       );
       expect(screen.getByRole("heading", { name: MODERATION_TITLE })).toBeInTheDocument();
+      expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+});
+
+// `BadgeSettingsPage` lật trang bằng cùng lối `navigate({ to: "." })`. Ca này đi qua CHÍNH `router` của app:
+// route `/feed/kudos-badges` có trong cây, `validateSearch` của nó sống thật (`page` tới 056 là SỐ), màn nạp
+// qua `React.lazy` đúng module, và lật trang không đưa người dùng khỏi màn.
+describe("Router THẬT — lật trang ở `/feed/kudos-badges` ở lại đúng màn, search = ĐÚNG `?page=…`", () => {
+  it(
+    "ALLOW — mở `?page=2` (3 trang), bấm «Trang sau» ⇒ pathname còn `/feed/kudos-badges`, search = `?page=3`, 056 gọi lại với trang 3",
+    async () => {
+      routerMode.isReal = true;
+      setCaps({ "view:feed": true, "manage:feed-kudos": true });
+      listBadgesAdmin.mockImplementation((query: { page: number }) =>
+        Promise.resolve(
+          makeBadgeAdminPage([makeBadgeAdmin()], { page: query.page, total: BADGES_LIMIT * 3 }),
+        ),
+      );
+      const { router } = await import("@/router");
+      router.history.push("/feed/kudos-badges?page=2");
+      await router.load();
+
+      render(
+        <QueryClientProvider client={makeTestQueryClient()}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() =>
+        expect(listBadgesAdmin).toHaveBeenLastCalledWith({ page: 2, limit: BADGES_LIMIT }),
+      );
+      expect(router.state.location.pathname).toBe("/feed/kudos-badges");
+
+      fireEvent.click(await screen.findByRole("button", { name: NEXT_PAGE }));
+
+      await waitFor(() => expect(router.state.location.searchStr).toBe("?page=3"));
+      expect(router.state.location.pathname).toBe("/feed/kudos-badges");
+      await waitFor(() =>
+        expect(listBadgesAdmin).toHaveBeenLastCalledWith({ page: 3, limit: BADGES_LIMIT }),
+      );
+      expect(screen.getByRole("heading", { name: BADGES_TITLE })).toBeInTheDocument();
+      expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
+});
+
+// `StatsPage` đổi khoảng / đơn vị bằng cùng lối `navigate({ to: "." })`. Ca này đi qua CHÍNH `router` của app:
+// route `/feed/stats` có trong cây, `validateSearch` của nó sống thật (`orgUnitId` của URL tới 052, cặp ngày
+// lẻ bị bỏ), màn nạp qua `React.lazy` đúng module, và bỏ lọc đơn vị không đưa người dùng khỏi màn.
+describe("Router THẬT — bỏ lọc đơn vị ở `/feed/stats` ở lại đúng màn, search về RỖNG", () => {
+  it(
+    "ALLOW — mở `?orgUnitId=…&from=2026-09-01` (cặp ngày lẻ) ⇒ 052 nhận ĐÚNG `{ orgUnitId }`; chọn «tất cả đơn vị» ⇒ pathname còn `/feed/stats`, search rỗng, 052 gọi lại với `{}`",
+    async () => {
+      routerMode.isReal = true;
+      setCaps({ "view:feed": true, "view:feed-report": true });
+      const { router } = await import("@/router");
+      router.history.push(`/feed/stats?orgUnitId=${UNIT_ID}&from=2026-09-01`);
+      await router.load();
+
+      render(
+        <QueryClientProvider client={makeTestQueryClient()}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => expect(engagement).toHaveBeenLastCalledWith({ orgUnitId: UNIT_ID }));
+      expect(router.state.location.pathname).toBe("/feed/stats");
+
+      const select = await screen.findByRole("combobox", { name: STATS_UNIT_LABEL });
+      await waitFor(() => expect(select).toHaveValue(UNIT_ID));
+      fireEvent.change(select, { target: { value: "" } });
+
+      await waitFor(() => expect(router.state.location.searchStr).toBe(""));
+      expect(router.state.location.pathname).toBe("/feed/stats");
+      await waitFor(() => expect(engagement).toHaveBeenLastCalledWith({}));
+      expect(screen.getByRole("heading", { name: STATS_TITLE })).toBeInTheDocument();
       expect(screen.queryByText(FORBIDDEN_TITLE)).not.toBeInTheDocument();
     },
     ROUTER_IMPORT_TIMEOUT,

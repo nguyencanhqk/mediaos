@@ -5,7 +5,7 @@ import { pruneUnbuiltScreens } from "./prune-unbuilt";
 // SOCIAL — sidebar v2 (S16-SOCIAL-FE-1 · D10 · SPEC-16 §9/§11/§14 · UI-07 §34b.6)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Khuôn y hệt `PAYROLL_SIDEBAR_V2` (S15-UI-SHELL-1): khai **ĐẦY ĐỦ 8 mục** của track A (FE-1),
+// Khuôn y hệt `PAYROLL_SIDEBAR_V2` (S15-UI-SHELL-1): khai **ĐẦY ĐỦ các mục** của track A (FE-1),
 // track B (FE-2/2B/2C) và track C (FE-3), rồi `pruneUnbuiltScreens` (D9) cắt mục chưa có route
 // trước khi đăng ký vào `SIDEBAR_REGISTRY`. Mục nào có route sống trong `ROUTE_REGISTRY` thì hiện,
 // mục nào chưa thì tự ẩn — WO track B sau chỉ cần thêm route là mục tự xuất hiện, không phải quay
@@ -16,8 +16,9 @@ import { pruneUnbuiltScreens } from "./prune-unbuilt";
 // Track B (S16-SOCIAL-FE-2/2B/2C — 4 mục sau): Sáng kiến `/feed/ideas` · Bình chọn `/feed/polls` ·
 // Vinh danh `/feed/kudos` (FE-2C, owner ký O2 — UI-07 rail trái không liệt kê, chấp nhận lệch) · Nhóm
 // `/feed/groups`.
-// Track C (S16-SOCIAL-FE-3 — màn quản trị, owner ký O2 = a): Kiểm duyệt `/feed/moderation`
-// (SOC-SCREEN-010).
+// Track C (S16-SOCIAL-FE-3/3B — màn quản trị, owner ký O2 = a): Kiểm duyệt `/feed/moderation`
+// (SOC-SCREEN-010) · Thống kê tương tác `/feed/stats` (SOC-SCREEN-011) · Thiết lập huy hiệu
+// `/feed/kudos-badges` (SOC-SCREEN-012).
 //
 // Gate — HAI khuôn, đừng chép nhầm:
 //  · 7 mục track A/B dùng `requiredAnyPermissions: ["view:feed"]` (SPEC-16 §5.2 — chỉ cần vào được
@@ -26,8 +27,8 @@ import { pruneUnbuiltScreens } from "./prune-unbuilt";
 //    `0578` — KHÔNG bịa cặp khác (SPEC-16 §11.2: thích/lưu/xem/đọc KHÔNG có cặp riêng, chỉ theo
 //    `view:feed` + sở hữu hàng).
 //  · Mục track C dùng `requiredPermissions` (ĐỦ-HẾT) với ĐÚNG cặp của route nó trỏ tới. 🔴 Chép khuôn
-//    any-of ở trên thành `[view:feed, view:feed-report]` là MỌI nhân viên thấy mục «Kiểm duyệt», bấm
-//    vào thì trang cấm (SPEC-16 §14: forbidden = ẩn mục). `social-wiring.spec.ts` (ca W1 · W4) ghim.
+//    any-of ở trên thành `[view:feed, view:feed-report]` là MỌI nhân viên thấy mục «Kiểm duyệt» (hay
+//    «Thiết lập huy hiệu»), bấm vào thì trang cấm (SPEC-16 §14: forbidden = ẩn mục). `social-wiring.spec.ts` (ca W1 · W4) ghim.
 // Mọi mục ở đây PHẢI có `requiredPermissions`/`requiredAnyPermissions`, nếu không sẽ lọt ca «không
 // quyền nào ⇒ mọi module rỗng» của `sidebar-registry.snapshot.spec.ts` — mục không đòi gì thì luôn
 // `allowed: true`.
@@ -128,10 +129,32 @@ export const SOCIAL_SIDEBAR_V2: readonly SidebarItemMeta[] = [
     order: 70,
     requiredPermissions: ["view:feed", "view:feed-report"],
   },
+  {
+    // SOC-SCREEN-011 — S16-SOCIAL-FE-3B, owner ký O2 = a.
+    sidebarKey: "social.stats",
+    moduleCode: "SOCIAL",
+    label: "Thống kê tương tác",
+    path: "/feed/stats",
+    icon: "bar-chart-3",
+    group: "report",
+    order: 80,
+    requiredPermissions: ["view:feed", "view:feed-report"],
+  },
+  {
+    // SOC-SCREEN-012 — S16-SOCIAL-FE-3B, owner ký O2 = a.
+    sidebarKey: "social.kudosBadges",
+    moduleCode: "SOCIAL",
+    label: "Thiết lập huy hiệu",
+    path: "/feed/kudos-badges",
+    icon: "settings",
+    group: "settings",
+    order: 90,
+    requiredPermissions: ["view:feed", "manage:feed-kudos"],
+  },
 ];
 
 /**
- * Bản ĐĂNG KÝ = cấu trúc v2 đã cắt mục chưa có màn. Hiện cả 8 mục đều đã có route trong
+ * Bản ĐĂNG KÝ = cấu trúc v2 đã cắt mục chưa có màn. Hiện cả 10 mục đều đã có route trong
  * `ROUTE_REGISTRY` nên không mục nào bị cắt; hàm cắt vẫn chạy để một mục khai trước màn (hoặc một
  * `path` gõ sai) tự ẩn thay vì thành link chết.
  */

@@ -79,7 +79,9 @@ import {
   LEGACY_SOCIAL_REPORTS_REDIRECT,
   legacyRedirectBeforeLoad,
 } from "@/routes/social/legacy-social-redirects";
+import { validateBadgeRouteSearch } from "@/routes/social/badges/lib/badge-route-search";
 import { validateModerationRouteSearch } from "@/routes/social/moderation/lib/moderation-route-search";
+import { validateStatsRouteSearch } from "@/routes/social/stats/lib/stats-route-search";
 import { payrollInsuranceIssueEnum, type PayrollInsuranceIssue } from "@mediaos/contracts";
 
 export function getMeta(routeKey: string): RouteMeta {
@@ -3109,6 +3111,18 @@ const ModerationPage = React.lazy(() =>
     default: m.ModerationPage,
   })),
 );
+// S16-SOCIAL-FE-3B — SOC-SCREEN-011.
+const StatsPage = React.lazy(() =>
+  import("@/routes/social/stats/StatsPage").then((m) => ({
+    default: m.StatsPage,
+  })),
+);
+// S16-SOCIAL-FE-3B — SOC-SCREEN-012.
+const BadgeSettingsPage = React.lazy(() =>
+  import("@/routes/social/badges/BadgeSettingsPage").then((m) => ({
+    default: m.BadgeSettingsPage,
+  })),
+);
 
 /**
  * Bộ lọc/sắp xếp sống trong URL (plan D6) — `validateSearch` rơi về mặc định thay vì NÉM khi gặp
@@ -3240,6 +3254,32 @@ const feedModerationRoute = createRoute({
   beforeLoad: authGuard,
   validateSearch: validateModerationRouteSearch,
   component: () => buildModuleRouteContent(feedModerationMeta, "SOCIAL", <ModerationPage />),
+});
+
+// S16-SOCIAL-FE-3B — Thống kê tương tác (SOC-SCREEN-011). Cổng `view:feed` + `view:feed-report` đi theo meta.
+// `validateSearch` KHÔNG ném, luôn trả đủ ba khoá `from` / `to` / `orgUnitId` (`stats-route-search.ts`): cặp
+// ngày lẻ / quá 26 tuần bị bỏ CẢ HAI thay vì gọi 052 với tham số chắc chắn 400. Ca W3 ghim cặp `path` ↔
+// `getMeta("…")` + việc route có trong cây.
+const feedStatsMeta = getMeta("social.stats");
+const feedStatsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/stats",
+  beforeLoad: authGuard,
+  validateSearch: validateStatsRouteSearch,
+  component: () => buildModuleRouteContent(feedStatsMeta, "SOCIAL", <StatsPage />),
+});
+
+// S16-SOCIAL-FE-3B — Thiết lập huy hiệu (SOC-SCREEN-012). Cổng `view:feed` + `manage:feed-kudos` đi theo
+// meta. Đường dẫn `/feed/kudos-badges`, KHÔNG lồng dưới `/feed/kudos/` (mục rail «Vinh danh» sẽ sáng cùng
+// lúc). `validateSearch` KHÔNG ném, luôn trả khoá `page` (`badge-route-search.ts`). Ca W3 ghim cặp
+// `path` ↔ `getMeta("…")` + việc route có trong cây.
+const feedKudosBadgesMeta = getMeta("social.kudosBadges");
+const feedKudosBadgesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed/kudos-badges",
+  beforeLoad: authGuard,
+  validateSearch: validateBadgeRouteSearch,
+  component: () => buildModuleRouteContent(feedKudosBadgesMeta, "SOCIAL", <BadgeSettingsPage />),
 });
 
 // S16-SOCIAL-FE-2B (owner ký O2) — link NOTI `/social/groups/{id}` · `/social/posts/{id}` đang rơi vào
@@ -3673,6 +3713,9 @@ const routeTree = rootRoute.addChildren([
   // S16-SOCIAL-FE-3 — màn Kiểm duyệt + route chuyển hướng link NOTI-036.
   feedModerationRoute,
   legacySocialReportsRoute,
+  // S16-SOCIAL-FE-3B — màn Thống kê tương tác + màn Thiết lập huy hiệu.
+  feedStatsRoute,
+  feedKudosBadgesRoute,
   accountSetupTwoFactorRoute,
   accountProfileRoute,
   systemAuditLogsRoute,

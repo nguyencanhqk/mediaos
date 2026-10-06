@@ -123,6 +123,12 @@ interface DialogActionsProps {
   canSubmit: boolean;
   onCancel: () => void;
   onSubmit: () => void;
+  /**
+   * Có ⇒ nút gửi là nút SUBMIT của `<form id>` đó (chân hộp thoại nằm ngoài form nên gắn qua thuộc tính
+   * `form`): Enter trong một ô của form là gửi, và mọi lối gửi đi qua `onSubmit` của FORM — nút không tự gọi
+   * `onSubmit` nữa (một cú bấm không được thành hai lượt gửi).
+   */
+  submitFormId?: string;
 }
 
 /** Hai nút chân của hộp thoại ghi: «Huỷ» + nút gửi. */
@@ -133,13 +139,18 @@ export function DialogActions({
   canSubmit,
   onCancel,
   onSubmit,
+  submitFormId,
 }: DialogActionsProps): React.ReactElement {
+  const submitProps =
+    submitFormId === undefined
+      ? ({ type: "button", onClick: onSubmit } as const)
+      : ({ type: "submit", form: submitFormId } as const);
   return (
     <>
       <Button type="button" variant="outline" disabled={isPending} onClick={onCancel}>
         {cancelLabel}
       </Button>
-      <Button type="button" disabled={!canSubmit} aria-busy={isPending} onClick={onSubmit}>
+      <Button {...submitProps} disabled={!canSubmit} aria-busy={isPending}>
         {submitLabel}
       </Button>
     </>

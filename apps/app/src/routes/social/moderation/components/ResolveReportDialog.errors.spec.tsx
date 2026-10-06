@@ -12,13 +12,13 @@
  * i18n THẬT, chữ kỳ vọng VIẾT TAY; lỗi dựng bằng `ADMIN_ERR` (đúng hình dạng trên dây, `message` là chữ
  * của SERVER — ca E2 assert nó không lên màn).
  */
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onlineManager } from "@tanstack/react-query";
 import { ApiError } from "@mediaos/web-core";
 import { FEED_NOTE_MAX, resolveFeedReportSchema, type FeedReportDto } from "@mediaos/contracts";
 import { renderWithProviders, resetCaps, setCaps } from "../../feed/social-test-doubles";
-import { ADMIN_ERR, makeReport } from "../../admin/admin-test-doubles";
+import { ADMIN_ERR, advanceFakeTimers, makeReport } from "../../admin/admin-test-doubles";
 import { ResolveReportDialog } from "./ResolveReportDialog";
 
 const resolveReport = vi.fn();
@@ -488,10 +488,7 @@ describe("Yêu cầu TREO — trình duyệt vẫn báo online, server không tr
     vi.useRealTimers();
   });
 
-  const advance = (ms: number): Promise<void> =>
-    act(async () => {
-      await vi.advanceTimersByTimeAsync(ms);
-    });
+  const advance = advanceFakeTimers;
 
   it("029 treo: trước 30 giây còn khoá; quá hạn ⇒ dải `outcomeUnknown` + «Thử lại», yêu cầu bị huỷ, trang được báo đọc lại, «Huỷ» đóng được", async () => {
     resolveReport.mockImplementation(() => new Promise<never>(() => undefined));

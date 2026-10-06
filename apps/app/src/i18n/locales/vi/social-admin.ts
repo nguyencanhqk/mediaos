@@ -12,7 +12,12 @@
  * │ Câu nào hứa «thử lại» thì lỗi đó phải thật sự thử lại được (`reportBusy` · `busy` · `generic`);│
  * │ lỗi kết cục (`reportAlreadyDecided` · `forbidden`…) KHÔNG mời thử lại.                         │
  * └────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * Cụm `stats` (Thống kê tương tác) nằm ở file riêng `social-admin-stats.ts` để file này dưới trần 400 dòng
+ * (plan D18).
  */
+import stats from "./social-admin-stats";
+
 export default {
   notice: {
     retry: "Thử lại",
@@ -49,6 +54,17 @@ export default {
     // ── 027 — gửi báo cáo ──
     reportDuplicate: "Bạn đã báo cáo nội dung này và báo cáo đó đang chờ xử lý. Không cần gửi lại.",
     reportTargetGone: "Nội dung bạn muốn báo cáo không còn tồn tại hoặc bạn không còn xem được.",
+    // ── 049 — tạo huy hiệu ── (dải vẽ CẠNH ô mã; không mời «thử lại»: phải đổi mã)
+    badgeCodeTaken:
+      "Mã huy hiệu này đã được dùng. Hãy nhập mã khác; nếu huy hiệu cũ đang ngừng dùng, bạn có thể bật lại nó trong danh sách.",
+    // ── 050 · 051 — sửa / ngừng dùng / bật lại huy hiệu ──
+    badgeGone:
+      "Không tìm thấy huy hiệu này — có thể nó không còn tồn tại. Danh sách đã được làm mới.",
+    // ── 052 · 053 — thống kê tương tác ── (403 mang mã riêng: KHÁC «không có quyền vào màn»)
+    statsUnitOutOfScope:
+      "Bạn không có quyền xem thống kê của đơn vị này. Hãy bỏ lọc đơn vị hoặc chọn đơn vị khác.",
+    statsRangeInvalid:
+      "Khoảng thời gian thống kê không hợp lệ (tối đa 26 tuần). Hãy chọn lại khoảng thời gian.",
   },
   // ── Báo cáo vi phạm — nhãn dùng chung cho hàng đợi (010) và hộp thoại «Báo cáo» (027) ──
   report: {
@@ -225,4 +241,113 @@ export default {
       submit: "Xác nhận",
     },
   },
+  // ── Thiết lập huy hiệu `SOC-SCREEN-012` ──
+  badges: {
+    /**
+     * Khung của màn — `BadgeSettingsPage`.
+     *
+     * `deactivateConfirm.body` nói ĐÚNG việc 051 làm ở server: tắt chỉ chặn chọn MỚI, vinh danh cũ giữ huy
+     * hiệu, và bật lại được — không viết «xoá». `outcome.*`: câu xác nhận sau một lượt ghi THÀNH CÔNG, khoá
+     * = loại lượt ghi (bảng được đọc lại ngay sau đó, không có câu này thì người dùng không biết đã ăn).
+     */
+    page: {
+      title: "Thiết lập huy hiệu",
+      add: "Thêm huy hiệu",
+      loadingAria: "Đang tải danh sách huy hiệu",
+      empty: "Chưa có huy hiệu nào.",
+      pageOutOfRange: "Trang này không còn huy hiệu nào.",
+      backToFirstPage: "Về trang 1",
+      deactivateConfirm: {
+        title: "Ngừng dùng huy hiệu «{{name}}»?",
+        body: "Huy hiệu sẽ không còn trong ô chọn khi gửi vinh danh mới. Các lời vinh danh đã gửi vẫn giữ huy hiệu này, và bạn có thể bật lại bất cứ lúc nào.",
+        confirm: "Ngừng dùng",
+        cancel: "Huỷ",
+        working: "Đang xử lý…",
+      },
+      outcome: {
+        created: "Đã thêm huy hiệu «{{name}}».",
+        updated: "Đã lưu huy hiệu «{{name}}».",
+        deactivated: "Đã ngừng dùng huy hiệu «{{name}}».",
+        reactivated: "Đã bật lại huy hiệu «{{name}}».",
+      },
+    },
+    /**
+     * Bảng huy hiệu (056) — `BadgeTable`.
+     *
+     * Ba nút của hàng mang tên trợ năng CÓ tên huy hiệu (`…Aria`): bảng có nhiều hàng, «Sửa» trần thì trình
+     * đọc màn hình đọc N nút giống hệt nhau. Chữ thấy trên nút (`edit` · `deactivate` · `reactivate`) phải
+     * là phần ĐẦU của tên trợ năng tương ứng (điều khiển bằng giọng nói gọi theo chữ nhìn thấy).
+     */
+    table: {
+      caption: "Danh sách huy hiệu vinh danh",
+      column: {
+        badge: "Huy hiệu",
+        code: "Mã",
+        description: "Mô tả",
+        position: "Thứ tự",
+        status: "Trạng thái",
+        actions: "Thao tác",
+      },
+      status: { active: "Đang dùng", inactive: "Ngừng dùng" },
+      noDescription: "Chưa có mô tả",
+      edit: "Sửa",
+      editAria: "Sửa huy hiệu {{name}}",
+      deactivate: "Ngừng dùng",
+      deactivateAria: "Ngừng dùng huy hiệu {{name}}",
+      reactivate: "Bật lại",
+      reactivateAria: "Bật lại huy hiệu {{name}}",
+    },
+    /**
+     * Hộp thoại tạo (049) / sửa (050) — `BadgeFormDialog`.
+     *
+     * `invalid.*`: khoá = đúng một phần tử của `BADGE_FIELDS` (`badges/lib/badge-form.ts`); câu vẽ NGAY
+     * dưới ô sai và là mô tả trợ năng đầu tiên của ô. Con số trong câu (`{{max}}`) lấy từ hằng contracts —
+     * riêng câu của ô mã viết sẵn «2–32» vì khuôn mã là một biểu thức chính quy, không có hằng để nội suy.
+     */
+    form: {
+      title: { create: "Thêm huy hiệu", edit: "Sửa huy hiệu" },
+      code: {
+        label: "Mã huy hiệu",
+        hint: "Từ 2 đến 32 ký tự, chỉ gồm chữ thường a–z, chữ số 0–9 và dấu gạch nối. Mã không đổi được sau khi tạo.",
+        lockedHint: "Mã không đổi được sau khi tạo.",
+      },
+      name: { label: "Tên huy hiệu", hint: "Tối đa {{max}} ký tự." },
+      description: { label: "Mô tả (không bắt buộc)", hint: "Tối đa {{max}} ký tự." },
+      icon: { label: "Biểu tượng", none: "Mặc định" },
+      emoji: {
+        label: "Emoji (không bắt buộc)",
+        hint: "Nếu nhập, emoji được dùng thay cho biểu tượng đã chọn. Ví dụ: 🎉",
+      },
+      preview: "Xem trước biểu tượng:",
+      position: {
+        label: "Thứ tự hiển thị",
+        hint: "Số nguyên từ 0 đến {{max}}; số nhỏ hơn đứng trước.",
+      },
+      invalid: {
+        code: "Mã chưa hợp lệ: cần 2–32 ký tự, chỉ gồm chữ thường a–z, chữ số 0–9 và dấu gạch nối.",
+        name: "Hãy nhập tên huy hiệu (tối đa {{max}} ký tự).",
+        description: "Mô tả dài quá {{max}} ký tự.",
+        icon: "Emoji dài quá {{max}} ký tự.",
+        position: "Thứ tự phải là số nguyên từ 0 đến {{max}}.",
+      },
+      cancel: "Huỷ",
+      submit: "Lưu",
+    },
+    /** Nhãn của ô chọn biểu tượng. Khoá = đúng một phần tử của `KUDOS_BADGE_ICON_NAMES`. */
+    icon: {
+      award: "Giải thưởng",
+      trophy: "Cúp",
+      medal: "Huy chương",
+      star: "Ngôi sao",
+      heart: "Trái tim",
+      sparkles: "Lấp lánh",
+      "users-round": "Đồng đội",
+      lightbulb: "Bóng đèn",
+      "heart-handshake": "Bắt tay",
+      "graduation-cap": "Mũ tốt nghiệp",
+      rocket: "Tên lửa",
+    },
+  },
+  // ── Thống kê tương tác `SOC-SCREEN-011` — file riêng ──
+  stats,
 };

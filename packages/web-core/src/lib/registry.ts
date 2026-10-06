@@ -2371,6 +2371,39 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 103,
   },
+  // S16-SOCIAL-FE-3B — Thống kê tương tác (SOC-SCREEN-011). Cổng route = cặp của LỜI GỌI ĐẦU TIÊN của màn
+  // (`SOCIAL-API-052` gác `view:feed-report`) + cặp vào module, ĐỦ CẢ HAI — cùng cặp với màn Kiểm duyệt.
+  // Nút «Xuất Excel» (053) chung cặp đó nên trong màn không có cổng phụ. KHÔNG khai `requiredScopes`: phạm
+  // vi đơn vị do 052 tự xét (đơn vị ngoài phạm vi ⇒ 403 mang mã riêng, màn có lối «Bỏ lọc đơn vị»). Mục rail
+  // `social.stats` ở `SOCIAL_SIDEBAR_V2` khai Y HỆT cặp này (ghim ở `social-wiring.spec.ts` ca W1).
+  {
+    routeKey: "social.stats",
+    path: "/feed/stats",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-011",
+    titleKey: "routeTitle.socialStats",
+    requiredPermissions: ["view:feed", "view:feed-report"],
+    showInSidebar: true,
+    order: 104,
+  },
+  // S16-SOCIAL-FE-3B — Thiết lập huy hiệu (SOC-SCREEN-012). Cổng route = cặp của LỜI GỌI ĐẦU TIÊN của màn
+  // (`SOCIAL-API-056` gác `manage:feed-kudos`) + cặp vào module, ĐỦ CẢ HAI; bốn route của màn (056 · 049 ·
+  // 050 · 051) chung cặp đó nên trong màn không còn cổng phụ. Đường dẫn `/feed/kudos-badges`, KHÔNG
+  // `/feed/kudos/badges`: luật «active» của rail so tiền tố nên đường lồng làm mục «Vinh danh» sáng cùng
+  // lúc. KHÔNG khai `requiredScopes`. Mục rail `social.kudosBadges` ở `SOCIAL_SIDEBAR_V2` khai Y HỆT cặp
+  // này (ghim ở `social-wiring.spec.ts` ca W1).
+  {
+    routeKey: "social.kudosBadges",
+    path: "/feed/kudos-badges",
+    layout: "MODULE_PORTAL",
+    moduleCode: "SOCIAL",
+    screenCode: "SOC-SCREEN-012",
+    titleKey: "routeTitle.socialKudosBadges",
+    requiredPermissions: ["view:feed", "manage:feed-kudos"],
+    showInSidebar: true,
+    order: 105,
+  },
 
   // Account
   {
