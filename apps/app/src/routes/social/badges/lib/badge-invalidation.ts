@@ -13,7 +13,8 @@
  * tượng huy hiệu vào lời vinh danh LÚC ĐỌC, nên đổi một trong hai là đổi cách vẽ của mọi lời vinh danh CŨ —
  * widget «Vinh danh tháng này» (rail luôn mount, ngay cạnh màn này), trang Vinh danh, thẻ bài kudos trên bảng
  * tin. Tập khoá là của `invalidatePostSurfaces` (cụm Kiểm duyệt) — DÙNG LẠI, không chép bản thứ ba. Tắt / bật
- * lại / đổi thứ tự / mô tả không đổi gì trên các bề mặt đó ⇒ không gọi.
+ * lại / đổi thứ tự / mô tả không đổi gì trên các bề mặt đó ⇒ không gọi. Lượt SỬA không có câu trả lời đọc được
+ * (`outcomeUnknown`) cũng gọi: không biết server đã ghi trường nào.
  */
 import type { QueryClient } from "@tanstack/react-query";
 import { socialKeys } from "@mediaos/web-core";

@@ -208,6 +208,14 @@ export function BadgeSettingsPage(): React.ReactElement {
     // Nút «Sửa» đã mở hộp thoại có thể không còn sau lượt đọc lại; lỗi không làm mới vẫn cần đọc dải ở trang.
     outcomeFocus.requestFocus();
   };
+  // Lỗi GIỮ hộp thoại. Ở chế độ SỬA, lượt ghi không có câu trả lời đọc được có thể ĐÃ đổi tên / biểu tượng:
+  // bảng đọc lại hiện giá trị mới thì các bề mặt vẽ lời vinh danh cũng phải đọc lại (không biết trường nào đã
+  // ghi ⇒ làm mới thừa còn hơn giữ tên cũ cạnh tên mới).
+  const handleFormStale = (): void => {
+    invalidateBadgeCatalogs(queryClient);
+    if (formTarget !== null && formTarget.badge !== null)
+      invalidateBadgeDisplaySurfaces(queryClient);
+  };
   const handlePageChange = (page: number): void => {
     setNotice(null);
     // `to: "."` = ở lại CHÍNH route đang mount màn này, thay TOÀN BỘ search (search kế tiếp luôn mang `page`).
@@ -262,7 +270,7 @@ export function BadgeSettingsPage(): React.ReactElement {
           badge={formTarget.badge}
           onClose={() => setFormTarget(null)}
           onOutcome={handleFormOutcome}
-          onStale={() => invalidateBadgeCatalogs(queryClient)}
+          onStale={handleFormStale}
         />
       )}
     </div>

@@ -300,6 +300,37 @@ describe("Lỗi GIỮ hộp thoại báo dữ liệu cũ (`onStale`) — trang l
     expect(snapshot()).toEqual(UNTOUCHED);
     expect(listBadgesAdmin).toHaveBeenCalledTimes(1);
   });
+
+  it("SỬA gặp 500 (`outcomeUnknown` — server có thể ĐÃ ghi tên mới) ⇒ hộp thoại còn; hai khoá catalog VÀ danh sách vinh danh `isInvalidated` (bảng đọc lại hiện tên mới thì widget cạnh nó không được giữ tên cũ)", async () => {
+    updateBadge.mockImplementation(() => Promise.reject(ADMIN_ERR.server()));
+    const { snapshot } = await renderPage();
+    openEditAndRename();
+
+    clickSave();
+
+    const dialog = screen.getByRole("dialog", { name: DIALOG.edit });
+    expect(await within(dialog).findByRole("alert")).toHaveAttribute(
+      "data-reason",
+      "outcomeUnknown",
+    );
+    expect(within(dialog).getByRole("textbox", { name: NAME })).toHaveValue("Đồng đội mới");
+    expect(snapshot()).toEqual(REFRESHED_WITH_KUDOS);
+  });
+
+  it("đối chứng — TẠO gặp 500 ⇒ chỉ hai khoá catalog (huy hiệu mới chưa có lời vinh danh nào mang nó)", async () => {
+    createBadge.mockImplementation(() => Promise.reject(ADMIN_ERR.server()));
+    const { snapshot } = await renderPage();
+    openCreateAndFill();
+
+    clickSave();
+
+    const dialog = screen.getByRole("dialog", { name: DIALOG.create });
+    expect(await within(dialog).findByRole("alert")).toHaveAttribute(
+      "data-reason",
+      "outcomeUnknown",
+    );
+    expect(snapshot()).toEqual(REFRESHED);
+  });
 });
 
 describe("Kết cục của nút hàng về khi hộp thoại tạo / sửa ĐANG MỞ", () => {
