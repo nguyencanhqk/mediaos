@@ -140,3 +140,57 @@ describe("req.ip THẬT qua Express (đây mới là thứ chống giả mạo)"
     expect(ip).toBe(SPOOF);
   });
 });
+
+/**
+ * S19-OPS-AUDITCRIT-1 — GHSA-jqcg-44mw-7w3h (proxy-addr < 2.0.8). Một dải tin cậy viết dạng
+ * IPv4-mapped với tiền tố NGẮN (`::ffff:10.0.0.0/8` thay vì `/104`), hay bất kỳ dải IPv6 nào có các
+ * bit đầu bằng 0, từng biên dịch thành "khớp MỌI IPv4": ai cũng được tin là proxy ở hop 0 ⇒ `req.ip`
+ * là thứ client tự khai — cùng mức thiệt hại với `TRUST_PROXY=true`, nhưng cấu hình trông vô hại và
+ * không báo lỗi. `parseTrustProxy` chuyển nguyên chuỗi CIDR cho proxy-addr, nên thứ chặn được ca này
+ * là BẢN proxy-addr mà express của API nạp — các ca dưới đây ghim đúng điều đó (đỏ nếu lockfile tụt
+ * về bản cũ). Giá trị PROD `loopback` không nằm trong ca lỗi; ca cuối ghim luôn điều đó.
+ */
+describe("dải tin cậy viết sai KHÔNG được nuốt mọi IPv4 (GHSA-jqcg-44mw-7w3h)", () => {
+  type TrustFn = (addr: string, hop: number) => boolean;
+
+  /**
+   * Hàm tin cậy mà Express THẬT biên dịch từ giá trị `trust proxy` — tức đúng bản proxy-addr express
+   * nạp, không phải một bản do spec tự import.
+   */
+  async function trustFnFor(rawTrustProxy: string): Promise<TrustFn> {
+    const a = await bootWith(rawTrustProxy);
+    const fn: unknown = a.getHttpAdapter().getInstance().get("trust proxy fn");
+    return fn as TrustFn;
+  }
+
+  it("ALLOW đối chứng — dải viết ĐÚNG `::ffff:10.0.0.0/104` tin 10.x và KHÔNG tin IP công cộng", async () => {
+    const trust = await trustFnFor("::ffff:10.0.0.0/104");
+    expect(trust("10.1.2.3", 0)).toBe(true);
+    expect(trust(SPOOF, 0)).toBe(false);
+  });
+
+  it("DENY — dải viết SAI `::ffff:10.0.0.0/8` KHÔNG tin IP công cộng ở hop 0", async () => {
+    const trust = await trustFnFor("::ffff:10.0.0.0/8");
+    expect(trust(SPOOF, 0)).toBe(false);
+    expect(trust(REAL, 0)).toBe(false);
+  });
+
+  it("DENY — dải IPv6 có các bit đầu bằng 0 (`::/1`) KHÔNG tin IPv4 công cộng", async () => {
+    const trust = await trustFnFor("::/1");
+    expect(trust(SPOOF, 0)).toBe(false);
+  });
+
+  it("HTTP thật — dải viết SAI + client TỰ gửi X-Forwarded-For ⇒ req.ip KHÔNG leo lên IP bịa", async () => {
+    const ip = await ipSeenBy("::ffff:10.0.0.0/8", { "x-forwarded-for": SPOOF });
+    expect(ip).not.toBe(SPOOF);
+    expect(isLoopback(ip)).toBe(true);
+  });
+
+  it("`loopback` (giá trị PROD) — tin đúng loopback, không tin IPv4 lạ kể cả khi viết dạng `::ffff:`", async () => {
+    const trust = await trustFnFor("loopback");
+    expect(trust("127.0.0.1", 0)).toBe(true);
+    expect(trust("::1", 0)).toBe(true);
+    expect(trust(SPOOF, 0)).toBe(false);
+    expect(trust(`::ffff:${SPOOF}`, 0)).toBe(false);
+  });
+});

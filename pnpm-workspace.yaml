@@ -106,6 +106,17 @@ overrides:
   # devDependency — `@vitejs/plugin-react > @babel/core > @babel/helper-compilation-targets` và
   # `@nestjs/cli > webpack` — KHÔNG vào runtime bundle của API.
   "browserslist@<4.28.7": "^4.28.7"
+  # 2026-10-06 (S19-OPS-AUDITCRIT-1) — HAI advisory CRITICAL công bố 05/10: GHSA-5gmw-xhrv-c9v3 (`<=2.1.0`)
+  # + GHSA-85c8-ppgw-ccpr (`<2.1.2`) — tinypool đọc tuỳ chọn worker / `filename` qua chuỗi prototype ⇒ nếu
+  # tiến trình ĐÃ bị prototype pollution thì thành thực thi mã. Đường tới DUY NHẤT là vitest (9 đường, mọi
+  # lá đều devDependencies) — KHÔNG vào runtime bundle của API hay FE.
+  # Vì sao phải override (khác ba gói còn lại của WO này, vốn chỉ bump lockfile trong dải): vitest 3.2.x khai
+  # `tinypool: ^1.1.1`, dòng 1.x KHÔNG có bản vá (1.1.1 là bản cuối), vitest 4+ đã bỏ hẳn tinypool — nâng
+  # vitest 3→4/5 là đổi toolchain lớn cho một bản vá bảo mật. Release notes 2.x: 2.0.0 chỉ bỏ Node 18 (repo
+  # chạy Node ≥20) + đổi cách đếm CPU · 2.1.0 thêm tuỳ chọn · 2.1.1/2.1.2 là hai bản vá · 2.2.0 gỡ tham
+  # chiếu CJS (vitest nạp entry ESM). ĐO: suite thật của API + 3 app FE + packages chạy trên pool mới xanh.
+  # Resolve: 2.2.0 (13/09). Gỡ dòng này khi nâng vitest lên 4+.
+  "tinypool@<2.1.2": "^2.1.2"
 
 # 2026-07-29 — GHSA-mh99-v99m-4gvg (brace-expansion DoS): dải advisory ghi `<=5.0.7`, tức nó cờ MỌI bản
 # của dòng 1.x–4.x kể cả bản ĐÃ VÁ (2.1.3). `overrides` bên trên đã đưa toàn cây về 2.1.3 + 5.0.8 và ĐO
