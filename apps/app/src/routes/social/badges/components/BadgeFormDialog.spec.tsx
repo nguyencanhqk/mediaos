@@ -184,7 +184,7 @@ describe("F1 — TẠO (049)", () => {
     expect(sentCreate()).toEqual({ code: "sang-tao", name: "Sáng tạo", position: 0 });
   });
 
-  it("nhiều ô sai ⇒ MỖI ô một câu lỗi riêng, focus về ô sai ĐẦU TIÊN; 0 lời gọi", () => {
+  it("nhiều ô sai ⇒ MỖI ô một câu lỗi riêng, focus về ô sai ĐẦU TIÊN; 0 lời gọi", async () => {
     renderDialog();
     type(CODE, "ok-code");
     type(POSITION, "x");
@@ -196,6 +196,8 @@ describe("F1 — TẠO (049)", () => {
     expect(box(POSITION)).toHaveAttribute("aria-invalid", "true");
     expect(firstDescription(box(POSITION))).toHaveTextContent(POSITION_INVALID);
     expect(box(NAME)).toHaveFocus();
+    // Cho react-query một nhịp: lời gọi (nếu lưới thủng) chạy SAU cú bấm.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(createBadge).not.toHaveBeenCalled();
   });
 });
