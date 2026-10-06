@@ -234,6 +234,34 @@ export default {
   // ── Thiết lập huy hiệu `SOC-SCREEN-012` ──
   badges: {
     /**
+     * Khung của màn — `BadgeSettingsPage`.
+     *
+     * `deactivateConfirm.body` nói ĐÚNG việc 051 làm ở server: tắt chỉ chặn chọn MỚI, vinh danh cũ giữ huy
+     * hiệu, và bật lại được — không viết «xoá». `outcome.*`: câu xác nhận sau một lượt ghi THÀNH CÔNG, khoá
+     * = loại lượt ghi (bảng được đọc lại ngay sau đó, không có câu này thì người dùng không biết đã ăn).
+     */
+    page: {
+      title: "Thiết lập huy hiệu",
+      add: "Thêm huy hiệu",
+      loadingAria: "Đang tải danh sách huy hiệu",
+      empty: "Chưa có huy hiệu nào.",
+      pageOutOfRange: "Trang này không còn huy hiệu nào.",
+      backToFirstPage: "Về trang 1",
+      deactivateConfirm: {
+        title: "Ngừng dùng huy hiệu «{{name}}»?",
+        body: "Huy hiệu sẽ không còn trong ô chọn khi gửi vinh danh mới. Các lời vinh danh đã gửi vẫn giữ huy hiệu này, và bạn có thể bật lại bất cứ lúc nào.",
+        confirm: "Ngừng dùng",
+        cancel: "Huỷ",
+        working: "Đang xử lý…",
+      },
+      outcome: {
+        created: "Đã thêm huy hiệu «{{name}}».",
+        updated: "Đã lưu huy hiệu «{{name}}».",
+        deactivated: "Đã ngừng dùng huy hiệu «{{name}}».",
+        reactivated: "Đã bật lại huy hiệu «{{name}}».",
+      },
+    },
+    /**
      * Bảng huy hiệu (056) — `BadgeTable`.
      *
      * Ba nút của hàng mang tên trợ năng CÓ tên huy hiệu (`…Aria`): bảng có nhiều hàng, «Sửa» trần thì trình

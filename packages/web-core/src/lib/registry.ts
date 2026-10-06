@@ -2384,7 +2384,7 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     moduleCode: "SOCIAL",
     screenCode: "SOC-SCREEN-012",
     titleKey: "routeTitle.socialKudosBadges",
-    requiredPermissions: ["view:feed"],
+    requiredPermissions: ["view:feed", "manage:feed-kudos"],
     showInSidebar: true,
     order: 105,
   },
