@@ -92,7 +92,7 @@ const lastNavigation = (): { to?: string; search?: Record<string, unknown> } =>
 
 const filters = (): Promise<HTMLElement> => screen.findByRole("group", { name: FILTERS });
 const unitSelect = async (): Promise<HTMLSelectElement> =>
-  within(await filters()).getByRole("combobox", { name: UNIT });
+  within(await filters()).getByRole<HTMLSelectElement>("combobox", { name: UNIT });
 const weekTable = (): Promise<HTMLElement> => screen.findByRole("table", { name: WEEK_TABLE });
 const exportButton = (): HTMLButtonElement => screen.getByRole("button", { name: EXPORT });
 const card = (metric: string): HTMLElement => {
@@ -149,7 +149,7 @@ describe("Khung của màn", () => {
     renderPage();
 
     expect(screen.getByRole("status", { name: LOADING })).toBeInTheDocument();
-    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryAllByRole("table")).toHaveLength(0);
     expect(screen.queryByRole("group", { name: FILTERS })).toBeNull();
     expect(screen.queryByText(EMPTY_SCOPE)).toBeNull();
     expect(exportButton()).toBeDisabled();
@@ -304,7 +304,7 @@ describe("T5 — 200 rỗng KHÁC «không có quyền»", () => {
     expect(await screen.findByText(EMPTY_SCOPE)).toBeInTheDocument();
     expect(container.querySelector('[data-reason="forbidden"]')).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryAllByRole("table")).toHaveLength(0);
     expect(exportButton()).toBeDisabled();
   });
 

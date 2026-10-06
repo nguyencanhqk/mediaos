@@ -17,7 +17,8 @@ import { pruneUnbuiltScreens } from "./prune-unbuilt";
 // Vinh danh `/feed/kudos` (FE-2C, owner ký O2 — UI-07 rail trái không liệt kê, chấp nhận lệch) · Nhóm
 // `/feed/groups`.
 // Track C (S16-SOCIAL-FE-3/3B — màn quản trị, owner ký O2 = a): Kiểm duyệt `/feed/moderation`
-// (SOC-SCREEN-010) · Thiết lập huy hiệu `/feed/kudos-badges` (SOC-SCREEN-012).
+// (SOC-SCREEN-010) · Thống kê tương tác `/feed/stats` (SOC-SCREEN-011) · Thiết lập huy hiệu
+// `/feed/kudos-badges` (SOC-SCREEN-012).
 //
 // Gate — HAI khuôn, đừng chép nhầm:
 //  · 7 mục track A/B dùng `requiredAnyPermissions: ["view:feed"]` (SPEC-16 §5.2 — chỉ cần vào được
@@ -137,7 +138,7 @@ export const SOCIAL_SIDEBAR_V2: readonly SidebarItemMeta[] = [
     icon: "bar-chart-3",
     group: "report",
     order: 80,
-    requiredAnyPermissions: ["view:feed"],
+    requiredPermissions: ["view:feed", "view:feed-report"],
   },
   {
     // SOC-SCREEN-012 — S16-SOCIAL-FE-3B, owner ký O2 = a.
@@ -153,7 +154,7 @@ export const SOCIAL_SIDEBAR_V2: readonly SidebarItemMeta[] = [
 ];
 
 /**
- * Bản ĐĂNG KÝ = cấu trúc v2 đã cắt mục chưa có màn. Hiện cả 9 mục đều đã có route trong
+ * Bản ĐĂNG KÝ = cấu trúc v2 đã cắt mục chưa có màn. Hiện cả 10 mục đều đã có route trong
  * `ROUTE_REGISTRY` nên không mục nào bị cắt; hàm cắt vẫn chạy để một mục khai trước màn (hoặc một
  * `path` gõ sai) tự ẩn thay vì thành link chết.
  */

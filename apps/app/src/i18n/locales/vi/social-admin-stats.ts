@@ -7,6 +7,24 @@
  */
 export default {
   /**
+   * Khung của màn — `StatsPage` · `StatsSummary` · `StatsLoadError`.
+   *
+   * ⚠️ `emptyScope` là câu của 200 RỖNG (người xem chưa có đơn vị nào trong phạm vi) — KHÔNG phải «không có
+   * quyền»: đó là 403, đi qua `error.forbidden`. `clearOrgUnit` / `resetRange` là hai LỐI THOÁT đứng cạnh dải
+   * lỗi (`error.statsUnitOutOfScope` / `error.statsRangeInvalid`). `latestWeekNote` nói rõ thẻ thành viên là
+   * số của MỘT tuần: số người hoạt động là DISTINCT theo tuần, cộng qua các tuần là đếm một người nhiều lần.
+   */
+  page: {
+    title: "Thống kê tương tác",
+    loadingAria: "Đang tải số liệu thống kê",
+    emptyScope: "Bạn chưa có đơn vị nào trong phạm vi thống kê.",
+    clearOrgUnit: "Bỏ lọc đơn vị",
+    resetRange: "Về mặc định",
+    summaryAria: "Tổng quan trong khoảng đang xem",
+    latestWeekMembers: "Thành viên hoạt động tuần gần nhất",
+    latestWeekNote: "Tuần {{week}} · không cộng dồn qua các tuần",
+  },
+  /**
    * Thanh bộ lọc — `StatsFilters`.
    *
    * `back` / `forward` là TÊN TRỢ NĂNG của hai nút ‹ ›: mang số tuần sẽ dịch, vì nút chỉ vẽ một mũi tên.

@@ -2383,7 +2383,7 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     moduleCode: "SOCIAL",
     screenCode: "SOC-SCREEN-011",
     titleKey: "routeTitle.socialStats",
-    requiredPermissions: ["view:feed"],
+    requiredPermissions: ["view:feed", "view:feed-report"],
     showInSidebar: true,
     order: 104,
   },

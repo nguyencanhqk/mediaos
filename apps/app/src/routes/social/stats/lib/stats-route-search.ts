@@ -67,15 +67,28 @@ export function engagementParams(search: StatsRouteSearch): FeedEngagementParams
   return { ...range, ...unit };
 }
 
+/** Phần tử THAM SỐ của khoá `socialKeys.stats.engagement(params)`: object thuần (mặc định là `{}`). */
+function isParamsPart(part: unknown): part is Record<string, unknown> {
+  return typeof part === "object" && part !== null && !Array.isArray(part);
+}
+
 /**
  * `queryKey` có phải khoá `socialKeys.stats.engagement(…)` của CÙNG bộ lọc đơn vị với `params` không (khoảng
- * tuần khác nhau vẫn là cùng bộ lọc). Màn dùng để quyết định giữ số liệu cũ lúc đang tải.
+ * tuần khác nhau vẫn là cùng bộ lọc). Màn dùng để quyết định giữ số liệu cũ lúc đang tải: dịch tuần thì giữ
+ * (nhãn khoảng trên màn lấy từ chính số liệu đang vẽ nên không lệch), đổi ĐƠN VỊ thì không — số của đơn vị
+ * cũ đứng dưới ô chọn đơn vị mới đọc như số của đơn vị mới.
+ *
+ * Tìm phần tử tham số theo HÌNH DẠNG, không theo vị trí (khuôn `isReportListKeyOfSameFilter`): khoá không
+ * mang tham số (tiền tố `allOf()`, hoặc `engagement()` không đối số) ⇒ `false` — nếu coi «không đọc được» là
+ * `orgUnitId: undefined` thì nó trùng đúng bộ lọc «tất cả đơn vị».
  */
 export function isEngagementKeyOfSameUnit(
-  _queryKey: readonly unknown[] | undefined,
-  _params: FeedEngagementParams,
+  queryKey: readonly unknown[] | undefined,
+  params: FeedEngagementParams,
 ): boolean {
-  return false;
+  const keyParams = queryKey?.find(isParamsPart);
+  if (keyParams === undefined) return false;
+  return keyParams.orgUnitId === params.orgUnitId;
 }
 
 /** Search kế tiếp khi đổi khoảng:`null` = về mặc định của server (bỏ `from` + `to`). Giữ đơn vị. */

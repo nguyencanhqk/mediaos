@@ -78,7 +78,7 @@ const recoveryButtons = (): string[] =>
 
 /** Không còn gì của lượt đọc trước: bảng · dải thẻ · bộ lọc · biểu đồ. */
 function expectNoStaleData(): void {
-  expect(screen.queryByRole("table")).toBeNull();
+  expect(screen.queryAllByRole("table")).toHaveLength(0);
   expect(screen.queryByRole("list", { name: SUMMARY })).toBeNull();
   expect(screen.queryByRole("group", { name: FILTERS })).toBeNull();
   expect(screen.queryByTestId("stats-chart-double")).toBeNull();
