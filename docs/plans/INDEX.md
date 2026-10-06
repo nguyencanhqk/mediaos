@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**588 WO** · có micro-plan: **347/588** · ⬜ 46 chờ · 🔵 0 đang làm · ✅ 540 xong · 🔴 1 chặn
+**588 WO** · có micro-plan: **347/588** · ⬜ 45 chờ · 🔵 0 đang làm · ✅ 541 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -691,7 +691,7 @@
 | `S19-UI-AVATARFALLBACK-1` | 🟡 | ✅ xong | — *(chưa)* | — | `Avatar` (`packages/ui`) không có `onError` ⇒ URL ký hết hạn (TTL 300  |
 | `S19-OPS-AVATARCENSUS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-AVATARPRESIGN-1 | Đếm trên PROD (owner chạy câu ĐỌC): số hồ sơ có `avatar_url` dạng UUID |
 | `S19-OPS-AUDITHIGH-1` | 🔴 | ✅ xong | [📄](S19-OPS-AUDITHIGH-1.md) | — | Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên MỌI PR  |
-| `S19-OPS-AUDITCRIT-1` | amber | ⬜ chờ | — *(chưa)* | — | Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên master  |
+| `S19-OPS-AUDITCRIT-1` | amber | ✅ xong | — *(chưa)* | — | Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên master  |
 | `S19-SEC-MAILCREDEXFIL-1` | 🔴 | ✅ xong | [📄](S19-SEC-MAILCREDEXFIL-1.md) | ✅S19-OPS-AUDITHIGH-1 | Mật khẩu SMTP ĐÃ LƯU (write-only secret) bị gửi tới host DO CLIENT CHỌ |
 | `S19-SEC-MAILAADBIND-1` | 🔴 | ✅ xong | [📄](S19-SEC-MAILAADBIND-1.md) | ✅S19-SEC-MAILCREDEXFIL-1 | Gắn ĐÍCH SMTP (host/port/username/secure) vào AAD của envelope mật khẩ |
 | `S19-SEC-MAILTAMPERDETECT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-SEC-MAILAADBIND-1 | Giải mã mật khẩu SMTP hỏng vì ĐÍCH BỊ TRÁO ngoài ứng dụng hiện y hệt e |
