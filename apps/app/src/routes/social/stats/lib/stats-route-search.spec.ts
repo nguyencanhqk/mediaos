@@ -6,6 +6,7 @@
  * `toStrictEqual` (nó phân biệt `{ a: undefined }` với `{}`).
  */
 import { describe, expect, it } from "vitest";
+import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 import { feedEngagementQuerySchema } from "@mediaos/contracts";
 import { socialKeys } from "@mediaos/web-core";
 import { UNIT_ID } from "../../admin/admin-test-doubles";
@@ -188,5 +189,30 @@ describe("isEngagementKeyOfSameUnit — giữ số liệu cũ CHỈ khi cùng b�
     const extended = [...key({ orgUnitId: UNIT_ID }), "them"];
     expect(isEngagementKeyOfSameUnit(extended, { orgUnitId: UNIT_ID })).toBe(true);
     expect(isEngagementKeyOfSameUnit(extended, {})).toBe(false);
+  });
+});
+
+describe("Qua parser / serializer THẬT của router (`defaultParseSearch` · `defaultStringifySearch`)", () => {
+  const parse = (qs: string) => defaultParseSearch(qs) as Record<string, unknown>;
+  const PAIR = { from: "2026-09-21", to: "2026-10-04" };
+
+  it("ALLOW — `?from=2026-09-21&to=2026-10-04` ⇒ parser giữ hai CHUỖI ngày ⇒ cặp được giữ nguyên văn và 052 nhận đúng cặp", () => {
+    const search = validateStatsRouteSearch(parse("?from=2026-09-21&to=2026-10-04"));
+
+    expect(search).toStrictEqual({ ...NONE, ...PAIR });
+    expect(engagementParams(search)).toStrictEqual(PAIR);
+  });
+
+  it("ALLOW — khoảng mà nút ‹ ghi lên URL (kèm đơn vị) đi qua serializer rồi parser vẫn là CHÍNH nó", () => {
+    const written = searchForRange({ ...NONE, orgUnitId: UNIT_ID }, PAIR);
+
+    const reread = validateStatsRouteSearch(parse(defaultStringifySearch(written)));
+
+    expect(reread).toStrictEqual({ ...PAIR, orgUnitId: UNIT_ID });
+    expect(engagementParams(reread)).toStrictEqual({ ...PAIR, orgUnitId: UNIT_ID });
+  });
+
+  it("DENY — `?from=2026&to=2027`: parser đưa hai SỐ ⇒ bỏ cả cặp (không gửi tham số chắc chắn 400)", () => {
+    expect(validateStatsRouteSearch(parse("?from=2026&to=2027"))).toStrictEqual(NONE);
   });
 });
