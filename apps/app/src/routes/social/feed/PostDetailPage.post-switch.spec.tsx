@@ -40,6 +40,8 @@ const getPost = vi.fn();
 const listComments = vi.fn();
 const deleteComment = vi.fn();
 const createReport = vi.fn();
+/** Thế chỗ `fetch` trong MỌI ca: luôn từ chối, và `afterEach` đòi 0 lời gọi — xem 🔴 ở `beforeEach`. */
+const fetchMock = vi.fn();
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -153,12 +155,22 @@ beforeEach(() => {
   createReport.mockReset().mockResolvedValue({ id: "66666666-6666-4666-8666-666666666666" });
   // jsdom không cài `window.scrollTo`; router gọi nó sau mỗi lượt điều hướng và jsdom in lỗi ra stderr.
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+  // 🔴 Lưới chặn mạng (gate bảo mật của PR-C, SEC-02 — khuôn của `SocialPortalShell.spec.tsx`). File này dựng
+  // `PostDetailPage` THẬT và chỉ thay bốn lời gọi API: trang hay một component con thêm một lời gọi lúc mount (đếm lượt
+  // xem…) mà ở đây chưa mock thì `apiFetch` THẬT đi tới địa chỉ API mặc định (`localhost:3100`) — trên máy có API đang
+  // chạy đó là một request thật, còn ca vẫn xanh. `fetch` vì vậy luôn từ chối, và `afterEach` đòi 0 lời gọi.
+  fetchMock.mockReset().mockRejectedValue(new TypeError("mạng bị chặn trong test"));
+  vi.stubGlobal("fetch", fetchMock);
 });
 
 afterEach(() => {
+  // Đếm TRƯỚC khi dọn; so SAU khi dọn để ca đỏ không để lại cây đang mount hay `fetch` giả cho ca kế tiếp.
+  const requestsLeavingTheTest = fetchMock.mock.calls.map((call) => String(call[0]));
   cleanup();
   resetCaps();
   vi.mocked(window.scrollTo).mockRestore();
+  vi.unstubAllGlobals();
+  expect(requestsLeavingTheTest).toEqual([]);
 });
 
 describe("đổi `$postId` (router THẬT, trang KHÔNG mount lại) — hộp thoại của bình luận bài cũ không sống sang bài mới", () => {
