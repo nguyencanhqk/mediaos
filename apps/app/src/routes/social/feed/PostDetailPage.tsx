@@ -283,6 +283,10 @@ export function PostDetailPage(): React.ReactElement {
         />
 
         <CommentList
+          // `key` theo BÀI: router không mount lại trang khi chỉ `$postId` đổi (không khai `remountDeps`), và bài
+          // đích còn trong cache thì trang vẽ ngay bài đó — thiếu `key`, hộp thoại «Báo cáo» / hộp xác nhận xoá đang
+          // mở cho một bình luận của bài CŨ sẽ nổi trên bài MỚI (Back / Forward). Đo ở `PostDetailPage.post-switch.spec.tsx`.
+          key={postId}
           comments={comments}
           // Ba trạng thái của `014` đi XUỐNG component; bản đầu giữ chúng lại ở đây nên cả "đang
           // tải" lẫn "500" đều hiện thành «Chưa có bình luận nào.» (H5).
