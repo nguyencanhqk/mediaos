@@ -10,9 +10,8 @@
  * ⚠️ Bộ lọc sống trong URL (plan D6). Badge «N bài mới» chỉ ĐẾM, bấm mới tải lại (plan D7) — xem
  * `useFeedRealtime`.
  *
- * ⚠️ **«Dải ô liên kết nhanh» (SC-14) CỐ Ý VẮNG.** SPEC-16 §9 liệt nó trong `SOC-SCREEN-001`, nhưng
- * nó thuộc track C và owner đã ký hoãn sang `S16-SOCIAL-FE-3` (plan finding #11). Màn này vì vậy ship
- * THIẾU phần đó — nói ra ở đây để người đọc sau không tưởng là quên.
+ * «Dải ô liên kết nhanh» (SC-14) đứng ngay trên ô soạn bài từ `S16-SOCIAL-FE-3C` (`QuickLinkStrip`): ô theo
+ * `APP_REGISTRY` + quyền, 0 ô thì không vẽ gì ⇒ người chỉ có quyền bảng tin thấy màn y như trước.
  */
 import * as React from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -26,6 +25,7 @@ import { CreatePostNotices } from "./components/CreatePostNotices";
 import { FeedComposer } from "./components/FeedComposer";
 import { FeedPostList } from "./components/FeedPostList";
 import { NewFeedPostsBadge } from "./components/NewFeedPostsBadge";
+import { QuickLinkStrip } from "./components/QuickLinkStrip";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 import { useCreatePost } from "./lib/use-create-post";
 // Kiểu tham số URL lấy từ CHÍNH bộ lọc `validateSearch` (trước đây màn này khai bản sao riêng
@@ -142,6 +142,8 @@ export function FeedPage(): React.ReactElement {
         droppedMentionCount={createPost.droppedMentionCount}
         clearDroppedMentions={createPost.clearDroppedMentions}
       />
+
+      <QuickLinkStrip />
 
       {/*
         🔴 `mutateAsync`, KHÔNG phải `mutate`: ô soạn chỉ dọn nội dung khi promise RESOLVE. Đổi về
