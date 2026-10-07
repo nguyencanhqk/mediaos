@@ -7,7 +7,7 @@
  * search mới ⇒ ca lật trang đo tới tận THAM SỐ gửi 056.
  *
  * i18n THẬT, chữ kỳ vọng VIẾT TAY. Màn không có cổng riêng (route gác `manage:feed-kudos` — ca G5 ở
- * `admin/admin-route-gates.spec.tsx`).
+ * `admin/admin-route-gates.badges.spec.tsx`).
  */
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

@@ -485,6 +485,14 @@ Cột **Mutant:** ★ = BẮT BUỘC chạy (§6); mọi hàng có `V` đều �
   2. `pnpm --filter @mediaos/web-core exec vitest run src/lib/social-moderation-api.spec.ts src/lib/social-stats-api.spec.ts src/lib/social-kudos-api.spec.ts src/lib/query-keys.spec.ts src/lib/registry.spec.ts --maxWorkers=4`
   3. `pnpm --filter @mediaos/app exec vitest run src/routes/social/<thư-mục-lát> --maxWorkers=4` — vòng RED/GREEN.
   4. `pnpm --filter @mediaos/app exec vitest run src/routes/social/social-wiring.spec.ts src/routes/social/legacy-social-redirects.spec.ts src/routes/social/admin/admin-route-gates.spec.tsx src/layouts/workspace/sidebar-registry.snapshot.spec.ts --maxWorkers=4`; regen: lặp lại CHỈ với file snapshot + `-u`, rồi `git diff -- apps/app/src/layouts/workspace/__snapshots__/`.
+     ↳ **Sau PR-C (07/10/2026) — hai file spec trong lệnh 4 đã tách** (bước S0 của `S16-SOCIAL-FE-3C`, finding
+     AUD-SPEC400; tách THUẦN: 69 ca trước = 69 ca sau, tập tên ca trùng nhau): `social-wiring.spec.ts` giữ C20 · R1–R3 ·
+     C22 · FBPOST-1, W1 · W4 sang `social-wiring.admin.spec.ts`, W3 sang `social-wiring.router.spec.ts`;
+     `admin/admin-route-gates.spec.tsx` thành `admin/admin-route-gates.{moderation,badges,stats}.spec.tsx` (G1 · G5 · G6,
+     mỗi file kèm ca «Router THẬT» của màn đó). ⚠️ Lệnh 4 gõ NGUYÊN VĂN nay vẫn exit 0 nhưng chỉ chạy 3 file / 35 ca —
+     tên `admin-route-gates.spec.tsx` không còn khớp file nào, `social-wiring.spec.ts` chỉ khớp file gốc ⇒ bỏ sót 47 ca
+     mà không báo. Dùng dạng tiền tố (đo 07/10/2026: 8 file / 82 ca):
+     `pnpm --filter @mediaos/app exec vitest run src/routes/social/social-wiring src/routes/social/legacy-social-redirects.spec.ts src/routes/social/admin/admin-route-gates src/layouts/workspace/sidebar-registry.snapshot.spec.ts --maxWorkers=4`
   5. `pnpm --filter @mediaos/app test:social-cov` — ĐÚNG lệnh cổng CI (`apps/app/package.json:14`, `maxThreads=2`;
      `apps-frontend.yml:139-141`). Tiêu chí: exit 0, 4 số ≥ 80.
   6. `bash harness/check.sh --quick` — lint + typecheck toàn workspace. Tiêu chí: exit 0, mọi dòng KẾT QUẢ là ✅.
