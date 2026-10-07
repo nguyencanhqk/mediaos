@@ -14,6 +14,12 @@
  * │ thẻ bài ngay trên vẫn ghi «12 bình luận». Người đọc kết luận 12 bình luận vừa bị xoá sạch.    │
  * │ Một câu RỖNG sai sự thật nguy hiểm hơn một khối lỗi, vì nó trông như trạng thái bình thường.  │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * **«Báo cáo»** (`S16-SOCIAL-FE-3C` · L8, `SOCIAL-API-027`) — nút ở MỌI hàng của người khác, gốc lẫn trả
+ * lời. KHÔNG cặp quyền riêng: 027 gác bằng `view:feed`, cặp mà route chứa danh sách đã đòi. Ẩn với bình
+ * luận của CHÍNH MÌNH (`comment.isMine` — sở hữu hàng từ DTO, cùng cờ với «Xoá» ⇒ mỗi hàng chỉ có một
+ * trong hai nút). Hộp thoại là `ReportDialog` dùng chung với thẻ bài — cảnh báo SOC-DEC-011 nằm TRONG nó,
+ * đừng mở đường báo cáo nào không qua nó — và được mount theo đúng hợp đồng ghi ở đầu file đó.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -23,6 +29,11 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PostBody } from "./PostBody";
 import { FeedReactionBar } from "./FeedReactionBar";
 import { authorDisplayName, avatarSrc, relativeTime } from "../lib/feed-format";
+import { ReportDialog } from "../../moderation/components/ReportDialog";
+
+/** Ba nút chữ của hàng («Trả lời» · «Xoá» · «Báo cáo») — cùng một cỡ, cùng một vòng focus. */
+const ROW_ACTION_CLASS =
+  "rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 interface CommentListProps {
   comments: readonly FeedCommentDto[];
@@ -39,6 +50,11 @@ interface CommentListProps {
   className?: string;
 }
 
+interface CommentListContentProps extends CommentListProps {
+  /** Mở hộp thoại «Báo cáo» cho bình luận này — state nằm ở `CommentList` (xem lý do ở đó). */
+  onReport: (comment: FeedCommentDto) => void;
+}
+
 interface CommentRowProps {
   comment: FeedCommentDto;
   isReply?: boolean;
@@ -46,6 +62,7 @@ interface CommentRowProps {
   onReply: CommentListProps["onReply"];
   onDelete: CommentListProps["onDelete"];
   onReactionChange: CommentListProps["onReactionChange"];
+  onReport: CommentListContentProps["onReport"];
 }
 
 function CommentRow({
@@ -55,6 +72,7 @@ function CommentRow({
   onReply,
   onDelete,
   onReactionChange,
+  onReport,
 }: CommentRowProps): React.ReactElement {
   const { t } = useTranslation("social");
   const name = authorDisplayName(comment.author, t("post.unknownAuthor"));
@@ -94,11 +112,7 @@ function CommentRow({
             là lời hứa không giữ được (BE sẽ gắn nó vào cùng cha, không phải vào nó).
           */}
           {!isReply && (
-            <button
-              type="button"
-              onClick={() => onReply(comment)}
-              className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <button type="button" onClick={() => onReply(comment)} className={ROW_ACTION_CLASS}>
               {t("comment.reply")}
             </button>
           )}
@@ -109,9 +123,28 @@ function CommentRow({
               type="button"
               onClick={() => onDelete(comment)}
               data-testid="comment-delete"
-              className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={ROW_ACTION_CLASS}
             >
               {t("comment.delete")}
+            </button>
+          )}
+
+          {/*
+            «Báo cáo» bình luận của NGƯỜI KHÁC — đứng NGOÀI nhánh `!isReply` của «Trả lời»: trả lời cũng báo
+            cáo được, và người không được bình luận vẫn báo cáo được (027 chỉ đòi `view:feed`).
+          */}
+          {!comment.isMine && (
+            <button
+              type="button"
+              onClick={(event) => {
+                // Safari (macOS) KHÔNG đưa focus vào nút khi bấm chuột ⇒ `Dialog` ghi nhầm «phần tử kích
+                // hoạt» (ô soạn bình luận, hay `body`) và lúc đóng trả focus về đó. Tự đặt focus TRƯỚC khi mở.
+                event.currentTarget.focus();
+                onReport(comment);
+              }}
+              className={ROW_ACTION_CLASS}
+            >
+              {t("admin.report.trigger")}
             </button>
           )}
         </div>
@@ -120,7 +153,8 @@ function CommentRow({
   );
 }
 
-export function CommentList({
+/** Thân danh sách: ba trạng thái + các hàng. Hộp thoại «Báo cáo» KHÔNG ở đây — xem `CommentList`. */
+function CommentListContent({
   comments,
   isLoading,
   isError,
@@ -128,9 +162,10 @@ export function CommentList({
   onReply,
   onDelete,
   onReactionChange,
+  onReport,
   pendingReactionCommentId = null,
   className,
-}: CommentListProps): React.ReactElement {
+}: CommentListContentProps): React.ReactElement {
   const { t } = useTranslation("social");
   // Nhãn «Hủy» dùng chung — không dựng bản sao trong bundle `social` để hai chỗ khỏi trôi khỏi nhau.
   const { t: tc } = useTranslation("common");
@@ -218,6 +253,7 @@ export function CommentList({
               onReply={onReply}
               onDelete={setPendingDelete}
               onReactionChange={onReactionChange}
+              onReport={onReport}
             />
             {(repliesByParent.get(root.id) ?? []).map((reply) => (
               <CommentRow
@@ -228,6 +264,7 @@ export function CommentList({
                 onReply={onReply}
                 onDelete={setPendingDelete}
                 onReactionChange={onReactionChange}
+                onReport={onReport}
               />
             ))}
           </React.Fragment>
@@ -251,6 +288,38 @@ export function CommentList({
         }}
         onCancel={() => setPendingDelete(null)}
       />
+    </>
+  );
+}
+
+export function CommentList(props: CommentListProps): React.ReactElement {
+  /**
+   * Bình luận mà hộp thoại «Báo cáo» đang mở cho (khuôn `pendingDelete`). State + hộp thoại nằm Ở ĐÂY,
+   * NGOÀI `CommentListContent`: hộp thoại thuộc về BÌNH LUẬN đã chọn chứ không thuộc về hàng. Realtime xoá,
+   * tải lại hay lượt đọc hỏng gỡ hàng — hoặc thay cả danh sách bằng khung chờ / khối lỗi / câu rỗng — trong
+   * lúc người dùng còn đang gõ, và hộp thoại không được biến mất im lặng kèm cả nháp. Đích mất thật thì
+   * server trả 404 ⇒ dải `reportTargetGone` ngay trong hộp thoại.
+   */
+  const [reportTarget, setReportTarget] = React.useState<FeedCommentDto | null>(null);
+
+  return (
+    <>
+      <CommentListContent {...props} onReport={setReportTarget} />
+
+      {/*
+        Mount LƯỜI — unmount khi đóng: `ReportDialog` dùng `useMutation` (mount sẵn là mọi nơi vẽ danh sách
+        đều phải có `QueryClientProvider`) và mỗi lượt mount là MỘT khoá idempotency của 027. `key` theo id:
+        lớp phủ của `Dialog` không làm phần nền `inert`, nên nút «Báo cáo» của hàng KHÁC vẫn kích hoạt được
+        khi hộp thoại đang mở — không mount lại thì nháp + khoá viết cho bình luận này bị gửi cho bình luận kia.
+      */}
+      {reportTarget !== null && (
+        <ReportDialog
+          key={reportTarget.id}
+          targetType="comment"
+          targetId={reportTarget.id}
+          onClose={() => setReportTarget(null)}
+        />
+      )}
     </>
   );
 }
