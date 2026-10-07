@@ -88,7 +88,15 @@ overrides:
   # Đo 09/09: 18 đường, vẫn nguyên `eslint > @eslint/eslintrc > js-yaml` — dev-tooling, KHÔNG vào
   # runtime bundle của API.
   "js-yaml@>=4.0.0 <4.3.2": "^4.3.2"
-  "shell-quote@<=1.8.4": "^1.8.5"
+  # 2026-10-07 (S19-OPS-AUDITCRIT-2) — NỚI dải từ `<=1.8.4` lên `<1.11.0`: advisory CRITICAL mới
+  # `GHSA-pqg4-j6r4-53mv` (`>=1.8.4 <1.11.0` — `quote()` chèn lệnh qua ký tự xuống dòng trong token đứng
+  # sau token `{ comment }`) phủ CẢ 1.10.0 mà cây đang resolve. Lên registry giữa lần Security chạy cuối
+  # trên master (06/10 21:02 XANH) và PR #575 (07/10 15:44 ĐỎ, PR chạm 0 file deps) ⇒ đỏ trên MỌI PR,
+  # KHÔNG do PR nào sinh ra. `pnpm why shell-quote -r` đo 07/10: cây có ĐÚNG MỘT bản 1.10.0, đường tới
+  # duy nhất là `gel@2.2.0` — trình điều khiển Gel mà `drizzle-orm` (peer tuỳ chọn) và `drizzle-kit` kéo
+  # theo; trong `gel` chỉ `dist/cli.mjs` (lớp bọc CLI) nạp `shell-quote`. API dùng trình điều khiển
+  # Postgres và không import `gel` ở đâu ⇒ KHÔNG nằm trên đường chạy của API.
+  "shell-quote@<1.11.0": "^1.11.0"
   # 2026-08-08 — advisory MỚI `GHSA-2v37-7h3g-55p8` (HIGH, `nanoid <3.3.17`: custom generator lặp vô hạn
   # khi size = 0). Lên registry giữa lần Security chạy cuối trên master (07/08 15:42 XANH) và PR #368
   # (08/08 03:33 ĐỎ) ⇒ đỏ trên MỌI PR, KHÔNG do PR nào sinh ra. `pnpm why nanoid -r` đo 08/08: cây có
