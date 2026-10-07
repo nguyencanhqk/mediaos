@@ -51,8 +51,11 @@ interface CommentListProps {
 }
 
 interface CommentListContentProps extends CommentListProps {
-  /** Mở hộp thoại «Báo cáo» cho bình luận này — state nằm ở `CommentList` (xem lý do ở đó). */
-  onReport: (comment: FeedCommentDto) => void;
+  /**
+   * Nút «Báo cáo» của hàng được kích hoạt. `trigger` = chính nút đó: việc có mở hay không — và có dời focus hay
+   * không — do `CommentList` quyết (state nằm ở đó, xem lý do ở đó), hàng KHÔNG tự đặt focus.
+   */
+  onReport: (comment: FeedCommentDto, trigger: HTMLElement) => void;
 }
 
 interface CommentRowProps {
@@ -136,12 +139,7 @@ function CommentRow({
           {!comment.isMine && (
             <button
               type="button"
-              onClick={(event) => {
-                // Safari (macOS) KHÔNG đưa focus vào nút khi bấm chuột ⇒ `Dialog` ghi nhầm «phần tử kích
-                // hoạt» (ô soạn bình luận, hay `body`) và lúc đóng trả focus về đó. Tự đặt focus TRƯỚC khi mở.
-                event.currentTarget.focus();
-                onReport(comment);
-              }}
+              onClick={(event) => onReport(comment, event.currentTarget)}
               className={ROW_ACTION_CLASS}
             >
               {t("admin.report.trigger")}
@@ -302,15 +300,31 @@ export function CommentList(props: CommentListProps): React.ReactElement {
    */
   const [reportTarget, setReportTarget] = React.useState<FeedCommentDto | null>(null);
 
+  /**
+   * 🔴 Hộp thoại đang mở là MODAL: lượt kích hoạt bị BỎ QUA, đích không đổi và focus không bị kéo ra. Lớp phủ của
+   * `Dialog` không làm phần nền `inert`, nên công nghệ hỗ trợ vẫn kích hoạt được nút «Báo cáo» của một hàng lúc đó.
+   * Đổi đích giữa chừng là gỡ hộp thoại của bình luận kia khi lượt gửi của nó còn bay (`ReportDialog` cấm đóng lúc
+   * đang gửi; mount lại theo `key` thì đi vòng qua lệnh cấm đó): kết cục không lên màn, nháp mất không hỏi, và lúc
+   * đóng focus về nút của hàng CŨ.
+   */
+  const openReport = (comment: FeedCommentDto, trigger: HTMLElement): void => {
+    if (reportTarget !== null) return;
+    // Safari (macOS) KHÔNG đưa focus vào nút khi bấm chuột ⇒ `Dialog` ghi nhầm «phần tử kích hoạt» (ô soạn bình
+    // luận, hay `body`) và lúc đóng trả focus về đó. Tự đặt focus TRƯỚC khi mở.
+    trigger.focus();
+    setReportTarget(comment);
+  };
+
   return (
     <>
-      <CommentListContent {...props} onReport={setReportTarget} />
+      <CommentListContent {...props} onReport={openReport} />
 
       {/*
         Mount LƯỜI — unmount khi đóng: `ReportDialog` dùng `useMutation` (mount sẵn là mọi nơi vẽ danh sách
-        đều phải có `QueryClientProvider`) và mỗi lượt mount là MỘT khoá idempotency của 027. `key` theo id:
-        lớp phủ của `Dialog` không làm phần nền `inert`, nên nút «Báo cáo» của hàng KHÁC vẫn kích hoạt được
-        khi hộp thoại đang mở — không mount lại thì nháp + khoá viết cho bình luận này bị gửi cho bình luận kia.
+        đều phải có `QueryClientProvider`) và mỗi lượt mount là MỘT khoá idempotency của 027. `key` theo id là
+        lưới THỨ HAI theo hợp đồng nơi mount của `ReportDialog` (đích đổi mà không mount lại = nháp + khoá viết
+        cho bình luận này bị gửi cho bình luận kia): `openReport` không đổi đích khi hộp thoại đang mở, nên hôm
+        nay không đường nào tới được nó — và không ca nào đo được nó.
       */}
       {reportTarget !== null && (
         <ReportDialog

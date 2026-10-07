@@ -9,6 +9,8 @@
  *    mount LƯỜI: danh sách vẽ được khi KHÔNG có `QueryClientProvider` (như các ca của `CommentList.spec.tsx`).
  *  · hàng biến mất khi hộp thoại đang mở ⇒ hộp thoại + nháp CÒN; server trả 404 ⇒ `reportTargetGone`.
  *  · đóng ⇒ focus về nút «Báo cáo» của ĐÚNG hàng · mỗi lượt mở một nháp + một `attemptId` (plan D20 · B22).
+ * Hộp thoại ĐANG MỞ mà nút «Báo cáo» của một hàng được kích hoạt (hộp thoại là modal ở nơi mount) đo ở file riêng
+ * `CommentList.report-modal.spec.tsx`.
  *
  * i18n THẬT, chữ kỳ vọng VIẾT TAY. Hàng tìm theo NỘI DUNG bình luận, phần tử truy vấn theo role + tên trợ năng.
  */
@@ -24,7 +26,6 @@ import {
 import { ApiError } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { makeComment, renderWithProviders, resetCaps, setCaps } from "../social-test-doubles";
-import { ADMIN_ERR } from "../../admin/admin-test-doubles";
 import { CommentList } from "./CommentList";
 
 const createReport = vi.fn();
@@ -364,30 +365,6 @@ describe("mỗi lượt mở một nháp + một `attemptId` (plan D20 · B22)",
     expectDistinctAttemptIds(sentAttemptId(0), sentAttemptId(1));
   });
 
-  // Lớp phủ của `Dialog` không làm phần nền `inert`: công nghệ hỗ trợ (con trỏ ảo của trình đọc màn hình,
-  // điều khiển bằng giọng nói) vẫn kích hoạt được nút «Báo cáo» của hàng KHÁC khi hộp thoại đang mở. Hộp
-  // thoại không mount lại theo đích thì nháp + `attemptId` viết cho A được gửi cho B — một lượt GHI nhầm đích.
-  // 🔴 Ca DUY NHẤT giữ `key={reportTarget.id}` ở nơi mount: bỏ `key` thì chỉ ca này đỏ. ĐỪNG gộp nó vào ca «báo cáo
-  // A (gửi xong, đóng) rồi mở cho B» phía trên — luồng có đóng đã mount lại nhờ mount LƯỜI, mất `key` vẫn xanh.
-  it("đang mở cho A (đã gửi hỏng một lần) mà nút «Báo cáo» của B được kích hoạt ⇒ hộp thoại của B: nháp TRẮNG, hết dải lỗi, `attemptId` MỚI", async () => {
-    createReport.mockRejectedValueOnce(ADMIN_ERR.server());
-    renderWithProviders(listNode([root(), other()]));
-    reportAndSubmit(ROOT_BODY, HARASSMENT, DRAFT);
-    await waitFor(() => expect(alertReason()).toBe("generic"));
-
-    fireEvent.click(reportButton(OTHER_BODY));
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    expect(within(dialog()).queryByRole("alert")).toBeNull();
-    expect(radio(HARASSMENT)).not.toBeChecked();
-    expect(noteBox()).toHaveValue("");
-
-    pick(HARASSMENT);
-    typeNote(DRAFT);
-    fireEvent.click(button(SUBMIT));
-    await waitFor(() => expect(createReport).toHaveBeenCalledTimes(2));
-    expect(sentBody(0)).toEqual(commentReport(ROOT_ID, "harassment", DRAFT));
-    expect(sentBody(1)).toEqual(commentReport(OTHER_ID, "harassment", DRAFT));
-    expectDistinctAttemptIds(sentAttemptId(0), sentAttemptId(1));
-    await screen.findByRole("status");
-  });
+  // Nút «Báo cáo» của một hàng được kích hoạt khi hộp thoại ĐANG MỞ (lớp phủ không làm nền `inert`) ⇒ bị bỏ qua, đích
+  // không đổi: đo ở `CommentList.report-modal.spec.tsx`. Ca «báo cáo A (gửi xong, đóng) rồi mở cho B» là vế ALLOW ở đây.
 });
