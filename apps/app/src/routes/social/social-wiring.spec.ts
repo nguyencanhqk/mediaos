@@ -15,7 +15,8 @@
  *  · file NÀY — registry + sidebar chung: C20 · R1 · R2 · R3 · C22 (tile Home) · S16-SOCIAL-FBPOST-1;
  *  · `social-wiring.admin.spec.ts` — ba màn quản trị: W1 (route ↔ mục rail khai CÙNG cổng) · W4 (mục rail theo quyền);
  *  · `social-wiring.router.spec.ts` — W3 (`router.tsx` nối đúng meta + route có trong cây, đọc NGUỒN).
- * Chú thích ở mã sản phẩm còn ghi «`social-wiring.spec.ts` ca W1 / W3 / W4» ⇒ tìm ở hai file trên.
+ * `packages/web-core/src/lib/registry.ts` còn ba chú thích ghi «`social-wiring.spec.ts` ca W1» (chưa sửa: đổi file
+ * web-core kéo theo build lại + CI của auth / console) ⇒ ca đó nay ở `social-wiring.admin.spec.ts`.
  */
 import fs from "node:fs";
 import path from "node:path";
