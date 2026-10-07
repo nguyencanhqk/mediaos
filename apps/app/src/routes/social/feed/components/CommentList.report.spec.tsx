@@ -367,6 +367,8 @@ describe("mỗi lượt mở một nháp + một `attemptId` (plan D20 · B22)",
   // Lớp phủ của `Dialog` không làm phần nền `inert`: công nghệ hỗ trợ (con trỏ ảo của trình đọc màn hình,
   // điều khiển bằng giọng nói) vẫn kích hoạt được nút «Báo cáo» của hàng KHÁC khi hộp thoại đang mở. Hộp
   // thoại không mount lại theo đích thì nháp + `attemptId` viết cho A được gửi cho B — một lượt GHI nhầm đích.
+  // 🔴 Ca DUY NHẤT giữ `key={reportTarget.id}` ở nơi mount: bỏ `key` thì chỉ ca này đỏ. ĐỪNG gộp nó vào ca «báo cáo
+  // A (gửi xong, đóng) rồi mở cho B» phía trên — luồng có đóng đã mount lại nhờ mount LƯỜI, mất `key` vẫn xanh.
   it("đang mở cho A (đã gửi hỏng một lần) mà nút «Báo cáo» của B được kích hoạt ⇒ hộp thoại của B: nháp TRẮNG, hết dải lỗi, `attemptId` MỚI", async () => {
     createReport.mockRejectedValueOnce(ADMIN_ERR.server());
     renderWithProviders(listNode([root(), other()]));

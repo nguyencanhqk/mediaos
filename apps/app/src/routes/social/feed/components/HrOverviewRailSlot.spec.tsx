@@ -187,9 +187,11 @@ describe("HR1 — cổng của ô: ĐỦ bốn cặp, khớp ĐÚNG-BẰNG", () 
   });
 
   /**
-   * Wildcard «gần đúng»: ba cặp còn lại ĐỦ, cặp đang đo chỉ có ở dạng wildcard. Đây là hàng DUY NHẤT phân biệt
-   * được vế `read:employee` của slot với cổng trong của `HrOverviewWidget` (cổng đó nhận wildcard): ở ca DENY-4
-   * phía trên, bỏ vế ngoài thì cổng trong vẫn chặn.
+   * Wildcard «gần đúng»: ba cặp còn lại ĐỦ, cặp đang đo chỉ có ở dạng wildcard. Trong file NÀY đây là hàng duy
+   * nhất phân biệt được vế `read:employee` của slot với cổng trong của `HrOverviewWidget` (cổng đó nhận wildcard):
+   * ở ca DENY-4 phía trên, bỏ vế ngoài thì cổng trong vẫn chặn. Vế đó còn hai ghim nữa ở ngoài file:
+   * ca DENY trần của `HrOverviewRailSlot.gate.spec.tsx` (widget giả, không có cổng trong) và hàng DENY-4w của
+   * `../SocialPortalShell.hr-widget.spec.tsx` (vỏ thật).
    */
   it.each<[string, Record<string, boolean>]>([
     [
