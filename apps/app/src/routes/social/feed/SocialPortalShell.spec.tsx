@@ -6,7 +6,7 @@
  * chiếu sinh nhật của cả công ty vào một ngữ cảnh chưa ai cân nhắc. Fail-LOUD là lựa chọn đúng, và
  * ca dưới đây giữ nó khỏi bị "dọn" thành fail-soft.
  */
-import { screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
+import { screen, cleanup, waitFor, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SocialPortalShell } from "./SocialPortalShell";
 import { page, renderWithProviders, resetCaps, setCaps } from "./social-test-doubles";
@@ -17,6 +17,7 @@ const listNews = vi.fn();
 const listPolls = vi.fn();
 const listGroups = vi.fn();
 const listKudos = vi.fn();
+const getWidgetData = vi.fn();
 /** Tham số URL mà `useSearch` trả về. Đặt trong từng ca để giả lập `/feed?q=...`. */
 let routeSearch: Record<string, unknown> = {};
 
@@ -56,6 +57,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.socialKudosApi,
       list: (...a: unknown[]) => listKudos(...a),
     },
+    // S16-SOCIAL-FE-3C (L7) — ô DASH «Tổng quan nhân sự» ở cuối rail. Không mock ⇒ `apiFetch` THẬT chạy trong test.
+    dashboardApi: {
+      ...actual.dashboardApi,
+      getWidgetData: (...a: unknown[]) => getWidgetData(...a),
+    },
   };
 });
 
@@ -67,6 +73,17 @@ beforeEach(() => {
   listPolls.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
   listGroups.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
   listKudos.mockReset().mockResolvedValue({ data: [], page: 1, limit: 5, total: 0 });
+  getWidgetData.mockReset().mockResolvedValue({
+    widget_code: "HR_OVERVIEW",
+    widget_type: "Summary",
+    status: "Active",
+    data: { summary: { headcount: 128 }, byStatus: { Active: 128 }, byOrgUnit: {} },
+    empty_state: null,
+    error_state: null,
+    last_updated_at: null,
+    cache: null,
+    quick_actions: [],
+  });
   routeSearch = {};
 });
 
@@ -412,5 +429,50 @@ describe("W2 — widget «Nhóm của tôi» (S16-SOCIAL-FE-2B, plan D14)", () =
     expect(list).toHaveTextContent("Bóng đá");
     expect(list.textContent).not.toMatch(/\d+\s*bài mới/);
     expect(list.querySelector("[data-testid*='badge']")).toBeNull();
+  });
+});
+
+describe("W4 — widget DASH «Tổng quan nhân sự» (S16-SOCIAL-FE-3C L7, plan D15 · D16 · owner O1 = B)", () => {
+  /**
+   * Cổng bốn vế và các ca DENY «gần đúng» sống ở `components/HrOverviewRailSlot.spec.tsx`. Ca dưới đây giữ thứ
+   * chỉ vỏ THẬT đo được: ô có được cắm vào rail không, và cắm ở CUỐI (UI-07 §34b.2). Mọi ca khác của file chạy
+   * với `{view:feed}` hoặc caps rỗng nên ô không mount.
+   *
+   * 🔴 `fetch` bị thay bằng hàm luôn từ chối trong ca này: gỡ mock `getWidgetData` thì `apiFetch` THẬT sẽ gọi
+   * `fetch` tới địa chỉ API mặc định (`localhost:3100`) — trên máy có API đang chạy đó là một request thật.
+   * Ca phải ĐỎ ở dòng đếm lời gọi, không được lặng lẽ bắn request ra ngoài tiến trình test.
+   */
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset().mockRejectedValue(new TypeError("mạng bị chặn trong test"));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("ALLOW: đủ bốn cặp ⇒ ô «Tổng quan nhân sự» là khối CUỐI của rail phải, đường dữ liệu widget (mock) được gọi đúng 1 lần", async () => {
+    setCaps({
+      "view:feed": true,
+      "read:dashboard": true,
+      "read:employee": true,
+      "update:employee": true,
+    });
+    renderWithProviders(
+      <SocialPortalShell moduleCode="SOCIAL">
+        <p>nội dung</p>
+      </SocialPortalShell>,
+    );
+
+    const rail = screen.getByRole("complementary", { name: "Thông tin bên phải" });
+    const title = await within(rail).findByRole("heading", { name: "Tổng quan nhân sự" });
+    expect(rail.lastElementChild).toContainElement(title);
+
+    await waitFor(() => expect(getWidgetData).toHaveBeenCalledTimes(1));
+    expect(getWidgetData.mock.calls[0]?.[0]).toBe("HR_OVERVIEW");
+    expect(await within(rail).findByText("128")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
