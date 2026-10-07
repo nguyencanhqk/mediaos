@@ -3,7 +3,9 @@
  * Q1 · Q2 · Q3 — vế vẽ ra màn nằm ở `components/QuickLinkStrip.spec.tsx`).
  *
  * `pickQuickLinkApps` nhận registry làm THAM SỐ ⇒ ca Q6 đưa BẢN SAO có một app ở trạng thái khác `active` vào
- * mà không phải sửa hằng `APP_REGISTRY` thật (đo 07/10/2026: cả 7 app của dải đều `active`).
+ * mà không phải sửa hằng `APP_REGISTRY` thật (đo 07/10/2026: cả 7 app của dải đều `active`). Cũng nhờ đó khối
+ * «cổng … đọc từ registry TRUYỀN VÀO» đổi được CỔNG của từng app trong một bản sao — vế «không hard-code» của
+ * `done_when`, thứ mà Q1–Q3 (đo bằng giá trị registry hôm nay) không phân biệt được.
  *
  * Quyền trong file này là chuỗi CẶP ENGINE viết tay (đúng thứ `/auth/me` trả) — fixture của ca, không phải mã
  * sản phẩm: `quick-links.ts` không nêu một cặp nào, cổng của từng ô đọc từ registry.
@@ -60,6 +62,21 @@ const registryApp = (appKey: string): AppRegistryItem | undefined =>
 /** BẢN SAO registry với đúng một app đổi trạng thái — không đụng hằng thật. */
 const withStatus = (appKey: string, status: ModuleStatus): AppRegistryItem[] =>
   APP_REGISTRY.map((app) => (app.appKey === appKey ? { ...app, status } : app));
+
+/** Cổng của một app = đúng hai trường này của registry. */
+type Gate = Pick<AppRegistryItem, "requiredPermissions" | "requiredAnyPermissions">;
+
+/** BẢN SAO registry với đúng một app đổi CỔNG: gỡ CẢ HAI trường cũ rồi mới đặt cổng mới — không đụng hằng thật. */
+const withGate = (appKey: string, gate: Gate): AppRegistryItem[] =>
+  APP_REGISTRY.map((app) => {
+    if (app.appKey !== appKey) return app;
+    const { requiredPermissions: _all, requiredAnyPermissions: _any, ...ungated } = app;
+    return { ...ungated, ...gate };
+  });
+
+/** Hai cặp KHÔNG app nào của registry thật khai ⇒ ô chỉ hiện được khi cổng được đọc từ bản sao. */
+const NEW_PAIR = "zz:quick-link-a";
+const SECOND_NEW_PAIR = "zz:quick-link-b";
 
 describe("Q5 — hằng `FEED_QUICK_LINK_APP_KEYS`", () => {
   it("ĐÚNG 7 khoá theo thứ tự SC-14 (viết tay)", () => {
@@ -136,6 +153,35 @@ describe("Q3 — ô `rooms` cần ĐỦ hai cặp", () => {
   it("ALLOW: đủ `access:room` + `view:room` ⇒ CÓ ô phòng họp", () => {
     expect(registryApp("rooms")?.requiredPermissions).toEqual(["access:room", "view:room"]);
     expect(pick(["access:goal", "access:room", "view:room"])).toEqual(["rooms", "goals"]);
+  });
+});
+
+// Q1–Q3 đo bằng giá trị HÔM NAY của registry: chép tay cổng của cả bảy app vào `quick-links.ts` cho ra đúng những
+// kết quả đó (đo 07/10/2026 — 46 ca của dải vẫn xanh). Khối này đổi CỔNG của từng app trong một bản sao registry,
+// nên chỉ một bộ chọn ĐỌC cổng từ registry được truyền vào mới qua. Ca ALLOW không mang cặp cũ nào: một vế của
+// cổng cũ còn dính lại (cổng chép tay đứng THÊM vào cổng registry) cũng đỏ.
+describe.each(SC14_ORDER)("cổng của ô `%s` đọc từ registry TRUYỀN VÀO, không chép tay", (key) => {
+  const others = SC14_ORDER.filter((candidate) => candidate !== key);
+  const oneNewPair = withGate(key, { requiredAnyPermissions: [NEW_PAIR] });
+  const twoNewPairs = withGate(key, { requiredPermissions: [NEW_PAIR, SECOND_NEW_PAIR] });
+
+  it("DENY: registry đổi cổng sang MỘT cặp mới ⇒ đủ mọi cặp cũ vẫn KHÔNG có ô (sáu ô kia vẫn có)", () => {
+    expect(pick(EVERY_PAIR, oneNewPair)).toEqual(others);
+  });
+
+  it("ALLOW: cùng bản sao đó ⇒ cặp mới MỘT MÌNH là đủ, không cần cặp cũ nào", () => {
+    expect(pick([NEW_PAIR], oneNewPair)).toEqual([key]);
+  });
+
+  it.each([NEW_PAIR, SECOND_NEW_PAIR])(
+    "DENY: registry đổi sang cổng ĐỦ-CẢ-HAI ⇒ mọi cặp cũ + riêng `%s` vẫn KHÔNG có ô",
+    (onlyPair) => {
+      expect(pick([...EVERY_PAIR, onlyPair], twoNewPairs)).toEqual(others);
+    },
+  );
+
+  it("ALLOW: cùng bản sao đó ⇒ đủ hai cặp mới là có ô, không cần cặp cũ nào", () => {
+    expect(pick([NEW_PAIR, SECOND_NEW_PAIR], twoNewPairs)).toEqual([key]);
   });
 });
 
