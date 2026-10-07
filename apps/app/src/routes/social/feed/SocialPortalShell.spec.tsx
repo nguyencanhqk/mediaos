@@ -182,7 +182,9 @@ describe("điều hướng từ rail phải và ô tìm kiếm", () => {
     // `search` là HÀM cập nhật (giữ nguyên bộ lọc đang có) chứ không phải object ghi đè — ghi đè sẽ
     // xoá mất `sort`/`tag` người dùng đang đặt.
     expect(typeof arg.search).toBe("function");
-    expect((arg.search as (p: Record<string, unknown>) => Record<string, unknown>)({ sort: "latest" })).toEqual({
+    expect(
+      (arg.search as (p: Record<string, unknown>) => Record<string, unknown>)({ sort: "latest" }),
+    ).toEqual({
       sort: "latest",
       wish: "An Nguyễn",
     });
@@ -245,7 +247,7 @@ describe("SocialPortalShell — ô tìm kiếm đồng bộ từ URL", () => {
 
     // Đây là ca đắt nhất: nút này VẮNG MẶT hoàn toàn trước bản vá.
     const clearBtn = await waitFor(() => {
-      const el = screen.getByTestId("feed-search-box").querySelector('button[aria-label]');
+      const el = screen.getByTestId("feed-search-box").querySelector("button[aria-label]");
       expect(el).not.toBeNull();
       return el as HTMLButtonElement;
     });
