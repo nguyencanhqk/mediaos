@@ -266,39 +266,49 @@ describe("Q5 — thứ tự vẽ = thứ tự SC-14, tên lấy từ i18n thật
 });
 
 describe("icon của từng ô", () => {
-  /** `true` ⇔ `DynamicIcon` không biết tên này và vẽ vòng tròn mặc định. */
-  const isFallbackIcon = (name: string): boolean => {
+  /** Lớp `lucide-<tên>` của một `<svg>` — danh tính của HÌNH, không phụ thuộc kích thước hay màu. */
+  const iconTokenIn = (svg: Element | null): string | undefined =>
+    Array.from(svg?.classList ?? []).find((cls) => cls.startsWith("lucide-"));
+
+  /** Hình mà `DynamicIcon` vẽ cho một tên icon của registry. */
+  const iconTokenOf = (name: string): string | undefined => {
     const { container, unmount } = render(<DynamicIcon name={name} />);
-    const classes = container.querySelector("svg")?.getAttribute("class")?.split(/\s+/) ?? [];
+    const token = iconTokenIn(container.querySelector("svg"));
     unmount();
-    return classes.includes(FALLBACK_ICON_CLASS);
+    return token;
   };
+
+  /** App của dải, đúng thứ tự hằng — nguồn icon kỳ vọng là registry, không phải bảng viết tay. */
+  const stripApps = () =>
+    FEED_QUICK_LINK_APP_KEYS.flatMap((key) => APP_REGISTRY.filter((app) => app.appKey === key));
 
   it("mọi app của dải có `icon` KHAI trong ICON_MAP (thiếu ⇒ vòng tròn mặc định, không cổng nào bắt)", () => {
     // Đối chứng cho phép đo: tên không tồn tại ⇒ vòng tròn mặc định; tên có thật ⇒ không phải.
-    expect(isFallbackIcon("khong-co-icon-nay")).toBe(true);
-    expect(isFallbackIcon("target")).toBe(false);
+    expect(iconTokenOf("khong-co-icon-nay")).toBe(FALLBACK_ICON_CLASS);
+    expect(iconTokenOf("target")).not.toBe(FALLBACK_ICON_CLASS);
 
-    const apps = FEED_QUICK_LINK_APP_KEYS.flatMap((key) =>
-      APP_REGISTRY.filter((app) => app.appKey === key),
-    );
+    const apps = stripApps();
     expect(apps).toHaveLength(7);
     const unmapped = apps
-      .filter((app) => isFallbackIcon(app.icon))
+      .filter((app) => iconTokenOf(app.icon) === FALLBACK_ICON_CLASS)
       .map((app) => `${app.appKey} → ${app.icon}`);
     expect(unmapped).toEqual([]);
   });
 
-  it("mỗi ô VẼ icon của app, và icon ẩn với trình đọc màn hình (tên ô không lẫn icon)", () => {
+  it("mỗi ô VẼ đúng icon registry khai cho app ĐÓ, và icon ẩn với trình đọc màn hình", () => {
     setCaps(EVERY_CAP);
     renderStrip();
     const items = within(screen.getByRole("navigation", { name: STRIP })).getAllByRole("listitem");
     expect(items).toHaveLength(7);
+
+    const expected = stripApps().map((app) => iconTokenOf(app.icon));
+    // Bảy app, bảy HÌNH khác nhau — không thì một icon cố định cho mọi ô cũng qua được phép so dưới.
+    expect(new Set(expected).size).toBe(7);
+
+    // Icon của app là `<svg>` ĐẦU TIÊN trong ô (dấu ↗ của ô ngoài đứng sau nó).
+    expect(items.map((item) => iconTokenIn(item.querySelector("svg")))).toEqual(expected);
     for (const item of items) {
-      const icon = item.querySelector("svg");
-      expect(icon, `ô «${item.textContent}» không có icon`).not.toBeNull();
-      expect(icon?.classList.contains(FALLBACK_ICON_CLASS)).toBe(false);
-      expect(icon?.closest("[aria-hidden='true']")).not.toBeNull();
+      expect(item.querySelector("svg")?.closest("[aria-hidden='true']")).not.toBeNull();
     }
   });
 });
