@@ -20978,6 +20978,31 @@ export const backlog = [
     ],
   },
   {
+    id: "S19-OPS-AUDITCRIT-2",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên mọi PR từ 07/10/2026: 1 advisory CRITICAL mới — shell-quote `>=1.8.4 <1.11.0` (GHSA-pqg4-j6r4-53mv), dep bắc cầu của `gel` (trình điều khiển Gel do drizzle-orm / drizzle-kit kéo theo; API không nạp)",
+    zone: "amber",
+    status: "todo",
+    paths: ["pnpm-workspace.yaml", "pnpm-lock.yaml", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Đo 07/10/2026: lượt Security của PR #575 (run `37595714251`) ĐỎ trong khi PR chạm 0 file deps; ba lượt `security.yml` gần nhất trên master (tới `9c28dd9b`, 06/10 21:02) còn XANH ⇒ advisory lên registry sau đó, không do PR nào sinh ra. `pnpm audit` local trên lockfile của master: 12 vuln (1 critical · 9 moderate · 2 low), exit 1",
+      "`pnpm why shell-quote -r`: cây có ĐÚNG MỘT bản 1.10.0, đường tới duy nhất `gel@2.2.0` ← `drizzle-orm@0.45.2` (peer tuỳ chọn; dependencies của API) + `drizzle-kit@0.30.6` (devDependencies của API); trong `gel` chỉ `dist/cli.mjs` nạp `shell-quote`; `apps/api` không import `gel`. Registry: 1.11.0 (29/09) · 1.12.0 (02/10)",
+    ],
+    done_when: [
+      "MỘT dòng override range-scoped trong `pnpm-workspace.yaml` (nới dòng `shell-quote` sẵn có từ `<=1.8.4` lên `<1.11.0`); lockfile đổi ĐÚNG gói `shell-quote`; KHÔNG suppress GHSA (owner 25/07: «luôn vá, không ỉm»)",
+      "Đo trên ĐÚNG entry mà `gel` nạp: với đầu vào của advisory (token có ký tự xuống dòng đứng sau token `{ comment }`) bản cũ trả chuỗi có dòng lệnh thứ hai, bản mới ném `TypeError`; quote thường không đổi",
+      "`pnpm install --frozen-lockfile` sạch · `pnpm audit --audit-level high` exit 0 · CI Security XANH",
+    ],
+    notes: [
+      "🟡 Diff chỉ gồm `pnpm-workspace.yaml` + `pnpm-lock.yaml` + mục backlog này. Owner nói «vá luôn» ngày 07/10/2026 sau khi CI của PR-C (#575) đỏ đúng cổng này; không subagent, 1 PR, thi công trong worktree riêng (PROD chạy trên node_modules của checkout chính).",
+      "Sau merge: checkout chính `git pull --ff-only` + `pnpm install --frozen-lockfile` để node_modules khớp lockfile — không cần build / restart API (API không nạp `gel` hay `shell-quote`). Rồi cập nhật nhánh PR #575 từ master để cổng này chạy lại trên lockfile mới.",
+    ],
+  },
+  {
     id: "S19-OPS-SCASATELLITE-1",
     module: "DEVOPS",
     layer: "OPS",
