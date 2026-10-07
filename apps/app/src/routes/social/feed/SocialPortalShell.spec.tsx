@@ -77,7 +77,7 @@ beforeEach(() => {
     widget_code: "HR_OVERVIEW",
     widget_type: "Summary",
     status: "Active",
-    data: { summary: { headcount: 128 }, byStatus: { Active: 128 }, byOrgUnit: {} },
+    data: { summary: { headcount: 128 }, byStatus: { Active: 120, Probation: 8 }, byOrgUnit: {} },
     empty_state: null,
     error_state: null,
     last_updated_at: null,

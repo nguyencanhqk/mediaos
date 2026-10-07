@@ -5,7 +5,11 @@
  * tin" của UI-07 §34b (khác `ModuleWorkspaceLayout`, nơi chỉ có một sidebar và phần còn lại là trang).
  *
  * Rail phải: Sinh nhật · Tin nổi bật · Bình chọn đang mở (FE-2) · Vinh danh tháng này (FE-2C) · Nhóm
- * của tôi (FE-2B, KHÔNG badge cho tới `S16-SOCIAL-BE-2C`) — thứ tự UI-07.
+ * của tôi (FE-2B, KHÔNG badge cho tới `S16-SOCIAL-BE-2C`) · Tổng quan nhân sự (FE-3C — widget DASH, chỉ
+ * hiện với người đủ quyền) — thứ tự UI-07.
+ *
+ * Năm khối đầu là dữ liệu SOCIAL: vỏ nạp ở đây, cùng gác `enabled: canViewFeed`. Khối cuối là widget của
+ * module DASH — nó tự gác quyền và tự nạp dữ liệu trong `HrOverviewRailSlot`; vỏ chỉ cho nó chỗ đứng.
  *
  * ┌─ 🔴 VỎ NÀY LÀ CỦA SOCIAL, KHÔNG PHẢI CỦA MỌI `MODULE_PORTAL` ────────────────────────────────┐
  * │ Rail phải chở widget Sinh nhật + Tin nổi bật — hai thứ chỉ SOCIAL có. Hôm nay SOCIAL là module │
@@ -34,6 +38,7 @@ import { BirthdayWidget } from "./components/BirthdayWidget";
 import { HighlightNewsWidget } from "./components/HighlightNewsWidget";
 import { OpenPollsWidget } from "./components/OpenPollsWidget";
 import { MyGroupsWidget } from "./components/MyGroupsWidget";
+import { HrOverviewRailSlot } from "./components/HrOverviewRailSlot";
 import { KudosThisMonthWidget } from "../kudos/components/KudosThisMonthWidget";
 import { currentKudosMonth } from "../kudos/lib/kudos-month";
 import { FeedSearchBox } from "./components/FeedSearchBox";
@@ -207,6 +212,8 @@ export function SocialPortalShell({
             isLoading={myGroupsQuery.isLoading}
             isError={myGroupsQuery.isError}
           />
+          {/* CUỐI rail (UI-07 §34b.2). Không đủ quyền ⇒ không vẽ gì và không gọi API DASH nào. */}
+          <HrOverviewRailSlot />
         </PortalRightRail>
       }
     >
