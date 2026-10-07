@@ -14,7 +14,7 @@
  * đi qua spy, nên «không gọi API DASH» đo trên cả `/dashboard/me` lẫn đường dữ liệu widget.
  * Quyền là chuỗi cặp engine viết tay — fixture, không phải mã sản phẩm. Chữ kỳ vọng VIẾT TAY.
  */
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardWidgetDataDto } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
@@ -272,6 +272,24 @@ describe("HR1 — cổng của ô: ĐỦ bốn cặp, khớp ĐÚNG-BẰNG", () 
   });
 });
 
+// Năm khối SOCIAL của rail là `<section aria-label>` (`PortalWidgetBlock`); thẻ của widget DASH tự nó không khai vùng
+// nào ⇒ ô từng là khối DUY NHẤT của rail vắng mặt trong danh sách vùng của trình đọc màn hình (gate TS, TSC-04). Vế
+// DENY của vùng là các hàng DENY phía trên (`renderedNodes: 0` — không có khung nào, kể cả khung vùng rỗng).
+describe("vùng có nhãn — ô đứng trong rail như năm khối SOCIAL", () => {
+  it("ALLOW: slot vẽ đúng MỘT vùng (`region`) mang tên tiêu đề của widget; vùng là node duy nhất và chứa tiêu đề + số liệu", async () => {
+    setCaps(FOUR_PAIRS);
+    const { container } = renderSlot();
+    await settle();
+
+    const regionNames = screen.queryAllByRole("region").map((el) => el.getAttribute("aria-label"));
+    expect(regionNames).toEqual([WIDGET_TITLE]);
+    const region = screen.getByRole("region", { name: WIDGET_TITLE });
+    expect(container.firstElementChild).toBe(region);
+    expect(within(region).getByRole("heading", { name: WIDGET_TITLE })).toBeInTheDocument();
+    expect(within(region).getByText(String(HEADCOUNT))).toBeInTheDocument();
+  });
+});
+
 describe("số request khi đi lại giữa các trang của cụm bảng tin (vỏ mount lại ô ở mỗi route)", () => {
   it("mount lại trên CÙNG QueryClient: vài giây sau ⇒ dùng số liệu đã có, không gọi thêm; rất lâu sau ⇒ thêm đúng 1 lời gọi", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -298,7 +316,7 @@ describe("số request khi đi lại giữa các trang của cụm bảng tin (v
   });
 });
 
-describe("trạng thái của ô ở rail — do widget DASH tự vẽ, slot không thêm gì", () => {
+describe("trạng thái của ô ở rail — do widget DASH tự vẽ, slot không thêm trạng thái nào", () => {
   beforeEach(() => setCaps(FOUR_PAIRS));
 
   it("đang tải ⇒ tiêu đề đã có, nút «Làm mới» khoá, chưa có số liệu", async () => {

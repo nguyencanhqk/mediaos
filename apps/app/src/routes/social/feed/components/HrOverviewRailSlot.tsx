@@ -32,7 +32,15 @@
  * thời gian cache của server.
  *
  * Cổng ở FE chỉ để KHÔNG vẽ và KHÔNG hỏi; quyền thật và phạm vi dữ liệu do server quyết ở mỗi lời gọi.
+ *
+ * VÙNG CÓ NHÃN: năm khối SOCIAL của rail là `<section aria-label>` (`PortalWidgetBlock`), còn thẻ của widget DASH tự
+ * nó không khai vùng nào ⇒ slot bọc ô trong một `<section aria-label>` để ô có mặt trong danh sách vùng của trình đọc
+ * màn hình như năm khối kia. Nhãn là CHÍNH khoá tiêu đề của widget (`dashboard:hrOverview.title`) — tên vùng không
+ * lệch được khỏi chữ nhìn thấy. Khung bọc đứng SAU cổng (không đủ quyền ⇒ không có vùng rỗng) và không mang class
+ * nào: bố cục vẫn do thẻ của widget tự lo. ⚠️ Tiêu đề trong thẻ vẫn là `<h3>` đứng sau năm `<h2>` của rail, đệm của
+ * thẻ lớn hơn các khối bên cạnh — sửa gốc cần `WidgetCard` nhận cấp tiêu đề / biến thể gọn (nợ, ngoài WO này).
  */
+import { useTranslation } from "react-i18next";
 import { useCanExact } from "@mediaos/web-core";
 import { HrOverviewWidget } from "@/components/dashboard/HrOverviewWidget";
 import { DASH_READ_PAIR, DASH_WIDGET_GATE_PAIR } from "@/routes/dashboard/constants";
@@ -45,6 +53,7 @@ import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
 const FEED_VIEW_PAIR = { action: "view", resourceType: "feed" } as const;
 
 export function HrOverviewRailSlot(): React.ReactElement | null {
+  const { t } = useTranslation("dashboard");
   const widgetPair = DASH_WIDGET_GATE_PAIR.HR_OVERVIEW;
   const hrStaffPair = HR_ENGINE_PAIRS.UPDATE_EMPLOYEE;
 
@@ -56,5 +65,9 @@ export function HrOverviewRailSlot(): React.ReactElement | null {
 
   if (!(canViewFeed && canReadDashboard && canReadEmployees && canUpdateEmployees)) return null;
 
-  return <HrOverviewWidget />;
+  return (
+    <section aria-label={t("hrOverview.title")}>
+      <HrOverviewWidget />
+    </section>
+  );
 }

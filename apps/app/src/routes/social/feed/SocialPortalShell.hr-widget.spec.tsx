@@ -190,6 +190,18 @@ describe("W4 — widget DASH «Tổng quan nhân sự» (S16-SOCIAL-FE-3C L7, pl
     expect(await within(rail).findByText(String(HEADCOUNT))).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  // Gate TS của PR-C (TSC-04): năm khối SOCIAL là `<section aria-label>`, ô DASH từng là khối duy nhất không có vùng.
+  it("ALLOW: ô là VÙNG CÓ NHÃN như năm khối SOCIAL — rail có sáu vùng, vùng CUỐI mang tên «Tổng quan nhân sự» và chính là khối cuối của rail", async () => {
+    setCaps(FOUR_PAIRS);
+    renderShell();
+    await settle();
+
+    const regions = within(rightRail()).getAllByRole("region");
+    expect(regions).toHaveLength(SOCIAL_RAIL_BLOCKS + 1);
+    expect(regions.at(-1)).toHaveAccessibleName(WIDGET_TITLE);
+    expect(regions.at(-1)).toBe(rightRail().lastElementChild);
+  });
 });
 
 describe("W4 — cổng của ô ở CẤP VỎ: vỏ chỉ mount ô qua slot bốn vế, không mount thẳng widget", () => {
