@@ -7,6 +7,9 @@
  *    chứng). Nút không nằm trong nhánh của «Trả lời», không đòi `create:feed-comment` (027 gác `view:feed`).
  *  · CR2 — bấm ⇒ hộp thoại «Báo cáo bình luận»; gửi ⇒ đích `comment` + id của CHÍNH hàng đó. Hộp thoại
  *    mount LƯỜI: danh sách vẽ được khi KHÔNG có `QueryClientProvider` (như các ca của `CommentList.spec.tsx`).
+ *  · hộp thoại mở TỪ BÌNH LUẬN mang dòng cảnh báo SOC-DEC-011 (`done_when`: «dùng chung hộp thoại + cảnh báo») —
+ *    đo ở NƠI MOUNT: `ReportDialog.spec.tsx` đo chính hộp thoại, còn một hộp thoại khác cùng tiêu đề + nhãn ô đặt
+ *    vào đây, hay một prop ẩn cảnh báo cho đích bình luận, thì chỉ ca ở file này thấy.
  *  · hàng biến mất khi hộp thoại đang mở ⇒ hộp thoại + nháp CÒN; server trả 404 ⇒ `reportTargetGone`.
  *  · đóng ⇒ focus về nút «Báo cáo» của ĐÚNG hàng · mỗi lượt mở một nháp + một `attemptId` (plan D20 · B22).
  * Hộp thoại ĐANG MỞ mà nút «Báo cáo» của một hàng được kích hoạt (hộp thoại là modal ở nơi mount) đo ở file riêng
@@ -54,6 +57,8 @@ const REPLY = "Trả lời";
 const DELETE = "Xoá";
 const DIALOG_TITLE = "Báo cáo bình luận";
 const NOTE = "Ghi chú thêm (không bắt buộc)";
+const WARNING =
+  "Người kiểm duyệt cấp công ty thấy tên người báo cáo; quản lý đơn vị thì không. Ghi chú của bạn được hiển thị nguyên văn cho mọi người kiểm duyệt, kể cả quản lý đơn vị — đừng viết điều có thể tự làm lộ danh tính của bạn.";
 const SUBMIT = "Gửi báo cáo";
 const CANCEL = "Huỷ";
 const CLOSE = "Đóng";
@@ -199,6 +204,21 @@ describe("CR2 — hộp thoại mount LƯỜI", () => {
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(dialog()).toBeInTheDocument();
   });
+
+  it.each([
+    { name: "bình luận gốc", body: ROOT_BODY },
+    { name: "trả lời", body: REPLY_BODY },
+  ])(
+    "$name: hộp thoại mang dòng cảnh báo SOC-DEC-011 TRƯỚC khi gõ, và nó là mô tả trợ năng của ô ghi chú",
+    ({ body }) => {
+      renderWithProviders(listNode([root(), reply()]));
+      fireEvent.click(reportButton(body));
+
+      expect(noteBox()).toHaveValue("");
+      expect(within(dialog()).getByText(WARNING)).toBeInTheDocument();
+      expect(noteBox()).toHaveAccessibleDescription(/tự làm lộ danh tính/);
+    },
+  );
 });
 
 describe("CR2 — gửi báo cáo cho ĐÚNG bình luận", () => {
