@@ -38,12 +38,23 @@ export interface StoragePutInput {
 /**
  * Input for a presigned GET (download intent). The adapter re-asserts key ∈ tenant prefix before
  * signing (CLAUDE.md §2.1 — company_id on every query).
+ *
+ * `registeredMimeType` + `fileName` are REQUIRED (S16-SOCIAL-FILEDISPOSITION-1): the signed URL pins
+ * the response content type and disposition to the file's registered metadata, so a caller must read
+ * both from the metadata row it already resolved — there is no way to sign without them.
  */
 export interface StorageGetInput {
   /** Storage key for the object to download. */
   key: string;
   /** Owning company — used to assert the key is inside this tenant's prefix. */
   companyId: string;
+  /**
+   * MIME type REGISTERED for the file (the metadata row's value, passed verbatim). The storage layer
+   * derives the response content type from it; it is not the type stored with the object.
+   */
+  registeredMimeType: string;
+  /** Original file name of the metadata row (verbatim) — used for the download file name. */
+  fileName: string;
   /** Optional TTL override in seconds (uses DEFAULT_PRESIGN_TTL_SEC when absent). */
   presignTtlSec?: number;
 }
@@ -144,6 +155,8 @@ export interface StorageAdapter {
   /**
    * Returns a presigned GET URL for `key`, scoped to `companyId`.
    * The adapter MUST re-assert `key` is inside the tenant prefix (cross-tenant guard).
+   * The URL pins the response content type (derived from `registeredMimeType`) and, for every type
+   * that is not displayed inline, an `attachment` disposition built from `fileName`.
    * Result URL is ephemeral — MUST NOT be persisted by the caller.
    */
   get(input: StorageGetInput): Promise<SignedUrlResult>;

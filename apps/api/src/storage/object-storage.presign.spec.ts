@@ -8,6 +8,9 @@
  * Ca:
  *   G1 — URL PUT ký header `content-type` (nằm trong `X-Amz-SignedHeaders`).
  *   G2 — kiểu nội dung tham gia chữ ký: đổi kiểu ⇒ chữ ký khác; cùng kiểu ⇒ chữ ký giống.
+ *   G3 — URL GET mang `response-content-type` = MIME đã đăng ký; loại không hiển thị trực tiếp kèm
+ *        `response-content-disposition: attachment…`, loại hiển thị trực tiếp KHÔNG có khoá đó.
+ *   G4 — hàng cũ mang MIME thuộc nhóm trình duyệt tự dựng ⇒ kiểu trả dự phòng + `attachment`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectStorageService } from "./object-storage.service";
@@ -121,5 +124,112 @@ describe("ObjectStorageService — URL PUT đã ký (ký ngoại tuyến, không
 
     expect(queryParam(first, "X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
     expect(queryParam(second, "X-Amz-Signature")).toBe(queryParam(first, "X-Amz-Signature"));
+  });
+});
+
+describe("ObjectStorageService — URL GET đã ký (ký ngoại tuyến, không mock SDK)", () => {
+  let envSnap: EnvSnapshot;
+
+  beforeEach(() => {
+    envSnap = snapshotEnv();
+    setOfflineSigningEnv();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(SIGNING_DATE);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    restoreEnv(envSnap);
+  });
+
+  it("G3 — hàng application/pdf ⇒ response-content-type = application/pdf + attachment", async () => {
+    const service = new ObjectStorageService();
+
+    const url = await service.createDownloadUrl(KEY_A, COMPANY_A, {
+      registeredMimeType: "application/pdf",
+      fileName: "bao-cao.pdf",
+    });
+
+    expect(queryParam(url, "response-content-type")).toBe("application/pdf");
+    expect(queryParam(url, "response-content-disposition")).toMatch(/^attachment; filename=/);
+    expect(queryParam(url, "response-content-disposition")).toContain("bao-cao.pdf");
+  });
+
+  it("G3 — CHO PHÉP: hàng image/png ⇒ response-content-type = image/png, KHÔNG có khoá response-content-disposition", async () => {
+    const service = new ObjectStorageService();
+
+    const url = await service.createDownloadUrl(KEY_A, COMPANY_A, {
+      registeredMimeType: "image/png",
+      fileName: "anh.png",
+    });
+
+    expect(queryParam(url, "response-content-type")).toBe("image/png");
+    // `null` = khoá VẮNG hẳn. Khoá có mặt với giá trị rỗng sẽ là chuỗi rỗng ⇒ ca đỏ.
+    expect(queryParam(url, "response-content-disposition")).toBeNull();
+  });
+
+  it("G3 — kiểu trả là type/subtype đã thường hoá, không phải chuỗi của hàng nguyên văn", async () => {
+    const service = new ObjectStorageService();
+
+    const url = await service.createDownloadUrl(KEY_A, COMPANY_A, {
+      registeredMimeType: " Text/CSV ;charset=utf-8",
+      fileName: "bang.csv",
+    });
+
+    expect(queryParam(url, "response-content-type")).toBe("text/csv");
+    expect(queryParam(url, "response-content-disposition")).toMatch(/^attachment; filename=/);
+  });
+
+  it("G4 — hàng cũ text/html ⇒ response-content-type = application/octet-stream + attachment", async () => {
+    const service = new ObjectStorageService();
+
+    const url = await service.createDownloadUrl(KEY_A, COMPANY_A, {
+      registeredMimeType: "text/html",
+      fileName: "trang.html",
+    });
+
+    expect(queryParam(url, "response-content-type")).toBe("application/octet-stream");
+    expect(queryParam(url, "response-content-disposition")).toMatch(/^attachment; filename=/);
+  });
+
+  it("G4 — MIME rỗng hoặc sai dạng ⇒ kiểu trả dự phòng + attachment (không ký trần)", async () => {
+    const service = new ObjectStorageService();
+
+    for (const registeredMimeType of ["", "khong-phai-mime"]) {
+      const url = await service.createDownloadUrl(KEY_A, COMPANY_A, {
+        registeredMimeType,
+        fileName: "tep",
+      });
+
+      expect(queryParam(url, "response-content-type")).toBe("application/octet-stream");
+      expect(queryParam(url, "response-content-disposition")).toMatch(/^attachment; filename=/);
+    }
+  });
+
+  it("G3 — hai tham số response-* nằm trong phần ĐÃ KÝ: đổi kiểu đã đăng ký ⇒ chữ ký KHÁC ⇄ cùng kiểu ⇒ chữ ký GIỐNG", async () => {
+    const service = new ObjectStorageService();
+    const pdf = { registeredMimeType: "application/pdf", fileName: "tep" };
+
+    const first = await service.createDownloadUrl(KEY_A, COMPANY_A, pdf);
+    const second = await service.createDownloadUrl(KEY_A, COMPANY_A, pdf);
+    const other = await service.createDownloadUrl(KEY_A, COMPANY_A, {
+      registeredMimeType: "text/csv",
+      fileName: "tep",
+    });
+
+    expect(queryParam(first, "X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
+    expect(queryParam(second, "X-Amz-Signature")).toBe(queryParam(first, "X-Amz-Signature"));
+    expect(queryParam(other, "X-Amz-Signature")).not.toBe(queryParam(first, "X-Amz-Signature"));
+  });
+
+  it("TTL theo lời gọi vẫn tới chữ ký sau khi thêm tham số kiểu (X-Amz-Expires)", async () => {
+    const service = new ObjectStorageService();
+    const serveAs = { registeredMimeType: "image/png", fileName: "anh.png" };
+
+    const withDefault = await service.createDownloadUrl(KEY_A, COMPANY_A, serveAs);
+    const withOverride = await service.createDownloadUrl(KEY_A, COMPANY_A, serveAs, 900);
+
+    expect(queryParam(withDefault, "X-Amz-Expires")).toBe("300");
+    expect(queryParam(withOverride, "X-Amz-Expires")).toBe("900");
   });
 });

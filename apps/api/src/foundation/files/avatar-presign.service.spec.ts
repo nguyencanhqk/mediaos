@@ -19,8 +19,13 @@ const F2 = "22222222-2222-4222-8222-222222222222";
 
 type Verified = { employeeId: string; fileId: string; storagePath: string };
 
+/** Hai cột hàng `files` mà projection trả kèm (S16-SOCIAL-FILEDISPOSITION-1) — cùng giá trị cho mọi fixture. */
+const REGISTERED = { mimeType: "image/png", originalName: "ảnh đại diện.png" };
+
 function makeService(verified: Verified[], getImpl?: (key: string) => Promise<{ url: string }>) {
-  const findVerifiedAvatarsTx = vi.fn().mockResolvedValue(verified);
+  const findVerifiedAvatarsTx = vi
+    .fn()
+    .mockResolvedValue(verified.map((v) => ({ ...v, ...REGISTERED })));
   const db = { withTenant: vi.fn((_c: string, fn: (tx: unknown) => unknown) => fn({})) };
   const fileRepo = { findVerifiedAvatarsTx };
   const storage = {
@@ -70,6 +75,19 @@ describe("resolveEmployeeAvatars", () => {
     expect(findVerifiedAvatarsTx).toHaveBeenCalledWith("c1", [F1], {});
     expect(storage.get).toHaveBeenCalledTimes(1);
     expect(map.get(E1)).toBe("https://signed/c1/files/f1");
+  });
+
+  it("ký với MIME đã đăng ký + tên gốc của CHÍNH hàng đó (không hằng đoán)", async () => {
+    const { svc, storage } = makeService([
+      { employeeId: E1, fileId: F1, storagePath: "c1/files/f1" },
+    ]);
+    await svc.resolveEmployeeAvatars("c1", [{ employeeId: E1, avatarUrl: F1 }]);
+    expect(storage.get).toHaveBeenCalledWith({
+      key: "c1/files/f1",
+      companyId: "c1",
+      registeredMimeType: REGISTERED.mimeType,
+      fileName: REGISTERED.originalName,
+    });
   });
 
   it("DENY đầu độc CHÉO — B đặt avatar_url = fileId avatar của A → B KHÔNG được ký (link entity=A≠B)", async () => {

@@ -37,9 +37,7 @@ function makeRepo() {
   return {
     findRawByIdTx: vi
       .fn()
-      .mockResolvedValue([
-        { id: TASK_ID, taskType: "office", status: "not_started" },
-      ]),
+      .mockResolvedValue([{ id: TASK_ID, taskType: "office", status: "not_started" }]),
     isTaskAssigneeTx: vi.fn().mockResolvedValue(false),
     createAttachment: vi.fn().mockResolvedValue([
       {
@@ -196,11 +194,22 @@ describe("TaskAttachmentsService.getDownloadUrl — cross-tenant deny", () => {
     const ctx = build();
     const key = `${COMPANY_ID}/tasks/${TASK_ID}/${ATTACH_ID}`;
     ctx.repo.findAttachmentByIdTx.mockResolvedValue([
-      { id: ATTACH_ID, taskId: TASK_ID, companyId: COMPANY_ID, storageKey: key },
+      {
+        id: ATTACH_ID,
+        taskId: TASK_ID,
+        companyId: COMPANY_ID,
+        storageKey: key,
+        fileName: "report.pdf",
+        contentType: "application/pdf",
+      },
     ]);
     const out = await ctx.service.getDownloadUrl(USER, TASK_ID, ATTACH_ID);
     expect(out.downloadUrl).toContain("presigned-get");
-    expect(ctx.storage.createDownloadUrl).toHaveBeenCalledWith(key, COMPANY_ID);
+    // S16-SOCIAL-FILEDISPOSITION-1: the row's registered type + name go down to the signing layer.
+    expect(ctx.storage.createDownloadUrl).toHaveBeenCalledWith(key, COMPANY_ID, {
+      registeredMimeType: "application/pdf",
+      fileName: "report.pdf",
+    });
   });
 });
 

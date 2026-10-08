@@ -63,7 +63,14 @@ export class ChatRoomAvatarPresignService {
     const results = await Promise.allSettled(
       verified.map(async (v) => ({
         roomId: v.roomId,
-        url: (await this.storage.get({ key: v.storagePath, companyId })).url,
+        url: (
+          await this.storage.get({
+            key: v.storagePath,
+            companyId,
+            registeredMimeType: v.mimeType,
+            fileName: v.originalName,
+          })
+        ).url,
       })),
     );
 

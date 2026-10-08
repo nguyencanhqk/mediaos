@@ -74,6 +74,48 @@ describe("S3StorageAdapter.stat", () => {
   });
 });
 
+describe("S3StorageAdapter.get (S16-SOCIAL-FILEDISPOSITION-1)", () => {
+  it("G5 — forwards registeredMimeType + fileName to createDownloadUrl unchanged", async () => {
+    const fakeStorage = buildFakeObjectStorage();
+    vi.mocked(fakeStorage.createDownloadUrl).mockResolvedValue("https://signed.example/get");
+    const adapter = new S3StorageAdapter(fakeStorage);
+
+    const result = await adapter.get({
+      key: KEY_A,
+      companyId: COMPANY_A,
+      registeredMimeType: "Application/PDF; x=1",
+      fileName: "báo cáo (1).pdf",
+      presignTtlSec: 900,
+    });
+
+    expect(result.url).toBe("https://signed.example/get");
+    // The adapter holds no serving rule: both values reach the service exactly as given.
+    expect(fakeStorage.createDownloadUrl).toHaveBeenCalledTimes(1);
+    expect(fakeStorage.createDownloadUrl).toHaveBeenCalledWith(
+      KEY_A,
+      COMPANY_A,
+      { registeredMimeType: "Application/PDF; x=1", fileName: "báo cáo (1).pdf" },
+      900,
+    );
+  });
+
+  it("propagates a rejection from the service (does not swallow a signing failure)", async () => {
+    const fakeStorage = buildFakeObjectStorage();
+    const boom = new Error("boom");
+    vi.mocked(fakeStorage.createDownloadUrl).mockRejectedValue(boom);
+    const adapter = new S3StorageAdapter(fakeStorage);
+
+    await expect(
+      adapter.get({
+        key: KEY_A,
+        companyId: COMPANY_A,
+        registeredMimeType: "image/png",
+        fileName: "anh.png",
+      }),
+    ).rejects.toBe(boom);
+  });
+});
+
 describe("S3StorageAdapter.getBytes", () => {
   it("delegates to ObjectStorageService.getObjectBytes with (key, companyId) unchanged", async () => {
     const fakeStorage = buildFakeObjectStorage();
@@ -135,8 +177,15 @@ describe("S3StorageAdapter — resolveTtl clamp (QA06-FILE-003 signed-URL expiry
     {
       name: "get",
       call: (adapter, presignTtlSec) =>
-        adapter.get({ key: KEY_A, companyId: COMPANY_A, presignTtlSec }),
-      signerTtl: (fake) => vi.mocked(fake.createDownloadUrl).mock.calls[0]?.[2],
+        adapter.get({
+          key: KEY_A,
+          companyId: COMPANY_A,
+          registeredMimeType: "application/pdf",
+          fileName: "report.pdf",
+          presignTtlSec,
+        }),
+      // createDownloadUrl(key, companyId, serveAs, ttl) — the TTL is the 4th argument.
+      signerTtl: (fake) => vi.mocked(fake.createDownloadUrl).mock.calls[0]?.[3],
     },
     {
       name: "signedUrl",

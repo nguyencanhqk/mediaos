@@ -8,7 +8,11 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ATTACHMENT_ALLOWED_CONTENT_TYPES, ATTACHMENT_MAX_BYTES } from "@mediaos/contracts";
-import { assertPresignedPutSignsContentType } from "./presign-invariants";
+import { resolveServeDirectives } from "./content-serving";
+import {
+  assertPresignedGetPinsContentType,
+  assertPresignedPutSignsContentType,
+} from "./presign-invariants";
 import { assertKeyInTenant, validateKey } from "./storage-key";
 import type { StorageStatResult } from "./storage-adapter.port";
 
@@ -46,6 +50,19 @@ export class StorageObjectBodyMissingError extends Error {
     super(`Object storage trả về response không có Body cho key: ${key}`);
     this.name = "StorageObjectBodyMissingError";
   }
+}
+
+/**
+ * How a download must be SERVED (S16-SOCIAL-FILEDISPOSITION-1). Both values are REQUIRED and come from
+ * the registered metadata row of the file — never from the object as stored, never a caller's guess.
+ * There is deliberately no "unknown" variant: a caller that cannot name the registered type must not
+ * be able to obtain a download URL.
+ */
+export interface DownloadServeAs {
+  /** MIME type registered for the file (the row's value, verbatim — normalization happens here). */
+  registeredMimeType: string;
+  /** Original file name of the row (verbatim — sanitized here before it reaches a header). */
+  fileName: string;
 }
 
 const ALLOWED_CONTENT_TYPES = new Set<string>(ATTACHMENT_ALLOWED_CONTENT_TYPES);
@@ -235,14 +252,37 @@ export class ObjectStorageService {
    * Presigned GET URL for downloading `key`. Caller MUST have already resolved the metadata row via
    * RLS (tenant scope) and pass the owning companyId — we re-assert the key is inside that tenant's
    * prefix before signing (belt-and-suspenders on top of RLS).
+   *
+   * What the response carries is decided HERE from the registered metadata (`serveAs`), not from the
+   * object as stored (S16-SOCIAL-FILEDISPOSITION-1): `resolveServeDirectives` yields the response
+   * content type (always a normalized `type/subtype`) and, for every type outside the explicit inline
+   * list, an `attachment` disposition. Both become `response-*` query parameters, which are part of
+   * the signed query — storage answers with exactly these values and rejects a URL whose values were
+   * edited. An inline type passes `undefined` for the disposition (an empty string would still emit an
+   * empty parameter). `X-Content-Type-Options` cannot be set through a signed parameter.
+   * After signing we re-check the URL (fail-closed): no `response-content-type` ⇒ log at error level
+   * and throw `StoragePresignInvariantError` — no URL is returned.
    */
-  async createDownloadUrl(key: string, companyId: string, expiresInSec?: number): Promise<string> {
+  async createDownloadUrl(
+    key: string,
+    companyId: string,
+    serveAs: DownloadServeAs,
+    expiresInSec?: number,
+  ): Promise<string> {
     const config = this.assertConfigured();
     assertKeyInTenant(key, companyId);
-    const command = new GetObjectCommand({ Bucket: config.bucket, Key: key });
-    return getSignedUrl(this.getClient(), command, {
+    const directives = resolveServeDirectives(serveAs.registeredMimeType, serveAs.fileName);
+    const command = new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      ResponseContentType: directives.responseContentType,
+      ResponseContentDisposition: directives.responseContentDisposition,
+    });
+    const url = await getSignedUrl(this.getClient(), command, {
       expiresIn: expiresInSec ?? config.presignTtlSec,
     });
+    this.verifyPresigned(() => assertPresignedGetPinsContentType(url));
+    return url;
   }
 
   /**

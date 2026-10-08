@@ -485,7 +485,13 @@ export class FileService {
     }
 
     // Presign sau khi ALLOW + state-guard. Key đã thuộc tenant (server-derived); adapter re-assert prefix (#2.1).
-    const signed = await this.storage.get({ key: row.storagePath, companyId: user.companyId });
+    // Kiểu trả + tên tải xuống lấy từ HÀNG đã đăng ký (không từ object đang lưu) — tầng ký quyết định.
+    const signed = await this.storage.get({
+      key: row.storagePath,
+      companyId: user.companyId,
+      registeredMimeType: row.mimeType,
+      fileName: row.originalName,
+    });
 
     await this.db.withTenant(user.companyId, (tx) =>
       this.accessLog.record(tx, {

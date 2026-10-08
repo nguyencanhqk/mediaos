@@ -143,7 +143,13 @@ describe("ServerFileService", () => {
     const h = harness();
     const url = await h.svc.issueUrlTx(TX, COMPANY, USER, fileRow());
     expect(url.url).toContain("X-Amz-Expires");
-    expect(h.storage.get).toHaveBeenCalledWith({ key: `${COMPANY}/files/f1`, companyId: COMPANY });
+    // S16-SOCIAL-FILEDISPOSITION-1: MIME đã đăng ký + tên gốc của hàng đi xuống tầng ký.
+    expect(h.storage.get).toHaveBeenCalledWith({
+      key: `${COMPANY}/files/f1`,
+      companyId: COMPANY,
+      registeredMimeType: "application/pdf",
+      fileName: "phieu-luong-2026-08.pdf",
+    });
     expect(h.accessLog.record).toHaveBeenCalledWith(
       TX,
       expect.objectContaining({

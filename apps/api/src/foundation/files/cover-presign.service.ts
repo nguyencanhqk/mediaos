@@ -74,7 +74,14 @@ export class CoverPresignService {
     const results = await Promise.allSettled(
       verified.map(async (v) => ({
         taskId: v.taskId,
-        url: (await this.storage.get({ key: v.storagePath, companyId })).url,
+        url: (
+          await this.storage.get({
+            key: v.storagePath,
+            companyId,
+            registeredMimeType: v.mimeType,
+            fileName: v.originalName,
+          })
+        ).url,
       })),
     );
 

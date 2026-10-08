@@ -251,6 +251,85 @@ describe("ObjectStorageService.createUploadUrl — post-signing self-check (S16-
   });
 });
 
+describe("ObjectStorageService.createDownloadUrl — serve directives + post-signing self-check (S16-SOCIAL-FILEDISPOSITION-1)", () => {
+  const SIGNED_BASE = `http://localhost:9000/test-bucket/${KEY_A}?X-Amz-Signature=abc`;
+  const PDF = { registeredMimeType: "application/pdf", fileName: "bao-cao.pdf" };
+  let envSnap: EnvSnapshot;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    envSnap = snapshotEnv();
+    getSignedUrlMock.mockReset();
+    setConfiguredEnv();
+    errorSpy = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    // Chỉ gỡ spy của Logger — `vi.restoreAllMocks()` sẽ xoá luôn bản giả `S3Client` dùng chung cả file.
+    errorSpy.mockRestore();
+    restoreEnv(envSnap);
+  });
+
+  it("DENY — signer returns a URL with no response-content-type ⇒ throws, logs at error level, returns no URL", async () => {
+    getSignedUrlMock.mockResolvedValue(`${SIGNED_BASE}&X-Amz-SignedHeaders=host`);
+    const service = new ObjectStorageService();
+
+    await expect(service.createDownloadUrl(KEY_A, COMPANY_A, PDF)).rejects.toBeInstanceOf(
+      StoragePresignInvariantError,
+    );
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const logged = String(errorSpy.mock.calls[0][0]);
+    expect(logged).toContain("StoragePresignInvariantError");
+    expect(logged).toContain("GET");
+    // Dòng log không mang URL, khoá object hay chữ ký.
+    expect(logged).not.toContain(KEY_A);
+    expect(logged).not.toContain("X-Amz-Signature");
+    expect(logged).not.toContain("http");
+  });
+
+  it("ALLOW — signer returns a URL that pins response-content-type ⇒ URL returned, nothing logged at error level", async () => {
+    const signed = `${SIGNED_BASE}&response-content-type=application%2Fpdf`;
+    getSignedUrlMock.mockResolvedValue(signed);
+    const service = new ObjectStorageService();
+
+    await expect(service.createDownloadUrl(KEY_A, COMPANY_A, PDF, 900)).resolves.toBe(signed);
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    // Lớp ký được YÊU CẦU ghim kiểu trả + attachment (không chỉ tình cờ có trong URL giả).
+    const command = getSignedUrlMock.mock.calls[0][1] as GetObjectCommand;
+    expect(command).toBeInstanceOf(GetObjectCommand);
+    expect(command.input.Key).toBe(KEY_A);
+    expect(command.input.ResponseContentType).toBe("application/pdf");
+    expect(command.input.ResponseContentDisposition).toMatch(/^attachment; filename=/);
+    expect((getSignedUrlMock.mock.calls[0][2] as { expiresIn?: number }).expiresIn).toBe(900);
+  });
+
+  it("an inline type asks the signer for NO disposition (undefined, never an empty string)", async () => {
+    getSignedUrlMock.mockResolvedValue(`${SIGNED_BASE}&response-content-type=image%2Fpng`);
+    const service = new ObjectStorageService();
+
+    await service.createDownloadUrl(KEY_A, COMPANY_A, {
+      registeredMimeType: "image/png",
+      fileName: "anh.png",
+    });
+
+    const command = getSignedUrlMock.mock.calls[0][1] as GetObjectCommand;
+    expect(command.input.ResponseContentType).toBe("image/png");
+    expect(command.input.ResponseContentDisposition).toBeUndefined();
+  });
+
+  it("DENY — a key outside the caller's tenant prefix is rejected BEFORE signing", async () => {
+    const service = new ObjectStorageService();
+
+    await expect(service.createDownloadUrl(KEY_A, COMPANY_B, PDF)).rejects.toBeInstanceOf(
+      InvalidStorageKeyError,
+    );
+
+    expect(getSignedUrlMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("ObjectStorageService.getObjectBytes", () => {
   let envSnap: EnvSnapshot;
 

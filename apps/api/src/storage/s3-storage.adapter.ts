@@ -16,7 +16,7 @@
  *
  * Method mapping:
  *   PORT `put`        → ObjectStorageService.putObject(key, body, contentType, companyId)
- *   PORT `get`        → ObjectStorageService.createDownloadUrl(key, companyId, ttl)  [presigned GET]
+ *   PORT `get`        → ObjectStorageService.createDownloadUrl(key, companyId, serveAs, ttl) [presigned GET]
  *   PORT `delete`     → ObjectStorageService.deleteObject(key, companyId)
  *   PORT `signedUrl`  → ObjectStorageService.createUploadUrl(key, type, size, ttl)   [presigned PUT]
  *   PORT `stat`       → ObjectStorageService.statObject(key, companyId)              [HEAD — S2-FND-FILE-2]
@@ -65,14 +65,21 @@ export class S3StorageAdapter implements StorageAdapter {
 
   /**
    * Presigned GET URL for client download. ObjectStorageService.createDownloadUrl re-asserts
-   * `key ∈ companyId prefix` (cross-tenant guard) before signing.
+   * `key ∈ companyId prefix` (cross-tenant guard) before signing, and pins the response content type
+   * and disposition from `registeredMimeType` + `fileName` — both forwarded verbatim (the serving rule
+   * lives in the service, not here).
    *
    * `expiresAt` is computed from the effective TTL (env S3_PRESIGN_TTL_SEC or the per-call override,
    * clamped to MAX_PRESIGN_TTL_SEC).
    */
   async get(input: StorageGetInput): Promise<SignedUrlResult> {
     const ttlSec = this.resolveTtl(input.presignTtlSec);
-    const url = await this.objectStorage.createDownloadUrl(input.key, input.companyId, ttlSec);
+    const url = await this.objectStorage.createDownloadUrl(
+      input.key,
+      input.companyId,
+      { registeredMimeType: input.registeredMimeType, fileName: input.fileName },
+      ttlSec,
+    );
     return { url, expiresAt: this.expiresAt(ttlSec) };
   }
 
