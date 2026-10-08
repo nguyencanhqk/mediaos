@@ -1,10 +1,19 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-08 04:38Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-08 09:08Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S16-SOCIAL-FILEDISPOSITION-1 — Kiểu nội dung storage PHỤC VỤ không gắn với MIME đã đăng ký ⇒ XSS lưu trữ trên origin storage với cấu hình MẶC ĐỊNH: PUT ký sẵn KHÔNG ký `Content-Type` (presigner ép vào `unsignableHeaders`) nên người tải lên tự chọn kiểu lưu, confirm không so kiểu, URL ký GET (`createDownloadUrl` — `GetObjectCommand({Bucket, Key})`) không `ResponseContentType`/`ResponseContentDisposition`; allowlist MIME đổi được THEO CÔNG TY lúc chạy làm nặng thêm (chat có sẵn đường bấm; bảng tin S16-SOCIAL-FE-2D mở ra cả công ty)
+- **zone**: red · **skills**: security-review, code-review
+- **sửa ở đâu (paths)**: `apps/api/src/storage/**`, `apps/api/src/foundation/files/**`, `apps/api/src/foundation/settings/**`, `apps/api/src/social/**`, `apps/api/src/chat/**`, `apps/api/test/**`, `packages/contracts/**`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] RED trước — KÝ `Content-Type` của PUT (FULL gate lượt 2): `createUploadUrl` truyền `signableHeaders: new Set(['content-type'])`; ca trên bucket lane/dev (KHÔNG PROD): presign PUT `application/pdf` rồi PUT `Content-Type: text/html` ⇒ storage TỪ CHỐI (403 `SignatureDoesNotMatch`) — trên code hôm nay HEAD thấy `text/html` (ghi lại làm bằng chứng RED); ca ALLOW cạnh bên: PUT đúng `Content-Type` đã khai ⇒ 200. Trước khi bật: đo mọi call-site PUT phía FE gửi ĐÚNG `declaredMimeType` (grep `putBytesToStorage(` + `setRequestHeader` ở `packages/web-core/src` · `apps/app/src` — 9 chỗ lúc seed)
+  - [ ] RED trước — confirm SO KIỂU (FULL gate lượt 2; mọi đường: 055 SOCIAL · `/foundation/files/:id/confirm` · chat): `statObject` trả cả `ContentType` của HEAD; khác MIME đã đăng ký (không phân biệt hoa thường, bỏ tham số `;…`) ⇒ confirm FAIL qua `failConfirm` + mã FOUNDATION có sẵn hoặc append catalog — lưới thứ hai nếu lớp ký bị gỡ hoặc storage/proxy bỏ qua
+  - [ ] RED trước — GET: `createDownloadUrl` ký `ResponseContentType` = MIME ĐÃ ĐĂNG KÝ (đọc từ hàng `files`, KHÔNG từ storage) cho MỌI loại + `ResponseContentDisposition: attachment` (tên tệp mã hoá RFC 5987) cho loại KHÔNG phải ảnh/video; ảnh/video giữ inline để `<img>`/`<video>` vẽ được; `X-Content-Type-Options: nosniff` nếu storage (MinIO/R2) cho đặt qua tham số ký — ghi rõ kết quả ĐO, không đoán
+  - [ ] Server TỪ CHỐI (415, mã FOUNDATION có sẵn hoặc append catalog) MIME nội dung chủ động `text/html` · `application/xhtml+xml` · `image/svg+xml` · `text/xml` · `application/xml` ở MỌI đường register (054 SOCIAL · `/foundation/files` · chat) KHÔNG phụ thuộc allowlist công ty; đuôi tương ứng vào blocklist cứng
+  - [ ] Áp ở `createUploadUrl` · confirm · `createDownloadUrl` dùng chung (mọi module: SOCIAL · chat · FOUNDATION · HR · TASK · avatar · branding), không chỉ SOCIAL; int-spec deny-path + FULL gate
+  - [ ] Sửa docblock `object-storage.service.ts:138` («pins content-type» — SAI với presigner 3.1068.0) theo hành vi mới; 7 docblock FE khẳng định «lệch ⇒ 403 SignatureDoesNotMatch» chỉ ĐÚNG sau khi ký — nếu WO chốt KHÔNG ký thì seed WO FE sửa chúng
 
 ## Hàng đợi
 
@@ -21,9 +30,9 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🔴 `S16-SOCIAL-SCOPEDENIEDCODE-1` `SocialAccessService.resolveActor` nhánh sàn Company ném message `AUTH-ERR-SCOPE-DENIED: …` nhưng `error.code` trên dây là `AUTH-ERR-FORBIDDEN` (chuỗi trần) — quyết định có phát đúng mã `AUTH-ERR-SCOPE-DENIED` không (FE `api-error-kind` sẽ đổi `kind` sang SCOPE_DENIED)
 -  `S16-SOCIAL-FE-2D` FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qua SOCIAL-API-054/055 · @mention thành link hồ sơ từ mảng `mentions` (BE-1D) · hiện `droppedMentions` của bình luận
 - 🔴 `S16-SOCIAL-MENTIONDIR-1` Web KHÔNG sinh được @mention: `002`/`004`/`015`/`016` đòi `mentionedUserIds` (`users.id`) mà mọi DTO SOCIAL cố ý không phơi `userId` ⇒ cần nguồn nhắc tên phía server (nhận `mentionedEmployeeIds` hoặc route danh bạ nhắc tên kiểu `059`) để FE dựng ô chọn mention
-- 🔴 `S16-SOCIAL-FILEDISPOSITION-1` Kiểu nội dung storage PHỤC VỤ không gắn với MIME đã đăng ký ⇒ XSS lưu trữ trên origin storage với cấu hình MẶC ĐỊNH: PUT ký sẵn KHÔNG ký `Content-Type` (presigner ép vào `unsignableHeaders`) nên người tải lên tự chọn kiểu lưu, confirm không so kiểu, URL ký GET (`createDownloadUrl` — `GetObjectCommand({Bucket, Key})`) không `ResponseContentType`/`ResponseContentDisposition`; allowlist MIME đổi được THEO CÔNG TY lúc chạy làm nặng thêm (chat có sẵn đường bấm; bảng tin S16-SOCIAL-FE-2D mở ra cả công ty)
 - 🔴 `S16-SOCIAL-ATTMETAMASK-1` Đính kèm bị TỪ CHỐI presign (`url: null`) vẫn trả `fileName`/`sizeBytes`/`kind`/`fileId` cho người xem (`social-attachments.service.ts` `decorateMany`), và payload WS bài/bình luận mới phát metadata đính kèm cho CẢ phòng công ty không qua quyết định theo người xem ⇒ «ẩn tệp không xem được» (D4 của S16-SOCIAL-FE-2D) chỉ là lưới CLIENT
 - 🔴 `S16-SOCIAL-ORPHANUPLOAD-1` Tệp đã `Uploaded` mà KHÔNG BAO GIỜ được link (gỡ khỏi khay sau khi 055 xong · bỏ nháp · bình luận bị khoá — D10 của S16-SOCIAL-FE-2D · chat tương tự) sống MÃI trên storage + bảng `files`: `TEMP_FILE_CLEANUP` (S2-FND-JOBS-1) chỉ dọn `Pending` quá TTL và tệp tạm hết hạn
+- 🟡 `S18-QA-CHECKALLFLAKE-1` Hai flake CÓ SẴN làm `check.sh --all` đỏ oan theo cách chia chunk: (1) PAYROLL `s15-payroll-db1-seed` E4 TẮT trigger `salary_component_system_freeze` TOÀN CỤC bằng DDL autocommit ⇒ `s15-payroll-be3-migration` đọc `tgenabled='D'`; (2) SOCIAL `social-attdebt-1-cost-alert` H9 đếm `security_alerts` KHÔNG lọc hàng sở hữu
 - 🔴 `S16-SOCIAL-GROUPMOD-1` Đường KIỂM DUYỆT nội dung nhóm RIÊNG TƯ: hôm nay bài/bình luận trong nhóm private mà người kiểm duyệt (manage:feed-post) không phải thành viên thì KHÔNG ai ngoài tác giả ẩn/xoá được — kể cả qua báo cáo 029
 -  `S16-SOCIAL-FERECYCLE-1` FE nợ SOCIAL: màn thùng rác bài viết (SOCIAL-API-057 liệt kê · 058 khôi phục, gác `restore:feed-post`) — hôm nay `delete_target` từ hàng đợi kiểm duyệt và «Xoá bài» ở menu ⋯ KHÔNG có đường khôi phục trên giao diện
 - 🔴 `S16-SOCIAL-REPORTSNAPSHOT-1` Snapshot báo cáo BÌNH LUẬN (SOCIAL-API-028) thiếu tác giả + `deletedAt` của CHÍNH bình luận: `postId` · `author*` · `status` · `deletedAt` hiện là của BÀI CHA, chỉ `bodyExcerpt` là của bình luận ⇒ FE không đánh dấu được bình luận đã xoá dưới bài còn sống (bấm hành động mới gặp 422)
@@ -83,6 +92,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `3b4ab8a6` | 2026-10-08 | fix(harness): sổ lệch — 2 WO mang status «ready» · phụ thuộc không tồn tại S5-ME-BE-5 · ánh xạ story 191–218 + cổng C5/C6 chống tái phát (#577) |
+| `77d04a8a` | 2026-10-08 | chore(docs): regen STATUS + INDEX sau merge #575 (S16-SOCIAL-FE-3C) |
 | `3cdc4cc3` | 2026-10-08 | feat(social): S16-SOCIAL-FE-3C — dải ô liên kết nhanh trên /feed + widget «Tổng quan nhân sự» ở rail + nút «Báo cáo» trên bình luận (#575) |
 | `0c1e8026` | 2026-10-07 | fix(deps): S19-OPS-AUDITCRIT-2 — gỡ advisory CRITICAL GHSA-pqg4-j6r4-53mv (shell-quote 1.10.0 → 1.12.0 qua override) (#576) |
 | `9c28dd9b` | 2026-10-06 | chore(docs): seed S19-OPS-SCASATELLITE-1 + regen STATUS sau merge #574 (S16-SOCIAL-FE-3B) |
@@ -93,8 +104,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `102e86be` | 2026-10-06 | feat(social): S16-SOCIAL-FE-3 — màn Kiểm duyệt (hàng đợi báo cáo · bài đang ẩn) + nút «Báo cáo» trên thẻ bài (#572) |
 | `42b41680` | 2026-10-06 | feat(social): S16-SOCIAL-MENTIONLINK-1 — @mention thành link hồ sơ từ mentions · droppedMentions của bình luận (#571) |
 | `68fb04fa` | 2026-10-06 | fix(settings): S19-SEC-MAILAADBIND-1 — gắn id + đích SMTP vào ngữ cảnh mã hoá envelope mật khẩu (đổi đích không mã hoá lại ⇒ giải mã hỏng) (#569) |
-| `b637f3d6` | 2026-10-05 | fix(ui): S19-UI-AVATARFALLBACK-1 — Avatar rơi về chữ cái đầu khi ảnh tải lỗi, thử lại khi `src` đổi (#570) |
-| `f72ea8f2` | 2026-10-03 | fix(social): S16-SOCIAL-AVATARPRESIGN-1 — ký avatar toàn module SOCIAL qua AvatarPresignService · bỏ URL ngoài · che ảnh theo vị từ che tên (#568) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**601 WO** · có micro-plan: **347/601** · ⬜ 54 chờ · 🔵 0 đang làm · ✅ 545 xong · 🔴 1 chặn
+**601 WO** · có micro-plan: **347/601** · ⬜ 54 chờ · 🔵 1 đang làm · ✅ 545 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -271,7 +271,7 @@
 | `S5-TASK-PROJROLE-1` | 🔴 | ✅ xong | [📄](S5-TASK-PROJROLE-1.md) | ✅S5-TASK-PIPELINE-1 | Đợt C — Quyền per-project THẬT: projectRole (Owner/Manager/Member/View |
 | `S5-TASK-BOARD-UX-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-PIPELINE-1 ✅S5-TASK-DETAIL-1 | Board: bấm thẻ mở chi tiết trong panel TRƯỢT PHẢI (?task=, giữ ngữ cản |
 | `S5-TASK-INLINE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-BOARD-UX-1 | Màn chi tiết task: bố cục lại (dự án + trạng thái + ưu tiên lên dải đầ |
-| `S5-TASK-AVATAR-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-ME-BE-5 | Avatar người phụ trách trong TASK (Nhóm C của hệ avatar): nối 3 mắt xí |
+| `S5-TASK-AVATAR-1` | 🟡 | ✅ xong | — *(chưa)* | — | Avatar người phụ trách trong TASK (Nhóm C của hệ avatar): nối 3 mắt xí |
 | `S5-TASK-CARDSUB-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S5-TASK-SUBTASK-1 | Thẻ board: nút trỏ xuống bung danh sách việc con ngay trên thẻ (tải lư |
 | `S5-TASK-MOVEPROJ-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-TASK-INLINE-1 | VÁ BUG state_id mồ côi khi đổi dự án + đường đổi dự án ĐÚNG MỘT chỗ (h |
 | `S5-TASK-COVER-1` | 🔴 | ✅ xong | [📄](S5-TASK-COVER-1.md) | ✅S5-TASK-AVATAR-1 | Ảnh bìa cho công việc — chọn từ TỆP ĐÃ ĐÍNH KÈM (file_links Attachment |
@@ -605,7 +605,7 @@
 | `S16-SOCIAL-MENTIONDIR-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1D | Web KHÔNG sinh được @mention: `002`/`004`/`015`/`016` đòi `mentionedUs |
 | `S16-SOCIAL-VIDEOMIME-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D ⏳S16-SOCIAL-FILEDISPOSITION-1 | Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt` |
 | `S16-SOCIAL-ATTERRSPLIT-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D | `SOCIAL-ERR-007` gộp HAI lỗi khác bản chất — `ATTACHMENT_LIMIT` (vượt  |
-| `S16-SOCIAL-FILEDISPOSITION-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Kiểu nội dung storage PHỤC VỤ không gắn với MIME đã đăng ký ⇒ XSS lưu  |
+| `S16-SOCIAL-FILEDISPOSITION-1` | 🔴 | 🔵 đang làm | — *(chưa)* | — | Kiểu nội dung storage PHỤC VỤ không gắn với MIME đã đăng ký ⇒ XSS lưu  |
 | `S16-SOCIAL-ATTMETAMASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Đính kèm bị TỪ CHỐI presign (`url: null`) vẫn trả `fileName`/`sizeByte |
 | `S16-SOCIAL-ORPHANUPLOAD-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Tệp đã `Uploaded` mà KHÔNG BAO GIỜ được link (gỡ khỏi khay sau khi 055 |
 | `S16-SOCIAL-BE-3A` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3A.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 | BE track C/1 — resolve báo cáo KÈM HÀNH ĐỘNG (SOCIAL-API-029: ẩn bài · |
@@ -664,7 +664,7 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S18-QA-CHECKALLFLAKE-1` | 🟡 | ready | — *(chưa)* | — | Hai flake CÓ SẴN làm `check.sh --all` đỏ oan theo cách chia chunk: (1) |
+| `S18-QA-CHECKALLFLAKE-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Hai flake CÓ SẴN làm `check.sh --all` đỏ oan theo cách chia chunk: (1) |
 | `S18-AUTH-UNLOCK429-1` | 🔴 | ✅ xong | [📄](S18-AUTH-UNLOCK429-1.md) | — | Gỡ khoá đăng nhập (429) từ giao diện: chỉ mục IP + clearLoginLocks/rem |
 | `S18-AUTH-RESETCLEARS-1` | 🔴 | ✅ xong | [📄](S18-AUTH-RESETCLEARS-1.md) | ✅S18-AUTH-UNLOCK429-1 | Đặt lại mật khẩu thành công thì xoá luôn khoá login 429 của email đó ( |
 | `S18-AUTH-RETRYAFTER-1` | 🟡 | ✅ xong | [📄](S18-AUTH-RETRYAFTER-1.md) | ✅S18-AUTH-UNLOCK429-1 | 429 đăng nhập mang `retryAfterSec` (error.details + header Retry-After |
