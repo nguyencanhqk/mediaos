@@ -123,6 +123,7 @@ describe("FileService.upload — F8: đuôi chặn cứng (blocked_extensions c�
     ["tên dài, đuôi ngắn được giữ khi cắt", `${"a".repeat(300)}.svg`],
     ["ký tự toàn chiều rộng ở thân", `tep${FULLWIDTH_DOT}.svg`],
     ["surrogate lẻ ở thân", `tep${HIGH_SURROGATE}.svg`],
+    ["chữ cái toàn chiều rộng ở đuôi (dạng gập trùng đuôi chặn cứng)", `tep.${fullwidth("svg")}`],
   ])("TỪ CHỐI — %s ⇒ 415 BLOCKED, không ghi hàng, không ký", async (_label, originalName) => {
     const attempt = await registerName(originalName, MIME_ZIP, []);
 
@@ -139,7 +140,7 @@ describe("FileService.upload — F8: đuôi chặn cứng (blocked_extensions c�
     ["dấu chấm xen khoảng trắng ở cuối", "tep.svg. .", "svg_"],
     ["chỗ cắt độ dài rơi ngay sau một đuôi ngắn", `${"a".repeat(176)}.svg${"z".repeat(9)}`, "sv_"],
     ["dấu chấm toàn chiều rộng", `tep${FULLWIDTH_DOT}svg`, null],
-    ["chữ cái toàn chiều rộng ở đuôi", `tep.${fullwidth("svg")}`, fullwidth("svg")],
+    ["chữ cái toàn chiều rộng ở đuôi không bị chặn", `tep.${fullwidth("svgx")}`, fullwidth("svgx")],
     ["chữ cuối của đuôi mang dấu", `tep.sv${G_ACUTE}`, `sv${G_ACUTE}`],
     ["surrogate lẻ trong đuôi", `tep.sv${HIGH_SURROGATE}g`, "sv_g"],
   ])(
@@ -194,6 +195,86 @@ describe("FileService.upload — F8: đuôi CHỈ có trong blocked_extensions c
     expect(attempt.outcome).toBe(CODE_BLOCKED);
     expect(attempt.stored).toBeUndefined();
   });
+});
+
+describe("FileService.upload — dạng gập của đuôi cũng được so với tập chặn (kiểu khai ngoài bảng đuôi ↔ MIME)", () => {
+  const COMPANY_BLOCKED = ["xyz", "xis"];
+  const codePointLabel = (codePoint: number): string =>
+    `U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}`;
+  const END_MARK = at(0x180e);
+  const LONG_S = at(0x017f);
+  const DOTLESS_I = at(0x0131);
+  const ZERO_WIDTH_SPACE = at(0x200b);
+  const RESERVED_PUNCTUATION = [":", "*", "?", '"', "<", ">", "|"];
+  const INVISIBLE_FORMAT = [0x200b, 0x200d, 0x2060, 0x00ad, 0x061c];
+
+  /** [nhãn, tên] — mỗi lớp một đuôi thuộc tập chặn cứng (`svg`) và một đuôi chỉ có trong tập của công ty. */
+  const REJECTED: Array<[string, string]> = [
+    ["lớp 1 — U+180E sau đuôi chặn cứng", `tep.svg${END_MARK}`],
+    ["lớp 1 — U+180E sau đuôi của tập công ty", `tep.xyz${END_MARK}`],
+    ...RESERVED_PUNCTUATION.flatMap(
+      (mark): Array<[string, string]> => [
+        [`lớp 2 — dấu ${mark} sau đuôi chặn cứng`, `tep.svg${mark}`],
+        [`lớp 2 — dấu ${mark} sau đuôi của tập công ty`, `tep.xyz${mark}`],
+      ],
+    ),
+    ["lớp 3 — U+017F trong đuôi chặn cứng", `tep.${LONG_S}vg`],
+    ["lớp 3 — U+017F trong đuôi của tập công ty", `tep.xi${LONG_S}`],
+    // Tập chặn cứng không có đuôi nào chứa chữ `i` ⇒ U+0131 chỉ thử được với tập của công ty.
+    ["lớp 3 — U+0131 trong đuôi của tập công ty", `tep.x${DOTLESS_I}s`],
+    ...INVISIBLE_FORMAT.flatMap(
+      (codePoint): Array<[string, string]> => [
+        [`lớp 4 — ${codePointLabel(codePoint)} giữa đuôi chặn cứng`, `tep.sv${at(codePoint)}g`],
+        [
+          `lớp 4 — ${codePointLabel(codePoint)} giữa đuôi của tập công ty`,
+          `tep.xy${at(codePoint)}z`,
+        ],
+      ],
+    ),
+    ["phần trước ký tự ngoài tập đầu tiên là đuôi chặn cứng", "tep.svg?x"],
+    ["phần trước ký tự ngoài tập đầu tiên là đuôi của tập công ty", "tep.xyz (1)"],
+  ];
+
+  it.each(REJECTED)(
+    "TỪ CHỐI — %s ⇒ 415 BLOCKED, không ghi hàng, không ký",
+    async (_label, originalName) => {
+      const attempt = await registerName(originalName, MIME_ZIP, COMPANY_BLOCKED);
+
+      expect(attempt.outcome).toBe(CODE_BLOCKED);
+      expect(attempt.stored).toBeUndefined();
+      expect(attempt.signCalls).toBe(0);
+    },
+  );
+
+  it.each<[string, string, string | null]>([
+    ["lớp 1 — U+180E sau một đuôi thường", `tep.zip${END_MARK}`, `zip${END_MARK}`],
+    ["lớp 2 — dấu câu sau một đuôi thường", "tep.zip?", "zip?"],
+    ["lớp 3 — U+017F trong một đuôi không bị chặn", `tep.${LONG_S}vgx`, `${LONG_S}vgx`],
+    [
+      "lớp 4 — ký tự định dạng giữa một đuôi thường",
+      `tep.zi${ZERO_WIDTH_SPACE}p`,
+      `zi${ZERO_WIDTH_SPACE}p`,
+    ],
+    ["đuôi chỉ CHỨA đuôi bị chặn sau khi gập", "tep.sv?gx", "sv?gx"],
+    ["tên tiếng Việt có dấu, đuôi thường", "Hồ sơ dự thầu – Đặng Thị Ánh.zip", "zip"],
+    ["dấu chấm giữa câu, không có đuôi thật (số)", "Bien ban hop 12.10", "10"],
+    ["dấu chấm giữa câu, không có đuôi thật (chữ)", "Ghi chu. Ban cuoi", " ban cuoi"],
+    ["hai đuôi", "a.tar.gz", "gz"],
+    ["số trong ngoặc ở thân", "anh (1).png", "png"],
+    ["đuôi chặn cứng đã vô hiệu bằng dấu chấm cuối", "tep.svg.", "svg_"],
+    ["đuôi của tập công ty đã vô hiệu bằng dấu chấm cuối", "tep.xyz.", "xyz_"],
+    ["đuôi của tập công ty đã vô hiệu bằng ký tự bị loại", `tep.xy${LRM}z`, "xy_z"],
+  ])(
+    "CHO PHÉP — %s ⇒ nhận; đuôi lưu không đổi vì phép gập; tên gốc lưu NGUYÊN",
+    async (_label, originalName, fileExtension) => {
+      const attempt = await registerName(originalName, MIME_ZIP, COMPANY_BLOCKED);
+
+      expect(attempt.outcome).toBe("accepted");
+      expect(attempt.stored?.fileExtension).toBe(fileExtension);
+      expect(attempt.stored?.originalName).toBe(originalName);
+      expect(attempt.signCalls).toBe(1);
+    },
+  );
 });
 
 describe("FileService.upload — F8: tên hợp lệ sát cạnh vẫn được nhận", () => {

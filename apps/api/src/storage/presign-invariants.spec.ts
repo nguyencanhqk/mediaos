@@ -162,11 +162,51 @@ describe("assertPresignedGetPinsServeDirectives — P5 (so GIÁ TRỊ)", () => {
       ]),
       PNG,
     ],
+    [
+      "TÊN tham số kiểu viết hoa khác đi (giá trị đúng, không có bản chữ thường)",
+      getUrl([
+        ["Response-Content-Type", PDF.responseContentType],
+        [DISPOSITION, PDF.responseContentDisposition],
+      ]),
+      PDF,
+    ],
+    [
+      "TÊN tham số disposition viết hoa khác đi (giá trị đúng, không có bản chữ thường)",
+      getUrl([
+        [TYPE, PNG.responseContentType],
+        ["Response-Content-Disposition", PNG.responseContentDisposition],
+      ]),
+      PNG,
+    ],
+    [
+      "TÊN cả hai tham số viết HOA toàn bộ (giá trị đúng)",
+      getUrl([
+        [TYPE.toUpperCase(), PDF.responseContentType],
+        [DISPOSITION.toUpperCase(), PDF.responseContentDisposition],
+      ]),
+      PDF,
+    ],
     ["chuỗi không phải URL", "không phải url", PDF],
   ])("TỪ CHỐI: %s ⇒ ném StoragePresignInvariantError", (_label, url, expected) => {
     expect(() => assertPresignedGetPinsServeDirectives(url, expected)).toThrow(
       StoragePresignInvariantError,
     );
+  });
+
+  it("TÊN tham số viết hoa khác đi ⇒ coi như THIẾU (thông điệp nêu tên chữ thường); tên chữ thường ⇒ qua", () => {
+    const upperCaseName = getUrl([
+      [TYPE, PNG.responseContentType],
+      ["Response-Content-Disposition", PNG.responseContentDisposition],
+    ]);
+    const lowerCaseName = getUrl([
+      [TYPE, PNG.responseContentType],
+      [DISPOSITION, PNG.responseContentDisposition],
+    ]);
+
+    expect(() => assertPresignedGetPinsServeDirectives(upperCaseName, PNG)).toThrow(
+      /thiếu tham số response-content-disposition/,
+    );
+    expect(() => assertPresignedGetPinsServeDirectives(lowerCaseName, PNG)).not.toThrow();
   });
 
   it.each([
