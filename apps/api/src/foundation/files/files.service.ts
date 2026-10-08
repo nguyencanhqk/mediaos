@@ -35,6 +35,7 @@ import { FileAccessLogService } from "./file-access-log.service";
 import {
   CONFIRM_FAILURE_ERROR_CODE,
   registerContentRejection,
+  resolveRegisterExtension,
   storedContentTypeMatches,
   type ConfirmFailureReason,
 } from "./file-content-guard";
@@ -150,17 +151,19 @@ export class FileService {
       });
     }
 
-    // 2. Sanitize originalName (chống path-traversal) + suy extension server-side.
+    // 2. Sanitize originalName (chống path-traversal).
     const safeName = this.sanitizeFilename(input.originalName);
-    const fileExtension = this.deriveExtension(safeName);
 
-    // 2b. blocklist extension: setting file.blocked_extensions HỢP với tập chặn CỨNG trong code. Reject TRƯỚC khi ghi.
-    const hardBlocked =
-      registerContentRejection(input.declaredMimeType, fileExtension) === "hard-blocked-extension";
-    if (fileExtension !== null && (hardBlocked || blockedExtensions.has(fileExtension))) {
+    // 2b. Đuôi của MỌI dạng tên sẽ phát ra khi tải về, so với setting file.blocked_extensions HỢP tập chặn
+    //     CỨNG trong code (file-content-guard.ts). Reject TRƯỚC khi ghi.
+    const { fileExtension, blockedExtension } = resolveRegisterExtension(
+      safeName,
+      blockedExtensions,
+    );
+    if (blockedExtension !== null) {
       throw new UnsupportedMediaTypeException({
         code: FOUNDATION_FILE_ERROR_CODES.BLOCKED,
-        message: `${FOUNDATION_FILE_ERROR_CODES.BLOCKED}: phần mở rộng bị chặn: .${fileExtension}`,
+        message: `${FOUNDATION_FILE_ERROR_CODES.BLOCKED}: phần mở rộng bị chặn: .${blockedExtension}`,
       });
     }
 
@@ -897,16 +900,6 @@ export class FileService {
     return trimmed.slice(0, 500);
   }
 
-  /** Suy phần mở rộng từ tên ĐÃ sanitize (server-side). null nếu không có '.'. Cắt 50 ký tự (cột). */
-  private deriveExtension(safeName: string): string | null {
-    const dot = safeName.lastIndexOf(".");
-    if (dot <= 0 || dot === safeName.length - 1) return null;
-    return safeName
-      .slice(dot + 1)
-      .toLowerCase()
-      .slice(0, 50);
-  }
-
   /** Build key server-side; InvalidStorageKeyError → 400 (không lộ chi tiết). */
   private buildKeyOrThrow(companyId: string, fileId: string, originalName: string): string {
     try {
@@ -950,7 +943,7 @@ export class FileService {
     const maxMb =
       typeof sizeValue === "number" && sizeValue > 0 ? sizeValue : DEFAULT_MAX_UPLOAD_MB;
 
-    // blocked_extensions normalize về lowercase, không dấu chấm (khớp deriveExtension). Thiếu setting →
+    // blocked_extensions normalize về lowercase, không dấu chấm (khớp resolveRegisterExtension). Thiếu setting →
     // Set rỗng (không chặn theo extension; MIME-allowlist + extension↔MIME vẫn là hàng rào).
     const blockedValue = byKey.get(SETTING_BLOCKED_EXT);
     const blockedExtensions = new Set<string>(

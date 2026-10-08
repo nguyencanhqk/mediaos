@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   CONFIRM_FAILURE_ERROR_CODE,
   registerContentRejection,
+  resolveRegisterExtension,
   storedContentTypeMatches,
 } from "./file-content-guard";
 
@@ -144,5 +145,80 @@ describe("registerContentRejection — từ chối cứng lúc đăng ký", () =
   it("kiểu SAI DẠNG không thuộc lưới này (allowlist công ty + trần của tầng storage lo) ⇒ null", () => {
     expect(registerContentRejection("rác", null)).toBeNull();
     expect(registerContentRejection("", null)).toBeNull();
+  });
+});
+
+describe("resolveRegisterExtension — đuôi của tên SẼ PHÁT RA, so với tập chặn cứng HỢP tập của công ty", () => {
+  /** Ký tự đặc biệt dựng từ ĐIỂM MÃ — tệp nguồn không chứa ký tự vô hình. */
+  const at = (codePoint: number): string => String.fromCodePoint(codePoint);
+  const LRM = at(0x200e); // dấu chiều chữ
+  const HIGH_SURROGATE = at(0xd83d); // surrogate lẻ
+  const FULLWIDTH_DOT = at(0xff0e);
+  const Z_ACUTE = at(0x017a); // chữ z mang dấu sắc
+  const NONE: ReadonlySet<string> = new Set();
+  const COMPANY: ReadonlySet<string> = new Set(["xyz"]);
+
+  it.each(HARD_BLOCKED)("TỪ CHỐI: đuôi chặn cứng %j bị nhận ra dù tập của công ty RỖNG", (ext) => {
+    expect(resolveRegisterExtension(`tep.${ext}`, NONE)).toEqual({
+      fileExtension: ext,
+      blockedExtension: ext,
+    });
+    expect(resolveRegisterExtension(`TEP.${ext.toUpperCase()}`, NONE).blockedExtension).toBe(ext);
+    expect(resolveRegisterExtension(`.${ext}`, NONE).blockedExtension).toBe(ext);
+    expect(resolveRegisterExtension(`tep${HIGH_SURROGATE}.${ext}`, NONE).blockedExtension).toBe(
+      ext,
+    );
+  });
+
+  it("TỪ CHỐI: đuôi chỉ có trong tập của công ty; HỢP — đuôi chặn cứng vẫn bị chặn khi tập công ty khác rỗng", () => {
+    expect(resolveRegisterExtension("tep.xyz", COMPANY).blockedExtension).toBe("xyz");
+    expect(resolveRegisterExtension(".xyz", COMPANY).blockedExtension).toBe("xyz");
+    expect(resolveRegisterExtension("tep.svg", COMPANY).blockedExtension).toBe("svg");
+  });
+
+  it("TỪ CHỐI: đuôi của dạng dự phòng ASCII thuộc tập công ty dù đuôi của dạng Unicode thì không", () => {
+    expect(resolveRegisterExtension(`tep.xy${Z_ACUTE}`, new Set(["xy_"]))).toEqual({
+      fileExtension: `xy${Z_ACUTE}`,
+      blockedExtension: "xy_",
+    });
+  });
+
+  it("TỪ CHỐI: phép so dùng đuôi ĐẦY ĐỦ — đuôi lưu bị cắt còn 50 ký tự không làm hụt phép so", () => {
+    const longExtension = "e".repeat(60);
+    expect(resolveRegisterExtension(`tep.${longExtension}`, new Set([longExtension]))).toEqual({
+      fileExtension: "e".repeat(50),
+      blockedExtension: longExtension,
+    });
+  });
+
+  it.each<[string, string, string | null]>([
+    ["ký tự bị loại trong đuôi", `tep.xy${LRM}z`, "xy_z"],
+    ["ký tự bị loại sau đuôi", `tep.xyz${LRM}`, "xyz_"],
+    ["dấu chấm cuối", "tep.xyz.", "xyz_"],
+    ["chỗ cắt độ dài rơi ngay sau đuôi", `${"a".repeat(176)}.xyz${"z".repeat(9)}`, "xy_"],
+    ["dấu chấm toàn chiều rộng", `tep${FULLWIDTH_DOT}xyz`, null],
+    ["chữ cuối của đuôi mang dấu", `tep.xy${Z_ACUTE}`, `xy${Z_ACUTE}`],
+    ["đuôi chỉ CHỨA đuôi bị chặn", "tep.xyzw", "xyzw"],
+  ])(
+    "CHO PHÉP: %s ⇒ không chặn (tên phát ra không mang đuôi `xyz`), đuôi lưu %j",
+    (_label, fileName, fileExtension) => {
+      expect(resolveRegisterExtension(fileName, COMPANY)).toEqual({
+        fileExtension,
+        blockedExtension: null,
+      });
+    },
+  );
+
+  it.each<[string, string | null]>([
+    ["tep.pdf", "pdf"],
+    ["bao.cao.quy-3.v2.PDF", "pdf"],
+    [".pdf", "pdf"],
+    ["tep-khong-duoi", null],
+    [`${"a".repeat(300)}.xlsx`, "xlsx"],
+  ])("CHO PHÉP: tên thường %j ⇒ đuôi lưu %j, không chặn", (fileName, fileExtension) => {
+    expect(resolveRegisterExtension(fileName, COMPANY)).toEqual({
+      fileExtension,
+      blockedExtension: null,
+    });
   });
 });

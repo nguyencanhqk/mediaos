@@ -9,6 +9,11 @@
  */
 import { FOUNDATION_FILE_ERROR_CODES, type FoundationFileErrorCode } from "@mediaos/contracts";
 import {
+  fileNameExtension,
+  servedFileName,
+  servedFileNameExtensions,
+} from "../../storage/content-disposition";
+import {
   HARD_BLOCKED_EXTENSIONS,
   isActiveContentMime,
   normalizeMimeForCompare,
@@ -64,6 +69,38 @@ export function registerContentRejection(
 ): RegisterContentRejection | null {
   if (isActiveContentMime(declaredMimeType)) return "active-mime";
   if (fileExtension === null) return null;
-  const extension = fileExtension.replace(/^\./, "").toLowerCase();
-  return HARD_BLOCKED_EXTENSIONS.has(extension) ? "hard-blocked-extension" : null;
+  return isHardBlockedExtension(fileExtension) ? "hard-blocked-extension" : null;
+}
+
+function isHardBlockedExtension(extension: string): boolean {
+  return HARD_BLOCKED_EXTENSIONS.has(extension.replace(/^\./, "").toLowerCase());
+}
+
+/** Kết quả xét phần mở rộng của một tên tệp lúc đăng ký. */
+export interface RegisterExtensionVerdict {
+  /** Đuôi chính (của tên chuẩn sẽ phát ra): lưu cột `file_extension`, đối chiếu đuôi ↔ MIME. `null` = không đuôi. */
+  fileExtension: string | null;
+  /** Đuôi bị chặn ĐẦU TIÊN tìm thấy; `null` = không dạng tên nào mang đuôi bị chặn. */
+  blockedExtension: string | null;
+}
+
+/**
+ * Xét phần mở rộng của `fileName` (tên đã bỏ đường dẫn) trên CHÍNH các tên server sẽ phát ra khi tải về —
+ * dạng Unicode lẫn dạng dự phòng ASCII (`storage/content-disposition.ts`) — chứ không trên tên thô. Đuôi của
+ * BẤT KỲ dạng nào thuộc tập chặn cứng HOẶC `companyBlockedExtensions` ⇒ bị chặn; nhờ vậy đuôi mà một máy
+ * khách lưu xuống luôn là đuôi đã qua phép so này.
+ *
+ * `companyBlockedExtensions`: chữ thường, không dấu chấm đầu (dạng `loadUploadLimits` đã chuẩn hoá).
+ */
+export function resolveRegisterExtension(
+  fileName: string,
+  companyBlockedExtensions: ReadonlySet<string>,
+): RegisterExtensionVerdict {
+  const blockedExtension = servedFileNameExtensions(fileName).find(
+    (extension) => isHardBlockedExtension(extension) || companyBlockedExtensions.has(extension),
+  );
+  return {
+    fileExtension: fileNameExtension(servedFileName(fileName)),
+    blockedExtension: blockedExtension ?? null,
+  };
 }
