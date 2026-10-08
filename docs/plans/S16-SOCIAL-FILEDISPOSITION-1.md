@@ -1,0 +1,277 @@
+# S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung storage phục vụ phải gắn với MIME đã đăng ký
+
+> Trạng thái: **plan v1 (08/10/2026)** — **đo trên `77d04a8a`** (worktree `MediaOS-fdisp`, nhánh
+> `fix/s16-social-filedisposition-1`). Zone ĐỎ · FOUNDATION/BE · mức «Bản gọn» (plan + MỘT vòng plan-review → thi công
+> tuần tự, ca từ chối viết TRƯỚC → FULL gate → verify có `LANE_DB` → mở PR). CHƯA qua plan-review.
+> Nguồn: mục WO trong `harness/backlog.mjs` (6 `done_when` = hợp đồng) · `docs/plans/S16-SOCIAL-FE-2D.md` §2 M14/M32,
+> nợ G2/G8, D2/D11 · ba bản đồ đọc-hiểu U1 (lõi storage) · U2 (call-site BE/FE) · U3 (SDK ngoại tuyến + rollout).
+> Bước lập plan KHÔNG chạy test/build/tsc, KHÔNG gọi storage, KHÔNG nối DB — mọi dòng «ĐO» là đọc code hoặc phép ký
+> ngoại tuyến của U3; mọi hành vi phía storage là **CHƯA ĐO** tới khi L5 chạy.
+> Mô tả lỗi ở mức: kiểu nội dung mà storage PHỤC VỤ không gắn với MIME đã đăng ký. Kho PUBLIC — plan, commit, PR
+> KHÔNG tả cách khai thác.
+
+Viết tắt: `St/` = `apps/api/src/storage/` · `F/` = `apps/api/src/foundation/files/` · `T/` = `apps/api/test/` ·
+`C/` = `packages/contracts/src/` · `W/` = `packages/web-core/src/` · `A/` = `apps/app/src/`.
+
+## 0. Chữ ký owner & quyết định
+
+### 0.1 Bảng [OWNER] — không mục nào CHẶN; owner im lặng ⇒ builder đi theo cột «mặc định an toàn», báo lại ở đầu PR
+
+| # | Câu hỏi | Phương án | Khuyến nghị | Mặc định an toàn (builder làm ngay) | CHẶN? |
+| --- | --- | --- | --- | --- | --- |
+| **O1** (đổi hành vi người dùng THẤY) | Sau `done_when[2]`, mọi tệp KHÔNG phải ảnh/video được trả `attachment`: **7 màn đang «mở xem ở tab mới» thành «tải xuống»** (chat ×2 · HR hồ sơ · HR hợp đồng · CV · phiếu lương PDF/ZIP · Hệ thống › Tệp — §2 M9). Phiếu lương và CV mở tab trắng TRƯỚC rồi gán URL ⇒ **tab trắng ở lại** tới khi WO FE kế (§8 N1) lên. Chấp nhận? | **A** làm đúng `done_when[2]` · **B** cho `application/pdf` hiển thị trực tiếp · **C** chỉ PDF do SERVER sinh (phiếu lương) hiển thị trực tiếp | **A** | **A.** Rủi ro của B: PDF người dùng tải lên được trình duyệt dựng ngay trên origin storage — an toàn chỉ còn dựa vào hộp cát của trình xem PDF và vào việc storage có gắn `nosniff` (CHƯA ĐO trên R2); lệch chữ `done_when[2]`. C không có rủi ro nội dung người dùng nhưng thêm một cờ «tin server» vào hàm ký — để WO sau nếu owner muốn. | Không |
+| **O2** (rủi ro vận hành) | Ca storage THẬT của `done_when[0]` cần một storage không phải PROD. Máy này chỉ có MinIO cục bộ = server PROD. Cho chạy cục bộ trên **bucket riêng** `mediaos-fdisp-test` (cùng server, khác bucket)? | **A** chạy cục bộ với `S3_BUCKET=mediaos-fdisp-test` export tường minh + CI · **B** chỉ CI `api.yml` (bucket `mediaos-test`), cục bộ không chạm storage | **A** | **A.** Lý do: (i) đây là phép đo DUY NHẤT trước deploy trên đúng bản MinIO của PROD (CI chạy bản khác — §2 M14); (ii) lấy được bằng chứng RED trên code hôm nay mà `done_when[0]` đòi; (iii) ÍT rủi ro hơn hiện trạng — hôm nay mọi lượt `--lane-db` cục bộ để các int-spec storage có sẵn ghi vào bucket mà `.env` nêu (SUY, §2 M13). Ca mới có chốt tên bucket (D12) nên KHÔNG THỂ ghi vào bucket không mang hậu tố `-test`. Không đổi policy/CORS/lifecycle. Bucket thử còn lại sau WO (§7.4). | Không |
+| **O3** (lệch CHỮ `done_when[2]`, theo hướng chặt hơn) | `done_when[2]` viết «`ResponseContentType` = MIME đã đăng ký cho MỌI loại» và «ảnh giữ inline». Plan lệch hai chỗ: (a) hàng CŨ mang MIME nội dung chủ động hoặc MIME sai dạng ⇒ trả `application/octet-stream` + `attachment`, không trả đúng MIME đó; (b) «ảnh» = danh sách raster TƯỜNG MINH, **không** theo tiền tố `image/` ⇒ `image/svg+xml` KHÔNG inline; (c) register chặn RỘNG hơn 5 kiểu của `done_when[3]`: thêm mọi kiểu hậu tố `+xml` (D4) và các đuôi `xht · svgz · xsl · xslt` (D5). | **A** làm như plan · **B** đúng từng chữ (trả MIME đã đăng ký kể cả loại chủ động; mọi `image/*` inline; chặn đúng 5 kiểu) | **A** | **A.** B giữ nguyên đúng lớp lỗi WO này vá cho dữ liệu cũ. Tác động người dùng của A với cấu hình mặc định: 0 (không loại nào trong ba nhóm đăng ký được hôm nay — §2 M4/M5). | Không |
+| **O4** (thứ tự triển khai) | Kho PUBLIC ⇒ merge PR = công bố bản vá trong khi API PROD deploy TAY. Merge lúc nào? | **A** chỉ merge khi chạy được `m prod-update api` NGAY sau đó (cùng một lượt ngồi máy) · **B** merge trước, deploy sau | **A** | **A.** Builder ghi dòng đầu mô tả PR: «Merge ⇒ deploy API ngay (§7 của plan)»; tiêu đề/commit trung tính. Phiên điều phối KHÔNG tự merge. | Không |
+
+### 0.2 Quyết định của plan (builder cứ thế làm) — K1…K14 của phiên điều phối: **nhận hết, bác 0**
+
+| D | Quyết định | Từ |
+| --- | --- | --- |
+| D1 | Vá ở `ObjectStorageService` (`createUploadUrl` · `createDownloadUrl` · `statObject`); port + adapter chỉ mở rộng kiểu và chuyển tiếp. Lý do: `tasks/task-attachments.service.ts:151,221` gọi THẲNG service, không qua adapter. | K1 |
+| D2 | Tham số ký GET `{ registeredMimeType: string; fileName: string }` là **BẮT BUỘC** về kiểu ở cả `StorageGetInput` lẫn `createDownloadUrl`. Không có nhánh «không biết ⇒ ký trần». 3 lớp ký ảnh theo lô thêm `files.mimeType` + `files.originalName` vào projection (không truyền hằng đoán). | K2 |
+| D3 | MỘT hàm thuần `resolveServeDirectives(registeredMimeType, fileName)` ở `St/content-serving.ts` quyết định cả hai tham số `response-*`. Inline = danh sách TƯỜNG MINH `image/png · image/jpeg · image/gif · image/webp · video/mp4 · video/webm`. Mọi thứ khác ⇒ `attachment`. MIME rỗng · sai dạng · thuộc nhóm chủ động ⇒ kiểu trả `application/octet-stream` + `attachment` (fail-closed, O3). Inline ⇒ `ResponseContentDisposition: undefined` (KHÔNG chuỗi rỗng — U3 đo: chuỗi rỗng vẫn sinh tham số). | K3 |
+| D4 | Nhóm «nội dung chủ động» (hằng cứng trong code): 5 kiểu của `done_when[3]` (`text/html` · `application/xhtml+xml` · `image/svg+xml` · `text/xml` · `application/xml`) **+ mọi kiểu có hậu tố `+xml`** (cùng họ trình duyệt dựng; 0 kiểu trong allowlist mặc định lẫn 14 kiểu cứng bị ảnh hưởng — §2 M5). So sau khi thường hoá. | K5 |
+| D5 | Đuôi chặn CỨNG (hằng trong code, **HỢP** với setting công ty, không thay nó): `html · htm · xhtml · xht · shtml · svg · svgz · xml · xsl · xslt`. | K5 |
+| D6 | Thường hoá MIME chỉ để SO (`trim` · chữ thường · bỏ phần sau `;`); kết quả rỗng hoặc không khớp dạng `type/subtype` ⇒ `null`. KHÔNG thường hoá chuỗi LƯU / chuỗi KÝ PUT ở register: chuỗi ký = `created.mimeType` = `input.declaredMimeType` nguyên văn (`F/files.service.ts:178,227`) = chuỗi FE gửi (§2 M8). | K4 |
+| D7 | Confirm so kiểu: `normalize(HEAD.ContentType)` phải bằng `normalize(row.mimeType)`; HEAD không trả kiểu (hoặc một trong hai vế thường hoá ra `null`) ⇒ FAIL. Đặt SAU kiểm tồn tại + cỡ, TRƯỚC `getBytes`. | K4 |
+| D8 | **Không thêm mã lỗi.** Lệch kiểu ở confirm ⇒ 409 `FOUNDATION-FILE-ERR-CONFIRM-MISMATCH` (ngữ nghĩa «object ở storage không khớp khai báo»); phân biệt bằng lý do `content-type-mismatch` ghi vào `metadata.confirmFailure` + `deniedReason`. MIME chủ động ở register ⇒ 415 `…-MIME`; đuôi chặn cứng ⇒ 415 `…-BLOCKED`. ⇒ `packages/contracts` chỉ đổi docblock. | K6 |
+| D9 | `failConfirm` nhận kiểu hợp `ConfirmFailureReason = "object-absent" \| "size-mismatch" \| "content-type-mismatch"`; mã lỗi lấy từ `Record<ConfirmFailureReason, FoundationFileErrorCode>` (thiếu khoá ⇒ không biên dịch) thay phép ba ngôi `F/files.service.ts:355-358`. | K6 |
+| D10 | `UnsupportedAttachmentError` thêm trường `kind: "content-type" \| "size"`; `FileService.upload` bắt quanh `storage.signedUrl` ⇒ 415 `…-MIME` / 413 `…-SIZE` (hôm nay rơi 500 — §2 M4). Lỗi khác ném lại nguyên. | K5 |
+| D11 | Tự kiểm sau ký (fail-closed, không phải chỉ test): URL PUT phải có `content-type` trong `X-Amz-SignedHeaders`; URL GET phải có tham số `response-content-type`. Thiếu ⇒ ném `StoragePresignInvariantError`, KHÔNG trả URL. Chống nâng SDK làm mất lớp ký trong im lặng. | K7 (i) |
+| D12 | Ca storage thật: chỉ chạy khi `S3_BUCKET` đã resolve khớp `/-test$/` (CI `mediaos-test` · cục bộ `mediaos-fdisp-test`). Không khớp: **CI ⇒ ném (ĐỎ)**; cục bộ ⇒ bỏ qua các ca storage KÈM `console.warn` nêu tên ca. Đã khớp mà dò `HeadBucket` (có ký) lỗi khác `NotFound` ⇒ ném ở mọi môi trường. `NotFound` ⇒ `CreateBucket` (chỉ với tên đã qua chốt). Không `ctx.skip()` im lặng. Cùng nguyên tắc với hàng rào DB sẵn có: chốt trên TÊN ĐÍCH đã resolve, không trên «có đặt biến hay không» (`T/db-target.ts:22-23`). | K7 (ii) |
+| D13 | MỘT PR chỉ-BE: `apps/api` + `packages/contracts` (docblock) + `docs/plans` + `harness/backlog.mjs`. Không chạm mã FE. Docblock FE khẳng định «lệch ⇒ 403» thành ĐÚNG sau WO ⇒ không sửa. | K8 |
+| D14 | Hệ quả người dùng thấy ⇒ O1; WO FE kế ở §8 N1 (lên SAU API). | K9 |
+| D15 | Không cờ env tắt lớp ký. Lùi = `m prod-rollback`. | K10 |
+| D16 | Không migration (không đổi schema, không seed) ⇒ FULL gate KHÔNG gọi `database-reviewer`. | K11 |
+| D17 | `tasks/task-attachments.service.ts` (mồ côi, controller 410, NGOÀI `paths`): chỉ sửa cho biên dịch — truyền `{ registeredMimeType: "application/octet-stream", fileName: "download" }` (⇒ octet-stream + `attachment`, fail-closed) trừ khi hàng `task_attachments` (`db/schema/workflow.ts:296`, select ở `tasks/tasks.repository.ts:915`) có sẵn cột kiểu + tên thì truyền cột — CHƯA ĐO cột nào có; không xoá, không mở rộng. | K12 |
+| D18 | Logic mới ở module nhỏ MỚI; `F/files.service.ts` (1.087 dòng, đã > 800) chỉ gọi, tăng ròng ≤ ~40 dòng. Ca test mới của FileService đặt ở file spec MỚI cạnh nguồn (`files.service.spec.ts` đã 969 dòng). | K13 |
+| D19 | `buildAttachmentDisposition(rawName)` theo bản đã chạy thử của U3 (`u3-sdk-probe.mjs`): đầu ra thuần ASCII in được; xoá C0/C1 · `U+2028/2029` · ký tự đảo chiều; `\` `/` → `_`; cắt 180 byte UTF-8 giữ đuôi; `filename="…"` dự phòng ASCII + `filename*=UTF-8''…` mã hoá thêm `' ( ) * !`. Mã hoá `'` là BẮT BUỘC: parser FE dừng nhóm bắt ở `'` (`W/lib/api-client.ts:599`). | K13 |
+| D20 | Mọi mục [OWNER] có mặc định an toàn làm được ngay; 0 mục CHẶN. | K14 |
+
+## 1. Phạm vi · không-làm
+
+**Làm:** `done_when[0]`–`[5]` ở tầng dùng chung ⇒ phủ SOCIAL · chat · FOUNDATION · HR · TASK · avatar · branding · recruit · tệp server sinh.
+
+**Không làm (để lại):**
+- `S16-SOCIAL-VIDEOMIME-1` — thêm `video/*` vào allowlist. WO đó phải mở CẢ trần cứng 14 kiểu (`C/task.ts:242-257`, hôm nay chặn mọi video) LẪN rà danh sách inline D3 (đã có sẵn `video/mp4` · `video/webm`).
+- `S16-SOCIAL-ATTMETAMASK-1` — metadata đính kèm lộ khi presign bị từ chối. Không chạm `decorateMany` ngoài 2 trường thêm vào lời gọi ký.
+- `S16-SOCIAL-ORPHANUPLOAD-1` — dọn object/hàng mồ côi (gồm object còn lại sau một confirm thất bại vì lệch kiểu).
+- S16-SOCIAL-FE-2D lát A — mã FE; điều kiện đo trước khi nó merge ở §8.
+- Validate theo KHOÁ lúc LƯU setting (`setting.service.ts:521-528`); thay vị từ `like 'image/%'` ở 3 truy vấn ảnh; dùng lại hàm D19 cho 5 controller CSV/XLSX; `createUploadUrl` chưa `assertKeyInTenant`; tách `files.service.ts` xuống < 800 dòng ⇒ nợ §8.
+
+**Ngoại lệ phạm vi (ngoài `paths` của WO, chỉ sửa cho BIÊN DỊCH theo chữ ký mới):** `apps/api/src/tasks/task-attachments.service.ts` (+ spec của nó) — D17 · `apps/api/src/foundation/company/**`, `me/**`, `employees/**`, `recruit/**`: chỉ file SPEC nếu assert tham số `storage.get` (mã nguồn các module này đi qua `FileService.getDownloadUrl`, không đổi).
+
+## 2. Sự thật đã đo (`77d04a8a`)
+
+| # | Điều | file:dòng | Nguồn |
+| --- | --- | --- | --- |
+| M1 | `createUploadUrl` dựng `PutObjectCommand{ContentType, ContentLength}` rồi `getSignedUrl(…, {expiresIn})` — KHÔNG `signableHeaders`. Ký ngoại tuyến bằng đúng SDK cài (client-s3 + presigner **3.1068.0**): `X-Amz-SignedHeaders=content-length;host`; thêm `signableHeaders: new Set(["content-type"])` ⇒ `content-length;content-type;host`, so khớp TỪNG BYTE (`image/png` ≠ `IMAGE/PNG` ≠ `image/png; charset=utf-8`) | `St/object-storage.service.ts:141-159` | tự đọc + U3 §A1 |
+| M2 | `createDownloadUrl` ký `GetObjectCommand{Bucket, Key}` trần — 0 tham số `response-*`. Thêm `ResponseContentType`/`ResponseContentDisposition` ⇒ vào query ĐÃ KÝ. SDK chỉ có 6 trường `Response*` ⇒ **không đặt được `nosniff` qua tham số ký** (kết quả ĐO cho vế cuối của `done_when[2]`) | `:199-206` | tự đọc + U3 §A2/A4 |
+| M3 | `statObject` chỉ trả `{exists, sizeBytes}` — bỏ `ContentType` của HEAD; confirm so tồn tại + cỡ + checksum, không so kiểu; `failConfirm` chọn mã bằng ba ngôi (lý do lạ ⇒ `CONFIRM_MISMATCH`), `markFailedTx` ghi đè `metadata = {confirmFailure}` | `:217-232` · `F/files.service.ts:276-294,341-369` · `F/file.repository.ts:391-412` | tự đọc + U1 |
+| M4 | Trần CỨNG 14 MIME + 50 MiB ở tầng storage (`assertUploadAllowed`), độc lập allowlist công ty. `FileService.upload` gọi `storage.signedUrl` KHÔNG `try/catch` ⇒ MIME có trong allowlist công ty nhưng ngoài 14 kiểu = 500 (SUY — chưa chạy). Đối chiếu đuôi↔MIME THẢ LỎNG khi tệp không đuôi hoặc MIME ngoài bảng 8 kiểu | `St/object-storage.service.ts:123-133` · `C/task.ts:242-260` · `F/files.service.ts:225-229` · `F/mime-extension.ts:38,40` | tự đọc + U1 |
+| M5 | Allowlist mặc định 8 MIME (không loại chủ động); blocklist đuôi mặc định 36 mục có `html·htm·xhtml·shtml·svg`, **không có** `xml·xht·svgz·xsl·xslt`; cả hai ĐỔI ĐƯỢC theo công ty; thiếu `blocked_extensions` ⇒ Set rỗng | `foundation/settings/setting-defaults.ts:41-56,69-112` · `F/files.service.ts:884-919` | tự đọc |
+| M6 | Register/confirm/ký PUT mỗi thứ MỘT phễu: `FileService.upload` (:123) · `confirmUpload` (:250) · `storage.signedUrl` (:225). 8 wrapper module đều uỷ quyền về đây. Ngoại lệ: `tasks/task-attachments.service.ts:151` (GET) · `:221` (PUT) gọi thẳng service | — | U2 §A · tự đọc `:137-160,215-231` |
+| M7 | **8 chỗ ký GET** — bảng dưới | — | tự đọc + U2 §A3 |
+| M8 | **Mọi call-site PUT phía FE gửi `Content-Type` = đúng chuỗi đã khai**: 8 luồng / 5 hàm PUT trên master, cả 8 dùng CÙNG biến `declaredMimeType = file.type \|\| "application/octet-stream"` cho body register và header PUT, body là `File` gốc (không nén/đổi định dạng). Server không thường hoá chuỗi (`C/files.ts:80` `z.string().min(1).max(255)`) ⇒ tiền điều kiện `done_when[0]` ĐẠT, kể cả bundle cũ. Chỗ thứ 9 của WO = luồng SOCIAL của FE-2D lát A, CHƯA có trên master | `W/lib/storage-upload.ts:23-34` (+ `me-api.ts:185-190` · `branding-api.ts:74-79` · `chat-api.ts:425-434` · `A/components/chat/chat-upload.ts:47-65`) · `W/lib/employee-avatar-api.ts:15-27,66-74` · `employee-file-api.ts:46-84` · `task-file-api.ts:60-98` · `A/routes/recruit/candidate-file-api.ts:37-53` | U2 §B (ĐO theo cấu trúc mã; trình duyệt thật CHƯA ĐO) |
+| M9 | 7 màn đổi từ «mở xem» sang «tải xuống»: `A/components/chat/MessageBubble.tsx:160-171` · `RoomFilesTab.tsx:145-158` · `A/routes/hr/employees/EmployeeFilesTab.tsx:68-70` · `EmployeeContractsPage.tsx:59-61` · `A/routes/recruit/components/CandidateCvTab.tsx:71-74` · `A/routes/payroll/open-signed-url.ts:15-27` · `A/routes/system/files/FileDetailPage.tsx:61-65`. TASK tệp không đổi (đã tải blob). Ảnh chat bọc `<a target=_blank>` ⇒ ảnh PHẢI inline | — | U2 §C |
+| M10 | Parser tên tệp phía FE: ưu tiên `filename*=(UTF-8'')?…`, nhóm bắt `[^"';\r\n]+` rồi `decodeURIComponent`; rơi về `filename=` | `W/lib/api-client.ts:597-609` | tự đọc |
+| M11 | Kho chưa có hàm RFC 5987; hàm đề xuất đã chạy thử 9 tên tệp, đầu ra thuần ASCII, URL ký dài nhất 1.492 ký tự | `…/fdisp/logs/u3-sdk-probe.mjs:129-158` | U3 §A3 |
+| M12 | Unit storage hiện mock TOÀN BỘ SDK ở mức file ⇒ ca ký ngoại tuyến phải ở file spec RIÊNG; chưa có ca nào ghim hành vi ký | `St/object-storage.service.spec.ts:24` | U1 §D |
+| M13 | Nạp env khi test: spec `import { AppModule }` tĩnh ⇒ `ConfigModule.forRoot({envFilePath: [".env","../../.env"]})` nạp `.env` vào `process.env` cho khoá CHƯA có (không ghi đè) trước các dòng `process.env.S3_* ??=` trong `beforeAll` ⇒ giá trị `.env` thắng fallback của spec, và **biến export từ shell thắng `.env`** (ĐO bằng đọc mã thư viện @nestjs/config 4.0.4 `dist/config.module.js:80-90` — `forRoot` nạp file NGAY lúc gọi, `:198-202` chỉ gán khoá `!(key in process.env)`; chưa chạy). `ObjectStorageService` đọc `process.env` trong constructor ⇒ chốt D12 đọc cùng giá trị service sẽ dùng, KHÔNG phụ thuộc suy luận này | `app.module.ts:54-58` · `config/env.schema.ts:8` · `T/integration/files-e2e-confirm.int-spec.ts:31,89-95` · `St/object-storage.service.ts:71-94` | tự đọc |
+| M14 | CI `api.yml`: MinIO tạm (bitnami `DEVELOPMENT.2025-05-24`, **khác** bản PROD `RELEASE.2025-09-07`), `S3_BUCKET=mediaos-test`, test chạy `LANE_DB=mediaos`. `ci.yml` không có S3/LANE_DB. Mẫu dò storage hiện có nuốt mọi lỗi thành `storageReady=false` ⇒ skip im lặng | `.github/workflows/api.yml:101-106,198-220,238-241` · `files-e2e-confirm.int-spec.ts:148-164` | tự đọc + U1 §D |
+| M15 | Int-spec có sẵn PUT thật lên URL ký: `files-e2e-confirm` · `hr-employee-avatar` · `me-preferences-avatar` (+ `s13-payroll-qa1-scope-floor`) — header từng chỗ có bằng MIME đã khai không: CHƯA ĐO (L2 kiểm) | `grep 'method: "PUT"' apps/api/test` | tự đo |
+
+**M7 — chỗ ký GET và dữ liệu có sẵn tại chỗ gọi**
+
+| Chỗ gọi | MIME + tên tệp có sẵn? | Việc ở L3 |
+| --- | --- | --- |
+| `F/files.service.ts:488` (mọi module qua `getDownloadUrl`: FOUNDATION · ME avatar · branding · recruit · HR hồ sơ · TASK tệp) | CÓ — `row` là `FileRecord` | truyền `row.mimeType` · `row.originalName` |
+| `F/server-file.service.ts:180` (phiếu lương PDF/ZIP) | CÓ — `ServerFileRow` (`server-file.repository.ts:31-35`) | truyền |
+| `chat/chat-attachments.service.ts:274` | CÓ — hàng chat mang `mimeType` + `name` (dùng ở `:325-330`; `name` = `files.originalName`, `chat-attachments.repository.ts:239-242`) — builder xác nhận `row` tại `:274` cùng kiểu | truyền `row.mimeType` · `row.name` |
+| `social/social-attachments.service.ts:592` | CÓ — `FileRow{originalName, mimeType}` (:609-618) | truyền |
+| `F/avatar-presign.service.ts:104` | KHÔNG — projection `{employeeId, fileId, storagePath}` (`F/file.repository.ts:111-115`), `toSign` chỉ mang `storagePath` | thêm 2 cột + mang qua `toSign` |
+| `F/cover-presign.service.ts:77` | KHÔNG — `file.repository.ts:169-173` | thêm 2 cột |
+| `chat/chat-room-avatar-presign.service.ts:66` | KHÔNG — `file.repository.ts:247-251` | thêm 2 cột |
+| `tasks/task-attachments.service.ts:151` (mồ côi) | hàng riêng, không phải `files` | D17 |
+
+## 3. Lát thi công TUẦN TỰ (5 lát; mỗi lát ≤ ~400 dòng diff; cuối mỗi lát cây biên dịch + spec của lát xanh)
+
+**Bước 0 (trước L1, không commit):** viết đủ `T/integration/s16-filedisposition-storage.int-spec.ts` (§4 nhóm S) + helper D12; chạy trên code CHƯA sửa theo lệnh §6.3 để lấy thông điệp ĐỎ của S1/S2/S4/S5/S7 (S3 là ca nền, xanh cả trước lẫn sau) ⇒ chép nguyên văn vào §9. Cất bản sao file ở `…/scratchpad/fdisp/logs/` (file untracked tới L5). Không có storage (O2 = B) ⇒ ghi «RED storage: chưa đo cục bộ» vào §9 và đi tiếp.
+Lệnh kiểm NHẸ cuối mỗi lát (chạy từ gốc worktree, mỗi lúc MỘT lệnh): `pnpm --filter @mediaos/api exec vitest run <các file spec của lát> --maxWorkers=4` rồi `pnpm --filter @mediaos/api typecheck`. (KHÔNG dùng `pnpm test -- <path>` — nó chạy toàn bộ suite.)
+
+### L1 — Quy tắc thuần (không nối dây) · `packages/contracts`: không đổi
+- MỚI `St/content-serving.ts`:
+  `export const INLINE_SERVE_MIME_TYPES: ReadonlySet<string>` · `export const HARD_BLOCKED_EXTENSIONS: ReadonlySet<string>` ·
+  `export const FALLBACK_SERVE_MIME = "application/octet-stream"` ·
+  `export function normalizeMimeForCompare(raw: string | null | undefined): string | null` ·
+  `export function isActiveContentMime(raw: string): boolean` ·
+  `export interface ServeDirectives { responseContentType: string; responseContentDisposition: string | undefined }` ·
+  `export function resolveServeDirectives(registeredMimeType: string, fileName: string): ServeDirectives`
+- MỚI `St/content-disposition.ts`: `export function buildAttachmentDisposition(rawName: string): string` (D19).
+- MỚI `St/presign-invariants.ts`: `export class StoragePresignInvariantError extends Error` ·
+  `export function assertPresignedPutSignsContentType(url: string): void` · `export function assertPresignedGetPinsContentType(url: string): void` (D11).
+- Spec cạnh nguồn: `content-serving.spec.ts` · `content-disposition.spec.ts` · `presign-invariants.spec.ts` (§4 nhóm P).
+- Commit: `feat(storage): S16-SOCIAL-FILEDISPOSITION-1 L1 — quy tắc phục vụ nội dung + dựng Content-Disposition (hàm thuần)`
+
+### L2 — PUT ký kiểu + stat trả kiểu đã lưu (`done_when[0]`, nền của `[1]`) · contracts: không đổi
+- `St/object-storage.service.ts`: `createUploadUrl` giữ chữ ký, thêm `signableHeaders: new Set(["content-type"])` + `assertPresignedPutSignsContentType(url)`; `statObject` trả thêm `contentType`; `UnsupportedAttachmentError(reason: string, kind: "content-type" | "size")` (D10); sửa docblock `:135-139` theo cơ chế thật (`done_when[5]`).
+- `St/storage-adapter.port.ts`: `StorageStatResult { exists: boolean; sizeBytes: number | null; contentType: string | null }`; sửa docblock `:63`, `:65`. `St/s3-storage.adapter.ts`: không đổi logic (chuyển tiếp nguyên kết quả), sửa docblock đầu file đã cũ.
+- Spec: MỚI `St/object-storage.presign.spec.ts` (KHÔNG mock SDK; khoá giả GHÉP CHUỖI; endpoint `http://storage.invalid:9000` — ký là HMAC cục bộ, không mạng) — ca G1/G2; sửa `object-storage.service.spec.ts` (hình dạng `statObject`), `s3-storage.adapter.spec.ts`, mọi mock `stat` trả thiếu `contentType` (typecheck chỉ ra).
+- Kiểm M15: từng chỗ PUT trong int-spec có sẵn gửi đúng MIME đã khai; lệch ⇒ sửa SPEC đó trong lát này.
+- Commit: `fix(storage): S16-SOCIAL-FILEDISPOSITION-1 L2 — ký Content-Type của URL PUT + stat trả kiểu đã lưu`
+
+### L3 — GET ép kiểu đã đăng ký + attachment, nối đủ 8 chỗ gọi (`done_when[2]`, `[4]`) · contracts: không đổi
+- `St/object-storage.service.ts`: `export interface DownloadServeAs { registeredMimeType: string; fileName: string }` ·
+  `async createDownloadUrl(key: string, companyId: string, serveAs: DownloadServeAs, expiresInSec?: number): Promise<string>` — gọi `resolveServeDirectives`, đặt `ResponseContentType` + `ResponseContentDisposition`, rồi `assertPresignedGetPinsContentType(url)`.
+- `St/storage-adapter.port.ts`: `StorageGetInput { key; companyId; registeredMimeType: string; fileName: string; presignTtlSec? }`; adapter chuyển tiếp.
+- `F/file.repository.ts`: 3 projection + 3 kiểu `Verified*Meta` thêm `mimeType`, `originalName` (KHÔNG chạm mệnh đề `where`, nhất là hai `NOT EXISTS`).
+- 7 chỗ gọi qua port (bảng M7) + D17. `F/files.service.ts:488` chỉ thêm 2 trường vào lời gọi.
+- Spec: thêm ca G3–G6 vào `object-storage.presign.spec.ts`; sửa spec assert tham số `storage.get` (`avatar-presign.service.spec.ts` · `server-file.service.spec.ts` · spec cover/room-avatar/chat-attachments/social-attachments/task-attachments nếu có — typecheck + chạy chỉ ra).
+- Commit: `fix(storage): S16-SOCIAL-FILEDISPOSITION-1 L3 — URL GET ép kiểu đã đăng ký + attachment cho loại không hiển thị trực tiếp`
+
+### L4 — FileService: confirm so kiểu + register chặn cứng (`done_when[1]`, `[3]`) · contracts: không đổi
+- MỚI `F/file-content-guard.ts`:
+  `export type ConfirmFailureReason = "object-absent" | "size-mismatch" | "content-type-mismatch"` ·
+  `export const CONFIRM_FAILURE_ERROR_CODE: Record<ConfirmFailureReason, FoundationFileErrorCode>` ·
+  `export function storedContentTypeMatches(registeredMimeType: string, storedContentType: string | null): boolean` ·
+  `export function registerContentRejection(declaredMimeType: string, fileExtension: string | null): "active-mime" | "hard-blocked-extension" | null`
+- `F/files.service.ts` (chỉ gọi): `upload()` — kiểm `active-mime` TRƯỚC allowlist công ty (415 `MIME`); đuôi chặn cứng HỢP với setting (415 `BLOCKED`); `try/catch` quanh `storage.signedUrl` (D10). `confirmUpload()` — D7. `failConfirm(user, row, reason: ConfirmFailureReason)` — D9.
+- Spec MỚI cạnh nguồn: `F/file-content-guard.spec.ts` · `F/files.service.content-type.spec.ts` (§4 nhóm F).
+- Commit: `fix(files): S16-SOCIAL-FILEDISPOSITION-1 L4 — confirm so kiểu đã lưu + từ chối kiểu nội dung chủ động lúc đăng ký`
+
+### L5 — Int-spec storage thật + docblock + sổ · contracts: CHỈ docblock ⇒ build lại contracts trước verify
+- Commit file của Bước 0: `T/integration/s16-filedisposition-storage.int-spec.ts` + `T/helpers/storage-test-target.ts` + `T/foundation/storage-test-target.unit-spec.ts`.
+- Docblock (`done_when[5]`): `C/files.ts:72-80` (câu «server tự detect bằng magic bytes» — không có mã đó) · `T/integration/files-e2e-confirm.int-spec.ts:294,338-341`.
+- `harness/backlog.mjs`: thêm ghi chú kết quả đo vào WO này + seed các WO kế §8 (chữ trung tính). `docs/plans/…` §9.
+- Ghi kết quả ĐO `X-Content-Type-Options` (ca S6) vào §9; nếu MinIO có gắn ⇒ đổi ca S6 thành assert cứng kèm chú thích «R2 chưa đo».
+- Commit: `test(files): S16-SOCIAL-FILEDISPOSITION-1 L5 — int-spec storage thật + sửa docblock + seed WO kế`
+
+## 4. Ca test viết TRƯỚC (mỗi ca TỪ CHỐI đứng cạnh ca CHO PHÉP cùng khung)
+
+| Ca | `done_when` | Tầng · file | TỪ CHỐI ⇄ CHO PHÉP | Đỏ kỳ vọng trên code hôm nay |
+| --- | --- | --- | --- | --- |
+| P1 | [2] | unit · `content-serving.spec` | `image/svg+xml` · `text/html` · `application/atom+xml` · `""` · `"rác"` ⇒ `octet-stream` + `attachment` ⇄ `image/png` · `IMAGE/PNG ; q=1` ⇒ `image/png`, disposition `undefined` | module chưa có (đỏ nạp file — CHỈ chấp nhận ở L1; ghi rõ ở §9) |
+| P2 | [2] | unit · như trên | `application/pdf` · `text/csv` ⇒ kiểu giữ nguyên + `attachment…` ⇄ `video/mp4` inline | như P1 |
+| P3 | [2] | unit · `content-disposition.spec` | 9 tên của U3 (tiếng Việt · nháy kép · `;%` · CR/LF · `\ /` · U+202E · `' ( ) *` · rỗng · 300 ký tự): đầu ra khớp `/^[\x20-\x7e]*$/`, không `\r\n`, ≤ 700 ký tự ⇄ tên ASCII thường giữ nguyên | như P1 |
+| P4 | [2] | unit · như trên — **đối chiếu parser FE**: bản chép regex `W/lib/api-client.ts:599-608` đọc ngược đầu ra ⇒ đúng tên đã làm sạch (cả ca `it's (1)*.png`) | — | như P1 |
+| P5 | [0][2] | unit · `presign-invariants.spec` | URL thiếu `content-type` trong SignedHeaders / thiếu `response-content-type` ⇒ ném ⇄ URL đủ ⇒ không ném | như P1 |
+| G1 | [0] | unit ký ngoại tuyến · `object-storage.presign.spec` | — ⇄ URL PUT có `content-type` trong `X-Amz-SignedHeaders` | `expected 'content-length;host' to contain 'content-type'` |
+| G2 | [0] | như trên | đổi `contentType` (cùng key/cỡ/`signingDate` giả lập bằng fake timer) ⇒ chữ ký KHÁC ⇄ cùng `contentType` ⇒ chữ ký GIỐNG | `expected '<sig>' not to be '<sig>'` |
+| G3 | [2] | như trên | hàng `application/pdf` ⇒ query có `response-content-type=application/pdf` + `response-content-disposition` bắt đầu `attachment; filename=` ⇄ hàng `image/png` ⇒ `response-content-type=image/png` và KHÔNG có khoá `response-content-disposition` | chữ ký hàm đổi ⇒ không đoán trước được; chạy trên code trước L3, chép thông điệp THẬT vào §9 (kỳ vọng dạng `expected null to be 'application/pdf'`) |
+| G4 | [2] | như trên | hàng cũ `text/html` ⇒ `response-content-type=application/octet-stream` + attachment ⇄ (cặp với G3 png) | như G3 |
+| G5 | [4] | unit · `s3-storage.adapter.spec` | — ⇄ `get()` chuyển nguyên `registeredMimeType` + `fileName`; `stat()` trả `contentType` | `toHaveBeenCalledWith` lệch tham số |
+| G6 | [1] | unit · `object-storage.service.spec` | HEAD không có `ContentType` ⇒ `contentType: null` ⇄ có ⇒ đúng chuỗi | `toEqual` thiếu khoá `contentType` |
+| F1 | [1] | unit · `files.service.content-type.spec` | `stat.contentType="text/html"`, hàng `application/pdf` ⇒ 409 `CONFIRM-MISMATCH`, `markFailedTx(…, "content-type-mismatch")`, `getBytes` + `markUploadedTx` KHÔNG gọi ⇄ `"Application/PDF; x=1"` ⇒ `Uploaded` | `promise resolved … instead of rejecting` |
+| F2 | [1] | như trên | `stat.contentType=null` ⇒ FAIL như F1 ⇄ (cặp với F1 allow) | như F1 |
+| F3 | [1] | như trên | — ⇄ audit `FileUploadFailed` mang `errorCode` `CONFIRM-MISMATCH`, access-log `deniedReason="content-type-mismatch"`; `CONFIRM_FAILURE_ERROR_CODE` có đủ 3 khoá | như F1 (vitest không kiểm kiểu ⇒ đỏ ở runtime, không phải đỏ biên dịch) |
+| F4 | [3] | như trên | allowlist công ty (mock) CÓ `text/html`; khai `text/html` · ` TEXT/HTML ` · `text/html; charset=utf-8` · `image/svg+xml` · `application/xml` ⇒ 415 `…-MIME`, `insertTx` + `storage.signedUrl` KHÔNG gọi ⇄ `application/pdf` ⇒ có `uploadUrl` | `promise resolved … instead of rejecting` |
+| F5 | [3] | như trên | `blocked_extensions` công ty RỖNG; tên `a.svgz` · `a.xml` · `a.xht` ⇒ 415 `…-BLOCKED` ⇄ `a.pdf` qua | `promise resolved …` |
+| F6 | [3] | như trên | `storage.signedUrl` ném `UnsupportedAttachmentError(kind "content-type")` ⇒ 415 `…-MIME`; `kind "size"` ⇒ 413 `…-SIZE` ⇄ lỗi lạ ⇒ ném lại nguyên | nhận `UnsupportedAttachmentError` thay vì `HttpException` |
+| F7 | [2][4] | như trên | — ⇄ `getDownloadUrl` gọi `storage.get` với `registeredMimeType=row.mimeType`, `fileName=row.originalName` | `toHaveBeenCalledWith` lệch |
+| T1 | — | unit hạ tầng · `storage-test-target.unit-spec` | bucket `mediaos-assets` · rỗng · thiếu khoá ⇒ `ok:false` ⇄ `mediaos-test` · `mediaos-fdisp-test` ⇒ `ok:true` | module chưa có |
+| S1 | [0] | int · storage thật + DB · `s16-filedisposition-storage.int-spec` | register `application/pdf` → PUT `Content-Type: text/html` ⇒ **403**, thân chứa `SignatureDoesNotMatch`, HEAD sau đó ⇒ không có object ⇄ PUT đúng `application/pdf` ⇒ 200 | `expected 200 to be 403` (+ ghi HEAD thấy `text/html` làm bằng chứng) |
+| S2 | [0] | như trên | PUT KHÔNG header `Content-Type` ⇒ 403 ⇄ (cặp với S1 allow) | `expected 200 to be 403` |
+| S3 | [1] | như trên | — ⇄ sau PUT đúng: HEAD trả ĐÚNG chuỗi đã gửi; confirm ⇒ 200 `Uploaded` (đo nền của D7: storage không chuẩn hoá/thêm charset) | (xanh trên code cũ — là ca nền, KHÔNG tính là RED) |
+| S4 | [1] | như trên | object cấy thẳng bằng S3 client với kiểu KHÁC MIME đăng ký (hàng `Pending`) ⇒ confirm 409 `CONFIRM-MISMATCH`, hàng `Failed`, `metadata.confirmFailure="content-type-mismatch"` ⇄ cấy đúng kiểu ⇒ `Uploaded` | `expected 200 to be 409` |
+| S5 | [2] | như trên | object LƯU `text/html`, hàng đăng ký `application/pdf` ⇒ `fetch(url)` trả `content-type: application/pdf` + `content-disposition` bắt đầu `attachment; filename=` ⇄ hàng `image/png` ⇒ `content-type: image/png`, không `attachment` | `expected 'text/html' to be 'application/pdf'` |
+| S6 | [2] | như trên | sửa `response-content-type` trên URL đã ký ⇒ 403 ⇄ URL nguyên ⇒ 200. **Đo + ghi** header `x-content-type-options` của phản hồi GET | — (ca chỉ có nghĩa sau L3) |
+| S7 | [3] | int · DB (không cần storage) · cùng file | công ty test mở allowlist thêm `text/html` (theo mẫu thay bộ resolve setting ở `T/foundation/file-security.int-spec.ts:85` · `T/integration/files-service.int-spec.ts:82`); `POST /foundation/files/upload` khai `text/html`, tên không đuôi ⇒ **415** `…-MIME`, 0 hàng `files` mới ⇄ `application/pdf` ⇒ 201 | `expected 500 to be 415` (M4 — SUY; nếu ra số khác ⇒ ghi số thật vào §9, KHÔNG sửa kỳ vọng cho khớp) |
+| S8 | [3][4] | int · DB · cùng file | cùng thân S7 qua 054 SOCIAL và đường register của chat ⇒ 415 ⇄ pdf qua | như S7 |
+
+- Ca S (trừ S7/S8) chạy khi D12 cho phép: CI `api.yml` (bắt buộc — thiếu storage là ĐỎ) và cục bộ theo §6.3. Báo cáo verify PHẢI chép dòng đếm `Tests N passed | M skipped` của riêng file này + nói rõ «ca storage thật: CHẠY / BỎ QUA».
+- **Mutant ★** (cấy SAU khi lát đã commit; `cp` bản sao trước khi cấy; đỏ phải khớp THÔNG ĐIỆP):
+  L1 ★a thêm `image/svg+xml` vào danh sách inline ⇒ P1 đỏ `expected 'image/svg+xml' to be 'application/octet-stream'` · ★b bỏ mã hoá `'` ở `filename*` ⇒ P4 đỏ ở ca `it's (1)*.png`.
+  L2 ★a bỏ `signableHeaders` ⇒ G1 đỏ `to contain 'content-type'` (và D11 ném — ghi cả hai) · ★b `statObject` trả `contentType: null` cố định ⇒ G6 đỏ.
+  L3 ★a truyền `ResponseContentDisposition: ""` cho inline ⇒ G3 đỏ (có khoá rỗng) · ★b đọc kiểu từ tham số KHÁC `registeredMimeType` (hằng `image/png`) ⇒ G3 đỏ `to be 'application/pdf'`.
+  L4 ★a gỡ so kiểu ở confirm ⇒ F1 đỏ `resolved instead of rejecting` · ★b dời kiểm `active-mime` xuống SAU allowlist ⇒ F4 đỏ.
+  L5 ★a (storage thật) bỏ `signableHeaders` + tắt D11 ⇒ S1 đỏ `expected 200 to be 403` · ★b bỏ `ResponseContentType` + tắt D11 ⇒ S5 đỏ `expected 'text/html' to be 'application/pdf'`.
+
+## 5. Bẫy đã biết áp vào WO này
+
+1. **Fixture giống-secret:** khoá S3 giả trong spec PHẢI ghép chuỗi (`["fixture","s3","secret","x"].join("-")`) hoặc dùng `FALLBACK_S3_SECRET` (`T/helpers/fixture-secrets.ts:17`). Literal ⇒ gitleaks đỏ cả lịch sử nhánh.
+2. **Spec unit đặt CẠNH nguồn** (`src/**/*.spec.ts`); unit của hạ tầng test đặt `test/**/*.unit-spec.ts`; tên khác ⇒ không bao giờ chạy (`apps/api/vitest.config.ts:45-50`).
+3. **Thành công RỖNG = fail-open:** ca storage «xanh» mà bị bỏ qua đọc y hệt đã chạy ⇒ D12 + dòng đếm ở báo cáo. `lane-db-guard` chỉ đếm FILE skip, không thấy ca skip trong file đang chạy.
+4. **Ca DENY không có ca ALLOW là rỗng** — mọi dòng §4 có cặp; F4/S7 PHẢI mở allowlist công ty trước, nếu không 415 đến từ allowlist (xanh sai lý do).
+5. **Hai lưới chồng nhau che mutant:** sau D10, trần 14 kiểu cũng ra 415 `…-MIME` ⇒ ở tầng int (S7) gỡ kiểm `active-mime` vẫn 415. Mutant L4 ★b chỉ có nghĩa ở unit F4 (storage mock) — đừng đo nó bằng S7.
+6. **Mã lỗi:** KHÔNG thêm mã (D8). Nếu plan-review buộc thêm: append cuối `FOUNDATION_FILE_ERROR_CODES`, khớp `^FOUNDATION-FILE-ERR-[A-Z-]+$` (không chữ số — `C/files.spec.ts:358`), không trùng catalog chung, ghim ở `files.spec.ts`, build lại contracts.
+7. **Stale contracts dist:** L5 sửa docblock ở `C/files.ts` ⇒ `pnpm --filter @mediaos/contracts build` trước typecheck/test của api.
+8. **Trần 800 dòng:** `files.service.ts` 1.087 · `files.service.spec.ts` 969 — không cổng nào ép; WO này không làm chúng dài thêm quá ~40 dòng (D18).
+9. **Spec assert hình dạng sẽ vỡ:** `St/object-storage.service.spec.ts:106-118` (`toEqual` của stat) · `St/s3-storage.adapter.spec.ts:37-49` · mọi mock `stat`/`get` trong spec avatar/cover/room/chat/social/server-file/task-attachments. Sửa SPEC theo hình dạng mới — không nới kiểu để né.
+10. **Không hard-delete:** confirm lệch kiểu ⇒ hàng `Failed` (đường `failConfirm` sẵn có); KHÔNG xoá object/hàng (thuộc `ORPHANUPLOAD-1`).
+11. **`ResponseContentDisposition: ""` vẫn sinh tham số rỗng** (U3 đo) ⇒ inline phải là `undefined`. **SDK không lọc CR/LF** ⇒ lọc ở D19.
+12. **Thiếu `ContentType` ở `PutObjectCommand` mà vẫn ký** ⇒ SDK lặng lẽ ký `application/octet-stream`: giữ `assertUploadAllowed` TRƯỚC khi ký (chuỗi rỗng không thuộc 14 kiểu).
+13. **KHÔNG chạm `where` của 3 truy vấn ảnh** (hai `NOT EXISTS` là chốt chống leo thang đọc — docblock `F/file.repository.ts:144-157`); chỉ thêm cột vào `select`.
+14. **Mutant:** hoàn tác bằng `git checkout --` xoá cả vá chưa commit ⇒ chỉ cấy sau commit, hoặc `cp` trước.
+15. **Vitest:** lọc đầu ra bằng grep có thể nuốt dòng `Test Files` ⇒ file spec không nạp được đọc thành xanh; đọc dòng tổng kết nguyên văn.
+16. **KHÔNG in/grep `.env`** (kể cả tên khoá); KHÔNG `source .env`; chỉ export đúng các biến ở §6.3.
+17. **Bản chép regex parser FE trong P4** sẽ trôi nếu FE đổi parser — ghi chú nguồn `file:dòng` ngay trên bản chép.
+
+## 6. Gate & verify (mỗi lúc MỘT lệnh nặng; chạy từ `C:/dev 2/MediaOS-fdisp`)
+
+**FULL gate tuần tự** (sau L5): `security-reviewer` → `ecc:silent-failure-hunter`. KHÔNG `ecc:database-reviewer` (D16). PASS vòng 1 ⇒ dừng; LOW ⇒ ghi nợ §8.
+
+**Verify theo thứ tự:**
+1. `pnpm --filter @mediaos/contracts build`
+2. `bash harness/check.sh --quick`
+3. Spec của WO với DB lane + bucket thử (O2 = A):
+   `bash scripts/lane-db-setup.sh fdisp` rồi
+   `LANE_DB=mediaos_fdisp S3_BUCKET=mediaos-fdisp-test pnpm --filter @mediaos/api exec vitest run src/storage src/foundation/files test/foundation/storage-test-target.unit-spec.ts test/integration/s16-filedisposition-storage.int-spec.ts test/integration/files-e2e-confirm.int-spec.ts --maxWorkers=4`
+   - Bucket: KHÔNG tạo tay. `S3_BUCKET` export từ shell thắng `.env` (M13); ca mới tự `HeadBucket` có ký → `NotFound` ⇒ `CreateBucket` chỉ khi tên qua chốt `/-test$/` (D12). Khoá truy cập do `AppModule` nạp từ `.env` như mọi int-spec — không export, không in.
+   - Chốt chống ghi nhầm: tên bucket đã resolve không mang hậu tố `-test` ⇒ ca storage KHÔNG gọi storage lần nào (cục bộ: bỏ qua có cảnh báo; CI: ĐỎ).
+   - O2 = B ⇒ bỏ `S3_BUCKET=…` khỏi lệnh; các ca S1–S6 bỏ qua có cảnh báo; phép đo dời sang CI.
+   - `LANE_DB` đặt mà thiếu biến mật khẩu role trong shell ⇒ resolver NÉM to (`T/db-target.ts:73-89`) — phiên điều phối cấp biến như các WO vùng đỏ trước; KHÔNG `source .env`. Lane `fdisp` đã tồn tại từ lượt trước ⇒ thêm `--reset`.
+4. Trước khi mở PR: `S3_BUCKET=mediaos-fdisp-test bash harness/check.sh --all --lane-db=fdisp` (cùng biến ⇒ MỌI int-spec storage có sẵn cũng ghi vào bucket thử thay vì bucket của `.env`).
+5. Sau khi mở PR: job `api.yml` «Build · Typecheck · Migrate · Test» là **phép đo CHÍNH** của nhóm S (MinIO tạm, `mediaos-test`); đọc log tìm tên file int-spec + dòng đếm, không chỉ dấu xanh.
+
+## 7. Triển khai & lùi
+
+**7.1 Thứ tự:** PR xanh + FULL gate PASS → owner merge (O4: chỉ khi deploy được ngay) → trên checkout chính `git checkout master && git pull` → `m prod-update api` (build → snapshot → migrate [0 migration mới] → restart; WO không đổi deps) → `m prod-status` / `GET /api/v1/health` kiểm `data.build.commit` = commit merge → smoke 7.2.
+FE: PR không chạm mã FE ⇒ Pages không đổi hành vi.
+
+**7.2 Smoke sau deploy (owner, ~5 phút):** (1) tải lên 1 ẢNH (avatar hoặc chat) → thấy ảnh hiển thị lại; (2) tải lên 1 TÀI LIỆU PDF (hồ sơ HR hoặc chat) → confirm xong, bấm mở ⇒ trình duyệt TẢI XUỐNG, tên tệp tiếng Việt đúng; (3) mở 1 ảnh cũ + 1 tài liệu cũ (tải trước deploy); (4) mở 1 phiếu lương PDF.
+**Lùi NGAY nếu:** mọi lượt tải lên báo lỗi ở bước PUT (403 từ storage) · confirm hợp lệ bị từ chối hàng loạt (409) · ảnh/avatar không hiển thị · URL tải trả 403/400 từ storage.
+
+**7.3 Bảng tương thích**
+
+| Tình huống | Kết quả | Căn cứ |
+| --- | --- | --- |
+| API mới + bundle FE cũ còn trong trình duyệt | Chạy: 8 luồng đã gửi đúng `Content-Type` đã khai | M8 (trình duyệt thật CHƯA ĐO ⇒ smoke 7.2) |
+| URL PUT/GET phát TRƯỚC deploy còn hạn | Theo hành vi cũ tới hết TTL (mặc định 300 s, trần 3.600 s — `config/env.schema.ts:209`); object PUT bằng URL cũ vẫn bị confirm mới so kiểu | U3 §D |
+| Tệp CŨ lưu sai kiểu | GET mới ép kiểu theo hàng `files` ⇒ được che; không cần backfill | D3 (hành vi storage CHƯA ĐO tới S5) |
+| Hàng cũ đăng ký MIME chủ động | `octet-stream` + `attachment` | D3 / O3 |
+| Lượt tải dở dang lúc deploy (register trên API cũ, PUT/confirm trên API mới) | Qua: header FE gửi = MIME đã đăng ký ⇒ confirm khớp | M8 + D7 |
+| 7 màn «mở xem» | Thành «tải xuống»; phiếu lương/CV để lại tab trắng tới khi N1 lên | M9 / O1 |
+
+**7.4 Lùi:** `m prod-rollback` (về bản ngay trước; không migration ⇒ không có trạng thái schema). **KHÔNG tự hồi sau khi lùi:** (a) hàng `files` đã bị đánh `Failed` vì lệch kiểu trong lúc bản mới chạy — người dùng tải lại; (b) lớp bảo vệ mất hoàn toàn (kể cả cho tệp cũ) trong khi bản vá đã công khai trên master ⇒ lùi là tạm thời, phải vá tiến; (c) bucket thử `mediaos-fdisp-test` trên MinIO cục bộ còn lại (vài chục object nhỏ) — owner xoá khi tiện.
+
+**7.5 Owner PHẢI làm ngay sau merge:** deploy API (7.1) + smoke (7.2) trong cùng lượt; chưa deploy được ⇒ ĐỪNG merge. Sau deploy: ghi commit PROD vào notes của FE-2D (điều kiện merge lát A).
+
+## 8. Nợ / WO kế (builder seed vào `harness/backlog.mjs` ở L5 — chữ trung tính)
+
+- **N1 `S16-SOCIAL-FILEOPENUX-1` (FE, amber):** 7 màn M9 đổi nhãn/cách mở cho khớp «tải xuống»; phiếu lương + CV bỏ bước mở tab trắng trước. **KHÔNG tương thích ngược với API cũ** (trên API cũ tệp vẫn hiển thị trực tiếp ⇒ bỏ tab mới sẽ điều hướng người dùng khỏi ứng dụng hoặc không thấy gì) ⇒ chỉ merge SAU khi PROD API chứa WO này (`git merge-base --is-ancestor <sha merge> <data.build.commit>`), vì FE lên Pages ngay khi merge. Kèm: lọc sớm loại tệp bị chặn ở form tải (UX).
+- **N2 (BE, LOW):** vị từ `like 'image/%'` ở 3 truy vấn ảnh + `kindOf` của SOCIAL (`startsWith("image/")`) dùng chung danh sách D3.
+- **N3 (BE):** validate theo KHOÁ lúc lưu `file.allowed_mime_types` / `file.blocked_extensions`.
+- **N4 (QA):** các int-spec storage có sẵn dùng `S3_BUCKET ??= …` + dò nuốt lỗi ⇒ chuyển sang helper D12.
+- **N5 (BE, LOW):** `createUploadUrl` chưa `assertKeyInTenant`; 5 controller CSV/XLSX tự ghép `Content-Disposition`; tách `files.service.ts` / `.spec.ts` xuống < 800 dòng; xoá dịch vụ mồ côi `task-attachments`.
+- **N6 (OPS):** `nosniff` do storage tự gắn, không do API điều khiển (M2) — đo lại nếu đổi sang R2; CI MinIO ≠ PROD (`S19-OPS-MINIOMIRROR-1` đã có).
+- **Điều kiện đo cho FE-2D lát A trước khi merge:** (1) `git merge-base --is-ancestor <sha merge WO này> <commit PROD>` exit 0 (đã ghi ở `S16-SOCIAL-FE-2D.md:376-377`); (2) ĐO trong worktree `MediaOS-fe2d`: luồng tải SOCIAL dùng CÙNG biến cho body register và header PUT (chưa đo — ngoài worktree này); (3) khối tệp đính kèm của lát A hiển thị đúng khi tệp không phải ảnh/video trả `attachment`; (4) `VIDEOMIME-1` vẫn chờ sau WO này.
+
+## 9. Sổ vết
+
+| Bước | Ngày giờ | Kết quả / số đo | Người ghi |
+| --- | --- | --- | --- |
+| Plan v1 commit | 08/10/2026 | — | planner |
+| Plan-review (1 vòng) | | | |
+| Bước 0 — RED storage trên code cũ (S1/S4/S5/S7: thông điệp nguyên văn) | | | |
+| L1 (spec · typecheck · mutant ★a/★b) | | | |
+| L2 (… · kết quả kiểm M15) | | | |
+| L3 | | | |
+| L4 | | | |
+| L5 (dòng đếm file int-spec · `x-content-type-options` ĐO được · chuỗi HEAD trả về) | | | |
+| FULL gate — `security-reviewer` | | | |
+| FULL gate — `silent-failure-hunter` | | | |
+| Verify §6 (1→4) | | | |
+| CI `api.yml` — nhóm S chạy/bỏ qua | | | |
+| Owner: O1 · O2 · O3 · O4 | | | |
+| Deploy + smoke 7.2 | | | |
