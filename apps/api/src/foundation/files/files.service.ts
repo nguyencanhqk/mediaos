@@ -28,9 +28,16 @@ import { isUniqueViolation, pgErrorField } from "../../common/db-error";
 import { AuditService } from "../../events/audit.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../../storage/storage-adapter.port";
 import { buildFileKey, InvalidStorageKeyError } from "../../storage/file-storage-key";
+import { UnsupportedAttachmentError } from "../../storage/object-storage.service";
 import type { FileLink, FileRecord, NewFileLink, NewFileRecord } from "../../db/schema/files";
 import { SettingService } from "../settings/setting.service";
 import { FileAccessLogService } from "./file-access-log.service";
+import {
+  CONFIRM_FAILURE_ERROR_CODE,
+  registerContentRejection,
+  storedContentTypeMatches,
+  type ConfirmFailureReason,
+} from "./file-content-guard";
 import { fileDownloadStateDenyReason, type FileDownloadDenyReason } from "./file-download-state";
 import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
@@ -119,18 +126,21 @@ export class FileService {
    * path-traversal → server suy extension + storage key qua buildFileKey → ghi files + audit 'file'/
    * FileUploaded + file_access_log Upload + presign PUT — CÙNG tx withTenant (presign lỗi ⇒ rollback nguyên
    * khối, không để row Pending mồ côi). Response KHÔNG chứa storage_path (BẤT BIẾN #2.3).
+   * Thêm 2 lưới CỨNG không setting nào mở được (kiểu + đuôi — file-content-guard.ts); trần của tầng ký ⇒ 415/413.
    */
   async upload(user: RequestUser, input: UploadFileInput): Promise<RegisterFileResponse> {
+    // 0. Kiểu bị từ chối CỨNG — xét TRƯỚC khi đọc cấu hình công ty (allowlist có mở cũng không qua).
+    if (registerContentRejection(input.declaredMimeType, null) === "active-mime") {
+      throw this.mimeRejected(input.declaredMimeType);
+    }
+
     // 1. Validate MIME ∈ allowlist + size ≤ ceiling (TẦNG SERVICE, từ settings). Sai → 4xx, KHÔNG ghi.
     const { allowedMime, maxBytes, blockedExtensions } = await this.loadUploadLimits(
       user.companyId,
     );
     if (!allowedMime.has(input.declaredMimeType)) {
       // FOUNDATION-FILE-ERR-MIME: MIME ngoài allowlist (server không tin Content-Type client).
-      throw new UnsupportedMediaTypeException({
-        code: FOUNDATION_FILE_ERROR_CODES.MIME,
-        message: `${FOUNDATION_FILE_ERROR_CODES.MIME}: MIME không được phép: ${input.declaredMimeType}`,
-      });
+      throw this.mimeRejected(input.declaredMimeType);
     }
     if (input.sizeBytes > maxBytes) {
       // FOUNDATION-FILE-ERR-SIZE: vượt trần dung lượng.
@@ -144,8 +154,10 @@ export class FileService {
     const safeName = this.sanitizeFilename(input.originalName);
     const fileExtension = this.deriveExtension(safeName);
 
-    // 2b. blocklist extension (exe/bat/sh/html/svg… — setting file.blocked_extensions). Reject TRƯỚC khi ghi.
-    if (fileExtension !== null && blockedExtensions.has(fileExtension)) {
+    // 2b. blocklist extension: setting file.blocked_extensions HỢP với tập chặn CỨNG trong code. Reject TRƯỚC khi ghi.
+    const hardBlocked =
+      registerContentRejection(input.declaredMimeType, fileExtension) === "hard-blocked-extension";
+    if (fileExtension !== null && (hardBlocked || blockedExtensions.has(fileExtension))) {
       throw new UnsupportedMediaTypeException({
         code: FOUNDATION_FILE_ERROR_CODES.BLOCKED,
         message: `${FOUNDATION_FILE_ERROR_CODES.BLOCKED}: phần mở rộng bị chặn: .${fileExtension}`,
@@ -222,11 +234,7 @@ export class FileService {
 
       // Presign PUT SAU khi ghi metadata (bên trong tx: presign lỗi ⇒ rollback insert/audit/log). Key
       // server-derived, adapter re-assert prefix tenant + clamp TTL; URL ephemeral (KHÔNG persist — #2.3).
-      const signed = await this.storage.signedUrl({
-        key: created.storagePath,
-        contentType: created.mimeType,
-        sizeBytes: created.fileSizeBytes,
-      });
+      const signed = await this.signUploadOrReject(created);
 
       return {
         fileId: created.id,
@@ -237,15 +245,38 @@ export class FileService {
     });
   }
 
+  /** 415 FOUNDATION-FILE-ERR-MIME — chung cho lưới cứng, allowlist công ty và trần kiểu của tầng ký. */
+  private mimeRejected(declaredMimeType: string): UnsupportedMediaTypeException {
+    return new UnsupportedMediaTypeException({
+      code: FOUNDATION_FILE_ERROR_CODES.MIME,
+      message: `${FOUNDATION_FILE_ERROR_CODES.MIME}: MIME không được phép: ${declaredMimeType}`,
+    });
+  }
+
+  /** Ký PUT cho hàng vừa ghi. Trần cứng của tầng ký ⇒ 415/413; lỗi khác ném lại nguyên. LUÔN ném ⇒ tx rollback hàng. */
+  private async signUploadOrReject(row: FileRecord): ReturnType<StorageAdapter["signedUrl"]> {
+    const { storagePath: key, mimeType: contentType, fileSizeBytes: sizeBytes } = row;
+    try {
+      return await this.storage.signedUrl({ key, contentType, sizeBytes });
+    } catch (err) {
+      if (!(err instanceof UnsupportedAttachmentError)) throw err;
+      if (err.kind === "content-type") throw this.mimeRejected(contentType);
+      throw new PayloadTooLargeException({
+        code: FOUNDATION_FILE_ERROR_CODES.SIZE,
+        message: `${FOUNDATION_FILE_ERROR_CODES.SIZE}: kích thước file ngoài giới hạn của tầng lưu trữ.`,
+      });
+    }
+  }
+
   // ─── Confirm (S2-FND-FILE-2) ───────────────────────────────────────────────────
 
   /**
    * POST /foundation/files/:id/confirm — pha 3 của upload E2E. Gate `upload:foundation-file` ép ở controller.
    * CHỈ file 'Pending' trong tenant (RLS + WHERE company_id + upload_status='Pending'). Verify object THẬT ở
-   * storage: tồn tại + ContentLength == size khai báo lúc register; tính checksum_sha256 server-side từ bytes
-   * (KHÔNG tin client). Khớp → 'Uploaded' + persist checksum. Absent → 'Failed'+lý do → 422 CONFIRM_ABSENT.
-   * Size lệch → 'Failed'+lý do → 409 CONFIRM_MISMATCH (KHÔNG persist checksum). Đã 'Uploaded' → idempotent 200.
-   * Non-Pending khác (Failed/Deleted) → 409 NOT_PENDING. Audit ghi CÙNG tx withTenant (BẤT BIẾN #1/#2).
+   * storage: tồn tại + ContentLength == size khai báo + kiểu đang LƯU khớp MIME đã đăng ký; checksum_sha256 tính
+   * server-side từ bytes (KHÔNG tin client). Khớp → 'Uploaded' + persist checksum. Absent → 'Failed'+lý do → 422
+   * CONFIRM_ABSENT. Size/kiểu lệch → 'Failed'+lý do → 409 CONFIRM_MISMATCH (KHÔNG persist checksum). Đã 'Uploaded'
+   * → idempotent 200. Non-Pending khác (Failed/Deleted) → 409 NOT_PENDING. Audit ghi CÙNG tx withTenant (#1/#2).
    */
   async confirmUpload(
     user: RequestUser,
@@ -286,6 +317,14 @@ export class FileService {
       throw new ConflictException({
         code: FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH,
         message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH}: size storage (${stat.sizeBytes}) khác khai báo (${row.fileSizeBytes}).`,
+      });
+    }
+    // Kiểu storage đang LƯU phải khớp kiểu đã đăng ký; storage không trả kiểu ⇒ KHÔNG khớp (fail-closed).
+    if (!storedContentTypeMatches(row.mimeType, stat.contentType)) {
+      await this.failConfirm(user, row, "content-type-mismatch");
+      throw new ConflictException({
+        code: FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH,
+        message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH}: kiểu nội dung ở storage khác kiểu đã đăng ký.`,
       });
     }
 
@@ -336,9 +375,13 @@ export class FileService {
 
   /**
    * Ghi confirm THẤT BẠI: Pending → Failed + lý do (KHÔNG persist checksum) + audit CÙNG tx. Row đã đổi
-   * trạng thái (affected=0) → bỏ qua audit (không ghi trạng thái sai). Dùng bởi nhánh absent/size-mismatch.
+   * trạng thái (affected=0) → bỏ qua audit (không ghi trạng thái sai). Mã lỗi tra theo lý do (bảng đủ khoá).
    */
-  private async failConfirm(user: RequestUser, row: FileRecord, reason: string): Promise<void> {
+  private async failConfirm(
+    user: RequestUser,
+    row: FileRecord,
+    reason: ConfirmFailureReason,
+  ): Promise<void> {
     await this.db.withTenant(user.companyId, async (tx) => {
       const affected = await this.fileRepo.markFailedTx(user.companyId, row.id, reason, tx);
       if (affected === 0) return;
@@ -352,10 +395,7 @@ export class FileService {
         dataScope: "Company",
         before: { uploadStatus: row.uploadStatus },
         after: { uploadStatus: "Failed" },
-        errorCode:
-          reason === "object-absent"
-            ? FOUNDATION_FILE_ERROR_CODES.CONFIRM_ABSENT
-            : FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH,
+        errorCode: CONFIRM_FAILURE_ERROR_CODE[reason],
       });
       await this.accessLog.record(tx, {
         fileId: row.id,
