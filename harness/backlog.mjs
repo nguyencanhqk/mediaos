@@ -8121,7 +8121,8 @@ export const backlog = [
       "apps/app/src/routes/tasks/**",
     ],
     skills: ["code-review"],
-    depends_on: ["S5-ME-BE-5"],
+    // Tiền đề thật là «S5-ME-BE-5» (AvatarPresignService, ship ở #228 `f49a1ce3`) — việc đó CHƯA TỪNG là id trong backlog ⇒ không khai được ở depends_on (cổng C6).
+    depends_on: [],
     src: [
       "Owner 2026-07-20: 'trong tất cả các task chưa hiển thị đúng avatar'. Đây là NỢ ĐÃ BIẾT, ghi sẵn trong memory avatar-own-scope-presign-wrapper: 'Nhóm C (task assignee): CHƯA làm — task data chưa mang URL avatar (follow-up)'",
       "Không phải lỗi component: <Avatar> ĐÃ hỗ trợ src và render <img>; TASK chỉ truyền `name` nên rơi vào nhánh initials",
@@ -18324,7 +18325,7 @@ export const backlog = [
     title:
       "Hai flake CÓ SẴN làm `check.sh --all` đỏ oan theo cách chia chunk: (1) PAYROLL `s15-payroll-db1-seed` E4 TẮT trigger `salary_component_system_freeze` TOÀN CỤC bằng DDL autocommit ⇒ `s15-payroll-be3-migration` đọc `tgenabled='D'`; (2) SOCIAL `social-attdebt-1-cost-alert` H9 đếm `security_alerts` KHÔNG lọc hàng sở hữu",
     zone: "yellow",
-    status: "ready",
+    status: "todo",
     paths: [
       "apps/api/test/integration/s15-payroll-db1-seed.int-spec.ts",
       "apps/api/test/integration/social-attdebt-1-cost-alert.int-spec.ts",
@@ -20467,7 +20468,7 @@ export const backlog = [
     title:
       "`leave-request.int.spec.ts` dùng NGÀY CỨNG tuyệt đối — đỏ từ 0h 09/09/2026 trên MỌI nhánh, và còn 2 quả bom nữa chưa nổ",
     zone: "yellow",
-    status: "ready",
+    status: "done",
     paths: ["apps/api/src/leave/leave-request.int.spec.ts", "harness/backlog.mjs"],
     skills: ["code-review"],
     depends_on: [],
