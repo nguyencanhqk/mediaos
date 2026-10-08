@@ -18255,7 +18255,7 @@ export const backlog = [
     notes: [
       "🔴 Seed 02/10/2026 từ FULL gate lượt 1 của S16-SOCIAL-FE-2D (security-reviewer MEDIUM) — tách G8 khỏi tiền điều kiện của `S16-SOCIAL-VIDEOMIME-1` (giờ chờ WO này). ĐIỀU KIỆN: PHẢI merge TRƯỚC khi BẤT KỲ admin nào mở rộng `file.allowed_mime_types` hoặc proxy storage về cùng origin app (khi đó script trong tệp đọc được cookie CSRF và gọi `/auth/refresh` = chiếm tài khoản). SVG an toàn trong `<img>` nhưng CHẠY script khi mở ở tab mới.",
       "🔴 Mở rộng 02/10/2026 ở FULL gate lượt 2 của S16-SOCIAL-FE-2D (security-reviewer HIGH): phạm vi thêm ký `Content-Type` PUT + confirm so kiểu + `ResponseContentType` (done_when 1–3, 6) vì vế «chặn MIME nội dung chủ động lúc register» (done_when 4) KHÔNG đủ — kiểu lưu do PUT quyết, không do register. ĐIỀU KIỆN siết: API có WO này PHẢI lên PROD TRƯỚC khi (i) storage được mở cho trình duyệt (`S3_ENDPOINT` tới được từ máy người dùng — chat có sẵn đường bấm), (ii) merge lát A của `S16-SOCIAL-FE-2D` (điều kiện MERGE D11 bổ sung ở notes WO đó), (iii) bất kỳ admin nào mở rộng allowlist hoặc proxy storage về cùng origin app. Owner kiểm: nếu storage PROD ĐÃ tới được từ trình duyệt thì chat phơi NGAY HÔM NAY ⇒ làm WO này trước mọi việc khác.",
-      "Kết quả thi công 08/10/2026 (plan `docs/plans/S16-SOCIAL-FILEDISPOSITION-1.md` §9; CHƯA lên PROD — merge ⇒ deploy API ngay, plan §7): URL PUT ký `Content-Type` (`X-Amz-SignedHeaders=content-length;content-type;host`) · confirm so kiểu storage đang lưu với MIME đã đăng ký (lệch/thiếu ⇒ 409 `FOUNDATION-FILE-ERR-CONFIRM-MISMATCH`, lý do `content-type-mismatch`) · URL GET ép kiểu đã đăng ký + `attachment` cho loại ngoài 6 kiểu hiển thị trực tiếp · register từ chối cứng nhóm kiểu/đuôi không phụ thuộc setting công ty (415); không thêm mã lỗi, không migration, không đổi mã FE. ĐO trên MinIO bản PROD (bucket thử riêng): PUT lệch kiểu ⇒ 403 `SignatureDoesNotMatch` · PUT thiếu `Content-Type` ⇒ 400 · HEAD trả đúng chuỗi đã gửi · đổi tham số kiểu trên URL GET đã ký ⇒ 403 · `X-Content-Type-Options: nosniff` do storage TỰ gắn (SDK không cho đặt qua tham số ký; R2 chưa đo). WO kế: `S16-SOCIAL-FILEOPENUX-1` · `-INLINELIST-1` · `-FILESETTINGKEY-1` · `-STORAGETESTGATE-1` · `-FILEDEBT-1`.",
+      "Kết quả thi công 08/10/2026 (plan `docs/plans/S16-SOCIAL-FILEDISPOSITION-1.md` §9; CHƯA lên PROD — merge ⇒ deploy API ngay, plan §7): URL PUT ký `Content-Type` (`X-Amz-SignedHeaders=content-length;content-type;host`) · confirm so kiểu storage đang lưu với MIME đã đăng ký (lệch/thiếu ⇒ 409 `FOUNDATION-FILE-ERR-CONFIRM-MISMATCH`, lý do `content-type-mismatch`, hoặc `content-type-unknown` khi storage không trả kiểu) · URL GET ép kiểu đã đăng ký + `attachment` cho loại ngoài 6 kiểu hiển thị trực tiếp (6 kiểu đó ghim `inline`) · register từ chối cứng nhóm kiểu/đuôi không phụ thuộc setting công ty (415); không thêm mã lỗi, không migration, không đổi mã FE. ĐO trên MinIO bản PROD (bucket thử riêng): PUT lệch kiểu ⇒ 403 `SignatureDoesNotMatch` · PUT thiếu `Content-Type` ⇒ 400 · HEAD trả đúng chuỗi đã gửi · đổi tham số kiểu trên URL GET đã ký ⇒ 403 · `X-Content-Type-Options: nosniff` do storage TỰ gắn (SDK không cho đặt qua tham số ký; R2 chưa đo). FULL gate 08/10/2026 (hai lượt review): mọi finding trong phạm vi đã vá ở `4e904cb9` + `aa17f408`, phần còn lại ghi nợ (plan §8 N4 · N7 · N8 · N9). WO kế: `S16-SOCIAL-FILEOPENUX-1` · `-INLINELIST-1` · `-FILESETTINGKEY-1` · `-STORAGETESTGATE-1` · `-FILEDEBT-1`.",
     ],
   },
   {
@@ -18430,15 +18430,18 @@ export const backlog = [
     done_when: [
       "Mọi int-spec có PUT/GET thật lên storage đi qua `resolveStorageTestTarget`: CI thiếu storage ⇒ ĐỎ (không skip im lặng); cục bộ tên bucket không khớp ⇒ bỏ qua KÈM `console.warn` nêu tên ca, 0 lời gọi storage",
       "Đo cổng bằng vi phạm thật: chạy với `S3_BUCKET` trỏ tên khác ⇒ đếm được số ca bỏ qua + 0 object mới ở bucket đó; báo cáo verify chép dòng `Tests N passed | M skipped` từng file",
+      "Cổng `check.sh --all` / `REQUIRE_LANE_DB=1`: ca storage thật của int-spec phải CHẠY — khi cổng yêu cầu mà ca bị bỏ qua theo từng ca (bên trong một file vẫn đang chạy) ⇒ ĐỎ, không tính là xanh; đo bằng một lượt cố ý đóng cổng bucket",
     ],
-    notes: ["Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N4."],
+    notes: [
+      "Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N4; `done_when` thứ ba thêm cùng ngày sau FULL gate của WO gốc.",
+    ],
   },
   {
     id: "S16-SOCIAL-FILEDEBT-1",
     module: "FOUNDATION",
     layer: "BE",
     title:
-      "Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl` chưa gọi `assertKeyInTenant` (GET đã gọi) · 5 controller CSV/XLSX tự ghép `Content-Disposition` thay vì `buildAttachmentDisposition` · `files.service.ts` (1.133 dòng) + `files.service.spec.ts` vượt trần 800 · dịch vụ mồ côi `task-attachments` (controller đã 410) · `deriveExtension` trả `null` cho tên bắt đầu/kết thúc bằng dấu chấm",
+      "Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl` chưa gọi `assertKeyInTenant` (GET đã gọi) · 5 controller CSV/XLSX tự ghép `Content-Disposition` thay vì `buildAttachmentDisposition` · `files.service.ts` (1.132 dòng) + `files.service.spec.ts` vượt trần 800 · dịch vụ mồ côi `task-attachments` (controller đã 410) · toàn vẹn object sau confirm · tín hiệu khi phục vụ bằng kiểu dự phòng · giới hạn tần suất dòng lỗi của lớp tự kiểm sau ký",
     zone: "red",
     status: "todo",
     paths: [
@@ -18453,15 +18456,18 @@ export const backlog = [
     skills: ["security-review", "code-review"],
     depends_on: ["S16-SOCIAL-FILEDISPOSITION-1"],
     src: [
-      "Plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5 + sổ vết L4 (D18 vượt ~6 dòng; ghi nhận `deriveExtension`). Tầng ký GET của WO gốc (kiểu trả = MIME đã đăng ký + tải xuống) vẫn đứng sau mọi mục ở đây ⇒ LOW.",
+      "Plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5 · N7 · N8 · N9 + sổ vết §9 (D18 vượt ~6 dòng; hai dòng FULL gate). Tầng ký của WO gốc (kiểu trả = MIME đã đăng ký; disposition do server ghim) vẫn đứng sau mọi mục ở đây. Phần xử lý tên có dấu chấm ở đầu / cuối đã làm trong WO gốc, không còn ở đây.",
     ],
     done_when: [
       "RED trước: `createUploadUrl` với khoá ngoài tiền tố công ty ⇒ ném trước khi ký (ca cạnh bên: khoá đúng tiền tố ⇒ có URL); chữ ký hàm nhận `companyId` và mọi chỗ gọi truyền đủ",
-      "`deriveExtension` xử lý tên bắt đầu/kết thúc bằng dấu chấm nhất quán với hai tập chặn đuôi (ca TỪ CHỐI + ca CHO PHÉP cạnh nhau); 5 controller CSV/XLSX dùng `buildAttachmentDisposition`",
+      "5 controller CSV/XLSX dùng `buildAttachmentDisposition` (ca cạnh nguồn cho từng controller: tên có dấu tiếng Việt ra đúng hai dạng `filename` / `filename*`)",
       "Tách `files.service.ts` + spec xuống < 800 dòng mỗi file KHÔNG đổi hành vi (toàn bộ spec hiện có xanh, không sửa kỳ vọng); `task-attachments.service.ts` + spec: xoá nếu đo được 0 chỗ gọi còn sống, nếu không thì ghi lý do giữ",
+      "Toàn vẹn object sau confirm — chốt MỘT hướng (ghi lý do): lưu dấu nội dung của object lúc confirm rồi đối chiếu khi phát URL tải, HOẶC rút hạn URL ghi; RED trước: dấu nội dung khác dấu đã lưu ⇒ không phát URL tải (ca cạnh bên: khớp ⇒ có URL)",
+      "Hàng được phục vụ bằng kiểu dự phòng (`application/octet-stream` + tải xuống): quy tắc phục vụ báo được trường hợp này cho bên gọi, bên gọi ghi tín hiệu có giới hạn tần suất (không kèm khoá object); kèm câu đếm CHỈ-ĐỌC các hàng `files` như vậy để chạy trước deploy",
+      "Lớp tự kiểm sau ký: dòng lỗi có giới hạn tần suất theo thao tác (PUT / GET) kèm bộ đếm — vẫn từ chối MỌI URL không đạt, chỉ giảm số dòng log",
     ],
     notes: [
-      "LOW — Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5. Có thể tách thành PR nhỏ theo từng `done_when`.",
+      "Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5; cập nhật cùng ngày sau FULL gate của WO gốc (thêm N7 · N8 · N9, bỏ mục đã xử lý trong WO gốc). Có thể tách thành PR nhỏ theo từng `done_when`.",
     ],
   },
   {
