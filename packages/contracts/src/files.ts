@@ -223,8 +223,9 @@ export type FileLinkDto = z.infer<typeof fileLinkSchema>;
 //   (1) POST /foundation/files/upload  → register metadata (upload_status='Pending') + trả presigned-PUT
 //       `uploadUrl` (ephemeral, TTL-ngắn `expiresAt`). KHÔNG stream binary qua NestJS, KHÔNG lộ storage_path.
 //   (2) client PUT bytes trực tiếp lên `uploadUrl` (S3/MinIO).
-//   (3) POST /foundation/files/:id/confirm → server HEAD/GET verify object tồn tại + size khớp khai báo,
-//       tính checksum_sha256 server-side → upload_status='Uploaded'. Sai size/absent → 'Failed'.
+//   (3) POST /foundation/files/:id/confirm → server HEAD/GET verify object tồn tại + size khớp khai báo +
+//       kiểu storage đang lưu khớp MIME đã đăng ký, tính checksum_sha256 server-side → upload_status='Uploaded'.
+//       Sai size / lệch kiểu / absent → 'Failed'.
 
 /**
  * FOUNDATION-FILE-ERR-* — catalog mã lỗi domain file (SPEC-01 §9 `MODULE-ERR-XXX`). NGUỒN SỰ THẬT DTO
@@ -232,6 +233,9 @@ export type FileLinkDto = z.infer<typeof fileLinkSchema>;
  * thêm mã mới ở CUỐI, KHÔNG đổi/xoá mã đã có (S2-FND-FILE-2 bổ sung EXTENSION, BLOCKED, CONFIRM-x, NOT-PENDING).
  *
  *  - MIME / SIZE / EXTENSION / BLOCKED / FILENAME / KEY: validate register (415/413/400) TRƯỚC mọi ghi.
+ *    EXTENSION mang HAI nghĩa (câu `message` của server phân biệt): phần mở rộng không khớp MIME khai báo,
+ *    hoặc phần mở rộng không đúng dạng được nhận (1–16 chữ cái không dấu / chữ số; tên không có dấu chấm thì
+ *    không xét). CONFIRM_MISMATCH: cỡ HOẶC kiểu storage đang lưu khác khai báo.
  *  - FORBIDDEN / NOT_DOWNLOADABLE / INFECTED / LINK: chốt policy + state-guard (403/409/400).
  *  - DUP_LINK / DUP_PRIMARY: 23505 phân biệt theo TÊN constraint (S2-FND-DB-2-B).
  *  - CONFIRM_ABSENT / CONFIRM_MISMATCH / NOT_PENDING: confirm-upload (422/409).

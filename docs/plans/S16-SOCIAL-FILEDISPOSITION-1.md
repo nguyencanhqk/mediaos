@@ -231,7 +231,7 @@ Lệnh kiểm NHẸ cuối mỗi lát (chạy từ gốc worktree, mỗi lúc M�
 **7.1 Thứ tự:** PR xanh + FULL gate PASS → owner merge (O4: chỉ khi deploy được ngay) → trên checkout chính `git checkout master && git pull` → `m prod-update api` (build → snapshot → migrate [0 migration mới] → restart; WO không đổi deps) → `m prod-status` / `GET /api/v1/health` kiểm `data.build.commit` = commit merge → smoke 7.2.
 FE: PR không chạm mã FE ⇒ Pages không đổi hành vi.
 
-**7.1a Đếm CHỈ-ĐỌC trước deploy** (thêm sau re-gate — RG-F5 + §8 N8). Hai nhóm hàng `files` CŨ mà bản mới phục vụ theo quy tắc mới; chỉ `SELECT count`, chạy bằng vai trò đọc được mọi hàng của bảng (bảng có RLS). Kết quả > 0 ⇒ xem từng hàng TRƯỚC khi deploy. Hai câu này CHƯA chạy thử trên DB (đợt vá không được nối DB ngoài vitest); câu (2) xấp xỉ quy tắc `resolveServeDirectives` — lệch thì đếm DƯ, không đếm thiếu.
+**7.1a Đếm CHỈ-ĐỌC trước deploy** (thêm sau re-gate — RG-F5 + §8 N8). Ba nhóm hàng `files` CŨ mà bản mới phục vụ theo quy tắc mới; chỉ `SELECT count`, chạy bằng vai trò đọc được mọi hàng của bảng (bảng có RLS). Kết quả > 0 ⇒ xem từng hàng TRƯỚC khi deploy. Ba câu này CHƯA chạy thử trên DB (đợt vá không được nối DB ngoài vitest); câu (2) xấp xỉ quy tắc `resolveServeDirectives` — lệch thì đếm DƯ, không đếm thiếu.
 
 ```sql
 -- (1) hàng chưa xoá có tên bắt đầu bằng dấu chấm
@@ -242,6 +242,10 @@ SELECT count(*) FROM files
 WHERE deleted_at IS NULL
   AND (lower(btrim(split_part(mime_type, ';', 1))) !~ '^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$'
     OR lower(btrim(split_part(mime_type, ';', 1))) ~ '^(text/html|text/xml|application/xml)$|[+]xml$');
+
+-- (3) hàng chưa xoá có phần mở rộng đã lưu không thuộc dạng mà register nay nhận (thêm sau VÁ-D)
+SELECT count(*) FROM files
+WHERE deleted_at IS NULL AND file_extension IS NOT NULL AND file_extension !~ '^[a-z0-9]{1,16}$';
 ```
 
 **7.2 Smoke sau deploy (owner, ~7 phút) — BẮT BUỘC đủ cả hai đường PUT** (hai đường mã khác nhau phía FE): (1) **đường fetch** — tải lên 1 ẢNH qua avatar hoặc chat (`W/lib/storage-upload.ts:30` · `employee-avatar-api.ts:20`) → thấy ảnh hiển thị lại; (2) **đường XHR** — tải lên qua hồ sơ HR hoặc TASK (`W/lib/employee-file-api.ts:60` · `task-file-api.ts:74`): 1 PDF tên tiếng Việt **và** 1 tệp `.txt` hoặc `.csv` → confirm xong, bấm mở PDF ⇒ trình duyệt TẢI XUỐNG, tên tệp đúng; (3) mở 1 ảnh cũ + 1 tài liệu cũ (tải trước deploy); (4) mở 1 phiếu lương PDF; (5) đọc log API từ lúc restart: 0 dòng `StoragePresignInvariantError`.
