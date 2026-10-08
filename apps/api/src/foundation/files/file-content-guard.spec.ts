@@ -5,17 +5,18 @@
  *   - bảng lý do thất bại của confirm → mã lỗi (đủ khoá, không lý do nào rơi về mã mặc định);
  *   - so kiểu đã LƯU ở storage với kiểu đã ĐĂNG KÝ: khớp · lệch · không rõ (storage không trả kiểu). Chỉ
  *     «khớp» mới qua; hai trường hợp còn lại mang hai lý do riêng + một dòng log an toàn;
- *   - từ chối cứng lúc đăng ký theo kiểu và theo đuôi (không phụ thuộc cấu hình công ty).
+ *   - từ chối cứng lúc đăng ký theo kiểu và theo đuôi (không phụ thuộc cấu hình công ty);
+ *   - dạng của đuôi được nhận lúc đăng ký: 1–16 chữ cái ASCII / chữ số, hoặc tên không có đuôi.
  * Mỗi ca TỪ CHỐI đứng cạnh ca CHO PHÉP cùng khung.
  */
 import { ATTACHMENT_ALLOWED_CONTENT_TYPES, FOUNDATION_FILE_ERROR_CODES } from "@mediaos/contracts";
 import { describe, expect, it } from "vitest";
+import { buildAttachmentDisposition } from "../../storage/content-disposition";
 import {
   CONFIRM_FAILURE_ERROR_CODE,
   compareStoredContentType,
   confirmContentTypeFailure,
   describeSignRejection,
-  foldedExtensionCandidates,
   quoteForLog,
   registerContentRejection,
   resolveRegisterExtension,
@@ -262,16 +263,16 @@ describe("registerContentRejection — từ chối cứng lúc đăng ký", () =
 describe("resolveRegisterExtension — đuôi của tên SẼ PHÁT RA, so với tập chặn cứng HỢP tập của công ty", () => {
   /** Ký tự đặc biệt dựng từ ĐIỂM MÃ — tệp nguồn không chứa ký tự vô hình. */
   const at = (codePoint: number): string => String.fromCodePoint(codePoint);
-  const LRM = at(0x200e); // dấu chiều chữ
   const HIGH_SURROGATE = at(0xd83d); // surrogate lẻ
   const FULLWIDTH_DOT = at(0xff0e);
-  const Z_ACUTE = at(0x017a); // chữ z mang dấu sắc
+  const KELVIN_SIGN = at(0x212a); // dạng chuẩn tắc của nó là chữ K không dấu
   const NONE: ReadonlySet<string> = new Set();
   const COMPANY: ReadonlySet<string> = new Set(["xyz"]);
 
   it.each(HARD_BLOCKED)("TỪ CHỐI: đuôi chặn cứng %j bị nhận ra dù tập của công ty RỖNG", (ext) => {
     expect(resolveRegisterExtension(`tep.${ext}`, NONE)).toEqual({
       fileExtension: ext,
+      malformedExtension: false,
       blockedExtension: ext,
     });
     expect(resolveRegisterExtension(`TEP.${ext.toUpperCase()}`, NONE).blockedExtension).toBe(ext);
@@ -287,38 +288,14 @@ describe("resolveRegisterExtension — đuôi của tên SẼ PHÁT RA, so với
     expect(resolveRegisterExtension("tep.svg", COMPANY).blockedExtension).toBe("svg");
   });
 
-  it("TỪ CHỐI: đuôi của dạng dự phòng ASCII thuộc tập công ty dù đuôi của dạng Unicode thì không", () => {
-    expect(resolveRegisterExtension(`tep.xy${Z_ACUTE}`, new Set(["xy_"]))).toEqual({
-      fileExtension: `xy${Z_ACUTE}`,
-      blockedExtension: "xy_",
+  it("TỪ CHỐI: ký tự có dạng chuẩn tắc là một chữ cái không dấu được so như chính chữ cái đó", () => {
+    expect(resolveRegisterExtension(`tep.xy${KELVIN_SIGN}`, new Set(["xyk"]))).toEqual({
+      fileExtension: "xyk",
+      malformedExtension: false,
+      blockedExtension: "xyk",
     });
+    expect(resolveRegisterExtension(`tep.xy${KELVIN_SIGN}`, COMPANY).blockedExtension).toBeNull();
   });
-
-  it("TỪ CHỐI: phép so dùng đuôi ĐẦY ĐỦ — đuôi lưu bị cắt còn 50 ký tự không làm hụt phép so", () => {
-    const longExtension = "e".repeat(60);
-    expect(resolveRegisterExtension(`tep.${longExtension}`, new Set([longExtension]))).toEqual({
-      fileExtension: "e".repeat(50),
-      blockedExtension: longExtension,
-    });
-  });
-
-  it.each<[string, string, string | null]>([
-    ["ký tự bị loại trong đuôi", `tep.xy${LRM}z`, "xy_z"],
-    ["ký tự bị loại sau đuôi", `tep.xyz${LRM}`, "xyz_"],
-    ["dấu chấm cuối", "tep.xyz.", "xyz_"],
-    ["chỗ cắt độ dài rơi ngay sau đuôi", `${"a".repeat(176)}.xyz${"z".repeat(9)}`, "xy_"],
-    ["dấu chấm toàn chiều rộng", `tep${FULLWIDTH_DOT}xyz`, null],
-    ["chữ cuối của đuôi mang dấu", `tep.xy${Z_ACUTE}`, `xy${Z_ACUTE}`],
-    ["đuôi chỉ CHỨA đuôi bị chặn", "tep.xyzw", "xyzw"],
-  ])(
-    "CHO PHÉP: %s ⇒ không chặn (tên phát ra không mang đuôi `xyz`), đuôi lưu %j",
-    (_label, fileName, fileExtension) => {
-      expect(resolveRegisterExtension(fileName, COMPANY)).toEqual({
-        fileExtension,
-        blockedExtension: null,
-      });
-    },
-  );
 
   it.each<[string, string | null]>([
     ["tep.pdf", "pdf"],
@@ -326,128 +303,202 @@ describe("resolveRegisterExtension — đuôi của tên SẼ PHÁT RA, so với
     [".pdf", "pdf"],
     ["tep-khong-duoi", null],
     [`${"a".repeat(300)}.xlsx`, "xlsx"],
-  ])("CHO PHÉP: tên thường %j ⇒ đuôi lưu %j, không chặn", (fileName, fileExtension) => {
+    ["tep.xyzw", "xyzw"],
+    [`tep${FULLWIDTH_DOT}xyz`, null],
+  ])("CHO PHÉP: tên %j ⇒ đuôi lưu %j, không chặn", (fileName, fileExtension) => {
     expect(resolveRegisterExtension(fileName, COMPANY)).toEqual({
       fileExtension,
+      malformedExtension: false,
       blockedExtension: null,
     });
   });
 });
 
-describe("foldedExtensionCandidates — dạng gập của một đuôi, chỉ dùng để SO với tập chặn", () => {
-  const at = (codePoint: number): string => String.fromCodePoint(codePoint);
-
-  it.each<[string, string, string[]]>([
-    ["đuôi thường", "pdf", ["pdf"]],
-    ["chữ hoa", "PDF", ["pdf"]],
-    ["chữ số và gạch dưới được giữ", "xy_z9", ["xy_z9"]],
-    ["ký tự ngoài tập đứng CUỐI (U+180E)", `xyz${at(0x180e)}`, ["xyz"]],
-    ["dấu câu đứng cuối", "xyz?", ["xyz"]],
-    ["ký tự ngoài tập đứng GIỮA ⇒ hai ứng viên", `xy${at(0x200b)}z`, ["xyz", "xy"]],
-    ["chữ chỉ thành ASCII sau khi gập hoa-thường (U+017F)", `xy${at(0x017f)}`, ["xys"]],
-    ["chữ chỉ thành ASCII sau khi gập hoa-thường (U+0131)", `x${at(0x0131)}z`, ["xiz"]],
-    ["ký tự ngoài tập đứng ĐẦU ⇒ chỉ còn ứng viên bỏ-ký-tự", " ban cuoi", ["bancuoi"]],
-    ["chữ mang dấu bị bỏ, không chuyển tự", `xy${at(0x017a)}`, ["xy"]],
-  ])("%s", (_label, extension, expected) => {
-    expect(foldedExtensionCandidates(extension)).toEqual(expected);
-  });
-
-  it.each([["?"], [at(0x200b)], ["."], [""]])(
-    "không còn ký tự nào trong tập (%j) ⇒ mảng rỗng",
-    (extension) => {
-      expect(foldedExtensionCandidates(extension)).toEqual([]);
-    },
-  );
-});
-
-describe("resolveRegisterExtension — dạng gập của đuôi cũng được so với tập chặn", () => {
+describe("resolveRegisterExtension — đuôi được nhận chỉ gồm 1–16 chữ cái ASCII hoặc chữ số", () => {
   const at = (codePoint: number): string => String.fromCodePoint(codePoint);
   const codePointLabel = (codePoint: number): string =>
     `U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}`;
+  const fullwidth = (text: string): string =>
+    Array.from(text, (char) => at(char.charCodeAt(0) + 0xfee0)).join("");
   const END_MARK = at(0x180e);
   const LONG_S = at(0x017f);
   const DOTLESS_I = at(0x0131);
-  const LRM = at(0x200e);
+  const LRM = at(0x200e); // dấu chiều chữ — phép làm sạch thay bằng `_`
+  const ZERO_WIDTH_SPACE = at(0x200b);
+  const Z_ACUTE = at(0x017a); // chữ z mang dấu sắc
   const RESERVED_PUNCTUATION = [":", "*", "?", '"', "<", ">", "|"];
   const INVISIBLE_FORMAT = [0x200b, 0x200d, 0x2060, 0x00ad, 0x061c].map(
     (codePoint): [string, string] => [codePointLabel(codePoint), at(codePoint)],
   );
+  /** Ba đuôi thử cho mỗi lớp: thuộc tập chặn cứng · chỉ thuộc tập của công ty · đuôi thường. */
+  const SAMPLE_EXTENSIONS = ["svg", "xyz", "zip"];
   const NONE: ReadonlySet<string> = new Set();
   const COMPANY: ReadonlySet<string> = new Set(["xyz", "xis"]);
 
-  it("lớp 1 — U+180E đứng sau đuôi: TỪ CHỐI với đuôi bị chặn ⇄ CHO PHÉP với đuôi thường", () => {
-    expect(resolveRegisterExtension(`tep.svg${END_MARK}`, NONE).blockedExtension).toBe("svg");
-    expect(resolveRegisterExtension(`tep.xyz${END_MARK}`, COMPANY).blockedExtension).toBe("xyz");
+  /** Kết cục của một tên theo ĐÚNG thứ tự bên gọi xét: dạng của đuôi trước, tập chặn sau. */
+  const outcomeOf = (fileName: string): "malformed" | "blocked" | "accepted" => {
+    const verdict = resolveRegisterExtension(fileName, COMPANY);
+    if (verdict.malformedExtension) return "malformed";
+    return verdict.blockedExtension === null ? "accepted" : "blocked";
+  };
 
-    expect(resolveRegisterExtension(`tep.zip${END_MARK}`, COMPANY).blockedExtension).toBeNull();
-    expect(resolveRegisterExtension(`tep.xyzw${END_MARK}`, COMPANY).blockedExtension).toBeNull();
+  /** [nhãn, tên] — ký tự của bốn lớp nằm TRONG hoặc ngay SAU đuôi. */
+  const MARK_IN_EXTENSION: Array<[string, string]> = [
+    ...SAMPLE_EXTENSIONS.map((ext): [string, string] => [
+      `lớp 1 — U+180E sau đuôi ${ext}`,
+      `tep.${ext}${END_MARK}`,
+    ]),
+    ...RESERVED_PUNCTUATION.flatMap((mark) =>
+      SAMPLE_EXTENSIONS.map((ext): [string, string] => [
+        `lớp 2 — dấu ${mark} sau đuôi ${ext}`,
+        `tep.${ext}${mark}`,
+      ]),
+    ),
+    ["lớp 3 — U+017F thay một chữ của đuôi svg", `tep.${LONG_S}vg`],
+    ["lớp 3 — U+017F thay một chữ của đuôi xsl", `tep.x${LONG_S}l`],
+    ["lớp 3 — U+017F thay một chữ của đuôi xis", `tep.xi${LONG_S}`],
+    ["lớp 3 — U+0131 thay một chữ của đuôi xis", `tep.x${DOTLESS_I}s`],
+    ["lớp 3 — U+017F trong một đuôi thường", `tep.${LONG_S}vgx`],
+    ...INVISIBLE_FORMAT.flatMap(
+      ([label, mark]): Array<[string, string]> => [
+        [`lớp 4 — ${label} giữa đuôi svg`, `tep.sv${mark}g`],
+        [`lớp 4 — ${label} giữa đuôi xyz`, `tep.xy${mark}z`],
+        [`lớp 4 — ${label} giữa đuôi zip`, `tep.zi${mark}p`],
+      ],
+    ),
+    ["dấu câu giữa đuôi", "tep.svg?x"],
+    ["khoảng trắng + ngoặc sau đuôi", "tep.xyz (1)"],
+    ["dấu câu giữa một đuôi thường", "tep.sv?gx"],
+  ];
+
+  it.each(MARK_IN_EXTENSION)("TỪ CHỐI — %s ⇒ đuôi không hợp lệ", (_label, fileName) => {
+    expect(outcomeOf(fileName)).toBe("malformed");
   });
 
-  it.each(RESERVED_PUNCTUATION)(
-    "lớp 2 — dấu %j đứng sau đuôi: TỪ CHỐI với đuôi bị chặn ⇄ CHO PHÉP với đuôi thường",
-    (mark) => {
-      expect(resolveRegisterExtension(`tep.svg${mark}`, NONE).blockedExtension).toBe("svg");
-      expect(resolveRegisterExtension(`tep.xyz${mark}`, COMPANY).blockedExtension).toBe("xyz");
+  /** Cùng các ký tự đó nằm ở THÂN tên, đuôi thường. */
+  const MARK_IN_STEM: Array<[string, string]> = [
+    ["U+180E", END_MARK],
+    ...RESERVED_PUNCTUATION.map((mark): [string, string] => [`dấu ${mark}`, mark]),
+    ["U+017F", LONG_S],
+    ["U+0131", DOTLESS_I],
+    ...INVISIBLE_FORMAT,
+  ];
 
-      expect(resolveRegisterExtension(`tep.zip${mark}`, COMPANY).blockedExtension).toBeNull();
-      expect(resolveRegisterExtension(`tep.xyzw${mark}`, COMPANY).blockedExtension).toBeNull();
-    },
-  );
-
-  it("lớp 3 — chữ chỉ trùng ASCII sau khi gập hoa-thường (U+017F · U+0131): TỪ CHỐI ⇄ CHO PHÉP", () => {
-    expect(resolveRegisterExtension(`tep.${LONG_S}vg`, NONE).blockedExtension).toBe("svg");
-    expect(resolveRegisterExtension(`tep.x${LONG_S}l`, NONE).blockedExtension).toBe("xsl");
-    // Tập chặn cứng không có đuôi nào chứa chữ `i` ⇒ U+0131 chỉ thử được với tập của công ty.
-    expect(resolveRegisterExtension(`tep.x${DOTLESS_I}s`, COMPANY).blockedExtension).toBe("xis");
-    expect(resolveRegisterExtension(`tep.xi${LONG_S}`, COMPANY).blockedExtension).toBe("xis");
-
-    expect(resolveRegisterExtension(`tep.${LONG_S}vgx`, COMPANY).blockedExtension).toBeNull();
-    expect(resolveRegisterExtension(`tep.x${DOTLESS_I}sw`, COMPANY).blockedExtension).toBeNull();
-  });
-
-  it.each(INVISIBLE_FORMAT)(
-    "lớp 4 — ký tự định dạng %s nằm giữa đuôi: TỪ CHỐI với đuôi bị chặn ⇄ CHO PHÉP với đuôi thường",
-    (_label, mark) => {
-      expect(resolveRegisterExtension(`tep.sv${mark}g`, NONE).blockedExtension).toBe("svg");
-      expect(resolveRegisterExtension(`tep.xy${mark}z`, COMPANY).blockedExtension).toBe("xyz");
-
-      expect(resolveRegisterExtension(`tep.zi${mark}p`, COMPANY).blockedExtension).toBeNull();
-      expect(resolveRegisterExtension(`tep.xy${mark}zw`, COMPANY).blockedExtension).toBeNull();
-    },
-  );
-
-  it("phần đứng TRƯỚC ký tự ngoài tập đầu tiên cũng được so: TỪ CHỐI ⇄ CHO PHÉP", () => {
-    expect(resolveRegisterExtension("tep.svg?x", NONE).blockedExtension).toBe("svg");
-    expect(resolveRegisterExtension("tep.xyz (1)", COMPANY).blockedExtension).toBe("xyz");
-
-    expect(resolveRegisterExtension("tep.sv?gx", NONE).blockedExtension).toBeNull();
-    expect(resolveRegisterExtension("tep.xy (1)", COMPANY).blockedExtension).toBeNull();
-  });
-
-  it("phép gập chỉ dùng để SO: đuôi báo ra là phần tử của tập chặn, đuôi LƯU giữ nguyên", () => {
-    expect(resolveRegisterExtension(`tep.xyz${END_MARK}`, COMPANY)).toEqual({
-      fileExtension: `xyz${END_MARK}`,
-      blockedExtension: "xyz",
-    });
-    expect(resolveRegisterExtension(`tep.zip${END_MARK}`, COMPANY)).toEqual({
-      fileExtension: `zip${END_MARK}`,
+  it.each(MARK_IN_STEM)("CHO PHÉP — %s nằm ở THÂN tên, đuôi thường ⇒ nhận", (_label, mark) => {
+    expect(resolveRegisterExtension(`te${mark}p.zip`, COMPANY)).toEqual({
+      fileExtension: "zip",
+      malformedExtension: false,
       blockedExtension: null,
+    });
+  });
+
+  it.each<[string, string]>([
+    ["chỉ một dấu câu", "tep.svg.?"],
+    ["chỉ U+180E", `tep.svg.${END_MARK}`],
+    ["chỉ U+200B", `tep.svg.${ZERO_WIDTH_SPACE}`],
+    ["chỉ một dấu câu (tên mang đuôi của tập công ty)", "tep.xyz.?"],
+    ["một dấu câu, lặp hai lần", "tep.svg.?.?"],
+    ["khoảng trắng rồi dấu câu", "tep.svg. ?"],
+    ["dấu câu rồi chữ", "tep.svg.?x"],
+    ["khoảng trắng rồi chữ", "tep.svg. ban cuoi"],
+  ])("TỪ CHỐI — đoạn sau dấu chấm cuối là %s ⇒ đuôi không hợp lệ", (_label, fileName) => {
+    expect(outcomeOf(fileName)).toBe("malformed");
+  });
+
+  it.each<[string, string, string]>([
+    ["ký tự bị thay trong đuôi", `tep.xy${LRM}z`, "xy_z"],
+    ["ký tự bị thay sau đuôi", `tep.xyz${LRM}`, "xyz_"],
+    ["dấu chấm cuối tên", "tep.xyz.", "xyz_"],
+    ["dấu chấm cuối tên (đuôi chặn cứng)", "tep.svg.", "svg_"],
+    ["chỗ cắt độ dài rơi vào đuôi", `${"a".repeat(176)}.xyz${"z".repeat(9)}`, "xy_"],
+  ])(
+    "TỪ CHỐI — %s: phép làm sạch chèn `_` vào đuôi ⇒ đuôi không hợp lệ",
+    (_label, fileName, fileExtension) => {
+      expect(resolveRegisterExtension(fileName, COMPANY)).toEqual({
+        fileExtension,
+        malformedExtension: true,
+        blockedExtension: null,
+      });
+    },
+  );
+
+  it.each<[string, string]>([
+    ["gạch dưới", "tep.x_t"],
+    ["gạch nối", "tep.tar-gz"],
+    ["dấu ngã", "ban-nhap.txt~"],
+    ["khoảng trắng (tên dạng câu)", "Ghi chu. Ban cuoi"],
+    ["chữ mang dấu", `tep.xy${Z_ACUTE}`],
+    ["chữ cái toàn chiều rộng", `tep.${fullwidth("zip")}`],
+    ["chữ cái toàn chiều rộng (đuôi khác)", `tep.${fullwidth("svg")}`],
+    ["17 ký tự", `tep.${"a".repeat(17)}`],
+    ["60 ký tự", `tep.${"e".repeat(60)}`],
+  ])("TỪ CHỐI — đuôi có %s ⇒ đuôi không hợp lệ", (_label, fileName) => {
+    expect(outcomeOf(fileName)).toBe("malformed");
+  });
+
+  it("hai kết quả tách bạch: «không hợp lệ» không thay «bị chặn» — bên gọi xét dạng của đuôi TRƯỚC", () => {
+    // Dạng dự phòng ASCII của đuôi này trùng một phần tử của tập công ty; đuôi chính thì không đúng dạng.
+    expect(resolveRegisterExtension(`tep.xy${Z_ACUTE}`, new Set(["xy_"]))).toEqual({
+      fileExtension: `xy${Z_ACUTE}`,
+      malformedExtension: true,
+      blockedExtension: "xy_",
+    });
+    // Đuôi LƯU cắt còn 50 ký tự; phép so tập chặn dùng đuôi ĐẦY ĐỦ.
+    const longExtension = "e".repeat(60);
+    expect(resolveRegisterExtension(`tep.${longExtension}`, new Set([longExtension]))).toEqual({
+      fileExtension: "e".repeat(50),
+      malformedExtension: true,
+      blockedExtension: longExtension,
+    });
+    expect(resolveRegisterExtension("tep.svg", COMPANY)).toEqual({
+      fileExtension: "svg",
+      malformedExtension: false,
+      blockedExtension: "svg",
     });
   });
 
   it.each<[string, string, string | null]>([
-    ["tên tiếng Việt có dấu, đuôi thường", "Hồ sơ dự thầu – Đặng Thị Ánh.zip", "zip"],
-    ["dấu chấm giữa câu, không có đuôi thật (số)", "Bien ban hop 12.10", "10"],
-    ["dấu chấm giữa câu, không có đuôi thật (chữ)", "Ghi chu. Ban cuoi", " ban cuoi"],
+    ["tên tiếng Việt có dấu", "Hồ sơ dự thầu – Đặng Thị Ánh.zip", "zip"],
     ["hai đuôi", "a.tar.gz", "gz"],
+    ["nhiều dấu chấm ở thân", "Bien ban hop 12.10.pdf", "pdf"],
+    ["dấu chấm giữa câu, phần sau là chữ số", "Bien ban hop 12.10", "10"],
     ["số trong ngoặc ở thân", "anh (1).png", "png"],
-    ["đuôi chặn cứng đã vô hiệu bằng dấu chấm cuối", "tep.svg.", "svg_"],
-    ["đuôi của tập công ty đã vô hiệu bằng dấu chấm cuối", "tep.xyz.", "xyz_"],
-    ["đuôi của tập công ty đã vô hiệu bằng ký tự bị loại", `tep.xy${LRM}z`, "xy_z"],
-  ])("CHO PHÉP — %s ⇒ không chặn, đuôi lưu %j", (_label, fileName, fileExtension) => {
+    ["chữ hoa", "ANH.PNG", "png"],
+    ["chữ hoa + số trong ngoặc ở thân", "IMG_0012 (2).JPG", "jpg"],
+    ["tên dài hơn 180 byte", `${"ă".repeat(295)}.xlsx`, "xlsx"],
+    ["tên không có dấu chấm", "tep-khong-duoi", null],
+    ["dấu chấm duy nhất nằm cuối tên", "Bao cao thang 10.", null],
+    ["đuôi có chữ số", "tep.7z", "7z"],
+    ["đuôi toàn chữ số", "tep.001", "001"],
+    ["đuôi 16 ký tự", `tep.${"a".repeat(16)}`, "a".repeat(16)],
+  ])("CHO PHÉP — %s ⇒ nhận, không chặn", (_label, fileName, fileExtension) => {
     expect(resolveRegisterExtension(fileName, COMPANY)).toEqual({
       fileExtension,
+      malformedExtension: false,
       blockedExtension: null,
     });
+  });
+
+  it("thuộc tính — mọi điểm mã U+0000…U+FFFF đặt vào đuôi: tên được nhận ⇒ cả hai dạng tên phát ra kết thúc bằng «.» + 1–16 chữ cái ASCII / chữ số", () => {
+    const ACCEPTED_TAIL = /\.[A-Za-z0-9]{1,16}$/;
+    const MAX_REPORTED = 5;
+    const offenders: string[] = [];
+    let accepted = 0;
+    for (let codePoint = 0; codePoint <= 0xffff; codePoint += 1) {
+      const char = at(codePoint);
+      for (const fileName of [`tep.xy${char}`, `tep.x${char}y`, `tep.${char}xy`]) {
+        if (resolveRegisterExtension(fileName, NONE).malformedExtension) continue;
+        accepted += 1;
+        const header = buildAttachmentDisposition(fileName);
+        const match = /^attachment; filename="([^"]*)"; filename\*=UTF-8''(.*)$/.exec(header);
+        const forms = [match?.[1] ?? "", decodeURIComponent(match?.[2] ?? "")];
+        if (forms.every((form) => ACCEPTED_TAIL.test(form))) continue;
+        if (offenders.length < MAX_REPORTED) offenders.push(codePointLabel(codePoint));
+      }
+    }
+
+    expect(offenders).toEqual([]);
+    // 62 chữ cái ASCII / chữ số ở ba vị trí là mức tối thiểu ⇒ vòng lặp có đi qua nhánh «được nhận».
+    expect(accepted).toBeGreaterThanOrEqual(62 * 3);
   });
 });

@@ -34,6 +34,7 @@ import { SettingService } from "../settings/setting.service";
 import { FileAccessLogService } from "./file-access-log.service";
 import {
   CONFIRM_FAILURE_ERROR_CODE,
+  MALFORMED_EXTENSION_MESSAGE,
   confirmContentTypeFailure,
   describeSignRejection,
   registerContentRejection,
@@ -155,12 +156,18 @@ export class FileService {
     // 2. Sanitize originalName (chống path-traversal).
     const safeName = this.sanitizeFilename(input.originalName);
 
-    // 2b. Đuôi của MỌI dạng tên sẽ phát ra khi tải về, so với setting file.blocked_extensions HỢP tập chặn
-    //     CỨNG trong code (file-content-guard.ts). Reject TRƯỚC khi ghi.
-    const { fileExtension, blockedExtension } = resolveRegisterExtension(
+    // 2b. Đuôi của tên sẽ phát ra khi tải về: phải đúng dạng, rồi mới so MỌI dạng tên với setting
+    //     file.blocked_extensions HỢP tập chặn CỨNG trong code (file-content-guard.ts). Reject TRƯỚC khi ghi.
+    const { fileExtension, malformedExtension, blockedExtension } = resolveRegisterExtension(
       safeName,
       blockedExtensions,
     );
+    if (malformedExtension) {
+      throw new UnsupportedMediaTypeException({
+        code: FOUNDATION_FILE_ERROR_CODES.EXTENSION,
+        message: `${FOUNDATION_FILE_ERROR_CODES.EXTENSION}: ${MALFORMED_EXTENSION_MESSAGE}`,
+      });
+    }
     if (blockedExtension !== null) {
       throw new UnsupportedMediaTypeException({
         code: FOUNDATION_FILE_ERROR_CODES.BLOCKED,

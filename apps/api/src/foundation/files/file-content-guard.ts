@@ -160,39 +160,38 @@ function isHardBlockedExtension(extension: string): boolean {
   return HARD_BLOCKED_EXTENSIONS.has(extension.replace(/^\./, "").toLowerCase());
 }
 
-/** Ký tự được GIỮ ở dạng gập của một đuôi. `_` nằm trong tập: đuôi đã vô hiệu bằng `_` không gập về đuôi gốc. */
-const FOLD_KEPT_CHARACTER = /^[a-z0-9_]$/;
+/** Dạng DUY NHẤT của một đuôi được nhận lúc đăng ký (đuôi đã hạ chữ thường): 1–16 chữ cái ASCII hoặc chữ số. */
+const ACCEPTED_EXTENSION_SHAPE = /^[a-z0-9]{1,16}$/;
 
-/**
- * Các «dạng gập» của một đuôi — CHỈ để đem so với tập chặn lúc đăng ký; không dùng để lưu, không dùng để
- * dựng tên phát ra, không dùng để đối chiếu đuôi ↔ MIME. Đuôi được đưa về dạng tương thích (NFKC), gập
- * hoa-thường qua chữ HOA rồi chữ thường, sau đó cho hai ứng viên:
- *   - bỏ MỌI ký tự ngoài `[a-z0-9_]`;
- *   - phần đứng TRƯỚC ký tự đầu tiên ngoài `[a-z0-9_]`.
- * Ứng viên rỗng và ứng viên trùng nhau bị bỏ ⇒ mảng rỗng khi đuôi không còn ký tự nào trong tập.
- */
-export function foldedExtensionCandidates(extension: string): readonly string[] {
-  const folded = Array.from(extension.normalize("NFKC").toUpperCase().toLowerCase());
-  const firstOutside = folded.findIndex((char) => !FOLD_KEPT_CHARACTER.test(char));
-  const withoutOutside = folded.filter((char) => FOLD_KEPT_CHARACTER.test(char)).join("");
-  const beforeFirstOutside = (firstOutside < 0 ? folded : folded.slice(0, firstOutside)).join("");
-  return [...new Set([withoutOutside, beforeFirstOutside])].filter((candidate) => candidate !== "");
+/** Câu trả cho client khi đuôi không đúng dạng — câu CỐ ĐỊNH, không chép tên hay đuôi đã gửi. */
+export const MALFORMED_EXTENSION_MESSAGE =
+  "phần mở rộng của tên tệp không hợp lệ — chỉ gồm chữ cái không dấu và chữ số, tối đa 16 ký tự.";
+
+/** `null` = tên không có dấu chấm ⇒ không có đuôi nào để xét dạng. */
+function isAcceptedExtensionShape(fileExtension: string | null): boolean {
+  return fileExtension === null || ACCEPTED_EXTENSION_SHAPE.test(fileExtension);
 }
 
-/** Kết quả xét phần mở rộng của một tên tệp lúc đăng ký. */
+/** Kết quả xét phần mở rộng của một tên tệp lúc đăng ký. Hai lý do từ chối TÁCH BẠCH; bên gọi xét theo thứ tự khai. */
 export interface RegisterExtensionVerdict {
   /** Đuôi chính (của tên chuẩn sẽ phát ra): lưu cột `file_extension`, đối chiếu đuôi ↔ MIME. `null` = không đuôi. */
   fileExtension: string | null;
-  /** Phần tử của tập chặn khớp ĐẦU TIÊN (đuôi hoặc một dạng gập của nó); `null` = không dạng nào bị chặn. */
+  /** `true` = tên CÓ đuôi nhưng đuôi không đúng dạng được nhận ⇒ từ chối (xét TRƯỚC `blockedExtension`). */
+  malformedExtension: boolean;
+  /** Phần tử của tập chặn mà đuôi của một dạng tên phát ra trùng ĐẦU TIÊN; `null` = không dạng nào bị chặn. */
   blockedExtension: string | null;
 }
 
 /**
  * Xét phần mở rộng của `fileName` (tên đã bỏ đường dẫn) trên CHÍNH các tên server sẽ phát ra khi tải về —
- * dạng Unicode lẫn dạng dự phòng ASCII (`storage/content-disposition.ts`) — chứ không trên tên thô. Với đuôi
- * của MỖI dạng, đem so chính nó rồi tới các dạng gập của nó ({@link foldedExtensionCandidates}); bất kỳ
- * phần tử nào thuộc tập chặn cứng HOẶC `companyBlockedExtensions` ⇒ bị chặn. Phép gập chỉ làm TỪ CHỐI THÊM:
- * `fileExtension` trả về và tên phát ra không đổi vì nó.
+ * dạng Unicode lẫn dạng dự phòng ASCII (`storage/content-disposition.ts`) — chứ không trên tên thô:
+ *   1. `malformedExtension` — đuôi chính, nếu có, phải là 1–16 chữ cái ASCII hoặc chữ số;
+ *   2. `blockedExtension` — đuôi của MỖI dạng tên phát ra, so đúng chuỗi với tập chặn cứng HỢP
+ *      `companyBlockedExtensions`.
+ * Một tên qua được (1) hoặc không có dấu chấm, hoặc KẾT THÚC bằng «.» + một đuôi chỉ gồm chữ cái ASCII / chữ
+ * số: ở vùng đuôi không còn ký tự nào khác, nên đuôi nơi nhận thấy khi lưu chính là đuôi đã đem so ở (2).
+ * Tên mà phép làm sạch phải chèn `_` vào đuôi (ký tự bị thay · cụm dấu chấm cuối · chỗ cắt độ dài) bị từ chối
+ * ở (1) thay vì được nhận.
  *
  * `companyBlockedExtensions`: chữ thường, không dấu chấm đầu (dạng `loadUploadLimits` đã chuẩn hoá).
  */
@@ -200,13 +199,13 @@ export function resolveRegisterExtension(
   fileName: string,
   companyBlockedExtensions: ReadonlySet<string>,
 ): RegisterExtensionVerdict {
-  const blockedExtension = servedFileNameExtensions(fileName)
-    .flatMap((extension) => [extension, ...foldedExtensionCandidates(extension)])
-    .find(
-      (candidate) => isHardBlockedExtension(candidate) || companyBlockedExtensions.has(candidate),
-    );
+  const fileExtension = fileNameExtension(servedFileName(fileName));
+  const blockedExtension = servedFileNameExtensions(fileName).find(
+    (extension) => isHardBlockedExtension(extension) || companyBlockedExtensions.has(extension),
+  );
   return {
-    fileExtension: fileNameExtension(servedFileName(fileName)),
+    fileExtension,
+    malformedExtension: !isAcceptedExtensionShape(fileExtension),
     blockedExtension: blockedExtension ?? null,
   };
 }
