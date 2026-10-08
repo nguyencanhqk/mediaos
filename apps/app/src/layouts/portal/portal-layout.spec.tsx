@@ -170,6 +170,40 @@ describe("C1 — PortalLayout: khung 3 cột (UI-07 §34b.3 · plan D4)", () => 
     expect(withOrderClass.map((el) => el.className)).toEqual([]);
   });
 
+  it("<1024px hàng của grid cao theo NỘI DUNG (`max-content`) — và CHỈ dưới `lg`: thanh tab không bị ép sụp", () => {
+    renderPortal();
+    const classes = screen.getByTestId("portal-layout").className.split(/\s+/);
+
+    /**
+     * Đo trên trình duyệt thật ngày 08/10/2026 (jsdom không có layout nên ca này chỉ ghim LỚP):
+     * thanh tab có `overflow-x-auto` ⇒ là khung cuộn ⇒ kích thước tối thiểu tự động bằng 0; grid một
+     * cột cao cố định vì thế ép hàng `auto` chứa thanh về đúng đệm + viền (17px) mỗi khi nội dung
+     * dài hơn khung nhìn — nhãn tab bị cắt mất. Đặt sàn trên chính thanh (`min-h-max`) KHÔNG đủ:
+     * hộp của thanh cao lên nhưng hàng vẫn 17px ⇒ thanh tràn khỏi hàng, đè lên ô tìm kiếm.
+     */
+    expect(screen.getByTestId("portal-tab-bar").className).toContain("overflow-x-auto");
+    expect(classes).toContain("max-lg:auto-rows-max");
+
+    // Vế DENY: từ 1024px grid là MỘT hàng ba cột phải cao đúng bằng khung để từng cột tự cuộn. Lớp
+    // hàng `max-content` không tiền tố (hoặc `lg:`) sẽ kéo hàng dài theo cột cao nhất và phá vùng cuộn.
+    expect(classes.filter((c) => /^(lg:|xl:|2xl:)?(auto-rows-|grid-rows-)/.test(c))).toEqual([]);
+  });
+
+  it("rail phải lấp đầy cột 300px của grid, KHÔNG tự ép bề rộng: có thanh cuộn dọc vẫn không tràn ngang", () => {
+    renderPortal();
+    const rightRail = screen.getByTestId("portal-right-rail");
+
+    /**
+     * Đo trên trình duyệt thật ngày 08/10/2026: khung bọc rail là vùng cuộn dọc nằm trong cột
+     * 300px; khi rail cao hơn khung nhìn, thanh cuộn chiếm 10px ⇒ chỗ còn lại là 290px. Rail tự ép
+     * `lg:w-[300px]` thì tràn ngang 10px: mọi khối bị cắt mép phải và mọc thêm thanh cuộn ngang.
+     * Bề rộng 300px đã do grid của `PortalLayout` quyết (ca đầu của khối này ghim con số đó).
+     */
+    const classes = rightRail.className.split(/\s+/);
+    expect(classes).toContain("w-full");
+    expect(classes.filter((c) => /^([a-z0-9]+:)?w-\[/.test(c))).toEqual([]);
+  });
+
   it("thứ tự tab-focus đi đúng thứ tự DOM: rail trái → cột giữa → rail phải", () => {
     renderPortal({
       children: (

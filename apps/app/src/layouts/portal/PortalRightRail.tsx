@@ -22,7 +22,10 @@ export function PortalRightRail({ children, className }: PortalRightRailProps): 
     <aside
       aria-label={t("portal.rightRailAria")}
       data-testid="portal-right-rail"
-      className={cn("flex w-full flex-col gap-4 py-4 lg:w-[300px] lg:shrink-0", className)}
+      // KHÔNG tự ép bề rộng ở đây: cột 300px do grid của `PortalLayout` quyết. Khung bọc rail là vùng
+      // cuộn dọc; khi rail cao hơn khung nhìn thanh cuộn chiếm 10px, rail ép cứng 300px sẽ tràn ngang
+      // (đo trình duyệt thật 08/10/2026: mọi khối bị cắt 10px mép phải + mọc thanh cuộn ngang).
+      className={cn("flex w-full flex-col gap-4 py-4", className)}
     >
       {children}
     </aside>
