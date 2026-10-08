@@ -1,9 +1,10 @@
 /**
  * S16-SOCIAL-FILEDISPOSITION-1 — quy tắc kiểu nội dung của FileService (hàm THUẦN, unit cạnh nguồn).
  *
- * Ba thứ được ghim ở đây:
+ * Các thứ được ghim ở đây:
  *   - bảng lý do thất bại của confirm → mã lỗi (đủ khoá, không lý do nào rơi về mã mặc định);
- *   - so kiểu đã LƯU ở storage với kiểu đã ĐĂNG KÝ (thiếu / sai dạng ở bất kỳ vế nào = không khớp);
+ *   - so kiểu đã LƯU ở storage với kiểu đã ĐĂNG KÝ: khớp · lệch · không rõ (storage không trả kiểu). Chỉ
+ *     «khớp» mới qua; hai trường hợp còn lại mang hai lý do riêng + một dòng log an toàn;
  *   - từ chối cứng lúc đăng ký theo kiểu và theo đuôi (không phụ thuộc cấu hình công ty).
  * Mỗi ca TỪ CHỐI đứng cạnh ca CHO PHÉP cùng khung.
  */
@@ -11,18 +12,22 @@ import { ATTACHMENT_ALLOWED_CONTENT_TYPES, FOUNDATION_FILE_ERROR_CODES } from "@
 import { describe, expect, it } from "vitest";
 import {
   CONFIRM_FAILURE_ERROR_CODE,
+  compareStoredContentType,
+  confirmContentTypeFailure,
+  describeSignRejection,
+  quoteForLog,
   registerContentRejection,
   resolveRegisterExtension,
-  storedContentTypeMatches,
 } from "./file-content-guard";
 
 /** Chép TAY (không import từ nguồn) để ca dưới ghim đúng tập đuôi — đổi tập ở nguồn phải đổi cả ở đây. */
 const HARD_BLOCKED = ["html", "htm", "xhtml", "xht", "shtml", "svg", "svgz", "xml", "xsl", "xslt"];
 
 describe("CONFIRM_FAILURE_ERROR_CODE — lý do thất bại của confirm → mã lỗi", () => {
-  it("có ĐÚNG 3 khoá, mỗi khoá trỏ tới một mã có thật trong catalog", () => {
+  it("có ĐÚNG 4 khoá, mỗi khoá trỏ tới một mã có thật trong catalog", () => {
     expect(Object.keys(CONFIRM_FAILURE_ERROR_CODE).sort()).toEqual([
       "content-type-mismatch",
+      "content-type-unknown",
       "object-absent",
       "size-mismatch",
     ]);
@@ -32,7 +37,7 @@ describe("CONFIRM_FAILURE_ERROR_CODE — lý do thất bại của confirm → m
     }
   });
 
-  it("object vắng ⇒ CONFIRM-ABSENT; lệch cỡ và lệch kiểu ⇒ CONFIRM-MISMATCH", () => {
+  it("object vắng ⇒ CONFIRM-ABSENT; lệch cỡ, lệch kiểu và không rõ kiểu ⇒ CONFIRM-MISMATCH", () => {
     expect(CONFIRM_FAILURE_ERROR_CODE["object-absent"]).toBe("FOUNDATION-FILE-ERR-CONFIRM-ABSENT");
     expect(CONFIRM_FAILURE_ERROR_CODE["size-mismatch"]).toBe(
       "FOUNDATION-FILE-ERR-CONFIRM-MISMATCH",
@@ -40,10 +45,13 @@ describe("CONFIRM_FAILURE_ERROR_CODE — lý do thất bại của confirm → m
     expect(CONFIRM_FAILURE_ERROR_CODE["content-type-mismatch"]).toBe(
       "FOUNDATION-FILE-ERR-CONFIRM-MISMATCH",
     );
+    expect(CONFIRM_FAILURE_ERROR_CODE["content-type-unknown"]).toBe(
+      "FOUNDATION-FILE-ERR-CONFIRM-MISMATCH",
+    );
   });
 });
 
-describe("storedContentTypeMatches — kiểu đã lưu phải khớp kiểu đã đăng ký", () => {
+describe("compareStoredContentType — kiểu đã lưu phải khớp kiểu đã đăng ký (ba giá trị)", () => {
   it.each([
     ["application/pdf", "text/html"],
     ["application/pdf", "image/png"],
@@ -51,32 +59,37 @@ describe("storedContentTypeMatches — kiểu đã lưu phải khớp kiểu đ�
     ["application/pdf", "application/pdfx"],
     ["application/pdf", "binary/octet-stream"],
     ["application/pdf", "application/octet-stream"],
-  ])("TỪ CHỐI: đăng ký %j, storage lưu %j ⇒ không khớp", (registered, stored) => {
-    expect(storedContentTypeMatches(registered, stored)).toBe(false);
+  ])("TỪ CHỐI: đăng ký %j, storage lưu %j ⇒ mismatch", (registered, stored) => {
+    expect(compareStoredContentType(registered, stored)).toBe("mismatch");
+  });
+
+  it.each([
+    ["application/pdf", "rác"],
+    ["application/pdf", "; charset=utf-8"],
+    ["application/pdf", "text/html, application/pdf"],
+  ])("TỪ CHỐI: đăng ký %j, storage CÓ trả nhưng sai dạng (%j) ⇒ mismatch", (registered, stored) => {
+    expect(compareStoredContentType(registered, stored)).toBe("mismatch");
   });
 
   it.each([
     ["application/pdf", null],
     ["application/pdf", ""],
     ["application/pdf", "   "],
-    ["application/pdf", "rác"],
-    ["application/pdf", "; charset=utf-8"],
-  ])(
-    "TỪ CHỐI: đăng ký %j, storage không trả kiểu dùng được (%j) ⇒ không khớp",
-    (registered, stored) => {
-      expect(storedContentTypeMatches(registered, stored)).toBe(false);
-    },
-  );
+    ["", ""],
+    ["", null],
+    ["rác", null],
+  ])("TỪ CHỐI: đăng ký %j, storage KHÔNG trả kiểu (%j) ⇒ unknown", (registered, stored) => {
+    expect(compareStoredContentType(registered, stored)).toBe("unknown");
+  });
 
   it.each([
     ["rác", "rác"],
-    ["", ""],
-    ["", null],
     ["không/hợp lệ", "không/hợp lệ"],
+    ["", "application/pdf"],
   ])(
-    "TỪ CHỐI: kiểu đăng ký sai dạng (%j) ⇒ không khớp dù hai chuỗi giống nhau (%j)",
+    "TỪ CHỐI: kiểu đăng ký sai dạng (%j) ⇒ mismatch dù storage trả đúng chuỗi đó (%j)",
     (registered, stored) => {
-      expect(storedContentTypeMatches(registered, stored)).toBe(false);
+      expect(compareStoredContentType(registered, stored)).toBe("mismatch");
     },
   );
 
@@ -87,8 +100,105 @@ describe("storedContentTypeMatches — kiểu đã lưu phải khớp kiểu đ�
     ["text/plain", " TEXT/PLAIN "],
     [" Text/CSV ;charset=utf-8", "text/csv"],
     ["image/png", "image/png"],
-  ])("CHO PHÉP: đăng ký %j, storage lưu %j ⇒ khớp sau thường hoá", (registered, stored) => {
-    expect(storedContentTypeMatches(registered, stored)).toBe(true);
+  ])("CHO PHÉP: đăng ký %j, storage lưu %j ⇒ match sau thường hoá", (registered, stored) => {
+    expect(compareStoredContentType(registered, stored)).toBe("match");
+  });
+});
+
+describe("confirmContentTypeFailure — lý do + dòng log của một lượt confirm không khớp kiểu", () => {
+  const ROW = {
+    id: "33333333-3333-3333-3333-333333333333",
+    companyId: "11111111-1111-1111-1111-111111111111",
+    mimeType: "application/pdf",
+  };
+
+  it("CHO PHÉP: kiểu khớp ⇒ null (không có gì để ghi)", () => {
+    expect(confirmContentTypeFailure(ROW, "application/pdf")).toBeNull();
+    expect(confirmContentTypeFailure(ROW, "Application/PDF; x=1")).toBeNull();
+  });
+
+  it("TỪ CHỐI: storage trả kiểu khác ⇒ lý do content-type-mismatch, dòng log đủ 4 trường", () => {
+    const failure = confirmContentTypeFailure(ROW, "text/html");
+
+    expect(failure?.reason).toBe("content-type-mismatch");
+    expect(failure?.logLine).toContain(`fileId=${ROW.id}`);
+    expect(failure?.logLine).toContain(`companyId=${ROW.companyId}`);
+    expect(failure?.logLine).toContain('registeredType="application/pdf"');
+    expect(failure?.logLine).toContain('storedType="text/html"');
+    expect(failure?.logLine).toContain("content-type-mismatch");
+  });
+
+  it.each([[null], [""], ["   "]])(
+    "TỪ CHỐI: storage không trả kiểu (%j) ⇒ lý do content-type-unknown, khác lý do lệch kiểu",
+    (stored) => {
+      const failure = confirmContentTypeFailure(ROW, stored);
+
+      expect(failure?.reason).toBe("content-type-unknown");
+      expect(failure?.logLine).toContain("content-type-unknown");
+      expect(failure?.logLine).toContain(`storedType=${stored === null ? "null" : `"${stored}"`}`);
+    },
+  );
+
+  it("câu trả cho người dùng KHÔNG chép kiểu nào; hai lý do có hai câu khác nhau", () => {
+    const mismatch = confirmContentTypeFailure(ROW, "text/html");
+    const unknown = confirmContentTypeFailure(ROW, null);
+
+    expect(mismatch?.message).not.toContain("text/html");
+    expect(mismatch?.message).not.toContain("application/pdf");
+    expect(unknown?.message).not.toContain("application/pdf");
+    expect(unknown?.message).not.toBe(mismatch?.message);
+  });
+
+  it("kiểu storage trả là chuỗi do bên ngoài điều khiển ⇒ dòng log vẫn là MỘT dòng ASCII, bị cắt", () => {
+    const lineBreaks = [10, 13, 0x85, 0x2028].map((code) => String.fromCodePoint(code)).join("");
+    const hostile = `text/html${lineBreaks}dong-gia fileId=khac${"x".repeat(500)}`;
+
+    const failure = confirmContentTypeFailure(ROW, hostile);
+
+    expect(failure?.reason).toBe("content-type-mismatch");
+    const logLine = failure?.logLine ?? "";
+    expect(logLine).toMatch(/^[ -~]+$/);
+    expect(logLine.length).toBeLessThan(400);
+    // Giá trị nằm trọn trong MỘT cặp nháy: không tự đóng nháy để chèn trường mới.
+    expect(logLine.match(/storedType="/g)).toHaveLength(1);
+  });
+});
+
+describe("quoteForLog — đưa một chuỗi ngoài vào dòng log", () => {
+  it("null ⇒ null; chuỗi thường ⇒ trong nháy kép", () => {
+    expect(quoteForLog(null)).toBe("null");
+    expect(quoteForLog("image/png")).toBe('"image/png"');
+    expect(quoteForLog("")).toBe('""');
+  });
+
+  it("nháy kép trong giá trị bị thoát; dài quá trần ⇒ cắt kèm dấu ba chấm", () => {
+    const escapedQuote = quoteForLog('a"b');
+    expect(escapedQuote).toHaveLength(6);
+    expect(escapedQuote.startsWith('"a')).toBe(true);
+    expect(escapedQuote.endsWith('"b"')).toBe(true);
+    expect(quoteForLog("y".repeat(300))).toBe(`"${"y".repeat(120)}..."`);
+  });
+
+  it("mọi điểm mã ngoài ASCII in được ⇒ không còn trong đầu ra", () => {
+    const every = [0, 9, 10, 13, 27, 0x7f, 0x85, 0x9f, 0xa0, 0x2028, 0x2029, 0x202e, 0xfffd]
+      .map((code) => String.fromCodePoint(code))
+      .join("|");
+    expect(quoteForLog(every)).toMatch(/^[ -~]+$/);
+  });
+});
+
+describe("describeSignRejection — dòng log khi tầng ký từ chối một lượt đăng ký", () => {
+  it("đủ 4 trường: kind · companyId · kiểu khai · thông điệp gốc", () => {
+    const line = describeSignRejection("11111111-1111-1111-1111-111111111111", "application/x-a", {
+      kind: "content-type",
+      message: "ngoai tran: application/x-a",
+    });
+
+    expect(line).toContain("kind=content-type");
+    expect(line).toContain("companyId=11111111-1111-1111-1111-111111111111");
+    expect(line).toContain('declaredType="application/x-a"');
+    expect(line).toContain('detail="ngoai tran: application/x-a"');
+    expect(line).toMatch(/^[ -~]+$/);
   });
 });
 

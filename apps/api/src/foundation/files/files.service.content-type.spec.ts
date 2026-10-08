@@ -8,7 +8,8 @@
  *
  * Ca (mỗi ca TỪ CHỐI đứng cạnh ca CHO PHÉP cùng khung):
  *   F1 — confirm: kiểu đã LƯU ở storage khác kiểu đã đăng ký ⇒ 409, hàng `Failed`, không đọc bytes.
- *   F2 — confirm: storage không trả kiểu dùng được ⇒ thất bại như F1.
+ *   F2 — confirm: storage không trả kiểu ⇒ thất bại như F1 nhưng với lý do RIÊNG (`content-type-unknown`);
+ *        cả hai để lại đúng một dòng `warn` đủ trường, không mang khoá object.
  *   F3 — confirm thất bại vì lệch kiểu: audit + nhật ký truy cập mang đúng mã / lý do.
  *   F4 — register: kiểu bị từ chối cứng ⇒ 415 dù allowlist công ty đã mở; bảng 14 kiểu vẫn qua.
  *   F5 — register: đuôi bị từ chối cứng ⇒ 415 dù `blocked_extensions` của công ty rỗng.
@@ -18,11 +19,12 @@
 import {
   ConflictException,
   HttpException,
+  Logger,
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
 import { ATTACHMENT_ALLOWED_CONTENT_TYPES } from "@mediaos/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UnsupportedAttachmentError } from "../../storage/object-storage.service";
 import { StoragePresignInvariantError } from "../../storage/presign-invariants";
 import type { StorageStatResult } from "../../storage/storage-adapter.port";
@@ -37,6 +39,17 @@ const FILE = "33333333-3333-3333-3333-333333333333";
 const STORAGE_PATH = `${COMPANY}/files/${FILE}`;
 
 const user = { id: USER, companyId: COMPANY };
+
+/** Dòng `warn` của Logger trong từng ca — bắt lại để assert dấu vết và để không in ra console. */
+let warnSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  warnSpy.mockRestore();
+});
 
 const ALLOW: FilePolicyDecision = { allow: true, reason: "allow-foundation" };
 
@@ -226,9 +239,15 @@ describe("FileService.confirmUpload — kiểu đã lưu phải khớp kiểu đ
     expect(h.fileRepo.markFailedTx).not.toHaveBeenCalled();
   });
 
-  it.each([[null], [""], ["binary/octet-stream"], ["rác"]])(
-    "F2 — TỪ CHỐI: storage trả kiểu %j ⇒ 409 CONFIRM-MISMATCH, lý do content-type-mismatch",
-    async (storedContentType) => {
+  it.each([
+    [null, "content-type-unknown"],
+    ["", "content-type-unknown"],
+    ["   ", "content-type-unknown"],
+    ["binary/octet-stream", "content-type-mismatch"],
+    ["rác", "content-type-mismatch"],
+  ])(
+    "F2 — TỪ CHỐI: storage trả kiểu %j ⇒ 409 CONFIRM-MISMATCH, hàng Failed, lý do %s",
+    async (storedContentType, reason) => {
       const h = makeHarness();
       h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
       h.storage.stat.mockResolvedValue({
@@ -244,13 +263,78 @@ describe("FileService.confirmUpload — kiểu đã lưu phải khớp kiểu đ
       expect(h.fileRepo.markFailedTx).toHaveBeenCalledWith(
         COMPANY,
         FILE,
-        "content-type-mismatch",
+        reason,
         expect.anything(),
       );
       expect(h.storage.getBytes).not.toHaveBeenCalled();
       expect(h.fileRepo.markUploadedTx).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    ["text/html", "content-type-mismatch", 'storedType="text/html"'],
+    [null, "content-type-unknown", "storedType=null"],
+  ])(
+    "F2 — dấu vết: storage trả kiểu %j ⇒ ĐÚNG MỘT dòng warn (%s) đủ fileId · companyId · kiểu đăng ký · kiểu storage trả, không khoá object",
+    async (storedContentType, reason, storedField) => {
+      const h = makeHarness();
+      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+      h.storage.stat.mockResolvedValue({
+        exists: true,
+        sizeBytes: 1024,
+        contentType: storedContentType,
+      });
+
+      await expect(h.service.confirmUpload(user, FILE, {})).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const logged = String(warnSpy.mock.calls[0][0]);
+      expect(logged).toContain(reason);
+      expect(logged).toContain(`fileId=${FILE}`);
+      expect(logged).toContain(`companyId=${COMPANY}`);
+      expect(logged).toContain('registeredType="application/pdf"');
+      expect(logged).toContain(storedField);
+      expect(logged).not.toContain(STORAGE_PATH);
+      expect(logged).not.toContain("http");
+      // Thân 409 không chép kiểu nào ra cho client.
+      const body = JSON.stringify(
+        (
+          (await h.service.confirmUpload(user, FILE, {}).catch((e: unknown) => e)) as HttpException
+        ).getResponse(),
+      );
+      expect(body).not.toContain("text/html");
+      expect(body).not.toContain("application/pdf");
+    },
+  );
+
+  it("F2 — dấu vết: kiểu storage trả chứa ký tự ngắt dòng ⇒ dòng warn vẫn là MỘT dòng ASCII", async () => {
+    const h = makeHarness();
+    h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+    const lineBreak = String.fromCodePoint(10);
+    h.storage.stat.mockResolvedValue({
+      exists: true,
+      sizeBytes: 1024,
+      contentType: `text/html${lineBreak}dong-gia${"x".repeat(400)}`,
+    });
+
+    await expect(h.service.confirmUpload(user, FILE, {})).rejects.toBeInstanceOf(ConflictException);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const logged = String(warnSpy.mock.calls[0][0]);
+    expect(logged).toMatch(/^[ -~]+$/);
+    expect(logged.length).toBeLessThan(400);
+  });
+
+  it("F2 — CHO PHÉP: kiểu khớp ⇒ không có dòng warn nào", async () => {
+    const h = makeHarness();
+    h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+
+    await h.service.confirmUpload(user, FILE, {});
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
 
   it("F2 — TỪ CHỐI: kiểu đăng ký của hàng sai dạng ⇒ không khớp dù storage trả đúng chuỗi đó", async () => {
     const h = makeHarness();
@@ -303,13 +387,15 @@ describe("FileService.confirmUpload — kiểu đã lưu phải khớp kiểu đ
     expect(h.accessLogSpy.mock.calls.some((call) => call[1].accessGranted === true)).toBe(false);
   });
 
-  it("F3 — bảng lý do → mã có đủ 3 khoá; lệch kiểu dùng chung mã với lệch cỡ", () => {
+  it("F3 — bảng lý do → mã có đủ 4 khoá; lệch kiểu và không rõ kiểu dùng chung mã với lệch cỡ", () => {
     expect(Object.keys(CONFIRM_FAILURE_ERROR_CODE).sort()).toEqual([
       "content-type-mismatch",
+      "content-type-unknown",
       "object-absent",
       "size-mismatch",
     ]);
     expect(CONFIRM_FAILURE_ERROR_CODE["content-type-mismatch"]).toBe(CODE_CONFIRM_MISMATCH);
+    expect(CONFIRM_FAILURE_ERROR_CODE["content-type-unknown"]).toBe(CODE_CONFIRM_MISMATCH);
     expect(CONFIRM_FAILURE_ERROR_CODE["size-mismatch"]).toBe(CODE_CONFIRM_MISMATCH);
     expect(CONFIRM_FAILURE_ERROR_CODE["object-absent"]).toBe("FOUNDATION-FILE-ERR-CONFIRM-ABSENT");
   });
@@ -538,6 +624,28 @@ describe("FileService.upload — tầng ký từ chối (trần cứng của sto
   });
 
   it.each([
+    ["content-type", "kieu ngoai tran"],
+    ["size", "co ngoai tran"],
+  ] as const)(
+    "F6 — dấu vết: tầng ký từ chối (%s) ⇒ ĐÚNG MỘT dòng warn nêu kind · companyId · kiểu khai · thông điệp gốc",
+    async (kind, detail) => {
+      const { h } = harnessWhereSigningThrows(new UnsupportedAttachmentError(detail, kind));
+
+      await h.service
+        .upload(user, { ...BASE_UPLOAD, declaredMimeType: BEYOND_CEILING })
+        .catch((e: unknown) => e);
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const logged = String(warnSpy.mock.calls[0][0]);
+      expect(logged).toContain(`kind=${kind}`);
+      expect(logged).toContain(`companyId=${COMPANY}`);
+      expect(logged).toContain(`declaredType="${BEYOND_CEILING}"`);
+      expect(logged).toContain(`detail="${detail}"`);
+      expect(logged).not.toContain(STORAGE_PATH);
+    },
+  );
+
+  it.each([
     ["lỗi hạ tầng bất kỳ", new Error("storage không phản hồi")],
     ["lỗi tự kiểm sau ký", new StoragePresignInvariantError("PUT", "thiếu ràng buộc")],
   ])(
@@ -551,6 +659,8 @@ describe("FileService.upload — tầng ký từ chối (trần cứng của sto
 
       expect(caught).toBe(error);
       expect(caught).not.toBeInstanceOf(HttpException);
+      // Lỗi không phải «tầng ký từ chối» thì đường này không tự ghi dòng nào (bên bắt lỗi chung lo).
+      expect(warnSpy).not.toHaveBeenCalled();
     },
   );
 

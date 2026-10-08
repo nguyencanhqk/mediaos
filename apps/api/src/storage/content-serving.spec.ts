@@ -85,11 +85,27 @@ describe("resolveServeDirectives — P1", () => {
   it.each([
     ["image/png", "image/png"],
     ["IMAGE/PNG ; q=1", "image/png"],
-  ])("%j ⇒ %j, hiển thị trực tiếp (disposition undefined)", (mime, expected) => {
+  ])("%j ⇒ %j, hiển thị trực tiếp (disposition ghim là inline)", (mime, expected) => {
     const directives = resolveServeDirectives(mime, "anh.png");
     expect(directives.responseContentType).toBe(expected);
-    expect(directives.responseContentDisposition).toBeUndefined();
-    expect("responseContentDisposition" in directives).toBe(true);
+    // Ghim hẳn giá trị: để trống thì storage trả disposition đang lưu kèm object.
+    expect(directives.responseContentDisposition).toBe("inline");
+  });
+
+  it("mọi đầu vào ⇒ disposition là chuỗi KHÁC RỖNG: inline hoặc attachment kèm tên", () => {
+    const inputs = [
+      ...INLINE_SERVE_MIME_TYPES,
+      ...ATTACHMENT_ALLOWED_CONTENT_TYPES,
+      "text/html",
+      "image/svg+xml",
+      "",
+      "rác",
+    ];
+    for (const mime of inputs) {
+      const { responseContentDisposition } = resolveServeDirectives(mime, "tep.bin");
+      expect(typeof responseContentDisposition, mime).toBe("string");
+      expect(responseContentDisposition, mime).toMatch(/^(inline$|attachment; filename=")/);
+    }
   });
 
   it("FALLBACK_SERVE_MIME là application/octet-stream", () => {
@@ -131,7 +147,7 @@ describe("resolveServeDirectives — P2", () => {
     (mime) => {
       const directives = resolveServeDirectives(mime, "tep");
       expect(directives.responseContentType).toBe(mime);
-      expect(directives.responseContentDisposition).toBeUndefined();
+      expect(directives.responseContentDisposition).toBe("inline");
     },
   );
 });

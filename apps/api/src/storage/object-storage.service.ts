@@ -10,7 +10,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ATTACHMENT_ALLOWED_CONTENT_TYPES, ATTACHMENT_MAX_BYTES } from "@mediaos/contracts";
 import { resolveServeDirectives } from "./content-serving";
 import {
-  assertPresignedGetPinsContentType,
+  assertPresignedGetPinsServeDirectives,
   assertPresignedPutSignsContentType,
 } from "./presign-invariants";
 import { assertKeyInTenant, validateKey } from "./storage-key";
@@ -202,7 +202,8 @@ export class ObjectStorageService {
   /**
    * Run a post-signing self-check. On failure: log at ERROR level HERE (several callers downgrade a
    * signing failure to a warning) and rethrow — the URL is never returned. The log line carries only
-   * the error's own message (operation + reason); never the URL, the object key or the signature.
+   * the error's own message (operation + reason, naming a parameter but never its value); never the
+   * URL, the object key, the signature or a file name.
    */
   private verifyPresigned(check: () => void): void {
     try {
@@ -255,13 +256,15 @@ export class ObjectStorageService {
    *
    * What the response carries is decided HERE from the registered metadata (`serveAs`), not from the
    * object as stored (S16-SOCIAL-FILEDISPOSITION-1): `resolveServeDirectives` yields the response
-   * content type (always a normalized `type/subtype`) and, for every type outside the explicit inline
-   * list, an `attachment` disposition. Both become `response-*` query parameters, which are part of
-   * the signed query — storage answers with exactly these values and rejects a URL whose values were
-   * edited. An inline type passes `undefined` for the disposition (an empty string would still emit an
-   * empty parameter). `X-Content-Type-Options` cannot be set through a signed parameter.
-   * After signing we re-check the URL (fail-closed): no `response-content-type` ⇒ log at error level
-   * and throw `StoragePresignInvariantError` — no URL is returned.
+   * content type (always a normalized `type/subtype`) and a disposition — `inline` for the explicit
+   * inline list, `attachment` for every other type. Both ALWAYS become `response-*` query parameters,
+   * which are part of the signed query — storage answers with exactly these values (overriding whatever
+   * is stored alongside the object) and rejects a URL whose values were edited. Neither is ever left
+   * out: an omitted parameter makes storage answer with the value stored with the object.
+   * `X-Content-Type-Options` cannot be set through a signed parameter.
+   * After signing we re-check the URL (fail-closed): each of the two parameters must be present exactly
+   * once and EQUAL the value decided here, otherwise log at error level and throw
+   * `StoragePresignInvariantError` — no URL is returned.
    */
   async createDownloadUrl(
     key: string,
@@ -281,7 +284,7 @@ export class ObjectStorageService {
     const url = await getSignedUrl(this.getClient(), command, {
       expiresIn: expiresInSec ?? config.presignTtlSec,
     });
-    this.verifyPresigned(() => assertPresignedGetPinsContentType(url));
+    this.verifyPresigned(() => assertPresignedGetPinsServeDirectives(url, directives));
     return url;
   }
 

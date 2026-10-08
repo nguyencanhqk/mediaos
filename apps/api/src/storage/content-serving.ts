@@ -4,7 +4,7 @@
  * MỘT nơi quyết định storage trả một object về trình duyệt với kiểu nào và có kèm `attachment` hay không,
  * dựa trên MIME đã ĐĂNG KÝ ở hàng `files` (không dựa trên kiểu object đang lưu ở storage):
  *   - Hiển thị trực tiếp CHỈ cho danh sách tường minh {@link INLINE_SERVE_MIME_TYPES} — không theo tiền tố
- *     `image/` hay `video/`.
+ *     `image/` hay `video/`; disposition của nhóm này cũng được GHIM (`inline`), không để storage tự chọn.
  *   - Mọi kiểu khác ⇒ `attachment` (trình duyệt tải xuống).
  *   - MIME rỗng · sai dạng · thuộc nhóm trình duyệt tự dựng ({@link isActiveContentMime}) ⇒ kiểu trả là
  *     {@link FALLBACK_SERVE_MIME} + `attachment` (fail-closed).
@@ -78,11 +78,18 @@ export function isActiveContentMime(raw: string): boolean {
   return ACTIVE_CONTENT_MIME_TYPES.has(normalized) || normalized.endsWith(ACTIVE_SUFFIX);
 }
 
-/** Hai tham số `response-*` đưa vào URL GET đã ký. */
+/** Disposition ghim cho loại hiển thị trực tiếp. */
+export const INLINE_DISPOSITION = "inline";
+
+/** Hai tham số `response-*` đưa vào URL GET đã ký. CẢ HAI luôn có mặt và khác rỗng. */
 export interface ServeDirectives {
   responseContentType: string;
-  /** `undefined` = hiển thị trực tiếp. KHÔNG dùng chuỗi rỗng (SDK vẫn sinh tham số rỗng). */
-  responseContentDisposition: string | undefined;
+  /**
+   * {@link INLINE_DISPOSITION} cho loại hiển thị trực tiếp, `attachment; …` cho mọi loại khác. Không bao giờ
+   * để trống: thiếu tham số này thì storage trả disposition đang LƯU kèm object, tức giá trị không do
+   * server quyết định.
+   */
+  responseContentDisposition: string;
 }
 
 /**
@@ -95,7 +102,7 @@ export function resolveServeDirectives(
 ): ServeDirectives {
   const normalized = normalizeMimeForCompare(registeredMimeType);
   if (normalized !== null && INLINE_SERVE_MIME_TYPES.has(normalized)) {
-    return { responseContentType: normalized, responseContentDisposition: undefined };
+    return { responseContentType: normalized, responseContentDisposition: INLINE_DISPOSITION };
   }
   const servable = normalized !== null && !isActiveContentMime(normalized);
   return {

@@ -288,8 +288,22 @@ describe("ObjectStorageService.createDownloadUrl — serve directives + post-sig
     expect(logged).not.toContain("http");
   });
 
-  it("ALLOW — signer returns a URL that pins response-content-type ⇒ URL returned, nothing logged at error level", async () => {
-    const signed = `${SIGNED_BASE}&response-content-type=application%2Fpdf`;
+  /** Giá trị disposition server định ký cho `PDF` (chép TAY — không lấy từ nguồn đang được kiểm). */
+  const PDF_DISPOSITION = `attachment; filename="bao-cao.pdf"; filename*=UTF-8''bao-cao.pdf`;
+  const PNG = { registeredMimeType: "image/png", fileName: "anh.png" };
+
+  /** URL giả của lớp ký với hai tham số `response-*` cho trước (`null` = vắng tham số đó). */
+  function signedGet(type: string | null, disposition: string | null): string {
+    const typePart = type === null ? "" : `&response-content-type=${encodeURIComponent(type)}`;
+    const dispositionPart =
+      disposition === null
+        ? ""
+        : `&response-content-disposition=${encodeURIComponent(disposition)}`;
+    return `${SIGNED_BASE}${typePart}${dispositionPart}`;
+  }
+
+  it("ALLOW — signer returns a URL that pins BOTH response-* values ⇒ URL returned, nothing logged at error level", async () => {
+    const signed = signedGet("application/pdf", PDF_DISPOSITION);
     getSignedUrlMock.mockResolvedValue(signed);
     const service = new ObjectStorageService();
 
@@ -301,22 +315,48 @@ describe("ObjectStorageService.createDownloadUrl — serve directives + post-sig
     expect(command).toBeInstanceOf(GetObjectCommand);
     expect(command.input.Key).toBe(KEY_A);
     expect(command.input.ResponseContentType).toBe("application/pdf");
-    expect(command.input.ResponseContentDisposition).toMatch(/^attachment; filename=/);
+    expect(command.input.ResponseContentDisposition).toBe(PDF_DISPOSITION);
     expect((getSignedUrlMock.mock.calls[0][2] as { expiresIn?: number }).expiresIn).toBe(900);
   });
 
-  it("an inline type asks the signer for NO disposition (undefined, never an empty string)", async () => {
-    getSignedUrlMock.mockResolvedValue(`${SIGNED_BASE}&response-content-type=image%2Fpng`);
+  it.each([
+    ["the disposition is missing", signedGet("application/pdf", null), PDF],
+    ["the disposition differs (inline)", signedGet("application/pdf", "inline"), PDF],
+    ["the type differs", signedGet("text/html", PDF_DISPOSITION), PDF],
+    ["an inline type lost its disposition", signedGet("image/png", null), PNG],
+    ["an inline type got an attachment", signedGet("image/png", PDF_DISPOSITION), PNG],
+  ])(
+    "DENY — signer returns a URL where %s ⇒ throws, logs ONE error line, returns no URL",
+    async (_label, signed, serveAs) => {
+      getSignedUrlMock.mockResolvedValue(signed);
+      const service = new ObjectStorageService();
+
+      await expect(service.createDownloadUrl(KEY_A, COMPANY_A, serveAs)).rejects.toBeInstanceOf(
+        StoragePresignInvariantError,
+      );
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const logged = String(errorSpy.mock.calls[0][0]);
+      expect(logged).toContain("GET");
+      // Dòng log không mang URL, khoá object, chữ ký hay tên tệp.
+      expect(logged).not.toContain(KEY_A);
+      expect(logged).not.toContain("X-Amz-Signature");
+      expect(logged).not.toContain("http");
+      expect(logged).not.toContain("bao-cao");
+    },
+  );
+
+  it("an inline type asks the signer to PIN the disposition to inline (never left to the stored object)", async () => {
+    const signed = signedGet("image/png", "inline");
+    getSignedUrlMock.mockResolvedValue(signed);
     const service = new ObjectStorageService();
 
-    await service.createDownloadUrl(KEY_A, COMPANY_A, {
-      registeredMimeType: "image/png",
-      fileName: "anh.png",
-    });
+    await expect(service.createDownloadUrl(KEY_A, COMPANY_A, PNG)).resolves.toBe(signed);
 
     const command = getSignedUrlMock.mock.calls[0][1] as GetObjectCommand;
     expect(command.input.ResponseContentType).toBe("image/png");
-    expect(command.input.ResponseContentDisposition).toBeUndefined();
+    expect(command.input.ResponseContentDisposition).toBe("inline");
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it("DENY — a key outside the caller's tenant prefix is rejected BEFORE signing", async () => {

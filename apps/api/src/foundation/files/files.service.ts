@@ -34,9 +34,10 @@ import { SettingService } from "../settings/setting.service";
 import { FileAccessLogService } from "./file-access-log.service";
 import {
   CONFIRM_FAILURE_ERROR_CODE,
+  confirmContentTypeFailure,
+  describeSignRejection,
   registerContentRejection,
   resolveRegisterExtension,
-  storedContentTypeMatches,
   type ConfirmFailureReason,
 } from "./file-content-guard";
 import { fileDownloadStateDenyReason, type FileDownloadDenyReason } from "./file-download-state";
@@ -263,6 +264,8 @@ export class FileService {
       return await this.storage.signedUrl({ key, contentType, sizeBytes });
     } catch (err) {
       if (!(err instanceof UnsupportedAttachmentError)) throw err;
+      // 4xx dưới đây trùng thông điệp với allowlist công ty ⇒ để lại dấu vết riêng cho nguyên nhân này.
+      this.logger.warn(describeSignRejection(row.companyId, contentType, err));
       if (err.kind === "content-type") throw this.mimeRejected(contentType);
       throw new PayloadTooLargeException({
         code: FOUNDATION_FILE_ERROR_CODES.SIZE,
@@ -322,12 +325,15 @@ export class FileService {
         message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH}: size storage (${stat.sizeBytes}) khác khai báo (${row.fileSizeBytes}).`,
       });
     }
-    // Kiểu storage đang LƯU phải khớp kiểu đã đăng ký; storage không trả kiểu ⇒ KHÔNG khớp (fail-closed).
-    if (!storedContentTypeMatches(row.mimeType, stat.contentType)) {
-      await this.failConfirm(user, row, "content-type-mismatch");
+    // Kiểu storage đang LƯU phải khớp kiểu đã đăng ký; lệch HOẶC storage không trả kiểu ⇒ Failed (fail-closed),
+    // mỗi trường hợp một lý do riêng + một dòng warn (không mang khoá object).
+    const typeFailure = confirmContentTypeFailure(row, stat.contentType);
+    if (typeFailure !== null) {
+      this.logger.warn(typeFailure.logLine);
+      await this.failConfirm(user, row, typeFailure.reason);
       throw new ConflictException({
         code: FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH,
-        message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH}: kiểu nội dung ở storage khác kiểu đã đăng ký.`,
+        message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH}: ${typeFailure.message}`,
       });
     }
 

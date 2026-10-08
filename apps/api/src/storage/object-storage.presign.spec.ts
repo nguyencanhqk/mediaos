@@ -9,10 +9,12 @@
  *   G1 — URL PUT ký header `content-type` (nằm trong `X-Amz-SignedHeaders`).
  *   G2 — kiểu nội dung tham gia chữ ký: đổi kiểu ⇒ chữ ký khác; cùng kiểu ⇒ chữ ký giống.
  *   G3 — URL GET mang `response-content-type` = MIME đã đăng ký; loại không hiển thị trực tiếp kèm
- *        `response-content-disposition: attachment…`, loại hiển thị trực tiếp KHÔNG có khoá đó.
+ *        `response-content-disposition: attachment…`, loại hiển thị trực tiếp kèm `inline`. Mọi URL ở đây
+ *        đi qua lớp tự kiểm so GIÁ TRỊ của service ⇒ trả được URL = lớp ký thật không làm lệch giá trị nào.
  *   G4 — hàng cũ mang MIME thuộc nhóm trình duyệt tự dựng ⇒ kiểu trả dự phòng + `attachment`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildAttachmentDisposition } from "./content-disposition";
 import { ObjectStorageService } from "./object-storage.service";
 
 const COMPANY_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -155,7 +157,7 @@ describe("ObjectStorageService — URL GET đã ký (ký ngoại tuyến, không
     expect(queryParam(url, "response-content-disposition")).toContain("bao-cao.pdf");
   });
 
-  it("G3 — CHO PHÉP: hàng image/png ⇒ response-content-type = image/png, KHÔNG có khoá response-content-disposition", async () => {
+  it("G3 — CHO PHÉP: hàng image/png ⇒ response-content-type = image/png, response-content-disposition = inline", async () => {
     const service = new ObjectStorageService();
 
     const url = await service.createDownloadUrl(KEY_A, COMPANY_A, {
@@ -164,8 +166,45 @@ describe("ObjectStorageService — URL GET đã ký (ký ngoại tuyến, không
     });
 
     expect(queryParam(url, "response-content-type")).toBe("image/png");
-    // `null` = khoá VẮNG hẳn. Khoá có mặt với giá trị rỗng sẽ là chuỗi rỗng ⇒ ca đỏ.
-    expect(queryParam(url, "response-content-disposition")).toBeNull();
+    // Ghim hẳn `inline` vào phần đã ký: khoá vắng (`null`) hay rỗng đều để storage trả giá trị đang lưu.
+    expect(queryParam(url, "response-content-disposition")).toBe("inline");
+  });
+
+  it.each([
+    "báo cáo quý 3 (bản 2).pdf",
+    "a+b & c #1 100%.pdf",
+    "it's (1)*!.pdf",
+    'nháy "kép"; chấm phẩy.pdf',
+    `${"đ".repeat(120)}.pdf`,
+  ])(
+    "G3 — tự kiểm so GIÁ TRỊ nhận URL do lớp ký THẬT sinh ra, tên %j (không chặn nhầm)",
+    async (fileName) => {
+      const service = new ObjectStorageService();
+
+      const url = await service.createDownloadUrl(KEY_A, COMPANY_A, {
+        registeredMimeType: "application/pdf",
+        fileName,
+      });
+
+      // Đọc lại từ URL đã ký ra ĐÚNG chuỗi server định ký — không ký tự nào bị lớp ký đổi hay nuốt.
+      expect(queryParam(url, "response-content-disposition")).toBe(
+        buildAttachmentDisposition(fileName),
+      );
+      expect(queryParam(url, "response-content-type")).toBe("application/pdf");
+    },
+  );
+
+  it("G3 — kiểu của hàng cũ chứa ký tự phân tách của query (& # +) vẫn tới URL nguyên vẹn", async () => {
+    const service = new ObjectStorageService();
+    const oddType = "application/x-thu&nghiem+a#b";
+
+    const url = await service.createDownloadUrl(KEY_A, COMPANY_A, {
+      registeredMimeType: oddType,
+      fileName: "tep.bin",
+    });
+
+    expect(queryParam(url, "response-content-type")).toBe(oddType);
+    expect(queryParam(url, "response-content-disposition")).toMatch(/^attachment; filename=/);
   });
 
   it("G3 — kiểu trả là type/subtype đã thường hoá, không phải chuỗi của hàng nguyên văn", async () => {

@@ -9,8 +9,11 @@
  *   S4  object ở storage mang kiểu khác MIME đã đăng ký (hàng Pending) ⇒ confirm 409, hàng Failed kèm
  *       lý do ⇄ object đúng kiểu ⇒ Uploaded.
  *   S5  object LƯU kiểu khác, hàng đăng ký `application/pdf` ⇒ URL tải trả đúng `application/pdf` +
- *       `attachment` ⇄ hàng `image/png` ⇒ `image/png`, không `attachment`.
+ *       `attachment` ⇄ hàng `image/png` ⇒ `image/png` + `inline`.
  *   S6  đổi `response-content-type` trên URL đã ký ⇒ 403 ⇄ URL nguyên ⇒ 200 (+ đo `x-content-type-options`).
+ *   S9  lượt PUT gửi kèm một header `Content-Disposition` KHÔNG nằm trong chữ ký: storage nhận ⇒ URL tải
+ *       vẫn trả disposition do SERVER quyết định (hàng `image/png` ⇒ `inline` ⇄ hàng `application/pdf`
+ *       ⇒ `attachment`); storage từ chối lượt PUT ⇒ không có object. Ca ĐO: in mã PUT + hai header GET.
  *   S7  đăng ký một kiểu trình duyệt tự dựng khi công ty ĐÃ mở allowlist cho nó ⇒ 415 `…-MIME`, 0 hàng
  *       mới ⇄ `application/pdf` · docx ⇒ 201.
  *   S8  cùng thân S7 qua cửa đăng ký của SOCIAL (054) và của CHAT ⇒ 415 ⇄ `application/pdf` ⇒ 200.
@@ -45,10 +48,9 @@ import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi, type TestContext } from "vitest";
 import { AppModule } from "../../src/app.module";
-import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
-import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { SettingService } from "../../src/foundation/settings/setting.service";
+import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
@@ -105,8 +107,13 @@ type StorageState = { run: true; bucket: string; s3: S3Client } | { run: false; 
 
 interface HeadResult {
   contentType: string | null;
+  contentDisposition: string | null;
   sizeBytes: number | null;
 }
+
+/** Header `Content-Disposition` gửi kèm lượt PUT ở S9 — KHÔNG nằm trong chữ ký của URL. */
+const UNSIGNED_ATTACHMENT_DISPOSITION = 'attachment; filename="khac.bin"';
+const UNSIGNED_INLINE_DISPOSITION = "inline";
 
 function isNotFound(err: unknown): boolean {
   const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
@@ -223,6 +230,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
       const r = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
       return {
         contentType: r.ContentType ?? null,
+        contentDisposition: r.ContentDisposition ?? null,
         sizeBytes: typeof r.ContentLength === "number" ? r.ContentLength : null,
       };
     } catch (err) {
@@ -278,18 +286,62 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     };
   }
 
-  /** PUT lên URL đã ký. `contentType === undefined` ⇒ KHÔNG gửi header (body `Uint8Array` ⇒ fetch không tự gắn). */
+  /**
+   * PUT lên URL đã ký. `contentType === undefined` ⇒ KHÔNG gửi header (body `Uint8Array` ⇒ fetch không tự gắn).
+   * `unsignedHeaders`: header gửi THÊM, không nằm trong chữ ký của URL (S9).
+   */
   async function putPresigned(
     uploadUrl: string,
     bytes: Uint8Array,
     contentType: string | undefined,
+    unsignedHeaders: Record<string, string> = {},
   ): Promise<{ status: number; body: string }> {
     const res = await fetch(uploadUrl, {
       method: "PUT",
-      headers: contentType === undefined ? {} : { "Content-Type": contentType },
+      headers: {
+        ...(contentType === undefined ? {} : { "Content-Type": contentType }),
+        ...unsignedHeaders,
+      },
       body: bytes,
     });
     return { status: res.status, body: await res.text() };
+  }
+
+  /**
+   * S9 — đăng ký `mime`, PUT ĐÚNG kiểu kèm một `Content-Disposition` không ký. Storage nhận ⇒ confirm rồi
+   * GET URL tải, trả hai header của phản hồi; storage từ chối ⇒ `served: null` (object phải vắng).
+   */
+  async function putWithUnsignedDisposition(
+    mime: string,
+    name: string,
+    unsignedDisposition: string,
+  ): Promise<{
+    putStatus: number;
+    stored: HeadResult | null;
+    served: { contentType: string | null; disposition: string | null } | null;
+  }> {
+    const bytes = payload(name);
+    const reg = await registerOk(mime, name, bytes.byteLength);
+    const put = await putPresigned(reg.uploadUrl, bytes, mime, {
+      "Content-Disposition": unsignedDisposition,
+    });
+    const stored = await headObject(reg.key);
+    if (put.status < 200 || put.status >= 300)
+      return { putStatus: put.status, stored, served: null };
+
+    const confirmed = await confirm(reg.fileId);
+    expect(confirmed.status, `confirm ${name}: ${JSON.stringify(confirmed.body)}`).toBe(200);
+    const res = await fetch(await downloadUrl(reg.fileId));
+    await res.arrayBuffer();
+    expect(res.status).toBe(200);
+    return {
+      putStatus: put.status,
+      stored,
+      served: {
+        contentType: res.headers.get("content-type"),
+        disposition: res.headers.get("content-disposition"),
+      },
+    };
   }
 
   function confirm(fileId: string) {
@@ -346,9 +398,8 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     process.env.S3_REGION ??= "us-east-1";
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = moduleRef.createNestApplication();
-    app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
-    app.useGlobalFilters(new AllExceptionsFilter());
+    // Pipeline y hệt main.ts (lưới S16-TEST-PIPELINE-PARITY-1) — kể cả lớp validate DTO.
+    app = applyMainPipeline(moduleRef.createNestApplication());
     await app.init();
     direct = directPool();
 
@@ -383,27 +434,37 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     }
   }, 180_000);
 
-  afterAll(async () => {
-    vi.restoreAllMocks();
-    // Dọn object do CHÍNH file này tạo: mọi khoá của công ty test (tiền tố `{companyId}/…`).
-    if (storage.run && direct && companyIds.length) {
-      const { bucket, s3 } = storage;
-      const r = await direct.query(`SELECT storage_path FROM files WHERE company_id = ANY($1)`, [
-        companyIds,
-      ]);
-      for (const row of r.rows as Array<{ storage_path: string }>) {
-        try {
-          await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: row.storage_path }));
-        } catch (err) {
-          console.warn(
-            `${TAG} dọn object thất bại (${errName(err)}) — object thử còn lại trong bucket.`,
-          );
-        }
+  /** Dọn object do CHÍNH file này tạo: mọi khoá của công ty test (tiền tố `{companyId}/…`). */
+  async function removeTestObjects(): Promise<void> {
+    if (!storage.run || !direct || companyIds.length === 0) return;
+    const { bucket, s3 } = storage;
+    const r = await direct.query(`SELECT storage_path FROM files WHERE company_id = ANY($1)`, [
+      companyIds,
+    ]);
+    for (const row of r.rows as Array<{ storage_path: string }>) {
+      try {
+        await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: row.storage_path }));
+      } catch (err) {
+        console.warn(
+          `${TAG} dọn object thất bại (${errName(err)}) — object thử còn lại trong bucket.`,
+        );
       }
     }
-    await app?.close();
-    if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
-    await direct?.end();
+  }
+
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    // Dọn object có ném thì app + công ty thử VẪN được dọn; lỗi gốc vẫn nổi lên sau `finally`.
+    try {
+      await removeTestObjects();
+    } finally {
+      try {
+        await app?.close();
+      } finally {
+        if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+        await direct?.end();
+      }
+    }
   });
 
   // ══════════════ S1–S3 · done_when[0] + nền của [1] — PUT lên URL đã ký ══════════════
@@ -536,7 +597,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
       expect(disposition ?? "").toMatch(/^attachment; filename=/);
     });
 
-    it("S5 CHO PHÉP — hàng image/png ⇒ trả image/png, KHÔNG attachment (hiển thị trực tiếp)", async (ctx) => {
+    it("S5 CHO PHÉP — hàng image/png ⇒ trả image/png + inline (hiển thị trực tiếp)", async (ctx) => {
       if (!storage.run) return skipStorageCase(ctx, "S5 CHO PHÉP");
       const up = await uploadConfirmed(PNG, "s5-anh.png", "s5-allow");
 
@@ -550,7 +611,52 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
 
       expect(res.status).toBe(200);
       expect(contentType).toBe(PNG);
-      expect(disposition ?? "").not.toMatch(/attachment/i);
+      expect(disposition).toBe("inline");
+    });
+
+    it("S9 — hàng image/png, PUT kèm Content-Disposition không ký ⇒ URL tải vẫn trả inline + image/png", async (ctx) => {
+      if (!storage.run) return skipStorageCase(ctx, "S9 image/png");
+
+      const m = await putWithUnsignedDisposition(
+        PNG,
+        "s9-anh.png",
+        UNSIGNED_ATTACHMENT_DISPOSITION,
+      );
+      console.log(
+        `${TAG} S9 hàng "${PNG}", PUT kèm Content-Disposition không ký: PUT HTTP ${m.putStatus} · storage LƯU disposition="${m.stored?.contentDisposition ?? "(không có)"}" · GET content-type="${m.served?.contentType ?? "(không GET)"}" · content-disposition="${m.served?.disposition ?? "(không có)"}"`,
+      );
+
+      if (m.served === null) {
+        // Storage từ chối lượt PUT mang header ngoài chữ ký ⇒ không có object nào để phục vụ.
+        expect(m.putStatus).toBeGreaterThanOrEqual(400);
+        expect(m.putStatus).toBeLessThan(500);
+        expect(m.stored).toBeNull();
+        return;
+      }
+      expect(m.served.contentType).toBe(PNG);
+      expect(m.served.disposition ?? "").toMatch(/^inline/);
+    });
+
+    it("S9 — hàng application/pdf, PUT kèm Content-Disposition không ký ⇒ URL tải vẫn trả attachment + application/pdf", async (ctx) => {
+      if (!storage.run) return skipStorageCase(ctx, "S9 application/pdf");
+
+      const m = await putWithUnsignedDisposition(
+        PDF,
+        "s9-tai-lieu.pdf",
+        UNSIGNED_INLINE_DISPOSITION,
+      );
+      console.log(
+        `${TAG} S9 hàng "${PDF}", PUT kèm Content-Disposition không ký: PUT HTTP ${m.putStatus} · storage LƯU disposition="${m.stored?.contentDisposition ?? "(không có)"}" · GET content-type="${m.served?.contentType ?? "(không GET)"}" · content-disposition="${m.served?.disposition ?? "(không có)"}"`,
+      );
+
+      if (m.served === null) {
+        expect(m.putStatus).toBeGreaterThanOrEqual(400);
+        expect(m.putStatus).toBeLessThan(500);
+        expect(m.stored).toBeNull();
+        return;
+      }
+      expect(m.served.contentType).toBe(PDF);
+      expect(m.served.disposition ?? "").toMatch(/^attachment; filename=/);
     });
 
     it("S6 CHO PHÉP — URL đã ký để nguyên ⇒ 200 + x-content-type-options: nosniff", async (ctx) => {
