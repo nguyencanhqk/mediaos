@@ -18441,7 +18441,7 @@ export const backlog = [
     module: "FOUNDATION",
     layer: "BE",
     title:
-      "Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl` chưa gọi `assertKeyInTenant` (GET đã gọi) · 5 controller CSV/XLSX tự ghép `Content-Disposition` thay vì `buildAttachmentDisposition` · `files.service.ts` (1.132 dòng) + `files.service.spec.ts` vượt trần 800 · dịch vụ mồ côi `task-attachments` (controller đã 410) · toàn vẹn object sau confirm · tín hiệu khi phục vụ bằng kiểu dự phòng · giới hạn tần suất dòng lỗi của lớp tự kiểm sau ký",
+      "Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl` chưa gọi `assertKeyInTenant` (GET đã gọi) · 5 controller CSV/XLSX tự ghép `Content-Disposition` thay vì `buildAttachmentDisposition` · `files.service.ts` (1.132 dòng) + `files.service.spec.ts` vượt trần 800 · dịch vụ mồ côi `task-attachments` (controller đã 410) · toàn vẹn object sau confirm · tín hiệu khi phục vụ bằng kiểu dự phòng · giới hạn tần suất dòng lỗi của lớp tự kiểm sau ký · các header khác của lượt ghi nằm ngoài chữ ký",
     zone: "red",
     status: "todo",
     paths: [
@@ -18456,18 +18456,20 @@ export const backlog = [
     skills: ["security-review", "code-review"],
     depends_on: ["S16-SOCIAL-FILEDISPOSITION-1"],
     src: [
-      "Plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5 · N7 · N8 · N9 + sổ vết §9 (D18 vượt ~6 dòng; hai dòng FULL gate). Tầng ký của WO gốc (kiểu trả = MIME đã đăng ký; disposition do server ghim) vẫn đứng sau mọi mục ở đây. Phần xử lý tên có dấu chấm ở đầu / cuối đã làm trong WO gốc, không còn ở đây.",
+      "Plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5 · N7 · N8 · N9 · N10 + sổ vết §9 (D18 vượt ~6 dòng; hai dòng FULL gate + dòng re-gate). Tầng ký của WO gốc (kiểu trả = MIME đã đăng ký; disposition do server ghim) vẫn đứng sau mọi mục ở đây. Phần xử lý tên có dấu chấm ở đầu / cuối đã làm trong WO gốc, không còn ở đây.",
     ],
     done_when: [
       "RED trước: `createUploadUrl` với khoá ngoài tiền tố công ty ⇒ ném trước khi ký (ca cạnh bên: khoá đúng tiền tố ⇒ có URL); chữ ký hàm nhận `companyId` và mọi chỗ gọi truyền đủ",
       "5 controller CSV/XLSX dùng `buildAttachmentDisposition` (ca cạnh nguồn cho từng controller: tên có dấu tiếng Việt ra đúng hai dạng `filename` / `filename*`)",
       "Tách `files.service.ts` + spec xuống < 800 dòng mỗi file KHÔNG đổi hành vi (toàn bộ spec hiện có xanh, không sửa kỳ vọng); `task-attachments.service.ts` + spec: xoá nếu đo được 0 chỗ gọi còn sống, nếu không thì ghi lý do giữ",
-      "Toàn vẹn object sau confirm — chốt MỘT hướng (ghi lý do): lưu dấu nội dung của object lúc confirm rồi đối chiếu khi phát URL tải, HOẶC rút hạn URL ghi; RED trước: dấu nội dung khác dấu đã lưu ⇒ không phát URL tải (ca cạnh bên: khớp ⇒ có URL)",
+      "Toàn vẹn object sau confirm — chốt hướng trong WO này (ghi lý do); ca TỪ CHỐI viết trước, đứng cạnh ca CHO PHÉP cùng khung",
+      "Các header khác mà lượt ghi có thể gửi ngoài chữ ký: ĐO trên storage rồi quyết định ghim thêm tham số phản hồi nào (ghi số đo + lý do)",
       "Hàng được phục vụ bằng kiểu dự phòng (`application/octet-stream` + tải xuống): quy tắc phục vụ báo được trường hợp này cho bên gọi, bên gọi ghi tín hiệu có giới hạn tần suất (không kèm khoá object); kèm câu đếm CHỈ-ĐỌC các hàng `files` như vậy để chạy trước deploy",
       "Lớp tự kiểm sau ký: dòng lỗi có giới hạn tần suất theo thao tác (PUT / GET) kèm bộ đếm — vẫn từ chối MỌI URL không đạt, chỉ giảm số dòng log",
     ],
     notes: [
       "Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5; cập nhật cùng ngày sau FULL gate của WO gốc (thêm N7 · N8 · N9, bỏ mục đã xử lý trong WO gốc). Có thể tách thành PR nhỏ theo từng `done_when`.",
+      "Cập nhật 08/10/2026 sau re-gate của WO gốc: mục toàn vẹn object rút về mức nêu vấn đề (hướng chốt trong WO này); thêm mục đo các header khác của lượt ghi nằm ngoài chữ ký (plan §8 N10).",
     ],
   },
   {
