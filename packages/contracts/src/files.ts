@@ -69,14 +69,25 @@ const PAGE_LIMIT_MAX = 100;
 // ─── Input schemas ─────────────────────────────────────────────────────────────
 
 /**
- * UploadFileInput — metadata kèm multipart binary khi upload.
- * Server KHÔNG tin `declaredMimeType` (tự detect bằng magic bytes); field này chỉ để tham khảo.
+ * UploadFileInput — metadata đăng ký một lượt tải lên (byte đi THẲNG lên storage qua URL PUT đã ký, không
+ * qua API).
+ * `declaredMimeType` là kiểu ĐÃ ĐĂNG KÝ của tệp, và nó ràng buộc cả ba bước sau (server KHÔNG đọc nội dung
+ * tệp để đoán kiểu):
+ *  - URL PUT ký kèm đúng chuỗi này ⇒ client PHẢI gửi header `Content-Type` trùng TỪNG BYTE, lệch là storage
+ *    từ chối;
+ *  - confirm so kiểu storage đang lưu với chuỗi này (không phân biệt hoa-thường, bỏ phần sau `;`) ⇒ lệch là
+ *    409 `FOUNDATION-FILE-ERR-CONFIRM-MISMATCH`;
+ *  - URL tải về trả đúng kiểu này; loại không thuộc danh sách hiển thị trực tiếp được trả dạng tải xuống.
+ * Một số kiểu / đuôi tệp bị từ chối ở bước đăng ký (415) bất kể cấu hình công ty.
  * KHÔNG có storagePath / checksum / signedUrl.
  */
 export const uploadFileInputSchema = z.object({
   /** Tên file gốc — trim + non-empty; normalize chống path traversal ở service. */
   originalName: z.string().trim().min(1).max(500),
-  /** MIME type do client khai báo — server sẽ RE-DETECT, không tin mù quáng. */
+  /**
+   * MIME đã đăng ký — lưu và ký NGUYÊN VĂN (server không thường hoá chuỗi này); client gửi lại đúng chuỗi
+   * đó ở header `Content-Type` của lượt PUT.
+   */
   declaredMimeType: z.string().min(1).max(255),
   /** Kích thước byte (integer ≥ 0) — dùng để validate trước khi stream. */
   sizeBytes: z.number().int().nonnegative(),

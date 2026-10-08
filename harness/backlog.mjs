@@ -18255,6 +18255,7 @@ export const backlog = [
     notes: [
       "🔴 Seed 02/10/2026 từ FULL gate lượt 1 của S16-SOCIAL-FE-2D (security-reviewer MEDIUM) — tách G8 khỏi tiền điều kiện của `S16-SOCIAL-VIDEOMIME-1` (giờ chờ WO này). ĐIỀU KIỆN: PHẢI merge TRƯỚC khi BẤT KỲ admin nào mở rộng `file.allowed_mime_types` hoặc proxy storage về cùng origin app (khi đó script trong tệp đọc được cookie CSRF và gọi `/auth/refresh` = chiếm tài khoản). SVG an toàn trong `<img>` nhưng CHẠY script khi mở ở tab mới.",
       "🔴 Mở rộng 02/10/2026 ở FULL gate lượt 2 của S16-SOCIAL-FE-2D (security-reviewer HIGH): phạm vi thêm ký `Content-Type` PUT + confirm so kiểu + `ResponseContentType` (done_when 1–3, 6) vì vế «chặn MIME nội dung chủ động lúc register» (done_when 4) KHÔNG đủ — kiểu lưu do PUT quyết, không do register. ĐIỀU KIỆN siết: API có WO này PHẢI lên PROD TRƯỚC khi (i) storage được mở cho trình duyệt (`S3_ENDPOINT` tới được từ máy người dùng — chat có sẵn đường bấm), (ii) merge lát A của `S16-SOCIAL-FE-2D` (điều kiện MERGE D11 bổ sung ở notes WO đó), (iii) bất kỳ admin nào mở rộng allowlist hoặc proxy storage về cùng origin app. Owner kiểm: nếu storage PROD ĐÃ tới được từ trình duyệt thì chat phơi NGAY HÔM NAY ⇒ làm WO này trước mọi việc khác.",
+      "Kết quả thi công 08/10/2026 (plan `docs/plans/S16-SOCIAL-FILEDISPOSITION-1.md` §9; CHƯA lên PROD — merge ⇒ deploy API ngay, plan §7): URL PUT ký `Content-Type` (`X-Amz-SignedHeaders=content-length;content-type;host`) · confirm so kiểu storage đang lưu với MIME đã đăng ký (lệch/thiếu ⇒ 409 `FOUNDATION-FILE-ERR-CONFIRM-MISMATCH`, lý do `content-type-mismatch`) · URL GET ép kiểu đã đăng ký + `attachment` cho loại ngoài 6 kiểu hiển thị trực tiếp · register từ chối cứng nhóm kiểu/đuôi không phụ thuộc setting công ty (415); không thêm mã lỗi, không migration, không đổi mã FE. ĐO trên MinIO bản PROD (bucket thử riêng): PUT lệch kiểu ⇒ 403 `SignatureDoesNotMatch` · PUT thiếu `Content-Type` ⇒ 400 · HEAD trả đúng chuỗi đã gửi · đổi tham số kiểu trên URL GET đã ký ⇒ 403 · `X-Content-Type-Options: nosniff` do storage TỰ gắn (SDK không cho đặt qua tham số ký; R2 chưa đo). WO kế: `S16-SOCIAL-FILEOPENUX-1` · `-INLINELIST-1` · `-FILESETTINGKEY-1` · `-STORAGETESTGATE-1` · `-FILEDEBT-1`.",
     ],
   },
   {
@@ -18316,6 +18317,151 @@ export const backlog = [
     ],
     notes: [
       "LOW — Seed 02/10/2026 từ FULL gate lượt 1 của S16-SOCIAL-FE-2D (security-reviewer LOW). Không có đường nào làm tệp mồ côi rò ra NGOÀI (không link ⇒ không route SOCIAL nào ký GET cho nó); rủi ro là lưu trữ phình + tệp nhạy cảm chọn nhầm vẫn nằm trên storage (đọc được bởi quản trị storage / quyền FOUNDATION file).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FILEOPENUX-1",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "7 màn đang «mở xem ở tab mới» cho tệp không phải ảnh/video nay nhận phản hồi dạng TẢI XUỐNG (sau `S16-SOCIAL-FILEDISPOSITION-1`) — đổi nhãn/cách mở cho khớp; phiếu lương + CV bỏ bước mở tab trắng trước; lọc sớm loại tệp không được nhận ở form tải",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/components/chat/**",
+      "apps/app/src/routes/hr/**",
+      "apps/app/src/routes/recruit/**",
+      "apps/app/src/routes/payroll/**",
+      "apps/app/src/routes/system/files/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FILEDISPOSITION-1"],
+    src: [
+      "Plan S16-SOCIAL-FILEDISPOSITION-1 §2 M9 + §8 N1 (owner O1 = A theo mặc định an toàn): `MessageBubble.tsx:160-171` · `RoomFilesTab.tsx:145-158` · `EmployeeFilesTab.tsx:68-70` · `EmployeeContractsPage.tsx:59-61` · `CandidateCvTab.tsx:71-74` · `payroll/open-signed-url.ts:15-27` · `system/files/FileDetailPage.tsx:61-65`. TASK tệp không đổi (đã tải blob). Ảnh/video vẫn hiển thị trực tiếp.",
+    ],
+    done_when: [
+      "ĐIỀU KIỆN MERGE (FE lên Pages ngay khi merge, API deploy tay): chỉ merge SAU khi API PROD chứa `S16-SOCIAL-FILEDISPOSITION-1` — đo `git merge-base --is-ancestor <sha merge WO đó> <data.build.commit của GET /api/v1/health>` exit 0. KHÔNG tương thích ngược với API cũ (ở đó tệp vẫn hiển thị trực tiếp)",
+      "7 màn: nhãn và hành vi nút khớp «tải xuống» (không còn hứa «mở xem»); phiếu lương PDF/ZIP + CV không để lại tab trắng; tên tệp tải về đúng tên gốc (đo trên trình duyệt thật, tên có dấu tiếng Việt)",
+      "Form tải: báo sớm ở client khi loại/đuôi tệp thuộc nhóm server luôn từ chối (UX — server vẫn là lưới chính, không hard-code quyền); test cạnh nguồn cho từng màn đổi",
+    ],
+    notes: [
+      "Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N1. Tới khi WO này lên: phiếu lương và CV để lại một tab trắng sau khi tệp được tải xuống (hệ quả O1 đã ghi ở đầu PR của WO gốc).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-INLINELIST-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Một nguồn sự thật cho «loại hiển thị trực tiếp»: 3 truy vấn ảnh (`file.repository.ts` — avatar · bìa task · avatar phòng) lọc `like 'image/%'` và `kindOf` của SOCIAL dùng `startsWith(\"image/\")`, trong khi tầng ký dùng danh sách tường minh `INLINE_SERVE_MIME_TYPES` ⇒ hai định nghĩa «ảnh» lệch nhau",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/src/storage/**",
+      "apps/api/src/social/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S16-SOCIAL-FILEDISPOSITION-1"],
+    src: [
+      "Plan S16-SOCIAL-FILEDISPOSITION-1 §8 N2 + bàn giao L3: hàng cũ có MIME `image/*` nằm NGOÀI danh sách hiển thị trực tiếp vẫn lọt 3 projection ảnh nhưng được ký dạng tải xuống ⇒ ảnh đó không vẽ được (fail-closed, đúng O3 b). LOW.",
+    ],
+    done_when: [
+      "3 truy vấn ảnh + `kindOf` của SOCIAL dùng CHUNG danh sách của `apps/api/src/storage/content-serving.ts` (không còn tiền tố `image/`); mệnh đề `NOT EXISTS` của 3 truy vấn KHÔNG đổi (chốt quyền đọc — docblock `file.repository.ts`)",
+      "RED trước: hàng `image/*` ngoài danh sách ⇒ VẮNG khỏi kết quả presign theo lô (ca cạnh bên: `image/png` có mặt); FE nhận `null` thì rơi về hình mặc định như hôm nay",
+    ],
+    notes: [
+      "LOW — Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N2. Vùng đỏ vì chạm truy vấn mang chốt quyền đọc.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FILESETTINGKEY-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Validate theo KHOÁ lúc LƯU setting `file.allowed_mime_types` / `file.blocked_extensions`: hôm nay giá trị chỉ được kiểm lúc ĐỌC (register), nên một cấu hình công ty chứa kiểu/đuôi mà server luôn từ chối vẫn lưu được và chỉ lộ ra khi người dùng tải tệp",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/settings/**",
+      "apps/api/src/foundation/files/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S16-SOCIAL-FILEDISPOSITION-1"],
+    src: [
+      "Plan S16-SOCIAL-FILEDISPOSITION-1 §1 «Không làm» + §8 N3: `setting.service.ts:521-528` không có validator theo khoá cho hai setting này; `files.service.ts` `loadUploadLimits` coi thiếu `blocked_extensions` là tập rỗng (M5). Lớp từ chối cứng của WO gốc đứng độc lập với setting nên đây là nợ UX/nhất quán, không phải lưới chính.",
+    ],
+    done_when: [
+      "RED trước: lưu `file.allowed_mime_types` chứa phần tử sai dạng `type/subtype` hoặc thuộc nhóm server luôn từ chối ⇒ 4xx với mã lỗi setting có sẵn (tra catalog, KHÔNG tự đặt); ca cạnh bên: danh sách hợp lệ ⇒ lưu được",
+      "`file.blocked_extensions`: chuẩn hoá chữ thường, bỏ dấu chấm đầu, từ chối phần tử rỗng; giá trị ĐÃ lưu từ trước không bị ghi đè (không migration dữ liệu trừ khi plan đo thấy cần)",
+    ],
+    notes: ["Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N3."],
+  },
+  {
+    id: "S16-SOCIAL-STORAGETESTGATE-1",
+    module: "FOUNDATION",
+    layer: "QA",
+    title:
+      "Các int-spec storage có sẵn (`files-e2e-confirm` · `hr-employee-avatar` · `me-preferences-avatar` …) chọn bucket bằng `S3_BUCKET ??= …` và dò storage kiểu nuốt mọi lỗi thành `storageReady=false` ⇒ ca bị bỏ qua đọc y hệt ca đã chạy; chuyển sang helper chốt ĐÚNG TÊN bucket `resolveStorageTestTarget`",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/**",
+      ".github/workflows/api.yml",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FILEDISPOSITION-1"],
+    src: [
+      "Plan S16-SOCIAL-FILEDISPOSITION-1 §2 M13/M14 + D12 + §8 N4: `files-e2e-confirm.int-spec.ts:148-164` (mẫu dò nuốt lỗi) · `apps/api/test/helpers/storage-test-target.ts` (helper thuần, đã có unit-spec 42 ca). Trên máy dev, bucket mà các spec cũ ghi vào là bucket `.env` nêu, trừ khi shell export `S3_BUCKET`.",
+    ],
+    done_when: [
+      "Mọi int-spec có PUT/GET thật lên storage đi qua `resolveStorageTestTarget`: CI thiếu storage ⇒ ĐỎ (không skip im lặng); cục bộ tên bucket không khớp ⇒ bỏ qua KÈM `console.warn` nêu tên ca, 0 lời gọi storage",
+      "Đo cổng bằng vi phạm thật: chạy với `S3_BUCKET` trỏ tên khác ⇒ đếm được số ca bỏ qua + 0 object mới ở bucket đó; báo cáo verify chép dòng `Tests N passed | M skipped` từng file",
+    ],
+    notes: ["Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N4."],
+  },
+  {
+    id: "S16-SOCIAL-FILEDEBT-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl` chưa gọi `assertKeyInTenant` (GET đã gọi) · 5 controller CSV/XLSX tự ghép `Content-Disposition` thay vì `buildAttachmentDisposition` · `files.service.ts` (1.133 dòng) + `files.service.spec.ts` vượt trần 800 · dịch vụ mồ côi `task-attachments` (controller đã 410) · `deriveExtension` trả `null` cho tên bắt đầu/kết thúc bằng dấu chấm",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/storage/**",
+      "apps/api/src/foundation/files/**",
+      "apps/api/src/tasks/**",
+      "apps/api/src/**/*.controller.ts",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S16-SOCIAL-FILEDISPOSITION-1"],
+    src: [
+      "Plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5 + sổ vết L4 (D18 vượt ~6 dòng; ghi nhận `deriveExtension`). Tầng ký GET của WO gốc (kiểu trả = MIME đã đăng ký + tải xuống) vẫn đứng sau mọi mục ở đây ⇒ LOW.",
+    ],
+    done_when: [
+      "RED trước: `createUploadUrl` với khoá ngoài tiền tố công ty ⇒ ném trước khi ký (ca cạnh bên: khoá đúng tiền tố ⇒ có URL); chữ ký hàm nhận `companyId` và mọi chỗ gọi truyền đủ",
+      "`deriveExtension` xử lý tên bắt đầu/kết thúc bằng dấu chấm nhất quán với hai tập chặn đuôi (ca TỪ CHỐI + ca CHO PHÉP cạnh nhau); 5 controller CSV/XLSX dùng `buildAttachmentDisposition`",
+      "Tách `files.service.ts` + spec xuống < 800 dòng mỗi file KHÔNG đổi hành vi (toàn bộ spec hiện có xanh, không sửa kỳ vọng); `task-attachments.service.ts` + spec: xoá nếu đo được 0 chỗ gọi còn sống, nếu không thì ghi lý do giữ",
+    ],
+    notes: [
+      "LOW — Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N5. Có thể tách thành PR nhỏ theo từng `done_when`.",
     ],
   },
   {
@@ -20714,6 +20860,7 @@ export const backlog = [
       "🟡 Chạm container PROD ở bước cuối ⇒ người chốt thời điểm recreate. Nhưng bước ĐẨY LÊN GHCR thì KHÔNG chạm PROD và nên làm NGAY.",
       "⚠️ PROD + dev-online dùng CHUNG `mediaos-minio` (cả 3 file env đều trỏ localhost:9000) ⇒ recreate là cửa sổ gián đoạn của CẢ HAI.",
       "Hướng thay thế nếu owner không muốn tự host image: chọn object storage S3-compatible khác (quyết định treo từ S18-OPS-MINIOPIN-1) — nhưng việc đó KHÔNG cứu được image PROD hiện có, nên bước đẩy GHCR vẫn nên làm trước.",
+      "Ghi thêm 08/10/2026 từ `S16-SOCIAL-FILEDISPOSITION-1` (plan §8 N6): header `X-Content-Type-Options: nosniff` trên phản hồi GET do STORAGE tự gắn, API không điều khiển được — int-spec `s16-filedisposition-storage` (ca S6) ghim cứng giá trị đo trên MinIO bản PROD. Bản MinIO của CI còn KHÁC bản PROD ⇒ lượt CI của ca đó là phép đo trên bản khác; đổi image/nhà cung cấp storage (kể cả sang R2) thì ĐO lại ca S6 trước khi trỏ PROD sang.",
     ],
   },
   {
