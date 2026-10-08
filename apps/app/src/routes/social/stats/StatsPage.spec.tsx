@@ -8,7 +8,7 @@
  *
  * File biểu đồ bị MOCK (plan B13: Recharts trong jsdom không có layout) — ca khói của nó ở spec riêng.
  * i18n THẬT, chữ kỳ vọng VIẾT TAY. Màn không có cổng riêng (route gác `view:feed-report` — ca G6 ở
- * `admin/admin-route-gates.spec.tsx`).
+ * `admin/admin-route-gates.stats.spec.tsx`).
  *
  * Đồng hồ: `2026-10-04T17:30:00Z` = 00:30 thứ Hai 05/10 giờ VN ⇒ tuần hiện tại kết thúc 11/10 (plan B10). Chỉ
  * giả `Date` (không giả timer) để `waitFor` của RTL vẫn chạy.

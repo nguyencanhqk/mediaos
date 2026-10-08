@@ -4,7 +4,7 @@
  *
  * File này đo DỮ LIỆU + hàm `beforeLoad`: đích, tham số, `replace`, và phủ ĐÚNG các template NOTI đang
  * sinh link. Vế «route đã được dựng từ đúng hằng và đã lắp vào `rootRoute.addChildren`» đo ở
- * `social-wiring.spec.ts` (ca W3, đọc nguồn `router.tsx`) — kho không có spec nào dựng cây route thật.
+ * `social-wiring.router.spec.ts` (ca W3, đọc nguồn `router.tsx`) — kho không có spec nào dựng cây route thật.
  */
 import { describe, expect, it } from "vitest";
 import { isRedirect } from "@tanstack/react-router";

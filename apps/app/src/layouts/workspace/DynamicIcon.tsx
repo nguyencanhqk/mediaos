@@ -69,6 +69,11 @@ import {
   // S16-SOCIAL-FE-3B — mục «Thống kê tương tác» (`social.stats`); ba mục báo cáo ATT / LEAVE / PAYROLL đã
   // khai `bar-chart-3` từ trước nhưng map thiếu khoá nên đang đeo vòng tròn mặc định.
   BarChart3,
+  // S16-SOCIAL-FE-3C (L6) — `APP_REGISTRY.fbpost.icon`: ô «Đăng bài Facebook» của dải ô liên kết nhanh trên
+  // bảng tin, và thẻ cùng tên trong AppSwitcher (trước đó đeo vòng tròn mặc định vì map thiếu khoá).
+  // ⚠️ lucide đánh dấu icon thương hiệu `@deprecated`, hẹn gỡ ở v1.0 (đang cài 0.469). Nâng lucide mà import
+  // này đỏ typecheck ⇒ thay bằng một icon trung tính, ĐỪNG xoá khoá `facebook` khỏi map.
+  Facebook,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -82,6 +87,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   vote: Vote,
   award: Award,
   "bar-chart-3": BarChart3,
+  facebook: Facebook,
   "layout-dashboard": LayoutDashboard,
   users: Users,
   user: User,

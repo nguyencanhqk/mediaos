@@ -18616,6 +18616,8 @@ export const backlog = [
       "Trước khi nối ca của PR-C: TÁCH theo màn hai file spec đã phình sau PR-B — `apps/app/src/routes/social/social-wiring.spec.ts` (627 dòng) và `admin/admin-route-gates.spec.tsx` (501 dòng) — finding AUD-SPEC400 của kiểm toán PR-B (06/10/2026); trần 800 dòng của CLAUDE.md §5 không có cổng nào ép.",
       "⚠️ Phụ thuộc thật của lát L8 là FE-2D lát B = S16-SOCIAL-MENTIONLINK-1 (PR #571) — #571 đã merge 06/10/2026 (`42b41680`) ⇒ id đó ĐÃ khai vào `depends_on` cùng ngày. Tiền điều kiện L8 đo bằng git theo plan §3 L8; chưa thoả ⇒ DỪNG sau L7, báo owner.",
       "Owner ký 05/10/2026: O1 = B (widget chỉ HR + company-admin — manager KHÔNG thấy dù SPEC-07:1200 cho scope Department; vế đó chờ BE, nợ S4-DASH-HROVERVIEW-FLOOR-1) · O3 = a (nút «Báo cáo» bình luận ở PR-C). Chữ `done_when` về ô fbpost (D14) và cách nhúng widget (D16) là chữ đã sửa theo plan §8.2–§8.3 — hai ô ☐ chờ owner tick khi duyệt PR-A.",
+      "📌 Sau thi công (07/10/2026, nhánh `feat/s16-social-fe-3c`) — các dòng notes phía trên lỗi thời ở bốn điểm: (1) gate — ngoài hai reviewer LIGHT, PR-C CHẠY THÊM `security-reviewer` hẹp cho lát L7 theo lựa chọn của owner ngày 07/10/2026 («Bản gọn + security cho L7») và không có bước `ecc:quality-gate` riêng; cả ba gate PASS sau vòng vá, trước đó có một lượt kiểm toán mutant độc lập. (2) Hai file spec ĐÃ tách theo màn ở bước S0 (`social-wiring.spec.ts` → 3 file · `admin/admin-route-gates.spec.tsx` → 3 file; 69 ca trước = 69 ca sau) — tên `admin-route-gates.spec.tsx` không còn. (3) Tiền điều kiện L8 ĐÃ đo thoả (`git merge-base --is-ancestor 42b41680 HEAD` exit 0) ⇒ L8 có trong PR. (4) Hai ô D14 · D16 được ghi nhận chấp thuận qua lệnh merge #572 (xem notes của S16-SOCIAL-FE-3); riêng D16 có MỘT hệ quả mới nêu ở gate bảo mật — ô rail hiện theo quyền, không theo cấu hình widget của Dashboard — chờ owner tick ở mô tả PR-C.",
+      "Sổ vết đầy đủ: plan §9 «Sổ vết PR-C» (bước → commit · 23 lệch plan · mục chờ owner duyệt · bảng `done_when` → bằng chứng · finding LOW đã hoãn · bảng nhãn gate). Nợ seed sau gate (đứng sau S16-SOCIAL-FEADMINSHARED-1, đều `depends_on` WO này): S16-SOCIAL-FEPOSTSWITCH-1 · S16-SOCIAL-FECROSSOPEN-1 · S16-SOCIAL-FECOMMENTA11Y-1 · S4-DASH-WIDGETCARD-VARIANT-1 · S19-UI-DIALOGINERT-1 · S19-SEC-FECACHELOGOUT-1 · S19-QA-FETESTNET-1 · S19-QA-FEHOOKSLINT-1; nợ nối bằng một dòng notes vào S4-DASH-HROVERVIEW-FLOOR-1 · S16-SOCIAL-FEADMINSHARED-1 · S16-SOCIAL-FEADMINSIGNAL-1 · S16-SOCIAL-DOC-2.",
     ],
   },
   {
@@ -18704,6 +18706,7 @@ export const backlog = [
     ],
     notes: [
       "🔴 FULL gate (cổng đọc số liệu nhân sự). Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9. Đây là điều kiện để bỏ cặp thay thế của O1 = B.",
+      "📌 PR-C S16-SOCIAL-FE-3C (07/10/2026) — thêm cho WO này: (1) vế thay thế `update:employee` nằm ở `apps/app/src/routes/social/feed/components/HrOverviewRailSlot.tsx`; bỏ nó thì ba spec đỏ THEO THIẾT KẾ (`HrOverviewRailSlot.spec.tsx` · `HrOverviewRailSlot.gate.spec.tsx` · `feed/SocialPortalShell.hr-widget.spec.tsx`) — sửa ca theo cổng mới, đừng nới. (2) Câu hỏi owner còn mở (finding SEC-03 của gate bảo mật, plan FE-3 §9): ô rail hiện theo QUYỀN, không theo `dashboard_widget_configs` — đường data `GET /dashboard/widgets/:slug` không đọc cấu hình; owner muốn rail tôn trọng cấu hình thì BE ép ở đường data hoặc phát tín hiệu cho FE ngay trong WO này. (3) Đọc từ mã, CHƯA đo: `fetchHrOverview` lấy `pageSize: 100` rồi đếm `byStatus` / `byOrgUnit` trên 100 hàng đầu trong khi `headcount = meta.total` (`dashboard-widget-handlers.service.ts`) ⇒ công ty trên 100 người thì các dòng trạng thái không cộng ra tổng. (4) `apps/api/test/integration/auth-seed-canonical-roles.int-spec.ts` mới ghim chiều CÓ của `update:employee` (hr · company-admin), chưa ghim chiều VẮNG cho employee / manager — vế phân biệt của O1 = B dựa vào đó. (5) Flip `read:employee` / `update:employee` sang `is_sensitive` mà thiếu allowlist ở `permission.service.ts` thì ô biến mất im lặng với chính HR — không ca FE nào bắt được.",
     ],
   },
   {
@@ -18782,6 +18785,7 @@ export const backlog = [
     ],
     notes: [
       "🟢 Docs-only. Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9; `depends_on` S16-SOCIAL-FE-3C để tài liệu chép theo trạng thái cuối của cả ba PR.",
+      "📌 PR-C S16-SOCIAL-FE-3C (07/10/2026) — thêm chỗ cần đối chiếu khi làm: UI-07 §34b.2 (`UI-07_Module_Workspace_Template_Design.md:2159-2160`) gọi ô rail là «Nhân sự», FE vẽ tiêu đề SẴN CÓ của widget «Tổng quan nhân sự» · ô rail hiện theo QUYỀN (bốn cặp đúng-bằng, O1 = B), không theo cấu hình widget của Dashboard — owner chốt giữ hay đổi (finding SEC-03, plan FE-3 §9) rồi mới ghi vào SPEC-07 §14.8 / UI-07 · dải ô: ô ứng dụng ngoài là NÚT mang tên trợ năng «… (mở ứng dụng ngoài)» · nút «Báo cáo» trên bình luận không có cặp quyền riêng (027 gác `view:feed`) và hiện cả ở bài đã khoá bình luận.",
     ],
   },
   {
@@ -18914,6 +18918,7 @@ export const backlog = [
     ],
     notes: [
       "🟡 Gate LIGHT. Seed 06/10/2026 từ gate PR-B (báo cáo bước L4a · L4b · L5a). Cùng lớp nợ với `socialApi.moderatePost` đã nằm ở S16-SOCIAL-FEMODINVAL-1 — làm chung một PR được nếu hai WO cùng READY. `depends_on` S16-SOCIAL-FE-3C vì chạm glob `apps/app/src/routes/social/**`.",
+      "📌 PR-C S16-SOCIAL-FE-3C (07/10/2026) — làm KÈM trong lượt build web-core của WO này (finding TSC-06 = phần còn lại của AUD-04; PR-C không chạm `packages/web-core` nên không sửa): ba chú thích ở `packages/web-core/src/lib/registry.ts` (mục `social.moderation` · `social.stats` · `social.kudosBadges`) còn ghi «ghim ở `social-wiring.spec.ts` ca W1» ⇒ đổi thành `social-wiring.admin.spec.ts`, rồi xoá câu chuyển hướng ở docblock `apps/app/src/routes/social/social-wiring.spec.ts`; docblock `switcherOnly` cùng file nêu thêm dải ô liên kết nhanh của bảng tin là bề mặt THỨ BA vẽ ô `fbpost` (AppSwitcher có, lưới Home thì không).",
     ],
   },
   {
@@ -18965,6 +18970,256 @@ export const backlog = [
     ],
     notes: [
       "🟡 Gate LIGHT — refactor thuần + siết ca, không đổi cổng quyền. Seed 06/10/2026 từ gate PR-B. `depends_on` S16-SOCIAL-FEMODINVAL-1 vì WO đó sửa `moderation-invalidation.ts` (một nguồn tập khoá) — dời file TRƯỚC khi nó xong là xung đột chắc chắn; `depends_on` S16-SOCIAL-FE-3C vì chạm glob `apps/app/src/routes/social/**`.",
+      "📌 PR-C S16-SOCIAL-FE-3C (07/10/2026) — nối thêm vào WO này (finding CRC-05 + nợ các bước S0 · L7; đều dưới `routes/social/**`, KHÔNG đổi hành vi): khung test chép nhiều bản sau khi tách spec — `renderRoute` + mock router / vỏ / i18n ×3 ở `admin/admin-route-gates.{moderation,badges,stats}.spec.tsx` (sửa một phải sửa cả ba) · `FOUR_PAIRS` ×3 + `observe` ×3 ở ba spec của ô «Tổng quan nhân sự» · `renderStrip` / `visibleNames` ×2 ở hai spec của dải ô · helper hàng bình luận (`reportButton` · `dialog` · `button`) ×2 · `settle` có bản riêng ở 8 spec của cụm ⇒ dời vào `admin/admin-test-doubles.tsx` / `feed/social-test-doubles.tsx` (hai file đã loại khỏi mẫu số coverage; ĐO thứ tự nạp giữa các factory `vi.mock` trước khi dời). `feed/SocialPortalShell.spec.tsx` còn 432 dòng; cụm còn 16 spec trên mốc 400 dòng (không file nào quá 800). Hằng cặp quyền SOCIAL: 23 lời gọi `useCan` / `useCanExact` viết literal cặp `feed*` ở 19 file + một hằng cục bộ `FEED_VIEW_PAIR` ở `feed/components/HrOverviewRailSlot.tsx` ⇒ gom về MỘT file hằng. Bảng nhãn `AUD-*` · `TSC-*` · `CRC-*` · `SEC-*` mà chú thích spec còn trỏ: plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» mục (8).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FEPOSTSWITCH-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Trang chi tiết bài (`PostDetailPage`) giữ state của bài CŨ khi chỉ `$postId` đổi (router không mount lại trang): dòng «đang trả lời …» + nháp ô soạn bình luận sống sang bài khác ⇒ lượt gửi 015 mang `parentCommentId` của bài kia và bị server từ chối (404, dải lỗi chung); lượt đọc lại NỀN của bài hỏng thì cả trang bị thay bằng khối lỗi ⇒ hộp thoại đang mở + nháp mất im lặng",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/router.tsx",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C"],
+    src: [
+      "Gate PR-C S16-SOCIAL-FE-3C (07/10/2026) — plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» mục (4): phát hiện ngoài danh sách của vòng vá TSC-03 (đo trên router THẬT, jsdom) · CRC-01 mục 4 · nợ của bước L8",
+      "`apps/app/src/routes/social/feed/PostDetailPage.tsx` (state `replyTo` · `localError` · `droppedMentionCount`; nhánh `postQuery.isError || !postQuery.data`) · `feed/components/CommentComposer.tsx` · server: `parentAuthorFor` của `apps/api/src/social/social-comments.repository.ts` đòi bình luận cha CÙNG bài",
+    ],
+    done_when: [
+      "RED trước, trên router THẬT (khuôn `feed/PostDetailPage.post-switch.spec.tsx`): bấm «Trả lời» một bình luận của bài B + gõ nháp, Back về bài A còn trong cache ⇒ KHÔNG còn dòng «đang trả lời», ô soạn trắng, lượt gửi không mang `parentCommentId` của bài B; ca ALLOW cùng khung: ở NGUYÊN một bài, danh sách bình luận đọc lại ⇒ đích trả lời + nháp CÒN",
+      "State theo bài (`replyTo` · nháp ô soạn · `localError` · `droppedMentionCount`) được đặt lại ở MỘT chỗ khi `$postId` đổi — thân trang mang `key` theo `postId` hoặc route khai `remountDeps` — rồi gỡ `key` riêng của `<CommentList>` (vá TSC-03 của PR-C) nếu đã thừa; ba ca của `PostDetailPage.post-switch.spec.tsx` giữ xanh, mutant «bỏ khoá» đỏ đúng thông điệp",
+      "Lượt đọc lại NỀN của 003 hỏng khi ĐÃ có dữ liệu ⇒ trang giữ bài đang vẽ (hộp thoại «Báo cáo» / nháp bình luận không mất); chỉ là lỗi trang khi CHƯA có dữ liệu; 404 thật vẫn ra «không tìm thấy» — mỗi nhánh một ca",
+      "Test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT. Seed 07/10/2026 từ gate PR-C. KHÔNG phải lượt ghi nhầm bài: server từ chối bình luận cha khác bài — hệ quả hôm nay là người dùng thấy dải lỗi chung và mất công gõ. Có từ FE-1, không do PR-C; PR-C chỉ đóng phần hộp thoại của danh sách bình luận (`key` theo `postId` trên `<CommentList>`).",
+      "Nhánh nháp FE-2D lát A (`feat/s16-social-fe-2d-a`, WO S16-SOCIAL-FE-2D) cũng thêm state vào `PostDetailPage.tsx` và sửa `CommentComposer.tsx` (đo 07/10/2026: nhánh đó đổi 36 · 30 dòng ở hai file) ⇒ WO nào merge SAU phải đưa state mới vào CÙNG cơ chế đặt lại.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FECROSSOPEN-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Mở ứng dụng ở tên miền khác (LMS · Đăng bài Facebook) từ BỐN nơi — dải ô liên kết nhanh · mục rail «Đăng bài Facebook» · AppSwitcher · nút «Mở LMS» của trang Đào tạo — đều gọi `void opener(fallback)` không có trạng thái «đang mở»: bấm xong không có phản hồi, bấm lại phát thêm yêu cầu SSO, lời gọi không có hạn chờ nên kết quả về muộn vẫn kéo người dùng rời màn đang đứng",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/layouts/**",
+      "apps/app/src/routes/social/**",
+      "apps/app/src/routes/lms/**",
+      "apps/app/src/routes/me/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C"],
+    src: [
+      "Gate PR-C S16-SOCIAL-FE-3C (07/10/2026): finding TSC-02 của `ecc:typescript-reviewer` + CRC-04 của `ecc:code-reviewer` (LOW, hoãn — plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» mục (6))",
+      "Nơi gọi: `routes/social/feed/components/QuickLinkStrip.tsx` · `layouts/workspace/SocialFbpostLink.tsx` · `layouts/home/AppSwitcher.tsx` · `routes/me/MeTrainingPage.tsx` · opener: `routes/lms/open-lms.ts` · `routes/social/open-social.ts` · map `layouts/home/cross-domain-apps.ts`",
+    ],
+    done_when: [
+      "MỘT hook / helper mở app ngoài dùng chung cho cả bốn nơi gọi; không nơi nào còn tự gọi `void opener(fallback)`; hợp đồng never-throw của opener giữ nguyên (lỗi vẫn rơi về trang trung chuyển `/lms` · `/social`)",
+      "Khoá ĐỒNG BỘ chống kích hoạt lặp + `aria-busy` (KHÔNG `disabled` trên nút đang giữ focus) — RED trước ở TỪNG nơi gọi: «kích hoạt hai lần liền ⇒ đúng 1 lời gọi SSO», mutant bỏ khoá đỏ đúng thông điệp «called 2 times»",
+      "Lời gọi SSO có hạn chờ; hết hạn ⇒ đi đường lỗi như cầu SSO hỏng; kết quả về MUỘN không `location.assign` và không điều hướng `fallback` khi người dùng đã rời nơi bấm; cờ «đang mở» được nhả khi trang trở về từ bfcache",
+      "Tín hiệu «đang mở» NHÌN THẤY được (chữ / hình) đã qua owner duyệt và đã nhìn trên trình duyệt thật; test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT. Seed 07/10/2026 từ gate PR-C. KHÔNG phải hồi quy của PR-C: ba nơi gọi đã có từ trước, dải ô thêm hai lối vào đặt sát ô soạn bài (bảng tin không có cảnh báo nháp chưa lưu). Không sai quyền, không nuốt lỗi — đường `fallback` đã có ca ghim (Q4 của `QuickLinkStrip.spec.tsx`). Hai vòng vá của PR-C đề xuất hai tên cho CÙNG nợ này (`…FEXDOMAINOPEN-1` · `…FECROSSOPEN-1`) — chỉ seed MỘT mục.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-FECOMMENTA11Y-1",
+    module: "SOCIAL",
+    layer: "FE",
+    title:
+      "Hàng bình luận: ba nút chữ «Trả lời» · «Xoá» · «Báo cáo» mang CÙNG tên trợ năng ở mọi hàng (bài 20 bình luận = 20 nút «Báo cáo» giống hệt nhau) và hộp thoại «Báo cáo bình luận» không nói đang báo cáo bình luận NÀO — trong khi hộp thoại được thiết kế để sống tiếp khi hàng đã bị gỡ khỏi danh sách; kèm dời khoá i18n `admin.quickLinks.*` về đúng chỗ khi `social.ts` hết bị khoá",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C", "S16-SOCIAL-FE-2D"],
+    src: [
+      "Gate PR-C S16-SOCIAL-FE-3C (07/10/2026): finding TSC-07 của `ecc:typescript-reviewer` (LOW, hoãn — plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» mục (6)) · nợ của bước L6 (khoá `quickLinks` nằm dưới nhánh `admin` vì plan D18)",
+      "`routes/social/feed/components/CommentList.tsx` · `routes/social/moderation/components/ReportDialog.tsx` · `i18n/locales/vi/social.ts` (`comment.*`) · `i18n/locales/vi/social-admin.ts` (`admin.report.*` · `admin.quickLinks.*`)",
+    ],
+    done_when: [
+      "Ba nút của hàng bình luận mang tên trợ năng theo THỰC THỂ (vd «Báo cáo bình luận của {{name}}»), chữ nhìn thấy là phần ĐẦU của tên trợ năng, cả ba cùng một kiểu — ca truy vấn role + tên: hai hàng khác tác giả ⇒ hai tên khác nhau; spec hiện có đổi truy vấn theo, KHÔNG nới assert",
+      "`ReportDialog` nhận `description` TUỲ CHỌN (tác giả + trích đoạn của đích) truyền xuống prop `description` sẵn có của `Dialog`; nơi mount của bài và của bình luận đều truyền; dòng cảnh báo SOC-DEC-011 vẫn là mô tả trợ năng của ô ghi chú (hai ca CRC-03 của `CommentList.report.spec.tsx` giữ xanh)",
+      "`admin.quickLinks.*` dời khỏi nhánh `admin` (dải ô liên kết nhanh không phải bề mặt quản trị) — `QuickLinkStrip` + các spec của dải đổi khoá theo, chữ hiển thị KHÔNG đổi",
+      "Chữ MỚI đã qua owner duyệt (nguyên văn ở mô tả PR); test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟢 Gate LIGHT. Seed 07/10/2026 từ gate PR-C. `depends_on` S16-SOCIAL-FE-2D (lát A): việc này phải sửa `i18n/locales/vi/social.ts` — file nhánh nháp lát A còn hunk (plan FE-3 D18) — và `CommentList.tsx`, file lát A cũng chạm (đo 07/10/2026). Hai nút «Trả lời» · «Xoá» có từ FE-1; PR-C thêm nút thứ ba cùng kiểu nên KHÔNG phải hồi quy.",
+    ],
+  },
+  {
+    id: "S4-DASH-WIDGETCARD-VARIANT-1",
+    module: "DASH",
+    layer: "FE",
+    title:
+      "`WidgetCard` của Dashboard chỉ có MỘT diện mạo (tiêu đề `<h3>` qua `CardTitle`, đệm `p-6`) ⇒ ô «Tổng quan nhân sự» cắm vào rail bảng tin đứng lệch cấp tiêu đề (`<h3>` sau năm `<h2>`) và lệch đệm với năm khối bên cạnh; kèm ba khoảng trống trạng thái của chính widget: khung chờ không `aria-busy` · dòng trạng thái hiện khoá THÔ server gửi (vd «Active») · lượt «Làm mới» hỏng thì im lặng",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/components/dashboard/**",
+      "apps/app/src/routes/dashboard/**",
+      "apps/app/src/routes/social/**",
+      "apps/app/src/i18n/**",
+      "packages/ui/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C"],
+    src: [
+      "Gate PR-C S16-SOCIAL-FE-3C (07/10/2026): phần CHƯA vá của finding TSC-04 (`ecc:typescript-reviewer`) + nợ của bước L7 — plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» mục (4)",
+      "`apps/app/src/components/dashboard/WidgetCard.tsx` · `HrOverviewWidget.tsx` · `useDashboardWidget.ts` (mutation làm mới không có `onError`) · `packages/ui/src/components/ui/card.tsx` (`CardTitle` = `<h3>`) · nơi cắm: `apps/app/src/routes/social/feed/components/HrOverviewRailSlot.tsx`",
+    ],
+    done_when: [
+      "`WidgetCard` nhận cấp tiêu đề + biến thể gọn; MẶC ĐỊNH giữ nguyên cho màn Dashboard (spec Dashboard hiện có không sửa, không đổi kết quả); ô ở rail bảng tin dùng `<h2>` + đệm như năm khối SOCIAL — ca truy vấn `heading` KÈM `level` ở `HrOverviewRailSlot.spec.tsx` / `SocialPortalShell.hr-widget.spec.tsx`",
+      "Ba trạng thái của widget, mỗi vế một ca RED: khung chờ có `aria-busy`; khoá trạng thái của `byStatus` đi qua i18n, khoá lạ có lối dự phòng (không rơi mất dòng); lượt «Làm mới» hỏng có thông báo cho người dùng",
+      "KHÔNG đổi cổng trong `PermissionGate(read:employee)` của `HrOverviewWidget` và KHÔNG đổi bốn vế của `HrOverviewRailSlot` (đổi là kích FULL gate — việc đó thuộc S4-DASH-HROVERVIEW-FLOOR-1)",
+      "Đã nhìn ô trên trình duyệt thật bằng tài khoản HR ở rail ~300px (≥ 1024px) và dưới 1024px; test FE + typecheck/build xanh (sửa `packages/ui` ⇒ build lại gói và chạy cả auth + console)",
+    ],
+    notes: [
+      "🟡 Gate LIGHT. Seed 07/10/2026 từ gate PR-C. PR-C chỉ thêm `<section aria-label>` bọc ô (vùng có nhãn cho trình đọc màn hình); cấp tiêu đề + đệm phải sửa ở component chung của MỌI widget Dashboard nên tách WO. Con trỏ nợ trong mã: docblock `HrOverviewRailSlot.tsx`, đoạn «VÙNG CÓ NHÃN».",
+    ],
+  },
+  {
+    id: "S19-UI-DIALOGINERT-1",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "`Dialog` (`packages/ui`) khai `aria-modal` nhưng KHÔNG làm phần nền `inert` ⇒ khi một hộp thoại đang mở, công nghệ hỗ trợ (trình đọc màn hình · điều khiển giọng nói) vẫn kích hoạt được nút ở nền: mở được hộp thoại thứ hai chồng lên hộp thoại đang mở, hoặc đổi đích của hộp thoại đang soạn — ảnh hưởng mọi hộp thoại của app · auth · console",
+    zone: "yellow",
+    status: "todo",
+    paths: ["packages/ui/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C"],
+    src: [
+      "Gate PR-C S16-SOCIAL-FE-3C (07/10/2026): gốc của finding TSC-01 + phép đo CRC-01 mục 4b (jsdom: hộp «Xoá bình luận này?» mở được DƯỚI hộp thoại «Báo cáo bình luận» đang mở ⇒ hai hộp thoại cùng lúc) — plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» mục (4)",
+      "`packages/ui/src/components/ui/dialog.tsx` (lớp phủ `fixed inset-0`, render tại chỗ, không `inert`) · lưới tạm ở nơi dùng: `openReport` của `apps/app/src/routes/social/feed/components/CommentList.tsx`",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: `Dialog` render tại chỗ (không portal) ⇒ «phần nền» không phải một node gốc duy nhất; chốt cách làm (portal + `inert` trên gốc app, hay cách khác) ở plan — kèm danh sách nơi lồng hộp thoại trong hộp thoại và nơi `Dialog` nằm trong phần tử có thể bị gỡ khi đang mở",
+      "RED trước ở `packages/ui`: hộp thoại đang mở ⇒ phần nền mang `inert` (ca đo THUỘC TÍNH trên đúng node nền — jsdom không thực thi `inert`, hành vi chặn thật đo trên trình duyệt); đóng ⇒ gỡ `inert` + focus về phần tử kích hoạt; hai hộp thoại chồng nhau ⇒ đóng hộp trên KHÔNG gỡ `inert` của nền; ca đối chứng: nội dung TRONG hộp thoại không bao giờ mang `inert`",
+      "API của `Dialog` / `ConfirmDialog` không đổi (mọi nơi dùng không sửa); spec hộp thoại hiện có của app · auth · console giữ xanh; lưới tạm của PR-C (`openReport` bỏ qua lượt kích hoạt khi hộp thoại đang mở + `CommentList.report-modal.spec.tsx`) GIỮ làm lưới thứ hai",
+      "Đã thử trên trình duyệt thật với một trình đọc màn hình: nút nền không kích hoạt được khi hộp thoại mở; test + typecheck/build của ba app xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT. Seed 07/10/2026 từ gate PR-C. Với chuột, lớp phủ đã chặn — vế đó jsdom không đo được; đường tới được hôm nay chỉ là công nghệ hỗ trợ / kích hoạt bằng mã. Phần dư focus đã biết ở nơi dùng (chưa có ca): hàng bình luận bị gỡ rồi vẽ lại bằng nút MỚI khi hộp thoại còn mở ⇒ đóng thì focus về `body`.",
+    ],
+  },
+  {
+    id: "S19-SEC-FECACHELOGOUT-1",
+    module: "AUTH",
+    layer: "FE",
+    title:
+      "Vòng đời cache phía FE khi phiên kết thúc: dọn `QueryClient` + auth store ở MỘT chỗ theo tín hiệu phiên cho `apps/app` · `apps/console` (đăng xuất · hết phiên · trang khôi phục từ bfcache)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/app/src/main.tsx",
+      "apps/app/src/test/**",
+      "apps/console/src/main.tsx",
+      "packages/web-core/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S16-SOCIAL-FE-3C"],
+    src: [
+      "Gate `security-reviewer` (hẹp) của PR-C S16-SOCIAL-FE-3C (07/10/2026): finding SEC-01 (LOW, có sẵn NGOÀI diff, hoãn — plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» mục (6))",
+      "`apps/app/src/main.tsx` + `apps/console/src/main.tsx` (`QueryClient` cấp module) · `packages/web-core/src/lib/api-client.ts` (`logoutSession` · `redirectToAuth`) · `apps/app/src/test/leave-flow-smoke.spec.tsx` (tên ca «logout … cache-clear được wire vào logout ở web-core» trong khi ca chỉ đo auth store)",
+    ],
+    done_when: [
+      "Plan riêng qua plan-review TRƯỚC khi code (vòng đời phiên của web-core = vùng đỏ); chốt MỘT điểm dọn theo tín hiệu phiên (`isAuthenticated` chuyển false) dùng chung cho app + console",
+      "RED trước: đăng xuất ⇒ cache truy vấn RỖNG; hết phiên (đường `redirectToAuth`) ⇒ auth store + cache được dọn trước khi rời trang; ca ALLOW cùng khung: phiên còn sống ⇒ cache KHÔNG bị dọn (không refetch thừa)",
+      "Trang khôi phục từ bfcache (`pageshow` với `event.persisted`) khi phiên đã kết thúc được xử lý theo plan; đã đo Back / Forward trên trình duyệt thật (jsdom không có bfcache)",
+      "Sửa tên ca ở `leave-flow-smoke.spec.tsx` cho khớp điều nó đo; không đổi hành vi đăng nhập / refresh token; FULL gate PASS",
+    ],
+    notes: [
+      "🔴 FULL gate (vòng đời phiên ở web-core). Ưu tiên THẤP: đăng nhập lại đi qua `apps/auth` = tải trang mới ⇒ `QueryClient` mới; SPA không có đường đổi tài khoản tại chỗ. Seed 07/10/2026 từ gate PR-C — PR-C không mở thêm loại dữ liệu mới.",
+    ],
+  },
+  {
+    id: "S19-QA-FETESTNET-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Suite test của `apps/app` không chặn mạng: `src/test/setup.ts` để nguyên `fetch`, URL API mặc định dưới test là `http://localhost:3100/api/v1` ⇒ spec nào quên mock một lời gọi thì `apiFetch` THẬT gửi request ra khỏi tiến trình test (ca xanh / đỏ tuỳ máy có dịch vụ nghe cổng đó hay không) — đã có trường hợp thật: `layouts/protected/ProtectedShell.spec.tsx`",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/test/**",
+      "apps/app/src/layouts/**",
+      "apps/app/src/routes/social/**",
+      "apps/app/vitest.config.ts",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C"],
+    src: [
+      "Gate PR-C S16-SOCIAL-FE-3C (07/10/2026) — plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» lệch #16 + mục (4): phép đo của bước L7 (gỡ một mock ⇒ `fetch` nhận URL `…/dashboard/widgets/hr-overview`) · finding TSC-05 + SEC-02 (đã vá TẠI CHỖ ở bốn spec) · quan sát ngoài danh sách của vòng vá gate code / bảo mật",
+      "`apps/app/src/test/setup.ts` · `packages/web-core/src/lib/api-client.ts` (`DEFAULT_API_URL`) · `apps/app/src/layouts/protected/ProtectedShell.spec.tsx` (`useBrandingQuery()` của `ProtectedShell.tsx` không được mock ⇒ `apiFetch` thật ⇒ nhánh `redirectToAuth`, jsdom in «Not implemented: navigation»)",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (không sửa spec): bật lưới ở chế độ CHỈ GHI trên cả suite `apps/app` ⇒ danh sách MỌI spec để lọt một lời gọi `fetch` kèm URL; ghi danh sách vào plan",
+      "`src/test/setup.ts` thay `fetch` toàn cục bằng hàm luôn từ chối + sổ lời gọi; ca nào để lọt ⇒ ĐỎ ở `afterEach` kèm URL; spec cần `fetch` giả thì tự khai trong file. Ca thử-ngược: một spec dò cố ý gọi `apiFetch` không mock ⇒ lưới ĐỎ đúng thông điệp",
+      "Vá các spec lộ ra ở bước đo (trước hết `ProtectedShell.spec.tsx`) bằng mock đúng hàm, KHÔNG bằng cách nới lưới; gỡ bốn bản chép tay của khuôn chặn `fetch` ở `routes/social/feed/{SocialPortalShell,SocialPortalShell.hr-widget,FeedPage.quick-links,PostDetailPage.post-switch}.spec.tsx`",
+      "Trả lời cùng câu hỏi cho `apps/auth` · `apps/console` (đo, ghi kết quả; có lọt thì seed tiếp); chunk-test `@mediaos/app` xanh",
+    ],
+    notes: [
+      "🟡 Gate LIGHT — chỉ hạ tầng test, không đổi mã sản phẩm. Seed 07/10/2026 từ gate PR-C. Giới hạn đã biết của khuôn hiện có: chỉ thay `fetch` (socket · `XMLHttpRequest` không đi qua nó), và gỡ dòng `stubGlobal` thì phép so ở `afterEach` vẫn xanh — lưới toàn cục phải tự kiểm là nó ĐANG bật.",
+    ],
+  },
+  {
+    id: "S19-QA-FEHOOKSLINT-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Luật lint `react-hooks` + `react-refresh` KHÔNG áp cho app FE nào: khối «Frontend» của `eslint.config.mjs` khai `files: [«apps/web/**/*.{ts,tsx}»]` — thư mục `apps/web` không còn tồn tại (hôm nay có api · app · auth · console · fbpost) ⇒ hook gọi có điều kiện / thiếu phụ thuộc effect ở `apps/app` · `apps/auth` · `apps/console` · `packages/ui` · `packages/web-core` không cổng nào bắt",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "eslint.config.mjs",
+      "apps/app/**",
+      "apps/auth/**",
+      "apps/console/**",
+      "packages/ui/**",
+      "packages/web-core/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-FE-3C"],
+    src: [
+      "Phát hiện ở bước L6 của PR-C S16-SOCIAL-FE-3C (07/10/2026) — plan S16-SOCIAL-FE-3 §9 «Sổ vết PR-C» mục (4) · `eslint.config.mjs` (khối «Frontend: quy tắc hooks + fast-refresh» + dòng `ignores` `apps/web/src/routeTree.gen.ts`) · ba PR của FE-3 xét luật hook bằng mắt reviewer",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (không sửa mã): chạy eslint với khối đó trỏ vào thư mục CÓ THẬT ⇒ đếm vi phạm theo luật (`rules-of-hooks` · `exhaustive-deps` · `only-export-components`) × gói; ghi bảng số vào plan và chốt mức từng luật theo số đo",
+      "`eslint.config.mjs` trỏ đúng các gói FE; `rules-of-hooks` = error ngay; luật còn lại: sửa hết thì error, không thì warn kèm ratchet ĐẾM (số chỉ được giảm) — CẤM chú thích tắt luật lint hàng loạt để cho qua (CLAUDE.md §6: sửa gốc)",
+      "Ca thử-ngược: một file dò gọi hook có điều kiện ⇒ `pnpm lint` ĐỎ đúng luật; gỡ file dò ⇒ xanh; `bash harness/check.sh --quick` xanh",
+      "Vi phạm `rules-of-hooks` lộ ra được SỬA GỐC trong WO (mỗi chỗ ghi ở PR); số lượng vượt một PR ⇒ tách WO theo gói, không hạ luật",
+    ],
+    notes: [
+      "🟡 Gate LIGHT nếu chỉ đổi cấu hình + sửa cảnh báo; chỗ sửa nào chạm `packages/web-core/src/stores/auth.ts` · `hooks/use-can.ts` · `components/permission-gate.tsx` thì theo gate của vùng đó. Seed 07/10/2026 từ gate PR-C. `apps/fbpost` · `apps/lms` là app Next.js riêng — ngoài phạm vi.",
     ],
   },
   {

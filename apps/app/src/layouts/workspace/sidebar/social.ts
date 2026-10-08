@@ -28,7 +28,7 @@ import { pruneUnbuiltScreens } from "./prune-unbuilt";
 //    `view:feed` + sở hữu hàng).
 //  · Mục track C dùng `requiredPermissions` (ĐỦ-HẾT) với ĐÚNG cặp của route nó trỏ tới. 🔴 Chép khuôn
 //    any-of ở trên thành `[view:feed, view:feed-report]` là MỌI nhân viên thấy mục «Kiểm duyệt» (hay
-//    «Thiết lập huy hiệu»), bấm vào thì trang cấm (SPEC-16 §14: forbidden = ẩn mục). `social-wiring.spec.ts` (ca W1 · W4) ghim.
+//    «Thiết lập huy hiệu»), bấm vào thì trang cấm (SPEC-16 §14: forbidden = ẩn mục). `social-wiring.admin.spec.ts` (ca W1 · W4) ghim.
 // Mọi mục ở đây PHẢI có `requiredPermissions`/`requiredAnyPermissions`, nếu không sẽ lọt ca «không
 // quyền nào ⇒ mọi module rỗng» của `sidebar-registry.snapshot.spec.ts` — mục không đòi gì thì luôn
 // `allowed: true`.

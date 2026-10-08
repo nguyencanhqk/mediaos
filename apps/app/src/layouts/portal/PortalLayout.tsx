@@ -56,8 +56,14 @@ export function PortalLayout({
   return (
     <div
       data-testid="portal-layout"
+      // `max-lg:auto-rows-max`: dưới 1024px grid là MỘT cột cao cố định, tự cuộn; hàng ngầm định `auto`
+      // lấy sàn theo kích thước tối thiểu của phần tử, mà thanh tab (`overflow-x-auto` ⇒ là khung
+      // cuộn) có sàn bằng 0 ⇒ hàng của nó bị ép về đúng đệm + viền mỗi khi nội dung dài hơn khung nhìn
+      // (đo trình duyệt thật 08/10/2026: hàng 17px, nhãn tab bị cắt mất). `max-content` cho hàng cao
+      // theo nội dung. CHỈ dưới `lg`: từ 1024px grid là một hàng ba cột phải cao đúng bằng khung để
+      // từng cột tự cuộn — hàng `max-content` ở đó sẽ phá vùng cuộn của cột.
       className={cn(
-        "grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto lg:grid-cols-[240px_minmax(0,1fr)_300px] lg:gap-6 lg:overflow-hidden lg:px-6",
+        "grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto max-lg:auto-rows-max lg:grid-cols-[240px_minmax(0,1fr)_300px] lg:gap-6 lg:overflow-hidden lg:px-6",
         className,
       )}
     >

@@ -348,6 +348,17 @@ export default {
       rocket: "Tên lửa",
     },
   },
+  /**
+   * S16-SOCIAL-FE-3C (L6) — «dải ô liên kết nhanh» ở đầu bảng tin (`feed/components/QuickLinkStrip`).
+   *
+   * ⚠️ Dải này KHÔNG phải bề mặt quản trị — nó nằm dưới `admin` chỉ vì plan D18 khoá `social.ts` trong lúc
+   * nhánh FE-2D lát A còn hunk ở đó. TÊN của từng ô KHÔNG ở đây: lấy từ `nav:app.*` qua `nameKey` của
+   * `APP_REGISTRY`. `external` là TÊN TRỢ NĂNG của ô mở ứng dụng ở tên miền khác (ô chỉ vẽ thêm dấu ↗).
+   */
+  quickLinks: {
+    aria: "Liên kết nhanh",
+    external: "{{name}} (mở ứng dụng ngoài)",
+  },
   // ── Thống kê tương tác `SOC-SCREEN-011` — file riêng ──
   stats,
 };

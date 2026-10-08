@@ -3245,7 +3245,7 @@ const feedGroupDetailRoute = createRoute({
 
 // S16-SOCIAL-FE-3 — Kiểm duyệt (SOC-SCREEN-010). Cổng `view:feed` + `view:feed-report` đi theo meta
 // (`ProtectedRoute` trong `buildModuleRouteContent`). `path` và `getMeta("…")` là hai literal RỜI — ca
-// W3 của `social-wiring.spec.ts` ghim cặp này + việc route có trong cây. `validateSearch` KHÔNG ném,
+// W3 của `social-wiring.router.spec.ts` ghim cặp này + việc route có trong cây. `validateSearch` KHÔNG ném,
 // luôn trả đủ ba khoá (`moderation-route-search.ts`: `?page=2` tới đó là SỐ).
 const feedModerationMeta = getMeta("social.moderation");
 const feedModerationRoute = createRoute({
