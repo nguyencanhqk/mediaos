@@ -469,3 +469,95 @@ test("C4-thử-ngược-2 — khoá gồm CẢ HỌ: API-10 và DB-10 KHÔNG tr�
   );
   assert.equal(dups[0].value, "API-9");
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CỔNG 5 + 6 — hai trường của backlog.mjs mà không cổng nào đọc: `status` và `depends_on`.
+//
+// LÝ DO THÊM (08/10/2026): cùng LỚP "biến mất âm thầm" với C1, khác trường. Đo trên master `77d04a8a`:
+//
+//   • `status: "ready"` ở HAI WO (`S18-QA-CHECKALLFLAKE-1`, `S18-QA-LEAVEDATEBOMB-1`). «READY» KHÔNG phải
+//     literal — nó là trạng thái SUY RA (`gen-status.mjs#isReady` = `todo` + mọi phụ thuộc đã done).
+//     `gen-status.mjs` lọc theo ĐÚNG bốn literal ⇒ WO mang giá trị thứ năm không rơi vào nhóm nào,
+//     VÔ HÌNH trên `docs/STATUS.md`, và `wo-state.mjs#isReady` (start-on-touch) cũng không bao giờ nhặt.
+//   • `depends_on: ["S5-ME-BE-5"]` ở `S5-TASK-AVATAR-1` — id chưa từng có trong backlog (việc ship
+//     ngoài backlog ở #228). `isDone(id thiếu)` = false ⇒ nếu WO đó còn `todo` thì KẸT ở «chờ phụ
+//     thuộc» vĩnh viễn. Lần này vô hại chỉ vì WO đã done.
+//
+// Ghim ĐỊNH NGHĨA: tập literal dưới đây là tập mà `gen-status.mjs` (dòng lọc `b.status === …`) và
+// `lib/wo-state.mjs` thực sự xử lý. Thêm trạng thái mới thì sửa CẢ hai nơi đó rồi mới sửa tập này.
+// Chống xanh-RỖNG: C1b đã ép backlog không rỗng + mọi item có id; C6b ép có ít nhất một cạnh phụ thuộc.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WO_STATUS_LITERALS = ["todo", "in_progress", "done", "blocked"];
+
+/** Trả ["<id> → status <giá trị>"] cho mọi item có `status` ngoài tập literal (kể cả thiếu trường). */
+export function findInvalidStatuses(items, allowed = WO_STATUS_LITERALS) {
+  return items
+    .filter((item) => !allowed.includes(item.status))
+    .map((item) => `${item.id} → status ${JSON.stringify(item.status)}`);
+}
+
+/** Trả ["<WO> → <id thiếu>"] cho mọi phần tử `depends_on` không phải id của item nào trong `items`. */
+export function findDanglingDependencies(items) {
+  const ids = new Set(items.map((item) => item.id));
+  return items.flatMap((item) =>
+    (item.depends_on ?? []).filter((dep) => !ids.has(dep)).map((dep) => `${item.id} → ${dep}`),
+  );
+}
+
+test("C5 — mọi `status` trong backlog.mjs ∈ {todo, in_progress, done, blocked} (giá trị khác ⇒ WO vô hình trên STATUS)", () => {
+  const bad = findInvalidStatuses(backlog);
+  assert.deepEqual(
+    bad,
+    [],
+    "WO mang `status` KHÔNG hợp lệ trong harness/backlog.mjs:\n" +
+      bad.map((b) => `  ${b}`).join("\n") +
+      `\nChỉ có ${WO_STATUS_LITERALS.length} literal: ${WO_STATUS_LITERALS.join(" | ")}. «READY» là trạng thái SUY RA ` +
+      "(todo + phụ thuộc đã done), KHÔNG ghi tay — WO sẵn sàng làm thì để `todo`.",
+  );
+});
+
+test("C5-thử-ngược — gieo `ready` và item thiếu status ⇒ cổng PHẢI phát hiện, bốn literal hợp lệ thì KHÔNG", () => {
+  const seeded = [
+    ...WO_STATUS_LITERALS.map((status, i) => ({ id: `WO-OK-${i}`, status })),
+    { id: "WO-READY", status: "ready" },
+    { id: "WO-THIEU" },
+  ];
+  assert.deepEqual(findInvalidStatuses(seeded), [
+    'WO-READY → status "ready"',
+    "WO-THIEU → status undefined",
+  ]);
+});
+
+test("C6 — mọi id trong `depends_on` TỒN TẠI trong backlog.mjs (id ma ⇒ WO kẹt «chờ phụ thuộc» vĩnh viễn)", () => {
+  const bad = findDanglingDependencies(backlog);
+  assert.deepEqual(
+    bad,
+    [],
+    "`depends_on` trỏ tới id KHÔNG có trong harness/backlog.mjs (<WO> → <id thiếu>):\n" +
+      bad.map((b) => `  ${b}`).join("\n") +
+      "\nSửa thành id đúng; nếu việc đó ship NGOÀI backlog thì gỡ phần tử và ghi một dòng chú thích.",
+  );
+});
+
+test("C6b — chống xanh-RỖNG: backlog có ít nhất một cạnh `depends_on` và mọi `depends_on` là mảng chuỗi", () => {
+  const edges = backlog.flatMap((item) => item.depends_on ?? []);
+  assert.ok(edges.length > 0, "không trích được cạnh phụ thuộc nào ⇒ cổng C6 xanh một cách RỖNG");
+  const malformed = backlog
+    .filter(
+      (item) =>
+        item.depends_on !== undefined &&
+        (!Array.isArray(item.depends_on) || item.depends_on.some((d) => typeof d !== "string")),
+    )
+    .map((item) => item.id);
+  assert.deepEqual(malformed, [], `\`depends_on\` sai kiểu ⇒ lọt khỏi C6: ${malformed.join(", ")}`);
+});
+
+test("C6-thử-ngược — gieo một phụ thuộc ma ⇒ cổng PHẢI phát hiện đúng cặp; phụ thuộc có thật thì KHÔNG", () => {
+  const seeded = [
+    { id: "WO-A", depends_on: [] },
+    { id: "WO-B", depends_on: ["WO-A", "WO-MA"] },
+    { id: "WO-C" },
+  ];
+  assert.deepEqual(findDanglingDependencies(seeded), ["WO-B → WO-MA"]);
+});
