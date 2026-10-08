@@ -1,8 +1,11 @@
 /**
  * S3StorageAdapter — concrete implementation of StorageAdapter PORT backed by ObjectStorageService.
  *
- * Design: COMPOSITION (not inheritance) over ObjectStorageService. We do NOT modify object-storage.
- * service.ts. This adapter only maps PORT method signatures to the existing service API.
+ * Design: COMPOSITION (not inheritance) over ObjectStorageService. This adapter only maps PORT method
+ * signatures to the service API and resolves the presign TTL — it holds NO storage rule of its own.
+ * Every rule about what gets signed (allowlist, size ceiling, signed `content-type`, the post-signing
+ * self-check) and what `stat` reports lives in ObjectStorageService, because some callers use that
+ * service directly without going through this adapter.
  *
  * BẤT BIẾN (CLAUDE.md §2.3):
  *   - `storage_path` / raw keys are NEVER returned from this class. Only SignedUrlResult is returned
@@ -87,7 +90,8 @@ export class S3StorageAdapter implements StorageAdapter {
 
   /**
    * Presigned PUT URL for direct client upload. ObjectStorageService.createUploadUrl re-validates
-   * key + enforces content-type allowlist + size ceiling before signing.
+   * key + enforces content-type allowlist + size ceiling before signing, signs `content-type` and
+   * `content-length`, then self-checks the URL. `input.contentType` is forwarded verbatim.
    */
   async signedUrl(input: StorageSignedUploadInput): Promise<SignedUrlResult> {
     const ttlSec = this.resolveTtl(input.presignTtlSec);
@@ -105,7 +109,8 @@ export class S3StorageAdapter implements StorageAdapter {
   /**
    * HEAD the object at `key` (S2-FND-FILE-2 confirm-upload flow). Thin, argument-preserving delegate
    * onto ObjectStorageService.statObject — no TTL/clamp involvement (not a presigned operation).
-   * ObjectStorageService re-asserts `key ∈ companyId` prefix before touching the SDK.
+   * ObjectStorageService re-asserts `key ∈ companyId` prefix before touching the SDK. The result
+   * (`exists` · `sizeBytes` · `contentType`) is returned unchanged.
    */
   async stat(input: StorageStatInput): Promise<StorageStatResult> {
     return this.objectStorage.statObject(input.key, input.companyId);

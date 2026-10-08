@@ -39,12 +39,14 @@ describe("S3StorageAdapter.stat", () => {
     (fakeStorage.statObject as ReturnType<typeof vi.fn>).mockResolvedValue({
       exists: true,
       sizeBytes: 999,
+      contentType: "application/pdf",
     });
     const adapter = new S3StorageAdapter(fakeStorage);
 
     const result = await adapter.stat({ key: KEY_A, companyId: COMPANY_A });
 
-    expect(result).toEqual({ exists: true, sizeBytes: 999 });
+    // S16-SOCIAL-FILEDISPOSITION-1: the stored content type is forwarded unchanged.
+    expect(result).toEqual({ exists: true, sizeBytes: 999, contentType: "application/pdf" });
     expect(fakeStorage.statObject).toHaveBeenCalledWith(KEY_A, COMPANY_A);
   });
 
@@ -53,12 +55,13 @@ describe("S3StorageAdapter.stat", () => {
     (fakeStorage.statObject as ReturnType<typeof vi.fn>).mockResolvedValue({
       exists: false,
       sizeBytes: null,
+      contentType: null,
     });
     const adapter = new S3StorageAdapter(fakeStorage);
 
     const result = await adapter.stat({ key: KEY_A, companyId: COMPANY_A });
 
-    expect(result).toEqual({ exists: false, sizeBytes: null });
+    expect(result).toEqual({ exists: false, sizeBytes: null, contentType: null });
   });
 
   it("propagates a rejection from the service (does not swallow errors)", async () => {

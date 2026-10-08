@@ -60,9 +60,13 @@ export interface SignedUrlResult {
 export interface StorageSignedUploadInput {
   /** Server-derived, tenant-scoped key for the object. */
   key: string;
-  /** Content type the client must declare on upload. */
+  /**
+   * Content type the client must send on upload. It is part of the signed headers
+   * (S16-SOCIAL-FILEDISPOSITION-1), so storage accepts the PUT only when the `Content-Type` header
+   * equals this string byte-for-byte — callers pass the registered type verbatim (no normalization).
+   */
   contentType: string;
-  /** Expected byte size — S3 pins ContentLength to prevent oversized uploads. */
+  /** Expected byte size — `content-length` is a signed header, so the PUT must carry exactly this size. */
   sizeBytes: number;
   /** Optional TTL override in seconds (uses DEFAULT_PRESIGN_TTL_SEC when absent). */
   presignTtlSec?: number;
@@ -88,15 +92,20 @@ export interface StorageStatInput {
 }
 
 /**
- * Result of a stat/HEAD check. `exists=false` ⇒ `sizeBytes` is `null` (object absent from storage —
- * e.g. the client never completed the presigned-PUT). Implementations MUST NOT throw for a missing
- * object; only genuine transport/auth errors should propagate.
+ * Result of a stat/HEAD check. `exists=false` ⇒ `sizeBytes` and `contentType` are `null` (object
+ * absent from storage — e.g. the client never completed the presigned-PUT). Implementations MUST NOT
+ * throw for a missing object; only genuine transport/auth errors should propagate.
  */
 export interface StorageStatResult {
   /** Whether the object exists at `key`. */
   exists: boolean;
   /** Actual ContentLength reported by storage, or `null` when `exists` is `false`. */
   sizeBytes: number | null;
+  /**
+   * Content type STORED with the object, exactly as storage reports it (not normalized). `null` when
+   * the object is absent or storage reports no type — callers must treat `null` as "does not match".
+   */
+  contentType: string | null;
 }
 
 /**
@@ -152,10 +161,11 @@ export interface StorageAdapter {
   signedUrl(input: StorageSignedUploadInput): Promise<SignedUrlResult>;
 
   /**
-   * HEAD the object at `key` — returns whether it exists and its actual ContentLength in storage
-   * (S2-FND-FILE-2 confirm-upload flow: verify a client's presigned-PUT actually landed BEFORE the
-   * caller marks a file row `Uploaded`). Re-asserts `key ∈ companyId` prefix before the SDK call.
-   * Never throws for a missing object — returns `{ exists: false, sizeBytes: null }`.
+   * HEAD the object at `key` — returns whether it exists, its actual ContentLength and its stored
+   * content type (S2-FND-FILE-2 confirm-upload flow: verify a client's presigned-PUT actually landed
+   * BEFORE the caller marks a file row `Uploaded`). Re-asserts `key ∈ companyId` prefix before the SDK
+   * call. Never throws for a missing object — returns
+   * `{ exists: false, sizeBytes: null, contentType: null }`.
    */
   stat(input: StorageStatInput): Promise<StorageStatResult>;
 

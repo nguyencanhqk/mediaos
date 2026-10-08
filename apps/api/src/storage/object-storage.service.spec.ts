@@ -17,7 +17,7 @@
  * vi.fn() we control per-test; all other exports (commands, error classes) come from the REAL
  * module via `vi.importActual` so `instanceof` checks on commands / NotFound stay accurate.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const sendMock = vi.fn();
 
@@ -29,7 +29,17 @@ vi.mock("@aws-sdk/client-s3", async () => {
   };
 });
 
+// S16-SOCIAL-FILEDISPOSITION-1: the presigner is replaced ONLY in this file, to drive the post-signing
+// self-check with a URL the real signer would never produce. Real signing behaviour is pinned in
+// `object-storage.presign.spec.ts` (no SDK mock there).
+const getSignedUrlMock = vi.fn();
+
+vi.mock("@aws-sdk/s3-request-presigner", () => ({
+  getSignedUrl: (...args: unknown[]) => getSignedUrlMock(...args),
+}));
+
 // Import AFTER the mock is registered (hoisted by vitest) so ObjectStorageService picks it up.
+import { Logger } from "@nestjs/common";
 import {
   HeadObjectCommand,
   GetObjectCommand,
@@ -37,7 +47,12 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
-import { ObjectStorageService, StorageNotConfiguredError } from "./object-storage.service";
+import {
+  ObjectStorageService,
+  StorageNotConfiguredError,
+  UnsupportedAttachmentError,
+} from "./object-storage.service";
+import { StoragePresignInvariantError } from "./presign-invariants";
 import { InvalidStorageKeyError } from "./storage-key";
 
 const COMPANY_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -103,12 +118,21 @@ describe("ObjectStorageService.statObject", () => {
     restoreEnv(envSnap);
   });
 
-  it("returns exists=true + sizeBytes from ContentLength when the object is present", async () => {
+  it("G6 — returns exists=true + sizeBytes + the STORED contentType (verbatim) when the object is present", async () => {
     setConfiguredEnv();
-    sendMock.mockResolvedValueOnce({ ContentLength: 12345, $metadata: { httpStatusCode: 200 } });
+    sendMock.mockResolvedValueOnce({
+      ContentLength: 12345,
+      ContentType: "Application/PDF; x=1",
+      $metadata: { httpStatusCode: 200 },
+    });
     const service = new ObjectStorageService();
     const result = await service.statObject(KEY_A, COMPANY_A);
-    expect(result).toEqual({ exists: true, sizeBytes: 12345 });
+    // Chuỗi storage trả về được chuyển NGUYÊN VĂN — so khớp/thường hoá là việc của tầng gọi.
+    expect(result).toEqual({
+      exists: true,
+      sizeBytes: 12345,
+      contentType: "Application/PDF; x=1",
+    });
     expect(sendMock).toHaveBeenCalledTimes(1);
     const sentCommand = sendMock.mock.calls[0][0];
     expect(sentCommand).toBeInstanceOf(HeadObjectCommand);
@@ -124,7 +148,29 @@ describe("ObjectStorageService.statObject", () => {
     );
     const service = new ObjectStorageService();
     const result = await service.statObject(KEY_A, COMPANY_A);
-    expect(result).toEqual({ exists: false, sizeBytes: null });
+    expect(result).toEqual({ exists: false, sizeBytes: null, contentType: null });
+    restoreEnv(envSnap);
+  });
+
+  it("G6 — contentType=null when HEAD carries no ContentType (never a guessed default)", async () => {
+    setConfiguredEnv();
+    sendMock.mockResolvedValueOnce({ ContentLength: 7, $metadata: { httpStatusCode: 200 } });
+    const service = new ObjectStorageService();
+    const result = await service.statObject(KEY_A, COMPANY_A);
+    expect(result).toEqual({ exists: true, sizeBytes: 7, contentType: null });
+    restoreEnv(envSnap);
+  });
+
+  it("G6 — contentType=null when HEAD carries an EMPTY ContentType", async () => {
+    setConfiguredEnv();
+    sendMock.mockResolvedValueOnce({
+      ContentLength: 7,
+      ContentType: "",
+      $metadata: { httpStatusCode: 200 },
+    });
+    const service = new ObjectStorageService();
+    const result = await service.statObject(KEY_A, COMPANY_A);
+    expect(result).toEqual({ exists: true, sizeBytes: 7, contentType: null });
     restoreEnv(envSnap);
   });
 
@@ -135,6 +181,73 @@ describe("ObjectStorageService.statObject", () => {
     const service = new ObjectStorageService();
     await expect(service.statObject(KEY_A, COMPANY_A)).rejects.toBe(transportError);
     restoreEnv(envSnap);
+  });
+});
+
+describe("ObjectStorageService.createUploadUrl — post-signing self-check (S16-SOCIAL-FILEDISPOSITION-1)", () => {
+  const SIGNED_BASE = `http://localhost:9000/test-bucket/${KEY_A}?X-Amz-Signature=abc`;
+  let envSnap: EnvSnapshot;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    envSnap = snapshotEnv();
+    getSignedUrlMock.mockReset();
+    setConfiguredEnv();
+    errorSpy = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    // Chỉ gỡ spy của Logger — `vi.restoreAllMocks()` sẽ xoá luôn bản giả `S3Client` dùng chung cả file.
+    errorSpy.mockRestore();
+    restoreEnv(envSnap);
+  });
+
+  it("DENY — signer returns a URL that does not sign content-type ⇒ throws, logs at error level, returns no URL", async () => {
+    getSignedUrlMock.mockResolvedValue(`${SIGNED_BASE}&X-Amz-SignedHeaders=content-length%3Bhost`);
+    const service = new ObjectStorageService();
+
+    await expect(service.createUploadUrl(KEY_A, "application/pdf", 10)).rejects.toBeInstanceOf(
+      StoragePresignInvariantError,
+    );
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const logged = String(errorSpy.mock.calls[0][0]);
+    expect(logged).toContain("StoragePresignInvariantError");
+    expect(logged).toContain("PUT");
+    // Dòng log không mang URL, khoá object hay chữ ký.
+    expect(logged).not.toContain(KEY_A);
+    expect(logged).not.toContain("X-Amz-Signature");
+    expect(logged).not.toContain("http");
+  });
+
+  it("ALLOW — signer returns a URL that signs content-type ⇒ URL returned, nothing logged at error level", async () => {
+    const signed = `${SIGNED_BASE}&X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost`;
+    getSignedUrlMock.mockResolvedValue(signed);
+    const service = new ObjectStorageService();
+
+    await expect(service.createUploadUrl(KEY_A, "application/pdf", 10)).resolves.toBe(signed);
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    // Lớp ký được YÊU CẦU ký content-type (không chỉ tình cờ có trong URL giả).
+    const options = getSignedUrlMock.mock.calls[0][2] as { signableHeaders?: Set<string> };
+    expect([...(options.signableHeaders ?? [])]).toEqual(["content-type"]);
+  });
+
+  it("the hard ceilings still run BEFORE signing and say which ceiling failed (kind)", async () => {
+    const service = new ObjectStorageService();
+
+    const typeError = await service.createUploadUrl(KEY_A, "text/html", 10).catch((e) => e);
+    expect(typeError).toBeInstanceOf(UnsupportedAttachmentError);
+    expect((typeError as UnsupportedAttachmentError).kind).toBe("content-type");
+
+    const emptyTypeError = await service.createUploadUrl(KEY_A, "", 10).catch((e) => e);
+    expect((emptyTypeError as UnsupportedAttachmentError).kind).toBe("content-type");
+
+    const sizeError = await service.createUploadUrl(KEY_A, "application/pdf", 0).catch((e) => e);
+    expect(sizeError).toBeInstanceOf(UnsupportedAttachmentError);
+    expect((sizeError as UnsupportedAttachmentError).kind).toBe("size");
+
+    expect(getSignedUrlMock).not.toHaveBeenCalled();
   });
 });
 
