@@ -238,6 +238,78 @@ const STORY_WO_OVERRIDE = {
   188: ["S13-PAYROLL-BE-2"], // export XLSX + audit
   189: ["S13-PAYROLL-DB-1", "S13-PAYROLL-BE-1", "S13-PAYROLL-QA-1"], // masking + thu hồi quyền di sản + audit
   190: ["S13-PAYROLL-DASH-1"], // widget DASH chi phí lương kỳ
+
+  // ── trace-map bổ sung 2026-10-08: wave S15-PAYROLL v2 + S16-SOCIAL (WO không ghi mã story trong src[]) ──
+  //    Chỉ gắn WO GIAO phần story hứa; WO nợ/đua khoá/vệ sinh (…-DEBT-1, …TOCTOU-1, …) cố ý KHÔNG gắn.
+  191: ["S15-PAYROLL-BE-1", "S15-PAYROLL-FE-1"], // danh sách NV hưởng lương + chi tiết 5 tab
+  192: ["S15-PAYROLL-DB-1", "S15-PAYROLL-BE-1", "S15-PAYROLL-FE-1", "S15-PAYROLL-FE-5"], // hồ sơ lương v2 (NET/GROSS, lương đóng BH, thử việc, định mức)
+  193: ["S15-PAYROLL-BE-1", "S15-PAYROLL-FE-1"], // thiết lập BH/công đoàn, TK ngân hàng, người phụ thuộc
+  194: ["S15-PAYROLL-BE-1", "S15-PAYROLL-FE-1"], // bảng công tổng hợp của kỳ
+  195: ["S15-PAYROLL-BE-2", "S15-PAYROLL-FE-2"], // catalog thành phần lương + công thức
+  196: ["S15-PAYROLL-DB-2", "S15-PAYROLL-BE-2", "S15-PAYROLL-BE-3", "S15-PAYROLL-FE-2"], // mẫu bảng lương + gắn mẫu vào kỳ (cột template_id ở DB-2, gắn/đổi mẫu ở BE-3)
+  197: ["S15-PAYROLL-BE-3", "S15-PAYROLL-FE-2"], // máy tính lương theo mẫu: BH, TNCN 7 bậc, NET gross-up
+  198: ["S15-PAYROLL-BE-2", "S15-PAYROLL-FE-2"], // bảng tỉ lệ luật định theo ngày hiệu lực
+  199: ["S15-PAYROLL-BE-4", "S15-PAYROLL-FE-3"], // tạm ứng four-eyes + «Tạm ứng của tôi»
+  200: [
+    "S15-PAYROLL-DB-2",
+    "S15-PAYROLL-BE-4",
+    "S15-PAYROLL-FE-3",
+    "S15-PAYROLL-FE-6",
+    "S15-PAYROLL-FE-7",
+  ], // đợt chi trả, tệp UNC, đánh dấu đã trả ⇒ kỳ Paid
+  201: ["S15-PAYROLL-BE-4", "S15-PAYROLL-FE-3", "S15-PAYROLL-DASH-1"], // ngân sách lương năm theo đơn vị (+ widget)
+  202: ["S15-PAYROLL-BE-4", "S15-PAYROLL-FE-3"], // nhập Excel thu nhập/khấu trừ khác
+  203: ["S15-PAYROLL-BE-5", "S15-PAYROLL-FE-4"], // trang Tổng quan + 7 báo cáo, xuất Excel
+  204: ["S15-PAYROLL-BE-5B", "S15-PAYROLL-FE-4"], // PDF phiếu lương của mình + hàng loạt
+  205: [
+    "S16-SOCIAL-BE-1",
+    "S16-SOCIAL-BE-1C",
+    "S16-SOCIAL-BE-3C",
+    "S16-SOCIAL-FE-1",
+    "S16-SOCIAL-FE-2D", // UI đính kèm ảnh/tệp ở composer
+    "S16-SOCIAL-VIDEOMIME-1", // video đang 415
+    "S16-SOCIAL-MENTIONDIR-1", // «gắn thẻ» người: web chưa sinh được @mention
+    "S16-SOCIAL-FERECYCLE-1", // màn thùng rác
+  ], // đăng bài (văn bản · ảnh · video · hashtag · gắn thẻ) theo phạm vi; sửa, xoá
+  206: [
+    "S16-SOCIAL-BE-1",
+    "S16-SOCIAL-BE-1D",
+    "S16-SOCIAL-FE-1",
+    "S16-SOCIAL-MENTIONLINK-1",
+    "S16-SOCIAL-FE-2D", // đính kèm ở bình luận
+    "S16-SOCIAL-MENTIONDIR-1",
+  ], // thích (emoji), bình luận, trả lời 1 cấp, mention @, đính kèm, lượt xem
+  207: ["S16-SOCIAL-BE-1", "S16-SOCIAL-BE-1B", "S16-SOCIAL-FE-1"], // lọc/sắp xếp bảng tin, tìm kiếm bài
+  208: ["S16-SOCIAL-BE-1", "S16-SOCIAL-BE-1B", "S16-SOCIAL-FE-1"], // lưu bài, «Đã lưu», «Bài viết của tôi», trang cá nhân
+  209: ["S16-SOCIAL-BE-1", "S16-SOCIAL-BE-1B", "S16-SOCIAL-FE-1"], // tin tức, ghim «Tin nổi bật», xác nhận đã đọc
+  210: ["S16-SOCIAL-BE-1B", "S16-SOCIAL-FE-1"], // sinh nhật, lời chúc, tự ẩn sinh nhật
+  211: ["S16-SOCIAL-BE-2A", "S16-SOCIAL-FE-2B"], // nhóm: tạo/tham gia, duyệt thành viên, bài trong nhóm
+  212: ["S16-SOCIAL-BE-2B-1", "S16-SOCIAL-FE-2"], // bình chọn: tạo, bỏ phiếu, kết quả, tự đóng
+  213: ["S16-SOCIAL-BE-2B-2", "S16-SOCIAL-FE-2"], // sáng kiến: gửi, xét duyệt, thông báo tác giả
+  214: [
+    "S16-SOCIAL-BE-2B-2",
+    "S16-SOCIAL-BE-2D",
+    "S16-SOCIAL-BE-3A",
+    "S16-SOCIAL-FE-2C",
+    "S16-SOCIAL-FE-3B",
+  ], // vinh danh kèm huy hiệu + catalog huy hiệu
+  215: [
+    "S16-SOCIAL-DB-2",
+    "S16-SOCIAL-BE-1",
+    "S16-SOCIAL-BE-1B",
+    "S16-SOCIAL-BE-2A",
+    "S16-SOCIAL-BE-2B-1",
+    "S16-SOCIAL-BE-2B-2",
+  ], // NOTI-EVENT-028..036 (catalog ở DB-2; 031 tin tức + 036 báo cáo phát từ BE-1B)
+  216: [
+    "S16-SOCIAL-BE-1",
+    "S16-SOCIAL-BE-1B",
+    "S16-SOCIAL-BE-3A",
+    "S16-SOCIAL-FE-3",
+    "S16-SOCIAL-FE-3C",
+  ], // hàng đợi báo cáo + kiểm duyệt, có audit
+  217: ["S16-SOCIAL-BE-3B", "S16-SOCIAL-FE-3B", "S16-SOCIAL-DASH-1"], // thống kê tương tác + xuất XLSX + widget DASH «Tương tác tuần»
+  218: ["S16-SOCIAL-FE-3C", "S16-SOCIAL-FBPOST-1"], // dải ô liên kết nhanh hiện theo quyền
 };
 
 // Vite dev port mỗi app (apps/*/vite.config.ts) → link "chạy thử" FE.
