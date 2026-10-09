@@ -605,7 +605,7 @@
 | `S16-SOCIAL-MENTIONDIR-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1D | Web KHÔNG sinh được @mention: `002`/`004`/`015`/`016` đòi `mentionedUs |
 | `S16-SOCIAL-VIDEOMIME-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D ✅S16-SOCIAL-FILEDISPOSITION-1 | Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt` |
 | `S16-SOCIAL-ATTERRSPLIT-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D | `SOCIAL-ERR-007` gộp HAI lỗi khác bản chất — `ATTACHMENT_LIMIT` (vượt  |
-| `S16-SOCIAL-FILEDISPOSITION-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-FILEDISPOSITION-1.md) | — | Kiểu nội dung storage PHỤC VỤ không gắn với MIME đã đăng ký ⇒ XSS lưu  |
+| `S16-SOCIAL-FILEDISPOSITION-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-FILEDISPOSITION-1.md) | — | Kiểu nội dung và tên tệp storage phục vụ phải gắn với thứ đã kiểm lúc  |
 | `S16-SOCIAL-ATTMETAMASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Đính kèm bị TỪ CHỐI presign (`url: null`) vẫn trả `fileName`/`sizeByte |
 | `S16-SOCIAL-ORPHANUPLOAD-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Tệp đã `Uploaded` mà KHÔNG BAO GIỜ được link (gỡ khỏi khay sau khi 055 |
 | `S16-SOCIAL-FILEOPENUX-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | 7 màn đang «mở xem ở tab mới» cho tệp không phải ảnh/video nay nhận ph |

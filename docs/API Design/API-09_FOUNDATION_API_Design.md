@@ -1561,6 +1561,9 @@ Company + module policy.
 7. Nếu link ngay, backend phải gọi module policy để kiểm tra quyền link file.
 8. File private không có public URL cố định.
 9. Nếu file scan chưa hoàn tất ở phase sau, download bị chặn đến khi status `Clean`.
+10. MIME thuộc nhóm bị từ chối cố định (các kiểu trình duyệt tự dựng thành tài liệu) luôn bị từ chối 415, kể cả khi allowlist của công ty có kiểu đó (`S16-SOCIAL-FILEDISPOSITION-1`).
+11. Phần mở rộng của tên tệp phải là 1–16 chữ cái không dấu / chữ số (tên không có dấu chấm thì không xét). Danh sách chặn phần mở rộng — cấu hình công ty hợp với tập cố định trong mã — được so trên chính tên sẽ phát ra khi tải về.
+12. Lượt `PUT` lên `uploadUrl` phải gửi `Content-Type` đúng MIME đã khai (URL ký cả header này); bước confirm so kiểu storage đang lưu với MIME đã đăng ký, lệch ⇒ 409.
 
 #### Audit log
 
@@ -1629,6 +1632,8 @@ Company + module policy.
 | --- | --- | --- |
 | `disposition` | string | `attachment` hoặc `inline` |
 | `variant` | string | `original`, `thumbnail`, `preview` nếu có |
+
+> **Cập nhật 09/10/2026 (`S16-SOCIAL-FILEDISPOSITION-1`):** server KHÔNG đọc tham số `disposition`. Kiểu trả về và cách hiển thị do server ghim vào URL tải theo MIME đã đăng ký: sáu kiểu ảnh / video hiển thị trực tiếp (`inline`), mọi kiểu khác tải xuống (`attachment`) kèm tên tệp gốc đã làm sạch. Điều này áp cho cả trường `disposition` trong thân yêu cầu của §12.5.
 
 #### Response
 
