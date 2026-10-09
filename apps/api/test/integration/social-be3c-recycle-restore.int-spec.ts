@@ -23,6 +23,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool, PoolClient } from "pg";
@@ -647,6 +648,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
       const res = await post(tHr, restoreUrl(id));
       expect(res.status, msg(res)).toBe(409);
       expect(msg(res)).toContain(SOCIAL_ERR.RESTORE_GROUP_DELETED);
+      expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.RESTORE_GROUP_DELETED);
       expect((await postRow(id)).deleted_at).not.toBeNull();
       expect(await auditRestoreRows(id)).toHaveLength(0);
       expect(await tagUsage("d5tag"), "409 không chạm restorePostTx ⇒ usage_count không đổi").toBe(u0);

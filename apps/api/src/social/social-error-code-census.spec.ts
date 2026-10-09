@@ -106,6 +106,30 @@ const NEVER_THROWN: readonly string[] = [
   "AUDIENCE_GROUP_NOT_AVAILABLE",
 ];
 
+/**
+ * TẦNG D (S16-SOCIAL-QA-1) — khoá ĐƯỢC NÉM nhưng không ra tới dây qua HTTP. Mọi khoá được ném KHÁC phải
+ * có ca int-spec assert `error.code` bằng hằng mã (`SOCIAL_ERROR_CODES.<KHOÁ>`). Mỗi dòng ở đây phải có
+ * lý do ĐO ĐƯỢC; `direct` = tên file spec (cạnh nguồn) có ca gọi THẲNG service cho khoá đó, `null` = không
+ * dựng được ca nào khi hai bảng hằng còn khớp.
+ */
+const HTTP_UNREACHABLE: ReadonlyArray<{ key: string; why: string; direct: string | null }> = [
+  {
+    key: "REACTION_EMOJI_INVALID",
+    why: "schema của thân request từ chối giá trị ngoài bộ cảm xúc TRƯỚC khi vào service ⇒ trên dây là 400 chung; ca gọi thẳng service nằm ở int-spec QA-1 (E-X5)",
+    direct: null,
+  },
+  {
+    key: "AUDIENCE_KEY_MISSING",
+    why: "schema tạo bài từ chối audience thiếu khoá TRƯỚC khi vào service ⇒ trên dây là 400 chung",
+    direct: "social-access.service.spec.ts",
+  },
+  {
+    key: "POST_TYPE_PAIR_DESYNC",
+    why: "chân fail-closed: chỉ ném khi hai bảng hằng theo loại bài lệch nhau; hai bảng đang khớp",
+    direct: null,
+  },
+];
+
 /** Bỏ comment TRƯỚC khi quét: docblock nhắc tên hằng KHÔNG phải bằng chứng (`vitest-exclude-selfcheck-reads-comments`). */
 const stripComments = (src: string): string =>
   src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
@@ -230,6 +254,58 @@ describe("S16-SOCIAL-BE-2B-2 · C-7 · census hằng lỗi SOCIAL", () => {
     // Không hằng nào vừa "phải có bằng chứng mạnh" vừa "không bao giờ ném".
     expect(STRONG_EVIDENCE.filter((n) => neverThrown.has(n))).toEqual([]);
   });
+
+  // ══════════ TẦNG D (S16-SOCIAL-QA-1) — mỗi khoá được ném có ca HTTP assert theo MÃ ══════════
+  //
+  // Tầng A chỉ đòi tham chiếu hằng THÔNG ĐIỆP ở bất kỳ spec nào. Một chỗ ném quên bọc `socialError(`
+  // vẫn trả đúng thông điệp ⇒ tầng A xanh trong khi `error.code` trên dây đã rơi về mã chung. Tầng D đòi
+  // tham chiếu hằng MÃ trong một int-spec — nơi duy nhất `error.code` được đọc từ phản hồi HTTP thật.
+
+  /** CHỈ int-spec (ca chạy qua HTTP) — spec cạnh nguồn và spec `foundation` không tính. */
+  const intSurface = readAll(INTEGRATION, (n) => /social/i.test(n) && n.endsWith(".int-spec.ts"));
+  const unreachable = new Set(HTTP_UNREACHABLE.map((u) => u.key));
+  const tierD = allKeys.filter((n) => !neverThrown.has(n) && !unreachable.has(n));
+  const hasCodeCase = (name: string): boolean =>
+    new RegExp(`SOCIAL_ERROR_CODES\\.${name}\\b`).test(intSurface);
+
+  it.each(tierD.map((n) => [n] as const))("tầng D · %s: có ca int-spec assert theo MÃ", (name) => {
+    expect(
+      hasCodeCase(name),
+      `${name}: thiếu ca theo MÃ — không int-spec SOCIAL nào assert error.code bằng ` +
+        `SOCIAL_ERROR_CODES.${name}. Thêm ca, hoặc khai HTTP_UNREACHABLE kèm lý do đo được`,
+    ).toBe(true);
+  });
+
+  it("tầng D · neo: bề mặt int-spec không rỗng, 52 khoá phải có ca, danh sách tha KHÔNG phình", () => {
+    expect(intSurface.length, "không đọc được int-spec SOCIAL").toBeGreaterThan(10_000);
+    expect(hasCodeCase("POST_NOT_FOUND")).toBe(true);
+    // Khoá bịa phải KHÔNG khớp — phép dò không được «luôn đúng».
+    expect(hasCodeCase("POST_NOT")).toBe(false);
+    expect(tierD.length).toBe(52);
+    expect(HTTP_UNREACHABLE.length, "HTTP_UNREACHABLE phình ra ⇒ tầng D bị tha dần").toBe(3);
+  });
+
+  it.each(HTTP_UNREACHABLE.map((u) => [u.key, u] as const))(
+    "tầng D · %s: khai «không ra dây» thì vẫn phải được ném, và có ca gọi thẳng nếu đã khai",
+    (name, entry) => {
+      expect(
+        Object.prototype.hasOwnProperty.call(SOCIAL_ERR, name),
+        `${name} không phải khoá của SOCIAL_ERR`,
+      ).toBe(true);
+      expect(neverThrown.has(name), `${name} nằm ở cả hai danh sách tha`).toBe(false);
+      expect(
+        isThrown(name),
+        `${name} không còn được ném ⇒ thuộc NEVER_THROWN, không thuộc đây`,
+      ).toBe(true);
+      expect(entry.why.length).toBeGreaterThan(20);
+      if (entry.direct !== null) {
+        const src = stripComments(fs.readFileSync(path.join(SOCIAL_SRC, entry.direct), "utf8"));
+        expect(src.includes(`SOCIAL_ERR.${name}`), `${entry.direct} không còn ca cho ${name}`).toBe(
+          true,
+        );
+      }
+    },
+  );
 });
 
 /**
