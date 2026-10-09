@@ -1,10 +1,25 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-09 01:04Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-09 06:47Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+###  S16-SOCIAL-FE-2D — FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qua SOCIAL-API-054/055 · @mention thành link hồ sơ từ mảng `mentions` (BE-1D) · hiện `droppedMentions` của bình luận
+- **zone**: amber · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/social/**`, `apps/app/src/i18n/**`, `packages/web-core/**`, `packages/contracts/**`, `docs/plans/**`, `harness/backlog.mjs`
+- **phụ thuộc**: S16-SOCIAL-BE-1C✓, S16-SOCIAL-BE-1D✓, S16-SOCIAL-FE-2✓
+- **done_when (đích hội tụ)**:
+  - [ ] Đính kèm: đúng luồng upload-url → PUT storage → confirm → attachmentIds; trần 10 ảnh/1 video/20MB (ERR-007) kiểm phía client + hiện 422; url null (presign bị từ chối) KHÔNG vẽ ô ảnh vỡ
+  - [ ] Mention link chỉ với phần tử withheld:false; withheld:true giữ SPAN; response 006 không mang mentions ⇒ giữ mảng cũ khi merge cache
+
+###  S16-SOCIAL-QA-1 — QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager · hr · company-admin · payroll-officer/recruiter không thêm gì) · IDOR: bài nhóm riêng tư · bài hidden/deleted · sửa/xoá bài người khác · ack giả · vote đôi · poll đóng · kết quả ẩn danh không lộ user_id · sinh nhật không lộ năm/ẩn theo preference · cross-tenant 2 công ty · fuzz mention/hashtag/emoji/body · race counters (2 like đồng thời, đối soát COUNT ↔ counter) · WS payload = DTO · soft-delete lan đủ · census mã lỗi theo MÃ · coverage social/ ≥85% LANE_DB
+- **zone**: amber · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/test/**`, `apps/api/src/social/**`, `apps/app/src/routes/social/**`, `docs/QA/**`, `docs/TESTABLE-FEATURES.md`, `docs/plans/**`, `harness/backlog.mjs`
+- **phụ thuộc**: S16-SOCIAL-FE-3✓, S16-SOCIAL-FE-3B✓, S16-SOCIAL-FE-3C✓, S16-SOCIAL-BE-3C✓
+- **done_when (đích hội tụ)**:
+  - [ ] Mỗi route API-19 có ≥1 ca allow + ≥1 ca deny theo cặp; mọi SOCIAL-ERR có ≥1 ca; IDOR + cross-tenant cụm riêng; ca PII sinh nhật + poll ẩn danh grep response
+  - [ ] Race: like đồng thời, vote đồng thời, join nhóm đồng thời — counters đúng; script đối soát COUNT↔counter chạy trong test; soft-delete: bài xoá biến khỏi 6 bề mặt (feed · đếm · tìm kiếm · tag · saved · widget)
+  - [ ] Lỗi sản phẩm lộ ra được vá trong WO (ghi rõ trong PR); docs/TESTABLE-FEATURES.md + QA-02 ma trận cập nhật; check.sh --lane-db XANH
 
 ## Hàng đợi
 
@@ -19,7 +34,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🔴 `S16-SOCIAL-GROUPDELRACE-1` `038`/`039` vẫn ghi thành viên vào nhóm bị XOÁ MỀM giữa chừng — `lockGroupRowTx` cố ý không lọc `deleted_at` (miễn trừ W4 của neo D6-ii) và không route nào kiểm lại `deleted_at` sau khoá
 - 🔴 `S16-SOCIAL-POSTGROUPTOCTOU-1` `002` đăng bài vào nhóm: `assertWriteAudience` đọc membership KHÔNG khoá hàng nhóm rồi `INSERT feed_posts` — INSERT chờ khoá RI sau một `039` mời ra rồi chạy tiếp ⇒ người VỪA bị mời ra vẫn đăng được bài vào nhóm kín (cùng lớp TOCTOU của GROUPTOCTOU-1, nợ N2)
 - 🔴 `S16-SOCIAL-SCOPEDENIEDCODE-1` `SocialAccessService.resolveActor` nhánh sàn Company ném message `AUTH-ERR-SCOPE-DENIED: …` nhưng `error.code` trên dây là `AUTH-ERR-FORBIDDEN` (chuỗi trần) — quyết định có phát đúng mã `AUTH-ERR-SCOPE-DENIED` không (FE `api-error-kind` sẽ đổi `kind` sang SCOPE_DENIED)
--  `S16-SOCIAL-FE-2D` FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qua SOCIAL-API-054/055 · @mention thành link hồ sơ từ mảng `mentions` (BE-1D) · hiện `droppedMentions` của bình luận
 - 🔴 `S16-SOCIAL-MENTIONDIR-1` Web KHÔNG sinh được @mention: `002`/`004`/`015`/`016` đòi `mentionedUserIds` (`users.id`) mà mọi DTO SOCIAL cố ý không phơi `userId` ⇒ cần nguồn nhắc tên phía server (nhận `mentionedEmployeeIds` hoặc route danh bạ nhắc tên kiểu `059`) để FE dựng ô chọn mention
 - 🔴 `S16-SOCIAL-ATTMETAMASK-1` Đính kèm bị TỪ CHỐI presign (`url: null`) vẫn trả `fileName`/`sizeBytes`/`kind`/`fileId` cho người xem (`social-attachments.service.ts` `decorateMany`), và payload WS bài/bình luận mới phát metadata đính kèm cho CẢ phòng công ty không qua quyết định theo người xem ⇒ «ẩn tệp không xem được» (D4 của S16-SOCIAL-FE-2D) chỉ là lưới CLIENT
 - 🔴 `S16-SOCIAL-ORPHANUPLOAD-1` Tệp đã `Uploaded` mà KHÔNG BAO GIỜ được link (gỡ khỏi khay sau khi 055 xong · bỏ nháp · bình luận bị khoá — D10 của S16-SOCIAL-FE-2D · chat tương tự) sống MÃI trên storage + bảng `files`: `TEMP_FILE_CLEANUP` (S2-FND-JOBS-1) chỉ dọn `Pending` quá TTL và tệp tạm hết hạn
@@ -49,7 +63,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🔴 `S19-SEC-FECACHELOGOUT-1` Vòng đời cache phía FE khi phiên kết thúc: dọn `QueryClient` + auth store ở MỘT chỗ theo tín hiệu phiên cho `apps/app` · `apps/console` (đăng xuất · hết phiên · trang khôi phục từ bfcache)
 - 🟡 `S19-QA-FETESTNET-1` Suite test của `apps/app` không chặn mạng: `src/test/setup.ts` để nguyên `fetch`, URL API mặc định dưới test là `http://localhost:3100/api/v1` ⇒ spec nào quên mock một lời gọi thì `apiFetch` THẬT gửi request ra khỏi tiến trình test (ca xanh / đỏ tuỳ máy có dịch vụ nghe cổng đó hay không) — đã có trường hợp thật: `layouts/protected/ProtectedShell.spec.tsx`
 - 🟡 `S19-QA-FEHOOKSLINT-1` Luật lint `react-hooks` + `react-refresh` KHÔNG áp cho app FE nào: khối «Frontend» của `eslint.config.mjs` khai `files: [«apps/web/**/*.{ts,tsx}»]` — thư mục `apps/web` không còn tồn tại (hôm nay có api · app · auth · console · fbpost) ⇒ hook gọi có điều kiện / thiếu phụ thuộc effect ở `apps/app` · `apps/auth` · `apps/console` · `packages/ui` · `packages/web-core` không cổng nào bắt
--  `S16-SOCIAL-QA-1` QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager · hr · company-admin · payroll-officer/recruiter không thêm gì) · IDOR: bài nhóm riêng tư · bài hidden/deleted · sửa/xoá bài người khác · ack giả · vote đôi · poll đóng · kết quả ẩn danh không lộ user_id · sinh nhật không lộ năm/ẩn theo preference · cross-tenant 2 công ty · fuzz mention/hashtag/emoji/body · race counters (2 like đồng thời, đối soát COUNT ↔ counter) · WS payload = DTO · soft-delete lan đủ · census mã lỗi theo MÃ · coverage social/ ≥85% LANE_DB
 - 🟡 `S19-OPS-MINIOMIRROR-1` Mirror image MinIO đúng digest PROD (`sha256:14cea493…` = RELEASE.2025-09-07T16-13-09Z) lên GHCR rồi trỏ CI + docker-compose về đó — dựng lại bất biến «CI = PROD» và cứu image khỏi chỗ chỉ-còn-trong-cache
 - 🔴 `S19-HR-AVATARWRITE-1` Đường GHI `employee_profiles.avatar_url` nhận chuỗi tuỳ ý: `createEmployeeProfileSchema`/`updateEmployeeProfileSchema.avatarUrl` (`z.string().url()`) nhận `javascript:`/`data:`/`http://host-lạ`; đề xuất đổi hồ sơ của NHÂN VIÊN (`avatar_file_id`) ghi NGUYÊN giá trị vào cột khi HR duyệt
 - 🟡 `S19-OPS-AVATARCENSUS-1` Đếm trên PROD (owner chạy câu ĐỌC): số hồ sơ có `avatar_url` dạng UUID mà KHÔNG có link `ME/avatar` sống (hiện chữ cái đầu ở mọi bề mặt ký) + số hồ sơ `avatar_url` http(s) (hiện chữ cái đầu ở SOCIAL theo D2-b)
@@ -63,6 +76,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 -  `S19-OPS-SCASATELLITE-1` Cổng `Dependency scan` chỉ quét workspace pnpm chính — `apps/fbpost` (npm, lockfile riêng) và `apps/lms` (repo git riêng) KHÔNG có SCA nào soi: thêm bước audit cho hai app vệ tinh + gỡ các advisory mức high trên dependency chạy thật của chúng
 - 🔴 `S19-SEC-MAILTAMPERDETECT-1` Giải mã mật khẩu SMTP hỏng vì ĐÍCH BỊ TRÁO ngoài ứng dụng hiện y hệt envelope ngữ cảnh cũ / sự cố khoá — chỉ có câu «kiểm tra đích trước khi nhập lại» + log `smtp-envelope-unusable`, không cảnh báo an ninh, không phân biệt ca tráo đích (nơi nhập lại mật khẩu = gửi nó cho kẻ tấn công)
 - 🟢 `S19-FE-MAILSAVEERR-1` Console «Cấu hình mail server»: lỗi Lưu KHÔNG phải MAIL-PASSWORD-REQUIRED hiện câu chung «Lưu thất bại.» — 400 `VALIDATION-ERR-001` của B4 (host/username PG lưu ≠ giá trị đã gắn vào ngữ cảnh mã hoá) mang câu server cố định mà admin không bao giờ thấy
+- 🔴 `S19-OPS-STORAGEPUBLIC-1` Storage PROD chỉ nghe ở địa chỉ nội bộ của máy chủ và tunnel không có hostname nào trỏ tới nó ⇒ URL ký do API phát (tải lên · xem · tải về tệp) chỉ dùng được TRÊN CHÍNH MÁY CHỦ: đưa storage tới được từ trình duyệt của người dùng — endpoint KÝ công khai tách khỏi endpoint nội bộ + đường vào riêng + CORS của bucket — để đính kèm chat · avatar · tệp hồ sơ · đính kèm SOCIAL chạy với người dùng ở máy khác
 
 **CHỜ (kẹt phụ thuộc):**
 - `S16-SOCIAL-VIDEOMIME-1` Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt`) KHÔNG có `video/*` dù SPEC-16 SC-01 hứa đính kèm video ⇒ mọi video ăn 415 `FOUNDATION-FILE-ERR-MIME` ở `054`; thêm `video/mp4` (allowlist + `MIME_TO_EXTENSIONS`, migration seed) — SAU khi tải về có `Content-Disposition` ⏳ cần: S16-SOCIAL-FE-2D
@@ -79,7 +93,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 3
 - **migration head**: idx 258 — `0591_s19secmailcred_revoke_mail_dest_update` (259 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -88,6 +102,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `a3283ce3` | 2026-10-09 | docs(files): S16-SOCIAL-FILEDISPOSITION-1 — ghi nhận deploy PROD 09/10 (build b091a8e7) + điều kiện D11 của FE-2D đạt + regen STATUS |
 | `b091a8e7` | 2026-10-09 | docs(files): S16-SOCIAL-FILEDISPOSITION-1 — sổ vết verify/CI/merge, tài liệu API-09 + BACKEND-11 theo hành vi mới, rút gọn mô tả WO trong backlog + regen STATUS/INDEX |
 | `3d8452bb` | 2026-10-09 | chore(docs): regen STATUS + INDEX sau merge #578 (S16-SOCIAL-FILEDISPOSITION-1) |
 | `c0cf6319` | 2026-10-09 | fix(files): S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung và tên tệp khi tải về gắn với thứ đã kiểm lúc đăng ký (#578) |
@@ -99,7 +114,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `9c28dd9b` | 2026-10-06 | chore(docs): seed S19-OPS-SCASATELLITE-1 + regen STATUS sau merge #574 (S16-SOCIAL-FE-3B) |
 | `01e4750f` | 2026-10-06 | feat(social): S16-SOCIAL-FE-3B — màn Thiết lập huy hiệu + màn Thống kê tương tác (xuất XLSX) + 2 mục rail (#574) |
 | `bd19092e` | 2026-10-06 | chore(docs): regen STATUS sau merge #573 (S19-OPS-AUDITCRIT-1) |
-| `fa478655` | 2026-10-06 | fix(deps): S19-OPS-AUDITCRIT-1 — gỡ 4 advisory CRITICAL + 2 HIGH (proxy-addr 2.0.8 · seroval 1.6.8 · tinypool 2.2.0 · source-map-js 1.2.2) (#573) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**606 WO** · có micro-plan: **348/606** · ⬜ 59 chờ · 🔵 0 đang làm · ✅ 546 xong · 🔴 1 chặn
+**607 WO** · có micro-plan: **348/607** · ⬜ 58 chờ · 🔵 2 đang làm · ✅ 546 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -600,7 +600,7 @@
 | `S16-SOCIAL-SCOPEDENIEDCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-GROUPERR-1 | `SocialAccessService.resolveActor` nhánh sàn Company ném message `AUTH |
 | `S16-SOCIAL-BE-2D` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-2D.md) | ✅S16-SOCIAL-BE-2B-2 | BE mở khoá lát C — (1) khối `kudos?` (người nhận · huy hiệu · lời nhắn |
 | `S16-SOCIAL-FE-2C` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2C.md) | ✅S16-SOCIAL-FE-2 ✅S16-SOCIAL-BE-2D | FE track B / lát C: SOC-SCREEN-009 Vinh danh — composer kudos (chọn ≤1 |
-| `S16-SOCIAL-FE-2D` | amber | ⬜ chờ | [📄](S16-SOCIAL-FE-2D.md) | ✅S16-SOCIAL-BE-1C ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FE-2 | FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qu |
+| `S16-SOCIAL-FE-2D` | amber | 🔵 đang làm | [📄](S16-SOCIAL-FE-2D.md) | ✅S16-SOCIAL-BE-1C ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FE-2 | FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qu |
 | `S16-SOCIAL-MENTIONLINK-1` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2D.md) | ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FEBLOCKSEED-1 | FE lát B tách từ S16-SOCIAL-FE-2D: @mention thành link hồ sơ từ mảng ` |
 | `S16-SOCIAL-MENTIONDIR-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1D | Web KHÔNG sinh được @mention: `002`/`004`/`015`/`016` đòi `mentionedUs |
 | `S16-SOCIAL-VIDEOMIME-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D ✅S16-SOCIAL-FILEDISPOSITION-1 | Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt` |
@@ -634,7 +634,7 @@
 | `S16-SOCIAL-FEPOSTSWITCH-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Trang chi tiết bài (`PostDetailPage`) giữ state của bài CŨ khi chỉ `$p |
 | `S16-SOCIAL-FECROSSOPEN-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Mở ứng dụng ở tên miền khác (LMS · Đăng bài Facebook) từ BỐN nơi — dải |
 | `S16-SOCIAL-FECOMMENTA11Y-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C ⏳S16-SOCIAL-FE-2D | Hàng bình luận: ba nút chữ «Trả lời» · «Xoá» · «Báo cáo» mang CÙNG tên |
-| `S16-SOCIAL-QA-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3 ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C ✅S16-SOCIAL-BE-3C | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
+| `S16-SOCIAL-QA-1` | amber | 🔵 đang làm | — *(chưa)* | ✅S16-SOCIAL-FE-3 ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C ✅S16-SOCIAL-BE-3C | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
 | `S16-SOCIAL-TESTISO-1` | amber | ✅ xong | [📄](S16-SOCIAL-TESTISO-1.md) | — | Vá CÁCH LY TEST: Nhóm 13 của s16-social-db2-invariants chạy thân migra |
 | `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
 | `S16-SOCIAL-AVATARPRESIGN-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-AVATARPRESIGN-1.md) | ✅S16-SOCIAL-BE-2D | `avatarUrl` của TOÀN module SOCIAL (tác giả bài/bình luận · người thả  |
@@ -716,6 +716,7 @@
 | `S19-FE-MAILSAVEERR-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S19-SEC-MAILAADBIND-1 | Console «Cấu hình mail server»: lỗi Lưu KHÔNG phải MAIL-PASSWORD-REQUI |
 | `S19-GOV-BOOKKEEPRE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S19-OPS-AUDITHIGH-1 | Nợ sổ sách sau #558: `BOOKKEEPING_RE` của reconcile thiếu `chore(backl |
 | `S19-LMS-NODEMAILER-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S19-OPS-AUDITHIGH-1 | `apps/lms` (repo git RIÊNG, ngoài cổng SCA) ghim `nodemailer ^8.0.7` — |
+| `S19-OPS-STORAGEPUBLIC-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Storage PROD chỉ nghe ở địa chỉ nội bộ của máy chủ và tunnel không có  |
 
 ---
 
