@@ -526,24 +526,22 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · sự kiện realtime trên
     );
   });
 
-  // QA1-BUG (nghi vấn S1 của plan §5.2 — ĐO XÁC NHẬN): lượt đổi loại không phát sự kiện nào, dù REST
-  // của chính người bấm trả tổng hợp mới (W-4a). Sản phẩm được vá thì `it.fails` tự đỏ ⇒ lật về `it`.
-  it.fails(
-    "QA1-BUG · đổi loại cảm xúc phải phát đúng 1 sự kiện mang tổng hợp mới (QA1-W-4)",
-    () => {
-      expect(
-        changeEvents,
-        "số sự kiện phát cho lượt đổi loại (giữa lượt thả đầu và neo)",
-      ).toHaveLength(1);
-      expect(changeEvents[0]).toEqual({
-        targetType: "post",
-        targetId: mainPostId,
-        postId: mainPostId,
-        likeCount: 1,
-        reactions: [{ emoji: "love", count: 1 }],
-      });
-    },
-  );
+  // Lượt đổi loại là một thay đổi của tổng hợp theo loại (`reactions[]`) dù `likeCount` giữ nguyên ⇒
+  // room phải nhận ĐÚNG 1 sự kiện mang tổng hợp mới (API-19 §7; QA1-BUG-1 đã vá ở repository). Đọc
+  // `changeEvents` do W-4a gom: các sự kiện của bài nằm GIỮA lượt thả đầu và neo phát sau.
+  it("QA1-W-4 · đổi loại cảm xúc ⇒ đúng 1 sự kiện mang tổng hợp mới", () => {
+    expect(
+      changeEvents,
+      "số sự kiện phát cho lượt đổi loại (giữa lượt thả đầu và neo)",
+    ).toHaveLength(1);
+    expect(changeEvents[0]).toEqual({
+      targetType: "post",
+      targetId: mainPostId,
+      postId: mainPostId,
+      likeCount: 1,
+      reactions: [{ emoji: "love", count: 1 }],
+    });
+  });
 
   it("QA1-W-5 bài ẩn · bài đơn vị · bình luận và cảm xúc trên bài nhóm ⇒ 0 sự kiện tới room công ty", async () => {
     // (a) Bài công ty: thả cảm xúc khi còn hiển thị (neo dương), rồi ẨN, rồi tương tác tiếp.

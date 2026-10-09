@@ -25,6 +25,12 @@ export class SocialReactionsRepository {
    *   emoji đang có). Ba nhánh vì chúng khác nhau ở HỆ QUẢ: chỉ `inserted` mới `+1 like_count`, và
    *   chỉ `inserted`/`updated` mới đáng phát WS — phát lại cho `unchanged` chỉ bắt cả công ty render
    *   lại đúng con số cũ (khuôn `ChatReactionsService.react`, `changed===true`).
+   *
+   * ⚠️ Phân loại nằm ở mệnh đề `WHERE` của `DO UPDATE`, KHÔNG ở `RETURNING`: `RETURNING` chỉ thấy
+   * hàng SAU khi ghi, nên so `emoji` ở đó luôn ra «bằng nhau» và nhánh `updated` không bao giờ được
+   * trả (QA1-BUG-1 — lượt đổi loại không phát WS). `WHERE` thì được tính trên hàng ĐANG có, đã khoá,
+   * trong chính câu lệnh ⇒ không có khe đọc-rồi-ghi: cùng emoji ⇒ 0 hàng trả về (`unchanged`, hàng
+   * vẫn bị khoá nên thứ tự khoá «cảm xúc → bộ đếm» giữ nguyên); khác emoji ⇒ 1 hàng `xmax <> 0`.
    */
   async put(
     tx: TenantTx,
@@ -34,18 +40,17 @@ export class SocialReactionsRepository {
     userId: string,
     emoji: string,
   ): Promise<"inserted" | "updated" | "unchanged"> {
-    const rows = await tx.execute<{ inserted: boolean; changed: boolean }>(sql`
+    const rows = await tx.execute<{ inserted: boolean }>(sql`
       INSERT INTO feed_reactions (company_id, target_type, target_id, user_id, emoji)
       VALUES (${companyId}, ${targetType}, ${targetId}, ${userId}, ${emoji})
       ON CONFLICT (company_id, target_type, target_id, user_id)
       DO UPDATE SET emoji = EXCLUDED.emoji, updated_at = now()
-      RETURNING (xmax = 0) AS inserted,
-                (xmax = 0 OR feed_reactions.emoji IS DISTINCT FROM ${emoji}) AS changed
+      WHERE feed_reactions.emoji IS DISTINCT FROM EXCLUDED.emoji
+      RETURNING (xmax = 0) AS inserted
     `);
     const row = rows.rows[0];
     if (!row) return "unchanged";
-    if (row.inserted) return "inserted";
-    return row.changed ? "updated" : "unchanged";
+    return row.inserted ? "inserted" : "updated";
   }
 
   /**
