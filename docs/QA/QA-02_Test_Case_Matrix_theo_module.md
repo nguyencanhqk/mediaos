@@ -61,7 +61,6 @@ Tài liệu này dùng để:
 | RECRUIT | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
 | ASSET | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
 | ROOM | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
-| SOCIAL | Chỉ test placeholder/permission nếu hiển thị Coming Soon |
 | MOBILE native | Chưa test native app, chỉ test responsive/mobile web nếu có |
 | AI | Chưa test trong MVP |
 
@@ -83,6 +82,14 @@ Tài liệu này dùng để:
 > Đáng nhớ nhất: **hai nhánh tư cách avatar `department`/`project` của `CHAT-DEC-016` trước đó không có
 > một ca nào** — cả deny lẫn allow — nên một lỗi chính tả cặp quyền sẽ làm tính năng chết vĩnh viễn mà
 > toàn bộ suite vẫn xanh.
+>
+> **SOCIAL «bảng tin nội bộ» đã RỜI bảng này (S16-SOCIAL-QA-1, 09/10/2026).** Module không còn là placeholder:
+> backend 59 route + FE của wave S16 đã lên master. Bộ nghiệm thu của WO thêm **909 ca / 15 int-spec**
+> `s16-social-qa1-*` (cần `LANE_DB`) bên cạnh 33 int-spec SOCIAL đã có. Bảng gọn theo nhóm ở §13b; bảng chi tiết
+> (ma trận 59 route × 9 vai · mã lỗi → ca · mutant · số coverage) **không** nhân bản vào tài liệu này — nguồn duy nhất
+> là [`evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md`](evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md).
+>
+> ⚠️ «SOCIAL» ở đây là bảng tin nội bộ của `apps/api` + `apps/app` — KHÔNG phải app vệ tinh `apps/fbpost`.
 
 ---
 
@@ -124,6 +131,7 @@ QA02-CROSS-LEAVE-ATT-001
 | TASK | Công việc & Dự án |
 | NOTI | Thông báo |
 | DASH | Dashboard |
+| SOCIAL | Bảng tin nội bộ (wave S16 — xem §13b) |
 | CROSS | Liên module |
 | NFR | Non-functional Requirement |
 | REG | Regression |
@@ -181,7 +189,11 @@ QA02-CROSS-LEAVE-ATT-001
 | TASK | Có | Có | Có | Có | Có | Có | Có | Có | Có |
 | NOTI | Có | Có | Có | Có | Có | Có | Có | Có | Có |
 | DASH | Có | Có | Có | Có | Có | Có | Có | Có | Có |
+| SOCIAL | Riêng¹ | Có | Có | Có | Có | Có | Có | Chưa¹ | Có |
 | CROSS | Có | Có | Có | Có | Có | Có | Có | Có | Có |
+
+> ¹ SOCIAL: bộ nghiệm thu S16-SOCIAL-QA-1 là bộ BACKEND (API · DB · quyền · realtime). Ca giao diện nằm ở các WO FE của
+> wave S16 (ngoài WO nghiệm thu); chưa có ca tải / hiệu năng.
 
 ---
 
@@ -565,6 +577,35 @@ QA02-CROSS-LEAVE-ATT-001
 | QA02-DASH-CONFIG-002 | Config widget trùng | P1 | Negative | API/DB | Existing config | Create duplicate | 409 conflict/upsert theo strategy |
 | QA02-DASH-SEC-001 | Dashboard không trả audit diff nhạy cảm | P0 | Security | API | System logs widget | GET widget | old_value/new_value sensitive masked/không trả |
 | QA02-DASH-PERF-001 | /dashboard/me với 5-8 widget phản hồi trong SLA | P1 | Performance | API | Dữ liệu đủ lớn | GET /dashboard/me | Response đạt SLA, không N+1 |
+
+---
+
+## 13b. Ma trận test SOCIAL — bảng tin nội bộ (wave S16)
+
+Bảng GỌN theo nhóm. Mỗi dòng ánh xạ một nhóm `QA02-SOCIAL-…` ↔ dải mã ca `QA1-…` ↔ file int-spec
+(`apps/api/test/integration/s16-social-qa1-<tên>.int-spec.ts`). Bảng chi tiết từng route / từng mã lỗi / từng mutant:
+[`evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md`](evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md).
+
+| Test ID | Nhóm | Priority | Type | Dải mã ca | File (`s16-social-qa1-…`) | Số ca |
+| --- | --- | --- | --- | --- | --- | ---: |
+| QA02-SOCIAL-KIT-001 | Bộ đồ nghề + ca khói (2 công ty, 9 vai, đối soát 7 cột đếm tự kiểm) | P0 | Positive | QA1-K-1…8 | `smoke` | 15 |
+| QA02-SOCIAL-PERM-001 | Ma trận cặp quyền: đủ cặp ⇒ đúng mã · không token ⇒ 401 · thiếu đúng một cặp ⇒ 403 · sàn scope · kiểm đủ 59 route | P0 | Permission | QA1-M-A · M-U · M-P · M-F · M-C | `pair-matrix` | 196 |
+| QA02-SOCIAL-PERM-002 | 9 vai canonical + 2 tổ hợp × 59 route · `/auth/me` đúng số cặp theo vai | P0 | Permission | QA1-M-R | `roles` | 261 |
+| QA02-SOCIAL-PERM-003 | Cặp kiểm ở tầng 2 (tin tức · poll · sáng kiến · vinh danh · kiểm duyệt · báo cáo · nhóm · tệp) + lọc theo đơn vị | P0 | Permission | QA1-M-T-1…10 · M-S-1…3 | `tier2-pairs` | 16 |
+| QA02-SOCIAL-SEC-001 | IDOR cùng công ty trên mọi route nhận `post_id`: bài nhóm kín · bài ẩn · bài đã xoá · bài đơn vị khác | P0 | Security | QA1-I-P | `idor-posts` | 96 |
+| QA02-SOCIAL-SEC-002 | IDOR nội dung: bình luận · sửa / xoá của người khác · ack · nhóm kín · danh sách | P0 | Security | QA1-I-C · I-O · I-A · I-G · I-L | `idor-content` | 24 |
+| QA02-SOCIAL-SEC-003 | Chéo công ty: id ở đường dẫn · id trong thân · route danh sách · dữ liệu công ty kia nguyên vẹn | P0 | Security | QA1-T · T-B · T-L · T-Q · T-X | `cross-tenant` | 133 |
+| QA02-SOCIAL-SEC-004 | Dữ liệu cá nhân: sinh nhật không lộ năm / ẩn theo tuỳ chọn · bình chọn không lộ danh tính cử tri | P0 | Security | QA1-P-B0…5 · P-V0…3 | `pii` | 11 |
+| QA02-SOCIAL-ERR-001 | Mã lỗi theo MÃ qua HTTP (52 khoá có ca · 3 không ra dây · 2 không ném) + ratchet | P0 | Negative | QA1-E-01…14 · E-X1…5 · E-N1 · E-G1 · E-R1…3 | `error-codes` | 77 |
+| QA02-SOCIAL-DB-001 | Đua tất định like · lượt xem · phiếu · tham gia nhóm · xoá đôi + đối soát COUNT ↔ 7 cột đếm | P0 | Concurrency | QA1-R-0…6 · R-8…12 | `race` | 12 |
+| QA02-SOCIAL-FLOW-001 | Xoá mềm lan đủ 6 bề mặt · ẩn · khôi phục · xoá nhóm | P0 | Workflow | QA1-S-0…9 · S-H · S-G · S-C · S-X | `softdelete` | 16 |
+| QA02-SOCIAL-INT-001 | Realtime trên dây: tập khoá payload · room · đổi loại cảm xúc · bài không hiển thị không phát | P1 | Integration | QA1-W-0…7 · W-4a · W-4b | `ws` | 10 |
+| QA02-SOCIAL-VAL-001 | Fuzz có hạt giống: thân bài · hashtag · mention · emoji — không 5xx, đúng oracle | P1 | Negative | QA1-F-0 · F-B · F-H · F-M · F-E · F-X | `fuzz` | 6 |
+| QA02-SOCIAL-VAL-002 | Ký tự U+0000 ở thân / query ⇒ 400 chuẩn, không ghi gì; 401 / 403 đứng trước | P1 | Negative | QA1-F-1 | `input-ctrl` | 32 |
+| QA02-SOCIAL-REG-001 | Ca bù cho điểm gác lộ ra ở lượt kiểm toán mutant (cờ quản lý bài theo scope · đếm lại khi khôi phục) | P1 | Regression | QA1-G-1…4 | `gaps` | 4 |
+
+Tổng 909 ca. Chạy: `LANE_DB=<lane> pnpm --filter @mediaos/api exec vitest run test/integration/s16-social-qa1-` (thiếu
+`LANE_DB` thì cả 15 file tự bỏ qua — CLAUDE.md §9.5). Coverage `src/social/**`: script `test:cov:social` của gói api.
 
 ---
 

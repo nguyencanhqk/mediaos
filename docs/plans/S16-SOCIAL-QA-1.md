@@ -279,17 +279,17 @@ Cuối MỖI lát: spec của lát XANH (ca chạm lỗi sản phẩm ở dạng
 
 Chi tiết (cơ chế nghi ngờ · `file:dòng`) của cả bảng: sổ ngoài kho — kho public chỉ giữ mã + một dòng.
 
-| #   | Nghi vấn (một dòng trung tính) | Ca đo | Vùng · cách xử |
-| --- | ------------------------------ | ----- | -------------- |
-| S1  | Sự kiện realtime khi ĐỔI loại cảm xúc có thể không phát | W-4 | vàng, gốc trong `S/` ⇒ `it.fails` → vá trong WO (LIGHT) |
-| S2  | Một lớp ký tự điều khiển trong chuỗi đầu vào: nghi trả sai lớp status | F-1 | vàng — O7 (vá hẹp trong `S/`, ca commit cùng bản vá) |
-| S3  | Thân request quá cỡ: nghi trả sai lớp status | E-X3 | vàng, gốc NGOÀI `S/` ⇒ O8 (mặc định không vá) |
-| S4  | Thẻ không còn bài nào vẫn nằm trong danh sách thẻ | S-4 | vàng — đi cùng O3 (ghim; vá nếu owner chọn) |
-| S5  | Thông báo của sự kiện «bài bị báo cáo» thất bại KHÔNG tất định ở lượt nền — đua lúc dọn test hay lỗi thật? | E-N1 | vàng; gốc trong `S/` ⇒ vá trong WO, gốc ngoài ⇒ O8 |
-| S6  | = O4 | I-G-5/6 | đỏ nếu owner chọn (b); ca giữ ngoài kho (D23) |
-| S7  | = O5 | S-G (vế tác giả) | như trên |
-| S8  | = O6 | F-O6 | như trên |
-| S9  | = O3 | I-L-4 | như trên |
+| #   | Nghi vấn (một dòng trung tính) | Ca đo | Vùng · cách xử | Trạng thái sau khi chạy (09/10/2026) |
+| --- | ------------------------------ | ----- | -------------- | ------------------------------------ |
+| S1  | Sự kiện realtime khi ĐỔI loại cảm xúc có thể không phát | W-4 | vàng, gốc trong `S/` ⇒ `it.fails` → vá trong WO (LIGHT) | ĐÃ VÁ = QA1-BUG-1 (`aad82bb7`); W-4 lật `it.fails` → `it`, thêm W-4a · W-4b |
+| S2  | Một lớp ký tự điều khiển trong chuỗi đầu vào: nghi trả sai lớp status | F-1 | vàng — O7 (vá hẹp trong `S/`, ca commit cùng bản vá) | ĐÃ VÁ hẹp trong SOCIAL = QA1-BUG-2 (`4c96fa4a` · `853f0eb1`); biên chung ⇒ WO `S1-FND-NULINPUT-1` |
+| S3  | Thân request quá cỡ: nghi trả sai lớp status | E-X3 | vàng, gốc NGOÀI `S/` ⇒ O8 (mặc định không vá) | XÁC NHẬN = QA1-BUG-3; không vá (O8-a), ca `[O8]` assert bất biến yếu ⇒ WO `S1-FND-BODYLIMIT-1` |
+| S4  | Thẻ không còn bài nào vẫn nằm trong danh sách thẻ | S-4 | vàng — đi cùng O3 (ghim; vá nếu owner chọn) | đã đo — chờ owner (đi cùng O3) |
+| S5  | Thông báo của sự kiện «bài bị báo cáo» thất bại KHÔNG tất định ở lượt nền — đua lúc dọn test hay lỗi thật? | E-N1 | vàng; gốc trong `S/` ⇒ vá trong WO, gốc ngoài ⇒ O8 | KHÔNG phải lỗi sản phẩm: E-N1 xanh 6/6 lượt một-file, cụm tuần tự 0 dòng lỗi; chỉ lộ khi nhiều file chạy song song (đua giữa bước dọn của một spec và worker của file khác) |
+| S6  | = O4 | I-G-5/6 | đỏ nếu owner chọn (b); ca giữ ngoài kho (D23) | đã đo — chờ owner; ca giữ ngoài kho |
+| S7  | = O5 | S-G (vế tác giả) | như trên | đã đo — chờ owner; ca giữ ngoài kho |
+| S8  | = O6 | F-O6 | như trên | đã đo — chờ owner; ca giữ ngoài kho |
+| S9  | = O3 | I-L-4 | như trên | đã đo — chờ owner; ca giữ ngoài kho |
 
 Ghi nhận mức thấp, KHÔNG đo trong WO (7 mục — không tái lập tất định hoặc chỉ là hiển thị; danh sách ở sổ ngoài kho). Fuzz chỉ ép bất biến chung trên các đầu vào đó, không ghim hành vi đáng ngờ.
 
@@ -373,17 +373,18 @@ Rồi `pnpm --filter @mediaos/api typecheck`. Không bao giờ in / grep `.env`;
 | ---- | ---- | ------ | ------------------ | ------------------- |
 | Plan | 09/10/2026 | | — | |
 | Plan-review | 09/10/2026 | (commit này) | — | plan-review lượt 1: PASS_WITH_FIXES (0 BLOCKER · 1 HIGH · 7 MEDIUM · 5 LOW) — nhận 13 · bác 0. PR-07 nhận nhưng LỆCH cách vá: không amend (agent vá plan không được viết lại lịch sử) ⇒ thêm §7.2 bước 0 (gộp commit plan trước khi push). Thêm O8 · D23 · Bảng 4 |
-| L0 | | | | |
-| L1 | | | | |
-| L2 | | | | |
-| L3 | | | | |
-| L4 | | | | |
-| L5 | | | | |
-| L6 | | | | |
-| L7 | | | | |
-| L8 | | | | |
-| Pha vá (QA1-BUG-n) | | | | |
-| Kiểm toán mutant | | | | |
-| Gate | | | | |
-| Z · verify 7.2 (bước 0–4) · coverage | | | | |
+| L0 | 09/10/2026 | 9687d609 | 15 (QA1-K-1…8) | kit tách thêm `-kit-race` · `-kit-counters`; mutant ★ đỏ đúng cột (`feed_posts.like_count`) |
+| L1 | 09/10/2026 | b91484c0 | 196 | bộ gieo tách sang `H/social-qa1-seed.ts` (D1); guard ĐÓNG khi route vắng decorator (plan giả định mở) — 2/2 ★ đỏ |
+| L2 | 09/10/2026 | ee3bed2d | 277 (roles 261 · tier2 16) | xanh ngay lượt đầu, 0 literal phải sửa; 2/2 ★ đỏ |
+| L3 | 09/10/2026 | 5ae4b792 | 120 (idor-posts 96 · idor-content 24) | tách HAI file + helper `-idor-util`; thêm 19 ca «-cũ» vì ★1 theo plan không đỏ (hai lớp chặn trùng nhau); đăng bài vào nhóm kín khi chờ duyệt ⇒ 404 theo API-19 (plan ghi 403); 3 ca O3 / O4 giữ ngoài kho |
+| L4 | 09/10/2026 | a4627fba | 133 | thêm T-Q-1…4 (bộ lọc bảng tin) · pha «A nguyên vẹn» băm toàn bộ hàng; 2/2 ★ đỏ đúng 1 ca |
+| L5 | 09/10/2026 | debf0114 | 77 (+ tầng D census · 27 khoá nâng tại chỗ ở 9 file cũ) | E-02 · E-06 phải có ca riêng; lộ QA1-BUG-3 ⇒ E-X3 dạng `[O8]`; 2/2 ★ + 2 tự-kiểm ratchet đỏ |
+| L6 | 09/10/2026 | 2570fc3b | 12 | hàm bọc `race()` tách lỗi harness khỏi lỗi sản phẩm; 2/2 ★ đỏ |
+| L7 | 09/10/2026 | 8ad6ab2c | 27 (softdelete 16 · pii 11) | S-4 dùng hai thẻ; 2 ca O5 / S4 giữ ngoài kho; 2/2 ★ đỏ |
+| L8 | 09/10/2026 | 48b6fc9a | 15 (ws 9 · fuzz 6) | lộ QA1-BUG-1 (W-4 `it.fails`) + QA1-BUG-2 (F-1 giữ ngoài kho tới bản vá); F-O6 giữ ngoài kho; 2/2 ★ đỏ |
+| Pha vá (QA1-BUG-n) | 09/10/2026 | aad82bb7 · 4c96fa4a | +31 (`input-ctrl`) + 19 ca unit pipe; W-4 đỏ → xanh | BUG-1 vá ở repository (một câu lệnh); BUG-2 vá bằng pipe cấp class trên 12 controller (O7-b) — rộng hơn «`S/social.dto.ts`» của plan vì đo được cả query; BUG-3 không vá (O8-a) |
+| Kiểm toán mutant | 09/10/2026 | 8fb87e99 | +4 (QA1-G-1…4) | 11 điểm gác: 8 bị bắt · 2 sống sót (M02 · M11) đã bù ca · 1 không áp dụng (M01) |
+| Gate | 09/10/2026 | 853f0eb1 · 648e569c | +2 (W-4b · 1 ca `input-ctrl`) + 5 ca unit pipe ⇒ 909 | `ecc:typescript-reviewer` PASS_WITH_FIXES (1 MEDIUM · 6 LOW) · `security-reviewer` hẹp PASS_WITH_FIXES (1 MEDIUM · 3 LOW); 10/11 finding đã vá, G1-07 ghi nợ; 2 mutant của bước vá đỏ đúng thông điệp |
+| Z · coverage | 09/10/2026 | (commit này) | — (không thêm ca) | `test:cov:social` đủ 48 int-spec SOCIAL (thêm 15 cũ + 15 mới; trừ `s16-filedisposition-storage`). Coverage `src/social/**` trên lane, 81 file · 2.335 ca: statements 98,66 · branches 92,65 · functions 99,77 · lines 98,66 (nền 98,16 · 90,75 · 99,31 · 98,16). LỆCH: lượt một tiến trình chết `Channel closed` 3/3 ⇒ đo theo 6 mảnh tuần tự rồi gộp báo cáo. Seed 4 WO nợ: `S16-SOCIAL-DOC-3` (không phải DOC-2 — id đó đã có chủ) · `S1-FND-BODYLIMIT-1` · `S1-FND-NULINPUT-1` · `S16-SOCIAL-QADEBT-1` |
+| verify 7.2 (bước 0–4) | | | | |
 | PR | | | | |
