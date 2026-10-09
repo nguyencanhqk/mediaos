@@ -114,7 +114,7 @@ describe.skipIf(!hasLaneDb)(
       get: storageGet,
       // S2-FND-FILE-2 (storage-port): confirm-upload flow only — unused by this suite (upload/download
       // security cases don't exercise confirm). Kept minimal so the stub still satisfies StorageAdapter.
-      stat: async () => ({ exists: true, sizeBytes: 0 }),
+      stat: async () => ({ exists: true, sizeBytes: 0, contentType: null }),
       getBytes: async () => new Uint8Array(),
     };
 

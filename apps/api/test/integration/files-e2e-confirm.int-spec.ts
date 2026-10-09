@@ -291,7 +291,9 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
     const fileId = reg.body.data.fileId as string;
     const uploadUrl = reg.body.data.uploadUrl as string;
 
-    // Client PUTs bytes directly to the presigned URL (ContentType pinned at sign time).
+    // Client PUTs bytes directly to the presigned URL. `content-type` is one of the SIGNED headers, so the
+    // header below must equal the registered MIME byte-for-byte (a different value is refused by storage —
+    // measured in s16-filedisposition-storage.int-spec.ts).
     const put = await fetch(uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": "text/plain" },
@@ -335,10 +337,10 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
       sizeBytes: bytes.length + 100,
     });
     const fileId = reg.body.data.fileId as string;
-    // PUT the presigned URL — the URL pins the DECLARED (wrong) content-length, so we must send that many
-    // bytes for the PUT to succeed; then stat reports the padded size which still differs is impossible.
-    // Instead: create a SEPARATE object of the real length by signing is not trivial → assert via absent path.
-    // Here we PUT the real bytes to a url pinned at len+100 → MinIO rejects (length mismatch) → object absent.
+    // The presigned URL signs `content-length` = the DECLARED size (len+100) and `content-type` = the
+    // registered MIME. Here the Content-Type is correct and only the body LENGTH differs (real bytes are
+    // shorter), so the PUT is expected to be refused and the object to stay absent. This case is about SIZE;
+    // a stored type that differs from the registered MIME is covered by s16-filedisposition-storage.int-spec.ts.
     await fetch(reg.body.data.uploadUrl as string, {
       method: "PUT",
       headers: { "Content-Type": "text/plain" },

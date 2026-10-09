@@ -177,7 +177,12 @@ export class ServerFileService {
   ): Promise<IssuedServerFileUrl> {
     const deny = fileDownloadStateDenyReason(file);
     if (deny !== null) throw new ServerFileNotDownloadableError(file.id, deny);
-    const signed = await this.storage.get({ key: file.storagePath, companyId });
+    const signed = await this.storage.get({
+      key: file.storagePath,
+      companyId,
+      registeredMimeType: file.mimeType,
+      fileName: file.originalName,
+    });
     await this.accessLog.record(tx, {
       fileId: file.id,
       action: "GenerateSignedUrl",

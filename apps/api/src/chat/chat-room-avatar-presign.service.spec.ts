@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DatabaseService, TenantTx } from "../db/db.service";
 import type { FileRepository } from "../foundation/files/file.repository";
-import type { StorageAdapter } from "../storage/storage-adapter.port";
+import type { StorageAdapter, StorageGetInput } from "../storage/storage-adapter.port";
 import { ChatRoomAvatarPresignService } from "./chat-room-avatar-presign.service";
 
 /**
@@ -17,6 +17,9 @@ const COMPANY = "11111111-1111-4111-8111-111111111111";
 const ROOM_A = "22222222-2222-4222-8222-222222222222";
 const ROOM_B = "33333333-3333-4333-8333-333333333333";
 
+/** MIME đã đăng ký + tên gốc mà projection trả kèm — cùng giá trị cho mọi fixture. */
+const REGISTERED = { mimeType: "image/png", originalName: "ảnh phòng.png" };
+
 function build(opts?: {
   verified?: { roomId: string; storagePath: string }[];
   failFor?: string[];
@@ -26,12 +29,14 @@ function build(opts?: {
 
   // Khai ĐỦ ba tham số (dù thân không dùng): `mock.calls[i][1]`/`[2]` là thứ hai ca dưới đây assert —
   // mock không tham số cho ra tuple rỗng, và TS chặn ngay việc đọc phần tử không tồn tại.
+  // Projection thật trả kèm hai cột của hàng `files` (S16-SOCIAL-FILEDISPOSITION-1) — fixture mang đủ hình dạng.
   const findVerifiedRoomAvatarsTx = vi.fn(
-    async (_companyId: string, _roomIds: string[], _tx: unknown) => opts?.verified ?? [],
+    async (_companyId: string, _roomIds: string[], _tx: unknown) =>
+      (opts?.verified ?? []).map((v) => ({ ...v, ...REGISTERED })),
   );
   const fileRepo = { findVerifiedRoomAvatarsTx } as unknown as FileRepository;
 
-  const get = vi.fn(async ({ key }: { key: string; companyId: string }) => {
+  const get = vi.fn(async ({ key }: StorageGetInput) => {
     if (opts?.failFor?.includes(key)) throw new Error(`storage down: ${key}`);
     return { url: `https://signed.test/${key}`, expiresAt: new Date() };
   });
@@ -63,6 +68,20 @@ describe("ChatRoomAvatarPresignService — một lô, không N+1", () => {
     ]);
     expect(map.get(ROOM_A)).toBe("https://signed.test/co/a.png");
     expect(map.get(ROOM_B)).toBe("https://signed.test/co/b.png");
+  });
+
+  it("ký với MIME đã đăng ký + tên gốc của CHÍNH hàng đó (không hằng đoán)", async () => {
+    const { svc, get } = build({ verified: [{ roomId: ROOM_A, storagePath: "co/a.png" }] });
+
+    await svc.resolveRoomAvatars(COMPANY, [ROOM_A]);
+
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith({
+      key: "co/a.png",
+      companyId: COMPANY,
+      registeredMimeType: REGISTERED.mimeType,
+      fileName: REGISTERED.originalName,
+    });
   });
 
   it("danh sách rỗng ⇒ map rỗng, KHÔNG chạm DB và KHÔNG chạm storage", async () => {

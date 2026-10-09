@@ -188,8 +188,8 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
       url: "https://signed.example/put",
       expiresAt: new Date("2026-06-24T00:05:00Z"),
     })),
-    // S2-FND-FILE-2 — confirm HEAD/GET. Defaults: object exists, size matches the register fixture (1024).
-    stat: vi.fn(async () => ({ exists: true, sizeBytes: 1024 })),
+    // S2-FND-FILE-2 — confirm HEAD/GET. Defaults: object exists, size + stored type match the register fixture.
+    stat: vi.fn(async () => ({ exists: true, sizeBytes: 1024, contentType: "application/pdf" })),
     getBytes: vi.fn(async () => new Uint8Array([1, 2, 3, 4])),
   };
 
@@ -841,7 +841,11 @@ describe("FileService.confirmUpload (S2-FND-FILE-2)", () => {
     h.fileRepo.findByIdTx.mockResolvedValue(
       makeFileRow({ uploadStatus: "Pending", fileSizeBytes: 4 }),
     );
-    h.storage.stat.mockResolvedValue({ exists: true, sizeBytes: 4 });
+    h.storage.stat.mockResolvedValue({
+      exists: true,
+      sizeBytes: 4,
+      contentType: "application/pdf",
+    });
     h.storage.getBytes.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
 
     const res = await h.service.confirmUpload(user, FILE, {});
@@ -856,7 +860,7 @@ describe("FileService.confirmUpload (S2-FND-FILE-2)", () => {
 
   it("object absent → markFailed('object-absent') + 422 FOUNDATION-FILE-ERR-CONFIRM-ABSENT, checksum NOT persisted", async () => {
     h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow({ uploadStatus: "Pending" }));
-    h.storage.stat.mockResolvedValue({ exists: false, sizeBytes: null });
+    h.storage.stat.mockResolvedValue({ exists: false, sizeBytes: null, contentType: null });
 
     const caught = await h.service.confirmUpload(user, FILE, {}).catch((e: unknown) => e);
     expect(caught).toBeInstanceOf(UnprocessableEntityException);
@@ -873,7 +877,11 @@ describe("FileService.confirmUpload (S2-FND-FILE-2)", () => {
     h.fileRepo.findByIdTx.mockResolvedValue(
       makeFileRow({ uploadStatus: "Pending", fileSizeBytes: 1024 }),
     );
-    h.storage.stat.mockResolvedValue({ exists: true, sizeBytes: 9999 });
+    h.storage.stat.mockResolvedValue({
+      exists: true,
+      sizeBytes: 9999,
+      contentType: "application/pdf",
+    });
 
     const caught = await h.service.confirmUpload(user, FILE, {}).catch((e: unknown) => e);
     expect(caught).toBeInstanceOf(ConflictException);
@@ -881,6 +889,7 @@ describe("FileService.confirmUpload (S2-FND-FILE-2)", () => {
       "FOUNDATION-FILE-ERR-CONFIRM-MISMATCH",
     );
     expect(h.fileRepo.markFailedTx).toHaveBeenCalledTimes(1);
+    expect(h.fileRepo.markFailedTx.mock.calls[0][2]).toBe("size-mismatch");
     expect(h.fileRepo.markUploadedTx).not.toHaveBeenCalled();
     expect(h.storage.getBytes).not.toHaveBeenCalled();
   });

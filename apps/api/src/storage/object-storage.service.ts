@@ -8,6 +8,11 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ATTACHMENT_ALLOWED_CONTENT_TYPES, ATTACHMENT_MAX_BYTES } from "@mediaos/contracts";
+import { resolveServeDirectives } from "./content-serving";
+import {
+  assertPresignedGetPinsServeDirectives,
+  assertPresignedPutSignsContentType,
+} from "./presign-invariants";
 import { assertKeyInTenant, validateKey } from "./storage-key";
 import type { StorageStatResult } from "./storage-adapter.port";
 
@@ -22,11 +27,17 @@ export class StorageNotConfiguredError extends Error {
   }
 }
 
+/** Which hard ceiling an upload failed — lets the caller map to the right HTTP status (415 vs 413). */
+export type UnsupportedAttachmentKind = "content-type" | "size";
+
 /** Thrown when a content type is not in the allowlist or the declared size exceeds the ceiling. */
 export class UnsupportedAttachmentError extends Error {
-  constructor(reason: string) {
+  readonly kind: UnsupportedAttachmentKind;
+
+  constructor(reason: string, kind: UnsupportedAttachmentKind) {
     super(reason);
     this.name = "UnsupportedAttachmentError";
+    this.kind = kind;
   }
 }
 
@@ -39,6 +50,19 @@ export class StorageObjectBodyMissingError extends Error {
     super(`Object storage trả về response không có Body cho key: ${key}`);
     this.name = "StorageObjectBodyMissingError";
   }
+}
+
+/**
+ * How a download must be SERVED (S16-SOCIAL-FILEDISPOSITION-1). Both values are REQUIRED and come from
+ * the registered metadata row of the file — never from the object as stored, never a caller's guess.
+ * There is deliberately no "unknown" variant: a caller that cannot name the registered type must not
+ * be able to obtain a download URL.
+ */
+export interface DownloadServeAs {
+  /** MIME type registered for the file (the row's value, verbatim — normalization happens here). */
+  registeredMimeType: string;
+  /** Original file name of the row (verbatim — sanitized here before it reaches a header). */
+  fileName: string;
 }
 
 const ALLOWED_CONTENT_TYPES = new Set<string>(ATTACHMENT_ALLOWED_CONTENT_TYPES);
@@ -122,21 +146,35 @@ export class ObjectStorageService {
    */
   assertUploadAllowed(contentType: string, sizeBytes: number): void {
     if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
-      throw new UnsupportedAttachmentError(`Content-type không được phép: ${contentType}`);
+      throw new UnsupportedAttachmentError(
+        `Content-type không được phép: ${contentType}`,
+        "content-type",
+      );
     }
     if (!Number.isInteger(sizeBytes) || sizeBytes <= 0) {
-      throw new UnsupportedAttachmentError("Kích thước file không hợp lệ.");
+      throw new UnsupportedAttachmentError("Kích thước file không hợp lệ.", "size");
     }
     if (sizeBytes > ATTACHMENT_MAX_BYTES) {
-      throw new UnsupportedAttachmentError(`File vượt giới hạn ${ATTACHMENT_MAX_BYTES} bytes.`);
+      throw new UnsupportedAttachmentError(
+        `File vượt giới hạn ${ATTACHMENT_MAX_BYTES} bytes.`,
+        "size",
+      );
     }
   }
 
   /**
    * Presigned PUT URL for uploading bytes to `key`. The key MUST be server-derived + validated; we
    * re-validate here so this method is a hard boundary (no caller can pass a traversal key).
-   * The presigned request pins content-type and content-length so the client cannot upload a
-   * different type or an oversized object than was authorized at intent time.
+   *
+   * What the signature actually binds (S16-SOCIAL-FILEDISPOSITION-1):
+   *  - `content-length` — signed by the presigner by default;
+   *  - `content-type` — signed ONLY because we pass it in `signableHeaders` (the presigner leaves it
+   *    unsigned otherwise). Storage then compares the header the client sends byte-for-byte against
+   *    `contentType`, so the upload must declare exactly the type authorized at intent time.
+   * `assertUploadAllowed` MUST stay before signing: with no ContentType on the command the SDK would
+   * sign a default type instead of failing.
+   * After signing we re-check the URL (fail-closed): if `content-type` is not among the signed headers
+   * we log at error level and throw `StoragePresignInvariantError` — no URL is returned.
    */
   async createUploadUrl(
     key: string,
@@ -153,9 +191,29 @@ export class ObjectStorageService {
       ContentType: contentType,
       ContentLength: sizeBytes,
     });
-    return getSignedUrl(this.getClient(), command, {
+    const url = await getSignedUrl(this.getClient(), command, {
       expiresIn: expiresInSec ?? config.presignTtlSec,
+      signableHeaders: new Set(["content-type"]),
     });
+    this.verifyPresigned(() => assertPresignedPutSignsContentType(url));
+    return url;
+  }
+
+  /**
+   * Run a post-signing self-check. On failure: log at ERROR level HERE (several callers downgrade a
+   * signing failure to a warning) and rethrow — the URL is never returned. The log line carries only
+   * the error's own message (operation + reason, naming a parameter but never its value); never the
+   * URL, the object key, the signature or a file name.
+   */
+  private verifyPresigned(check: () => void): void {
+    try {
+      check();
+    } catch (err) {
+      const name = err instanceof Error ? err.name : "UnknownError";
+      const message = err instanceof Error ? err.message : "lỗi không xác định";
+      this.logger.error(`${name}: ${message} — không phát URL.`);
+      throw err;
+    }
   }
 
   /**
@@ -195,14 +253,39 @@ export class ObjectStorageService {
    * Presigned GET URL for downloading `key`. Caller MUST have already resolved the metadata row via
    * RLS (tenant scope) and pass the owning companyId — we re-assert the key is inside that tenant's
    * prefix before signing (belt-and-suspenders on top of RLS).
+   *
+   * What the response carries is decided HERE from the registered metadata (`serveAs`), not from the
+   * object as stored (S16-SOCIAL-FILEDISPOSITION-1): `resolveServeDirectives` yields the response
+   * content type (always a normalized `type/subtype`) and a disposition — `inline` for the explicit
+   * inline list, `attachment` for every other type. Both ALWAYS become `response-*` query parameters,
+   * which are part of the signed query — storage answers with exactly these values (overriding whatever
+   * is stored alongside the object) and rejects a URL whose values were edited. Neither is ever left
+   * out: an omitted parameter makes storage answer with the value stored with the object.
+   * `X-Content-Type-Options` cannot be set through a signed parameter.
+   * After signing we re-check the URL (fail-closed): each of the two parameters must be present exactly
+   * once and EQUAL the value decided here, otherwise log at error level and throw
+   * `StoragePresignInvariantError` — no URL is returned.
    */
-  async createDownloadUrl(key: string, companyId: string, expiresInSec?: number): Promise<string> {
+  async createDownloadUrl(
+    key: string,
+    companyId: string,
+    serveAs: DownloadServeAs,
+    expiresInSec?: number,
+  ): Promise<string> {
     const config = this.assertConfigured();
     assertKeyInTenant(key, companyId);
-    const command = new GetObjectCommand({ Bucket: config.bucket, Key: key });
-    return getSignedUrl(this.getClient(), command, {
+    const directives = resolveServeDirectives(serveAs.registeredMimeType, serveAs.fileName);
+    const command = new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      ResponseContentType: directives.responseContentType,
+      ResponseContentDisposition: directives.responseContentDisposition,
+    });
+    const url = await getSignedUrl(this.getClient(), command, {
       expiresIn: expiresInSec ?? config.presignTtlSec,
     });
+    this.verifyPresigned(() => assertPresignedGetPinsServeDirectives(url, directives));
+    return url;
   }
 
   /**
@@ -210,9 +293,11 @@ export class ObjectStorageService {
    * actually landed BEFORE the caller (FileService.confirm) marks the file row 'Uploaded'. Re-asserts
    * `key ∈ companyId` prefix (cross-tenant guard) BEFORE the SDK call — mirrors createDownloadUrl.
    * Never throws for a genuinely-absent object (404/NotFound): returns
-   * `{ exists: false, sizeBytes: null }` so the caller can set upload_status='Failed' instead of
-   * crashing. Any OTHER error (transport/auth) is rethrown — an unknown failure is NEVER silently
-   * reinterpreted as "object missing" (silent-failure-hunter guard).
+   * `{ exists: false, sizeBytes: null, contentType: null }` so the caller can set
+   * upload_status='Failed' instead of crashing. Any OTHER error (transport/auth) is rethrown — an
+   * unknown failure is NEVER silently reinterpreted as "object missing" (silent-failure-hunter guard).
+   * `contentType` is the STORED type exactly as storage reports it (no normalization, no guessed
+   * default): absent or empty ⇒ `null`, which the caller must treat as "does not match".
    */
   async statObject(key: string, companyId: string): Promise<StorageStatResult> {
     const config = this.assertConfigured();
@@ -222,10 +307,14 @@ export class ObjectStorageService {
         new HeadObjectCommand({ Bucket: config.bucket, Key: key }),
       );
       const sizeBytes = typeof result.ContentLength === "number" ? result.ContentLength : null;
-      return { exists: true, sizeBytes };
+      const contentType =
+        typeof result.ContentType === "string" && result.ContentType !== ""
+          ? result.ContentType
+          : null;
+      return { exists: true, sizeBytes, contentType };
     } catch (err) {
       if (this.isNotFoundError(err)) {
-        return { exists: false, sizeBytes: null };
+        return { exists: false, sizeBytes: null, contentType: null };
       }
       throw err;
     }

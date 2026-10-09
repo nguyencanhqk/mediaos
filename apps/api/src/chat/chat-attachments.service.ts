@@ -271,7 +271,12 @@ export class ChatAttachmentPresignService {
         }
         return null;
       }
-      const signed = await this.storage.get({ key: row.storagePath, companyId: actor.companyId });
+      const signed = await this.storage.get({
+        key: row.storagePath,
+        companyId: actor.companyId,
+        registeredMimeType: row.mimeType,
+        fileName: row.name,
+      });
       return signed.url;
     } catch (err) {
       // Degrade CÓ LOG (không nuốt im lặng): storage lỗi/cấu hình thiếu ⇒ tệp hiện "không tải được",

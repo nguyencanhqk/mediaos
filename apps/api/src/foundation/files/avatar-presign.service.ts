@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../../storage/storage-adapter.port";
-import { FileRepository } from "./file.repository";
+import { FileRepository, type VerifiedAvatarMeta } from "./file.repository";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -88,20 +88,28 @@ export class AvatarPresignService {
           this.fileRepo.findVerifiedAvatarsTx(companyId, uniqueFileIds, tx),
         );
     // Khớp ĐÚNG cặp (employeeId, fileId) — link.entity_id PHẢI là chính employee đó (chống đầu độc chéo).
-    const storagePathByPair = new Map<string, string>();
-    for (const v of verified) storagePathByPair.set(`${v.employeeId}:${v.fileId}`, v.storagePath);
+    const verifiedByPair = new Map<string, VerifiedAvatarMeta>();
+    for (const v of verified) verifiedByPair.set(`${v.employeeId}:${v.fileId}`, v);
 
-    const toSign: Array<{ employeeId: string; storagePath: string }> = [];
+    // Mang CẢ MIME đã đăng ký + tên gốc của hàng tới bước ký (S16-SOCIAL-FILEDISPOSITION-1) — không đoán.
+    const toSign: VerifiedAvatarMeta[] = [];
     for (const [employeeId, fileId] of candidateFileId) {
-      const storagePath = storagePathByPair.get(`${employeeId}:${fileId}`);
-      if (storagePath) toSign.push({ employeeId, storagePath });
+      const meta = verifiedByPair.get(`${employeeId}:${fileId}`);
+      if (meta?.storagePath) toSign.push(meta);
     }
     if (toSign.length === 0) return out;
 
     const results = await Promise.allSettled(
       toSign.map(async (t) => ({
         employeeId: t.employeeId,
-        url: (await this.storage.get({ key: t.storagePath, companyId })).url,
+        url: (
+          await this.storage.get({
+            key: t.storagePath,
+            companyId,
+            registeredMimeType: t.mimeType,
+            fileName: t.originalName,
+          })
+        ).url,
       })),
     );
     let failures = 0;

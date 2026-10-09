@@ -20,6 +20,9 @@ export interface VerifiedAvatarMeta {
   employeeId: string;
   fileId: string;
   storagePath: string;
+  /** MIME đã đăng ký + tên gốc của hàng `files` — tầng ký cần cả hai để ghim kiểu trả của URL. */
+  mimeType: string;
+  originalName: string;
 }
 
 /**
@@ -39,6 +42,9 @@ export interface VerifiedCoverMeta {
   taskId: string;
   fileId: string;
   storagePath: string;
+  /** MIME đã đăng ký + tên gốc của hàng `files` — tầng ký cần cả hai để ghim kiểu trả của URL. */
+  mimeType: string;
+  originalName: string;
 }
 
 /**
@@ -56,6 +62,9 @@ export interface VerifiedRoomAvatarMeta {
   roomId: string;
   fileId: string;
   storagePath: string;
+  /** MIME đã đăng ký + tên gốc của hàng `files` — tầng ký cần cả hai để ghim kiểu trả của URL. */
+  mimeType: string;
+  originalName: string;
 }
 
 /**
@@ -112,6 +121,8 @@ export class FileRepository {
         employeeId: fileLinks.entityId,
         fileId: files.id,
         storagePath: files.storagePath,
+        mimeType: files.mimeType,
+        originalName: files.originalName,
       })
       .from(fileLinks)
       .innerJoin(files, eq(files.id, fileLinks.fileId))
@@ -170,6 +181,8 @@ export class FileRepository {
         taskId: fileLinks.entityId,
         fileId: files.id,
         storagePath: files.storagePath,
+        mimeType: files.mimeType,
+        originalName: files.originalName,
       })
       .from(fileLinks)
       .innerJoin(files, eq(files.id, fileLinks.fileId))
@@ -248,6 +261,8 @@ export class FileRepository {
         roomId: fileLinks.entityId,
         fileId: files.id,
         storagePath: files.storagePath,
+        mimeType: files.mimeType,
+        originalName: files.originalName,
       })
       .from(fileLinks)
       .innerJoin(files, eq(files.id, fileLinks.fileId))

@@ -555,7 +555,7 @@ export class SocialAttachmentsService {
   /** `null` = không ký được (mọi lý do). KHÔNG ném — fail-soft CÓ LOG, khuôn CHAT. */
   private async signOne(
     viewer: SocialViewerContext,
-    row: { fileId: string; storagePath: string },
+    row: { fileId: string; storagePath: string; mimeType: string; originalName: string },
     entityType: string,
     links: readonly { moduleCode: string; entityType: string; entityId: string }[],
   ): Promise<string | null> {
@@ -592,6 +592,8 @@ export class SocialAttachmentsService {
       const signed = await this.storage.get({
         key: row.storagePath,
         companyId: viewer.companyId,
+        registeredMimeType: row.mimeType,
+        fileName: row.originalName,
       });
       return signed.url;
     } catch (err) {

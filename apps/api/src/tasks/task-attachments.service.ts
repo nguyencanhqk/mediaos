@@ -148,7 +148,11 @@ export class TaskAttachmentsService {
     if (!row) throw new NotFoundException("Attachment not found");
 
     try {
-      const downloadUrl = await this.storage.createDownloadUrl(row.storageKey, user.companyId);
+      // Hàng `task_attachments` mang sẵn kiểu + tên đã đăng ký ⇒ truyền đúng hai cột đó (không đoán).
+      const downloadUrl = await this.storage.createDownloadUrl(row.storageKey, user.companyId, {
+        registeredMimeType: row.contentType,
+        fileName: row.fileName,
+      });
       return { downloadUrl };
     } catch (err) {
       if (err instanceof InvalidStorageKeyError) {

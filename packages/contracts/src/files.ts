@@ -69,14 +69,25 @@ const PAGE_LIMIT_MAX = 100;
 // ─── Input schemas ─────────────────────────────────────────────────────────────
 
 /**
- * UploadFileInput — metadata kèm multipart binary khi upload.
- * Server KHÔNG tin `declaredMimeType` (tự detect bằng magic bytes); field này chỉ để tham khảo.
+ * UploadFileInput — metadata đăng ký một lượt tải lên (byte đi THẲNG lên storage qua URL PUT đã ký, không
+ * qua API).
+ * `declaredMimeType` là kiểu ĐÃ ĐĂNG KÝ của tệp, và nó ràng buộc cả ba bước sau (server KHÔNG đọc nội dung
+ * tệp để đoán kiểu):
+ *  - URL PUT ký kèm đúng chuỗi này ⇒ client PHẢI gửi header `Content-Type` trùng TỪNG BYTE, lệch là storage
+ *    từ chối;
+ *  - confirm so kiểu storage đang lưu với chuỗi này (không phân biệt hoa-thường, bỏ phần sau `;`) ⇒ lệch là
+ *    409 `FOUNDATION-FILE-ERR-CONFIRM-MISMATCH`;
+ *  - URL tải về trả đúng kiểu này; loại không thuộc danh sách hiển thị trực tiếp được trả dạng tải xuống.
+ * Một số kiểu / đuôi tệp bị từ chối ở bước đăng ký (415) bất kể cấu hình công ty.
  * KHÔNG có storagePath / checksum / signedUrl.
  */
 export const uploadFileInputSchema = z.object({
   /** Tên file gốc — trim + non-empty; normalize chống path traversal ở service. */
   originalName: z.string().trim().min(1).max(500),
-  /** MIME type do client khai báo — server sẽ RE-DETECT, không tin mù quáng. */
+  /**
+   * MIME đã đăng ký — lưu và ký NGUYÊN VĂN (server không thường hoá chuỗi này); client gửi lại đúng chuỗi
+   * đó ở header `Content-Type` của lượt PUT.
+   */
   declaredMimeType: z.string().min(1).max(255),
   /** Kích thước byte (integer ≥ 0) — dùng để validate trước khi stream. */
   sizeBytes: z.number().int().nonnegative(),
@@ -212,8 +223,9 @@ export type FileLinkDto = z.infer<typeof fileLinkSchema>;
 //   (1) POST /foundation/files/upload  → register metadata (upload_status='Pending') + trả presigned-PUT
 //       `uploadUrl` (ephemeral, TTL-ngắn `expiresAt`). KHÔNG stream binary qua NestJS, KHÔNG lộ storage_path.
 //   (2) client PUT bytes trực tiếp lên `uploadUrl` (S3/MinIO).
-//   (3) POST /foundation/files/:id/confirm → server HEAD/GET verify object tồn tại + size khớp khai báo,
-//       tính checksum_sha256 server-side → upload_status='Uploaded'. Sai size/absent → 'Failed'.
+//   (3) POST /foundation/files/:id/confirm → server HEAD/GET verify object tồn tại + size khớp khai báo +
+//       kiểu storage đang lưu khớp MIME đã đăng ký, tính checksum_sha256 server-side → upload_status='Uploaded'.
+//       Sai size / lệch kiểu / absent → 'Failed'.
 
 /**
  * FOUNDATION-FILE-ERR-* — catalog mã lỗi domain file (SPEC-01 §9 `MODULE-ERR-XXX`). NGUỒN SỰ THẬT DTO
@@ -221,6 +233,9 @@ export type FileLinkDto = z.infer<typeof fileLinkSchema>;
  * thêm mã mới ở CUỐI, KHÔNG đổi/xoá mã đã có (S2-FND-FILE-2 bổ sung EXTENSION, BLOCKED, CONFIRM-x, NOT-PENDING).
  *
  *  - MIME / SIZE / EXTENSION / BLOCKED / FILENAME / KEY: validate register (415/413/400) TRƯỚC mọi ghi.
+ *    EXTENSION mang HAI nghĩa (câu `message` của server phân biệt): phần mở rộng không khớp MIME khai báo,
+ *    hoặc phần mở rộng không đúng dạng được nhận (1–16 chữ cái không dấu / chữ số; tên không có dấu chấm thì
+ *    không xét). CONFIRM_MISMATCH: cỡ HOẶC kiểu storage đang lưu khác khai báo.
  *  - FORBIDDEN / NOT_DOWNLOADABLE / INFECTED / LINK: chốt policy + state-guard (403/409/400).
  *  - DUP_LINK / DUP_PRIMARY: 23505 phân biệt theo TÊN constraint (S2-FND-DB-2-B).
  *  - CONFIRM_ABSENT / CONFIRM_MISMATCH / NOT_PENDING: confirm-upload (422/409).

@@ -39,12 +39,14 @@ describe("S3StorageAdapter.stat", () => {
     (fakeStorage.statObject as ReturnType<typeof vi.fn>).mockResolvedValue({
       exists: true,
       sizeBytes: 999,
+      contentType: "application/pdf",
     });
     const adapter = new S3StorageAdapter(fakeStorage);
 
     const result = await adapter.stat({ key: KEY_A, companyId: COMPANY_A });
 
-    expect(result).toEqual({ exists: true, sizeBytes: 999 });
+    // S16-SOCIAL-FILEDISPOSITION-1: the stored content type is forwarded unchanged.
+    expect(result).toEqual({ exists: true, sizeBytes: 999, contentType: "application/pdf" });
     expect(fakeStorage.statObject).toHaveBeenCalledWith(KEY_A, COMPANY_A);
   });
 
@@ -53,12 +55,13 @@ describe("S3StorageAdapter.stat", () => {
     (fakeStorage.statObject as ReturnType<typeof vi.fn>).mockResolvedValue({
       exists: false,
       sizeBytes: null,
+      contentType: null,
     });
     const adapter = new S3StorageAdapter(fakeStorage);
 
     const result = await adapter.stat({ key: KEY_A, companyId: COMPANY_A });
 
-    expect(result).toEqual({ exists: false, sizeBytes: null });
+    expect(result).toEqual({ exists: false, sizeBytes: null, contentType: null });
   });
 
   it("propagates a rejection from the service (does not swallow errors)", async () => {
@@ -68,6 +71,48 @@ describe("S3StorageAdapter.stat", () => {
     const adapter = new S3StorageAdapter(fakeStorage);
 
     await expect(adapter.stat({ key: KEY_A, companyId: COMPANY_A })).rejects.toBe(boom);
+  });
+});
+
+describe("S3StorageAdapter.get (S16-SOCIAL-FILEDISPOSITION-1)", () => {
+  it("G5 — forwards registeredMimeType + fileName to createDownloadUrl unchanged", async () => {
+    const fakeStorage = buildFakeObjectStorage();
+    vi.mocked(fakeStorage.createDownloadUrl).mockResolvedValue("https://signed.example/get");
+    const adapter = new S3StorageAdapter(fakeStorage);
+
+    const result = await adapter.get({
+      key: KEY_A,
+      companyId: COMPANY_A,
+      registeredMimeType: "Application/PDF; x=1",
+      fileName: "báo cáo (1).pdf",
+      presignTtlSec: 900,
+    });
+
+    expect(result.url).toBe("https://signed.example/get");
+    // The adapter holds no serving rule: both values reach the service exactly as given.
+    expect(fakeStorage.createDownloadUrl).toHaveBeenCalledTimes(1);
+    expect(fakeStorage.createDownloadUrl).toHaveBeenCalledWith(
+      KEY_A,
+      COMPANY_A,
+      { registeredMimeType: "Application/PDF; x=1", fileName: "báo cáo (1).pdf" },
+      900,
+    );
+  });
+
+  it("propagates a rejection from the service (does not swallow a signing failure)", async () => {
+    const fakeStorage = buildFakeObjectStorage();
+    const boom = new Error("boom");
+    vi.mocked(fakeStorage.createDownloadUrl).mockRejectedValue(boom);
+    const adapter = new S3StorageAdapter(fakeStorage);
+
+    await expect(
+      adapter.get({
+        key: KEY_A,
+        companyId: COMPANY_A,
+        registeredMimeType: "image/png",
+        fileName: "anh.png",
+      }),
+    ).rejects.toBe(boom);
   });
 });
 
@@ -132,8 +177,15 @@ describe("S3StorageAdapter — resolveTtl clamp (QA06-FILE-003 signed-URL expiry
     {
       name: "get",
       call: (adapter, presignTtlSec) =>
-        adapter.get({ key: KEY_A, companyId: COMPANY_A, presignTtlSec }),
-      signerTtl: (fake) => vi.mocked(fake.createDownloadUrl).mock.calls[0]?.[2],
+        adapter.get({
+          key: KEY_A,
+          companyId: COMPANY_A,
+          registeredMimeType: "application/pdf",
+          fileName: "report.pdf",
+          presignTtlSec,
+        }),
+      // createDownloadUrl(key, companyId, serveAs, ttl) — the TTL is the 4th argument.
+      signerTtl: (fake) => vi.mocked(fake.createDownloadUrl).mock.calls[0]?.[3],
     },
     {
       name: "signedUrl",

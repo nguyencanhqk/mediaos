@@ -38,12 +38,23 @@ export interface StoragePutInput {
 /**
  * Input for a presigned GET (download intent). The adapter re-asserts key ∈ tenant prefix before
  * signing (CLAUDE.md §2.1 — company_id on every query).
+ *
+ * `registeredMimeType` + `fileName` are REQUIRED (S16-SOCIAL-FILEDISPOSITION-1): the signed URL pins
+ * the response content type and disposition to the file's registered metadata, so a caller must read
+ * both from the metadata row it already resolved — there is no way to sign without them.
  */
 export interface StorageGetInput {
   /** Storage key for the object to download. */
   key: string;
   /** Owning company — used to assert the key is inside this tenant's prefix. */
   companyId: string;
+  /**
+   * MIME type REGISTERED for the file (the metadata row's value, passed verbatim). The storage layer
+   * derives the response content type from it; it is not the type stored with the object.
+   */
+  registeredMimeType: string;
+  /** Original file name of the metadata row (verbatim) — used for the download file name. */
+  fileName: string;
   /** Optional TTL override in seconds (uses DEFAULT_PRESIGN_TTL_SEC when absent). */
   presignTtlSec?: number;
 }
@@ -60,9 +71,13 @@ export interface SignedUrlResult {
 export interface StorageSignedUploadInput {
   /** Server-derived, tenant-scoped key for the object. */
   key: string;
-  /** Content type the client must declare on upload. */
+  /**
+   * Content type the client must send on upload. It is part of the signed headers
+   * (S16-SOCIAL-FILEDISPOSITION-1), so storage accepts the PUT only when the `Content-Type` header
+   * equals this string byte-for-byte — callers pass the registered type verbatim (no normalization).
+   */
   contentType: string;
-  /** Expected byte size — S3 pins ContentLength to prevent oversized uploads. */
+  /** Expected byte size — `content-length` is a signed header, so the PUT must carry exactly this size. */
   sizeBytes: number;
   /** Optional TTL override in seconds (uses DEFAULT_PRESIGN_TTL_SEC when absent). */
   presignTtlSec?: number;
@@ -88,15 +103,20 @@ export interface StorageStatInput {
 }
 
 /**
- * Result of a stat/HEAD check. `exists=false` ⇒ `sizeBytes` is `null` (object absent from storage —
- * e.g. the client never completed the presigned-PUT). Implementations MUST NOT throw for a missing
- * object; only genuine transport/auth errors should propagate.
+ * Result of a stat/HEAD check. `exists=false` ⇒ `sizeBytes` and `contentType` are `null` (object
+ * absent from storage — e.g. the client never completed the presigned-PUT). Implementations MUST NOT
+ * throw for a missing object; only genuine transport/auth errors should propagate.
  */
 export interface StorageStatResult {
   /** Whether the object exists at `key`. */
   exists: boolean;
   /** Actual ContentLength reported by storage, or `null` when `exists` is `false`. */
   sizeBytes: number | null;
+  /**
+   * Content type STORED with the object, exactly as storage reports it (not normalized). `null` when
+   * the object is absent or storage reports no type — callers must treat `null` as "does not match".
+   */
+  contentType: string | null;
 }
 
 /**
@@ -135,6 +155,8 @@ export interface StorageAdapter {
   /**
    * Returns a presigned GET URL for `key`, scoped to `companyId`.
    * The adapter MUST re-assert `key` is inside the tenant prefix (cross-tenant guard).
+   * The URL pins the response content type (derived from `registeredMimeType`) and, for every type
+   * that is not displayed inline, an `attachment` disposition built from `fileName`.
    * Result URL is ephemeral — MUST NOT be persisted by the caller.
    */
   get(input: StorageGetInput): Promise<SignedUrlResult>;
@@ -152,10 +174,11 @@ export interface StorageAdapter {
   signedUrl(input: StorageSignedUploadInput): Promise<SignedUrlResult>;
 
   /**
-   * HEAD the object at `key` — returns whether it exists and its actual ContentLength in storage
-   * (S2-FND-FILE-2 confirm-upload flow: verify a client's presigned-PUT actually landed BEFORE the
-   * caller marks a file row `Uploaded`). Re-asserts `key ∈ companyId` prefix before the SDK call.
-   * Never throws for a missing object — returns `{ exists: false, sizeBytes: null }`.
+   * HEAD the object at `key` — returns whether it exists, its actual ContentLength and its stored
+   * content type (S2-FND-FILE-2 confirm-upload flow: verify a client's presigned-PUT actually landed
+   * BEFORE the caller marks a file row `Uploaded`). Re-asserts `key ∈ companyId` prefix before the SDK
+   * call. Never throws for a missing object — returns
+   * `{ exists: false, sizeBytes: null, contentType: null }`.
    */
   stat(input: StorageStatInput): Promise<StorageStatResult>;
 
