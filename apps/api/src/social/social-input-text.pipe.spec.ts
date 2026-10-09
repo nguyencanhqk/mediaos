@@ -11,6 +11,7 @@ import {
   SOCIAL_INPUT_TEXT_MESSAGE,
   SocialInputTextPipe,
   findNulPaths,
+  socialInputTextSchemaFor,
 } from "./social-input-text.pipe";
 
 /**
@@ -18,7 +19,8 @@ import {
  *
  *   A. `findNulPaths` — quét sâu (object · mảng · tên khoá), không đệ quy, có trần số mục.
  *   B. `SocialInputTextPipe` — thân + query ⇒ `ZodValidationException`; kênh khác đi qua nguyên vẹn.
- *   C. KIỂM ĐỦ TĨNH — mọi controller SOCIAL gắn lớp chặn ở cấp class, đứng đầu danh sách pipe.
+ *   C. KIỂM ĐỦ TĨNH — mọi controller SOCIAL gắn lớp chặn ở cấp class, đứng đầu danh sách pipe; mọi
+ *      tham số đường dẫn của SOCIAL qua `ParseUUIDPipe` (kênh lớp chặn KHÔNG quét).
  *      Không cần Postgres, không boot app: đọc AST của file nguồn.
  */
 
@@ -62,6 +64,27 @@ describe("findNulPaths", () => {
     expect(findNulPaths({ [bad("k", "k")]: "sach" })).toEqual([["?"]]);
     expect(findNulPaths({ "khoa <la>": bad() })).toEqual([["?"]]);
     expect(findNulPaths({ ["x".repeat(65)]: bad() })).toEqual([["?"]]);
+  });
+
+  it("số · boolean · null xen giữa các chuỗi ⇒ bị bỏ qua, chỉ số và tên khoá của chuỗi KHÔNG lệch", () => {
+    expect(findNulPaths([1, null, true, bad(), 2, [false, 0, bad()], bad()])).toEqual([
+      [3],
+      [5, 2],
+      [6],
+    ]);
+    expect(findNulPaths({ a: 1, b: null, c: bad(), d: false, e: { f: 0, g: bad() } })).toEqual([
+      ["c"],
+      ["e", "g"],
+    ]);
+    // Gốc không phải chuỗi / object ⇒ rỗng (nhánh gốc không qua bộ lọc phần tử).
+    for (const root of [0, 7, true, false]) expect(findNulPaths(root)).toEqual([]);
+  });
+
+  it("mảng lớn toàn số với một chuỗi vi phạm ở cuối ⇒ vẫn tìm thấy đúng chỉ số", () => {
+    const SIZE = 200_000;
+    const big: unknown[] = Array.from({ length: SIZE }, (_, i) => i);
+    big.push(bad());
+    expect(findNulPaths(big)).toEqual([[SIZE]]);
   });
 
   it("trần số mục: không trả quá `limit`", () => {
@@ -135,6 +158,19 @@ describe("SocialInputTextPipe", () => {
     }
   });
 
+  it("schema gốc là MỘT hằng dùng lại; có tên trường thì dựng schema riêng mang tên đó", () => {
+    expect(socialInputTextSchemaFor(undefined)).toBe(socialInputTextSchemaFor(undefined));
+    expect(socialInputTextSchemaFor("")).toBe(socialInputTextSchemaFor(undefined));
+    const scoped = socialInputTextSchemaFor("q");
+    expect(scoped).not.toBe(socialInputTextSchemaFor(undefined));
+    const rootIssue = socialInputTextSchemaFor(undefined).safeParse({ q: bad() });
+    expect(rootIssue.success ? [] : rootIssue.error.issues.map((i) => i.path)).toEqual([["q"]]);
+    const scopedIssue = scoped.safeParse(bad());
+    expect(scopedIssue.success ? [] : scopedIssue.error.issues.map((i) => i.path)).toEqual([["q"]]);
+    // Hằng gốc không giữ trạng thái giữa hai lượt: lượt sạch sau lượt bẩn vẫn qua.
+    expect(socialInputTextSchemaFor(undefined).safeParse({ q: "sach" }).success).toBe(true);
+  });
+
   it.each(["param", "custom"] as const)(
     "kênh %s ⇒ đi qua nguyên vẹn (không thuộc lớp này)",
     (type) => {
@@ -147,6 +183,15 @@ describe("SocialInputTextPipe", () => {
 // ───────────────────────────── C. KIỂM ĐỦ TĨNH ─────────────────────────────
 
 const SRC_SOCIAL = __dirname;
+const SRC_ROOT = path.join(__dirname, "..");
+/** Tên module bảng cặp quyền của SOCIAL — controller nào import nó là controller SOCIAL. */
+const SOCIAL_PAIRS_MODULE = "social-route-pairs.const";
+/**
+ * Số decorator `@Param` trong `src/social/` — ĐẾM THẬT lúc viết ca. Chốt chống xanh-rỗng: phép quét
+ * hỏng (trả ít site hơn) thì đỏ ở đây thay vì «mọi phần tử của mảng rỗng đều đạt». Thêm / bớt route
+ * có tham số đường dẫn ⇒ sửa con số này cùng lúc.
+ */
+const SOCIAL_PARAM_SITES = 38;
 const RECYCLE_CONTROLLER = path.join(
   __dirname,
   "..",
@@ -215,12 +260,56 @@ function controllersIn(file: string): ControllerSite[] {
   return out;
 }
 
-function socialControllers(): ControllerSite[] {
+/** Mọi file nguồn `.ts` (không tính spec) dưới `dir`, ĐỆ QUY — đường dẫn tuyệt đối, đã sắp xếp. */
+function sourceFilesUnder(dir: string): string[] {
   return fs
-    .readdirSync(SRC_SOCIAL)
-    .filter((n) => n.endsWith(".ts") && !n.endsWith(".spec.ts"))
+    .readdirSync(dir, { recursive: true, encoding: "utf8" })
+    .filter((n) => n.endsWith(".ts") && !n.endsWith(".spec.ts") && !n.endsWith(".d.ts"))
     .sort()
-    .flatMap((n) => controllersIn(path.join(SRC_SOCIAL, n)));
+    .map((n) => path.join(dir, n));
+}
+
+function socialControllers(): ControllerSite[] {
+  return sourceFilesUnder(SRC_SOCIAL).flatMap(controllersIn);
+}
+
+/**
+ * Nguồn đối chiếu thứ HAI, độc lập với danh sách trắng của census: mọi controller ở BẤT KỲ đâu dưới
+ * `src/` mà file của nó import bảng cặp quyền của SOCIAL. Một controller SOCIAL đặt ngoài `src/social/`
+ * và chưa ai thêm vào danh sách trắng vẫn lộ ra ở đây.
+ */
+function controllersImportingSocialPairs(): ControllerSite[] {
+  return sourceFilesUnder(SRC_ROOT)
+    .filter((file) => fs.readFileSync(file, "utf8").includes(SOCIAL_PAIRS_MODULE))
+    .flatMap(controllersIn);
+}
+
+interface ParamSite {
+  where: string;
+  args: string[];
+}
+
+/** Mọi decorator `@Param(...)` đặt trên tham số, trong mọi file nguồn dưới `src/social/` (đệ quy). */
+function socialParamSites(): ParamSite[] {
+  const out: ParamSite[] = [];
+  for (const file of sourceFilesUnder(SRC_SOCIAL)) {
+    const sf = parse(file);
+    const visit = (node: ts.Node): void => {
+      if (ts.isParameter(node)) {
+        for (const d of decoratorsOf(node)) {
+          if (d.name !== "Param") continue;
+          const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+          out.push({
+            where: `${path.relative(SRC_SOCIAL, file)}:${line}`,
+            args: d.args.map((a) => a.getText(sf)),
+          });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return out;
 }
 
 /** Danh sách trắng controller SOCIAL của census 2 tầng — nguồn ĐỘC LẬP với phép quét thư mục. */
@@ -268,6 +357,31 @@ describe("KIỂM ĐỦ TĨNH — mọi controller SOCIAL đi qua lớp chặn U+
     const covered = new Set([...sites.map((s) => s.name), ...NO_FREE_TEXT_CONTROLLERS]);
     expect(census.filter((n) => !covered.has(n))).toEqual([]);
     expect([...covered].filter((n) => !census.includes(n))).toEqual([]);
+  });
+
+  it("nguồn thứ hai (import bảng cặp quyền SOCIAL, quét cả `src/`): không controller nào nằm ngoài phép đo", () => {
+    const found = controllersImportingSocialPairs().map((s) => s.name);
+    // Chốt chống xanh-rỗng: phép quét phải thấy controller ở CẢ trong lẫn ngoài `src/social/`.
+    expect(found, "phải thấy controller thùng rác (ngoài `src/social/`)").toContain(
+      "RecycleBinFeedPostsController",
+    );
+    expect(found, "phải thấy controller trong `src/social/`").toContain("SocialPostsController");
+    const covered = new Set([...sites.map((s) => s.name), ...NO_FREE_TEXT_CONTROLLERS]);
+    expect(
+      found.filter((n) => !covered.has(n)),
+      "controller import bảng cặp quyền SOCIAL nhưng chưa có lớp chặn lẫn phép đo miễn trừ",
+    ).toEqual([]);
+  });
+
+  it("mọi `@Param` của controller SOCIAL qua `ParseUUIDPipe` (kênh lớp chặn không quét)", () => {
+    const params = socialParamSites();
+    expect(params.length, "số site `@Param` trong `src/social/`").toBe(SOCIAL_PARAM_SITES);
+    const loose = params
+      .filter((p) => p.args.length !== 2 || p.args[1] !== "ParseUUIDPipe")
+      .map((p) => `${p.where} — @Param(${p.args.join(", ")})`);
+    expect(loose, `tham số đường dẫn SOCIAL chưa qua ParseUUIDPipe:\n${loose.join("\n")}`).toEqual(
+      [],
+    );
   });
 
   describe("RecycleBinFeedPostsController (057 · 058) — không gắn lớp chặn vì không nhận chuỗi tự do", () => {

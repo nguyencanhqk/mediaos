@@ -17,8 +17,14 @@ import { z } from "zod";
  * Phép kiểm đủ tĩnh ở `social-input-text.pipe.spec.ts` đỏ khi một controller SOCIAL thiếu lớp này.
  *
  * ⚠️ CHỈ U+0000. Các ký tự điều khiển khác đang là đầu vào hợp lệ; cấm thêm ở đây là đổi hành vi.
- * ⚠️ Tham số đường dẫn KHÔNG quét ở đây: mọi `@Param` của SOCIAL đã qua `ParseUUIDPipe` (ratchet
- * `param-uuid-ratchet.unit-spec.ts`), và giữ nguyên thân lỗi hiện có của nhánh đó.
+ * ⚠️ Tham số đường dẫn KHÔNG quét ở đây: mọi `@Param` của SOCIAL đã qua `ParseUUIDPipe`, và giữ
+ * nguyên thân lỗi hiện có của nhánh đó. Điều kiện này được ghim bởi ca «mọi `@Param` của controller
+ * SOCIAL qua `ParseUUIDPipe`» trong `social-input-text.pipe.spec.ts` (đọc AST từng decorator, có chốt
+ * số site) — KHÔNG phải bởi `param-uuid-ratchet.unit-spec.ts`: ratchet đó chỉ đếm tham số tên `id` /
+ * `…Id` trong file `*.controller.ts`, nên không nhìn thấy phần lớn tham số của SOCIAL.
+ * ⚠️ Chi phí quét: chỉ chuỗi và object / mảng được đưa vào hàng chờ duyệt (số · boolean · null bị bỏ
+ * qua ngay), nên bộ nhớ tạm tỉ lệ với số nút CÓ THỂ chứa chuỗi. Cận trên vẫn là giới hạn cỡ thân của
+ * body-parser — nâng giới hạn đó thì xem lại lớp này.
  */
 
 const NUL = String.fromCharCode(0);
@@ -43,6 +49,10 @@ interface Pending {
   readonly segment: string | number | null;
   readonly depth: number;
 }
+
+/** Chỉ chuỗi và object / mảng mới có thể mang U+0000 — kiểu khác không đáng một nút chờ duyệt. */
+const canHoldText = (value: unknown): boolean =>
+  typeof value === "string" || (typeof value === "object" && value !== null);
 
 /** Dựng đường dẫn từ gốc tới `node`, giữ tối đa `SOCIAL_INPUT_TEXT_MAX_PATH_SEGMENTS` đoạn ĐẦU. */
 function pathOf(node: Pending, base: Path): Path {
@@ -80,7 +90,8 @@ export function findNulPaths(
     if (Array.isArray(value)) {
       // Đẩy ngược để lấy ra theo thứ tự chỉ số tăng dần (thứ tự `details[]` ổn định).
       for (let i = value.length - 1; i >= 0; i -= 1) {
-        stack.push({ value: value[i] as unknown, parent: node, segment: i, depth });
+        const item = value[i] as unknown;
+        if (canHoldText(item)) stack.push({ value: item, parent: node, segment: i, depth });
       }
       continue;
     }
@@ -89,7 +100,9 @@ export function findNulPaths(
       const [key, child] = entries[i] as [string, unknown];
       // Khoá mang U+0000: báo như một chuỗi con rồi thôi — không đi tiếp vào giá trị của nó.
       const next = key.includes(NUL) ? NUL : child;
-      stack.push({ value: next, parent: node, segment: safeSegment(key), depth });
+      if (canHoldText(next)) {
+        stack.push({ value: next, parent: node, segment: safeSegment(key), depth });
+      }
     }
   }
   return found;
@@ -111,14 +124,21 @@ export function socialInputTextSchema(base: Path = []): z.ZodType<unknown> {
   });
 }
 
+/** Schema cho trường hợp thường gặp (decorator trao CẢ thân / query): dựng MỘT lần, dùng lại. */
+const ROOT_SCHEMA = socialInputTextSchema();
+
+/** Schema pipe dùng cho một tham số: hằng gốc khi không có tên trường, dựng mới khi có. */
+export function socialInputTextSchemaFor(field: string | undefined): z.ZodType<unknown> {
+  // `@Body("x")` / `@Query("x")` trao riêng một trường ⇒ đường dẫn bắt đầu từ tên trường đó.
+  return field ? socialInputTextSchema([safeSegment(field)]) : ROOT_SCHEMA;
+}
+
 @Injectable()
 export class SocialInputTextPipe implements PipeTransform {
   transform(value: unknown, metadata: ArgumentMetadata): unknown {
     if (metadata.type !== "body" && metadata.type !== "query") return value;
-    // `@Body("x")` / `@Query("x")` trao riêng một trường ⇒ đường dẫn bắt đầu từ tên trường đó.
-    const base: Path = metadata.data ? [safeSegment(metadata.data)] : [];
     // `validate` của nestjs-zod tự ném `ZodValidationException` — cùng đường với `ZodValidationPipe`.
-    validate(value, socialInputTextSchema(base));
+    validate(value, socialInputTextSchemaFor(metadata.data));
     return value;
   }
 }
