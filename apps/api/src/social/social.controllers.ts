@@ -14,6 +14,7 @@ import {
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
+import { SocialInputTextPipe } from "./social-input-text.pipe";
 import type { Request } from "express";
 import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { PermissionGuard } from "../permission/guards/permission.guard";
@@ -54,6 +55,7 @@ interface AuthenticatedRequest extends Request {
  * là ĐỎ ngay.
  */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialPostsController {
   constructor(
     private readonly posts: SocialPostsService,
@@ -173,6 +175,7 @@ export class SocialPostsController {
 
 /** `SOCIAL-API-011..013` (bài) + `018..019` (bình luận) — cùng một bảng `feed_reactions` ĐA HÌNH. */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialReactionsController {
   constructor(private readonly reactions: SocialReactionsService) {}
 
@@ -235,6 +238,7 @@ export class SocialReactionsController {
 
 /** `SOCIAL-API-014..017` — bình luận 1 cấp. */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialCommentsController {
   constructor(private readonly comments: SocialCommentsService) {}
 
