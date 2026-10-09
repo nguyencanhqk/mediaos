@@ -10,7 +10,8 @@
  * gitleaks (CLAUDE.md §5 «fixture giống-secret»).
  */
 import { describe, expect, it } from "vitest";
-import { avatarSrc } from "./feed-format";
+import { FEED_MAX_IMAGES_PER_POST, type FeedAttachmentDto } from "@mediaos/contracts";
+import { IMAGE_GRID_MAX, avatarSrc, buildImageGrid } from "./feed-format";
 
 const SIG = "ab".repeat(32);
 const SIGNED_HTTPS = `https://storage.invalid/co/files/f.png?X-Amz-Expires=300&X-Amz-Signature=${SIG}&X-Amz-SignedHeaders=host&x-id=GetObject`;
@@ -50,5 +51,69 @@ describe("avatarSrc — CHỈ URL presign SigV4 thành `src`", () => {
     ],
   ])("từ chối: %s ⇒ undefined (chữ cái đầu)", (_label, value) => {
     expect(avatarSrc(value)).toBeUndefined();
+  });
+});
+
+/**
+ * S16-SOCIAL-FE-2D — `buildImageGrid(attachments, max)`: LỌC ảnh vẽ được (`url` http(s)) → rồi mới CẮT theo
+ * `max`; «+N» (`overflow`) đếm trên tập ĐÃ LỌC. Mặc định `max = IMAGE_GRID_MAX` (thẻ bảng tin); trang chi tiết
+ * truyền trần ảnh mỗi bài của contracts.
+ */
+describe("buildImageGrid — lọc rồi mới cắt theo `max`", () => {
+  const img = (
+    n: number,
+    url: string | null = `https://cdn.invalid/i${n}.png`,
+  ): FeedAttachmentDto => ({
+    fileId: `i${n}`,
+    kind: "image",
+    fileName: `i${n}.png`,
+    sizeBytes: 1,
+    url,
+  });
+  const idsOf = (list: readonly FeedAttachmentDto[]) => list.map((a) => a.fileId);
+  const six = [1, 2, 3, 4, 5, 6].map((n) => img(n));
+
+  it("mặc định: 6 ảnh ⇒ vẽ 4 ảnh ĐẦU (đúng thứ tự), «+2», 2 cột", () => {
+    const grid = buildImageGrid(six);
+
+    expect(IMAGE_GRID_MAX).toBe(4);
+    expect(idsOf(grid.shown)).toEqual(["i1", "i2", "i3", "i4"]);
+    expect(grid.overflow).toBe(2);
+    expect(grid.columns).toBe(2);
+  });
+
+  it("`max` = trần ảnh mỗi bài: 6 ảnh ⇒ vẽ ĐỦ 6, không «+N»", () => {
+    const grid = buildImageGrid(six, FEED_MAX_IMAGES_PER_POST);
+
+    expect(idsOf(grid.shown)).toEqual(["i1", "i2", "i3", "i4", "i5", "i6"]);
+    expect(grid.overflow).toBe(0);
+  });
+
+  it("`max` vẫn là TRẦN: nhiều ảnh hơn `max` ⇒ cắt ở `max`, phần dư vào «+N»", () => {
+    const many = Array.from({ length: FEED_MAX_IMAGES_PER_POST + 2 }, (_, i) => img(i + 1));
+    const grid = buildImageGrid(many, FEED_MAX_IMAGES_PER_POST);
+
+    expect(grid.shown).toHaveLength(FEED_MAX_IMAGES_PER_POST);
+    expect(grid.overflow).toBe(2);
+  });
+
+  it("DENY: ảnh `url:null` / lược đồ lạ bị lọc TRƯỚC khi cắt — không chiếm ô, không tính vào «+N»", () => {
+    const mixed = [
+      img(1, null),
+      img(2),
+      img(3, "javascript:alert(1)"),
+      img(4),
+      img(5),
+      img(6),
+      img(7),
+    ];
+
+    const feed = buildImageGrid(mixed);
+    expect(idsOf(feed.shown)).toEqual(["i2", "i4", "i5", "i6"]);
+    expect(feed.overflow).toBe(1);
+
+    const detail = buildImageGrid(mixed, FEED_MAX_IMAGES_PER_POST);
+    expect(idsOf(detail.shown)).toEqual(["i2", "i4", "i5", "i6", "i7"]);
+    expect(detail.overflow).toBe(0);
   });
 });
