@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**601 WO** · có micro-plan: **347/601** · ⬜ 54 chờ · 🔵 1 đang làm · ✅ 545 xong · 🔴 1 chặn
+**606 WO** · có micro-plan: **348/606** · ⬜ 59 chờ · 🔵 0 đang làm · ✅ 546 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -603,11 +603,16 @@
 | `S16-SOCIAL-FE-2D` | amber | ⬜ chờ | [📄](S16-SOCIAL-FE-2D.md) | ✅S16-SOCIAL-BE-1C ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FE-2 | FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qu |
 | `S16-SOCIAL-MENTIONLINK-1` | amber | ✅ xong | [📄](S16-SOCIAL-FE-2D.md) | ✅S16-SOCIAL-BE-1D ✅S16-SOCIAL-FEBLOCKSEED-1 | FE lát B tách từ S16-SOCIAL-FE-2D: @mention thành link hồ sơ từ mảng ` |
 | `S16-SOCIAL-MENTIONDIR-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-1D | Web KHÔNG sinh được @mention: `002`/`004`/`015`/`016` đòi `mentionedUs |
-| `S16-SOCIAL-VIDEOMIME-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D ⏳S16-SOCIAL-FILEDISPOSITION-1 | Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt` |
+| `S16-SOCIAL-VIDEOMIME-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D ✅S16-SOCIAL-FILEDISPOSITION-1 | Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt` |
 | `S16-SOCIAL-ATTERRSPLIT-1` | amber | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-FE-2D | `SOCIAL-ERR-007` gộp HAI lỗi khác bản chất — `ATTACHMENT_LIMIT` (vượt  |
-| `S16-SOCIAL-FILEDISPOSITION-1` | 🔴 | 🔵 đang làm | — *(chưa)* | — | Kiểu nội dung storage PHỤC VỤ không gắn với MIME đã đăng ký ⇒ XSS lưu  |
+| `S16-SOCIAL-FILEDISPOSITION-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-FILEDISPOSITION-1.md) | — | Kiểu nội dung storage PHỤC VỤ không gắn với MIME đã đăng ký ⇒ XSS lưu  |
 | `S16-SOCIAL-ATTMETAMASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Đính kèm bị TỪ CHỐI presign (`url: null`) vẫn trả `fileName`/`sizeByte |
 | `S16-SOCIAL-ORPHANUPLOAD-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Tệp đã `Uploaded` mà KHÔNG BAO GIỜ được link (gỡ khỏi khay sau khi 055 |
+| `S16-SOCIAL-FILEOPENUX-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | 7 màn đang «mở xem ở tab mới» cho tệp không phải ảnh/video nay nhận ph |
+| `S16-SOCIAL-INLINELIST-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Một nguồn sự thật cho «loại hiển thị trực tiếp»: 3 truy vấn ảnh (`file |
+| `S16-SOCIAL-FILESETTINGKEY-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Validate theo KHOÁ lúc LƯU setting `file.allowed_mime_types` / `file.b |
+| `S16-SOCIAL-STORAGETESTGATE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Các int-spec storage có sẵn (`files-e2e-confirm` · `hr-employee-avatar |
+| `S16-SOCIAL-FILEDEBT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Nợ dọn tầng tệp sau `S16-SOCIAL-FILEDISPOSITION-1`: `createUploadUrl`  |
 | `S16-SOCIAL-BE-3A` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3A.md) | ✅S16-SOCIAL-BE-2A ✅S16-SOCIAL-BE-2B-2 | BE track C/1 — resolve báo cáo KÈM HÀNH ĐỘNG (SOCIAL-API-029: ẩn bài · |
 | `S16-SOCIAL-GROUPMOD-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-BE-3A | Đường KIỂM DUYỆT nội dung nhóm RIÊNG TƯ: hôm nay bài/bình luận trong n |
 | `S16-SOCIAL-BE-3B` | 🔴 | ✅ xong | [📄](S16-SOCIAL-BE-3B.md) | ✅S16-SOCIAL-BE-3A | BE track C/2 — thống kê tương tác SOCIAL-API-052 (bài · bình luận · th |
