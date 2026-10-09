@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-09 00:57Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-09 01:04Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -79,7 +79,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 4
+- **branch**: `master` · **file đang đổi (dirty)**: 2
 - **migration head**: idx 258 — `0591_s19secmailcred_revoke_mail_dest_update` (259 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -88,6 +88,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `b091a8e7` | 2026-10-09 | docs(files): S16-SOCIAL-FILEDISPOSITION-1 — sổ vết verify/CI/merge, tài liệu API-09 + BACKEND-11 theo hành vi mới, rút gọn mô tả WO trong backlog + regen STATUS/INDEX |
 | `3d8452bb` | 2026-10-09 | chore(docs): regen STATUS + INDEX sau merge #578 (S16-SOCIAL-FILEDISPOSITION-1) |
 | `c0cf6319` | 2026-10-09 | fix(files): S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung và tên tệp khi tải về gắn với thứ đã kiểm lúc đăng ký (#578) |
 | `b3048a8a` | 2026-10-08 | chore(docs): regen STATUS + INDEX sau merge #577 (sổ lệch harness) |
@@ -99,7 +100,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `01e4750f` | 2026-10-06 | feat(social): S16-SOCIAL-FE-3B — màn Thiết lập huy hiệu + màn Thống kê tương tác (xuất XLSX) + 2 mục rail (#574) |
 | `bd19092e` | 2026-10-06 | chore(docs): regen STATUS sau merge #573 (S19-OPS-AUDITCRIT-1) |
 | `fa478655` | 2026-10-06 | fix(deps): S19-OPS-AUDITCRIT-1 — gỡ 4 advisory CRITICAL + 2 HIGH (proxy-addr 2.0.8 · seroval 1.6.8 · tinypool 2.2.0 · source-map-js 1.2.2) (#573) |
-| `b8a74225` | 2026-10-06 | chore(docs): seed S19-OPS-AUDITCRIT-1 + regen STATUS sau merge #569 · #571 · #572 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
