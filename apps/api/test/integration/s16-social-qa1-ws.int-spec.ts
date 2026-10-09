@@ -6,6 +6,7 @@
  *   W-1  `feed:post.created` — tập khoá, giá trị, khoá cấm W-5  bài ẩn / đơn vị / nhóm ⇒ 0 sự kiện
  *   W-2  `feed:comment.created`                            W-6  công ty khác ⇒ 0 sự kiện
  *   W-3  `feed:reaction.changed` — đúng 5 khoá             W-7  thiếu cặp đọc ⇒ không ở room
+ *   W-4b thả lại đúng loại đang có ⇒ 0 sự kiện
  *
  * Luật đo:
  *  - Socket client THẬT; payload là thứ đã đi qua dây (không spy emitter — spy thấy payload TRƯỚC khi
@@ -260,6 +261,21 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · sự kiện realtime trên
     await waitFor(() => commentEvent(r, comment.id), `neo bình luận ${comment.id}`);
     await waitFor(() => reactionsOf(r, post.id)[0], `neo cảm xúc ${post.id}`);
     return post.id;
+  }
+
+  /**
+   * ĐỔI loại cảm xúc của `author` trên một bài và một bình luận của nó (`like` → `love`), kèm neo
+   * dương rằng hàng ĐÃ đổi thật — để «0 sự kiện» đo sau đó phủ cả nhánh đổi loại.
+   */
+  async function expectSwitched(postId: string, commentId: string, name: string): Promise<void> {
+    const onPost = await reactPost(w, author, postId, "love");
+    expect(onPost.reactions, `bài ${name}: hàng đã đổi loại`).toEqual([
+      { emoji: "love", count: 1, mine: true },
+    ]);
+    const onComment = await reactComment(w, author, commentId, "love");
+    expect(onComment.reactions, `bình luận của bài ${name}: hàng đã đổi loại`).toEqual([
+      { emoji: "love", count: 1, mine: true },
+    ]);
   }
 
   beforeAll(async () => {
@@ -543,6 +559,37 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · sự kiện realtime trên
     });
   });
 
+  // Ca song sinh của W-4: thả lại ĐÚNG loại đang có không đổi tổng hợp nào ⇒ không có gì để phát.
+  // Cùng khuôn đếm: mọi sự kiện của bài nằm GIỮA mốc chụp và một neo dương phát sau.
+  it("QA1-W-4b · thả lại đúng loại đang có ⇒ REST 200 tổng hợp không đổi, 0 sự kiện", async () => {
+    // Trạng thái vào ca (do W-4a để lại): `listener` đang thả `love`, `second` đang thả `haha`.
+    const seenBefore = reactionsOf(rec, mainPostId).length;
+
+    const repeated = await reactPost(w, listener, mainPostId, "love");
+    expect(repeated.likeCount, "tổng số không đổi").toBe(2);
+    expect(repeated.reactions, "tổng hợp theo loại không đổi").toEqual(
+      expect.arrayContaining([
+        { emoji: "love", count: 1, mine: true },
+        { emoji: "haha", count: 1, mine: false },
+      ]),
+    );
+    expect(repeated.reactions).toHaveLength(2);
+
+    // Neo phát SAU: người thứ ba thả cảm xúc lên cùng bài.
+    await reactPost(w, author, mainPostId, "wow");
+    const anchorEvent = await waitFor(
+      () => reactionsOf(rec, mainPostId).find((e) => e.likeCount === 3),
+      "neo sau lượt thả lại",
+    );
+    const between = reactionsOf(rec, mainPostId)
+      .slice(seenBefore)
+      .filter((e) => e !== anchorEvent);
+    expect(
+      between,
+      "số sự kiện phát cho lượt thả lại đúng loại (giữa mốc chụp và neo)",
+    ).toHaveLength(0);
+  });
+
   it("QA1-W-5 bài ẩn · bài đơn vị · bình luận và cảm xúc trên bài nhóm ⇒ 0 sự kiện tới room công ty", async () => {
     // (a) Bài công ty: thả cảm xúc khi còn hiển thị (neo dương), rồi ẨN, rồi tương tác tiếp.
     const hidden = await sharePost(w, author, `Bài sẽ ẩn ${randomUUID().slice(0, 8)}`);
@@ -565,6 +612,17 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · sự kiện realtime trên
       emoji: "love",
     });
     expect(again.status, JSON.stringify(again.body)).toBeLessThan(500);
+    // ĐỔI loại trên bài ẩn (nhánh «đổi loại» cũng phải đi qua cùng lưới hiển thị).
+    const switched = await w.put(author.token, `/social/posts/${hidden.id}/reaction`).send({
+      emoji: "haha",
+    });
+    expect(switched.status, JSON.stringify(switched.body)).toBe(again.status);
+    if (again.status === 200) {
+      // Neo dương: lượt đổi loại ĐÃ ghi thật — «0 sự kiện» bên dưới không phải vì request bị từ chối.
+      expect(dataOf(switched.body).reactions, "bài ẩn: hàng đã đổi loại").toEqual([
+        { emoji: "haha", count: 1, mine: true },
+      ]);
+    }
     const hiddenComment = await w.post(author.token, `/social/posts/${hidden.id}/comments`).send({
       body: "Bình luận trên bài ẩn",
     });
@@ -580,6 +638,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · sự kiện realtime trên
     idsOfA.push(unitComment.id);
     await reactPost(w, author, unitPost.id, "like");
     await reactComment(w, author, unitComment.id, "like");
+    await expectSwitched(unitPost.id, unitComment.id, "đơn vị");
 
     // (c) Bài nhóm (nợ S16-SOCIAL-RTGROUPCR-1 — ghim hiện trạng): bình luận + cảm xúc không phát.
     const group = await createGroup(w, author, "public");
@@ -592,6 +651,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · sự kiện realtime trên
     idsOfA.push(groupComment.id);
     await reactPost(w, author, groupPost.id, "like");
     await reactComment(w, author, groupComment.id, "like");
+    await expectSwitched(groupPost.id, groupComment.id, "nhóm");
 
     // Neo dương của cả ba loại sự kiện, phát SAU mọi thứ ở trên, trên CHÍNH socket này.
     idsOfA.push(await anchor(rec, author, second));

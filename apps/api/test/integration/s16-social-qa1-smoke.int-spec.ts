@@ -536,10 +536,10 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L0 · bộ đồ nghề QA + ca 
     expect(stripVolatile(sample, { uuids: true })).toEqual({
       data: { id: "<uuid>", createdAt: "<ts>", note: "bài <uuid> lúc <ts>" },
     });
-    // Sau khi bỏ UUID + mốc ISO, một regex «năm» không còn khớp nhầm.
-    const year = String(localDateParts().y);
+    // Sau khi bỏ UUID + mốc ISO, một regex «năm» không còn khớp nhầm. Mẫu ở trên là literal cố định
+    // (mọi mốc đều năm 2026), nên phép kiểm dùng đúng literal đó — không phụ thuộc ngày chạy.
+    expect(JSON.stringify(sample)).toContain("2026");
     expect(JSON.stringify(stripVolatile(sample, { uuids: true }))).not.toContain("2026");
-    expect(year).toMatch(/^\d{4}$/);
     expect(localDateParts(new Date(2031, 0, 9)).mmdd).toBe("01-09");
 
     // findIdentity: tự-kiểm DƯƠNG trên thẻ bài của chính tác giả, ÂM với danh tính người khác.

@@ -485,9 +485,10 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L4 · chéo công ty (DB cô l�
 
     // Dấu riêng của A cho các route danh sách mà lát không gieo sẵn.
     nameMark = `Zq${randomUUID().replace(/-/g, "").slice(0, 10)}`;
+    // Năm NHUẬN: ngày-tháng hôm nay luôn là một ngày có thật của năm sinh, kể cả khi chạy đúng 29/02.
     const born = await w.actor(w.A, "born", {
       pairs: ["view:feed"],
-      profile: { dob: `1990-${localDateParts().mmdd}`, fullName: `${nameMark} Sinh Nhat` },
+      profile: { dob: `1992-${localDateParts().mmdd}`, fullName: `${nameMark} Sinh Nhat` },
     });
     const kudosMade = await kudosPost(w, A.admin, [A.priv.employeeId ?? ""]);
     const openGroup = await createGroup(w, A.admin, "public");

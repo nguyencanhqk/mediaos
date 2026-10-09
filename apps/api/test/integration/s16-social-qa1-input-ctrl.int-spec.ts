@@ -43,6 +43,19 @@ interface Surface {
   /** Trường mà `details[]` phải nêu (đường dẫn nối bằng dấu chấm, như lỗi validation thường). */
   field: string;
   call: (text: string) => PromiseLike<Qa1Res>;
+  /**
+   * Số hàng mà BƯỚC CHUẨN BỊ của chính `call` tạo ra (bằng request thành công) trước request được
+   * đo. Vắng = bề mặt không có bước chuẩn bị ⇒ ca từ chối phải để số hàng ĐỨNG YÊN.
+   */
+  seeds?: Partial<RowCounts>;
+}
+
+/** Số hàng của MỘT công ty ở bốn bảng mà các bề mặt trong file này ghi vào. */
+interface RowCounts {
+  posts: number;
+  comments: number;
+  groups: number;
+  reports: number;
 }
 
 describe.skipIf(!hasLaneDb)(
@@ -66,6 +79,24 @@ describe.skipIf(!hasLaneDb)(
 
     afterAll(async () => {
       await w?.close();
+    });
+
+    /** Đếm hàng (kể cả hàng đã xoá mềm) của công ty A — nơi mọi request của file này ghi vào. */
+    async function rowCounts(): Promise<RowCounts> {
+      const r = await w.direct.query<RowCounts>(
+        `SELECT (SELECT count(*)::int FROM feed_posts    WHERE company_id = $1) AS posts,
+                (SELECT count(*)::int FROM feed_comments WHERE company_id = $1) AS comments,
+                (SELECT count(*)::int FROM feed_groups   WHERE company_id = $1) AS groups,
+                (SELECT count(*)::int FROM feed_reports  WHERE company_id = $1) AS reports`,
+        [w.A.companyId],
+      );
+      return r.rows[0] as RowCounts;
+    }
+    const plus = (base: RowCounts, add: Partial<RowCounts> = {}): RowCounts => ({
+      posts: base.posts + (add.posts ?? 0),
+      comments: base.comments + (add.comments ?? 0),
+      groups: base.groups + (add.groups ?? 0),
+      reports: base.reports + (add.reports ?? 0),
     });
 
     const post = (body: Json): PromiseLike<Qa1Res> =>
@@ -144,6 +175,7 @@ describe.skipIf(!hasLaneDb)(
         name: "029 ghi chú xử lý báo cáo",
         ok: 200,
         field: "resolutionNote",
+        seeds: { posts: 1, reports: 1 },
         call: async (t) => {
           const target = await sharePost(w, admin);
           const report = await reportTarget(w, author, "post", target.id);
@@ -177,6 +209,7 @@ describe.skipIf(!hasLaneDb)(
         name: "046 ghi chú duyệt sáng kiến",
         ok: 200,
         field: "reviewNote",
+        seeds: { posts: 1 },
         call: async (t) => {
           const idea = await ideaPost(w, author);
           return w
@@ -191,8 +224,19 @@ describe.skipIf(!hasLaneDb)(
       expect(res.status, JSON.stringify(res.body)).toBe(s.ok);
     });
 
+    it("tự-kiểm phép đếm hàng: một request THÀNH CÔNG làm số hàng tăng đúng 1", async () => {
+      const before = await rowCounts();
+      expect(before.posts, "bài nền đã được đếm").toBeGreaterThanOrEqual(1);
+      expect(before.groups, "nhóm nền đã được đếm").toBeGreaterThanOrEqual(1);
+      await sharePost(w, author, "Bài tự-kiểm phép đếm");
+      expect(await rowCounts()).toEqual(plus(before, { posts: 1 }));
+    });
+
     it.each(surfaces)("QA1-F-1 · $name có U+0000 ⇒ 400 chuẩn, nêu trường", async (s) => {
+      const rowsBefore = await rowCounts();
       const res = await s.call(`${MARK_HEAD}${NUL}${MARK_TAIL}`);
+      // Không ghi gì: số hàng chỉ đổi đúng bằng phần bước chuẩn bị của bề mặt (nếu có) đã tạo.
+      expect(await rowCounts(), `số hàng sau ${s.name}`).toEqual(plus(rowsBefore, s.seeds));
       const raw = JSON.stringify(res.body);
       const dump = `ĐO: ${s.name} ⇒ ${res.status} ${raw.slice(0, 400)}`;
       expect(res.status, dump).toBe(400);
@@ -213,7 +257,9 @@ describe.skipIf(!hasLaneDb)(
 
     it("thân có NHIỀU chuỗi chứa U+0000 ⇒ một 400, `details[]` nêu đủ từng trường", async () => {
       const bad = `${MARK_HEAD}${NUL}`;
+      const rowsBefore = await rowCounts();
       const res = await poll(bad, bad);
+      expect(await rowCounts(), "số hàng không đổi").toEqual(rowsBefore);
       expect(res.status, JSON.stringify(res.body)).toBe(400);
       const fields = ((res.body?.error?.details ?? []) as Array<{ field?: string }>).map(
         (d) => d.field,
@@ -223,8 +269,10 @@ describe.skipIf(!hasLaneDb)(
 
     it("thứ tự từ chối không đổi: không token ⇒ 401, thiếu quyền ⇒ 403 — cả khi thân có U+0000", async () => {
       const body = { type: "share", audience: "company", body: `${MARK_HEAD}${NUL}${MARK_TAIL}` };
+      const rowsBefore = await rowCounts();
       expectUnauthenticated(await w.post(null, "/social/posts").send(body));
       expectGuardDenied(await w.post(viewer.token, "/social/posts").send(body));
+      expect(await rowCounts(), "số hàng không đổi").toEqual(rowsBefore);
     });
 
     it("sau mọi lượt trên: cột đếm vẫn khớp (không ghi dở)", async () => {

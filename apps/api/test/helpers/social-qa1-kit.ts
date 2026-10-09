@@ -190,18 +190,32 @@ const short = (n = 8): string => randomUUID().replace(/-/g, "").slice(0, n);
  */
 export async function bootQa1World(label: string): Promise<Qa1World> {
   const direct = directPool();
-  const A = await seedCompany(direct, `${label}a`);
-  const B = await seedCompany(direct, `${label}b`);
+  // Mỗi bước dựng ném thì dọn thứ ĐÃ dựng rồi ném lại lỗi gốc — lúc ấy `afterAll` của spec chưa có
+  // `world` nào trong tay để đóng.
+  const seeded: string[] = [];
+  const fail =
+    (closeApp?: () => Promise<unknown>) =>
+    (bootError: unknown): Promise<never> =>
+      abortBoot(bootError, direct, seeded, closeApp);
+
+  const A = await seedCompany(direct, `${label}a`).catch(fail());
+  seeded.push(A.companyId);
+  const B = await seedCompany(direct, `${label}b`).catch(fail());
+  seeded.push(B.companyId);
   const companyIds = [A.companyId, B.companyId] as const;
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .compile()
+    .catch(fail());
   const app = applyMainPipeline(moduleRef.createNestApplication());
-  await app.init();
-  await app.listen(0);
-  const port = (app.getHttpServer().address() as AddressInfo).port;
-
   const loginPassword = loginPasswordFixture(`socialqa1${label}`);
-  const passwordHash = await app.get(PasswordService).hash(loginPassword);
+  const listenAndHash = async (): Promise<string> => {
+    await app.init();
+    await app.listen(0);
+    return app.get(PasswordService).hash(loginPassword);
+  };
+  const passwordHash = await listenAndHash().catch(fail(() => app.close()));
+  const port = (app.getHttpServer().address() as AddressInfo).port;
 
   const http = () => request(app.getHttpServer());
   const withAuth = (t: request.Test, token: string | null): request.Test =>
@@ -335,12 +349,49 @@ export async function bootQa1World(label: string): Promise<Qa1World> {
     del: (token, url) => withAuth(http().delete(url), token),
     orgUnit,
     actor,
+    // Bước sau LUÔN chạy dù bước trước ném: app hỏng lúc đóng vẫn dọn công ty, và pool luôn được đóng.
     close: async () => {
-      await app.close();
-      await cleanupTenants(direct, [...companyIds]);
-      await direct.end();
+      try {
+        await app.close();
+      } finally {
+        await dropWorld(direct, companyIds);
+      }
     },
   };
+}
+
+/**
+ * Dọn thứ đã dựng dở (app nếu có → công ty → pool) rồi ném lại LỖI GỐC của bước dựng; bước dọn cũng
+ * hỏng thì ném `AggregateError` mang cả hai, để lỗi gốc không bị che.
+ */
+async function abortBoot(
+  bootError: unknown,
+  direct: Pool,
+  companyIds: readonly string[],
+  closeApp?: () => Promise<unknown>,
+): Promise<never> {
+  try {
+    try {
+      await closeApp?.();
+    } finally {
+      await dropWorld(direct, companyIds);
+    }
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [bootError, cleanupError],
+      `[social-qa1-kit] dựng thế giới hỏng (${String(bootError)}) và bước dọn cũng hỏng`,
+    );
+  }
+  throw bootError;
+}
+
+/** Dọn các công ty đã tạo rồi LUÔN đóng pool — kể cả khi bước dọn ném. */
+async function dropWorld(direct: Pool, companyIds: readonly string[]): Promise<void> {
+  try {
+    if (companyIds.length > 0) await cleanupTenants(direct, [...companyIds]);
+  } finally {
+    await direct.end();
+  }
 }
 
 /** Số hàng catalog mang resource `feed` / `feed-*` — để ca tự-kiểm hàng rào so trước/sau. */
