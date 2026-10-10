@@ -7,6 +7,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
+import { SecurityAlertService } from "../../src/auth/security-alert.service";
 import { PermissionRepository } from "../../src/permission/permission.repository";
 import { SOCIAL_ERR } from "../../src/social/social.errors";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
@@ -169,6 +170,25 @@ describe.skipIf(!hasLaneDb)(
         [userId],
       );
       return { n: r.rows[0].n as number, detail: r.rows[0].detail, sev: r.rows[0].sev as string };
+    }
+
+    /**
+     * Số hàng `attach_gate_deny` của TENANT `A` = phạm vi SỞ HỮU của file này: mỗi int-spec gieo
+     * công ty riêng và các ca trong một file chạy tuần tự ⇒ không spec nào khác ghi được vào đây.
+     *
+     * 🔴 Dành cho ca «KHÔNG được sinh alert» (H8 · H9). ĐỪNG thu hẹp xuống `alertsOf(<người gửi>)` hay
+     * `detail->>'targetId'` — ĐO 10/10/2026 (S18-QA-CHECKALLFLAKE-1): reporter bị đổi sang phân biệt
+     * bằng thông điệp ghi cho lượt 403 TRẦN một hàng có `subject_user_id` NULL và `detail` KHÔNG
+     * mang `targetId` (lỗi trần không có `signal`) ⇒ hai vị từ đó đếm 0 và ca XANH-RỖNG đúng với
+     * lỗi nó sinh ra để bắt. Thứ duy nhất reporter luôn có là `companyId` do caller truyền vào.
+     */
+    async function tenantAlertCount(): Promise<number> {
+      const r = await direct.query(
+        `SELECT count(*)::int AS n FROM security_alerts
+          WHERE alert_type = 'attach_gate_deny' AND company_id = $1`,
+        [A.companyId],
+      );
+      return r.rows[0].n as number;
     }
 
     async function bodyOf(postId: string): Promise<string> {
@@ -334,6 +354,7 @@ describe.skipIf(!hasLaneDb)(
       it("H7 — DENY 004 ⇒ 403 · alert +1 · bài KHÔNG đổi · tệp KHÔNG link", async () => {
         const { postId } = await postWithFile();
         const before = await alertsOf(modUserId);
+        const tenantBefore = await tenantAlertCount();
         const bodyBefore = await bodyOf(postId);
         const mine = await seedFile(modUserId);
 
@@ -348,9 +369,15 @@ describe.skipIf(!hasLaneDb)(
         const after = await alertsOf(modUserId);
         // 🔴 Vế trung tâm: hàng alert SỐNG SÓT dù transaction nghiệp vụ đã cuộn.
         // Mutant «dùng `emitTx` trong tx» ⇒ đỏ ở đây với `expected 0 to be 1`.
-        // Mutant «bỏ dòng journal của 0588» ⇒ CHECK vỡ ⇒ `emit` NUỐT lỗi ⇒ cũng đỏ ở đây; đây là
-        // lưới DUY NHẤT nhìn thấy được ca đó.
+        // Mutant «bỏ dòng journal của 0588» ⇒ CHECK vỡ ⇒ `emit` NUỐT lỗi ⇒ cũng đỏ ở đây. (Lượt nhiễu
+        // `emit` của H9 đi qua cùng CHECK đó nên cũng phụ thuộc nó.)
         expect(after.n - before.n, "phải có ĐÚNG 1 hàng security_alerts mới").toBe(1);
+        // NEO CHỐNG-XANH-RỖNG cho H9: CÙNG helper mà H9 dùng PHẢI nhìn thấy hàng alert thật của
+        // tenant này. Vị từ gõ sai cột / sai tham số ⇒ đỏ ở đây, thay vì để `0 − 0` của H9 xanh.
+        expect(
+          (await tenantAlertCount()) - tenantBefore,
+          "đếm theo tenant phải thấy ĐÚNG hàng alert mới",
+        ).toBe(1);
         expect(after.sev, "severity chốt ở `low` (owner ký S-3)").toBe("low");
         expect(after.detail).toEqual({
           route: "postUpdate",
@@ -367,7 +394,8 @@ describe.skipIf(!hasLaneDb)(
 
       it("H8 — ALLOW cạnh DENY: vai ĐỦ quyền ⇒ 200 · KHÔNG sinh alert", async () => {
         const { postId, fileId } = await postWithFile();
-        const before = await alertsOf(modFullUserId);
+        // Ca «KHÔNG sinh alert» ⇒ đếm theo TENANT, không theo người — xem docblock `tenantAlertCount`.
+        const before = await tenantAlertCount();
         const mine = await seedFile(modFullUserId);
 
         const res = await patch(tModFull, `/social/posts/${postId}`).send({
@@ -376,14 +404,25 @@ describe.skipIf(!hasLaneDb)(
         });
 
         expect(res.status, JSON.stringify(res.body)).toBe(200);
-        expect((await alertsOf(modFullUserId)).n - before.n, "ALLOW không sinh alert").toBe(0);
+        expect((await tenantAlertCount()) - before, "ALLOW không sinh alert").toBe(0);
       });
 
       it("H9 — 403 KHÁC từ CÙNG tx (không phải chủ bài) ⇒ KHÔNG sinh alert", async () => {
         const { postId, fileId } = await postWithFile();
-        const before = await direct.query(
-          `SELECT count(*)::int AS n FROM security_alerts WHERE alert_type = 'attach_gate_deny'`,
-        );
+        // Đếm hàng SỞ HỮU (tenant của file), KHÔNG đếm toàn bảng — xem docblock `tenantAlertCount`.
+        const before = await tenantAlertCount();
+
+        // CHỐT HỒI QUY (S18-QA-CHECKALLFLAKE-1) — mô phỏng một spec chạy SONG SONG trên cùng lane:
+        // giữa hai mốc đếm, một TENANT KHÁC ghi một hàng `attach_gate_deny` qua đúng lời gọi mà
+        // reporter dùng. Ai quay lại đếm TOÀN BẢNG thì ca này đỏ TẤT ĐỊNH (`expected 1 to be +0`)
+        // thay vì đỏ oan theo cách chia chunk. (Phải là tenant KHÁC: spec song song luôn có công
+        // ty riêng, còn một lượt deny CÙNG tenant thì vị từ theo tenant đếm nó — và đếm là ĐÚNG.)
+        const other = await seedCompany(direct, "attdebtpar");
+        companyIds.push(other.companyId);
+        const noise = await app
+          .get(SecurityAlertService, { strict: false })
+          .emit(other.companyId, { alertType: "attach_gate_deny", severity: "low" });
+        expect(noise, "lượt nhiễu phải GHI ĐƯỢC — không thì chốt hồi quy này rỗng").toBe(true);
 
         // Vai `PLAIN` CÓ `create:feed-post` nhưng KHÔNG `manage` ⇒ `assertCanMutateContent` ném
         // `ForbiddenException` TRẦN từ bên trong CÙNG transaction.
@@ -393,12 +432,11 @@ describe.skipIf(!hasLaneDb)(
         });
         expect(res.status, JSON.stringify(res.body)).toBe(403);
 
-        const after = await direct.query(
-          `SELECT count(*)::int AS n FROM security_alerts WHERE alert_type = 'attach_gate_deny'`,
-        );
         // 🔴 Chứng minh reporter phân biệt bằng `instanceof`, KHÔNG bằng thông điệp. Mutant «đổi
-        // sang `err.message.includes(...)`» làm ca này đỏ `expected 1 to be 0`.
-        expect(after.rows[0].n - before.rows[0].n, "403 KHÁC không được sinh alert").toBe(0);
+        // sang `err.message.includes(...)`» làm ca này đỏ `expected 1 to be +0`. ⚠️ Khi đo lại: bản
+        // mutant CHỈ đổi phép thử nổ `TypeError` lúc đọc `err.signal` ⇒ 500, đỏ ở dòng status phía
+        // trên và KHÔNG ghi hàng nào; phải kèm đọc `signal` khoan dung thì mutant mới bắn tới đây.
+        expect((await tenantAlertCount()) - before, "403 KHÁC không được sinh alert").toBe(0);
       });
 
       it("H10 — khử trùng cửa sổ: hai lượt deny CÙNG đích ⇒ 1 alert (S-5)", async () => {

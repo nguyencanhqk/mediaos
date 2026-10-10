@@ -12,6 +12,7 @@ import {
   PayrollMasterDataSeeder,
 } from "../../src/payroll/payroll-master-data.seeder";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { withReplicaSession } from "../helpers/replica-session";
 import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed";
 
 /**
@@ -72,6 +73,44 @@ describe.skipIf(!hasDb)(
       return rows.map((r) => r.code);
     }
 
+    // `tgenabled` của trigger đóng băng trong `pg_trigger` = trạng thái TOÀN CỤC (mọi phiên thấy như
+    // nhau; phiên `replica` KHÔNG đổi nó). 'O' = bật (origin) · 'D' = tắt.
+    const FREEZE_TRIGGER_STATE_SQL = `SELECT tgenabled FROM pg_trigger
+          WHERE tgname = 'salary_component_system_freeze'
+            AND tgrelid = 'salary_components'::regclass AND NOT tgisinternal`;
+
+    /** Trạng thái TOÀN CỤC của trigger đóng băng lúc gọi. Mảng rỗng = trigger biến mất. */
+    async function freezeTriggerState(): Promise<string[]> {
+      const { rows } = await direct.query<{ tgenabled: string }>(FREEZE_TRIGGER_STATE_SQL);
+      return rows.map((r) => r.tgenabled);
+    }
+
+    /**
+     * Đặt `DOAN_PHI.pit_deductible` của công ty A VƯỢT trigger đóng băng — CHỈ để gieo / dọn tiền đề
+     * của E4 (lý do ở chú thích của E4). Chạy trong phiên `replica`: trigger không bắn cho ĐÚNG phiên
+     * này, câu UPDATE commit ngay nên `runner` (connection riêng) đọc thấy.
+     *
+     * `freezeStateAtWrite` = trạng thái TOÀN CỤC của trigger do CHÍNH câu UPDATE đọc (`RETURNING`), tức
+     * tại đúng thời điểm ghi. Đó là chỗ duy nhất thấy được một cặp `DISABLE TRIGGER` / `ENABLE TRIGGER`
+     * bọc SÁT câu UPDATE: đọc trước hay sau lời gọi này đều ra 'O'.
+     */
+    async function forceDoanPhiPitDeductible(
+      value: boolean,
+    ): Promise<{ rowCount: number; freezeStateAtWrite: (string | null)[] }> {
+      const res = await withReplicaSession(direct, (client) =>
+        client.query<{ freeze_state: string | null }>(
+          `UPDATE salary_components SET pit_deductible = $2
+            WHERE company_id = $1 AND code = 'DOAN_PHI'
+        RETURNING (${FREEZE_TRIGGER_STATE_SQL}) AS freeze_state`,
+          [A.companyId, value],
+        ),
+      );
+      return {
+        rowCount: res.rowCount ?? 0,
+        freezeStateAtWrite: res.rows.map((r) => r.freeze_state),
+      };
+    }
+
     it("E1 tập mã value_type='engine' ĐÚNG BẰNG 4 nút tổng hợp (SET-EQUALITY, không đếm)", async () => {
       expect(await systemCodes(A.companyId, "value_type = 'engine'")).toEqual(
         [...PAYROLL_ENGINE_COMPONENT_CODES].sort(),
@@ -100,30 +139,52 @@ describe.skipIf(!hasDb)(
     });
 
     it("E4 ca ÂM: lật DOAN_PHI.pit_deductible=true ⇒ outcome.ok === FALSE (KHÔNG dùng .rejects)", async () => {
-      // ⚠️ HAI lý do ca này trông lạ, cả hai đều CÓ CHỦ ĐÍCH:
+      // ⚠️ BA lý do ca này trông lạ, cả ba đều CÓ CHỦ ĐÍCH:
       //
       // 1. `.rejects` ở đây sẽ LUÔN xanh vì `MasterDataSeedRunner.runOne()` nuốt throw ⇒ assert đúng
       //    là cờ `ok` của outcome, không phải phép ném.
       //
-      // 2. Fixture phải TẮT TẠM trigger `salary_component_system_freeze` để dựng được tiền đề. Trigger
+      // 2. Fixture phải VƯỢT trigger `salary_component_system_freeze` để dựng được tiền đề. Trigger
       //    (mig 0570) đóng băng hàng `is_system` tới mức một câu UPDATE thẳng qua `direct` cũng bị
       //    chặn — tức bất biến DB **giết chính fixture đối kháng** (`db-invariant-kills-adversarial-
       //    fixtures`). Đây KHÔNG phải nới cổng: hai lớp kiểm hai thứ KHÁC nhau —
       //      · trigger (ca C5b–C5f ở `s15-payroll-db1-invariants`) chặn đường GHI làm hỏng hàng seed;
-      //      · `assertSeedIntegrity()` (ca này) bắt hàng seed ĐÃ lệch, dù lệch bằng đường nào —
+      //      · `assertPayrollSeedIntegrity()` (ca này) bắt hàng seed ĐÃ lệch, dù lệch bằng đường nào —
       //        seeder viết sai, migration vá dữ liệu sai, hay khôi phục từ bản sao lưu cũ.
       //    Bỏ ca này vì "trigger đã chặn rồi" là bỏ lớp thứ hai đúng lúc lớp thứ nhất bị vòng qua.
-      //    `finally` bật lại trigger VÀ ca E4b assert nó đã bật lại (tắt mà quên bật = mọi ca sau mù).
-      await direct.query(
-        "ALTER TABLE salary_components DISABLE TRIGGER salary_component_system_freeze",
-      );
-      await direct.query(
-        `UPDATE salary_components SET pit_deductible = true
-        WHERE company_id = $1 AND code = 'DOAN_PHI'`,
-        [A.companyId],
-      );
+      //
+      // 3. VƯỢT bằng phiên `replica` (`withReplicaSession`), KHÔNG bằng `ALTER TABLE … DISABLE TRIGGER`
+      //    (`S18-QA-CHECKALLFLAKE-1`). DDL đó chạy trên pool là autocommit ⇒ trigger TẮT cho MỌI phiên
+      //    của DB tới khi bật lại, và `s15-payroll-be3-migration` chạy song song đọc `pg_trigger` trúng
+      //    cửa sổ đó thì đỏ oan (`tgenabled 'D'` · `[0575] DUNG: trigger …`). Bọc DISABLE / UPDATE /
+      //    ENABLE vào MỘT transaction cũng không dùng được ở đây: `runner` đọc bằng connection RIÊNG nên
+      //    không thấy UPDATE chưa commit, và khoá bảng của `ALTER TABLE` giữ tới hết transaction nên
+      //    runner tự chặn chính nó. Phiên `replica` chỉ làm trigger không bắn cho ĐÚNG phiên gieo:
+      //    không DDL, `tgenabled` toàn cục vẫn `O` — chốt ở BA thời điểm: lúc ghi tiền đề + ngay sau
+      //    lượt runner (hai assert bên dưới) + sau khi ca này xong (E4b).
       try {
+        const seeded = await forceDoanPhiPitDeductible(true);
+        expect(
+          seeded.rowCount,
+          "tiền đề của E4 KHÔNG được gieo: phải sửa đúng 1 hàng DOAN_PHI",
+        ).toBe(1);
         const outcomes = await runner.reconcileCompany(A.companyId);
+        // Hai chốt TRONG CỬA SỔ cho «fixture không tắt trigger TOÀN CỤC» — E4b chỉ đọc SAU ca này nên
+        // mù với kiểu «tắt rồi bật lại đúng», tức đúng dạng lỗi mà `S18-QA-CHECKALLFLAKE-1` gỡ:
+        //   · sau lượt runner — bắt `DISABLE` trước khi gieo + `ENABLE` ở `finally` (hình dạng cũ của ca này);
+        //   · lúc ghi tiền đề — bắt cặp `DISABLE` / `ENABLE` bọc SÁT câu UPDATE (đã bật lại trước khi runner
+        //     chạy nên chốt thứ nhất đọc ra 'O').
+        // Cả hai KHÔNG tự thành flake: hai chỗ khác trong bộ test tắt trigger NÀY (`withSystemKind` của
+        // `s15-payroll-be3-binding-gates` · replay mig 0575 ở `s15-payroll-be3-migration`) đều tắt TRONG một
+        // transaction (bật lại trước COMMIT, hoặc ROLLBACK) nên không phiên nào khác đọc được 'D' của chúng.
+        expect(
+          await freezeTriggerState(),
+          "fixture E4 đang TẮT trigger TOÀN CỤC giữa lúc runner chạy",
+        ).toEqual(["O"]);
+        expect(
+          seeded.freezeStateAtWrite,
+          "fixture E4 TẮT trigger TOÀN CỤC quanh câu UPDATE gieo tiền đề",
+        ).toEqual(["O"]);
         const payroll = outcomes.find((o) => o.seedKey === "payroll.master-data");
         expect(payroll, "không tìm thấy outcome của payroll.master-data").toBeTruthy();
         expect(payroll?.ok, "seeder PHẢI báo thất bại khi đoàn phí bị đánh dấu giảm trừ thuế").toBe(
@@ -131,26 +192,21 @@ describe.skipIf(!hasDb)(
         );
         expect(payroll?.error ?? "").toContain("DOAN_PHI");
       } finally {
-        await direct.query(
-          `UPDATE salary_components SET pit_deductible = false
-          WHERE company_id = $1 AND code = 'DOAN_PHI'`,
-          [A.companyId],
-        );
-        await direct.query(
-          "ALTER TABLE salary_components ENABLE TRIGGER salary_component_system_freeze",
-        );
+        // Dọn đi CÙNG đường gieo. Gieo nằm TRONG `try` nên bước này chạy cả khi gieo hỏng giữa chừng
+        // (đặt lại `false` là giá trị seed ⇒ chạy thừa cũng vô hại); E5 chốt rằng dọn đã có hiệu lực.
+        await forceDoanPhiPitDeductible(false);
       }
     });
 
-    it("E4b trigger ĐÃ ĐƯỢC BẬT LẠI sau fixture của E4 (tắt mà quên bật = mọi ca sau MÙ)", async () => {
-      const { rows } = await direct.query<{ tgenabled: string }>(
-        `SELECT tgenabled FROM pg_trigger
-          WHERE tgname = 'salary_component_system_freeze'
-            AND tgrelid = 'salary_components'::regclass AND NOT tgisinternal`,
-      );
-      expect(rows, "trigger biến mất").toHaveLength(1);
-      // 'O' = enabled (origin). 'D' = disabled.
-      expect(rows[0].tgenabled, "trigger còn ĐANG TẮT sau E4").toBe("O");
+    it("E4b fixture của E4 KHÔNG đụng trạng thái trigger TOÀN CỤC — `tgenabled` vẫn 'O' (tắt = mọi ca sau MÙ)", async () => {
+      // E4 vượt trigger bằng phiên `replica`, không bằng DDL ⇒ `pg_trigger.tgenabled` không đổi. Ca này
+      // chốt TRẠNG THÁI SAU E4: ai đưa `DISABLE TRIGGER` trở lại fixture mà quên / hỏng bước bật lại sẽ
+      // ĐỎ ở đây, thay vì để các ca phía sau chạy trên một bảng không còn được đóng băng.
+      // ⚠️ Ca này KHÔNG thấy được kiểu «tắt rồi bật lại đúng» — kiểu đó do hai chốt TRONG CỬA SỔ của E4
+      // bắt (đọc lúc ghi tiền đề + ngay sau lượt runner).
+      const states = await freezeTriggerState();
+      expect(states, "trigger biến mất").toHaveLength(1);
+      expect(states[0], "trigger còn ĐANG TẮT sau E4").toBe("O");
     });
 
     it("E5 ĐỐI CHỨNG DƯƠNG cho E4: sau khi khôi phục, seeder chạy lại XANH (ok === true)", async () => {
