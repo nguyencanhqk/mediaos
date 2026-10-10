@@ -10,6 +10,7 @@ import {
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
+import { SocialInputTextPipe } from "./social-input-text.pipe";
 import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
@@ -50,7 +51,7 @@ interface AuthenticatedRequest extends Request {
  * `social-two-layer-guard-census.unit-spec.ts` — nếu không, census 2 tầng lặng lẽ bỏ qua cả hai route.
  */
 @Controller("social/files")
-@UsePipes(ZodValidationPipe)
+@UsePipes(SocialInputTextPipe, ZodValidationPipe)
 export class SocialFilesController {
   constructor(private readonly svc: SocialFilesService) {}
 

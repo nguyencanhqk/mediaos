@@ -16,6 +16,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -305,6 +306,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2A · nhóm — vòng đời thành v
       "phải 409 ở service — để chạm `chk_feed_group_members_pending_role` là 500",
     ).toBe(409);
     expect(JSON.stringify(wrongRole.body)).toContain(SOCIAL_ERR.GROUP_MEMBER_STATE_MISMATCH);
+    expect(wrongRole.body.error?.code).toBe(SOCIAL_ERROR_CODES.GROUP_MEMBER_STATE_MISMATCH);
 
     const wrongDecision = await patch(owner.token, `/social/groups/${g}/members/${u2.userId}`).send(
       {

@@ -15,6 +15,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import { ForbiddenException, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -457,6 +458,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3B · thống kê tương tác 052/05
         const res = await get(tMgr1, url, { ...WEEK_S, orgUnitId: sB });
         expect(res.status, `${url}: ${JSON.stringify(res.body)}`).toBe(403);
         expect(JSON.stringify(res.body)).toContain(OUT_OF_SCOPE);
+        expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.STATS_UNIT_OUT_OF_SCOPE);
       }
       expect(await exportAuditCount(A.companyId)).toBe(before);
       // ALLOW đối chứng: đơn vị CỦA manager ⇒ 200.

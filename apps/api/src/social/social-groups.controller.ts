@@ -13,6 +13,7 @@ import {
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
+import { SocialInputTextPipe } from "./social-input-text.pipe";
 import { decideFeedGroupMemberSchema, type DecideFeedGroupMemberDto } from "@mediaos/contracts";
 import type { Request } from "express";
 import { Idempotent } from "../common/idempotency/idempotency.decorator";
@@ -48,6 +49,7 @@ interface AuthenticatedRequest extends Request {
  * một mình sẽ kết luận sai là "gate lỏng" — xem `social-groups.service.ts`.
  */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialGroupsController {
   constructor(private readonly groups: SocialGroupsService) {}
 

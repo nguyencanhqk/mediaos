@@ -27,6 +27,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -313,6 +314,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · sáng kiến (DB cô lập)",
     const denied = await createIdea(noIdea.token);
     expect(denied.status).toBe(403);
     expect(JSON.stringify(denied.body)).toContain(SOCIAL_ERR.IDEA_CREATE_REQUIRED);
+    expect((denied.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.IDEA_CREATE_REQUIRED,
+    );
 
     // Cổng phải chặn TRƯỚC khi ghi: một cổng đặt SAU `INSERT feed_posts` vẫn trả 403 nhưng để lại bài
     // mồ côi. Đếm trên DB, không tin status.
@@ -419,6 +423,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · sáng kiến (DB cô lập)",
     });
     expect(denied.status, JSON.stringify(denied.body)).toBe(422);
     expect(JSON.stringify(denied.body)).toContain(SOCIAL_ERR.IDEA_REJECT_NOTE_REQUIRED);
+    expect(denied.body.error?.code).toBe(SOCIAL_ERROR_CODES.IDEA_REJECT_NOTE_REQUIRED);
     expect((await ideaRow(postId))?.status, "vẫn `under_review`").toBe("under_review");
 
     const ok = await patch(reviewer.token, `/social/posts/${postId}/idea/review`).send({
@@ -481,6 +486,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · sáng kiến (DB cô lập)",
     });
     expect(res.status, JSON.stringify(res.body)).toBe(409);
     expect(JSON.stringify(res.body)).toContain(SOCIAL_ERR.IDEA_TRANSITION);
+    expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.IDEA_TRANSITION);
     expect((await ideaRow(postId))?.status).toBe("submitted");
   });
 

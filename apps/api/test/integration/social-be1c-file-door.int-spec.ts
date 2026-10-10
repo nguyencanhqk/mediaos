@@ -32,6 +32,7 @@
 
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -237,6 +238,7 @@ describe.skipIf(!hasLaneDb)(
         });
         expect(res.status, JSON.stringify(res.body)).toBe(403);
         expect(JSON.stringify(res.body)).toContain(SOCIAL_ERR.FILE_TARGET_COMMENT_DENIED);
+        expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.FILE_TARGET_COMMENT_DENIED);
       });
 
       it("ALLOW (cạnh ca trên): `postOnly` + target=post ⇒ 200", async () => {
@@ -250,6 +252,7 @@ describe.skipIf(!hasLaneDb)(
         });
         expect(res.status, JSON.stringify(res.body)).toBe(403);
         expect(JSON.stringify(res.body)).toContain(SOCIAL_ERR.FILE_TARGET_POST_DENIED);
+        expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.FILE_TARGET_POST_DENIED);
       });
 
       it("ALLOW (cạnh ca trên): `commentOnly` + target=comment ⇒ 200", async () => {
@@ -299,6 +302,7 @@ describe.skipIf(!hasLaneDb)(
         const res = await post(tOther, `/social/files/${fileId}/confirm`).send({ target: "post" });
         expect(res.status, JSON.stringify(res.body)).toBe(403);
         expect(JSON.stringify(res.body)).toContain(SOCIAL_ERR.FILE_NOT_OWNED);
+        expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.FILE_NOT_OWNED);
         expect((await fileRow(fileId))?.owner_user_id).toBe(bothUserId);
         expect((await fileRow(fileId))?.owner_user_id).not.toBe(otherUserId);
       });

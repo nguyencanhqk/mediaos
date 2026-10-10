@@ -578,6 +578,57 @@ dấu gạch chứ không in 0 ₫** — cộng 1 ca wire trong Grid).
 
 ---
 
+## 5k. SOCIAL — Bảng tin nội bộ (wave S16, nghiệm thu QA 09/10/2026)
+
+> Đừng nhầm với §5b («App vệ tinh SOCIAL — `apps/fbpost`»): mục này là **bảng tin nội bộ** chạy trong `apps/api` +
+> `apps/app`. Nghiệp vụ: [SPEC-16](spec/SPEC-16%20SOCIAL.md) · API:
+> [API-19](API%20Design/API-19_SOCIAL_API_Design.md).
+
+Backend có **59 route** (57 dưới `/api/v1/social` + 2 dưới `/api/v1/recycle-bin/feed-posts`): bảng tin · bài viết ·
+bình luận · cảm xúc · lưu bài · tin tức có xác nhận đã đọc · tìm kiếm · thẻ · sinh nhật · báo cáo & kiểm duyệt · nhóm ·
+bình chọn · sáng kiến · vinh danh & huy hiệu · thống kê tương tác · tệp đính kèm · thùng rác. Gác bằng **15 cặp quyền
+`feed*`** theo hai tầng: tầng 1 ở route (thiếu cặp ⇒ 403 `AUTH-ERR-FORBIDDEN`), tầng 2 trong nghiệp vụ (403 mang mã
+`SOCIAL-ERR-…`).
+
+**Quyền theo vai hệ thống** (số cặp `feed*`; vai tuỳ biến thì theo cặp được gán):
+
+| Vai | Số cặp | Làm được | Bị chặn (403 tầng 1) |
+| --- | ---: | --- | --- |
+| employee | 7 | đọc bảng tin · đăng bài / bình luận / cảm xúc / lưu · tạo nhóm · bình chọn · sáng kiến · vinh danh · gửi báo cáo | kiểm duyệt bài · danh sách người đã xác nhận tin · xem / xử lý báo cáo · duyệt sáng kiến · quản lý huy hiệu · thống kê · thùng rác (13/59 route) |
+| manager | 8 | như employee + xem báo cáo và thống kê **của đơn vị mình** | kiểm duyệt · danh sách người đã xác nhận tin · xử lý báo cáo · duyệt sáng kiến · huy hiệu · thùng rác (10/59 route) |
+| hr · company-admin | 15 | toàn bộ 59 route | — |
+| payroll-officer · recruiter · asset-manager · office-admin · hr-manager | 0 | — (gán kèm `employee` thì đúng bằng employee) | cả 59 route |
+
+| Việc | Cách kiểm | Kỳ vọng |
+| --- | --- | --- |
+| Vai không có cặp feed | đăng nhập tài khoản chỉ giữ vai `payroll-officer` rồi gọi `GET /social/feed` | **403** `AUTH-ERR-FORBIDDEN`; gán thêm `employee` ⇒ 200 |
+| Nhân viên đăng tin tức | nhân viên tạo bài loại tin tức | **403** `SOCIAL-ERR-010` (cần `manage:feed-news`); bài thường ⇒ 201 |
+| Sửa / xoá bài người khác | nhân viên B sửa hoặc xoá bài của nhân viên A | **403** `SOCIAL-ERR-003`, bài không đổi; hr / company-admin xoá được và có vết kiểm toán |
+| Bài không được thấy | mở bằng id một bài đang ẩn · đã xoá · thuộc nhóm kín mình không tham gia · thuộc đơn vị khác | **404** `SOCIAL-ERR-001` — cùng một thân lỗi với id không tồn tại |
+| Xoá bài | xoá một bài có thẻ, có người đã lưu | bài biến khỏi bảng tin · chi tiết · tìm kiếm · lọc theo thẻ · danh sách đã lưu · số liệu tuần; lượt dùng của thẻ giảm |
+| Khôi phục từ thùng rác | người có `restore:feed-post` khôi phục bài tác giả tự xoá | bài trở về trạng thái **ẩn** (tác giả + người kiểm duyệt thấy, đồng nghiệp chưa thấy); bộ đếm bình luận / cảm xúc / lượt xem đếm lại đúng |
+| Khoá bình luận | người kiểm duyệt khoá bình luận rồi người khác bình luận | từ chối với `SOCIAL-ERR-004`; trả lời quá một cấp ⇒ `SOCIAL-ERR-005` |
+| Cảm xúc realtime | hai tài khoản cùng mở bảng tin; một người thả rồi **đổi loại** cảm xúc | bên kia thấy tổng hợp mới ngay ở cả hai lượt (đổi loại đã vá ở WO này); bấm lại đúng loại cũ không phát thêm sự kiện |
+| Nhóm kín | người ngoài mở nhóm kín bằng id · thành viên thường sửa nhóm · chủ nhóm duy nhất rời nhóm · vào nhóm lần hai | **404** `SOCIAL-ERR-012` · **403** `SOCIAL-ERR-014` · **409** `SOCIAL-ERR-015` · **409** `SOCIAL-ERR-013` |
+| Bình chọn | bỏ phiếu vào bình chọn đã đóng · đọc kết quả bằng tài khoản company-admin | `SOCIAL-ERR-016` · response **không có** danh tính cử tri, kể cả bình chọn không ẩn danh |
+| Sinh nhật | mở danh sách sinh nhật tuần / tháng · một người tắt hiển thị sinh nhật trong tuỳ chọn cá nhân | mỗi dòng chỉ có ngày + tháng, **không có năm sinh**; người đã tắt không xuất hiện |
+| Báo cáo | báo cáo cùng một bài hai lần khi báo cáo đầu còn mở · manager mở danh sách báo cáo | **409** `SOCIAL-ERR-REPORT-DUPLICATE-OPEN` · manager chỉ thấy báo cáo về bài của đơn vị mình, không thấy tên người báo cáo |
+| Thống kê theo đơn vị | manager hỏi thống kê của đơn vị khác | **403** `SOCIAL-ERR-STATS-UNIT-OUT-OF-SCOPE`; hr thấy toàn công ty |
+| Nhắc tên / thẻ | nhắc tên một tài khoản đã khoá · viết `#Tag` và `#tag` trong cùng bài | bài vẫn 201, người không hợp lệ nằm ở `droppedMentions` và không nhận thông báo · hai cách viết là **một** thẻ |
+| Đầu vào lạ | gửi chuỗi chứa ký tự U+0000 ở thân hoặc tham số tìm kiếm | **400** `VALIDATION-ERR-001` kèm tên trường, không ghi gì (đã vá ở WO này) |
+| Hai công ty | tài khoản công ty B gọi bất kỳ route nào với id thật của công ty A | **404** như id không tồn tại (thống kê theo đơn vị: 403; danh sách bài theo hồ sơ: 200 rỗng); không bao giờ 2xx có dữ liệu; dữ liệu của A không đổi |
+| Bấm «thích» đồng thời | nhiều người thả cảm xúc cùng lúc vào một bài | số đếm trên bài bằng đúng số hàng cảm xúc thật |
+
+Bộ test tự động của `S16-SOCIAL-QA-1`: **909 ca int mới / 15 file** `s16-social-qa1-*` (cần `LANE_DB` — ma trận cặp
+quyền 196 · 9 vai × 59 route 261 · tầng 2 16 · IDOR 120 · chéo công ty 133 · mã lỗi 77 · đua + đối soát 12 · xoá mềm 16 ·
+dữ liệu cá nhân 11 · realtime 10 · fuzz 6 · ký tự điều khiển 32 · ca bù 4 · ca khói 15). Coverage `src/social/**`
+**98,66 %** statements (branches 92,65 %) trên lượt 81 file / 2.335 ca. **2 lỗi sản phẩm tìm được và đã vá** (đổi loại
+cảm xúc không phát realtime · ký tự U+0000 trả sai lớp status), 1 lỗi có gốc ở tầng chung của API tách WO
+(`S1-FND-BODYLIMIT-1`). Bốn câu hỏi «thiết kế hay cần siết» về hiển thị đang chờ owner. Bằng chứng:
+[`QA/evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md`](QA/evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md).
+
+---
+
 ## 6. Tham chiếu
 
 - Trạng thái tự sinh: [docs/STATUS.md](STATUS.md) — danh sách WO "Đã xong (v2)".
