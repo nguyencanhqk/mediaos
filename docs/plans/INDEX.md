@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**607 WO** · có micro-plan: **348/607** · ⬜ 58 chờ · 🔵 2 đang làm · ✅ 546 xong · 🔴 1 chặn
+**611 WO** · có micro-plan: **349/611** · ⬜ 61 chờ · 🔵 2 đang làm · ✅ 547 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -39,6 +39,8 @@
 | `S1-QA-DEBT-1` | 🟡 | ✅ xong | — *(chưa)* | — | Test-suite triage: xoá/exclude test của module PARKED (de-media-fy: fi |
 | `S1-INT-MOUNT-1` | 🟡 | ✅ xong | — *(chưa)* | — | Quyết scope + mount-or-skip: webhooks-deny + ui-config-deny đang 404 ( |
 | `S1-FND-CORS-EXPOSE-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | CORS của API không khai `exposedHeaders: [«Content-Disposition»]` (`ap |
+| `S1-FND-BODYLIMIT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-QA-1 | Thân request quá cỡ trả sai lớp status ở tầng chung của API: lỗi của b |
+| `S1-FND-NULINPUT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-QA-1 | Ký tự U+0000 trong chuỗi đầu vào ở các module NGOÀI SOCIAL: chưa có lớ |
 
 ## Sprint 2
 
@@ -634,9 +636,11 @@
 | `S16-SOCIAL-FEPOSTSWITCH-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Trang chi tiết bài (`PostDetailPage`) giữ state của bài CŨ khi chỉ `$p |
 | `S16-SOCIAL-FECROSSOPEN-1` | amber | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C | Mở ứng dụng ở tên miền khác (LMS · Đăng bài Facebook) từ BỐN nơi — dải |
 | `S16-SOCIAL-FECOMMENTA11Y-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C ⏳S16-SOCIAL-FE-2D | Hàng bình luận: ba nút chữ «Trả lời» · «Xoá» · «Báo cáo» mang CÙNG tên |
-| `S16-SOCIAL-QA-1` | amber | 🔵 đang làm | — *(chưa)* | ✅S16-SOCIAL-FE-3 ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C ✅S16-SOCIAL-BE-3C | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
+| `S16-SOCIAL-QA-1` | amber | ✅ xong | [📄](S16-SOCIAL-QA-1.md) | ✅S16-SOCIAL-FE-3 ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C ✅S16-SOCIAL-BE-3C | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
 | `S16-SOCIAL-TESTISO-1` | amber | ✅ xong | [📄](S16-SOCIAL-TESTISO-1.md) | — | Vá CÁCH LY TEST: Nhóm 13 của s16-social-db2-invariants chạy thân migra |
-| `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
+| `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
+| `S16-SOCIAL-DOC-3` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-QA-1 | Đính chính SPEC-16 + API-19 theo các chỗ lệch tài liệu ↔ code mà S16-S |
+| `S16-SOCIAL-QADEBT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-QA-1 | Nợ test SOCIAL sau S16-SOCIAL-QA-1: chuyển 18 int-spec SOCIAL dựng app |
 | `S16-SOCIAL-AVATARPRESIGN-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-AVATARPRESIGN-1.md) | ✅S16-SOCIAL-BE-2D | `avatarUrl` của TOÀN module SOCIAL (tác giả bài/bình luận · người thả  |
 | `S16-SOCIAL-POSTSSPLIT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-AVATARPRESIGN-1 | `apps/api/src/social/social-posts.service.ts` vượt trần 800 dòng (904  |
 | `S16-SOCIAL-BDAYMASKED-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-AVATARPRESIGN-1 | `026` vẫn hiện dòng sinh nhật (ngày/tháng) của người có TK khoá/xoá mề |
@@ -716,7 +720,7 @@
 | `S19-FE-MAILSAVEERR-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S19-SEC-MAILAADBIND-1 | Console «Cấu hình mail server»: lỗi Lưu KHÔNG phải MAIL-PASSWORD-REQUI |
 | `S19-GOV-BOOKKEEPRE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S19-OPS-AUDITHIGH-1 | Nợ sổ sách sau #558: `BOOKKEEPING_RE` của reconcile thiếu `chore(backl |
 | `S19-LMS-NODEMAILER-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S19-OPS-AUDITHIGH-1 | `apps/lms` (repo git RIÊNG, ngoài cổng SCA) ghim `nodemailer ^8.0.7` — |
-| `S19-OPS-STORAGEPUBLIC-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Storage PROD chỉ nghe ở địa chỉ nội bộ của máy chủ và tunnel không có  |
+| `S19-OPS-STORAGEPUBLIC-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Storage PROD chỉ nghe ở địa chỉ nội bộ của máy chủ và tunnel không có  |
 
 ---
 

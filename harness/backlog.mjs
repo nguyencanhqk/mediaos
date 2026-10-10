@@ -19612,6 +19612,7 @@ export const backlog = [
     ],
     notes: [
       "🟡 Gate LIGHT — chỉ hạ tầng test + cấu hình cổng, không đổi mã sản phẩm. Seed 09/10/2026 từ S16-SOCIAL-QA-1. Có thể tách thành nhiều PR theo từng `done_when`.",
+      "BỔ SUNG 10/10/2026 (gate bù `ecc:database-reviewer` trên câu upsert cảm xúc của S16-SOCIAL-QA-1 — PASS, 0 finding; plan QA-1 §9 hàng «Gate bù»): gộp vào mục «Ca mới» hai ca đua mà QA1-R-2 chưa phủ (nó chỉ đo ca CÙNG loại): (d) hai lượt đặt cảm xúc KHÁC loại của cùng một người lên cùng một đích ⇒ còn đúng một hàng, bộ đếm +1 đúng một lần; (e) đặt × gỡ cảm xúc đồng thời theo cả hai thứ tự ⇒ bộ đếm khớp số hàng thật. Kết luận PASS của reviewer là suy từ mã + tài liệu PG, chưa đo bằng hai phiên — hai ca này chính là phép đo đó.",
     ],
   },
   // ════════════════════ WAVE S17-CHAT-UX2 — nâng bố cục/thao tác Chat theo benchmark MISA AMIS Chat ════════════════════
