@@ -27,6 +27,7 @@ import { Avatar, Button, Skeleton, cn } from "@mediaos/ui";
 import type { FeedCommentDto, FeedReactionEmojiDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PostBody } from "./PostBody";
+import { PostAttachments } from "./PostAttachments";
 import { FeedReactionBar } from "./FeedReactionBar";
 import { authorDisplayName, avatarSrc, relativeTime } from "../lib/feed-format";
 import { ReportDialog } from "../../moderation/components/ReportDialog";
@@ -97,6 +98,15 @@ function CommentRow({
             </span>
           </div>
           <PostBody body={comment.body} mentions={comment.mentions} />
+          {/* S16-SOCIAL-FE-2D — DTO luôn chở `attachments`; trước đây hàng bình luận bỏ qua chúng. */}
+          {/* Bình luận chỉ vẽ ở trang chi tiết ⇒ vẽ ĐỦ ảnh, không cắt ở 4 ô. */}
+          <PostAttachments
+            attachments={comment.attachments}
+            compact
+            showAllImages
+            testId="comment-attachments"
+            className="mt-2"
+          />
         </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-2">

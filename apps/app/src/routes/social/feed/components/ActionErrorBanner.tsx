@@ -19,6 +19,7 @@ import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { cn } from "@mediaos/ui";
+import { ATTACHMENT_LIMIT_PARAMS } from "../lib/attachment-limits";
 
 /**
  * Rộng hơn `FeedActionKind` của `use-feed-actions`: dải này còn phục vụ các đường ghi KHÔNG đi qua
@@ -51,9 +52,10 @@ export type ActionErrorKind = (typeof ACTION_ERROR_KINDS)[number];
 
 /**
  * S16-SOCIAL-FE-2B — lý do CỤ THỂ đọc được từ lỗi (`groups/lib/group-errors.ts`; S16-SOCIAL-FE-2C thêm
- * `kudos/lib/kudos-errors.ts`; S16-SOCIAL-FEMODERRMSG-1 thêm `feed/lib/feed-errors.ts`). Có `reason`
- * thì câu chữ nói ĐÚNG lý do (vd «phải còn một chủ nhóm») thay cho câu forbidden/generic — done_when
- * #1 của FE-2B: 409 ERR-015 phải hiện lý do, không phải «vui lòng thử lại» (thử lại là vô ích).
+ * `kudos/lib/kudos-errors.ts`; S16-SOCIAL-FEMODERRMSG-1 thêm `feed/lib/feed-errors.ts`; S16-SOCIAL-FE-2D
+ * thêm `feed/lib/attachment-draft.ts`). Có `reason` thì câu chữ nói ĐÚNG lý do (vd «phải còn một chủ
+ * nhóm») thay cho câu forbidden/generic — done_when #1 của FE-2B: 409 ERR-015 phải hiện lý do, không
+ * phải «vui lòng thử lại» (thử lại là vô ích).
  */
 export const ACTION_ERROR_REASONS = [
   "lastOwner",
@@ -70,8 +72,21 @@ export const ACTION_ERROR_REASONS = [
   "kudosBadgeInvalid",
   // S16-SOCIAL-FEMODERRMSG-1 — hành động trên bài gặp 404 `SOCIAL-ERR-001` (`feed/lib/feed-errors.ts`).
   "postGone",
+  // S16-SOCIAL-FE-2D — đính kèm (`SOCIAL-ERR-007` · `SOCIAL-ERR-FILE-TARGET-*-DENIED`).
+  "attachmentRejected",
+  "attachDenied",
 ] as const;
 export type ActionErrorReason = (typeof ACTION_ERROR_REASONS)[number];
+
+/**
+ * Tham số nội suy của câu lý do (S16-SOCIAL-FE-2D, FULL gate lượt 1 — G6): con số TRẦN đọc từ hằng
+ * contracts, KHÔNG chép cứng vào bản dịch. Reason vắng ở đây ⇒ câu không có biến (`ActionErrorBanner.spec`
+ * chặn `{{` lọt ra màn hình cho MỌI reason).
+ */
+type ReasonParams = Readonly<Record<string, string | number>>;
+const REASON_PARAMS: Partial<Record<ActionErrorReason, ReasonParams>> = {
+  attachmentRejected: ATTACHMENT_LIMIT_PARAMS,
+};
 
 export interface ActionErrorBannerProps {
   kind: ActionErrorKind;
@@ -92,7 +107,9 @@ export function ActionErrorBanner({
 }: ActionErrorBannerProps): React.ReactElement {
   const { t } = useTranslation("social");
   const group = forbidden ? "forbidden" : "generic";
-  const text = reason ? t(`actionError.reason.${reason}`) : t(`actionError.${group}.${kind}`);
+  const text = reason
+    ? t(`actionError.reason.${reason}`, REASON_PARAMS[reason])
+    : t(`actionError.${group}.${kind}`);
 
   return (
     <div
