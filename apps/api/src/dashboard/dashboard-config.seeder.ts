@@ -36,7 +36,10 @@ export class DashboardConfigSeeder implements ModuleMasterDataSeeder {
   // S13-PAYROLL-DASH-1: bump v4→v5 — CÙNG lý do, cho 4 entry mới (PAYROLL_COST × 4 dashboard type).
   // S15-PAYROLL-DASH-1: bump v5→v6 — CÙNG lý do, cho 8 entry mới (PAYROLL_BUDGET +
   // PAYROLL_ADVANCE_PENDING × 4 dashboard type).
-  readonly seedVersion = "v6";
+  // S16-SOCIAL-DASH-1: bump v6→v7 — CÙNG lý do, cho 8 entry mới (SOCIAL_ENGAGEMENT_WEEK +
+  // SOCIAL_NEWS_UNACKED × 4 dashboard type). Mig 0592 PHẢI chạy trước khi boot bản này (seedOne ném
+  // khi thiếu hàng catalog toàn cục, và lỗi seed lúc boot chỉ để lại log).
+  readonly seedVersion = "v7";
 
   async seed(ctx: MasterDataSeedContext): Promise<void> {
     for (const entry of DASH_DEFAULT_CONFIG) {
@@ -68,7 +71,7 @@ export class DashboardConfigSeeder implements ModuleMasterDataSeeder {
 
     if (!widget) {
       throw new Error(
-        `[dash.default-configs] widget GLOBAL '${widgetCode}' không tồn tại — migration 0484 phải chạy trước`,
+        `[dash.default-configs] widget GLOBAL '${widgetCode}' không tồn tại — migration thêm widget này vào catalog chưa chạy (db:migrate TRƯỚC khi boot API)`,
       );
     }
 

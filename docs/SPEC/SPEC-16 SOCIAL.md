@@ -505,12 +505,22 @@ Bảng endpoint đầy đủ kèm cặp quyền từng route, DTO và mã lỗi:
 
 Trong ứng dụng (chuông NOTI) là kênh duy nhất ở v1. **Không** email, **không** push mobile (`PARK-SOCIAL-001`).
 
-### 17.3 Widget DASH
+### 17.3 Widget DASH (`S16-SOCIAL-DASH-1`, mig `0592` — **ĐÃ SHIP**)
 
-| Mã | Widget | Gate |
-| --- | --- | --- |
-| `SOCIAL-WIDGET-001` | «Tương tác tuần» — bài · bình luận · thích · thành viên hoạt động | `view:feed-report` (sàn `Company`; manager `Department`) |
-| `SOCIAL-WIDGET-002` | «Tin tức chưa đọc» — đếm tin yêu cầu ack mà tôi chưa xác nhận | `view:feed` (phạm vi `Own`) |
+| Mã | widget_code | Tên | Nguồn | Gate |
+| --- | --- | --- | --- | --- |
+| `SOCIAL-WIDGET-001` | `SOCIAL_ENGAGEMENT_WEEK` | «Tương tác tuần» — bài · bình luận · cảm xúc · thành viên hoạt động của tuần hiện tại (slug `social-engagement-week`) | `SocialStatsService.weeklyEngagementForWidget()` — cùng câu với hàng tuần hiện tại của `SOCIAL-API-052` | cặp **`view:feed-report`** + **SÀN scope `Department`** |
+| `SOCIAL-WIDGET-002` | `SOCIAL_NEWS_UNACKED` | «Tin tức chưa đọc» — CHỈ `total` = số tin yêu cầu xác nhận mà chính người xem chưa xác nhận (slug `social-news-unacked`) | nhánh `countOnly` của `SOCIAL-API-020` (`SocialNewsService.list`) | cặp **`view:feed`** + **SÀN scope `Company`** |
+
+- **Sàn scope ép ở HAI tầng đọc CÙNG một hằng** (`DASH_WIDGET_MIN_DATA_SCOPE`): đường METADATA (`/dashboard/me` · `/dashboard/widgets` — widget dưới sàn bị bỏ khỏi danh sách) và đường DATA (`/dashboard/widgets/{slug}` — 403 «… ở phạm vi đủ rộng»). Người dưới sàn KHÔNG thấy ô số 0.
+- **«sàn Company; manager Department» của 001** = hằng sàn `Department`: tập scope hợp lệ là `Department` · `Company` · `System`; con số tự co theo scope của người xem (quản lý chỉ thấy đơn vị mình — cùng luật với 052). `Own` · `Team` ⇒ ẩn + 403: nguồn không 403 với hai scope này mà trả số 0, nên sàn của DASH là chỗ duy nhất chặn.
+- **«Own» của 002 là nhãn DỮ LIỆU**, không phải scope của grant: con số đếm cho chính người gọi, còn cặp `view:feed` chỉ hợp lệ ở `Company` (khớp sàn của route 020) ⇒ sàn widget là `Company`.
+- **Không cache (áp SOC-DEC-010)** — ba tầng: (1) server: TTL của module SOCIAL = 0, mỗi lượt xem tính lại; (2) HTTP: `Cache-Control: no-store` trên hai route dữ liệu widget (áp cho mọi widget); (3) FE giữ số tối đa 15 giây theo `staleTime` chung của mọi widget — nằm NGOÀI nghĩa «không cache» ở đây. Mỗi lượt xem vẫn ghi đè một hàng `dashboard_widget_cache` không ai đọc lại. Lý do riêng của 002: SOCIAL không phát sự kiện nào khi xác nhận / ẩn / xoá / khôi phục tin nên không có gì để làm mới cache.
+- **`Empty`:** 001 khi bài + bình luận + cảm xúc của tuần = 0 (gồm cả quản lý không thuộc / không đứng đầu đơn vị nào — chữ rỗng nói «trong phạm vi của bạn»); 002 khi `total = 0`. Lỗi của nguồn KHÔNG thành số 0: `HttpException` giữ nguyên status, lỗi khác ⇒ `Degraded`.
+- **«Cảm xúc» thay «thích»:** cột đếm mọi loại cảm xúc — cùng chữ với màn Thống kê tương tác và tệp XLSX của 053.
+- **FE dùng `useCanExact`** (khớp đúng-bằng như các route `/feed*`; hai cặp KHÔNG nhạy cảm nên lý do không phải «cặp sensitive»). Nút dẫn của 001 tới `/feed/stats` chỉ vẽ khi người xem có thêm `view:feed` (màn đó đòi đủ hai cặp); 002 dẫn tới `/feed/news`.
+- **Hiệu năng:** câu thống kê của 052 chưa có chỉ mục theo thời gian và chạy ở mỗi lượt mở Dashboard của quản lý · HR · admin (không cache) — owner chấp nhận khi dữ liệu còn nhỏ (12/10/2026); trả nợ ở `S16-SOCIAL-STATSPERF-1`. Công tắc vận hành không cần deploy: đặt `status = 'Inactive'` cho hàng catalog toàn cục của `SOCIAL_ENGAGEMENT_WEEK` ⇒ widget rời `/dashboard/me` (theo mã: `DashboardWidgetRegistryService` chỉ nạp hàng `status = 'Active'`; chưa diễn tập trên PROD).
+- **Bằng chứng:** `apps/api/test/integration/dashboard-social-widgets.int-spec.ts` (25 ca, LANE_DB — ba bề mặt cho từng widget, ca DENY assert nguyên chuỗi thông điệp để phân biệt cổng DASH với cổng của nguồn, đối chiếu số với 052 / 020, không cache + header, xoá mềm theo hai nhánh của luật khôi phục, chéo công ty, seeder `v7`) · `apps/api/src/dashboard/dashboard-widget-social.handlers.spec.ts` (35 ca) · `apps/app/src/components/dashboard/social-widgets.spec.tsx` (47 ca FE) · `packages/web-core/src/lib/dashboard-api.spec.ts` (2 ca ghim giá trị slug).
 
 ---
 
@@ -542,7 +552,7 @@ Mọi thao tác `manage:*` và `approve:feed-idea`: ẩn/hiện bài · ghim/b�
 | --- | --- |
 | Tải bảng tin trang đầu (20 bài) | < 500ms p95 |
 | Tìm kiếm toàn văn | < 800ms p95 |
-| Thống kê tương tác | < 2s p95, **không cache** (số phải tươi) |
+| Thống kê tương tác | < 2s p95, **không cache** (số phải tươi) — `SOCIAL-WIDGET-001` dùng cùng câu; chỉ mục thời gian còn nợ ở `S16-SOCIAL-STATSPERF-1` |
 | Phân trang | cursor-based cho feed; offset cho các danh sách quản trị |
 | Coverage `apps/api/src/social/` | **≥ 85%** trên LANE_DB |
 

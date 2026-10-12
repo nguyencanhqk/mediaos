@@ -10,7 +10,11 @@
  * KHÔNG cast tay.
  */
 import { z } from "zod";
-import { taskCoreStatusSchema, taskCorePrioritySchema } from "@mediaos/contracts";
+import {
+  taskCoreStatusSchema,
+  taskCorePrioritySchema,
+  feedEngagementWeekSchema,
+} from "@mediaos/contracts";
 
 /** message localized do SERVER trả (§16.6/§16.7) — component ưu tiên message này hơn copy i18n tĩnh. */
 export const widgetMessageSchema = z.object({ message: z.string() });
@@ -285,3 +289,29 @@ export const payrollAdvancePendingWidgetDataSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 export type PayrollAdvancePendingWidgetData = z.infer<typeof payrollAdvancePendingWidgetDataSchema>;
+
+// ── S16-SOCIAL-DASH-1 — SOCIAL_ENGAGEMENT_WEEK · SOCIAL_NEWS_UNACKED (dashboard-widget-social.handlers.ts) ──
+
+/**
+ * SOCIAL_ENGAGEMENT_WEEK — `fetchEngagementWeek()` trả NGUYÊN `FeedEngagementWeekDto` của TUẦN HIỆN TẠI
+ * (`SocialStatsService.weeklyEngagementForWidget` — hàng tổng tuần cuối của SOCIAL-API-052): { weekStart,
+ * posts, comments, reactions, activeMembers }. TÁI DÙNG `feedEngagementWeekSchema` của contracts chứ không
+ * khai lại 5 khoá: widget và màn Thống kê tương tác đọc CÙNG một hợp đồng, không có nơi thứ hai để trôi.
+ *
+ * Payload CHỈ là số đếm — không tên người, không nội dung bài. `activeMembers` là DISTINCT của tuần, không
+ * phải tổng ba cột kia. `weekStart` là `z.string()` ở hợp đồng (ngày lịch `YYYY-MM-DD` do SERVER tính theo
+ * múi giờ công ty) ⇒ component PHẢI tự kiểm dạng trước khi vẽ (xem `formatWeekStart` ở component).
+ */
+export const socialEngagementWeekWidgetDataSchema = feedEngagementWeekSchema;
+export type SocialEngagementWeekWidgetData = z.infer<typeof socialEngagementWeekWidgetDataSchema>;
+
+/**
+ * SOCIAL_NEWS_UNACKED — `fetchNewsUnacked()`: CHỈ `total` = số tin yêu cầu xác nhận mà CHÍNH người xem chưa
+ * xác nhận (`unackedCount` của SOCIAL-API-020 ở chế độ `countOnly`). `total = 0` ⇒ BE trả `Empty`, không
+ * trả `{ total: 0 }`. Schema hẹp đúng bằng payload là một cái chốt (khuôn PAYROLL_ADVANCE_PENDING): thêm
+ * khoá ở BE mà quên nghĩ sẽ không lặng lẽ chảy ra UI.
+ */
+export const socialNewsUnackedWidgetDataSchema = z.object({
+  total: z.number().int().nonnegative(),
+});
+export type SocialNewsUnackedWidgetData = z.infer<typeof socialNewsUnackedWidgetDataSchema>;

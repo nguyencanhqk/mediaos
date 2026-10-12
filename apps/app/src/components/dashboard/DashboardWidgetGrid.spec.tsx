@@ -61,6 +61,17 @@ vi.mock("./PayrollCostWidget", () => ({
     <div data-testid="widget-PAYROLL_COST">PAYROLL_COST:{dashboardType}</div>
   ),
 }));
+// S16-SOCIAL-DASH-1 (additive) — 2 widget SOCIAL, mock để ca «wire» chỉ đo bản đồ WIDGET_COMPONENTS của Grid.
+vi.mock("./SocialEngagementWeekWidget", () => ({
+  SocialEngagementWeekWidget: ({ dashboardType }: { dashboardType?: string }) => (
+    <div data-testid="widget-SOCIAL_ENGAGEMENT_WEEK">SOCIAL_ENGAGEMENT_WEEK:{dashboardType}</div>
+  ),
+}));
+vi.mock("./SocialNewsUnackedWidget", () => ({
+  SocialNewsUnackedWidget: ({ dashboardType }: { dashboardType?: string }) => (
+    <div data-testid="widget-SOCIAL_NEWS_UNACKED">SOCIAL_NEWS_UNACKED:{dashboardType}</div>
+  ),
+}));
 
 function widget(code: string, order: number): DashboardWidgetSummaryDto {
   return {
@@ -126,6 +137,24 @@ describe("DashboardWidgetGrid", () => {
   it("S13-PAYROLL-DASH-1 — wire widget PAYROLL_COST", () => {
     render(<DashboardWidgetGrid widgets={[widget("PAYROLL_COST", 100)]} dashboardType="Admin" />);
     expect(screen.getByTestId("widget-PAYROLL_COST")).toHaveTextContent("PAYROLL_COST:Admin");
+  });
+
+  /**
+   * G1 (S16-SOCIAL-DASH-1) — `WIDGET_COMPONENTS` không export và không ca nào khác kiểm nó ⊇ `DASH_WIDGET_CODE`:
+   * quên một dòng map là widget lặng lẽ không hiện trong khi spec của component (render thẳng, không qua Grid)
+   * vẫn xanh. Mảng input cố ý ĐẢO so với `layout.order` — @130 / @140 là thứ tự seed của BE (mig 0592).
+   */
+  it("S16-SOCIAL-DASH-1 — wire 2 widget SOCIAL (SOCIAL_ENGAGEMENT_WEEK/SOCIAL_NEWS_UNACKED) đúng thứ tự layout.order", () => {
+    const widgets = [widget("SOCIAL_NEWS_UNACKED", 140), widget("SOCIAL_ENGAGEMENT_WEEK", 130)];
+    render(<DashboardWidgetGrid widgets={widgets} dashboardType="Manager" />);
+    expect(screen.getByTestId("widget-SOCIAL_ENGAGEMENT_WEEK")).toHaveTextContent(
+      "SOCIAL_ENGAGEMENT_WEEK:Manager",
+    );
+    expect(screen.getByTestId("widget-SOCIAL_NEWS_UNACKED")).toHaveTextContent(
+      "SOCIAL_NEWS_UNACKED:Manager",
+    );
+    const order = screen.getAllByTestId(/^widget-/).map((el) => el.getAttribute("data-testid"));
+    expect(order).toEqual(["widget-SOCIAL_ENGAGEMENT_WEEK", "widget-SOCIAL_NEWS_UNACKED"]);
   });
 
   /**
