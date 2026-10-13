@@ -41,6 +41,17 @@ export const DASH_WIDGET_TTL_SECONDS: Readonly<Record<DashModuleCode, number>> =
   // canSeeMoney=true cho MỌI actor qua được (route 018 không nằm trong MONEY_FREE_ROUTES) ⇒ payload
   // viewer-independent, không có nhánh mask-per-người để cache lẫn.
   PAYROLL: 300,
+  // S16-SOCIAL-DASH-1: 0 = KHÔNG BAO GIỜ phục vụ lại — cho CẢ HAI widget SOCIAL, hai lý do khác nhau:
+  //   • «Tương tác tuần»: SOC-DEC-010 (SPEC-16) chốt thống kê tương tác KHÔNG cache (số phải tươi).
+  //   • «Tin tức chưa đọc»: SOCIAL không phát sự kiện nào khi xác nhận / ẩn / xoá / khôi phục tin, nên
+  //     không có gì để làm mới cache — TTL > 0 là giữ số cũ sau khi người dùng vừa bấm xác nhận.
+  // Cơ chế: `upsert` ghi `expires_at = generated_at`, `shouldServe` loại hàng `expiresAt <= now` ⇒ `fetch`
+  // chạy MỌI lượt (hàng cache vẫn được ghi đè mỗi lượt, chỉ là không ai đọc lại). ⚠️ `ttlSecondsFor` dùng
+  // `??` — đổi thành `||` là 0 lặng lẽ thành 60. Header `no-store` gắn ở DashboardWidgetDataController.
+  // ⚠️ Nới lên > 0 thì PHẢI sửa kèm: khoá cache của «Tương tác tuần» chưa mang tuần (`keyDiscriminator`) nên
+  // qua ranh tuần sẽ phục vụ số tuần cũ; và theo mã runner hiện tại, lượt cache hit trả `Empty` đã lưu thành
+  // `Active` + `{}` (đọc mã, chưa có ca tái hiện).
+  SOCIAL: 0,
 } as const;
 
 /**

@@ -19455,7 +19455,7 @@ export const backlog = [
     layer: "FULL",
     title:
       "Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạt động) + «Tin tức chưa đọc» (Own, đếm tin yêu cầu ack chưa xác nhận) — catalog BE + SÀN scope 2 tầng + slug FE Grid + useCanExact, đăng ký SOCIAL-WIDGET-001/002 (SPEC-01 §9.9)",
-    zone: "green",
+    zone: "red",
     status: "todo",
     paths: [
       "apps/api/src/dashboard/**",
@@ -19468,6 +19468,12 @@ export const backlog = [
       "packages/contracts/**",
       "docs/SPEC/SPEC-16*.md",
       "docs/spec/SPEC-16*.md",
+      // Mở rộng 12/10/2026 (plan §3.4) — 5 đường bản seed thiếu; lý do từng đường ở dòng cuối của `notes`.
+      "apps/app/src/i18n/locales/vi/dashboard.ts",
+      "apps/api/src/social/social-stats.service.ts",
+      "docs/API Design/API-19_SOCIAL_API_Design.md",
+      "docs/TESTABLE-FEATURES.md",
+      "docs/plans/S16-SOCIAL-DASH-1.md",
       "harness/backlog.mjs",
     ],
     skills: ["code-review"],
@@ -19480,10 +19486,48 @@ export const backlog = [
       "SocialModule export CHỈ service cần thiết; FE useCanExact; slug-map ratchet xanh; int-spec LANE_DB + FE test; typecheck/build xanh",
     ],
     notes: [
-      "🟢 LIGHT gate. Đóng wave S16: regen STATUS + memory.",
+      "🔴 FULL gate theo ĐƯỜNG DẪN (migration + cổng quyền) — không gắn nhãn auto-merge, người merge. Đóng wave S16: regen STATUS + memory.",
       "BÀN GIAO từ S16-SOCIAL-BE-3B (28/09/2026): SOCIAL-WIDGET-001 gọi `SocialStatsService.weeklyEngagementForWidget(user)` (đã export từ SocialModule; cùng cổng/sàn với 052). (a) MÂU THUẪN phải chốt: DASH cache widget theo `ttlSecondsFor` vs SOC-DEC-010 «thống kê KHÔNG cache» — chọn TTL=0/không cache hoặc xin owner nới. (b) `Own`/`Team` nhận số 0 chứ không 403 ⇒ DASH phải tự ẩn widget cho scope đó.",
       "(c) NỢ HIỆU NĂNG (database-reviewer FULL gate BE-3B, MEDIUM): câu 052 quét TOÀN BỘ lịch sử feed của công ty mỗi lượt (biên lo/hi áp sau khi đọc; `feed_comments`/`feed_reactions` không có chỉ mục `(company_id, created_at)`; chỉ mục bài partial `status='published'` không phục vụ `hidden`) — widget 1 tuần cũng vậy, và không cache. Trước khi bật widget: WO migration thêm 2 chỉ mục + đẩy lo/hi vào nhánh `ev` dạng scalar.",
       "BÀN GIAO từ S16-SOCIAL-QA-1 (09/10/2026, mục O1 của plan QA-1): widget thật phải có ca xoá mềm riêng — QA-1 chỉ đo NGUỒN dữ liệu của widget (hàng tuần hiện tại của 052 + `weeklyEngagementForWidget`), chưa có widget nào để đo trên Dashboard.",
+      "MỞ RỘNG `paths` 12/10/2026 (plan `docs/plans/S16-SOCIAL-DASH-1.md` §3.4) — bản seed thiếu 5 đường mà việc thi công buộc phải chạm: `apps/app/src/i18n/locales/vi/dashboard.ts` (tiêu đề + nhãn của hai widget) · `docs/plans/S16-SOCIAL-DASH-1.md` (plan + sổ vết) · `docs/API Design/API-19_SOCIAL_API_Design.md` (hai câu về widget) · `docs/TESTABLE-FEATURES.md` (cách thử tay) · `apps/api/src/social/social-stats.service.ts` (CHỈ docblock — con trỏ nợ (a)(b) thành cũ, không đổi mã); zone đổi sang red vì diff có migration + cổng quyền. Về mục (c) ở trên: owner chốt O1 = C2 ngày 12/10/2026: cắt lát hiệu năng, widget 001 vẫn bật mặc định với câu hiện tại; nợ chuyển S16-SOCIAL-STATSPERF-1.",
+    ],
+  },
+  // ── Nợ tách từ S16-SOCIAL-DASH-1 (seed 12/10/2026, owner chốt O1 = C2) — căn cứ: docs/plans/S16-SOCIAL-DASH-1.md §1.2 M11 · §7 N7 ──
+  {
+    id: "S16-SOCIAL-STATSPERF-1",
+    module: "SOCIAL",
+    layer: "PERF",
+    title:
+      "Hiệu năng câu thống kê tương tác của SOCIAL (route 052 + widget Dashboard «Tương tác tuần»): 2 chỉ mục thời gian trên `feed_comments` · `feed_reactions` + viết lại CTE `ev` để không quét toàn bộ lịch sử feed của công ty mỗi lượt — ĐO TRƯỚC trên bảng thật, kết quả cũ ≡ mới",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/social/social-stats.repository.ts",
+      "apps/api/src/db/schema/social.ts",
+      "apps/api/migrations/**",
+      "apps/api/test/**",
+      "docs/DB/**",
+      "docs/SPEC/SPEC-16*.md",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "database-review"],
+    depends_on: ["S16-SOCIAL-DASH-1"],
+    src: [
+      "Plan `docs/plans/S16-SOCIAL-DASH-1.md`: §1.2 M11 (hình dạng plan của câu thống kê, đo trên bảng tạm) · §3.2 O1 (owner chốt C2 ngày 12/10/2026 — tách nợ hiệu năng khỏi WO widget) · §7 N7 · §8 (công tắc vận hành)",
+      "Nợ gốc: database-reviewer ở FULL gate của S16-SOCIAL-BE-3B (mức MEDIUM) — mục (c) trong `notes` của S16-SOCIAL-DASH-1; câu cần viết lại: `SocialStatsRepository.engagementTx` ở `apps/api/src/social/social-stats.repository.ts` (các CTE `b` · `alive_posts` · `alive_comments` · `ev`)",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (không sửa mã): `EXPLAIN (ANALYZE, BUFFERS)` câu hiện tại trên bảng THẬT của lane, dưới vai app + FORCE RLS, với dữ liệu gieo CÓ hàng `companies` (biên `lo`/`hi` không NULL) và `count(*)` của từng nhánh (bài · bình luận · cảm xúc) > 0; lệnh gieo đi qua khoá lệnh nặng của máy; số đo ghi vào plan, phạm vi vá chốt theo số đo",
+      "Migration 2 chỉ mục thời gian — `feed_comments (company_id, created_at) WHERE deleted_at IS NULL` · `feed_reactions (company_id, created_at)` — đặt TRƯỚC mọi migration giữ khoá ACCESS EXCLUSIVE trong cùng lượt, kèm viết lại CTE `ev`: biên vô hướng · quét bảng gốc theo dải thời gian · tách nhánh cảm xúc theo `target_type`",
+      "Kết quả cũ ≡ mới: `(<câu cũ>) EXCEPT ALL (<câu mới>)` và chiều ngược lại đều 0 hàng cho ba bộ lọc `all` · `units` · `none`; 22 ca của `social-be3b-engagement-stats`, ca xoá mềm của S16-SOCIAL-QA-1 và ca X1 của widget (S16-SOCIAL-DASH-1) không đổi số",
+      "Ghim `indexdef` NGUYÊN CHUỖI của 2 chỉ mục (với `feed_comments` chỉ `indexdef` gác được: chỉ mục cũ cũng dẫn bằng `company_id` nên ca «không Seq Scan» không thể đỏ) và vế `created_at` của nhánh cảm xúc nằm trong `Index Cond`",
+    ],
+    notes: [
+      "🔴 FULL gate — migration + viết lại câu SQL thống kê chạy dưới FORCE RLS. Seed 12/10/2026 từ S16-SOCIAL-DASH-1 (owner chốt O1 = C2: widget «Tương tác tuần» bật mặc định với câu hiện tại khi dữ liệu còn nhỏ, nợ hiệu năng tách về WO này).",
+      "SỐ ĐO lúc seed (plan S16-SOCIAL-DASH-1 §1.2 M11): câu hiện tại 411 ms → thêm 2 chỉ mục mà giữ nguyên câu 323 ms → viết lại + tách nhánh cảm xúc 12 ms. Điều kiện đo: bảng TẠM 310.000 hàng, mỗi biến thể chạy một lượt, superuser không RLS ⇒ chỉ kết luận HÌNH DẠNG plan (thêm chỉ mục mà không sửa câu gần như vô ích), KHÔNG phải số hiệu năng của PROD — vì thế `done_when` đầu tiên bắt đo lại trên bảng thật.",
+      "NGƯỠNG MỞ: trước khi `feed_reactions` của một công ty vượt khoảng 50.000 hàng, hoặc khi Dashboard của quản lý chậm thấy được. Công tắc vận hành trong lúc chờ (plan S16-SOCIAL-DASH-1 §8 — mới đọc mã, chưa đo): đặt `status = 'Inactive'` cho hàng catalog `SOCIAL_ENGAGEMENT_WEEK` ⇒ widget rời `/dashboard/me`; đường gọi thẳng slug vẫn mở theo quyền.",
     ],
   },
   // ── Nợ bàn giao từ S16-SOCIAL-QA-1 (seed 09/10/2026) — bảng chi tiết: docs/QA/evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md §9 ──

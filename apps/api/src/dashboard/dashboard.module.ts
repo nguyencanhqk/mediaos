@@ -46,12 +46,19 @@ import { RecruitModule } from "../recruit/recruit.module";
 // = đúng công thức GET /payroll-periods/summary, PAYROLL-API-018; nó tự gate + ghi audit lượt đọc).
 // PayrollModule chỉ import PermissionModule ⇒ KHÔNG circular-dep.
 import { PayrollModule } from "../payroll/payroll.module";
+// S16-SOCIAL-DASH-1 (additive): module nguồn cho SOCIAL_ENGAGEMENT_WEEK / SOCIAL_NEWS_UNACKED —
+// SocialModule export đúng hai service widget cần (SocialStatsService.weeklyEngagementForWidget = hàng
+// tuần hiện tại của route 052 · SocialNewsService.list nhánh countOnly = huy hiệu của route 020).
+// SocialModule KHÔNG import DashboardModule (chỉ AppModule import DASH) ⇒ không circular-dep; hệ quả
+// ngược: từ nay SOCIAL không được import DashboardModule, muốn báo DASH thì đi qua outbox/EventBus.
+import { SocialModule } from "../social/social.module";
 import { DashboardWidgetDataController } from "./dashboard-widget-data.controller";
 import { DashboardWidgetDataService } from "./dashboard-widget-data.service";
 import { DashboardWidgetHandlersService } from "./dashboard-widget-handlers.service";
 import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
 import { DashboardWidgetRecruitHandlers } from "./dashboard-widget-recruit.handlers";
 import { DashboardWidgetPayrollHandlers } from "./dashboard-widget-payroll.handlers";
+import { DashboardWidgetSocialHandlers } from "./dashboard-widget-social.handlers";
 import { DashboardWidgetCacheService } from "./dashboard-widget-cache.service";
 // S4-DASH-BE-3 (additive): config CRUD — controller THỨ TƯ (/configs + /configs/:id), không đụng khối trên.
 import { DashboardConfigController } from "./dashboard-config.controller";
@@ -100,6 +107,8 @@ import { DashboardMvRefreshJobHandler } from "./dashboard-mv-refresh.job-handler
     RecruitModule,
     // S13-PAYROLL-DASH-1 (additive): + module nguồn cho PAYROLL_COST.
     PayrollModule,
+    // S16-SOCIAL-DASH-1 (additive): + module nguồn cho SOCIAL_ENGAGEMENT_WEEK / SOCIAL_NEWS_UNACKED.
+    SocialModule,
   ],
   controllers: [
     DashboardController,
@@ -131,6 +140,8 @@ import { DashboardMvRefreshJobHandler } from "./dashboard-mv-refresh.job-handler
     DashboardWidgetRecruitHandlers,
     // S13-PAYROLL-DASH-1 (additive): handler PAYROLL_COST (file riêng, cùng MỘT registry).
     DashboardWidgetPayrollHandlers,
+    // S16-SOCIAL-DASH-1 (additive): handler 2 widget SOCIAL (file riêng, cùng MỘT registry).
+    DashboardWidgetSocialHandlers,
     // S4-DASH-BE-3 (additive): config CRUD service.
     DashboardConfigService,
     // S4-INT-2 (additive): internal cache invalidation service.

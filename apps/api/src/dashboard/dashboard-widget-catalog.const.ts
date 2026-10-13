@@ -15,7 +15,7 @@ import type { DataScope } from "@mediaos/contracts";
  *  - mô hình gate widget       → docs/permission-matrix-spec.md §7 (dòng 144)
  */
 
-/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' 0525; 'ASSET','ROOM' 0558; 'RECRUIT' 0563; 'PAYROLL' 0568). */
+/** Union khớp CHECK chk_dashboard_widgets_module_code (mig 0482:71-72; APPEND 'GOAL' 0525; 'ASSET','ROOM' 0558; 'RECRUIT' 0563; 'PAYROLL' 0568; 'SOCIAL' 0592). */
 export type DashModuleCode =
   | "AUTH"
   | "HR"
@@ -29,7 +29,8 @@ export type DashModuleCode =
   | "ASSET"
   | "ROOM"
   | "RECRUIT"
-  | "PAYROLL";
+  | "PAYROLL"
+  | "SOCIAL";
 /** Union khớp CHECK chk_dashboard_widgets_widget_type (mig 0482:73-74). */
 export type DashWidgetType = "Summary" | "List" | "Chart" | "Calendar" | "Action" | "Alert";
 /** Union khớp CHECK chk_dashboard_widgets_default_data_scope (mig 0482:75-76). */
@@ -317,6 +318,30 @@ export const DASH_WIDGET_CATALOG: readonly DashWidgetEntry[] = [
     dataSourceKey: "payroll-advance-pending",
     componentKey: "PayrollAdvancePendingWidget",
   },
+  // ─── S16-SOCIAL-DASH-1 (APPEND-only) — 2 widget SOCIAL (SPEC-16 §17.3 SOCIAL-WIDGET-001/002, mig 0592).
+  // `defaultDataScope` ở đây là NHÃN DỮ LIỆU, không phải sàn của grant (sàn: DASH_WIDGET_MIN_DATA_SCOPE):
+  //   • SOCIAL_ENGAGEMENT_WEEK 'Department' — số co theo scope của người xem (quản lý: đơn vị mình).
+  //   • SOCIAL_NEWS_UNACKED 'Own' — đếm cho CHÍNH người gọi, dù cặp `view:feed` chỉ hợp lệ ở @Company.
+  {
+    widgetCode: "SOCIAL_ENGAGEMENT_WEEK",
+    moduleCode: "SOCIAL",
+    name: "Tương tác tuần",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_SOCIAL_ENGAGEMENT_WEEK",
+    defaultDataScope: "Department",
+    widgetType: "Summary",
+    dataSourceKey: "social-engagement-week",
+    componentKey: "SocialEngagementWeekWidget",
+  },
+  {
+    widgetCode: "SOCIAL_NEWS_UNACKED",
+    moduleCode: "SOCIAL",
+    name: "Tin tức chưa đọc",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_SOCIAL_NEWS_UNACKED",
+    defaultDataScope: "Own",
+    widgetType: "Summary",
+    dataSourceKey: "social-news-unacked",
+    componentKey: "SocialNewsUnackedWidget",
+  },
 ] as const;
 
 export const DASH_WIDGET_COUNT = DASH_WIDGET_CATALOG.length;
@@ -411,6 +436,16 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
   // Cả hai cặp CHƯA đủ một mình: xem DASH_WIDGET_MIN_DATA_SCOPE (sàn 'Company').
   PAYROLL_BUDGET: { action: "view", resourceType: "payroll-budget" },
   PAYROLL_ADVANCE_PENDING: { action: "view", resourceType: "payroll-advance" },
+  // ─── S16-SOCIAL-DASH-1 (APPEND) — cặp gate 2 widget SOCIAL ──────────────────────────────────────
+  // Luật «gate màn-hình khớp gate đường-tải»: mỗi widget mượn ĐÚNG cặp của route NGUỒN, không mượn chéo.
+  // Cả hai cặp ở mig 0578, is_sensitive=FALSE ⇒ wildcard `*:*` MỞ được (khác các cặp PAYROLL/RECRUIT).
+  //   • SOCIAL_ENGAGEMENT_WEEK → ('view','feed-report') = SOCIAL_ROUTE_PAIRS.statsEngagement (route 052);
+  //     grant: manager @Department · hr/company-admin @Company; employee KHÔNG có.
+  //   • SOCIAL_NEWS_UNACKED → ('view','feed') = SOCIAL_ROUTE_PAIRS.newsList (route 020); cả 4 role
+  //     canonical @Company. KHÔNG dùng `manage:feed-news`: đó là cặp của người ĐĂNG tin, không phải người đọc.
+  // Cả hai cặp CHƯA đủ một mình: xem DASH_WIDGET_MIN_DATA_SCOPE.
+  SOCIAL_ENGAGEMENT_WEEK: { action: "view", resourceType: "feed-report" },
+  SOCIAL_NEWS_UNACKED: { action: "view", resourceType: "feed" },
 } as const;
 
 /**
@@ -458,6 +493,17 @@ export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> = {
   // METADATA /dashboard/me KHÔNG đi qua service PAYROLL ⇒ không có sàn đó).
   PAYROLL_BUDGET: "Company",
   PAYROLL_ADVANCE_PENDING: "Company",
+  // S16-SOCIAL-DASH-1: hai sàn KHÁC giá trị và KHÁC lý do — đừng gộp.
+  //   • SOCIAL_ENGAGEMENT_WEEK = 'Department' (cách diễn đạt «sàn Company; manager Department» của
+  //     SPEC-16 §17.3: tập hợp lệ {Department, Company, System}). Nguồn `weeklyEngagementForWidget` KHÔNG
+  //     403 với grant @Own/@Team — nó trả SỐ 0 (`statsScopeFilter` ⇒ `none`), nên thiếu sàn này người
+  //     giữ `view:feed-report@Own|Team` sẽ thấy một ô «0 tương tác» trông như số thật. Sàn 'Company'
+  //     thuần thì giấu widget khỏi chính quản lý (@Department).
+  //   • SOCIAL_NEWS_UNACKED = 'Company' — khớp `companyFloor` của route 020: `SocialAccessService` từ
+  //     chối `view:feed` hẹp hơn Company. Đường METADATA (/dashboard/me) KHÔNG đi qua service SOCIAL ⇒
+  //     thiếu sàn này grant hẹp vẫn nhận shell widget rồi mới ăn 403 ở đường data.
+  SOCIAL_ENGAGEMENT_WEEK: "Department",
+  SOCIAL_NEWS_UNACKED: "Company",
 } as const;
 
 /**
@@ -606,102 +652,12 @@ export const DASH_GRANT_MATRIX: readonly DashGrant[] = [
   },
 ] as const;
 
-export interface DashDefaultConfigEntry {
-  readonly dashboardType: DashboardType;
-  readonly widgetCode: string;
-  readonly sortOrder: number;
-}
-
-/**
- * QUY TẮC (không phải khẩu vị):
- *   DASH_DEFAULT_CONFIG = ( DB-07 §14.3 ∩ 7 widget đã seed ) ∪ { NOTIFICATIONS cho MỌI dashboard type }
- *
- * Vế hai neo vào IMPLEMENTATION-07 §11.3: cột Dashboard của NOTIFICATIONS ghi "All".
- * sortOrder lấy nguyên từ DB-07 §14.3.
- *
- * PROJECT_PROGRESS có trong catalog nhưng KHÔNG có default config — §14.3 không đặt nó vào dashboard nào.
- *
- * S4-DASH-CATALOG-2 (APPEND-only): seed nốt DB-07 §14.3 cho 9 widget đợt 2. TEAM_TASKS_TODAY + CONFIG_WARNINGS
- * DEFER ⇒ KHÔNG default-config (không có row). ATTENDANCE_ALERTS xuất hiện ở CẢ Manager lẫn HR (khác
- * dashboard_type ⇒ khoá nghiệp vụ (company,widget,type,scope) không đụng). Dashboard Admin sau seed = 5 widget
- * (USER_SUMMARY@10 · EMPLOYEE_SUMMARY@20 · MODULE_STATUS@30 · SYSTEM_LOGS@50 + NOTIFICATIONS@50 đã có).
- */
-export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
-  { dashboardType: "Employee", widgetCode: "ATTENDANCE_TODAY", sortOrder: 10 },
-  { dashboardType: "Employee", widgetCode: "MY_TASKS", sortOrder: 20 },
-  { dashboardType: "Employee", widgetCode: "TASK_ALERTS", sortOrder: 30 },
-  { dashboardType: "Employee", widgetCode: "NOTIFICATIONS", sortOrder: 50 },
-  { dashboardType: "Manager", widgetCode: "PENDING_LEAVE", sortOrder: 10 },
-  { dashboardType: "Manager", widgetCode: "TASK_ALERTS", sortOrder: 30 },
-  { dashboardType: "Manager", widgetCode: "NOTIFICATIONS", sortOrder: 50 },
-  { dashboardType: "HR", widgetCode: "HR_OVERVIEW", sortOrder: 10 },
-  { dashboardType: "HR", widgetCode: "PENDING_LEAVE", sortOrder: 40 },
-  { dashboardType: "HR", widgetCode: "NOTIFICATIONS", sortOrder: 50 },
-  { dashboardType: "Admin", widgetCode: "NOTIFICATIONS", sortOrder: 50 },
-  // ─── S4-DASH-CATALOG-2 (APPEND) — DB-07 §14.3 cho 9 widget đợt 2 (KHÔNG TEAM_TASKS_TODAY/CONFIG_WARNINGS) ───
-  { dashboardType: "Employee", widgetCode: "LEAVE_BALANCE", sortOrder: 40 },
-  { dashboardType: "Manager", widgetCode: "LEAVE_CALENDAR", sortOrder: 40 },
-  { dashboardType: "Manager", widgetCode: "ATTENDANCE_ALERTS", sortOrder: 50 },
-  { dashboardType: "HR", widgetCode: "NEW_EMPLOYEES", sortOrder: 20 },
-  { dashboardType: "HR", widgetCode: "CONTRACT_EXPIRING", sortOrder: 30 },
-  { dashboardType: "HR", widgetCode: "ATTENDANCE_ALERTS", sortOrder: 50 },
-  { dashboardType: "Admin", widgetCode: "USER_SUMMARY", sortOrder: 10 },
-  { dashboardType: "Admin", widgetCode: "EMPLOYEE_SUMMARY", sortOrder: 20 },
-  { dashboardType: "Admin", widgetCode: "MODULE_STATUS", sortOrder: 30 },
-  { dashboardType: "Admin", widgetCode: "SYSTEM_LOGS", sortOrder: 50 },
-  // ─── S5-GOAL-DASH-1 (APPEND) — GOAL_PROGRESS mặc định ở Manager/HR/Admin (widget "theo phòng ban",
-  // Employee KHÔNG có default vì GoalAccessService tự co scope Own→chỉ thấy dept mình khi có; đủ quyền
-  // view:goal vẫn có thể mở qua trang Mục tiêu, KHÔNG cần widget mặc định trên dashboard cá nhân).
-  { dashboardType: "Manager", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
-  { dashboardType: "HR", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
-  { dashboardType: "Admin", widgetCode: "GOAL_PROGRESS", sortOrder: 60 },
-  // ─── S11-OFFICE-DASH-1 (APPEND) — 2 widget wave OFFICE trên CẢ 4 dashboard type ────────────────────
-  // ROOM_TODAY@70: lịch họp CỦA CHÍNH người xem — ai cũng đặt/được mời được, 4 role canonical đều có
-  // view:room@Company (mig 0554) ⇒ mặc định bật khắp nơi, KHÔNG sàn scope.
-  { dashboardType: "Employee", widgetCode: "ROOM_TODAY", sortOrder: 70 },
-  { dashboardType: "Manager", widgetCode: "ROOM_TODAY", sortOrder: 70 },
-  { dashboardType: "HR", widgetCode: "ROOM_TODAY", sortOrder: 70 },
-  { dashboardType: "Admin", widgetCode: "ROOM_TODAY", sortOrder: 70 },
-  // ASSET_SUMMARY@80 CÓ MẶT ở dashboard 'Employee' là CỐ Ý — Asset Manager (view:asset@Company) dùng chung
-  // dashboard type đó (role `asset-manager` không có cặp view-*:dashboard riêng, SPEC-13 §272). Nhân viên
-  // thường bị loại bởi SÀN scope 'Department' (DASH_WIDGET_MIN_DATA_SCOPE), KHÔNG bởi việc vắng config —
-  // lọc theo config sẽ giấu widget khỏi CHÍNH người đáng thấy nó (SPEC-13 §482).
-  { dashboardType: "Employee", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
-  { dashboardType: "Manager", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
-  { dashboardType: "HR", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
-  { dashboardType: "Admin", widgetCode: "ASSET_SUMMARY", sortOrder: 80 },
-  // ─── S12-RECRUIT-DASH-1 (APPEND) — RECRUIT_FUNNEL@90 trên CẢ 4 dashboard type (mirror lý do
-  // ASSET_SUMMARY@Employee): role `recruiter` KHÔNG có cặp view-*:dashboard riêng ⇒ resolve về dashboard
-  // type của các role KHÁC user đó mang (thường 'Employee'). Ai không có view:candidate@Company bị loại
-  // bởi CẶP + SÀN (filterByGatePair), KHÔNG bởi việc vắng config — lọc theo config sẽ giấu widget khỏi
-  // chính người đáng thấy nó.
-  { dashboardType: "Employee", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
-  { dashboardType: "Manager", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
-  { dashboardType: "HR", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
-  { dashboardType: "Admin", widgetCode: "RECRUIT_FUNNEL", sortOrder: 90 },
-  // ─── S13-PAYROLL-DASH-1 (APPEND) — PAYROLL_COST@100 trên CẢ 4 dashboard type (mirror lý do
-  // ASSET_SUMMARY@Employee / RECRUIT_FUNNEL): role `payroll-officer` KHÔNG có cặp view-*:dashboard riêng
-  // ⇒ resolve về dashboard type của các role KHÁC user đó mang (thường 'Employee'). Ai không có
-  // view-line:payroll-period@Company bị loại bởi CẶP + SÀN (filterByGatePair), KHÔNG bởi việc vắng
-  // config — lọc theo config sẽ giấu widget khỏi chính người đáng thấy nó.
-  { dashboardType: "Employee", widgetCode: "PAYROLL_COST", sortOrder: 100 },
-  { dashboardType: "Manager", widgetCode: "PAYROLL_COST", sortOrder: 100 },
-  { dashboardType: "HR", widgetCode: "PAYROLL_COST", sortOrder: 100 },
-  { dashboardType: "Admin", widgetCode: "PAYROLL_COST", sortOrder: 100 },
-  // ─── S15-PAYROLL-DASH-1 (APPEND) — PAYROLL_BUDGET@110 · PAYROLL_ADVANCE_PENDING@120 trên CẢ 4
-  // dashboard type (mirror lý do PAYROLL_COST@100): `payroll-officer` KHÔNG có cặp view-*:dashboard
-  // riêng ⇒ resolve về dashboard type của role KHÁC user đó mang (thường 'Employee'). Ai không có cặp
-  // + sàn Company bị loại bởi filterByGatePair, KHÔNG bởi việc vắng config — lọc theo config sẽ giấu
-  // widget khỏi chính người đáng thấy nó.
-  { dashboardType: "Employee", widgetCode: "PAYROLL_BUDGET", sortOrder: 110 },
-  { dashboardType: "Manager", widgetCode: "PAYROLL_BUDGET", sortOrder: 110 },
-  { dashboardType: "HR", widgetCode: "PAYROLL_BUDGET", sortOrder: 110 },
-  { dashboardType: "Admin", widgetCode: "PAYROLL_BUDGET", sortOrder: 110 },
-  { dashboardType: "Employee", widgetCode: "PAYROLL_ADVANCE_PENDING", sortOrder: 120 },
-  { dashboardType: "Manager", widgetCode: "PAYROLL_ADVANCE_PENDING", sortOrder: 120 },
-  { dashboardType: "HR", widgetCode: "PAYROLL_ADVANCE_PENDING", sortOrder: 120 },
-  { dashboardType: "Admin", widgetCode: "PAYROLL_ADVANCE_PENDING", sortOrder: 120 },
-] as const;
+// S16-SOCIAL-DASH-1 (K13): khối `DashDefaultConfigEntry` + `DASH_DEFAULT_CONFIG` dời NGUYÊN sang
+// `dashboard-default-config.const.ts` để file này ở dưới trần 800 dòng (CLAUDE.md §5). Re-export tại
+// đây ⇒ mọi nơi đang import từ file này KHÔNG phải đổi; file mới chỉ `import type` ngược lại nên không
+// sinh vòng import lúc chạy.
+export { DASH_DEFAULT_CONFIG } from "./dashboard-default-config.const";
+export type { DashDefaultConfigEntry } from "./dashboard-default-config.const";
 
 // ─── S4-DASH-BE-1 (APPEND-only) — resolver route → cặp engine ────────────────────────────────────────
 //

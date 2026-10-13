@@ -83,7 +83,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-018` | `PUT /social/comments/{comment_id}/reaction` | `view:feed` (hàng `user_id = actor`) | |
 | `SOCIAL-API-019` | `DELETE /social/comments/{comment_id}/reaction` | như trên | |
 | **Tin tức — Track A** ||||
-| `SOCIAL-API-020` | `GET /social/news` | `view:feed` | Tin ghim lên đầu; cờ `ackedByMe`. Tham số **`unackedOnly`** + **`countOnly`** ⇒ **nguồn dữ liệu của `SOCIAL-WIDGET-002`** «Tin tức chưa đọc» (phạm vi Own, không cần route riêng) |
+| `SOCIAL-API-020` | `GET /social/news` | `view:feed` | Tin ghim lên đầu; cờ `ackedByMe`. Tham số **`unackedOnly`** + **`countOnly`** ⇒ **nguồn dữ liệu của `SOCIAL-WIDGET-002`** «Tin tức chưa đọc» (đếm cho chính người gọi, không cần route riêng — handler `DashboardWidgetSocialHandlers.fetchNewsUnacked`, slug `social-news-unacked`; SPEC-16 §17.3) |
 | `SOCIAL-API-021` | `POST /social/posts/{post_id}/ack` | `view:feed` (hàng `user_id = actor`) | Không phải `news`/không bật ack ⇒ 409 `ERR-011`; **không rút lại được** |
 | `SOCIAL-API-022` | `GET /social/posts/{post_id}/acks` | `manage:feed-news` | Ai đã đọc / chưa đọc |
 | **Tìm kiếm · thẻ · trang cá nhân · sinh nhật — Track A** ||||
@@ -329,7 +329,8 @@ của `weekTotals` là số người DISTINCT trong tuần, không phải tổng
 số liệu. ⚠️ Nợ: thêm object type riêng ở lượt migrate CHECK `audit_logs.object_type` kế tiếp.
 
 **Widget `SOCIAL-WIDGET-001`:** `SocialStatsService.weeklyEngagementForWidget(user)` — cùng cổng/sàn với `052`, trả tổng
-tuần hiện tại. Handler/catalog DASH thuộc `S16-SOCIAL-DASH-1`.
+tuần hiện tại. Handler DASH: `DashboardWidgetSocialHandlers.fetchEngagementWeek` (slug `social-engagement-week`, sàn scope
+`Department`, không cache — SPEC-16 §17.3; `S16-SOCIAL-DASH-1`, mig `0592`).
 
 ### 5.1k `SOCIAL-API-057` / `058` — thùng rác bài viết (`S16-SOCIAL-BE-3C`)
 

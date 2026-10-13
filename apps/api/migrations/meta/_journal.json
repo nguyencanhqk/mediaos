@@ -1814,6 +1814,13 @@
       "when": 1717587380000,
       "tag": "0591_s19secmailcred_revoke_mail_dest_update",
       "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "7",
+      "when": 1717587381000,
+      "tag": "0592_s16socialdash1_widget_social",
+      "breakpoints": true
     }
   ]
 }

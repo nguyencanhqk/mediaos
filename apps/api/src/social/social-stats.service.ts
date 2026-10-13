@@ -82,9 +82,12 @@ export class SocialStatsService {
   /**
    * `SOCIAL-WIDGET-001` «Tương tác tuần» — tổng của TUẦN HIỆN TẠI (theo TZ công ty) trong phạm vi người xem.
    *
-   * CÙNG cổng + CÙNG sàn với `052` (`statsEngagement`) và CÙNG `collectTx`. Handler/catalog/slug DASH là việc của
-   * `S16-SOCIAL-DASH-1` — xem notes WO đó: (a) DASH cache theo TTL mâu thuẫn SOC-DEC-010 «không cache»;
-   * (b) `Own`/`Team` nhận số 0 chứ không 403 ⇒ DASH phải tự ẩn widget.
+   * CÙNG cổng + CÙNG sàn với `052` (`statsEngagement`) và CÙNG `collectTx`. Người gọi: handler DASH
+   * `DashboardWidgetSocialHandlers.fetchEngagementWeek` (slug `social-engagement-week`, `S16-SOCIAL-DASH-1`), nơi
+   * đã chốt hai điều hàm này để ngỏ: (a) widget KHÔNG cache — `DASH_WIDGET_TTL_SECONDS.SOCIAL = 0` + header
+   * `no-store`, theo SOC-DEC-010; (b) `Own`/`Team` ở ĐÂY vẫn nhận số 0 chứ không 403, nên DASH tự chặn bằng sàn
+   * scope `Department` (`DASH_WIDGET_MIN_DATA_SCOPE`) ở cả đường metadata lẫn đường data. Gọi hàm này từ nơi
+   * khác thì phải tự lo điều (b).
    */
   async weeklyEngagementForWidget(user: SocialRequestUser): Promise<FeedEngagementWeekDto> {
     const actor = await this.access.resolveActor(user, "statsEngagement");

@@ -176,8 +176,12 @@ import {
     // `AvatarPresignService` đến từ `FilesModule` (ĐÃ có trong `imports`, export sẵn).
     SocialAvatarSigner,
   ],
-  // `SocialStatsService` export cho `S16-SOCIAL-DASH-1` (widget «Tương tác tuần» gọi `weeklyEngagementForWidget`).
-  exports: [SocialAccessService, SocialStatsService],
+  // `S16-SOCIAL-DASH-1` — hai service là nguồn của 2 widget Dashboard (`DashboardModule` import module này):
+  //   • `SocialStatsService` — «Tương tác tuần» gọi `weeklyEngagementForWidget`;
+  //   • `SocialNewsService` — «Tin tức chưa đọc» gọi `list(user, { countOnly: true })` (huy hiệu của `020`).
+  // Export CHỈ service widget cần. Cả hai tự chạy tầng 2 (`resolveActor`) bên trong ⇒ module ngoài gọi
+  // vẫn bị gác; `SocialNewsService` kéo theo `ack` / `listAcks`, và chúng cũng tự gác như vậy.
+  exports: [SocialAccessService, SocialStatsService, SocialNewsService],
 })
 export class SocialModule implements OnModuleInit {
   constructor(

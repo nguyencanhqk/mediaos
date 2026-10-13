@@ -127,6 +127,26 @@ export default {
     countLabel_other: "đề nghị chờ duyệt",
     cta: "Xem danh sách tạm ứng",
   },
+  // ── S16-SOCIAL-DASH-1 — 2 widget SOCIAL (SPEC-16 §17.3 SOCIAL-WIDGET-001/002).
+  // `reactions` là «Cảm xúc» chứ không «thích»: cột đếm MỌI loại cảm xúc — cùng chữ với màn Thống kê tương
+  // tác (`social:admin.stats.metric.*`) và tệp XLSX. Hai `empty.title` chỉ là dự phòng: chữ rỗng do SERVER gửi.
+  socialEngagementWeek: {
+    title: "Tương tác tuần",
+    empty: { title: "Tuần này chưa có tương tác nào trong phạm vi của bạn" },
+    weekOf: "Tuần từ {{date}}",
+    posts: "Bài viết",
+    comments: "Bình luận",
+    reactions: "Cảm xúc",
+    activeMembers: "Thành viên hoạt động",
+    cta: "Xem thống kê tương tác",
+  },
+  socialNewsUnacked: {
+    title: "Tin tức chưa đọc",
+    empty: { title: "Bạn đã xác nhận hết các tin cần đọc" },
+    countLabel_one: "tin chưa xác nhận",
+    countLabel_other: "tin chưa xác nhận",
+    cta: "Xem danh sách tin tức",
+  },
   typeSwitcher: {
     label: "Chuyển đổi loại bảng điều khiển",
   },

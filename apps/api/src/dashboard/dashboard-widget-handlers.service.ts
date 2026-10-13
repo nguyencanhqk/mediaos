@@ -29,6 +29,7 @@ import { HrDepartmentService } from "../org/hr-department.service";
 import { DashboardWidgetOfficeHandlers } from "./dashboard-widget-office.handlers";
 import { DashboardWidgetRecruitHandlers } from "./dashboard-widget-recruit.handlers";
 import { DashboardWidgetPayrollHandlers } from "./dashboard-widget-payroll.handlers";
+import { DashboardWidgetSocialHandlers } from "./dashboard-widget-social.handlers";
 import {
   ttlSecondsFor,
   DASH_WIDGET_LIST_CAP,
@@ -106,6 +107,8 @@ export class DashboardWidgetHandlersService {
     private readonly recruit: DashboardWidgetRecruitHandlers,
     // S13-PAYROLL-DASH-1 (additive): handler PAYROLL_COST.
     private readonly payroll: DashboardWidgetPayrollHandlers,
+    // S16-SOCIAL-DASH-1 (additive): handler SOCIAL_ENGAGEMENT_WEEK / SOCIAL_NEWS_UNACKED.
+    private readonly social: DashboardWidgetSocialHandlers,
   ) {
     this.buildRegistry();
   }
@@ -246,6 +249,16 @@ export class DashboardWidgetHandlersService {
     add("payroll-advance-pending", "PAYROLL_ADVANCE_PENDING", {
       gateAndResolve: (ctx) => this.payroll.gatePayrollAdvancePending(ctx),
       fetch: (ctx) => this.payroll.fetchPayrollAdvancePending(ctx),
+    });
+
+    // ─── S16-SOCIAL-DASH-1 (APPEND) — 2 widget SOCIAL (gate + fetch ở social.handlers.ts) ───────────
+    add("social-engagement-week", "SOCIAL_ENGAGEMENT_WEEK", {
+      gateAndResolve: (ctx) => this.social.gateEngagementWeek(ctx),
+      fetch: (ctx) => this.social.fetchEngagementWeek(ctx),
+    });
+    add("social-news-unacked", "SOCIAL_NEWS_UNACKED", {
+      gateAndResolve: (ctx) => this.social.gateNewsUnacked(ctx),
+      fetch: (ctx) => this.social.fetchNewsUnacked(ctx),
     });
   }
 

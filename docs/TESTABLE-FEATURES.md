@@ -627,6 +627,14 @@ cảm xúc không phát realtime · ký tự U+0000 trả sai lớp status), 1 l
 (`S1-FND-BODYLIMIT-1`). Bốn câu hỏi «thiết kế hay cần siết» về hiển thị đang chờ owner. Bằng chứng:
 [`QA/evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md`](QA/evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md).
 
+**Widget Dashboard của SOCIAL** (`S16-SOCIAL-DASH-1`, 12/10/2026 — dùng được sau khi API có mig `0592` lên PROD): mở
+Dashboard bằng tài khoản HR · admin · quản lý ⇒ thấy ô «Tương tác tuần» (4 số của tuần hiện tại: bài · bình luận · cảm
+xúc · thành viên hoạt động; quản lý chỉ thấy đơn vị mình), nhân viên thường KHÔNG thấy ô này. Ai xem được bảng tin đều
+thấy ô «Tin tức chưa đọc» (số tin yêu cầu xác nhận mà mình chưa xác nhận): xác nhận một tin ở màn Tin tức rồi quay lại
+Dashboard sau ít nhất 15 giây ⇒ số giảm 1; xác nhận hết ⇒ ô báo «Bạn đã xác nhận hết các tin cần đọc». Test tự động:
+`dashboard-social-widgets.int-spec.ts` (25 ca, cần `LANE_DB`) · `dashboard-widget-social.handlers.spec.ts` (35 ca) ·
+`social-widgets.spec.tsx` (47 ca FE). Chi tiết: SPEC-16 §17.3.
+
 ---
 
 ## 6. Tham chiếu
