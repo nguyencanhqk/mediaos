@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   ParseUUIDPipe,
   Param,
@@ -17,7 +18,11 @@ import { createZodDto, ZodValidationPipe } from "nestjs-zod";
 import type { Request, Response } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
-import { linkTaskFileSchema, listTaskFilesQuerySchema } from "@mediaos/contracts";
+import {
+  linkTaskFileSchema,
+  listTaskFilesQuerySchema,
+  type DownloadUrlDto,
+} from "@mediaos/contracts";
 import { TaskFileService } from "./task-file.service";
 
 class ListTaskFilesQueryDto extends createZodDto(listTaskFilesQuerySchema) {}
@@ -30,12 +35,23 @@ interface AuthenticatedRequest extends Request {
 /**
  * S4-TASK-BE-5 — Task File (đính kèm công việc) surface under /tasks/:taskId/files. TÁI DÙNG NGUYÊN pattern
  * S2-HR-EMPFILE-1 — KHÔNG bảng task_files riêng (Foundation FileService + polymorphic file_links). Class-level
- * PermissionGuard fail-closed; EVERY route @RequirePermission OPT-IN tường minh (thiếu = route MỞ). Permission
+ * PermissionGuard fail-closed; EVERY route @RequirePermission tường minh — thiếu decorator ⇒ PermissionGuard ném
+ * 403 `Route is not decorated with @RequirePermission` (fail-closed, `permission.guard.ts:84`; census
+ * route-guard-coverage cũng đỏ — đo ở mutant ★1 của S19-OPS-TASKFILEURL-1). Permission
  * pairs (seed mig 0485): POST=('file-upload','task') · GET*=('read','task') · DELETE=('file-delete','task').
  * Không có cặp file-view:task — xem/tải attachment tái dùng read:task (cùng cổng với task).
  *
  * Envelope do ResponseEnvelopeInterceptor TOÀN CỤC dựng — controller trả DATA THÔ (KHÔNG double-wrap).
- * Download dùng @Res library-mode ⇒ 302 redirect (KHÔNG qua envelope), KHÔNG lộ storage_path (chỉ signed-url).
+ * `download` dùng @Res library-mode ⇒ 302 redirect (KHÔNG qua envelope); `download-url` trả DATA THÔ qua envelope.
+ * Cả hai KHÔNG lộ storage_path (chỉ signed-url).
+ *
+ * S19-OPS-TASKFILEURL-1 — tải tệp có HAI cửa trên CÙNG một hàm kiểm `TaskFileService.getDownloadUrl` (scope →
+ * liên kết task → scan-guard → FileService): `download-url` trả JSON `{ url, expiresAt }` (FE điều hướng tới
+ * URL, không đọc byte) và `download` (302). Route 302 GIỮ cho client không phải trình duyệt (Bearer + theo
+ * redirect); FE KHÔNG còn dùng nó — client trình duyệt đọc body SAU redirect sẽ hỏng với storage không trả CORS
+ * có credentials (vd R2). Gỡ route 302 = nợ N1 của plan, cần grep lại mọi client trước.
+ * Tài liệu: mã `TASK-API-404` ở SPEC-06 §16.5; bảng lỗi + nhật ký + header ở API-06 §18 (mục `download-url`),
+ * route 302 ghi là route phụ KHÔNG có mã API; OpenAPI `taskGetTaskFileDownloadUrl` (task.paths.yaml).
  */
 @Controller("tasks/:taskId/files")
 @UseGuards(PermissionGuard)
@@ -67,7 +83,7 @@ export class TaskFilesController {
 
   /**
    * GET /tasks/:taskId/files/:fileId/download — 302 redirect to a short-lived signed URL. Scan-guard STRICT
-   * (Clean/NotRequired only, else 409) inside the service. Gate read:task.
+   * (Clean/NotRequired only, else 409) inside the service. Gate read:task. Route phụ, KHÔNG có mã API (API-06 §18).
    */
   @Get(":fileId/download")
   @RequirePermission("read", "task")
@@ -79,6 +95,22 @@ export class TaskFilesController {
   ): Promise<void> {
     const { url } = await this.svc.getDownloadUrl(req.user, taskId, fileId);
     res.redirect(302, url);
+  }
+
+  /**
+   * GET /tasks/:taskId/files/:fileId/download-url — JSON `{ url, expiresAt }` (TASK-API-404). CÙNG hàm kiểm +
+   * CÙNG cổng read:task với route 302 ở trên (cấm chép chuỗi kiểm). `no-store`: body mang URL ký dùng được tới
+   * khi hết hạn. KHÔNG @Idempotent — interceptor idempotency LƯU body phản hồi (sẽ lưu URL ký).
+   */
+  @Get(":fileId/download-url")
+  @RequirePermission("read", "task")
+  @Header("Cache-Control", "no-store")
+  downloadUrl(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
+  ): Promise<DownloadUrlDto> {
+    return this.svc.getDownloadUrl(req.user, taskId, fileId);
   }
 
   /** POST /tasks/:taskId/files — link an uploaded+confirmed file. Gate file-upload:task. */

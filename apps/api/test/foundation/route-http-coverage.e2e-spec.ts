@@ -374,7 +374,10 @@ const MAX_UNCOVERED_TOTAL = 0;
 // coverage: 691/691 (100.0%) — CHƯA phủ: 0"). Đo baseline TRƯỚC WO: 690/690 — tức BE-3A/3B/3C đã thêm
 // 8 route mà không nâng sàn (sàn hở 8 đơn vị); +1 là `059` `GET /social/kudos/recipients`
 // (`social-be2d-blocks-recipients.int-spec.ts`).
-const MIN_COVERED_COUNT = 691;
+// S19-OPS-TASKFILEURL-1 (14/10/2026): 691 → **692** — SỐ SPEC IN RA ("[S10-QA-ROUTEHTTP-1] Route HTTP
+// coverage: 692/692 (100.0%) — CHƯA phủ: 0"); +1 là `GET /tasks/:taskId/files/:fileId/download-url`
+// (TASK-API-404, `s19-task-file-download-url.int-spec.ts`). Census trước WO: 691 route.
+const MIN_COVERED_COUNT = 692;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;

@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 691,
+    "routes": 692,
     "controllers": 131,
-    "gated": 652,
+    "gated": 653,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -10123,6 +10123,22 @@
       "key": "TaskFilesController#download",
       "httpMethod": "GET",
       "path": "/api/v1/tasks/:taskId/files/:fileId/download",
+      "hasPermission": true,
+      "permission": "read:task",
+      "permissionLevel": "handler",
+      "isPublic": false,
+      "classGuards": [
+        "PermissionGuard"
+      ],
+      "routeGuards": [],
+      "verdict": null,
+      "verdictReason": null,
+      "verdictWo": null
+    },
+    {
+      "key": "TaskFilesController#downloadUrl",
+      "httpMethod": "GET",
+      "path": "/api/v1/tasks/:taskId/files/:fileId/download-url",
       "hasPermission": true,
       "permission": "read:task",
       "permissionLevel": "handler",

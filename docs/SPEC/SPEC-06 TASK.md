@@ -2199,6 +2199,7 @@ Lọc board theo người X giữ thẻ **cha** khi người thực hiện của
 | TASK-API-401 | GET    | /api/v1/tasks/{id}/files           | Lấy file task | TASK.TASK.VIEW        |
 | TASK-API-402 | POST   | /api/v1/tasks/{id}/files           | Upload file   | TASK.TASK.FILE_UPLOAD |
 | TASK-API-403 | DELETE | /api/v1/tasks/{id}/files/{file_id} | Xóa file      | TASK.TASK.FILE_DELETE |
+| TASK-API-404 | GET    | /api/v1/tasks/{id}/files/{file_id}/download-url | Lấy URL tải file | TASK.TASK.VIEW |
 
 ---
 

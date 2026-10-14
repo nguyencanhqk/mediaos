@@ -635,6 +635,7 @@ title
 | GET | `/api/v1/tasks/{task_id}/checklists` | Danh sách checklist | `TASK.TASK.VIEW` |
 | POST | `/api/v1/tasks/{task_id}/checklists` | Tạo checklist | `TASK.TASK.UPDATE` |
 | POST | `/api/v1/tasks/{task_id}/files` | Upload file task | `TASK.TASK.FILE_UPLOAD` |
+| GET | `/api/v1/tasks/{task_id}/files/{file_id}/download-url` | Lấy URL tải file (**TASK-API-404**) | `TASK.TASK.VIEW` |
 | GET | `/api/v1/tasks/{task_id}/activity-logs` | Xem activity task | `TASK.AUDIT_LOG.VIEW` hoặc `TASK.TASK.VIEW` |
 
 > **Về mã `TASK-API-213`.** Cấp ngày 18/07/2026 cho route đổi cột (chi tiết §15.2), theo **sổ mã SPEC-06 §16.3** — nguồn chuẩn theo CLAUDE.md §1. Bối cảnh: SPEC-06 §16.3 và `IMPLEMENTATION-07` là **hai sổ mã đã lệch nhau từ trước đợt này** cho cả route cũ (SPEC: kanban = `212`; IMPLEMENTATION-07: kanban = `241`, kéo thả = `242`). Chọn dải `21x` của SPEC. `IMPLEMENTATION-07` **đã được đồng bộ** về `213`. Việc hợp nhất hoàn toàn hai sổ mã là một lần dọn riêng — đừng "sửa lại" thành `243` khi thấy IMPL-07 dùng dải `24x`.
@@ -2340,16 +2341,63 @@ Trả metadata file. Link tải phải lấy qua endpoint download riêng hoặc
 
 #### GET `/api/v1/tasks/{task_id}/files/{file_id}/download-url`
 
+**Mã API**  
+`TASK-API-404`
+
 **Required permission**  
 `TASK.TASK.VIEW`
 
-**Business validation**
+**Header phản hồi**  
+`Cache-Control: no-store` — body mang URL ký dùng được tới khi hết hạn, không để cache trung gian giữ lại.
 
-1. User phải xem được task.
-2. File phải thuộc task.
-3. Backend kiểm tra permission trước khi cấp signed URL.
-4. Signed URL có TTL ngắn, ví dụ 5 phút.
-5. Ghi `file_access_logs` nếu file nhạy cảm.
+**Business validation** (đúng thứ tự kiểm)
+
+1. User phải xem được task: có `TASK.TASK.VIEW`, task thuộc company hiện tại, chưa xoá mềm và nằm trong phạm vi dữ liệu của user (gồm nhánh thành viên dự án `member_status = 'Active'`).
+2. File phải được đính kèm vào ĐÚNG task `{task_id}`; liên kết và file đều chưa xoá mềm.
+3. File phải quét sạch (`scan_status` ∈ {`Clean`, `NotRequired`}); từ chối ⇒ 409, không ghi `file_access_logs`.
+4. Backend kiểm quyền trên file trước khi cấp signed URL; từ chối ⇒ 403 + 1 dòng deny.
+5. File đã `Uploaded` (kiểm SAU quyền trên file — tệp vừa không có quyền vừa chưa `Uploaded` nhận 403, không phải 409); từ chối ⇒ 409 + 1 dòng deny. Mọi nhánh từ chối (bước 1–5) dừng TRƯỚC khi ký: body lỗi không chứa URL.
+6. Signed URL sống `S3_PRESIGN_TTL_SEC` giây (mặc định 300). Kiểu trả về, cách phục vụ `inline` / `attachment` và tên tệp do server ép qua `response-content-type` / `response-content-disposition`; client không chọn được.
+
+**Response 200**
+
+`data` theo `downloadUrlSchema` (`packages/contracts/src/files.ts`); envelope chuẩn, các trường khác của envelope lược bớt:
+
+```json
+{
+  "data": {
+    "url": "<signed-url>",
+    "expiresAt": "2026-10-14T03:05:00.000Z"
+  }
+}
+```
+
+**Lỗi**
+
+| HTTP | `error.code` | Khi nào |
+| --- | --- | --- |
+| 401 | `AUTH-ERR-UNAUTHENTICATED` | Không có token hoặc token hết hạn |
+| 403 | `AUTH-ERR-FORBIDDEN` | Thiếu `TASK.TASK.VIEW` (kể cả khi chỉ có quyền tải file Foundation) · hoặc bước kiểm quyền trên file từ chối |
+| 404 | `RESOURCE-ERR-NOT-FOUND`, `error.message` bắt đầu bằng `TASK-ERR-TASK-NOT-FOUND` | Task của công ty khác · ngoài phạm vi dữ liệu · đã xoá mềm (không tiết lộ sự tồn tại) |
+| 404 | `RESOURCE-ERR-NOT-FOUND`, `error.message` bắt đầu bằng `TASK-ERR-FILE-NOT-FOUND` | File không đính kèm vào task này (IDOR chéo task) · liên kết hoặc file đã xoá mềm |
+| 409 | `FOUNDATION-FILE-ERR-NOT-DOWNLOADABLE` | File chưa quét sạch (`Pending` / `Failed` / `Infected`) hoặc chưa `Uploaded` |
+
+**Nhật ký**
+
+- Cho phép ⇒ đúng 1 dòng `file_access_logs`: `action = Download`, `access_granted = true`, `permission_code = FOUNDATION.FILE.DOWNLOAD`.
+- Từ chối ở bước kiểm quyền trên file (403) hoặc vì file chưa `Uploaded` (409) ⇒ 1 dòng cùng dạng với `access_granted = false`.
+- 401, 403 ở cổng quyền, mọi 404 và 409 vì chưa quét sạch ⇒ KHÔNG ghi `file_access_logs`.
+- Đường tải không ghi `audit_logs`.
+
+**Client**
+
+Client trình duyệt ĐIỀU HƯỚNG tới `url` (mở tab mới), KHÔNG `fetch` rồi đọc byte: storage khác origin nên điều hướng không cần CORS, còn đọc byte thì cần.
+
+URL ký là bearer-capability: ai cầm URL đều tải được, không cần token, tới khi hết TTL (`S3_PRESIGN_TTL_SEC`, mặc định 300 s). URL có thể nằm lại trong lịch sử hoặc danh sách tải của trình duyệt khi mở inline hoặc tải về. Vì vậy phản hồi `no-store`, server không ghi URL vào log, và route KHÔNG `@Idempotent` (interceptor idempotency lưu body phản hồi).
+
+#### Route phụ: GET `/api/v1/tasks/{task_id}/files/{file_id}/download` (302, không có mã API)
+
+Cùng cổng `TASK.TASK.VIEW`, cùng hàm kiểm (`TaskFileService.getDownloadUrl`), cùng bảng lỗi và cùng nhật ký với `TASK-API-404`; chỉ khác ở chỗ trả `302` tới URL ký thay vì JSON. Route này lệch so với thiết kế ở trên, giữ lại cho client không phải trình duyệt (gửi Bearer rồi theo redirect). Từ S19-OPS-TASKFILEURL-1, FE chuyển sang `TASK-API-404`: client trình duyệt `fetch` route này rồi đọc body sau redirect sẽ hỏng với storage không trả CORS có credentials (vd Cloudflare R2). Gỡ khi mọi client đã chuyển.
 
 ---
 
