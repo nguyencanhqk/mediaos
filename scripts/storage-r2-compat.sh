@@ -17,7 +17,7 @@
 # Bucket luôn là bucket thử `mediaos-fdisp-test` (tên duy nhất `apps/api/test/helpers/storage-test-target.ts`
 # cho ghi khi chạy cục bộ). Đặt TƯỜNG MINH đủ 6 biến `S3_*` ⇒ không biến nào lấy từ `.env` của máy.
 #
-# XANH = exit 0 VÀ log có dòng «ĐÃ TỒN TẠI — ca storage thật CHẠY» của CẢ HAI int-spec (không phải «BỎ QUA»).
+# XANH = exit 0 VÀ mỗi int-spec báo đúng 1 dòng «ca storage thật CHẠY» VÀ dòng `Tests` không có ca bỏ qua (exit 7 nếu thiếu).
 # Log đầy đủ: $R2_COMPAT_LOG (mặc định một file tạm ngoài kho) — có thể chứa URL ký của bucket thử, đừng chép vào kho.
 set -uo pipefail
 
@@ -61,10 +61,16 @@ pnpm --filter @mediaos/api exec vitest run \
 code=$?
 echo "exit=$code · $(($(date +%s) - t0))s · lane=$LANE_DB · storage=R2 (bucket thử) · log=$LOG"
 clean="$(sed 's/\x1b\[[0-9;]*m//g' "$LOG" | sed -E 's#https?://[^[:space:]"]+#<url>#g')"
-echo "$clean" | grep -E 'ĐÃ TỒN TẠI|BỎ QUA|Test Files|Tests |AssertionError|Error: ' | head -40
-ran="$(echo "$clean" | grep -c 'ĐÃ TỒN TẠI — ca storage thật CHẠY')"
-if [ "$code" = 0 ] && [ "$ran" -lt 2 ]; then
-  echo "KHÔNG ĐỦ BẰNG CHỨNG: chỉ $ran/2 int-spec báo ca storage thật CHẠY — xem các dòng BỎ QUA ở trên."
+echo "$clean" | grep -E 'ĐÃ TỒN TẠI|VỪA ĐƯỢC TẠO|BỎ QUA|Test Files|Tests |AssertionError|Error: ' | head -40
+# Bằng chứng TÁCH theo từng int-spec (đếm chung thì một spec chạy hai lần che được spec kia bị bỏ qua):
+#   [fdisp-storage]  — bucket «ĐÃ TỒN TẠI» hoặc «VỪA ĐƯỢC TẠO» (spec này tự tạo bucket khi chưa có);
+#   [storage-compat] — bucket «ĐÃ TỒN TẠI» (spec này không tạo bucket).
+# Và dòng `Tests` không được có ca bị bỏ qua.
+fdisp="$(echo "$clean" | grep -cE '\[fdisp-storage\] bucket .*(ĐÃ TỒN TẠI|VỪA ĐƯỢC TẠO) — ca storage thật CHẠY')"
+compat="$(echo "$clean" | grep -cE '\[storage-compat\] bucket .*ĐÃ TỒN TẠI — ca storage thật CHẠY')"
+skipped="$(echo "$clean" | grep -E '^ +Tests ' | grep -cE 'skipped')"
+if [ "$code" = 0 ] && { [ "$fdisp" != 1 ] || [ "$compat" != 1 ] || [ "$skipped" != 0 ]; }; then
+  echo "KHÔNG ĐỦ BẰNG CHỨNG: [fdisp-storage] chạy $fdisp/1 · [storage-compat] chạy $compat/1 · dòng Tests có ca bỏ qua: $skipped — xem các dòng BỎ QUA ở trên."
   exit 7
 fi
 exit $code

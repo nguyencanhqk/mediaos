@@ -15,6 +15,8 @@ describe("storage-provider — isR2Endpoint / expectedNoSniff", () => {
     ["đúng tiền tố nhưng thêm nhãn sau", `https://${ACCOUNT}.r2.cloudflarestorage.com.x`],
     ["mã tài khoản không phải 32 hex", "https://abc.r2.cloudflarestorage.com"],
     ["mã tài khoản 31 hex", `https://${ACCOUNT.slice(1)}.r2.cloudflarestorage.com`],
+    // userinfo: host THẬT của URL là phần sau `@`.
+    ["host R2 nằm ở phần userinfo", `https://${ACCOUNT}.r2.cloudflarestorage.com@evil.test`],
     ["http thay https", `http://${ACCOUNT}.r2.cloudflarestorage.com`],
     ["storage tự host cục bộ", "http://localhost:9000"],
     ["không phải URL", "không phải url"],
@@ -28,6 +30,7 @@ describe("storage-provider — isR2Endpoint / expectedNoSniff", () => {
     ["endpoint chuẩn", R2],
     ["có dấu / cuối", `${R2}/`],
     ["vùng pháp lý eu", `https://${ACCOUNT}.eu.r2.cloudflarestorage.com`],
+    ["vùng pháp lý fedramp", `https://${ACCOUNT}.fedramp.r2.cloudflarestorage.com`],
     // `new URL()` đưa hostname về chữ thường (hostname không phân biệt hoa-thường) ⇒ cùng một host R2.
     ["host viết chữ HOA", `https://${ACCOUNT.toUpperCase()}.R2.CLOUDFLARESTORAGE.COM`],
   ])("CHO PHÉP nhận là R2 — %s ⇒ kỳ vọng KHÔNG có header", (_label, endpoint) => {

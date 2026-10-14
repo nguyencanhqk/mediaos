@@ -14,6 +14,8 @@
 
 1. **PROD** dùng một bucket Cloudflare R2 RIÊNG TƯ: đường công khai của nhà cung cấp TẮT, không gắn tên miền riêng; mọi
    lượt đọc / ghi của trình duyệt đi bằng URL ký (SigV4) trên miền S3 API của R2, TTL giữ nguyên (`S3_PRESIGN_TTL_SEC`).
+   Bằng chứng «riêng tư» là cấu hình của bucket (r2.dev tắt + 0 tên miền riêng, đo bằng API quản trị chỉ-đọc —
+   `RELEASE-08` §9 C1), KHÔNG phải một lượt GET không chữ ký vào miền S3 API (miền đó luôn đòi chữ ký).
 2. **dev · CI · lane · dev-online** giữ storage tự host như cũ. Không môi trường nào ngoài PROD chạm bucket PROD.
 3. Khoá ký là token R2 «Object Read & Write» CHỈ cho bucket PROD, không quyền quản trị (đo 14/10: token loại này không
    đọc / đổi được CORS của bucket), token RIÊNG — không dùng lại token của app khác.

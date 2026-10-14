@@ -96,6 +96,9 @@ describe.skipIf(!runDb)("S19-OPS-STORAGEPUBLIC-1 — thao tác phía server trê
         reason: `${reason} — chạy s16-filedisposition-storage trước để tạo bucket`,
       };
       return;
+    } finally {
+      // Client dò bucket chỉ dùng một lần — đóng socket keep-alive, không để treo tới hết worker.
+      s3.destroy();
     }
     storage = new ObjectStorageService();
     expect(storage.isConfigured(), `${TAG} S3_* chưa đủ`).toBe(true);

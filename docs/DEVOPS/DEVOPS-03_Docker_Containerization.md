@@ -459,7 +459,9 @@ có tuỳ chọn cho yêu cầu kèm credentials, nên đường «fetch qua 302
 **Đã đo trên bucket R2 thử (14/10):** nhóm S1–S9 của `S16-SOCIAL-FILEDISPOSITION-1` + int-spec thao tác phía server =
 xanh; R2 **không gửi** `x-content-type-options: nosniff` (storage tự host có gửi — owner chấp nhận, test ghim theo nhà cung
 cấp ở `apps/api/test/helpers/storage-provider.ts`); GET không chữ ký trả **cùng mã (400) cho khoá có lẫn khoá không có**
-⇒ phép đo «bucket riêng tư» luôn đặt cạnh lượt CÓ chữ ký trên CÙNG khoá (ca K-3).
+⇒ ca K-3 đặt lượt CÓ chữ ký trên CÙNG khoá cạnh lượt không chữ ký. ⚠️ K-3 chỉ chứng minh «miền S3 API đòi chữ ký» —
+miền này của R2 LUÔN đòi chữ ký, kể cả khi bucket đã bật đường công khai (Public Development URL / tên miền riêng). Bằng
+chứng bucket RIÊNG TƯ là phép đo qua API quản trị chỉ-đọc ở `RELEASE-08` §9 C1 (r2.dev tắt + 0 tên miền riêng).
 
 **LUẬT nâng SDK:** CI chạy storage tự host nên KHÔNG BAO GIỜ chứng minh tương thích R2. Trước MỖI lần nâng `@aws-sdk/*`
 và trước lần chuyển PROD:
@@ -472,7 +474,7 @@ LANE_DB=mediaos_<lane> bash scripts/storage-r2-compat.sh "<file cấu hình 3 kh
 XANH = exit 0 và cả hai int-spec báo «ca storage thật CHẠY» (script tự trả exit 7 nếu thiếu). Đỏ = không nâng.
 
 **Di trú + đường lùi:** `scripts/windows/storage-migrate-r2.ps1` (rclone; chỉ `copy` · `check` · `lsjson` · `lsf` · `size`,
-không bao giờ xoá; Copy / Check bắt buộc `-Prefix` = id công ty vì bucket cũ dùng chung với dev-online + test). Thứ tự
+không bao giờ xoá; Copy / Check bắt buộc `-Prefix` hoặc `-PrefixFile` = id công ty vì bucket cũ dùng chung với dev-online + test). Thứ tự
 từng bước: `RELEASE-08` §9.
 
 ## 14. Container network

@@ -28,7 +28,10 @@
 .PARAMETER TargetConf
   File cấu hình đích (ngoài kho).
 .PARAMETER Prefix
-  Một hoặc nhiều UUID (tiền tố công ty). Bắt buộc với Copy / Check.
+  Một hoặc nhiều UUID (tiền tố công ty). Copy / Check bắt buộc -Prefix hoặc -PrefixFile.
+.PARAMETER PrefixFile
+  File mỗi dòng một UUID (vd danh sách id công ty xuất từ DB PROD); dòng trống bị bỏ qua. Gộp với -Prefix.
+  Dùng cách này khi gọi qua `powershell -File` (khi đó không truyền được mảng cho -Prefix).
 .PARAMETER SourceBucket
   Thay dòng S3_BUCKET của file nguồn (diễn tập trên bucket thử).
 .PARAMETER TargetBucket
@@ -37,17 +40,20 @@
   Đường dẫn rclone.exe; vắng ⇒ tìm trong PATH rồi trong thư mục cài của winget.
 
 .EXAMPLE
-  .\storage-migrate-r2.ps1 -SourceConf C:\ops\minio-prod.conf -TargetConf C:\ops\r2-prod.conf -Mode Plan -Prefix <id công ty>
+  .\storage-migrate-r2.ps1 -SourceConf C:\ops\minio-prod.conf -TargetConf C:\ops\r2-prod.conf -Mode Plan -PrefixFile C:\ops\prod-company-ids.txt
 .EXAMPLE
   # Lùi (sau khi đã chuyển): đảo hai file cấu hình
-  .\storage-migrate-r2.ps1 -SourceConf C:\ops\r2-prod.conf -TargetConf C:\ops\minio-prod.conf -Mode Copy -Prefix <id công ty>
+  .\storage-migrate-r2.ps1 -SourceConf C:\ops\r2-prod.conf -TargetConf C:\ops\minio-prod.conf -Mode Copy -PrefixFile C:\ops\prod-company-ids.txt
 #>
-[CmdletBinding()]
+# PositionalBinding=$false: giá trị thừa (vd `-Prefix a b` qua `powershell -File`) phải báo LỖI, không được lặng lẽ
+# rơi vào tham số kế tiếp theo vị trí (đo ở diễn tập 14/10/2026: `b` bị gán vào -RclonePath).
+[CmdletBinding(PositionalBinding = $false)]
 param(
   [Parameter(Mandatory = $true)][string]$SourceConf,
   [Parameter(Mandatory = $true)][string]$TargetConf,
   [Parameter(Mandatory = $true)][ValidateSet('Plan', 'Copy', 'Check')][string]$Mode,
   [string[]]$Prefix = @(),
+  [string]$PrefixFile = '',
   [string]$SourceBucket = '',
   [string]$TargetBucket = '',
   [string]$RclonePath = ''
@@ -147,7 +153,8 @@ function Get-MimeMap {
   param([string]$Remote, [string]$Tag)
   $r = Invoke-Rclone -Sub 'lsjson' -Rest @('-R', '--files-only', $Remote) -Tag $Tag
   if ($r.Code -ne 0) { throw "lsjson $Tag lỗi (exit $($r.Code)) — xem $($r.Err)" }
-  $map = @{}
+  # Khoá object phân biệt hoa-thường; `@{}` của PowerShell thì KHÔNG ⇒ dùng Dictionary so Ordinal.
+  $map = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::Ordinal)
   $text = [System.IO.File]::ReadAllText($r.Out)
   if ($text.Trim()) {
     # PowerShell 5.1: `ConvertFrom-Json` trả CẢ mảng như MỘT phần tử của pipeline — bọc `@(... | ConvertFrom-Json)`
@@ -156,12 +163,20 @@ function Get-MimeMap {
     $parsed = ConvertFrom-Json -InputObject $text
     foreach ($e in $parsed) { $map[[string]$e.Path] = [string]$e.MimeType }
   }
-  return $map
+  # HEAD hỏng thì rclone tự đoán kiểu theo đuôi tệp mà lsjson vẫn exit 0 ⇒ kiểu không tin được.
+  $metaErr = @([System.IO.File]::ReadAllLines($r.Err) | Where-Object { $_ -match 'Failed to read metadata|ERROR' }).Count
+  if ($metaErr -gt 0) { throw "lsjson ${Tag}: $metaErr dòng lỗi đọc metadata — Content-Type không tin được, xem $($r.Err)" }
+  return , $map
 }
 
 # ── kiểm tham số ──────────────────────────────────────────────────────────────────────────────────────────────
-foreach ($p in $Prefix) { if ($p -cnotmatch $UUID_RE) { throw "-Prefix chỉ nhận UUID chữ thường (id công ty)" } }
-if ($Mode -ne 'Plan' -and $Prefix.Count -eq 0) { throw "-Mode $Mode bắt buộc -Prefix (id công ty PROD) — không có chế độ chạy trên cả bucket" }
+if ($PrefixFile) {
+  if (-not (Test-Path -LiteralPath $PrefixFile -PathType Leaf)) { throw '-PrefixFile: không thấy file' }
+  $Prefix = @($Prefix) + @([System.IO.File]::ReadAllLines($PrefixFile) | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+}
+foreach ($p in $Prefix) { if ($p -cnotmatch $UUID_RE) { throw "-Prefix / -PrefixFile chỉ nhận UUID chữ thường (id công ty)" } }
+$Prefix = @($Prefix | Select-Object -Unique)
+if ($Mode -ne 'Plan' -and $Prefix.Count -eq 0) { throw "-Mode $Mode bắt buộc -Prefix hoặc -PrefixFile (id công ty PROD) — không có chế độ chạy trên cả bucket" }
 if ($SourceBucket -and $SourceBucket -cnotmatch $BUCKET_RE) { throw '-SourceBucket sai dạng' }
 if ($TargetBucket -and $TargetBucket -cnotmatch $BUCKET_RE) { throw '-TargetBucket sai dạng' }
 
@@ -190,9 +205,13 @@ try {
     if ($rootFiles.Code -ne 0) { throw "lsf nguồn lỗi (exit $($rootFiles.Code)) — xem $($rootFiles.Err)" }
     Write-Host ''
     Write-Host 'tiền tố cấp 1 của nguồn                | object | byte        | chọn'
+    $notUuid = 0
     foreach ($line in [System.IO.File]::ReadAllLines($dirs.Out)) {
       $name = $line.Trim().TrimEnd('/')
       if (-not $name) { continue }
+      # Tên lấy từ bucket dùng chung ⇒ dữ liệu không tin cậy: chỉ tên đúng dạng UUID mới được ghép vào tham số
+      # rclone / tên file làm việc; tên khác chỉ được ĐẾM.
+      if ($name -cnotmatch $UUID_RE) { $notUuid++; continue }
       $s = Invoke-Rclone -Sub 'size' -Rest @('--json', "SRC:$($src.Bucket)/$name") -Tag "plan-size-$name"
       if ($s.Code -ne 0) { throw "size $name lỗi (exit $($s.Code)) — xem $($s.Err)" }
       $j = [System.IO.File]::ReadAllText($s.Out) | ConvertFrom-Json
@@ -200,6 +219,7 @@ try {
       if ($Prefix -ccontains $name) { $mark = '✔' }
       Write-Host ('{0,-38} | {1,6} | {2,11} | {3}' -f $name, $j.count, $j.bytes, $mark)
     }
+    Write-Host "tiền tố KHÔNG phải UUID (chỉ đếm, không xử lý): $notUuid"
     Write-Host "object ở gốc bucket (không thuộc tiền tố nào): $(Get-LineCount $rootFiles.Out)"
     foreach ($p in $Prefix) {
       $d = Invoke-Rclone -Sub 'copy' -Rest @('--dry-run', '--checksum', '-v', "SRC:$($src.Bucket)/$p", "DST:$($dst.Bucket)/$p") -Tag "plan-dry-$p"
@@ -210,37 +230,57 @@ try {
   }
 
   if ($Mode -eq 'Copy') {
+    $passed = 0
     foreach ($p in $Prefix) {
+      $s = Invoke-Rclone -Sub 'size' -Rest @('--json', "SRC:$($src.Bucket)/$p") -Tag "copy-size-$p"
+      if ($s.Code -ne 0) { $failed = $true; Write-Host "KHÔNG ĐẠT · size $p · exit $($s.Code) · xem $($s.Err)"; continue }
+      $srcCount = ([System.IO.File]::ReadAllText($s.Out) | ConvertFrom-Json).count
       $c = Invoke-Rclone -Sub 'copy' -Rest @('--checksum', '-v', "SRC:$($src.Bucket)/$p", "DST:$($dst.Bucket)/$p") -Tag "copy-$p"
       $lines = [System.IO.File]::ReadAllLines($c.Err)
       $new = @($lines | Where-Object { $_ -match 'Copied \(new\)' }).Count
       $repl = @($lines | Where-Object { $_ -match 'Copied \(replaced existing\)' }).Count
-      if ($c.Code -ne 0) { $failed = $true; Write-Host "KHÔNG ĐẠT · copy $p · exit $($c.Code) · xem $($c.Err)"; continue }
-      Write-Host "ĐẠT · copy $p · mới $new · thay $repl"
+      if ($c.Code -ne 0) { $failed = $true; Write-Host "KHÔNG ĐẠT · copy $p · nguồn $srcCount object · exit $($c.Code) · xem $($c.Err)"; continue }
+      $passed++
+      Write-Host "ĐẠT · copy $p · nguồn $srcCount object · mới $new · thay $repl"
     }
+    Write-Host "TỔNG copy: ĐẠT $passed/$($Prefix.Count) tiền tố — kết luận cuối luôn là -Mode Check"
   }
 
   if ($Mode -eq 'Check') {
+    $passed = 0; $empty = 0
     foreach ($p in $Prefix) {
       $base = Join-Path $script:WorkDir "check-$p"
       $c = Invoke-Rclone -Sub 'check' -Rest @(
         "SRC:$($src.Bucket)/$p", "DST:$($dst.Bucket)/$p",
+        '--match', "$base.match.txt",
         '--missing-on-dst', "$base.missing-on-dst.txt", '--missing-on-src', "$base.only-on-dst.txt",
         '--differ', "$base.differ.txt", '--error', "$base.error.txt") -Tag "check-$p"
+      $match = Get-LineCount "$base.match.txt"
       $missing = Get-LineCount "$base.missing-on-dst.txt"
       $onlyDst = Get-LineCount "$base.only-on-dst.txt"
       $differ = Get-LineCount "$base.differ.txt"
       $errors = Get-LineCount "$base.error.txt"
       $srcMime = Get-MimeMap -Remote "SRC:$($src.Bucket)/$p" -Tag "mime-src-$p"
       $dstMime = Get-MimeMap -Remote "DST:$($dst.Bucket)/$p" -Tag "mime-dst-$p"
+      $absent = @($srcMime.Keys | Where-Object { -not $dstMime.ContainsKey($_) }).Count
       $mimeBad = @($srcMime.Keys | Where-Object { $dstMime.ContainsKey($_) -and $dstMime[$_] -cne $srcMime[$_] }).Count
-      # Nguồn rỗng (gõ nhầm tiền tố) thì mọi phép đếm đều 0 ⇒ phải là KHÔNG ĐẠT, không phải ĐẠT.
-      $ok = ($srcMime.Count -gt 0) -and ($missing -eq 0) -and ($differ -eq 0) -and ($errors -eq 0) -and ($mimeBad -eq 0)
+      if ($srcMime.Count -eq 0 -and $dstMime.Count -eq 0 -and $c.Code -eq 0) {
+        # Công ty chưa có tệp nào — hợp lệ, nhưng in RIÊNG để người đọc thấy (và để gõ nhầm tiền tố không đọc thành ĐẠT).
+        $empty++
+        Write-Host "RỖNG CẢ HAI PHÍA · check $p (công ty chưa có tệp — đối chiếu với bảng của -Mode Plan)"
+        continue
+      }
+      # Quy tắc DƯƠNG: MỌI object của nguồn phải nằm trong danh sách «khớp» của chính lượt rclone check; exit ≠ 0
+      # chỉ được chấp nhận khi lý do duy nhất là object chỉ-có-ở-đích. Lỗi liệt kê giữa chừng ⇒ thiếu dòng «khớp».
+      $exitOk = ($c.Code -eq 0) -or ($onlyDst -gt 0)
+      $ok = ($srcMime.Count -gt 0) -and ($match -eq $srcMime.Count) -and ($absent -eq 0) -and ($missing -eq 0) -and `
+        ($differ -eq 0) -and ($errors -eq 0) -and ($mimeBad -eq 0) -and $exitOk
       $label = 'KHÔNG ĐẠT'
-      if ($ok) { $label = 'ĐẠT' } else { $failed = $true }
-      Write-Host ("{0} · check {1} · nguồn {2} object · đích {3} · thiếu ở đích {4} · lệch hash {5} · lỗi {6} · lệch Content-Type {7} · chỉ-có-ở-đích {8} (rclone exit {9})" -f `
-          $label, $p, $srcMime.Count, $dstMime.Count, $missing, $differ, $errors, $mimeBad, $onlyDst, $c.Code)
+      if ($ok) { $label = 'ĐẠT'; $passed++ } else { $failed = $true }
+      Write-Host ("{0} · check {1} · nguồn {2} object · đích {3} · khớp {4} · thiếu ở đích {5} · lệch hash {6} · lỗi {7} · lệch Content-Type {8} · chỉ-có-ở-đích {9} (rclone exit {10})" -f `
+          $label, $p, $srcMime.Count, $dstMime.Count, $match, [Math]::Max($missing, $absent), $differ, $errors, $mimeBad, $onlyDst, $c.Code)
     }
+    Write-Host "TỔNG check: ĐẠT $passed · RỖNG cả hai phía $empty · KHÔNG ĐẠT $($Prefix.Count - $passed - $empty) / $($Prefix.Count) tiền tố"
   }
 }
 finally {
