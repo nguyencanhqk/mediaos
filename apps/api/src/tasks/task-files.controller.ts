@@ -40,13 +40,16 @@ interface AuthenticatedRequest extends Request {
  * Không có cặp file-view:task — xem/tải attachment tái dùng read:task (cùng cổng với task).
  *
  * Envelope do ResponseEnvelopeInterceptor TOÀN CỤC dựng — controller trả DATA THÔ (KHÔNG double-wrap).
- * Download dùng @Res library-mode ⇒ 302 redirect (KHÔNG qua envelope), KHÔNG lộ storage_path (chỉ signed-url).
+ * `download` dùng @Res library-mode ⇒ 302 redirect (KHÔNG qua envelope); `download-url` trả DATA THÔ qua envelope.
+ * Cả hai KHÔNG lộ storage_path (chỉ signed-url).
  *
  * S19-OPS-TASKFILEURL-1 — tải tệp có HAI cửa trên CÙNG một hàm kiểm `TaskFileService.getDownloadUrl` (scope →
  * liên kết task → scan-guard → FileService): `download-url` trả JSON `{ url, expiresAt }` (FE điều hướng tới
  * URL, không đọc byte) và `download` (302). Route 302 GIỮ cho client không phải trình duyệt (Bearer + theo
  * redirect); FE KHÔNG còn dùng nó — client trình duyệt đọc body SAU redirect sẽ hỏng với storage không trả CORS
  * có credentials (vd R2). Gỡ route 302 = nợ N1 của plan, cần grep lại mọi client trước.
+ * Tài liệu: mã `TASK-API-404` ở SPEC-06 §16.5; bảng lỗi + nhật ký + header ở API-06 §18 (mục `download-url`),
+ * route 302 ghi là route phụ KHÔNG có mã API; OpenAPI `taskGetTaskFileDownloadUrl` (task.paths.yaml).
  */
 @Controller("tasks/:taskId/files")
 @UseGuards(PermissionGuard)
@@ -78,7 +81,7 @@ export class TaskFilesController {
 
   /**
    * GET /tasks/:taskId/files/:fileId/download — 302 redirect to a short-lived signed URL. Scan-guard STRICT
-   * (Clean/NotRequired only, else 409) inside the service. Gate read:task.
+   * (Clean/NotRequired only, else 409) inside the service. Gate read:task. Route phụ, KHÔNG có mã API (API-06 §18).
    */
   @Get(":fileId/download")
   @RequirePermission("read", "task")
