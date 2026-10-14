@@ -21903,6 +21903,7 @@ export const backlog = [
     paths: [
       "apps/api/test/**",
       "scripts/*.sh",
+      "scripts/*.mjs",
       "scripts/windows/**",
       ".env.example",
       "docs/DECISIONS/**",
