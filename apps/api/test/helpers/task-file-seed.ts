@@ -42,15 +42,20 @@ export async function seedEmployee(
   return r.rows[0].id as string;
 }
 
+/**
+ * `projectId` TUỲ CHỌN (S19-OPS-TASKFILEURL-1 L1b, ca J-11 phạm vi theo dự án). Bỏ trống ⇒ `project_id`
+ * NULL — đúng hành vi cũ (cột nullable, không default).
+ */
 export async function seedTask(
   direct: Pool,
   companyId: string,
   assigneeEmployeeId: string | null,
+  projectId: string | null = null,
 ): Promise<string> {
   const r = await direct.query(
-    `INSERT INTO tasks (company_id, task_type, title, task_status, main_assignee_employee_id)
-     VALUES ($1, 'office', 't5-task', 'Todo', $2) RETURNING id`,
-    [companyId, assigneeEmployeeId],
+    `INSERT INTO tasks (company_id, task_type, title, task_status, main_assignee_employee_id, project_id)
+     VALUES ($1, 'office', 't5-task', 'Todo', $2, $3) RETURNING id`,
+    [companyId, assigneeEmployeeId, projectId],
   );
   return r.rows[0].id as string;
 }
@@ -99,4 +104,27 @@ export async function seedTaskLink(
     [companyId, fileId, taskId, category, createdBy],
   );
   return r.rows[0].id as string;
+}
+
+/**
+ * Dự án + MỘT thành viên `Active` (S19-OPS-TASKFILEURL-1 L1b, ca J-11). Nhánh phạm vi theo dự án của
+ * `buildReadScopeExists` (mode `read`) cho mọi thành viên `Active` đọc task của dự án — kể cả `Viewer`.
+ * Đổi `member_status` sau đó bằng UPDATE thẳng trên `memberId` để đo vế từ chối.
+ */
+export async function seedProjectMember(
+  direct: Pool,
+  companyId: string,
+  member: { userId: string; employeeId: string; role?: "Owner" | "Manager" | "Member" | "Viewer" },
+): Promise<{ projectId: string; memberId: string }> {
+  const p = await direct.query(
+    `INSERT INTO projects (company_id, name, project_status) VALUES ($1, 'tfu-proj', 'Active') RETURNING id`,
+    [companyId],
+  );
+  const projectId = p.rows[0].id as string;
+  const m = await direct.query(
+    `INSERT INTO project_members (company_id, project_id, user_id, employee_id, project_role, member_status)
+     VALUES ($1, $2, $3, $4, $5, 'Active') RETURNING id`,
+    [companyId, projectId, member.userId, member.employeeId, member.role ?? "Viewer"],
+  );
+  return { projectId, memberId: m.rows[0].id as string };
 }

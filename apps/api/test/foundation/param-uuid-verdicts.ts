@@ -55,7 +55,11 @@ export interface ParamVerdict {
   /** Route HTTP tương ứng, để người đọc khỏi phải mở controller. */
   readonly route: string;
   readonly decision: ParamVerdictDecision;
-  /** Status + `error.type` ĐO ĐƯỢC bằng HTTP THẬT **trước** bản vá. Cấm ghi "suy ra". */
+  /**
+   * Status + `error.type` ĐO ĐƯỢC bằng HTTP THẬT **trước** bản vá. Cấm ghi "suy ra". Ngoại lệ ĐÃ KÝ duy nhất:
+   * `BORN_PIPED` — route SINH RA đã gắn `ParseUUIDPipe` nên không có "trước bản vá" để đo; số đo 400 của nó
+   * nằm ở int-spec param-uuid của controller, không phải số đo "trước".
+   */
   readonly before: string;
   /** Vì sao quyết định như vậy. Viết cho người đọc sau, không viết cho linter. */
   readonly reason: string;
@@ -72,6 +76,14 @@ const PIPED_500 = "vá: 500 GIẢ ⇒ 400 đơn trị ở BIÊN, hợp đồng A
  * (`auth-session` = 404) đúng để nhắc rằng giả thuyết "mọi id-like unpiped đều 500" SAI được.
  */
 const BEFORE_500 = "500 SYSTEM-ERR-001 · error.type='Error' (22P02 lọt tới tận DB)";
+
+/**
+ * Cột `before` cho route SINH RA đã có pipe (S19-OPS-TASKFILEURL-1). KHÔNG dùng `BEFORE_500`: hằng đó là số ĐO
+ * của một lượt HTTP trên mã chưa vá, còn route này chưa bao giờ tồn tại mà thiếu pipe — ghi 500 là sai sự thật.
+ * Dựng tạm một bản không pipe chỉ để đo thì một commit sẽ chứa route mở biên ⇒ cũng loại.
+ */
+const BORN_PIPED =
+  'không có "trước": route SINH RA đã gắn ParseUUIDPipe (S19-OPS-TASKFILEURL-1) — không có bản chưa vá để đo; 400 đo ở task-files-param-uuid.int-spec';
 
 /**
  * NHÓM ĐỢT-1 — 32 dòng, ĐÚNG MỘT dòng cho mỗi site census thấy trong 7 controller dưới đây.
@@ -1426,6 +1438,20 @@ export const PARAM_UUID_VERDICTS: readonly ParamVerdict[] = [
     reason: `Đường TẢI (302 signed-url, scan-guard STRICT), hai tham số — mỗi vế đo RIÊNG. ALLOW-302 trên tệp THẬT Uploaded+Clean. (vế \`fileId\`) ${PIPED_500}`,
   },
   {
+    key: "tasks/task-files.controller.ts#downloadUrl:taskId",
+    route: "GET /tasks/:taskId/files/:fileId/download-url",
+    decision: "piped",
+    before: BORN_PIPED,
+    reason: `Đường TẢI dạng JSON (URL ký, CÙNG hàm kiểm với route 302), hai tham số — mỗi vế đo RIÊNG ở task-files-param-uuid.int-spec; ALLOW-200 ở s19-task-file-download-url.int-spec. (vế \`taskId\`)`,
+  },
+  {
+    key: "tasks/task-files.controller.ts#downloadUrl:fileId",
+    route: "GET /tasks/:taskId/files/:fileId/download-url",
+    decision: "piped",
+    before: BORN_PIPED,
+    reason: `Đường TẢI dạng JSON (URL ký, CÙNG hàm kiểm với route 302), hai tham số — mỗi vế đo RIÊNG ở task-files-param-uuid.int-spec; ALLOW-200 ở s19-task-file-download-url.int-spec. (vế \`fileId\`)`,
+  },
+  {
     key: "tasks/task-files.controller.ts#linkFile:taskId",
     route: "POST /tasks/:taskId/files",
     decision: "piped",
@@ -1599,5 +1625,7 @@ export const PARAM_UUID_MEASURED_FILES: readonly string[] = [
  * Cách phân biệt nếu sàn này lại tụt: sàn chỉ được hạ khi CONTROLLER biến mất khỏi cây mã (kiểm
  * bằng `PARAM_UUID_MEASURED_FILES` + `git log --diff-filter=D`). Site còn sống mà mất dòng verdict
  * là NỢ, cấm hạ sàn.
+ *
+ * S19-OPS-TASKFILEURL-1 (14/10/2026): 183 → **185** — +2 site `downloadUrl:{taskId,fileId}` (route JSON MỚI, `BORN_PIPED`).
  */
-export const PARAM_UUID_MEASURED_SIZE = 183;
+export const PARAM_UUID_MEASURED_SIZE = 185;

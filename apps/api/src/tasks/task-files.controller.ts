@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   ParseUUIDPipe,
   Param,
@@ -17,7 +18,11 @@ import { createZodDto, ZodValidationPipe } from "nestjs-zod";
 import type { Request, Response } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
-import { linkTaskFileSchema, listTaskFilesQuerySchema } from "@mediaos/contracts";
+import {
+  linkTaskFileSchema,
+  listTaskFilesQuerySchema,
+  type DownloadUrlDto,
+} from "@mediaos/contracts";
 import { TaskFileService } from "./task-file.service";
 
 class ListTaskFilesQueryDto extends createZodDto(listTaskFilesQuerySchema) {}
@@ -36,6 +41,12 @@ interface AuthenticatedRequest extends Request {
  *
  * Envelope do ResponseEnvelopeInterceptor TOÀN CỤC dựng — controller trả DATA THÔ (KHÔNG double-wrap).
  * Download dùng @Res library-mode ⇒ 302 redirect (KHÔNG qua envelope), KHÔNG lộ storage_path (chỉ signed-url).
+ *
+ * S19-OPS-TASKFILEURL-1 — tải tệp có HAI cửa trên CÙNG một hàm kiểm `TaskFileService.getDownloadUrl` (scope →
+ * liên kết task → scan-guard → FileService): `download-url` trả JSON `{ url, expiresAt }` (FE điều hướng tới
+ * URL, không đọc byte) và `download` (302). Route 302 GIỮ cho client không phải trình duyệt (Bearer + theo
+ * redirect); FE KHÔNG còn dùng nó — client trình duyệt đọc body SAU redirect sẽ hỏng với storage không trả CORS
+ * có credentials (vd R2). Gỡ route 302 = nợ N1 của plan, cần grep lại mọi client trước.
  */
 @Controller("tasks/:taskId/files")
 @UseGuards(PermissionGuard)
@@ -79,6 +90,22 @@ export class TaskFilesController {
   ): Promise<void> {
     const { url } = await this.svc.getDownloadUrl(req.user, taskId, fileId);
     res.redirect(302, url);
+  }
+
+  /**
+   * GET /tasks/:taskId/files/:fileId/download-url — JSON `{ url, expiresAt }` (TASK-API-404). CÙNG hàm kiểm +
+   * CÙNG cổng read:task với route 302 ở trên (cấm chép chuỗi kiểm). `no-store`: body mang URL ký dùng được tới
+   * khi hết hạn. KHÔNG @Idempotent — interceptor idempotency LƯU body phản hồi (sẽ lưu URL ký).
+   */
+  @Get(":fileId/download-url")
+  @RequirePermission("read", "task")
+  @Header("Cache-Control", "no-store")
+  downloadUrl(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+    @Param("fileId", ParseUUIDPipe) fileId: string,
+  ): Promise<DownloadUrlDto> {
+    return this.svc.getDownloadUrl(req.user, taskId, fileId);
   }
 
   /** POST /tasks/:taskId/files — link an uploaded+confirmed file. Gate file-upload:task. */
