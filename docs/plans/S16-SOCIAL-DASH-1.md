@@ -386,8 +386,8 @@ Không thêm `santa-method`: phần cổng/sàn là chép khuôn đã qua FULL g
 | `santa-method` | — | MIỄN theo §9 | bật vòng hai khi `security-reviewer` trả phát hiện HIGH trở lên |
 | L6 — tài liệu | 12/10 · commit sổ kế tiếp | SPEC-16 §17.3 (bảng 5 cột + 9 gạch) + dòng NFR thống kê · API-19 (hai câu về widget) · TESTABLE-FEATURES §5k | điều phối tự sửa (không agent) |
 | Verify `check-all.sh` | 12/10 · trên `ed57d3d1` (commit làm việc trước khi gộp), lane `mediaos_dash1` vừa dựng lại sạch | `check.sh --all --lane-db=dash1`: **XANH 9/9** trong 15 phút — api 846/846 file (9 lần chạy lại vì crash hạ tầng của máy, 0 ca đỏ) · app 398/398 · web-core 50/50 · contracts 45/45 · ui 24/24 · console 22/22 · auth 4/4 · build 7/7 · gitleaks 13 commit sạch | kết luận «XANH», không phải «XANH KHÔNG ĐỦ BẰNG CHỨNG» |
-| PR | 12/10 | mở từ nhánh `feat/s16-social-dash-1` — MỘT commit gộp | số PR + kết quả CI điền ở lượt sổ hậu merge |
-| Deploy PROD: đếm 3 bảng feed TRƯỚC · migrate → boot · đo config SOCIAL SAU | | | owner + điều phối |
+| PR | 12/10 · `02cf70c2` (#582) | mở từ nhánh `feat/s16-social-dash-1` — MỘT commit gộp. CI của PR XANH 12/10 18:21: 11 check pass · 3 bỏ qua đúng (deploy · release notice · fbpost); job «Build · Typecheck · Migrate · Test» CÓ chạy `dashboard-social-widgets.int-spec.ts` 25/25 + `handlers.spec` 35/35 | owner squash-merge `--admin` 13/10 09:37 = `9f18bf6a`; CI master xanh (5 workflow); job Pages xong 13/10 09:50 ⇒ FE lên PROD trước API |
+| Deploy PROD: đếm 3 bảng feed TRƯỚC · migrate → boot · đo config SOCIAL SAU | 14/10 · `85c3b28d` | owner chạy `m prod-update api` cùng lượt deploy của #584 (bước migrate fail-closed của lệnh chạy TRƯỚC restart). `/api/v1/health` 14:34: `build.commit` = `85c3b28d` (chứa `9f18bf6a`) · `migrationHead` = `0592_s16socialdash1_widget_social` · build 14:33 | **Lệch plan:** KHÔNG đếm 3 bảng `feed_*` trước deploy (owner chạy thẳng lệnh deploy). CÒN: đo `dashboard_widget_configs` của SOCIAL = 8 × số công ty + xem hai ô bằng mắt — owner |
 
 ## 11. plan-review lượt 1 — xử lý (12/10/2026 · PASS_WITH_FIXES · nhận cả 11, 0 bác)
 
