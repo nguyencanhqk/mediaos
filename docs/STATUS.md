@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-14 07:35Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-14 10:01Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -90,7 +90,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 3
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -99,6 +99,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `1519bd67` | 2026-10-14 | fix(tasks): S19-OPS-TASKFILEURL-1 (PR-B/2, FE) — tải tệp TASK qua URL ký từ download-url, mở tab mới đồng bộ trong onClick (thay #585; #584 đã lên PROD, T2 = 401) (#586) |
+| `4bbeb2e2` | 2026-10-14 | chore(docs): sổ hậu merge #581 + #582 · deploy PROD 85c3b28d (mig 0592) · gieo 3 WO nợ của S19-OPS-TASKFILEURL-1 + regen STATUS/INDEX |
 | `85c3b28d` | 2026-10-14 | feat(tasks): S19-OPS-TASKFILEURL-1 (PR-A/2, API) — route JSON GET /tasks/:taskId/files/:fileId/download-url (TASK-API-404) cùng cổng + cùng hàm kiểm với route 302 (#584) |
 | `b9e437f2` | 2026-10-13 | test(qa): S18-QA-CHECKALLFLAKE-1 — gỡ hai flake làm `check.sh --all` đỏ oan (PAYROLL E4 tắt trigger toàn cục · SOCIAL H9 đếm toàn bảng) + phiên replica luôn huỷ connection (#581) |
 | `9f18bf6a` | 2026-10-13 | feat(dashboard): S16-SOCIAL-DASH-1 — 2 widget Dashboard của SOCIAL: «Tương tác tuần» + «Tin tức chưa đọc» (mig 0592) (#582) |
@@ -109,8 +111,6 @@
 | `b091a8e7` | 2026-10-09 | docs(files): S16-SOCIAL-FILEDISPOSITION-1 — sổ vết verify/CI/merge, tài liệu API-09 + BACKEND-11 theo hành vi mới, rút gọn mô tả WO trong backlog + regen STATUS/INDEX |
 | `3d8452bb` | 2026-10-09 | chore(docs): regen STATUS + INDEX sau merge #578 (S16-SOCIAL-FILEDISPOSITION-1) |
 | `c0cf6319` | 2026-10-09 | fix(files): S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung và tên tệp khi tải về gắn với thứ đã kiểm lúc đăng ký (#578) |
-| `b3048a8a` | 2026-10-08 | chore(docs): regen STATUS + INDEX sau merge #577 (sổ lệch harness) |
-| `3b4ab8a6` | 2026-10-08 | fix(harness): sổ lệch — 2 WO mang status «ready» · phụ thuộc không tồn tại S5-ME-BE-5 · ánh xạ story 191–218 + cổng C5/C6 chống tái phát (#577) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

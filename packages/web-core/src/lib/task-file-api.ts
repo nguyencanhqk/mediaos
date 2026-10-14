@@ -6,8 +6,10 @@ import {
   type TaskFileDto,
   type ListTaskFilesQuery,
   type RegisterFileResponse,
+  downloadUrlSchema,
+  type DownloadUrlDto,
 } from "@mediaos/contracts";
-import { apiFetch, apiFetchBlob, type ApiBlobResult } from "./api-client";
+import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
 
 /**
@@ -21,19 +23,9 @@ import { buildQueryString } from "./api-params";
  * Foundation) · file-delete:task (soft-delete). Foundation 2 pha đầu (register/confirm) gate riêng bởi
  * upload:foundation-file (BE, ngoài phạm vi lane này — mirror ghi chú uploadEmployeeFile).
  *
- * KHÔNG có route JSON `/tasks/:taskId/files/:fileId/download-url` (chỉ redirect 302 `/download` —
- * task-files.controller.ts) — downloadTaskFile dùng apiFetchBlob (mirror files-api.ts pattern export CSV):
- * apiFetchBlob gắn Bearer cho hop ĐẦU (API), fetch tự theo dõi redirect 302 tới storage; trình duyệt hiện đại
- * TỰ bỏ header Authorization khi redirect cross-origin (Fetch spec) nên KHÔNG lộ token cho storage backend.
- *
- * NỢ KỸ THUẬT (ghi nhận tường minh, KHÔNG che giấu): khác `filesApi.getDownloadUrl` (JSON URL rồi
- * `window.open` — full navigation, KHÔNG cần CORS), `apiFetchBlob` đọc BODY của response sau redirect bằng
- * JS (`fetch().blob()`) ⇒ storage backend (S3/R2/MinIO) PHẢI bật CORS (Access-Control-Allow-Origin) cho GET
- * từ origin app — repo hiện KHÔNG thấy cấu hình CORS bucket nào (devops/docker-compose). Nếu bucket CHƯA
- * bật CORS, download sẽ lỗi network ở trình duyệt thật (test unit mock apiFetchBlob nên KHÔNG bắt được gap
- * này). Fix triệt để cần 1 trong 2: (a) BE thêm route JSON `/tasks/:taskId/files/:fileId/download-url`
- * (mirror `/foundation/files/:id/download-url`) để FE window.open thẳng (khỏi cần CORS); hoặc (b)
- * devops/BE bật CORS GET cho bucket storage. Ngoài phạm vi lane FE này — cờ cho BE/DevOps.
+ * Tải tệp (S19-OPS-TASKFILEURL-1): `downloadTaskFile` gọi route JSON `GET /tasks/:taskId/files/:fileId/download-url`
+ * (TASK-API-404, cùng hàm kiểm với route 302 `/download`) và trả URL ký có TTL ngắn; caller ĐIỀU HƯỚNG tới URL đó
+ * (`openSignedUrlInNewTab`) — không đọc byte bằng JS, nên storage không cần CORS có credentials.
  */
 
 const taskFileListSchema = z.array(taskFileDtoSchema);
@@ -180,10 +172,9 @@ export const taskFileApi = {
     apiFetch(`/tasks/${taskId}/files/cover`, z.void(), { method: "DELETE" }),
 
   /**
-   * Tải file nhị phân — GET /tasks/:taskId/files/:fileId/download (302 redirect, permission read:task).
-   * apiFetchBlob theo redirect + trả { blob, filename } (filename suy từ Content-Disposition nếu storage
-   * backend gửi kèm — caller fallback về TaskFileDto.originalName khi vắng).
+   * URL ký để tải tệp — GET /tasks/:taskId/files/:fileId/download-url (TASK-API-404, permission read:task).
+   * Server quyết `inline`/`attachment` + tên tệp; URL chỉ dùng để điều hướng, KHÔNG lưu, KHÔNG log.
    */
-  downloadTaskFile: (taskId: string, fileId: string): Promise<ApiBlobResult> =>
-    apiFetchBlob(`/tasks/${taskId}/files/${fileId}/download`),
+  downloadTaskFile: (taskId: string, fileId: string): Promise<DownloadUrlDto> =>
+    apiFetch(`/tasks/${taskId}/files/${fileId}/download-url`, downloadUrlSchema),
 };

@@ -5,7 +5,7 @@ import { FileDown } from "lucide-react";
 import { payrollApi, payrollKeys, useCanExact } from "@mediaos/web-core";
 import { Button, DetailPageHeader, EmptyState } from "@mediaos/ui";
 import { PAYROLL_ENGINE_PAIRS } from "./constants";
-import { openSignedUrlInNewTab } from "./open-signed-url";
+import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
 import { parsePayrollError, payrollErrorText } from "./payroll-errors";
 import { displayUserRef, usePayrollPeople } from "./use-payroll-people";
 import { PayslipBreakdown } from "./components/PayslipBreakdown";

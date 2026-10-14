@@ -2,11 +2,12 @@
  * task-file-api.spec.ts — contract/URL boundary tests (S4-FE-TASK-4).
  *
  * Mock `apiFetch`/`apiFetchBlob` tại ranh giới `./api-client` (mirror employee-file-api.spec.ts) để kiểm
- * chứng taskFileApi gọi ĐÚNG path + method + body cho list/delete/download, và ĐÚNG chuỗi 4 pha
+ * chứng taskFileApi gọi ĐÚNG path + method + body cho list/delete/download-url, và ĐÚNG chuỗi 4 pha
  * (register → PUT XHR → confirm → link) cho upload — mỗi pha lỗi phải chặn pha sau (KHÔNG silent-failure).
  * XMLHttpRequest được stub qua vi.stubGlobal (Vitest env "node" không có XHR built-in).
  */
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { downloadUrlSchema } from "@mediaos/contracts";
 import { taskFileApi } from "./task-file-api";
 import * as apiClient from "./api-client";
 
@@ -150,14 +151,29 @@ describe("taskFileApi", () => {
     expect(init?.method).toBe("DELETE");
   });
 
-  it("downloadTaskFile(taskId, fileId) → apiFetchBlob (KHÔNG apiFetch) tới GET .../download", async () => {
-    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({
-      blob: new Blob(["x"]),
-      filename: "spec.pdf",
-    });
-    await taskFileApi.downloadTaskFile("task-1", "file-1");
-    expect(apiClient.apiFetchBlob).toHaveBeenCalledWith("/tasks/task-1/files/file-1/download");
-    expect(apiClient.apiFetch).not.toHaveBeenCalled();
+  // S19-OPS-TASKFILEURL-1 D6 (F-1) — route JSON `download-url` (TASK-API-404) trả URL ký; FE điều hướng tới URL
+  // đó (TaskFilePanel). Đường cũ đọc body sau redirect 302 bằng JS ⇒ cần CORS có credentials ở storage.
+  it("downloadTaskFile(taskId, fileId) → apiFetch GET .../download-url + downloadUrlSchema, trả DTO (KHÔNG apiFetchBlob)", async () => {
+    const dto = {
+      url: "https://storage.example.test/obj?sig=1",
+      expiresAt: "2026-10-14T00:05:00.000Z",
+    };
+    vi.mocked(apiClient.apiFetch).mockResolvedValue(dto as never);
+    const got = await taskFileApi.downloadTaskFile("task-1", "file-1");
+    expect(apiClient.apiFetch).toHaveBeenCalledWith(
+      "/tasks/task-1/files/file-1/download-url",
+      downloadUrlSchema,
+    );
+    expect(got).toEqual(dto);
+    expect(apiClient.apiFetchBlob).not.toHaveBeenCalled();
+  });
+
+  it("downloadTaskFile: apiFetch reject (vd 409 NOT_DOWNLOADABLE) ⇒ lỗi lan ra caller ⇄ ca trên", async () => {
+    vi.mocked(apiClient.apiFetch).mockRejectedValue(new Error("NOT_DOWNLOADABLE"));
+    // Bọc trong Promise: trên mã gọi apiFetchBlob (mock trả undefined) ca đỏ ở assert, không ở TypeError.
+    const call = Promise.resolve().then(() => taskFileApi.downloadTaskFile("task-1", "file-1"));
+    await expect(call).rejects.toThrow("NOT_DOWNLOADABLE");
+    expect(apiClient.apiFetchBlob).not.toHaveBeenCalled();
   });
 
   // ── Upload: chuỗi 4 pha ĐÚNG thứ tự + đúng payload ─────────────────────────────
