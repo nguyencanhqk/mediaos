@@ -1,10 +1,11 @@
 /**
  * S10-FND-PARAMUUID-5 · lane **L3-TASKFILE** (KI-078 đợt 4) — biên HTTP THẬT cho kênh **PARAM** của
- * TỆP ĐÍNH KÈM CÔNG VIỆC. **11 tham số / 1 controller** (`tasks/task-files.controller.ts`).
+ * TỆP ĐÍNH KÈM CÔNG VIỆC. **13 tham số / 1 controller** (`tasks/task-files.controller.ts`).
  *
  *   GET    /tasks/:taskId/files                    [list]        read:task
  *   GET    /tasks/:taskId/files/:fileId            [getOne]      read:task
  *   GET    /tasks/:taskId/files/:fileId/download   [download]    read:task        (302 → signed URL)
+ *   GET    /tasks/:taskId/files/:fileId/download-url [downloadUrl] read:task      (JSON signed URL — S19-OPS-TASKFILEURL-1)
  *   POST   /tasks/:taskId/files                    [linkFile]    file-upload:task (201)
  *   POST   /tasks/:taskId/files/:fileId/cover      [setCover]    file-upload:task (201)
  *   DELETE /tasks/:taskId/files/cover              [clearCover]  file-upload:task (204)
@@ -74,7 +75,7 @@ interface ParamCase {
 }
 
 describe.skipIf(!hasLaneDb)(
-  "S10-FND-PARAMUUID-5 · L3-TASKFILE — biên HTTP kênh PARAM của task-files.controller.ts (11 tham số)",
+  "S10-FND-PARAMUUID-5 · L3-TASKFILE — biên HTTP kênh PARAM của task-files.controller.ts (13 tham số)",
   () => {
     let app: INestApplication;
     let direct: Pool;
@@ -245,6 +246,16 @@ describe.skipIf(!hasLaneDb)(
         run: (bad) => get(`/tasks/${taskId}/files/${bad}/download`),
       },
       {
+        key: "tasks/task-files.controller.ts#downloadUrl:taskId",
+        name: "GET /tasks/:taskId/files/:fileId/download-url — vế taskId",
+        run: (bad) => get(`/tasks/${bad}/files/${fileId}/download-url`),
+      },
+      {
+        key: "tasks/task-files.controller.ts#downloadUrl:fileId",
+        name: "GET /tasks/:taskId/files/:fileId/download-url — vế fileId",
+        run: (bad) => get(`/tasks/${taskId}/files/${bad}/download-url`),
+      },
+      {
         key: "tasks/task-files.controller.ts#linkFile:taskId",
         name: "POST /tasks/:taskId/files",
         run: (bad) => post(`/tasks/${bad}/files`).send({ fileId: randomUUID() }),
@@ -276,10 +287,10 @@ describe.skipIf(!hasLaneDb)(
       },
     ];
 
-    it("(0) BẢNG ĐO phủ ĐỦ 11 tham số và không dòng nào TRÙNG KHOÁ", () => {
+    it("(0) BẢNG ĐO phủ ĐỦ 13 tham số và không dòng nào TRÙNG KHOÁ", () => {
       // Neo chống xanh-RỖNG: bảng thiếu dòng thì mọi ca dưới xanh vì KHÔNG CÓ GÌ để chạy.
-      expect(CASES.length).toBe(11);
-      expect(new Set(CASES.map((c) => c.key)).size, "có dòng TRÙNG KHOÁ trong bảng đo").toBe(11);
+      expect(CASES.length).toBe(13);
+      expect(new Set(CASES.map((c) => c.key)).size, "có dòng TRÙNG KHOÁ trong bảng đo").toBe(13);
       for (const c of CASES) {
         expect(c.key.startsWith("tasks/task-files.controller.ts#"), `khoá sai file: ${c.key}`).toBe(
           true,

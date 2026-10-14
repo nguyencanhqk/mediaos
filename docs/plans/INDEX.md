@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**611 WO** · có micro-plan: **349/611** · ⬜ 61 chờ · 🔵 2 đang làm · ✅ 547 xong · 🔴 1 chặn
+**617 WO** · có micro-plan: **351/617** · ⬜ 64 chờ · 🔵 1 đang làm · ✅ 551 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -638,7 +638,8 @@
 | `S16-SOCIAL-FECOMMENTA11Y-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-FE-3C ⏳S16-SOCIAL-FE-2D | Hàng bình luận: ba nút chữ «Trả lời» · «Xoá» · «Báo cáo» mang CÙNG tên |
 | `S16-SOCIAL-QA-1` | amber | ✅ xong | [📄](S16-SOCIAL-QA-1.md) | ✅S16-SOCIAL-FE-3 ✅S16-SOCIAL-FE-3B ✅S16-SOCIAL-FE-3C ✅S16-SOCIAL-BE-3C | QA SOCIAL: ma trận allow/deny per-pair TỪNG route (employee · manager  |
 | `S16-SOCIAL-TESTISO-1` | amber | ✅ xong | [📄](S16-SOCIAL-TESTISO-1.md) | — | Vá CÁCH LY TEST: Nhóm 13 của s16-social-db2-invariants chạy thân migra |
-| `S16-SOCIAL-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
+| `S16-SOCIAL-DASH-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-DASH-1.md) | ✅S16-SOCIAL-QA-1 | Widget DASH «Tương tác tuần» (bài · bình luận · thích · thành viên hoạ |
+| `S16-SOCIAL-STATSPERF-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-DASH-1 | Hiệu năng câu thống kê tương tác của SOCIAL (route 052 + widget Dashbo |
 | `S16-SOCIAL-DOC-3` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-QA-1 | Đính chính SPEC-16 + API-19 theo các chỗ lệch tài liệu ↔ code mà S16-S |
 | `S16-SOCIAL-QADEBT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-QA-1 | Nợ test SOCIAL sau S16-SOCIAL-QA-1: chuyển 18 int-spec SOCIAL dựng app |
 | `S16-SOCIAL-AVATARPRESIGN-1` | 🔴 | ✅ xong | [📄](S16-SOCIAL-AVATARPRESIGN-1.md) | ✅S16-SOCIAL-BE-2D | `avatarUrl` của TOÀN module SOCIAL (tác giả bài/bình luận · người thả  |
@@ -673,7 +674,8 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S18-QA-CHECKALLFLAKE-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | Hai flake CÓ SẴN làm `check.sh --all` đỏ oan theo cách chia chunk: (1) |
+| `S18-QA-CHECKALLFLAKE-1` | 🟡 | ✅ xong | — *(chưa)* | — | Hai flake CÓ SẴN làm `check.sh --all` đỏ oan theo cách chia chunk: (1) |
+| `S18-QA-SHAREDSTATE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S18-QA-CHECKALLFLAKE-1 | Nợ quét cùng họ của S18-QA-CHECKALLFLAKE-1 — năm lớp test đọc / ghi tr |
 | `S18-AUTH-UNLOCK429-1` | 🔴 | ✅ xong | [📄](S18-AUTH-UNLOCK429-1.md) | — | Gỡ khoá đăng nhập (429) từ giao diện: chỉ mục IP + clearLoginLocks/rem |
 | `S18-AUTH-RESETCLEARS-1` | 🔴 | ✅ xong | [📄](S18-AUTH-RESETCLEARS-1.md) | ✅S18-AUTH-UNLOCK429-1 | Đặt lại mật khẩu thành công thì xoá luôn khoá login 429 của email đó ( |
 | `S18-AUTH-RETRYAFTER-1` | 🟡 | ✅ xong | [📄](S18-AUTH-RETRYAFTER-1.md) | ✅S18-AUTH-UNLOCK429-1 | 429 đăng nhập mang `retryAfterSec` (error.details + header Retry-After |
@@ -720,7 +722,11 @@
 | `S19-FE-MAILSAVEERR-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S19-SEC-MAILAADBIND-1 | Console «Cấu hình mail server»: lỗi Lưu KHÔNG phải MAIL-PASSWORD-REQUI |
 | `S19-GOV-BOOKKEEPRE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S19-OPS-AUDITHIGH-1 | Nợ sổ sách sau #558: `BOOKKEEPING_RE` của reconcile thiếu `chore(backl |
 | `S19-LMS-NODEMAILER-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S19-OPS-AUDITHIGH-1 | `apps/lms` (repo git RIÊNG, ngoài cổng SCA) ghim `nodemailer ^8.0.7` — |
-| `S19-OPS-STORAGEPUBLIC-1` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Storage PROD chỉ nghe ở địa chỉ nội bộ của máy chủ và tunnel không có  |
+| `S19-OPS-STORAGEPUBLIC-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S16-SOCIAL-FILEDISPOSITION-1 | Storage PROD chỉ nghe ở địa chỉ nội bộ của máy chủ và tunnel không có  |
+| `S19-OPS-TASKFILEURL-1` | 🔴 | ✅ xong | [📄](S19-OPS-TASKFILEURL-1.md) | — | Tải tệp đính kèm TASK đọc byte bằng JavaScript sau redirect 302 sang s |
+| `S19-FE-SIGNEDTAB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-TASKFILEURL-1 | Mở tệp qua URL ký ở tab mới — bốn lỗi cùng họ gom từ S19-OPS-TASKFILEU |
+| `S19-FE-APIFETCHTIMEOUT-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | `apiFetch*` (packages/web-core) không có timeout / `AbortSignal` cho M |
+| `S19-SEC-TASKFILEDENYLOG-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-TASKFILEURL-1 | Nhật ký truy cập tệp TASK không ghi các nhánh TỪ CHỐI — 404 (tệp không |
 
 ---
 
