@@ -3,16 +3,16 @@
  *
  * Deny-path TRƯỚC (crown pattern): thiếu read:task → forbidden, KHÔNG gọi getTaskFiles. Upload/Delete đều
  * gate qua PermissionGate/useCan (nút ẩn khi thiếu quyền tương ứng) — mirror EmployeeFilesTab.spec.tsx.
- * Download gọi taskFileApi.downloadTaskFile (apiFetchBlob boundary) + triggerBlobDownload.
+ * Download (S19-OPS-TASKFILEURL-1 D7): mở tab trắng ĐỒNG BỘ trong click rồi gán URL ký từ
+ * taskFileApi.downloadTaskFile (route JSON download-url) — khuôn openSignedUrlInNewTab của payroll.
  */
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskFileApi } from "@mediaos/web-core";
+import { useAuthStore, taskFileApi, ApiError, mapApiErrorToUi } from "@mediaos/web-core";
 import type { TaskFileDto } from "@mediaos/contracts";
 import { TaskFilePanel } from "./TaskFilePanel";
-import { triggerBlobDownload } from "@/lib/download-blob";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -28,9 +28,6 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     },
   };
 });
-
-vi.mock("@/lib/download-blob", () => ({ triggerBlobDownload: vi.fn() }));
-const mockTriggerDownload = triggerBlobDownload as ReturnType<typeof vi.fn>;
 
 function renderWithQuery(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -175,21 +172,132 @@ describe("TaskFilePanel (gate = read/file-upload/file-delete:task)", () => {
     await waitFor(() => expect(screen.getByText("spec.pdf")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: /^xóa$/i })).not.toBeInTheDocument();
   });
+});
 
-  // ── DOWNLOAD: read:task đủ để tải (cùng gate BE) — apiFetchBlob boundary + triggerBlobDownload ──
-  it("downloads a file via taskFileApi.downloadTaskFile + triggerBlobDownload when user has read:task", async () => {
+/**
+ * S19-OPS-TASKFILEURL-1 — tải tệp: URL ký từ route JSON `download-url`, FE ĐIỀU HƯỚNG (F-2…F-6, F-8).
+ *
+ * `window.open("", "_blank")` phải chạy TRONG nhịp click: mở sau `await` là bị chặn popup (Safari), và
+ * `useMutation` lùi `mutationFn` qua microtask — nên F-2 assert NGAY sau `fireEvent.click`, trước mọi `await`.
+ */
+const SIGNED = "https://storage.example.test/task-1/file-1?sig=1";
+const EXPIRES = "2026-10-14T00:05:00.000Z";
+const downloadBtn = () => screen.getByRole("button", { name: /tải xuống/i });
+
+/** Tab giả do `window.open` trả về — khuôn `payroll-track-d-pdf.spec.tsx`. */
+function fakeTab() {
+  const tab = { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
+  const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+  return { tab, open };
+}
+
+describe("TaskFilePanel — tải tệp qua URL ký (S19-OPS-TASKFILEURL-1)", () => {
+  beforeEach(() => {
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+    vi.clearAllMocks();
+    vi.mocked(taskFileApi.getTaskFiles).mockResolvedValue([FILE_A]);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("[F-2 allow] click ⇒ mở tab trắng ĐỒNG BỘ, cắt opener, gán URL ký", async () => {
     setCaps({ "read:task": true });
-    const blob = new Blob(["x"]);
-    vi.mocked(taskFileApi.downloadTaskFile).mockResolvedValue({ blob, filename: "spec.pdf" });
+    vi.mocked(taskFileApi.downloadTaskFile).mockResolvedValue({ url: SIGNED, expiresAt: EXPIRES });
+    const { tab, open } = fakeTab();
     renderWithQuery(<TaskFilePanel taskId="task-1" />);
-    await waitFor(() => expect(screen.getByText("spec.pdf")).toBeInTheDocument());
+    await screen.findByText("spec.pdf");
 
-    fireEvent.click(screen.getByRole("button", { name: /tải xuống/i }));
+    fireEvent.click(downloadBtn());
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    expect(open).toHaveBeenCalledTimes(1);
 
-    await waitFor(() =>
-      expect(taskFileApi.downloadTaskFile).toHaveBeenCalledWith("task-1", "file-1"),
+    await waitFor(() => expect(tab.location.href).toBe(SIGNED));
+    expect(tab.opener).toBeNull();
+    expect(taskFileApi.downloadTaskFile).toHaveBeenCalledWith("task-1", "file-1");
+    expect(tab.close).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("[F-3 deny] server từ chối (409 NOT_DOWNLOADABLE) ⇒ đóng tab trắng + role=alert + nút bật lại ⇄ F-2", async () => {
+    setCaps({ "read:task": true });
+    const err = new ApiError(
+      409,
+      "FOUNDATION-FILE-ERR-NOT-DOWNLOADABLE",
+      "Tệp chưa sẵn sàng để tải",
     );
-    await waitFor(() => expect(mockTriggerDownload).toHaveBeenCalledWith(blob, "spec.pdf"));
+    vi.mocked(taskFileApi.downloadTaskFile).mockRejectedValue(err);
+    const { tab } = fakeTab();
+    renderWithQuery(<TaskFilePanel taskId="task-1" />);
+    await screen.findByText("spec.pdf");
+
+    fireEvent.click(downloadBtn());
+    await waitFor(() => expect(tab.close).toHaveBeenCalled());
+    expect(tab.location.href).toBe("");
+    expect((await screen.findByRole("alert")).textContent).toBe(mapApiErrorToUi(err).message);
+    expect(downloadBtn()).not.toBeDisabled();
+  });
+
+  it("[F-4] popup bị chặn (open trả null) ⇒ điều hướng chính tab tới URL ký ⇄ F-2", async () => {
+    setCaps({ "read:task": true });
+    vi.mocked(taskFileApi.downloadTaskFile).mockResolvedValue({ url: SIGNED, expiresAt: EXPIRES });
+    vi.spyOn(window, "open").mockReturnValue(null);
+    renderWithQuery(<TaskFilePanel taskId="task-1" />);
+    await screen.findByText("spec.pdf");
+
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+    fireEvent.click(downloadBtn());
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(SIGNED));
+  });
+
+  it("[F-5] đang chờ URL ⇒ nút disabled + «Đang tải…»; xong ⇒ bật lại", async () => {
+    setCaps({ "read:task": true });
+    let resolve!: (v: { url: string; expiresAt: string }) => void;
+    vi.mocked(taskFileApi.downloadTaskFile).mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    fakeTab();
+    renderWithQuery(<TaskFilePanel taskId="task-1" />);
+    await screen.findByText("spec.pdf");
+
+    fireEvent.click(downloadBtn());
+    const pending = await screen.findByRole("button", { name: /đang tải…/i });
+    expect(pending).toBeDisabled();
+
+    resolve({ url: SIGNED, expiresAt: EXPIRES });
+    await waitFor(() => expect(downloadBtn()).not.toBeDisabled());
+  });
+
+  it("[F-6 deny] thiếu read:task ⇒ không có nút tải, không mở tab ⇄ F-2", () => {
+    setCaps({});
+    const { open } = fakeTab();
+    renderWithQuery(<TaskFilePanel taskId="task-1" />);
+    expect(screen.queryByRole("button", { name: /tải xuống/i })).toBeNull();
+    expect(open).not.toHaveBeenCalled();
+    expect(taskFileApi.downloadTaskFile).not.toHaveBeenCalled();
+  });
+
+  it("[F-8 deny] URL không phải http(s) ⇒ đóng tab, KHÔNG gán href, KHÔNG assign, role=alert ⇄ F-2", async () => {
+    setCaps({ "read:task": true });
+    vi.mocked(taskFileApi.downloadTaskFile).mockResolvedValue({
+      url: "javascript:alert(1)",
+      expiresAt: EXPIRES,
+    });
+    const { tab } = fakeTab();
+    renderWithQuery(<TaskFilePanel taskId="task-1" />);
+    await screen.findByText("spec.pdf");
+
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+    fireEvent.click(downloadBtn());
+    await waitFor(() => expect(tab.close).toHaveBeenCalled());
+    expect(tab.location.href).toBe("");
+    expect(assign).not.toHaveBeenCalled();
+    // Lỗi không phải ApiError ("unsafe-url") ⇒ ĐÚNG thông điệp chung của mapApiErrorToUi, không lộ chi tiết.
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Có lỗi không xác định. Vui lòng thử lại.",
+    );
   });
 });
 
