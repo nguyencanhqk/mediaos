@@ -294,7 +294,10 @@ describe("TaskFilePanel — tải tệp qua URL ký (S19-OPS-TASKFILEURL-1)", ()
     await waitFor(() => expect(tab.close).toHaveBeenCalled());
     expect(tab.location.href).toBe("");
     expect(assign).not.toHaveBeenCalled();
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    // Lỗi không phải ApiError ("unsafe-url") ⇒ ĐÚNG thông điệp chung của mapApiErrorToUi, không lộ chi tiết.
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Có lỗi không xác định. Vui lòng thử lại.",
+    );
   });
 });
 
