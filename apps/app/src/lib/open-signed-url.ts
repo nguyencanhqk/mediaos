@@ -1,5 +1,6 @@
 /**
  * S15-PAYROLL-FE-4 — mở signed-URL (PDF phiếu lương 083/084/085) ở TAB MỚI mà không bị chặn popup.
+ * Dùng chung payroll + TASK (S19-OPS-TASKFILEURL-1 dời từ `routes/payroll/` sang `lib/`).
  *
  * Trình duyệt chỉ coi `window.open` là thao tác của người dùng khi nó chạy CÙNG nhịp sự kiện click — mở SAU
  * `await` là bị chặn. Nên: mở tab trắng NGAY, cắt `opener` (tab đích không chạm được `window.opener`), rồi mới
@@ -23,6 +24,8 @@ export async function openSignedUrlInNewTab(
       tab?.close();
       return false;
     }
+    const p = new URL(url).protocol;
+    if (p !== "https:" && p !== "http:") throw new Error("unsafe-url");
     if (tab) tab.location.href = url;
     else window.location.assign(url);
     return true;

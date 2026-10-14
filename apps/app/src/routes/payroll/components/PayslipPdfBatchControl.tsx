@@ -5,7 +5,7 @@ import type { PayslipPdfBatchDto } from "@mediaos/contracts";
 import { formatDateTime, payrollApi } from "@mediaos/web-core";
 import { Button } from "@mediaos/ui";
 import { parsePayrollError, payrollErrorText } from "../payroll-errors";
-import { openSignedUrlInNewTab } from "../open-signed-url";
+import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
 
 /** Nhịp hỏi lại lô đang sinh: 3 s rồi giãn dần tới 15 s (server tự báo `stale` sau 15′). */
 export const PDF_BATCH_POLL_START_MS = 3_000;
