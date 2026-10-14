@@ -35,7 +35,9 @@ interface AuthenticatedRequest extends Request {
 /**
  * S4-TASK-BE-5 — Task File (đính kèm công việc) surface under /tasks/:taskId/files. TÁI DÙNG NGUYÊN pattern
  * S2-HR-EMPFILE-1 — KHÔNG bảng task_files riêng (Foundation FileService + polymorphic file_links). Class-level
- * PermissionGuard fail-closed; EVERY route @RequirePermission OPT-IN tường minh (thiếu = route MỞ). Permission
+ * PermissionGuard fail-closed; EVERY route @RequirePermission tường minh — thiếu decorator ⇒ PermissionGuard ném
+ * 403 `Route is not decorated with @RequirePermission` (fail-closed, `permission.guard.ts:84`; census
+ * route-guard-coverage cũng đỏ — đo ở mutant ★1 của S19-OPS-TASKFILEURL-1). Permission
  * pairs (seed mig 0485): POST=('file-upload','task') · GET*=('read','task') · DELETE=('file-delete','task').
  * Không có cặp file-view:task — xem/tải attachment tái dùng read:task (cùng cổng với task).
  *

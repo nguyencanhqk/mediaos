@@ -15,6 +15,11 @@
  * và tham số `response-content-disposition` giống nhau. Cặp của J-6/J-7/J-11 được đo TRƯỚC khi xoá / đổi
  * membership (vế cho phép chạy trước).
  *
+ * ⚠️ PHỤ THUỘC THỨ TỰ: các ca J-* chạy tuần tự trên CÙNG dữ liệu — J-6/J-7/J-11 tự đổi dữ liệu (DELETE thật,
+ *    UPDATE `tasks.deleted_at`, UPDATE `project_members.member_status` bằng superuser) và J-10 đọc mảng `pairs` do
+ *    các ca trước ghi. CHỈ chạy cả tệp; `-t` lọc một ca sẽ đỏ ở neo `EXPECTED_PAIRS` của J-10 (không xanh giả).
+ *    J-10 so `origin + pathname` + `response-content-disposition`, KHÔNG so phần còn lại của tham số ký.
+ *
  * Cổng `hasDb && LANE_DB` (CLAUDE.md §9.5). Không `Promise.all` quanh supertest (census S18-QA-SUPERTESTLISTEN-1).
  */
 
@@ -31,7 +36,7 @@ import { ERROR_CODES } from "../../src/common/errors/error-codes";
 import { DEFAULT_PRESIGN_TTL_SEC } from "../../src/storage/storage-adapter.port";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { FALLBACK_S3_SECRET, loginPasswordFixture } from "../helpers/fixture-secrets";
-import { directPool, hasDb } from "../helpers/integration-db";
+import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 import {
   grant,
@@ -146,6 +151,10 @@ describe.skipIf(!runDb)("S19-OPS-TASKFILEURL-1 — route JSON download-url cho t
     expect(h.res.headers["cache-control"]).toBe("no-store");
     const exp = Date.parse(dto.expiresAt);
     expect(exp).toBeGreaterThan(h.sentAt);
+    // Cận dưới: TTL bị rút ngắn (vd 1 s) phải ĐỎ ở đây, không chỉ ở cận trên.
+    expect(exp, `expiresAt ngắn hơn TTL ${ttlSec}s`).toBeGreaterThanOrEqual(
+      h.sentAt + ttlSec * 1000 - CLOCK_SLACK_MS,
+    );
     expect(exp).toBeLessThanOrEqual(h.sentAt + ttlSec * 1000 + CLOCK_SLACK_MS);
     expect(h.logs).toEqual([tuple("Download", true, uid[who], DL_PERM, fileId)]);
   }
@@ -240,6 +249,38 @@ describe.skipIf(!runDb)("S19-OPS-TASKFILEURL-1 — route JSON download-url cho t
     if (nest) await nest.close();
     if (A && B) await cleanupTenants(direct, [A.companyId, B.companyId]);
     await direct.end();
+  });
+
+  it("J-R app role (DATABASE_URL) không superuser, không BYPASSRLS · RLS tự chặn file_links của B dưới GUC của A", async () => {
+    const app = appPool(1);
+    try {
+      const role = await app.query(
+        "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user",
+      );
+      expect(role.rows).toEqual([{ rolsuper: false, rolbypassrls: false }]);
+      const countUnder = async (companyId: string): Promise<number> => {
+        const c = await app.connect();
+        try {
+          await c.query("BEGIN");
+          await c.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
+          const r = await c.query(
+            "SELECT count(*)::int AS n FROM file_links WHERE entity_id = $1",
+            [taskB],
+          );
+          await c.query("COMMIT");
+          return r.rows[0].n as number;
+        } finally {
+          c.release();
+        }
+      };
+      // Không lọc company_id trong câu SQL: chỉ RLS + FORCE quyết. Vế B là đối chứng chống xanh-rỗng.
+      expect(await countUnder(A.companyId), "RLS phải giấu file_links của B dưới GUC của A").toBe(
+        0,
+      );
+      expect(await countUnder(B.companyId), "đối chứng: GUC của B thấy liên kết của B").toBe(1);
+    } finally {
+      await app.end();
+    }
   });
 
   it("J-0 không Bearer → 401 trên CẢ hai route (route tồn tại, guard xác thực chặn — T2 dựa vào đây)", async () => {

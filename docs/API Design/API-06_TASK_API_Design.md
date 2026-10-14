@@ -2354,9 +2354,10 @@ Trả metadata file. Link tải phải lấy qua endpoint download riêng hoặc
 
 1. User phải xem được task: có `TASK.TASK.VIEW`, task thuộc company hiện tại, chưa xoá mềm và nằm trong phạm vi dữ liệu của user (gồm nhánh thành viên dự án `member_status = 'Active'`).
 2. File phải được đính kèm vào ĐÚNG task `{task_id}`; liên kết và file đều chưa xoá mềm.
-3. File phải quét sạch (`scan_status` ∈ {`Clean`, `NotRequired`}) và đã `Uploaded`.
-4. Backend kiểm quyền trên file trước khi cấp signed URL. Mọi nhánh từ chối dừng TRƯỚC khi ký: body lỗi không chứa URL.
-5. Signed URL sống `S3_PRESIGN_TTL_SEC` giây (mặc định 300). Kiểu trả về, cách phục vụ `inline` / `attachment` và tên tệp do server ép qua `response-content-type` / `response-content-disposition`; client không chọn được.
+3. File phải quét sạch (`scan_status` ∈ {`Clean`, `NotRequired`}); từ chối ⇒ 409, không ghi `file_access_logs`.
+4. Backend kiểm quyền trên file trước khi cấp signed URL; từ chối ⇒ 403 + 1 dòng deny.
+5. File đã `Uploaded` (kiểm SAU quyền trên file — tệp vừa không có quyền vừa chưa `Uploaded` nhận 403, không phải 409); từ chối ⇒ 409 + 1 dòng deny. Mọi nhánh từ chối (bước 1–5) dừng TRƯỚC khi ký: body lỗi không chứa URL.
+6. Signed URL sống `S3_PRESIGN_TTL_SEC` giây (mặc định 300). Kiểu trả về, cách phục vụ `inline` / `attachment` và tên tệp do server ép qua `response-content-type` / `response-content-disposition`; client không chọn được.
 
 **Response 200**
 
