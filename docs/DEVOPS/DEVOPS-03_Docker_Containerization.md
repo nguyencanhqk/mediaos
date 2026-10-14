@@ -374,6 +374,8 @@ và máy đang chạy chỉ còn sống nhờ **image cache** — hỏng khi d�
 
 > **PROD và dev-online dùng CHUNG container này** — `.env`, `.env.dev`, `.env.prod` đều trỏ
 > `S3_ENDPOINT=http://localhost:9000` ⇒ mỗi lần recreate là cửa sổ gián đoạn của CẢ HAI môi trường.
+> **Sau khi chạy `RELEASE-08` §9** PROD chuyển sang R2 (§13.5) và container này chỉ còn phục vụ dev-online · lane · đường
+> lùi 30 ngày.
 
 ### 13.4 Nguồn image MinIO SỤP HẲN — CI tách khỏi PROD (24/09/2026, WO `S19-OPS-MINIOSRC-1`)
 
@@ -424,6 +426,54 @@ Chỉ lời gọi **có ký SigV4** mới phân biệt được: `HeadBucket` n�
 - `bitnamilegacy` là kho lưu trữ đóng băng ⇒ **không có bản vá bảo mật**, và có thể bị gỡ bất cứ lúc nào.
 - Hướng trả nợ đã seed: **`S19-OPS-MINIOMIRROR-1`** — mirror đúng digest PROD lên GHCR rồi trỏ CI + compose về đó
   (cần owner cấp scope `write:packages`; token `gh` hiện chỉ có `gist, read:org, repo, workflow`).
+
+### 13.5 Object storage PROD = Cloudflare R2 (14/10/2026, WO `S19-OPS-STORAGEPUBLIC-1`, DECISIONS-16)
+
+**Vì sao:** storage tự host chỉ nghe ở địa chỉ nội bộ của máy chủ ⇒ URL ký chỉ dùng được TRÊN máy chủ. PROD chuyển sang
+một bucket R2 riêng tư; **dev · CI · lane · dev-online giữ container của §13.3–§13.4** (sau lúc chuyển, container đó
+không còn phục vụ PROD — rủi ro image ở §13.4 chỉ còn đè lên dev/CI và đường lùi 30 ngày).
+
+**Cấu hình** (6 biến sẵn có, KHÔNG biến mới, KHÔNG đổi mã): `S3_ENDPOINT=https://<mã tài khoản>.r2.cloudflarestorage.com`
+(không kèm tên bucket) · `S3_ACCESS_KEY` / `S3_SECRET_KEY` = token «Object Read & Write» CHỈ bucket PROD · `S3_BUCKET` ·
+`S3_REGION=auto` · `S3_FORCE_PATH_STYLE=true`. Ghi vào CẢ `.env` lẫn `.env.prod` (`m prod-env` chép đè `.env` từ
+`.env.prod`). Token loại này KHÔNG đọc / đổi được CORS của bucket (đo 14/10) — cấu hình bucket chỉ làm trên dashboard.
+
+**CORS của bucket** (Settings → CORS Policy → JSON; thay `<Domain>`; bỏ origin của app nào không tải lên):
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://<Domain>", "https://console.<Domain>", "https://auth.<Domain>"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 600
+  }
+]
+```
+
+Mọi lượt ĐỌC đi bằng `<img>` / điều hướng tới URL ký nên không cần `GET`. KHÔNG thêm `*` hay `null`: CORS của R2 không
+có tuỳ chọn cho yêu cầu kèm credentials, nên đường «fetch qua 302 rồi đọc body» không cứu được bằng CORS — đường đó phải
+đổi sang «lấy URL JSON rồi điều hướng» (`S19-OPS-TASKFILEURL-1`). Đo chính sách bằng
+`node scripts/storage-r2-cors-probe.mjs --conf <file> --allow <origin> … --deny <origin lạ>` (preflight, không ghi object).
+
+**Đã đo trên bucket R2 thử (14/10):** nhóm S1–S9 của `S16-SOCIAL-FILEDISPOSITION-1` + int-spec thao tác phía server =
+xanh; R2 **không gửi** `x-content-type-options: nosniff` (storage tự host có gửi — owner chấp nhận, test ghim theo nhà cung
+cấp ở `apps/api/test/helpers/storage-provider.ts`); GET không chữ ký trả **cùng mã (400) cho khoá có lẫn khoá không có**
+⇒ phép đo «bucket riêng tư» luôn đặt cạnh lượt CÓ chữ ký trên CÙNG khoá (ca K-3).
+
+**LUẬT nâng SDK:** CI chạy storage tự host nên KHÔNG BAO GIỜ chứng minh tương thích R2. Trước MỖI lần nâng `@aws-sdk/*`
+và trước lần chuyển PROD:
+
+```bash
+bash scripts/lane-db-setup.sh <lane>
+LANE_DB=mediaos_<lane> bash scripts/storage-r2-compat.sh "<file cấu hình 3 khoá của bucket THỬ>"
+```
+
+XANH = exit 0 và cả hai int-spec báo «ca storage thật CHẠY» (script tự trả exit 7 nếu thiếu). Đỏ = không nâng.
+
+**Di trú + đường lùi:** `scripts/windows/storage-migrate-r2.ps1` (rclone; chỉ `copy` · `check` · `lsjson` · `lsf` · `size`,
+không bao giờ xoá; Copy / Check bắt buộc `-Prefix` = id công ty vì bucket cũ dùng chung với dev-online + test). Thứ tự
+từng bước: `RELEASE-08` §9.
 
 ## 14. Container network
 

@@ -94,6 +94,7 @@ Frontend không phải lớp bảo mật cuối cùng; backend/API luôn là tru
 | API | Có qua reverse proxy | HTTPS, rate limit, CORS |
 | Database | Không | Private network/firewall |
 | Valkey | Không | Private network |
+| Object storage (PROD = bucket Cloudflare R2 — DECISIONS-16) | Chỉ qua URL ký | Bucket riêng tư: đường công khai của nhà cung cấp TẮT, không tên miền riêng; GET/PUT chỉ bằng URL ký TTL ngắn; token một bucket, không quyền quản trị; CORS theo bucket (DEVOPS-03 §13.5). Storage tự host của dev/CI chỉ nghe nội bộ |
 | Metrics | Không | Internal/VPN/auth |
 | Admin panel infra | Không | Internal/VPN/auth |
 | SSH | Hạn chế | IP allowlist/key only |
@@ -141,6 +142,9 @@ CSP cần kiểm thử kỹ để không chặn asset/API/error tracking hợp l
 3. Allowed methods whitelist.
 4. Allowed headers whitelist, bao gồm `Authorization`, `Content-Type`, `X-Request-Id`, `Idempotency-Key` nếu dùng.
 5. Preflight cache hợp lý.
+6. CORS của OBJECT STORAGE là lớp RIÊNG (chính sách của bucket, khác CORS của API ở trên): chỉ `PUT` + `content-type` từ
+   origin app có tải lên; đọc tệp bằng `<img>` / điều hướng nên không cần `GET`; không `*`, không `null`. Mức thật: URL ký
+   mới là hàng rào; CORS chỉ ngăn trang lạ dùng trình duyệt của người dùng (DEVOPS-03 §13.5).
 
 ### 9.2 Cookie/session
 
