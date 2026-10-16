@@ -63,6 +63,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { expectedNoSniff } from "../helpers/storage-provider";
 import { isCiEnv, resolveStorageTestTarget } from "../helpers/storage-test-target";
 
 const LOGIN_PW = "Passw0rd!fdisp16";
@@ -659,11 +660,12 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
       expect(m.served.disposition ?? "").toMatch(/^attachment; filename=/);
     });
 
-    it("S6 CHO PHÉP — URL đã ký để nguyên ⇒ 200 + x-content-type-options: nosniff", async (ctx) => {
+    it("S6 CHO PHÉP — URL đã ký để nguyên ⇒ 200 + x-content-type-options đúng hành vi đã đo", async (ctx) => {
       if (!storage.run) return skipStorageCase(ctx, "S6 CHO PHÉP");
       const up = await uploadConfirmed(PDF, "s6-nguyen-ven.pdf", "s6-allow");
 
-      const res = await fetch(await downloadUrl(up.fileId));
+      const url = await downloadUrl(up.fileId);
+      const res = await fetch(url);
       await res.arrayBuffer();
       const noSniff = res.headers.get("x-content-type-options");
       console.log(
@@ -672,9 +674,11 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
 
       expect(res.status).toBe(200);
       // Header này do STORAGE tự gắn — API không đặt được nó qua tham số ký (SDK chỉ có 6 trường Response*).
-      // ĐO 08/10/2026 trên MinIO (bản PROD cục bộ): có gắn ⇒ ghim cứng để một lần đổi bản storage làm mất nó
-      // sẽ đỏ ở đây. R2 chưa đo: đổi nhà cung cấp storage thì ĐO lại rồi mới sửa dòng dưới.
-      expect(noSniff).toBe("nosniff");
+      // ĐO: storage tự host (08/10/2026) gắn `nosniff`; R2 (14/10/2026) KHÔNG gắn — owner chấp nhận
+      // (S19-OPS-STORAGEPUBLIC-1 B11). Ghim CẢ HAI chiều: mất header ở storage tự host, hoặc R2 bắt đầu
+      // gửi header, đều đỏ ở đây — đo lại rồi mới sửa `expectedNoSniff`. Chọn theo origin của URL ĐÃ GET (nơi
+      // header thật sự đến từ đó), không theo env.
+      expect(noSniff).toBe(expectedNoSniff(new URL(url).origin));
     });
 
     it("S6 TỪ CHỐI — đổi response-content-type trên URL đã ký ⇒ 403", async (ctx) => {
