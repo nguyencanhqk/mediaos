@@ -8,12 +8,21 @@
 // mở máy PROD ra mới biết. Nhóm test dưới ghim: thân tin nhắn PHẢI liệt kê các hàng không-ok.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
+  DEFAULT_REMIND_HOURS,
   buildWebhookRequest,
+  decideAlertDelivery,
   detectWebhookFormat,
   formatAlertText,
+  nextAlertState,
+  parseRemindHours,
+  readAlertState,
   redactWebhook,
   sendAlert,
+  writeAlertState,
 } from "./ops-alert-notify.mjs";
 
 const PAYLOAD = {
@@ -262,5 +271,297 @@ describe("redactWebhook", () => {
 
   it("URL rác ⇒ chuỗi mô tả, KHÔNG ném và KHÔNG vọt nguyên chuỗi ra ngoài", () => {
     assert.doesNotMatch(redactWebhook("rac-nhung-co-the-la-secret"), /rac-nhung/);
+  });
+});
+// ── S19-OPS-PRODDBBOOT-1: CHỐNG SPAM WEBHOOK mà KHÔNG nuốt cảnh báo thật ──────────────────────────
+// Tác vụ chạy mỗi 10 phút; bản trước gửi webhook MỖI lần worst ≠ ok ⇒ một luật warn kéo dài (SITE_LMS
+// kêu oan từ 21/09) = 144 tin/ngày ⇒ người ta tắt tiếng kênh ⇒ sự cố thật kế tiếp im lặng. Nhưng chiều
+// hỏng NGƯỢC (nuốt một cảnh báo thật) còn tệ hơn — đó là rủi ro số 1 của phần này. Nên mọi chỗ nghi
+// ngờ (trạng thái đọc lỗi, mốc thời gian lạ) đều nghiêng về GỬI.
+const H = 3_600_000;
+const T0 = Date.parse("2026-10-16T08:00:00.000Z");
+const row = (id, severity) => ({
+  id,
+  title: id,
+  severity,
+  detail: `chi tiết ${id}`,
+});
+const ROWS_WARN = [row("BACKEND_DOWN", "ok"), row("SITE_LMS", "warn")];
+const ROWS_CRIT = [row("BACKEND_DOWN", "crit"), row("SITE_LMS", "warn")];
+const ROWS_OK = [row("BACKEND_DOWN", "ok"), row("SITE_LMS", "ok")];
+const sentState = (worst, rows, hoursAgo) => nextAlertState({ worst, rows }, T0 - hoursAgo * H);
+const decide = (o) =>
+  decideAlertDelivery({
+    now: T0,
+    remindHours: DEFAULT_REMIND_HOURS,
+    state: null,
+    stateError: null,
+    ...o,
+  });
+
+describe("decideAlertDelivery — khi nào GỬI", () => {
+  it("lần đầu không-ok (chưa có trạng thái) ⇒ gửi", () => {
+    const d = decide({ worst: "warn", rows: ROWS_WARN });
+    assert.equal(d.send, true);
+    assert.equal(d.kind, "alert");
+  });
+
+  it("cùng worst + cùng tập luật, trong hạn nhắc ⇒ KHÔNG gửi (đây là spam cần chặn)", () => {
+    const d = decide({
+      worst: "warn",
+      rows: ROWS_WARN,
+      state: sentState("warn", ROWS_WARN, 1),
+    });
+    assert.equal(d.send, false);
+    assert.match(d.reason, /\S/);
+  });
+
+  it("chỉ đổi CHI TIẾT (số đếm, latency) ⇒ vẫn coi là trùng", () => {
+    const rows = ROWS_WARN.map((r) => ({ ...r, detail: "số khác" }));
+    const d = decide({
+      worst: "warn",
+      rows,
+      state: sentState("warn", ROWS_WARN, 1),
+    });
+    assert.equal(d.send, false);
+  });
+
+  it("(a) worst đổi — nặng lên HAY nhẹ đi đều gửi", () => {
+    const up = decide({
+      worst: "crit",
+      rows: ROWS_CRIT,
+      state: sentState("warn", ROWS_WARN, 0.1),
+    });
+    const down = decide({
+      worst: "warn",
+      rows: ROWS_WARN,
+      state: sentState("crit", ROWS_CRIT, 0.1),
+    });
+    assert.equal(up.send, true);
+    assert.equal(down.send, true);
+  });
+
+  it("(b) cùng worst nhưng THÊM một luật hỏng ⇒ gửi (luật thứ hai không được núp sau luật đầu)", () => {
+    const rows = [...ROWS_WARN, row("BACKUP_AGE", "warn")];
+    const d = decide({
+      worst: "warn",
+      rows,
+      state: sentState("warn", ROWS_WARN, 0.1),
+    });
+    assert.equal(d.send, true);
+    assert.equal(d.kind, "change");
+  });
+
+  it("(b) cùng worst, cùng luật nhưng ĐỘ NẶNG một luật đổi ⇒ gửi", () => {
+    const before = [row("A", "crit"), row("B", "warn")];
+    const after = [row("A", "crit"), row("B", "unknown")];
+    const d = decide({
+      worst: "crit",
+      rows: after,
+      state: sentState("crit", before, 0.1),
+    });
+    assert.equal(d.send, true);
+  });
+
+  it("(b) một luật HẾT hỏng nhưng worst giữ nguyên ⇒ gửi (tập đổi)", () => {
+    const before = [row("A", "warn"), row("B", "warn")];
+    const after = [row("A", "warn"), row("B", "ok")];
+    const d = decide({
+      worst: "warn",
+      rows: after,
+      state: sentState("warn", before, 0.1),
+    });
+    assert.equal(d.send, true);
+  });
+
+  it("(c) còn hỏng y nguyên và lần gửi cuối cũ hơn hạn nhắc ⇒ gửi nhắc", () => {
+    const state = sentState("warn", ROWS_WARN, DEFAULT_REMIND_HOURS);
+    const d = decide({ worst: "warn", rows: ROWS_WARN, state });
+    assert.equal(d.send, true);
+    assert.equal(d.kind, "remind");
+  });
+
+  it("(c) hạn nhắc lấy từ tham số, không cứng 6 giờ", () => {
+    const state = sentState("warn", ROWS_WARN, 2);
+    assert.equal(decide({ worst: "warn", rows: ROWS_WARN, state, remindHours: 1 }).send, true);
+    assert.equal(decide({ worst: "warn", rows: ROWS_WARN, state, remindHours: 3 }).send, false);
+  });
+
+  it("mốc gửi NẰM Ở TƯƠNG LAI (đồng hồ lùi) ⇒ gửi, không im tới mốc đó", () => {
+    const d = decide({
+      worst: "warn",
+      rows: ROWS_WARN,
+      state: sentState("warn", ROWS_WARN, -48),
+    });
+    assert.equal(d.send, true);
+  });
+
+  it("(d) về ok sau khi đã gửi tin không-ok ⇒ MỘT tin hồi phục", () => {
+    const d = decide({
+      worst: "ok",
+      rows: ROWS_OK,
+      state: sentState("crit", ROWS_CRIT, 3),
+    });
+    assert.equal(d.send, true);
+    assert.equal(d.kind, "recovered");
+  });
+
+  it("(d) đã gửi tin hồi phục rồi, vẫn ok ⇒ im", () => {
+    const d = decide({
+      worst: "ok",
+      rows: ROWS_OK,
+      state: sentState("ok", ROWS_OK, 0.1),
+    });
+    assert.equal(d.send, false);
+  });
+
+  it("ok và chưa từng gửi gì ⇒ im (không có gì để hồi phục)", () => {
+    assert.equal(decide({ worst: "ok", rows: ROWS_OK }).send, false);
+  });
+
+  it("hỏng lại SAU tin hồi phục ⇒ gửi ngay, kể cả trong hạn nhắc", () => {
+    const d = decide({
+      worst: "warn",
+      rows: ROWS_WARN,
+      state: sentState("ok", ROWS_OK, 0.05),
+    });
+    assert.equal(d.send, true);
+    assert.equal(d.kind, "alert");
+  });
+
+  it("trạng thái ĐỌC LỖI + đang hỏng ⇒ VẪN GỬI (thà trùng còn hơn nuốt)", () => {
+    const d = decide({
+      worst: "warn",
+      rows: ROWS_WARN,
+      stateError: "JSON hỏng",
+    });
+    assert.equal(d.send, true);
+    assert.match(d.reason, /trạng thái/);
+  });
+
+  it("trạng thái đọc lỗi + đang ok ⇒ không bịa tin hồi phục", () => {
+    assert.equal(decide({ worst: "ok", rows: ROWS_OK, stateError: "JSON hỏng" }).send, false);
+  });
+});
+
+describe("parseRemindHours — OPS_ALERT_REMIND_HOURS", () => {
+  it("không đặt ⇒ mặc định 6, không kêu", () => {
+    assert.equal(DEFAULT_REMIND_HOURS, 6);
+    assert.deepEqual(parseRemindHours(undefined), { hours: 6, invalid: false });
+    assert.deepEqual(parseRemindHours("  "), { hours: 6, invalid: false });
+  });
+
+  it("số dương (cả số lẻ) ⇒ nhận", () => {
+    assert.deepEqual(parseRemindHours("2"), { hours: 2, invalid: false });
+    assert.deepEqual(parseRemindHours("0.5"), { hours: 0.5, invalid: false });
+  });
+
+  it("giá trị rác ⇒ mặc định + cờ invalid để người gọi KÊU stderr", () => {
+    for (const raw of ["abc", "0", "-1", "6h", "Infinity", "NaN"]) {
+      assert.deepEqual(parseRemindHours(raw), { hours: 6, invalid: true }, raw);
+    }
+  });
+});
+
+describe("readAlertState / writeAlertState — file trạng thái", () => {
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "ops-alert-state-"));
+  const warnState = () => nextAlertState({ worst: "warn", rows: ROWS_WARN }, T0);
+
+  it("chưa có file ⇒ state null, KHÔNG phải lỗi (lần chạy đầu)", () => {
+    const r = readAlertState(path.join(tmp(), "khong-co.json"));
+    assert.deepEqual(r, { state: null, error: null });
+  });
+
+  it("ghi rồi đọc lại ra đúng nội dung; ghi nguyên tử không để lại file tạm", () => {
+    const dir = tmp();
+    const file = path.join(dir, "state.json");
+    const state = warnState();
+    assert.deepEqual(writeAlertState(file, state), { ok: true, error: null });
+    assert.deepEqual(readAlertState(file), { state, error: null });
+    assert.deepEqual(fs.readdirSync(dir), ["state.json"]);
+  });
+
+  it("ghi đè file trạng thái cũ được (rename lên file đã có)", () => {
+    const file = path.join(tmp(), "state.json");
+    writeAlertState(file, warnState());
+    const next = nextAlertState({ worst: "ok", rows: ROWS_OK }, T0 + H);
+    assert.deepEqual(writeAlertState(file, next), { ok: true, error: null });
+    assert.equal(readAlertState(file).state.worst, "ok");
+  });
+
+  it("nextAlertState chỉ giữ luật không-ok, kèm worst + mốc gửi", () => {
+    const st = nextAlertState({ worst: "crit", rows: ROWS_CRIT }, T0);
+    assert.equal(st.worst, "crit");
+    assert.equal(st.sentAt, new Date(T0).toISOString());
+    assert.deepEqual(st.alerts, [
+      { id: "BACKEND_DOWN", severity: "crit" },
+      { id: "SITE_LMS", severity: "warn" },
+    ]);
+  });
+
+  it("JSON rác hoặc sai hình dạng ⇒ error (để người gọi kêu + vẫn gửi)", () => {
+    const dir = tmp();
+    const cases = {
+      "rac.json": "{rac",
+      "mang.json": "[]",
+      "thieu.json": JSON.stringify({ worst: "warn" }),
+      "worst-la.json": JSON.stringify({
+        worst: "xanh",
+        alerts: [],
+        sentAt: "2026-10-16T00:00:00Z",
+      }),
+      "moc-hong.json": JSON.stringify({
+        worst: "warn",
+        alerts: [],
+        sentAt: "hôm qua",
+      }),
+      "luat-hong.json": JSON.stringify({
+        worst: "warn",
+        alerts: [{ id: 1 }],
+        sentAt: "2026-10-16T00:00:00Z",
+      }),
+    };
+    for (const [name, body] of Object.entries(cases)) {
+      fs.writeFileSync(path.join(dir, name), body);
+      const r = readAlertState(path.join(dir, name));
+      assert.equal(r.state, null, name);
+      assert.ok(r.error, name);
+    }
+  });
+
+  it("ghi lỗi (thư mục cha là FILE) ⇒ ok:false kèm error, KHÔNG ném", () => {
+    const blocker = path.join(tmp(), "la-file");
+    fs.writeFileSync(blocker, "x");
+    const r = writeAlertState(path.join(blocker, "state.json"), warnState());
+    assert.equal(r.ok, false);
+    assert.ok(r.error);
+  });
+});
+
+describe("formatAlertText — tin nhắc lại / hồi phục nói rõ mình là gì", () => {
+  const firstLine = (payload) => formatAlertText(payload).split("\n")[0];
+
+  it("tin hồi phục ghi ĐÃ HỒI PHỤC + mức trước đó", () => {
+    const head = firstLine({
+      worst: "ok",
+      rows: ROWS_OK,
+      deliveryKind: "recovered",
+      previousWorst: "crit",
+    });
+    assert.match(head, /ĐÃ HỒI PHỤC/);
+    assert.match(head, /CRIT/);
+  });
+
+  it("tin nhắc lại ghi NHẮC LẠI ở dòng đầu, vẫn liệt kê luật hỏng", () => {
+    const payload = { worst: "warn", rows: ROWS_WARN, deliveryKind: "remind" };
+    assert.match(firstLine(payload), /NHẮC LẠI/);
+    assert.match(formatAlertText(payload), /SITE_LMS/);
+  });
+
+  it("tin thường giữ nguyên tiêu đề cũ", () => {
+    assert.match(
+      firstLine({ worst: "warn", rows: ROWS_WARN }),
+      /^\[MediaOS ops\] WARN — 1\/2 nhóm/,
+    );
   });
 });

@@ -267,6 +267,14 @@ Get-ScheduledTask -TaskName MediaOS-* | Get-ScheduledTaskInfo |
 | `0` | chạy xong, exit 0 |
 | `1` ở `MediaOS-OpsAlert` | **BÌNH THƯỜNG** — `ops-alert-check.mjs` trả `1` khi có nhóm `warn`. Không phải task hỏng |
 | `1` ở `MediaOS-BackupDaily` | **HỎNG THẬT** — script backup trả 0 khi thành công |
+| `0` ở `MediaOS-DockerWatchdog` | engine Docker trả lời, hoặc watchdog vừa bật lại Docker Desktop (xem `logs\docker-watchdog.log`) |
+| `1` ở `MediaOS-DockerWatchdog` | **lỗi script** — đọc dòng `[ERROR]` trong `logs\docker-watchdog.log` |
+| `2` ở `MediaOS-DockerWatchdog` | Docker Desktop đang chạy nhưng engine im quá 10 phút — **cần người xem**, watchdog không diệt gì |
+| `3` ở `MediaOS-DockerWatchdog` | không bật được Docker Desktop (thiếu exe / Start-Process lỗi) — **hỏng thật** |
+
+Tác vụ `MediaOS-DockerWatchdog` (bật lại Docker Desktop khi Explorer lỡ mục Run): đăng ký · gỡ ·
+tạm dừng · diễn tập — xem [RELEASE-09 §4c](RELEASE-09_Monitoring_Alerting_Support_Readiness.md#4c-docker-tự-bật-s19-ops-proddbboot-1).
+Webhook cảnh báo nay chỉ gửi khi trạng thái đổi + nhắc định kỳ + một tin hồi phục — xem RELEASE-09 §4b.
 
 ⚠️ **`State = Ready` KHÔNG chứng minh gì.** Task trỏ tới một `bash.exe` không chạy được vẫn hiện
 `Ready` và vẫn đăng ký thành công; nó chỉ hỏng lúc trigger nổ. Verify bằng `LastTaskResult` + file

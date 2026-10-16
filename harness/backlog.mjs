@@ -22135,6 +22135,7 @@ export const backlog = [
     notes: [
       "Nguyên nhân gốc: Docker Desktop bật qua mục Run của Explorer — Explorer bỏ lỡ mục Run khi treo hoặc khi màn hình khoá quá sớm sau tự đăng nhập ⇒ DB không lên. Tác vụ tạm (watchdog) đã đăng ký 16/10/2026 từ bản tạm `logs\\interim`; WO này đưa nó vào repo.",
       "Vàng (ops). Seed 16/10/2026 ở Đợt 0 — status `todo`; bước thi công tự đóng dấu `started` bằng `node harness/ledger.mjs start S19-OPS-PRODDBBOOT-1`.",
+      "Thi công 16/10/2026 (nhánh `fix/s19-ops-proddbboot-1`): `expectRedirect` cho trang dò (LMS mặc định `/lms`; `DEFAULT_SITES` chuyển sang `scripts/lib/ops-alert-rules.mjs`) · chính sách gửi webhook theo trạng thái (`logs/ops-alert-state.json`, `OPS_ALERT_REMIND_HOURS` mặc định 6) · watchdog + script đăng ký chép nguyên văn bản đang chạy (không sửa — đọc lại không thấy lỗi). Đo trên máy PROD từ worktree: SITE_LMS = ok (307 → …/lms); `docker-watchdog.ps1 -DryRun` exit 0. Tài liệu: RELEASE-09 §3/§4/§4b/§4c + RELEASE-11 bảng LastTaskResult.",
     ],
   },
   {

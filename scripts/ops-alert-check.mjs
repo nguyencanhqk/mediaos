@@ -41,7 +41,9 @@
  *      OPS_ALERT_WEBHOOK (tuỳ chọn — **SECRET, chỉ đặt vào env máy PROD, KHÔNG commit**)
  *      OPS_ALERT_WEBHOOK_FORMAT (ghi đè suy đoán kênh: slack·google-chat·discord·telegram·generic)
  *      OPS_ALERT_TELEGRAM_CHAT_ID (BẮT BUỘC nếu webhook là Telegram) · OPS_ALERT_TIMEOUT_MS
- *      OPS_SITES (JSON ghi đè danh sách trang dò) · OPS_SITE_TIMEOUT_MS
+ *      OPS_SITES (JSON ghi đè danh sách trang dò; mỗi trang nhận `expectRedirect`) · OPS_SITE_TIMEOUT_MS
+ *      OPS_ALERT_REMIND_HOURS (nhắc lại khi còn hỏng y nguyên, mặc định 6)
+ *      OPS_ALERT_STATE (file trạng thái lần GỬI gần nhất, mặc định cạnh OPS_ALERT_LOG)
  *      DATABASE_DIRECT_URL (đọc migration + system_job_runs; thiếu ⇒ 2 rule đó `unknown`)
  *
  * Exit: 0 tất cả ok · 1 có warn hoặc unknown · 2 có crit · 3 lỗi cấu hình.
@@ -52,8 +54,17 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { evaluate, exitCodeFor, worstSeverity } from "./lib/ops-alert-rules.mjs";
-import { WEBHOOK_FORMATS, redactWebhook, sendAlert } from "./lib/ops-alert-notify.mjs";
+import { evaluate, exitCodeFor, parseSitesEnv, worstSeverity } from "./lib/ops-alert-rules.mjs";
+import {
+  WEBHOOK_FORMATS,
+  decideAlertDelivery,
+  nextAlertState,
+  parseRemindHours,
+  readAlertState,
+  redactWebhook,
+  sendAlert,
+  writeAlertState,
+} from "./lib/ops-alert-notify.mjs";
 import { DEFAULT_TAIL_BYTES, countErrorLinesInFile } from "./lib/ops-log-window.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -107,6 +118,18 @@ const LOG_TAIL_BYTES = (() => {
 })();
 const ALERT_LOG = process.env.OPS_ALERT_LOG ?? path.join(REPO_ROOT, "logs", "ops-alerts.log");
 const WEBHOOK = (process.env.OPS_ALERT_WEBHOOK ?? "").trim();
+/** Trạng thái lần GỬI webhook gần nhất — chống spam (xem `decideAlertDelivery`). Xoá file = quên lịch sử gửi. */
+const ALERT_STATE =
+  process.env.OPS_ALERT_STATE ?? path.join(path.dirname(ALERT_LOG), "ops-alert-state.json");
+const REMIND_HOURS = (() => {
+  const { hours, invalid } = parseRemindHours(process.env.OPS_ALERT_REMIND_HOURS);
+  if (invalid) {
+    process.stderr.write(
+      `[ops-alert] OPS_ALERT_REMIND_HOURS="${process.env.OPS_ALERT_REMIND_HOURS}" không hợp lệ (cần số giờ > 0) — dùng mặc định ${hours}\n`,
+    );
+  }
+  return hours;
+})();
 const TIMEOUT_MS = 8000;
 
 /**
@@ -128,50 +151,14 @@ const ALERT_TIMEOUT_MS = (() => {
 })();
 
 /**
- * Các mặt PROD KHÁC ngoài API — mỗi cái là một dịch vụ NSSM riêng, chết độc lập với :3100.
- *
- * `url` cố tình trỏ vào một trang CÔNG KHAI có thật (không phải `/api/health` — hai app này không
- * có), vì sự cố 11–12/08 giết cả `/login` lẫn đường dẫn không tồn tại: nó nằm ở **middleware**, tức
- * lớp mà mọi request đều đi qua. Dò một trang thật là dò đúng chỗ đau.
- *
- * `expect` = một chuỗi PHẢI có trong HTML trả về. Đây là lớp chắn thứ hai cho ca "200 nhưng trang
- * trắng" ([[web-core-stale-dist-white-page]]) — chọn chuỗi do CHÍNH trang đó sinh, đủ hẹp để trang
- * lỗi của Next không tình cờ khớp.
- *
- * `nextDir` = app dir để soi `.next` (xem `collectNextBuilds`); bỏ trống nếu không phải app Next.
- */
-const DEFAULT_SITES = [
-  {
-    id: "SOCIAL",
-    title: "fbpost đăng bài (:3500)",
-    url: "http://localhost:3500/login",
-    expect: "Cần đăng nhập từ MediaOS",
-    nextDir: path.join("apps", "fbpost"),
-  },
-  {
-    id: "LMS",
-    title: "LMS đào tạo (:3400)",
-    url: "http://localhost:3400/login",
-    expect: "<title>FMC</title>",
-    nextDir: path.join("apps", "lms"),
-  },
-];
-
-/**
- * `OPS_SITES` rác ⇒ trả `null` ⇒ luật ra `unknown` (KHÔNG âm thầm quay về mặc định).
- * Quay về mặc định sẽ giấu mất việc người vận hành vừa gõ sai cấu hình.
+ * Các trang PROD ngoài API: danh sách mặc định + hợp đồng "thế nào là sống" (`expect` ·
+ * `expectRedirect` · `nextDir`) nằm ở `DEFAULT_SITES` trong `lib/ops-alert-rules.mjs` để test được.
+ * `OPS_SITES` rác ⇒ `null` ⇒ luật ra `unknown` (KHÔNG âm thầm quay về mặc định — xem `parseSitesEnv`).
  */
 const SITES = (() => {
-  const raw = process.env.OPS_SITES;
-  if (!raw) return DEFAULT_SITES;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) throw new Error("OPS_SITES phải là mảng JSON");
-    return parsed;
-  } catch (err) {
-    process.stderr.write(`[ops-alert] OPS_SITES không đọc được: ${err?.message ?? err}\n`);
-    return null;
-  }
+  const { sites, error } = parseSitesEnv(process.env.OPS_SITES);
+  if (error) process.stderr.write(`[ops-alert] OPS_SITES không đọc được: ${error}\n`);
+  return sites;
 })();
 
 const SITE_TIMEOUT_MS = (() => {
@@ -285,7 +272,13 @@ function collectErrorLines() {
  * một cảnh báo sai mỗi 10 phút thì chỉ vài ngày là không ai đọc nữa.
  */
 async function probeSite(site) {
-  const base = { id: site.id, title: site.title ?? site.id, url: site.url, expect: site.expect };
+  const base = {
+    id: site.id,
+    title: site.title ?? site.id,
+    url: site.url,
+    expect: site.expect,
+    expectRedirect: site.expectRedirect,
+  };
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), SITE_TIMEOUT_MS);
@@ -303,6 +296,8 @@ async function probeSite(site) {
         ...base,
         status: res.status,
         bodyOk: site.expect ? body.includes(site.expect) : null,
+        // 3xx: giữ Location để luật so với `expectRedirect` (LMS → SSO app chính).
+        location: res.status >= 300 && res.status < 400 ? res.headers.get("location") : null,
       };
     } catch (err) {
       const transport =
@@ -512,6 +507,49 @@ async function notifyWebhook(payload) {
 }
 
 /**
+ * Giao cảnh báo theo CHÍNH SÁCH CHỐNG SPAM (S19-OPS-PRODDBBOOT-1) — chỉ gửi khi worst đổi · tập luật
+ * không-ok/độ nặng đổi · còn hỏng quá `OPS_ALERT_REMIND_HOURS` · hoặc MỘT tin hồi phục khi về ok.
+ *
+ * Nghiêng về GỬI ở mọi chỗ nghi ngờ: trạng thái đọc lỗi ⇒ vẫn gửi + kêu stderr; gửi hỏng ⇒ KHÔNG
+ * ghi trạng thái (lần sau thử lại); ghi trạng thái lỗi ⇒ kêu stderr (lần sau có thể gửi trùng).
+ * Chưa đặt webhook ⇒ không đọc/ghi trạng thái gì cả.
+ *
+ * @returns {Promise<{sent:boolean, reason:string}|null>} `null` = chưa cấu hình webhook.
+ */
+async function deliverAlert(payload) {
+  if (!WEBHOOK) return null;
+  const { state, error: stateError } = readAlertState(ALERT_STATE);
+  if (stateError) {
+    process.stderr.write(`[ops-alert] trạng thái gửi lỗi — ${stateError} ⇒ coi như chưa gửi gì\n`);
+  }
+  const now = Date.now();
+  const decision = decideAlertDelivery({
+    worst: payload.worst,
+    rows: payload.rows,
+    state,
+    stateError,
+    now,
+    remindHours: REMIND_HOURS,
+  });
+  if (!decision.send) return { sent: false, reason: decision.reason };
+
+  const result = await notifyWebhook({
+    ...payload,
+    deliveryKind: decision.kind,
+    previousWorst: state?.worst ?? null,
+  });
+  if (!result?.ok) return { sent: false, reason: "giao hỏng — lần chạy sau thử lại" };
+
+  const written = writeAlertState(ALERT_STATE, nextAlertState(payload, now));
+  if (!written.ok) {
+    process.stderr.write(
+      `[ops-alert] KHÔNG ghi được trạng thái gửi (${written.error}) — lần chạy sau có thể gửi trùng\n`,
+    );
+  }
+  return { sent: true, reason: decision.reason };
+}
+
+/**
  * `--test-alert` — nghiệm thu KÊNH, không nghiệm thu sức khoẻ hệ.
  *
  * In ra đủ để trả lời "tin có tới không, nếu không thì vì sao", rồi thoát theo KẾT QUẢ GIAO. Chưa
@@ -595,10 +633,8 @@ async function main() {
   // nhiều tháng nhưng chưa từng chạy trên PROD, và chỉ phát hiện khi cần tới nó).
   if (TEST_ALERT) return testAlert(payload);
 
-  if (worst !== "ok") {
-    appendAlertLog(payload);
-    await notifyWebhook(payload);
-  }
+  if (worst !== "ok") appendAlertLog(payload);
+  const delivery = await deliverAlert(payload);
 
   if (JSON_OUT) {
     process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
@@ -612,8 +648,13 @@ async function main() {
         `  ${icon[r.severity]} ${r.severity.padEnd(7)} ${r.title.padEnd(34)} ${r.detail}\n`,
       );
     process.stdout.write(
-      `\n  Tổng thể: ${worst.toUpperCase()}${worst === "ok" ? "" : `  → ghi ${path.relative(REPO_ROOT, ALERT_LOG)}`}\n\n`,
+      `\n  Tổng thể: ${worst.toUpperCase()}${worst === "ok" ? "" : `  → ghi ${path.relative(REPO_ROOT, ALERT_LOG)}`}\n`,
     );
+    const sent =
+      delivery === null
+        ? "chưa cấu hình"
+        : `${delivery.sent ? "ĐÃ GỬI" : "không gửi"} — ${delivery.reason}`;
+    process.stdout.write(`  Webhook: ${sent}\n\n`);
   }
 
   process.exit(exitCodeFor(worst));

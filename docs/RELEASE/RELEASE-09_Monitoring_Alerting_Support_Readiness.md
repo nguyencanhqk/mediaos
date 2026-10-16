@@ -60,7 +60,7 @@ unknown) / `2` (crit).
 | 7 | Backup fail | tuổi bản backup mới nhất | > 26h | > 50h | DevOps |
 | 8 | SSL expiry | hạn cert của domain API | ≤ 14 ngày | ≤ 3 ngày | DevOps |
 | 9 | *(thêm)* fbpost đăng bài :3500 | GET `http://localhost:3500/login` — **không đi theo redirect** | 3xx/4xx · 200 mất dấu nhận dạng | ≥ 500 · không ai trả lời | DevOps |
-| 10 | *(thêm)* LMS đào tạo :3400 | GET `http://localhost:3400/login` — như trên | như trên | như trên | DevOps |
+| 10 | *(thêm)* LMS đào tạo :3400 | GET `http://localhost:3400/login` — như trên, **trừ** 3xx có `Location` kết thúc `/lms` = **ok** (LMS đăng nhập qua SSO từ 21/09, `S19-OPS-PRODDBBOOT-1`) | như trên; 3xx đi chỗ khác vẫn warn | như trên | DevOps |
 | 11 | *(thêm)* Bản build Next đang phục vụ | `.next/static/development\|webpack` + đếm `eval(` trong bundle middleware (đường dẫn lấy từ `middleware-manifest.json`) | — | có bundle DEV | DevOps |
 
 **Chưa nhận (nói rõ để không ai tưởng đã có):** *Login fail spike* · *Permission denied (403) spike* ·
@@ -94,8 +94,17 @@ cổng phiên đá về `/login` vẫn hiện ra "200 ok" — đúng chế độ
 chính sách Meta.
 
 > 🔴 **Thêm một mặt PROD mới (app/cổng/dịch vụ) ⇒ PHẢI thêm vào `DEFAULT_SITES` trong
-> `scripts/ops-alert-check.mjs`**, nếu không nó sẽ sập âm y hệt. Danh sách trang dò RỖNG ⇒ `unknown`,
-> không bao giờ ra xanh. Ghi đè tại chỗ khi cần: `OPS_SITES` (JSON) · `OPS_SITE_TIMEOUT_MS`.
+> `scripts/lib/ops-alert-rules.mjs`** (chuyển từ `ops-alert-check.mjs` ở `S19-OPS-PRODDBBOOT-1` để có
+> test), nếu không nó sẽ sập âm y hệt. Danh sách trang dò RỖNG ⇒ `unknown`, không bao giờ ra xanh.
+> Ghi đè tại chỗ khi cần: `OPS_SITES` (JSON) · `OPS_SITE_TIMEOUT_MS`.
+>
+> **Chuyển hướng đúng chỗ là sống — `expectRedirect`.** Mỗi trang có thể khai `expectRedirect` (vd
+> `"/lms"`): phản hồi 3xx mà ĐƯỜNG DẪN của `Location` kết thúc bằng giá trị đó (có/không `/` cuối) ⇒
+> `ok`. So phần cuối đường dẫn, **không ghim miền**, không xét query. Mọi ca khác giữ mức cũ: 3xx đi
+> chỗ khác hoặc thiếu `Location` = warn · 2xx sai dấu nhận dạng = warn · 4xx = warn · 5xx = crit ·
+> không ai trả lời = crit · lỗi lạ = unknown. Trang KHÔNG khai trường này ⇒ mọi 3xx vẫn warn (fbpost).
+> `OPS_SITES` nhận trường này; `expectRedirect` sai kiểu hoặc chỉ `/` ⇒ cả cấu hình bị coi là hỏng ⇒
+> `unknown`. Đo 16/10/2026 trên máy PROD: SITE_LMS = `ok` (`HTTP 307 → …/lms`) — hết warn oan từ 21/09.
 
 ### Kết quả chạy thật — 2026-07-30 trên PROD
 
@@ -207,7 +216,17 @@ Register-ScheduledTask -TaskName "MediaOS-BackupDaily" -Action $bAction -Trigger
 ```
 
 `--quiet` chỉ in khi có `warn`/`crit`/`unknown`. Mọi lần khác `ok` đều im lặng; mỗi lần không-ok ghi
-một dòng JSON vào `logs/ops-alerts.log` **và** đẩy ra kênh chat nếu đã đặt `OPS_ALERT_WEBHOOK`.
+một dòng JSON vào `logs/ops-alerts.log` (như cũ, MỌI lần). Đẩy ra kênh chat (nếu đã đặt
+`OPS_ALERT_WEBHOOK`) theo **chính sách chống spam** ở §4b — không còn gửi mỗi 10 phút.
+
+**Bảng tác vụ lịch trên máy PROD** (đối chiếu bằng
+`Get-ScheduledTask -TaskName MediaOS-* | Get-ScheduledTaskInfo`):
+
+| Tác vụ | Chu kỳ | Chạy gì | `LastTaskResult` |
+| --- | --- | --- | --- |
+| `MediaOS-OpsAlert` | mỗi 10 phút | `node scripts\ops-alert-check.mjs --quiet` | `0` ok · `1` có warn/unknown (bình thường khi có nhóm warn) · `2` có crit · `3` lỗi cấu hình |
+| `MediaOS-BackupDaily` | 02:00 hằng ngày | `scripts/backup-db.sh` qua Git Bash (xem RELEASE-11 §6.2) | `0` ok · khác 0 = **hỏng thật** |
+| `MediaOS-DockerWatchdog` | lúc đăng nhập +90 giây, rồi mỗi 5 phút | `scripts\windows\docker-watchdog.ps1` (§4c) | `0` ổn/đã bật Docker · `1` lỗi script · `2` Docker Desktop chạy mà engine im quá ngưỡng · `3` không bật được Docker Desktop |
 
 **Kiểm tra lịch đã chạy chưa:** `Get-ScheduledTask -TaskName MediaOS-*` + xem `logs/ops-alerts.log`.
 Đo 2026-08-12: `MediaOS-OpsAlert` = `Ready`, chu kỳ 10 phút, `LastTaskResult` = 1 (warn) — **lịch CHẠY
@@ -230,6 +249,32 @@ BẤT BIẾN #3):
 | `OPS_ALERT_WEBHOOK_FORMAT` | không | Ghi đè suy đoán kênh: `slack`·`google-chat`·`discord`·`telegram`·`generic`. Giá trị lạ ⇒ kêu ra stderr rồi suy theo host |
 | `OPS_ALERT_TELEGRAM_CHAT_ID` | **có, nếu dùng Telegram** | Thiếu ⇒ báo lỗi ngay lúc dựng, KHÔNG gửi một request chắc chắn hỏng |
 | `OPS_ALERT_TIMEOUT_MS` | không | Trần thời gian giao (mặc định 8000). Webhook treo **không** được treo scheduled task |
+| `OPS_ALERT_REMIND_HOURS` | không | Nhắc lại sau bao nhiêu giờ khi vẫn hỏng y nguyên (mặc định `6`, nhận số lẻ). Giá trị rác (chữ, ≤ 0) ⇒ dùng `6` + kêu ra stderr |
+| `OPS_ALERT_STATE` | không | Đường dẫn file trạng thái gửi. Mặc định `ops-alert-state.json` cùng thư mục với `OPS_ALERT_LOG` (tức `logs\`) |
+
+### Chính sách gửi — chống spam mà KHÔNG nuốt cảnh báo (S19-OPS-PRODDBBOOT-1)
+
+Bản trước gửi webhook **mỗi lần** kết quả ≠ ok, tức mỗi 10 phút. Một nhóm warn kéo dài (SITE_LMS kêu
+oan từ 21/09) ⇒ ~144 tin/ngày ⇒ người nhận tắt tiếng kênh ⇒ sự cố thật kế tiếp im lặng. Nay chỉ gửi khi:
+
+1. **Mức tổng (worst) đổi** — nặng lên hay nhẹ đi đều gửi.
+2. **Tập nhóm không-ok hoặc độ nặng của một nhóm đổi** — kể cả khi worst giữ nguyên (nhóm thứ hai hỏng
+   không được núp sau nhóm đầu). Chỉ đổi chi tiết (số đếm, latency) thì KHÔNG tính là đổi.
+3. **Vẫn hỏng y nguyên quá `OPS_ALERT_REMIND_HOURS`** (mặc định 6 giờ) — tin ghi `NHẮC LẠI` ở dòng đầu.
+4. **Về ok sau khi đã gửi tin không-ok** — đúng **một** tin `ĐÃ HỒI PHỤC` (kèm mức lần báo trước).
+
+Mọi chỗ nghi ngờ nghiêng về **GỬI**: file trạng thái đọc lỗi hoặc hỏng ⇒ vẫn gửi + kêu stderr; mốc gửi
+nằm ở tương lai (đồng hồ lùi) ⇒ gửi; **giao hỏng ⇒ KHÔNG ghi trạng thái** (lần chạy sau thử lại); ghi
+trạng thái lỗi ⇒ kêu stderr (lần sau có thể gửi trùng — chấp nhận). `--test-alert` giữ nguyên: luôn
+gửi, không đọc/ghi trạng thái. Chế độ bảng in thêm dòng `Webhook: ĐÃ GỬI|không gửi — <lý do>`.
+
+**File trạng thái** `logs\ops-alert-state.json` — chỉ ghi sau một lần GỬI THÀNH CÔNG, ghi nguyên tử
+(file tạm rồi rename): `worst` + danh sách `{id, severity}` không-ok + `sentAt`. **Xoá file = quên lịch
+sử gửi** ⇒ lần chạy kế tiếp đang hỏng sẽ gửi ngay (dùng khi muốn ép gửi lại, hoặc sau khi đổi kênh):
+
+```powershell
+Remove-Item "C:\dev 2\MediaOS\logs\ops-alert-state.json"
+```
 
 **Hình dạng thân khác nhau theo kênh** — gửi sai khoá thì tin bay mất mà phía ta không thấy lỗi:
 Slack · Google Chat · kênh lạ dùng `{text}` · Discord dùng `{content}` · Telegram dùng
@@ -260,6 +305,59 @@ Mã thoát của lệnh kiểm tra **không** đổi theo kênh chat: nó nói v
 > `OPS_ALERT_WEBHOOK` lên máy PROD. Chừng nào chưa đặt, nửa (b) **vẫn mở** — `fbpost` chết lại thì
 > `ops-alert-check` SẼ ra `crit` exit 2 đúng lúc và **vẫn không ai biết**. Gỡ khối 🔴 này khi đã đặt
 > webhook thật và `--test-alert` trả exit 0 + nhìn thấy tin trong kênh.
+
+---
+
+## 4c. Docker tự bật (S19-OPS-PRODDBBOOT-1)
+
+**Nguyên nhân gốc (ngắn).** Postgres/PgBouncer/Valkey/MinIO PROD chạy trong Docker Desktop, mà Docker
+Desktop chỉ được bật qua mục *Run* của tài khoản — do `explorer.exe` chạy. Explorer đã hai lần bỏ lỡ
+mục Run: 13/10 (Explorer treo, bị Windows đóng, bản mới bỏ qua Run cho cả phiên ⇒ DB PROD vắng ~17
+giờ) và 16/10 (màn hình khoá quá sớm sau khi tự đăng nhập ⇒ Explorer hoãn ứng dụng khởi động tới lần
+mở khoá đầu). Task Scheduler chạy độc lập với Explorer và chạy cả khi màn hình khoá ⇒ đặt việc bật
+Docker vào một tác vụ lịch thay vì trông vào Explorer.
+
+**Watchdog** `scripts\windows\docker-watchdog.ps1` (PowerShell 5.1, UTF-8 có BOM):
+
+- `docker info` trả lời ⇒ im lặng, thoát 0.
+- Engine im **và** không có tiến trình `Docker Desktop` trong phiên ⇒ bật Docker Desktop, ghi `[ACTION]`.
+- Engine im **nhưng** tiến trình còn ⇒ chỉ đếm giờ; quá 10 phút ghi `[WARN]` (tối đa mỗi 60 phút),
+  thoát 2. **Không diệt gì** (chỉ dừng đúng tiến trình `docker info` con của chính nó khi quá hạn).
+- Engine trả lời lại sau một lần `[ACTION]`/`[WARN]` ⇒ ghi `[RECOVERED]`.
+- Chỉ ghi `logs\docker-watchdog.log` khi có hành động hoặc lỗi (xoay ở 1 MB). Trạng thái tạm:
+  `logs\docker-watchdog.state`.
+
+**Đăng ký / gỡ** (PowerShell thường của tài khoản chạy dịch vụ, KHÔNG cần Admin; tác vụ chạy
+Interactive vì Docker Desktop là ứng dụng của phiên đăng nhập — session 0 không bật được nó). Script
+đăng ký từ chối thư mục nằm trong `%TEMP%` hoặc worktree — tác vụ phải trỏ vào **cây chính**:
+
+```powershell
+$reg = "C:\dev 2\MediaOS\scripts\windows\register-docker-watchdog.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File $reg -DryRun       # xem kế hoạch, không đăng ký
+powershell -NoProfile -ExecutionPolicy Bypass -File $reg               # đăng ký (+ chạy thử 1 lần, in LastTaskResult)
+powershell -NoProfile -ExecutionPolicy Bypass -File $reg -Unregister   # gỡ
+```
+
+**Tạm dừng** khi bảo trì Docker (vd cố ý tắt Docker Desktop — nếu không watchdog bật lại trong ≤ 5 phút):
+
+```powershell
+New-Item -ItemType File "C:\dev 2\MediaOS\logs\docker-watchdog.pause"   # tạm dừng
+Remove-Item "C:\dev 2\MediaOS\logs\docker-watchdog.pause"               # chạy lại
+```
+
+**Diễn tập** (không bật/không ghi gì — chỉ in việc SẼ làm):
+
+```powershell
+$wd = "C:\dev 2\MediaOS\scripts\windows\docker-watchdog.ps1"
+powershell -NoProfile -File $wd -DryRun                                          # trạng thái thật, exit 0 khi engine trả lời
+powershell -NoProfile -File $wd -DryRun -SimulateEngineDown -SimulateNoProcess   # nhánh bật Docker: in "DRYRUN se chay: Start-Process ..."
+```
+
+`-Simulate*` chỉ được dùng kèm `-DryRun` (thiếu ⇒ script tự chặn: ghi một dòng `[ERROR]`, exit 1). Đo 16/10/2026 từ worktree:
+cả hai lệnh exit 0; bản tạm của tác vụ (đăng ký 16/10 16:19) có `LastTaskResult` = 0.
+
+> **Sau khi merge** (owner): `git pull` cây chính → chạy lại lệnh đăng ký ở trên (ghi đè tác vụ để trỏ
+> vào `scripts\windows\docker-watchdog.ps1`) → kiểm `LastTaskResult` = 0 → xoá bản tạm ở `logs\interim\`.
 
 ---
 
