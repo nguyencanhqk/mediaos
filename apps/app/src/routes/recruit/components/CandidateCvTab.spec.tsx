@@ -15,11 +15,11 @@
  *
  * Mỗi ca ẨN đi kèm ca HIỆN đối chứng cùng cấu hình (`deny-cases-vacuous-without-allow-case`).
  */
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore } from "@mediaos/web-core";
+import { ApiError, useAuthStore } from "@mediaos/web-core";
 import i18n from "@/i18n";
 
 const listCandidateFiles = vi.fn();
@@ -171,4 +171,160 @@ describe("CandidateCvTab — cổng hiển thị theo cặp NHẠY CẢM (useCan
     expect(await screen.findByText("cv-nguyen-van-a.pdf")).toBeTruthy();
     expect(screen.getByRole("button", { name: i18n.t("recruit:cv.download") })).toBeTruthy();
   });
+});
+
+/**
+ * S19-FE-SIGNEDTAB-1 — nút Tải xuống mở URL ký ở tab mới (N2 của S19-OPS-TASKFILEURL-1).
+ *
+ * `window.open` giả lập ĐÚNG CHUẨN HTML: có cờ `noopener` trong `features` ⇒ trả `null` (tab trắng mở ra
+ * nhưng phía gọi không cầm được nó để điều hướng). Spec TASK/payroll giả `open` trả tab VÔ ĐIỀU KIỆN nên
+ * không thấy lỗi này — trình duyệt thật đo 14/10: nút CV hỏng ở mọi tốc độ, PDF lẫn PNG.
+ */
+describe("CandidateCvTab — nút Tải xuống mở URL ký ở tab mới (S19-FE-SIGNEDTAB-1)", () => {
+  const FILE_ID = "33333333-3333-4333-8333-333333333333";
+  const FILE = {
+    linkId: "22222222-2222-4222-8222-222222222222",
+    fileId: FILE_ID,
+    originalName: "cv-nguyen-van-a.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 1024,
+    scanStatus: "Clean",
+    uploadStatus: "Uploaded",
+    uploadedAt: "2026-09-04T00:00:00.000Z",
+    purpose: "CV",
+  };
+  const SIGNED = "https://storage.example.test/cv-nguyen-van-a.pdf?sig=t";
+  const UNSAFE = "javascript:alert(1)";
+  const EXPIRES_AT = "2026-10-16T12:00:00.000Z";
+
+  let tab: { opener: unknown; location: { href: string }; close: ReturnType<typeof vi.fn> };
+  let open: MockInstance<typeof window.open>;
+
+  beforeEach(() => {
+    tab = { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
+    open = vi
+      .spyOn(window, "open")
+      .mockImplementation((_u, _t, f) =>
+        /noopener/i.test(String(f ?? "")) ? null : (tab as unknown as Window),
+      );
+    // Đặt lại mock cấp module MỖI ca: tuỳ phiên bản vitest, `restoreAllMocks` có thể xoá implementation.
+    listCandidateFiles.mockReset();
+    listCandidateFiles.mockResolvedValue([FILE]);
+    getDownloadUrl.mockReset();
+    setCaps({ [VIEW_PAIR]: true });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function findDownloadButton(): Promise<HTMLElement> {
+    renderTab();
+    return screen.findByRole("button", { name: i18n.t("recruit:cv.download") });
+  }
+
+  function mockAppLocationAssign(): ReturnType<typeof vi.fn> {
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+    return assign;
+  }
+
+  it("C-1 [allow] bấm Tải xuống ⇒ mở tab KHÔNG cờ noopener, cắt opener, điều hướng tới URL ký", async () => {
+    getDownloadUrl.mockResolvedValue({ url: SIGNED, expiresAt: EXPIRES_AT });
+    fireEvent.click(await findDownloadButton());
+
+    await waitFor(() => expect(tab.location.href).toBe(SIGNED));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    expect(tab.opener).toBeNull();
+    expect(tab.close).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(getDownloadUrl).toHaveBeenCalledWith(CANDIDATE_ID, FILE_ID);
+  });
+
+  it("C-2 [nhịp click] `window.open` chạy ĐỒNG BỘ trong onClick, trước khi API trả URL", async () => {
+    let resolveUrl!: (v: { url: string; expiresAt: string }) => void;
+    getDownloadUrl.mockReturnValue(
+      new Promise((r) => {
+        resolveUrl = r;
+      }),
+    );
+    const button = await findDownloadButton();
+
+    // CẤM `await` giữa click và khẳng định: một `await` bất kỳ trước helper sẽ ra khỏi nhịp click
+    // (trình duyệt thật chặn popup) — khẳng định ở dòng NGAY sau click mới bắt được điều đó.
+    fireEvent.click(button);
+    expect(open).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveUrl({ url: SIGNED, expiresAt: EXPIRES_AT });
+    });
+    await waitFor(() => expect(tab.location.href).toBe(SIGNED));
+  });
+
+  it("C-3 [deny ⇄ C-1] API trả 404 ⇒ đóng tab trắng, không điều hướng, alert «không tìm thấy»", async () => {
+    getDownloadUrl.mockRejectedValue(
+      new ApiError({
+        status: 404,
+        code: "NOT_FOUND",
+        message: "not found",
+        details: [{ field: "kind", message: "not-found", rule: "recruit" }],
+      }),
+    );
+    fireEvent.click(await findDownloadButton());
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(i18n.t("recruit:errors.notFound"));
+    expect(tab.close).toHaveBeenCalled();
+    expect(tab.location.href).toBe("");
+  });
+
+  it("C-4 [popup bị chặn ⇄ C-1] `open` trả null ⇒ điều hướng chính tab app tới URL ký, không alert", async () => {
+    open.mockReturnValue(null);
+    getDownloadUrl.mockResolvedValue({ url: SIGNED, expiresAt: EXPIRES_AT });
+    const button = await findDownloadButton();
+    const assign = mockAppLocationAssign();
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(assign).toHaveBeenCalledWith(SIGNED);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("C-5 [deny ⇄ C-1] URL không phải http(s) ⇒ đóng tab, không gán href, alert chung (không lộ chi tiết)", async () => {
+    getDownloadUrl.mockResolvedValue({ url: UNSAFE, expiresAt: EXPIRES_AT });
+    fireEvent.click(await findDownloadButton());
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(i18n.t("recruit:errors.generic"));
+    expect(tab.close).toHaveBeenCalled();
+    expect(tab.location.href).toBe("");
+  });
+
+  it("C-5b [deny ⇄ C-4] popup bị chặn + URL không phải http(s) ⇒ KHÔNG điều hướng tab app, alert chung", async () => {
+    open.mockReturnValue(null);
+    getDownloadUrl.mockResolvedValue({ url: UNSAFE, expiresAt: EXPIRES_AT });
+    const button = await findDownloadButton();
+    const assign = mockAppLocationAssign();
+
+    fireEvent.click(button);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(i18n.t("recruit:errors.generic"));
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["{}", {}],
+    ["{ *:* }", { "*:*": true }],
+  ])(
+    "C-6 [mốc] caps %s ⇒ KHÔNG có nút Tải xuống (cổng `view:candidate` giữ nguyên)",
+    async (_label, caps: Record<string, boolean>) => {
+      setCaps(caps);
+      renderTab();
+      expect(await screen.findByText(i18n.t("recruit:cv.noPermission"))).toBeTruthy();
+      expect(screen.queryByRole("button", { name: i18n.t("recruit:cv.download") })).toBeNull();
+    },
+  );
 });
