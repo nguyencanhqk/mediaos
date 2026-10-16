@@ -15590,6 +15590,7 @@ export const backlog = [
       "🔴 KHÔNG phải lỗ leo thang: cổng thật là BE (đã kín sau DECISIONS-12). Đây là lỗi TRẢI NGHIỆM + một nguồn sự-thật thứ hai đang trôi khỏi engine.",
       "`useCanExact` là lối đúng đã có sẵn cho cặp nhạy cảm (memory sensitive-pair-widget-needs-usecanexact) — cân nhắc census 'cặp sensitive nào còn dùng useCan' trước khi đổi bản thân useCan.",
       "Memory liên quan: sensitive-pair-widget-needs-usecanexact · sensitive-capability-allowlist-is-backend · capability-allowlist-hides-admin-screens.",
+      "Census PROD 16/10/2026 ~16:05 ICT (đọc-chỉ, ROLLBACK, chỉ số tổng hợp): Q1 = 0 (không actor nào giữ wildcard ALLOW) · Q3 = 0 · Q6 = 0 (qua) · Q4a = 86 (allowlist trong file census gốc `docs/plans/S14-SEC-CAPWILDCARD-1.census.sql` còn 69 ⇒ cập nhật allowlist trong file đó) · Q4 = 71 cặp — chi tiết lưu ngoài repo (máy PROD), gồm cả cặp lớp reveal/step-up ⇒ đọc trước khi code theo plan §12. Repo công khai: PR chỉ ghi số tổng hợp, KHÔNG liệt kê cặp.",
     ],
   },
   {
@@ -17305,7 +17306,10 @@ export const backlog = [
       "🔴 ĐO TRƯỚC KHI DROP: `pg_stat_user_indexes.idx_scan` của `file_links_company_id_idx` trên môi trường có tải THẬT — một index company-only vẫn có thể được dùng cho câu quét-theo-tenant mà index 2 cột không phục vụ tốt bằng",
       "Drop index là thao tác MỘT CHIỀU trên bảng dùng chung (avatar · HR · CHAT · SOCIAL) ⇒ cần chữ ký owner riêng",
     ],
-    notes: ["TÁCH RA 24/09/2026 từ ATTDEBT-1 (owner ký S-6: giữ nguyên ở WO đó)."],
+    notes: [
+      "TÁCH RA 24/09/2026 từ ATTDEBT-1 (owner ký S-6: giữ nguyên ở WO đó).",
+      "Census PROD 16/10/2026 ~16:05 ICT (đọc-chỉ, ROLLBACK, chỉ số tổng hợp): 18/19 bảng `feed_*` = 0 dòng (bảng còn lại là danh mục gieo sẵn); `idx_scan` = 0 nhưng cửa sổ đếm chỉ ~8 giờ (Postgres khởi động lại sáng 16/10) ⇒ chưa có tải thật để đo — GIỮ HOÃN, ngưỡng mở không đổi.",
+    ],
   },
   {
     id: "S16-SOCIAL-BE-1D",
@@ -17855,10 +17859,13 @@ export const backlog = [
       "plan S16-SOCIAL-GROUPERR-1 §1 D14 + owner ký O4 29/09/2026 (FE auto-deploy khi merge, API deploy tay)",
     ],
     done_when: [
-      "ĐO TRƯỚC: PROD API trả `error.code` = SOCIAL-ERR-* cho một lỗi nhóm thật (vd 409 ERR-015) — chưa thấy thì CHƯA gỡ",
+      "ĐO TRƯỚC, hai bằng chứng: (a) commit trong `/health` của PROD API chứa #554 (`a1dbe7f0`) — ĐẠT 16/10/2026 (`85c3b28d`); (b) owner mở một link nhóm KHÔNG tồn tại trên PROD, tab Network thấy 404 kèm `error.code` = SOCIAL-ERR-012 — CHỜ OWNER. Chưa có (b) thì CHƯA gỡ. (Cách cũ «ép 409 ERR-015» không làm được: PROD chưa có nhóm nào.)",
       "Gỡ nhánh fallback + ca LEGACY trong group-errors.spec; heuristic status+action cũ đi theo",
     ],
-    notes: ["Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1 (O4)."],
+    notes: [
+      "Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1 (O4).",
+      "Owner chốt 16/10/2026 qua hộp hỏi (Đợt 0): bằng chứng = commit `/health` + một phản hồi 404 chỉ-đọc (không ghi dữ liệu). (a) đạt 16/10: `/health` PROD = `85c3b28d`, chứa `a1dbe7f0` (#554); (b) chờ owner.",
+    ],
   },
   {
     id: "S16-SOCIAL-GROUPTOCTOU-1",
@@ -17987,6 +17994,7 @@ export const backlog = [
     ],
     notes: [
       "Seed 29/09/2026 từ S16-SOCIAL-GROUPERR-1. Không phải lỗi SOCIAL-ERR nên nằm ngoài GROUPERR-1 (D13).",
+      "Owner chốt 16/10/2026 qua hộp hỏi (Đợt 0): phát mã máy `AUTH-ERR-SCOPE-DENIED`, CHỈ SOCIAL (theo khuôn ROOM `viewScopeDenied`), giữ nguyên lời nhắn; vẫn FULL gate. RECRUIT · PAYROLL · HR tách sang WO nợ S19-SEC-SCOPEDENIEDCODE-1.",
     ],
   },
   {
@@ -18625,6 +18633,7 @@ export const backlog = [
     notes: [
       "🔴 FULL gate — nới cổng đọc/ghi nhóm riêng tư.",
       "➕ 05/10/2026 (plan S16-SOCIAL-FE-3 §8.9 · ô O4): SOCIAL-API-001 với `status=hidden` mà vắng `groupId` thì LOẠI bài nhóm (`social-posts.service.ts:124`) ⇒ tab «Bài đang ẩn» của SOC-SCREEN-010 (FE-3) KHÔNG liệt kê bài nhóm đã ẩn — người kiểm duyệt chỉ tới được bài đó qua link trực tiếp hoặc «Xem trong ngữ cảnh» ở dòng báo cáo. Khi chốt đường kiểm duyệt nhóm ở WO này: mở luôn nguồn bài nhóm đã ẩn cho màn 010 (tham số/route riêng, có sàn quyền) rồi gỡ dòng giới hạn trên màn.",
+      "Owner chốt 16/10/2026 qua hộp hỏi (Đợt 0): chọn hướng (b): HR/admin công ty (`manage:feed-post`) xử lý nội dung nhóm kín qua báo cáo (ẩn · khoá · xoá) + thấy bài nhóm đã ẩn ở màn kiểm duyệt (tab «Bài đang ẩn»); KHÔNG đọc feed nhóm; không migration; có audit.",
     ],
   },
   {
@@ -18908,12 +18917,13 @@ export const backlog = [
       "Nợ plan S16-SOCIAL-FE-3 §8.9 (O1 = B · D15 · phép đo M18) · SPEC-07 §14.8 + `SPEC-07 DASH.md:1198-1200` · memory dash-widget-gate-needs-scope-floor",
     ],
     done_when: [
-      "`HR_OVERVIEW` có SÀN scope ở CẢ metadata lẫn data (Company cho HR/Admin; manager Department chỉ phòng mình theo SPEC-07:1200; Own/Team không nhận số liệu) — deny-path RED trước, mỗi scope một ca",
-      "Có tín hiệu để FE biết ai được xem mà không cần cặp thay thế; sau đó mở WO FE nhỏ bỏ vế `update:employee` ở `HrOverviewRailSlot` (S16-SOCIAL-FE-3C) và mở widget cho manager theo phòng",
+      "`HR_OVERVIEW` có SÀN scope ở CẢ metadata lẫn data (sàn Phòng ban ở server: HR/Admin = Company thấy cả công ty; người giữ Department chỉ phòng mình theo SPEC-07:1200; quản lý @Team và nhân viên Own không nhận số liệu) — deny-path RED trước, mỗi scope một ca",
+      "Có tín hiệu để FE biết ai được xem mà không cần cặp thay thế; sau đó mở WO FE nhỏ bỏ vế `update:employee` ở `HrOverviewRailSlot` (S16-SOCIAL-FE-3C) — KHÔNG mở cho quản lý (ma trận quyền §7; owner chốt 16/10/2026)",
     ],
     notes: [
       "🔴 FULL gate (cổng đọc số liệu nhân sự). Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9. Đây là điều kiện để bỏ cặp thay thế của O1 = B.",
       "📌 PR-C S16-SOCIAL-FE-3C (07/10/2026) — thêm cho WO này: (1) vế thay thế `update:employee` nằm ở `apps/app/src/routes/social/feed/components/HrOverviewRailSlot.tsx`; bỏ nó thì ba spec đỏ THEO THIẾT KẾ (`HrOverviewRailSlot.spec.tsx` · `HrOverviewRailSlot.gate.spec.tsx` · `feed/SocialPortalShell.hr-widget.spec.tsx`) — sửa ca theo cổng mới, đừng nới. (2) Câu hỏi owner còn mở (finding SEC-03 của gate bảo mật, plan FE-3 §9): ô rail hiện theo QUYỀN, không theo `dashboard_widget_configs` — đường data `GET /dashboard/widgets/:slug` không đọc cấu hình; owner muốn rail tôn trọng cấu hình thì BE ép ở đường data hoặc phát tín hiệu cho FE ngay trong WO này. (3) Đọc từ mã, CHƯA đo: `fetchHrOverview` lấy `pageSize: 100` rồi đếm `byStatus` / `byOrgUnit` trên 100 hàng đầu trong khi `headcount = meta.total` (`dashboard-widget-handlers.service.ts`) ⇒ công ty trên 100 người thì các dòng trạng thái không cộng ra tổng. (4) `apps/api/test/integration/auth-seed-canonical-roles.int-spec.ts` mới ghim chiều CÓ của `update:employee` (hr · company-admin), chưa ghim chiều VẮNG cho employee / manager — vế phân biệt của O1 = B dựa vào đó. (5) Flip `read:employee` / `update:employee` sang `is_sensitive` mà thiếu allowlist ở `permission.service.ts` thì ô biến mất im lặng với chính HR — không ca FE nào bắt được.",
+      "Owner chốt 16/10/2026 qua hộp hỏi (Đợt 0): sàn Phòng ban ở server (CẢ danh sách widget lẫn đường số liệu); HR/admin thấy cả công ty; quản lý @Team và nhân viên không nhận số; ô rail theo QUYỀN, không theo cấu hình Dashboard (trả lời SEC-03 — cấu hình Dashboard chỉ áp cho trang Dashboard). Vế «mở widget cho manager theo phòng» ở done_when đã thay bằng «không mở cho quản lý (ma trận quyền §7)». FE bỏ cặp tạm `update:employee` sau khi BE có sàn.",
     ],
   },
   {
@@ -19579,6 +19589,7 @@ export const backlog = [
       "🔴 FULL gate — migration + viết lại câu SQL thống kê chạy dưới FORCE RLS. Seed 12/10/2026 từ S16-SOCIAL-DASH-1 (owner chốt O1 = C2: widget «Tương tác tuần» bật mặc định với câu hiện tại khi dữ liệu còn nhỏ, nợ hiệu năng tách về WO này).",
       "SỐ ĐO lúc seed (plan S16-SOCIAL-DASH-1 §1.2 M11): câu hiện tại 411 ms → thêm 2 chỉ mục mà giữ nguyên câu 323 ms → viết lại + tách nhánh cảm xúc 12 ms. Điều kiện đo: bảng TẠM 310.000 hàng, mỗi biến thể chạy một lượt, superuser không RLS ⇒ chỉ kết luận HÌNH DẠNG plan (thêm chỉ mục mà không sửa câu gần như vô ích), KHÔNG phải số hiệu năng của PROD — vì thế `done_when` đầu tiên bắt đo lại trên bảng thật.",
       "NGƯỠNG MỞ: trước khi `feed_reactions` của một công ty vượt khoảng 50.000 hàng, hoặc khi Dashboard của quản lý chậm thấy được. Công tắc vận hành trong lúc chờ (plan S16-SOCIAL-DASH-1 §8 — mới đọc mã, chưa đo): đặt `status = 'Inactive'` cho hàng catalog `SOCIAL_ENGAGEMENT_WEEK` ⇒ widget rời `/dashboard/me`; đường gọi thẳng slug vẫn mở theo quyền.",
+      "Census PROD 16/10/2026 ~16:05 ICT (đọc-chỉ, ROLLBACK, chỉ số tổng hợp): 18/19 bảng `feed_*` = 0 dòng (bảng còn lại là danh mục gieo sẵn); `idx_scan` = 0 nhưng cửa sổ đếm chỉ ~8 giờ (Postgres khởi động lại sáng 16/10) ⇒ chưa có tải thật để đo — GIỮ HOÃN, ngưỡng mở không đổi.",
     ],
   },
   // ── Nợ bàn giao từ S16-SOCIAL-QA-1 (seed 09/10/2026) — bảng chi tiết: docs/QA/evidence/S16-SOCIAL-QA-1-ACCEPTANCE.md §9 ──
@@ -21198,6 +21209,9 @@ export const backlog = [
       "packages/contracts/src/hr/**",
       "apps/api/src/employees/**",
       "apps/api/test/**",
+      "apps/api/src/foundation/files/avatar-presign*",
+      "apps/app/src/routes/hr/profile-change-requests/**",
+      "docs/SPEC/SPEC-03 HR.md",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
@@ -21212,6 +21226,7 @@ export const backlog = [
     ],
     notes: [
       "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (plan §7 N1). SOCIAL đã tự vệ ở đường ĐỌC (chỉ ký fileId xác minh, bỏ mọi URL — D2-b); HR/CHAT/TASK vẫn passthrough URL http(s) ⇒ đường GHI là nơi đóng lỗ cho MỌI module.",
+      "Owner chốt 16/10/2026 qua hộp hỏi (Đợt 0): bỏ `avatar_file_id` khỏi đề nghị sửa hồ sơ (`PROFILE_CHANGE_ALLOWED_FIELDS`) + API HR tạo/sửa chỉ nhận lệnh GỠ ảnh (ảnh chỉ đổi qua hai đường đã kiểm tệp) + HR/CHAT/TASK thôi hiện link http(s) (`avatar-presign.service.ts`) — tức nhánh «bỏ hẳn» của done_when đầu, không làm nhánh 422. Theo bằng chứng phiếu: thêm vào paths ô ảnh FE của đề nghị (`apps/app/src/routes/hr/profile-change-requests/**`), dòng SPEC-03 cho phép đề nghị đổi ảnh (`docs/SPEC/SPEC-03 HR.md`) và `avatar-presign*`. Census PROD 16/10/2026 ~16:05 ICT (đọc-chỉ, ROLLBACK, chỉ số tổng hợp): 49/49 hồ sơ chưa có ảnh · 0 ảnh dạng link · 0 đề nghị có trường ảnh ⇒ không ai bị ảnh hưởng (số của S19-OPS-AVATARCENSUS-1). Merge xong deploy API trong ngày.",
     ],
   },
   {
@@ -21256,6 +21271,7 @@ export const backlog = [
     ],
     notes: [
       "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (nợ N3). Chữ cái đầu cho dữ liệu cũ là ĐÚNG thiết kế self-defending — số đo chỉ cho biết bao nhiêu người thấy thay đổi.",
+      "Census PROD 16/10/2026 ~16:05 ICT (đọc-chỉ, ROLLBACK, chỉ số tổng hợp): câu 1 (`avatar_url` dạng UUID không có link `ME/avatar` đã xác minh) = 0 · câu 2 (`avatar_url` http(s)) = 0; nền: 49/49 hồ sơ `avatar_url` rỗng (NULL). Số = 0 ⇒ không cần chuyển dữ liệu cũ, không ai thấy đổi sang chữ cái đầu. WO đo xong — ledger `finished` 16/10/2026; số đã chuyển vào S19-HR-AVATARWRITE-1.",
     ],
   },
   {
@@ -21338,6 +21354,7 @@ export const backlog = [
     notes: [
       "Seed 02/10/2026 từ S16-SOCIAL-AVATARPRESIGN-1 (nợ N7). WO đó chỉ bảo đảm che ẢNH ⊆ che TÊN; WO này thống nhất chính vị từ che TÊN.",
       "Owner sửa D9 02/10/2026 (AVATARPRESIGN FULL gate lượt 1, database-reviewer): `026` là ngoại lệ — ảnh chỉ đi kèm TK SỐNG; mọi điểm khác giữ «vắng ≠ che» (K1/D9). Xem mục «NGOẠI LỆ CÓ CHỦ ĐÍCH» ở done_when.",
+      "Owner chốt 16/10/2026 qua hộp hỏi (Đợt 0): MỘT luật = K1 mở rộng: TK hoặc hồ sơ bị XOÁ ⇒ che tên + ảnh; nghỉ việc (TK khoá) ⇒ GIỮ tên. Áp 7 bề mặt: bài · bình luận · cảm xúc · đã đọc · báo cáo · người duyệt sáng kiến · thùng rác. Sinh nhật · chưa-đọc · danh bạ · nhắc tên giữ như nay (kể cả ngoại lệ `026` ở done_when).",
     ],
   },
   {
@@ -21493,7 +21510,10 @@ export const backlog = [
       "Lưới chống trôi: spec so hai bảng (hoặc một nguồn chung) — mutant đổi một nhãn ⇒ đỏ",
       "ĐO TRƯỚC: nhãn chỉ nằm trong code (template `0581` dùng placeholder `{status_label}`) — xác nhận không cần migration",
     ],
-    notes: ["LOW — copy, không đổi hành vi."],
+    notes: [
+      "LOW — copy, không đổi hành vi.",
+      "Owner chốt 16/10/2026 qua hộp hỏi (Đợt 0): bộ nhãn theo thông báo — «Đã gửi · Đang xét duyệt · Được duyệt · Từ chối». Chỉ sửa nhãn i18n FE cho khớp `IDEA_STATUS_LABEL`; thông báo đã gửi giữ nguyên chữ.",
+    ],
   },
   {
     id: "S16-SOCIAL-FESEARCHBOUNDS-1",
@@ -21934,6 +21954,7 @@ export const backlog = [
       "PR của `S16-SOCIAL-FE-2D` lát A (UI đính kèm SOCIAL) mang điều kiện «chưa merge cho tới khi WO này xong»: merge trước thì người dùng ở máy khác thấy nút đính kèm nhưng mọi lượt tải đều báo lỗi (hỏng kín, không rò dữ liệu).",
       "Liên quan nhưng KHÁC việc: `S19-OPS-MINIOMIRROR-1` (nguồn image) · `S16-SOCIAL-ORPHANUPLOAD-1` (dọn tệp mồ côi) · `S1-FND-CORS-EXPOSE-1` (CORS của API, không phải của bucket).",
       "Đổi hướng 14/10/2026 (plan v2): phép thử nhóm S1–S9 trên bucket R2 thử = 19/20 xanh, đỏ duy nhất là header `x-content-type-options` vắng ⇒ owner «chấp nhận». Hợp đồng v2 thay `done_when` [2]–[6] của hướng (a) và thêm [7]; `paths` bỏ `apps/api/src/storage/**` + `apps/api/src/config/**` + `docker-compose.yml` (hướng R2 không đổi chúng). Bước chuyển PROD (plan §5 C7) cần `S19-OPS-TASKFILEURL-1` đã ở PROD; phần mã của WO này KHÔNG phụ thuộc nó.",
+      '16/10/2026: #583 merge = `a9bdc3db` (KHÔNG đổi PROD). O1 = được chuyển (owner 16/10) · O2 = bucket «mediaos-prod», Location hint APAC (owner tự tạo) · O3 (khung giờ C5–C7) CHƯA hỏi. Còn: L4 + C1–C9 (S16-SOCIAL-STORAGETESTGATE-1 trước C5). WO CHƯA xong dù PR đã merge: ledger giữ `blocked` (chờ O3 + chuyển PROD) — reconcile không lật WO `blocked`; ĐỪNG ghi `start`/`reopened`/`milestone` (overlay về todo/in_progress ⇒ reconcile đóng dấu `finished` ngay theo `a9bdc3db`). Xong C9 ⇒ `node harness/ledger.mjs done S19-OPS-STORAGEPUBLIC-1 "…"`.',
     ],
   },
   {
@@ -22082,5 +22103,89 @@ export const backlog = [
       "🔴 — nhật ký truy cập là bảng append-only (bất biến #2) và là một đường đọc tệp.",
       "Seed 14/10/2026 ở hậu merge PR-A của S19-OPS-TASKFILEURL-1.",
     ],
+  },
+  // ── Đợt 0 (16/10/2026) — gieo từ quyết định owner qua hộp hỏi ──
+  {
+    id: "S19-OPS-PRODDBBOOT-1",
+    module: "DEVOPS",
+    layer: "DEVOPS",
+    title: "Máy PROD: Docker tự bật lại không phụ thuộc Explorer + kênh báo động không spam",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "scripts/ops-alert-check.mjs",
+      "scripts/lib/ops-alert-*.mjs",
+      "scripts/windows/docker-watchdog.ps1",
+      "scripts/windows/register-docker-watchdog.ps1",
+      "docs/RELEASE/RELEASE-09_Monitoring_Alerting_Support_Readiness.md",
+      "docs/RELEASE/RELEASE-11_Admin_Guide.md",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Đợt 0 16/10/2026: 13→14/10 DB PROD vắng ~17 h vì Docker không tự lên sau khi máy khởi động lại (memory prod-api-boots-without-db-until-login). Owner chọn «Sửa trong 1 WO hôm nay» + «Đăng ký ngay + vào PR» (hộp hỏi 16/10/2026).",
+    ],
+    done_when: [
+      "Luật `SITE_LMS` coi phản hồi 3xx chuyển về trang đăng nhập SSO là SỐNG (không báo động oan)",
+      "Webhook chỉ gửi khi trạng thái ĐỔI + nhắc định kỳ khi còn hỏng + tin hồi phục; `--test-alert` giữ nguyên hành vi; ca test RED trước (`scripts/lib/ops-alert-*.test.mjs`)",
+      "Watchdog + script đăng ký ở `scripts/windows/` (UTF-8 BOM, chạy được trên PowerShell 5.1) + tài liệu vận hành ở RELEASE-09 / RELEASE-11",
+      "Sau merge: đăng ký lại tác vụ trỏ vào `scripts\\windows`, xoá bản tạm ở `logs\\interim`",
+    ],
+    notes: [
+      "Nguyên nhân gốc: Docker Desktop bật qua mục Run của Explorer — Explorer bỏ lỡ mục Run khi treo hoặc khi màn hình khoá quá sớm sau tự đăng nhập ⇒ DB không lên. Tác vụ tạm (watchdog) đã đăng ký 16/10/2026 từ bản tạm `logs\\interim`; WO này đưa nó vào repo.",
+      "Vàng (ops). Seed 16/10/2026 ở Đợt 0 — status `todo`; bước thi công tự đóng dấu `started` bằng `node harness/ledger.mjs start S19-OPS-PRODDBBOOT-1`.",
+    ],
+  },
+  {
+    id: "S19-LMS-DOCSAUTH-1",
+    module: "LMS",
+    layer: "SEC",
+    title: "LMS: siết quyền truy cập trang tài liệu /docs (chỉ người đã đăng nhập)",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["security-review", "code-review"],
+    depends_on: [],
+    src: ["Đợt 0 16/10/2026 — chi tiết đo lưu ngoài repo (máy PROD)."],
+    done_when: [
+      "ĐO TRƯỚC (phiên chưa đăng nhập + phiên đã đăng nhập) — kết quả lưu ngoài repo (máy PROD), không ghi vào repo công khai",
+      "`/docs` và mọi trang con chỉ phục vụ người đã đăng nhập; chưa đăng nhập ⇒ chuyển về trang đăng nhập SSO; người đã đăng nhập vẫn đọc được",
+      "Thi công trong worktree của repo LMS — KHÔNG sửa/build trong `apps/lms` (PROD LMS phục vụ `.next` của chính thư mục đó); `tsc` + lint + build xanh trong worktree",
+      "Owner deploy theo khuôn S19-LMS-NODEMAILER-1, rồi đo lại từ phiên chưa đăng nhập",
+    ],
+    notes: [
+      "`apps/lms` là repo git RIÊNG (local, không remote) — memory lms-local-git-repo. Chi tiết đo lưu ngoài repo (máy PROD). Xếp Đợt 1 (thứ tự thực hiện 16/10/2026). Seed 16/10/2026.",
+    ],
+  },
+  {
+    id: "S19-SEC-SCOPEDENIEDCODE-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Mã máy `AUTH-ERR-SCOPE-DENIED` cho RECRUIT · PAYROLL · HR (403 sàn scope hôm nay rơi về `AUTH-ERR-FORBIDDEN`)",
+    zone: "red",
+    gate: "FULL",
+    status: "todo",
+    paths: [
+      "apps/api/src/recruit/**",
+      "apps/api/src/payroll/**",
+      "apps/api/src/employees/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S16-SOCIAL-SCOPEDENIEDCODE-1"],
+    src: [
+      "Tách từ quyết định owner 16/10/2026 cho S16-SOCIAL-SCOPEDENIEDCODE-1 («mã đúng, chỉ SOCIAL»). Điểm lệch cùng lớp (phiếu Đợt 0): `recruit-access.service.ts` · `payroll-access.service.ts` · `hr-write.service.ts` · `hr-employee-import.service.ts` · `hr-employee-avatar.service.ts`.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: liệt kê mọi chỗ ném 403 sàn scope ở RECRUIT · PAYROLL · HR mà `error.code` trên dây là `AUTH-ERR-FORBIDDEN` + màn FE nào đọc `kind`",
+      "Phát `AUTH-ERR-SCOPE-DENIED` theo khuôn đã dùng ở SOCIAL/ROOM, giữ lời nhắn; ca RED trước mỗi module: 403 sàn scope ⇒ `AUTH-ERR-SCOPE-DENIED`; 403 thiếu quyền vẫn `AUTH-ERR-FORBIDDEN`",
+      "FULL gate (đụng vùng lương): security-reviewer + database-reviewer + silent-failure-hunter; census mã lỗi cập nhật CÓ CHỦ ĐÍCH",
+    ],
+    notes: ["WO nợ — seed 16/10/2026 (Đợt 0). 🔴 vì PAYROLL."],
   },
 ];
