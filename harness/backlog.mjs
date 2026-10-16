@@ -21120,6 +21120,7 @@ export const backlog = [
       "⚠️ PROD + dev-online dùng CHUNG `mediaos-minio` (cả 3 file env đều trỏ localhost:9000) ⇒ recreate là cửa sổ gián đoạn của CẢ HAI.",
       "Hướng thay thế nếu owner không muốn tự host image: chọn object storage S3-compatible khác (quyết định treo từ S18-OPS-MINIOPIN-1) — nhưng việc đó KHÔNG cứu được image PROD hiện có, nên bước đẩy GHCR vẫn nên làm trước.",
       "Ghi thêm 08/10/2026 từ `S16-SOCIAL-FILEDISPOSITION-1` (plan §8 N6): header `X-Content-Type-Options: nosniff` trên phản hồi GET do STORAGE tự gắn, API không điều khiển được — int-spec `s16-filedisposition-storage` (ca S6) ghim cứng giá trị đo trên MinIO bản PROD. Bản MinIO của CI còn KHÁC bản PROD ⇒ lượt CI của ca đó là phép đo trên bản khác; đổi image/nhà cung cấp storage (kể cả sang R2) thì ĐO lại ca S6 trước khi trỏ PROD sang.",
+      "16/10/2026 (Đợt 0): owner cấp scope `write:packages` ⇒ ĐÃ đẩy image minio lên ghcr.io (package PRIVATE ⇒ CI/máy khác pull phải `docker login ghcr.io`). Máy chỉ giữ phần amd64 nên GHCR nhận manifest một nền tảng `sha256:a1a8bd4a…` — TRÙNG đúng mục amd64/linux trong index `sha256:14cea493…` của PROD (đối chiếu với bản tar sao lưu); index đa nền tảng gốc không dựng lại được ⇒ ghim theo `a1a8bd4a…`, và done_when[1] đọc là «digest == mục amd64 của index PROD». Image `mc` (`a7fe349e…`) KHÔNG còn trong cache máy ⇒ không đẩy được (CI đã bỏ bước mc từ #542). Còn: done_when[2]–[3] (trỏ CI + compose về ghcr).",
     ],
   },
   {
