@@ -14,7 +14,9 @@
   Docker vào một tác vụ lịch (logon + mỗi 5 phút) thay vì trông vào Explorer.
 
   Quy tắc:
-    1. Có file cờ  <thư mục log>\docker-watchdog.pause  ⇒ bỏ qua (owner đang bảo trì Docker).
+    1. Có file cờ  <thư mục log>\docker-watchdog.pause  còn hạn (-PauseMaxHours, mặc định 8 giờ
+       tính từ lúc sửa file) ⇒ bỏ qua, ghi 1 dòng [PAUSE] mỗi lần đặt cờ. Cờ quá hạn ⇒ [WARN] mỗi
+       lượt và kiểm như thường (quên xoá cờ không được tắt watchdog trong im lặng).
     2. `docker info` trả về ServerVersion trong hạn ⇒ im lặng, thoát 0.
     3. Engine im VÀ không có tiến trình «Docker Desktop» trong phiên này ⇒ Start-Process Docker
        Desktop, ghi 1 dòng [ACTION].
@@ -36,6 +38,8 @@
 param(
   [switch]$DryRun,
   [int]$StuckMinutes = 10,
+  # Cờ tạm dừng cũ hơn ngần này giờ bị bỏ qua (kèm [WARN] mỗi lượt) — quên xoá cờ không được câm mãi.
+  [int]$PauseMaxHours = 8,
   [int]$InfoTimeoutSec = 20,
   [string]$LogPath = 'C:\dev 2\MediaOS\logs\docker-watchdog.log',
   [string]$DockerDesktopExe = 'C:\Program Files\Docker\Docker\Docker Desktop.exe',
@@ -59,6 +63,7 @@ $DETAIL_MAX_CHARS = 160
 $logDir = Split-Path -Parent $LogPath
 $statePath = Join-Path $logDir 'docker-watchdog.state'
 $pausePath = Join-Path $logDir 'docker-watchdog.pause'
+$pauseNotedPath = Join-Path $logDir 'docker-watchdog.pause-noted'
 
 function Write-WatchdogLine {
   param([string]$Level, [string]$Message)
@@ -159,14 +164,35 @@ function Clear-WatchdogState {
   if (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath }
 }
 
+# Cờ tạm dừng CÓ HẠN: quên xoá cờ sau bảo trì không được phép tắt watchdog mãi mãi trong im lặng.
+#   - cờ còn hạn (< -PauseMaxHours) => bỏ qua lượt này; ghi MỘT dòng [PAUSE] cho mỗi lần đặt cờ
+#     (nhận theo mốc sửa file, nhớ ở docker-watchdog.pause-noted).
+#   - cờ quá hạn => ghi [WARN] MỖI lượt (luật DOCKER_WATCHDOG của ops-alert đọc được) và kiểm như thường.
+function Test-PauseActive {
+  if (-not (Test-Path -LiteralPath $pausePath)) { return $false }
+  $setAt = (Get-Item -LiteralPath $pausePath).LastWriteTime
+  $setText = $setAt.ToString('yyyy-MM-ddTHH:mm:sszzz')
+  if (((Get-Date) - $setAt).TotalHours -ge $PauseMaxHours) {
+    Write-WatchdogLine 'WARN' ('pause flag set ' + $setText + ' is older than ' + $PauseMaxHours + 'h -> ignored; delete ' + $pausePath + ' after maintenance')
+    return $false
+  }
+  $stamp = $setAt.ToUniversalTime().Ticks.ToString()
+  $noted = ''
+  if (Test-Path -LiteralPath $pauseNotedPath) {
+    $noted = [string](Get-Content -LiteralPath $pauseNotedPath -TotalCount 1)
+  }
+  if ($noted -ne $stamp) {
+    Write-WatchdogLine 'PAUSE' ('pause flag set ' + $setText + ' -> skipping checks for up to ' + $PauseMaxHours + 'h')
+    if (-not $DryRun) { Set-Content -LiteralPath $pauseNotedPath -Value $stamp -Encoding ASCII }
+  }
+  return $true
+}
+
 function Invoke-Watchdog {
   if (($SimulateEngineDown -or $SimulateNoProcess) -and -not $DryRun) {
     throw 'Simulate* chi duoc dung cung -DryRun'
   }
-  if (Test-Path -LiteralPath $pausePath) {
-    if ($DryRun) { Write-Host ('DRYRUN: co co tam dung ' + $pausePath + ' -> bo qua') }
-    return $EXIT_OK
-  }
+  if (Test-PauseActive) { return $EXIT_OK }
 
   $now = Get-Date
   $probe = Test-DockerEngine

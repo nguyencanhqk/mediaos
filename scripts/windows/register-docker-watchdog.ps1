@@ -46,8 +46,15 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$EXEC_LIMIT_MINUTES = 3
+# KHÔNG giới hạn thời gian chạy (PT0S). Docker Desktop được bật bằng Start-Process từ CHÍNH cây
+# tiến trình của tác vụ. Nếu Task Scheduler giữ tác vụ «Running» theo tiến trình con (chưa đo được
+# trước khi đăng ký), một giới hạn N phút sẽ diệt luôn Docker Desktop vừa bật => vòng bật/tắt.
+# Không giới hạn thì trường hợp xấu nhất chỉ là các lượt sau bị IgnoreNew bỏ qua trong lúc Docker
+# còn sống. Watchdog tự có hạn giờ cho `docker info` (-InfoTimeoutSec) nên không treo lâu.
+$EXEC_LIMIT = [TimeSpan]::Zero
 $VERIFY_WAIT_SECONDS = 40
+$RESULT_STILL_RUNNING = 267009  # 0x41301
+$RESULT_NEVER_RAN = 267011      # 0x41303
 
 function Test-IsAdmin {
   $id = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -96,7 +103,7 @@ function New-WatchdogTaskParts {
   $principal = New-ScheduledTaskPrincipal -UserId $UserId -LogonType Interactive -RunLevel Limited
   $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes $EXEC_LIMIT_MINUTES)
+    -ExecutionTimeLimit $EXEC_LIMIT
 
   return New-Object PSObject -Property @{
     Action = $action; Triggers = @($logon, $repeat); Principal = $principal; Settings = $settings; ArgLine = $argLine
@@ -111,21 +118,45 @@ function Show-Plan {
   Write-Host ('Lenh        : wscript.exe ' + $Parts.ArgLine)
   Write-Host ('Trigger 1   : luc ' + $UserId + ' dang nhap, tre ' + $LogonDelaySeconds + ' giay')
   Write-Host ('Trigger 2   : moi ' + $IntervalMinutes + ' phut, vo han')
-  Write-Host ('Cai dat     : IgnoreNew, StartWhenAvailable, gioi han ' + $EXEC_LIMIT_MINUTES + ' phut/lan')
+  Write-Host ('Cai dat     : IgnoreNew, StartWhenAvailable, ExecutionTimeLimit=' + $Parts.Settings.ExecutionTimeLimit + ' (PT0S = khong gioi han)')
   Write-Host ('Log         : ' + (Join-Path $Paths.Repo 'logs\docker-watchdog.log') + ' (chi khi co hanh dong/loi)')
   Write-Host ('Tam dung    : tao file ' + (Join-Path $Paths.Repo 'logs\docker-watchdog.pause'))
 }
 
+# Chạy thử một lần và PHÁN kết quả — không được in «Da dang ky» rồi exit 0 khi tác vụ hỏng.
+# Trả mã thoát: 0 = chạy thử xong với 0 (ổn) hoặc 2 (watchdog đúng, Docker kẹt); 1 = hỏng/chưa xác minh.
 function Confirm-Registered {
-  Start-ScheduledTask -TaskName $TaskName
+  $kickedAt = (Get-Date).AddSeconds(-2)
+  Start-ScheduledTask -TaskName $TaskName | Out-Null
   $deadline = (Get-Date).AddSeconds($VERIFY_WAIT_SECONDS)
   do {
     Start-Sleep -Seconds 2
-    $state = (Get-ScheduledTask -TaskName $TaskName).State
+    $state = [string](Get-ScheduledTask -TaskName $TaskName).State
   } while ($state -eq 'Running' -and (Get-Date) -lt $deadline)
   $info = Get-ScheduledTaskInfo -TaskName $TaskName
-  Write-Host ('Chay thu    : LastRunTime=' + $info.LastRunTime + ' LastTaskResult=' + $info.LastTaskResult + ' (0 = on; 2 = engine im qua nguong; 3 = khong bat duoc Docker)')
+  $result = [int64]$info.LastTaskResult
+  Write-Host ('Chay thu    : State=' + $state + ' LastRunTime=' + $info.LastRunTime + ' LastTaskResult=' + $result)
   Write-Host ('Lan ke tiep : ' + $info.NextRunTime)
+  if ($state -eq 'Running') {
+    Write-Warning ('CHUA XAC MINH: tac vu van Running sau ' + $VERIFY_WAIT_SECONDS + 's. Neu watchdog vua bat Docker Desktop thi Task Scheduler co the dang giu tac vu theo tien trinh con: kiem lai sau vai phut - State phai ve Ready va Docker Desktop van song.')
+    return 1
+  }
+  if ($null -eq $info.LastRunTime -or $info.LastRunTime -lt $kickedAt) {
+    Write-Warning 'CHUA XAC MINH: tac vu chua chay sau Start-ScheduledTask (LastRunTime cu hon luc goi).'
+    return 1
+  }
+  if ($result -eq 0) { return 0 }
+  if ($result -eq 2) {
+    Write-Warning 'Watchdog chay dung, nhung Docker Desktop dang chay ma engine im qua nguong - can nguoi xem.'
+    return 0
+  }
+  $meaning = 'ma la (vd duong dan vbs/quyen sai)'
+  if ($result -eq 1) { $meaning = 'loi script' }
+  elseif ($result -eq 3) { $meaning = 'khong bat duoc Docker Desktop' }
+  elseif ($result -eq $RESULT_STILL_RUNNING) { $meaning = 'van dang chay' }
+  elseif ($result -eq $RESULT_NEVER_RAN) { $meaning = 'chua tung chay' }
+  Write-Warning ('TAC VU HONG: LastTaskResult=' + $result + ' (' + $meaning + '). Xem logs\docker-watchdog.log.')
+  return 1
 }
 
 if ($Unregister) {
@@ -158,5 +189,5 @@ try {
   exit 1
 }
 Write-Host ('Da dang ky ' + $TaskName + '. Chay thu mot lan...')
-Confirm-Registered
-exit 0
+$verifyCode = Confirm-Registered
+exit ([int]$verifyCode)

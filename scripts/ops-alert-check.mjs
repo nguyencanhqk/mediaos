@@ -44,6 +44,7 @@
  *      OPS_SITES (JSON ghi đè danh sách trang dò; mỗi trang nhận `expectRedirect`) · OPS_SITE_TIMEOUT_MS
  *      OPS_ALERT_REMIND_HOURS (nhắc lại khi còn hỏng y nguyên, mặc định 6)
  *      OPS_ALERT_STATE (file trạng thái lần GỬI gần nhất, mặc định cạnh OPS_ALERT_LOG)
+ *      OPS_DOCKER_WATCHDOG_LOG (mặc định logs/docker-watchdog.log)
  *      DATABASE_DIRECT_URL (đọc migration + system_job_runs; thiếu ⇒ 2 rule đó `unknown`)
  *
  * Exit: 0 tất cả ok · 1 có warn hoặc unknown · 2 có crit · 3 lỗi cấu hình.
@@ -54,9 +55,16 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { evaluate, exitCodeFor, parseSitesEnv, worstSeverity } from "./lib/ops-alert-rules.mjs";
+import {
+  evaluate,
+  exitCodeFor,
+  parseSitesEnv,
+  summarizeWatchdogLog,
+  worstSeverity,
+} from "./lib/ops-alert-rules.mjs";
 import {
   WEBHOOK_FORMATS,
+  applyStateUpdate,
   decideAlertDelivery,
   nextAlertState,
   parseRemindHours,
@@ -116,6 +124,11 @@ const LOG_TAIL_BYTES = (() => {
   const n = Number.parseInt(process.env.OPS_LOG_TAIL_BYTES ?? "", 10);
   return Number.isNaN(n) || n <= 0 ? DEFAULT_TAIL_BYTES : n;
 })();
+/** Log của scripts/windows/docker-watchdog.ps1 (chỉ có dòng khi watchdog phải ra tay). */
+const WATCHDOG_LOG =
+  process.env.OPS_DOCKER_WATCHDOG_LOG ?? path.join(REPO_ROOT, "logs", "docker-watchdog.log");
+/** Watchdog xoay log ở 1 MB; cửa sổ 60 phút chỉ cần phần đuôi. */
+const WATCHDOG_TAIL_BYTES = 256 * 1024;
 const ALERT_LOG = process.env.OPS_ALERT_LOG ?? path.join(REPO_ROOT, "logs", "ops-alerts.log");
 const WEBHOOK = (process.env.OPS_ALERT_WEBHOOK ?? "").trim();
 /** Trạng thái lần GỬI webhook gần nhất — chống spam (xem `decideAlertDelivery`). Xoá file = quên lịch sử gửi. */
@@ -403,6 +416,37 @@ function collectNextBuilds() {
   }));
 }
 
+/**
+ * Đuôi docker-watchdog.log ⇒ tóm tắt cửa sổ. Chưa có file ⇒ `present:false` (máy khoẻ, watchdog chưa
+ * phải ra tay). Lỗi đọc khác ⇒ `null` ⇒ luật ra unknown.
+ */
+function collectDockerWatchdog() {
+  let fd = null;
+  try {
+    const size = fs.statSync(WATCHDOG_LOG).size;
+    const readBytes = Math.min(size, WATCHDOG_TAIL_BYTES);
+    fd = fs.openSync(WATCHDOG_LOG, "r");
+    const buf = Buffer.alloc(readBytes);
+    fs.readSync(fd, buf, 0, readBytes, size - readBytes);
+    let text = buf.toString("utf8");
+    // Đọc từ giữa file ⇒ dòng đầu bị cắt ngang: bỏ đi thay vì phán một mảnh dòng.
+    if (readBytes < size) text = text.slice(text.indexOf("\n") + 1);
+    return summarizeWatchdogLog(text, { windowMin: WINDOW_MIN });
+  } catch (err) {
+    if (err?.code === "ENOENT")
+      return { present: false, warn: 0, error: 0, actions: 0, last: null };
+    return null;
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        /* đóng fd hỏng không đổi phán quyết đã có */
+      }
+    }
+  }
+}
+
 function collectDiskFreeGb() {
   try {
     const drive = path.parse(REPO_ROOT).root.replace(/\\$/, "");
@@ -531,7 +575,20 @@ async function deliverAlert(payload) {
     now,
     remindHours: REMIND_HOURS,
   });
-  if (!decision.send) return { sent: false, reason: decision.reason };
+  if (!decision.send) {
+    // Ghi sổ KHÔNG kèm gửi: mốc bắt đầu chuỗi ok (giữ tin hồi phục) hoặc xoá mốc khi hỏng lại.
+    const updated = applyStateUpdate(state, decision.stateUpdate, now);
+    if (updated) {
+      const marked = writeAlertState(ALERT_STATE, updated);
+      if (!marked.ok) {
+        process.stderr.write(
+          `[ops-alert] KHÔNG ghi được mốc chuỗi ok (${marked.error}) — tin hồi phục có thể sớm/muộn một lượt
+`,
+        );
+      }
+    }
+    return { sent: false, reason: decision.reason };
+  }
 
   const result = await notifyWebhook({
     ...payload,
@@ -616,6 +673,7 @@ async function main() {
     certExpiryDays: collectCertExpiryDays(),
     sites: await collectSites(),
     nextBuilds: collectNextBuilds(),
+    dockerWatchdog: collectDockerWatchdog(),
   };
 
   const rows = evaluate(signals);

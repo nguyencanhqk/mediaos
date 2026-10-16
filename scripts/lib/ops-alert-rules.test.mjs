@@ -14,6 +14,7 @@ import {
   exitCodeFor,
   parseSitesEnv,
   redirectMatches,
+  summarizeWatchdogLog,
   worstSeverity,
 } from "./ops-alert-rules.mjs";
 
@@ -41,10 +42,11 @@ const HEALTHY = {
     { id: "SOCIAL", dir: "apps/fbpost", mode: "prod" },
     { id: "LMS", dir: "apps/lms", mode: "prod" },
   ],
+  dockerWatchdog: { present: false, warn: 0, error: 0, actions: 0, last: null },
 };
 
-/** Số hàng khi đủ tín hiệu: 8 nhóm nền + 1 hàng/trang dò + 1 hàng bản build Next. */
-const HEALTHY_ROWS = 8 + HEALTHY.sites.length + 1;
+/** Số hàng khi đủ tín hiệu: 8 nhóm nền + 1 hàng/trang dò + 1 hàng bản build Next + 1 watchdog. */
+const HEALTHY_ROWS = 8 + HEALTHY.sites.length + 1 + 1;
 
 const find = (rows, id) => rows.find((r) => r.id === id);
 const sev = (signals, id) => find(evaluate(signals), id).severity;
@@ -87,6 +89,7 @@ describe("evaluate — THIẾU DỮ LIỆU phải ra unknown, KHÔNG phải ok",
     ["certExpiryDays", "CERT_EXPIRY"],
     ["sites", "SITE_PROBES"],
     ["nextBuilds", "NEXT_DEV_BUILD"],
+    ["dockerWatchdog", "DOCKER_WATCHDOG"],
   ];
 
   for (const [field, id] of cases) {
@@ -100,9 +103,9 @@ describe("evaluate — THIẾU DỮ LIỆU phải ra unknown, KHÔNG phải ok",
     });
   }
 
-  it("không có tín hiệu nào ⇒ 10/10 unknown, tổng thể unknown (KHÔNG ok)", () => {
+  it("không có tín hiệu nào ⇒ 11/11 unknown, tổng thể unknown (KHÔNG ok)", () => {
     const rows = evaluate({});
-    assert.equal(rows.filter((r) => r.severity === "unknown").length, 10);
+    assert.equal(rows.filter((r) => r.severity === "unknown").length, 11);
     assert.equal(worstSeverity(rows.map((r) => r.severity)), "unknown");
   });
 
@@ -319,8 +322,11 @@ describe("SITE_* — chuyển hướng đúng chỗ đã khai (expectRedirect) l
   const SSO = { expectRedirect: "/lms" };
 
   it("307 + Location tuyệt đối kết thúc /lms ⇒ ok (không ghim miền)", () => {
-    const row = one({ ...SSO, status: 307, location: "https://app.example.test/lms" });
+    const row = one({ ...SSO, status: 307, location: "https://app.example.test/lms?next=x" });
     assert.equal(row.severity, "ok", row.detail);
+    // Miền không bị ghim ⇒ ít nhất phải LỘ origin trong dòng ok; query thì không in.
+    assert.ok(row.detail.includes("https://app.example.test/lms"), row.detail);
+    assert.doesNotMatch(row.detail, /next=x/);
   });
 
   it("có «/» cuối cũng khớp", () => {
@@ -506,5 +512,53 @@ describe("mỗi phán quyết có đủ trường để in ra và gửi đi", ()
     for (const row of evaluate(HEALTHY).concat(evaluate({}))) {
       assert.ok(row.id && row.title && row.severity && row.detail, JSON.stringify(row));
     }
+  });
+});
+
+describe("DOCKER_WATCHDOG — watchdog hỏng phải tới được kênh báo động", () => {
+  const NOW = Date.parse("2026-10-16T10:00:00+07:00");
+  const log = (lines) => lines.join("\r\n");
+  const sum = (text) => summarizeWatchdogLog(text, { nowMs: NOW, windowMin: 60 });
+  const judge = (w) => find(evaluate({ ...HEALTHY, dockerWatchdog: w }), "DOCKER_WATCHDOG");
+
+  it("chưa có log ⇒ ok (watchdog chỉ ghi khi ra tay)", () => {
+    assert.equal(judge(HEALTHY.dockerWatchdog).severity, "ok");
+  });
+
+  it("ERROR trong cửa sổ ⇒ crit, kèm dòng mới nhất", () => {
+    const w = sum(
+      log([
+        "\uFEFF2026-10-16T09:10:00+07:00 [ACTION] engine down -> started Docker Desktop",
+        "2026-10-16T09:40:00+07:00 [ERROR] Start-Process Docker Desktop failed: x",
+      ]),
+    );
+    assert.deepEqual([w.warn, w.error, w.actions], [0, 1, 1]);
+    const row = judge(w);
+    assert.equal(row.severity, "crit");
+    assert.match(row.detail, /Start-Process Docker Desktop failed/);
+  });
+
+  it("WARN (engine kẹt / cờ tạm dừng quá hạn) ⇒ warn", () => {
+    const w = sum(log(["2026-10-16T09:55:00+07:00 [WARN] pause flag older than 8h -> ignored"]));
+    assert.equal(judge(w).severity, "warn");
+  });
+
+  it("dòng NGOÀI cửa sổ, dòng rác, ACTION/RECOVERED ⇒ ok", () => {
+    const w = sum(
+      log([
+        "2026-10-16T08:00:00+07:00 [ERROR] chuyện cũ",
+        "rác không có mốc [ERROR] x",
+        "2026-10-16T09:30:00+07:00 [ACTION] started Docker Desktop",
+        "2026-10-16T09:35:00+07:00 [RECOVERED] engine responds again",
+      ]),
+    );
+    const row = judge(w);
+    assert.equal(row.severity, "ok", row.detail);
+    assert.match(row.detail, /1 lần/);
+  });
+
+  it("đọc log lỗi (null) hoặc tóm tắt hỏng ⇒ unknown", () => {
+    assert.equal(judge(null).severity, "unknown");
+    assert.equal(judge({ present: true, warn: "2", error: 0 }).severity, "unknown");
   });
 });

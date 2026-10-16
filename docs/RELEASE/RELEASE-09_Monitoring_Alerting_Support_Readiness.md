@@ -261,7 +261,14 @@ oan từ 21/09) ⇒ ~144 tin/ngày ⇒ người nhận tắt tiếng kênh ⇒ s
 2. **Tập nhóm không-ok hoặc độ nặng của một nhóm đổi** — kể cả khi worst giữ nguyên (nhóm thứ hai hỏng
    không được núp sau nhóm đầu). Chỉ đổi chi tiết (số đếm, latency) thì KHÔNG tính là đổi.
 3. **Vẫn hỏng y nguyên quá `OPS_ALERT_REMIND_HOURS`** (mặc định 6 giờ) — tin ghi `NHẮC LẠI` ở dòng đầu.
-4. **Về ok sau khi đã gửi tin không-ok** — đúng **một** tin `ĐÃ HỒI PHỤC` (kèm mức lần báo trước).
+4. **Về ok sau khi đã gửi tin không-ok** — đúng **một** tin `ĐÃ HỒI PHỤC` (kèm mức lần báo trước),
+   nhưng chỉ khi đã ok **liên tục ≥ 20 phút** (`DEFAULT_RECOVERY_HOLD_MINUTES`). Lượt ok đầu chỉ ghi mốc
+   `okSince`; hỏng lại giữa chừng thì xoá mốc. Nhờ vậy một nhóm chập chờn (warn · ok · warn …) không
+   bắn cặp tin cảnh báo/hồi phục mỗi 10 phút. Hạn này chỉ **hoãn tin hồi phục**, không bao giờ hoãn
+   một cảnh báo.
+5. **Sổ gửi đọc lỗi mà hệ đang ok** — một tin `OK` trung tính (loại `resync`, không gọi là hồi phục)
+   rồi ghi lại sổ, để kênh không treo mãi ở tin hỏng cũ. Sổ không ghi được ⇒ lặp mỗi lượt + kêu
+   stderr (giống nhánh đang hỏng).
 
 Mọi chỗ nghi ngờ nghiêng về **GỬI**: file trạng thái đọc lỗi hoặc hỏng ⇒ vẫn gửi + kêu stderr; mốc gửi
 nằm ở tương lai (đồng hồ lùi) ⇒ gửi; **giao hỏng ⇒ KHÔNG ghi trạng thái** (lần chạy sau thử lại); ghi
@@ -269,7 +276,9 @@ trạng thái lỗi ⇒ kêu stderr (lần sau có thể gửi trùng — chấp
 gửi, không đọc/ghi trạng thái. Chế độ bảng in thêm dòng `Webhook: ĐÃ GỬI|không gửi — <lý do>`.
 
 **File trạng thái** `logs\ops-alert-state.json` — chỉ ghi sau một lần GỬI THÀNH CÔNG, ghi nguyên tử
-(file tạm rồi rename): `worst` + danh sách `{id, severity}` không-ok + `sentAt`. **Xoá file = quên lịch
+(file tạm rồi rename; rename bị khoá tạm trên Windows ⇒ thử lại 2 lần rồi ghi thẳng file đích):
+`worst` + danh sách `{id, severity}` không-ok + `sentAt` (+ `okSince` khi đang chờ đủ hạn hồi phục —
+mốc này là chỗ duy nhất được ghi mà không kèm gửi). **Xoá file = quên lịch
 sử gửi** ⇒ lần chạy kế tiếp đang hỏng sẽ gửi ngay (dùng khi muốn ép gửi lại, hoặc sau khi đổi kênh):
 
 ```powershell
@@ -326,6 +335,16 @@ Docker vào một tác vụ lịch thay vì trông vào Explorer.
 - Engine trả lời lại sau một lần `[ACTION]`/`[WARN]` ⇒ ghi `[RECOVERED]`.
 - Chỉ ghi `logs\docker-watchdog.log` khi có hành động hoặc lỗi (xoay ở 1 MB). Trạng thái tạm:
   `logs\docker-watchdog.state`.
+- **Đường báo động của chính watchdog:** luật `DOCKER_WATCHDOG` của `ops-alert-check` đọc đuôi log này
+  trong cửa sổ 60 phút — `[ERROR]` (không bật được Docker / script lỗi) ⇒ crit, `[WARN]` (engine kẹt /
+  cờ tạm dừng quá hạn) ⇒ warn, chưa có log ⇒ ok (máy khoẻ thì watchdog không ghi gì), đọc lỗi khác ⇒
+  unknown. Nhờ vậy watchdog hỏng đi qua cùng webhook với mọi luật khác. Đổi đường dẫn:
+  `OPS_DOCKER_WATCHDOG_LOG`.
+- **Tác vụ KHÔNG giới hạn thời gian chạy** (`ExecutionTimeLimit` = `PT0S`). Docker Desktop được bật từ
+  chính cây tiến trình của tác vụ; nếu Task Scheduler giữ tác vụ `Running` theo tiến trình con thì một
+  giới hạn N phút sẽ diệt luôn Docker vừa bật. Chưa đo được trước khi đăng ký — xem bước đo sau merge.
+  Không giới hạn thì trường hợp xấu nhất chỉ là các lượt 5 phút bị `IgnoreNew` bỏ qua khi Docker còn
+  sống; `docker info` có hạn giờ riêng nên watchdog không treo lâu.
 
 **Đăng ký / gỡ** (PowerShell thường của tài khoản chạy dịch vụ, KHÔNG cần Admin; tác vụ chạy
 Interactive vì Docker Desktop là ứng dụng của phiên đăng nhập — session 0 không bật được nó). Script
@@ -334,11 +353,14 @@ Interactive vì Docker Desktop là ứng dụng của phiên đăng nhập — s
 ```powershell
 $reg = "C:\dev 2\MediaOS\scripts\windows\register-docker-watchdog.ps1"
 powershell -NoProfile -ExecutionPolicy Bypass -File $reg -DryRun       # xem kế hoạch, không đăng ký
-powershell -NoProfile -ExecutionPolicy Bypass -File $reg               # đăng ký (+ chạy thử 1 lần, in LastTaskResult)
+powershell -NoProfile -ExecutionPolicy Bypass -File $reg               # đăng ký + chạy thử 1 lần; exit 1 nếu chạy thử hỏng/chưa xác minh
 powershell -NoProfile -ExecutionPolicy Bypass -File $reg -Unregister   # gỡ
 ```
 
-**Tạm dừng** khi bảo trì Docker (vd cố ý tắt Docker Desktop — nếu không watchdog bật lại trong ≤ 5 phút):
+**Tạm dừng** khi bảo trì Docker (vd cố ý tắt Docker Desktop — nếu không watchdog bật lại trong ≤ 5 phút).
+Cờ **có hạn 8 giờ** tính từ lúc tạo/sửa file (`-PauseMaxHours`): còn hạn ⇒ ghi một dòng `[PAUSE]`; quá
+hạn ⇒ bị bỏ qua, ghi `[WARN]` mỗi lượt (ra webhook qua `DOCKER_WATCHDOG`) — quên xoá cờ không được
+tắt watchdog trong im lặng. Bảo trì lâu hơn: tạo lại file (đặt lại hạn).
 
 ```powershell
 New-Item -ItemType File "C:\dev 2\MediaOS\logs\docker-watchdog.pause"   # tạm dừng
@@ -357,7 +379,14 @@ powershell -NoProfile -File $wd -DryRun -SimulateEngineDown -SimulateNoProcess  
 cả hai lệnh exit 0; bản tạm của tác vụ (đăng ký 16/10 16:19) có `LastTaskResult` = 0.
 
 > **Sau khi merge** (owner): `git pull` cây chính → chạy lại lệnh đăng ký ở trên (ghi đè tác vụ để trỏ
-> vào `scripts\windows\docker-watchdog.ps1`) → kiểm `LastTaskResult` = 0 → xoá bản tạm ở `logs\interim\`.
+> vào `scripts\windows\docker-watchdog.ps1`; lệnh exit 0 nghĩa là lần chạy thử đã chạy xong với kết quả
+> 0 hoặc 2) → xoá bản tạm ở `logs\interim\`.
+>
+> **Đo một lần khi watchdog bật Docker thật** (lần `[ACTION]` đầu, hoặc diễn tập có chủ đích lúc ngoài
+> giờ: tạo cờ tạm dừng → thoát Docker Desktop → xoá cờ): sau ~5 phút,
+> `Get-ScheduledTask MediaOS-DockerWatchdog` phải về `Ready` và Docker Desktop vẫn sống. Nếu tác vụ
+> cứ `Running` trong khi Docker sống ⇒ Task Scheduler giữ tác vụ theo tiến trình con: Docker không bị
+> diệt (không có giới hạn thời gian) nhưng các lượt kiểm bị bỏ qua — ghi lại và mở WO tách tiến trình.
 
 ---
 

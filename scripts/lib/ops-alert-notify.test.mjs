@@ -12,7 +12,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  DEFAULT_RECOVERY_HOLD_MINUTES,
   DEFAULT_REMIND_HOURS,
+  applyStateUpdate,
   buildWebhookRequest,
   decideAlertDelivery,
   detectWebhookFormat,
@@ -396,14 +398,73 @@ describe("decideAlertDelivery — khi nào GỬI", () => {
     assert.equal(d.send, true);
   });
 
-  it("(d) về ok sau khi đã gửi tin không-ok ⇒ MỘT tin hồi phục", () => {
+  it("(d) lượt ok ĐẦU sau tin không-ok ⇒ chưa gửi, chỉ đánh mốc chuỗi ok", () => {
     const d = decide({
       worst: "ok",
       rows: ROWS_OK,
       state: sentState("crit", ROWS_CRIT, 3),
     });
-    assert.equal(d.send, true);
-    assert.equal(d.kind, "recovered");
+    assert.equal(d.send, false);
+    assert.equal(d.stateUpdate, "mark-ok");
+  });
+
+  it("(d) ok liên tục đủ hạn giữ ⇒ MỘT tin hồi phục; chưa đủ ⇒ chờ", () => {
+    const withOk = (minutesAgo) => ({
+      ...sentState("crit", ROWS_CRIT, 3),
+      okSince: new Date(T0 - minutesAgo * 60_000).toISOString(),
+    });
+    const done = decide({
+      worst: "ok",
+      rows: ROWS_OK,
+      state: withOk(DEFAULT_RECOVERY_HOLD_MINUTES),
+    });
+    assert.equal(done.send, true);
+    assert.equal(done.kind, "recovered");
+    const early = decide({ worst: "ok", rows: ROWS_OK, state: withOk(10) });
+    assert.equal(early.send, false);
+    assert.equal(early.stateUpdate, null);
+  });
+
+  it("hỏng lại giữa lúc chờ (trùng tin cũ) ⇒ không gửi nhưng XOÁ mốc chuỗi ok", () => {
+    const state = {
+      ...sentState("warn", ROWS_WARN, 1),
+      okSince: new Date(T0 - 600_000).toISOString(),
+    };
+    const d = decide({ worst: "warn", rows: ROWS_WARN, state });
+    assert.equal(d.send, false);
+    assert.equal(d.stateUpdate, "clear-ok");
+  });
+
+  it("luật CHẬP CHỜN warn/ok mỗi lượt 10 phút trong 3 giờ ⇒ chỉ 1 tin (không spam cặp cảnh báo/hồi phục)", () => {
+    let state = null;
+    const sent = [];
+    for (let i = 0; i < 18; i += 1) {
+      const now = T0 + i * 600_000;
+      const worst = i % 2 === 0 ? "warn" : "ok";
+      const rows = worst === "ok" ? ROWS_OK : ROWS_WARN;
+      const d = decide({ worst, rows, state, now });
+      if (d.send) {
+        sent.push(d.kind);
+        state = nextAlertState({ worst, rows }, now);
+      } else {
+        state = applyStateUpdate(state, d.stateUpdate, now) ?? state;
+      }
+    }
+    assert.deepEqual(sent, ["alert"]);
+  });
+
+  it("hết chập chờn, ok đủ lâu ⇒ tin hồi phục tới (hoãn chứ không nuốt)", () => {
+    let state = sentState("warn", ROWS_WARN, 0.5);
+    const kinds = [];
+    for (let i = 0; i < 4; i += 1) {
+      const now = T0 + i * 600_000;
+      const d = decide({ worst: "ok", rows: ROWS_OK, state, now });
+      if (d.send) {
+        kinds.push(d.kind);
+        state = nextAlertState({ worst: "ok", rows: ROWS_OK }, now);
+      } else state = applyStateUpdate(state, d.stateUpdate, now) ?? state;
+    }
+    assert.deepEqual(kinds, ["recovered"]);
   });
 
   it("(d) đã gửi tin hồi phục rồi, vẫn ok ⇒ im", () => {
@@ -439,8 +500,10 @@ describe("decideAlertDelivery — khi nào GỬI", () => {
     assert.match(d.reason, /trạng thái/);
   });
 
-  it("trạng thái đọc lỗi + đang ok ⇒ không bịa tin hồi phục", () => {
-    assert.equal(decide({ worst: "ok", rows: ROWS_OK, stateError: "JSON hỏng" }).send, false);
+  it("trạng thái đọc lỗi + đang ok ⇒ MỘT tin «resync» (không gọi là hồi phục), để ghi lại sổ", () => {
+    const d = decide({ worst: "ok", rows: ROWS_OK, stateError: "JSON hỏng" });
+    assert.equal(d.send, true);
+    assert.equal(d.kind, "resync");
   });
 });
 
@@ -529,6 +592,60 @@ describe("readAlertState / writeAlertState — file trạng thái", () => {
     }
   });
 
+  it("okSince hỏng ⇒ error; okSince hợp lệ đọc lại nguyên vẹn", () => {
+    const dir = tmp();
+    const bad = path.join(dir, "bad.json");
+    fs.writeFileSync(bad, JSON.stringify({ ...warnState(), okSince: "chiều nay" }));
+    assert.ok(readAlertState(bad).error);
+    const good = path.join(dir, "good.json");
+    const st = applyStateUpdate(warnState(), "mark-ok", T0);
+    writeAlertState(good, st);
+    assert.deepEqual(readAlertState(good), { state: st, error: null });
+    assert.equal(applyStateUpdate(st, "clear-ok", T0).okSince, undefined);
+    assert.equal(st.okSince, new Date(T0).toISOString(), "applyStateUpdate không sửa bản gốc");
+  });
+
+  it("rename bị khoá tạm (EPERM) ⇒ thử lại rồi thành công", () => {
+    const dir = tmp();
+    const file = path.join(dir, "state.json");
+    let calls = 0;
+    const flaky = (a, b) => {
+      calls += 1;
+      if (calls < 3) throw Object.assign(new Error("locked"), { code: "EPERM" });
+      fs.renameSync(a, b);
+    };
+    const r = writeAlertState(file, warnState(), { renameImpl: flaky, retryDelaysMs: [1, 1] });
+    assert.deepEqual(r, { ok: true, error: null });
+    assert.equal(calls, 3);
+    assert.deepEqual(fs.readdirSync(dir), ["state.json"]);
+  });
+
+  it("rename khoá mãi ⇒ ghi THẲNG file đích, không để file tạm", () => {
+    const dir = tmp();
+    const file = path.join(dir, "state.json");
+    writeAlertState(file, warnState());
+    const locked = () => {
+      throw Object.assign(new Error("busy"), { code: "EBUSY" });
+    };
+    const next = nextAlertState({ worst: "ok", rows: ROWS_OK }, T0 + H);
+    const r = writeAlertState(file, next, { renameImpl: locked, retryDelaysMs: [1] });
+    assert.equal(r.ok, true);
+    assert.equal(r.via, "direct-write");
+    assert.equal(readAlertState(file).state.worst, "ok");
+    assert.deepEqual(fs.readdirSync(dir), ["state.json"]);
+  });
+
+  it("rename lỗi KHÁC loại khoá ⇒ ok:false, không ghi thẳng", () => {
+    const dir = tmp();
+    const file = path.join(dir, "state.json");
+    const xdev = () => {
+      throw Object.assign(new Error("cross-device"), { code: "EXDEV" });
+    };
+    const r = writeAlertState(file, warnState(), { renameImpl: xdev, retryDelaysMs: [1] });
+    assert.deepEqual(r, { ok: false, error: "EXDEV" });
+    assert.deepEqual(fs.readdirSync(dir), []);
+  });
+
   it("ghi lỗi (thư mục cha là FILE) ⇒ ok:false kèm error, KHÔNG ném", () => {
     const blocker = path.join(tmp(), "la-file");
     fs.writeFileSync(blocker, "x");
@@ -555,6 +672,14 @@ describe("formatAlertText — tin nhắc lại / hồi phục nói rõ mình là
   it("tin nhắc lại ghi NHẮC LẠI ở dòng đầu, vẫn liệt kê luật hỏng", () => {
     const payload = { worst: "warn", rows: ROWS_WARN, deliveryKind: "remind" };
     assert.match(firstLine(payload), /NHẮC LẠI/);
+    assert.doesNotMatch(
+      firstLine({ worst: "ok", rows: ROWS_OK, deliveryKind: "resync" }),
+      /HỒI PHỤC/,
+    );
+    assert.match(
+      firstLine({ worst: "ok", rows: ROWS_OK, deliveryKind: "resync" }),
+      /không đọc được/,
+    );
     assert.match(formatAlertText(payload), /SITE_LMS/);
   });
 

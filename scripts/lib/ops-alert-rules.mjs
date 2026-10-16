@@ -337,6 +337,9 @@ export function evaluate(s = {}, t = DEFAULT_THRESHOLDS) {
   // ── Bản build Next đang được phục vụ ───────────────────────────────────────────────────
   out.push(evaluateNextBuilds(s.nextBuilds));
 
+  // ── Docker watchdog (S19-OPS-PRODDBBOOT-1) ─────────────────────────────────────────────
+  out.push(evaluateDockerWatchdog(s.dockerWatchdog));
+
   return out;
 }
 
@@ -402,7 +405,9 @@ function evaluateSite(site) {
           id,
           title,
           "ok",
-          `HTTP ${site.status} → …${normalizeRedirectPath(site.expectRedirect)} (chuyển hướng đúng như khai)`,
+          // In cả origin của Location (không query): miền KHÔNG bị ghim (PROD ≠ dev-online), nên người
+          // đọc log phải tự thấy được trang đang đẩy về host nào.
+          `HTTP ${site.status} → ${describeLocation(site.location)} (chuyển hướng đúng như khai …${normalizeRedirectPath(site.expectRedirect)})`,
         );
       }
       return verdict(
@@ -461,6 +466,77 @@ function evaluateNextBuilds(builds) {
     );
   }
   return verdict(ID, TITLE, "ok", `${builds.length} app đều chạy bundle PROD`);
+}
+
+/** Dòng log của scripts/windows/docker-watchdog.ps1: `<ISO có offset> [LEVEL] <thông điệp>`. */
+const WATCHDOG_LINE_RE = /^(\S+) \[([A-Z]+)\] (.*)$/;
+const WATCHDOG_DETAIL_MAX = 160;
+
+/**
+ * Tóm tắt docker-watchdog.log trong cửa sổ `windowMin` phút: đếm [WARN] / [ERROR] / [ACTION] và giữ
+ * dòng có vấn đề mới nhất. Watchdog chỉ ghi file — thiếu luật này thì watchdog HỎNG (không bật được
+ * Docker, engine kẹt, cờ tạm dừng bị quên) không tới được ai.
+ *
+ * @returns {{present:true, warn:number, error:number, actions:number, last:string|null}}
+ */
+export function summarizeWatchdogLog(text, { nowMs = Date.now(), windowMin = 60 } = {}) {
+  const since = nowMs - windowMin * 60_000;
+  let warn = 0;
+  let error = 0;
+  let actions = 0;
+  let last = null;
+  for (const raw of String(text ?? "").split(/\r?\n/)) {
+    // PowerShell 5.1 `Add-Content -Encoding UTF8` mở đầu file bằng BOM.
+    const m = WATCHDOG_LINE_RE.exec(raw.replace(/^\uFEFF/, "").trim());
+    if (!m) continue;
+    const at = Date.parse(m[1]);
+    if (Number.isNaN(at) || at < since) continue;
+    if (m[2] === "ACTION") actions += 1;
+    if (m[2] !== "WARN" && m[2] !== "ERROR") continue;
+    if (m[2] === "ERROR") error += 1;
+    else warn += 1;
+    last = `[${m[2]}] ${m[3]}`.slice(0, WATCHDOG_DETAIL_MAX);
+  }
+  return { present: true, warn, error, actions, last };
+}
+
+/**
+ * Phán docker-watchdog.log. Chưa có file ⇒ ok: watchdog CHỈ ghi khi phải ra tay, nên máy khoẻ không
+ * có log là bình thường. Đọc lỗi khác ⇒ unknown (luật nền).
+ *
+ * @param {{present:boolean, warn?:number, error?:number, actions?:number, last?:string|null}|null|undefined} w
+ */
+function evaluateDockerWatchdog(w) {
+  const ID = "DOCKER_WATCHDOG";
+  const TITLE = "Docker watchdog";
+  if (w === null || w === undefined || typeof w !== "object") {
+    return missing(ID, TITLE, "không đọc được docker-watchdog.log");
+  }
+  if (w.present === false) {
+    return verdict(ID, TITLE, "ok", "chưa có log — watchdog chưa phải ra tay");
+  }
+  if (![w.warn, w.error].every((n) => Number.isInteger(n) && n >= 0)) {
+    return missing(ID, TITLE, "tóm tắt docker-watchdog.log hỏng");
+  }
+  const latest = w.last ? `; mới nhất: ${w.last}` : "";
+  if (w.error > 0) {
+    return verdict(
+      ID,
+      TITLE,
+      "crit",
+      `${w.error} dòng ERROR trong cửa sổ — watchdog không bật được Docker Desktop hoặc script lỗi${latest}`,
+    );
+  }
+  if (w.warn > 0) {
+    return verdict(
+      ID,
+      TITLE,
+      "warn",
+      `${w.warn} dòng WARN trong cửa sổ — engine kẹt hoặc cờ tạm dừng quá hạn${latest}`,
+    );
+  }
+  const acted = w.actions > 0 ? ` (đã tự bật Docker Desktop ${w.actions} lần)` : "";
+  return verdict(ID, TITLE, "ok", `không có WARN/ERROR trong cửa sổ${acted}`);
 }
 
 /** Luật "càng LỚN càng nặng" (job failed · error lines · backup age). */
