@@ -62,16 +62,44 @@ export function relativeTime(iso: string | null | undefined): string {
   return formatDistanceToNowStrict(date, { addSuffix: true, locale: vi });
 }
 
-/** Số ảnh nhiều nhất vẽ trong lưới; phần dư hiện dưới dạng «+N» trên ô cuối. */
+/**
+ * Số ảnh nhiều nhất vẽ trong lưới MẶC ĐỊNH (thẻ bảng tin · bình luận · tin); phần dư hiện dưới dạng «+N» trên
+ * ô cuối. Trang chi tiết bài truyền trần riêng qua `max` của `buildImageGrid`.
+ */
 export const IMAGE_GRID_MAX = 4;
 
+/** Đính kèm VẼ được: `url` có mặt VÀ là `http(s)` (xem `isSafeAttachmentUrl`). */
+export type RenderableAttachment = FeedAttachmentDto & { url: string };
+
 export interface FeedImageGrid {
-  /** Ảnh thực sự được vẽ (≤ `IMAGE_GRID_MAX`). */
-  shown: FeedAttachmentDto[];
+  /** Ảnh thực sự được vẽ (≤ `max` của `buildImageGrid` — mặc định `IMAGE_GRID_MAX`). */
+  shown: RenderableAttachment[];
   /** Số ảnh còn lại, hiện đè lên ô cuối. `0` ⇒ không vẽ lớp phủ. */
   overflow: number;
   /** Số cột Tailwind cho lưới — 1 ảnh thì tràn khung, từ 2 trở lên thì 2 cột. */
   columns: 1 | 2;
+}
+
+/** S16-SOCIAL-FE-2D — chỉ `http`/`https` (không phân biệt hoa thường — cùng tư thế `URL_RE` của thân bài). */
+const SAFE_ATTACHMENT_URL_RE = /^https?:\/\//i;
+
+/**
+ * URL đính kèm có VẼ được không (S16-SOCIAL-FE-2D, plan §3 + §4 A8 · ca R5).
+ *
+ * Bất biến: CHỈ URL `http(s)` mới thành `src` / `href`. `feedAttachmentSchema.url` là `z.string()` trần — hợp
+ * đồng không kiểm lược đồ (đo M32) — và React vẽ `src` NGUYÊN VĂN (đo M33), nên vị từ này là chốt ở phía render:
+ * mọi lược đồ khác, kể cả URL tương đối giao thức (`//host`), coi như `url:null` ⇒ KHÔNG vẽ.
+ * Vị từ chỉ lo LƯỢC ĐỒ của URL; tệp được trả về ra sao là việc của server (ảnh / video hiển thị trực tiếp, mọi
+ * loại khác về dạng tải xuống — xem docblock `PostAttachments.tsx`).
+ * Lỏng hơn `avatarSrc` có chủ ý: URL đính kèm LUÔN do server ký hoặc `null`; `avatarSrc` còn phải loại URL không ký.
+ */
+export function isSafeAttachmentUrl(url: string): boolean {
+  return SAFE_ATTACHMENT_URL_RE.test(url);
+}
+
+/** MỘT vị từ cho cả ảnh · video · tệp: `url:null` (presign bị từ chối) hoặc lược đồ lạ ⇒ không vẽ. */
+function isRenderableAttachment(a: FeedAttachmentDto): a is RenderableAttachment {
+  return a.url !== null && isSafeAttachmentUrl(a.url);
 }
 
 /**
@@ -81,15 +109,50 @@ export interface FeedImageGrid {
  * định presign **theo từng người nhận** và từ chối thì trả `null` (fail-soft, khuôn
  * `chat-attachments.service.ts`). Vẽ một `<img src={null}>` cho ra ô ảnh vỡ — tệ hơn là nó **rò thông
  * tin**: người xem biết "có một ảnh ở đây mà tôi không được xem". Đếm `overflow` vì vậy cũng phải đếm
- * trên tập ĐÃ LỌC, không trên `attachments.length`.
+ * trên tập ĐÃ LỌC, không trên `attachments.length`. S16-SOCIAL-FE-2D: cùng vị từ lọc luôn URL không phải
+ * `http(s)` (`isRenderableAttachment`).
+ *
+ * Thứ tự cố định: LỌC → rồi mới CẮT theo `max` (mặc định `IMAGE_GRID_MAX`).
  */
-export function buildImageGrid(attachments: readonly FeedAttachmentDto[]): FeedImageGrid {
-  const images = attachments.filter((a) => a.kind === "image" && a.url !== null);
-  const shown = images.slice(0, IMAGE_GRID_MAX);
+export function buildImageGrid(
+  attachments: readonly FeedAttachmentDto[],
+  max: number = IMAGE_GRID_MAX,
+): FeedImageGrid {
+  const images = attachments.filter(
+    (a): a is RenderableAttachment => a.kind === "image" && isRenderableAttachment(a),
+  );
+  const shown = images.slice(0, max);
   return {
     shown,
     overflow: Math.max(0, images.length - shown.length),
     columns: shown.length <= 1 ? 1 : 2,
+  };
+}
+
+export interface FeedAttachmentGroups {
+  grid: FeedImageGrid;
+  /** Video VẼ được (`url` http(s)) — ẩn HẲN video `url:null` như ảnh (owner ký D4 (a)). */
+  videos: RenderableAttachment[];
+  /** Tệp khác VẼ được — cùng luật. */
+  files: RenderableAttachment[];
+}
+
+/**
+ * S16-SOCIAL-FE-2D (plan §4 A8) — tách đính kèm thành lưới ảnh · video · tệp. CẢ BA đi qua MỘT vị từ
+ * (`isRenderableAttachment`): một ô video/tệp «có mà bạn không xem được» rò sự tồn tại y như ảnh (D4).
+ */
+export function splitAttachments(
+  attachments: readonly FeedAttachmentDto[],
+  maxImages: number = IMAGE_GRID_MAX,
+): FeedAttachmentGroups {
+  return {
+    grid: buildImageGrid(attachments, maxImages),
+    videos: attachments.filter(
+      (a): a is RenderableAttachment => a.kind === "video" && isRenderableAttachment(a),
+    ),
+    files: attachments.filter(
+      (a): a is RenderableAttachment => a.kind === "file" && isRenderableAttachment(a),
+    ),
   };
 }
 
