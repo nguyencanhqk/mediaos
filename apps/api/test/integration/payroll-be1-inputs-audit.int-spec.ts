@@ -15,8 +15,8 @@
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
-import { sql } from "drizzle-orm";
 import { Test } from "@nestjs/testing";
+import { sql } from "drizzle-orm";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -209,6 +209,22 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
     return codes;
   }
 
+  /**
+   * Gate F-1 — đối chứng DƯƠNG cùng tx cho ca phủ định A3/A4: một lễ PublicHoliday Active hợp lệ (thứ Tư
+   * `-03`, ngày A2 dùng — đã rollback) gieo qua CÙNG `seed` phải làm `workDays` giảm đúng 1. Thiếu nó thì
+   * một `seed` gieo hàng mà `compute()` không thấy (RLS ẩn hàng NULL, sai ngày…) vẫn để A3/A4 xanh rỗng.
+   */
+  async function expectValidHolidayCountedInTx(
+    seed: UncommittedHolidays["seed"],
+    computeInTx: UncommittedHolidays["compute"],
+    before: number,
+  ) {
+    await seed(`${MONTH}-03`);
+    expect((await computeInTx()).workDays, "neo dương: lễ hợp lệ cùng tx phải bị trừ").toBe(
+      before - 1,
+    );
+  }
+
   /** F4-N — lễ GLOBAL của ca không bao giờ commit (đếm từ `direct`, kết nối khác). */
   async function expectHolidaysNotCommitted(codes: string[], seeded: number) {
     expect(codes, "neo dương: helper phải gieo đủ lễ").toHaveLength(seeded);
@@ -324,8 +340,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
       const before = (await computeInTx()).workDays;
       await seed(`${MONTH}-04`, { type: "WorkingDayOverride" });
       expect((await computeInTx()).workDays, "ngày làm bù bị trừ nhầm").toBe(before);
+      await expectValidHolidayCountedInTx(seed, computeInTx, before);
     });
-    await expectHolidaysNotCommitted(codes, 1);
+    await expectHolidaysNotCommitted(codes, 2);
   });
 
   it("A4 — lễ `status <> 'Active'` hoặc `is_paid_holiday=false` KHÔNG bị trừ", async () => {
@@ -334,8 +351,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
       await seed(`${MONTH}-05`, { status: "Inactive" });
       await seed(`${MONTH}-08`, { paid: false });
       expect((await computeInTx()).workDays).toBe(before);
+      await expectValidHolidayCountedInTx(seed, computeInTx, before);
     });
-    await expectHolidaysNotCommitted(codes, 2);
+    await expectHolidaysNotCommitted(codes, 3);
   });
 
   // ── B. present_days · leave ───────────────────────────────────────────────────────────────────

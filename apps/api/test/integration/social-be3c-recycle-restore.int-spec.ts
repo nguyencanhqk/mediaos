@@ -408,7 +408,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
     return Number(r.rows[0].n);
   }
 
-  /** A5 — thông báo của ĐÚNG bài (`SOCIAL_MENTIONED` ghi `source_entity_id` = targetId, social-noti-bridge). */
+  /** A5 — thông báo của ĐÚNG bài (`SOCIAL_MENTIONED`/`SOCIAL_KUDOS_RECEIVED` ghi `source_entity_id` = postId). */
   async function mentionNotiCount(userId: string, postId: string): Promise<number> {
     const r = await direct.query(
       `SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND source_entity_id = $2`,
@@ -1012,8 +1012,13 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
           expect(kudosRes.status, msg(kudosRes)).toBe(201);
           const kudosPost = kudosRes.body.data.id as string;
           expect(await outboxCount("social.kudos_received", kudosPost, "post_id")).toBe(1);
+          await drain();
+          // Gate F-3: vế kudos cũng đếm `notifications` của người nhận (neo dương: đúng 1 của bài này).
+          expect(await mentionNotiCount(uPeer, kudosPost), "kudos ⇒ đúng 1 thông báo").toBe(1);
 
           await deleteAs(tHr, kudosPost);
+          await drain();
+          const kudosNotiBefore = await notificationsCount(uPeer);
           const anyBeforeKudos = await outboxCountAny(kudosPost);
           expect(
             anyBeforeKudos,
@@ -1023,6 +1028,8 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
           expect(res2.status, msg(res2)).toBe(200);
           expect(await outboxCount("social.kudos_received", kudosPost, "post_id")).toBe(1);
           expect(await outboxCountAny(kudosPost)).toBe(anyBeforeKudos);
+          await drain();
+          expect(await notificationsCount(uPeer)).toBe(kudosNotiBefore);
         } finally {
           await lock.release();
         }

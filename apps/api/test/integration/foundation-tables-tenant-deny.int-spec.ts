@@ -48,7 +48,11 @@ async function asTenant<T>(
   }
 }
 
-describe.skipIf(!hasDb)(
+// S18-QA-NOTIGLOBALLEAK-1 (gate F-2/DB-1): `.env` làm hasDb=true ⇒ thiếu LANE_DB thì `seedCompany` ở
+// beforeAll commit lên DB mặc định. CI đặt LANE_DB=mediaos ⇒ vẫn chạy ở CI.
+const hasLaneDb = hasDb && !!process.env.LANE_DB;
+
+describe.skipIf(!hasLaneDb)(
   "FOUNDATION-DB deny-path — cross-tenant INSERT blocked + foreign row invisible",
   () => {
     const direct = directPool();
