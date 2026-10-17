@@ -209,6 +209,15 @@ Lệnh int-spec (bash, trong worktree): `. scripts/lib/db-secrets.sh && db_secre
 
 ## 9. Ghi chú
 
+### 9.1 Finding gate (17/10) — quyết định + nợ
+
+Vá ở `1f333185` (đo trên lane `mediaos_notileak`, mutant tạm đã gỡ): **F-1** A3/A4 thêm đối chứng dương cùng tx (mutant «seed rơi ngoài tháng» ⇒ A3/A4 ĐỎ ở neo dương) · **F-3** A5 vế kudos đếm `notifications` của người nhận (mutant «nhân đôi thông báo kudos ngoài outbox» ⇒ ĐỎ `expected 3 to be 2`) · **F-2/DB-1** F2 dùng cổng `hasDb && LANE_DB` (CI đặt `LANE_DB=mediaos` ⇒ vẫn chạy) · **TS-3** thứ tự import.
+
+- **TS-1 (MEDIUM) → NỢ:** `social-be3c-recycle-restore.int-spec.ts` 1.152 → 1.220 dòng (trần 800). Đã quá trần trước WO; tách tệp là WO dọn riêng (ghi ở `notes` của WO này trong `harness/backlog.mjs`), không chặn PR.
+- **TS-2 / DB-2 (LOW) → BÁC:** các dòng xuống dòng là đầu ra của prettier 3.8.3. Đo: `prettier --check` trên bản d6fc99d6 của F2 · F4 · `social-be3c` ⇒ cả 3 báo lệch; bản HEAD sạch. Hoàn lại = tệp chạm trong WO lệch `format:check`. Tách commit = viết lại lịch sử nhánh mà Sổ vết đã trích SHA.
+- **TS-4 (LOW) → CHẤP NHẬN:** khoá chờ tối đa 240 s < `A5_TIMEOUT_MS` 360 s ⇒ lỗi (nếu có) là `55P03` rõ ràng, không phải timeout câm.
+- **DB-3 (LOW) → BÁC:** `uq_public_holidays_global_date_code_active` = `(country_code, holiday_date, holiday_code)` (mig `0434:189`); `holiday_code` ngẫu nhiên mỗi lần gieo ⇒ hai tx không chặn nhau.
+
 ### 9.3 Sổ vết
 
 | Bước            | Ngày  | Kết quả                                                                                                                                                                                                                                                                                                                                                                                           |
