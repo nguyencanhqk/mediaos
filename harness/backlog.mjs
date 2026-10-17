@@ -18356,6 +18356,7 @@ export const backlog = [
       "16/10/2026 — nhận N9 của `docs/plans/S19-OPS-TASKFILEURL-1.md` §9 (tách từ S19-FE-SIGNEDTAB-1, plan `docs/plans/S19-FE-SIGNEDTAB-1.md` §7 L0). ĐO 14/10 (Chromium): mọi nút qua helper `apps/app/src/lib/open-signed-url.ts` (đã dời từ `payroll/`) đều để lại tab `about:blank` sau khi tải tệp `attachment` — TASK PDF + 3 nút phiếu lương, nhanh lẫn chậm; ảnh `inline` hiện bình thường. Câu «TASK tệp không đổi (đã tải blob)» ở trên ĐÃ CŨ: từ `1519bd67` TASK đi qua helper; sau SIGNEDTAB-1, CV cũng vậy.",
       "16/10/2026 — nhánh popup bị chặn của helper (`open-signed-url.ts:30`) gọi `window.location.assign(url)` trên tab APP: tệp `inline` làm tab app rời SPA (mất trạng thái màn), `attachment` thì tải về và trang giữ nguyên. Hành vi sẵn có (TASK · phiếu lương · CV sau SIGNEDTAB-1); muốn đổi thì làm ở WO này.",
       "16/10/2026 — tham chiếu chéo: N3 (`window.open` sau `await`, HR/SYSTEM) + CHAT-TTL nằm ở `S19-FE-SIGNEDTAB-2`, CÙNG các dòng mã đã liệt kê ở dòng src đầu — plan của WO này nên cân nhắc gộp hoặc ghi rõ ranh giới.",
+      "17/10/2026 — nợ từ FULL gate PR-A của S19-FE-SIGNEDTAB-1 (plan `docs/plans/S19-FE-SIGNEDTAB-1.md` §9): (F1, MEDIUM) nhánh popup bị chặn còn điều hướng tab app cả khi người dùng ĐÃ RỜI màn (component unmount trong lúc API chậm) — chưa có guard «lượt bấm còn hiện hành». Hướng vá: helper nhận tuỳ chọn `isCurrent()`/`AbortSignal`, kiểm CHỈ ngay trước `window.location.assign`; caller truyền mounted-ref. KHÔNG vá ở caller bằng cách cho resolver trả `null` khi unmount: helper sẽ đóng cả tab mới ở nhánh bình thường ⇒ mất tệp, không báo. (F2 + SF-4, LOW) nút CV không có trạng thái chờ: bấm đúp ⇒ 2 tab · 2 lượt gọi, và `setDownloadError(null)` của lượt sau có thể xoá lỗi của lượt trước — thêm `downloadingId`/ref theo `fileId`, kiểm TRƯỚC `window.open` (vẫn đồng bộ trong onClick).",
     ],
     done_when: [
       "ĐIỀU KIỆN MERGE (FE lên Pages ngay khi merge, API deploy tay): chỉ merge SAU khi API PROD chứa `S16-SOCIAL-FILEDISPOSITION-1` — đo `git merge-base --is-ancestor <sha merge WO đó> <data.build.commit của GET /api/v1/health>` exit 0. KHÔNG tương thích ngược với API cũ (ở đó tệp vẫn hiển thị trực tiếp)",
@@ -22062,6 +22063,7 @@ export const backlog = [
       "apps/api/src/config/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      "apps/app/public/_headers",
     ],
     skills: ["security-review", "code-review"],
     depends_on: ["S19-FE-SIGNEDTAB-1", "S16-SOCIAL-FILEOPENUX-1"],
@@ -22072,6 +22074,7 @@ export const backlog = [
       "N11 — FULL gate SEC-TFU-01 của TASKFILEURL: guard scheme `apps/app/src/lib/open-signed-url.ts:27-28` nhận cả `http:`; chọn chỗ ép `https:` (FE ngoài DEV/loopback, hay `apps/api/src/config/env.schema.ts` đòi `S3_ENDPOINT` https khi production) SAU khi ghi endpoint storage từng môi trường.",
       'CHAT — [SUY RA, chưa đo] lượt quét 14/10: `<a target="_blank">` tới URL ký tạo lúc render ở `components/chat/MessageBubble.tsx` (:94 · :144 · :163) · `components/chat/room-info/RoomMediaGrid.tsx:111` · `components/chat/RoomFilesTab.tsx` (:130 · :147); TTL URL ký ngắn ⇒ bấm sau khi hết hạn có thể nhận lỗi từ storage.',
       "Trùng dòng mã với `S16-SOCIAL-FILEOPENUX-1` (src của WO đó đã liệt kê các nút HR/SYSTEM/CHAT này): plan của hai WO phải ghi rõ ranh giới, hoặc gộp.",
+      "17/10/2026 — nợ từ FULL gate PR-A của S19-FE-SIGNEDTAB-1 (plan `docs/plans/S19-FE-SIGNEDTAB-1.md` §9), cùng chủ đề an toàn của helper: (SEC-SIGNEDTAB-01, LOW) `apps/app/public/_headers` không có `Referrer-Policy` (DEVOPS-11 dòng 130 đòi `strict-origin-when-cross-origin`) — helper điều hướng bằng `tab.location.href`/`window.location.assign` nên chính sách mặc định của trình duyệt là lớp chặn duy nhất, giữ đường dẫn màn (có UUID ứng viên) khỏi log storage; thêm khối `/*` + đo `curl -I` trên host app PROD (zone không được ghi đè, như Cache-Control). (SEC-SIGNEDTAB-02 = N11) khi ép `https:` thì điều hướng bằng `href` của đối tượng `URL` đã kiểm, không bằng chuỗi gốc. (SF-3, LOW) lỗi không phải ApiError (`unsafe-url`, `TypeError` của `new URL`) đều thành `errors.generic`, không dấu vết chẩn đoán — cân nhắc log có cấu trúc KHÔNG kèm URL ký. (F3, LOW) docblock helper mới nêu payroll + TASK, thêm `CandidateCvTab` vào danh sách caller.",
     ],
     done_when: [
       "ĐO TRƯỚC (trình duyệt thật): CHAT — bấm tệp sau khi URL ký hết hạn (TTL thật của môi trường đo) ⇒ ghi kết quả; N3 dùng số đo 14/10",
