@@ -225,8 +225,28 @@ describe("CandidateCvTab — nút Tải xuống mở URL ký ở tab mới (S19-
 
   function mockAppLocationAssign(): ReturnType<typeof vi.fn> {
     const assign = vi.fn();
-    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+    // Giữ các trường đọc được của location THẬT, chỉ thay `assign`: mã nào đọc `pathname`/`href` trong lúc
+    // spy còn bật sẽ không nhận `undefined` rồi đỏ khó hiểu (gate F4).
+    const real = window.location;
+    const fake = {
+      href: real.href,
+      origin: real.origin,
+      protocol: real.protocol,
+      host: real.host,
+      pathname: real.pathname,
+      search: real.search,
+      hash: real.hash,
+      assign,
+    };
+    vi.spyOn(window, "location", "get").mockReturnValue(fake as unknown as Location);
     return assign;
+  }
+
+  function uploadCv(): void {
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["cv"], "cv.pdf", { type: "application/pdf" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    fireEvent.change(input);
   }
 
   it("C-1 [allow] bấm Tải xuống ⇒ mở tab KHÔNG cờ noopener, cắt opener, điều hướng tới URL ký", async () => {
@@ -313,6 +333,46 @@ describe("CandidateCvTab — nút Tải xuống mở URL ký ở tab mới (S19-
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe(i18n.t("recruit:errors.generic"));
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  // Alert DÙNG CHUNG cho hai ngả (`downloadError ?? uploadError`) — gate SF-1: lỗi cũ của ngả này không được
+  // che / treo đè lên kết quả mới của ngả kia.
+  it("C-7 [alert chung] tải xuống lỗi RỒI tải lên lỗi ⇒ alert là lỗi TẢI LÊN, không phải lỗi tải cũ", async () => {
+    setCaps({ [VIEW_PAIR]: true, [UPLOAD_PAIR]: true });
+    getDownloadUrl.mockRejectedValue(
+      new ApiError({
+        status: 404,
+        code: "NOT_FOUND",
+        message: "not found",
+        details: [{ field: "kind", message: "not-found", rule: "recruit" }],
+      }),
+    );
+    uploadCandidateFile.mockReset();
+    uploadCandidateFile.mockRejectedValue(new Error("HTTP 403"));
+    fireEvent.click(await findDownloadButton());
+    expect((await screen.findByRole("alert")).textContent).toBe(i18n.t("recruit:errors.notFound"));
+
+    uploadCv();
+
+    await waitFor(() => expect(uploadCandidateFile).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toBe(i18n.t("recruit:errors.generic")),
+    );
+  });
+
+  it("C-8 [alert chung ⇄ C-7] tải lên lỗi RỒI tải xuống thành công ⇒ không còn alert lỗi cũ", async () => {
+    setCaps({ [VIEW_PAIR]: true, [UPLOAD_PAIR]: true });
+    uploadCandidateFile.mockReset();
+    uploadCandidateFile.mockRejectedValue(new Error("HTTP 403"));
+    getDownloadUrl.mockResolvedValue({ url: SIGNED, expiresAt: EXPIRES_AT });
+    const button = await findDownloadButton();
+    uploadCv();
+    expect((await screen.findByRole("alert")).textContent).toBe(i18n.t("recruit:errors.generic"));
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(tab.location.href).toBe(SIGNED));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it.each([

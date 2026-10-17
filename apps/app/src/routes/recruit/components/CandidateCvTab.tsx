@@ -47,9 +47,13 @@ export function CandidateCvTab({ candidateId }: { candidateId: string }) {
    * `isPending` chỉ lật về `false`, nút quay lại chữ "Tải CV lên", và người dùng **không có cách nào
    * biết CV chưa đính** — không lỗi, không log, không dấu vết. Dùng chung khuôn hiển thị với
    * `downloadError` bên dưới.
+   *
+   * Alert dùng chung hiện `downloadError ?? uploadError` ⇒ mỗi thao tác xoá lỗi của CẢ HAI ngả, nếu không
+   * lỗi tải xuống cũ sẽ CHE lỗi tải lên vừa xảy ra (và ngược lại lỗi cũ còn treo sau lượt thành công).
    */
   const uploadMutation = useMutation({
     mutationFn: (file: File) => {
+      setDownloadError(null);
       setUploadError(null);
       return candidateFileApi.uploadCandidateFile(candidateId, file);
     },
@@ -71,6 +75,7 @@ export function CandidateCvTab({ candidateId }: { candidateId: string }) {
    */
   const download = async (fileId: string) => {
     setDownloadError(null);
+    setUploadError(null);
     try {
       await openSignedUrlInNewTab(
         async () => (await candidateFileApi.getDownloadUrl(candidateId, fileId)).url,
