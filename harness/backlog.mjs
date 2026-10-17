@@ -19047,6 +19047,7 @@ export const backlog = [
       "apps/api/test/**",
       "packages/contracts/**",
       "apps/app/src/routes/social/moderation/**",
+      "apps/app/src/i18n/locales/vi/social-admin.ts",
       "docs/API Design/**",
       "docs/plans/**",
       "harness/backlog.mjs",
