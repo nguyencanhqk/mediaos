@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
+import { enterAppRoleInTx, withRolledBackTx } from "../helpers/rolled-back-tx";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
 /**
@@ -43,9 +44,12 @@ async function asTenant<T>(
   }
 }
 
+/** Pool (commit ngay) hoặc kết nối đang mở tx (hàng GLOBAL — chỉ sống trong tx, xem withUncommittedGlobals). */
+type Queryable = Pick<PoolClient, "query">;
+
 /** Seed 1 notification_event — companyId=null ⇒ GLOBAL (catalog dùng chung), NOT NULL cột theo DB-07 §7.1. */
-async function seedEvent(direct: Pool, companyId: string | null): Promise<string> {
-  const r = await direct.query(
+async function seedEvent(db: Queryable, companyId: string | null): Promise<string> {
+  const r = await db.query(
     `INSERT INTO notification_events
        (company_id, module_code, event_code, event_name, notification_type,
         default_priority, default_channels, dedupe_strategy, is_enabled, is_system_event)
@@ -58,11 +62,11 @@ async function seedEvent(direct: Pool, companyId: string | null): Promise<string
 
 /** Seed 1 notification_template (FK event_id) — companyId=null ⇒ GLOBAL, NOT NULL cột theo DB-07 §7.2. */
 async function seedTemplate(
-  direct: Pool,
+  db: Queryable,
   companyId: string | null,
   eventId: string,
 ): Promise<string> {
-  const r = await direct.query(
+  const r = await db.query(
     `INSERT INTO notification_templates
        (company_id, event_id, template_code, channel, locale, title_template,
         body_template, version, status, is_default)
@@ -106,8 +110,6 @@ describe.skipIf(!hasLaneDb)(
 
     let A: SeededTenant;
     let B: SeededTenant;
-    let gEvent: string; // GLOBAL (company_id NULL)
-    let gTemplate: string; // GLOBAL
     let aEvent: string;
     let bEvent: string;
     let aTemplate: string;
@@ -122,9 +124,7 @@ describe.skipIf(!hasLaneDb)(
       A = await seedCompany(direct, "noti-core-a");
       B = await seedCompany(direct, "noti-core-b");
 
-      // Hàng GLOBAL (company_id NULL) — nullable-tenant policy phải hiển thị cho MỌI tenant.
-      gEvent = await seedEvent(direct, null);
-      gTemplate = await seedTemplate(direct, null, gEvent);
+      // Hàng GLOBAL (company_id NULL) KHÔNG gieo ở đây — xem withUncommittedGlobals (S18-QA-NOTIGLOBALLEAK-1).
 
       // Hàng company-scoped (company_id NOT NULL) — cô lập chéo tenant.
       aEvent = await seedEvent(direct, A.companyId);
@@ -150,10 +150,6 @@ describe.skipIf(!hasLaneDb)(
         await direct.query("DELETE FROM notification_templates WHERE company_id = $1", [companyId]);
         await direct.query("DELETE FROM notification_events WHERE company_id = $1", [companyId]);
       }
-      // Hàng GLOBAL (company_id NULL) — cleanupTenants/DELETE-by-company KHÔNG phủ ⇒ xoá theo id.
-      // Template trước event (FK event_id).
-      await direct.query("DELETE FROM notification_templates WHERE id = $1", [gTemplate]);
-      await direct.query("DELETE FROM notification_events WHERE id = $1", [gEvent]);
       await cleanupTenants(direct, [A.companyId, B.companyId]);
       await direct.end();
       await app.end();
@@ -166,20 +162,70 @@ describe.skipIf(!hasLaneDb)(
       });
     }
 
+    async function idsIn(c: Queryable, table: string, ids: string[]): Promise<Set<string>> {
+      const r = await c.query(`SELECT id FROM ${table} WHERE id = ANY($1::uuid[])`, [ids]);
+      return new Set(r.rows.map((x) => x.id as string));
+    }
+
+    /**
+     * S18-QA-NOTIGLOBALLEAK-1 — hàng GLOBAL (event + template) CHỈ sống trong MỘT tx trên kết nối riêng:
+     * gieo bằng superuser ⇒ hạ xuống vai app + GUC `companyId` ⇒ `fn` kiểm bằng SQL trên CHÍNH kết nối đó
+     * ⇒ ROLLBACK. Không commit ⇒ spec catalog đọc toàn tập (qua `direct`, kết nối khác) không bao giờ thấy,
+     * và crash ở bất kỳ đâu cũng không để lại gì (bản cũ gieo ở `beforeAll`, chỉ dọn ở `afterAll`).
+     */
+    async function withUncommittedGlobals<T>(
+      companyId: string,
+      fn: (c: PoolClient, g: { eventId: string; templateId: string }) => Promise<T>,
+    ): Promise<T> {
+      return withRolledBackTx(direct, `noti-core GLOBAL (${companyId})`, async (c) => {
+        const eventId = await seedEvent(c, null);
+        const templateId = await seedTemplate(c, null, eventId);
+        await enterAppRoleInTx(c, companyId);
+        return fn(c, { eventId, templateId });
+      });
+    }
+
     // ── notification_events (nullable-tenant) ───────────────────────────────────
     describe("notification_events (nullable-tenant)", () => {
       it("withTenant(A): thấy event GLOBAL (company_id NULL) + của A, KHÔNG thấy của B", async () => {
-        const seen = await visible(A.companyId, "notification_events", [gEvent, aEvent, bEvent]);
-        expect(seen.has(gEvent)).toBe(true);
-        expect(seen.has(aEvent)).toBe(true);
-        expect(seen.has(bEvent)).toBe(false);
+        await withUncommittedGlobals(A.companyId, async (c, g) => {
+          const seen = await idsIn(c, "notification_events", [g.eventId, aEvent, bEvent]);
+          expect(seen.has(g.eventId)).toBe(true);
+          expect(seen.has(aEvent)).toBe(true);
+          expect(seen.has(bEvent)).toBe(false);
+        });
       });
 
       it("withTenant(B): thấy GLOBAL + của B, KHÔNG thấy của A", async () => {
-        const seen = await visible(B.companyId, "notification_events", [gEvent, aEvent, bEvent]);
-        expect(seen.has(gEvent)).toBe(true);
-        expect(seen.has(bEvent)).toBe(true);
-        expect(seen.has(aEvent)).toBe(false);
+        await withUncommittedGlobals(B.companyId, async (c, g) => {
+          const seen = await idsIn(c, "notification_events", [g.eventId, aEvent, bEvent]);
+          expect(seen.has(g.eventId)).toBe(true);
+          expect(seen.has(bEvent)).toBe(true);
+          expect(seen.has(aEvent)).toBe(false);
+        });
+      });
+
+      it("hàng GLOBAL của ca kiểm KHÔNG bao giờ commit: kết nối khác không thấy trong lúc kiểm, và sau ROLLBACK", async () => {
+        const countFromOtherConnection = async (id: string): Promise<number> => {
+          const r = await direct.query(
+            "SELECT count(*)::int AS n FROM notification_events WHERE id = $1",
+            [id],
+          );
+          return Number(r.rows[0].n);
+        };
+        const gEventId = await withUncommittedGlobals(A.companyId, async (c, g) => {
+          // Neo dương: hàng có thật trong tx ⇒ phép đếm 0 bên dưới không xanh rỗng.
+          expect((await idsIn(c, "notification_events", [g.eventId])).has(g.eventId)).toBe(true);
+          expect(
+            await countFromOtherConnection(g.eventId),
+            "hàng GLOBAL chưa commit lọt sang kết nối khác",
+          ).toBe(0);
+          return g.eventId;
+        });
+        expect(
+          await countFromOtherConnection(gEventId),
+          "hàng GLOBAL còn sau khi helper trả ⇒ helper đã COMMIT",
+        ).toBe(0);
       });
 
       it("withTenant(A): INSERT notification_events company_id=B bị chặn (rejects)", async () => {
@@ -201,14 +247,16 @@ describe.skipIf(!hasLaneDb)(
     // ── notification_templates (nullable-tenant) ────────────────────────────────
     describe("notification_templates (nullable-tenant)", () => {
       it("withTenant(A): thấy template GLOBAL + của A, KHÔNG thấy của B", async () => {
-        const seen = await visible(A.companyId, "notification_templates", [
-          gTemplate,
-          aTemplate,
-          bTemplate,
-        ]);
-        expect(seen.has(gTemplate)).toBe(true);
-        expect(seen.has(aTemplate)).toBe(true);
-        expect(seen.has(bTemplate)).toBe(false);
+        await withUncommittedGlobals(A.companyId, async (c, g) => {
+          const seen = await idsIn(c, "notification_templates", [
+            g.templateId,
+            aTemplate,
+            bTemplate,
+          ]);
+          expect(seen.has(g.templateId)).toBe(true);
+          expect(seen.has(aTemplate)).toBe(true);
+          expect(seen.has(bTemplate)).toBe(false);
+        });
       });
 
       it("withTenant(A): INSERT notification_templates company_id=B bị chặn (rejects)", async () => {

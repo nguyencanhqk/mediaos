@@ -18549,6 +18549,8 @@ export const backlog = [
       "apps/api/test/integration/task-subtask-counting.int-spec.ts",
       "apps/api/src/dashboard/dashboard-mv-refresh.int.spec.ts",
       "apps/api/src/dashboard/mv-taskstatus-canonical.int.spec.ts",
+      "apps/api/src/attendance/attendance-alert-noti-producer.int.spec.ts",
+      "apps/api/test/integration/role-member-del-oracle.int-spec.ts",
       "apps/api/test/helpers/**",
       "harness/backlog.mjs",
     ],
@@ -18572,6 +18574,8 @@ export const backlog = [
       "🟡 LIGHT gate — chỉ sửa spec / helper test, KHÔNG chạm code sản phẩm hay migration. CẤM «vá» bằng retry, skip, nới assert.",
       "Độ tin (để xếp thứ tự): A5 của `social-be3c-recycle-restore` cao nhất (đã đỏ thật một lần, cơ chế chưa tái hiện) · `task-project-role` vừa · nạn nhân `dashboard-mv-refresh` vừa · `chat-noti-e2e` mốc > 0 vừa, `toBe(0)` thấp · `login-blocked-attribution` thấp (chỉ lộ khi lượt trước chết giữa chừng) · các chỗ REFRESH thấp.",
       "Seed 10/10/2026 từ S18-QA-CHECKALLFLAKE-1.",
+      "layer (0) chuyển sang S18-QA-NOTIGLOBALLEAK-1 (17/10/2026) — owner gộp A5 `social-be3c-recycle-restore` vào WO đó; done_when dòng 2 + path của file đó ở đây giữ cho lịch sử, KHÔNG làm lại ở WO này.",
+      "Nợ nhận từ S18-QA-NOTIGLOBALLEAK-1 (plan §4.4, thuộc lớp «int-spec cạnh mã nguồn · ghi vào catalog toàn cục» của done_when cuối): (i) `apps/api/src/attendance/attendance-alert-noti-producer.int.spec.ts:432-443` gieo lễ GLOBAL `HOL-<8hex>` ngày `yesterday`, chỉ dọn trong `finally` ⇒ crash giữa ca ⇒ các ca ALLOW cùng file ĐỎ khi chạy lại trong cùng ngày [SUY RA]; nằm ngoài `paths` và done_when (3) của NOTIGLOBALLEAK (giới hạn `apps/api/test/**`). (ii) `apps/api/test/integration/role-member-del-oracle.int-spec.ts:252-262` gieo `roles` GLOBAL `ki074-system-<8hex>` (đã có mã riêng + xoá theo id; ca `:340` đi qua HTTP nên cần hàng đã commit); `roles` không có `created_at` ⇒ không dọn theo tuổi được; chưa có người đọc `roles` GLOBAL toàn tập ⇒ ưu tiên thấp.",
     ],
   },
   {
@@ -21372,7 +21376,7 @@ export const backlog = [
     module: "QA",
     layer: "BE",
     title:
-      "`notifications-noti-core-tenant-isolation` gieo event + template GLOBAL (`company_id NULL`, mã `NOTI_EVT_*`/`NOTI_TPL_*`) và chỉ dọn ở `afterAll` ⇒ worker crash `ERR_IPC_CHANNEL_CLOSED` giữa spec để lại hàng GLOBAL VĨNH VIỄN trên lane ⇒ `noti-seed-catalog-permissions` (A — event lạ) + `s5-noti-fix1-deeplink` ((a) — template GLOBAL `target_url` NULL) ĐỎ ở mọi lượt sau trên lane đó",
+      "`notifications-noti-core-tenant-isolation` gieo event + template GLOBAL (`company_id NULL`, mã `NOTI_EVT_*`/`NOTI_TPL_*`) và chỉ dọn ở `afterAll` ⇒ worker crash `ERR_IPC_CHANNEL_CLOSED` giữa spec để lại hàng GLOBAL VĨNH VIỄN trên lane ⇒ `noti-seed-catalog-permissions` (A — event lạ) + `s5-noti-fix1-deeplink` ((a) — template GLOBAL `target_url` NULL) ĐỎ ở mọi lượt sau trên lane đó + lớp A5 (gộp từ S18-QA-SHAREDSTATE-1, owner 17/10/2026): `social-be3c-recycle-restore` A5 so số `notifications` của người được nhắc trong khi thông báo đến BẤT ĐỒNG BỘ qua outbox dùng chung — ĐÃ ĐỎ THẬT 10/10/2026",
     zone: "yellow",
     status: "todo",
     paths: [
@@ -21393,10 +21397,14 @@ export const backlog = [
       "Hàng GLOBAL do spec gieo KHÔNG sống sót qua crash — vd dọn TÀN DƯ theo tiền tố mã riêng của spec ở ĐẦU `beforeAll` (ĐO an toàn khi hai lượt cùng spec chạy song song trên MỘT lane) hoặc cách khác có đo; KHÔNG nới assert của hai spec catalog, KHÔNG thêm miễn trừ mã `NOTI_EVT_*` vào registry",
       "Quét cùng họ trong `apps/api/test/**`: mọi spec gieo hàng `company_id IS NULL` (catalog · permission · template dùng chung) mà chỉ dọn ở `afterAll` — liệt kê, vá theo LỚP",
       "ĐO CỔNG sau vá: kịch bản tái hiện ở trên ⇒ hai spec catalog XANH",
+      "`social-be3c-recycle-restore` A5 (làm TRƯỚC — lớp duy nhất đã đỏ thật): tái hiện tất định bằng một lượt drain outbox xen giữa hai mốc ⇒ ĐỎ `expected 1 to be +0`; sau vá, mốc `notifications` của người được nhắc không còn phụ thuộc lúc nào thông báo của lượt tạo bài tới nơi (ví dụ tự drain dưới khoá `test/helpers/outbox-worker-lock.ts` rồi mới lấy mốc) và ca vẫn ĐỎ khi lượt khôi phục phát lại thông báo",
     ],
     notes: [
       "🟡 LIGHT — chỉ sửa spec/helper test, KHÔNG chạm code sản phẩm hay migration. Cùng lý do với S18-QA-CHECKALLFLAKE-1: lane bẩn làm `check.sh --all` đỏ oan ở ca KHÔNG liên quan diff ⇒ một ĐỎ THẬT có thể trốn sau chúng.",
       "Seed 02/10/2026 từ verify cuối S16-SOCIAL-AVATARPRESIGN-1 (phát hiện ngoài phạm vi; WO đó không chạm NOTI).",
+      "Owner GỘP 17/10/2026 (hộp hỏi phiên f4ef72c3, «NOTIGLOBALLEAK + lớp A5 tới PR (Recommended)»): lớp (0) A5 của S18-QA-SHAREDSTATE-1 chuyển sang WO này; done_when cuối = nguyên văn done_when A5 của SHAREDSTATE. Plan `docs/plans/S18-QA-NOTIGLOBALLEAK-1.md`.",
+      "Plan v2.1 (17/10/2026, sau 2 vòng plan-review): khuôn rollback (lớp a — gieo + kiểm hàng GLOBAL rồi ROLLBACK trong MỘT transaction, không bao giờ commit) cho `notifications-noti-core-tenant-isolation` · `foundation-tables-tenant-deny` · `payroll-be1-inputs-audit`; `role-member-del-oracle` + `attendance-alert-noti-producer` (cạnh mã nguồn) ghi nợ sang S18-QA-SHAREDSTATE-1; KHÔNG lease khoá tư vấn, KHÔNG dọn theo tuổi. Gate bắt buộc: typescript-reviewer + silent-failure-hunter + database-reviewer.",
+      "Nợ gate TS-1 (17/10/2026): `apps/api/test/integration/social-be3c-recycle-restore.int-spec.ts` 1.152 dòng ở d6fc99d6 → 1.220 sau WO này (A5 tự drain + đếm thông báo kudos), vượt trần 800 của CLAUDE.md §5 và không cổng nào ép. Tách KHÔNG đổi hành vi theo nhóm ca (A allow-path · D deny/không tác dụng phụ · helper đếm outbox/notifications sang `test/helpers`), mỗi tệp < 800, cả 24 ca giữ nguyên kỳ vọng — WO dọn riêng, không chặn PR này (plan §9.1).",
     ],
   },
   {
