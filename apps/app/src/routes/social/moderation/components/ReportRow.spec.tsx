@@ -427,6 +427,16 @@ describe("R5 — hàng đã xử lý + nhãn lý do", () => {
     expect(screen.queryByTestId("report-resolution-note")).toBeNull();
   });
 
+  // S16-SOCIAL-RESNOTEMASK-1 — hình dạng server trả cho người đọc ở scope hẹp hơn Company: `reporter` và
+  // `resolutionNote` cùng `null` (một vị từ). Trạng thái che đọc từ `reporter === null`; KHÔNG có khối
+  // ghi chú rỗng hay chỉ báo «ghi chú bị ẩn» (không lộ sự tồn tại của ghi chú).
+  it("F-1: `reporter: null` + `resolved` + `resolutionNote: null` ⇒ câu che, có người xử lý, KHÔNG khối ghi chú", () => {
+    renderRow(closedReport({ reporter: null, resolutionNote: null }));
+    expect(screen.getByTestId("report-reporter")).toHaveTextContent(REPORTER_MASKED);
+    expect(screen.getByTestId("report-resolved-by")).toHaveTextContent("Phạm Thị Hoa");
+    expect(screen.queryByTestId("report-resolution-note")).toBeNull();
+  });
+
   it("có `resolutionNote` ⇒ vẽ khối, chữ thuần giữ xuống dòng", () => {
     const { container } = renderRow(closedReport({ resolutionNote: "Đã nhắc nhở\n<u>ẩn bài</u>" }));
     const note = screen.getByTestId("report-resolution-note");

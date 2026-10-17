@@ -93,7 +93,7 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 | `SOCIAL-API-026` | `GET /social/birthdays` | `view:feed` | **DTO chỉ `{employeeId, fullName, avatar, day, month}`** — không năm, không tuổi; tôn trọng `showBirthday` |
 | **Báo cáo & kiểm duyệt — Track A ghi · Track C xử lý** ||||
 | `SOCIAL-API-027` | `POST /social/reports` | `view:feed` (hàng `reporter_user_id = actor`) | Báo cáo bài/bình luận |
-| `SOCIAL-API-028` | `GET /social/reports` | `view:feed-report` | Sàn scope `Company`; manager `Department`. **`reporter` = `null` khi scope HẸP HƠN `Company`** (D13-a, owner ký 22/09/2026) — chỉ HR/company-admin thấy người tố giác; khoá vẫn có mặt |
+| `SOCIAL-API-028` | `GET /social/reports` | `view:feed-report` | Sàn scope `Company`; manager `Department`. **`reporter` = `null` khi scope HẸP HƠN `Company`** (D13-a, owner ký 22/09/2026) — chỉ HR/company-admin thấy người tố giác; khoá vẫn có mặt. **`resolutionNote` = `null` cùng vị từ với `reporter`** (S16-SOCIAL-RESNOTEMASK-1) — không cờ đã-che; `note` không che (SOC-DEC-011) |
 | `SOCIAL-API-029` | `PATCH /social/reports/{report_id}` | `manage:feed-report` **SÀN** + cặp theo `action` — xem §5.1h | `resolve`/`dismiss` + hành động kèm `action` (BE-3A); đã xử lý ⇒ 409 `ERR-021`; ghi audit |
 | **Nhóm — Track B** ||||
 | `SOCIAL-API-030` | `GET /social/groups` | `view:feed` | Nhóm `public` + nhóm actor là thành viên |
@@ -265,6 +265,8 @@ Cùng khuôn `attachmentIds` ở §5.1f: khoá vắng = không đụng, mảng r
 
 Body: `{status, resolutionNote?, action?}`; `action ∈ none · hide_post · lock_comments · delete_target`,
 **vắng ⇒ `none`** (client cũ giữ nguyên hành vi). `status='dismissed'` + `action ≠ none` ⇒ **400**.
+Phản hồi = `FeedReportDto` dựng qua CÙNG hàm với `028`: `reporter` và `resolutionNote` che theo cùng vị từ
+`isCompany(routeScope)` — sàn `Company` của `029` khiến người gọi luôn thấy đủ (S16-SOCIAL-RESNOTEMASK-1).
 
 | Loại đích | `none` | `hide_post` | `lock_comments` | `delete_target` |
 | --- | --- | --- | --- | --- |

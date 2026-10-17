@@ -155,9 +155,10 @@ export interface SocialPostReportedPayload extends Omit<SocialPayloadBase, "acto
    * registrar trừ nó khỏi `notifications.payload`. Lý do giống hệt `actor_name` ở trên: user_id giải ra
    * được danh tính qua DTO của module khác, và hàng thông báo sống lâu hơn grant.
    *
-   * Danh tính người tố giác chỉ đọc được ở `028`/`029`, và **chỉ khi người đọc ở scope Company**
-   * (SOC-DEC-011 · `toReportDto(r, revealReporter)`). Đó là đường DUY NHẤT — nếu thêm một đường nữa
-   * thì phải gác bằng CÙNG vị từ, không phải bằng một bản luật thứ hai.
+   * Danh tính người tố giác — và ghi chú xử lý `resolutionNote` (S16-SOCIAL-RESNOTEMASK-1) — chỉ đọc
+   * được ở `028`/`029`, và **chỉ khi người đọc ở scope Company** (SOC-DEC-011 · `toReportDto(r,
+   * revealReporter)`). Đó là đường DUY NHẤT — nếu thêm một đường nữa thì phải gác bằng CÙNG vị từ, không
+   * phải bằng một bản luật thứ hai. Payload này KHÔNG chở `resolutionNote`.
    */
   reportId: string;
   report_id: string;
