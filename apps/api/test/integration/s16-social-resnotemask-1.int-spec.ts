@@ -258,8 +258,16 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-RESNOTEMASK-1 che resolutionNote (DB cô
         "≥ 1 hàng resolved trong phản hồi phải CÓ ghi chú ở DB",
       ).toBeGreaterThan(0);
 
-      for (const it of items) {
-        if (it.reporter === null) expect(it.resolutionNote, `hàng ${it.id}`).toBeNull();
+      // Vế «nếu» của phép kéo theo KHÔNG được rỗng: ≥ 1 hàng CÓ ghi chú ở DB phải nằm trong tập bị che
+      // `reporter` — nếu fixture đổi làm manager X thấy `reporter`, ca này ĐỎ thay vì xanh không kiểm gì.
+      const noted = new Set(withNote.rows.map((r: { id: string }) => r.id));
+      const masked = items.filter((row) => row.reporter === null);
+      expect(
+        masked.filter((row) => noted.has(row.id)).length,
+        "≥ 1 hàng có ghi chú ở DB phải bị che reporter (vế «nếu» không rỗng)",
+      ).toBeGreaterThan(0);
+      for (const row of masked) {
+        expect(row.resolutionNote, `hàng ${row.id}`).toBeNull();
       }
     });
 

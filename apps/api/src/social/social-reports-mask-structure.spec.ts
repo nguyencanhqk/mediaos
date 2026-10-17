@@ -62,4 +62,38 @@ describe("S16-SOCIAL-RESNOTEMASK-1 — toReportDto: một vị từ", () => {
       expect(expr).toMatch(new RegExp(`^\\s*${field}:\\s*revealReporter\\b`));
     },
   );
+
+  /** Mã service (đã bỏ comment) TRỪ thân `toReportDto` — nơi luật nói «không được có nguồn thứ hai». */
+  const outsideToReportDto = (): string =>
+    stripComments(readFileSync(SERVICE_FILE, "utf8")).replace(toReportDtoBody(), "");
+
+  it("S-1d: call-site KHÔNG đè/ghép trường che ngoài toReportDto (một nguồn luật)", () => {
+    const text = stripComments(readFileSync(SERVICE_FILE, "utf8"));
+    const calls = [...text.matchAll(/(?<!function )\btoReportDto\(([^)]*)\)/g)].map((m) =>
+      m[1]!.split(",").map((a) => a.trim()),
+    );
+    expect(calls.length, "phải có call-site 028 + 029").toBeGreaterThanOrEqual(2);
+    for (const args of calls) {
+      expect(args[1], `toReportDto(${args.join(", ")})`).toBe("revealReporter");
+    }
+    expect(text, "không spread toReportDto rồi đè trường").not.toMatch(/\.\.\.\s*toReportDto\s*\(/);
+    expect(text, "không gán lại trường che sau khi dựng DTO").not.toMatch(
+      /\.(resolutionNote|reporter)\s*=(?!=)/,
+    );
+    // Ngoài thân DTO, `resolutionNote:` chỉ được là phép GHI của 029 — một biểu thức đọc ở đây là vị từ thứ hai.
+    const writes = [...outsideToReportDto().matchAll(/\bresolutionNote\s*:\s*([^,\n]*)/g)].map(
+      (m) => m[1]!.trim(),
+    );
+    expect(writes).toEqual(["dto.resolutionNote ?? null"]);
+  });
+
+  it("S-1e: mọi phép gán revealReporter là đúng vị từ isCompany(actor.routeScope) — 028 + 029", () => {
+    const rhs = [...outsideToReportDto().matchAll(/\brevealReporter\s*=(?!=)\s*([^;\n]*)/g)].map(
+      (m) => m[1]!.trim(),
+    );
+    expect(rhs).toEqual([
+      "SocialAccessService.isCompany(actor.routeScope)",
+      "SocialAccessService.isCompany(actor.routeScope)",
+    ]);
+  });
 });
