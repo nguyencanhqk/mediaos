@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCanExact } from "@mediaos/web-core";
 import { Button, EmptyState, Skeleton } from "@mediaos/ui";
+import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
 import { candidateFileApi } from "../candidate-file-api";
 import { parseRecruitError, recruitErrorI18nKey } from "../recruit-errors";
 
@@ -62,18 +63,19 @@ export function CandidateCvTab({ candidateId }: { candidateId: string }) {
   });
 
   /**
-   * Mở tab TRẮNG NGAY TRONG click handler (đồng bộ, trước `await`) rồi điều hướng nó sau khi có URL —
-   * mở `window.open` SAU await bị Safari/Chrome popup-blocker chặn (chỉ coi lệnh gọi trong cùng tick sự
-   * kiện click là "user gesture") — mục 6 review-gate.
+   * Mở URL ký qua helper chung `openSignedUrlInNewTab` (`@/lib/open-signed-url`): helper mở tab ĐỒNG BỘ,
+   * cắt opener, chặn scheme lạ và tự đóng tab khi lỗi. Vì vậy KHÔNG được có `await` nào trước lời gọi helper.
+   *
+   * ⚠️ S19-FE-SIGNEDTAB-1: đừng tự gọi `window.open(..., "noopener")` — có cờ đó hàm trả `null`, tab trắng
+   * mở ra mà không bao giờ được điều hướng (đo 14/10: nút này hỏng ở mọi tốc độ, PDF lẫn PNG).
    */
   const download = async (fileId: string) => {
     setDownloadError(null);
-    const w = window.open("", "_blank", "noopener,noreferrer");
     try {
-      const { url } = await candidateFileApi.getDownloadUrl(candidateId, fileId);
-      if (w) w.location.href = url;
+      await openSignedUrlInNewTab(
+        async () => (await candidateFileApi.getDownloadUrl(candidateId, fileId)).url,
+      );
     } catch (err) {
-      w?.close();
       const info = parseRecruitError(err);
       setDownloadError(t(recruitErrorI18nKey(info), { ...Object.fromEntries(info.fields) }));
     }
