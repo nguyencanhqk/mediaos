@@ -31,11 +31,17 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
+import { OutboxWorker } from "../../src/events/outbox-worker";
 import { SocialPollCloseExpiredJobHandler } from "../../src/social/social-poll-close.job-handler";
 import { SOCIAL_ERR } from "../../src/social/social.errors";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { waitForBlockedBy } from "../helpers/lock-wait";
+import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+} from "../helpers/outbox-worker-lock";
 import {
   cleanupTenants,
   seedCompany,
@@ -52,6 +58,12 @@ const LOGIN_PW = ["Passw0rd!socialbe3c", "restore"].join("-");
 
 /** Trần chờ một request HTTP rơi vào trạng thái CHỜ khoá hàng (khuôn `social-be3a-report-actions`). */
 const WAIT_LOCK_MS = 3_000;
+
+/**
+ * Ngân sách ca A5 (S18-QA-NOTIGLOBALLEAK-1): chờ mutex outbox tới `OUTBOX_WORKER_LOCK_TIMEOUT_MS` (240 s, đã
+ * nằm trong `OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS` 300 s) + thân ca: 4 lượt drain + ~10 request ⇒ +60 s.
+ */
+const A5_TIMEOUT_MS = OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS + 60_000;
 
 const LIST_URL = "/recycle-bin/feed-posts";
 const restoreUrl = (postId: string): string => `/recycle-bin/feed-posts/${postId}/restore`;
@@ -389,9 +401,19 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
   const launch = (t: request.Test): Promise<request.Response> => t.then((r) => r);
 
   async function notificationsCount(userId: string): Promise<number> {
-    const r = await direct.query(`SELECT count(*)::int AS n FROM notifications WHERE user_id = $1`, [
-      userId,
-    ]);
+    const r = await direct.query(
+      `SELECT count(*)::int AS n FROM notifications WHERE user_id = $1`,
+      [userId],
+    );
+    return Number(r.rows[0].n);
+  }
+
+  /** A5 — thông báo của ĐÚNG bài (`SOCIAL_MENTIONED` ghi `source_entity_id` = targetId, social-noti-bridge). */
+  async function mentionNotiCount(userId: string, postId: string): Promise<number> {
+    const r = await direct.query(
+      `SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND source_entity_id = $2`,
+      [userId, postId],
+    );
     return Number(r.rows[0].n);
   }
 
@@ -439,7 +461,10 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
    * A8 — kiểm CẢ mã `23514` VÀ tên constraint (không chỉ `code`): một CHECK khác trên `feed_posts` nổ vì
    * fixture sai cũng cho `23514` ⇒ xanh sai lý do nếu chỉ so mã.
    */
-  async function expectCheckViolation(promise: Promise<unknown>, constraint: string): Promise<void> {
+  async function expectCheckViolation(
+    promise: Promise<unknown>,
+    constraint: string,
+  ): Promise<void> {
     await expect(promise).rejects.toMatchObject({ code: "23514", constraint });
   }
 
@@ -593,9 +618,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
       expect(
         (await post(tPeer, `/social/posts/${id}/comments`).send({ body: "binh luan D4" })).status,
       ).toBe(201);
-      expect((await put(tPeer, `/social/posts/${id}/reaction`).send({ emoji: "like" })).status).toBe(
-        200,
-      );
+      expect(
+        (await put(tPeer, `/social/posts/${id}/reaction`).send({ emoji: "like" })).status,
+      ).toBe(200);
       const before = await postRow(id);
       expect(before.status).toBe("published");
       const rowBefore = await direct.query(
@@ -651,7 +676,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
       expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.RESTORE_GROUP_DELETED);
       expect((await postRow(id)).deleted_at).not.toBeNull();
       expect(await auditRestoreRows(id)).toHaveLength(0);
-      expect(await tagUsage("d5tag"), "409 không chạm restorePostTx ⇒ usage_count không đổi").toBe(u0);
+      expect(await tagUsage("d5tag"), "409 không chạm restorePostTx ⇒ usage_count không đổi").toBe(
+        u0,
+      );
 
       // `057` liệt kê bằng `tHr` (`restore:feed-post@Company`) — KHÔNG bằng `tAuthor`: tác giả không có
       // cặp `restore:feed-post` nên `057` sẽ 403 Ở TẦNG 1 (PermissionGuard) trước khi chạm audience.
@@ -931,43 +958,77 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3C · khôi phục bài viết 058 (D
       expect(audit[0].metadata).toMatchObject({ statusBeforeDelete: null });
     });
 
-    it("A5: mention + kudos KHÔNG phát lại NOTI/outbox khi khôi phục", async () => {
-      const mentionPost = await createPost(tHr, { mentionedUserIds: [uPeer] });
-      expect(await outboxCount("social.mentioned", mentionPost, "targetId")).toBe(1);
-      const notiBefore = await notificationsCount(uPeer);
+    // S18-QA-NOTIGLOBALLEAK-1 (lớp A5): ca này TỰ drain outbox dưới mutex chung — `claim()` không lọc
+    // tenant ⇒ drain của spec khác giao thông báo `social.mentioned` vào GIỮA hai mốc đếm ⇒ ĐỎ oan
+    // `expected 1 to be +0` (đo 10/10). Drain sau MỖI bước ghi ⇒ mọi mốc đếm đứng trên outbox đã terminal.
+    it(
+      "A5: mention + kudos KHÔNG phát lại NOTI/outbox khi khôi phục",
+      async () => {
+        const lock = await acquireOutboxWorkerLock("social-be3c-recycle-restore A5");
+        try {
+          const drain = () =>
+            drainOutboxUntilSettled({ worker: app.get(OutboxWorker), direct, companyIds });
+          await drain();
+          const base0 = await notificationsCount(uPeer);
 
-      await deleteAs(tHr, mentionPost);
-      const beforeRestore = await outboxCount("social.mentioned", mentionPost, "targetId");
-      const anyBefore = await outboxCountAny(mentionPost);
-      // Mốc dương (FULL gate SF-L2): phép `LIKE` hỏng ⇒ 0 === 0 xanh-rỗng. Event `social.mentioned` ở trên
-      // mang postId ⇒ phép đếm «mọi event» PHẢI thấy nó.
-      expect(anyBefore, "neo dương: outboxCountAny phải thấy social.mentioned").toBeGreaterThanOrEqual(1);
-      const res1 = await post(tHr, restoreUrl(mentionPost));
-      expect(res1.status, msg(res1)).toBe(200);
-      expect(await outboxCount("social.mentioned", mentionPost, "targetId")).toBe(beforeRestore);
-      // D14 "không tác dụng phụ" — MỌI event nhắc postId, không chỉ hai loại đã biết, và `notifications`
-      // của người liên quan giữ nguyên (khôi phục không phải một lượt tạo bài mới).
-      expect(await outboxCountAny(mentionPost)).toBe(anyBefore);
-      expect(await notificationsCount(uPeer)).toBe(notiBefore);
+          const mentionPost = await createPost(tHr, { mentionedUserIds: [uPeer] });
+          expect(await outboxCount("social.mentioned", mentionPost, "targetId")).toBe(1);
+          await drain();
+          // Neo dương CHÍNH XÁC: lượt tạo bài giao đúng MỘT thông báo cho đúng bài này — mốc «không đổi» bên
+          // dưới không xanh rỗng nhờ outbox chưa ai drain.
+          expect(await notificationsCount(uPeer), "tạo bài nhắc tên ⇒ đúng +1 thông báo").toBe(
+            base0 + 1,
+          );
+          expect(await mentionNotiCount(uPeer, mentionPost)).toBe(1);
 
-      const kudosRes = await post(tHr, "/social/posts").send({
-        type: "kudos",
-        audience: "company",
-        body: "cam on ban",
-        kudos: { recipientEmployeeIds: [ePeer], message: "tuyet voi" },
-      });
-      expect(kudosRes.status, msg(kudosRes)).toBe(201);
-      const kudosPost = kudosRes.body.data.id as string;
-      expect(await outboxCount("social.kudos_received", kudosPost, "post_id")).toBe(1);
+          await deleteAs(tHr, mentionPost);
+          await drain();
+          const notiBefore = await notificationsCount(uPeer);
+          const beforeRestore = await outboxCount("social.mentioned", mentionPost, "targetId");
+          const anyBefore = await outboxCountAny(mentionPost);
+          // Mốc dương (FULL gate SF-L2): phép `LIKE` hỏng ⇒ 0 === 0 xanh-rỗng. Event `social.mentioned` ở trên
+          // mang postId ⇒ phép đếm «mọi event» PHẢI thấy nó.
+          expect(
+            anyBefore,
+            "neo dương: outboxCountAny phải thấy social.mentioned",
+          ).toBeGreaterThanOrEqual(1);
+          const res1 = await post(tHr, restoreUrl(mentionPost));
+          expect(res1.status, msg(res1)).toBe(200);
+          await drain();
+          expect(await outboxCount("social.mentioned", mentionPost, "targetId")).toBe(
+            beforeRestore,
+          );
+          // D14 "không tác dụng phụ" — MỌI event nhắc postId, không chỉ hai loại đã biết, và `notifications`
+          // của người liên quan giữ nguyên (khôi phục không phải một lượt tạo bài mới).
+          expect(await outboxCountAny(mentionPost)).toBe(anyBefore);
+          expect(await notificationsCount(uPeer)).toBe(notiBefore);
 
-      await deleteAs(tHr, kudosPost);
-      const anyBeforeKudos = await outboxCountAny(kudosPost);
-      expect(anyBeforeKudos, "neo dương: outboxCountAny phải thấy social.kudos_received").toBeGreaterThanOrEqual(1);
-      const res2 = await post(tHr, restoreUrl(kudosPost));
-      expect(res2.status, msg(res2)).toBe(200);
-      expect(await outboxCount("social.kudos_received", kudosPost, "post_id")).toBe(1);
-      expect(await outboxCountAny(kudosPost)).toBe(anyBeforeKudos);
-    });
+          const kudosRes = await post(tHr, "/social/posts").send({
+            type: "kudos",
+            audience: "company",
+            body: "cam on ban",
+            kudos: { recipientEmployeeIds: [ePeer], message: "tuyet voi" },
+          });
+          expect(kudosRes.status, msg(kudosRes)).toBe(201);
+          const kudosPost = kudosRes.body.data.id as string;
+          expect(await outboxCount("social.kudos_received", kudosPost, "post_id")).toBe(1);
+
+          await deleteAs(tHr, kudosPost);
+          const anyBeforeKudos = await outboxCountAny(kudosPost);
+          expect(
+            anyBeforeKudos,
+            "neo dương: outboxCountAny phải thấy social.kudos_received",
+          ).toBeGreaterThanOrEqual(1);
+          const res2 = await post(tHr, restoreUrl(kudosPost));
+          expect(res2.status, msg(res2)).toBe(200);
+          expect(await outboxCount("social.kudos_received", kudosPost, "post_id")).toBe(1);
+          expect(await outboxCountAny(kudosPost)).toBe(anyBeforeKudos);
+        } finally {
+          await lock.release();
+        }
+      },
+      A5_TIMEOUT_MS,
+    );
 
     it("A7: bài poll xoá → khôi phục ⇒ option + vote_count nguyên; bài news ghim ⇒ vẫn ghim sau khôi phục", async () => {
       const pollRes = await post(tHr, "/social/posts").send({
