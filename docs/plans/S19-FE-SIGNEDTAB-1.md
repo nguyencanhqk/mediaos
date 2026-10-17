@@ -367,6 +367,16 @@ O6 xoá: đính chính ở §2.
 - N10 (timeout `apiFetch`) → `S19-FE-APIFETCHTIMEOUT-1` (đã seed).
 - Nút CV không có trạng thái chờ: bấm hai lần ⇒ hai tab. Nợ nhỏ, có thể gộp vào FILEOPENUX.
 - Nhánh popup bị chặn điều hướng tab app với tệp `inline` (§1, M2): hành vi sẵn có của helper, ghi ở src của FILEOPENUX.
+- Nợ từ FULL gate PR-A (17/10/2026; đã THÊM dòng src vào backlog, commit `chore(docs)` riêng):
+  - → `S16-SOCIAL-FILEOPENUX-1`: **F1** (MEDIUM) nhánh popup bị chặn còn điều hướng tab app sau khi component unmount.
+    Vá đúng chỗ là helper (tuỳ chọn `isCurrent()`/`AbortSignal`, kiểm CHỈ trước `assign`); vá ở caller bằng resolver trả
+    `null` sẽ đóng cả tab mới ở nhánh bình thường. · **F2 + SF-4** (LOW) chống bấm đúp (mục trên).
+  - → `S19-FE-SIGNEDTAB-2` (thêm path `apps/app/public/_headers`): **SEC-SIGNEDTAB-01** (LOW) thiếu `Referrer-Policy`
+    (DEVOPS-11:130) · **SEC-SIGNEDTAB-02** = N11, kèm gợi ý điều hướng bằng `href` của `URL` đã kiểm · **SF-3** (LOW) lỗi không
+    phải ApiError mất dấu chẩn đoán · **F3** (LOW) docblock helper thiếu caller CV.
+  - Đã vá trong PR-A: **SF-1** (MEDIUM, alert dùng chung để lỗi cũ che lỗi mới; ca C-7 · C-8) · **F4** (LOW, spy location).
+  - Từ chối: **SF-2** — resolver CV không thể trả `null`: `downloadUrlSchema.url = z.string().url()`
+    (`packages/contracts/src/files.ts:195`), `apiFetch` parse qua schema (`candidate-file-api.ts:63`).
 
 | Rủi ro                                                                                         | Giảm bằng                                                                                      | Đường lùi                                                             |
 | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
