@@ -232,10 +232,11 @@ export default {
       targetUnavailableHint:
         "Nội dung bị báo cáo không còn thao tác được nên hành động kèm đã được đưa về «Không kèm hành động». Bấm «Xác nhận» để kết thúc báo cáo mà không kèm hành động.",
       noteLabel: "Ghi chú xử lý (không bắt buộc)",
-      // Ghi chú xử lý được vẽ nguyên văn ở mọi hàng đã kết thúc cho MỌI người đọc hàng đợi (028), kể cả
-      // người đang bị che tên người báo cáo — người xử lý (thấy tên) phải được nhắc TRƯỚC khi gõ.
+      // S16-SOCIAL-RESNOTEMASK-1 — server che ghi chú xử lý (028) theo CÙNG vị từ với tên người báo cáo.
+      // Vẫn giữ cảnh báo: người khác ở scope Company (company-admin, HR khác) vẫn đọc được ghi chú, và
+      // FE lên trước API trong cửa sổ deploy — câu dưới phải đúng ở cả hai phía.
       noteWarning:
-        "Ghi chú này hiện nguyên văn cho mọi người xem được hàng đợi báo cáo, kể cả người không được thấy tên người báo cáo. Đừng nêu tên hay chi tiết giúp nhận ra người báo cáo.",
+        "Ghi chú này được lưu lại và có thể hiện cho người khác xem hàng đợi báo cáo. Đừng nêu tên hay chi tiết giúp nhận ra người báo cáo.",
       noteHint: "Tối đa {{max}} ký tự.",
       cancel: "Huỷ",
       submit: "Xác nhận",
