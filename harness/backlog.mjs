@@ -21404,6 +21404,7 @@ export const backlog = [
       "Seed 02/10/2026 từ verify cuối S16-SOCIAL-AVATARPRESIGN-1 (phát hiện ngoài phạm vi; WO đó không chạm NOTI).",
       "Owner GỘP 17/10/2026 (hộp hỏi phiên f4ef72c3, «NOTIGLOBALLEAK + lớp A5 tới PR (Recommended)»): lớp (0) A5 của S18-QA-SHAREDSTATE-1 chuyển sang WO này; done_when cuối = nguyên văn done_when A5 của SHAREDSTATE. Plan `docs/plans/S18-QA-NOTIGLOBALLEAK-1.md`.",
       "Plan v2.1 (17/10/2026, sau 2 vòng plan-review): khuôn rollback (lớp a — gieo + kiểm hàng GLOBAL rồi ROLLBACK trong MỘT transaction, không bao giờ commit) cho `notifications-noti-core-tenant-isolation` · `foundation-tables-tenant-deny` · `payroll-be1-inputs-audit`; `role-member-del-oracle` + `attendance-alert-noti-producer` (cạnh mã nguồn) ghi nợ sang S18-QA-SHAREDSTATE-1; KHÔNG lease khoá tư vấn, KHÔNG dọn theo tuổi. Gate bắt buộc: typescript-reviewer + silent-failure-hunter + database-reviewer.",
+      "Nợ gate TS-1 (17/10/2026): `apps/api/test/integration/social-be3c-recycle-restore.int-spec.ts` 1.152 dòng ở d6fc99d6 → 1.220 sau WO này (A5 tự drain + đếm thông báo kudos), vượt trần 800 của CLAUDE.md §5 và không cổng nào ép. Tách KHÔNG đổi hành vi theo nhóm ca (A allow-path · D deny/không tác dụng phụ · helper đếm outbox/notifications sang `test/helpers`), mỗi tệp < 800, cả 24 ca giữ nguyên kỳ vọng — WO dọn riêng, không chặn PR này (plan §9.1).",
     ],
   },
   {
