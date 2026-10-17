@@ -237,6 +237,16 @@ gác, ngoài diff).
 - Rủi ro: (a) manager mất ngữ cảnh xử lý — chấp nhận, cùng lý do che `reporter`; (b) ca D-3 cross-tenant phụ thuộc seed B có báo cáo — thiếu
   thì «rỗng xanh» ⇒ assert neo dương bắt buộc; (c) cửa sổ merge→deploy — O3.
 - Đường lùi: revert một commit `fix(social)` (dữ liệu không đổi, DTO cùng hình dạng) ⇒ `m prod-update api`; FE chỉ đổi chữ, không cần lùi.
+- Nợ từ FULL gate + santa (17/10, LOW — không chặn PR):
+  - **SEC-L1** — SPEC-16 SOC-DEC-011 (nguồn sự thật) chưa ghi luật che `resolutionNote`; API-19 + contracts mang luật (O2: owner chốt
+    không sửa SPEC-16 trong WO này). Đề xuất một WO docs-only nối một câu vào SOC-DEC-011: «`resolutionNote` (chữ người xử lý) che bằng
+    `null` theo CÙNG vị từ với `reporter` (S16-SOCIAL-RESNOTEMASK-1); `note` không che.» — ghi trong thân PR cho owner. Chú thích
+    «đường duy nhất» ở `social-noti.payload.ts` đã cập nhật trong WO. Đường đọc MỚI không qua `toReportDto` vẫn chỉ được gác bằng
+    review — S-1d/S-1e chỉ ghim tệp service hiện có.
+  - **F2 (typescript)** — `toReportDtoBody()` đếm ngoặc + bỏ comment bằng regex (khuôn `social-avatar-sign-structure.spec.ts`); chuỗi
+    chứa `{`/`}` trong thân hàm ⇒ ĐỎ GIẢ (lộ ngay, không im lặng). Nâng lên parse AST (`ts.createSourceFile`) khi có lần vỡ thật.
+  - **F3 (typescript)** — S-1c chỉ ghim tiền tố `field: revealReporter`, cố ý không ghim hình dạng ba ngôi; đảo nhánh / `||` bị A-1…A-3
+    và D-1 bắt ở tầng hành vi.
 
 ### 9.3 Sổ vết
 
