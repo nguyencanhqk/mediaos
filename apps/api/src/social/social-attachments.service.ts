@@ -462,6 +462,7 @@ export class SocialAttachmentsService {
    * `targetId → đính kèm ĐÃ KÝ cho CHÍNH người gọi`. **GỌI SAU KHI tx đã commit.**
    *
    * Một truy vấn cho cả lô (không phải một truy vấn mỗi bài), rồi một quyết định policy mỗi TỆP.
+   * Tên/cỡ tệp đi theo ĐÚNG quyết định ký đó — phần tử dựng qua `toFeedAttachmentDto` (S16-SOCIAL-ATTMETAMASK-1).
    */
   async decorateMany(
     viewer: SocialViewerContext,
@@ -540,19 +541,17 @@ export class SocialAttachmentsService {
 
     for (const row of rows.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))) {
       const list = out.get(row.entityId) ?? [];
-      list.push({
-        fileId: row.fileId,
-        kind: kindOf(row.mimeType),
-        fileName: row.originalName,
-        sizeBytes: row.fileSizeBytes,
-        url: urlByFile.get(row.fileId) ?? null,
-      });
+      list.push(toFeedAttachmentDto(row, urlByFile.get(row.fileId) ?? null));
       out.set(row.entityId, list);
     }
     return out;
   }
 
-  /** `null` = không ký được (mọi lý do). KHÔNG ném — fail-soft CÓ LOG, khuôn CHAT. */
+  /**
+   * `null` = không ký được (mọi lý do). KHÔNG ném — fail-soft CÓ LOG, khuôn CHAT. Mọi `null` ở đây che
+   * luôn tên/cỡ tệp (`toFeedAttachmentDto`, S16-SOCIAL-ATTMETAMASK-1 D-1) — không có nhánh «từ chối nhưng
+   * vẫn trả tên».
+   */
   private async signOne(
     viewer: SocialViewerContext,
     row: { fileId: string; storagePath: string; mimeType: string; originalName: string },
@@ -617,6 +616,34 @@ interface FileRow {
   uploadStatus: string;
   scanStatus: string;
   ownerUserId: string | null;
+}
+
+/** Cột của `files` mà phần tử đính kèm REST cần. */
+export interface AttachmentMetaRow {
+  fileId: string;
+  mimeType: string;
+  originalName: string;
+  fileSizeBytes: number;
+}
+
+/**
+ * S16-SOCIAL-ATTMETAMASK-1 — NƠI DUY NHẤT dựng `FeedAttachmentDto` (plan §3 bất biến 1–2).
+ *
+ * D-1 — MỘT vị từ: tên/cỡ chỉ đi kèm khi `url` (ký cho CHÍNH người xem) khác `null`. Từ chối policy,
+ * 0 link và lỗi storage cùng rơi vào `url === null` — không tách nhánh: một lý do từ chối mới bị xếp
+ * nhầm vào «lỗi» sẽ lộ lại đúng thứ luật này che. Cùng vị từ FE dùng để ẩn phần tử.
+ * D-2 — GIỮ phần tử (`fileId`/`kind`): lượt sửa nhận allowlist ĐẦY ĐỦ và gỡ là một chiều, nên client
+ * phải gửi lại được `fileId` của cả phần tử bị che.
+ */
+export function toFeedAttachmentDto(row: AttachmentMetaRow, url: string | null): FeedAttachmentDto {
+  const signed = url !== null;
+  return {
+    fileId: row.fileId,
+    kind: kindOf(row.mimeType),
+    fileName: signed ? row.originalName : null,
+    sizeBytes: signed ? row.fileSizeBytes : null,
+    url,
+  };
 }
 
 /**

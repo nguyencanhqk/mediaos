@@ -1,11 +1,26 @@
 import type {
+  FeedAttachmentDto,
   FeedAudienceDto,
   FeedPostDto,
   FeedPostStatusDto,
+  WsFeedAttachment,
   WsFeedPostCreatedEvent,
 } from "@mediaos/contracts";
 // THUẦN: KHÔNG import `social-avatar-signer` (kéo Nest DI · drizzle · presign/S3 theo).
 import { wsAuthorOf } from "./social-ws-author";
+
+/**
+ * S16-SOCIAL-ATTMETAMASK-1 (D-3) — đính kèm trên WS, DÙNG CHUNG cho `feed:post.created` và
+ * `feed:comment.created` (tầng NGUỒN; tầng schema là `.transform` của `wsFeedAttachmentSchema`).
+ *
+ * Sự kiện phát cho CẢ room, còn quyết định ký là theo TỪNG người xem ⇒ payload mang góc nhìn hẹp nhất:
+ * `fileId`/`kind` (đúng thứ người bị từ chối thấy ở REST), `fileName`/`sizeBytes` = `null`, không `url`.
+ * GIỮ khoá (bundle FE cũ parse bằng schema đòi hai khoá này). Dựng TƯỜNG MINH từng khoá — không `...rest`
+ * — để một trường mới của DTO REST không tự lên dây.
+ */
+export function wsAttachmentsOf(list: readonly FeedAttachmentDto[]): WsFeedAttachment[] {
+  return list.map(({ fileId, kind }) => ({ fileId, kind, fileName: null, sizeBytes: null }));
+}
 
 /**
  * Ba cột của HÀNG DB quyết định bài có được phát không và phát vào room nào. Giữ `string` vì đó là kiểu
@@ -36,7 +51,8 @@ export interface WsPostRouteRow {
  *   • 4 khoá projection-theo-actor (`myReaction`/`savedByMe`/`isMine`/`status`) — `dto` decorate bằng
  *     TÁC GIẢ; phát cho room là gửi cờ của người vừa đăng tới mọi người;
  *   • `mentions` (BE-1D D6) · `kudos`/`poll`/`idea` (BE-2D D7 — `poll.myVote` là của tác giả);
- *   • `url` của đính kèm — presign KÝ CHO MỘT NGƯỜI, là bearer capability (luật 2);
+ *   • `url` của đính kèm — presign KÝ CHO MỘT NGƯỜI, là bearer capability (luật 2); cùng lý do, tên/cỡ
+ *     tệp về `null` (S16-SOCIAL-ATTMETAMASK-1 — đi theo quyết định ký theo người xem, xem `wsAttachmentsOf`);
  *   • `author.avatarUrl` (S16-SOCIAL-AVATARPRESIGN-1 D3-b) — `dto.author.avatarUrl` là URL ĐÃ KÝ của REST
  *     (capability TTL) ⇒ `author` dựng lại TƯỜNG MINH qua `wsAuthorOf` (`avatarUrl: null`, giữ khoá cho
  *     bundle FE cũ) cho CẢ HAI biến thể — room nhóm không được nhận thứ room công ty không nhận. Kiểu ĐẦU
@@ -68,7 +84,8 @@ export function buildWsPostCreatedEvent(
     ...rest,
     // S16-SOCIAL-AVATARPRESIGN-1 (D3-b): URL ký là capability TTL — `avatarUrl: null` TẠI NGUỒN.
     author: wsAuthorOf(author),
-    attachments: attachments.map(({ url: _u, ...a }) => a),
+    // S16-SOCIAL-ATTMETAMASK-1 (D-3): không `url`, tên/cỡ `null` TẠI NGUỒN.
+    attachments: wsAttachmentsOf(attachments),
   };
 
   if (row.audience === ("company" satisfies FeedAudienceDto)) {
