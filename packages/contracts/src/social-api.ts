@@ -111,6 +111,12 @@ export type FeedAttachmentKindDto = z.infer<typeof feedAttachmentKindSchema>;
 const uuid = () => z.string().uuid();
 const feedBody = () => z.string().trim().min(1).max(FEED_BODY_MAX);
 const mentionIds = () => z.array(uuid()).max(FEED_MAX_MENTIONS).optional();
+/**
+ * Danh sách đính kèm của lượt tạo/sửa (002 · 004 · 015 · 016). Trên lượt SỬA đây là allowlist ĐẦY ĐỦ —
+ * id vắng mặt bị gỡ, và gỡ là MỘT CHIỀU (tệp đã từng link không gắn lại được). ⇒ Client PHẢI gửi lại
+ * `fileId` của MỌI phần tử `attachments` đang có, KỂ CẢ phần tử `url: null` (bị che tên/cỡ với người
+ * xem này — S16-SOCIAL-ATTMETAMASK-1 D-2); lọc theo danh sách đang vẽ là gỡ vĩnh viễn tệp bị ẩn.
+ */
 const attachmentIds = () => z.array(uuid()).max(FEED_MAX_ATTACHMENTS).optional();
 
 /**
@@ -138,6 +144,10 @@ export type FeedAuthorDto = z.infer<typeof feedAuthorSchema>;
  *
  * `url` nullable: `FilePolicyService` quyết định per-recipient, từ chối ⇒ `null` (fail-soft, khuôn
  * `chat-attachments.service.ts:217`) chứ không làm hỏng cả thẻ bài.
+ *
+ * S16-SOCIAL-ATTMETAMASK-1 — `fileName`/`sizeBytes` khác `null` ⇔ `url` khác `null` (MỘT vị từ: từ chối
+ * policy và lỗi ký cùng che). Phần tử bị che VẪN có mặt với `fileId`/`kind` — lượt sửa phải gửi lại nó
+ * (xem `attachmentIds`). Trên WS hai trường này LUÔN `null` (`wsFeedAttachmentSchema`).
  */
 export const feedAttachmentSchema = z.object({
   fileId: uuid(),
@@ -615,7 +625,8 @@ export const FEED_COMMENT_DB_BODY_MAX = FEED_COMMENT_BODY_MAX;
 
 /**
  * `SOCIAL-API-016` — `PATCH /social/comments/{id}`. `mentionedUserIds`/`attachmentIds` VẮNG = giữ
- * nguyên, `[]` = gỡ hết (API-19 §5.1f/§5.1g).
+ * nguyên, `[]` = gỡ hết (API-19 §5.1f/§5.1g). Có mặt = allowlist ĐẦY ĐỦ: client PHẢI gửi lại `fileId`
+ * của MỌI phần tử `attachments`, kể cả `url: null` (S16-SOCIAL-ATTMETAMASK-1 D-2).
  */
 export const updateFeedCommentSchema = z
   .object({
