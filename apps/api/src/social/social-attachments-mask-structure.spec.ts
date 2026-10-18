@@ -80,9 +80,13 @@ describe("S16-SOCIAL-ATTMETAMASK-1 — một nơi dựng đính kèm REST, một
       // ĐỌC cột của bảng `files` (drizzle `files.<cột>` hoặc SQL thô) — không phải chữ `originalName` bất
       // kỳ: cửa tải lên own-scope (`social-files.service.ts`) chuyển `input.originalName` của chính người
       // tải vào đường GHI, không đọc tên tệp của ai.
-      /\bfiles\.(originalName|fileSizeBytes)\b|\b(original_name|file_size_bytes)\b/.test(
-        source(join(SOCIAL_DIR, f)),
-      ),
+      // Gate FULL (silent-failure F5): cả lối đọc NGUYÊN HÀNG — `select()` trần trên `files` hoặc
+      // `getTableColumns(files)` — vì chúng mang tên/cỡ tệp mà không nhắc tên cột.
+      [
+        /\bfiles\.(originalName|fileSizeBytes)\b|\b(original_name|file_size_bytes)\b/,
+        /\.select\(\s*\)\s*\.from\(\s*files\s*\)/,
+        /\bgetTableColumns\(\s*files\s*\)/,
+      ].some((re) => re.test(source(join(SOCIAL_DIR, f)))),
     );
     expect(readers).toEqual(["social-attachments.service.ts"]);
   });
@@ -95,4 +99,27 @@ describe("S16-SOCIAL-ATTMETAMASK-1 — một nơi dựng đính kèm REST, một
       expect(text).not.toMatch(/\battachments\s*\.\s*map\s*\(/);
     },
   );
+
+  it("S-1e: MỌI lời gọi `emitFeed*(` của SOCIAL có mang `attachments` đều qua `wsAttachmentsOf`", () => {
+    // Gate FULL (silent-failure F5): S-1d khoá hai tệp có tên; tệp thứ ba phát sự kiện WS mang đính
+    // kèm thì không bị bắt. Ca này quét cả thư mục theo LỜI GỌI phát, không theo danh sách tệp.
+    const files = readdirSync(SOCIAL_DIR).filter(
+      (f) => f.endsWith(".ts") && !f.endsWith(".spec.ts") && !f.endsWith(".d.ts"),
+    );
+    const carrying: string[] = [];
+    for (const f of files) {
+      const text = source(join(SOCIAL_DIR, f));
+      for (const m of text.matchAll(/\bemitFeed\w*\s*\(/g)) {
+        const args = balanced(text, (m.index ?? 0) + m[0].length - 1);
+        if (!/\battachments\b/.test(args)) continue;
+        carrying.push(f);
+        expect(args, `${f}: ${m[0]} mang đính kèm phải qua wsAttachmentsOf`).toMatch(
+          /\bwsAttachmentsOf\s*\(/,
+        );
+      }
+    }
+    expect(carrying, "neo: đường bình luận phát đính kèm inline").toContain(
+      "social-comments.service.ts",
+    );
+  });
 });

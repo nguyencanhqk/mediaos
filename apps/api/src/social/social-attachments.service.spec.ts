@@ -334,3 +334,102 @@ describe("S16-SOCIAL-ATTMETAMASK-1 — toFeedAttachmentDto (U-1)", () => {
     expect(Object.keys(toFeedAttachmentDto(row, "u")).sort()).toEqual(keys);
   });
 });
+
+/**
+ * S16-SOCIAL-ATTMETAMASK-1 — gate FULL (silent-failure F1 · santa A-2): `signOne` qua đường công khai
+ * `decorateMany`, đo KHÔNG cần DB.
+ *
+ * Sau luật che, từ chối vì resolver rơi khỏi đăng ký và từ chối thường cho CÙNG kết quả ở người dùng
+ * (phần tử bị che). Dòng `logger.error` là tín hiệu DUY NHẤT tách «tính năng chết» khỏi «bị từ chối»;
+ * R-5 của int-spec chỉ khoá phía im lặng (`deny-resolver` không log error). Ở đây khoá phía ngược lại,
+ * cộng với vế «adapter trả URL rỗng ⇒ vẫn che» (D-1: có tên ⇔ có URL dùng được).
+ */
+describe("S16-SOCIAL-ATTMETAMASK-1 — signOne qua decorateMany (gate FULL)", () => {
+  const VIEWER = { companyId: COMPANY, actorUserId: USER } as never;
+  const ROW = {
+    entityId: TARGET,
+    fileId: FILE_A,
+    originalName: "bao-cao-quy.png",
+    mimeType: "image/png",
+    fileSizeBytes: 4096,
+    storagePath: "k/obj",
+    sortOrder: 0,
+  };
+  const LINKS = new Map([
+    [FILE_A, [{ moduleCode: "SOCIAL", entityType: "post", entityId: TARGET }]],
+  ]);
+
+  /** `withTenant` giả trả lần lượt: hàng đính kèm → bản đồ link (đúng thứ tự hai truy vấn của `decorateMany`). */
+  function serviceWith(decision: { allow: boolean; reason: string }, signedUrl: unknown) {
+    const db = {
+      withTenant: vi.fn().mockResolvedValueOnce([ROW]).mockResolvedValueOnce(LINKS),
+    };
+    const policy = { decideForLinkedFile: vi.fn(async () => decision) };
+    const storage = { get: vi.fn(async () => ({ url: signedUrl })) };
+    const svc = new SocialAttachmentsService(
+      db as never,
+      policy as never,
+      storage as never,
+      null as never,
+    );
+    return { svc, storage };
+  }
+
+  const MASKED = { fileId: FILE_A, kind: "image", fileName: null, sizeBytes: null, url: null };
+
+  it.each(["deny-no-resolver", "deny-error"])(
+    "`%s` ⇒ phần tử bị che VÀ logger.error đúng một lần, có id tệp (không lẫn vào từ chối thường)",
+    async (reason) => {
+      const { svc, storage } = serviceWith({ allow: false, reason }, "https://signed.example/x");
+      const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+      try {
+        const out = await svc.decorateMany(VIEWER, "post", [TARGET]);
+        expect(out.get(TARGET)).toEqual([MASKED]);
+        expect(storage.get, "từ chối ⇒ không ký").not.toHaveBeenCalled();
+        expect(error, "resolver rơi khỏi đăng ký phải ồn ở mức ERROR").toHaveBeenCalledTimes(1);
+        expect(String(error.mock.calls[0][0])).toContain(`reason=${reason}`);
+        expect(String(error.mock.calls[0][0])).toContain(`file=${FILE_A}`);
+      } finally {
+        error.mockRestore();
+      }
+    },
+  );
+
+  it("`deny-resolver` (từ chối thường) ⇒ che, KHÔNG log error (đối chứng của ca trên)", async () => {
+    const { svc } = serviceWith(
+      { allow: false, reason: "deny-resolver" },
+      "https://signed.example/x",
+    );
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    try {
+      expect((await svc.decorateMany(VIEWER, "post", [TARGET])).get(TARGET)).toEqual([MASKED]);
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it.each([[""], [undefined]])(
+    "CHO PHÉP nhưng adapter trả url %j ⇒ vẫn che tên/cỡ + logger.warn (D-1: có tên ⇔ URL dùng được)",
+    async (badUrl) => {
+      const { svc } = serviceWith({ allow: true, reason: "allow-resolver" }, badUrl);
+      const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+      try {
+        expect((await svc.decorateMany(VIEWER, "post", [TARGET])).get(TARGET)).toEqual([MASKED]);
+        expect(warn.mock.calls.some(([m]) => String(m).includes(`file=${FILE_A}`))).toBe(true);
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+
+  it("CHO PHÉP + url chuỗi ⇒ tên/cỡ nguyên văn (đối chứng chiều cho phép)", async () => {
+    const { svc } = serviceWith(
+      { allow: true, reason: "allow-resolver" },
+      "https://signed.example/x",
+    );
+    expect((await svc.decorateMany(VIEWER, "post", [TARGET])).get(TARGET)).toEqual([
+      { ...MASKED, fileName: "bao-cao-quy.png", sizeBytes: 4096, url: "https://signed.example/x" },
+    ]);
+  });
+});

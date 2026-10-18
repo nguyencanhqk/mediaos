@@ -594,7 +594,11 @@ export class SocialAttachmentsService {
         registeredMimeType: row.mimeType,
         fileName: row.originalName,
       });
-      return signed.url;
+      // D-1 «có tên ⇔ có URL DÙNG ĐƯỢC»: adapter hồi quy trả `url` rỗng/không phải chuỗi thì quy về
+      // `null` ở ĐÂY, để vị từ duy nhất `url !== null` của `toFeedAttachmentDto` không đổi (gate santa A-2).
+      if (typeof signed.url === "string" && signed.url.length > 0) return signed.url;
+      this.logger.warn(`social attachment presign returned no usable url: file=${row.fileId}`);
+      return null;
     } catch (err) {
       // Degrade CÓ LOG (không nuốt im lặng): storage lỗi/cấu hình thiếu ⇒ tệp hiện "không tải được",
       // dòng cuộn vẫn trả. Kèm lý do để một BUG THẬT không lẩn sau fail-soft.
