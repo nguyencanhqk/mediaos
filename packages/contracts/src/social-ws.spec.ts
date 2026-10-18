@@ -406,3 +406,58 @@ describe("R24 — `feed:reaction.changed`", () => {
     expect("mine" in parsed.reactions[0]).toBe(false);
   });
 });
+
+/**
+ * S16-SOCIAL-ATTMETAMASK-1 U-3 — TẦNG SCHEMA của luật «WS không mang tên/cỡ tệp» (plan D-3). Quyết định ký
+ * là theo TỪNG người xem, còn sự kiện phát cho cả room ⇒ `fileName`/`sizeBytes` LUÔN `null` trên dây.
+ * GIỮ khoá, ép GIÁ TRỊ (khuôn `wsFeedAuthorSchema`): schema của bundle FE cũ đòi hai khoá này (nullable,
+ * không optional) — bỏ khoá là bundle cũ vứt mọi `feed:post.created` có đính kèm.
+ */
+describe("ATTMETAMASK D-3 — đính kèm trên WS: `fileName`/`sizeBytes` luôn `null`, khoá giữ", () => {
+  const att = {
+    fileId: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    kind: "image",
+    fileName: "a.png",
+    sizeBytes: 10,
+    url: "https://signed.example/secret",
+  };
+  const MASKED = {
+    fileId: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    kind: "image",
+    fileName: null,
+    sizeBytes: null,
+  };
+
+  it("`.parse()` ép tên/cỡ về `null` kể cả khi nguồn lỡ truyền giá trị; tập khoá không đổi", () => {
+    const out = wsFeedAttachmentSchema.parse(att);
+    expect(out).toEqual(MASKED);
+    expect(Object.keys(out).sort()).toEqual(["fileId", "fileName", "kind", "sizeBytes"]);
+    expect(keysOf(wsFeedAttachmentSchema)).toEqual(["fileId", "fileName", "kind", "sizeBytes"]);
+  });
+
+  it.each(AUDIENCES)("option bài `%s` ép tên/cỡ của MỌI phần tử đính kèm", (aud) => {
+    const groupId = aud === "group" ? G : null;
+    const out = optionFor(aud).parse({ ...base, audience: aud, groupId, attachments: [att, att] });
+    expect(out.attachments).toEqual([MASKED, MASKED]);
+  });
+
+  it("bình luận WS ép tên/cỡ (cùng schema phần tử)", () => {
+    const out = wsFeedCommentCreatedEventSchema.parse({
+      id: "3f2504e0-4f89-11d3-9a0c-0305e82c3302",
+      postId: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+      parentCommentId: null,
+      author: { employeeId: null, fullName: "A", avatarUrl: null },
+      body: "x",
+      attachments: [att],
+      likeCount: 0,
+      editedAt: null,
+      createdAt: "2026-09-21T00:00:00.000Z",
+    });
+    expect(out.attachments).toEqual([MASKED]);
+  });
+
+  it("tương thích bundle FE cũ: schema CŨ (`feedAttachmentSchema.omit({url})`, strict) nhận payload mới", () => {
+    const legacy = feedAttachmentSchema.omit({ url: true }).strict();
+    expect(legacy.safeParse(MASKED).success).toBe(true);
+  });
+});
