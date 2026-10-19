@@ -298,10 +298,10 @@ export class FileService {
       this.fileRepo.findByIdTx(user.companyId, fileId, tx),
     );
     if (!row) throw new NotFoundException("File không tồn tại");
-    // S15-PAYROLL-BE-5B (plan §8.2 #4): tệp TẠM do hệ thống sinh (PDF/ZIP) tự chốt qua ServerFileService, KHÔNG
-    // đi pha confirm của client. Route chung không qua resolver ⇒ chặn ở đây, trả 404 sentinel như tệp vắng
-    // (không lộ sự tồn tại, không để ghi đè trạng thái/metadata của lô đang sinh).
-    if (row.isTemporary) throw new NotFoundException("File không tồn tại");
+    // Tệp TẠM hệ thống sinh tự chốt qua ServerFileService (S15-PAYROLL-BE-5B); chỉ CHỦ tệp xác nhận (S19-SEC-
+    // FILEMETAGATE-1; wrapper module kiểm chủ trước). Cả hai ⇒ 404 như tệp vắng: không lộ tồn tại/cỡ, không đổi trạng thái.
+    if (row.isTemporary || row.ownerUserId !== user.id)
+      throw new NotFoundException("File không tồn tại");
 
     // Idempotent: đã Uploaded → trả trạng thái hiện tại (confirm gọi lại vô hại). Non-Pending khác → 409.
     if (row.uploadStatus === "Uploaded") {

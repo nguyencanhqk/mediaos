@@ -11,6 +11,22 @@ import { FileRepository } from "./file.repository";
 
 /** Số fileId tối đa trong một dòng log chẩn đoán (đủ để tra, không xả cả trang vào log). */
 const LOG_SAMPLE_FILE_IDS = 5;
+/**
+ * Mã module/entity vào log theo quy tắc DƯƠNG: khớp tập ký tự của mã ⇒ giữ nguyên, khác ⇒ «?». Hai cột chỉ bị
+ * ràng buộc độ dài (`linkFileInputSchema`, DB không CHECK) ⇒ không ghép thô chuỗi do người dùng cấp vào log.
+ */
+const LOG_CODE = /^[A-Za-z0-9_.-]{1,100}$/;
+const logCode = (value: string): string => (LOG_CODE.test(value) ? value : "?");
+
+/** Lý do che được tóm tắt trong log — deny thường của resolver KHÔNG tính (đó là kết quả đúng, không phải sự cố). */
+type LoggedReason = "deny-no-resolver" | "deny-error";
+const LOGGED_REASONS: readonly LoggedReason[] = ["deny-no-resolver", "deny-error"];
+
+interface MaskedEntry {
+  fileId: string;
+  reason: LoggedReason;
+  links: readonly FileLink[];
+}
 
 interface LinkContext {
   live: FileLink[];
@@ -27,8 +43,8 @@ interface LinkContext {
  * - Hàng + total + MỌI link của trang đọc trong CÙNG một `withTenant` (một ảnh chụp, một truy vấn link cho
  *   cả trang). Quyết định chạy TUẦN TỰ SAU khi tx đóng — resolver tự mở `withTenant`, lồng tx treo trên
  *   PgBouncer (khuôn `chat-attachments.service.ts`).
- * - Không ghi `file_access_logs` (danh sách chưa từng ghi). Một `logger.error` mỗi request khi có hàng
- *   `deny-no-resolver` (không tên tệp); `deny-error` policy đã tự log.
+ * - Không ghi `file_access_logs` (danh sách chưa từng ghi). Một `logger.error` mỗi request khi có hàng che do
+ *   `deny-no-resolver`/`deny-error` (đếm theo lý do, không tên tệp); policy vẫn tự log từng `deny-error`.
  */
 @Injectable()
 export class FileListService {
@@ -74,7 +90,7 @@ export class FileListService {
     byFile: ReadonlyMap<string, LinkContext>,
   ): Promise<FileListItemDto[]> {
     const data: FileListItemDto[] = [];
-    const noResolver: { fileId: string; links: readonly FileLink[] }[] = [];
+    const masked: MaskedEntry[] = [];
     for (const row of rows) {
       const ctx = byFile.get(row.id) ?? { live: [], everLinked: false };
       const decision = await this.policy.decideForLinkedFile(
@@ -83,22 +99,31 @@ export class FileListService {
         FilePolicyAction.View,
         ctx.everLinked,
       );
-      if (decision.reason === "deny-no-resolver")
-        noResolver.push({ fileId: row.id, links: ctx.live });
+      const reason = LOGGED_REASONS.find((r) => r === decision.reason);
+      if (reason) masked.push({ fileId: row.id, reason, links: ctx.live });
       data.push(toFileListItemDto(row, decision.allow));
     }
-    if (noResolver.length > 0) this.logNoResolver(noResolver);
+    if (masked.length > 0) this.logMasked(masked, rows.length);
     return data;
   }
 
-  /** MỘT dòng mỗi request: số hàng + tập (module, entity) + mẫu fileId. KHÔNG tên tệp. */
-  private logNoResolver(entries: readonly { fileId: string; links: readonly FileLink[] }[]): void {
+  /**
+   * MỘT dòng mỗi request khi có hàng che do lỗi quyết định: số hàng che / số hàng của trang, đếm theo lý do,
+   * tập (module, entity) qua `logCode`, mẫu fileId. KHÔNG tên tệp. Một trang che hàng loạt vì `deny-error` hiện
+   * thành MỘT dòng tóm tắt — phân biệt sự cố với từ chối hợp lệ (stack từng hàng vẫn ở log của policy).
+   */
+  private logMasked(entries: readonly MaskedEntry[], pageSize: number): void {
+    const counts = LOGGED_REASONS.map(
+      (r) => `${r}=${entries.filter((e) => e.reason === r).length}`,
+    ).join(", ");
     const pairs = new Set(
-      entries.flatMap((e) => e.links.map((l) => `${l.moduleCode}/${l.entityType}`)),
+      entries.flatMap((e) =>
+        e.links.map((l) => `${logCode(l.moduleCode)}/${logCode(l.entityType)}`),
+      ),
     );
     const sample = entries.slice(0, LOG_SAMPLE_FILE_IDS).map((e) => e.fileId);
     this.logger.error(
-      `file list: ${entries.length} row(s) masked by deny-no-resolver; ` +
+      `file list: ${entries.length} of ${pageSize} row(s) masked by a decision failure (${counts}); ` +
         `links=[${[...pairs].join(", ")}]; sampleFileIds=[${sample.join(", ")}]`,
     );
   }

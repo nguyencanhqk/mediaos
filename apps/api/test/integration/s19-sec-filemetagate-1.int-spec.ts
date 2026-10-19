@@ -44,6 +44,8 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const BOOT_TIMEOUT_MS = 180_000;
 const FILE_SIZE = 3072;
+/** Đuôi khác `null` ⇒ ca che `fileExtension` của int-spec có nghĩa (không so null với null). */
+const FILE_EXT = "png";
 const PAGE_LIMIT_MAX = 100;
 const LOGIN_PW = ["Passw0rd", "fmg19"].join("!");
 const MASKED_KEYS = ["originalName", "fileExtension", "sizeBytes", "ownerUserId"] as const;
@@ -105,6 +107,12 @@ describe.skipIf(!hasLaneDb)(
     let fX = "";
     let fM2 = "";
 
+    // Xác nhận tải lên (tenant A): chủ tệp + một người khác cùng giữ cặp tải lên.
+    let tUploader = "";
+    let tOtherUploader = "";
+    let fUp = "";
+    let fPend = "";
+
     /** Hàng tệp Uploaded + Clean. Mốc thời gian tách nhau ⇒ thứ tự phân trang xác định. */
     async function seedFile(
       tenant: SeededTenant,
@@ -117,10 +125,10 @@ describe.skipIf(!hasLaneDb)(
       seq += 1;
       const at = new Date(Date.now() - seq * 1000).toISOString();
       await w.direct.query(
-        `INSERT INTO files (id, company_id, original_name, stored_name, mime_type, file_size_bytes,
-                          storage_provider, storage_path, upload_status, scan_status,
+        `INSERT INTO files (id, company_id, original_name, stored_name, mime_type, file_extension,
+                          file_size_bytes, storage_provider, storage_path, upload_status, scan_status,
                           owner_user_id, uploaded_by, uploaded_at, created_at)
-       VALUES ($1,$2,$3,$4,'image/png',$5,'MinIO',$6,'Uploaded','Clean',$7,$7,$8,$8)`,
+       VALUES ($1,$2,$3,$4,'image/png',$9,$5,'MinIO',$6,'Uploaded','Clean',$7,$7,$8,$8)`,
         [
           id,
           tenant.companyId,
@@ -130,6 +138,7 @@ describe.skipIf(!hasLaneDb)(
           `${tenant.companyId}/${prefix}/${id}`,
           ownerId,
           at,
+          FILE_EXT,
         ],
       );
       return id;
@@ -214,6 +223,7 @@ describe.skipIf(!hasLaneDb)(
     function expectFullRow(row: Json | undefined, id: string, ownerId: string, what: string): void {
       expect(row, `${what}: hàng có mặt`).toBeDefined();
       expect(row!.originalName, `${what}: originalName`).toBe(names.get(id));
+      expect(row!.fileExtension, `${what}: fileExtension`).toBe(FILE_EXT);
       expect(row!.sizeBytes, `${what}: sizeBytes`).toBe(FILE_SIZE);
       expect(row!.ownerUserId, `${what}: ownerUserId`).toBe(ownerId);
     }
@@ -315,6 +325,26 @@ describe.skipIf(!hasLaneDb)(
         `neo ALLOW: mate gửi tệp của chính mình — ${JSON.stringify(own.body)}`,
       ).toBe(200);
       msgMate = dataOf(own.body).id as string;
+
+      const uploadPairs: readonly PairGrant[] = [
+        ["upload", "foundation-file", "Company"],
+        ["view", "foundation-file", "Company"],
+      ];
+      const uploaderId = await chatUser("uploader", uploadPairs);
+      await chatUser("otheruploader", uploadPairs);
+      tUploader = await login("uploader");
+      tOtherUploader = await login("otheruploader");
+      fUp = await seedFile(w.A, uploaderId, "files");
+      const pendName = `fmg-pend-${randomUUID().slice(0, 8)}.png`;
+      const reg = await w.post(tUploader, "/foundation/files/upload").send({
+        originalName: pendName,
+        declaredMimeType: "image/png",
+        sizeBytes: FILE_SIZE,
+        visibility: "Private",
+      });
+      expect(reg.status, `neo: chủ tệp đăng ký tải lên — ${JSON.stringify(reg.body)}`).toBe(201);
+      fPend = dataOf(reg.body).fileId as string;
+      names.set(fPend, pendName);
     }, BOOT_TIMEOUT_MS);
 
     afterAll(async () => {
@@ -350,11 +380,13 @@ describe.skipIf(!hasLaneDb)(
       for (const actor of [fileViewer, author, admin]) {
         const { rows } = await listAll(actor);
         expect(rows.length, `${actor.label}: tenant có tệp`).toBeGreaterThan(0);
+        let allowed = 0;
         for (const row of rows) {
           const id = row.id as string;
           const detail = await w.get(actor.token, `/foundation/files/${id}`);
           expect([200, 403], `${actor.label} · GET /:id ${id}`).toContain(detail.status);
           if (detail.status === 200) {
+            allowed += 1;
             const d = dataOf(detail.body);
             for (const k of MASKED_KEYS) {
               expect(row[k], `${actor.label} · ${id}: ${k} khớp GET /:id`).toEqual(d[k] ?? null);
@@ -365,6 +397,10 @@ describe.skipIf(!hasLaneDb)(
             }
           }
         }
+        expect(
+          allowed,
+          `${actor.label}: có hàng GET /:id = 200 (so khớp không rỗng)`,
+        ).toBeGreaterThan(0);
       }
     });
 
@@ -447,6 +483,44 @@ describe.skipIf(!hasLaneDb)(
       for (const name of names.values()) expect(JSON.stringify(res.body)).not.toContain(name);
       const ok = await w.get(fileViewer.token, `/foundation/files?page=1&limit=${PAGE_LIMIT_MAX}`);
       expect(ok.status, "neo ALLOW").toBe(200);
+    });
+
+    // ── Xác nhận tải lên ───────────────────────────────────────────────────────
+
+    it("F-1 xác nhận tải lên chỉ dành cho chủ tệp: người khác cùng giữ cặp tải lên ⇒ 404 không mang cỡ/tên; chủ tệp ⇒ 200", async () => {
+      const denied = await w.post(tOtherUploader, `/foundation/files/${fUp}/confirm`).send({});
+      expect(denied.status, JSON.stringify(denied.body)).toBe(404);
+      const raw = JSON.stringify(denied.body);
+      expect(raw, "thân lỗi không có khoá sizeBytes").not.toContain("sizeBytes");
+      expect(raw).not.toContain(names.get(fUp)!);
+
+      const ok = await w.post(tUploader, `/foundation/files/${fUp}/confirm`).send({});
+      expect(ok.status, `neo ALLOW: ${JSON.stringify(ok.body)}`).toBe(200);
+      expect(dataOf(ok.body)).toMatchObject({
+        fileId: fUp,
+        uploadStatus: "Uploaded",
+        sizeBytes: FILE_SIZE,
+      });
+    });
+
+    it("F-2 xác nhận tệp đang chờ của người khác ⇒ 404; trạng thái giữ Pending, không thêm dòng audit", async () => {
+      const auditCount = async (): Promise<number> =>
+        (
+          await w.direct.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM audit_logs WHERE object_id = $1`,
+            [fPend],
+          )
+        ).rows[0]!.n;
+      const before = await auditCount();
+      const res = await w.post(tOtherUploader, `/foundation/files/${fPend}/confirm`).send({});
+      expect(res.status, JSON.stringify(res.body)).toBe(404);
+      expect(JSON.stringify(res.body)).not.toContain(names.get(fPend)!);
+      const row = await w.direct.query<{ upload_status: string }>(
+        `SELECT upload_status FROM files WHERE id = $1`,
+        [fPend],
+      );
+      expect(row.rows[0]!.upload_status, "trạng thái không đổi").toBe("Pending");
+      expect(await auditCount(), "không thêm dòng audit").toBe(before);
     });
 
     // ── CHAT ───────────────────────────────────────────────────────────────────

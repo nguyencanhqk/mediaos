@@ -317,7 +317,7 @@ describe("S19-SEC-FILEMETAGATE-1 · danh sách tệp theo quyết định xem t�
     for (const id of ids) expect(line).not.toContain(fileRow(id).originalName);
   });
 
-  it("U-5a deny-error ⇒ danh sách KHÔNG ghi thêm (policy đã log); deny thường ⇒ không log; hàng vẫn che", async () => {
+  it("U-5a deny-error ⇒ MỘT dòng tóm tắt đếm theo lý do (hàng deny thường không tính); hàng vẫn che", async () => {
     const e = fid(18);
     const d = fid(19);
     const ok = fid(20);
@@ -326,7 +326,14 @@ describe("S19-SEC-FILEMETAGATE-1 · danh sách tệp theo quyết định xem t�
       input.fileId === e ? DENY_ERROR : input.fileId === d ? DENY : ALLOW,
     );
     const res = await h.service.list(user, { page: 1, limit: 20 } as never);
-    expect(errorLines(), "không log ở danh sách").toEqual([]);
+    const lines = errorLines();
+    expect(lines, "một dòng mỗi request").toHaveLength(1);
+    expect(lines[0]).toContain("1 of 3");
+    expect(lines[0]).toContain("deny-error=1");
+    expect(lines[0]).toContain("deny-no-resolver=0");
+    expect(lines[0]).toContain(e);
+    expect(lines[0], "hàng deny thường không vào mẫu").not.toContain(d);
+    for (const id of [e, d, ok]) expect(lines[0]).not.toContain(fileRow(id).originalName);
     expect(res.data[0]!.originalName).toBeNull();
     expect(res.data[1]!.originalName).toBeNull();
     expect(res.data[2]!.originalName).toBe(fileRow(ok).originalName);
@@ -342,6 +349,30 @@ describe("S19-SEC-FILEMETAGATE-1 · danh sách tệp theo quyết định xem t�
     );
     await h.service.list(user, { page: 1, limit: 20 } as never);
     expect(errorLines()).toHaveLength(1);
+    expect(errorLines()[0]).toContain("deny-no-resolver=2");
+    expect(errorLines()[0]).toContain("deny-error=1");
+  });
+
+  it("U-5d mã module/entity ngoài tập ký tự mã (xuống dòng, mã điều khiển) ⇒ «?», dòng log vẫn là MỘT dòng; mã hợp lệ giữ nguyên", async () => {
+    const odd = fid(24);
+    const plain = fid(25);
+    const h = makeHarness(
+      [fileRow(odd), fileRow(plain)],
+      [
+        linkRow(odd, { module: "LEAVE\nfile list: 0 row(s)", entity: "leave_request\u001b[31m" }),
+        linkRow(plain, { module: "LEAVE", entity: "leave_request" }),
+      ],
+    );
+    h.policy.decideForLinkedFile.mockResolvedValue(DENY_NO_RESOLVER);
+    await h.service.list(user, { page: 1, limit: 20 } as never);
+    const lines = errorLines();
+    expect(lines).toHaveLength(1);
+    const line = lines[0]!;
+    expect(line.includes("\n"), "không xuống dòng").toBe(false);
+    expect(line.includes("\r"), "không về đầu dòng").toBe(false);
+    expect(line.includes("\u001b"), "không mã điều khiển").toBe(false);
+    expect(line).toContain("?/?");
+    expect(line).toContain("LEAVE/leave_request");
   });
 
   it("U-5c quyết định ném ⇒ KHÔNG thành ALLOW (ném lên hoặc che — không lộ tên)", async () => {
