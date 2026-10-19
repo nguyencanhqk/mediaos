@@ -51,8 +51,13 @@ function mapMutationError(err: unknown, t: TF, kind: "approve" | "reject"): stri
     return t(`changeRequest.list.${kind}.forbidden`);
   // S19-HR-AVATARWRITE-1 — duyệt (không có body) chỉ trả 400 khi đề nghị chứa trường ngoài danh sách
   // cho phép hiện tại (HR-ERR-040, vd. đề nghị cũ có ảnh đại diện). Thử lại không bao giờ qua ⇒ chỉ
-  // đường «Từ chối» thay cho lỗi chung.
-  if (kind === "approve" && err instanceof ApiError && err.status === 400)
+  // đường «Từ chối» thay cho lỗi chung. So ĐÚNG mã: 400 khác (nếu sau này có) vẫn về lỗi chung.
+  if (
+    kind === "approve" &&
+    err instanceof ApiError &&
+    err.status === 400 &&
+    err.code === "HR-ERR-040"
+  )
     return t("changeRequest.list.approve.unsupportedField");
   return t(`changeRequest.list.${kind}.error`);
 }

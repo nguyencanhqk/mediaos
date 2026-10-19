@@ -143,6 +143,27 @@ describe("ProfileChangeRequestListPage", () => {
     expect(hrApi.approveProfileChangeRequest).toHaveBeenCalledWith("pcr-1");
   });
 
+  // ── S19-HR-AVATARWRITE-1 R2-L1: 400 mang mã KHÁC ⇒ lỗi chung, không bảo HR «hãy từ chối» ──
+  it("keeps the generic approve error when a 400 carries a code other than HR-ERR-040", async () => {
+    setCapabilities({ "approve:profile-change-request": true });
+    vi.mocked(hrApi.listProfileChangeRequests).mockResolvedValue(LIST);
+    vi.mocked(hrApi.approveProfileChangeRequest).mockRejectedValue(
+      new ApiError(400, "VALIDATION-ERR-001", "Validation failed"),
+    );
+
+    renderWithQuery(<ProfileChangeRequestListPage />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText(/^xem$/i));
+    fireEvent.click(await screen.findByRole("button", { name: /^duyệt$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /xác nhận duyệt/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).not.toHaveTextContent(/không còn được hỗ trợ/i);
+    expect(alert).not.toHaveTextContent(/hãy từ chối/i);
+    expect(alert.textContent?.trim()).not.toBe("");
+  });
+
   // ── Reject requires a reason (blocked client-side without one) ──────────────
   it("blocks reject submit without a reason, then submits once filled", async () => {
     setCapabilities({ "approve:profile-change-request": true });
