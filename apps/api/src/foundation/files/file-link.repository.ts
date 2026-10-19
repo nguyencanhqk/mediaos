@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../../db/db.service";
 import { fileLinks, type FileLink, type NewFileLink } from "../../db/schema/files";
 
@@ -53,6 +53,25 @@ export class FileLinkRepository {
       .where(and(eq(fileLinks.companyId, companyId), eq(fileLinks.fileId, fileId)))
       .limit(1);
     return row !== undefined;
+  }
+
+  /**
+   * S19-SEC-FILEMETAGATE-1 — MỌI link (kể cả đã gỡ) của một lô tệp, MỘT truy vấn (danh sách tệp không N+1).
+   *
+   * ⚠️ CỐ Ý **KHÔNG** lọc `deleted_at`: người gọi tách link SỐNG (`deletedAt` null — như `listByFileTx`) và
+   * cờ đã-từng-link (có bất kỳ hàng — như `hasEverBeenLinkedTx`) từ cùng một ảnh chụp. `eq(company_id)`
+   * tường minh = defense-in-depth trên RLS. `fileIds` rỗng ⇒ `[]`, không chạm DB.
+   */
+  async listAllByFileIdsTx(
+    companyId: string,
+    fileIds: readonly string[],
+    tx: TenantTx,
+  ): Promise<FileLink[]> {
+    if (fileIds.length === 0) return [];
+    return tx
+      .select()
+      .from(fileLinks)
+      .where(and(eq(fileLinks.companyId, companyId), inArray(fileLinks.fileId, [...fileIds])));
   }
 
   /** Liệt kê link chưa gỡ của 1 file (cho FileMetadataDto.links eager-load). RLS-scoped. */

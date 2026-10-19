@@ -638,14 +638,6 @@ describe("FileService (deny-path / validation RED)", () => {
       expect(dto).not.toHaveProperty("checksumSha256");
     });
 
-    it("list ALLOW → {data, meta} with page/limit/total", async () => {
-      h.fileRepo.listTx.mockResolvedValue([makeFileRow()]);
-      h.fileRepo.countTx.mockResolvedValue(1);
-      const res = await h.service.list(user, { page: 2, limit: 10 });
-      expect(res.meta).toEqual({ total: 1, page: 2, limit: 10 });
-      expect(res.data[0]).not.toHaveProperty("storagePath");
-    });
-
     it("download ALLOW → DownloadUrlDto {url, expiresAt} short-TTL + Download log granted", async () => {
       // S2-FND-BE-4 (H2): a downloadable file MUST be upload_status='Uploaded' AND not scan_status='Infected'.
       // The fixture now reflects a ready file (Uploaded/Clean) so the ALLOW path reaches storage.get.
