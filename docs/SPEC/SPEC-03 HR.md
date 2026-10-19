@@ -1026,9 +1026,10 @@ Cho phép HR/Admin cập nhật thông tin nhân viên.
 
 #### Các trường Employee có thể gửi yêu cầu cập nhật
 
+> Ảnh đại diện KHÔNG đi qua đề nghị duyệt (S19-HR-AVATARWRITE-1): nhân viên đổi trực tiếp qua `/me/avatar`, HR qua endpoint ảnh của HR — hai đường đã kiểm tệp. API tạo/sửa hồ sơ chỉ nhận `avatarUrl: null` (gỡ ảnh); mọi chuỗi bị từ chối 400.
+
 | Nhóm thông tin | Trường                  | Cho phép Employee gửi yêu cầu sửa |
 | -------------- | ----------------------- | --------------------------------- |
-| Cá nhân        | avatar (avatar_file_id) | Có                                |
 | Cá nhân        | date_of_birth           | Có, nếu cấu hình cho phép         |
 | Cá nhân        | gender                  | Có                                |
 | Cá nhân        | marital_status          | Có                                |
@@ -2274,9 +2275,11 @@ Cho phép Employee tự đề xuất cập nhật một số thông tin cá nhâ
 
 #### Dữ liệu được phép đề xuất cập nhật
 
+> Ảnh đại diện KHÔNG đi qua đề nghị duyệt (S19-HR-AVATARWRITE-1): nhân viên đổi trực tiếp qua `/me/avatar`, HR qua endpoint ảnh của HR — hai đường đã kiểm tệp. API tạo/sửa hồ sơ chỉ nhận `avatarUrl: null` (gỡ ảnh); mọi chuỗi bị từ chối 400.
+
 | Nhóm thông tin | Trường                                                                     | Cho phép Employee gửi yêu cầu sửa |
 | -------------- | -------------------------------------------------------------------------- | --------------------------------- |
-| Cá nhân        | avatar (avatar_file_id), date_of_birth, gender, marital_status              | Có theo cấu hình                  |
+| Cá nhân        | date_of_birth, gender, marital_status                                      | Có theo cấu hình                  |
 | Liên hệ        | personal_email, phone, current_address, permanent_address                  | Có                                |
 | Khẩn cấp       | emergency_contact_name, emergency_contact_phone                            | Có                                |
 | Giấy tờ        | identity_number, identity_issue_date, identity_issue_place                  | Có, cần duyệt nghiêm ngặt         |

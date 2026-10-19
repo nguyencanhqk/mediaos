@@ -99,6 +99,23 @@ describe("MyChangeRequestPage", () => {
     expect(screen.queryByText(/gửi yêu cầu mới/i)).not.toBeInTheDocument();
   });
 
+  // ── S19-HR-AVATARWRITE-1 R12: ảnh đại diện đổi qua /me/avatar, form không mời đổi ảnh ──
+  it("form has no 'Ảnh đại diện' checkbox (avatar changes go through /me/avatar)", async () => {
+    setCapabilities({ "create:profile-change-request": true });
+    vi.mocked(hrApi.listMyProfileChangeRequests).mockResolvedValue({
+      items: [],
+      meta: { page: 1, pageSize: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false },
+    });
+
+    renderWithQuery(<MyChangeRequestPage />);
+    await waitFor(() => expect(screen.getByText(/gửi yêu cầu mới/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByText(/gửi yêu cầu mới/i));
+
+    // Neo dương: form đã mở thật (ô số điện thoại có mặt) trước khi khẳng định vắng ô ảnh.
+    expect(await screen.findByRole("checkbox", { name: /số điện thoại/i })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /ảnh đại diện/i })).not.toBeInTheDocument();
+  });
+
   // ── Happy path: open form, select a field, submit ────────────────────────
   it("submits a new change request via the dialog form", async () => {
     setCapabilities({ "create:profile-change-request": true });

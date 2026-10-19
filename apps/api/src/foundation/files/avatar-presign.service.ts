@@ -5,12 +5,15 @@ import { FileRepository, type VerifiedAvatarMeta } from "./file.repository";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** `avatar_url` lưu fileId (UUID) cho ảnh self-service; legacy admin có thể set URL http trực tiếp. */
+/**
+ * `avatar_url` chỉ lưu fileId (UUID) — do `/me/avatar` hoặc endpoint ảnh của HR ghi, đều đã kiểm tệp
+ * (S19-HR-AVATARWRITE-1). Giá trị không phải UUID không bao giờ được trả làm URL ảnh.
+ */
 export function isUuid(v: string): boolean {
   return UUID_RE.test(v);
 }
 
-/** 1 nhân viên cần resolve avatar: employeeId (chủ hàng) + giá trị avatar_url thô (fileId | http | null). */
+/** 1 nhân viên cần resolve avatar: employeeId (chủ hàng) + giá trị avatar_url thô (fileId | null | rác). */
 export interface AvatarSubject {
   employeeId: string;
   avatarUrl: string | null;
@@ -22,8 +25,8 @@ export interface AvatarSubject {
  *   - KHÔNG qua FilePolicy owner-check: avatar là DIRECTORY-CLASS — ai đọc được nhân viên (đã qua gate
  *     read:employee + data-scope ở caller) thì thấy avatar. Owner-only resolver (ME/avatar) chỉ cho luồng
  *     download đầy đủ của CHÍNH chủ, KHÔNG cho thumbnail directory.
- *   - SELF-DEFENDING (crown, security-review S5-ME-BE-5): KHÔNG tin cột `avatar_url` (đa-người-ghi — vd
- *     profile-change-request `avatar_file_id` ghi verbatim, có thể bị đầu độc trỏ file bất kỳ trong tenant).
+ *   - SELF-DEFENDING (crown, security-review S5-ME-BE-5): KHÔNG tin cột `avatar_url` (dữ liệu cũ hoặc một
+ *     đường ghi tương lai có thể trỏ file bất kỳ trong tenant) — chỉ ký fileId đã xác minh, không passthrough.
  *     `findVerifiedAvatarsTx` CHỈ trả file có link ME/avatar SỐNG (nguồn DUY NHẤT = MeAvatarService.setAvatar,
  *     đã validate owner+image) + image/*+Uploaded, VÀ caller khớp ĐÚNG cặp (employeeId, fileId) ⇒ đầu độc
  *     (trỏ contract/payslip/ID scan hoặc avatar người khác) KHÔNG bao giờ được ký (→ initials).
@@ -47,9 +50,8 @@ export class AvatarPresignService {
    * hiển thị initials (chưa có avatar / đầu độc / ký lỗi). Gọi NGOÀI transaction đọc chính của caller (tự mở
    * withTenant riêng) để tránh nested-tx trên PgBouncer.
    *
-   *   - avatar_url = http(s) URL  → passthrough (legacy admin-set, admin-trusted).
-   *   - avatar_url = UUID fileId  → CHỈ ký nếu (employeeId, fileId) khớp 1 avatar ĐÃ XÁC MINH (link+image).
-   *   - null / giá trị rác        → bỏ qua (không vào map).
+   *   - avatar_url = UUID fileId     → CHỈ ký nếu (employeeId, fileId) khớp 1 avatar ĐÃ XÁC MINH (link+image).
+   *   - http(s) / null / giá trị rác → bỏ qua (không vào map) — KHÔNG passthrough (S19-HR-AVATARWRITE-1).
    */
   async resolveEmployeeAvatars(
     companyId: string,
@@ -65,19 +67,26 @@ export class AvatarPresignService {
     callerTx?: TenantTx,
   ): Promise<Map<string, string>> {
     const out = new Map<string, string>();
-    // employeeId → fileId ứng viên (chỉ giữ bản ghi UUID; http đã passthrough thẳng vào `out`).
+    // employeeId → fileId ứng viên. CHỈ UUID là ứng viên; mọi giá trị khác (http(s), rác) → bỏ (initials).
     const candidateFileId = new Map<string, string>();
     const fileIds: string[] = [];
+    let nonFileIdValues = 0;
     for (const s of subjects) {
       const raw = s.avatarUrl;
       if (!raw) continue;
-      if (isUuid(raw)) {
-        candidateFileId.set(s.employeeId, raw);
-        fileIds.push(raw);
-      } else if (raw.startsWith("http://") || raw.startsWith("https://")) {
-        out.set(s.employeeId, raw);
+      if (!isUuid(raw)) {
+        nonFileIdValues++;
+        continue;
       }
-      // else: giá trị lạ (không UUID, không URL) → bỏ (initials).
+      candidateFileId.set(s.employeeId, raw);
+      fileIds.push(raw);
+    }
+    if (nonFileIdValues > 0) {
+      // Bỏ-CÓ-LOG (không im lặng): giá trị ghi trước S19-HR-AVATARWRITE-1 (link, chuỗi rác) về initials.
+      // Chỉ in SỐ ĐẾM + companyId — KHÔNG in giá trị (chuỗi do người dùng nhập).
+      this.logger.warn(
+        `resolveEmployeeAvatars[company=${companyId}]: ${nonFileIdValues}/${subjects.length} giá trị avatar_url không phải fileId bị bỏ (degrade→initials)`,
+      );
     }
     if (fileIds.length === 0) return out;
 

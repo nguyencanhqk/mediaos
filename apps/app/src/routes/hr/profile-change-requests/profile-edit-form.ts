@@ -17,10 +17,10 @@ import {
 } from "@mediaos/contracts";
 
 /**
- * `avatar_file_id` CỐ Ý không có ô nhập: ảnh đại diện đã đổi được TRỰC TIẾP own-scope qua /me/avatar
- * (S5-ME-BE-4) nên không cần đi đường phê duyệt, và ô nhập "file id" thủ công là vô nghĩa với người dùng.
+ * Mọi trường đề nghị sửa đều có ô nhập. Ảnh đại diện không thuộc danh sách (S19-HR-AVATARWRITE-1): đổi
+ * TRỰC TIẾP own-scope qua /me/avatar (S5-ME-BE-4), không qua đường phê duyệt.
  */
-export type ProfileEditField = Exclude<ProfileChangeAllowedField, "avatar_file_id">;
+export type ProfileEditField = ProfileChangeAllowedField;
 
 /** Ô nhập → khoá tương ứng trong HrMeProfile (snake_case DTO ↔ camelCase read model). */
 const FIELD_TO_PROFILE_KEY: Readonly<Record<ProfileEditField, keyof HrMeProfile>> = {

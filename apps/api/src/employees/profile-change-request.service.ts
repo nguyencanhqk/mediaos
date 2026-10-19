@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  PROFILE_CHANGE_ALLOWED_FIELDS,
   PROFILE_CHANGE_SENSITIVE_FIELDS,
   type ApproveProfileChangeRequest,
   type CreateProfileChangeRequest,
@@ -43,18 +44,33 @@ export const PCR_EVENT_TYPE = {
   REJECTED: "hr.profile_change.rejected",
 } as const;
 
-/** Fields the employee is NOT allowed to request changes to (SPEC-03 §13.4). */
-const FORBIDDEN_FIELDS = new Set([
-  "department_id",
-  "position_id",
-  "job_level_id",
-  "direct_manager_id",
-  "employment_status",
-  "employee_type",
-  "contract",
-  "role",
-  "user_permission",
-]);
+/**
+ * S19-HR-AVATARWRITE-1 — quy tắc DƯƠNG (SPEC-03 §13.4): trường được đề nghị/áp PHẢI thuộc danh sách cho
+ * phép của contracts — nguồn sự thật duy nhất, không danh sách cấm riêng, không ngoại lệ từng trường.
+ */
+const ALLOWED_FIELDS = new Set<string>(PROFILE_CHANGE_ALLOWED_FIELDS);
+
+/** Fail-closed: một trường ngoài danh sách cho phép HIỆN TẠI ⇒ 400 HR-ERR-040, không ghi gì. */
+function assertAllowedFields(fields: readonly unknown[]): asserts fields is readonly string[] {
+  const notAllowed = fields.filter((f) => typeof f !== "string" || !ALLOWED_FIELDS.has(f));
+  if (notAllowed.length > 0) {
+    throw new BadRequestException(
+      `HR-ERR-040: Fields not allowed for self-update: ${notAllowed.map(String).join(", ")}`,
+    );
+  }
+}
+
+/**
+ * Tập trường của MỘT đề nghị đã lưu = `changedFields` ∪ khoá `newValues`. Apply lặp theo khoá `newValues`,
+ * nên kiểm cho phép, cổng nhạy cảm, áp cột và lịch sử phải dùng CÙNG tập này — một hàng có khoá chỉ nằm
+ * trong `newValues` không được lọt qua kiểm mà vẫn được áp.
+ */
+function requestFieldSet(req: Pick<PcrDetailRow, "changedFields" | "newValues">): unknown[] {
+  const changed: unknown[] = Array.isArray(req.changedFields) ? req.changedFields : [];
+  const valueKeys =
+    req.newValues && typeof req.newValues === "object" ? Object.keys(req.newValues) : [];
+  return [...new Set([...changed, ...valueKeys])];
+}
 
 /**
  * Nhóm "Giấy tờ" (SPEC-03 §14.18 — "Có, cần duyệt nghiêm ngặt"). Khi yêu cầu duyệt chạm bất kỳ
@@ -111,13 +127,9 @@ export class ProfileChangeRequestService {
     // GATE: permission check before any DB work.
     await this.assertCan(user, "create", "profile-change-request");
 
-    // Validate no forbidden fields are in changedFields (HR-ERR-040).
-    const forbidden = (dto.changedFields as string[]).filter((f) => FORBIDDEN_FIELDS.has(f));
-    if (forbidden.length > 0) {
-      throw new BadRequestException(
-        `HR-ERR-040: Fields not allowed for self-update: ${forbidden.join(", ")}`,
-      );
-    }
+    // changedFields ⊆ danh sách cho phép của contracts (HR-ERR-040). newValues bị cắt về changedFields
+    // ngay dưới (sanitizedNew) nên khoá thừa không bao giờ được lưu.
+    assertAllowedFields(dto.changedFields);
 
     return this.db.withTenant(user.companyId, async (tx) => {
       // Resolve employee profile for the current user (Own scope).
@@ -283,7 +295,11 @@ export class ProfileChangeRequestService {
         );
       }
 
-      const fields = Array.isArray(req.changedFields) ? req.changedFields : [];
+      // MỘT tập (changedFields ∪ khoá newValues) cho kiểm cho phép, cổng nhạy cảm, áp và lịch sử. Đề nghị
+      // cũ có trường không còn cho phép ⇒ 400 trước mọi ghi, vẫn Pending (HR dùng «Từ chối»): bỏ qua im
+      // lặng trường đó khiến nhân viên tưởng đã đổi.
+      const fields: readonly unknown[] = requestFieldSet(req);
+      assertAllowedFields(fields);
       const touchesSensitive = fields.some((f) => SENSITIVE_FIELDS.has(f));
 
       // SENSITIVE GATE (SPEC-03 §14.18 "Giấy tờ — cần duyệt nghiêm ngặt"): an approver may hold
@@ -318,7 +334,7 @@ export class ProfileChangeRequestService {
       await this.repo.applyChangesToEmployeeTx(tx, user.companyId, req.employeeId, req.newValues);
 
       // Append field-level history rows (SPEC-03 §14.12) in the SAME tx — append-only (BẤT BIẾN #2).
-      const entries = this.buildHistoryEntries(req);
+      const entries = this.buildHistoryEntries(req, fields);
       await this.repo.writeProfileChangeHistoryTx(tx, user.companyId, {
         employeeId: req.employeeId,
         requestId: id,
@@ -374,7 +390,7 @@ export class ProfileChangeRequestService {
   private async recordSensitiveDenyAudit(
     user: RequestUser,
     requestId: string,
-    changedFields: string[],
+    changedFields: readonly string[],
   ): Promise<void> {
     await this.db.withTenant(user.companyId, async (auditTx) => {
       await this.audit.record(auditTx, {
@@ -397,8 +413,10 @@ export class ProfileChangeRequestService {
    * BẤT BIẾN #3: sensitive values are masked (identity_number → "***") before being persisted
    * to the append-only history. is_sensitive marks the §14.18 "Giấy tờ" group.
    */
-  private buildHistoryEntries(req: PcrDetailRow): ProfileChangeHistoryEntry[] {
-    const fields = Array.isArray(req.changedFields) ? req.changedFields : [];
+  private buildHistoryEntries(
+    req: PcrDetailRow,
+    fields: readonly string[],
+  ): ProfileChangeHistoryEntry[] {
     const entries: ProfileChangeHistoryEntry[] = [];
     for (const field of fields) {
       // Only persist history for fields that actually map to an employee column.

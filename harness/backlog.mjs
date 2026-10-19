@@ -21225,6 +21225,7 @@ export const backlog = [
       "apps/api/test/**",
       "apps/api/src/foundation/files/avatar-presign*",
       "apps/app/src/routes/hr/profile-change-requests/**",
+      "apps/app/src/i18n/locales/vi/hr.ts",
       "docs/SPEC/SPEC-03 HR.md",
       "docs/plans/**",
       "harness/backlog.mjs",

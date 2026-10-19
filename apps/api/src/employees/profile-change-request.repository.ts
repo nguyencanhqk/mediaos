@@ -107,12 +107,13 @@ export interface WriteHistoryData {
 
 /**
  * Single source of truth: SPEC-03 allowed field name → employee_profiles Drizzle column key.
- * All 11 self-service fields now have real columns (mig 0451). Unknown keys map to null →
- * silently ignored by apply (defense-in-depth; the service validates changedFields first).
+ * All self-service fields have real columns (mig 0451). Unknown keys map to null → silently ignored
+ * by apply (defense-in-depth; the service validates changedFields ∪ newValues keys first).
+ * S19-HR-AVATARWRITE-1: KHÔNG có ánh xạ tới `avatarUrl` — cột ảnh chỉ do /me/avatar + endpoint ảnh của
+ * HR ghi (đã kiểm tệp); kể cả khi kiểm ở service bị gỡ, apply cũng không chạm cột ảnh.
  */
 export const FIELD_TO_COLUMN: Record<string, keyof typeof employeeProfiles.$inferInsert> = {
   phone: "phone",
-  avatar_file_id: "avatarUrl", // stored as avatarUrl in the current schema
   notes: "notes",
   date_of_birth: "dateOfBirth",
   gender: "gender",

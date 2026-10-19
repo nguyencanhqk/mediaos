@@ -58,6 +58,22 @@ describe("ProfileChangeRequestDetailPage", () => {
     vi.clearAllMocks();
   });
 
+  // ── S19-HR-AVATARWRITE-1: đề nghị CŨ có trường đã bị loại ⇒ nhãn người đọc được, không khoá kỹ thuật ──
+  it("labels a retired field of a legacy request (no raw key)", async () => {
+    setCapabilities({ "create:profile-change-request": true });
+    vi.mocked(hrApi.getProfileChangeRequestDetail).mockResolvedValue({
+      ...DETAIL,
+      changedFields: ["avatar_file_id", "phone"],
+      oldValues: { avatar_file_id: null, phone: "0900000000" },
+      newValues: { avatar_file_id: "f-1", phone: "0911111111" },
+    });
+    renderWithQuery(<ProfileChangeRequestDetailPage requestId="pcr-1" />);
+    await waitFor(() =>
+      expect(screen.getByText(/không còn hỗ trợ qua đề nghị/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("avatar_file_id")).not.toBeInTheDocument();
+  });
+
   it("shows loading state", () => {
     setCapabilities({ "create:profile-change-request": true });
     vi.mocked(hrApi.getProfileChangeRequestDetail).mockReturnValue(new Promise(() => {}));
