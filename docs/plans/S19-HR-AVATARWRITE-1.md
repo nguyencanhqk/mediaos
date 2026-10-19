@@ -1,0 +1,142 @@
+# S19-HR-AVATARWRITE-1 — đường GHI `employee_profiles.avatar_url` chỉ còn hai đường đã kiểm tệp; API HR tạo/sửa chỉ nhận lệnh GỠ; đề nghị sửa hồ sơ thôi mang ảnh; HR/CHAT/TASK thôi hiện link
+
+> Vùng 🔴 red · FULL gate · MỘT PR (BE + contracts + FE + SPEC-03). Nhánh `fix/s19-hr-avatarwrite-1`, cắt từ `origin/master` `c4ba1813`.
+> Quyết định owner 16/10/2026 (notes của WO — KHÔNG mở lại): nhánh «bỏ hẳn» của done_when đầu, không làm nhánh 422.
+> Ký hiệu: **[ĐO]** = đã đọc mã/tệp ở `c4ba1813` (file:dòng) · **[SUY RA]** = suy luận, phải xác nhận ở lát ghi chú.
+
+## 1. Bối cảnh + phép đo
+
+Cột `employee_profiles.avatar_url` (`apps/api/src/db/schema/employees.ts:62`) có BỐN đường ghi; hai đường kiểm tệp, hai đường ghi nguyên chuỗi:
+
+| #   | Đường ghi                                                                                                                                                                                                                                                                                                                                                                    | Kiểm tệp?                                                                                                                                                                                                   | Số đo            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| W1  | `MeAvatarService.setAvatar` (`apps/api/src/me/me-avatar.service.ts:158`)                                                                                                                                                                                                                                                                                                     | Có (owner + image + link `ME/avatar`)                                                                                                                                                                       | [ĐO] — GIỮ       |
+| W2  | `HrEmployeeAvatarService.setEmployeeAvatar` / `removeEmployeeAvatar` (`apps/api/src/employees/hr-employee-avatar.service.ts:144` · `:237`)                                                                                                                                                                                                                                   | Có (link + audit `avatar-update`/`avatar-remove`)                                                                                                                                                           | [ĐO] — GIỮ       |
+| W3  | `POST/PATCH /employees` (`employees.controller.ts:61-82`) → `employees.service.ts:266` (`dto.avatarUrl ?? null`) · `:368` (`dto.avatarUrl`)                                                                                                                                                                                                                                  | KHÔNG — `createEmployeeProfileSchema.avatarUrl: z.string().url().optional()` (`packages/contracts/src/employees.ts:88`) · update `z.string().url().nullable().optional()` (`:106`) nhận mọi chuỗi có scheme | [ĐO] — ĐÓNG (Q2) |
+| W4  | Duyệt đề nghị sửa hồ sơ: `PROFILE_CHANGE_ALLOWED_FIELDS` có `"avatar_file_id"` (`packages/contracts/src/hr/profile-change-request.ts:21`) · `newValues: z.record(z.string(), z.unknown())` (`:77`) → `FIELD_TO_COLUMN.avatar_file_id → "avatarUrl"` (`apps/api/src/employees/profile-change-request.repository.ts:115`) → `applyChangesToEmployeeTx` ghi nguyên (`:318-344`) | KHÔNG — service chỉ có danh sách CẤM (`FORBIDDEN_FIELDS`, `profile-change-request.service.ts:47-57`, kiểm ở `:114-120`); `approveRequest` không kiểm lại trường (`:270-318`)                                | [ĐO] — ĐÓNG (Q1) |
+
+Đường ĐỌC: `AvatarPresignService.resolveEmployeeAvatars` (`apps/api/src/foundation/files/avatar-presign.service.ts`) ký UUID đã xác minh, còn `http(s)` thì **passthrough** (`:50` docblock, `:76-78` nhánh `startsWith("http")`). [ĐO] Người dùng: HR `hr-read.service.ts:67` · `:77`, `hr-org-chart.service.ts:66`; CHAT `chat-members.service.ts:74`, `chat-rooms.service.ts:150`; TASK `task-actions.service.ts:751`, `task-core.service.ts:1393`, `task-kanban.service.ts:130`; SOCIAL `social-avatar-signer.ts:162` (SOCIAL đã tự vệ — D2-b của S16-SOCIAL-AVATARPRESIGN-1). Mọi caller đều thay giá trị bằng `map.get(id) ?? null` (vd `hr-read.service.ts:68`, `hr-org-chart.service.ts:67-70`, `chat.mapper.ts:212`).
+
+Census PROD 16/10/2026 (chỉ số tổng hợp, từ S19-OPS-AVATARCENSUS-1): 49/49 hồ sơ `avatar_url` NULL · 0 giá trị dạng link · 0 đề nghị có trường ảnh ⇒ không dữ liệu nào đổi hiển thị, không chuyển dữ liệu.
+
+**Ai gửi `avatarUrl` vào W3?** [ĐO] Không ai: FE nghiệp vụ dùng `/hr/employees` (`packages/web-core/src/lib/hr-api.ts:135` · `:148`, schema `packages/contracts/src/hr/employee-write.ts` — không có trường ảnh); `apps/console/src/lib/employees-api.ts:58-65` chỉ dùng kiểu, `apps/console/src` không có chuỗi `avatarUrl`; import dùng `importEmployeeRowSchema` (`employees.ts:117-126`, không ảnh); không seed nào ghi `avatar_url`. ⇒ «PATCH hồ sơ đang mang URL cũ bị 400 oan» KHÔNG xảy ra: không caller nào gửi lại giá trị cũ; và PROD có 0 giá trị link.
+
+**FE đề nghị sửa hồ sơ:** [ĐO] `ChangeRequestForm.tsx:58` lặp `PROFILE_CHANGE_FIELD_LIST` (`field-labels.ts:119-120`) ⇒ hiện ô tick «Ảnh đại diện» kiểu `text` (`field-labels.ts:36-41`). `MyProfileEditPage` đã loại ô ảnh (`profile-edit-form.ts:20-23`, spec `profile-edit-form.spec.ts:25-26`).
+
+## 2. Quyết định owner đã có (16/10/2026)
+
+- **Q1** bỏ `avatar_file_id` khỏi `PROFILE_CHANGE_ALLOWED_FIELDS`.
+- **Q2** API HR tạo/sửa hồ sơ chỉ nhận lệnh GỠ ảnh; ảnh chỉ đổi qua W1 + W2.
+- **Q3** HR/CHAT/TASK thôi hiện link `http(s)` — bỏ passthrough ở `avatar-presign.service.ts`.
+- Paths đã thêm: FE `apps/app/src/routes/hr/profile-change-requests/**`, `docs/SPEC/SPEC-03 HR.md`, `avatar-presign*`. Merge xong deploy API trong ngày.
+
+## 3. Bất biến phải giữ
+
+1. Giá trị khác NULL trong `avatar_url` chỉ do W1/W2 ghi (fileId có link đã xác minh).
+2. Đường đọc không bao giờ trả chuỗi do người dùng cung cấp làm URL ảnh — chỉ URL ký của tệp đã xác minh, hoặc `null` (FE dựng chữ cái đầu).
+3. Duyệt đề nghị sửa hồ sơ fail-closed: trường ngoài danh sách cho phép HIỆN TẠI ⇒ không ghi gì, báo lỗi rõ.
+4. `company_id`/RLS, audit hiện có, các đường W1/W2 không đổi hành vi.
+
+## 4. Thiết kế — quyết định D-1…D-6
+
+**D-1 (H1) — hình dạng contracts.** `createEmployeeProfileSchema.avatarUrl` và `updateEmployeeProfileSchema.avatarUrl` cùng thành `z.null().optional()` (`employees.ts:88` · `:106`). Vắng ⇒ không đụng cột; `null` ⇒ gỡ (create: cột NULL như nay, `employees.service.ts:266`); MỌI chuỗi ⇒ 400 `VALIDATION-ERR-001` (`ZodValidationPipe` toàn cục `main.ts:54` → `all-exceptions.filter.ts:77`, mã `common/errors/error-codes.ts:18`).
+Lý do không XOÁ trường: `z.object` mặc định strip khoá lạ ⇒ chuỗi bị bỏ im lặng, 201/200 dù client gửi sai — done_when đòi 400, và nuốt im lặng che lỗi client. `employees.service.ts` KHÔNG cần sửa (kiểu thu về `null | undefined`). Không caller nội bộ nào gửi chuỗi (§1) ⇒ không vỡ console/import/seed; `pnpm typecheck` toàn workspace là phép đo cuối.
+
+**D-2 (H2) — đề nghị sửa hồ sơ, ba lớp fail-closed.**
+(a) Bỏ `"avatar_file_id"` khỏi `PROFILE_CHANGE_ALLOWED_FIELDS` (`profile-change-request.ts:21`) ⇒ `POST /hr/profile-change-requests` có trường ảnh ⇒ 400 `VALIDATION-ERR-001` (enum `:71`).
+(b) Service: thay danh sách CẤM `FORBIDDEN_FIELDS` (`service.ts:47-57`) bằng quy tắc DƯƠNG — một hàm `assertAllowedFields(fields)` (tập từ `PROFILE_CHANGE_ALLOWED_FIELDS`) ném `BadRequestException("HR-ERR-040: Fields not allowed for self-update: …")` (giữ nguyên văn mã/thông điệp hiện có `:117-119`); gọi ở `createRequest` (thay `:114-120`) VÀ ở `approveRequest` ngay sau kiểm `Pending` (`:285`), TRƯỚC cổng nhạy cảm và `applyChangesToEmployeeTx`. Đề nghị cũ đang chờ có `avatar_file_id` ⇒ duyệt bị 400, không ghi gì (trạng thái vẫn `Pending`); HR dùng «Từ chối». Chọn từ chối CẢ đề nghị thay vì bỏ qua trường: bỏ qua im lặng khiến nhân viên tưởng ảnh đã đổi (thành công rỗng = fail-open).
+(c) Bỏ `avatar_file_id` khỏi `FIELD_TO_COLUMN` (`repository.ts:115`) ⇒ kể cả khi (b) bị gỡ, `applyChangesToEmployeeTx` bỏ qua khoá (`:327-330`) và `buildHistoryEntries` không ghi lịch sử (`service.ts:405`).
+Mã HR-ERR-040: dùng nghĩa ĐANG có trong mã + contracts (`profile-change-request.ts:66`); SPEC-03 `:3295` ghi nghĩa khác — lệch có sẵn, ghi nợ N4, không sửa ở WO này.
+
+**D-3 (H3) — `avatar-presign.service.ts`.** Bỏ nhánh `http(s)` (`:76-78`): giá trị không phải UUID ⇒ không vào map ⇒ caller trả `null`. Sửa docblock `:8`, `:13`, `:26`, `:50` cho khớp («chỉ ký fileId đã xác minh»). Không đổi chữ ký hàm ⇒ mọi consumer §1 không sửa; L2 grep lại `resolveEmployeeAvatars` để chắc mỗi caller chỉ dùng kết quả map. Ngoài phạm vi (ghi rõ): cột `chat_rooms.avatar_file_id` / `feed_groups.avatar_file_id` (đường riêng, đã có FK composite + presign riêng); hai bề mặt trả cột THÔ không qua ký — `GET /employees/:id` (`employees.repository.ts:66`) và xuất HR (`hr-export.service.ts:158`) — sau WO giá trị chỉ còn fileId/NULL, không phải URL hiển thị ⇒ nợ N1.
+
+**D-4 (H4) — MỘT PR, thứ tự deploy.** Bỏ enum ở contracts làm FE vỡ build nếu không sửa cùng lúc: `PROFILE_CHANGE_FIELD_META: Record<ProfileChangeAllowedField, …>` (`field-labels.ts:33-41`) còn khoá `avatar_file_id` ⇒ lỗi TS khoá thừa [SUY RA, đo bằng typecheck ở L3]. Sửa trong cùng PR: xoá mục `avatar_file_id` ở `field-labels.ts`; `profile-edit-form.ts:23` `Exclude<…, "avatar_file_id">` thành no-op ⇒ rút về `ProfileChangeAllowedField` + sửa chú thích `:20-22`. `ProfileChangeRequestDetailPage.tsx:33` đã có đường rơi về tên khoá thô cho trường lạ ⇒ đề nghị cũ (PROD = 0) vẫn hiển thị được. Khoá i18n `hr.ts:690` (ngoài paths) để nguyên — nợ N6.
+Ma trận: merge ⇒ FE Pages tự lên (vài phút) ⇒ API deploy tay trong ngày. FE mới + API cũ: FE thôi mời đổi ảnh; API cũ vẫn nhận chuỗi ⇒ lỗ còn mở tới khi deploy API (lý do [OWNER] O2 làm NGAY). FE cũ (tab cũ) + API mới: tick «Ảnh đại diện» ⇒ 400, toast lỗi, không ghi gì. Cả hai an toàn về dữ liệu ⇒ không tách PR.
+
+**D-5 (H5) — không migration.** [ĐO] `0451_s2_hrbe4_profile_change_requests.sql` chỉ có CHECK `status` (`:59`, `:62`); không CHECK/enum nào trên `changed_fields` hay `avatar_url` (`0018_g5_employee_profiles.sql`, `0451:24` chỉ là chú thích). Census 0/0/0 ⇒ không chuyển dữ liệu.
+
+**D-6 — SPEC-03.** Bỏ `avatar (avatar_file_id)` khỏi hai bảng trường được đề nghị (`docs/SPEC/SPEC-03 HR.md:1031` · `:2279`); thêm một câu: ảnh đại diện đổi trực tiếp qua `/me/avatar` (nhân viên) hoặc endpoint ảnh của HR, không qua đề nghị duyệt; API tạo/sửa hồ sơ chỉ nhận `avatarUrl: null` (gỡ). Mô tả trường `:841` / `:2555` giữ nguyên.
+
+## 5. Triển khai — MỘT PR, không L0
+
+Mọi tệp phải chạm nằm trong `paths` của WO [ĐO §1]: `packages/contracts/src/employees.ts` · `packages/contracts/src/hr/**` · `apps/api/src/employees/**` · `apps/api/test/**` · `apps/api/src/foundation/files/avatar-presign*` · `apps/app/src/routes/hr/profile-change-requests/**` · `docs/SPEC/SPEC-03 HR.md`. Kiểm schema tạo/sửa đi bằng int-spec HTTP thật (D-1) thay vì `packages/contracts/src/employees.spec.ts` (ngoài paths) ⇒ **không cần L0**.
+
+## 6. Ca test viết TRƯỚC (TỪ CHỐI đứng cạnh CHO PHÉP) + mutant ★
+
+Tệp: **mới** `apps/api/test/integration/s19-hr-avatarwrite-1.int-spec.ts` — `applyMainPipeline` + `listen(0)`, gate `hasDb && LANE_DB`, khuôn `s16-social-resnotemask-1.int-spec.ts`; actor vai thường có `create/update/read:employee` (không super-admin). `POST /employees` có `@Idempotent()` (`controller.ts:62`) ⇒ gửi `Idempotency-Key` suy từ nội dung. Hằng có tên: `JS_SCHEME_URL`, `DATA_URI`, `FOREIGN_HTTP_URL`, `RANDOM_UUID`. **Mở rộng** `profile-change-request.int-spec.ts` (service-level, khuôn `:52`). **Mới** `packages/contracts/src/hr/profile-change-request.spec.ts`. **Sửa** `avatar-presign.service.spec.ts`. **FE** `apps/app/src/routes/hr/profile-change-requests/field-labels.spec.ts` (mới) + một ca trong `MyChangeRequestPage.spec.tsx`.
+
+| Ca  | Tầng           | Phép thử                                                                                                                                  | Kỳ vọng mới                                                                   | Trên mã CŨ                          |
+| --- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------- |
+| R1  | int HTTP       | `POST /employees` `avatarUrl = JS_SCHEME_URL`                                                                                             | 400 `VALIDATION-ERR-001`, không hàng mới                                      | ĐỎ (201, cột = chuỗi)               |
+| R2  | int HTTP       | như R1 với `DATA_URI`                                                                                                                     | 400                                                                           | ĐỎ                                  |
+| R3  | int HTTP       | như R1 với `FOREIGN_HTTP_URL`                                                                                                             | 400                                                                           | ĐỎ                                  |
+| R4  | int HTTP       | `PATCH /employees/:id` `avatarUrl = JS_SCHEME_URL` trên hồ sơ cột = fileId                                                                | 400; cột KHÔNG đổi (đọc qua direct pool)                                      | ĐỎ                                  |
+| R5  | int HTTP       | như R4 với `FOREIGN_HTTP_URL`                                                                                                             | 400; cột không đổi                                                            | ĐỎ                                  |
+| R6  | int HTTP       | hồ sơ có cột = `https://…` (direct pool, vai owner) ⇒ `GET /hr/employees/:id`                                                             | `avatarUrl === null`; neo dương: `200` + đúng `id`                            | ĐỎ (passthrough)                    |
+| R7  | int service    | `createRequest` `changedFields: ["avatar_file_id"]` (vượt zod)                                                                            | `HR-ERR-040`, 0 hàng đề nghị mới                                              | ĐỎ (tạo `Pending`)                  |
+| R8  | int service    | hàng đề nghị CŨ chèn bằng direct pool `changed_fields = [avatar_file_id, phone]` ⇒ `approveRequest`                                       | `HR-ERR-040`; vẫn `Pending`; `avatar_url` + `phone` không đổi; 0 hàng lịch sử | ĐỎ (Approved + ghi cột)             |
+| R9  | int repository | `applyChangesToEmployeeTx(tx, …, { avatar_file_id: X })`                                                                                  | cột không đổi                                                                 | ĐỎ                                  |
+| R10 | unit contracts | `createProfileChangeRequestSchema.safeParse` có `avatar_file_id` · `PROFILE_CHANGE_ALLOWED_FIELDS` không chứa                             | `success === false` · không chứa                                              | ĐỎ                                  |
+| R11 | unit           | `resolveEmployeeAvatars` với `https://…` (thay khẳng định `:64-66`, `:136-139`)                                                           | map KHÔNG có employee đó; UUID đã xác minh vẫn ký                             | ĐỎ                                  |
+| R12 | FE unit        | `PROFILE_CHANGE_FIELD_LIST` không có `avatar_file_id`; form không có ô tick «Ảnh đại diện»                                                | vắng                                                                          | ĐỎ                                  |
+| A1  | int HTTP       | `PATCH` `avatarUrl: null` trên hồ sơ cột = fileId                                                                                         | 200; cột NULL                                                                 | xanh (lưới «chặn quá tay null»)     |
+| A2  | int HTTP       | `PATCH` chỉ `phone` trên hồ sơ cột = fileId                                                                                               | 200; `phone` đổi; cột ảnh GIỮ                                                 | xanh                                |
+| A3  | int HTTP       | `POST` không `avatarUrl` · `POST` `avatarUrl: null`                                                                                       | 201; cột NULL                                                                 | xanh                                |
+| A4  | int HTTP       | `PATCH` `avatarUrl = RANDOM_UUID`                                                                                                         | 400                                                                           | xanh (`.url()` cũng từ chối) — lưới |
+| A5  | int service    | đề nghị chỉ `phone` ⇒ tạo + duyệt                                                                                                         | Approved; `phone` ghi; lịch sử 1 hàng                                         | xanh                                |
+| A6  | int (có sẵn)   | `hr-employee-avatar.int-spec.ts` (ký sau khi HR đặt, `:404`) + `me-preferences-avatar.int-spec.ts` (`:679`, `:732`) chạy NGUYÊN trên lane | xanh — W1/W2 vẫn ghi + ký                                                     | xanh                                |
+
+Mutant ★ (L4 — mỗi cái phải làm ít nhất một ca ĐỎ, rồi hoàn nguyên):
+
+- ★1 create trở lại `z.string().url().optional()` ⇒ R1–R3.
+- ★2 update trở lại `z.string().url().nullable().optional()` ⇒ R4–R5.
+- ★3 khôi phục nhánh passthrough `http(s)` ⇒ R6, R11.
+- ★4 bỏ `assertAllowedFields` ở `approveRequest` ⇒ R8 (Approved thay vì 400).
+- ★5 thêm lại `avatar_file_id` vào `FIELD_TO_COLUMN` ⇒ R9.
+- ★6 bỏ `assertAllowedFields` ở `createRequest` (còn danh sách cấm cũ) ⇒ R7.
+- ★7 update thành `z.never().optional()` (chặn cả `null`) ⇒ A1.
+- ★8 thêm lại `"avatar_file_id"` vào enum contracts ⇒ R10, R12.
+
+## 7. Lát thi công · verify · gate
+
+Lệnh test (từ worktree): int-spec CHỈ với `LANE_DB=mediaos_avwrite` (`. scripts/lib/db-secrets.sh && db_secrets_load …; LANE_DB=mediaos_avwrite pnpm --filter @mediaos/api exec vitest run <path>`); unit/FE bằng `exec vitest run <path>`; không `pnpm test -- <path>`.
+
+| Lát                  | Việc                                                                                                                                                                                                                                               | Phép đo xong                                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| L1 RED               | Viết toàn bộ §6 trên mã CŨ; commit `test(hr): S19-HR-AVATARWRITE-1 — …`                                                                                                                                                                            | R1–R12 đỏ ĐÚNG lý do (ghi thông điệp), A1–A6 xanh; ghi lệch bảng nếu có                                                    |
+| L2 GREEN BE          | D-2(b)(c) service + repository; D-3 presign + docblock; sửa chú thích mock `hr-read.service.spec.ts:235`; grep `resolveEmployeeAvatars` xác nhận caller                                                                                            | R6–R9, R11 xanh; spec có sẵn `profile-change-request.int-spec.ts` + `hr-read/hr-org-chart` xanh; typecheck api             |
+| L3 contracts/FE/SPEC | D-1, D-2(a) contracts; `field-labels.ts` + `profile-edit-form.ts`; SPEC-03 D-6                                                                                                                                                                     | R1–R5, R10, R12 xanh; `pnpm typecheck` toàn workspace (app + console) xanh; FE spec thư mục `profile-change-requests` xanh |
+| L4 mutant            | ★1–★8 lần lượt, mỗi lần chạy ĐÚNG spec đích, hoàn nguyên bằng `git checkout -- <tệp>`                                                                                                                                                              | 8/8 bị giết; bảng kết quả vào §9.3                                                                                         |
+| Gate FULL            | security-reviewer + silent-failure-hunter + typescript-reviewer (gộp góc React cho FE) + database-reviewer (diff chạm `profile-change-request.repository.ts` — hằng ánh xạ, không SQL mới; ngân sách lượt có trần) + santa-method MỘT vòng có trần | Không CRITICAL/HIGH còn mở; vá theo đúng fix reviewer, commit `fix(hr): S19-HR-AVATARWRITE-1 — …`                          |
+| Verify               | luồng chính: `bash harness/check.sh --all --lane-db=avwrite` + gitleaks (net diff PR)                                                                                                                                                              | XANH đủ bằng chứng (không banner skip); gitleaks sạch                                                                      |
+| PR                   | mô tả trung tính (bất biến + phép đo, không bước khai thác); `docs(plan)` cập nhật §9.3                                                                                                                                                            | PR mở, dừng — owner merge                                                                                                  |
+
+Sau mỗi lần sửa tệp: đọc 5 dòng cuối `harness/activity.jsonl` của checkout chính; dấu `started` tự động cho WO khác ⇒ `ledger.mjs event <WO> reset …`.
+
+## 8. Bảng [OWNER]
+
+| #   | Việc                                                                                                                                          | Phép đo                                                                                                                                                                                                                                                                    |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1  | Merge PR `--admin` (PR tự tạo không tự duyệt được)                                                                                            | SHA merge trên `master`                                                                                                                                                                                                                                                    |
+| O2  | NGAY sau merge, cùng ngày: đưa checkout chính lên SHA merge rồi `m prod-update api` (lệnh này không pull, không cài deps — WO không đổi deps) | (1) HEAD checkout chính = SHA merge · (2) grep dist API: `avatar-presign.service.js` KHÔNG còn `startsWith("http`; dist contracts `PROFILE_CHANGE_ALLOWED_FIELDS` KHÔNG còn `avatar_file_id` · (3) `/health` `build.commit` = SHA (kiểm sống, không phải bằng chứng chính) |
+| O3  | FE Pages tự lên khi merge                                                                                                                     | run Pages của SHA merge xanh; mở «Đề nghị sửa hồ sơ» không còn ô «Ảnh đại diện»                                                                                                                                                                                            |
+| O4  | Không chuyển dữ liệu, không migration                                                                                                         | census 16/10 = 0/0/0 (§1)                                                                                                                                                                                                                                                  |
+
+Lý do O2 gấp: repo PUBLIC — merge công bố bản vá trong khi API PROD còn mã cũ cho tới khi deploy.
+
+## 9. Ngoài phạm vi / nợ · rủi ro + đường lùi
+
+- **N1** `GET /employees/:id` (`employees.repository.ts:66`) và xuất HR (`hr-export.service.ts:158`) trả cột thô (fileId) không qua ký — sau WO không còn URL do người dùng nhập; xem xét bỏ/ký ở WO riêng.
+- **N2** `employeeProfileSchema.avatarUrl: z.string().url()` (`employees.ts:28`) mâu thuẫn với giá trị fileId đang lưu — lệch schema phản hồi có sẵn.
+- **N3** `PATCH avatarUrl: null` xoá cột nhưng không gỡ link `ME/avatar` và không ghi audit `avatar-remove` như `removeEmployeeAvatar` (`hr-employee-avatar.service.ts:237`); link mồ côi vô hại (đường đọc đòi cột = fileId). FE không dùng trường này — có thể bỏ hẳn sau.
+- **N4** SPEC-03 `:3295` định nghĩa HR-ERR-040 khác nghĩa trong mã/contracts — lệch có sẵn.
+- **N5** Tài liệu ngoài paths còn nhắc `avatar_file_id` trong đề nghị sửa hồ sơ (`docs/BACKEND/BACKEND-05_HR_Backend.md`, `docs/DB/DB-03_HR Database Design.md`, …) — đồng bộ ở WO docs.
+- **N6** Khoá i18n `changeRequest.fields.avatar_file_id` (`apps/app/src/i18n/locales/vi/hr.ts:690`) thành khoá chết; màn chi tiết hiện tên khoá thô cho đề nghị cũ (PROD = 0).
+- **N7** `FIELD_TO_COLUMN.notes` (`repository.ts:116`) không thuộc danh sách cho phép — không với tới được sau D-2(b); dọn sau.
+- Rủi ro: một client ngoài (script tay) đang gửi chuỗi `avatarUrl` sẽ nhận 400 — chủ đích. Đường lùi: revert PR (không migration) + `m prod-rollback` API; FE tự lùi theo revert.
+
+### 9.3 Sổ vết
+
+| Bước    | Ngày       | Kết quả                                                                                                                                                                                                                                                                                            |
+| ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plan v1 | 19/10/2026 | Trên `c4ba1813`. Đối chiếu mã §1 (bốn đường ghi, một đường đọc passthrough, không caller nào gửi `avatarUrl`); chốt D-1 `z.null().optional()` · D-2 ba lớp fail-closed (enum · allow-list dương ở tạo + duyệt · bỏ ánh xạ cột) · D-3 bỏ passthrough · D-4 MỘT PR · D-5 không migration · không L0. |
