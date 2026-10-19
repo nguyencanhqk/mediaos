@@ -14,11 +14,12 @@ import { z } from "zod";
 
 /**
  * Danh sách field được phép đề xuất sửa (SPEC-03 §13.4 / §14.18).
- * Server validate changedFields chỉ gồm các key này; KHÔNG cho phép sửa
- * department_id/position_id/employment_status/role/contract (public deny-list).
+ * Đây là nguồn sự thật DUY NHẤT (quy tắc dương): server kiểm `changedFields` ∪ khoá `newValues` ⊆ danh
+ * sách này ở CẢ tạo lẫn duyệt (HR-ERR-040) — mọi trường khác, kể cả phòng ban/chức danh/vai trò, bị từ chối.
+ * Ảnh đại diện KHÔNG có ở đây (S19-HR-AVATARWRITE-1): nhân viên đổi qua `/me/avatar`, HR qua endpoint ảnh
+ * của HR — hai đường đã kiểm tệp.
  */
 export const PROFILE_CHANGE_ALLOWED_FIELDS = [
-  "avatar_file_id",
   "date_of_birth",
   "gender",
   "marital_status",

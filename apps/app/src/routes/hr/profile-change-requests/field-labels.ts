@@ -33,12 +33,6 @@ const MARITAL_STATUS_OPTIONS = [
 export const PROFILE_CHANGE_FIELD_META: Readonly<
   Record<ProfileChangeAllowedField, ProfileChangeFieldMeta>
 > = {
-  avatar_file_id: {
-    field: "avatar_file_id",
-    labelKey: "changeRequest.fields.avatar_file_id",
-    inputType: "text",
-    sensitive: false,
-  },
   date_of_birth: {
     field: "date_of_birth",
     labelKey: "changeRequest.fields.date_of_birth",

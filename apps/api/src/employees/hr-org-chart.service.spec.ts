@@ -125,7 +125,7 @@ describe("buildOrgChartTree", () => {
         positionName: "Trưởng nhóm",
         orgUnitName: "Kỹ thuật",
         jobLevelName: "L3",
-        avatarUrl: "https://x/a.png",
+        avatarUrl: "https://signed.test/a.png",
         employeeCode: "E001",
       }),
     ];
@@ -143,7 +143,7 @@ describe("buildOrgChartTree", () => {
       positionName: "Trưởng nhóm",
       orgUnitName: "Kỹ thuật",
       jobLevelName: "L3",
-      avatarUrl: "https://x/a.png",
+      avatarUrl: "https://signed.test/a.png",
       employeeCode: "E001",
     });
   });

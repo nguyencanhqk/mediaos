@@ -330,6 +330,9 @@ export class EmployeesService {
 
   async updateEmployee(user: RequestUser, id: string, dto: UpdateEmployeeProfileRequest) {
     const changingSalary = dto.baseSalary !== undefined;
+    // S19-HR-AVATARWRITE-1 (D-7): route này chỉ còn GỠ được ảnh (`avatarUrl: null`) — gỡ phải để lại vết
+    // audit như `avatar-remove` của endpoint ảnh HR.
+    const removingAvatar = dto.avatarUrl === null;
 
     try {
       const updated = await this.db.withTenant(user.companyId, async (tx) => {
@@ -343,10 +346,11 @@ export class EmployeesService {
           }
         }
 
-        // Read the prior salary inside the tx so the audit before/after is consistent with the write.
-        const before = changingSalary
-          ? await this.repo.findByIdTx(tx, user.companyId, id)
-          : undefined;
+        // Read the prior row inside the tx so the audit before/after is consistent with the write.
+        const before =
+          changingSalary || removingAvatar
+            ? await this.repo.findByIdTx(tx, user.companyId, id)
+            : undefined;
 
         const rows = await this.repo.updateEmployeeTx(tx, user.companyId, id, {
           employeeCode: dto.employeeCode,
@@ -388,6 +392,17 @@ export class EmployeesService {
             actorUserId: user.id,
             before: { base_salary: before?.baseSalary != null ? Number(before.baseSalary) : null },
             after: { base_salary: dto.baseSalary ?? null },
+          });
+        }
+        // Cột ĐÃ NULL ⇒ không audit (không có gì bị gỡ). Cùng tx với ghi (BẤT BIẾN #2), chỉ `{avatarUrl}`.
+        if (removingAvatar && before?.avatarUrl != null) {
+          await this.auditService.record(tx, {
+            action: "avatar-remove",
+            objectType: "employee",
+            objectId: id,
+            actorUserId: user.id,
+            before: { avatarUrl: before.avatarUrl },
+            after: { avatarUrl: null },
           });
         }
         // S7-CHAT-BE-5 (W9b) — route `PATCH /employees/:id` ghi CẢ `orgUnitId` LẪN `status` (dòng
