@@ -108,3 +108,21 @@ jobs:
       # đã gỡ 2026-10-01 (thượng nguồn sửa dải advisory 31/07) nhưng bước này GIỮ làm lưới thứ hai.
       - name: Chốt hồi quy brace-expansion (GHSA-mh99-v99m-4gvg)
         run: node scripts/check-brace-expansion-guard.mjs
+
+      # S19-OPS-SCASATELLITE-1 — app vệ tinh có lockfile RIÊNG nằm ngoài workspace pnpm (pnpm-workspace.yaml
+      # loại !apps/fbpost) ⇒ `pnpm audit` phía trên mù với nó. Bước nằm TRONG job bắt buộc sẵn có (không tạo
+      # job mới: job mới chưa là required check ⇒ fail-open ở cổng merge); giữ nguyên tên job vì lý do đó.
+      # Không `npm ci`: npm audit dựng cây từ package-lock.json. Registry không tới được ⇒ exit ≠ 0 (đo).
+      # `!cancelled()`: vẫn chạy khi bước pnpm audit đỏ — hai kết quả cùng hiện; job đỏ nếu bất kỳ bước nào đỏ.
+      # --omit=dev: chỉ dependency CHẠY THẬT của fbpost (khác cổng pnpm phía trên quét cả dev) —
+      # lý do + quyết định owner: D-2 plan S19-OPS-SCASATELLITE-1; nợ dev = WO N1.
+      - name: npm audit — apps/fbpost (fail on high|critical, dependency chạy thật)
+        if: ${{ !cancelled() }}
+        working-directory: apps/fbpost
+        run: npm audit --omit=dev --audit-level=high
+
+      # Bộ đọc kết quả audit của `m sca` (scripts/lib/sca-summary.mjs): "không đo được" KHÔNG BAO GIỜ là
+      # "sạch". Chạy ở đây (không vào danh sách tooling của ci.yml/api.yml/check.sh — nợ N10 của plan).
+      - name: Tooling tests — sca-summary (node --test)
+        if: ${{ !cancelled() }}
+        run: node --test scripts/lib/sca-summary.test.mjs
