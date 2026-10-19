@@ -6,7 +6,7 @@ import {
   wsFeedGroupPostCreatedEventSchema,
   type FeedPostDto,
 } from "@mediaos/contracts";
-import { buildWsPostCreatedEvent } from "./social-ws-payload";
+import { buildWsPostCreatedEvent, wsAttachmentsOf } from "./social-ws-payload";
 
 /**
  * S16-SOCIAL-BE-2C — nguồn payload `feed:post.created` (plan §4.7, §5 P1–P5).
@@ -180,5 +180,59 @@ describe("S16-SOCIAL-AVATARPRESIGN-1 — `social-ws-payload.ts` là module THU�
     for (const s of importsOf("social-ws-author.ts")) {
       expect(s, "social-ws-author.ts import ngoài contracts").toBe("@mediaos/contracts");
     }
+  });
+});
+
+/**
+ * S16-SOCIAL-ATTMETAMASK-1 U-2 — TẦNG NGUỒN của luật «WS không mang tên/cỡ tệp» (plan D-3). Payload phát
+ * cho CẢ room, còn quyết định ký là theo TỪNG người xem ⇒ góc nhìn hẹp nhất: giữ `fileId`/`kind` (đúng
+ * thứ người bị từ chối thấy ở REST), `fileName`/`sizeBytes` = `null`, GIỮ khoá (bundle FE cũ parse bằng
+ * schema đòi hai khoá này). Tầng schema (`wsFeedAttachmentSchema` `.transform`) đo ở contracts (U-3).
+ */
+describe("S16-SOCIAL-ATTMETAMASK-1 — đính kèm WS không mang tên/cỡ (U-2)", () => {
+  const EXPECTED = [
+    {
+      fileId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      kind: "image",
+      fileName: null,
+      sizeBytes: null,
+    },
+  ];
+
+  it.each([
+    ["company", null],
+    ["group", G],
+  ] as const)("builder bài %s: tên/cỡ `null`, khoá còn, không `url`", (audience, groupId) => {
+    const ev = buildWsPostCreatedEvent({ audience, status: "published", groupId }, restDto());
+    expect(ev?.attachments).toEqual(EXPECTED);
+    expect(Object.keys(ev?.attachments[0] ?? {}).sort()).toEqual([
+      "fileId",
+      "fileName",
+      "kind",
+      "sizeBytes",
+    ]);
+    expect(JSON.stringify(ev)).not.toContain("a.png");
+  });
+
+  it("`wsAttachmentsOf` (helper chung bài + bình luận) ép `null` cho mọi phần tử, kể cả `url` null", () => {
+    const out = wsAttachmentsOf([
+      ...restDto().attachments,
+      {
+        fileId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        kind: "file",
+        fileName: null,
+        sizeBytes: null,
+        url: null,
+      },
+    ]);
+    expect(out).toEqual([
+      ...EXPECTED,
+      {
+        fileId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        kind: "file",
+        fileName: null,
+        sizeBytes: null,
+      },
+    ]);
   });
 });

@@ -19,6 +19,7 @@ import {
   ATTACH_GATE_ENFORCED_BY_TIER1,
   SocialAttachGateDeniedException,
   SocialAttachmentsService,
+  toFeedAttachmentDto,
   type AttachNewGate,
 } from "./social-attachments.service";
 import { SOCIAL_ERR } from "./social.errors";
@@ -56,7 +57,9 @@ function fakeTx(currentLinks: ReadonlyArray<{ id: string; fileId: string }>) {
  * Thứ tự cổng được đo THẬT ở ca G18 của `test/integration/social-attgate-1-update-attach.int-spec.ts`
  * (403 chứ không 422). (FULL gate 24/09/2026, `silent-failure-hunter` S-2.)
  */
-function makeService(alerts?: { emit: (...a: never[]) => Promise<boolean> }): SocialAttachmentsService {
+function makeService(alerts?: {
+  emit: (...a: never[]) => Promise<boolean>;
+}): SocialAttachmentsService {
   // S16-SOCIAL-ATTDEBT-1: đối số thứ 4 là `SecurityAlertService`. Mặc định `null` giữ nguyên mọi ca
   // cũ (chúng không đi qua đường alert); ca nào đo `reportAttachGateDeny` thì truyền giả vào.
   return new SocialAttachmentsService(
@@ -166,19 +169,13 @@ describe("SocialAttachmentsService.reportAttachGateDeny (S16-SOCIAL-ATTDEBT-1 C-
     return { emit: vi.fn().mockResolvedValue(true) };
   }
 
-  function denial(
-    targetId = "33333333-3333-4333-8333-333333333333",
-    newFileCount = 2,
-  ) {
-    return new SocialAttachGateDeniedException(
-      SOCIAL_ERR.FILE_TARGET_POST_DENIED,
-      {
-        targetType: "post",
-        targetId,
-        actorUserId: ACTOR,
-        newFileCount,
-      },
-    );
+  function denial(targetId = "33333333-3333-4333-8333-333333333333", newFileCount = 2) {
+    return new SocialAttachGateDeniedException(SOCIAL_ERR.FILE_TARGET_POST_DENIED, {
+      targetType: "post",
+      targetId,
+      actorUserId: ACTOR,
+      newFileCount,
+    });
   }
 
   it("ngoại lệ KHÁC ⇒ KHÔNG phát alert (phân biệt bằng instanceof, không bằng thông điệp)", async () => {
@@ -225,25 +222,16 @@ describe("SocialAttachmentsService.reportAttachGateDeny (S16-SOCIAL-ATTDEBT-1 C-
     // (nó sẽ xanh y hệt kể cả khi `sanitizeDetail` là hàm rỗng).
     const BLOCKED = /(password|secret|token|code|otp|dek|cipher|hash|key)/i;
     for (const k of Object.keys(signal.detail)) {
-      expect(
-        BLOCKED.test(k),
-        `khoá \`${k}\` sẽ bị sanitizeDetail CẮT IM LẶNG`,
-      ).toBe(false);
+      expect(BLOCKED.test(k), `khoá \`${k}\` sẽ bị sanitizeDetail CẮT IM LẶNG`).toBe(false);
     }
-    expect(
-      BLOCKED.test("moduleCode"),
-      "ca đối chứng: bộ lọc phải cắt `moduleCode`",
-    ).toBe(true);
+    expect(BLOCKED.test("moduleCode"), "ca đối chứng: bộ lọc phải cắt `moduleCode`").toBe(true);
   });
 
   it("`detail` KHÔNG mang id/tên tệp — chỉ SỐ LƯỢNG", async () => {
     const alerts = makeAlerts();
     const svc = makeService(alerts);
     await svc.reportAttachGateDeny(denial(), COMPANY);
-    const [, signal] = alerts.emit.mock.calls[0] as [
-      string,
-      { detail: Record<string, unknown> },
-    ];
+    const [, signal] = alerts.emit.mock.calls[0] as [string, { detail: Record<string, unknown> }];
     expect(Object.keys(signal.detail)).not.toContain("fileIds");
     expect(JSON.stringify(signal.detail)).not.toContain("file");
   });
@@ -253,19 +241,10 @@ describe("SocialAttachmentsService.reportAttachGateDeny (S16-SOCIAL-ATTDEBT-1 C-
     const svc = makeService(alerts);
     await svc.reportAttachGateDeny(denial(), COMPANY);
     await svc.reportAttachGateDeny(denial(), COMPANY);
-    expect(
-      alerts.emit,
-      "lượt thứ hai cùng đích phải bị khử trùng",
-    ).toHaveBeenCalledTimes(1);
+    expect(alerts.emit, "lượt thứ hai cùng đích phải bị khử trùng").toHaveBeenCalledTimes(1);
 
-    await svc.reportAttachGateDeny(
-      denial("44444444-4444-4444-8444-444444444444"),
-      COMPANY,
-    );
-    expect(
-      alerts.emit,
-      "đích KHÁC là một tín hiệu khác — không được khử",
-    ).toHaveBeenCalledTimes(2);
+    await svc.reportAttachGateDeny(denial("44444444-4444-4444-8444-444444444444"), COMPANY);
+    expect(alerts.emit, "đích KHÁC là một tín hiệu khác — không được khử").toHaveBeenCalledTimes(2);
   });
 
   it("`emit` NÉM ⇒ reporter không làm hỏng luồng (deny vẫn là deny)", async () => {
@@ -313,5 +292,144 @@ describe("SocialAttachmentsService.reportAttachGateDeny (S16-SOCIAL-ATTDEBT-1 C-
       alerts.emit,
       "ngoại lệ hạ tầng không được ăn mất cửa sổ ghi của 60 giây kế tiếp",
     ).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * S16-SOCIAL-ATTMETAMASK-1 U-1 — `toFeedAttachmentDto` là NƠI DUY NHẤT dựng `FeedAttachmentDto` (plan
+ * §3 bất biến 1–2, D-1): `fileName`/`sizeBytes` khác `null` ⇔ `url` khác `null`. Một vị từ, không biểu
+ * thức thứ hai — lỗi storage và từ chối policy cùng rơi vào `url === null`.
+ */
+describe("S16-SOCIAL-ATTMETAMASK-1 — toFeedAttachmentDto (U-1)", () => {
+  const row = {
+    fileId: FILE_A,
+    mimeType: "image/png",
+    originalName: "bao-cao-quy.png",
+    fileSizeBytes: 4096,
+  };
+
+  it("`url` null ⇒ `fileName`/`sizeBytes` null; `fileId`/`kind` giữ (phần tử còn — D-2)", () => {
+    expect(toFeedAttachmentDto(row, null)).toEqual({
+      fileId: FILE_A,
+      kind: "image",
+      fileName: null,
+      sizeBytes: null,
+      url: null,
+    });
+  });
+
+  it("`url` chuỗi ⇒ tên/cỡ nguyên văn (không hồi quy chiều CHO PHÉP)", () => {
+    expect(toFeedAttachmentDto(row, "https://signed.example/x")).toEqual({
+      fileId: FILE_A,
+      kind: "image",
+      fileName: "bao-cao-quy.png",
+      sizeBytes: 4096,
+      url: "https://signed.example/x",
+    });
+  });
+
+  it("tập khoá cố định ở cả hai nhánh (DTO REST không đổi hình dạng)", () => {
+    const keys = ["fileId", "fileName", "kind", "sizeBytes", "url"];
+    expect(Object.keys(toFeedAttachmentDto(row, null)).sort()).toEqual(keys);
+    expect(Object.keys(toFeedAttachmentDto(row, "u")).sort()).toEqual(keys);
+  });
+});
+
+/**
+ * S16-SOCIAL-ATTMETAMASK-1 — gate FULL (silent-failure F1 · santa A-2): `signOne` qua đường công khai
+ * `decorateMany`, đo KHÔNG cần DB.
+ *
+ * Sau luật che, từ chối vì resolver rơi khỏi đăng ký và từ chối thường cho CÙNG kết quả ở người dùng
+ * (phần tử bị che). Dòng `logger.error` là tín hiệu DUY NHẤT tách «tính năng chết» khỏi «bị từ chối»;
+ * R-5 của int-spec chỉ khoá phía im lặng (`deny-resolver` không log error). Ở đây khoá phía ngược lại,
+ * cộng với vế «adapter trả URL rỗng ⇒ vẫn che» (D-1: có tên ⇔ có URL dùng được).
+ */
+describe("S16-SOCIAL-ATTMETAMASK-1 — signOne qua decorateMany (gate FULL)", () => {
+  const VIEWER = { companyId: COMPANY, actorUserId: USER } as never;
+  const ROW = {
+    entityId: TARGET,
+    fileId: FILE_A,
+    originalName: "bao-cao-quy.png",
+    mimeType: "image/png",
+    fileSizeBytes: 4096,
+    storagePath: "k/obj",
+    sortOrder: 0,
+  };
+  const LINKS = new Map([
+    [FILE_A, [{ moduleCode: "SOCIAL", entityType: "post", entityId: TARGET }]],
+  ]);
+
+  /** `withTenant` giả trả lần lượt: hàng đính kèm → bản đồ link (đúng thứ tự hai truy vấn của `decorateMany`). */
+  function serviceWith(decision: { allow: boolean; reason: string }, signedUrl: unknown) {
+    const db = {
+      withTenant: vi.fn().mockResolvedValueOnce([ROW]).mockResolvedValueOnce(LINKS),
+    };
+    const policy = { decideForLinkedFile: vi.fn(async () => decision) };
+    const storage = { get: vi.fn(async () => ({ url: signedUrl })) };
+    const svc = new SocialAttachmentsService(
+      db as never,
+      policy as never,
+      storage as never,
+      null as never,
+    );
+    return { svc, storage };
+  }
+
+  const MASKED = { fileId: FILE_A, kind: "image", fileName: null, sizeBytes: null, url: null };
+
+  it.each(["deny-no-resolver", "deny-error"])(
+    "`%s` ⇒ phần tử bị che VÀ logger.error đúng một lần, có id tệp (không lẫn vào từ chối thường)",
+    async (reason) => {
+      const { svc, storage } = serviceWith({ allow: false, reason }, "https://signed.example/x");
+      const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+      try {
+        const out = await svc.decorateMany(VIEWER, "post", [TARGET]);
+        expect(out.get(TARGET)).toEqual([MASKED]);
+        expect(storage.get, "từ chối ⇒ không ký").not.toHaveBeenCalled();
+        expect(error, "resolver rơi khỏi đăng ký phải ồn ở mức ERROR").toHaveBeenCalledTimes(1);
+        expect(String(error.mock.calls[0][0])).toContain(`reason=${reason}`);
+        expect(String(error.mock.calls[0][0])).toContain(`file=${FILE_A}`);
+      } finally {
+        error.mockRestore();
+      }
+    },
+  );
+
+  it("`deny-resolver` (từ chối thường) ⇒ che, KHÔNG log error (đối chứng của ca trên)", async () => {
+    const { svc } = serviceWith(
+      { allow: false, reason: "deny-resolver" },
+      "https://signed.example/x",
+    );
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    try {
+      expect((await svc.decorateMany(VIEWER, "post", [TARGET])).get(TARGET)).toEqual([MASKED]);
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it.each([[""], [undefined]])(
+    "CHO PHÉP nhưng adapter trả url %j ⇒ vẫn che tên/cỡ + logger.warn (D-1: có tên ⇔ URL dùng được)",
+    async (badUrl) => {
+      const { svc } = serviceWith({ allow: true, reason: "allow-resolver" }, badUrl);
+      const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+      try {
+        expect((await svc.decorateMany(VIEWER, "post", [TARGET])).get(TARGET)).toEqual([MASKED]);
+        expect(warn.mock.calls.some(([m]) => String(m).includes(`file=${FILE_A}`))).toBe(true);
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+
+  it("CHO PHÉP + url chuỗi ⇒ tên/cỡ nguyên văn (đối chứng chiều cho phép)", async () => {
+    const { svc } = serviceWith(
+      { allow: true, reason: "allow-resolver" },
+      "https://signed.example/x",
+    );
+    expect((await svc.decorateMany(VIEWER, "post", [TARGET])).get(TARGET)).toEqual([
+      { ...MASKED, fileName: "bao-cao-quy.png", sizeBytes: 4096, url: "https://signed.example/x" },
+    ]);
   });
 });
