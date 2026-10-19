@@ -1330,6 +1330,11 @@ export default {
       actions: "",
       viewDetail: "Xem chi tiết",
     },
+    // S19-SEC-FILEMETAGATE-1: ô che của hàng người xem không xem được tệp (máy chủ trả null).
+    masked: {
+      name: "Không có quyền xem tệp này",
+      size: "—",
+    },
     visibility: {
       Private: "Riêng tư",
       Internal: "Nội bộ",
