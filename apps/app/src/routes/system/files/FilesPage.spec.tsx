@@ -11,10 +11,16 @@
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, apiFetch } from "@mediaos/web-core";
-import { meResponseSchema, type FileMetadataDto, type MeResponse } from "@mediaos/contracts";
+import {
+  meResponseSchema,
+  type FileListItemDto,
+  type FileMetadataDto,
+  type MeResponse,
+} from "@mediaos/contracts";
+import systemVi from "@/i18n/locales/vi/system";
 import { FilesPage } from "./FilesPage";
 import { FOUNDATION_FILE_VIEW } from "./constants";
 
@@ -209,5 +215,69 @@ describe("FilesPage", () => {
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
     expect(document.body.innerHTML).not.toMatch(/storagePath|storageBucket|checksumSha256/i);
+  });
+
+  // ── S19-SEC-FILEMETAGATE-1 · hàng theo quyết định xem từng tệp (plan §2 bất biến 1–2 · D-3) ────────
+  describe("hàng không xem được (máy chủ trả tên/cỡ/chủ tệp = null)", () => {
+    const MASKED_ROW: FileListItemDto = {
+      id: "33333333-3333-4333-8333-333333333333",
+      originalName: null,
+      mimeType: "image/png",
+      fileExtension: null,
+      sizeBytes: null,
+      visibility: "Private",
+      uploadStatus: "Uploaded",
+      scanStatus: "Clean",
+      uploadedAt: "2026-10-01T10:00:00.000Z",
+      downloadCount: 0,
+      ownerUserId: null,
+      isTemporary: false,
+    };
+    const ROWS: FileListItemDto[] = [MOCK_ROWS[0]!, MASKED_ROW];
+    const viewLabel = (systemVi as { files: { columns: { viewDetail: string } } }).files.columns
+      .viewDetail;
+    const maskedLabel = (): string => {
+      const label = (systemVi as { files: { masked?: { name?: unknown } } }).files.masked?.name;
+      expect(typeof label, "i18n `files.masked.name` phải có (ô che của hàng)").toBe("string");
+      return label as string;
+    };
+
+    it("schema danh sách mà trang dùng nhận hàng bị che (không vỡ trang khi gặp null)", async () => {
+      hydrateWithFileView();
+      vi.mocked(apiFetch).mockResolvedValue(ROWS);
+      renderWithQuery(<FilesPage />);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalled());
+      const schema = vi.mocked(apiFetch).mock.calls[0]![1] as {
+        safeParse: (v: unknown) => { success: boolean };
+      };
+      expect(schema.safeParse(ROWS).success, "schema list phải chấp nhận hàng che").toBe(true);
+    });
+
+    it("hàng bị che hiện ô che, KHÔNG có nút xem chi tiết; hàng đủ vẫn có", async () => {
+      hydrateWithFileView();
+      vi.mocked(apiFetch).mockResolvedValue(ROWS);
+      renderWithQuery(<FilesPage />);
+      await waitFor(() => expect(screen.getByText("contract.pdf")).toBeInTheDocument());
+
+      const label = maskedLabel();
+      const maskedCell = screen.getAllByText(label)[0]!;
+      const maskedTr = maskedCell.closest("tr");
+      expect(maskedTr, "ô che nằm trong một hàng của bảng").not.toBeNull();
+      expect(
+        within(maskedTr!).queryByRole("button", { name: viewLabel }),
+        "hàng che không điều hướng sang trang chi tiết",
+      ).toBeNull();
+      expect(
+        within(maskedTr!).queryByText(/null|NaN|undefined/),
+        "không in giá trị rỗng",
+      ).toBeNull();
+
+      const fullTr = screen.getByText("contract.pdf").closest("tr");
+      expect(
+        within(fullTr!).getByRole("button", { name: viewLabel }),
+        "hàng đủ vẫn mở được chi tiết — ALLOW đứng cạnh",
+      ).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: viewLabel })).toHaveLength(1);
+    });
   });
 });

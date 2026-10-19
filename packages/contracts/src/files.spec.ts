@@ -4,8 +4,10 @@ import {
   confirmUploadResponseSchema,
   downloadUrlSchema,
   fileLinkSchema,
+  fileListItemSchema,
   fileMetadataSchema,
   FOUNDATION_FILE_ERROR_CODES,
+  type FileListItemDto,
   linkFileInputSchema,
   listFilesQuerySchema,
   registerFileResponseSchema,
@@ -383,5 +385,75 @@ describe("FileLinkDto — anti-leak guard", () => {
     expect(parsed.linkType).toBe("Contract");
     expect(parsed.accessScope).toBe("Company");
     expect(parsed.isPrimary).toBe(true);
+  });
+});
+
+/**
+ * S19-SEC-FILEMETAGATE-1 (U-7) — hàng của danh sách tệp: `originalName`/`fileExtension`/`sizeBytes`/
+ * `ownerUserId` nullable theo quyết định xem từng tệp (plan §2 bất biến 1 · D-3). DTO theo id GIỮ non-null.
+ * `shape` đọc TRONG ca (không ở thân describe) để các ca cũ của tệp vẫn chạy khi schema chưa có.
+ */
+describe("FileListItemDto — hàng danh sách tệp theo quyết định xem từng tệp", () => {
+  const MASKED_ROW = {
+    id: UUID,
+    originalName: null,
+    mimeType: "application/pdf",
+    fileExtension: null,
+    sizeBytes: null,
+    visibility: "Private",
+    uploadStatus: "Uploaded",
+    scanStatus: "Clean",
+    uploadedAt: ISO_DT,
+    downloadCount: 0,
+    ownerUserId: null,
+    isTemporary: false,
+    links: [],
+  };
+  const FULL_ROW = {
+    ...MASKED_ROW,
+    originalName: "bao-cao.pdf",
+    fileExtension: "pdf",
+    sizeBytes: 2_048,
+    ownerUserId: UUID_B,
+  };
+
+  it.each(FORBIDDEN_KEYS)("KHÔNG có key '%s' trong fileListItemSchema", (key) => {
+    expect(Object.keys(fileListItemSchema.shape)).not.toContain(key);
+  });
+
+  it("nhận hàng bị che (bốn trường null)", () => {
+    const parsed: FileListItemDto = fileListItemSchema.parse(MASKED_ROW);
+    expect(parsed.originalName).toBeNull();
+    expect(parsed.fileExtension).toBeNull();
+    expect(parsed.sizeBytes).toBeNull();
+    expect(parsed.ownerUserId).toBeNull();
+    expect(parsed.id).toBe(UUID);
+  });
+
+  it("nhận hàng đủ trường — ALLOW đứng cạnh", () => {
+    const parsed = fileListItemSchema.parse(FULL_ROW);
+    expect(parsed.originalName).toBe("bao-cao.pdf");
+    expect(parsed.sizeBytes).toBe(2_048);
+    expect(parsed.ownerUserId).toBe(UUID_B);
+  });
+
+  it("vẫn từ chối sizeBytes âm", () => {
+    expect(() => fileListItemSchema.parse({ ...FULL_ROW, sizeBytes: -1 })).toThrow();
+  });
+
+  it("strip khoá lưu trữ lạ", () => {
+    const parsed = fileListItemSchema.parse({
+      ...MASKED_ROW,
+      storagePath: `${UUID}/files/${UUID_B}`,
+      storedName: "x.pdf",
+    });
+    expect(parsed).not.toHaveProperty("storagePath");
+    expect(parsed).not.toHaveProperty("storedName");
+  });
+
+  it("fileMetadataSchema (theo id) GIỮ non-null: từ chối originalName/sizeBytes null", () => {
+    expect(fileMetadataSchema.safeParse(FULL_ROW).success, "neo: hàng đủ hợp lệ").toBe(true);
+    expect(fileMetadataSchema.safeParse({ ...FULL_ROW, originalName: null }).success).toBe(false);
+    expect(fileMetadataSchema.safeParse({ ...FULL_ROW, sizeBytes: null }).success).toBe(false);
   });
 });
