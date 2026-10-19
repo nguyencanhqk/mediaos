@@ -352,8 +352,10 @@ m dev-online-stop     # tránh xung đột thư mục build
 # backup trước (§6.3)
 m prod-update fe      # frontend
 m prod-update api     # build → snapshot → MIGRATE → restart (không migrate xong thì không restart)
-# deps đổi ⇒ cài TAY trước (prod-update KHÔNG cài): pnpm install --frozen-lockfile (apps/lms) / npm ci (apps/fbpost)
-m prod-update lms     # rồi m prod-update social — đọc dòng SCA cuối lệnh (đỏ ⇒ m sca; «cây đã cài LỆCH lockfile» = quên bước cài ở trên)
+# deps đổi ⇒ cài TAY trước (prod-update KHÔNG cài): pnpm install --frozen-lockfile (apps/lms)
+m prod-update lms     # đọc dòng SCA cuối lệnh (đỏ ⇒ m sca; «cây đã cài LỆCH lockfile» = quên bước cài ở trên)
+# fbpost deps đổi: Stop-Service MediaOS-Social (Admin) TRƯỚC → npm ci (apps/fbpost) — Windows khoá tệp native đang nạp, npm ci xoá node_modules trước ⇒ EPERM giữa chừng
+m prod-update social  # khởi động lại dịch vụ; đọc dòng SCA cuối lệnh như trên
 node scripts/release-smoke.mjs --expect-commit <sha>    # BẮT BUỘC có --expect-commit
 ```
 

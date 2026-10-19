@@ -22275,4 +22275,171 @@ export const backlog = [
       "🔴 Seed 19/10/2026 — owner chọn qua hộp hỏi «Gieo, tiêu đề trung tính». Merge = công bố ⇒ owner deploy API trong ngày merge.",
     ],
   },
+  {
+    id: "S19-OPS-SCADEVDEPS-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Phần devDependency của hai app vệ tinh (SOCIAL · LMS) còn advisory mức cao/critical ngoài phạm vi cổng `--omit=dev` — vá + cân mở rộng cổng quét cả dev",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      ".github/workflows/security.yml",
+      "apps/fbpost/package.json",
+      "apps/fbpost/package-lock.json",
+      "scripts/sca-satellites.mjs",
+      "scripts/lib/sca-summary.mjs",
+      "scripts/lib/sca-summary.test.mjs",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-OPS-SCASATELLITE-1"],
+    src: [
+      "`docs/plans/S19-OPS-SCASATELLITE-1.md` §9 N1 + D-2 + O8 — owner chốt 19/10/2026 giữ `--omit=dev` và tách phần dev thành WO này. Tên gói / số advisory: chạy lại lệnh audit tại chỗ hoặc xem sổ ngoài repo — KHÔNG chép vào backlog (repo public).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: audit cả dev ở `apps/fbpost` (npm, không `--omit=dev`) và ở repo LMS (pnpm, không `--prod`) — số đo + tên gói chỉ ghi ngoài repo",
+      "fbpost: nâng major dependency của bộ chạy test (và chuỗi dev kéo theo) ⇒ 0 high/critical trên toàn cây; typecheck + build + test fbpost xanh. LMS: vá chuỗi dev ở nhánh riêng của repo LMS; lint + test + build xanh",
+      "Owner chốt có mở rộng cổng sang quét cả dev hay không (bước CI fbpost và/hoặc `m sca`); nếu mở rộng: phép đo cổng ĐỎ thật trên một bản dính lỗi rồi xanh lại; ghi quyết định vào plan",
+    ],
+    notes: [
+      "🟡 Seed 19/10/2026 khi đóng S19-OPS-SCASATELLITE-1. Dependency dev không chạy trong dịch vụ PROD nhưng `npm ci` / `pnpm install` trên máy PROD có cài chúng. LMS là repo git riêng ⇒ thi công trong worktree của repo LMS, không sửa/build trong `apps/lms`.",
+    ],
+  },
+  {
+    id: "S19-OPS-SCASCHEDULE-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Quét SCA định kỳ cho hai app vệ tinh bằng tác vụ lịch, kết quả đỏ gửi qua kênh báo động — hôm nay chỉ quét khi deploy, khi chạy `m sca` tay và trong CI của PR",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "scripts/sca-satellites.mjs",
+      "scripts/lib/sca-summary.mjs",
+      "scripts/lib/sca-summary.test.mjs",
+      "mediaos.ps1",
+      "docs/RELEASE/RELEASE-09_Monitoring_Alerting_Support_Readiness.md",
+      "docs/RELEASE/RELEASE-11_Admin_Guide.md",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-OPS-SCASATELLITE-1", "S10-OPS-ALERTCHAN-1"],
+    src: [
+      "`docs/plans/S19-OPS-SCASATELLITE-1.md` §9 N3 + O8 — lịch quét chờ kênh báo động; dấu vết tạm `logs\\sca-last-<app>.txt` + mục SCA của `m prod-status` chỉ đo khi có người chạy.",
+    ],
+    done_when: [
+      "Tiền đề: `OPS_ALERT_WEBHOOK` đã đặt trên máy PROD và `node scripts/ops-alert-check.mjs --test-alert` exit 0 + thấy tin trong kênh — chưa có ⇒ WO chưa mở",
+      "Tác vụ lịch chạy `node scripts/sca-satellites.mjs all` theo chu kỳ owner chốt; high/critical hoặc «không đo được» ⇒ gửi báo động nêu app nào (không tên gói), dấu vết `logs\\sca-last-<app>.txt` cập nhật mỗi lượt",
+      "Diễn tập với kết quả đỏ giả lập (fixture hoặc cờ thử) ⇒ tin tới kênh; cách đăng ký/kiểm tác vụ ghi vào RELEASE-09 + RELEASE-11",
+    ],
+    notes: [
+      "🟢 Seed 19/10/2026 khi đóng S19-OPS-SCASATELLITE-1. Chỉ làm SAU khi kênh báo động hoạt động trên PROD (việc owner, xem S10-OPS-ALERTCHAN-1 notes).",
+    ],
+  },
+  {
+    id: "S19-OPS-REQUIREDCHECK-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Đưa check «Dependency scan» và «Secret scan» vào required status check của master — ý định đã ghi ở đầu `security.yml`, đo 19/10/2026 thì branch protection chưa có",
+    zone: "green",
+    status: "todo",
+    paths: [
+      ".github/workflows/security.yml",
+      "docs/RELEASE/RELEASE-11_Admin_Guide.md",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-OPS-SCASATELLITE-1"],
+    src: [
+      "`docs/plans/S19-OPS-SCASATELLITE-1.md` §8 O7 + §9 N15 — required_status_checks của master chỉ có `Lint · Typecheck · Migrate · RLS Test`; owner chốt 19/10/2026 giữ nguyên branch protection, sửa comment CI theo phép đo, ghi nợ ở WO này.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (đọc-chỉ): required_status_checks hiện tại của master + tên check thật của hai job trên một PR gần nhất (tên phải khớp từng ký tự)",
+      "Owner chọn thời điểm và đổi branch protection (việc owner); sau đổi: một PR thử có bước SCA đỏ ⇒ merge thường bị chặn; comment đầu `security.yml` khớp trạng thái thật",
+      "Ghi rõ trong runbook: merge `--admin` BỎ QUA required check ⇒ quy ước khi nào được dùng `--admin` và phải đọc kết quả hai check trước khi dùng",
+    ],
+    notes: [
+      "🟢 Seed 19/10/2026 khi đóng S19-OPS-SCASATELLITE-1. Owner quyết thời điểm. Đổi tên job làm đổi tên check ⇒ đổi tên (N9) phải đi cùng cập nhật branch protection.",
+    ],
+  },
+  {
+    id: "S19-OPS-FBPOSTDEPLOYORDER-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "`m prod-update social` tự dừng dịch vụ rồi `npm ci` đúng thứ tự khi deps đổi (thay bước tay) — tránh lặp sự cố 19/10/2026: cài deps khi dịch vụ đang chạy để lại cây `node_modules` hỏng",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "mediaos.ps1",
+      "docs/RELEASE/RELEASE-08_Go_Live_Runbook.md",
+      "docs/RELEASE/RELEASE-11_Admin_Guide.md",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-OPS-SCASATELLITE-1"],
+    src: [
+      "`docs/plans/S19-OPS-SCASATELLITE-1.md` §9.3 «Deploy fbpost» — 19/10/2026 `npm ci` chạy khi dịch vụ MediaOS-Social đang chạy ⇒ EPERM ở tệp native đang nạp sau khi phần lớn `node_modules` đã bị xoá; sửa bằng `Stop-Service` → `npm ci` → `m prod-update social` (ngừng ≈ 40 giây). Nợ N5 (prod-update không tự cài deps).",
+    ],
+    done_when: [
+      "`m prod-update social` khi cây đã cài lệch lockfile (hoặc có cờ tường minh): kiểm quyền Admin (thiếu ⇒ báo rõ, không làm dở) → `Stop-Service MediaOS-Social` → `npm ci` (exit ≠ 0 ⇒ dừng, báo ĐỎ, không build) → build → khởi động lại dịch vụ",
+      "Diễn tập trên máy PROD trong cửa sổ owner chốt: đo thời gian ngừng dịch vụ · `/login` 200 · `/api/pages` 401 · dòng SCA «cây khớp lockfile»",
+      "RELEASE-08 §4 bước 7 + RELEASE-11 §6.4 thay bước tay bằng lệnh mới; ghi đóng N5 vào plan S19-OPS-SCASATELLITE-1",
+    ],
+    notes: [
+      "🟡 Seed 19/10/2026 khi đóng S19-OPS-SCASATELLITE-1. `mediaos.ps1` đã quá 800 dòng (N6) — cân tách phần prod-update khi sửa. Máy PROD chạy Windows PowerShell 5.1 ⇒ diễn tập script trên đúng phiên bản đó.",
+    ],
+  },
+  {
+    id: "S19-LMS-PDFWORKER-1",
+    module: "LMS",
+    layer: "BE",
+    title:
+      "LMS: đường trích văn bản PDF ở bản build thật không tìm thấy worker và lỗi bị nuốt im lặng ⇒ chỉ mục tìm kiếm tài liệu PDF có thể rỗng mà không ai biết",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S19-OPS-SCASATELLITE-1"],
+    src: [
+      "`docs/plans/S19-OPS-SCASATELLITE-1.md` §9 N7 — P10 đo: trong bản build PROD đường trích PDF hỏng im lặng ở CẢ trước và sau lần vá deps (có từ trước, không do diff). Chi tiết đo ở sổ ngoài repo.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC trên PROD (đọc-chỉ): đếm tài liệu PDF có văn bản trích rỗng trong chỉ mục + chạy đường trích của bản build PROD trên một PDF mẫu ngoài dữ liệu thật — kết quả ngoài repo",
+      "Vá cấu hình bundle để worker của thư viện trích PDF có mặt trong bản build thật; thay `catch {}` bằng log có ngữ cảnh (không ghi nội dung tài liệu); test tự động với fixture PDF nhỏ đi qua đúng chế độ nạp của bản build",
+      "Thi công trong worktree repo LMS; owner deploy theo khuôn S19-LMS-NODEMAILER-1; đo lại PROD: PDF mới có văn bản trong chỉ mục; cách lập chỉ mục lại tài liệu cũ ghi vào bàn giao",
+    ],
+    notes: [
+      "🟡 Seed 19/10/2026 khi đóng S19-OPS-SCASATELLITE-1. `apps/lms` là repo git RIÊNG (local, không remote) — KHÔNG sửa/build trong `apps/lms` (PROD LMS phục vụ `.next` của chính thư mục đó).",
+    ],
+  },
+  {
+    id: "S19-LMS-SHEETVENDOR-1",
+    module: "LMS",
+    layer: "OPS",
+    title:
+      "LMS: đưa tarball chính thức của thư viện đọc bảng tính vào repo LMS (`vendor/`) để lần cài sạch không phụ thuộc CDN của nhà phát hành",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S19-OPS-SCASATELLITE-1"],
+    src: [
+      "`docs/plans/S19-OPS-SCASATELLITE-1.md` §3 D-10 + §8 O0 + §9 N4 — owner chốt 19/10/2026 giữ tarball chính thức (resolution ngoài registry); phương án vendor là bước tiếp theo.",
+    ],
+    done_when: [
+      "Đúng tệp tarball đang khoá trong lockfile (cùng checksum) đặt vào `vendor/` của repo LMS; manifest + lockfile trỏ đường cục bộ; checksum trong lockfile khớp",
+      "`pnpm install --frozen-lockfile` với store trống và host CDN của nhà phát hành bị chặn ⇒ exit 0; lint + test + build xanh trong worktree",
+      "`m sca` vẫn in dòng resolution ngoài registry với nguồn mới; owner deploy theo khuôn S19-LMS-NODEMAILER-1; cách cập nhật bản mới ghi vào bàn giao LMS",
+    ],
+    notes: [
+      "🟢 Seed 19/10/2026 khi đóng S19-OPS-SCASATELLITE-1. Thi công trong worktree repo LMS (repo git riêng, local).",
+    ],
+  },
 ];
