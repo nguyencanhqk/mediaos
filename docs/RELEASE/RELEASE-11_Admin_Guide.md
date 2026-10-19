@@ -352,7 +352,8 @@ m dev-online-stop     # tránh xung đột thư mục build
 # backup trước (§6.3)
 m prod-update fe      # frontend
 m prod-update api     # build → snapshot → MIGRATE → restart (không migrate xong thì không restart)
-m prod-update lms
+# deps đổi ⇒ cài TAY trước (prod-update KHÔNG cài): pnpm install --frozen-lockfile (apps/lms) / npm ci (apps/fbpost)
+m prod-update lms     # rồi m prod-update social — đọc dòng SCA cuối lệnh (đỏ ⇒ m sca)
 node scripts/release-smoke.mjs --expect-commit <sha>    # BẮT BUỘC có --expect-commit
 ```
 
