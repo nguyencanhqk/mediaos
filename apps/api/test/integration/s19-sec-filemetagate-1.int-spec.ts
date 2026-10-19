@@ -48,7 +48,7 @@ const PAGE_LIMIT_MAX = 100;
 const LOGIN_PW = ["Passw0rd", "fmg19"].join("!");
 const MASKED_KEYS = ["originalName", "fileExtension", "sizeBytes", "ownerUserId"] as const;
 
-type PairGrant = readonly [string, string, string];
+type PairGrant = readonly [string, string, "Own" | "Team" | "Department" | "Company"];
 const CHAT_PAIRS: readonly PairGrant[] = [
   ["view", "chat-room", "Company"],
   ["create", "chat-room", "Company"],
