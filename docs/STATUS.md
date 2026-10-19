@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-19 05:51Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-19 06:51Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -11,6 +11,14 @@
 - **done_when (đích hội tụ)**:
   - [ ] Đính kèm: đúng luồng upload-url → PUT storage → confirm → attachmentIds; trần 10 ảnh/1 video/20MB (ERR-007) kiểm phía client + hiện 422; url null (presign bị từ chối) KHÔNG vẽ ô ảnh vỡ
   - [ ] Mention link chỉ với phần tử withheld:false; withheld:true giữ SPAN; response 006 không mang mentions ⇒ giữ mảng cũ khi merge cache
+
+###  S19-OPS-SCASATELLITE-1 — Cổng `Dependency scan` chỉ quét workspace pnpm chính — `apps/fbpost` (npm, lockfile riêng) và `apps/lms` (repo git riêng) KHÔNG có SCA nào soi: thêm bước audit cho hai app vệ tinh + gỡ các advisory mức high trên dependency chạy thật của chúng
+- **zone**: amber · **skills**: code-review
+- **sửa ở đâu (paths)**: `.github/workflows/security.yml`, `apps/fbpost/package.json`, `apps/fbpost/package-lock.json`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] `security.yml` có bước `npm audit --audit-level=high` chạy trên ĐÚNG lockfile npm của `apps/fbpost`, fail khi có high/critical; phép đo cổng: hạ một gói về bản dính advisory ⇒ bước ĐỎ thật, trả lại ⇒ xanh
+  - [ ] `apps/fbpost`: 0 advisory high/critical trên dependency chạy thật (bump trong dải gói cha hoặc override range-scoped — không suppress); typecheck + build + test của fbpost xanh; owner deploy `m prod-update social` SAU `npm ci`
+  - [ ] `apps/lms` (repo riêng, không có CI ở kho này): chốt cách quét định kỳ (lệnh `m` hoặc một bước trong runbook deploy) + gỡ các advisory high trên dependency chạy thật ở nhánh riêng của repo LMS; owner deploy `m prod-update lms` sau `pnpm install --frozen-lockfile`
 
 ## Hàng đợi
 
@@ -64,7 +72,6 @@
 -  `S16-SOCIAL-FEPOLLRACE-1` `PollBlock` không huỷ `043` đang bay trước khi bỏ/rút phiếu/đóng bình chọn: một refetch (vd `invalidatePostLists` sau lượt thích — tiền tố `polls.allOf()`) về SAU kết quả `041/042/044` ⇒ đè phiếu vừa bỏ bằng ảnh chụp trước-bỏ-phiếu
 -  `S16-SOCIAL-FESTALELISTS-1` `invalidatePostLists` (use-feed-actions) · `useCreatePost` · `IdeaReviewDialog` không chạm `socialKeys.search({q})` và `socialKeys.profilePosts(id)` ⇒ hai danh sách đó giữ `likeCount`/`savedByMe`/khối poll/pill sáng kiến CŨ tới khi mount lại sau `staleTime`
 -  `S16-SOCIAL-IDEALABEL-1` Nhãn trạng thái sáng kiến lệch giữa thông báo NOTI-032 (`IDEA_STATUS_LABEL` ở `apps/api/src/social/social-idea-fsm.ts`: «Đang xét duyệt» · «Được duyệt» · «Từ chối») và i18n FE `idea.status.*` («Đang xem xét» · «Được chấp nhận» · «Không được chấp nhận») ⇒ thông báo và pill gọi cùng một trạng thái bằng hai tên
--  `S19-OPS-SCASATELLITE-1` Cổng `Dependency scan` chỉ quét workspace pnpm chính — `apps/fbpost` (npm, lockfile riêng) và `apps/lms` (repo git riêng) KHÔNG có SCA nào soi: thêm bước audit cho hai app vệ tinh + gỡ các advisory mức high trên dependency chạy thật của chúng
 - 🔴 `S19-SEC-MAILTAMPERDETECT-1` Giải mã mật khẩu SMTP hỏng vì ĐÍCH BỊ TRÁO ngoài ứng dụng hiện y hệt envelope ngữ cảnh cũ / sự cố khoá — chỉ có câu «kiểm tra đích trước khi nhập lại» + log `smtp-envelope-unusable`, không cảnh báo an ninh, không phân biệt ca tráo đích (nơi nhập lại mật khẩu = gửi nó cho kẻ tấn công)
 - 🟢 `S19-FE-MAILSAVEERR-1` Console «Cấu hình mail server»: lỗi Lưu KHÔNG phải MAIL-PASSWORD-REQUIRED hiện câu chung «Lưu thất bại.» — 400 `VALIDATION-ERR-001` của B4 (host/username PG lưu ≠ giá trị đã gắn vào ngữ cảnh mã hoá) mang câu server cố định mà admin không bao giờ thấy
 - 🟡 `S19-FE-APIFETCHTIMEOUT-1` `apiFetch*` (packages/web-core) không có timeout / `AbortSignal` cho MỌI lời gọi — API treo ⇒ nút đang tải (tab trắng của nút tải tệp, trạng thái `pending` của mutation) treo theo, không có lỗi để người dùng thử lại (N10 của S19-OPS-TASKFILEURL-1)
@@ -90,7 +97,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 3
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -99,6 +106,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `490fd9a7` | 2026-10-19 | docs(plan): S16-SOCIAL-ATTMETAMASK-1 + S19-HR-AVATARWRITE-1 — sổ hậu merge: #591 = d5bd37e8 · #592 = 805ca919 · API PROD đo 12:38 / 12:51 (dist + /health build.commit) · regen STATUS |
 | `805ca919` | 2026-10-19 | fix(hr): S19-HR-AVATARWRITE-1 — ảnh đại diện hồ sơ chỉ đổi qua hai đường đã kiểm tệp; API HR tạo/sửa chỉ nhận lệnh gỡ ảnh; thôi passthrough link http(s) (#592) |
 | `d5bd37e8` | 2026-10-19 | fix(social): S16-SOCIAL-ATTMETAMASK-1 — metadata đính kèm trên các đường đọc SOCIAL theo đúng quyết định ký URL cho người xem; WS không mang tên/cỡ tệp (#591) |
 | `c4ba1813` | 2026-10-19 | chore(docs): seed S19-SEC-FILEMETAGATE-1 — rà metadata tệp ngoài SOCIAL theo bất biến của ATTMETAMASK · regen STATUS |
@@ -110,7 +118,6 @@
 | `896a93ab` | 2026-10-17 | fix(recruit): S19-FE-SIGNEDTAB-1 — nút tải CV ứng viên mở tab trắng mà không tải (noopener ⇒ window.open trả null) (#588) |
 | `a593a360` | 2026-10-17 | chore(docs): nợ FULL gate PR-A S19-FE-SIGNEDTAB-1 — thêm src vào FILEOPENUX (F1 · F2/SF-4) và SIGNEDTAB-2 (Referrer-Policy · N11 parsed.href · SF-3 · F3; thêm path apps/app/public/_headers) |
 | `c9e3a7f9` | 2026-10-16 | chore(docs): tách nợ S19-FE-SIGNEDTAB-1 — thu hẹp còn N2 (tải CV) · gieo S19-FE-SIGNEDTAB-2 (N3 · N11 · CHAT) · nối N9 vào FILEOPENUX |
-| `a2aabe7e` | 2026-10-16 | docs(storage): Đợt 0 16/10 — sổ vết L4 STORAGEPUBLIC sau CORS bucket thử: PUT 200 · ảnh hiện · tải qua 302 hỏng (đúng R6/D7) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
