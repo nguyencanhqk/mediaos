@@ -15,7 +15,11 @@
 
 ### 1.1 Mọi đường đọc trả tên/cỡ tệp `files` (done_when #1)
 
-Grep `toMetadataDto|originalName|sizeBytes|name: row\.name` trong `apps/api/src` (bỏ `*.spec.ts`, `db/schema`), phân loại từng dòng khớp.
+Grep `toMetadataDto|originalName|original_name|sizeBytes|size_bytes|fileName|name: row\.name` trong `apps/api/src` (bỏ `*.spec.ts`,
+`db/schema`), phân loại từng dòng khớp. Dòng khớp KHÔNG phải đường đọc trả tên cho người dùng (re-review L3): tên tệp import multipart ghi
+vào `audit_logs.after` (`employees/hr-import.repository.ts:142-151` · `employees/hr-employee-import.service.ts` · `payroll/payroll-adjustments-import.service.ts:87,161`
+— không phải bảng `files`) · `F/temp-file-cleanup.job-handler.ts:208` (ảnh chụp khi dọn tệp tạm — [SUY RA] đi qua cổng audit) ·
+`F/server-file.repository.ts:181-241` (nội bộ của #4/#9) · `storage/*` + `F/file-content-guard.ts` (nội bộ content-disposition của URL ký).
 
 | #   | Đường                                                                                                           | Nguồn tên/cỡ [ĐO]                                                                                                                                                                                                                                                                                                                    | Bất biến                                                                      | WO này            |
 | --- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ----------------- |
@@ -42,7 +46,8 @@ Grep `toMetadataDto|originalName|sizeBytes|name: row\.name` trong `apps/api/src`
 3. CHAT: metadata đính kèm = nội dung tin do CHỦ TỆP chia sẻ vào phòng — phạm vi có chủ đích (D-2, owner chốt 19/10).
 4. Giám sát CHAT: tên/cỡ đính kèm trong phạm vi toàn tenant cho người giữ cặp nhạy cảm `view:chat-oversight`, mỗi lần đọc có audit,
    KHÔNG mang khoá `url` — phạm vi có chủ đích (D-2b, owner chốt 19/10).
-5. Không đường nào trong phạm vi ghi tên tệp vào log khi từ chối; lỗi bất thường của quyết định ⇒ đúng MỘT dòng log mỗi request.
+5. Không đường nào trong phạm vi ghi tên tệp vào log khi từ chối. `deny-no-resolver` ⇒ danh sách ghi đúng MỘT `logger.error` mỗi
+   request; `deny-error` ⇒ chỉ dòng log của policy (`F/file-policy.service.ts:263-264`), danh sách KHÔNG ghi thêm; không dòng nào mang tên tệp.
 
 ## 3. Phép đo đã có [ĐO]
 
@@ -131,21 +136,22 @@ SQL ⇒ không PUT storage (không cần `resolveStorageTestTarget`; lát nào c
 Tệp: F_grp (đính kèm bài trong G) · F_pub (bài audience company) · F_free (0 link) · F_rev (link đã gỡ mềm) · F_nores (link module không
 resolver) · F_B (tenant B).
 
-| Ca   | Actor                       | Kỳ vọng                                                                                                                         | Mã cũ    |
-| ---- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| R-1  | fileViewer                  | hàng F_grp CÓ, `id` đúng, `originalName`/`fileExtension`/`sizeBytes`/`ownerUserId` = `null`; thân response không chứa tên F_grp | ĐỎ       |
-| R-1a | fileViewer                  | cùng response: F_pub + F_free đủ trường (ALLOW đứng cạnh)                                                                       | xanh     |
-| R-2  | member                      | F_grp đủ trường                                                                                                                 | xanh     |
-| R-3  | fileViewer · member · admin | duyệt HẾT trang (hoặc `limit=PAGE_LIMIT_MAX`) trên tenant tươi: MỌI hàng `originalName !== null` ⇔ `GET /:id` cùng actor = 200  | ĐỎ       |
-| R-4  | fileViewer                  | F_rev che (`deny-links-revoked`)                                                                                                | ĐỎ       |
-| R-5  | fileViewer                  | F_nores che (`deny-no-resolver`)                                                                                                | ĐỎ       |
-| R-6  | fileViewer                  | `limit` < tổng: trang đầu ĐẦY `limit` hàng, trang cuối hụt đúng phần dư, `pagination.total` = tổng — hàng che không bị bỏ       | xanh/neo |
-| R-7  | fileViewer · viewerB        | A không thấy id F_B; B không thấy id tệp A; link `company_id` = B gieo bằng SQL trỏ F_free ⇒ F_free với A vẫn đủ trường         | xanh/neo |
-| R-8  | noFilePair                  | 403 guard                                                                                                                       | xanh/neo |
-| C-1  | thành viên phòng, ngoài G   | tin kèm F_c (của người gửi, thêm link tới bài G) ⇒ `url` null, `name`/`sizeBytes` còn (D-2)                                     | xanh/neo |
-| C-2  | thành viên phòng            | gửi tin kèm `fileId` không phải của mình ⇒ bị từ chối, 0 link mới                                                               | xanh/neo |
-| C-3  | overseer                    | `GET /chat/oversight/rooms/:id/messages`: đính kèm có `name` + `sizeBytes`, `not.toHaveProperty("url")` (D-2b)                  | xanh/neo |
-| C-3d | plain                       | cùng route `/messages` ⇒ 403 (DENY đứng cạnh C-3)                                                                               | xanh/neo |
+| Ca   | Actor                       | Kỳ vọng                                                                                                                          | Mã cũ    |
+| ---- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| R-1  | fileViewer                  | hàng F_grp CÓ, `id` đúng, `originalName`/`fileExtension`/`sizeBytes`/`ownerUserId` = `null`; thân response không chứa tên F_grp  | ĐỎ       |
+| R-1a | fileViewer                  | cùng response: F_pub + F_free đủ trường (ALLOW đứng cạnh)                                                                        | xanh     |
+| R-2  | member                      | F_grp đủ trường                                                                                                                  | xanh     |
+| R-3  | fileViewer · member · admin | duyệt HẾT trang (hoặc `limit=PAGE_LIMIT_MAX`) trên tenant tươi: MỌI hàng `originalName !== null` ⇔ `GET /:id` cùng actor = 200   | ĐỎ       |
+| R-4  | fileViewer                  | F_rev che (`deny-links-revoked`)                                                                                                 | ĐỎ       |
+| R-5  | fileViewer                  | F_nores che (`deny-no-resolver`)                                                                                                 | ĐỎ       |
+| R-6  | fileViewer                  | `limit` < tổng: trang đầu ĐẦY `limit` hàng, trang cuối hụt đúng phần dư, `pagination.total` = tổng — hàng che không bị bỏ        | xanh/neo |
+| R-7  | fileViewer · viewerB        | A không thấy id F_B; B không thấy id tệp A; link `company_id` = B gieo bằng SQL trỏ F_free ⇒ F_free với A vẫn đủ trường          | xanh/neo |
+| R-8  | noFilePair                  | 403 guard                                                                                                                        | xanh/neo |
+| C-1  | thành viên phòng, ngoài G   | tin kèm F_c (của người gửi, thêm link tới bài G) ⇒ `url` null, `name`/`sizeBytes` còn (D-2)                                      | xanh/neo |
+| C-2  | thành viên phòng            | gửi tin kèm `fileId` không phải của mình ⇒ bị từ chối, 0 link mới                                                                | xanh/neo |
+| C-2b | thành viên phòng            | `POST /foundation/files/:id/links` {CHAT, tin của CHÍNH mình} với tệp không phải của mình ⇒ 403, 0 link mới; tệp của mình ⇒ được | xanh/neo |
+| C-3  | overseer                    | `GET /chat/oversight/rooms/:id/messages`: đính kèm có `name` + `sizeBytes`, `not.toHaveProperty("url")` (D-2b)                   | xanh/neo |
+| C-3d | plain                       | cùng route `/messages` ⇒ 403 (DENY đứng cạnh C-3)                                                                                | xanh/neo |
 
 Unit MỚI `F/file-list.service.spec.ts`: U-1 mapper che đúng bốn trường, giữ phần còn lại · U-2 policy chỉ gọi SAU khi tx resolve ·
 U-3 tách live/`everLinked` từ một lô · U-4 action = View, input = `fileSelfPolicyInput` · U-5 N hàng `deny-no-resolver` ⇒ đúng MỘT
@@ -164,7 +170,8 @@ hàng (U-5) · list tự dựng input thay vì hàm chung (U-8) · lỗi quyết
 
 - L1 [SUY RA]: bài trong nhóm kín G với `fileViewer` ⇒ `GET /:id` 403 (nếu kit không dựng được nhóm kín rẻ ⇒ dùng khuôn «bài ẩn» của
   ATTMETAMASK `:136-160`, ghi vào sổ vết) · `admin` với F_grp: kỳ vọng R-3 suy từ `GET /:id`, KHÔNG viết cứng · fixture CHAT cho C-1/C-2/C-3
-  (nếu tốn > 1 lượt dựng ⇒ dẫn ca có sẵn ghim cùng điều, ghi khoảng trống vào sổ vết) · F_nores: đo migration có CHECK trên
+  (nếu tốn > 1 lượt dựng ⇒ dẫn ca có sẵn ghim cùng điều, ghi khoảng trống vào sổ vết; RIÊNG C-3d luôn viết MỚI trên
+  `/chat/oversight/rooms/:id/messages`, không thay bằng ca 16 — guard quyền chặn trước khi nạp phòng nên rẻ) · F_nores: đo migration có CHECK trên
   `file_links.module_code` không — chọn `(moduleCode, entityType)` NẰM TRONG CHECK mà không có resolver đăng ký · R-7 vế link chéo tenant:
   FK một cột (§3) ⇒ kỳ vọng gieo được bằng SQL; RLS/FK chặn từ gốc ⇒ ghi sổ «RLS/FK chặn từ gốc». Mutant bỏ `eq(companyId)` chỉ đỏ ở R-7
   khi vai test bỏ qua RLS — ghi kết quả thật, U-6 là lưới chính.
@@ -212,8 +219,10 @@ hàng (U-5) · list tự dựng input thay vì hàm chung (U-8) · lỗi quyết
 
 ### 9.3 Sổ vết
 
-| Mốc         | Lúc              | Ghi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ----------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Plan v1     | 19/10/2026 13:58 | Trên `68f8719b`. D-1 giữ hàng, che ba trường theo vị từ của `GET /:id` · D-2 CHAT giữ phạm vi chủ tệp (chờ O-2) · D-3 schema list riêng + FE (L0) · D-5 tách tệp.                                                                                                                                                                                                                                                                                                                                                                              |
-| Plan-review | 19/10/2026 14:17 | Verdict BLOCK, 8 finding — kiểm từng cái bằng mã, ÁP HẾT, từ chối 0. F1 thêm đường giám sát CHAT (§1, §1.1 #6, D-2b, C-3/C-3d) + bảng §1.1 đủ · F2 `F/file-view-decision.ts` một nguồn (U-8) · F3 một log mỗi request, không log lại `deny-error` (U-5) · F4 `listAllByFileIdsTx` có `company_id`, R-7 vế link chéo tenant · F5 che `ownerUserId` + không điều hướng · F6 U-7 `FORBIDDEN_KEYS` + kiểu trả · F7 R-3 hết trang, R-6 hai trang, RED `--lane-db=fmg`, CHECK `module_code` · F8 O-4 push = công bố, `candidate-file-api.ts` vào L0. |
-| Plan v2     | 19/10/2026 14:17 | Owner chốt 19/10: O-2 GIỮ · O-3 che `ownerUserId` + không điều hướng · O-6 gieo WO theo dõi · O-7 giám sát CHAT phạm vi toàn tenant có chủ đích.                                                                                                                                                                                                                                                                                                                                                                                               |
+| Mốc              | Lúc              | Ghi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plan v1          | 19/10/2026 13:58 | Trên `68f8719b`. D-1 giữ hàng, che ba trường theo vị từ của `GET /:id` · D-2 CHAT giữ phạm vi chủ tệp (chờ O-2) · D-3 schema list riêng + FE (L0) · D-5 tách tệp.                                                                                                                                                                                                                                                                                                                                                                                        |
+| Plan-review      | 19/10/2026 14:17 | Verdict BLOCK, 8 finding — kiểm từng cái bằng mã, ÁP HẾT, từ chối 0. F1 thêm đường giám sát CHAT (§1, §1.1 #6, D-2b, C-3/C-3d) + bảng §1.1 đủ · F2 `F/file-view-decision.ts` một nguồn (U-8) · F3 một log mỗi request, không log lại `deny-error` (U-5) · F4 `listAllByFileIdsTx` có `company_id`, R-7 vế link chéo tenant · F5 che `ownerUserId` + không điều hướng · F6 U-7 `FORBIDDEN_KEYS` + kiểu trả · F7 R-3 hết trang, R-6 hai trang, RED `--lane-db=fmg`, CHECK `module_code` · F8 O-4 push = công bố, `candidate-file-api.ts` vào L0.           |
+| Plan v2          | 19/10/2026 14:17 | Owner chốt 19/10: O-2 GIỮ · O-3 che `ownerUserId` + không điều hướng · O-6 gieo WO theo dõi · O-7 giám sát CHAT phạm vi toàn tenant có chủ đích.                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Re-review        | 19/10/2026 14:28 | Áp M1 (thêm C-2b — đường gắn thứ hai qua `POST /foundation/files/:id/links`) · L1 (C-3d luôn viết mới trên `/messages`) · L2 (câu chữ bất biến 5 khớp D-4) · L3 (mẫu grep thêm `fileName`/`original_name`/`size_bytes`, phân loại các dòng import/dọn tệp tạm/nội bộ URL ký).                                                                                                                                                                                                                                                                            |
+| L1 RED — fixture | 19/10/2026 14:28 | Đo mã khi viết ca: (a) F_grp dựng theo đường lùi §6 = đính kèm bài bị ẨN của tác giả (khuôn ATTMETAMASK), đặt tên F_hid trong spec; `member` = tác giả. (b) `file_links.module_code` KHÔNG có CHECK (grep `migrations/*.sql`) ⇒ F_nores = `(LEAVE, leave_request)` — không resolver đăng ký. (c) mig 0535 đổi FK `file_links.file_id` sang FK tenant ghép ⇒ R-7 vế link chéo tenant kỳ vọng DB TỪ CHỐI (23503) — spec ghi nhận cả hai nhánh, U-6 là lưới chính. (d) CHAT dựng bằng `helpers/seed` trong tenant A của cùng world (kit chỉ nhận cặp feed). |
