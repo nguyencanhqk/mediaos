@@ -12,6 +12,7 @@ import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
 import { FilesController } from "./files.controller";
+import { FileListService } from "./file-list.service";
 import { FileService } from "./files.service";
 // S5-ME-BE-5 (additive): ký URL avatar directory-class (HR read/org-chart hiển thị ảnh nhân viên).
 import { AvatarPresignService } from "./avatar-presign.service";
@@ -52,6 +53,8 @@ import { ServerFileService } from "./server-file.service";
     FileAccessLogService,
     FileAccessLogReadService,
     FileService,
+    // S19-SEC-FILEMETAGATE-1: danh sách tệp theo quyết định xem từng tệp (controller nội bộ dùng).
+    FileListService,
     // S2-FND-JOBS-1 (jobs_tempfile) — ADDITIVE. Handler tự đăng ký qua @SystemJobHandler metadata.
     TempFileCleanupRepository,
     TempFileCleanupJobHandler,

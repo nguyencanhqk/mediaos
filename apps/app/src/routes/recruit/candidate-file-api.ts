@@ -6,7 +6,7 @@
  * │ Bản S12-RECRUIT-FE-1 gọi thẳng 5 route `/foundation/files*`, vốn gate `*:foundation-file` —   │
  * │ cặp mà seed chỉ cấp cho company-admin. Đó là "NỢ SEED" ghi ở docblock cũ. Cách đóng KHÔNG      │
  * │ phải là cấp cặp đó cho recruiter/hr: `view:foundation-file` mở luôn màn quản trị              │
- * │ System > Files, và `GET /foundation/files` không gác per-file ⇒ trình duyệt tệp TOÀN TENANT.  │
+ * │ System > Files (danh sách tệp toàn tenant; tên/cỡ từng hàng theo quyết định xem từng tệp).    │
  * │ Thay vào đó BE dựng wrapper module-owned với một cặp GHI mới `upload:candidate-file`          │
  * │ (is_sensitive=TRUE, mig 0569) và đường ĐỌC dùng lại `view:candidate`.                          │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘

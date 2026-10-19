@@ -1610,6 +1610,35 @@ Company + module policy.
 
 ---
 
+### 12.3b Danh sách metadata file
+
+```http
+GET /api/v1/foundation/files?page=&limit=&visibility=
+```
+
+#### Required permission
+
+```text
+FOUNDATION.FILE.VIEW
+```
+
+#### Response
+
+Mỗi hàng theo `fileListItemSchema` (`packages/contracts/src/files.ts`), `links: []` (không eager-load), phân trang
+`pagination` ở đỉnh envelope. _(S19-SEC-FILEMETAGATE-1)_
+
+#### Business validation
+
+1. `originalName` · `fileExtension` · `sizeBytes` · `ownerUserId` của một hàng khác `null` ⇔ quyết định XEM của
+   chính người gọi cho tệp đó là ALLOW — cùng vị từ với §12.3 (hàng có tên ⇔ `GET /files/{file_id}` cùng người
+   gọi = 200).
+2. Hàng không xem được VẪN có mặt (phân trang và `total` giữ nghĩa); client không điều hướng hàng đó sang chi tiết.
+3. Metadata đính kèm CHAT (tin + giám sát CHAT) không đi qua route này — giữ theo SPEC CHAT.
+4. `id` của hàng che vẫn được trả ⇒ MỌI route theo `{file_id}` tự ra quyết định (XEM/TẢI) hoặc kiểm chủ tệp
+   trước khi trả metadata. `POST /files/{file_id}/confirm` chỉ dành cho chủ tệp; người khác ⇒ 404 như tệp vắng.
+
+---
+
 ### 12.4 Download file
 
 ```http

@@ -19,7 +19,6 @@ import {
   type FileLinkDto,
   type FileMetadataDto,
   type LinkFileInput,
-  type ListFilesQuery,
   type RegisterFileResponse,
   type UploadFileInput,
 } from "@mediaos/contracts";
@@ -46,12 +45,15 @@ import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
 import { isExtensionConsistentWithMime } from "./mime-extension";
+import { toFileMetadataDto } from "./file-metadata.mapper";
+import { FilePolicyAction, FOUNDATION_FILE_PERMISSION } from "./file-policy.types";
 import {
-  FilePolicyAction,
-  FOUNDATION_FILE_PERMISSION,
-  type FileLinkRef,
-  type FilePermissionInput,
-} from "./file-policy.types";
+  FOUNDATION_FILE_ENTITY,
+  FOUNDATION_FILE_MODULE,
+  filePolicyInput,
+  fileSelfPolicyInput,
+  toFileLinkRef,
+} from "./file-view-decision";
 
 /** Acting user resolved from the authenticated request (JwtAuthGuard + CompanyGuard). */
 interface RequestUser {
@@ -72,10 +74,6 @@ const DEFAULT_MAX_UPLOAD_MB = 25; // mirror setting-defaults.ts — only used if
  * (System Jobs khung) sở hữu job dọn dẹp (soft-delete + storage delete khi Pending quá TTL 'file.pending_
  * ttl_hours'). LANE NÀY KHÔNG tự chế job (tránh scheduler trùng) — chỉ để lại con trỏ. Không làm gì thêm ở đây.
  */
-
-/** Module/entity used when an upload is not linked to any business entity (foundation-owned file). */
-const FOUNDATION_MODULE = "FOUNDATION";
-const FOUNDATION_ENTITY = "File";
 
 /**
  * Tên 2 constraint UNIQUE trên `file_links` mà `link()` phải PHÂN BIỆT khi bắt 23505 (S2-FND-DB-2-B) —
@@ -98,7 +96,7 @@ const UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE = "uq_file_links_primary_per_entity_
  *  - #2.1 company_id mọi query qua withTenant; thiếu companyId/userId → FilePolicy deny-tenant (chặn
  *    TRƯỚC khi chạm storage/DB-write).
  *  - #2.2 file_access_logs APPEND-ONLY (FileAccessLogService); files/file_links SOFT-DELETE.
- *  - #2.3 KHÔNG trả storage_path/checksum/signed-url-dài-hạn ra DTO (toMetadataDto loại bỏ). KHÔNG tin
+ *  - #2.3 KHÔNG trả storage_path/checksum/signed-url-dài-hạn ra DTO (toFileMetadataDto ở file-metadata.mapper.ts loại bỏ). KHÔNG tin
  *    MIME client mù quáng — validate `declaredMimeType` ∈ allowlist (system_settings) + server tự suy
  *    file_extension từ originalName ĐÃ sanitize; storage key SERVER-derive qua buildFileKey ({companyId}/
  *    files/{fileId}) — client KHÔNG cấp path (chống path-traversal).
@@ -187,8 +185,8 @@ export class FileService {
     const fileId = randomUUID();
     const storageKey = this.buildKeyOrThrow(user.companyId, fileId, safeName);
 
-    const moduleCode = input.moduleCode ?? FOUNDATION_MODULE;
-    const entityType = input.entityType ?? FOUNDATION_ENTITY;
+    const moduleCode = input.moduleCode ?? FOUNDATION_FILE_MODULE;
+    const entityType = input.entityType ?? FOUNDATION_FILE_ENTITY;
     const entityId = input.entityId;
 
     return this.db.withTenant(user.companyId, async (tx) => {
@@ -300,10 +298,10 @@ export class FileService {
       this.fileRepo.findByIdTx(user.companyId, fileId, tx),
     );
     if (!row) throw new NotFoundException("File không tồn tại");
-    // S15-PAYROLL-BE-5B (plan §8.2 #4): tệp TẠM do hệ thống sinh (PDF/ZIP) tự chốt qua ServerFileService, KHÔNG
-    // đi pha confirm của client. Route chung không qua resolver ⇒ chặn ở đây, trả 404 sentinel như tệp vắng
-    // (không lộ sự tồn tại, không để ghi đè trạng thái/metadata của lô đang sinh).
-    if (row.isTemporary) throw new NotFoundException("File không tồn tại");
+    // Tệp TẠM hệ thống sinh tự chốt qua ServerFileService (S15-PAYROLL-BE-5B); chỉ CHỦ tệp xác nhận (S19-SEC-
+    // FILEMETAGATE-1; wrapper module kiểm chủ trước). Cả hai ⇒ 404 như tệp vắng: không lộ tồn tại/cỡ, không đổi trạng thái.
+    if (row.isTemporary || row.ownerUserId !== user.id)
+      throw new NotFoundException("File không tồn tại");
 
     // Idempotent: đã Uploaded → trả trạng thái hiện tại (confirm gọi lại vô hại). Non-Pending khác → 409.
     if (row.uploadStatus === "Uploaded") {
@@ -424,7 +422,7 @@ export class FileService {
     });
   }
 
-  // ─── Read (metadata / list) ──────────────────────────────────────────────────
+  // ─── Read (metadata) ──────────────────────────────────────────────────
 
   /**
    * Trả FileMetadataDto (KHÔNG storage_path) cho 1 file. FilePolicy.canView TRƯỚC (deny → 403 + log
@@ -440,8 +438,8 @@ export class FileService {
     // owning module's resolver (link-aware), not the FOUNDATION.FILE.* fallback (deny-no-resolver otherwise).
     const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
-      this.policyInputForFile(user, fileId, FilePolicyAction.View),
-      links.map((l) => this.toLinkRef(l)),
+      fileSelfPolicyInput(user, fileId, FilePolicyAction.View),
+      links.map((l) => toFileLinkRef(l)),
       FilePolicyAction.View,
       everLinked,
     );
@@ -458,32 +456,7 @@ export class FileService {
       });
     }
 
-    return this.toMetadataDto(row, links);
-  }
-
-  /**
-   * Liệt kê metadata file của tenant (pagination). Gate `view:foundation-file` ép ở controller (list
-   * cấp tenant — RLS là hàng rào thật). Trả {data, meta}. KHÔNG storage_path.
-   */
-  async list(
-    user: RequestUser,
-    query: ListFilesQuery,
-  ): Promise<{ data: FileMetadataDto[]; meta: { total: number; page: number; limit: number } }> {
-    const offset = (query.page - 1) * query.limit;
-    return this.db.withTenant(user.companyId, async (tx) => {
-      const [rows, total] = await Promise.all([
-        this.fileRepo.listTx(
-          user.companyId,
-          { limit: query.limit, offset, visibility: query.visibility },
-          tx,
-        ),
-        this.fileRepo.countTx(user.companyId, { visibility: query.visibility }, tx),
-      ]);
-      return {
-        data: rows.map((r) => this.toMetadataDto(r, [])),
-        meta: { total, page: query.page, limit: query.limit },
-      };
-    });
+    return toFileMetadataDto(row, links);
   }
 
   // ─── Download ─────────────────────────────────────────────────────────────────
@@ -504,8 +477,8 @@ export class FileService {
     // fail-closed (deny-no-resolver); foundation-owned (0-link) keeps the FOUNDATION.FILE.* fallback.
     const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
-      this.policyInputForFile(user, fileId, FilePolicyAction.Download),
-      links.map((l) => this.toLinkRef(l)),
+      fileSelfPolicyInput(user, fileId, FilePolicyAction.Download),
+      links.map((l) => toFileLinkRef(l)),
       FilePolicyAction.Download,
       everLinked,
     );
@@ -613,7 +586,7 @@ export class FileService {
     }
 
     const decision = await this.policy.canLink(
-      this.policyInput(user, {
+      filePolicyInput(user, {
         fileId: input.fileId,
         moduleCode: input.moduleCode,
         entityType: input.entityType,
@@ -725,7 +698,7 @@ export class FileService {
     if (!existing) throw new NotFoundException("File link không tồn tại");
 
     const decision = await this.policy.canUnlink(
-      this.policyInput(user, {
+      filePolicyInput(user, {
         fileId: existing.fileId,
         moduleCode: existing.moduleCode,
         entityType: existing.entityType,
@@ -804,8 +777,8 @@ export class FileService {
     // resolver — orphaned-file cleanup is the owning module's responsibility (S2-FND-BE-5+).
     const { links, everLinked } = await this.loadLinkContext(user, fileId);
     const decision = await this.policy.decideForLinkedFile(
-      this.policyInputForFile(user, fileId, FilePolicyAction.Delete),
-      links.map((l) => this.toLinkRef(l)),
+      fileSelfPolicyInput(user, fileId, FilePolicyAction.Delete),
+      links.map((l) => toFileLinkRef(l)),
       FilePolicyAction.Delete,
       everLinked,
     );
@@ -971,10 +944,6 @@ export class FileService {
   }
 
   /**
-   * Dựng FilePermissionInput cho thao tác trên 1 file foundation-owned (module=FOUNDATION, entity=File,
-   * entityId=fileId) — fallback FOUNDATION.FILE.* khi không có resolver module.
-   */
-  /**
    * S7-FND-LINKFALLBACK-1 — nạp NGỮ CẢNH LINK cho một quyết định FilePolicy: link SỐNG + cờ "đã từng có
    * link module".
    *
@@ -993,54 +962,6 @@ export class FileService {
       links: await this.linkRepo.listByFileTx(user.companyId, fileId, tx),
       everLinked: await this.linkRepo.hasEverBeenLinkedTx(user.companyId, fileId, tx),
     }));
-  }
-
-  private policyInputForFile(
-    user: RequestUser,
-    fileId: string,
-    action: FilePolicyAction,
-  ): FilePermissionInput {
-    return this.policyInput(user, {
-      fileId,
-      moduleCode: FOUNDATION_MODULE,
-      entityType: FOUNDATION_ENTITY,
-      entityId: fileId,
-      action,
-    });
-  }
-
-  /** Dựng FilePermissionInput tường minh (đủ kiểu, không cast) cho dispatch resolver/fallback. */
-  private policyInput(
-    user: RequestUser,
-    parts: {
-      fileId: string;
-      moduleCode: string;
-      entityType: string;
-      entityId: string;
-      action: FilePolicyAction;
-    },
-  ): FilePermissionInput {
-    return {
-      companyId: user.companyId,
-      userId: user.id,
-      fileId: parts.fileId,
-      moduleCode: parts.moduleCode,
-      entityType: parts.entityType,
-      entityId: parts.entityId,
-      action: parts.action,
-    };
-  }
-
-  /**
-   * S2-FND-BE-4 (H1) — map a `file_links` row to the minimal FileLinkRef the policy layer dispatches on.
-   * Only the dispatch key + entity instance travel to the policy (no storage_path / secret — #2.3).
-   */
-  private toLinkRef(link: FileLink): FileLinkRef {
-    return {
-      moduleCode: link.moduleCode,
-      entityType: link.entityType,
-      entityId: link.entityId,
-    };
   }
 
   /**
@@ -1092,33 +1013,6 @@ export class FileService {
         fileLinkId: entry.fileLinkId,
       }),
     );
-  }
-
-  /** Map files row → FileMetadataDto an toàn (BẤT BIẾN #2.3 — KHÔNG storage_path/checksum/storedName). */
-  private toMetadataDto(row: FileRecord, links: FileLink[]): FileMetadataDto {
-    return {
-      id: row.id,
-      originalName: row.originalName,
-      mimeType: row.mimeType,
-      fileExtension: row.fileExtension ?? null,
-      sizeBytes: row.fileSizeBytes,
-      visibility: row.visibility as FileMetadataDto["visibility"],
-      uploadStatus: row.uploadStatus as FileMetadataDto["uploadStatus"],
-      scanStatus: row.scanStatus as FileMetadataDto["scanStatus"],
-      uploadedAt: row.uploadedAt.toISOString(),
-      downloadCount: row.downloadCount,
-      ownerUserId: row.ownerUserId ?? null,
-      isTemporary: row.isTemporary,
-      links: links.map((l) => ({
-        id: l.id,
-        moduleCode: l.moduleCode,
-        entityType: l.entityType,
-        entityId: l.entityId,
-        linkType: l.linkType as FileLinkDto["linkType"],
-        accessScope: l.accessScope as FileLinkDto["accessScope"],
-        isPrimary: l.isPrimary,
-      })),
-    };
   }
 
   /** Map file_links row → FileLinkDto an toàn. */
