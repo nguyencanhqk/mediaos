@@ -8,7 +8,7 @@ import { AvatarPresignService, isUuid } from "./avatar-presign.service";
  *   - DENY đầu độc CHÉO: employee B mượn fileId avatar của A (avatar_url B bị đặt = fileId của A) → link
  *     entity_id=A ≠ B ⇒ B KHÔNG được ký (chống IDOR đọc file nội-tenant qua avatar_url đa-người-ghi).
  *   - DENY không-xác-minh: fileId không có link/không image (findVerifiedAvatarsTx rỗng) → KHÔNG ký.
- *   - http passthrough (legacy admin-set); null/rác → bỏ; storage lỗi → fail-soft (bỏ + warn).
+ *   - http(s)/null/rác → bỏ (S19-HR-AVATARWRITE-1: không passthrough); storage lỗi → fail-soft (bỏ + warn).
  * Gate SQL (image/* + link ME/avatar SỐNG) test THẬT ở avatar-presign.int-spec.ts (Postgres).
  */
 
@@ -58,12 +58,13 @@ describe("resolveEmployeeAvatars", () => {
     expect(findVerifiedAvatarsTx).not.toHaveBeenCalled();
   });
 
-  it("http(s) URL → passthrough (legacy admin-set), KHÔNG chạm DB", async () => {
+  it("R11: http(s) URL → KHÔNG vào map (không passthrough chuỗi người dùng nhập), KHÔNG chạm DB", async () => {
     const { svc, findVerifiedAvatarsTx } = makeService([]);
     const map = await svc.resolveEmployeeAvatars("c1", [
       { employeeId: E1, avatarUrl: "https://cdn/x.png" },
+      { employeeId: E2, avatarUrl: "http://cdn/y.png" },
     ]);
-    expect(map.get(E1)).toBe("https://cdn/x.png");
+    expect(map.size).toBe(0);
     expect(findVerifiedAvatarsTx).not.toHaveBeenCalled();
   });
 
@@ -130,13 +131,13 @@ describe("resolveEmployeeAvatars", () => {
     expect(map.get(E2)).toBe("https://signed/c1/files/f2");
   });
 
-  it("hỗn hợp — http passthrough + fileId xác minh cùng response", async () => {
+  it("R11 hỗn hợp — http bị bỏ (initials), fileId xác minh vẫn ký trong cùng response", async () => {
     const { svc } = makeService([{ employeeId: E2, fileId: F2, storagePath: "c1/files/f2" }]);
     const map = await svc.resolveEmployeeAvatars("c1", [
       { employeeId: E1, avatarUrl: "https://cdn/a.png" },
       { employeeId: E2, avatarUrl: F2 },
     ]);
-    expect(map.get(E1)).toBe("https://cdn/a.png");
+    expect(map.has(E1)).toBe(false);
     expect(map.get(E2)).toBe("https://signed/c1/files/f2");
   });
 });

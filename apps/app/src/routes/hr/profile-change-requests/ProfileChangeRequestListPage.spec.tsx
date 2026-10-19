@@ -3,7 +3,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, hrApi } from "@mediaos/web-core";
+import { useAuthStore, hrApi, ApiError } from "@mediaos/web-core";
 import type { ProfileChangeRequestListResponse } from "@mediaos/contracts";
 import { ProfileChangeRequestListPage } from "./ProfileChangeRequestListPage";
 
@@ -120,6 +120,26 @@ describe("ProfileChangeRequestListPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /xác nhận duyệt/i }));
 
     await waitFor(() => expect(hrApi.approveProfileChangeRequest).toHaveBeenCalledWith("pcr-1"));
+  });
+
+  // ── S19-HR-AVATARWRITE-1 A8: duyệt bị 400 HR-ERR-040 (đề nghị cũ có trường không còn cho phép) ──
+  it("shows the approve error alert when approval is rejected with HR-ERR-040", async () => {
+    setCapabilities({ "approve:profile-change-request": true });
+    vi.mocked(hrApi.listProfileChangeRequests).mockResolvedValue(LIST);
+    vi.mocked(hrApi.approveProfileChangeRequest).mockRejectedValue(
+      new ApiError(400, "HR-ERR-040", "Fields not allowed for self-update"),
+    );
+
+    renderWithQuery(<ProfileChangeRequestListPage />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText(/^xem$/i));
+    fireEvent.click(await screen.findByRole("button", { name: /^duyệt$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /xác nhận duyệt/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/không thể duyệt/i);
+    expect(hrApi.approveProfileChangeRequest).toHaveBeenCalledWith("pcr-1");
   });
 
   // ── Reject requires a reason (blocked client-side without one) ──────────────
