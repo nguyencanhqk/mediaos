@@ -22236,4 +22236,36 @@ export const backlog = [
     ],
     notes: ["WO nợ — seed 16/10/2026 (Đợt 0). 🔴 vì PAYROLL."],
   },
+  {
+    id: "S19-SEC-FILEMETAGATE-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Rà metadata tệp (tên · cỡ) trên các đường đọc NGOÀI SOCIAL — danh sách tệp FOUNDATION và DTO đính kèm CHAT — theo cùng bất biến của S16-SOCIAL-ATTMETAMASK-1: tên/cỡ chỉ đi theo quyết định xem từng tệp, hoặc phạm vi toàn tenant được chốt có chủ đích",
+    zone: "red",
+    gate: "FULL",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/src/chat/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S16-SOCIAL-ATTMETAMASK-1"],
+    src: [
+      "FULL gate + santa của S16-SOCIAL-ATTMETAMASK-1 (18/10/2026, PR #591) — có từ trước, nằm ngoài diff của WO đó. Số đo chi tiết ở kênh owner (thư mục kept/ ngoài repo), KHÔNG chép vào backlog (repo public).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: census PROD đọc-chỉ những vai trò giữ cặp quyền liên quan + liệt kê mọi đường đọc trả tên/cỡ tệp trong phạm vi — số đo để ngoài repo; owner chốt mức ưu tiên theo số đo",
+      "Chốt MỘT bất biến cho từng đường: tên/cỡ chỉ trả khi người xem có quyết định xem đúng tệp đó (policy theo từng tệp) HOẶC owner xác nhận đường đó là màn quản trị phạm vi toàn tenant có chủ đích — ghi lý do vào plan",
+      "RED trước: int-spec deny-path cho từng đường đọc trong phạm vi + ca ALLOW đứng cạnh; payload realtime (nếu có) đi cùng luật",
+    ],
+    notes: [
+      "🔴 Seed 19/10/2026 — owner chọn qua hộp hỏi «Gieo, tiêu đề trung tính». Merge = công bố ⇒ owner deploy API trong ngày merge.",
+    ],
+  },
 ];
