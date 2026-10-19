@@ -64,6 +64,19 @@ export const EMPLOYEE_LIST_PAGE_SIZE_MAX = 2000;
 export const EMPLOYEE_LIST_PAGE_SIZE_DEFAULT = 50;
 
 /**
+ * S19-HR-AVATARWRITE-1 — `avatarUrl` ở API tạo/sửa hồ sơ CHỈ nhận lệnh GỠ: vắng ⇒ không đụng cột, `null`
+ * ⇒ gỡ; MỌI chuỗi ⇒ 400 `VALIDATION-ERR-001`. Ảnh chỉ đặt qua `/me/avatar` (nhân viên) hoặc endpoint ảnh
+ * của HR — hai đường đã kiểm tệp. Không xoá trường: `z.object` bỏ khoá lạ im lặng ⇒ chuỗi sẽ bị nuốt với
+ * 200/201 thay vì báo lỗi cho client.
+ */
+const avatarRemoveOnlySchema = z
+  .null()
+  .optional()
+  .describe(
+    "Chỉ nhận null (gỡ ảnh); mọi chuỗi ⇒ 400. Ảnh đặt qua /me/avatar hoặc endpoint ảnh của HR.",
+  );
+
+/**
  * Create employee profile.
  * EMP-001: either link an existing `userId`, OR create a new login account by supplying
  * `email` + `fullName` (server hashes `password`, or generates a temporary one). The
@@ -85,7 +98,7 @@ export const createEmployeeProfileSchema = z.object({
   baseSalary: z.number().nonnegative().optional(),
   salaryType: salaryTypeEnum.default("monthly"),
   phone: z.string().optional(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: avatarRemoveOnlySchema,
   notes: z.string().optional(),
 });
 export type CreateEmployeeProfileRequest = z.infer<typeof createEmployeeProfileSchema>;
@@ -103,7 +116,7 @@ export const updateEmployeeProfileSchema = z.object({
   baseSalary: z.number().nonnegative().nullable().optional(),
   salaryType: salaryTypeEnum.optional(),
   phone: z.string().nullable().optional(),
-  avatarUrl: z.string().url().nullable().optional(),
+  avatarUrl: avatarRemoveOnlySchema,
   notes: z.string().nullable().optional(),
   status: employeeStatusEnum.optional(),
 });
