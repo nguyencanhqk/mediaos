@@ -69,8 +69,12 @@ export const EMPLOYEE_LIST_PAGE_SIZE_DEFAULT = 50;
  * của HR — hai đường đã kiểm tệp. Không xoá trường: `z.object` bỏ khoá lạ im lặng ⇒ chuỗi sẽ bị nuốt với
  * 200/201 thay vì báo lỗi cho client.
  */
+/** Lời nhắn lỗi đi vào `details[].message` của 400 — client cũ tự chẩn đoán được, không chỉ «Expected null». */
+export const AVATAR_REMOVE_ONLY_MESSAGE =
+  "avatarUrl chỉ nhận null (gỡ ảnh); đặt ảnh qua /me/avatar hoặc endpoint ảnh của HR";
+
 const avatarRemoveOnlySchema = z
-  .null()
+  .null({ invalid_type_error: AVATAR_REMOVE_ONLY_MESSAGE })
   .optional()
   .describe(
     "Chỉ nhận null (gỡ ảnh); mọi chuỗi ⇒ 400. Ảnh đặt qua /me/avatar hoặc endpoint ảnh của HR.",

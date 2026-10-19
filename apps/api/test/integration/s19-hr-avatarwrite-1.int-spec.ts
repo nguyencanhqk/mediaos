@@ -5,9 +5,11 @@
  * Bất biến:
  *   1. Giá trị khác NULL trong `avatar_url` chỉ do W1/W2 ghi ⇒ `POST/PATCH /employees` chỉ nhận lệnh GỠ
  *      (`avatarUrl: null`); MỌI chuỗi ⇒ 400 `VALIDATION-ERR-001`, không ghi gì (R1–R5, A4).
- *   2. Đường đọc không trả chuỗi người dùng cung cấp làm URL ảnh (R6).
+ *   2. Đường đọc không trả chuỗi người dùng cung cấp làm URL ảnh (R6) — kể cả route legacy trả cột THÔ
+ *      `GET/PATCH /employees` (R14, neo dương A9: fileId vẫn trả nguyên).
  *   3. Duyệt đề nghị sửa hồ sơ fail-closed trên MỘT tập = `changedFields` ∪ khoá `newValues` cho kiểm cho
- *      phép, cổng nhạy cảm, áp cột và lịch sử (R7–R9, R8b, R8c).
+ *      phép, cổng nhạy cảm, áp cột và lịch sử (R7–R9, R8b, R8c). Hàng cũ bị chặn duyệt vẫn TỪ CHỐI được
+ *      (A10 — lối ra duy nhất của HR).
  *   4. Mọi lần cột ảnh từ khác-NULL về NULL đều có một hàng audit `avatar-remove` (R13, A1b).
  *
  * ┌─ MỌI CA TỪ CHỐI ĐỀU CÓ NEO DƯƠNG ──────────────────────────────────────────────────────────────┐
@@ -32,6 +34,7 @@ import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { AVATAR_REMOVE_ONLY_MESSAGE } from "@mediaos/contracts";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
 import { DatabaseService } from "../../src/db/db.service";
@@ -265,14 +268,16 @@ describe.skipIf(!hasLaneDb)("S19-HR-AVATARWRITE-1 đường ghi ảnh hồ sơ (
   });
 
   afterAll(async () => {
-    if (direct && A) {
-      await direct
-        .query("DELETE FROM employee_profiles WHERE company_id = $1", [A.companyId])
-        .catch(() => undefined);
-      await cleanupTenants(direct, [A.companyId]);
-      await direct.end();
+    // Lỗi dọn dẹp phải NỔI (không nuốt): một DELETE hỏng là rác trên lane DB. `finally` vẫn đóng pool + app.
+    try {
+      if (direct && A) {
+        await direct.query("DELETE FROM employee_profiles WHERE company_id = $1", [A.companyId]);
+        await cleanupTenants(direct, [A.companyId]);
+      }
+    } finally {
+      await direct?.end();
+      await app?.close();
     }
-    await app?.close();
   });
 
   // ── POST /employees ──────────────────────────────────────────────────────────────────────────────
@@ -287,6 +292,12 @@ describe.skipIf(!hasLaneDb)("S19-HR-AVATARWRITE-1 đường ghi ảnh hồ sơ (
       const res = await postEmployee({ userId, avatarUrl: value });
       expect(res.status, JSON.stringify(res.body)).toBe(400);
       expect(res.body.error.code).toBe(VALIDATION_ERROR);
+      // Lời nhắn chỉ đường cho client cũ (không chỉ «Expected null, received string»).
+      expect(res.body.error.details).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: "avatarUrl", message: AVATAR_REMOVE_ONLY_MESSAGE }),
+        ]),
+      );
       expect(await profileCountForUser(userId)).toBe(0);
     });
 
@@ -370,6 +381,40 @@ describe.skipIf(!hasLaneDb)("S19-HR-AVATARWRITE-1 đường ghi ảnh hồ sơ (
     expect(JSON.stringify(res.body)).not.toContain(FOREIGN_HTTP_URL);
   });
 
+  describe("route legacy /employees trả cột THÔ — chỉ để lộ fileId", () => {
+    it.each([
+      ["R14-link", FOREIGN_HTTP_URL],
+      ["R14-scheme", JS_SCHEME_URL],
+    ])(
+      "%s: cột cũ không phải fileId ⇒ GET + PATCH /employees trả avatarUrl null",
+      async (_ca, value) => {
+        const target = await seedProfile(value, { phone: "0922000001" });
+        const got = await auth(http().get(`/employees/${target.id}`));
+        expect(got.status, JSON.stringify(got.body)).toBe(200);
+        expect(got.body.data.id).toBe(target.id);
+        expect(got.body.data.avatarUrl).toBeNull();
+        expect(JSON.stringify(got.body)).not.toContain(value);
+
+        const patched = await patchEmployee(target.id, { phone: "0922000002" });
+        expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+        expect(patched.body.data.phone).toBe("0922000002");
+        expect(patched.body.data.avatarUrl).toBeNull();
+        expect(JSON.stringify(patched.body)).not.toContain(value);
+      },
+    );
+
+    it("A9: cột = fileId ⇒ GET + PATCH /employees trả nguyên fileId (neo dương R14)", async () => {
+      const fileId = randomUUID();
+      const target = await seedProfile(fileId, { phone: "0922000011" });
+      const got = await auth(http().get(`/employees/${target.id}`));
+      expect(got.status, JSON.stringify(got.body)).toBe(200);
+      expect(got.body.data.avatarUrl).toBe(fileId);
+      const patched = await patchEmployee(target.id, { phone: "0922000012" });
+      expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+      expect(patched.body.data.avatarUrl).toBe(fileId);
+    });
+  });
+
   // ── Đề nghị sửa hồ sơ (service THẬT từ DI) ───────────────────────────────────────────────────────
 
   describe("đề nghị sửa hồ sơ — một tập kiểm = tập áp", () => {
@@ -441,6 +486,22 @@ describe.skipIf(!hasLaneDb)("S19-HR-AVATARWRITE-1 đường ghi ảnh hồ sơ (
       const row = await profileRow(target.id);
       expect(row.identity_number).toBe("070200000001");
       expect(row.phone).toBe("0911000021");
+    });
+
+    it("A10: hàng cũ có avatar_file_id (bị chặn duyệt) vẫn TỪ CHỐI được ⇒ Rejected, không ghi cột", async () => {
+      const target = await seedProfile(null, { phone: "0911000041" });
+      const pcr = await seedPcr(target.id, target.userId, ["avatar_file_id", "phone"], {
+        avatar_file_id: RANDOM_UUID,
+        phone: "0911000042",
+      });
+      const rejected = await svc.rejectRequest({ id: approverUid, companyId: A.companyId }, pcr, {
+        rejectionReason: "Đề nghị chứa trường không còn hỗ trợ",
+      });
+      expect(rejected.status).toBe("Rejected");
+      expect(await pcrStatus(pcr)).toBe("Rejected");
+      const row = await profileRow(target.id);
+      expect(row.avatar_url).toBeNull();
+      expect(row.phone).toBe("0911000041");
     });
 
     it("R9: applyChangesToEmployeeTx với khoá avatar_file_id ⇒ cột không đổi", async () => {

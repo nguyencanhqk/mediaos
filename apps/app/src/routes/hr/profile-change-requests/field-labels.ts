@@ -109,6 +109,22 @@ export const PROFILE_CHANGE_FIELD_META: Readonly<
   },
 };
 
+/**
+ * S19-HR-AVATARWRITE-1 — trường ĐÃ BỊ LOẠI khỏi danh sách cho phép nhưng còn trong đề nghị cũ. Chỉ để
+ * HIỂN THỊ nhãn (kèm «không còn hỗ trợ»), không bao giờ vào form — form lặp `PROFILE_CHANGE_FIELD_LIST`.
+ */
+const RETIRED_PROFILE_CHANGE_FIELD_LABEL_KEYS: Readonly<Record<string, string>> = {
+  avatar_file_id: "changeRequest.fields.avatar_file_id",
+};
+
+/** Khoá i18n nhãn của một trường trong đề nghị (cho phép hiện tại hoặc đã loại); `null` ⇒ trường lạ. */
+export function profileChangeFieldLabelKey(field: string): string | null {
+  const meta = (PROFILE_CHANGE_FIELD_META as Readonly<Record<string, ProfileChangeFieldMeta>>)[
+    field
+  ];
+  return meta?.labelKey ?? RETIRED_PROFILE_CHANGE_FIELD_LABEL_KEYS[field] ?? null;
+}
+
 /** Danh sách field theo thứ tự hiển thị — luôn đọc từ contracts (nguồn sự thật). */
 export const PROFILE_CHANGE_FIELD_LIST: readonly ProfileChangeFieldMeta[] =
   PROFILE_CHANGE_ALLOWED_FIELDS.map((f) => PROFILE_CHANGE_FIELD_META[f]);

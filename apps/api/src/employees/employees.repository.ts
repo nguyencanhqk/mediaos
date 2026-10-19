@@ -95,7 +95,11 @@ export interface EmployeeInsertData {
   baseSalary?: string | null;
   salaryType?: string;
   phone?: string | null;
-  avatarUrl?: string | null;
+  /**
+   * S19-HR-AVATARWRITE-1 — route legacy chỉ được GỠ ảnh: kiểu `null` để trình biên dịch chặn mọi chuỗi đi
+   * qua đây. Giá trị khác NULL chỉ do `HrWriteRepository.updateAvatarUrlTx` (W1/W2, đã kiểm tệp) ghi.
+   */
+  avatarUrl?: null;
   notes?: string | null;
 }
 
@@ -112,7 +116,8 @@ export type EmployeeUpdateData = Partial<{
   baseSalary: string | null;
   salaryType: string;
   phone: string | null;
-  avatarUrl: string | null;
+  /** Chỉ lệnh GỠ (`null`) — xem `EmployeeInsertData.avatarUrl`. */
+  avatarUrl: null;
   notes: string | null;
   status: string;
 }>;

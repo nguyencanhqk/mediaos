@@ -21,7 +21,15 @@ import { ClipboardCheck, RefreshCw } from "lucide-react";
 import type { ProfileChangeRequestListItem, ProfileChangeStatus } from "@mediaos/contracts";
 import { PROFILE_CHANGE_STATUSES, rejectProfileChangeRequestSchema } from "@mediaos/contracts";
 import { hrApi, hrKeys, hrInvalidation, useCan, ApiError } from "@mediaos/web-core";
-import { Button, DataTable, Dialog, EmptyState, PageHeader, PaginationFooter, Select } from "@mediaos/ui";
+import {
+  Button,
+  DataTable,
+  Dialog,
+  EmptyState,
+  PageHeader,
+  PaginationFooter,
+  Select,
+} from "@mediaos/ui";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { ProfileChangeStatusBadge } from "./status-badge";
 
@@ -41,6 +49,11 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 function mapMutationError(err: unknown, t: TF, kind: "approve" | "reject"): string {
   if (err instanceof ApiError && err.status === 403)
     return t(`changeRequest.list.${kind}.forbidden`);
+  // S19-HR-AVATARWRITE-1 — duyệt (không có body) chỉ trả 400 khi đề nghị chứa trường ngoài danh sách
+  // cho phép hiện tại (HR-ERR-040, vd. đề nghị cũ có ảnh đại diện). Thử lại không bao giờ qua ⇒ chỉ
+  // đường «Từ chối» thay cho lỗi chung.
+  if (kind === "approve" && err instanceof ApiError && err.status === 400)
+    return t("changeRequest.list.approve.unsupportedField");
   return t(`changeRequest.list.${kind}.error`);
 }
 

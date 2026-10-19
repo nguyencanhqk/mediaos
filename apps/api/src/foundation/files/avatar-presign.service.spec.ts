@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { Logger } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AvatarPresignService, isUuid } from "./avatar-presign.service";
 
@@ -66,6 +67,34 @@ describe("resolveEmployeeAvatars", () => {
     ]);
     expect(map.size).toBe(0);
     expect(findVerifiedAvatarsTx).not.toHaveBeenCalled();
+  });
+
+  it("giá trị không phải fileId bị bỏ CÓ LOG: 1 warn kèm số đếm + company, KHÔNG in giá trị", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    const { svc } = makeService([{ employeeId: E1, fileId: F1, storagePath: "c1/files/f1" }]);
+    const map = await svc.resolveEmployeeAvatars("c1", [
+      { employeeId: E1, avatarUrl: F1 },
+      { employeeId: E2, avatarUrl: "https://cdn/legacy.png" },
+    ]);
+    expect(map.get(E1)).toBe("https://signed/c1/files/f1");
+    expect(map.has(E2)).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = String(warn.mock.calls[0]?.[0]);
+    expect(msg).toContain("company=c1");
+    expect(msg).toContain("1/2");
+    expect(msg).not.toContain("legacy.png");
+    warn.mockRestore();
+  });
+
+  it("toàn fileId/null ⇒ KHÔNG warn (không nhiễu log khi dữ liệu sạch)", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    const { svc } = makeService([{ employeeId: E1, fileId: F1, storagePath: "c1/files/f1" }]);
+    await svc.resolveEmployeeAvatars("c1", [
+      { employeeId: E1, avatarUrl: F1 },
+      { employeeId: E2, avatarUrl: null },
+    ]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("avatar ĐÃ XÁC MINH (cặp khớp) → ký; dedupe fileId", async () => {

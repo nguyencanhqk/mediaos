@@ -29,6 +29,7 @@ import {
 } from "../chat/chat-derived-rooms-sync.service";
 import { EMPLOYEE_LIST_MAX_ROWS, EmployeesRepository } from "./employees.repository";
 import { isUniqueViolation } from "../common/db-error";
+import { isUuid } from "../foundation/files/avatar-presign.service";
 
 const GENERATED_PASSWORD_BYTES = 18;
 
@@ -44,6 +45,17 @@ function maskSalary<T extends SalaryMaskable>(
 ): Omit<T, "baseSalary"> & { baseSalary: number | null } {
   const salary = allow && item.baseSalary != null ? Number(item.baseSalary) : null;
   return { ...item, baseSalary: salary };
+}
+
+/**
+ * S19-HR-AVATARWRITE-1 — route legacy trả cột `avatar_url` THÔ (không qua ký). Chỉ để lộ giá trị dạng
+ * fileId (UUID) — hình dạng duy nhất W1/W2 ghi; mọi giá trị khác (dữ liệu cũ dạng link, chuỗi rác) ⇒
+ * `null`. Cùng quy tắc với `AvatarPresignService`: không trả chuỗi người dùng nhập làm ảnh (bất biến §3.2
+ * của plan), kể cả khi cột còn dữ liệu ghi trước WO.
+ */
+function withExposedAvatar<T extends { avatarUrl: string | null }>(row: T): T {
+  const raw = row.avatarUrl;
+  return { ...row, avatarUrl: raw != null && isUuid(raw) ? raw : null };
 }
 
 type RequestUser = { id: string; companyId: string };
@@ -196,16 +208,17 @@ export class EmployeesService {
       phone: unknown;
       contractType: unknown;
       notes: unknown;
+      avatarUrl: string | null;
     },
   >(row: T, revealSalary: boolean, revealPii: boolean) {
-    return {
+    return withExposedAvatar({
       ...row,
       baseSalary: revealSalary && row.baseSalary != null ? Number(row.baseSalary) : null,
       salaryType: revealSalary ? row.salaryType : null,
       phone: revealPii ? row.phone : null,
       contractType: revealPii ? row.contractType : null,
       notes: revealPii ? row.notes : null,
-    };
+    });
   }
 
   /**
@@ -313,7 +326,7 @@ export class EmployeesService {
       });
 
       // Mutation responses mask salary by default — view it via the audited GET /employees/:id.
-      return maskSalary(created, false);
+      return withExposedAvatar(maskSalary(created, false));
     } catch (err) {
       if (err instanceof ChatSyncRevokeError) {
         await this.chatSync.reportRevokeFailure(user.companyId, err);
@@ -418,7 +431,7 @@ export class EmployeesService {
       });
 
       // Mutation responses mask salary by default — view it via the audited GET /employees/:id.
-      return maskSalary(updated, false);
+      return withExposedAvatar(maskSalary(updated, false));
     } catch (err) {
       if (err instanceof ChatSyncRevokeError) {
         await this.chatSync.reportRevokeFailure(user.companyId, err);

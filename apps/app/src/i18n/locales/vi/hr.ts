@@ -687,7 +687,7 @@ export default {
       },
     },
     fields: {
-      avatar_file_id: "Ảnh đại diện",
+      avatar_file_id: "Ảnh đại diện (không còn hỗ trợ qua đề nghị)",
       date_of_birth: "Ngày sinh",
       gender: "Giới tính",
       marital_status: "Tình trạng hôn nhân",
@@ -744,6 +744,7 @@ export default {
         submitting: "Đang duyệt…",
         forbidden: "Bạn không có quyền duyệt yêu cầu này.",
         error: "Không thể duyệt. Vui lòng thử lại.",
+        unsupportedField: "Có trường không còn được hỗ trợ (ảnh đại diện) — hãy Từ chối yêu cầu.",
       },
       reject: {
         title: "Từ chối yêu cầu",

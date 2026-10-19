@@ -123,7 +123,7 @@ describe("ProfileChangeRequestListPage", () => {
   });
 
   // ── S19-HR-AVATARWRITE-1 A8: duyệt bị 400 HR-ERR-040 (đề nghị cũ có trường không còn cho phép) ──
-  it("shows the approve error alert when approval is rejected with HR-ERR-040", async () => {
+  it("shows the unsupported-field guidance (Từ chối) when approval is rejected with HR-ERR-040", async () => {
     setCapabilities({ "approve:profile-change-request": true });
     vi.mocked(hrApi.listProfileChangeRequests).mockResolvedValue(LIST);
     vi.mocked(hrApi.approveProfileChangeRequest).mockRejectedValue(
@@ -138,7 +138,8 @@ describe("ProfileChangeRequestListPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /xác nhận duyệt/i }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/không thể duyệt/i);
+    expect(alert).toHaveTextContent(/không còn được hỗ trợ/i);
+    expect(alert).toHaveTextContent(/hãy từ chối/i);
     expect(hrApi.approveProfileChangeRequest).toHaveBeenCalledWith("pcr-1");
   });
 

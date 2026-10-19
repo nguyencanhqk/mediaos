@@ -70,11 +70,23 @@ export class AvatarPresignService {
     // employeeId → fileId ứng viên. CHỈ UUID là ứng viên; mọi giá trị khác (http(s), rác) → bỏ (initials).
     const candidateFileId = new Map<string, string>();
     const fileIds: string[] = [];
+    let nonFileIdValues = 0;
     for (const s of subjects) {
       const raw = s.avatarUrl;
-      if (!raw || !isUuid(raw)) continue;
+      if (!raw) continue;
+      if (!isUuid(raw)) {
+        nonFileIdValues++;
+        continue;
+      }
       candidateFileId.set(s.employeeId, raw);
       fileIds.push(raw);
+    }
+    if (nonFileIdValues > 0) {
+      // Bỏ-CÓ-LOG (không im lặng): giá trị ghi trước S19-HR-AVATARWRITE-1 (link, chuỗi rác) về initials.
+      // Chỉ in SỐ ĐẾM + companyId — KHÔNG in giá trị (chuỗi do người dùng nhập).
+      this.logger.warn(
+        `resolveEmployeeAvatars[company=${companyId}]: ${nonFileIdValues}/${subjects.length} giá trị avatar_url không phải fileId bị bỏ (degrade→initials)`,
+      );
     }
     if (fileIds.length === 0) return out;
 
