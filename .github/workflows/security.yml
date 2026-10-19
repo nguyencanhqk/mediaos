@@ -6,8 +6,10 @@
 #   1. secret-scan     — gitleaks full-history → FAIL build khi phát hiện secret THẬT (BẤT BIẾN #3).
 #   2. dependency-scan — pnpm audit → FAIL khi có lỗ hổng high|critical chưa xử lý (SCA, DEVOPS-02 §9.2).
 #
-# REQUIRED STATUS CHECK: hai job 'secret-scan' và 'dependency-scan' phải là required check trên branch
+# REQUIRED STATUS CHECK (Ý ĐỊNH): hai job 'secret-scan' và 'dependency-scan' phải là required check trên branch
 # protection của master (đồng bộ auto-merge.yml + repo settings) — auto-merge CHỈ squash sau khi cả hai xanh.
+# THỰC TẾ đo 19/10/2026: chưa bật trong repo settings (chỉ «Lint · Typecheck · Migrate · RLS Test» bắt buộc) — nợ O7
+# của plan S19-OPS-SCASATELLITE-1.
 # Branch model = master (single-tenant N=1), KHÔNG develop — quyết định lệch DEVOPS-02 (develop/main) ghi ở
 # docs/plans/S0-CI-2.md. Trigger master/main giữ đồng bộ với ci.yml/api.yml/apps-frontend.yml.
 #
@@ -110,8 +112,11 @@ jobs:
         run: node scripts/check-brace-expansion-guard.mjs
 
       # S19-OPS-SCASATELLITE-1 — app vệ tinh có lockfile RIÊNG nằm ngoài workspace pnpm (pnpm-workspace.yaml
-      # loại !apps/fbpost) ⇒ `pnpm audit` phía trên mù với nó. Bước nằm TRONG job bắt buộc sẵn có (không tạo
-      # job mới: job mới chưa là required check ⇒ fail-open ở cổng merge); giữ nguyên tên job vì lý do đó.
+      # loại !apps/fbpost) ⇒ `pnpm audit` phía trên mù với nó. Bước nằm TRONG job dependency-scan sẵn có (không
+      # tạo job mới). LƯU Ý (đo 19/10/2026): branch protection của master hiện CHỈ bắt buộc check «Lint ·
+      # Typecheck · Migrate · RLS Test» — dependency-scan KHÔNG phải required check (khác ý định ghi ở đầu tệp)
+      # và merge `--admin` bỏ qua required check ⇒ đỏ ở đây là tín hiệu, không chặn merge; owner chốt giữ
+      # nguyên, ghi nợ (plan S19-OPS-SCASATELLITE-1, O7).
       # Không `npm ci`: npm audit dựng cây từ package-lock.json. Registry không tới được ⇒ exit ≠ 0 (đo).
       # `!cancelled()`: vẫn chạy khi bước pnpm audit đỏ — hai kết quả cùng hiện; job đỏ nếu bất kỳ bước nào đỏ.
       # --omit=dev: chỉ dependency CHẠY THẬT của fbpost (khác cổng pnpm phía trên quét cả dev) —
