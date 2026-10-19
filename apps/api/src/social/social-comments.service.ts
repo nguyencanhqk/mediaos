@@ -51,6 +51,7 @@ import {
 import { SocialActorProjectionRepository } from "./social-posts.repository";
 import { resolveActorName } from "./social-posts.service";
 import { SocialReactionsRepository } from "./social-reactions.repository";
+import { wsAttachmentsOf } from "./social-ws-payload";
 import { SOCIAL_ERR, socialError } from "./social.errors";
 import { toFeedCommentDto } from "./social.mapper";
 import type {
@@ -553,7 +554,8 @@ export class SocialCommentsService {
     const { myReaction: _mr, isMine: _im, mentions: _mn, attachments, author, ...rest } = dto;
     this.realtime.emitFeedCommentCreated(actor.companyId, {
       ...rest,
-      attachments: attachments.map(({ url: _u, ...a }) => a),
+      // S16-SOCIAL-ATTMETAMASK-1 (D-3): cùng helper với bài — không `url`, tên/cỡ `null`.
+      attachments: wsAttachmentsOf(attachments),
       // S16-SOCIAL-AVATARPRESIGN-1 (D3-b): URL ký là capability TTL — `avatarUrl: null` TẠI NGUỒN.
       author: wsAuthorOf(author),
     });

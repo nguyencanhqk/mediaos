@@ -404,10 +404,17 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · sự kiện realtime trên
     expect(wireAtt).toHaveLength(1);
     expect(restAtt).toHaveLength(1);
     expect(restAtt[0]).toHaveProperty("url");
-    for (const k of ["fileId", "kind", "fileName", "sizeBytes"]) {
+    for (const k of ["fileId", "kind"]) {
       expect(wireAtt[0]![k], `đính kèm · ${k}`).toEqual(restAtt[0]![k]);
     }
     expect(wireAtt[0]!.fileId).toBe(fileId);
+    // S16-SOCIAL-ATTMETAMASK-1 (D-3): trên dây `fileName`/`sizeBytes` LUÔN `null` (khoá giữ — bảng khoá
+    // trên không đổi). Neo dương: REST của CHÍNH người nghe (ký được) mang tên/cỡ và `url` chuỗi.
+    expect(wireAtt[0]!.fileName, "dây · fileName").toBeNull();
+    expect(wireAtt[0]!.sizeBytes, "dây · sizeBytes").toBeNull();
+    expect(typeof restAtt[0]!.url, "neo REST · url").toBe("string");
+    expect(restAtt[0]!.fileName, "neo REST · fileName").toEqual(expect.any(String));
+    expect(restAtt[0]!.sizeBytes, "neo REST · sizeBytes").toBe(2048);
 
     // Kiểm phụ: schema WS ở chế độ strict nhận payload trên dây.
     expect(wsFeedCompanyPostCreatedEventSchema.strict().safeParse(wire).success).toBe(true);
@@ -462,7 +469,15 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · sự kiện realtime trên
     const wireAtt = wire.attachments as Json[];
     expect(wireAtt).toHaveLength(1);
     expect(wireAtt[0]!.fileId).toBe(fileId);
-    expect((dto!.attachments as Json[])[0]).toHaveProperty("url");
+    const restAtt = (dto!.attachments as Json[])[0]!;
+    expect(restAtt).toHaveProperty("url");
+    // S16-SOCIAL-ATTMETAMASK-1 (D-3) — như W-1: dây `null`, REST của người nghe đủ trường.
+    expect(wireAtt[0]!.kind).toBe(restAtt.kind);
+    expect(wireAtt[0]!.fileName, "dây · fileName").toBeNull();
+    expect(wireAtt[0]!.sizeBytes, "dây · sizeBytes").toBeNull();
+    expect(typeof restAtt.url, "neo REST · url").toBe("string");
+    expect(restAtt.fileName, "neo REST · fileName").toEqual(expect.any(String));
+    expect(restAtt.sizeBytes, "neo REST · sizeBytes").toBe(2048);
 
     expect(wsFeedCommentCreatedEventSchema.strict().safeParse(wire).success).toBe(true);
   });

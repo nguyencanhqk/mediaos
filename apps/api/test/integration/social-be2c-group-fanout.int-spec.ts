@@ -229,7 +229,7 @@ describe.skipIf(!hasLaneDb)(
       expect(postCount(sock.M, kPost), "đúng MỘT bản — M ở cả room công ty lẫn room nhóm").toBe(1);
     });
 
-    it("🔒 W2 payload bài nhóm ≡ DTO REST `003` trừ khoá cố ý bóc; đính kèm = REST trừ `url`", async () => {
+    it("🔒 W2 payload bài nhóm ≡ DTO REST `003` trừ khoá cố ý bóc; đính kèm = REST trừ `url`, tên/cỡ null", async () => {
       const fileId = await seedFile(O.userId);
       const kPost = await groupPost(K, { attachmentIds: [fileId] });
       const ws = await waitForPost(sock.M, kPost);
@@ -257,7 +257,14 @@ describe.skipIf(!hasLaneDb)(
       }
       const restAtt = rest.attachments as Record<string, unknown>[];
       expect(restAtt, "neo dương: REST có đính kèm").toHaveLength(1);
-      expect(ws.attachments).toEqual(restAtt.map(({ url: _url, ...a }) => a));
+      // S16-SOCIAL-ATTMETAMASK-1 (D-3): room nhóm như room công ty — dây giữ khoá nhưng `fileName`/`sizeBytes`
+      // LUÔN `null`. Neo dương: REST của CHÍNH người nghe (ký được) mang tên/cỡ và `url` chuỗi.
+      expect(ws.attachments).toEqual(
+        restAtt.map(({ url: _url, ...a }) => ({ ...a, fileName: null, sizeBytes: null })),
+      );
+      expect(typeof restAtt[0]!.url, "neo REST · url").toBe("string");
+      expect(restAtt[0]!.fileName, "neo REST · fileName").toEqual(expect.any(String));
+      expect(restAtt[0]!.sizeBytes, "neo REST · sizeBytes").toBe(2048);
       expect(JSON.stringify(ws)).not.toContain("X-Amz-");
     });
 

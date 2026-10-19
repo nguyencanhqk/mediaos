@@ -349,8 +349,28 @@ export type WsNotificationReadEvent = z.infer<typeof wsNotificationReadEventSche
 // │    bình luận/cảm xúc vẫn CHỈ bài company (Q-CR — nợ `S16-SOCIAL-RTGROUPCR-1`).                   │
 // └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-/** Đính kèm trên kênh WS — **CỐ TÌNH KHÔNG CÓ `url`** (luật 2). */
-export const wsFeedAttachmentSchema = feedAttachmentSchema.omit({ url: true });
+/**
+ * Đính kèm trên kênh WS — **CỐ TÌNH KHÔNG CÓ `url`** (luật 2), và `fileName`/`sizeBytes` LUÔN `null`
+ * (S16-SOCIAL-ATTMETAMASK-1 D-3).
+ *
+ * Trên REST, tên/cỡ chỉ đi kèm khi ký được URL cho CHÍNH người xem; sự kiện phát cho CẢ room nên mang
+ * góc nhìn hẹp nhất: `fileId` + `kind` (đúng thứ người bị từ chối thấy ở REST). GIỮ khoá, ép GIÁ TRỊ
+ * (khuôn `wsFeedAuthorSchema`): schema cũ đòi hai khoá này (nullable, không optional) ⇒ bỏ khoá làm
+ * bundle FE cũ vứt mọi `feed:post.created` có đính kèm. Kiểu ĐẦU RA `null` ⇒ nguồn chép tên là đỏ lúc
+ * biên dịch; emitter `.parse()` ⇒ kể cả nguồn hồi quy, dây vẫn `null`. Tầng nguồn: `wsAttachmentsOf`.
+ */
+export const wsFeedAttachmentSchema = feedAttachmentSchema.omit({ url: true }).extend({
+  fileName: z
+    .string()
+    .nullable()
+    .transform((): null => null),
+  sizeBytes: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullable()
+    .transform((): null => null),
+});
 export type WsFeedAttachment = z.infer<typeof wsFeedAttachmentSchema>;
 
 /**
