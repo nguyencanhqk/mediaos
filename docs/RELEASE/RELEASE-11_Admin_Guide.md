@@ -352,9 +352,12 @@ m dev-online-stop     # tránh xung đột thư mục build
 # backup trước (§6.3)
 m prod-update fe      # frontend
 m prod-update api     # build → snapshot → MIGRATE → restart (không migrate xong thì không restart)
-m prod-update lms
+# deps đổi ⇒ cài TAY trước (prod-update KHÔNG cài): pnpm install --frozen-lockfile (apps/lms) / npm ci (apps/fbpost)
+m prod-update lms     # rồi m prod-update social — đọc dòng SCA cuối lệnh (đỏ ⇒ m sca; «cây đã cài LỆCH lockfile» = quên bước cài ở trên)
 node scripts/release-smoke.mjs --expect-commit <sha>    # BẮT BUỘC có --expect-commit
 ```
+
+Vá deps `apps/fbpost` (`npm audit fix` / `npm update`): LUÔN kèm `--before=<thời điểm hiện tại trừ 72 giờ>` — npm không có cổng tuổi bản lưu trong cấu hình như `minimumReleaseAge` của pnpm, nên bản vá non tuổi chỉ bị chặn khi người chạy nhớ cờ này.
 
 Quay lui khi hỏng: `m prod-rollback` (`RELEASE-08` §5).
 
