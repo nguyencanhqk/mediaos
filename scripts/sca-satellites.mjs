@@ -6,7 +6,8 @@
 // THẬT (`--omit=dev` / `--prod`), ngưỡng high|critical — cùng ngưỡng với cổng CI.
 //
 // Đầu ra: mỗi app một dòng đếm theo mức + một dòng đếm resolution không đến từ registry (audit mù với các gói
-// đó). Tên gói chỉ in ra terminal, không ghi tệp. Tiền tố dòng [OK]/[!]/[X] để mediaos.ps1 tô màu.
+// đó) + một dòng đối chiếu CÂY ĐÃ CÀI với lockfile (audit chỉ đọc lockfile: đổi lockfile mà quên cài lại thì
+// audit xanh về thứ không chạy ⇒ lệch = KHÔNG ĐO ĐƯỢC). Tên gói chỉ in ra terminal, không ghi tệp. Tiền tố dòng [OK]/[!]/[X] để mediaos.ps1 tô màu.
 // Exit tổng: 2 nếu có app KHÔNG ĐO ĐƯỢC · 1 nếu có high/critical · 0 sạch. "Không đo được" ≠ "sạch".
 //
 //   node scripts/sca-satellites.mjs [fbpost|lms|all] [--fbpost-dir <thư mục>] [--lms-dir <thư mục>]
@@ -14,7 +15,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { countNonRegistry, summarizeAudit, verdict } from "./lib/sca-summary.mjs";
+import { countNonRegistry, installDrift, summarizeAudit, verdict } from "./lib/sca-summary.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -28,6 +29,8 @@ const APPS = {
     defaultDir: "apps/fbpost",
     cmd: "npm",
     args: ["audit", "--omit=dev", "--audit-level=high", "--json"],
+    installedCopy: "node_modules/.package-lock.json",
+    installCmd: "npm ci",
   },
   lms: {
     kind: "pnpm",
@@ -35,6 +38,8 @@ const APPS = {
     defaultDir: "apps/lms",
     cmd: "pnpm",
     args: ["audit", "--prod", "--audit-level=high", "--json"],
+    installedCopy: "node_modules/.pnpm/lock.yaml",
+    installCmd: "pnpm install --frozen-lockfile",
   },
 };
 
@@ -89,7 +94,49 @@ function runAudit(app, dir) {
     : spawnSync(app.cmd, app.args, opts);
   if (r.error)
     return { error: `${app.cmd} audit không chạy được (${r.error.code ?? r.error.message})` };
-  return { stdout: r.stdout, status: r.status, signal: r.signal };
+  return { stdout: r.stdout, stderr: r.stderr, status: r.status, signal: r.signal };
+}
+
+/** stderr của audit (cắt ngắn, một dòng) — để «không đo được» nói được nguyên nhân: mạng, thiếu pnpm, endpoint… */
+function stderrHint(stderr) {
+  const s = String(stderr ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return s ? s.slice(0, 300) : "";
+}
+
+/**
+ * Gate SCA-1: audit chỉ đọc lockfile ⇒ đối chiếu bản sao cây đã cài. Trả 0 (khớp / chưa cài gì) hoặc 2.
+ * Chưa có node_modules: không có mã nào chạy từ thư mục này để lệch — báo [!], không đổi kết quả.
+ */
+function checkInstalled(app, tag, dir, lockPath) {
+  if (!existsSync(path.join(dir, "node_modules"))) {
+    console.log(
+      `  [!]  ${tag} chưa cài deps (không có node_modules) — kết quả trên chỉ nói về lockfile`,
+    );
+    return 0;
+  }
+  const copyPath = path.join(dir, app.installedCopy);
+  try {
+    if (!existsSync(copyPath))
+      throw new Error(`không đo được: có node_modules nhưng thiếu ${app.installedCopy}`);
+    const d = installDrift(
+      readFileSync(lockPath, "utf8"),
+      readFileSync(copyPath, "utf8"),
+      app.kind,
+    );
+    if (d.extra + d.missing + d.changed === 0) {
+      console.log(`  [OK] ${tag} cây đã cài khớp lockfile`);
+      return 0;
+    }
+    console.log(
+      `  [X]  ${tag} CÂY ĐÃ CÀI LỆCH LOCKFILE (thừa ${d.extra} · thiếu ${d.missing} · khác bản ${d.changed}) — deps CHƯA cài lại sau khi đổi lockfile ⇒ audit ở trên KHÔNG mô tả mã đang chạy`,
+    );
+    console.log(`  [X]  ${tag} chạy '${app.installCmd}' trong ${dir} rồi build + restart lại`);
+  } catch (err) {
+    console.log(`  [X]  ${tag} cây đã cài KHÔNG ĐO ĐƯỢC: ${err.message}`);
+  }
+  return 2;
 }
 
 function scanOne(name, dir) {
@@ -113,6 +160,8 @@ function scanOne(name, dir) {
       json = JSON.parse(r.stdout);
     } catch (err) {
       console.log(`  [X]  ${tag} ${err.message}`); // message đã mở đầu bằng «không đo được: …»
+      const hint = stderrHint(r.stderr);
+      if (hint) console.log(`  [X]  ${tag} stderr: ${hint}`);
     }
     result = verdict(counts, r.status);
     const exitTxt = r.status === null ? `bị dừng (${r.signal ?? "?"})` : `exit ${r.status}`;
@@ -146,7 +195,8 @@ function scanOne(name, dir) {
     console.log(`  [X]  ${tag} resolution ngoài registry KHÔNG ĐO ĐƯỢC: ${err.message}`);
     result = 2;
   }
-  return result;
+  // 2 trội hơn 1 trội hơn 0: cây cài lệch ⇒ số đếm audit ở trên không phải của mã đang chạy.
+  return Math.max(result, checkInstalled(app, tag, dir, lockPath));
 }
 
 function main() {

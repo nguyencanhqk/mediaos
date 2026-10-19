@@ -136,3 +136,76 @@ export function countNonRegistry(lockText, kind) {
   const sorted = [...names].sort();
   return { count: sorted.length, names: sorted };
 }
+
+// ── Cây ĐÃ CÀI so với lockfile (gate SCA-1) ────────────────────────────────────────────────────────────────────
+// audit chỉ đọc LOCKFILE. Đổi lockfile (pull bản vá) mà quên cài lại ⇒ build chạy cây CŨ trong khi audit báo
+// xanh về thứ không chạy. npm ghi bản sao cây đã cài ở `node_modules/.package-lock.json`, pnpm ở
+// `node_modules/.pnpm/lock.yaml` — đối chiếu bản sao đó với lockfile. Bản sao hỏng ⇒ ném (KHÔNG coi là khớp).
+const PNPM_KEYED_SECTIONS = new Set(["packages", "snapshots"]);
+
+function pnpmKeySet(text, label) {
+  if (!/^lockfileVersion:/m.test(text))
+    throw new UnmeasurableError(`${label} không phải pnpm lockfile`);
+  const keys = new Set();
+  let section = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^\S/.test(line)) {
+      section = /^([A-Za-z]+):\s*$/.exec(line)?.[1] ?? null;
+      continue;
+    }
+    if (!PNPM_KEYED_SECTIONS.has(section)) continue;
+    const m = /^ {2}(?! )(['"]?)(.+?)\1:\s*(\{\})?\s*$/.exec(line);
+    if (m) keys.add(`${section}:${m[2]}`);
+  }
+  return keys;
+}
+
+function npmPackageMap(text, label) {
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (err) {
+    throw new UnmeasurableError(`${label} JSON lỗi (${err.message})`);
+  }
+  const pkgs = json?.packages;
+  if (!pkgs || typeof pkgs !== "object" || Array.isArray(pkgs))
+    throw new UnmeasurableError(`${label} thiếu khoá packages`);
+  return pkgs;
+}
+
+/**
+ * Đếm lệch giữa lockfile (`wantedText`) và bản sao cây đã cài (`currentText`).
+ * extra = có trong cây cài, không có trong lockfile (vd. gói lồng cũ còn sót) · missing = lockfile có, cây cài
+ * không (npm: bỏ qua gói dev/optional — nền tảng khác hoặc cài --omit=dev) · changed = cùng chỗ, khác bản (npm;
+ * với pnpm phiên bản nằm trong khoá nên lệch bản hiện thành extra + missing).
+ */
+export function installDrift(wantedText, currentText, kind) {
+  if (kind === "pnpm") {
+    const wanted = pnpmKeySet(wantedText, "lockfile");
+    const current = pnpmKeySet(currentText, "bản sao cây đã cài");
+    return {
+      extra: [...current].filter((k) => !wanted.has(k)).length,
+      missing: [...wanted].filter((k) => !current.has(k)).length,
+      changed: 0,
+    };
+  }
+  if (kind === "npm") {
+    const wanted = npmPackageMap(wantedText, "lockfile");
+    const current = npmPackageMap(currentText, "bản sao cây đã cài");
+    let extra = 0;
+    let changed = 0;
+    let missing = 0;
+    for (const [key, entry] of Object.entries(current)) {
+      if (key === "") continue;
+      if (!Object.hasOwn(wanted, key)) extra++;
+      else if (wanted[key]?.version !== entry?.version) changed++;
+    }
+    for (const [key, entry] of Object.entries(wanted)) {
+      if (key === "" || Object.hasOwn(current, key)) continue;
+      if (entry?.dev || entry?.optional || entry?.devOptional) continue;
+      missing++;
+    }
+    return { extra, missing, changed };
+  }
+  throw new UnmeasurableError(`loại lockfile lạ: ${JSON.stringify(kind)}`);
+}

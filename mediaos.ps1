@@ -620,19 +620,69 @@ function Invoke-ScaAfterDeploy([string]$app) {
   Write-Host "  quét SCA $app (audit dependency chạy thật, ngưỡng high|critical) ..." -ForegroundColor DarkGray
   $code = -1
   try { $code = Invoke-ScaNode @($app) } catch { $code = -1 }
+  Save-ScaState $app $code "prod-update"
   if ($code -eq 0) { return }
   $why = switch ($code) {
     1 { "CÓ advisory mức high/critical trên dependency chạy thật" }
-    2 { "KHÔNG ĐO ĐƯỢC (audit lỗi / thiếu lockfile / kết quả lệch nhau)" }
+    2 { "KHÔNG ĐO ĐƯỢC (audit lỗi / thiếu lockfile / kết quả lệch nhau / CÂY ĐÃ CÀI LỆCH lockfile = chưa cài lại deps ⇒ build vừa chạy mã CŨ)" }
     default { "không chạy được bộ quét (exit $code)" }
   }
   Write-Err "SCA ${app}: $why — service ĐÃ restart, deploy KHÔNG bị chặn."
   Write-Err "Xử lý trước lần deploy kế: 'm sca $app' để xem chi tiết (plan S19-OPS-SCASATELLITE-1)."
 }
 
+# Dấu vết BỀN của lần quét gần nhất mỗi app (gate F1): một dòng đỏ trôi trong cuộn log deploy là đủ để bị bỏ
+# lỡ ⇒ ghi logs\sca-last-<app>.txt (logs\ đã gitignore) để `m prod-status` hiện lại. Một dòng ASCII:
+# "<giờ>|<exit>|<nguồn>". KHÔNG throw — ghi hỏng chỉ cảnh báo.
+function Save-ScaState([string]$app, [int]$code, [string]$source) {
+  try {
+    $dir = Join-Path $Root "logs"
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $line = "{0}|{1}|{2}" -f (Get-Date -Format "yyyy-MM-dd HH:mm"), $code, $source
+    [IO.File]::WriteAllText((Join-Path $dir "sca-last-$app.txt"), $line)
+  } catch { Write-Warn ("không ghi được dấu vết SCA ${app}: " + $_.Exception.Message) }
+}
+
+# Mục SCA của `m prod-status` — CHỈ ĐỌC dấu vết, không chạy audit (audit cần mạng + vài chục giây).
+function Show-ScaStatus {
+  Write-Host "  SCA app vệ tinh (lần quét gần nhất — 'm sca' / cuối 'm prod-update lms|social'):" -ForegroundColor DarkGray
+  foreach ($app in @("lms", "fbpost")) {
+    $f = Join-Path $Root "logs\sca-last-$app.txt"
+    if (-not (Test-Path -LiteralPath $f)) { Write-Warn "SCA ${app}: chưa có lần quét nào được ghi — chạy 'm sca $app'"; continue }
+    try {
+      $parts = ([IO.File]::ReadAllText($f)).Trim().Split('|')
+      # Sai dạng ⇒ throw sang nhánh "hỏng": KHÔNG để [int]$null = 0 thành «sạch».
+      if ($parts.Count -lt 3 -or $parts[1] -notmatch '^-?\d+$') { throw "dấu vết sai dạng" }
+      $at = $parts[0]; $code = [int]$parts[1]; $src = $parts[2]
+      if ($code -eq 0) { Write-Ok "SCA ${app}: sạch (lần quét $at, $src)" }
+      elseif ($code -eq 1) { Write-Err "SCA ${app}: ĐỎ từ $at ($src) — có high/critical trên dependency chạy thật — 'm sca $app'" }
+      else { Write-Err "SCA ${app}: KHÔNG ĐO ĐƯỢC từ $at ($src, exit $code) — gồm cả cây đã cài lệch lockfile — 'm sca $app'" }
+    } catch { Write-Err "SCA ${app}: dấu vết hỏng ($f) — chạy lại 'm sca $app'" }
+  }
+}
+
 function Invoke-Sca([string[]]$scaArgs) {
   Write-Step "SCA app vệ tinh (fbpost npm · lms pnpm) — dependency chạy thật, ngưỡng high|critical"
-  $code = Invoke-ScaNode $scaArgs
+  $argList = @()
+  if ($scaArgs) { $argList = @($scaArgs | Where-Object { $_ }) }
+  $target = "all"
+  if ($argList.Count -eq 1) { $target = ([string]$argList[0]).ToLower() }
+  if ($argList.Count -gt 1 -or @("all", "fbpost", "lms") -notcontains $target) {
+    # Thư mục tuỳ chọn / tham số khác ⇒ không phải cây của checkout này: chạy nguyên trạng, KHÔNG ghi dấu vết.
+    $code = Invoke-ScaNode $argList
+  } else {
+    $apps = @("fbpost", "lms")
+    if ($target -ne "all") { $apps = @($target) }
+    $codes = @()
+    foreach ($a in $apps) {
+      $c = Invoke-ScaNode @($a)
+      Save-ScaState $a $c "m sca"
+      $codes += $c
+    }
+    $code = 0
+    if (@($codes | Where-Object { $_ -eq 1 }).Count -gt 0) { $code = 1 }
+    if (@($codes | Where-Object { $_ -ne 0 -and $_ -ne 1 }).Count -gt 0) { $code = 2 }
+  }
   if ($code -lt 0) { $code = 2 }
   if ($code -ne 0) { exit $code }
 }
@@ -856,6 +906,8 @@ function Invoke-ProdStatus {
   Show-MigrationStatus
   Write-Host ""
   Show-ReleaseStatus
+  Write-Host ""
+  Show-ScaStatus
   Write-Host ""
   try {
     $r = Invoke-WebRequest -Uri "http://localhost:$ApiPort/api/v1/health" -UseBasicParsing -TimeoutSec 4

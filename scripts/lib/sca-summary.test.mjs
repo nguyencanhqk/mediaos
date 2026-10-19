@@ -8,7 +8,7 @@
 // Fixture tổng hợp, tên gói giả. Chạy: node --test scripts/lib/sca-summary.test.mjs
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { countNonRegistry, summarizeAudit, verdict } from "./sca-summary.mjs";
+import { countNonRegistry, installDrift, summarizeAudit, verdict } from "./sca-summary.mjs";
 
 const auditJson = (v) =>
   JSON.stringify({
@@ -217,5 +217,80 @@ describe("countNonRegistry (resolution không đến từ registry trong lockfil
     );
     assert.throws(() => countNonRegistry("lockfileVersion: '9.0'\n", "pnpm"), UNMEASURABLE);
     assert.throws(() => countNonRegistry("{}", "yarn"), UNMEASURABLE);
+  });
+});
+
+// Gate SCA-1: audit chỉ đọc LOCKFILE. Đổi lockfile mà quên cài lại ⇒ build chạy cây cũ, audit vẫn xanh. Đối
+// chiếu bản sao cây đã cài (npm: node_modules/.package-lock.json · pnpm: node_modules/.pnpm/lock.yaml).
+describe("installDrift (cây đã cài so với lockfile)", () => {
+  const npmLock = (pkgs) =>
+    JSON.stringify({ lockfileVersion: 3, packages: { "": { name: "app" }, ...pkgs } });
+  const pnpmLock = (pkgs, snaps) =>
+    [
+      "lockfileVersion: '9.0'",
+      "",
+      "importers:",
+      "",
+      "  .:",
+      "    dependencies:",
+      "      alpha:",
+      "        specifier: ^1.0.0",
+      "        version: 1.0.0",
+      "",
+      "packages:",
+      "",
+      ...pkgs.flatMap((k) => [`  '${k}':`, "    resolution: {integrity: sha512-x}", ""]),
+      "snapshots:",
+      "",
+      ...snaps.map((k) => `  '${k}': {}`),
+      "",
+    ].join(String.fromCharCode(10));
+
+  it("T14 npm: khớp (cây cài thiếu gói dev/optional của nền tảng khác) ⇒ 0 · 0 · 0", () => {
+    const wanted = npmLock({
+      "node_modules/alpha": { version: "1.0.0" },
+      "node_modules/@x/bin-other-os": { version: "1.0.0", optional: true },
+      "node_modules/devtool": { version: "2.0.0", dev: true },
+      "node_modules/both": { version: "3.0.0", devOptional: true },
+    });
+    const current = npmLock({ "node_modules/alpha": { version: "1.0.0" } });
+    assert.deepEqual(installDrift(wanted, current, "npm"), { extra: 0, missing: 0, changed: 0 });
+  });
+
+  it("T14b npm: gói lồng cũ còn trong cây · khác bản · thiếu gói chạy thật ⇒ đếm đủ ba loại", () => {
+    const wanted = npmLock({
+      "node_modules/alpha": { version: "1.0.1" },
+      "node_modules/beta": { version: "1.0.0" },
+      "node_modules/devtool": { version: "2.0.0", dev: true },
+    });
+    const current = npmLock({
+      "node_modules/alpha": { version: "1.0.0" },
+      "node_modules/alpha/node_modules/gamma": { version: "0.9.0" },
+    });
+    assert.deepEqual(installDrift(wanted, current, "npm"), { extra: 1, missing: 1, changed: 1 });
+  });
+
+  it("T15 pnpm: cùng tập khoá packages/snapshots ⇒ 0; bản cũ còn cài ⇒ thừa + thiếu", () => {
+    const wanted = pnpmLock(
+      ["alpha@1.0.1", "@s/beta@2.0.0"],
+      ["alpha@1.0.1", "@s/beta@2.0.0(alpha@1.0.1)"],
+    );
+    assert.deepEqual(installDrift(wanted, wanted, "pnpm"), { extra: 0, missing: 0, changed: 0 });
+    const stale = pnpmLock(
+      ["alpha@1.0.0", "@s/beta@2.0.0"],
+      ["alpha@1.0.0", "@s/beta@2.0.0(alpha@1.0.0)"],
+    );
+    assert.deepEqual(installDrift(wanted, stale, "pnpm"), { extra: 3, missing: 3, changed: 0 });
+  });
+
+  it("T16 bản sao hỏng / không phải lockfile / kind lạ ⇒ ném «không đo được» (KHÔNG coi là khớp)", () => {
+    const wanted = npmLock({ "node_modules/alpha": { version: "1.0.0" } });
+    assert.throws(() => installDrift(wanted, "{hỏng", "npm"), UNMEASURABLE);
+    assert.throws(
+      () => installDrift(wanted, JSON.stringify({ lockfileVersion: 3 }), "npm"),
+      UNMEASURABLE,
+    );
+    assert.throws(() => installDrift(pnpmLock([], []), "", "pnpm"), UNMEASURABLE);
+    assert.throws(() => installDrift(wanted, wanted, "yarn"), UNMEASURABLE);
   });
 });

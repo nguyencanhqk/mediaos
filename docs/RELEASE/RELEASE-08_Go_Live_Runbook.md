@@ -113,7 +113,7 @@ Quay lại đường cũ nếu cần: `nssm set MediaOS-API AppParameters "apps\
 | 4 | Deploy FE | `m prod-update fe` | Pages deploy xong |
 | 5 | Build + snapshot + **migrate** + restart API | `m prod-update api` | Fail-closed: schema chưa ở head ⇒ **KHÔNG restart** |
 | 6 | Seed nếu cần | `m seed` (chặn DB được bảo vệ) hoặc idempotent seed-on-boot | Log `MasterDataSeedRunner … 0 lỗi` |
-| 7 | Deploy LMS + SOCIAL — `prod-update` KHÔNG cài deps: deps đổi ⇒ cài TAY trước | `pnpm install --frozen-lockfile` (apps/lms) / `npm ci` (apps/fbpost) → `m prod-update lms` / `m prod-update social` | `:3400` 200 · SOCIAL «cổng phiên OK (401)» · dòng SCA cuối lệnh không đỏ (chi tiết: `m sca`) |
+| 7 | Deploy LMS + SOCIAL — `prod-update` KHÔNG cài deps: deps đổi ⇒ cài TAY trước | `pnpm install --frozen-lockfile` (apps/lms) / `npm ci` (apps/fbpost) → `m prod-update lms` / `m prod-update social` | `:3400` 200 · SOCIAL «cổng phiên OK (401)» · dòng SCA cuối lệnh không đỏ, GỒM dòng «cây đã cài khớp lockfile» (dòng «LỆCH» = chưa cài lại deps ⇒ build vừa chạy mã CŨ: cài rồi chạy lại lệnh) · `m prod-status` mục SCA không đỏ (chi tiết: `m sca`) |
 | 8 | Canary | `CANARY_BASE_URL=http://localhost:3100/api/v1 bash scripts/canary-watch.sh --once` | exit 0 |
 | 9 | **Smoke** | `node scripts/release-smoke.mjs --expect-commit <sha>` | 10/10 PASS · `RC-BUILD-MATCH` PASS |
 | 10 | Mở truy cập người dùng | — | Người thật đăng nhập được |
