@@ -38,6 +38,7 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 import {
   QA1_ROUTES,
   callQa1Route,
@@ -57,7 +58,10 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 
+const FILE = "test/integration/s15-payroll-qa1-roles.int-spec.ts";
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
+/** Route ALLOW mà server GHI PDF lên storage (083 phiếu · 084 phiếu của tôi) — chỉ dòng ALLOW của chúng cần cổng. */
+const PDF_STORAGE_CODES: ReadonlySet<string> = new Set(["083", "084"]);
 const LOGIN_PW = loginPasswordFixture("s15payrollqa1roles");
 
 const CANONICAL = [
@@ -116,6 +120,7 @@ const V2_HELD: Record<"company-admin" | "payroll-officer" | "employee", Readonly
 
 describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · role hệ thống × 50 route v2", () => {
   let app: INestApplication;
+  let gate: StorageTestGate;
   let direct: Pool;
   let A: SeededTenant;
   const companyIds: string[] = [];
@@ -142,6 +147,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · role hệ thống × 50 route v
   };
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -208,11 +214,15 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · role hệ thống × 50 route v
   }, 600_000);
 
   afterAll(async () => {
-    if (direct) {
-      await cleanupTenants(direct, companyIds);
-      await direct.end();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      if (direct) {
+        await cleanupTenants(direct, companyIds);
+        await direct.end();
+      }
+      await app?.close();
     }
-    await app?.close();
   });
 
   it("chống xanh-RỖNG: bảng đủ 50 route 036–085, mã không trùng", () => {
@@ -222,7 +232,18 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · role hệ thống × 50 route v
   });
 
   describe.each(["company-admin", "payroll-officer", "employee"] as const)("A · %s", (role) => {
-    it.each(QA1_ROUTES.map((r) => [r.code, r] as const))("%s", async (_code, route) => {
+    it.for(QA1_ROUTES.map((r) => [r.code, r] as const))("%s", async ([, route], ctx) => {
+      // Chỉ dòng ALLOW của route sinh PDF chạm storage; mọi dòng DENY (403) và ALLOW chỉ-DB luôn chạy.
+      if (
+        ALLOWED[role].has(route.code) &&
+        PDF_STORAGE_CODES.has(route.code) &&
+        !gate.needStorage(
+          ctx,
+          `A · ${role} ${route.verb.toUpperCase()} ${route.code} ALLOW sinh PDF`,
+        )
+      ) {
+        return;
+      }
       const res = await callQa1Route(http, route, slices[role], tokens[role]);
       const what = `${role} ${route.verb.toUpperCase()} ${route.code}`;
       if (ALLOWED[role].has(route.code)) {

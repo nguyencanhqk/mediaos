@@ -31,6 +31,7 @@ import {
 } from "../../src/payroll/payroll-route-pairs.const";
 import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 import {
   QA1_ROUTES,
   callQa1Route,
@@ -46,7 +47,10 @@ import {
 } from "../helpers/payroll-v2-fixtures";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
+const FILE = "test/integration/s15-payroll-qa1-pair-matrix.int-spec.ts";
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
+/** Route ALLOW mà server GHI PDF lên storage (083 phiếu · 084 phiếu của tôi). */
+const PDF_STORAGE_CODES: ReadonlySet<string> = new Set(["083", "084"]);
 const LOGIN_PW = loginPasswordFixture("s15payrollqa1pairs");
 
 const pairOf = (k: PayrollRouteKey): string =>
@@ -82,6 +86,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · thiếu ĐÚNG một cặp × 1
   let app: INestApplication;
   let direct: Pool;
   let A: SeededTenant;
+  let gate: StorageTestGate;
   const companyIds: string[] = [];
   let fullToken = "";
   let fullSlice: Qa1Slice;
@@ -110,6 +115,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · thiếu ĐÚNG một cặp × 1
   };
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -179,15 +185,26 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · thiếu ĐÚNG một cặp × 1
   }, 600_000);
 
   afterAll(async () => {
-    if (direct) {
-      await cleanupTenants(direct, companyIds);
-      await direct.end();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      if (direct) {
+        await cleanupTenants(direct, companyIds);
+        await direct.end();
+      }
+      await app?.close();
     }
-    await app?.close();
   });
 
   describe("A · ALLOW đối chứng — đủ mọi cặp @Company ⇒ mã chính xác trên 50 route", () => {
-    it.each(QA1_ROUTES.map((r) => [r.code, r] as const))("%s", async (_code, route) => {
+    it.for(QA1_ROUTES.map((r) => [r.code, r] as const))("%s", async ([, route], ctx) => {
+      // Chỉ dòng của route sinh PDF chạm storage; 48 dòng còn lại luôn chạy.
+      if (
+        PDF_STORAGE_CODES.has(route.code) &&
+        !gate.needStorage(ctx, `A · ALLOW ${route.verb.toUpperCase()} ${route.code} sinh PDF`)
+      ) {
+        return;
+      }
       const res = await callQa1Route(http, route, fullSlice, fullToken);
       expect(res.status, `${route.code}: ${JSON.stringify(res.body)}`).toBe(route.ok);
     });
