@@ -193,6 +193,15 @@ bỏ so ảnh chụp ở bước (6) (unit 409) · `ownerUserId` null coi là ch
 - Rủi ro: (a) TOCTOU giữa quyết định (ngoài tx, O-9) và ghi — bước (6) so lại ảnh chụp liên kết ⇒ 409; còn cửa sổ rất hẹp vì gỡ liên kết không
   khoá (O-8) · (b) vế chủ thắng grant đối tượng DENY trên tệp chưa từng gắn — theo O-1 · (c) branding/ME: đặt lại một tệp đã từng gắn ⇒ 403
   (theo O-1), không còn làm mất tài sản hiện hành (D-6b) · (d) đường lùi: `m prod-rollback` API (không đổi schema/contracts).
+- Sau gate FULL/santa (trung tính):
+  - Nợ (N6) thay-thế liên kết ở branding/ME là chuỗi gỡ → gắn qua hai lời gọi: lỗi không tất định ở bước gắn sau khi đã gỡ (409 ảnh chụp do
+    phiên song song, lỗi DB) để thực thể không còn tệp — cần API thay-thế liên kết trong MỘT tx ghi ở `FileService` (quyết định vẫn ngoài tx).
+  - Rủi ro (e) ảnh chụp so lại trong tx ghi phủ tập liên kết sống + cờ đã từng gắn, không phủ phán quyết resolver (quyền người gắn đổi giữa
+    quyết định và ghi) — chấp nhận theo O-9 · (f) gắn và gỡ đồng thời trên cùng tệp: mọi trật tự đan xen tương đương một trật tự tuần tự hợp
+    lệ (gắn trước, gỡ sau), nên khoá hàng tệp không thêm bảo đảm so với (a).
+  - Chờ owner: (Q1) ngữ nghĩa thu hồi khi tệp có nhiều liên kết sống (gỡ một liên kết, các liên kết còn lại vẫn quyết định) · (Q2) vế fallback
+    FOUNDATION ở biên gắn có đòi thêm hành động TẢI hay giữ XEM (O-1).
+  - Dòng log từ chối ở biên gắn chỉ ghi khi hàng tệp có trong công ty (id tệp do client gửi; các bước trước khi nạp hàng).
 
 ### 9.3 Sổ vết
 
