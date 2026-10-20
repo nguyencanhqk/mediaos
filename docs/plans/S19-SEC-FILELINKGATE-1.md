@@ -42,6 +42,11 @@
 - **O-7** Con trỏ `fileId` không tạo liên kết ⇒ ngoài phạm vi, nợ. **O-8** Gỡ liên kết giữ nguyên.
 - **O-9** Người gắn không xem được tệp ⇒ 403 `FOUNDATION-FILE-ERR-FORBIDDEN` + dòng `file_access_logs` từ chối như `canLink`; quyết định
   NGOÀI tx ghi (resolver tự mở `withTenant` — `apps/api/src/db/db.service.ts:74-91`), ngay sau `canLink`.
+- **Q1 (owner 20/10 ~10:10)** Gắn tệp là chia sẻ bền: gỡ một liên kết không thu hồi bản chia sẻ đã tạo hợp lệ từ nó (hệ quả của D-1). Không
+  đổi mã; nợ «thu hồi theo gốc» (§9).
+- **Q2 (owner 20/10 ~10:10)** Vế dự phòng của biên gắn (0 liên kết sống, chưa từng gắn, người gắn không phải chủ ⇒ fallback FOUNDATION) đòi
+  quyền xem lẫn quyền tải: `decideLinkAccess` hỏi `decideFileAccess` với View rồi Download. Vế chủ tệp và vế có liên kết sống giữ nguyên
+  (chỉ hỏi xem). Từ chối ⇒ 403 + dòng log Link mang mã quyền của hành động bị từ chối.
 
 ## 3. Thiết kế
 
@@ -199,8 +204,12 @@ bỏ so ảnh chụp ở bước (6) (unit 409) · `ownerUserId` null coi là ch
   - Rủi ro (e) ảnh chụp so lại trong tx ghi phủ tập liên kết sống + cờ đã từng gắn, không phủ phán quyết resolver (quyền người gắn đổi giữa
     quyết định và ghi) — chấp nhận theo O-9 · (f) gắn và gỡ đồng thời trên cùng tệp: mọi trật tự đan xen tương đương một trật tự tuần tự hợp
     lệ (gắn trước, gỡ sau), nên khoá hàng tệp không thêm bảo đảm so với (a).
-  - Chờ owner: (Q1) ngữ nghĩa thu hồi khi tệp có nhiều liên kết sống (gỡ một liên kết, các liên kết còn lại vẫn quyết định) · (Q2) vế fallback
-    FOUNDATION ở biên gắn có đòi thêm hành động TẢI hay giữ XEM (O-1).
+  - Đã chốt (owner 20/10 ~10:10, §2): (Q1) gắn tệp là chia sẻ bền — gỡ một liên kết không thu hồi bản chia sẻ đã tạo hợp lệ từ nó; không
+    đổi mã · (Q2) vế dự phòng của biên gắn đòi quyền xem lẫn quyền tải — đã thi công (`decideLinkAccess`).
+  - Nợ (N7, Q1; luồng chính gieo sau deploy, tiêu đề trung tính): «thu hồi theo gốc» — gỡ liên kết gốc có kéo theo các liên kết tạo từ nó hay
+    không; cần mô hình nguồn gốc liên kết. Ma trận quyền cập nhật sau deploy.
+  - Rủi ro (g) hai lời gắn đồng thời trên cùng tệp: tx ghi khoá hàng tệp (`FOR UPDATE`) trước khi đọc lại ảnh chụp ⇒ lời sau so ảnh chụp
+    sau khi lời trước commit (lệch ⇒ 409). Gỡ liên kết không khoá — theo (f).
   - Dòng log từ chối ở biên gắn chỉ ghi khi hàng tệp có trong công ty (id tệp do client gửi; các bước trước khi nạp hàng).
 
 ### 9.3 Sổ vết
