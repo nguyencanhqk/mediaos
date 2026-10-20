@@ -11,7 +11,7 @@
 // Chạy: `node --test harness/lane-db-guard.test.mjs`
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -323,4 +323,177 @@ test("R1(j/M1) decideGate: strict + có lời gọi storage bị tripwire chặn
     storageCalls: 1,
   });
   assert.equal(gate.level, "red");
+});
+
+// ══ Cổng LIGHT 20/10 — F2: guard đòi TỪNG tệp storage chạy · F1: check.sh không rơi về XANH khi guard sập ══
+
+const MANIFEST = fileURLToPath(
+  new URL("../apps/api/test/storage-spec-files.json", import.meta.url),
+);
+const CHECK_SH = fileURLToPath(new URL("./check.sh", import.meta.url));
+const STRICT_LANE = ["--lane-db-set=1", "--strict=1", "--fail-unless-ok=1"];
+const manifestFiles = () => JSON.parse(readFileSync(MANIFEST, "utf8"));
+const runLog = (files) =>
+  [...files.map((file) => runLabel({ file, bucket: "mediaos-test" })), ...SUMMARY].join("\n");
+
+test("LIGHT-F2 parseStorageRunFiles: chỉ nhãn run hợp lệ, khử trùng lặp, sắp xếp (bỏ ANSI + tiền tố turbo)", () => {
+  const text = [
+    runLabel({ file: SF2, bucket: "b" }),
+    `@mediaos/api:test: ${ESC}[2m${runLabel({ file: SF, bucket: "b" })}${ESC}[22m`,
+    runLabel({ file: SF, bucket: "b" }),
+    "[storage-test-run] {hỏng",
+    ...SUMMARY,
+  ].join("\n");
+  assert.deepEqual(guard.parseStorageRunFiles(text), [SF, SF2].sort());
+  assert.deepEqual(guard.parseStorageRunFiles(""), []);
+});
+
+test("LIGHT-F2 decideGate: strict + LANE_DB + THIẾU một tệp mong đợi ⇒ red dù runs > 0 (nêu tên tệp)", () => {
+  const gate = decideGate({
+    skippedFiles: 0,
+    laneDbSet: true,
+    strict: true,
+    storageSkips: 0,
+    storageRuns: 1,
+    storageCalls: 0,
+    expectedRunFiles: [SF, SF2],
+    storageRunFiles: [SF],
+  });
+  assert.equal(gate.level, "red");
+  assert.match(gate.message, /1\/2 tệp storage mong đợi/);
+  assert.ok(gate.message.includes(SF2));
+});
+
+test("LIGHT-F2 đối chứng: đủ mọi tệp ⇒ ok · không strict ⇒ không xét theo tệp · không truyền danh sách ⇒ hành vi cũ", () => {
+  const base = {
+    skippedFiles: 0,
+    laneDbSet: true,
+    storageSkips: 0,
+    storageRuns: 1,
+    storageCalls: 0,
+  };
+  const expectedRunFiles = [SF, SF2];
+  assert.equal(
+    decideGate({ ...base, strict: true, expectedRunFiles, storageRunFiles: [SF2, SF] }).level,
+    "ok",
+  );
+  assert.equal(
+    decideGate({ ...base, strict: false, expectedRunFiles, storageRunFiles: [SF] }).level,
+    "ok",
+  );
+  assert.equal(decideGate({ ...base, strict: true, storageRunFiles: [SF] }).level, "ok");
+});
+
+test("LIGHT-F2 CLI --expect-run-files (manifest THẬT của kho): đủ tệp ⇒ ok/exit 0; thiếu tệp đầu ⇒ red/exit 1 + tên tệp", () => {
+  const expected = manifestFiles();
+  assert.ok(expected.length > 1, "manifest phải liệt kê các tệp storage");
+  const ok = runGuardCli(runLog(expected), [...STRICT_LANE, `--expect-run-files=${MANIFEST}`]);
+  assert.equal(ok.level, "ok");
+  assert.equal(ok.status, 0);
+  const red = runGuardCli(runLog(expected.slice(1)), [
+    ...STRICT_LANE,
+    `--expect-run-files=${MANIFEST}`,
+  ]);
+  assert.equal(red.level, "red");
+  assert.equal(red.status, 1);
+  assert.ok(red.stdout.includes(expected[0]), red.stdout);
+});
+
+test("LIGHT-F2 CLI manifest vắng / rỗng / sai kiểu ⇒ red + exit 1 (không ngầm bỏ cổng theo tệp)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lane-db-guard-manifest-"));
+  const bad = [
+    join(dir, "khong-co.json"),
+    ...[["[]"], ['["a","a"]'], ['{"a":1}'], ["[1]"], ["{hỏng"]].map(([body], i) => {
+      const f = join(dir, `bad-${i}.json`);
+      writeFileSync(f, body, "utf8");
+      return f;
+    }),
+  ];
+  for (const manifest of bad) {
+    const r = runGuardCli(runLog(manifestFiles()), [
+      ...STRICT_LANE,
+      `--expect-run-files=${manifest}`,
+    ]);
+    assert.equal(r.level, "red", manifest);
+    assert.equal(r.status, 1, manifest);
+  }
+});
+
+/** Chạy ĐÚNG hàm run_lane_db_guard trích từ harness/check.sh (không chạy cả check.sh). */
+function runCheckShGuard({ guardPath, logText, strict, manifest = "" }) {
+  const fn = readFileSync(CHECK_SH, "utf8")
+    .replace(/\r/g, "")
+    .match(/^run_lane_db_guard\(\) \{\n[\s\S]*?\n\}\n/m)?.[0];
+  assert.ok(fn, "check.sh phải có hàm run_lane_db_guard ở cột 0");
+  const dir = mkdtempSync(join(tmpdir(), "check-sh-guard-"));
+  const log = join(dir, "test.log");
+  writeFileSync(log, logText, "utf8");
+  const script = [
+    "set -uo pipefail",
+    fn,
+    'run_lane_db_guard "$G" "$L" 1 20 "$ST" "$MF"',
+    'printf \'LEVEL=%s\\nMESSAGE=%s\\n\' "$GUARD_LEVEL" "$GUARD_MESSAGE"',
+  ].join("\n");
+  const res = spawnSync("bash", ["-c", script], {
+    encoding: "utf8",
+    env: { ...process.env, G: guardPath, L: log, ST: String(strict), MF: manifest },
+  });
+  const out = res.stdout ?? "";
+  const pick = (k) =>
+    out
+      .split(/\r?\n/)
+      .find((l) => l.startsWith(`${k}=`))
+      ?.slice(k.length + 1);
+  return {
+    status: res.status,
+    level: pick("LEVEL"),
+    message: pick("MESSAGE") ?? "",
+    stderr: res.stderr,
+  };
+}
+
+function stubGuard(body) {
+  const dir = mkdtempSync(join(tmpdir(), "check-sh-stub-"));
+  const f = join(dir, "guard.mjs");
+  writeFileSync(f, body, "utf8");
+  return f;
+}
+
+test("LIGHT-F1 check.sh: guard VẮNG (node exit 1, 0 dòng) ⇒ red khi strict · warn khi không — không bao giờ rỗng/XANH", () => {
+  const guardPath = join(mkdtempSync(join(tmpdir(), "check-sh-missing-")), "khong-co.mjs");
+  const red = runCheckShGuard({ guardPath, logText: runLog([SF]), strict: 1 });
+  assert.equal(red.status, 0, red.stderr);
+  assert.equal(red.level, "red");
+  assert.match(red.message, /KHÔNG trả LEVEL hợp lệ \(node exit [1-9]/);
+  assert.equal(runCheckShGuard({ guardPath, logText: runLog([SF]), strict: 0 }).level, "warn");
+});
+
+test("LIGHT-F1 check.sh: guard THROW · in LEVEL lạ · in LEVEL:ok rồi exit ≠ 0 ⇒ red (strict)", () => {
+  for (const body of [
+    'throw new Error("boom");',
+    'console.log("LEVEL:bogus"); console.log("MESSAGE:x");',
+    'console.log("LEVEL:ok"); process.exitCode = 3;',
+  ]) {
+    const r = runCheckShGuard({ guardPath: stubGuard(body), logText: runLog([SF]), strict: 1 });
+    assert.equal(r.level, "red", body);
+  }
+});
+
+test("LIGHT-F1/F2 check.sh đối chứng: guard THẬT + manifest — đủ tệp ⇒ ok; thiếu tệp ⇒ red (check.sh chuyển manifest)", () => {
+  const expected = manifestFiles();
+  const ok = runCheckShGuard({
+    guardPath: GUARD_CLI,
+    logText: runLog(expected),
+    strict: 1,
+    manifest: MANIFEST,
+  });
+  assert.equal(ok.level, "ok", ok.message + ok.stderr);
+  const red = runCheckShGuard({
+    guardPath: GUARD_CLI,
+    logText: runLog(expected.slice(1)),
+    strict: 1,
+    manifest: MANIFEST,
+  });
+  assert.equal(red.level, "red");
+  assert.ok(red.message.includes(expected[0]), red.message);
 });

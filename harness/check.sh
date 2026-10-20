@@ -60,6 +60,8 @@
 #   `--storage=offline` ép `offline` (unset mọi `S3_*` của shell). Chốt tên bucket thật nằm ở
 #   `apps/api/test/helpers/storage-test-target.ts` (`pinTestStorageEnv`): bucket khác tên cho phép ⇒ offline.
 #   Nợ N4 (owner nhận 20/10): hồ sơ live dùng khoá ROOT MinIO — an toàn chỉ dựa vào chốt tên bucket/tiền tố.
+#   Cổng LIGHT (20/10): guard nhận `--expect-run-files=apps/api/test/storage-spec-files.json` ⇒ strict + LANE_DB đòi
+#   TỪNG tệp storage phát nhãn run; node guard sập / không in LEVEL hợp lệ ⇒ red (strict) / warn, KHÔNG BAO GIỜ XANH.
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -128,6 +130,8 @@ storage_profile_setup() {
 }
 
 INT_SKIP_THRESHOLD="${INT_SKIP_THRESHOLD:-20}"
+# Manifest tệp storage (dùng chung với ratchet R4 `storage-spec-ratchet.unit-spec.ts`) — guard đòi từng tệp chạy.
+STORAGE_SPEC_MANIFEST="apps/api/test/storage-spec-files.json"
 REQUIRE_LANE_DB="${REQUIRE_LANE_DB:-0}"
 
 # ── KI-014 (S6-QA-CHUNK-1): chọn ĐƯỜNG CHẠY TEST theo nền tảng ───────────────────────────────
@@ -151,6 +155,27 @@ FAIL=0
 declare -a SUMMARY
 GUARD_LEVEL=""
 GUARD_MESSAGE=""
+GUARD_STORAGE=""
+
+# run_lane_db_guard <guard.mjs> <log> <lane_db_set 0|1> <threshold> <strict 0|1> [<manifest.json>]
+# Đặt GUARD_LEVEL / GUARD_MESSAGE / GUARD_STORAGE. Node sập (thiếu tệp, throw, OOM) hay in LEVEL rỗng/lạ ⇒ KHÔNG được
+# rơi về «XANH ✅» (cổng LIGHT F1 silent-failure-hunter): red khi strict, warn khi không — kèm lý do. Hàm đứng riêng để
+# harness/lane-db-guard.test.mjs trích đúng đoạn này (sed theo tên hàm) mà chạy các đường hỏng.
+run_lane_db_guard() {
+  local guard="$1" log="$2" lane_db_set="$3" threshold="$4" strict="$5" manifest="${6:-}"
+  local out rc=0
+  local -a extra=()
+  [ -n "$manifest" ] && extra=("--expect-run-files=$manifest")
+  out="$(node "$guard" "$log" --lane-db-set="$lane_db_set" --threshold="$threshold" --strict="$strict" ${extra[@]+"${extra[@]}"})" || rc=$?
+  GUARD_LEVEL="$(printf '%s\n' "$out" | grep '^LEVEL:' | head -n 1 | cut -d: -f2-)"
+  GUARD_MESSAGE="$(printf '%s\n' "$out" | grep '^MESSAGE:' | head -n 1 | cut -d: -f2-)"
+  GUARD_STORAGE="$(printf '%s\n' "$out" | grep '^STORAGE:' | head -n 1 | cut -d: -f2-)"
+  case "$rc:$GUARD_LEVEL" in
+    0:ok | 0:warn | 0:red) return 0 ;;
+  esac
+  GUARD_MESSAGE="lane-db-guard KHÔNG trả LEVEL hợp lệ (node exit $rc, LEVEL='$GUARD_LEVEL') — không có bằng chứng, không được coi là XANH"
+  if [ "$strict" = 1 ]; then GUARD_LEVEL="red"; else GUARD_LEVEL="warn"; fi
+}
 
 step() { # step "<nhãn>" <lệnh...>
   local label="$1"; shift
@@ -242,12 +267,9 @@ if [ "$RUN_TEST" = 1 ]; then
     local lane_db_set=0
     [ -n "${LANE_DB:-}" ] && lane_db_set=1
 
-    local guard_out
-    guard_out="$(node harness/lane-db-guard.mjs "$TEST_LOG" --lane-db-set="$lane_db_set" --threshold="$INT_SKIP_THRESHOLD" --strict="$strict")"
-    GUARD_LEVEL="$(printf '%s\n' "$guard_out" | grep '^LEVEL:' | cut -d: -f2-)"
-    GUARD_MESSAGE="$(printf '%s\n' "$guard_out" | grep '^MESSAGE:' | cut -d: -f2-)"
+    run_lane_db_guard harness/lane-db-guard.mjs "$TEST_LOG" "$lane_db_set" "$INT_SKIP_THRESHOLD" "$strict" "$STORAGE_SPEC_MANIFEST"
     # S16-SOCIAL-STORAGETESTGATE-1 (D-6): số ca storage bỏ qua / tệp chạy / lời gọi bị chặn — in để thấy bằng chứng.
-    echo "[check.sh] lane-db-guard STORAGE: $(printf '%s\n' "$guard_out" | grep '^STORAGE:' | cut -d: -f2-)"
+    echo "[check.sh] lane-db-guard STORAGE: $GUARD_STORAGE"
 
     return "$vitest_status"
   }

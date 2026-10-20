@@ -18441,6 +18441,7 @@ export const backlog = [
       "harness/lane-db-guard.mjs",
       "harness/lane-db-guard.test.mjs",
       "harness/check.sh",
+      "turbo.json",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],

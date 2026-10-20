@@ -9,6 +9,9 @@
  *   DƯƠNG tệp import `@aws-sdk/client-s3` hoặc thuộc 11 tệp storage của plan §1.2 ⇒ phải dùng `openStorageTestGate`.
  *   CẤU TRÚC `vitest.config.ts` ghim `pinTestStorageEnv(process.env)` trong `env` + tripwire D-10 trong `setupFiles`;
  *        `.github/workflows/api.yml` bước Test có `shell: bash` (pipefail — B1) và bước «Storage int-spec gate».
+ *   MANIFEST `test/storage-spec-files.json` = ĐÚNG tập tệp gọi `openStorageTestGate`; guard CI đòi TỪNG tệp trong đó
+ *        phát nhãn run (`--expect-run-files`, cổng LIGHT F2) ⇒ chuỗi `FILE` truyền cho cổng phải là đường dẫn thật
+ *        của chính tệp (cổng LIGHT F3-LOW). `turbo.json` passthrough đủ khoá `S3_*` (cổng LIGHT F1 — đường turbo).
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -19,20 +22,9 @@ const API = join(__dirname, "../../");
 const ROOT = join(__dirname, "../../../../");
 const GATE_HELPER = "test/helpers/storage-test-gate.ts";
 
-/** 11 tệp storage của plan §1.2 (đường dẫn tính từ apps/api). */
-const STORAGE_FILES = [
-  "files-e2e-confirm",
-  "hr-employee-avatar",
-  "me-preferences-avatar",
-  "temp-file-cleanup",
-  "s15-payroll-be5b-pdf",
-  "s15-payroll-be5b-pdf-batch",
-  "s15-payroll-qa1-idor-leak",
-  "s15-payroll-qa1-race",
-  "s13-payroll-qa1-scope-floor",
-  "s16-filedisposition-storage",
-  "s19-storage-provider-compat",
-].map((n) => `test/integration/${n}.int-spec.ts`);
+/** Manifest dùng chung với `harness/lane-db-guard.mjs --expect-run-files` (đường dẫn tính từ apps/api). */
+const MANIFEST = "test/storage-spec-files.json";
+const STORAGE_FILES = JSON.parse(readFileSync(join(API, MANIFEST), "utf8")) as string[];
 
 function walk(rel: string, keep: (p: string) => boolean): string[] {
   return (readdirSync(join(API, rel), { recursive: true }) as string[])
@@ -101,6 +93,33 @@ describe("R4 — ratchet int-spec storage (D-9)", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("manifest = đúng tập tệp gọi openStorageTestGate; mỗi tệp truyền cho cổng ĐƯỜNG DẪN THẬT của chính nó", () => {
+    const callers = SCANNED.filter((file) => file !== GATE_HELPER)
+      .filter((file) => /\bopenStorageTestGate\s*\(/.test(code(file)))
+      .sort();
+    expect([...STORAGE_FILES].sort()).toEqual(callers);
+    const badFileArg = STORAGE_FILES.filter((file) => {
+      const src = code(file);
+      const declared = src.match(/\bconst FILE\s*=\s*["']([^"']+)["']/)?.[1];
+      return declared !== file || !/\bopenStorageTestGate\(\s*FILE\s*[,)]/.test(src);
+    });
+    expect(badFileArg).toEqual([]);
+  });
+
+  it("turbo.json globalPassThroughEnv có ĐỦ khoá S3_* của env.schema (strict env-mode không được xoá hồ sơ live)", () => {
+    const schemaKeys = [
+      ...readFileSync(join(API, "src/config/env.schema.ts"), "utf8").matchAll(
+        /^\s*(S3_[A-Z_]+)\s*:/gm,
+      ),
+    ].map((m) => m[1]);
+    expect(schemaKeys.length).toBeGreaterThan(0);
+    const turbo = JSON.parse(readFileSync(join(ROOT, "turbo.json"), "utf8")) as {
+      globalPassThroughEnv?: string[];
+    };
+    const missing = schemaKeys.filter((k) => !(turbo.globalPassThroughEnv ?? []).includes(k));
+    expect(missing).toEqual([]);
+  });
+
   it("vitest.config.ts: env ghim pinTestStorageEnv(process.env) + setupFiles có tripwire D-10", () => {
     const cfg = code("vitest.config.ts");
     expect(cfg).toMatch(/env:\s*\{[^}]*\.\.\.pinTestStorageEnv\(process\.env\)/);
@@ -118,5 +137,6 @@ describe("R4 — ratchet int-spec storage (D-9)", () => {
     expect(gateStep, "bước Storage int-spec gate").toBeDefined();
     expect(gateStep).toMatch(/\n\s*shell: bash\s*\n/);
     expect(gateStep).toMatch(/lane-db-guard\.mjs[\s\S]*--strict=1[\s\S]*--fail-unless-ok=1/);
+    expect(gateStep).toMatch(/--expect-run-files=apps\/api\/test\/storage-spec-files\.json/);
   });
 });

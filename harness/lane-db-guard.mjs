@@ -117,6 +117,37 @@ export function parseStorageMarkers(text) {
   return { skips: skips.size, runs: runs.size, calls };
 }
 
+/**
+ * parseStorageRunFiles(text) → tên tệp (trường `file`) của mọi nhãn `[storage-test-run]` HỢP LỆ, khử trùng lặp, sắp xếp.
+ * Dùng cho cổng THEO TỪNG TỆP (`--expect-run-files`): tổng `runs > 0` không đủ — một tệp storage bị skip cả tệp
+ * (`describe.skip`) hay không còn gọi cổng thì mất nhãn run mà 10 tệp còn lại vẫn đẩy `runs` > 0 (cổng LIGHT F2).
+ */
+export function parseStorageRunFiles(text) {
+  if (typeof text !== "string" || text.length === 0) return [];
+  const files = new Set();
+  for (const rawLine of text.split(/\r?\n/)) {
+    const run = parseLabelBody(cleanLine(rawLine), STORAGE_RUN_TAG);
+    if (run && typeof run.file === "string" && run.file.length > 0) files.add(run.file);
+  }
+  return [...files].sort();
+}
+
+/**
+ * parseExpectedRunFiles(jsonText) → mảng tên tệp storage mong đợi (manifest dùng chung với ratchet R4:
+ * `apps/api/test/storage-spec-files.json`). Ném khi không phải mảng chuỗi không rỗng, không trùng — manifest hỏng
+ * KHÔNG được ngầm thành «không mong đợi gì» (xanh giả).
+ */
+export function parseExpectedRunFiles(jsonText) {
+  const list = JSON.parse(jsonText);
+  const valid =
+    Array.isArray(list) &&
+    list.length > 0 &&
+    list.every((f) => typeof f === "string" && f.length > 0) &&
+    new Set(list).size === list.length;
+  if (!valid) throw new Error("manifest phải là mảng KHÔNG rỗng các tên tệp (chuỗi, không trùng)");
+  return list;
+}
+
 const LEVEL_RANK = { ok: 0, warn: 1, red: 2 };
 
 function isCount(n) {
@@ -124,7 +155,15 @@ function isCount(n) {
 }
 
 /** Phán quyết riêng phần storage; `null` khi người gọi không truyền số storage (hành vi cũ). */
-function decideStorage({ storageSkips, storageRuns, storageCalls, laneDbSet, strict }) {
+function decideStorage({
+  storageSkips,
+  storageRuns,
+  storageCalls,
+  laneDbSet,
+  strict,
+  expectedRunFiles,
+  storageRunFiles,
+}) {
   if (![storageSkips, storageRuns, storageCalls].some(isCount)) return null;
   const skips = isCount(storageSkips) ? storageSkips : 0;
   const runs = isCount(storageRuns) ? storageRuns : 0;
@@ -143,6 +182,18 @@ function decideStorage({ storageSkips, storageRuns, storageCalls, laneDbSet, str
       message: `${counts} — 0 tệp storage CHẠY dù LANE_DB set: thành công RỖNG, không có bằng chứng`,
     };
   }
+  if (strict && laneDbSet && Array.isArray(expectedRunFiles)) {
+    const ran = new Set(Array.isArray(storageRunFiles) ? storageRunFiles : []);
+    const missing = expectedRunFiles.filter((f) => !ran.has(f));
+    if (missing.length > 0) {
+      return {
+        level: "red",
+        message:
+          `${counts} — ${missing.length}/${expectedRunFiles.length} tệp storage mong đợi KHÔNG phát nhãn run ` +
+          `(skip cả tệp / không gọi cổng?): ${missing.join(", ")}`,
+      };
+    }
+  }
   return { level: "ok", message: counts };
 }
 
@@ -152,6 +203,7 @@ function decideStorage({ storageSkips, storageRuns, storageCalls, laneDbSet, str
  *   (A) storage (D-6, chỉ khi truyền ít nhất một số storage — CLI LUÔN truyền; gọi thư viện kiểu cũ ⇒ bỏ qua):
  *     - strict ∧ (skips > 0 ∨ calls > 0)        → 'red'  (BẤT KỂ LANE_DB — đây là lỗ cũ)
  *     - strict ∧ laneDbSet ∧ runs === 0         → 'red'  (thành công rỗng)
+ *     - strict ∧ laneDbSet ∧ có tệp trong expectedRunFiles KHÔNG nằm trong storageRunFiles → 'red' (theo từng tệp)
  *     - không strict ∧ (skips ∨ calls) > 0      → 'warn' (tối thiểu)
  *   (B) lane-db (hành vi cũ, giữ nguyên):
  *     - laneDbSet=true            → 'ok' (kể cả skippedFiles cao/null — LANE_DB là bằng chứng
@@ -169,9 +221,19 @@ export function decideGate({
   storageSkips,
   storageRuns,
   storageCalls,
+  expectedRunFiles,
+  storageRunFiles,
 } = {}) {
   const laneGate = decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict });
-  const storageGate = decideStorage({ storageSkips, storageRuns, storageCalls, laneDbSet, strict });
+  const storageGate = decideStorage({
+    storageSkips,
+    storageRuns,
+    storageCalls,
+    laneDbSet,
+    strict,
+    expectedRunFiles,
+    storageRunFiles,
+  });
   if (storageGate === null) return laneGate;
   if (LEVEL_RANK[storageGate.level] > LEVEL_RANK[laneGate.level]) return storageGate;
   if (storageGate.level === "ok") return laneGate;
@@ -205,7 +267,8 @@ function decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict }) {
   return { level: "ok", message: `int-spec skip trong ngưỡng (${skippedFiles} <= ${threshold}).` };
 }
 
-// ── CLI: `node harness/lane-db-guard.mjs <logfile> --lane-db-set=0|1 --threshold=N --strict=0|1 [--fail-unless-ok=1]` ──
+// ── CLI: `node harness/lane-db-guard.mjs <logfile> --lane-db-set=0|1 --threshold=N --strict=0|1 [--fail-unless-ok=1]
+//        [--expect-run-files=<manifest.json>]` ──
 // In kết quả từng dòng `KEY:value` (KHÔNG JSON) để bash check.sh đọc bằng grep/cut, tránh phụ thuộc
 // parser JSON trong bash.
 function runCli(argv) {
@@ -226,17 +289,34 @@ function runCli(argv) {
   // (check.sh đọc LEVEL rồi tự quyết) — chỉ cờ này mới biến LEVEL ≠ ok thành exit 1.
   const failUnlessOk = flags["fail-unless-ok"] === "1";
 
-  let text;
-  try {
-    text = readFileSync(logPath, "utf8");
-  } catch (err) {
+  const failNoEvidence = (message) => {
     console.log(`LEVEL:${strict ? "red" : "warn"}`);
     console.log("FILES:");
     console.log("TESTS:");
     console.log("STORAGE:");
-    console.log(`MESSAGE:không đọc được log test (${logPath}): ${err.message}`);
+    console.log(`MESSAGE:${message}`);
     if (failUnlessOk) process.exitCode = 1;
+  };
+
+  let text;
+  try {
+    text = readFileSync(logPath, "utf8");
+  } catch (err) {
+    failNoEvidence(`không đọc được log test (${logPath}): ${err.message}`);
     return;
+  }
+
+  // Cổng THEO TỪNG TỆP (cổng LIGHT F2): cờ có mặt mà manifest đọc/parse hỏng ⇒ KHÔNG có bằng chứng, không bỏ qua cổng.
+  let expectedRunFiles;
+  if (flags["expect-run-files"] !== undefined) {
+    try {
+      expectedRunFiles = parseExpectedRunFiles(readFileSync(flags["expect-run-files"], "utf8"));
+    } catch (err) {
+      failNoEvidence(
+        `không đọc được manifest tệp storage (${flags["expect-run-files"]}): ${err.message}`,
+      );
+      return;
+    }
   }
 
   const { files, tests } = parseVitestSkips(text);
@@ -249,6 +329,8 @@ function runCli(argv) {
     storageSkips: storage.skips,
     storageRuns: storage.runs,
     storageCalls: storage.calls,
+    expectedRunFiles,
+    storageRunFiles: parseStorageRunFiles(text),
   });
 
   console.log(`LEVEL:${gate.level}`);

@@ -253,11 +253,14 @@ jobs:
       # Đọc log bước Test: strict ⇒ ĐỎ khi có ca storage bị bỏ qua theo từng ca (`[storage-test-skip]`), khi tripwire
       # chặn lời gọi storage (`[storage-test-call]`), hoặc khi 0 tệp storage chạy (`[storage-test-run]` = 0 — thành
       # công rỗng). `--fail-unless-ok=1` ⇒ exit 1 khi LEVEL ≠ ok. Chạy sau bước Test xanh (`if: success()` mặc định).
+      # `--expect-run-files` (cổng LIGHT F2): TỪNG tệp trong manifest phải phát nhãn run — tổng runs > 0 không đủ
+      # (một tệp skip cả tệp vẫn để 10 tệp kia đẩy runs > 0). Manifest = ratchet R4 canh khớp tập tệp gọi cổng.
       - name: Storage int-spec gate
         shell: bash
         run: |
           set -o pipefail
-          node harness/lane-db-guard.mjs "$RUNNER_TEMP/api-test.log" --lane-db-set=1 --strict=1 --fail-unless-ok=1
+          node harness/lane-db-guard.mjs "$RUNNER_TEMP/api-test.log" --lane-db-set=1 --strict=1 --fail-unless-ok=1 \
+            --expect-run-files=apps/api/test/storage-spec-files.json
 
       # ── S2-AUTH-SEED-1 / FIX-SEED1-D — canary tường minh cho 2 spec SEED-1 ──────────
       # Step "Test" phía trên GIỜ đã bao trùm 2 file này (LANE_DB đã bật). Giữ step riêng làm check có TÊN
