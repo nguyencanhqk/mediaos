@@ -45,7 +45,7 @@ import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
 import { isExtensionConsistentWithMime } from "./mime-extension";
 import { toFileMetadataDto, toLinkDto } from "./file-metadata.mapper";
-import { decideFileAccess, type FileAccessContext } from "./file-access-decision";
+import { decideFileAccess, decideLinkAccess, type FileAccessContext } from "./file-access-decision";
 import {
   assertLinkableFile,
   assertRegisteredLinkTarget,
@@ -530,8 +530,8 @@ export class FileService {
   // ─── Link / Unlink ────────────────────────────────────────────────────────────
 
   /**
-   * Gắn file vào entity nghiệp vụ. Mọi kiểm ở `preflightLink` (không ghi) chạy TRƯỚC, ngoài tx; tx ghi đọc lại
-   * hàng + ảnh chụp liên kết (lệch ⇒ 409) rồi tạo file_links + audit 'file_link'/FileLinked + log Link — cùng tx.
+   * Gắn file vào entity nghiệp vụ. Mọi kiểm ở `preflightLink` (không ghi) chạy TRƯỚC, ngoài tx; tx ghi khoá hàng
+   * tệp rồi đọc lại ảnh chụp liên kết (lệch ⇒ 409), tạo file_links + audit 'file_link'/FileLinked + log Link.
    *
    * LƯU Ý: entityId là tham chiếu POLYMORPHIC — KHÔNG validate entity tồn tại ở đây (không FK); resolver đích
    * (`canLink`) quyết định quyền trên thực thể. Cô lập tenant: company_id NOT NULL + RLS+FORCE (mig 0433).
@@ -540,7 +540,7 @@ export class FileService {
     const decided = await this.checkLink(user, input);
 
     return this.db.withTenant(user.companyId, async (tx) => {
-      const file = await this.fileRepo.findByIdTx(user.companyId, input.fileId, tx);
+      const file = await this.fileRepo.findByIdForUpdateTx(user.companyId, input.fileId, tx);
       if (!file) throw linkFileMissing();
       assertLinkableFile(file);
       assertSameLinkSnapshot(
@@ -619,7 +619,7 @@ export class FileService {
 
   /**
    * Thứ tự: (1) cặp đích đã đăng ký + chính tắc (400) → (2) `canLink` trên thực thể đích (403) → (3) hàng + liên
-   * kết một ảnh chụp (tệp vắng 400) → (4) quyết định XEM của người gắn cho chính tệp — cùng vị từ GET /:id,
+   * kết một ảnh chụp (tệp vắng 400) → (4) `decideLinkAccess`: XEM như GET /:id, vế dự phòng thêm TẢI —
    * NGOÀI tx (resolver tự mở `withTenant`) (403) → (5) trạng thái tệp (400), sau cổng xem như đường tải.
    * Trả ảnh chụp đã dùng để tx ghi so lại.
    */
@@ -637,9 +637,9 @@ export class FileService {
 
     const { row, ctx } = await this.loadFileAccessContext(user, input.fileId);
     if (!row) throw linkFileMissing();
-    const view = await decideFileAccess(this.policy, user, row, ctx, FilePolicyAction.View);
+    const view = await decideLinkAccess(this.policy, user, row, ctx);
     if (!view.allow) {
-      await this.logLinkDeny(user, input, "FOUNDATION.FILE.VIEW", view.reason);
+      await this.logLinkDeny(user, input, this.foundationPermissionCode(view.action), view.reason);
       throw fileForbidden(view.reason);
     }
     assertLinkableFile(row);

@@ -7,8 +7,8 @@ import type { FilePolicyService } from "./file-policy.service";
 
 /**
  * S19-SEC-FILELINKGATE-1 — các kiểm thuần của biên gắn tệp `FileService.link()` (ném lỗi Nest, không DB).
- * Thứ tự gọi do `FileService` giữ: cặp đích → `canLink` → quyết định XEM của người gắn → trạng thái tệp →
- * (trong tx ghi) so lại ảnh chụp liên kết.
+ * Thứ tự gọi do `FileService` giữ: cặp đích → `canLink` → `decideLinkAccess` của người gắn → trạng thái tệp →
+ * (trong tx ghi) khoá hàng tệp, so lại ảnh chụp liên kết.
  */
 
 /** 403 FOUNDATION-FILE-ERR-FORBIDDEN mang lý do của quyết định (như `GET /foundation/files/:id`). */
