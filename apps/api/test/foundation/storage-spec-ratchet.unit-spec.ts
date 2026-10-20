@@ -49,6 +49,16 @@ const SCANNED = [
     .map((f) => `test/helpers/${f}`),
 ];
 const source = (rel: string) => readFileSync(join(API, rel), "utf8");
+/**
+ * Mã KHÔNG kèm chú thích (giữ nguyên số dòng): tài liệu nhắc tới mẫu cũ (vd `process.env.S3_BUCKET ??= …` trong
+ * phần «vì sao» của helper) không được làm ratchet đỏ oan, và tên `openStorageTestGate` trong chú thích không được
+ * tính là đã dùng. `//` sau `:` (URL `http://…`) không bị coi là chú thích.
+ */
+function code(rel: string): string {
+  return source(rel)
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
 
 const S3_ENV_WRITE = /process\.env(?:\.|\[["'])S3_[A-Z_]+(?:["']\])?\s*(?:\?\?=|\|\|=|=(?!=))/;
 const S3_ENV_DELETE = /delete\s+process\.env(?:\.|\[["'])S3_/;
@@ -71,7 +81,7 @@ describe("R4 — ratchet int-spec storage (D-9)", () => {
   it("không tệp nào trong tập quét dùng mẫu bị cấm", () => {
     const offenders: string[] = [];
     for (const file of SCANNED) {
-      const lines = source(file).split(/\r?\n/);
+      const lines = code(file).split(/\r?\n/);
       for (const { rule, re, exempt } of BANNED) {
         if (file === exempt) continue;
         lines.forEach((text, i) => {
@@ -86,14 +96,14 @@ describe("R4 — ratchet int-spec storage (D-9)", () => {
     const offenders = SCANNED.filter((file) => file !== GATE_HELPER)
       .filter(
         (file) =>
-          STORAGE_FILES.includes(file) || /from\s+["']@aws-sdk\/client-s3["']/.test(source(file)),
+          STORAGE_FILES.includes(file) || /from\s+["']@aws-sdk\/client-s3["']/.test(code(file)),
       )
-      .filter((file) => !/\bopenStorageTestGate\b/.test(source(file)));
+      .filter((file) => !/\bopenStorageTestGate\b/.test(code(file)));
     expect(offenders).toEqual([]);
   });
 
   it("vitest.config.ts: env ghim pinTestStorageEnv(process.env) + setupFiles có tripwire D-10", () => {
-    const cfg = source("vitest.config.ts");
+    const cfg = code("vitest.config.ts");
     expect(cfg).toMatch(/env:\s*\{[^}]*\.\.\.pinTestStorageEnv\(process\.env\)/);
     expect(cfg).toMatch(/setupFiles:\s*\[[^\]]*storage-call-tripwire/);
   });
