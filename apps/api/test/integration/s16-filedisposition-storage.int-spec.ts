@@ -18,13 +18,12 @@
  *       mới ⇄ `application/pdf` · docx ⇒ 201.
  *   S8  cùng thân S7 qua cửa đăng ký của SOCIAL (054) và của CHAT ⇒ 415 ⇄ `application/pdf` ⇒ 200.
  *
- * HAI CỔNG (plan D12 — `test/helpers/storage-test-target.ts`):
- *   1. Cả file chạy khi `hasDb && LANE_DB` (job CI không có `LANE_DB`/`S3_*` ⇒ SKIP cả file, không đỏ).
- *   2. S1–S6 chỉ chạm storage khi `S3_BUCKET` đã resolve BẰNG ĐÚNG tên cho phép (cục bộ
- *      `mediaos-fdisp-test`, CI `mediaos-test`). Không khớp: CI ⇒ ĐỎ; cục bộ ⇒ bỏ qua CÓ cảnh báo
- *      (`console.warn` nêu tên ca — không `ctx.skip()` im lặng). S7/S8 luôn chạy: chỉ ký ngoại tuyến.
- *      Cổng 2 CHỈ được đánh giá trong `beforeAll` — không ở top-level, không lúc import.
- *
+ * CỔNG (S16-SOCIAL-STORAGETESTGATE-1 — `test/helpers/storage-test-gate.ts`):
+ *   1. Cả file chạy khi `hasDb && LANE_DB` (job CI không có `LANE_DB` ⇒ SKIP cả file, không đỏ).
+ *   2. `openStorageTestGate` ở beforeAll NGOÀI CÙNG (trước khi dựng app): S1–S6 + S9 chỉ chạm storage khi
+ *      `S3_BUCKET` đã ghim (`vitest.config.ts` → `pinTestStorageEnv`) BẰNG ĐÚNG tên cho phép (cục bộ
+ *      `mediaos-fdisp-test`, CI `mediaos-test`). Không khớp: CI ⇒ ĐỎ; cục bộ ⇒ mỗi ca storage in nhãn
+ *      `[storage-test-skip]` rồi bỏ qua (`needStorage`). S7/S8 luôn chạy: chỉ ký ngoại tuyến.
  * ⚠️ Luồng của mỗi ca hợp lệ trên cả mã trước lẫn sau bản vá (cùng một file đỏ trước, xanh sau): ca
  *    nào cần «object lưu khác kiểu + hàng Uploaded» thì đi register → PUT đúng → confirm → RỒI mới ghi
  *    đè object; không dựa vào việc confirm cho qua một object lệch kiểu.
@@ -36,22 +35,14 @@ import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import {
-  CreateBucketCommand,
-  DeleteObjectCommand,
-  HeadBucketCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { HeadObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import type { Pool } from "pg";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it, vi, type TestContext } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
 import { SettingService } from "../../src/foundation/settings/setting.service";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
-import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -64,13 +55,14 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 import { expectedNoSniff } from "../helpers/storage-provider";
-import { isCiEnv, resolveStorageTestTarget } from "../helpers/storage-test-target";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 
 const LOGIN_PW = "Passw0rd!fdisp16";
-// Cổng 1 (D12) — cùng hình với các int-spec storage có sẵn. Cổng 2 nằm trong `beforeAll`.
+// Cổng tệp — cùng hình với các int-spec có sẵn. Cổng storage nằm trong `beforeAll` (openStorageTestGate).
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 
 const TAG = "[fdisp-storage]";
+const FILE = "test/integration/s16-filedisposition-storage.int-spec.ts";
 const PDF = "application/pdf";
 const PNG = "image/png";
 const PLAIN = "text/plain";
@@ -81,8 +73,6 @@ const ERR_MIME = "FOUNDATION-FILE-ERR-MIME";
 const ERR_CONFIRM_MISMATCH = "FOUNDATION-FILE-ERR-CONFIRM-MISMATCH";
 /** Tên KHÔNG đuôi: phép đối chiếu đuôi↔MIME không tham gia ⇒ thứ duy nhất khác nhau giữa các ca S7/S8 là MIME. */
 const NO_EXT_NAME = "tep-khong-duoi";
-/** Chỉ dùng để KÝ NGOẠI TUYẾN khi máy không cấu hình storage — không bao giờ được gọi tới. */
-const OFFLINE_SIGN_ONLY_BUCKET = "fdisp-offline-sign-only";
 
 const FOUNDATION_PAIRS = [
   ["upload", "foundation-file"],
@@ -104,8 +94,6 @@ const MODULE_DOORS = [
   { door: "CHAT", path: "/chat/files/upload-url", extra: {} },
 ] as const;
 
-type StorageState = { run: true; bucket: string; s3: S3Client } | { run: false; reason: string };
-
 interface HeadResult {
   contentType: string | null;
   contentDisposition: string | null;
@@ -119,10 +107,6 @@ const UNSIGNED_INLINE_DISPOSITION = "inline";
 function isNotFound(err: unknown): boolean {
   const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
   return e.name === "NotFound" || e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404;
-}
-
-function errName(err: unknown): string {
-  return (err as { name?: string }).name ?? "UnknownError";
 }
 
 function describeHead(head: HeadResult | null): string {
@@ -141,7 +125,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
   let A: SeededTenant;
   let uploaderToken = "";
   let memberToken = "";
-  let storage: StorageState = { run: false, reason: "beforeAll chưa chạy" };
+  let gate: StorageTestGate;
   const companyIds: string[] = [];
 
   const http = () => request(app.getHttpServer());
@@ -178,50 +162,10 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     return res.body.data.accessToken as string;
   }
 
-  // ── cổng 2: bucket ─────────────────────────────────────────────────────────────
-  /** Đã qua chốt TÊN ⇒ dò bucket (có ký). Lỗi khác «không tồn tại» ⇒ ném ở MỌI môi trường. */
-  async function openTestBucket(bucket: string): Promise<StorageState> {
-    const s3 = new S3Client({
-      endpoint: process.env.S3_ENDPOINT,
-      region: process.env.S3_REGION ?? "us-east-1",
-      forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY ?? "",
-        secretAccessKey: process.env.S3_SECRET_KEY ?? "",
-      },
-    });
-    try {
-      await s3.send(new HeadBucketCommand({ Bucket: bucket }));
-      console.log(`${TAG} bucket "${bucket}": ĐÃ TỒN TẠI — ca storage thật CHẠY.`);
-      return { run: true, bucket, s3 };
-    } catch (err) {
-      if (!isNotFound(err)) {
-        throw new Error(
-          `${TAG} HeadBucket "${bucket}" lỗi ${errName(err)} — không phải «không tồn tại».`,
-        );
-      }
-    }
-    try {
-      await s3.send(new CreateBucketCommand({ Bucket: bucket }));
-      console.log(`${TAG} bucket "${bucket}": VỪA ĐƯỢC TẠO — ca storage thật CHẠY.`);
-      return { run: true, bucket, s3 };
-    } catch (err) {
-      const reason = `tạo bucket "${bucket}" LỖI (${errName(err)})`;
-      if (isCiEnv(process.env)) throw new Error(`${TAG} ${reason} — ở CI đây là ĐỎ.`);
-      return { run: false, reason: `${reason} ⇒ coi như không có storage thử (O2 = B)` };
-    }
-  }
-
+  /** Ca storage đã qua `needStorage` ⇒ client + bucket của cổng; cổng đóng ⇒ NÉM (0 lời gọi). */
   function live(): { bucket: string; s3: S3Client } {
-    if (!storage.run) throw new Error(`${TAG} gọi storage khi cổng bucket đang đóng.`);
-    return storage;
-  }
-
-  /** Bỏ qua CÓ cảnh báo — không bao giờ im lặng (D12). */
-  function skipStorageCase(ctx: Pick<TestContext, "skip">, caseName: string): void {
-    const why = storage.run ? "" : storage.reason;
-    console.warn(`${TAG} BỎ QUA ca storage thật «${caseName}»: ${why}`);
-    ctx.skip();
+    if (!gate.run) throw new Error(`${TAG} gọi storage khi cổng bucket đang đóng.`);
+    return { bucket: gate.bucket, s3: gate.s3() };
   }
 
   // ── thao tác storage trực tiếp (cấy / HEAD) — chỉ trên bucket đã chốt ───────────
@@ -382,21 +326,8 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
   }
 
   beforeAll(async () => {
-    // Cổng 2 — chốt trên TÊN bucket đã resolve (AppModule import tĩnh ⇒ env đã nạp xong), TRƯỚC mọi
-    // fallback bên dưới và TRƯỚC khi `ObjectStorageService` đọc env trong constructor.
-    const target = resolveStorageTestTarget(process.env);
-    if (target.kind === "skip-file") {
-      throw new Error(`${TAG} hai cổng lệch nhau: file đang chạy nhưng helper trả skip-file.`);
-    }
-    if (target.kind === "throw") throw new Error(`${TAG} ${target.reason}`);
-
-    // Fallback CHỈ để ký ngoại tuyến cho S7/S8 trên máy không cấu hình storage (không gọi mạng).
-    process.env.S3_ENDPOINT ??= "http://localhost:9000";
-    process.env.S3_ACCESS_KEY ??= "mediaos";
-    process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-    process.env.S3_BUCKET ??= OFFLINE_SIGN_ONLY_BUCKET;
-    process.env.S3_FORCE_PATH_STYLE ??= "true";
-    process.env.S3_REGION ??= "us-east-1";
+    // Cổng storage NGOÀI CÙNG — trước khi dựng app (`ObjectStorageService` đọc `S3_*` đã ghim ở `test.env`).
+    gate = await openStorageTestGate(FILE);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     // Pipeline y hệt main.ts (lưới S16-TEST-PIPELINE-PARITY-1) — kể cả lớp validate DTO.
@@ -424,40 +355,14 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     const hash = await new PasswordService().hash(LOGIN_PW);
     uploaderToken = await makeUser("uploader", hash, FOUNDATION_PAIRS);
     memberToken = await makeUser("member", hash, MEMBER_PAIRS);
-
-    if (target.kind === "run") {
-      storage = await openTestBucket(target.bucket);
-    } else {
-      storage = { run: false, reason: target.reason };
-    }
-    if (!storage.run) {
-      console.warn(`${TAG} ca storage thật S1–S6 sẽ BỎ QUA: ${storage.reason}`);
-    }
   }, 180_000);
-
-  /** Dọn object do CHÍNH file này tạo: mọi khoá của công ty test (tiền tố `{companyId}/…`). */
-  async function removeTestObjects(): Promise<void> {
-    if (!storage.run || !direct || companyIds.length === 0) return;
-    const { bucket, s3 } = storage;
-    const r = await direct.query(`SELECT storage_path FROM files WHERE company_id = ANY($1)`, [
-      companyIds,
-    ]);
-    for (const row of r.rows as Array<{ storage_path: string }>) {
-      try {
-        await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: row.storage_path }));
-      } catch (err) {
-        console.warn(
-          `${TAG} dọn object thất bại (${errName(err)}) — object thử còn lại trong bucket.`,
-        );
-      }
-    }
-  }
 
   afterAll(async () => {
     vi.restoreAllMocks();
     // Dọn object có ném thì app + công ty thử VẪN được dọn; lỗi gốc vẫn nổi lên sau `finally`.
     try {
-      await removeTestObjects();
+      // Mọi khoá của công ty test (tiền tố `{companyId}/…`) trên bucket của cổng; cổng đóng ⇒ không gọi gì.
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
     } finally {
       try {
         await app?.close();
@@ -472,7 +377,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
 
   describe("S1–S3 — PUT lên URL đã ký", () => {
     it("S1 TỪ CHỐI — PUT với Content-Type khác kiểu đã đăng ký ⇒ 403 SignatureDoesNotMatch, object không được ghi", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S1 TỪ CHỐI");
+      if (!gate.needStorage(ctx, "S1 TỪ CHỐI")) return;
       const bytes = payload("s1-deny");
       const reg = await registerOk(PDF, "s1-lech-kieu.pdf", bytes.byteLength);
 
@@ -488,7 +393,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     });
 
     it("S1 CHO PHÉP — PUT đúng kiểu đã đăng ký ⇒ 200, object có mặt", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S1 CHO PHÉP");
+      if (!gate.needStorage(ctx, "S1 CHO PHÉP")) return;
       const bytes = payload("s1-allow");
       const reg = await registerOk(PDF, "s1-dung-kieu.pdf", bytes.byteLength);
 
@@ -503,7 +408,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     });
 
     it("S2 TỪ CHỐI — PUT không có Content-Type ⇒ 400 hoặc 403, object không được ghi", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S2 TỪ CHỐI");
+      if (!gate.needStorage(ctx, "S2 TỪ CHỐI")) return;
       const bytes = payload("s2-deny");
       const reg = await registerOk(PDF, "s2-khong-kieu.pdf", bytes.byteLength);
 
@@ -522,7 +427,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
       [PLAIN, "s3-nen.txt"],
     ] as const) {
       it(`S3 NỀN — PUT đúng "${mime}": HEAD trả ĐÚNG chuỗi đã gửi; confirm ⇒ Uploaded`, async (ctx) => {
-        if (!storage.run) return skipStorageCase(ctx, `S3 NỀN ${mime}`);
+        if (!gate.needStorage(ctx, `S3 NỀN ${mime}`)) return;
         const bytes = payload("s3-base");
         const reg = await registerOk(mime, name, bytes.byteLength);
 
@@ -543,7 +448,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
 
   describe("S4 — confirm so kiểu object đã lưu với MIME đã đăng ký", () => {
     it("S4 TỪ CHỐI — object lưu kiểu khác MIME đã đăng ký ⇒ 409 CONFIRM-MISMATCH, hàng Failed + lý do", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S4 TỪ CHỐI");
+      if (!gate.needStorage(ctx, "S4 TỪ CHỐI")) return;
       const bytes = payload("s4-deny");
       const reg = await registerOk(PDF, "s4-luu-lech.pdf", bytes.byteLength);
       await plantObject(reg.key, bytes, HTML); // hàng còn Pending; object cùng cỡ, khác kiểu
@@ -564,7 +469,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     });
 
     it("S4 CHO PHÉP — object lưu đúng kiểu đã đăng ký ⇒ 200 Uploaded", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S4 CHO PHÉP");
+      if (!gate.needStorage(ctx, "S4 CHO PHÉP")) return;
       const bytes = payload("s4-allow");
       const reg = await registerOk(PDF, "s4-luu-dung.pdf", bytes.byteLength);
       await plantObject(reg.key, bytes, PDF);
@@ -581,7 +486,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
 
   describe("S5–S6 — URL tải", () => {
     it("S5 TỪ CHỐI — object LƯU kiểu khác, hàng đăng ký application/pdf ⇒ trả application/pdf + attachment", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S5 TỪ CHỐI");
+      if (!gate.needStorage(ctx, "S5 TỪ CHỐI")) return;
       const up = await uploadConfirmed(PDF, "s5-tai-lieu.pdf", "s5-deny");
       await plantObject(up.key, up.bytes, HTML); // hàng ĐÃ Uploaded; ghi đè cùng cỡ, khác kiểu
 
@@ -599,7 +504,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     });
 
     it("S5 CHO PHÉP — hàng image/png ⇒ trả image/png + inline (hiển thị trực tiếp)", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S5 CHO PHÉP");
+      if (!gate.needStorage(ctx, "S5 CHO PHÉP")) return;
       const up = await uploadConfirmed(PNG, "s5-anh.png", "s5-allow");
 
       const res = await fetch(await downloadUrl(up.fileId));
@@ -616,7 +521,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     });
 
     it("S9 — hàng image/png, PUT kèm Content-Disposition không ký ⇒ URL tải vẫn trả inline + image/png", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S9 image/png");
+      if (!gate.needStorage(ctx, "S9 image/png")) return;
 
       const m = await putWithUnsignedDisposition(
         PNG,
@@ -639,7 +544,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     });
 
     it("S9 — hàng application/pdf, PUT kèm Content-Disposition không ký ⇒ URL tải vẫn trả attachment + application/pdf", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S9 application/pdf");
+      if (!gate.needStorage(ctx, "S9 application/pdf")) return;
 
       const m = await putWithUnsignedDisposition(
         PDF,
@@ -661,7 +566,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     });
 
     it("S6 CHO PHÉP — URL đã ký để nguyên ⇒ 200 + x-content-type-options đúng hành vi đã đo", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S6 CHO PHÉP");
+      if (!gate.needStorage(ctx, "S6 CHO PHÉP")) return;
       const up = await uploadConfirmed(PDF, "s6-nguyen-ven.pdf", "s6-allow");
 
       const url = await downloadUrl(up.fileId);
@@ -682,7 +587,7 @@ describe.skipIf(!runDb)("S16-SOCIAL-FILEDISPOSITION-1 — kiểu nội dung stor
     });
 
     it("S6 TỪ CHỐI — đổi response-content-type trên URL đã ký ⇒ 403", async (ctx) => {
-      if (!storage.run) return skipStorageCase(ctx, "S6 TỪ CHỐI");
+      if (!gate.needStorage(ctx, "S6 TỪ CHỐI")) return;
       const up = await uploadConfirmed(PDF, "s6-sua-url.pdf", "s6-deny");
       const url = await downloadUrl(up.fileId);
 
