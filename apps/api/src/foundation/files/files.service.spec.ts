@@ -36,6 +36,8 @@ import { FileService } from "./files.service";
 const COMPANY = "11111111-1111-1111-1111-111111111111";
 const USER = "22222222-2222-2222-2222-222222222222";
 const FILE = "33333333-3333-3333-3333-333333333333";
+/** Chủ tệp khác người gọi — ca từ chối qua fallback không rơi vào vế chủ tệp chưa từng gắn (S19-SEC-FILELINKGATE-1). */
+const OTHER_OWNER = "44444444-4444-4444-4444-444444444444";
 
 function makeFileRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -172,8 +174,12 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
     // link-aware branching itself is unit-tested in file-policy.service.spec.ts.
     decideForLinkedFile: vi.fn(async () => policyDecision),
     // S7-CHAT-BE-3 (FULL gate): `link()` từ chối khoá điều phối lệch chính tả TRƯỚC khi hỏi quyền.
-    // Mặc định `null` = "không resolver nào nhận cặp này" ⇒ mọi ca sẵn có giữ nguyên hành vi.
-    canonicalOwnerKey: vi.fn(() => null),
+    // Mặc định = chính cặp client khai (đã đăng ký, đúng chính tắc). `null` (không resolver nào nhận cặp) ⇒
+    // biên gắn từ chối 400 (S19-SEC-FILELINKGATE-1) — ca riêng trong "link guards".
+    canonicalOwnerKey: vi.fn((moduleCode: string, entityType: string) => ({
+      moduleCode,
+      entityType,
+    })),
   };
 
   const storage = {
@@ -250,7 +256,7 @@ describe("FileService (deny-path / validation RED)", () => {
   describe("FilePolicy DENY → 403 + access-log denied", () => {
     it("getMetadata: deny → ForbiddenException + Preview log access_granted=false + denied_reason", async () => {
       h = makeHarness(DENY);
-      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow({ ownerUserId: OTHER_OWNER }));
 
       await expect(h.service.getMetadata(user, FILE)).rejects.toBeInstanceOf(ForbiddenException);
 
@@ -262,7 +268,7 @@ describe("FileService (deny-path / validation RED)", () => {
 
     it("download: deny → ForbiddenException + NO signed-url generated (storage.get not called)", async () => {
       h = makeHarness(DENY);
-      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow({ ownerUserId: OTHER_OWNER }));
 
       await expect(h.service.getDownloadUrl(user, FILE)).rejects.toBeInstanceOf(ForbiddenException);
       expect(h.storage.get).not.toHaveBeenCalled(); // binary/url never produced on deny
@@ -506,6 +512,17 @@ describe("FileService (deny-path / validation RED)", () => {
       expect((caught as { getResponse(): { code?: string } }).getResponse().code).toBe(
         "FOUNDATION-FILE-ERR-LINK",
       );
+      expect(h.linkRepo.insertTx).not.toHaveBeenCalled();
+    });
+
+    it("cặp (module, entity) không resolver nào nhận → 400 LINK, canLink không hỏi, NO link inserted", async () => {
+      h.policy.canonicalOwnerKey.mockReturnValue(null);
+      const caught = await h.service.link(user, linkInput).catch((e: unknown) => e);
+      expect(caught).toBeInstanceOf(BadRequestException);
+      expect((caught as { getResponse(): { code?: string } }).getResponse().code).toBe(
+        "FOUNDATION-FILE-ERR-LINK",
+      );
+      expect(h.policy.canLink).not.toHaveBeenCalled();
       expect(h.linkRepo.insertTx).not.toHaveBeenCalled();
     });
 

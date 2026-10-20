@@ -116,7 +116,8 @@ export class FilePolicyService {
 
   /**
    * Dạng CHÍNH TẮC của cặp `(moduleCode, entityType)` theo resolver đang giữ khoá — `null` khi không
-   * resolver nào nhận cặp này (tệp foundation-owned; giữ nguyên hành vi cũ).
+   * resolver nào nhận cặp này ⇒ biên gắn `FileService.link()` TỪ CHỐI (400 LINK, S19-SEC-FILELINKGATE-1): một
+   * liên kết tới cặp không resolver nào nhận làm tệp `deny-no-resolver` với mọi người và không module nào quản.
    *
    * ┌─ VÌ SAO CẦN ─ S7-CHAT-BE-3 FULL gate, HIGH ─────────────────────────────────────────────────┐
    * │ Registry ở đây tra resolver bằng khoá ĐÃ CHUẨN HOÁ (`trim().toLowerCase()`), nhưng các module │

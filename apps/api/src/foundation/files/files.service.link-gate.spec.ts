@@ -164,9 +164,7 @@ function makeHarness() {
 type Harness = ReturnType<typeof makeHarness>;
 
 function denyLogEntries(h: Harness) {
-  return h.accessLogSpy.mock.calls
-    .map((c) => c[1] as Record<string, unknown>)
-    .filter((e) => e.accessGranted === false);
+  return h.accessLogSpy.mock.calls.map((c) => c[1]).filter((e) => e.accessGranted === false);
 }
 
 describe("FileService.link — cổng xem của người gắn (S19-SEC-FILELINKGATE-1)", () => {
