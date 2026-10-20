@@ -60,6 +60,8 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >
 > **Mọi đường GHI branding VẪN gate `update:foundation-company`** (`upload-url` · `confirm` · `PUT :kind` · `DELETE :kind`), thêm owner-check file ở `canLinkFile`/`canDeleteFile`. ⚠️ Hệ quả đã ghi nhận: role nào được cấp `download:foundation-file` sẽ **kéo theo** quyền đọc file branding (hôm nay chỉ SA + company-admin giữ cặp đó) — pin bằng int-spec `company-branding-deny.int-spec.ts`.
 
+> **CHỐT biên GẮN tệp vào thực thể = cùng quyết định XEM từng tệp (S19-SEC-FILELINKGATE-1, owner chốt 20/10/2026):** ngoài cổng đích của module, tạo một liên kết tệp → thực thể (lõi gắn chung — route FOUNDATION `POST /foundation/files/:id/links` và các module gắn qua lõi) đòi người gắn **xem được tệp** theo cùng hàm quyết định với `GET /foundation/files/:id` (một nguồn, không viết lại); từ chối ⇒ 403 `FOUNDATION-FILE-ERR-FORBIDDEN`, 0 liên kết mới. Tệp **chưa từng gắn** mà người gắn **không phải chủ** ⇒ đòi cả quyền **xem** lẫn quyền **tải** tệp (`view:` rồi `download:foundation-file`); tệp đã từng gắn mà nay không còn liên kết sống ⇒ từ chối mọi người, kể cả chủ. **Gắn tệp là CHIA SẺ BỀN:** gỡ một liên kết không thu hồi bản chia sẻ hợp lệ đã tạo sang thực thể khác (ngữ nghĩa thu hồi khi tệp được chia sẻ sang nhiều thực thể = WO nợ `S19-SEC-FILESHAREREVOKE-1`).
+
 > **CHỐT `GET /foundation/settings/public` = Authenticated** (chỉ cần JWT hợp lệ, KHÔNG cần `view:foundation-setting`); server vẫn lọc `is_public && !is_sensitive` + mask secret. `resolve`/`PATCH company-settings` VẪN gate `view`/`update:foundation-setting`. *(Pin API-09 chuẩn hoá surface → S2-FND-DOC-1.)*
 
 > **CHỐT đường ĐỌC `/org` — ranh giới "CƠ CẤU ≠ NGƯỜI" (S6-SEC-ORG-1, đóng KI-030):**
