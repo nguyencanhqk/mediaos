@@ -22445,4 +22445,32 @@ export const backlog = [
       "🟢 Seed 19/10/2026 khi đóng S19-OPS-SCASATELLITE-1. Thi công trong worktree repo LMS (repo git riêng, local).",
     ],
   },
+  {
+    id: "S19-SEC-FILELINKGATE-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title: "Gắn tệp vào thực thể theo cùng quyết định xem từng tệp (FOUNDATION link)",
+    zone: "red",
+    gate: "FULL",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-SEC-FILEMETAGATE-1"],
+    src: [
+      "`docs/plans/S19-SEC-FILEMETAGATE-1.md` §8 O-6 + §9 (ngoài phạm vi: biên GHI link tệp + danh sách tệp module §1.1 #8) — owner chốt 19/10/2026 gieo WO theo dõi tiêu đề trung tính. Số đo chi tiết ở kênh owner (thư mục kept/ ngoài repo), KHÔNG chép vào backlog (repo public).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: liệt kê mọi đường gắn tệp vào thực thể + đường đọc tên/cỡ tệp của module (plan S19-SEC-FILEMETAGATE-1 §1.1 #8) và vị từ mỗi đường đang hỏi — số đo để ngoài repo; owner chốt ưu tiên theo số đo",
+      "Bất biến: gắn tệp vào thực thể chỉ khi người gắn được xem tệp theo các liên kết sẵn có của nó — cùng vị từ với `GET /foundation/files/:id` (một nguồn quyết định dùng chung, không viết lại); đường đọc của module theo cùng bất biến hoặc owner chốt có chủ đích, ghi lý do vào plan",
+      "RED trước: int-spec deny-path cho từng đường gắn trong phạm vi (từ chối ⇒ 0 liên kết mới) + ca ALLOW đứng cạnh (người được xem tệp vẫn gắn được); FULL gate",
+    ],
+    notes: [
+      "🔴 Seed 20/10/2026 ở sổ hậu merge S19-SEC-FILEMETAGATE-1 (PR #594 = `7a29082b`). Merge = công bố ⇒ owner deploy API trong ngày merge. Plan có thể mở rộng `paths` ở L0 (commit backlog riêng) khi số đo chỉ ra module cần sửa.",
+    ],
+  },
 ];
