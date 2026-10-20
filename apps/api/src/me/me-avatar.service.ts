@@ -9,6 +9,7 @@ import {
 import {
   FOUNDATION_FILE_ERROR_CODES,
   type ConfirmUploadResponse,
+  type LinkFileInput,
   type MeAvatar,
   type MeAvatarUploadUrlInput,
   type MeAvatarUploadUrlResponse,
@@ -187,9 +188,9 @@ export class MeAvatarService {
     }
 
     // Replace semantics: gỡ (soft-delete) link avatar CŨ của employee này TRƯỚC khi tạo link mới.
-    await this.unlinkStaleAvatarLinks(requestUser, employeeId);
-
-    await this.files.link(requestUser, {
+    // S19-SEC-FILELINKGATE-1: kiểm gắn TRƯỚC khi gỡ (từ chối ⇒ avatar hiện hành còn nguyên); đặt lại đúng ảnh
+    // đang dùng ⇒ giữ liên kết đó (gắn lại tệp «đã từng gắn» bị từ chối), chỉ gỡ cái khác.
+    const linkInput: LinkFileInput = {
       fileId,
       moduleCode: ME_MODULE_CODE,
       entityType: ME_AVATAR_ENTITY_TYPE,
@@ -197,7 +198,15 @@ export class MeAvatarService {
       linkType: "Avatar",
       accessScope: "Owner",
       isPrimary: true,
-    });
+    };
+    const current = await this.listAvatarLinks(requestUser, employeeId);
+    const alreadyLinked = current.some((l) => l.fileId === fileId);
+    if (!alreadyLinked) await this.files.preflightLink(requestUser, linkInput);
+    await this.unlinkEach(
+      requestUser,
+      current.filter((l) => l.fileId !== fileId),
+    );
+    if (!alreadyLinked) await this.files.link(requestUser, linkInput);
 
     await this.hrWrite.updateOwnAvatar(requestUser, employeeId, fileId);
 
@@ -210,7 +219,7 @@ export class MeAvatarService {
     const employeeId = await this.resolveOwnEmployeeIdOrThrow(actor);
     const requestUser = { id: actor.id, companyId: actor.companyId };
 
-    await this.unlinkStaleAvatarLinks(requestUser, employeeId);
+    await this.unlinkEach(requestUser, await this.listAvatarLinks(requestUser, employeeId));
     await this.hrWrite.updateOwnAvatar(requestUser, employeeId, null);
   }
 
@@ -225,11 +234,9 @@ export class MeAvatarService {
     return person.employee.employeeId;
   }
 
-  private async unlinkStaleAvatarLinks(
-    requestUser: { id: string; companyId: string },
-    employeeId: string,
-  ): Promise<void> {
-    const stale = await this.db.withTenant(requestUser.companyId, (tx) =>
+  /** Liên kết avatar SỐNG của employee (chiều thực thể → tệp). */
+  private listAvatarLinks(requestUser: { id: string; companyId: string }, employeeId: string) {
+    return this.db.withTenant(requestUser.companyId, (tx) =>
       this.linkRepo.listActiveByEntityTx(
         requestUser.companyId,
         ME_MODULE_CODE,
@@ -238,7 +245,13 @@ export class MeAvatarService {
         tx,
       ),
     );
-    for (const link of stale) {
+  }
+
+  private async unlinkEach(
+    requestUser: { id: string; companyId: string },
+    links: readonly { id: string }[],
+  ): Promise<void> {
+    for (const link of links) {
       await this.files.unlink(requestUser, link.id);
     }
   }
