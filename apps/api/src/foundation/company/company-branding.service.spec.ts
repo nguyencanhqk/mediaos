@@ -34,6 +34,7 @@ interface Deps {
   upload: Mock;
   confirmUpload: Mock;
   getDownloadUrl: Mock;
+  preflightLink: Mock;
   link: Mock;
   unlink: Mock;
   listActiveByEntityTx: Mock;
@@ -68,6 +69,7 @@ function makeService(over: Partial<Deps> = {}): { svc: CompanyBrandingService; d
       url: "https://storage.local/get",
       expiresAt: "2026-07-22T02:00:00.000Z",
     })),
+    preflightLink: vi.fn(async () => undefined),
     link: vi.fn(),
     unlink: vi.fn(),
     // Mặc định: đã có link branding SỐNG trỏ FILE_ID (đường đọc self-defending verify link trước khi ký).
@@ -91,6 +93,7 @@ function makeService(over: Partial<Deps> = {}): { svc: CompanyBrandingService; d
     upload: deps.upload,
     confirmUpload: deps.confirmUpload,
     getDownloadUrl: deps.getDownloadUrl,
+    preflightLink: deps.preflightLink,
     link: deps.link,
     unlink: deps.unlink,
   };
@@ -321,7 +324,11 @@ describe("CompanyBrandingService — getBranding FAIL-SOFT", () => {
 
   it("logo là URL cũ nhập tay → source='external', KHÔNG gọi presign (tương thích ngược)", async () => {
     const { svc, deps } = makeService({
-      getCurrent: vi.fn(async () => ({ id: COMPANY_ID, logoUrl: "https://cdn.cũ/logo.png", status: "active" })),
+      getCurrent: vi.fn(async () => ({
+        id: COMPANY_ID,
+        logoUrl: "https://cdn.cũ/logo.png",
+        status: "active",
+      })),
     });
     const out = await svc.getBranding(ACTOR);
     expect(out.logo).toEqual({
@@ -388,5 +395,67 @@ describe("CompanyBrandingService — setAsset không im lặng khi presign hỏn
     await expect(svc.setAsset(ACTOR, "logo", FILE_ID)).rejects.toBeInstanceOf(ConflictException);
     // con trỏ ĐÃ ghi trước đó — lỗi ở bước ký URL trả về, không phải bước lưu.
     expect(deps.updateCompany).toHaveBeenCalled();
+  });
+});
+
+describe("CompanyBrandingService — setAsset kiểm gắn TRƯỚC khi gỡ (S19-SEC-FILELINKGATE-1 D-6)", () => {
+  it("đặt lại đúng tệp đang dùng ⇒ không gỡ liên kết đó, không gắn lại, vẫn ghi con trỏ", async () => {
+    const { svc, deps } = makeService();
+    await svc.setAsset(ACTOR, "favicon", FILE_ID);
+    expect(deps.unlink, "liên kết sống đang trỏ đúng tệp phải giữ nguyên").not.toHaveBeenCalled();
+    expect(deps.link, "không tạo liên kết thứ hai cho cùng tệp").not.toHaveBeenCalled();
+    expect(deps.updateCompanySetting).toHaveBeenCalledWith(
+      ACTOR,
+      FAVICON_SETTING_KEY,
+      expect.objectContaining({ settingValue: FILE_ID }),
+    );
+  });
+
+  it("tệp không qua kiểm gắn ⇒ ném lỗi đó; liên kết hiện hành còn, không gắn, không ghi con trỏ", async () => {
+    const denied = new ForbiddenException("FOUNDATION-FILE-ERR-FORBIDDEN: deny-links-revoked");
+    const { svc, deps } = makeService({
+      listActiveByEntityTx: vi.fn(async () => [
+        { id: "link-B", fileId: "file-B", linkType: "Other" },
+      ]),
+      preflightLink: vi.fn(async () => {
+        throw denied;
+      }),
+    });
+    await expect(svc.setAsset(ACTOR, "favicon", FILE_ID)).rejects.toBe(denied);
+    expect(deps.unlink, "liên kết của tài sản hiện hành KHÔNG được gỡ").not.toHaveBeenCalled();
+    expect(deps.link).not.toHaveBeenCalled();
+    expect(deps.updateCompanySetting).not.toHaveBeenCalled();
+  });
+
+  it("neo ALLOW: kiểm gắn → gỡ liên kết cũ → gắn, đúng thứ tự và đúng đích", async () => {
+    const order: string[] = [];
+    let linked = false;
+    const { svc, deps } = makeService({
+      listActiveByEntityTx: vi.fn(async () =>
+        linked
+          ? [{ id: "link-mới", fileId: FILE_ID, linkType: "Other" }]
+          : [{ id: "link-B", fileId: "file-B", linkType: "Other" }],
+      ),
+      preflightLink: vi.fn(async () => {
+        order.push("preflight");
+      }),
+      unlink: vi.fn(async () => {
+        order.push("unlink");
+      }),
+      link: vi.fn(async () => {
+        order.push("link");
+        linked = true;
+      }),
+    });
+    await svc.setAsset(ACTOR, "favicon", FILE_ID);
+    expect(order).toEqual(["preflight", "unlink", "link"]);
+    expect(deps.preflightLink).toHaveBeenCalledWith(
+      ACTOR,
+      expect.objectContaining({
+        fileId: FILE_ID,
+        entityType: BRANDING_RULES.favicon.entityType,
+        entityId: COMPANY_ID,
+      }),
+    );
   });
 });

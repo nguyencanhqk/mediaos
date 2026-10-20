@@ -42,6 +42,11 @@ interface Deps {
   confirmUpload: Mock;
   getDownloadUrl: Mock;
   getAvatarFileIdTx: Mock;
+  listActiveByEntityTx: Mock;
+  preflightLink: Mock;
+  link: Mock;
+  unlink: Mock;
+  updateOwnAvatar: Mock;
 }
 
 function makeService(over: Partial<Deps> = {}): { svc: MeAvatarService; deps: Deps } {
@@ -52,21 +57,27 @@ function makeService(over: Partial<Deps> = {}): { svc: MeAvatarService; deps: De
     confirmUpload: vi.fn(),
     getDownloadUrl: vi.fn(),
     getAvatarFileIdTx: vi.fn(),
+    listActiveByEntityTx: vi.fn(async () => []),
+    preflightLink: vi.fn(async () => undefined),
+    link: vi.fn(),
+    unlink: vi.fn(),
+    updateOwnAvatar: vi.fn(),
     ...over,
   };
 
   const db = { withTenant: vi.fn((_c: string, fn: (tx: unknown) => unknown) => fn({})) };
   const currentPerson = { resolve: deps.resolve };
   const fileRepo = { findByIdTx: deps.findByIdTx };
-  const linkRepo = { listActiveByEntityTx: vi.fn(async () => []) };
+  const linkRepo = { listActiveByEntityTx: deps.listActiveByEntityTx };
   const files = {
     upload: deps.upload,
     confirmUpload: deps.confirmUpload,
     getDownloadUrl: deps.getDownloadUrl,
-    link: vi.fn(),
-    unlink: vi.fn(),
+    preflightLink: deps.preflightLink,
+    link: deps.link,
+    unlink: deps.unlink,
   };
-  const hrWrite = { updateOwnAvatar: vi.fn() };
+  const hrWrite = { updateOwnAvatar: deps.updateOwnAvatar };
   const repo = { getAvatarFileIdTx: deps.getAvatarFileIdTx };
 
   const svc = new MeAvatarService(
@@ -213,5 +224,72 @@ describe("getCurrentAvatar (fail-soft)", () => {
       }),
     });
     await expect(svc.getCurrentAvatar(ACTOR)).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+});
+
+describe("setAvatar — kiểm gắn TRƯỚC khi gỡ (S19-SEC-FILELINKGATE-1 D-6)", () => {
+  const AVATAR = "f-avatar-1";
+  const ownImage = () => ({
+    id: AVATAR,
+    ownerUserId: ACTOR.id,
+    uploadStatus: "Uploaded",
+    scanStatus: "Clean",
+    mimeType: "image/png",
+  });
+  const signed = () => ({
+    url: "https://storage.local/get",
+    expiresAt: "2026-10-20T00:05:00.000Z",
+  });
+
+  it("đặt lại đúng ảnh đang dùng ⇒ không gỡ liên kết đó, không gắn lại, vẫn ghi con trỏ", async () => {
+    const { svc, deps } = makeService({
+      findByIdTx: vi.fn(async () => ownImage()),
+      getDownloadUrl: vi.fn(async () => signed()),
+      listActiveByEntityTx: vi.fn(async () => [{ id: "link-A", fileId: AVATAR }]),
+    });
+    await expect(svc.setAvatar(ACTOR, AVATAR)).resolves.toMatchObject({ fileId: AVATAR });
+    expect(deps.unlink, "liên kết sống đang trỏ đúng ảnh phải giữ nguyên").not.toHaveBeenCalled();
+    expect(deps.link, "không tạo liên kết thứ hai cho cùng ảnh").not.toHaveBeenCalled();
+    expect(deps.updateOwnAvatar).toHaveBeenCalledWith(ACTOR, "e1", AVATAR);
+  });
+
+  it("ảnh không qua kiểm gắn ⇒ ném lỗi đó; liên kết hiện hành còn, không gắn, không ghi con trỏ", async () => {
+    const denied = new ForbiddenException("FOUNDATION-FILE-ERR-FORBIDDEN: deny-links-revoked");
+    const { svc, deps } = makeService({
+      findByIdTx: vi.fn(async () => ownImage()),
+      getDownloadUrl: vi.fn(async () => signed()),
+      listActiveByEntityTx: vi.fn(async () => [{ id: "link-B", fileId: "f-avatar-B" }]),
+      preflightLink: vi.fn(async () => {
+        throw denied;
+      }),
+    });
+    await expect(svc.setAvatar(ACTOR, AVATAR)).rejects.toBe(denied);
+    expect(deps.unlink, "liên kết của ảnh hiện hành KHÔNG được gỡ").not.toHaveBeenCalled();
+    expect(deps.link).not.toHaveBeenCalled();
+    expect(deps.updateOwnAvatar).not.toHaveBeenCalled();
+  });
+
+  it("neo ALLOW: kiểm gắn → gỡ liên kết cũ → gắn, đúng thứ tự", async () => {
+    const order: string[] = [];
+    const { svc, deps } = makeService({
+      findByIdTx: vi.fn(async () => ownImage()),
+      getDownloadUrl: vi.fn(async () => signed()),
+      listActiveByEntityTx: vi.fn(async () => [{ id: "link-B", fileId: "f-avatar-B" }]),
+      preflightLink: vi.fn(async () => {
+        order.push("preflight");
+      }),
+      unlink: vi.fn(async () => {
+        order.push("unlink");
+      }),
+      link: vi.fn(async () => {
+        order.push("link");
+      }),
+    });
+    await svc.setAvatar(ACTOR, AVATAR);
+    expect(order).toEqual(["preflight", "unlink", "link"]);
+    expect(deps.preflightLink).toHaveBeenCalledWith(
+      ACTOR,
+      expect.objectContaining({ fileId: AVATAR }),
+    );
   });
 });
