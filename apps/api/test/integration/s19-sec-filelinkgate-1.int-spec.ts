@@ -72,7 +72,6 @@ describe.skipIf(!hasLaneDb)(
     let taskT2 = "";
     let employeeE = "";
     let contractTypeId = "";
-    let contractC1 = "";
     let contractC2 = "";
 
     const files: Record<string, string> = {};
@@ -267,7 +266,6 @@ describe.skipIf(!hasLaneDb)(
         [w.A.companyId, `ct-${randomUUID().slice(0, 8)}`],
       );
       contractTypeId = ct.rows[0]!.id;
-      contractC1 = await seedContract();
       contractC2 = await seedContract();
 
       const stranger = uid("stranger");
@@ -368,11 +366,13 @@ describe.skipIf(!hasLaneDb)(
       ["C-3", "revC", "tệp của chính người gắn, đã từng gắn"],
     ] as const) {
       it(`${ca} POST /hr/contracts/:id/file — ${what} ⇒ 403, file_id hợp đồng không đổi`, async () => {
-        const fileBefore = await contractFileId(contractC1);
-        const before = await snap(files[key]!, contractC1);
-        const res = await postContract("ctr", contractC1, files[key]!);
-        expectDenied(res, before, await snap(files[key]!, contractC1), ca);
-        expect(await contractFileId(contractC1), `${ca}: file_id hợp đồng giữ nguyên`).toBe(
+        // Hợp đồng riêng mỗi ca: kết quả của ca trước không ảnh hưởng lý do đỏ/xanh của ca này.
+        const contractId = await seedContract();
+        const fileBefore = await contractFileId(contractId);
+        const before = await snap(files[key]!, contractId);
+        const res = await postContract("ctr", contractId, files[key]!);
+        expectDenied(res, before, await snap(files[key]!, contractId), ca);
+        expect(await contractFileId(contractId), `${ca}: file_id hợp đồng giữ nguyên`).toBe(
           fileBefore,
         );
       });
