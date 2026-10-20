@@ -23,7 +23,6 @@ import {
   type UploadFileInput,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../../db/db.service";
-import { isUniqueViolation, pgErrorField } from "../../common/db-error";
 import { AuditService } from "../../events/audit.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../../storage/storage-adapter.port";
 import { buildFileKey, InvalidStorageKeyError } from "../../storage/file-storage-key";
@@ -45,7 +44,16 @@ import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
 import { isExtensionConsistentWithMime } from "./mime-extension";
-import { toFileMetadataDto } from "./file-metadata.mapper";
+import { toFileMetadataDto, toLinkDto } from "./file-metadata.mapper";
+import { decideFileAccess, decideLinkAccess, type FileAccessContext } from "./file-access-decision";
+import {
+  assertLinkableFile,
+  assertRegisteredLinkTarget,
+  assertSameLinkSnapshot,
+  fileForbidden,
+  linkFileMissing,
+  rethrowLinkInsertError,
+} from "./file-link-guard";
 import { FilePolicyAction, FOUNDATION_FILE_PERMISSION } from "./file-policy.types";
 import {
   FOUNDATION_FILE_ENTITY,
@@ -74,17 +82,6 @@ const DEFAULT_MAX_UPLOAD_MB = 25; // mirror setting-defaults.ts — only used if
  * (System Jobs khung) sở hữu job dọn dẹp (soft-delete + storage delete khi Pending quá TTL 'file.pending_
  * ttl_hours'). LANE NÀY KHÔNG tự chế job (tránh scheduler trùng) — chỉ để lại con trỏ. Không làm gì thêm ở đây.
  */
-
-/**
- * Tên 2 constraint UNIQUE trên `file_links` mà `link()` phải PHÂN BIỆT khi bắt 23505 (S2-FND-DB-2-B) —
- * KHÔNG gộp chung 1 mã lỗi cho 2 nguyên nhân khác nhau:
- *  - `uq_file_links_entity_file_active` (6 cột: company_id, module_code, entity_type, entity_id, file_id,
- *    link_type — WHERE deleted_at IS NULL, mig 0472): file NÀY đã gắn vào ĐÚNG entity + link_type này rồi.
- *  - `uq_file_links_primary_per_entity_type` (5 cột is_primary=true, mig 0433): entity này ĐÃ có 1 file
- *    KHÁC primary cho cùng link_type — không thể có 2 primary song song.
- */
-const UQ_FILE_LINKS_ENTITY_FILE_ACTIVE = "uq_file_links_entity_file_active";
-const UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE = "uq_file_links_primary_per_entity_type";
 
 /**
  * S1-FND-FILE-1 — FileService (crown-jewel). Quản lý vòng đời metadata file: upload → getMetadata/list →
@@ -429,20 +426,10 @@ export class FileService {
    * Preview access_granted=false). Row 0 (RLS/cross-tenant/không tồn tại) → 404 (tránh oracle).
    */
   async getMetadata(user: RequestUser, fileId: string): Promise<FileMetadataDto> {
-    const row = await this.db.withTenant(user.companyId, (tx) =>
-      this.fileRepo.findByIdTx(user.companyId, fileId, tx),
-    );
+    // Hàng + liên kết trong MỘT ảnh chụp, rồi vị từ XEM chung (file-access-decision.ts) ngoài tx.
+    const { row, ctx } = await this.loadFileAccessContext(user, fileId);
     if (!row) throw new NotFoundException("File không tồn tại");
-
-    // S2-FND-BE-4 (H1): load links BEFORE the decision — a module-owned file must be authorized by its
-    // owning module's resolver (link-aware), not the FOUNDATION.FILE.* fallback (deny-no-resolver otherwise).
-    const { links, everLinked } = await this.loadLinkContext(user, fileId);
-    const decision = await this.policy.decideForLinkedFile(
-      fileSelfPolicyInput(user, fileId, FilePolicyAction.View),
-      links.map((l) => toFileLinkRef(l)),
-      FilePolicyAction.View,
-      everLinked,
-    );
+    const decision = await decideFileAccess(this.policy, user, row, ctx, FilePolicyAction.View);
     if (!decision.allow) {
       await this.logDeny(user, {
         fileId,
@@ -450,13 +437,10 @@ export class FileService {
         permissionCode: "FOUNDATION.FILE.VIEW",
         reason: decision.reason,
       });
-      throw new ForbiddenException({
-        code: FOUNDATION_FILE_ERROR_CODES.FORBIDDEN,
-        message: `${FOUNDATION_FILE_ERROR_CODES.FORBIDDEN}: ${decision.reason}`,
-      });
+      throw fileForbidden(decision.reason);
     }
 
-    return toFileMetadataDto(row, links);
+    return toFileMetadataDto(row, ctx.live);
   }
 
   // ─── Download ─────────────────────────────────────────────────────────────────
@@ -468,20 +452,11 @@ export class FileService {
    * rồi trả signed-url TTL-ngắn (quyết định: tránh proxy byte qua API process, ép TTL ngắn ở adapter).
    */
   async getDownloadUrl(user: RequestUser, fileId: string): Promise<DownloadUrlDto> {
-    const row = await this.db.withTenant(user.companyId, (tx) =>
-      this.fileRepo.findByIdTx(user.companyId, fileId, tx),
-    );
+    // S2-FND-BE-4 (H1) link-aware + vế chủ tệp chưa từng gắn — cùng vị từ với GET /:id (file-access-decision.ts).
+    const { row, ctx } = await this.loadFileAccessContext(user, fileId);
     if (!row) throw new NotFoundException("File không tồn tại");
-
-    // S2-FND-BE-4 (H1): link-aware authorization — a module-owned file with no registered resolver is
-    // fail-closed (deny-no-resolver); foundation-owned (0-link) keeps the FOUNDATION.FILE.* fallback.
-    const { links, everLinked } = await this.loadLinkContext(user, fileId);
-    const decision = await this.policy.decideForLinkedFile(
-      fileSelfPolicyInput(user, fileId, FilePolicyAction.Download),
-      links.map((l) => toFileLinkRef(l)),
-      FilePolicyAction.Download,
-      everLinked,
-    );
+    const action = FilePolicyAction.Download;
+    const decision = await decideFileAccess(this.policy, user, row, ctx, action);
     if (!decision.allow) {
       await this.logDeny(user, {
         fileId,
@@ -489,10 +464,7 @@ export class FileService {
         permissionCode: "FOUNDATION.FILE.DOWNLOAD",
         reason: decision.reason,
       });
-      throw new ForbiddenException({
-        code: FOUNDATION_FILE_ERROR_CODES.FORBIDDEN,
-        message: `${FOUNDATION_FILE_ERROR_CODES.FORBIDDEN}: ${decision.reason}`,
-      });
+      throw fileForbidden(decision.reason);
     }
 
     // S2-FND-BE-4 (H2): state-guard AFTER authz ALLOW (so we don't leak state to a user without access).
@@ -558,83 +530,23 @@ export class FileService {
   // ─── Link / Unlink ────────────────────────────────────────────────────────────
 
   /**
-   * Gắn file vào entity nghiệp vụ. FilePolicy.canLink TRƯỚC. Validate FILE thuộc tenant (RLS lọc
-   * cross-company → 0 row ⇒ reject 4xx) + file.scan_status != 'Infected' → vi phạm thì reject (4xx).
-   * Tạo file_links (created_by) + audit 'file_link'/FileLinked + log Link — cùng tx.
+   * Gắn file vào entity nghiệp vụ. Mọi kiểm ở `preflightLink` (không ghi) chạy TRƯỚC, ngoài tx; tx ghi khoá hàng
+   * tệp rồi đọc lại ảnh chụp liên kết (lệch ⇒ 409), tạo file_links + audit 'file_link'/FileLinked + log Link.
    *
-   * LƯU Ý: entityId là tham chiếu POLYMORPHIC (module_code/entity_type/entity_id) — WO này KHÔNG validate
-   * entity tồn tại/thuộc tenant ở đây (không có FK tới bảng entity). Cô lập tenant của file_links đã được
-   * ép bởi company_id NOT NULL + RLS+FORCE (mig 0433). Validate entity-existence để WO module-owner sau.
+   * LƯU Ý: entityId là tham chiếu POLYMORPHIC — KHÔNG validate entity tồn tại ở đây (không FK); resolver đích
+   * (`canLink`) quyết định quyền trên thực thể. Cô lập tenant: company_id NOT NULL + RLS+FORCE (mig 0433).
    */
   async link(user: RequestUser, input: LinkFileInput): Promise<FileLinkDto> {
-    // S7-CHAT-BE-3 (FULL gate, HIGH): khoá điều phối phải ở dạng CHÍNH TẮC của module sở hữu.
-    // Registry tra resolver bằng khoá đã `toLowerCase()`, còn module truy vấn `file_links` của mình bằng
-    // so-chuỗi chính xác ⇒ một cặp lệch chính tả tạo được link "ma": resolver vẫn CẤP QUYỀN TẢI, module
-    // KHÔNG thấy để hiển thị và KHÔNG gỡ được. Từ chối ở biên ghi thay vì âm thầm nhận (hoặc âm thầm
-    // viết lại — viết lại là đổi thứ client khai mà không nói). Xem `FilePolicyService.canonicalOwnerKey`.
-    const canonical = this.policy.canonicalOwnerKey(input.moduleCode, input.entityType);
-    if (
-      canonical &&
-      (canonical.moduleCode !== input.moduleCode || canonical.entityType !== input.entityType)
-    ) {
-      throw new BadRequestException({
-        code: FOUNDATION_FILE_ERROR_CODES.LINK,
-        message:
-          `${FOUNDATION_FILE_ERROR_CODES.LINK}: moduleCode/entityType phải đúng dạng chính tắc ` +
-          `("${canonical.moduleCode}"/"${canonical.entityType}").`,
-      });
-    }
-
-    const decision = await this.policy.canLink(
-      filePolicyInput(user, {
-        fileId: input.fileId,
-        moduleCode: input.moduleCode,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        action: FilePolicyAction.Link,
-      }),
-    );
-    if (!decision.allow) {
-      await this.logDeny(user, {
-        fileId: input.fileId,
-        action: "Link",
-        permissionCode: "FOUNDATION.FILE.LINK",
-        reason: decision.reason,
-        moduleCode: input.moduleCode,
-        entityType: input.entityType,
-        entityId: input.entityId,
-      });
-      throw new ForbiddenException({
-        code: FOUNDATION_FILE_ERROR_CODES.FORBIDDEN,
-        message: `${FOUNDATION_FILE_ERROR_CODES.FORBIDDEN}: ${decision.reason}`,
-      });
-    }
+    const decided = await this.checkLink(user, input);
 
     return this.db.withTenant(user.companyId, async (tx) => {
-      // File phải thuộc tenant (RLS lọc cross-company → 0 row) + chưa xoá.
-      const file = await this.fileRepo.findByIdTx(user.companyId, input.fileId, tx);
-      if (!file) {
-        // FOUNDATION-FILE-ERR-LINK: file không thuộc tenant / không tồn tại (cross-company → RLS 0 row).
-        throw new BadRequestException({
-          code: FOUNDATION_FILE_ERROR_CODES.LINK,
-          message: `${FOUNDATION_FILE_ERROR_CODES.LINK}: file không thuộc công ty hiện tại hoặc không tồn tại.`,
-        });
-      }
-      // Không cho link file nhiễm mã độc (QA-06).
-      if (file.scanStatus === "Infected") {
-        throw new BadRequestException({
-          code: FOUNDATION_FILE_ERROR_CODES.INFECTED,
-          message: `${FOUNDATION_FILE_ERROR_CODES.INFECTED}: không thể link file đang ở trạng thái Infected.`,
-        });
-      }
-      // S15-PAYROLL-BE-5B (plan §8.2 #3): tệp TẠM do hệ thống sinh chỉ mang link sở hữu `Export` của module
-      // sinh ra nó. Link thật gắn thêm khiến TEMP_FILE_CLEANUP giữ tệp mãi (phá hạn tệp tạm — owner O-7).
-      if (file.isTemporary) {
-        throw new BadRequestException({
-          code: FOUNDATION_FILE_ERROR_CODES.LINK,
-          message: `${FOUNDATION_FILE_ERROR_CODES.LINK}: tệp tạm do hệ thống sinh không gắn link được.`,
-        });
-      }
+      const file = await this.fileRepo.findByIdForUpdateTx(user.companyId, input.fileId, tx);
+      if (!file) throw linkFileMissing();
+      assertLinkableFile(file);
+      assertSameLinkSnapshot(
+        decided,
+        await this.readLinkContextTx(user.companyId, input.fileId, tx),
+      );
 
       const created = await this.insertLinkOrThrow(
         {
@@ -652,38 +564,104 @@ export class FileService {
         tx,
       );
 
-      await this.audit.record(tx, {
-        action: "FileLinked",
-        objectType: "file_link",
-        objectId: created.id,
-        actorUserId: user.id,
-        actorType: "User",
-        moduleCode: input.moduleCode,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        resultStatus: "Success",
-        dataScope: "Company",
-        after: {
-          fileId: created.fileId,
-          linkType: created.linkType,
-          accessScope: created.accessScope,
-          isPrimary: created.isPrimary,
-        },
-      });
+      await this.recordLinkedTx(tx, user, input, created);
+      return toLinkDto(created);
+    });
+  }
 
-      await this.accessLog.record(tx, {
-        fileId: input.fileId,
-        action: "Link",
-        accessGranted: true,
-        actorUserId: user.id,
-        fileLinkId: created.id,
-        moduleCode: input.moduleCode,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        permissionCode: "FOUNDATION.FILE.LINK",
-      });
+  /** Audit 'file_link'/FileLinked + log Link của liên kết vừa tạo — trong tx ghi của `link()`. */
+  private async recordLinkedTx(
+    tx: TenantTx,
+    user: RequestUser,
+    input: LinkFileInput,
+    created: FileLink,
+  ): Promise<void> {
+    const target = {
+      moduleCode: input.moduleCode,
+      entityType: input.entityType,
+      entityId: input.entityId,
+    };
+    await this.audit.record(tx, {
+      action: "FileLinked",
+      objectType: "file_link",
+      objectId: created.id,
+      actorUserId: user.id,
+      actorType: "User",
+      ...target,
+      resultStatus: "Success",
+      dataScope: "Company",
+      after: {
+        fileId: created.fileId,
+        linkType: created.linkType,
+        accessScope: created.accessScope,
+        isPrimary: created.isPrimary,
+      },
+    });
+    await this.accessLog.record(tx, {
+      fileId: input.fileId,
+      action: "Link",
+      accessGranted: true,
+      actorUserId: user.id,
+      fileLinkId: created.id,
+      ...target,
+      permissionCode: "FOUNDATION.FILE.LINK",
+    });
+  }
 
-      return this.toLinkDto(created);
+  /**
+   * S19-SEC-FILELINKGATE-1 — mọi kiểm của `link()` mà KHÔNG ghi (ngoài dòng log từ chối). Module tự gỡ liên
+   * kết cũ trước khi gắn (branding · ME avatar) gọi hàm này TRƯỚC khi gỡ, để lời gắn bị từ chối không làm
+   * mất tài sản đang dùng. `link()` vẫn tự kiểm lại.
+   */
+  async preflightLink(user: RequestUser, input: LinkFileInput): Promise<void> {
+    await this.checkLink(user, input);
+  }
+
+  /**
+   * Thứ tự: (1) cặp đích đã đăng ký + chính tắc (400) → (2) `canLink` trên thực thể đích (403) → (3) hàng + liên
+   * kết một ảnh chụp (tệp vắng 400) → (4) `decideLinkAccess`: XEM như GET /:id, vế dự phòng thêm TẢI —
+   * NGOÀI tx (resolver tự mở `withTenant`) (403) → (5) trạng thái tệp (400), sau cổng xem như đường tải.
+   * Trả ảnh chụp đã dùng để tx ghi so lại.
+   */
+  private async checkLink(user: RequestUser, input: LinkFileInput): Promise<FileAccessContext> {
+    await assertRegisteredLinkTarget(this.policy, input, () =>
+      this.logLinkDeny(user, input, "FOUNDATION.FILE.LINK", "deny-no-resolver"),
+    );
+    const target = await this.policy.canLink(
+      filePolicyInput(user, { ...input, action: FilePolicyAction.Link }),
+    );
+    if (!target.allow) {
+      await this.logLinkDeny(user, input, "FOUNDATION.FILE.LINK", target.reason);
+      throw fileForbidden(target.reason);
+    }
+
+    const { row, ctx } = await this.loadFileAccessContext(user, input.fileId);
+    if (!row) throw linkFileMissing();
+    const view = await decideLinkAccess(this.policy, user, row, ctx);
+    if (!view.allow) {
+      await this.logLinkDeny(user, input, this.foundationPermissionCode(view.action), view.reason);
+      throw fileForbidden(view.reason);
+    }
+    assertLinkableFile(row);
+    return ctx;
+  }
+
+  private logLinkDeny(
+    user: RequestUser,
+    input: LinkFileInput,
+    permissionCode: string,
+    reason: string,
+  ): Promise<void> {
+    const { fileId, moduleCode, entityType, entityId } = input;
+    return this.logDeny(user, {
+      fileId,
+      action: "Link",
+      permissionCode,
+      reason,
+      moduleCode,
+      entityType,
+      entityId,
+      unverifiedFileId: true,
     });
   }
 
@@ -826,37 +804,12 @@ export class FileService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────────
 
-  /**
-   * Insert `file_links` bọc bắt 23505 (unique-violation) — PHÂN BIỆT theo TÊN constraint
-   * (`pgErrorField(err,'constraint')`), KHÔNG gộp chung 1 mã lỗi cho 2 nguyên nhân khác nhau
-   * (S2-FND-DB-2-B):
-   *  - `uq_file_links_entity_file_active` (6 cột, mig 0472) → 409 FOUNDATION-FILE-ERR-DUP-LINK (file NÀY
-   *    đã gắn vào ĐÚNG entity + link_type này, còn active).
-   *  - `uq_file_links_primary_per_entity_type` (5 cột is_primary, mig 0433) → 409
-   *    FOUNDATION-FILE-ERR-DUP-PRIMARY (entity đã có 1 file KHÁC làm primary cho cùng link_type).
-   * Vi phạm 23505 với constraint KHÁC (không nhận diện được) hoặc lỗi khác 23505 → rethrow nguyên vẹn
-   * (KHÔNG nuốt lỗi — silent-failure-hunter).
-   */
+  /** Insert `file_links`; 23505 ⇒ 409 phân biệt theo constraint (`rethrowLinkInsertError`), lỗi khác ném nguyên. */
   private async insertLinkOrThrow(data: NewFileLink, tx: TenantTx): Promise<FileLink> {
     try {
       return await this.linkRepo.insertTx(data, tx);
     } catch (err) {
-      if (isUniqueViolation(err)) {
-        const constraint = pgErrorField(err, "constraint");
-        if (constraint === UQ_FILE_LINKS_ENTITY_FILE_ACTIVE) {
-          throw new ConflictException({
-            code: FOUNDATION_FILE_ERROR_CODES.DUP_LINK,
-            message: `${FOUNDATION_FILE_ERROR_CODES.DUP_LINK}: file đã được gắn vào entity này với cùng link_type (chưa gỡ).`,
-          });
-        }
-        if (constraint === UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE) {
-          throw new ConflictException({
-            code: FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY,
-            message: `${FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY}: entity này đã có 1 file khác làm primary cho cùng link_type.`,
-          });
-        }
-      }
-      throw err;
+      rethrowLinkInsertError(err);
     }
   }
 
@@ -951,17 +904,39 @@ export class FileService {
    * chụp. Tách ra hai tx thì có cửa sổ mà link cuối bị gỡ ở giữa ⇒ `links` rỗng nhưng `everLinked` đọc
    * trước khi gỡ trả `false` ⇒ rơi xuống fallback FOUNDATION.FILE.* đúng lúc vừa bị thu hồi.
    *
-   * Gom về một chỗ cho cả 3 đường (View/Download/Delete) để không có đường nào lỡ quên cờ — đây là loại
-   * bất biến phải chốt ở method dùng chung, không rải theo từng route.
+   * Gom về `readLinkContextTx` cho mọi đường (xem · tải · xoá · gắn, kể cả lần đọc lại trong tx ghi của gắn)
+   * để không đường nào lỡ quên cờ — bất biến chốt ở method dùng chung, không rải theo route.
    */
   private async loadLinkContext(
     user: RequestUser,
     fileId: string,
   ): Promise<{ links: FileLink[]; everLinked: boolean }> {
+    const { live, everLinked } = await this.db.withTenant(user.companyId, (tx) =>
+      this.readLinkContextTx(user.companyId, fileId, tx),
+    );
+    return { links: live, everLinked };
+  }
+
+  /** Hàng tệp + ngữ cảnh liên kết trong MỘT `withTenant` (một ảnh chụp) — GET /:id · tải · gắn. */
+  private async loadFileAccessContext(
+    user: RequestUser,
+    fileId: string,
+  ): Promise<{ row: FileRecord | undefined; ctx: FileAccessContext }> {
     return this.db.withTenant(user.companyId, async (tx) => ({
-      links: await this.linkRepo.listByFileTx(user.companyId, fileId, tx),
-      everLinked: await this.linkRepo.hasEverBeenLinkedTx(user.companyId, fileId, tx),
+      row: await this.fileRepo.findByIdTx(user.companyId, fileId, tx),
+      ctx: await this.readLinkContextTx(user.companyId, fileId, tx),
     }));
+  }
+
+  private async readLinkContextTx(
+    companyId: string,
+    fileId: string,
+    tx: TenantTx,
+  ): Promise<FileAccessContext & { live: FileLink[] }> {
+    return {
+      live: await this.linkRepo.listByFileTx(companyId, fileId, tx),
+      everLinked: await this.linkRepo.hasEverBeenLinkedTx(companyId, fileId, tx),
+    };
   }
 
   /**
@@ -997,10 +972,18 @@ export class FileService {
       entityType?: string;
       entityId?: string;
       fileLinkId?: string;
+      /** `fileId` do client gửi, chưa nạp hàng: chỉ ghi khi hàng có trong tenant (FK của log kiểm vượt RLS). */
+      unverifiedFileId?: boolean;
     },
   ): Promise<void> {
-    await this.db.withTenant(user.companyId, (tx) =>
-      this.accessLog.record(tx, {
+    await this.db.withTenant(user.companyId, async (tx) => {
+      if (
+        entry.unverifiedFileId &&
+        !(await this.fileRepo.findByIdTx(user.companyId, entry.fileId, tx))
+      ) {
+        return;
+      }
+      await this.accessLog.record(tx, {
         fileId: entry.fileId,
         action: entry.action,
         accessGranted: false,
@@ -1011,23 +994,7 @@ export class FileService {
         entityType: entry.entityType,
         entityId: entry.entityId,
         fileLinkId: entry.fileLinkId,
-      }),
-    );
-  }
-
-  /** Map file_links row → FileLinkDto an toàn. */
-  private toLinkDto(row: FileLink): FileLinkDto {
-    return {
-      id: row.id,
-      fileId: row.fileId,
-      moduleCode: row.moduleCode,
-      entityType: row.entityType,
-      entityId: row.entityId,
-      linkType: row.linkType as FileLinkDto["linkType"],
-      accessScope: row.accessScope as FileLinkDto["accessScope"],
-      isPrimary: row.isPrimary,
-      purpose: row.purpose ?? null,
-      createdAt: row.createdAt.toISOString(),
-    };
+      });
+    });
   }
 }

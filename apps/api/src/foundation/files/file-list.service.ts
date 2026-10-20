@@ -6,7 +6,8 @@ import { FileLinkRepository } from "./file-link.repository";
 import { toFileListItemDto } from "./file-metadata.mapper";
 import { FilePolicyService } from "./file-policy.service";
 import { FilePolicyAction } from "./file-policy.types";
-import { fileSelfPolicyInput, toFileLinkRef, type FileDecisionActor } from "./file-view-decision";
+import { decideFileAccess } from "./file-access-decision";
+import type { FileDecisionActor } from "./file-view-decision";
 import { FileRepository } from "./file.repository";
 
 /** Số fileId tối đa trong một dòng log chẩn đoán (đủ để tra, không xả cả trang vào log). */
@@ -36,7 +37,7 @@ interface LinkContext {
 /**
  * S19-SEC-FILEMETAGATE-1 — `GET /foundation/files`: tên · đuôi · cỡ · chủ tệp của một hàng đi theo quyết
  * định XEM của chính người gọi cho đúng tệp đó — cùng vị từ với `GET /foundation/files/:id`
- * (`decideForLinkedFile` + đầu vào từ `file-view-decision.ts`).
+ * (`decideFileAccess` ở `file-access-decision.ts`, S19-SEC-FILELINKGATE-1).
  *
  * - GIỮ mọi hàng (không lọc): lọc sau LIMIT/OFFSET làm trang hụt ⇒ client dừng phân trang sớm và `total`
  *   lệch; quyết định đi qua resolver nên không lọc được trong SQL. Hàng không xem được bị che (mapper).
@@ -93,12 +94,7 @@ export class FileListService {
     const masked: MaskedEntry[] = [];
     for (const row of rows) {
       const ctx = byFile.get(row.id) ?? { live: [], everLinked: false };
-      const decision = await this.policy.decideForLinkedFile(
-        fileSelfPolicyInput(user, row.id, FilePolicyAction.View),
-        ctx.live.map((l) => toFileLinkRef(l)),
-        FilePolicyAction.View,
-        ctx.everLinked,
-      );
+      const decision = await decideFileAccess(this.policy, user, row, ctx, FilePolicyAction.View);
       const reason = LOGGED_REASONS.find((r) => r === decision.reason);
       if (reason) masked.push({ fileId: row.id, reason, links: ctx.live });
       data.push(toFileListItemDto(row, decision.allow));

@@ -34,6 +34,22 @@ export function toFileMetadataDto(row: FileRecord, links: readonly FileLink[]): 
   };
 }
 
+/** Map hàng `file_links` → FileLinkDto an toàn (phản hồi của biên gắn tệp). */
+export function toLinkDto(row: FileLink): FileLinkDto {
+  return {
+    id: row.id,
+    fileId: row.fileId,
+    moduleCode: row.moduleCode,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    linkType: row.linkType as FileLinkDto["linkType"],
+    accessScope: row.accessScope as FileLinkDto["accessScope"],
+    isPrimary: row.isPrimary,
+    purpose: row.purpose ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 /**
  * Một hàng của danh sách tệp. `canView` = quyết định XEM của chính người gọi cho tệp này (cùng vị từ với
  * `GET /foundation/files/:id`). Danh sách không eager-load link (`links: []`).

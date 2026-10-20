@@ -65,15 +65,15 @@ export async function seedFile(
   direct: Pool,
   companyId: string,
   uploadedBy: string,
-  opts?: { scanStatus?: string; uploadStatus?: string },
+  opts?: { scanStatus?: string; uploadStatus?: string; ownerUserId?: string },
 ): Promise<string> {
   const fileId = randomUUID();
   const storagePath = `${companyId}/files/${fileId}`;
   await direct.query(
     `INSERT INTO files
        (id, company_id, original_name, stored_name, mime_type, file_size_bytes, storage_provider,
-        storage_path, upload_status, scan_status, uploaded_by)
-     VALUES ($1, $2, 'attach.pdf', $3, 'application/pdf', 4096, 'MinIO', $4, $5, $6, $7)`,
+        storage_path, upload_status, scan_status, uploaded_by, owner_user_id)
+     VALUES ($1, $2, 'attach.pdf', $3, 'application/pdf', 4096, 'MinIO', $4, $5, $6, $7, $8)`,
     [
       fileId,
       companyId,
@@ -82,6 +82,7 @@ export async function seedFile(
       opts?.uploadStatus ?? "Uploaded",
       opts?.scanStatus ?? "Clean",
       uploadedBy,
+      opts?.ownerUserId ?? null,
     ],
   );
   return fileId;

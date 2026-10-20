@@ -15,6 +15,7 @@ import {
   type BrandingUploadUrlResponse,
   type CompanyBranding,
   type ConfirmUploadResponse,
+  type LinkFileInput,
 } from "@mediaos/contracts";
 import { DatabaseService } from "../../db/db.service";
 import { FileLinkRepository } from "../files/file-link.repository";
@@ -133,15 +134,15 @@ export class CompanyBrandingService {
    * PUT /:kind — đặt tài sản thương hiệu từ 1 file ĐÃ upload+confirm. Kiểm đủ: tồn tại (RLS/tenant) →
    * owner (IDOR) → state Uploaded → không Infected → MIME thuộc whitelist của kind. Replace semantics:
    * gỡ (soft-delete) link CŨ cùng linkType TRƯỚC khi tạo link mới ⇒ không để file treo.
+   * S19-SEC-FILELINKGATE-1: kiểm gắn (`preflightLink`) TRƯỚC khi gỡ ⇒ lời gắn bị từ chối không làm mất tài sản
+   * đang dùng; đặt lại đúng tệp đang dùng ⇒ giữ liên kết đó (gắn lại tệp «đã từng gắn» bị từ chối), chỉ gỡ cái khác.
    */
   async setAsset(actor: Actor, kind: BrandingKind, fileId: string): Promise<BrandingAsset> {
     const requestUser = { id: actor.id, companyId: actor.companyId };
     await this.loadOwnedFileOrThrow(actor, fileId, { requireUploaded: true, kind });
 
     const companyId = await this.resolveActiveCompanyIdOrThrow(actor);
-    await this.unlinkStale(requestUser, companyId, kind);
-
-    await this.files.link(requestUser, {
+    const linkInput: LinkFileInput = {
       fileId,
       moduleCode: BRANDING_MODULE_CODE,
       entityType: BRANDING_RULES[kind].entityType,
@@ -149,7 +150,15 @@ export class CompanyBrandingService {
       linkType: BRANDING_LINK_TYPE,
       accessScope: "Company",
       isPrimary: true,
-    });
+    };
+    const current = await this.listBrandingLinks(actor.companyId, companyId, kind);
+    const alreadyLinked = current.some((l) => l.fileId === fileId);
+    if (!alreadyLinked) await this.files.preflightLink(requestUser, linkInput);
+    await this.unlinkEach(
+      requestUser,
+      current.filter((l) => l.fileId !== fileId),
+    );
+    if (!alreadyLinked) await this.files.link(requestUser, linkInput);
 
     await this.persistRef(actor, kind, fileId);
 
@@ -343,6 +352,13 @@ export class CompanyBrandingService {
     kind: BrandingKind,
   ): Promise<void> {
     const links = await this.listBrandingLinks(requestUser.companyId, companyId, kind);
+    await this.unlinkEach(requestUser, links);
+  }
+
+  private async unlinkEach(
+    requestUser: { id: string; companyId: string },
+    links: readonly { id: string }[],
+  ): Promise<void> {
     for (const link of links) {
       await this.files.unlink(requestUser, link.id);
     }

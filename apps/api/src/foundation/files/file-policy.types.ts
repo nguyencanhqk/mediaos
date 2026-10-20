@@ -70,6 +70,7 @@ export interface FilePolicyDecision {
 export type FilePolicyReason =
   | "allow-resolver" // a registered module resolver granted access
   | "allow-foundation" // fallback FOUNDATION.FILE.* permission granted access
+  | "allow-owner" // S19-SEC-FILELINKGATE-1: caller owns a file that has never been linked (file-access-decision.ts)
   | "deny-resolver" // a registered module resolver denied access (final, no escalation)
   | "deny-foundation" // no resolver + FOUNDATION.FILE.* permission not granted
   | "deny-no-resolver" // S2-FND-BE-4 (H1): a LINKED file whose owning (module,entity) has NO registered

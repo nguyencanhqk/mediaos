@@ -113,14 +113,15 @@ describe.skipIf(!hasLaneDb)(
      * `files` row Uploaded + Clean — `download` có scan-guard STRICT nên `Pending`/`Infected` sẽ ra
      * 409 và ca ALLOW sẽ đỏ vì lý do KHÔNG liên quan tới tham số.
      * `storage_path` mang tiền tố tenant đúng khuôn `employee-file.int-spec.ts:111`.
+     * Chủ tệp = actor: gắn tệp đòi người gắn xem được tệp (chủ tệp chưa từng gắn — S19-SEC-FILELINKGATE-1).
      */
     async function seedFile(): Promise<string> {
       const fileId = randomUUID();
       await direct.query(
         `INSERT INTO files
            (id, company_id, original_name, stored_name, mime_type, file_size_bytes, storage_provider,
-            storage_path, upload_status, scan_status, uploaded_by)
-         VALUES ($1, $2, 'ho-so.pdf', $3, 'application/pdf', 2048, 'MinIO', $4, 'Uploaded', 'Clean', $5)`,
+            storage_path, upload_status, scan_status, uploaded_by, owner_user_id)
+         VALUES ($1, $2, 'ho-so.pdf', $3, 'application/pdf', 2048, 'MinIO', $4, 'Uploaded', 'Clean', $5, $5)`,
         [fileId, A.companyId, fileId, `${A.companyId}/files/${fileId}`, actorUserId],
       );
       return fileId;

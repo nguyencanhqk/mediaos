@@ -52,10 +52,14 @@ const allowPolicy = {
     reason: "allow-foundation",
   }),
   // S7-CHAT-BE-3 (FULL gate, HIGH): `link()` chặn khoá điều phối lệch chính tả trước khi hỏi quyền.
-  // `null` = "không resolver nào nhận cặp này" ⇒ giữ nguyên hành vi foundation-owned của stub này.
+  // Trả lại chính cặp đã khai = cặp đã đăng ký, đúng chính tắc. `null` (không resolver nào nhận) ⇒ link() 400
+  // (S19-SEC-FILELINKGATE-1) — biên đó đo ở files.service.link-gate.spec.ts.
   // ⚠️ CÙNG LỚP BẪY với dòng `decideForLinkedFile` ở trên: `as never` ở chỗ inject giấu method thiếu
   // khỏi `tsc`, nên thêm method vào service mà quên stub này = đỏ lúc CHẠY, không phải lúc build.
-  canonicalOwnerKey: (): { moduleCode: string; entityType: string } | null => null,
+  canonicalOwnerKey: (
+    moduleCode: string,
+    entityType: string,
+  ): { moduleCode: string; entityType: string } | null => ({ moduleCode, entityType }),
 };
 
 /** Stub storage adapter — presign returns a fake short-lived URL (no real S3 in integration). */
