@@ -105,15 +105,16 @@ describe.skipIf(!hasLaneDb)(
     /**
      * `files` row Uploaded + Clean + mime ẢNH — `download` và `setCover` đều có scan-guard STRICT, và
      * `setCover` đòi `mime_type` bắt đầu bằng `image/`. `storage_path` mang tiền tố tenant theo khuôn
-     * `employee-file.int-spec.ts`.
+     * `employee-file.int-spec.ts`. Chủ tệp = người tải lên (như một lần tải thật) — người gắn phải xem được
+     * tệp (S19-SEC-FILELINKGATE-1).
      */
     async function seedFile(): Promise<string> {
       const id = randomUUID();
       await direct.query(
         `INSERT INTO files
            (id, company_id, original_name, stored_name, mime_type, file_size_bytes, storage_provider,
-            storage_path, upload_status, scan_status, uploaded_by)
-         VALUES ($1, $2, 'anh-bia.png', $3, 'image/png', 2048, 'MinIO', $4, 'Uploaded', 'Clean', $5)`,
+            storage_path, upload_status, scan_status, uploaded_by, owner_user_id)
+         VALUES ($1, $2, 'anh-bia.png', $3, 'image/png', 2048, 'MinIO', $4, 'Uploaded', 'Clean', $5, $5)`,
         [id, A.companyId, id, `${A.companyId}/files/${id}`, actorUserId],
       );
       return id;

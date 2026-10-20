@@ -113,6 +113,7 @@ describe.skipIf(!hasLaneDb)(
 
     const tok = (label: string): string => tokens.get(label)!;
     const uid = (label: string): string => ids.get(label)!;
+    const objectGrantIds: string[] = [];
 
     /** Hàng tệp Uploaded + Clean, chủ = `ownerId`. */
     async function seedFile(ownerId: string): Promise<string> {
@@ -321,10 +322,12 @@ describe.skipIf(!hasLaneDb)(
       await insertLink(files.andT, "SOCIAL", "feed_post", randomUUID(), stranger);
 
       // Viewer giữ `view:foundation-file` nhưng có grant đối tượng DENY trên cả hai tệp G.
+      // Grant ghi `granted_by` (người cấp thật) và bị xoá ở afterAll: lane dùng chung, các census
+      // toàn lane chỉ đếm grant hệ thống (granted_by IS NULL) và không được thấy hàng của world này.
       files.gOwn = await seedFile(uid("viewer"));
       files.gOther = await seedFile(stranger);
       for (const g of [files.gOwn, files.gOther]) {
-        await seedObjectGrant(
+        const grantId = await seedObjectGrant(
           w.direct,
           w.A.companyId,
           uid("viewer"),
@@ -333,10 +336,20 @@ describe.skipIf(!hasLaneDb)(
           "view",
           "DENY",
         );
+        await w.direct.query(`UPDATE object_permissions SET granted_by = $1 WHERE id = $2`, [
+          stranger,
+          grantId,
+        ]);
+        objectGrantIds.push(grantId);
       }
     }, BOOT_TIMEOUT_MS);
 
     afterAll(async () => {
+      if (w && objectGrantIds.length > 0) {
+        await w.direct.query(`DELETE FROM object_permissions WHERE id = ANY($1::uuid[])`, [
+          objectGrantIds,
+        ]);
+      }
       await w?.close();
     });
 

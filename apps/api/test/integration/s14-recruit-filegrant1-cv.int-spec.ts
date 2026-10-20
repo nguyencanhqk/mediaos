@@ -647,12 +647,15 @@ describe.skipIf(!hasLaneDb)("S14-RECRUIT-FILEGRANT-1 — tệp CV qua bề mặt
       expect(names.filter((n) => n.includes("recruiter") || n === "hr")).toEqual([]);
     });
 
-    it("Z2: `object_permissions` chạm `foundation-file`/`*` = 0 hàng", async () => {
+    it("Z2: `object_permissions` HỆ THỐNG chạm `foundation-file`/`*` = 0 hàng", async () => {
+      // Census trên lane DÙNG CHUNG: chỉ đếm grant hệ thống (granted_by IS NULL — dạng một migration/seed
+      // sẽ ghi). Grant do int-spec khác tự cấp trong tenant riêng của nó mang granted_by và không thuộc phạm vi WO.
       const r = await direct().query<{ n: number }>(
         `SELECT count(*)::int AS n
            FROM object_permissions op
            JOIN permissions p ON p.id = op.permission_id
-          WHERE p.resource_type IN ('foundation-file','*')`,
+          WHERE p.resource_type IN ('foundation-file','*')
+            AND op.granted_by IS NULL`,
       );
       expect(r.rows[0].n).toBe(0);
     });
