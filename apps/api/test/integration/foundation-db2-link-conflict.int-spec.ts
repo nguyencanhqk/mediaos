@@ -59,8 +59,12 @@ const allowPolicy = {
     allow: true,
     reason: "allow-foundation",
   }),
-  // S7-CHAT-BE-3 (FULL gate): `link()` chặn khoá điều phối lệch chính tả. `null` = foundation-owned.
-  canonicalOwnerKey: (): { moduleCode: string; entityType: string } | null => null,
+  // S7-CHAT-BE-3 (FULL gate): `link()` chặn khoá điều phối lệch chính tả. Trả lại chính cặp đã khai = đã
+  // đăng ký, đúng chính tắc (`null` ⇒ link() 400 từ S19-SEC-FILELINKGATE-1, đo ở unit link-gate).
+  canonicalOwnerKey: (
+    moduleCode: string,
+    entityType: string,
+  ): { moduleCode: string; entityType: string } | null => ({ moduleCode, entityType }),
 };
 
 /** Stub storage adapter — link() never touches storage; kept only to satisfy the constructor. */

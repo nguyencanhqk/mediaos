@@ -113,15 +113,15 @@ async function seedFile(
   direct: Pool,
   companyId: string,
   uploadedBy: string,
-  opts?: { scanStatus?: string; uploadStatus?: string },
+  opts?: { scanStatus?: string; uploadStatus?: string; ownerUserId?: string },
 ): Promise<string> {
   const fileId = randomUUID();
   const storagePath = `${companyId}/files/${fileId}`;
   await direct.query(
     `INSERT INTO files
        (id, company_id, original_name, stored_name, mime_type, file_size_bytes, storage_provider,
-        storage_path, upload_status, scan_status, uploaded_by)
-     VALUES ($1, $2, 'ho-so.pdf', $3, 'application/pdf', 2048, 'MinIO', $4, $5, $6, $7)`,
+        storage_path, upload_status, scan_status, uploaded_by, owner_user_id)
+     VALUES ($1, $2, 'ho-so.pdf', $3, 'application/pdf', 2048, 'MinIO', $4, $5, $6, $7, $8)`,
     [
       fileId,
       companyId,
@@ -130,6 +130,7 @@ async function seedFile(
       opts?.uploadStatus ?? "Uploaded",
       opts?.scanStatus ?? "Clean",
       uploadedBy,
+      opts?.ownerUserId ?? null,
     ],
   );
   return fileId;
@@ -224,7 +225,11 @@ describe.skipIf(!hasLaneDb)("S2-HR-EMPFILE-1 employee files (HTTP, real permissi
     infectedFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "Infected" });
     await seedFileLink(direct, A.companyId, infectedFileA, empA, hrUserId);
 
-    unlinkedCleanFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "Clean" });
+    // Tệp người gắn tự tải lên: chủ tệp = người gắn (gắn đòi người gắn xem được tệp — S19-SEC-FILELINKGATE-1).
+    unlinkedCleanFileA = await seedFile(direct, A.companyId, hrUserId, {
+      scanStatus: "Clean",
+      ownerUserId: hrUserId,
+    });
 
     empB = await seedEmployeeProfile(direct, B.companyId);
     bUserId = await seedUser(direct, B.companyId, `bhr@${B.slug}.test`, hash);

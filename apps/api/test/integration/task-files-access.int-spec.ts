@@ -193,8 +193,15 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
     notRequiredFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "NotRequired" });
     await seedTaskLink(direct, A.companyId, notRequiredFileA, taskA, hrUserId);
 
-    unlinkedCleanFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "Clean" });
-    empUnlinkedFileA = await seedFile(direct, A.companyId, empUserId, { scanStatus: "Clean" });
+    // Tệp người gắn tự tải lên: chủ tệp = người gắn (gắn đòi người gắn xem được tệp — S19-SEC-FILELINKGATE-1).
+    unlinkedCleanFileA = await seedFile(direct, A.companyId, hrUserId, {
+      scanStatus: "Clean",
+      ownerUserId: hrUserId,
+    });
+    empUnlinkedFileA = await seedFile(direct, A.companyId, empUserId, {
+      scanStatus: "Clean",
+      ownerUserId: empUserId,
+    });
     outOfScopeUnlinkedFileA = await seedFile(direct, A.companyId, empUserId, {
       scanStatus: "Clean",
     });
