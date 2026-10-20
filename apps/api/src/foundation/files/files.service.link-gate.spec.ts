@@ -191,6 +191,20 @@ describe("FileService.link — cổng xem của người gắn (S19-SEC-FILELINK
     ]);
   });
 
+  it("cặp chưa đăng ký + tệp không có trong công ty ⇒ 400 LINK, KHÔNG ghi dòng log từ chối", async () => {
+    h.policy.canonicalOwnerKey.mockReturnValue(null as never);
+    h.fileRepo.findByIdTx.mockResolvedValue(null as never);
+    await expect(h.service.link(user, INPUT)).rejects.toBeInstanceOf(BadRequestException);
+    expect(denyLogEntries(h), "id tệp do client gửi, không có hàng ⇒ không log").toEqual([]);
+  });
+
+  it("canLink từ chối + tệp không có trong công ty ⇒ 403, KHÔNG ghi dòng log từ chối", async () => {
+    h.policy.canLink.mockResolvedValue(DENY);
+    h.fileRepo.findByIdTx.mockResolvedValue(null as never);
+    await expect(h.service.link(user, INPUT)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(denyLogEntries(h), "id tệp do client gửi, không có hàng ⇒ không log").toEqual([]);
+  });
+
   it("neo: canLink từ chối ⇒ 403, không quyết định xem, không nạp liên kết", async () => {
     h.policy.canLink.mockResolvedValue(DENY);
     await expect(h.service.link(user, INPUT)).rejects.toBeInstanceOf(ForbiddenException);

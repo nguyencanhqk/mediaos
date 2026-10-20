@@ -163,6 +163,39 @@ describe("decideFileAccess — một vị từ xem/tải từng tệp", () => {
         expect(d).toMatchObject({ allow: false, reason: "deny-resolver" });
       });
 
+      it("3 liên kết sống, chỉ liên kết GIỮA bị resolver từ chối ⇒ deny-resolver (AND đủ mọi liên kết)", async () => {
+        policy.registerResolver(makeResolver("HR", ["contract"], true));
+        policy.registerResolver(makeResolver("SOCIAL", ["feed_post"], true));
+        const d = await decideFileAccess(
+          policy,
+          ACTOR,
+          { id: FILE_ID, ownerUserId: OTHER_ID },
+          {
+            live: [
+              liveLink("HR", "contract"),
+              liveLink("TASK", "task"),
+              liveLink("SOCIAL", "feed_post"),
+            ],
+            everLinked: true,
+          },
+          action,
+        );
+        expect(d).toMatchObject({ allow: false, reason: "deny-resolver" });
+      });
+
+      it("neo: 2 liên kết sống, cả hai resolver cho ⇒ allow", async () => {
+        policy.registerResolver(makeResolver("HR", ["contract"], true));
+        policy.registerResolver(makeResolver("SOCIAL", ["feed_post"], true));
+        const d = await decideFileAccess(
+          policy,
+          ACTOR,
+          { id: FILE_ID, ownerUserId: OTHER_ID },
+          { live: [liveLink("HR", "contract"), liveLink("SOCIAL", "feed_post")], everLinked: true },
+          action,
+        );
+        expect(d.allow).toBe(true);
+      });
+
       it("chủ tệp · liên kết tới cặp không có resolver ⇒ deny-no-resolver", async () => {
         withChecker(allowPerm);
         const d = await decideFileAccess(

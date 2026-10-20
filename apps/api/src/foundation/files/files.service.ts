@@ -52,7 +52,7 @@ import {
   assertSameLinkSnapshot,
   fileForbidden,
   linkFileMissing,
-  linkInsertError,
+  rethrowLinkInsertError,
 } from "./file-link-guard";
 import { FilePolicyAction, FOUNDATION_FILE_PERMISSION } from "./file-policy.types";
 import {
@@ -564,38 +564,47 @@ export class FileService {
         tx,
       );
 
-      await this.audit.record(tx, {
-        action: "FileLinked",
-        objectType: "file_link",
-        objectId: created.id,
-        actorUserId: user.id,
-        actorType: "User",
-        moduleCode: input.moduleCode,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        resultStatus: "Success",
-        dataScope: "Company",
-        after: {
-          fileId: created.fileId,
-          linkType: created.linkType,
-          accessScope: created.accessScope,
-          isPrimary: created.isPrimary,
-        },
-      });
-
-      await this.accessLog.record(tx, {
-        fileId: input.fileId,
-        action: "Link",
-        accessGranted: true,
-        actorUserId: user.id,
-        fileLinkId: created.id,
-        moduleCode: input.moduleCode,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        permissionCode: "FOUNDATION.FILE.LINK",
-      });
-
+      await this.recordLinkedTx(tx, user, input, created);
       return toLinkDto(created);
+    });
+  }
+
+  /** Audit 'file_link'/FileLinked + log Link của liên kết vừa tạo — trong tx ghi của `link()`. */
+  private async recordLinkedTx(
+    tx: TenantTx,
+    user: RequestUser,
+    input: LinkFileInput,
+    created: FileLink,
+  ): Promise<void> {
+    const target = {
+      moduleCode: input.moduleCode,
+      entityType: input.entityType,
+      entityId: input.entityId,
+    };
+    await this.audit.record(tx, {
+      action: "FileLinked",
+      objectType: "file_link",
+      objectId: created.id,
+      actorUserId: user.id,
+      actorType: "User",
+      ...target,
+      resultStatus: "Success",
+      dataScope: "Company",
+      after: {
+        fileId: created.fileId,
+        linkType: created.linkType,
+        accessScope: created.accessScope,
+        isPrimary: created.isPrimary,
+      },
+    });
+    await this.accessLog.record(tx, {
+      fileId: input.fileId,
+      action: "Link",
+      accessGranted: true,
+      actorUserId: user.id,
+      fileLinkId: created.id,
+      ...target,
+      permissionCode: "FOUNDATION.FILE.LINK",
     });
   }
 
@@ -652,6 +661,7 @@ export class FileService {
       moduleCode,
       entityType,
       entityId,
+      unverifiedFileId: true,
     });
   }
 
@@ -794,12 +804,12 @@ export class FileService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────────
 
-  /** Insert `file_links`; 23505 ⇒ 409 phân biệt theo constraint (`linkInsertError`), lỗi khác ném nguyên. */
+  /** Insert `file_links`; 23505 ⇒ 409 phân biệt theo constraint (`rethrowLinkInsertError`), lỗi khác ném nguyên. */
   private async insertLinkOrThrow(data: NewFileLink, tx: TenantTx): Promise<FileLink> {
     try {
       return await this.linkRepo.insertTx(data, tx);
     } catch (err) {
-      throw linkInsertError(err);
+      rethrowLinkInsertError(err);
     }
   }
 
@@ -962,10 +972,18 @@ export class FileService {
       entityType?: string;
       entityId?: string;
       fileLinkId?: string;
+      /** `fileId` do client gửi, chưa nạp hàng: chỉ ghi khi hàng có trong tenant (FK của log kiểm vượt RLS). */
+      unverifiedFileId?: boolean;
     },
   ): Promise<void> {
-    await this.db.withTenant(user.companyId, (tx) =>
-      this.accessLog.record(tx, {
+    await this.db.withTenant(user.companyId, async (tx) => {
+      if (
+        entry.unverifiedFileId &&
+        !(await this.fileRepo.findByIdTx(user.companyId, entry.fileId, tx))
+      ) {
+        return;
+      }
+      await this.accessLog.record(tx, {
         fileId: entry.fileId,
         action: entry.action,
         accessGranted: false,
@@ -976,7 +994,7 @@ export class FileService {
         entityType: entry.entityType,
         entityId: entry.entityId,
         fileLinkId: entry.fileLinkId,
-      }),
-    );
+      });
+    });
   }
 }

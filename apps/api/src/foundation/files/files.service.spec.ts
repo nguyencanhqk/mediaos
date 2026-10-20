@@ -528,6 +528,8 @@ describe("FileService (deny-path / validation RED)", () => {
 
     it("policy DENY on link → 403 + denied access-log, NO link inserted", async () => {
       h = makeHarness(DENY);
+      // Dòng log từ chối chỉ ghi khi tệp có trong công ty (id tệp do client gửi).
+      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
       await expect(h.service.link(user, linkInput)).rejects.toBeInstanceOf(ForbiddenException);
       expect(h.linkRepo.insertTx).not.toHaveBeenCalled();
       const denyLog = h.accessLogSpy.mock.calls.find((c) => c[1].action === "Link");

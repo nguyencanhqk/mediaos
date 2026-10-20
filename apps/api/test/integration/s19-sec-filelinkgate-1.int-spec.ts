@@ -429,6 +429,35 @@ describe.skipIf(!hasLaneDb)(
       expect((await snap(files.ownF2!, entityId)).live).toBe(before.live);
     });
 
+    const logRowsOf = (fileId: string) =>
+      count(`SELECT count(*)::int AS n FROM file_access_logs WHERE file_id = $1`, [fileId]);
+
+    it("F-8 cặp chưa đăng ký + id tệp không có trong công ty ⇒ 400 LINK, không ghi dòng log nào", async () => {
+      const ghost = randomUUID();
+      const res = await postFoundation("linker", ghost, {
+        moduleCode: "FOUNDATION",
+        entityType: "Employee",
+        entityId: randomUUID(),
+        linkType: "Attachment",
+      });
+      expect(res.status, `F-8: ${JSON.stringify(res.body)}`).toBe(400);
+      expect(JSON.stringify(res.body)).toContain("FOUNDATION-FILE-ERR-LINK");
+      expect(await logRowsOf(ghost), "F-8: không dòng log nào trỏ id tệp vắng").toBe(0);
+    });
+
+    it("F-9 thực thể đích từ chối + id tệp không có trong công ty ⇒ 403, không ghi dòng log nào", async () => {
+      const ghost = randomUUID();
+      const res = await postFoundation("linker", ghost, {
+        moduleCode: "TASK",
+        entityType: "task",
+        entityId: randomUUID(),
+        linkType: "Attachment",
+      });
+      expect(res.status, `F-9: ${JSON.stringify(res.body)}`).toBe(403);
+      expect(JSON.stringify(res.body)).toContain("FOUNDATION-FILE-ERR-FORBIDDEN");
+      expect(await logRowsOf(ghost), "F-9: không dòng log nào trỏ id tệp vắng").toBe(0);
+    });
+
     it("F-7 cùng người gọi: gắn 2xx ⇔ GET /foundation/files/:id = 200 (bản sao riêng, mỗi tệp một thực thể)", async () => {
       const stranger = uid("stranger");
       const me = uid("viewlinker");

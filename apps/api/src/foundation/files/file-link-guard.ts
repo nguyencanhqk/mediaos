@@ -108,23 +108,23 @@ const UQ_FILE_LINKS_ENTITY_FILE_ACTIVE = "uq_file_links_entity_file_active";
 const UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE = "uq_file_links_primary_per_entity_type";
 
 /**
- * Lỗi insert `file_links` ⇒ lỗi để ném: 23505 của hai constraint trên ⇒ 409 tương ứng; 23505 constraint khác
- * hoặc lỗi khác ⇒ trả NGUYÊN lỗi gốc (không nuốt — silent-failure-hunter).
+ * Ném lỗi của insert `file_links`: 23505 của hai constraint trên ⇒ 409 tương ứng; 23505 constraint khác
+ * hoặc lỗi khác ⇒ ném NGUYÊN lỗi gốc (không nuốt — silent-failure-hunter).
  */
-export function linkInsertError(err: unknown): unknown {
-  if (!isUniqueViolation(err)) return err;
+export function rethrowLinkInsertError(err: unknown): never {
+  if (!isUniqueViolation(err)) throw err;
   const constraint = pgErrorField(err, "constraint");
   if (constraint === UQ_FILE_LINKS_ENTITY_FILE_ACTIVE) {
-    return new ConflictException({
+    throw new ConflictException({
       code: FOUNDATION_FILE_ERROR_CODES.DUP_LINK,
       message: `${FOUNDATION_FILE_ERROR_CODES.DUP_LINK}: file đã được gắn vào entity này với cùng link_type (chưa gỡ).`,
     });
   }
   if (constraint === UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE) {
-    return new ConflictException({
+    throw new ConflictException({
       code: FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY,
       message: `${FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY}: entity này đã có 1 file khác làm primary cho cùng link_type.`,
     });
   }
-  return err;
+  throw err;
 }

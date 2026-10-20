@@ -16,6 +16,7 @@ import {
   type MeCurrentAvatar,
 } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
+import type { FileLink } from "../db/schema/files";
 import { FileLinkRepository } from "../foundation/files/file-link.repository";
 import { FileRepository } from "../foundation/files/file.repository";
 import { FileService } from "../foundation/files/files.service";
@@ -235,7 +236,10 @@ export class MeAvatarService {
   }
 
   /** Liên kết avatar SỐNG của employee (chiều thực thể → tệp). */
-  private listAvatarLinks(requestUser: { id: string; companyId: string }, employeeId: string) {
+  private listAvatarLinks(
+    requestUser: { id: string; companyId: string },
+    employeeId: string,
+  ): Promise<FileLink[]> {
     return this.db.withTenant(requestUser.companyId, (tx) =>
       this.linkRepo.listActiveByEntityTx(
         requestUser.companyId,
