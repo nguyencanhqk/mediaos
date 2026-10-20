@@ -7,8 +7,10 @@
  *       từ chối ⇒ 403, +0 liên kết, +0 audit `FileLinked`, +1 dòng `file_access_logs` từ chối (Link/VIEW);
  *   (2) vị từ xem: ≥ 1 liên kết sống ⇒ AND mọi liên kết; 0 sống + chưa từng gắn ⇒ chủ tệp HOẶC fallback
  *       `view:foundation-file`; 0 sống + đã từng gắn ⇒ từ chối mọi người, kể cả chủ;
+ *   (2b) ở biên gắn, vế fallback đòi thêm `download:foundation-file` (từ chối ⇒ dòng log Link/DOWNLOAD); vế
+ *       chủ tệp và vế có liên kết sống chỉ hỏi xem;
  *   (3) cặp (module, entity) chưa đăng ký ⇒ 400 ở route FOUNDATION;
- *   (4) cùng người gọi: gắn 2xx ⇔ `GET /foundation/files/:id` = 200 (F-7).
+ *   (4) cùng người gọi (giữ cả xem lẫn tải): gắn 2xx ⇔ `GET /foundation/files/:id` = 200 (F-7).
  *
  * Fixture gieo bằng pool `direct` (không PUT storage). Mọi ca TỪ CHỐI có ALLOW đứng cạnh trên cùng route.
  */
@@ -47,6 +49,9 @@ const CONTRACT_PAIRS: readonly PairGrant[] = [
 ];
 const LINKER_PAIRS: readonly PairGrant[] = [["link", "foundation-file"], ...CONTRACT_PAIRS];
 const VIEW_FILE: PairGrant = ["view", "foundation-file"];
+const DOWNLOAD_FILE: PairGrant = ["download", "foundation-file"];
+const VIEW_CODE = "FOUNDATION.FILE.VIEW";
+const DOWNLOAD_CODE = "FOUNDATION.FILE.DOWNLOAD";
 
 const dataOf = (body: unknown): Json => ((body as { data?: unknown }).data ?? {}) as Json;
 const rowsOf = (body: unknown): Json[] => {
@@ -59,6 +64,7 @@ interface Snap {
   live: number;
   audit: number;
   denyView: number;
+  denyDownload: number;
 }
 
 describe.skipIf(!hasLaneDb)(
@@ -177,6 +183,14 @@ describe.skipIf(!hasLaneDb)(
       return r.rows[0]!.n;
     }
 
+    const denyLinkLogs = (fileId: string, permissionCode: string) =>
+      count(
+        `SELECT count(*)::int AS n FROM file_access_logs
+          WHERE file_id = $1 AND action = 'Link' AND access_granted = false
+            AND permission_code = $2`,
+        [fileId, permissionCode],
+      );
+
     async function snap(fileId: string, entityId: string): Promise<Snap> {
       return {
         live: await count(
@@ -187,12 +201,8 @@ describe.skipIf(!hasLaneDb)(
           `SELECT count(*)::int AS n FROM audit_logs WHERE action = 'FileLinked' AND entity_id = $1`,
           [entityId],
         ),
-        denyView: await count(
-          `SELECT count(*)::int AS n FROM file_access_logs
-            WHERE file_id = $1 AND action = 'Link' AND access_granted = false
-              AND permission_code = 'FOUNDATION.FILE.VIEW'`,
-          [fileId],
-        ),
+        denyView: await denyLinkLogs(fileId, VIEW_CODE),
+        denyDownload: await denyLinkLogs(fileId, DOWNLOAD_CODE),
       };
     }
 
@@ -215,6 +225,9 @@ describe.skipIf(!hasLaneDb)(
       expect(after.audit, `${what}: không có audit FileLinked mới`).toBe(before.audit);
       expect(after.denyView, `${what}: đúng 1 dòng log từ chối Link/FOUNDATION.FILE.VIEW`).toBe(
         before.denyView + 1,
+      );
+      expect(after.denyDownload, `${what}: không dòng log từ chối Link/DOWNLOAD`).toBe(
+        before.denyDownload,
       );
     }
 
@@ -251,9 +264,10 @@ describe.skipIf(!hasLaneDb)(
       await makeUser("hrup", HR_PAIRS);
       await makeUser("ctr", CONTRACT_PAIRS);
       await makeUser("linker", LINKER_PAIRS);
-      await makeUser("viewlinker", [...LINKER_PAIRS, VIEW_FILE]);
+      await makeUser("viewlinker", [...LINKER_PAIRS, VIEW_FILE, DOWNLOAD_FILE]);
+      await makeUser("viewonly", [...LINKER_PAIRS, VIEW_FILE]);
       await makeUser("viewer", [VIEW_FILE]);
-      for (const label of ["tasker", "hrup", "ctr", "linker", "viewlinker", "viewer"]) {
+      for (const label of ["tasker", "hrup", "ctr", "linker", "viewlinker", "viewonly", "viewer"]) {
         await login(label);
       }
 
@@ -274,6 +288,9 @@ describe.skipIf(!hasLaneDb)(
       files.otherC = await seedFile(stranger);
       files.otherF = await seedFile(stranger);
       files.otherF5 = await seedFile(stranger);
+      files.fbView = await seedFile(stranger);
+      files.ownT3 = await seedFile(uid("tasker"));
+      files.andT = await seedFile(stranger);
       files.hid = await seedHiddenLinked(stranger);
       files.hidOwnT = await seedHiddenLinked(uid("tasker"));
       files.revT = await seedRevoked(uid("tasker"));
@@ -288,6 +305,9 @@ describe.skipIf(!hasLaneDb)(
       files.ownF2 = await seedFile(uid("linker"));
       files.pub = await seedFile(stranger);
       await insertLink(files.pub, "TASK", "task", taskT2, stranger);
+      // Hai liên kết sống: liên kết xem được chèn TRƯỚC liên kết không xem được.
+      await insertLink(files.andT, "TASK", "task", taskT2, stranger);
+      await insertLink(files.andT, "SOCIAL", "feed_post", randomUUID(), stranger);
 
       // Viewer giữ `view:foundation-file` nhưng có grant đối tượng DENY trên cả hai tệp G.
       files.gOwn = await seedFile(uid("viewer"));
@@ -336,6 +356,20 @@ describe.skipIf(!hasLaneDb)(
       const after = await snap(files.pub!, taskT);
       expectLinked(res, before, after, "K-5");
       expect(after.live).toBe(2);
+    });
+
+    it("K-6 tệp có hai liên kết sống — một xem được, một không ⇒ 403, không gắn (AND mọi liên kết)", async () => {
+      const before = await snap(files.andT!, taskT);
+      const res = await postTask("tasker", taskT, files.andT!);
+      const after = await snap(files.andT!, taskT);
+      expectDenied(res, before, after, "K-6");
+      expect(after.live, "K-6: vẫn đúng 2 liên kết sống").toBe(2);
+    });
+
+    it("K-7 neo ALLOW: chủ tệp không giữ cặp foundation-file nào, chưa từng gắn ⇒ 201", async () => {
+      const before = await snap(files.ownT3!, taskT);
+      const res = await postTask("tasker", taskT, files.ownT3!);
+      expectLinked(res, before, await snap(files.ownT3!, taskT), "K-7");
     });
 
     // ─── HR hồ sơ nhân viên ─────────────────────────────────────────────────
@@ -408,11 +442,28 @@ describe.skipIf(!hasLaneDb)(
       expectLinked(res, before, await snap(files.ownF!, entityId), "F-4");
     });
 
-    it("F-5 neo ALLOW: người gắn giữ view:foundation-file, tệp người khác chưa từng gắn ⇒ 201", async () => {
+    it("F-5 neo ALLOW: người gắn giữ view + download:foundation-file, tệp người khác chưa từng gắn ⇒ 201", async () => {
       const entityId = randomUUID();
       const before = await snap(files.otherF5!, entityId);
       const res = await postFoundation("viewlinker", files.otherF5!, contractTarget(entityId));
       expectLinked(res, before, await snap(files.otherF5!, entityId), "F-5");
+    });
+
+    it("F-10 cùng các cặp trừ download:foundation-file, tệp người khác chưa từng gắn ⇒ 403, không gắn", async () => {
+      const get = await w.get(tok("viewonly"), `/foundation/files/${files.fbView}`);
+      expect(get.status, `F-10: vẫn xem được tệp — ${JSON.stringify(get.body)}`).toBe(200);
+      const entityId = randomUUID();
+      const before = await snap(files.fbView!, entityId);
+      const res = await postFoundation("viewonly", files.fbView!, contractTarget(entityId));
+      const after = await snap(files.fbView!, entityId);
+      expect(res.status, `F-10: phải 403 — ${JSON.stringify(res.body)}`).toBe(403);
+      expect(JSON.stringify(res.body)).toContain("FOUNDATION-FILE-ERR-FORBIDDEN");
+      expect(after.live, "F-10: không thêm liên kết nào").toBe(before.live);
+      expect(after.audit, "F-10: không có audit FileLinked mới").toBe(before.audit);
+      expect(after.denyDownload, "F-10: đúng 1 dòng log từ chối Link/DOWNLOAD").toBe(
+        before.denyDownload + 1,
+      );
+      expect(after.denyView, "F-10: không dòng log từ chối Link/VIEW").toBe(before.denyView);
     });
 
     it("F-6 cặp (module, entity) chưa đăng ký ⇒ 400 LINK, không gắn", async () => {

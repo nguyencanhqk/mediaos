@@ -81,6 +81,7 @@ interface Harness {
   service: FileService;
   fileRepo: {
     findByIdTx: ReturnType<typeof vi.fn>;
+    findByIdForUpdateTx: ReturnType<typeof vi.fn>;
     insertTx: ReturnType<typeof vi.fn>;
     listTx: ReturnType<typeof vi.fn>;
     countTx: ReturnType<typeof vi.fn>;
@@ -140,6 +141,7 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
 
   const fileRepo = {
     findByIdTx: vi.fn(),
+    findByIdForUpdateTx: vi.fn((...a: unknown[]): unknown => fileRepo.findByIdTx(...a)),
     insertTx: vi.fn(),
     listTx: vi.fn(async () => []),
     countTx: vi.fn(async () => 0),

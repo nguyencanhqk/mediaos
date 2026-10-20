@@ -3,7 +3,8 @@
  * (plan `docs/plans/S19-SEC-FILELINKGATE-1.md` §3 D-3 · §5).
  *
  * Thứ tự đích: cặp đã đăng ký (400) → `canLink` (403) → nạp ngữ cảnh (tệp vắng 400) → quyết định XEM của người
- * gắn (403, ngoài mọi tx) → trạng thái tệp (400) → tx ghi so lại ảnh chụp liên kết (409) → insert.
+ * gắn (403, ngoài mọi tx; vế dự phòng FOUNDATION hỏi thêm TẢI) → trạng thái tệp (400) → tx ghi khoá hàng tệp
+ * rồi so lại ảnh chụp liên kết (409) → insert.
  * Không DB: repo/policy giả, `FileAccessLogService` thật ghi vào tx giả.
  */
 import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
@@ -111,8 +112,14 @@ function makeHarness() {
       }
     }),
   };
+  const depthAtLock: number[] = [];
   const fileRepo = {
     findByIdTx: vi.fn(async () => fileRow()),
+    /** Đọc khoá hàng trong tx ghi — trả cùng hàng với `findByIdTx` (ca ghi đè hàng áp cho cả hai). */
+    findByIdForUpdateTx: vi.fn((): Promise<unknown> => {
+      depthAtLock.push(depth);
+      return fileRepo.findByIdTx();
+    }),
     incrementDownloadCountTx: vi.fn(async () => 1),
   };
   const linkRepo = {
@@ -158,7 +165,18 @@ function makeHarness() {
     {} as never,
     storage as never,
   );
-  return { service, db, fileRepo, linkRepo, accessLogSpy, audit, policy, depthAtDecide, events };
+  return {
+    service,
+    db,
+    fileRepo,
+    linkRepo,
+    accessLogSpy,
+    audit,
+    policy,
+    depthAtDecide,
+    depthAtLock,
+    events,
+  };
 }
 
 type Harness = ReturnType<typeof makeHarness>;
@@ -227,6 +245,10 @@ describe("FileService.link — cổng xem của người gắn (S19-SEC-FILELINK
     );
     expect(h.linkRepo.insertTx).not.toHaveBeenCalled();
     expect(h.audit.record).not.toHaveBeenCalled();
+    expect(
+      h.policy.decideForLinkedFile,
+      "không xem được ⇒ không hỏi thêm TẢI",
+    ).toHaveBeenCalledTimes(1);
     expect(denyLogEntries(h)).toEqual([
       expect.objectContaining({
         fileId: FILE,
@@ -240,8 +262,13 @@ describe("FileService.link — cổng xem của người gắn (S19-SEC-FILELINK
     ]);
   });
 
-  it("quyết định dùng action View trên chính tệp (không Download, không Link)", async () => {
-    await h.service.link(user, INPUT);
+  it("vế có liên kết sống: chỉ hỏi View trên chính tệp — TẢI bị từ chối không chặn gắn", async () => {
+    h.linkRepo.listByFileTx.mockResolvedValue([linkRow("TASK", "task")]);
+    h.linkRepo.hasEverBeenLinkedTx.mockResolvedValue(true);
+    h.policy.decideForLinkedFile.mockImplementation(async (_i: unknown, _l: unknown, a: unknown) =>
+      a === FilePolicyAction.Download ? DENY : ALLOW,
+    );
+    await expect(h.service.link(user, INPUT)).resolves.toMatchObject({ fileId: FILE });
     expect(h.policy.decideForLinkedFile).toHaveBeenCalledTimes(1);
     expect(h.policy.decideForLinkedFile).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -253,16 +280,58 @@ describe("FileService.link — cổng xem của người gắn (S19-SEC-FILELINK
         entityId: FILE,
         action: FilePolicyAction.View,
       }),
-      [],
+      [expect.objectContaining({ moduleCode: "TASK", entityType: "task" })],
       FilePolicyAction.View,
+      true,
+    );
+  });
+
+  it("vế dự phòng (không chủ · 0 liên kết · chưa từng gắn): hỏi View rồi Download trên chính tệp", async () => {
+    await expect(h.service.link(user, INPUT)).resolves.toMatchObject({ fileId: FILE });
+    expect(h.policy.decideForLinkedFile.mock.calls.map((c) => c[2])).toEqual([
+      FilePolicyAction.View,
+      FilePolicyAction.Download,
+    ]);
+    expect(h.policy.decideForLinkedFile).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        fileId: FILE,
+        entityType: "File",
+        entityId: FILE,
+        action: FilePolicyAction.Download,
+      }),
+      [],
+      FilePolicyAction.Download,
       false,
     );
   });
 
+  it("vế dự phòng: xem được nhưng không tải được ⇒ 403 + log Link/FOUNDATION.FILE.DOWNLOAD, không insert", async () => {
+    h.policy.decideForLinkedFile.mockImplementation(async (_i: unknown, _l: unknown, a: unknown) =>
+      a === FilePolicyAction.Download ? DENY : ALLOW,
+    );
+    const err = await h.service.link(user, INPUT).catch((e: unknown) => e);
+    expect(err, "vế dự phòng đòi cả quyền tải").toBeInstanceOf(ForbiddenException);
+    expect(JSON.stringify((err as ForbiddenException).getResponse())).toContain(
+      "FOUNDATION-FILE-ERR-FORBIDDEN",
+    );
+    expect(h.linkRepo.insertTx).not.toHaveBeenCalled();
+    expect(h.audit.record).not.toHaveBeenCalled();
+    expect(denyLogEntries(h)).toEqual([
+      expect.objectContaining({
+        fileId: FILE,
+        action: "Link",
+        permissionCode: "FOUNDATION.FILE.DOWNLOAD",
+        deniedReason: "deny-foundation",
+      }),
+    ]);
+  });
+
   it("quyết định xem chạy NGOÀI mọi withTenant và TRƯỚC insert", async () => {
     await h.service.link(user, INPUT);
-    expect(h.depthAtDecide, "quyết định phải chạy đúng một lần, ở độ sâu tx 0").toEqual([0]);
-    expect(h.events).toEqual(["decide", "insert"]);
+    expect(h.depthAtDecide, "vế dự phòng: hai lần hỏi (xem, tải), đều ở độ sâu tx 0").toEqual([
+      0, 0,
+    ]);
+    expect(h.events).toEqual(["decide", "decide", "insert"]);
   });
 
   it("neo ALLOW: chủ tệp · 0 liên kết · chưa từng gắn ⇒ insert, không cần fallback", async () => {
@@ -330,6 +399,21 @@ describe("FileService.link — cổng xem của người gắn (S19-SEC-FILELINK
     h.linkRepo.hasEverBeenLinkedTx.mockResolvedValueOnce(false).mockResolvedValue(true);
     await expect(h.service.link(user, INPUT)).rejects.toBeInstanceOf(ConflictException);
     expect(h.linkRepo.insertTx).not.toHaveBeenCalled();
+  });
+
+  it("tx ghi khoá hàng tệp sau quyết định, TRƯỚC khi đọc lại ảnh chụp liên kết", async () => {
+    await h.service.link(user, INPUT);
+    expect(h.fileRepo.findByIdForUpdateTx, "khoá đúng một lần").toHaveBeenCalledTimes(1);
+    expect(h.fileRepo.findByIdForUpdateTx).toHaveBeenCalledWith(COMPANY, FILE, expect.anything());
+    expect(h.depthAtLock, "khoá nằm trong một withTenant").toEqual([1]);
+    const [lockAt] = h.fileRepo.findByIdForUpdateTx.mock.invocationCallOrder;
+    const lists = h.linkRepo.listByFileTx.mock.invocationCallOrder;
+    const evers = h.linkRepo.hasEverBeenLinkedTx.mock.invocationCallOrder;
+    expect([lists.length, evers.length], "hai ảnh chụp: quyết định + so lại").toEqual([2, 2]);
+    expect(lockAt!, "khoá sau ảnh chụp dùng để quyết định").toBeGreaterThan(
+      Math.max(lists[0]!, evers[0]!),
+    );
+    expect(lockAt!, "khoá trước ảnh chụp so lại").toBeLessThan(Math.min(lists[1]!, evers[1]!));
   });
 });
 
