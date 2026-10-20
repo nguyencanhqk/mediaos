@@ -35,7 +35,7 @@ import { PasswordService } from "../../src/auth/password.service";
 import { ERROR_CODES } from "../../src/common/errors/error-codes";
 import { DEFAULT_PRESIGN_TTL_SEC } from "../../src/storage/storage-adapter.port";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
-import { FALLBACK_S3_SECRET, loginPasswordFixture } from "../helpers/fixture-secrets";
+import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 import {
@@ -160,11 +160,7 @@ describe.skipIf(!runDb)("S19-OPS-TASKFILEURL-1 — route JSON download-url cho t
   }
 
   beforeAll(async () => {
-    // Ký ngoại tuyến khi máy không cấu hình storage (cùng khuôn s16-filedisposition-storage); `??=` không đè.
-    process.env.S3_ENDPOINT ??= "http://localhost:9000";
-    process.env.S3_ACCESS_KEY ??= "mediaos";
-    process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-    process.env.S3_BUCKET ??= "tfu-offline-sign-only";
+    // S3_* ghim ở `vitest.config.ts` (`pinTestStorageEnv`); presign là HMAC ngoại tuyến — không gọi mạng.
     // TTL hiệu lực = đúng luật của `S3StorageAdapter.resolveTtl` (env, hoặc hằng mặc định của port).
     ttlSec = Number.parseInt(process.env.S3_PRESIGN_TTL_SEC ?? "", 10) || DEFAULT_PRESIGN_TTL_SEC;
 

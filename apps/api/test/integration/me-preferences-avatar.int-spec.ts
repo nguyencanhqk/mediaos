@@ -13,8 +13,8 @@
  *     null luôn được phép bất kể policy.
  *   Avatar — deny thiếu update:avatar → 403 · unlinked-employee → 409 ME-ERR-UNLINKED-EMPLOYEE · file
  *     KHÔNG phải ảnh → 415 · file thuộc user khác (IDOR — chống gắn avatar bằng file người khác upload) →
- *     403 · DELETE khi chưa có avatar → 204 idempotent · E2E thật qua MinIO (storageReady probe, mirror
- *     files-e2e-confirm.int-spec.ts) khi `.env` có S3_*, else chỉ DENY/CONTRACT chạy (E2E tự skip).
+ *     403 · DELETE khi chưa có avatar → 204 idempotent · E2E thật qua MinIO (cổng openStorageTestGate, mirror
+ *     files-e2e-confirm.int-spec.ts) khi hồ sơ storage `live`, else E2E bỏ qua CÓ nhãn.
  *
  * Gate cứng `hasDb && LANE_DB` (memory integration-test-lane-db-gate):
  *     bash scripts/lane-db-setup.sh mebe2 → export LANE_DB=mediaos_mebe2 →
@@ -25,7 +25,6 @@ import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -34,6 +33,7 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 import {
   cleanupTenants,
   seedCompany,
@@ -44,9 +44,9 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
-import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
+const FILE = "test/integration/me-preferences-avatar.int-spec.ts";
 const LOGIN_PW = "Passw0rd!me-be2-inttests-1";
 
 /** (action, resourceType) — khớp NGUYÊN VĂN mig 0495 (D). */
@@ -90,6 +90,7 @@ describe.skipIf(!runDb)("S5-ME-BE-2 ME preferences + avatar (DB cô lập, đư�
   let A: SeededTenant;
   let B: SeededTenant;
   const companyIds: string[] = [];
+  let gate: StorageTestGate;
   let seq = 0;
 
   async function makeUser(
@@ -134,6 +135,7 @@ describe.skipIf(!runDb)("S5-ME-BE-2 ME preferences + avatar (DB cô lập, đư�
   }
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -148,9 +150,13 @@ describe.skipIf(!runDb)("S5-ME-BE-2 ME preferences + avatar (DB cô lập, đư�
   });
 
   afterAll(async () => {
-    await app?.close();
-    if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
-    await direct?.end();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    }
   });
 
   // ═══════════════════════════ Preferences ═══════════════════════════
@@ -598,36 +604,15 @@ describe.skipIf(!runDb)("S5-ME-BE-2 ME preferences + avatar (DB cô lập, đư�
     });
 
     // ── E2E thật qua MinIO (skip nếu storage chưa sẵn sàng — mirror files-e2e-confirm.int-spec.ts) ──
-    describe("E2E qua MinIO (storageReady probe)", () => {
-      let storageReady = false;
-
-      beforeAll(async () => {
-        process.env.S3_ENDPOINT ??= "http://localhost:9000";
-        process.env.S3_ACCESS_KEY ??= "mediaos";
-        process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-        process.env.S3_BUCKET ??= "mediaos-assets";
-        process.env.S3_FORCE_PATH_STYLE ??= "true";
-        process.env.S3_REGION ??= "us-east-1";
-        try {
-          const s3 = new S3Client({
-            endpoint: process.env.S3_ENDPOINT,
-            region: process.env.S3_REGION,
-            forcePathStyle: true,
-            credentials: {
-              accessKeyId: process.env.S3_ACCESS_KEY!,
-              secretAccessKey: process.env.S3_SECRET_KEY!,
-            },
-          });
-          await s3.send(new CreateBucketCommand({ Bucket: process.env.S3_BUCKET }));
-          storageReady = true;
-        } catch (err) {
-          const name = (err as { name?: string }).name;
-          storageReady = name === "BucketAlreadyOwnedByYou" || name === "BucketAlreadyExists";
-        }
-      });
-
+    describe("E2E qua storage (openStorageTestGate)", () => {
       it("register→PUT→confirm→POST /me/avatar → Uploaded avatar thật qua storage", async (ctx) => {
-        if (!storageReady) return ctx.skip();
+        if (
+          !gate.needStorage(
+            ctx,
+            "register→PUT→confirm→POST /me/avatar → Uploaded avatar thật qua storage",
+          )
+        )
+          return;
 
         // Role RIÊNG cho test: cần cả cặp ME (Own) + foundation-file (Company) để hoàn tất phase
         // register/confirm — gap thật (chỉ company-admin có sẵn *:foundation-file, xem docs/plans/
@@ -685,7 +670,13 @@ describe.skipIf(!runDb)("S5-ME-BE-2 ME preferences + avatar (DB cô lập, đư�
       });
 
       it("S5-ME-BE-4 GAP-CLOSED — user CHỈ update:avatar + access:me (0 foundation-file): upload-url→PUT→confirm→POST→GET trọn vẹn", async (ctx) => {
-        if (!storageReady) return ctx.skip();
+        if (
+          !gate.needStorage(
+            ctx,
+            "S5-ME-BE-4 GAP-CLOSED — user CHỈ update:avatar + access:me (0 foundation-file): upload-url→PUT→confirm→POST→GET trọn vẹn",
+          )
+        )
+          return;
 
         // KHÔNG seed foundation-file — chứng minh đóng "Nợ để lại" S5-ME-BE-2: role thường tự upload+confirm+
         // hiển-thị avatar HOÀN TOÀN qua đường ME own-scope, KHÔNG cần *:foundation-file.
@@ -733,7 +724,13 @@ describe.skipIf(!runDb)("S5-ME-BE-2 ME preferences + avatar (DB cô lập, đư�
       });
 
       it("S5-ME-BE-4 confirm — bytes CHƯA PUT → 422 CONFIRM-ABSENT (surface, không nuốt)", async (ctx) => {
-        if (!storageReady) return ctx.skip();
+        if (
+          !gate.needStorage(
+            ctx,
+            "S5-ME-BE-4 confirm — bytes CHƯA PUT → 422 CONFIRM-ABSENT (surface, không nuốt)",
+          )
+        )
+          return;
         const u = await makeUser(A, [PAIR.avatarUpdate]);
         const reg = await api(app)
           .post("/me/avatar/upload-url")

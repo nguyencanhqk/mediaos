@@ -74,10 +74,11 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-/** S15-PAYROLL-BE-5B — 084 sinh PDF thật ⇒ cần object storage (CI API có MinIO). */
-const hasStorage = !!process.env.S3_ENDPOINT && !!process.env.S3_BUCKET;
+/** S15-PAYROLL-BE-5B — 084 sinh PDF thật ⇒ ca `mePayslipPdf` qua cổng storage (lệch ⇒ bỏ qua CÓ NHÃN). */
+const FILE = "test/integration/s13-payroll-qa1-scope-floor.int-spec.ts";
 const LOGIN_PW = loginPasswordFixture("s13payrollqa1");
 
 /**
@@ -497,6 +498,7 @@ const ROUTES: Partial<Record<PayrollRouteKey, RouteSpec>> = {
 };
 
 describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (80 + 5)", () => {
+  let gate: StorageTestGate;
   let app: INestApplication;
   let direct: Pool;
   let A: SeededTenant;
@@ -571,6 +573,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (8
   }
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -731,9 +734,13 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (8
   }, 300_000);
 
   afterAll(async () => {
-    if (direct) await cleanupTenants(direct, companyIds);
-    await direct?.end();
-    await app?.close();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      if (direct) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+      await app?.close();
+    }
   });
 
   // ── A. DENY — 80 route companyFloor:true, chủ thể Own ⇒ 403 + marker ─────────────────────────
@@ -786,15 +793,11 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-QA-1 · sàn scope Company per-route (8
       expect(ids, "tạm ứng của chính mình phải nằm trong danh sách").toContain(fixture.advanceId);
     });
 
-    it("mePayslipPdf — GET /me/payslips/:id/pdf (Own, phiếu CỦA MÌNH) ⇒ 200 (S15-PAYROLL-BE-5B)", async () => {
+    it("mePayslipPdf — GET /me/payslips/:id/pdf (Own, phiếu CỦA MÌNH) ⇒ 200 (S15-PAYROLL-BE-5B)", async (ctx) => {
+      if (!gate.needStorage(ctx, "C mePayslipPdf GET /me/payslips/:id/pdf (Own) sinh PDF")) return;
       const res = await get(tOwn, `/me/payslips/${fixture.payslipId}/pdf`);
-      if (hasStorage) {
-        expect(res.status, JSON.stringify(res.body)).toBe(200);
-        expect(res.body.data.fileName).toMatch(/^phieu-luong-\d{4}-\d{2}\.pdf$/);
-      } else {
-        // Không có object storage thì không sinh được tệp — nhưng vẫn phải QUA sàn scope.
-        expect(res.status, JSON.stringify(res.body)).not.toBe(403);
-      }
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.data.fileName).toMatch(/^phieu-luong-\d{4}-\d{2}\.pdf$/);
     });
   });
 
