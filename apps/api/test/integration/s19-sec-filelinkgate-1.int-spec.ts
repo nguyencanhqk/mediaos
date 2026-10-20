@@ -191,6 +191,17 @@ describe.skipIf(!hasLaneDb)(
         [fileId, permissionCode],
       );
 
+    /** Lý do của dòng log từ chối Link mới nhất — phân biệt quyết định thật của liên kết với lối tắt thiếu resolver. */
+    const lastLinkDenyReason = async (fileId: string): Promise<string | null> => {
+      const r = await w.direct.query<{ denied_reason: string | null }>(
+        `SELECT denied_reason FROM file_access_logs
+          WHERE file_id = $1 AND action = 'Link' AND access_granted = false
+          ORDER BY created_at DESC LIMIT 1`,
+        [fileId],
+      );
+      return r.rows[0]?.denied_reason ?? null;
+    };
+
     async function snap(fileId: string, entityId: string): Promise<Snap> {
       return {
         live: await count(
@@ -364,6 +375,10 @@ describe.skipIf(!hasLaneDb)(
       const after = await snap(files.andT!, taskT);
       expectDenied(res, before, after, "K-6");
       expect(after.live, "K-6: vẫn đúng 2 liên kết sống").toBe(2);
+      expect(
+        await lastLinkDenyReason(files.andT!),
+        "K-6: từ chối phải đến từ quyết định của resolver trên liên kết, không phải lối tắt thiếu resolver",
+      ).toBe("deny-resolver");
     });
 
     it("K-7 neo ALLOW: chủ tệp không giữ cặp foundation-file nào, chưa từng gắn ⇒ 201", async () => {

@@ -65,7 +65,11 @@ export interface LinkAccessDecision extends FilePolicyDecision {
   action: FileAccessAction;
 }
 
-/** Vế dự phòng: 0 liên kết sống, chưa từng gắn, người gọi không phải chủ ⇒ quyết định thuộc FOUNDATION.FILE.*. */
+/**
+ * Vế dự phòng: 0 liên kết sống, chưa từng gắn, người gọi không phải chủ ⇒ quyết định thuộc FOUNDATION.FILE.*.
+ * Điều kiện này phải khớp nhánh fallback của `FilePolicyService.decideForLinkedFile` (file-policy.service.ts) —
+ * đổi một bên thì đổi cả hai.
+ */
 function isFoundationFallback(
   actor: FileDecisionActor,
   file: FileAccessSubject,
