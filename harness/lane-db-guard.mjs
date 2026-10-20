@@ -64,22 +64,121 @@ export function shouldWarn(n, threshold) {
   return typeof n === "number" && Number.isFinite(n) && n > threshold;
 }
 
+// ══ S16-SOCIAL-STORAGETESTGATE-1 (plan D-4/D-6) — ca storage bị bỏ qua THEO TỪNG CA bên trong tệp đang chạy ══
+//
+// «Test Files … skipped» chỉ thấy cả-tệp bị skip. Ca storage bị `ctx.skip()` bên trong một tệp CHẠY thì vô hình
+// với nó ⇒ cổng cũ trả `ok` khi LANE_DB set dù 16 ca storage không chạy (đo ở RED, plan §9.3). Helper test in nhãn
+// (định dạng sinh ở `apps/api/test/helpers/storage-test-target.ts` — đổi ở đó ⇒ đổi ở đây, R2 khứ hồi canh):
+//   [storage-test-skip] {"file":…,"task":…,"case":…,"reason":…}  — khử trùng lặp theo (file, task)
+//   [storage-test-run]  {"file":…,"bucket":…}                      — khử trùng lặp theo file
+//   [storage-test-call] {"file":…,"command":…}                     — tripwire D-10 chặn; đếm TỪNG dòng
+export const STORAGE_SKIP_TAG = "[storage-test-skip]";
+export const STORAGE_RUN_TAG = "[storage-test-run]";
+export const STORAGE_CALL_TAG = "[storage-test-call]";
+
+function parseLabelBody(line, tag) {
+  const at = line.indexOf(tag);
+  if (at === -1) return undefined;
+  try {
+    const body = JSON.parse(line.slice(at + tag.length).trim());
+    return body !== null && typeof body === "object" ? body : null;
+  } catch {
+    return null; // nhãn bị cắt/chen dòng — VẪN là một nhãn, người gọi đếm riêng (không nuốt)
+  }
+}
+
 /**
- * decideGate({skippedFiles, laneDbSet, threshold, strict}) → {level, message}
- *   level: 'ok' | 'warn' | 'red'
- *   - laneDbSet=true            → 'ok' LUÔN (kể cả skippedFiles cao/null — LANE_DB là bằng chứng
+ * parseStorageMarkers(text) → {skips, runs, calls} — LUÔN là số (0 khi không có nhãn; không bao giờ null).
+ * Nhãn hỏng JSON vẫn được đếm (mỗi dòng một khoá riêng) — thà đếm thừa thành ĐỎ còn hơn nuốt thành XANH.
+ */
+export function parseStorageMarkers(text) {
+  const skips = new Set();
+  const runs = new Set();
+  let calls = 0;
+  if (typeof text !== "string" || text.length === 0) return { skips: 0, runs: 0, calls: 0 };
+
+  text.split(/\r?\n/).forEach((rawLine, lineNo) => {
+    const line = cleanLine(rawLine);
+    const opaque = `#dòng-${lineNo}`;
+    const skip = parseLabelBody(line, STORAGE_SKIP_TAG);
+    if (skip !== undefined) {
+      const ok = skip && typeof skip.file === "string" && typeof skip.task === "string";
+      skips.add(ok ? JSON.stringify([skip.file, skip.task]) : opaque);
+      return;
+    }
+    const run = parseLabelBody(line, STORAGE_RUN_TAG);
+    if (run !== undefined) {
+      runs.add(run && typeof run.file === "string" ? JSON.stringify([run.file]) : opaque);
+      return;
+    }
+    if (parseLabelBody(line, STORAGE_CALL_TAG) !== undefined) calls += 1;
+  });
+
+  return { skips: skips.size, runs: runs.size, calls };
+}
+
+const LEVEL_RANK = { ok: 0, warn: 1, red: 2 };
+
+function isCount(n) {
+  return typeof n === "number" && Number.isFinite(n);
+}
+
+/** Phán quyết riêng phần storage; `null` khi người gọi không truyền số storage (hành vi cũ). */
+function decideStorage({ storageSkips, storageRuns, storageCalls, laneDbSet, strict }) {
+  if (![storageSkips, storageRuns, storageCalls].some(isCount)) return null;
+  const skips = isCount(storageSkips) ? storageSkips : 0;
+  const runs = isCount(storageRuns) ? storageRuns : 0;
+  const calls = isCount(storageCalls) ? storageCalls : 0;
+  const counts = `storage: ${skips} ca BỎ QUA · ${runs} tệp CHẠY · ${calls} lời gọi bị tripwire chặn`;
+
+  if (skips > 0 || calls > 0) {
+    return {
+      level: strict ? "red" : "warn",
+      message: `${counts} — ca storage KHÔNG chạy trên bucket test cho phép (hồ sơ offline?)`,
+    };
+  }
+  if (strict && laneDbSet && runs === 0) {
+    return {
+      level: "red",
+      message: `${counts} — 0 tệp storage CHẠY dù LANE_DB set: thành công RỖNG, không có bằng chứng`,
+    };
+  }
+  return { level: "ok", message: counts };
+}
+
+/**
+ * decideGate({skippedFiles, laneDbSet, threshold, strict, storageSkips?, storageRuns?, storageCalls?}) → {level, message}
+ *   level: 'ok' | 'warn' | 'red' — lấy MỨC CAO HƠN của hai phán quyết:
+ *   (A) storage (D-6, chỉ khi truyền ít nhất một số storage — CLI LUÔN truyền; gọi thư viện kiểu cũ ⇒ bỏ qua):
+ *     - strict ∧ (skips > 0 ∨ calls > 0)        → 'red'  (BẤT KỂ LANE_DB — đây là lỗ cũ)
+ *     - strict ∧ laneDbSet ∧ runs === 0         → 'red'  (thành công rỗng)
+ *     - không strict ∧ (skips ∨ calls) > 0      → 'warn' (tối thiểu)
+ *   (B) lane-db (hành vi cũ, giữ nguyên):
+ *     - laneDbSet=true            → 'ok' (kể cả skippedFiles cao/null — LANE_DB là bằng chứng
  *                                  deny-path đã chạy như CI; số skip còn lại là RED-placeholder cố ý).
- *   - skippedFiles null/undefined (không đọc được summary) → 'warn' (strict → 'red'): KHÔNG có
- *     bằng chứng test đã thực sự chạy (nghi turbo-cache hoặc crash giữa chừng).
- *   - skippedFiles > threshold  → 'warn' (strict → 'red'): banner LOUD.
- *   - còn lại                   → 'ok'.
+ *     - skippedFiles null/undefined (không đọc được summary) → 'warn' (strict → 'red'): KHÔNG có
+ *       bằng chứng test đã thực sự chạy (nghi turbo-cache hoặc crash giữa chừng).
+ *     - skippedFiles > threshold  → 'warn' (strict → 'red'): banner LOUD.
+ *     - còn lại                   → 'ok'.
  */
 export function decideGate({
   skippedFiles,
   laneDbSet = false,
   threshold = DEFAULT_THRESHOLD,
   strict = false,
+  storageSkips,
+  storageRuns,
+  storageCalls,
 } = {}) {
+  const laneGate = decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict });
+  const storageGate = decideStorage({ storageSkips, storageRuns, storageCalls, laneDbSet, strict });
+  if (storageGate === null) return laneGate;
+  if (LEVEL_RANK[storageGate.level] > LEVEL_RANK[laneGate.level]) return storageGate;
+  if (storageGate.level === "ok") return laneGate;
+  return { level: laneGate.level, message: `${laneGate.message} · ${storageGate.message}` };
+}
+
+function decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict }) {
   if (laneDbSet) {
     return {
       level: "ok",
@@ -106,7 +205,7 @@ export function decideGate({
   return { level: "ok", message: `int-spec skip trong ngưỡng (${skippedFiles} <= ${threshold}).` };
 }
 
-// ── CLI: `node harness/lane-db-guard.mjs <logfile> --lane-db-set=0|1 --threshold=N --strict=0|1` ──
+// ── CLI: `node harness/lane-db-guard.mjs <logfile> --lane-db-set=0|1 --threshold=N --strict=0|1 [--fail-unless-ok=1]` ──
 // In kết quả từng dòng `KEY:value` (KHÔNG JSON) để bash check.sh đọc bằng grep/cut, tránh phụ thuộc
 // parser JSON trong bash.
 function runCli(argv) {
@@ -123,25 +222,41 @@ function runCli(argv) {
   const laneDbSet = flags["lane-db-set"] === "1";
   const strict = flags.strict === "1";
   const threshold = Number(flags.threshold ?? DEFAULT_THRESHOLD);
+  // S16-SOCIAL-STORAGETESTGATE-1 (D-6/D-8): CI cần mã thoát thay cho bash tự grep/cut. Mặc định GIỮ exit 0
+  // (check.sh đọc LEVEL rồi tự quyết) — chỉ cờ này mới biến LEVEL ≠ ok thành exit 1.
+  const failUnlessOk = flags["fail-unless-ok"] === "1";
 
   let text;
   try {
     text = readFileSync(logPath, "utf8");
   } catch (err) {
-    console.log("LEVEL:warn");
+    console.log(`LEVEL:${strict ? "red" : "warn"}`);
     console.log("FILES:");
     console.log("TESTS:");
+    console.log("STORAGE:");
     console.log(`MESSAGE:không đọc được log test (${logPath}): ${err.message}`);
+    if (failUnlessOk) process.exitCode = 1;
     return;
   }
 
   const { files, tests } = parseVitestSkips(text);
-  const gate = decideGate({ skippedFiles: files, laneDbSet, threshold, strict });
+  const storage = parseStorageMarkers(text);
+  const gate = decideGate({
+    skippedFiles: files,
+    laneDbSet,
+    threshold,
+    strict,
+    storageSkips: storage.skips,
+    storageRuns: storage.runs,
+    storageCalls: storage.calls,
+  });
 
   console.log(`LEVEL:${gate.level}`);
   console.log(`FILES:${files ?? ""}`);
   console.log(`TESTS:${tests ?? ""}`);
+  console.log(`STORAGE:skips=${storage.skips} runs=${storage.runs} calls=${storage.calls}`);
   console.log(`MESSAGE:${gate.message}`);
+  if (failUnlessOk && gate.level !== "ok") process.exitCode = 1;
 }
 
 const isDirectRun = (() => {

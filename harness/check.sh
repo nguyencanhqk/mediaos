@@ -50,6 +50,16 @@
 #   LANE_DB=mediaos_g11 bash harness/check.sh     # dùng DB cô lập đã tự tạo từ trước (giữ nguyên)
 #   REQUIRE_LANE_DB=1 bash harness/check.sh       # ép escalate ĐỎ nếu int-spec skip vượt ngưỡng
 #   INT_SKIP_THRESHOLD=30 bash harness/check.sh   # đổi ngưỡng cảnh báo (mặc định 20)
+#   bash harness/check.sh --all --lane-db --storage=offline   # ép hồ sơ storage offline (đo cổng storage)
+#
+# ⚠️ ĐỔI HÀNH VI (S16-SOCIAL-STORAGETESTGATE-1, plan D-7 · owner O-2 20/10): `--lane-db[=<lane>]` NAY BẬT LUÔN
+#   hồ sơ storage `live` cho int-spec storage — export `S3_ENDPOINT=http://localhost:9000` ·
+#   `S3_BUCKET=mediaos-fdisp-test` · `S3_ACCESS_KEY`/`S3_SECRET_KEY` đọc từ `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`
+#   (env thật thắng, rồi `.env` qua `_db_secrets_read_key` — KHÔNG in). Cần MinIO cục bộ chạy. Đọc hỏng ⇒ cảnh
+#   báo + giữ `offline` ⇒ ca storage bị bỏ qua có nhãn ⇒ lane-db-guard strict (--all/REQUIRE_LANE_DB) ĐỎ kèm lý do.
+#   `--storage=offline` ép `offline` (unset mọi `S3_*` của shell). Chốt tên bucket thật nằm ở
+#   `apps/api/test/helpers/storage-test-target.ts` (`pinTestStorageEnv`): bucket khác tên cho phép ⇒ offline.
+#   Nợ N4 (owner nhận 20/10): hồ sơ live dùng khoá ROOT MinIO — an toàn chỉ dựa vào chốt tên bucket/tiền tố.
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -60,6 +70,7 @@ RUN_BUILD=0
 RUN_ALL=0
 RUN_LANE_DB=0
 LANE_DB_NAME="check"
+STORAGE_FORCE_OFFLINE=0
 for a in "$@"; do
   case "$a" in
     --quick)     RUN_TEST=0 ;;
@@ -68,8 +79,53 @@ for a in "$@"; do
     --smoke)     RUN_SMOKE=1 ;;
     --lane-db)   RUN_LANE_DB=1 ;;
     --lane-db=*) RUN_LANE_DB=1; LANE_DB_NAME="${a#--lane-db=}" ;;
+    --storage=offline) STORAGE_FORCE_OFFLINE=1 ;;
+    --storage=*) echo "[check.sh] cờ không hỗ trợ: $a (chỉ có --storage=offline)"; exit 2 ;;
   esac
 done
+
+# Bucket DUY NHẤT hồ sơ live cục bộ được trỏ tới — PHẢI trùng STORAGE_TEST_BUCKET_LOCAL của storage-test-target.ts.
+STORAGE_LIVE_BUCKET="mediaos-fdisp-test"
+STORAGE_LIVE_ENDPOINT="http://localhost:9000"
+STORAGE_PROFILE_NOTE=""
+
+# Đọc một khoá: env thật THẮNG; rồi lần lượt $MEDIAOS_ENV_FILE · ./.env (cùng thứ tự db_secrets_load). Bóc một cặp
+# nháy bao ngoài. In ra stdout cho lệnh `$(…)` bắt — người gọi KHÔNG được echo giá trị.
+storage_read_secret() {
+  local key="$1" v="${!1:-}" f
+  if [ -z "$v" ]; then
+    for f in "${MEDIAOS_ENV_FILE:-}" "$PWD/.env"; do
+      [ -n "$f" ] && [ -f "$f" ] || continue
+      v="$(_db_secrets_read_key "$f" "$key")"
+      [ -n "$v" ] && break
+    done
+  fi
+  v="${v#\"}"; v="${v%\"}"; v="${v#\'}"; v="${v%\'}"
+  printf '%s' "$v"
+}
+
+# Hồ sơ storage của lượt --lane-db: live nếu đọc được khoá MinIO và không bị ép offline; còn lại offline.
+storage_profile_setup() {
+  unset S3_ENDPOINT S3_ACCESS_KEY S3_SECRET_KEY S3_BUCKET STORAGE_TEST_PROFILE
+  if [ "$STORAGE_FORCE_OFFLINE" = 1 ]; then
+    STORAGE_PROFILE_NOTE="storage offline (ép bằng --storage=offline) — ca storage sẽ BỎ QUA có nhãn"
+    echo "[check.sh] $STORAGE_PROFILE_NOTE"
+    return 0
+  fi
+  local access secret
+  access="$(storage_read_secret MINIO_ROOT_USER)"
+  secret="$(storage_read_secret MINIO_ROOT_PASSWORD)"
+  if [ -z "$access" ] || [ -z "$secret" ]; then
+    STORAGE_PROFILE_NOTE="storage offline: KHÔNG đọc được MINIO_ROOT_USER/MINIO_ROOT_PASSWORD (env hoặc .env) — ca storage sẽ BỎ QUA ⇒ guard strict ĐỎ"
+    echo "[check.sh] ⚠️  $STORAGE_PROFILE_NOTE"
+    return 0
+  fi
+  export S3_ENDPOINT="$STORAGE_LIVE_ENDPOINT" S3_BUCKET="$STORAGE_LIVE_BUCKET"
+  export S3_ACCESS_KEY="$access" S3_SECRET_KEY="$secret"
+  export S3_REGION="${S3_REGION:-us-east-1}" S3_FORCE_PATH_STYLE="${S3_FORCE_PATH_STYLE:-true}"
+  STORAGE_PROFILE_NOTE="storage live: bucket $STORAGE_LIVE_BUCKET @ $STORAGE_LIVE_ENDPOINT (cần MinIO cục bộ chạy)"
+  echo "[check.sh] $STORAGE_PROFILE_NOTE"
+}
 
 INT_SKIP_THRESHOLD="${INT_SKIP_THRESHOLD:-20}"
 REQUIRE_LANE_DB="${REQUIRE_LANE_DB:-0}"
@@ -132,6 +188,8 @@ if [ "$RUN_LANE_DB" = 1 ] && [ "$RUN_TEST" = 1 ]; then
   # test/db-target.ts). Nếu shell/parent còn sót DATABASE_*_URL trỏ PROD thì cả suite chạy vào PROD.
   # Đây chính là điều thông báo lỗi của hàng rào KI-028 dặn làm; làm luôn cho người dùng.
   unset DATABASE_URL DATABASE_DIRECT_URL DATABASE_WORKER_URL
+  # S16-SOCIAL-STORAGETESTGATE-1 (D-7): --lane-db = chạy NHƯ CI ⇒ int-spec storage cũng phải CHẠY (hồ sơ live).
+  storage_profile_setup
   if [ "$LANE_SECRETS_OK" = 1 ] && bash scripts/lane-db-setup.sh "$LANE_DB_NAME"; then
     export LANE_DB="mediaos_${LANE_DB_NAME}"
     echo "[check.sh] LANE_DB=$LANE_DB sẵn sàng — step test chạy NHƯ CI (deny-path/IDOR/cross-tenant KHÔNG bị skip)."
@@ -139,6 +197,8 @@ if [ "$RUN_LANE_DB" = 1 ] && [ "$RUN_TEST" = 1 ]; then
     echo "[check.sh] ⚠️  lane-db-setup.sh thất bại (không có Docker/Postgres đang chạy?) — tiếp tục KHÔNG có LANE_DB."
     echo "[check.sh]     Docker KHÔNG bắt buộc để dùng check.sh; xem banner cảnh báo bên dưới nếu int-spec bị skip nhiều."
   fi
+elif [ "$STORAGE_FORCE_OFFLINE" = 1 ]; then
+  storage_profile_setup
 fi
 
 # S6-SEC-ROTATE-1 (KI-043): chốt hồi quy literal secret + bind cổng. Đặt TRƯỚC lint/test vì nó rẻ (chỉ
@@ -186,6 +246,8 @@ if [ "$RUN_TEST" = 1 ]; then
     guard_out="$(node harness/lane-db-guard.mjs "$TEST_LOG" --lane-db-set="$lane_db_set" --threshold="$INT_SKIP_THRESHOLD" --strict="$strict")"
     GUARD_LEVEL="$(printf '%s\n' "$guard_out" | grep '^LEVEL:' | cut -d: -f2-)"
     GUARD_MESSAGE="$(printf '%s\n' "$guard_out" | grep '^MESSAGE:' | cut -d: -f2-)"
+    # S16-SOCIAL-STORAGETESTGATE-1 (D-6): số ca storage bỏ qua / tệp chạy / lời gọi bị chặn — in để thấy bằng chứng.
+    echo "[check.sh] lane-db-guard STORAGE: $(printf '%s\n' "$guard_out" | grep '^STORAGE:' | cut -d: -f2-)"
 
     return "$vitest_status"
   }
@@ -224,7 +286,8 @@ if [ "$GUARD_LEVEL" = "warn" ] || [ "$GUARD_LEVEL" = "red" ]; then
   echo ""
   echo "⚠️⚠️⚠️  LANE-DB GUARD  ⚠️⚠️⚠️"
   echo "⚠️  $GUARD_MESSAGE"
-  echo "⚠️  Chạy \`bash harness/check.sh --lane-db\` (cần Postgres) để có bằng chứng thật, hoặc export LANE_DB=mediaos_<lane>."
+  echo "⚠️  Chạy \`bash harness/check.sh --lane-db\` (cần Postgres + MinIO cục bộ; tự bật hồ sơ storage live — đọc MINIO_ROOT_USER/MINIO_ROOT_PASSWORD) để có bằng chứng thật, hoặc export LANE_DB=mediaos_<lane>."
+  [ -n "$STORAGE_PROFILE_NOTE" ] && echo "⚠️  $STORAGE_PROFILE_NOTE"
   echo "⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️"
   if [ "$GUARD_LEVEL" = "red" ]; then
     SUMMARY+=("❌ lane-db-guard: $GUARD_MESSAGE")

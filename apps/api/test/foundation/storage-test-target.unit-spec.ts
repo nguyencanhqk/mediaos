@@ -10,7 +10,6 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   STORAGE_RUN_TAG,
@@ -171,8 +170,8 @@ describe("T1 — resolveStorageTestTarget (chốt đích storage của ca test)"
  * `test.env` để `.env` (nạp lúc import AppModule, chỉ lấp khoá VẮNG) không bao giờ đưa bucket/khoá PROD vào worker.
  * Hồ sơ `live` CHỈ khi bucket cho phép + endpoint loopback + đủ hai khoá; còn lại `offline` (khoá giả, bucket chặn).
  */
-const API_ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const GUARD_CLI = fileURLToPath(new URL("../../../../harness/lane-db-guard.mjs", import.meta.url));
+const API_ROOT = join(__dirname, "../../");
+const GUARD_CLI = join(__dirname, "../../../../harness/lane-db-guard.mjs");
 /** Danh sách khoá `S3_*` đọc từ NGUỒN env.schema — thêm khoá mới mà quên ghim ⇒ ca «đủ khoá» đỏ. */
 const SCHEMA_S3_KEYS = [
   ...readFileSync(join(API_ROOT, "src/config/env.schema.ts"), "utf8").matchAll(

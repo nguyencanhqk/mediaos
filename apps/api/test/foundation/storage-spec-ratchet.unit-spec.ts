@@ -13,11 +13,10 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const API = fileURLToPath(new URL("../../", import.meta.url));
-const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
+const API = join(__dirname, "../../");
+const ROOT = join(__dirname, "../../../../");
 const GATE_HELPER = "test/helpers/storage-test-gate.ts";
 
 /** 11 tệp storage của plan §1.2 (đường dẫn tính từ apps/api). */
