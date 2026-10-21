@@ -22630,4 +22630,188 @@ export const backlog = [
     ],
     notes: ["🔴 Seed 20/10/2026 ở sổ hậu merge S19-SEC-FILELINKGATE-1 (PR #595 = `cd65e89f`)."],
   },
+  {
+    id: "S16-SOCIAL-STORAGEGATEDOCS-1",
+    module: "QA",
+    layer: "DOC",
+    title:
+      "Tài liệu vận hành nói đúng cổng storage của int-spec: `check.sh --lane-db` tự bật hồ sơ storage `live` · `--storage=offline` · guard strict ĐỎ khi ca storage bị bỏ qua, có lời gọi storage bị chặn hoặc tệp trong manifest không chạy",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "CLAUDE.md",
+      "AGENTS.md",
+      "harness/README.md",
+      "harness/init.sh",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-STORAGETESTGATE-1"],
+    src: [
+      "`docs/plans/S16-SOCIAL-STORAGETESTGATE-1.md` §9 N3 + §8 O-2 — owner chốt 20/10/2026 «`--lane-db` tự bật `live`»; CLAUDE.md §9 mục 5 · `harness/README.md` · `harness/init.sh` nằm ngoài `paths` của WO đó nên chưa ghi đổi hành vi. Nguồn sự thật: khối chú thích cờ ở đầu `harness/check.sh` (`--lane-db` · `--storage=offline` · `--expect-run-files`) + `harness/lane-db-guard.mjs` trên master.",
+    ],
+    done_when: [
+      "CLAUDE.md §9 mục 5 + `harness/README.md` + lời nhắc của `harness/init.sh` (và `AGENTS.md` nếu nhắc `check.sh --all`) mô tả đúng hành vi đã merge: `--lane-db[=<lane>]` = chạy như CI kể cả ca storage (hồ sơ `live` trên bucket thử cục bộ — cần MinIO cục bộ chạy + đọc được khoá MinIO, không in) · `--storage=offline` ép bỏ qua có nhãn · guard strict (`--all` / `REQUIRE_LANE_DB=1`) ĐỎ khi có ca storage bị bỏ qua, có lời gọi storage bị chặn, hoặc một tệp trong `apps/api/test/storage-spec-files.json` không phát nhãn chạy",
+      "Mỗi câu đối chiếu được với mã trên master (đầu tệp `harness/check.sh` · `harness/lane-db-guard.mjs` · `apps/api/test/helpers/storage-test-target.ts`) — chép từ mã, KHÔNG chép từ plan; chi tiết cờ chỉ sống ở `check.sh`, tài liệu trỏ về đó (không nhân bản)",
+    ],
+    notes: [
+      "🟢 Docs-only. Seed 21/10/2026 ở sổ hậu merge S16-SOCIAL-STORAGETESTGATE-1 (PR #597 = `8b46c67f`). Phần sửa ở `init.sh` chỉ là dòng `echo` — không đổi luồng.",
+    ],
+  },
+  {
+    id: "S19-OPS-MINIOTESTUSER-1",
+    module: "DEVOPS",
+    layer: "DEVOPS",
+    title:
+      "Hồ sơ storage `live` của int-spec chạy bằng tài khoản MinIO riêng chỉ có quyền trên bucket thử (`mediaos-fdisp-test` · `mediaos-stg-probe-*`), không dùng tài khoản root",
+    zone: "red",
+    gate: "FULL",
+    status: "todo",
+    paths: [
+      "harness/check.sh",
+      "harness/lane-db-guard.test.mjs",
+      "scripts/lib/db-secrets.sh",
+      "scripts/windows/**",
+      "apps/api/test/helpers/storage-test-target.ts",
+      "apps/api/test/foundation/**",
+      ".env.example",
+      "docs/DEVOPS/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S16-SOCIAL-STORAGETESTGATE-1"],
+    src: [
+      "`docs/plans/S16-SOCIAL-STORAGETESTGATE-1.md` §8 O-1 + §9 N4 — owner NHẬN NỢ 20/10/2026 ~15:45: tới khi xong, hồ sơ `live` (`harness/check.sh` `storage_profile_setup` · lượt lẻ `kept/…/lane-vitest.sh` ngoài repo) dùng tài khoản root của MinIO trên máy này; an toàn chỉ dựa vào chốt tên bucket (`pinTestStorageEnv`) + chốt tiền tố `removeObjects`. Một container MinIO phục vụ cả PROD lẫn dev-online (DEVOPS-03 §13.3).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (chỉ đọc): container MinIO đang chạy · bucket hiện có · tài khoản/policy hiện có · những đường nào đang đọc tài khoản root (check.sh · lượt lẻ ngoài repo) — số đo để ngoài repo; owner chốt cửa sổ đổi cấu hình MinIO PROD",
+      "Bất biến: hồ sơ `live` của int-spec (`check.sh --lane-db` + lượt lẻ) chỉ dùng tài khoản test có policy giới hạn `mediaos-fdisp-test` + `mediaos-stg-probe-*`; đọc/ghi/liệt kê bucket ngoài danh sách bằng tài khoản đó ⇒ `AccessDenied` (đo thật, 0 object mới); thiếu tài khoản test ⇒ hồ sơ `offline` + ĐỎ có lý do — KHÔNG quay về tài khoản root",
+      "Tài khoản test nằm ở env/secret manager, không vào repo · log · DTO (bất biến 3); tạo tài khoản + policy idempotent, runbook ở `docs/DEVOPS`; FULL gate",
+    ],
+    notes: [
+      "🔴 Seed 21/10/2026 ở sổ hậu merge S16-SOCIAL-STORAGETESTGATE-1 (PR #597 = `8b46c67f`). Đổi cấu hình container MinIO PROD ⇒ người chốt giờ; trước khi đổi, so tài khoản root của container với `.env` (memory minio-container-password-drift). Nếu `S19-OPS-STORAGEPUBLIC-1` chuyển storage PROD sang R2 trước, đo lại phạm vi rủi ro (MinIO cục bộ còn dữ liệu PROD hay không) — owner có thể đóng WO kèm lý do.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-STORAGERATCHET-1",
+    module: "FOUNDATION",
+    layer: "QA",
+    title:
+      "Mọi int-spec có thể phát lời gọi storage thật (trực tiếp qua `ObjectStorageService` hoặc qua route mà server đọc/ghi object) đều nằm trong manifest và mở `openStorageTestGate` — ép bằng quy tắc dương, không chỉ dựa vào tripwire của hồ sơ `offline`",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/**",
+      "apps/api/src/**/*.int.spec.ts",
+      "harness/lane-db-guard.mjs",
+      "harness/lane-db-guard.test.mjs",
+      "harness/check.sh",
+      ".github/workflows/api.yml",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-STORAGETESTGATE-1", "S16-SOCIAL-PDFBATCHLEAK-1"],
+    src: [
+      "`docs/plans/S16-SOCIAL-STORAGETESTGATE-1.md` §9 N5 (cổng LIGHT F3-LOW) + hàng §9.3 «L5 offline + N2»: ratchet R4 (`apps/api/test/foundation/storage-spec-ratchet.unit-spec.ts`) chỉ ép tệp import `@aws-sdk/client-s3` hoặc có trong manifest; 3 tệp gọi storage NGẦM qua route (HeadObject khi xác nhận branding · PutObject khi sinh PDF phiếu lương) chỉ lộ ở lượt `check.sh --all --storage=offline` (tripwire D-10). CI chạy hồ sơ `live` ⇒ một tệp chưa qua cổng ghi object mà không có nhãn chạy và không dọn.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: lượt `check.sh --all --lane-db --storage=offline` toàn suite trên master — liệt kê theo tệp mọi nhãn `[storage-test-call]` (kỳ vọng 0 sau N2 + N8 `S16-SOCIAL-PDFBATCHLEAK-1`; đo 20/10 trước N8: 2 — plan §9.3 «L5 offline (sau N2)») + liệt kê int-spec tham chiếu `ObjectStorageService` / dịch vụ ghi tệp phía server; chọn quy tắc DƯƠNG theo số đo",
+      "Bất biến: tệp int-spec nào có thể phát lời gọi storage thật đều có trong `apps/api/test/storage-spec-files.json` và mở `openStorageTestGate`; ratchet R4 đỏ khi một int-spec tham chiếu `ObjectStorageService` mà không mở cổng; một lưới tự động bắt lời gọi storage NGẦM qua route (lượt hồ sơ `offline` đòi `calls=0` nằm trong một cổng — CI hoặc `check.sh --all`) hoặc owner chốt bỏ lưới đó, ghi lý do vào plan",
+      "RED trước: mutant thêm một int-spec gọi `ObjectStorageService` không qua cổng ⇒ ratchet ĐỎ; mutant bỏ `needStorage` của một ca sinh PDF ⇒ lưới động ĐỎ kèm nhãn `call`",
+    ],
+    notes: [
+      "🟡 Seed 21/10/2026 ở sổ hậu merge S16-SOCIAL-STORAGETESTGATE-1 (PR #597 = `8b46c67f`). Lượt `offline` toàn suite là việc nặng trên máy PROD — một lệnh nặng mỗi lúc, theo khoá chung.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-STORAGEPORTPIN-1",
+    module: "FOUNDATION",
+    layer: "QA",
+    title:
+      "Chốt hồ sơ storage `live` của int-spec xét cả cổng của endpoint loopback (hôm nay chỉ xét host `localhost` / `127.0.0.1`)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/helpers/storage-test-target.ts",
+      "apps/api/test/foundation/storage-test-target.unit-spec.ts",
+      "harness/check.sh",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-STORAGETESTGATE-1"],
+    src: [
+      "`docs/plans/S16-SOCIAL-STORAGETESTGATE-1.md` §9 N6 (cổng LIGHT F2-LOW; trước ghi gộp vào N4, nay tách số riêng): `pinTestStorageEnv` trả `live` khi bucket đúng tên cho phép + host thuộc {`localhost`, `127.0.0.1`} + đủ hai khoá — không xét cổng, nên một dịch vụ khác nghe trên loopback (proxy/tunnel) với cùng tên bucket vẫn lọt chốt.",
+    ],
+    done_when: [
+      "Bất biến: `pinTestStorageEnv` chỉ trả `live` khi endpoint là loopback VÀ cổng thuộc danh sách cho phép khai ở MỘT chỗ dùng chung (MinIO test cục bộ và CI đều `9000` — đo lại `api.yml` + `harness/check.sh` khi làm); cổng vắng (mặc định 80/443) hoặc khác ⇒ `offline`",
+      "RED trước: ca unit `localhost:9001` · `127.0.0.1:80` · `http://localhost` (không cổng) ⇒ `offline`; `localhost:9000` + `127.0.0.1:9000` ⇒ `live` (ca đứng cạnh); mutant bỏ điều kiện cổng ⇒ đỏ",
+    ],
+    notes: [
+      "🟡 Seed 21/10/2026 ở sổ hậu merge S16-SOCIAL-STORAGETESTGATE-1 (PR #597 = `8b46c67f`). Ưu tiên thấp: lưới chính vẫn là chốt tên bucket + khoá giả của hồ sơ `offline`; làm cùng lượt với `S19-OPS-MINIOTESTUSER-1` nếu thuận.",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-GUARDNOSUMMARY-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "`lane-db-guard` chế độ strict không trả `ok` khi log không có dòng tổng kết của vitest (lượt chết giữa chừng) dù LANE_DB đã set",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "harness/lane-db-guard.mjs",
+      "harness/lane-db-guard.test.mjs",
+      "harness/check.sh",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-STORAGETESTGATE-1"],
+    src: [
+      "`docs/plans/S16-SOCIAL-STORAGETESTGATE-1.md` §9 N7 = quan sát (q1) ở hàng §9.3 «L3 đo»: lô D chết `Channel closed` không in `Test Files`/`Tests` mà guard `--strict=1 --lane-db-set=1` vẫn `LEVEL:ok` — `decideLaneDbGate` trả `ok` khi `laneDbSet` TRƯỚC khi xét summary vắng (`skippedFiles === null`). Cổng LIGHT thêm `--expect-run-files` (đòi từng tệp storage phát nhãn chạy) che một phần; CI có pipefail nên vẫn đỏ, còn `check.sh` chỉ dựa vào guard.",
+    ],
+    done_when: [
+      "Bất biến: strict ∧ LANE_DB ∧ log không có dòng tổng kết vitest nào ⇒ `red` (không strict ⇒ `warn`) — guard không bao giờ báo XANH khi log không chứng minh được bộ test đã chạy xong; hành vi khi có summary giữ nguyên",
+      "RED trước: ca `node --test` dùng fixture log `Channel closed` không summary (đã có trong `harness/lane-db-guard.test.mjs`) với `--strict=1 --lane-db-set=1` ⇒ mã cũ `LEVEL:ok` (đỏ đúng); ca đứng cạnh có summary ⇒ `ok`; đo trên đường chunk-runner của `check.sh` (chunk chết rồi được chạy lại vẫn để lại summary của lượt lại) để không đỏ oan",
+    ],
+    notes: [
+      "🟡 Seed 21/10/2026 ở sổ hậu merge S16-SOCIAL-STORAGETESTGATE-1 (PR #597 = `8b46c67f`).",
+    ],
+  },
+  {
+    id: "S16-SOCIAL-PDFBATCHLEAK-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Int-spec gọi `PAYROLL-API-085` (lô PDF phiếu lương chạy nền, trả 202) không để lại event outbox mà app của tệp khác nhặt được — lượt `check.sh --all --storage=offline` toàn suite có `calls=0`",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/test/integration/s15-payroll-qa1-roles.int-spec.ts",
+      "apps/api/test/integration/s15-payroll-qa1-pair-matrix.int-spec.ts",
+      "apps/api/test/integration/s15-payroll-qa1-race.int-spec.ts",
+      "apps/api/test/integration/s13-payroll-qa1-scope-floor.int-spec.ts",
+      "apps/api/test/integration/s15-payroll-be5b-pdf-batch.int-spec.ts",
+      "apps/api/test/helpers/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S16-SOCIAL-STORAGETESTGATE-1"],
+    src: [
+      "`docs/plans/S16-SOCIAL-STORAGETESTGATE-1.md` §9 N8 + hàng §9.3 «L5 offline (sau N2)»: lượt `bash harness/check.sh --all --lane-db=stg --storage=offline` 20/10/2026 17:27–17:47 trên `4836d01a` — api 865/865 tệp, 0 ca đỏ, guard `STORAGE: skips=44 runs=0 calls=2`. 2 nhãn `[storage-test-call]` (PutObjectCommand) gắn tệp `s16-social-qa1-error-codes` (ca QA1-E-N1) nhưng là 2 lô PDF của công ty `qa1roles-…` (tệp `s15-payroll-qa1-roles`: dòng ALLOW của 085 trả 202, lô + event `payroll.payslip_pdf_batch.requested` để `pending`). `drainOutboxUntilSettled` gọi `OutboxWorker.processBatch()`, claim `FOR UPDATE SKIP LOCKED` KHÔNG lọc tenant (đúng thiết kế — worker thấy mọi tenant) ⇒ `PayrollPayslipPdfBatchConsumer` của app tệp khác sinh PDF ⇒ hồ sơ `offline`: tripwire chặn, lô `Failed{generation-failed}`; hồ sơ `live`: object ghi vào bucket thử ngoài mọi cổng (không nhãn chạy, không dọn).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (chỉ đọc): liệt kê int-spec gọi 085 có thể nhận 202 (đã thấy `s15-payroll-qa1-roles`; kiểm thêm `s15-payroll-qa1-pair-matrix` · `s15-payroll-qa1-race` · `s13-payroll-qa1-scope-floor` · `s15-payroll-be5b-pdf-batch`) và với mỗi tệp: lô/event của tenant mình còn `pending`/`processing` lúc ca kết thúc hay không",
+      "Bất biến: tệp int-spec nào tạo lô PDF qua 085 thì sau ca đó không còn event `payroll.payslip_pdf_batch.requested` claim được của tenant mình — tự xử lý lô trong cổng storage của chính tệp, hoặc «đỗ» lô ngay sau khi kiểm 202 (tệp về trạng thái kết thúc, event về `done`) — nên `processBatch()` của app tệp khác không bao giờ sinh PDF thay; lượt `check.sh --all --lane-db --storage=offline` toàn suite ⇒ `calls=0` và không có dòng `[PayrollPayslipPdfBatchConsumer] … StorageCallBlockedError`",
+      "RED trước: chạy `s15-payroll-qa1-roles` + `s16-social-qa1-error-codes` trong CÙNG một lượt vitest ở hồ sơ `offline` trên lane cô lập ⇒ mã cũ: ≥1 nhãn `[storage-test-call]`, hoặc DB lane thấy event 085 của `qa1roles-…` đã `done` mà tệp roles không tự xử lý; sau vá ⇒ 0; ca 202 của 085 vẫn kiểm đúng mã + thân trả về (không nới ca)",
+    ],
+    notes: [
+      "🟡 Seed 21/10/2026 ở sổ hậu merge S16-SOCIAL-STORAGETESTGATE-1 (PR #597 = `8b46c67f`). Reviewer coverage xác nhận độc lập 20/10, verifier hạ LOW: CI chạy hồ sơ `live` trên MinIO tạm nên ở đó chỉ còn object mồ côi; cái giá thật là lượt `offline` toàn suite không bao giờ chứng minh được `calls=0` — tiền đề lưới động của `S16-SOCIAL-STORAGERATCHET-1`. Cùng họ «trạng thái dùng chung của lane» với `S18-QA-SHAREDSTATE-1` · `S18-QA-NOTIGLOBALLEAK-1`. KHÔNG sửa `OutboxWorker.claim` (đường PROD) — chỉ test/helper.",
+    ],
+  },
 ];
