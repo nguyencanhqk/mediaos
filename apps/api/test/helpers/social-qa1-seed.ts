@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { SeededTenant } from "./seed";
-import { FALLBACK_S3_SECRET } from "./fixture-secrets";
 import {
   addComment,
   createGroup,
@@ -34,16 +33,19 @@ import { QA1_FILE_UPLOAD_BODY, type Qa1Slice } from "./social-qa1-routes";
 const short = (n = 10): string => randomUUID().replace(/-/g, "").slice(0, n);
 
 /**
- * Đặt giá trị MẶC ĐỊNH cho cấu hình kho tệp để route 054 ký URL NGOẠI TUYẾN (HMAC, không gọi mạng,
- * không cần kho tệp chạy). Chỉ điền biến CHƯA có (`??=`). PHẢI gọi TRƯỚC `bootQa1World(...)` ở mọi
- * file spec sẽ gọi 054 / `seedQa1Slice`.
+ * Kiểm cấu hình kho tệp đã được GHIM trước khi boot app: route 054 ký URL NGOẠI TUYẾN (HMAC, không
+ * gọi mạng). `S3_*` do `vitest.config.ts` (`pinTestStorageEnv`) ghim cho MỌI worker — spec KHÔNG tự gán
+ * (ratchet `storage-spec-ratchet`). Thiếu khoá ⇒ ném ngay thay vì để `.env` lấp. Gọi TRƯỚC `bootQa1World(...)`.
  */
 export function ensureQa1FileDoorEnv(): void {
-  process.env.S3_ENDPOINT ??= "http://localhost:9000";
-  process.env.S3_ACCESS_KEY ??= "mediaos";
-  process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-  process.env.S3_BUCKET ??= "mediaos-assets";
-  process.env.S3_FORCE_PATH_STYLE ??= "true";
+  const missing = ["S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET"].filter(
+    (key) => !process.env[key],
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `[social-qa1-seed] thiếu ${missing.join(", ")} — S3_* phải được ghim ở vitest.config.ts (pinTestStorageEnv)`,
+    );
+  }
 }
 
 function okData(res: Qa1Res, status: number, what: string): Json {

@@ -62,7 +62,6 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../../../test/helpers/seed";
-import { FALLBACK_S3_SECRET } from "../../../test/helpers/fixture-secrets";
 
 const LOGIN_PW = "Passw0rd!test99";
 
@@ -219,13 +218,7 @@ describe.skipIf(!runDb)(
     const companyIds: string[] = [];
 
     beforeAll(async () => {
-      // Object storage (presign is offline HMAC) — set defaults so the regression 302/200 path can sign a
-      // URL even without a running MinIO. `??=` respects an already-configured shell env.
-      process.env.S3_ENDPOINT ??= "http://localhost:9000";
-      process.env.S3_ACCESS_KEY ??= "mediaos";
-      process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-      process.env.S3_BUCKET ??= "mediaos-assets";
-      process.env.S3_FORCE_PATH_STYLE ??= "true";
+      // S3_* ghim ở `vitest.config.ts` (`pinTestStorageEnv`); presign là HMAC ngoại tuyến — không gọi mạng.
 
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
       app = moduleRef.createNestApplication();

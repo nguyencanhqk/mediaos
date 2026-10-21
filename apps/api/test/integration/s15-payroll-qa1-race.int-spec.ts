@@ -13,7 +13,8 @@
  * đóng server tạm khi request ĐẦU về, thiếu dòng này thì `Promise.all` ăn `ECONNRESET` (xanh cục bộ, đỏ CI —
  * memory `supertest-closes-shared-server-on-first-response`; cổng `supertest-listen-ratchet` ép tự động).
  *
- * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5). Ca 4 cần thêm S3 (mirror gate của `s15-payroll-be5b-pdf-batch.int-spec.ts`).
+ * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5). Ca 4 chỉ tạo lô `Pending` (không chạy worker) ⇒ chỉ DB,
+ * chạy cả khi storage lệch; tripwire D-10 (`STORAGE_TEST_PROFILE=offline`) bắt mọi lời gọi storage lọt.
  */
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
@@ -33,9 +34,10 @@ import {
   seedPayrollCatalog,
 } from "../helpers/payroll-v2-fixtures";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-const hasStorage = !!process.env.S3_ENDPOINT && !!process.env.S3_BUCKET;
+const FILE = "test/integration/s15-payroll-qa1-race.int-spec.ts";
 const LOGIN_PW = loginPasswordFixture("s15payrollqa1race");
 
 interface Actor {
@@ -44,6 +46,7 @@ interface Actor {
 }
 
 describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · G8 — đua ghi (race)", () => {
+  let gate: StorageTestGate;
   let app: INestApplication;
   let direct: Pool;
   const companyIds: string[] = [];
@@ -110,6 +113,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · G8 — đua ghi (race)", () => 
   }
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -147,9 +151,13 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · G8 — đua ghi (race)", () => 
   }, 300_000);
 
   afterAll(async () => {
-    if (direct) await cleanupTenants(direct, companyIds);
-    await direct?.end();
-    await app?.close();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      if (direct) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+      await app?.close();
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -313,51 +321,48 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 · G8 — đua ghi (race)", () => 
   });
 
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
-  describe.skipIf(!hasStorage)(
-    "G8-4 · 085 — lấy-hoặc-tạo PDF hàng loạt, CÙNG người gọi, song song",
-    () => {
-      it("2 vòng: hai POST song song ⇒ cả hai 202 + CÙNG fileId; ĐÚNG 1 hàng `files` được tạo; 0×5xx", async () => {
-        for (let round = 0; round < 2; round++) {
-          const month = nextMonth();
-          const { periodId } = await publishedPeriodWithPayslips(direct, A.companyId, {
-            month,
-            payees: [
-              { userId: payees[0], net: "1000000.00" },
-              { userId: payees[1], net: "2000000.00" },
-            ],
-            officerId: officer.id,
-            approverId: completer1.id,
-          });
-          const before = (
-            await direct.query<{ n: number }>(
-              `SELECT count(*)::int AS n FROM files WHERE company_id = $1 AND uploaded_by = $2`,
-              [A.companyId, pdfActor.id],
-            )
-          ).rows[0].n;
+  describe("G8-4 · 085 — lấy-hoặc-tạo PDF hàng loạt, CÙNG người gọi, song song", () => {
+    it("2 vòng: hai POST song song ⇒ cả hai 202 + CÙNG fileId; ĐÚNG 1 hàng `files` được tạo; 0×5xx", async () => {
+      for (let round = 0; round < 2; round++) {
+        const month = nextMonth();
+        const { periodId } = await publishedPeriodWithPayslips(direct, A.companyId, {
+          month,
+          payees: [
+            { userId: payees[0], net: "1000000.00" },
+            { userId: payees[1], net: "2000000.00" },
+          ],
+          officerId: officer.id,
+          approverId: completer1.id,
+        });
+        const before = (
+          await direct.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM files WHERE company_id = $1 AND uploaded_by = $2`,
+            [A.companyId, pdfActor.id],
+          )
+        ).rows[0].n;
 
-          const [r1, r2] = await Promise.all([
-            as(pdfActor.token).post(`/payroll-periods/${periodId}/payslips/pdf-batch`).send({}),
-            as(pdfActor.token).post(`/payroll-periods/${periodId}/payslips/pdf-batch`).send({}),
-          ]);
-          noServerError([r1, r2], `round ${round}`);
-          expect(
-            [r1.status, r2.status],
-            `round ${round}: ${JSON.stringify([r1.body, r2.body])}`,
-          ).toEqual([202, 202]);
-          expect(r1.body.data.fileId, `round ${round} — get-or-create phải trả CÙNG lô`).toBe(
-            r2.body.data.fileId,
-          );
-          const after = (
-            await direct.query<{ n: number }>(
-              `SELECT count(*)::int AS n FROM files WHERE company_id = $1 AND uploaded_by = $2`,
-              [A.companyId, pdfActor.id],
-            )
-          ).rows[0].n;
-          expect(after, `round ${round} — advisory lock phải chặn tạo trùng`).toBe(before + 1);
-        }
-      });
-    },
-  );
+        const [r1, r2] = await Promise.all([
+          as(pdfActor.token).post(`/payroll-periods/${periodId}/payslips/pdf-batch`).send({}),
+          as(pdfActor.token).post(`/payroll-periods/${periodId}/payslips/pdf-batch`).send({}),
+        ]);
+        noServerError([r1, r2], `round ${round}`);
+        expect(
+          [r1.status, r2.status],
+          `round ${round}: ${JSON.stringify([r1.body, r2.body])}`,
+        ).toEqual([202, 202]);
+        expect(r1.body.data.fileId, `round ${round} — get-or-create phải trả CÙNG lô`).toBe(
+          r2.body.data.fileId,
+        );
+        const after = (
+          await direct.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM files WHERE company_id = $1 AND uploaded_by = $2`,
+            [A.companyId, pdfActor.id],
+          )
+        ).rows[0].n;
+        expect(after, `round ${round} — advisory lock phải chặn tạo trùng`).toBe(before + 1);
+      }
+    });
+  });
 
   /**
    * 5 · SPEC-11 §21.1 #7 — «vòng sinh ra do GHI SONG SONG». Hai PATCH 047: X := Y + 1 và Y := X + 1 — mỗi bản riêng

@@ -1,0 +1,16 @@
+[
+  "test/integration/files-e2e-confirm.int-spec.ts",
+  "test/integration/hr-employee-avatar.int-spec.ts",
+  "test/integration/me-preferences-avatar.int-spec.ts",
+  "test/integration/temp-file-cleanup.int-spec.ts",
+  "test/integration/s15-payroll-be5b-pdf.int-spec.ts",
+  "test/integration/s15-payroll-be5b-pdf-batch.int-spec.ts",
+  "test/integration/s15-payroll-qa1-idor-leak.int-spec.ts",
+  "test/integration/s15-payroll-qa1-race.int-spec.ts",
+  "test/integration/s13-payroll-qa1-scope-floor.int-spec.ts",
+  "test/integration/s16-filedisposition-storage.int-spec.ts",
+  "test/integration/s19-storage-provider-compat.int-spec.ts",
+  "test/integration/routehttp3-foundation-settings.int-spec.ts",
+  "test/integration/s15-payroll-qa1-roles.int-spec.ts",
+  "test/integration/s15-payroll-qa1-pair-matrix.int-spec.ts"
+]

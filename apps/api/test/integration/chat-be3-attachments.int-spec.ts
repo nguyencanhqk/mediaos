@@ -29,7 +29,6 @@ import {
   CHAT_MESSAGE_ENTITY_TYPE,
 } from "../../src/chat/chat-file.constants";
 import { directPool, hasDb } from "../helpers/integration-db";
-import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 import {
   cleanupTenants,
   seedCompany,
@@ -44,13 +43,7 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = "Passw0rd!chatbe3";
 
-// Presign S3 là HMAC OFFLINE — không gọi mạng, không cần MinIO chạy. Đặt trước khi dựng app.
-process.env.S3_ENDPOINT ??= "http://localhost:9000";
-process.env.S3_ACCESS_KEY ??= "mediaos";
-process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-process.env.S3_BUCKET ??= "mediaos-assets";
-process.env.S3_FORCE_PATH_STYLE ??= "true";
-process.env.S3_REGION ??= "us-east-1";
+// S3_* ghim ở `vitest.config.ts` (`pinTestStorageEnv`); presign là HMAC ngoại tuyến — không gọi mạng.
 
 type Scope = "Own" | "Team" | "Department" | "Company";
 type PairGrant = [action: string, resource: string, scope: Scope];

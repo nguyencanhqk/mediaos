@@ -34,7 +34,6 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { directPool, hasDb } from "../helpers/integration-db";
-import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 import {
   cleanupTenants,
   seedCompany,
@@ -49,13 +48,7 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = ["Passw0rd", "s14filegrant"].join("!");
 
-// Presign S3 là HMAC OFFLINE — không gọi mạng, không cần MinIO chạy. Đặt TRƯỚC khi dựng app.
-process.env.S3_ENDPOINT ??= "http://localhost:9000";
-process.env.S3_ACCESS_KEY ??= "mediaos";
-process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-process.env.S3_BUCKET ??= "mediaos-assets";
-process.env.S3_FORCE_PATH_STYLE ??= "true";
-process.env.S3_REGION ??= "us-east-1";
+// S3_* ghim ở `vitest.config.ts` (`pinTestStorageEnv`); presign là HMAC ngoại tuyến — không gọi mạng.
 
 type Scope = "Own" | "Team" | "Department" | "Company";
 /** [action, resourceType, scope, isSensitive] — cờ sensitive phải KHỚP catalog thật, seed.ts ném LOUD nếu lệch. */

@@ -18435,7 +18435,13 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/test/**",
+      "apps/api/vitest.config.ts",
+      "apps/api/src/foundation/files/file-access-hardening.int.spec.ts",
       ".github/workflows/api.yml",
+      "harness/lane-db-guard.mjs",
+      "harness/lane-db-guard.test.mjs",
+      "harness/check.sh",
+      "turbo.json",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],

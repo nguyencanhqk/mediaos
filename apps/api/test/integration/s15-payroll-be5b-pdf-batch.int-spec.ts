@@ -12,7 +12,8 @@
  *
  * Lái `OutboxWorker` ⇒ giữ mutex outbox (S7-QA-OUTBOXPROBE-1, `test/helpers/outbox-worker-lock.ts`).
  *
- * GATE CỨNG `hasDb && LANE_DB` + object storage.
+ * GATE CỨNG `hasDb && LANE_DB` — chỉ DB: ca deny/422/409/400 + lô `Pending` chạy cả khi storage lệch. Ca chạy
+ * worker (`drain` ⇒ sinh ZIP lên storage, kể cả lô của ca khác) qua `openStorageTestGate` + `needStorage`.
  */
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
@@ -54,9 +55,10 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 
-const hasStorage = !!process.env.S3_ENDPOINT && !!process.env.S3_BUCKET;
-const hasLaneDb = hasDb && !!process.env.LANE_DB && hasStorage;
+const FILE = "test/integration/s15-payroll-be5b-pdf-batch.int-spec.ts";
+const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s15payrollbe5bbatch");
 const CAP = 3;
 
@@ -71,6 +73,7 @@ type BatchBody = {
 };
 
 describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
+  let gate: StorageTestGate;
   let app: INestApplication;
   let direct: Pool;
   let outboxLock: OutboxWorkerLock | undefined;
@@ -140,6 +143,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
     ).periodId;
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PAYSLIP_PDF_BATCH_LIMITS)
       .useValue({ maxPayslips: CAP })
@@ -222,10 +226,14 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
   }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
-    await outboxLock?.release();
-    if (direct) await cleanupTenants(direct, companyIds);
-    await direct?.end();
-    await app?.close();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      await outboxLock?.release();
+      if (direct) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+      await app?.close();
+    }
   });
 
   it("consumer 085 đăng ký ĐÚNG MỘT lần trên app thật (quên đăng ký ⇒ event `done` im lặng)", () => {
@@ -282,7 +290,8 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
     expect(res.status).toBe(400);
   });
 
-  it("luồng đủ: 202 Pending → worker → 200 + ZIP đúng người; cùng Idempotency-Key vẫn phản ánh trạng thái mới", async () => {
+  it("luồng đủ: 202 Pending → worker → 200 + ZIP đúng người; cùng Idempotency-Key vẫn phản ánh trạng thái mới", async (ctx) => {
+    if (!gate.needStorage(ctx, "085 luồng đủ worker sinh ZIP")) return;
     const key = randomUUID();
     const before = await sideEffects(officer.id);
     const first = await post(officer.token, periodMain, {}, key);
@@ -443,7 +452,8 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF hàng loạt 085", () => {
     expect(retried.body.data.fileId).not.toBe(lot.fileId);
   });
 
-  it("người yêu cầu MẤT cặp trước khi worker chạy ⇒ lô `Failed{forbidden}`, không có object", async () => {
+  it("người yêu cầu MẤT cặp trước khi worker chạy ⇒ lô `Failed{forbidden}`, không có object", async (ctx) => {
+    if (!gate.needStorage(ctx, "085 MẤT cặp — drain ghi ZIP cả lô khác")) return;
     const period = await newPeriod("2094-08", payees.slice(0, 1));
     const temp = await (async () => {
       const email = `temp@${A.slug}.test`;

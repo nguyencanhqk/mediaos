@@ -10,8 +10,14 @@
 //
 // Chạy: `node --test harness/lane-db-guard.test.mjs`
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
+import * as guard from "./lane-db-guard.mjs";
 import { DEFAULT_THRESHOLD, decideGate, parseVitestSkips, shouldWarn } from "./lane-db-guard.mjs";
 
 const ESC = "\x1b";
@@ -128,4 +134,366 @@ test("decideGate: skippedFiles=null, strict=true → 'red' (không được coi 
 test("decideGate: threshold mặc định = DEFAULT_THRESHOLD khi không truyền", () => {
   const gate = decideGate({ skippedFiles: DEFAULT_THRESHOLD + 1, laneDbSet: false });
   assert.equal(gate.level, "warn");
+});
+
+// ══ S16-SOCIAL-STORAGETESTGATE-1 (plan §4 R1, D-4/D-6) — ca storage bị bỏ qua THEO TỪNG CA phải đếm được ══
+//
+// Nhãn do `apps/api/test/helpers/storage-test-target.ts` in (định dạng D-4, một dòng JSON sau thẻ):
+//   [storage-test-skip] {"file":…,"task":…,"case":…,"reason":…}   — ca storage bị bỏ qua (khoá khử trùng lặp = file+task)
+//   [storage-test-run]  {"file":…,"bucket":…}                       — tệp storage đã CHẠY trên bucket cho phép
+//   [storage-test-call] {"file":…,"command":…}                      — lời gọi storage bị tripwire chặn (hồ sơ offline)
+// Import dạng namespace để 14 ca cũ vẫn chạy khi `parseStorageMarkers` chưa tồn tại (RED theo hành vi).
+
+const GUARD_CLI = fileURLToPath(new URL("./lane-db-guard.mjs", import.meta.url));
+const SF = "test/integration/files-e2e-confirm.int-spec.ts";
+const SF2 = "test/integration/hr-employee-avatar.int-spec.ts";
+const skipLabel = (o) => `[storage-test-skip] ${JSON.stringify(o)}`;
+const runLabel = (o) => `[storage-test-run] ${JSON.stringify(o)}`;
+const callLabel = (o) => `[storage-test-call] ${JSON.stringify(o)}`;
+const SUMMARY = [
+  `${ESC}[2m Test Files ${ESC}[22m${ESC}[1m${ESC}[32m2 passed${ESC}[39m${ESC}[90m (2)${ESC}[39m`,
+  `${ESC}[2m      Tests ${ESC}[22m${ESC}[1m${ESC}[32m9 passed${ESC}[39m${ESC}[2m | ${ESC}[22m${ESC}[33m2 skipped${ESC}[39m${ESC}[90m (11)${ESC}[39m`,
+];
+
+/** Log thật dạng reporter mặc định: khối `stderr | tệp > ca` rồi dòng nhãn đứng riêng; có ANSI + tiền tố turbo. */
+const FIXTURE_STORAGE_SKIPS = [
+  `stderr | ${SF} > files e2e confirm > E1 PUT rồi confirm`,
+  skipLabel({ file: SF, task: "a1b2_0_0", case: "E1 PUT rồi confirm", reason: "S3_BUCKET lệch" }),
+  `@mediaos/api:test: ${ESC}[33m${skipLabel({ file: SF, task: "a1b2_0_1", case: "E2 sai cỡ", reason: "S3_BUCKET lệch" })}${ESC}[39m`,
+  // chunk-runner chạy lại cùng tệp ⇒ cùng task id ⇒ KHÔNG đếm lần hai
+  skipLabel({ file: SF, task: "a1b2_0_0", case: "E1 PUT rồi confirm", reason: "S3_BUCKET lệch" }),
+  ...SUMMARY,
+].join("\n");
+
+const parseMarkers = (text) => guard.parseStorageMarkers(text);
+
+function runGuardCli(logText, flags) {
+  const dir = mkdtempSync(join(tmpdir(), "lane-db-guard-r1-"));
+  const logPath = join(dir, "test.log");
+  writeFileSync(logPath, logText, "utf8");
+  const res = spawnSync(process.execPath, [GUARD_CLI, logPath, ...flags], { encoding: "utf8" });
+  const line = (key) =>
+    (res.stdout ?? "")
+      .split(/\r?\n/)
+      .find((l) => l.startsWith(`${key}:`))
+      ?.slice(key.length + 1);
+  return {
+    status: res.status,
+    stdout: res.stdout ?? "",
+    level: line("LEVEL"),
+    storage: line("STORAGE"),
+  };
+}
+
+test("R1(a) parseStorageMarkers: 2 ca skip khác task + 1 dòng trùng (chạy lại) ⇒ skips=2 (có/không ANSI + tiền tố turbo)", () => {
+  assert.equal(parseMarkers(FIXTURE_STORAGE_SKIPS).skips, 2);
+});
+
+test("R1(a/M3) hai nhãn CÙNG `case` nhưng KHÁC `task` (it.each / describe khác) ⇒ 2, không gộp nhầm", () => {
+  const text = [
+    skipLabel({ file: SF, task: "t_each_0", case: "E3 tải %s", reason: "r" }),
+    skipLabel({ file: SF, task: "t_each_1", case: "E3 tải %s", reason: "r" }),
+  ].join("\n");
+  assert.equal(parseMarkers(text).skips, 2);
+});
+
+test("R1(a) run khử trùng lặp theo tệp; call đếm từng dòng", () => {
+  const text = [
+    runLabel({ file: SF, bucket: "mediaos-fdisp-test" }),
+    runLabel({ file: SF, bucket: "mediaos-fdisp-test" }),
+    runLabel({ file: SF2, bucket: "mediaos-fdisp-test" }),
+    callLabel({ file: SF2, command: "PutObjectCommand" }),
+  ].join("\n");
+  const m = parseMarkers(text);
+  assert.equal(m.runs, 2);
+  assert.equal(m.calls, 1);
+});
+
+test("R1(b) decideGate: strict + LANE_DB + ca storage bị bỏ qua ⇒ red (mã cũ trả ok vô điều kiện)", () => {
+  const gate = decideGate({
+    skippedFiles: 1,
+    laneDbSet: true,
+    strict: true,
+    storageSkips: 2,
+    storageRuns: 3,
+    storageCalls: 0,
+  });
+  assert.equal(gate.level, "red");
+});
+
+test("R1(c) decideGate: strict + LANE_DB + 0 tệp storage CHẠY ⇒ red (thành công rỗng)", () => {
+  const gate = decideGate({
+    skippedFiles: 1,
+    laneDbSet: true,
+    strict: true,
+    storageSkips: 0,
+    storageRuns: 0,
+    storageCalls: 0,
+  });
+  assert.equal(gate.level, "red");
+});
+
+test("R1(c) đối chứng: strict + LANE_DB + có run, 0 skip, 0 call ⇒ ok", () => {
+  const gate = decideGate({
+    skippedFiles: 1,
+    laneDbSet: true,
+    strict: true,
+    storageSkips: 0,
+    storageRuns: 11,
+    storageCalls: 0,
+  });
+  assert.equal(gate.level, "ok");
+});
+
+test("R1(d) decideGate: KHÔNG strict + LANE_DB + ca storage bị bỏ qua ⇒ warn (tối thiểu)", () => {
+  const gate = decideGate({
+    skippedFiles: 1,
+    laneDbSet: true,
+    strict: false,
+    storageSkips: 1,
+    storageRuns: 2,
+    storageCalls: 0,
+  });
+  assert.equal(gate.level, "warn");
+});
+
+test("R1(d) CLI không strict + có nhãn skip ⇒ LEVEL:warn, exit 0 (tier thường không vỡ)", () => {
+  const r = runGuardCli(FIXTURE_STORAGE_SKIPS, ["--lane-db-set=1", "--strict=0"]);
+  assert.equal(r.level, "warn");
+  assert.equal(r.status, 0);
+});
+
+test("R1(e) dòng warn CẤP TỆP (không có thẻ) không tính là ca bị bỏ qua", () => {
+  const text = [
+    `stderr | ${SF}`,
+    `⚠ ${SF}: cổng storage ĐÓNG (S3_BUCKET="mediaos-storage-off" khác "mediaos-fdisp-test") — các ca storage sẽ BỎ QUA`,
+    ...SUMMARY,
+  ].join("\n");
+  assert.equal(parseMarkers(text).skips, 0);
+});
+
+test("R1(f) nhãn hỏng JSON (bị cắt/chen dòng) vẫn ĐẾM, không bị nuốt", () => {
+  const text = [
+    `[storage-test-skip] {"file":"${SF}","task":`,
+    skipLabel({ file: SF, task: "t9", case: "E4", reason: "r" }),
+  ].join("\n");
+  assert.equal(parseMarkers(text).skips, 2);
+});
+
+test("R1(k/M4) không có nhãn nào ⇒ parseStorageMarkers trả số 0/0/0 (không null)", () => {
+  assert.deepEqual(parseMarkers(""), { skips: 0, runs: 0, calls: 0 });
+  assert.deepEqual(parseMarkers(SUMMARY.join("\n")), { skips: 0, runs: 0, calls: 0 });
+});
+
+test("R1(h/M4) CLI: log có summary vitest + 0 nhãn, strict + LANE_DB ⇒ LEVEL:red và in STORAGE:skips=0 runs=0 calls=0", () => {
+  const r = runGuardCli(SUMMARY.join("\n"), ["--lane-db-set=1", "--strict=1"]);
+  assert.equal(r.level, "red");
+  assert.equal(r.storage, "skips=0 runs=0 calls=0");
+});
+
+test("R1(h/M4) đối chứng: cùng log, KHÔNG strict ⇒ LEVEL:ok như hành vi cũ", () => {
+  const r = runGuardCli(SUMMARY.join("\n"), ["--lane-db-set=1", "--strict=0"]);
+  assert.equal(r.level, "ok");
+});
+
+test("R1(i/B1) CLI --fail-unless-ok=1: LEVEL red ⇒ exit 1 (bước CI đỏ)", () => {
+  const r = runGuardCli(FIXTURE_STORAGE_SKIPS, [
+    "--lane-db-set=1",
+    "--strict=1",
+    "--fail-unless-ok=1",
+  ]);
+  assert.equal(r.level, "red");
+  assert.equal(r.status, 1);
+});
+
+test("R1(i/B1) đối chứng: --fail-unless-ok=1 với LEVEL ok ⇒ exit 0", () => {
+  const text = [runLabel({ file: SF, bucket: "mediaos-test" }), ...SUMMARY].join("\n");
+  const r = runGuardCli(text, ["--lane-db-set=1", "--strict=1", "--fail-unless-ok=1"]);
+  assert.equal(r.level, "ok");
+  assert.equal(r.status, 0);
+});
+
+test("R1(j/M1) decideGate: strict + có lời gọi storage bị tripwire chặn ⇒ red dù 0 skip", () => {
+  const gate = decideGate({
+    skippedFiles: 1,
+    laneDbSet: true,
+    strict: true,
+    storageSkips: 0,
+    storageRuns: 3,
+    storageCalls: 1,
+  });
+  assert.equal(gate.level, "red");
+});
+
+// ══ Cổng LIGHT 20/10 — F2: guard đòi TỪNG tệp storage chạy · F1: check.sh không rơi về XANH khi guard sập ══
+
+const MANIFEST = fileURLToPath(
+  new URL("../apps/api/test/storage-spec-files.json", import.meta.url),
+);
+const CHECK_SH = fileURLToPath(new URL("./check.sh", import.meta.url));
+const STRICT_LANE = ["--lane-db-set=1", "--strict=1", "--fail-unless-ok=1"];
+const manifestFiles = () => JSON.parse(readFileSync(MANIFEST, "utf8"));
+const runLog = (files) =>
+  [...files.map((file) => runLabel({ file, bucket: "mediaos-test" })), ...SUMMARY].join("\n");
+
+test("LIGHT-F2 parseStorageRunFiles: chỉ nhãn run hợp lệ, khử trùng lặp, sắp xếp (bỏ ANSI + tiền tố turbo)", () => {
+  const text = [
+    runLabel({ file: SF2, bucket: "b" }),
+    `@mediaos/api:test: ${ESC}[2m${runLabel({ file: SF, bucket: "b" })}${ESC}[22m`,
+    runLabel({ file: SF, bucket: "b" }),
+    "[storage-test-run] {hỏng",
+    ...SUMMARY,
+  ].join("\n");
+  assert.deepEqual(guard.parseStorageRunFiles(text), [SF, SF2].sort());
+  assert.deepEqual(guard.parseStorageRunFiles(""), []);
+});
+
+test("LIGHT-F2 decideGate: strict + LANE_DB + THIẾU một tệp mong đợi ⇒ red dù runs > 0 (nêu tên tệp)", () => {
+  const gate = decideGate({
+    skippedFiles: 0,
+    laneDbSet: true,
+    strict: true,
+    storageSkips: 0,
+    storageRuns: 1,
+    storageCalls: 0,
+    expectedRunFiles: [SF, SF2],
+    storageRunFiles: [SF],
+  });
+  assert.equal(gate.level, "red");
+  assert.match(gate.message, /1\/2 tệp storage mong đợi/);
+  assert.ok(gate.message.includes(SF2));
+});
+
+test("LIGHT-F2 đối chứng: đủ mọi tệp ⇒ ok · không strict ⇒ không xét theo tệp · không truyền danh sách ⇒ hành vi cũ", () => {
+  const base = {
+    skippedFiles: 0,
+    laneDbSet: true,
+    storageSkips: 0,
+    storageRuns: 1,
+    storageCalls: 0,
+  };
+  const expectedRunFiles = [SF, SF2];
+  assert.equal(
+    decideGate({ ...base, strict: true, expectedRunFiles, storageRunFiles: [SF2, SF] }).level,
+    "ok",
+  );
+  assert.equal(
+    decideGate({ ...base, strict: false, expectedRunFiles, storageRunFiles: [SF] }).level,
+    "ok",
+  );
+  assert.equal(decideGate({ ...base, strict: true, storageRunFiles: [SF] }).level, "ok");
+});
+
+test("LIGHT-F2 CLI --expect-run-files (manifest THẬT của kho): đủ tệp ⇒ ok/exit 0; thiếu tệp đầu ⇒ red/exit 1 + tên tệp", () => {
+  const expected = manifestFiles();
+  assert.ok(expected.length > 1, "manifest phải liệt kê các tệp storage");
+  const ok = runGuardCli(runLog(expected), [...STRICT_LANE, `--expect-run-files=${MANIFEST}`]);
+  assert.equal(ok.level, "ok");
+  assert.equal(ok.status, 0);
+  const red = runGuardCli(runLog(expected.slice(1)), [
+    ...STRICT_LANE,
+    `--expect-run-files=${MANIFEST}`,
+  ]);
+  assert.equal(red.level, "red");
+  assert.equal(red.status, 1);
+  assert.ok(red.stdout.includes(expected[0]), red.stdout);
+});
+
+test("LIGHT-F2 CLI manifest vắng / rỗng / sai kiểu ⇒ red + exit 1 (không ngầm bỏ cổng theo tệp)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lane-db-guard-manifest-"));
+  const bad = [
+    join(dir, "khong-co.json"),
+    ...[["[]"], ['["a","a"]'], ['{"a":1}'], ["[1]"], ["{hỏng"]].map(([body], i) => {
+      const f = join(dir, `bad-${i}.json`);
+      writeFileSync(f, body, "utf8");
+      return f;
+    }),
+  ];
+  for (const manifest of bad) {
+    const r = runGuardCli(runLog(manifestFiles()), [
+      ...STRICT_LANE,
+      `--expect-run-files=${manifest}`,
+    ]);
+    assert.equal(r.level, "red", manifest);
+    assert.equal(r.status, 1, manifest);
+  }
+});
+
+/** Chạy ĐÚNG hàm run_lane_db_guard trích từ harness/check.sh (không chạy cả check.sh). */
+function runCheckShGuard({ guardPath, logText, strict, manifest = "" }) {
+  const fn = readFileSync(CHECK_SH, "utf8")
+    .replace(/\r/g, "")
+    .match(/^run_lane_db_guard\(\) \{\n[\s\S]*?\n\}\n/m)?.[0];
+  assert.ok(fn, "check.sh phải có hàm run_lane_db_guard ở cột 0");
+  const dir = mkdtempSync(join(tmpdir(), "check-sh-guard-"));
+  const log = join(dir, "test.log");
+  writeFileSync(log, logText, "utf8");
+  const script = [
+    "set -uo pipefail",
+    fn,
+    'run_lane_db_guard "$G" "$L" 1 20 "$ST" "$MF"',
+    'printf \'LEVEL=%s\\nMESSAGE=%s\\n\' "$GUARD_LEVEL" "$GUARD_MESSAGE"',
+  ].join("\n");
+  const res = spawnSync("bash", ["-c", script], {
+    encoding: "utf8",
+    env: { ...process.env, G: guardPath, L: log, ST: String(strict), MF: manifest },
+  });
+  const out = res.stdout ?? "";
+  const pick = (k) =>
+    out
+      .split(/\r?\n/)
+      .find((l) => l.startsWith(`${k}=`))
+      ?.slice(k.length + 1);
+  return {
+    status: res.status,
+    level: pick("LEVEL"),
+    message: pick("MESSAGE") ?? "",
+    stderr: res.stderr,
+  };
+}
+
+function stubGuard(body) {
+  const dir = mkdtempSync(join(tmpdir(), "check-sh-stub-"));
+  const f = join(dir, "guard.mjs");
+  writeFileSync(f, body, "utf8");
+  return f;
+}
+
+test("LIGHT-F1 check.sh: guard VẮNG (node exit 1, 0 dòng) ⇒ red khi strict · warn khi không — không bao giờ rỗng/XANH", () => {
+  const guardPath = join(mkdtempSync(join(tmpdir(), "check-sh-missing-")), "khong-co.mjs");
+  const red = runCheckShGuard({ guardPath, logText: runLog([SF]), strict: 1 });
+  assert.equal(red.status, 0, red.stderr);
+  assert.equal(red.level, "red");
+  assert.match(red.message, /KHÔNG trả LEVEL hợp lệ \(node exit [1-9]/);
+  assert.equal(runCheckShGuard({ guardPath, logText: runLog([SF]), strict: 0 }).level, "warn");
+});
+
+test("LIGHT-F1 check.sh: guard THROW · in LEVEL lạ · in LEVEL:ok rồi exit ≠ 0 ⇒ red (strict)", () => {
+  for (const body of [
+    'throw new Error("boom");',
+    'console.log("LEVEL:bogus"); console.log("MESSAGE:x");',
+    'console.log("LEVEL:ok"); process.exitCode = 3;',
+  ]) {
+    const r = runCheckShGuard({ guardPath: stubGuard(body), logText: runLog([SF]), strict: 1 });
+    assert.equal(r.level, "red", body);
+  }
+});
+
+test("LIGHT-F1/F2 check.sh đối chứng: guard THẬT + manifest — đủ tệp ⇒ ok; thiếu tệp ⇒ red (check.sh chuyển manifest)", () => {
+  const expected = manifestFiles();
+  const ok = runCheckShGuard({
+    guardPath: GUARD_CLI,
+    logText: runLog(expected),
+    strict: 1,
+    manifest: MANIFEST,
+  });
+  assert.equal(ok.level, "ok", ok.message + ok.stderr);
+  const red = runCheckShGuard({
+    guardPath: GUARD_CLI,
+    logText: runLog(expected.slice(1)),
+    strict: 1,
+    manifest: MANIFEST,
+  });
+  assert.equal(red.level, "red");
+  assert.ok(red.message.includes(expected[0]), red.message);
 });

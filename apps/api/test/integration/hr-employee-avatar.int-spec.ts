@@ -4,7 +4,7 @@
  * PHỦ (mirror me-preferences-avatar.int-spec.ts avatar suite, own-scope → HR-managed):
  *   deny thiếu update:employee → 403 trên upload-url/POST/DELETE · NV không tồn tại → 404 · cross-tenant
  *   (fileId thuộc company KHÁC) → 404 (RLS 0-row, KHÔNG lộ tồn tại) · file do NHÂN VIÊN KHÁC upload (owner ≠
- *   HR) → 403 (chống forge) · happy E2E qua MinIO (storageReady probe, mirror files-e2e-confirm.int-spec.ts):
+ *   HR) → 403 (chống forge) · happy E2E qua MinIO (cổng openStorageTestGate, mirror files-e2e-confirm.int-spec.ts):
  *   upload-url→PUT→POST /hr/employees/:id/avatar → avatar_url=fileId + file_links(created_by=HR) + GET detail
  *   avatarUrl ký · DELETE gỡ (link soft-deleted + avatar_url null).
  *
@@ -17,7 +17,6 @@ import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -26,6 +25,7 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 import {
   cleanupTenants,
   seedCompany,
@@ -36,9 +36,9 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
-import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
+const FILE = "test/integration/hr-employee-avatar.int-spec.ts";
 const LOGIN_PW = "Passw0rd!hravatar-1-inttests-1";
 
 /** (action, resourceType) — khớp NGUYÊN VĂN mig 0444 (update:employee). */
@@ -98,6 +98,7 @@ describe.skipIf(!runDb)("S5-HR-AVATAR-1 HR-managed employee avatar (DB cô lập
   let A: SeededTenant;
   let B: SeededTenant;
   const companyIds: string[] = [];
+  let gate: StorageTestGate;
   let seq = 0;
 
   async function makeHrUser(
@@ -131,6 +132,7 @@ describe.skipIf(!runDb)("S5-HR-AVATAR-1 HR-managed employee avatar (DB cô lập
   }
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -145,9 +147,13 @@ describe.skipIf(!runDb)("S5-HR-AVATAR-1 HR-managed employee avatar (DB cô lập
   });
 
   afterAll(async () => {
-    await app?.close();
-    if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
-    await direct?.end();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    }
   });
 
   it("deny — thiếu update:employee → 403 trên upload-url/POST/DELETE", async () => {
@@ -331,36 +337,15 @@ describe.skipIf(!runDb)("S5-HR-AVATAR-1 HR-managed employee avatar (DB cô lập
   });
 
   // ── E2E thật qua MinIO (skip nếu storage chưa sẵn sàng — mirror me-preferences-avatar.int-spec.ts) ──
-  describe("E2E qua MinIO (storageReady probe)", () => {
-    let storageReady = false;
-
-    beforeAll(async () => {
-      process.env.S3_ENDPOINT ??= "http://localhost:9000";
-      process.env.S3_ACCESS_KEY ??= "mediaos";
-      process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-      process.env.S3_BUCKET ??= "mediaos-assets";
-      process.env.S3_FORCE_PATH_STYLE ??= "true";
-      process.env.S3_REGION ??= "us-east-1";
-      try {
-        const s3 = new S3Client({
-          endpoint: process.env.S3_ENDPOINT,
-          region: process.env.S3_REGION,
-          forcePathStyle: true,
-          credentials: {
-            accessKeyId: process.env.S3_ACCESS_KEY!,
-            secretAccessKey: process.env.S3_SECRET_KEY!,
-          },
-        });
-        await s3.send(new CreateBucketCommand({ Bucket: process.env.S3_BUCKET }));
-        storageReady = true;
-      } catch (err) {
-        const name = (err as { name?: string }).name;
-        storageReady = name === "BucketAlreadyOwnedByYou" || name === "BucketAlreadyExists";
-      }
-    });
-
+  describe("E2E qua storage (openStorageTestGate)", () => {
     it("upload-url→PUT→POST /hr/employees/:id/avatar→GET detail avatarUrl ký; DELETE gỡ", async (ctx) => {
-      if (!storageReady) return ctx.skip();
+      if (
+        !gate.needStorage(
+          ctx,
+          "upload-url→PUT→POST /hr/employees/:id/avatar→GET detail avatarUrl ký; DELETE gỡ",
+        )
+      )
+        return;
 
       const hr = await makeHrUser(A, [PAIR.employeeUpdate, PAIR.employeeRead]);
       const target = await makeTargetEmployee(A);

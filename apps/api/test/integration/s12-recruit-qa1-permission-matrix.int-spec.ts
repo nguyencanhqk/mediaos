@@ -51,7 +51,7 @@ import {
   RECRUIT_ROUTE_PAIRS,
   type RecruitRouteKey,
 } from "../../src/recruit/recruit-route-pairs.const";
-import { FALLBACK_S3_SECRET, loginPasswordFixture } from "../helpers/fixture-secrets";
+import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -67,14 +67,7 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s12recruitqa1");
 
-// S14-RECRUIT-FILEGRANT-1 — 3 route tệp CV đi qua `FileService` (presign S3 là HMAC OFFLINE, KHÔNG
-// gọi mạng ⇒ không cần MinIO chạy). Đặt TRƯỚC khi dựng app.
-process.env.S3_ENDPOINT ??= "http://localhost:9000";
-process.env.S3_ACCESS_KEY ??= "mediaos";
-process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-process.env.S3_BUCKET ??= "mediaos-assets";
-process.env.S3_FORCE_PATH_STYLE ??= "true";
-process.env.S3_REGION ??= "us-east-1";
+// S3_* ghim ở `vitest.config.ts` (`pinTestStorageEnv`); presign là HMAC ngoại tuyến — không gọi mạng.
 
 /** 16 cặp distinct của RECRUIT_ROUTE_PAIRS (dedupe theo "action:resource"), giữ NGUYÊN cờ sensitive —
  * nguồn sự thật DUY NHẤT cho cả ba chủ thể (`tOwn`/`tDept`/`tCompany`), không gõ lại literal. */
