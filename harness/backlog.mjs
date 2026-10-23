@@ -15554,7 +15554,7 @@ export const backlog = [
       "`capabilities` phát ĐÚNG quyết định của `can()` tầng công ty (v2, owner chốt 05/09): bỏ cờ HÀNG GRANT + bỏ danh sách tay `SENSITIVE_CAPABILITY_ALLOWLIST` — đóng CẢ lỗ `*:*` lẫn lớp lỗi `capability-allowlist-hides-admin-screens`",
     zone: "red",
     gate: "FULL",
-    status: "blocked",
+    status: "todo",
     paths: [
       "apps/api/src/permission/**",
       "apps/api/src/auth/**",
@@ -15585,12 +15585,14 @@ export const backlog = [
       "Quyet + ghi ro: GIU fallback caps['*:*'] trong useCan (plan §7.2, 0 dong logic FE doi) - fallback thanh code CHET vi ratchet BE",
       "CONG NGUOI TRUOC MERGE: owner chay docs/plans/S14-SEC-CAPWILDCARD-1.census.sql tren PROD, dan Q0/Q1/Q3/Q4 vao PR (Q4 = danh sach man se hien them). classifier-blocks-prod-db-from-agent",
       "`bash harness/check.sh --all --lane-db` xanh khong banner",
+      "Owner chốt 23/10/2026 (CW-1): EXCLUDED + cổng ratchet tĩnh phủ tiền tố `reveal-` (thay vì chỉ `reveal-secret`); allowlist trong `docs/plans/S14-SEC-CAPWILDCARD-1.census.sql` cập nhật 69 → 86 mục (khớp Q4a census 16/10)",
     ],
     notes: [
       "🔴 KHÔNG phải lỗ leo thang: cổng thật là BE (đã kín sau DECISIONS-12). Đây là lỗi TRẢI NGHIỆM + một nguồn sự-thật thứ hai đang trôi khỏi engine.",
       "`useCanExact` là lối đúng đã có sẵn cho cặp nhạy cảm (memory sensitive-pair-widget-needs-usecanexact) — cân nhắc census 'cặp sensitive nào còn dùng useCan' trước khi đổi bản thân useCan.",
       "Memory liên quan: sensitive-pair-widget-needs-usecanexact · sensitive-capability-allowlist-is-backend · capability-allowlist-hides-admin-screens.",
       "Census PROD 16/10/2026 ~16:05 ICT (đọc-chỉ, ROLLBACK, chỉ số tổng hợp): Q1 = 0 (không actor nào giữ wildcard ALLOW) · Q3 = 0 · Q6 = 0 (qua) · Q4a = 86 (allowlist trong file census gốc `docs/plans/S14-SEC-CAPWILDCARD-1.census.sql` còn 69 ⇒ cập nhật allowlist trong file đó) · Q4 = 71 cặp — chi tiết lưu ngoài repo (máy PROD), gồm cả cặp lớp reveal/step-up ⇒ đọc trước khi code theo plan §12. Repo công khai: PR chỉ ghi số tổng hợp, KHÔNG liệt kê cặp.",
+      "Owner chốt 23/10/2026 (phiếu quyết định đợt 23/10, phương án khuyến nghị): CW-1 giữ thiết kế v2, nới EXCLUDED + ratchet từ `reveal-secret` sang tiền tố `reveal-` · CW-2 cho hiện nút nhạy cảm cho người mà BE đã cho phép (đúng ADR DECISIONS-13, không dựng lại danh sách ẩn tay ở FE) · CW-3 mở ngay sau đợt song song hiện tại, lane riêng, chỉ deploy API (không migration, rollback bằng git revert). Census PROD 16/10 đã chạy: Q1 = 0 · Q3 = 0 · Q6 = 0 · Q4 = 71 cặp chia 7 nhóm — không nhóm nào đòi đổi kiến trúc. Làm kèm: cập nhật `census.sql` 69 → 86 mục; khi code đo lại các cặp seed sau 16/10 (plan §9.4). Ước ~380 USD (300–520), trần 600 USD gồm FULL gate + santa. Gỡ chặn: `status` blocked → todo. Gieo kèm WO chỉ-đọc `S14-SEC-OPPLANEPAIRS-1`.",
     ],
   },
   {
@@ -22494,6 +22496,12 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/src/foundation/files/**",
+      // L0 23/10/2026 (owner chốt LP-1): 3 đường gắn CHAT + avatar NV do HR đặt + đính kèm SOCIAL (kèm spec cạnh nguồn)
+      "apps/api/src/chat/chat-messages.service*.ts",
+      "apps/api/src/chat/chat-attachments.repository*.ts",
+      "apps/api/src/chat/chat-room-avatar.service*.ts",
+      "apps/api/src/employees/hr-employee-avatar.service*.ts",
+      "apps/api/src/social/social-attachments.service*.ts",
       "apps/api/test/**",
       "docs/plans/**",
       "harness/backlog.mjs",
@@ -22510,6 +22518,7 @@ export const backlog = [
     ],
     notes: [
       "🔴 Seed 20/10/2026 ở sổ hậu merge S19-SEC-FILELINKGATE-1 (PR #595 = `cd65e89f`). Merge = công bố ⇒ owner deploy API trong ngày merge. Plan mở rộng `paths` ở L0 (commit backlog riêng) theo số đo.",
+      "Owner chốt 23/10/2026 (phiếu quyết định đợt 23/10, phương án khuyến nghị): LP-1 chuyển 3 đường gắn tệp (đính kèm tin CHAT · ảnh phòng CHAT · avatar nhân viên do HR đặt) về hàm quyết định chung «người gắn xem được tệp»; đường SOCIAL đổi sang hàm thuần chung, không đổi hành vi · LP-2 chấp nhận đổi hành vi CHAT cho khớp vị từ của lõi gắn chung (từ chối ⇒ 403 `CHAT-ERR-015`; ca cụ thể ở phiếu, kept/ ngoài repo) · LP-3 tệp do server sinh (PDF/ZIP phiếu lương) giữ ngoài lõi có chủ đích — quyền ở đó là quyền xuất của PAYROLL, ghi lý do vào plan. `paths` mở rộng ở L0 23/10 cho 5 tệp nguồn trên (glob `*` phủ spec cạnh nguồn). Làm TRƯỚC `S19-SEC-FILEPOINTER-1` (WO đó dùng lại hàm chung dựng ở đây). Ước 260–340 USD.",
     ],
   },
   {
@@ -22539,6 +22548,7 @@ export const backlog = [
     ],
     notes: [
       "🔴 Seed 20/10/2026 ở sổ hậu merge S19-SEC-FILELINKGATE-1 (PR #595 = `cd65e89f`). Plan mở rộng `paths` ở L0 (commit backlog riêng) nếu số đo chỉ ra module đích cần sửa.",
+      "Owner chốt 23/10/2026 (phiếu quyết định đợt 23/10, phương án khuyến nghị): PR-1 mỗi resolver khai «hồ sơ gắn» (giá trị tham số liên kết được phép cho cặp module/thực thể đó); giá trị ngoài hồ sơ ⇒ 400, 0 liên kết mới; ép `isPrimary=false` ở route FOUNDATION — không migration, contracts giữ nguyên hình · PR-2 giữ trường `accessScope`, chỉ nhận giá trị của hồ sơ (cột này không phải nguồn quyền). Lưu ý: chưa đo tích hợp bằng khoá API có gọi route này không — đo ở bước đầu (nếu có, lời gọi gửi giá trị ngoài hồ sơ sẽ bắt đầu nhận 400). Chạy SAU `S19-SEC-FILELINKPATHS-1` (cùng vùng `foundation/files`), hoặc đo trùng tệp trước nếu muốn chạy song song. Ước 180–260 USD.",
     ],
   },
   {
@@ -22551,12 +22561,22 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/src/foundation/files/**",
+      // L0 23/10/2026 (owner chốt FP-2): kiểm tại biên ghi — logo công ty · hợp đồng HR · đính kèm ATT (kèm spec cạnh nguồn)
+      "apps/api/src/foundation/company/**",
+      "apps/api/src/settings/settings.*.ts",
+      "apps/api/src/employees/contract*.ts",
+      "apps/api/src/attendance/attendance-adjustment.service*.ts",
+      "apps/api/src/attendance/remote-work-request.service*.ts",
+      "packages/contracts/src/hr/contracts*.ts",
+      "packages/contracts/src/settings*.ts",
+      "packages/contracts/src/platform*.ts",
+      "packages/contracts/src/foundation/branding*.ts",
       "apps/api/test/**",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
     skills: ["security-review", "code-review"],
-    depends_on: ["S19-SEC-FILELINKGATE-1"],
+    depends_on: ["S19-SEC-FILELINKGATE-1", "S19-SEC-FILELINKPATHS-1"],
     src: [
       "`docs/plans/S19-SEC-FILELINKGATE-1.md` §2 O-7 + §1.1 #10 + §9 N3 — owner chốt 20/10/2026 ngoài phạm vi WO đó, gieo WO nợ theo dõi. Số đo chi tiết ở kênh owner (thư mục kept/ ngoài repo).",
     ],
@@ -22567,6 +22587,7 @@ export const backlog = [
     ],
     notes: [
       "🔴 Seed 20/10/2026 ở sổ hậu merge S19-SEC-FILELINKGATE-1 (PR #595 = `cd65e89f`). Plan mở rộng `paths` ở L0 (commit backlog riêng) theo số đo.",
+      "Owner chốt 23/10/2026 (phiếu quyết định đợt 23/10, phương án khuyến nghị): FP-1 đường ký avatar nhân viên ở danh bạ theo phương án khuyến nghị của phiếu (chi tiết ở kept/ ngoài repo); ghi ngoại lệ lớp danh bạ (directory-class) vào plan · FP-2 kiểm tại biên ghi bằng hàm chung «người ghi xem được tệp»; bỏ `fileId` khỏi DTO tạo/sửa hợp đồng (chỉ gắn qua đường tệp hợp đồng đi qua lõi); logo công ty chỉ nhận `null` / http(s) / giữ giá trị cũ ở các đường ngoài branding; việc chuyển đính kèm ATT (điều chỉnh công · làm từ xa) sang liên kết TÁCH thành WO riêng `S19-SEC-FILEATTLINK-1` — ở WO này chỉ kiểm biên ghi · FP-3 làm SAU `S19-SEC-FILELINKPATHS-1`, dùng lại hàm chung dựng ở đó (thêm `depends_on`). Cột con trỏ chưa có đường ghi: không làm, ghi «đường ghi mới phải qua hàm chung». `paths` mở rộng ở L0 23/10; nếu FE hợp đồng đang gửi `fileId` (chưa đo) thì mở thêm `apps/app` ở L0. Ước 220–320 USD (+40–80 USD nếu FE hợp đồng phải sửa).",
     ],
   },
   {
@@ -22608,7 +22629,7 @@ export const backlog = [
     title: "Ngữ nghĩa thu hồi khi một tệp được chia sẻ sang nhiều thực thể",
     zone: "red",
     gate: "FULL",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/foundation/files/**",
       "apps/api/src/db/schema/**",
@@ -22629,7 +22650,67 @@ export const backlog = [
       "Bất biến chọn được ghi vào `docs/permission-matrix-spec.md` + `docs/DB`; xem · tải · danh sách · biên gắn vẫn dùng một hàm quyết định chung — không viết lại",
       "RED trước: int-spec thu hồi (gỡ liên kết gốc ⇒ các liên kết dẫn xuất theo đúng quyết định) + ca ALLOW đứng cạnh; FULL gate",
     ],
-    notes: ["🔴 Seed 20/10/2026 ở sổ hậu merge S19-SEC-FILELINKGATE-1 (PR #595 = `cd65e89f`)."],
+    notes: [
+      "🔴 Seed 20/10/2026 ở sổ hậu merge S19-SEC-FILELINKGATE-1 (PR #595 = `cd65e89f`).",
+      "Owner chốt 23/10/2026 (phiếu quyết định đợt 23/10, phương án khuyến nghị): SR-1 GIỮ «gắn tệp là chia sẻ bền» ⇒ ĐÓNG WO, không đổi mã, không migration. Kết quả: bất biến ghi vào `docs/permission-matrix-spec.md` §2 (khối CHỐT thu hồi chia sẻ tệp, ngay dưới khối CHỐT biên gắn tệp) + `docs/DB/DB-08 Audit Files Settings Seeds Database Design.md` §8.7 quy tắc 9–11: xem · tải · xoá một tệp đòi người gọi được phép theo MỌI liên kết sống của tệp (AND); gắn tệp sang thực thể khác chỉ khi người gắn xem được tệp và có vết audit; gỡ liên kết gốc KHÔNG thu hồi các liên kết đã tạo từ nó; muốn thu hồi thì gỡ từng liên kết. Mục RED «thu hồi theo gốc» không áp dụng vì ngữ nghĩa không đổi. Lý do: người chia sẻ đã được phép xem tệp lúc gắn; thu hồi theo gốc kéo theo rủi ro gỡ dây chuyền nhầm liên kết hợp lệ và người dùng ở thực thể đích bỗng mất tệp.",
+    ],
+  },
+  {
+    id: "S19-SEC-FILEATTLINK-1",
+    module: "ATT",
+    layer: "BE",
+    title:
+      "Đính kèm của điều chỉnh công và làm từ xa đi qua liên kết tệp thay vì con trỏ trên thực thể — người duyệt mở được tệp theo cùng quyết định xem từng tệp",
+    zone: "red",
+    gate: "FULL",
+    status: "todo",
+    paths: [
+      "apps/api/src/attendance/attendance-adjustment*.ts",
+      "apps/api/src/attendance/remote-work-request*.ts",
+      "apps/api/src/attendance/attendance.module.ts",
+      "apps/api/src/foundation/files/**",
+      "packages/contracts/src/attendance*.ts",
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-SEC-FILEPOINTER-1"],
+    src: [
+      "Phiếu quyết định đợt 23/10/2026 câu FP-2 của `S19-SEC-FILEPOINTER-1` — owner chốt tách việc chuyển đính kèm ATT sang liên kết tệp thành WO riêng (WO kia chỉ kiểm tại biên ghi). Số đo chi tiết ở kênh owner (thư mục kept/ ngoài repo), KHÔNG chép vào backlog (repo public).",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: đường ghi + đường đọc/tải của đính kèm điều chỉnh công và làm từ xa (ai cần mở tệp: người nộp · người duyệt theo phạm vi) và cách xử lý con trỏ hiện có — số đo ngoài repo; owner chốt",
+      "Bất biến: đính kèm ATT là liên kết tệp → thực thể (resolver ATT quyết định người đọc thực thể); tạo liên kết qua hàm quyết định chung «người gắn xem được tệp» (dựng ở `S19-SEC-FILELINKPATHS-1`); xem · tải theo cùng hàm quyết định với `GET /foundation/files/:id` — một nguồn, không viết lại",
+      "RED trước: int-spec deny-path (người ngoài phạm vi duyệt không mở được; người không xem được tệp không gắn được ⇒ 0 liên kết mới) + ca ALLOW đứng cạnh (người duyệt mở được); migration nếu cần thì RLS + FORCE trước mọi backfill `company_id`; FULL gate",
+    ],
+    notes: [
+      "🔴 Seed 23/10/2026 từ phiếu quyết định đợt 23/10 (câu FP-2, phương án khuyến nghị). Plan mở rộng `paths` ở L0 (commit backlog riêng) nếu số đo chỉ ra FE (`apps/app`) cần sửa. Ước 200–300 USD.",
+    ],
+  },
+  {
+    id: "S14-SEC-OPPLANEPAIRS-1",
+    module: "AUTH",
+    layer: "SEC",
+    title:
+      "Rà các cặp quyền tầng vận hành đang gán cho actor của công ty (chỉ đọc, N=1) — giữ hay gỡ",
+    zone: "green",
+    status: "todo",
+    paths: ["docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Phiếu quyết định đợt 23/10/2026 mục `S14-SEC-CAPWILDCARD-1` — census PROD 16/10 của WO đó thấy actor của công ty giữ cặp quyền tầng vận hành; owner chốt gieo WO chỉ-đọc để xét lại. Số đo ở kênh owner (thư mục kept/ ngoài repo), KHÔNG chép vào backlog (repo public).",
+    ],
+    done_when: [
+      "Bảng rà NGOÀI repo (repo public — không liệt kê cặp theo actor): mỗi cặp tầng vận hành đang gán cho actor công ty — nguồn gán, còn dùng hay không, đề xuất giữ/gỡ",
+      "Owner chốt giữ hay gỡ; gỡ thì gieo WO riêng (đổi qua migration seed, không sửa tay DB)",
+    ],
+    notes: [
+      "🟢 Seed 23/10/2026 từ phiếu quyết định đợt 23/10 (mục CAPWILDCARD). Vô hại ở N=1 (một công ty); rà để không mang theo khi mở rộng đa-công-ty. Chỉ đọc — không đổi mã/DB trong WO này. Chưa ước chi phí.",
+    ],
   },
   {
     id: "S16-SOCIAL-STORAGEGATEDOCS-1",

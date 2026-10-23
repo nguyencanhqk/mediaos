@@ -1134,6 +1134,9 @@ WHERE is_primary = true AND deleted_at IS NULL;
 6. Nếu link_type là `Contract` hoặc `Proof`, nên ghi audit log.
 7. Quyền xem file được quyết định bởi module gốc, không chỉ bởi `file_links.access_scope`.
 8. `access_scope` là gợi ý để file service hỗ trợ kiểm tra nhanh, không thay thế permission module.
+9. Xem · tải · xoá một file đòi người gọi được phép theo **mọi** link sống (`deleted_at IS NULL`) của file đó (AND), dùng cùng hàm quyết định với `GET /foundation/files/:id`.
+10. Gắn file sang entity khác (tạo thêm một link) chỉ được khi người gắn xem được file theo quy tắc 9, và việc gắn có vết audit.
+11. **Gắn file là chia sẻ bền** (owner chốt 23/10/2026, `S19-SEC-FILESHAREREVOKE-1`): soft delete link gốc KHÔNG thu hồi các link đã tạo từ nó; muốn thu hồi thì soft delete từng link. Bảng không lưu nguồn gốc link (không có cột trỏ «link này tạo từ link nào») — có chủ đích. Xem thêm `docs/permission-matrix-spec.md` §2 (khối CHỐT thu hồi chia sẻ tệp).
 
 #### Entity type đề xuất theo module
 
