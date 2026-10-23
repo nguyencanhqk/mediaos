@@ -48,4 +48,10 @@ export default {
       mentionNotFound: "Không tìm thấy người được nhắc hoặc người đó đã ngưng hoạt động.",
     },
   },
+  // S20-TASK-BOARDMOVE-1 (US-TASK-NV-91) — menu ⋯ đổi cột trên thẻ board (điện thoại · bàn phím).
+  kanbanMove: {
+    trigger: "Chuyển việc «{{title}}» sang cột khác",
+    heading: "Chuyển sang cột…",
+    noTargets: "Không còn cột nào khác để chuyển.",
+  },
 };
