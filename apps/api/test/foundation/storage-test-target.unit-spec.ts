@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   STORAGE_RUN_TAG,
   STORAGE_SKIP_TAG,
+  STORAGE_TEST_ALLOWED_PORTS,
   STORAGE_TEST_BUCKET_CI,
   STORAGE_TEST_BUCKET_LOCAL,
   STORAGE_TEST_SENTINEL_BUCKET,
@@ -312,6 +313,75 @@ describe("R2 — pinTestStorageEnv (ghim S3_* của test.env, quy tắc dương)
     const snapshot = { ...input };
     expect(() => pinTestStorageEnv(input)).not.toThrow();
     expect(input).toEqual(snapshot);
+  });
+});
+
+/**
+ * S16-SOCIAL-STORAGEPORTPIN-1 (plan STORAGETESTGATE-1 §9 N6) — hồ sơ `live` xét cả CỔNG của endpoint loopback: một dịch
+ * vụ khác nghe trên loopback (console MinIO, proxy, tunnel) với cùng tên bucket không được lọt chốt. Danh sách cổng
+ * khai ở MỘT chỗ (`STORAGE_TEST_ALLOWED_PORTS`); hai nơi xuất endpoint `live` (check.sh · job CI) đối chiếu với nó.
+ */
+const REPO_ROOT = join(__dirname, "../../../../");
+
+function captureFromRepo(file: string, re: RegExp): string {
+  const value = re.exec(readFileSync(join(REPO_ROOT, file), "utf8"))?.[1] ?? "";
+  expect(value, `${file}: không thấy ${re.source}`).not.toBe("");
+  return value;
+}
+
+describe("N6 — pinTestStorageEnv: endpoint loopback phải dùng cổng cho phép", () => {
+  it("danh sách cổng cho phép = đúng `9000` (API MinIO test cục bộ + CI; 9001 là console MinIO)", () => {
+    expect([...STORAGE_TEST_ALLOWED_PORTS]).toEqual(["9000"]);
+  });
+
+  it.each([
+    ["localhost:9001 (console MinIO)", "http://localhost:9001"],
+    ["127.0.0.1:80 (cổng mặc định ghi tường minh)", "http://127.0.0.1:80"],
+    ["http://localhost không cổng (⇒ 80)", "http://localhost"],
+    ["https://localhost không cổng (⇒ 443)", "https://localhost"],
+    ["https://127.0.0.1:443", "https://127.0.0.1:443"],
+    ["localhost:19000 (chứa chuỗi 9000)", "http://localhost:19000"],
+    ["127.0.0.1:900 (tiền tố của 9000)", "http://127.0.0.1:900"],
+  ])("bucket + khoá đúng nhưng %s ⇒ offline", (_label, endpoint) => {
+    expectOffline(pinTestStorageEnv(liveInput({ S3_ENDPOINT: endpoint })));
+  });
+
+  it.each([
+    ["localhost:9000", "http://localhost:9000"],
+    ["127.0.0.1:9000", "http://127.0.0.1:9000"],
+  ])("ca đứng cạnh: %s ⇒ live, endpoint chép nguyên văn", (_label, endpoint) => {
+    const out = pinTestStorageEnv(liveInput({ S3_ENDPOINT: endpoint }));
+    expect(out.STORAGE_TEST_PROFILE).toBe("live");
+    expect(out.S3_ENDPOINT).toBe(endpoint);
+  });
+
+  it("CI + mediaos-test + loopback cổng lạ ⇒ offline, rồi resolveStorageTestTarget ⇒ throw", () => {
+    const out = pinTestStorageEnv(
+      liveInput({
+        CI: "true",
+        S3_BUCKET: STORAGE_TEST_BUCKET_CI,
+        S3_ENDPOINT: "http://127.0.0.1:9001",
+      }),
+    );
+    expectOffline(out);
+    expect(resolveStorageTestTarget({ ...LANE, CI: "true", ...out }).kind).toBe("throw");
+  });
+
+  it("chống trôi: endpoint + bucket hồ sơ live của `harness/check.sh` qua chốt ⇒ live", () => {
+    const endpoint = captureFromRepo("harness/check.sh", /^STORAGE_LIVE_ENDPOINT="([^"]+)"/m);
+    const bucket = captureFromRepo("harness/check.sh", /^STORAGE_LIVE_BUCKET="([^"]+)"/m);
+    const out = pinTestStorageEnv(liveInput({ S3_ENDPOINT: endpoint, S3_BUCKET: bucket }));
+    expect(out.STORAGE_TEST_PROFILE).toBe("live");
+  });
+
+  it("chống trôi: env `S3_*` của job CI (`.github/workflows/api.yml`) qua chốt ⇒ live", () => {
+    const workflow = ".github/workflows/api.yml";
+    const endpoint = captureFromRepo(workflow, /^\s+S3_ENDPOINT:\s*(\S+)/m);
+    const bucket = captureFromRepo(workflow, /^\s+S3_BUCKET:\s*(\S+)/m);
+    const out = pinTestStorageEnv(
+      liveInput({ CI: "true", S3_ENDPOINT: endpoint, S3_BUCKET: bucket }),
+    );
+    expect(out.STORAGE_TEST_PROFILE).toBe("live");
   });
 });
 
