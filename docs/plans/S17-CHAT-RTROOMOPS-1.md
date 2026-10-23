@@ -57,8 +57,8 @@
   `leaveLocally(callServer, callUserRoomName, callRoomName)` rồi lệnh toàn cụm hiện có. try/catch RIÊNG mỗi vế; `join`
   KHÔNG có vế cục bộ. Giữ bất đối xứng bộ chọn (join `chatUserRoomName` · leave `userRoomName`) và nhánh
   `callServer === null ⇒ error` của evict. `severUserSessions` KHÔNG thêm vế cục bộ ở WO này (N7).
-- **D-3 — KHÔNG sửa `apps/api/src/chat/**`.** Chữ ký + số lời gọi của caller giữ nguyên ⇒ `chat-realtime-after-commit.spec.ts`
-  (S6) không đổi kỳ vọng; nó là lưới hồi quy, không phải nơi viết ca mới.
+- **D-3 — KHÔNG sửa `apps/api/src/chat/**`.** Chữ ký + số lời gọi của caller giữ nguyên ⇒ `chat-realtime-after-commit.spec.ts`(S6) không đổi kỳ vọng; nó là lưới hồi quy, không phải nơi viết ca mới. **Ngoại lệ FULL gate (G-1, §9):**`chat-typing.service.ts` dùng id phòng TỪ DB (`access.room.id`) cho khoá tiết lưu + đích + payload — sau D-1 mọi
+  biến thể hoa/thường của id route tới cùng một phòng, nên khoá tiết lưu phải cùng dạng chuẩn.
 - **D-4 (H3) — kiểm thử.** Int-spec MỚI `test/integration/chat-rtroomops-1.int-spec.ts` (boot `applyMainPipeline` +
   `setupWebSocketAdapter` + `listen(0)`, tái dùng fixture S8) thay vì nới `chat-s7-call-rt1` (S9: > 800 dòng, không qua
   pipeline). Trình tự `/ws-call` KHÔNG chép từ S9: T1 tách helper MỚI `test/helpers/chat-call-fixture.ts` (nối `/ws-call`,
@@ -173,23 +173,43 @@ Mọi lệnh nặng qua `run-heavy.sh B <log> …`, lọc theo tệp, < 9 phút/
 
 - **O1 merge** — PR do luồng chính mở; tự tạo ⇒ `--admin`. Chuỗi B KHÔNG push/mở PR/merge. Repo PUBLIC: PR mở ra đã là
   công bố lớp lỗi (gồm cửa tự rời phòng — mọi người dùng đều chạm được) ⇒ luồng chính CHỈ mở PR khi owner sẵn sàng merge
-  VÀ deploy API trong cùng một lượt; không để PR mở lâu.
+  VÀ deploy API trong cùng một lượt; không để PR mở lâu. FULL gate lượt 1 (security) ghi: phạm vi duyệt 23/10 («mở PR,
+  không merge, không deploy») mâu thuẫn với điều kiện này ⇒ luồng chính hỏi lại owner TRƯỚC khi push nhánh; nếu PR
+  buộc phải mở sớm, mô tả PR chỉ ghi bất biến + phép đo.
 - **O2 deploy** — chỉ API (`m prod-update api`), không migration, không FE; ngay sau merge, cùng lượt với O1.
 - **O3 đo sau deploy** — `/api/v1/health` lên SHA merge; một lượt gỡ thành viên thử trên phòng thử (không dữ liệu thật):
   người bị gỡ không còn nhận tin mới của phòng. Không ghi dữ liệu PROD vào repo.
 
 ## 9. Nợ + rủi ro
 
-- **N1** chuẩn hoá uuid ở biên REST (pipe dùng chung) cho payload/audit/khoá Valkey (D-5); `joinedCallIds` dùng
-  `access.callId` ở cả `:392` lẫn `:423` (S13 — hết `call:peer-left` thừa lúc ngắt) — đề xuất seed WO amber.
+- **G-1 / G-2 (vá ở FULL gate lượt 1):** G-1 khoá tiết lưu typing theo id từ DB (ca `T-1` trong
+  `chat-typing.service.spec.ts`) — D-1 làm mọi biến thể hoa/thường tới room thật, khoá theo id route thì mỗi biến thể là
+  một cửa sổ tiết lưu riêng. G-2 lệnh `leave` toàn cụm ném đồng bộ ⇒ `logger.error` (join giữ `warn`) ở lõi chung
+  `syncSocketRoom` — ca `C-5` (`realtime-emitter.chat.spec.ts`) + ca tương ứng của `realtime-emitter.feed.spec.ts`.
+- **N1** chuẩn hoá uuid ở biên REST (pipe dùng chung) cho payload/audit (D-5; khoá typing đã đóng ở G-1); `joinedCallIds`
+  - payload `call:peer-left` của `call:leave` dùng `access.callId` ở cả `:392` lẫn `:416-423` (S13 — hết
+    `call:peer-left` thừa lúc ngắt, callId cùng dạng với phía nhận) — đề xuất seed WO amber.
 - **N2** đa-instance: node khác vẫn chỉ nhận leave qua pub/sub (D-6) — đóng hẳn cần xác nhận phía adapter; ghi API-13 §7.
-- **N3** `unhandledRejection` khi publish rớt — có sẵn ở mọi emit (D-6).
+- **N3** `unhandledRejection` khi publish rớt — có sẵn ở mọi emit (D-6). Caller không gắn `.catch` được: `socketsLeave`
+  (socket.io 4 `broadcast-operator.js`) và `delSockets` không-`local` (redis-adapter 8.3.0) đều trả `undefined`, promise
+  của `publish` nằm trong adapter. Đóng cần bọc adapter (bắt reject của `pubClient.publish` + log) — WO riêng.
 - **N4** khối vá adapter-nuốt lặp ở 2 io spec — gom helper khi có ca thứ ba.
 - **N5** `toLowerCase` ở `syncFeedGroupMembership:377` thừa sau D-1 — dọn trong một WO SOCIAL.
 - **N6** cửa sổ rejoin `call:join` đọc trước commit (docblock evict) — có sẵn, ngoài phạm vi.
 - **N7** `disconnectSockets` không-`local` của `severUserSessions` CHỈ publish (S12, cùng mẫu at-most-once với `delSockets`)
   ⇒ khi kết nối SUBSCRIBE rớt, socket của tài khoản đã bị khoá có thể sống tiếp. KHÔNG vá ở WO này (D-2); ghi API-13 §7a + mô
-  tả PR; luồng chính gieo WO đỏ riêng (hoặc owner quyết nới D-2: vế `local` trước lệnh toàn cụm).
+  tả PR; luồng chính gieo WO đỏ riêng (hoặc owner quyết nới D-2: vế `local` trước lệnh toàn cụm). FULL gate lượt 1
+  đo lại adapter (`disconnectSockets` không-`local` chỉ publish) và xếp MEDIUM: vá đề xuất là
+  `server.local.in(userRoomName).disconnectSockets(true)` + vế `/ws-call` tương ứng, mỗi vế một khối try, ĐỨNG TRƯỚC
+  lệnh toàn cụm (khuôn `leaveLocally`) — trên N=1 đóng trọn phần dư; nên ưu tiên ngay sau WO này.
+- **N8** (có sẵn, ngoài diff — database-reviewer) so sánh/khoá dựng từ chuỗi uuid CHƯA chuẩn hoá ở tầng JS:
+  `chat-rooms.service.ts` `openDirect` (chốt `DIRECT_SELF` + `buildDirectKey` ⇒ ràng buộc «một phòng direct mỗi cặp»),
+  `chat-members.service.ts` `readMemberDto`, `resolveInvitees` (`Set` + đếm so với kết quả DB) — bất biến phụ thuộc dạng
+  chữ của đầu vào. Vá một nơi: chuẩn hoá chữ thường ở biên DTO (Zod `uuid().transform`) cho các DTO chat, cùng gốc N1;
+  không rải `toLowerCase` ở caller. Đề xuất seed WO amber (đo trạng thái dữ liệu hiện có trước khi vá).
+- **N9** `realtime-emitter.service.ts` = 731/800 dòng — tách các room-op (`syncRoomMembership`,
+  `syncFeedGroupMembership`, `evictFromCallRoom`, `leaveLocally`, `syncSocketRoom`) sang tệp/service riêng TRƯỚC khi
+  thêm room-op mới (gồm vế cục bộ của N7).
 - Rủi ro: (a) đổi builder chạm cả room SOCIAL/NOTI + thu hồi phiên — đầu vào đã chuẩn cho chuỗi y hệt (B-1 + S-1 + hồi quy
   H-1 đo); (b) mock thiếu `local` ở spec khác ⇒ xanh ồn — grep `makeServer`/`in: vi.fn` trong `src/**` ở T2; (c) emitter sát
   750 dòng; (d) int-spec lớn — giữ < 800 bằng fixture.
