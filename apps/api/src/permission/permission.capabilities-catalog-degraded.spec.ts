@@ -139,4 +139,38 @@ describe("S14-SEC-CAPWILDCARD-1 — hợp đồng lỗi grant cũ không đổi 
     expect(await svc.getCapabilityScopes(U, CO)).toEqual({});
     expect(errorSpy).toHaveBeenCalled();
   });
+
+  it("gate F4: log lỗi grant giữ stack + chuỗi cause (mã SQLSTATE) — caps VÀ scopes", async () => {
+    // Hình dạng lỗi Drizzle: message chung ở ngoài, mã PG nằm trong `cause` (quy ước `serializeErrorChain`).
+    const pgError = Object.assign(new Error("permission denied for table role_permissions"), {
+      code: "42501",
+    });
+    const failure = new Error("Failed query: select role grants", { cause: pgError });
+    const repo = new CapabilityStubRepo().withCatalog(catalogRows());
+    vi.spyOn(repo, "getCompanyRoleGrants").mockRejectedValue(failure);
+    vi.spyOn(repo, "getCompanyRoleGrantsWithScope").mockRejectedValue(failure);
+    const svc = new PermissionService(repo);
+
+    expect(await svc.getCapabilities(U, CO)).toEqual({});
+    expect(await svc.getCapabilityScopes(U, CO)).toEqual({});
+
+    const logged = errorSpy.mock.calls.filter(([message]) =>
+      String(message).includes("infrastructure error — returning empty map"),
+    );
+    expect(logged.map(([message]) => String(message).split("(")[0])).toEqual([
+      "getCapabilities",
+      "getCapabilityScopes",
+    ]);
+    for (const [, context] of logged) {
+      expect(context).toMatchObject({
+        userId: U,
+        companyId: CO,
+        stack: failure.stack,
+        error: {
+          message: failure.message,
+          cause: { message: pgError.message, code: "42501" },
+        },
+      });
+    }
+  });
 });

@@ -17,6 +17,7 @@ import {
 } from "./permission.decide";
 import { PermissionCatalogSnapshot } from "./permission-catalog-snapshot";
 import { PermissionPairCatalogSnapshot } from "./permission-pair-catalog-snapshot";
+import { serializeErrorChain } from "./serialize-error-chain";
 import {
   needsCatalogForCapabilities,
   projectCapabilities,
@@ -357,27 +358,6 @@ export const SENSITIVE_SCREEN_GATE_PAIRS: readonly string[] = [
 /** Chỉ dùng cho test khoá — KHÔNG export ra ngoài module permission. */
 export const __SENSITIVE_CAPABILITY_ALLOWLIST_FOR_TEST = SENSITIVE_CAPABILITY_ALLOWLIST;
 
-/**
- * Trải chuỗi `Error.cause` thành object log được.
- *
- * Vì sao cần: Drizzle bọc lỗi PG và GIẤU mã lỗi (SQLSTATE) trong `cause`
- * (memory `drizzle-wraps-pg-error-code-in-cause`). Log mỗi `error.message` là vứt đúng thứ duy nhất
- * phân biệt được 42501 với cạn connection pool.
- *
- * Có TRẦN ĐỘ SÂU: chuỗi `cause` có thể tự tham chiếu vòng; không có trần thì hàm quan sát này tự
- * đệ quy vô hạn — tức một hàm sinh ra để chẩn đoán sự cố lại thành sự cố.
- */
-function serializeErrorChain(error: unknown, depth = 0): unknown {
-  if (depth >= 4) return "[cause chain truncated]";
-  if (!(error instanceof Error)) return error === undefined ? undefined : String(error);
-  return {
-    name: error.name,
-    message: error.message,
-    code: (error as { code?: unknown }).code,
-    cause: error.cause === undefined ? undefined : serializeErrorChain(error.cause, depth + 1),
-  };
-}
-
 @Injectable()
 export class PermissionService {
   private readonly logger = new Logger(PermissionService.name);
@@ -676,8 +656,10 @@ export class PermissionService {
       const catalog = await this.capabilityCatalogFor(grants, now);
       return projectCapabilities({ grants, catalog, now });
     } catch (error: unknown) {
+      // Gate F4: giữ chuỗi `cause` (SQLSTATE) + stack — cùng quy ước hai `onError` của ảnh chụp ở trên.
       this.logger.error("getCapabilities() infrastructure error — returning empty map", {
-        error: error instanceof Error ? error.message : String(error),
+        error: serializeErrorChain(error),
+        stack: error instanceof Error ? error.stack : undefined,
         userId,
         companyId,
       });
@@ -766,7 +748,8 @@ export class PermissionService {
       return projectCapabilityScopes({ grants, catalog, now });
     } catch (error: unknown) {
       this.logger.error("getCapabilityScopes() infrastructure error — returning empty map", {
-        error: error instanceof Error ? error.message : String(error),
+        error: serializeErrorChain(error),
+        stack: error instanceof Error ? error.stack : undefined,
         userId,
         companyId,
       });
