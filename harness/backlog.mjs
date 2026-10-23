@@ -22823,6 +22823,8 @@ export const backlog = [
       "apps/api/src/chat/chat-room-avatar.service*.ts",
       "apps/api/src/employees/hr-employee-avatar.service*.ts",
       "apps/api/src/social/social-attachments.service*.ts",
+      // L0 hồi tố 23/10/2026 (plan-review F4): chuỗi đã sửa spec này
+      "apps/api/src/chat/chat-realtime-after-commit.spec.ts",
       "apps/api/test/**",
       "docs/plans/**",
       "harness/backlog.mjs",
@@ -22840,6 +22842,101 @@ export const backlog = [
     notes: [
       "🔴 Seed 20/10/2026 ở sổ hậu merge S19-SEC-FILELINKGATE-1 (PR #595 = `cd65e89f`). Merge = công bố ⇒ owner deploy API trong ngày merge. Plan mở rộng `paths` ở L0 (commit backlog riêng) theo số đo.",
       "Owner chốt 23/10/2026 (phiếu quyết định đợt 23/10, phương án khuyến nghị): LP-1 chuyển 3 đường gắn tệp (đính kèm tin CHAT · ảnh phòng CHAT · avatar nhân viên do HR đặt) về hàm quyết định chung «người gắn xem được tệp»; đường SOCIAL đổi sang hàm thuần chung, không đổi hành vi · LP-2 chấp nhận đổi hành vi CHAT cho khớp vị từ của lõi gắn chung (từ chối ⇒ 403 `CHAT-ERR-015`; ca cụ thể ở phiếu, kept/ ngoài repo) · LP-3 tệp do server sinh (PDF/ZIP phiếu lương) giữ ngoài lõi có chủ đích — quyền ở đó là quyền xuất của PAYROLL, ghi lý do vào plan. `paths` mở rộng ở L0 23/10 cho 5 tệp nguồn trên (glob `*` phủ spec cạnh nguồn). Làm TRƯỚC `S19-SEC-FILEPOINTER-1` (WO đó dùng lại hàm chung dựng ở đây). Ước 260–340 USD.",
+      "23/10/2026 — hậu merge: PR #602 = `3924d08a` (merge 12:31:40 +07, `--admin`, owner; trước khi CI chính của PR xong — CI master ghi ở lượt sổ sau) · API PROD `/health` build.commit `3924d08a-dirty` (hậu tố do tệp chưa track trong checkout chính, mã = `3924d08a`) · builtAt `2026-10-23T05:32:13Z` · ok · không migration. Owner chốt D-7 (HR chọn lại đúng ảnh đang là avatar của NV ⇒ 403): CHẤP NHẬN ⇒ nợ N7 (no-op 200 khi chọn lại đúng ảnh) KHÔNG gieo WO. Nợ từ plan §9: N1 + N2 + N4 + N5 (FE) → `S19-FE-FILELINKERR-1` · N5 (API) + N6 → `S19-SEC-FILEDENYERR-1` · N8 + N9 → `S19-SEC-FILELINKBATCH-1` · N3 thuộc `S16-SOCIAL-FILEDEBT-1`. Còn: owner smoke W-3 trên máy chủ (storage PROD chỉ tới được từ máy chủ tới khi chuyển R2) · kế tiếp `S19-SEC-FILEPOINTER-1` (R-6).",
+    ],
+  },
+  {
+    id: "S19-FE-FILELINKERR-1",
+    module: "CHAT",
+    layer: "FE",
+    title:
+      "Thông điệp rõ cho mã lỗi mới của đường gắn tệp (403 · 409) ở composer CHAT, ảnh phòng CHAT và ảnh đại diện nhân viên do HR đặt — gửi lại không lặp lại đúng lệnh đã bị từ chối",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/components/chat/**",
+      "apps/app/src/stores/chat.store*.ts",
+      "apps/app/src/routes/hr/employees/**",
+      "apps/app/src/i18n/locales/vi/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-SEC-FILELINKPATHS-1"],
+    src: [
+      "Nợ N1 · N2 · N4 · N5 (phần FE) của `docs/plans/S19-SEC-FILELINKPATHS-1.md` §9 — sau merge #602 `3924d08a`",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: liệt kê vào plan chỗ FE xử lý lỗi của 3 đường (gửi tin kèm tệp · đặt ảnh phòng · HR đặt avatar NV) và cách mỗi chỗ đang phân biệt mã lỗi (file:dòng)",
+      "Phân biệt theo `code` của body, KHÔNG theo riêng mã HTTP: 409 «phòng đã lưu trữ» tách khỏi 409 `FOUNDATION-FILE-ERR-LINK` (tạm, thử lại được); 403 `CHAT-ERR-015` / `AUTH-ERR-FORBIDDEN` có thông điệp «tệp này không dùng được ở đây» (tiếng Việt qua i18n)",
+      "Composer CHAT: lỗi vĩnh viễn (403) không để «Gửi lại» lặp đúng lệnh cũ — gợi ý bỏ tệp rồi gửi lại; lỗi tạm (409) giữ «Gửi lại»",
+      "Ca test RED trước cho từng nhánh mã lỗi (spec cạnh component), ca đối chứng lỗi chung giữ nguyên",
+      "Docs API CHAT/HR ghi mã 409 `FOUNDATION-FILE-ERR-LINK` mới và điều kiện của `CHAT-ERR-015`",
+    ],
+    notes: [
+      "🟠 Seed 23/10/2026 từ plan S19-SEC-FILELINKPATHS-1 §9. Không đổi API. Có thể cần đo trên trình duyệt thật (khuôn API giả lập) cho nút «Gửi lại».",
+    ],
+  },
+  {
+    id: "S19-SEC-FILEDENYERR-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Tách lỗi hạ tầng khỏi phán quyết từ chối ở hàm quyết định xem tệp — lỗi hạ tầng trả 5xx/503 kèm tín hiệu, không hiện như 403",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/src/chat/chat-messages.service*.ts",
+      "apps/api/src/chat/chat-room-avatar.service*.ts",
+      "apps/api/src/employees/hr-employee-avatar.service*.ts",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-SEC-FILELINKPATHS-1"],
+    src: [
+      "Nợ N6 + N5 (phần API) của `docs/plans/S19-SEC-FILELINKPATHS-1.md` §9 — sau merge #602 `3924d08a`; áp cho `GET /foundation/files/:id` và 3 đường gắn tệp dùng hàm chung",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: liệt kê vào plan các route dùng kết quả `deny-error` và mã HTTP mỗi route trả hôm nay",
+      "Giữ fail-closed: lỗi hạ tầng KHÔNG BAO GIỜ thành `allow` (0 liên kết mới, 0 nội dung trả về); route trả 5xx/503 thay vì 403, kèm log/metric có ngữ cảnh (không PII, không khoá object)",
+      "Ca test RED trước: repo/resolver ném ⇒ hôm nay 403; sau vá ⇒ 5xx + 0 liên kết; ca đối chứng từ chối thật vẫn 403",
+      "Đo rồi quyết (ghi lý do vào plan): gộp dòng log từ chối lặp lại cùng (người gắn, tệp) trong cửa sổ ngắn",
+    ],
+    notes: [
+      "🟡 Seed 23/10/2026 từ plan S19-SEC-FILELINKPATHS-1 §9. Chạm hàm quyết định xem tệp ⇒ `red-zone-scanner` xét nâng FULL gate.",
+    ],
+  },
+  {
+    id: "S19-SEC-FILELINKBATCH-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Quyết định xem tệp theo lô cho đường gắn nhiều tệp + ca test cho nhánh 409 so lại ở route module",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/src/chat/chat-messages.service*.ts",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-SEC-FILELINKPATHS-1"],
+    src: ["Nợ N8 + N9 của `docs/plans/S19-SEC-FILELINKPATHS-1.md` §9 — sau merge #602 `3924d08a`"],
+    done_when: [
+      "ĐO TRƯỚC: số tx và độ trễ của đường gửi tin kèm tối đa `CHAT_MAX_ATTACHMENTS_PER_MESSAGE` tệp hôm nay (ghi vào plan)",
+      "Một hàm lô dùng chung trả phán quyết từng tệp, CÙNG kết quả với hàm đơn cho mọi tệp (ca unit so hai đường); lô có một tệp bị từ chối ⇒ cả lô từ chối, 0 liên kết mới",
+      "Int-spec ép nhánh 409 so lại ở route module (cài điểm chen giữa kiểm trước và tx ghi) cho CHAT · ảnh phòng · HR; recheck `missing`/`unlinkable` ra mã từ chối của route",
+      "Tx ngắn tra `clientMessageId` gộp vào lượt lô nếu đo thấy lợi; ca idempotent hiện có xanh không sửa kỳ vọng",
+    ],
+    notes: [
+      "🟡 Seed 23/10/2026 từ plan S19-SEC-FILELINKPATHS-1 §9 (N9 đề nghị làm cùng `S19-SEC-FILEPOINTER-1` — plan WO này quyết gộp hay chạy sau). Chạm hàm quyết định xem tệp ⇒ `red-zone-scanner` xét nâng FULL gate.",
     ],
   },
   {
