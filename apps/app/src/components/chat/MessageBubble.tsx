@@ -22,6 +22,7 @@ import { Avatar, Badge, cn } from "@mediaos/ui";
 import type { ChatReactionEmoji } from "@mediaos/contracts";
 import type { StoredChatAttachment, StoredChatMessage } from "@/stores/chat.store";
 import { attachmentUrl } from "@/stores/chat.store";
+import { hrefDisposition } from "@/lib/signed-url-disposition";
 import { formatClock, formatFileSize, splitTextWithLinks } from "./chat-format";
 import { MessageActions } from "./MessageActions";
 import { ReactionBar } from "./ReactionBar";
@@ -157,11 +158,17 @@ function AttachmentTile({ attachment }: { attachment: StoredChatAttachment }): R
     );
   }
 
+  // S16-SOCIAL-FILEOPENUX-1 — tên trợ năng theo cách phục vụ SERVER đã ký vào URL, không theo loại tệp: `attachment`
+  // ⇒ «Tải xuống»; `inline` (video mp4/webm, ảnh vỡ) hoặc không rõ ⇒ «Mở». Cách lấy URL (gắn lúc render,
+  // `target=_blank`) giữ nguyên — đổi thuộc S19-FE-SIGNEDTAB-2 (CHAT-TTL).
+  const labelKey =
+    hrefDisposition(url) === "attachment" ? "attachment.downloadName" : "attachment.openName";
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
+      aria-label={t(labelKey, { name: attachment.name })}
       className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs hover:bg-accent"
     >
       <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />

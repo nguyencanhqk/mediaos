@@ -10,6 +10,7 @@ import { parsePayrollError, payrollErrorI18nKey } from "./payroll-errors";
 import { PayslipBreakdown } from "./components/PayslipBreakdown";
 import { PayslipStatusBadge } from "./components/StatusBadges";
 import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
+import { useIsMounted } from "@/lib/use-is-mounted";
 
 /**
  * PAY-SCREEN-006 (S13-PAYROLL-FE-1) — «Phiếu lương của tôi». Scope **Own tuyệt đối**.
@@ -42,12 +43,15 @@ export function MePayslipsPage() {
   const [page, setPage] = useState(1);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const isMounted = useIsMounted();
 
   const openPdf = async (id: string) => {
     setPdfBusy(true);
     setErrorKey(null);
     try {
-      await openSignedUrlInNewTab(async () => (await payrollApi.getMyPayslipPdf(id)).url);
+      await openSignedUrlInNewTab(async () => (await payrollApi.getMyPayslipPdf(id)).url, {
+        isCurrent: isMounted,
+      });
     } catch (err) {
       setErrorKey(payrollErrorI18nKey(parsePayrollError(err)));
     } finally {

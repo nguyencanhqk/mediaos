@@ -11,6 +11,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, employeeFilesApi, filesApi } from "@mediaos/web-core";
 import type { EmployeeFileDto } from "@mediaos/contracts";
+import i18n from "@/i18n";
 import { EmployeeFilesTab } from "./EmployeeFilesTab";
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -174,6 +175,39 @@ describe("EmployeeFilesTab (gate = file-view/file-upload/file-delete:employee)",
       ),
     );
     openSpy.mockRestore();
+  });
+
+  // ── S16-SOCIAL-FILEOPENUX-1 L-1: tệp không phải ảnh/video được server phục vụ dạng TẢI XUỐNG ⇒ nhãn chờ
+  // không được hứa «mở». Đo bằng `textContent` (chuỗi literal, không so với chính khoá i18n).
+  it("[L-1 FILEOPENUX] đang chờ URL ⇒ nhãn «Đang tải…», không «Đang mở…»", async () => {
+    setCaps({ "file-view:employee": true, "download:foundation-file": true });
+    vi.mocked(filesApi.getDownloadUrl).mockReturnValue(new Promise(() => {}));
+    renderWithQuery(<EmployeeFilesTab employeeId="emp-1" />);
+    await waitFor(() => expect(screen.getByText("cccd.pdf")).toBeInTheDocument());
+
+    const button = screen.getByRole("button", { name: /tải xuống/i });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button.textContent?.trim()).toBe("Đang tải…");
+    expect(button.textContent).not.toContain("Đang mở");
+  });
+
+  // ── S16-SOCIAL-FILEOPENUX-1 F-1: loại tệp server LUÔN từ chối ⇒ báo tại chỗ, KHÔNG gọi API tải lên ──
+  // (F-2 đối chứng = ca «uploads a selected file…» ở trên.)
+  it("[F-1 FILEOPENUX] chọn `a.svg` ⇒ lỗi tại chỗ (role=alert) + KHÔNG gọi uploadEmployeeFile", async () => {
+    setCaps({ "file-view:employee": true, "file-upload:employee": true });
+    renderWithQuery(<EmployeeFilesTab employeeId="emp-1" />);
+    await waitFor(() => expect(screen.getByText("cccd.pdf")).toBeInTheDocument());
+
+    const input = screen.getByTestId("employee-file-upload-input") as HTMLInputElement;
+    const file = new File(["<svg/>"], "a.svg", { type: "image/svg+xml" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(i18n.t("common:uploadPrecheck.activeMime", { name: "a.svg" }));
+    expect(alert.textContent).toContain("a.svg");
+    expect(employeeFilesApi.uploadEmployeeFile).not.toHaveBeenCalled();
   });
 
   it("hides download action without download:foundation-file", async () => {

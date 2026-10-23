@@ -6,6 +6,7 @@ import { payrollApi, payrollKeys, useCanExact } from "@mediaos/web-core";
 import { Button, DetailPageHeader, EmptyState } from "@mediaos/ui";
 import { PAYROLL_ENGINE_PAIRS } from "./constants";
 import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
+import { useIsMounted } from "@/lib/use-is-mounted";
 import { parsePayrollError, payrollErrorText } from "./payroll-errors";
 import { displayUserRef, usePayrollPeople } from "./use-payroll-people";
 import { PayslipBreakdown } from "./components/PayslipBreakdown";
@@ -42,6 +43,7 @@ export function PayslipDetailPage({
   const canPdf = canViewPayslip && canExport;
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const isMounted = useIsMounted();
 
   const query = useQuery({
     queryKey: payrollKeys.payslips.detail(payslipId),
@@ -70,7 +72,9 @@ export function PayslipDetailPage({
     setPdfBusy(true);
     setPdfError(null);
     try {
-      await openSignedUrlInNewTab(async () => (await payrollApi.getPayslipPdf(payslipId)).url);
+      await openSignedUrlInNewTab(async () => (await payrollApi.getPayslipPdf(payslipId)).url, {
+        isCurrent: isMounted,
+      });
     } catch (err) {
       setPdfError(payrollErrorText(t, parsePayrollError(err)));
     } finally {

@@ -296,6 +296,8 @@ export default {
     upload: "Tải CV lên",
     uploading: "Đang tải lên…",
     download: "Tải xuống",
+    // S16-SOCIAL-FILEOPENUX-1 (D6) — nhãn chờ của nút tải trong lúc lấy URL ký (nút khoá, chống bấm trùng).
+    downloading: "Đang tải…",
     noPermission: "Bạn không có quyền xem tài liệu của ứng viên này.",
   },
 

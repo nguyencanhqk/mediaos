@@ -303,3 +303,88 @@ describe("openSignedUrlInNewTab", () => {
     expect((outcome as Error).message).toBe("unsafe-url");
   });
 });
+
+/**
+ * S16-SOCIAL-FILEOPENUX-1 Y-1 (N9) — server ký PDF/ZIP dạng `attachment` (tham số `response-content-disposition`
+ * trong URL) ⇒ tab trắng mở trong click được ĐÓNG lại và tải diễn ra trên tab app; không để lại `about:blank`.
+ * Đối chứng: các ca «gán signed-URL» ở trên dùng URL không tham số ⇒ vẫn mở ở tab mới (D3).
+ */
+describe("Y-1 — 3 nút PDF/ZIP với URL `attachment` (S16-SOCIAL-FILEOPENUX-1)", () => {
+  const ATTACHMENT = `${SIGNED}&${new URLSearchParams({
+    "response-content-disposition": 'attachment; filename="phieu-luong.pdf"',
+  }).toString()}`;
+
+  function spyAppAssign(): ReturnType<typeof vi.fn> {
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+    return assign;
+  }
+
+  it("083 PayslipDetailPage ⇒ đóng tab trắng + tải trên tab app", async () => {
+    allow(VIEW_PAYSLIP, EXPORT);
+    api.getPayslip!.mockResolvedValue(payslip);
+    api.getPayslipPdf!.mockResolvedValue({
+      fileId: "f",
+      fileName: "a.pdf",
+      url: ATTACHMENT,
+      expiresAt: "x",
+    });
+    const { tab } = fakeTab();
+    wrap(<PayslipDetailPage payslipId={PAYSLIP_ID} onBack={vi.fn()} />);
+    const button = await screen.findByRole("button", { name: /Tải PDF/ });
+    const assign = spyAppAssign();
+    fireEvent.click(button);
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(new URL(ATTACHMENT).href));
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    expect(tab.location.href).toBe("");
+  });
+
+  it("084 MePayslipsPage ⇒ đóng tab trắng + tải trên tab app", async () => {
+    allow();
+    api.listMyPayslips!.mockResolvedValue({
+      data: [payslip as unknown as PayslipDto],
+      pagination: { total: 1, page: 1, perPage: 20 },
+    });
+    api.getMyPayslip!.mockResolvedValue(payslip);
+    api.getMyPayslipPdf!.mockResolvedValue({
+      fileId: "f",
+      fileName: "a.pdf",
+      url: ATTACHMENT,
+      expiresAt: "x",
+    });
+    const { tab } = fakeTab();
+    wrap(<MePayslipsPage />);
+    fireEvent.click(await screen.findByText("1.000 ₫"));
+    const button = await screen.findByRole("button", { name: /Tải PDF/ });
+    const assign = spyAppAssign();
+    fireEvent.click(button);
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(new URL(ATTACHMENT).href));
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    expect(tab.location.href).toBe("");
+  });
+
+  it("085 «Tải tệp ZIP» ⇒ đóng tab trắng + tải trên tab app", async () => {
+    allow(VIEW_PAYSLIP, EXPORT);
+    api.listPayslips!.mockResolvedValue({
+      data: [payslip as unknown as PayslipDto],
+      pagination: { total: 1, page: 1, perPage: 20 },
+    });
+    api
+      .requestPayslipPdfBatch!.mockResolvedValueOnce(batch({ status: "Uploaded", url: SIGNED }))
+      .mockResolvedValueOnce(batch({ status: "Uploaded", url: ATTACHMENT, expiresAt: "z" }));
+    wrap(<PeriodPayslipsSection periodId={PERIOD_ID} people={PEOPLE} onOpenPayslip={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Xuất PDF hàng loạt" }));
+    const dl = await screen.findByRole("button", { name: "Tải tệp ZIP" });
+
+    const { tab } = fakeTab();
+    const assign = spyAppAssign();
+    fireEvent.click(dl);
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(new URL(ATTACHMENT).href));
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    expect(tab.location.href).toBe("");
+    expect(api.requestPayslipPdfBatch).toHaveBeenCalledTimes(2);
+  });
+});
