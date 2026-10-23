@@ -17,7 +17,14 @@ import { chatRoomSchema, wsChatRoomEventSchema } from "@mediaos/contracts";
  */
 
 /** Khoá chỉ đúng với MỘT người — phát cho cả phòng là rò trạng thái riêng của actor. */
-const PER_USER_KEYS = ["unreadCount", "pinnedAt", "mutedUntil", "markedUnreadAt"] as const;
+// S20-CHAT-MENTIONPIN-1 — `mentionUnreadCount` là số @ chưa đọc của RIÊNG người gọi ⇒ per-user.
+const PER_USER_KEYS = [
+  "unreadCount",
+  "pinnedAt",
+  "mutedUntil",
+  "markedUnreadAt",
+  "mentionUnreadCount",
+] as const;
 
 /** Khoá có vòng đời NGẮN HƠN sự kiện mang nó (URL ký TTL ngắn) — client cache lại sẽ hỏng. */
 const EPHEMERAL_KEYS = ["avatarUrl"] as const;
@@ -62,6 +69,7 @@ function fullRoomDto(): Record<string, unknown> {
     pinnedAt: new Date(0).toISOString(),
     mutedUntil: new Date(0).toISOString(),
     markedUnreadAt: new Date(0).toISOString(),
+    mentionUnreadCount: 2,
     avatarUrl: "https://storage.example/signed?exp=123",
   };
 }
@@ -142,9 +150,7 @@ describe("chat:room — payload broadcast HẸP HƠN DTO REST", () => {
     const wsRoomShape = unwrapShape(wsChatRoomEventSchema.shape.room);
     const nestedStripped: string[] = [];
     for (const key of Object.keys(wsRoomShape)) {
-      const restNested = tryUnwrapShape(
-        (chatRoomSchema.shape as Record<string, unknown>)[key],
-      );
+      const restNested = tryUnwrapShape((chatRoomSchema.shape as Record<string, unknown>)[key]);
       const wsNested = tryUnwrapShape((wsRoomShape as Record<string, unknown>)[key]);
       if (restNested === null || wsNested === null) continue;
       for (const nestedKey of Object.keys(restNested)) {

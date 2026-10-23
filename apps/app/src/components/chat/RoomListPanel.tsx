@@ -58,6 +58,8 @@ import {
   chipNeedsArchivedScope,
   chipUsesSections,
   filterRoomsByChip,
+  mentionUnreadOf,
+  roomsSupportMentionCount,
   type RoomFilterChip,
 } from "./room-list-filter";
 
@@ -147,7 +149,18 @@ export function RoomListPanel({
   );
 
   const isChipControlled = chipProp !== undefined;
-  const chip = chipProp ?? chipState;
+  const roomsById = useChatStore((s) => s.roomsById);
+  const showMentions = useMemo(
+    () => roomsSupportMentionCount(Object.values(roomsById)),
+    [roomsById],
+  );
+  /**
+   * Chip «Nhắc tôi» ẨN khi không phòng nào còn số @ ⇒ không giữ bộ lọc vô hình: hiệu lực về «Tất cả» ngay
+   * trong lần vẽ này (không chớp danh sách rỗng), và effect dưới đồng bộ nguồn chip để nó không bật lại.
+   */
+  const selectedChip = chipProp ?? chipState;
+  const chip =
+    selectedChip === "mentions" && !showMentions ? DEFAULT_ROOM_FILTER_CHIP : selectedChip;
   const setChip = useCallback(
     (next: RoomFilterChip): void => {
       if (isChipControlled) onChipChange?.(next);
@@ -155,6 +168,9 @@ export function RoomListPanel({
     },
     [isChipControlled, onChipChange],
   );
+  useEffect(() => {
+    if (selectedChip !== chip) setChip(chip);
+  }, [selectedChip, chip, setChip]);
   const showArchived = chipNeedsArchivedScope(chip);
   /** Menu ĐANG mở của phòng nào — một tại một thời điểm (mở cái thứ hai tự đóng cái trước). */
   const [openMenuRoomId, setOpenMenuRoomId] = useState<string | null>(null);
@@ -166,7 +182,6 @@ export function RoomListPanel({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const myUserId = useChatStore((s) => s.myUserId);
-  const roomsById = useChatStore((s) => s.roomsById);
   const roomOrder = useChatStore((s) => s.roomOrder);
   const presenceByUser = useChatStore((s) => s.presenceByUser);
   const syncRoomList = useChatStore((s) => s.syncRoomList);
@@ -370,7 +385,7 @@ export function RoomListPanel({
         onCreateRoom={canCreate ? onCreateRoom : undefined}
       />
 
-      <RoomFilterChipBar value={chip} onChange={setChip} />
+      <RoomFilterChipBar value={chip} onChange={setChip} showMentions={showMentions} />
 
       {actionError !== null && (
         <div
@@ -537,9 +552,12 @@ function RoomListHeader({
 function RoomFilterChipBar({
   value,
   onChange,
+  showMentions,
 }: {
   value: RoomFilterChip;
   onChange: (chip: RoomFilterChip) => void;
+  /** S20-CHAT-MENTIONPIN-1 — `false` (server cũ) ⇒ chip «Nhắc tôi» ẩn (`roomsSupportMentionCount`). */
+  showMentions: boolean;
 }): React.ReactElement {
   const { t } = useTranslation("chat");
   return (
@@ -549,7 +567,7 @@ function RoomFilterChipBar({
       className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2"
       data-testid="chat-room-chips"
     >
-      {ROOM_FILTER_CHIPS.map((key) => (
+      {ROOM_FILTER_CHIPS.filter((key) => showMentions || key !== "mentions").map((key) => (
         <button
           key={key}
           type="button"
@@ -621,6 +639,7 @@ function RoomRow({
 }: RoomRowProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const unread = room.unreadCount ?? 0;
+  const mentions = mentionUnreadOf(room);
   const muted = isRoomMuted(room);
   // Đậm khi CÓ tin chưa đọc HOẶC người dùng tự đánh dấu chưa đọc: `markRoomUnread` cố ý KHÔNG đổi
   // `unreadCount` (con trỏ `last_read_seq` chỉ tiến — SPEC-15 §13.2), nên suy độ đậm từ mỗi badge là bỏ
@@ -697,6 +716,17 @@ function RoomRow({
               aria-label={t("rooms.mutedAria")}
               data-testid="chat-room-muted-icon"
             />
+          )}
+          {/* S20-CHAT-MENTIONPIN-1 — «@» cạnh badge: có tin chưa đọc NHẮC TÔI (số của riêng tôi, server tính). */}
+          {mentions > 0 && (
+            <span
+              className="shrink-0 text-xs font-bold text-primary"
+              role="img"
+              aria-label={t("rooms.mentionAria", { count: mentions })}
+              data-testid="chat-room-mention"
+            >
+              @
+            </span>
           )}
           {unread > 0 && (
             <Badge

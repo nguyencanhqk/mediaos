@@ -92,10 +92,23 @@ export function toChatRoomDto(
    * mặc định `null`. Ba đường broadcast (`updateRoom`/`archiveRoom`/`createGroup`) cố ý KHÔNG truyền
    * tham số này: payload WS không mang preview của một thời điểm khác thời điểm người nhận đọc nó.
    */
-  extra: { lastMessage?: ChatRoomLastMessageDto | null; peer?: ChatRoomPeerDto | null } = {},
+  extra: {
+    lastMessage?: ChatRoomLastMessageDto | null;
+    peer?: ChatRoomPeerDto | null;
+    /**
+     * S20-CHAT-MENTIONPIN-1 — số @ chưa đọc của NGƯỜI GỌI (`countUnreadMentionsByRoom`). CHỈ đường
+     * danh sách tính nó. Vắng ⇒ KHÔNG đặt khoá (khác `lastMessage`/`peer` mặc định `null`): đường một
+     * phòng và payload broadcast không tính số này, và một `null` từ đó sẽ ĐÈ con số thật FE đang giữ —
+     * vắng khoá thì phép trộn ở FE giữ nguyên giá trị cũ.
+     */
+    mentionUnreadCount?: number;
+  } = {},
 ): ChatRoomDto {
   const p = prefs ?? row;
   return {
+    ...(extra.mentionUnreadCount !== undefined
+      ? { mentionUnreadCount: extra.mentionUnreadCount }
+      : {}),
     avatarUrl,
     lastMessage: extra.lastMessage ?? null,
     peer: extra.peer ?? null,

@@ -103,12 +103,13 @@ export class ChatMessageModerationService {
 
   /** CHAT-API-012a — ghim. Quyền `pin:chat-message` + **admin phòng**; trần 20/phòng (CHAT-ERR-008). */
   async pin(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
-    const row = await this.db.withTenant(actor.companyId, async (tx) => {
+    const { row, changed } = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
       assertNotArchived(acc.room);
       this.access.requirePinAuthority(acc);
       assertPinnable(acc);
-      if (acc.message.pinnedAt) return this.readRow(tx, actor, acc);
+      // Nhánh IDEMPOTENT — `changed: false` ⇒ KHÔNG phát sự kiện (cùng lập luận nhánh thu hồi lần hai).
+      if (acc.message.pinnedAt) return { row: await this.readRow(tx, actor, acc), changed: false };
 
       // Khoá phòng TRƯỚC khi đếm: `countPinned` → `setPinned` không khoá là TOCTOU, hai request cùng
       // đọc 19 rồi cùng ghim ⇒ 21 tin ghim, cả hai 200, CHAT-ERR-008 bị phá trong im lặng.
@@ -127,19 +128,21 @@ export class ChatMessageModerationService {
         resultStatus: "Success",
         newValues: { roomId: acc.message.roomId },
       });
-      return this.readRow(tx, actor, acc);
+      return { row: await this.readRow(tx, actor, acc), changed: true };
     });
-    // Ký tệp SAU khi tx đã commit — xem cảnh báo ở `readRow`.
+    // Phát TRƯỚC khi ký tệp: tx đã commit nên trạng thái ghim đã đổi — lỗi ký tệp sau đó (REST 5xx) không
+    // được nuốt mất sự kiện, client đang kết nối không poll. Ký tệp SAU commit — xem cảnh báo ở `readRow`.
+    if (changed) this.emitPinChange(actor, row);
     return this.attachments.decorateOne(actor, row);
   }
 
   /** CHAT-API-012b — bỏ ghim. Idempotent: tin chưa ghim thì trả nguyên trạng, không lỗi. */
   async unpin(actor: ChatActor, messageId: string): Promise<ChatMessageDto> {
-    const row = await this.db.withTenant(actor.companyId, async (tx) => {
+    const { row, changed } = await this.db.withTenant(actor.companyId, async (tx) => {
       const acc = await this.access.assertMessageAccess(tx, actor.companyId, messageId, actor.id);
       assertNotArchived(acc.room);
       this.access.requirePinAuthority(acc);
-      if (!acc.message.pinnedAt) return this.readRow(tx, actor, acc);
+      if (!acc.message.pinnedAt) return { row: await this.readRow(tx, actor, acc), changed: false };
 
       await this.repo.setPinned(tx, actor.companyId, messageId, null);
       await this.audit.record(tx, {
@@ -151,10 +154,29 @@ export class ChatMessageModerationService {
         resultStatus: "Success",
         oldValues: { roomId: acc.message.roomId, pinned: true },
       });
-      return this.readRow(tx, actor, acc);
+      return { row: await this.readRow(tx, actor, acc), changed: true };
     });
-    // Ký tệp SAU khi tx đã commit — xem cảnh báo ở `readRow`.
+    // Phát TRƯỚC khi ký tệp: tx đã commit nên trạng thái ghim đã đổi — lỗi ký tệp sau đó (REST 5xx) không
+    // được nuốt mất sự kiện, client đang kết nối không poll. Ký tệp SAU commit — xem cảnh báo ở `readRow`.
+    if (changed) this.emitPinChange(actor, row);
     return this.attachments.decorateOne(actor, row);
+  }
+
+  /**
+   * S20-CHAT-MENTIONPIN-1 — `chat:message-pinned` SAU commit, CHỈ ở nhánh thật sự đổi trạng thái.
+   *
+   * Nguồn là hàng ĐÃ COMMIT (đọc lại trong cùng tx), không đợi DTO đã ký tệp: bốn khoá này là định danh +
+   * mốc ghim, cùng phép chiếu với `toChatMessageDto` (`pinnedAt` → ISO, `pinnedBy` nguyên trạng), không
+   * qua lớp che nào. Nội dung tin KHÔNG đi kèm — người nhận nạp lại `/pinned` theo quyền của chính họ (xem
+   * `wsChatMessagePinnedEventSchema`; emitter `.parse()` strip mọi khoá thừa trước khi phát).
+   */
+  private emitPinChange(actor: ChatActor, row: ChatMessageRow): void {
+    this.realtime.emitChatMessagePinned(actor.companyId, row.roomId, {
+      messageId: row.id,
+      roomId: row.roomId,
+      pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
+      pinnedBy: row.pinnedBy,
+    });
   }
 
   /**

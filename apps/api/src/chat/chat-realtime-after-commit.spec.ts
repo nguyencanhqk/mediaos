@@ -33,7 +33,7 @@ const MESSAGE = "99999999-9999-4999-8999-999999999999";
 const CALL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 /**
- * Bộ đếm mọi lối phát **SAU COMMIT** — 6 method, không sót lối nào.
+ * Bộ đếm mọi lối phát **SAU COMMIT** — 7 method, không sót lối nào.
  *
  * ⚠️ **`evictFromCallRoom` CỐ Ý KHÔNG ở đây** (S7-CALL-RT-FIX-2). Nó là lối duy nhất được gọi **TRONG
  * tx** — vế AN NINH, cùng lập luận với `severUserSessions`: đặt sau commit là để hở đúng cửa sổ mà bản
@@ -49,6 +49,8 @@ function makeRealtime() {
     syncRoomMembership: vi.fn(),
     // S7-CALL-RT-FIX-2 — `call:peer-left` khi một người bị gỡ/tự rời khỏi PHÒNG giữa cuộc gọi.
     emitCallPeerLeft: vi.fn(),
+    // S20-CHAT-MENTIONPIN-1 — `chat:message-pinned` sau ghim/bỏ ghim.
+    emitChatMessagePinned: vi.fn(),
   };
 }
 
@@ -72,10 +74,10 @@ const callExit = () => ({
 });
 
 describe("ratchet của chính bộ đếm", () => {
-  it("đếm ĐÚNG 6 lối phát sau-commit, và `evictFromCallRoom` KHÔNG nằm trong đó", () => {
+  it("đếm ĐÚNG 7 lối phát sau-commit, và `evictFromCallRoom` KHÔNG nằm trong đó", () => {
     // Thêm/bớt lối phát mà không cập nhật bài này = ĐỎ có chủ đích: bất biến "emit SAU COMMIT" chỉ có
     // giá trị khi bộ đếm biết hết các lối.
-    expect(EMIT_KEYS).toHaveLength(6);
+    expect(EMIT_KEYS).toHaveLength(7);
     expect(EMIT_KEYS).not.toContain("evictFromCallRoom");
   });
 });
@@ -166,7 +168,7 @@ describe("emit SAU COMMIT — ChatMembersService", () => {
     return { svc, realtime };
   }
 
-  it("removeMember: COMMIT hỏng → KHÔNG emit gì (0/6 lối)", async () => {
+  it("removeMember: COMMIT hỏng → KHÔNG emit gì (0/7 lối)", async () => {
     const { svc, realtime } = build(true);
     await expect(svc.removeMember(ACTOR, ROOM, TARGET)).rejects.toThrow(/COMMIT/);
     expect(totalCalls(realtime)).toBe(0);
@@ -180,7 +182,7 @@ describe("emit SAU COMMIT — ChatMembersService", () => {
    * reconnect: chiều fail-safe). `emitCallPeerLeft` thì ngược lại: phát trước commit rồi rollback là NÓI
    * DỐI với người còn lại. Chuyển `evictFromCallRoom` ra sau commit làm ca này ĐỎ.
    */
-  it("removeMember: COMMIT hỏng → 0/6 lối phát NHƯNG evictFromCallRoom VẪN chạy 1 lần (trong tx)", async () => {
+  it("removeMember: COMMIT hỏng → 0/7 lối phát NHƯNG evictFromCallRoom VẪN chạy 1 lần (trong tx)", async () => {
     const { svc, realtime } = build(true);
     await expect(svc.removeMember(ACTOR, ROOM, TARGET)).rejects.toThrow(/COMMIT/);
     expect(totalCalls(realtime)).toBe(0);
@@ -352,6 +354,140 @@ describe("emit SAU COMMIT — ChatMessageModerationService.recall", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────
+describe("emit SAU COMMIT — ChatMessageModerationService.pin/unpin (S20-CHAT-MENTIONPIN-1)", () => {
+  const PINNED_AT = new Date("2026-10-23T08:00:00.000Z");
+
+  /** `pinnedNow` = trạng thái ghim TRƯỚC thao tác (quyết định nhánh idempotent). */
+  /** `decorateFails` = ký tệp hỏng SAU khi tx đã commit (trạng thái ghim ĐÃ đổi). */
+  function build(
+    commitFails: boolean,
+    pinnedNow: boolean,
+    afterPinnedAt: Date | null,
+    decorateFails = false,
+  ) {
+    const realtime = makeRealtime();
+    const acc = access();
+    acc.assertMessageAccess = vi.fn(async () => ({
+      room: ROOM_ROW,
+      membership: MEMBERSHIP,
+      message: {
+        id: MESSAGE,
+        roomId: ROOM,
+        senderId: ACTOR.id,
+        messageType: "text",
+        recalledAt: null,
+        pinnedAt: pinnedNow ? PINNED_AT : null,
+      },
+    })) as never;
+    const withPin = { ...acc, requirePinAuthority: vi.fn() };
+    const repo = {
+      lockRoom: vi.fn(),
+      countPinned: vi.fn(async () => 0),
+      setPinned: vi.fn(),
+      // Hàng ĐỌC LẠI sau ghi — mang `body` để ca dưới chứng minh payload WS KHÔNG chở nó.
+      findMessageForDto: vi.fn(async () => ({
+        id: MESSAGE,
+        roomId: ROOM,
+        body: "nội dung tin",
+        pinnedAt: afterPinnedAt,
+        pinnedBy: afterPinnedAt ? ACTOR.id : null,
+      })),
+    };
+    const svc = new ChatMessageModerationService(
+      makeDb(commitFails) as never,
+      withPin as never,
+      repo as never,
+      audit() as never,
+      // `decorateOne` mô phỏng DTO REST: Date → ISO, giữ `body`.
+      {
+        decorateOne: vi.fn(async (_a: unknown, row: { pinnedAt: Date | null }) => {
+          if (decorateFails) throw new Error("SIGN");
+          return { ...row, pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null };
+        }),
+      } as never,
+      realtime as unknown as RealtimeEmitterService,
+    );
+    return { svc, realtime };
+  }
+
+  it("pin: COMMIT hỏng → 0/7 lối phát", async () => {
+    const { svc, realtime } = build(true, false, PINNED_AT);
+    await expect(svc.pin(ACTOR, MESSAGE)).rejects.toThrow(/COMMIT/);
+    expect(totalCalls(realtime)).toBe(0);
+  });
+
+  it("pin: POSITIVE CONTROL — ghim thật thì phát đúng 1 lần, payload KHÔNG có `body`", async () => {
+    const { svc, realtime } = build(false, false, PINNED_AT);
+    await svc.pin(ACTOR, MESSAGE);
+    expect(realtime.emitChatMessagePinned).toHaveBeenCalledTimes(1);
+    expect(totalCalls(realtime)).toBe(1);
+    const [companyId, roomId, payload] = realtime.emitChatMessagePinned.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect([companyId, roomId]).toEqual([COMPANY, ROOM]);
+    expect(Object.keys(payload).sort()).toEqual(["messageId", "pinnedAt", "pinnedBy", "roomId"]);
+    expect(payload).toMatchObject({ messageId: MESSAGE, pinnedAt: PINNED_AT.toISOString() });
+  });
+
+  it("pin lần HAI (idempotent) → 0 sự kiện", async () => {
+    const { svc, realtime } = build(false, true, PINNED_AT);
+    await svc.pin(ACTOR, MESSAGE);
+    expect(totalCalls(realtime)).toBe(0);
+  });
+
+  it("unpin: COMMIT hỏng → 0/7 lối phát", async () => {
+    const { svc, realtime } = build(true, true, null);
+    await expect(svc.unpin(ACTOR, MESSAGE)).rejects.toThrow(/COMMIT/);
+    expect(totalCalls(realtime)).toBe(0);
+  });
+
+  it("unpin: POSITIVE CONTROL — bỏ ghim thật thì phát đúng 1 lần với `pinnedAt: null`", async () => {
+    const { svc, realtime } = build(false, true, null);
+    await svc.unpin(ACTOR, MESSAGE);
+    expect(realtime.emitChatMessagePinned).toHaveBeenCalledTimes(1);
+    const payload = realtime.emitChatMessagePinned.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(payload).toEqual({ messageId: MESSAGE, roomId: ROOM, pinnedAt: null, pinnedBy: null });
+  });
+
+  it("unpin tin CHƯA ghim (idempotent) → 0 sự kiện", async () => {
+    const { svc, realtime } = build(false, false, null);
+    await svc.unpin(ACTOR, MESSAGE);
+    expect(totalCalls(realtime)).toBe(0);
+  });
+
+  // Ký tệp chạy SAU commit: lỗi ở đó không được nuốt mất sự kiện của một thay đổi ĐÃ ghi — client đang
+  // kết nối không poll, thanh tin ghim của họ sẽ cũ tới lần tải lại.
+  it("pin: ký tệp hỏng SAU commit → REST vẫn báo lỗi, sự kiện VẪN phát đúng 1 lần (4 khoá)", async () => {
+    const { svc, realtime } = build(false, false, PINNED_AT, true);
+    await expect(svc.pin(ACTOR, MESSAGE)).rejects.toThrow(/SIGN/);
+    expect(realtime.emitChatMessagePinned).toHaveBeenCalledTimes(1);
+    const payload = realtime.emitChatMessagePinned.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(payload).toEqual({
+      messageId: MESSAGE,
+      roomId: ROOM,
+      pinnedAt: PINNED_AT.toISOString(),
+      pinnedBy: ACTOR.id,
+    });
+  });
+
+  it("unpin: ký tệp hỏng SAU commit → sự kiện VẪN phát đúng 1 lần với `pinnedAt: null`", async () => {
+    const { svc, realtime } = build(false, true, null, true);
+    await expect(svc.unpin(ACTOR, MESSAGE)).rejects.toThrow(/SIGN/);
+    expect(realtime.emitChatMessagePinned).toHaveBeenCalledTimes(1);
+    const payload = realtime.emitChatMessagePinned.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(payload).toEqual({ messageId: MESSAGE, roomId: ROOM, pinnedAt: null, pinnedBy: null });
+  });
+
+  it("pin lần HAI (idempotent) + ký tệp hỏng → 0 sự kiện", async () => {
+    const { svc, realtime } = build(false, true, PINNED_AT, true);
+    await expect(svc.pin(ACTOR, MESSAGE)).rejects.toThrow(/SIGN/);
+    expect(totalCalls(realtime)).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────
 describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
   function build(commitFails: boolean) {
     const realtime = { ...makeRealtime(), evictFromCallRoom: vi.fn() };
@@ -415,7 +551,7 @@ describe("emit SAU COMMIT — ChatRoomsService.createGroup", () => {
    * là vá được một nửa. `describe` này trước đây KHÔNG có ca `leaveRoom` nào — đó chính là lý do nửa
    * còn lại của lỗ có thể land mà không ai thấy.
    */
-  it("leaveRoom: COMMIT hỏng → 0/6 lối phát NHƯNG evictFromCallRoom VẪN chạy 1 lần (trong tx)", async () => {
+  it("leaveRoom: COMMIT hỏng → 0/7 lối phát NHƯNG evictFromCallRoom VẪN chạy 1 lần (trong tx)", async () => {
     const { svc, realtime } = build(true);
     await expect(svc.leaveRoom(ACTOR, ROOM)).rejects.toThrow(/COMMIT/);
     expect(totalCalls(realtime)).toBe(0);

@@ -11,6 +11,8 @@ import i18n from "@/i18n";
 import type { ChatRoomDto } from "@mediaos/contracts";
 
 const getMessages = vi.fn();
+// S20-CHAT-MENTIONPIN-1 — thanh tin ghim nạp `/pinned`; mock để ca cũ không gọi mạng thật.
+const getPinned = vi.fn();
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
@@ -19,6 +21,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     chatApi: {
       ...actual.chatApi,
       getMessages: (...args: unknown[]) => getMessages(...args),
+      getPinned: (...args: unknown[]) => getPinned(...args),
       markRead: vi.fn().mockResolvedValue({ roomId: "", lastReadSeq: 0, unreadCount: 0 }),
     },
   };
@@ -90,6 +93,7 @@ function seededMessage() {
 beforeEach(() => {
   getMessages.mockReset();
   getMessages.mockResolvedValue([]);
+  getPinned.mockReset().mockResolvedValue([]);
   useChatStore.getState().resetChatStore();
 });
 
@@ -332,5 +336,52 @@ describe("ConversationPanel · phím tắt", () => {
     });
     document.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
+  });
+});
+
+describe("S20-CHAT-MENTIONPIN-1 · thanh tin ghim trong khung hội thoại", () => {
+  const pinnedMessage = {
+    id: "00000009-1111-4111-8111-111111111111",
+    companyId: room.companyId,
+    roomId: ROOM_ID,
+    senderId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    senderName: "Bình",
+    body: "Họp 9h thứ Hai",
+    messageType: "text" as const,
+    mentions: [],
+    pinnedAt: "2026-10-23T08:00:00.000Z",
+    pinnedBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    replyToMessageId: null,
+    recalledAt: null,
+    attachmentCount: 0,
+    attachments: [],
+    roomSeq: 3,
+    createdAt: "2026-10-23T07:00:00.000Z",
+  };
+
+  it("có tin ghim ⇒ thanh hiện cả khi KHÔNG có header (drawer); thành viên thường ⇒ không nút bỏ ghim", async () => {
+    getPinned.mockResolvedValue([pinnedMessage]);
+    renderPanel({}, { showHeader: false, myRole: "member" });
+    expect(await screen.findByTestId("chat-pinned-bar")).toHaveTextContent("Họp 9h thứ Hai");
+    expect(screen.queryByTestId("chat-pinned-bar-unpin")).toBeNull();
+  });
+
+  it("admin phòng nhóm ⇒ có nút bỏ ghim; phòng LƯU TRỮ ⇒ không", async () => {
+    getPinned.mockResolvedValue([pinnedMessage]);
+    const first = renderPanel({}, { myRole: "admin" });
+    expect(await screen.findByTestId("chat-pinned-bar-unpin")).toBeInTheDocument();
+    first.unmount();
+
+    renderPanel({ isArchived: true }, { myRole: "admin" });
+    await screen.findByTestId("chat-pinned-bar");
+    expect(screen.queryByTestId("chat-pinned-bar-unpin")).toBeNull();
+  });
+
+  it("`getPinned` lỗi ⇒ không thanh, ô soạn vẫn dùng được", async () => {
+    getPinned.mockRejectedValue(new Error("500"));
+    renderPanel();
+    await waitFor(() => expect(getPinned).toHaveBeenCalled());
+    expect(screen.queryByTestId("chat-pinned-bar")).toBeNull();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 });

@@ -8,7 +8,7 @@
  * ⚠️ WS MỘT CHIỀU (CHAT-DEC-005): hook chỉ ĐĂNG KÝ listener, không bao giờ `emit`. Muốn ghi thì gọi REST.
  */
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   chatApi,
@@ -21,6 +21,7 @@ import {
 import {
   WS_EVENTS,
   wsChatMessageEventSchema,
+  wsChatMessagePinnedEventSchema,
   wsChatMessageRecalledEventSchema,
   wsChatPresenceEventSchema,
   wsChatReactionEventSchema,
@@ -29,6 +30,7 @@ import {
   wsChatTypingEventSchema,
 } from "@mediaos/contracts";
 import { useChatStore } from "@/stores/chat.store";
+import { applyPinnedEvent, invalidatePinned } from "./use-chat-realtime-pins";
 
 /**
  * Hai message lỗi handshake mà server phát CÓ CHỦ ĐÍCH (`realtime.gateway.ts`). Mọi message khác rơi
@@ -54,6 +56,7 @@ export function useChatRealtime(): void {
   // không chỉ hỏng CHAT. Cổng quyền nằm BÊN TRONG từng hook.
   const canReadChat = useCan("view", "chat-room");
   const myUserId = useAuthStore((s) => s.user?.id ?? null);
+  const queryClient = useQueryClient();
 
   const setMyUserId = useChatStore((s) => s.setMyUserId);
   const syncRoomList = useChatStore((s) => s.syncRoomList);
@@ -129,6 +132,16 @@ export function useChatRealtime(): void {
       const parsed = wsChatMessageRecalledEventSchema.safeParse(payload);
       if (!parsed.success) return void warnBadPayload("chat:message-recalled", parsed.error);
       store().applyMessageRecalled(parsed.data);
+      // S20-CHAT-MENTIONPIN-1 — tin ghim vừa thu hồi không được hiện tiếp nội dung cũ từ cache `/pinned`.
+      invalidatePinned(queryClient, parsed.data.roomId);
+    };
+
+    /** S20-CHAT-MENTIONPIN-1 — người khác ghim/bỏ ghim ⇒ thanh tin ghim cập nhật không cần tải lại. */
+    const onChatMessagePinned = (payload: unknown): void => {
+      const parsed = wsChatMessagePinnedEventSchema.safeParse(payload);
+      if (!parsed.success) return void warnBadPayload("chat:message-pinned", parsed.error);
+      applyPinnedEvent(parsed.data);
+      invalidatePinned(queryClient, parsed.data.roomId);
     };
 
     const onChatRead = (payload: unknown): void => {
@@ -236,6 +249,7 @@ export function useChatRealtime(): void {
 
     socket.on(WS_EVENTS.CHAT_MESSAGE, onChatMessage);
     socket.on(WS_EVENTS.CHAT_MESSAGE_RECALLED, onChatMessageRecalled);
+    socket.on(WS_EVENTS.CHAT_MESSAGE_PINNED, onChatMessagePinned);
     socket.on(WS_EVENTS.CHAT_READ, onChatRead);
     socket.on(WS_EVENTS.CHAT_ROOM, onChatRoom);
     socket.on(WS_EVENTS.CHAT_REACTION, onChatReaction);
@@ -252,6 +266,7 @@ export function useChatRealtime(): void {
       // duyệt tự huỷ.
       socket.off(WS_EVENTS.CHAT_MESSAGE, onChatMessage);
       socket.off(WS_EVENTS.CHAT_MESSAGE_RECALLED, onChatMessageRecalled);
+      socket.off(WS_EVENTS.CHAT_MESSAGE_PINNED, onChatMessagePinned);
       socket.off(WS_EVENTS.CHAT_READ, onChatRead);
       socket.off(WS_EVENTS.CHAT_ROOM, onChatRoom);
       socket.off(WS_EVENTS.CHAT_REACTION, onChatReaction);
@@ -265,5 +280,5 @@ export function useChatRealtime(): void {
       // dù nó chưa bao giờ đồng ý và không có cách nào biết vì sao.
       socket.io.reconnection(true);
     };
-  }, [canReadChat, refetchRooms]);
+  }, [canReadChat, queryClient, refetchRooms]);
 }

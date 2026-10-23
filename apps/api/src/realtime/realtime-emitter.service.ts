@@ -5,6 +5,7 @@ import {
   chatCallPeerSchema,
   WS_EVENTS,
   wsChatMessageEventSchema,
+  wsChatMessagePinnedEventSchema,
   wsChatMessageRecalledEventSchema,
   wsChatPresenceEventSchema,
   wsChatReactionEventSchema,
@@ -19,6 +20,7 @@ import {
   wsFeedReactionChangedEventSchema,
   type ChatMessageDto,
   type NotificationDto,
+  type WsChatMessagePinnedEvent,
   type WsChatMessageRecalledEvent,
   type WsChatPresenceEvent,
   type WsChatCallEvent,
@@ -151,6 +153,21 @@ export class RealtimeEmitterService {
       WS_EVENTS.CHAT_MESSAGE_RECALLED,
       () => wsChatMessageRecalledEventSchema.parse(payload),
       "emitChatMessageRecalled",
+    );
+  }
+
+  /** `chat:message-pinned` — ghim/bỏ ghim (S20-CHAT-MENTIONPIN-1). KHÔNG kèm nội dung tin. Gọi SAU commit. */
+  emitChatMessagePinned(
+    companyId: string,
+    roomId: string,
+    payload: WsChatMessagePinnedEvent,
+  ): void {
+    this.emitToRoom(
+      companyId,
+      roomId,
+      WS_EVENTS.CHAT_MESSAGE_PINNED,
+      () => wsChatMessagePinnedEventSchema.parse(payload),
+      "emitChatMessagePinned",
     );
   }
 

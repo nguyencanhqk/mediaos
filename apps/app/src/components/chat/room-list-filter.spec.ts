@@ -13,6 +13,7 @@ import {
   chipNeedsArchivedScope,
   chipUsesSections,
   filterRoomsByChip,
+  roomsSupportMentionCount,
 } from "./room-list-filter";
 
 const COMPANY = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -127,5 +128,23 @@ describe("filterRoomsByChip · bất biến áp cho MỌI chip", () => {
   it("trả MẢNG MỚI, không phải chính mảng đầu vào (caller sắp/cắt được mà không đụng store)", () => {
     const input = [room("a")];
     expect(filterRoomsByChip(input, "all")).not.toBe(input);
+  });
+});
+
+describe("S20-CHAT-MENTIONPIN-1 · chip «Nhắc tôi»", () => {
+  it("lọc phòng có @ chưa đọc > 0 — `null`/vắng đọc là 0", () => {
+    const list = [
+      room("m", { mentionUnreadCount: 2 }),
+      room("zero", { mentionUnreadCount: 0 }),
+      room("null", { mentionUnreadCount: null }),
+      room("old"),
+    ];
+    expect(filterRoomsByChip(list, "mentions").map((r) => r.id)).toEqual(["m"]);
+  });
+
+  it("server CŨ (không phòng nào có khoá) ⇒ không hỗ trợ ⇒ chip ẩn; có ≥1 SỐ (kể cả 0) ⇒ hỗ trợ", () => {
+    expect(roomsSupportMentionCount([room("a"), room("b"), undefined])).toBe(false);
+    expect(roomsSupportMentionCount([room("a", { mentionUnreadCount: null })])).toBe(false);
+    expect(roomsSupportMentionCount([room("a"), room("b", { mentionUnreadCount: 0 })])).toBe(true);
   });
 });

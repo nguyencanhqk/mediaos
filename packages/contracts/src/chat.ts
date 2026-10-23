@@ -130,6 +130,7 @@ export const chatRoomSchema = z.object({
   lastMessage: chatRoomLastMessageSchema.nullable().optional(),
   /** Người đối thoại — chỉ phòng `direct`, `null` ở mọi loại khác. Xem `chatRoomPeerSchema`. */
   peer: chatRoomPeerSchema.nullable().optional(),
+  mentionUnreadCount: z.number().int().nonnegative().nullable().optional(),
 });
 export type ChatRoomDto = z.infer<typeof chatRoomSchema>;
 

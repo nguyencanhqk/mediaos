@@ -201,6 +201,15 @@ describe("census — MỌI truy vấn đọc `chat_messages` mang vị từ §13
     }
   });
 
+  it("chat-room-mention-count.ts: đường đếm @ chưa đọc mang vị từ §13.4 (dạng CỘT)", () => {
+    // S20-CHAT-MENTIONPIN-1 mở đường đọc `chat_messages` ở file THỨ NĂM (`mentionUnreadCount` của
+    // danh sách phòng). Đếm tin nằm TRƯỚC mốc vào phòng là để lộ đúng phần lịch sử mà `/messages` chặn,
+    // dưới dạng một con số trên dòng phòng. Neo dương `chatMessages` để ca không xanh-rỗng khi file đổi.
+    const code = codeOf("chat-room-mention-count.ts");
+    expect(code).toContain("chatMessages");
+    expect(code).toContain("visibleFromSeqColumn()");
+  });
+
   it("chat-access.service.ts: `assertMessageAccess` gọi `visibleFromSeqColumn()`", () => {
     const code = codeOf("chat-access.service.ts");
     const method = methodsOf(code).find((m) => m.name === "assertMessageAccess");
@@ -226,6 +235,8 @@ describe("census — MỌI truy vấn đọc `chat_messages` mang vị từ §13
       "chat-attachments.repository.ts",
       // S7-CHAT-BE-4 — file thứ ba đọc `chat_messages`.
       "chat-search.repository.ts",
+      // S20-CHAT-MENTIONPIN-1 — file thứ năm.
+      "chat-room-mention-count.ts",
     ].filter((f) => codeOf(f).includes("visible_from_seq"));
     expect(offenders, `bản sao thứ hai của luật §13.4 ở: ${offenders.join(", ")}`).toEqual([]);
   });
