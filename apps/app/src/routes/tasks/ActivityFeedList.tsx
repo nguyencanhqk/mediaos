@@ -47,7 +47,7 @@ export function ActivityFeedList({
     if (change.kind === "status") return t(`tasks.status.${value}`, { defaultValue: value });
     if (change.kind === "priority") return t(`tasks.priority.${value}`, { defaultValue: value });
     if (change.kind === "dueAt") {
-      // formatDateTime (web-core) pin Asia/Ho_Chi_Minh — không trôi theo múi giờ trình duyệt.
+      // formatDateTime (web-core) pin múi giờ công ty (DEFAULT_TIMEZONE) — không trôi theo múi giờ trình duyệt.
       const d = new Date(value);
       return Number.isNaN(d.getTime()) ? value : formatDateTime(value);
     }
