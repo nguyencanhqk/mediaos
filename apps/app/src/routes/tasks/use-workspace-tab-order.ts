@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   moveWorkspaceTab,
+  nextProjectLastTabMap,
+  pickProjectLastTab,
   PROJECT_WORKSPACE_TABS,
   sanitizeWorkspaceTabOrder,
   type ProjectWorkspaceTab,
@@ -69,4 +71,63 @@ export function useWorkspaceTabOrder(): {
     moveTab,
     resetTabOrder,
   };
+}
+
+/**
+ * S20-TASK-PROJECTENTRY-1 — tab dùng lần trước THEO DỰ ÁN (US-TASK-QL-13). Cũng là tuỳ chọn hiển thị
+ * cá nhân trong localStorage như thứ tự tab ở trên: mọi đọc/ghi bọc try/catch, storage hỏng/bị chặn
+ * ⇒ như chưa có tính năng (vào Tổng quan). Không phải dữ liệu nghiệp vụ, không gọi server.
+ *
+ * `entryTab` = tab nhớ, ĐỌC MỘT LẦN khi vào dự án; trang chỉ dùng nó cho URL trống
+ * (`/tasks/projects/:id`, không `?tab`). Nút Tổng quan đẩy URL trống (không `?tab=overview`) ⇒ bấm
+ * Tổng quan thì `entryTab` về `null`, nếu không URL trống sẽ lại hiện tab nhớ.
+ */
+const LAST_TAB_STORAGE_KEY = "mediaos.tasks.projectLastTab";
+
+function readStoredLastTabMap(): unknown {
+  try {
+    const raw = window.localStorage.getItem(LAST_TAB_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredLastTab(projectId: string, tab: ProjectWorkspaceTab): void {
+  try {
+    const next = nextProjectLastTabMap(readStoredLastTabMap(), projectId, tab);
+    window.localStorage.setItem(LAST_TAB_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Storage bị chặn/đầy → lần sau không nhớ được, tab vẫn đổi bình thường.
+  }
+}
+
+interface ProjectEntryTabState {
+  projectId: string;
+  entryTab: ProjectWorkspaceTab | null;
+}
+
+export function useProjectLastTab(projectId: string): {
+  entryTab: ProjectWorkspaceTab | null;
+  /** Gọi khi người dùng BẤM tab — ghi tab cuối của dự án này. */
+  rememberTab: (tab: ProjectWorkspaceTab) => void;
+} {
+  const [state, setState] = useState<ProjectEntryTabState>(() => ({
+    projectId,
+    entryTab: pickProjectLastTab(readStoredLastTabMap(), projectId),
+  }));
+  // Cùng instance nhưng đổi dự án (cây sidebar P1 → P2) ⇒ đọc lại tab nhớ của dự án mới (mẫu React
+  // "điều chỉnh state khi prop đổi" — setState có điều kiện trong lúc render).
+  let current = state;
+  if (state.projectId !== projectId) {
+    current = { projectId, entryTab: pickProjectLastTab(readStoredLastTabMap(), projectId) };
+    setState(current);
+  }
+
+  const rememberTab = (tab: ProjectWorkspaceTab) => {
+    writeStoredLastTab(projectId, tab);
+    if (tab === "overview" && current.entryTab !== null) setState({ projectId, entryTab: null });
+  };
+
+  return { entryTab: current.entryTab, rememberTab };
 }

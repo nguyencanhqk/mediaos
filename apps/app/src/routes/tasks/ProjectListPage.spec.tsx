@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
 import { taskProjectApi } from "@mediaos/web-core";
@@ -11,9 +11,10 @@ import type { TaskProjectListItemDto } from "@mediaos/contracts";
 // Mocks
 // ---------------------------------------------------------------------------
 // S5-TASK-NAV-TREE-1 — search mutable qua vi.hoisted để test deep-link ?departmentId từ sidebar.
-const { searchRef, historyReplaceMock } = vi.hoisted(() => ({
+const { searchRef, historyReplaceMock, historyPushMock } = vi.hoisted(() => ({
   searchRef: { current: {} as Record<string, unknown> },
   historyReplaceMock: vi.fn(),
+  historyPushMock: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -23,7 +24,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     useNavigate: () => vi.fn(),
     // Page đọc ?departmentId qua useRouterState + đổi URL qua router.history — test không dựng
     // RouterProvider nên mock cả hai.
-    useRouter: () => ({ history: { push: vi.fn(), replace: historyReplaceMock } }),
+    useRouter: () => ({ history: { push: historyPushMock, replace: historyReplaceMock } }),
     useRouterState: ({
       select,
     }: {
@@ -172,6 +173,35 @@ describe("ProjectListPage", () => {
     renderWithQuery(<ProjectListPage />);
     await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
     expect(screen.getByText(/tạo dự án/i)).toBeInTheDocument();
+  });
+
+  // ── S20-TASK-PROJECTENTRY-1: tạo xong → vào thẳng tab Thành viên, hộp thêm thành viên mở ──────
+  it("tạo dự án thành công → điều hướng /tasks/projects/:id?tab=members&addMembers=1", async () => {
+    setCapabilities({ "read:project": true, "create:project": true });
+    vi.mocked(taskProjectApi.listProjects).mockResolvedValue(MOCK_ITEMS);
+    vi.mocked(taskProjectApi.createProject).mockResolvedValue({
+      ...MOCK_ITEMS[0],
+      id: "proj-new",
+      name: "Dự án mới",
+      description: null,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      closedAt: null,
+      closedBy: null,
+    } as never);
+    renderWithQuery(<ProjectListPage />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /tạo dự án/i }));
+    fireEvent.change(await screen.findByLabelText(/tên dự án/i), {
+      target: { value: "Dự án mới" },
+    });
+    fireEvent.submit(document.getElementById("project-form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(historyPushMock).toHaveBeenCalledWith(
+        "/tasks/projects/proj-new?tab=members&addMembers=1",
+      ),
+    );
   });
 
   // ── DENY-PATH: delete action hidden without delete:project ───────────────

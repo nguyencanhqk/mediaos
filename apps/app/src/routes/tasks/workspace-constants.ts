@@ -80,6 +80,70 @@ export function moveWorkspaceTab(
   return next;
 }
 
+// ─── Vào dự án (S20-TASK-PROJECTENTRY-1, US-TASK-QL-13) ──────────────────────
+// Tạo xong → tab Thành viên + hộp thêm thành viên; mở lại → tab dùng lần trước. Tab nhớ là TUỲ CHỌN
+// HIỂN THỊ (localStorage, đọc/ghi ở use-workspace-tab-order.ts); ở đây chỉ phần thuần.
+
+/** Tab CÓ trên URL hay không — khác `parseWorkspaceTab`: thiếu/rác trả `null`, không tự thành overview. */
+export function parseWorkspaceTabParam(raw: unknown): ProjectWorkspaceTab | null {
+  return typeof raw === "string" && (PROJECT_WORKSPACE_TABS as readonly string[]).includes(raw)
+    ? (raw as ProjectWorkspaceTab)
+    : null;
+}
+
+/** Cờ `?addMembers=1` — parser search của router đổi `1` thành số, nên nhận cả số lẫn chuỗi. */
+export function isAddMembersFlag(raw: unknown): boolean {
+  return raw === 1 || raw === "1" || raw === true;
+}
+
+/** Đích ngay sau khi tạo dự án: tab Thành viên, hộp thêm thành viên tự mở (nếu có quyền). */
+export function projectCreatedEntryUrl(projectId: string): string {
+  return `/tasks/projects/${encodeURIComponent(projectId)}?tab=members&addMembers=1`;
+}
+
+/**
+ * Tab hiển thị khi vào dự án: tab trên URL luôn thắng (tab đó tự gate quyền như trước); không có
+ * thì dùng tab nhớ NẾU còn nằm trong tập tab người này thấy; còn lại → Tổng quan.
+ */
+export function resolveWorkspaceTab(
+  urlTab: ProjectWorkspaceTab | null,
+  rememberedTab: ProjectWorkspaceTab | null,
+  visibleTabs: readonly ProjectWorkspaceTab[],
+): ProjectWorkspaceTab {
+  if (urlTab) return urlTab;
+  if (rememberedTab && visibleTabs.includes(rememberedTab)) return rememberedTab;
+  return "overview";
+}
+
+/** Số dự án tối đa giữ tab cuối — bản đồ không phình mãi theo số dự án từng mở. */
+export const PROJECT_LAST_TAB_MAX_ENTRIES = 50;
+
+function asTabMap(raw: unknown): Record<string, unknown> {
+  return raw !== null && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {};
+}
+
+/** Tab cuối của `projectId` trong bản đồ đã lưu; dữ liệu hỏng/rác → `null`. */
+export function pickProjectLastTab(map: unknown, projectId: string): ProjectWorkspaceTab | null {
+  const value = asTabMap(map)[projectId];
+  return parseWorkspaceTabParam(value);
+}
+
+/** Trả bản đồ MỚI: bỏ mục rác, dự án vừa ghi đứng cuối, cắt mục cũ nhất khi vượt giới hạn. */
+export function nextProjectLastTabMap(
+  prev: unknown,
+  projectId: string,
+  tab: ProjectWorkspaceTab,
+): Record<string, ProjectWorkspaceTab> {
+  const others = Object.entries(asTabMap(prev)).flatMap(([id, value]) => {
+    const parsed = parseWorkspaceTabParam(value);
+    return id !== projectId && parsed ? [[id, parsed] as const] : [];
+  });
+  const kept = others.slice(Math.max(0, others.length - (PROJECT_LAST_TAB_MAX_ENTRIES - 1)));
+  return Object.fromEntries([...kept, [projectId, tab]]);
+}
+
 // ─── Bộ lọc toolbar dùng chung (tìm · lọc · sắp xếp) ──────────────────────────
 export const WORKSPACE_TASK_SORTS = [
   "default",
