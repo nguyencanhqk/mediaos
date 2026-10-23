@@ -30,6 +30,7 @@ import {
 } from "@mediaos/contracts";
 import { TASK_ENGINE_PAIRS } from "./constants";
 import { ProjectFormDrawer } from "./ProjectFormDrawer";
+import { projectCreatedEntryUrl } from "./workspace-constants";
 
 /**
  * ProjectListPage — S4-FE-TASK-1 (SPEC-06 §13.1, TASK-SCREEN-001).
@@ -417,7 +418,11 @@ export function ProjectListPage() {
         <ProjectFormDrawer
           mode="create"
           onClose={() => setCreateOpen(false)}
-          onSuccess={() => setCreateOpen(false)}
+          // S20-TASK-PROJECTENTRY-1 — tạo xong vào thẳng tab Thành viên, hộp thêm thành viên mở sẵn.
+          onSuccess={(created) => {
+            setCreateOpen(false);
+            router.history.push(projectCreatedEntryUrl(created.id));
+          }}
         />
       )}
       {deleteItem && (

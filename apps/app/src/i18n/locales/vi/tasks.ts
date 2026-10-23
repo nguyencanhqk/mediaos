@@ -509,7 +509,6 @@ export default {
       checklist: {
         title: "Checklist",
         addButton: "Thêm checklist",
-        addItemPlaceholder: "Thêm hạng mục…",
         empty: "Chưa có checklist nào.",
         progress: "{{done}}/{{total}} hoàn thành ({{pct}}%)",
         requiredBadge: "Bắt buộc",
@@ -566,12 +565,6 @@ export default {
           title: "Tiêu đề",
           assignee: "Người thực hiện",
           dueAt: "Hạn hoàn thành",
-        },
-        addDialog: {
-          title: "Thêm việc con",
-          confirm: "Thêm",
-          cancel: "Hủy",
-          saving: "Đang lưu…",
         },
         editDialog: {
           title: "Sửa việc con",

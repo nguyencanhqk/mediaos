@@ -2,7 +2,8 @@
 /**
  * NotificationDropdown tests (S4-FE-NOTI-1, NOTI-API-002). Phủ: loading/error/empty ("Bạn chưa có thông
  * báo mới") · render N dòng latest từ GET /notifications/dropdown (KHÔNG list()) · click dòng → mark-read
- * (nếu unread) + onNavigate() · "Xem tất cả" → onNavigate().
+ * (nếu unread) + onSelect() (CHỈ đóng — không sang danh sách, S20-TASK-DRAWER-1) · "Xem tất cả" →
+ * onNavigate().
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
@@ -40,14 +41,15 @@ import { NotificationDropdown } from "./NotificationDropdown";
 const mockDropdown = myNotificationApi.dropdown as ReturnType<typeof vi.fn>;
 const mockMarkRead = myNotificationApi.markRead as ReturnType<typeof vi.fn>;
 
-function renderDropdown(onNavigate = vi.fn()) {
+function renderDropdown(onNavigate = vi.fn(), onSelect = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
     onNavigate,
+    onSelect,
     ...render(
       <QueryClientProvider client={qc}>
         <I18nextProvider i18n={i18n}>
-          <NotificationDropdown onNavigate={onNavigate} />
+          <NotificationDropdown onSelect={onSelect} onNavigate={onNavigate} />
         </I18nextProvider>
       </QueryClientProvider>,
     ),
@@ -118,22 +120,25 @@ describe("NotificationDropdown — click hành vi", () => {
     ],
   };
 
-  it("click dòng chưa đọc có target_url an toàn → mark-read + onNavigate()", async () => {
+  it("click dòng chưa đọc có target_url an toàn → mark-read + onSelect() (KHÔNG sang danh sách)", async () => {
     mockDropdown.mockResolvedValue(UNREAD_ITEM);
-    const { onNavigate } = renderDropdown();
+    const { onNavigate, onSelect } = renderDropdown();
     const row = await screen.findByText("Bạn có task mới");
     fireEvent.click(row.closest("button") as HTMLElement);
     await waitFor(() => {
       expect(mockMarkRead).toHaveBeenCalledWith("n1");
     });
-    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    // Lượt sang /notifications ở đây sẽ đè đích của dòng (drawer `?task=` mở nhầm trên danh sách).
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 
   it("bấm 'Xem tất cả' → onNavigate()", async () => {
     mockDropdown.mockResolvedValue({ unread_count: 0, items: [] });
-    const { onNavigate } = renderDropdown();
+    const { onNavigate, onSelect } = renderDropdown();
     const viewAll = await screen.findByText(/xem tất cả/i);
     fireEvent.click(viewAll);
     expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

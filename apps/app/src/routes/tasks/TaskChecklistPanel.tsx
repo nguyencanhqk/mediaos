@@ -13,6 +13,7 @@ import { Button, Checkbox, Input, Badge, Dialog } from "@mediaos/ui";
 import type { TaskChecklistResponseDto, TaskChecklistItemResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { PanelBody } from "./PanelBody";
+import { ChecklistQuickAdd, type ChecklistSaveResult } from "./TaskChecklistPanelQuickAdd";
 
 /**
  * TaskChecklistPanel — nhóm checklist + item tick được (S4-FE-TASK-3, SPEC-06 §13.7/§14.16,
@@ -23,6 +24,10 @@ import { PanelBody } from "./PanelBody";
  * (S5-TASK-PROJROLE-1) employee@Own + manager@Team ĐÃ có update:task ⇒ panel render tương tác được khi
  * useCan true; BE còn cap thêm theo project_role (D-24, mode 'collab' cho checklist). KHÔNG hard-code
  * role — chỉ theo useCan, BE là người quyết cuối.
+ *
+ * S20-TASK-QUICKENTRY-1 (US-TASK-NV-10): ô «Thêm mục» luôn hiện khi có quyền — kể cả khi việc CHƯA
+ * có checklist: mục đầu tiên tạo nhóm «Checklist» kèm `items[]` trong MỘT request (API-06 §17.2);
+ * nhóm đã có thì thêm lần lượt từng mục (đúng thứ tự). Không đổi quy tắc đếm lá (DECISIONS-05).
  */
 function checklistErrorKey(err: unknown): string {
   if (err instanceof ApiError) {
@@ -127,59 +132,72 @@ function ChecklistItemRow({
   );
 }
 
-function AddChecklistItemForm({ taskId, checklistId }: { taskId: string; checklistId: string }) {
-  const { t } = useTranslation("tasks");
-  const [title, setTitle] = useState("");
+/** Thêm lần lượt từng mục vào nhóm đã có — tuần tự để giữ đúng thứ tự; dừng ở mục lỗi đầu tiên. */
+function useAddItemsToChecklist(taskId: string, checklistId: string) {
   const queryClient = useQueryClient();
-  const mutation = useMutation({
-    mutationFn: () => taskCollabApi.addChecklistItem(taskId, checklistId, { title: title.trim() }),
-    onSuccess: async () => {
-      setTitle("");
-      for (const key of taskCollabInvalidation.checklists(taskId))
-        await queryClient.invalidateQueries({ queryKey: key });
-    },
-  });
+  return async (titles: string[]): Promise<ChecklistSaveResult> => {
+    let saved = 0;
+    try {
+      for (const title of titles) {
+        await taskCollabApi.addChecklistItem(taskId, checklistId, { title });
+        saved += 1;
+      }
+      return { saved };
+    } catch (error) {
+      return { saved, error };
+    } finally {
+      if (saved > 0) {
+        for (const key of taskCollabInvalidation.checklists(taskId))
+          void queryClient.invalidateQueries({ queryKey: key });
+      }
+    }
+  };
+}
 
-  return (
-    <div className="flex items-center gap-2">
-      <Input
-        value={title}
-        disabled={mutation.isPending}
-        placeholder={t("tasks.detail.checklist.addItemPlaceholder")}
-        className="h-8 text-sm"
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && title.trim()) {
-            e.preventDefault();
-            mutation.mutate();
-          }
-        }}
-      />
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={mutation.isPending || title.trim().length === 0}
-        onClick={() => mutation.mutate()}
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  );
+/** Việc chưa có checklist: mục đầu tiên tạo nhóm mặc định kèm `items[]` trong MỘT request. */
+function FirstChecklistQuickAdd({
+  taskId,
+  onCreated,
+}: {
+  taskId: string;
+  onCreated: (checklistId: string) => void;
+}) {
+  const { t } = useTranslation("tasks");
+  const queryClient = useQueryClient();
+  const save = async (titles: string[]): Promise<ChecklistSaveResult> => {
+    try {
+      const created = await taskCollabApi.createChecklist(taskId, {
+        title: t("quickEntry.checklist.defaultTitle"),
+        isRequiredForDone: false,
+        items: titles,
+      });
+      onCreated(created.id);
+      for (const key of taskCollabInvalidation.checklists(taskId))
+        void queryClient.invalidateQueries({ queryKey: key });
+      return { saved: titles.length };
+    } catch (error) {
+      return { saved: 0, error };
+    }
+  };
+  return <ChecklistQuickAdd save={save} errorKeyOf={checklistErrorKey} />;
 }
 
 function ChecklistGroup({
   taskId,
   checklist,
   canUpdate,
+  autoFocusQuickAdd,
   onDeleteRequest,
 }: {
   taskId: string;
   checklist: TaskChecklistResponseDto;
   canUpdate: boolean;
+  /** Nhóm vừa được tạo từ ô «Thêm mục» ⇒ đưa focus về ô của nhóm để gõ tiếp. */
+  autoFocusQuickAdd: boolean;
   onDeleteRequest: (checklist: TaskChecklistResponseDto) => void;
 }) {
   const { t } = useTranslation("tasks");
+  const addItems = useAddItemsToChecklist(taskId, checklist.id);
   const done = checklist.items.filter((i) => i.isDone).length;
   const total = checklist.items.length;
 
@@ -218,7 +236,13 @@ function ChecklistGroup({
           />
         ))}
       </ul>
-      {canUpdate && <AddChecklistItemForm taskId={taskId} checklistId={checklist.id} />}
+      {canUpdate && (
+        <ChecklistQuickAdd
+          save={addItems}
+          errorKeyOf={checklistErrorKey}
+          autoFocus={autoFocusQuickAdd}
+        />
+      )}
     </div>
   );
 }
@@ -344,6 +368,7 @@ export function TaskChecklistPanel({
   );
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TaskChecklistResponseDto | null>(null);
+  const [createdChecklistId, setCreatedChecklistId] = useState<string | null>(null);
 
   const {
     data: checklists,
@@ -404,12 +429,18 @@ export function TaskChecklistPanel({
               taskId={taskId}
               checklist={cl}
               canUpdate={canUpdate}
+              autoFocusQuickAdd={cl.id === createdChecklistId}
               onDeleteRequest={setDeleteTarget}
             />
           ))}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">{t("tasks.detail.checklist.empty")}</p>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">{t("tasks.detail.checklist.empty")}</p>
+          {canUpdate && (
+            <FirstChecklistQuickAdd taskId={taskId} onCreated={setCreatedChecklistId} />
+          )}
+        </div>
       )}
 
       {createOpen && <CreateChecklistDialog taskId={taskId} onClose={() => setCreateOpen(false)} />}

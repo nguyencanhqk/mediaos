@@ -8,9 +8,11 @@ import {
   configureApiBaseUrl,
   configureAuthAppUrl,
   configureClientVersion,
+  configureToast,
   redirectToAuth,
   shouldRetryQuery,
 } from "@mediaos/web-core";
+import { toast } from "@mediaos/ui";
 import i18n from "@/i18n";
 import { router } from "@/router";
 import "@/index.css";
@@ -20,6 +22,9 @@ import "@/index.css";
 configureApiBaseUrl(import.meta.env.VITE_API_URL);
 configureAuthAppUrl(import.meta.env.VITE_AUTH_APP_URL);
 configureClientVersion(import.meta.env.VITE_APP_VERSION);
+// S20-FE-TOAST-1 — đích hiển thị của showApiErrorToast (web-core không phụ thuộc UI). Thiếu dòng này
+// thì lỗi ghi chỉ rơi vào console ⇒ người dùng thấy im lặng. <Toaster /> mount ở ProtectedShell.
+configureToast(toast);
 
 // TanStack Query defaults (FRONTEND-04 §16.1): chỉ retry lỗi tạm (shouldRetryQuery — bỏ qua
 // 401/403/422/404…), staleTime 30s, gcTime 5'; mutation KHÔNG retry (dùng Idempotency-Key chống trùng).

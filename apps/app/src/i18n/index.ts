@@ -13,6 +13,8 @@ import accountVi from "./locales/vi/account";
 import notificationsVi from "./locales/vi/notifications";
 // S4-FE-TASK-1 — Project List/Detail/Form/Member (namespace mới "tasks").
 import tasksVi from "./locales/vi/tasks";
+// S20-TASK-DRAWER-1 — khoá mới của "tasks" ở file riêng (tasks.ts đã quá 800 dòng); spread nông.
+import tasksWorkUxVi from "./locales/vi/tasks-workux";
 // S4-FE-DASH-1 — DashboardMePage + WidgetCard + widget P0 (namespace mới "dashboard").
 import dashboardVi from "./locales/vi/dashboard";
 // S5-ME-FE-1 — MeOverviewPage (namespace mới "me", ME-SCREEN-001).
@@ -45,7 +47,7 @@ registerI18nResources("vi", {
   attendance: attendanceVi,
   account: accountVi,
   notifications: notificationsVi,
-  tasks: tasksVi,
+  tasks: { ...tasksVi, ...tasksWorkUxVi },
   dashboard: dashboardVi,
   me: meVi,
   goals: goalsVi,

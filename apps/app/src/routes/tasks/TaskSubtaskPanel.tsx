@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, ArrowDown, Plus, Pencil, Trash2 } from "lucide-react";
+import { ArrowUp, ArrowDown, Pencil, Trash2 } from "lucide-react";
 import {
   taskCoreApi,
   taskKeys,
@@ -15,7 +14,9 @@ import type { SubtaskListItemDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { PanelBody } from "./PanelBody";
 import { TaskOverdueBadge } from "./TaskStatusBadge";
-import { AddSubtaskDialog, EditSubtaskDialog, DeleteSubtaskConfirm } from "./TaskSubtaskDialogs";
+import { useTaskDrawer } from "./task-drawer-nav";
+import { EditSubtaskDialog, DeleteSubtaskConfirm } from "./TaskSubtaskDialogs";
+import { SubtaskQuickAdd } from "./TaskSubtaskPanelQuickAdd";
 import {
   SubtaskAssigneeControl,
   SubtaskDueControl,
@@ -39,7 +40,7 @@ import {
  *
  * Quyền theo ĐÚNG cặp BE dùng (KHÔNG 1 gate chung như TaskChecklistPanel — subtask tái dùng 3 pair
  * khác nhau của TASK core, không phải 1 gate riêng như checklist): thêm = create:task (TASK-API-202
- * với parentTaskId); sửa nhanh + đổi thứ tự = update:task (PATCH .../reorder); xoá = delete:task
+ * với parentTaskId — ô nhập inline cuối danh sách, S20-TASK-QUICKENTRY-1); sửa nhanh + đổi thứ tự = update:task (PATCH .../reorder); xoá = delete:task
  * (SENSITIVE, mirror canDelete của TaskDetailPage — useCanExact fail-closed).
  *
  * Optimistic reorder + rollback (onMutate cancelQueries → setQueryData; onError rollback; onSettled
@@ -95,7 +96,8 @@ function SubtaskRow({
   onDeleteRequest: (item: SubtaskListItemDto) => void;
 }) {
   const { t } = useTranslation("tasks");
-  const navigate = useNavigate();
+  // S20-TASK-DRAWER-1 — mở việc con / việc cha = đổi `?task=` (push) ngay trong drawer; Back về lại.
+  const { openTask } = useTaskDrawer();
 
   return (
     <li
@@ -130,7 +132,7 @@ function SubtaskRow({
           <button
             type="button"
             className="truncate text-left font-medium text-foreground underline-offset-2 hover:underline"
-            onClick={() => void navigate({ to: "/tasks/$taskId", params: { taskId: item.id } })}
+            onClick={() => openTask(item.id)}
           >
             {item.title}
           </button>
@@ -209,7 +211,8 @@ export function TaskSubtaskPanel({
   embedded?: boolean;
 }) {
   const { t } = useTranslation("tasks");
-  const navigate = useNavigate();
+  // S20-TASK-DRAWER-1 — mở việc con / việc cha = đổi `?task=` (push) ngay trong drawer; Back về lại.
+  const { openTask } = useTaskDrawer();
   const queryClient = useQueryClient();
   const canCreate = useCan(
     TASK_CORE_ENGINE_PAIRS.CREATE.action,
@@ -224,7 +227,6 @@ export function TaskSubtaskPanel({
     TASK_CORE_ENGINE_PAIRS.DELETE.resourceType,
   );
 
-  const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SubtaskListItemDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SubtaskListItemDto | null>(null);
 
@@ -294,9 +296,7 @@ export function TaskSubtaskPanel({
           <button
             type="button"
             className="font-medium text-foreground underline-offset-2 hover:underline"
-            onClick={() =>
-              void navigate({ to: "/tasks/$taskId", params: { taskId: parentTaskId } })
-            }
+            onClick={() => openTask(parentTaskId)}
           >
             {t("tasks.detail.subtasks.viewParentAction")}
           </button>
@@ -335,21 +335,11 @@ export function TaskSubtaskPanel({
 
   return (
     <PanelBody embedded={embedded}>
-      <div className="flex items-center justify-between">
-        {embedded ? (
-          <span />
-        ) : (
-          <h3 className="text-sm font-semibold text-muted-foreground">
-            {t("tasks.detail.subtasks.title")}
-          </h3>
-        )}
-        {canCreate && (
-          <Button type="button" size="sm" variant="outline" onClick={() => setAddOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            {t("tasks.detail.subtasks.addButton")}
-          </Button>
-        )}
-      </div>
+      {!embedded && (
+        <h3 className="text-sm font-semibold text-muted-foreground">
+          {t("tasks.detail.subtasks.title")}
+        </h3>
+      )}
 
       {total > 0 && <ProgressBar done={done} total={total} />}
 
@@ -387,13 +377,8 @@ export function TaskSubtaskPanel({
         <p className="text-sm text-muted-foreground">{t("tasks.detail.subtasks.empty")}</p>
       )}
 
-      {addOpen && (
-        <AddSubtaskDialog
-          parentTaskId={taskId}
-          projectId={projectId}
-          onClose={() => setAddOpen(false)}
-        />
-      )}
+      {canCreate && <SubtaskQuickAdd parentTaskId={taskId} projectId={projectId} />}
+
       {editTarget && (
         <EditSubtaskDialog
           parentTaskId={taskId}

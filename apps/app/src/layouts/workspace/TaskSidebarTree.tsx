@@ -26,6 +26,7 @@ import { cn, Popover, Skeleton } from "@mediaos/ui";
 import { TASK_PROJECT_PAGE_LIMIT_MAX, type TaskProjectListItemDto } from "@mediaos/contracts";
 import { isProjectOwner, TASK_ENGINE_PAIRS } from "@/routes/tasks/constants";
 import { ProjectFormDrawer } from "@/routes/tasks/ProjectFormDrawer";
+import { projectCreatedEntryUrl } from "@/routes/tasks/workspace-constants";
 import { useLocalPref } from "@/hooks/use-local-pref";
 import { isPathActive } from "./ModuleSidebar";
 import { usePersistedSet } from "./use-persisted-set";
@@ -352,6 +353,7 @@ function DeptNode({
 export function TaskSidebarTree() {
   const { t } = useTranslation("tasks");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const router = useRouter();
   const canRead = useCan(
     TASK_ENGINE_PAIRS.READ_PROJECT.action,
     TASK_ENGINE_PAIRS.READ_PROJECT.resourceType,
@@ -485,7 +487,11 @@ export function TaskSidebarTree() {
           mode="create"
           initialDepartmentId={createForDept}
           onClose={() => setCreateForDept(null)}
-          onSuccess={() => setCreateForDept(null)}
+          // S20-TASK-PROJECTENTRY-1 — như tạo từ danh sách: vào thẳng tab Thành viên, hộp thêm mở sẵn.
+          onSuccess={(created) => {
+            setCreateForDept(null);
+            router.history.push(projectCreatedEntryUrl(created.id));
+          }}
         />
       )}
     </div>
