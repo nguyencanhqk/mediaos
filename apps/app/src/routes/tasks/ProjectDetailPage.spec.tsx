@@ -415,34 +415,21 @@ describe("ProjectDetailPage", () => {
       expect(screen.queryByTestId("task-detail-drawer")).not.toBeInTheDocument();
     });
 
-    it("deep-link ?tab=board&task=<id> mở thẳng panel chi tiết — copy link ra đúng task", async () => {
+    // S20-TASK-DRAWER-1 — drawer việc giờ mount MỘT lần ở ProtectedShell (GlobalTaskDrawer, có spec
+    // riêng ở TaskDetailDrawer.spec): trang workspace KHÔNG được tự vẽ thêm một cái nữa.
+    it("?tab=board&task=<uuid> ⇒ trang KHÔNG tự vẽ drawer việc (chỉ còn MỘT — cái ở shell)", async () => {
       setCapabilities({ "read:project": true, "view-kanban:task": true, "read:task": true });
       vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
       vi.mocked(taskCoreApi.getTask).mockResolvedValue({
-        id: "task-042",
+        id: "0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b",
         title: "Dựng trang Tuyển dụng",
       } as never);
-      searchRef.current = { tab: "board", task: "task-042" };
+      searchRef.current = { tab: "board", task: "0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b" };
       renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
 
-      await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeInTheDocument());
-      await waitFor(() => expect(screen.getByText("Dựng trang Tuyển dụng")).toBeInTheDocument());
-    });
-
-    it("đóng panel dùng history.REPLACE (không push) — Back sau khi đóng không mở lại panel", async () => {
-      setCapabilities({ "read:project": true, "view-kanban:task": true, "read:task": true });
-      vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
-      vi.mocked(taskCoreApi.getTask).mockResolvedValue({
-        id: "task-042",
-        title: "Dựng trang Tuyển dụng",
-      } as never);
-      searchRef.current = { tab: "board", task: "task-042" };
-      renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
-      await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeInTheDocument());
-
-      fireEvent.click(screen.getByTestId("sheet-close"));
-      expect(historyReplaceMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=board");
-      expect(historyPushMock).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+      expect(screen.queryAllByTestId("task-detail-drawer")).toHaveLength(0);
+      expect(taskCoreApi.getTask).not.toHaveBeenCalled();
     });
 
     it("đổi tab BỎ ?task= — panel không treo lại ở tab khác", async () => {

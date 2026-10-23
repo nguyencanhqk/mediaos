@@ -7,6 +7,7 @@
  *  (e) FE-2: đã chốt kỳ ⇒ Check-in DISABLED + nút đổi thành "Mở lại" (cùng cặp finalize).
  *  (f) FE-2: bấm "Chốt kỳ" chỉ MỞ hộp thoại — mutation chỉ chạy khi bấm xác nhận trong hộp thoại.
  *  (g) FE-2 two-gate: "Gắn thêm việc"/"Tháo" ẩn khi thiếu update:goal HOẶC update:task.
+ *  (i) S20-TASK-DRAWER-1: tên việc gắn là lối mở drawer CHỈ khi có read:task (cặp drawer dùng).
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -15,8 +16,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 
+// Một hàm navigate DUY NHẤT để soi lời gọi mở drawer `?task=` (S20-TASK-DRAWER-1).
+const nav = vi.hoisted(() => ({ navigate: vi.fn() }));
 vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => nav.navigate,
 }));
 
 // Tập cặp quyền BỊ THU HỒI cho từng test (mặc định rỗng = có đủ quyền). `vi.hoisted` vì factory
@@ -290,6 +293,45 @@ describe("GoalDetailPage — tab Công việc: two-gate gắn/tháo", () => {
     expect(screen.getByTestId("goal-link-tasks-open")).toBeDisabled();
     expect(screen.getByTestId("goal-unlink-task-t-1")).toBeDisabled();
     expect(mockUnlink).not.toHaveBeenCalled();
+  });
+});
+
+describe("GoalDetailPage — tab Công việc: lối mở drawer việc (S20-TASK-DRAWER-1)", () => {
+  beforeEach(() => {
+    mockListLinkedTasks.mockResolvedValue([LINKED_TASK]);
+  });
+
+  async function openLinkedTab() {
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Tăng doanh thu 20%")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: "Công việc gắn" }));
+    await waitFor(() => expect(screen.getByText("Chuẩn bị tài liệu")).toBeInTheDocument());
+  }
+
+  it("(i1) có read:task ⇒ tên việc là nút, bấm thêm ?task= vào URL hiện tại (drawer tại chỗ)", async () => {
+    await openLinkedTab();
+    fireEvent.click(screen.getByTestId("goal-linked-task-open-t-1"));
+
+    expect(nav.navigate).toHaveBeenCalledTimes(1);
+    const arg = nav.navigate.mock.calls[0]?.[0] as {
+      to: string;
+      replace?: boolean;
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+    };
+    expect(arg).toMatchObject({ to: "." });
+    expect(arg.replace).not.toBe(true);
+    expect(arg.search({ tab: "tasks" })).toEqual({ tab: "tasks", task: "t-1" });
+  });
+
+  it("(i2) thiếu read:task ⇒ tên việc là chữ thường, KHÔNG có nút mở, bấm vào 0 lời gọi", async () => {
+    perm.denied.add("read:task");
+    await openLinkedTab();
+
+    expect(screen.queryByTestId("goal-linked-task-open-t-1")).not.toBeInTheDocument();
+    const title = screen.getByText("Chuẩn bị tài liệu");
+    expect(title.closest("button")).toBeNull();
+    fireEvent.click(title);
+    expect(nav.navigate).not.toHaveBeenCalled();
   });
 });
 

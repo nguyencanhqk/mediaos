@@ -9,8 +9,19 @@ import { TaskDetailContent } from "./TaskDetailContent";
  * S5-TASK-BOARD-UX-1: toàn bộ NỘI DUNG chuyển sang `TaskDetailContent` (dùng chung với panel trượt
  * phải mở từ board — xem TaskDetailDrawer). Trang này giờ chỉ là VỎ: nút quay lại + khung padding.
  * Route/deep-link giữ nguyên — thông báo, danh sách, việc con vẫn trỏ /tasks/:taskId như cũ.
+ *
+ * S20-TASK-DRAWER-1: xoá xong gọi `onDeleted` (KHÔNG `onBack`) — trang trước có thể còn `?task=<việc
+ * vừa xoá>`, quay lại đó thì drawer mở lại việc đã xoá.
  */
-export function TaskDetailPage({ taskId, onBack }: { taskId: string; onBack: () => void }) {
+export function TaskDetailPage({
+  taskId,
+  onBack,
+  onDeleted,
+}: {
+  taskId: string;
+  onBack: () => void;
+  onDeleted: () => void;
+}) {
   const { t } = useTranslation("tasks");
 
   return (
@@ -20,7 +31,7 @@ export function TaskDetailPage({ taskId, onBack }: { taskId: string; onBack: () 
         {t("tasks.detail.backToList")}
       </Button>
 
-      <TaskDetailContent taskId={taskId} onDeleted={onBack} variant="page" />
+      <TaskDetailContent taskId={taskId} onDeleted={onDeleted} variant="page" />
     </div>
   );
 }

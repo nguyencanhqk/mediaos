@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { taskIdFromPath, useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
 
 /**
  * NotificationTargetLink — S4-FE-NOTI-1. Deep link AN TOÀN từ 1 thông báo tới nội dung liên quan
@@ -12,6 +13,10 @@ import { useNavigate } from "@tanstack/react-router";
  *  - CHỈ chấp nhận `target_url` bắt đầu bằng "/" (đường dẫn NỘI BỘ, tương đối tới gốc app). URL tuyệt đối
  *    ("http://…", "//…" protocol-relative) hoặc rỗng/null ⇒ KHÔNG render link (tránh open-redirect nếu
  *    server/nguồn dữ liệu bị thao túng — defense-in-depth, dù server hiện tại luôn generate nội bộ).
+ *
+ * S20-TASK-DRAWER-1: đích `/tasks/<uuid>` KHÔNG rời trang — thêm `?task=<uuid>` vào URL hiện tại để
+ * drawer việc toàn cục mở tại chỗ (đứng ở /goals/G ⇒ /goals/G?task=T). Quyền xem việc vẫn do server
+ * quyết khi drawer tải; đích khác giữ nguyên điều hướng cũ.
  */
 export function isSafeInternalTarget(url: string | null | undefined): url is string {
   if (!url) return false;
@@ -34,6 +39,7 @@ export function NotificationTargetLink({
   className,
 }: NotificationTargetLinkProps) {
   const navigate = useNavigate();
+  const { openTask } = useTaskDrawer();
   const safe = isSafeInternalTarget(targetUrl);
 
   if (!safe) {
@@ -46,6 +52,11 @@ export function NotificationTargetLink({
       className={className}
       onClick={() => {
         onBeforeNavigate?.();
+        const taskId = taskIdFromPath(targetUrl);
+        if (taskId) {
+          openTask(taskId);
+          return;
+        }
         // target_url là chuỗi động (server) — router yêu cầu literal route ở type-level; cast "as \"/\""
         // là pattern ĐÃ DÙNG khắp router.tsx cho mọi điều hướng path động (vd LEAVE_PATHS.DETAIL(id)).
         void navigate({ to: targetUrl as "/" });

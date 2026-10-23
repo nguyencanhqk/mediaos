@@ -23,7 +23,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { I18nextProvider } from "react-i18next";
-import { useAuthStore, myNotificationApi } from "@mediaos/web-core";
+import { useAuthStore, myNotificationApi, goalApi, taskCoreApi } from "@mediaos/web-core";
 import type {
   MyNotificationListItem,
   MyNotificationDetail,
@@ -53,7 +53,10 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     },
     taskCoreApi: {
       getMyTasks: vi.fn().mockResolvedValue([]),
+      // S20-TASK-DRAWER-1 — drawer việc toàn cục tải việc khi URL có `?task=` (stub mạng).
+      getTask: vi.fn(),
     },
+    goalApi: { ...actual.goalApi, getGoal: vi.fn() },
   };
 });
 
@@ -219,6 +222,35 @@ describe("NOTI router-wire flow (S4-FE-NOTI-1-WIRE) — qua router THẬT + Glob
       expect(screen.getByRole("heading", { name: /việc của tôi/i })).toBeInTheDocument(),
     );
     expect(screen.queryByText(/đang xây dựng/i)).not.toBeInTheDocument();
+
+    view.unmount();
+  });
+
+  it("S20-TASK-DRAWER-1 KPI #9 — đứng ở /goals/G, bấm thông báo việc ⇒ drawer mở TẠI CHỖ: pathname giữ /goals/G, search có task=T, 0 chuyển trang", async () => {
+    const GOAL_ID = "5f0c2a1e-7b3d-4c9e-8a6f-1d2e3f4a5b6c";
+    const TASK_ID = "0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b";
+    login({ ...NOTI_CAPS, "access:goal": true, "read:goal": true, "read:task": true });
+    // Mạng treo ⇒ trang mục tiêu ở khung tải, drawer ở tiêu đề tạm — đủ để soi URL, không cần dữ liệu.
+    vi.mocked(goalApi.getGoal).mockReturnValue(new Promise(() => {}));
+    vi.mocked(taskCoreApi.getTask).mockReturnValue(new Promise(() => {}));
+    vi.mocked(myNotificationApi.dropdown).mockResolvedValue({
+      unread_count: 1,
+      items: [{ ...DROPDOWN_ITEM, target_url: `/tasks/${TASK_ID}` }],
+    });
+    vi.mocked(myNotificationApi.markRead).mockResolvedValue(MARK_READ_RESPONSE);
+
+    await router.navigate({ to: "/goals/$goalId", params: { goalId: GOAL_ID } });
+    const view = renderApp();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Thông báo" }));
+    fireEvent.click(await screen.findByText(DROPDOWN_ITEM.title));
+
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ task: TASK_ID }));
+    expect(router.state.location.pathname).toBe(`/goals/${GOAL_ID}`);
+    await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeInTheDocument());
+    // Dropdown đã đóng (chỉ đóng — không có lượt sang /notifications đè lên đích).
+    expect(screen.queryByText(DROPDOWN_ITEM.title)).not.toBeInTheDocument();
+    expect(myNotificationApi.markRead).toHaveBeenCalledWith("n2");
 
     view.unmount();
   });

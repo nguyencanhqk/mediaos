@@ -112,7 +112,7 @@ describe("TaskDetailPage", () => {
   // ── DENY-PATH: no read:task ────────────────────────────────────────────────
   it("renders forbidden state when user lacks read:task", () => {
     setCapabilities({});
-    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} onDeleted={vi.fn()} />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
     expect(taskCoreApi.getTask).not.toHaveBeenCalled();
   });
@@ -121,7 +121,7 @@ describe("TaskDetailPage", () => {
   it("renders task overview when user has read:task", async () => {
     setCapabilities({ "read:task": true });
     vi.mocked(taskCoreApi.getTask).mockResolvedValue(MOCK_TASK);
-    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} onDeleted={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
     expect(screen.getByText("Mô tả chi tiết")).toBeInTheDocument();
     expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0);
@@ -134,7 +134,7 @@ describe("TaskDetailPage", () => {
   it("hides edit/delete actions without update/delete:task", async () => {
     setCapabilities({ "read:task": true });
     vi.mocked(taskCoreApi.getTask).mockResolvedValue(MOCK_TASK);
-    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} onDeleted={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
     expect(screen.queryByText(/sửa công việc/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/xóa công việc/i)).not.toBeInTheDocument();
@@ -146,7 +146,7 @@ describe("TaskDetailPage", () => {
   it("ẩn Sửa/Xóa sau menu ⋯, mở ra mới thấy (có update/delete:task)", async () => {
     setCapabilities({ "read:task": true, "update:task": true, "delete:task": true });
     vi.mocked(taskCoreApi.getTask).mockResolvedValue(MOCK_TASK);
-    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} onDeleted={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
 
     expect(screen.queryByTestId("task-action-edit")).not.toBeInTheDocument();
@@ -155,10 +155,30 @@ describe("TaskDetailPage", () => {
     expect(screen.getByTestId("task-action-delete")).toBeInTheDocument();
   });
 
+  // S20-TASK-DRAWER-1 — xoá ở trang đầy đủ KHÔNG dùng «Quay lại»: trang trước có thể còn `?task=<việc
+  // vừa xoá>` ⇒ drawer mở lại việc đã xoá và báo lỗi. Trang gọi onDeleted (router về /tasks/my-tasks).
+  it("xoá thành công ⇒ gọi onDeleted, KHÔNG gọi onBack", async () => {
+    setCapabilities({ "read:task": true, "delete:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue(MOCK_TASK);
+    vi.mocked(taskCoreApi.deleteTask).mockResolvedValue(undefined as never);
+    const onBack = vi.fn();
+    const onDeleted = vi.fn();
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={onBack} onDeleted={onDeleted} />);
+    await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("task-actions-menu"));
+    fireEvent.click(screen.getByTestId("task-action-delete"));
+    fireEvent.click(await screen.findByRole("button", { name: "Xác nhận xóa" }));
+
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
+    expect(taskCoreApi.deleteTask).toHaveBeenCalledWith("task-001");
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
   it("thiếu cả update lẫn delete ⇒ KHÔNG render menu ⋯", async () => {
     setCapabilities({ "read:task": true });
     vi.mocked(taskCoreApi.getTask).mockResolvedValue(MOCK_TASK);
-    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} onDeleted={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
     expect(screen.queryByTestId("task-actions-menu")).not.toBeInTheDocument();
   });
@@ -169,7 +189,7 @@ describe("TaskDetailPage", () => {
     vi.mocked(taskCoreApi.getTask).mockRejectedValue(
       new ApiError({ status: 404, code: "NOT_FOUND", message: "not found" }),
     );
-    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} onDeleted={vi.fn()} />);
     await waitFor(() => expect(screen.getByText(/không tìm thấy công việc/i)).toBeInTheDocument());
   });
 
@@ -177,7 +197,7 @@ describe("TaskDetailPage", () => {
   it("shows error state with retry on generic failure", async () => {
     setCapabilities({ "read:task": true });
     vi.mocked(taskCoreApi.getTask).mockRejectedValue(new Error("Network error"));
-    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} onDeleted={vi.fn()} />);
     await waitFor(() => expect(screen.getByText(/không thể tải công việc/i)).toBeInTheDocument());
   });
 
@@ -193,7 +213,7 @@ describe("TaskDetailPage", () => {
           rejectChangeStatus = reject;
         }),
     );
-    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} />);
+    renderWithQuery(<TaskDetailPage taskId="task-001" onBack={vi.fn()} onDeleted={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
 
     // Vá UI 2026-07-20: control trạng thái là THẺ badge + popover (không còn <select>).
