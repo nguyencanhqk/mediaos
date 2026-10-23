@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-23 06:02Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-23 06:09Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -122,6 +122,11 @@
 -  `S20-TASK-ALLOWEDACTIONS-1` Ở việc tôi chỉ theo dõi, trạng thái/hạn/người phụ trách hiện chỉ đọc kèm lý do thay vì cho bấm rồi báo lỗi (server trả `allowedActions`)
 - 🟡 `S20-CHAT-MENTIONPIN-1` Thấy ngay phòng nào có người @nhắc tôi chưa đọc (dấu @ + chip «Nhắc tôi»), và tin đã ghim hiện thành thanh ở đầu hội thoại, cập nhật tức thì khi người khác ghim/bỏ ghim
 - 🔴 `S20-TASK-PROJREPORTROLE-1` Owner/Manager còn hiệu lực của dự án xem được tab Báo cáo của chính dự án đó mà không cần cặp `view-report:project` — tab Hoạt động giữ nguyên DECISIONS-04 mục 3
+- 🔴 `S20-SEC-TASKLEGACYREAD-1` Ba route đọc việc đời cũ (board · theo dự án · theo nhóm) — gỡ nếu không còn nơi dùng, hoặc đưa về cùng cổng đọc với danh sách việc chính
+- 🔴 `S20-SEC-TASKPATCHGATE-1` Đối chiếu cổng quyền của form Sửa việc với các thao tác chuyên trách (giao người · dời hạn · đổi ưu tiên) — cùng một thay đổi phải cùng một quyết định quyền
+- 🔴 `S20-SEC-GOALLINKGATE-1` Gắn việc vào mục tiêu kiểm cả mục tiêu đang giữ việc đó (quyền ghi · chốt kỳ) và trạng thái mục tiêu đích — trước khi mở các luồng gắn một chạm/hàng loạt
+- 🔴 `S20-SEC-GOALNAMEDTO-1` Tên/mã mục tiêu đi kèm dữ liệu việc theo đúng quyền xem mục tiêu — chốt chính sách trước khi chip mục tiêu xuất hiện rộng trên danh sách việc
+- 🔴 `S20-SEC-LEAVETYPEMASK-1` Lịch nghỉ cấp đội chỉ hiện «Nghỉ» + khoảng ngày; loại nghỉ cụ thể chỉ người duyệt thấy — che ở server (Q23 = B)
 
 **CHỜ (kẹt phụ thuộc):**
 - `S7-GOAL-PROJTAB-1` Tab «Mục tiêu» trong workspace dự án — lát A (xanh): danh sách mục tiêu gắn dự án bằng bộ lọc `projectId` sẵn có + «Tạo mục tiêu dự án» điền sẵn; lát B (vàng, sau): endpoint phủ mục tiêu của việc (gồm việc CHƯA gắn) + gắn việc tại chỗ ⏳ cần: S20-GOAL-LISTURL-1
@@ -196,7 +201,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -205,6 +210,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `c4ab0059` | 2026-10-23 | chore(backlog): seed wave S20-WORKUX — 62 WO Tin nhắn · Công việc · Mục tiêu (owner duyệt 23/10) + tài liệu story + mở lại tab Mục tiêu dự án · regen STATUS |
 | `42f6c7fa` | 2026-10-23 | docs(plan): S19-SEC-FILELINKPATHS-1 — sổ hậu merge: #602 = 3924d08a · API PROD 3924d08a (/health 12:32) · owner chấp nhận D-7 · gieo 3 WO nợ (FE mã lỗi · deny-error · kiểm lô) · regen STATUS |
 | `3924d08a` | 2026-10-23 | fix(files): S19-SEC-FILELINKPATHS-1 — đường gắn tệp ngoài lõi dùng chung quyết định xem của người gắn (#602) |
 | `7c77dbce` | 2026-10-23 | docs(plan): S4-DASH-HROVERVIEW-FLOOR-1 + S17-CHAT-RTROOMOPS-1 — sổ hậu merge: #599 = c8aec03b · #601 = 32db6308 · API PROD 32db6308 (/health 11:35) · gieo 4 WO nợ CHAT · regen STATUS |
@@ -216,7 +222,6 @@
 | `6ac4ca48` | 2026-10-23 | chore(harness): sổ 23/10 — lý do chặn CAPWILDCARD/STORAGEPUBLIC theo số đo · định nghĩa zone amber · regen STATUS |
 | `03b7951f` | 2026-10-23 | docs(social): S16-SOCIAL-DOC-3 — đính chính SPEC-16 + API-19 + README theo số đo của S16-SOCIAL-QA-1 (cặp 15 · mã lỗi 57→51/47 · 7 cột đếm · mã thành công 59 route · tập khoá WS) |
 | `1323e319` | 2026-10-23 | fix(deps): S19-OPS-AUDITVITE-1 — gỡ advisory HIGH GHSA-587h-7wmj-h5pm (vite 6.4.3 → 6.4.4 qua override) (#598) |
-| `ec6decae` | 2026-10-21 | docs(plan): S16-SOCIAL-STORAGETESTGATE-1 — sổ hậu merge: #597 = 8b46c67f (21/10 07:46) · CI xanh (Storage int-spec gate skips=0 runs=14 calls=0) · offline toàn suite calls=2 ⇒ N8 · không deploy · gieo 6 WO nợ · regen STATUS |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
