@@ -96,6 +96,31 @@ export function isAddMembersFlag(raw: unknown): boolean {
   return raw === 1 || raw === "1" || raw === true;
 }
 
+/** Search đã validate của route `/tasks/projects/$projectId` (router.tsx). */
+export interface ProjectWorkspaceSearch {
+  tab?: ProjectWorkspaceTab;
+  task?: string;
+  addMembers?: 1;
+}
+
+/**
+ * validateSearch của route dự án. `?tab` TƯỜNG MINH được giữ — kể cả `overview` — vì tab trên URL
+ * thắng tab nhớ (resolveWorkspaceTab): link chia sẻ `?tab=overview` phải mở Tổng quan, không bị coi
+ * như URL trống. Rác ⇒ bỏ khoá (như không có), KHÔNG ném. `?task=` giữ nguyên chuỗi (server quyết id
+ * hợp lệ hay không); `?addMembers=1` = vừa tạo dự án (trang gỡ cờ bằng replace sau khi xử lý).
+ */
+export function validateProjectWorkspaceSearch(
+  search: Record<string, unknown>,
+): ProjectWorkspaceSearch {
+  const tab = parseWorkspaceTabParam(search.tab);
+  const task = typeof search.task === "string" && search.task.length > 0 ? search.task : undefined;
+  return {
+    ...(tab ? { tab } : {}),
+    ...(task ? { task } : {}),
+    ...(isAddMembersFlag(search.addMembers) ? { addMembers: 1 as const } : {}),
+  };
+}
+
 /** Đích ngay sau khi tạo dự án: tab Thành viên, hộp thêm thành viên tự mở (nếu có quyền). */
 export function projectCreatedEntryUrl(projectId: string): string {
   return `/tasks/projects/${encodeURIComponent(projectId)}?tab=members&addMembers=1`;

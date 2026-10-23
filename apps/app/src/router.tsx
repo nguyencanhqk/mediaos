@@ -16,12 +16,8 @@ import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout
 // KHÔNG lazy: nó là KHUNG của route, không phải nội dung — lazy hoá khung làm cả cổng nháy trắng
 // một nhịp ở mỗi lần điều hướng giữa các màn /feed*.
 import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
-// S5-TASK-WORKSPACE-1 — parser ?tab= của workspace dự án (file thuần TS, không component).
-import {
-  isAddMembersFlag,
-  parseWorkspaceTab,
-  type ProjectWorkspaceTab,
-} from "@/routes/tasks/workspace-constants";
+// S5-TASK-WORKSPACE-1 — validateSearch của workspace dự án (file thuần TS, không component).
+import { validateProjectWorkspaceSearch } from "@/routes/tasks/workspace-constants";
 import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
 import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
 
@@ -1500,32 +1496,18 @@ const tasksProjectsRoute = makeModuleRoute(
 );
 
 // Project detail — no sidebar entry; path param resolved via useParams (mirror hrEmployeeDetailRoute).
-// S5-TASK-WORKSPACE-1: vỏ workspace tab hoá — `?tab=` validate bằng CHÍNH parser của workspace
-// (parseWorkspaceTab, single source apps/app/src/routes/tasks/workspace-constants.ts — file thuần TS,
-// import tĩnh không kéo component vào bundle router). Giá trị rác bị strip (overview mặc định),
-// không 400/crash; đổi tab do page tự history.push (mirror pattern đợt B ProjectListPage).
+// S5-TASK-WORKSPACE-1: vỏ workspace tab hoá — search validate bằng CHÍNH helper của workspace
+// (validateProjectWorkspaceSearch, single source routes/tasks/workspace-constants.ts — file thuần TS,
+// import tĩnh không kéo component vào bundle router): `?tab` tường minh GIỮ (kể cả overview — URL
+// thắng tab nhớ), rác bị bỏ, không 400/crash; đổi tab do page tự history.push.
 const tasksProjectDetailMeta = getMeta("task.projects.detail");
 const tasksProjectDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tasks/projects/$projectId",
   beforeLoad: authGuard,
-  // S5-TASK-BOARD-UX-1 — thêm `?task=<id>`: mở panel chi tiết ĐÈ LÊN workspace (không rời trang).
-  // Giữ nguyên chuỗi, KHÔNG validate uuid ở đây: id rác chỉ làm panel hiện "không tìm thấy" (server
-  // là người quyết), còn chặn ở router sẽ nuốt mất param và người dùng thấy panel im lặng không mở.
-  // S20-TASK-PROJECTENTRY-1 — thêm `?addMembers=1` (vừa tạo dự án ⇒ tab Thành viên tự mở hộp thêm
-  // thành viên khi có quyền; trang gỡ cờ bằng replace sau khi xử lý). Giá trị khác ⇒ bỏ.
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { tab?: ProjectWorkspaceTab; task?: string; addMembers?: 1 } => {
-    const tab = parseWorkspaceTab(search.tab);
-    const task =
-      typeof search.task === "string" && search.task.length > 0 ? search.task : undefined;
-    return {
-      ...(tab === "overview" ? {} : { tab }),
-      ...(task ? { task } : {}),
-      ...(isAddMembersFlag(search.addMembers) ? { addMembers: 1 as const } : {}),
-    };
-  },
+  // `?task=<id>` (S5-TASK-BOARD-UX-1) mở panel chi tiết đè workspace; `?addMembers=1`
+  // (S20-TASK-PROJECTENTRY-1) = vừa tạo dự án ⇒ tab Thành viên tự mở hộp thêm khi có quyền.
+  validateSearch: validateProjectWorkspaceSearch,
   component: () => {
     const { projectId } = tasksProjectDetailRoute.useParams();
     const navigate = useNavigate();

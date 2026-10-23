@@ -18,6 +18,7 @@ import {
   sanitizeWorkspaceTabOrder,
   sortWorkspaceTasks,
   UNASSIGNED_FILTER_VALUE,
+  validateProjectWorkspaceSearch,
   type WorkspaceTaskFilters,
 } from "./workspace-constants";
 
@@ -293,5 +294,26 @@ describe("pickProjectLastTab / nextProjectLastTabMap — bản đồ projectId �
     expect(Object.keys(next)).toHaveLength(PROJECT_LAST_TAB_MAX_ENTRIES);
     expect(next.p0).toBeUndefined();
     expect(next.new).toBe("list");
+  });
+});
+
+// Review S20-TASK-PROJECTENTRY-1 — search của route dự án: `?tab` TƯỜNG MINH được giữ, kể cả
+// `overview` (URL thắng tab nhớ ⇒ link chia sẻ `?tab=overview` phải mở Tổng quan); rác bị bỏ.
+describe("validateProjectWorkspaceSearch — validateSearch của /tasks/projects/$projectId", () => {
+  it("?tab=overview tường minh → GIỮ tab overview (không coi như thiếu ?tab)", () => {
+    expect(validateProjectWorkspaceSearch({ tab: "overview" })).toEqual({ tab: "overview" });
+  });
+  it("tab hợp lệ khác + task + addMembers=1 → giữ đủ", () => {
+    expect(validateProjectWorkspaceSearch({ tab: "members", task: "t-1", addMembers: 1 })).toEqual({
+      tab: "members",
+      task: "t-1",
+      addMembers: 1,
+    });
+  });
+  it("rác / sai kiểu → bỏ khoá (như không có), không ném", () => {
+    expect(
+      validateProjectWorkspaceSearch({ tab: "gantt", task: "", addMembers: 2, extra: "x" }),
+    ).toEqual({});
+    expect(validateProjectWorkspaceSearch({ tab: ["board"], task: 5 })).toEqual({});
   });
 });

@@ -575,6 +575,17 @@ describe("ProjectDetailPage — vào dự án (tab nhớ + addMembers)", () => {
     expect(screen.getByTestId("workspace-toolbar")).toBeInTheDocument();
   });
 
+  // Review: trang đọc search THÔ (location.search) ⇒ `?tab=overview` chia sẻ vẫn là tab tường minh.
+  it("URL ?tab=overview tường minh thắng tab nhớ (không coi như thiếu ?tab)", async () => {
+    setCapabilities({ "read:project": true, "view-kanban:task": true });
+    remember({ "proj-001": "board" });
+    searchRef.current = { tab: "overview" };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-overview");
+    expect(screen.queryByTestId("workspace-toolbar")).not.toBeInTheDocument();
+  });
+
   it("tab nhớ là của dự án KHÁC → không áp sang dự án này", async () => {
     setCapabilities({ "read:project": true, "view-kanban:task": true });
     remember({ "proj-999": "board" });
@@ -661,6 +672,20 @@ describe("ProjectDetailPage — vào dự án (tab nhớ + addMembers)", () => {
 
   it("?tab=members&addMembers=1 + có manage-member:project → hộp thêm thành viên mở, cờ bị gỡ khỏi URL (replace)", async () => {
     setCapabilities({ "read:project": true, "manage-member:project": true });
+    searchRef.current = { tab: "members", addMembers: 1 };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("member-picker-confirm")).toBeInTheDocument());
+    expect(historyReplaceMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=members");
+  });
+
+  // Review: người tạo dự án thường KHÔNG có pair manage-member mà là Owner — myProjectRole đến từ
+  // getProject và bảng thành viên chỉ mount SAU khi dự án tải xong ⇒ cổng đã đủ dữ liệu ở lần chạy đầu.
+  it("người tạo = Owner (myProjectRole từ server, thiếu pair) + addMembers=1 → hộp thêm thành viên mở", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue({
+      ...MOCK_PROJECT,
+      myProjectRole: "Owner",
+    });
     searchRef.current = { tab: "members", addMembers: 1 };
     renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId("member-picker-confirm")).toBeInTheDocument());
