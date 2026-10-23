@@ -9,7 +9,9 @@
  *   (3) từ chối ⇒ 0 liên kết mới, thực thể đích không đổi; một tệp từ chối trong lô ⇒ cả lô không gắn;
  *   (4) thứ tự lỗi cũ giữ nguyên (ngoài phòng ⇒ lỗi thành viên trước lỗi tệp) và gửi lại cùng
  *       `clientMessageId` trả lại tin cũ;
- *   (5) mỗi ca TỪ CHỐI có ca CHO PHÉP đứng cạnh trên cùng route.
+ *   (5) mỗi ca TỪ CHỐI có ca CHO PHÉP đứng cạnh trên cùng route;
+ *   (6) tệp thuộc tenant khác ⇒ từ chối, 0 liên kết trên tệp đó (chủ tệp là người dùng của tenant kia — khoá
+ *       ngoại tổ hợp chủ↔tenant của `files` không cho dựng chủ chéo tenant).
  *
  * Fixture «0 liên kết sống» dựng bằng đường thật gỡ liên kết (gỡ / thay ảnh), đo trước khi dùng.
  * Tệp gieo bằng pool `direct` (không PUT storage).
@@ -86,8 +88,8 @@ describe.skipIf(!hasLaneDb)(
     const tok = (label: string): string => tokens.get(label)!;
     const uid = (label: string): string => ids.get(label)!;
 
-    /** Ảnh Uploaded + Clean, chủ = `ownerId`, chưa từng gắn. */
-    async function seedImage(ownerId: string): Promise<string> {
+    /** Ảnh Uploaded + Clean, chủ = `ownerId`, chưa từng gắn; mặc định thuộc tenant A. */
+    async function seedImage(ownerId: string, companyId = w.A.companyId): Promise<string> {
       const id = randomUUID();
       await w.direct.query(
         `INSERT INTO files (id, company_id, original_name, stored_name, mime_type, file_extension,
@@ -96,10 +98,10 @@ describe.skipIf(!hasLaneDb)(
          VALUES ($1,$2,$3,$4,'image/png','png',2048,'MinIO',$5,'Uploaded','Clean',$6,$6,now())`,
         [
           id,
-          w.A.companyId,
+          companyId,
           `flp-${id.slice(0, 8)}.png`,
           `stored-${id}`,
-          `${w.A.companyId}/files/${id}`,
+          `${companyId}/files/${id}`,
           ownerId,
         ],
       );
@@ -229,6 +231,16 @@ describe.skipIf(!hasLaneDb)(
       emp1 = await seedEmployeeRow();
       emp2 = await seedEmployeeRow();
       for (const k of ["y", "z", "wnew"]) f[k] = await seedImage(uid("hr"));
+
+      // Tenant khác: hàng tệp thuộc B, chủ là người dùng của B.
+      const ownerB = await seedUser(
+        w.direct,
+        w.B.companyId,
+        `flp-owner@${w.B.slug}.test`,
+        await new PasswordService().hash(LOGIN_PW),
+      );
+      f.tu = await seedImage(ownerB, w.B.companyId);
+      f.thr = await seedImage(ownerB, w.B.companyId);
       expectOk(await setEmpAvatar(emp1, f.y!), "fixture avatar NV1 = y");
       expectOk(await setEmpAvatar(emp1, f.z!), "fixture avatar NV1 = z");
     }, BOOT_TIMEOUT_MS);
@@ -308,6 +320,13 @@ describe.skipIf(!hasLaneDb)(
       expect(await allLinks(f.a4!)).toBe(before);
     });
 
+    it("P1-T tệp thuộc tenant khác ⇒ 403, 0 liên kết, 0 tin mới", async () => {
+      const msgs = await roomMessages(roomA);
+      expectDenied(await sendFiles("u", roomA, [f.tu!]), CHAT_FILE_INVALID, "P1-T");
+      expect(await allLinks(f.tu!), "P1-T: 0 liên kết trên tệp tenant khác").toBe(0);
+      expect(await roomMessages(roomA), "P1-T: 0 tin mới").toBe(msgs);
+    });
+
     // ─── L2 · ảnh phòng CHAT ─────────────────────────────────────────────────
 
     it("P2-D1 ảnh của người đặt, từng là ảnh phòng rồi gỡ ⇒ 403 CHAT-ERR-015, Δ0, cột giữ", async () => {
@@ -331,6 +350,13 @@ describe.skipIf(!hasLaneDb)(
       expect(await liveLinks(f.img!)).toBe(1);
       expectOk(await setRoomAvatar("u", roomA, f.img!), "P2-A2");
       expect(await liveLinks(f.img!)).toBe(1);
+    });
+
+    it("P2-T ảnh thuộc tenant khác ⇒ 403, 0 liên kết, cột giữ", async () => {
+      const col = await roomAvatar(roomA);
+      expectDenied(await setRoomAvatar("u", roomA, f.tu!), CHAT_FILE_INVALID, "P2-T");
+      expect(await allLinks(f.tu!)).toBe(0);
+      expect(await roomAvatar(roomA), "P2-T: avatar_file_id giữ").toBe(col);
     });
 
     // ─── L3 · ảnh đại diện NV do HR đặt ──────────────────────────────────────
@@ -358,6 +384,17 @@ describe.skipIf(!hasLaneDb)(
       expect(await allLinks(f.z!)).toBe(before);
       expect(await liveLinks(f.z!)).toBe(1);
       expect(await empAvatar(emp1)).toBe(f.z);
+    });
+
+    it("P3-T ảnh thuộc tenant khác ⇒ 404 (không thấy), 0 liên kết, cột NV giữ", async () => {
+      const col2 = await empAvatar(emp2);
+      const res = await setEmpAvatar(emp2, f.thr!);
+      expect(res.status, `P3-T: tệp ngoài tenant = không thấy — ${JSON.stringify(res.body)}`).toBe(
+        404,
+      );
+      expect(JSON.stringify(res.body)).toContain("RESOURCE-ERR-NOT-FOUND");
+      expect(await allLinks(f.thr!)).toBe(0);
+      expect(await empAvatar(emp2), "P3-T: cột NV2 giữ").toBe(col2);
     });
 
     it("P3-A1 neo ALLOW: ảnh mới ⇒ 2xx, liên kết mới sống, liên kết cũ gỡ", async () => {

@@ -250,6 +250,39 @@ describe("FileService — quyết định xem của người gắn dùng chung (
       expect(denyLogs(h).map((e) => e.permissionCode)).toEqual(["FOUNDATION.FILE.DOWNLOAD"]);
     });
 
+    // Fail-closed khi hạ tầng lỗi: không nhánh nào trả `allow` (người gọi không bước vào tx ghi).
+    it("nạp ảnh chụp lỗi (repo ném) ⇒ preflight ném, không trả allow, 0 dòng log", async () => {
+      h.linkRepo.listByFileTx.mockRejectedValue(new Error("link read failed"));
+      await expect(h.service.preflightLinkerView(actor, FILE, LOG_TARGET)).rejects.toThrow(
+        "link read failed",
+      );
+      expect(denyLogs(h)).toEqual([]);
+    });
+
+    it("policy ném (không tự quy về deny) ⇒ preflight ném, không trả allow", async () => {
+      h.linkRepo.listByFileTx.mockResolvedValue([linkRow("OK")]);
+      h.policy.decideForLinkedFile.mockRejectedValue(new Error("resolver failed"));
+      await expect(h.service.preflightLinkerView(actor, FILE, LOG_TARGET)).rejects.toThrow(
+        "resolver failed",
+      );
+    });
+
+    it("resolver lỗi đã quy về deny-error ⇒ forbidden, đúng 1 dòng log mang deny-error", async () => {
+      h.linkRepo.listByFileTx.mockResolvedValue([linkRow("OK")]);
+      h.policy.decideForLinkedFile.mockResolvedValue({ allow: false, reason: "deny-error" });
+      const out = await h.service.preflightLinkerView(actor, FILE, LOG_TARGET);
+      expect(out).toMatchObject({ kind: "forbidden", reason: "deny-error" });
+      expect(denyLogs(h).map((e) => e.deniedReason)).toEqual(["deny-error"]);
+    });
+
+    it("ghi dòng log từ chối lỗi ⇒ preflight ném (không nuốt thành kết quả nào)", async () => {
+      h.linkRepo.hasEverBeenLinkedTx.mockResolvedValue(true);
+      h.accessLogSpy.mockRejectedValue(new Error("deny log failed"));
+      await expect(h.service.preflightLinkerView(actor, FILE, LOG_TARGET)).rejects.toThrow(
+        "deny log failed",
+      );
+    });
+
     it.each([
       ["missing", () => fileRow(), undefined],
       ["unlinkable", () => fileRow({ ownerUserId: ACTOR_ID, scanStatus: "Infected" }), "x"],

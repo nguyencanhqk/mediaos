@@ -7,11 +7,14 @@
  * hàm ghi): một tệp ghi mới, hay một tệp ghi đã biết mà người gọi bỏ lời gọi hàm chung, đều đỏ tới khi được
  * phân loại ở bảng dưới.
  *
- * Ba luật quét (đã bỏ comment, bỏ `*.spec.ts`):
+ * Bốn luật quét (đã bỏ comment, bỏ `*.spec.ts`):
  *   (i)   tệp có `.insert(fileLinks)` hoặc `INSERT INTO file_links` ⇒ phải nằm trong bảng;
  *   (ii)  tệp import `FileLinkRepository` VÀ gọi `.insertTx(` ⇒ phải nằm trong bảng;
  *   (iii) `.update(fileLinks)` mà `.set({…})` mang `deletedAt: null`, `fileId` hoặc `entityId` (hồi sinh /
- *         trỏ lại liên kết) ⇒ đỏ, không có miễn trừ.
+ *         trỏ lại liên kết) ⇒ đỏ, không có miễn trừ;
+ *   (iv)  tệp gọi `.<hàm ghi>(` của một tệp ghi (bảng `WRITE_METHODS`) ⇒ phải là tệp gọi đã phân loại của tệp ghi
+ *         đó — một service mới tiêm repo/service ghi rồi gọi thẳng hàm ghi (không import `FileLinkRepository`,
+ *         không có `.insert(fileLinks)`) đỏ ở đây, không lọt qua (i)/(ii).
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -51,6 +54,17 @@ const WRITERS: Record<string, { caller: string; symbols: readonly string[] } | n
   },
   // D-9: tạo hàng `files` MỚI cùng tx với liên kết (chủ = người gọi, tệp tạm) — không có tệp người dùng chọn.
   "foundation/files/server-file.repository.ts": null,
+};
+
+/**
+ * Luật (iv): hàm ghi `file_links` của từng tệp ghi. Người gọi hợp lệ của một tên = các `caller` ở `WRITERS` của
+ * những tệp ghi khai báo tên đó. `insertTx` của `FileLinkRepository` trùng tên với repo khác ⇒ do luật (ii) giữ.
+ */
+const WRITE_METHODS: Record<string, readonly string[]> = {
+  "chat/chat-attachments.repository.ts": ["insertAttachmentLinks"],
+  "chat/chat-room-avatar.service.ts": ["insertAvatarLinkOrThrowTx"],
+  "employees/hr-employee-avatar.service.ts": ["insertAvatarLinkOrThrowTx"],
+  "foundation/files/files.service.ts": ["insertLinkOrThrow"],
 };
 
 const stripComments = (text: string): string =>
@@ -105,6 +119,32 @@ function revivingUpdates(src: ReadonlyMap<string, string>): string[] {
   return hits.sort();
 }
 
+/** Tên hàm ghi → tập tệp gọi hợp lệ (gộp theo tên: hai tệp ghi có thể trùng tên hàm riêng). */
+function allowedCallersByMethod(): Map<string, ReadonlySet<string>> {
+  const pairs = Object.entries(WRITE_METHODS).flatMap(([writer, names]) =>
+    names.map((name) => [name, WRITERS[writer]?.caller] as const),
+  );
+  return new Map(
+    [...new Set(pairs.map(([name]) => name))].map((name) => [
+      name,
+      new Set(pairs.flatMap(([n, caller]) => (n === name && caller ? [caller] : []))),
+    ]),
+  );
+}
+
+const callPattern = (name: string): RegExp => new RegExp(`\\.${name}\\s*\\(`);
+
+/** Luật (iv): `<tệp> → <hàm>` cho mỗi tệp gọi một hàm ghi mà không phải tệp gọi đã phân loại. */
+function unlistedWriteCallers(src: ReadonlyMap<string, string>): string[] {
+  return [...allowedCallersByMethod()]
+    .flatMap(([name, allowed]) =>
+      [...src.entries()]
+        .filter(([path, text]) => callPattern(name).test(text) && !allowed.has(path))
+        .map(([path]) => `${path} → ${name}`),
+    )
+    .sort();
+}
+
 describe("S19-SEC-FILELINKPATHS-1 D-10 — đường ghi file_links đi qua quyết định chung", () => {
   const src = sources();
 
@@ -139,6 +179,40 @@ describe("S19-SEC-FILELINKPATHS-1 D-10 — đường ghi file_links đi qua quy�
 
   it("(iii) không đường nào hồi sinh hay trỏ lại một liên kết bằng UPDATE", () => {
     expect(revivingUpdates(src)).toEqual([]);
+  });
+
+  it("(iv) mọi tệp gọi hàm ghi của một tệp ghi đều là tệp gọi đã phân loại", () => {
+    expect(
+      unlistedWriteCallers(src),
+      "tệp gọi hàm ghi file_links chưa phân loại — đi qua hàm chung rồi thêm vào WRITERS",
+    ).toEqual([]);
+  });
+
+  it("(iv) bảng hàm ghi không giữ tên ma: tệp ghi khai báo hàm, và mỗi hàm có ít nhất một tệp gọi", () => {
+    for (const [writer, names] of Object.entries(WRITE_METHODS)) {
+      const text = src.get(writer) ?? "";
+      for (const name of names) {
+        const declared = new RegExp(`(^|[^.\\w])${name}\\s*\\(`, "m").test(text);
+        expect(declared, `${writer} phải khai báo ${name}`).toBe(true);
+        const callers = [...src.entries()].filter(([, t]) => callPattern(name).test(t));
+        expect(callers.length, `${name} phải có tệp gọi`).toBeGreaterThan(0);
+      }
+    }
+    expect(allowedCallersByMethod().get("insertAttachmentLinks")).toEqual(
+      new Set(["chat/chat-messages.service.ts"]),
+    );
+  });
+
+  it("cổng (iv) đo bằng vi phạm thật: tệp gọi thứ hai của hàm ghi công khai ⇒ (iv) bắt, (i)/(ii) không", () => {
+    const fake = new Map(src);
+    fake.set(
+      "zz/fake-forward.service.ts",
+      "const created = await this.attachmentRepo.insertAttachmentLinks(tx, { fileIds });",
+    );
+    expect(linkWriters(fake)).not.toContain("zz/fake-forward.service.ts");
+    expect(unlistedWriteCallers(fake)).toEqual([
+      "zz/fake-forward.service.ts → insertAttachmentLinks",
+    ]);
   });
 
   it("cổng đo bằng vi phạm thật: tệp ghi giả + UPDATE hồi sinh ⇒ cả hai luật bắt", () => {
