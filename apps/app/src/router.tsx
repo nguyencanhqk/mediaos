@@ -27,6 +27,7 @@ import {
   validateGoalDetailSearch,
   validateGoalListSearch,
 } from "@/routes/goals/goal-list-search";
+import { useGoalFormPrefill, validateGoalFormPrefill } from "@/routes/goals/goal-form-prefill";
 
 // ---------------------------------------------------------------------------
 // Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
@@ -2712,13 +2713,24 @@ const goalNewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/new",
   beforeLoad: authGuard,
+  // S20-GOAL-LISTURL-1 — prefill cha · kỳ · phòng · cấp qua search (gợi ý, BE vẫn validate); rác ⇒ bỏ.
+  validateSearch: validateGoalFormPrefill,
   component: () => {
     const navigate = useNavigate();
+    const prefill = useGoalFormPrefill();
     return buildModuleRouteContent(
       goalNewMeta,
       "GOAL",
       <GoalFormPage
+        prefill={prefill}
         onSuccess={(id) => void navigate({ to: "/goals/$goalId", params: { goalId: id } })}
+        onCreatedFromParent={(parentId) =>
+          void navigate({
+            to: "/goals/$goalId",
+            params: { goalId: parentId },
+            search: { tab: "children" },
+          })
+        }
         onCancel={() => void navigate({ to: "/goals" as "/" })}
       />,
     );

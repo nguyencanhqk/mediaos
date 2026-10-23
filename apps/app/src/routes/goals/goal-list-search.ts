@@ -76,8 +76,13 @@ function oneOf<T extends string>(value: unknown, options: readonly T[]): T | und
     : undefined;
 }
 
+/** Chuỗi uuid (dùng chung với prefill `/goals/new`). */
+export function isGoalUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
 function uuidParam(value: unknown): string | undefined {
-  return typeof value === "string" && UUID_RE.test(value) ? value : undefined;
+  return isGoalUuid(value) ? value : undefined;
 }
 
 function flagParam(value: unknown): 1 | undefined {
@@ -85,7 +90,7 @@ function flagParam(value: unknown): 1 | undefined {
 }
 
 /** Ngày local `YYYY-MM-DD` CÓ THẬT (loại 2026-02-30). */
-function isLocalDate(value: string): boolean {
+export function isLocalDate(value: string): boolean {
   const match = LOCAL_DATE_RE.exec(value);
   if (!match) return false;
   const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];

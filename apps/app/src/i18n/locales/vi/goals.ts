@@ -163,8 +163,15 @@ export default {
       targetRequired: "Cần nhập giá trị mục tiêu khi đo bằng con số.",
       // Fallback khi server trả 422 GOAL-ERR-XXX không map riêng.
       generic: "Không lưu được mục tiêu. Vui lòng kiểm tra lại thông tin.",
+      // S20-GOAL-LISTURL-1 — BE từ chối quyền (vd. tự gõ /goals/new khi thiếu create:goal).
+      forbidden: "Bạn không có quyền thực hiện thao tác này với mục tiêu.",
     },
     submitCreate: "Tạo mục tiêu",
+    // S20-GOAL-LISTURL-1 — phân rã liên tiếp: giữ cha/kỳ/phòng, xoá tên/người/chỉ tiêu.
+    submitCreateAndNext: "Lưu và thêm tiếp",
+    savedAndNext: "Đã tạo mục tiêu «{{name}}»",
+    parentInvalid:
+      "Mục tiêu cha không hợp lệ (không tồn tại hoặc đã chốt kỳ) — đã bỏ chọn mục tiêu cha.",
     submitSave: "Lưu thay đổi",
     finalizedLocked: "Mục tiêu đã chốt kỳ — cần mở lại (reopen) trước khi sửa.",
     loadError: "Không tải được mục tiêu để sửa.",
@@ -224,6 +231,8 @@ export default {
       error: "Không tải được danh sách công việc gắn.",
     },
     children: {
+      // S20-GOAL-LISTURL-1 — mở /goals/new điền sẵn cha · kỳ · phòng · cấp.
+      add: "Thêm mục tiêu con",
       empty: {
         title: "Chưa có mục tiêu con",
         description: "Mục tiêu này chưa có mục tiêu con nào.",

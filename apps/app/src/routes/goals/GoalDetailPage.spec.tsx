@@ -410,3 +410,30 @@ describe("GoalDetailPage — lịch sử check-in phân trang", () => {
     );
   });
 });
+
+// ── S20-GOAL-LISTURL-1 (US-GOAL-QL-04 TC1, TC4) — «+ Thêm mục tiêu con» ─────────────────────────────
+describe("GoalDetailPage — Thêm mục tiêu con", () => {
+  it("(k1) có create:goal ⇒ nút trong tab Mục tiêu con, mở /goals/new điền sẵn cha · kỳ · phòng · cấp", async () => {
+    renderPage("children");
+    fireEvent.click(await screen.findByRole("button", { name: /Thêm mục tiêu con/ }));
+    expect(nav.navigate).toHaveBeenCalledWith({
+      to: "/goals/new",
+      search: {
+        parentGoalId: "g-1",
+        level: "employee",
+        departmentId: "dept-1",
+        periodType: "quarter",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-03-31",
+      },
+    });
+  });
+
+  it("(k2) thiếu create:goal ⇒ KHÔNG có nút", async () => {
+    perm.denied.add("create:goal");
+    renderPage("children");
+    await waitFor(() => expect(mockListGoals).toHaveBeenCalled());
+    await screen.findByText("Chưa có mục tiêu con");
+    expect(screen.queryByRole("button", { name: /Thêm mục tiêu con/ })).not.toBeInTheDocument();
+  });
+});
