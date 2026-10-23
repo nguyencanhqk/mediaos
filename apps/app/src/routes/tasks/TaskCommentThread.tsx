@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Send, Pencil, Trash2, X } from "lucide-react";
@@ -6,8 +6,6 @@ import {
   taskCollabApi,
   taskKeys,
   taskCollabInvalidation,
-  hrApi,
-  hrKeys,
   useAuthStore,
   useCan,
   ApiError,
@@ -16,6 +14,11 @@ import { Button, Badge, Popover, Dialog } from "@mediaos/ui";
 import type { TaskCommentResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { PanelBody } from "./PanelBody";
+import {
+  filterMentionCandidates,
+  useMentionCandidates,
+  type MentionCandidate,
+} from "./task-mention-candidates";
 
 /**
  * TaskCommentThread — bình luận + mention autocomplete (S4-FE-TASK-3, SPEC-06 §13.7/§14.14,
@@ -28,9 +31,10 @@ import { PanelBody } from "./PanelBody";
  * tiết (chỉ boolean grant) ⇒ ẨN nút sửa/xoá comment người khác theo mặc định AN TOÀN (fail-closed UI) —
  * server vẫn là cổng thật, không mất chức năng cho actor có quyền (chỉ thiếu tiện ích UI, ghi backlog).
  *
- * Mention "trong scope": autocomplete dùng `hrApi.listEmployees` (gate read:employee, server đã lọc theo
- * data-scope) lọc client-side theo chuỗi gõ sau "@" — validate THẬT (403 MENTION-OUT-OF-SCOPE) luôn ở
- * server khi submit.
+ * Mention (S20-TASK-QUICKENTRY-1): nguồn gợi ý = người tham gia việc (phụ trách · giao · theo dõi ·
+ * thành viên dự án) + danh bạ HR khi có read:employee — xem `task-mention-candidates.ts`. Lọc
+ * client-side theo chuỗi gõ sau "@"; validate THẬT (MENTION-OUT-OF-SCOPE/NOT-FOUND) luôn ở server.
+ * Ctrl/Cmd+Enter gửi, Enter đơn xuống dòng; lỗi ⇒ giữ nguyên nội dung đã gõ.
  *
  * Deep link `?comment_id=` — đọc qua `window.location.search` (KHÔNG dùng TanStack Router useSearch: page
  * này render độc lập ngoài router context trong test, mirror TaskDetailPage nhận taskId qua prop thay vì
@@ -38,17 +42,16 @@ import { PanelBody } from "./PanelBody";
  */
 function commentErrorKey(err: unknown): string {
   if (err instanceof ApiError) {
+    // Server trả slug mention trong message (code là mã HTTP chung) — nói rõ lý do thay vì "không có quyền".
+    const detail = `${err.code} ${err.message}`;
+    if (detail.includes("MENTION-OUT-OF-SCOPE")) return "quickEntry.comments.mentionOutOfScope";
+    if (detail.includes("MENTION-NOT-FOUND")) return "quickEntry.comments.mentionNotFound";
     if (err.status === 400 || err.status === 422) return "tasks.detail.comments.errors.validation";
     if (err.status === 403) return "tasks.detail.comments.errors.forbidden";
     if (err.status === 404) return "tasks.detail.comments.errors.notFound";
     if (err.status >= 500) return "tasks.detail.comments.errors.server";
   }
   return "tasks.detail.comments.errors.generic";
-}
-
-interface EmployeeOption {
-  id: string;
-  fullName: string;
 }
 
 /** Tìm token mention đang gõ dở ngay trước con trỏ (`@...` chưa gặp khoảng trắng). */
@@ -65,8 +68,8 @@ function MentionSuggestions({
   suggestions,
   onSelect,
 }: {
-  suggestions: EmployeeOption[];
-  onSelect: (emp: EmployeeOption) => void;
+  suggestions: MentionCandidate[];
+  onSelect: (emp: MentionCandidate) => void;
 }) {
   const { t } = useTranslation("tasks");
   if (suggestions.length === 0) {
@@ -77,7 +80,7 @@ function MentionSuggestions({
     );
   }
   return (
-    <ul className="max-h-56 space-y-0.5 overflow-y-auto">
+    <ul className="max-h-56 space-y-0.5 overflow-y-auto" data-testid="mention-suggestions">
       {suggestions.map((emp) => (
         <li key={emp.id}>
           <button
@@ -95,8 +98,7 @@ function MentionSuggestions({
 
 function CommentComposer({
   taskId,
-  employees,
-  canReadEmployees,
+  candidates,
   onDone,
   autoFocus,
   initialContent,
@@ -105,8 +107,7 @@ function CommentComposer({
   mutationFn,
 }: {
   taskId: string;
-  employees: EmployeeOption[];
-  canReadEmployees: boolean;
+  candidates: MentionCandidate[];
   onDone?: () => void;
   autoFocus?: boolean;
   initialContent?: string;
@@ -123,11 +124,10 @@ function CommentComposer({
   const [mentionState, setMentionState] = useState<{ atIndex: number; query: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const suggestions = useMemo(() => {
-    if (!mentionState) return [];
-    const q = mentionState.query.toLowerCase();
-    return employees.filter((e) => e.fullName.toLowerCase().includes(q)).slice(0, 8);
-  }, [mentionState, employees]);
+  const suggestions = useMemo(
+    () => (mentionState ? filterMentionCandidates(candidates, mentionState.query) : []),
+    [mentionState, candidates],
+  );
 
   const mutation = useMutation({
     mutationFn: () => mutationFn(draft.trim(), Array.from(mentions.keys())),
@@ -141,6 +141,22 @@ function CommentComposer({
     },
   });
 
+  const canSubmit = !mutation.isPending && draft.trim().length > 0;
+
+  function submit() {
+    if (canSubmit) mutation.mutate();
+  }
+
+  // Ctrl+Enter (Cmd+Enter trên macOS) gửi; Enter đơn để mặc định (xuống dòng). Bỏ qua khi đang gõ
+  // bộ gõ IME (isComposing) để Enter chốt chữ không bị hiểu nhầm.
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    setMentionState(null);
+    submit();
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const value = e.target.value;
     setDraft(value);
@@ -148,7 +164,7 @@ function CommentComposer({
     setMentionState(findMentionToken(value, cursor));
   }
 
-  function selectMention(emp: EmployeeOption) {
+  function selectMention(emp: MentionCandidate) {
     if (!mentionState) return;
     const cursor = textareaRef.current?.selectionStart ?? draft.length;
     const before = draft.slice(0, mentionState.atIndex);
@@ -181,12 +197,16 @@ function CommentComposer({
           autoFocus={autoFocus}
           rows={2}
           value={draft}
-          disabled={mutation.isPending}
+          // readOnly (không disabled) khi đang gửi: disabled làm ô mất focus, gõ tiếp phải bấm lại.
+          // Gửi trùng đã chặn ở `canSubmit` (!isPending).
+          readOnly={mutation.isPending}
+          aria-busy={mutation.isPending}
           onChange={handleChange}
+          onKeyDown={handleKeyDown}
           placeholder={t("tasks.detail.comments.placeholder")}
           className="flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
-        {mentionState && canReadEmployees && (
+        {mentionState && (
           <Popover
             open
             onOpenChange={(open) => {
@@ -217,12 +237,7 @@ function CommentComposer({
         </div>
       )}
       <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          disabled={mutation.isPending || draft.trim().length === 0}
-          onClick={() => mutation.mutate()}
-        >
+        <Button type="button" size="sm" disabled={!canSubmit} onClick={submit}>
           <Send className="mr-2 h-4 w-4" />
           {submitLabel}
         </Button>
@@ -231,6 +246,9 @@ function CommentComposer({
             {t("tasks.detail.comments.cancel")}
           </Button>
         )}
+        <span className="text-xs text-muted-foreground">
+          {t("quickEntry.comments.shortcutHint")}
+        </span>
       </div>
       {mutation.isError && (
         <p role="alert" className="text-xs text-destructive">
@@ -390,7 +408,6 @@ export function TaskCommentThread({
     TASK_CORE_ENGINE_PAIRS.COMMENT.action,
     TASK_CORE_ENGINE_PAIRS.COMMENT.resourceType,
   );
-  const canReadEmployees = useCan("read", "employee");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [highlightId] = useState<string | null>(() =>
     typeof window === "undefined"
@@ -409,16 +426,8 @@ export function TaskCommentThread({
     staleTime: 30_000,
   });
 
-  const { data: employeesPage } = useQuery({
-    queryKey: hrKeys.employees.list({ pageSize: 100, status: "active" }),
-    queryFn: () => hrApi.listEmployees({ pageSize: 100, status: "active" }),
-    enabled: canComment && canReadEmployees,
-    staleTime: 60_000,
-  });
-  // Nhân viên chưa có fullName (hồ sơ chưa đủ) KHÔNG mention được (không có gì để hiển thị/khớp autocomplete).
-  const employees: EmployeeOption[] = (employeesPage?.items ?? []).flatMap((e) =>
-    e.fullName ? [{ id: e.id, fullName: e.fullName }] : [],
-  );
+  // Mục không tên (hồ sơ chưa đủ) KHÔNG mention được — buildMentionCandidates đã loại.
+  const candidates = useMentionCandidates(taskId, canComment);
 
   return (
     <PanelBody embedded={embedded}>
@@ -444,8 +453,7 @@ export function TaskCommentThread({
               <li key={c.id} className="rounded-md border border-border p-2">
                 <CommentComposer
                   taskId={taskId}
-                  employees={employees}
-                  canReadEmployees={canReadEmployees}
+                  candidates={candidates}
                   autoFocus
                   initialContent={c.content}
                   initialMentionIds={c.mentions.map((m) => m.employeeId)}
@@ -476,8 +484,7 @@ export function TaskCommentThread({
       {canComment && editingId === null && (
         <CommentComposer
           taskId={taskId}
-          employees={employees}
-          canReadEmployees={canReadEmployees}
+          candidates={candidates}
           submitLabel={t("tasks.detail.comments.send")}
           mutationFn={(content, mentionEmployeeIds) =>
             taskCollabApi.addComment(taskId, { content, mentionEmployeeIds })
