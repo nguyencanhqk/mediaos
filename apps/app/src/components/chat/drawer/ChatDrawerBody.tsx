@@ -12,12 +12,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Maximize2, MessagesSquare } from "lucide-react";
-import { useCan } from "@mediaos/web-core";
+import { chatKeys, useCan } from "@mediaos/web-core";
 import { Button, EmptyState, Sheet } from "@mediaos/ui";
 import { CHAT_PAIRS, CHAT_PATH } from "@/routes/chat/constants";
 import { useChatStore } from "@/stores/chat.store";
 import { useChatDockStore } from "../chat-dock.store";
+import { CreateRoomDialog } from "../CreateRoomDialog";
 import { RoomListPanel } from "../RoomListPanel";
 import { roomDisplayName } from "../chat-format";
 import { DEFAULT_ROOM_FILTER_CHIP, type RoomFilterChip } from "../room-list-filter";
@@ -49,6 +51,15 @@ export function ChatDrawerBody(): React.ReactElement {
   const roomsById = useChatStore((s) => s.roomsById);
   const myUserId = useChatStore((s) => s.myUserId);
   const hasLoadedRooms = useChatStore((s) => s.hasLoadedRooms);
+  const hydrateRooms = useChatStore((s) => s.hydrateRooms);
+  const queryClient = useQueryClient();
+
+  /**
+   * S20-CHAT-NEWROOM-1 — «Cuộc trò chuyện mới» NGAY trong drawer (US-CHAT-NV-91): cùng `CreateRoomDialog`
+   * với `/chat`. Cổng `create:chat-room` nằm ở `RoomListPanel` (thiếu cặp ⇒ không render «+»), nên
+   * state này chỉ bật được qua nút đã qua cổng.
+   */
+  const [isCreateOpen, setCreateOpen] = useState(false);
 
   /**
    * Câu lọc + chip giữ Ở ĐÂY chứ không trong `RoomListPanel`.
@@ -155,12 +166,13 @@ export function ChatDrawerBody(): React.ReactElement {
           onQueryChange={setQuery}
           chip={chip}
           onChipChange={setChip}
+          onCreateRoom={() => setCreateOpen(true)}
           /*
-           * `onOpenSearch` và `onCreateRoom` CỐ Ý không truyền ⇒ hai nút biến mất.
+           * `onOpenSearch` CỐ Ý không truyền ⇒ nút biến mất: drawer không có cột thứ hai để mở
+           * CHAT-SCREEN-005 vào — render nút ở đây rồi không làm gì mới là thứ người dùng đọc ra là "hỏng".
            *
-           * Drawer không có cột thứ hai để mở CHAT-SCREEN-005 vào, và hộp thoại tạo phòng cần chỗ rộng
-           * hơn 400px để chọn thành viên. Cả hai đã có đủ ở `/chat`, cách đúng một cú ⤢ — render nút ở
-           * đây rồi không làm gì mới là thứ người dùng đọc ra là "hỏng".
+           * `onCreateRoom` thì CÓ từ S20-CHAT-NEWROOM-1: dialog tạo phòng không còn bảng chọn người rộng
+           * (ô tìm đã nhúng thẳng), nên vừa khung drawer — kể cả toàn màn trên điện thoại.
            */
         />
       ) : (
@@ -173,6 +185,24 @@ export function ChatDrawerBody(): React.ReactElement {
          * DOM thành ảnh chiếu trung thực của store: trần là chính sách DUY NHẤT, đặt đúng một chỗ.
          */
         openRoomIds.map((roomId) => <ChatDrawerConversation key={roomId} roomId={roomId} />)
+      )}
+
+      {/*
+       * Dialog đặt TRONG thân `Sheet` (không ngoài): `Sheet` nhường Esc khi thấy một
+       * `[role=dialog][aria-modal]` con trong panel ⇒ Esc đóng dialog trước, Esc lần hai mới đóng drawer.
+       */}
+      {isCreateOpen && canViewRoom && (
+        <CreateRoomDialog
+          variant="drawer"
+          onClose={() => setCreateOpen(false)}
+          onCreated={(room) => {
+            hydrateRooms([room]);
+            // `POST /chat/rooms/direct` trả `peer: null` — xin lại danh sách thay vì bịa `peer` (xem ChatPage).
+            void queryClient.invalidateQueries({ queryKey: chatKeys.rooms.list() });
+            setCreateOpen(false);
+            openRoom(room.id);
+          }}
+        />
       )}
     </Sheet>
   );

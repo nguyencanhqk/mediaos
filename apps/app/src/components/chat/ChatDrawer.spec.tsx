@@ -33,13 +33,19 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 const getMessages = vi.fn();
 const getRoom = vi.fn();
 const sendMessage = vi.fn();
+const openDirect = vi.fn();
+const createRoom = vi.fn();
+const listEmployees = vi.fn();
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
     useCan: vi.fn(() => true),
+    hrApi: { ...actual.hrApi, listEmployees: (...a: unknown[]) => listEmployees(...a) },
     chatApi: {
       ...actual.chatApi,
+      openDirect: (...a: unknown[]) => openDirect(...a),
+      createRoom: (...a: unknown[]) => createRoom(...a),
       getRoom: (...a: unknown[]) => getRoom(...a),
       getMessages: (...a: unknown[]) => getMessages(...a),
       sendMessage: (...a: unknown[]) => sendMessage(...a),
@@ -69,11 +75,12 @@ const mockUseCan = useCan as unknown as ReturnType<typeof vi.fn>;
  * chúng gác hai tầng khác nhau. Một mock trả cùng giá trị cho mọi cặp thì ca «có `access` nhưng thiếu
  * `view`» đơn giản không tồn tại được — và đó lại là ca duy nhất chứng minh cổng đọc có thật.
  */
-function grant(pairs: { access?: boolean; viewRoom?: boolean }): void {
-  const { access = true, viewRoom = true } = pairs;
+function grant(pairs: { access?: boolean; viewRoom?: boolean; createRoom?: boolean }): void {
+  const { access = true, viewRoom = true, createRoom: canCreate = true } = pairs;
   mockUseCan.mockImplementation((action: string, resourceType: string) => {
     if (action === "access" && resourceType === "chat") return access;
     if (action === "view" && resourceType === "chat-room") return viewRoom;
+    if (action === "create" && resourceType === "chat-room") return canCreate;
     return true;
   });
 }
@@ -546,5 +553,122 @@ describe("ChatDrawer · nháp theo phòng (S20-CHAT-DRAFT-1)", () => {
     fireEvent.click(screen.getByTestId("chat-drawer-back"));
     await screen.findByTestId("chat-room-list");
     expect(screen.queryByTestId("chat-room-draft")).toBeNull();
+  });
+});
+
+/**
+ * S20-CHAT-NEWROOM-1 — «Cuộc trò chuyện mới» ngay trong drawer (US-CHAT-NV-91): «+» trên header danh sách
+ * mở CÙNG `CreateRoomDialog` với /chat; tạo xong ⇒ `openRoom` trong drawer, trang phía sau giữ nguyên.
+ */
+describe("ChatDrawer · cuộc trò chuyện mới (S20-CHAT-NEWROOM-1)", () => {
+  const AN = "55555555-5555-4555-8555-555555555555";
+  const anEmployee = {
+    id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    userId: AN,
+    employeeCode: "NV001",
+    fullName: "Nguyễn Văn An",
+    email: null,
+    orgUnitId: null,
+    orgUnitName: null,
+    positionId: null,
+    positionName: null,
+    status: "active",
+    avatarUrl: null,
+  };
+  const pageOf = (items: unknown[]) => ({
+    items,
+    meta: {
+      page: 1,
+      pageSize: 8,
+      total: items.length,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false,
+    },
+  });
+
+  beforeEach(() => {
+    openDirect.mockReset().mockResolvedValue(room("dm-an", { roomType: "direct", name: null }));
+    createRoom.mockReset();
+    listEmployees.mockReset().mockResolvedValue(pageOf([anEmployee]));
+  });
+
+  async function openCreateDialog(): Promise<void> {
+    useChatStore.getState().syncRoomList([room("a", { name: "Nhóm A" })], false);
+    useChatDockStore.getState().openDrawer();
+    renderDrawer();
+    fireEvent.click(await screen.findByTestId("chat-create-room"));
+    await screen.findByRole("searchbox", { name: "Tìm người" });
+  }
+
+  it("«+» mở dialog; gõ tên → chọn ⇒ DM mở NGAY trong drawer, không điều hướng, drawer vẫn mở", async () => {
+    await openCreateDialog();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Tìm người" }), {
+      target: { value: "An" },
+    });
+    fireEvent.click(
+      within(await screen.findByRole("list", { name: "Kết quả tìm người" })).getByRole("button", {
+        name: /Nguyễn Văn An/,
+      }),
+    );
+
+    expect(await screen.findByTestId("chat-drawer-conversation")).toBeTruthy();
+    expect(openDirect).toHaveBeenCalledWith({ peerUserId: AN });
+    expect(useChatDockStore.getState().openRoomIds).toEqual(["dm-an"]);
+    expect(useChatDockStore.getState().isOpen).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("searchbox", { name: "Tìm người" })).toBeNull();
+  });
+
+  it("thiếu `create:chat-room` ⇒ KHÔNG có «+» trong drawer", async () => {
+    grant({ createRoom: false });
+    useChatDockStore.getState().openDrawer();
+    renderDrawer();
+
+    await screen.findByTestId("chat-room-list");
+    expect(screen.queryByTestId("chat-create-room")).toBeNull();
+  });
+
+  it("server từ chối ⇒ dialog giữ, báo lỗi; drawer KHÔNG chuyển sang phòng rỗng", async () => {
+    openDirect.mockRejectedValue(new Error("422"));
+    await openCreateDialog();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Tìm người" }), {
+      target: { value: "An" },
+    });
+    fireEvent.click(
+      within(await screen.findByRole("list", { name: "Kết quả tìm người" })).getByRole("button", {
+        name: /Nguyễn Văn An/,
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Nguyễn Văn An"));
+    expect(screen.getByRole("searchbox", { name: "Tìm người" })).toBeTruthy();
+    expect(useChatDockStore.getState().openRoomIds).toEqual([]);
+    expect(screen.queryByTestId("chat-drawer-conversation")).toBeNull();
+  });
+
+  it("Esc đóng DIALOG trước, drawer vẫn mở; Esc lần hai mới đóng drawer", async () => {
+    await openCreateDialog();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("searchbox", { name: "Tìm người" })).toBeNull());
+    expect(useChatDockStore.getState().isOpen).toBe(true);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(useChatDockStore.getState().isOpen).toBe(false);
+  });
+
+  it("ngoài phạm vi danh bạ ⇒ «Không tìm thấy…» kèm gợi ý; KHÔNG gọi endpoint nào khác để «tìm hộ»", async () => {
+    listEmployees.mockResolvedValue(pageOf([]));
+    await openCreateDialog();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Tìm người" }), {
+      target: { value: "Bình" },
+    });
+
+    expect(await screen.findByText("Không tìm thấy trong danh bạ bạn được xem.")).toBeTruthy();
+    expect(screen.getByText(/Nhắn riêng từ một phòng chung/i)).toBeTruthy();
+    expect(listEmployees).toHaveBeenCalledTimes(1);
+    expect(openDirect).not.toHaveBeenCalled();
+    expect(createRoom).not.toHaveBeenCalled();
   });
 });

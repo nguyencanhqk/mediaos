@@ -54,6 +54,7 @@ import { useChatStore } from "@/stores/chat.store";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
 import { MUTE_PRESETS, isRoomMuted, isRoomPinned } from "./chat-room-prefs";
 import { useRoomPrefs } from "./use-room-prefs";
+import type { PersonPick } from "./create-room-people";
 import { RoomAvatar } from "./RoomAvatar";
 import { RoomAvatarEditor } from "./RoomAvatarEditor";
 import { RoomFilesTab } from "./RoomFilesTab";
@@ -100,6 +101,11 @@ interface RoomInfoPanelProps {
    * hai bản khác nội dung là hai bảng thông tin phải nuôi song song.
    */
   variant?: "page" | "sheet";
+  /**
+   * S20-CHAT-NEWROOM-1 — lối «Thêm người» của phòng DM: mở dialog NHÓM đã chọn sẵn người đối thoại
+   * (US-CHAT-NV-12). `undefined` ⇒ ẩn nút (caller không có chỗ mở dialog).
+   */
+  onStartGroupWith?: (peer: PersonPick) => void;
 }
 
 export function RoomInfoPanel({
@@ -113,6 +119,7 @@ export function RoomInfoPanel({
   onJumpToMessage,
   onRoomLeft,
   variant = "page",
+  onStartGroupWith,
 }: RoomInfoPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const queryClient = useQueryClient();
@@ -124,6 +131,9 @@ export function RoomInfoPanel({
   );
   const canUpdateRoom = useCan(CHAT_PAIRS.UPDATE_ROOM.action, CHAT_PAIRS.UPDATE_ROOM.resourceType);
   const canArchive = useCan(CHAT_PAIRS.ARCHIVE_ROOM.action, CHAT_PAIRS.ARCHIVE_ROOM.resourceType);
+  // S20-CHAT-NEWROOM-1 — «Thêm người» ở DM tạo một phòng NHÓM mới ⇒ cùng cặp với nút «+», không phải
+  // `manage:chat-member` (DM không có thành viên nào để quản trị).
+  const canCreateRoom = useCan(CHAT_PAIRS.CREATE_ROOM.action, CHAT_PAIRS.CREATE_ROOM.resourceType);
 
   const [openSections, setOpenSections] = useState<string[]>([]);
   const [isMembersOpen, setMembersOpen] = useState(false);
@@ -136,6 +146,8 @@ export function RoomInfoPanel({
   const [error, setError] = useState<string | null>(null);
 
   const isGroup = room.roomType === "group";
+  // Người đối thoại đã ngừng hoạt động ⇒ server sẽ từ chối họ (CHAT-ERR-003): không mời lập nhóm.
+  const dmPeer = room.roomType === "direct" && room.peer?.isActive === true ? room.peer : null;
   const isRoomAdmin = myRole === "admin";
   const isArchived = room.isArchived ?? false;
   const label = room.name ?? room.roomCode;
@@ -305,6 +317,16 @@ export function RoomInfoPanel({
               label={t("info.members.add")}
               onClick={() => setPickerOpen(true)}
               testId="chat-info-add-member"
+            />
+          )}
+          {canCreateRoom && dmPeer !== null && onStartGroupWith !== undefined && (
+            <RoundAction
+              icon={UserPlus}
+              label={t("info.members.addPeople")}
+              onClick={() =>
+                onStartGroupWith({ userId: dmPeer.userId, fullName: dmPeer.name ?? "" })
+              }
+              testId="chat-info-dm-add-people"
             />
           )}
 
