@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-23 03:42Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-23 03:52Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -47,6 +47,15 @@
   - [ ] `/docs` và mọi trang con chỉ phục vụ người đã đăng nhập; chưa đăng nhập ⇒ chuyển về trang đăng nhập SSO; người đã đăng nhập vẫn đọc được
   - [ ] Thi công trong worktree của repo LMS — KHÔNG sửa/build trong `apps/lms` (PROD LMS phục vụ `.next` của chính thư mục đó); `tsc` + lint + build xanh trong worktree
   - [ ] Owner deploy theo khuôn S19-LMS-NODEMAILER-1, rồi đo lại từ phiên chưa đăng nhập
+
+### 🔴 S19-SEC-FILELINKPATHS-1 — Các đường ghi liên kết tệp ngoài lõi gắn chung theo cùng quyết định xem từng tệp
+- **zone**: red · **skills**: security-review, code-review
+- **sửa ở đâu (paths)**: `apps/api/src/foundation/files/**`, `apps/api/src/chat/chat-messages.service*.ts`, `apps/api/src/chat/chat-attachments.repository*.ts`, `apps/api/src/chat/chat-room-avatar.service*.ts`, `apps/api/src/employees/hr-employee-avatar.service*.ts`, `apps/api/src/social/social-attachments.service*.ts`, `apps/api/test/**`, `docs/plans/**`, `harness/backlog.mjs`
+- **phụ thuộc**: S19-SEC-FILELINKGATE-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] ĐO TRƯỚC: liệt kê mọi đường tạo liên kết tệp không đi qua lõi gắn chung và điều kiện mỗi đường đang hỏi — số đo ngoài repo; owner chốt đường nào chuyển về lõi, đường nào giữ có chủ đích (ghi lý do vào plan)
+  - [ ] Bất biến: mọi đường tạo liên kết tệp → thực thể quyết định bằng cùng hàm với biên gắn chung (cùng vị từ `GET /foundation/files/:id`) — một nguồn quyết định dùng chung, không viết lại
+  - [ ] RED trước: int-spec deny-path cho từng đường trong phạm vi (từ chối ⇒ 0 liên kết mới) + ca ALLOW đứng cạnh; FULL gate
 
 ## Hàng đợi
 
@@ -105,7 +114,6 @@
 - 🟡 `S19-OPS-FBPOSTDEPLOYORDER-1` `m prod-update social` tự dừng dịch vụ rồi `npm ci` đúng thứ tự khi deps đổi (thay bước tay) — tránh lặp sự cố 19/10/2026: cài deps khi dịch vụ đang chạy để lại cây `node_modules` hỏng
 - 🟡 `S19-LMS-PDFWORKER-1` LMS: đường trích văn bản PDF ở bản build thật không tìm thấy worker và lỗi bị nuốt im lặng ⇒ chỉ mục tìm kiếm tài liệu PDF có thể rỗng mà không ai biết
 - 🟢 `S19-LMS-SHEETVENDOR-1` LMS: đưa tarball chính thức của thư viện đọc bảng tính vào repo LMS (`vendor/`) để lần cài sạch không phụ thuộc CDN của nhà phát hành
-- 🔴 `S19-SEC-FILELINKPATHS-1` Các đường ghi liên kết tệp ngoài lõi gắn chung theo cùng quyết định xem từng tệp
 - 🔴 `S19-SEC-FILELINKPARAMS-1` Tham số liên kết qua route gắn tệp FOUNDATION theo quy tắc của module đích
 - 🔴 `S19-SEC-FILEASSETSWAP-1` Thay tài sản ảnh (branding · ảnh đại diện) nguyên tử trong một giao dịch ghi
 - 🟢 `S14-SEC-OPPLANEPAIRS-1` Rà các cặp quyền tầng vận hành đang gán cho actor của công ty (chỉ đọc, N=1) — giữ hay gỡ
@@ -118,9 +126,17 @@
 **CHỜ (kẹt phụ thuộc):**
 - `S16-SOCIAL-VIDEOMIME-1` Allowlist MIME mặc định của tệp (`png·jpeg·webp·pdf·docx·xlsx·csv·txt`) KHÔNG có `video/*` dù SPEC-16 SC-01 hứa đính kèm video ⇒ mọi video ăn 415 `FOUNDATION-FILE-ERR-MIME` ở `054`; thêm `video/mp4` (allowlist + `MIME_TO_EXTENSIONS`, migration seed) — SAU khi tải về có `Content-Disposition` ⏳ cần: S16-SOCIAL-FE-2D
 - `S16-SOCIAL-ATTERRSPLIT-1` `SOCIAL-ERR-007` gộp HAI lỗi khác bản chất — `ATTACHMENT_LIMIT` (vượt trần 10 ảnh / 1 video / 20 MB) và `ATTACHMENT_INVALID` (tệp thiếu · không phải của mình · chưa `Uploaded` · đã link) cùng một mã (`social-errors.ts:30-31`) ⇒ FE chỉ nói được một câu gộp ⏳ cần: S16-SOCIAL-FE-2D
+- `S4-DASH-HROVERVIEW-COUNT-1` Widget DASH `HR_OVERVIEW`: đếm `headcount` · `byStatus` · `byOrgUnit` phía DB trong MỘT vị từ scope (method đếm của `HrReadService`) thay vì đếm trên trang danh sách đầu — tổng các dòng trạng thái luôn khớp `headcount` ở mọi cỡ công ty ⏳ cần: S4-DASH-HROVERVIEW-FLOOR-1
+- `S4-DASH-HROVERVIEW-FE-1` Ô rail «Tổng quan nhân sự» (`HrOverviewRailSlot`) gác bằng tín hiệu sàn của widget lấy từ `packages/contracts` (`DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW`) thay cặp tạm `update:employee` ⏳ cần: S4-DASH-HROVERVIEW-FLOOR-1
+- `S4-DASH-SIBLINGFLOOR-1` Sàn scope cho hai widget DASH anh em cùng cặp đọc nhân sự (`EMPLOYEE_SUMMARY` · `NEW_EMPLOYEES`) theo ma trận quyền §7 — cùng khuôn sàn đã làm cho `HR_OVERVIEW` ⏳ cần: S4-DASH-HROVERVIEW-FLOOR-1
 - `S16-SOCIAL-FEADMINSHARED-1` Dọn thứ dùng chung của cụm quản trị SOCIAL: DoneNotice · useOutcomeFocus · list-states · DialogActions · claimsListRefreshed · invalidatePostSurfaces còn nằm dưới moderation/** dù màn huy hiệu + thống kê cùng dùng; khung chờ SKELETON_ROWS.map 4 bản · helper «lời gọi treo» 2 bản · FIRST_PAGE = 1 4 bản; ba spec PR-A còn khuôn hai fireEvent rời để mutant «bỏ khoá đồng bộ» sống; BadgeSettingsPage() vượt mốc 50 dòng / hàm ⏳ cần: S16-SOCIAL-FEMODINVAL-1
 - `S16-SOCIAL-FECOMMENTA11Y-1` Hàng bình luận: ba nút chữ «Trả lời» · «Xoá» · «Báo cáo» mang CÙNG tên trợ năng ở mọi hàng (bài 20 bình luận = 20 nút «Báo cáo» giống hệt nhau) và hộp thoại «Báo cáo bình luận» không nói đang báo cáo bình luận NÀO — trong khi hộp thoại được thiết kế để sống tiếp khi hàng đã bị gỡ khỏi danh sách; kèm dời khoá i18n `admin.quickLinks.*` về đúng chỗ khi `social.ts` hết bị khoá ⏳ cần: S16-SOCIAL-FE-2D
 - `S19-FE-SIGNEDTAB-2` Mở tệp qua URL ký — phần còn lại sau SIGNEDTAB-1: 3 nút HR/SYSTEM gọi `window.open(url)` SAU `await` (API > ~5 s + chặn popup ⇒ không tab, không tệp, không báo) (N3) · guard scheme của helper còn nhận `http:` (N11) · CHAT gắn URL ký tạo lúc render vào `<a target=_blank>` (bấm muộn có thể quá TTL — CHƯA đo) ⏳ cần: S16-SOCIAL-FILEOPENUX-1
+- `S19-LMS-SSORETURN-1` LMS: quay lại trang gốc sau SSO ⏳ cần: S19-LMS-DOCSAUTH-1
+- `S19-LMS-DOCSROLE-1` LMS: phạm vi đọc sổ tay theo vai trò ⏳ cần: S19-LMS-DOCSAUTH-1
+- `S19-LMS-SESSIONHARDEN-1` LMS: gia cố lưu trữ phiên ⏳ cần: S19-LMS-DOCSAUTH-1
+- `S19-LMS-AUTHCENSUS-1` LMS: census điểm kiểm xác thực trên các trang (app) ⏳ cần: S19-LMS-DOCSAUTH-1
+- `S19-LMS-DOCSCONTENT-1` LMS: rà nội dung sổ tay ⏳ cần: S19-LMS-DOCSAUTH-1
 - `S19-SEC-SCOPEDENIEDCODE-1` Mã máy `AUTH-ERR-SCOPE-DENIED` cho RECRUIT · PAYROLL · HR (403 sàn scope hôm nay rơi về `AUTH-ERR-FORBIDDEN`) ⏳ cần: S16-SOCIAL-SCOPEDENIEDCODE-1
 - `S19-SEC-FILEPOINTER-1` Con trỏ tệp trên thực thể (không qua liên kết) theo cùng quyết định xem từng tệp ⏳ cần: S19-SEC-FILELINKPATHS-1
 - `S19-SEC-FILEATTLINK-1` Đính kèm của điều chỉnh công và làm từ xa đi qua liên kết tệp thay vì con trỏ trên thực thể — người duyệt mở được tệp theo cùng quyết định xem từng tệp ⏳ cần: S19-SEC-FILEPOINTER-1
@@ -136,7 +152,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 4
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -145,6 +161,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `c687b55d` | 2026-10-23 | docs(plan): sổ 23/10 — owner chốt phiếu quyết định 5 WO (phương án khuyến nghị) · đóng FILESHAREREVOKE bằng bất biến chia sẻ bền · gieo 2 WO · regen STATUS |
 | `8401d2c8` | 2026-10-23 | docs: TESTABLE-FEATURES + README theo mã thật — ATT/LEAVE/TASK/DASH/NOTI đang chạy PROD, ROOM/RECRUIT/ASSET/PAYROLL v2 đã có mã + migration |
 | `6ac4ca48` | 2026-10-23 | chore(harness): sổ 23/10 — lý do chặn CAPWILDCARD/STORAGEPUBLIC theo số đo · định nghĩa zone amber · regen STATUS |
 | `03b7951f` | 2026-10-23 | docs(social): S16-SOCIAL-DOC-3 — đính chính SPEC-16 + API-19 + README theo số đo của S16-SOCIAL-QA-1 (cặp 15 · mã lỗi 57→51/47 · 7 cột đếm · mã thành công 59 route · tập khoá WS) |
@@ -156,7 +173,6 @@
 | `90ee1568` | 2026-10-20 | docs(plan): S19-SEC-FILEMETAGATE-1 — sổ hậu merge: #594 = 7a29082b · Pages 19/10 17:24 · API PROD 20/10 07:42 (/health build.commit) · gieo WO theo dõi · regen STATUS |
 | `7a29082b` | 2026-10-19 | fix(files): S19-SEC-FILEMETAGATE-1 — metadata tệp theo cùng quyết định xem từng tệp (danh sách FOUNDATION · xác nhận tải lên) (#594) |
 | `7560a8fc` | 2026-10-19 | docs(plan): S19-OPS-SCASATELLITE-1 — sổ hậu merge: #593 = 41820250 · LMS 14:29 · fbpost 16:21 · runbook thứ tự deploy fbpost · gieo 6 WO nợ · regen STATUS |
-| `41820250` | 2026-10-19 | ci(security): S19-OPS-SCASATELLITE-1 — cổng SCA phủ app vệ tinh fbpost + lệnh m sca + vá deps fbpost (#593) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

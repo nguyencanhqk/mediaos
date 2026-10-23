@@ -18369,6 +18369,7 @@ export const backlog = [
     notes: [
       "Seed 08/10/2026 từ plan S16-SOCIAL-FILEDISPOSITION-1 §8 N1. Tới khi WO này lên: phiếu lương và CV để lại một tab trắng sau khi tệp được tải xuống (hệ quả O1 đã ghi ở đầu PR của WO gốc).",
       "16/10/2026 (plan-review H3 của S19-FE-SIGNEDTAB-1): nếu chọn hướng (a) cho N9 — cờ cách phục vụ trong DTO URL ký, đổi contracts/API — thì TRƯỚC khi code phải nâng zone `red` + FULL gate + thêm paths `packages/contracts/**` và `apps/api/src/storage/**`, và thêm điều kiện merge: API PROD chứa commit DTO (`git merge-base --is-ancestor <sha> <data.build.commit của GET /api/v1/health>` exit 0). Hướng (b) — FE đọc tham số `response-content-disposition` đã ký trong URL — giữ `amber`.",
+      "23/10/2026 — sau gate (plan `docs/plans/S16-SOCIAL-FILEOPENUX-1.md` §8–§9): ĐIỀU KIỆN MERGE O5 — chỉ merge khi storage PROD tới được từ trình duyệt người dùng (sau `S19-OPS-STORAGEPUBLIC-1`) HOẶC owner chấp nhận RÕ RÀNG rủi ro tab app bị thay bằng trang lỗi khi storage lỗi; O1 (API PROD chứa `S16-SOCIAL-FILEDISPOSITION-1`) đo lại ngay trước merge. Nợ còn lại plan §9 (chưa gieo WO riêng): N1 một nguồn cho tập chặn cứng + tập active ở `packages/contracts`, API và FE cùng import — red · N2 DTO danh sách mang quyết định cách phục vụ của server để FE biết trước khi bấm — red · N4 báo sớm giới hạn tải theo công ty (cần endpoint đọc giới hạn ở API) · N6 khai `inputs` cho task `test` của turbo để spec app mất cache khi tệp nguồn đổi (hoặc làm N1) · N8 ghi nhận, không việc. N3 · N5 · N7 → `S19-FE-SIGNEDTAB-2`.",
     ],
   },
   {
@@ -18944,6 +18945,98 @@ export const backlog = [
       "🔴 FULL gate (cổng đọc số liệu nhân sự). Seed 05/10/2026 từ plan S16-SOCIAL-FE-3 §8.9. Đây là điều kiện để bỏ cặp thay thế của O1 = B.",
       "📌 PR-C S16-SOCIAL-FE-3C (07/10/2026) — thêm cho WO này: (1) vế thay thế `update:employee` nằm ở `apps/app/src/routes/social/feed/components/HrOverviewRailSlot.tsx`; bỏ nó thì ba spec đỏ THEO THIẾT KẾ (`HrOverviewRailSlot.spec.tsx` · `HrOverviewRailSlot.gate.spec.tsx` · `feed/SocialPortalShell.hr-widget.spec.tsx`) — sửa ca theo cổng mới, đừng nới. (2) Câu hỏi owner còn mở (finding SEC-03 của gate bảo mật, plan FE-3 §9): ô rail hiện theo QUYỀN, không theo `dashboard_widget_configs` — đường data `GET /dashboard/widgets/:slug` không đọc cấu hình; owner muốn rail tôn trọng cấu hình thì BE ép ở đường data hoặc phát tín hiệu cho FE ngay trong WO này. (3) Đọc từ mã, CHƯA đo: `fetchHrOverview` lấy `pageSize: 100` rồi đếm `byStatus` / `byOrgUnit` trên 100 hàng đầu trong khi `headcount = meta.total` (`dashboard-widget-handlers.service.ts`) ⇒ công ty trên 100 người thì các dòng trạng thái không cộng ra tổng. (4) `apps/api/test/integration/auth-seed-canonical-roles.int-spec.ts` mới ghim chiều CÓ của `update:employee` (hr · company-admin), chưa ghim chiều VẮNG cho employee / manager — vế phân biệt của O1 = B dựa vào đó. (5) Flip `read:employee` / `update:employee` sang `is_sensitive` mà thiếu allowlist ở `permission.service.ts` thì ô biến mất im lặng với chính HR — không ca FE nào bắt được.",
       "Owner chốt 16/10/2026 qua hộp hỏi (Đợt 0): sàn Phòng ban ở server (CẢ danh sách widget lẫn đường số liệu); HR/admin thấy cả công ty; quản lý @Team và nhân viên không nhận số; ô rail theo QUYỀN, không theo cấu hình Dashboard (trả lời SEC-03 — cấu hình Dashboard chỉ áp cho trang Dashboard). Vế «mở widget cho manager theo phòng» ở done_when đã thay bằng «không mở cho quản lý (ma trận quyền §7)». FE bỏ cặp tạm `update:employee` sau khi BE có sàn.",
+      "23/10/2026 — nợ từ plan `docs/plans/S4-DASH-HROVERVIEW-FLOOR-1.md` §9: N1 → `S4-DASH-HROVERVIEW-COUNT-1` · N2 → `S4-DASH-HROVERVIEW-FE-1` · N3 → `S4-DASH-SIBLINGFLOOR-1` (thân PR của WO này ghi N3). Chưa gieo WO riêng: (N4) payload widget lệch tên trường của SPEC-07 §14.8 — nợ tài liệu/tính năng; (N5) lỗi hạ tầng khi resolve scope hiện ra như 403 (fail-closed) — cần WO riêng phân biệt «hạ tầng lỗi» với «không grant», áp cho mọi caller của `resolveAndAssert`; (N6) `dashboard-widget-handlers.service.ts` 792/800 dòng — WO kế tiếp đụng tệp phải tách gate/fetch `HR_OVERVIEW` sang `dashboard-widget-hr.handlers.ts` TRƯỚC khi thêm mã.",
+      "23/10/2026: PROD dưới ngưỡng 100 hồ sơ theo census 16/10 ⇒ N1 (`S4-DASH-HROVERVIEW-COUNT-1`) không chặn merge WO này.",
+    ],
+  },
+  {
+    id: "S4-DASH-HROVERVIEW-COUNT-1",
+    module: "DASH",
+    layer: "BE",
+    title:
+      "Widget DASH `HR_OVERVIEW`: đếm `headcount` · `byStatus` · `byOrgUnit` phía DB trong MỘT vị từ scope (method đếm của `HrReadService`) thay vì đếm trên trang danh sách đầu — tổng các dòng trạng thái luôn khớp `headcount` ở mọi cỡ công ty",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/hr-read.*",
+      "apps/api/src/dashboard/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-DASH-HROVERVIEW-FLOOR-1"],
+    src: [
+      "Nợ N1 của `docs/plans/S4-DASH-HROVERVIEW-FLOOR-1.md` §9 (bổ sung sau gate: (a) ngưỡng · (b) một lần resolve scope · (c) ca > 100 hồ sơ) · note (3) của WO mẹ (đọc từ mã 07/10/2026).",
+    ],
+    done_when: [
+      "Method count-only mới của `HrReadService` trả `headcount` · `byStatus` · `byOrgUnit` bằng truy vấn tổng hợp phía DB, dùng CÙNG vị từ scope với danh sách hồ sơ; handler `HR_OVERVIEW` không còn gọi `listHrEmployees`",
+      "Phép đếm nhận scope ĐÃ resolve ở gate sàn — một lần resolve cho cả gate lẫn phép đếm; số ghi vào cache widget luôn ứng với đúng scope của lần resolve đó",
+      "Số tổng hợp KHÔNG đi qua đường đọc trường nhạy cảm từng hàng (không sinh audit đọc trường nhạy cảm theo hàng khi cache miss)",
+      "Ca int-spec RED trước: > 100 hồ sơ ⇒ Σ `byStatus` = `headcount`; ca deny-path sàn của WO mẹ giữ xanh; chạy trên `LANE_DB`",
+    ],
+    notes: [
+      "🟡 Seed 23/10/2026 từ plan S4-DASH-HROVERVIEW-FLOOR-1 §9 N1. Kích hoạt: TRƯỚC khi số hồ sơ chưa xoá mềm của công ty chạm ngưỡng trang 100 — mỗi lần đo chỉ ghi «dưới / đạt ngưỡng», KHÔNG ghi số vào repo; đạt ngưỡng ⇒ nâng ưu tiên. Plan phải đổi vị từ scope hay đường audit của `hr-read` ⇒ `red-zone-scanner` nâng 🔴 + FULL gate.",
+      "Đụng `dashboard-widget-handlers.service.ts` (sát trần 800 — N6 plan WO mẹ) ⇒ tách gate/fetch `HR_OVERVIEW` sang `dashboard-widget-hr.handlers.ts` theo khuôn `dashboard-widget-{office,recruit,payroll,social}.handlers.ts` TRƯỚC khi thêm mã.",
+    ],
+  },
+  {
+    id: "S4-DASH-HROVERVIEW-FE-1",
+    module: "DASH",
+    layer: "FE",
+    title:
+      "Ô rail «Tổng quan nhân sự» (`HrOverviewRailSlot`) gác bằng tín hiệu sàn của widget lấy từ `packages/contracts` (`DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW`) thay cặp tạm `update:employee`",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/social/feed/components/HrOverviewRailSlot*",
+      "apps/app/src/routes/social/feed/SocialPortalShell.hr-widget.spec.tsx",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-DASH-HROVERVIEW-FLOOR-1"],
+    src: [
+      "Nợ N2 của `docs/plans/S4-DASH-HROVERVIEW-FLOOR-1.md` §9 (O2–O4: API lên + đo sau deploy TRƯỚC khi mở WO FE) · done_when thứ hai của WO mẹ · note 📌 (1) của WO mẹ.",
+    ],
+    done_when: [
+      "ĐIỀU KIỆN MERGE (FE lên Pages ngay khi merge, API deploy tay): chỉ merge SAU khi API PROD chứa `S4-DASH-HROVERVIEW-FLOOR-1` và bước đo sau deploy của WO đó đạt — đo `git merge-base --is-ancestor <sha merge WO đó> <data.build.commit của GET /api/v1/health>` exit 0",
+      '`HrOverviewRailSlot` gác bằng `hasScope("read:employee", DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW)` (khớp cặp đúng-bằng, không wildcard; hằng sàn import từ contracts, không hard-code ở FE) — bỏ vế `update:employee`',
+      "Ba spec đỏ theo thiết kế (`HrOverviewRailSlot.spec.tsx` · `HrOverviewRailSlot.gate.spec.tsx` · `SocialPortalShell.hr-widget.spec.tsx`) sửa ca theo cổng mới, KHÔNG nới; ca deny riêng: dưới sàn ⇒ không render ô và không gọi API DASH",
+      "Test FE + typecheck/build xanh",
+    ],
+    notes: [
+      "🟠 Seed 23/10/2026 từ plan S4-DASH-HROVERVIEW-FLOOR-1 §9 N2. Chỉ merge SAU khi API PROD có WO mẹ (FE mới trên API cũ ⇒ hằng sàn không khớp hành vi server).",
+    ],
+  },
+  {
+    id: "S4-DASH-SIBLINGFLOOR-1",
+    module: "DASH",
+    layer: "BE",
+    title:
+      "Sàn scope cho hai widget DASH anh em cùng cặp đọc nhân sự (`EMPLOYEE_SUMMARY` · `NEW_EMPLOYEES`) theo ma trận quyền §7 — cùng khuôn sàn đã làm cho `HR_OVERVIEW`",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/test/**",
+      "packages/contracts/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S4-DASH-HROVERVIEW-FLOOR-1"],
+    src: [
+      "Nợ N3 của `docs/plans/S4-DASH-HROVERVIEW-FLOOR-1.md` §9 · `docs/permission-matrix-spec.md` §7 (hàng «tổng user/nhân viên» + hàng nhân viên mới) · SPEC-07 §14.",
+    ],
+    done_when: [
+      "OWNER CHỐT giá trị sàn cho `EMPLOYEE_SUMMARY` (hàng «tổng user/nhân viên» của ma trận quyền §7): Department hay Company — ghi vào plan TRƯỚC khi code; `NEW_EMPLOYEES` theo hàng ma trận đã được owner phủ (không mở cho quản lý)",
+      "Sàn ở CẢ metadata lẫn đường số liệu, hằng sàn công bố ở `packages/contracts` theo khuôn `HR_OVERVIEW` — deny-path RED trước, mỗi scope một ca; plan rà mọi widget DASH khác dựa trên cùng hàng ma trận và ghi kết luận",
+      "Ô/màn FE nào đang gác widget bằng cặp thay thế ⇒ ghi WO FE nhỏ (đổi sang tín hiệu sàn, chỉ merge sau khi API PROD có WO này); route census + coverage `dashboard/` giữ xanh",
+    ],
+    notes: [
+      "🔴 FULL gate (cổng đọc số liệu nhân sự). Seed 23/10/2026 từ plan S4-DASH-HROVERVIEW-FLOOR-1 §9 N3.",
+      "Đụng `dashboard-widget-handlers.service.ts` (sát trần 800 — N6 plan WO mẹ) ⇒ tách handler theo khuôn `dashboard-widget-*.handlers.ts` TRƯỚC khi thêm mã (cùng việc với `S4-DASH-HROVERVIEW-COUNT-1` — WO nào làm trước thì tách).",
     ],
   },
   {
@@ -22109,6 +22202,7 @@ export const backlog = [
     ],
     notes: [
       "Seed 16/10/2026 khi thu hẹp S19-FE-SIGNEDTAB-1. 🔴 vì N11 có thể chạm `env.schema` (cấu hình storage) và HR/CHAT là đường cấp quyền đọc tệp.",
+      "23/10/2026 từ gate FILEOPENUX (plan `docs/plans/S16-SOCIAL-FILEOPENUX-1.md` §9): (N7) ghim gốc storage cho helper mở URL ký — danh sách cho phép lúc chạy phủ storage tự host + R2, ca DENY gốc lạ + `attachment` ⇒ không điều hướng; số dòng trích dẫn `EmployeeFilesTab` đổi :70 → :71. Cùng nguồn: (N5) cô lập lỗi storage khỏi tab app khi tải `attachment` (iframe ẩn + CSP `frame-src` ở `_headers`) — đo kích hoạt người dùng + CSP trước khi chọn; F3 phần docblock helper (nêu đủ caller) xong ở FILEOPENUX — tính khi WO đó merge.",
     ],
   },
   {
@@ -22220,6 +22314,113 @@ export const backlog = [
     ],
     notes: [
       "`apps/lms` là repo git RIÊNG (local, không remote) — memory lms-local-git-repo. Chi tiết đo lưu ngoài repo (máy PROD). Xếp Đợt 1 (thứ tự thực hiện 16/10/2026). Seed 16/10/2026.",
+      "23/10/2026: thi công xong ở repo LMS nhánh `fix/docs-auth-1` (đầu `38233df`), 3 gate (security · typescript · silent-failure) không còn CRITICAL/HIGH; chờ owner deploy (ff master LMS → backup → build → restart → purge cache biên). Nợ gieo: `S19-LMS-SSORETURN-1` · `S19-LMS-DOCSROLE-1` · `S19-LMS-SESSIONHARDEN-1` · `S19-LMS-AUTHCENSUS-1` · `S19-LMS-DOCSCONTENT-1`.",
+    ],
+  },
+  {
+    id: "S19-LMS-SSORETURN-1",
+    module: "LMS",
+    layer: "INT",
+    title: "LMS: quay lại trang gốc sau SSO",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S19-LMS-DOCSAUTH-1"],
+    src: [
+      "Nợ N1 của plan S19-LMS-DOCSAUTH-1 §9 (plan lưu ngoài repo, `kept/`) — gate 23/10/2026 nêu lại cùng khoảng trống, gộp vào đây.",
+    ],
+    done_when: [
+      "Người dùng chưa đăng nhập mở một trang sổ tay ⇒ sau SSO quay về đúng trang đó (không về trang mặc định)",
+      "Ràng buộc: tham số quay lại CHỈ nhận đường dẫn nội bộ thuộc danh sách được liệt kê, kiểm ở PHÍA NHẬN (trang đăng nhập LMS và callback SSO), từ chối URL tự do; đích chuyển hướng hằng hôm nay giữ nguyên tới khi có kiểm phía nhận — ca test cho giá trị hợp lệ + mọi dạng bị từ chối",
+      "Thi công trong worktree repo LMS; owner deploy theo khuôn S19-LMS-NODEMAILER-1; đo lại trên PROD",
+    ],
+    notes: [
+      "🟡 Seed 23/10/2026. WO 2 repo: phía MediaOS (trang chuyển tiếp sang LMS trong `apps/app`) cũng phải chuyển tiếp tham số ⇒ plan thêm path tương ứng. `apps/lms` là repo git RIÊNG (local, không remote) — KHÔNG sửa/build trong `apps/lms`.",
+    ],
+  },
+  {
+    id: "S19-LMS-DOCSROLE-1",
+    module: "LMS",
+    layer: "SEC",
+    title: "LMS: phạm vi đọc sổ tay theo vai trò",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S19-LMS-DOCSAUTH-1"],
+    src: ["Nợ N2 của plan S19-LMS-DOCSAUTH-1 §9 (plan lưu ngoài repo, `kept/`)."],
+    done_when: [
+      "OWNER CHỐT phạm vi đọc sổ tay: mọi nhân viên đã đăng nhập, hay chỉ dev/admin — ghi vào plan TRƯỚC khi code; chọn giữ nguyên ⇒ đóng WO kèm quyết định",
+      "Chọn giới hạn ⇒ kiểm vai trò ở phía server, cùng chỗ với cổng đăng nhập của S19-LMS-DOCSAUTH-1; ca test cho từng vai (được đọc / bị từ chối)",
+      "Thi công trong worktree repo LMS; owner deploy theo khuôn S19-LMS-NODEMAILER-1",
+    ],
+    notes: [
+      "🟢 Seed 23/10/2026. `apps/lms` là repo git RIÊNG (local, không remote) — KHÔNG sửa/build trong `apps/lms`.",
+    ],
+  },
+  {
+    id: "S19-LMS-SESSIONHARDEN-1",
+    module: "LMS",
+    layer: "SEC",
+    title: "LMS: gia cố lưu trữ phiên",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-LMS-DOCSAUTH-1"],
+    src: [
+      "Nợ N3 + N7 của plan S19-LMS-DOCSAUTH-1 §9 (plan lưu ngoài repo, `kept/`) — N7 từ gate silent-failure 23/10/2026.",
+    ],
+    done_when: [
+      "Bất biến: kho phiên KHÔNG giữ giá trị token dùng lại trực tiếp được — lưu dạng băm, tra theo băm; cách xử lý phiên đang sống khi chuyển đổi chốt có chủ đích trong plan + ghi vào bàn giao",
+      "Các nhánh fail-closed của hàm đọc phiên có ca đơn vị (lỗi kho ⇒ không cấp phiên), test chạy tự động trong repo LMS, không chỉ chạy tay",
+      "Thi công trong worktree repo LMS; owner deploy theo khuôn S19-LMS-NODEMAILER-1; đo lại: đăng nhập SSO + đăng xuất vẫn chạy",
+    ],
+    notes: [
+      "🔴 FULL gate (auth/token). Seed 23/10/2026. Chi tiết lưu ngoài repo. `apps/lms` là repo git RIÊNG (local, không remote) — KHÔNG sửa/build trong `apps/lms`.",
+    ],
+  },
+  {
+    id: "S19-LMS-AUTHCENSUS-1",
+    module: "LMS",
+    layer: "SEC",
+    title: "LMS: census điểm kiểm xác thực trên các trang (app)",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S19-LMS-DOCSAUTH-1"],
+    src: ["Nợ N5 của plan S19-LMS-DOCSAUTH-1 §9 (plan lưu ngoài repo, `kept/`)."],
+    done_when: [
+      "ĐO TRƯỚC: census mọi trang của repo LMS — điểm kiểm phiên nằm ở đâu — kết quả lưu NGOÀI repo, không ghi vào repo công khai",
+      "Bất biến: mọi trang render dữ liệu chỉ cho phiên hợp lệ; plan chọn chỗ đặt cổng (chung hay từng trang); ca test phiên chưa đăng nhập phủ mọi trang (script kiểm ở repo LMS)",
+      "Thi công trong worktree repo LMS; owner deploy theo khuôn S19-LMS-NODEMAILER-1, rồi đo lại từ phiên chưa đăng nhập; khi đóng WO chỉ ghi kết quả + sha",
+    ],
+    notes: [
+      "🔴 FULL gate. Seed 23/10/2026. Chi tiết lưu ngoài repo — repo MediaOS PUBLIC. `apps/lms` là repo git RIÊNG (local, không remote) — KHÔNG sửa/build trong `apps/lms`.",
+    ],
+  },
+  {
+    id: "S19-LMS-DOCSCONTENT-1",
+    module: "LMS",
+    layer: "BE",
+    title: "LMS: rà nội dung sổ tay",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/lms/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S19-LMS-DOCSAUTH-1"],
+    src: [
+      "Nợ N4 + N6 của plan S19-LMS-DOCSAUTH-1 §9 (plan lưu ngoài repo, `kept/`) — N6 từ gate silent-failure 23/10/2026.",
+    ],
+    done_when: [
+      "Owner rà nội dung sổ tay theo danh mục (giá trị bí mật · thông tin hạ tầng nội bộ) — quyết giữ hay đổi từng mục; chi tiết từng mục ghi NGOÀI repo",
+      "Tệp nguồn sổ tay có mặt nhưng rỗng ⇒ báo lỗi rõ (không phục vụ trang trống im lặng) + ca test",
+      "Thi công trong worktree repo LMS; owner deploy theo khuôn S19-LMS-NODEMAILER-1",
+    ],
+    notes: [
+      "🟢 Seed 23/10/2026. `apps/lms` là repo git RIÊNG (local, không remote) — KHÔNG sửa/build trong `apps/lms`.",
     ],
   },
   {
