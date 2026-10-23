@@ -8,10 +8,17 @@ import { chatRoomName, chatUserRoomName, userRoomName } from "./rooms";
 
 const COMPANY = "c0000000-0000-0000-0000-00000000000a";
 const ROOM = "11111111-1111-4111-8111-111111111111";
+/** Phòng có chữ hex (a–f) — `ROOM` toàn số nên `.toUpperCase()` không đổi gì (ca chữ HOA xanh-rỗng). */
+const ROOM_HEX = "6b1f0c2e-9d3a-4e5f-8a7b-c0d1e2f3a4b5";
 const USER_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const USER_B = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const MESSAGE_ID = "99999999-9999-4999-8999-999999999999";
 
+/**
+ * Fake `Server` ghi THỨ TỰ room-op (`order`) của CẢ HAI kênh (khuôn `realtime-emitter.feed.spec.ts`):
+ * `server.in(...)` = lệnh toàn cụm (dưới adapter Valkey: publish, có thể MẤT) · `server.local.in(...)` =
+ * lệnh cục bộ, đồng bộ. Thiếu `local` thì vế cục bộ nuốt `TypeError` + log `error` ⇒ ca vẫn xanh nhưng ồn.
+ */
 function makeServer() {
   const emit = vi.fn();
   const socketsJoin = vi.fn();
@@ -19,6 +26,18 @@ function makeServer() {
   const disconnectSockets = vi.fn();
   const toTargets: unknown[] = [];
   const inTargets: string[] = [];
+  const order: string[] = [];
+  const opsFor = (kind: "cluster" | "local", selector: string) => ({
+    socketsJoin: (target: string) => {
+      order.push(`${kind}:join:${selector}>${target}`);
+      if (kind === "cluster") socketsJoin(target);
+    },
+    socketsLeave: (target: string) => {
+      order.push(`${kind}:leave:${selector}>${target}`);
+      if (kind === "cluster") socketsLeave(target);
+    },
+    disconnectSockets,
+  });
   const server = {
     to: vi.fn((t: unknown) => {
       toTargets.push(t);
@@ -26,10 +45,20 @@ function makeServer() {
     }),
     in: vi.fn((t: string) => {
       inTargets.push(t);
-      return { socketsJoin, socketsLeave, disconnectSockets };
+      return opsFor("cluster", t);
     }),
+    local: { in: vi.fn((t: string) => opsFor("local", t)) },
   };
-  return { server, emit, socketsJoin, socketsLeave, disconnectSockets, toTargets, inTargets };
+  return {
+    server,
+    emit,
+    socketsJoin,
+    socketsLeave,
+    disconnectSockets,
+    toTargets,
+    inTargets,
+    order,
+  };
 }
 
 function makeEmitter() {
@@ -185,6 +214,68 @@ describe("RealtimeEmitterService — cụm CHAT (S7-CHAT-RT-1)", () => {
 
     expect(server.in).toHaveBeenCalledWith(userRoomName(COMPANY, USER_B));
     expect(socketsLeave).toHaveBeenCalledWith(chatRoomName(COMPANY, ROOM));
+  });
+
+  // ─── S17-CHAT-RTROOMOPS-1 — leave CỤC BỘ trước lệnh toàn cụm + tên room chuẩn tắc ───────
+  //
+  // Dưới adapter Valkey, `socketsLeave` không cờ `local` CHỈ publish; node giữ socket chỉ áp khi nhận lại
+  // qua kết nối SUBSCRIBE (at-most-once) ⇒ lệnh có thể mất trong khi broadcast vẫn phát cục bộ. Vế
+  // `server.local` áp đồng bộ trên node này. Khuôn W1b/W1d của `syncFeedGroupMembership` (BE-2C).
+  describe("syncRoomMembership — vế cục bộ (S17-CHAT-RTROOMOPS-1)", () => {
+    it("🔒 C-1 'leave' ⇒ CỤC BỘ trước, rồi mới toàn cụm — cùng bộ chọn user-room, cùng đích phòng", () => {
+      const { svc, order } = makeEmitter();
+
+      svc.syncRoomMembership(COMPANY, ROOM, USER_B, "leave");
+
+      const sel = userRoomName(COMPANY, USER_B);
+      const target = chatRoomName(COMPANY, ROOM);
+      expect(order).toEqual([`local:leave:${sel}>${target}`, `cluster:leave:${sel}>${target}`]);
+    });
+
+    it("C-2 'join' ⇒ 0 lệnh cục bộ, đúng 1 join toàn cụm qua CHAT-USER-room (join mất = fail-closed)", () => {
+      const { svc, server, order } = makeEmitter();
+
+      svc.syncRoomMembership(COMPANY, ROOM, USER_B, "join");
+
+      expect(server.local.in).not.toHaveBeenCalled();
+      expect(order).toEqual([
+        `cluster:join:${chatUserRoomName(COMPANY, USER_B)}>${chatRoomName(COMPANY, ROOM)}`,
+      ]);
+    });
+
+    it("🔒 C-3 vế cục bộ NÉM ⇒ lệnh toàn cụm VẪN chạy + đúng 1 `error` (hai nghĩa vụ độc lập)", () => {
+      const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+      const { svc, server, order } = makeEmitter();
+      server.local.in.mockImplementation(() => {
+        throw new Error("local adapter down");
+      });
+
+      expect(() => svc.syncRoomMembership(COMPANY, ROOM, USER_B, "leave")).not.toThrow();
+
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(order).toEqual([
+        `cluster:leave:${userRoomName(COMPANY, USER_B)}>${chatRoomName(COMPANY, ROOM)}`,
+      ]);
+    });
+
+    it("🔒 C-4 id CHỮ HOA (route `ParseUUIDPipe` trả nguyên văn) ⇒ bộ chọn + đích ra chữ thường ở CẢ HAI vế", () => {
+      const { svc, order } = makeEmitter();
+      const [C, R, U] = [COMPANY, ROOM_HEX, USER_B].map((s) => s.toUpperCase()) as [
+        string,
+        string,
+        string,
+      ];
+
+      svc.syncRoomMembership(C, R, U, "leave");
+      svc.syncRoomMembership(C, R, U, "join");
+
+      const target = `co:${COMPANY}:chatroom:${ROOM_HEX}`;
+      expect(order).toEqual([
+        `local:leave:co:${COMPANY}:user:${USER_B}>${target}`,
+        `cluster:leave:co:${COMPANY}:user:${USER_B}>${target}`,
+        `cluster:join:co:${COMPANY}:chatuser:${USER_B}>${target}`,
+      ]);
+    });
   });
 
   // ─── masking: `.parse()` TRƯỚC emit ────────────────────────────────────────────
