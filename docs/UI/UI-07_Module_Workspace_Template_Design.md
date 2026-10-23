@@ -16,12 +16,12 @@
 | Tên tài liệu | Module Workspace Template Design |
 | Tên dự án | Hệ thống quản lý doanh nghiệp nội bộ |
 | Tên sản phẩm | Enterprise Management System |
-| Phiên bản | **v1.1** |
+| Phiên bản | **v1.2a** |
 | Trạng thái | Draft |
 | Giai đoạn | MVP Version 1.0 |
 | Tài liệu nguồn | PRD-00, SPEC-01 -> SPEC-08, DB-01 -> DB-10, API-01 -> API-09, UI-01 -> UI-05 |
 | Ngày tạo | 20/06/2026 |
-| Ngày cập nhật | **11/09/2026** — v1.1 (DEC-020, WO `S15-PAYROLL-DOC-1`) |
+| Ngày cập nhật | **23/10/2026** — v1.2a (WO `S16-SOCIAL-DOC-2` — đồng bộ §34b theo mã FE-3/3B/3C) |
 | Người viết |  |
 | Người duyệt |  |
 
@@ -2184,13 +2184,13 @@ Module Workspace chuẩn (sidebar + vùng nội dung) tối ưu cho **danh sách
 
 `▸` Tiêu đề nhóm của rail = `group` của mục sidebar (rail dùng lại `ModuleSidebar` chung — §34b.6): Tổng quan · Nghiệp vụ · Quản lý · Báo cáo · Thiết lập. Thứ tự mục theo `order` của `SOCIAL_SIDEBAR_V2`; dưới 1024px thanh tab ngang đọc CÙNG danh sách đó.
 
-`†` Ba mục **quản trị** (`S16-SOCIAL-FE-3`/`3B`, owner chọn O2 = a ngày 05/10/2026). Mỗi mục khai `requiredPermissions` **ĐỦ-HẾT, y hệt cặp của route** nó trỏ tới (`ROUTE_REGISTRY`) — KHÔNG theo khuôn any-of `view:feed` của 7 mục phía trên (chép khuôn đó thì mọi nhân viên thấy mục rồi bấm vào trang cấm). Thiếu một vế ⇒ mục **ẩn** (§34b.5 Forbidden):
+`†` Ba mục **quản trị** (`S16-SOCIAL-FE-3`/`3B`, owner chọn O2 = a ngày 05/10/2026). Mỗi mục khai `requiredPermissions` **ĐỦ-HẾT, y hệt cặp của route** nó trỏ tới (`ROUTE_REGISTRY`) — KHÔNG theo khuôn any-of `view:feed` của 7 mục phía trên (chép khuôn đó thì mọi nhân viên thấy mục rồi bấm vào trang cấm). Thiếu một vế ⇒ mục **ẩn** (§34b.5 Forbidden). Cặp của từng màn: cột «Quyền vào» ở [SPEC-16 §9](<../SPEC/SPEC-16 SOCIAL.md>) — không chép lại ở đây.
 
-| Mục rail | Nhóm | Đường dẫn | Màn | Cặp — đủ cả hai, khớp đúng-bằng |
-| --- | --- | --- | --- | --- |
-| Kiểm duyệt | Quản lý | `/feed/moderation` | `SOC-SCREEN-010` | `view:feed` + `view:feed-report` |
-| Thống kê tương tác | Báo cáo | `/feed/stats` | `SOC-SCREEN-011` | `view:feed` + `view:feed-report` |
-| Thiết lập huy hiệu | Thiết lập | `/feed/kudos-badges` | `SOC-SCREEN-012` | `view:feed` + `manage:feed-kudos` |
+| Mục rail | Nhóm | Đường dẫn | Màn |
+| --- | --- | --- | --- |
+| Kiểm duyệt | Quản lý | `/feed/moderation` | `SOC-SCREEN-010` |
+| Thống kê tương tác | Báo cáo | `/feed/stats` | `SOC-SCREEN-011` |
+| Thiết lập huy hiệu | Thiết lập | `/feed/kudos-badges` | `SOC-SCREEN-012` |
 
 `‡` Ô widget DASH «Tổng quan nhân sự» ([SPEC-07 §14.8](<../SPEC/SPEC-07 DASH.md>)) — cuối rail phải, hiện **theo quyền**; chi tiết cổng ở §34b.6.
 
@@ -2249,10 +2249,10 @@ Menu `⋯` hiện theo quyền: **sửa · xoá** (chủ bài) · **lưu** (mọ
 
 - **Khung 3 cột** ở `apps/app/src/layouts/portal/` (`PortalLayout` · `PortalLeftRail` · `PortalRightRail` · `PortalTabBar`). Rail trái **dùng lại** `ModuleSidebar` của `layouts/workspace/` — không viết sidebar riêng, để giữ MỘT luật lọc quyền và cổng snapshot cây điều hướng. Vì vậy các **điểm đăng ký riêng của SOCIAL** nằm trong `layouts/workspace/`: mục rail ở `sidebar/social.ts` (`SOCIAL_SIDEBAR_V2`), ô «Đăng bài Facebook» ở khe `sidebar-extensions.ts` (`SocialFbpostLink.tsx`), icon mới vào `DynamicIcon.tsx`. Điều **không** làm: sửa phần dùng chung (`ModuleSidebar` · `ModuleWorkspaceLayout`) cho riêng SOCIAL.
 - Mục rail trái đăng ký qua `ROUTE_REGISTRY` như mọi module; mục chưa có màn tự ẩn (`pruneUnbuiltScreens()`).
-- Ô «Đăng bài Facebook» là **liên kết ngoài** (icon ↗, mở qua SSO), gác **đúng MỘT cặp `view:social-post`** — khớp cổng của endpoint SSO duy nhất (`GET /integrations/social/sso-link`) và của ô `fbpost` trong `APP_REGISTRY`. Ba cặp `social-*` cũ vẫn tồn tại, không đổi (SOC-DEC-002), nhưng chỉ cặp này mở ô: người chỉ giữ `manage:social-account` không thấy ô. Mục rail không hiện khi sidebar thu gọn ⇒ lối vào luôn-có là AppSwitcher (`fbpost` là `switcherOnly`: có ở AppSwitcher, không ở lưới Home) — xem `S16-SOCIAL-FBPOST-1`.
-- **Dải ô liên kết nhanh** (đầu cột feed, [SPEC-16](<../SPEC/SPEC-16 SOCIAL.md>) SC-14): hằng `FEED_QUICK_LINK_APP_KEYS` chỉ mang 7 `appKey` theo thứ tự SC-14 — Công việc · Nghỉ phép · Chấm công · Phòng họp · Mục tiêu · Đào tạo · Đăng bài Facebook. Nhãn · icon · cổng · đích lấy 100% từ `APP_REGISTRY` qua `getVisibleApps` (cùng hàm của AppSwitcher) rồi lọc `status = active` ⇒ «Phòng họp» đòi đủ `access:room` + `view:room`, «Đăng bài Facebook» một cặp như trên. Ô của ứng dụng **ngoài** (app có trình mở cross-domain — hôm nay Đào tạo và Đăng bài Facebook) là **nút** mang tên trợ năng «… (mở ứng dụng ngoài)» kèm dấu ↗; ô khác là liên kết nội bộ. Không ô nào đủ quyền ⇒ không vẽ dải.
-- **Ô «Tổng quan nhân sự»** (cuối rail phải): hiện **theo QUYỀN**, KHÔNG theo cấu hình widget của màn Dashboard (`dashboard_widget_configs`) — owner chốt 16/10/2026 (trả lời finding SEC-03 của `S16-SOCIAL-FE-3C`). Sàn dữ liệu là **Phòng ban**: server ép sàn `Department` cho widget ở cả danh sách widget lẫn đường số liệu (`S4-DASH-HROVERVIEW-FLOOR-1`; hằng dùng chung `DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW` ở `packages/contracts`) — grant `read:employee` ở Company thấy cả công ty, ở Department thấy phòng mình, ở Team/Own không nhận số liệu. Thiếu quyền ⇒ không vẽ ô và không gọi API DASH nào.
-  > ⏳ **Cổng FE đang chuyển.** Mã đã merge (`HrOverviewRailSlot.tsx`) còn gác bốn cặp khớp đúng-bằng `view:feed` · `read:dashboard` · `read:employee` · `update:employee` — vế cuối là cặp thay thế tạm (trong bốn vai chuẩn chỉ HR và company-admin giữ). WO `S4-DASH-HROVERVIEW-FE-1` (chưa merge) thay vế đó bằng tín hiệu sàn: `hasScope("read:employee", DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW)`.
+- Ô «Đăng bài Facebook» là **liên kết ngoài** (icon ↗, mở qua SSO), gác **đúng MỘT cặp `view:social-post`** — khớp cổng của endpoint SSO duy nhất (`GET /integrations/social/sso-link`) và của ô `fbpost` trong `APP_REGISTRY`. Ba cặp `social-*` cũ vẫn tồn tại, không đổi (SOC-DEC-002), nhưng chỉ cặp này mở ô: người chỉ giữ `manage:social-account` không thấy ô. Mục rail này vẽ qua khe extension, nên dưới 1024px thanh tab (`PortalTabBar` — chỉ đọc mục của `SOCIAL_SIDEBAR_V2`, không vẽ khe extension) không có nó; `ModuleSidebar` ở chế độ icon cũng không vẽ extension (`{Extension && !collapsed}`), dù rail trái của cổng luôn mở rộng. Lối vào luôn-có vì vậy là AppSwitcher (`fbpost` là `switcherOnly`: có ở AppSwitcher, không ở lưới Home) cùng ô của dải liên kết nhanh — xem `S16-SOCIAL-FBPOST-1`.
+- **Dải ô liên kết nhanh** (đầu cột feed, [SPEC-16](<../SPEC/SPEC-16 SOCIAL.md>) SC-14): hằng `FEED_QUICK_LINK_APP_KEYS` chỉ mang 7 `appKey` theo thứ tự SC-14 — Công việc · Nghỉ phép · Chấm công · Phòng họp · Mục tiêu · Đào tạo · Đăng bài Facebook. Nhãn · icon · cổng · đích lấy 100% từ `APP_REGISTRY` qua `getVisibleApps` (cùng hàm của AppSwitcher) rồi lọc `status = active` ⇒ mỗi ô theo đúng cổng của ô cùng `appKey` trong `APP_REGISTRY` (ví dụ «Phòng họp» theo cổng của ô `rooms`, «Đăng bài Facebook» theo ô `fbpost` như trên) — đổi cổng một app là sửa MỘT chỗ ở registry, dải tự theo. Ô của ứng dụng **ngoài** (app có trình mở cross-domain — hôm nay Đào tạo và Đăng bài Facebook) là **nút** mang tên trợ năng «… (mở ứng dụng ngoài)» kèm dấu ↗; ô khác là liên kết nội bộ. Không ô nào đủ quyền ⇒ không vẽ dải.
+- **Ô «Tổng quan nhân sự»** (cuối rail phải): hiện **theo QUYỀN**, KHÔNG theo cấu hình widget của màn Dashboard (`dashboard_widget_configs`) — owner chốt 16/10/2026 (trả lời finding SEC-03 của `S16-SOCIAL-FE-3C`). Sàn dữ liệu là **Phòng ban** — luật và nghĩa của từng scope: xem [SPEC-07 §14.8](<../SPEC/SPEC-07 DASH.md>). Cổng FE của ô = các cặp `view:feed` · `read:dashboard` · `read:employee` (khớp đúng-bằng) cộng tín hiệu sàn `hasScope("read:employee", DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW)` — hằng import từ `packages/contracts`, không hard-code ở FE, không dùng cặp thay thế. Thiếu quyền hoặc dưới sàn ⇒ không vẽ ô và không gọi API DASH nào.
+  > Mã FE theo cổng này qua WO `S4-DASH-HROVERVIEW-FE-1` (trạng thái ở `harness/backlog.mjs`). Trước khi WO đó merge, `HrOverviewRailSlot.tsx` dùng cặp thay thế tạm `update:employee` thay cho tín hiệu sàn.
 - Mọi thời gian hiển thị theo múi giờ công ty; server trả ISO, FE format bằng `date-fns`.
 
 ---
