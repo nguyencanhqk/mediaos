@@ -99,6 +99,22 @@ describe("bootstrapSession", () => {
     expect(state.user?.email).toBe("a@b.com");
     expect(state.capabilities).toEqual({ "read:tasks": true });
     expect(state.mustSetupTwoFactor).toBe(false);
+    // `/me` không gửi `scopes` ⇒ store giữ map RỖNG (fail-closed: mọi `hasScope` từ store đều false).
+    expect(state.scopes).toEqual({});
+  });
+
+  it("S4-DASH-HROVERVIEW-FE-1 — `me.scopes` (phạm vi theo cặp) vào store y nguyên; logout xoá sạch", async () => {
+    stubBrowser();
+    fetchMock.mockResolvedValue(refreshOk("tok-s"));
+    const scopes = { "read:employee": ["Department" as const], "read:tasks": ["Own" as const] };
+    const me = vi.fn().mockResolvedValue({ ...ME, scopes });
+    const { session, store } = await loadSession(me);
+
+    await expect(session.bootstrapSession()).resolves.toBe(true);
+    expect(store.useAuthStore.getState().scopes).toEqual(scopes);
+
+    store.useAuthStore.getState().logout();
+    expect(store.useAuthStore.getState().scopes).toEqual({});
   });
 
   it("me.mustSetupTwoFactor=true → store.mustSetupTwoFactor=true (AUTH-003 ép enroll)", async () => {

@@ -54,7 +54,7 @@ async function doBootstrap(): Promise<boolean> {
   if (!refreshed) return false;
   try {
     const me = await authApi.me();
-    useAuthStore.getState().setUser(me, me.capabilities);
+    useAuthStore.getState().setUser(me, me.capabilities, me.scopes ?? {});
     // Cờ ép-enroll-2FA (AUTH-003) — set RIÊNG (setUser giữ nguyên chữ ký cho các call site khác không đổi).
     useAuthStore.getState().setMustSetupTwoFactor(me.mustSetupTwoFactor);
     // KHÔNG await — xem ghi chú S10-PERF-LOADPATH-1 ở đầu file. Gán vào `themeSyncInFlight` (thay vì thả

@@ -1,5 +1,6 @@
 /**
- * S16-SOCIAL-FE-3C (L7 · hàng HR2 của plan §4) — ô DASH «Tổng quan nhân sự» trong VỎ THẬT của bảng tin.
+ * S16-SOCIAL-FE-3C (L7 · hàng HR2 của plan §4) · S4-DASH-HROVERVIEW-FE-1 — ô DASH «Tổng quan nhân sự» trong VỎ THẬT
+ * của bảng tin. Cổng của slot: ba cặp đúng-bằng + phạm vi `read:employee` ≥ sàn của widget (`@mediaos/contracts`).
  *
  * 🔴 Vì sao vỏ có ca DENY riêng, dù `components/HrOverviewRailSlot.spec.tsx` đã đo đủ bốn vế của cổng: spec đó đo
  * slot đứng RIÊNG. Vỏ bỏ slot mà mount thẳng `HrOverviewWidget` thì mọi ca ở đó vẫn xanh, còn ô chỉ còn cổng TRONG
@@ -29,6 +30,7 @@
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SocialPortalShell } from "./SocialPortalShell";
+import type { DataScope } from "@mediaos/web-core";
 import { page, renderWithProviders, resetCaps, setCaps } from "./social-test-doubles";
 
 const navigateSpy = vi.fn();
@@ -92,13 +94,16 @@ const HEADCOUNT = 128;
  */
 const SOCIAL_RAIL_BLOCKS = 5;
 
-/** ĐỦ bốn cặp của cổng — trong bốn vai chuẩn chỉ HR và company-admin giữ cả bốn. */
-const FOUR_PAIRS: Record<string, boolean> = {
+/** Ba cặp đúng-bằng của cổng — MỌI vai chuẩn đều giữ; vế phân biệt là phạm vi của `read:employee`. */
+const THREE_PAIRS: Record<string, boolean> = {
   "view:feed": true,
   "read:dashboard": true,
   "read:employee": true,
-  "update:employee": true,
 };
+/** Phạm vi `read:employee` (như `/auth/me.scopes`) — sàn của widget là Department. */
+const HR_COMPANY = { "read:employee": ["Company"] } as const;
+const DEPT_HEAD = { "read:employee": ["Department"] } as const;
+const MANAGER_TEAM = { "read:employee": ["Team"] } as const;
 
 const renderShell = () =>
   renderWithProviders(
@@ -177,8 +182,8 @@ afterEach(() => {
 });
 
 describe("W4 — widget DASH «Tổng quan nhân sự» (S16-SOCIAL-FE-3C L7, plan D15 · D16 · owner O1 = B)", () => {
-  it("ALLOW: đủ bốn cặp ⇒ ô «Tổng quan nhân sự» là khối CUỐI của rail phải, đường dữ liệu widget (mock) được gọi đúng 1 lần", async () => {
-    setCaps(FOUR_PAIRS);
+  it("ALLOW: ba cặp + `read:employee` @Company ⇒ ô «Tổng quan nhân sự» là khối CUỐI của rail phải, đường dữ liệu widget (mock) được gọi đúng 1 lần", async () => {
+    setCaps(THREE_PAIRS, HR_COMPANY);
     renderShell();
 
     const rail = rightRail();
@@ -193,7 +198,7 @@ describe("W4 — widget DASH «Tổng quan nhân sự» (S16-SOCIAL-FE-3C L7, pl
 
   // Gate TS của PR-C (TSC-04): năm khối SOCIAL là `<section aria-label>`, ô DASH từng là khối duy nhất không có vùng.
   it("ALLOW: ô là VÙNG CÓ NHÃN như năm khối SOCIAL — rail có sáu vùng, vùng CUỐI mang tên «Tổng quan nhân sự» và chính là khối cuối của rail", async () => {
-    setCaps(FOUR_PAIRS);
+    setCaps(THREE_PAIRS, HR_COMPANY);
     renderShell();
     await settle();
 
@@ -205,13 +210,18 @@ describe("W4 — widget DASH «Tổng quan nhân sự» (S16-SOCIAL-FE-3C L7, pl
 });
 
 describe("W4 — cổng của ô ở CẤP VỎ: vỏ chỉ mount ô qua slot bốn vế, không mount thẳng widget", () => {
-  it.each<[string, Record<string, boolean>]>([
-    ["đủ bốn cặp đích danh", FOUR_PAIRS],
-    ["đủ bốn cặp đích danh, có thêm `*:*`", { ...FOUR_PAIRS, "*:*": true }],
+  it.each<[string, Record<string, boolean>, Record<string, readonly DataScope[]>]>([
+    ["ba cặp đích danh, `read:employee` @Company", THREE_PAIRS, HR_COMPANY],
+    [
+      "ba cặp đích danh, `read:employee` @Department, không `update:employee`",
+      THREE_PAIRS,
+      DEPT_HEAD,
+    ],
+    ["ba cặp đích danh @Company, có thêm `*:*`", { ...THREE_PAIRS, "*:*": true }, HR_COMPANY],
   ])(
     "ALLOW (cùng khung với các ca DENY) · %s ⇒ sau MỘT nhịp: có ô, rail thêm đúng 1 khối, đúng 1 lời gọi dữ liệu, 0 request ra ngoài",
-    async (_label, caps) => {
-      setCaps(caps);
+    async (_label, caps, scopes) => {
+      setCaps(caps, scopes);
       renderShell();
       await settle();
       expect(listGroups).toHaveBeenCalled();
@@ -221,34 +231,38 @@ describe("W4 — cổng của ô ở CẤP VỎ: vỏ chỉ mount ô qua slot b�
 
   /**
    * Mỗi bộ quyền dưới đây lọt qua cổng TRONG của `HrOverviewWidget` (`read:employee`, nhận wildcard) — vỏ mount
-   * thẳng widget thì cả bốn hàng đều hiện ô. Hàng DENY-4w là hàng duy nhất còn đỏ khi vỏ tự dựng lại cổng mà để
+   * thẳng widget thì mọi hàng đều hiện ô. Hàng DENY-4w là hàng duy nhất còn đỏ khi vỏ tự dựng lại cổng mà để
    * vế `read:employee` cho widget lo (cổng trong nhận wildcard).
    */
-  it.each<[string, Record<string, boolean>]>([
+  it.each<[string, Record<string, boolean>, Record<string, readonly DataScope[]>]>([
+    ["DENY-1 · quản lý: `read:employee` @Team (dưới sàn)", THREE_PAIRS, MANAGER_TEAM],
     [
-      "DENY-1 · bộ quyền nhân viên / quản lý (thiếu `update:employee`)",
-      { "view:feed": true, "read:dashboard": true, "read:employee": true },
+      "DENY-1b · @Team dù CÓ `update:employee` — vế cũ không còn mở cổng",
+      { ...THREE_PAIRS, "update:employee": true },
+      MANAGER_TEAM,
     ],
-    ["DENY-2 · `view:feed` + chỉ `*:*`", { "view:feed": true, "*:*": true }],
+    ["DENY-1c · `/auth/me` không gửi phạm vi nào", THREE_PAIRS, {}],
     [
-      "DENY-3 · thiếu `read:dashboard`",
-      { "view:feed": true, "read:employee": true, "update:employee": true },
+      "DENY-2 · `view:feed` + chỉ `*:*`",
+      { "view:feed": true, "*:*": true },
+      { "*:*": ["Company"] },
     ],
+    ["DENY-3 · thiếu `read:dashboard`", { "view:feed": true, "read:employee": true }, HR_COMPANY],
     [
-      "DENY-4w · đủ ba cặp còn lại, `read:employee` chỉ có ở dạng wildcard",
+      "DENY-4w · đủ các vế còn lại, cặp `read:employee` chỉ có ở dạng wildcard",
       {
         "view:feed": true,
         "read:dashboard": true,
-        "update:employee": true,
         "*:*": true,
         "read:*": true,
         "*:employee": true,
       },
+      HR_COMPANY,
     ],
   ])(
     "%s ⇒ không có ô, rail không thêm khối nào, 0 lời gọi dữ liệu widget, 0 request ra ngoài",
-    async (_label, caps) => {
-      setCaps(caps);
+    async (_label, caps, scopes) => {
+      setCaps(caps, scopes);
       renderShell();
       await settle();
       // Đối chứng: trong CHÍNH nhịp này rail đã dựng và widget SOCIAL đã hỏi dữ liệu — ca không xanh vì «chưa kịp».
@@ -257,8 +271,8 @@ describe("W4 — cổng của ô ở CẤP VỎ: vỏ chỉ mount ô qua slot b�
     },
   );
 
-  it("DENY-5 · thiếu `view:feed` (đủ ba cặp còn lại) ⇒ không có ô, 0 lời gọi dữ liệu widget — như năm widget SOCIAL của rail", async () => {
-    setCaps({ "read:dashboard": true, "read:employee": true, "update:employee": true });
+  it("DENY-5 · thiếu `view:feed` (đủ các vế còn lại) ⇒ không có ô, 0 lời gọi dữ liệu widget — như năm widget SOCIAL của rail", async () => {
+    setCaps({ "read:dashboard": true, "read:employee": true }, HR_COMPANY);
     renderShell();
     await settle();
     // Đối chứng: vỏ đang ở chế độ «không `view:feed`» — năm widget SOCIAL cũng không hỏi dữ liệu.
