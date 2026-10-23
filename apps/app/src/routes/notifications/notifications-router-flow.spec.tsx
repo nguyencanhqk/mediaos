@@ -202,8 +202,9 @@ describe("NOTI router-wire flow (S4-FE-NOTI-1-WIRE) — qua router THẬT + Glob
     const view = renderApp();
 
     // Exact match — "Thông báo — nội dung chính" (main content region) cũng khớp regex /thông báo/i,
-    // nên dùng chuỗi exact của chuông (t("badge.ariaLabel")).
-    const bell = await screen.findByLabelText("Thông báo");
+    // nên dùng chuỗi exact của chuông (t("badge.ariaLabel")). Lọc theo role BUTTON: vùng toast của
+    // shell (S20-FE-TOAST-1) là <section aria-label="Thông báo"> — cùng nhãn, khác vai trò.
+    const bell = await screen.findByRole("button", { name: "Thông báo" });
     fireEvent.click(bell);
 
     await waitFor(() => expect(screen.getByText(DROPDOWN_ITEM.title)).toBeInTheDocument());
@@ -232,7 +233,7 @@ describe("NOTI router-wire flow (S4-FE-NOTI-1-WIRE) — qua router THẬT + Glob
 
     await waitFor(() => expect(myNotificationApi.unreadCount).toHaveBeenCalled());
     // Topbar nguyên vẹn dù badge lỗi — không crash, không màn trắng.
-    expect(screen.getByLabelText("Thông báo")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Thông báo" })).toBeInTheDocument();
     expect(screen.getByLabelText("Menu tài khoản")).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText("Bạn chưa có thông báo mới")).toBeInTheDocument());
