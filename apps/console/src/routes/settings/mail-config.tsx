@@ -27,6 +27,22 @@ function isPasswordRequired(err: unknown): boolean {
   return err instanceof ApiError && err.code === FOUNDATION_ERROR_CODES.MAIL_PASSWORD_REQUIRED;
 }
 
+/** Mã 400 đầu vào chung của filter toàn cục (Zod · B4 của S19-SEC-MAILAADBIND-1) — contracts chưa xuất hằng này. */
+const VALIDATION_ERROR_CODE = "VALIDATION-ERR-001";
+
+/**
+ * S19-FE-MAILSAVEERR-1 — câu server cho lỗi Lưu, CHỈ với 400 `VALIDATION-ERR-001`: câu đó là HẰNG SỐ phía server
+ * (Zod ⇒ «Dữ liệu không hợp lệ»; B4 ⇒ câu cố định về host/username — filter quy định 4xx message dành cho UI, caller
+ * không nội suy dữ liệu request). `details` của Zod KHÔNG in. 403/5xx/lỗi mạng/body thô (`HTTP_ERROR`) ⇒ `null`
+ * để form giữ câu chung — câu của guard/hệ thống không dành cho người dùng.
+ */
+function serverValidationMessage(err: unknown): string | null {
+  if (!(err instanceof ApiError) || err.status !== 400 || err.code !== VALIDATION_ERROR_CODE)
+    return null;
+  const message = err.message.trim();
+  return message.length > 0 ? message : null;
+}
+
 // ── Container ───────────────────────────────────────────────────────────────────
 
 export function MailConfigPage() {
@@ -407,7 +423,7 @@ export function MailConfigForm({
           <p role="alert" className="text-sm text-destructive">
             {isPasswordRequired(saveError)
               ? t("mailConfig.passwordRequiredServer")
-              : t("mailConfig.saveError")}
+              : (serverValidationMessage(saveError) ?? t("mailConfig.saveError"))}
           </p>
         )}
       </div>
