@@ -205,11 +205,11 @@ function decideStorage({
  *     - strict ∧ laneDbSet ∧ runs === 0         → 'red'  (thành công rỗng)
  *     - strict ∧ laneDbSet ∧ có tệp trong expectedRunFiles KHÔNG nằm trong storageRunFiles → 'red' (theo từng tệp)
  *     - không strict ∧ (skips ∨ calls) > 0      → 'warn' (tối thiểu)
- *   (B) lane-db (hành vi cũ, giữ nguyên):
- *     - laneDbSet=true            → 'ok' (kể cả skippedFiles cao/null — LANE_DB là bằng chứng
+ *   (B) lane-db:
+ *     - skippedFiles null/undefined (không đọc được summary) → 'warn' (strict → 'red') BẤT KỂ LANE_DB
+ *       (S16-SOCIAL-GUARDNOSUMMARY-1): KHÔNG có bằng chứng test đã chạy xong (turbo-cache, crash giữa chừng).
+ *     - laneDbSet=true            → 'ok' (kể cả skippedFiles cao — LANE_DB là bằng chứng
  *                                  deny-path đã chạy như CI; số skip còn lại là RED-placeholder cố ý).
- *     - skippedFiles null/undefined (không đọc được summary) → 'warn' (strict → 'red'): KHÔNG có
- *       bằng chứng test đã thực sự chạy (nghi turbo-cache hoặc crash giữa chừng).
  *     - skippedFiles > threshold  → 'warn' (strict → 'red'): banner LOUD.
  *     - còn lại                   → 'ok'.
  */
@@ -241,19 +241,22 @@ export function decideGate({
 }
 
 function decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict }) {
-  if (laneDbSet) {
+  // S16-SOCIAL-GUARDNOSUMMARY-1: summary vắng xét TRƯỚC LANE_DB — LANE_DB chỉ chứng minh int-spec KHÔNG bị skip vì
+  // thiếu DB, không chứng minh bộ test đã chạy XONG (lượt chết `Channel closed` giữa chừng vẫn có LANE_DB).
+  if (skippedFiles === null || skippedFiles === undefined) {
+    const why = laneDbSet
+      ? "LANE_DB đã set nhưng log KHÔNG có dòng tổng kết vitest (Test Files/Tests) — lượt test chết giữa chừng/log cụt"
+      : "KHÔNG xác định được số int-spec bị skip (không tìm thấy dòng tổng kết vitest — nghi turbo-cache/crash)";
     return {
-      level: "ok",
-      message: `LANE_DB đã set — int-spec chạy đầy đủ (skipped files=${skippedFiles ?? 0}).`,
+      level: strict ? "red" : "warn",
+      message: `${why} — KHÔNG có bằng chứng deny-path/IDOR/cross-tenant đã chạy xong`,
     };
   }
 
-  if (skippedFiles === null || skippedFiles === undefined) {
+  if (laneDbSet) {
     return {
-      level: strict ? "red" : "warn",
-      message:
-        "KHÔNG xác định được số int-spec bị skip (không tìm thấy dòng summary vitest — nghi turbo-cache/crash) " +
-        "— KHÔNG có bằng chứng deny-path/IDOR/cross-tenant đã chạy",
+      level: "ok",
+      message: `LANE_DB đã set — int-spec chạy đầy đủ (skipped files=${skippedFiles}).`,
     };
   }
 

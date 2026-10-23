@@ -497,3 +497,120 @@ test("LIGHT-F1/F2 check.sh đối chứng: guard THẬT + manifest — đủ t�
   assert.equal(red.level, "red");
   assert.ok(red.message.includes(expected[0]), red.message);
 });
+
+// ══ S16-SOCIAL-GUARDNOSUMMARY-1 — LANE_DB set KHÔNG thay được dòng tổng kết vitest ══
+//
+// Quan sát (q1, plan S16-SOCIAL-STORAGETESTGATE-1 §9.3 «L3 đo»): lô D chết `Channel closed` không in
+// `Test Files`/`Tests`, các tệp storage kịp phát nhãn run ⇒ cổng storage `ok`; cổng lane-db trả `ok` vì
+// `laneDbSet` được xét TRƯỚC summary vắng ⇒ guard `--strict=1 --lane-db-set=1` báo `LEVEL:ok`.
+// Bất biến: strict ∧ LANE_DB ∧ log không có dòng tổng kết nào ⇒ red (không strict ⇒ warn); có summary ⇒ giữ nguyên.
+
+/** Log lô chết giữa chừng: mọi tệp storage mong đợi đã phát nhãn run, rồi tinypool sập — KHÔNG có summary. */
+const crashLogWithRuns = (files) =>
+  [
+    ...files.map((file) => runLabel({ file, bucket: "mediaos-test" })),
+    FIXTURE_CRASH_NO_SUMMARY,
+  ].join("\n");
+
+test("NOSUMMARY decideGate: strict + LANE_DB + skippedFiles=null (không summary) ⇒ red (mã cũ trả ok)", () => {
+  const gate = decideGate({ skippedFiles: null, laneDbSet: true, threshold: 20, strict: true });
+  assert.equal(gate.level, "red");
+  assert.match(gate.message, /dòng tổng kết/);
+});
+
+test("NOSUMMARY decideGate: KHÔNG strict + LANE_DB + skippedFiles=null ⇒ warn (không bao giờ XANH)", () => {
+  assert.equal(decideGate({ skippedFiles: null, laneDbSet: true, strict: false }).level, "warn");
+  assert.equal(
+    decideGate({ skippedFiles: undefined, laneDbSet: true, strict: false }).level,
+    "warn",
+  );
+});
+
+test("NOSUMMARY decideGate: storage đủ bằng chứng KHÔNG che được summary vắng (strict + LANE_DB ⇒ red)", () => {
+  const gate = decideGate({
+    skippedFiles: null,
+    laneDbSet: true,
+    strict: true,
+    storageSkips: 0,
+    storageRuns: 2,
+    storageCalls: 0,
+    expectedRunFiles: [SF, SF2],
+    storageRunFiles: [SF, SF2],
+  });
+  assert.equal(gate.level, "red");
+});
+
+test("NOSUMMARY đối chứng decideGate: có summary (skippedFiles=0/1) + LANE_DB ⇒ ok như cũ, strict hay không", () => {
+  for (const strict of [true, false]) {
+    for (const skippedFiles of [0, 1]) {
+      assert.equal(decideGate({ skippedFiles, laneDbSet: true, strict }).level, "ok");
+    }
+  }
+});
+
+test("NOSUMMARY CLI: log `Channel closed` không summary + đủ nhãn run, --strict=1 --lane-db-set=1 ⇒ LEVEL:red, exit 1", () => {
+  const expected = manifestFiles();
+  const r = runGuardCli(crashLogWithRuns(expected), [
+    ...STRICT_LANE,
+    `--expect-run-files=${MANIFEST}`,
+  ]);
+  assert.equal(r.level, "red", r.stdout);
+  assert.equal(r.status, 1);
+  assert.equal(r.storage, `skips=0 runs=${expected.length} calls=0`);
+  const bare = runGuardCli(crashLogWithRuns([SF]), ["--strict=1", "--lane-db-set=1"]);
+  assert.equal(bare.level, "red", bare.stdout);
+});
+
+test("NOSUMMARY CLI đối chứng đứng cạnh: cùng nhãn run + CÓ summary ⇒ LEVEL:ok, exit 0", () => {
+  const r = runGuardCli(runLog(manifestFiles()), [
+    ...STRICT_LANE,
+    `--expect-run-files=${MANIFEST}`,
+  ]);
+  assert.equal(r.level, "ok", r.stdout);
+  assert.equal(r.status, 0);
+});
+
+test("NOSUMMARY CLI không strict: log không summary + LANE_DB ⇒ LEVEL:warn, exit 0 (tier thường không vỡ)", () => {
+  const r = runGuardCli(crashLogWithRuns([SF]), [
+    "--strict=0",
+    "--lane-db-set=1",
+    "--fail-unless-ok=0",
+  ]);
+  assert.equal(r.level, "warn", r.stdout);
+  assert.equal(r.status, 0);
+});
+
+// Đường chunk-runner của check.sh (`node harness/chunk-test.mjs | tee`): mỗi chunk (kể cả lượt chạy lại) là MỘT tiến
+// trình vitest riêng, reporter default ⇒ tự in summary. Chunk chết rồi được chạy lại vẫn để lại summary của lượt lại.
+const CHUNK_CRASHED_THEN_RERUN = [
+  "──▶ @mediaos/api: 2 file spec → 1 chunk",
+  "  ── chunk 1/1",
+  ` ${ESC}[32m✓${ESC}[39m test/integration/bonus-penalty-transition.int-spec.ts ${ESC}[2m(8 tests)${ESC}[22m`,
+  `${ESC}[31m${ESC}[1mError${ESC}[22m: Channel closed${ESC}[39m`,
+  "  ── chunk 1/1 · chạy lại 1/2 (crash hạ tầng)",
+  runLabel({ file: SF, bucket: "mediaos-test" }),
+  runLabel({ file: SF2, bucket: "mediaos-test" }),
+  ...SUMMARY,
+  "═══════════ KẾT QUẢ CHUNK-TEST ═══════════",
+].join("\n");
+
+test("NOSUMMARY check.sh chunk-runner: chunk chết rồi chạy lại có summary ⇒ ok (KHÔNG đỏ oan)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "guard-nosummary-manifest-"));
+  const manifest = join(dir, "storage-spec-files.json");
+  writeFileSync(manifest, JSON.stringify([SF, SF2]), "utf8");
+  const r = runCheckShGuard({
+    guardPath: GUARD_CLI,
+    logText: CHUNK_CRASHED_THEN_RERUN,
+    strict: 1,
+    manifest,
+  });
+  assert.equal(r.level, "ok", r.message + r.stderr);
+});
+
+test("NOSUMMARY check.sh: log không summary nào (mọi chunk chết / runner chết sớm) ⇒ red khi strict · warn khi không", () => {
+  const logText = crashLogWithRuns(manifestFiles());
+  const red = runCheckShGuard({ guardPath: GUARD_CLI, logText, strict: 1, manifest: MANIFEST });
+  assert.equal(red.level, "red", red.message + red.stderr);
+  const warn = runCheckShGuard({ guardPath: GUARD_CLI, logText, strict: 0, manifest: MANIFEST });
+  assert.equal(warn.level, "warn", warn.message + warn.stderr);
+});
