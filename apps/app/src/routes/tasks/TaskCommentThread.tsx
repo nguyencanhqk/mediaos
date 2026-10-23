@@ -197,7 +197,10 @@ function CommentComposer({
           autoFocus={autoFocus}
           rows={2}
           value={draft}
-          disabled={mutation.isPending}
+          // readOnly (không disabled) khi đang gửi: disabled làm ô mất focus, gõ tiếp phải bấm lại.
+          // Gửi trùng đã chặn ở `canSubmit` (!isPending).
+          readOnly={mutation.isPending}
+          aria-busy={mutation.isPending}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder={t("tasks.detail.comments.placeholder")}

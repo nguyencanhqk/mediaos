@@ -350,6 +350,32 @@ describe("TaskCommentThread — gợi ý @ và phím tắt gửi", () => {
     await waitFor(() => expect(taskCollabApi.addComment).toHaveBeenCalledTimes(2));
   });
 
+  it("đang gửi: ô GIỮ focus (readOnly + aria-busy, không disabled), Ctrl+Enter lần nữa không gửi trùng", async () => {
+    setCapabilities({ "comment:task": true });
+    let resolveAdd: (value: typeof MOCK_COMMENT) => void = () => undefined;
+    vi.mocked(taskCollabApi.addComment).mockImplementation(
+      () => new Promise((resolve) => (resolveAdd = resolve)),
+    );
+    renderWithQuery(<TaskCommentThread taskId="task-001" />);
+    const textarea = await composer();
+    textarea.focus();
+
+    fireEvent.change(textarea, { target: { value: "Đang gửi" } });
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+
+    await waitFor(() => expect(textarea).toHaveAttribute("aria-busy", "true"));
+    expect(textarea).not.toBeDisabled();
+    expect(textarea.readOnly).toBe(true);
+    expect(textarea).toHaveFocus();
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+    expect(taskCollabApi.addComment).toHaveBeenCalledTimes(1);
+
+    resolveAdd(MOCK_COMMENT);
+    await waitFor(() => expect(textarea.value).toBe(""));
+    expect(textarea.readOnly).toBe(false);
+    expect(textarea).toHaveFocus();
+  });
+
   it("ô rỗng hoặc chỉ khoảng trắng: Ctrl+Enter không gửi", async () => {
     setCapabilities({ "comment:task": true });
     renderWithQuery(<TaskCommentThread taskId="task-001" />);

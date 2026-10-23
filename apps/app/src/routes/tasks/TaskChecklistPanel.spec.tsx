@@ -216,6 +216,38 @@ describe("TaskChecklistPanel — nhập nhanh bằng bàn phím", () => {
     expect(input.value).toBe(sixtyLines);
   });
 
+  it("checklist đã có: một dòng dài hơn 500 ký tự ⇒ không gửi mục nào, lỗi tại chỗ", async () => {
+    setCapabilities({ "update:task": true });
+    vi.mocked(taskCollabApi.listChecklists).mockResolvedValue([MOCK_CHECKLIST]);
+    renderWithQuery(<TaskChecklistPanel taskId="task-001" />);
+
+    const input = await findQuickInput();
+    const pasted = ["Đặt phòng", "x".repeat(501), "In tài liệu"].join("\n");
+    submitWithEnter(input, pasted);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/tối đa 500 ký tự/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/dòng 2/i);
+    fireEvent.click(screen.getByRole("button", { name: "Thêm vào checklist" }));
+    expect(taskCollabApi.addChecklistItem).not.toHaveBeenCalled();
+    expect(taskCollabApi.createChecklist).not.toHaveBeenCalled();
+    expect(input.value).toBe(pasted);
+  });
+
+  it("dòng đúng 500 ký tự (sau khi bỏ khoảng trắng hai đầu) ⇒ vẫn gửi", async () => {
+    setCapabilities({ "update:task": true });
+    vi.mocked(taskCollabApi.listChecklists).mockResolvedValue([]);
+    vi.mocked(taskCollabApi.createChecklist).mockResolvedValue({ ...MOCK_CHECKLIST, id: "cl-new" });
+    renderWithQuery(<TaskChecklistPanel taskId="task-001" />);
+
+    const exactly500 = "y".repeat(500);
+    submitWithEnter(await findQuickInput(), `  ${exactly500}  `);
+
+    await waitFor(() => expect(taskCollabApi.createChecklist).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(taskCollabApi.createChecklist).mock.calls[0]?.[1]).toMatchObject({
+      items: [exactly500],
+    });
+  });
+
   it("tạo bị 403 ⇒ ô giữ nội dung đã gõ + hiện lỗi", async () => {
     setCapabilities({ "update:task": true });
     vi.mocked(taskCollabApi.listChecklists).mockResolvedValue([]);

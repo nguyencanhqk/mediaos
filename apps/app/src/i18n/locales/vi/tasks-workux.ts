@@ -36,6 +36,7 @@ export default {
       defaultTitle: "Checklist",
       pendingCount: "Enter để thêm {{count}} mục",
       tooMany: "Tối đa {{max}} mục mỗi lần — hiện có {{count}} dòng.",
+      tooLong: "Mỗi mục tối đa {{max}} ký tự — dòng {{line}} có {{length}} ký tự.",
     },
     subtasks: {
       inputLabel: "Tiêu đề việc con",
