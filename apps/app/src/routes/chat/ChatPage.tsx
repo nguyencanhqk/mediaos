@@ -30,6 +30,7 @@ import type { ChatRoomDto } from "@mediaos/contracts";
 import { ChatEmptyHero } from "@/components/chat/ChatEmptyHero";
 import { ConversationPanel } from "@/components/chat/ConversationPanel";
 import { CreateRoomDialog } from "@/components/chat/CreateRoomDialog";
+import type { PersonPick } from "@/components/chat/create-room-people";
 import { MessageSearchPanel } from "@/components/chat/MessageSearchPanel";
 import { RoomInfoPanel } from "@/components/chat/RoomInfoPanel";
 import { RoomListPanel } from "@/components/chat/RoomListPanel";
@@ -72,6 +73,11 @@ export function ChatPage(): React.ReactElement {
   const [isInfoColumnOpen, setInfoColumnOpen] = useState(true);
   const [isInfoSheetOpen, setInfoSheetOpen] = useState(false);
   const [isCreateOpen, setCreateOpen] = useState(false);
+  /**
+   * S20-CHAT-NEWROOM-1 — người chọn SẴN khi dialog mở từ lối «Thêm người» của DM (US-CHAT-NV-12). Rỗng
+   * = mở từ «+» như cũ (tab Nhắn riêng).
+   */
+  const [createPreset, setCreatePreset] = useState<readonly PersonPick[]>([]);
   /**
    * S7-CHAT-FE-4 — cột trái có HAI chế độ: danh sách phòng ↔ tìm kiếm tin nhắn (CHAT-SCREEN-005).
    *
@@ -235,6 +241,13 @@ export function ChatPage(): React.ReactElement {
         // <1280 bảng nằm TRONG `Sheet` — Sheet đã có viền, nền và bề rộng riêng, nên panel bỏ khung
         // của chính nó đi (nếu không là hai đường viền lồng nhau và một cột 340px trong panel 400px).
         variant={isInfoSheet ? "sheet" : "page"}
+        onStartGroupWith={(peer) => {
+          // Đóng Sheet thông tin (<1280): dialog dựng ở cấp trang, NGOÀI Sheet — để Sheet mở thì một
+          // lần Esc đóng cả hai. Ở mốc cột thì cột đứng yên, không che gì.
+          setInfoSheetOpen(false);
+          setCreatePreset([peer]);
+          setCreateOpen(true);
+        }}
         room={selectedRoom}
         members={members}
         myRole={myRole}
@@ -425,7 +438,12 @@ export function ChatPage(): React.ReactElement {
 
       {isCreateOpen && (
         <CreateRoomDialog
-          onClose={() => setCreateOpen(false)}
+          initialTab={createPreset.length > 0 ? "group" : "direct"}
+          initialMembers={createPreset}
+          onClose={() => {
+            setCreateOpen(false);
+            setCreatePreset([]);
+          }}
           onCreated={(room) => {
             hydrateRooms([room]);
             /**
@@ -442,6 +460,7 @@ export function ChatPage(): React.ReactElement {
             void queryClient.invalidateQueries({ queryKey: chatKeys.rooms.list() });
             setSelectedRoomId(room.id);
             setCreateOpen(false);
+            setCreatePreset([]);
           }}
         />
       )}

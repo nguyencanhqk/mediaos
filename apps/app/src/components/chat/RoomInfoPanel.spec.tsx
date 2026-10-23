@@ -567,3 +567,50 @@ describe("RoomInfoPanel · rời phòng", () => {
     expect(useChatStore.getState().roomsById[ROOM_ID]).toBeDefined();
   });
 });
+
+/**
+ * S20-CHAT-NEWROOM-1 — lối «Thêm người» ở bảng thông tin DM: mở dialog NHÓM đã chọn sẵn người đối
+ * thoại (US-CHAT-NV-12). Cổng = `create:chat-room` (cùng cặp với nút «+»), KHÔNG phải
+ * `manage:chat-member`: DM không có thành viên nào để quản trị — thứ được tạo ra là một phòng nhóm MỚI.
+ */
+describe("RoomInfoPanel · DM «Thêm người» (S20-CHAT-NEWROOM-1)", () => {
+  const PEER = { userId: OTHER, name: "Trần Thị Lan", avatarUrl: null, isActive: true };
+
+  it("DM + `create:chat-room` ⇒ bấm «Thêm người» gọi onStartGroupWith với người đối thoại", () => {
+    const onStartGroupWith = vi.fn();
+    renderPanel({
+      room: room({ roomType: "direct", name: null, peer: PEER }),
+      myRole: "member",
+      onStartGroupWith,
+    });
+
+    fireEvent.click(screen.getByTestId("chat-info-dm-add-people"));
+    expect(onStartGroupWith).toHaveBeenCalledWith({ userId: OTHER, fullName: "Trần Thị Lan" });
+    expect(mockUseCan).toHaveBeenCalledWith("create", "chat-room");
+  });
+
+  it("thiếu `create:chat-room` ⇒ KHÔNG có «Thêm người»", () => {
+    mockUseCan.mockImplementation(
+      (action: string, resource: string) => !(action === "create" && resource === "chat-room"),
+    );
+    renderPanel({
+      room: room({ roomType: "direct", name: null, peer: PEER }),
+      onStartGroupWith: vi.fn(),
+    });
+    expect(screen.queryByTestId("chat-info-dm-add-people")).toBeNull();
+  });
+
+  it("người đối thoại ngừng hoạt động ⇒ KHÔNG mời lập nhóm với họ", () => {
+    renderPanel({
+      room: room({ roomType: "direct", name: null, peer: { ...PEER, isActive: false } }),
+      onStartGroupWith: vi.fn(),
+    });
+    expect(screen.queryByTestId("chat-info-dm-add-people")).toBeNull();
+  });
+
+  it("phòng NHÓM ⇒ không có lối DM này (đã có «Thêm thành viên» riêng)", () => {
+    renderPanel({ onStartGroupWith: vi.fn() });
+    expect(screen.queryByTestId("chat-info-dm-add-people")).toBeNull();
+    expect(screen.getByTestId("chat-info-add-member")).toBeTruthy();
+  });
+});

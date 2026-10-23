@@ -1,181 +1,284 @@
 /**
- * S7-CHAT-FE-2 — CHAT-SCREEN-003: mở tin nhắn riêng (DM) hoặc tạo phòng nhóm.
+ * S7-CHAT-FE-2 → **S20-CHAT-NEWROOM-1** — CHAT-SCREEN-003: mở tin nhắn riêng (DM) hoặc tạo phòng nhóm.
  *
- * Danh bạ dùng LẠI `EmployeeMultiPickerDialog` (tìm server + lọc phòng ban + phân trang) chứ không dựng
- * bảng chọn thứ ba: danh sách người do SERVER lọc theo data-scope của `read:employee`, đúng yêu cầu
- * "tôn trọng quyền xem danh bạ của HR" ở §9. Client KHÔNG tự lọc thêm.
+ * S20 (US-CHAT-NV-12 · NV-91): bỏ dialog chọn người thứ hai. Ô tìm NHÚNG thẳng ở cả hai tab; tab «Nhóm»
+ * thêm dải chip «Gần đây» (người đối thoại của các DM đã nạp sẵn ở `chat.store` — không gọi API nào) và
+ * tên nhóm tự gợi ý «Lan, Minh, Hà +1» khi người dùng chưa gõ. Dùng chung cho `/chat` và drawer chat.
  *
- * ⚠️ Nhân viên **chưa liên kết tài khoản** có `userId === null` (`hrEmployeeListItemSchema`). Không có
- * `userId` thì không có ai để nhắn — hàng đó bị KHOÁ kèm lý do, chứ không phải gửi `null` xuống server
- * rồi nhận 422 khó hiểu.
+ * Danh sách người do SERVER lọc theo data-scope của `read:employee` (§9 "tôn trọng quyền xem danh bạ của
+ * HR") — xem docblock `CreateRoomDialog.people.tsx`.
+ *
+ * ⚠️ Server từ chối (CHAT-ERR-003 — tài khoản không còn dùng được) ⇒ dialog GIỮ NGUYÊN lựa chọn và nói
+ * ai không thêm được. Server cố ý KHÔNG echo `userId` trong lỗi, nên client nêu người nó BIẾT là ngừng
+ * hoạt động (peer `isActive=false`, danh sách phòng được xin lại ngay khi lỗi); không biết thì nêu cả
+ * nhóm ứng viên — không bao giờ đoán một cái tên.
  */
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation } from "@tanstack/react-query";
-import { chatApi } from "@mediaos/web-core";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ApiError, chatApi, chatKeys } from "@mediaos/web-core";
 import { Button, Dialog, Input, Tabs, TabsContent, TabsList, TabsTrigger } from "@mediaos/ui";
 import type { ChatRoomDto } from "@mediaos/contracts";
-import { EmployeeMultiPickerDialog } from "@/components/EmployeeMultiPickerDialog";
 import { MAX_MESSAGE_LENGTH } from "@/routes/chat/constants";
+import { useChatStore } from "@/stores/chat.store";
+import { PeopleSearch, RecentPeerChips, SelectedPeople } from "./CreateRoomDialog.people";
+import {
+  MAX_GROUP_NAME_LENGTH,
+  deriveRecentPeers,
+  suggestGroupName,
+  type PersonPick,
+} from "./create-room-people";
+
+type CreateTab = "direct" | "group";
+
+/** Tab nhắn riêng không có «đã chọn» — lựa chọn của tab nhóm không được tô lên kết quả ở đây. */
+const NO_SELECTION: ReadonlySet<string> = new Set();
+
+/** Lỗi gần nhất — giữ LOẠI chứ không giữ chuỗi, để thông điệp tính lại theo lựa chọn hiện tại. */
+type Failure =
+  | { kind: "direct"; name: string }
+  | { kind: "groupRejected" }
+  | { kind: "groupFailed" };
 
 interface CreateRoomDialogProps {
   onClose: () => void;
-  /** Phòng vừa mở/tạo — trang mở nó ngay và cache tên đã dựng. */
+  /** Phòng vừa mở/tạo — caller mở nó ngay (trang `/chat` hoặc drawer). */
   onCreated: (room: ChatRoomDto, displayName: string) => void;
+  /** Tab mở đầu — lối «Thêm người» ở bảng thông tin DM mở thẳng tab nhóm. */
+  initialTab?: CreateTab;
+  /** Người chọn sẵn cho tab nhóm (người đối thoại của DM). */
+  initialMembers?: readonly PersonPick[];
+  /** `drawer` ⇒ không có kết quả tìm thì kèm gợi ý «Nhắn riêng từ một phòng chung». */
+  variant?: "page" | "drawer";
 }
 
 export function CreateRoomDialog({
   onClose,
   onCreated,
+  initialTab = "direct",
+  initialMembers = [],
+  variant = "page",
 }: CreateRoomDialogProps): React.ReactElement {
   const { t } = useTranslation("chat");
-  const [tab, setTab] = useState<"direct" | "group">("direct");
-  const [name, setName] = useState("");
+  const queryClient = useQueryClient();
+  const roomOrder = useChatStore((s) => s.roomOrder);
+  const roomsById = useChatStore((s) => s.roomsById);
+  const myUserId = useChatStore((s) => s.myUserId);
+
+  const [tab, setTab] = useState<CreateTab>(initialTab);
+  const [selected, setSelected] = useState<readonly PersonPick[]>(initialMembers);
+  /** `null` = CHƯA gõ ⇒ ô tên hiện tên gợi ý (đổi theo người chọn). Gõ rồi thì là chữ của người dùng. */
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [description, setDescription] = useState("");
-  const [selected, setSelected] = useState<Array<{ userId: string; fullName: string }>>([]);
-  const [isPickerOpen, setPickerOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isSubmitAttempted, setSubmitAttempted] = useState(false);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const recentPeers = useMemo(
+    () => deriveRecentPeers(roomOrder, roomsById, myUserId),
+    [roomOrder, roomsById, myUserId],
+  );
+  const inactiveIds = useMemo(
+    () => new Set(recentPeers.filter((p) => !p.isActive).map((p) => p.userId)),
+    [recentPeers],
+  );
+  const selectedIds = useMemo(() => new Set(selected.map((p) => p.userId)), [selected]);
+
+  const groupName = (nameDraft ?? suggestGroupName(selected)).trim();
+  const showNameError = groupName.length === 0 && (nameDraft !== null || isSubmitAttempted);
 
   const directMutation = useMutation({
-    mutationFn: (input: { userId: string; fullName: string }) =>
-      chatApi.openDirect({ peerUserId: input.userId }).then((room) => ({ room, input })),
-    // Idempotent theo `direct_key`: gọi lại cho ĐÚNG phòng cũ với 200 (không 201), nên "mở lại" và "mở
-    // lần đầu" là cùng một đường — client không phải phân biệt.
-    onSuccess: ({ room, input }) => onCreated(room, input.fullName),
-    onError: () => setError(t("create.direct.failed")),
+    mutationFn: (person: PersonPick) =>
+      chatApi.openDirect({ peerUserId: person.userId }).then((room) => ({ room, person })),
+    // Idempotent theo `direct_key`: mở lại DM cũ và mở lần đầu là cùng một đường.
+    onSuccess: ({ room, person }) => onCreated(room, person.fullName),
+    onError: (_err, person) => setFailure({ kind: "direct", name: person.fullName }),
   });
 
   const groupMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (input: { name: string; description: string; memberUserIds: string[] }) =>
       chatApi.createRoom({
-        name: name.trim(),
+        name: input.name,
         roomType: "group",
-        ...(description.trim().length > 0 ? { description: description.trim() } : {}),
-        memberUserIds: selected.map((s) => s.userId),
+        ...(input.description.length > 0 ? { description: input.description } : {}),
+        memberUserIds: input.memberUserIds,
       }),
-    onSuccess: (room) => onCreated(room, room.name ?? name.trim()),
-    onError: () => setError(t("create.group.failed")),
+    onSuccess: (room, input) => onCreated(room, room.name ?? input.name),
+    onError: (err, input) => {
+      const isRejected =
+        err instanceof ApiError && err.status === 422 && input.memberUserIds.length > 0;
+      setFailure({ kind: isRejected ? "groupRejected" : "groupFailed" });
+      // Xin lại danh sách phòng (endpoint ĐÃ dùng) để `peer.isActive` mới nhất khoá đúng chip người
+      // vừa bị từ chối — không phải một lời gọi «tìm hộ».
+      if (isRejected) void queryClient.invalidateQueries({ queryKey: chatKeys.rooms.list() });
+    },
   });
 
+  const isBusy = directMutation.isPending || groupMutation.isPending;
+  const failureText = failure === null ? null : failureMessage(failure, selected, inactiveIds);
+
+  const toggleMember = (person: PersonPick): void => {
+    const isIn = selectedIds.has(person.userId);
+    if (!isIn && inactiveIds.has(person.userId)) return;
+    setSelected((prev) =>
+      isIn ? prev.filter((p) => p.userId !== person.userId) : [...prev, person],
+    );
+    setFailure(null);
+  };
+
+  const submitGroup = (): void => {
+    if (groupName.length === 0) {
+      // Không gửi request: `createChatRoomSchema.name.min(1)` sẽ trả 400 cho đúng thứ ta biết trước.
+      setSubmitAttempted(true);
+      nameInputRef.current?.focus();
+      return;
+    }
+    // Chụp giá trị TẠI ĐIỂM BẤM vào `input` — `mutationFn` không đọc state qua closure.
+    groupMutation.mutate({
+      name: groupName,
+      description: description.trim(),
+      memberUserIds: selected.map((p) => p.userId),
+    });
+  };
+
   return (
-    <>
-      <Dialog
-        open
-        onClose={onClose}
-        title={t("create.title")}
-        footer={
-          <>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {t("create.cancel")}
+    <Dialog
+      open
+      onClose={onClose}
+      title={t("create.title")}
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t("create.cancel")}
+          </Button>
+          {tab === "group" && (
+            <Button type="button" disabled={isBusy} onClick={submitGroup}>
+              {t("create.group.create")}
             </Button>
-            {tab === "group" && (
-              <Button
-                type="button"
-                disabled={name.trim().length === 0 || groupMutation.isPending}
-                onClick={() => {
-                  if (name.trim().length === 0) {
-                    setError(t("create.group.nameRequired"));
-                    return;
-                  }
-                  groupMutation.mutate();
-                }}
-              >
-                {t("create.group.create")}
-              </Button>
-            )}
-          </>
-        }
+          )}
+        </>
+      }
+    >
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v as CreateTab);
+          setFailure(null);
+        }}
       >
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "direct" | "group")}>
-          <TabsList>
-            <TabsTrigger value="direct">{t("create.tabs.direct")}</TabsTrigger>
-            <TabsTrigger value="group">{t("create.tabs.group")}</TabsTrigger>
-          </TabsList>
+        <TabsList>
+          <TabsTrigger value="direct">{t("create.tabs.direct")}</TabsTrigger>
+          <TabsTrigger value="group">{t("create.tabs.group")}</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="direct">
-            <div className="space-y-3 py-3">
-              <p className="text-sm text-muted-foreground">{t("create.direct.description")}</p>
-              <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
-                {t("create.direct.pickerTitle")}
-              </Button>
+        <TabsContent value="direct">
+          <div className="space-y-3 py-3">
+            <p className="text-sm text-muted-foreground">{t("create.direct.description")}</p>
+            <PeopleSearch
+              mode="direct"
+              selectedIds={NO_SELECTION}
+              myUserId={myUserId}
+              disabled={isBusy}
+              showSharedRoomHint={variant === "drawer"}
+              onPick={(person) => {
+                setFailure(null);
+                directMutation.mutate(person);
+              }}
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="group">
+          <div className="space-y-3 py-3">
+            <p className="text-sm text-muted-foreground">{t("create.group.description")}</p>
+            <RecentPeerChips
+              peers={recentPeers}
+              selectedIds={selectedIds}
+              disabled={isBusy}
+              onToggle={toggleMember}
+            />
+            <PeopleSearch
+              mode="group"
+              selectedIds={selectedIds}
+              myUserId={myUserId}
+              disabled={isBusy}
+              showSharedRoomHint={variant === "drawer"}
+              onPick={toggleMember}
+            />
+            <SelectedPeople people={selected} disabled={isBusy} onRemove={toggleMember} />
+            <div className="space-y-1">
+              <label className="text-xs font-medium" htmlFor="chat-create-name">
+                {t("create.group.nameLabel")}
+              </label>
+              <Input
+                ref={nameInputRef}
+                id="chat-create-name"
+                value={nameDraft ?? suggestGroupName(selected)}
+                onChange={(e) => setNameDraft(e.target.value)}
+                placeholder={t("create.group.namePlaceholder")}
+                maxLength={MAX_GROUP_NAME_LENGTH}
+                aria-invalid={showNameError}
+                aria-describedby="chat-create-name-hint"
+              />
+              <p
+                id="chat-create-name-hint"
+                aria-live="polite"
+                className={
+                  showNameError ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+                }
+              >
+                {showNameError
+                  ? t("create.group.nameRequired")
+                  : nameDraft === null && selected.length > 0
+                    ? t("create.group.nameSuggestedHint")
+                    : t("create.group.membersHint")}
+              </p>
             </div>
-          </TabsContent>
-
-          <TabsContent value="group">
-            <div className="space-y-3 py-3">
-              <p className="text-sm text-muted-foreground">{t("create.group.description")}</p>
-              <div className="space-y-1">
-                <label className="text-xs font-medium" htmlFor="chat-create-name">
-                  {t("create.group.nameLabel")}
-                </label>
-                <Input
-                  id="chat-create-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={t("create.group.namePlaceholder")}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium" htmlFor="chat-create-desc">
-                  {t("create.group.descriptionLabel")}
-                </label>
-                <textarea
-                  id="chat-create-desc"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder={t("create.group.descriptionPlaceholder")}
-                  rows={2}
-                  maxLength={MAX_MESSAGE_LENGTH}
-                  className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium">{t("create.group.membersLabel")}</p>
-                <p className="text-xs text-muted-foreground">{t("create.group.membersHint")}</p>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
-                    {t("create.group.pickMembers")}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {t("create.group.selectedCount", { count: selected.length })}
-                  </span>
-                </div>
-              </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium" htmlFor="chat-create-desc">
+                {t("create.group.descriptionLabel")}
+              </label>
+              <textarea
+                id="chat-create-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={t("create.group.descriptionPlaceholder")}
+                rows={2}
+                maxLength={MAX_MESSAGE_LENGTH}
+                className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        </TabsContent>
+      </Tabs>
 
-        {error !== null && (
-          <p className="pt-2 text-xs text-destructive" role="alert">
-            {error}
-          </p>
-        )}
-      </Dialog>
-
-      {isPickerOpen && (
-        <EmployeeMultiPickerDialog
-          title={tab === "direct" ? t("create.direct.pickerTitle") : t("create.group.pickMembers")}
-          selectionMode={tab === "direct" ? "single" : "multi"}
-          isRowDisabled={(employee) =>
-            employee.userId === null || selected.some((s) => s.userId === employee.userId)
-          }
-          disabledBadge={(employee) =>
-            employee.userId === null ? t("create.direct.noAccount") : t("info.members.alreadyIn")
-          }
-          disabledRowChecked={(employee) => employee.userId !== null}
-          onAddOne={(employee) => {
-            if (employee.userId === null) return Promise.reject(new Error("no-user"));
-            const picked = { userId: employee.userId, fullName: employee.fullName ?? "" };
-            if (tab === "direct") return directMutation.mutateAsync(picked);
-            setSelected((prev) =>
-              prev.some((s) => s.userId === picked.userId) ? prev : [...prev, picked],
-            );
-            return Promise.resolve();
-          }}
-          onBatchSettled={() => setPickerOpen(false)}
-          onClose={() => setPickerOpen(false)}
-        />
+      {failureText !== null && (
+        <p className="pt-2 text-xs text-destructive" role="alert">
+          {t(failureText.key, failureText.options)}
+        </p>
       )}
-    </>
+    </Dialog>
   );
+}
+
+/** Khoá i18n + tham số của thông điệp lỗi — tính lại theo lựa chọn HIỆN TẠI mỗi lần render. */
+function failureMessage(
+  failure: Failure,
+  selected: readonly PersonPick[],
+  inactiveIds: ReadonlySet<string>,
+): { key: string; options?: Record<string, string> } {
+  if (failure.kind === "direct") {
+    return { key: "create.direct.failedWith", options: { name: failure.name } };
+  }
+  if (failure.kind === "groupFailed" || selected.length === 0)
+    return { key: "create.group.failed" };
+  const known = selected.filter((p) => inactiveIds.has(p.userId));
+  const suspects = known.length > 0 ? known : selected;
+  if (suspects.length === 1) {
+    return { key: "create.group.rejectedOne", options: { name: suspects[0].fullName } };
+  }
+  return {
+    key: "create.group.rejectedSome",
+    options: { names: suspects.map((p) => p.fullName).join(", ") },
+  };
 }
