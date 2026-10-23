@@ -1,9 +1,22 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
-import { TaskDetailDrawer } from "./TaskDetailDrawer";
+import { ApiError, useAuthStore, taskCoreApi } from "@mediaos/web-core";
+import { Toaster, toast } from "@mediaos/ui";
+import { useChatDockStore } from "@/components/chat/chat-dock.store";
+import { GlobalTaskDrawer, TaskDetailDrawer } from "./TaskDetailDrawer";
+
+// S20-TASK-DRAWER-1 — drawer toàn cục đọc `?task=` từ location.search và mở/đóng qua navigate.
+const { searchRef, navigateMock } = vi.hoisted(() => ({
+  searchRef: { current: {} as Record<string, unknown> },
+  navigateMock: vi.fn(),
+}));
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => navigateMock,
+  useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
+    select({ location: { pathname: "/tasks/my-tasks", search: searchRef.current } }),
+}));
 
 /**
  * S5-TASK-BOARD-UX-1 — panel chi tiết trượt phải mở từ board.
@@ -158,5 +171,154 @@ describe("TaskDetailDrawer", () => {
     setCapabilities({});
     renderWithQuery(<TaskDetailDrawer taskId="task-001" onClose={vi.fn()} />);
     expect(taskCoreApi.getTask).not.toHaveBeenCalled();
+  });
+});
+
+// ── S20-TASK-DRAWER-1 — drawer TOÀN CỤC (mount ở ProtectedShell) ────────────────────────────────
+const TASK_UUID = "0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b";
+const UNAVAILABLE = "Không mở được việc này";
+
+type NavigateArg = {
+  to: string;
+  params?: Record<string, string>;
+  replace?: boolean;
+  search?: (prev: Record<string, unknown>) => Record<string, unknown>;
+};
+
+function lastNavigate(): NavigateArg {
+  const calls = navigateMock.mock.calls;
+  return calls[calls.length - 1]?.[0] as NavigateArg;
+}
+
+function renderGlobal(search: Record<string, unknown>) {
+  searchRef.current = search;
+  const client = makeQueryClient();
+  return render(
+    <QueryClientProvider client={client}>
+      <GlobalTaskDrawer />
+      <Toaster />
+    </QueryClientProvider>,
+  );
+}
+
+function setViewportNarrow(narrow: boolean) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: narrow,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
+/** Đóng do từ chối: replace, bỏ `task`, GIỮ mọi tham số khác của trang phía sau. */
+function expectClosedKeeping(other: Record<string, unknown>) {
+  const call = lastNavigate();
+  expect(call).toMatchObject({ to: ".", replace: true });
+  expect(call.search?.({ ...other, task: TASK_UUID })).toEqual(other);
+}
+
+describe("GlobalTaskDrawer — ?task= toàn ứng dụng", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    act(() => toast.clear());
+    useChatDockStore.getState().resetChatDock();
+    setViewportNarrow(false);
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+  });
+
+  it("không có ?task= ⇒ không render, không gọi API", () => {
+    setCapabilities({ "read:task": true });
+    renderGlobal({ status: "Todo" });
+    expect(screen.queryByTestId("task-detail-drawer")).not.toBeInTheDocument();
+    expect(taskCoreApi.getTask).not.toHaveBeenCalled();
+  });
+
+  it.each([["abc"], [123], ["../../etc"], [`${TASK_UUID}x`]])(
+    "?task=%s không phải UUID ⇒ 0 lời gọi API, báo «Không mở được việc này», đóng bằng replace",
+    async (raw) => {
+      setCapabilities({ "read:task": true });
+      renderGlobal({ status: "Todo", task: raw });
+
+      await waitFor(() => expect(screen.getByText(UNAVAILABLE)).toBeInTheDocument());
+      expect(taskCoreApi.getTask).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("task-detail-drawer")).not.toBeInTheDocument();
+      expectClosedKeeping({ status: "Todo" });
+    },
+  );
+
+  it.each([
+    ["không tồn tại / xoá mềm (404)", 404, "TASK-ERR-001"],
+    ["ngoài phạm vi đọc (403)", 403, "AUTH-ERR-FORBIDDEN"],
+    ["id bị server từ chối (400)", 400, "VALIDATION-ERR"],
+  ])("%s ⇒ CÙNG thông điệp, không lộ tiêu đề/mã, trang sau vẫn dùng được", async (_l, st, code) => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockRejectedValue(new ApiError(st, code, "x"));
+    renderGlobal({ tab: "board", task: TASK_UUID });
+
+    await waitFor(() => expect(screen.getByText(UNAVAILABLE)).toBeInTheDocument());
+    expect(taskCoreApi.getTask).toHaveBeenCalledWith(TASK_UUID);
+    expect(screen.queryByTestId("task-detail-drawer")).not.toBeInTheDocument();
+    expect(screen.queryByText(code)).not.toBeInTheDocument();
+    expect(screen.queryByText(TASK_UUID)).not.toBeInTheDocument();
+    expectClosedKeeping({ tab: "board" });
+  });
+
+  it("thiếu read:task ⇒ 0 lời gọi API, cùng thông điệp", async () => {
+    setCapabilities({});
+    renderGlobal({ task: TASK_UUID });
+
+    await waitFor(() => expect(screen.getByText(UNAVAILABLE)).toBeInTheDocument());
+    expect(taskCoreApi.getTask).not.toHaveBeenCalled();
+    expectClosedKeeping({});
+  });
+
+  it("UUID hợp lệ ⇒ mở drawer với tiêu đề việc; Esc đóng bằng replace, bộ lọc giữ nguyên", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue({ ...TASK, id: TASK_UUID } as never);
+    renderGlobal({ status: "InProgress", page: 2, task: TASK_UUID });
+
+    await waitFor(() => expect(screen.getByText("Dựng trang Tuyển dụng")).toBeInTheDocument());
+    expect(screen.getAllByTestId("task-detail-drawer")).toHaveLength(1);
+    expect(screen.getByTestId("task-detail-content")).toHaveAttribute("data-task-id", TASK_UUID);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expectClosedKeeping({ status: "InProgress", page: 2 });
+  });
+
+  it("«Mở toàn trang» ⇒ push sang /tasks/:id", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue({ ...TASK, id: TASK_UUID } as never);
+    renderGlobal({ task: TASK_UUID });
+
+    fireEvent.click(screen.getByTestId("task-drawer-open-full"));
+    expect(lastNavigate()).toMatchObject({ to: "/tasks/$taskId", params: { taskId: TASK_UUID } });
+    expect(lastNavigate().replace).not.toBe(true);
+  });
+
+  it("màn hẹp hơn md + drawer chat đang mở ⇒ drawer chat thu lại, drawer việc ở trên", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue({ ...TASK, id: TASK_UUID } as never);
+    setViewportNarrow(true);
+    act(() => useChatDockStore.getState().openRoom("room-1"));
+    renderGlobal({ task: TASK_UUID });
+
+    await waitFor(() => expect(useChatDockStore.getState().isOpen).toBe(false));
+    // Thu lại, KHÔNG rời phòng: mở lại drawer chat là về đúng hội thoại.
+    expect(useChatDockStore.getState().openRoomIds).toEqual(["room-1"]);
+    expect(screen.getByTestId("task-detail-drawer")).toBeInTheDocument();
+  });
+
+  it("màn rộng ⇒ drawer chat KHÔNG bị đóng", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue({ ...TASK, id: TASK_UUID } as never);
+    act(() => useChatDockStore.getState().openDrawer());
+    renderGlobal({ task: TASK_UUID });
+
+    await waitFor(() => expect(screen.getByTestId("task-detail-drawer")).toBeInTheDocument());
+    expect(useChatDockStore.getState().isOpen).toBe(true);
   });
 });

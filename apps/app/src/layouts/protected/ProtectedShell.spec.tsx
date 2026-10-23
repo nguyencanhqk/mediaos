@@ -18,15 +18,22 @@ import { toast } from "@mediaos/ui";
 import { ProtectedShell } from "./ProtectedShell";
 import { ACCOUNT_SETUP_2FA_PATH, ME_SETUP_2FA_PATH } from "@/routes/account/constants";
 
-const { navigateMock, pathnameRef } = vi.hoisted(() => ({
+const { navigateMock, pathnameRef, searchRef } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   pathnameRef: { current: "/home" },
+  searchRef: { current: {} as Record<string, unknown> },
 }));
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
-    select({ location: { pathname: pathnameRef.current } }),
+    select({ location: { pathname: pathnameRef.current, search: searchRef.current } }),
+}));
+
+// S20-TASK-DRAWER-1 — drawer việc toàn cục (nạp lười). Thân drawer có spec riêng (TaskDetailDrawer.spec);
+// ở đây chỉ khoá: shell mount nó ĐÚNG MỘT lần khi URL có `?task=`, và không nạp gì khi không có.
+vi.mock("@/routes/tasks/TaskDetailDrawer", () => ({
+  GlobalTaskDrawer: () => <div data-testid="global-task-drawer" />,
 }));
 
 // Chrome nặng — không thuộc phạm vi guard.
@@ -64,6 +71,7 @@ function renderShell(pathname: string) {
 describe("ProtectedShell — guard ép enroll 2FA (AUTH-003)", () => {
   beforeEach(() => {
     pathnameRef.current = "/home";
+    searchRef.current = {};
   });
   afterEach(() => {
     // Unmount TRƯỚC khi hạ isAuthenticated: shell còn mount sẽ chạy effect redirect
@@ -167,5 +175,33 @@ describe("ProtectedShell — hệ thông báo nổi dùng chung (S20-FE-TOAST-1)
     renderShell("/home");
 
     expect(document.querySelectorAll('[data-slot="toaster"]')).toHaveLength(1);
+  });
+});
+
+describe("ProtectedShell — drawer việc toàn cục (S20-TASK-DRAWER-1)", () => {
+  afterEach(() => {
+    cleanup();
+    searchRef.current = {};
+    useAuthStore.setState({ isAuthenticated: false, user: null, mustSetupTwoFactor: false });
+  });
+
+  it("URL có ?task= ⇒ mount drawer việc ĐÚNG một lần, ở mọi route (kể cả /goals/G)", async () => {
+    setUser(false);
+    searchRef.current = { task: "0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b" };
+    renderShell("/goals/g-1");
+
+    expect(await screen.findByTestId("global-task-drawer")).toBeInTheDocument();
+    expect(screen.getAllByTestId("global-task-drawer")).toHaveLength(1);
+    expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+  });
+
+  it("không có ?task= ⇒ không mount drawer việc", async () => {
+    setUser(false);
+    renderShell("/tasks");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId("global-task-drawer")).not.toBeInTheDocument();
   });
 });

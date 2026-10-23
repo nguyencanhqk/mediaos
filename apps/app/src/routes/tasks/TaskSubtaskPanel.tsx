@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, ArrowDown, Plus, Pencil, Trash2 } from "lucide-react";
 import {
@@ -15,6 +14,7 @@ import type { SubtaskListItemDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { PanelBody } from "./PanelBody";
 import { TaskOverdueBadge } from "./TaskStatusBadge";
+import { useTaskDrawer } from "./task-drawer-nav";
 import { AddSubtaskDialog, EditSubtaskDialog, DeleteSubtaskConfirm } from "./TaskSubtaskDialogs";
 import {
   SubtaskAssigneeControl,
@@ -95,7 +95,8 @@ function SubtaskRow({
   onDeleteRequest: (item: SubtaskListItemDto) => void;
 }) {
   const { t } = useTranslation("tasks");
-  const navigate = useNavigate();
+  // S20-TASK-DRAWER-1 — mở việc con / việc cha = đổi `?task=` (push) ngay trong drawer; Back về lại.
+  const { openTask } = useTaskDrawer();
 
   return (
     <li
@@ -130,7 +131,7 @@ function SubtaskRow({
           <button
             type="button"
             className="truncate text-left font-medium text-foreground underline-offset-2 hover:underline"
-            onClick={() => void navigate({ to: "/tasks/$taskId", params: { taskId: item.id } })}
+            onClick={() => openTask(item.id)}
           >
             {item.title}
           </button>
@@ -209,7 +210,8 @@ export function TaskSubtaskPanel({
   embedded?: boolean;
 }) {
   const { t } = useTranslation("tasks");
-  const navigate = useNavigate();
+  // S20-TASK-DRAWER-1 — mở việc con / việc cha = đổi `?task=` (push) ngay trong drawer; Back về lại.
+  const { openTask } = useTaskDrawer();
   const queryClient = useQueryClient();
   const canCreate = useCan(
     TASK_CORE_ENGINE_PAIRS.CREATE.action,
@@ -294,9 +296,7 @@ export function TaskSubtaskPanel({
           <button
             type="button"
             className="font-medium text-foreground underline-offset-2 hover:underline"
-            onClick={() =>
-              void navigate({ to: "/tasks/$taskId", params: { taskId: parentTaskId } })
-            }
+            onClick={() => openTask(parentTaskId)}
           >
             {t("tasks.detail.subtasks.viewParentAction")}
           </button>

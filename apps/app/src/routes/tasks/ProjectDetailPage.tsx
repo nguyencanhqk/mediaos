@@ -28,7 +28,6 @@ import { ProjectMemberTable } from "./ProjectMemberTable";
 import { ProjectRoleLegend } from "./ProjectRoleLegend";
 import { TaskKanbanPage } from "./TaskKanbanPage";
 import { TaskStateColumnsDialog } from "./TaskStateColumnsDialog";
-import { TaskDetailDrawer } from "./TaskDetailDrawer";
 import { ProjectTaskListTab } from "./ProjectTaskListTab";
 import { ProjectActivityTimeline } from "./ProjectActivityTimeline";
 import { ProjectReportContent } from "./ProjectReportPage";
@@ -43,6 +42,7 @@ import {
 } from "./workspace-constants";
 import { useWorkspaceTabOrder } from "./use-workspace-tab-order";
 import { WorkspaceTabOrderMenu } from "./WorkspaceTabOrderMenu";
+import { useTaskDrawer } from "./task-drawer-nav";
 
 /**
  * ProjectDetailPage — VỎ WORKSPACE dự án (S5-TASK-WORKSPACE-1 đợt D1, SPEC-06 §13.3 TASK-SCREEN-003;
@@ -517,32 +517,19 @@ export function ProjectDetailPage({
   const router = useRouter();
   const locationSearch = useRouterState({ select: (s) => s.location.search });
   const tab = parseWorkspaceTab((locationSearch as Record<string, unknown> | undefined)?.tab);
-  // S5-TASK-BOARD-UX-1 — `?task=<id>` mở panel chi tiết ĐÈ LÊN board (không rời trang). Để URL cầm
-  // trạng thái này (thay vì useState) thì: copy link ra đúng board + đúng task, và Back của trình
-  // duyệt đóng panel. validateSearch của route (router.tsx) là NGUỒN DUY NHẤT về shape search —
-  // param nào không khai ở đó sẽ bị strip lượt sau, nên `task` đã được khai thêm cùng lúc với thay
-  // đổi này.
-  const rawTask = (locationSearch as Record<string, unknown> | undefined)?.task;
-  const openTaskId = typeof rawTask === "string" && rawTask.length > 0 ? rawTask : null;
+  // `?task=<id>` (panel chi tiết đè lên board) — S20-TASK-DRAWER-1: drawer giờ là cái TOÀN CỤC ở
+  // ProtectedShell (GlobalTaskDrawer); trang này chỉ THÊM `?task=` vào URL (mở = push, đóng = replace
+  // do drawer lo) và KHÔNG tự vẽ drawer nữa ⇒ `/tasks/projects/P?task=T` chỉ còn MỘT drawer.
+  const { openTask } = useTaskDrawer();
 
-  const buildUrl = (nextTab: ProjectWorkspaceTab, nextTaskId: string | null) => {
-    const params = new URLSearchParams();
-    if (nextTab !== "overview") params.set("tab", nextTab);
-    if (nextTaskId) params.set("task", nextTaskId);
-    const qs = params.toString();
-    return `/tasks/projects/${projectId}${qs ? `?${qs}` : ""}`;
-  };
+  const buildUrl = (nextTab: ProjectWorkspaceTab) =>
+    `/tasks/projects/${projectId}${nextTab === "overview" ? "" : `?tab=${nextTab}`}`;
 
   // Đổi tab thì BỎ `task` — chuyển sang tab khác mà panel còn treo là vô lý.
   const setTab = (next: ProjectWorkspaceTab) => {
     if (next === tab) return;
-    router.history.push(buildUrl(next, null));
+    router.history.push(buildUrl(next));
   };
-
-  // Mở = push (Back đóng panel). Đóng = REPLACE để không nhét thêm một mục lịch sử: nếu push cả hai
-  // chiều thì bấm Back sau khi đóng sẽ MỞ LẠI panel — người dùng đọc là "Back không làm gì".
-  const openTask = (taskId: string) => router.history.push(buildUrl(tab, taskId));
-  const closeTask = () => router.history.replace(buildUrl(tab, null));
 
   // Thứ tự tab — tuỳ chọn hiển thị cá nhân (localStorage), chỉnh trong thẻ "Thứ tự tab" của Cài đặt.
   const { tabOrder, isCustomized, moveTab, resetTabOrder } = useWorkspaceTabOrder();
@@ -750,17 +737,6 @@ export function ProjectDetailPage({
           onClose={() => setColumnsOpen(false)}
         />
       )}
-      {/* S5-TASK-BOARD-UX-1 — panel chi tiết mở từ board. Đặt ở VỎ workspace (không trong
-          TaskKanbanPage) để tab Danh sách sau này dùng lại được cùng một `?task=`. */}
-      <TaskDetailDrawer
-        taskId={openTaskId}
-        onClose={closeTask}
-        // Mở toàn trang = PUSH sang /tasks/:taskId — Back quay về board với panel còn mở (?task= giữ
-        // nguyên trong entry trước).
-        onOpenFull={() => {
-          if (openTaskId) router.history.push(`/tasks/${openTaskId}`);
-        }}
-      />
       {deleteOpen && (
         <DeleteProjectDialog
           project={project}

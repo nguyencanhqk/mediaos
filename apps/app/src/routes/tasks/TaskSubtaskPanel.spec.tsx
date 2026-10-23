@@ -104,6 +104,19 @@ function setCapabilities(caps: Record<string, boolean>) {
   });
 }
 
+/** Mở việc qua drawer toàn cục: navigate tại chỗ (to "."), PUSH, chỉ đổi `task`, giữ tham số khác. */
+function expectTaskParamPushed(taskId: string) {
+  expect(mockNavigate).toHaveBeenCalledTimes(1);
+  const arg = mockNavigate.mock.calls[0]?.[0] as {
+    to: string;
+    replace?: boolean;
+    search: (prev: Record<string, unknown>) => Record<string, unknown>;
+  };
+  expect(arg.to).toBe(".");
+  expect(arg.replace).toBe(false);
+  expect(arg.search({ tab: "board", task: "khac" })).toEqual({ tab: "board", task: taskId });
+}
+
 function clearCapabilities() {
   useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
 }
@@ -176,11 +189,21 @@ describe("TaskSubtaskPanel", () => {
     await waitFor(() => expect(screen.getByTestId("subtask-parent-link")).toBeInTheDocument());
     expect(taskCoreApi.listSubtasks).not.toHaveBeenCalled();
 
+    // S20-TASK-DRAWER-1 — về việc cha = đổi `?task=` (push) ngay trong drawer, không rời trang.
     fireEvent.click(screen.getByRole("button", { name: /xem công việc cha/i }));
-    expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/tasks/$taskId",
-      params: { taskId: "task-001" },
-    });
+    expectTaskParamPushed("task-001");
+  });
+
+  it("bấm một việc con ⇒ PUSH ?task=<con> (drawer chuyển sang con, Back về cha)", async () => {
+    setCapabilities({});
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue(makeTask({ subtaskTotal: 1, subtaskDone: 0 }));
+    vi.mocked(taskCoreApi.listSubtasks).mockResolvedValue([
+      makeSubtask({ id: "sub-001", title: "Soạn tài liệu" }),
+    ]);
+    renderWithQuery(<TaskSubtaskPanel taskId="task-001" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Soạn tài liệu" }));
+    expectTaskParamPushed("sub-001");
   });
 
   // ── D-39: con canOpen=false render READ-ONLY (không link, không nút sửa/xoá) ─

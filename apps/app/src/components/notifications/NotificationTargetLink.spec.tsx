@@ -76,3 +76,39 @@ describe("NotificationTargetLink — render", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 });
+
+// S20-TASK-DRAWER-1 — đích `/tasks/<uuid>` mở drawer việc TẠI CHỖ (thêm `?task=` vào URL hiện tại),
+// không rời trang đang đứng (vd /goals/G ⇒ /goals/G?task=T).
+describe("NotificationTargetLink — đích việc mở drawer tại chỗ", () => {
+  const TASK_UUID = "0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b";
+
+  it("/tasks/<uuid> ⇒ onBeforeNavigate rồi PUSH ?task=<uuid> trên đường hiện tại, giữ tham số khác", () => {
+    const onBeforeNavigate = vi.fn();
+    render(
+      <NotificationTargetLink targetUrl={`/tasks/${TASK_UUID}`} onBeforeNavigate={onBeforeNavigate}>
+        Việc được giao
+      </NotificationTargetLink>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Việc được giao" }));
+
+    expect(onBeforeNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    const arg = mockNavigate.mock.calls[0]?.[0] as {
+      to: string;
+      replace?: boolean;
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+    };
+    expect(arg.to).toBe(".");
+    expect(arg.replace).not.toBe(true);
+    expect(arg.search({ tab: "tasks" })).toEqual({ tab: "tasks", task: TASK_UUID });
+  });
+
+  it.each([["/tasks/my-tasks"], ["/tasks/overdue"], ["/tasks/not-a-uuid"], ["/tasks/projects/p1"]])(
+    "%s ⇒ điều hướng như cũ (không phải đích một việc)",
+    (target) => {
+      render(<NotificationTargetLink targetUrl={target}>Mở</NotificationTargetLink>);
+      fireEvent.click(screen.getByRole("button", { name: "Mở" }));
+      expect(mockNavigate).toHaveBeenCalledWith({ to: target });
+    },
+  );
+});
