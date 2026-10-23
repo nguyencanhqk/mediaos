@@ -35,12 +35,14 @@ import { ProjectProgressCard } from "./ProjectProgressCard";
 import { ProjectProgressWidget } from "@/components/dashboard/ProjectProgressWidget";
 import {
   DEFAULT_WORKSPACE_FILTERS,
-  parseWorkspaceTab,
+  isAddMembersFlag,
+  parseWorkspaceTabParam,
+  resolveWorkspaceTab,
   WORKSPACE_TASK_SORTS,
   type ProjectWorkspaceTab,
   type WorkspaceTaskFilters,
 } from "./workspace-constants";
-import { useWorkspaceTabOrder } from "./use-workspace-tab-order";
+import { useProjectLastTab, useWorkspaceTabOrder } from "./use-workspace-tab-order";
 import { WorkspaceTabOrderMenu } from "./WorkspaceTabOrderMenu";
 import { useTaskDrawer } from "./task-drawer-nav";
 
@@ -52,6 +54,8 @@ import { useTaskDrawer } from "./task-drawer-nav";
  * vào URL (?tab=, history.PUSH ⇒ back/forward đi qua các tab). Tab Báo cáo/Hoạt động ẨN khi thiếu
  * cặp SENSITIVE tương ứng (view-report:project / view:task-audit-log, useCanExact — UI-02 §5.3);
  * deep-link thẳng vào tab bị ẩn → component tab TỰ gate (EmptyState forbidden, không fetch).
+ * URL không có ?tab ⇒ tab dùng lần trước của dự án nếu còn trong tập tab hiện, không thì Tổng quan
+ * (S20-TASK-PROJECTENTRY-1, tuỳ chọn hiển thị localStorage — use-workspace-tab-order.ts).
  * Tab Cài đặt gom Sửa/Đóng/Xóa dự án (trước ở header) + Quản lý cột pipeline — chỉ hiện khi đủ
  * quyền (pair hệ thống HOẶC myProjectRole đủ bậc, D-24). Tab Gantt·Lịch·Tài liệu·Biểu mẫu thuộc
  * đợt D2-D5 — KHÔNG render giả.
@@ -513,10 +517,15 @@ export function ProjectDetailPage({
 
   // Tab là URL-driven (?tab=) — deep-link/share được; history.PUSH nên back/forward đi qua tab
   // (done_when #1). Đọc qua useRouterState (route đã có validateSearch — router.tsx) mirror pattern
-  // đợt B ProjectListPage; giá trị rác → "overview".
+  // đợt B ProjectListPage; giá trị rác → coi như không có ?tab.
+  // S20-TASK-PROJECTENTRY-1 — URL trống ⇒ tab dùng lần trước của dự án (nếu còn quyền xem — tính
+  // sau khi có visibleTabs); `?addMembers=1` (vừa tạo dự án) ⇒ tab Thành viên tự mở hộp thêm.
   const router = useRouter();
   const locationSearch = useRouterState({ select: (s) => s.location.search });
-  const tab = parseWorkspaceTab((locationSearch as Record<string, unknown> | undefined)?.tab);
+  const search = (locationSearch as Record<string, unknown> | undefined) ?? {};
+  const urlTab = parseWorkspaceTabParam(search.tab);
+  const autoAddMembers = isAddMembersFlag(search.addMembers);
+  const { entryTab, rememberTab } = useProjectLastTab(projectId);
   // `?task=<id>` (panel chi tiết đè lên board) — S20-TASK-DRAWER-1: drawer giờ là cái TOÀN CỤC ở
   // ProtectedShell (GlobalTaskDrawer); trang này chỉ THÊM `?task=` vào URL (mở = push, đóng = replace
   // do drawer lo) và KHÔNG tự vẽ drawer nữa ⇒ `/tasks/projects/P?task=T` chỉ còn MỘT drawer.
@@ -524,12 +533,6 @@ export function ProjectDetailPage({
 
   const buildUrl = (nextTab: ProjectWorkspaceTab) =>
     `/tasks/projects/${projectId}${nextTab === "overview" ? "" : `?tab=${nextTab}`}`;
-
-  // Đổi tab thì BỎ `task` — chuyển sang tab khác mà panel còn treo là vô lý.
-  const setTab = (next: ProjectWorkspaceTab) => {
-    if (next === tab) return;
-    router.history.push(buildUrl(next));
-  };
 
   // Thứ tự tab — tuỳ chọn hiển thị cá nhân (localStorage), chỉnh trong thẻ "Thứ tự tab" của Cài đặt.
   const { tabOrder, isCustomized, moveTab, resetTabOrder } = useWorkspaceTabOrder();
@@ -629,6 +632,17 @@ export function ProjectDetailPage({
           ? showSettings
           : true,
   );
+  const tab = resolveWorkspaceTab(urlTab, entryTab, visibleTabs);
+
+  // Đổi tab thì BỎ `task` — chuyển sang tab khác mà panel còn treo là vô lý. Tab đang hiện đến từ
+  // tab nhớ (URL trống) ⇒ ghi rõ ?tab vào mục lịch sử hiện tại trước khi đẩy tab mới, để Back quay
+  // về đúng tab đó chứ không rơi về Tổng quan.
+  const setTab = (next: ProjectWorkspaceTab) => {
+    if (next === tab) return;
+    rememberTab(next);
+    if (urlTab === null && tab !== "overview") router.history.replace(buildUrl(tab));
+    router.history.push(buildUrl(next));
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -697,7 +711,12 @@ export function ProjectDetailPage({
         // tab "members" (S5-TASK-PROJROLE-1 đợt C) — HIỆN cho mọi người xem được dự án; control ghi
         // gate trong ProjectMemberTable qua myProjectRole. Chú giải D-24 kèm theo, KHÔNG logic quyền.
         <div className="space-y-4">
-          <ProjectMemberTable projectId={project.id} myProjectRole={project.myProjectRole} />
+          <ProjectMemberTable
+            projectId={project.id}
+            myProjectRole={project.myProjectRole}
+            autoOpenAdd={autoAddMembers}
+            onAutoOpenHandled={() => router.history.replace(buildUrl("members"))}
+          />
           <ProjectRoleLegend />
         </div>
       ) : !showSettings ? (

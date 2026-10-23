@@ -543,3 +543,204 @@ describe("ProjectDetailPage", () => {
     await waitFor(() => expect(screen.getByText(/không thể tải dự án/i)).toBeInTheDocument());
   });
 });
+
+// S20-TASK-PROJECTENTRY-1 — mở lại dự án vào tab dùng lần trước (tuỳ chọn hiển thị, localStorage,
+// mọi đọc/ghi bọc try/catch); URL `?tab` thắng; tab nhớ mất quyền ⇒ Tổng quan; `?addMembers=1` ⇒
+// hộp thêm thành viên tự mở CHỈ khi qua cổng quản thành viên của ProjectMemberTable.
+describe("ProjectDetailPage — vào dự án (tab nhớ + addMembers)", () => {
+  const LAST_TAB_PREFIX = "mediaos.tasks.projectLastTab";
+  // Khoá gắn id người dùng của setCapabilities ("u1").
+  const LAST_TAB_KEY = `${LAST_TAB_PREFIX}:u1`;
+  const remember = (map: Record<string, string>) =>
+    window.localStorage.setItem(LAST_TAB_KEY, JSON.stringify(map));
+  const activeTab = () =>
+    screen
+      .getAllByTestId(/^workspace-tab-/)
+      .find((el) => el.getAttribute("aria-current") === "page")
+      ?.getAttribute("data-testid");
+
+  beforeEach(() => {
+    clearCapabilities();
+    searchRef.current = {};
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+    vi.mocked(taskProjectApi.listMembers).mockResolvedValue([]);
+  });
+
+  it("URL không có ?tab + lần trước rời ở Bảng → mở thẳng tab Bảng", async () => {
+    setCapabilities({ "read:project": true, "view-kanban:task": true });
+    remember({ "proj-001": "board" });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-board");
+    expect(screen.getByTestId("workspace-toolbar")).toBeInTheDocument();
+  });
+
+  // Review: trang đọc search THÔ (location.search) ⇒ `?tab=overview` chia sẻ vẫn là tab tường minh.
+  it("URL ?tab=overview tường minh thắng tab nhớ (không coi như thiếu ?tab)", async () => {
+    setCapabilities({ "read:project": true, "view-kanban:task": true });
+    remember({ "proj-001": "board" });
+    searchRef.current = { tab: "overview" };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-overview");
+    expect(screen.queryByTestId("workspace-toolbar")).not.toBeInTheDocument();
+  });
+
+  it("tab nhớ là của dự án KHÁC → không áp sang dự án này", async () => {
+    setCapabilities({ "read:project": true, "view-kanban:task": true });
+    remember({ "proj-999": "board" });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-overview");
+  });
+
+  it("URL ?tab=report thắng tab nhớ", async () => {
+    setCapabilities({
+      "read:project": true,
+      "view-report:project": true,
+      "view-kanban:task": true,
+    });
+    remember({ "proj-001": "board" });
+    searchRef.current = { tab: "report" };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-report");
+  });
+
+  it("DENY: tab nhớ là Báo cáo nhưng không còn view-report:project → rơi về Tổng quan, KHÔNG fetch report", async () => {
+    setCapabilities({ "read:project": true });
+    remember({ "proj-001": "report" });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-overview");
+    expect(screen.queryByTestId("workspace-tab-report")).not.toBeInTheDocument();
+    expect(taskProjectApi.getReport).not.toHaveBeenCalled();
+  });
+
+  it("DENY: tab nhớ là Cài đặt nhưng không còn quyền quản trị dự án → Tổng quan", async () => {
+    setCapabilities({ "read:project": true });
+    remember({ "proj-001": "settings" });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-overview");
+    expect(screen.queryByTestId("project-settings-tab")).not.toBeInTheDocument();
+  });
+
+  it("bấm tab → ghi tab cuối của dự án vào localStorage", async () => {
+    setCapabilities({ "read:project": true });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("workspace-tab-list"));
+    expect(JSON.parse(window.localStorage.getItem(LAST_TAB_KEY) ?? "{}")).toEqual({
+      "proj-001": "list",
+    });
+    expect(historyPushMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=list");
+  });
+
+  // Tab nhớ gắn người dùng: đổi tài khoản trên cùng trình duyệt KHÔNG mang tab của người trước sang.
+  it("người A nhớ tab Danh sách → người B (cùng trình duyệt) vào dự án ở Tổng quan; A quay lại vẫn thấy Danh sách", async () => {
+    const signInAs = (id: string) => {
+      setCapabilities({ "read:project": true });
+      useAuthStore.setState((s) => ({ user: s.user ? { ...s.user, id } : s.user }));
+    };
+    signInAs("user-a");
+    const first = renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("workspace-tab-list"));
+    first.unmount();
+
+    signInAs("user-b");
+    const second = renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-overview");
+    second.unmount();
+
+    signInAs("user-a");
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    expect(activeTab()).toBe("workspace-tab-list");
+  });
+
+  it("chưa có id người dùng → không đọc, không ghi tab nhớ", async () => {
+    setCapabilities({ "read:project": true, "view-kanban:task": true });
+    useAuthStore.setState({ user: null });
+    remember({ "proj-001": "board" });
+    const setSpy = vi.spyOn(Storage.prototype, "setItem");
+    try {
+      renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+      expect(activeTab()).toBe("workspace-tab-overview");
+      fireEvent.click(screen.getByTestId("workspace-tab-list"));
+      expect(historyPushMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=list");
+      expect(setSpy.mock.calls.filter(([key]) => key.startsWith(LAST_TAB_PREFIX))).toEqual([]);
+    } finally {
+      setSpy.mockRestore();
+    }
+  });
+
+  it("rời tab nhớ (URL trống) → mục lịch sử hiện tại được ghi rõ ?tab trước khi đẩy tab mới (Back về đúng tab)", async () => {
+    setCapabilities({ "read:project": true, "view-kanban:task": true });
+    remember({ "proj-001": "board" });
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("workspace-tab-list"));
+    expect(historyReplaceMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=board");
+    expect(historyPushMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=list");
+    expect(historyReplaceMock.mock.invocationCallOrder[0]).toBeLessThan(
+      historyPushMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("localStorage bị chặn (getItem/setItem ném) → như hiện nay: vào Tổng quan, đổi tab vẫn chạy", async () => {
+    setCapabilities({ "read:project": true });
+    const blocked = () => {
+      throw new DOMException("blocked", "SecurityError");
+    };
+    const getSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(blocked);
+    const setSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(blocked);
+    try {
+      renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+      expect(activeTab()).toBe("workspace-tab-overview");
+      fireEvent.click(screen.getByTestId("workspace-tab-list"));
+      expect(historyPushMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=list");
+      expect(setSpy).toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+      setSpy.mockRestore();
+    }
+  });
+
+  it("?tab=members&addMembers=1 + có manage-member:project → hộp thêm thành viên mở, cờ bị gỡ khỏi URL (replace)", async () => {
+    setCapabilities({ "read:project": true, "manage-member:project": true });
+    searchRef.current = { tab: "members", addMembers: 1 };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("member-picker-confirm")).toBeInTheDocument());
+    expect(historyReplaceMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=members");
+  });
+
+  // Review: người tạo dự án thường KHÔNG có pair manage-member mà là Owner — myProjectRole đến từ
+  // getProject và bảng thành viên chỉ mount SAU khi dự án tải xong ⇒ cổng đã đủ dữ liệu ở lần chạy đầu.
+  it("người tạo = Owner (myProjectRole từ server, thiếu pair) + addMembers=1 → hộp thêm thành viên mở", async () => {
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue({
+      ...MOCK_PROJECT,
+      myProjectRole: "Owner",
+    });
+    searchRef.current = { tab: "members", addMembers: 1 };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("member-picker-confirm")).toBeInTheDocument());
+    expect(historyReplaceMock).toHaveBeenCalledWith("/tasks/projects/proj-001?tab=members");
+  });
+
+  it("DENY: ?tab=members&addMembers=1 nhưng không quyền quản thành viên → vẫn vào tab Thành viên, KHÔNG mở hộp", async () => {
+    setCapabilities({ "read:project": true });
+    searchRef.current = { tab: "members", addMembers: 1 };
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(taskProjectApi.listMembers).toHaveBeenCalledWith("proj-001"));
+    expect(activeTab()).toBe("workspace-tab-members");
+    expect(screen.queryByTestId("member-picker-confirm")).not.toBeInTheDocument();
+  });
+});

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
@@ -198,10 +198,19 @@ function RemoveMemberDialog({
 export function ProjectMemberTable({
   projectId,
   myProjectRole = null,
+  autoOpenAdd = false,
+  onAutoOpenHandled,
 }: {
   projectId: string;
   /** Vai trò của CHÍNH actor trong dự án (server tính — TaskProjectResponseDto.myProjectRole). */
   myProjectRole?: ProjectRoleDto | null;
+  /**
+   * S20-TASK-PROJECTENTRY-1 — vừa tạo dự án (`?addMembers=1`): tự mở hộp thêm thành viên, CHỈ khi
+   * qua cùng cổng `canManage` của nút "Thêm thành viên" bên dưới (không hard-code quyền riêng).
+   */
+  autoOpenAdd?: boolean;
+  /** Gọi đúng MỘT lần mỗi dự án khi cờ đã được xử lý (mở hoặc không) — cha gỡ cờ khỏi URL. */
+  onAutoOpenHandled?: () => void;
 }) {
   const { t } = useTranslation("tasks");
   const canManagePair = useCan(
@@ -212,6 +221,15 @@ export function ProjectMemberTable({
   const canManage = canManagePair || isProjectOwner(myProjectRole);
   const [addOpen, setAddOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<MemberResponseDto | null>(null);
+
+  // Cờ là việc MỘT LẦN theo dự án: ref chặn mở lại khi cha render lại trước khi URL kịp gỡ cờ.
+  const autoOpenHandledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoOpenAdd || autoOpenHandledFor.current === projectId) return;
+    autoOpenHandledFor.current = projectId;
+    if (canManage) setAddOpen(true);
+    onAutoOpenHandled?.();
+  }, [autoOpenAdd, canManage, projectId, onAutoOpenHandled]);
 
   const query = useQuery({
     queryKey: taskKeys.projects.members(projectId),

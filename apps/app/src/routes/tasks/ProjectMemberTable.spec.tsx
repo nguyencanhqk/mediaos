@@ -229,3 +229,51 @@ describe("ProjectMemberTable", () => {
     expect(screen.getByTestId("member-picker-confirm")).toHaveTextContent("Thêm (1)");
   });
 });
+
+// S20-TASK-PROJECTENTRY-1 — vừa tạo dự án (`?addMembers=1`) ⇒ tự mở hộp thêm thành viên, NHƯNG chỉ
+// khi qua đúng cổng quản thành viên sẵn có (pair manage-member:project HOẶC Owner của dự án).
+describe("ProjectMemberTable — autoOpenAdd (vào dự án ngay sau khi tạo)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(taskProjectApi.listMembers).mockResolvedValue(MOCK_MEMBERS);
+  });
+
+  it("có manage-member:project → hộp thêm thành viên tự mở + báo đã xử lý cờ", async () => {
+    setCapabilities({ "read:project": true, "manage-member:project": true });
+    const onHandled = vi.fn();
+    renderWithQuery(
+      <ProjectMemberTable projectId="proj-001" autoOpenAdd onAutoOpenHandled={onHandled} />,
+    );
+    await waitFor(() => expect(screen.getByTestId("member-picker-confirm")).toBeInTheDocument());
+    expect(onHandled).toHaveBeenCalledTimes(1);
+  });
+
+  it("Owner của dự án (thiếu pair) → hộp vẫn tự mở", async () => {
+    setCapabilities({ "read:project": true });
+    renderWithQuery(<ProjectMemberTable projectId="proj-001" myProjectRole="Owner" autoOpenAdd />);
+    await waitFor(() => expect(screen.getByTestId("member-picker-confirm")).toBeInTheDocument());
+  });
+
+  it("DENY: không quyền quản thành viên (Member, thiếu pair) → KHÔNG tự mở, cờ vẫn được tiêu", async () => {
+    setCapabilities({ "read:project": true });
+    const onHandled = vi.fn();
+    renderWithQuery(
+      <ProjectMemberTable
+        projectId="proj-001"
+        myProjectRole="Member"
+        autoOpenAdd
+        onAutoOpenHandled={onHandled}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.queryByTestId("member-picker-confirm")).not.toBeInTheDocument();
+    expect(onHandled).toHaveBeenCalledTimes(1);
+  });
+
+  it("không có cờ → không tự mở dù có quyền (hành vi cũ)", async () => {
+    setCapabilities({ "read:project": true, "manage-member:project": true });
+    renderWithQuery(<ProjectMemberTable projectId="proj-001" />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.queryByTestId("member-picker-confirm")).not.toBeInTheDocument();
+  });
+});
