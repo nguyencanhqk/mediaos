@@ -55,7 +55,7 @@ export class SocialNewsService {
     ]);
 
     // ┌─ VÌ SAO PHẦN «TRANG TRÍ» NẰM NGOÀI `withTenant` ────────────────────────────────────────────┐
-    // │ `decorateForViewer` → `SocialPostsService.decorate` MỞ `withTenant` RIÊNG (:487) và gọi tiếp │
+    // │ `decorateForViewer` → `decoratePosts` (social-posts-decorate.ts) MỞ `withTenant` RIÊNG, gọi  │
     // │ `attachments.decorateMany` (mở cái thứ ba + ký URL S3). `DatabaseService.withTenant` =       │
     // │ `db.transaction` thuần, KHÔNG reentrancy ⇒ mỗi lượt xin một connection MỚI từ pool. Gọi nó   │
     // │ khi tx ngoài còn mở là `withTenant` lồng nhau — thứ mà docblock của `SocialPostsService`     │

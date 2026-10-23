@@ -16,7 +16,7 @@
 
 import { Logger } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
-import { SocialPostsService } from "./social-posts.service";
+import { enqueueNewsPublishedNoti, type SocialPostsNotiDeps } from "./social-posts-notify";
 import { SOCIAL_EVENT_NEWS_PUBLISHED, SOCIAL_NEWS_NOTI_RECIPIENT_CAP } from "./social-noti.payload";
 import type { SocialActor } from "./social.types";
 
@@ -29,29 +29,24 @@ function sortedUserIds(n: number): string[] {
 }
 
 /**
- * Dựng service với ĐÚNG hai cộng tác viên mà nhánh này chạm (`news` + `outbox`); phần còn lại là
- * `null` — nếu một lượt sửa sau kéo thêm phụ thuộc vào nhánh này, ca sẽ NỔ chứ không im lặng đi qua.
+ * Dựng ĐÚNG ba cộng tác viên mà nhánh này chạm (`news` + `outbox` + logger) — S16-SOCIAL-POSTSSPLIT-1
+ * dời hàm ra `social-posts-notify.ts` với kiểu `SocialPostsNotiDeps` liệt kê đúng các method đó: một
+ * lượt sửa sau kéo thêm phụ thuộc vào nhánh này thì ca ĐỎ ở TS chứ không im lặng đi qua.
+ * Logger mang CÙNG ngữ cảnh service truyền vào (`SocialPostsService`); spy đặt trên `Logger.prototype`.
  */
-function makeService(audience: { userIds: string[]; total: number }) {
+function makeDeps(audience: { userIds: string[]; total: number }) {
   const enqueue = vi.fn().mockResolvedValue(undefined);
   const audienceUserIds = vi.fn().mockResolvedValue(audience);
-  const service = new SocialPostsService(
-    null as never, // db
-    null as never, // access
-    null as never, // repo
-    null as never, // projections
-    null as never, // attachments
-    null as never, // audit
-    { enqueue } as never, // outbox
-    null as never, // realtime
-    { audienceUserIds } as never, // news
-    null as never, // avatarSigner (S16-SOCIAL-AVATARPRESIGN-1 — nhánh trần NOTI không ký avatar)
-  );
-  return { service, enqueue, audienceUserIds };
+  const deps: SocialPostsNotiDeps = {
+    outbox: { enqueue } as never,
+    news: { audienceUserIds } as never,
+    logger: new Logger("SocialPostsService"),
+  };
+  return { deps, enqueue, audienceUserIds };
 }
 
 const ACTOR = { companyId: COMPANY, actorUserId: AUTHOR } as SocialActor;
-const POST = { audience: "company", orgUnitId: null };
+const POST = { audience: "company", orgUnitId: null, groupId: null };
 
 /**
  * `tx` giả vừa đủ cho `resolveActorName` (tên tác giả đi vào `{actor_name}` của template): mọi mắt
@@ -69,30 +64,21 @@ function fakeTx(): unknown {
   return chain;
 }
 
-/** `enqueueNewsPublishedNoti` là `private` — gọi qua chỉ số để KHÔNG phải nới khả kiến cho test. */
-function callEnqueue(service: SocialPostsService, postId: string): Promise<void> {
-  return (
-    service as unknown as {
-      enqueueNewsPublishedNoti: (
-        tx: unknown,
-        actor: SocialActor,
-        postId: string,
-        post: { audience: string; orgUnitId: string | null },
-      ) => Promise<void>;
-    }
-  ).enqueueNewsPublishedNoti(fakeTx() as never, ACTOR, postId, POST);
+/** Gọi THẲNG hàm đã dời (`social-posts-notify.ts`) — cùng đối số mà `SocialPostsService.create` truyền. */
+function callEnqueue(deps: SocialPostsNotiDeps, postId: string): Promise<void> {
+  return enqueueNewsPublishedNoti(deps, fakeTx() as never, ACTOR, postId, POST);
 }
 
 describe("NOTI-031 — trần người nhận (N-C8-trần)", () => {
   it("VƯỢT trần: cắt đúng trần · cờ `recipientsTruncated` · `totalRecipients` là tổng THẬT · WARN mang post_id", async () => {
     const total = SOCIAL_NEWS_NOTI_RECIPIENT_CAP + 37;
-    const { service, enqueue } = makeService({
+    const { deps, enqueue } = makeDeps({
       userIds: sortedUserIds(SOCIAL_NEWS_NOTI_RECIPIENT_CAP),
       total,
     });
     const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
 
-    await callEnqueue(service, "post-cap");
+    await callEnqueue(deps, "post-cap");
 
     expect(enqueue).toHaveBeenCalledTimes(1);
     const { eventType, payload } = enqueue.mock.calls[0]![1] as {
@@ -121,12 +107,12 @@ describe("NOTI-031 — trần người nhận (N-C8-trần)", () => {
   });
 
   it("ĐÚNG bằng trần: KHÔNG coi là cắt (ranh giới `>` chứ không phải `>=`)", async () => {
-    const { service, enqueue } = makeService({
+    const { deps, enqueue } = makeDeps({
       userIds: sortedUserIds(SOCIAL_NEWS_NOTI_RECIPIENT_CAP),
       total: SOCIAL_NEWS_NOTI_RECIPIENT_CAP,
     });
 
-    await callEnqueue(service, "post-exact");
+    await callEnqueue(deps, "post-exact");
 
     const { payload } = enqueue.mock.calls[0]![1] as {
       payload: { recipientsTruncated: boolean; totalRecipients: number };
@@ -136,10 +122,10 @@ describe("NOTI-031 — trần người nhận (N-C8-trần)", () => {
   });
 
   it("tập RỖNG: WARN và KHÔNG enqueue (registrar ném nếu nhận payload rỗng — không nuốt)", async () => {
-    const { service, enqueue } = makeService({ userIds: [], total: 0 });
+    const { deps, enqueue } = makeDeps({ userIds: [], total: 0 });
     const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
 
-    await callEnqueue(service, "post-empty");
+    await callEnqueue(deps, "post-empty");
 
     expect(enqueue, "không có người nhận thì KHÔNG phát sự kiện").not.toHaveBeenCalled();
     expect(warn.mock.calls.map((c) => String(c[0])).join("\n")).toContain("post-empty");
@@ -147,9 +133,9 @@ describe("NOTI-031 — trần người nhận (N-C8-trần)", () => {
   });
 
   it("trần truyền XUỐNG SQL: repository được gọi với `limit` = trần và loại tác giả", async () => {
-    const { service, audienceUserIds } = makeService({ userIds: sortedUserIds(10), total: 10 });
+    const { deps, audienceUserIds } = makeDeps({ userIds: sortedUserIds(10), total: 10 });
 
-    await callEnqueue(service, "post-args");
+    await callEnqueue(deps, "post-args");
 
     expect(audienceUserIds).toHaveBeenCalledTimes(1);
     const [, companyId, post, opts] = audienceUserIds.mock.calls[0]!;

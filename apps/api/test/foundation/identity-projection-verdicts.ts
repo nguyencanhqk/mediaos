@@ -694,10 +694,13 @@ export const IDENTITY_VERDICTS: readonly IdentityVerdict[] = [
     signedBy: "S16-SOCIAL-BE-1",
   },
   {
-    point: "social/social-posts.service.ts#resolveActorName:users.fullName",
+    // S16-SOCIAL-POSTSSPLIT-1 (23/10/2026): khoá đổi CÓ CHỦ ĐÍCH — hàm dời NGUYÊN VĂN từ
+    // `social-posts.service.ts` sang `social-posts-notify.ts` (tách tệp vượt trần 800 dòng). Cùng truy
+    // vấn, cùng căn cứ, cùng basis — không mở thêm bề mặt đọc; trần `self-bound-row` giữ nguyên.
+    point: "social/social-posts-notify.ts#resolveActorName:users.fullName",
     basis: "self-bound-row",
     reason:
-      "Truy vấn ghim `eq(users.id, userId)` với `userId = actor.actorUserId` (social-posts.service.ts, `resolveActorName`) — lấy tên hiển thị của CHÍNH người đang thao tác để dựng biến template `{actor_name}` của NOTI-028/029/030. Cùng hình dạng với `chat-messages.repository.ts#findSenderDisplayName`.",
+      "Truy vấn ghim `eq(users.id, userId)` với `userId = actor.actorUserId` (social-posts-notify.ts, `resolveActorName`) — lấy tên hiển thị của CHÍNH người đang thao tác để dựng biến template `{actor_name}` của NOTI-028/029/030. Cùng hình dạng với `chat-messages.repository.ts#findSenderDisplayName`.",
     signedBy: "S16-SOCIAL-BE-1",
   },
 
@@ -878,7 +881,8 @@ export const BASIS_CEILINGS: Readonly<Record<string, number>> = {
   // đọc nào ngoài phòng của chính actor — oversight cũng KHÔNG được miễn `assertMember` (API-13
   // §5.1d(4), có ca int-spec 404 cho actor mang `view:chat-oversight`).
   membership: 12,
-  // 4 → 5 (S16-SOCIAL-BE-1, 21/09/2026): `social-posts.service.ts#resolveActorName` — tên của CHÍNH
+  // 4 → 5 (S16-SOCIAL-BE-1, 21/09/2026): `social-posts.service.ts#resolveActorName` (nay ở
+  // `social-posts-notify.ts` — S16-SOCIAL-POSTSSPLIT-1, cùng điểm, không đổi số) — tên của CHÍNH
   // actor cho biến template `{actor_name}` của NOTI-028/029/030. Truy vấn ghim `users.id = actor`.
   "self-bound-row": 5, // S11-ASSET-BE-1: +1 (findUserDisplayNameTx — tên actor cho payload NOTI, thay raw SQL để không nới vùng mù rawSqlIdentity)
   // 14 → 15 (S11-ROOM-BE-1, 30/08/2026): `rooms/room-people.repository.ts#namesByUserIdsTx` — điểm chiếu DUY NHẤT của
