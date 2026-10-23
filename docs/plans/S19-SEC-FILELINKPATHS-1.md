@@ -227,6 +227,26 @@ P1-A4. Tiêu chí: 17/17 chết.
   trước tệp — D-3 ghi trật tự, reviewer database soát · R-6 đường ký avatar NV (đọc, danh bạ) chưa có vị từ độc quyền — WO này chỉ ép
   quyết định xem của người gắn ở biên ghi, KHÔNG đóng phần đọc; phần đó thuộc `S19-SEC-FILEPOINTER-1` (FP-1), đề nghị owner xếp deploy sát
   sau WO này (W-5). Không mở rộng phạm vi WO.
+- Vá gate (FULL + santa ×2): census thêm luật (iv) — tệp gọi `.<hàm ghi>(` của một tệp ghi (bảng `WRITE_METHODS`) phải là tệp gọi
+  đã phân loại, đo bằng tệp gọi thứ hai giả của `insertAttachmentLinks` (luật (i)/(ii) không bắt, (iv) bắt; gỡ (iv) ⇒ đúng ca đó đỏ) ·
+  int thêm P1-T/P2-T/P3-T: tệp thuộc tenant khác ⇒ CHAT 403 `CHAT-ERR-015` · ảnh phòng 403 `CHAT-ERR-015` · HR 404
+  `RESOURCE-ERR-NOT-FOUND`, 0 liên kết trên tệp đó, cột đích giữ (khoá ngoại tổ hợp chủ↔tenant của `files` không cho dựng chủ chéo
+  tenant) · unit fail-closed của `preflightLinkerView`: repo ném / policy ném / ghi log từ chối ném ⇒ ném (không trả `allow`);
+  `deny-error` ⇒ `forbidden` + 1 dòng log.
+- Nợ từ gate (luồng chính gieo, tiêu đề trung tính): N4 FE ảnh phòng ánh xạ MỌI 409 sang «phòng đã lưu trữ» — 409 không-lưu-trữ đã
+  có trước diff (23505 ⇒ 409 ở `S/chat/chat-room-avatar.service.ts`), WO này thêm 409 so lại ảnh chụp ⇒ phân biệt theo `code` của
+  body; 403 `CHAT-ERR-015` cần thông điệp «ảnh này không dùng được» · N5 composer CHAT: 403 `CHAT-ERR-015` (vĩnh viễn) và 409 so lại
+  (tạm) chung trạng thái `failed`, «Gửi lại» lặp đúng lệnh bị từ chối và mỗi lần thêm 1 dòng log từ chối ⇒ FE «bỏ tệp rồi gửi lại» cho
+  403; API cân nhắc gộp log từ chối cùng (người gắn, tệp) trong cửa sổ ngắn (mở rộng N1) · N6 lỗi hạ tầng trong resolver ⇒ `deny-error`
+  ⇒ 403 thay vì 5xx (có sẵn ở `GET /:id`, nay cả 3 đường gắn) — fail-closed và có log; nợ: route ánh xạ `deny-error` sang 5xx hoặc
+  đếm metric · N7 HR đặt lại đúng ảnh đang sống ⇒ 403 (= R-3/D-7): phương án 200 idempotent trước preflight khi liên kết sống đã trỏ
+  đúng NV đích — chờ owner ở W-5 · N8 chưa có ca int ép nhánh 409 so lại ảnh chụp ở route module (cần móc chen liên kết giữa preflight
+  và tx ghi); 409 trên race hai lần gắn cùng tệp là CỐ Ý (D-2), còn recheck `missing`/`unlinkable` quy về mã từ chối của route (LP-2)
+  · N9 preflight đính kèm tuần tự: ≤ 10 tệp (`CHAT_MAX_ATTACHMENTS_PER_MESSAGE`) ⇒ ≤ 2N+1 tx tuần tự, mỗi lúc giữ ≤ 1 kết nối (tăng
+  độ trễ, không cạn pool — R-2) ⇒ API lô quyết định cho nhiều tệp, làm cùng `S19-SEC-FILEPOINTER-1`; tx ngắn tra `clientMessageId`
+  (F3) gộp vào đó · N3 giữ nguyên: `F/files.service.ts` 1000 dòng trước và sau diff (không dài thêm); logic quyết định ở
+  `F/file-linker-view.ts` + `F/file-link-context.ts`, FileService chỉ giữ 3 hàm uỷ quyền mỏng — tách sang service nhỏ ở FILEDEBT.
+  R-1 (so lại ảnh chụp, không so lại phán quyết resolver) và D-12/W-2 (mở PR = công bố) đã ghi, gate xác nhận lại.
 
 ### 9.3 Sổ vết
 
