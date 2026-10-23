@@ -125,6 +125,33 @@ test("B1d/B1e-đối chứng — bàn giao/seed KHÔNG ở vị trí ghi sổ �
   }
 });
 
+// ── B1f: "plan vN cho <WO>" ở PHẦN ĐẦU thân docs(<scope>) là bookkeeping (lỗ mở sẵn — ĐO 23/10/2026) ─
+// 42249f56 `docs(permission): DECISIONS-13 + plan v3 cho S14-SEC-CAPWILDCARD-1 — thiết kế CHỐT, 0 dòng
+// code, WO \`blocked\`` mở thân bằng mã ADR chứ không bằng chữ "plan" ⇒ trượt B1c. WO đang `blocked` nên B3
+// giữ được, nhưng ngay khi gỡ chặn (reopen/start) reconcile đóng dấu 'finished' theo commit kế hoạch đó
+// (đã xảy ra 23/10 03:41). Chắn theo THÂN: "plan v<N> cho|for" đứng TRƯỚC dấu "—" đầu tiên.
+test("B1f — docs(<scope>): … plan vN cho <WO> — … là bookkeeping ⇒ bị loại khỏi nguồn stamp", () => {
+  const cases = [
+    "docs(permission): DECISIONS-13 + plan v3 cho S14-SEC-CAPWILDCARD-1 — thiết kế CHỐT, 0 dòng code, WO `blocked`",
+    "docs(social): ADR mới + plan v2 for S16-SOCIAL-GROUPMOD-1 — chờ owner ký",
+  ];
+  for (const s of cases) {
+    assert.ok(isBookkeeping(s), `phải nhận là bookkeeping: ${s}`);
+  }
+});
+
+// Đối chứng B1f: "plan vN" SAU dấu "—" (commit ship nhắc plan đã duyệt) hoặc không kèm "cho|for" ⇒ vẫn ship.
+test("B1f-đối chứng — 'plan vN' ngoài phần đầu thân hoặc không kèm 'cho' ⇒ vẫn là commit ship", () => {
+  const cases = [
+    "docs(social): S16-SOCIAL-DOC-2 — đồng bộ SPEC theo plan v2 cho S16-SOCIAL-FE-3",
+    "fix(permission): S14-SEC-CAPWILDCARD-1 — capabilities theo can() (plan v4 cho WO này)",
+    "docs(spec): S5-ME-DOC-1 + plan v2 — bộ spec ME",
+  ];
+  for (const s of cases) {
+    assert.ok(!isBookkeeping(s), `KHÔNG được coi là bookkeeping: ${s}`);
+  }
+});
+
 // ── B2: commit SHIP THẬT vẫn phải lọt qua (không được vá quá tay) ───────────────────────────
 // Nếu luật lọc nới rộng tới mức nuốt cả commit ship, board sẽ kẹt ready dù việc đã vào master —
 // đúng bẫy ngược mà chính reconcile sinh ra để chữa (S2-INT-1 · S2-INT-2).
