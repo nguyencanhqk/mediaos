@@ -259,6 +259,25 @@ describe.skipIf(!runIsolatedDb)(
         expect(res.rows[0].n, "manager KHÔNG được view-sensitive:employee").toBe(0);
       });
 
+      // S4-DASH-HROVERVIEW-FLOOR-1 (S1): chiều VẮNG của vế FE tạm `update:employee` ở ô rail «Tổng quan nhân
+      // sự» — chiều CÓ (hr · company-admin) đã ghim ở mục C. Vế đó chỉ phân biệt đúng khi employee / manager
+      // KHÔNG giữ cặp này; WO FE bỏ vế đó (thay bằng sàn scope ở contracts) mở sau.
+      it("employee + manager KHÔNG có update:employee", async () => {
+        const res = await direct.query<{ role: string }>(
+          `SELECT r.name AS role
+             FROM role_permissions rp
+             JOIN roles r ON r.id = rp.role_id
+             JOIN permissions p ON p.id = rp.permission_id
+            WHERE r.name = ANY($1) AND r.company_id IS NULL AND rp.effect = 'ALLOW'
+              AND p.action = 'update' AND p.resource_type = 'employee'`,
+          [["employee", "manager"]],
+        );
+        expect(
+          res.rows.map((x) => x.role),
+          "employee/manager KHÔNG được update:employee",
+        ).toEqual([]);
+      });
+
       it("hr KHÔNG có delete:employee (§13 mặc định)", async () => {
         const res = await direct.query<{ n: number }>(
           `SELECT COUNT(*)::int AS n

@@ -229,3 +229,6 @@ export * from "./social-api-recycle";
 // S16-SOCIAL-GROUPERR-1 (additive): MÃ lỗi SOCIAL trên dây (`error.code`) — nguồn chung api ↔ web. Tự chứa;
 // tên export SOCIAL_ERROR_*/SocialError*/isSocialErrorCode KHÔNG trùng barrel hiện có.
 export * from "./social-errors";
+// S4-DASH-HROVERVIEW-FLOOR-1 (additive): SÀN data-scope widget DASH (`DASH_WIDGET_MIN_DATA_SCOPE`) — api ép ở
+// metadata + đường số liệu, web đọc làm tín hiệu mount ô. Chỉ import type từ ./auth.
+export * from "./dashboard-widget-floor";

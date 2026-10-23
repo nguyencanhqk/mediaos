@@ -98,7 +98,7 @@ function wire(grants: CompanyRoleGrantWithScope[]) {
 const FLOORED = Object.keys(DASH_WIDGET_MIN_DATA_SCOPE);
 
 describe("Số đo — GET /dashboard/me (đường sàn scope của filterByGatePair)", () => {
-  it("TRƯỚC (một resolveOrNull mỗi widget khai sàn) = 7", async () => {
+  it("TRƯỚC (một resolveOrNull mỗi widget khai sàn) = 8", async () => {
     const { repo, dataScope } = wire(ADMIN_GRANTS);
     for (const code of FLOORED) {
       const pair = DASH_WIDGET_GATE_PAIR[code];
@@ -109,8 +109,9 @@ describe("Số đo — GET /dashboard/me (đường sàn scope của filterByGat
     // S16-SOCIAL-DASH-1: +SOCIAL_ENGAGEMENT_WEEK (sàn 'Department') · SOCIAL_NEWS_UNACKED (sàn 'Company') ⇒ 5 → 7.
     // 7 mã: ASSET_SUMMARY · RECRUIT_FUNNEL · PAYROLL_COST · PAYROLL_BUDGET · PAYROLL_ADVANCE_PENDING ·
     // SOCIAL_ENGAGEMENT_WEEK · SOCIAL_NEWS_UNACKED.
-    expect(FLOORED).toHaveLength(7);
-    expect(repo.hits).toHaveBeenCalledTimes(7);
+    // S4-DASH-HROVERVIEW-FLOOR-1: +HR_OVERVIEW (sàn 'Department'; map dời sang packages/contracts) ⇒ 7 → 8.
+    expect(FLOORED).toHaveLength(8);
+    expect(repo.hits).toHaveBeenCalledTimes(8);
   });
 
   it("SAU (một resolveManyOrNull cho cả tập) = 1", async () => {
