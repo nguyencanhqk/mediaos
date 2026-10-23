@@ -130,10 +130,10 @@ export class ChatMessageModerationService {
       });
       return { row: await this.readRow(tx, actor, acc), changed: true };
     });
-    // Ký tệp SAU khi tx đã commit — xem cảnh báo ở `readRow`.
-    const dto = await this.attachments.decorateOne(actor, row);
-    if (changed) this.emitPinChange(actor, dto);
-    return dto;
+    // Phát TRƯỚC khi ký tệp: tx đã commit nên trạng thái ghim đã đổi — lỗi ký tệp sau đó (REST 5xx) không
+    // được nuốt mất sự kiện, client đang kết nối không poll. Ký tệp SAU commit — xem cảnh báo ở `readRow`.
+    if (changed) this.emitPinChange(actor, row);
+    return this.attachments.decorateOne(actor, row);
   }
 
   /** CHAT-API-012b — bỏ ghim. Idempotent: tin chưa ghim thì trả nguyên trạng, không lỗi. */
@@ -156,24 +156,26 @@ export class ChatMessageModerationService {
       });
       return { row: await this.readRow(tx, actor, acc), changed: true };
     });
-    // Ký tệp SAU khi tx đã commit — xem cảnh báo ở `readRow`.
-    const dto = await this.attachments.decorateOne(actor, row);
-    if (changed) this.emitPinChange(actor, dto);
-    return dto;
+    // Phát TRƯỚC khi ký tệp: tx đã commit nên trạng thái ghim đã đổi — lỗi ký tệp sau đó (REST 5xx) không
+    // được nuốt mất sự kiện, client đang kết nối không poll. Ký tệp SAU commit — xem cảnh báo ở `readRow`.
+    if (changed) this.emitPinChange(actor, row);
+    return this.attachments.decorateOne(actor, row);
   }
 
   /**
    * S20-CHAT-MENTIONPIN-1 — `chat:message-pinned` SAU commit, CHỈ ở nhánh thật sự đổi trạng thái.
    *
-   * Nguồn là DTO REST vừa dựng (cùng lớp che), không phải row. Chỉ bốn khoá: nội dung tin KHÔNG đi kèm —
-   * người nhận nạp lại `/pinned` theo quyền của chính họ (xem `wsChatMessagePinnedEventSchema`).
+   * Nguồn là hàng ĐÃ COMMIT (đọc lại trong cùng tx), không đợi DTO đã ký tệp: bốn khoá này là định danh +
+   * mốc ghim, cùng phép chiếu với `toChatMessageDto` (`pinnedAt` → ISO, `pinnedBy` nguyên trạng), không
+   * qua lớp che nào. Nội dung tin KHÔNG đi kèm — người nhận nạp lại `/pinned` theo quyền của chính họ (xem
+   * `wsChatMessagePinnedEventSchema`; emitter `.parse()` strip mọi khoá thừa trước khi phát).
    */
-  private emitPinChange(actor: ChatActor, dto: ChatMessageDto): void {
-    this.realtime.emitChatMessagePinned(actor.companyId, dto.roomId, {
-      messageId: dto.id,
-      roomId: dto.roomId,
-      pinnedAt: dto.pinnedAt,
-      pinnedBy: dto.pinnedBy,
+  private emitPinChange(actor: ChatActor, row: ChatMessageRow): void {
+    this.realtime.emitChatMessagePinned(actor.companyId, row.roomId, {
+      messageId: row.id,
+      roomId: row.roomId,
+      pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
+      pinnedBy: row.pinnedBy,
     });
   }
 

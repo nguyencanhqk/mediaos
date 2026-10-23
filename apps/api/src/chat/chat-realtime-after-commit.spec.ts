@@ -358,7 +358,13 @@ describe("emit SAU COMMIT — ChatMessageModerationService.pin/unpin (S20-CHAT-M
   const PINNED_AT = new Date("2026-10-23T08:00:00.000Z");
 
   /** `pinnedNow` = trạng thái ghim TRƯỚC thao tác (quyết định nhánh idempotent). */
-  function build(commitFails: boolean, pinnedNow: boolean, afterPinnedAt: Date | null) {
+  /** `decorateFails` = ký tệp hỏng SAU khi tx đã commit (trạng thái ghim ĐÃ đổi). */
+  function build(
+    commitFails: boolean,
+    pinnedNow: boolean,
+    afterPinnedAt: Date | null,
+    decorateFails = false,
+  ) {
     const realtime = makeRealtime();
     const acc = access();
     acc.assertMessageAccess = vi.fn(async () => ({
@@ -394,10 +400,10 @@ describe("emit SAU COMMIT — ChatMessageModerationService.pin/unpin (S20-CHAT-M
       audit() as never,
       // `decorateOne` mô phỏng DTO REST: Date → ISO, giữ `body`.
       {
-        decorateOne: vi.fn(async (_a: unknown, row: { pinnedAt: Date | null }) => ({
-          ...row,
-          pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
-        })),
+        decorateOne: vi.fn(async (_a: unknown, row: { pinnedAt: Date | null }) => {
+          if (decorateFails) throw new Error("SIGN");
+          return { ...row, pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null };
+        }),
       } as never,
       realtime as unknown as RealtimeEmitterService,
     );
@@ -448,6 +454,35 @@ describe("emit SAU COMMIT — ChatMessageModerationService.pin/unpin (S20-CHAT-M
   it("unpin tin CHƯA ghim (idempotent) → 0 sự kiện", async () => {
     const { svc, realtime } = build(false, false, null);
     await svc.unpin(ACTOR, MESSAGE);
+    expect(totalCalls(realtime)).toBe(0);
+  });
+
+  // Ký tệp chạy SAU commit: lỗi ở đó không được nuốt mất sự kiện của một thay đổi ĐÃ ghi — client đang
+  // kết nối không poll, thanh tin ghim của họ sẽ cũ tới lần tải lại.
+  it("pin: ký tệp hỏng SAU commit → REST vẫn báo lỗi, sự kiện VẪN phát đúng 1 lần (4 khoá)", async () => {
+    const { svc, realtime } = build(false, false, PINNED_AT, true);
+    await expect(svc.pin(ACTOR, MESSAGE)).rejects.toThrow(/SIGN/);
+    expect(realtime.emitChatMessagePinned).toHaveBeenCalledTimes(1);
+    const payload = realtime.emitChatMessagePinned.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(payload).toEqual({
+      messageId: MESSAGE,
+      roomId: ROOM,
+      pinnedAt: PINNED_AT.toISOString(),
+      pinnedBy: ACTOR.id,
+    });
+  });
+
+  it("unpin: ký tệp hỏng SAU commit → sự kiện VẪN phát đúng 1 lần với `pinnedAt: null`", async () => {
+    const { svc, realtime } = build(false, true, null, true);
+    await expect(svc.unpin(ACTOR, MESSAGE)).rejects.toThrow(/SIGN/);
+    expect(realtime.emitChatMessagePinned).toHaveBeenCalledTimes(1);
+    const payload = realtime.emitChatMessagePinned.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(payload).toEqual({ messageId: MESSAGE, roomId: ROOM, pinnedAt: null, pinnedBy: null });
+  });
+
+  it("pin lần HAI (idempotent) + ký tệp hỏng → 0 sự kiện", async () => {
+    const { svc, realtime } = build(false, true, PINNED_AT, true);
+    await expect(svc.pin(ACTOR, MESSAGE)).rejects.toThrow(/SIGN/);
     expect(totalCalls(realtime)).toBe(0);
   });
 });

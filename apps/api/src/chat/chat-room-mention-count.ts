@@ -24,10 +24,14 @@ import { visibleFromSeqColumn } from "./chat-visibility";
  *
  * Kết quả CHỈ là con số của người gọi — không id người được nhắc nào khác rời server qua đường này.
  *
- * Hiệu năng: mỗi phòng là một lần dò dải `room_seq > last_read_seq` trên
- * `idx_chat_messages_room_seq (company_id, room_id, room_seq DESC)` — chi phí tỉ lệ với số tin CHƯA ĐỌC,
- * không với tổng lịch sử. Vế `mentions @> …` lọc trên dải đó nên KHÔNG cần index GIN ở quy mô hiện tại
- * (đo EXPLAIN trong `s20-chat-mention-pin.int-spec.ts`).
+ * Hiệu năng (đo bằng EXPLAIN ANALYZE dưới app role + tenant, seqscan BẬT — ca M-4 của
+ * `s20-chat-mention-pin.int-spec.ts`): bảng 40.006 tin / 10 phòng, phòng hỏi có 4.000 tin, 25 chưa đọc ⇒
+ * Nested Loop → Bitmap Index Scan `uq_chat_messages_room_seq (company_id, room_id, room_seq)` với
+ * `room_seq > last_read_seq` ở **Index Cond**; chạm 25 hàng (giữ 3, Filter loại 22), ~0,06 ms. Chi phí theo
+ * dải CHƯA ĐỌC, không theo lịch sử; vế `mentions @> …` chỉ lọc trên dải đó ⇒ CHƯA cần GIN.
+ * Khi một phòng ≈ cả bảng (bảng nhỏ), planner chọn quét tuần tự — đúng (đo: 4.006 hàng, ~1 ms).
+ * Điều kiện mở WO đỏ (migration GIN `jsonb_path_ops` trên `mentions`): dải chưa đọc điển hình lên hàng
+ * chục nghìn tin/phòng, đo lại bằng chính ca M-4 với `UNREAD` tương ứng.
  */
 export function unreadMentionCountQuery(
   tx: TenantTx,

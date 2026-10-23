@@ -148,6 +148,11 @@ export type WsChatMessageRecalledEvent = z.infer<typeof wsChatMessageRecalledEve
  * ⚠️ CỐ Ý KHÔNG mang `body`/`attachments`/`mentions`: sự kiện phát cho CẢ phòng, còn nội dung tin là
  * thứ đọc qua REST theo đúng người gọi (vị từ §13.4 + che thu hồi). Client nhận sự kiện thì nạp lại
  * `GET /chat/rooms/:id/pinned` — Zod strip mọi khoá thừa ở `.parse()` trước emit.
+ *
+ * Phạm vi người nhận = CẢ room socket, giống `chat:message-recalled`: nếu một ngày §13.4 có thành viên «vào
+ * sau» (`visible_from_seq` khác NULL — v1 luôn NULL, CHAT-DEC-008), họ vẫn nhận bốn khoá siêu dữ liệu này
+ * của một tin họ không mở được. Nội dung chỉ đi qua REST có vị từ §13.4 (`listPinned` truyền
+ * `visibleFromSeq`). Lọc theo từng socket là việc của WO bật §13.4, không phải của sự kiện này.
  */
 export const wsChatMessagePinnedEventSchema = chatMessageSchema
   .pick({ roomId: true, pinnedAt: true, pinnedBy: true })

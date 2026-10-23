@@ -149,7 +149,18 @@ export function RoomListPanel({
   );
 
   const isChipControlled = chipProp !== undefined;
-  const chip = chipProp ?? chipState;
+  const roomsById = useChatStore((s) => s.roomsById);
+  const showMentions = useMemo(
+    () => roomsSupportMentionCount(Object.values(roomsById)),
+    [roomsById],
+  );
+  /**
+   * Chip «Nhắc tôi» ẨN khi không phòng nào còn số @ ⇒ không giữ bộ lọc vô hình: hiệu lực về «Tất cả» ngay
+   * trong lần vẽ này (không chớp danh sách rỗng), và effect dưới đồng bộ nguồn chip để nó không bật lại.
+   */
+  const selectedChip = chipProp ?? chipState;
+  const chip =
+    selectedChip === "mentions" && !showMentions ? DEFAULT_ROOM_FILTER_CHIP : selectedChip;
   const setChip = useCallback(
     (next: RoomFilterChip): void => {
       if (isChipControlled) onChipChange?.(next);
@@ -157,6 +168,9 @@ export function RoomListPanel({
     },
     [isChipControlled, onChipChange],
   );
+  useEffect(() => {
+    if (selectedChip !== chip) setChip(chip);
+  }, [selectedChip, chip, setChip]);
   const showArchived = chipNeedsArchivedScope(chip);
   /** Menu ĐANG mở của phòng nào — một tại một thời điểm (mở cái thứ hai tự đóng cái trước). */
   const [openMenuRoomId, setOpenMenuRoomId] = useState<string | null>(null);
@@ -168,7 +182,6 @@ export function RoomListPanel({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const myUserId = useChatStore((s) => s.myUserId);
-  const roomsById = useChatStore((s) => s.roomsById);
   const roomOrder = useChatStore((s) => s.roomOrder);
   const presenceByUser = useChatStore((s) => s.presenceByUser);
   const syncRoomList = useChatStore((s) => s.syncRoomList);
@@ -372,11 +385,7 @@ export function RoomListPanel({
         onCreateRoom={canCreate ? onCreateRoom : undefined}
       />
 
-      <RoomFilterChipBar
-        value={chip}
-        onChange={setChip}
-        showMentions={roomsSupportMentionCount(Object.values(roomsById))}
-      />
+      <RoomFilterChipBar value={chip} onChange={setChip} showMentions={showMentions} />
 
       {actionError !== null && (
         <div

@@ -8,7 +8,10 @@
  *   M-2  con trỏ đọc tiến ⇒ số giảm đúng phần đã đọc; đọc tới đáy ⇒ 0.
  *   M-3  chỉ membership của CHÍNH người gọi: người ngoài phòng ⇒ không có số; tenant khác ⇒ không có số
  *        (vị từ `company_id` + RLS), kèm neo dương cùng hàm ở tenant đúng.
- *   M-4  EXPLAIN: `chat_messages` được đọc qua index (không quét toàn bảng) khi tắt seqscan.
+ *   M-4  EXPLAIN ANALYZE dưới APP ROLE + `set_config` tenant (như `withTenant`), KHÔNG tắt seqscan, trên
+ *        phòng `BULK` tin: `chat_messages` đọc qua index hệ `room_seq` với `room_seq > …` ở **Index Cond**
+ *        (không phải Filter), số hàng chạm tới ≤ dải chưa đọc — chi phí theo tin CHƯA ĐỌC, không theo lịch sử.
+ *   M-5  vị từ §13.4: tin nhắc nằm TRƯỚC `visible_from_seq` không được đếm (mốc là biên ĐÓNG — neo dương).
  *   P-1  ghim/bỏ ghim THẬT ⇒ đúng một `chat:message-pinned` mỗi lần, ĐÚNG 4 khoá (không `body`); ghim lặp
  *        (idempotent) và lời bỏ ghim bị server từ chối ⇒ 0 sự kiện (neo dương = sự kiện bỏ ghim sau đó).
  *
@@ -44,7 +47,7 @@ import {
   waitForEvent,
   type WsRecorder,
 } from "../helpers/chat-call-fixture";
-import { directPool, hasDb } from "../helpers/integration-db";
+import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed";
 import { gatewayNamespace, seedActor } from "../helpers/social-group-rooms-fixture";
 
@@ -64,15 +67,43 @@ interface Who {
   token: string;
 }
 
+/** M-4 — phòng lớn để kế hoạch là kế hoạch thật; chỉ `UNREAD` tin cuối là chưa đọc, mỗi 10 tin có 1 tin nhắc Me. */
+const BULK = 4000;
+const UNREAD = 25;
+const NOISE_ROOMS = 9;
+const ROOM_SEQ_INDEXES = new Set(["idx_chat_messages_room_seq", "uq_chat_messages_room_seq"]);
+
 interface PlanNode {
   "Node Type": string;
   "Relation Name"?: string;
   "Index Name"?: string;
+  "Index Cond"?: string;
+  "Actual Rows"?: number;
+  "Actual Loops"?: number;
+  "Rows Removed by Filter"?: number;
+  "Rows Removed by Index Recheck"?: number;
   Plans?: PlanNode[];
 }
 
 function flattenPlan(node: PlanNode): PlanNode[] {
   return [node, ...(node.Plans ?? []).flatMap(flattenPlan)];
+}
+
+/** Nút index THẬT SỰ định vị dải: Index Scan tự nó; Bitmap Heap Scan → con Bitmap Index Scan. */
+function locatingIndex(heap: PlanNode): PlanNode | undefined {
+  if (heap["Node Type"] === "Bitmap Heap Scan") {
+    return flattenPlan(heap).find((n) => n["Node Type"] === "Bitmap Index Scan");
+  }
+  return heap["Index Name"] ? heap : undefined;
+}
+
+/** Số hàng heap bị chạm tới (giữ + loại bởi Filter/Recheck), cộng qua mọi vòng lặp. */
+function rowsTouched(heap: PlanNode): number {
+  const perLoop =
+    (heap["Actual Rows"] ?? 0) +
+    (heap["Rows Removed by Filter"] ?? 0) +
+    (heap["Rows Removed by Index Recheck"] ?? 0);
+  return perLoop * (heap["Actual Loops"] ?? 1);
 }
 
 describe.skipIf(!hasLaneDb)(
@@ -98,6 +129,7 @@ describe.skipIf(!hasLaneDb)(
     let RB = "";
     let m1 = "";
     let seqM2 = 0;
+    let seqC = 0;
     let lastSeq = 0;
     let meSock: WsRecorder;
 
@@ -171,7 +203,7 @@ describe.skipIf(!hasLaneDb)(
 
       m1 = (await send(Adm, R, "chung")).id;
       seqM2 = (await send(Adm, R, "nhắc me 1", [Me])).roomSeq;
-      await send(Adm, R, "nhắc c", [C]);
+      seqC = (await send(Adm, R, "nhắc c", [C])).roomSeq;
       lastSeq = (await send(Adm, R, "nhắc me 2", [Me])).roomSeq;
       const m5 = await send(Adm, R, "nhắc me rồi thu hồi", [Me]);
       lastSeq = m5.roomSeq;
@@ -246,30 +278,111 @@ describe.skipIf(!hasLaneDb)(
       expect(crossRoom.size).toBe(0);
     });
 
-    it("M-4 EXPLAIN — `chat_messages` đọc qua index, không quét toàn bảng", async () => {
-      const query = await dbs.withTenant(A.companyId, async (tx) =>
-        unreadMentionCountQuery(tx, A.companyId, Me.userId, [R]).toSQL(),
-      );
-      const client = await direct.connect();
+    it("M-5 §13.4 — tin nhắc TRƯỚC `visible_from_seq` không tính; mốc là biên ĐÓNG (neo dương)", async () => {
+      // v1 không có writer nào của cột này (CHAT-DEC-008 · 0540 REVOKE) ⇒ đặt thẳng bằng kết nối direct để
+      // đo vị từ — đây là trạng thái mà WO bật §13.4 sẽ tạo ra.
+      const setVisible = (v: number | null) =>
+        direct.query(
+          `UPDATE chat_room_members SET visible_from_seq = $1 WHERE room_id = $2 AND user_id = $3`,
+          [v, R, C.userId],
+        );
+      const countC = () =>
+        dbs.withTenant(A.companyId, (tx) =>
+          countUnreadMentionsByRoom(tx, A.companyId, C.userId, [R]),
+        );
       try {
-        await client.query("BEGIN");
-        await client.query("SET LOCAL enable_seqscan = off");
-        const res = await client.query(`EXPLAIN (FORMAT JSON) ${query.sql}`, query.params);
-        await client.query("ROLLBACK");
-        const plan = (res.rows[0] as { "QUERY PLAN": { Plan: PlanNode }[] })["QUERY PLAN"][0]
-          ?.Plan as PlanNode;
-        const onMessages = flattenPlan(plan).filter((n) => n["Relation Name"] === "chat_messages");
-        const dump = JSON.stringify(plan);
-        expect(onMessages.length, dump).toBeGreaterThan(0);
-        expect(
-          onMessages.every((n) => n["Node Type"] !== "Seq Scan"),
-          dump,
-        ).toBe(true);
+        await setVisible(seqC);
+        expect((await countC()).get(R)).toBe(1);
+        expect((await roomFor(C, R))?.mentionUnreadCount).toBe(1);
+
+        await setVisible(seqC + 1);
+        expect((await countC()).get(R)).toBeUndefined();
+        expect((await roomFor(C, R))?.mentionUnreadCount).toBe(0);
       } finally {
-        client.release();
+        await setVisible(null);
       }
+      expect((await countC()).get(R)).toBe(1);
     });
 
+    it("M-4 EXPLAIN ANALYZE (app role + tenant, seqscan BẬT, phòng lớn) — dò dải `room_seq` trên index, chạm ≤ dải chưa đọc", async () => {
+      // Phòng là một phần NHỎ của bảng (như PROD): khi phòng ≈ cả bảng, quét tuần tự rẻ hơn và planner
+      // chọn nó — đúng, nhưng không đo được điều ta hỏi. `NOISE_ROOMS` phòng khác cùng tenant, mỗi phòng
+      // `BULK` tin, room_seq lệch xa để không đụng tin hệ thống lúc tạo phòng.
+      const noiseRooms: string[] = [];
+      for (let i = 0; i < NOISE_ROOMS; i++)
+        noiseRooms.push(await newRoom(Adm, `s20mp n${i}`, [Me]));
+      await direct.query(
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq)
+         SELECT $1, r, $2, 'noise ' || g, 100000 + g
+           FROM unnest($3::uuid[]) AS r CROSS JOIN generate_series(1, $4::int) AS g`,
+        [A.companyId, Adm.userId, noiseRooms, BULK],
+      );
+      await direct.query(`UPDATE chat_rooms SET last_message_seq = $1 WHERE id = ANY($2::uuid[])`, [
+        100000 + BULK,
+        noiseRooms,
+      ]);
+
+      const RX = await newRoom(Adm, "s20mp rx", [Me]);
+      const baseRes = await direct.query(
+        `SELECT COALESCE(last_message_seq, 0) AS base FROM chat_rooms WHERE id = $1`,
+        [RX],
+      );
+      const base = Number(baseRes.rows[0]?.base ?? 0);
+      await direct.query(
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body, room_seq, mentions)
+         SELECT $1, $2, $3, 'bulk ' || g, $4::bigint + g,
+                CASE WHEN g % 10 = 0 THEN jsonb_build_array($5::text) ELSE '[]'::jsonb END
+           FROM generate_series(1, $6::int) AS g`,
+        [A.companyId, RX, Adm.userId, base, Me.userId, BULK],
+      );
+      await direct.query(`UPDATE chat_rooms SET last_message_seq = $1 WHERE id = $2`, [
+        base + BULK,
+        RX,
+      ]);
+      await direct.query(
+        `UPDATE chat_room_members SET last_read_seq = $1 WHERE room_id = $2 AND user_id = $3`,
+        [base + BULK - UNREAD, RX, Me.userId],
+      );
+      await direct.query("ANALYZE chat_messages, chat_room_members");
+
+      let expected = 0;
+      for (let i = BULK - UNREAD + 1; i <= BULK; i++) if (i % 10 === 0) expected++;
+      const counts = await dbs.withTenant(A.companyId, (tx) =>
+        countUnreadMentionsByRoom(tx, A.companyId, Me.userId, [RX]),
+      );
+      expect(counts.get(RX)).toBe(expected);
+
+      const query = await dbs.withTenant(A.companyId, async (tx) =>
+        unreadMentionCountQuery(tx, A.companyId, Me.userId, [RX]).toSQL(),
+      );
+      // Cùng vai trò + cùng ngữ cảnh tenant với `withTenant` ⇒ kế hoạch có đủ vế RLS của app role.
+      const pool = appPool();
+      const client = await pool.connect();
+      let plan: PlanNode | undefined;
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.current_company_id', $1, true)", [A.companyId]);
+        const res = await client.query(`EXPLAIN (ANALYZE, FORMAT JSON) ${query.sql}`, query.params);
+        plan = (res.rows[0] as { "QUERY PLAN": { Plan: PlanNode }[] })["QUERY PLAN"][0]?.Plan;
+      } finally {
+        await client.query("ROLLBACK");
+        client.release();
+        await pool.end();
+      }
+      const dump = JSON.stringify(plan);
+      const heaps = plan
+        ? flattenPlan(plan).filter((n) => n["Relation Name"] === "chat_messages")
+        : [];
+      expect(heaps.length, dump).toBe(1);
+      const heap = heaps[0] as PlanNode;
+      const index = locatingIndex(heap);
+      expect(ROOM_SEQ_INDEXES.has(index?.["Index Name"] ?? ""), dump).toBe(true);
+      // Vế dải nằm ở Index Cond (định vị), không phải Filter (lọc sau khi đã quét).
+      expect(index?.["Index Cond"] ?? "", dump).toMatch(/room_seq\s*>/);
+      const touched = rowsTouched(heap);
+      expect(touched, dump).toBeGreaterThan(0);
+      expect(touched, dump).toBeLessThanOrEqual(UNREAD);
+    });
     it("P-1 ghim/bỏ ghim THẬT ⇒ đúng 2 sự kiện 4 khoá; ghim lặp + bỏ ghim bị từ chối ⇒ 0 sự kiện", async () => {
       const pin = await http().post(`/chat/messages/${m1}/pin`).set(auth(Adm.token));
       expect([200, 201], JSON.stringify(pin.body)).toContain(pin.status);

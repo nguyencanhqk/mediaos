@@ -118,5 +118,24 @@ describe.each(["page", "drawer"] as const)(
       expect(chipKeys()).toContain("unread");
       expect(screen.queryByTestId("chat-room-mention")).toBeNull();
     });
+
+    it("đang chọn «Nhắc tôi» rồi danh sách mới KHÔNG còn số @ ⇒ chip ẩn VÀ bộ lọc về «Tất cả»", () => {
+      useChatStore.getState().hydrateRooms([room("r", { unreadCount: 10, mentionUnreadCount: 2 })]);
+      renderPanel(variant);
+      fireEvent.click(chip("mentions"));
+      expect(chip("mentions").getAttribute("aria-pressed")).toBe("true");
+
+      act(() => {
+        useChatStore.getState().resetChatStore();
+        useChatStore.getState().setMyUserId(ME);
+        useChatStore.getState().hydrateRooms([room("s", { unreadCount: 3 })]);
+      });
+      expect(chipKeys()).not.toContain("mentions");
+      // Không có bộ lọc vô hình: chip «Tất cả» đang chọn và phòng s hiện ra.
+      expect(chip("all").getAttribute("aria-pressed")).toBe("true");
+      const items = screen.getAllByTestId("chat-room-item");
+      expect(items).toHaveLength(1);
+      expect(items[0]?.textContent).toContain("Phòng s");
+    });
   },
 );
