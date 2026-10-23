@@ -139,9 +139,9 @@ export default {
     viewAll: "Xem danh sách sáng kiến",
     status: {
       submitted: "Đã gửi",
-      under_review: "Đang xem xét",
-      accepted: "Được chấp nhận",
-      rejected: "Không được chấp nhận",
+      under_review: "Đang xét duyệt",
+      accepted: "Được duyệt",
+      rejected: "Từ chối",
     },
     review: "Xét duyệt",
     reviewTitle: "Xét duyệt sáng kiến",

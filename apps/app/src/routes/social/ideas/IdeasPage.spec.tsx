@@ -184,7 +184,7 @@ describe("I4 — `reviewNote` vẽ ĐÚNG giá trị server trả (server đã m
 });
 
 describe("L1 — lọc · rỗng · lỗi", () => {
-  it("lọc «Đang xem xét» ⇒ gửi `status=under_review`; rỗng ⇒ câu RIÊNG của bộ lọc", async () => {
+  it("lọc «Đang xét duyệt» ⇒ gửi `status=under_review`; rỗng ⇒ câu RIÊNG của bộ lọc", async () => {
     listIdeas.mockResolvedValue(pageOf([]));
     renderWithProviders(<IdeasPage />);
     expect(await screen.findByTestId("ideas-empty")).toHaveTextContent(t("ideas.empty"));
