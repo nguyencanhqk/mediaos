@@ -92,6 +92,8 @@ Spec mới `apps/api/test/integration/dashboard-hr-overview-floor.int-spec.ts` d
 
 Tuỳ chọn (còn ngân sách): **D4″** user Z @Department làm ấm `u:Z`, đổi role sang @Team (xoá cache quyền), gọi lại ⇒ 403; **A6** manager chuẩn (`@Team`) + role tuỳ biến `@Department`, U1 ⇒ như A5.
 
+**Bổ sung sau gate FULL (vá finding):** A3/A4 tự làm ấm hàng `Employee:HR_OVERVIEW:co` (`hr` gọi route) và chứng bằng SQL hàng đó `Fresh` còn hạn TRƯỚC khi người giữ @Department gọi — bằng chứng «không đọc hàng chia sẻ» không còn dựa vào thứ tự chạy (`-t`, shuffle). M2 thêm đối chứng ALLOW: `dept` CÓ trên `/dashboard/widgets` (kể cả `include_data`). M3 thêm actor `mgrDept` (manager chuẩn + role tuỳ biến `read:employee@Department`, U1 — chính actor của A6) CÓ trên `/dashboard/manager`. U2b: đối chứng nạp lại catalog thành công + ca bản build contracts thiếu export ⇒ nạp catalog ném lỗi kèm chỉ dẫn.
+
 Bằng chứng RED: chạy spec mới + U1 + U2 trên mã cũ (chỉ thêm test) TRƯỚC khi sửa `src`. Kỳ vọng: đúng các ca **RED** ở bảng đỏ ở mức assertion (U2 đỏ vì lỗi import, được phép vì nằm ở tệp riêng), mọi ca ALLOW xanh. Ghi vào §9.3 TỪNG ca đỏ/xanh trên mã cũ, không chỉ tổng số.
 
 **Mutant ★** (mỗi cái: sửa tạm → chạy → ghi số ca đỏ → hoàn tác):
@@ -106,6 +108,8 @@ Bằng chứng RED: chạy spec mới + U1 + U2 trên mã cũ (chỉ thêm test)
 - M-f BE giữ bản map cục bộ lệch contracts ⇒ U2 đỏ.
 - M-i (chỉ metadata, đối xứng M-b) registry bỏ `HR_OVERVIEW` khỏi `floorIdx` (`dashboard-widget-registry.service.ts:218-221`) ⇒ M1–M3 đỏ; D1, D2, D4′ xanh.
 - M-j engine chọn grant YẾU nhất cho người nhiều grant ⇒ A5 đỏ (nếu đo được mà không sửa `permission/**` ngoài paths thì làm, không thì bỏ — ghi lý do ở §9.3).
+- M-k gỡ kiểm `requireContractFloorMap` ở catalog const ⇒ U2 đỏ (U2b «promise resolved … instead of rejecting»).
+- Sau vá gate: M-g kỳ vọng A3 + A4 đỏ (A4 cũng tự làm ấm hàng `co`); M-c kỳ vọng thêm M2 + M3 (đối chứng ALLOW mới).
 
 ## 7. Lát thi công
 
@@ -124,17 +128,19 @@ Mọi lệnh nặng chạy qua wrapper khoá chung của đợt (`run-heavy.sh A
 ## 8. [OWNER]
 
 - **O1** merge PR (tự tác giả ⇒ `--admin` theo lệ).
-- **O2** deploy API (build contracts + api; KHÔNG migration). API PHẢI lên trước khi WO FE (N2) merge. FE Pages tự lên không đổi hành vi (FE chưa import hằng mới).
+- **O2** deploy API (build contracts + api; KHÔNG migration). API PHẢI lên trước khi WO FE (N2) merge. FE Pages tự lên không đổi hành vi (FE chưa import hằng mới). Catalog const kiểm hằng sàn của bản build contracts lúc nạp module: bản build contracts cũ ⇒ API KHÔNG khởi động (lỗi nêu tên hằng + «build lại packages/contracts trước apps/api») thay vì 500 ở dashboard — gặp thì build contracts rồi khởi động lại, hoặc rollback.
 - **O3** đo sau deploy: `/api/v1/health` trả commit ≥ merge; tài khoản HR: ô «Tổng quan nhân sự» ở rail bảng tin và màn Dashboard HR vẫn có số; một tài khoản nhân viên: route số liệu widget trả 403 (đo qua trình duyệt/nhật ký, không cần dữ liệu PROD trong plan).
 - **O4** mở WO FE N2 sau O3.
 - **Rollback** = `m prod-rollback` API. Không có migration, không đổi dữ liệu, không đổi deps ⇒ quay về bản trước là đủ (FE chưa phụ thuộc hằng mới).
 
 ## 9. Nợ
 
-- **N1 `S4-DASH-HROVERVIEW-COUNT-1`** (BE, paths `apps/api/src/employees/hr-read.*` + `dashboard/**`): đếm `byStatus`/`byOrgUnit`/`headcount` phía DB trong MỘT vị từ scope (method count-only mới của `HrReadService`), bỏ gọi `listHrEmployees` ⇒ hết lệch tổng khi > 100 hồ sơ và hết `canBatch` + audit `view-salary`/`view-identity` mỗi hàng khi cache miss với người xem giữ grant hiện [SUY RA từ M9 — vai chuẩn không có `view-salary` (`0445_s2_hrseed1_hr_perms.sql:28`), phải đo]. Kích hoạt: trước khi số hồ sơ chạm 100.
+- **N1 `S4-DASH-HROVERVIEW-COUNT-1`** (BE, paths `apps/api/src/employees/hr-read.*` + `dashboard/**`): đếm `byStatus`/`byOrgUnit`/`headcount` phía DB trong MỘT vị từ scope (method count-only mới của `HrReadService`), bỏ gọi `listHrEmployees` ⇒ hết lệch tổng khi > 100 hồ sơ và hết `canBatch` + audit `view-salary`/`view-identity` mỗi hàng khi cache miss với người xem giữ grant hiện [SUY RA từ M9 — vai chuẩn không có `view-salary` (`0445_s2_hrseed1_hr_perms.sql:28`), phải đo]. Kích hoạt: trước khi số hồ sơ chạm 100. Bổ sung sau gate: (a) TRƯỚC merge, luồng chính đo số hồ sơ `employee_profiles` chưa xoá mềm của công ty đang chạy so với ngưỡng 100 — chỉ ghi «dưới / đạt ngưỡng», KHÔNG ghi số vào repo; đạt ngưỡng ⇒ N1 thành điều kiện tiên quyết của merge. (b) method đếm mới nhận scope ĐÃ resolve ở gate (một lần resolve cho cả gate lẫn phép đếm): hôm nay gate và `listHrEmployees` resolve scope hai lần, còn khoá cache per-user `u:<id>` không chứa `cacheScope` (`dashboard-widget-cache.service.ts:50-59`), nên đổi vai giữa hai lần resolve có thể ghi số rộng hơn vào hàng `u:<id>` tới hết TTL (cần hai lần đổi vai trong TTL; có từ trước WO này). (c) ca int-spec > 100 hồ sơ chứng Σ `byStatus` = `headcount`.
 - **N2 WO FE** (`apps/app/src/routes/social/feed/components/HrOverviewRailSlot.tsx`): thay vế `update:employee` bằng `hasScope("read:employee", DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW)` (vẫn khớp đúng-bằng, không wildcard); ba spec đỏ theo thiết kế (`HrOverviewRailSlot.spec.tsx` · `.gate.spec.tsx` · `SocialPortalShell.hr-widget.spec.tsx`) — sửa ca theo cổng mới, không nới. Điều kiện: O3 đạt.
-- **N3** Widget anh em vẫn trả số co theo scope cho MGR @Team / EMP @Own, không sàn: `EMPLOYEE_SUMMARY` (`read:employee`, headcount + `byStatus` + `byEmploymentType`; catalog `:377-378`) ⇒ ma trận `permission-matrix-spec.md:394` «tổng user/nhân viên» ghi HR/MGR/EMP «—»; `NEW_EMPLOYEES` (`read:employee`, catalog `:386-387`) + `CONTRACT_EXPIRING` (`view:contract`, employee Own / manager Team; catalog `:388-389`) ⇒ ma trận `:393` ghi MGR/EMP «—». Hàng `:393` đã được Q4 của owner phủ (không mở cho quản lý) ⇒ chỉ hàng `:394` cần owner chốt giá trị sàn. Gieo vào `harness/backlog.mjs` kèm câu hỏi đó: do luồng chính làm khi gộp hot-file của 4 chuỗi, KHÔNG Edit trong worktree này.
+- **N3** Widget anh em vẫn trả số co theo scope cho MGR @Team / EMP @Own, không sàn: `EMPLOYEE_SUMMARY` (`read:employee`, headcount + `byStatus` + `byEmploymentType`; catalog `:377-378`) ⇒ ma trận `permission-matrix-spec.md:394` «tổng user/nhân viên» ghi HR/MGR/EMP «—»; `NEW_EMPLOYEES` (`read:employee`, catalog `:386-387`) + `CONTRACT_EXPIRING` (`view:contract`, employee Own / manager Team; catalog `:388-389`) ⇒ ma trận `:393` ghi MGR/EMP «—». Hàng `:393` đã được Q4 của owner phủ (không mở cho quản lý) ⇒ chỉ hàng `:394` cần owner chốt giá trị sàn. Gieo vào `harness/backlog.mjs` kèm câu hỏi đó: do luồng chính làm khi gộp hot-file của 4 chuỗi, KHÔNG Edit trong worktree này. **Tiền đề mở PR:** luồng chính gieo N3 vào `harness/backlog.mjs` VÀ ghi N3 vào thân PR — thiếu bước này món nợ không có chỗ theo dõi.
 - **N4** Payload widget (`headcount`/`byStatus`/`byOrgUnit`) lệch 6 trường của SPEC-07 §14.8 (`total_active_employees` · `probation_count` · …) — nợ tài liệu/tính năng.
+- **N5** Lỗi hạ tầng khi resolve scope hiện ra như 403: `PermissionService.resolveStrongestScope` bắt lỗi, log `error`, trả `null` (`permission.service.ts:805-814`); `DataScopeService.resolveAndAssert` biến `null` thành 403 «out of permission scope» (`data-scope.service.ts:81-83`). Fail-closed, không rò, nhưng người dùng hợp lệ thấy «không có quyền» khi DB lỗi tạm; ở metadata widget biến mất không báo. Áp cho MỌI caller của `resolveAndAssert`, ngoài `paths` (`permission/**`) ⇒ WO riêng: phân biệt «hạ tầng lỗi» (5xx mã riêng) với «không grant»; metadata trả chỉ báo Degraded.
+- **N6** `dashboard-widget-handlers.service.ts` 792 dòng, sát trần 800: WO kế tiếp đụng tệp này tách gate/fetch `HR_OVERVIEW` sang `dashboard-widget-hr.handlers.ts` theo khuôn `dashboard-widget-{office,recruit,payroll,social}.handlers.ts` TRƯỚC khi thêm mã. Cùng đợt: log chẩn đoán (`debug`, không PII) khi một cổng sàn từ chối — mã widget, scope đang giữ, sàn yêu cầu — dùng chung cho cả 6 cổng sàn (chuỗi 403 hiện là quy ước chung của 6 cổng, giữ nguyên).
 
 ### 9.3 Sổ vết
 
