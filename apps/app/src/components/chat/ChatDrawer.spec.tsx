@@ -11,7 +11,7 @@
  * có thật sự chặn được `Sheet` hay không. Mock thân đi là bỏ mất cả ba.
  */
 import { describe, expect, it, vi, beforeAll, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
@@ -32,6 +32,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 
 const getMessages = vi.fn();
 const getRoom = vi.fn();
+const sendMessage = vi.fn();
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
@@ -41,6 +42,10 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.chatApi,
       getRoom: (...a: unknown[]) => getRoom(...a),
       getMessages: (...a: unknown[]) => getMessages(...a),
+      sendMessage: (...a: unknown[]) => sendMessage(...a),
+      // Hàm thường, KHÔNG `vi.fn()`: `vi.restoreAllMocks()` ở afterEach trả `vi.fn` về rỗng ⇒ ping trả
+      // `undefined` và `.catch` của nó ném ở ca sau.
+      pingTyping: () => Promise.resolve(undefined),
       listRooms: vi.fn().mockResolvedValue([]),
       listRoomFiles: vi.fn().mockResolvedValue([]),
       getPinned: vi.fn().mockResolvedValue([]),
@@ -49,10 +54,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   };
 });
 
-import { useCan } from "@mediaos/web-core";
+import { useAuthStore, useCan } from "@mediaos/web-core";
 import { useChatStore } from "@/stores/chat.store";
 import { useChatDockStore } from "./chat-dock.store";
 import { ChatDrawer } from "./ChatDrawer";
+import { ConversationPanel } from "./ConversationPanel";
 
 const mockUseCan = useCan as unknown as ReturnType<typeof vi.fn>;
 
@@ -148,8 +154,23 @@ beforeEach(() => {
   getRoom.mockResolvedValue({ ...room("a"), members: [], myRole: "member" });
   getMessages.mockReset();
   getMessages.mockResolvedValue([]);
+  sendMessage.mockReset();
+  sendMessage.mockRejectedValue(new Error("mạng đứt"));
   useChatDockStore.getState().resetChatDock();
   useChatStore.getState().resetChatStore();
+  // S20-CHAT-DRAFT-1 — dọn nháp bằng CHÍNH chốt sản phẩm (đổi người đăng nhập), không gọi thẳng store:
+  // ca nào để lại nháp mà chốt reset hỏng thì ca sau đỏ theo, đúng như người dùng sau sẽ thấy.
+  useAuthStore.getState().setUser(
+    {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      companyId: "c",
+      email: "d@x.test",
+      fullName: null,
+      status: "active",
+    },
+    {},
+  );
+  useAuthStore.getState().logout();
 });
 
 afterEach(() => {
@@ -372,8 +393,8 @@ describe("ChatDrawer · Esc nhường cho việc đang dở", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() => expect(screen.queryByText(/Trả lời Trần B/)).toBeNull());
-    // Vế quyết định: một lần Esc = một ý định. Đóng luôn drawer là mất cả tin đang gõ dở
-    // (`MessageComposer` giữ nháp bằng state cục bộ).
+    // Vế quyết định: một lần Esc = một ý định. Đóng luôn drawer là bỏ tệp chờ đang soạn dở (chữ nháp
+    // thì `chat-draft.store` giữ từ S20-CHAT-DRAFT-1, tệp chờ vẫn chỉ ở state cục bộ của `MessageComposer`).
     expect(useChatDockStore.getState().isOpen).toBe(true);
 
     // ĐỐI CHỨNG: hết việc đang dở thì Esc lại đóng bình thường — nếu không, drawer thành cái bẫy.
@@ -406,5 +427,124 @@ describe("ChatDrawer · phòng biến khỏi store", () => {
     await screen.findByTestId("chat-drawer");
 
     expect(useChatDockStore.getState().openRoomIds).toEqual(["a"]);
+  });
+});
+
+describe("ChatDrawer · nháp theo phòng (S20-CHAT-DRAFT-1)", () => {
+  const composerBox = () => screen.getByRole("textbox") as HTMLTextAreaElement;
+  const typeDraft = (value: string) => fireEvent.change(composerBox(), { target: { value } });
+
+  it("gõ dở ở A, ‹ về danh sách ⇒ dòng A hiện «Nháp: …»; mở lại A ⇒ ô soạn còn nguyên", async () => {
+    useChatStore.getState().syncRoomList([room("a", { name: "Nhóm A" })], false);
+    useChatDockStore.getState().openRoom("a");
+    renderDrawer();
+    await screen.findByTestId("chat-drawer-conversation");
+
+    typeDraft("Anh xem giúp báo cáo");
+    fireEvent.click(screen.getByTestId("chat-drawer-back"));
+
+    expect((await screen.findByTestId("chat-room-draft")).textContent).toBe(
+      "Nháp: Anh xem giúp báo cáo",
+    );
+
+    fireEvent.click(screen.getByText("Nhóm A"));
+    await screen.findByTestId("chat-drawer-conversation");
+    expect(composerBox().value).toBe("Anh xem giúp báo cáo");
+  });
+
+  it("khung «đang trả lời» còn sau khi ‹ rồi mở lại phòng", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    useChatStore.getState().syncRoomList([room("a", { name: "Nhóm A" })], false);
+    useChatDockStore.getState().openRoom("a");
+    renderDrawer();
+
+    fireEvent.click(await screen.findByLabelText("Trả lời"));
+    expect(await screen.findByText(/Trả lời Trần B/)).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("chat-drawer-back"));
+    fireEvent.click(await screen.findByText("Nhóm A"));
+
+    expect(await screen.findByText(/Trả lời Trần B/)).toBeTruthy();
+  });
+
+  it("tin đang trả lời bị THU HỒI khi đang ở phòng khác ⇒ quay lại, khung trả lời KHÔNG còn thân tin cũ", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    useChatStore.getState().syncRoomList([room("a", { name: "Nhóm A" })], false);
+    useChatDockStore.getState().openRoom("a");
+    renderDrawer();
+
+    fireEvent.click(await screen.findByLabelText("Trả lời"));
+    expect(await screen.findByText(/Trả lời Trần B/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId("chat-drawer-back"));
+    await screen.findByTestId("chat-room-list");
+
+    // `chat:message-recalled` tới qua WS; lần nạp lại khi mở phòng cũng trả bản ĐÃ che như server thật.
+    const recalledAt = "2026-08-04T10:05:00.000Z";
+    useChatStore
+      .getState()
+      .applyMessageRecalled({ roomId: "a", messageId: seededMessage().id, recalledAt });
+    getMessages.mockResolvedValue([{ ...seededMessage(), body: null, recalledAt }]);
+
+    fireEvent.click(await screen.findByText("Nhóm A"));
+    const composer = await screen.findByTestId("chat-composer");
+    expect(await within(composer).findByText(/Trả lời Trần B/)).toBeTruthy();
+    // Nhất quán với trích dẫn trong `MessageBubble`: tin thu hồi hiện chữ xám, không bao giờ thân cũ.
+    expect(within(composer).queryByText("xin chào")).toBeNull();
+    expect(within(composer).getByText("Tin nhắn đã được thu hồi")).toBeTruthy();
+  });
+
+  it("⤢ sang /chat ⇒ hội thoại cùng phòng ở trang đầy đủ còn NGUYÊN nháp", async () => {
+    useChatStore.getState().syncRoomList([room("a")], false);
+    useChatDockStore.getState().openRoom("a");
+    const drawer = renderDrawer();
+    await screen.findByTestId("chat-drawer-conversation");
+
+    typeDraft("gõ trong drawer");
+    fireEvent.click(screen.getByTestId("chat-drawer-expand"));
+    drawer.unmount();
+
+    // `/chat/A` dựng ĐÚNG `ConversationPanel` này (ChatPage, khe 2) — dựng nó trực tiếp để ca không phụ
+    // thuộc router; thứ được đo là nháp đi theo store dùng chung, không phải cây route.
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <I18nextProvider i18n={i18n}>
+          <ConversationPanel room={room("a")} members={[]} myRole="member" />
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+    expect(composerBox().value).toBe("gõ trong drawer");
+  });
+
+  it("gửi LỖI ⇒ nhãn «Nháp:» còn; gửi THÀNH CÔNG ⇒ ô trống và nhãn biến mất", async () => {
+    useChatStore.getState().syncRoomList([room("a", { name: "Nhóm A" })], false);
+    useChatDockStore.getState().openRoom("a");
+    renderDrawer();
+    await screen.findByTestId("chat-drawer-conversation");
+
+    typeDraft("báo cáo quý");
+    fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Không gửi được tin/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId("chat-drawer-back"));
+    expect((await screen.findByTestId("chat-room-draft")).textContent).toBe("Nháp: báo cáo quý");
+
+    sendMessage.mockImplementation((_roomId: string, body: { clientMessageId: string }) =>
+      Promise.resolve({
+        ...seededMessage(),
+        id: "00000002-1111-4111-8111-111111111112",
+        senderId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        body: "báo cáo quý",
+        roomSeq: 6,
+        clientMessageId: body.clientMessageId,
+      }),
+    );
+    fireEvent.click(screen.getByText("Nhóm A"));
+    await screen.findByTestId("chat-drawer-conversation");
+    fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+    await waitFor(() => expect(composerBox().value).toBe(""));
+
+    fireEvent.click(screen.getByTestId("chat-drawer-back"));
+    await screen.findByTestId("chat-room-list");
+    expect(screen.queryByTestId("chat-room-draft")).toBeNull();
   });
 });

@@ -109,9 +109,13 @@ export const meResponseSchema = z.object({
   fullName: z.string().nullable(),
   status: z.string(),
   /**
-   * non-sensitive + allowlisted sensitive view-caps (action:resourceType) keyed for O(1) FE lookup.
-   * Wildcards included as-is. Sensitive caps are EXCLUDED by default; only a curated allowlist (e.g.
-   * 'view:audit-log') is surfaced as a UI hint — enforcement stays per-resource (PermissionGuard/can()).
+   * S14-SEC-CAPWILDCARD-1 (ADR `DECISIONS-13` §4) — phép CHIẾU quyết định `can()` ở tầng CÔNG TY, keyed
+   * "action:resourceType" cho tra O(1) ở FE: `capabilities[k] === true` ⟺ k ∉ EXCLUDED (action tiền tố
+   * `reveal-`) ∧ `can()` ALLOW k ở tầng công ty cho call-site không khai `requiresReauth`/
+   * `objectGrantRequired` và không khai `isSensitive` trên cặp catalog non-sensitive (khai vậy ⇒ `can()` đòi
+   * ALLOW exact). Khoá KHÔNG BAO GIỜ chứa `*` — grant wildcard được khai triển ở BE thành cặp
+   * literal (BE có ratchet). Cặp sensitive CÓ mặt khi actor giữ ALLOW exact; wildcard không mở cặp sensitive.
+   * Chỉ là GỢI Ý UI — enforcement vẫn per-resource (PermissionGuard/can()). Zod shape không đổi.
    */
   capabilities: z.record(z.boolean()),
   /** true khi role ép 2FA (requires_two_factor) nhưng user CHƯA bật → FE buộc enroll (G16-1, AUTH-003). */
@@ -148,8 +152,10 @@ export const meResponseSchema = z.object({
   /** Role active (user_roles ⋈ roles, chưa xoá/hết hạn). roles không có cột `code` → `name` chính là code. */
   roles: z.array(z.object({ id: z.string().uuid(), name: z.string() })).optional(),
   /**
-   * Union data_scope theo từng cặp ALLOW non-sensitive (BACKEND-03 §15.3 rule 6 — mảng hợp, KHÔNG scalar).
-   * Key = "action:resourceType" (đồng bộ `capabilities`); cặp bị DENY-override KHÔNG xuất hiện. Đã dedupe.
+   * data_scope theo từng cặp (BACKEND-03 §15.3 rule 6 — mảng, KHÔNG scalar). KEYSET === keyset
+   * `capabilities` (cùng phép chiếu, kể cả cặp sensitive có ALLOW exact — S14-SEC-CAPWILDCARD-1); cặp bị
+   * DENY-override KHÔNG xuất hiện. Giá trị = scope của grant đóng góp: ALLOW exact THẮNG, wildcard chỉ khi
+   * cặp không có exact (soi gương `decideStrongestScope`). Đã dedupe.
    */
   scopes: z.record(z.array(z.enum(DATA_SCOPES))).optional(),
   /** Module user thấy ở Home/App-Switcher — TÁI DÙNG ModuleCatalogService.getMyApps() (KHÔNG re-implement). */

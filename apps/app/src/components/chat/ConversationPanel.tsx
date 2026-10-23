@@ -19,6 +19,7 @@ import { ChatEmptyHero } from "./ChatEmptyHero";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { ConversationHeader } from "./ConversationHeader";
 import { MessageComposer, type ComposerSubmitPayload } from "./MessageComposer";
+import { useChatDraftStore } from "./chat-draft.store";
 import { MessageList } from "./MessageList";
 import { TypingIndicator } from "./TypingIndicator";
 import { roomDisplayName } from "./chat-format";
@@ -129,7 +130,28 @@ export function ConversationPanel({
     conversation.reload();
   }, [conversation, exitMessageContext, room.id]);
 
-  const [replyTo, setReplyTo] = useState<StoredChatMessage | null>(null);
+  /**
+   * S20-CHAT-DRAFT-1 — tin đang trả lời là một phần của NHÁP phòng (`chat-draft.store`, chỉ bộ nhớ):
+   * panel này bị tháo mỗi lần đổi phòng, state cục bộ thì khung «đang trả lời» mất theo.
+   */
+  const draftReplyTo = useChatDraftStore((s) => s.drafts[room.id]?.replyTo ?? null);
+  /**
+   * Nháp giữ ẢNH CHỤP lúc bấm «Trả lời»; tin đó có thể bị thu hồi qua WS sau đó (`applyMessageRecalled`
+   * chỉ sửa `messagesByRoom`). Hiển thị bản ĐANG SỐNG trong RAM khi còn — không thì thân cũ sống lại ở
+   * khung trả lời. Tin không còn trong RAM ⇒ dùng ảnh chụp (lần nạp phòng kế tiếp trả bản đã che).
+   */
+  const replyTo = useMemo(
+    () =>
+      draftReplyTo === null
+        ? null
+        : (messages?.find((m) => m.id === draftReplyTo.id) ?? draftReplyTo),
+    [draftReplyTo, messages],
+  );
+  const setDraftReplyTo = useChatDraftStore((s) => s.setReplyTo);
+  const setReplyTo = useCallback(
+    (message: StoredChatMessage | null) => setDraftReplyTo(room.id, message),
+    [room.id, setDraftReplyTo],
+  );
   const [recallTarget, setRecallTarget] = useState<StoredChatMessage | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 

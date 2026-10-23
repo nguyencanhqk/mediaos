@@ -199,7 +199,25 @@ WITH allowlist(action, resource_type) AS (VALUES
   ('approve','bonus-penalty'),
   ('view-payslip','payslip'),
   ('view-own-payslip','payslip'),
-  ('upload','candidate-file')
+  ('upload','candidate-file'),
+  -- plan v4 D-v4-7 (23/10/2026): +17 cap PAYROLL v2 (mig 0571) ⇒ 86 muc, khop SENSITIVE_CAPABILITY_ALLOWLIST
+  ('view','payroll-employee'),
+  ('manage','payroll-employee'),
+  ('view','salary-component'),
+  ('manage','salary-component'),
+  ('view','payroll-template'),
+  ('manage','payroll-template'),
+  ('view','statutory-rate'),
+  ('manage','statutory-rate'),
+  ('view','payroll-advance'),
+  ('manage','payroll-advance'),
+  ('approve','payroll-advance'),
+  ('view-own','payroll-advance'),
+  ('view','payment-batch'),
+  ('manage','payment-batch'),
+  ('view','payroll-budget'),
+  ('manage','payroll-budget'),
+  ('view','payroll-report')
 ),
 live_grants AS (
   SELECT ur.user_id, ur.company_id, p.action, p.resource_type, p.is_sensitive, rp.effect

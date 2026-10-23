@@ -16,6 +16,8 @@
  * getAllowlistedSensitiveCapabilities() (Option B) — 3 cặp view-*:attendance + view:audit-log đã nằm trong
  * SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts). Đây là cờ HIỂN THỊ (UI-hint), KHÔNG phải cổng
  * enforcement — cổng THẬT vẫn là can()/PermissionGuard per-resource ở từng controller.
+ * ⇒ S14-SEC-CAPWILDCARD-1: getCapabilities() nay phát cặp sensitive actor giữ ALLOW exact ⇒ merge Option B
+ * thành no-op (giữ tới `S18-AUTH-CAPALLOWLIST-RETIRE-1`).
  *
  * `feCodes` chỉ để TRẢ RA trường `required_permissions` (FE display) + truy vết — KHÔNG dùng để enforce.
  */
@@ -207,6 +209,10 @@ export const MODULE_APP_METADATA: Readonly<Record<string, ModuleAppMeta>> = {
  * Cặp pair (luôn exact) có thoả capabilities map (key "action:resourceType", có thể chứa wildcard) — mirror
  * PermissionService/guard wildcard match. requiredAny rỗng ⇒ true (HIỆN). caps rỗng (vd getCapabilities lỗi
  * → {} fail-safe) ⇒ chỉ module requiredAny rỗng mới hiện (an toàn, không rò).
+ *
+ * S14-SEC-CAPWILDCARD-1 (ADR `DECISIONS-13`): getCapabilities() không còn phát khoá chứa `*` (ratchet
+ * `permission.capabilities-company-tier.spec.ts` #5) ⇒ 3 vế fallback wildcard là code CHẾT trên payload thật;
+ * GIỮ làm phòng thủ theo tầng (plan §7.2). Cặp sensitive nay tới đây qua grant exact của chính actor.
  */
 export function hasAnyCapability(
   caps: Record<string, boolean>,
