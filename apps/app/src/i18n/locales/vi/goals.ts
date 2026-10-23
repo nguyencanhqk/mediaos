@@ -59,6 +59,22 @@ export default {
     view: {
       tree: "Cây",
       list: "Danh sách",
+      // S20-GOAL-LISTURL-1 — «Của tôi» = GET /me/goals (phụ trách HOẶC chủ thể).
+      mine: "Của tôi",
+    },
+    // S20-GOAL-LISTURL-1 — chip kỳ theo giờ công ty.
+    periodChips: {
+      label: "Kỳ",
+      previous: "Kỳ trước",
+      quarter: "Quý này",
+      year: "Năm nay",
+    },
+    mine: {
+      empty: {
+        title: "Bạn chưa có mục tiêu trong kỳ này",
+        description: "Bạn chưa phụ trách hay sở hữu mục tiêu nào trong kỳ đang chọn.",
+        previousPeriod: "Xem kỳ trước",
+      },
     },
     filters: {
       periodFrom: "Từ ngày",

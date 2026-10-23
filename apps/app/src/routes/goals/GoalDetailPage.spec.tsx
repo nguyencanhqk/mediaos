@@ -86,6 +86,7 @@ vi.mock("@mediaos/web-core", () => {
 
 import { goalApi } from "@mediaos/web-core";
 import { GoalDetailPage } from "./GoalDetailPage";
+import type { GoalDetailTab } from "./goal-list-search";
 
 const mockGetGoal = goalApi.getGoal as ReturnType<typeof vi.fn>;
 const mockListLinkedTasks = goalApi.listLinkedTasks as ReturnType<typeof vi.fn>;
@@ -142,12 +143,35 @@ const LINKED_TASK = {
   isOverdue: false,
 };
 
-function renderPage() {
+/** S20-GOAL-LISTURL-1 — tab do route điều khiển (`?tab=`); harness giữ tab như router làm. */
+function TabHarness({
+  initialTab,
+  onTabChange,
+}: {
+  initialTab: GoalDetailTab;
+  onTabChange: (tab: GoalDetailTab) => void;
+}) {
+  const [tab, setTab] = React.useState<GoalDetailTab>(initialTab);
+  return (
+    <GoalDetailPage
+      goalId="g-1"
+      tab={tab}
+      onTabChange={(next) => {
+        onTabChange(next);
+        setTab(next);
+      }}
+      onEdit={vi.fn()}
+      onBack={vi.fn()}
+    />
+  );
+}
+
+function renderPage(initialTab: GoalDetailTab = "overview", onTabChange = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <I18nextProvider i18n={i18n}>
-        <GoalDetailPage goalId="g-1" onEdit={vi.fn()} onBack={vi.fn()} />
+        <TabHarness initialTab={initialTab} onTabChange={onTabChange} />
       </I18nextProvider>
     </QueryClientProvider>,
   );
@@ -194,6 +218,27 @@ describe("GoalDetailPage — tab lazy", () => {
     expect(mockListLinkedTasks).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("tab", { name: "Công việc gắn" }));
     await waitFor(() => expect(mockListLinkedTasks).toHaveBeenCalledWith("g-1"));
+  });
+});
+
+// ── S20-GOAL-LISTURL-1 (US-GOAL-QL-03 TC3) — tab trên URL ──────────────────────────────────────────
+describe("GoalDetailPage — tab do URL điều khiển", () => {
+  it("(t1) mở với tab=checkins ⇒ tab Lịch sử check-in hiện ngay, sổ check-in được tải", async () => {
+    renderPage("checkins");
+    await waitFor(() => expect(screen.getByText("Tăng doanh thu 20%")).toBeInTheDocument());
+    expect(screen.getByRole("tab", { name: "Lịch sử check-in" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await waitFor(() => expect(mockListUpdates).toHaveBeenCalled());
+  });
+
+  it("(t2) bấm tab ⇒ báo route đổi `tab` (ghi URL), không giữ trạng thái riêng", async () => {
+    const onTabChange = vi.fn();
+    renderPage("overview", onTabChange);
+    await waitFor(() => expect(screen.getByText("Tăng doanh thu 20%")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: /Mục tiêu con/ }));
+    expect(onTabChange).toHaveBeenCalledWith("children");
   });
 });
 

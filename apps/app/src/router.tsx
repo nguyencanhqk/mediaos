@@ -20,6 +20,13 @@ import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
 import { validateProjectWorkspaceSearch } from "@/routes/tasks/workspace-constants";
 import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
 import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
+// S20-GOAL-LISTURL-1 — validateSearch /goals + /goals/$goalId (file thuần TS + hook, không component).
+import {
+  goalListBackSearch,
+  useGoalDetailTab,
+  validateGoalDetailSearch,
+  validateGoalListSearch,
+} from "@/routes/goals/goal-list-search";
 
 // ---------------------------------------------------------------------------
 // Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
@@ -2681,7 +2688,14 @@ const meRoomBookingsRoute = makeModuleRoute(
   MeRoomBookingsPage,
 );
 
-const goalsListRoute = makeModuleRoute("/goals", "goal.list", "GOAL", GoalListPage);
+// S20-GOAL-LISTURL-1 — bộ lọc trên URL; rác ⇒ bỏ, KHÔNG ném (goal-list-search.ts).
+const goalsListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/goals",
+  beforeLoad: authGuard,
+  validateSearch: validateGoalListSearch,
+  component: () => buildModuleRouteContent(getMeta("goal.list"), "GOAL", <GoalListPage />),
+});
 
 const goalNewMeta: RouteMeta = {
   routeKey: "goal.new",
@@ -2750,16 +2764,21 @@ const goalDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/$goalId",
   beforeLoad: authGuard,
+  // S20-GOAL-LISTURL-1 — `?tab=` mở thẳng tab; «Quay lại» về đúng bộ lọc gần nhất của danh sách.
+  validateSearch: validateGoalDetailSearch,
   component: () => {
     const { goalId } = goalDetailRoute.useParams();
     const navigate = useNavigate();
+    const [tab, setTab] = useGoalDetailTab();
     return buildModuleRouteContent(
       goalDetailMeta,
       "GOAL",
       <GoalDetailPage
         goalId={goalId}
+        tab={tab}
+        onTabChange={setTab}
         onEdit={(id) => void navigate({ to: "/goals/$goalId/edit", params: { goalId: id } })}
-        onBack={() => void navigate({ to: "/goals" as "/" })}
+        onBack={() => void navigate({ to: "/goals", search: goalListBackSearch() })}
       />,
     );
   },

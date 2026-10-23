@@ -35,14 +35,16 @@ import { GoalCheckinsTab } from "./components/GoalCheckinsTab";
 import { GoalDecomposeWizard } from "./components/GoalDecomposeWizard";
 import { GoalLinkedTasksTab } from "./components/GoalLinkedTasksTab";
 import { SimpleTable, TabError, TabSkeleton } from "./components/GoalTabPrimitives";
+import type { GoalDetailTab } from "./goal-list-search";
 
 interface GoalDetailPageProps {
   goalId: string;
+  /** S20-GOAL-LISTURL-1 — tab do route giữ trên URL (`?tab=`), F5/link mở thẳng tab. */
+  tab: GoalDetailTab;
+  onTabChange: (tab: GoalDetailTab) => void;
   onEdit: (goalId: string) => void;
   onBack: () => void;
 }
-
-type DetailTab = "overview" | "linked" | "children" | "checkins";
 
 /**
  * GOAL-SCREEN-002/005 (S5-GOAL-FE-1 + FE-2) — chi tiết mục tiêu, 4 tab: Tổng quan · Công việc gắn ·
@@ -56,11 +58,10 @@ type DetailTab = "overview" | "linked" | "children" | "checkins";
  * riêng nút finalize đổi nhãn thành "Mở lại" (đường duy nhất thoát trạng thái đóng băng).
  * Xóa → invalidate list + tree + detail (goalInvalidation) → về danh sách.
  */
-export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) {
+export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: GoalDetailPageProps) {
   const { t } = useTranslation("goals");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<DetailTab>("overview");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
@@ -221,7 +222,7 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
         </div>
       )}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)}>
+      <Tabs value={tab} onValueChange={(v) => onTabChange(v as GoalDetailTab)}>
         <TabsList>
           <TabsTrigger value="overview">{t("detail.tabs.overview")}</TabsTrigger>
           <TabsTrigger value="linked">{t("detail.tabs.linkedTasks")}</TabsTrigger>
@@ -250,9 +251,7 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
       </Tabs>
 
       {checkinOpen && <GoalCheckinDialog goal={goal} onClose={() => setCheckinOpen(false)} />}
-      {decomposeOpen && (
-        <GoalDecomposeWizard goal={goal} onClose={() => setDecomposeOpen(false)} />
-      )}
+      {decomposeOpen && <GoalDecomposeWizard goal={goal} onClose={() => setDecomposeOpen(false)} />}
       {finalizeOpen && (
         <GoalFinalizeDialog
           goal={goal}
