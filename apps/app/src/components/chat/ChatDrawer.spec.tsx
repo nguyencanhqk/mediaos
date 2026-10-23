@@ -11,7 +11,7 @@
  * có thật sự chặn được `Sheet` hay không. Mock thân đi là bỏ mất cả ba.
  */
 import { describe, expect, it, vi, beforeAll, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
@@ -465,6 +465,32 @@ describe("ChatDrawer · nháp theo phòng (S20-CHAT-DRAFT-1)", () => {
     fireEvent.click(await screen.findByText("Nhóm A"));
 
     expect(await screen.findByText(/Trả lời Trần B/)).toBeTruthy();
+  });
+
+  it("tin đang trả lời bị THU HỒI khi đang ở phòng khác ⇒ quay lại, khung trả lời KHÔNG còn thân tin cũ", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    useChatStore.getState().syncRoomList([room("a", { name: "Nhóm A" })], false);
+    useChatDockStore.getState().openRoom("a");
+    renderDrawer();
+
+    fireEvent.click(await screen.findByLabelText("Trả lời"));
+    expect(await screen.findByText(/Trả lời Trần B/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId("chat-drawer-back"));
+    await screen.findByTestId("chat-room-list");
+
+    // `chat:message-recalled` tới qua WS; lần nạp lại khi mở phòng cũng trả bản ĐÃ che như server thật.
+    const recalledAt = "2026-08-04T10:05:00.000Z";
+    useChatStore
+      .getState()
+      .applyMessageRecalled({ roomId: "a", messageId: seededMessage().id, recalledAt });
+    getMessages.mockResolvedValue([{ ...seededMessage(), body: null, recalledAt }]);
+
+    fireEvent.click(await screen.findByText("Nhóm A"));
+    const composer = await screen.findByTestId("chat-composer");
+    expect(await within(composer).findByText(/Trả lời Trần B/)).toBeTruthy();
+    // Nhất quán với trích dẫn trong `MessageBubble`: tin thu hồi hiện chữ xám, không bao giờ thân cũ.
+    expect(within(composer).queryByText("xin chào")).toBeNull();
+    expect(within(composer).getByText("Tin nhắn đã được thu hồi")).toBeTruthy();
   });
 
   it("⤢ sang /chat ⇒ hội thoại cùng phòng ở trang đầy đủ còn NGUYÊN nháp", async () => {

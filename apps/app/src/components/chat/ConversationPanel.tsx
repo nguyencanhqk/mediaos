@@ -134,7 +134,19 @@ export function ConversationPanel({
    * S20-CHAT-DRAFT-1 — tin đang trả lời là một phần của NHÁP phòng (`chat-draft.store`, chỉ bộ nhớ):
    * panel này bị tháo mỗi lần đổi phòng, state cục bộ thì khung «đang trả lời» mất theo.
    */
-  const replyTo = useChatDraftStore((s) => s.drafts[room.id]?.replyTo ?? null);
+  const draftReplyTo = useChatDraftStore((s) => s.drafts[room.id]?.replyTo ?? null);
+  /**
+   * Nháp giữ ẢNH CHỤP lúc bấm «Trả lời»; tin đó có thể bị thu hồi qua WS sau đó (`applyMessageRecalled`
+   * chỉ sửa `messagesByRoom`). Hiển thị bản ĐANG SỐNG trong RAM khi còn — không thì thân cũ sống lại ở
+   * khung trả lời. Tin không còn trong RAM ⇒ dùng ảnh chụp (lần nạp phòng kế tiếp trả bản đã che).
+   */
+  const replyTo = useMemo(
+    () =>
+      draftReplyTo === null
+        ? null
+        : (messages?.find((m) => m.id === draftReplyTo.id) ?? draftReplyTo),
+    [draftReplyTo, messages],
+  );
   const setDraftReplyTo = useChatDraftStore((s) => s.setReplyTo);
   const setReplyTo = useCallback(
     (message: StoredChatMessage | null) => setDraftReplyTo(room.id, message),
