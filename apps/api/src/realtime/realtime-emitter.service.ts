@@ -440,11 +440,11 @@ export class RealtimeEmitterService {
       }
     } catch (err) {
       const { label, ...ctx } = logCtx;
-      this.logger.warn(`${label} failed`, {
-        ...ctx,
-        action,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const detail = { ...ctx, action, error: err instanceof Error ? err.message : String(err) };
+      // `leave` hỏng ⇒ socket ở node KHÁC có thể còn ở room đích (rò) ⇒ `error`; `join` hỏng = fail-closed.
+      if (action === "leave")
+        this.logger.error(`${label} failed — leave toàn cụm không áp`, detail);
+      else this.logger.warn(`${label} failed`, detail);
     }
   }
 

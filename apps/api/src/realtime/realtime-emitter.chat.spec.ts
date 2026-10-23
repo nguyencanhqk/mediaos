@@ -276,6 +276,23 @@ describe("RealtimeEmitterService — cụm CHAT (S7-CHAT-RT-1)", () => {
         `cluster:join:co:${COMPANY}:chatuser:${USER_B}>${target}`,
       ]);
     });
+
+    it("🔒 C-5 lệnh toàn cụm NÉM ĐỒNG BỘ: 'leave' ⇒ `error` (sót socket ở node khác là rò) · 'join' ⇒ `warn`", () => {
+      const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+      const warn = vi.mocked(Logger.prototype.warn);
+      const { svc, server } = makeEmitter();
+      server.in.mockImplementation(() => {
+        throw new Error("cluster publish down");
+      });
+
+      expect(() => svc.syncRoomMembership(COMPANY, ROOM, USER_B, "leave")).not.toThrow();
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(warn).not.toHaveBeenCalled();
+
+      expect(() => svc.syncRoomMembership(COMPANY, ROOM, USER_B, "join")).not.toThrow();
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ─── masking: `.parse()` TRƯỚC emit ────────────────────────────────────────────
