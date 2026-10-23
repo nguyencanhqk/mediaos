@@ -36,8 +36,8 @@ export const socialStatsApi = {
    * 🔴 Đi `apiFetchBlob`, KHÔNG `apiFetch`: `apiFetch` đọc thân như JSON và làm hỏng tệp nhị phân. Lỗi
    * (403/400…) vẫn ném `ApiError` như thường vì server chỉ đặt header XLSX ở đường thành công.
    *
-   * ⚠️ `filename` có thể là `null`: API không khai `exposedHeaders` cho `Content-Disposition` nên trình
-   * duyệt giấu header đó khi gọi khác origin — nơi gọi PHẢI có tên dự phòng đuôi `.xlsx`.
+   * ⚠️ `filename` có thể là `null` khi server không gửi `Content-Disposition` (CORS của API expose header
+   * này từ S1-FND-CORS-EXPOSE-1) — nơi gọi PHẢI giữ tên dự phòng đuôi `.xlsx` làm lưới.
    */
   exportEngagement: (query?: FeedEngagementParams): Promise<ApiBlobResult> =>
     apiFetchBlob(`/social/stats/engagement/export${buildQueryString(query ?? {})}`),

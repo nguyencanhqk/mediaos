@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Controller, Get, Header, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
@@ -7,12 +9,14 @@ import { buildCorsOptions } from "./cors-options";
 /**
  * S1-FND-CORS-EXPOSE-1 — `buildCorsOptions` là ĐÚNG đối số `main.ts` truyền vào `app.enableCors`.
  *
- * Hai lớp ca:
+ * Ba lớp ca:
  *  1. Giá trị trả về: `exposedHeaders` có `Content-Disposition`; `origin`/`credentials` GIỮ nguyên
  *     ngữ nghĩa cũ (danh sách cố định tách dấu phẩy + trim, credentials bật) — WO cấm nới.
  *  2. Trên dây (app tối giản, không DB): trình duyệt chỉ cho JS đọc header liệt kê trong
  *     `Access-Control-Expose-Headers` ⇒ đo header đó thật, không chỉ so object. Ca trên route xuất tệp
  *     THẬT của AppModule nằm ở `test/integration/cors-expose-headers.int-spec.ts` (cần lane DB).
+ *  3. Nơi gọi THẬT trong `main.ts` (đọc source): hai lớp trên tự gọi `buildCorsOptions` nên vẫn xanh
+ *     nếu `main.ts` quay về `enableCors({ origin, credentials })` inline — lớp này chặn đúng đột biến đó.
  */
 
 const ALLOWED = "http://app.cors.test";
@@ -81,5 +85,27 @@ describe("buildCorsOptions — trên dây", () => {
     const a = await boot();
     const res = await request(a.getHttpServer()).get("/file").set("Origin", FOREIGN);
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+});
+
+/**
+ * Lớp 3 — KHÔNG import được `main.ts` (cuối tệp `void bootstrap()` khởi động server) nên đọc SOURCE TEXT,
+ * bỏ comment trước khi so (comment trong `main.ts` cũng nhắc `enableCors`) — khuôn
+ * `realtime/setup-websocket-adapter.spec.ts` «main.ts — thứ tự bootstrap».
+ */
+describe("main.ts — nơi gọi enableCors", () => {
+  const source = readFileSync(join(__dirname, "..", "main.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  it("đúng MỘT lời gọi enableCors( và đối số là buildCorsOptions(env.CORS_ORIGIN)", () => {
+    expect(source.match(/\benableCors\s*\(/g) ?? []).toHaveLength(1);
+    expect(source).toMatch(/\bapp\.enableCors\(\s*buildCorsOptions\(\s*env\.CORS_ORIGIN\s*\)\s*\)/);
+  });
+
+  it("buildCorsOptions lấy từ ./config/cors-options (không phải bản sao cục bộ)", () => {
+    expect(source).toMatch(
+      /import\s*\{[^}]*\bbuildCorsOptions\b[^}]*\}\s*from\s*"\.\/config\/cors-options"/,
+    );
   });
 });

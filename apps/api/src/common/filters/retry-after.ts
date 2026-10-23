@@ -13,9 +13,10 @@ import type { ErrorDetail } from "@mediaos/contracts";
  * VÌ SAO HEADER SUY *TỪ* `details` chứ không truyền song song: một nguồn ⇒ body và header không thể
  * lệch nhau. Ai bỏ `details` mà quên header thì header tự biến mất theo.
  *
- * ⚠️ Header này KHÔNG tới được trình duyệt: `main.ts` gọi `enableCors()` mà KHÔNG khai `exposedHeaders`,
- * và `Retry-After` không nằm trong 7 header CORS-safelisted ⇒ `fetch` cross-origin của `apps/auth` không
- * thấy nó. Header phục vụ hạ tầng (proxy/cloudflared/`curl`); ĐƯỜNG TẢI THẬT CHO FE LÀ BODY.
+ * ⚠️ Header này KHÔNG tới được trình duyệt: CORS của API chỉ expose `Content-Disposition`
+ * (`config/cors-options.ts`, S1-FND-CORS-EXPOSE-1) — `Retry-After` vẫn KHÔNG expose và không nằm trong
+ * 7 header CORS-safelisted ⇒ `fetch` cross-origin của `apps/auth` không thấy nó. Header phục vụ hạ tầng
+ * (proxy/cloudflared/`curl`); ĐƯỜNG TẢI THẬT CHO FE LÀ BODY.
  */
 
 /** Tên field trong `ErrorDetail` — FE (`retryAfterSecFromError`) khớp đúng chuỗi này. */

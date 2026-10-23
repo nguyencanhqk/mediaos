@@ -21,8 +21,9 @@
  *
  * KHÔNG tải tệp hỏng: 2xx mà thân rỗng, hoặc là trang HTML / JSON (proxy, SPA fallback trả 200) ⇒ coi là lỗi.
  *
- * Tên tệp: của server nếu đọc được; `Content-Disposition` bị trình duyệt giấu khi gọi khác origin (API chưa
- * khai `exposedHeaders` — plan M15) ⇒ tên dự phòng `social-tuong-tac-<from>_<to>.xlsx` theo `range` đang xem.
+ * Tên tệp: của server nếu đọc được (CORS của API expose `Content-Disposition` từ S1-FND-CORS-EXPOSE-1);
+ * filename null khi server không gửi header ⇒ tên dự phòng `social-tuong-tac-<from>_<to>.xlsx` theo `range`
+ * đang xem — giữ làm lưới.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
