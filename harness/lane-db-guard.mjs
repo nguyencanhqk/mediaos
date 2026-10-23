@@ -18,12 +18,33 @@ import { pathToFileURL } from "node:url";
 
 export const DEFAULT_THRESHOLD = Number(process.env.INT_SKIP_THRESHOLD ?? 20);
 
-const ANSI_RE = /\x1b\[[0-9;]*m/g;
+// MỌI chuỗi CSI (`ESC [ tham-số trung-gian kết`), không chỉ SGR `…m`: renderer TTY của vitest còn in `ESC[2K` /
+// `ESC[1G` trước dòng tổng kết — sót ⇒ không đọc được summary ⇒ strict ĐỎ oan (review S16-SOCIAL-GUARDNOSUMMARY-1).
+const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
 // Turbo tiền tố dòng log: "@mediaos/api:test: ", "@mediaos/contracts:build: " …
 const TURBO_PREFIX_RE = /^@[^\s:]+:[^\s:]+:/;
 
+/** Chữ ký crash HẠ TẦNG — NGUỒN DUY NHẤT: chunk-test.mjs import từ đây để quyết định «được phép chạy lại». */
+export const CRASH_SIGNATURES = [
+  /ERR_IPC_CHANNEL_CLOSED/,
+  /Channel closed/,
+  /Segmentation fault/i,
+  /SIGSEGV/,
+  /3221225477/, // 0xC0000005 ACCESS_VIOLATION (Windows)
+];
+
+/** Tách một dòng log thô thành {stream, line}: stream = tiền tố turbo `@pkg:task`, hoặc "" khi không có tiền tố. */
+function splitLine(rawLine) {
+  const noAnsi = rawLine.replace(ANSI_RE, "");
+  const m = noAnsi.match(TURBO_PREFIX_RE);
+  return {
+    stream: m ? m[0].slice(0, -1) : "",
+    line: (m ? noAnsi.slice(m[0].length) : noAnsi).trim(),
+  };
+}
+
 function cleanLine(rawLine) {
-  return rawLine.replace(ANSI_RE, "").replace(TURBO_PREFIX_RE, "").trim();
+  return splitLine(rawLine).line;
 }
 
 function extractSkipped(segment) {
@@ -57,6 +78,27 @@ export function parseVitestSkips(text) {
   }
 
   return { files, tests };
+}
+
+/**
+ * findUnfinishedStreams(text) → tên các luồng log (tiền tố turbo `@pkg:task`; `(log)` cho log không tiền tố — vitest
+ * trực tiếp / chunk-runner) có chữ ký crash hạ tầng mà SAU nó KHÔNG còn dòng `Test Files` nào trong cùng luồng; sắp xếp.
+ * Dòng tổng kết của luồng/chunk KHÁC không chứng minh luồng này chạy xong (summary MỘT PHẦN). Crash rồi được chạy lại có
+ * summary ⇒ summary đứng sau ⇒ không tính. Giới hạn: chunk-runner chia đôi mà nửa SAU xanh che nửa trước chết — check.sh
+ * bù bằng `--runner-status` (chunk-test.mjs exit 1 khi còn crash không cứu được).
+ */
+export function findUnfinishedStreams(text) {
+  if (typeof text !== "string" || text.length === 0) return [];
+  const open = new Map(); // luồng → true khi crash cuối cùng CHƯA có `Test Files` đứng sau
+  for (const rawLine of text.split(/\r?\n/)) {
+    const { stream, line } = splitLine(rawLine);
+    if (line.startsWith("Test Files")) open.set(stream, false);
+    else if (CRASH_SIGNATURES.some((re) => re.test(line))) open.set(stream, true);
+  }
+  return [...open]
+    .filter(([, isOpen]) => isOpen)
+    .map(([stream]) => stream || "(log)")
+    .sort();
 }
 
 /** shouldWarn(n, threshold) — n là số nguyên đã biết (KHÔNG null); so ngưỡng thuần. */
@@ -212,6 +254,8 @@ function decideStorage({
  *                                  deny-path đã chạy như CI; số skip còn lại là RED-placeholder cố ý).
  *     - skippedFiles > threshold  → 'warn' (strict → 'red'): banner LOUD.
  *     - còn lại                   → 'ok'.
+ *     - RỒI, có summary nhưng lượt CHƯA xong — runnerStatus đã truyền mà ≠ 0 (hoặc không phải số), hay
+ *       unfinishedStreams không rỗng (findUnfinishedStreams) ⇒ nâng lên 'warn' (strict → 'red'), nối lý do.
  */
 export function decideGate({
   skippedFiles,
@@ -223,8 +267,17 @@ export function decideGate({
   storageCalls,
   expectedRunFiles,
   storageRunFiles,
+  runnerStatus,
+  unfinishedStreams,
 } = {}) {
-  const laneGate = decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict });
+  const laneGate = decideLaneDbGate({
+    skippedFiles,
+    laneDbSet,
+    threshold,
+    strict,
+    runnerStatus,
+    unfinishedStreams,
+  });
   const storageGate = decideStorage({
     storageSkips,
     storageRuns,
@@ -240,7 +293,39 @@ export function decideGate({
   return { level: laneGate.level, message: `${laneGate.message} · ${storageGate.message}` };
 }
 
-function decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict }) {
+/** Lý do lượt test CHƯA xong dù đã có dòng tổng kết; `null` khi không có dấu hiệu nào. */
+function describeUnfinished(runnerStatus, unfinishedStreams) {
+  const why = [];
+  if (Array.isArray(unfinishedStreams) && unfinishedStreams.length > 0) {
+    why.push(`crash hạ tầng KHÔNG có dòng tổng kết theo sau ở: ${unfinishedStreams.join(", ")}`);
+  }
+  if (runnerStatus !== undefined && runnerStatus !== 0) {
+    why.push(`runner test thoát mã ${runnerStatus} (đỏ thật hoặc chết giữa chừng)`);
+  }
+  return why.length > 0 ? why.join(" · ") : null;
+}
+
+function decideLaneDbGate({
+  skippedFiles,
+  laneDbSet,
+  threshold,
+  strict,
+  runnerStatus,
+  unfinishedStreams,
+}) {
+  const base = decideFromSummary({ skippedFiles, laneDbSet, threshold, strict });
+  // Summary vắng đã là warn/red với lý do riêng. Có summary ⇒ vẫn phải chứng minh lượt đã XONG (review: summary MỘT PHẦN
+  // — một chunk/package in tổng kết, chunk/package khác chết không cứu được — từng được chứng nhận «chạy đầy đủ»).
+  const unfinished = describeUnfinished(runnerStatus, unfinishedStreams);
+  if (unfinished === null || skippedFiles === null || skippedFiles === undefined) return base;
+  const tail = `${unfinished} — dòng tổng kết vitest KHÔNG chứng minh bộ test đã chạy xong`;
+  return {
+    level: strict ? "red" : "warn",
+    message: base.level === "ok" ? tail : `${base.message} · ${tail}`,
+  };
+}
+
+function decideFromSummary({ skippedFiles, laneDbSet, threshold, strict }) {
   // S16-SOCIAL-GUARDNOSUMMARY-1: summary vắng xét TRƯỚC LANE_DB — LANE_DB chỉ chứng minh int-spec KHÔNG bị skip vì
   // thiếu DB, không chứng minh bộ test đã chạy XONG (lượt chết `Channel closed` giữa chừng vẫn có LANE_DB).
   if (skippedFiles === null || skippedFiles === undefined) {
@@ -256,7 +341,7 @@ function decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict }) {
   if (laneDbSet) {
     return {
       level: "ok",
-      message: `LANE_DB đã set — int-spec chạy đầy đủ (skipped files=${skippedFiles}).`,
+      message: `LANE_DB đã set — có dòng tổng kết vitest, không thấy dấu lượt chạy dở (skipped files=${skippedFiles}).`,
     };
   }
 
@@ -271,7 +356,9 @@ function decideLaneDbGate({ skippedFiles, laneDbSet, threshold, strict }) {
 }
 
 // ── CLI: `node harness/lane-db-guard.mjs <logfile> --lane-db-set=0|1 --threshold=N --strict=0|1 [--fail-unless-ok=1]
-//        [--expect-run-files=<manifest.json>]` ──
+//        [--expect-run-files=<manifest.json>] [--runner-status=<mã thoát runner>]` ──
+// `--runner-status` (check.sh truyền `$vitest_status`): ≠ 0 ⇒ không chứng nhận «xong»; giá trị không phải số nguyên
+// không âm ⇒ cũng coi là ≠ 0 (fail-closed, KHÔNG để `Number("")` = 0 thành xanh).
 // In kết quả từng dòng `KEY:value` (KHÔNG JSON) để bash check.sh đọc bằng grep/cut, tránh phụ thuộc
 // parser JSON trong bash.
 function runCli(argv) {
@@ -291,6 +378,11 @@ function runCli(argv) {
   // S16-SOCIAL-STORAGETESTGATE-1 (D-6/D-8): CI cần mã thoát thay cho bash tự grep/cut. Mặc định GIỮ exit 0
   // (check.sh đọc LEVEL rồi tự quyết) — chỉ cờ này mới biến LEVEL ≠ ok thành exit 1.
   const failUnlessOk = flags["fail-unless-ok"] === "1";
+  const rawRunnerStatus = flags["runner-status"];
+  const runnerStatus =
+    rawRunnerStatus === undefined || !/^\d+$/.test(rawRunnerStatus)
+      ? rawRunnerStatus
+      : Number(rawRunnerStatus);
 
   const failNoEvidence = (message) => {
     console.log(`LEVEL:${strict ? "red" : "warn"}`);
@@ -334,6 +426,8 @@ function runCli(argv) {
     storageCalls: storage.calls,
     expectedRunFiles,
     storageRunFiles: parseStorageRunFiles(text),
+    runnerStatus,
+    unfinishedStreams: findUnfinishedStreams(text),
   });
 
   console.log(`LEVEL:${gate.level}`);

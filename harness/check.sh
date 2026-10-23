@@ -157,15 +157,18 @@ GUARD_LEVEL=""
 GUARD_MESSAGE=""
 GUARD_STORAGE=""
 
-# run_lane_db_guard <guard.mjs> <log> <lane_db_set 0|1> <threshold> <strict 0|1> [<manifest.json>]
+# run_lane_db_guard <guard.mjs> <log> <lane_db_set 0|1> <threshold> <strict 0|1> [<manifest.json>] [<runner_status>]
+# <runner_status> = mã thoát của runner test (vitest/turbo/chunk-test): ≠ 0 ⇒ guard KHÔNG chứng nhận lượt đã chạy xong
+# dù log có dòng tổng kết một phần (review S16-SOCIAL-GUARDNOSUMMARY-1).
 # Đặt GUARD_LEVEL / GUARD_MESSAGE / GUARD_STORAGE. Node sập (thiếu tệp, throw, OOM) hay in LEVEL rỗng/lạ ⇒ KHÔNG được
 # rơi về «XANH ✅» (cổng LIGHT F1 silent-failure-hunter): red khi strict, warn khi không — kèm lý do. Hàm đứng riêng để
 # harness/lane-db-guard.test.mjs trích đúng đoạn này (sed theo tên hàm) mà chạy các đường hỏng.
 run_lane_db_guard() {
-  local guard="$1" log="$2" lane_db_set="$3" threshold="$4" strict="$5" manifest="${6:-}"
+  local guard="$1" log="$2" lane_db_set="$3" threshold="$4" strict="$5" manifest="${6:-}" runner_status="${7:-}"
   local out rc=0
   local -a extra=()
-  [ -n "$manifest" ] && extra=("--expect-run-files=$manifest")
+  [ -n "$manifest" ] && extra+=("--expect-run-files=$manifest")
+  [ -n "$runner_status" ] && extra+=("--runner-status=$runner_status")
   out="$(node "$guard" "$log" --lane-db-set="$lane_db_set" --threshold="$threshold" --strict="$strict" ${extra[@]+"${extra[@]}"})" || rc=$?
   GUARD_LEVEL="$(printf '%s\n' "$out" | grep '^LEVEL:' | head -n 1 | cut -d: -f2-)"
   GUARD_MESSAGE="$(printf '%s\n' "$out" | grep '^MESSAGE:' | head -n 1 | cut -d: -f2-)"
@@ -267,7 +270,7 @@ if [ "$RUN_TEST" = 1 ]; then
     local lane_db_set=0
     [ -n "${LANE_DB:-}" ] && lane_db_set=1
 
-    run_lane_db_guard harness/lane-db-guard.mjs "$TEST_LOG" "$lane_db_set" "$INT_SKIP_THRESHOLD" "$strict" "$STORAGE_SPEC_MANIFEST"
+    run_lane_db_guard harness/lane-db-guard.mjs "$TEST_LOG" "$lane_db_set" "$INT_SKIP_THRESHOLD" "$strict" "$STORAGE_SPEC_MANIFEST" "$vitest_status"
     # S16-SOCIAL-STORAGETESTGATE-1 (D-6): số ca storage bỏ qua / tệp chạy / lời gọi bị chặn — in để thấy bằng chứng.
     echo "[check.sh] lane-db-guard STORAGE: $GUARD_STORAGE"
 

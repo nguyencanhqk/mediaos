@@ -420,7 +420,7 @@ test("LIGHT-F2 CLI manifest vắng / rỗng / sai kiểu ⇒ red + exit 1 (khôn
 });
 
 /** Chạy ĐÚNG hàm run_lane_db_guard trích từ harness/check.sh (không chạy cả check.sh). */
-function runCheckShGuard({ guardPath, logText, strict, manifest = "" }) {
+function runCheckShGuard({ guardPath, logText, strict, manifest = "", runnerStatus = "" }) {
   const fn = readFileSync(CHECK_SH, "utf8")
     .replace(/\r/g, "")
     .match(/^run_lane_db_guard\(\) \{\n[\s\S]*?\n\}\n/m)?.[0];
@@ -431,12 +431,12 @@ function runCheckShGuard({ guardPath, logText, strict, manifest = "" }) {
   const script = [
     "set -uo pipefail",
     fn,
-    'run_lane_db_guard "$G" "$L" 1 20 "$ST" "$MF"',
+    'run_lane_db_guard "$G" "$L" 1 20 "$ST" "$MF" "$RS"',
     'printf \'LEVEL=%s\\nMESSAGE=%s\\n\' "$GUARD_LEVEL" "$GUARD_MESSAGE"',
   ].join("\n");
   const res = spawnSync("bash", ["-c", script], {
     encoding: "utf8",
-    env: { ...process.env, G: guardPath, L: log, ST: String(strict), MF: manifest },
+    env: { ...process.env, G: guardPath, L: log, ST: String(strict), MF: manifest, RS: runnerStatus },
   });
   const out = res.stdout ?? "";
   const pick = (k) =>
@@ -613,4 +613,100 @@ test("NOSUMMARY check.sh: log không summary nào (mọi chunk chết / runner c
   assert.equal(red.level, "red", red.message + red.stderr);
   const warn = runCheckShGuard({ guardPath: GUARD_CLI, logText, strict: 0, manifest: MANIFEST });
   assert.equal(warn.level, "warn", warn.message + warn.stderr);
+});
+
+// ══ S16-SOCIAL-GUARDNOSUMMARY-1 (review) — summary MỘT PHẦN không được chứng nhận «chạy đầy đủ» ══
+// (a) chunk-runner: chunk 1/2 in summary, chunk 2/2 chết `Channel closed` không cứu được · (b) turbo: contracts in
+// summary, api chết không summary. Mã cũ: --strict=1 --lane-db-set=1 ⇒ LEVEL:ok. Luồng log = tiền tố turbo, hoặc
+// «(log)» khi không tiền tố; crash có summary ĐỨNG SAU trong cùng luồng (chạy lại xanh) ⇒ không tính.
+const allRunLabels = (prefix = "") =>
+  manifestFiles().map((file) => `${prefix}${runLabel({ file, bucket: "mediaos-test" })}`);
+const CHUNK_SECOND_CRASHED_UNRESCUED = [
+  "──▶ @mediaos/api: 4 file spec → 2 chunk",
+  "  ── @mediaos/api chunk 1/2 (2 file)",
+  ...allRunLabels(),
+  ...SUMMARY,
+  "  ── @mediaos/api chunk 2/2 (2 file)",
+  `${ESC}[31m${ESC}[1mError${ESC}[22m: Channel closed${ESC}[39m`,
+  "  ❌ @mediaos/api chunk 2/2 (2 file): crash hạ tầng KHÔNG cứu được — 2 file:",
+  "═══════════ KẾT QUẢ CHUNK-TEST ═══════════",
+  "  ❌ @mediaos/api: 2/4 file chạy · 2 file crash không cứu được",
+  "═════════ ĐỎ ❌ — xem chi tiết từng chunk ở trên ═════════",
+].join("\n");
+const TURBO_ONE_PKG_CRASHED = [
+  ...FIXTURE_ZERO_SKIP.split("\n"),
+  ...allRunLabels("@mediaos/api:test: "),
+  FIXTURE_CRASH_NO_SUMMARY,
+].join("\n");
+const unfinished = (text) => guard.findUnfinishedStreams(text);
+
+test("REVIEW findUnfinishedStreams: (a) chunk chết sau summary ⇒ (log) · (b) turbo ⇒ @mediaos/api:test · chạy lại/đủ ⇒ []", () => {
+  assert.deepEqual(unfinished(CHUNK_SECOND_CRASHED_UNRESCUED), ["(log)"]);
+  assert.deepEqual(unfinished(TURBO_ONE_PKG_CRASHED), ["@mediaos/api:test"]);
+  assert.deepEqual(unfinished(CHUNK_CRASHED_THEN_RERUN), []);
+  assert.deepEqual(unfinished(FIXTURE_NO_LANE_DB), []);
+  assert.deepEqual(unfinished(""), []);
+});
+
+test("REVIEW CLI: summary MỘT PHẦN (a)/(b) + đủ nhãn run, strict + LANE_DB ⇒ LEVEL:red exit 1 (mã cũ ok)", () => {
+  for (const log of [CHUNK_SECOND_CRASHED_UNRESCUED, TURBO_ONE_PKG_CRASHED]) {
+    const r = runGuardCli(log, [...STRICT_LANE, `--expect-run-files=${MANIFEST}`]);
+    assert.equal(r.level, "red", r.stdout);
+    assert.equal(r.status, 1);
+    assert.doesNotMatch(r.stdout, /chạy đầy đủ/);
+  }
+  const warn = runGuardCli(TURBO_ONE_PKG_CRASHED, ["--strict=0", "--lane-db-set=1"]);
+  assert.equal(warn.level, "warn", warn.stdout);
+  assert.equal(warn.status, 0);
+});
+
+test("REVIEW CLI đối chứng chạy lại: chunk chết rồi chạy lại có summary ⇒ LEVEL:ok (KHÔNG đỏ oan)", () => {
+  const r = runGuardCli(CHUNK_CRASHED_THEN_RERUN, ["--strict=1", "--lane-db-set=1", "--fail-unless-ok=1"]);
+  assert.equal(r.level, "ok", r.stdout);
+  assert.equal(r.status, 0);
+});
+
+test("REVIEW decideGate runnerStatus: ≠0 (hoặc không phải số) ⇒ red strict / warn · 0 hoặc vắng ⇒ ok như cũ", () => {
+  const base = { skippedFiles: 0, laneDbSet: true, threshold: 20 };
+  assert.equal(decideGate({ ...base, strict: true, runnerStatus: 1 }).level, "red");
+  assert.equal(decideGate({ ...base, strict: false, runnerStatus: 1 }).level, "warn");
+  assert.equal(decideGate({ ...base, strict: true, runnerStatus: "x" }).level, "red");
+  assert.equal(decideGate({ ...base, strict: true, runnerStatus: 0 }).level, "ok");
+  assert.equal(decideGate({ ...base, strict: true }).level, "ok");
+  const over = decideGate({ skippedFiles: 50, laneDbSet: false, strict: true, runnerStatus: 1 });
+  assert.equal(over.level, "red");
+  assert.match(over.message, /50 int-spec SKIPPED/);
+  assert.match(over.message, /thoát mã 1/);
+});
+
+test("REVIEW thông điệp ok: LANE_DB + có summary KHÔNG còn khẳng định «chạy đầy đủ»", () => {
+  const ok = decideGate({ skippedFiles: 1, laneDbSet: true, strict: true });
+  assert.equal(ok.level, "ok");
+  assert.doesNotMatch(ok.message, /chạy đầy đủ/);
+  assert.match(ok.message, /dòng tổng kết vitest/);
+});
+
+test("REVIEW check.sh: run_lane_db_guard nhận mã thoát runner (đối số 7) · run_test_with_guard truyền $vitest_status", () => {
+  const full = runLog(manifestFiles());
+  const at = (rs) => runCheckShGuard({ guardPath: GUARD_CLI, logText: full, strict: 1, manifest: MANIFEST, runnerStatus: rs });
+  assert.equal(at("1").level, "red");
+  assert.match(at("1").message, /thoát mã 1/);
+  assert.equal(at("0").level, "ok");
+  assert.equal(at("").level, "ok");
+  const src = readFileSync(CHECK_SH, "utf8");
+  assert.match(src, /run_lane_db_guard harness\/lane-db-guard\.mjs [^\n]*"\$vitest_status"/);
+});
+
+test("REVIEW ANSI: dòng summary có tiền tố CSI khác SGR (\x1b[2K, \x1b[1G) vẫn được đọc ⇒ strict + LANE_DB ok", () => {
+  const log = [...allRunLabels(), `${ESC}[2K${ESC}[1G${SUMMARY[0]}`, `${ESC}[2K${SUMMARY[1]}`].join("\n");
+  assert.deepEqual(parseVitestSkips(log), { files: 0, tests: 2 });
+  assert.equal(runGuardCli(log, [...STRICT_LANE, `--expect-run-files=${MANIFEST}`]).level, "ok");
+});
+
+test("REVIEW chữ ký crash MỘT nguồn: chunk-test.mjs import CRASH_SIGNATURES từ lane-db-guard.mjs, không tự khai", () => {
+  assert.ok(Array.isArray(guard.CRASH_SIGNATURES) && guard.CRASH_SIGNATURES.length >= 5);
+  assert.ok(guard.CRASH_SIGNATURES.some((re) => re.test("Error: Channel closed")));
+  const src = readFileSync(fileURLToPath(new URL("./chunk-test.mjs", import.meta.url)), "utf8");
+  assert.match(src, /import \{[^}]*\bCRASH_SIGNATURES\b[^}]*\} from "\.\/lane-db-guard\.mjs";/);
+  assert.doesNotMatch(src, /const CRASH_SIGNATURES\s*=/);
 });
