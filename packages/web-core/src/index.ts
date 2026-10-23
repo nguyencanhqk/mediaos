@@ -377,6 +377,27 @@ export {
   formatCurrency,
 } from "./i18n/format";
 
+// S20-FE-COMPANYTZ-1 — giờ CÔNG TY cho mốc nghiệp vụ («hôm nay», quý, năm, hạn 17:00). Hàm thuần nhận
+// `now`/ngày local + `timeZone`; màn truyền `companyTimeZone()`, không viết cứng tên múi giờ.
+export {
+  companyTimeZone,
+  assertTimeZone,
+  partsIn,
+  localDateOf,
+  localTimeOf,
+  addDaysToLocalDate,
+  wallTimeToInstant,
+  todayLocal,
+  isSameLocalDay,
+  startOfLocalDay,
+  endOfLocalDay,
+  deadlineAt,
+  quarterRange,
+  yearRange,
+  type LocalParts,
+  type LocalDateRange,
+} from "./lib/company-time";
+
 // S5-BRAND-FE-1 — thương hiệu công ty (logo + favicon) + helper upload storage dùng chung.
 export {
   brandingApi,

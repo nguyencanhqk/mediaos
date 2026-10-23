@@ -9,6 +9,10 @@ import { useAuthStore } from "../stores/auth";
  *   2. action wildcard:      *:resourceType
  *   3. resource wildcard:    action:*
  *   4. full wildcard:        *:*
+ *
+ * S14-SEC-CAPWILDCARD-1 (ADR `DECISIONS-13`): BE không còn phát khoá chứa `*` (ratchet BE
+ * `permission.capabilities-company-tier.spec.ts` #5 + `capability-star-key-pin.unit-spec.ts`) ⇒ vế 2–4 là
+ * code CHẾT trên payload thật. GIỮ có chủ đích (plan §7.2): phòng thủ theo tầng nếu BE tái sinh khoá `*`.
  */
 export function useCan(action: string, resourceType: string): boolean {
   return useAuthStore((s) => {

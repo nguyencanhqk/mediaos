@@ -15589,6 +15589,7 @@ export const backlog = [
       "apps/api/test/**",
       "docs/plans/**",
       "harness/backlog.mjs",
+      "apps/console/**",
     ],
     skills: ["code-review"],
     depends_on: ["S14-SEC-DASHGATE-WILDCARD-1"],
@@ -15614,6 +15615,7 @@ export const backlog = [
       "Memory liên quan: sensitive-pair-widget-needs-usecanexact · sensitive-capability-allowlist-is-backend · capability-allowlist-hides-admin-screens.",
       "Census PROD 16/10/2026 ~16:05 ICT (đọc-chỉ, ROLLBACK, chỉ số tổng hợp): Q1 = 0 (không actor nào giữ wildcard ALLOW) · Q3 = 0 · Q6 = 0 (qua) · Q4a = 86 (allowlist trong file census gốc `docs/plans/S14-SEC-CAPWILDCARD-1.census.sql` còn 69 ⇒ cập nhật allowlist trong file đó) · Q4 = 71 cặp — chi tiết lưu ngoài repo (máy PROD), gồm cả cặp lớp reveal/step-up ⇒ đọc trước khi code theo plan §12. Repo công khai: PR chỉ ghi số tổng hợp, KHÔNG liệt kê cặp.",
       "Owner chốt 23/10/2026 (phiếu quyết định đợt 23/10, phương án khuyến nghị): CW-1 giữ thiết kế v2, nới EXCLUDED + ratchet từ `reveal-secret` sang tiền tố `reveal-` · CW-2 cho hiện nút nhạy cảm cho người mà BE đã cho phép (đúng ADR DECISIONS-13, không dựng lại danh sách ẩn tay ở FE) · CW-3 mở ngay sau đợt song song hiện tại, lane riêng, chỉ deploy API (không migration, rollback bằng git revert). Census PROD 16/10 đã chạy: Q1 = 0 · Q3 = 0 · Q6 = 0 · Q4 = 71 cặp chia 7 nhóm — không nhóm nào đòi đổi kiến trúc. Làm kèm: cập nhật `census.sql` 69 → 86 mục; khi code đo lại các cặp seed sau 16/10 (plan §9.4). Ước ~380 USD (300–520), trần 600 USD gồm FULL gate + santa. Gỡ chặn: `status` blocked → todo. Gieo kèm WO chỉ-đọc `S14-SEC-OPPLANEPAIRS-1`.",
+      "📌 23/10/2026 tối — PR #627 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). FULL gate + santa hội tụ; check.sh --all lane cw: 1 ca đỏ do môi trường (prepipe-500 cần Valkey — đo đối chứng trên nhánh không đụng permission), 25 tệp chunk chết đã chạy lại xanh. Deploy API CÙNG NGÀY merge. Nợ N-G1…N-G9 ⇒ `S14-SEC-CAPWILDCARD-DEBT-1`. Đã nới paths `apps/console/**` theo plan §13.1.",
     ],
   },
   {
@@ -23429,6 +23431,7 @@ export const backlog = [
     notes: [
       "🟢 Seed 23/10/2026 từ S20-WORKUX Đợt 1A, owner duyệt qua trang duyệt 12:27–12:29. Nền phản hồi ghi cho các WO S20 TASK · GOAL · CHAT. Ước 40–60 USD (trần xanh ≤80 USD).",
       "Ưu tiên không thêm dependency; nếu thêm thì làm trong worktree (API PROD chạy trên `node_modules` của checkout chính) và mở rộng `paths` sang `packages/ui/package.json` + `pnpm-lock.yaml` ở L0 (commit backlog riêng).",
+      "📌 23/10/2026 tối — PR #617 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng A #617 → #618 → #619 → #620 → #621 → #622 (merge đúng thứ tự). Kèm commit sửa `notifications-router-flow.spec` (vùng toast trùng nhãn chuông) dời từ nhánh DRAWER về đây.",
     ],
   },
   {
@@ -23464,6 +23467,7 @@ export const backlog = [
     ],
     notes: [
       "🟢 Seed 23/10/2026 từ S20-WORKUX Đợt 1A, owner duyệt qua trang duyệt 12:27–12:29. Nền giờ công ty cho S20-TASK-MYTASKS-1 · S20-TASK-QUICKEDIT-1 · S20-GOAL-LISTURL-1 · S20-GOAL-QUICKSTART-1 · S20-DASH-TODAY-1; khi `/auth/me` trả `company.timezone` chỉ sửa thân một hàm. Ước 30–50 USD (trần xanh ≤80 USD).",
+      "📌 23/10/2026 tối — PR #623 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). Độc lập (cắt từ master), merge bất kỳ lúc nào.",
     ],
   },
   {
@@ -23598,6 +23602,15 @@ export const backlog = [
       "apps/app/src/i18n/locales/vi/tasks.ts",
       "docs/plans/**",
       "harness/backlog.mjs",
+      "apps/app/src/components/notifications/NotificationBadge.tsx",
+      "apps/app/src/components/notifications/NotificationDropdown*.tsx",
+      "apps/app/src/routes/goals/GoalDetailPage.spec.tsx",
+      "apps/app/src/routes/notifications/notifications-router-flow.spec.tsx",
+      "apps/app/src/routes/tasks/task-drawer-nav*.ts",
+      "apps/app/src/routes/tasks/TaskListToolbar.tsx",
+      "apps/app/src/routes/tasks/use-task-list-search.ts",
+      "apps/app/src/i18n/locales/vi/tasks-workux.ts",
+      "apps/app/src/i18n/index.ts",
     ],
     skills: ["code-review"],
     depends_on: [],
@@ -23616,6 +23629,7 @@ export const backlog = [
     notes: [
       "🟢 Seed 23/10/2026 từ S20-WORKUX Đợt 1A, owner duyệt qua trang duyệt 12:27–12:29. Nền drawer việc + URL làm trạng thái cho S20-TASK-MYTASKS-1 · S20-X-QUICKCREATE-1 · S20-DASH-TODAY-1. Hai story M ⇒ ước 70–80 USD, sát trần xanh 80 USD: plan L0 ước vượt thì tách phần bộ lọc URL thành WO riêng.",
       "Chung `NotificationTargetLink.tsx` với S20-CHAT-DEEPLINK-1 và `MyTasksPage.tsx`/`router.tsx` với các WO TASK S20 ⇒ không chạy song song; sau lần chạm đầu đọc «Tiêu điểm phiên» của STATUS.",
+      "📌 23/10/2026 tối — PR #618 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng A #617 → #618 → #619 → #620 → #621 → #622 (merge đúng thứ tự). Đo trình duyệt thật lần 1 trượt KPI #9 (a) và (c) ⇒ vá + đo lại 8/8. Phần (2b) toolbar/rail workspace dự án lên URL CHƯA làm ⇒ tách `S20-TASK-PROJTOOLBARURL-1`.",
     ],
   },
   {
@@ -23956,6 +23970,8 @@ export const backlog = [
       "apps/app/src/i18n/locales/vi/chat.ts",
       "docs/plans/**",
       "harness/backlog.mjs",
+      "apps/app/src/components/chat/ConversationPanel*.tsx",
+      "apps/app/src/components/chat/ComposerNotices*.tsx",
     ],
     skills: ["code-review"],
     depends_on: [],
@@ -23970,6 +23986,7 @@ export const backlog = [
     ],
     notes: [
       "🟢 Seed 23/10/2026 từ S20-WORKUX Đợt 1B, owner duyệt qua trang duyệt 12:27–12:29. Ước 30–60 USD (khung xanh ≤80 USD). Store nháp là nền cho phím tắt của S20-CHAT-UNREADNAV-1 và điểm điền sẵn của US-GOAL-QL-13 (Đợt 2); plan mở rộng `paths` ở L0 tới điểm đăng xuất/đổi phiên nếu reset phải móc ở đó.",
+      "📌 23/10/2026 tối — PR #624 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng B #624 → #625 → #626 (merge đúng thứ tự). Hậu kỳ: khung «đang trả lời» tra lại tin trong RAM, tin đã thu hồi không hiện thân cũ.",
     ],
   },
   {
@@ -24109,6 +24126,7 @@ export const backlog = [
     ],
     notes: [
       "🟢 Seed 23/10/2026 từ S20-WORKUX Đợt 1B, owner duyệt qua trang duyệt 12:27–12:29. Ước 50–80 USD (khung xanh ≤80 USD). Cùng `ChatDrawerBody.tsx` với S20-CHAT-DRAFT-1 và S20-CHAT-UNREADNAV-1 — làm tuần tự.",
+      "📌 23/10/2026 tối — PR #625 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng B #624 → #625 → #626 (merge đúng thứ tự). Nợ: BE CHAT-ERR-003 chưa nêu người bị từ chối (contracts) · spec CHAT-SCREEN-002/003 ⇒ `S20-CHAT-DOCSYNC-1`.",
     ],
   },
   {
@@ -24248,6 +24266,7 @@ export const backlog = [
     ],
     notes: [
       "🟢 Seed 23/10/2026 từ S20-WORKUX Đợt 1B, owner duyệt qua trang duyệt 12:27–12:29. Ước 40–70 USD (khung xanh ≤80 USD). `router.tsx` là hot-file: chỉ thêm khối `validateSearch` của /notifications (append, không rewrite).",
+      "📌 23/10/2026 tối — PR #622 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng A #617 → #618 → #619 → #620 → #621 → #622 (merge đúng thứ tự). Nợ BE lọc mức ưu tiên ⇒ `S20-NOTI-PRIORITYFILTER-1`.",
     ],
   },
   {
@@ -24284,6 +24303,7 @@ export const backlog = [
     ],
     notes: [
       "🟢 Seed 23/10/2026 từ S20-WORKUX Đợt 1B, owner duyệt qua trang duyệt 12:27–12:29. Ước 50–80 USD (khung xanh ≤80 USD; M+S sát trần — vượt thì tách NV-11 ra WO riêng). Nên xong trước S20-TASK-LEAVEHANDOFF-1 (Ctrl+Enter cho «Báo người giao»).",
+      "📌 23/10/2026 tối — PR #619 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng A #617 → #618 → #619 → #620 → #621 → #622 (merge đúng thứ tự). Review 1 MEDIUM đã vá; soát chéo xác nhận ca payload chỉ `parentTaskId` vẫn còn.",
     ],
   },
   {
@@ -24314,6 +24334,7 @@ export const backlog = [
     ],
     notes: [
       "🟡 Seed 23/10/2026 từ S20-WORKUX Đợt 1B, owner duyệt qua trang duyệt 12:27–12:29. Ước 60–120 USD (khung vàng ≤250 USD). Luồng task qua route sẵn có; là lối thay cho kéo-thả mà S20-FE-MOBILEDAILY-1 trông vào.",
+      "📌 23/10/2026 tối — PR #620 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng A #617 → #618 → #619 → #620 → #621 → #622 (merge đúng thứ tự). `TaskKanbanPage.tsx` lên 797/800 dòng ⇒ nợ tách ở `S20-TASK-FEDEBT-1`.",
     ],
   },
   {
@@ -24474,6 +24495,7 @@ export const backlog = [
     ],
     notes: [
       "🟢 Seed 23/10/2026 từ S20-WORKUX Đợt 1B, owner duyệt qua trang duyệt 12:27–12:29. Ước 30–60 USD (khung xanh ≤80 USD). Cùng `ProjectDetailPage`/`workspace-constants` với S7-GOAL-PROJTAB-1 (mở lại, thêm tab `goals`) và S20-CHAT-DISCUSS-1 — làm tuần tự; tab nhớ phải tôn trọng gate của tab `goals`.",
+      "📌 23/10/2026 tối — PR #621 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng A #617 → #618 → #619 → #620 → #621 → #622 (merge đúng thứ tự). Hậu kỳ: khoá tab nhớ gắn theo người dùng (`mediaos.tasks.projectLastTab:<userId>`).",
     ],
   },
   {
@@ -25267,6 +25289,8 @@ export const backlog = [
       "apps/api/test/integration/s20-chat-mention-pin*.int-spec.ts",
       "docs/plans/**",
       "harness/backlog.mjs",
+      "apps/app/src/stores/chat-room-counters*.ts",
+      "apps/app/src/stores/chat.store*.ts",
     ],
     skills: ["code-review"],
     depends_on: [],
@@ -25284,6 +25308,7 @@ export const backlog = [
     notes: [
       "🟡 Seed 23/10/2026 từ S20-WORKUX Đợt 2, owner duyệt qua trang duyệt 12:27–12:29. Ước 150–230 USD (trần vàng ≤250).",
       "`chat-rooms.repository.ts` (1040 dòng) và `contracts/src/chat.ts` đã quá 800 ⇒ truy vấn đếm @ đặt ở tệp mới. Đo hiệu năng thấy cần index GIN trên `mentions` ⇒ tách WO đỏ (migration).",
+      "📌 23/10/2026 tối — PR #626 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng B #624 → #625 → #626 (merge đúng thứ tự). Có API (contracts + chat) ⇒ owner `m prod-update api` sau merge. Hậu kỳ: tin nhắc tôi bị thu hồi ⇒ «@» trừ 1. Đo EXPLAIN trên dữ liệu cỡ PROD ⇒ `S20-CHAT-MENTIONIDX-1`.",
     ],
   },
   {
@@ -26006,6 +26031,231 @@ export const backlog = [
     ],
     notes: [
       "🔴 Seed 23/10/2026 theo Q23 = B. `dashboard-widget-handlers.service.ts` sát 800 dòng ⇒ thêm mã ở file handler riêng. Nên xong TRƯỚC S20-DASH-WIDGETS-1. Ước 150–250 USD.",
+    ],
+  },
+  // ════════════════════ Nợ gieo khi mở PR đợt song song 23/10/2026 tối ════════════════════
+  {
+    id: "S20-TASK-PROJTOOLBARURL-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Workspace dự án: toolbar và rail người phụ trách lên URL (q · status · priority · overdue · who), F5/Back/link giữ nguyên — phần (2b) còn lại của S20-TASK-DRAWER-1",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/tasks/ProjectDetailPage*.tsx",
+      "apps/app/src/routes/tasks/AssigneeRail*.tsx",
+      "apps/app/src/routes/tasks/project-workspace-filters*.ts",
+      "apps/app/src/routes/tasks/workspace-constants*.ts",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/locales/vi/tasks-workux.ts",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-TASK-DRAWER-1", "S20-TASK-PROJECTENTRY-1"],
+    src: [
+      "Followup của S20-TASK-DRAWER-1 (PR #618, done_when 3 phần workspace) — đợt song song 23/10/2026 tối",
+    ],
+    done_when: [
+      "Toolbar + rail của workspace dự án đọc/ghi URL qua `validateSearch` KHÔNG ném (giá trị rác ⇒ mặc định); F5 · Back · chia sẻ link giữ nguyên bộ lọc; chip «Của tôi» dùng cùng nguồn với Danh sách",
+      "Bộ lọc tách khỏi `ProjectDetailPage.tsx` (768 dòng) ra tệp riêng; mọi tệp ≤ 800 dòng; `router.tsx` chỉ thêm khối",
+      "Test cạnh file (search schema, ProjectDetailPage, AssigneeRail) kể cả giá trị rác và Back; `bash harness/check.sh` xanh",
+    ],
+    notes: ["🟢 Seed 23/10/2026 tối khi mở PR #618 (DRAWER làm một phần). Ước 40–70 USD."],
+  },
+  {
+    id: "S20-FE-TOAST-2",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "Thông báo nổi cho apps/auth + apps/console, dọn thông báo khi đăng xuất/hết phiên, và chuyển các mutation SOCIAL chưa có onError sang toast",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/auth/src/**",
+      "apps/console/src/**",
+      "packages/ui/src/components/ui/toast*.tsx",
+      "packages/web-core/src/**",
+      "apps/app/src/routes/social/**",
+      "apps/app/src/layouts/protected/ProtectedShell*.tsx",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-FE-TOAST-1"],
+    src: ["Followup của S20-FE-TOAST-1 (PR #617) — đợt song song 23/10/2026 tối"],
+    done_when: [
+      "`apps/auth` + `apps/console` mount `Toaster` một lần và gọi `configureToast` lúc khởi động (`showApiErrorToast` không còn rơi về console)",
+      "Đăng xuất / hết phiên / đổi phiên tại chỗ ⇒ `toast.clear()`; ca test người đăng nhập sau không thấy thông báo của người trước",
+      "Các mutation SOCIAL chưa có `onError` hiện lỗi qua toast; gỡ chú thích cũ «App KHÔNG có hệ toast» ở `ActionErrorBanner.tsx`; chốt (ghi plan) thông báo có nằm ngoài bẫy tiêu điểm của Dialog/Sheet hay không",
+      "`ProtectedShell.spec` mock `useBrandingQuery` (hết nhiễu «Not implemented: navigation»); `bash harness/check.sh` xanh",
+    ],
+    notes: [
+      "🟢 Seed 23/10/2026 tối. Ước 50–80 USD. Owner nên xem hiệu ứng/vị trí/độ tương phản chế độ tối của toast trên trình duyệt thật.",
+    ],
+  },
+  {
+    id: "S20-NOTI-PRIORITYFILTER-1",
+    module: "NOTI",
+    layer: "FULL",
+    title:
+      "Lọc thông báo theo mức ưu tiên khớp hiển thị: hàng priority NULL tính là «Bình thường» phía server; «đánh dấu đã đọc theo bộ lọc» nhận priority và mốc thời điểm tải danh sách",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/notifications/**",
+      "packages/contracts/src/notification*.ts",
+      "apps/api/test/**",
+      "apps/app/src/routes/notifications/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-NOTI-LISTNAV-1"],
+    src: ["Followup của S20-NOTI-LISTNAV-1 (PR #622) — đợt song song 23/10/2026 tối"],
+    done_when: [
+      "Lọc `priority=Normal` phía server gồm cả hàng cũ priority NULL (coalesce) — ca int-spec với LANE_DB",
+      "mark-all-read nhận `priority` + `created_before` (contracts tương thích ngược, trường tuỳ chọn); FE «đánh dấu theo bộ lọc» gửi đủ và bỏ vòng gọi từng dòng",
+      "Deny-path/cross-tenant giữ nguyên; `bash harness/check.sh` xanh",
+    ],
+    notes: [
+      "🟡 Seed 23/10/2026 tối. BE + contracts + FE ⇒ tách PR theo tầng nếu đổi DTO. Ước 100–180 USD.",
+    ],
+  },
+  {
+    id: "S20-CHAT-MENTIONIDX-1",
+    module: "CHAT",
+    layer: "DB",
+    title:
+      "Đo truy vấn đếm @ chưa đọc của danh sách phòng trên dữ liệu cỡ PROD; cần thì thêm chỉ mục (migration nối tiếp head)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/src/chat/chat-room-mention-count*.ts",
+      "apps/api/test/**",
+      "docs/DB/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-CHAT-MENTIONPIN-1"],
+    src: [
+      "Followup của S20-CHAT-MENTIONPIN-1 (PR #626): EXPLAIN trên lane nhỏ cho thấy planner quét toàn bảng khi phòng ≈ cả bảng; điều kiện mở WO ghi trong jsdoc `chat-room-mention-count.ts`",
+    ],
+    done_when: [
+      "ĐO TRƯỚC (chỉ đọc) trên bản sao/PROD do owner chạy: EXPLAIN (ANALYZE, BUFFERS) truy vấn đếm @ cho phòng lớn nhất + p95 thời gian `/chat/rooms`; kết quả tổng hợp ghi plan",
+      "Chỉ khi số đo vượt ngưỡng ghi trong plan: migration nối tiếp head thêm chỉ mục phù hợp (RLS/FORCE không đổi), int-spec trên LANE_DB chứng minh planner dùng chỉ mục ở dữ liệu đủ lớn; không vượt ngưỡng ⇒ đóng WO bằng số đo",
+    ],
+    notes: ["🔴 Seed 23/10/2026 tối (migration ⇒ zone đỏ). Ước 0 (đóng bằng số đo) – 250 USD."],
+  },
+  {
+    id: "S20-CHAT-FEDEBT-1",
+    module: "CHAT",
+    layer: "FE",
+    title:
+      "Nợ FE CHAT sau S20: hook nạp cửa sổ ngữ cảnh dùng chung (nhảy tới tin · tin ghim) · cảnh báo tệp chưa gửi TRƯỚC khi rời phòng · reset store nháp giữa các ca spec · ẩn lối «Thêm người» khi người đối thoại không có tên · khung trả lời cho tin đã ra khỏi RAM",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/components/chat/**",
+      "apps/app/src/routes/chat/**",
+      "apps/app/src/stores/chat*.ts",
+      "apps/app/src/hooks/use-chat-*",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-CHAT-MENTIONPIN-1"],
+    src: [
+      "Followup của S20-CHAT-DRAFT-1 · S20-CHAT-NEWROOM-1 · S20-CHAT-MENTIONPIN-1 (PR #624–#626) + reviewer tích hợp chồng B — đợt song song 23/10/2026 tối",
+    ],
+    done_when: [
+      "`ChatPage.jumpToMessage` và nhảy tới tin ghim dùng chung MỘT hook nạp cửa sổ ngữ cảnh",
+      "Có tệp chưa gửi mà rời phòng ⇒ cảnh báo ngay lúc rời (kể cả tệp đang tải dở); các spec chat reset store nháp ở `beforeEach`",
+      "Người đối thoại không có tên hiển thị ⇒ ẩn «Thêm người» hoặc nhãn thay thế; test cạnh file; `bash harness/check.sh` xanh",
+    ],
+    notes: [
+      "🟢 Seed 23/10/2026 tối. `chat.store.ts` đã 1.080 dòng ⇒ không làm dài thêm. Ước 50–80 USD.",
+    ],
+  },
+  {
+    id: "S20-CHAT-DOCSYNC-1",
+    module: "CHAT",
+    layer: "DOC",
+    title:
+      "Đồng bộ tài liệu CHAT theo S20: API-13 §7 (sự kiện ghim/bỏ ghim realtime, trường đếm @ chưa đọc của phòng) · SPEC-15 CHAT-SCREEN-002/003 (ô tìm nhúng, chip «Gần đây», «+» trong drawer)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "docs/API Design/**",
+      "docs/SPEC/**",
+      "docs/spec/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-CHAT-MENTIONPIN-1", "S20-CHAT-NEWROOM-1"],
+    src: ["Followup của S20-CHAT-NEWROOM-1 + S20-CHAT-MENTIONPIN-1 (PR #625–#626)"],
+    done_when: [
+      "Mỗi câu tài liệu mới/đổi khớp mã ĐÃ merge (file:dòng), không chép từ plan; liên kết tương đối còn sống",
+    ],
+    notes: ["🟢 Seed 23/10/2026 tối, làm SAU khi #625/#626 merge. Ước 20–40 USD."],
+  },
+  {
+    id: "S20-TASK-FEDEBT-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Nợ FE TASK sau S20: tách thẻ/cột Kanban khỏi TaskKanbanPage.tsx (797/800 dòng) · thẻ board không lồng nút trong role=button · lý do server từ chối đổi cột báo qua toast · spec riêng cho tab nhớ của dự án + ca đổi projectId · gợi ý @ chọn bằng bàn phím · dọn khoá localStorage cũ không hậu tố",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/tasks/**",
+      "apps/app/src/i18n/locales/vi/tasks*.ts",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S20-TASK-BOARDMOVE-1", "S20-TASK-PROJECTENTRY-1", "S20-TASK-QUICKENTRY-1"],
+    src: [
+      "Followup của S20-TASK-BOARDMOVE-1 · S20-TASK-PROJECTENTRY-1 · S20-TASK-QUICKENTRY-1 (PR #619–#621) + reviewer tích hợp chồng A",
+    ],
+    done_when: [
+      "`TaskKanbanPage.tsx` ≤ ~600 dòng sau khi tách thẻ/cột; hành vi kéo-thả + menu «Chuyển sang cột…» giữ nguyên (spec xanh không sửa ca)",
+      "Thẻ board không còn nút lồng trong phần tử role=button; lý do từ chối hiện qua toast cho cả kéo-thả lẫn menu",
+      "Spec riêng cho hook tab nhớ (đổi projectId không remount, đổi người dùng); gợi ý @ điều hướng bằng mũi tên + Enter; `bash harness/check.sh` xanh",
+    ],
+    notes: ["🟢 Seed 23/10/2026 tối. Làm TRƯỚC WO S20 kế tiếp chạm board. Ước 60–100 USD."],
+  },
+  {
+    id: "S14-SEC-CAPWILDCARD-DEBT-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Nợ sau S14-SEC-CAPWILDCARD-1 (N-G1…N-G9, plan §15.10): ratchet cờ sensitive ở call-site · trần tuổi + một nguồn nạp cho ảnh chụp catalog · tín hiệu suy biến capabilities · sàn thử-lại khi nạp lỗi · keyset scopes khi suy biến một phía · tách permission.service.ts ≤ 800 · khối catch anh em dùng serializeErrorChain · ca helper khẳng định giá trị",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/src/auth/**",
+      "packages/contracts/src/auth.ts",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S14-SEC-CAPWILDCARD-1"],
+    src: ["`docs/plans/S14-SEC-CAPWILDCARD-1.md` §15.10 (N-G1…N-G9) — PR #627"],
+    done_when: [
+      "Plan + plan-review trước (crown); chọn nhóm nợ làm trong WO này, phần còn lại ghi lý do",
+      "Mỗi mục làm có ca RED trước; FULL gate (security + silent-failure + santa) trước PR; `bash harness/check.sh --all --lane-db` xanh",
+    ],
+    notes: [
+      "🔴 Seed 23/10/2026 tối. Cùng tệp `permission/*` với S14-SEC-OPPLANEREVOKE-1 ⇒ không chạy song song; owner chọn thứ tự. Ước 300–450 USD.",
     ],
   },
 ];

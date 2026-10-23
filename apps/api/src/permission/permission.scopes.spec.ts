@@ -20,6 +20,7 @@ import { sentinelCatalog } from "../../test/helpers/permission-catalog-fixture";
 class ScopeMockRepo implements IPermissionRepository {
   private grants: CompanyRoleGrantWithScope[] = [];
   private fail = false;
+  private catalog: PermissionCatalogEntry[] = sentinelCatalog();
 
   withScopeGrants(grants: CompanyRoleGrantWithScope[]): this {
     this.grants = grants;
@@ -27,6 +28,10 @@ class ScopeMockRepo implements IPermissionRepository {
   }
   withFailure(): this {
     this.fail = true;
+    return this;
+  }
+  withCatalog(rows: PermissionCatalogEntry[]): this {
+    this.catalog = rows;
     return this;
   }
 
@@ -51,9 +56,23 @@ class ScopeMockRepo implements IPermissionRepository {
   // "không có cặp nhạy cảm nào". Spec này không đo sensitivity, nên nó trả một catalog KHÔNG
   // RỖNG mà mọi cặp nó kiểm đều VẮNG ⇒ `false` theo D3 = y hệt hành vi trước D9.
   async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
-    return sentinelCatalog();
+    return this.catalog.map((r) => ({ ...r }));
   }
 }
+
+/** S14-SEC-CAPWILDCARD-1 §9.4 — cặp sensitive + hàng wildcard view:* cho hai ca đảo nghĩa. */
+const SALARY_SENSITIVE_ROW: PermissionCatalogEntry = {
+  id: "00000000-0000-4000-8000-0000000005a1",
+  action: "view",
+  resourceType: "salary",
+  isSensitive: true,
+};
+const VIEW_STAR_ROW: PermissionCatalogEntry = {
+  id: "00000000-0000-4000-8000-0000000005a2",
+  action: "view",
+  resourceType: "*",
+  isSensitive: false,
+};
 
 function g(
   action: string,
@@ -98,15 +117,25 @@ describe("PermissionService.getCapabilityScopes", () => {
     expect(scopes["view:employee"]).toBeUndefined();
   });
 
-  it("omits sensitive grants (keyset mirrors getCapabilities)", async () => {
-    const repo = new ScopeMockRepo().withScopeGrants([
-      g("view", "salary", "Company", "ALLOW", true),
-    ]);
+  // S14-SEC-CAPWILDCARD-1 (plan §9.4) — ca cũ «omits sensitive grants» ĐẢO NGHĨA dưới DECISIONS-13 §4 và
+  // từng xanh-RỖNG (view:salary vắng vì catalog stub không có cặp đó). Tách hai ca, catalog có view:salary
+  // cờ `true` để vế sensitive thật sự được đo. Keyset vẫn mirror getCapabilities.
+  it("sensitive + grant EXACT ⇒ scopes CÓ cặp (keyset mirrors getCapabilities)", async () => {
+    const repo = new ScopeMockRepo()
+      .withScopeGrants([g("view", "salary", "Company", "ALLOW", true)])
+      .withCatalog([SALARY_SENSITIVE_ROW, VIEW_STAR_ROW]);
     const svc = new PermissionService(repo);
 
-    const scopes = await svc.getCapabilityScopes("u1", "co1");
+    expect(await svc.getCapabilityScopes("u1", "co1")).toEqual({ "view:salary": ["Company"] });
+  });
 
-    expect(scopes["view:salary"]).toBeUndefined();
+  it("sensitive + CHỈ wildcard ⇒ scopes VẮNG cặp", async () => {
+    const repo = new ScopeMockRepo()
+      .withScopeGrants([g("view", "*", "Company")])
+      .withCatalog([SALARY_SENSITIVE_ROW, VIEW_STAR_ROW]);
+    const svc = new PermissionService(repo);
+
+    expect(await svc.getCapabilityScopes("u1", "co1")).toEqual({});
   });
 
   it("returns {} on infrastructure error (fail-safe UI hint, never throws)", async () => {
