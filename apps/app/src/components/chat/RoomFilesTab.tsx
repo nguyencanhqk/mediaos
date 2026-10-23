@@ -147,6 +147,8 @@ function FilePreview({ file }: { file: ChatRoomFileDto }): React.ReactElement {
       target="_blank"
       rel="noreferrer noopener"
       download={file.name}
+      // S16-SOCIAL-FILEOPENUX-1 — server phục vụ tệp không phải ảnh dạng TẢI XUỐNG; tên trợ năng nói đúng điều đó.
+      aria-label={t("attachment.downloadName", { name: file.name })}
       className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent"
     >
       <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />

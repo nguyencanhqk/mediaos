@@ -157,11 +157,14 @@ function AttachmentTile({ attachment }: { attachment: StoredChatAttachment }): R
     );
   }
 
+  // S16-SOCIAL-FILEOPENUX-1 — tệp không phải ảnh được server phục vụ dạng TẢI XUỐNG: tên trợ năng nói đúng điều
+  // đó. Cách lấy URL (gắn lúc render, `target=_blank`) giữ nguyên — đổi thuộc S19-FE-SIGNEDTAB-2 (CHAT-TTL).
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
+      aria-label={t("attachment.downloadName", { name: attachment.name })}
       className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs hover:bg-accent"
     >
       <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
