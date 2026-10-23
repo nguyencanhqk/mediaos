@@ -15616,6 +15616,7 @@ export const backlog = [
       "Census PROD 16/10/2026 ~16:05 ICT (đọc-chỉ, ROLLBACK, chỉ số tổng hợp): Q1 = 0 (không actor nào giữ wildcard ALLOW) · Q3 = 0 · Q6 = 0 (qua) · Q4a = 86 (allowlist trong file census gốc `docs/plans/S14-SEC-CAPWILDCARD-1.census.sql` còn 69 ⇒ cập nhật allowlist trong file đó) · Q4 = 71 cặp — chi tiết lưu ngoài repo (máy PROD), gồm cả cặp lớp reveal/step-up ⇒ đọc trước khi code theo plan §12. Repo công khai: PR chỉ ghi số tổng hợp, KHÔNG liệt kê cặp.",
       "Owner chốt 23/10/2026 (phiếu quyết định đợt 23/10, phương án khuyến nghị): CW-1 giữ thiết kế v2, nới EXCLUDED + ratchet từ `reveal-secret` sang tiền tố `reveal-` · CW-2 cho hiện nút nhạy cảm cho người mà BE đã cho phép (đúng ADR DECISIONS-13, không dựng lại danh sách ẩn tay ở FE) · CW-3 mở ngay sau đợt song song hiện tại, lane riêng, chỉ deploy API (không migration, rollback bằng git revert). Census PROD 16/10 đã chạy: Q1 = 0 · Q3 = 0 · Q6 = 0 · Q4 = 71 cặp chia 7 nhóm — không nhóm nào đòi đổi kiến trúc. Làm kèm: cập nhật `census.sql` 69 → 86 mục; khi code đo lại các cặp seed sau 16/10 (plan §9.4). Ước ~380 USD (300–520), trần 600 USD gồm FULL gate + santa. Gỡ chặn: `status` blocked → todo. Gieo kèm WO chỉ-đọc `S14-SEC-OPPLANEPAIRS-1`.",
       "📌 23/10/2026 tối — PR #627 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). FULL gate + santa hội tụ; check.sh --all lane cw: 1 ca đỏ do môi trường (prepipe-500 cần Valkey — đo đối chứng trên nhánh không đụng permission), 25 tệp chunk chết đã chạy lại xanh. Deploy API CÙNG NGÀY merge. Nợ N-G1…N-G9 ⇒ `S14-SEC-CAPWILDCARD-DEBT-1`. Đã nới paths `apps/console/**` theo plan §13.1.",
+      "✅ 23/10/2026 tối — merge #627 = fb9bb279; API PROD build be0b420d (13:35Z) ⊇ fb9bb279 (đo /api/v1/health + merge-base). CI master c4d0f664 xanh 5/5. Nợ ⇒ S14-SEC-CAPWILDCARD-DEBT-1; kế tiếp cùng tệp: S14-SEC-OPPLANEREVOKE-1.",
     ],
   },
   {
@@ -25309,6 +25310,7 @@ export const backlog = [
       "🟡 Seed 23/10/2026 từ S20-WORKUX Đợt 2, owner duyệt qua trang duyệt 12:27–12:29. Ước 150–230 USD (trần vàng ≤250).",
       "`chat-rooms.repository.ts` (1040 dòng) và `contracts/src/chat.ts` đã quá 800 ⇒ truy vấn đếm @ đặt ở tệp mới. Đo hiệu năng thấy cần index GIN trên `mentions` ⇒ tách WO đỏ (migration).",
       "📌 23/10/2026 tối — PR #626 mở (đợt song song A+B+C, owner duyệt qua hộp hỏi). chồng B #624 → #625 → #626 (merge đúng thứ tự). Có API (contracts + chat) ⇒ owner `m prod-update api` sau merge. Hậu kỳ: tin nhắc tôi bị thu hồi ⇒ «@» trừ 1. Đo EXPLAIN trên dữ liệu cỡ PROD ⇒ `S20-CHAT-MENTIONIDX-1`.",
+      "✅ 23/10/2026 tối — merge #626 = c4d0f664; CI master xanh 5/5. ⏳ API PROD vẫn be0b420d (chưa có phần API của WO này) ⇒ owner `m prod-update api`; FE trên Pages chịu được server cũ (trường đếm @ tuỳ chọn, thanh ghim có polling dự phòng).",
     ],
   },
   {
