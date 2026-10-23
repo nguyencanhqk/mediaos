@@ -276,6 +276,26 @@ describe("GlobalTaskDrawer — ?task= toàn ứng dụng", () => {
     expectClosedKeeping({});
   });
 
+  it.each([
+    ["lỗi máy chủ (500)", new ApiError(500, "INTERNAL", "boom")],
+    ["lỗi mạng", new Error("network")],
+  ])(
+    "%s ⇒ drawer vẫn mở (thân có «Thử lại»), tiêu đề là thông điệp lỗi chung — không còn «Đang tải…», không lộ mã",
+    async (_l, err) => {
+      setCapabilities({ "read:task": true });
+      vi.mocked(taskCoreApi.getTask).mockRejectedValue(err);
+      renderGlobal({ task: TASK_UUID });
+
+      await waitFor(() => expect(screen.getByText("Lỗi khi tải công việc")).toBeInTheDocument());
+      expect(screen.queryByText("Đang tải công việc…")).not.toBeInTheDocument();
+      expect(screen.queryByText(TASK_UUID)).not.toBeInTheDocument();
+      // Không thuộc nhóm từ chối ⇒ KHÔNG báo «Không mở được», KHÔNG tự đóng.
+      expect(screen.getByTestId("task-detail-drawer")).toBeInTheDocument();
+      expect(screen.queryByText(UNAVAILABLE)).not.toBeInTheDocument();
+      expect(navigateMock).not.toHaveBeenCalled();
+    },
+  );
+
   it("UUID hợp lệ ⇒ mở drawer với tiêu đề việc; Esc đóng bằng replace, bộ lọc giữ nguyên", async () => {
     setCapabilities({ "read:task": true });
     vi.mocked(taskCoreApi.getTask).mockResolvedValue({ ...TASK, id: TASK_UUID } as never);

@@ -18,7 +18,7 @@ import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout
 import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
 // S5-TASK-WORKSPACE-1 — parser ?tab= của workspace dự án (file thuần TS, không component).
 import { parseWorkspaceTab, type ProjectWorkspaceTab } from "@/routes/tasks/workspace-constants";
-import { useTaskDetailBack } from "@/routes/tasks/task-drawer-nav";
+import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
 import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
 
 // ---------------------------------------------------------------------------
@@ -1576,12 +1576,12 @@ const tasksTaskDetailRoute = createRoute({
   beforeLoad: authGuard,
   component: () => {
     const { taskId } = tasksTaskDetailRoute.useParams();
-    // S20-TASK-DRAWER-1 — Quay lại: có lịch sử trong app ⇒ trang trước; mở từ tab mới ⇒ /tasks/my-tasks.
-    const onBack = useTaskDetailBack();
+    // S20-TASK-DRAWER-1 — Quay lại = trang trước (tab mới ⇒ /tasks/my-tasks); xoá xong ⇒ /tasks/my-tasks.
+    const nav = useTaskDetailNav();
     return buildModuleRouteContent(
       tasksTaskDetailMeta,
       "TASK",
-      <TaskDetailPage taskId={taskId} onBack={onBack} />,
+      <TaskDetailPage taskId={taskId} onBack={nav.onBack} onDeleted={nav.onDeleted} />,
     );
   },
 });

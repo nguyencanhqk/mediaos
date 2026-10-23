@@ -19,6 +19,7 @@ import {
   readTaskDrawerParam,
   taskIdFromPath,
   useTaskDetailBack,
+  useTaskDetailNav,
   useTaskDrawer,
 } from "./task-drawer-nav";
 
@@ -130,5 +131,25 @@ describe("useTaskDetailBack — «Quay lại» của /tasks/:id", () => {
     expect(historyRef.back).not.toHaveBeenCalled();
     expect(navigateMock).toHaveBeenCalledWith({ to: TASK_DETAIL_BACK_FALLBACK });
     expect(TASK_DETAIL_BACK_FALLBACK).toBe("/tasks/my-tasks");
+  });
+});
+
+describe("useTaskDetailNav — điều hướng của trang /tasks/:id", () => {
+  it("onBack = «Quay lại» (có lịch sử ⇒ history.back())", () => {
+    historyRef.canGoBack.mockReturnValue(true);
+    const { result } = renderHook(() => useTaskDetailNav());
+    result.current.onBack();
+
+    expect(historyRef.back).toHaveBeenCalledTimes(1);
+  });
+
+  it("onDeleted ⇒ về THẲNG /tasks/my-tasks (replace), KHÔNG history.back dù có lịch sử", () => {
+    // Trang trước có thể là URL còn `?task=<việc vừa xoá>` ⇒ quay lại sẽ mở drawer việc đã xoá.
+    historyRef.canGoBack.mockReturnValue(true);
+    const { result } = renderHook(() => useTaskDetailNav());
+    result.current.onDeleted();
+
+    expect(historyRef.back).not.toHaveBeenCalled();
+    expect(navigateMock).toHaveBeenCalledWith({ to: TASK_DETAIL_BACK_FALLBACK, replace: true });
   });
 });

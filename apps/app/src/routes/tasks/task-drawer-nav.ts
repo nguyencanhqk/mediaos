@@ -97,3 +97,23 @@ export function useTaskDetailBack(): () => void {
     void navigate({ to: TASK_DETAIL_BACK_FALLBACK as "/" });
   };
 }
+
+export interface TaskDetailNav {
+  /** «Quay lại» — xem {@link useTaskDetailBack}. */
+  onBack: () => void;
+  /**
+   * Sau khi xoá việc ⇒ về THẲNG `/tasks/my-tasks` (replace). Không dùng «Quay lại»: trang trước có thể
+   * là URL còn `?task=<việc vừa xoá>` ⇒ drawer mở lại việc đã xoá và báo lỗi.
+   */
+  onDeleted: () => void;
+}
+
+/** Điều hướng của trang `/tasks/:id`: «Quay lại» và đích sau khi xoá việc. */
+export function useTaskDetailNav(): TaskDetailNav {
+  const onBack = useTaskDetailBack();
+  const navigate = useNavigate();
+  return {
+    onBack,
+    onDeleted: () => void navigate({ to: TASK_DETAIL_BACK_FALLBACK as "/", replace: true }),
+  };
+}

@@ -84,7 +84,10 @@ export function TaskDetailDrawer({
     <Sheet
       open
       onClose={onClose}
-      title={data?.title ?? t("tasks.detail.drawer.loading")}
+      // Lỗi ngoài nhóm từ chối (5xx/mạng): thân hiện lỗi + «Thử lại» ⇒ tiêu đề không được ghi «Đang tải».
+      title={
+        data?.title ?? (isError ? t("taskDrawer.loadFailed") : t("tasks.detail.drawer.loading"))
+      }
       description={data?.projectName ?? undefined}
       className="max-w-[max(42rem,50%)]"
       actions={

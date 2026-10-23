@@ -8,6 +8,8 @@ export default {
   // tồn tại, đã xoá mềm, ngoài phạm vi đọc): không phân biệt để không lộ việc nào có thật.
   taskDrawer: {
     unavailable: "Không mở được việc này",
+    // Tiêu đề drawer khi tải lỗi ngoài nhóm từ chối (5xx/mạng) — không lộ tiêu đề/mã việc.
+    loadFailed: "Lỗi khi tải công việc",
   },
   // S20-TASK-DRAWER-1 (US-TASK-QL-05) — bộ lọc Danh sách trên URL: ô tìm, chip «Của tôi», phòng ban.
   listFilters: {
