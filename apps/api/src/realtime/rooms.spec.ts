@@ -81,6 +81,13 @@ describe("rooms.ts — tên room chuẩn tắc ở builder (S17-CHAT-RTROOMOPS-1
     });
   });
 
+  it("hàm TOÀN PHẦN: caller JS vi phạm kiểu (id vắng) KHÔNG làm builder ném — caller có thể đang ở trong tx", () => {
+    // Builder được tính NGOÀI `try` ở `syncRoomMembership`/`evictFromCallRoom`; ném ở đây là rollback thao tác
+    // gỡ thành viên đã đúng. Chuỗi ra y hệt template literal trước khi chuẩn hoá.
+    expect(() => chatRoomName(COMPANY, undefined as never)).not.toThrow();
+    expect(callUserRoomName(COMPANY, undefined as never)).toBe(`co:${COMPANY}:calluser:undefined`);
+  });
+
   it("các room khác loại của CÙNG một id không bao giờ trùng tên (chuẩn hoá không làm sập không gian tên)", () => {
     const names = new Set([
       ...TWO_ARG.map(([, build]) => build(up(COMPANY), up(ID))),
