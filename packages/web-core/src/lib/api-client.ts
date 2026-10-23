@@ -135,9 +135,10 @@ export class ApiError extends Error {
  * ⟲ S18-AUTH-RETRYAFTER-1 — giây phải chờ của một 429 mang `retryAfterSec`; `null` khi không phải 429,
  * thiếu field, hoặc hỏng hình. FE gọi hàm này để đếm ngược thay cho câu chữ vô định.
  *
- * ĐỌC TỪ BODY, KHÔNG TỪ HEADER — có lý do đo được: `main.ts` gọi `enableCors()` mà KHÔNG khai
- * `exposedHeaders`, và `Retry-After` không nằm trong 7 header CORS-safelisted ⇒ `fetch` cross-origin của
- * `apps/auth` KHÔNG BAO GIỜ thấy header đó dù server có gửi. Header phục vụ hạ tầng (proxy/`curl`).
+ * ĐỌC TỪ BODY, KHÔNG TỪ HEADER — có lý do đo được: CORS của API chỉ expose `Content-Disposition`
+ * (S1-FND-CORS-EXPOSE-1); `Retry-After` vẫn KHÔNG expose và không nằm trong 7 header CORS-safelisted ⇒
+ * `fetch` cross-origin của `apps/auth` không thấy header đó dù server có gửi. Header phục vụ hạ tầng
+ * (proxy/`curl`).
  *
  * Khuôn bóc soi gương `parseRoomConflictsDetail` (`contracts/src/room.ts:314`): `details` là mảng
  * `ErrorDetail {field,message,rule}` — HÌNH DUY NHẤT `AllExceptionsFilter` cho đi ra. Khớp CẢ `field`
