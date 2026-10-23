@@ -19,7 +19,7 @@
  *               EmptyState hiện đúng chỗ (không throw/trắng trang)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { I18nextProvider } from "react-i18next";
@@ -53,8 +53,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     },
     taskCoreApi: {
       getMyTasks: vi.fn().mockResolvedValue([]),
-      // S20-TASK-DRAWER-1 — drawer việc toàn cục tải việc khi URL có `?task=` (stub mạng).
-      getTask: vi.fn(),
+      // S20-TASK-DRAWER-1 / S20-NOTI-LISTNAV-1 — drawer việc toàn cục tải việc khi URL có `?task=`; mặc định treo (không network).
+      getTask: vi.fn(() => new Promise(() => {})),
     },
     goalApi: { ...actual.goalApi, getGoal: vi.fn() },
   };
@@ -170,7 +170,7 @@ describe("NOTI router-wire flow (S4-FE-NOTI-1-WIRE) — qua router THẬT + Glob
     vi.mocked(myNotificationApi.list).mockResolvedValue([]);
   });
 
-  it("route /notifications render NotificationListPage THẬT (KHÔNG còn ModulePlaceholder) — click 1 dòng → điều hướng /notifications/$id → detail(auto_mark_read=true)", async () => {
+  it("route /notifications render NotificationListPage THẬT (KHÔNG còn ModulePlaceholder) — nút «Chi tiết thông báo» → điều hướng /notifications/$id → detail(auto_mark_read=true)", async () => {
     login(NOTI_CAPS);
     vi.mocked(myNotificationApi.list).mockResolvedValue([LIST_ITEM]);
     vi.mocked(myNotificationApi.detail).mockResolvedValue(DETAIL);
@@ -182,7 +182,8 @@ describe("NOTI router-wire flow (S4-FE-NOTI-1-WIRE) — qua router THẬT + Glob
     await waitFor(() => expect(screen.getByText(LIST_ITEM.title)).toBeInTheDocument());
     expect(screen.queryByText(/đang xây dựng/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText(LIST_ITEM.title));
+    // S20-NOTI-LISTNAV-1 — bấm DÒNG nay đi thẳng target_url; trang chi tiết qua nút phụ.
+    fireEvent.click(screen.getByRole("button", { name: "Chi tiết thông báo" }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/notifications/n1"));
     await waitFor(() =>
@@ -268,6 +269,97 @@ describe("NOTI router-wire flow (S4-FE-NOTI-1-WIRE) — qua router THẬT + Glob
     expect(screen.getByRole("button", { name: "Thông báo" })).toBeInTheDocument();
     expect(screen.getByLabelText("Menu tài khoản")).toBeInTheDocument();
 
+    await waitFor(() => expect(screen.getByText("Bạn chưa có thông báo mới")).toBeInTheDocument());
+
+    view.unmount();
+  });
+});
+
+// S20-NOTI-LISTNAV-1 (US-X-13) — qua router THẬT: `validateSearch` của /notifications + drawer việc toàn
+// cục mount ở ProtectedShell. Bấm dòng đi thẳng đích (0 chuyển trang khi đích là drawer); bộ lọc sống
+// trên URL nên tải lại vẫn giữ; tham số rác không làm route ném.
+describe("NOTI list nav (S20-NOTI-LISTNAV-1) — qua router THẬT", () => {
+  const TASK_UUID = "0b9f6a4e-2c1d-4e8f-9a7b-3c5d6e7f8a9b";
+  const TASK_ITEM: MyNotificationListItem = {
+    ...LIST_ITEM,
+    notification_id: "n3",
+    title: "Bạn được giao: Viết báo cáo",
+    short_content: "Hạn 30/10",
+    notification_type: "task_assigned",
+    source_module: "TASK",
+    event_code: "TASK_ASSIGNED",
+    target_module: "TASK",
+    target_type: "task",
+    target_id: TASK_UUID,
+    target_url: `/tasks/${TASK_UUID}`,
+  };
+
+  beforeEach(() => {
+    useAuthStore.getState().logout();
+    vi.clearAllMocks();
+    vi.mocked(myNotificationApi.dropdown).mockResolvedValue({ unread_count: 0, items: [] });
+    vi.mocked(myNotificationApi.unreadCount).mockResolvedValue(UNREAD_COUNT_OK);
+    vi.mocked(myNotificationApi.list).mockResolvedValue([]);
+  });
+
+  it("bấm dòng TASK_ASSIGNED ⇒ mark-read + drawer `?task=` mở TẠI /notifications, giữ bộ lọc, không qua trang chi tiết", async () => {
+    login({ ...NOTI_CAPS, "read:task": true });
+    vi.mocked(myNotificationApi.list).mockResolvedValue([TASK_ITEM]);
+    vi.mocked(myNotificationApi.markRead).mockResolvedValue({
+      ...MARK_READ_RESPONSE,
+      notification_id: "n3",
+    });
+
+    await router.navigate({ to: "/notifications" as "/", search: { source: "TASK" } as never });
+    const view = renderApp();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Bạn được giao: Viết báo cáo/ }));
+
+    await waitFor(() => expect(myNotificationApi.markRead).toHaveBeenCalledWith("n3"));
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ source: "TASK", task: TASK_UUID }),
+    );
+    expect(router.state.location.pathname).toBe("/notifications");
+    await waitFor(() => expect(taskCoreApi.getTask).toHaveBeenCalledWith(TASK_UUID));
+    expect(myNotificationApi.detail).not.toHaveBeenCalled();
+
+    view.unmount();
+  });
+
+  it("mở thẳng `/notifications?source=CHAT` (tải lại) ⇒ API nhận source_module=CHAT, chip «Tin nhắn» bật", async () => {
+    login(NOTI_CAPS);
+
+    await router.navigate({ to: "/notifications" as "/", search: { source: "CHAT" } as never });
+    const view = renderApp();
+
+    await waitFor(() =>
+      expect(myNotificationApi.list).toHaveBeenCalledWith(
+        expect.objectContaining({ source_module: "CHAT" }),
+      ),
+    );
+    const group = await screen.findByRole("group", { name: "Nguồn" });
+    expect(
+      within(group).getByRole("button", { name: "Tin nhắn" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    await waitFor(() =>
+      expect(screen.getByText("Không có thông báo nào trong mục này")).toBeInTheDocument(),
+    );
+
+    view.unmount();
+  });
+
+  it("tham số rác (`source=HR&priority=xyz&page=abc`) ⇒ validateSearch KHÔNG ném, trang render, API không nhận rác", async () => {
+    login(NOTI_CAPS);
+
+    await router.navigate({
+      to: "/notifications" as "/",
+      search: { source: "HR", priority: "xyz", page: "abc" } as never,
+    });
+    const view = renderApp();
+
+    await waitFor(() =>
+      expect(myNotificationApi.list).toHaveBeenCalledWith({ page: 1, per_page: 20 }),
+    );
     await waitFor(() => expect(screen.getByText("Bạn chưa có thông báo mới")).toBeInTheDocument());
 
     view.unmount();

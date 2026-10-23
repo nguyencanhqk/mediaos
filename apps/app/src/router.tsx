@@ -474,6 +474,7 @@ const LeaveAuditLogsPage = React.lazy(() =>
 
 // Notifications — S4-FE-NOTI-1-WIRE (wire NotificationListPage/DetailPage đã build ở S4-FE-NOTI-1/a7be971)
 import { NOTI_PATHS } from "@/routes/notifications/constants";
+import { validateNotificationListSearch } from "@/routes/notifications/notification-list-search";
 const NotificationListPage = React.lazy(() =>
   import("@/routes/notifications/NotificationListPage").then((m) => ({
     default: m.NotificationListPage,
@@ -1575,13 +1576,14 @@ const tasksTaskDetailRoute = createRoute({
   },
 });
 
-// Notifications
-const notificationsRoute = makeModuleRoute(
-  "/notifications",
-  "noti.list",
-  "NOTI",
-  NotificationListPage,
-);
+// S20-NOTI-LISTNAV-1 — bộ lọc trên URL; rác ⇒ bỏ, KHÔNG ném (notification-list-search.ts).
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/notifications",
+  beforeLoad: authGuard,
+  validateSearch: validateNotificationListSearch,
+  component: () => buildModuleRouteContent(getMeta("noti.list"), "NOTI", <NotificationListPage />),
+});
 
 // Notification detail — /notifications/$id (NOTI-SCREEN-DETAIL), path param NOTI_PATHS.DETAIL(id).
 // Reuses noti.list meta (cùng gate NOTI.NOTIFICATION.VIEW_OWN) — mirrors hrEmployeeDetailRoute pattern:

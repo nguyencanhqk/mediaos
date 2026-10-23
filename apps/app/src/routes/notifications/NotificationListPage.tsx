@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -6,11 +5,17 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Bell, RefreshCw } from "lucide-react";
 import type { MyNotificationListItem } from "@mediaos/contracts";
 import { myNotificationApi, notificationKeys, useCan } from "@mediaos/web-core";
-import { PageHeader, DataTable, EmptyState, Button, Select, Badge } from "@mediaos/ui";
+import { PageHeader, DataTable, EmptyState, Button, Badge } from "@mediaos/ui";
 import { AuthLogPagination } from "@/routes/system/auth-logs/AuthLogControls";
 import { MarkReadButton } from "@/components/notifications/MarkReadButton";
-import { MarkAllReadButton } from "@/components/notifications/MarkAllReadButton";
-import { NOTI_ENGINE_PAIRS, NOTI_LIST_PAGE_SIZE, NOTI_PATHS, NOTI_STATUS } from "./constants";
+import { NOTI_ENGINE_PAIRS, NOTI_LIST_PAGE_SIZE, NOTI_PATHS } from "./constants";
+import { NotificationListFilters } from "./NotificationListPageFilters";
+import { NotificationListMarkRead, NotificationRowLink } from "./NotificationListPageActions";
+import {
+  hasActiveNotificationListFilters,
+  toNotificationListQuery,
+  useNotificationListSearch,
+} from "./notification-list-search";
 
 const PRIORITY_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   Low: "outline",
@@ -28,20 +33,8 @@ function useColumns(
     {
       id: "title",
       header: t("list.columns.title"),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => onView(row.original.notification_id)}
-          className="block max-w-md text-left"
-        >
-          <span className={`text-sm ${row.original.is_read ? "" : "font-semibold"}`}>
-            {row.original.title}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {row.original.short_content}
-          </span>
-        </button>
-      ),
+      // S20-NOTI-LISTNAV-1 — bấm dòng ⇒ mark-read + đi thẳng target_url; đích rỗng/không an toàn ⇒ chi tiết.
+      cell: ({ row }) => <NotificationRowLink item={row.original} onView={onView} />,
     },
     {
       accessorKey: "priority",
@@ -92,6 +85,9 @@ function useColumns(
  * NotificationListPage (NOTI-SCREEN-LIST) — S4-FE-NOTI-1. GET /notifications (NOTI-API-001), phân trang
  * page-based server-side. Pagination heuristic (KHÔNG total chính xác — xem my-notification-api.ts) tái
  * dùng AuthLogPagination (cùng kỹ thuật FileAccessLogsPage). Gate = read:notification (Own).
+ *
+ * S20-NOTI-LISTNAV-1 (US-X-13): bộ lọc nguồn/mức ưu tiên/trạng thái + trang sống trên URL
+ * (`notification-list-search.ts`, cùng hàm `validateSearch` của route); bấm dòng đi thẳng đích.
  */
 export function NotificationListPage() {
   const { t } = useTranslation("notifications");
@@ -99,14 +95,9 @@ export function NotificationListPage() {
   const navigate = useNavigate();
   const canView = useCan(NOTI_ENGINE_PAIRS.READ.action, NOTI_ENGINE_PAIRS.READ.resourceType);
 
-  const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<"" | "Unread">("");
-
-  const query = {
-    page,
-    per_page: NOTI_LIST_PAGE_SIZE,
-    ...(statusFilter ? { status: statusFilter } : {}),
-  };
+  const { search, update, clearFilters } = useNotificationListSearch();
+  const query = toNotificationListQuery(search, NOTI_LIST_PAGE_SIZE);
+  const isFiltered = hasActiveNotificationListFilters(search);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: notificationKeys.list(query),
@@ -149,6 +140,18 @@ export function NotificationListPage() {
   }
 
   const items = data ?? [];
+  const emptyState = isFiltered ? (
+    <EmptyState
+      title={t("list.emptyFiltered.title")}
+      action={
+        <Button variant="outline" size="sm" onClick={clearFilters}>
+          {t("list.emptyFiltered.clear")}
+        </Button>
+      }
+    />
+  ) : (
+    <EmptyState title={t("list.empty.title")} description={t("list.empty.description")} />
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -156,40 +159,25 @@ export function NotificationListPage() {
         title={t("list.title")}
         description={t("list.description")}
         icon={Bell}
-        actions={<MarkAllReadButton />}
+        actions={<NotificationListMarkRead search={search} items={items} />}
       >
-        <div className="flex flex-wrap items-center gap-3">
-          <Select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value as "" | "Unread");
-              setPage(1);
-            }}
-            className="w-48"
-            aria-label={t("list.filters.allStatuses")}
-          >
-            <option value="">{t("list.filters.allStatuses")}</option>
-            <option value={NOTI_STATUS.UNREAD}>{t("list.filters.unreadOnly")}</option>
-          </Select>
-        </div>
+        <NotificationListFilters search={search} onChange={update} />
       </PageHeader>
 
       <DataTable
         columns={columns}
         data={items}
         isLoading={isLoading}
-        emptyState={
-          <EmptyState title={t("list.empty.title")} description={t("list.empty.description")} />
-        }
+        emptyState={emptyState}
         pageSize={NOTI_LIST_PAGE_SIZE}
       />
 
       {!isLoading && (
         <AuthLogPagination
-          page={page}
+          page={search.page ?? 1}
           currentCount={items.length}
           pageSize={NOTI_LIST_PAGE_SIZE}
-          onPageChange={setPage}
+          onPageChange={(page) => update({ page: page > 1 ? page : undefined })}
         />
       )}
     </div>
