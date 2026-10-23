@@ -12,8 +12,9 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, cleanup } from "@testing-library/react";
-import { useAuthStore } from "@mediaos/web-core";
+import { act, render, screen, cleanup, within } from "@testing-library/react";
+import { ApiError, configureToast, showApiErrorToast, useAuthStore } from "@mediaos/web-core";
+import { toast } from "@mediaos/ui";
 import { ProtectedShell } from "./ProtectedShell";
 import { ACCOUNT_SETUP_2FA_PATH, ME_SETUP_2FA_PATH } from "@/routes/account/constants";
 
@@ -128,5 +129,43 @@ describe("ProtectedShell — nối hạ tầng realtime CHAT (S7-CHAT-FE-1)", ()
     setUser(true);
     renderShell("/home");
     expect(useChatRealtimeMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ProtectedShell — hệ thông báo nổi dùng chung (S20-FE-TOAST-1)", () => {
+  // Lớp hỏng mà ca này bắt: `showApiErrorToast` có từ lâu nhưng KHÔNG ai gắn đích hiển thị ⇒ lỗi ghi
+  // chỉ rơi vào console, người dùng thấy im lặng. Đầu luồng = configureToast (main.tsx làm y hệt dòng
+  // dưới), cuối luồng = Toaster mount ở shell — ca chỉ xanh khi CẢ HAI đầu nối với nhau.
+  beforeEach(() => {
+    pathnameRef.current = "/home";
+    configureToast(toast);
+  });
+  afterEach(() => {
+    act(() => toast.clear());
+    cleanup();
+    configureToast(null);
+    useAuthStore.setState({ isAuthenticated: false, user: null, mustSetupTwoFactor: false });
+  });
+
+  it("showApiErrorToast ở màn bất kỳ ⇒ thông báo lỗi hiện trong vùng assertive, không chỉ log console", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    setUser(false);
+    renderShell("/home");
+
+    act(() =>
+      showApiErrorToast(new ApiError({ message: "Máy chủ đang bận", kind: "SERVER", status: 500 })),
+    );
+
+    const region = screen.getByRole("region", { name: "Thông báo" });
+    expect(within(region).getByRole("alert")).toHaveTextContent("Máy chủ đang bận");
+    expect(consoleError).not.toHaveBeenCalledWith("[api]", "Máy chủ đang bận");
+    consoleError.mockRestore();
+  });
+
+  it("Toaster mount ĐÚNG một lần ở shell", () => {
+    setUser(false);
+    renderShell("/home");
+
+    expect(document.querySelectorAll('[data-slot="toaster"]')).toHaveLength(1);
   });
 });
