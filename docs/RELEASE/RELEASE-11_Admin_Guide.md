@@ -366,6 +366,55 @@ Quay lui khi hỏng: `m prod-rollback` (`RELEASE-08` §5).
 > `--expect-commit` không phải tuỳ chọn cho vui. Thiếu nó, smoke xanh chỉ chứng minh "có một hệ thống
 > nào đó đang chạy tốt" — không chứng minh nó đang chạy **bản bạn vừa deploy**.
 
+### 6.5 Merge PR vào `master` — khi nào được dùng `--admin`
+
+**Sự thật (đo 23/10/2026):** `master` bắt buộc 1 review duyệt, ba check (`strict` — phải cập nhật theo
+master) và lịch sử tuyến tính; **enforce_admins TẮT**. Ba check bắt buộc: «Lint · Typecheck · Migrate · RLS
+Test» · «Secret scan (gitleaks)» · «Dependency scan (pnpm audit)». PR do chính mình mở không tự duyệt được ⇒
+merge thực tế đi bằng `gh pr merge --admin`, và **`--admin` bỏ qua TOÀN BỘ yêu cầu**: thiếu review, check
+ĐỎ, và cả check **CHƯA CHẠY XONG** (đo: hai PR ngày 23/10 merge khi check «Lint · …» còn chạy thêm 17–23
+phút). Required check không tự bảo vệ được gì nếu người merge không làm đủ các bước dưới.
+
+**Được dùng `--admin` khi và chỉ khi đủ cả 4:**
+
+1. Lý do vượt **duy nhất** là thiếu review của người thứ hai (PR tự mở). `--admin` KHÔNG BAO GIỜ dùng để
+   vượt check đỏ hay check đang chạy.
+2. Mọi check bắt buộc đã **chạy xong và xanh** trên head hiện tại:
+
+   ```powershell
+   gh pr checks <n> --required --watch --fail-fast; "EXIT=$LASTEXITCODE"
+   ```
+
+   Chỉ đi tiếp khi `EXIT=0` (`1` = có check đỏ · `8` = còn chờ ⇒ không được merge).
+3. **Đọc tận mắt** hai dòng «Secret scan (gitleaks)» và «Dependency scan (pnpm audit)» trong kết quả trên:
+   phải là `pass` — `skipping` / `cancel` / thiếu dòng đều là **chưa đạt** (cổng không chạy ≠ cổng sạch).
+   Không thấy hai dòng này trong `--required` ⇒ branch protection đã bị đổi hoặc tên job đã đổi: dừng.
+4. Ghim đúng commit vừa đọc:
+
+   ```powershell
+   $sha = gh pr view <n> --json headRefOid --jq .headRefOid
+   gh pr merge <n> --squash --admin --match-head-commit $sha
+   ```
+
+   Có push mới sau bước 2 ⇒ GitHub từ chối merge ⇒ làm lại từ bước 2.
+
+Merge nhiều PR một lượt: lặp đúng 4 bước cho từng PR, dừng ở PR đầu tiên không đạt. Trong PowerShell 5.1,
+bảng `[ordered]@{ 603 = '<sha>' }` có khoá là SỐ ⇒ `$bang[603]` đọc theo VỊ TRÍ (rỗng) — duyệt bằng
+`$bang.GetEnumerator()` rồi dùng `.Key` / `.Value`.
+
+**Ngoại lệ (vượt check đỏ) — chỉ owner, có chữ trong plan WO:**
+
+- «Secret scan (gitleaks)» đỏ: chỉ vượt khi đã quét **net diff PR + master** và cả hai SẠCH (leak nằm ở lịch
+  sử nhánh, không lên master) — quy tắc `CLAUDE.md` §5; ghi lệnh quét + kết quả vào plan WO.
+- «Dependency scan (pnpm audit)» đỏ: chỉ vượt khi owner ghi quyết định trong plan WO (advisory nào, vì sao
+  chấp nhận tạm, WO nợ nào gỡ). Đỏ vì registry không tới được = **không đo được**, KHÔNG phải sạch — chạy lại
+  job, không vượt.
+- Ghi vào sổ hậu merge của WO: số PR, SHA merge, kết luận ba check lúc merge.
+
+**Sau khi merge rồi mới deploy:** đợi CI trên `master` của commit merge cuối cùng xanh
+(`gh run list --branch master --limit 5`) rồi mới `m prod-update …` (§6.4) — mỗi lần merge là một push, run
+master cũ đang chờ bị thay bằng run mới, nên chỉ run của commit cuối mới là kết quả.
+
 ---
 
 ## 7. Khi có sự cố
