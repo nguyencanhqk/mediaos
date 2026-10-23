@@ -58,6 +58,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { rescueRun } from "./chunk-bisect.mjs";
+import { CRASH_SIGNATURES } from "./lane-db-guard.mjs";
 import { SPEC_FILE_RE } from "./spec-file-re.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,14 +69,8 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 // máy 32 nhân này; hạ trần làm giảm hẳn số vòng tạo/huỷ worker (xem evidence §2).
 const DEFAULTS = { chunkSize: 40, maxForks: 8, retries: 2, bisect: true };
 
-// Chữ ký crash HẠ TẦNG (được phép chạy lại). KHÔNG bao gồm test đỏ.
-const CRASH_SIGNATURES = [
-  /ERR_IPC_CHANNEL_CLOSED/,
-  /Channel closed/,
-  /Segmentation fault/i,
-  /SIGSEGV/,
-  /3221225477/, // 0xC0000005 ACCESS_VIOLATION (Windows)
-];
+// Chữ ký crash HẠ TẦNG (được phép chạy lại; KHÔNG bao gồm test đỏ) — CRASH_SIGNATURES import từ lane-db-guard.mjs:
+// guard dùng CÙNG danh sách để biết một luồng log chết mà không có dòng tổng kết theo sau.
 
 // SPEC_FILE_RE nay ở `spec-file-re.mjs` — xem docblock ở đó: bản cũ tại ĐÂY thiếu nhánh
 // `unit-` và làm runner bỏ chạy 20 spec tĩnh của apps/api trong im lặng (sự cố 03–04/09/2026).
