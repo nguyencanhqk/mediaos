@@ -304,6 +304,34 @@ describe("S14-SEC-CAPWILDCARD-1 — mệnh đề đơn điệu CÓ ĐIỀU KIỆ
   });
 });
 
+describe("S14-SEC-CAPWILDCARD-1 — cờ HÀNG grant wildcard ALLOW (gate CW-SEC-1/CW-G1, vế ALLOW của §8 T1)", () => {
+  // `decideCan` (permission.decide.ts — `effectivelySensitive`) coi cặp là sensitive khi MỘT hàng ALLOW khớp
+  // mang cờ, kể cả hàng wildcard ⇒ actor chỉ có wildcard nhận deny-sensitive. Phép chiếu phải soi gương.
+  const catalog = [
+    pair("view", "user", false),
+    pair("update", "user", false),
+    pair("*", "*", false),
+    pair("view", "*", true),
+  ];
+
+  it("ALLOW ('view','*') is_sensitive=true + ALLOW ('*','*') ⇒ view:user VẮNG ở caps + scopes; update:user CÒN", async () => {
+    const { svc } = service([grant("*", "*"), grant("view", "*", { isSensitive: true })], catalog);
+
+    expect(await svc.getCapabilities(U, CO)).toEqual({ "update:user": true });
+    expect(await svc.getCapabilityScopes(U, CO)).toEqual({ "update:user": ["Company"] });
+  });
+
+  it("ĐỐI CHỨNG: cùng hàng wildcard sensitive + ALLOW EXACT view:user ⇒ view:user CÒN (exact thoả cổng)", async () => {
+    const { svc } = service(
+      [grant("view", "*", { isSensitive: true }), grant("view", "user", { dataScope: "Own" })],
+      catalog,
+    );
+
+    expect(await svc.getCapabilities(U, CO)).toEqual({ "view:user": true });
+    expect(await svc.getCapabilityScopes(U, CO)).toEqual({ "view:user": ["Own"] });
+  });
+});
+
 describe("S14-SEC-CAPWILDCARD-1 — reset ảnh chụp catalog (§13.2)", () => {
   it("resetCatalogSnapshotForTest() reset CẢ ảnh chụp cặp ⇒ cặp mới seed thấy ngay qua wildcard", async () => {
     const catalog = [pair("view", "user", false)];

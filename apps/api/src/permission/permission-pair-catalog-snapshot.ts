@@ -21,8 +21,9 @@
  * ⚠️ KHÔNG BAO GIỜ ném / reject: mọi lỗi nạp ⇒ giá trị suy biến + `onError` (luật quan sát).
  *
  * Nợ ghi nhận (plan §13.2): `capabilities` nay phụ thuộc CATALOG (không chỉ grant) — seed cặp mới hoặc
- * lật `is_sensitive` đổi caps sau tối đa một TTL. `can()` đọc ảnh chụp KHÁC (cờ sensitive, TTL riêng) ⇒
- * trong một cửa sổ TTL hai ảnh có thể lệch. Ai reset ảnh chụp cho test phải reset CẢ HAI
+ * lật `is_sensitive` đổi caps sau tối đa một TTL. `can()` đọc ảnh chụp KHÁC (cờ sensitive, TTL riêng,
+ * mốc nạp độc lập) ⇒ cửa sổ hai ảnh lệch nhau tới ~2 × TTL, tính riêng từng instance (gate CW-G3); deploy
+ * khởi động lại nạp cả hai cùng lúc. Ai reset ảnh chụp cho test phải reset CẢ HAI
  * (`PermissionService.resetCatalogSnapshotForTest()` làm việc đó).
  */
 import type { CapabilityCatalogPair } from "./capability-projection";

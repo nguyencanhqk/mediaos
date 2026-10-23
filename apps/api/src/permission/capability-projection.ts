@@ -12,19 +12,24 @@
  *   excluded(a)  = `isCapabilityExcluded(a)` — action tiền tố `reveal-` (owner chốt CW-1 23/10/2026)
  *   denied(a,t)  = ∃ grant DENY còn hiệu lực khớp (a,t) — trên MỌI grant, kể cả hàng sensitive (mirror
  *                  `decideCan`). Đây là vế SIẾT duy nhất so với bản cũ (bản cũ chỉ gom DENY non-sensitive).
- *   sensitive    = cờ của CẶP ĐÍCH. Grant EXACT mang đúng cờ cặp đích (UNIQUE (action, resource_type),
- *                  cờ lấy từ chính hàng được grant) ⇒ grant exact KHÔNG cần catalog; cặp khai triển từ
- *                  wildcard đọc cờ từ catalog.
+ *   sensitive    = cờ của CẶP ĐÍCH ∨ cờ của một HÀNG ALLOW khớp (mirror `effectivelySensitive` của
+ *                  `decideCan`). Grant EXACT mang đúng cờ cặp đích (UNIQUE (action, resource_type), cờ lấy
+ *                  từ chính hàng được grant) ⇒ grant exact KHÔNG cần catalog; cặp khai triển từ wildcard đọc
+ *                  cờ catalog VÀ cờ các hàng wildcard khớp — hàng wildcard mang `is_sensitive=true` khiến
+ *                  `can()` deny-sensitive mọi cặp nó khớp khi không có ALLOW exact.
  *
  * Bất biến hình dạng được ép ở ĐIỂM PHÁT KHOÁ (không ở tập đích): mọi cặp chứa `*` bị loại, nên nhánh
  * nào cũng kín — kể cả catalog có hàng `('*','*')` hay `('view','*')`.
  *
  * ⚠️ KHÔNG phải cổng enforcement — `can()`/`PermissionGuard` vẫn là cổng thật. Đây là GỢI Ý UI phản chiếu
- * quyết định tầng công ty của `can()` cho call-site không khai `requiresReauth`/`objectGrantRequired`.
+ * quyết định tầng công ty của `can()` cho call-site không khai `requiresReauth`/`objectGrantRequired` và
+ * không khai `isSensitive` trên cặp mà catalog ghi non-sensitive (call-site khai `isSensitive: true` làm
+ * `can()` đòi ALLOW exact ⇒ actor chỉ có wildcard thấy khoá mà nhận 403 — lệch hẹp, không rò; gate CW-SEC-2).
  *
  * ⚠️ Mệnh đề «không actor nào mất khoá» CHỈ đúng khi catalog không có hàng wildcard mang
- * `is_sensitive=true` (vế DENY-siết sẽ thấy DENY trên hàng đó) và ảnh chụp catalog đã nạp ≥ 1 lần (plan §8
- * T1/T2). Đừng đọc nó như định lý vô điều kiện.
+ * `is_sensitive=true` và ảnh chụp catalog đã nạp ≥ 1 lần (plan §8 T1/T2). Hàng wildcard sensitive siết ở CẢ
+ * HAI vế: DENY trên nó ⇒ mất khoá exact khớp (#23a); ALLOW trên nó ⇒ mọi cặp nó khớp cần ALLOW exact (vế
+ * ALLOW, gate CW-SEC-1). Đừng đọc nó như định lý vô điều kiện.
  */
 import type { DataScope } from "@mediaos/contracts";
 import { isCapabilityExcluded } from "../auth/step-up/capability-exclusion";
@@ -116,10 +121,13 @@ function projectPairs<G extends CompanyRoleGrant>(
       if (candidates.has(key) || containsStar(p.action, p.resourceType)) continue;
       const matching = wildcardAllows.filter((g) => grantMatchesPair(g, p.action, p.resourceType));
       if (matching.length === 0) continue;
+      // Soi gương `decideCan`/`decideStrongestScope` (`effectivelySensitive`): cặp là sensitive khi cờ
+      // CẶP ĐÍCH bật HOẶC một hàng ALLOW khớp mang cờ — kể cả hàng wildcard (gate CW-SEC-1/CW-G1).
+      const rowFlagged = matching.some((g) => g.isSensitive);
       candidates.set(key, {
         action: p.action,
         resourceType: p.resourceType,
-        isSensitive: p.isSensitive,
+        isSensitive: p.isSensitive || rowFlagged,
         hasExactAllow: false,
         contributors: matching,
       });

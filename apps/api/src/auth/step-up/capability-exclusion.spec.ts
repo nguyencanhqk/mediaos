@@ -14,13 +14,18 @@
  *   (d) allowlist ∩ EXCLUDED = ∅ — đo hành vi: grant exact trên mọi cặp reveal của migration ⇒
  *       `getAllowlistedSensitiveCapabilities` không trả khoá nào bị loại (nếu trả, merge
  *       `{...allowlisted, ...caps}` ở /auth/me sẽ phục hồi khoá đã loại).
+ *   (d') allowlist ∩ EXCLUDED = ∅ đo TRỰC TIẾP trên toàn bộ allowlist (gate CW-SEC-3/CW-G6) — không
+ *       phụ thuộc regex migration của (a)/(d), không cần DB.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isCapabilityExcluded } from "./capability-exclusion";
 import { REVEAL_CLASS_PAIRS } from "./reveal-class-pairs";
-import { PermissionService } from "../../permission/permission.service";
+import {
+  __SENSITIVE_CAPABILITY_ALLOWLIST_FOR_TEST,
+  PermissionService,
+} from "../../permission/permission.service";
 import { CapabilityStubRepo, grant, pair } from "../../../test/helpers/capability-stub-repo";
 
 const MIGRATIONS_DIR = join(__dirname, "..", "..", "..", "migrations");
@@ -83,5 +88,11 @@ describe("S14-SEC-CAPWILDCARD-1 #14 — ratchet EXCLUDED (tiền tố action rev
 
     const leaked = Object.keys(allowlisted).filter((k) => isCapabilityExcluded(k.split(":")[0]));
     expect(leaked).toEqual([]);
+  });
+
+  it("(d') allowlist ∩ EXCLUDED = ∅ — kiểm TRỰC TIẾP mọi khoá của SENSITIVE_CAPABILITY_ALLOWLIST", () => {
+    const keys = [...__SENSITIVE_CAPABILITY_ALLOWLIST_FOR_TEST];
+    expect(keys.length, "sàn chống xanh-rỗng").toBeGreaterThan(0);
+    expect(keys.filter((k) => isCapabilityExcluded(k.split(":")[0]))).toEqual([]);
   });
 });

@@ -112,7 +112,8 @@ export const meResponseSchema = z.object({
    * S14-SEC-CAPWILDCARD-1 (ADR `DECISIONS-13` §4) — phép CHIẾU quyết định `can()` ở tầng CÔNG TY, keyed
    * "action:resourceType" cho tra O(1) ở FE: `capabilities[k] === true` ⟺ k ∉ EXCLUDED (action tiền tố
    * `reveal-`) ∧ `can()` ALLOW k ở tầng công ty cho call-site không khai `requiresReauth`/
-   * `objectGrantRequired`. Khoá KHÔNG BAO GIỜ chứa `*` — grant wildcard được khai triển ở BE thành cặp
+   * `objectGrantRequired` và không khai `isSensitive` trên cặp catalog non-sensitive (khai vậy ⇒ `can()` đòi
+   * ALLOW exact). Khoá KHÔNG BAO GIỜ chứa `*` — grant wildcard được khai triển ở BE thành cặp
    * literal (BE có ratchet). Cặp sensitive CÓ mặt khi actor giữ ALLOW exact; wildcard không mở cặp sensitive.
    * Chỉ là GỢI Ý UI — enforcement vẫn per-resource (PermissionGuard/can()). Zod shape không đổi.
    */

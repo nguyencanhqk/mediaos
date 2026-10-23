@@ -36,3 +36,25 @@ describe("S14-SEC-CAPWILDCARD-1 #24 — hàm chiếu thuần loại mọi action
     });
   });
 });
+
+describe("S14-SEC-CAPWILDCARD-1 gate CW-SEC-5/CW-G4 — hàm chiếu TỰ loại '*' (không dựa lọc ảnh chụp)", () => {
+  // Gọi thẳng hàm chiếu với catalog CÒN hàng '*' — tầng lọc của `PermissionPairCatalogSnapshot` không có
+  // mặt ⇒ ca này ghim bất biến hình dạng ở điểm phát khoá của chính hàm chiếu.
+  const grants = [grant("*", "*"), grant("vi*ew", "user")];
+  const catalog = [
+    pair("*", "*", false),
+    pair("view", "*", false),
+    pair("view", "user", false),
+    pair("vi*ew", "user", false),
+  ];
+
+  it("caps: 0 khoá chứa '*' — cả cặp catalog wildcard lẫn grant exact có '*' trong chuỗi", () => {
+    expect(projectCapabilities({ grants, catalog, now: NOW })).toEqual({ "view:user": true });
+  });
+
+  it("scopes: cùng keyset, 0 khoá chứa '*'", () => {
+    expect(projectCapabilityScopes({ grants, catalog, now: NOW })).toEqual({
+      "view:user": ["Company"],
+    });
+  });
+});
