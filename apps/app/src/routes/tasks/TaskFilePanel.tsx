@@ -30,6 +30,8 @@ import { Badge, Button, DataTable, Dialog, EmptyState, Input } from "@mediaos/ui
 import { TASK_FILE_ENGINE_PAIRS } from "./task-file-constants";
 import { PanelBody } from "./PanelBody";
 import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
+import { uploadPrecheckMessage } from "@/lib/upload-precheck";
+import { useIsMounted } from "@/lib/use-is-mounted";
 
 /** 1024-based byte formatter — mirror EmployeeFilesTab.tsx (không export dùng chung, tránh coupling). */
 function formatBytes(bytes: number): string {
@@ -70,6 +72,7 @@ function DownloadTaskFileButton({ taskId, file }: { taskId: string; file: TaskFi
   const { t } = useTranslation("tasks");
   const [pending, setPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isMounted = useIsMounted();
 
   const download = async () => {
     setPending(true);
@@ -77,6 +80,7 @@ function DownloadTaskFileButton({ taskId, file }: { taskId: string; file: TaskFi
     try {
       await openSignedUrlInNewTab(
         async () => (await taskFileApi.downloadTaskFile(taskId, file.fileId)).url,
+        { isCurrent: isMounted },
       );
     } catch (err) {
       setErrorMessage(mapApiErrorToUi(err).message);
@@ -258,6 +262,7 @@ function UploadTaskFileControl({ taskId }: { taskId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState("");
   const [progress, setProgress] = useState(0);
+  const [precheckError, setPrecheckError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: (file: File) =>
@@ -280,6 +285,13 @@ function UploadTaskFileControl({ taskId }: { taskId: string }) {
   const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // S16-SOCIAL-FILEOPENUX-1 — nhóm tệp server LUÔN từ chối ⇒ báo tại chỗ, không gọi API (server vẫn là lưới).
+    const rejected = uploadPrecheckMessage(file);
+    setPrecheckError(rejected ? t(rejected.key, rejected.values) : null);
+    if (rejected) {
+      e.target.value = "";
+      return;
+    }
     setProgress(0);
     mutation.mutate(file);
   };
@@ -327,6 +339,11 @@ function UploadTaskFileControl({ taskId }: { taskId: string }) {
       )}
       {mutation.isError && (
         <p className="text-xs text-destructive">{t("tasks.detail.files.uploadError")}</p>
+      )}
+      {precheckError !== null && (
+        <p role="alert" className="text-xs text-destructive">
+          {precheckError}
+        </p>
       )}
     </div>
   );

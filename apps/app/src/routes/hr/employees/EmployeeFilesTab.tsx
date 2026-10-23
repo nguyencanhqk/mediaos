@@ -30,6 +30,7 @@ import { EMPLOYEE_FILE_ENGINE_PAIRS } from "./employee-file-constants";
 // Cặp quyền tải file (foundation-file) — TÁI DÙNG cặp đã dùng ở EmployeeContractsPage (cùng cơ chế
 // filesApi.getDownloadUrl + window.open, KHÔNG bịa cặp mới).
 import { FILE_DOWNLOAD_PAIR } from "../contracts/constants";
+import { uploadPrecheckMessage } from "@/lib/upload-precheck";
 
 /** 1024-based byte formatter — mirror system/files/FilesPage.tsx (không export dùng chung, tránh coupling). */
 function formatBytes(bytes: number): string {
@@ -160,6 +161,7 @@ function UploadEmployeeFileControl({ employeeId }: { employeeId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState("");
   const [progress, setProgress] = useState(0);
+  const [precheckError, setPrecheckError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: (file: File) =>
@@ -182,6 +184,13 @@ function UploadEmployeeFileControl({ employeeId }: { employeeId: string }) {
   const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // S16-SOCIAL-FILEOPENUX-1 — nhóm tệp server LUÔN từ chối ⇒ báo tại chỗ, không gọi API (server vẫn là lưới).
+    const rejected = uploadPrecheckMessage(file);
+    setPrecheckError(rejected ? t(rejected.key, rejected.values) : null);
+    if (rejected) {
+      e.target.value = "";
+      return;
+    }
     setProgress(0);
     mutation.mutate(file);
   };
@@ -228,6 +237,11 @@ function UploadEmployeeFileControl({ employeeId }: { employeeId: string }) {
         </div>
       )}
       {mutation.isError && <p className="text-xs text-destructive">{t("files.uploadError")}</p>}
+      {precheckError !== null && (
+        <p role="alert" className="text-xs text-destructive">
+          {precheckError}
+        </p>
+      )}
     </div>
   );
 }

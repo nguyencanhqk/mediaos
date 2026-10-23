@@ -31,6 +31,7 @@ import {
   MAX_MENTIONS_PER_MESSAGE,
   MAX_MESSAGE_LENGTH,
 } from "@/routes/chat/constants";
+import { uploadPrecheckMessage } from "@/lib/upload-precheck";
 import { uploadChatAttachment } from "./chat-upload";
 import {
   applyMention,
@@ -176,6 +177,13 @@ export function MessageComposer({
       const picked = Array.from(files);
       if (attachments.length + picked.length > MAX_ATTACHMENTS_PER_MESSAGE) {
         setError(t("composer.tooManyFiles", { count: MAX_ATTACHMENTS_PER_MESSAGE }));
+        return;
+      }
+      // S16-SOCIAL-FILEOPENUX-1 — lọc sớm nhóm tệp server LUÔN từ chối (`lib/upload-precheck.ts`). Đặt ở đây vì
+      // đây là đường duy nhất của 📎 · dán · kéo-thả; một tệp bị chặn ⇒ cả lượt dừng trước mọi lời gọi API.
+      const rejected = picked.map(uploadPrecheckMessage).find((m) => m !== null);
+      if (rejected) {
+        setError(t(rejected.key, rejected.values));
         return;
       }
       ensureClientMessageId(); // soạn đã bắt đầu ngay khi có tệp, dù chưa gõ chữ nào
