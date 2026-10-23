@@ -1,28 +1,22 @@
-import type { FeedReportActionDto, FeedTargetTypeDto } from "@mediaos/contracts";
+import {
+  REPORT_ACTION_MATRIX,
+  type FeedReportActionDto,
+  type FeedTargetTypeDto,
+} from "@mediaos/contracts";
 import { SOCIAL_REPORT_ACTION_PAIRS } from "./social-route-pairs.const";
 import type { SocialActor } from "./social.types";
 
 /**
  * S16-SOCIAL-BE-3A — luật THUẦN của hành động kèm ở `SOCIAL-API-029` (không DB, không DI).
  *
- * Tách khỏi `social-reports.service.ts` để hai bảng dưới đây đo được VÉT CẠN ở unit spec
- * (`social-report-actions.spec.ts`) mà không dựng Nest.
+ * Tách khỏi `social-reports.service.ts` để luật ma trận D2 và bảng cặp D4 dưới đây đo được VÉT CẠN ở
+ * unit spec (`social-report-actions.spec.ts`) mà không dựng Nest.
  */
 
 /**
- * D2 — ma trận hành động × loại đích. `satisfies Record<FeedTargetTypeDto, …>` ⇒ thêm một loại đích
- * vào enum contracts mà quên hàng ở đây là TS đỏ.
- *
- * ⚠️ `comment` KHÔNG có `hide_post`: ẩn BÀI vì một bình luận là trừng phạt tác giả bài cho lỗi của
- * người khác. `lock_comments` trên báo cáo bình luận khoá bình luận của BÀI CHA — đó là cách chặn
- * một luồng bình luận đang vượt kiểm soát, và là lý do duy nhất nó có mặt ở hàng này.
+ * `true` ⇔ `action` hợp lệ cho `targetType` theo ma trận D2. Ma trận là `REPORT_ACTION_MATRIX` của
+ * `@mediaos/contracts` (S16-SOCIAL-REPORTMATRIX-1) — FE đọc CHÍNH hằng đó, không có bản chép tay.
  */
-export const REPORT_ACTION_MATRIX = {
-  post: ["none", "hide_post", "lock_comments", "delete_target"],
-  comment: ["none", "lock_comments", "delete_target"],
-} as const satisfies Record<FeedTargetTypeDto, readonly FeedReportActionDto[]>;
-
-/** `true` ⇔ `action` hợp lệ cho `targetType` theo ma trận D2. */
 export function isReportActionValidForTarget(
   targetType: FeedTargetTypeDto,
   action: FeedReportActionDto,

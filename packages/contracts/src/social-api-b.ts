@@ -4,6 +4,7 @@ import {
   feedReportReasonSchema,
   feedReportStatusSchema,
   feedTargetTypeSchema,
+  type FeedTargetTypeDto,
 } from "./social";
 import { FEED_NOTE_MAX, FEED_PAGE_LIMIT_MAX, feedPostSchema } from "./social-api";
 
@@ -299,6 +300,28 @@ export const feedReportActionSchema = z.enum([
   "delete_target",
 ]);
 export type FeedReportActionDto = z.infer<typeof feedReportActionSchema>;
+
+/**
+ * S16-SOCIAL-REPORTMATRIX-1 — ma trận D2 (S16-SOCIAL-BE-3A): loại đích → hành động kèm HỢP LỆ của `029`,
+ * theo THỨ TỰ hiển thị (`none` đứng đầu = giá trị mặc định của ô chọn). MỘT nguồn cho cả hai phía:
+ *   · BE `apps/api/src/social/social-report-actions.ts` — cổng thật, tổ hợp ngoài ma trận ⇒ 422
+ *     `SOCIAL-ERR-REPORT-ACTION-INVALID-FOR-TARGET` (luật SERVICE, Zod của `resolveFeedReportSchema`
+ *     không ép ma trận này).
+ *   · FE `apps/app/src/routes/social/moderation/lib/report-actions.ts` — chỉ mời người dùng chọn thứ
+ *     server sẽ nhận.
+ * `satisfies Record<FeedTargetTypeDto, …>` ⇒ thêm một loại đích vào enum mà quên hàng ở đây là TS đỏ.
+ *
+ * ⚠️ `comment` KHÔNG có `hide_post`: ẩn BÀI vì một bình luận là trừng phạt tác giả bài cho lỗi của
+ * người khác. `lock_comments` trên báo cáo bình luận khoá bình luận của BÀI CHA — đó là cách chặn một
+ * luồng bình luận đang vượt kiểm soát, và là lý do duy nhất nó có mặt ở hàng này.
+ *
+ * Cặp quyền THÊM mà từng hành động đòi KHÔNG ở đây — nó là cổng quyền của server
+ * (`SOCIAL_REPORT_ACTION_PAIRS`, `apps/api/src/social/social-route-pairs.const.ts`).
+ */
+export const REPORT_ACTION_MATRIX = {
+  post: ["none", "hide_post", "lock_comments", "delete_target"],
+  comment: ["none", "lock_comments", "delete_target"],
+} as const satisfies Record<FeedTargetTypeDto, readonly FeedReportActionDto[]>;
 
 /**
  * `SOCIAL-API-029` — `PATCH /social/reports/{id}`.

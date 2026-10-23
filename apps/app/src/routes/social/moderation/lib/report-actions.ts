@@ -3,14 +3,11 @@
  * đích, bảng nhãn, và hàm dựng body. Hộp thoại xử lý báo cáo chỉ ĐỌC file này — không tự suy lựa chọn,
  * nhãn hay hình dạng body.
  *
- * ┌─ NGUỒN CỦA MA TRẬN (plan D7 · M3) ─────────────────────────────────────────────────────────────┐
- * │ `REPORT_ACTION_MATRIX` là BẢN CHÉP của `apps/api/src/social/social-report-actions.ts:20-23`      │
- * │ (`REPORT_ACTION_MATRIX`, quyết định D2 của S16-SOCIAL-BE-3A). Không import được: `apps/api` nằm  │
- * │ ngoài biên của app, và hằng chưa có ở `packages/contracts` (nợ ghi ở plan §8).                   │
- * │ Server vẫn là cổng THẬT: tổ hợp sai ⇒ 422 `SOCIAL-ERR-REPORT-ACTION-INVALID-FOR-TARGET`. Bản     │
- * │ chép này chỉ để KHÔNG mời người dùng chọn thứ server sẽ từ chối. Sửa ma trận ở server ⇒ sửa ở    │
- * │ đây + bảng nhãn dưới (TS đỏ nếu quên nhãn) + ca viết tay ở `report-actions.spec.ts`.             │
- * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ * NGUỒN CỦA MA TRẬN: `REPORT_ACTION_MATRIX` của `@mediaos/contracts` — CHÍNH hằng mà server dùng làm
+ * cổng 422 `SOCIAL-ERR-REPORT-ACTION-INVALID-FOR-TARGET` (S16-SOCIAL-REPORTMATRIX-1; trước đó FE chép tay
+ * — nợ D7 · M3 của plan FE-3). File này KHÔNG giữ bản chép nào. Server vẫn là cổng THẬT; ma trận ở đây
+ * chỉ để không mời người dùng chọn thứ server sẽ từ chối. Đổi ma trận ở contracts ⇒ bảng nhãn dưới phải
+ * theo (TS đỏ nếu thiếu nhãn hoặc thừa nhãn).
  *
  * ⚠️ Nghĩa của CÙNG một hành động khác nhau theo loại đích (plan M2b · B27):
  *   · `lock_comments` trên báo cáo BÌNH LUẬN khoá bình luận của BÀI CHA, không phải «khoá bình luận này».
@@ -20,17 +17,15 @@
  * ⇒ hai loại đích KHÔNG dùng chung nhãn `lock_comments` / `delete_target`, và chữ ô tick xác nhận xoá
  *   nói rõ xoá CÁI GÌ.
  */
-import type { FeedReportActionDto, FeedTargetTypeDto } from "@mediaos/contracts";
+import {
+  REPORT_ACTION_MATRIX,
+  type FeedReportActionDto,
+  type FeedTargetTypeDto,
+} from "@mediaos/contracts";
 import type { ResolveFeedReportBody } from "@mediaos/web-core";
 
 /** «Không kèm hành động» — giá trị mặc định của ô chọn; KHÔNG bao giờ được gửi lên (vắng khoá = `none`). */
 export const NO_REPORT_ACTION = "none" satisfies FeedReportActionDto;
-
-/** Hành động hợp lệ theo loại đích, theo THỨ TỰ hiển thị. Chép từ server — xem docblock. */
-export const REPORT_ACTION_MATRIX = {
-  post: ["none", "hide_post", "lock_comments", "delete_target"],
-  comment: ["none", "lock_comments", "delete_target"],
-} as const satisfies Record<FeedTargetTypeDto, readonly FeedReportActionDto[]>;
 
 type ActionOf<T extends FeedTargetTypeDto> = (typeof REPORT_ACTION_MATRIX)[T][number];
 
