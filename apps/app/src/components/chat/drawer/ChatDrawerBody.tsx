@@ -129,10 +129,9 @@ export function ChatDrawerBody(): React.ReactElement {
       /*
        * Bấm ra nền KHÔNG đóng — khác mặc định của `Sheet`.
        *
-       * `MessageComposer` giữ nháp bằng state cục bộ, mất khi unmount. Cửa sổ nổi cũ không có nền phủ nên
-       * không có đường này; thêm drawer mà giữ mặc định là thêm một cú click trượt tay xoá sạch tin đang
-       * gõ. Esc và ✕ vẫn đóng (ngang cửa sổ nổi cũ), và Esc còn được `data-escape-claim` che khi đang
-       * soạn câu trả lời.
+       * Chữ nháp nay sống ở `chat-draft.store` (S20-CHAT-DRAFT-1) nên đóng drawer không mất chữ nữa, nhưng
+       * TỆP CHỜ thì vẫn mất khi ô soạn tháo — một cú click trượt tay ra nền vẫn bỏ tệp vừa dán. Esc và ✕
+       * vẫn đóng (ngang cửa sổ nổi cũ), và Esc còn được `data-escape-claim` che khi đang soạn câu trả lời.
        */
       closeOnBackdrop={false}
       data-testid="chat-drawer"

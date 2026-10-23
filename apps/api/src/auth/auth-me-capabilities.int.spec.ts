@@ -85,6 +85,7 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../../test/helpers/seed";
+import * as capShape from "../../test/helpers/capability-shape-assert";
 import {
   TASK_GRANT_MATRIX,
   TASK_PERMISSIONS,
@@ -101,7 +102,6 @@ const MANAGER_ROLE = "00000000-0000-0000-0000-000000000010";
 
 /** Cặp seed THẬT (mig 0340: is_sensitive=true). Key map = "action:resourceType". */
 const AUDIT_LOG_CAP_KEY = "view:audit-log";
-const WILDCARD_CAP_KEY = "*:*";
 
 /**
  * S3-FE-REGISTRY-1 — 4 cặp ATT/LEAVE view NHẠY CẢM (is_sensitive=true, seed mig 0454/0455) mới APPEND vào
@@ -231,7 +231,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 FIX-1-CAP-EXPOSE /auth/me allowlisted sens
 
   it("N2 — employee + wildcard '*:*' → KHÔNG có 'view:audit-log' (sensitive không kế thừa), '*:*' vẫn có", async () => {
     const caps = await meCapabilities(app, wildcardToken);
-    expect(caps[WILDCARD_CAP_KEY]).toBe(true); // non-sensitive wildcard vẫn surface
+    capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_WITH_EMPLOYEE_ROLE);
     expect(AUDIT_LOG_CAP_KEY in caps).toBe(false); // sensitive KHÔNG kế thừa qua *:*
   });
 
@@ -270,7 +270,7 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 FIX-1-CAP-EXPOSE /auth/me allowlisted sens
 
   it("N5 — user CHỈ '*:*' → KHÔNG kế thừa 4 cặp ATT/LEAVE nhạy cảm; view:audit-log vẫn vắng", async () => {
     const caps = await meCapabilities(app, bareWildToken);
-    expect(caps[WILDCARD_CAP_KEY]).toBe(true); // non-sensitive wildcard vẫn surface
+    capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_ONLY);
     for (const key of ATT_LEAVE_SENSITIVE_KEYS) {
       expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
     }
@@ -430,7 +430,7 @@ describe.skipIf(!runDb)(
 
     it("CAP1-N3 — wildcard '*:*' → KHÔNG kế thừa 3 cặp CAP-1 (sensitive gate); '*:*' vẫn có", async () => {
       const caps = await meCapabilities(app, wildcardToken);
-      expect(caps[WILDCARD_CAP_KEY]).toBe(true); // non-sensitive wildcard vẫn surface
+      capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_ONLY);
       for (const key of CAP1_SENSITIVE_KEYS) {
         expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
       }
@@ -571,7 +571,7 @@ describe.skipIf(!runDb)(
 
     it("CAP2-N3 — wildcard '*:*' → KHÔNG kế thừa 2 cặp CAP-2 (sensitive gate); '*:*' vẫn có", async () => {
       const caps = await meCapabilities(app, wildcardToken);
-      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_ONLY);
       for (const key of CAP2_SENSITIVE_KEYS) {
         expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
       }
@@ -734,7 +734,7 @@ describe.skipIf(!runDb)(
 
     it("UOPS-N2 — wildcard '*:*' → KHÔNG kế thừa 3 cặp USEROPS (delete:user ĐÃ sensitive-hóa); '*:*' vẫn có", async () => {
       const caps = await meCapabilities(app, wildcardToken);
-      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_ONLY);
       for (const key of USEROPS_SENSITIVE_KEYS) {
         expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
       }
@@ -876,7 +876,7 @@ describe.skipIf(!runDb)(
 
     it("TASKCAP-N2 — wildcard '*:*' → KHÔNG kế thừa cặp sensitive TASK nào (sensitive gate)", async () => {
       const caps = await meCapabilities(app, wildcardToken);
-      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_ONLY);
       for (const key of TASK_SENSITIVE_KEYS) {
         expect(key in caps, `cặp sensitive ${key} KHÔNG kế thừa qua *:*`).toBe(false);
       }
@@ -998,7 +998,7 @@ describe.skipIf(!runDb)(
 
     it("NOTICAP-N4 — wildcard '*:*' → KHÔNG kế thừa 6 cặp NOTI config nào (sensitive gate); '*:*' vẫn có", async () => {
       const caps = await meCapabilities(app, wildcardToken);
-      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_ONLY);
       for (const key of NOTI_CONFIG_SENSITIVE_KEYS) {
         expect(key in caps, `cặp sensitive ${key} KHÔNG kế thừa qua *:*`).toBe(false);
       }
@@ -1133,7 +1133,7 @@ describe.skipIf(!runDb)(
 
     it("DASHCFG-N4 — wildcard '*:*' → KHÔNG kế thừa 2 cặp DASH config (sensitive gate); '*:*' vẫn có", async () => {
       const caps = await meCapabilities(app, wildcardToken);
-      expect(caps[WILDCARD_CAP_KEY]).toBe(true); // non-sensitive wildcard vẫn surface
+      capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_ONLY);
       for (const key of DASH_CONFIG_SENSITIVE_KEYS) {
         expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
       }
@@ -1273,7 +1273,7 @@ describe.skipIf(!runDb)(
 
     it("IMPORTCAP-N3 — wildcard '*:*' → KHÔNG kế thừa 'import:employee' (sensitive gate); '*:*' vẫn có", async () => {
       const caps = await meCapabilities(app, wildcardToken);
-      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      capShape.expectCompanyTierCapsShape(caps, capShape.WILDCARD_ONLY);
       expect(IMPORT_EMPLOYEE_CAP_KEY in caps).toBe(false);
     });
 

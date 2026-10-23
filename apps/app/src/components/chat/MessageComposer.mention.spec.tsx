@@ -25,6 +25,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 import { useCan } from "@mediaos/web-core";
+import { useChatDraftStore } from "./chat-draft.store";
 import { MessageComposer } from "./MessageComposer";
 import type { MentionCandidate } from "./use-mention-autocomplete";
 
@@ -61,6 +62,9 @@ const sendButton = () => screen.getByLabelText("Gửi tin nhắn");
 const type = (value: string) => fireEvent.change(textbox(), { target: { value } });
 
 beforeEach(() => {
+  // S20-CHAT-DRAFT-1 — nháp sống ở store module (theo `roomId`), không chết theo `cleanup()`: không dọn
+  // thì ca trước để lại chữ cho ca sau cùng phòng, và `fireEvent.change` với đúng giá trị cũ KHÔNG bắn `onChange`.
+  useChatDraftStore.getState().resetChatDrafts();
   mockUseCan.mockReset();
   mockUseCan.mockReturnValue(true);
 });

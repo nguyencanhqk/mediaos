@@ -20,6 +20,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 import { chatApi } from "@mediaos/web-core";
+import { useChatDraftStore } from "./chat-draft.store";
 import { MessageComposer } from "./MessageComposer";
 import { TYPING_PING_THROTTLE_MS } from "@/routes/chat/constants";
 
@@ -46,6 +47,9 @@ const type = (value: string): void => {
 };
 
 beforeEach(() => {
+  // S20-CHAT-DRAFT-1 — nháp sống ở store module (theo `roomId`), không chết theo `cleanup()`: không dọn
+  // thì ca trước để lại chữ cho ca sau cùng phòng, và `fireEvent.change` với đúng giá trị cũ KHÔNG bắn `onChange`.
+  useChatDraftStore.getState().resetChatDrafts();
   pingTyping.mockClear();
   pingTyping.mockResolvedValue(undefined);
   vi.useFakeTimers();

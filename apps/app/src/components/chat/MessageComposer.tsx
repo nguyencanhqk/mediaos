@@ -17,6 +17,10 @@
  * 4. `mentions[]` gửi lên **suy từ chính chuỗi nháp** (`collectMentionIds`), không phải từ danh sách
  *    tích luỹ theo lượt chọn — xem docblock `use-mention-autocomplete.ts`.
  * 5. Mọi blob URL xem trước sinh ở ĐÂY thì cũng **thu hồi ở đây** (gỡ tệp · gửi xong · tháo cây).
+ *
+ * S20-CHAT-DRAFT-1 — chữ, bảng mention, khoá idempotency của nháp sống ở `chat-draft.store` (CHỈ bộ
+ * nhớ, theo `roomId`) thay vì state cục bộ, để đổi phòng / bấm ⤢ không xoá nháp. Tệp chờ vẫn cục bộ
+ * và KHÔNG được giữ — tháo cây khi còn tệp thì để lại cảnh báo cho lần quay lại.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,13 +36,13 @@ import {
   MAX_MESSAGE_LENGTH,
 } from "@/routes/chat/constants";
 import { uploadChatAttachment } from "./chat-upload";
+import { EMPTY_CHAT_DRAFT, useChatDraftStore } from "./chat-draft.store";
 import {
   applyMention,
   collectMentionIds,
   mentionLabel,
   useMentionAutocomplete,
   type MentionCandidate,
-  type MentionEntry,
 } from "./use-mention-autocomplete";
 import { AttachmentPreviewList, type PendingAttachment } from "./composer/AttachmentPreviewList";
 import { ComposerActions } from "./composer/ComposerActions";
@@ -58,7 +62,7 @@ export interface ComposerSubmitPayload {
 }
 
 interface MessageComposerProps {
-  /** Phòng đang mở — đổi phòng ⇒ nháp reset (nháp thuộc về phòng, không theo người dùng). */
+  /** Phòng đang mở — khoá của nháp trong `chat-draft.store` (nháp thuộc về phòng). */
   roomId: string;
   isArchived: boolean;
   replyTo: StoredChatMessage | null;
@@ -93,7 +97,9 @@ export function MessageComposer({
    */
   const canSend = useCan(CHAT_PAIRS.SEND_MESSAGE.action, CHAT_PAIRS.SEND_MESSAGE.resourceType);
 
-  const [draft, setDraft] = useState("");
+  const roomDraft = useChatDraftStore((s) => s.drafts[roomId] ?? EMPTY_CHAT_DRAFT);
+  const draft = roomDraft.text;
+  const setText = useChatDraftStore((s) => s.setText);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,19 +134,30 @@ export function MessageComposer({
   }, []);
 
   /**
-   * Khoá idempotency của NHÁP hiện tại. `null` = chưa bắt đầu soạn.
+   * Khoá idempotency của NHÁP hiện tại — ở store nháp, cấp MỘT lần khi bắt đầu soạn.
    *
-   * Ở ref chứ không ở state: nó không được kích hoạt render, và quan trọng hơn — nó phải sống sót qua
-   * mọi lần re-render giữa lúc `onSubmit` đang bay. Cấp lại khoá giữa chừng là mất tác dụng dedupe.
+   * Không ở state cục bộ: nó phải sống qua mọi lần re-render giữa lúc `onSubmit` đang bay, và (S20) qua
+   * cả lần tháo khi đổi phòng — dựng lại mà cấp khoá mới thì «gửi lại» thành một tin KHÁC ở server.
    */
-  const clientMessageIdRef = useRef<string | null>(null);
-  const ensureClientMessageId = (): string => {
-    clientMessageIdRef.current ??= createClientMessageId();
-    return clientMessageIdRef.current;
-  };
+  const ensureClientMessageId = useCallback(
+    (): string => useChatDraftStore.getState().ensureClientMessageId(roomId, createClientMessageId),
+    [roomId],
+  );
 
-  /** Những lượt chèn mention đã xảy ra. Bảng tra `label → userId`, KHÔNG phải payload gửi đi. */
-  const mentionEntriesRef = useRef<MentionEntry[]>([]);
+  /**
+   * Tệp chờ KHÔNG được giữ qua lần tháo (blob xem trước thu hồi cùng cây). Ghi lại SỐ tệp bị bỏ để lần
+   * quay lại phòng có cảnh báo. `epoch` chụp lúc dựng: đăng xuất giữa chừng ⇒ store bỏ qua lần ghi trễ.
+   */
+  const pendingFileCountRef = useRef(0);
+  useEffect(() => {
+    pendingFileCountRef.current = attachments.length;
+  }, [attachments.length]);
+  useEffect(() => {
+    const epoch = useChatDraftStore.getState().sessionEpoch;
+    return () => {
+      useChatDraftStore.getState().noteFilesNotKept(roomId, pendingFileCountRef.current, epoch);
+    };
+  }, [roomId]);
   /** Vị trí con trỏ cần đặt lại SAU khi React vẽ xong `draft` mới (chèn mention / emoji). */
   const pendingCaretRef = useRef<number | null>(null);
 
@@ -173,6 +190,7 @@ export function MessageComposer({
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
       setError(null);
+      useChatDraftStore.getState().clearFilesNotKept(roomId);
       const picked = Array.from(files);
       if (attachments.length + picked.length > MAX_ATTACHMENTS_PER_MESSAGE) {
         setError(t("composer.tooManyFiles", { count: MAX_ATTACHMENTS_PER_MESSAGE }));
@@ -201,7 +219,7 @@ export function MessageComposer({
         }
       }
     },
-    [attachments.length, previews, t],
+    [attachments.length, ensureClientMessageId, previews, roomId, t],
   );
 
   // Bọc `useCallback`: `useFileDrop` memo theo tham chiếu này — truyền một arrow mới mỗi lần render
@@ -225,30 +243,33 @@ export function MessageComposer({
       const trigger = mention.trigger;
       if (trigger === null) return;
       const next = applyMention(draft, trigger, candidate);
-      mentionEntriesRef.current.push({
+      useChatDraftStore.getState().addMention(roomId, {
         userId: candidate.userId,
         label: mentionLabel(candidate.name),
       });
-      setDraft(next.text);
+      setText(roomId, next.text);
       pendingCaretRef.current = next.caret;
       // Đóng NGAY và KHÔNG `sync` lại: con trỏ vừa đứng sau `@Tên ` nên dò trigger sẽ mở lại đúng cái
       // popover mình vừa chọn xong.
       mention.close();
       ensureClientMessageId();
     },
-    [draft, mention],
+    [draft, ensureClientMessageId, mention, roomId, setText],
   );
 
-  const insertEmoji = useCallback((emoji: string) => {
-    const el = textareaRef.current;
-    setDraft((prev) => {
-      const start = el?.selectionStart ?? prev.length;
-      const end = el?.selectionEnd ?? start;
-      pendingCaretRef.current = start + emoji.length;
-      return `${prev.slice(0, start)}${emoji}${prev.slice(end)}`;
-    });
-    ensureClientMessageId();
-  }, []);
+  const insertEmoji = useCallback(
+    (emoji: string) => {
+      const el = textareaRef.current;
+      setText(roomId, (prev) => {
+        const start = el?.selectionStart ?? prev.length;
+        const end = el?.selectionEnd ?? start;
+        pendingCaretRef.current = start + emoji.length;
+        return `${prev.slice(0, start)}${emoji}${prev.slice(end)}`;
+      });
+      ensureClientMessageId();
+    },
+    [ensureClientMessageId, roomId, setText],
+  );
 
   const handleSubmit = useCallback(async () => {
     if (disabled || !hasContent || tooLong || isSending) return;
@@ -259,9 +280,12 @@ export function MessageComposer({
       clientMessageId,
       body: draft,
       fileIds: attachments.map((a) => a.fileId),
-      mentions: collectMentionIds(draft, mentionEntriesRef.current, MAX_MENTIONS_PER_MESSAGE),
+      mentions: collectMentionIds(draft, roomDraft.mentions, MAX_MENTIONS_PER_MESSAGE),
       ...(replyTo ? { replyToMessageId: replyTo.id } : {}),
     });
+    // Dọn nháp đã gửi TRƯỚC chốt `isMountedRef`: store sống ngoài cây, nên đổi phòng lúc tin đang bay mà
+    // không dọn ở đây thì quay lại sẽ thấy nguyên tin vừa gửi — bấm Enter là gửi trùng.
+    if (ok) useChatDraftStore.getState().clearSentDraft(roomId, clientMessageId);
     if (!isMountedRef.current) return; // xem docblock của `isMountedRef` — cây đã tháo, dừng tại đây
     setSending(false);
 
@@ -271,22 +295,23 @@ export function MessageComposer({
       setError(t("composer.sendFailed"));
       return;
     }
-    setDraft("");
+    // Chữ + mention + khoá idempotency đã dọn ở `clearSentDraft` (tin kế tiếp là tin KHÁC ⇒ khoá mới).
     setAttachments([]);
     previews.revokeAll();
-    mentionEntriesRef.current = [];
-    clientMessageIdRef.current = null; // tin kế tiếp là tin KHÁC ⇒ khoá mới
     onCancelReply();
   }, [
     attachments,
     disabled,
     draft,
+    ensureClientMessageId,
     hasContent,
     isSending,
     onCancelReply,
     onSubmit,
     previews,
     replyTo,
+    roomDraft.mentions,
+    roomId,
     t,
     tooLong,
   ]);
@@ -312,6 +337,16 @@ export function MessageComposer({
         error={error}
         tooLong={tooLong}
       />
+
+      {roomDraft.droppedFileCount > 0 && (
+        <p
+          role="status"
+          className="mb-2 text-xs text-muted-foreground"
+          data-testid="chat-composer-files-not-kept"
+        >
+          {t("composer.filesNotKept", { count: roomDraft.droppedFileCount })}
+        </p>
+      )}
 
       {attachments.length > 0 && (
         <AttachmentPreviewList items={attachments} onRemove={removeAttachment} />
@@ -359,7 +394,7 @@ export function MessageComposer({
             : {})}
           onChange={(e) => {
             const value = e.target.value;
-            setDraft(value);
+            setText(roomId, value);
             mention.sync(value, e.target.selectionStart ?? value.length);
             if (value.length > 0) {
               ensureClientMessageId();
