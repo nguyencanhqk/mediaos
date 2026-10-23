@@ -149,18 +149,18 @@ trước/sau (Δ = 0) + trạng thái thực thể không đổi.
 | P1-D2   | L1 · U                                | của U, sống ở tin phòng B mà U đã rời           | 403 · Δ0                                                               | ĐỎ    |
 | P1-D3   | L1 · U, `[mới, X của P1-D1]`          | lô trộn                                         | 403 · Δ0 cho CẢ HAI tệp (không gửi một phần)                           | ĐỎ    |
 | P1-D4   | L1 · U gửi vào phòng A                | của U, liên kết SỐNG tới tin phòng A đã thu hồi | 403 · Δ0 (lớp «liên kết sống mà người gắn không xem được»)             | ĐỎ    |
-| P1-A1   | L1 · U                                | mới tải, chưa gắn                               | 201 · +1 liên kết                                                      | XANH  |
-| P1-A2   | L1 · U                                | của U, sống ở tin phòng A (U còn là thành viên) | 201 · +1                                                               | XANH  |
+| P1-A1   | L1 · U                                | mới tải, chưa gắn                               | 2xx (route trả 200) · +1 liên kết                                      | XANH  |
+| P1-A2   | L1 · U                                | của U, sống ở tin phòng A (U còn là thành viên) | 2xx · +1                                                               | XANH  |
 | P1-A3   | L1 · U gửi lại cùng `clientMessageId` | như P1-A1                                       | cùng tin · tổng liên kết không đổi                                     | XANH  |
 | P1-A4 ★ | L1 · U gửi lại cùng `clientMessageId` | tệp của tin gốc, tin gốc đã thu hồi             | trả lại tin cũ như nhánh idempotent hiện tại (không 403) · Δ0 (D-4a)   | XANH  |
 | P1-O ★  | L1 · người ngoài phòng X              | X của P1-D1                                     | lỗi thành viên như hiện tại (404 [SUY RA]) — đứng trước lỗi tệp (D-4a) | XANH  |
 | P2-D1   | L2 · U đặt ảnh phòng A                | ảnh của U, từng là ảnh phòng rồi gỡ             | 403 `CHAT-ERR-015` · Δ0 · `avatar_file_id` giữ                         | ĐỎ    |
 | P2-D2   | L2 · U                                | ảnh của U, sống ở tin phòng B U đã rời          | 403 · Δ0                                                               | ĐỎ    |
-| P2-A1/2 | L2 · U                                | ảnh mới · đặt lại đúng ảnh đang dùng            | 200 · liên kết ảnh phòng = 1 sống                                      | XANH  |
+| P2-A1/2 | L2 · U                                | ảnh mới · đặt lại đúng ảnh đang dùng            | 2xx (route trả 201) · liên kết ảnh phòng = 1 sống                      | XANH  |
 | P3-D1   | L3 · HR đặt cho NV2                   | ảnh của HR đang là avatar sống của NV1          | 403 `AUTH-ERR-FORBIDDEN` · Δ0 · cột NV2 giữ · liên kết NV1 sống        | ĐỎ    |
 | P3-D2   | L3 · HR cho NV1                       | Y của HR: từng là avatar NV1, đã thay bằng Z    | 403 · Δ0                                                               | ĐỎ    |
 | P3-R ★  | L3 · HR đặt lại cho NV1               | ảnh đang là avatar sống của NV1                 | 403 · liên kết cũ GIỮ sống (D-7, ghim đổi hành vi)                     | ĐỎ    |
-| P3-A1   | L3 · HR                               | ảnh mới                                         | 200 · liên kết mới sống, liên kết cũ gỡ (thay thế như cũ)              | XANH  |
+| P3-A1   | L3 · HR                               | ảnh mới                                         | 2xx (route trả 201) · liên kết mới sống, liên kết cũ gỡ                | XANH  |
 
 - Hồi quy SOCIAL (H3, không đổi tệp spec): `T/integration/social-be1-attachments.int-spec.ts` (DENY tệp người khác `:169` · ALLOW `:187` ·
   DENY đã từng gắn `:202`) + `social-attgate-1-update-attach.int-spec.ts` + `S/social/social-attachments.service.spec.ts` — xanh trước và
@@ -216,7 +216,8 @@ P1-A4. Tiêu chí: 17/17 chết.
 - Ngoài phạm vi: con trỏ tệp không qua liên kết (`S19-SEC-FILEPOINTER-1`, dùng lại D-1) · tham số liên kết ở route FOUNDATION
   (`S19-SEC-FILELINKPARAMS-1`) · `S/realtime/**` · `apps/app` · docs API CHAT.
 - Nợ (luồng chính gieo sau merge, tiêu đề trung tính): N1 FE hiện lỗi chung (bong bóng «gửi lỗi» CHAT · HR «tải ảnh lỗi») — không nuốt
-  im, không cần sửa ở WO này · N2 thông điệp `CHAT-ERR-015` chưa nêu điều kiện mới (cố ý một thông điệp) + 409
+  im, không cần sửa ở WO này [ĐO lại lúc thi công: composer CHAT giữ tin ở trạng thái `failed` + «Gửi lại» dùng lại đúng
+  `clientMessageId` (lần gửi đầu bị 403 không tạo tin ⇒ gửi lại vẫn 403, đúng vị từ); HR hiện thông điệp lỗi tải chung] · N2 thông điệp `CHAT-ERR-015` chưa nêu điều kiện mới (cố ý một thông điệp) + 409
   `FOUNDATION-FILE-ERR-LINK` (lệch ảnh chụp khi so lại, D-2) là mã MỚI với các route CHAT/HR — cập nhật docs API CHAT/HR sau khi chuỗi
   RTROOMOPS xong · N3 `F/files.service.ts` vẫn > 800 dòng (FILEDEBT).
 - Rủi ro: R-1 TOCTOU như lõi — so lại ảnh chụp liên kết, không so lại phán quyết resolver (chấp nhận theo O-9 của WO mẹ) · R-2 L1 tốn thêm
