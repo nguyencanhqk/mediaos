@@ -17,6 +17,7 @@ import { ChevronLeft, Maximize2, MessagesSquare } from "lucide-react";
 import { chatKeys, useCan } from "@mediaos/web-core";
 import { Button, EmptyState, Sheet } from "@mediaos/ui";
 import { CHAT_PAIRS, CHAT_PATH } from "@/routes/chat/constants";
+import { CHAT_ROOM_PATH } from "@/routes/chat/chat-room-link";
 import { useChatStore } from "@/stores/chat.store";
 import { useChatDockStore } from "../chat-dock.store";
 import { CreateRoomDialog } from "../CreateRoomDialog";
@@ -123,6 +124,11 @@ export function ChatDrawerBody(): React.ReactElement {
              * `/chat` sang một trang khác, drawer tự bung ra dù họ chưa hề mở nó.
              */
             closeDrawer();
+            // S20-CHAT-DEEPLINK-1 — ⤢ GIỮ phòng đang đọc: `/chat/R` (chưa chọn phòng ⇒ `/chat`).
+            if (activeRoomId !== null) {
+              void navigate({ to: CHAT_ROOM_PATH, params: { roomId: activeRoomId } });
+              return;
+            }
             void navigate({ to: CHAT_PATH as "/" });
           }}
         >

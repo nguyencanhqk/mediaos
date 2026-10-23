@@ -20,12 +20,12 @@
  * tươi). Trang chỉ hỏi thêm CHI TIẾT của phòng đang mở (`members[]` + `myRole`) — thứ danh sách phòng
  * không mang theo.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare } from "lucide-react";
 import { chatApi, chatKeys, useCan } from "@mediaos/web-core";
-import { Button, EmptyState, Sheet } from "@mediaos/ui";
+import { Button, EmptyState, Sheet, toast } from "@mediaos/ui";
 import type { ChatRoomDto } from "@mediaos/contracts";
 import { ChatEmptyHero } from "@/components/chat/ChatEmptyHero";
 import { ConversationPanel } from "@/components/chat/ConversationPanel";
@@ -37,9 +37,28 @@ import { RoomListPanel } from "@/components/chat/RoomListPanel";
 import { roomDisplayName } from "@/components/chat/chat-format";
 import { useChatLayoutMode } from "@/components/chat/use-chat-viewport";
 import { useChatStore } from "@/stores/chat.store";
+import { CHAT_LINK_TOAST_KEY } from "./chat-room-link";
 import { CHAT_PAIRS, CONTEXT_AFTER, CONTEXT_BEFORE } from "./constants";
 
-export function ChatPage(): React.ReactElement {
+/**
+ * S20-CHAT-DEEPLINK-1 (US-CHAT-NV-01) — phòng đang mở sống trên URL (`/chat/$roomId`), không trong
+ * `useState`. Trang chỉ nhận phòng XIN mở (`roomId`) và báo ngược khi người dùng đổi phòng
+ * (`onRoomChange` — route đổi URL bằng `replace`, §7 Q5 = A: Back rời `/chat`).
+ */
+export interface ChatPageProps {
+  /** Phòng XIN mở theo URL — CHƯA xác nhận là phòng của tôi. `null` = `/chat`. */
+  roomId: string | null;
+  /** `?msg=<id>` — tin cần nhảy tới sau khi phòng mở. */
+  messageId?: string | null;
+  /** Đổi phòng đang mở (`null` = về danh sách). */
+  onRoomChange: (roomId: string | null) => void;
+}
+
+export function ChatPage({
+  roomId: requestedRoomId,
+  messageId = null,
+  onRoomChange,
+}: ChatPageProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const canViewRoom = useCan(CHAT_PAIRS.VIEW_ROOM.action, CHAT_PAIRS.VIEW_ROOM.resourceType);
   /**
@@ -61,7 +80,14 @@ export function ChatPage(): React.ReactElement {
 
   const enterMessageContext = useChatStore((s) => s.enterMessageContext);
 
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  /**
+   * S20-CHAT-DEEPLINK-1 — phòng XIN mở chỉ thành phòng ĐANG mở khi nó có trong danh sách phòng của tôi
+   * (`roomsById`, nạp từ `GET /chat/rooms`). Trước đó `selectedRoomId` là `null` ⇒ không truy vấn chi
+   * tiết, không dựng hội thoại (tin · ghim) — không lời gọi API nào mang id của một phòng chưa xác nhận.
+   */
+  const selectedRoomId =
+    requestedRoomId !== null && roomsById[requestedRoomId] !== undefined ? requestedRoomId : null;
+  const setSelectedRoomId = onRoomChange;
   /**
    * S17-CHAT-UX2-FE-5 — HAI state cho "bảng thông tin đang mở", không phải một (CHAT-DEC-026).
    *
@@ -116,11 +142,29 @@ export function ChatPage(): React.ReactElement {
     hydrateRooms([room]);
   }, [detail, hydrateRooms]);
 
-  // Phòng đang mở biến mất (bị bớt / tự rời / lưu trữ khỏi rổ) ⇒ bỏ chọn. Giữ id chết lại thì cột giữa
-  // đứng hình ở trạng thái "đang tải" vĩnh viễn.
+  /**
+   * Phòng xin mở KHÔNG có trong danh sách phòng của tôi (danh sách đã về) ⇒ về `/chat`.
+   *
+   * - Chưa từng mở được (liên kết/thông báo tới phòng không tồn tại · xoá mềm · lưu trữ · đã rời) ⇒
+   *   MỘT thông điệp chung, không tên phòng: phân biệt các lý do là lộ sự tồn tại của phòng.
+   * - Đang mở rồi biến mất (bị bớt / tự rời / lưu trữ khỏi rổ) ⇒ về danh sách, không thông điệp — như
+   *   trước. Giữ id chết lại thì cột giữa đứng hình ở trạng thái "đang tải" vĩnh viễn.
+   *
+   * Chưa có danh sách (`hasLoadedRooms` false) ⇒ CHỜ: `roomsById` lúc đó rỗng với MỌI phòng.
+   */
+  const openedRoomIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (selectedRoomId !== null && roomsById[selectedRoomId] === undefined) setSelectedRoomId(null);
-  }, [roomsById, selectedRoomId]);
+    if (requestedRoomId === null) return;
+    if (roomsById[requestedRoomId] !== undefined) {
+      openedRoomIdRef.current = requestedRoomId;
+      return;
+    }
+    if (!hasLoadedRooms) return;
+    const wasOpen = openedRoomIdRef.current === requestedRoomId;
+    openedRoomIdRef.current = null;
+    if (!wasOpen) toast.error(t("deepLink.unavailable"), { key: CHAT_LINK_TOAST_KEY });
+    onRoomChange(null);
+  }, [requestedRoomId, roomsById, hasLoadedRooms, onRoomChange, t]);
 
   const members = useMemo(() => detail?.members ?? [], [detail]);
   const myRole = detail?.myRole ?? null;
@@ -194,8 +238,26 @@ export function ChatPage(): React.ReactElement {
         console.error(`[chat] không mở được ngữ cảnh của tin ${messageId}:`, err);
       }
     },
-    [enterMessageContext],
+    [enterMessageContext, setSelectedRoomId],
   );
+
+  /**
+   * `?msg=<id>` — dùng lại `jumpToMessage` khi tin đã có trong lịch sử đã tải của phòng (cần `roomSeq`
+   * để nạp cửa sổ quanh nó; chưa có API lấy tin theo id). Mỗi cặp phòng+tin chỉ nhảy MỘT lần.
+   */
+  const targetMessage = useChatStore((s) =>
+    selectedRoomId === null || messageId === null
+      ? undefined
+      : s.messagesByRoom[selectedRoomId]?.find((m) => m.id === messageId),
+  );
+  const jumpedToRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedRoomId === null || targetMessage === undefined) return;
+    const key = `${selectedRoomId}:${targetMessage.id}`;
+    if (jumpedToRef.current === key) return;
+    jumpedToRef.current = key;
+    void jumpToMessage(selectedRoomId, targetMessage.id, targetMessage.roomSeq);
+  }, [selectedRoomId, targetMessage, jumpToMessage]);
 
   if (!canViewRoom) {
     // §14 "không có quyền": ẩn nội dung, không hard-code role. Cổng thật vẫn ở server.
@@ -349,6 +411,8 @@ export function ChatPage(): React.ReactElement {
             // Giữ `key` (để đổi phòng là dựng lại state cục bộ) nhưng phải DUY NHẤT trong mảng anh em.
             key={`conv-${selectedRoom.id}`}
             room={selectedRoom}
+            // S20-CHAT-DEEPLINK-1 — mở phòng (từ danh sách, liên kết hay thông báo) là sẵn sàng gõ.
+            autoFocusComposer
             members={members}
             myRole={myRole}
             isInfoOpen={isInfoOpen}

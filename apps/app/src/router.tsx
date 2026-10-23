@@ -530,6 +530,11 @@ import {
 import { FILES_PATH } from "@/routes/system/files/constants";
 // S7-CHAT-FE-2 — /chat (RouteMeta CỤC BỘ, không ở ROUTE_REGISTRY web-core — cùng pattern hrOrgChartMeta).
 import { CHAT_PATH, CHAT_ROUTE_META } from "@/routes/chat/constants";
+import {
+  CHAT_ROOM_SEGMENT,
+  redirectInvalidChatRoom,
+  validateChatRoomSearch,
+} from "@/routes/chat/chat-room-link";
 import { MODULES_PATH } from "@/routes/system/modules/constants";
 const UsersPage = React.lazy(() =>
   import("@/routes/system/UsersPage").then((m) => ({ default: m.UsersPage })),
@@ -3021,8 +3026,8 @@ const accountSessionsRoute = createRoute({
 // (danh sách phòng · hội thoại · thông tin phòng), thêm sidebar module là cột thứ TƯ. Cổng quyền không
 // mất gì vì nó nằm ở `ProtectedRoute meta` — `buildChatRouteContent` vẫn bọc nguyên tầng đó.
 // Lối vào (sidebar + badge chưa đọc trên header) thuộc `S7-CHAT-FE-3`; hôm nay vào bằng URL trực tiếp.
-const ChatPage = React.lazy(() =>
-  import("@/routes/chat/ChatPage").then((m) => ({ default: m.ChatPage })),
+const ChatRoute = React.lazy(() =>
+  import("@/routes/chat/ChatRoute").then((m) => ({ default: m.ChatRoute })),
 );
 const chatRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -3032,11 +3037,20 @@ const chatRoute = createRoute({
     <ProtectedShell>
       <ProtectedRoute meta={CHAT_ROUTE_META}>
         <React.Suspense fallback={<RouteSuspenseFallback />}>
-          <ChatPage />
+          <ChatRoute />
         </React.Suspense>
       </ProtectedRoute>
     </ProtectedShell>
   ),
+});
+
+// S20-CHAT-DEEPLINK-1 — route con `/chat/$roomId` (đích thông báo `/chat/{room_id}`): KHÔNG component
+// riêng ⇒ cùng cổng `ProtectedRoute meta` + cùng trang của cha. Id rác ⇒ `replace` về `/chat`.
+const chatRoomRoute = createRoute({
+  getParentRoute: () => chatRoute,
+  path: CHAT_ROOM_SEGMENT,
+  beforeLoad: ({ params }) => redirectInvalidChatRoom(params.roomId),
+  validateSearch: validateChatRoomSearch,
 });
 
 // Tích hợp LMS Giai đoạn A — /lms: authenticated-only (không permission pair — mọi nhân viên
@@ -3689,7 +3703,7 @@ const routeTree = rootRoute.addChildren([
   systemSequencesRoute,
   systemSeedsRoute,
   accountSessionsRoute,
-  chatRoute,
+  chatRoute.addChildren([chatRoomRoute]),
   lmsRedirectRoute,
   socialRedirectRoute,
   // S16-SOCIAL-FE-1 — 6 route /feed* (portal 3 cột). Thứ tự khai KHÔNG quan trọng với TanStack
