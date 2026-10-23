@@ -73,3 +73,41 @@ export function olderCounters(current: ChatRoomDto, incoming: ChatRoomDto): Room
     ? { unreadCount: current.unreadCount }
     : { unreadCount: current.unreadCount, mentionUnreadCount: mention };
 }
+
+/** Phần tin (bản TRƯỚC khi che) cần để quyết định trừ «@» khi thu hồi. */
+interface RecalledForCounters extends IncomingForCounters {
+  id: string;
+  roomSeq: number;
+}
+
+/**
+ * `chat:message-recalled` — tin NHẮC TÔI chưa đọc bị thu hồi ⇒ «@» −1. Server đã loại tin thu hồi
+ * (`chat-room-mention-count.ts`: `recalled_at IS NULL`); FE không theo thì chip «Nhắc tôi» và dấu «@»
+ * sai tới lần nạp danh sách kế.
+ *
+ * Chỉ trừ khi đủ CẢ: phòng có số gốc (number) · tin ĐANG trong RAM (`listBefore` = danh sách trước khi
+ * che) · chưa từng thu hồi (sự kiện lặp không trừ hai lần) · của người khác · nhắc tôi · chưa đọc
+ * (`roomSeq > lastMessageSeq − unreadCount`, cùng hệ `room_seq` với `unreadFrom`). Kẹp ≥ 0.
+ * Không đổi gì ⇒ trả ĐÚNG object `roomsById` cũ (selector không render lại vô ích).
+ */
+export function withMentionRecalled(
+  roomsById: Record<string, ChatRoomDto>,
+  listBefore: readonly RecalledForCounters[],
+  event: { roomId: string; messageId: string },
+  myUserId: string | null,
+): Record<string, ChatRoomDto> {
+  const room = roomsById[event.roomId];
+  const base = room?.mentionUnreadCount;
+  const target = listBefore.find((m) => m.id === event.messageId);
+  if (!room || typeof base !== "number" || base <= 0 || !target || myUserId === null) {
+    return roomsById;
+  }
+  const lastReadSeq = (room.lastMessageSeq ?? 0) - (room.unreadCount ?? 0);
+  const counted =
+    (target.recalledAt ?? null) === null &&
+    target.senderId !== myUserId &&
+    (target.mentions ?? []).includes(myUserId) &&
+    target.roomSeq > lastReadSeq;
+  if (!counted) return roomsById;
+  return { ...roomsById, [event.roomId]: { ...room, mentionUnreadCount: base - 1 } };
+}

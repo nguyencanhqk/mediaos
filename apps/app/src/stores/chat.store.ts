@@ -28,6 +28,7 @@ import type {
 } from "@mediaos/contracts";
 import { previewFromMessage } from "@/components/chat/chat-preview";
 import { bumpCounters, keepMention, olderCounters, withRead } from "./chat-room-counters";
+import { withMentionRecalled } from "./chat-room-counters";
 
 /**
  * Một đính kèm trong store — hợp của HAI hình dạng, và đây KHÔNG phải sự cẩu thả về kiểu.
@@ -833,15 +834,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
        * được, còn `id` thì không có trong DTO preview. Tin bị thu hồi KHÔNG nằm trong RAM ⇒ nhánh trên
        * đã `return state`, và lần refetch REST kế tiếp sẽ trả preview đã che từ server.
        */
-      const room = state.roomsById[event.roomId];
+      const roomsById = withMentionRecalled(state.roomsById, list, event, state.myUserId);
+      const room = roomsById[event.roomId];
       const recalled = next.find((m) => m.id === event.messageId);
       if (!room || !recalled || recalled.roomSeq !== (room.lastMessageSeq ?? 0)) {
-        return { messagesByRoom };
+        return { messagesByRoom, roomsById };
       }
       return {
         messagesByRoom,
         roomsById: {
-          ...state.roomsById,
+          ...roomsById,
           [event.roomId]: { ...room, lastMessage: previewFromMessage(recalled) },
         },
       };
