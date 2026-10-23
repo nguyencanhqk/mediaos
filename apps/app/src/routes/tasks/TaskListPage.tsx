@@ -3,29 +3,14 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { ListChecks, RefreshCw, Trash2, Pencil, Plus } from "lucide-react";
-import {
-  taskCoreApi,
-  taskProjectApi,
-  hrApi,
-  hrKeys,
-  taskKeys,
-  useCan,
-  useCanExact,
-  PermissionGate,
-} from "@mediaos/web-core";
-import { PageHeader, DataTable, EmptyState, Button, Input, Select } from "@mediaos/ui";
-import type {
-  TaskCoreResponseDto,
-  TaskCoreStatusDto,
-  TaskCorePriorityDto,
-  ListTaskCoreQueryRequest,
-} from "@mediaos/contracts";
-import {
-  TASK_CORE_ENGINE_PAIRS,
-  TASK_CORE_STATUS_OPTIONS,
-  TASK_CORE_PRIORITY_OPTIONS,
-} from "./constants";
+import { taskCoreApi, taskKeys, useCan, useCanExact, PermissionGate } from "@mediaos/web-core";
+import { PageHeader, DataTable, EmptyState, Button } from "@mediaos/ui";
+import type { TaskCoreResponseDto } from "@mediaos/contracts";
+import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { useTaskReadColumns } from "./task-columns";
+import { TaskListToolbar } from "./TaskListToolbar";
+import { hasActiveTaskListFilters, toTaskListQuery } from "./task-list-search";
+import { useTaskListSearch } from "./use-task-list-search";
 import { TaskFormDrawer } from "./TaskFormDrawer";
 import { DeleteTaskDialog } from "./DeleteTaskDialog";
 
@@ -39,6 +24,10 @@ import { DeleteTaskDialog } from "./DeleteTaskDialog";
  *
  * GET /tasks trả MẢNG TRẦN (KHÔNG kèm `total` — xem task-core.service.ts listTasks) → phân trang FE dùng
  * offset "tải thêm" (heuristic: còn trang kế khi số dòng trả == PAGE_SIZE), mirror ProjectListPage.
+ *
+ * S20-TASK-DRAWER-1 (US-TASK-QL-05): bộ lọc + trang sống trên URL (`validateTaskListSearch`, route
+ * `/tasks`) thay cho `useState` — mở việc (drawer `?task=`) rồi đóng, tải lại, Back từ trang chi
+ * tiết hay gửi link đều giữ bộ lọc; server vẫn ép phạm vi dữ liệu của người xem.
  */
 const PAGE_SIZE = 20;
 
@@ -56,47 +45,13 @@ export function TaskListPage() {
     TASK_CORE_ENGINE_PAIRS.DELETE.action,
     TASK_CORE_ENGINE_PAIRS.DELETE.resourceType,
   );
-  const canReadEmployees = useCan("read", "employee");
-  const canReadProjects = useCan("read", "project");
-
-  const [status, setStatus] = useState<TaskCoreStatusDto | "">("");
-  const [priority, setPriority] = useState<TaskCorePriorityDto | "">("");
-  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [dueFrom, setDueFrom] = useState("");
-  const [dueTo, setDueTo] = useState("");
-  const [overdueOnly, setOverdueOnly] = useState(false);
-  const [page, setPage] = useState(1);
+  const { search, update, clearFilters } = useTaskListSearch();
+  const page = search.page ?? 1;
   const [createOpen, setCreateOpen] = useState(false);
   const [editItem, setEditItem] = useState<TaskCoreResponseDto | null>(null);
   const [deleteItem, setDeleteItem] = useState<TaskCoreResponseDto | null>(null);
 
-  const { data: employeesPage } = useQuery({
-    queryKey: hrKeys.employees.list({ pageSize: 100, status: "active" }),
-    queryFn: () => hrApi.listEmployees({ pageSize: 100, status: "active" }),
-    enabled: canReadEmployees,
-    staleTime: 60_000,
-  });
-  const employees = employeesPage?.items ?? [];
-
-  const { data: projects } = useQuery({
-    queryKey: taskKeys.projects.list({ limit: 100 }),
-    queryFn: () => taskProjectApi.listProjects({ limit: 100 }),
-    enabled: canReadProjects,
-    staleTime: 60_000,
-  });
-
-  const queryParams: Partial<ListTaskCoreQueryRequest> = {
-    status: status || undefined,
-    priority: priority || undefined,
-    assigneeEmployeeId: assigneeEmployeeId || undefined,
-    projectId: projectId || undefined,
-    dueFrom: dueFrom ? new Date(dueFrom).toISOString() : undefined,
-    dueTo: dueTo ? new Date(dueTo).toISOString() : undefined,
-    overdue: overdueOnly || undefined,
-    limit: PAGE_SIZE,
-    offset: (page - 1) * PAGE_SIZE,
-  };
+  const queryParams = toTaskListQuery(search, PAGE_SIZE);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: taskKeys.list(queryParams),
@@ -104,13 +59,6 @@ export function TaskListPage() {
     enabled: canView,
     staleTime: 30_000,
   });
-
-  const resetToPage1 =
-    <T,>(setter: (v: T) => void) =>
-    (v: T) => {
-      setter(v);
-      setPage(1);
-    };
 
   const readColumns = useTaskReadColumns();
   const columns: ColumnDef<TaskCoreResponseDto>[] = [
@@ -201,110 +149,7 @@ export function TaskListPage() {
           </PermissionGate>
         }
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">
-              {t("tasks.list.filters.status")}
-            </label>
-            <Select
-              value={status}
-              onChange={(e) => resetToPage1(setStatus)(e.target.value as TaskCoreStatusDto | "")}
-              className="w-40"
-            >
-              <option value="">{t("tasks.list.allStatuses")}</option>
-              {TASK_CORE_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {t(`tasks.status.${s}`)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">
-              {t("tasks.list.filters.priority")}
-            </label>
-            <Select
-              value={priority}
-              onChange={(e) =>
-                resetToPage1(setPriority)(e.target.value as TaskCorePriorityDto | "")
-              }
-              className="w-36"
-            >
-              <option value="">{t("tasks.list.allPriorities")}</option>
-              {TASK_CORE_PRIORITY_OPTIONS.map((p) => (
-                <option key={p} value={p}>
-                  {t(`tasks.priority.${p}`)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {canReadEmployees && (
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">
-                {t("tasks.list.filters.assignee")}
-              </label>
-              <Select
-                value={assigneeEmployeeId}
-                onChange={(e) => resetToPage1(setAssigneeEmployeeId)(e.target.value)}
-                className="w-44"
-              >
-                <option value="">{t("tasks.list.filters.allAssignees")}</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.fullName}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          {canReadProjects && (
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">
-                {t("tasks.list.filters.project")}
-              </label>
-              <Select
-                value={projectId}
-                onChange={(e) => resetToPage1(setProjectId)(e.target.value)}
-                className="w-44"
-              >
-                <option value="">{t("tasks.list.filters.allProjects")}</option>
-                {(projects ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">
-              {t("tasks.list.filters.dueFrom")}
-            </label>
-            <Input
-              type="date"
-              value={dueFrom}
-              onChange={(e) => resetToPage1(setDueFrom)(e.target.value)}
-              className="w-40"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">{t("tasks.list.filters.dueTo")}</label>
-            <Input
-              type="date"
-              value={dueTo}
-              onChange={(e) => resetToPage1(setDueTo)(e.target.value)}
-              className="w-40"
-            />
-          </div>
-          <label className="flex items-center gap-2 pb-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={overdueOnly}
-              onChange={(e) => resetToPage1(setOverdueOnly)(e.target.checked)}
-            />
-            {t("tasks.list.filters.overdue")}
-          </label>
-        </div>
+        <TaskListToolbar search={search} update={update} />
       </PageHeader>
 
       <DataTable
@@ -312,10 +157,22 @@ export function TaskListPage() {
         data={items}
         isLoading={isLoading}
         emptyState={
-          <EmptyState
-            title={t("tasks.list.empty.title")}
-            description={t("tasks.list.empty.description")}
-          />
+          hasActiveTaskListFilters(search) ? (
+            <EmptyState
+              title={t("listFilters.emptyFiltered.title")}
+              description={t("listFilters.emptyFiltered.description")}
+              action={
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  {t("listFilters.clear")}
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              title={t("tasks.list.empty.title")}
+              description={t("tasks.list.empty.description")}
+            />
+          )
         }
         pageSize={PAGE_SIZE}
       />
@@ -328,7 +185,7 @@ export function TaskListPage() {
               variant="outline"
               size="sm"
               disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => update({ page: page - 1 > 1 ? page - 1 : undefined })}
             >
               {t("pagination.prev", { ns: "common" })}
             </Button>
@@ -336,7 +193,7 @@ export function TaskListPage() {
               variant="outline"
               size="sm"
               disabled={!hasNext}
-              onClick={() => setPage((p) => p + 1)}
+              onClick={() => update({ page: page + 1 })}
             >
               {t("pagination.next", { ns: "common" })}
             </Button>

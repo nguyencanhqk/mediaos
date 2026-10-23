@@ -19,6 +19,7 @@ import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
 // S5-TASK-WORKSPACE-1 — parser ?tab= của workspace dự án (file thuần TS, không component).
 import { parseWorkspaceTab, type ProjectWorkspaceTab } from "@/routes/tasks/workspace-constants";
 import { useTaskDetailBack } from "@/routes/tasks/task-drawer-nav";
+import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
 
 // ---------------------------------------------------------------------------
 // Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
@@ -1457,7 +1458,14 @@ const TaskDetailPage = React.lazy(() =>
   import("@/routes/tasks/TaskDetailPage").then((m) => ({ default: m.TaskDetailPage })),
 );
 
-const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", TaskListPage);
+// S20-TASK-DRAWER-1 — bộ lọc Danh sách trên URL; rác ⇒ mặc định, KHÔNG ném (task-list-search.ts).
+const tasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks",
+  beforeLoad: authGuard,
+  validateSearch: validateTaskListSearch,
+  component: () => buildModuleRouteContent(getMeta("task.overview"), "TASK", <TaskListPage />),
+});
 const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
 
 // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN

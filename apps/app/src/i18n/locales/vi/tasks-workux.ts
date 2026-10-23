@@ -9,4 +9,19 @@ export default {
   taskDrawer: {
     unavailable: "Không mở được việc này",
   },
+  // S20-TASK-DRAWER-1 (US-TASK-QL-05) — bộ lọc Danh sách trên URL: ô tìm, chip «Của tôi», phòng ban.
+  listFilters: {
+    searchLabel: "Tìm công việc",
+    searchPlaceholder: "Tìm theo tiêu đề… (phím /)",
+    mine: "Của tôi",
+    mineUnlinked: "Tài khoản của bạn chưa gắn hồ sơ nhân viên.",
+    mineFailed: "Không tải được thông tin của bạn. Vui lòng thử lại.",
+    department: "Phòng ban",
+    allDepartments: "Tất cả phòng ban",
+    clear: "Xoá bộ lọc",
+    emptyFiltered: {
+      title: "Không có công việc khớp bộ lọc",
+      description: "Thử đổi từ khoá hoặc xoá bộ lọc để xem lại toàn bộ.",
+    },
+  },
 };
