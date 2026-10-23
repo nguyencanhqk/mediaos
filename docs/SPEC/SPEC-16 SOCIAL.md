@@ -23,7 +23,7 @@
 | Trạng thái | **Approved** — owner chốt 10 quyết định §22 ngày 02/09/2026; §2–§21 + §23–§25 viết ở WO `S16-SOCIAL-DOC-1` ngày 18/09/2026 |
 | Giai đoạn | **Phase 4 kéo lên · wave S16-SOCIAL** |
 | Ngày tạo | 02/09/2026 |
-| Ngày cập nhật | 23/10/2026 (`S16-SOCIAL-DOC-3` — đính chính theo số đo của `S16-SOCIAL-QA-1`) |
+| Ngày cập nhật | 23/10/2026 (`S16-SOCIAL-DOC-3` — đính chính theo số đo của `S16-SOCIAL-QA-1`; `S16-SOCIAL-DOC-2` — §3.1 · §5.1 SC-14 · §9 đồng bộ theo mã FE-3/3B/3C) |
 
 > **Đọc §5.1 trước.** Cấp phát v1 đã ĐÓNG ở mức **19 bảng · 12 màn · 53 route · 14 cặp quyền · 22 mã lỗi ·
 > 9 sự kiện NOTI · 2 widget**. Ba con số đầu **khác** ước lượng ghi lúc seed wave (15 bảng / 13 cặp / ~45 route) —
@@ -53,7 +53,7 @@ SPEC-16 là **nguồn sự thật nghiệp vụ** cho module: màn hình, luật
 
 Mã module `SOCIAL` **chỉ có một nghĩa**: mạng xã hội nội bộ của công ty (đúng [SPEC-01 §7](<SPEC-01 Tổng quan.md>) và hàng `modules` do migration `0435` seed).
 
-App vệ tinh **đăng bài Facebook** (wave S9, [DECISIONS-08](<../DECISIONS/DECISIONS-08_Social_Satellite_App.md>)) là một **tiện ích con** nằm trong module này, xuất hiện như mục cuối sidebar SOCIAL với nhãn «Đăng bài Facebook». Nó **giữ nguyên** ba cặp quyền `view:social-post` · `create:social-post` · `manage:social-account`, dịch vụ cổng 3500 và đường SSO — wave S16 **không đụng** vào chúng (SOC-DEC-002).
+App vệ tinh **đăng bài Facebook** (wave S9, [DECISIONS-08](<../DECISIONS/DECISIONS-08_Social_Satellite_App.md>)) là một **tiện ích con** nằm trong module này, xuất hiện như mục cuối sidebar SOCIAL với nhãn «Đăng bài Facebook». Nó **giữ nguyên** ba cặp quyền `view:social-post` · `create:social-post` · `manage:social-account`, dịch vụ cổng 3500 và đường SSO — wave S16 **không đụng** vào chúng (SOC-DEC-002). Lối vào của nó (mục rail · ô AppSwitcher · ô của dải liên kết nhanh) gác **đúng MỘT** cặp `view:social-post` — cặp mà endpoint SSO `GET /integrations/social/sso-link` đòi; hai cặp kia không mở lối vào (chi tiết: [UI-07 §34b.6](<../UI/UI-07_Module_Workspace_Template_Design.md>)).
 
 > ⚠️ **Hệ quả bắt buộc cho mọi WO của wave:** resource của mạng xã hội nội bộ **luôn mang tiền tố `feed-`**. Migration `0544` có bước verify **đếm grant `social*` của vai `employee`** và RAISE nếu khác 0; đặt tên resource mới là `social-*` sẽ làm đỏ verify đó trên PROD.
 
@@ -132,7 +132,7 @@ Sự kiện WS mang **đúng DTO** mà REST trả cho người nhận, không ba
 | SC-11 | NOTI: mention · bình luận vào bài của tôi · trả lời · tin tức mới · sáng kiến đổi trạng thái · vinh danh · nhóm duyệt · bình chọn đóng · bài bị báo cáo | B |
 | SC-12 | Hàng đợi báo cáo: ẩn/hiện · khoá bình luận · xoá bài · xử lý báo cáo — mọi thao tác có audit | C |
 | SC-13 | Thống kê tương tác theo tuần & đơn vị, xuất XLSX; widget DASH «Tương tác tuần» | C |
-| SC-14 | Dải ô liên kết nhanh (Công việc · Nghỉ phép · Chấm công · Đặt phòng · Mục tiêu · Đào tạo · Đăng bài Facebook) hiện theo quyền | C |
+| SC-14 | Dải ô liên kết nhanh (Công việc · Nghỉ phép · Chấm công · Phòng họp · Mục tiêu · Đào tạo · Đăng bài Facebook) hiện theo quyền | C |
 
 Cấp phát **ĐÓNG** của v1 (con số chốt tại DOC-1 — xem §23.1 về chênh lệch với ước lượng lúc seed):
 
@@ -226,20 +226,22 @@ Màn MISA có «Giới thiệu ứng viên». Ở MediaOS đây là **việc c�
 
 ## 9. Danh sách màn hình — `SOC-SCREEN-001..012`
 
-| Mã | Màn hình | Quyền vào | Track |
-| --- | --- | --- | --- |
-| `SOC-SCREEN-001` | **Bảng tin** — composer 5 nút · thẻ bài · lọc/sắp xếp · badge «N bài mới» · dải ô liên kết nhanh | `view:feed` | A |
-| `SOC-SCREEN-002` | **Chi tiết bài** — bài + toàn bộ bình luận + người thích | `view:feed` | A |
-| `SOC-SCREEN-003` | **Tin tức** — danh sách tin, tin ghim, xác nhận đã đọc, danh sách đã đọc | `view:feed` (danh sách đã đọc: `manage:feed-news`) | A |
-| `SOC-SCREEN-004` | **Đã lưu** | `view:feed` | A |
-| `SOC-SCREEN-005` | **Trang cá nhân** — «Bài viết của tôi» / bài của đồng nghiệp | `view:feed` | A |
-| `SOC-SCREEN-006` | **Nhóm** — danh sách · trang nhóm · thành viên · xin vào/duyệt · cài đặt | `view:feed` (+ membership) | B |
-| `SOC-SCREEN-007` | **Bình chọn** — thẻ poll trong feed + trang danh sách | `view:feed` | B |
-| `SOC-SCREEN-008` | **Sáng kiến** — danh sách + màn xét duyệt | `view:feed`; xét duyệt: `approve:feed-idea` | B |
-| `SOC-SCREEN-009` | **Vinh danh** — thẻ kudos + huy hiệu | `view:feed` | B |
-| `SOC-SCREEN-010` | **Kiểm duyệt** — hàng đợi báo cáo + bài đang ẩn | `view:feed-report` (hành động: `manage:feed-report` · `manage:feed-post`) | C |
-| `SOC-SCREEN-011` | **Thống kê tương tác** — theo tuần & đơn vị + XLSX | `view:feed-report` | C |
-| `SOC-SCREEN-012` | **Thiết lập huy hiệu** — CRUD catalog | `manage:feed-kudos` | C |
+| Mã | Màn hình | Đường dẫn FE | Quyền vào | Track |
+| --- | --- | --- | --- | --- |
+| `SOC-SCREEN-001` | **Bảng tin** — composer 5 nút · thẻ bài · lọc/sắp xếp · badge «N bài mới» · dải ô liên kết nhanh | `/feed` | `view:feed` | A |
+| `SOC-SCREEN-002` | **Chi tiết bài** — bài + toàn bộ bình luận + người thích | `/feed/posts/$postId` | `view:feed` | A |
+| `SOC-SCREEN-003` | **Tin tức** — danh sách tin, tin ghim, xác nhận đã đọc, danh sách đã đọc | `/feed/news` | `view:feed` (danh sách đã đọc: `manage:feed-news`) | A |
+| `SOC-SCREEN-004` | **Đã lưu** | `/feed/saved` | `view:feed` | A |
+| `SOC-SCREEN-005` | **Trang cá nhân** — «Bài viết của tôi» / bài của đồng nghiệp | `/feed/profiles/me` · `/feed/profiles/$employeeId` | `view:feed` | A |
+| `SOC-SCREEN-006` | **Nhóm** — danh sách · trang nhóm · thành viên · xin vào/duyệt · cài đặt | `/feed/groups` · `/feed/groups/$groupId` | `view:feed` (+ membership) | B |
+| `SOC-SCREEN-007` | **Bình chọn** — thẻ poll trong feed + trang danh sách | `/feed/polls` | `view:feed` | B |
+| `SOC-SCREEN-008` | **Sáng kiến** — danh sách + màn xét duyệt | `/feed/ideas` | `view:feed`; xét duyệt: `approve:feed-idea` | B |
+| `SOC-SCREEN-009` | **Vinh danh** — thẻ kudos + huy hiệu | `/feed/kudos` | `view:feed` | B |
+| `SOC-SCREEN-010` | **Kiểm duyệt** — hàng đợi báo cáo + bài đang ẩn | `/feed/moderation` | `view:feed` + `view:feed-report` (hành động: `manage:feed-report` · `manage:feed-post`) | C |
+| `SOC-SCREEN-011` | **Thống kê tương tác** — theo tuần & đơn vị + XLSX | `/feed/stats` | `view:feed` + `view:feed-report` | C |
+| `SOC-SCREEN-012` | **Thiết lập huy hiệu** — CRUD catalog | `/feed/kudos-badges` | `view:feed` + `manage:feed-kudos` | C |
+
+> **Đường dẫn + quyền vào = `ROUTE_REGISTRY`** (`packages/web-core/src/lib/registry.ts`; đồng bộ ở `S16-SOCIAL-DOC-2`). Gốc FE là `/feed`, KHÔNG `/social`: `/social` là trang trung chuyển SSO của fbpost; tiền tố REST của BE vẫn là `/social/*`. «Quyền vào» = `requiredPermissions` của route — ĐỦ-HẾT, khớp đúng-bằng (giữ `manage:*` không tự suy ra `view:*`). Ba màn quản trị đòi `view:feed` CỘNG cặp của lời gọi đầu tiên của màn (028 / 052 gác `view:feed-report` · 056 gác `manage:feed-kudos`); mục rail của chúng khai Y HỆT cặp route, thiếu ⇒ ẩn (§14). `/feed/kudos-badges` chứ không `/feed/kudos/badges`: luật «đang chọn» của rail so tiền tố, đường lồng làm mục «Vinh danh» sáng cùng lúc. Đường cũ `/social/reports` (đích của NOTI-036) chuyển hướng tới `/feed/moderation`.
 
 > Bố cục **cổng thông tin 3 cột** dùng riêng cho SOCIAL: xem [UI-07](<../UI/UI-07_Module_Workspace_Template_Design.md>) biến thể «portal».
 

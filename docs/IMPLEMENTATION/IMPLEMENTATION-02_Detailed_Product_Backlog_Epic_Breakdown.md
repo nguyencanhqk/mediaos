@@ -883,7 +883,7 @@ PAYROLL phụ thuộc AUTH (RBAC per-pair + scope; `users`; role 2FA), HR (`empl
 | IMP02-STORY-215 | Hệ thống | Thông báo NOTI cho 9 tình huống tương tác | P1 | 8 | `NOTI-EVENT-028..036` — **catalog CHECK sống ở HAI bảng** + bản mẫu, UNION-ADD không rewrite; dải **đo lại lúc merge**; phát qua outbox, không gọi thẳng |
 | IMP02-STORY-216 | Admin / HR | Hàng đợi báo cáo: ẩn/hiện · khoá bình luận · xoá bài · xử lý báo cáo — mọi thao tác có audit | P1 | 8 | `object_type` mới `feed_post`/`feed_comment`/`feed_group`/`feed_report` **UNION-ADD** vào CHECK `audit_logs` đúng neo parse; audit ghi **cùng tx**; báo cáo đã xử lý ⇒ 409 `SOCIAL-ERR-021` |
 | IMP02-STORY-217 | Admin / HR / Manager | Thống kê tương tác theo tuần & đơn vị, xuất XLSX; widget DASH «Tương tác tuần» | P2 | 8 | SQL **set-based** (không vòng lặp); sàn scope `Company`, manager `Department`; **KHÔNG cache** (số phải tươi); `view:feed-report` là cặp duy nhất có scope khác nhau theo vai |
-| IMP02-STORY-218 | Nhân viên | Dải ô liên kết nhanh hiện theo quyền | P3 | 3 | Dùng `useCan` + `APP_REGISTRY` sẵn có, **không** hard-code; ô «Đăng bài Facebook» gate bằng ba cặp `social-*` cũ |
+| IMP02-STORY-218 | Nhân viên | Dải ô liên kết nhanh hiện theo quyền | P3 | 3 | Hằng chỉ mang 7 `appKey` theo thứ tự SC-14 (Công việc · Nghỉ phép · Chấm công · Phòng họp · Mục tiêu · Đào tạo · Đăng bài Facebook); nhãn · icon · cổng · đích lấy từ `APP_REGISTRY` qua `getVisibleApps` + lọc `active`, **không** hard-code cặp nào; ô «Đăng bài Facebook» gác **đúng MỘT** cặp `view:social-post` (khớp endpoint SSO — không phải ba cặp `social-*`); ô «Phòng họp» đủ `access:room` + `view:room`; ô ứng dụng ngoài là nút «… (mở ứng dụng ngoài)» |
 
 ### Ghi chú dependency
 

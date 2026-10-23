@@ -29,6 +29,7 @@
 
 | Phiên bản | Ngày | Thay đổi | Người thực hiện |
 | --- | --- | --- | --- |
+| **v1.2a** | **23/10/2026** | **S16-SOCIAL-DOC-2 — đồng bộ §34b theo mã FE-3/3B/3C**: §34b.2 rail trái thêm ba mục quản trị (Kiểm duyệt · Thống kê tương tác · Thiết lập huy hiệu — cặp đủ-hết y hệt route) + «Vinh danh», «Nhóm của tôi» chỉ ở rail phải, «Sinh nhật» ở đầu rail phải, ô «Tổng quan nhân sự» theo quyền · §34b.4 «Báo cáo» không cặp riêng (cả bình luận) · §34b.6 vị trí mã thật (khung ở `layouts/portal/`, điểm đăng ký SOCIAL ở `layouts/workspace/`), ô fbpost gác MỘT cặp `view:social-post`, dải ô liên kết nhanh, cổng ô «Tổng quan nhân sự». | |
 | **v1.2** | **18/09/2026** | **S16-SOCIAL-DOC-1 — thêm §34b biến thể «Cổng thông tin 3 cột»** dành riêng SOCIAL (rail trái 240 · cột feed max 680 · rail phải 300; dưới 1024px rail trái thành thanh tab ngang, rail phải gập xuống cuối). Kèm anatomy thẻ bài, trạng thái bắt buộc và ghi chú hiện thực (`apps/app/src/layouts/portal/`, KHÔNG sửa `layouts/workspace/`). Nguồn: [SPEC-16 §9](<../SPEC/SPEC-16 SOCIAL.md>). | |
 | v1.0 | 20/06/2026 | Khởi tạo tài liệu cho giai đoạn MVP v1.0. | |
 | **v1.1a** | **12/09/2026** | **S15-UI-SHELL-1 — đối chiếu tài liệu ↔ code khi dựng thật**: §9.4 `collapsible` mặc định **true** (cờ để TẮT, không để BẬT — cây TASK 3 cấp đã chạy không khai cờ) · §9.2 mục 8 làm rõ «ACTIVE» = mục CON active, và chevron của nhóm bị ghim mở thì `disabled` + tooltip · §21.8 «Bảng công» là TAB của chi tiết kỳ chứ không phải mục sidebar, không bọc thêm hàng cha «Thiết lập», và mục chưa có màn tự ẩn qua `pruneUnbuiltScreens()` theo `ROUTE_REGISTRY`. Component dựng ở `packages/ui`: `DataToolbar` · `ColumnPicker` + `useColumnVisibility` · `TableFooter` · `StatusPill` · `DetailPageHeader`, cộng `DataTable` nhận `pinFirstColumn`/`pinLastColumn`/`footer`. | |
@@ -2152,24 +2153,46 @@ Module Workspace chuẩn (sidebar + vùng nội dung) tối ưu cho **danh sách
 │ Rail trái     │ Cột feed (giữa)                      │ Rail phải                     │
 │ 240px         │ max 680px, căn giữa phần còn lại     │ 300px                         │
 │               │                                      │                               │
-│ Thẻ danh tính │ Dải ô liên kết nhanh (theo quyền)    │ Tin nổi bật                   │
-│  avatar · tên │ Composer «Bạn muốn chia sẻ gì?»      │ Bình chọn đang mở             │
-│  «Trang cá    │   5 nút: Chia sẻ · Tin tức* ·        │ Vinh danh tháng này           │
-│   nhân»       │          Sáng kiến · Bình chọn ·     │ Nhóm của tôi (badge bài mới)  │
-│               │          Vinh danh                   │ Widget DASH «Nhân sự»         │
-│ Bảng tin      │ Thanh Sinh nhật «Hôm nay ▾»          │   (theo quyền)                │
-│ Tin tức       │ Lọc «Tất cả ▾» · Sắp xếp «Hoạt       │                               │
-│ Sáng kiến     │   động mới ⇅»                        │                               │
-│ Bình chọn     │ ── Thẻ bài ──                        │                               │
-│ Nhóm          │ ── Thẻ bài ──                        │                               │
-│ Đã lưu        │ …                                    │                               │
+│ Thẻ danh tính │ Dải ô liên kết nhanh (theo quyền)    │ Sinh nhật «Hôm nay ▾»         │
+│  avatar · tên │ Composer «Bạn muốn chia sẻ gì?»      │ Tin nổi bật                   │
+│  «Trang cá    │   5 nút: Chia sẻ · Tin tức* ·        │ Bình chọn đang mở             │
+│   nhân»       │          Sáng kiến · Bình chọn ·     │ Vinh danh tháng này           │
+│               │          Vinh danh                   │ Nhóm của tôi (badge bài mới)  │
+│ ▸ Tổng quan   │ Lọc «Tất cả ▾» · Sắp xếp «Hoạt       │ Tổng quan nhân sự ‡           │
+│ Bảng tin      │   động mới ⇅»                        │   (widget DASH, theo quyền)   │
+│ Tin tức       │ ── Thẻ bài ──                        │                               │
+│ Đã lưu        │ ── Thẻ bài ──                        │                               │
+│ ▸ Nghiệp vụ   │ …                                    │                               │
+│ Sáng kiến     │                                      │                               │
+│ Bình chọn     │                                      │                               │
+│ Vinh danh     │                                      │                               │
+│ Nhóm          │                                      │                               │
+│ ▸ Quản lý †   │                                      │                               │
+│ Kiểm duyệt    │                                      │                               │
+│ ▸ Báo cáo †   │                                      │                               │
+│ Thống kê      │                                      │                               │
+│   tương tác   │                                      │                               │
+│ ▸ Thiết lập † │                                      │                               │
+│ Thiết lập     │                                      │                               │
+│   huy hiệu    │                                      │                               │
 │ ─────────     │                                      │                               │
-│ Nhóm của tôi  │                                      │                               │
 │ Đăng bài FB ↗ │                                      │                               │
 └───────────────┴──────────────────────────────────────┴───────────────────────────────┘
 ```
 
 `*` Nút «Tin tức» chỉ hiện khi caller giữ `manage:feed-news`.
+
+`▸` Tiêu đề nhóm của rail = `group` của mục sidebar (rail dùng lại `ModuleSidebar` chung — §34b.6): Tổng quan · Nghiệp vụ · Quản lý · Báo cáo · Thiết lập. Thứ tự mục theo `order` của `SOCIAL_SIDEBAR_V2`; dưới 1024px thanh tab ngang đọc CÙNG danh sách đó.
+
+`†` Ba mục **quản trị** (`S16-SOCIAL-FE-3`/`3B`, owner chọn O2 = a ngày 05/10/2026). Mỗi mục khai `requiredPermissions` **ĐỦ-HẾT, y hệt cặp của route** nó trỏ tới (`ROUTE_REGISTRY`) — KHÔNG theo khuôn any-of `view:feed` của 7 mục phía trên (chép khuôn đó thì mọi nhân viên thấy mục rồi bấm vào trang cấm). Thiếu một vế ⇒ mục **ẩn** (§34b.5 Forbidden):
+
+| Mục rail | Nhóm | Đường dẫn | Màn | Cặp — đủ cả hai, khớp đúng-bằng |
+| --- | --- | --- | --- | --- |
+| Kiểm duyệt | Quản lý | `/feed/moderation` | `SOC-SCREEN-010` | `view:feed` + `view:feed-report` |
+| Thống kê tương tác | Báo cáo | `/feed/stats` | `SOC-SCREEN-011` | `view:feed` + `view:feed-report` |
+| Thiết lập huy hiệu | Thiết lập | `/feed/kudos-badges` | `SOC-SCREEN-012` | `view:feed` + `manage:feed-kudos` |
+
+`‡` Ô widget DASH «Tổng quan nhân sự» ([SPEC-07 §14.8](<../SPEC/SPEC-07 DASH.md>)) — cuối rail phải, hiện **theo quyền**; chi tiết cổng ở §34b.6.
 
 ### 34b.3 Quy chuẩn kích thước
 
@@ -2202,7 +2225,9 @@ Dưới 1024px **không** dùng drawer cho rail trái: mục SOCIAL ít và ph�
 └────────────────────────────────────────────────────────┘
 ```
 
-Menu `⋯` hiện theo quyền: **sửa · xoá** (chủ bài) · **lưu · báo cáo** (mọi người) · **ghim · ẩn · khoá bình luận** (`manage:feed-post` / `manage:feed-news`).
+Menu `⋯` hiện theo quyền: **sửa · xoá** (chủ bài) · **lưu** (mọi người) · **báo cáo** (mọi người trừ chủ bài) · **ghim · ẩn · khoá bình luận** (`manage:feed-post` / `manage:feed-news`).
+
+«Báo cáo» **không có cặp quyền riêng**: `SOCIAL-API-027` gác `view:feed`, cặp mà màn đã đòi. Hàng bình luận của người khác (gốc lẫn trả lời) cũng có nút «Báo cáo» — cùng hộp thoại, ẩn với bình luận của chính mình, và vẫn hiện ở bài đã khoá bình luận.
 
 > ⚠️ **Bẫy đã gặp ở wave trước:** «nút ⋯ vắng» **không** đồng nghĩa «mục vắng». Ca kiểm thử deny-path phải xác nhận **mục trong menu** không có, chứ không chỉ xác nhận nút mở menu không render — nếu không, một thay đổi làm nút biến mất vì lý do khác sẽ làm ca deny xanh giả.
 
@@ -2220,9 +2245,14 @@ Menu `⋯` hiện theo quyền: **sửa · xoá** (chủ bài) · **lưu · báo
 
 ### 34b.6 Ghi chú hiện thực
 
-- Layout đặt ở `apps/app/src/layouts/portal/` — **không** sửa `layouts/workspace/`.
+> Đồng bộ theo mã đã merge của `S16-SOCIAL-FE-3`/`3B`/`3C` (`S16-SOCIAL-DOC-2`, 23/10/2026). Đường dẫn và cặp quyền lấy từ `ROUTE_REGISTRY` / `APP_REGISTRY` (`packages/web-core/src/lib/registry.ts`), không lấy từ plan.
+
+- **Khung 3 cột** ở `apps/app/src/layouts/portal/` (`PortalLayout` · `PortalLeftRail` · `PortalRightRail` · `PortalTabBar`). Rail trái **dùng lại** `ModuleSidebar` của `layouts/workspace/` — không viết sidebar riêng, để giữ MỘT luật lọc quyền và cổng snapshot cây điều hướng. Vì vậy các **điểm đăng ký riêng của SOCIAL** nằm trong `layouts/workspace/`: mục rail ở `sidebar/social.ts` (`SOCIAL_SIDEBAR_V2`), ô «Đăng bài Facebook» ở khe `sidebar-extensions.ts` (`SocialFbpostLink.tsx`), icon mới vào `DynamicIcon.tsx`. Điều **không** làm: sửa phần dùng chung (`ModuleSidebar` · `ModuleWorkspaceLayout`) cho riêng SOCIAL.
 - Mục rail trái đăng ký qua `ROUTE_REGISTRY` như mọi module; mục chưa có màn tự ẩn (`pruneUnbuiltScreens()`).
-- Ô «Đăng bài Facebook» là **liên kết ngoài** (icon ↗), gate bằng ba cặp `social-*` cũ — xem `S16-SOCIAL-FBPOST-1`.
+- Ô «Đăng bài Facebook» là **liên kết ngoài** (icon ↗, mở qua SSO), gác **đúng MỘT cặp `view:social-post`** — khớp cổng của endpoint SSO duy nhất (`GET /integrations/social/sso-link`) và của ô `fbpost` trong `APP_REGISTRY`. Ba cặp `social-*` cũ vẫn tồn tại, không đổi (SOC-DEC-002), nhưng chỉ cặp này mở ô: người chỉ giữ `manage:social-account` không thấy ô. Mục rail không hiện khi sidebar thu gọn ⇒ lối vào luôn-có là AppSwitcher (`fbpost` là `switcherOnly`: có ở AppSwitcher, không ở lưới Home) — xem `S16-SOCIAL-FBPOST-1`.
+- **Dải ô liên kết nhanh** (đầu cột feed, [SPEC-16](<../SPEC/SPEC-16 SOCIAL.md>) SC-14): hằng `FEED_QUICK_LINK_APP_KEYS` chỉ mang 7 `appKey` theo thứ tự SC-14 — Công việc · Nghỉ phép · Chấm công · Phòng họp · Mục tiêu · Đào tạo · Đăng bài Facebook. Nhãn · icon · cổng · đích lấy 100% từ `APP_REGISTRY` qua `getVisibleApps` (cùng hàm của AppSwitcher) rồi lọc `status = active` ⇒ «Phòng họp» đòi đủ `access:room` + `view:room`, «Đăng bài Facebook» một cặp như trên. Ô của ứng dụng **ngoài** (app có trình mở cross-domain — hôm nay Đào tạo và Đăng bài Facebook) là **nút** mang tên trợ năng «… (mở ứng dụng ngoài)» kèm dấu ↗; ô khác là liên kết nội bộ. Không ô nào đủ quyền ⇒ không vẽ dải.
+- **Ô «Tổng quan nhân sự»** (cuối rail phải): hiện **theo QUYỀN**, KHÔNG theo cấu hình widget của màn Dashboard (`dashboard_widget_configs`) — owner chốt 16/10/2026 (trả lời finding SEC-03 của `S16-SOCIAL-FE-3C`). Sàn dữ liệu là **Phòng ban**: server ép sàn `Department` cho widget ở cả danh sách widget lẫn đường số liệu (`S4-DASH-HROVERVIEW-FLOOR-1`; hằng dùng chung `DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW` ở `packages/contracts`) — grant `read:employee` ở Company thấy cả công ty, ở Department thấy phòng mình, ở Team/Own không nhận số liệu. Thiếu quyền ⇒ không vẽ ô và không gọi API DASH nào.
+  > ⏳ **Cổng FE đang chuyển.** Mã đã merge (`HrOverviewRailSlot.tsx`) còn gác bốn cặp khớp đúng-bằng `view:feed` · `read:dashboard` · `read:employee` · `update:employee` — vế cuối là cặp thay thế tạm (trong bốn vai chuẩn chỉ HR và company-admin giữ). WO `S4-DASH-HROVERVIEW-FE-1` (chưa merge) thay vế đó bằng tín hiệu sàn: `hasScope("read:employee", DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW)`.
 - Mọi thời gian hiển thị theo múi giờ công ty; server trả ISO, FE format bằng `date-fns`.
 
 ---
