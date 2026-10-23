@@ -266,3 +266,73 @@ describe("MailConfigForm — lỗi không lẫn vào nhau", () => {
     await waitFor(() => expect(onPasswordRequired).toHaveBeenCalledOnce());
   });
 });
+
+// S19-FE-MAILSAVEERR-1 — lỗi Lưu KHÔNG phải MAIL-PASSWORD-REQUIRED: chỉ 400 `VALIDATION-ERR-001` mang câu CỐ ĐỊNH
+// của server (B4 · Zod) được hiện; 5xx / 403 / lỗi mạng giữ câu chung «Lưu thất bại.».
+describe("MailConfigForm — lỗi Lưu hiện câu server cho 400 VALIDATION-ERR-001", () => {
+  const SAVE_FAILED = "Lưu thất bại.";
+  const renderWithSaveError = (saveError: unknown) =>
+    render(
+      <MailConfigForm
+        initial={makeConfig()}
+        scopeTab="default"
+        onSubmit={vi.fn()}
+        isSaveError
+        saveError={saveError}
+      />,
+    );
+
+  it("400 VALIDATION-ERR-001 của B4 → hiện ĐÚNG câu server, không phải «Lưu thất bại.»", () => {
+    const serverMessage = "Máy chủ hoặc tên đăng nhập SMTP chứa ký tự không hợp lệ.";
+    renderWithSaveError(new ApiError(400, "VALIDATION-ERR-001", serverMessage));
+    expect(screen.getByRole("alert").textContent).toBe(serverMessage);
+  });
+
+  it("400 VALIDATION-ERR-001 của Zod (có details) → hiện câu server cấp cao, KHÔNG in details", () => {
+    renderWithSaveError(
+      new ApiError({
+        status: 400,
+        code: "VALIDATION-ERR-001",
+        message: "Dữ liệu không hợp lệ",
+        details: [{ field: "host", message: "chi-tiet-zod-khong-hien", rule: "too_small" }],
+      }),
+    );
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Dữ liệu không hợp lệ");
+    expect(alert).not.toHaveTextContent("chi-tiet-zod-khong-hien");
+  });
+
+  it("500 → vẫn «Lưu thất bại.» (không lộ câu lỗi hệ thống)", () => {
+    renderWithSaveError(new ApiError(500, "SYSTEM-ERR-001", "Lỗi hệ thống"));
+    expect(screen.getByRole("alert").textContent).toBe(SAVE_FAILED);
+  });
+
+  it("403 → vẫn «Lưu thất bại.» (câu của guard không dành cho người dùng)", () => {
+    renderWithSaveError(new ApiError(403, "AUTH-ERR-FORBIDDEN", "Permission denied: x"));
+    expect(screen.getByRole("alert").textContent).toBe(SAVE_FAILED);
+  });
+
+  it("400 body KHÔNG phải envelope (HTTP_ERROR, câu chứa body thô) → vẫn «Lưu thất bại.»", () => {
+    renderWithSaveError(
+      new ApiError(400, "HTTP_ERROR", "400 /settings/mail-config: <html>proxy</html>"),
+    );
+    expect(screen.getByRole("alert").textContent).toBe(SAVE_FAILED);
+  });
+
+  it("lỗi mạng (không phải ApiError) → vẫn «Lưu thất bại.»", () => {
+    renderWithSaveError(new TypeError("Failed to fetch"));
+    expect(screen.getByRole("alert").textContent).toBe(SAVE_FAILED);
+  });
+
+  it("400 VALIDATION-ERR-001 nhưng câu rỗng → rơi về «Lưu thất bại.»", () => {
+    renderWithSaveError(new ApiError(400, "VALIDATION-ERR-001", "   "));
+    expect(screen.getByRole("alert").textContent).toBe(SAVE_FAILED);
+  });
+
+  it("MAIL-PASSWORD-REQUIRED vẫn ưu tiên câu nhập lại mật khẩu (không in câu server)", () => {
+    renderWithSaveError(new ApiError(400, MAIL_PASSWORD_REQUIRED, "server message"));
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(REENTER_PW);
+    expect(alert).not.toHaveTextContent("server message");
+  });
+});
