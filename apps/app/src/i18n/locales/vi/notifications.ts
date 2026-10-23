@@ -22,6 +22,17 @@ export default {
     filters: {
       allStatuses: "Tất cả trạng thái",
       unreadOnly: "Chỉ chưa đọc",
+      // S20-NOTI-LISTNAV-1 — chip lọc nguồn (source_module) + mức ưu tiên, nằm trên URL.
+      sourceLabel: "Nguồn",
+      sourceAll: "Tất cả",
+      sources: {
+        TASK: "Công việc",
+        CHAT: "Tin nhắn",
+        GOAL: "Mục tiêu",
+        LEAVE: "Nghỉ phép",
+      },
+      priorityLabel: "Mức ưu tiên",
+      priorityAll: "Mọi mức",
     },
     columns: {
       title: "Nội dung",
@@ -34,6 +45,10 @@ export default {
     empty: {
       title: "Không có thông báo",
       description: "Bạn chưa có thông báo mới",
+    },
+    emptyFiltered: {
+      title: "Không có thông báo nào trong mục này",
+      clear: "Bỏ lọc",
     },
     error: {
       title: "Không thể tải danh sách thông báo",
@@ -73,6 +88,10 @@ export default {
     markRead: "Đánh dấu đã đọc",
     markAllRead: "Đánh dấu tất cả đã đọc",
     markingAllRead: "Đang xử lý…",
+    // S20-NOTI-LISTNAV-1 — phạm vi theo khả năng endpoint mark-all-read (lọc được nguồn, không lọc mức).
+    markAllReadInFilter: "Đánh dấu đã đọc tất cả trong bộ lọc này",
+    markReadInPage: "Đánh dấu đã đọc trong trang này",
+    markReadFailed: "Không đánh dấu được một số thông báo. Vui lòng thử lại.",
     delete: "Xoá",
     deleteConfirm: "Xoá thông báo này?",
   },

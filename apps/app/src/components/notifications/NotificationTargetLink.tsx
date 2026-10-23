@@ -28,6 +28,12 @@ interface NotificationTargetLinkProps {
   targetUrl: string | null | undefined;
   /** Gọi TRƯỚC khi điều hướng (vd mark-read) — không chặn navigate nếu lỗi. */
   onBeforeNavigate?: () => void;
+  /**
+   * S20-NOTI-LISTNAV-1 — đích rỗng/không an toàn: có callback ⇒ vẫn là nút bấm được, nhưng KHÔNG điều
+   * hướng tới `targetUrl` mà giao lượt bấm cho caller (vd trang Thông báo mở trang chi tiết như cũ).
+   * Không có ⇒ span trần như trước. Việc kiểm an toàn vẫn CHỈ nằm ở `isSafeInternalTarget`.
+   */
+  onUnsafeTarget?: () => void;
   children: React.ReactNode;
   className?: string;
 }
@@ -35,6 +41,7 @@ interface NotificationTargetLinkProps {
 export function NotificationTargetLink({
   targetUrl,
   onBeforeNavigate,
+  onUnsafeTarget,
   children,
   className,
 }: NotificationTargetLinkProps) {
@@ -43,7 +50,13 @@ export function NotificationTargetLink({
   const safe = isSafeInternalTarget(targetUrl);
 
   if (!safe) {
-    return <span className={className}>{children}</span>;
+    return onUnsafeTarget ? (
+      <button type="button" className={className} onClick={onUnsafeTarget}>
+        {children}
+      </button>
+    ) : (
+      <span className={className}>{children}</span>
+    );
   }
 
   return (

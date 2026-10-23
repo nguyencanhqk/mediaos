@@ -1800,6 +1800,7 @@
   5. mark-read lỗi: vẫn điều hướng, trạng thái chưa đọc được giữ.
 - **Zone.** FE list/filter dùng tham số contract sẵn có.
 - **Dẫn chứng.** `routes/notifications/NotificationListPage.tsx:34,82,103-172`; `contracts/src/my-notification.ts:40-58`; `NotificationTargetLink.tsx:31-57`.
+- **Đo endpoint mark-all-read (S20-NOTI-LISTNAV-1, 23/10).** `POST /notifications/mark-all-read` (`markAllNotificationsReadRequestSchema`, `contracts/src/my-notification.ts:172-176`; repository `markAllReadTx`) lọc được `source_module` · `notification_type` · `created_before`, KHÔNG lọc `priority`. Vì vậy: không lọc ⇒ «Đánh dấu tất cả đã đọc» như cũ; chỉ lọc nguồn ⇒ «Đánh dấu đã đọc tất cả trong bộ lọc này» gửi `source_module`; có lọc mức ưu tiên ⇒ «Đánh dấu đã đọc trong trang này» (mark-read từng dòng chưa đọc của trang).
 
 ##### US-X-14 · Hộp «Chờ tôi xử lý» cho quản lý: đơn nghỉ chờ duyệt và việc chờ review
 **P2 · M · 🟡 yellow** · Lớp FE · Phụ thuộc: US-TASK-NV-04, US-X-03 (`?request=`), nên có US-TASK-QL-08 (tham số «tôi giao») · Spec: SPEC-07 §13.3; SPEC-05; SPEC-06 · **Owner chọn vị trí (§7 Q22)**

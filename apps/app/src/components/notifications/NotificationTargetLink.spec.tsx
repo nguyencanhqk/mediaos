@@ -112,3 +112,46 @@ describe("NotificationTargetLink — đích việc mở drawer tại chỗ", () 
     },
   );
 });
+
+// S20-NOTI-LISTNAV-1 — trang Thông báo: đích rỗng/không an toàn ⇒ caller tự lo (trang chi tiết như cũ).
+// Kiểm an toàn VẪN chỉ nằm ở `isSafeInternalTarget` — `onUnsafeTarget` chỉ nhận lượt bấm khi đích bị loại.
+describe("NotificationTargetLink — onUnsafeTarget (đích bị loại ⇒ đường lui của caller)", () => {
+  it.each([
+    [null],
+    [""],
+    ["https://evil.example.com/phish"],
+    ["//evil.example.com"],
+    ["javascript:alert(1)"],
+  ])(
+    "target_url %s ⇒ button gọi onUnsafeTarget, KHÔNG navigate, KHÔNG onBeforeNavigate",
+    (target) => {
+      const onUnsafeTarget = vi.fn();
+      const onBeforeNavigate = vi.fn();
+      render(
+        <NotificationTargetLink
+          targetUrl={target}
+          onBeforeNavigate={onBeforeNavigate}
+          onUnsafeTarget={onUnsafeTarget}
+        >
+          Thông báo hệ thống
+        </NotificationTargetLink>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Thông báo hệ thống" }));
+      expect(onUnsafeTarget).toHaveBeenCalledTimes(1);
+      expect(onBeforeNavigate).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    },
+  );
+
+  it("đích an toàn ⇒ onUnsafeTarget KHÔNG được gọi, điều hướng như cũ", () => {
+    const onUnsafeTarget = vi.fn();
+    render(
+      <NotificationTargetLink targetUrl="/hr/employees/emp-1" onUnsafeTarget={onUnsafeTarget}>
+        Hồ sơ
+      </NotificationTargetLink>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Hồ sơ" }));
+    expect(onUnsafeTarget).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/hr/employees/emp-1" });
+  });
+});
