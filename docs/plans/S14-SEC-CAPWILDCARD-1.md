@@ -14,6 +14,7 @@
 > | v1 (khai triển wildcard, GIỮ luật lọc sensitive) | plan-review **BLOCK** 6 mục + census bác giả định nền | bỏ hẳn            |
 > | v2 (caps == `can()`, gồm sensitive)              | plan-review **BLOCK** 6 mục (B1–B6) + 7 cảnh báo      | vá hết ở v3       |
 > | **v3 (bản này)**                                 | vá B1–B6 + W1–W8; ADR đã viết                         | **sẵn sàng code** |
+> | v4 — delta 23/10/2026 (**§15**)                  | CW-1..3 owner chốt + đo lại drift trên `0d7350c7`     | **sẵn sàng code** |
 >
 > **Hoàn tác**: không migration, không seed, không feature-flag ⇒ rollback = `git revert`.
 
@@ -122,6 +123,7 @@ thứ năm).
    (`apps/api/src/auth/step-up/reveal-class-pairs.ts` — const đó **cố ý RỖNG**, đừng nhét vào nó), khởi
    tạo `[('reveal-secret','platform-account')]`. **KHÔNG** viết danh sách literal thứ hai ở
    `permission.service.ts`. Ratchet: mọi cặp catalog có `action` bắt đầu `reveal-secret` phải ∈ `EXCLUDED`.
+   **v4 (§15 D-v4-1/2, owner chốt CW-1): luật theo TIỀN TỐ action `reveal-`, không chỉ `reveal-secret`.**
 
 ### 4.3 Nguồn catalog — chỉ chạm khi CÓ grant wildcard, và PHẢI có trần (vá B1 vòng 1 + B3)
 
@@ -343,7 +345,7 @@ khẳng định, ghi actor đó có grant exact trên cặp đó không; ca thu�
 | 11     | RED §6.1                               | `view:user@Own` + `*:*@Company` ⇒ `scopes["view:user"] === ["Own"]`, cặp khác `["Company"]`.                                                                                                                                                                                                                                 |
 | 12     | RED §6.1                               | exact **HẾT HẠN** + wildcard còn hiệu lực ⇒ rơi về scope wildcard (không `[]`, không mất khoá).                                                                                                                                                                                                                              |
 | **13** | **RED §4.2-(3) / B1**                  | Actor có grant exact `reveal-secret:platform-account` ⇒ khoá **VẮNG**.                                                                                                                                                                                                                                                       |
-| **14** | **RATCHET §4.2-(3)**                   | Mọi cặp catalog có `action` bắt đầu `reveal-secret` ∈ `EXCLUDED`.                                                                                                                                                                                                                                                            |
+| **14** | **RATCHET §4.2-(3)**                   | **(v4 §15.6)** Mọi token action `^reveal` trong `apps/api/migrations/*.sql` bị `EXCLUDED` loại · số khớp ≥ 2 · allowlist ∩ `EXCLUDED` = ∅.                                                                                                                                                                                   |
 | 15     | RED §4.4                               | Có wildcard · snapshot **đã** nạp · lượt mới ném ⇒ dùng **ảnh CŨ**, caps ĐẦY ĐỦ, `logger.error` được gọi.                                                                                                                                                                                                                    |
 | 16     | RED §4.4                               | Có wildcard · snapshot **chưa** nạp · load ném ⇒ khoá exact **CÒN**, khoá wildcard **MẤT**, log.                                                                                                                                                                                                                             |
 | 17     | RED §4.4                               | Y HỆT #16 nhưng catalog trả `[]` — **kể cả vế log**.                                                                                                                                                                                                                                                                         |
@@ -353,6 +355,7 @@ khẳng định, ghi actor đó có grant exact trên cặp đó không; ca thu�
 | 21     | ĐỐI CHỨNG §4.3.1                       | Load **vượt trần 5s** ⇒ rơi nhánh suy biến, `/auth/me` **vẫn trả** (không treo).                                                                                                                                                                                                                                             |
 | 22     | ĐỐI CHỨNG                              | `getCompanyRoleGrants` ném ⇒ `{}` + log (hợp đồng cũ không đổi).                                                                                                                                                                                                                                                             |
 | **23** | **ĐỐI CHỨNG hữu hạn thay #13-cũ / B6** | Ba nhóm actor §8 + **hai phản ví dụ** T1/T2: (a) catalog có hàng `('view','*')` `is_sensitive=true` + DENY trên nó ⇒ khoá non-sensitive **BỊ MẤT** — ca này **khẳng định phản ví dụ tồn tại**, không phải khẳng định nó không xảy ra; (b) cold start + catalog ném + actor chỉ-wildcard ⇒ `caps = {}`. Kỳ vọng **viết tay**. |
+| **24** | **RED (v4) §15.3 D-v4-1**              | Actor có grant exact trên cặp tiền tố `reveal-` **khác** `reveal-secret` (cặp thật của catalog, mig 0201) ⇒ khoá **VẮNG**; cùng actor, cặp sensitive exact không-`reveal-` vẫn **CÓ** (đối chứng chống loại thừa).                                                                                                           |
 
 > ⚠️ **Bỏ hẳn ca "đơn điệu" kiểu property test neo bằng bản sao `getCapabilities` cũ trong spec** (v2 #13).
 > Bản sao code trong test **trôi im lặng** và fixture viết tay **không bao giờ sinh ra** T1/T2. #23 thay
@@ -373,6 +376,7 @@ khẳng định, ghi actor đó có grant exact trên cặp đó không; ca thu�
 | Gỡ `logger.error` nhánh rỗng                               | #17                                                                                                                  |
 | Bỏ `if wildcards ≠ ∅` (đọc catalog vô điều kiện)           | #20                                                                                                                  |
 | Bỏ `withTimeout`                                           | #21                                                                                                                  |
+| **(v4) Thu hẹp `EXCLUDED` về `reveal-secret` / 1 cặp**     | **#24** + **#14**                                                                                                    |
 
 ### 9.4 Blast radius trên stub — đo lại trên master
 
@@ -477,6 +481,107 @@ Zod shape **không** đổi (`z.record(z.boolean())`); chỉ docblock `contracts
 8. Chạy **11** đột biến (§9.3) ⇒ mỗi cái giết đúng ca đã khai.
 9. Docblock: `permission.service.ts` (3 method) · `contracts/src/auth.ts` · comment FE 2 file.
 10. `bash harness/check.sh --all --lane-db` ⇒ FULL gate (§11) ⇒ PR (**KHÔNG** nhãn auto-merge).
+
+---
+
+## 15. Plan v4 — delta 23/10/2026 (đo trên `0d7350c7`)
+
+> DELTA, không viết lại: §1–§14 vẫn là thiết kế; mục này chỉ ghi cái ĐỔI. Owner chốt 23/10 (không mở lại):
+> **CW-1** giữ v2/v3, nới `EXCLUDED` + ratchet sang tiền tố `reveal-` · **CW-2** nút nhạy cảm hiện cho người
+> BE đã cho phép (ADR-13), KHÔNG dựng danh sách ẩn ở FE · **CW-3** lane riêng, chỉ deploy API, không
+> migration, rollback = `git revert`. [ĐO] = đọc mã/tệp thấy · [SUY RA] = suy luận.
+
+### 15.1 Census PROD 16/10 — chỉ số tổng hợp (§12, §14 bước 1 = XONG)
+
+Q1 = 0 · Q3 = 0 · Q6 = 0 · Q4 = 71 cặp chia 7 nhóm, không nhóm nào đòi đổi kiến trúc · Q4a = 86. Chi tiết
+theo actor ở kênh owner, **không** vào repo. Hệ quả [SUY RA]:
+
+- Q6 = 0 ⇒ T1 đúng; Q1 = 0 ⇒ T2 vô can ⇒ mệnh đề đơn điệu §8 đúng trên ảnh 16/10 ⇒ nhánh DỪNG §12 không kích hoạt.
+- Q1 = 0 ⇒ trên PROD **không actor nào** giữ wildcard ALLOW (ảnh 02/08 ở §2 đã cũ) ⇒ nhánh khai triển §4.3,
+  `PermissionPairCatalogSnapshot` và rủi ro cold-start §4.4 **ngủ** trên PROD; tác dụng PROD = cặp sensitive
+  exact ngoài allowlist hiện ra (Q4) + `EXCLUDED` + vế DENY-siết. Thiết kế giữ nguyên (CW-1): nhánh wildcard
+  vẫn cần cho lane/dev và ngày có grant wildcard.
+
+### 15.2 Drift file:dòng của v3 [ĐO `git log 42249f56..0d7350c7` + grep]
+
+| v3 dẫn                                                                                                    | Trên `0d7350c7`                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `permission.service.ts` (874 dòng)                                                                        | **922 dòng** — `fddea800` chèn 2 khối 17 cặp PAYROLL v2 (`:235`, `:324`); mọi dòng sau `:232` dời **+48**                                                                                                                                                                                                                                         |
+| ↳ `getCapabilities` `:589-612` · docblock allowlist `:626-638`                                            | `:637-668` (vế `!g.isSensitive` `:641`) · `:674-686`; deny của `getAllowlisted…` `:646-656` → `:694-704`                                                                                                                                                                                                                                          |
+| ↳ `getCapabilityScopes` "KEYSET" `:686`                                                                   | `:732` (lọc `:744`); tiêu chí `:21-27` không dời                                                                                                                                                                                                                                                                                                  |
+| `SENSITIVE_CAPABILITY_ALLOWLIST` "69 mục" (§1.2, §6.3)                                                    | **86** = 69 + 17 PAYROLL v2 (mig 0571); 0 mục chứa `*`, 0 mục `reveal-`; `SENSITIVE_SCREEN_GATE_PAIRS` = 53                                                                                                                                                                                                                                       |
+| `permission.cache.ts:52-89`                                                                               | `66a5fe6b` (ADR-15): `getCompanyRoleGrantsWithScope` nay memo theo request ≤ 2000 ms; `getCompanyRoleGrants` (`:59`) không đổi                                                                                                                                                                                                                    |
+| `auth.service.ts:1348-1360`                                                                               | `:1553-1566` (10 commit, chủ yếu S18-AUTH, không đổi nghĩa); tệp 2536 dòng                                                                                                                                                                                                                                                                        |
+| `module-app-metadata.ts:196-204` (BE, `foundation/module-catalog/`)                                       | `:211-221`                                                                                                                                                                                                                                                                                                                                        |
+| `stores/auth.ts:57` `setUser`                                                                             | `:71`, `35dbd0cf` thêm tham số `scopes` vào store; 3 call-site sản phẩm giữ nguyên, nay truyền `me.scopes`                                                                                                                                                                                                                                        |
+| `console/src/router.tsx:225`                                                                              | `:227`                                                                                                                                                                                                                                                                                                                                            |
+| `permission-catalog-fixture.ts:42-47` · `permission.service.spec.ts:142` · `permission.scopes.spec.ts:53` | `:44-50` · `:143` · `:54`; 5 stub còn lại đúng dòng                                                                                                                                                                                                                                                                                               |
+| Không đổi (0 commit)                                                                                      | `permission.decide.ts` (`matches` `:233-235` là **closure cục bộ**, chưa export; exact-thắng `:262`) · `permission.repository.ts` (`:266-272`; cờ `:34`) · `permission-catalog-snapshot.ts` (`:22-23`, `:142`) · `reveal-class-pairs.ts` · `contracts/src/auth.ts` · `use-can.ts` · `auth-me-capabilities.int.spec.ts` (9 dòng ghim §9.1a đúng y) |
+
+### 15.3 Quyết định v4
+
+- **D-v4-1 (CW-1)** `EXCLUDED` = **luật tiền tố**, không danh sách: `isCapabilityExcluded(action)` ⟺
+  `action.startsWith("reveal-")`, tệp mới `apps/api/src/auth/step-up/capability-exclusion.ts` cạnh
+  `reveal-class-pairs.ts` (chiều import permission → auth/step-up đã có sẵn). Catalog [ĐO migrations] có đúng
+  **2** cặp tiền tố này, cả hai `is_sensitive=true`: `reveal-secret:platform-account` (0005:281) ·
+  `reveal-break-glass:break-glass` (0201:23). So khớp tiền tố ở đây là chiều **LOẠI** (thu hẹp gợi ý UI) —
+  ngược chiều cảnh báo "KHÔNG so khớp tiền tố" ở `reveal-class-pairs.ts:50-54` (chiều MINT = nới) ⇒ không
+  mâu thuẫn; ghi docblock để reviewer không đọc nhầm. `REVEAL_CLASS_PAIRS` vẫn rỗng, không chạm.
+- **D-v4-2** Ratchet #14 **rộng hơn** luật runtime để không thành tautology: bắt token action `^reveal`
+  (cả `reveal`/`reveal_…`) ⇒ một action reveal mới không theo tiền tố làm ĐỎ, buộc quyết định. Số khớp ≥ 2
+  (chống xanh-RỖNG). Kèm allowlist ∩ `EXCLUDED` = ∅ ⇒ merge §6.3 không phục hồi được khoá bị loại.
+- **D-v4-3 (CW-2)** 0 dòng logic FE; không danh sách ẩn ở FE. Bề mặt đo lại §15.5.
+- **D-v4-4 (CW-3)** Lane riêng · chỉ deploy API · 0 migration · rollback `git revert`. Diff FE chỉ là comment
+  ⇒ không cần deploy FE.
+- **D-v4-5 (trần 800 dòng)** `permission.service.ts` đã 922 ⇒ **không làm dài thêm**: logic chiếu cap/scope
+  sang tệp mới `apps/api/src/permission/capability-projection.ts` (hàm thuần: grants + pairs + now ⇒
+  caps/scopes); 2 method service chỉ uỷ quyền; số dòng service sau vá ≤ 922. `matches` được **export** từ
+  `permission.decide.ts` thay closure `:233-235` (0 đổi hành vi — `decideStrongestScope` gọi chính hàm đó).
+- **D-v4-6 (chỗ đặt test)** `permission.service.spec.ts` 1010 dòng, int-spec 1293 dòng ⇒ ca unit #1–#24 ở
+  tệp spec MỚI; 9 dòng ghim §9.1a đổi **1 dòng ↔ 1 dòng** qua helper assert ở tệp mới (khuôn 3 khẳng định
+  nằm trong helper, tham số = loại actor); int-spec MỚI nếu có dựng qua `applyMainPipeline`.
+- **D-v4-7** `census.sql` VALUES của Q4: **69 → 86** (thêm đúng 17 cặp PAYROLL v2 — [ĐO] code = census + 17,
+  0 mục ngược). Chữ "69" ở §1.2/§6.3 và ADR-13 §4.2-(2) đọc là 86.
+- **D-v4-8** ADR-13 §4.1: thêm dòng **sửa đổi 23/10 (CW-1)** — tiền tố `reveal-`; không viết lại ADR.
+- **D-v4-9** §6.2 GIỮ. `scopes` nay có **1** consumer thật (§15.5 #11, cặp non-sensitive) ⇒ "0 consumer cho
+  cặp sensitive" vẫn đúng; ca #11 thêm biến thể `read:employee` (cặp có consumer thật).
+
+### 15.4 §9.4 — cặp seed SAU census 16/10 [ĐO]
+
+0 migration mới sau 16/10 (mới nhất 0592, commit 13/10); 0 lệnh INSERT `permissions` lúc chạy trong
+`apps/api/src` ⇒ catalog = ảnh census ⇒ **không** cặp nào đổi blast radius hay cờ sensitive. 7 stub
+`sentinelCatalog()` giữ nguyên; `permission.scopes.spec.ts:101-110` vẫn là ca DUY NHẤT đảo nghĩa.
+
+### 15.5 CW-2 — bề mặt FE đo lại [ĐO]
+
+| #      | Điểm                                                                                      | So với §7                                                                                                                             |
+| ------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1–4    | `use-can.ts:16-22` · `:39-41` · `<PermissionGate>` · `hasAnyCapability`                   | Đúng y (0 commit `use-can.ts`). Đếm `grep -F` thô (gồm định nghĩa): 371 · 180 · 97                                                    |
+| 5–8    | `createPermissionChecker` tại ProtectedRoute · HomePortal · AppSwitcher · ModuleWorkspace | Vẫn khoá LITERAL, `scopes: []` ⇒ chiều NỚI như §7                                                                                     |
+| 9      | `console/src/lib/chat-oversight-gate.ts:33` (`router.tsx:227`)                            | Không đổi (`view:chat-oversight` ∈ 86)                                                                                                |
+| **10** | **MỚI** `app/src/layouts/portal/portal-session.ts:27-33` (`f407c1d1`)                     | Điểm `createPermissionChecker` thứ 5, cùng khuôn #5-8 ⇒ chiều NỚI; 0 actor PROD (Q1 = 0)                                              |
+| **11** | **MỚI** `HrOverviewRailSlot.tsx:70-86` (`35dbd0cf`) đọc `scopes["read:employee"]`         | Có exact ⇒ không đổi (§6.1 exact thắng); chỉ-wildcard ⇒ hiện với scope wildcard — khớp nhánh non-sensitive của `decideStrongestScope` |
+
+⇒ 0 dòng logic FE đổi; comment chỉ ở `use-can.ts` (+ `module-app-metadata.ts` là BE). `apps/console/**`
+**0 dòng cần đổi** dưới CW-2 — nới `paths` chỉ khi FULL gate đòi comment ở #9.
+
+### 15.6 Ca + đột biến thêm (đã ghi vào §9.2/§9.3)
+
+- **#14 sửa** (D-v4-2) · **#24 mới** (D-v4-1, tên ca trung tính: "loại mọi action tiền tố reveal-") ·
+  biến thể `read:employee` cho #11.
+- Đột biến thứ **12**: thu hẹp `EXCLUDED` về `reveal-secret` (hoặc so khớp đúng 1 cặp) ⇒ giết #24 + #14.
+
+### 15.7 §14 — thứ tự thi công, delta
+
+1 = XONG (15.1) · 2 = việc luồng chính · 3: họ khẳng định vắng-mặt đếm lại **37 dòng `toBe(false)`** (v3 liệt 11 + "…") ·
+**4b** sửa `census.sql` 69 → 86 · 5: `capability-exclusion.ts` (D-v4-1) · 6: `capability-projection.ts` +
+export `matches` (D-v4-5) · 8: **12** đột biến · 9: thêm ADR-13 §4.1 (D-v4-8) · 10 = việc luồng chính.
+
+### 15.8 Lệch trong `backlog.mjs` (luồng chính sửa — WO này không chạm)
+
+- `done_when` "Don dieu … (ca #13)" dùng số ca v2: ở v3 #13 = `EXCLUDED`, đơn điệu = #23 **có điều kiện** T1/T2;
+  "(ca doi chung #4/#16)" — đối chứng không-wildcard ở v3 là **#20**.
+- `title` "bỏ danh sách tay" ≠ §13 (GIỮ allowlist, dọn ở `S18-AUTH-CAPALLOWLIST-RETIRE-1`).
 
 ---
 
