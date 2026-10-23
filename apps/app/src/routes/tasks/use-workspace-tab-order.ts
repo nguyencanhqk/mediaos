@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuthStore } from "@mediaos/web-core";
 import {
   moveWorkspaceTab,
   nextProjectLastTabMap,
@@ -81,28 +82,42 @@ export function useWorkspaceTabOrder(): {
  * `entryTab` = tab nhớ, ĐỌC MỘT LẦN khi vào dự án; trang chỉ dùng nó cho URL trống
  * (`/tasks/projects/:id`, không `?tab`). Nút Tổng quan đẩy URL trống (không `?tab=overview`) ⇒ bấm
  * Tổng quan thì `entryTab` về `null`, nếu không URL trống sẽ lại hiện tab nhớ.
+ *
+ * Khoá GẮN id người dùng hiện tại (auth store): đổi tài khoản trên cùng trình duyệt không mang tab nhớ
+ * của người trước sang. Chưa có id ⇒ không đọc, không ghi.
  */
-const LAST_TAB_STORAGE_KEY = "mediaos.tasks.projectLastTab";
+const LAST_TAB_STORAGE_PREFIX = "mediaos.tasks.projectLastTab";
 
-function readStoredLastTabMap(): unknown {
+function lastTabStorageKey(userId: string): string {
+  return `${LAST_TAB_STORAGE_PREFIX}:${userId}`;
+}
+
+function readStoredLastTabMap(userId: string | null): unknown {
+  if (!userId) return null;
   try {
-    const raw = window.localStorage.getItem(LAST_TAB_STORAGE_KEY);
+    const raw = window.localStorage.getItem(lastTabStorageKey(userId));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-function writeStoredLastTab(projectId: string, tab: ProjectWorkspaceTab): void {
+function writeStoredLastTab(
+  userId: string | null,
+  projectId: string,
+  tab: ProjectWorkspaceTab,
+): void {
+  if (!userId) return;
   try {
-    const next = nextProjectLastTabMap(readStoredLastTabMap(), projectId, tab);
-    window.localStorage.setItem(LAST_TAB_STORAGE_KEY, JSON.stringify(next));
+    const next = nextProjectLastTabMap(readStoredLastTabMap(userId), projectId, tab);
+    window.localStorage.setItem(lastTabStorageKey(userId), JSON.stringify(next));
   } catch {
     // Storage bị chặn/đầy → lần sau không nhớ được, tab vẫn đổi bình thường.
   }
 }
 
 interface ProjectEntryTabState {
+  userId: string | null;
   projectId: string;
   entryTab: ProjectWorkspaceTab | null;
 }
@@ -112,21 +127,29 @@ export function useProjectLastTab(projectId: string): {
   /** Gọi khi người dùng BẤM tab — ghi tab cuối của dự án này. */
   rememberTab: (tab: ProjectWorkspaceTab) => void;
 } {
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const [state, setState] = useState<ProjectEntryTabState>(() => ({
+    userId,
     projectId,
-    entryTab: pickProjectLastTab(readStoredLastTabMap(), projectId),
+    entryTab: pickProjectLastTab(readStoredLastTabMap(userId), projectId),
   }));
-  // Cùng instance nhưng đổi dự án (cây sidebar P1 → P2) ⇒ đọc lại tab nhớ của dự án mới (mẫu React
-  // "điều chỉnh state khi prop đổi" — setState có điều kiện trong lúc render).
+  // Cùng instance nhưng đổi dự án (cây sidebar P1 → P2) hoặc đổi người dùng ⇒ đọc lại tab nhớ (mẫu
+  // React "điều chỉnh state khi prop đổi" — setState có điều kiện trong lúc render).
   let current = state;
-  if (state.projectId !== projectId) {
-    current = { projectId, entryTab: pickProjectLastTab(readStoredLastTabMap(), projectId) };
+  if (state.projectId !== projectId || state.userId !== userId) {
+    current = {
+      userId,
+      projectId,
+      entryTab: pickProjectLastTab(readStoredLastTabMap(userId), projectId),
+    };
     setState(current);
   }
 
   const rememberTab = (tab: ProjectWorkspaceTab) => {
-    writeStoredLastTab(projectId, tab);
-    if (tab === "overview" && current.entryTab !== null) setState({ projectId, entryTab: null });
+    writeStoredLastTab(userId, projectId, tab);
+    if (tab === "overview" && current.entryTab !== null) {
+      setState({ userId, projectId, entryTab: null });
+    }
   };
 
   return { entryTab: current.entryTab, rememberTab };
