@@ -22814,4 +22814,29 @@ export const backlog = [
       "🟡 Seed 21/10/2026 ở sổ hậu merge S16-SOCIAL-STORAGETESTGATE-1 (PR #597 = `8b46c67f`). Reviewer coverage xác nhận độc lập 20/10, verifier hạ LOW: CI chạy hồ sơ `live` trên MinIO tạm nên ở đó chỉ còn object mồ côi; cái giá thật là lượt `offline` toàn suite không bao giờ chứng minh được `calls=0` — tiền đề lưới động của `S16-SOCIAL-STORAGERATCHET-1`. Cùng họ «trạng thái dùng chung của lane» với `S18-QA-SHAREDSTATE-1` · `S18-QA-NOTIGLOBALLEAK-1`. KHÔNG sửa `OutboxWorker.claim` (đường PROD) — chỉ test/helper.",
     ],
   },
+  {
+    id: "S19-OPS-AUDITVITE-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên mọi PR từ 21/10/2026: advisory HIGH mới GHSA-587h-7wmj-h5pm — `launch-editor` gói trong dev server của vite `<=6.4.3` lách được kiểm `fs.existsSync()` trên Windows ⇒ chèn lệnh khi kẻ tấn công điều khiển đường dẫn mở-trong-editor",
+    zone: "amber",
+    status: "todo",
+    paths: ["pnpm-workspace.yaml", "pnpm-lock.yaml", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Đo 22/10/2026: `pnpm audit --audit-level=high` trên lockfile của master `ec6decae` ⇒ 14 vuln (1 high · 11 moderate · 2 low), exit 1 — high duy nhất là vite `<=6.4.3` (`pnpm audit` đếm 38 đường). Advisory công bố 20/10 19:48Z (`gh api advisories/GHSA-587h-7wmj-h5pm`: vite `<=6.4.3` → 6.4.4 · `>=7.0.0 <=7.3.6` → 7.3.7 · launch-editor `<=2.14.1`); Dependabot mở 21/10 ⇒ đỏ trên MỌI PR, KHÔNG do PR nào sinh ra. `apps/fbpost` cũng có vite 7.x dev nhưng bước SCA của nó quét `--omit=dev` nên không chặn.",
+      "Cây có ĐÚNG MỘT bản vite 6.4.3: devDependency trực tiếp của `apps/app` · `apps/auth` · `apps/console` (`^6.0.0`) + bắc cầu qua vitest / `vite-node` / `@vitest/mocker` / `@vitejs/plugin-react` / `@tailwindcss/vite`; vite chỉ chạy lúc dev/build/test — không vào runtime bundle của API hay bản FE đã build. Máy dev/PROD của dự án là Windows ⇒ dev server cục bộ thuộc diện bị.",
+    ],
+    done_when: [
+      'MỘT dòng override range-scoped `"vite@<6.4.4": "6.4.4"` trong `pnpm-workspace.yaml`; lockfile đổi ĐÚNG các snapshot vite 6.4.3 → 6.4.4 và gói tham chiếu nó; KHÔNG suppress GHSA (owner 25/07: «luôn vá, không ỉm»)',
+      "Đo bằng mô phỏng (thân `parseFile` đối chiếu với dist của hai bản: 6.4.3 `dep-Dm0c1Wj2.js` · 6.4.4 `dep-3O3b9SCF.js`; không chạy middleware/editor thật): với đầu vào của advisory (đường dẫn không tồn tại chứa payload, đuôi `\..:1:1`, qua `path.resolve` như middleware) bản 6.4.3 cho `existsSync` = true và tên chuyển cho editor còn payload; bản 6.4.4 chuẩn hoá tên trước khi kiểm, payload mất",
+      "`pnpm install --frozen-lockfile` sạch · `pnpm audit --audit-level high` exit 0 · `harness/check.sh` xanh trên worktree · CI Security XANH",
+    ],
+    notes: [
+      "🟡 Diff chỉ gồm `pnpm-workspace.yaml` + `pnpm-lock.yaml` + mục backlog này. Owner chọn qua hộp hỏi 22/10/2026 «SCA vite rồi DOC-3» + «Solo + 1 reviewer giới hạn»; thi công trong worktree `MediaOS-vite` (PROD chạy trên node_modules của checkout chính). Đã thử bump lockfile trong dải (lệ AUDITCRIT-1) bằng `pnpm update -r --depth Infinity --no-save vite@6.4.4` ⇒ giữ 6.4.3 cho một nhánh + kéo bản thứ hai của rollup/postcss/nanoid ⇒ bỏ, dùng override. Ghim đúng 6.4.4 (06/10); 6.4.5 (21/10) cố ý chưa lấy.",
+      "Sau merge: API PROD không nạp vite ⇒ không build/restart API. FE trên Pages build lại bằng vite 6.4.4 nếu path-filter của `apps-frontend.yml` bắt `pnpm-lock.yaml` — đo lượt deploy, không giả định.",
+    ],
+  },
 ];

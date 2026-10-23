@@ -125,6 +125,19 @@ overrides:
   # chiếu CJS (vitest nạp entry ESM). ĐO: suite thật của API + 3 app FE + packages chạy trên pool mới xanh.
   # Resolve: 2.2.0 (13/09). Gỡ dòng này khi nâng vitest lên 4+.
   "tinypool@<2.1.2": "^2.1.2"
+  # 2026-10-22 (S19-OPS-AUDITVITE-1) — advisory HIGH `GHSA-587h-7wmj-h5pm` công bố 20/10 (vite `<=6.4.3`,
+  # bản vá 6.4.4): `launch-editor` gói trong dev server của vite kiểm `fs.existsSync()` trước khi mở tệp
+  # trong editor, và trên Windows kiểm đó lách được bằng đường dẫn chế tác ⇒ theo mô tả advisory, ghép với
+  # lỗi thoát `%` của GHSA-698v-4r3x-3vcv thành chèn lệnh hệ điều hành. Chỉ Windows bị — đúng loại máy dev/PROD của dự án. Đỏ trên MỌI PR từ
+  # 21/10, KHÔNG do PR nào sinh ra. `pnpm why vite -r` đo 22/10: cây có ĐÚNG MỘT bản 6.4.3 — devDependency
+  # trực tiếp của 3 app FE + bắc cầu qua vitest · vite-node · @vitest/mocker · @vitejs/plugin-react ·
+  # @tailwindcss/vite (`pnpm audit` đếm 38 đường); vite chỉ chạy lúc dev/build/test, KHÔNG vào
+  # runtime bundle của API hay bản FE đã build.
+  # Vì sao override (khác lệ «chỉ bump lockfile trong dải» của AUDITCRIT-1): đã thử
+  # `pnpm update -r --depth Infinity --no-save vite@6.4.4` ⇒ lockfile GIỮ 6.4.3 cho một nhánh và kéo
+  # thêm bản rollup/postcss/nanoid mới làm bản thứ hai (+363 dòng) — không sạch. GHIM đúng 6.4.4
+  # (phát hành 06/10); 6.4.5 ra 21/10, cố ý chưa lấy. Gỡ dòng này khi nâng vite lên 7+.
+  "vite@<6.4.4": "6.4.4"
 
 # 2026-07-29 — GHSA-mh99-v99m-4gvg (brace-expansion DoS): dải advisory ghi `<=5.0.7`, tức nó cờ MỌI bản
 # của dòng 1.x–4.x kể cả bản ĐÃ VÁ (2.1.3). `overrides` bên trên đã đưa toàn cây về 2.1.3 + 5.0.8 và ĐO
