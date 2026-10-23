@@ -20,6 +20,7 @@ import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
 import { validateProjectWorkspaceSearch } from "@/routes/tasks/workspace-constants";
 import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
 import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
+import { validateMyTasksSearch } from "@/routes/tasks/my-tasks-groups";
 
 // ---------------------------------------------------------------------------
 // Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
@@ -1467,7 +1468,14 @@ const tasksRoute = createRoute({
   validateSearch: validateTaskListSearch,
   component: () => buildModuleRouteContent(getMeta("task.overview"), "TASK", <TaskListPage />),
 });
-const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
+// S20-TASK-MYTASKS-1 — nhóm + chip nguồn trên URL; rác ⇒ mặc định, KHÔNG ném (my-tasks-groups.ts).
+const tasksMyTasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/my-tasks",
+  beforeLoad: authGuard,
+  validateSearch: validateMyTasksSearch,
+  component: () => buildModuleRouteContent(getMeta("task.my-tasks"), "TASK", <MyTasksPage />),
+});
 
 // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN
 // route param "/tasks/$taskId" (mirror tasksMyTasksRoute) → không bị detail nuốt.
