@@ -25,7 +25,7 @@
 | Người viết                 |                                                 |
 | Người duyệt                |                                                 |
 | Ngày tạo                   |                                                 |
-| Ngày cập nhật              |                                                 |
+| Ngày cập nhật              | 23/10/2026 (`S16-SOCIAL-DOC-2` — §14.8 sàn Department + ô rail SOCIAL theo quyền) |
 
 ---
 
@@ -1198,6 +1198,8 @@ Cho HR/Admin xem nhanh tình hình nhân sự.
 * Chỉ HR/Admin/Super Admin hoặc user có quyền HR overview được xem.
 * Không hiển thị dữ liệu nhạy cảm.
 * Nếu có data scope Department, chỉ hiển thị phòng ban tương ứng.
+* **Sàn scope `Department`** (`S4-DASH-HROVERVIEW-FLOOR-1`, owner chốt 16/10/2026): server ép ở cả danh sách widget lẫn đường số liệu `GET /dashboard/widgets/hr-overview` — grant `read:employee` ở Company thấy cả công ty, ở Department thấy phòng mình, ở Team/Own **không** nhận số liệu. Giá trị sàn dùng chung cho FE: `DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW` (`packages/contracts`).
+* **Ô cùng widget ở rail phải bảng tin SOCIAL** ([UI-07 §34b](<../UI/UI-07_Module_Workspace_Template_Design.md>)) hiện **theo quyền** (cặp + sàn Phòng ban ở trên), **không** theo cấu hình widget của Dashboard: tắt `HR_OVERVIEW` cho một vai ở màn cấu hình Dashboard chỉ ẩn ô trên Dashboard, không ẩn ô ở bảng tin (owner chốt 16/10/2026 — trả lời finding SEC-03 của `S16-SOCIAL-FE-3C`). Cổng FE của ô dùng chính sàn này (`DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW`), không dùng cặp thay thế — chi tiết hiện thực ở UI-07 §34b.6.
 
 ---
 
