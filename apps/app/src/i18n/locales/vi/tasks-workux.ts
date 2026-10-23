@@ -26,4 +26,25 @@ export default {
       description: "Thử đổi từ khoá hoặc xoá bộ lọc để xem lại toàn bộ.",
     },
   },
+  // S20-TASK-QUICKENTRY-1 (US-TASK-NV-10/11) — nhập bằng bàn phím ở chi tiết việc.
+  quickEntry: {
+    checklist: {
+      inputLabel: "Thêm mục",
+      placeholder: "Thêm mục… (Enter để thêm · dán nhiều dòng = nhiều mục)",
+      submit: "Thêm vào checklist",
+      // Tên nhóm tạo tự động khi việc chưa có checklist nào.
+      defaultTitle: "Checklist",
+      pendingCount: "Enter để thêm {{count}} mục",
+      tooMany: "Tối đa {{max}} mục mỗi lần — hiện có {{count}} dòng.",
+    },
+    subtasks: {
+      inputLabel: "Tiêu đề việc con",
+      placeholder: "Nhập tiêu đề rồi Enter… (Esc để đóng)",
+    },
+    comments: {
+      shortcutHint: "Ctrl/⌘+Enter để gửi · Enter để xuống dòng",
+      mentionOutOfScope: "Người được nhắc không có quyền xem công việc này — bỏ nhắc rồi gửi lại.",
+      mentionNotFound: "Không tìm thấy người được nhắc hoặc người đó đã ngưng hoạt động.",
+    },
+  },
 };

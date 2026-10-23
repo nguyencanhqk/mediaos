@@ -2,7 +2,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi, hrApi } from "@mediaos/web-core";
+import { useAuthStore, taskCoreApi, hrApi, ApiError } from "@mediaos/web-core";
 import { TaskSubtaskPanel } from "./TaskSubtaskPanel";
 import type { TaskCoreResponseDto, SubtaskListItemDto } from "@mediaos/contracts";
 
@@ -240,8 +240,9 @@ describe("TaskSubtaskPanel", () => {
     expect(within(row).getByRole("button", { name: /đưa lên trên/i })).toBeDisabled();
   });
 
-  // ── Thêm việc con (create:task, POST /tasks parentTaskId — KHÔNG projectId/stateId) ──
-  it("adds a subtask via the add dialog with parentTaskId only", async () => {
+  // ── S20-TASK-QUICKENTRY-1 (US-TASK-NV-10) — ô nhập inline cuối danh sách thay hộp thoại ──
+  // create:task, POST /tasks parentTaskId — KHÔNG projectId/stateId (BE suy từ cha).
+  it("thêm việc con bằng ô inline: Enter tạo (chỉ parentTaskId), ô trống và vẫn focus; Esc đóng ô", async () => {
     setCapabilities({ "create:task": true, "update:task": true });
     vi.mocked(taskCoreApi.getTask).mockResolvedValue(makeTask({ subtaskTotal: 0, subtaskDone: 0 }));
     vi.mocked(taskCoreApi.listSubtasks).mockResolvedValue([]);
@@ -250,8 +251,12 @@ describe("TaskSubtaskPanel", () => {
     await waitFor(() => expect(screen.getByText(/chưa có việc con/i)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /thêm việc con/i }));
-    fireEvent.change(screen.getByLabelText(/tiêu đề/i), { target: { value: "Việc con mới" } });
-    fireEvent.click(screen.getByRole("button", { name: "Thêm" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const input = screen.getByRole("textbox", { name: "Tiêu đề việc con" }) as HTMLInputElement;
+    expect(input).toHaveFocus();
+
+    fireEvent.change(input, { target: { value: "Việc con mới" } });
+    fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() =>
       expect(taskCoreApi.createTask).toHaveBeenCalledWith(
@@ -261,6 +266,49 @@ describe("TaskSubtaskPanel", () => {
     const sentBody = vi.mocked(taskCoreApi.createTask).mock.calls[0][0];
     expect(sentBody).not.toHaveProperty("projectId");
     expect(sentBody).not.toHaveProperty("stateId");
+    await waitFor(() => expect(input.value).toBe(""));
+    expect(input).toHaveFocus();
+
+    // Nhập liên tiếp: việc thứ hai ngay trong cùng ô.
+    fireEvent.change(input, { target: { value: "Việc con thứ hai" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(input.value).toBe(""));
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("textbox", { name: "Tiêu đề việc con" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /thêm việc con/i })).toBeInTheDocument();
+  });
+
+  it("ô inline: Enter khi ô rỗng/chỉ khoảng trắng ⇒ không gửi", async () => {
+    setCapabilities({ "create:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue(makeTask({}));
+    vi.mocked(taskCoreApi.listSubtasks).mockResolvedValue([]);
+    renderWithQuery(<TaskSubtaskPanel taskId="task-001" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /thêm việc con/i }));
+    const input = screen.getByRole("textbox", { name: "Tiêu đề việc con" });
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(taskCoreApi.createTask).not.toHaveBeenCalled();
+  });
+
+  it("tạo việc con bị 403 ⇒ ô giữ nội dung đã gõ + hiện lỗi", async () => {
+    setCapabilities({ "create:task": true });
+    vi.mocked(taskCoreApi.getTask).mockResolvedValue(makeTask({}));
+    vi.mocked(taskCoreApi.listSubtasks).mockResolvedValue([]);
+    vi.mocked(taskCoreApi.createTask).mockRejectedValue(
+      new ApiError(403, "FORBIDDEN", "forbidden"),
+    );
+    renderWithQuery(<TaskSubtaskPanel taskId="task-001" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /thêm việc con/i }));
+    const input = screen.getByRole("textbox", { name: "Tiêu đề việc con" }) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Việc con mới" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/không có quyền/i);
+    expect(input.value).toBe("Việc con mới");
   });
 
   // ── Xoá việc con (delete:task, đòi xác nhận dialog) ─────────────────────────

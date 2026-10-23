@@ -15,18 +15,16 @@ import { Button, Input, Select, Dialog } from "@mediaos/ui";
 import type { SubtaskListItemDto } from "@mediaos/contracts";
 import {
   subtaskFormSchema,
-  subtaskFormToCreatePayload,
   subtaskFormToUpdatePayload,
   subtaskItemToFormValues,
-  EMPTY_SUBTASK_FORM,
   type SubtaskFormValues,
 } from "./subtask-form-schema";
 
 /**
- * Dialog Thêm/Sửa/Xoá 1 việc con — tách khỏi TaskSubtaskPanel.tsx (S5-TASK-SUBTASK-1) để giữ mỗi file
- * <400 dòng (CLAUDE.md §5 "nhiều file nhỏ"). Thêm dùng create:task (POST /tasks parentTaskId — KHÔNG
- * projectId/stateId, BE suy từ cha); sửa dùng update:task (PATCH); xoá dùng delete:task (sensitive) —
- * gate ở CALLER (TaskSubtaskPanel), 3 component ở đây KHÔNG tự gate lại, chỉ mount khi caller đã cho phép.
+ * Dialog Sửa/Xoá 1 việc con — tách khỏi TaskSubtaskPanel.tsx (S5-TASK-SUBTASK-1) để giữ mỗi file
+ * <400 dòng (CLAUDE.md §5 "nhiều file nhỏ"). Thêm việc con KHÔNG còn qua hộp thoại: ô nhập inline cuối
+ * danh sách (TaskSubtaskPanelQuickAdd.tsx, S20-TASK-QUICKENTRY-1). Sửa dùng update:task (PATCH); xoá
+ * dùng delete:task (sensitive) — gate ở CALLER (TaskSubtaskPanel), component ở đây KHÔNG tự gate lại.
  */
 export function subtaskErrorKey(err: unknown): string {
   if (err instanceof ApiError) {
@@ -109,83 +107,6 @@ function useEmployeeOptions(): Array<{ id: string; fullName: string }> {
         fullName: e.fullName ?? e.employeeCode ?? "—",
       })),
     [data],
-  );
-}
-
-export function AddSubtaskDialog({
-  parentTaskId,
-  projectId,
-  onClose,
-}: {
-  parentTaskId: string;
-  projectId: string | null;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation("tasks");
-  const queryClient = useQueryClient();
-  const employees = useEmployeeOptions();
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<SubtaskFormValues>({
-    resolver: zodResolver(subtaskFormSchema),
-    mode: "onSubmit",
-    defaultValues: EMPTY_SUBTASK_FORM,
-  });
-
-  const mutation = useMutation({
-    mutationFn: (values: SubtaskFormValues) =>
-      taskCoreApi.createTask(subtaskFormToCreatePayload(values, parentTaskId)),
-    onSuccess: async () => {
-      await Promise.all(
-        taskSubtaskInvalidation
-          .afterMutate(parentTaskId, projectId)
-          .map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-      );
-      onClose();
-    },
-  });
-
-  const busy = isSubmitting || mutation.isPending;
-  const noop = () => {};
-
-  return (
-    <Dialog
-      open
-      onClose={busy ? noop : onClose}
-      title={t("tasks.detail.subtasks.addDialog.title")}
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            {t("tasks.detail.subtasks.addDialog.cancel")}
-          </Button>
-          <Button type="submit" form="subtask-add-form" disabled={busy}>
-            {busy
-              ? t("tasks.detail.subtasks.addDialog.saving")
-              : t("tasks.detail.subtasks.addDialog.confirm")}
-          </Button>
-        </>
-      }
-    >
-      {mutation.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {t(subtaskErrorKey(mutation.error))}
-        </p>
-      )}
-      <form
-        id="subtask-add-form"
-        noValidate
-        onSubmit={handleSubmit((values) => mutation.mutate(values))}
-      >
-        <SubtaskFormFields
-          idPrefix="subtask-add"
-          register={register}
-          errors={errors}
-          employees={employees}
-        />
-      </form>
-    </Dialog>
   );
 }
 
