@@ -8,12 +8,18 @@
  * từ ảnh chụp catalog). Kỳ vọng mỗi cặp catalog `k`:
  *
  *   caps[k] === (decideCan(...).allow ∧ ¬isCapabilityExcluded(action))
- *   scopes[k] === [decideStrongestScope(...)]   (khi caps[k])
+ *   scopes[k] (khi caps[k]): đã dedupe · TẬP = dataScope của grant đóng góp theo plan §6.1 (ALLOW exact khớp
+ *   nếu có, ngược lại mọi ALLOW wildcard khớp) · scope MẠNH NHẤT trong đó === decideStrongestScope(...)
  *
- * Lưới: mọi tập con cỡ 1..3 của 32 mẫu grant (wildcard × ALLOW/DENY × cờ hàng × hết hạn; exact × ALLOW/DENY
- * × hết hạn, cờ exact = cờ catalog như DB thật). Mẫu wildcard mang `dataScope` Company, exact mang Own ⇒
- * vế scopes phân biệt được «exact thắng» với «wildcard».
+ * Lưới: mọi tập con cỡ 1..3 của 51 mẫu grant:
+ *   - wildcard 4 hình — ('*','*') · (action,'*') = ('view','*') · ('*',resourceType) = ('*','user') và
+ *     ('*','break-glass') (rereview RR-1) — × ALLOW/DENY × cờ hàng × hết hạn, `dataScope` Company;
+ *   - exact 4 cặp × ALLOW/DENY × hết hạn, cờ exact = cờ catalog như DB thật, `dataScope` Own;
+ *   - 3 mẫu ALLOW KHÁC scope (rereview RR-2): exact view:user @Department, exact view:salary @Department,
+ *     ('view','*') @Team ⇒ phủ nhánh danh sách dedupe NHIỀU scope (exact×exact và wildcard×wildcard).
+ * Exact Own vs wildcard Company ⇒ vế scopes phân biệt được «exact thắng» với «wildcard».
  */
+import { DATA_SCOPES, type DataScope } from "@mediaos/contracts";
 import { describe, expect, it } from "vitest";
 import { isCapabilityExcluded } from "../auth/step-up/capability-exclusion";
 import { projectCapabilities, projectCapabilityScopes } from "./capability-projection";
@@ -43,6 +49,8 @@ function grantTemplates(): CompanyRoleGrantWithScope[] {
   for (const [action, resourceType] of [
     ["*", "*"],
     ["view", "*"],
+    ["*", "user"],
+    ["*", "break-glass"],
   ] as const) {
     for (const effect of EFFECTS) {
       for (const isSensitive of [false, true]) {
@@ -67,7 +75,59 @@ function grantTemplates(): CompanyRoleGrantWithScope[] {
       }
     }
   }
+  // RR-2 — ALLOW cùng cặp/cùng hình nhưng KHÁC scope ⇒ danh sách scopes có > 1 phần tử.
+  out.push(
+    grant("view", "user", { isSensitive: catalogFlag("view", "user"), dataScope: "Department" }),
+  );
+  out.push(
+    grant("view", "salary", {
+      isSensitive: catalogFlag("view", "salary"),
+      dataScope: "Department",
+    }),
+  );
+  out.push(grant("view", "*", { dataScope: "Team" }));
   return out;
+}
+
+const strength = (scope: DataScope): number => DATA_SCOPES.indexOf(scope);
+
+/** ALLOW còn hiệu lực khớp cặp — viết lại ĐỘC LẬP (không gọi `capability-projection` / `permission.decide`). */
+function activeAllowsFor(
+  grants: readonly CompanyRoleGrantWithScope[],
+  action: string,
+  resourceType: string,
+): CompanyRoleGrantWithScope[] {
+  return grants.filter(
+    (g) =>
+      g.effect === "ALLOW" &&
+      (g.expiresAt === null || g.expiresAt > NOW) &&
+      (g.action === action || g.action === "*") &&
+      (g.resourceType === resourceType || g.resourceType === "*"),
+  );
+}
+
+/** Plan §6.1: có ALLOW exact ⇒ chỉ exact đóng góp, không ⇒ mọi wildcard. Tập scope sắp theo độ mạnh. */
+function contributorScopes(
+  grants: readonly CompanyRoleGrantWithScope[],
+  action: string,
+  resourceType: string,
+): DataScope[] {
+  const allows = activeAllowsFor(grants, action, resourceType);
+  const exact = allows.filter((g) => g.action === action && g.resourceType === resourceType);
+  const eligible = exact.length > 0 ? exact : allows;
+  return [...new Set(eligible.map((g) => g.dataScope as DataScope))].sort(
+    (a, b) => strength(a) - strength(b),
+  );
+}
+
+/** Mọi ALLOW còn hiệu lực khớp cặp đều có hình ('*', resourceType) — sàn chống xanh-rỗng cho RR-1. */
+function onlyStarActionAllows(
+  grants: readonly CompanyRoleGrantWithScope[],
+  action: string,
+  resourceType: string,
+): boolean {
+  const allows = activeAllowsFor(grants, action, resourceType);
+  return allows.length > 0 && allows.every((g) => g.action === "*" && g.resourceType !== "*");
 }
 
 function combos<T>(items: readonly T[], maxSize: number): T[][] {
@@ -85,23 +145,25 @@ const label = (grants: readonly CompanyRoleGrantWithScope[]): string =>
   grants
     .map(
       (g) =>
-        `${g.effect}(${g.action},${g.resourceType}${g.isSensitive ? ",S" : ""}${g.expiresAt ? ",exp" : ""})`,
+        `${g.effect}(${g.action},${g.resourceType}${g.isSensitive ? ",S" : ""}${g.expiresAt ? ",exp" : ""}@${g.dataScope})`,
     )
     .join("+");
 
-describe("S14-SEC-CAPWILDCARD-1 gate CW-G2 — caps/scopes ≡ decideCan/decideStrongestScope trên lưới grant", () => {
+describe("S14-SEC-CAPWILDCARD-1 gate CW-G2 + RR-1/RR-2 — caps/scopes ≡ decideCan/decideStrongestScope trên lưới grant", () => {
   const templates = grantTemplates();
   const grids = combos(templates, 3);
 
   it("lưới đủ rộng (sàn chống xanh-rỗng)", () => {
-    expect(templates.length).toBe(32);
-    expect(grids.length).toBe(32 + 496 + 4960);
+    expect(templates.length).toBe(51);
+    expect(grids.length).toBe(51 + 1275 + 20825);
   });
 
-  it("mọi cặp catalog: caps[k] ⟺ decideCan ALLOW ∧ ¬EXCLUDED; scopes[k] = [decideStrongestScope]", () => {
+  it("mọi cặp catalog: caps[k] ⟺ decideCan ALLOW ∧ ¬EXCLUDED; scopes[k] = tập §6.1, mạnh nhất = decideStrongestScope", () => {
     const mismatches: string[] = [];
     let allowed = 0;
     let denied = 0;
+    let multiScope = 0;
+    let viaStarAction = 0;
 
     for (const grants of grids) {
       const caps = projectCapabilities({ grants, catalog: CATALOG, now: NOW });
@@ -122,11 +184,25 @@ describe("S14-SEC-CAPWILDCARD-1 gate CW-G2 — caps/scopes ≡ decideCan/decideS
         else denied += 1;
         if (got !== want) mismatches.push(`${label(grants)} :: caps[${k}]=${got}, can()=${want}`);
 
+        const gotScopes = scopes[k];
+        if (!want) {
+          if (gotScopes !== undefined)
+            mismatches.push(`${label(grants)} :: scopes[${k}] có mặt khi caps vắng`);
+          continue;
+        }
+        if (onlyStarActionAllows(grants, p.action, p.resourceType)) viaStarAction += 1;
         const strongest = decideStrongestScope([...grants], req, NOW);
-        const wantScopes = want && strongest !== null ? [strongest] : undefined;
-        if (JSON.stringify(scopes[k]) !== JSON.stringify(wantScopes)) {
+        const sorted = [...(gotScopes ?? [])].sort((a, b) => strength(a) - strength(b));
+        const wantSet = contributorScopes(grants, p.action, p.resourceType);
+        if (sorted.length > 1) multiScope += 1;
+        if (
+          gotScopes === undefined ||
+          new Set(gotScopes).size !== gotScopes.length ||
+          JSON.stringify(sorted) !== JSON.stringify(wantSet) ||
+          sorted[sorted.length - 1] !== strongest
+        ) {
           mismatches.push(
-            `${label(grants)} :: scopes[${k}]=${JSON.stringify(scopes[k])}, decide=${JSON.stringify(wantScopes)}`,
+            `${label(grants)} :: scopes[${k}]=${JSON.stringify(gotScopes)}, §6.1=${JSON.stringify(wantSet)}, decide=${strongest}`,
           );
         }
       }
@@ -140,6 +216,8 @@ describe("S14-SEC-CAPWILDCARD-1 gate CW-G2 — caps/scopes ≡ decideCan/decideS
 
     expect(allowed, "sàn: có cặp ALLOW").toBeGreaterThan(1000);
     expect(denied, "sàn: có cặp DENY").toBeGreaterThan(1000);
+    expect(multiScope, "sàn RR-2: có cặp mang > 1 scope").toBeGreaterThan(100);
+    expect(viaStarAction, "sàn RR-1: có cặp mở CHỈ bởi ('*', resourceType)").toBeGreaterThan(100);
     expect({ count: mismatches.length, first: mismatches.slice(0, 8) }).toEqual({
       count: 0,
       first: [],
