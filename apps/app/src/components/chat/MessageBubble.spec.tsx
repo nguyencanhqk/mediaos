@@ -165,6 +165,35 @@ describe("MessageBubble · đính kèm BA trạng thái", () => {
     expect(screen.getByText("2.0 KB")).toBeTruthy();
   });
 
+  // S16-SOCIAL-FILEOPENUX-1 L-2: tệp không phải ảnh được server phục vụ dạng TẢI XUỐNG ⇒ ô tệp mang tên trợ
+  // năng nói đúng điều đó. Ảnh (ca đối chứng) giữ nguyên: vẫn mở ở tab mới, tên trợ năng lấy từ `alt`.
+  it("[L-2 FILEOPENUX] ô tệp PDF ⇒ tên trợ năng «Tải xuống <tên>»", () => {
+    const { container } = renderBubble({
+      attachments: [{ ...rest, url: "https://storage/signed", thumbnailUrl: null }],
+    });
+    const link = container.querySelector('a[href="https://storage/signed"]');
+    expect(link?.getAttribute("aria-label")).toBe("Tải xuống bao-cao.pdf");
+    expect(screen.getByRole("link", { name: "Tải xuống bao-cao.pdf" })).toBe(link);
+  });
+
+  it("[L-2 FILEOPENUX allow] ô ẢNH ⇒ vẫn `target=_blank`, không thêm nhãn «Tải xuống»", () => {
+    const { container } = renderBubble({
+      attachments: [
+        {
+          ...rest,
+          name: "anh.png",
+          mimeType: "image/png",
+          isImage: true,
+          url: "https://storage/anh",
+          thumbnailUrl: "https://storage/anh",
+        },
+      ],
+    });
+    const link = container.querySelector('a[href="https://storage/anh"]');
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("aria-label")).toBeNull();
+  });
+
   it("url = null (server TỪ CHỐI ký) ⇒ 'Tệp không tải được', KHÔNG có nút tải chết", () => {
     const { container } = renderBubble({
       attachments: [{ ...rest, url: null, thumbnailUrl: null }],
@@ -249,10 +278,7 @@ describe("MessageBubble v2 · hai phía (done_when #1)", () => {
   it("tin gộp của NGƯỜI KHÁC ⇒ không lặp avatar, nhưng NHÃN GHIM vẫn thấy được", () => {
     // Hàng tên (chỗ bám của nhãn ghim ở tin đầu cụm) không tồn tại ở tin gộp — nhãn phải chuyển vào
     // trong bong bóng, nếu không thì ghim một tin gộp là ghim xong mà không có dấu vết nào.
-    renderBubble(
-      { pinnedAt: "2026-08-04T10:01:00.000Z" },
-      { isMine: false, isGrouped: true },
-    );
+    renderBubble({ pinnedAt: "2026-08-04T10:01:00.000Z" }, { isMine: false, isGrouped: true });
     expect(screen.queryByTestId("chat-sender-avatar")).toBeNull();
     expect(screen.getByText("Đã ghim")).toBeTruthy();
   });
