@@ -16,6 +16,13 @@ import {
   type ScopeRequest,
 } from "./permission.decide";
 import { PermissionCatalogSnapshot } from "./permission-catalog-snapshot";
+import { PermissionPairCatalogSnapshot } from "./permission-pair-catalog-snapshot";
+import {
+  needsCatalogForCapabilities,
+  projectCapabilities,
+  projectCapabilityScopes,
+  type CapabilityCatalogPair,
+} from "./capability-projection";
 
 /**
  * FIX-1-CAP-EXPOSE (S2-AUTH-BE-5) — ALLOWLIST cặp quyền NHẠY CẢM được phép PHƠI vào /auth/me `capabilities`
@@ -423,18 +430,42 @@ export class PermissionService {
     },
   });
 
+  /** S14-SEC-CAPWILDCARD-1 §4.3.1 — ảnh CẶP khai triển wildcard cho caps/scopes; suy biến NGƯỢC
+   *  chiều `catalog` ở trên (ảnh cũ / rỗng — `permission-pair-catalog-snapshot.ts`). */
+  private readonly pairCatalog = new PermissionPairCatalogSnapshot({
+    load: () => this.repo.getAllPermissions(),
+    onError: (error, phase, cause) =>
+      this.logger.error("capabilities pair-catalog snapshot degraded", {
+        error: serializeErrorChain(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        phase,
+        cause,
+        degradedTo: phase === "no-snapshot" ? "mất khoá khai triển wildcard (siết)" : "ảnh chụp CŨ",
+      }),
+  });
+
   constructor(private readonly repo: IPermissionRepository) {}
 
   /**
    * ADR `DECISIONS-12` D7 — seam TEST duy nhất cho ảnh chụp catalog. int-spec gọi qua
    * `app.get(PermissionService)` SAU khi seed cặp quyền mới, nếu không ảnh chụp nạp lúc kiểm quyền đầu
-   * tiên sẽ không thấy hàng vừa seed (TTL 5 phút).
+   * tiên sẽ không thấy hàng vừa seed (TTL 5 phút). Reset CẢ HAI ảnh chụp (cờ sensitive của `can()` +
+   * danh sách cặp của capabilities — S14-SEC-CAPWILDCARD-1 §13.2).
    *
    * KHÔNG export hàm module-level thay cho method này: hàm module-level không chạm được ảnh chụp của
    * instance singleton mà DI đang dùng ⇒ dây chết trông như dây sống.
    */
   resetCatalogSnapshotForTest(): void {
     this.catalog.reset();
+    this.pairCatalog.reset();
+  }
+
+  /** Plan §4.3 — catalog cặp CHỈ đọc khi actor giữ grant ALLOW wildcard còn hiệu lực (else 0 truy vấn). */
+  private capabilityCatalogFor(
+    grants: readonly CompanyRoleGrant[],
+    now: Date,
+  ): Promise<readonly CapabilityCatalogPair[]> {
+    return needsCatalogForCapabilities(grants, now) ? this.pairCatalog.list() : Promise.resolve([]);
   }
 
   /**
@@ -628,37 +659,22 @@ export class PermissionService {
   }
 
   /**
-   * Returns a flat map of non-sensitive capabilities for the given user.
-   * Key format: "${action}:${resourceType}" — wildcards included as-is (FE handles multi-key lookup).
-   * Only non-sensitive grants; sensitive permissions require explicit per-resource checks.
-   * Deny-overrides-across-roles applied: any DENY removes the key entirely.
-   * On error → empty map (fail-safe for UI hints, never fail-closed like can()).
+   * S14-SEC-CAPWILDCARD-1 (ADR `DECISIONS-13` §4) — `/auth/me.capabilities` = phép CHIẾU quyết định
+   * `can()` ở tầng CÔNG TY: `caps[k] === true` ⟺ k ∉ EXCLUDED (action tiền tố `reveal-`) ∧ `can()` ALLOW k ở
+   * tầng công ty cho call-site không khai `requiresReauth`/`objectGrantRequired`. Khoá
+   * "${action}:${resourceType}" KHÔNG BAO GIỜ chứa `*` — grant wildcard được khai triển trên catalog cặp.
+   *
+   * Cặp SENSITIVE: CÓ khi actor giữ ALLOW EXACT (đảo `S2-AUTH-BE-5`); wildcard không mở cặp sensitive.
+   * DENY tính trên MỌI grant còn hiệu lực. Thuật toán: `capability-projection.ts`. Catalog chỉ đọc khi actor
+   * giữ wildcard ⇒ caps phụ thuộc catalog (≤ 1 TTL); suy biến ⇒ giữ khoá exact, mất phần khai triển (§4.4).
+   * KHÔNG phải cổng enforcement. Lỗi đọc grant → {} (fail-safe UI hint, không fail-closed như can()).
    */
   async getCapabilities(userId: string, companyId: string): Promise<Record<string, boolean>> {
     try {
       const now = new Date();
-      const rawGrants = await this.repo.getCompanyRoleGrants(userId, companyId);
-      const grants = rawGrants.filter((g) => isGrantActive(g.expiresAt, now) && !g.isSensitive);
-
-      const denyKeys = new Set<string>();
-      for (const g of grants) {
-        if (g.effect === "DENY") denyKeys.add(`${g.action}:${g.resourceType}`);
-      }
-
-      // Wildcard-aware deny check: a DENY on *:T or A:* or *:* suppresses matching ALLOW keys.
-      const isDenied = (action: string, resourceType: string): boolean =>
-        denyKeys.has(`${action}:${resourceType}`) ||
-        denyKeys.has(`*:${resourceType}`) ||
-        denyKeys.has(`${action}:*`) ||
-        denyKeys.has("*:*");
-
-      const caps: Record<string, boolean> = {};
-      for (const g of grants) {
-        if (g.effect === "ALLOW" && !isDenied(g.action, g.resourceType)) {
-          caps[`${g.action}:${g.resourceType}`] = true;
-        }
-      }
-      return caps;
+      const grants = await this.repo.getCompanyRoleGrants(userId, companyId);
+      const catalog = await this.capabilityCatalogFor(grants, now);
+      return projectCapabilities({ grants, catalog, now });
     } catch (error: unknown) {
       this.logger.error("getCapabilities() infrastructure error — returning empty map", {
         error: error instanceof Error ? error.message : String(error),
@@ -670,6 +686,10 @@ export class PermissionService {
   }
 
   /**
+   * ⚠️ BỊ THAY THẾ (S14-SEC-CAPWILDCARD-1, ADR `DECISIONS-13`): output ⊆ getCapabilities() mới ⇒ merge ở
+   * /auth/me + getMyApps là no-op; GIỮ tới `S18-AUTH-CAPALLOWLIST-RETIRE-1`. Allowlist ∩ EXCLUDED (`reveal-`)
+   * phải = ∅ (ratchet `capability-exclusion.spec`). Mô tả GỐC dưới đây tả getCapabilities() TRƯỚC WO đó.
+   *
    * FIX-1-CAP-EXPOSE (S2-AUTH-BE-5) — map cờ cho các cặp NHẠY CẢM trong SENSITIVE_CAPABILITY_ALLOWLIST mà user
    * THỰC SỰ được ALLOW ở cấp-role (company-tier). getCapabilities() lọc bỏ TẤT CẢ sensitive ⇒ FE useCan() trên
    * cặp nhạy cảm luôn false (vd viewer audit-log không bao giờ render được). Method này surface CÓ KIỂM SOÁT ĐÚNG
@@ -728,11 +748,12 @@ export class PermissionService {
   }
 
   /**
-   * S2-AUTH-BE-1 — union data_scope cho từng cặp ALLOW non-sensitive (cho /auth/me `scopes`, BACKEND-03 §15.3
-   * rule 6). KEYSET Y HỆT getCapabilities: chỉ ALLOW non-sensitive; cặp bị DENY-override (wildcard-aware) bị
-   * LOẠI hoàn toàn (KHÔNG union). Mảng scope đã DEDUPE. Lỗi hạ tầng → {} (fail-safe UI hint; guard BE-2 là cổng
-   * thật). Độc lập getCapabilities: nếu method này lỗi mà getCapabilities ok, /me trả caps không kèm scope —
-   * chấp nhận (chỉ là gợi ý FE).
+   * S2-AUTH-BE-1 + S14-SEC-CAPWILDCARD-1 — `/auth/me.scopes` (BACKEND-03 §15.3 rule 6). KEYSET === keyset
+   * getCapabilities (cùng hàm chiếu `capability-projection.ts`, cùng luật — kể cả cặp sensitive có ALLOW
+   * exact, ADR `DECISIONS-13` / plan §6.2). Giá trị = data_scope DEDUPE của grant đóng góp, chọn theo luật
+   * exact-THẮNG-wildcard (soi gương `decideStrongestScope`, plan §6.1) — không union ngây thơ.
+   * Lỗi hạ tầng → {} (fail-safe UI hint; guard BE-2 là cổng thật). Độc lập getCapabilities: nếu method này
+   * lỗi mà getCapabilities ok, /me trả caps không kèm scope — chấp nhận (chỉ là gợi ý FE).
    */
   async getCapabilityScopes(
     userId: string,
@@ -740,31 +761,9 @@ export class PermissionService {
   ): Promise<Record<string, DataScope[]>> {
     try {
       const now = new Date();
-      const rawGrants = await this.repo.getCompanyRoleGrantsWithScope(userId, companyId);
-      const grants = rawGrants.filter((g) => isGrantActive(g.expiresAt, now) && !g.isSensitive);
-
-      const denyKeys = new Set<string>();
-      for (const g of grants) {
-        if (g.effect === "DENY") denyKeys.add(`${g.action}:${g.resourceType}`);
-      }
-      const isDenied = (action: string, resourceType: string): boolean =>
-        denyKeys.has(`${action}:${resourceType}`) ||
-        denyKeys.has(`*:${resourceType}`) ||
-        denyKeys.has(`${action}:*`) ||
-        denyKeys.has("*:*");
-
-      const scopeSets = new Map<string, Set<DataScope>>();
-      for (const g of grants) {
-        if (g.effect !== "ALLOW" || isDenied(g.action, g.resourceType)) continue;
-        const key = `${g.action}:${g.resourceType}`;
-        const set = scopeSets.get(key) ?? new Set<DataScope>();
-        set.add(g.dataScope as DataScope);
-        scopeSets.set(key, set);
-      }
-
-      const out: Record<string, DataScope[]> = {};
-      for (const [key, set] of scopeSets) out[key] = [...set];
-      return out;
+      const grants = await this.repo.getCompanyRoleGrantsWithScope(userId, companyId);
+      const catalog = await this.capabilityCatalogFor(grants, now);
+      return projectCapabilityScopes({ grants, catalog, now });
     } catch (error: unknown) {
       this.logger.error("getCapabilityScopes() infrastructure error — returning empty map", {
         error: error instanceof Error ? error.message : String(error),
