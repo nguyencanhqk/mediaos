@@ -77,6 +77,8 @@ export default {
       recalled: "Tin nhắn đã được thu hồi",
       files: "{{count}} tệp đính kèm",
       attachmentAria: "Có {{count}} tệp đính kèm",
+      /** S20-CHAT-DRAFT-1 — tiền tố dòng phòng đang có nháp. Dấu «:» do component thêm. */
+      draft: "Nháp",
     },
     menu: {
       openAria: "Tuỳ chọn cho {{name}}",
@@ -237,6 +239,9 @@ export default {
     resend: "Gửi lại",
     discard: "Bỏ tin này",
     sendFailed: "Không gửi được tin. Nội dung của bạn vẫn được giữ nguyên.",
+    /** S20-CHAT-DRAFT-1 — tệp chờ không được giữ khi đổi phòng; chữ thì vẫn giữ. */
+    filesNotKept:
+      "{{count}} tệp chưa gửi không được giữ khi chuyển phòng — chữ vẫn còn, hãy đính kèm lại nếu cần.",
     archivedNotice: "Phòng đã lưu trữ. Bạn vẫn đọc được nhưng không gửi tin mới.",
 
     // S17-CHAT-UX2-FE-3 — ô soạn v2 (CHAT-DEC-027).

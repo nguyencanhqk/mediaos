@@ -1,8 +1,25 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-23 08:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-10-23 11:33Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
+
+### 🔴 S14-SEC-CAPWILDCARD-1 — `capabilities` phát ĐÚNG quyết định của `can()` tầng công ty (v2, owner chốt 05/09): bỏ cờ HÀNG GRANT + bỏ danh sách tay `SENSITIVE_CAPABILITY_ALLOWLIST` — đóng CẢ lỗ `*:*` lẫn lớp lỗi `capability-allowlist-hides-admin-screens`
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/permission/**`, `apps/api/src/auth/**`, `apps/api/src/foundation/**`, `packages/web-core/src/hooks/**`, `packages/contracts/**`, `docs/DECISIONS/**`, `apps/api/test/**`, `docs/plans/**`, `harness/backlog.mjs`, `apps/console/**`
+- **phụ thuộc**: S14-SEC-DASHGATE-WILDCARD-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] HOP DONG (v2): capabilities[k]===true <=> can() ALLOW o tang CONG TY cho k='action:resourceType'; k KHONG BAO GIO chua '*'. Ghi vao DECISIONS-12 + docblock contracts/src/auth.ts
+  - [ ] Cong sensitive doc co CAP DICH: sensitive(cap) => phai co ALLOW EXACT (mirror decideCan/decideStrongestScope/userGrantsPermissionIds - ho 3 ban cai dat ADR §2). Ve `!g.isSensitive` tren HANG GRANT bi GO
+  - [ ] getCapabilityScopes GIU keyset Y HET getCapabilities, va chon grant dong gop scope theo luat exact-THANG-wildcard (mirror decideStrongestScope) - khong union ngay tho
+  - [ ] Catalog CHI duoc doc khi actor giu grant wildcard (plan §4.3). Actor khong wildcard => 0 truy van them, output byte-identical truoc/sau (ca doi chung #4/#16)
+  - [ ] Ca ALLOW doi chung DOI CHIEU: cap sensitive + grant EXACT => CO khoa (#6); cap sensitive + CHI wildcard => VANG khoa (#7). Thieu mot trong hai la ca kia xanh-RONG
+  - [ ] Don dieu: caps_cu TRU {'*:*'} la TAP CON cua caps_moi voi moi bo grant (ca #13) - khong actor nao MAT khoa
+  - [ ] Chuyen DU 9 ca ghim caps['*:*']===true o auth-me-capabilities.int.spec.ts (:234 :273 :433 :574 :737 :879 :1001 :1136 :1276) - KHONG xoa dong (tests-can-pin-a-hole-open) + them cong ratchet tinh
+  - [ ] Quyet + ghi ro: GIU fallback caps['*:*'] trong useCan (plan §7.2, 0 dong logic FE doi) - fallback thanh code CHET vi ratchet BE
+  - [ ] CONG NGUOI TRUOC MERGE: owner chay docs/plans/S14-SEC-CAPWILDCARD-1.census.sql tren PROD, dan Q0/Q1/Q3/Q4 vao PR (Q4 = danh sach man se hien them). classifier-blocks-prod-db-from-agent
+  - [ ] `bash harness/check.sh --all --lane-db` xanh khong banner
+  - [ ] Owner chốt 23/10/2026 (CW-1): EXCLUDED + cổng ratchet tĩnh phủ tiền tố `reveal-` (thay vì chỉ `reveal-secret`); allowlist trong `docs/plans/S14-SEC-CAPWILDCARD-1.census.sql` cập nhật 69 → 86 mục (khớp Q4a census 16/10)
 
 ###  S16-SOCIAL-FE-2D — FE nợ nội dung SOCIAL: UI đính kèm ảnh/tệp cho composer + bình luận qua SOCIAL-API-054/055 · @mention thành link hồ sơ từ mảng `mentions` (BE-1D) · hiện `droppedMentions` của bình luận
 - **zone**: amber · **skills**: code-review
@@ -21,6 +38,98 @@
   - [ ] 7 màn: nhãn và hành vi nút khớp «tải xuống» (không còn hứa «mở xem»); phiếu lương PDF/ZIP + CV không để lại tab trắng; tên tệp tải về đúng tên gốc (đo trên trình duyệt thật, tên có dấu tiếng Việt)
   - [ ] Form tải: báo sớm ở client khi loại/đuôi tệp thuộc nhóm server luôn từ chối (UX — server vẫn là lưới chính, không hard-code quyền); test cạnh nguồn cho từng màn đổi
   - [ ] N9 (helper chung): tải `attachment` qua `openSignedUrlInNewTab` KHÔNG để lại tab trắng cho TASK · 3 nút phiếu lương · CV; cách phục vụ lấy từ quyết định của SERVER (`resolveServeDirectives`), FE không đoán theo đuôi tệp; tệp `inline` vẫn mở tab mới; tab vẫn mở ĐỒNG BỘ trong onClick; đo lại bằng trình duyệt thật
+
+### 🟢 S20-FE-TOAST-1 — Mọi thao tác ghi trong ứng dụng có phản hồi: thông báo nổi dùng chung (toast + vùng `aria-live`) báo thành công ngắn gọn và báo lỗi rõ ràng thay vì im lặng
+- **zone**: green · **skills**: frontend-design, code-review
+- **sửa ở đâu (paths)**: `packages/ui/src/components/ui/toast.tsx`, `packages/ui/src/components/ui/toast.spec.tsx`, `packages/ui/src/index.ts`, `packages/web-core/src/lib/error-mapper.ts`, `packages/web-core/src/lib/error-mapper.spec.ts`, `apps/app/src/layouts/protected/ProtectedShell.tsx`, `apps/app/src/layouts/protected/ProtectedShell.spec.tsx`, `apps/app/src/main.tsx`, `apps/app/src/test/boot.spec.tsx`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] RED trước: gọi `showApiErrorToast(err)` ở bất kỳ màn nào ⇒ hiện thông báo lỗi theo `error-mapper`, không chỉ log console (ca đỏ trên mã cũ); thành phần thông báo nổi ở `packages/ui`, mount MỘT lần ở `ProtectedShell`, `configureToast` gọi lúc khởi động
+  - [ ] API dùng chung: loại success · error · warning, kèm hành động tuỳ chọn («Mở» · «Thử lại»…); cùng khoá trong cửa sổ gộp ⇒ một thông báo kèm số lần; tối đa 3, cái cũ nhất tự đóng; mặc định KHÔNG chứa nội dung nhạy cảm (thân tin chat, mô tả việc)
+  - [ ] A11y: vùng `aria-live` polite (lỗi dùng assertive); nút hành động tới được bằng Tab, Esc đóng; tôn trọng `prefers-reduced-motion`; trên điện thoại không che ô soạn chat
+  - [ ] Test đơn vị cạnh file cho gộp khoá · giới hạn số lượng · `aria-live`; nếu dùng thư viện thì ghim phiên bản chính xác và ghi kiểm giấy phép vào plan; `bash harness/check.sh` xanh (sửa `packages/ui` ⇒ build lại gói, chạy cả auth + console)
+
+### 🟢 S20-FE-COMPANYTZ-1 — «Hôm nay», «quý này» và mốc hạn 17:00 luôn tính theo giờ công ty dù máy người dùng đặt múi giờ khác — bộ hàm giờ công ty dùng chung ở web-core
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `packages/web-core/src/lib/company-time.ts`, `packages/web-core/src/lib/company-time.spec.ts`, `packages/web-core/src/index.ts`, `packages/web-core/src/i18n/format.ts`, `apps/app/src/routes/rooms/room-time.ts`, `apps/app/src/routes/rooms/room-time.spec.ts`, `apps/app/src/test/company-tz-literal.spec.ts`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] `companyTimeZone()` + `partsIn`/`localDateOf`/`wallTimeToInstant` chuyển lên `packages/web-core`; `room-time.ts` re-export ⇒ ROOM · SOCIAL stats · kudos không phải sửa; spec sẵn có của `room-time` · `stats-range` · `kudos-month` giữ xanh (không đổi hành vi)
+  - [ ] Hàm thuần nhận `now` + `timeZone`: `todayLocal` · `startOfLocalDay`/`endOfLocalDay` (trả instant UTC) · `deadlineAt(localDate, '17:00')` · `quarterRange` · `yearRange` · `isSameLocalDay`; ca chấp nhận chạy dưới `TZ=UTC` và `TZ=America/Los_Angeles`: `todayLocal(2026-10-22T23:30Z, VN)` = `2026-10-23`; `quarterRange(2026-09-30T17:30Z)` = `2026-10-01…2026-12-31`, `(2026-09-30T16:59Z)` = `2026-07-01…2026-09-30`; `endOfLocalDay('2026-10-31')` = `2026-10-31T16:59:59.999Z`; `deadlineAt('2026-10-24','17:00')` = `2026-10-24T10:00:00Z`
+  - [ ] Ca lỗi: `timeZone` không phải IANA hợp lệ ⇒ helper ném lỗi rõ (có ca test); `companyTimeZone()` không bao giờ trả chuỗi rỗng; `timezone` cá nhân của `/me/preferences` chỉ dùng để hiển thị, KHÔNG dùng cho mốc nghiệp vụ
+  - [ ] Test tĩnh: không còn chuỗi múi giờ viết cứng trong `apps/app/src/routes/{tasks,goals,me}` ngoài file spec; KHÔNG đổi `isOverdue` (quá hạn luôn theo server); `bash harness/check.sh` xanh (web-core + app)
+
+### 🟢 S20-TASK-DRAWER-1 — Mở một việc từ danh sách, thông báo, dashboard hay mục tiêu thành drawer tại chỗ (`?task=`), đóng lại về đúng chỗ cũ; bộ lọc Danh sách và workspace dự án nằm trên URL, có ô tìm và chip «Của tôi»
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/layouts/protected/ProtectedShell.tsx`, `apps/app/src/layouts/protected/ProtectedShell.spec.tsx`, `apps/app/src/router.tsx`, `apps/app/src/routes/tasks/TaskDetailDrawer.tsx`, `apps/app/src/routes/tasks/TaskDetailDrawer.spec.tsx`, `apps/app/src/routes/tasks/TaskDetailPage.tsx`, `apps/app/src/routes/tasks/TaskDetailPage.spec.tsx`, `apps/app/src/routes/tasks/TaskSubtaskPanel.tsx`, `apps/app/src/routes/tasks/TaskSubtaskPanel.spec.tsx`, `apps/app/src/routes/tasks/task-columns.tsx`, `apps/app/src/routes/tasks/TaskListPage.tsx`, `apps/app/src/routes/tasks/TaskListPage.spec.tsx`, `apps/app/src/routes/tasks/task-list-search.ts`, `apps/app/src/routes/tasks/task-list-search.spec.ts`, `apps/app/src/routes/tasks/OverdueTasksPage.tsx`, `apps/app/src/routes/tasks/OverdueTasksPage.spec.tsx`, `apps/app/src/routes/tasks/MyTasksPage.tsx`, `apps/app/src/routes/tasks/MyTasksPage.spec.tsx`, `apps/app/src/routes/tasks/ProjectDetailPage.tsx`, `apps/app/src/routes/tasks/ProjectDetailPage.spec.tsx`, `apps/app/src/routes/tasks/ProjectTaskListTab.tsx`, `apps/app/src/routes/tasks/ProjectTaskListTab.spec.tsx`, `apps/app/src/routes/tasks/AssigneeRail.tsx`, `apps/app/src/routes/goals/components/GoalLinkedTasksTab.tsx`, `apps/app/src/components/notifications/NotificationTargetLink.tsx`, `apps/app/src/components/notifications/NotificationTargetLink.spec.tsx`, `apps/app/src/components/chat/chat-dock.store.ts`, `apps/app/src/i18n/locales/vi/tasks.ts`, `docs/plans/**`, `harness/backlog.mjs`, `apps/app/src/components/notifications/NotificationBadge.tsx`, `apps/app/src/components/notifications/NotificationDropdown*.tsx`, `apps/app/src/routes/goals/GoalDetailPage.spec.tsx`, `apps/app/src/routes/notifications/notifications-router-flow.spec.tsx`, `apps/app/src/routes/tasks/task-drawer-nav*.ts`, `apps/app/src/routes/tasks/TaskListToolbar.tsx`, `apps/app/src/routes/tasks/use-task-list-search.ts`, `apps/app/src/i18n/locales/vi/tasks-workux.ts`, `apps/app/src/i18n/index.ts`
+- **done_when (đích hội tụ)**:
+  - [ ] `TaskDetailDrawer` mount MỘT lần ở `ProtectedShell`, đọc `?task=` từ `location.search` và kiểm UUID trước mọi lời gọi; mở = push, đóng = replace; điểm mở việc (Danh sách · Việc của tôi · Quá hạn · tab việc của dự án · `NotificationTargetLink` với `/tasks/<uuid>` · việc gắn ở mục tiêu) chỉ thêm `?task=` vào URL hiện tại (ở /goals/G ⇒ `/goals/G?task=T`); `/tasks/projects/P?task=T` chỉ còn MỘT drawer; việc con đổi `?task=` ngay trong drawer, Back về việc cha
+  - [ ] Ca từ chối (RED trước): `?task=` không phải UUID ⇒ 0 lời gọi API; T không tồn tại · xoá mềm · ngoài phạm vi đọc ⇒ CÙNG một thông điệp «Không mở được việc này», không hiện tiêu đề/mã việc, danh sách phía sau vẫn dùng được; Esc/Back đóng drawer, bộ lọc + vị trí cuộn giữ nguyên; `onBack` của `/tasks/:id` về trang trước khi có lịch sử trong app, không có thì về `/tasks/my-tasks`; màn hẹp hơn md: drawer chat thu lại, drawer việc ở trên
+  - [ ] Bộ lọc `TaskListPage` lên URL qua `validateSearch` KHÔNG ném (status · priority · assignee · project · dueFrom/dueTo · overdue · page; giá trị rác ⇒ mặc định, không 404, back/forward không vỡ); toolbar + rail workspace dự án lên URL (q · status · priority · overdue · who); ô tìm debounce 300ms + phím «/» nối tham số `search` sẵn có của `GET /tasks`; chip «Của tôi» = `assigneeEmployeeId` của tôi từ /me; lọc phòng ban chỉ khi có `read:department` (thiếu ⇒ không gọi API phòng ban); rỗng ⇒ «Xoá bộ lọc»; `localStorage` bị chặn vẫn đúng; link gửi người khác ⇒ cùng bộ lọc, BE vẫn ép phạm vi của họ
+  - [ ] KPI #9: đo ≤ 4 thao tác, 0 chuyển trang (mở việc từ thông báo rồi quay lại, xuất phát /goals/{id}) trong trình duyệt thật với API giả lập, ghi vào sổ vết plan + mô tả PR; kèm lượt Danh sách (mở việc → Esc ≤ 2 thao tác, 0 chuyển trang) và ca thiếu quyền không thấy lối tắt
+  - [ ] Test cạnh file (drawer toàn cục, search schema, `TaskListPage`, `ProjectDetailPage`, `NotificationTargetLink`); `bash harness/check.sh` xanh
+
+### 🟢 S20-CHAT-DRAFT-1 — Tin nhắn: nháp đang gõ dở (kể cả @nhắc và tin đang trả lời) được giữ theo từng phòng khi chuyển phòng hoặc bấm ⤢ — chỉ trong bộ nhớ, mất khi đăng xuất
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/components/chat/MessageComposer*.tsx`, `apps/app/src/components/chat/drawer/ChatDrawerBody.tsx`, `apps/app/src/components/chat/ChatDrawer.spec.tsx`, `apps/app/src/components/chat/chat-draft*.ts`, `apps/app/src/components/chat/RoomListPanel*.tsx`, `apps/app/src/i18n/locales/vi/chat.ts`, `docs/plans/**`, `harness/backlog.mjs`, `apps/app/src/components/chat/ConversationPanel*.tsx`, `apps/app/src/components/chat/ComposerNotices*.tsx`
+- **done_when (đích hội tụ)**:
+  - [ ] Store Zustand CHỈ trong bộ nhớ theo `roomId` giữ chữ + mention đã chèn + `replyToMessageId`: gõ «Anh xem giúp @Lan báo cáo» ở A, sang B rồi về A (hoặc bấm ⤢ từ drawer sang `/chat/A`) thì ô soạn còn nguyên, mention @Lan vẫn được gửi, khung «đang trả lời» còn; dòng phòng có nháp hiện «Nháp: …»
+  - [ ] Gửi thành công ⇒ ô trống, nhãn «Nháp:» biến mất; gửi lỗi ⇒ giữ nháp; có tệp chưa gửi mà đổi phòng ⇒ cảnh báo nhẹ tệp không được giữ, chữ vẫn giữ
+  - [ ] Đăng xuất hoặc đổi phiên tại chỗ ⇒ store reset tường minh, người đăng nhập sau trên cùng tab không thấy nháp; test khẳng định KHÔNG có khoá nào chứa nội dung nháp, mention hay `replyToMessageId` trong sessionStorage/localStorage/IndexedDB
+  - [ ] Test cạnh file (`MessageComposer*.spec.tsx`, spec store nháp, `ChatDrawer.spec.tsx`) cho từng tiêu chí kể cả ca gửi lỗi, ca có tệp chờ và ca đăng xuất; `bash harness/check.sh` xanh
+
+### 🟢 S20-CHAT-NEWROOM-1 — Tin nhắn: lập nhóm nhanh từ người liên hệ gần đây (ô tìm nhúng, tên nhóm gợi ý) và bắt đầu cuộc trò chuyện mới ngay trong drawer chat mà không rời trang đang làm
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/components/chat/CreateRoomDialog*.tsx`, `apps/app/src/components/chat/drawer/ChatDrawerBody.tsx`, `apps/app/src/components/chat/ChatDrawer.spec.tsx`, `apps/app/src/components/chat/RoomInfoPanel*.tsx`, `apps/app/src/components/EmployeeMultiPickerDialog*.tsx`, `apps/app/src/routes/chat/ChatPage*.tsx`, `apps/app/src/i18n/locales/vi/chat.ts`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] Tab «Nhóm» của `CreateRoomDialog`: dải chip «Gần đây» lấy từ người đối thoại của các DM sẵn có (không gọi roster từng phòng); ô tìm người nhúng thẳng, bỏ dialog thứ hai; chưa gõ tên ⇒ tên gợi ý «Lan, Minh, Hà +1» thoả `min(1)`, đổi tên được sau; xoá trắng tên ⇒ lỗi «Cần tên nhóm» tại ô, không gửi request; lối «Thêm người» ở bảng thông tin DM mở dialog nhóm đã chọn sẵn người đối thoại
+  - [ ] Chưa có DM ⇒ «Gần đây» ẩn, ô tìm theo phạm vi danh bạ hiện hành; không có kết quả ⇒ «Không tìm thấy trong danh bạ bạn được xem» (trong drawer kèm gợi ý «Nhắn riêng từ một phòng chung») — KHÔNG gọi thêm endpoint nào để «tìm hộ»; người đối thoại `isActive=false` ⇒ chip khoá kèm lý do; server từ chối một người ⇒ dialog giữ lựa chọn, nói rõ ai không thêm được
+  - [ ] Nút «+» trên header danh sách phòng của drawer mở cùng `CreateRoomDialog`; tạo DM/nhóm xong ⇒ `openRoom` ngay trong drawer, trang phía sau giữ nguyên; server từ chối ⇒ dialog giữ lựa chọn, drawer không chuyển sang phòng rỗng; drawer toàn màn trên điện thoại mở dialog đúng lớp, Esc đóng dialog trước rồi mới đóng drawer; không có `create:chat-room` ⇒ không có «+» ở cả /chat lẫn drawer
+  - [ ] Test cạnh file (`CreateRoomDialog.spec.tsx`, `ChatDrawer.spec.tsx`, `RoomInfoPanel.spec.tsx`) cho từng ca kể cả không quyền, server từ chối, chưa có DM, ngoài phạm vi danh bạ; không đổi contracts/quyền/schema; `bash harness/check.sh` xanh
+
+### 🟢 S20-NOTI-LISTNAV-1 — Trang Thông báo: bấm dòng đi thẳng tới việc/phòng/mục tiêu (đánh dấu đã đọc), lọc theo nguồn và mức ưu tiên, bộ lọc nằm trên URL
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/notifications/NotificationListPage*.tsx`, `apps/app/src/routes/notifications/notification-list-search*.ts`, `apps/app/src/routes/notifications/notifications-router-flow.spec.tsx`, `apps/app/src/components/notifications/NotificationTargetLink*.tsx`, `apps/app/src/router.tsx`, `packages/web-core/src/lib/my-notification-api*.ts`, `apps/app/src/i18n/locales/vi/notifications.ts`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] Bấm dòng ⇒ đánh dấu đã đọc và đi tới `target_url` qua `NotificationTargetLink` (như dropdown), không qua trang chi tiết — TASK_ASSIGNED ⇒ drawer việc hoặc trang đích; giữ nút «Chi tiết» phụ; `target_url` không an toàn/rỗng ⇒ mở trang chi tiết như cũ; mark-read lỗi ⇒ vẫn điều hướng, trạng thái chưa đọc được giữ
+  - [ ] Chip lọc `source_module` (Công việc · Tin nhắn · Mục tiêu · Nghỉ phép) và `priority` dùng tham số contract sẵn có, nằm trên URL (`validateSearch` không ném), tải lại vẫn giữ; chip «Tin nhắn» chỉ `source_module = CHAT`; lọc rỗng ⇒ «Không có thông báo nào trong mục này» + bỏ lọc
+  - [ ] «Đánh dấu đã đọc tất cả trong bộ lọc này» chỉ khi endpoint mark-read hỗ trợ theo bộ lọc; không thì chỉ trong trang hiện tại — đo endpoint trước, ghi plan
+  - [ ] Test cạnh file (`NotificationListPage.spec.tsx`, `NotificationTargetLink.spec.tsx`, `notifications-router-flow.spec.tsx`) cho từng ca kể cả `target_url` không an toàn và mark-read lỗi; `bash harness/check.sh` xanh
+
+### 🟢 S20-TASK-QUICKENTRY-1 — Chi tiết việc nhập bằng bàn phím: thêm liên tiếp việc con và mục checklist bằng Enter, dán nhiều dòng thành nhiều mục; bình luận gửi bằng Ctrl+Enter, gợi ý @ từ người tham gia việc
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/tasks/TaskChecklistPanel*.tsx`, `apps/app/src/routes/tasks/TaskSubtaskPanel*.tsx`, `apps/app/src/routes/tasks/TaskSubtaskDialogs*.tsx`, `apps/app/src/routes/tasks/SubtaskInlineControls*.tsx`, `apps/app/src/routes/tasks/TaskCommentThread*.tsx`, `apps/app/src/routes/tasks/task-mention-candidates*.ts`, `apps/app/src/i18n/locales/vi/tasks.ts`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] Việc con: ô nhập inline cuối danh sách thay `AddSubtaskDialog`, Enter tạo + ô trống và vẫn focus, Esc đóng ô; checklist: chưa có checklist vẫn hiện ô «Thêm mục», mục đầu tiên tạo nhóm «Checklist» kèm `items[]` trong MỘT request; dán 5 dòng (1 dòng trống) ⇒ 4 mục đúng thứ tự; dán 60 dòng ⇒ không gửi, lỗi «tối đa 50 mục mỗi lần»; không đổi quy tắc đếm lá (DECISIONS-05)
+  - [ ] Tạo bị 403 ⇒ ô giữ nội dung đã gõ + hiện lỗi; không có quyền ⇒ ô nhập không hiện
+  - [ ] Bình luận: nguồn gợi ý @ = hợp employee id đã có trong chi tiết việc (người phụ trách, người giao, người theo dõi, + thành viên dự án nếu đọc được), bỏ chính mình và mục không tên; không có `read:employee` vẫn gợi ý A/B/C và lọc theo ký tự gõ; có `read:employee` thì người tham gia việc xếp trước, kết quả danh bạ xếp sau; KHÔNG gọi thêm API nhạy cảm
+  - [ ] Ctrl/Cmd+Enter gửi và xoá ô, Enter xuống dòng; ô rỗng/chỉ khoảng trắng ⇒ không gửi; server từ chối mention hoặc 403 ⇒ giữ nội dung đã gõ, hiện lỗi
+  - [ ] Test cạnh file (`TaskChecklistPanel.spec.tsx`, `TaskSubtaskPanel.spec.tsx`, `TaskCommentThread.spec.tsx`) cho từng ca kể cả dán quá 50 dòng, 403, thiếu `read:employee`; `bash harness/check.sh` xanh
+
+### 🟡 S20-TASK-BOARDMOVE-1 — Board dự án: đổi cột một việc bằng menu ⋯ «Chuyển sang cột…» trên thẻ — dùng được trên điện thoại và bằng bàn phím, không cần kéo-thả
+- **zone**: yellow · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/tasks/TaskKanbanPage*.tsx`, `apps/app/src/routes/tasks/KanbanCardMoveMenu*.tsx`, `apps/app/src/i18n/locales/vi/tasks.ts`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] Thẻ board có nút ⋯ với «Chuyển sang cột…» liệt kê cột của dự án (chế độ status ⇒ danh sách trạng thái hợp lệ); chỉ hiện khi thẻ kéo được (`canDrag`, cùng điều kiện quyền); gọi move-state/change-status sẵn có, lạc quan + rollback giống kéo-thả; cột khác nhóm ⇒ trạng thái do server đồng bộ; không đổi FSM
+  - [ ] Không có quyền kéo ⇒ không có mục «Chuyển sang cột…»; server từ chối ⇒ thẻ về cột cũ, hiện lý do (không im lặng)
+  - [ ] Bàn phím: Tab tới thẻ → Enter/Space mở menu → chọn được cột, focus quay lại thẻ; nút có `aria-label`
+  - [ ] Test cạnh file (`TaskKanbanPage.spec.tsx`, spec menu mới) cho từng ca kể cả không quyền, server từ chối, chế độ status; `bash harness/check.sh` xanh
+
+### 🟢 S20-TASK-PROJECTENTRY-1 — Tạo dự án xong vào thẳng tab Thành viên với hộp thêm thành viên đang mở; mở lại dự án thì vào đúng tab dùng lần trước
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/app/src/routes/tasks/ProjectFormDrawer*.tsx`, `apps/app/src/routes/tasks/ProjectListPage*.tsx`, `apps/app/src/routes/tasks/ProjectMemberTable*.tsx`, `apps/app/src/routes/tasks/ProjectDetailPage*.tsx`, `apps/app/src/routes/tasks/workspace-constants*.ts`, `apps/app/src/routes/tasks/use-workspace-tab-order*.ts`, `apps/app/src/layouts/workspace/TaskSidebarTree*.tsx`, `apps/app/src/router.tsx`, `apps/app/src/i18n/locales/vi/tasks.ts`, `docs/plans/**`, `harness/backlog.mjs`
+- **done_when (đích hội tụ)**:
+  - [ ] `onSuccess` (tạo mới) của `ProjectFormDrawer` điều hướng `/tasks/projects/:id?tab=members&addMembers=1`; `ProjectMemberTable` tự mở `AddMemberDialog` khi có cờ VÀ có quyền quản thành viên; không có quyền ⇒ vẫn vào dự án, không tự mở hộp
+  - [ ] Nhớ tab cuối theo `projectId` bằng `localStorage` (try/catch), chỉ dùng khi URL không có `?tab` (URL `?tab=report` thắng); tab đã nhớ không còn quyền xem ⇒ rơi về Tổng quan; `localStorage` bị chặn ⇒ hành vi như hiện nay; link cây sidebar không gắn tab cố định
+  - [ ] Test cạnh file (`ProjectMemberTable.spec.tsx`, `ProjectDetailPage.spec.tsx`, `ProjectListPage.spec.tsx`, `workspace-constants.spec.ts`) cho từng ca kể cả không quyền, `localStorage` bị chặn, tab mất quyền; `bash harness/check.sh` xanh
+
+### 🟡 S20-CHAT-MENTIONPIN-1 — Thấy ngay phòng nào có người @nhắc tôi chưa đọc (dấu @ + chip «Nhắc tôi»), và tin đã ghim hiện thành thanh ở đầu hội thoại, cập nhật tức thì khi người khác ghim/bỏ ghim
+- **zone**: yellow · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/chat/chat-rooms.repository.ts`, `apps/api/src/chat/chat-room-mention-count*.ts`, `apps/api/src/chat/chat.mapper*.ts`, `apps/api/src/chat/chat-message-moderation.service*.ts`, `apps/api/src/chat/chat-realtime-after-commit.spec.ts`, `packages/contracts/src/chat.ts`, `packages/contracts/src/realtime.ts`, `apps/app/src/components/chat/RoomListPanel*.tsx`, `apps/app/src/components/chat/ConversationPanel*.tsx`, `apps/app/src/components/chat/PinnedMessageBar*.tsx`, `apps/app/src/components/chat/room-info/RoomPinnedList*.tsx`, `apps/app/src/hooks/use-chat-realtime*`, `apps/api/test/integration/s20-chat-mention-pin*.int-spec.ts`, `docs/plans/**`, `harness/backlog.mjs`, `apps/app/src/stores/chat-room-counters*.ts`, `apps/app/src/stores/chat.store*.ts`
+- **done_when (đích hội tụ)**:
+  - [ ] `chatRoomSchema` thêm `mentionUnreadCount` (`.nullable().optional()`): số tin `room_seq > last_read_seq`, `mentions` chứa người gọi, `recalled_at IS NULL`, chỉ membership của chính người gọi, trong `withTenant`, không N+1; payload phòng không chứa mention của người khác; tin nhắc đã thu hồi không tính; server cũ chưa trả trường ⇒ không ZodError, chip ẩn
+  - [ ] FE: dấu «@» cạnh badge + chip «Nhắc tôi» (trang + drawer); realtime tăng khi `chat:message` nhắc tôi ở phòng không đang mở, về 0 khi `chat:read` của tôi; đọc tới đáy phòng ⇒ «@» biến mất
+  - [ ] Pin/unpin phát sự kiện SAU commit qua cùng DTO/masking với REST; thanh tin ghim dưới header (trang + drawer): tin mới nhất + «1/N», mũi tên xoay, bấm ⇒ `jumpToMessage` (ngoài cửa sổ thì nạp ngữ cảnh); người khác ghim/bỏ ghim ⇒ cập nhật không tải lại (polling dự phòng: nhịp kế); tin ghim bị thu hồi ⇒ bỏ hoặc «Tin đã thu hồi», không hiện nội dung cũ
+  - [ ] Không có tin ghim ⇒ không vẽ thanh; `getPinned` lỗi ⇒ hội thoại bình thường, không chặn gửi; không đủ quyền bỏ ghim ⇒ không có nút, gọi API thẳng ⇒ server từ chối; thu gọn nhớ theo phòng bằng `localStorage` bọc try/catch
+  - [ ] Int-spec với `LANE_DB` (đếm @ theo membership + cross-tenant; emit sau commit cho pin) + test FE; `bash harness/check.sh` xanh
 
 ## Hàng đợi
 
@@ -89,20 +198,10 @@
 - 🔴 `S19-SEC-FILEASSETSWAP-1` Thay tài sản ảnh (branding · ảnh đại diện) nguyên tử trong một giao dịch ghi
 - 🔴 `S19-OPS-MINIOTESTUSER-1` Hồ sơ storage `live` của int-spec chạy bằng tài khoản MinIO riêng chỉ có quyền trên bucket thử (`mediaos-fdisp-test` · `mediaos-stg-probe-*`), không dùng tài khoản root
 - 🟡 `S16-SOCIAL-PDFBATCHLEAK-1` Int-spec gọi `PAYROLL-API-085` (lô PDF phiếu lương chạy nền, trả 202) không để lại event outbox mà app của tệp khác nhặt được — lượt `check.sh --all --storage=offline` toàn suite có `calls=0`
-- 🟢 `S20-FE-TOAST-1` Mọi thao tác ghi trong ứng dụng có phản hồi: thông báo nổi dùng chung (toast + vùng `aria-live`) báo thành công ngắn gọn và báo lỗi rõ ràng thay vì im lặng
-- 🟢 `S20-FE-COMPANYTZ-1` «Hôm nay», «quý này» và mốc hạn 17:00 luôn tính theo giờ công ty dù máy người dùng đặt múi giờ khác — bộ hàm giờ công ty dùng chung ở web-core
-- 🟢 `S20-TASK-DRAWER-1` Mở một việc từ danh sách, thông báo, dashboard hay mục tiêu thành drawer tại chỗ (`?task=`), đóng lại về đúng chỗ cũ; bộ lọc Danh sách và workspace dự án nằm trên URL, có ô tìm và chip «Của tôi»
-- 🟢 `S20-CHAT-DRAFT-1` Tin nhắn: nháp đang gõ dở (kể cả @nhắc và tin đang trả lời) được giữ theo từng phòng khi chuyển phòng hoặc bấm ⤢ — chỉ trong bộ nhớ, mất khi đăng xuất
-- 🟢 `S20-CHAT-NEWROOM-1` Tin nhắn: lập nhóm nhanh từ người liên hệ gần đây (ô tìm nhúng, tên nhóm gợi ý) và bắt đầu cuộc trò chuyện mới ngay trong drawer chat mà không rời trang đang làm
-- 🟢 `S20-NOTI-LISTNAV-1` Trang Thông báo: bấm dòng đi thẳng tới việc/phòng/mục tiêu (đánh dấu đã đọc), lọc theo nguồn và mức ưu tiên, bộ lọc nằm trên URL
-- 🟢 `S20-TASK-QUICKENTRY-1` Chi tiết việc nhập bằng bàn phím: thêm liên tiếp việc con và mục checklist bằng Enter, dán nhiều dòng thành nhiều mục; bình luận gửi bằng Ctrl+Enter, gợi ý @ từ người tham gia việc
-- 🟡 `S20-TASK-BOARDMOVE-1` Board dự án: đổi cột một việc bằng menu ⋯ «Chuyển sang cột…» trên thẻ — dùng được trên điện thoại và bằng bàn phím, không cần kéo-thả
 - 🟢 `S20-TASK-MULTIUPLOAD-1` Đính kèm nhiều tệp vào việc trong một lần: chọn nhiều, kéo-thả hoặc dán ảnh từ clipboard, mỗi tệp báo tiến độ và lỗi riêng
-- 🟢 `S20-TASK-PROJECTENTRY-1` Tạo dự án xong vào thẳng tab Thành viên với hộp thêm thành viên đang mở; mở lại dự án thì vào đúng tab dùng lần trước
 - 🟡 `S20-TASK-ASSIGNNOTI-1` Giao việc qua form Tạo, hoặc đổi người/hạn/ưu tiên qua form Sửa, cũng báo cho người được giao như khi đổi trong chi tiết việc
 - 🟡 `S20-TASK-DUEREMIND-1` Nhắc sắp đến hạn/quá hạn chạy đúng cho việc SPEC-06 (quá hạn báo cả người giao việc), và chủ/quản lý dự án được báo khi một việc vào Chờ duyệt
 -  `S20-TASK-ALLOWEDACTIONS-1` Ở việc tôi chỉ theo dõi, trạng thái/hạn/người phụ trách hiện chỉ đọc kèm lý do thay vì cho bấm rồi báo lỗi (server trả `allowedActions`)
-- 🟡 `S20-CHAT-MENTIONPIN-1` Thấy ngay phòng nào có người @nhắc tôi chưa đọc (dấu @ + chip «Nhắc tôi»), và tin đã ghim hiện thành thanh ở đầu hội thoại, cập nhật tức thì khi người khác ghim/bỏ ghim
 - 🔴 `S20-TASK-PROJREPORTROLE-1` Owner/Manager còn hiệu lực của dự án xem được tab Báo cáo của chính dự án đó mà không cần cặp `view-report:project` — tab Hoạt động giữ nguyên DECISIONS-04 mục 3
 - 🔴 `S20-SEC-TASKLEGACYREAD-1` Ba route đọc việc đời cũ (board · theo dự án · theo nhóm) — gỡ nếu không còn nơi dùng, hoặc đưa về cùng cổng đọc với danh sách việc chính
 - 🔴 `S20-SEC-TASKPATCHGATE-1` Đối chiếu cổng quyền của form Sửa việc với các thao tác chuyên trách (giao người · dời hạn · đổi ưu tiên) — cùng một thay đổi phải cùng một quyết định quyền
@@ -168,10 +267,16 @@
 - `S20-NOTI-TARGETURL-1` Template `target_url` mở đúng bản ghi: nhắc hạn việc → `/tasks/{taskId}`, đơn nghỉ gửi người duyệt → `/leave/approvals?request={id}`, bình luận việc kèm `comment_id` — một migration sửa template (Q7 = B), sau khi drawer `?task=` và `?request=` đã lên ⏳ cần: S20-TASK-DRAWER-1, S20-DASH-TODAY-1, S20-TASK-DUEREMIND-1
 - `S20-GOAL-SUGGEST-1` Tạo việc tự điền sẵn mục tiêu cá nhân của chính mình, các trường hợp khác gợi ý một chạm; việc con đề xuất «Tính vào mục tiêu của việc cha» — không còn phải mở lại việc để gắn ⏳ cần: S20-GOAL-LINKEDTASKS-1, S20-FE-TOAST-1, S20-FE-COMPANYTZ-1, S20-TASK-QUICKADD-1
 - `S20-GOAL-BULKLINK-1` Tab «Công việc gắn» gợi ý hàng loạt «N việc trong kỳ chưa gắn mục tiêu» — gắn 8 việc từ 11 thao tác còn 3; việc đang gắn mục tiêu khác hiện rõ và chỉ chuyển qua bước gỡ-rồi-gắn ⏳ cần: S20-GOAL-LINKEDTASKS-1, S20-FE-TOAST-1, S20-FE-COMPANYTZ-1
+- `S20-TASK-PROJTOOLBARURL-1` Workspace dự án: toolbar và rail người phụ trách lên URL (q · status · priority · overdue · who), F5/Back/link giữ nguyên — phần (2b) còn lại của S20-TASK-DRAWER-1 ⏳ cần: S20-TASK-DRAWER-1, S20-TASK-PROJECTENTRY-1
+- `S20-FE-TOAST-2` Thông báo nổi cho apps/auth + apps/console, dọn thông báo khi đăng xuất/hết phiên, và chuyển các mutation SOCIAL chưa có onError sang toast ⏳ cần: S20-FE-TOAST-1
+- `S20-NOTI-PRIORITYFILTER-1` Lọc thông báo theo mức ưu tiên khớp hiển thị: hàng priority NULL tính là «Bình thường» phía server; «đánh dấu đã đọc theo bộ lọc» nhận priority và mốc thời điểm tải danh sách ⏳ cần: S20-NOTI-LISTNAV-1
+- `S20-CHAT-MENTIONIDX-1` Đo truy vấn đếm @ chưa đọc của danh sách phòng trên dữ liệu cỡ PROD; cần thì thêm chỉ mục (migration nối tiếp head) ⏳ cần: S20-CHAT-MENTIONPIN-1
+- `S20-CHAT-FEDEBT-1` Nợ FE CHAT sau S20: hook nạp cửa sổ ngữ cảnh dùng chung (nhảy tới tin · tin ghim) · cảnh báo tệp chưa gửi TRƯỚC khi rời phòng · reset store nháp giữa các ca spec · ẩn lối «Thêm người» khi người đối thoại không có tên · khung trả lời cho tin đã ra khỏi RAM ⏳ cần: S20-CHAT-MENTIONPIN-1
+- `S20-CHAT-DOCSYNC-1` Đồng bộ tài liệu CHAT theo S20: API-13 §7 (sự kiện ghim/bỏ ghim realtime, trường đếm @ chưa đọc của phòng) · SPEC-15 CHAT-SCREEN-002/003 (ô tìm nhúng, chip «Gần đây», «+» trong drawer) ⏳ cần: S20-CHAT-MENTIONPIN-1, S20-CHAT-NEWROOM-1
+- `S20-TASK-FEDEBT-1` Nợ FE TASK sau S20: tách thẻ/cột Kanban khỏi TaskKanbanPage.tsx (797/800 dòng) · thẻ board không lồng nút trong role=button · lý do server từ chối đổi cột báo qua toast · spec riêng cho tab nhớ của dự án + ca đổi projectId · gợi ý @ chọn bằng bàn phím · dọn khoá localStorage cũ không hậu tố ⏳ cần: S20-TASK-BOARDMOVE-1, S20-TASK-PROJECTENTRY-1, S20-TASK-QUICKENTRY-1
+- `S14-SEC-CAPWILDCARD-DEBT-1` Nợ sau S14-SEC-CAPWILDCARD-1 (N-G1…N-G9, plan §15.10): ratchet cờ sensitive ở call-site · trần tuổi + một nguồn nạp cho ảnh chụp catalog · tín hiệu suy biến capabilities · sàn thử-lại khi nạp lỗi · keyset scopes khi suy biến một phía · tách permission.service.ts ≤ 800 · khối catch anh em dùng serializeErrorChain · ca helper khẳng định giá trị ⏳ cần: S14-SEC-CAPWILDCARD-1
 
 **🛑 BLOCKED:**
-- `S14-SEC-CAPWILDCARD-1` `capabilities` phát ĐÚNG quyết định của `can()` tầng công ty (v2, owner chốt 05/09): bỏ cờ HÀNG GRANT + bỏ danh sách tay `SENSITIVE_CAPABILITY_ALLOWLIST` — đóng CẢ lỗ `*:*` lẫn lớp lỗi `capability-allowlist-hides-admin-screens`
-  - **vì sao chặn**: HOAN CO CHU DICH (owner chot CW-3 23/10): quyet dinh CW-1..3 DA CHOT, mo lane ngay SAU dot song song 23/10. Dau 'finished' 03:41:33 la reconcile NHAM theo commit plan 42249f56 — WO chua thi cong. Truoc khi start: va rec…
 - `S19-OPS-STORAGEPUBLIC-1` Storage PROD chỉ nghe ở địa chỉ nội bộ của máy chủ và tunnel không có hostname nào trỏ tới nó ⇒ URL ký do API phát (tải lên · xem · tải về tệp) chỉ dùng được TRÊN CHÍNH MÁY CHỦ: chuyển storage PROD sang Cloudflare R2 (bucket riêng tư · URL ký trên miền S3 API của nhà cung cấp · CORS theo bucket) + di trú dữ liệu, KHÔNG đổi mã ký — để đính kèm chat · avatar · tệp hồ sơ · đính kèm SOCIAL chạy với người dùng ở máy khác
   - **vì sao chặn**: CAP NHAT 23/10: #583 DA MERGE 16/10 (a9bdc3db); L4 + C1-C3 DAT 16/10; O1/O2 xong. Con owner: O3 (khung ~30 phut cho C5-C7) · C0 (thu gui tep tu may khac/4G) · dau vao C4 (minio-prod.conf + danh sach id cong ty). Sau do …
 
@@ -179,7 +284,7 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 259 — `0592_s16socialdash1_widget_social` (260 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -188,6 +293,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `b2c4106b` | 2026-10-23 | fix(harness): reconcile coi «plan vN cho <WO>» ở phần đầu thân docs(<scope>) là ghi sổ, không phải commit ship (#616) |
+| `0d7350c7` | 2026-10-23 | chore(backlog): seed S14-SEC-OPPLANEREVOKE-1 (owner chốt 23/10: gỡ + chốt chặn) · ghi kết quả rà OPPLANEPAIRS · regen STATUS sau đợt việc nhanh #603–#615 |
 | `2a5313bd` | 2026-10-23 | docs(ops): S19-OPS-REQUIREDCHECK-1 — runbook merge --admin (RELEASE-11 §6.5) + comment security.yml khớp branch protection 3 check (#615) |
 | `ad0b3225` | 2026-10-23 | refactor(social): S16-SOCIAL-REPORTMATRIX-1 — dời ma trận hành động kèm 029 vào contracts, BE/FE cùng import (#609) |
 | `509cca73` | 2026-10-23 | refactor(social): S16-SOCIAL-POSTSSPLIT-1 — tách social-posts.service.ts (891 → 675 dòng) ra decorate + notify (#605) |
@@ -198,8 +305,6 @@
 | `903f0c8f` | 2026-10-23 | fix(social): S16-SOCIAL-FEAVATAR-1 — bật lại ảnh đại diện ở hàng đợi báo cáo và bài đang ẩn qua avatarSrc (#607) |
 | `35dbd0cf` | 2026-10-23 | fix(app): S4-DASH-HROVERVIEW-FE-1 — ô «Tổng quan nhân sự» ở rail bảng tin gác bằng sàn phạm vi của widget (#606) |
 | `24350596` | 2026-10-23 | fix(qa): S16-SOCIAL-STORAGEPORTPIN-1 — hồ sơ storage live của int-spec xét cả cổng endpoint loopback (#611) |
-| `3810d9ad` | 2026-10-23 | fix(qa): S16-SOCIAL-GUARDNOSUMMARY-1 — guard không báo XANH khi log thiếu dòng tổng kết vitest dù LANE_DB đã set (#610) |
-| `e95c6a37` | 2026-10-23 | docs(social): S16-SOCIAL-DOC-2 — đồng bộ UI-07 §34b · SPEC-16 §5.1/§9 · SPEC-07 §14.8 · STORY-218 theo mã FE-3/3B/3C (#614) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

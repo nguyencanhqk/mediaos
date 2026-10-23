@@ -7,6 +7,11 @@
  */
 
 export const VI_LOCALE = "vi-VN";
+/**
+ * Fallback múi giờ công ty (trùng `tz.util` của API). Mốc nghiệp vụ KHÔNG đọc thẳng hằng này mà đi
+ * qua `companyTimeZone()` (`lib/company-time.ts`) — điểm đọc duy nhất khi `/auth/me` trả
+ * `company.timezone`.
+ */
 export const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
 
 type DateInput = Date | string | number;
@@ -16,10 +21,7 @@ function toDate(value: DateInput): Date {
 }
 
 /** Ngày: 14/06/2026 */
-export function formatDate(
-  value: DateInput,
-  timeZone: string = DEFAULT_TIMEZONE,
-): string {
+export function formatDate(value: DateInput, timeZone: string = DEFAULT_TIMEZONE): string {
   return new Intl.DateTimeFormat(VI_LOCALE, {
     dateStyle: "short",
     timeZone,
@@ -27,10 +29,7 @@ export function formatDate(
 }
 
 /** Ngày + giờ: 14/06/2026 09:30 */
-export function formatDateTime(
-  value: DateInput,
-  timeZone: string = DEFAULT_TIMEZONE,
-): string {
+export function formatDateTime(value: DateInput, timeZone: string = DEFAULT_TIMEZONE): string {
   return new Intl.DateTimeFormat(VI_LOCALE, {
     dateStyle: "short",
     timeStyle: "short",
@@ -39,10 +38,7 @@ export function formatDateTime(
 }
 
 /** Giờ: 09:30 */
-export function formatTime(
-  value: DateInput,
-  timeZone: string = DEFAULT_TIMEZONE,
-): string {
+export function formatTime(value: DateInput, timeZone: string = DEFAULT_TIMEZONE): string {
   return new Intl.DateTimeFormat(VI_LOCALE, {
     timeStyle: "short",
     timeZone,
@@ -50,18 +46,12 @@ export function formatTime(
 }
 
 /** Số: 1.234,5 */
-export function formatNumber(
-  value: number,
-  options?: Intl.NumberFormatOptions,
-): string {
+export function formatNumber(value: number, options?: Intl.NumberFormatOptions): string {
   return new Intl.NumberFormat(VI_LOCALE, options).format(value);
 }
 
 /** Tiền VND: 1.234.567 ₫ */
-export function formatCurrency(
-  value: number,
-  currency = "VND",
-): string {
+export function formatCurrency(value: number, currency = "VND"): string {
   return new Intl.NumberFormat(VI_LOCALE, {
     style: "currency",
     currency,
