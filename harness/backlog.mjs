@@ -23149,6 +23149,38 @@ export const backlog = [
     ],
     notes: [
       "🟢 Seed 23/10/2026 từ phiếu quyết định đợt 23/10 (mục CAPWILDCARD). Vô hại ở N=1 (một công ty); rà để không mang theo khi mở rộng đa-công-ty. Chỉ đọc — không đổi mã/DB trong WO này. Chưa ước chi phí.",
+      "📌 23/10/2026 — bảng rà XONG (kênh owner, thư mục kept/ ngoài repo): 25 cặp xét · đề xuất gỡ 19 · giữ 5 · giữ ở N=1 rồi đổi trước đa-công-ty 1; thiếu chốt chặn gán cặp tầng vận hành vào role tenant. Owner chốt qua hộp hỏi «Gỡ 19 + thêm chốt — WO crown (Recommended)» ⇒ gieo `S14-SEC-OPPLANEREVOKE-1`.",
+    ],
+  },
+  {
+    id: "S14-SEC-OPPLANEREVOKE-1",
+    module: "AUTH",
+    layer: "SEC",
+    title:
+      "Gỡ các cặp quyền tầng vận hành khỏi role của công ty theo bảng rà S14-SEC-OPPLANEPAIRS-1 + chốt chặn gán cặp tầng vận hành vào role tenant",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/migrations/**",
+      "apps/api/test/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review", "code-review"],
+    depends_on: ["S14-SEC-OPPLANEPAIRS-1", "S14-SEC-CAPWILDCARD-1"],
+    src: [
+      "Bảng rà S14-SEC-OPPLANEPAIRS-1 (kênh owner, kept/ ngoài repo — repo public, KHÔNG chép danh sách cặp theo actor vào repo). Owner chốt 23/10/2026: gỡ + thêm chốt cấu trúc.",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: owner chạy truy vấn đối chiếu CHỈ-ĐỌC trong bảng rà (BEGIN READ ONLY … ROLLBACK) trên PROD; kết quả giữ ở kênh owner — xác nhận role nào đang mang các cặp và số người giữ còn hiệu lực",
+      "Một nguồn sự thật cho tập cặp tầng vận hành, đặt cạnh `operator-roles.ts`; gán cặp thuộc tập đó vào role tenant (`role-admin`, cả luật bung) ⇒ 400 có mã lỗi chuẩn; danh sách loại trừ của bootstrap super-admin hợp với tập đó",
+      "Migration nối tiếp head gỡ các cặp đề xuất gỡ khỏi role company-scoped: chọn role theo THUỘC TÍNH (company-scoped / khác role hệ thống của operator), KHÔNG theo tên role; DELETE theo từng cặp × role, không blanket; có audit; idempotent",
+      "RED trước: ca deny gán cặp tầng vận hành vào role tenant + ratchet int-spec (lane DB) «không role company-scoped nào giữ cặp tầng vận hành»; ca đối chứng: cặp tenant thường vẫn gán được; role hệ thống của operator giữ nguyên",
+      "Cặp giữ ở N=1 (ghi trong bảng rà) KHÔNG gỡ ở WO này — ghi rõ điều kiện đổi trước khi mở đa-công-ty",
+    ],
+    notes: [
+      "🔴 Seed 23/10/2026 từ quyết định owner cho S14-SEC-OPPLANEPAIRS-1. Crown (permission + migration) ⇒ FULL gate, plan + plan-review trước. Làm SAU S14-SEC-CAPWILDCARD-1 (cùng tệp `permission/*`). Ước 400–550 USD.",
     ],
   },
   {
