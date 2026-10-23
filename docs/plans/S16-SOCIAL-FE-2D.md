@@ -10,6 +10,9 @@
 > bình luận» FE-1 §9 · plan-reviewer FE-2 M9. Đề xuất **hai lát**: **A** đính kèm (composer + bình luận + vẽ) · **B** mention
 > link + `droppedMentions` bình luận + ghim ngữ nghĩa cache `006`. **Điều kiện MERGE: PROD API đủ mới (D11, §8 bước 0b);
 > lát A thêm: API PROD có `S16-SOCIAL-FILEDISPOSITION-1` (§12 H1).**
+> **plan v3 (09/10/2026):** lát B đã merge (`S16-SOCIAL-MENTIONLINK-1`); lát A được đặt lại lên master `a3283ce3` trên nhánh
+> `feat/s16-social-fe-2d-attach` + thích nghi sau `S16-SOCIAL-FILEDISPOSITION-1` — xem **§13** (điều kiện MERGE D11 đã ĐẠT,
+> đo 09/10 12:13).
 
 ## 1. Bối cảnh — cái gì đang sai (code HIỆN TẠI, `14afbb5f`)
 
@@ -438,12 +441,12 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 
 | # | Nguồn · mức | Phát hiện (tóm) | Kiểm lại | Xử lý |
 | --- | --- | --- | --- | --- |
-| G1 | ts + sec · MEDIUM | `retry(id)` đưa ô lỗi về hàng đợi KHÔNG kiểm lại trần; `planAttachmentAdds` không đếm ô lỗi ⇒ 11 tệp, 1 lỗi, thêm 1, «Thử lại» ⇒ 12 id (400 vô danh — M10) / 11 ảnh (422) | **Xác nhận** (`use-attachment-uploads.ts:170-177`, `attachment-draft.ts:96`) | Lát A — vá ở commit lát A (chi tiết điền ở đó) |
-| G2 | ts · MEDIUM | `<video src>` nhận URL ký MỚI mỗi lần refetch (`getSignedUrl` không ghim `signingDate`) ⇒ phần tử giữ nguyên, `src` đổi ⇒ trình duyệt nạp lại, mất vị trí phát | **Xác nhận** (`PostAttachments.tsx:85`; `invalidatePostLists` sau thả cảm xúc/lưu/bình luận…) — ngủ tới khi mở `video/*` | Lát A — vá ở commit lát A |
-| G3 | ts · MEDIUM | `failed` là boolean dính chặt — refetch mang URL mới vẫn không hồi ô ảnh/video | **Xác nhận** (`PostAttachments.tsx:51,74`) | Lát A — vá ở commit lát A |
+| G1 | ts + sec · MEDIUM | `retry(id)` đưa ô lỗi về hàng đợi KHÔNG kiểm lại trần; `planAttachmentAdds` không đếm ô lỗi ⇒ 11 tệp, 1 lỗi, thêm 1, «Thử lại» ⇒ 12 id (400 vô danh — M10) / 11 ảnh (422) | **Xác nhận** (`use-attachment-uploads.ts:170-177`, `attachment-draft.ts:96`) | **Lát A — ĐÃ VÁ:** `retry` kiểm lại trần bằng `planAttachmentAdds` như một lượt chọn MỚI (luật 5 của hook); bị từ chối ⇒ ô GIỮ lỗi + báo lý do (`tooManyFiles`/`tooManyImages`) — người dùng gỡ bớt rồi thử lại; được nhận ⇒ dọn danh sách từ chối cũ. Ca G1 (2 DENY: 11 tệp · 10 ảnh + 1 ALLOW đối chứng: còn chỗ ⇒ tải lại, 11 id đúng thứ tự chọn) + 1 ca dọn từ chối. RED code cũ: `expected "spy" to not be called at all, but actually been called 1 times` (cả 2 DENY) · `expected [ { name: 'lon.pdf', …(1) } ] to deeply equal []`. Mutant bỏ kiểm trần ⇒ 2 DENY đỏ đúng thông điệp; mutant giữ từ chối cũ ⇒ ca dọn đỏ đúng thông điệp |
+| G2 | ts · MEDIUM | `<video src>` nhận URL ký MỚI mỗi lần refetch (`getSignedUrl` không ghim `signingDate`) ⇒ phần tử giữ nguyên, `src` đổi ⇒ trình duyệt nạp lại, mất vị trí phát | **Xác nhận** (`PostAttachments.tsx:85`; `invalidatePostLists` sau thả cảm xúc/lưu/bình luận…) — ngủ tới khi mở `video/*` | **Lát A — ĐÃ VÁ:** `useSignedMediaUrl` (`PostAttachments.tsx`) GIỮ URL đầu suốt vòng đời ô — cho cả ẢNH (thôi tải lại mọi ảnh trên mọi trang đã nạp sau mỗi lần thả cảm xúc). Ca G2 (video: cùng phần tử + `src` giữ · ảnh) ở `PostAttachments.spec.tsx` mới. RED code cũ: `expected 'https://cdn.invalid/v1.mp4?sig=2' to be 'https://cdn.invalid/v1.mp4?sig=1'` (ảnh tương tự). Mutant «`src` đi theo prop» ⇒ 2 ca G2 đỏ đúng thông điệp |
+| G3 | ts · MEDIUM | `failed` là boolean dính chặt — refetch mang URL mới vẫn không hồi ô ảnh/video | **Xác nhận** (`PostAttachments.tsx:51,74`) | **Lát A — ĐÃ VÁ:** cùng hook — URL đang dùng lỗi ⇒ ô trung tính; prop mang URL KHÁC (server ký lại trước hay sau lúc lỗi) ⇒ nhận URL đó, vẽ lại; URL mới lỗi tiếp ⇒ trung tính, KHÔNG quay về URL cũ; cùng URL ⇒ không nạp lại URL đã chết. 3 ca G3. RED code cũ: `expected <div …(2)>…(1)</div> to be null`. Mutant «không nhận URL mới sau lỗi» ⇒ 3 ca đỏ đúng thông điệp |
 | G4 | ts · LOW | Nhãn mơ hồ bị LOẠI HẲN ⇒ nhãn ngắn của người thứ ba khớp nửa tên trọn (probe R-B2) | **Xác nhận** — `buildMentionLabels` bỏ nhãn `null` | **Lát B — ĐÃ VÁ:** nhãn mơ hồ giữ trong bảng làm CHẶN (`employeeId: null`; khớp đầu tiên mơ hồ ⇒ không link, không thử nhãn ngắn hơn). Ca **P3b** (DENY + 2 đối chứng). RED code cũ: `expected [ …(3) ] to deeply equal [ …(3) ]` (nhận link «@Nguyễn Văn An» → E3). Mutant lọc lại nhãn mơ hồ ⇒ P3b đỏ đúng thông điệp. Biến thể phần tử RÚT (R-B1): không chặn được — ghi R6 |
-| G5 | ts · LOW | a11y: (a) `trayAria` nói «bài» cả ở ô bình luận · (b) mọi «Thử lại» cùng tên · (c) `<video>` không tên · (d) vùng `role=status` mount CÙNG chữ | **Xác nhận** cả 4 (`ComposerAttachmentTray.tsx:76,121,155-163`, `PostAttachments.tsx:85`) | Lát A — vá ở commit lát A |
-| G6 | ts · LOW | Câu `attachmentRejected` chép cứng «10 ảnh · 1 video · 20 MB» — bản thứ hai không nối với hằng contracts | **Xác nhận** (`social.ts:484`) | Lát A — vá ở commit lát A |
+| G5 | ts · LOW | a11y: (a) `trayAria` nói «bài» cả ở ô bình luận · (b) mọi «Thử lại» cùng tên · (c) `<video>` không tên · (d) vùng `role=status` mount CÙNG chữ | **Xác nhận** cả 4 (`ComposerAttachmentTray.tsx:76,121,155-163`, `PostAttachments.tsx:85`) | **Lát A — ĐÃ VÁ cả 4:** (a) `attachment.trayAria.{composer,comment}` theo tiền tố khay · (b) nút «Thử lại» `aria-label` «Thử lại tải lên «tên»» (chứa chữ hiển thị — WCAG 2.5.3) · (c) `<video aria-label>` = tên tệp, vô danh ⇒ «Tệp đính kèm» · (d) `<p role=status>` LUÔN mount, chỉ đổi chữ (`sr-only` khi rỗng; testid giữ nguyên). RED code cũ: (a) `expected 'Tệp đính kèm của bài đang soạn' to match /bình luận/` · (b) `toHaveAccessibleName()` nhận «Thử lại» · (c) `expected null to be 'hop-giao-ban.mp4'` · (d) `Unable to find an accessible element with the role "status"`. 4 mutant, mỗi cái đỏ đúng ca của nó |
+| G6 | ts · LOW | Câu `attachmentRejected` chép cứng «10 ảnh · 1 video · 20 MB» — bản thứ hai không nối với hằng contracts | **Xác nhận** (`social.ts:484`) | **Lát A — ĐÃ VÁ:** `feed/lib/attachment-limits.ts` (CHỈ import contracts — `ActionErrorBanner` dùng ở mọi màn) = MỘT nguồn cho `{{max}}` của khay và tham số `{{images}}`/`{{videos}}`/`{{maxSize}}` mà `ActionErrorBanner` truyền cho câu 422. Ca mới `ActionErrorBanner.limits.spec.tsx` (mock hằng contracts 7 · 2 · 5 MB) + lưới `not.toContain("{{")` cho MỌI reason ở `ActionErrorBanner.spec`. RED code cũ: `expected 'Tệp đính kèm không được chấp nhận: vư…' to contain '7 ảnh'`. Mutant «dải không truyền tham số» ⇒ 3 ca đỏ (limits · lưới `{{` · E2 của PostDetailPage); mutant «chép cứng lại số» ⇒ limits đỏ đúng thông điệp |
 | G7 | ts · LOW | `findMentionLink(base)` dò lại MỌI `@` còn lại sau MỖI token ⇒ O(token × @) (probe R-B4 ~74 ms/lượt) | **Xác nhận** + đo lại (Node 24, `@A` × 2000 + 50 nhãn): **59,7 ms** trung vị; nhánh không `mentions` 1,6 ms | **Lát B — ĐÃ VÁ:** con trỏ (lượt dò trước còn hiệu lực tới khi `from` vượt match) ⇒ mỗi `@` đi qua một lần: **1,8 ms**. Ca **P8** đếm `indexOf("@")` (tất định). RED code cũ: `expected 80600 to be less than or equal to 800`. Mutant tắt con trỏ ⇒ P8 đỏ đúng thông điệp, đầu ra không đổi |
 | G8 | sec · MEDIUM | Tải về không `Content-Disposition` + allowlist MIME đổi được THEO CÔNG TY lúc chạy ⇒ XSS lưu trữ trên origin storage khi admin mở `text/html`/`image/svg+xml` | **Xác nhận** (`files.service.ts:889-893` `resolveMany(companyId…)`; `mime-extension.ts:37-41` thả lỏng khi không đuôi / MIME ngoài map); mặc định an toàn (`setting-defaults.ts:41-56`) — ⚠️ **SAI** (FULL gate lượt 2, §12 H1: khai thác được với cấu hình MẶC ĐỊNH vì Content-Type của PUT không được ký — M36) | Ngoài phạm vi FE ⇒ seed 🔴 **`S16-SOCIAL-FILEDISPOSITION-1`** (BE) + ghi điều kiện merge vào notes FE-2D; `S16-SOCIAL-VIDEOMIME-1` chờ nó |
 | G9 | sec · MEDIUM | Phần tử `url:null` vẫn mang `fileName`/`sizeBytes`/`kind`/`fileId`; WS phát metadata cho cả công ty ⇒ «masking ở server» của §3 là sai | **Xác nhận** (`social-attachments.service.ts:541-550`; `social-posts.service.ts:848`; `social-comments.service.ts:544`) | Ngoài phạm vi FE ⇒ seed 🔴 **`S16-SOCIAL-ATTMETAMASK-1`** (BE); §3 sửa lời |
@@ -451,7 +454,9 @@ Probe ở `scratchpad/probes/fe2d/` (config vitest riêng, resolve qua `apps/app
 
 Ghi chú không phải phát hiện: (1) security-reviewer — DEVOPS-03 §13.3 ghi PROD/dev-online `S3_ENDPOINT=http://localhost:9000`;
 nếu đúng, URL ký PUT/GET trỏ về localhost của MÁY NGƯỜI DÙNG ⇒ ghi thành mục kiểm lúc merge (D11) trong notes FE-2D.
-(2) typescript-reviewer — tên tệp có ký tự đảo chiều (RTLO) hiển thị không cô lập; xử lý ở lát A.
+(2) typescript-reviewer — tên tệp có ký tự đảo chiều (RTLO) hiển thị không cô lập ⇒ lát A bọc tên tệp của link trong
+`<bdi>` (ca trong `PostAttachments.spec.tsx`, ký tự dựng bằng `String.fromCharCode` — KHÔNG để ký tự điều khiển hướng
+chữ thô trong mã; RED code cũ: link không có `<bdi>`; mutant `<span>` ⇒ đỏ).
 
 ## 12. FULL gate lượt 2 — xử lý (02/10/2026)
 
@@ -467,3 +472,158 @@ nếu đúng, URL ký PUT/GET trỏ về localhost của MÁY NGƯỜI DÙNG ⇒
 Phép đo cho owner (KHÔNG PROD): trên bucket lane/dev, presign PUT `application/pdf` rồi PUT kèm `Content-Type: text/html`
 ⇒ HEAD phải thấy `text/html` (xác nhận vế storage của H1); sau `S16-SOCIAL-FILEDISPOSITION-1` ⇒ 403. Nếu storage PROD ĐÃ tới
 được từ trình duyệt (khác DEVOPS-03 §13.3) thì chat phơi NGAY HÔM NAY ⇒ WO đó đi trước mọi việc khác.
+
+## 13. Đặt lại lên master 09/10/2026 + thích nghi sau `S16-SOCIAL-FILEDISPOSITION-1` (plan v3)
+
+> Lát A hoãn từ 03/10 (owner, vì chi phí); 09/10/2026 owner chọn làm tiếp tới khi mở PR. Từ nền cũ `14afbb5f` tới master
+> `a3283ce3` có 8 PR đổi vùng FE này (`FEBLOCKSEED-1` · `FESEARCHBOUNDS-1` · `FEMODERRMSG-1` · `AVATARPRESIGN-1` ·
+> `MENTIONLINK-1` = lát B · `FE-3` · `FE-3B` · `FE-3C`) và BE đã đổi đường tệp (`S16-SOCIAL-FILEDISPOSITION-1`, #578, lên PROD
+> 09/10 08:01). Mục này ghi: cách đặt lại · đối chiếu hợp đồng · việc làm thêm · verify + gate. Phần còn lại của plan giữ
+> nguyên hiệu lực; chỗ nào §13 nói khác thì §13 thắng.
+
+### 13.1 Cách đặt lại + kiểm toán bản ghép
+
+- Gộp 3 commit lát A (`4229b3e0` · `d4c995ff` · `6053d28d`) thành MỘT (cha `64e7a9fa`, cây = cây của `6053d28d`) rồi
+  cherry-pick lên nhánh mới `feat/s16-social-fe-2d-attach` cắt từ `a3283ce3`. Kết quả: 4 file xung đột / 5 khối, 31 file tự
+  ghép hoặc là file mới. Nhánh cũ `feat/s16-social-fe-2d-a` giữ làm sao lưu tới khi PR merge.
+- Lời giải 5 khối — giữ CẢ hai phía, phía master đứng trước:
+
+  | File | Master (giữ) | Lát A (giữ) |
+  | --- | --- | --- |
+  | `i18n/locales/vi/social.ts` | `actionError.reason.postGone` (FEMODERRMSG-1) | `attachmentRejected` · `attachDenied` |
+  | `feed/PostDetailPage.tsx` (2 khối) | docblock nguồn lý do của `useFeedActions` · `reason={shownError.reason}` | nguồn lý do «gửi bình luận kèm tệp» |
+  | `feed/components/ActionErrorBanner.tsx` | reason `postGone` | 2 reason đính kèm ⇒ tổng 14 |
+  | `feed/components/PostCard.tsx` | import `avatarSrc` (AVATARPRESIGN-1) | bỏ `buildImageGrid`, vẽ qua `<PostAttachments>` |
+
+- Kiểm toán ĐỘC LẬP với người giải (verdict PASS, 2 MEDIUM + 6 LOW — xử lý ở 13.3 / 13.4): tập file đổi = đúng 35 file của
+  lát A; 23 file trùng từng byte bản 02/10; 12 file cả hai phía cùng sửa có tập dòng ± khớp diff lát A gốc (3 file lệch = đúng
+  5 khối giải ở trên); 31/31 mục «vá gate» của §11/§12 còn nguyên; 233 ca test của 15 spec = số gốc; `src/routes/social`
+  101 file / 1.912 ca xanh; typecheck `app` + `web-core` và eslint các file chạm xanh.
+- Hai ca của master bị thay bằng ca NGƯỢC, có chủ ý (lát A đảo hợp đồng D8 «chưa có nút đính kèm»): `CommentList.spec`
+  «KHÔNG có nút đính kèm (D8 · nợ N1)» · `FeedComposer.spec` «D8 — KHÔNG có nút đính kèm ở FE-1». PR nêu rõ.
+
+### 13.2 Đối chiếu hợp đồng BE sau #578 (đọc code ở `a3283ce3`)
+
+**Không có lệch mức phải-sửa.** Đã kiểm và khớp: body 054 (4 khoá, `.strict()`) và 055 (`{target}`) · phản hồi 054/055 ·
+header `Content-Type` của lượt ghi = ĐÚNG chuỗi đã khai ở 054 (cùng một biến `declaredMimeType`) = chuỗi server ký — đây
+là điều kiện đo (2) của plan `S16-SOCIAL-FILEDISPOSITION-1` §8 · cùng helper `putBytesToStorage` với các luồng đang sống
+(chat · thương hiệu · hồ sơ cá nhân) · phong bì lỗi + mã lỗi FE ánh xạ đều còn · trần 20 MiB / 10 ảnh / 1 video / 11 tổng ·
+`kindOf` · `feedAttachmentSchema` · payload WS không mang `url`. Đường đọc: ảnh/video trả dạng hiển thị trực tiếp ⇒
+`<img>`/`<video>` vẽ được; mọi loại khác (kể cả PDF) trả dạng TẢI XUỐNG ⇒ link tệp là link tải — điều kiện đo (3), xử lý ở V3.
+
+**D11 — ĐO 09/10/2026 12:13:** `GET /api/v1/health` của PROD ⇒ `data.build.commit = b091a8e7`;
+`git merge-base --is-ancestor` của `7bfb3f96` (#545) · `a1dbe7f0` (#554) · `c0cf6319` (#578) vào `b091a8e7` đều exit 0.
+
+D11 là điều kiện lúc MERGE (PROD có bản lùi trước #578) ⇒ **đo lại `data.build.commit` NGAY TRƯỚC khi merge** — ô kiểm
+trong PR.
+
+**B23 — storage tới được từ trình duyệt của người dùng (KHÔNG đo được từ mã nguồn):** URL ký mang host của `S3_ENDPOINT`
+(một biến duy nhất, không có biến «endpoint công khai»); `.env.example` + DEVOPS-03 ghi `http://localhost:9000`; giá trị
+thật của PROD không đọc từ phiên làm việc. ⇒ **điều kiện TRƯỚC merge, do owner đo bằng đường đang sống:** từ một máy KHÁC
+máy chủ, gửi 1 tệp qua chat PROD (lượt ghi 200 + tải về được). Không đạt ⇒ KHÔNG merge (khi đó đính kèm của chat cũng đang
+hỏng với người dùng ở máy khác — việc hạ tầng riêng, đi trước PR này).
+
+Mã `FOUNDATION-FILE-ERR-FILENAME` (tên rỗng / `.` / `..` sau chuẩn hoá) không có ánh xạ riêng ⇒ rơi về `uploadFailed`, có
+chủ ý: hộp chọn tệp gần như không sinh được tên như vậy.
+
+### 13.3 Việc làm thêm ở v3
+
+Mỗi mục đổi hành vi: test RED trước (đỏ trên ASSERT, không phải lỗi nạp), ca DENY đứng cạnh ca ALLOW, một mutant ★ đỏ đúng
+thông điệp (sao lưu → cấy → khôi phục bằng bản sao + `cmp`).
+
+| # | Nguồn | Việc | Test · mutant |
+| --- | --- | --- | --- |
+| V1 | kiểm toán ghép (MEDIUM) | Khay tệp của ô bình luận đi theo sang bài KHÁC khi chỉ `$postId` đổi (router không mount lại trang — cùng lớp với `S16-SOCIAL-FEPOSTSWITCH-1`; lát A thêm một state mới vào lớp đó, và tệp đính nhầm bài nặng hơn nháp chữ). Sửa: `<CommentComposer>` mang `key` theo bài, CÓ tiền tố (`composer:` + `postId`) trong `PostDetailPage.tsx` (`<CommentList>` anh em cùng cha đã mang `key={postId}`; hai anh em trùng `key` thì ô soạn cũ không bị tháo — đo ở bước dựng) — khuôn `key` của `<CommentList>` (FE-3C); unmount huỷ lượt tải đang bay (A4-L4). Nháp chữ cũng về trắng — đúng đích `done_when` của FEPOSTSWITCH-1; `replyTo` · `localError` · `droppedMentionCount` VẪN thuộc WO đó. | `PostDetailPage.post-switch.spec.tsx` (router thật). Khuôn hiện có KHÔNG đủ ⇒ thêm: quyền `create:feed-comment` · factory giả thêm `uploadSocialAttachment` + `socialApi.createComment` (trả DTO có `droppedMentions: []`) · tệp `application/pdf` (jsdom không có `createObjectURL` cho ảnh). **DENY** — ở bài B: gõ nháp + chờ ô tệp `data-status="done"`, Back về bài A ĐÃ có trong cache (chiều đi qua khung chờ thì xanh cả khi thiếu `key`), trang không mount lại ⇒ khay rỗng (đếm `comment-attach-item` = 0), ô soạn trắng, lượt gửi 015 KHÔNG mang `attachmentIds`; **ALLOW** cùng khung — ở nguyên một bài, danh sách bình luận đọc lại ⇒ khay + nháp còn nguyên. RED trên mã hiện tại và ★ mV1 «bỏ `key`» phải đỏ ở ĐÚNG assert đếm ô tệp / ô soạn (không nhận đỏ do lưới `afterEach` hay TypeError). |
+| V2 | hợp đồng (SHOULD) | Tệp 0 byte: server nay từ chối bằng mã SIZE (trước #578 không bắt) ⇒ client đang nói «vượt dung lượng». Chặn ở client: `planAttachmentAdds` thêm lý do `empty`, đứng TRƯỚC `tooLarge` (thêm vào union `AttachmentRejectReason` · `REJECT_MAX` của khay — câu `empty` không có tham số · docblock thứ tự luật) + 1 khoá i18n. Tệp rỗng KHÔNG chiếm chỗ của trần. Giữ bất biến A3 «trần client = trần server». | `attachment-draft.spec.ts`: **DENY** tệp 0 byte ⇒ `empty`, không vào hàng tải; **ALLOW** tệp 1 byte đi tiếp; 10 ảnh thật + 1 ảnh rỗng ⇒ 10 nhận, 1 `empty`. Thêm MỘT ca tầng khay (khuôn F1 của `FeedComposer.attach.spec.tsx`): tệp 0 byte ⇒ spy tải 0 lần + câu ở `composer-attach-error` so với chữ VIẾT TAY, không chứa `attachment.reject` hay `{{` (khoá thiếu / sai tên phải đỏ). ★ mV2 «bỏ nhánh» đỏ ở cả hai tầng. |
+| V3 | hợp đồng (SHOULD) · điều kiện đo (3) | Link tệp (`kind = file`) nay luôn là link tải ⇒ thêm icon tải `aria-hidden` ở cuối link (khuôn `MessageBubble` của chat) + chữ ẩn «tải xuống» cho trình đọc màn hình: `<span className="sr-only">` đặt SAU cỡ tệp, NGOÀI `<bdi>`, +1 khoá i18n; KHÔNG đặt `aria-label` lên `<a>` (sẽ đè mất tên tệp). Giữ `target="_blank" rel="noopener noreferrer"`; KHÔNG thêm thuộc tính `download`. | `PostAttachments.spec.tsx`: tên trợ năng của link tệp chứa CẢ tên tệp LẪN «tải xuống»; link không có thuộc tính `download`; ô ảnh / video không có chữ đó; ca `<bdi>` cũ giữ xanh. |
+| V4 | hợp đồng (NOTE) | Câu `error.unsupportedType`: mã `…-EXTENSION` nay gồm cả «phần mở rộng sai dạng» ⇒ câu trung tính «Định dạng hoặc phần mở rộng của tệp không được chấp nhận.» | chỉ chữ; ca nào đang so chữ thì đọc qua khoá i18n |
+| V5 | hợp đồng (SHOULD/NOTE) · kiểm toán (MEDIUM/LOW) | Chú thích đã cũ sau #578: docblock đầu `PostAttachments.tsx` · `feed-format.ts` (`isSafeAttachmentUrl`: thêm một dòng vì sao khác `avatarSrc`) · `attachment-draft.ts` (ghi chú video + điều kiện merge). Viết theo bất biến HIỆN TẠI, không tả cơ chế. Không đổi hành vi. | — |
+| V6 | điều kiện đo (2) | `Content-Type` của lượt ghi = ĐÚNG chuỗi `declaredMimeType` đã gửi ở 054, cả khi `file.type` rỗng (dự phòng `application/octet-stream` cho CẢ HAI). Sau #578 đây là điều kiện để lượt ghi được nhận. Đo 09/10: `social-files-api.spec.ts` ĐÃ có hai ca assert đủ hai vế (ca «bài: … PUT Content-Type khớp MIME đã khai» + ca «`file.type === ''` ⇒ khai VÀ PUT `application/octet-stream`») ⇒ không thêm mã, không thêm ca — chỉ chứng minh lưới còn cắn. | ★ mV6 «lượt ghi dùng `file.type` thô thay cho biến đã khai» phải đỏ ở ca kiểu rỗng. |
+
+Trước lần push đầu: gộp nhánh về MỘT commit (chú thích cũ của V5 không nằm lại trong lịch sử nhánh PR).
+
+### 13.4 Không làm ở v3 (ghi PR; seed WO — nếu owner muốn — ở lượt sổ SAU merge)
+
+- Ảnh chưa bọc link «mở to» (chat có) — mở rộng phạm vi; điều kiện kỹ thuật đã đủ sau #578.
+- `.csv` trên Windows có Excel được trình duyệt khai `application/vnd.ms-excel` ⇒ 054 từ chối với allowlist mặc định (có
+  sẵn, chat cũng vậy).
+- Màn Kiểm duyệt (FE-3) không vẽ đính kèm của nội dung bị báo cáo.
+- Ba assert đếm `img` trên cả thẻ (`PostCard.spec` R1/R5 · `NewsPage.spec` R4) chỉ đúng chừng nào avatar của fixture còn null.
+- Nợ đã có WO: `ATTMETAMASK-1` · `ORPHANUPLOAD-1` · `VIDEOMIME-1` · `ATTERRSPLIT-1` · `FILEOPENUX-1` · `FEPOSTSWITCH-1`.
+- PR này KHÔNG thêm WO mới vào `harness/backlog.mjs` (PR #579 đang mở cũng sửa file đó) — chỉ thêm dòng `notes` cho chính
+  WO và MỘT dòng `notes` cho `S16-SOCIAL-FEPOSTSWITCH-1`: V1 đã khoá `<CommentComposer>` theo `postId` (khay tệp + nháp chữ
+  về trắng khi đổi bài) ⇒ ở WO đó vế «ô soạn trắng» không còn là phần phải-RED, và khi thân trang mang khoá thì gỡ `key`
+  riêng của `<CommentComposer>` cùng lượt với `key` của `<CommentList>`; ca V1 khi đó đổi mutant sang «bỏ khoá thân trang».
+- Trạng thái nửa vời CÓ CHỦ Ý sau V1 (PR nêu rõ): dòng «đang trả lời …» của bài cũ còn hiện trên ô soạn đã trắng — thuộc
+  `S16-SOCIAL-FEPOSTSWITCH-1`.
+
+### 13.5 Verify + gate (thay dòng cuối của §8 bước 3)
+
+- `bash harness/check.sh --all --lane-db=fe2d` của §8 được THAY bằng bộ của PR chỉ-FE (tiền lệ plan `S16-SOCIAL-FE-3` v2,
+  đã qua plan-review): `pnpm --filter @mediaos/app test:social-cov` (sàn 80 × 4 trục) · `bash harness/check.sh --quick` ·
+  `node harness/chunk-test.mjs --packages=@mediaos/app,@mediaos/web-core,@mediaos/auth,@mediaos/console --no-build
+  --max-forks=4` · build 3 app ·
+  `git diff --name-only origin/master...HEAD -- apps/api packages/contracts` RỖNG. Lý do: diff không chạm `apps/api` /
+  `packages/contracts` ⇒ suite DB của API không thể đổi kết quả; máy dev đang chạy PROD và có phiên khác chạy suite nặng ⇒
+  mỗi lúc một lệnh nặng. CI `apps-frontend.yml` dựng + test cả 3 app khi `packages/web-core` đổi.
+- Thứ tự chạy: build `contracts` → build `web-core` (app đọc web-core qua `dist`) → `test:social-cov` → `check.sh --quick` →
+  `chunk-test … --no-build` → build 3 app. Phần của `--all` bị bỏ (test `@mediaos/api` · `contracts` · `ui`, build API) không
+  bị diff này chạm; CI của PR phải xanh trước merge.
+- Mutant sau khi đặt lại, chạy trên cây CUỐI: mọi mutant có MÃ hoặc CA GIẾT đi qua phép ghép, hoặc bị V1–V6 chạm — mA2 ·
+  mA8 · mA17 · mA18 (ca ở `PostCard.spec.tsx`, file tự ghép) · mA6 + hai mutant G6 (mã ở `ActionErrorBanner.tsx` /
+  `social.ts` / `PostDetailPage.tsx` — file từng xung đột) · mutant `<bdi>` → `<span>` của §11 (V3 sửa đúng thẻ `<a>` đó) —
+  cùng mV1 · mV2 · mV6. Các mutant còn lại: mã + ca trùng từng byte bản 02/10 (đã đỏ đúng thông điệp khi đó) ⇒ không chạy lại.
+- Gate TUẦN TỰ trên toàn diff `a3283ce3..HEAD`, coi finding của §11/§12 là «đã biết»: `typescript-reviewer` →
+  `code-reviewer` (lăng kính React + a11y) → `security-reviewer` (tệp người dùng · lượt ghi ra storage ngoài · bất biến
+  `credentials:'omit'` · lược đồ URL · khoảng cách với hợp đồng BE sau #578) → `quality-gate`. `react-reviewer` ghi ở đầu
+  plan được thay bằng `code-reviewer` với lăng kính React + a11y (môi trường chạy không có agent `react-reviewer`; tiền lệ
+  PR-A của `S16-SOCIAL-FE-3`).
+- Smoke của owner sau khi FE deploy (không tự động hoá được: PROD bật 2FA): đăng 1 ảnh png + 1 pdf tên có dấu qua ô soạn bài
+  và ô bình luận ⇒ ảnh hiện, bấm link pdf ⇒ tải về đúng tên; mở bài khác rồi Back ⇒ khay trống; thử từ một máy KHÁC máy chủ.
+  Smoke đỏ ⇒ revert PR (FE tự deploy lại bản trước).
+
+### 13.6 Sổ vết v3
+
+| Bước | Kết quả |
+| --- | --- |
+| Đặt lại + kiểm toán ghép | 09/10 — xong (13.1) |
+| plan-review v3 | 09/10 — PASS_WITH_FIXES (0 BLOCKER/HIGH · 5 MEDIUM · 5 LOW), nhận cả 10 — 13.7 |
+| V1–V6 | 09/10 — V1–V5 dựng xong, mỗi mục một commit, RED trước (`src/routes/social` 101 file / 1.921 ca xanh); V6 không có mã (chỉ mutant) |
+| Mutant (cây cuối: lát A + V1–V6 + phần vá của gate) | 09/10 — kiểm toán độc lập trên cây cuối: 27 mutant, 24 đỏ đúng thông điệp; 3 sống ở HAI chỗ lưới thưa (video `url:null` ẩn hẳn · trần ảnh khi `showAllImages`) ⇒ bù 2 ca ghim ở `PostAttachments.spec.tsx`, cấy lại cả hai đều đỏ đúng assert; mã nguồn không đổi |
+| Gate | 09/10 — ba reviewer tuần tự trên toàn diff: 0 CRITICAL / HIGH · 4 MEDIUM · 8 LOW ⇒ vá (RED trước) + review hẹp trên phần vá (1 MEDIUM · 5 LOW, đã vá phần phải vá) — bảng 13.8 |
+| Verify 13.5 | 09/10 — XANH trên cây đã gộp và rebase lên `dd02788c`: build `contracts` + `web-core` · `test:social-cov` 104 file / 1.998 ca, coverage 98,69 / 94,92 / 92,56 / 98,69 (sàn 80 × 4) · `check.sh --quick` XANH · `chunk-test` bốn gói XANH mọi chunk (app 403 file · web-core 52 · console 22 · auth 4) · build 3 app · diff `apps/api` + `packages/contracts` rỗng · gitleaks trên commit của nhánh sạch |
+
+### 13.7 plan-review v3 — xử lý (09/10/2026 · PASS_WITH_FIXES · nhận cả 10, 0 bác)
+
+| # | Mức | Phát hiện (tóm) | Xử lý |
+| --- | --- | --- | --- |
+| V1-KHUON | MEDIUM | Khuôn `post-switch.spec` thiếu quyền / hàm giả / loại tệp để dựng ca V1 ⇒ dễ đỏ sai lý do | hàng V1: liệt kê thứ phải thêm + chiều Back + thông điệp RED |
+| V1-SO | MEDIUM | V1 nhận vế «nháp về trắng» của FEPOSTSWITCH-1 mà không ca nào ghim; sổ WO đó lệch | hàng V1 thêm assert nháp ở cả hai ca; 13.4 thêm dòng `notes` cho WO đó + ghi trạng thái nửa vời |
+| MUT-THIEU | MEDIUM | Danh sách mutant chạy lại thiếu theo chính tiêu chí của nó | 13.5: thêm mA6 · mA8 · G6 ×2 · `<bdi>`; tiêu chí «hoặc bị V1–V6 chạm»; chạy trên cây cuối |
+| V2-I18N | MEDIUM | Khoá i18n mới + `REJECT_MAX` không có ca nào đỏ khi thiếu / sai tên | hàng V2: ca tầng khay so chữ viết tay + vế «không chiếm chỗ trần» |
+| MERGE-DK | MEDIUM | D11 và B23 là điều kiện lúc MERGE nhưng bị ghi như đã xong / dời sang smoke | 13.2: đo lại commit PROD ngay trước merge; B23 thành điều kiện trước merge; 13.5: smoke đỏ ⇒ revert |
+| GATE | LOW | Thành phần gate đổi không lý do, thiếu `quality-gate` | 13.5 |
+| V3-CHU | LOW | Thiếu khoá i18n + cách ghi tên trợ năng | hàng V3 |
+| FILENAME | LOW | Mã `…-FILENAME` không có ánh xạ | 13.2: để `uploadFailed`, có chủ ý |
+| VERIFY-THUTU | LOW | Thứ tự build ↔ `--no-build` | 13.5 |
+| PUBLIC | LOW | Thông điệp commit / PR / `notes` cũng phải theo «bất biến hiện tại»; nhánh sao lưu giữ chú thích cũ | áp khi viết PR; nhánh `feat/s16-social-fe-2d-a` xoá sau merge |
+
+### 13.8 Gate v3 — xử lý (09/10/2026 · 0 CRITICAL / HIGH)
+
+Ba reviewer tuần tự trên toàn diff (`typescript-reviewer` → `code-reviewer` lăng kính React + a11y → `security-reviewer`),
+rồi hai reviewer hẹp (`typescript-reviewer` · `security-reviewer`) trên riêng phần vá. Mỗi mục đổi hành vi: ca RED trước,
+ca DENY đứng cạnh ca ALLOW. Cột «Phát hiện» ghi theo bất biến phải giữ.
+
+| # | Mức | Phát hiện (tóm) | Xử lý |
+| --- | --- | --- | --- |
+| TS-01 | MEDIUM | Thiếu ca ghim «ô soạn đã tháo thì tệp còn xếp hàng không được tải» | Thêm ca DENY + đối chứng ở `use-attachment-uploads.spec.tsx`; mã không đổi |
+| TS-02 | MEDIUM | Tệp đã tải xong mà ô chữ trống ⇒ nút gửi khoá phải nói lý do | Hai ô soạn hiện MỘT dòng lý do (còn tệp đang tải / lỗi thì khay nói); ô soạn bài: lỗi sau khi đã bấm gửi, lời nhắc trung tính khi chưa bấm; bài kudos / poll không dùng câu chung |
+| TS-03 | MEDIUM | Ô soạn nhận tới trần ảnh mỗi bài / bình luận thì nơi xem chi tiết phải vẽ đủ | Trang chi tiết bài và hàng bình luận vẽ đủ ảnh tới `FEED_MAX_IMAGES_PER_POST`; thẻ bảng tin giữ 4 ô + «+N». Giữ: LỌC rồi mới CẮT · ô ảnh là `<img>` trần (không thêm đường mở URL tệp) · trần lấy từ hằng của contracts |
+| SEC-01 | MEDIUM | Lượt gửi bình luận mang đích (bài nhận) từ lúc bấm, kể cả khi lượt gửi bị hoãn rồi người dùng sang bài khác | Đích + lượt làm mới sau khi gửi đi trong BIẾN của lượt gửi; ca trên router thật (`PostDetailPage.post-switch.spec.tsx`) có đối chứng |
+| TS-05 · TS-06 | LOW | Ca biên 20 MB so đúng tên tệp · bỏ ép kiểu `as string` | Đã vá, hành vi không đổi |
+| SEC-02 | LOW | Ba ràng buộc khi vẽ đủ ảnh (xem TS-03) | Áp trong bản vá; review hẹp xác nhận đủ ba |
+| TS-04 · RX-01 | LOW | Sau «Gỡ» / «Thử lại» trong khay, focus bàn phím nên về nút «Đính kèm» khi nút vừa bấm rời trang | NỢ — ghi PR |
+| RX-02 | LOW | Vùng trạng thái của khay nên báo «đã tải xong» cho trình đọc màn hình | NỢ — ghi PR |
+| RX-03 | LOW | Lượt đọc lại bài hỏng khi đã có dữ liệu thì trang nên giữ nguyên (nháp + khay không mất) | NỢ — đã là `done_when` dòng 3 của `S16-SOCIAL-FEPOSTSWITCH-1` |
+| RS-01 · RS-02 | LOW | Đích trả lời là state cấp trang · lượt làm mới sau xoá / cảm xúc bình luận theo bài đang mở | NỢ — dòng `notes` của `S16-SOCIAL-FEPOSTSWITCH-1` |
+| SEC-03 | LOW | FE nên đòi `https` cho URL storage khi trang chạy `https` | NỢ — đi cùng WO đường vào storage (`S19-OPS-STORAGEPUBLIC-1`); điều kiện B23 trước merge giữ nguyên |

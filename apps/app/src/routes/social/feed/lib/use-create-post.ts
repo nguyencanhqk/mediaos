@@ -21,6 +21,7 @@ import { socialApi, socialKeys } from "@mediaos/web-core";
 import type { CreateFeedPostDto, FeedPostCreatedDto } from "@mediaos/contracts";
 import type { ActionErrorReason } from "../components/ActionErrorBanner";
 import { kudosErrorReason } from "../../kudos/lib/kudos-errors";
+import { attachmentErrorReason } from "./attachment-draft";
 import {
   groupErrorReason,
   isForbiddenError,
@@ -82,7 +83,12 @@ export function useCreatePost({
       const kudosReason = kudosErrorReason(err);
       setPostError({
         forbidden: isForbiddenError(err),
-        reason: kudosReason ?? (groupId ? groupErrorReason("post", err) : null),
+        // S16-SOCIAL-FE-2D — lỗi tệp đính kèm (`SOCIAL-ERR-007` · `FILE-TARGET-*-DENIED`) mang lý do ở
+        // CẢ bảng tin lẫn nhóm: mã chỉ phát ra từ nhánh `attachmentIds`, không cần ngữ cảnh màn.
+        reason:
+          kudosReason ??
+          attachmentErrorReason(err) ??
+          (groupId ? groupErrorReason("post", err) : null),
       });
       // 022 — huy hiệu vừa bị tắt: tải lại catalog để ô chọn thôi mời huy hiệu đó (và nháp bỏ chọn nó).
       if (kudosReason === "kudosBadgeInvalid") {

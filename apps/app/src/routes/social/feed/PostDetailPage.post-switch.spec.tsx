@@ -13,6 +13,12 @@
  *
  * Cây route là bản TỐI GIẢN của `router.tsx` (khuôn `FeedPage.router.spec.tsx`): cùng path, không vỏ, không cổng.
  * THẬT: router · trang · `CommentList` · hai hộp thoại · i18n. GIẢ: bốn lời gọi API. Chữ kỳ vọng VIẾT TAY.
+ *
+ * S16-SOCIAL-FE-2D (plan §13.3 V1) — cùng lớp, state của Ô SOẠN bình luận: khay tệp đã tải + nháp đang gõ thuộc về
+ * MỘT bài. `PostDetailPage` đặt `key` theo bài cho `<CommentComposer>` — `composer:${postId}`, CÓ tiền tố vì
+ * `<CommentList>` anh em đã mang `key={postId}` — nên đổi bài là ô soạn về trắng. Hai khối cuối file bật thêm quyền
+ * `create:feed-comment` (ô soạn chỉ vẽ khi có quyền) và thay thêm hai lời gọi: vòng tải tệp (`uploadSocialAttachment`)
+ * + `015`. Tệp dùng `application/pdf`: jsdom không có `URL.createObjectURL` cho ảnh.
  */
 import * as React from "react";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -24,6 +30,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
+import { onlineManager } from "@tanstack/react-query";
 import type { FeedCommentDto } from "@mediaos/contracts";
 import { socialKeys } from "@mediaos/web-core";
 import { PostDetailPage } from "./PostDetailPage";
@@ -40,6 +47,9 @@ const getPost = vi.fn();
 const listComments = vi.fn();
 const deleteComment = vi.fn();
 const createReport = vi.fn();
+const createComment = vi.fn();
+/** Thế chỗ TRỌN vòng tải một tệp đính kèm (054 → ghi bytes → 055). */
+const upload = vi.fn();
 /** Thế chỗ `fetch` trong MỌI ca: luôn từ chối, và `afterEach` đòi 0 lời gọi — xem 🔴 ở `beforeEach`. */
 const fetchMock = vi.fn();
 
@@ -47,10 +57,12 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
+    uploadSocialAttachment: (...a: unknown[]) => upload(...a),
     socialApi: {
       ...actual.socialApi,
       getPost: (...a: unknown[]) => getPost(...a),
       listComments: (...a: unknown[]) => listComments(...a),
+      createComment: (...a: unknown[]) => createComment(...a),
       deleteComment: (...a: unknown[]) => deleteComment(...a),
     },
     socialModerationApi: {
@@ -79,6 +91,12 @@ const SPAM = "Spam hoặc quảng cáo";
 const DELETE = "Xoá";
 const CONFIRM_DELETE = "Xoá bình luận này?";
 const DRAFT = "nháp viết cho bình luận của bài thứ hai";
+
+const SENT_COMMENT = "e5e5e5e5-e5e5-4e5e-8e5e-e5e5e5e5e5e5";
+const UPLOADED_FILE = "f6f6f6f6-f6f6-4f6f-8f6f-f6f6f6f6f6f6";
+const COMMENT_BOX = "Viết bình luận…";
+const COMMENT_DRAFT = "bình luận đang gõ dở ở bài thứ hai";
+const COMMENT_FOR_1 = "bình luận gửi ở bài thứ nhất";
 
 /** Bình luận server trả cho từng bài — ca «đọc lại» thay mảng của bài thứ hai. */
 let commentsByPost: Record<string, FeedCommentDto[]> = {};
@@ -121,6 +139,17 @@ function rowButton(body: string, name: string): HTMLElement {
 }
 const noteBox = (): HTMLTextAreaElement => screen.getByRole("textbox", { name: NOTE });
 
+const commentBox = (): HTMLTextAreaElement => screen.getByRole("textbox", { name: COMMENT_BOX });
+const trayItems = (): HTMLElement[] => screen.queryAllByTestId("comment-attach-item");
+const pdf = (): File => new File(["abc"], "bien-ban.pdf", { type: "application/pdf" });
+
+/** Gõ nháp + chọn một tệp vào ô soạn bình luận đang hiện, rồi chờ tệp TẢI XONG (`fileId` đã nằm trong khay). */
+async function draftCommentWithUploadedFile(): Promise<void> {
+  fireEvent.change(commentBox(), { target: { value: COMMENT_DRAFT } });
+  fireEvent.change(screen.getByTestId("comment-attach-input"), { target: { files: [pdf()] } });
+  await waitFor(() => expect(trayItems()[0]?.getAttribute("data-status")).toBe("done"));
+}
+
 /** Mở bài thứ nhất (vào cache), sang bài thứ hai bằng một lượt điều hướng — như bấm một tin ở rail. */
 async function openFirstThenSecond() {
   const mounted = mountAt(POST_1);
@@ -153,6 +182,21 @@ beforeEach(() => {
     .mockImplementation((postId: string) => Promise.resolve(page(commentsByPost[postId] ?? [])));
   deleteComment.mockReset().mockResolvedValue({ id: MY_COMMENT_OF_2, deleted: true });
   createReport.mockReset().mockResolvedValue({ id: "66666666-6666-4666-8666-666666666666" });
+  createComment.mockReset().mockImplementation((postId: string, dto: { body: string }) =>
+    Promise.resolve({
+      ...makeComment({ id: SENT_COMMENT, postId, body: dto.body, isMine: true }),
+      droppedMentions: [],
+    }),
+  );
+  upload.mockReset().mockImplementation((file: File) =>
+    Promise.resolve({
+      fileId: UPLOADED_FILE,
+      kind: "file",
+      name: file.name,
+      sizeBytes: file.size,
+      mimeType: file.type,
+    }),
+  );
   // jsdom không cài `window.scrollTo`; router gọi nó sau mỗi lượt điều hướng và jsdom in lỗi ra stderr.
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
   // 🔴 Lưới chặn mạng (gate bảo mật của PR-C, SEC-02 — khuôn của `SocialPortalShell.spec.tsx`). File này dựng
@@ -227,5 +271,125 @@ describe("đổi `$postId` (router THẬT, trang KHÔNG mount lại) — hộp t
     expect(screen.getByRole("dialog", { name: REPORT_DIALOG })).toBeInTheDocument();
     expect(noteBox()).toHaveValue(DRAFT);
     expect(createReport).not.toHaveBeenCalled();
+  });
+});
+
+describe("đổi `$postId` (router THẬT, trang KHÔNG mount lại) — khay tệp + nháp của ô bình luận ở lại với bài của chúng", () => {
+  beforeEach(() => {
+    setCaps({ "view:feed": true, "create:feed-comment": true });
+  });
+
+  it("DENY: ở bài thứ hai đã gõ nháp + tải XONG một tệp, Back về bài thứ nhất ⇒ khay RỖNG, ô soạn TRẮNG; bình luận gửi ở bài thứ nhất KHÔNG mang `attachmentIds`", async () => {
+    const { history } = await openFirstThenSecond();
+    await draftCommentWithUploadedFile();
+
+    await backToFirst(history);
+    // Đối chứng: vẫn là MỘT lượt mount của trang — ô soạn không trắng vì cả trang bị dựng lại.
+    expect(pageMounts).toBe(1);
+    expect(trayItems()).toHaveLength(0);
+    expect(commentBox()).toHaveValue("");
+
+    fireEvent.change(commentBox(), { target: { value: COMMENT_FOR_1 } });
+    fireEvent.click(screen.getByTestId("comment-submit"));
+    await waitFor(() => expect(createComment).toHaveBeenCalledTimes(1));
+    const [sentTo, sent] = createComment.mock.calls[0] as [string, Record<string, unknown>];
+    expect(sentTo).toBe(POST_1);
+    expect(sent).toEqual({ body: COMMENT_FOR_1, parentCommentId: null });
+    expect(sent).not.toHaveProperty("attachmentIds");
+    // Chờ lượt gửi khép lại (ô soạn tự dọn) để ca không kết thúc giữa một lượt cập nhật state.
+    await waitFor(() => expect(commentBox()).toHaveValue(""));
+    expect(upload).toHaveBeenCalledTimes(1);
+  });
+
+  it("ALLOW (cùng khung): Ở NGUYÊN bài thứ hai, danh sách bình luận được đọc lại ⇒ khay + nháp CÒN; gửi ⇒ `015` của bài đó mang đúng tệp đã tải", async () => {
+    const { client } = await openFirstThenSecond();
+    await draftCommentWithUploadedFile();
+
+    // Lượt đọc lại THÊM một hàng (số hàng đổi 2 → 3) — cây bên dưới ô soạn vẽ lại, ô soạn giữ nguyên chỗ.
+    commentsByPost[POST_2] = [
+      makeComment({ id: COMMENT_OF_2, postId: POST_2, body: BODY_OF_2 }),
+      makeComment({ id: MY_COMMENT_OF_2, postId: POST_2, body: MY_BODY_OF_2, isMine: true }),
+      makeComment({ id: LATE_COMMENT_OF_2, postId: POST_2, body: LATE_BODY_OF_2 }),
+    ];
+    await act(() => client.invalidateQueries({ queryKey: socialKeys.posts.comments(POST_2) }));
+    await screen.findByText(LATE_BODY_OF_2);
+
+    expect(pageMounts).toBe(1);
+    expect(trayItems()).toHaveLength(1);
+    expect(trayItems()[0]?.getAttribute("data-status")).toBe("done");
+    expect(commentBox()).toHaveValue(COMMENT_DRAFT);
+    expect(upload).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("comment-submit"));
+    await waitFor(() => expect(createComment).toHaveBeenCalledTimes(1));
+    expect(createComment.mock.calls[0]).toEqual([
+      POST_2,
+      { body: COMMENT_DRAFT, parentCommentId: null, attachmentIds: [UPLOADED_FILE] },
+    ]);
+    await waitFor(() => expect(trayItems()).toHaveLength(0));
+  });
+});
+
+/**
+ * Lượt GỬI bình luận mang ĐÍCH (bài) từ lúc bấm. Khi trình duyệt báo mất mạng, lượt gửi đứng chờ; người dùng sang
+ * bài khác trong lúc đó (trang không mount lại) thì lượt gửi, khi chạy, vẫn tới bài nơi nó được bấm — cùng chữ và tệp
+ * của bài đó — và gửi xong thì làm mới dữ liệu của chính bài ấy.
+ */
+describe("đổi `$postId` khi lượt GỬI bình luận còn đang chờ — lượt gửi mang đích từ lúc bấm", () => {
+  beforeEach(() => {
+    setCaps({ "view:feed": true, "create:feed-comment": true });
+  });
+
+  afterEach(() => {
+    act(() => onlineManager.setOnline(true));
+  });
+
+  const targetsOf015 = (): unknown[] => createComment.mock.calls.map((call) => call[0]);
+
+  it("DENY: mất mạng · ở bài thứ hai gõ chữ + tệp tải xong rồi bấm gửi · Back về bài thứ nhất · có mạng lại ⇒ MỌI lượt gọi `015` tới bài THỨ HAI", async () => {
+    const { history, client } = await openFirstThenSecond();
+    act(() => onlineManager.setOnline(false));
+    await draftCommentWithUploadedFile();
+    fireEvent.click(screen.getByTestId("comment-submit"));
+
+    // Tiền đề của ca: lượt gửi ĐỨNG CHỜ (thư viện giữ nó ở trạng thái tạm dừng) — `015` chưa được gọi.
+    await waitFor(() =>
+      expect(
+        client
+          .getMutationCache()
+          .getAll()
+          .map((m) => m.state.isPaused),
+      ).toEqual([true]),
+    );
+    expect(createComment).not.toHaveBeenCalled();
+
+    await backToFirst(history);
+    expect(pageMounts).toBe(1);
+    expect(createComment).not.toHaveBeenCalled();
+
+    act(() => onlineManager.setOnline(true));
+    await waitFor(() => expect(createComment).toHaveBeenCalledTimes(1));
+
+    expect(targetsOf015()).toEqual([POST_2]);
+    expect(createComment.mock.calls[0]?.[1]).toEqual({
+      body: COMMENT_DRAFT,
+      parentCommentId: null,
+      attachmentIds: [UPLOADED_FILE],
+    });
+    // Gửi xong ⇒ hai nhánh query của bài THỨ HAI (bài nhận bình luận) được đánh dấu cần đọc lại, dù trang đang mở
+    // bài thứ nhất.
+    await waitFor(() => expect(client.isMutating()).toBe(0));
+    expect(client.getQueryState(socialKeys.posts.comments(POST_2))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(socialKeys.posts.detail(POST_2))?.isInvalidated).toBe(true);
+  });
+
+  it("ALLOW (đối chứng có mạng): ở bài thứ hai gõ chữ + tệp tải xong rồi bấm gửi ⇒ `015` đi NGAY, đích là bài thứ hai", async () => {
+    await openFirstThenSecond();
+    await draftCommentWithUploadedFile();
+    fireEvent.click(screen.getByTestId("comment-submit"));
+
+    await waitFor(() => expect(createComment).toHaveBeenCalledTimes(1));
+    expect(targetsOf015()).toEqual([POST_2]);
+    await waitFor(() => expect(trayItems()).toHaveLength(0));
   });
 });
