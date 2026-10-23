@@ -581,6 +581,122 @@ describe("TaskKanbanPage", () => {
       await waitFor(() => expect(screen.getByTestId("kanban-column-Todo")).toBeInTheDocument());
       expect(screen.queryByText(/thêm công việc/i)).not.toBeInTheDocument();
     });
+
+    // ── S20-TASK-BOARDMOVE-1 — menu ⋯ trên board pipeline: đổi CỘT qua move-state ────────────────
+    it("menu ⋯ liệt kê cột pipeline KHÁC cột hiện tại; chọn ⇒ move-state {stateId}, focus về nút ⋯ của thẻ", async () => {
+      setCapabilities({ "view-kanban:task": true, "update-state:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      vi.mocked(taskCollabApi.moveTaskState).mockReturnValue(new Promise(() => {}));
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+
+      fireEvent.click(await screen.findByTestId("kanban-card-move-trigger-task-001"));
+      const menu = await screen.findByRole("menu");
+      expect(
+        within(menu)
+          .getAllByRole("menuitem")
+          .map((item) => item.textContent),
+      ).toEqual(["Hậu Kỳ"]);
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Hậu Kỳ" }));
+
+      await waitFor(() =>
+        expect(taskCollabApi.moveTaskState).toHaveBeenCalledWith("task-001", { stateId: "st-2" }),
+      );
+      expect(taskCollabApi.moveTask).not.toHaveBeenCalled();
+      const targetCol = screen.getByTestId("kanban-state-column-st-2");
+      await waitFor(() =>
+        expect(within(targetCol).getByTestId("kanban-card-task-001")).toBeInTheDocument(),
+      );
+      // Không truyền onOpenTask ⇒ thẻ không nhận focus được ⇒ focus về nút ⋯ của CHÍNH thẻ đó.
+      await waitFor(() =>
+        expect(document.activeElement).toBe(
+          within(targetCol).getByTestId("kanban-card-move-trigger-task-001"),
+        ),
+      );
+    });
+
+    it("board pipeline: có update-status mà THIẾU update-state ⇒ không có nút ⋯ (cùng điều kiện với kéo-thả)", async () => {
+      setCapabilities({ "view-kanban:task": true, "update-status:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+      expect(screen.queryByTestId("kanban-card-move-trigger-task-001")).not.toBeInTheDocument();
+    });
+  });
+
+  // ── S20-TASK-BOARDMOVE-1 (US-TASK-NV-91) — menu ⋯ «Chuyển sang cột…» (điện thoại · bàn phím) ──
+  describe("menu ⋯ «Chuyển sang cột…» — chế độ status", () => {
+    async function openMoveMenu(taskId: string) {
+      fireEvent.click(await screen.findByTestId(`kanban-card-move-trigger-${taskId}`));
+      return screen.findByRole("menu");
+    }
+
+    it("liệt kê cột trạng thái KHÁC cột hiện tại; chọn ⇒ moveTask lạc quan, focus về thẻ, KHÔNG mở chi tiết", async () => {
+      setCapabilities({ "view-kanban:task": true, "update-status:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      vi.mocked(taskCollabApi.moveTask).mockReturnValue(new Promise(() => {}));
+      const onOpenTask = vi.fn();
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" onOpenTask={onOpenTask} />);
+
+      const menu = await openMoveMenu("task-001");
+      expect(
+        within(menu)
+          .getAllByRole("menuitem")
+          .map((item) => item.textContent),
+      ).toEqual(["Đang làm", "Chờ review", "Hoàn thành", "Đã hủy"]);
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Chờ review" }));
+
+      await waitFor(() =>
+        expect(taskCollabApi.moveTask).toHaveBeenCalledWith("task-001", { status: "In Review" }),
+      );
+      const targetCol = screen.getByTestId("kanban-column-In Review");
+      await waitFor(() =>
+        expect(within(targetCol).getByTestId("kanban-card-task-001")).toBeInTheDocument(),
+      );
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByTestId("kanban-card-task-001")),
+      );
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      // Bấm trong menu KHÔNG lọt lên thẻ (thẻ bấm = mở chi tiết).
+      expect(onOpenTask).not.toHaveBeenCalled();
+    });
+
+    it("không có quyền kéo ⇒ không có nút ⋯ và không có mục «Chuyển sang cột…»", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" onOpenTask={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+      // Đối chứng: cùng board + có update-status thì nút có (ca ở trên).
+      expect(screen.queryByTestId("kanban-card-move-trigger-task-001")).not.toBeInTheDocument();
+      expect(screen.queryByText(/chuyển sang cột/i)).not.toBeInTheDocument();
+    });
+
+    it("server từ chối ⇒ thẻ về cột cũ và hiện lý do (không im lặng)", async () => {
+      setCapabilities({ "view-kanban:task": true, "update-status:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      let rejectMove!: (err: unknown) => void;
+      vi.mocked(taskCollabApi.moveTask).mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectMove = reject;
+          }),
+      );
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+
+      const menu = await openMoveMenu("task-001");
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Hoàn thành" }));
+      const doneCol = screen.getByTestId("kanban-column-Done");
+      await waitFor(() =>
+        expect(within(doneCol).queryByTestId("kanban-card-task-001")).toBeInTheDocument(),
+      );
+
+      rejectMove(new ApiError({ status: 409, code: "CONFLICT", message: "invalid transition" }));
+
+      const todoCol = screen.getByTestId("kanban-column-Todo");
+      await waitFor(() =>
+        expect(within(todoCol).queryByTestId("kanban-card-task-001")).toBeInTheDocument(),
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(/không thể chuyển sang trạng thái này/i);
+    });
   });
 
   // ── S5-TASK-BOARD-UX-1 — bấm thẻ mở panel chi tiết ────────────────────────────
