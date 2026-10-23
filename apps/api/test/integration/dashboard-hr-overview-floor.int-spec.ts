@@ -11,8 +11,9 @@
  *  2. `Department` chỉ đếm hồ sơ trong đơn vị của mình (∪ đơn vị mình làm trưởng); không đơn vị ⇒ 0.
  *  3. Company / System giữ hành vi cũ (một hàng cache chia sẻ); cô lập công ty không đổi (X1).
  *
- * Thứ tự chốt (plan F2): A1 chạy TRƯỚC A3 trong CÙNG `describe`, cả hai không truyền `dashboard_type` và không
- * `?refresh`, để hàng chia sẻ `Employee:HR_OVERVIEW:co` do `hr` làm ấm còn trong TTL khi `dept` gọi.
+ * Bằng chứng «không đọc hàng chia sẻ» (plan F2): A3/A4 TỰ làm ấm hàng `Employee:HR_OVERVIEW:co` (hr gọi route, không
+ * `dashboard_type`, không `?refresh`) rồi chứng bằng SQL hàng đó tươi TRƯỚC khi `dept` gọi — không dựa vào thứ tự
+ * chạy (`-t`, shuffle).
  *
  * App dựng bằng `bootQa1World` (`applyMainPipeline` + `listen(0)`). CHỈ chạy trên DB cô lập của lane.
  */
@@ -96,6 +97,8 @@ describe.skipIf(!hasLaneDb)("S4-DASH-HROVERVIEW-FLOOR-1 · sàn Department của
   let none: Viewer;
   /** Hai grant cùng cặp: role employee chuẩn (`read:employee@Own`) + role tuỳ biến `@Department`. */
   let dual: Viewer;
+  /** Manager chuẩn (`@Team`) + role tuỳ biến `read:employee@Department` — đối chứng ALLOW của M3. */
+  let mgrDept: Viewer;
 
   const get = (who: Viewer, url: string) => w.get(who.token, url);
 
@@ -213,6 +216,23 @@ describe.skipIf(!hasLaneDb)("S4-DASH-HROVERVIEW-FLOOR-1 · sàn Department của
     expect(JSON.stringify(res.body), what).not.toContain("headcount");
   };
 
+  /**
+   * Làm ấm hàng chia sẻ `Employee:HR_OVERVIEW:co` NGAY TRONG ca (hr gọi route) rồi chứng bằng SQL nó tươi — ca
+   * dùng nó tự chứa bằng chứng, không phụ thuộc A1 chạy trước.
+   */
+  async function warmSharedRow(): Promise<void> {
+    await ok(hr);
+    const r = await w.direct.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM dashboard_widget_cache
+        WHERE company_id = $1 AND cache_key = $2 AND status = 'Fresh'
+          AND expires_at > now() AND deleted_at IS NULL`,
+      [w.A.companyId, `Employee:${CODE}:co`],
+    );
+    expect(r.rows[0].n, "hàng chia sẻ Employee:HR_OVERVIEW:co phải tươi trước khi dept gọi").toBe(
+      1,
+    );
+  }
+
   const sum = (rec: Record<string, number>): number =>
     Object.values(rec).reduce((a, b) => a + b, 0);
 
@@ -249,6 +269,7 @@ describe.skipIf(!hasLaneDb)("S4-DASH-HROVERVIEW-FLOOR-1 · sàn Department của
     deptNoUnit = await customActor(w.A, "deptnounit", null, [deptGrant]);
     none = await customActor(w.A, "none", u2, []);
     dual = await customActor(w.A, "dual", u1, [deptGrant], "employee");
+    mgrDept = await customActor(w.A, "mgrdept", u1, [deptGrant], "manager");
 
     // U2 dày hơn: ≥ 2 hồ sơ, có người ngoài phòng của `dept`. B: thêm một hồ sơ ở đơn vị mốc.
     await filler(w.A, u2, "u2a");
@@ -302,7 +323,8 @@ describe.skipIf(!hasLaneDb)("S4-DASH-HROVERVIEW-FLOOR-1 · sàn Department của
       expect(Object.keys(data.byOrgUnit)).toEqual(expect.arrayContaining([u1Name, u2Name]));
     });
 
-    it("A3 · ALLOW @Department (U1), SAU A1 cùng khoá mặc định: chỉ đếm U1, không đọc hàng chia sẻ", async () => {
+    it("A3 · ALLOW @Department (U1), hàng chia sẻ co đã tươi: chỉ đếm U1, không đọc hàng chia sẻ", async () => {
+      await warmSharedRow();
       const data = (await ok(dept)).data as Overview;
       const unit1 = await sqlHeadcount(w.A.companyId, u1);
       expect(data.summary.headcount).toBe(unit1);
@@ -312,6 +334,7 @@ describe.skipIf(!hasLaneDb)("S4-DASH-HROVERVIEW-FLOOR-1 · sàn Department của
     });
 
     it("A4 · ALLOW @Department KHÔNG đơn vị: 200 `Empty`, headcount 0 (không bao giờ «cả công ty»)", async () => {
+      await warmSharedRow();
       const body = await ok(deptNoUnit);
       // `Empty` ⇒ server bỏ `data` (null) và gửi chữ rỗng — phép đếm của phạm vi rỗng = 0 hồ sơ.
       expect(body.status).toBe("Empty");
@@ -378,12 +401,18 @@ describe.skipIf(!hasLaneDb)("S4-DASH-HROVERVIEW-FLOOR-1 · sàn Department của
       expect(await codesOf(emp, "/dashboard/me")).not.toContain(CODE);
     });
 
-    it("M2 · employee @Own: /dashboard/widgets (kể cả ?include_data=true) KHÔNG có HR_OVERVIEW", async () => {
+    it("M2 · employee @Own: /dashboard/widgets (kể cả ?include_data=true) KHÔNG có HR_OVERVIEW; @Department CÓ", async () => {
+      expect(await codesOf(dept, "/dashboard/widgets"), "đối chứng dept").toContain(CODE);
+      expect(
+        await codesOf(dept, "/dashboard/widgets?include_data=true"),
+        "đối chứng dept",
+      ).toContain(CODE);
       expect(await codesOf(emp, "/dashboard/widgets")).not.toContain(CODE);
       expect(await codesOf(emp, "/dashboard/widgets?include_data=true")).not.toContain(CODE);
     });
 
-    it("M3 · manager @Team: /dashboard/manager KHÔNG có HR_OVERVIEW dù cấu hình bật tay", async () => {
+    it("M3 · manager @Team: /dashboard/manager KHÔNG có HR_OVERVIEW dù cấu hình bật tay; manager + @Department CÓ", async () => {
+      expect(await codesOf(mgrDept, "/dashboard/manager"), "đối chứng mgrDept").toContain(CODE);
       expect(await codesOf(mgr, "/dashboard/manager")).not.toContain(CODE);
     });
 

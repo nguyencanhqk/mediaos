@@ -7,10 +7,12 @@
  *     mọi consumer khác).
  *   - MỘT assert identity riêng: BE re-export đúng đối tượng của contracts. BE giữ bản cục bộ lệch contracts
  *     ⇒ metadata / data (BE) và FE đọc hai hằng khác nhau ⇒ ca này đỏ.
+ *   - U2b: bản build contracts thiếu hằng ⇒ nạp catalog BE NÉM ngay (lỗi lộ lúc khởi động, không thành 500
+ *     rải rác ở dashboard lúc chạy).
  *
  * Tệp DUY NHẤT import export mới của contracts (plan F5).
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DASH_WIDGET_MIN_DATA_SCOPE as CONTRACT_FLOOR } from "@mediaos/contracts";
 import { DASH_WIDGET_MIN_DATA_SCOPE as BE_FLOOR } from "../../src/dashboard/dashboard-widget-catalog.const";
 
@@ -36,5 +38,29 @@ describe("U2 · DASH_WIDGET_MIN_DATA_SCOPE — contracts là nguồn, BE re-expo
 
   it("BE re-export CÙNG đối tượng của contracts (không phải bản chép)", () => {
     expect(BE_FLOOR).toBe(CONTRACT_FLOOR);
+  });
+});
+
+describe("U2b · bản build contracts THIẾU hằng sàn ⇒ nạp catalog BE ném ngay (không thành 500 lúc chạy)", () => {
+  afterEach(() => {
+    vi.doUnmock("@mediaos/contracts");
+    vi.resetModules();
+  });
+
+  it("đối chứng: contracts đủ ⇒ nạp lại catalog thành công, sàn HR_OVERVIEW có mặt", async () => {
+    vi.resetModules();
+    const mod = await import("../../src/dashboard/dashboard-widget-catalog.const");
+    expect(mod.DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW).toBe("Department");
+  });
+
+  it("export vắng mặt ⇒ ném lỗi nêu tên hằng + chỉ dẫn build contracts", async () => {
+    vi.resetModules();
+    vi.doMock("@mediaos/contracts", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      DASH_WIDGET_MIN_DATA_SCOPE: undefined,
+    }));
+    await expect(import("../../src/dashboard/dashboard-widget-catalog.const")).rejects.toThrow(
+      "@mediaos/contracts thiếu DASH_WIDGET_MIN_DATA_SCOPE — build lại packages/contracts trước apps/api",
+    );
   });
 });

@@ -479,7 +479,22 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
  * `Record<string, DataScope>` để `meetsMinDataScope(code: string)` và registry tra bằng chuỗi.
  */
 export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> =
-  CONTRACT_DASH_WIDGET_MIN_DATA_SCOPE;
+  requireContractFloorMap(CONTRACT_DASH_WIDGET_MIN_DATA_SCOPE);
+
+/**
+ * Hằng sàn đến từ BẢN BUILD của `@mediaos/contracts` lúc chạy. Bản build cũ thiếu export ⇒ binding là
+ * `undefined` ⇒ mọi lượt tra sàn (metadata lẫn đường số liệu) ném TypeError thành 500. Kiểm ở lúc NẠP module
+ * để lỗi lộ ngay khi khởi động kèm chỉ dẫn, thay vì thành 500 rải rác lúc chạy. Trả ĐÚNG đối tượng nhận vào
+ * (U2 ghim identity với contracts).
+ */
+function requireContractFloorMap(map: unknown): Readonly<Record<string, DataScope>> {
+  if (map === null || typeof map !== "object") {
+    throw new Error(
+      "[dashboard] @mediaos/contracts thiếu DASH_WIDGET_MIN_DATA_SCOPE — build lại packages/contracts trước apps/api",
+    );
+  }
+  return map as Readonly<Record<string, DataScope>>;
+}
 
 /**
  * Độ mạnh scope — MIRROR `SCOPE_STRENGTH` của permission engine (permission.decide.ts — dời khỏi permission.service.ts ở
