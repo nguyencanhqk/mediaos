@@ -26,6 +26,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 
 vi.mock("./chat-upload", () => ({ uploadChatAttachment: vi.fn() }));
 
+import { useChatDraftStore } from "./chat-draft.store";
 import { MessageComposer } from "./MessageComposer";
 import { uploadChatAttachment } from "./chat-upload";
 
@@ -63,6 +64,9 @@ const textbox = () => screen.getByRole("textbox") as HTMLTextAreaElement;
 const composer = () => screen.getByTestId("chat-composer");
 
 beforeEach(() => {
+  // S20-CHAT-DRAFT-1 — nháp sống ở store module (theo `roomId`), không chết theo `cleanup()`: không dọn
+  // thì ca trước để lại chữ cho ca sau cùng phòng, và `fireEvent.change` với đúng giá trị cũ KHÔNG bắn `onChange`.
+  useChatDraftStore.getState().resetChatDrafts();
   createdUrls = [];
   revoked = [];
   // jsdom KHÔNG có hai hàm này. Gán mới mỗi ca thay vì `spyOn(...).mockRestore()`: `mockRestore` xoá
