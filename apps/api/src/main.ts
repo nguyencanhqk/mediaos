@@ -11,6 +11,7 @@ import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-enve
 import { JsonConsoleLogger } from "./common/logger/json-console-logger";
 import { grantMemoMiddleware } from "./common/middleware/grant-memo.middleware";
 import { requestIdMiddleware } from "./common/middleware/request-id.middleware";
+import { buildCorsOptions } from "./config/cors-options";
 import { loadEnv } from "./config/env.schema";
 import { SWAGGER_PATH, setupSwagger } from "./config/swagger";
 import { parseTrustProxy } from "./config/trust-proxy";
@@ -40,10 +41,9 @@ async function bootstrap(): Promise<void> {
   app.getHttpAdapter().getInstance().set("trust proxy", parseTrustProxy(env.TRUST_PROXY));
 
   app.setGlobalPrefix(`${env.API_PREFIX}/${env.API_VERSION}`);
-  app.enableCors({
-    origin: env.CORS_ORIGIN.split(",").map((o) => o.trim()),
-    credentials: true,
-  });
+  // S1-FND-CORS-EXPOSE-1: origin/credentials + header FE được đọc (vd `Content-Disposition` của file
+  // tải về) — xem config/cors-options.ts.
+  app.enableCors(buildCorsOptions(env.CORS_ORIGIN));
 
   // S7-CHAT-RT-0: `enableCors` ở trên CHỈ áp cho HTTP — engine.io/Socket.IO không đọc nó. Biên cross-origin
   // của namespace `/ws` (và adapter Valkey cho broadcast đa instance) sống trong ValkeyIoAdapter. PHẢI gọi
