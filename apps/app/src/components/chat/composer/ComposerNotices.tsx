@@ -47,7 +47,10 @@ export function ComposerNotices({
             <p className="font-medium">
               {t("message.replyingTo", { name: replyTo.senderName ?? "" })}
             </p>
-            <p className="line-clamp-1 break-words text-muted-foreground">{replyTo.body ?? ""}</p>
+            {/* Như trích dẫn trong `MessageBubble`: tin đã thu hồi hiện chữ xám, không bao giờ thân cũ. */}
+            <p className="line-clamp-1 break-words text-muted-foreground">
+              {replyTo.recalledAt !== null ? t("message.recalled") : (replyTo.body ?? "")}
+            </p>
           </div>
           <Button
             variant="ghost"
