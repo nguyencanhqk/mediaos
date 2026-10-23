@@ -6,6 +6,7 @@ import { ApiError, goalApi, goalInvalidation, goalKeys, useCan } from "@mediaos/
 import type { GoalDetailResponseDto, TaskCoreResponseDto } from "@mediaos/contracts";
 import { Button, EmptyState } from "@mediaos/ui";
 import { TaskStatusBadge } from "@/routes/tasks/TaskStatusBadge";
+import { TASK_CORE_ENGINE_PAIRS } from "@/routes/tasks/constants";
 import { useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
 import { GOAL_ENGINE_PAIRS, TASK_UPDATE_PAIR_FOR_GOAL_LINK } from "../constants";
 import { formatDateOnly } from "../goal-format";
@@ -46,6 +47,12 @@ export function GoalLinkedTasksTab({
     TASK_UPDATE_PAIR_FOR_GOAL_LINK.resourceType,
   );
   const canEditLinks = canUpdateGoal && canUpdateTask;
+  // Lối mở drawer gác CÙNG cặp drawer/route việc dùng (`read:task`): thiếu cặp này thì drawer chỉ báo
+  // «Không mở được» ⇒ không vẽ nút, tên việc là chữ thường.
+  const canOpenTask = useCan(
+    TASK_CORE_ENGINE_PAIRS.READ.action,
+    TASK_CORE_ENGINE_PAIRS.READ.resourceType,
+  );
   const finalized = Boolean(goal.finalizedAt);
 
   const query = useQuery({
@@ -130,14 +137,18 @@ export function GoalLinkedTasksTab({
         {tasks.map((task: TaskCoreResponseDto) => (
           <tr key={task.id} className="border-t border-border">
             <td className="px-3 py-2 text-sm">
-              <button
-                type="button"
-                className="text-left font-medium text-foreground underline-offset-2 hover:underline"
-                data-testid={`goal-linked-task-open-${task.id}`}
-                onClick={() => openTask(task.id)}
-              >
-                {task.title}
-              </button>
+              {canOpenTask ? (
+                <button
+                  type="button"
+                  className="text-left font-medium text-foreground underline-offset-2 hover:underline"
+                  data-testid={`goal-linked-task-open-${task.id}`}
+                  onClick={() => openTask(task.id)}
+                >
+                  {task.title}
+                </button>
+              ) : (
+                <span className="text-foreground">{task.title}</span>
+              )}
             </td>
             {/* TaskStatusBadge (dùng chung tasks/) — nhãn ĐÃ i18n theo enum, KHÔNG in enum thô. */}
             <td className="px-3 py-2">
