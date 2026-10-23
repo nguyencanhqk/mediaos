@@ -20,12 +20,14 @@ import {
   makeBadgeAdminPage,
   makeEngagement,
   makeReport,
+  signedAvatarUrl,
 } from "./admin-test-doubles";
+import { avatarSrc } from "../feed/lib/feed-format";
 
 const C = SOCIAL_ERROR_CODES;
 
 describe("admin-test-doubles — factory khớp hợp đồng", () => {
-  it("makeReport(): qua `feedReportSchema`, không khoá thừa, avatar KHÁC rỗng (để ca «không <img>» có răng)", () => {
+  it("makeReport(): qua `feedReportSchema`, không khoá thừa, avatar là URL CHƯA KÝ (để ca DENY «không <img>» có răng)", () => {
     const report = makeReport();
     expect(feedReportSchema.safeParse(report).success).toBe(true);
     const parsed = feedReportSchema.parse(report);
@@ -33,8 +35,12 @@ describe("admin-test-doubles — factory khớp hợp đồng", () => {
     expect(parsed).toEqual(report);
     expect(report.status).toBe("open");
     expect(report.targetType).toBe("post");
+    // KHÁC rỗng nhưng `avatarSrc` từ chối ⇒ mặc định là ca DENY; ca ALLOW ghi đè bằng `signedAvatarUrl`.
     expect(report.reporter?.avatarUrl).toMatch(/^https:\/\//);
     expect(report.targetSnapshot?.avatarUrl).toMatch(/^https:\/\//);
+    expect(avatarSrc(report.reporter?.avatarUrl)).toBeUndefined();
+    expect(avatarSrc(report.targetSnapshot?.avatarUrl)).toBeUndefined();
+    expect(avatarSrc(signedAvatarUrl("x"))).toBe(signedAvatarUrl("x"));
     // Bài bị báo cáo và người báo cáo là hai người khác nhau; id bài ≠ id báo cáo.
     expect(report.targetSnapshot?.postId).toBe(report.targetId);
     expect(report.id).not.toBe(report.targetId);

@@ -36,10 +36,18 @@ export const BADGE_ID = "55555555-5555-4555-8555-555555555555";
 const ISO = "2026-10-01T02:03:04.000Z";
 
 /**
+ * S16-SOCIAL-FEAVATAR-1 — URL presign GIẢ đúng hình dạng `avatarSrc` nhận (ca ALLOW của avatar). Chữ ký
+ * dựng lúc chạy từ `ab` lặp lại — không phải bí mật, không phải literal high-entropy (CLAUDE.md §5).
+ */
+export const signedAvatarUrl = (name: string): string =>
+  `https://x.invalid/${name}.png?X-Amz-Signature=${"ab".repeat(32)}`;
+
+/**
  * Báo cáo ĐANG MỞ về một BÀI, đọc ở phạm vi Company (thấy người báo cáo).
  *
- * 🔴 `avatarUrl` mang URL KHÁC rỗng có chủ ý: bề mặt FE-3 không được vẽ `<img>` từ trường này (plan D8),
- * và ca «không có `<img>`» chỉ có răng khi fixture THẬT SỰ mang URL (plan B7).
+ * 🔴 `avatarUrl` mang URL http(s) CHƯA KÝ có chủ ý — đúng thứ API cũ trả (cột thô): bề mặt FE-3 vẽ ảnh
+ * qua `avatarSrc` nên giá trị này phải ra chữ cái đầu, và ca DENY «không `<img>`» chỉ có răng khi fixture
+ * THẬT SỰ mang URL (plan B7). Ca ALLOW ghi đè bằng `signedAvatarUrl(…)`.
  *
  * Báo cáo BÌNH LUẬN: ghi đè `targetType`/`targetId`, GIỮ `targetSnapshot.postId` — snapshot mang bài
  * CHA chứ không phải bình luận (plan M2b). Bị che theo scope: `reporter: null`.
@@ -84,8 +92,8 @@ export const HIDDEN_POST_ID = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
 /**
  * Một bài ĐANG ẨN như 001 `status=hidden` trả cho người có `manage:feed-post` (DTO mang `status`).
  *
- * 🔴 `author.avatarUrl` KHÁC rỗng có chủ ý — cùng lý do với `makeReport` (plan D8 · B7): dòng «Bài đang
- * ẩn» không được vẽ `<img>` từ trường này.
+ * 🔴 `author.avatarUrl` là URL CHƯA KÝ có chủ ý — cùng lý do với `makeReport` (plan B7): dòng «Bài đang
+ * ẩn» vẽ ảnh qua `avatarSrc`, giá trị thô này phải ra chữ cái đầu (ca DENY có răng).
  */
 export const makeHiddenPost = (over: Partial<FeedPostDto> = {}): FeedPostDto =>
   makePost({

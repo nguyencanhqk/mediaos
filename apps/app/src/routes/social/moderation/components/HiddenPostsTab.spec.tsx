@@ -27,6 +27,7 @@ import {
   HIDDEN_POST_ID,
   makeHiddenPost,
   makeHiddenPostPage,
+  signedAvatarUrl,
 } from "../../admin/admin-test-doubles";
 import { HiddenPostsTab } from "./HiddenPostsTab";
 
@@ -161,7 +162,7 @@ afterEach(() => {
 });
 
 describe("Khung", () => {
-  it("fixture trang 001 đúng hợp đồng; bài mang `status: hidden` và avatar KHÁC rỗng", () => {
+  it("fixture trang 001 đúng hợp đồng; bài mang `status: hidden` và avatar URL CHƯA KÝ (ca DENY)", () => {
     const page = makeHiddenPostPage([first(), second()], "c1");
     expect(feedPostPageSchema.safeParse(page).success).toBe(true);
     expect(first().status).toBe("hidden");
@@ -228,8 +229,40 @@ describe("Dòng bài đang ẩn", () => {
       `/feed/posts/${HIDDEN_POST_ID}`,
     );
     expect(scope.getByRole("button", { name: UNHIDE })).toBeEnabled();
-    // Fixture mang `avatarUrl` khác rỗng — vẫn không có ảnh (plan D8).
+    // DENY: fixture mang `avatarUrl` http(s) CHƯA KÝ (hình dạng API cũ) ⇒ chữ cái đầu, không ảnh.
     expect(document.querySelector("img")).toBeNull();
+  });
+
+  // S16-SOCIAL-FEAVATAR-1 — avatar qua `avatarSrc`: chỉ URL ĐÃ KÝ thành `<img>`; fileId thô ⇒ chữ cái đầu.
+  it("ALLOW: tác giả mang URL ký ⇒ `<img>` đúng `src`; DENY: fileId THÔ ⇒ chữ cái đầu", async () => {
+    const signed = makeHiddenPost({
+      author: {
+        employeeId: AUTHOR_EMPLOYEE_ID,
+        fullName: "Trần Thị Bình",
+        avatarUrl: signedAvatarUrl("author"),
+      },
+    });
+    const raw = makeHiddenPost({
+      id: SECOND_POST_ID,
+      // fileId THÔ trong cột `avatar_url` — thứ API cũ trả nguyên.
+      author: {
+        employeeId: null,
+        fullName: "Lê Văn Cường",
+        avatarUrl: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      },
+    });
+    listFeed.mockImplementation(() => Promise.resolve(makeHiddenPostPage([signed, raw])));
+    renderTab();
+    const el = await list();
+
+    expect(within(el).getByRole("img", { name: "Trần Thị Bình" })).toHaveAttribute(
+      "src",
+      signedAvatarUrl("author"),
+    );
+    // Neo CÓ MẶT: dòng thứ hai thật sự vẽ — không thì vế «không `<img>`» xanh-rỗng.
+    expect(within(el).getByText("Lê Văn Cường")).toBeInTheDocument();
+    expect(within(el).queryByRole("img", { name: "Lê Văn Cường" })).toBeNull();
+    expect(el.querySelectorAll("img")).toHaveLength(1);
   });
 
   it("bài không có chữ (`body: null`) ⇒ câu thay thế, vẫn có «Hiện lại»", async () => {
