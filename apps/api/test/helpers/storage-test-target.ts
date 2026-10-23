@@ -81,12 +81,22 @@ export function resolveStorageTestTarget(env: StorageTestEnv): StorageTestTarget
  *
  * QUY TẮC DƯƠNG: hồ sơ `live` CHỈ khi cả ba cùng đúng — (1) `S3_BUCKET` BẰNG ĐÚNG tên cho phép của môi trường
  * (cùng chuẩn với `resolveStorageTestTarget`) · (2) host của `S3_ENDPOINT` (qua `new URL`, giao thức http/https,
- * không userinfo) ∈ {localhost, 127.0.0.1} · (3) có đủ hai khoá. Mọi trường hợp khác ⇒ `offline`: endpoint
+ * không userinfo) ∈ {localhost, 127.0.0.1} VÀ cổng ∈ `STORAGE_TEST_ALLOWED_PORTS` (S16-SOCIAL-STORAGEPORTPIN-1) ·
+ * (3) có đủ hai khoá. Mọi trường hợp khác ⇒ `offline`: endpoint
  * loopback, khoá GIẢ, bucket chặn ⇒ lời gọi lỡ tay bị từ chối xác thực, và tripwire D-10
  * (`test/setup/storage-call-tripwire.ts`) chặn trước khi có byte nào rời tiến trình.
  *
  * ⛔ ĐỪNG thêm nhánh «chép bucket của shell cho tiện»: đó chính là đường bucket PROD / token R2 PROD lọt vào test.
  */
+
+/**
+ * Cổng DUY NHẤT hồ sơ `live` nhận trên endpoint loopback — khai ở ĐÂY, một chỗ (S16-SOCIAL-STORAGEPORTPIN-1).
+ * Đo 23/10/2026: MinIO test cục bộ (`docker-compose.yml` `MINIO_PORT` mặc định · `harness/check.sh`
+ * `STORAGE_LIVE_ENDPOINT`) và CI (`.github/workflows/api.yml` `S3_ENDPOINT`) đều `9000`; `9001` là console MinIO.
+ * So nguyên văn với `URL.port` — URL bỏ cổng mặc định (80/443, kể cả ghi tường minh) thành chuỗi rỗng ⇒ không khớp.
+ * Unit-spec đối chiếu endpoint của check.sh + job CI với danh sách này: đổi cổng ở đó ⇒ đổi ở đây cùng lượt.
+ */
+export const STORAGE_TEST_ALLOWED_PORTS: readonly string[] = Object.freeze(["9000"]);
 
 /** Bucket CHẶN của hồ sơ `offline` — không bao giờ được tạo; mọi ca storage thấy tên này ⇒ cổng đóng. */
 export const STORAGE_TEST_SENTINEL_BUCKET = "mediaos-storage-off";
@@ -123,7 +133,7 @@ const DEFAULT_FORCE_PATH_STYLE = "true";
 const DEFAULT_PRESIGN_TTL_SEC = "300";
 const MAX_PRESIGN_TTL_SEC = 3600;
 
-function isLoopbackEndpoint(raw: string | undefined): raw is string {
+function isAllowedLoopbackEndpoint(raw: string | undefined): raw is string {
   if (!raw) return false;
   let url: URL;
   try {
@@ -133,7 +143,7 @@ function isLoopbackEndpoint(raw: string | undefined): raw is string {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
   if (url.username !== "" || url.password !== "") return false;
-  return LOOPBACK_HOSTS.has(url.hostname);
+  return LOOPBACK_HOSTS.has(url.hostname) && STORAGE_TEST_ALLOWED_PORTS.includes(url.port);
 }
 
 function nonEmpty(value: string | undefined): value is string {
@@ -162,7 +172,7 @@ export function pinTestStorageEnv(env: StorageTestEnv): PinnedStorageEnv {
   const secretKey = env.S3_SECRET_KEY;
   const live =
     env.S3_BUCKET === allowedBucket &&
-    isLoopbackEndpoint(endpoint) &&
+    isAllowedLoopbackEndpoint(endpoint) &&
     nonEmpty(accessKey) &&
     nonEmpty(secretKey);
 

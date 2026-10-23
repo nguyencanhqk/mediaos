@@ -88,6 +88,7 @@ done
 
 # Bucket DUY NHẤT hồ sơ live cục bộ được trỏ tới — PHẢI trùng STORAGE_TEST_BUCKET_LOCAL của storage-test-target.ts.
 STORAGE_LIVE_BUCKET="mediaos-fdisp-test"
+# Cổng của endpoint PHẢI thuộc STORAGE_TEST_ALLOWED_PORTS của storage-test-target.ts (unit-spec đối chiếu dòng dưới).
 STORAGE_LIVE_ENDPOINT="http://localhost:9000"
 STORAGE_PROFILE_NOTE=""
 
