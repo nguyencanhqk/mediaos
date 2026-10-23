@@ -31,6 +31,8 @@ type RequestUser = { id: string; companyId: string };
 const AVATAR_LINK_MODULE = "ME";
 const AVATAR_LINK_ENTITY = "avatar";
 const AVATAR_LINK_TYPE = "Avatar";
+/** S19-SEC-FILELINKPATHS-1 — HR không xem được ảnh theo quyết định chung của lõi gắn (mã route đang dùng). */
+const FILE_NOT_LINKABLE = "AUTH-ERR-FORBIDDEN: file cannot be linked by the caller";
 
 /** HR employee writes (bao gồm avatar) là thao tác company-wide — mirror HrWriteService.WRITE_SCOPES. */
 const WRITE_SCOPES: ReadonlySet<string> = new Set(["Company", "System"]);
@@ -159,8 +161,30 @@ export class HrEmployeeAvatarService {
     // + "atomic" sai). Đưa toàn bộ file-I/O ra ngoài; atomic tx chỉ còn pure-DB.
     await this.confirmAndValidateOwnImageFile(hrUser, fileId);
 
-    // Atomic pure-DB (rollback nguyên khối): lock → unlink stale → insert link → set avatar_url → audit.
+    // S19-SEC-FILELINKPATHS-1 D-6: HR phải XEM được ảnh theo cùng quyết định với lõi gắn (tệp đã từng gắn mà 0
+    // liên kết sống, hay đang là ảnh sống của NV khác ⇒ 403) — TRƯỚC khi gỡ liên kết cũ: bị từ chối thì ảnh
+    // hiện hành của NV giữ nguyên.
+    const decided = await this.files.preflightLinkerView(hrUser, fileId, {
+      moduleCode: AVATAR_LINK_MODULE,
+      entityType: AVATAR_LINK_ENTITY,
+      entityId: employeeId,
+    });
+    if (decided.kind !== "allow") {
+      throw new ForbiddenException(FILE_NOT_LINKABLE);
+    }
+
+    // Atomic pure-DB (rollback nguyên khối): so lại quyết định (khoá tệp TRƯỚC NV) → lock NV → unlink stale →
+    // insert link → set avatar_url → audit.
     return this.db.withTenant(hrUser.companyId, async (tx) => {
+      const checked = await this.files.recheckLinkerViewTx(
+        hrUser.companyId,
+        fileId,
+        decided.ctx,
+        tx,
+      );
+      if (checked.kind !== "ok") {
+        throw new ForbiddenException(FILE_NOT_LINKABLE);
+      }
       const employee = await this.hrWriteRepo.findForAvatarUpdateTx(
         tx,
         hrUser.companyId,

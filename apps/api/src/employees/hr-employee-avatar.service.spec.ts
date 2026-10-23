@@ -39,6 +39,8 @@ interface Deps {
   insertTx: Mock;
   accessLogRecord: Mock;
   auditRecord: Mock;
+  preflightLinkerView: Mock;
+  recheckLinkerViewTx: Mock;
 }
 
 function makeService(over: Partial<Deps> = {}): { svc: HrEmployeeAvatarService; deps: Deps } {
@@ -69,12 +71,25 @@ function makeService(over: Partial<Deps> = {}): { svc: HrEmployeeAvatarService; 
     insertTx: vi.fn(async (data: Record<string, unknown>) => ({ id: "link-new", ...data })),
     accessLogRecord: vi.fn(async () => undefined),
     auditRecord: vi.fn(async () => undefined),
+    // S19-SEC-FILELINKPATHS-1 — quyết định xem của người gắn (hàm chung của lõi); mặc định cho phép.
+    preflightLinkerView: vi.fn(
+      async (): Promise<unknown> => ({
+        kind: "allow",
+        ctx: { live: [], everLinked: false },
+      }),
+    ),
+    recheckLinkerViewTx: vi.fn(async (): Promise<unknown> => ({ kind: "ok" })),
     ...over,
   };
 
   const db = { withTenant: vi.fn((_c: string, fn: (tx: unknown) => unknown) => fn(FAKE_TX)) };
   const dataScope = { resolveAndAssert: deps.resolveAndAssert };
-  const files = { upload: deps.upload, confirmUpload: deps.confirmUpload };
+  const files = {
+    upload: deps.upload,
+    confirmUpload: deps.confirmUpload,
+    preflightLinkerView: deps.preflightLinkerView,
+    recheckLinkerViewTx: deps.recheckLinkerViewTx,
+  };
   const fileRepo = { findByIdTx: deps.findByIdTx };
   const linkRepo = {
     listActiveByEntityTx: deps.listActiveByEntityTx,
@@ -384,5 +399,36 @@ describe("removeEmployeeAvatar", () => {
     expect(entry.objectType).toBe("employee");
     expect(entry.before).toEqual({ avatarUrl: OLD_FILE });
     expect(entry.after).toEqual({ avatarUrl: null });
+  });
+});
+
+describe("setEmployeeAvatar — quyết định xem của người gắn (S19-SEC-FILELINKPATHS-1 D-6)", () => {
+  it.each([
+    ["forbidden", { kind: "forbidden", reason: "deny-links-revoked", action: "View" }],
+    ["unlinkable", { kind: "unlinkable", row: {} }],
+    ["missing", { kind: "missing" }],
+  ])(
+    "preflight %s ⇒ 403 AUTH-ERR-FORBIDDEN, không mở tx ghi, không gỡ/gắn",
+    async (_k, outcome) => {
+      const { svc, deps } = makeService({ preflightLinkerView: vi.fn(async () => outcome) });
+      await expect(svc.setEmployeeAvatar(HR, EMP_ID, NEW_FILE)).rejects.toThrow(
+        /AUTH-ERR-FORBIDDEN/,
+      );
+      expect(deps.recheckLinkerViewTx).not.toHaveBeenCalled();
+      expect(deps.softDeleteTx).not.toHaveBeenCalled();
+      expect(deps.insertTx).not.toHaveBeenCalled();
+    },
+  );
+
+  it("so lại trong tx khác ok ⇒ 403, không khoá NV, không gỡ/gắn", async () => {
+    const { svc, deps } = makeService({
+      recheckLinkerViewTx: vi.fn(async () => ({ kind: "unlinkable", row: {} })),
+    });
+    const lockCallsBefore = deps.findForAvatarUpdateTx.mock.calls.length;
+    await expect(svc.setEmployeeAvatar(HR, EMP_ID, NEW_FILE)).rejects.toThrow(/AUTH-ERR-FORBIDDEN/);
+    // Lần gọi khoá NV duy nhất là kiểm tồn tại 404 sớm (tx ngắn riêng) — không có lần thứ hai trong tx ghi.
+    expect(deps.findForAvatarUpdateTx.mock.calls.length - lockCallsBefore).toBe(1);
+    expect(deps.softDeleteTx).not.toHaveBeenCalled();
+    expect(deps.insertTx).not.toHaveBeenCalled();
   });
 });

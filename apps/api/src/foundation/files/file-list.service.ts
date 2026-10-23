@@ -7,6 +7,7 @@ import { toFileListItemDto } from "./file-metadata.mapper";
 import { FilePolicyService } from "./file-policy.service";
 import { FilePolicyAction } from "./file-policy.types";
 import { decideFileAccess } from "./file-access-decision";
+import { groupLinksByFile, type FileLinkContext } from "./file-link-context";
 import type { FileDecisionActor } from "./file-view-decision";
 import { FileRepository } from "./file.repository";
 
@@ -27,11 +28,6 @@ interface MaskedEntry {
   fileId: string;
   reason: LoggedReason;
   links: readonly FileLink[];
-}
-
-interface LinkContext {
-  live: FileLink[];
-  everLinked: boolean;
 }
 
 /**
@@ -88,7 +84,7 @@ export class FileListService {
   private async decideRows(
     user: FileDecisionActor,
     rows: readonly FileRecord[],
-    byFile: ReadonlyMap<string, LinkContext>,
+    byFile: ReadonlyMap<string, FileLinkContext>,
   ): Promise<FileListItemDto[]> {
     const data: FileListItemDto[] = [];
     const masked: MaskedEntry[] = [];
@@ -123,17 +119,4 @@ export class FileListService {
         `links=[${[...pairs].join(", ")}]; sampleFileIds=[${sample.join(", ")}]`,
     );
   }
-}
-
-/** Tách một lô link (kể cả đã gỡ) thành link SỐNG + cờ đã-từng-link cho từng tệp. */
-function groupLinksByFile(links: readonly FileLink[]): Map<string, LinkContext> {
-  const byFile = new Map<string, LinkContext>();
-  for (const link of links) {
-    const ctx = byFile.get(link.fileId) ?? { live: [], everLinked: false };
-    byFile.set(link.fileId, {
-      live: link.deletedAt === null ? [...ctx.live, link] : ctx.live,
-      everLinked: true,
-    });
-  }
-  return byFile;
 }

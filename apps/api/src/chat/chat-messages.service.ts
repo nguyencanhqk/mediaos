@@ -10,7 +10,9 @@ import type {
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { OutboxService } from "../events/outbox.service";
+import type { FileAccessContext } from "../foundation/files/file-access-decision";
 import { FileAccessLogService } from "../foundation/files/file-access-log.service";
+import { FileService } from "../foundation/files/files.service";
 import { ChatAccessService, type ChatRoomAccess } from "./chat-access.service";
 import { ChatAttachmentPresignService } from "./chat-attachments.service";
 import { ChatAttachmentsRepository } from "./chat-attachments.repository";
@@ -57,6 +59,9 @@ export class ChatMessagesService {
     private readonly outbox: OutboxService,
     // ── S7-CHAT-RT-1 (additive) ── emit SAU commit; KHÔNG gọi bên trong `withTenant`.
     private readonly realtime: RealtimeEmitterService,
+    // ── S19-SEC-FILELINKPATHS-1 (additive) ── quyết định «người gửi xem được tệp» dùng chung với lõi gắn.
+    // `FilesModule` đã được `ChatModule` import (export `FileService`) ⇒ không đổi `chat.module.ts`.
+    private readonly files: FileService,
   ) {}
 
   /** CHAT-API-009 — một trang tin theo con trỏ. Cấm offset (API-13 §6.4). */
@@ -108,6 +113,7 @@ export class ChatMessagesService {
     roomId: string,
     dto: SendMessageRequest,
   ): Promise<ChatMessageDto> {
+    const decided = await this.preflightAttachments(actor, roomId, dto);
     const sent = await this.db
       .withTenant(actor.companyId, async (tx): Promise<{ messageId: string; isNew: boolean }> => {
         const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
@@ -147,7 +153,7 @@ export class ChatMessagesService {
         // S7-CHAT-BE-3 — validate tệp TRƯỚC khi cấp số: `fileIds` sai thì tin không được sinh ra, và
         // `last_message_seq` không được đụng tới. (Rollback cũng trả lại số, nhưng dựa vào rollback để
         // giữ đúng bất biến là dựa vào may — cùng lập luận với nhánh idempotent ở trên.)
-        const fileIds = await this.resolveAttachments(tx, actor, dto.fileIds);
+        const fileIds = await this.resolveAttachments(tx, actor, dto.fileIds, decided);
 
         const now = new Date();
         const roomSeq = await this.repo.allocateRoomSeq(tx, actor.companyId, roomId, now);
@@ -402,6 +408,51 @@ export class ChatMessagesService {
   // ─── S7-CHAT-BE-3 — đính kèm (SPEC-15 §13.5) ─────────────────────────────────
 
   /**
+   * S19-SEC-FILELINKPATHS-1 D-4 — quyết định «người gửi xem được tệp» cho từng tệp đính kèm, NGOÀI tx gửi
+   * (resolver của module tự mở `withTenant`; lồng vào tx đang mở sẽ treo trên PgBouncer transaction-mode).
+   * Cùng hàm với biên gắn lõi và `GET /foundation/files/:id` (`FileService.preflightLinkerView`).
+   *
+   * Tx ngắn đứng TRƯỚC để giữ thứ tự lỗi cũ: ngoài phòng 404 · phòng lưu trữ 409 trước mọi lỗi tệp. Tin cùng
+   * `clientMessageId` đã có ⇒ không quyết định gì: tx gửi trả lại tin cũ ở nhánh idempotent (kể cả tin đã thu
+   * hồi), không gắn thêm liên kết nào.
+   *
+   * Trả ảnh chụp liên kết đã dùng của từng tệp — `resolveAttachments` so lại trong tx gửi. Một tệp không qua
+   * ⇒ 403 CHAT-ERR-015 cho cả tin (một thông điệp, không oracle).
+   */
+  private async preflightAttachments(
+    actor: ChatActor,
+    roomId: string,
+    dto: SendMessageRequest,
+  ): Promise<ReadonlyMap<string, FileAccessContext>> {
+    const decided = new Map<string, FileAccessContext>();
+    const unique = [...new Set(dto.fileIds ?? [])];
+    if (unique.length === 0) return decided;
+
+    const replay = await this.db.withTenant(actor.companyId, async (tx) => {
+      const acc = await this.access.assertMember(tx, actor.companyId, roomId, actor.id);
+      if (acc.room.isArchived) throw new ConflictException(CHAT_ERR.SEND_ARCHIVED);
+      return this.repo.findByClientMessageId(
+        tx,
+        actor.companyId,
+        roomId,
+        actor.id,
+        dto.clientMessageId,
+      );
+    });
+    if (replay) return decided;
+
+    for (const fileId of unique) {
+      const outcome = await this.files.preflightLinkerView(actor, fileId, {
+        moduleCode: CHAT_MODULE_CODE,
+        entityType: CHAT_MESSAGE_ENTITY_TYPE,
+      });
+      if (outcome.kind !== "allow") throw new ForbiddenException(CHAT_ERR.ATTACHMENT_INVALID);
+      decided.set(fileId, outcome.ctx);
+    }
+    return decided;
+  }
+
+  /**
    * `fileIds` đã khử trùng + đã kiểm ĐỦ BỐN VẾ, hoặc ném CHAT-ERR-015 (403).
    *
    * Bốn vế: tệp thuộc tenant (RLS lọc còn 0 hàng nếu không) · `owner_user_id = người gửi` · đã
@@ -419,6 +470,7 @@ export class ChatMessagesService {
     tx: TenantTx,
     actor: ChatActor,
     fileIds: string[] | undefined,
+    decided: ReadonlyMap<string, FileAccessContext>,
   ): Promise<string[]> {
     const unique = [...new Set(fileIds ?? [])];
     if (unique.length === 0) return [];
@@ -429,6 +481,16 @@ export class ChatMessagesService {
     // người dùng tin là đã gửi — tệ hơn hẳn một lỗi rõ ràng.
     if (usable.size !== unique.length) {
       throw new ForbiddenException(CHAT_ERR.ATTACHMENT_INVALID);
+    }
+    // S19-SEC-FILELINKPATHS-1 D-2/D-3 — so lại quyết định của `preflightAttachments` trong tx gửi: khoá hàng
+    // tệp theo thứ tự id đã sắp (một trật tự toàn cục tệp → phòng, trước `allocateRoomSeq`), lệch ảnh chụp
+    // ⇒ 409. Tệp không có quyết định (không đi qua preflight) ⇒ từ chối — fail-closed. Mảng trả về giữ thứ tự
+    // client gửi.
+    for (const fileId of [...unique].sort()) {
+      const ctx = decided.get(fileId);
+      if (!ctx) throw new ForbiddenException(CHAT_ERR.ATTACHMENT_INVALID);
+      const checked = await this.files.recheckLinkerViewTx(actor.companyId, fileId, ctx, tx);
+      if (checked.kind !== "ok") throw new ForbiddenException(CHAT_ERR.ATTACHMENT_INVALID);
     }
     return unique;
   }
@@ -441,8 +503,9 @@ export class ChatMessagesService {
    * lệ `HrEmployeeAvatarService` — và `FilesModule` export `FileLinkRepository`/`FileAccessLogService`
    * chính vì trường hợp này (xem jsdoc `files.module.ts`).
    *
-   * Đổi lại, hai thứ `FileService.link` làm hộ phải tự làm ở đây: quyền (đã kiểm ở
-   * `resolveAttachments`, cùng luật với `ChatMessageFileResolver.canLinkFile`) và access-log.
+   * Đổi lại, hai thứ `FileService.link` làm hộ phải tự làm ở đây: quyền (người gửi xem được tệp — cùng hàm
+   * với lõi qua `preflightAttachments` + so lại ở `resolveAttachments`; cộng vế chủ tệp/trạng thái của CHAT)
+   * và access-log.
    * KHÔNG ghi `audit_logs`: `S7-CHAT-BE-2` đã chốt gửi tin không sinh dòng audit nào — mỗi tin một dòng
    * sẽ nhấn chìm bảng append-only dùng chung. `file_access_logs` là nơi đúng cho dấu vết tệp.
    */

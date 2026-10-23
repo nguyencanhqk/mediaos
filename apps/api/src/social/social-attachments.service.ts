@@ -15,6 +15,9 @@ import {
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { fileLinks, files } from "../db/schema/files";
+import { isOwnerOfUnlinkedFile } from "../foundation/files/file-access-decision";
+import { groupLinksByFile, UNLINKED_CONTEXT } from "../foundation/files/file-link-context";
+import { FileLinkRepository } from "../foundation/files/file-link.repository";
 import { FilePolicyService } from "../foundation/files/file-policy.service";
 import { FilePolicyAction } from "../foundation/files/file-policy.types";
 import { SecurityAlertService } from "../auth/security-alert.service";
@@ -144,6 +147,8 @@ export class SocialAttachmentsService {
     @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
     // S16-SOCIAL-ATTDEBT-1 (C-5) — từ `SecurityAlertModule` (module LÁ), KHÔNG từ `AuthModule`.
     private readonly securityAlerts: SecurityAlertService,
+    // S19-SEC-FILELINKPATHS-1 D-8 — `FilesModule` (đã import) export `FileLinkRepository`.
+    private readonly linkRepo: FileLinkRepository,
   ) {}
 
   /**
@@ -316,14 +321,16 @@ export class SocialAttachmentsService {
         throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_LIMIT));
     }
 
-    // vế 5 — tệp CHƯA TỪNG có link nào (kể cả link đã gỡ). `deleted_at` KHÔNG lọc ở đây có chủ đích:
-    // câu hỏi là "đã từng", không phải "đang".
-    const everLinked = await tx
-      .select({ fileId: fileLinks.fileId })
-      .from(fileLinks)
-      .where(and(eq(fileLinks.companyId, companyId), inArray(fileLinks.fileId, unique)));
-    if (everLinked.length > 0) {
-      throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_INVALID));
+    // vế 5 — tệp CHƯA TỪNG có link nào (kể cả link đã gỡ) — S19-SEC-FILELINKPATHS-1 D-8: qua vế chủ tệp của
+    // quyết định chung FOUNDATION (`isOwnerOfUnlinkedFile`), không câu SQL riêng. Lô liên kết KHÔNG lọc
+    // `deleted_at` (câu hỏi là "đã từng", không phải "đang"). CỐ Ý không dùng `decideFileAccess`: vế AND trên
+    // liên kết sống sẽ NỚI cho tệp đang gắn chỗ khác, và hỏi resolver trong tx là `withTenant` lồng nhau.
+    const byFile = groupLinksByFile(await this.linkRepo.listAllByFileIdsTx(companyId, unique, tx));
+    const actor = { id: userId, companyId };
+    for (const f of rows) {
+      if (!isOwnerOfUnlinkedFile(actor, f, byFile.get(f.id) ?? UNLINKED_CONTEXT)) {
+        throw new UnprocessableEntityException(socialError(SOCIAL_ERR.ATTACHMENT_INVALID));
+      }
     }
 
     // Giới hạn SPEC-16 §16 theo LOẠI.

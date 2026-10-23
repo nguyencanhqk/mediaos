@@ -263,6 +263,8 @@ describe("emit SAU COMMIT — ChatMessagesService.markRead", () => {
       {} as never,
       {} as never,
       realtime as unknown as RealtimeEmitterService,
+      // S19-SEC-FILELINKPATHS-1 — `FileService` (quyết định xem tệp đính kèm); markRead không chạm tới.
+      {} as never,
     );
     return { svc, realtime };
   }

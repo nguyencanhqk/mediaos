@@ -11,10 +11,11 @@
  *      sẽ IM LẶNG CHO QUA ở ca này (plan F-2).
  */
 
-import { ForbiddenException, Logger } from "@nestjs/common";
+import { ForbiddenException, Logger, UnprocessableEntityException } from "@nestjs/common";
 import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { TenantTx } from "../db/db.service";
+import { FileLinkRepository } from "../foundation/files/file-link.repository";
 import {
   ATTACH_GATE_ENFORCED_BY_TIER1,
   SocialAttachGateDeniedException,
@@ -67,6 +68,7 @@ function makeService(alerts?: {
     null as never,
     null as never,
     (alerts ?? null) as never,
+    new FileLinkRepository(),
   );
 }
 
@@ -371,6 +373,7 @@ describe("S16-SOCIAL-ATTMETAMASK-1 — signOne qua decorateMany (gate FULL)", ()
       policy as never,
       storage as never,
       null as never,
+      new FileLinkRepository(),
     );
     return { svc, storage };
   }
@@ -431,5 +434,58 @@ describe("S16-SOCIAL-ATTMETAMASK-1 — signOne qua decorateMany (gate FULL)", ()
     expect((await svc.decorateMany(VIEWER, "post", [TARGET])).get(TARGET)).toEqual([
       { ...MASKED, fileName: "bao-cao-quy.png", sizeBytes: 4096, url: "https://signed.example/x" },
     ]);
+  });
+});
+
+/**
+ * S19-SEC-FILELINKPATHS-1 D-8 — vế «chưa từng có liên kết» của `assertLinkableFilesTx` qua hàm thuần chung
+ * của FOUNDATION, KHÔNG đổi hành vi: chỉ vế chủ tệp chưa từng gắn mới qua. Tệp của chính người gọi đang có
+ * liên kết SỐNG (kể cả liên kết người gọi xem được) vẫn 422 — một bản «AND trên liên kết sống» sẽ nới lỏng.
+ */
+describe("SocialAttachmentsService.assertLinkableFilesTx — vế chủ tệp chưa từng gắn (S19-SEC-FILELINKPATHS-1)", () => {
+  const ownRow = {
+    id: FILE_A,
+    originalName: "anh.png",
+    mimeType: "image/png",
+    fileSizeBytes: 1024,
+    storagePath: "x",
+    uploadStatus: "Uploaded",
+    scanStatus: "Clean",
+    ownerUserId: USER,
+  };
+  const link = (deletedAt: Date | null) => ({
+    id: "l1",
+    companyId: COMPANY,
+    fileId: FILE_A,
+    moduleCode: "SOCIAL",
+    entityType: "feed_post",
+    entityId: TARGET,
+    deletedAt,
+  });
+
+  /** `tx` giả: lần `select` đầu trả hàng tệp, lần sau trả hàng liên kết. */
+  function txWith(links: readonly unknown[]): TenantTx {
+    const results: unknown[][] = [[ownRow], [...links]];
+    return {
+      select: () => ({ from: () => ({ where: async () => results.shift() ?? [] }) }),
+    } as unknown as TenantTx;
+  }
+
+  it.each([
+    ["liên kết sống", [link(null)]],
+    ["liên kết đã gỡ", [link(new Date("2026-10-23T00:00:00Z"))]],
+  ] as const)("tệp của chính người gọi có %s ⇒ 422 ATTACHMENT_INVALID", async (_n, links) => {
+    const err = await makeService()
+      .assertLinkableFilesTx(txWith(links), COMPANY, USER, [FILE_A])
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnprocessableEntityException);
+    expect(JSON.stringify((err as UnprocessableEntityException).getResponse())).toContain(
+      SOCIAL_ERROR_CODES.ATTACHMENT_INVALID,
+    );
+  });
+
+  it("neo ALLOW: tệp của chính người gọi, chưa từng gắn ⇒ trả hàng", async () => {
+    const rows = await makeService().assertLinkableFilesTx(txWith([]), COMPANY, USER, [FILE_A]);
+    expect(rows.map((r) => r.id)).toEqual([FILE_A]);
   });
 });
