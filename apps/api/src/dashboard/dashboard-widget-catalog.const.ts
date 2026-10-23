@@ -1,4 +1,7 @@
-import type { DataScope } from "@mediaos/contracts";
+import {
+  DASH_WIDGET_MIN_DATA_SCOPE as CONTRACT_DASH_WIDGET_MIN_DATA_SCOPE,
+  type DataScope,
+} from "@mediaos/contracts";
 
 /**
  * S4-DASH-SEED-1 — registry TĨNH cho catalog widget DASH + quyền DASH + default config.
@@ -368,7 +371,9 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
   PENDING_LEAVE: { action: "view", resourceType: "leave" },
   // Tiến độ PROJECT, không phải task ⇒ ('read','project') — 0005_permissions.sql:223.
   PROJECT_PROGRESS: { action: "read", resourceType: "project" },
-  // ('read','employee') — 0019_g5_permissions_seed.sql.
+  // ('read','employee') — 0019_g5_permissions_seed.sql. CẢ 4 vai chuẩn đều giữ cặp này (employee @Own ·
+  // manager @Team · hr/company-admin @Company) ⇒ cặp CHƯA đủ một mình: xem DASH_WIDGET_MIN_DATA_SCOPE.HR_OVERVIEW
+  // (sàn 'Department', S4-DASH-HROVERVIEW-FLOOR-1).
   HR_OVERVIEW: { action: "read", resourceType: "employee" },
   // ─── S4-DASH-CATALOG-2 (APPEND-only) — cặp gate 9 widget đợt 2 (ĐÃ VERIFY grep migration runtime) ───
   // Mọi cặp ĐÃ TỒN TẠI + ĐÃ GRANT trước WO này; migration 0493 KHÔNG đụng permissions/role_permissions.
@@ -462,49 +467,19 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
  * `asset-guards-pairs-in-two-layers`: đổi một tầng mà quên tầng kia ⇒ deny-path xanh rỗng):
  *   1. `DashboardWidgetRegistryService.filterByGatePair` — loại khỏi METADATA (/dashboard/me) ⇒ FE không
  *      mount shell, KHÔNG gọi API (đúng chữ "không gọi API" của §482);
- *   2. `DashboardWidgetHandlersService.gateMinScope` — 403 fail-closed ở ĐƯỜNG DATA (/dashboard/widgets/
- *      :slug), kể cả khi ai đó gọi thẳng slug hoặc widget được bật tay qua dashboard_widget_configs.
+ *   2. `gateAndResolve` của handler widget khai sàn (vd `gateHrOverview`, `gateWithFloor` của SOCIAL) — 403
+ *      fail-closed ở ĐƯỜNG DATA (/dashboard/widgets/:slug), kể cả khi ai đó gọi thẳng slug, widget được bật
+ *      tay qua dashboard_widget_configs, hoặc đã có hàng cache tươi (gate chạy TRƯỚC đọc cache).
  *
  * Widget VẮNG MẶT trong map ⇒ KHÔNG có sàn (chỉ gate bằng cặp) — hành vi cũ, không đổi.
+ *
+ * ⟲ S4-DASH-HROVERVIEW-FLOOR-1: map DỜI sang `packages/contracts/src/dashboard-widget-floor.ts` (kèm lý do
+ * từng khoá) để web đọc CÙNG hằng làm tín hiệu mount ô. Binding dưới đây re-export ĐÚNG đối tượng đó (không
+ * chép — `test/foundation/dashboard-widget-floor-contract.unit-spec.ts` ghim identity) với kiểu RỘNG
+ * `Record<string, DataScope>` để `meetsMinDataScope(code: string)` và registry tra bằng chuỗi.
  */
-export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> = {
-  ASSET_SUMMARY: "Department",
-  // S12-RECRUIT-DASH-1: sàn = 'Company' vì lý do KHÁC ASSET_SUMMARY — không phải "role nào cũng có cặp"
-  // (grant view:candidate hôm nay CHỈ @Company), mà vì `CandidatesRepository.summaryTx` đếm TOÀN company
-  // (không co theo actor scope như AssetsService.summary). Sàn PHẢI bằng đúng bề rộng phép đếm: nếu mai
-  // sau ai đó grant view:candidate@Department, thiếu sàn này widget sẽ serve số TOÀN company cho scope
-  // hẹp — rò dữ liệu ngoài scope. Hôm nay sàn không loại ai; nó gác grant hẹp hơn xuất hiện về sau.
-  RECRUIT_FUNNEL: "Company",
-  // S13-PAYROLL-DASH-1: sàn = 'Company', CÙNG lý do RECRUIT_FUNNEL nhưng hệ quả NẶNG hơn vì payload là
-  // TIỀN: `PayrollCalcRepository.latestSummaryTx` SUM toàn bộ payroll_period_lines của company (không co
-  // theo actor scope) ⇒ grant `view-line:payroll-period` hẹp hơn Company mà được serve là rò tổng quỹ
-  // lương ra ngoài scope. Hôm nay mọi grant cặp này đều @Company (mig 0565) nên sàn không loại ai — nó
-  // gác grant hẹp hơn xuất hiện về sau, ĐỘC LẬP với `companyFloor` mà PayrollAccessService ép ở route
-  // 018 (đường METADATA /dashboard/me KHÔNG đi qua PayrollAccessService ⇒ không có sàn đó).
-  PAYROLL_COST: "Company",
-  // S15-PAYROLL-DASH-1: sàn = 'Company' cho CẢ HAI widget v2, cùng lý do PAYROLL_COST — phép cộng/đếm
-  // ở nguồn rộng bằng CẢ công ty, không co theo scope actor:
-  //   • PAYROLL_BUDGET → `PayrollBudgetsRepository.yearTotalsTx` cộng kế hoạch + Σ gross phiếu đã phát
-  //     hành của TOÀN công ty (chở TIỀN ⇒ hệ quả nặng nhất trong hai);
-  //   • PAYROLL_ADVANCE_PENDING → `PayrollAdvancesRepository.countTx` đếm tạm ứng Pending của TOÀN công
-  //     ty (không chở tiền, nhưng con số vẫn là thông tin toàn công ty).
-  // Hôm nay mọi grant hai cặp này đều @Company (mig 0571) nên sàn không loại ai — nó gác grant hẹp hơn
-  // xuất hiện về sau, ĐỘC LẬP với `companyFloor` mà PayrollAccessService ép ở route 073/059 (đường
-  // METADATA /dashboard/me KHÔNG đi qua service PAYROLL ⇒ không có sàn đó).
-  PAYROLL_BUDGET: "Company",
-  PAYROLL_ADVANCE_PENDING: "Company",
-  // S16-SOCIAL-DASH-1: hai sàn KHÁC giá trị và KHÁC lý do — đừng gộp.
-  //   • SOCIAL_ENGAGEMENT_WEEK = 'Department' (cách diễn đạt «sàn Company; manager Department» của
-  //     SPEC-16 §17.3: tập hợp lệ {Department, Company, System}). Nguồn `weeklyEngagementForWidget` KHÔNG
-  //     403 với grant @Own/@Team — nó trả SỐ 0 (`statsScopeFilter` ⇒ `none`), nên thiếu sàn này người
-  //     giữ `view:feed-report@Own|Team` sẽ thấy một ô «0 tương tác» trông như số thật. Sàn 'Company'
-  //     thuần thì giấu widget khỏi chính quản lý (@Department).
-  //   • SOCIAL_NEWS_UNACKED = 'Company' — khớp `companyFloor` của route 020: `SocialAccessService` từ
-  //     chối `view:feed` hẹp hơn Company. Đường METADATA (/dashboard/me) KHÔNG đi qua service SOCIAL ⇒
-  //     thiếu sàn này grant hẹp vẫn nhận shell widget rồi mới ăn 403 ở đường data.
-  SOCIAL_ENGAGEMENT_WEEK: "Department",
-  SOCIAL_NEWS_UNACKED: "Company",
-} as const;
+export const DASH_WIDGET_MIN_DATA_SCOPE: Readonly<Record<string, DataScope>> =
+  CONTRACT_DASH_WIDGET_MIN_DATA_SCOPE;
 
 /**
  * Độ mạnh scope — MIRROR `SCOPE_STRENGTH` của permission engine (permission.decide.ts — dời khỏi permission.service.ts ở

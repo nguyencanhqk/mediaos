@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
@@ -37,6 +37,7 @@ import {
 } from "./dashboard-widget-data.const";
 import { DASH_ERR } from "./dashboard-resolver.errors";
 import { gateWidgetOrThrow } from "./dashboard-widget-gate";
+import { meetsMinDataScope } from "./dashboard-widget-catalog.const";
 import type {
   WidgetCacheIdentity,
   WidgetFetchResult,
@@ -468,15 +469,22 @@ export class DashboardWidgetHandlersService {
   // ── HR_OVERVIEW (HrReadService.listHrEmployees → count/aggregate viewer-independent; KHÔNG lương/PII) ──
 
   private async gateHrOverview(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
-    await gateWidgetOrThrow(this.permission, ctx.user, "HR_OVERVIEW"); // read:employee (403 fail-closed)
+    const pair = await gateWidgetOrThrow(this.permission, ctx.user, "HR_OVERVIEW"); // read:employee (403)
     // Resolve scope (403 nếu thiếu — cũng là gate). Company/System ⇒ aggregate toàn tenant, viewer-independent ⇒
     // chia sẻ company-wide. scope < Company ⇒ aggregate scoped-theo-viewer ⇒ per-user (viewer-dependent).
     const scope = await this.dataScope.resolveAndAssert(
       ctx.user.id,
       ctx.user.companyId,
-      "read",
-      "employee",
+      pair.action,
+      pair.resourceType,
     );
+    // S4-DASH-HROVERVIEW-FLOOR-1: SÀN Department — CÙNG hằng registry dùng cho metadata. Ở gate (chạy MỌI
+    // lần serve, kể cả cache hit), KHÔNG ở fetch: hàng cache cũ của người dưới sàn cũng bị chặn.
+    if (!meetsMinDataScope("HR_OVERVIEW", scope)) {
+      throw new ForbiddenException(
+        `AUTH-ERR-FORBIDDEN: thiếu quyền ${pair.action}:${pair.resourceType} ở phạm vi đủ rộng`,
+      );
+    }
     const companyWide = scope === "Company" || scope === "System";
     return {
       shareScope: companyWide ? "company" : "user",

@@ -9,9 +9,11 @@
  *   M10 gate tầng-2 CÙNG-TENANT hai chiều (crown data-scope).
  *
  * ⚠ SAI LỆCH PLAN vs DB THẬT (đã probe mediaos_dashbe1, chống "reviewer pass real bug"):
- *   (a) role `employee` THỰC SỰ CÓ `read:employee` (blanket seed) ⇒ HR_OVERVIEW (gate=read:employee) KHÔNG
- *       phân biệt được employee/hr. M10 vì thế dùng PENDING_LEAVE (gate=view:leave): employee KHÔNG có
- *       view:leave, hr CÓ — vẫn chứng đúng tầng-2 gate HAI CHIỀU mà plan §7-M10 nhắm tới.
+ *   (a) role `employee` THỰC SỰ CÓ `read:employee` (blanket seed, scope Own) ⇒ CẶP gate của HR_OVERVIEW một mình
+ *       không phân biệt được employee/hr. M10 vì thế dùng PENDING_LEAVE (gate=view:leave): employee KHÔNG có
+ *       view:leave, hr CÓ — vẫn chứng đúng tầng-2 gate HAI CHIỀU mà plan §7-M10 nhắm tới. Từ
+ *       S4-DASH-HROVERVIEW-FLOOR-1, HR_OVERVIEW còn có SÀN scope 'Department' (DASH_WIDGET_MIN_DATA_SCOPE) nên
+ *       employee @Own bị loại — deny-path của sàn: test/integration/dashboard-hr-overview-floor.int-spec.ts.
  *   (b) role `hr` CÓ view-employee:dashboard (DASH_GRANT_MATRIX) ⇒ /types của hr trả 3 type
  *       (Employee/Manager/HR), KHÔNG phải 2 như plan M4 viết. Assert 3, is_default=HR.
  *
