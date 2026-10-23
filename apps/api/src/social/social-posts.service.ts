@@ -13,7 +13,6 @@ import type {
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import { feedPosts } from "../db/schema/social";
-import { users } from "../db/schema/users";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
@@ -25,38 +24,30 @@ import {
 import { bumpPostCounter, softDeletePostTx } from "./social-counters";
 import { decodeFeedCursor, encodeFeedCursor, fingerprintFeedFilter } from "./social-feed-cursor";
 import {
-  loadMentionsForTargets,
-  mentionsFor,
   parseHashtags,
   resolveMentions,
   resyncEditedMentions,
   syncMentions,
   syncPostTags,
-  targetTypeLabel,
   type ResolvedMention,
 } from "./social-mentions";
 import { SocialAvatarSigner } from "./social-avatar-signer";
-import { avatarRefsOfPage, blocksFor, loadPostBlocksTx } from "./social-post-blocks";
 import { createIdeaTx, createKudosTx, createPollTx } from "./social-post-types";
-import { userIdsOfEmployeesTx } from "./social-kudos.repository";
 import { SocialNewsRepository } from "./social-news.repository";
+import { decoratePosts, type SocialPostsDecorateDeps } from "./social-posts-decorate";
 import {
-  SOCIAL_EVENT_MENTIONED,
-  SOCIAL_EVENT_KUDOS_RECEIVED,
-  SOCIAL_EVENT_NEWS_PUBLISHED,
-  SOCIAL_NEWS_NOTI_RECIPIENT_CAP,
-  type SocialKudosReceivedPayload,
-  type SocialMentionedPayload,
-  type SocialNewsPublishedPayload,
-} from "./social-noti.payload";
+  emitPostCreated,
+  enqueueKudosReceivedNoti,
+  enqueueMentionNotis,
+  enqueueNewsPublishedNoti,
+  type SocialPostsNotiDeps,
+} from "./social-posts-notify";
 import {
   SocialActorProjectionRepository,
   SocialPostsRepository,
   type PostRow,
 } from "./social-posts.repository";
 import { SOCIAL_ERR, socialError } from "./social.errors";
-import { buildWsPostCreatedEvent } from "./social-ws-payload";
-import { toFeedPostDto } from "./social.mapper";
 import type {
   SocialActor,
   SocialPostAccess,
@@ -287,7 +278,7 @@ export class SocialPostsService {
         // 🔴 NOTI-033 enqueue **TRONG tx** (D24). Ghi hàng outbox sau commit là at-most-once: chết
         // giữa hai bước ⇒ lời vinh danh có thật mà không ai được báo, và không có đường phát lại.
         // Khuôn đã dùng cho NOTI-028 (`enqueueMentionNotis`) và NOTI-031 ngay dưới đây.
-        await this.enqueueKudosReceivedNoti(tx, actor, postId, recipientEmployeeIds);
+        await enqueueKudosReceivedNoti(this.notiDeps(), tx, actor, postId, recipientEmployeeIds);
       }
 
       await syncPostTags(tx, actor.companyId, postId, parseHashtags(dto.body));
@@ -314,13 +305,13 @@ export class SocialPostsService {
         );
       }
 
-      await this.enqueueMentionNotis(tx, actor, "post", postId, postId, fresh);
+      await enqueueMentionNotis(this.notiDeps(), tx, actor, "post", postId, postId, fresh);
 
       // ⟲ S16-SOCIAL-BE-1B — NOTI-031 «tin tức công ty mới». CÙNG tx với INSERT (C8): tập người nhận
       // chỉ còn đúng tại thời điểm này (bài có thể bị ẩn/xoá/đổi audience ngay sau đó, và registrar
       // chạy SAU, NGOÀI tx).
       if (dto.type === "news") {
-        await this.enqueueNewsPublishedNoti(tx, actor, postId, {
+        await enqueueNewsPublishedNoti(this.notiDeps(), tx, actor, postId, {
           audience: dto.audience,
           orgUnitId: dto.audience === "org_unit" ? (dto.orgUnitId ?? null) : null,
           // Cùng khuôn "khoá chỉ có nghĩa với ĐÚNG audience của nó" như `orgUnitId` ngay trên.
@@ -338,7 +329,7 @@ export class SocialPostsService {
     if (!result.row) throw new NotFoundException(socialError(SOCIAL_ERR.POST_NOT_FOUND));
 
     const [dto2] = await this.decorate(actor, [result.row]);
-    this.emitPostCreated(actor, result.row, dto2);
+    emitPostCreated(this.realtime, actor, result.row, dto2);
     return { ...dto2, droppedMentions: toDropped(result.dropped) };
   }
 
@@ -454,7 +445,7 @@ export class SocialPostsService {
           );
         }
 
-        await this.enqueueMentionNotis(tx, actor, "post", postId, postId, fresh);
+        await enqueueMentionNotis(this.notiDeps(), tx, actor, "post", postId, postId, fresh);
 
         const row = await this.repo.findVisible(tx, actor, postId);
         return { row, dropped: mentions.dropped };
@@ -606,102 +597,6 @@ export class SocialPostsService {
   }
 
   /**
-   * ⟲ **S16-SOCIAL-BE-1B** — `NOTI-031` «tin tức công ty mới». Producer tính người nhận TRONG tx (C8).
-   *
-   * ┌─ 🔴 TRẦN 500 NGƯỜI NHẬN — VÀ VÌ SAO KHÔNG ĐƯỢC CẮT CÂM ────────────────────────────────────────┐
-   * │ v1 không chia lô: công ty >500 người vẫn đọc tin qua `GET /social/news`; NOTI là kênh đẩy PHỤ.  │
-   * │ Nhưng cắt IM LẶNG là đúng hình dạng «thành công RỖNG = fail-OPEN», và hệ quả nghiệp vụ THẬT là: │
-   * │ với tin `requires_ack`, người thứ 501 trở đi **không hề được báo** trong khi route `022` vẫn    │
-   * │ liệt họ vào danh sách «chưa đọc» — hai đường nói ngược nhau về cùng một người.                  │
-   * │ Ba ràng buộc, cả ba đo được ở ca `N-C8-trần`:                                                   │
-   * │   1. XÁC ĐỊNH — repository trả tập ĐÃ sắp theo `user_id` tăng dần, cắt SAU khi sắp.             │
-   * │   2. QUAN SÁT ĐƯỢC — log WARN (post_id + tổng + trần) **VÀ** `recipientsTruncated`/              │
-   * │      `totalRecipients` trong payload outbox (hàng dữ liệu tự mang bằng chứng, log thì trôi).    │
-   * │   3. KHÔNG NUỐT tập rỗng — log WARN rồi KHÔNG enqueue (registrar sẽ NÉM nếu nhận payload rỗng). │
-   * └────────────────────────────────────────────────────────────────────────────────────────────────┘
-   */
-  private async enqueueNewsPublishedNoti(
-    tx: TenantTx,
-    actor: SocialActor,
-    postId: string,
-    // S16-SOCIAL-BE-2A D14(2): +`groupId` — tin đăng vào nhóm tính người nhận theo membership, và
-    // thiếu trường này thì `audienceUserIds` fail-closed về tập rỗng (tin không báo cho ai).
-    post: { audience: string; orgUnitId: string | null; groupId: string | null },
-  ): Promise<void> {
-    // Cắt + đếm + loại tác giả đều ở SQL (xem `audienceUserIds`): `recipients` đã là ≤ trần, `total`
-    // là tổng THẬT trước khi cắt — hai con số khác nhau và payload cần CẢ HAI.
-    const { userIds: recipients, total } = await this.news.audienceUserIds(
-      tx,
-      actor.companyId,
-      post,
-      { excludeUserId: actor.actorUserId, limit: SOCIAL_NEWS_NOTI_RECIPIENT_CAP },
-    );
-
-    if (total === 0) {
-      this.logger.warn(
-        `NOTI-031: tin ${postId} (audience=${post.audience}) không có người nhận nào — không phát thông báo.`,
-      );
-      return;
-    }
-
-    const truncated = total > SOCIAL_NEWS_NOTI_RECIPIENT_CAP;
-    if (truncated) {
-      this.logger.warn(
-        `NOTI-031: tin ${postId} có ${total} người nhận, vượt trần ${SOCIAL_NEWS_NOTI_RECIPIENT_CAP} — đã cắt ${total - recipients.length} người (thứ tự user_id tăng dần).`,
-      );
-    }
-
-    const actorName = await resolveActorName(tx, actor.companyId, actor.actorUserId);
-    const payload: SocialNewsPublishedPayload = {
-      actorUserId: actor.actorUserId,
-      postId,
-      post_id: postId,
-      actor_name: actorName,
-      recipientUserIds: recipients,
-      recipientsTruncated: truncated,
-      totalRecipients: total,
-    };
-    await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_NEWS_PUBLISHED, payload });
-  }
-
-  /**
-   * S16-SOCIAL-BE-2B-2 — NOTI-033 «bạn được vinh danh». Người nhận = tập được vinh danh, map
-   * `employee_id` → `user_id` rồi lọc **D18** (4 vế).
-   *
-   * ⚠️ Trừ `actorUserId` MỘT LẦN NỮA dù `KUDOS_SELF_RECIPIENT` đã chặn tự-vinh-danh ở đường ghi: lưới
-   * kia là luật NGHIỆP VỤ (owner có thể nới), lưới này là tính chất của THÔNG BÁO (không ai tự báo cho
-   * mình). Hai lý do khác nhau ⇒ hai lưới, không phải một lưới lặp.
-   *
-   * ⚠️ Tập rỗng ⇒ **KHÔNG enqueue**. Ba đường dẫn tới rỗng và cả ba đều BÌNH THƯỜNG, không phải lỗi:
-   * mọi người nhận đã nghỉ việc (ca `K-4`) · tài khoản bị khoá (`K-4b`) · nhân sự chưa có tài khoản
-   * `users` (`K-4c`). Enqueue một hàng với `recipientUserIds: []` sẽ thành dead-letter câm ở registrar
-   * (`requireUserIds` ném) — một lỗi hạ tầng cho một tình huống nghiệp vụ hợp lệ.
-   */
-  private async enqueueKudosReceivedNoti(
-    tx: TenantTx,
-    actor: SocialActor,
-    postId: string,
-    recipientEmployeeIds: readonly string[],
-  ): Promise<void> {
-    const mapped = await userIdsOfEmployeesTx(tx, actor.companyId, recipientEmployeeIds);
-    const recipients = mapped.filter((id) => id !== actor.actorUserId);
-    if (recipients.length === 0) {
-      this.logger.warn(
-        `NOTI-033: vinh danh ở bài ${postId} không có người nhận nào CÒN HOẠT ĐỘNG (${recipientEmployeeIds.length} nhân sự được ghi) — không phát thông báo.`,
-      );
-      return;
-    }
-
-    const actorName = await resolveActorName(tx, actor.companyId, actor.actorUserId);
-    const payload: SocialKudosReceivedPayload = {
-      post_id: postId,
-      actor_name: actorName,
-      recipientUserIds: recipients,
-    };
-    await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_KUDOS_RECEIVED, payload });
-  }
-
-  /**
    * ⟲ **MỐI NỐI TÁI DÙNG CỦA `S16-SOCIAL-BE-1B`** — `020` (tin tức) · `023` (tìm kiếm) · `025` (trang
    * cá nhân) trả CÙNG thẻ bài với dòng cuộn, nên chúng dùng LẠI `toPage`/`decorate` thay vì dựng bản
    * thứ hai (bản thứ hai sẽ trôi khỏi bản này ngay lần đầu DTO bài đổi).
@@ -726,138 +621,27 @@ export class SocialPostsService {
     return this.toPage(actor, rows, limit, fingerprint);
   }
 
-  /** Row → DTO cho một LÔ: tag + projection theo actor (1 tx đọc) rồi đính kèm ĐÃ KÝ (ngoài tx). */
-  private async decorate(viewer: SocialViewerContext, rows: PostRow[]): Promise<FeedPostDto[]> {
-    if (rows.length === 0) return [];
-    const ids = rows.map((r) => r.id);
-
-    // `mentions` (S16-SOCIAL-BE-1D D7): CÙNG tx, ≤3 câu cho cả lô; audience lấy từ `PostRow` sẵn có.
-    // `rows` đã qua cổng đọc bài (điều kiện của `decorate`) — bộ nạp KHÔNG tự kiểm tầm nhìn.
-    const { tags, myReactions, saved, mentions, blocks, avatars } = await this.db.withTenant(
-      viewer.companyId,
-      async (tx) => {
-        const loaded = {
-          tags: await this.repo.tagsFor(tx, viewer.companyId, ids),
-          myReactions: await this.projections.myReactions(
-            tx,
-            viewer.companyId,
-            viewer.actorUserId,
-            "post",
-            ids,
-          ),
-          saved: await this.projections.savedPostIds(tx, viewer.companyId, viewer.actorUserId, ids),
-          mentions: await loadMentionsForTargets(
-            tx,
-            viewer.companyId,
-            "post",
-            rows.map((r) => ({
-              id: r.id,
-              audience: r.audience,
-              orgUnitId: r.orgUnitId,
-              groupId: r.groupId,
-            })),
-          ),
-          // S16-SOCIAL-BE-2D D3: khối kudos/poll/idea — CÙNG tx, ≤4 câu/lô, chỉ bảng của loại có mặt.
-          blocks: await loadPostBlocksTx(tx, viewer.companyId, viewer.actorUserId, rows),
-        };
-        // S16-SOCIAL-AVATARPRESIGN-1: tác giả + người nhận kudos của CẢ lô — MỘT câu cổng, CÙNG tx.
-        const refs = avatarRefsOfPage(rows, loaded.blocks);
-        return { ...loaded, avatars: await this.avatarSigner.signTx(tx, viewer.companyId, refs) };
-      },
-    );
-    for (const o of blocks.orphans) {
-      this.logger.error(
-        `S16-SOCIAL-BE-2D: bài ${o.postId} type=${o.type} KHÔNG nạp được khối (thiếu hàng con hoặc dữ liệu hỏng) — khối vắng`,
-      );
-    }
-    for (const k of blocks.emptyKudos) {
-      this.logger.error(
-        `S16-SOCIAL-BE-2D: bài ${k.postId} vinh danh ${k.kudosId} KHÔNG còn người nhận nào`,
-      );
-    }
-    for (const b of blocks.brokenBadges) {
-      this.logger.error(
-        `S16-SOCIAL-BE-2D: kudos ${b.kudosId} trỏ huy hiệu ${String(b.badgeId)} không ra code/name — bỏ huy hiệu`,
-      );
-    }
-    // NGOÀI tx — ký URL tự mở kết nối riêng (xem docblock `SocialAttachmentsService`).
-    const attachments = await this.attachments.decorateMany(viewer, "post", ids);
-
-    return rows.map((row) =>
-      toFeedPostDto(row, viewer, {
-        tags: tags.get(row.id) ?? [],
-        attachments: attachments.get(row.id) ?? [],
-        myReaction: myReactions.get(row.id) ?? null,
-        savedByMe: saved.has(row.id),
-        mentions: mentionsFor(mentions, row.id),
-        ...blocksFor(blocks, row),
-        avatars,
-      }),
-    );
+  /** Row → DTO cho một LÔ — thân ở `social-posts-decorate.ts` (S16-SOCIAL-POSTSSPLIT-1). */
+  private decorate(viewer: SocialViewerContext, rows: PostRow[]): Promise<FeedPostDto[]> {
+    return decoratePosts(this.decorateDeps(), viewer, rows);
   }
 
-  /** Một outbox event cho MỖI người được nhắc — xem `social-noti.payload.ts`. */
-  private async enqueueMentionNotis(
-    tx: TenantTx,
-    actor: SocialActor,
-    targetType: "post" | "comment",
-    targetId: string,
-    postId: string,
-    fresh: readonly ResolvedMention[],
-  ): Promise<void> {
-    if (fresh.length === 0) return;
-    const actorName = await resolveActorName(tx, actor.companyId, actor.actorUserId);
-    for (const m of fresh) {
-      const payload: SocialMentionedPayload = {
-        actorUserId: actor.actorUserId,
-        postId,
-        targetType,
-        targetId,
-        mentionedUserId: m.userId,
-        actor_name: actorName,
-        post_id: postId,
-        target_type_label: targetTypeLabel(targetType),
-      };
-      await this.outbox.enqueue(tx, { eventType: SOCIAL_EVENT_MENTIONED, payload });
-    }
+  /** Cộng tác viên của lối dựng thẻ bài — xem `SocialPostsDecorateDeps`. */
+  private decorateDeps(): SocialPostsDecorateDeps {
+    return {
+      db: this.db,
+      repo: this.repo,
+      projections: this.projections,
+      attachments: this.attachments,
+      avatarSigner: this.avatarSigner,
+      logger: this.logger,
+    };
   }
 
-  /**
-   * Phát `feed:post.created` — S16-SOCIAL-BE-2C: bài `company` → room công ty, bài `group` → room NHÓM
-   * (chỉ thành viên `active`, đã qua `view:feed`); `org_unit` / không `published` ⇒ KHÔNG phát (D21).
-   *
-   * Quyết định + bóc khoá nằm ở hàm THUẦN `buildWsPostCreatedEvent` (`social-ws-payload.ts` — nhãn
-   * `audience`/`groupId` lấy TỪ HÀNG DB, không từ hằng); emitter định tuyến theo payload ĐÃ parse.
-   * S16-SOCIAL-AVATARPRESIGN-1 (D3-b): builder cũng ép `author.avatarUrl: null` cho CẢ HAI biến thể
-   * (room công ty lẫn room nhóm) — `dto` mang URL ĐÃ KÝ của REST, capability đó không lên room.
-   */
-  private emitPostCreated(actor: SocialActor, row: PostRow, dto: FeedPostDto): void {
-    const ev = buildWsPostCreatedEvent(row, dto);
-    if (ev) this.realtime.emitFeedPostCreated(actor.companyId, ev);
+  /** Cộng tác viên của đường NOTI (outbox TRONG tx) — xem `SocialPostsNotiDeps`. */
+  private notiDeps(): SocialPostsNotiDeps {
+    return { outbox: this.outbox, news: this.news, logger: this.logger };
   }
-}
-
-/**
- * Tên hiển thị của actor cho biến template `{actor_name}`.
- *
- * Tên người sống ở `users.full_name` — ĐO THẬT: `employee_profiles` KHÔNG có cột tên nào (chỉ
- * `emergency_contact_name`). Đừng đi tìm nó ở bảng nhân sự.
- *
- * Fallback `"Một đồng nghiệp"` thay vì chuỗi rỗng: registrar `requireField` NÉM khi biến template
- * rỗng (đúng — rỗng thì template render ra `{actor_name}` nguyên văn), nên một tài khoản chưa đặt
- * tên sẽ làm MỌI thông báo của họ dead-letter. Tên hiển thị không phải dữ liệu bắt buộc của hệ thống.
- */
-export async function resolveActorName(
-  tx: TenantTx,
-  companyId: string,
-  userId: string,
-): Promise<string> {
-  const rows = await tx
-    .select({ fullName: users.fullName })
-    .from(users)
-    .where(and(eq(users.id, userId), eq(users.companyId, companyId)))
-    .limit(1);
-  return rows[0]?.fullName?.trim() || "Một đồng nghiệp";
 }
 
 /**

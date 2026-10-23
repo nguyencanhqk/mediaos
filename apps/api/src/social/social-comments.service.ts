@@ -49,7 +49,7 @@ import {
   type SocialPostCommentedPayload,
 } from "./social-noti.payload";
 import { SocialActorProjectionRepository } from "./social-posts.repository";
-import { resolveActorName } from "./social-posts.service";
+import { resolveActorName } from "./social-posts-notify";
 import { SocialReactionsRepository } from "./social-reactions.repository";
 import { wsAttachmentsOf } from "./social-ws-payload";
 import { SOCIAL_ERR, socialError } from "./social.errors";
@@ -550,7 +550,7 @@ export class SocialCommentsService {
     dto: FeedCommentDto,
   ): void {
     if (postAudience !== "company" || postStatus !== "published") return;
-    // `mentions` bóc tại nguồn — xem `SocialPostsService.emitPostCreated` (S16-SOCIAL-BE-1D D6).
+    // `mentions` bóc tại nguồn — xem `emitPostCreated` (`social-posts-notify.ts`, S16-SOCIAL-BE-1D D6).
     const { myReaction: _mr, isMine: _im, mentions: _mn, attachments, author, ...rest } = dto;
     this.realtime.emitFeedCommentCreated(actor.companyId, {
       ...rest,
