@@ -17,7 +17,7 @@ import {
 } from "./permission.decide";
 import { PermissionCatalogSnapshot } from "./permission-catalog-snapshot";
 import { PermissionPairCatalogSnapshot } from "./permission-pair-catalog-snapshot";
-import { serializeErrorChain } from "./serialize-error-chain";
+import { safeErrorStack, serializeErrorChain } from "./serialize-error-chain";
 import {
   needsCatalogForCapabilities,
   projectCapabilities,
@@ -399,7 +399,7 @@ export class PermissionService {
           error: serializeErrorChain(error),
           // Nest chỉ nhận stack khi nó là CHUỖI khớp `isStackFormat`; một object không bao giờ được
           // coi là stack ⇒ phải đưa stack sang trường riêng, dạng chuỗi.
-          stack: error instanceof Error ? error.stack : undefined,
+          stack: safeErrorStack(error),
           phase,
           cause,
           // SUY RA từ `phase` — nguồn DUY NHẤT của KẾT QUẢ. Không hard-code theo `cause`: một sự cố
@@ -417,7 +417,7 @@ export class PermissionService {
     onError: (error, phase, cause) =>
       this.logger.error("capabilities pair-catalog snapshot degraded", {
         error: serializeErrorChain(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        stack: safeErrorStack(error),
         phase,
         cause,
         degradedTo: phase === "no-snapshot" ? "mất khoá khai triển wildcard (siết)" : "ảnh chụp CŨ",
@@ -659,7 +659,7 @@ export class PermissionService {
       // Gate F4: giữ chuỗi `cause` (SQLSTATE) + stack — cùng quy ước hai `onError` của ảnh chụp ở trên.
       this.logger.error("getCapabilities() infrastructure error — returning empty map", {
         error: serializeErrorChain(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        stack: safeErrorStack(error),
         userId,
         companyId,
       });
@@ -749,7 +749,7 @@ export class PermissionService {
     } catch (error: unknown) {
       this.logger.error("getCapabilityScopes() infrastructure error — returning empty map", {
         error: serializeErrorChain(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        stack: safeErrorStack(error),
         userId,
         companyId,
       });
