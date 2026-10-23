@@ -147,12 +147,18 @@ describe("RealtimeEmitterService — room nhóm bảng tin (S16-SOCIAL-BE-2C)", 
    * lệnh MẤT là vế CỤC BỘ (W1b + `realtime-emitter.feed.io.spec.ts`), không phải log.
    */
   it("lệnh room NÉM ĐỒNG BỘ ⇒ nuốt, KHÔNG ném lên caller (caller có thể đang ở trong tx — Q-LEAVE)", () => {
+    // S17-CHAT-RTROOMOPS-1 (FULL gate): `leave` toàn cụm hỏng log `error` (sót socket ở node khác là rò),
+    // `join` hỏng giữ `warn` — lõi `syncSocketRoom` dùng chung với `syncRoomMembership`.
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
     const { svc, server } = makeEmitter();
     server.in.mockImplementation(() => {
       throw new Error("adapter down");
     });
 
     expect(() => svc.syncFeedGroupMembership(COMPANY, GROUP, USER, "leave")).not.toThrow();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+    expect(() => svc.syncFeedGroupMembership(COMPANY, GROUP, USER, "join")).not.toThrow();
     expect(warn).toHaveBeenCalledTimes(1);
   });
 

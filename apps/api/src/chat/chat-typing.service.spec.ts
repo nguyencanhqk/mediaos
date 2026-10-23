@@ -23,8 +23,10 @@ const ACTOR = { id: USER, companyId: CO };
 function makeService(
   over: { isArchived?: boolean; setNx?: (typeof vi)["fn"] extends never ? never : unknown } = {},
 ) {
-  const assertMember = vi.fn(async () => ({
-    room: { id: ROOM, roomType: "group", isArchived: over.isArchived ?? false },
+  // Mô phỏng DB: Postgres so uuid không phân biệt hoa thường và trả id ĐÃ LƯU (chữ thường) — không phải
+  // chuỗi route nguyên văn.
+  const assertMember = vi.fn(async (_tx: unknown, _co: string, roomId: string) => ({
+    room: { id: roomId.toLowerCase(), roomType: "group", isArchived: over.isArchived ?? false },
     membership: { role: "member" },
   }));
   const access = { assertMember } as unknown as ChatAccessService;
@@ -129,6 +131,28 @@ describe("CHAT-API-023 — tiết lưu server", () => {
     await svc.ping(ACTOR, otherRoom);
 
     expect(emitChatTyping).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * S17-CHAT-RTROOMOPS-1 (FULL gate): tên room đã chuẩn hoá ở builder, nên mọi biến thể hoa/thường của
+   * id route tới CÙNG một phòng. Khoá tiết lưu phải theo cùng dạng chuẩn (id từ DB), nếu không mỗi biến
+   * thể là một cửa sổ tiết lưu riêng.
+   */
+  it("🔒 T-1 id phòng khác hoa/thường ⇒ CÙNG một khoá tiết lưu; đích + payload là id từ DB", async () => {
+    const { svc, emitChatTyping, setNx } = makeService();
+    const held = new Set<string>();
+    setNx.mockImplementation((async (key: string) => {
+      if (held.has(key)) return false;
+      held.add(key);
+      return true;
+    }) as never);
+    const roomHex = "6b1f0c2e-9d3a-4e5f-8a7b-c0d1e2f3a4b5";
+
+    await svc.ping(ACTOR, roomHex.toUpperCase());
+    await svc.ping(ACTOR, roomHex);
+
+    expect(emitChatTyping).toHaveBeenCalledTimes(1);
+    expect(emitChatTyping).toHaveBeenCalledWith(CO, roomHex, { roomId: roomHex, userId: USER });
   });
 });
 

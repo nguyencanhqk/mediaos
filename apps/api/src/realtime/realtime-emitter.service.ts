@@ -319,6 +319,10 @@ export class RealtimeEmitterService {
    *
    * Xuyên instance nhờ `@socket.io/redis-adapter` (`addSockets`/`delSockets` implement thật) — chỉ đúng
    * khi adapter Valkey đã gắn (`S7-CHAT-RT-0`); ở chế độ in-memory chỉ đúng trong tiến trình này.
+   *
+   * S17-CHAT-RTROOMOPS-1 (D-2): `leave` áp CỤC BỘ, đồng bộ (`leaveLocally`) TRƯỚC lệnh toàn cụm — dưới
+   * adapter Valkey lệnh toàn cụm chỉ là publish at-most-once, có thể MẤT. `join` không có vế cục bộ (join
+   * mất = fail-closed). Id route chữ HOA được chuẩn hoá ở builder `rooms.ts` (D-1), không ở đây.
    */
   syncRoomMembership(
     companyId: string,
@@ -326,15 +330,14 @@ export class RealtimeEmitterService {
     userId: string,
     action: "join" | "leave",
   ): void {
-    this.syncSocketRoom(
-      {
-        join: chatUserRoomName(companyId, userId),
-        leave: userRoomName(companyId, userId),
-        target: chatRoomName(companyId, roomId),
-      },
-      action,
-      { label: "syncRoomMembership", roomId, userId },
-    );
+    const rooms = {
+      join: chatUserRoomName(companyId, userId),
+      leave: userRoomName(companyId, userId),
+      target: chatRoomName(companyId, roomId),
+    };
+    const logCtx = { label: "syncRoomMembership", roomId, userId };
+    if (action === "leave") this.leaveLocally(this.server, rooms.leave, rooms.target, logCtx);
+    this.syncSocketRoom(rooms, action, logCtx);
   }
 
   /**
@@ -366,7 +369,8 @@ export class RealtimeEmitterService {
    * │     khác. Phần dư (API-19 §7.3 (c)): đa-instance + sub rớt ⇒ socket ở node KHÁC còn ở room.      │
    * │     `join` KHÔNG có vế cục bộ: join mất chỉ là thiếu badge (fail-closed).                       │
    * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-   * CHAT `syncRoomMembership` CỐ Ý chưa đổi (cùng hai lớp lỗi — nợ seed `S17-CHAT-RTROOMOPS-1`).
+   * S17-CHAT-RTROOMOPS-1: lớp (1) nay đóng ở builder `rooms.ts` cho MỌI room — `toLowerCase` dưới đây thừa,
+   * vô hại (dọn trong một WO SOCIAL); lớp (2) dùng chung `leaveLocally` với `syncRoomMembership`/evict.
    */
   syncFeedGroupMembership(
     companyId: string,
@@ -381,27 +385,29 @@ export class RealtimeEmitterService {
       target: feedGroupRoomName(c, g),
     };
     const logCtx = { label: "syncFeedGroupMembership", groupId: g, userId: u };
-    if (action === "leave") this.leaveLocally(rooms.leave, rooms.target, logCtx);
+    if (action === "leave") this.leaveLocally(this.server, rooms.leave, rooms.target, logCtx);
     this.syncSocketRoom(rooms, action, logCtx);
   }
 
   /**
-   * Vế AN NINH của `syncFeedGroupMembership('leave')`: rời room TRÊN NODE NÀY, đồng bộ, không qua pub/sub
-   * (`server.local` = cờ `local` ⇒ redis-adapter gọi thẳng `super.delSockets`). try/catch RIÊNG — vế này
-   * ném KHÔNG được bỏ qua lệnh toàn cụm (cùng lý do hai khối riêng của `severUserSessions`), và log `error`
-   * như `evictFromCallRoom`: sót lại một socket là RÒ, không phải suy giảm UX.
+   * Vế AN NINH của mọi room-op `leave` (room nhóm bảng tin · phòng chat · room cuộc gọi): rời room TRÊN NODE
+   * NÀY, đồng bộ, không qua pub/sub (`.local` = cờ `local` ⇒ redis-adapter gọi thẳng `super.delSockets`).
+   * `nsp` là namespace ĐÍCH (`/ws` hoặc `/ws-call` — hai không gian room tách biệt). try/catch RIÊNG — vế
+   * này ném KHÔNG được bỏ qua lệnh toàn cụm phía sau (cùng lý do hai khối riêng của `severUserSessions`),
+   * và log `error`: sót lại một socket là RÒ, không phải suy giảm UX.
    */
   private leaveLocally(
+    nsp: Server | Namespace | null,
     selector: string,
     target: string,
     logCtx: { label: string } & Record<string, string>,
   ): void {
-    if (!this.server) return;
+    if (!nsp) return;
     try {
-      this.server.local.in(selector).socketsLeave(target);
+      nsp.local.in(selector).socketsLeave(target);
     } catch (err) {
       const { label, ...ctx } = logCtx;
-      this.logger.error(`${label} leave CỤC BỘ thất bại — socket có thể còn ở room nhóm`, {
+      this.logger.error(`${label} leave CỤC BỘ thất bại — socket có thể còn ở room đích`, {
         ...ctx,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -434,11 +440,11 @@ export class RealtimeEmitterService {
       }
     } catch (err) {
       const { label, ...ctx } = logCtx;
-      this.logger.warn(`${label} failed`, {
-        ...ctx,
-        action,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const detail = { ...ctx, action, error: err instanceof Error ? err.message : String(err) };
+      // `leave` hỏng ⇒ socket ở node KHÁC có thể còn ở room đích (rò) ⇒ `error`; `join` hỏng = fail-closed.
+      if (action === "leave")
+        this.logger.error(`${label} failed — leave toàn cụm không áp`, detail);
+      else this.logger.warn(`${label} failed`, detail);
     }
   }
 
@@ -537,7 +543,8 @@ export class RealtimeEmitterService {
    *
    * ⚠️ `try/catch` CHỈ phủ nhánh ném ĐỒNG BỘ. `socketsLeave` với adapter Valkey publish trong một promise
    * nội bộ; reject ở đó KHÔNG rơi vào `catch` mà thành `unhandledRejection`. Rủi ro này ĐÃ CÓ SẴN ở
-   * `severUserSessions` — ghi ra để không ai đọc khối dưới thành "đã bọc kín".
+   * `severUserSessions` — ghi ra để không ai đọc khối dưới thành "đã bọc kín". Lệnh MẤT trên đường pub/sub
+   * có lưới là vế CỤC BỘ đứng trước (S17-CHAT-RTROOMOPS-1 D-2); socket ở node KHÁC vẫn chỉ nhận qua pub/sub.
    */
   evictFromCallRoom(companyId: string, callId: string, userId: string): void {
     if (!this.callServer) {
@@ -547,10 +554,15 @@ export class RealtimeEmitterService {
       );
       return;
     }
+    const selector = callUserRoomName(companyId, userId);
+    const target = callRoomName(companyId, callId);
+    this.leaveLocally(this.callServer, selector, target, {
+      label: "evictFromCallRoom",
+      callId,
+      userId,
+    });
     try {
-      this.callServer
-        .in(callUserRoomName(companyId, userId))
-        .socketsLeave(callRoomName(companyId, callId));
+      this.callServer.in(selector).socketsLeave(target);
     } catch (err) {
       // KHÔNG throw lên caller: ném ở đây sẽ ROLLBACK cả thao tác gỡ thành viên — lấy một sự cố realtime
       // đổi lấy một thao tác quản trị thất bại là sai chiều đánh đổi. Nhưng phải KÊU: im lặng nghĩa là

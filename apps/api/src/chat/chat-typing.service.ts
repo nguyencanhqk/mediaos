@@ -67,9 +67,13 @@ export class ChatTypingService {
       return;
     }
 
-    if (await this.throttled(actor, roomId)) return;
+    // Khoá tiết lưu, đích phát và payload dùng id TỪ DB (dạng chuẩn), không id route nguyên văn: tên room đã
+    // chuẩn hoá ở builder (S17-CHAT-RTROOMOPS-1) nên mọi biến thể hoa/thường tới CÙNG một phòng — khoá tiết
+    // lưu phải theo cùng dạng, nếu không mỗi biến thể là một cửa sổ tiết lưu riêng.
+    const dbRoomId = access.room.id;
+    if (await this.throttled(actor, dbRoomId)) return;
 
-    this.emitter.emitChatTyping(actor.companyId, roomId, { roomId, userId: actor.id });
+    this.emitter.emitChatTyping(actor.companyId, dbRoomId, { roomId: dbRoomId, userId: actor.id });
   }
 
   /**

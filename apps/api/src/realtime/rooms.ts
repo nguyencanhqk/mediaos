@@ -2,16 +2,37 @@
  * Helper tên Socket.IO room — KHÔNG string-concat rải rác (1 nguồn sự thật, tránh lệch tiền tố giữa
  * gateway/emitter). Quy ước ADR-0013: prefix `co:{companyId}:` ép cô lập tenant ở tầng room —
  * socket công ty B không bao giờ ở cùng room với công ty A dù đoán đúng roomId/userId.
+ *
+ * ┌─ LUẬT: MỌI tên room là CHUẨN TẮC (chữ thường) — S17-CHAT-RTROOMOPS-1 D-1 ───────────────────────┐
+ * │ Mọi tham số của mọi builder dưới đây là uuid (không có id nào phân biệt hoa thường). Cùng một    │
+ * │ thực thể tới builder dưới HAI dạng: join dùng id từ DB/JWT (chữ thường), còn leave/emit dùng id  │
+ * │ từ route (`ParseUUIDPipe` nhận chữ HOA, trả nguyên văn), body hay khung client (Zod `uuid()`    │
+ * │ cũng nhận chữ HOA). Postgres so uuid không phân biệt hoa thường nên lời ghi DB vẫn thành công,   │
+ * │ nhưng tên room là CHUỖI ⇒ room-op lệch dạng khớp 0 socket (người bị gỡ Ở LẠI — fail-OPEN) và emit │
+ * │ lệch dạng phát vào room không ai ở (fail-closed). Builder là chỗ DUY NHẤT join, leave và emit    │
+ * │ cùng đi qua ⇒ chuẩn hoá Ở ĐÂY, một lần, cho mọi tham số. KHÔNG `.toLowerCase()` ở caller.        │
+ * └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  */
+
+/**
+ * Dạng chuẩn tắc của một id trong tên room. Nhận `string` DUY NHẤT; hàm TOÀN PHẦN, KHÔNG BAO GIỜ ném —
+ * builder được tính ở chỗ caller có thể đang ở trong transaction (vd `syncRoomMembership`/`evictFromCallRoom`
+ * tính tên room ngoài `try`), ném ở đây là rollback một thao tác đã đúng. `String(…)` giữ tính toàn phần cả
+ * khi một caller JS vi phạm kiểu (cùng chuỗi mà template literal cũ sinh ra). Đầu vào đã chữ thường ra
+ * nguyên văn.
+ */
+function canonicalId(id: string): string {
+  return String(id).toLowerCase();
+}
 
 /** Room riêng cho 1 user: đích của `notification:new` (đa thiết bị — mọi socket của user join room này). */
 export function userRoomName(companyId: string, userId: string): string {
-  return `co:${companyId}:user:${userId}`;
+  return `co:${canonicalId(companyId)}:user:${canonicalId(userId)}`;
 }
 
 /** S7-CHAT-RT-1 — một phòng chat. Mọi socket của thành viên ĐANG hoạt động join room này. */
 export function chatRoomName(companyId: string, roomId: string): string {
-  return `co:${companyId}:chatroom:${roomId}`;
+  return `co:${canonicalId(companyId)}:chatroom:${canonicalId(roomId)}`;
 }
 
 /**
@@ -33,7 +54,7 @@ export function chatRoomName(companyId: string, roomId: string): string {
  * Nhánh `leave` CỐ Ý vẫn quét theo `userRoomName` (rộng hơn): rời nhầm là fail-safe, sót lại là rò.
  */
 export function chatUserRoomName(companyId: string, userId: string): string {
-  return `co:${companyId}:chatuser:${userId}`;
+  return `co:${canonicalId(companyId)}:chatuser:${canonicalId(userId)}`;
 }
 
 /**
@@ -49,7 +70,7 @@ export function chatUserRoomName(companyId: string, userId: string): string {
  * ĐÍCH fan-out (bài học `ws-permission-gate-needs-its-own-room`).
  */
 export function callUserRoomName(companyId: string, userId: string): string {
-  return `co:${companyId}:calluser:${userId}`;
+  return `co:${canonicalId(companyId)}:calluser:${canonicalId(userId)}`;
 }
 
 /**
@@ -60,7 +81,7 @@ export function callUserRoomName(companyId: string, userId: string): string {
  * không miễn cho khung kế tiếp một lần kiểm lại.
  */
 export function callRoomName(companyId: string, callId: string): string {
-  return `co:${companyId}:call:${callId}`;
+  return `co:${canonicalId(companyId)}:call:${canonicalId(callId)}`;
 }
 
 /**
@@ -79,7 +100,7 @@ export function callRoomName(companyId: string, callId: string): string {
  * tới khi họ ngắt kết nối. Đó là lý do payload WS phải HẸP HƠN DTO REST và không mang URL presign.
  */
 export function feedRoomName(companyId: string): string {
-  return `co:${companyId}:feed`;
+  return `co:${canonicalId(companyId)}:feed`;
 }
 
 /**
@@ -97,7 +118,7 @@ export function feedRoomName(companyId: string): string {
  * Nhánh `leave` CỐ Ý vẫn quét theo `userRoomName` (rộng hơn): rời nhầm là fail-safe, sót lại là rò.
  */
 export function feedUserRoomName(companyId: string, userId: string): string {
-  return `co:${companyId}:feeduser:${userId}`;
+  return `co:${canonicalId(companyId)}:feeduser:${canonicalId(userId)}`;
 }
 
 /**
@@ -111,5 +132,5 @@ export function feedUserRoomName(companyId: string, userId: string): string {
  * hạn của `feedRoomName` ở trên) — payload WS vì thế phải HẸP hơn DTO REST và không mang URL presign.
  */
 export function feedGroupRoomName(companyId: string, groupId: string): string {
-  return `co:${companyId}:feedgroup:${groupId}`;
+  return `co:${canonicalId(companyId)}:feedgroup:${canonicalId(groupId)}`;
 }

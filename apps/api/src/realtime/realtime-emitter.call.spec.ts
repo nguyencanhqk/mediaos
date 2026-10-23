@@ -122,3 +122,117 @@ describe("emitChatCall — hợp đồng biên `realtime/`: KHÔNG BAO GIỜ né
     expect(t.error).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * S17-CHAT-RTROOMOPS-1 — room-op của `/ws-call` (`evictFromCallRoom`) + vế `/ws-call` của
+ * `severUserSessions`. Fake ghi THỨ TỰ room-op của CẢ HAI namespace (`ws:` / `call:`) và CẢ HAI kênh
+ * (`cluster` = `in(...)`, dưới adapter Valkey là publish có thể MẤT · `local` = `local.in(...)`, đồng bộ).
+ */
+const CALL_HEX = "6b1f0c2e-9d3a-4e5f-8a7b-c0d1e2f3a4b5";
+
+function makeNamespace(tag: "ws" | "call", order: string[]) {
+  const disconnectSockets = vi.fn();
+  const opsFor = (kind: "cluster" | "local", selector: string) => ({
+    socketsJoin: (target: string) => order.push(`${tag}:${kind}:join:${selector}>${target}`),
+    socketsLeave: (target: string) => order.push(`${tag}:${kind}:leave:${selector}>${target}`),
+    disconnectSockets: (close: boolean) => {
+      order.push(`${tag}:${kind}:disconnect:${selector}`);
+      disconnectSockets(close);
+    },
+  });
+  return {
+    in: vi.fn((t: string) => opsFor("cluster", t)),
+    local: { in: vi.fn((t: string) => opsFor("local", t)) },
+    to: vi.fn(() => ({ emit: vi.fn() })),
+    disconnectSockets,
+  };
+}
+
+function makeRoomOpsEmitter(opts: { withCallServer?: boolean } = {}) {
+  const { withCallServer = true } = opts;
+  const order: string[] = [];
+  const ws = makeNamespace("ws", order);
+  const call = makeNamespace("call", order);
+  const svc = new RealtimeEmitterService();
+  svc.setServer(ws as never);
+  if (withCallServer) svc.setCallServer(call as never);
+  const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+  return { svc, ws, call, order, error };
+}
+
+describe("evictFromCallRoom — vế cục bộ + tên room chuẩn tắc (S17-CHAT-RTROOMOPS-1)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sel = `co:${COMPANY}:calluser:${USER_B}`;
+  const target = `co:${COMPANY}:call:${CALL}`;
+
+  it("🔒 E-1 CỤC BỘ trước, rồi mới toàn cụm — cùng bộ chọn calluser, cùng đích room cuộc gọi", () => {
+    const t = makeRoomOpsEmitter();
+
+    t.svc.evictFromCallRoom(COMPANY, CALL, USER_B);
+
+    expect(t.order).toEqual([
+      `call:local:leave:${sel}>${target}`,
+      `call:cluster:leave:${sel}>${target}`,
+    ]);
+    expect(t.error).not.toHaveBeenCalled();
+  });
+
+  it("🔒 E-2 vế cục bộ đi namespace `/ws-call`, 0 lệnh trên namespace `/ws` (hai không gian room tách biệt)", () => {
+    const t = makeRoomOpsEmitter();
+
+    t.svc.evictFromCallRoom(COMPANY, CALL, USER_B);
+
+    expect(t.call.local.in).toHaveBeenCalledWith(sel);
+    expect(t.ws.local.in).not.toHaveBeenCalled();
+    expect(t.ws.in).not.toHaveBeenCalled();
+  });
+
+  it("E-3 `/ws-call` chưa sẵn sàng ⇒ `error` (vế an ninh KHÔNG im lặng), 0 lệnh, không ném", () => {
+    const t = makeRoomOpsEmitter({ withCallServer: false });
+
+    expect(() => t.svc.evictFromCallRoom(COMPANY, CALL, USER_B)).not.toThrow();
+
+    expect(t.error).toHaveBeenCalledTimes(1);
+    expect(t.order).toEqual([]);
+  });
+
+  it("🔒 E-4 id CHỮ HOA ⇒ bộ chọn calluser + đích room cuộc gọi ra chữ thường ở CẢ HAI vế", () => {
+    const t = makeRoomOpsEmitter();
+
+    t.svc.evictFromCallRoom(COMPANY.toUpperCase(), CALL_HEX.toUpperCase(), USER_B.toUpperCase());
+
+    const hexTarget = `co:${COMPANY}:call:${CALL_HEX}`;
+    expect(t.order).toEqual([
+      `call:local:leave:${sel}>${hexTarget}`,
+      `call:cluster:leave:${sel}>${hexTarget}`,
+    ]);
+  });
+
+  it("🔒 E-5 vế cục bộ NÉM ⇒ lệnh toàn cụm VẪN chạy + `error`, không ném lên caller (caller ở trong tx)", () => {
+    const t = makeRoomOpsEmitter();
+    t.call.local.in.mockImplementation(() => {
+      throw new Error("local adapter down");
+    });
+
+    expect(() => t.svc.evictFromCallRoom(COMPANY, CALL, USER_B)).not.toThrow();
+
+    expect(t.order).toEqual([`call:cluster:leave:${sel}>${target}`]);
+    expect(t.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("🔒 S-1 severUserSessions với id CHỮ HOA (route thu hồi phiên) ⇒ cắt đúng room chuẩn tắc của CẢ HAI namespace", () => {
+    const t = makeRoomOpsEmitter();
+
+    t.svc.severUserSessions(COMPANY.toUpperCase(), USER_B.toUpperCase());
+
+    expect(t.order).toEqual([
+      `ws:cluster:disconnect:co:${COMPANY}:user:${USER_B}`,
+      `call:cluster:disconnect:co:${COMPANY}:calluser:${USER_B}`,
+    ]);
+    expect(t.ws.disconnectSockets).toHaveBeenCalledWith(true);
+    expect(t.call.disconnectSockets).toHaveBeenCalledWith(true);
+  });
+});
