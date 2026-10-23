@@ -213,8 +213,10 @@ export default {
     unavailable: "Tệp không tải được",
     resolving: "Đang lấy liên kết tải…",
     download: "Tải xuống",
-    // S16-SOCIAL-FILEOPENUX-1 — tên trợ năng của ô tệp không phải ảnh (server phục vụ dạng tải xuống).
+    // S16-SOCIAL-FILEOPENUX-1 — tên trợ năng của ô tệp không phải ảnh, theo cách phục vụ server đã ký vào URL:
+    // `attachment` ⇒ downloadName; `inline` (vd video mp4/webm) hoặc không rõ ⇒ openName.
     downloadName: "Tải xuống {{name}}",
+    openName: "Mở {{name}}",
     imageAlt: "Ảnh đính kèm: {{name}}",
     imageBroken: "Ảnh không hiển thị được",
     countLabel: "{{count}} tệp đính kèm",

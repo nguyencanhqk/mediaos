@@ -26,6 +26,12 @@ import { signedUrlDisposition } from "./signed-url-disposition";
  *        hiện hành (`isCurrent`, F1 của S19-FE-SIGNEDTAB-1) — đây là đường duy nhất THAY trang app.
  * Mọi điều hướng dùng `href` của URL đã qua bước 2. Lỗi ⇒ đóng tab trắng rồi ném lại cho caller hiện thông báo.
  * URL KHÔNG được lưu ở đâu.
+ *
+ * ⚠️ Giới hạn đã biết của nhánh `attachment` (plan S16-SOCIAL-FILEOPENUX-1 D4 · O5 · N5): storage trả lỗi
+ * (403/404/5xx) hoặc không tới được ⇒ phản hồi không có `Content-Disposition`, trình duyệt hiển thị trang lỗi
+ * NGAY TRÊN TAB APP (mất trạng thái màn). Chấp nhận có điều kiện: chỉ phát hành khi storage tới được từ trình duyệt
+ * người dùng (O5). Cô lập lỗi (iframe ẩn + CSP `frame-src`) và ghim origin storage trước khi rẽ nhánh thuộc
+ * S19-FE-SIGNEDTAB-2.
  */
 export interface OpenSignedUrlOptions {
   /**

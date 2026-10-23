@@ -32,3 +32,19 @@ export function signedUrlDisposition(url: URL): SignedUrlDisposition {
   const normalized = token.trim().toLowerCase();
   return normalized === "inline" || normalized === "attachment" ? normalized : "unknown";
 }
+
+/**
+ * Như {@link signedUrlDisposition} nhưng nhận chuỗi `href` (CHAT gắn URL ký lúc render). Không phải URL tuyệt đối
+ * hoặc scheme khác `http(s)` ⇒ `unknown`. Chỉ dùng để chọn NHÃN hiển thị — KHÔNG quyết định điều hướng.
+ */
+export function hrefDisposition(href: string): SignedUrlDisposition {
+  let parsed: URL;
+  try {
+    parsed = new URL(href);
+  } catch {
+    // Chuỗi không phải URL tuyệt đối: không có tham số đã ký để đọc.
+    return "unknown";
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "unknown";
+  return signedUrlDisposition(parsed);
+}

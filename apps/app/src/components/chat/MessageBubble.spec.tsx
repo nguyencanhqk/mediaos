@@ -147,6 +147,14 @@ describe("MessageBubble · §14 tin đã thu hồi", () => {
   });
 });
 
+/**
+ * Tìm `<a>` theo `href` bằng so chuỗi — URL ký có `%`/dấu nháy, đưa thẳng vào selector CSS của jsdom thì
+ * lỗi cú pháp.
+ */
+function linkWithHref(root: HTMLElement, href: string): HTMLAnchorElement | undefined {
+  return Array.from(root.querySelectorAll("a")).find((a) => a.getAttribute("href") === href);
+}
+
 describe("MessageBubble · đính kèm BA trạng thái", () => {
   const rest = {
     id: "aaaaaaa1-1111-4111-8111-111111111111",
@@ -165,15 +173,44 @@ describe("MessageBubble · đính kèm BA trạng thái", () => {
     expect(screen.getByText("2.0 KB")).toBeTruthy();
   });
 
-  // S16-SOCIAL-FILEOPENUX-1 L-2: tệp không phải ảnh được server phục vụ dạng TẢI XUỐNG ⇒ ô tệp mang tên trợ
-  // năng nói đúng điều đó. Ảnh (ca đối chứng) giữ nguyên: vẫn mở ở tab mới, tên trợ năng lấy từ `alt`.
-  it("[L-2 FILEOPENUX] ô tệp PDF ⇒ tên trợ năng «Tải xuống <tên>»", () => {
+  // S16-SOCIAL-FILEOPENUX-1 L-2: tên trợ năng của ô tệp không phải ảnh theo cách phục vụ SERVER đã ký vào URL
+  // (`response-content-disposition`): `attachment` ⇒ «Tải xuống <tên>»; `inline` (vd video mp4/webm) hoặc không rõ
+  // ⇒ «Mở <tên>». Ảnh (ca đối chứng) giữ nguyên: vẫn mở ở tab mới, tên trợ năng lấy từ `alt`.
+  // URL thử ghép từ `URLSearchParams` — không host thật, không chữ ký thật.
+  const signedHref = (disposition: string | null): string => {
+    const query = new URLSearchParams({ "X-Amz-Expires": "300" });
+    if (disposition !== null) query.append("response-content-disposition", disposition);
+    return `https://storage.example.test/co/obj?${query.toString()}`;
+  };
+
+  it("[L-2 FILEOPENUX] ô tệp PDF ký `attachment` ⇒ tên trợ năng «Tải xuống <tên>»", () => {
+    const href = signedHref('attachment; filename="bao-cao.pdf"');
     const { container } = renderBubble({
-      attachments: [{ ...rest, url: "https://storage/signed", thumbnailUrl: null }],
+      attachments: [{ ...rest, url: href, thumbnailUrl: null }],
     });
-    const link = container.querySelector('a[href="https://storage/signed"]');
+    const link = linkWithHref(container, href);
     expect(link?.getAttribute("aria-label")).toBe("Tải xuống bao-cao.pdf");
     expect(screen.getByRole("link", { name: "Tải xuống bao-cao.pdf" })).toBe(link);
+  });
+
+  it("[gate F1 FILEOPENUX] ô video mp4 ký `inline` ⇒ «Mở <tên>», KHÔNG nói «Tải xuống»", () => {
+    const href = signedHref("inline");
+    const { container } = renderBubble({
+      attachments: [
+        { ...rest, name: "clip.mp4", mimeType: "video/mp4", url: href, thumbnailUrl: null },
+      ],
+    });
+    const link = linkWithHref(container, href);
+    expect(link?.getAttribute("aria-label")).toBe("Mở clip.mp4");
+    expect(screen.queryByRole("link", { name: /Tải xuống/ })).toBeNull();
+  });
+
+  it("[gate F1 FILEOPENUX] URL không mang disposition đã ký ⇒ nhãn trung tính «Mở <tên>»", () => {
+    const href = signedHref(null);
+    const { container } = renderBubble({
+      attachments: [{ ...rest, url: href, thumbnailUrl: null }],
+    });
+    expect(linkWithHref(container, href)?.getAttribute("aria-label")).toBe("Mở bao-cao.pdf");
   });
 
   it("[L-2 FILEOPENUX allow] ô ẢNH ⇒ vẫn `target=_blank`, không thêm nhãn «Tải xuống»", () => {

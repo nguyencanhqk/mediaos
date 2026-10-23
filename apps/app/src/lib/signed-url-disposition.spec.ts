@@ -8,7 +8,7 @@
  * URL thử ghép từ `URLSearchParams` — không host thật, không chữ ký thật.
  */
 import { describe, expect, it } from "vitest";
-import { signedUrlDisposition } from "./signed-url-disposition";
+import { hrefDisposition, signedUrlDisposition } from "./signed-url-disposition";
 
 const PARAM = "response-content-disposition";
 
@@ -88,5 +88,22 @@ describe("signedUrlDisposition — tham số do server ký quyết định (P-1)
       [PARAM, "inline"],
     ]);
     expect(signedUrlDisposition(url)).toBe("inline");
+  });
+});
+
+describe("hrefDisposition — chuỗi href gắn lúc render (CHAT, chỉ để chọn nhãn)", () => {
+  it.each<[string, string, "inline" | "attachment" | "unknown"]>([
+    ["https + `attachment`", signed([[PARAM, ATTACHMENT_VALUE]]).href, "attachment"],
+    ["https + `inline`", signed([[PARAM, "inline"]]).href, "inline"],
+    ["https không có tham số", signed([]).href, "unknown"],
+    ["đường dẫn tương đối", `/co/obj?${PARAM}=attachment`, "unknown"],
+    ["chuỗi rỗng", "", "unknown"],
+    [
+      "scheme `javascript:` mang query `attachment`",
+      `javascript:void(0)?${PARAM}=attachment`,
+      "unknown",
+    ],
+  ])("%s ⇒ %s", (_label, href, expected) => {
+    expect(hrefDisposition(href)).toBe(expected);
   });
 });
