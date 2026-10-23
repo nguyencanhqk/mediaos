@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  REPORT_ACTION_MATRIX,
   feedReportActionSchema,
   feedTargetTypeSchema,
   resolveFeedReportSchema,
@@ -17,7 +18,6 @@ import {
 import i18n from "@/i18n";
 import {
   REPORT_ACTION_LABEL_KEYS,
-  REPORT_ACTION_MATRIX,
   REPORT_DELETE_CONFIRM_KEYS,
   buildResolveBody,
   reportActionNeedsConfirm,
@@ -35,8 +35,8 @@ const draft = (over: Partial<ResolveDraft> = {}): ResolveDraft => ({
   ...over,
 });
 
-describe("REPORT_ACTION_MATRIX — chép ma trận của server (plan M3 · D7)", () => {
-  it("đúng từng hàng, đúng thứ tự (viết tay theo `social-report-actions.ts`)", () => {
+describe("REPORT_ACTION_MATRIX — ma trận của contracts, CHUNG với server (S16-SOCIAL-REPORTMATRIX-1)", () => {
+  it("đúng từng hàng, đúng thứ tự (viết tay theo D2 của S16-SOCIAL-BE-3A)", () => {
     expect(REPORT_ACTION_MATRIX).toEqual({
       post: ["none", "hide_post", "lock_comments", "delete_target"],
       comment: ["none", "lock_comments", "delete_target"],

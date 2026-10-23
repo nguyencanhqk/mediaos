@@ -1,15 +1,12 @@
 import {
+  REPORT_ACTION_MATRIX,
   feedReportActionSchema,
   feedTargetTypeSchema,
   resolveFeedReportSchema,
   type FeedReportActionDto,
 } from "@mediaos/contracts";
 import { describe, expect, it } from "vitest";
-import {
-  REPORT_ACTION_MATRIX,
-  canPerformReportAction,
-  isReportActionValidForTarget,
-} from "./social-report-actions";
+import { canPerformReportAction, isReportActionValidForTarget } from "./social-report-actions";
 import { SOCIAL_REPORT_ACTION_PAIRS } from "./social-route-pairs.const";
 import type { SocialActor } from "./social.types";
 
@@ -75,7 +72,8 @@ describe("D4 — SOCIAL_REPORT_ACTION_PAIRS + canPerformReportAction", () => {
     for (const a of ACTIONS) {
       const pair = SOCIAL_REPORT_ACTION_PAIRS[a];
       if (a === "none") expect(pair).toBeNull();
-      else expect(pair).toEqual({ action: "manage", resourceType: "feed-post", isSensitive: false });
+      else
+        expect(pair).toEqual({ action: "manage", resourceType: "feed-post", isSensitive: false });
     }
   });
 
