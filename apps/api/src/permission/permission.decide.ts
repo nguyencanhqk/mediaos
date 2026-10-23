@@ -231,8 +231,7 @@ export function decideStrongestScope(
   const grants = rawGrants.filter((grant) => isGrantActive(grant.expiresAt, now));
 
   const matches = (grant: CompanyRoleGrantWithScope): boolean =>
-    (grant.action === action || grant.action === "*") &&
-    (grant.resourceType === resourceType || grant.resourceType === "*");
+    grantMatchesPair(grant, action, resourceType);
 
   // Deny-overrides-across-roles (wildcard-aware) — any matching DENY blocks all scope.
   if (grants.some((grant) => grant.effect === "DENY" && matches(grant))) return null;
@@ -276,6 +275,24 @@ export function decideStrongestScope(
     }
   }
   return best;
+}
+
+/**
+ * Grant tầng công ty có khớp cặp `(action, resourceType)` không — `'*'` ở trục nào khớp mọi giá trị trục
+ * đó. Nguồn DUY NHẤT của phép khớp cho `decideStrongestScope` VÀ phép chiếu `capabilities`/`scopes`
+ * (`capability-projection.ts`, S14-SEC-CAPWILDCARD-1) — hai đường không được viết lại biểu thức riêng.
+ *
+ * ⚠️ `decideCan` giữ closure `matchesCompanyGrant` riêng (đường cổng `can()`), cố ý KHÔNG đổi ở WO này.
+ */
+export function grantMatchesPair(
+  grant: Pick<CompanyRoleGrant, "action" | "resourceType">,
+  action: string,
+  resourceType: string,
+): boolean {
+  return (
+    (grant.action === action || grant.action === "*") &&
+    (grant.resourceType === resourceType || grant.resourceType === "*")
+  );
 }
 
 /** Returns true when the grant is active (not expired). Treats malformed dates as expired. */
