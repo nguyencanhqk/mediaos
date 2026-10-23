@@ -685,6 +685,16 @@ node -e 'const fs=require("fs"),cp=require("child_process");let n=0;const F=new 
 - **N-G7** — `/auth/me`: khi chỉ một trong `getCapabilities` / `getCapabilityScopes` lỗi, keyset `scopes` lệch
   `capabilities` (đo ở F4, §15.10.1). Chọn: tính hai map từ MỘT lượt đọc grant, hoặc nới câu hợp đồng
   `contracts/src/auth.ts:103,155` thành «⊆ khi suy biến».
+- **N-G8** — review hẹp vòng 2 (23/10, MEDIUM, có TỪ TRƯỚC, ngoài diff): 7 khối `catch` khác của
+  `permission.service.ts` (đo trên `a47a689f`: `:508` · `:590` · `:633` · `:723` · `:789` · `:838` · `:896`) còn dùng
+  `error instanceof Error ? error.message : String(error)` — `String()` có thể ném. Hệ quả nếu ném: lỗi lan ra
+  thành 5xx, KHÔNG thành cấp quyền (vẫn fail-closed). Vá: đổi cả loạt sang `serializeErrorChain` (helper đã không
+  ném từ `a47a689f`) trong một WO riêng, có review vì chạm đường `can()`.
+- **N-G9** — review hẹp vòng 2 (LOW): ca «toString / Symbol.toPrimitive / getter ném» ở
+  `serialize-error-chain.spec.ts` chỉ khẳng định `not.toThrow`; lớp `attempt` ngoài cùng làm chúng vẫn xanh khi gỡ
+  lớp bảo vệ bên trong ⇒ thêm khẳng định GIÁ TRỊ trả về (chuỗi dự phòng đúng vị trí) để mỗi lớp có ca riêng.
+  Kèm (LOW): catch của `getCapabilities`/`getCapabilityScopes` gọi thẳng `this.logger.error`, chưa bọc như
+  `emitError` của hai ảnh chụp.
 
 ---
 
