@@ -384,6 +384,11 @@ export type FeedReportTargetSnapshotDto = z.infer<typeof feedReportTargetSnapsho
  *
  * ⚠️ Khoá `reporter` **LUÔN CÓ MẶT**, che bằng `null` chứ KHÔNG bỏ khoá: tập khoá đóng ở trên.
  *
+ * ⚠️ **`resolutionNote` là `null` khi `reporter === null`** (CÙNG vị từ D13-a — S16-SOCIAL-RESNOTEMASK-1),
+ * bất kể hàng có ghi chú hay không: chữ người xử lý viết về báo cáo có thể nhắc người tố giác. Người đọc
+ * bị che KHÔNG phân biệt được «không có ghi chú» với «bị che» — cố ý, không có cờ đã-che. `note` (chữ của
+ * chính người báo cáo) KHÔNG che — SOC-DEC-011.
+ *
  * ⚠️ **HAI hình dạng, ĐỪNG gộp khi render:**
  * - `reporter === null` ⇒ **bị che theo scope**. KHÔNG BAO GIỜ có nghĩa «tra không ra»: khi được lộ,
  *   server LUÔN dựng object (có thể với trường `null` bên trong).

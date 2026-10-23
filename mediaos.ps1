@@ -576,13 +576,127 @@ function Invoke-ProdMigrateStep {
   return $true
 }
 
+# ── SCA app vệ tinh (S19-OPS-SCASATELLITE-1, D-3) ─────────────────────────────
+# apps\fbpost (npm) và apps\lms (pnpm) có lockfile RIÊNG, nằm ngoài workspace pnpm ⇒ cổng `pnpm audit`
+# của CI mù với chúng. `m sca` quét tay; `m prod-update lms|social` tự quét ở CUỐI nhánh của app đó.
+function Write-ScaLine([string]$line) {
+  if ($line -match '^\s*\[X\]') { Write-Host $line -ForegroundColor Red }
+  elseif ($line -match '^\s*\[!\]') { Write-Host $line -ForegroundColor Yellow }
+  elseif ($line -match '^\s*\[OK\]') { Write-Host $line -ForegroundColor Green }
+  else { Write-Host $line }
+}
+
+# Chạy scripts\sca-satellites.mjs, trả exit code (0 sạch · 1 high/critical · 2 không đo được · -1 không
+# chạy được). KHÔNG throw, KHÔNG exit. Đọc/ghi `$global:LASTEXITCODE` (gán `$LASTEXITCODE` trong hàm tạo
+# biến CỤC BỘ che biến toàn cục ⇒ luôn đọc ra $null). KHÔNG `2>&1` (bẫy NativeCommandError của PS 5.1).
+function Invoke-ScaNode([string[]]$scaArgs) {
+  $ErrorActionPreference = 'Continue'   # cục bộ trong hàm — không đổi EAP 'Stop' của script
+  $scaScript = Join-Path $Root 'scripts\sca-satellites.mjs'
+  if (-not (Test-Path -LiteralPath $scaScript)) {
+    Write-Err "không thấy $scaScript — checkout chưa có bộ quét SCA?"
+    return -1
+  }
+  $nodeArgs = @()
+  if ($scaArgs) { $nodeArgs = @($scaArgs) }
+  $prevEnc = $null
+  try { $prevEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { $prevEnc = $null }
+  $code = $null
+  try {
+    $global:LASTEXITCODE = $null
+    & node $scaScript $nodeArgs | ForEach-Object { Write-ScaLine ([string]$_) }
+    $code = $global:LASTEXITCODE
+  } catch {
+    $code = -1
+  } finally {
+    if ($null -ne $prevEnc) { try { [Console]::OutputEncoding = $prevEnc } catch { } }
+  }
+  if ($null -eq $code) { $code = -1 }
+  return [int]$code
+}
+
+# Hook cuối `m prod-update lms|social`: service ĐÃ restart (và lần deploy thường chính là bản vá) ⇒ BÁO ĐỎ
+# TO nhưng KHÔNG chặn, KHÔNG làm gãy bước kế (nhánh LMS và SOCIAL chạy nối tiếp khi target 'be'/'all').
+function Invoke-ScaAfterDeploy([string]$app) {
+  Write-Host "  quét SCA $app (audit dependency chạy thật, ngưỡng high|critical) ..." -ForegroundColor DarkGray
+  $code = -1
+  try { $code = Invoke-ScaNode @($app) } catch { $code = -1 }
+  Save-ScaState $app $code "prod-update"
+  if ($code -eq 0) { return }
+  $why = switch ($code) {
+    1 { "CÓ advisory mức high/critical trên dependency chạy thật" }
+    2 { "KHÔNG ĐO ĐƯỢC (audit lỗi / thiếu lockfile / kết quả lệch nhau / CÂY ĐÃ CÀI LỆCH lockfile = chưa cài lại deps ⇒ build vừa chạy mã CŨ)" }
+    default { "không chạy được bộ quét (exit $code)" }
+  }
+  Write-Err "SCA ${app}: $why — service ĐÃ restart, deploy KHÔNG bị chặn."
+  Write-Err "Xử lý trước lần deploy kế: 'm sca $app' để xem chi tiết (plan S19-OPS-SCASATELLITE-1)."
+}
+
+# Dấu vết BỀN của lần quét gần nhất mỗi app (gate F1): một dòng đỏ trôi trong cuộn log deploy là đủ để bị bỏ
+# lỡ ⇒ ghi logs\sca-last-<app>.txt (logs\ đã gitignore) để `m prod-status` hiện lại. Một dòng ASCII:
+# "<giờ>|<exit>|<nguồn>". KHÔNG throw — ghi hỏng chỉ cảnh báo.
+function Save-ScaState([string]$app, [int]$code, [string]$source) {
+  try {
+    $dir = Join-Path $Root "logs"
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $line = "{0}|{1}|{2}" -f (Get-Date -Format "yyyy-MM-dd HH:mm"), $code, $source
+    [IO.File]::WriteAllText((Join-Path $dir "sca-last-$app.txt"), $line)
+  } catch { Write-Warn ("không ghi được dấu vết SCA ${app}: " + $_.Exception.Message) }
+}
+
+# Mục SCA của `m prod-status` — CHỈ ĐỌC dấu vết, không chạy audit (audit cần mạng + vài chục giây).
+function Show-ScaStatus {
+  Write-Host "  SCA app vệ tinh (lần quét gần nhất — 'm sca' / cuối 'm prod-update lms|social'):" -ForegroundColor DarkGray
+  foreach ($app in @("lms", "fbpost")) {
+    $f = Join-Path $Root "logs\sca-last-$app.txt"
+    if (-not (Test-Path -LiteralPath $f)) { Write-Warn "SCA ${app}: chưa có lần quét nào được ghi — chạy 'm sca $app'"; continue }
+    try {
+      $parts = ([IO.File]::ReadAllText($f)).Trim().Split('|')
+      # Sai dạng ⇒ throw sang nhánh "hỏng": KHÔNG để [int]$null = 0 thành «sạch».
+      if ($parts.Count -lt 3 -or $parts[1] -notmatch '^-?\d+$') { throw "dấu vết sai dạng" }
+      $at = $parts[0]; $code = [int]$parts[1]; $src = $parts[2]
+      if ($code -eq 0) { Write-Ok "SCA ${app}: sạch (lần quét $at, $src)" }
+      elseif ($code -eq 1) { Write-Err "SCA ${app}: ĐỎ từ $at ($src) — có high/critical trên dependency chạy thật — 'm sca $app'" }
+      else { Write-Err "SCA ${app}: KHÔNG ĐO ĐƯỢC từ $at ($src, exit $code) — gồm cả cây đã cài lệch lockfile — 'm sca $app'" }
+    } catch { Write-Err "SCA ${app}: dấu vết hỏng ($f) — chạy lại 'm sca $app'" }
+  }
+}
+
+function Invoke-Sca([string[]]$scaArgs) {
+  Write-Step "SCA app vệ tinh (fbpost npm · lms pnpm) — dependency chạy thật, ngưỡng high|critical"
+  $argList = @()
+  if ($scaArgs) { $argList = @($scaArgs | Where-Object { $_ }) }
+  $target = "all"
+  if ($argList.Count -eq 1) { $target = ([string]$argList[0]).ToLower() }
+  if ($argList.Count -gt 1 -or @("all", "fbpost", "lms") -notcontains $target) {
+    # Thư mục tuỳ chọn / tham số khác ⇒ không phải cây của checkout này: chạy nguyên trạng, KHÔNG ghi dấu vết.
+    $code = Invoke-ScaNode $argList
+  } else {
+    $apps = @("fbpost", "lms")
+    if ($target -ne "all") { $apps = @($target) }
+    $codes = @()
+    foreach ($a in $apps) {
+      $c = Invoke-ScaNode @($a)
+      Save-ScaState $a $c "m sca"
+      $codes += $c
+    }
+    $code = 0
+    if (@($codes | Where-Object { $_ -eq 1 }).Count -gt 0) { $code = 1 }
+    if (@($codes | Where-Object { $_ -ne 0 -and $_ -ne 1 }).Count -gt 0) { $code = 2 }
+  }
+  if ($code -lt 0) { $code = 2 }
+  if ($code -ne 0) { exit $code }
+}
+
 # PROD UPDATE — re-build + cập nhật + khởi động lại các app đã deploy online:
-#   m prod-update              → FE (Pages) + API + LMS
-#   m prod-update fe|api|lms   → chỉ 1 phần    ('be' = API + LMS — bước elevated dùng nội bộ)
+#   m prod-update                    → FE (Pages) + API + LMS + SOCIAL
+#   m prod-update fe|api|lms|social  → chỉ 1 phần    ('be' = API + LMS + SOCIAL — bước elevated dùng nội bộ)
 # API: build ĐÚNG cặp filter của 04-build-install-service.ps1 (contracts + api) rồi restart service —
 # nhanh hơn 'm deploy-api' (không gỡ/cài lại service). Đổi cấu hình service/node path → vẫn 'm deploy-api'.
 # LMS: apps\lms là workspace RIÊNG (fmc-app) → build tại chỗ ('pnpm build' = next build) rồi restart
-# service. Deps LMS đổi thì tự chạy 'pnpm install' trong apps\lms trước.
+# service. SOCIAL: apps\fbpost dùng npm → 'npm run build' rồi restart.
+# KHÔNG tự cài deps (cũng KHÔNG pull): deps LMS/SOCIAL đổi ⇒ chạy TAY trước — 'pnpm install
+# --frozen-lockfile' trong apps\lms / 'npm ci' trong apps\fbpost. Cuối nhánh LMS/SOCIAL tự quét SCA
+# (Invoke-ScaAfterDeploy) — đỏ thì báo, không chặn.
 function Invoke-ProdUpdate([string[]]$updArgs) {
   $target = "all"
   if ($updArgs.Count -gt 0 -and $updArgs[0]) { $target = $updArgs[0].ToLower() }
@@ -644,6 +758,7 @@ function Invoke-ProdUpdate([string[]]$updArgs) {
     Push-Location (Join-Path $Root "apps\lms")
     try { Exec { pnpm build } "build lms (next build)" } finally { Pop-Location }
     Restart-OneProdService $ProdLmsService "http://localhost:$LmsPort" "LMS PROD" $LmsHealthHint
+    Invoke-ScaAfterDeploy "lms"
   }
   if ($doSocial) {
     # apps\fbpost dùng NPM (package-lock.json), KHÔNG pnpm — hàng rào R3 của DECISIONS-08 loại nó khỏi
@@ -664,6 +779,7 @@ function Invoke-ProdUpdate([string[]]$updArgs) {
       if ($sc -eq 401) { Write-Ok "cổng phiên OK (GET /api/pages -> 401)" }
       else { Write-Err ("CONG PHIEN bat thuong: GET /api/pages -> " + $sc + ", ky vong 401.") }
     }
+    Invoke-ScaAfterDeploy "fbpost"
   }
 }
 
@@ -790,6 +906,8 @@ function Invoke-ProdStatus {
   Show-MigrationStatus
   Write-Host ""
   Show-ReleaseStatus
+  Write-Host ""
+  Show-ScaStatus
   Write-Host ""
   try {
     $r = Invoke-WebRequest -Uri "http://localhost:$ApiPort/api/v1/health" -UseBasicParsing -TimeoutSec 4
@@ -1172,6 +1290,8 @@ function Show-Help {
   Write-Host "                              API: build -> MIGRATE -> restart. Migrate đỏ/huỷ = KHÔNG restart, exit 1."
   Write-Host "                              Lô tồn đọng có REVOKE/DROP thì HỎI xác nhận (bỏ qua: MEDIAOS_MIGRATE_YES=1)."
   Write-Host "    prod-restart [api|lms|social]    chỉ khởi động lại service PROD, KHÔNG rebuild/migrate (bỏ trống = cả ba)"
+  Write-Host "                              prod-update KHÔNG cài deps: đổi deps ⇒ chạy tay 'pnpm install --frozen-lockfile' (apps\lms) / 'npm ci' (apps\fbpost) TRƯỚC."
+  Write-Host "    sca [fbpost|lms|all]      quét SCA app vệ tinh (dependency chạy thật, high|critical). Exit 0 sạch · 1 có lỗ · 2 không đo được"
   Write-Host "    prod-status               service (API·LMS·cloudflared) · cổng · migration tồn đọng · release · health local + online"
   Write-Host "    prod-rollback [<stamp>]   quay API PROD về bản build TRƯỚC (không đụng DB); bỏ trống = ngay trước"
   Write-Host "    prod-cutover              MỘT LẦN: trỏ service từ apps\api\dist sang releases\current (KI-016)"
@@ -1315,6 +1435,7 @@ switch ($Command.ToLower()) {
   "prod-status"   { Invoke-ProdStatus }
   "prod-rollback" { Invoke-ProdRollback $Rest }   # S6-REL-1 (D3) — quay app về bản trước
   "prod-cutover"  { Invoke-ProdCutover }          # S6-REL-1 (D3) — một lần: dist → releases\current
+  "sca"           { Invoke-Sca $Rest }            # S19-OPS-SCASATELLITE-1 — quét SCA fbpost/lms
   "dev-online"        { Invoke-DevOnline }
   "dev-online-fast"   { Invoke-DevOnlineFast }
   "dev-online-stop"   { Invoke-DevOnlineStop }

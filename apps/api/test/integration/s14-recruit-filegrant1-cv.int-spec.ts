@@ -34,7 +34,6 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { directPool, hasDb } from "../helpers/integration-db";
-import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 import {
   cleanupTenants,
   seedCompany,
@@ -49,13 +48,7 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = ["Passw0rd", "s14filegrant"].join("!");
 
-// Presign S3 là HMAC OFFLINE — không gọi mạng, không cần MinIO chạy. Đặt TRƯỚC khi dựng app.
-process.env.S3_ENDPOINT ??= "http://localhost:9000";
-process.env.S3_ACCESS_KEY ??= "mediaos";
-process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-process.env.S3_BUCKET ??= "mediaos-assets";
-process.env.S3_FORCE_PATH_STYLE ??= "true";
-process.env.S3_REGION ??= "us-east-1";
+// S3_* ghim ở `vitest.config.ts` (`pinTestStorageEnv`); presign là HMAC ngoại tuyến — không gọi mạng.
 
 type Scope = "Own" | "Team" | "Department" | "Company";
 /** [action, resourceType, scope, isSensitive] — cờ sensitive phải KHỚP catalog thật, seed.ts ném LOUD nếu lệch. */
@@ -647,12 +640,15 @@ describe.skipIf(!hasLaneDb)("S14-RECRUIT-FILEGRANT-1 — tệp CV qua bề mặt
       expect(names.filter((n) => n.includes("recruiter") || n === "hr")).toEqual([]);
     });
 
-    it("Z2: `object_permissions` chạm `foundation-file`/`*` = 0 hàng", async () => {
+    it("Z2: `object_permissions` HỆ THỐNG chạm `foundation-file`/`*` = 0 hàng", async () => {
+      // Census trên lane DÙNG CHUNG: chỉ đếm grant hệ thống (granted_by IS NULL — dạng một migration/seed
+      // sẽ ghi). Grant do int-spec khác tự cấp trong tenant riêng của nó mang granted_by và không thuộc phạm vi WO.
       const r = await direct().query<{ n: number }>(
         `SELECT count(*)::int AS n
            FROM object_permissions op
            JOIN permissions p ON p.id = op.permission_id
-          WHERE p.resource_type IN ('foundation-file','*')`,
+          WHERE p.resource_type IN ('foundation-file','*')
+            AND op.granted_by IS NULL`,
       );
       expect(r.rows[0].n).toBe(0);
     });

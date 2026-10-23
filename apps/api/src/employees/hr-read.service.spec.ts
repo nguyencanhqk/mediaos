@@ -61,7 +61,7 @@ function makeDetailRow(overrides: Record<string, unknown> = {}) {
     startDate: null,
     endDate: null,
     status: "active",
-    avatarUrl: "https://cdn.test/a.png",
+    avatarUrl: "f0f0f0f0-0000-4000-8000-000000000001",
     baseSalary: "5000.00",
     salaryType: "monthly",
     phone: "0900000000",
@@ -106,7 +106,7 @@ function makeListRow(overrides: Record<string, unknown> = {}) {
     workType: "offline",
     employmentType: "full_time",
     status: "active",
-    avatarUrl: "https://cdn.test/a.png",
+    avatarUrl: "f0f0f0f0-0000-4000-8000-000000000001",
     startDate: "2025-02-01",
     officialDate: "2025-05-01",
     workLocation: "Hà Nội",
@@ -232,15 +232,15 @@ function makeAudit() {
   return { record: vi.fn().mockResolvedValue(undefined) };
 }
 
-// S5-ME-BE-5 — AvatarPresignService mock: mô phỏng đúng hành vi http-passthrough (test dùng cdn URL) — fileId
-// (UUID) → không map (initials) vì verify link/image test THẬT ở avatar-presign.service.spec.ts + int-spec.
+// Mock presign (S19-HR-AVATARWRITE-1): chỉ fileId UUID được ký (URL giả); http(s)/rác → initials.
 function makeAvatarPresign() {
   return {
     resolveEmployeeAvatars: vi.fn(
       async (_companyId: string, subjects: { employeeId: string; avatarUrl: string | null }[]) => {
         const m = new Map<string, string>();
         for (const s of subjects) {
-          if (s.avatarUrl && /^https?:\/\//.test(s.avatarUrl)) m.set(s.employeeId, s.avatarUrl);
+          const id = s.avatarUrl ?? "";
+          if (/^[0-9a-f-]{36}$/i.test(id)) m.set(s.employeeId, `https://signed.test/${id}`);
         }
         return m;
       },
@@ -549,7 +549,7 @@ describe("HrReadService.listHrEmployees — PII masking (HR-PROFILE-UI-1)", () =
       expect(item.phone).toBeNull();
       expect(item.contractType).toBeNull();
       // Directory-class fields are NOT gated.
-      expect(item.avatarUrl).toBe("https://cdn.test/a.png");
+      expect(item.avatarUrl).toBe("https://signed.test/f0f0f0f0-0000-4000-8000-000000000001");
       expect(item.startDate).toBe("2025-02-01");
     }
   });
@@ -599,7 +599,7 @@ describe("HrReadService.getHrEmployee — personal-info PII masking (HR-PROFILE-
     expect(res.emergencyContactName).toBeNull();
     expect(res.emergencyContactPhone).toBeNull();
     // avatarUrl is directory-class — not gated.
-    expect(res.avatarUrl).toBe("https://cdn.test/a.png");
+    expect(res.avatarUrl).toBe("https://signed.test/f0f0f0f0-0000-4000-8000-000000000001");
   });
 
   it("ALLOW view-sensitive → personal-info revealed BUT identity_* stays null (own sensitive gate)", async () => {

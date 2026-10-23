@@ -19,6 +19,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -274,6 +275,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3A · CRUD catalog huy hiệu (DB cô
     });
     expect(u.status, JSON.stringify(u.body)).toBe(404);
     expect(JSON.stringify(u.body)).toContain(SOCIAL_ERR.KUDOS_BADGE_NOT_FOUND);
+    expect(u.body.error?.code).toBe(SOCIAL_ERROR_CODES.KUDOS_BADGE_NOT_FOUND);
 
     const d = await del(manager.token, `/social/kudos-badges/${badgeOfB}`);
     expect(d.status, JSON.stringify(d.body)).toBe(404);
@@ -316,6 +318,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3A · CRUD catalog huy hiệu (DB cô
       const res = await post(manager.token, "/social/kudos-badges").send({ code, name: "Trùng" });
       expect(res.status, `${code}: ${JSON.stringify(res.body)}`).toBe(409);
       expect(JSON.stringify(res.body)).toContain(SOCIAL_ERR.KUDOS_BADGE_CODE_TAKEN);
+      expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.KUDOS_BADGE_CODE_TAKEN);
     }
     expect(await badgeCountOf(A.companyId)).toBe(before);
 

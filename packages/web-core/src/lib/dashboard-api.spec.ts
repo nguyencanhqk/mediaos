@@ -221,3 +221,28 @@ describe("dashboardApi — config admin (S4-FE-DASH-3, nối S4-DASH-BE-3)", () 
     expect(opts?.body).toBe(JSON.stringify({ is_enabled: false, sort_order: 20 }));
   });
 });
+
+/**
+ * S16-SOCIAL-DASH-1 (plan-review M1) — ghim GIÁ TRỊ slug của hai widget SOCIAL.
+ *
+ * Ratchet ở apps/app `DashboardWidgetGrid.spec.tsx` chỉ kiểm «mã nào cũng CÓ slug»; spec của component thì
+ * mock trọn `dashboardApi` nên không bao giờ chạm bản đồ `DASH_WIDGET_SLUG`. Gõ sai một ký tự của slug ⇒
+ * widget 404 ở MỌI lần mở mà hai lưới kia vẫn xanh. Hai ca dưới KHÔNG mock bản đồ và so URL bằng `toBe`
+ * NGUYÊN CHUỖI — cùng literal mà int-spec BE (`dashboard-social-widgets.int-spec.ts`) gọi qua HTTP, cũng là
+ * `data_source_key` của mig 0592.
+ */
+describe("dashboardApi — slug của 2 widget SOCIAL (S16-SOCIAL-DASH-1)", () => {
+  it("WC1 — getWidgetData('SOCIAL_ENGAGEMENT_WEEK') → đúng-bằng /dashboard/widgets/social-engagement-week", async () => {
+    await dashboardApi.getWidgetData("SOCIAL_ENGAGEMENT_WEEK");
+    const [url, schema] = lastCall();
+    expect(url).toBe("/dashboard/widgets/social-engagement-week");
+    expect(schema).toBe(dashboardWidgetDataSchema);
+  });
+
+  it("WC2 — getWidgetData('SOCIAL_NEWS_UNACKED') → đúng-bằng /dashboard/widgets/social-news-unacked", async () => {
+    await dashboardApi.getWidgetData("SOCIAL_NEWS_UNACKED");
+    const [url, schema] = lastCall();
+    expect(url).toBe("/dashboard/widgets/social-news-unacked");
+    expect(schema).toBe(dashboardWidgetDataSchema);
+  });
+});

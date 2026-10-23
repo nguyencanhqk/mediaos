@@ -267,6 +267,14 @@ Get-ScheduledTask -TaskName MediaOS-* | Get-ScheduledTaskInfo |
 | `0` | chạy xong, exit 0 |
 | `1` ở `MediaOS-OpsAlert` | **BÌNH THƯỜNG** — `ops-alert-check.mjs` trả `1` khi có nhóm `warn`. Không phải task hỏng |
 | `1` ở `MediaOS-BackupDaily` | **HỎNG THẬT** — script backup trả 0 khi thành công |
+| `0` ở `MediaOS-DockerWatchdog` | engine Docker trả lời, hoặc watchdog vừa bật lại Docker Desktop (xem `logs\docker-watchdog.log`) |
+| `1` ở `MediaOS-DockerWatchdog` | **lỗi script** — đọc dòng `[ERROR]` trong `logs\docker-watchdog.log` |
+| `2` ở `MediaOS-DockerWatchdog` | Docker Desktop đang chạy nhưng engine im quá 10 phút — **cần người xem**, watchdog không diệt gì |
+| `3` ở `MediaOS-DockerWatchdog` | không bật được Docker Desktop (thiếu exe / Start-Process lỗi) — **hỏng thật** |
+
+Tác vụ `MediaOS-DockerWatchdog` (bật lại Docker Desktop khi Explorer lỡ mục Run): đăng ký · gỡ ·
+tạm dừng · diễn tập — xem [RELEASE-09 §4c](RELEASE-09_Monitoring_Alerting_Support_Readiness.md#4c-docker-tự-bật-s19-ops-proddbboot-1).
+Webhook cảnh báo nay chỉ gửi khi trạng thái đổi + nhắc định kỳ + một tin hồi phục — xem RELEASE-09 §4b.
 
 ⚠️ **`State = Ready` KHÔNG chứng minh gì.** Task trỏ tới một `bash.exe` không chạy được vẫn hiện
 `Ready` và vẫn đăng ký thành công; nó chỉ hỏng lúc trigger nổ. Verify bằng `LastTaskResult` + file
@@ -344,9 +352,14 @@ m dev-online-stop     # tránh xung đột thư mục build
 # backup trước (§6.3)
 m prod-update fe      # frontend
 m prod-update api     # build → snapshot → MIGRATE → restart (không migrate xong thì không restart)
-m prod-update lms
+# deps đổi ⇒ cài TAY trước (prod-update KHÔNG cài): pnpm install --frozen-lockfile (apps/lms)
+m prod-update lms     # đọc dòng SCA cuối lệnh (đỏ ⇒ m sca; «cây đã cài LỆCH lockfile» = quên bước cài ở trên)
+# fbpost deps đổi: Stop-Service MediaOS-Social (Admin) TRƯỚC → npm ci (apps/fbpost) — Windows khoá tệp native đang nạp, npm ci xoá node_modules trước ⇒ EPERM giữa chừng
+m prod-update social  # khởi động lại dịch vụ; đọc dòng SCA cuối lệnh như trên
 node scripts/release-smoke.mjs --expect-commit <sha>    # BẮT BUỘC có --expect-commit
 ```
+
+Vá deps `apps/fbpost` (`npm audit fix` / `npm update`): LUÔN kèm `--before=<thời điểm hiện tại trừ 72 giờ>` — npm không có cổng tuổi bản lưu trong cấu hình như `minimumReleaseAge` của pnpm, nên bản vá non tuổi chỉ bị chặn khi người chạy nhớ cờ này.
 
 Quay lui khi hỏng: `m prod-rollback` (`RELEASE-08` §5).
 

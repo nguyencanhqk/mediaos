@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { sql } from "drizzle-orm";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -27,6 +28,7 @@ import { DatabaseService } from "../../src/db/db.service";
 import { PayrollInputsRepository } from "../../src/payroll/payroll-inputs.repository";
 import { PayrollPeopleRepository } from "../../src/payroll/payroll-people.repository";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { enterAppRoleInDrizzleTx, withRolledBackDrizzleTx } from "../helpers/rolled-back-tx";
 import {
   cleanupTenants,
   seedCompany,
@@ -166,23 +168,71 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
     return r.rows[0].id as string;
   }
 
-  async function seedHoliday(
-    date: string,
-    opts: { global?: boolean; type?: string; paid?: boolean; status?: string } = {},
+  type GlobalHolidayOpts = { type?: string; paid?: boolean; status?: string };
+  interface UncommittedHolidays {
+    /** Gieo 1 lễ QUỐC GIA (`company_id IS NULL`) trong tx đang mở — chỉ `compute()` cùng tx thấy. */
+    seed: (date: string, opts?: GlobalHolidayOpts) => Promise<void>;
+    compute: () => ReturnType<PayrollInputsRepository["computeInputsTx"]>;
+  }
+
+  /**
+   * S18-QA-NOTIGLOBALLEAK-1 — lễ QUỐC GIA chỉ sống trong MỘT tx rồi ROLLBACK. Lễ GLOBAL hiện với `compute()`
+   * của MỌI tenant ⇒ bản cũ (commit ở A2–A4, dọn bằng `LIKE 'H-PAYIO-%'` hai đầu) làm A1 `toBe(22)` của
+   * một lượt song song ĐỎ, và crash giữa spec để lại lễ sống trên lane. Ở đây: kết nối riêng của `direct`
+   * ⇒ drizzle tx ⇒ vai app + GUC (đúng `DatabaseService.withTenant`) ⇒ `fn` ⇒ ROLLBACK. Trả các mã lễ đã
+   * gieo để ca kiểm chúng KHÔNG còn sau khi helper trả.
+   */
+  async function withUncommittedHolidays(
+    fn: (h: UncommittedHolidays) => Promise<void>,
+  ): Promise<string[]> {
+    const codes: string[] = [];
+    await withRolledBackDrizzleTx(direct, "payroll-io lễ GLOBAL", async (tx) => {
+      await enterAppRoleInDrizzleTx(tx, A.companyId);
+      await fn({
+        seed: async (date, opts = {}) => {
+          const code = `H-PAYIO-${randomUUID().slice(0, 8)}`;
+          // Vai app KHÔNG ghi được hàng `company_id` NULL (RLS WITH CHECK, xem foundation-tables-tenant-deny
+          // §2) ⇒ về vai phiên (superuser) để gieo rồi hạ lại vai app — tất cả trong CÙNG tx.
+          await tx.execute(sql`RESET ROLE`);
+          await tx.execute(
+            sql`INSERT INTO public_holidays
+                  (company_id, holiday_code, name, holiday_date, holiday_type, is_paid_holiday, status)
+                VALUES (NULL, ${code}, ${`Lễ ${date}`}, ${date}, ${opts.type ?? "PublicHoliday"},
+                        ${opts.paid ?? true}, ${opts.status ?? "Active"})`,
+          );
+          codes.push(code);
+          await enterAppRoleInDrizzleTx(tx, A.companyId);
+        },
+        compute: () => inputs.computeInputsTx(tx, A.companyId, MONTH),
+      });
+    });
+    return codes;
+  }
+
+  /**
+   * Gate F-1 — đối chứng DƯƠNG cùng tx cho ca phủ định A3/A4: một lễ PublicHoliday Active hợp lệ (thứ Tư
+   * `-03`, ngày A2 dùng — đã rollback) gieo qua CÙNG `seed` phải làm `workDays` giảm đúng 1. Thiếu nó thì
+   * một `seed` gieo hàng mà `compute()` không thấy (RLS ẩn hàng NULL, sai ngày…) vẫn để A3/A4 xanh rỗng.
+   */
+  async function expectValidHolidayCountedInTx(
+    seed: UncommittedHolidays["seed"],
+    computeInTx: UncommittedHolidays["compute"],
+    before: number,
   ) {
-    await direct.query(
-      `INSERT INTO public_holidays (company_id, holiday_code, name, holiday_date, holiday_type, is_paid_holiday, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [
-        opts.global ? null : A.companyId,
-        `H-PAYIO-${randomUUID().slice(0, 8)}`,
-        `Lễ ${date}`,
-        date,
-        opts.type ?? "PublicHoliday",
-        opts.paid ?? true,
-        opts.status ?? "Active",
-      ],
+    await seed(`${MONTH}-03`);
+    expect((await computeInTx()).workDays, "neo dương: lễ hợp lệ cùng tx phải bị trừ").toBe(
+      before - 1,
     );
+  }
+
+  /** F4-N — lễ GLOBAL của ca không bao giờ commit (đếm từ `direct`, kết nối khác). */
+  async function expectHolidaysNotCommitted(codes: string[], seeded: number) {
+    expect(codes, "neo dương: helper phải gieo đủ lễ").toHaveLength(seeded);
+    const r = await direct.query(
+      `SELECT count(*)::int AS n FROM public_holidays WHERE holiday_code = ANY($1::text[])`,
+      [codes],
+    );
+    expect(Number(r.rows[0].n), "lễ GLOBAL còn sau khi helper trả ⇒ tx đã COMMIT").toBe(0);
   }
 
   beforeAll(async () => {
@@ -199,13 +249,7 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
     A = await seedCompany(direct, "payrollio");
     companyIds.push(A.companyId);
 
-    // ⚠️ Hàng lễ GLOBAL (`company_id IS NULL`) **sống sót qua `cleanupTenants`** — helper đó dọn theo
-    // company. Lần chạy trước để lại lễ quốc gia ⇒ `work_days` của lần này tụt 1 và ca A1 đỏ vì lý do
-    // sai. Dọn hai đầu (trước + sau) theo tiền tố mã lễ RIÊNG của spec này.
-    await direct.query(
-      `DELETE FROM public_holidays WHERE company_id IS NULL AND holiday_code LIKE 'H-PAYIO-%'`,
-    );
-
+    // Lễ GLOBAL không còn commit ở spec này (withUncommittedHolidays) ⇒ không có gì để dọn hai đầu.
     // ⚠️ Hình dạng {"days":[…]} của `companies` — KHÁC mảng trần của `work_schedules` (mig 0015/0061).
     await direct.query(`UPDATE companies SET working_days_json = $2::jsonb WHERE id = $1`, [
       A.companyId,
@@ -232,7 +276,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
     await seedUserRole(direct, uid, roleId, A.companyId);
     // `seedUser` KHÔNG đặt `full_name` ⇒ điểm chiếu danh tính trả null hợp lệ. Đặt tên cho ĐÚNG một
     // người để ca C1 kiểm được vế "cảnh báo mang TÊN", không chỉ id.
-    await direct.query(`UPDATE users SET full_name = 'Người Không Hồ Sơ Lương' WHERE id = $1`, [uid]);
+    await direct.query(`UPDATE users SET full_name = 'Người Không Hồ Sơ Lương' WHERE id = $1`, [
+      uid,
+    ]);
     const login = await http()
       .post("/auth/login")
       .send({ companySlug: A.slug, email: `io@${A.slug}.test`, password: LOGIN_PW });
@@ -263,10 +309,6 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
   afterAll(async () => {
     await app?.close();
     if (direct) {
-      // Lễ GLOBAL không thuộc company nào ⇒ `cleanupTenants` KHÔNG dọn giúp.
-      await direct.query(
-        `DELETE FROM public_holidays WHERE company_id IS NULL AND holiday_code LIKE 'H-PAYIO-%'`,
-      );
       await cleanupTenants(direct, companyIds);
       await direct.end();
     }
@@ -282,23 +324,36 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
   });
 
   it("A2 — lễ QUỐC GIA (`company_id IS NULL`) BỊ trừ; lễ của công ty khác thì không", async () => {
-    await seedHoliday(`${MONTH}-03`, { global: true }); // thứ Tư
-    const res = await compute();
-    expect(res.workDays, "lễ quốc gia không bị trừ ⇒ lọc `= companyId` (mất toàn bộ lễ)").toBe(21);
-    expect(res.meta.holidaysExcluded).toContain(`${MONTH}-03`);
+    const codes = await withUncommittedHolidays(async ({ seed, compute: computeInTx }) => {
+      await seed(`${MONTH}-03`); // thứ Tư
+      const res = await computeInTx();
+      expect(res.workDays, "lễ quốc gia không bị trừ ⇒ lọc `= companyId` (mất toàn bộ lễ)").toBe(
+        21,
+      );
+      expect(res.meta.holidaysExcluded).toContain(`${MONTH}-03`);
+    });
+    await expectHolidaysNotCommitted(codes, 1);
   });
 
   it("A3 — `WorkingDayOverride` KHÔNG bị trừ (ngày LÀM BÙ — trừ nó là trừ ngược)", async () => {
-    const before = (await compute()).workDays;
-    await seedHoliday(`${MONTH}-04`, { global: true, type: "WorkingDayOverride" });
-    expect((await compute()).workDays, "ngày làm bù bị trừ nhầm").toBe(before);
+    const codes = await withUncommittedHolidays(async ({ seed, compute: computeInTx }) => {
+      const before = (await computeInTx()).workDays;
+      await seed(`${MONTH}-04`, { type: "WorkingDayOverride" });
+      expect((await computeInTx()).workDays, "ngày làm bù bị trừ nhầm").toBe(before);
+      await expectValidHolidayCountedInTx(seed, computeInTx, before);
+    });
+    await expectHolidaysNotCommitted(codes, 2);
   });
 
   it("A4 — lễ `status <> 'Active'` hoặc `is_paid_holiday=false` KHÔNG bị trừ", async () => {
-    const before = (await compute()).workDays;
-    await seedHoliday(`${MONTH}-05`, { global: true, status: "Inactive" });
-    await seedHoliday(`${MONTH}-08`, { global: true, paid: false });
-    expect((await compute()).workDays).toBe(before);
+    const codes = await withUncommittedHolidays(async ({ seed, compute: computeInTx }) => {
+      const before = (await computeInTx()).workDays;
+      await seed(`${MONTH}-05`, { status: "Inactive" });
+      await seed(`${MONTH}-08`, { paid: false });
+      expect((await computeInTx()).workDays).toBe(before);
+      await expectValidHolidayCountedInTx(seed, computeInTx, before);
+    });
+    await expectHolidaysNotCommitted(codes, 3);
   });
 
   // ── B. present_days · leave ───────────────────────────────────────────────────────────────────
@@ -379,7 +434,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
       { date: `${MONTH}-01`, leaveDays: 0.5, session: "Morning" },
     ]);
     const row = await halfRow();
-    expect(row?.paidLeaveDays, "count(distinct ngày) ⇒ 1: nửa buổi bị tính tròn một ngày").toBe(0.5);
+    expect(row?.paidLeaveDays, "count(distinct ngày) ⇒ 1: nửa buổi bị tính tròn một ngày").toBe(
+      0.5,
+    );
     expect(row?.presentDays).toBe(0.5);
   });
 
@@ -533,9 +590,9 @@ describe.skipIf(!hasLaneDb)("S13-PAYROLL-BE-1 đầu vào công/phép + audit đ
     expect(res.body.data.eligibleCount + noProfile).toBe(full.userIds.length);
     // Và mọi userId được cảnh báo đều nằm trong tập người sống (không có id ma).
     const alive = new Set(full.userIds);
-    expect(
-      res.body.data.warnings.filter((w: { userId: string }) => !alive.has(w.userId)),
-    ).toEqual([]);
+    expect(res.body.data.warnings.filter((w: { userId: string }) => !alive.has(w.userId))).toEqual(
+      [],
+    );
   });
 
   // ── D. audit lượt ĐỌC atomic ──────────────────────────────────────────────────────────────────

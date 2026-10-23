@@ -20,6 +20,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -389,6 +390,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · vinh danh (DB cô lập)", ()
     const denied = await createKudos(noKudos.token, { recipients: [r1.employeeId] });
     expect(denied.status).toBe(403);
     expect(JSON.stringify(denied.body)).toContain(SOCIAL_ERR.KUDOS_CREATE_REQUIRED);
+    expect((denied.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.KUDOS_CREATE_REQUIRED,
+    );
     expect(await kudosCountOf(A.companyId, noKudos.userId)).toBe(0);
 
     const ok = await createKudos(author.token, { recipients: [r1.employeeId] });
@@ -414,6 +418,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · vinh danh (DB cô lập)", ()
     });
     expect(denied.status, JSON.stringify(denied.body)).toBe(422);
     expect(JSON.stringify(denied.body)).toContain(SOCIAL_ERR.KUDOS_BADGE_INVALID);
+    expect((denied.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.KUDOS_BADGE_INVALID,
+    );
     expect(await kudosCountOf(A.companyId, author.userId), "không hàng nào thêm").toBe(before);
 
     const ok = await createKudos(author.token, {
@@ -450,6 +457,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · vinh danh (DB cô lập)", ()
     });
     expect(denied.status, JSON.stringify(denied.body)).toBe(422);
     expect(JSON.stringify(denied.body)).toContain(SOCIAL_ERR.KUDOS_SELF_RECIPIENT);
+    expect((denied.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.KUDOS_SELF_RECIPIENT,
+    );
     expect(await kudosCountOf(A.companyId, author.userId)).toBe(before);
 
     const ok = await createKudos(author.token, { recipients: [r1.employeeId] });
@@ -477,6 +487,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · vinh danh (DB cô lập)", ()
     const over = await createKudos(author.token, { recipients: many });
     expect(over.status, JSON.stringify(over.body)).toBe(422);
     expect(JSON.stringify(over.body)).toContain(SOCIAL_ERR.KUDOS_RECIPIENT_LIMIT);
+    expect((over.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.KUDOS_RECIPIENT_LIMIT,
+    );
 
     // Mảng RỖNG: hình dạng hợp lệ, nghiệp vụ vô nghĩa ⇒ 422 CÓ MÃ, không phải 400 vô danh của Zod.
     const empty = await createKudos(author.token, { recipients: [] });
@@ -494,6 +507,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · vinh danh (DB cô lập)", ()
     const stranger = await createKudos(author.token, { recipients: [randomUUID()] });
     expect(stranger.status, JSON.stringify(stranger.body)).toBe(422);
     expect(JSON.stringify(stranger.body)).toContain(SOCIAL_ERR.KUDOS_RECIPIENT_INVALID);
+    expect((stranger.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.KUDOS_RECIPIENT_INVALID,
+    );
 
     // ⚠️ Cross-tenant: FK tổ hợp `feed_kudos_recipients_employee_tenant_fk` (`0580:439`) đã chặn ở tầng
     // DB bằng `23503`, nên ca này đo **CHẤT LƯỢNG MÃ LỖI** (422 đọc được thay vì 500), không phải một
@@ -525,6 +541,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-2 · vinh danh (DB cô lập)", ()
     });
     expect(denied.status, JSON.stringify(denied.body)).toBe(403);
     expect(JSON.stringify(denied.body)).toContain(SOCIAL_ERR.KUDOS_OFFICIAL_DENIED);
+    expect((denied.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.KUDOS_OFFICIAL_DENIED,
+    );
     // 🔴 Cổng chạy TRƯỚC khi mở tx ⇒ "không ghi gì" là BẤT BIẾN, không phải hệ quả của rollback đúng.
     expect(await kudosCountOf(A.companyId, author.userId)).toBe(before);
 

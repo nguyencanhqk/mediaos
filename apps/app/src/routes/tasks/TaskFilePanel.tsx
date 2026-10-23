@@ -4,8 +4,8 @@
  * route legacy `/attachments` đã 410 Gone, KHÔNG dùng ở đây).
  *
  * Danh sách file đính kèm công việc + Upload (4 pha register/PUT/confirm/link, có tiến độ, mirror
- * EmployeeFilesTab.tsx) + Download (taskFileApi.downloadTaskFile → apiFetchBlob theo redirect 302, KHÔNG
- * có route JSON download-url riêng cho task — xem task-file-api.ts) + Xóa mềm (confirm dialog).
+ * EmployeeFilesTab.tsx) + Download (S19-OPS-TASKFILEURL-1: URL ký từ route JSON download-url, FE điều hướng
+ * qua openSignedUrlInNewTab — xem DownloadTaskFileButton) + Xóa mềm (confirm dialog).
  *
  * Gate: PermissionGate/useCan theo TASK_FILE_ENGINE_PAIRS (read/file-upload/file-delete:task — cặp seed
  * THẬT mig 0485, non-sensitive). Masking là việc của SERVER — component chỉ render field TaskFileDto trả
@@ -29,7 +29,7 @@ import {
 import { Badge, Button, DataTable, Dialog, EmptyState, Input } from "@mediaos/ui";
 import { TASK_FILE_ENGINE_PAIRS } from "./task-file-constants";
 import { PanelBody } from "./PanelBody";
-import { triggerBlobDownload } from "@/lib/download-blob";
+import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
 
 /** 1024-based byte formatter — mirror EmployeeFilesTab.tsx (không export dùng chung, tránh coupling). */
 function formatBytes(bytes: number): string {
@@ -58,43 +58,54 @@ function scanStatusVariant(
 }
 
 // ---------------------------------------------------------------------------
-// Download button — taskFileApi.downloadTaskFile (blob qua redirect 302) rồi trigger tải nội bộ.
+// Download button — S19-OPS-TASKFILEURL-1 D7: mở tab trắng ĐỒNG BỘ ngay trong onClick (openSignedUrlInNewTab)
+// rồi gán URL ký lấy từ taskFileApi.downloadTaskFile (route JSON download-url). KHÔNG qua useMutation:
+// TanStack Query chạy mutationFn sau ít nhất một microtask ⇒ window.open rơi khỏi nhịp click ⇒ bị chặn popup.
+// Server quyết inline/attachment + tên tệp; từ chối (vd 409 chưa sạch / chưa Uploaded) ⇒ đóng tab + role="alert".
+// URL chỉ sống trong biến cục bộ của helper — không vào state.
 // Vá UI 2026-07-20: cột hành động chuyển hết sang NÚT ICON (tooltip qua title) — 3 nút chữ xếp dọc
 // làm cột "Hành động" tràn khỏi mép panel, phải kéo ngang mới thấy nút Xóa (owner gửi ảnh).
 // ---------------------------------------------------------------------------
 function DownloadTaskFileButton({ taskId, file }: { taskId: string; file: TaskFileDto }) {
   const { t } = useTranslation("tasks");
+  const [pending, setPending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const mutation = useMutation({
-    mutationFn: () => taskFileApi.downloadTaskFile(taskId, file.fileId),
-    onSuccess: ({ blob, filename }) => {
-      triggerBlobDownload(blob, filename ?? file.originalName);
-    },
-  });
+  const download = async () => {
+    setPending(true);
+    setErrorMessage(null);
+    try {
+      await openSignedUrlInNewTab(
+        async () => (await taskFileApi.downloadTaskFile(taskId, file.fileId)).url,
+      );
+    } catch (err) {
+      setErrorMessage(mapApiErrorToUi(err).message);
+    } finally {
+      setPending(false);
+    }
+  };
 
-  const label = mutation.isPending
-    ? t("tasks.detail.files.downloading")
-    : t("tasks.detail.files.download");
+  const label = pending ? t("tasks.detail.files.downloading") : t("tasks.detail.files.download");
 
   return (
     <>
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => mutation.mutate()}
-        disabled={mutation.isPending}
+        onClick={() => void download()}
+        disabled={pending}
         aria-label={label}
         title={label}
       >
-        {mutation.isPending ? (
+        {pending ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
         ) : (
           <Download className="h-4 w-4" aria-hidden />
         )}
       </Button>
-      {mutation.isError && (
+      {errorMessage !== null && (
         <span role="alert" className="text-xs text-destructive">
-          {mapApiErrorToUi(mutation.error).message}
+          {errorMessage}
         </span>
       )}
     </>

@@ -30,6 +30,9 @@ import { PayrollCostWidget } from "./PayrollCostWidget";
 // S15-PAYROLL-DASH-1 (additive): 2 widget PAYROLL v2 — cả hai chỉ cần dashboardType ⇒ mount qua Grid.
 import { PayrollBudgetWidget } from "./PayrollBudgetWidget";
 import { PayrollAdvancePendingWidget } from "./PayrollAdvancePendingWidget";
+// S16-SOCIAL-DASH-1 (additive): 2 widget SOCIAL — cả hai chỉ cần dashboardType ⇒ mount qua Grid.
+import { SocialEngagementWeekWidget } from "./SocialEngagementWeekWidget";
+import { SocialNewsUnackedWidget } from "./SocialNewsUnackedWidget";
 import { DASH_WIDGET_CODE } from "@/routes/dashboard/constants";
 
 interface DashboardWidgetProps {
@@ -59,6 +62,8 @@ const WIDGET_COMPONENTS: Readonly<Record<string, ComponentType<DashboardWidgetPr
   [DASH_WIDGET_CODE.PAYROLL_COST]: PayrollCostWidget,
   [DASH_WIDGET_CODE.PAYROLL_BUDGET]: PayrollBudgetWidget,
   [DASH_WIDGET_CODE.PAYROLL_ADVANCE_PENDING]: PayrollAdvancePendingWidget,
+  [DASH_WIDGET_CODE.SOCIAL_ENGAGEMENT_WEEK]: SocialEngagementWeekWidget,
+  [DASH_WIDGET_CODE.SOCIAL_NEWS_UNACKED]: SocialNewsUnackedWidget,
 };
 
 interface DashboardWidgetGridProps {

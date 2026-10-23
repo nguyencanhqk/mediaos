@@ -18,6 +18,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool, PoolClient } from "pg";
@@ -252,6 +253,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3A 029 resolve kèm hành động (DB
         const res = await resolve(tModOnly, r, { status: "resolved", action });
         expect(res.status, JSON.stringify(res.body)).toBe(403);
         expect(msg(res)).toBe(SOCIAL_ERR.REPORT_ACTION_DENIED);
+        expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.REPORT_ACTION_DENIED);
 
         expect((await reportRow(r)).status).toBe("open");
         const pr = await postRow(p);
@@ -280,6 +282,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3A 029 resolve kèm hành động (DB
         const res = await resolve(tHr, r, { status: "resolved", action });
         expect(res.status, JSON.stringify(res.body)).toBe(422);
         expect(msg(res)).toBe(SOCIAL_ERR.REPORT_ACTION_TARGET_UNAVAILABLE);
+        expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.REPORT_ACTION_TARGET_UNAVAILABLE);
         expect((await reportRow(r)).status).toBe("open");
         expect(await auditRows(r)).toHaveLength(0);
 
@@ -304,6 +307,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3A 029 resolve kèm hành động (DB
       const res = await resolve(tHr, r, { status: "resolved", action: "hide_post" });
       expect(res.status, JSON.stringify(res.body)).toBe(422);
       expect(msg(res)).toBe(SOCIAL_ERR.REPORT_ACTION_INVALID_FOR_TARGET);
+      expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.REPORT_ACTION_INVALID_FOR_TARGET);
       expect((await reportRow(r)).status).toBe("open");
       expect((await postRow(p)).status).toBe("published");
     });
@@ -366,6 +370,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3A 029 resolve kèm hành động (DB
         expect(ra.status, JSON.stringify(ra.body)).toBe(200);
         expect(rb.status, JSON.stringify(rb.body)).toBe(409);
         expect(msg(rb)).toBe(SOCIAL_ERR.REPORT_ALREADY_DECIDED);
+        expect(rb.body.error?.code).toBe(SOCIAL_ERROR_CODES.REPORT_ALREADY_DECIDED);
       } finally {
         if (!released) await hold.client.query("ROLLBACK");
         hold.client.release();
@@ -456,6 +461,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-3A 029 resolve kèm hành động (DB
         const res = await resolve(tHr, r, { status: "resolved", action: "hide_post" });
         expect(res.status, JSON.stringify(res.body)).toBe(409);
         expect(msg(res)).toBe(SOCIAL_ERR.REPORT_BUSY);
+        expect(res.body.error?.code).toBe(SOCIAL_ERROR_CODES.REPORT_BUSY);
       } finally {
         await hold.client.query("ROLLBACK");
         hold.client.release();

@@ -1,6 +1,7 @@
-import { Controller, Get, Header, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { Controller, Get, Header, Query, Req, Res, UseGuards, UsePipes } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { ZodValidationPipe } from "nestjs-zod";
+import { SocialInputTextPipe } from "./social-input-text.pipe";
 import { feedEngagementQuerySchema, type FeedEngagementQueryDto } from "@mediaos/contracts";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
@@ -21,6 +22,7 @@ interface AuthenticatedRequest extends Request {
  * Không route `{id}` nào ⇒ không `ParseUUIDPipe`.
  */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialStatsController {
   constructor(private readonly stats: SocialStatsService) {}
 

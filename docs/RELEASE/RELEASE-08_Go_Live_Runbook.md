@@ -19,6 +19,7 @@
 | FE PROD | Cloudflare Pages — apex `funtimemediacorp.com` (`web-mediaos`) · `auth.` · `console.` | `m prod-status` |
 | Vào từ ngoài | `cloudflared` tunnel → `api.` `train.` | `m prod-status` |
 | DB | Postgres trong docker `mediaos-postgres` · DB **`mediaos`** · PgBouncer `:6432` · Valkey · MinIO | `m prod-status` |
+| Object storage | PROD: storage tự host trong docker (chỉ nghe nội bộ máy chủ) **cho tới khi chạy §9** — sau §9: bucket Cloudflare R2 riêng tư. dev-online · CI · lane: storage tự host (DECISIONS-16) | §9 C8 |
 | Artifact release | `apps\api\releases\<stamp>` + junction `releases\current` (**S6-REL-1**) | `node scripts/release-artifact.mjs list` |
 
 ⚠️ **Trạng thái cutover:** service PROD **vẫn trỏ `apps\api\dist`** (đo 2026-07-30). Xem §3 — phải chạy
@@ -112,7 +113,7 @@ Quay lại đường cũ nếu cần: `nssm set MediaOS-API AppParameters "apps\
 | 4 | Deploy FE | `m prod-update fe` | Pages deploy xong |
 | 5 | Build + snapshot + **migrate** + restart API | `m prod-update api` | Fail-closed: schema chưa ở head ⇒ **KHÔNG restart** |
 | 6 | Seed nếu cần | `m seed` (chặn DB được bảo vệ) hoặc idempotent seed-on-boot | Log `MasterDataSeedRunner … 0 lỗi` |
-| 7 | Deploy LMS | `m prod-update lms` | `:3400` 200 |
+| 7 | Deploy LMS + SOCIAL — `prod-update` KHÔNG cài deps: deps đổi ⇒ cài TAY trước | LMS: `pnpm install --frozen-lockfile` (apps/lms) → `m prod-update lms` · SOCIAL: `Stop-Service MediaOS-Social` (PowerShell Admin) → `npm ci` (apps/fbpost) → `m prod-update social` — dừng dịch vụ TRƯỚC vì Windows khoá tệp native đang nạp mà `npm ci` xoá `node_modules` trước khi cài (chạy khi dịch vụ đang chạy ⇒ EPERM giữa chừng, cây hỏng; đo 19/10) | `:3400` 200 · SOCIAL «cổng phiên OK (401)» · dòng SCA cuối lệnh không đỏ, GỒM dòng «cây đã cài khớp lockfile» (dòng «LỆCH» = chưa cài lại deps ⇒ build vừa chạy mã CŨ: cài rồi chạy lại lệnh) · `m prod-status` mục SCA không đỏ (chi tiết: `m sca`) |
 | 8 | Canary | `CANARY_BASE_URL=http://localhost:3100/api/v1 bash scripts/canary-watch.sh --once` | exit 0 |
 | 9 | **Smoke** | `node scripts/release-smoke.mjs --expect-commit <sha>` | 10/10 PASS · `RC-BUILD-MATCH` PASS |
 | 10 | Mở truy cập người dùng | — | Người thật đăng nhập được |
@@ -275,3 +276,38 @@ Chúng tôi sẽ thông báo lại lịch mới. Xin lỗi vì sự bất tiện
 - Không thay `DEVOPS-01`/`DEVOPS-10` về cơ chế deploy/backup/restore.
 - Không có lệnh restore đè DB PROD (§5.4 — cố ý).
 - Không có down-migration (chiến lược là expand/contract).
+
+## 9. Chuyển object storage PROD sang Cloudflare R2 (`S19-OPS-STORAGEPUBLIC-1` · DECISIONS-16)
+
+Owner tự chạy, theo đúng thứ tự. Agent không chạm PROD, không đọc `.env*`. Gián đoạn DUY NHẤT: một lần khởi động lại API
+ở C5 — không khởi động lại tunnel, không tạo lại container. Plan đầy đủ + lý do từng bước:
+`docs/plans/S19-OPS-STORAGEPUBLIC-1.md` §5.
+
+**Điều kiện mở:** (1) owner đã xác nhận nghĩa vụ chuyển dữ liệu cá nhân ra nước ngoài (hợp đồng WO `done_when[7]`) — trước
+C4; (2) tên + vùng đặt bucket PROD đã chốt — trước C1; (3) `S19-OPS-TASKFILEURL-1` đã ở PROD — trước C5; (4) khung giờ
+vắng, owner ngồi máy — C5…C7.
+
+**Hai file cấu hình NGOÀI kho** (thư mục KHÔNG đồng bộ lên đám mây; xoá khi hết 30 ngày lùi), mỗi file 4 dòng
+`S3_ENDPOINT` · `S3_ACCESS_KEY` · `S3_SECRET_KEY` · `S3_BUCKET`:
+- `r2-prod.conf` — token R2 MỚI «Object Read & Write» CHỈ bucket PROD (không dùng lại token của app khác);
+- `minio-prod.conf` — 4 dòng storage tự host chép từ `.env` hiện tại (chứa khoá gốc của storage tự host).
+
+| # | Bước | ĐẠT khi |
+| --- | --- | --- |
+| C0 | `GET https://api.<Domain>/api/v1/health` + `/health/db` (ghi commit); từ thiết bị KHÁC máy chủ gửi một tệp qua chat + xem một avatar | ghi vào plan §9.3 |
+| C1 | Dashboard R2: tạo bucket PROD (Public Development URL TẮT, không tên miền riêng) + token như trên ⇒ `r2-prod.conf`; lập `minio-prod.conf`; hạn quyền đọc mỗi file chỉ cho tài khoản owner: `icacls <file> /inheritance:r /grant:r "${env:USERNAME}:(R,W)"`. **Đo riêng tư** bằng API quản trị CHỈ-ĐỌC của Cloudflare (một token đọc R2 tạm, KHÔNG phải token của app; đặt vào `$env:CF_API_TOKEN` rồi xoá sau khi đo): `$h=@{Authorization="Bearer $env:CF_API_TOKEN"}; $u="https://api.cloudflare.com/client/v4/accounts/<mã tài khoản>/r2/buckets/<bucket PROD>/domains"; "r2.dev bật: " + (Invoke-RestMethod "$u/managed" -Headers $h).result.enabled; "tên miền riêng: " + @((Invoke-RestMethod "$u/custom" -Headers $h).result.domains).Count` (lệnh lỗi ⇒ đọc cùng hai mục đó trên dashboard) | in «r2.dev bật: False» + «tên miền riêng: 0» (ca int-spec K-3 KHÔNG chứng minh được điều này: miền S3 API của R2 luôn đòi chữ ký, kể cả khi bucket đã bật đường công khai) · ảnh chụp lưu NGOÀI kho |
+| C2 | Bucket PROD → Settings → CORS Policy → JSON của `DEVOPS-03` §13.5 (thay `<Domain>`). Đo: `node scripts/storage-r2-cors-probe.mjs --conf <r2-prod.conf> --allow https://<Domain> --allow https://console.<Domain> --allow https://auth.<Domain> --deny https://evil.<Domain> --deny https://evil.example.test --deny null` | exit 0 (exit 3 = lỗi mạng / khoá hay bucket sai — không phải lỗi CORS) |
+| C3 | Merge PR của WO → kéo mã về checkout chính → `m prod-update api` như thường lệ (chưa đổi env ⇒ hành vi không đổi) | health mang commit mới |
+| C4 | Lấy id MỌI công ty của DB PROD (kể cả đã xoá mềm — tệp của họ cũng phải giữ): `docker exec mediaos-postgres psql -U mediaos -d mediaos -Atc "select id from companies order by created_at" > <thư mục ngoài kho>\prod-company-ids.txt`. Rồi: `scripts\windows\storage-migrate-r2.ps1 -SourceConf <minio-prod.conf> -TargetConf <r2-prod.conf> -PrefixFile <…>\prod-company-ids.txt -Mode Plan` → `-Mode Copy` → `-Mode Check` | `Plan`: tiền tố KHÔNG có trong danh sách = dữ liệu dev-online / test, KHÔNG chép. `Check`: mọi tiền tố ĐẠT |
+| C5 | TRƯỚC: kiểm tên khoá của dev-online (chỉ in TÊN): `foreach ($f in '.env.dev','.env.dev-online') { "{0}: {1}" -f $f, ((Select-String -Path $f -Pattern '^\s*(S3_[A-Z_]+)\s*=' \| ForEach-Object { $_.Matches[0].Groups[1].Value } \| Sort-Object -Unique) -join ', ') }` — hai file gộp lại phải đủ 6 khoá `S3_*`. Rồi sửa 6 dòng `S3_*` trong CẢ `.env` LẪN `.env.prod`: `S3_ENDPOINT` · `S3_ACCESS_KEY` · `S3_SECRET_KEY` · `S3_BUCKET` theo `r2-prod.conf`, `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=true` → `m prod-restart api` → NGAY trên máy chủ mở một tệp / ảnh ĐÃ có (vd avatar của chính mình), DevTools → Network: URL tệp | health 200 VÀ URL tệp có host `<32 hex>.r2.cloudflarestorage.com` VÀ tệp mở được (client storage dựng lười — sai khoá / bucket KHÔNG lộ ở health, chỉ lộ ở lượt dùng đầu). Không đạt ⇒ lùi ngay |
+| C6 | NGAY sau C5: `-Mode Copy` lần nữa (cùng `-PrefixFile`) → `-Mode Check` | ĐẠT; số «chỉ-có-ở-đích» ghi vào sổ vết NGOÀI kho (tệp tạm bị dọn ở nguồn giữa C4–C6) |
+| C7 | Smoke trên máy chủ rồi từ thiết bị NGOÀI: ảnh + pdf tên có dấu qua chat · avatar · một tệp hồ sơ · một tệp TASK · (sau FE-2D lát A) ô soạn bài SOCIAL | ảnh hiện · pdf tải về đúng tên · tệp TASK tải được |
+| C8 | 7 ngày: sau MỌI lần `m prod-env` / sửa env, chạy (không in giá trị; hai file dev-online phải ra «KHÔNG phải R2» — dev-online cầm token PROD là trái DECISIONS-16 §1.2): `foreach ($f in '.env','.env.prod','.env.dev','.env.dev-online') { $e = ((Select-String -Path $f -Pattern '^\s*S3_ENDPOINT\s*=' \| Select-Object -First 1).Line -replace '^\s*S3_ENDPOINT\s*=\s*',''); "{0}: {1}" -f $f, $(if ($e -match '^https://[0-9a-f]{32}(\.eu\|\.fedramp)?\.r2\.cloudflarestorage\.com/?$') { 'R2' } else { 'KHÔNG phải R2' }) }` | `.env` + `.env.prod` in «R2»; `.env.dev` + `.env.dev-online` in «KHÔNG phải R2» |
+| C9 | Gỡ điều kiện «chưa merge» của PR FE-2D lát A; đóng KI-084 | — |
+
+**Lùi (sau C5):** `storage-migrate-r2.ps1 -SourceConf <r2-prod.conf> -TargetConf <minio-prod.conf> -PrefixFile <…>\prod-company-ids.txt -Mode Copy`
+(đưa tệp tạo SAU lúc chuyển về storage tự host) → trả 6 dòng cũ ở CẢ hai file env → `m prod-restart api` → `-Mode Check`
+theo chiều ngược. Không bước nào xoá dữ liệu ở bất kỳ phía nào.
+
+**Cấm trong 30 ngày sau C5:** `m reset` (chạy `docker compose down -v` ⇒ xoá volume mà đường lùi cần) · chạy int-spec từ
+checkout chính (`.env` gốc mang token R2 PROD và được nạp làm giá trị dự phòng).

@@ -16,15 +16,14 @@
  *     (E3) confirm absent: object chưa PUT → Failed → 422 CONFIRM-ABSENT.
  *     (E4) confirm idempotent: gọi lại trên file đã Uploaded → 200 (không đổi state).
  *
- * Gate cứng `hasDb && LANE_DB` (memory integration-test-lane-db-gate). MinIO gate = storageReady (probe
- * CreateBucket ở beforeAll; MinIO down → chỉ E2E skip, DENY/CONTRACT vẫn chạy).
+ * Gate cứng `hasDb && LANE_DB` (memory integration-test-lane-db-gate). Storage = `openStorageTestGate`
+ * (cổng đóng ⇒ E1–E4 bỏ qua CÓ nhãn `[storage-test-skip]`; DENY/CONTRACT vẫn chạy).
  */
 
 import "reflect-metadata";
 import { createHash, randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -33,6 +32,7 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 import {
   cleanupTenants,
   seedCompany,
@@ -43,10 +43,10 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
-import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 
 const LOGIN_PW = "Passw0rd!test99";
 const runDb = hasDb && Boolean(process.env.LANE_DB);
+const FILE = "test/integration/files-e2e-confirm.int-spec.ts";
 
 function api(app: INestApplication) {
   return request(app.getHttpServer());
@@ -82,18 +82,12 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
   let viewerToken: string; // A — view ONLY (no upload) → register/confirm deny
   let uploaderId: string;
   let fileB: string; // a Pending file owned by tenant B (cross-tenant target)
-  let storageReady = false;
 
   const companyIds: string[] = [];
+  let gate: StorageTestGate;
 
   beforeAll(async () => {
-    process.env.S3_ENDPOINT ??= "http://localhost:9000";
-    process.env.S3_ACCESS_KEY ??= "mediaos";
-    process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-    process.env.S3_BUCKET ??= "mediaos-assets";
-    process.env.S3_FORCE_PATH_STYLE ??= "true";
-    process.env.S3_REGION ??= "us-east-1";
-
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -144,30 +138,16 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
 
     uploaderToken = await login(app, A.slug, uploaderEmail);
     viewerToken = await login(app, A.slug, viewerEmail);
-
-    // Probe storage: create the bucket (idempotent). MinIO down / creds bad → E2E skips.
-    try {
-      const s3 = new S3Client({
-        endpoint: process.env.S3_ENDPOINT,
-        region: process.env.S3_REGION,
-        forcePathStyle: true,
-        credentials: {
-          accessKeyId: process.env.S3_ACCESS_KEY!,
-          secretAccessKey: process.env.S3_SECRET_KEY!,
-        },
-      });
-      await s3.send(new CreateBucketCommand({ Bucket: process.env.S3_BUCKET }));
-      storageReady = true;
-    } catch (err) {
-      const name = (err as { name?: string }).name;
-      storageReady = name === "BucketAlreadyOwnedByYou" || name === "BucketAlreadyExists";
-    }
   });
 
   afterAll(async () => {
-    await app?.close();
-    if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
-    await direct?.end();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    }
   });
 
   /** REGISTER helper — returns the parsed register response body. */
@@ -280,7 +260,13 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
 
   // ── (E1) happy path — register → PUT → confirm → Uploaded + download counters ────
   it("(E1) E2E register→PUT→confirm→Uploaded + checksum persisted + download_count bumps", async (ctx) => {
-    if (!storageReady) return ctx.skip();
+    if (
+      !gate.needStorage(
+        ctx,
+        "(E1) E2E register→PUT→confirm→Uploaded + checksum persisted + download_count bumps",
+      )
+    )
+      return;
     const bytes = Buffer.from("hello-e2e-file-confirm", "utf8");
     const reg = await register(uploaderToken, {
       originalName: "e2e.txt",
@@ -328,7 +314,13 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
 
   // ── (E2) confirm size mismatch → Failed + no checksum ───────────────────────────
   it("(E2) confirm with wrong declared size → 409 CONFIRM-MISMATCH → Failed, no checksum", async (ctx) => {
-    if (!storageReady) return ctx.skip();
+    if (
+      !gate.needStorage(
+        ctx,
+        "(E2) confirm with wrong declared size → 409 CONFIRM-MISMATCH → Failed, no checksum",
+      )
+    )
+      return;
     const bytes = Buffer.from("size-mismatch-body", "utf8");
     // Declare a WRONG size (bytes.length + 100) so stat.size !== declared.
     const reg = await register(uploaderToken, {
@@ -362,7 +354,7 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
 
   // ── (E3) confirm with object never uploaded → Failed (absent) ───────────────────
   it("(E3) confirm without PUT → 422 CONFIRM-ABSENT → Failed", async (ctx) => {
-    if (!storageReady) return ctx.skip();
+    if (!gate.needStorage(ctx, "(E3) confirm without PUT → 422 CONFIRM-ABSENT → Failed")) return;
     const reg = await register(uploaderToken, {
       originalName: "absent.txt",
       declaredMimeType: "text/plain",
@@ -381,7 +373,13 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
 
   // ── (E4) confirm idempotent on an already-Uploaded file → 200 ───────────────────
   it("(E4) confirm on an already-Uploaded file → 200 idempotent (no state change)", async (ctx) => {
-    if (!storageReady) return ctx.skip();
+    if (
+      !gate.needStorage(
+        ctx,
+        "(E4) confirm on an already-Uploaded file → 200 idempotent (no state change)",
+      )
+    )
+      return;
     const bytes = Buffer.from("idempotent-confirm", "utf8");
     const reg = await register(uploaderToken, {
       originalName: "idem.txt",

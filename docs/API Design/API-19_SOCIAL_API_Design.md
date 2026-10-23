@@ -59,79 +59,79 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 
 ### 5.1 Bảng endpoint — 59 route (53 của SPEC-16 §15 + 2 cửa tệp hạ tầng + `056` quản trị huy hiệu + `057`/`058` thùng rác bài viết + `059` danh bạ người nhận)
 
-| Mã | Method · Path | Cặp quyền | Ghi chú |
-| --- | --- | --- | --- |
-| **Bảng tin & bài — Track A** ||||
-| `SOCIAL-API-001` | `GET /social/feed` | `view:feed` (+ `manage:feed-post` khi `status` khác `published`) | Lọc `type`/`audience`/`groupId`/`tag`/`authorId`/**`status`**, sắp xếp `latest`\|`active`; cursor-based. **`status` là nguồn dữ liệu của `SOC-SCREEN-010`** — `status` khác `published` đòi thêm `manage:feed-post` |
-| `SOCIAL-API-002` | `POST /social/posts` | **theo `type` — xem §5.1b** | `@Idempotent()`; parse hashtag + mention cùng tx. 5 loại bài dùng 5 cặp khác nhau |
-| `SOCIAL-API-003` | `GET /social/posts/{post_id}` | `view:feed` | `hidden` ⇒ 404 trừ tác giả / `manage:feed-post` |
-| `SOCIAL-API-004` | `PATCH /social/posts/{post_id}` | `view:feed` + chủ bài, **hoặc** `manage:feed-post`; **+ `create:feed-post` khi THÊM đính kèm mới — xem §5.1f** | Set `edited_at`; đồng bộ lại hashtag/mention (vắng `mentionedUserIds` = giữ nguyên — §5.1g) |
-| `SOCIAL-API-005` | `DELETE /social/posts/{post_id}` | như trên | Xoá **mềm** + recycle-bin |
-| `SOCIAL-API-006` | `PATCH /social/posts/{post_id}/moderation` | **theo TỪNG trường — xem §5.1c** | Body `{hidden?, pinned?, commentsLocked?}`; **mỗi trường đổi = 1 dòng audit** |
-| `SOCIAL-API-007` | `POST /social/posts/{post_id}/view` | `view:feed` (hàng `user_id = actor`) | `ON CONFLICT DO NOTHING` — reload không tăng |
-| `SOCIAL-API-008` | `POST /social/posts/{post_id}/save` | `view:feed` (hàng `user_id = actor`) | |
-| `SOCIAL-API-009` | `DELETE /social/posts/{post_id}/save` | như trên | |
-| `SOCIAL-API-010` | `GET /social/saved` | `view:feed` | Chỉ bài của chính actor |
-| `SOCIAL-API-011` | `PUT /social/posts/{post_id}/reaction` | `view:feed` (hàng `user_id = actor`) | Đặt/đổi emoji — idempotent theo bản chất |
-| `SOCIAL-API-012` | `DELETE /social/posts/{post_id}/reaction` | như trên | |
-| `SOCIAL-API-013` | `GET /social/posts/{post_id}/reactions` | `view:feed` | Danh sách người thích + emoji |
-| **Bình luận — Track A** ||||
-| `SOCIAL-API-014` | `GET /social/posts/{post_id}/comments` | `view:feed` | Phân trang; trả lời lồng 1 cấp |
-| `SOCIAL-API-015` | `POST /social/posts/{post_id}/comments` | `create:feed-comment` | `@Idempotent()`; bài khoá bình luận ⇒ 409 `ERR-004`; trả lời quá 1 cấp ⇒ 422 `ERR-005` |
-| `SOCIAL-API-016` | `PATCH /social/comments/{comment_id}` | chủ bình luận **hoặc** `manage:feed-post`; **+ `create:feed-comment` khi THÊM đính kèm mới — xem §5.1f** | Đồng bộ lại mention (vắng `mentionedUserIds` = giữ nguyên — §5.1g) |
-| `SOCIAL-API-017` | `DELETE /social/comments/{comment_id}` | như trên | Xoá mềm |
-| `SOCIAL-API-018` | `PUT /social/comments/{comment_id}/reaction` | `view:feed` (hàng `user_id = actor`) | |
-| `SOCIAL-API-019` | `DELETE /social/comments/{comment_id}/reaction` | như trên | |
-| **Tin tức — Track A** ||||
-| `SOCIAL-API-020` | `GET /social/news` | `view:feed` | Tin ghim lên đầu; cờ `ackedByMe`. Tham số **`unackedOnly`** + **`countOnly`** ⇒ **nguồn dữ liệu của `SOCIAL-WIDGET-002`** «Tin tức chưa đọc» (phạm vi Own, không cần route riêng) |
-| `SOCIAL-API-021` | `POST /social/posts/{post_id}/ack` | `view:feed` (hàng `user_id = actor`) | Không phải `news`/không bật ack ⇒ 409 `ERR-011`; **không rút lại được** |
-| `SOCIAL-API-022` | `GET /social/posts/{post_id}/acks` | `manage:feed-news` | Ai đã đọc / chưa đọc |
-| **Tìm kiếm · thẻ · trang cá nhân · sinh nhật — Track A** ||||
-| `SOCIAL-API-023` | `GET /social/search` | `view:feed` | `tsvector` phạm vi tenant; chỉ bài actor được thấy |
-| `SOCIAL-API-024` | `GET /social/tags` | `view:feed` | Gợi ý hashtag theo `usage_count` |
-| `SOCIAL-API-025` | `GET /social/profiles/{employee_id}/posts` | `view:feed` | Bài của một người, lọc theo audience của actor |
-| `SOCIAL-API-026` | `GET /social/birthdays` | `view:feed` | **DTO chỉ `{employeeId, fullName, avatar, day, month}`** — không năm, không tuổi; tôn trọng `showBirthday` |
-| **Báo cáo & kiểm duyệt — Track A ghi · Track C xử lý** ||||
-| `SOCIAL-API-027` | `POST /social/reports` | `view:feed` (hàng `reporter_user_id = actor`) | Báo cáo bài/bình luận |
-| `SOCIAL-API-028` | `GET /social/reports` | `view:feed-report` | Sàn scope `Company`; manager `Department`. **`reporter` = `null` khi scope HẸP HƠN `Company`** (D13-a, owner ký 22/09/2026) — chỉ HR/company-admin thấy người tố giác; khoá vẫn có mặt |
-| `SOCIAL-API-029` | `PATCH /social/reports/{report_id}` | `manage:feed-report` **SÀN** + cặp theo `action` — xem §5.1h | `resolve`/`dismiss` + hành động kèm `action` (BE-3A); đã xử lý ⇒ 409 `ERR-021`; ghi audit |
-| **Nhóm — Track B** ||||
-| `SOCIAL-API-030` | `GET /social/groups` | `view:feed` | Nhóm `public` + nhóm actor là thành viên |
-| `SOCIAL-API-031` | `POST /social/groups` | `create:feed-group` | Người tạo thành `owner` cùng tx |
-| `SOCIAL-API-032` | `GET /social/groups/{group_id}` | `view:feed` (+ membership nếu `private`) | Không thành viên + `private` ⇒ 404 `ERR-012` |
-| `SOCIAL-API-033` | `PATCH /social/groups/{group_id}` | `owner`\|`admin` nhóm **hoặc** `manage:feed-group` | |
-| `SOCIAL-API-034` | `DELETE /social/groups/{group_id}` | `owner` nhóm **hoặc** `manage:feed-group` | Xoá mềm |
-| `SOCIAL-API-035` | `POST /social/groups/{group_id}/join` | `view:feed` | `public` ⇒ `active` ngay; `private` ⇒ `pending`; trùng ⇒ 409 `ERR-013` |
-| `SOCIAL-API-036` | `POST /social/groups/{group_id}/leave` | `view:feed` (hàng của actor) | `owner` cuối cùng ⇒ 409 `ERR-015` |
-| `SOCIAL-API-037` | `GET /social/groups/{group_id}/members` | `view:feed` + membership | |
-| `SOCIAL-API-038` | `PATCH /social/groups/{group_id}/members/{user_id}` | `owner`\|`admin` nhóm **hoặc** `manage:feed-group` | Duyệt / từ chối / đổi vai trò; ghi audit; NOTI cho người xin vào. **Cấp vai `owner`**: chỉ `owner` hiện tại **hoặc** `manage:feed-group` BẤT KỂ vai trong nhóm (admin kiêm manage cấp được — GROUPERR-1); audit `viaManage:true` khi quyền cấp đến từ manage |
-| `SOCIAL-API-039` | `DELETE /social/groups/{group_id}/members/{user_id}` | như trên | Mời ra khỏi nhóm |
-| **Bình chọn — Track B** ||||
-| `SOCIAL-API-040` | `GET /social/polls` | `view:feed` | Bình chọn đang mở / đã đóng |
-| `SOCIAL-API-041` | `PUT /social/posts/{post_id}/poll/vote` | `view:feed` (hàng `user_id = actor`) | Poll `closed`/quá hạn ⇒ 409 `ERR-016`; phiếu đôi một-lựa-chọn ⇒ 409 `ERR-017` |
-| `SOCIAL-API-042` | `DELETE /social/posts/{post_id}/poll/vote` | như trên | Rút phiếu khi còn `open` |
-| `SOCIAL-API-043` | `GET /social/posts/{post_id}/poll/results` | `view:feed` | **Ẩn danh ⇒ không có `user_id` trong response, kể cả `company-admin`** |
-| `SOCIAL-API-044` | `POST /social/posts/{post_id}/poll/close` | chủ bài **hoặc** `manage:feed-post` | Đóng **bằng tay**. Job đóng theo hạn **KHÔNG** đi qua route này — xem §5.1d |
-| **Sáng kiến — Track B** ||||
-| `SOCIAL-API-045` | `GET /social/ideas` | `view:feed` | Lọc theo `status` |
-| `SOCIAL-API-046` | `PATCH /social/posts/{post_id}/idea/review` | `approve:feed-idea` | FSM §13.3; sai chuyển tiếp ⇒ 409 `ERR-019`; `rejected` bắt buộc `note`; audit + NOTI tác giả |
-| **Vinh danh — Track B** ||||
-| `SOCIAL-API-047` | `GET /social/kudos` | `view:feed` | Vinh danh gần đây / theo tháng |
-| `SOCIAL-API-048` | `GET /social/kudos-badges` | `view:feed` | Catalog huy hiệu đang bật |
-| `SOCIAL-API-059` | `GET /social/kudos/recipients?q=` | **`create:feed-kudos`** | **SOC-DEC-013 (BE-2D).** Danh bạ cho ô chọn người nhận vinh danh: `{data:[{employeeId, fullName, avatarUrl}], truncated}` — **KHÔNG `userId`**/email/mã NV. Chỉ nhân sự `active` + TK `active` (chưa xoá mềm ở cả hai), loại chính người gọi. `q` ≥ 2 chữ/số (NFC, dấu tổ hợp không tính), khớp **ĐẦU TỪ** chỉ trên họ tên (bỏ dấu, không phân biệt hoa thường; `strpos` — `%`/`_` là ký tự thường), trần **20**, không phân trang (`.strict()`: `limit`/`page` ⇒ 400). Xem §5.1l |
-| `SOCIAL-API-049` | `POST /social/kudos-badges` | `manage:feed-kudos` | `201` + DTO quản trị; `@Idempotent()`; `code` `^[a-z0-9-]{2,32}$` BẤT BIẾN; trùng (kể cả huy hiệu đã tắt) ⇒ 409 `KUDOS_BADGE_CODE_TAKEN`; audit — xem §5.1i |
-| `SOCIAL-API-050` | `PATCH /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | `200` + DTO quản trị; `{name?, description?, icon?, position?, isActive?}` strict, ≥1 trường; gửi `code` ⇒ 400; `isActive:true` bật lại; không đổi gì ⇒ 200 không audit |
-| `SOCIAL-API-051` | `DELETE /social/kudos-badges/{badge_id}` | `manage:feed-kudos` | `200` + DTO quản trị. Tắt (`is_active=false`), **không** hard-delete; đã tắt sẵn ⇒ 200 không audit; không tồn tại/tenant khác ⇒ 404 `KUDOS_BADGE_NOT_FOUND` |
-| `SOCIAL-API-056` | `GET /social/kudos-badges/manage` | `manage:feed-kudos` | **SOC-DEC-012 (BE-3A).** CẢ huy hiệu đã tắt + `isActive`; OFFSET; `ORDER BY position, id`. Khai TRƯỚC `…/{badge_id}` |
-| **Thống kê — Track C** ||||
-| `SOCIAL-API-052` | `GET /social/stats/engagement` | `view:feed-report` | Sàn scope `Company`; manager `Department`. Theo tuần & đơn vị; SQL set-based; **KHÔNG cache** — xem §5.1j |
-| `SOCIAL-API-053` | `GET /social/stats/engagement/export` | `view:feed-report` | Như `052`; XLSX; ghi audit cùng tx — xem §5.1j |
-| **Cửa đăng ký tệp đính kèm — `S16-SOCIAL-BE-1C`** ||||
-| `SOCIAL-API-054` | `POST /social/files/upload-url` | **SÀN `view:feed` + cặp theo `target` — xem §5.1e** | `@HttpCode(200)`; đăng ký tệp `Private` owned-by-token + presigned-PUT. **Không** `@Idempotent()` |
-| `SOCIAL-API-055` | `POST /social/files/{id}/confirm` | như trên | `Pending → Uploaded`; owner-check TRƯỚC khi chạm storage; 200 idempotent khi đã `Uploaded` |
-| **Thùng rác bài viết — `S16-SOCIAL-BE-3C`** ||||
-| `SOCIAL-API-057` | `GET /recycle-bin/feed-posts` | **`restore:feed-post`** — sàn scope `Company` | Bài đã xoá mềm của tenant; OFFSET `page`/`limit`, envelope `{data,page,limit,total}`, `ORDER BY deleted_at DESC, id DESC`; tác giả · nhóm · đơn vị · trích đoạn **che theo vị từ audience**; **KHÔNG audit** — xem §5.1k |
-| `SOCIAL-API-058` | `POST /recycle-bin/feed-posts/{post_id}/restore` | như trên | `200 {id, status}` — `status` ∈ `published`\|`hidden` theo luật §5.1k; **audit LUÔN**, cùng tx (`social.post.restore`); chưa xoá / không có / tenant khác ⇒ 404 `ERR-001`; nhóm đã xoá ⇒ 409 `RESTORE_GROUP_DELETED`; **không** `@Idempotent()` |
+| Mã | Method · Path | Thành công | Cặp quyền | Ghi chú |
+| --- | --- | --- | --- | --- |
+| **Bảng tin & bài — Track A** |||||
+| `SOCIAL-API-001` | `GET /social/feed` | `200` | `view:feed` (+ `manage:feed-post` khi `status` khác `published`) | Lọc `type`/`audience`/`groupId`/`orgUnitId`/`tag`/`authorUserId`/**`status`** (tên khoá theo `listFeedQuerySchema` của contracts — schema `.strict()` nên khoá lạ ⇒ **400 `VALIDATION-ERR-001`**; bản trước ghi nhầm `authorId`), sắp xếp `latest`\|`active`; cursor-based. **`status` là nguồn dữ liệu của `SOC-SCREEN-010`** — `status` khác `published` đòi thêm `manage:feed-post`. Id lọc (`groupId`/`orgUnitId`/`authorUserId`/`tag`) **của công ty khác** ⇒ **200 danh sách rỗng** — không 403/404, không lộ có hay không (ca `QA1-T-Q-1…4`; nhóm/đơn vị cùng công ty mà người gọi không thấy CHƯA có ca đo riêng) |
+| `SOCIAL-API-002` | `POST /social/posts` | `201` | **theo `type` — xem §5.1b** | `@Idempotent()`; parse hashtag + mention cùng tx. 5 loại bài dùng 5 cặp khác nhau |
+| `SOCIAL-API-003` | `GET /social/posts/{post_id}` | `200` | `view:feed` | `hidden` ⇒ 404 trừ tác giả / `manage:feed-post` |
+| `SOCIAL-API-004` | `PATCH /social/posts/{post_id}` | `200` | `view:feed` + chủ bài, **hoặc** `manage:feed-post`; **+ `create:feed-post` khi THÊM đính kèm mới — xem §5.1f** | Set `edited_at`; đồng bộ lại hashtag/mention (vắng `mentionedUserIds` = giữ nguyên — §5.1g) |
+| `SOCIAL-API-005` | `DELETE /social/posts/{post_id}` | `200` | như trên | Xoá **mềm** + recycle-bin |
+| `SOCIAL-API-006` | `PATCH /social/posts/{post_id}/moderation` | `200` | **theo TỪNG trường — xem §5.1c** | Body `{hidden?, pinned?, commentsLocked?}`; **mỗi trường đổi = 1 dòng audit** |
+| `SOCIAL-API-007` | `POST /social/posts/{post_id}/view` | `201` | `view:feed` (hàng `user_id = actor`) | `ON CONFLICT DO NOTHING` — reload không tăng |
+| `SOCIAL-API-008` | `POST /social/posts/{post_id}/save` | `201` | `view:feed` (hàng `user_id = actor`) | |
+| `SOCIAL-API-009` | `DELETE /social/posts/{post_id}/save` | `200` | như trên | |
+| `SOCIAL-API-010` | `GET /social/saved` | `200` | `view:feed` | Chỉ bài của chính actor |
+| `SOCIAL-API-011` | `PUT /social/posts/{post_id}/reaction` | `200` | `view:feed` (hàng `user_id = actor`) | Đặt/đổi emoji — idempotent theo bản chất |
+| `SOCIAL-API-012` | `DELETE /social/posts/{post_id}/reaction` | `200` | như trên | |
+| `SOCIAL-API-013` | `GET /social/posts/{post_id}/reactions` | `200` | `view:feed` | Danh sách người thích + emoji |
+| **Bình luận — Track A** |||||
+| `SOCIAL-API-014` | `GET /social/posts/{post_id}/comments` | `200` | `view:feed` | Phân trang; trả lời lồng 1 cấp |
+| `SOCIAL-API-015` | `POST /social/posts/{post_id}/comments` | `201` | `create:feed-comment` | `@Idempotent()`; bài khoá bình luận ⇒ 409 `ERR-004`; trả lời quá 1 cấp ⇒ 422 `ERR-005` |
+| `SOCIAL-API-016` | `PATCH /social/comments/{comment_id}` | `200` | chủ bình luận **hoặc** `manage:feed-post`; **+ `create:feed-comment` khi THÊM đính kèm mới — xem §5.1f** | Đồng bộ lại mention (vắng `mentionedUserIds` = giữ nguyên — §5.1g) |
+| `SOCIAL-API-017` | `DELETE /social/comments/{comment_id}` | `200` | như trên | Xoá mềm |
+| `SOCIAL-API-018` | `PUT /social/comments/{comment_id}/reaction` | `200` | `view:feed` (hàng `user_id = actor`) | |
+| `SOCIAL-API-019` | `DELETE /social/comments/{comment_id}/reaction` | `200` | như trên | |
+| **Tin tức — Track A** |||||
+| `SOCIAL-API-020` | `GET /social/news` | `200` | `view:feed` | Tin ghim lên đầu; cờ `ackedByMe`. Tham số **`unackedOnly`** + **`countOnly`** ⇒ **nguồn dữ liệu của `SOCIAL-WIDGET-002`** «Tin tức chưa đọc» (đếm cho chính người gọi, không cần route riêng — handler `DashboardWidgetSocialHandlers.fetchNewsUnacked`, slug `social-news-unacked`; SPEC-16 §17.3) |
+| `SOCIAL-API-021` | `POST /social/posts/{post_id}/ack` | `201` | `view:feed` (hàng `user_id = actor`) | Không phải `news`/không bật ack ⇒ 409 `ERR-011`; **không rút lại được** |
+| `SOCIAL-API-022` | `GET /social/posts/{post_id}/acks` | `200` | `manage:feed-news` | Ai đã đọc / chưa đọc |
+| **Tìm kiếm · thẻ · trang cá nhân · sinh nhật — Track A** |||||
+| `SOCIAL-API-023` | `GET /social/search` | `200` | `view:feed` | `tsvector` phạm vi tenant; chỉ bài actor được thấy |
+| `SOCIAL-API-024` | `GET /social/tags` | `200` | `view:feed` | Gợi ý hashtag theo `usage_count` |
+| `SOCIAL-API-025` | `GET /social/profiles/{employee_id}/posts` | `200` | `view:feed` | Bài của một người, lọc theo audience của actor |
+| `SOCIAL-API-026` | `GET /social/birthdays` | `200` | `view:feed` | **DTO chỉ `{employeeId, fullName, avatar, day, month}`** — không năm, không tuổi; tôn trọng `showBirthday` |
+| **Báo cáo & kiểm duyệt — Track A ghi · Track C xử lý** |||||
+| `SOCIAL-API-027` | `POST /social/reports` | `201` | `view:feed` (hàng `reporter_user_id = actor`) | Báo cáo bài/bình luận |
+| `SOCIAL-API-028` | `GET /social/reports` | `200` | `view:feed-report` | Sàn scope `Company`; manager `Department`. **`reporter` = `null` khi scope HẸP HƠN `Company`** (D13-a, owner ký 22/09/2026) — chỉ HR/company-admin thấy người tố giác; khoá vẫn có mặt. **`resolutionNote` = `null` cùng vị từ với `reporter`** (S16-SOCIAL-RESNOTEMASK-1) — không cờ đã-che; `note` không che (SOC-DEC-011) |
+| `SOCIAL-API-029` | `PATCH /social/reports/{report_id}` | `200` | `manage:feed-report` **SÀN** + cặp theo `action` — xem §5.1h | `resolve`/`dismiss` + hành động kèm `action` (BE-3A); đã xử lý ⇒ 409 `ERR-021`; ghi audit |
+| **Nhóm — Track B** |||||
+| `SOCIAL-API-030` | `GET /social/groups` | `200` | `view:feed` | Nhóm `public` + nhóm actor là thành viên |
+| `SOCIAL-API-031` | `POST /social/groups` | `201` | `create:feed-group` | Người tạo thành `owner` cùng tx |
+| `SOCIAL-API-032` | `GET /social/groups/{group_id}` | `200` | `view:feed` (+ membership nếu `private`) | Không thành viên + `private` ⇒ 404 `ERR-012` |
+| `SOCIAL-API-033` | `PATCH /social/groups/{group_id}` | `200` | `owner`\|`admin` nhóm **hoặc** `manage:feed-group` | |
+| `SOCIAL-API-034` | `DELETE /social/groups/{group_id}` | `200` | `owner` nhóm **hoặc** `manage:feed-group` | Xoá mềm |
+| `SOCIAL-API-035` | `POST /social/groups/{group_id}/join` | `201` | `view:feed` | `public` ⇒ `active` ngay; `private` ⇒ `pending`; trùng ⇒ 409 `ERR-013` |
+| `SOCIAL-API-036` | `POST /social/groups/{group_id}/leave` | `201` | `view:feed` (hàng của actor) | `owner` cuối cùng ⇒ 409 `ERR-015` |
+| `SOCIAL-API-037` | `GET /social/groups/{group_id}/members` | `200` | `view:feed` + membership | |
+| `SOCIAL-API-038` | `PATCH /social/groups/{group_id}/members/{user_id}` | `200` | `owner`\|`admin` nhóm **hoặc** `manage:feed-group` | Duyệt / từ chối / đổi vai trò; ghi audit; NOTI cho người xin vào. **Cấp vai `owner`**: chỉ `owner` hiện tại **hoặc** `manage:feed-group` BẤT KỂ vai trong nhóm (admin kiêm manage cấp được — GROUPERR-1); audit `viaManage:true` khi quyền cấp đến từ manage |
+| `SOCIAL-API-039` | `DELETE /social/groups/{group_id}/members/{user_id}` | `200` | như trên | Mời ra khỏi nhóm |
+| **Bình chọn — Track B** |||||
+| `SOCIAL-API-040` | `GET /social/polls` | `200` | `view:feed` | Bình chọn đang mở / đã đóng |
+| `SOCIAL-API-041` | `PUT /social/posts/{post_id}/poll/vote` | `200` | `view:feed` (hàng `user_id = actor`) | Poll `closed`/quá hạn ⇒ 409 `ERR-016`; poll một-lựa-chọn mà gửi > 1 lựa chọn, hoặc lượt thua khi hai lượt của cùng người đua nhau ⇒ 409 `ERR-017`; bỏ phiếu lần hai TUẦN TỰ = đổi phiếu (200) — SPEC-16 §12 |
+| `SOCIAL-API-042` | `DELETE /social/posts/{post_id}/poll/vote` | `200` | như trên | Rút phiếu khi còn `open` |
+| `SOCIAL-API-043` | `GET /social/posts/{post_id}/poll/results` | `200` | `view:feed` | **Ẩn danh ⇒ không có `user_id` trong response, kể cả `company-admin`** |
+| `SOCIAL-API-044` | `POST /social/posts/{post_id}/poll/close` | `201` | chủ bài **hoặc** `manage:feed-post` | Đóng **bằng tay**. Job đóng theo hạn **KHÔNG** đi qua route này — xem §5.1d |
+| **Sáng kiến — Track B** |||||
+| `SOCIAL-API-045` | `GET /social/ideas` | `200` | `view:feed` | Lọc theo `status` |
+| `SOCIAL-API-046` | `PATCH /social/posts/{post_id}/idea/review` | `200` | `approve:feed-idea` | FSM §13.3; sai chuyển tiếp ⇒ 409 `ERR-019`; `rejected` bắt buộc `note`; audit + NOTI tác giả |
+| **Vinh danh — Track B** |||||
+| `SOCIAL-API-047` | `GET /social/kudos` | `200` | `view:feed` | Vinh danh gần đây / theo tháng |
+| `SOCIAL-API-048` | `GET /social/kudos-badges` | `200` | `view:feed` | Catalog huy hiệu đang bật |
+| `SOCIAL-API-059` | `GET /social/kudos/recipients?q=` | `200` | **`create:feed-kudos`** | **SOC-DEC-013 (BE-2D).** Danh bạ cho ô chọn người nhận vinh danh: `{data:[{employeeId, fullName, avatarUrl}], truncated}` — **KHÔNG `userId`**/email/mã NV. Chỉ nhân sự `active` + TK `active` (chưa xoá mềm ở cả hai), loại chính người gọi. `q` ≥ 2 chữ/số (NFC, dấu tổ hợp không tính), khớp **ĐẦU TỪ** chỉ trên họ tên (bỏ dấu, không phân biệt hoa thường; `strpos` — `%`/`_` là ký tự thường), trần **20**, không phân trang (`.strict()`: `limit`/`page` ⇒ 400). Xem §5.1l |
+| `SOCIAL-API-049` | `POST /social/kudos-badges` | `201` | `manage:feed-kudos` | `201` + DTO quản trị; `@Idempotent()`; `code` `^[a-z0-9-]{2,32}$` BẤT BIẾN; trùng (kể cả huy hiệu đã tắt) ⇒ 409 `KUDOS_BADGE_CODE_TAKEN`; audit — xem §5.1i |
+| `SOCIAL-API-050` | `PATCH /social/kudos-badges/{badge_id}` | `200` | `manage:feed-kudos` | `200` + DTO quản trị; `{name?, description?, icon?, position?, isActive?}` strict, ≥1 trường; gửi `code` ⇒ 400; `isActive:true` bật lại; không đổi gì ⇒ 200 không audit |
+| `SOCIAL-API-051` | `DELETE /social/kudos-badges/{badge_id}` | `200` | `manage:feed-kudos` | `200` + DTO quản trị. Tắt (`is_active=false`), **không** hard-delete; đã tắt sẵn ⇒ 200 không audit; không tồn tại/tenant khác ⇒ 404 `KUDOS_BADGE_NOT_FOUND` |
+| `SOCIAL-API-056` | `GET /social/kudos-badges/manage` | `200` | `manage:feed-kudos` | **SOC-DEC-012 (BE-3A).** CẢ huy hiệu đã tắt + `isActive`; OFFSET; `ORDER BY position, id`. Khai TRƯỚC `…/{badge_id}` |
+| **Thống kê — Track C** |||||
+| `SOCIAL-API-052` | `GET /social/stats/engagement` | `200` | `view:feed-report` | Sàn scope `Company`; manager `Department`. Theo tuần & đơn vị; SQL set-based; **KHÔNG cache** — xem §5.1j |
+| `SOCIAL-API-053` | `GET /social/stats/engagement/export` | `200` | `view:feed-report` | Như `052`; XLSX; ghi audit cùng tx — xem §5.1j |
+| **Cửa đăng ký tệp đính kèm — `S16-SOCIAL-BE-1C`** |||||
+| `SOCIAL-API-054` | `POST /social/files/upload-url` | `200` | **SÀN `view:feed` + cặp theo `target` — xem §5.1e** | `@HttpCode(200)`; đăng ký tệp `Private` owned-by-token + presigned-PUT. **Không** `@Idempotent()` |
+| `SOCIAL-API-055` | `POST /social/files/{id}/confirm` | `200` | như trên | `Pending → Uploaded`; owner-check TRƯỚC khi chạm storage; 200 idempotent khi đã `Uploaded` |
+| **Thùng rác bài viết — `S16-SOCIAL-BE-3C`** |||||
+| `SOCIAL-API-057` | `GET /recycle-bin/feed-posts` | `200` | **`restore:feed-post`** — sàn scope `Company` | Bài đã xoá mềm của tenant; OFFSET `page`/`limit`, envelope `{data,page,limit,total}`, `ORDER BY deleted_at DESC, id DESC`; tác giả · nhóm · đơn vị · trích đoạn **che theo vị từ audience**; **KHÔNG audit** — xem §5.1k |
+| `SOCIAL-API-058` | `POST /recycle-bin/feed-posts/{post_id}/restore` | `200` | như trên | `200 {id, status}` — `status` ∈ `published`\|`hidden` theo luật §5.1k; **audit LUÔN**, cùng tx (`social.post.restore`); chưa xoá / không có / tenant khác ⇒ 404 `ERR-001`; nhóm đã xoá ⇒ 409 `RESTORE_GROUP_DELETED`; **không** `@Idempotent()` |
 
 > **59 mã = 59 route HTTP** — không mã nào gói hai route.
 
@@ -143,25 +143,23 @@ Prefix: `/api/v1`. Tất cả dưới basePath `social` ⇒ OpenAPI + route-cens
 - `avatarUrl` = URL ĐÃ KÝ (TTL ngắn) hoặc `null` (chữ cái đầu) — cùng luật avatar của toàn module (§6.1, `S16-SOCIAL-AVATARPRESIGN-1`, owner ký K4 + D1–D10 02/10/2026). Chỉ ký ≤ trần 20 dòng trả về, MỘT câu cổng.
 - `q` quá ngắn / chỉ ký tự đặc biệt / ký tự điều khiển ⇒ **400** `VALIDATION-ERR-001` (lỗi hình dạng, không mã SOCIAL).
 >
-> ⚠️ **`057`/`058` NẰM NGOÀI 56 route của SPEC-16 §15 VÀ NGOÀI basePath `social`** — thêm ở `S16-SOCIAL-BE-3C`
+> ⚠️ **`057`/`058` NẰM NGOÀI basePath `social`** — thêm ở `S16-SOCIAL-BE-3C`
 > (owner ký O3 ngày 28/09/2026): SPEC-16 §13.1/§16 nói bài xoá «vào recycle-bin», nên route sống ở
 > recycle-bin (registry theo loại đối tượng, SOCIAL đăng ký handler), không dựng thùng rác thứ hai trong
-> `social/`. SPEC-16 nằm NGOÀI `paths` của BE-3C ⇒ §15 vẫn ghi «56 route» (nợ `054`/`055`/`056` đã đóng ở
-> BE-3A). **Nợ doc MỚI:** §15 thêm dòng cụm «Thùng rác bài viết · `SOCIAL-API-057..058` · 2» và sửa tổng
-> 56 → 58; §11 thêm cặp `restore:feed-post` (14 → 15 cặp).
+> `social/`. Nợ doc của BE-3C đã đóng ở `S16-SOCIAL-DOC-3` (23/10/2026): SPEC-16 §15 có dòng cụm «Thùng rác
+> bài viết · `SOCIAL-API-057..058` · 2», tổng **59**; §11 có cặp thứ 15 `restore:feed-post`.
 >
-> ⚠️ **`056` cũng NẰM NGOÀI 53 route của SPEC-16 §15** — thêm ở `S16-SOCIAL-BE-3A` theo SOC-DEC-012
+> ⚠️ **`056` NẰM NGOÀI 53 route cấp phát ban đầu của SPEC-16** — thêm ở `S16-SOCIAL-BE-3A` theo SOC-DEC-012
 > (owner 28/09/2026): `048` CỐ Ý chỉ trả huy hiệu đang bật dưới cặp `view:feed`, nên màn quản trị cần
 > một route đọc riêng gác `manage:feed-kudos` để thấy và bật lại huy hiệu đã tắt.
 >
-> ⚠️ **`054`/`055` NẰM NGOÀI 53 route của SPEC-16 §15, CÓ CHỦ Ý.** Chúng là hạ tầng own-scope quanh
+> ⚠️ **`054`/`055` NẰM NGOÀI 53 route cấp phát ban đầu của SPEC-16, CÓ CHỦ Ý.** Chúng là hạ tầng own-scope quanh
 > `FileService` (khuôn `POST /chat/files/*`), không phải một chức năng nghiệp vụ mới của SPEC-16: mọi
 > ràng buộc sản phẩm về đính kèm (≤10 ảnh · ≤1 video · ≤20MB — SOC-DEC-008) vẫn ép ở bước GẮN với mã
-> `SOCIAL-ERR-007`. `docs/spec/**` nằm NGOÀI `paths` của `S16-SOCIAL-BE-1C` nên SPEC-16 §15 vẫn ghi
-> «53 route»; **nợ doc đã ghi nhận** (plan `S16-SOCIAL-BE-1C.md` §4): WO doc kế tiếp thêm dòng cụm
-> «Đính kèm · `SOCIAL-API-054..055` · 2» và sửa tổng 53 → 55.
+> `SOCIAL-ERR-007`. Nợ doc của `S16-SOCIAL-BE-1C` đã đóng: SPEC-16 §15 có dòng cụm «Đính kèm (hạ tầng
+> own-scope) · `SOCIAL-API-054..055` · 2».
 >
-> ⚠️ **Route-census của module SOCIAL KHÔNG bằng 53.** App vệ tinh fbpost (`apps/api/src/integrations/social/`) đã khai tag module `SOCIAL` từ wave S9. Khi BE-1..BE-3 land, census kỳ vọng = **53 + số route fbpost đang đếm** (đo lúc chạy, đừng gõ cứng). Hai lựa chọn cho WO BE-1, ghi lại lựa chọn vào §9: (a) giữ chung tag `SOCIAL` và cập nhật số sàn census; (b) tách tag OpenAPI riêng cho tiện ích fbpost. Không đo trước ⇒ cổng census đỏ ngay PR đầu.
+> ⚠️ **Route-census của module SOCIAL KHÔNG bằng 59.** App vệ tinh fbpost (`apps/api/src/integrations/social/`) đã khai tag module `SOCIAL` từ wave S9, và `057`/`058` được census đếm vào SOCIAL dù basePath là `recycle-bin` (dòng đầu §5). Census kỳ vọng = **59 + số route fbpost đang đếm** (đo lúc chạy, đừng gõ cứng). _(Đoạn dưới là ghi chú lúc thiết kế, trước BE-1.)_ Hai lựa chọn cho WO BE-1, ghi lại lựa chọn vào §9: (a) giữ chung tag `SOCIAL` và cập nhật số sàn census; (b) tách tag OpenAPI riêng cho tiện ích fbpost. Không đo trước ⇒ cổng census đỏ ngay PR đầu.
 
 ### 5.1b `SOCIAL-API-002` — cặp quyền và body **phân nhánh theo `type`**
 
@@ -265,6 +263,8 @@ Cùng khuôn `attachmentIds` ở §5.1f: khoá vắng = không đụng, mảng r
 
 Body: `{status, resolutionNote?, action?}`; `action ∈ none · hide_post · lock_comments · delete_target`,
 **vắng ⇒ `none`** (client cũ giữ nguyên hành vi). `status='dismissed'` + `action ≠ none` ⇒ **400**.
+Phản hồi = `FeedReportDto` dựng qua CÙNG hàm với `028`: `reporter` và `resolutionNote` che theo cùng vị từ
+`isCompany(routeScope)` — sàn `Company` của `029` khiến người gọi luôn thấy đủ (S16-SOCIAL-RESNOTEMASK-1).
 
 | Loại đích | `none` | `hide_post` | `lock_comments` | `delete_target` |
 | --- | --- | --- | --- | --- |
@@ -329,7 +329,8 @@ của `weekTotals` là số người DISTINCT trong tuần, không phải tổng
 số liệu. ⚠️ Nợ: thêm object type riêng ở lượt migrate CHECK `audit_logs.object_type` kế tiếp.
 
 **Widget `SOCIAL-WIDGET-001`:** `SocialStatsService.weeklyEngagementForWidget(user)` — cùng cổng/sàn với `052`, trả tổng
-tuần hiện tại. Handler/catalog DASH thuộc `S16-SOCIAL-DASH-1`.
+tuần hiện tại. Handler DASH: `DashboardWidgetSocialHandlers.fetchEngagementWeek` (slug `social-engagement-week`, sàn scope
+`Department`, không cache — SPEC-16 §17.3; `S16-SOCIAL-DASH-1`, mig `0592`).
 
 ### 5.1k `SOCIAL-API-057` / `058` — thùng rác bài viết (`S16-SOCIAL-BE-3C`)
 
@@ -347,7 +348,7 @@ tuần hiện tại. Handler/catalog DASH thuộc `S16-SOCIAL-DASH-1`.
 - **Hai tầng** (bảng hằng `SOCIAL_ROUTE_PAIRS` += `recycleFeedPostList` · `recycleFeedPostRestore`,
   `tier1IsFloor:false`, `companyFloor:true`): tầng 1 decorator đọc CÙNG hằng; tầng 2
   `SocialRecycleBinService.list/restore` gọi `resolveActor` NGOÀI `withTenant` — grant hẹp hơn `Company`
-  (`Department`/`Own`) ⇒ **403 `AUTH-ERR-SCOPE-DENIED`**, kể cả khi vai có thêm `manage:feed-post@Company`.
+  (`Department`/`Own`) ⇒ **403 `AUTH-ERR-FORBIDDEN`** (`message` mang tiền tố `AUTH-ERR-SCOPE-DENIED` — xem §6.5), kể cả khi vai có thêm `manage:feed-post@Company`.
 - **`is_sensitive = false`** — nhất quán với 14 cặp `feed-*` (SOC-DEC-004 «không cặp `is_sensitive`»). Khác
   `restore:employee`/`restore:user` (`true`) vì hai cặp đó hồi sinh PII/credential; khôi phục bài là kiểm duyệt
   NỘI DUNG, đảo ngược được, và luật trạng thái dưới đây đẩy mọi ca mơ hồ về `hidden`.
@@ -423,7 +424,7 @@ khôi phục đẩy `usage_count` lệch **+1** — chỉ xảy ra ở fixture; 
 | Ca | HTTP | Mã |
 | --- | --- | --- |
 | Thiếu `restore:feed-post` | 403 | tầng 1 (`PermissionGuard`) |
-| Grant hẹp hơn `Company` | 403 | `AUTH-ERR-SCOPE-DENIED` (tầng 2) |
+| Grant hẹp hơn `Company` | 403 | `AUTH-ERR-FORBIDDEN` (tầng 2; `message` tiền tố `AUTH-ERR-SCOPE-DENIED`) |
 | `{post_id}` không phải uuid | 400 | `ParseUUIDPipe` |
 | Không tồn tại · tenant khác · **bài CHƯA xoá** | 404 | `SOCIAL-ERR-001` (`POST_NOT_FOUND`) — **MỘT chuỗi cho mọi lý do**, không oracle |
 | Bài thuộc **nhóm đã xoá mềm** | 409 | `RESTORE_GROUP_DELETED` — «SOCIAL-ERR: nhóm của bài viết đã bị xoá — không thể khôi phục bài.» |
@@ -455,7 +456,7 @@ khôi phục đẩy `usage_count` lệch **+1** — chỉ xảy ra ở fixture; 
   registry.
 - ⚠️ **Tag OpenAPI = HR** (nợ): tag suy từ SEGMENT ĐẦU của path, và `recycle-bin` thuộc nhóm HR trong
   `config/openapi-modules.ts`. Đổi mapping nằm ngoài `paths` của BE-3C. Route-census 2 tầng vẫn tính `057`/`058`
-  vào SOCIAL (58 route) qua allowlist theo tên lớp controller.
+  vào SOCIAL (58 route lúc BE-3C; từ `S16-SOCIAL-BE-2D` thêm `059` ⇒ 59 — xem §9) qua allowlist theo tên lớp controller.
 
 ### 5.2 Thứ tự khai báo route — bẫy đã biết
 
@@ -502,6 +503,7 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
 ```
 
 - **Không** có `status`, `deletedAt`, `authorUserId` trong DTO của người đọc thường — chỉ tác giả và `manage:feed-post` nhận thêm `status`.
+- **Đính kèm (`attachments[]`)** — `url` = presign ký cho CHÍNH người gọi, hoặc `null` khi không ký được (từ chối của `FilePolicy` vì mọi lý do, hoặc lỗi ký). **`fileName`/`sizeBytes` = `null` khi `url` = `null`** — một vị từ duy nhất (`S16-SOCIAL-ATTMETAMASK-1` D-1); phần tử vẫn có mặt với `fileId` + `kind` (D-2). **Luật hợp đồng khi SỬA (`004`/`016`):** `attachmentIds` là allowlist đầy đủ và gỡ là một chiều ⇒ client PHẢI gửi lại `fileId` của MỌI phần tử `attachments`, kể cả phần tử `url: null` — dựng từ danh sách đang vẽ là gỡ vĩnh viễn tệp bị ẩn.
 - **Avatar — luật CHUNG của 10 trường danh tính SOCIAL** (`author.avatarUrl` bài/bình luận · người thả cảm xúc `013` · đã/chưa đọc `022` · `avatar` sinh nhật `026` · thành viên nhóm `037` · người nhận vinh danh trên thẻ + `047` · danh bạ `059` · reporter/resolver/tác giả đích `028`/`029`) — `S16-SOCIAL-AVATARPRESIGN-1`, owner ký 02/10/2026:
   - Giá trị = **URL ĐÃ KÝ (TTL ngắn, mặc định 300 s)** hoặc **`null`** (FE vẽ chữ cái đầu). **Không bao giờ** là cột thô `employee_profiles.avatar_url` (fileId — cột đa-người-ghi, đầu độc được).
   - Chỉ ký khi CẶP `(employeeId, fileId)` khớp một avatar **ĐÃ XÁC MINH** (link `ME/avatar` sống · `image/*` · `Uploaded` · không `Infected` · người tạo link sở hữu tệp) — fileId của người khác / tenant khác / tệp không link ⇒ `null`. **D2-b:** URL `http(s)` do quản trị đặt và mọi scheme khác (`javascript:`, `data:`…) ⇒ `null` trên SOCIAL (HR/CHAT/TASK vẫn passthrough URL — lệch có chủ ý).
@@ -510,6 +512,8 @@ Mọi `{id}` qua pipe UUID **cấp method** (không `@UsePipes` cấp class) —
   - Ký trong tx sẵn có của route: **+1 câu/request** bất kể số dòng, 0 transaction thêm; 0 câu khi trang không có avatar fileId. `029` ký trong SAVEPOINT — lỗi ký ⇒ ảnh `null`, quyết định kiểm duyệt vẫn lưu (D10).
   - Kiểu giữ `string | null` (D5) — hình dạng ép ở BE, không `.url()` ở hợp đồng.
 - `myReaction` · `savedByMe` là **projection theo actor**, tính trong cùng câu truy vấn, không gọi thêm vòng.
+- **`tags[]` — thứ tự phần tử KHÔNG được cam kết**: hai lần gửi cùng một thân có thể trả thứ tự khác nhau. Client và test so
+  theo TẬP (ca fuzz của `S16-SOCIAL-QA-1` so theo tập); cần thứ tự ổn định thì phải mở WO riêng (khác `mentions[]` ngay dưới).
 - **`mentions[]`** (bài **và** bình luận — `S16-SOCIAL-BE-1D`, owner chốt 28/09/2026) — người được nhắc, thứ tự ổn định `(created_at, id)` giữa các lần tải — KHÔNG theo thứ tự trong body, FE khớp theo `label`:
   - **Luật tầm nhìn (O-1):** phần tử có link ⇔ người được nhắc **VẪN trong audience của bài đích tại lúc ĐỌC** (bình luận: audience của **bài cha**), dùng **cùng vị từ** với lúc ghi (`classifyInAudience`): `company` ⇒ mọi tài khoản `active`; `org_unit` ⇒ hồ sơ thuộc đơn vị hoặc là trưởng đơn vị; `group` ⇒ thành viên `active` + nhân sự `active` + nhóm chưa xoá. Kết quả **không phụ thuộc người xem** (không có luật tự-nhắc ở đường đọc).
   - **Hình dạng (O-2):** `{withheld:false, employeeId, label}` | `{withheld:true}`. **KHÔNG `userId`** ở nhánh nào. Nhánh rút **không** mang `label` hay `employeeId` — FE giữ nguyên chữ `@…` trong `body` làm span.
@@ -596,7 +600,7 @@ Theo API-01 §12/§13 `MODULE-ERR-CODE`. **Mã nằm ở `error.code`** của en
 
 **Thông điệp** giữ nguyên tiền tố cũ: hằng có số ⇒ tiền tố `message` = đúng `error.code`; sentinel ⇒ tiền tố `SOCIAL-ERR: `. Client **bắt theo `error.code`**, không so câu chữ `message`.
 
-**KHÔNG mang mã SOCIAL** (giữ mã chung): 403 tầng-1 `PermissionGuard` (`AUTH-ERR-FORBIDDEN`, `Permission denied: …` — kể cả route `046`; `SOCIAL-ERR-020` chỉ ra ở nhánh có grant nhưng dưới sàn Company) · 403 tầng-2 `resolveActor` của route không có mã riêng (`AUTH-ERR-FORBIDDEN` / message `AUTH-ERR-SCOPE-DENIED` — nợ `S16-SOCIAL-SCOPEDENIEDCODE-1`) · 400 Zod/ParseUUID (`VALIDATION-ERR-001`) · 409 idempotency (`REQUEST-ERR-IDEMPOTENCY-*`) · lỗi của FileService.
+**KHÔNG mang mã SOCIAL** (giữ mã chung): 403 tầng-1 `PermissionGuard` (`AUTH-ERR-FORBIDDEN`, `Permission denied: …` — kể cả route `046`; `SOCIAL-ERR-020` chỉ ra ở nhánh có grant nhưng dưới sàn Company) · 403 tầng-2 `resolveActor` của route không có mã riêng (`error.code` = `AUTH-ERR-FORBIDDEN` — ánh xạ chung theo status của `httpStatusToCode`; `AUTH-ERR-SCOPE-DENIED` chỉ là TIỀN TỐ của `message`, KHÔNG phải mã trên dây — nợ `S16-SOCIAL-SCOPEDENIEDCODE-1`) · 400 Zod/ParseUUID (`VALIDATION-ERR-001`) · 409 idempotency (`REQUEST-ERR-IDEMPOTENCY-*`) · lỗi của FileService.
 
 Quy ước then chốt:
 
@@ -633,7 +637,16 @@ Replay `002` trả **thẻ LÚC TẠO** (khối `poll` đếm 0, tên người n
 | `feed:comment.created` | **CHỈ** `co:{companyId}:feed` (bài `company`) | DTO bình luận đã mask | `view:feed` **@Company** |
 | `feed:reaction.changed` | **CHỈ** `co:{companyId}:feed` (bài `company`) | `{ targetType, targetId, postId, likeCount, reactions[] }` | `view:feed` **@Company** |
 
-> **Gate lúc join = CÙNG sàn REST** (FULL gate `S16-SOCIAL-BE-2C` lượt 1, HIGH): mọi route đọc SOCIAL ép sàn scope Company (`companyFloor` — `resolveActor` ném 403 `AUTH-ERR-SCOPE-DENIED`), nên cổng WS hỏi scope MẠNH NHẤT của cặp `view:feed` (`resolveStrongestScope`, grant đọc TƯƠI mỗi lần connect — KHÔNG qua cache 300 s của `can()`) và chỉ cho qua `Company`/`System` (cùng vị từ `SocialAccessService.isCompany`). Trước bản vá cổng là `can()` — mù `data_scope` — nên một vai `view:feed@Department` (role-admin cho gán) bị REST 403 toàn bộ bảng tin/nhóm mà WS vẫn đưa vào `feed`, `feeduser` và MỌI room nhóm kín của người đó.
+**Tập khoá trên dây** (bổ sung 23/10/2026, `S16-SOCIAL-DOC-3`) — ghim bởi `apps/api/test/integration/s16-social-qa1-ws.int-spec.ts`,
+so ĐÚNG tập (khoá lạ hoặc thiếu ⇒ đỏ); `a.b` = khoá lồng, `a[].b` = khoá của phần tử mảng:
+
+| Sự kiện | Khoá | Khoá CẤM (có mặt ⇒ đỏ) |
+| --- | --- | --- |
+| `feed:post.created` (cả hai biến thể) | Theo DTO §6.1: `id` · `type` · `audience` · `groupId` · `orgUnitId` · `author.employeeId` · `author.fullName` · `author.avatarUrl` · `body` · `tags` · `attachments[].fileId` · `attachments[].kind` · `pinned` · `commentsLocked` · `likeCount` · `commentCount` · `viewCount` · `editedAt` · `createdAt`. **Cộng 5 khoá có trên dây, hiện chỉ ghim theo quan sát** (chưa là cam kết hợp đồng): `requiresAck` · `publishedAt` · `lastActivityAt` · `attachments[].fileName` · `attachments[].sizeBytes` | `myReaction` · `savedByMe` · `isMine` · `mentions` · `status` · `kudos` · `poll` · `idea` · `attachments[].url` |
+| `feed:comment.created` | `id` · `postId` · `parentCommentId` · `author.employeeId` · `author.fullName` · `author.avatarUrl` · `body` · `attachments[].fileId` · `attachments[].kind` · `attachments[].fileName` · `attachments[].sizeBytes` · `likeCount` · `editedAt` · `createdAt` | `myReaction` · `isMine` · `mentions` · `attachments[].url` |
+| `feed:reaction.changed` | `targetType` · `targetId` · `postId` · `likeCount` · `reactions[].emoji` · `reactions[].count` | `reactions[].mine` (REST thả cảm xúc `011` trả `mine` theo người gọi — ca `QA1-W-4a`; sự kiện phát cho cả room thì không) |
+
+> **Gate lúc join = CÙNG sàn REST** (FULL gate `S16-SOCIAL-BE-2C` lượt 1, HIGH): mọi route đọc SOCIAL ép sàn scope Company (`companyFloor` — `resolveActor` ném 403, `error.code` = `AUTH-ERR-FORBIDDEN`, `message` tiền tố `AUTH-ERR-SCOPE-DENIED`), nên cổng WS hỏi scope MẠNH NHẤT của cặp `view:feed` (`resolveStrongestScope`, grant đọc TƯƠI mỗi lần connect — KHÔNG qua cache 300 s của `can()`) và chỉ cho qua `Company`/`System` (cùng vị từ `SocialAccessService.isCompany`). Trước bản vá cổng là `can()` — mù `data_scope` — nên một vai `view:feed@Department` (role-admin cho gán) bị REST 403 toàn bộ bảng tin/nhóm mà WS vẫn đưa vào `feed`, `feeduser` và MỌI room nhóm kín của người đó.
 
 > Trạng thái từ **`S16-SOCIAL-BE-2C` (02/10/2026)** — bảng trên là HIỆN TRẠNG code. Bình luận / cảm xúc của bài nhóm **chưa** phát vào room nhóm (owner ký Q-CR (a): FE chưa có consumer nào — nợ `S16-SOCIAL-RTGROUPCR-1`); SPEC-16 §13.7 mô tả ĐÍCH («như trên») và không sửa ở WO này (Q-SPEC (a)).
 
@@ -641,6 +654,7 @@ Replay `002` trả **thẻ LÚC TẠO** (khối `poll` đếm 0, tên người n
 - **KHÔNG mang `mentions`** (`S16-SOCIAL-BE-1D` D6) — bóc tại nguồn và `.omit` ở schema WS. FE nhận thẻ qua WS render `@…` thành span tới lần refetch REST.
 - **KHÔNG mang `kudos` · `poll` · `idea`** (`S16-SOCIAL-BE-2D` D7) — `poll.myVote` là của TÁC GIẢ (thẻ phát ra được decorate bằng tác giả), phát cho cả room là rò; `.omit` không chạm khoá lồng nên bóc nguyên khối, ở CẢ nguồn (`buildWsPostCreatedEvent`) lẫn schema WS. FE chỉ đếm sự kiện nên không mất gì. Áp cho CẢ HAI biến thể.
 - **`author.avatarUrl` LUÔN `null`** trên `feed:post.created` — **CẢ HAI biến thể** (room công ty lẫn room nhóm `co:{companyId}:feedgroup:{groupId}`) — và `feed:comment.created` (`S16-SOCIAL-AVATARPRESIGN-1` D3-b) — REST trả URL ĐÃ KÝ, là capability có TTL (ai cầm cũng tải được); không lên room nào. GIỮ khoá (bundle FE cũ đòi khoá — bỏ khoá làm bundle cũ từ chối mọi sự kiện), ép giá trị `null` ở CẢ nguồn (`wsAuthorOf` — gọi trong `buildWsPostCreatedEvent` cho bài, `emitCommentCreated` cho bình luận) lẫn schema lồng `wsFeedAuthorSchema` (`.transform`) đặt ở LÕI chung của union ⇒ mọi option kế thừa. Ảnh lấy ở lần refetch REST.
+- **Đính kèm trên WS: không `url`, `fileName`/`sizeBytes` LUÔN `null`, giữ khoá** (`S16-SOCIAL-ATTMETAMASK-1` D-3) — `feed:post.created` (cả hai biến thể) và `feed:comment.created`. Trên REST tên/cỡ đi theo quyết định ký cho từng người xem; sự kiện phát cho cả room nên chỉ mang `fileId` + `kind`. Ép ở CẢ nguồn (`wsAttachmentsOf`, dùng chung bài/bình luận) lẫn schema (`wsFeedAttachmentSchema` `.transform`). Tên/cỡ lấy ở lần refetch REST.
 - **`feed:post.created` là union theo `audience`** (`S16-SOCIAL-BE-2C`, owner ký Q-SCHEMA = P1): `company` (`groupId: null`, `orgUnitId: null`) | `group` (`groupId` uuid BẮT BUỘC, `orgUnitId: null`); hai biến thể CÙNG tập khoá (room nhóm không nhận payload rộng hơn room công ty). `org_unit`, `group` thiếu `groupId`, `company` mang `groupId`, mọi `orgUnitId` khác `null` ⇒ **không parse được**. Emitter `.parse()` TRƯỚC rồi mới chọn room từ `audience` của kết quả — parse lỗi ⇒ không phát vào đâu.
 - **Room nhóm có gate RIÊNG** — `view:feed` KHÔNG đủ: chỉ thành viên `status='active'` (vị từ tập người `activeGroupMemberExists`, KHÔNG vị từ đọc) của nhóm còn sống, cùng công ty. `pending` không phải thành viên. Nhóm **`public` cũng chỉ thành viên** (owner ký Q-PUBLIC (a)): feed chính loại bài nhóm (D-OWNER-6) và WS một chiều không cho client tự xin room — người ngoài xem trang nhóm public không có badge.
 - **KHÔNG có room `org_unit`** (quyết định tường minh, done_when #8 — Q-ORG): (1) tài liệu chuẩn không khai room nào cho nó; (2) «thuộc đơn vị» là phân công HR (resolve theo request từ data scope), đổi bởi writer của module khác — giữ room đồng bộ phải móc vào MỌI writer đó; (3) FE không có consumer; (4) không room ⇒ bài `org_unit` tiếp tục KHÔNG phát vào đâu (fail-closed D21) — thiếu badge, không rò.
@@ -699,7 +713,7 @@ Vì sao cần room đánh dấu: lệnh `in(X).socketsJoin(feedgroup)` của đ�
 | `apps/api/src/social/` | *(cũ — 18/09)* **Chưa có** — module mới của `S16-SOCIAL-BE-1` · **đã land** ở BE-1..BE-3B |
 | `apps/api/src/integrations/social/` (fbpost) | **Đang chạy** — KHÔNG đụng (SOC-DEC-002) |
 | `packages/contracts/src/social/feed*.ts` | *(cũ — 18/09)* Chưa có — `S16-SOCIAL-DB-1` · **đã land** ở DB-1..BE-3B (thực tế là file phẳng `packages/contracts/src/social.ts` + `social-api*.ts`, không có thư mục `social/`) |
-| Route-census | *(cũ — 18/09)* Chưa có mục SOCIAL nội bộ; thêm 53 lúc BE-1..BE-3 land · **đã land** ở BE-1..BE-3B (56 route `/api/v1/social/*`) |
+| Route-census | *(cũ — 18/09)* Chưa có mục SOCIAL nội bộ; thêm 53 lúc BE-1..BE-3 land · **đã land**: 57 route `/api/v1/social/*` (`001..056` + `059`, tới `S16-SOCIAL-BE-2D`) + 2 route `/api/v1/recycle-bin/feed-posts*` (`057`/`058`, `S16-SOCIAL-BE-3C`) = **59** (đo 23/10/2026 theo `QA1_ROUTES`) |
 | Thùng rác bài viết `057`/`058` | **`S16-SOCIAL-BE-3C` (28/09/2026)** — `recycle-bin/recycle-bin-feed-posts.controller.ts` + registry `recycle-bin/recycle-bin.registry.ts` (handler `feed_post` do `social/social-recycle-bin.service.ts` đăng ký); mig `0589` (cột `feed_posts.status_before_delete` + 2 CHECK + chỉ mục thùng rác) · `0590` (cặp `restore:feed-post`, 2 grant); census 2 tầng SOCIAL 56 → **58**. Nợ: khôi phục NHÓM · tag OpenAPI HR · employee vào registry |
 | Room nhóm realtime (§7) | **`S16-SOCIAL-BE-2C` (02/10/2026)** — `realtime/rooms.ts` (`feedUserRoomName` + `feedGroupRoomName`) · `realtime/realtime.gateway.ts` (`joinFeedRooms`) · `realtime/realtime-emitter.service.ts` (`syncFeedGroupMembership`; `feed:post.created` định tuyến theo payload đã parse) · `social/social-group-rooms.reader.ts` + module lá `social-group-rooms.module.ts` · `social/social-ws-payload.ts`; contracts `wsFeedPostCreatedEventSchema` thành union `company`/`group`. KHÔNG migration. FULL gate lượt 1: cổng WS ép sàn scope Company như REST · id room-op chữ thường · `leave` cục bộ trước toàn cụm. Nợ: `S16-SOCIAL-RTGROUPCR-1` (bình luận/cảm xúc bài nhóm) · `S16-SOCIAL-GROUPPOSTDEL-1` (đua `034`↔`002`) · `S16-SOCIAL-FEGROUPBADGE-1` (badge theo nhóm ở FE) · `S17-CHAT-RTROOMOPS-1` (CHAT cùng hai lớp lỗi room-op) |
 

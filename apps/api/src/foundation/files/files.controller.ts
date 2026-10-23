@@ -20,6 +20,7 @@ import { PermissionGuard } from "../../permission/guards/permission.guard";
 import { RequirePermission } from "../../permission/require-permission.decorator";
 import { paginated, toPagination } from "../../common/pagination";
 import { ConfirmUploadDto, LinkFileDto, UploadFileDto } from "./files.dto";
+import { FileListService } from "./file-list.service";
 import { FileService } from "./files.service";
 
 interface AuthenticatedRequest extends Request {
@@ -40,7 +41,10 @@ interface AuthenticatedRequest extends Request {
 @UseGuards(PermissionGuard)
 @UsePipes(ZodValidationPipe)
 export class FilesController {
-  constructor(private readonly files: FileService) {}
+  constructor(
+    private readonly files: FileService,
+    private readonly fileList: FileListService,
+  ) {}
 
   /**
    * POST /foundation/files/upload — REGISTER (pha 1): đăng ký metadata (Private/Pending) + trả presigned-PUT
@@ -75,12 +79,15 @@ export class FilesController {
     return this.files.confirmUpload(req.user, id, body ?? {});
   }
 
-  /** GET /foundation/files — liệt kê metadata file của tenant (pagination block). Gate view:foundation-file. */
+  /**
+   * GET /foundation/files — liệt kê metadata file của tenant (pagination block). Gate view:foundation-file;
+   * tên/đuôi/cỡ/chủ tệp của từng hàng theo quyết định xem từng tệp (`FileListService`, cùng vị từ với `/:id`).
+   */
   @Get()
   @RequirePermission("view", "foundation-file")
   async list(@Req() req: AuthenticatedRequest, @Query() query: ListFilesQuery) {
     const parsed = listFilesQuerySchema.parse(query);
-    const { data, meta } = await this.files.list(req.user, parsed);
+    const { data, meta } = await this.fileList.list(req.user, parsed);
     return paginated(data, toPagination(meta.total, meta.page, meta.limit));
   }
 

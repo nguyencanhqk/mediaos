@@ -28,6 +28,9 @@
  * Mọi thứ in ra đi qua `redactWebhook` — chỉ còn host, đủ để chẩn đoán mà không rò khoá vào log/CI.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 /** Các kênh biết hình dạng thân. Kênh lạ rơi về `generic` (`{text}`) chứ KHÔNG ném. */
 export const WEBHOOK_FORMATS = ["slack", "google-chat", "discord", "telegram", "generic"];
 
@@ -63,8 +66,18 @@ export function formatAlertText(payload, { maxLength = MAX_ALERT_TEXT } = {}) {
   const rows = Array.isArray(payload?.rows) ? payload.rows : [];
   const bad = rows.filter((r) => r?.severity !== "ok");
 
+  // Tin nhắc lại / tin hồi phục PHẢI tự nói mình là gì ở dòng đầu — người đọc lúc 3h sáng cần biết
+  // ngay đây là sự cố MỚI, sự cố CŨ chưa hết, hay đã hết (xem `decideAlertDelivery`).
+  const kind = payload?.deliveryKind;
+  const firstLine =
+    kind === "recovered"
+      ? `[MediaOS ops] ĐÃ HỒI PHỤC — mọi luật ok (lần báo trước: ${String(payload?.previousWorst ?? "?").toUpperCase()})`
+      : kind === "resync"
+        ? "[MediaOS ops] OK — mọi luật ok (sổ gửi trước đó không đọc được; tin hỏng cũ trong kênh, nếu có, đã hết)"
+        : `[MediaOS ops] ${worst}${kind === "remind" ? " (NHẮC LẠI — chưa hết)" : ""} — ${bad.length}/${rows.length} nhóm bất thường`;
+
   const head = [
-    `[MediaOS ops] ${worst} — ${bad.length}/${rows.length} nhóm bất thường`,
+    firstLine,
     `${payload?.at ?? "?"} · ${payload?.baseUrl ?? "?"} · cửa sổ ${payload?.windowMin ?? "?"} phút`,
     "",
   ].join("\n");
@@ -237,4 +250,278 @@ export async function sendAlert({
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ═══ CHỐNG SPAM WEBHOOK mà KHÔNG nuốt cảnh báo thật (S19-OPS-PRODDBBOOT-1) ═══════════════════════
+// Tác vụ `MediaOS-OpsAlert` chạy mỗi 10 phút. Bản trước gửi webhook MỖI lần worst ≠ ok ⇒ một luật
+// warn kéo dài = 144 tin/ngày ⇒ người nhận tắt tiếng kênh ⇒ sự cố THẬT kế tiếp đi vào hư vô. Nhưng
+// chiều hỏng ngược lại — nuốt một cảnh báo thật — còn tệ hơn, nên MỌI chỗ nghi ngờ nghiêng về GỬI:
+//   · trạng thái đọc lỗi / mốc gửi lạ (tương lai) ⇒ gửi;  · gửi hỏng ⇒ KHÔNG ghi trạng thái (lần
+//     sau gửi lại);  · tập (luật, độ nặng) không-ok đổi ⇒ gửi, kể cả khi worst giữ nguyên.
+// Chỉ ghi trạng thái sau một lần GỬI THÀNH CÔNG — file là "lần cuối ta THẬT SỰ báo được cái gì".
+
+/** Hạn nhắc lại mặc định (giờ) khi vẫn còn hỏng y nguyên. Ghi đè: `OPS_ALERT_REMIND_HOURS`. */
+export const DEFAULT_REMIND_HOURS = 6;
+
+/**
+ * Phải ok LIÊN TỤC bao nhiêu phút mới gửi tin hồi phục. Không có hạn này thì một luật chập chờn
+ * (warn · ok · warn …) bắn cặp tin cảnh báo/hồi phục MỖI lượt 10 phút — đúng thứ spam đang chống.
+ * Chỉ HOÃN tin hồi phục; KHÔNG bao giờ hoãn một cảnh báo.
+ */
+export const DEFAULT_RECOVERY_HOLD_MINUTES = 20;
+
+const STATE_SEVERITIES = new Set(["ok", "unknown", "warn", "crit"]);
+
+/**
+ * Đọc `OPS_ALERT_REMIND_HOURS`. Rác (chữ, ≤ 0, vô hạn) ⇒ mặc định + `invalid:true` để người gọi KÊU
+ * stderr — im lặng dùng mặc định sẽ giấu một cấu hình người vận hành tưởng là đã có hiệu lực.
+ */
+export function parseRemindHours(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return { hours: DEFAULT_REMIND_HOURS, invalid: false };
+  }
+  const n = Number(String(raw).trim());
+  if (!Number.isFinite(n) || n <= 0) return { hours: DEFAULT_REMIND_HOURS, invalid: true };
+  return { hours: n, invalid: false };
+}
+
+/** Tập (id, severity) KHÔNG-ok, sắp theo id — so được bằng chuỗi, bỏ qua `detail` (số đếm đổi liên tục). */
+function nonOkAlerts(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((r) => r?.severity !== "ok")
+    .map((r) => ({ id: String(r?.id ?? "?"), severity: String(r?.severity ?? "unknown") }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+const fingerprint = (alerts) => alerts.map((a) => `${a.id}:${a.severity}`).join("|");
+
+/** Trạng thái ghi sau một lần gửi THÀNH CÔNG. */
+export function nextAlertState({ worst, rows }, now = Date.now()) {
+  return {
+    version: 1,
+    worst: String(worst),
+    alerts: nonOkAlerts(rows),
+    sentAt: new Date(now).toISOString(),
+  };
+}
+
+/**
+ * Quyết định có gửi webhook lần này không.
+ *
+ * `stateUpdate` = việc ghi sổ KHÔNG kèm gửi: "mark-ok" (bắt đầu đếm chuỗi ok — mốc `okSince`) ·
+ * "clear-ok" (hỏng lại giữa chừng ⇒ chuỗi ok đứt, lần về ok sau phải chờ lại từ đầu) · null.
+ *
+ * @param {{worst:string, rows:Array, state:object|null, stateError:string|null, now:number,
+ *          remindHours:number, recoveryHoldMin?:number}} input
+ * @returns {{send:boolean, kind:"alert"|"change"|"remind"|"recovered"|"resync"|null, reason:string,
+ *            stateUpdate:"mark-ok"|"clear-ok"|null}}
+ */
+export function decideAlertDelivery({
+  worst,
+  rows,
+  state,
+  stateError,
+  now,
+  remindHours,
+  recoveryHoldMin = DEFAULT_RECOVERY_HOLD_MINUTES,
+}) {
+  if (worst === "ok") return decideWhenOk({ state, stateError, now, recoveryHoldMin });
+  const d = decideWhenNotOk({ worst, rows, state, stateError, now, remindHours });
+  if (!d.send && state?.okSince) return { ...d, stateUpdate: "clear-ok" };
+  return { ...d, stateUpdate: null };
+}
+
+function decideWhenOk({ state, stateError, now, recoveryHoldMin }) {
+  if (stateError) {
+    // Sổ hỏng thì không biết kênh đang treo tin gì: báo "ok" MỘT lần — ghi được sổ sau đó là hết lặp.
+    return {
+      send: true,
+      kind: "resync",
+      reason: `ok; sổ gửi không đọc được (${stateError}) — báo ok một lần và ghi lại sổ`,
+      stateUpdate: null,
+    };
+  }
+  if (!state || state.worst === "ok") {
+    return { send: false, kind: null, reason: "ok; không nợ tin hồi phục", stateUpdate: null };
+  }
+  if (!state.okSince) {
+    return {
+      send: false,
+      kind: null,
+      reason: `về ok — chờ ok liên tục ${recoveryHoldMin} phút rồi mới báo hồi phục (chống chập chờn)`,
+      stateUpdate: "mark-ok",
+    };
+  }
+  const okMs = now - Date.parse(state.okSince);
+  if (okMs >= 0 && okMs < recoveryHoldMin * 60_000) {
+    return {
+      send: false,
+      kind: null,
+      reason: `ok được ~${Math.round(okMs / 60_000)} phút — chờ đủ ${recoveryHoldMin} phút mới báo hồi phục`,
+      stateUpdate: null,
+    };
+  }
+  return {
+    send: true,
+    kind: "recovered",
+    reason:
+      okMs < 0
+        ? "mốc ok nằm ở tương lai — gửi hồi phục cho chắc"
+        : `ok liên tục ≥ ${recoveryHoldMin} phút sau tin ${state.worst} đã gửi`,
+    stateUpdate: null,
+  };
+}
+
+function decideWhenNotOk({ worst, rows, state, stateError, now, remindHours }) {
+  if (stateError) {
+    return {
+      send: true,
+      kind: "alert",
+      reason: `không đọc được trạng thái gửi (${stateError}) — gửi để KHÔNG nuốt cảnh báo`,
+    };
+  }
+  if (!state) return { send: true, kind: "alert", reason: "chưa từng gửi" };
+  if (state.worst === "ok")
+    return { send: true, kind: "alert", reason: "hỏng lại sau tin hồi phục" };
+  if (state.worst !== worst) {
+    return { send: true, kind: "change", reason: `worst đổi ${state.worst} → ${worst}` };
+  }
+  if (fingerprint(nonOkAlerts(rows)) !== fingerprint(state.alerts)) {
+    return { send: true, kind: "change", reason: "tập luật không-ok/độ nặng đổi" };
+  }
+  const ageMs = now - Date.parse(state.sentAt);
+  const remindMs = remindHours * 3_600_000;
+  if (!(ageMs >= 0 && ageMs < remindMs)) {
+    return {
+      send: true,
+      kind: "remind",
+      reason:
+        ageMs < 0 ? "mốc gửi nằm ở tương lai — gửi cho chắc" : `còn hỏng sau ≥ ${remindHours} giờ`,
+    };
+  }
+  const leftH = Math.round(((remindMs - ageMs) / 3_600_000) * 10) / 10;
+  return {
+    send: false,
+    kind: null,
+    reason: `trùng tin đã gửi lúc ${state.sentAt} — nhắc lại sau ~${leftH} giờ nếu còn hỏng`,
+  };
+}
+
+function validateState(obj) {
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) return "không phải object";
+  if (!STATE_SEVERITIES.has(obj.worst)) return `worst lạ: ${JSON.stringify(obj.worst)}`;
+  if (!Array.isArray(obj.alerts)) return "thiếu mảng alerts";
+  for (const a of obj.alerts) {
+    if (typeof a?.id !== "string" || !STATE_SEVERITIES.has(a?.severity))
+      return "alerts có phần tử hỏng";
+  }
+  if (typeof obj.sentAt !== "string" || Number.isNaN(Date.parse(obj.sentAt))) return "sentAt hỏng";
+  if (
+    obj.okSince !== undefined &&
+    (typeof obj.okSince !== "string" || Number.isNaN(Date.parse(obj.okSince)))
+  ) {
+    return "okSince hỏng";
+  }
+  return null;
+}
+
+/**
+ * Đọc file trạng thái. Chưa có file ⇒ `{state:null, error:null}` (lần đầu — bình thường).
+ * Mọi lỗi khác (quyền, JSON rác, sai hình dạng) ⇒ `error` để người gọi KÊU và VẪN GỬI. Không ném.
+ */
+export function readAlertState(file) {
+  let raw;
+  try {
+    raw = fs.readFileSync(file, "utf8");
+  } catch (err) {
+    if (err?.code === "ENOENT") return { state: null, error: null };
+    return {
+      state: null,
+      error: `đọc ${path.basename(file)}: ${err?.code ?? err?.message ?? err}`,
+    };
+  }
+  try {
+    const obj = JSON.parse(raw);
+    const problem = validateState(obj);
+    if (problem) return { state: null, error: `${path.basename(file)}: ${problem}` };
+    return { state: obj, error: null };
+  } catch (err) {
+    return { state: null, error: `${path.basename(file)}: JSON hỏng (${err?.message ?? err})` };
+  }
+}
+
+/**
+ * Sổ mới cho việc ghi KHÔNG kèm gửi (`decision.stateUpdate`). Trả bản SAO, không sửa `state`.
+ * Không có gì để ghi ⇒ null.
+ */
+export function applyStateUpdate(state, update, now = Date.now()) {
+  if (!state || !update) return null;
+  if (update === "mark-ok") return { ...state, okSince: new Date(now).toISOString() };
+  if (update === "clear-ok") {
+    const next = { ...state };
+    delete next.okSince;
+    return next;
+  }
+  return null;
+}
+
+/** Windows: AV/tiến trình khác đang mở file đích ⇒ rename đè ném các mã này — thường chỉ thoáng qua. */
+const RENAME_RETRY_CODES = new Set(["EPERM", "EBUSY", "EACCES"]);
+const RENAME_RETRY_DELAYS_MS = Object.freeze([50, 200]);
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function removeQuietly(file) {
+  try {
+    fs.rmSync(file, { force: true });
+  } catch {
+    /* dọn file tạm hỏng thì thôi — lỗi chính được trả về ở người gọi */
+  }
+}
+
+/**
+ * Ghi NGUYÊN TỬ: file tạm cùng thư mục rồi `rename` đè lên — tiến trình chết giữa chừng không để lại
+ * một file trạng thái cụt. Rename bị khoá tạm (Windows) ⇒ thử lại 2 lần; vẫn khoá ⇒ ghi THẲNG vào
+ * file đích (không nguyên tử, nhưng sổ cụt chỉ làm lần sau gửi thêm — vẫn hơn giữ sổ CŨ rồi gửi
+ * trùng/lỡ tin hồi phục). Không ném.
+ */
+export function writeAlertState(
+  file,
+  state,
+  { renameImpl = fs.renameSync, retryDelaysMs = RENAME_RETRY_DELAYS_MS } = {},
+) {
+  const tmp = `${file}.${process.pid}.tmp`;
+  const body = `${JSON.stringify(state, null, 2)}
+`;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(tmp, body, "utf8");
+  } catch (err) {
+    removeQuietly(tmp);
+    return { ok: false, error: String(err?.code ?? err?.message ?? err) };
+  }
+  let lastErr = null;
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    try {
+      renameImpl(tmp, file);
+      return { ok: true, error: null };
+    } catch (err) {
+      lastErr = err;
+      if (!RENAME_RETRY_CODES.has(err?.code)) break;
+      if (attempt < retryDelaysMs.length) sleepSync(retryDelaysMs[attempt]);
+    }
+  }
+  if (RENAME_RETRY_CODES.has(lastErr?.code)) {
+    try {
+      fs.writeFileSync(file, body, "utf8");
+      removeQuietly(tmp);
+      return { ok: true, error: null, via: "direct-write" };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  removeQuietly(tmp);
+  return { ok: false, error: String(lastErr?.code ?? lastErr?.message ?? lastErr) };
 }

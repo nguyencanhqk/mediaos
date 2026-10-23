@@ -9,7 +9,7 @@ import { formatPayrollMoney } from "./payroll-format";
 import { parsePayrollError, payrollErrorI18nKey } from "./payroll-errors";
 import { PayslipBreakdown } from "./components/PayslipBreakdown";
 import { PayslipStatusBadge } from "./components/StatusBadges";
-import { openSignedUrlInNewTab } from "./open-signed-url";
+import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
 
 /**
  * PAY-SCREEN-006 (S13-PAYROLL-FE-1) — «Phiếu lương của tôi». Scope **Own tuyệt đối**.

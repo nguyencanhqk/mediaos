@@ -8,6 +8,10 @@
  * BẤT BIẾN: DTO KHÔNG chứa storagePath/storageBucket/checksumSha256/signedUrl dài hạn (packages/contracts
  * files.ts) — client CHỈ render field server trả, KHÔNG tự suy diễn đường dẫn lưu trữ.
  *
+ * S19-SEC-FILEMETAGATE-1: hàng theo `fileListItemSchema` — tên/đuôi/cỡ/chủ tệp `null` khi máy chủ quyết định
+ * người xem KHÔNG xem được tệp đó (cùng vị từ với trang chi tiết). Hàng đó hiện ô che và KHÔNG có nút Xem
+ * (không điều hướng); vào thẳng URL chi tiết thì trang chi tiết tự hiện trạng thái không có quyền.
+ *
  * States: loading · error · empty · forbidden. Bộ lọc: module/entity/visibility. Phân trang server-side
  * page/limit — heuristic prev/next (trang đầy ⇒ còn trang sau) vì apiFetch/unwrapEnvelope chỉ giữ `data`.
  */
@@ -18,7 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { File as FileIcon, RefreshCw } from "lucide-react";
 import { z } from "zod";
-import { type FileMetadataDto, fileMetadataSchema, type FileVisibility } from "@mediaos/contracts";
+import { type FileListItemDto, fileListItemSchema, type FileVisibility } from "@mediaos/contracts";
 import { apiFetch, buildQueryString, useCan } from "@mediaos/web-core";
 import { Badge, Button, DataTable, EmptyState, Input, PageHeader, Select } from "@mediaos/ui";
 import {
@@ -29,7 +33,7 @@ import {
   fileDetailPath,
 } from "./constants";
 
-const filesListSchema = z.array(fileMetadataSchema);
+const filesListSchema = z.array(fileListItemSchema);
 
 const VISIBILITY_OPTIONS: readonly FileVisibility[] = ["Private", "Internal", "Public"];
 
@@ -44,20 +48,28 @@ function formatBytes(bytes: number): string {
   return `${mb.toFixed(1)} MB`;
 }
 
+/** Hàng máy chủ đã che (người xem không xem được tệp này) — bốn trường che luôn đi cùng nhau. */
+function isMaskedRow(row: FileListItemDto): boolean {
+  return row.originalName === null;
+}
+
 // ---------------------------------------------------------------------------
 // Columns
 // ---------------------------------------------------------------------------
 function useFileColumns(
   t: ReturnType<typeof useTranslation<"system">>["t"],
   onView: (id: string) => void,
-): ColumnDef<FileMetadataDto>[] {
+): ColumnDef<FileListItemDto>[] {
   return [
     {
       accessorKey: "originalName",
       header: t("files.columns.name"),
-      cell: ({ row }) => (
-        <span className="text-sm font-medium text-foreground">{row.original.originalName}</span>
-      ),
+      cell: ({ row }) =>
+        row.original.originalName === null ? (
+          <span className="text-sm italic text-muted-foreground">{t("files.masked.name")}</span>
+        ) : (
+          <span className="text-sm font-medium text-foreground">{row.original.originalName}</span>
+        ),
     },
     {
       accessorKey: "mimeType",
@@ -71,7 +83,9 @@ function useFileColumns(
       header: t("files.columns.size"),
       cell: ({ row }) => (
         <span className="text-sm tabular-nums text-muted-foreground">
-          {formatBytes(row.original.sizeBytes)}
+          {row.original.sizeBytes === null
+            ? t("files.masked.size")
+            : formatBytes(row.original.sizeBytes)}
         </span>
       ),
     },
@@ -92,11 +106,12 @@ function useFileColumns(
     {
       id: "actions",
       header: t("files.columns.actions"),
-      cell: ({ row }) => (
-        <Button variant="ghost" size="sm" onClick={() => onView(row.original.id)}>
-          {t("files.columns.viewDetail")}
-        </Button>
-      ),
+      cell: ({ row }) =>
+        isMaskedRow(row.original) ? null : (
+          <Button variant="ghost" size="sm" onClick={() => onView(row.original.id)}>
+            {t("files.columns.viewDetail")}
+          </Button>
+        ),
     },
   ];
 }
@@ -166,7 +181,7 @@ export function FilesPage() {
     );
   }
 
-  const items: FileMetadataDto[] = data ?? [];
+  const items: FileListItemDto[] = data ?? [];
   const hasNext = items.length === FILES_PAGE_SIZE;
   const hasPrev = page > 1;
 

@@ -16,7 +16,7 @@ import { PageHeader, EmptyState, Button, Card, CardContent, Dialog } from "@medi
 import { useState } from "react";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { ProfileChangeStatusBadge } from "./status-badge";
-import { PROFILE_CHANGE_FIELD_META } from "./field-labels";
+import { profileChangeFieldLabelKey } from "./field-labels";
 
 type TF = ReturnType<typeof useTranslation<"hr">>["t"];
 
@@ -30,8 +30,8 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 function fieldLabel(field: string, t: TF): string {
-  const meta = PROFILE_CHANGE_FIELD_META[field as keyof typeof PROFILE_CHANGE_FIELD_META];
-  return meta ? t(meta.labelKey) : field;
+  const labelKey = profileChangeFieldLabelKey(field);
+  return labelKey ? t(labelKey) : field;
 }
 
 function renderValue(v: unknown): string {

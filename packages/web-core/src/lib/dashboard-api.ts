@@ -65,6 +65,10 @@ export const DASH_WIDGET_SLUG: Readonly<Record<string, string>> = {
   // S15-PAYROLL-DASH-1 — 2 widget PAYROLL v2 (mig 0576), khớp dataSourceKey của catalog BE.
   PAYROLL_BUDGET: "payroll-budget",
   PAYROLL_ADVANCE_PENDING: "payroll-advance-pending",
+  // S16-SOCIAL-DASH-1 — 2 widget SOCIAL (mig 0592), khớp dataSourceKey của catalog BE. GIÁ TRỊ hai dòng này
+  // được ghim ở dashboard-api.spec.ts (WC1 · WC2): ratchet ở Grid.spec chỉ kiểm «có slug», không kiểm «đúng slug».
+  SOCIAL_ENGAGEMENT_WEEK: "social-engagement-week",
+  SOCIAL_NEWS_UNACKED: "social-news-unacked",
 };
 
 /** 4 dashboard type user-facing → path GET /dashboard/{type} (API-08 §10.1, DashboardResolverController). */

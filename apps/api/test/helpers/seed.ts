@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import { withReplicaSession } from "./replica-session";
 
 /**
  * Seed tiện ích cho integration test. Dùng kết nối DIRECT (superuser, bypass RLS) để dựng dữ liệu
@@ -26,40 +27,16 @@ export interface SeededTenant {
  * migration gỡ nhầm constraint (đã suýt xảy ra khi thử đường lùi của 0535), hay một bảng lớp G
  * (catalog toàn cục) mà composite FK KHÔNG áp được — xem KI-055.
  *
- * `session_replication_role = replica` tắt trigger RI (gồm FK) cho ĐÚNG phiên này. Chỉ superuser đặt
- * được, nên nó KHÔNG phải lỗ hổng: app role (`mediaos_app`) không bao giờ làm được điều này.
- *
- * ⚠️ CHỈ dùng để GIEO. Đừng bọc phần assert — nếu bọc, ta sẽ đo hành vi của một DB đã tắt FK,
- * không phải hành vi thật.
- *
- * ⚠️ Callback nhận `client` và PHẢI chạy câu lệnh trên CHÍNH client đó. `session_replication_role`
- * là cấu hình theo PHIÊN, nên một `pool.query()` bên trong callback sẽ mượn connection KHÁC và vẫn
- * bị FK chặn — im lặng và khó hiểu. Đó là lý do API này trả `client` thay vì chạy `fn()` trống.
+ * CƠ CHẾ = phiên `session_replication_role = replica`, cài đặt DUY NHẤT ở `withReplicaSession`
+ * (`./replica-session.ts`); hàm này chỉ còn là TÊN nói đúng ý đồ «gieo hàng chéo tenant». Chế độ đó
+ * tắt MỌI trigger thường lẫn kiểm tra FK của phiên — luật dùng (chỉ để GIEO · chạy trên CHÍNH `client`
+ * được trao · không để transaction mở) ghi ở docblock bên đó, đọc trước khi thêm nơi gọi mới.
  */
 export async function seedCrossTenantViolation<T>(
   direct: Pool,
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
-  const client = await direct.connect();
-  let restored = false;
-  try {
-    await client.query("SET session_replication_role = replica");
-    return await fn(client);
-  } finally {
-    // Trả cấu hình về TRƯỚC khi release: connection quay lại pool và sẽ được spec khác mượn lại.
-    // Quên bước này = mọi test sau đó chạy trên một connection đã tắt FK ⇒ xanh-giả hàng loạt.
-    try {
-      await client.query("SET session_replication_role = DEFAULT");
-      restored = true;
-    } catch {
-      restored = false;
-    }
-    // ⚠️ NUỐT lỗi reset rồi `release()` là hỏng-im-lặng NẶNG NHẤT của helper này (rls-tenant-isolation-tester
-    // FULL gate 2026-07-31, MEDIUM): connection vẫn ở chế độ `replica` quay lại pool (`directPool` max=4)
-    // ⇒ FK/trigger TẮT cho mọi spec mượn sau đó = xanh-giả hàng loạt, đúng thứ mà chính helper này cảnh
-    // báo. `release(true)` HUỶ connection thay vì trả về pool: mất 1 connection còn hơn mất cả lưới.
-    client.release(restored ? undefined : true);
-  }
+  return withReplicaSession(direct, fn);
 }
 
 /** Tạo 1 company với slug ngẫu nhiên (tránh đụng giữa các lần chạy CI). */

@@ -8,8 +8,8 @@ import { AppModule } from "../../src/app.module";
 import { TempFileCleanupJobHandler } from "../../src/foundation/files/temp-file-cleanup.job-handler";
 import { ObjectStorageService } from "../../src/storage/object-storage.service";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
-import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
 
 /**
  * S2-FND-JOBS-1 (jobs_tempfile · crown) — TEMP_FILE_CLEANUP link-safety + system soft-delete (🔴 RED-trước).
@@ -28,8 +28,11 @@ import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
  *  (4) controls KHÔNG xóa: temp-expired-nhưng-relinked (link đã re-active), temp expires_at TƯƠNG LAI,
  *      Pending còn mới, file thường Uploaded.
  *  (5) 2-tenant: chạy handler cho A → file eligible của B KHÔNG bị đụng (RLS + company_id tường minh).
+ *  Khối này seed `storage_provider='Local'` (S16-SOCIAL-STORAGETESTGATE-1 D-5): handler trả `not-object-store`
+ *  rồi VẪN xoá mềm ⇒ thuần DB, 0 lời gọi storage. Đường xoá object nằm ở khối cuối (CI luôn hồ sơ `live`).
  *
- * S15-PAYROLL-BE-5B (owner O-3/O-6 · plan §0b B4) — khối riêng cuối file, object MinIO THẬT:
+ * S15-PAYROLL-BE-5B (owner O-3/O-6 · plan §0b B4) — khối riêng cuối file, object storage THẬT
+ * qua `openStorageTestGate` (cổng đóng ⇒ 5 ca bỏ qua CÓ nhãn `[storage-test-skip]`, không dựng app):
  *  (1b) temp-expired CHỈ có link `Export` → xoá hàng + gỡ link + object biến mất (headObject).
  *  (1c) temp-expired có link `Export` + link `Attachment` → GIỮ (link thật vẫn chặn) + object còn.
  *  (3b) Pending quá TTL không link → object biến mất.
@@ -38,6 +41,7 @@ import { FALLBACK_S3_SECRET } from "../helpers/fixture-secrets";
  */
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
+const FILE = "test/integration/temp-file-cleanup.int-spec.ts";
 
 /** Seed 1 file RAW (direct, bypass RLS) với created_at/expires_at/is_temporary/upload_status tường minh. */
 async function seedFile(
@@ -49,6 +53,7 @@ async function seedFile(
     expiresAt?: Date | null;
     uploadStatus?: string;
     createdAt?: Date;
+    storageProvider?: "Local" | "MinIO";
   },
 ): Promise<string> {
   const id = randomUUID();
@@ -58,7 +63,7 @@ async function seedFile(
        (id, company_id, original_name, stored_name, mime_type, file_size_bytes,
         storage_provider, storage_path, visibility, upload_status, scan_status,
         is_temporary, expires_at, uploaded_by, created_at, updated_at)
-     VALUES ($1, $2, $3, $3, 'application/pdf', 1024, 'MinIO', $4, 'Private', $5, 'NotRequired',
+     VALUES ($1, $2, $3, $3, 'application/pdf', 1024, $10, $4, 'Private', $5, 'NotRequired',
              $6, $7, $8, $9, $9)`,
     [
       id,
@@ -70,6 +75,7 @@ async function seedFile(
       opts.expiresAt ?? null,
       uploadedBy,
       opts.createdAt ?? new Date(),
+      opts.storageProvider ?? "MinIO",
     ],
   );
   return id;
@@ -165,12 +171,6 @@ describe.skipIf(!runDb)(
     const companyIds: string[] = [];
 
     beforeAll(async () => {
-      process.env.S3_ENDPOINT ??= "http://localhost:9000";
-      process.env.S3_ACCESS_KEY ??= "mediaos";
-      process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-      process.env.S3_BUCKET ??= "mediaos-assets";
-      process.env.S3_FORCE_PATH_STYLE ??= "true";
-
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
       app = moduleRef.createNestApplication();
       await app.init();
@@ -185,6 +185,7 @@ describe.skipIf(!runDb)(
       const upB = await seedUser(direct, B.companyId, `tf-b-${randomUUID().slice(0, 6)}@x.test`);
 
       fTempLinked = await seedFile(direct, A.companyId, upA, {
+        storageProvider: "Local",
         isTemporary: true,
         expiresAt: PAST,
         uploadStatus: "Uploaded",
@@ -192,31 +193,37 @@ describe.skipIf(!runDb)(
       await seedActiveLink(direct, A.companyId, fTempLinked, upA);
 
       fTempUnlinked = await seedFile(direct, A.companyId, upA, {
+        storageProvider: "Local",
         isTemporary: true,
         expiresAt: PAST,
         uploadStatus: "Uploaded",
       });
       fPendingOld = await seedFile(direct, A.companyId, upA, {
+        storageProvider: "Local",
         isTemporary: false,
         uploadStatus: "Pending",
         createdAt: OLD_CREATED,
       });
       fTempFuture = await seedFile(direct, A.companyId, upA, {
+        storageProvider: "Local",
         isTemporary: true,
         expiresAt: FUTURE,
         uploadStatus: "Uploaded",
       });
       fPendingRecent = await seedFile(direct, A.companyId, upA, {
+        storageProvider: "Local",
         isTemporary: false,
         uploadStatus: "Pending",
         createdAt: new Date(),
       });
       fNormal = await seedFile(direct, A.companyId, upA, {
+        storageProvider: "Local",
         isTemporary: false,
         uploadStatus: "Uploaded",
       });
 
       fB = await seedFile(direct, B.companyId, upB, {
+        storageProvider: "Local",
         isTemporary: true,
         expiresAt: PAST,
         uploadStatus: "Uploaded",
@@ -295,8 +302,8 @@ describe.skipIf(!runDb)(
   },
 );
 
-describe.skipIf(!runDb || !process.env.S3_ENDPOINT || !process.env.S3_BUCKET)(
-  "S15-PAYROLL-BE-5B TEMP_FILE_CLEANUP — xoá CẢ object (MinIO thật)",
+describe.skipIf(!runDb)(
+  "S15-PAYROLL-BE-5B TEMP_FILE_CLEANUP — xoá CẢ object (storage thật)",
   () => {
     let app: INestApplication;
     let handler: TempFileCleanupJobHandler;
@@ -305,6 +312,7 @@ describe.skipIf(!runDb || !process.env.S3_ENDPOINT || !process.env.S3_BUCKET)(
     let C: SeededTenant;
     let D: SeededTenant;
     const companyIds: string[] = [];
+    let gate: StorageTestGate;
     const PAST = new Date(Date.now() - 60 * 60_000);
     const FUTURE = new Date(Date.now() + 3_600_000);
     const OLD_CREATED = new Date(Date.now() - 48 * 3_600_000);
@@ -343,6 +351,10 @@ describe.skipIf(!runDb || !process.env.S3_ENDPOINT || !process.env.S3_BUCKET)(
       ).rows.map((r) => r.link_type as string);
 
     beforeAll(async () => {
+      gate = await openStorageTestGate(FILE);
+      // Cổng đóng ⇒ KHÔNG dựng app/seed: mọi lời gọi storage của khối này (putObject · handler DeleteObject ·
+      // statObject) nằm ở beforeAll/ca; 5 ca bỏ qua CÓ nhãn qua `needStorage`.
+      if (!gate.run) return;
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
       app = moduleRef.createNestApplication();
       await app.init();
@@ -389,12 +401,23 @@ describe.skipIf(!runDb || !process.env.S3_ENDPOINT || !process.env.S3_BUCKET)(
     });
 
     afterAll(async () => {
-      await app?.close();
-      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
-      await direct?.end();
+      try {
+        await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+      } finally {
+        await app?.close();
+        if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+        await direct?.end();
+      }
     });
 
-    it("(1b) temp-expired chỉ có link Export → xoá hàng, gỡ link, object BIẾN MẤT", async () => {
+    it("(1b) temp-expired chỉ có link Export → xoá hàng, gỡ link, object BIẾN MẤT", async (ctx) => {
+      if (
+        !gate.needStorage(
+          ctx,
+          "(1b) temp-expired chỉ có link Export → xoá hàng, gỡ link, object BIẾN MẤT",
+        )
+      )
+        return;
       const row = await fileRow(direct, fExportOnly);
       expect(row?.upload_status).toBe("Deleted");
       expect(row?.deleted_by).toBeNull();
@@ -407,18 +430,33 @@ describe.skipIf(!runDb || !process.env.S3_ENDPOINT || !process.env.S3_BUCKET)(
       expect(audit.rows[0].metadata).toMatchObject({ objectDeleted: true, exportLinksRemoved: 1 });
     });
 
-    it("(1c) temp-expired có thêm link Attachment → GIỮ hàng + link + object", async () => {
+    it("(1c) temp-expired có thêm link Attachment → GIỮ hàng + link + object", async (ctx) => {
+      if (
+        !gate.needStorage(
+          ctx,
+          "(1c) temp-expired có thêm link Attachment → GIỮ hàng + link + object",
+        )
+      )
+        return;
       expect((await fileRow(direct, fExportAndAttachment))?.deleted_at).toBeNull();
       expect(await liveLinks(fExportAndAttachment)).toEqual(["Attachment", "Export"]);
       expect(await objectExists(C.companyId, fExportAndAttachment)).toBe(true);
     });
 
-    it("(3b) Pending quá TTL không link → object BIẾN MẤT", async () => {
+    it("(3b) Pending quá TTL không link → object BIẾN MẤT", async (ctx) => {
+      if (!gate.needStorage(ctx, "(3b) Pending quá TTL không link → object BIẾN MẤT")) return;
       expect((await fileRow(direct, fPendingOld))?.upload_status).toBe("Deleted");
       expect(await objectExists(C.companyId, fPendingOld)).toBe(false);
     });
 
-    it("(6) xoá object lỗi (key lệch tenant) → GIỮ hàng, đếm failed, KHÔNG audit/log xoá", async () => {
+    it("(6) xoá object lỗi (key lệch tenant) → GIỮ hàng, đếm failed, KHÔNG audit/log xoá", async (ctx) => {
+      if (
+        !gate.needStorage(
+          ctx,
+          "(6) xoá object lỗi (key lệch tenant) → GIỮ hàng, đếm failed, KHÔNG audit/log xoá",
+        )
+      )
+        return;
       expect((await fileRow(direct, fBadKey))?.deleted_at).toBeNull();
       expect(runResult.failed).toBe(1);
       expect(runResult.success).toBe(2);
@@ -426,7 +464,9 @@ describe.skipIf(!runDb || !process.env.S3_ENDPOINT || !process.env.S3_BUCKET)(
       expect(await auditRows(direct, fBadKey)).toEqual([]);
     });
 
-    it("(4b) temp CHƯA hết hạn có link Export → không đụng, object còn", async () => {
+    it("(4b) temp CHƯA hết hạn có link Export → không đụng, object còn", async (ctx) => {
+      if (!gate.needStorage(ctx, "(4b) temp CHƯA hết hạn có link Export → không đụng, object còn"))
+        return;
       expect((await fileRow(direct, fNotExpired))?.deleted_at).toBeNull();
       expect(await liveLinks(fNotExpired)).toEqual(["Export"]);
       expect(await objectExists(C.companyId, fNotExpired)).toBe(true);

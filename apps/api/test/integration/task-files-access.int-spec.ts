@@ -25,7 +25,6 @@
  */
 
 import "reflect-metadata";
-import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -36,16 +35,15 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { appPool, directPool, hasDb, withClient } from "../helpers/integration-db";
+import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 import {
-  cleanupTenants,
-  seedCompany,
-  seedPermissionCatalog,
-  seedRole,
-  seedRolePermission,
-  seedUser,
-  seedUserRole,
-  type SeededTenant,
-} from "../helpers/seed";
+  grant,
+  seedEmployee,
+  seedFile,
+  seedTask,
+  seedTaskLink,
+  type Pair,
+} from "../helpers/task-file-seed";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
 
@@ -74,7 +72,6 @@ function bearer(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
 
-type Pair = [action: string, resourceType: string];
 const READ_ONLY: Pair[] = [["read", "task"]];
 const FILE_ALL: Pair[] = [
   ["read", "task"],
@@ -86,95 +83,6 @@ const EMP_UPLOAD: Pair[] = [
   ["file-upload", "task"],
 ]; // NO file-delete (mirror seed 0485 employee@Own)
 const FOUNDATION_DL: Pair[] = [["download", "foundation-file"]];
-
-const SENSITIVE = new Set(["delete", "export", "view", "view-report"]);
-
-/** Grant a fresh company-scoped role carrying `pairs` to `userId` at `scope`. */
-async function grant(
-  direct: Pool,
-  companyId: string,
-  userId: string,
-  pairs: Pair[],
-  scope: "Own" | "Team" | "Department" | "Company" | "System" = "Company",
-): Promise<void> {
-  const roleId = await seedRole(direct, companyId, `qa-taskfile-${scope}-${userId.slice(0, 8)}`);
-  for (const [action, resourceType] of pairs) {
-    const permId = await seedPermissionCatalog(direct, action, resourceType, SENSITIVE.has(action));
-    await seedRolePermission(direct, roleId, permId, "ALLOW", scope);
-  }
-  await seedUserRole(direct, userId, roleId, companyId);
-}
-
-async function seedEmployee(
-  direct: Pool,
-  companyId: string,
-  userId: string | null,
-): Promise<string> {
-  const r = await direct.query(
-    `INSERT INTO employee_profiles (company_id, user_id, status) VALUES ($1, $2, 'active') RETURNING id`,
-    [companyId, userId],
-  );
-  return r.rows[0].id as string;
-}
-
-async function seedTask(
-  direct: Pool,
-  companyId: string,
-  assigneeEmployeeId: string | null,
-): Promise<string> {
-  const r = await direct.query(
-    `INSERT INTO tasks (company_id, task_type, title, task_status, main_assignee_employee_id)
-     VALUES ($1, 'office', 't5-task', 'Todo', $2) RETURNING id`,
-    [companyId, assigneeEmployeeId],
-  );
-  return r.rows[0].id as string;
-}
-
-/** Seed a `files` row (Uploaded by default). storage_path = {companyId}/files/{fileId} (tenant prefix). */
-async function seedFile(
-  direct: Pool,
-  companyId: string,
-  uploadedBy: string,
-  opts?: { scanStatus?: string; uploadStatus?: string },
-): Promise<string> {
-  const fileId = randomUUID();
-  const storagePath = `${companyId}/files/${fileId}`;
-  await direct.query(
-    `INSERT INTO files
-       (id, company_id, original_name, stored_name, mime_type, file_size_bytes, storage_provider,
-        storage_path, upload_status, scan_status, uploaded_by)
-     VALUES ($1, $2, 'attach.pdf', $3, 'application/pdf', 4096, 'MinIO', $4, $5, $6, $7)`,
-    [
-      fileId,
-      companyId,
-      fileId,
-      storagePath,
-      opts?.uploadStatus ?? "Uploaded",
-      opts?.scanStatus ?? "Clean",
-      uploadedBy,
-    ],
-  );
-  return fileId;
-}
-
-/** Seed a file_links row (module TASK / entity task). Returns linkId. */
-async function seedTaskLink(
-  direct: Pool,
-  companyId: string,
-  fileId: string,
-  taskId: string,
-  createdBy: string,
-  category: string | null = null,
-): Promise<string> {
-  const r = await direct.query(
-    `INSERT INTO file_links
-       (company_id, file_id, module_code, entity_type, entity_id, link_type, access_scope, is_primary,
-        purpose, created_by)
-     VALUES ($1, $2, 'TASK', 'task', $3, 'Attachment', 'Company', false, $4, $5) RETURNING id`,
-    [companyId, fileId, taskId, category, createdBy],
-  );
-  return r.rows[0].id as string;
-}
 
 async function rawFile(
   direct: Pool,
@@ -285,8 +193,15 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
     notRequiredFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "NotRequired" });
     await seedTaskLink(direct, A.companyId, notRequiredFileA, taskA, hrUserId);
 
-    unlinkedCleanFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "Clean" });
-    empUnlinkedFileA = await seedFile(direct, A.companyId, empUserId, { scanStatus: "Clean" });
+    // Tệp người gắn tự tải lên: chủ tệp = người gắn (gắn đòi người gắn xem được tệp — S19-SEC-FILELINKGATE-1).
+    unlinkedCleanFileA = await seedFile(direct, A.companyId, hrUserId, {
+      scanStatus: "Clean",
+      ownerUserId: hrUserId,
+    });
+    empUnlinkedFileA = await seedFile(direct, A.companyId, empUserId, {
+      scanStatus: "Clean",
+      ownerUserId: empUserId,
+    });
     outOfScopeUnlinkedFileA = await seedFile(direct, A.companyId, empUserId, {
       scanStatus: "Clean",
     });

@@ -276,8 +276,9 @@ export function ResolveReportDialog({
           </ChoiceFieldset>
         )}
 
-        {/* Cảnh báo LUÔN có: `resolutionNote` được vẽ nguyên văn cho mọi người đọc hàng đợi (`ReportRow`),
-            kể cả người server đang che tên người báo cáo — ghi chú nêu tên là lộ danh tính người tố giác. */}
+        {/* Cảnh báo LUÔN có: server che `resolutionNote` theo CÙNG vị từ với tên người báo cáo
+            (S16-SOCIAL-RESNOTEMASK-1), nhưng người khác ở scope Company vẫn đọc được ghi chú (`ReportRow`) —
+            ghi chú nêu tên vẫn lan danh tính người tố giác ra ngoài người xử lý. */}
         <NoteField
           id={fieldId}
           label={t("admin.moderation.resolve.noteLabel")}

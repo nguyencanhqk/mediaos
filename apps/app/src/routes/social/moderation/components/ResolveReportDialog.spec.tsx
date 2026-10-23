@@ -48,7 +48,7 @@ const ACTION_GROUP = "Hành động kèm";
 const NO_ACTION = "Không kèm hành động";
 const NOTE = "Ghi chú xử lý (không bắt buộc)";
 const NOTE_WARNING =
-  "Ghi chú này hiện nguyên văn cho mọi người xem được hàng đợi báo cáo, kể cả người không được thấy tên người báo cáo. Đừng nêu tên hay chi tiết giúp nhận ra người báo cáo.";
+  "Ghi chú này được lưu lại và có thể hiện cho người khác xem hàng đợi báo cáo. Đừng nêu tên hay chi tiết giúp nhận ra người báo cáo.";
 const SUBMIT = "Xác nhận";
 const CANCEL = "Huỷ";
 
@@ -147,8 +147,8 @@ describe("Khung + trợ năng", () => {
     expect(noteBox()).toHaveAttribute("maxlength", String(FEED_NOTE_MAX));
   });
 
-  // Gate security (SEC-01): `resolutionNote` được vẽ nguyên văn ở MỌI hàng đã kết thúc, cho mọi người đọc
-  // 028 — gồm cả người đang bị che tên người báo cáo. Người xử lý (thấy tên) phải được nhắc TRƯỚC khi gõ.
+  // Gate security (SEC-01) + S16-SOCIAL-RESNOTEMASK-1: server che `resolutionNote` theo cùng vị từ với
+  // tên người báo cáo, nhưng người khác ở scope Company vẫn đọc được — người xử lý phải được nhắc TRƯỚC khi gõ.
   it("cảnh báo «đừng nêu người báo cáo» hiện TRƯỚC khi gõ, là mô tả trợ năng ĐẦU TIÊN của ô ghi chú xử lý", () => {
     renderDialog();
     const warning = within(dialog()).getByRole("note");

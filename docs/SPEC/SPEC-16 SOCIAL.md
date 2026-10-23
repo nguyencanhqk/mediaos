@@ -23,11 +23,15 @@
 | Trạng thái | **Approved** — owner chốt 10 quyết định §22 ngày 02/09/2026; §2–§21 + §23–§25 viết ở WO `S16-SOCIAL-DOC-1` ngày 18/09/2026 |
 | Giai đoạn | **Phase 4 kéo lên · wave S16-SOCIAL** |
 | Ngày tạo | 02/09/2026 |
-| Ngày cập nhật | 18/09/2026 |
+| Ngày cập nhật | 23/10/2026 (`S16-SOCIAL-DOC-3` — đính chính theo số đo của `S16-SOCIAL-QA-1`) |
 
 > **Đọc §5.1 trước.** Cấp phát v1 đã ĐÓNG ở mức **19 bảng · 12 màn · 53 route · 14 cặp quyền · 22 mã lỗi ·
 > 9 sự kiện NOTI · 2 widget**. Ba con số đầu **khác** ước lượng ghi lúc seed wave (15 bảng / 13 cặp / ~45 route) —
 > lý do và bảng đối chiếu ở **§23.1**; mọi WO hạ nguồn lấy theo §5.1, không lấy theo chữ trong `harness/backlog.mjs`.
+>
+> **Hiện trạng code (đo 23/10/2026):** **59 route** (§15) · **15 cặp** `feed-*` (§11 — thêm `restore:feed-post`) ·
+> **57 khoá lỗi → 51 mã**, trong đó 47 mã ra được dây (§12) · **7 cột đếm** (§13.6). Con số cấp phát ở trên giữ
+> nguyên như lịch sử.
 >
 > Bản đồ khoảng cách so với benchmark và 14 bẫy thi công vẫn nằm ở [kế hoạch wave](<../plans/S16-SOCIAL-WAVE.md>).
 
@@ -262,7 +266,7 @@ Màn MISA có «Giới thiệu ứng viên». Ở MediaOS đây là **việc c�
 
 ---
 
-## 11. Permission — **14 cặp mới**, tiền tố `feed-`
+## 11. Permission — **15 cặp** tiền tố `feed-` (14 cặp v1 + `restore:feed-post`)
 
 ### 11.1 Bảng cặp quyền
 
@@ -282,9 +286,13 @@ Màn MISA có «Giới thiệu ứng viên». Ở MediaOS đây là **việc c�
 | 12 | `manage:feed-report` | `Company` | hr · company-admin |
 | 13 | `approve:feed-idea` | `Company` | hr · company-admin |
 | 14 | `view:feed-report` | `Company` (manager: `Department`) | manager · hr · company-admin |
+| 15 | `restore:feed-post` | `Company` | hr · company-admin |
 
-- **Không cặp nào `is_sensitive`** — SOCIAL không chở PII (sinh nhật đã cắt còn ngày+tháng, §3.5).
-- Mọi hành động của nhóm `manage:*` và `approve:feed-idea` **ghi audit** (§18).
+- **Cặp 15 `restore:feed-post`** thêm ở `S16-SOCIAL-BE-3C` (mig `0590`, owner ký O1 28/09/2026): khôi phục bài từ
+  thùng rác (`SOCIAL-API-057`/`058`) là năng lực TÁCH khỏi `manage:feed-post` — vai tuỳ biến chỉ giữ `manage:feed-post`
+  không khôi phục được. Cấp đúng tập vai đang giữ `manage:feed-post`.
+- **Không cặp nào `is_sensitive`** (kể cả cặp 15) — SOCIAL không chở PII (sinh nhật đã cắt còn ngày+tháng, §3.5).
+- Mọi hành động của nhóm `manage:*`, `approve:feed-idea` và `restore:feed-post` **ghi audit** (§18).
 - Grant lưu **per-(permission, role)** — một hàng `role_permissions` cho mỗi cặp × vai, đúng khuôn §13 của ma trận quyền.
 
 ### 11.2 Luật «tương tác cá nhân không có cặp riêng»
@@ -313,9 +321,9 @@ Màn MISA có «Giới thiệu ứng viên». Ở MediaOS đây là **việc c�
 | `SOCIAL-ERR-003` | 403 | Sửa/xoá bài của người khác mà không có `manage:feed-post` |
 | `SOCIAL-ERR-004` | 409 | Bình luận vào bài đã khoá bình luận |
 | `SOCIAL-ERR-005` | 422 | Trả lời quá 1 cấp (`parent_comment_id` trỏ vào một bình luận đã là trả lời) |
-| `SOCIAL-ERR-006` | 422 | Emoji ngoài bộ CHAT |
+| `SOCIAL-ERR-006` | — (HTTP: **400**) | Emoji ngoài bộ CHAT. Qua HTTP bị schema thân request chặn ở BIÊN, trước service ⇒ **400 `VALIDATION-ERR-001`** nêu trường `emoji`; mã SOCIAL **không ra dây** (ca `QA1-E-X1`) |
 | `SOCIAL-ERR-007` | 422 | Quá 10 ảnh / quá 1 video / tệp quá 20MB |
-| `SOCIAL-ERR-008` | 422 | `audience='org_unit'` mà thiếu `org_unit_id`, hoặc `audience='group'` mà thiếu `group_id` |
+| `SOCIAL-ERR-008` | — (HTTP: **400**) | `audience='org_unit'` mà thiếu `org_unit_id`, hoặc `audience='group'` mà thiếu `group_id`. Qua HTTP bị schema tạo bài chặn ở BIÊN ⇒ **400 `VALIDATION-ERR-001`** nêu đúng trường thiếu; mã SOCIAL **không ra dây** (ca `QA1-E-X2`) |
 | `SOCIAL-ERR-009` | — | **KHÔNG phải mã HTTP lỗi.** Mention người ngoài `audience` bị **bỏ im lặng**: request vẫn `201`, phần mention đó không được tạo, và response trả `data.droppedMentions[]` (danh sách id bị bỏ) để FE hiện chú thích. Trả 403 ở đây **chính là** rò — caller biết mention bị chặn vì lý do audience. Mã giữ chỗ trong bảng để census không coi là thiếu |
 | `SOCIAL-ERR-010` | 403 | Tạo/ghim tin tức mà không có `manage:feed-news` |
 | `SOCIAL-ERR-011` | 409 | Xác nhận đã đọc một bài không phải `news` hoặc không bật «yêu cầu xác nhận» |
@@ -324,12 +332,19 @@ Màn MISA có «Giới thiệu ứng viên». Ở MediaOS đây là **việc c�
 | `SOCIAL-ERR-014` | 403 | **Mọi 403 vai-trò-nhóm** — sửa nhóm `033` · xoá nhóm `034` (**`owner` MỘT MÌNH**, `admin` KHÔNG xoá được — API-19 §5.1) · duyệt/từ chối/đổi vai trò `038` · mời ra `039` · đọc danh bạ thành viên `037` khi không phải thành viên của một nhóm `public`. Nhánh thoát chung: `manage:feed-group`. Cấp vai `owner` cho người khác chỉ dành cho `owner` hiện tại (hoặc `manage:feed-group`) — `admin` tự nâng mình lên `owner` biến cổng owner-only của `034` thành hai bước bấm. _(Nghĩa NỚI 22/09/2026 — S16-SOCIAL-BE-2A, D-OWNER-8; bản cũ chỉ ghi «duyệt thành viên / đổi vai trò».)_ |
 | `SOCIAL-ERR-015` | 409 | **Mọi thao tác làm nhóm mất `owner` `active` CUỐI CÙNG** — rời nhóm `036` · hạ vai trò owner cuối `038` · mời owner cuối ra `039`. Thiếu một đường là nhóm rơi về **0 owner và khoá vĩnh viễn** (chỉ `manage:feed-group` gỡ được). Ba đường đi qua một neo `SELECT … FROM feed_groups … FOR UPDATE` chung trước khi đếm — `COUNT` trần là TOCTOU. **`034` xoá nhóm KHÔNG thuộc bất biến này** (nó là luật ủy quyền, không phải luật đếm; đọc nghĩa đen thì xoá nhóm luôn 409). _(Nghĩa NỚI 22/09/2026 — S16-SOCIAL-BE-2A, D-OWNER-8.)_ |
 | `SOCIAL-ERR-016` | 409 | Bỏ phiếu vào bình chọn đã `closed` hoặc quá hạn |
-| `SOCIAL-ERR-017` | 409 | Bỏ phiếu lần hai vào bình chọn một-lựa-chọn (đổi phiếu phải đi đường sửa) |
+| `SOCIAL-ERR-017` | 409 | Bình chọn một-lựa-chọn: gửi **> 1 lựa chọn** trong một lượt, hoặc là lượt THUA khi hai lượt bỏ phiếu của cùng một người đua nhau (thông điệp «bạn đã bỏ phiếu cho bình chọn này»). Bỏ phiếu lần hai **tuần tự** KHÔNG lỗi — đó là **đổi phiếu** (200, vẫn đúng 1 hàng phiếu — §13.4) |
 | `SOCIAL-ERR-018` | 422 | Bình chọn ngoài khoảng 2–10 lựa chọn |
 | `SOCIAL-ERR-019` | 409 | Chuyển trạng thái sáng kiến sai (§13.3) |
 | `SOCIAL-ERR-020` | 403 | Xét duyệt sáng kiến mà không có `approve:feed-idea` |
 | `SOCIAL-ERR-021` | 409 | Xử lý một báo cáo đã `resolved`/`dismissed` |
 | `SOCIAL-ERR-022` | 422 | Huy hiệu không có trong catalog hoặc đã tắt |
+
+**Số mã thật** (đo 23/10/2026 ở `packages/contracts/src/social-errors.ts` — `SOCIAL_ERROR_CODES`): **57 khoá → 51 mã**
+= 22 mã có số của bảng trên (nhiều khoá có thể chung một số — một số là một LUẬT) + 29 sentinel `SOCIAL-ERR-<KHOÁ>`
+cho lỗi bảng này không cấp số (danh sách: API-19 §6.5). **47 mã ra được dây**: `006` · `008` (schema chặn ở biên, xem
+hai dòng trên) · `009` (không phải lỗi) · `SOCIAL-ERR-POST-TYPE-PAIR-DESYNC` (chân fail-closed, chỉ tới khi hai bảng cặp
+theo loại bài lệch nhau) không bao giờ xuất hiện trong `error.code` qua HTTP. Phân loại từng khoá + ca đo:
+`apps/api/test/helpers/social-qa1-code-cases.ts`.
 
 > **Luật rò rỉ — 404 TRƯỚC 403, không có ngoại lệ ở nhánh ĐỌC.**
 >
@@ -402,18 +417,21 @@ Cột sinh `search_vector` trên `feed_posts` — **cột này LUÔN tồn tại
 
 ### 13.6 Bộ đếm denormalized
 
-Bộ đếm denormalized của module gồm **sáu** cột — tất cả cập nhật **trong cùng transaction** với hàng nguồn:
+Bộ đếm denormalized của module gồm **bảy** cột — tất cả cập nhật **trong cùng transaction** với hàng nguồn:
 
 | Cột | Đối soát với |
 | --- | --- |
 | `feed_posts.like_count` | `COUNT(*) feed_reactions` theo bài |
 | `feed_posts.comment_count` | `COUNT(*) feed_comments` chưa xoá mềm |
 | `feed_posts.view_count` | `COUNT(*) feed_post_views` |
+| `feed_comments.like_count` | `COUNT(*) feed_reactions` `target_type='comment'` theo bình luận — chỉ bình luận chưa xoá mềm |
 | `feed_tags.usage_count` | `COUNT(*) feed_post_tags` qua bài chưa xoá mềm |
 | `feed_groups.member_count` | `COUNT(*) feed_group_members` `status='active'` |
 | **`feed_poll_options.vote_count`** | **`COUNT(*) feed_poll_votes` theo `(poll_id, option_id)`** |
 
-Có ca test race (hai lượt thích đồng thời) và **script đối soát cả sáu cột** cho QA.
+Có ca test race (hai lượt thích đồng thời) và **script đối soát cả bảy cột** cho QA
+(`apps/api/test/helpers/social-qa1-kit-counters.ts` — `QA1_COUNTER_COLUMNS`). _(Bảng trước 23/10/2026 liệt sáu cột,
+thiếu `feed_comments.like_count` mà code vẫn duy trì — đo ở `S16-SOCIAL-QA-1`.)_
 
 > 🔴 **`vote_count` bổ sung 23/09/2026 (S16-SOCIAL-BE-2B-1, owner chốt S2).** Trước đó nó có
 > `CHECK >= 0` nhưng **không nằm trong bảng này** ⇒ không sổ đối soát nào nhìn tới nó, trong khi
@@ -464,11 +482,13 @@ Bảng endpoint đầy đủ kèm cặp quyền từng route, DTO và mã lỗi:
 | Vinh danh & huy hiệu | `SOCIAL-API-047..051` · `056` · `059` | 7 |
 | Thống kê | `SOCIAL-API-052..053` | 2 |
 | Đính kèm (hạ tầng own-scope) | `SOCIAL-API-054..055` | 2 |
+| Thùng rác bài viết (basePath `recycle-bin`) | `SOCIAL-API-057..058` | 2 |
+| **Tổng** | `SOCIAL-API-001..059` | **59** |
 
 > 53 route cấp phát ban đầu (§5.1) + `054`/`055` (cửa tệp, `S16-SOCIAL-BE-1C` — nợ doc đóng ở đây) +
 > `056` (đọc quản trị huy hiệu — SOC-DEC-012, `S16-SOCIAL-BE-3A`) = 56 + `057`/`058` (thùng rác bài viết,
-> basePath `recycle-bin`, `S16-SOCIAL-BE-3C`) + `059` (danh bạ người nhận vinh danh — SOC-DEC-013,
-> `S16-SOCIAL-BE-2D`) = **59**. (Bảng trên chưa có dòng thùng rác — nguồn đầy đủ: API-19 §5.1.)
+> basePath `recycle-bin`, `S16-SOCIAL-BE-3C`, cặp `restore:feed-post` §11) + `059` (danh bạ người nhận vinh danh —
+> SOC-DEC-013, `S16-SOCIAL-BE-2D`) = **59**. Mã thành công từng route: API-19 §5.1.
 
 ---
 
@@ -505,12 +525,22 @@ Bảng endpoint đầy đủ kèm cặp quyền từng route, DTO và mã lỗi:
 
 Trong ứng dụng (chuông NOTI) là kênh duy nhất ở v1. **Không** email, **không** push mobile (`PARK-SOCIAL-001`).
 
-### 17.3 Widget DASH
+### 17.3 Widget DASH (`S16-SOCIAL-DASH-1`, mig `0592` — **ĐÃ SHIP**)
 
-| Mã | Widget | Gate |
-| --- | --- | --- |
-| `SOCIAL-WIDGET-001` | «Tương tác tuần» — bài · bình luận · thích · thành viên hoạt động | `view:feed-report` (sàn `Company`; manager `Department`) |
-| `SOCIAL-WIDGET-002` | «Tin tức chưa đọc» — đếm tin yêu cầu ack mà tôi chưa xác nhận | `view:feed` (phạm vi `Own`) |
+| Mã | widget_code | Tên | Nguồn | Gate |
+| --- | --- | --- | --- | --- |
+| `SOCIAL-WIDGET-001` | `SOCIAL_ENGAGEMENT_WEEK` | «Tương tác tuần» — bài · bình luận · cảm xúc · thành viên hoạt động của tuần hiện tại (slug `social-engagement-week`) | `SocialStatsService.weeklyEngagementForWidget()` — cùng câu với hàng tuần hiện tại của `SOCIAL-API-052` | cặp **`view:feed-report`** + **SÀN scope `Department`** |
+| `SOCIAL-WIDGET-002` | `SOCIAL_NEWS_UNACKED` | «Tin tức chưa đọc» — CHỈ `total` = số tin yêu cầu xác nhận mà chính người xem chưa xác nhận (slug `social-news-unacked`) | nhánh `countOnly` của `SOCIAL-API-020` (`SocialNewsService.list`) | cặp **`view:feed`** + **SÀN scope `Company`** |
+
+- **Sàn scope ép ở HAI tầng đọc CÙNG một hằng** (`DASH_WIDGET_MIN_DATA_SCOPE`): đường METADATA (`/dashboard/me` · `/dashboard/widgets` — widget dưới sàn bị bỏ khỏi danh sách) và đường DATA (`/dashboard/widgets/{slug}` — 403 «… ở phạm vi đủ rộng»). Người dưới sàn KHÔNG thấy ô số 0.
+- **«sàn Company; manager Department» của 001** = hằng sàn `Department`: tập scope hợp lệ là `Department` · `Company` · `System`; con số tự co theo scope của người xem (quản lý chỉ thấy đơn vị mình — cùng luật với 052). `Own` · `Team` ⇒ ẩn + 403: nguồn không 403 với hai scope này mà trả số 0, nên sàn của DASH là chỗ duy nhất chặn.
+- **«Own» của 002 là nhãn DỮ LIỆU**, không phải scope của grant: con số đếm cho chính người gọi, còn cặp `view:feed` chỉ hợp lệ ở `Company` (khớp sàn của route 020) ⇒ sàn widget là `Company`.
+- **Không cache (áp SOC-DEC-010)** — ba tầng: (1) server: TTL của module SOCIAL = 0, mỗi lượt xem tính lại; (2) HTTP: `Cache-Control: no-store` trên hai route dữ liệu widget (áp cho mọi widget); (3) FE giữ số tối đa 15 giây theo `staleTime` chung của mọi widget — nằm NGOÀI nghĩa «không cache» ở đây. Mỗi lượt xem vẫn ghi đè một hàng `dashboard_widget_cache` không ai đọc lại. Lý do riêng của 002: SOCIAL không phát sự kiện nào khi xác nhận / ẩn / xoá / khôi phục tin nên không có gì để làm mới cache.
+- **`Empty`:** 001 khi bài + bình luận + cảm xúc của tuần = 0 (gồm cả quản lý không thuộc / không đứng đầu đơn vị nào — chữ rỗng nói «trong phạm vi của bạn»); 002 khi `total = 0`. Lỗi của nguồn KHÔNG thành số 0: `HttpException` giữ nguyên status, lỗi khác ⇒ `Degraded`.
+- **«Cảm xúc» thay «thích»:** cột đếm mọi loại cảm xúc — cùng chữ với màn Thống kê tương tác và tệp XLSX của 053.
+- **FE dùng `useCanExact`** (khớp đúng-bằng như các route `/feed*`; hai cặp KHÔNG nhạy cảm nên lý do không phải «cặp sensitive»). Nút dẫn của 001 tới `/feed/stats` chỉ vẽ khi người xem có thêm `view:feed` (màn đó đòi đủ hai cặp); 002 dẫn tới `/feed/news`.
+- **Hiệu năng:** câu thống kê của 052 chưa có chỉ mục theo thời gian và chạy ở mỗi lượt mở Dashboard của quản lý · HR · admin (không cache) — owner chấp nhận khi dữ liệu còn nhỏ (12/10/2026); trả nợ ở `S16-SOCIAL-STATSPERF-1`. Công tắc vận hành không cần deploy: đặt `status = 'Inactive'` cho hàng catalog toàn cục của `SOCIAL_ENGAGEMENT_WEEK` ⇒ widget rời `/dashboard/me` (theo mã: `DashboardWidgetRegistryService` chỉ nạp hàng `status = 'Active'`; chưa diễn tập trên PROD).
+- **Bằng chứng:** `apps/api/test/integration/dashboard-social-widgets.int-spec.ts` (25 ca, LANE_DB — ba bề mặt cho từng widget, ca DENY assert nguyên chuỗi thông điệp để phân biệt cổng DASH với cổng của nguồn, đối chiếu số với 052 / 020, không cache + header, xoá mềm theo hai nhánh của luật khôi phục, chéo công ty, seeder `v7`) · `apps/api/src/dashboard/dashboard-widget-social.handlers.spec.ts` (35 ca) · `apps/app/src/components/dashboard/social-widgets.spec.tsx` (47 ca FE) · `packages/web-core/src/lib/dashboard-api.spec.ts` (2 ca ghim giá trị slug).
 
 ---
 
@@ -542,7 +572,7 @@ Mọi thao tác `manage:*` và `approve:feed-idea`: ẩn/hiện bài · ghim/b�
 | --- | --- |
 | Tải bảng tin trang đầu (20 bài) | < 500ms p95 |
 | Tìm kiếm toàn văn | < 800ms p95 |
-| Thống kê tương tác | < 2s p95, **không cache** (số phải tươi) |
+| Thống kê tương tác | < 2s p95, **không cache** (số phải tươi) — `SOCIAL-WIDGET-001` dùng cùng câu; chỉ mục thời gian còn nợ ở `S16-SOCIAL-STATSPERF-1` |
 | Phân trang | cursor-based cho feed; offset cho các danh sách quản trị |
 | Coverage `apps/api/src/social/` | **≥ 85%** trên LANE_DB |
 

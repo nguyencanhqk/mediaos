@@ -593,6 +593,11 @@ function reportAvatarRefs(rows: readonly ReportRow[], revealReporter: boolean): 
  * người tố giác CHỈ lộ cho người đọc ở scope `Company`. Bắt truyền TƯỜNG MINH để một call-site
  * MỚI phải TỰ QUYẾT — mặc định `true` thì quên là lộ lại mà typecheck vẫn xanh (fail-OPEN im lặng).
  * Nguồn luật DUY NHẤT là `SocialAccessService.isCompany(actor.routeScope)`, KHÔNG `scope !== null`.
+ *
+ * Tham số này gác MỌI trường danh tính-hoặc-có-thể-lộ-danh-tính: `reporter`, avatar người tố giác
+ * (`reportAvatarRefs`) và `resolutionNote` (S16-SOCIAL-RESNOTEMASK-1 — chữ người THỨ BA viết, người tố
+ * giác không kiểm soát được). Thân hàm KHÔNG tự tính lại vị từ — `social-reports-mask-structure.spec.ts`
+ * ghim. `note` (chữ của chính người báo cáo) KHÔNG che — SOC-DEC-011.
  */
 function toReportDto(r: ReportRow, revealReporter: boolean, avatars: SignedAvatars): FeedReportDto {
   return {
@@ -628,7 +633,9 @@ function toReportDto(r: ReportRow, revealReporter: boolean, avatars: SignedAvata
         ? null
         : person(r.resolverEmployeeId, r.resolverFullName, r.resolverAvatarRaw, avatars),
     resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
-    resolutionNote: r.resolutionNote,
+    // S16-SOCIAL-RESNOTEMASK-1 — chữ người xử lý viết VỀ báo cáo (có thể nhắc người báo cáo): che
+    // theo CÙNG tham số với `reporter`. Che = `null`, khoá vẫn có mặt (không phân biệt «không có» / «bị che»).
+    resolutionNote: revealReporter ? r.resolutionNote : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };

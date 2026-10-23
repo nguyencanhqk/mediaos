@@ -13,6 +13,7 @@ import {
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
+import { SocialInputTextPipe } from "./social-input-text.pipe";
 import type { Request } from "express";
 import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { PermissionGuard } from "../permission/guards/permission.guard";
@@ -57,6 +58,7 @@ interface AuthenticatedRequest extends Request {
  * audit/NOTI thứ hai) — cùng khuôn `044` (API-19 §6.6).
  */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialIdeasController {
   constructor(private readonly ideas: SocialIdeasService) {}
 
@@ -105,6 +107,7 @@ export class SocialIdeasController {
  * is_active = true`) nên lượt lặp là 200 không audit.
  */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialKudosController {
   constructor(private readonly kudos: SocialKudosService) {}
 

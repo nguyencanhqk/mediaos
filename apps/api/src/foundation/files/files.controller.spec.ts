@@ -29,7 +29,7 @@ function makeController() {
     unlink: vi.fn(async () => undefined),
     deleteFile: vi.fn(async () => undefined),
   };
-  const controller = new FilesController(service as never);
+  const controller = new FilesController(service as never, { list: service.list } as never);
   return { controller, service };
 }
 

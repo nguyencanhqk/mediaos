@@ -13,6 +13,7 @@ import {
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
+import { SocialInputTextPipe } from "./social-input-text.pipe";
 import type { Request } from "express";
 import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { PermissionGuard } from "../permission/guards/permission.guard";
@@ -43,6 +44,7 @@ interface AuthenticatedRequest extends Request {
  * bản chất: cùng payload ⇒ cùng trạng thái cuối), `042` là `DELETE` (đã idempotent).
  */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialPollsController {
   constructor(private readonly polls: SocialPollsService) {}
 

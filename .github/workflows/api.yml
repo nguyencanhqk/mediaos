@@ -235,10 +235,32 @@ jobs:
       # Đã đo trước khi bật (nhánh feat/s4-noti-dash-wave, DB cô lập chain 0000→0483):
       #   LANE_DB=<db> npx vitest run test/integration → 121 file pass · 1 file fail · 2126 test pass
       # File fail duy nhất = permission-rule-apply (201 vs 200) → đã sửa bằng @HttpCode(200) trong PR này.
+      #
+      # S16-SOCIAL-STORAGETESTGATE-1 (D-8): log của bước này là đầu vào của bước «Storage int-spec gate» ⇒ `| tee`.
+      # ⛔ `shell: bash` + `set -o pipefail` là BẮT BUỘC: không khai `shell:` ⇒ GitHub chạy `bash -e {0}` KHÔNG
+      # pipefail ⇒ mã thoát của `tee` (0) che mã thoát của vitest ⇒ test đỏ mà bước XANH (xanh giả cả kho).
+      # `shell: bash` = `bash --noprofile --norc -eo pipefail {0}`; `set -o pipefail` ghi lại cho người đọc.
+      # Ratchet `test/foundation/storage-spec-ratchet.unit-spec.ts` (R4) canh hai dòng này.
       - name: Test (unit + integration RLS/auth)
+        shell: bash
         env:
           LANE_DB: mediaos
-        run: pnpm --filter @mediaos/api test
+        run: |
+          set -o pipefail
+          pnpm --filter @mediaos/api test 2>&1 | tee "$RUNNER_TEMP/api-test.log"
+
+      # ── S16-SOCIAL-STORAGETESTGATE-1 (D-6/D-8) — bằng chứng CÓ TÊN «ca storage thật đã CHẠY» ──────────
+      # Đọc log bước Test: strict ⇒ ĐỎ khi có ca storage bị bỏ qua theo từng ca (`[storage-test-skip]`), khi tripwire
+      # chặn lời gọi storage (`[storage-test-call]`), hoặc khi 0 tệp storage chạy (`[storage-test-run]` = 0 — thành
+      # công rỗng). `--fail-unless-ok=1` ⇒ exit 1 khi LEVEL ≠ ok. Chạy sau bước Test xanh (`if: success()` mặc định).
+      # `--expect-run-files` (cổng LIGHT F2): TỪNG tệp trong manifest phải phát nhãn run — tổng runs > 0 không đủ
+      # (một tệp skip cả tệp vẫn để 10 tệp kia đẩy runs > 0). Manifest = ratchet R4 canh khớp tập tệp gọi cổng.
+      - name: Storage int-spec gate
+        shell: bash
+        run: |
+          set -o pipefail
+          node harness/lane-db-guard.mjs "$RUNNER_TEMP/api-test.log" --lane-db-set=1 --strict=1 --fail-unless-ok=1 \
+            --expect-run-files=apps/api/test/storage-spec-files.json
 
       # ── S2-AUTH-SEED-1 / FIX-SEED1-D — canary tường minh cho 2 spec SEED-1 ──────────
       # Step "Test" phía trên GIỜ đã bao trùm 2 file này (LANE_DB đã bật). Giữ step riêng làm check có TÊN

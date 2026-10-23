@@ -47,9 +47,26 @@ export const DASH_WIDGET_CODE = {
   // mig 0576).
   PAYROLL_BUDGET: "PAYROLL_BUDGET",
   PAYROLL_ADVANCE_PENDING: "PAYROLL_ADVANCE_PENDING",
+  // S16-SOCIAL-DASH-1 (APPEND) — 2 widget SOCIAL (SPEC-16 §17.3 SOCIAL-WIDGET-001/002, mig 0592).
+  SOCIAL_ENGAGEMENT_WEEK: "SOCIAL_ENGAGEMENT_WEEK",
+  SOCIAL_NEWS_UNACKED: "SOCIAL_NEWS_UNACKED",
 } as const;
 
 export type DashWidgetCode = (typeof DASH_WIDGET_CODE)[keyof typeof DASH_WIDGET_CODE];
+
+/**
+ * S16-SOCIAL-DASH-1 — hai cặp của cụm SOCIAL mà hai widget «Tương tác tuần» · «Tin tức chưa đọc» mượn (seed
+ * 0578, CẢ HAI `is_sensitive = false`). Khai literal Ở ĐÂY vì cụm SOCIAL chưa có file hằng cặp (các màn
+ * `/feed*` gọi cặp bằng literal — xem `HrOverviewRailSlot`); ngày cụm đó có file hằng thì trỏ sang, đừng giữ
+ * hai nguồn.
+ *
+ *  · FEED_VIEW        — cặp VÀO cụm `/feed*`: cổng của route nguồn SOCIAL-API-020 và của MỌI route `/feed*`.
+ *  · FEED_REPORT_VIEW — cặp của route nguồn SOCIAL-API-052 (màn Thống kê tương tác `/feed/stats`).
+ */
+export const DASH_SOCIAL_ENGINE_PAIRS = {
+  FEED_VIEW: { action: "view", resourceType: "feed" },
+  FEED_REPORT_VIEW: { action: "view", resourceType: "feed-report" },
+} as const;
 
 export const DASH_WIDGET_GATE_PAIR: Readonly<
   Record<DashWidgetCode, { action: string; resourceType: string }>
@@ -99,6 +116,18 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<
   // (capabilities không mang scope) ⇒ gate ở component chỉ là gate PHỤ.
   PAYROLL_BUDGET: PAYROLL_ENGINE_PAIRS.budgetList,
   PAYROLL_ADVANCE_PENDING: PAYROLL_ENGINE_PAIRS.advanceList,
+  // S16-SOCIAL-DASH-1 (APPEND) — MIRROR đúng BE: SOCIAL_ENGAGEMENT_WEEK→view:feed-report ·
+  // SOCIAL_NEWS_UNACKED→view:feed. Mỗi widget mượn cặp của route NGUỒN (052 · 020) — giữ luật «gate
+  // màn-hình khớp gate đường-tải»; cặp của widget này KHÔNG mở widget kia.
+  //
+  // ⚠ Component gate bằng `useCanExact` — nhưng lý do KHÁC ba widget PAYROLL: hai cặp này KHÔNG nhạy cảm.
+  // Khớp đúng-bằng là để giống bộ gác route `/feed*` (đích của nút dẫn, chỉ nhận cặp đích danh): dùng
+  // `useCan` / <PermissionGate> thì người chỉ cầm wildcard thấy ô rồi bấm vào tường. Hệ quả chấp nhận:
+  // người chỉ cầm `*:*` được BE trả widget nhưng FE không vẽ — lệch theo chiều ĐÓNG.
+  // BE còn ép SÀN scope (001 = 'Department' · 002 = 'Company', DASH_WIDGET_MIN_DATA_SCOPE) mà FE KHÔNG
+  // kiểm được (capabilities không mang scope) ⇒ gate ở component chỉ là gate PHỤ.
+  SOCIAL_ENGAGEMENT_WEEK: DASH_SOCIAL_ENGINE_PAIRS.FEED_REPORT_VIEW,
+  SOCIAL_NEWS_UNACKED: DASH_SOCIAL_ENGINE_PAIRS.FEED_VIEW,
 };
 
 /**

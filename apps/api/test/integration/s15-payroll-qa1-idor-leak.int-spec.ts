@@ -17,7 +17,8 @@
  *      403, nhưng 063 (duyệt) vẫn **201** — RỦI RO CÒN LẠI ĐÃ ĐƯỢC OWNER CHẤP NHẬN, ca này CHỈ GHIM hành vi,
  *      không phải bug cần vá.
  *
- * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5). 084 cần thêm object storage (`S3_ENDPOINT`/`S3_BUCKET`).
+ * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5). Ca ALLOW 084 sinh PDF ⇒ cổng storage
+ * `openStorageTestGate` + `needStorage` (lệch ⇒ bỏ qua CÓ NHÃN); ca 404 cùng route chỉ DB, luôn chạy.
  */
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
@@ -50,13 +51,15 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-const hasStorage = !!process.env.S3_ENDPOINT && !!process.env.S3_BUCKET;
+const FILE = "test/integration/s15-payroll-qa1-idor-leak.int-spec.ts";
 const LOGIN_PW = loginPasswordFixture("s15qa1bidorleak");
 type Actor = { id: string; token: string };
 
 describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 (lane B) · G5 cross-tenant + G7 Own + #24", () => {
+  let gate: StorageTestGate;
   let app: INestApplication;
   let direct: Pool;
   const companyIds: string[] = [];
@@ -142,6 +145,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 (lane B) · G5 cross-tenant + G7 O
   const FISCAL_YEAR = 2077;
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -252,9 +256,13 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 (lane B) · G5 cross-tenant + G7 O
   }, 300_000);
 
   afterAll(async () => {
-    if (direct) await cleanupTenants(direct, companyIds);
-    await direct?.end();
-    await app?.close();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      if (direct) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+      await app?.close();
+    }
   });
 
   // ═══ G5 — cross-tenant GHI trên 5 route mới ═══════════════════════════════════════════════════
@@ -431,8 +439,8 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 (lane B) · G5 cross-tenant + G7 O
     });
   });
 
-  describe.skipIf(!hasStorage)("G7 · 084 PDF phiếu người khác cho người KHÔNG có phiếu nào", () => {
-    it("404 010, 0 audit, 0 hàng `files`; ALLOW: chủ phiếu tải PDF CỦA MÌNH ⇒ 200", async () => {
+  describe("G7 · 084 PDF phiếu người khác cho người KHÔNG có phiếu nào", () => {
+    it("404 010, 0 audit, 0 hàng `files` (chỉ DB — chạy cả khi storage lệch)", async () => {
       const before = await auditCountFor(A.companyId, noPayslipEmp.id);
       const res = await get(noPayslipEmp.token, `/me/payslips/${ownerPayslipId}/pdf`);
       expect(res.status, JSON.stringify(res.body)).toBe(404);
@@ -443,7 +451,10 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-QA-1 (lane B) · G5 cross-tenant + G7 O
         [A.companyId, noPayslipEmp.id],
       );
       expect(files.rows[0].n).toBe(0);
+    });
 
+    it("ALLOW đối chứng: chủ phiếu tải PDF CỦA MÌNH ⇒ 200", async (ctx) => {
+      if (!gate.needStorage(ctx, "G7·084 ALLOW chủ phiếu tải PDF của mình")) return;
       const allow = await get(ownerEmp.token, `/me/payslips/${ownerPayslipId}/pdf`);
       expect(allow.status, JSON.stringify(allow.body)).toBe(200);
       expect(typeof allow.body.data.url).toBe("string");

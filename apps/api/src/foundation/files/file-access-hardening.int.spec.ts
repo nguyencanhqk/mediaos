@@ -62,7 +62,6 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../../../test/helpers/seed";
-import { FALLBACK_S3_SECRET } from "../../../test/helpers/fixture-secrets";
 
 const LOGIN_PW = "Passw0rd!test99";
 
@@ -93,15 +92,15 @@ async function seedFileRow(
   direct: Pool,
   companyId: string,
   uploadedBy: string,
-  opts: { uploadStatus?: string; scanStatus?: string } = {},
+  opts: { uploadStatus?: string; scanStatus?: string; ownerUserId?: string } = {},
 ): Promise<string> {
   const id = randomUUID();
   const name = `f-${randomUUID().slice(0, 8)}.pdf`;
   await direct.query(
     `INSERT INTO files
        (id, company_id, original_name, stored_name, mime_type, file_size_bytes,
-        storage_provider, storage_path, visibility, upload_status, scan_status, uploaded_by)
-     VALUES ($1, $2, $3, $3, 'application/pdf', 1024, 'MinIO', $4, 'Private', $5, $6, $7)`,
+        storage_provider, storage_path, visibility, upload_status, scan_status, uploaded_by, owner_user_id)
+     VALUES ($1, $2, $3, $3, 'application/pdf', 1024, 'MinIO', $4, 'Private', $5, $6, $7, $8)`,
     [
       id,
       companyId,
@@ -110,6 +109,7 @@ async function seedFileRow(
       opts.uploadStatus ?? "Uploaded",
       opts.scanStatus ?? "NotRequired",
       uploadedBy,
+      opts.ownerUserId ?? null,
     ],
   );
   return id;
@@ -218,13 +218,7 @@ describe.skipIf(!runDb)(
     const companyIds: string[] = [];
 
     beforeAll(async () => {
-      // Object storage (presign is offline HMAC) — set defaults so the regression 302/200 path can sign a
-      // URL even without a running MinIO. `??=` respects an already-configured shell env.
-      process.env.S3_ENDPOINT ??= "http://localhost:9000";
-      process.env.S3_ACCESS_KEY ??= "mediaos";
-      process.env.S3_SECRET_KEY ??= FALLBACK_S3_SECRET;
-      process.env.S3_BUCKET ??= "mediaos-assets";
-      process.env.S3_FORCE_PATH_STYLE ??= "true";
+      // S3_* ghim ở `vitest.config.ts` (`pinTestStorageEnv`); presign là HMAC ngoại tuyến — không gọi mạng.
 
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
       app = moduleRef.createNestApplication();
@@ -308,14 +302,18 @@ describe.skipIf(!runDb)(
       const emailB = `up-${randomUUID().slice(0, 8)}@b.test`;
       const uidB = await seedUser(direct, B.companyId, emailB, pw);
 
-      // Files (tenant A) — foundation-owned raw seeds.
+      // Files (tenant A) — foundation-owned raw seeds. The two files linked below through ContractService are
+      // owned by the linking admin: linking requires the linker to be able to view the file (owner of a never-
+      // linked file, S19-SEC-FILELINKGATE-1); once linked, ownership plays no part in the reads under test.
       fileContract = await seedFileRow(direct, A.companyId, downloaderId, {
         uploadStatus: "Uploaded",
         scanStatus: "Clean",
+        ownerUserId: adminUserId,
       });
       fileMultiLink = await seedFileRow(direct, A.companyId, downloaderId, {
         uploadStatus: "Uploaded",
         scanStatus: "Clean",
+        ownerUserId: adminUserId,
       });
       fileUnregistered = await seedFileRow(direct, A.companyId, downloaderId, {
         uploadStatus: "Uploaded",

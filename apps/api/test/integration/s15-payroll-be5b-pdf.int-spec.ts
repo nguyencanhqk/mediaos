@@ -10,7 +10,8 @@
  *    `expiresAt` = hạn chữ ký thật (`X-Amz-Expires`).
  *  · Route file chung `/foundation/files/*` ⇒ 403 cho người giữ quyền FOUNDATION (resolver PAYROLL).
  *
- * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5) + object storage đã cấu hình.
+ * GATE CỨNG `hasDb && LANE_DB` (CLAUDE.md §9.5) — chỉ DB: ca deny 403/404 chạy cả khi storage lệch. Ca sinh PDF qua
+ * cổng storage `openStorageTestGate` + `needStorage` (lệch ⇒ bỏ qua CÓ NHÃN, 0 lời gọi storage).
  */
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
@@ -42,15 +43,17 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../helpers/seed";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 
-const hasStorage = !!process.env.S3_ENDPOINT && !!process.env.S3_BUCKET;
-const hasLaneDb = hasDb && !!process.env.LANE_DB && hasStorage;
+const FILE = "test/integration/s15-payroll-be5b-pdf.int-spec.ts";
+const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s15payrollbe5bpdf");
 const EMP_NAME = "Nguyễn Thị Ánh Tuyết";
 
 type Actor = { id: string; token: string };
 
 describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
+  let gate: StorageTestGate;
   let app: INestApplication;
   let direct: Pool;
   const companyIds: string[] = [];
@@ -108,6 +111,7 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
   };
 
   beforeAll(async () => {
+    gate = await openStorageTestGate(FILE);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -220,9 +224,13 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
   }, 120_000);
 
   afterAll(async () => {
-    if (direct) await cleanupTenants(direct, companyIds);
-    await direct?.end();
-    await app?.close();
+    try {
+      await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+    } finally {
+      if (direct) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+      await app?.close();
+    }
   });
 
   // ═══ 083 — cổng ═══════════════════════════════════════════════════════════════════════════════
@@ -252,7 +260,8 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
     expect(await exportAudits(officer.id)).toBe(0);
   });
 
-  it("083 ALLOW: PDF thật đọc lại đúng chữ có dấu + số snapshot; hàng tệp tạm + link + log; 1 audit", async () => {
+  it("083 ALLOW: PDF thật đọc lại đúng chữ có dấu + số snapshot; hàng tệp tạm + link + log; 1 audit", async (ctx) => {
+    if (!gate.needStorage(ctx, "083 ALLOW sinh PDF thật")) return;
     const before = Date.now();
     const res = await get(adminOnlyPayslip.token, `/payslips/${payslipPublished}/pdf`);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -324,7 +333,8 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
     expect(logs).toEqual(["Upload", "GenerateSignedUrl"]);
   });
 
-  it("083 gọi lại ⇒ DÙNG LẠI tệp sống (không sinh PDF mới) nhưng VẪN audit lượt đó", async () => {
+  it("083 gọi lại ⇒ DÙNG LẠI tệp sống (không sinh PDF mới) nhưng VẪN audit lượt đó", async (ctx) => {
+    if (!gate.needStorage(ctx, "083 gọi lại dùng lại tệp sống")) return;
     const first = await get(officer.token, `/payslips/${payslipOther}/pdf`);
     const second = await get(officer.token, `/payslips/${payslipOther}/pdf`);
     expect(first.status).toBe(200);
@@ -339,7 +349,8 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
     expect(files.rows[0].n).toBe(1);
   });
 
-  it("Route file chung: người giữ quyền FOUNDATION bị 403 trên tệp PAYROLL (metadata · download · xoá)", async () => {
+  it("Route file chung: người giữ quyền FOUNDATION bị 403 trên tệp PAYROLL (metadata · download · xoá)", async (ctx) => {
+    if (!gate.needStorage(ctx, "083 route file chung 403 trên PDF đã sinh")) return;
     const res = await get(officer.token, `/payslips/${payslipPublished}/pdf`);
     const fileId = res.body.data.fileId as string;
     const meta = await get(fileAdmin.token, `/foundation/files/${fileId}`);
@@ -357,7 +368,8 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
 
   // ═══ 084 — Own ════════════════════════════════════════════════════════════════════════════════
 
-  it("084 ALLOW: kỳ ĐÚNG `Published` ⇒ 200 + PDF đúng người; 0 audit (SPEC-11 §13.2 (c))", async () => {
+  it("084 ALLOW: kỳ ĐÚNG `Published` ⇒ 200 + PDF đúng người; 0 audit (SPEC-11 §13.2 (c))", async (ctx) => {
+    if (!gate.needStorage(ctx, "084 ALLOW kỳ Published")) return;
     const res = await get(emp.token, `/me/payslips/${payslipPublished}/pdf`);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const pdf = await inspectPdf(await fetchBytes(res.body.data.url as string));
@@ -365,7 +377,8 @@ describe.skipIf(!hasLaneDb)("S15-PAYROLL-BE-5B · PDF 083/084", () => {
     expect(await anyAudits(emp.id)).toBe(0);
   });
 
-  it("084 ALLOW: kỳ `Locked` ⇒ 200", async () => {
+  it("084 ALLOW: kỳ `Locked` ⇒ 200", async (ctx) => {
+    if (!gate.needStorage(ctx, "084 ALLOW kỳ Locked")) return;
     const res = await get(emp.token, `/me/payslips/${payslipLocked}/pdf`);
     expect(res.status).toBe(200);
   });

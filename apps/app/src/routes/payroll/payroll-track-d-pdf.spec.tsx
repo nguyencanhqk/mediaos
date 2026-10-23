@@ -61,7 +61,7 @@ import { PayslipDetailPage } from "./PayslipDetailPage";
 import { MePayslipsPage } from "./MePayslipsPage";
 import { PeriodPayslipsSection } from "./components/PeriodPayslipsSection";
 import { nextPollDelay } from "./components/PayslipPdfBatchControl";
-import { openSignedUrlInNewTab } from "./open-signed-url";
+import { openSignedUrlInNewTab } from "@/lib/open-signed-url";
 
 const api = payrollApi as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
@@ -269,5 +269,37 @@ describe("openSignedUrlInNewTab", () => {
       }),
     ).rejects.toThrow("x");
     expect(tab.close).toHaveBeenCalled();
+  });
+
+  // S19-OPS-TASKFILEURL-1 D8 (F-7b) — guard scheme đứng TRƯỚC cả hai nhánh điều hướng. Tab trắng mang
+  // origin của app tới khi được điều hướng, còn `downloadUrlSchema` chỉ có `z.string().url()`.
+  // Kết quả lời gọi được giữ lại rồi mới assert, để ca đỏ trên mã thiếu guard ở `tab.close`.
+  const UNSAFE = "javascript:alert(1)";
+
+  it("[deny] URL không phải http(s) ⇒ đóng tab trắng, KHÔNG gán href, ném lỗi ⇄ ca popup/allow ở trên", async () => {
+    const { tab } = fakeTab();
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+    const outcome = await openSignedUrlInNewTab(async () => UNSAFE).then(
+      () => "resolved",
+      (err: unknown) => err,
+    );
+    expect(tab.close).toHaveBeenCalled();
+    expect(tab.location.href).toBe("");
+    expect(assign).not.toHaveBeenCalled();
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe("unsafe-url");
+  });
+
+  it("[deny] popup bị chặn + URL không phải http(s) ⇒ KHÔNG điều hướng chính tab, ném lỗi", async () => {
+    vi.spyOn(window, "open").mockReturnValue(null);
+    const assign = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ assign } as unknown as Location);
+    const outcome = await openSignedUrlInNewTab(async () => UNSAFE).then(
+      () => "resolved",
+      (err: unknown) => err,
+    );
+    expect(assign).not.toHaveBeenCalled();
+    expect((outcome as Error).message).toBe("unsafe-url");
   });
 });

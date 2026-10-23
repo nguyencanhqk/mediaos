@@ -12,6 +12,7 @@ import {
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
+import { SocialInputTextPipe } from "./social-input-text.pipe";
 import type { Request } from "express";
 import { Idempotent } from "../common/idempotency/idempotency.decorator";
 import { PermissionGuard } from "../permission/guards/permission.guard";
@@ -58,6 +59,7 @@ interface AuthenticatedRequest extends Request {
  * ĐỎ ngay, và nó là ĐẲNG THỨC (`toBe`), không phải trần lỏng.
  */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialNewsController {
   constructor(private readonly news: SocialNewsService) {}
 
@@ -102,6 +104,7 @@ export class SocialNewsController {
 
 /** `SOCIAL-API-023..026` — tìm kiếm · thẻ · trang cá nhân · sinh nhật. */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialDiscoveryController {
   constructor(private readonly discovery: SocialDiscoveryService) {}
 
@@ -148,6 +151,7 @@ export class SocialDiscoveryController {
 
 /** `SOCIAL-API-027..029` — báo cáo vi phạm. 🔴 Cụm crown-jewel của WO. */
 @Controller("social")
+@UsePipes(SocialInputTextPipe)
 export class SocialReportsController {
   constructor(private readonly reports: SocialReportsService) {}
 

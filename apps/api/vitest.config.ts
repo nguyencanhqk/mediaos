@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import swc from "unplugin-swc";
 import { configDefaults, defineConfig } from "vitest/config";
 import { resolveTestDbUrls } from "./test/db-target";
+import { pinTestStorageEnv } from "./test/helpers/storage-test-target";
 
 // Build the test env. DB đích do `test/db-target.ts` resolve — FAIL-CLOSED (S6-SEC-DBFENCE-1 / KI-028):
 // KHÔNG còn fallback `?? "mediaos"` (= DB PROD của .env/.env.prod). Thiếu LANE_DB và không có URL tường
@@ -92,7 +93,14 @@ export default defineConfig({
     // DATABASE_URL passed by the lane-db harness); the literals below are only the CI/master fallback.
     // Vitest's `env` literals OVERRIDE process.env, so each URL is resolved here in config (Node ctx)
     // where process.env is authoritative.
-    env: laneDbEnv(),
+    //
+    // S16-SOCIAL-STORAGETESTGATE-1 (plan D-1, N7 của S19-OPS-STORAGEPUBLIC-1): ghim ĐỦ 7 khoá `S3_*` +
+    // `STORAGE_TEST_PROFILE` bằng chuỗi cụ thể — `AppModule` nạp `.env` lúc import và chỉ LẤP khoá vắng, nên
+    // khoá nào bỏ trống ở đây ⇒ worker thấy bucket/khoá phục vụ thật. Hồ sơ `live` chỉ khi shell trỏ ĐÚNG
+    // bucket test cho phép trên endpoint loopback; còn lại `offline` (khoá giả + bucket chặn + tripwire D-10).
+    env: { ...laneDbEnv(), ...pinTestStorageEnv(process.env) },
+    // D-10: hồ sơ `offline` ⇒ mọi `S3Client.send` in nhãn `[storage-test-call]` rồi bị từ chối (0 byte tới MinIO).
+    setupFiles: ["./test/setup/storage-call-tripwire.ts"],
     coverage: {
       provider: "v8",
       // Scoped thresholds (CLAUDE.md §6: "coverage ≥80% — ngưỡng riêng cho module nhạy cảm").

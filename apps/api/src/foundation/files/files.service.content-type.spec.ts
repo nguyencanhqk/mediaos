@@ -141,7 +141,10 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW) {
     canUnlink: vi.fn(async () => policyDecision),
     canDelete: vi.fn(async () => policyDecision),
     decideForLinkedFile: vi.fn(async () => policyDecision),
-    canonicalOwnerKey: vi.fn(() => null),
+    canonicalOwnerKey: vi.fn((moduleCode: string, entityType: string) => ({
+      moduleCode,
+      entityType,
+    })),
   };
   const storage = {
     get: vi.fn(async () => ({

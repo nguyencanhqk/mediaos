@@ -22,6 +22,113 @@
  *     Bắt được TRƯỚC khi nó thành 500, và chỉ thẳng thủ phạm thay vì "trang chết, không rõ vì sao".
  */
 
+import path from "node:path";
+
+/**
+ * Các mặt PROD KHÁC ngoài API — mỗi cái là một dịch vụ NSSM riêng, chết độc lập với :3100.
+ * (Chuyển từ `ops-alert-check.mjs` sang đây ở S19-OPS-PRODDBBOOT-1 để HỢP ĐỒNG "thế nào là sống"
+ * của từng trang test được — phần đi đo vẫn ở `ops-alert-check.mjs`.)
+ *
+ * `url` cố tình trỏ vào một trang CÔNG KHAI có thật (không phải `/api/health` — hai app này không
+ * có), vì sự cố 11–12/08 giết cả `/login` lẫn đường dẫn không tồn tại: nó nằm ở **middleware**, tức
+ * lớp mà mọi request đều đi qua. Dò một trang thật là dò đúng chỗ đau.
+ *
+ * `expect` = một chuỗi PHẢI có trong HTML trả về (khi 2xx). Lớp chắn thứ hai cho ca "200 nhưng trang
+ * trắng" ([[web-core-stale-dist-white-page]]) — chọn chuỗi do CHÍNH trang đó sinh.
+ *
+ * `expectRedirect` (tuỳ chọn) = 3xx mà `Location` có ĐƯỜNG DẪN kết thúc bằng giá trị này là SỐNG.
+ * LMS đăng nhập qua SSO từ 21/09: `/login` trả 307 về app chính (`…/lms`) — trước khi có trường này,
+ * SITE_LMS kêu warn oan mỗi 10 phút. So phần CUỐI đường dẫn, KHÔNG ghim miền (miền app chính khác
+ * nhau giữa PROD/dev-online) và KHÔNG xét query. Trang không khai trường này ⇒ 3xx vẫn là warn.
+ *
+ * `nextDir` = app dir để soi `.next` (xem `collectNextBuilds`); bỏ trống nếu không phải app Next.
+ * Thêm một mặt PROD mới ⇒ THÊM VÀO ĐÂY, nếu không nó lại sập âm.
+ */
+export const DEFAULT_SITES = Object.freeze([
+  Object.freeze({
+    id: "SOCIAL",
+    title: "fbpost đăng bài (:3500)",
+    url: "http://localhost:3500/login",
+    expect: "Cần đăng nhập từ MediaOS",
+    nextDir: path.join("apps", "fbpost"),
+  }),
+  Object.freeze({
+    id: "LMS",
+    title: "LMS đào tạo (:3400)",
+    url: "http://localhost:3400/login",
+    expect: "<title>FMC</title>",
+    expectRedirect: "/lms",
+    nextDir: path.join("apps", "lms"),
+  }),
+]);
+
+/** `/lms/` · `lms` · `//lms` ⇒ `/lms`; `/` hoặc rỗng ⇒ `""` (không được khớp mọi thứ). */
+function normalizeRedirectPath(p) {
+  const trimmed = String(p).trim().replace(/^\/+/, "").replace(/\/+$/, "");
+  return trimmed === "" ? "" : `/${trimmed}`;
+}
+
+/**
+ * `Location` có ĐƯỜNG DẪN kết thúc đúng bằng `expected` (đủ đoạn — `/xlms` không khớp `/lms`)?
+ * Location tương đối được giải trên một gốc giả; query/fragment bị bỏ trước khi so.
+ */
+export function redirectMatches(location, expected) {
+  if (typeof location !== "string" || location.trim() === "") return false;
+  if (typeof expected !== "string") return false;
+  const want = normalizeRedirectPath(expected);
+  if (want === "") return false;
+  let pathname;
+  try {
+    pathname = new URL(location.trim(), "http://ops-alert.invalid").pathname;
+  } catch {
+    return false;
+  }
+  return `${normalizeRedirectPath(pathname)}`.endsWith(want);
+}
+
+/**
+ * Đọc `OPS_SITES`. Không đặt ⇒ `DEFAULT_SITES`. Rác ⇒ `sites: null` + `error` (luật ra `unknown`) —
+ * KHÔNG âm thầm quay về mặc định, vì thế sẽ giấu mất việc người vận hành vừa gõ sai cấu hình.
+ *
+ * @returns {{sites: ReadonlyArray<object>|null, error: string|null}}
+ */
+export function parseSitesEnv(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return { sites: DEFAULT_SITES, error: null };
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error("OPS_SITES phải là mảng JSON");
+    parsed.forEach((site, i) => {
+      if (site === null || typeof site !== "object" || Array.isArray(site)) {
+        throw new Error(`OPS_SITES[${i}] phải là object`);
+      }
+      if (
+        site.expectRedirect !== undefined &&
+        (typeof site.expectRedirect !== "string" ||
+          normalizeRedirectPath(site.expectRedirect) === "")
+      ) {
+        throw new Error(`OPS_SITES[${i}].expectRedirect phải là đường dẫn khác rỗng, khác "/"`);
+      }
+    });
+    return { sites: parsed, error: null };
+  } catch (err) {
+    return { sites: null, error: String(err?.message ?? err) };
+  }
+}
+
+/** In `Location` KHÔNG kèm query/fragment — có thể mang mã/phiên, không đưa vào sổ hay webhook. */
+function describeLocation(location) {
+  if (typeof location !== "string" || location.trim() === "") return "không có Location";
+  try {
+    const u = new URL(location.trim(), "http://ops-alert.invalid");
+    const origin = u.origin === "http://ops-alert.invalid" ? "" : u.origin;
+    return `Location ${origin}${u.pathname}`;
+  } catch {
+    return "Location không đọc được";
+  }
+}
+
 /** Thứ tự nghiêm trọng — `unknown` nằm TRÊN `ok` (xem luật nền ở đầu file). */
 export const SEVERITY_ORDER = ["ok", "unknown", "warn", "crit"];
 
@@ -230,6 +337,9 @@ export function evaluate(s = {}, t = DEFAULT_THRESHOLDS) {
   // ── Bản build Next đang được phục vụ ───────────────────────────────────────────────────
   out.push(evaluateNextBuilds(s.nextBuilds));
 
+  // ── Docker watchdog (S19-OPS-PRODDBBOOT-1) ─────────────────────────────────────────────
+  out.push(evaluateDockerWatchdog(s.dockerWatchdog));
+
   return out;
 }
 
@@ -257,7 +367,7 @@ const NO_ANSWER = new Set([
  * Phán một trang PROD từ hành vi HTTP thật.
  *
  * @param {{id:string,title?:string,url?:string,status?:number|null,bodyOk?:boolean|null,
- *          transport?:string}} site
+ *          transport?:string,location?:string|null,expectRedirect?:string}} site
  */
 function evaluateSite(site) {
   const id = `SITE_${site.id}`;
@@ -285,6 +395,26 @@ function evaluateSite(site) {
         title,
         "ok",
         `HTTP ${site.status}${site.bodyOk === true ? " + dấu nhận dạng khớp" : ""}`,
+      );
+    }
+    // 3xx ĐÚNG CHỖ đã khai (`expectRedirect`, vd LMS → SSO app chính) là sống. Mọi 3xx khác giữ
+    // nguyên warn bên dưới.
+    if (site.status >= 300 && site.status < 400 && site.expectRedirect !== undefined) {
+      if (redirectMatches(site.location, site.expectRedirect)) {
+        return verdict(
+          id,
+          title,
+          "ok",
+          // In cả origin của Location (không query): miền KHÔNG bị ghim (PROD ≠ dev-online), nên người
+          // đọc log phải tự thấy được trang đang đẩy về host nào.
+          `HTTP ${site.status} → ${describeLocation(site.location)} (chuyển hướng đúng như khai …${normalizeRedirectPath(site.expectRedirect)})`,
+        );
+      }
+      return verdict(
+        id,
+        title,
+        "warn",
+        `HTTP ${site.status}${where} — ${describeLocation(site.location)}, không về …${normalizeRedirectPath(String(site.expectRedirect))} như khai`,
       );
     }
     // 3xx/4xx: KHÔNG dò bằng redirect tự động, nên 307 nghĩa là đường dò công khai đã bị đóng lại
@@ -336,6 +466,77 @@ function evaluateNextBuilds(builds) {
     );
   }
   return verdict(ID, TITLE, "ok", `${builds.length} app đều chạy bundle PROD`);
+}
+
+/** Dòng log của scripts/windows/docker-watchdog.ps1: `<ISO có offset> [LEVEL] <thông điệp>`. */
+const WATCHDOG_LINE_RE = /^(\S+) \[([A-Z]+)\] (.*)$/;
+const WATCHDOG_DETAIL_MAX = 160;
+
+/**
+ * Tóm tắt docker-watchdog.log trong cửa sổ `windowMin` phút: đếm [WARN] / [ERROR] / [ACTION] và giữ
+ * dòng có vấn đề mới nhất. Watchdog chỉ ghi file — thiếu luật này thì watchdog HỎNG (không bật được
+ * Docker, engine kẹt, cờ tạm dừng bị quên) không tới được ai.
+ *
+ * @returns {{present:true, warn:number, error:number, actions:number, last:string|null}}
+ */
+export function summarizeWatchdogLog(text, { nowMs = Date.now(), windowMin = 60 } = {}) {
+  const since = nowMs - windowMin * 60_000;
+  let warn = 0;
+  let error = 0;
+  let actions = 0;
+  let last = null;
+  for (const raw of String(text ?? "").split(/\r?\n/)) {
+    // PowerShell 5.1 `Add-Content -Encoding UTF8` mở đầu file bằng BOM.
+    const m = WATCHDOG_LINE_RE.exec(raw.replace(/^\uFEFF/, "").trim());
+    if (!m) continue;
+    const at = Date.parse(m[1]);
+    if (Number.isNaN(at) || at < since) continue;
+    if (m[2] === "ACTION") actions += 1;
+    if (m[2] !== "WARN" && m[2] !== "ERROR") continue;
+    if (m[2] === "ERROR") error += 1;
+    else warn += 1;
+    last = `[${m[2]}] ${m[3]}`.slice(0, WATCHDOG_DETAIL_MAX);
+  }
+  return { present: true, warn, error, actions, last };
+}
+
+/**
+ * Phán docker-watchdog.log. Chưa có file ⇒ ok: watchdog CHỈ ghi khi phải ra tay, nên máy khoẻ không
+ * có log là bình thường. Đọc lỗi khác ⇒ unknown (luật nền).
+ *
+ * @param {{present:boolean, warn?:number, error?:number, actions?:number, last?:string|null}|null|undefined} w
+ */
+function evaluateDockerWatchdog(w) {
+  const ID = "DOCKER_WATCHDOG";
+  const TITLE = "Docker watchdog";
+  if (w === null || w === undefined || typeof w !== "object") {
+    return missing(ID, TITLE, "không đọc được docker-watchdog.log");
+  }
+  if (w.present === false) {
+    return verdict(ID, TITLE, "ok", "chưa có log — watchdog chưa phải ra tay");
+  }
+  if (![w.warn, w.error].every((n) => Number.isInteger(n) && n >= 0)) {
+    return missing(ID, TITLE, "tóm tắt docker-watchdog.log hỏng");
+  }
+  const latest = w.last ? `; mới nhất: ${w.last}` : "";
+  if (w.error > 0) {
+    return verdict(
+      ID,
+      TITLE,
+      "crit",
+      `${w.error} dòng ERROR trong cửa sổ — watchdog không bật được Docker Desktop hoặc script lỗi${latest}`,
+    );
+  }
+  if (w.warn > 0) {
+    return verdict(
+      ID,
+      TITLE,
+      "warn",
+      `${w.warn} dòng WARN trong cửa sổ — engine kẹt hoặc cờ tạm dừng quá hạn${latest}`,
+    );
+  }
+  const acted = w.actions > 0 ? ` (đã tự bật Docker Desktop ${w.actions} lần)` : "";
+  return verdict(ID, TITLE, "ok", `không có WARN/ERROR trong cửa sổ${acted}`);
 }
 
 /** Luật "càng LỚN càng nặng" (job failed · error lines · backup age). */

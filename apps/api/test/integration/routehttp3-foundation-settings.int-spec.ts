@@ -35,6 +35,7 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { openStorageTestGate, type StorageTestGate } from "../helpers/storage-test-gate";
 import {
   cleanupTenants,
   seedCompany,
@@ -46,6 +47,7 @@ import {
   type SeededTenant,
 } from "../helpers/seed";
 
+const FILE = "test/integration/routehttp3-foundation-settings.int-spec.ts";
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 const LOGIN_PW = loginPasswordFixture("s10rh3fs");
 
@@ -74,6 +76,7 @@ describe.skipIf(!hasLaneDb)(
   "S10-QA-ROUTEHTTP-3 — HTTP thật: foundation · settings · integrations (15 route)",
   () => {
     let app: INestApplication;
+    let gate: StorageTestGate;
     let direct: Pool;
     let A: SeededTenant;
     let B: SeededTenant;
@@ -142,6 +145,7 @@ describe.skipIf(!hasLaneDb)(
     }
 
     beforeAll(async () => {
+      gate = await openStorageTestGate(FILE);
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
       app = moduleRef.createNestApplication();
       app.useGlobalPipes(new ZodValidationPipe());
@@ -165,9 +169,13 @@ describe.skipIf(!hasLaneDb)(
     }, 180_000);
 
     afterAll(async () => {
-      await app?.close();
-      if (companyIds.length > 0) await cleanupTenants(direct, companyIds);
-      await direct?.end();
+      try {
+        await gate?.removeObjects(companyIds.map((id) => `${id}/`));
+      } finally {
+        await app?.close();
+        if (companyIds.length > 0) await cleanupTenants(direct, companyIds);
+        await direct?.end();
+      }
     });
 
     // ─── 1. API keys — catalog scope ────────────────────────────────────────────
@@ -216,7 +224,9 @@ describe.skipIf(!hasLaneDb)(
 
     // ─── 4. Thương hiệu — confirm upload ────────────────────────────────────────
 
-    it("POST /foundation/company/branding/:kind/confirm — đi hết chuỗi guard→DTO→service (không 500)", async () => {
+    it("POST /foundation/company/branding/:kind/confirm — đi hết chuỗi guard→DTO→service (không 500)", async (ctx) => {
+      // Server gọi HeadObject khi xác nhận ⇒ lời gọi storage thật.
+      if (!gate.needStorage(ctx, "confirm branding — guard→DTO→service (không 500)")) return;
       const fileId = await insertFile(A.companyId, adminUserIdA, "Pending");
       const res = await authPost(tAdminA, "/foundation/company/branding/logo/confirm").send({
         fileId,

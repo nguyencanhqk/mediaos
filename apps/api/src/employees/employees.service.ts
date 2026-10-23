@@ -29,6 +29,7 @@ import {
 } from "../chat/chat-derived-rooms-sync.service";
 import { EMPLOYEE_LIST_MAX_ROWS, EmployeesRepository } from "./employees.repository";
 import { isUniqueViolation } from "../common/db-error";
+import { isUuid } from "../foundation/files/avatar-presign.service";
 
 const GENERATED_PASSWORD_BYTES = 18;
 
@@ -44,6 +45,17 @@ function maskSalary<T extends SalaryMaskable>(
 ): Omit<T, "baseSalary"> & { baseSalary: number | null } {
   const salary = allow && item.baseSalary != null ? Number(item.baseSalary) : null;
   return { ...item, baseSalary: salary };
+}
+
+/**
+ * S19-HR-AVATARWRITE-1 — route legacy trả cột `avatar_url` THÔ (không qua ký). Chỉ để lộ giá trị dạng
+ * fileId (UUID) — hình dạng duy nhất W1/W2 ghi; mọi giá trị khác (dữ liệu cũ dạng link, chuỗi rác) ⇒
+ * `null`. Cùng quy tắc với `AvatarPresignService`: không trả chuỗi người dùng nhập làm ảnh (bất biến §3.2
+ * của plan), kể cả khi cột còn dữ liệu ghi trước WO.
+ */
+function withExposedAvatar<T extends { avatarUrl: string | null }>(row: T): T {
+  const raw = row.avatarUrl;
+  return { ...row, avatarUrl: raw != null && isUuid(raw) ? raw : null };
 }
 
 type RequestUser = { id: string; companyId: string };
@@ -196,16 +208,17 @@ export class EmployeesService {
       phone: unknown;
       contractType: unknown;
       notes: unknown;
+      avatarUrl: string | null;
     },
   >(row: T, revealSalary: boolean, revealPii: boolean) {
-    return {
+    return withExposedAvatar({
       ...row,
       baseSalary: revealSalary && row.baseSalary != null ? Number(row.baseSalary) : null,
       salaryType: revealSalary ? row.salaryType : null,
       phone: revealPii ? row.phone : null,
       contractType: revealPii ? row.contractType : null,
       notes: revealPii ? row.notes : null,
-    };
+    });
   }
 
   /**
@@ -313,7 +326,7 @@ export class EmployeesService {
       });
 
       // Mutation responses mask salary by default — view it via the audited GET /employees/:id.
-      return maskSalary(created, false);
+      return withExposedAvatar(maskSalary(created, false));
     } catch (err) {
       if (err instanceof ChatSyncRevokeError) {
         await this.chatSync.reportRevokeFailure(user.companyId, err);
@@ -330,6 +343,9 @@ export class EmployeesService {
 
   async updateEmployee(user: RequestUser, id: string, dto: UpdateEmployeeProfileRequest) {
     const changingSalary = dto.baseSalary !== undefined;
+    // S19-HR-AVATARWRITE-1 (D-7): route này chỉ còn GỠ được ảnh (`avatarUrl: null`) — gỡ phải để lại vết
+    // audit như `avatar-remove` của endpoint ảnh HR.
+    const removingAvatar = dto.avatarUrl === null;
 
     try {
       const updated = await this.db.withTenant(user.companyId, async (tx) => {
@@ -343,10 +359,11 @@ export class EmployeesService {
           }
         }
 
-        // Read the prior salary inside the tx so the audit before/after is consistent with the write.
-        const before = changingSalary
-          ? await this.repo.findByIdTx(tx, user.companyId, id)
-          : undefined;
+        // Read the prior row inside the tx so the audit before/after is consistent with the write.
+        const before =
+          changingSalary || removingAvatar
+            ? await this.repo.findByIdTx(tx, user.companyId, id)
+            : undefined;
 
         const rows = await this.repo.updateEmployeeTx(tx, user.companyId, id, {
           employeeCode: dto.employeeCode,
@@ -390,6 +407,17 @@ export class EmployeesService {
             after: { base_salary: dto.baseSalary ?? null },
           });
         }
+        // Cột ĐÃ NULL ⇒ không audit (không có gì bị gỡ). Cùng tx với ghi (BẤT BIẾN #2), chỉ `{avatarUrl}`.
+        if (removingAvatar && before?.avatarUrl != null) {
+          await this.auditService.record(tx, {
+            action: "avatar-remove",
+            objectType: "employee",
+            objectId: id,
+            actorUserId: user.id,
+            before: { avatarUrl: before.avatarUrl },
+            after: { avatarUrl: null },
+          });
+        }
         // S7-CHAT-BE-5 (W9b) — route `PATCH /employees/:id` ghi CẢ `orgUnitId` LẪN `status` (dòng
         // `status: dto.status` ở trên). Đây chính là điểm rev 2 bỏ sót. Không có nhánh `if` nào ở đây:
         // hàm sync tính lại tập mong muốn từ trạng thái SAU ghi, nên nó đúng cho cả hai trường và cho
@@ -403,7 +431,7 @@ export class EmployeesService {
       });
 
       // Mutation responses mask salary by default — view it via the audited GET /employees/:id.
-      return maskSalary(updated, false);
+      return withExposedAvatar(maskSalary(updated, false));
     } catch (err) {
       if (err instanceof ChatSyncRevokeError) {
         await this.chatSync.reportRevokeFailure(user.companyId, err);

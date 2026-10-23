@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
+import { enterAppRoleInTx, withRolledBackTx } from "../helpers/rolled-back-tx";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
 /**
@@ -47,7 +48,11 @@ async function asTenant<T>(
   }
 }
 
-describe.skipIf(!hasDb)(
+// S18-QA-NOTIGLOBALLEAK-1 (gate F-2/DB-1): `.env` làm hasDb=true ⇒ thiếu LANE_DB thì `seedCompany` ở
+// beforeAll commit lên DB mặc định. CI đặt LANE_DB=mediaos ⇒ vẫn chạy ở CI.
+const hasLaneDb = hasDb && !!process.env.LANE_DB;
+
+describe.skipIf(!hasLaneDb)(
   "FOUNDATION-DB deny-path — cross-tenant INSERT blocked + foreign row invisible",
   () => {
     const direct = directPool();
@@ -63,15 +68,6 @@ describe.skipIf(!hasDb)(
     let bFileId: string;
     let bFileLinkId: string;
     let bFileAccessLogId: string;
-
-    // GLOBAL rows (company_id IS NULL) — to confirm tenant A cannot re-home them
-    // (UPDATE company_id NULL→A must be rejected by mig 0436 trigger). FOUNDATION-DB-FIX-1.
-    let gSeqId: string;
-    let gHolId: string;
-    let gDrpId: string;
-    let gSeedBatchId: string;
-    let gSeedItemId: string;
-    let gSystemRoleId: string;
 
     beforeAll(async () => {
       A = await seedCompany(direct, "fnd-deny-a");
@@ -127,71 +123,91 @@ describe.skipIf(!hasDb)(
       );
       bFileAccessLogId = falB.rows[0].id as string;
 
-      // ── GLOBAL rows (company_id IS NULL), seeded via superuser (only system/owner writes NULL).
-      // Tenant A will try to re-home each (UPDATE company_id = A) — must be rejected by mig 0436 trigger.
-      const sfx = randomUUID().slice(0, 8);
-      gSeqId = (
-        await direct.query(
-          `INSERT INTO sequence_counters
-             (company_id, module_code, sequence_key, scope_type, reset_policy, status)
-           VALUES (NULL, 'SYSTEM', $1, 'System', 'Never', 'Active') RETURNING id`,
-          [`reh-seq-${sfx}`],
-        )
-      ).rows[0].id as string;
-      gHolId = (
-        await direct.query(
-          `INSERT INTO public_holidays
-             (company_id, holiday_code, name, holiday_date, holiday_type, status)
-           VALUES (NULL, $1, 'Re-home Global Holiday', '2099-01-01', 'PublicHoliday', 'Active') RETURNING id`,
-          [`reh-hol-${sfx}`],
-        )
-      ).rows[0].id as string;
-      gDrpId = (
-        await direct.query(
-          `INSERT INTO data_retention_policies
-             (company_id, module_code, entity_type, retention_days, cleanup_action, is_enabled)
-           VALUES (NULL, 'FOUNDATION', $1, 365, 'None', false) RETURNING id`,
-          [`reh-drp-${sfx}`],
-        )
-      ).rows[0].id as string;
-      gSeedBatchId = (
-        await direct.query(
-          `INSERT INTO seed_batches
-             (company_id, seed_key, seed_version, status)
-           VALUES (NULL, $1, '1.0.0', 'Pending') RETURNING id`,
-          [`reh-sb-${sfx}`],
-        )
-      ).rows[0].id as string;
-      gSeedItemId = (
-        await direct.query(
-          `INSERT INTO seed_items
-             (seed_batch_id, company_id, target_table, target_key, operation, status)
-           VALUES ($1, NULL, 'companies', $2, 'Upsert', 'Pending') RETURNING id`,
-          [gSeedBatchId, `reh-si-${sfx}`],
-        )
-      ).rows[0].id as string;
-      gSystemRoleId = (
-        await direct.query(
-          `INSERT INTO roles (company_id, name, is_system)
-           VALUES (NULL, $1, true) RETURNING id`,
-          [`reh-sysrole-${sfx}`],
-        )
-      ).rows[0].id as string;
+      // GLOBAL rows (company_id IS NULL) are NOT seeded here — see rehomeInTx (S18-QA-NOTIGLOBALLEAK-1).
     });
 
     afterAll(async () => {
-      // Clean GLOBAL (company_id NULL) rows — cleanupTenants filters by company_id so it misses them.
-      // Order respects FK (seed_items → seed_batches).
-      await direct.query(`DELETE FROM seed_items WHERE id = $1`, [gSeedItemId]);
-      await direct.query(`DELETE FROM seed_batches WHERE id = $1`, [gSeedBatchId]);
-      await direct.query(`DELETE FROM data_retention_policies WHERE id = $1`, [gDrpId]);
-      await direct.query(`DELETE FROM public_holidays WHERE id = $1`, [gHolId]);
-      await direct.query(`DELETE FROM sequence_counters WHERE id = $1`, [gSeqId]);
-      await direct.query(`DELETE FROM roles WHERE id = $1`, [gSystemRoleId]);
       await cleanupTenants(direct, [A.companyId, B.companyId]);
       await direct.end();
       await app.end();
     });
+
+    type RehomeTable =
+      | "sequence_counters"
+      | "public_holidays"
+      | "data_retention_policies"
+      | "seed_batches"
+      | "seed_items"
+      | "roles";
+
+    const insertId = async (c: PoolClient, sql: string, params: unknown[]): Promise<string> =>
+      (await c.query(sql, params)).rows[0].id as string;
+
+    /** GLOBAL rows (company_id IS NULL) — superuser only (app role cannot write NULL, see section 2). */
+    const GLOBAL_SEEDS: Record<RehomeTable, (c: PoolClient, sfx: string) => Promise<string>> = {
+      sequence_counters: (c, sfx) =>
+        insertId(
+          c,
+          `INSERT INTO sequence_counters
+             (company_id, module_code, sequence_key, scope_type, reset_policy, status)
+           VALUES (NULL, 'SYSTEM', $1, 'System', 'Never', 'Active') RETURNING id`,
+          [`reh-seq-${sfx}`],
+        ),
+      public_holidays: (c, sfx) =>
+        insertId(
+          c,
+          `INSERT INTO public_holidays
+             (company_id, holiday_code, name, holiday_date, holiday_type, status)
+           VALUES (NULL, $1, 'Re-home Global Holiday', '2099-01-01', 'PublicHoliday', 'Active') RETURNING id`,
+          [`reh-hol-${sfx}`],
+        ),
+      data_retention_policies: (c, sfx) =>
+        insertId(
+          c,
+          `INSERT INTO data_retention_policies
+             (company_id, module_code, entity_type, retention_days, cleanup_action, is_enabled)
+           VALUES (NULL, 'FOUNDATION', $1, 365, 'None', false) RETURNING id`,
+          [`reh-drp-${sfx}`],
+        ),
+      seed_batches: (c, sfx) =>
+        insertId(
+          c,
+          `INSERT INTO seed_batches
+             (company_id, seed_key, seed_version, status)
+           VALUES (NULL, $1, '1.0.0', 'Pending') RETURNING id`,
+          [`reh-sb-${sfx}`],
+        ),
+      seed_items: async (c, sfx) =>
+        insertId(
+          c,
+          `INSERT INTO seed_items
+             (seed_batch_id, company_id, target_table, target_key, operation, status)
+           VALUES ($1, NULL, 'companies', $2, 'Upsert', 'Pending') RETURNING id`,
+          [await GLOBAL_SEEDS.seed_batches(c, sfx), `reh-si-${sfx}`],
+        ),
+      roles: (c, sfx) =>
+        insertId(
+          c,
+          `INSERT INTO roles (company_id, name, is_system)
+           VALUES (NULL, $1, true) RETURNING id`,
+          [`reh-sysrole-${sfx}`],
+        ),
+    };
+
+    /**
+     * S18-QA-NOTIGLOBALLEAK-1 — the GLOBAL row lives in ONE transaction only: seed as superuser ⇒ drop to
+     * the app role + tenant A GUC ⇒ UPDATE company_id NULL→A (mig 0436 trigger must reject) ⇒ ROLLBACK.
+     * Nothing is ever committed, so a crashed run leaves no GLOBAL row behind (the old spec seeded in
+     * beforeAll and cleaned only in afterAll). The UPDATE error is rethrown for the caller to assert.
+     */
+    async function rehomeInTx(table: RehomeTable): Promise<void> {
+      const sfx = randomUUID().slice(0, 8);
+      await withRolledBackTx(direct, `fnd-deny re-home ${table}`, async (c) => {
+        const id = await GLOBAL_SEEDS[table](c, sfx);
+        await enterAppRoleInTx(c, A.companyId);
+        await c.query(`UPDATE ${table} SET company_id = $1 WHERE id = $2`, [A.companyId, id]);
+      });
+    }
 
     // ── 1a. company_settings: cross-tenant INSERT rejected ───────────────────
     describe("company_settings (NOT NULL company_id)", () => {
@@ -210,10 +226,9 @@ describe.skipIf(!hasDb)(
 
       it("withTenant(A): cannot SELECT B's company_settings row (RLS USING)", async () => {
         const rows = await asTenant(app, A.companyId, async (c) => {
-          const r = await c.query(
-            "SELECT id FROM company_settings WHERE id = $1",
-            [bCompanySettingsId],
-          );
+          const r = await c.query("SELECT id FROM company_settings WHERE id = $1", [
+            bCompanySettingsId,
+          ]);
           return r.rows;
         });
         expect(rows).toHaveLength(0);
@@ -293,10 +308,9 @@ describe.skipIf(!hasDb)(
 
       it("withTenant(A): cannot SELECT B's file_access_logs row (RLS USING)", async () => {
         const rows = await asTenant(app, A.companyId, async (c) => {
-          const r = await c.query(
-            "SELECT id FROM file_access_logs WHERE id = $1",
-            [bFileAccessLogId],
-          );
+          const r = await c.query("SELECT id FROM file_access_logs WHERE id = $1", [
+            bFileAccessLogId,
+          ]);
           return r.rows;
         });
         expect(rows).toHaveLength(0);
@@ -322,14 +336,7 @@ describe.skipIf(!hasDb)(
       });
 
       it("withTenant(A): UPDATE global row company_id NULL→A is rejected (re-home blocked, mig 0436)", async () => {
-        await expect(
-          asTenant(app, A.companyId, async (c) => {
-            await c.query(
-              `UPDATE sequence_counters SET company_id = $1 WHERE id = $2`,
-              [A.companyId, gSeqId],
-            );
-          }),
-        ).rejects.toThrow(/company_id is immutable/i);
+        await expect(rehomeInTx("sequence_counters")).rejects.toThrow(/company_id is immutable/i);
       });
     });
 
@@ -348,14 +355,7 @@ describe.skipIf(!hasDb)(
       });
 
       it("withTenant(A): UPDATE global row company_id NULL→A is rejected (re-home blocked, mig 0436)", async () => {
-        await expect(
-          asTenant(app, A.companyId, async (c) => {
-            await c.query(
-              `UPDATE public_holidays SET company_id = $1 WHERE id = $2`,
-              [A.companyId, gHolId],
-            );
-          }),
-        ).rejects.toThrow(/company_id is immutable/i);
+        await expect(rehomeInTx("public_holidays")).rejects.toThrow(/company_id is immutable/i);
       });
     });
 
@@ -374,14 +374,9 @@ describe.skipIf(!hasDb)(
       });
 
       it("withTenant(A): UPDATE global row company_id NULL→A is rejected (re-home blocked, mig 0436)", async () => {
-        await expect(
-          asTenant(app, A.companyId, async (c) => {
-            await c.query(
-              `UPDATE data_retention_policies SET company_id = $1 WHERE id = $2`,
-              [A.companyId, gDrpId],
-            );
-          }),
-        ).rejects.toThrow(/company_id is immutable/i);
+        await expect(rehomeInTx("data_retention_policies")).rejects.toThrow(
+          /company_id is immutable/i,
+        );
       });
     });
 
@@ -400,14 +395,7 @@ describe.skipIf(!hasDb)(
       });
 
       it("withTenant(A): UPDATE global row company_id NULL→A is rejected (re-home blocked, mig 0436)", async () => {
-        await expect(
-          asTenant(app, A.companyId, async (c) => {
-            await c.query(
-              `UPDATE seed_batches SET company_id = $1 WHERE id = $2`,
-              [A.companyId, gSeedBatchId],
-            );
-          }),
-        ).rejects.toThrow(/company_id is immutable/i);
+        await expect(rehomeInTx("seed_batches")).rejects.toThrow(/company_id is immutable/i);
       });
     });
 
@@ -436,14 +424,7 @@ describe.skipIf(!hasDb)(
       });
 
       it("withTenant(A): UPDATE global row company_id NULL→A is rejected (re-home blocked, mig 0436)", async () => {
-        await expect(
-          asTenant(app, A.companyId, async (c) => {
-            await c.query(
-              `UPDATE seed_items SET company_id = $1 WHERE id = $2`,
-              [A.companyId, gSeedItemId],
-            );
-          }),
-        ).rejects.toThrow(/company_id is immutable/i);
+        await expect(rehomeInTx("seed_items")).rejects.toThrow(/company_id is immutable/i);
       });
     });
 
@@ -451,14 +432,7 @@ describe.skipIf(!hasDb)(
     // System role (company_id IS NULL) must not be re-homed into a tenant by the app role.
     describe("roles (nullable company_id — system-role re-home deny)", () => {
       it("withTenant(A): UPDATE system role company_id NULL→A is rejected (re-home blocked, mig 0436)", async () => {
-        await expect(
-          asTenant(app, A.companyId, async (c) => {
-            await c.query(
-              `UPDATE roles SET company_id = $1 WHERE id = $2`,
-              [A.companyId, gSystemRoleId],
-            );
-          }),
-        ).rejects.toThrow(/company_id is immutable/i);
+        await expect(rehomeInTx("roles")).rejects.toThrow(/company_id is immutable/i);
       });
     });
   },

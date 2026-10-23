@@ -94,6 +94,25 @@ export class FileRepository {
   }
 
   /**
+   * Như `findByIdTx` nhưng khoá hàng (`SELECT … FOR UPDATE`) tới hết tx (S19-SEC-FILELINKGATE-1): tx ghi của
+   * `FileService.link()` gọi ĐẦU tiên, trước khi đọc lại ảnh chụp liên kết, để các lời gắn đồng thời trên cùng
+   * một tệp chạy tuần tự — lời sau đọc ảnh chụp SAU khi lời trước commit.
+   */
+  async findByIdForUpdateTx(
+    companyId: string,
+    fileId: string,
+    tx: TenantTx,
+  ): Promise<FileRecord | undefined> {
+    const [row] = await tx
+      .select()
+      .from(files)
+      .where(and(eq(files.companyId, companyId), eq(files.id, fileId), isNull(files.deletedAt)))
+      .limit(1)
+      .for("update");
+    return row;
+  }
+
+  /**
    * S5-ME-BE-5 (RECONCILE S5-HR-AVATAR-1) — batch tra AVATAR ĐÃ XÁC MINH theo fileIds (cho
    * AvatarPresignService ký thumbnail directory-class). SELF-DEFENDING (crown — KHÔNG tin cột `avatar_url`
    * đa-người-ghi): CHỈ trả file mà

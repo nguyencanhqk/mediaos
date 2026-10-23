@@ -184,6 +184,21 @@ export const fileMetadataSchema = z.object({
 export type FileMetadataDto = z.infer<typeof fileMetadataSchema>;
 
 /**
+ * FileListItemDto — một hàng của `GET /foundation/files` (S19-SEC-FILEMETAGATE-1).
+ *
+ * Bất biến: `originalName` · `fileExtension` · `sizeBytes` · `ownerUserId` của một hàng khác `null` ⇔
+ * quyết định XEM của chính người gọi cho đúng tệp đó là ALLOW — cùng vị từ với `GET /foundation/files/:id`
+ * (hàng có tên ⇔ `GET /:id` cùng người gọi = 200). Hàng không xem được VẪN có mặt (phân trang + `total`
+ * giữ nghĩa) nhưng bốn trường trên là `null`; client không được điều hướng hàng đó sang trang chi tiết.
+ * `fileMetadataSchema` (theo id) KHÔNG đổi — các trường đó vẫn non-null ở đường theo id.
+ */
+export const fileListItemSchema = fileMetadataSchema.extend({
+  originalName: z.string().nullable(),
+  sizeBytes: z.number().int().nonnegative().nullable(),
+});
+export type FileListItemDto = z.infer<typeof fileListItemSchema>;
+
+/**
  * DownloadUrlDto — signed / proxy URL có TTL ngắn.
  *
  * TUYỆT ĐỐI KHÔNG có: storagePath / storage_path / storageBucket / signedUrl dài hạn.

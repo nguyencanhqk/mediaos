@@ -18,6 +18,7 @@
 
 import { randomUUID } from "node:crypto";
 import "reflect-metadata";
+import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
@@ -286,6 +287,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
     });
     expect(crossed.status, "hai FK RỜI không ràng option thuộc poll — service phải chặn").toBe(404);
     expect(JSON.stringify(crossed.body)).toContain(SOCIAL_ERR.POLL_OPTION_NOT_FOUND);
+    expect(crossed.body.error?.code).toBe(SOCIAL_ERROR_CODES.POLL_OPTION_NOT_FOUND);
 
     expect(await counters(foreign.postId), "bình chọn KHÁC không được đụng tới").toEqual(before);
     expect(await counters(mine.postId)).toEqual([0, 0]);
@@ -302,6 +304,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
     });
     expect(late.status).toBe(409);
     expect(JSON.stringify(late.body)).toContain(SOCIAL_ERR.POLL_CLOSED);
+    expect(late.body.error?.code).toBe(SOCIAL_ERROR_CODES.POLL_CLOSED);
     expect(await counters(postId)).toEqual([0, 0]);
   });
 
@@ -351,6 +354,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
     });
     expect(dup.status).toBe(409);
     expect(JSON.stringify(dup.body)).toContain(SOCIAL_ERR.POLL_VOTE_DUPLICATE);
+    expect(dup.body.error?.code).toBe(SOCIAL_ERROR_CODES.POLL_VOTE_DUPLICATE);
     expect(await counters(single.postId)).toEqual([0, 0]);
   });
 
@@ -464,6 +468,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
     const one = await createPoll(author.token, { options: ["A"] });
     expect(one.status).toBe(422);
     expect(JSON.stringify(one.body)).toContain(SOCIAL_ERR.POLL_OPTIONS_RANGE);
+    expect((one.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.POLL_OPTIONS_RANGE,
+    );
 
     const eleven = await createPoll(author.token, {
       options: Array.from({ length: 11 }, (_, i) => `O${i}`),
@@ -494,6 +501,9 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-BE-2B-1 · bình chọn (DB cô lập)",
     });
     expect(past.status, "chk_feed_polls_closes_future sẽ trả 500 nếu service không chặn").toBe(422);
     expect(JSON.stringify(past.body)).toContain(SOCIAL_ERR.POLL_CLOSES_AT_PAST);
+    expect((past.body as { error?: { code?: string } }).error?.code).toBe(
+      SOCIAL_ERROR_CODES.POLL_CLOSES_AT_PAST,
+    );
   });
 
   it("P-13/P-14 — bài KHÔNG mang bình chọn ⇒ 404; rút phiếu khi chưa bỏ ⇒ 200 no-op", async () => {
