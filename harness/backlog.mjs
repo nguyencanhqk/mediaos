@@ -17731,6 +17731,126 @@ export const backlog = [
     ],
     notes: [
       "Seed 02/10/2026 từ FULL gate S16-SOCIAL-BE-2C lượt 1. BE-2C CỐ Ý không đổi CHAT (`syncRoomMembership` giữ nguyên chữ ký + hành vi, lưới `realtime-emitter.chat.spec.ts`): vá ở `syncFeedGroupMembership` chỉ phủ room nhóm. 🔴 FULL gate (cổng đọc realtime CHAT).",
+      "23/10/2026 — nợ từ plan `docs/plans/S17-CHAT-RTROOMOPS-1.md` §9 (sau merge #601 `32db6308`): N1 → `S17-CHAT-UUIDCANON-1` · N3 → `S17-CHAT-ADAPTERPUBLISH-1` · N7 → `S12-AUTH-SEVERLOCAL-1` · N9 → `S17-CHAT-EMITTERSPLIT-1`. Chưa gieo WO riêng: (N2) đa-instance — node khác chỉ nhận room-op qua pub/sub, đóng hẳn cần xác nhận phía adapter (ghi API-13 §7); (N4) khối adapter giả lặp ở 2 io spec — gom helper khi có ca thứ ba; (N5) `toLowerCase` thừa ở `syncFeedGroupMembership` sau D-1 — dọn trong một WO SOCIAL; (N6) cửa sổ rejoin `call:join` đọc trước commit — có sẵn, ngoài phạm vi; (N8) so sánh/khoá dựng từ chuỗi uuid ở `chat-rooms.service.ts` · `chat-members.service.ts` — chuẩn hoá chữ thường ở biên DTO chat (Zod `uuid().transform`), cùng gốc N1, đo dạng dữ liệu hiện có trước khi vá; plan `S17-CHAT-UUIDCANON-1` quyết gộp hay tách.",
+    ],
+  },
+  {
+    id: "S17-CHAT-UUIDCANON-1",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Chuẩn hoá uuid (chữ thường) ở biên REST bằng một pipe dùng chung — payload sự kiện, audit và khoá phụ của CHAT/CALL dùng dạng chuẩn tắc thay vì id nguyên văn của route",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "apps/api/src/common/**",
+      "apps/api/src/chat/**",
+      "apps/api/src/realtime/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S17-CHAT-RTROOMOPS-1"],
+    src: [
+      "Nợ N1 của `docs/plans/S17-CHAT-RTROOMOPS-1.md` §9 (D-5; khoá tiết lưu typing đã đóng ở G-1) · cùng gốc N8 (note của WO mẹ)",
+      "`apps/api/src/realtime/call-signalling.gateway.ts` `call:leave`: `joinedCallIds` + payload `call:peer-left` thống nhất dùng `access.callId` (S13 của plan WO mẹ)",
+    ],
+    done_when: [
+      "ĐO TRƯỚC: liệt kê vào plan các chỗ payload sự kiện / audit / khoá phụ của CHAT + CALL còn dùng id nguyên văn của route (file:dòng)",
+      "Một pipe dùng chung ở biên REST trả uuid dạng chuẩn tắc (chữ thường) cho controller CHAT/CALL — KHÔNG rải `.toLowerCase()` ở từng caller",
+      "`call:leave`: `joinedCallIds` và payload `call:peer-left` cùng dùng `access.callId`",
+      "Ca test RED trước: id route chữ HOA ⇒ payload sự kiện + hàng audit mang dạng chuẩn tắc; ca đối chứng chữ thường giữ nguyên",
+    ],
+    notes: [
+      "🟠 Seed 23/10/2026 từ plan S17-CHAT-RTROOMOPS-1 §9 N1 (đề xuất amber). Chạm payload audit ⇒ `red-zone-scanner` xét nâng FULL gate. Gộp N8 (chuẩn hoá ở biên DTO chat) hay tách là quyết định của plan WO này.",
+    ],
+  },
+  {
+    id: "S17-CHAT-ADAPTERPUBLISH-1",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Bọc adapter realtime (Valkey) để lỗi publish của room-op/emit được bắt và ghi log — không thành `unhandledRejection`",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/realtime/**",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S17-CHAT-RTROOMOPS-1"],
+    src: [
+      "Nợ N3 của `docs/plans/S17-CHAT-RTROOMOPS-1.md` §9 (D-6): `socketsLeave` (socket.io 4) và `delSockets` không-`local` (`@socket.io/redis-adapter` 8.3.0) trả `undefined` — promise của `publish` nằm trong adapter, caller không gắn `.catch` được",
+      "`apps/api/src/realtime/valkey-io.adapter.ts` · `ws-adapter-config.ts`",
+    ],
+    done_when: [
+      "Reject của `pubClient.publish` được bắt ở tầng adapter và ghi log (ngữ cảnh room-op/emit, không PII); tiến trình không phát `unhandledRejection`",
+      "Ca test RED trước: publish reject ⇒ hôm nay có `unhandledRejection`; sau vá ⇒ có log, không rejection",
+      "Publish thành công không đổi hành vi (spec room-op/emit hiện có xanh, không sửa ca)",
+      "API-13 §7 cập nhật phần dư `unhandledRejection` khi đã đóng",
+    ],
+    notes: [
+      "🟡 Seed 23/10/2026 từ plan S17-CHAT-RTROOMOPS-1 §9 N3. Áp cho mọi emit/room-op qua adapter, không riêng CHAT.",
+    ],
+  },
+  {
+    id: "S12-AUTH-SEVERLOCAL-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Thu hồi phiên (`severUserSessions`): ngắt socket CỤC BỘ trước lệnh toàn cụm — cùng khuôn `leaveLocally` của S17-CHAT-RTROOMOPS-1 — ở cả namespace chính lẫn `/ws-call`",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/realtime/**",
+      "apps/api/src/auth/auth-session-sever.spec.ts",
+      "apps/api/test/**",
+      "docs/API Design/**",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["security-review"],
+    depends_on: ["S17-CHAT-RTROOMOPS-1"],
+    src: [
+      "Nợ N7 của `docs/plans/S17-CHAT-RTROOMOPS-1.md` §9 (S12 + API-13 §7a) — FULL gate lượt 1 của WO mẹ xếp MEDIUM, đề xuất ưu tiên ngay sau WO mẹ",
+      "`apps/api/src/realtime/realtime-emitter.service.ts` `severUserSessions` (gọi từ `auth.service.ts`): `disconnectSockets` không-`local` cùng mẫu với `delSockets` mà WO mẹ đã thêm vế cục bộ",
+    ],
+    done_when: [
+      "OWNER XÁC NHẬN TRƯỚC: nới D-2 của plan S17-CHAT-RTROOMOPS-1 (vế cục bộ cho thu hồi phiên) hay giữ WO riêng này — ghi quyết định vào plan",
+      "Mỗi namespace (chính + `/ws-call`) một khối try: `server.local.in(<room user>).disconnectSockets(true)` ĐỨNG TRƯỚC lệnh toàn cụm (khuôn `leaveLocally`); lỗi vế cục bộ không bỏ qua lệnh toàn cụm",
+      "Ca RED trước trên adapter nuốt lệnh không-`local` (khuôn `realtime-emitter.roomops.io.spec.ts`) — đỏ trước vá, xanh sau vá; ca đối chứng adapter bình thường giữ xanh",
+      "API-13 §7a cập nhật phần dư (node khác vẫn chỉ qua pub/sub)",
+    ],
+    notes: [
+      "🔴 FULL gate + Opus (thu hồi phiên = auth). Seed 23/10/2026 từ plan S17-CHAT-RTROOMOPS-1 §9 N7. Thêm room-op cục bộ vào `realtime-emitter.service.ts` (731/800 dòng) ⇒ làm sau hoặc cùng `S17-CHAT-EMITTERSPLIT-1` để không vượt trần.",
+    ],
+  },
+  {
+    id: "S17-CHAT-EMITTERSPLIT-1",
+    module: "CHAT",
+    layer: "BE",
+    title:
+      "Tách các room-op (`syncRoomMembership` · `syncFeedGroupMembership` · `evictFromCallRoom` · `leaveLocally` · `syncSocketRoom`) khỏi `realtime-emitter.service.ts` (731/800 dòng) sang tệp/service riêng — không đổi hành vi",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/api/src/realtime/**", "apps/api/test/**", "docs/plans/**", "harness/backlog.mjs"],
+    skills: ["code-review"],
+    depends_on: ["S17-CHAT-RTROOMOPS-1"],
+    src: [
+      "Nợ N9 của `docs/plans/S17-CHAT-RTROOMOPS-1.md` §9 — `realtime-emitter.service.ts` 731/800 dòng (đo trên `32db6308`)",
+    ],
+    done_when: [
+      "Room-op nằm ở tệp/service riêng trong `apps/api/src/realtime/`; `realtime-emitter.service.ts` có dư địa rõ dưới trần 800",
+      "Không đổi hành vi: spec realtime hiện có (`realtime-emitter.{chat,feed,call}.spec.ts` · `realtime-emitter.{feed,roomops}.io.spec.ts` · `chat-realtime-after-commit.spec.ts`) xanh, không sửa ca (chỉ đổi import nếu cần)",
+      "Caller ngoài `apps/api/src/realtime/` không đổi chữ ký — cần đổi thì ghi vào plan + mở `paths`",
+    ],
+    notes: [
+      "🟢 Seed 23/10/2026 từ plan S17-CHAT-RTROOMOPS-1 §9 N9. Làm TRƯỚC khi thêm room-op mới (gồm vế cục bộ của `S12-AUTH-SEVERLOCAL-1`).",
     ],
   },
   {
