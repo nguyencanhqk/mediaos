@@ -13,7 +13,14 @@
 | **AUTH** — đăng nhập, 2FA, đổi/quên mật khẩu, quản trị user, role/permission | ✅ Hoàn thành (v2) | **Có** — API + UI login |
 | **HR** — hồ sơ nhân viên (CRUD), masking lương/PII, đổi trạng thái, link user, phòng ban, master-data, yêu cầu đổi hồ sơ, thùng rác | ✅ Hoàn thành (v2) | **Có** — API + UI (apps/app) |
 | **Foundation** — audit log, cấu hình công ty/settings, file, ngày nghỉ lễ, catalog module | ✅ Hoàn thành (v2) | **Có** — API |
-| ATT · LEAVE · TASK · DASH · NOTI · workflow · api-keys · webhooks … | ⚠️ **PARK (hướng cũ, out-of-scope)** | **Không** (xem §5) |
+| **ATT · LEAVE · TASK · DASH · NOTI** — chấm công, nghỉ phép, công việc & dự án, dashboard, thông báo | ✅ Hoàn thành (S3–S4, đang chạy PROD) | **Có** — API + UI (apps/app); ca kiểm theo module ở [QA-02](QA/QA-02_Test_Case_Matrix_theo_module.md) |
+| api-keys · org legacy · user-invites … | ⚠️ **PARK (hướng cũ, out-of-scope)** | **Không** (xem §5) |
+
+**Đính chính 23/10/2026 (đo trên mã):** ATT · LEAVE · TASK · DASH · NOTI **không còn PARK** — controller
+ở `apps/api/src/{attendance,leave,tasks,dashboard,notifications}/` (nạp trong `app.module.ts`), màn thật ở
+`apps/app/src/routes/` cùng tên, các WO S3/S4 đã đóng (`docs/STATUS.md`), và cả năm đều chạy trên PROD
+([RELEASE-10](RELEASE/RELEASE-10_Final_Signoff_Go_NoGo_Decision.md): «7 module lõi … đều chạy»). §1–§4
+dưới đây vẫn là ảnh chụp mốc Sprint 2 (chỉ AUTH/HR/Foundation); các module vào sau có mục riêng từ §5b.
 
 > ⚠️ **Đọc kỹ §5 trước khi test.** Cây code vẫn còn nhiều controller/màn hình của hướng cũ (media/operator-plane). Chúng *có thể phản hồi* nhưng **không nằm trong phạm vi v2, chưa verify, chưa seed quyền đầy đủ** → **đừng test, đừng báo lỗi** cho nhóm này.
 
@@ -199,9 +206,17 @@ App console là một trong 3 app v2 nhưng **phần lớn trang hiện tại l�
 
 Các thành phần sau **tồn tại trong cây code** nhưng thuộc **hướng cũ đã de-media-fy / chưa tới lượt build** (CLAUDE.md §1). Chúng có thể phản hồi HTTP nhưng **không thuộc sản phẩm v2 hiện tại, chưa verify, chưa chắc seed đủ quyền**:
 
-**Backend (controller còn wired nhưng PARK):** Attendance (`/attendance/*`) · Leave (`/leave/*`) · Tasks (`/tasks/*`, labels, states, attachments) · Workflow & Templates & Approval inbox (`/workflow/*`, `/workflow-templates/*`, `/approval/*`) · Dashboard (`/dashboard/*`) · Notifications (`/notifications/*`) · API keys (`/api-keys/*`) · Webhooks · Admin-users (`/users/admin/*`) · User-invites (`/users/*invite*`) · Settings mail/security-policy · Org legacy (`/org/*`).
+**Backend (controller còn wired nhưng PARK):** API keys (`/api-keys/*`) · Admin-users (`/users/admin/*`) · User-invites (`/users/*invite*`) · Settings mail/security-policy · Org legacy (`/org/*`).
 
-**Frontend placeholder (render "Màn hình đang xây dựng…"):** Dashboard · Attendance · Leave · Tasks · Notifications · `/system/audit-logs` (apps/app) · home-portal launcher.
+> _Đính chính 23/10/2026:_ Attendance · Leave · Tasks · Dashboard · Notifications đã ra khỏi danh sách này
+> (đã build + chạy PROD — xem §0). Workflow & Templates & Approval inbox (`/workflow/*`,
+> `/workflow-templates/*`, `/approval/*`) đã bị **gỡ khỏi mã** ở `S10-CLEAN-WORKFLOWPARK-1` /
+> `S10-CLEAN-WORKFLOWCLUSTER-2` (28/08/2026); Webhooks đã gỡ từ 24/06/2026.
+
+**Frontend placeholder:** không còn. Các màn từng render "Màn hình đang xây dựng…" ở mốc 26/06 (Dashboard ·
+Attendance · Leave · Tasks · Notifications · `/system/audit-logs` · home-portal launcher) nay đều là màn thật
+(`apps/app/src/routes/{dashboard,attendance,leave,tasks,notifications}/` ·
+`routes/system/foundation/audit-logs/` · `layouts/home/HomePortalLayout.tsx`).
 
 > Khi gặp các route này: ghi nhận "out-of-scope / parked", **không** mở bug. Nếu cần đưa vào phạm vi, tạo Work Order trong `harness/backlog.mjs`.
 
