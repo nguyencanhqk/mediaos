@@ -15,6 +15,9 @@ const redirectToAuth = vi.fn();
 const configureApiBaseUrl = vi.fn();
 const configureAuthAppUrl = vi.fn();
 const configureClientVersion = vi.fn();
+const configureToast = vi.fn();
+// S20-FE-TOAST-1 — đích hiển thị của showApiErrorToast; main.tsx gắn nó vào web-core lúc khởi động.
+const uiToast = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
 const shouldRetryQuery = vi.fn(() => false);
 const renderSpy = vi.fn();
 const createRootSpy = vi.fn(() => ({ render: renderSpy, unmount: vi.fn() }));
@@ -27,12 +30,15 @@ vi.mock("@mediaos/web-core", () => ({
   // S1-FE-QUERY-WIRE-1: main.tsx truyền version + lắp retry policy vào QueryClient.
   configureClientVersion,
   shouldRetryQuery,
+  configureToast,
   // i18n re-export dùng bởi @/i18n (NAMED `i18n`) — chỉ cần object react-i18next-compatible.
   i18n: { t: (k: string) => k, on: vi.fn(), off: vi.fn(), changeLanguage: vi.fn() },
   registerI18nResources: vi.fn(),
   getAuthRedirectUrl: vi.fn(() => "https://auth.localhost/login"),
   useAuthStore: Object.assign(vi.fn(), { getState: () => ({ isAuthenticated: false }) }),
 }));
+
+vi.mock("@mediaos/ui", () => ({ toast: uiToast }));
 
 vi.mock("react-dom/client", () => ({
   createRoot: createRootSpy,
@@ -76,5 +82,15 @@ describe("apps/app boot() — deny/redirect khi chưa có phiên", () => {
 
     expect(configureApiBaseUrl).toHaveBeenCalledTimes(1);
     expect(configureAuthAppUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("gắn toast của @mediaos/ui vào web-core lúc khởi động (S20-FE-TOAST-1) — trước cả khi có phiên", async () => {
+    bootstrapSession.mockResolvedValue(false);
+
+    await import("@/main");
+    await flushMicrotasks();
+
+    expect(configureToast).toHaveBeenCalledTimes(1);
+    expect(configureToast).toHaveBeenCalledWith(uiToast);
   });
 });

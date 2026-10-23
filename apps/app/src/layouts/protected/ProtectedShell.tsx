@@ -17,7 +17,7 @@
 import * as React from "react";
 import { useEffect } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { Skeleton } from "@mediaos/ui";
+import { Skeleton, Toaster } from "@mediaos/ui";
 import { ShieldX } from "lucide-react";
 import { useAuthStore, getAuthRedirectUrl, useFavicon } from "@mediaos/web-core";
 import { GlobalTopbar } from "../topbar/GlobalTopbar";
@@ -152,6 +152,10 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
             unmount ⇒ hội thoại đang mở đóng lại và tin đang gõ dở mất. Tự gate `access:chat` + tự ẩn
             trên /chat* bên trong (xem docblock). */}
         <ChatDrawer />
+        {/* S20-FE-TOAST-1 — vùng thông báo nổi DÙNG CHUNG, mount đúng một lần: đích của
+            showApiErrorToast (main.tsx gắn configureToast) và của toast.success/error/warning ở mọi
+            màn. Ở shell để thông báo sống qua lần đổi route ngay sau thao tác ghi. */}
+        <Toaster />
       </div>
     </CallProvider>
   );
