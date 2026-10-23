@@ -13,7 +13,7 @@ import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
-import { ApiError, useAuthStore } from "@mediaos/web-core";
+import { ApiError, useAuthStore, type DataScope } from "@mediaos/web-core";
 import type {
   FeedBirthdayDto,
   FeedCommentDto,
@@ -26,16 +26,24 @@ import type {
 import i18n from "@/i18n";
 
 /** Đặt capabilities trên store THẬT — `useCan` đọc store qua `../stores/auth`, không qua barrel. */
-export function setCaps(caps: Record<string, boolean>): void {
+/**
+ * `scopes` = phạm vi theo cặp như `/auth/me.scopes` (khoá Y HỆT `capabilities`). Mặc định RỖNG và LUÔN ghi đè ⇒
+ * không ca nào thừa hưởng phạm vi của ca trước.
+ */
+export function setCaps(
+  caps: Record<string, boolean>,
+  scopes: Record<string, readonly DataScope[]> = {},
+): void {
   useAuthStore.setState({
     isAuthenticated: true,
     capabilities: caps,
+    scopes,
     user: { id: "u1", email: "t@demo.local", fullName: "T", status: "Active", companyId: "co1" },
   });
 }
 
 export function resetCaps(): void {
-  useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+  useAuthStore.setState({ isAuthenticated: false, capabilities: {}, scopes: {}, user: null });
 }
 
 /**

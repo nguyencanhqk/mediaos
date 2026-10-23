@@ -69,7 +69,7 @@ export function TwoFactorSetupPage() {
       // Đồng bộ store qua ĐÚNG entrypoint /auth/me (session.ts dùng cùng cặp gọi) — mustSetupTwoFactor
       // sẽ về false sau khi server xác nhận đã enroll, ProtectedShell hết ép điều hướng.
       const me = await authApi.me();
-      useAuthStore.getState().setUser(me, me.capabilities);
+      useAuthStore.getState().setUser(me, me.capabilities, me.scopes ?? {});
       useAuthStore.getState().setMustSetupTwoFactor(me.mustSetupTwoFactor);
       void navigate({ to: "/home" });
     } catch (e) {

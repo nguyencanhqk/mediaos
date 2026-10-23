@@ -1,11 +1,12 @@
 /**
- * S16-SOCIAL-FE-3C (L7) — `HrOverviewRailSlot`: cổng ngoài của widget DASH «Tổng quan nhân sự» ở cuối rail phải
- * của bảng tin (plan §4 hàng HR1 · D15 · D16 · bẫy B16 · B17 · owner ký O1 = B: chỉ HR + company-admin).
+ * S16-SOCIAL-FE-3C (L7) · S4-DASH-HROVERVIEW-FE-1 — `HrOverviewRailSlot`: cổng ngoài của widget DASH «Tổng quan nhân
+ * sự» ở cuối rail phải của bảng tin (plan §4 hàng HR1 · D15 · D16 · bẫy B16 · B17 · SPEC-07 §14.8: người giữ
+ * `read:employee` @Department trở lên thấy ô; quản lý @Team và nhân viên @Own KHÔNG).
  *
  * Thứ file này giữ:
- *  · BỐN vế của cổng — mỗi vế một ca DENY riêng mang fixture «gần đúng»: đủ BA cặp còn lại, thiếu đúng cặp đang
- *    đo. Caps rỗng xanh với mọi cổng nên không dùng làm DENY (B17).
- *  · Khớp ĐÚNG-BẰNG: wildcard không thay được cặp đích danh nào trong bốn cặp.
+ *  · BỐN vế của cổng (ba cặp đúng-bằng + phạm vi `read:employee` ≥ sàn) — mỗi vế một ca DENY riêng mang fixture
+ *    «gần đúng»: đủ các vế còn lại, thiếu đúng vế đang đo. Caps rỗng xanh với mọi cổng nên không dùng làm DENY (B17).
+ *  · Khớp ĐÚNG-BẰNG: wildcard không thay được cặp đích danh nào, kể cả phạm vi ghi trên khoá wildcard.
  *  · DENY = không vẽ GÌ (không thẻ rỗng — B16) VÀ không có lời gọi DASH nào. Ba cạnh đó (tiêu đề · số node · số
  *    lời gọi) gom vào MỘT phép so `observe()` ⇒ ca đỏ in đủ cả ba; phép đếm làm sau CÙNG nhịp `settle()` mà ca
  *    ALLOW dùng để thấy đúng 1 lời gọi.
@@ -17,7 +18,7 @@
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardWidgetDataDto } from "@mediaos/contracts";
-import { ApiError } from "@mediaos/web-core";
+import { ApiError, type DataScope } from "@mediaos/web-core";
 import {
   makeTestQueryClient,
   renderWithProviders,
@@ -89,20 +90,18 @@ const HR_OVERVIEW: DashboardWidgetDataDto = {
   ],
 };
 
-/** ĐỦ bốn cặp của cổng — trong bốn vai chuẩn chỉ HR và company-admin giữ cả bốn. */
-const FOUR_PAIRS: Record<string, boolean> = {
+/** Ba cặp đúng-bằng của cổng — MỌI vai chuẩn đều giữ; vế phân biệt là phạm vi của `read:employee`. */
+const THREE_PAIRS: Record<string, boolean> = {
   "view:feed": true,
   "read:dashboard": true,
   "read:employee": true,
-  "update:employee": true,
 };
 
-/** Bộ quyền của nhân viên / quản lý: đọc được bảng tin, dashboard và hồ sơ, KHÔNG sửa được hồ sơ. */
-const WITHOUT_HR_WRITE: Record<string, boolean> = {
-  "view:feed": true,
-  "read:dashboard": true,
-  "read:employee": true,
-};
+/** Phạm vi `read:employee` theo vai chuẩn (như `/auth/me.scopes`) — sàn của widget là Department. */
+const HR_COMPANY = { "read:employee": ["Company"] } as const;
+const DEPT_HEAD = { "read:employee": ["Department"] } as const;
+const MANAGER_TEAM = { "read:employee": ["Team"] } as const;
+const STAFF_OWN = { "read:employee": ["Own"] } as const;
 
 const BEAT_MS = 20;
 
@@ -141,9 +140,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("HR1 — cổng của ô: ĐỦ bốn cặp, khớp ĐÚNG-BẰNG", () => {
-  it("ALLOW: đủ bốn cặp ⇒ ô «Tổng quan nhân sự» + đúng 1 lời gọi dữ liệu `HR_OVERVIEW`, không lời gọi DASH nào khác", async () => {
-    setCaps(FOUR_PAIRS);
+describe("HR1 — cổng của ô: ba cặp + phạm vi `read:employee` ≥ sàn, khớp ĐÚNG-BẰNG", () => {
+  it("ALLOW: ba cặp + `read:employee` @Company (HR / company-admin) ⇒ ô «Tổng quan nhân sự» + đúng 1 lời gọi dữ liệu `HR_OVERVIEW`, không lời gọi DASH nào khác", async () => {
+    setCaps(THREE_PAIRS, HR_COMPANY);
     const { container } = renderSlot();
     await settle();
     expect(observe(container)).toEqual(MOUNTED_ONCE);
@@ -152,120 +151,137 @@ describe("HR1 — cổng của ô: ĐỦ bốn cặp, khớp ĐÚNG-BẰNG", () 
     expect(await screen.findByText(String(HEADCOUNT))).toBeInTheDocument();
   });
 
-  it.each<[string, Record<string, boolean>]>([
-    ["DENY-1 · thiếu `update:employee` (bộ quyền của nhân viên / quản lý)", WITHOUT_HR_WRITE],
-    ["DENY-2 · chỉ có `*:*`", { "*:*": true }],
+  it("ALLOW: ba cặp + `read:employee` @Department (người giữ phạm vi phòng), KHÔNG có `update:employee` ⇒ ô hiện, đúng 1 lời gọi", async () => {
+    setCaps(THREE_PAIRS, DEPT_HEAD);
+    const { container } = renderSlot();
+    await settle();
+    expect(observe(container)).toEqual(MOUNTED_ONCE);
+  });
+
+  it.each<[string, Record<string, boolean>, Record<string, readonly DataScope[]>]>([
+    ["DENY-1 · quản lý: `read:employee` @Team (dưới sàn)", THREE_PAIRS, MANAGER_TEAM],
+    ["DENY-1b · nhân viên: `read:employee` @Own (dưới sàn)", THREE_PAIRS, STAFF_OWN],
+    [
+      "DENY-1c · @Team dù CÓ `update:employee` — vế cũ không còn mở cổng",
+      { ...THREE_PAIRS, "update:employee": true },
+      MANAGER_TEAM,
+    ],
+    [
+      "DENY-1d · `read:employee` chỉ @Project (phạm vi ngang, không xếp hạng)",
+      THREE_PAIRS,
+      { "read:employee": ["Project"] },
+    ],
+    ["DENY-1e · `/auth/me` không gửi phạm vi nào", THREE_PAIRS, {}],
+    [
+      "DENY-2 · chỉ có `*:*` (phạm vi @Company trên chính khoá đó)",
+      { "*:*": true },
+      { "*:*": ["Company"] },
+    ],
     [
       "DENY-2b · mọi dạng wildcard, không cặp đích danh nào",
       {
         "*:*": true,
         "view:*": true,
         "read:*": true,
-        "update:*": true,
         "*:feed": true,
         "*:dashboard": true,
         "*:employee": true,
       },
+      { "*:*": ["Company"], "read:*": ["Company"], "*:employee": ["Company"] },
     ],
+    ["DENY-3 · thiếu `read:dashboard`", { "view:feed": true, "read:employee": true }, HR_COMPANY],
     [
-      "DENY-3 · thiếu `read:dashboard`",
-      { "view:feed": true, "read:employee": true, "update:employee": true },
+      "DENY-4 · thiếu cặp `read:employee`",
+      { "view:feed": true, "read:dashboard": true },
+      HR_COMPANY,
     ],
-    [
-      "DENY-4 · thiếu `read:employee`",
-      { "view:feed": true, "read:dashboard": true, "update:employee": true },
-    ],
-    [
-      "DENY-5 · thiếu `view:feed`",
-      { "read:dashboard": true, "read:employee": true, "update:employee": true },
-    ],
-  ])("%s ⇒ không vẽ gì, không lời gọi DASH nào", async (_label, caps) => {
-    setCaps(caps);
+    ["DENY-5 · thiếu `view:feed`", { "read:dashboard": true, "read:employee": true }, HR_COMPANY],
+  ])("%s ⇒ không vẽ gì, không lời gọi DASH nào", async (_label, caps, scopes) => {
+    setCaps(caps, scopes);
     const { container } = renderSlot();
     await settle();
     expect(observe(container)).toEqual(NOTHING);
   });
 
   /**
-   * Wildcard «gần đúng»: ba cặp còn lại ĐỦ, cặp đang đo chỉ có ở dạng wildcard. Trong file NÀY đây là hàng duy
+   * Wildcard «gần đúng»: các vế còn lại ĐỦ, vế đang đo chỉ có ở dạng wildcard. Trong file NÀY đây là hàng duy
    * nhất phân biệt được vế `read:employee` của slot với cổng trong của `HrOverviewWidget` (cổng đó nhận wildcard):
    * ở ca DENY-4 phía trên, bỏ vế ngoài thì cổng trong vẫn chặn. Vế đó còn hai ghim nữa ở ngoài file:
    * ca DENY trần của `HrOverviewRailSlot.gate.spec.tsx` (widget giả, không có cổng trong) và hàng DENY-4w của
    * `../SocialPortalShell.hr-widget.spec.tsx` (vỏ thật).
    */
-  it.each<[string, Record<string, boolean>]>([
+  it.each<[string, Record<string, boolean>, Record<string, readonly DataScope[]>]>([
     [
       "view:feed",
       {
         "read:dashboard": true,
         "read:employee": true,
-        "update:employee": true,
         "*:*": true,
         "view:*": true,
         "*:feed": true,
       },
+      HR_COMPANY,
     ],
     [
       "read:dashboard",
       {
         "view:feed": true,
         "read:employee": true,
-        "update:employee": true,
         "*:*": true,
         "read:*": true,
         "*:dashboard": true,
       },
+      HR_COMPANY,
     ],
     [
       "read:employee",
       {
         "view:feed": true,
         "read:dashboard": true,
-        "update:employee": true,
         "*:*": true,
         "read:*": true,
         "*:employee": true,
       },
+      HR_COMPANY,
     ],
     [
-      "update:employee",
+      "phạm vi ≥ sàn (cặp đích danh chỉ @Own, @Company nằm trên khoá wildcard)",
+      { ...THREE_PAIRS, "*:*": true, "read:*": true, "*:employee": true },
       {
-        "view:feed": true,
-        "read:dashboard": true,
-        "read:employee": true,
-        "*:*": true,
-        "update:*": true,
-        "*:employee": true,
+        "read:employee": ["Own"],
+        "*:*": ["Company"],
+        "read:*": ["Company"],
+        "*:employee": ["Company"],
       },
     ],
   ])(
-    "DENY-W · đủ ba cặp còn lại, `%s` chỉ có ở dạng wildcard ⇒ không vẽ gì, không lời gọi DASH nào",
-    async (_missingPair, caps) => {
-      setCaps(caps);
+    "DENY-W · đủ các vế còn lại, `%s` chỉ có ở dạng wildcard ⇒ không vẽ gì, không lời gọi DASH nào",
+    async (_missingPair, caps, scopes) => {
+      setCaps(caps, scopes);
       const { container } = renderSlot();
       await settle();
       expect(observe(container)).toEqual(NOTHING);
     },
   );
 
-  it("ALLOW (cùng khung): đủ bốn cặp đích danh, có thêm `*:*` ⇒ ô vẫn hiện, đúng 1 lời gọi", async () => {
-    setCaps({ ...FOUR_PAIRS, "*:*": true });
+  it("ALLOW (cùng khung): ba cặp đích danh @Company, có thêm `*:*` ⇒ ô vẫn hiện, đúng 1 lời gọi", async () => {
+    setCaps({ ...THREE_PAIRS, "*:*": true }, { ...HR_COMPANY, "*:*": ["Company"] });
     const { container } = renderSlot();
     await settle();
     expect(observe(container)).toEqual(MOUNTED_ONCE);
   });
 
-  it("quyền nạp SAU khi mount ⇒ ô tự hiện; thu `update:employee` ⇒ ô tự biến mất (không cần mount lại)", async () => {
-    setCaps(WITHOUT_HR_WRITE);
+  it("phạm vi nâng lên sàn SAU khi mount ⇒ ô tự hiện; hạ xuống dưới sàn ⇒ ô tự biến mất (không cần mount lại)", async () => {
+    setCaps(THREE_PAIRS, MANAGER_TEAM);
     const { container } = renderSlot();
     await settle();
     expect(observe(container)).toEqual(NOTHING);
 
-    act(() => setCaps(FOUR_PAIRS));
+    act(() => setCaps(THREE_PAIRS, DEPT_HEAD));
     await settle();
     expect(observe(container)).toEqual(MOUNTED_ONCE);
 
-    act(() => setCaps(WITHOUT_HR_WRITE));
+    act(() => setCaps(THREE_PAIRS, MANAGER_TEAM));
     await settle();
     // Ô biến mất; con số 1 là lời gọi của lượt đã được phép — không có lời gọi mới.
     expect(observe(container)).toEqual({ ...NOTHING, widgetDataCalls: 1 });
@@ -277,7 +293,7 @@ describe("HR1 — cổng của ô: ĐỦ bốn cặp, khớp ĐÚNG-BẰNG", () 
 // DENY của vùng là các hàng DENY phía trên (`renderedNodes: 0` — không có khung nào, kể cả khung vùng rỗng).
 describe("vùng có nhãn — ô đứng trong rail như năm khối SOCIAL", () => {
   it("ALLOW: slot vẽ đúng MỘT vùng (`region`) mang tên tiêu đề của widget; vùng là node duy nhất và chứa tiêu đề + số liệu", async () => {
-    setCaps(FOUR_PAIRS);
+    setCaps(THREE_PAIRS, HR_COMPANY);
     const { container } = renderSlot();
     await settle();
 
@@ -294,7 +310,7 @@ describe("số request khi đi lại giữa các trang của cụm bảng tin (v
   it("mount lại trên CÙNG QueryClient: vài giây sau ⇒ dùng số liệu đã có, không gọi thêm; rất lâu sau ⇒ thêm đúng 1 lời gọi", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-07T02:00:00.000Z"));
-    setCaps(FOUR_PAIRS);
+    setCaps(THREE_PAIRS, HR_COMPANY);
     const client = makeTestQueryClient();
 
     const first = renderSlot(client);
@@ -317,7 +333,7 @@ describe("số request khi đi lại giữa các trang của cụm bảng tin (v
 });
 
 describe("trạng thái của ô ở rail — do widget DASH tự vẽ, slot không thêm trạng thái nào", () => {
-  beforeEach(() => setCaps(FOUR_PAIRS));
+  beforeEach(() => setCaps(THREE_PAIRS, HR_COMPANY));
 
   it("đang tải ⇒ tiêu đề đã có, nút «Làm mới» khoá, chưa có số liệu", async () => {
     getWidgetData.mockReturnValue(new Promise<never>(() => {}));
