@@ -10,6 +10,11 @@
 | 🟢 **green** | CRUD · list/detail · form · dashboard UI · docs · style · dời route | Sonnet | LIGHT (`typescript-reviewer` + `quality-gate`) | ✅ | ✅ khi check xanh | ❌ |
 | 🟡 **yellow** | workflow phê duyệt (nghỉ phép/điều chỉnh công) · task · noti · FE dữ liệu nhạy cảm HR (mask) | Sonnet/Opus | LIGHT + test logic | ✅ báo diff | ✅ khi xanh | ⚠️ xem trước merge lớn |
 | 🔴 **red** | permission · RLS · secret/encrypt · audit · auth (login/token) · migration | **Opus** | **FULL** (`security` + `database` + `silent-failure` [+ `santa-method`]) | ❌ không sửa mù | ❌ | ✅ **luôn người** |
+| 🟠 **amber** | FE/test/vận hành mà một phần CÓ THỂ chạm vùng đỏ, hoặc có điều kiện merge phụ thuộc PROD (vd «API PROD phải chứa commit X») | Opus | LIGHT mặc định; commit nào chạm đường dẫn đỏ ⇒ FULL cho riêng commit đó | ✅ báo diff | ❌ | ✅ kiểm điều kiện merge |
+
+> **amber** (định nghĩa 23/10/2026 — 35 WO dùng nhãn này mà trước đó không có dòng nào ở đây): xếp hạng chi phí như 🟡 (trần ≤250 USD
+> theo khung ngân sách 16/10), gate chọn theo ĐƯỜNG DẪN của từng file sản phẩm bị đổi chứ không theo nhãn. `gen-status.mjs` chưa có
+> biểu tượng cho amber nên STATUS hiện dòng amber không biểu tượng.
 
 Phát hiện crown-jewel tự động (regex trong parallel-lanes): permission/RLS/policy · secret/envelope/encrypt/KMS ·
 auth/token · workflow phê duyệt (FSM/DAG) · audit append-only · ADR · (Phase 2: payroll/lương/payslip).
