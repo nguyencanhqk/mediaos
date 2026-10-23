@@ -2,15 +2,23 @@ import { describe, expect, it } from "vitest";
 import {
   buildAssigneeSummary,
   DEFAULT_WORKSPACE_FILTERS,
+  isAddMembersFlag,
   matchesAssigneeSelection,
   matchesWorkspaceFilters,
+  nextProjectLastTabMap,
   normalizeSearchText,
   parseWorkspaceTab,
+  parseWorkspaceTabParam,
+  pickProjectLastTab,
   pinSelectedInSummary,
+  PROJECT_LAST_TAB_MAX_ENTRIES,
   PROJECT_WORKSPACE_TABS,
+  projectCreatedEntryUrl,
+  resolveWorkspaceTab,
   sanitizeWorkspaceTabOrder,
   sortWorkspaceTasks,
   UNASSIGNED_FILTER_VALUE,
+  validateProjectWorkspaceSearch,
   type WorkspaceTaskFilters,
 } from "./workspace-constants";
 
@@ -199,5 +207,113 @@ describe("sortWorkspaceTasks", () => {
   it("titleAsc + createdDesc", () => {
     expect(sortWorkspaceTasks([t1, t2, t3], "titleAsc")).toEqual([t2, t1, t3]);
     expect(sortWorkspaceTasks([t1, t2, t3], "createdDesc")).toEqual([t2, t3, t1]);
+  });
+});
+
+// S20-TASK-PROJECTENTRY-1 — vào dự án: tạo xong → tab Thành viên + hộp thêm thành viên; mở lại →
+// tab dùng lần trước (tuỳ chọn hiển thị, localStorage). Ở đây chỉ phần THUẦN; đọc/ghi storage
+// (try/catch) có ca riêng ở ProjectDetailPage.spec.
+describe("parseWorkspaceTabParam — tab trên URL có hay không (khác parseWorkspaceTab: không tự rơi về overview)", () => {
+  it("giá trị hợp lệ → chính tab đó", () => {
+    expect(parseWorkspaceTabParam("board")).toBe("board");
+    expect(parseWorkspaceTabParam("overview")).toBe("overview");
+  });
+  it("thiếu / rác / sai kiểu → null", () => {
+    expect(parseWorkspaceTabParam(undefined)).toBeNull();
+    expect(parseWorkspaceTabParam("")).toBeNull();
+    expect(parseWorkspaceTabParam("gantt")).toBeNull();
+    expect(parseWorkspaceTabParam(3)).toBeNull();
+  });
+});
+
+describe("isAddMembersFlag — cờ addMembers=1 (parser URL đổi `1` thành số)", () => {
+  it("1 · '1' · true → bật", () => {
+    expect(isAddMembersFlag(1)).toBe(true);
+    expect(isAddMembersFlag("1")).toBe(true);
+    expect(isAddMembersFlag(true)).toBe(true);
+  });
+  it("thiếu hoặc giá trị khác → tắt", () => {
+    expect(isAddMembersFlag(undefined)).toBe(false);
+    expect(isAddMembersFlag(0)).toBe(false);
+    expect(isAddMembersFlag("0")).toBe(false);
+    expect(isAddMembersFlag("yes")).toBe(false);
+  });
+});
+
+describe("projectCreatedEntryUrl — đích sau khi tạo dự án", () => {
+  it("vào tab Thành viên kèm cờ mở hộp thêm thành viên", () => {
+    expect(projectCreatedEntryUrl("proj-9")).toBe(
+      "/tasks/projects/proj-9?tab=members&addMembers=1",
+    );
+  });
+});
+
+describe("resolveWorkspaceTab — URL thắng; tab nhớ chỉ dùng khi còn quyền xem", () => {
+  const visible = ["overview", "board", "list", "members"] as const;
+  it("URL có tab → dùng tab URL kể cả khi có tab nhớ (component của tab tự gate quyền)", () => {
+    expect(resolveWorkspaceTab("report", "board", visible)).toBe("report");
+    expect(resolveWorkspaceTab("overview", "board", visible)).toBe("overview");
+  });
+  it("URL không có tab + tab nhớ còn hiện → tab nhớ", () => {
+    expect(resolveWorkspaceTab(null, "board", visible)).toBe("board");
+  });
+  it("tab nhớ không còn quyền xem (không nằm trong tập tab hiện) → Tổng quan", () => {
+    expect(resolveWorkspaceTab(null, "report", visible)).toBe("overview");
+    expect(resolveWorkspaceTab(null, "settings", visible)).toBe("overview");
+  });
+  it("không có gì → Tổng quan (như trước khi có tính năng nhớ tab)", () => {
+    expect(resolveWorkspaceTab(null, null, visible)).toBe("overview");
+  });
+});
+
+describe("pickProjectLastTab / nextProjectLastTabMap — bản đồ projectId → tab cuối", () => {
+  it("đọc đúng tab của dự án; dữ liệu hỏng/rác → null", () => {
+    expect(pickProjectLastTab({ p1: "board" }, "p1")).toBe("board");
+    expect(pickProjectLastTab({ p1: "board" }, "p2")).toBeNull();
+    expect(pickProjectLastTab({ p1: "gantt" }, "p1")).toBeNull();
+    expect(pickProjectLastTab(null, "p1")).toBeNull();
+    expect(pickProjectLastTab(["board"], "p1")).toBeNull();
+    expect(pickProjectLastTab("board", "p1")).toBeNull();
+  });
+  it("ghi trả bản đồ MỚI (không sửa đầu vào), bỏ mục rác, dự án vừa ghi đứng cuối", () => {
+    const prev = { p1: "board", p2: "list", junk: "gantt" };
+    const next = nextProjectLastTabMap(prev, "p1", "members");
+    expect(next).toEqual({ p2: "list", p1: "members" });
+    expect(Object.keys(next)).toEqual(["p2", "p1"]);
+    expect(prev).toEqual({ p1: "board", p2: "list", junk: "gantt" });
+  });
+  it("đầu vào hỏng → bắt đầu bản đồ mới", () => {
+    expect(nextProjectLastTabMap("not-a-map", "p1", "board")).toEqual({ p1: "board" });
+    expect(nextProjectLastTabMap(["board"], "p1", "board")).toEqual({ p1: "board" });
+  });
+  it(`giữ tối đa ${PROJECT_LAST_TAB_MAX_ENTRIES} dự án — bỏ mục cũ nhất`, () => {
+    const prev = Object.fromEntries(
+      Array.from({ length: PROJECT_LAST_TAB_MAX_ENTRIES }, (_, i) => [`p${i}`, "board"]),
+    );
+    const next = nextProjectLastTabMap(prev, "new", "list");
+    expect(Object.keys(next)).toHaveLength(PROJECT_LAST_TAB_MAX_ENTRIES);
+    expect(next.p0).toBeUndefined();
+    expect(next.new).toBe("list");
+  });
+});
+
+// Review S20-TASK-PROJECTENTRY-1 — search của route dự án: `?tab` TƯỜNG MINH được giữ, kể cả
+// `overview` (URL thắng tab nhớ ⇒ link chia sẻ `?tab=overview` phải mở Tổng quan); rác bị bỏ.
+describe("validateProjectWorkspaceSearch — validateSearch của /tasks/projects/$projectId", () => {
+  it("?tab=overview tường minh → GIỮ tab overview (không coi như thiếu ?tab)", () => {
+    expect(validateProjectWorkspaceSearch({ tab: "overview" })).toEqual({ tab: "overview" });
+  });
+  it("tab hợp lệ khác + task + addMembers=1 → giữ đủ", () => {
+    expect(validateProjectWorkspaceSearch({ tab: "members", task: "t-1", addMembers: 1 })).toEqual({
+      tab: "members",
+      task: "t-1",
+      addMembers: 1,
+    });
+  });
+  it("rác / sai kiểu → bỏ khoá (như không có), không ném", () => {
+    expect(
+      validateProjectWorkspaceSearch({ tab: "gantt", task: "", addMembers: 2, extra: "x" }),
+    ).toEqual({});
+    expect(validateProjectWorkspaceSearch({ tab: ["board"], task: 5 })).toEqual({});
   });
 });

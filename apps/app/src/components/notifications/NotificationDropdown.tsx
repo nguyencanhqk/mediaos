@@ -7,16 +7,22 @@ import { NotificationTargetLink, isSafeInternalTarget } from "./NotificationTarg
 import { NOTI_DROPDOWN_LIMIT, NOTI_STATUS } from "@/routes/notifications/constants";
 
 interface NotificationDropdownProps {
-  /** Gọi khi user chọn 1 dòng / bấm "Xem tất cả" — panel cha (NotificationBadge) đóng dropdown. */
+  /**
+   * Gọi khi user chọn 1 dòng — panel cha CHỈ đóng dropdown; `NotificationTargetLink` tự điều hướng
+   * tới đích (việc ⇒ drawer tại chỗ). S20-TASK-DRAWER-1: thêm lượt sang danh sách ở đây thì đích
+   * `?task=` bị giải trên /notifications thay vì trang đang đứng.
+   */
+  onSelect: () => void;
+  /** Gọi khi bấm "Xem tất cả" — panel cha đóng dropdown và sang trang danh sách. */
   onNavigate: () => void;
 }
 
 function DropdownRow({
   item,
-  onNavigate,
+  onSelect,
 }: {
   item: MyNotificationDropdownItem;
-  onNavigate: () => void;
+  onSelect: () => void;
 }) {
   const { t } = useTranslation("notifications");
   const queryClient = useQueryClient();
@@ -37,7 +43,7 @@ function DropdownRow({
         targetUrl={item.target_url}
         onBeforeNavigate={() => {
           if (isUnread) markRead.mutate();
-          onNavigate();
+          onSelect();
         }}
         className="flex w-full flex-col items-start gap-0.5 px-4 py-3 text-left hover:bg-muted/50"
       >
@@ -71,7 +77,7 @@ function DropdownRow({
  * — KHÔNG load cả danh sách (đó là việc của NotificationListPage). Chỉ fetch khi mounted (caller gate
  * bằng `open` qua unmount/mount, KHÔNG bằng `enabled` — panel nhỏ, không cần giữ cache lâu khi đóng).
  */
-export function NotificationDropdown({ onNavigate }: NotificationDropdownProps) {
+export function NotificationDropdown({ onSelect, onNavigate }: NotificationDropdownProps) {
   const { t } = useTranslation("notifications");
 
   const { data, isLoading, isError } = useQuery({
@@ -104,7 +110,7 @@ export function NotificationDropdown({ onNavigate }: NotificationDropdownProps) 
         {!isLoading &&
           !isError &&
           items.map((item) => (
-            <DropdownRow key={item.notification_id} item={item} onNavigate={onNavigate} />
+            <DropdownRow key={item.notification_id} item={item} onSelect={onSelect} />
           ))}
       </ul>
 

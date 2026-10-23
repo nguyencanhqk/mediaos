@@ -41,6 +41,8 @@ export * from "./components/ui/table-footer";
 export * from "./components/ui/status-pill";
 export * from "./hooks/use-local-pref";
 export * from "./hooks/use-column-visibility";
+// S20-FE-TOAST-1 (US-X-91) — thông báo nổi dùng chung + vùng aria-live (khối additive).
+export * from "./components/ui/toast";
 
 // Layout chrome
 export * from "./components/layout/app-shell";

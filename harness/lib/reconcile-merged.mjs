@@ -124,8 +124,19 @@ const tokenRe = (id) => new RegExp(`(^|[^\\w-])${esc(id)}([^\\w-]|$)`);
 //   là scope DOMAIN và đóng dấu WO đã xong thật; `chore(s2): backlog reconcile … + topbar rebrand`
 //   (83f028c0) trộn code; `docs(<domain>): seed wave …` (3 commit 20–21/07) mơ hồ giữa seed và ship
 //   tài liệu — cả ba nhóm nằm ngoài cửa sổ 400.
+//
+// Vì sao khớp cả "plan v<N> cho|for" ở PHẦN ĐẦU thân (trước dấu "—" đầu tiên) (thêm 2026-10-23 — lỗ
+// đã gây dấu sai một lần, chặn tạm bằng `blocked`):
+//   42249f56 `docs(permission): DECISIONS-13 + plan v3 cho S14-SEC-CAPWILDCARD-1 — thiết kế CHỐT, 0 dòng
+//   code, WO \`blocked\`` mở thân bằng mã ADR nên trượt luật neo-đầu-thân ở trên. B3 (`blocked`) giữ được
+//   dấu, nhưng 23/10 03:41 WO vừa gỡ chặn là reconcile đóng dấu 'finished' theo đúng commit kế hoạch này.
+//   Phần trước "—" là TIÊU ĐỀ của commit; WO thi công ship bằng `<type>(<scope>): <WO-ID> — …` nên phần
+//   đó không chứa "plan vN cho"; commit ship nhắc plan đã duyệt viết SAU "—" ⇒ không bị nuốt.
+//   Đo trước khi vá (TOÀN BỘ 973 commit first-parent của origin/master, không chỉ cửa sổ 400): luật mới
+//   bắt thêm ĐÚNG 1 subject — 42249f56. Mô phỏng `mergedCommits` cũ↔mới: chỉ S14-SEC-CAPWILDCARD-1 mất
+//   nguồn stamp (đúng ý định — nó chưa có commit thi công nào), 0 WO khác đổi nguồn.
 const BOOKKEEPING_RE =
-  /^(chore\((harness|docs|gov|backlog)\)|docs\((plan|status)\)|docs\([^)]+\):\s*(plan|kế hoạch|bàn giao|handoff)\b)/i;
+  /^(chore\((harness|docs|gov|backlog)\)|docs\((plan|status)\)|docs\([^)]+\):\s*(plan|kế hoạch|bàn giao|handoff)\b|docs\([^)]+\):[^—]*\bplan v\d+ (cho|for)\b)/i;
 
 // Subject có phải commit ghi sổ/quản trị (KHÔNG BAO GIỜ là "WO này đã ship") không?
 // Tách riêng để test soi được — đây là lớp chắn đã thủng 4 lần (S6-SEC-MV-1 · S6-SEC-IDENTITY-PROJ-1 ·

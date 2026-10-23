@@ -16,8 +16,10 @@ import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout
 // KHÔNG lazy: nó là KHUNG của route, không phải nội dung — lazy hoá khung làm cả cổng nháy trắng
 // một nhịp ở mỗi lần điều hướng giữa các màn /feed*.
 import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
-// S5-TASK-WORKSPACE-1 — parser ?tab= của workspace dự án (file thuần TS, không component).
-import { parseWorkspaceTab, type ProjectWorkspaceTab } from "@/routes/tasks/workspace-constants";
+// S5-TASK-WORKSPACE-1 — validateSearch của workspace dự án (file thuần TS, không component).
+import { validateProjectWorkspaceSearch } from "@/routes/tasks/workspace-constants";
+import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
+import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
 
 // ---------------------------------------------------------------------------
 // Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
@@ -472,6 +474,7 @@ const LeaveAuditLogsPage = React.lazy(() =>
 
 // Notifications — S4-FE-NOTI-1-WIRE (wire NotificationListPage/DetailPage đã build ở S4-FE-NOTI-1/a7be971)
 import { NOTI_PATHS } from "@/routes/notifications/constants";
+import { validateNotificationListSearch } from "@/routes/notifications/notification-list-search";
 const NotificationListPage = React.lazy(() =>
   import("@/routes/notifications/NotificationListPage").then((m) => ({
     default: m.NotificationListPage,
@@ -1456,7 +1459,14 @@ const TaskDetailPage = React.lazy(() =>
   import("@/routes/tasks/TaskDetailPage").then((m) => ({ default: m.TaskDetailPage })),
 );
 
-const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", TaskListPage);
+// S20-TASK-DRAWER-1 — bộ lọc Danh sách trên URL; rác ⇒ mặc định, KHÔNG ném (task-list-search.ts).
+const tasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks",
+  beforeLoad: authGuard,
+  validateSearch: validateTaskListSearch,
+  component: () => buildModuleRouteContent(getMeta("task.overview"), "TASK", <TaskListPage />),
+});
 const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
 
 // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN
@@ -1487,29 +1497,18 @@ const tasksProjectsRoute = makeModuleRoute(
 );
 
 // Project detail — no sidebar entry; path param resolved via useParams (mirror hrEmployeeDetailRoute).
-// S5-TASK-WORKSPACE-1: vỏ workspace tab hoá — `?tab=` validate bằng CHÍNH parser của workspace
-// (parseWorkspaceTab, single source apps/app/src/routes/tasks/workspace-constants.ts — file thuần TS,
-// import tĩnh không kéo component vào bundle router). Giá trị rác bị strip (overview mặc định),
-// không 400/crash; đổi tab do page tự history.push (mirror pattern đợt B ProjectListPage).
+// S5-TASK-WORKSPACE-1: vỏ workspace tab hoá — search validate bằng CHÍNH helper của workspace
+// (validateProjectWorkspaceSearch, single source routes/tasks/workspace-constants.ts — file thuần TS,
+// import tĩnh không kéo component vào bundle router): `?tab` tường minh GIỮ (kể cả overview — URL
+// thắng tab nhớ), rác bị bỏ, không 400/crash; đổi tab do page tự history.push.
 const tasksProjectDetailMeta = getMeta("task.projects.detail");
 const tasksProjectDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tasks/projects/$projectId",
   beforeLoad: authGuard,
-  // S5-TASK-BOARD-UX-1 — thêm `?task=<id>`: mở panel chi tiết ĐÈ LÊN workspace (không rời trang).
-  // Giữ nguyên chuỗi, KHÔNG validate uuid ở đây: id rác chỉ làm panel hiện "không tìm thấy" (server
-  // là người quyết), còn chặn ở router sẽ nuốt mất param và người dùng thấy panel im lặng không mở.
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { tab?: ProjectWorkspaceTab; task?: string } => {
-    const tab = parseWorkspaceTab(search.tab);
-    const task =
-      typeof search.task === "string" && search.task.length > 0 ? search.task : undefined;
-    return {
-      ...(tab === "overview" ? {} : { tab }),
-      ...(task ? { task } : {}),
-    };
-  },
+  // `?task=<id>` (S5-TASK-BOARD-UX-1) mở panel chi tiết đè workspace; `?addMembers=1`
+  // (S20-TASK-PROJECTENTRY-1) = vừa tạo dự án ⇒ tab Thành viên tự mở hộp thêm khi có quyền.
+  validateSearch: validateProjectWorkspaceSearch,
   component: () => {
     const { projectId } = tasksProjectDetailRoute.useParams();
     const navigate = useNavigate();
@@ -1567,22 +1566,24 @@ const tasksTaskDetailRoute = createRoute({
   beforeLoad: authGuard,
   component: () => {
     const { taskId } = tasksTaskDetailRoute.useParams();
-    const navigate = useNavigate();
+    // S20-TASK-DRAWER-1 — Quay lại = trang trước (tab mới ⇒ /tasks/my-tasks); xoá xong ⇒ /tasks/my-tasks.
+    const nav = useTaskDetailNav();
     return buildModuleRouteContent(
       tasksTaskDetailMeta,
       "TASK",
-      <TaskDetailPage taskId={taskId} onBack={() => void navigate({ to: "/tasks" as "/" })} />,
+      <TaskDetailPage taskId={taskId} onBack={nav.onBack} onDeleted={nav.onDeleted} />,
     );
   },
 });
 
-// Notifications
-const notificationsRoute = makeModuleRoute(
-  "/notifications",
-  "noti.list",
-  "NOTI",
-  NotificationListPage,
-);
+// S20-NOTI-LISTNAV-1 — bộ lọc trên URL; rác ⇒ bỏ, KHÔNG ném (notification-list-search.ts).
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/notifications",
+  beforeLoad: authGuard,
+  validateSearch: validateNotificationListSearch,
+  component: () => buildModuleRouteContent(getMeta("noti.list"), "NOTI", <NotificationListPage />),
+});
 
 // Notification detail — /notifications/$id (NOTI-SCREEN-DETAIL), path param NOTI_PATHS.DETAIL(id).
 // Reuses noti.list meta (cùng gate NOTI.NOTIFICATION.VIEW_OWN) — mirrors hrEmployeeDetailRoute pattern:

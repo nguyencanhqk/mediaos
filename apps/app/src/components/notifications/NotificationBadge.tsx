@@ -45,8 +45,12 @@ export function NotificationBadge() {
 
   const count = isError ? 0 : (data?.unread_count ?? 0);
 
-  function closeAndGoToList() {
+  function closeDropdown() {
     setOpen(false);
+  }
+
+  function closeAndGoToList() {
+    closeDropdown();
     void navigate({ to: NOTI_PATHS.LIST as "/" });
   }
 
@@ -67,7 +71,7 @@ export function NotificationBadge() {
         )}
       </Button>
 
-      {open && <NotificationDropdown onNavigate={closeAndGoToList} />}
+      {open && <NotificationDropdown onSelect={closeDropdown} onNavigate={closeAndGoToList} />}
     </div>
   );
 }

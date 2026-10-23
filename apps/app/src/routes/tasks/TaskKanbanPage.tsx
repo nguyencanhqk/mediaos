@@ -26,6 +26,11 @@ import { KanbanCardSubtasks } from "./KanbanCardSubtasks";
 import { TaskLabelChip } from "./TaskLabelPicker";
 import { AssigneeRail } from "./AssigneeRail";
 import {
+  KanbanCardMoveMenu,
+  useKanbanCardFocusReturn,
+  type KanbanMoveProps,
+} from "./KanbanCardMoveMenu";
+import {
   buildAssigneeSummary,
   DEFAULT_WORKSPACE_FILTERS,
   matchesAssigneeSelection,
@@ -155,6 +160,8 @@ function KanbanCard({
   subtasksExpanded,
   onToggleSubtasks,
   showStatus = false,
+  move,
+  columnId,
 }: {
   task: TaskKanbanCardDto;
   draggable: boolean;
@@ -167,6 +174,9 @@ function KanbanCard({
   onToggleSubtasks: () => void;
   /** Board state-mode: hiện badge task_status trên thẻ — người dùng THẤY auto-map nhóm→status đã chạy. */
   showStatus?: boolean;
+  /** S20-TASK-BOARDMOVE-1 — menu ⋯ đổi cột, chỉ khi `draggable`; `columnId` = cột đang chứa thẻ. */
+  move?: KanbanMoveProps;
+  columnId?: string;
 }) {
   const { t } = useTranslation("tasks");
   const isCompleted = task.status != null && COMPLETED_STATUSES.has(task.status);
@@ -191,6 +201,7 @@ function KanbanCard({
       tabIndex={onOpen ? 0 : undefined}
       aria-label={onOpen ? t("tasks.kanban.openDetail", { title: task.title }) : undefined}
       data-testid={`kanban-card-${task.id}`}
+      data-kanban-card={task.id}
       className={cn(
         "space-y-1.5 rounded-md border border-border bg-card p-2.5 text-sm shadow-sm",
         draggable && "cursor-grab active:cursor-grabbing",
@@ -224,14 +235,17 @@ function KanbanCard({
           className="mb-1.5 aspect-video w-full rounded object-cover"
         />
       )}
-      <p
-        className={cn(
-          "font-medium text-foreground",
-          isCompleted && "text-muted-foreground line-through",
-        )}
-      >
-        {task.title}
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <p
+          className={cn(
+            "font-medium text-foreground",
+            isCompleted && "text-muted-foreground line-through",
+          )}
+        >
+          {task.title}
+        </p>
+        {draggable && move && <KanbanCardMoveMenu task={task} currentId={columnId} move={move} />}
+      </div>
       {/* Gắn thẻ — chip nhãn màu trên thẻ board (server đính labels[] trong board read, không N+1). */}
       {(task.labels?.length ?? 0) > 0 && (
         <div className="flex flex-wrap gap-1" data-testid={`kanban-card-labels-${task.id}`}>
@@ -282,6 +296,7 @@ function KanbanColumn({
   onOpenTask,
   expandedSubtasks,
   onToggleSubtasks,
+  move,
 }: {
   status: TaskCoreStatusDto;
   tasks: TaskKanbanCardDto[];
@@ -293,6 +308,7 @@ function KanbanColumn({
   onOpenTask?: (taskId: string) => void;
   expandedSubtasks: ReadonlySet<string>;
   onToggleSubtasks: (taskId: string) => void;
+  move: KanbanMoveProps;
 }) {
   const { t } = useTranslation("tasks");
   return (
@@ -329,6 +345,8 @@ function KanbanColumn({
               onOpen={onOpenTask ? () => onOpenTask(task.id) : undefined}
               subtasksExpanded={expandedSubtasks.has(task.id)}
               onToggleSubtasks={() => onToggleSubtasks(task.id)}
+              move={move}
+              columnId={status}
             />
           ))
         )}
@@ -352,6 +370,7 @@ function StateKanbanColumn({
   onOpenTask,
   expandedSubtasks,
   onToggleSubtasks,
+  move,
 }: {
   column: TaskKanbanStateColumnDto;
   tasks: TaskKanbanCardDto[];
@@ -363,6 +382,7 @@ function StateKanbanColumn({
   onOpenTask?: (taskId: string) => void;
   expandedSubtasks: ReadonlySet<string>;
   onToggleSubtasks: (taskId: string) => void;
+  move: KanbanMoveProps;
 }) {
   const { t } = useTranslation("tasks");
   return (
@@ -404,6 +424,8 @@ function StateKanbanColumn({
               subtasksExpanded={expandedSubtasks.has(task.id)}
               onToggleSubtasks={() => onToggleSubtasks(task.id)}
               showStatus
+              move={move}
+              columnId={column.stateId}
             />
           ))
         )}
@@ -460,6 +482,7 @@ export function TaskKanbanPage({
       return next;
     });
   const [dragErrorKey, setDragErrorKey] = useState<string | null>(null);
+  const requestFocusReturn = useKanbanCardFocusReturn();
   const queryKey = taskKeys.kanban(projectId);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -615,24 +638,31 @@ export function TaskKanbanPage({
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const onDropState = (stateId: string) => (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+  // S20-TASK-BOARDMOVE-1 — lối vào đổi cột DUY NHẤT cho cả kéo-thả lẫn menu ⋯: cùng chốt quyền, cùng
+  // no-op khi trùng cột, cùng mutation lạc quan + rollback ở trên. Không có taskId ⇒ không tìm thấy thẻ.
+  const findTask = (taskId: string) =>
+    data?.columns.flatMap((c) => c.tasks).find((tk) => tk.id === taskId);
+  const moveToState = (taskId: string, stateId: string) => {
     if (!canDragState) return;
-    const taskId = e.dataTransfer.getData("text/plain");
-    if (!taskId) return;
-    const current = data?.columns.flatMap((c) => c.tasks).find((tk) => tk.id === taskId);
+    const current = findTask(taskId);
     if (!current || current.stateId === stateId) return; // cùng cột = no-op, không gọi API
     moveStateMutation.mutate({ taskId, stateId });
+  };
+  const moveToStatus = (taskId: string, status: TaskCoreStatusDto) => {
+    if (!canDrag) return;
+    const current = findTask(taskId);
+    if (!current || current.status === status) return;
+    moveMutation.mutate({ taskId, status });
+  };
+
+  const onDropState = (stateId: string) => (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    moveToState(e.dataTransfer.getData("text/plain"), stateId);
   };
 
   const onDrop = (status: TaskCoreStatusDto) => (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (!canDrag) return;
-    const taskId = e.dataTransfer.getData("text/plain");
-    if (!taskId) return;
-    const current = data?.columns.flatMap((c) => c.tasks).find((tk) => tk.id === taskId);
-    if (!current || current.status === status) return;
-    moveMutation.mutate({ taskId, status });
+    moveToStatus(e.dataTransfer.getData("text/plain"), status);
   };
 
   if (!canView) {
@@ -691,6 +721,18 @@ export function TaskKanbanPage({
   }
 
   const canDragBoard = isStateMode ? canDragState : canDrag;
+  // Chế độ status: liệt kê cột server trả (như vùng thả); FSM do server xét — 409 ⇒ rollback + lý do.
+  const boardMove: KanbanMoveProps = {
+    targets: isStateMode
+      ? stateColumns.map((col) => ({ id: col.stateId, label: col.name }))
+      : statusColumns.map((col) => ({ id: col.status, label: t(`tasks.status.${col.status}`) })),
+    onMove: (taskId, targetId) => {
+      requestFocusReturn(taskId);
+      const status = statusColumns.find((col) => col.status === targetId)?.status;
+      if (isStateMode) moveToState(taskId, targetId);
+      else if (status) moveToStatus(taskId, status);
+    },
+  };
   const showRail = onToggleAssignee !== undefined;
   const noopClear = () => {};
 
@@ -721,6 +763,7 @@ export function TaskKanbanPage({
                     onOpenTask={onOpenTask}
                     expandedSubtasks={expandedSubtasks}
                     onToggleSubtasks={toggleSubtasks}
+                    move={boardMove}
                   />
                 ))
               : statusColumns.map((col) => (
@@ -735,6 +778,7 @@ export function TaskKanbanPage({
                     onOpenTask={onOpenTask}
                     expandedSubtasks={expandedSubtasks}
                     onToggleSubtasks={toggleSubtasks}
+                    move={boardMove}
                   />
                 ))}
           </div>

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, ListTodo } from "lucide-react";
 import { taskCoreApi, taskKeys, useCan } from "@mediaos/web-core";
@@ -8,6 +7,7 @@ import { PageHeader, EmptyState, Button, Card } from "@mediaos/ui";
 import type { MyTaskItemDto, TaskCoreSourceDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { useTaskDrawer } from "./task-drawer-nav";
 
 /**
  * MyTasksPage — S4-FE-TASK-2 (SPEC-06 §13.9, TASK-SCREEN-009).
@@ -48,7 +48,6 @@ function TaskRow({ item, onOpen }: { item: MyTaskItemDto; onOpen: (id: string) =
 
 export function MyTasksPage() {
   const { t } = useTranslation("tasks");
-  const navigate = useNavigate();
   const canView = useCan(
     TASK_CORE_ENGINE_PAIRS.READ.action,
     TASK_CORE_ENGINE_PAIRS.READ.resourceType,
@@ -72,7 +71,8 @@ export function MyTasksPage() {
     return result;
   }, [data]);
 
-  const openTask = (taskId: string) => void navigate({ to: "/tasks/$taskId", params: { taskId } });
+  // S20-TASK-DRAWER-1 — mở drawer tại chỗ (`?task=`): nhóm đang chọn + vị trí cuộn giữ nguyên.
+  const { openTask } = useTaskDrawer();
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
   if (!canView) {

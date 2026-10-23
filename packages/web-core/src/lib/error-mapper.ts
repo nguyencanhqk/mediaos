@@ -191,8 +191,9 @@ export function parseKindError(error: unknown): KindErrorInfo {
 // ── Toast helper ──────────────────────────────────────────────────────────────
 
 /**
- * Giao diện toast tối giản — tránh hard dependency vào thư viện toast cụ thể.
- * App inject bằng `configureToast(toast)` khi khởi động.
+ * Giao diện toast tối giản — web-core KHÔNG phụ thuộc gói UI (ui phụ thuộc web-core, chiều ngược lại
+ * là vòng). App inject bằng `configureToast(toast)` khi khởi động — apps/app dùng `toast` của
+ * `@mediaos/ui` (S20-FE-TOAST-1). Chỉ nhận CHUỖI thông điệp đã map, không nhận `details`.
  */
 export interface ToastFn {
   error: (message: string) => void;
@@ -201,8 +202,8 @@ export interface ToastFn {
 
 let _toast: ToastFn | null = null;
 
-/** App gọi 1 lần khi khởi động để inject toast library (vd: sonner). */
-export function configureToast(toast: ToastFn): void {
+/** App gọi 1 lần khi khởi động để gắn đích hiển thị. `null` gỡ đích (test / HMR) ⇒ quay về console. */
+export function configureToast(toast: ToastFn | null): void {
   _toast = toast;
 }
 

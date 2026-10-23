@@ -39,8 +39,23 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
   return {
     ...actual,
-    Link: ({ children, to, title }: { children: ReactNode; to: string; title?: string }) => (
-      <a href={to} title={title}>
+    // `search` lộ ra data-search để ca S20-TASK-PROJECTENTRY-1 khẳng định link cây KHÔNG gắn tab cố định.
+    Link: ({
+      children,
+      to,
+      title,
+      search,
+    }: {
+      children: ReactNode;
+      to: string;
+      title?: string;
+      search?: unknown;
+    }) => (
+      <a
+        href={to}
+        title={title}
+        data-search={search === undefined ? undefined : JSON.stringify(search)}
+      >
         {children}
       </a>
     ),
@@ -75,10 +90,19 @@ vi.mock("@/routes/tasks/ProjectFormDrawer", () => ({
   ProjectFormDrawer: ({
     mode,
     initialDepartmentId,
+    onSuccess,
   }: {
     mode: string;
     initialDepartmentId?: string;
-  }) => <div data-testid="project-form-drawer">{`${mode}:${initialDepartmentId ?? ""}`}</div>,
+    onSuccess: (project: { id: string }) => void;
+  }) => (
+    <div data-testid="project-form-drawer">
+      {`${mode}:${initialDepartmentId ?? ""}`}
+      <button type="button" onClick={() => onSuccess({ id: "proj-new" })}>
+        mock-create-success
+      </button>
+    </div>
+  ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -239,6 +263,28 @@ describe("TaskSidebarTree", () => {
     fireEvent.click(screen.getByRole("button", { name: "sidebarTree.menuLabel:Phòng B" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /sidebarTree\.menu\.addProject/ }));
     expect(screen.getByTestId("project-form-drawer")).toHaveTextContent("create:d-b");
+  });
+
+  // S20-TASK-PROJECTENTRY-1 — tạo từ cây cũng vào thẳng tab Thành viên với cờ mở hộp thêm thành viên.
+  it("menu ⋯: tạo dự án thành công → điều hướng ?tab=members&addMembers=1 + đóng drawer", async () => {
+    allowedPairs.current = new Set(["read:project", "create:project"]);
+    renderTree();
+    await screen.findByText("Phòng B");
+    fireEvent.click(screen.getByRole("button", { name: "sidebarTree.menuLabel:Phòng B" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /sidebarTree.menu.addProject/ }));
+    fireEvent.click(screen.getByRole("button", { name: "mock-create-success" }));
+    expect(historyPushMock).toHaveBeenCalledWith(
+      "/tasks/projects/proj-new?tab=members&addMembers=1",
+    );
+    expect(screen.queryByTestId("project-form-drawer")).not.toBeInTheDocument();
+  });
+
+  it("link dự án trên cây KHÔNG gắn tab cố định (trang tự chọn tab dùng lần trước)", async () => {
+    renderTree();
+    const link = (await screen.findByText("Dự án A")).closest("a");
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBe("/tasks/projects/$projectId");
+    expect(link?.hasAttribute("data-search")).toBe(false);
   });
 
   it("menu ⋯: 'Xem báo cáo' deep-link /tasks/projects?departmentId=X", async () => {

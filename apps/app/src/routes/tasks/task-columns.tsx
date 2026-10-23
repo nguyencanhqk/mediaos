@@ -1,19 +1,21 @@
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { useTaskDrawer } from "./task-drawer-nav";
 
 /**
  * useTaskReadColumns — 7 cột ĐỌC dùng chung cho bảng công việc (TASK-SCREEN-005 danh sách + SCREEN-010
  * task quá hạn). Trích từ TaskListPage (S5-FE-TASK-6) để KHỎI lặp cột giữa 2 màn (DRY). Cột "actions"
  * (edit/delete — gate riêng, handler theo trang) KHÔNG nằm ở đây: mỗi trang tự nối thêm nếu cần.
  *
- * `t` (ns "tasks") + `navigate` gọi nội bộ trong hook → consumer chỉ cần spread mảng trả về.
+ * `t` (ns "tasks") + mở việc gọi nội bộ trong hook → consumer chỉ cần spread mảng trả về.
+ * S20-TASK-DRAWER-1: bấm tiêu đề mở drawer TẠI CHỖ (`?task=`), không rời danh sách — bộ lọc + vị trí
+ * cuộn của trang phía sau giữ nguyên.
  */
 export function useTaskReadColumns(): ColumnDef<TaskCoreResponseDto>[] {
   const { t } = useTranslation("tasks");
-  const navigate = useNavigate();
+  const { openTask } = useTaskDrawer();
 
   return [
     {
@@ -23,9 +25,7 @@ export function useTaskReadColumns(): ColumnDef<TaskCoreResponseDto>[] {
         <button
           type="button"
           className="font-medium text-foreground underline-offset-2 hover:underline"
-          onClick={() =>
-            void navigate({ to: "/tasks/$taskId", params: { taskId: row.original.id } })
-          }
+          onClick={() => openTask(row.original.id)}
         >
           {row.original.title}
         </button>

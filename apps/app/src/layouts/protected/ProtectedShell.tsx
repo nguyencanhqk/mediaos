@@ -17,7 +17,7 @@
 import * as React from "react";
 import { useEffect } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { Skeleton } from "@mediaos/ui";
+import { Skeleton, Toaster } from "@mediaos/ui";
 import { ShieldX } from "lucide-react";
 import { useAuthStore, getAuthRedirectUrl, useFavicon } from "@mediaos/web-core";
 import { GlobalTopbar } from "../topbar/GlobalTopbar";
@@ -29,6 +29,12 @@ import { useChatRealtime } from "@/hooks/use-chat-realtime";
 import { ChatDrawer } from "@/components/chat/ChatDrawer";
 import { CallProvider } from "@/components/chat/call/CallProvider";
 import { ACCOUNT_SETUP_2FA_PATH, SETUP_2FA_PATHS } from "@/routes/account/constants";
+import { readTaskDrawerParam } from "@/routes/tasks/task-drawer-nav";
+
+// S20-TASK-DRAWER-1 — drawer việc toàn cục, nạp LƯỜI: chỉ kéo chunk chi tiết việc khi URL có `?task=`.
+const GlobalTaskDrawer = React.lazy(() =>
+  import("@/routes/tasks/TaskDetailDrawer").then((m) => ({ default: m.GlobalTaskDrawer })),
+);
 
 // ---------------------------------------------------------------------------
 // Shell loading skeleton
@@ -94,6 +100,9 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
   // trong (`view:chat-room`) và không render gì — không có quyền thì nó im lặng, KHÔNG chặn shell.
   useChatRealtime();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const hasTaskParam = useRouterState({
+    select: (s) => readTaskDrawerParam(s.location.search) !== null,
+  });
 
   // Reset transient layout state on route change
   useEffect(() => {
@@ -152,6 +161,17 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
             unmount ⇒ hội thoại đang mở đóng lại và tin đang gõ dở mất. Tự gate `access:chat` + tự ẩn
             trên /chat* bên trong (xem docblock). */}
         <ChatDrawer />
+        {/* S20-TASK-DRAWER-1 — drawer chi tiết việc DUY NHẤT (`?task=<uuid>` trên mọi route), đặt SAU
+            drawer chat để nằm trên nó. Ở shell nên trang phía sau giữ nguyên bộ lọc + vị trí cuộn. */}
+        {hasTaskParam && (
+          <React.Suspense fallback={null}>
+            <GlobalTaskDrawer />
+          </React.Suspense>
+        )}
+        {/* S20-FE-TOAST-1 — vùng thông báo nổi DÙNG CHUNG, mount đúng một lần: đích của
+            showApiErrorToast (main.tsx gắn configureToast) và của toast.success/error/warning ở mọi
+            màn. Ở shell để thông báo sống qua lần đổi route ngay sau thao tác ghi. */}
+        <Toaster />
       </div>
     </CallProvider>
   );
