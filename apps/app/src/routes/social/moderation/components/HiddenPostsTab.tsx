@@ -17,7 +17,8 @@
  * │    `noticeState`: tab bị unmount khi đổi tab, mà 006 có thể hỏng SAU đó — xem prop.               │
  * │    Dải LUÔN vẽ, trừ dải có câu «danh sách đã được làm mới» khi lượt đọc lại đang lỗi                │
  * │    (`claimsListRefreshed`): lượt ghi đã xong không được trông như vừa hỏng.                        │
- * │ 5. Avatar chỉ vẽ theo TÊN, không truyền `src` (plan D8). Body vẽ như văn bản thuần.                │
+ * │ 5. Avatar qua `avatarSrc` (S16-SOCIAL-FEAVATAR-1): CHỈ URL đã ký thành `src`, giá trị thô ⇒ chữ    │
+ * │    cái đầu. Body vẽ như văn bản thuần.                                                             │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * Dòng GỌN tự vẽ — cố ý KHÔNG dùng `PostCard` / `useFeedActions`: người kiểm duyệt cần nhận ra bài và
@@ -40,7 +41,7 @@ import type { AdminErrorReason } from "../../admin/lib/admin-errors";
 import { useGuardedMutation } from "../../admin/lib/use-guarded-mutation";
 import { DoneNotice } from "./DoneNotice";
 import { PLACEHOLDER_CLASS, SKELETON_ROWS } from "./list-states";
-import { authorDisplayName, relativeTime } from "../../feed/lib/feed-format";
+import { authorDisplayName, avatarSrc, relativeTime } from "../../feed/lib/feed-format";
 import {
   claimsListRefreshed,
   describeModerationReadError,
@@ -109,7 +110,7 @@ function HiddenPostRow({ post, isBusy, onUnhide }: HiddenPostRowProps): React.Re
   return (
     <article className="rounded-lg border border-border bg-card p-3">
       <header className="flex flex-wrap items-center gap-2 text-sm">
-        <Avatar name={authorName} size="sm" />
+        <Avatar name={authorName} src={avatarSrc(post.author.avatarUrl)} size="sm" />
         <span className="font-medium text-foreground">{authorName}</span>
         <time dateTime={post.publishedAt} className="ml-auto text-xs text-muted-foreground">
           {relativeTime(post.publishedAt)}

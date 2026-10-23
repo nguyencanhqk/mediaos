@@ -10,7 +10,8 @@
  * │ 2. Báo cáo BÌNH LUẬN: `targetSnapshot.author*` / `status` / `deletedAt` / `postId` là của BÀI CHA; │
  * │    chỉ `bodyExcerpt` là của bình luận (plan M2b). DTO không có tác giả bình luận ⇒ câu chữ đi theo │
  * │    `targetType`, và link ngữ cảnh dùng `targetSnapshot.postId` — KHÔNG phải `targetId`.            │
- * │ 3. Avatar chỉ vẽ theo TÊN, không truyền `src` (plan D8): API PROD còn trả cột `avatarUrl` thô.     │
+ * │ 3. Avatar qua `avatarSrc` (S16-SOCIAL-FEAVATAR-1): CHỈ URL đã ký thành `src`; giá trị thô (API cũ  │
+ * │    trả nguyên cột: fileId · URL ngoài) ⇒ chữ cái đầu. KHÔNG truyền thẳng `avatarUrl` vào `src`.    │
  * │ 4. Cổng: «Xử lý» ⇔ báo cáo đang mở && `manage:feed-report` (`view:feed-report` chỉ được ĐỌC);     │
  * │    link tới bài đang ẩn ⇔ `manage:feed-post` (người khác bấm vào chỉ gặp 404).                     │
  * └────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -27,7 +28,7 @@ import type {
   FeedReportPersonDto,
   FeedReportTargetSnapshotDto,
 } from "@mediaos/contracts";
-import { relativeTime } from "../../feed/lib/feed-format";
+import { avatarSrc, relativeTime } from "../../feed/lib/feed-format";
 
 export interface ReportRowProps {
   report: FeedReportDto;
@@ -60,7 +61,7 @@ function PersonIdentity({ person }: { person: FeedReportPersonDto }): React.Reac
   const name = person.fullName?.trim() || t("admin.moderation.row.nameUnknown");
   return (
     <>
-      <Avatar name={name} size="sm" />
+      <Avatar name={name} src={avatarSrc(person.avatarUrl)} size="sm" />
       <span className="font-medium text-foreground">{name}</span>
       {person.employeeId === null && <span>{t("admin.moderation.row.profileGone")}</span>}
     </>
@@ -85,7 +86,7 @@ function ReportTarget({ report }: { report: FeedReportDto }): React.ReactElement
   return (
     <div className="mt-2 rounded-md border border-border bg-muted/40 p-2">
       <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-        <Avatar name={authorName} size="sm" />
+        <Avatar name={authorName} src={avatarSrc(snapshot.avatarUrl)} size="sm" />
         <span data-testid="report-target-identity">
           {t(`admin.moderation.row.identity.${report.targetType}`, { name: authorName })}
         </span>

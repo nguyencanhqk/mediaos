@@ -4,7 +4,8 @@
  * - Quyền đặt trên store THẬT (`setCaps`) TRƯỚC render — đo luật `useCan` thật, không đo mock.
  * - i18n THẬT; vế kỳ vọng là chữ tiếng Việt VIẾT TAY ⇒ thiếu khoá (i18next trả khoá thô) là đỏ (plan B18).
  * - `Link` giả NỘI SUY `params` vào `href` (plan B8): mock bỏ `params` làm link sai id vẫn xanh.
- * - Fixture mặc định mang `avatarUrl` KHÁC rỗng (plan B7) — ca «không `<img>`» tự kiểm điều đó.
+ * - Fixture mặc định mang `avatarUrl` CHƯA KÝ (plan B7) — ca DENY «không `<img>`» tự kiểm điều đó; ca
+ *   ALLOW ghi đè bằng `signedAvatarUrl` (S16-SOCIAL-FEAVATAR-1).
  * - Đồng hồ ghim ở 2026-10-03T02:03:04Z: `createdAt` của fixture = đúng 2 ngày trước.
  */
 import type { ReactNode } from "react";
@@ -12,7 +13,12 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { feedReportReasonSchema, type FeedReportDto } from "@mediaos/contracts";
 import { renderWithProviders, resetCaps, setCaps } from "../../feed/social-test-doubles";
-import { makeReport, REPORTED_POST_ID, REPORTER_EMPLOYEE_ID } from "../../admin/admin-test-doubles";
+import {
+  makeReport,
+  REPORTED_POST_ID,
+  REPORTER_EMPLOYEE_ID,
+  signedAvatarUrl,
+} from "../../admin/admin-test-doubles";
 import { ReportRow } from "./ReportRow";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -41,6 +47,8 @@ const NOW = new Date("2026-10-03T02:03:04.000Z");
 const RESOLVED_AT = "2026-10-02T23:03:04.000Z";
 const COMMENT_ID = "99999999-9999-4999-8999-999999999999";
 const RESOLVER_EMPLOYEE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+/** fileId THÔ trong cột `avatar_url` — thứ API cũ trả nguyên (ca DENY của avatar). */
+const RAW_FILE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 /** Vai manager theo seed: vào được màn (chỉ đọc), KHÔNG xử lý được. */
 const MANAGER = { "view:feed": true, "view:feed-report": true };
@@ -159,13 +167,44 @@ describe("R1 — danh tính người báo cáo: BỊ CHE ≠ HỒ SƠ KHÔNG CÒ
     expect(reporter).not.toHaveTextContent(REPORTER_MASKED);
   });
 
-  it("fixture mang `avatarUrl` KHÁC rỗng ở cả tác giả lẫn người báo cáo ⇒ thẻ vẫn KHÔNG có `<img>`", () => {
-    const report = makeReport();
+  // S16-SOCIAL-FEAVATAR-1 — avatar qua `avatarSrc`: chỉ URL ĐÃ KÝ thành `<img>`; giá trị thô ⇒ chữ cái đầu.
+  it("ALLOW: URL ký ở tác giả · người báo cáo · người xử lý ⇒ mỗi người một `<img>` đúng `src`", () => {
+    renderRow(
+      closedReport({
+        targetSnapshot: snapshot({ avatarUrl: signedAvatarUrl("author") }),
+        reporter: {
+          employeeId: REPORTER_EMPLOYEE_ID,
+          fullName: "Nguyễn Văn An",
+          avatarUrl: signedAvatarUrl("reporter"),
+        },
+        resolvedBy: {
+          employeeId: RESOLVER_EMPLOYEE_ID,
+          fullName: "Phạm Thị Hoa",
+          avatarUrl: signedAvatarUrl("resolver"),
+        },
+      }),
+    );
+    const img = (name: string) => screen.getByRole("img", { name });
+    expect(img("Trần Thị Bình")).toHaveAttribute("src", signedAvatarUrl("author"));
+    expect(img("Nguyễn Văn An")).toHaveAttribute("src", signedAvatarUrl("reporter"));
+    expect(img("Phạm Thị Hoa")).toHaveAttribute("src", signedAvatarUrl("resolver"));
+  });
+
+  it("DENY: URL http(s) CHƯA ký (fixture mặc định) · fileId THÔ ⇒ chữ cái đầu, thẻ KHÔNG có `<img>`", () => {
+    const report = closedReport({
+      resolvedBy: {
+        employeeId: RESOLVER_EMPLOYEE_ID,
+        fullName: "Phạm Thị Hoa",
+        avatarUrl: RAW_FILE_ID,
+      },
+    });
     expect(report.reporter?.avatarUrl).toMatch(/^https:\/\//);
     expect(report.targetSnapshot?.avatarUrl).toMatch(/^https:\/\//);
     const { card, container } = renderRow(report);
+    // Neo CÓ MẶT: cả ba người thật sự được vẽ — không thì vế «không `<img>`» xanh-rỗng.
     expect(card()).toHaveTextContent("Nguyễn Văn An");
     expect(card()).toHaveTextContent("Trần Thị Bình");
+    expect(card()).toHaveTextContent("Phạm Thị Hoa");
     expect(container.querySelector("img")).toBeNull();
   });
 
