@@ -15,7 +15,7 @@ bash harness/init.sh        # MỞ: đang ở đâu · làm gì · sửa ở đ�
    │     red/phức tạp → đẩy vào parallel-lanes (plan→review→escalate)
    │
 bash harness/check.sh --quick   # VERIFY (vòng lặp): lint + typecheck NHANH (KHÔNG DB/test) — bớt shell-wait
-   │                            #   full (+test): khi ĐÓNG việc · '--all' (+build): pre-merge/vùng đỏ
+   │                            #   full (+test): khi ĐÓNG việc · '--all --lane-db' (+build, như CI): pre-merge/vùng đỏ
    │
 bash harness/finish.sh      # ĐÓNG: full check (+test) → cập nhật backlog → ghi handoff → (tuỳ) commit-if-safe
 ```
@@ -30,9 +30,18 @@ bash harness/finish.sh      # ĐÓNG: full check (+test) → cập nhật backlo
 | **Ghi nhớ** | ② 3 tầng: phiên (TodoWrite) → bàn giao → dài hạn | `harness/handoff.md` · `docs/DECISIONS/` |
 | **Kiểm chứng** | verify 1 lệnh + 6 hook + CI RLS gate | `harness/check.sh` · `.claude/hooks/` · `.github/workflows/ci.yml` |
 | ↳ | chạy test chia chunk trên Windows (KI-014) | `harness/chunk-test.mjs` (check.sh tự gọi; `CHUNK_RUNNER=0` để tắt) |
+| ↳ | cổng bằng chứng của step test: int-spec SKIP vì thiếu `LANE_DB` + ca storage bỏ qua / bị chặn / không chạy | `harness/lane-db-guard.mjs` (check.sh tự gọi) · manifest `apps/api/test/storage-spec-files.json` |
 | **Vòng đời** | ④ mở/đóng phiên | `harness/init.sh` · `harness/finish.sh` |
 | (xuyên suốt) | ③ phân rã→song song→chuyên gia→leo thang · ⑤ routing model/skill | `.claude/workflows/parallel-lanes.mjs` + `policy.md` |
 | (xuyên suốt) | guard-scope: chống sửa ngoài `paths` | `.claude/hooks/guard-scope.mjs` (warn-only) |
+
+### Cổng bằng chứng của step test (LANE_DB + storage)
+
+Nguồn sự thật = khối chú thích đầu `harness/check.sh` (cờ) + `harness/lane-db-guard.mjs` (phán quyết); dưới đây chỉ là bản đồ.
+
+- `--lane-db[=<lane>]` = chạy **như CI**: dựng DB lane qua `scripts/lane-db-setup.sh` **và** bật hồ sơ storage `live` cho int-spec storage (bucket thử cục bộ trên MinIO cục bộ; khoá đọc từ `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`, env rồi `.env`, không in). Cần Postgres + MinIO cục bộ đang chạy; không đọc được khoá ⇒ cảnh báo + giữ `offline`.
+- `--storage=offline` ép hồ sơ `offline`: ca storage **bỏ qua có nhãn**. Bucket khác đúng tên cho phép cũng ⇒ `offline` (chốt ở `pinTestStorageEnv`, `apps/api/test/helpers/storage-test-target.ts`).
+- Tier strict (`--all` hoặc `REQUIRE_LANE_DB=1`) **ĐỎ** khi: int-spec skip vượt ngưỡng mà thiếu `LANE_DB` · có ca storage bị bỏ qua hoặc lời gọi storage bị chặn · có `LANE_DB` mà một tệp trong `apps/api/test/storage-spec-files.json` không phát nhãn chạy. Tier thường chỉ cảnh báo; guard sập / không trả mức hợp lệ ⇒ không bao giờ XANH.
 
 ## Một Work Order trông như
 

@@ -36,5 +36,5 @@ fi
 
 echo ""
 echo "→ Làm 1 Work Order. TRONG vòng lặp dùng tầng NHANH: 'bash harness/check.sh --quick' (lint+typecheck, KHÔNG DB/test)."
-echo "→ ĐÓNG việc: 'bash harness/finish.sh' (chạy FULL + test). Pre-merge/vùng đỏ: 'bash harness/check.sh --all'."
+echo "→ ĐÓNG việc: 'bash harness/finish.sh' (chạy FULL + test). Pre-merge/vùng đỏ: 'bash harness/check.sh --all --lane-db' (cần Postgres + MinIO cục bộ; int-spec/ca storage bị bỏ qua ⇒ ĐỎ — cờ: đầu harness/check.sh)."
 echo "→ Chi tiết đầy đủ: docs/STATUS.md · cách làm: harness/README.md"
