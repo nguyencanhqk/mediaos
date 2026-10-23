@@ -22,6 +22,8 @@ import { isRoomUnreadLooking } from "./chat-room-prefs";
 export const ROOM_FILTER_CHIPS = [
   "all",
   "unread",
+  // S20-CHAT-MENTIONPIN-1 (US-CHAT-NV-07) — CHỈ hiện khi server có tính năng (`chipIsAvailable`).
+  "mentions",
   "direct",
   "group",
   "deptproject",
@@ -43,6 +45,22 @@ export const DEFAULT_ROOM_FILTER_CHIP: RoomFilterChip = "all";
  */
 export function chipNeedsArchivedScope(chip: RoomFilterChip): boolean {
   return chip === "archived";
+}
+
+/**
+ * S20-CHAT-MENTIONPIN-1 — chip «Nhắc tôi» chỉ có nghĩa khi server trả `mentionUnreadCount` (số, kể cả 0).
+ * Server cũ không có khoá ⇒ ẩn chip: một bộ lọc LUÔN rỗng trông như «không ai nhắc bạn», tức nói sai.
+ */
+export function roomsSupportMentionCount(rooms: Iterable<ChatRoomDto | undefined>): boolean {
+  for (const room of rooms) {
+    if (typeof room?.mentionUnreadCount === "number") return true;
+  }
+  return false;
+}
+
+/** Số @ chưa đọc của một phòng — `null`/vắng (server cũ, đường không tính) đọc là 0. */
+export function mentionUnreadOf(room: ChatRoomDto): number {
+  return room.mentionUnreadCount ?? 0;
 }
 
 /** «Tất cả» là chip DUY NHẤT giữ mục cố định; mọi chip khác ra danh sách phẳng. */
@@ -73,6 +91,8 @@ export function filterRoomsByChip(
       return [...rooms];
     case "unread":
       return rooms.filter((room) => isRoomUnreadLooking(room));
+    case "mentions":
+      return rooms.filter((room) => mentionUnreadOf(room) > 0);
     case "direct":
     case "group":
       return rooms.filter((room) => room.roomType === chip);

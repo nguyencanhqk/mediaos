@@ -26,6 +26,8 @@ export default {
     chips: {
       all: "Tất cả",
       unread: "Chưa đọc",
+      // S20-CHAT-MENTIONPIN-1 — chỉ hiện khi server trả `mentionUnreadCount`.
+      mentions: "Nhắc tôi",
       direct: "Riêng",
       group: "Nhóm",
       deptproject: "Phòng ban · Dự án",
@@ -38,6 +40,7 @@ export default {
     /** Chip lọc ra rỗng — KHÁC "chưa có phòng nào": ở đây phòng CÓ, chỉ là không khớp bộ lọc đang bật. */
     emptyChip: "Không có hội thoại nào trong bộ lọc này.",
     unreadAria: "{{count}} tin chưa đọc",
+    mentionAria: "{{count}} tin chưa đọc nhắc đến bạn",
     unreadOverflow: "99+",
     archivedBadge: "Đã lưu trữ",
     noMessageYet: "Chưa có tin nhắn",
@@ -107,6 +110,18 @@ export default {
   },
 
   conversation: {
+    /** S20-CHAT-MENTIONPIN-1 — thanh tin ghim dưới đầu hội thoại (US-CHAT-NV-08). */
+    pinnedBar: {
+      aria: "Tin đã ghim",
+      position: "{{index}}/{{total}}",
+      next: "Tin ghim kế tiếp",
+      jump: "Xem tin ghim trong hội thoại",
+      unpin: "Bỏ ghim",
+      collapse: "Thu gọn thanh tin ghim",
+      expand: "Mở thanh tin ghim ({{count}})",
+      attachment: "[Tệp đính kèm]",
+      jumpFailed: "Không mở được tin ghim — tin có thể đã bị thu hồi.",
+    },
     selectRoom: "Chọn một cuộc trò chuyện",
     selectRoomHint: "Chọn ở danh sách bên trái, hoặc tạo cuộc trò chuyện mới.",
     loading: "Đang tải tin nhắn…",

@@ -27,6 +27,7 @@ import type {
   WsChatTypingEvent,
 } from "@mediaos/contracts";
 import { previewFromMessage } from "@/components/chat/chat-preview";
+import { bumpCounters, keepMention, olderCounters, withRead } from "./chat-room-counters";
 
 /**
  * Một đính kèm trong store — hợp của HAI hình dạng, và đây KHÔNG phải sự cẩu thả về kiểu.
@@ -434,13 +435,13 @@ function mergeServerRoom(current: ChatRoomDto | undefined, incoming: ChatRoomDto
   if (!current) return incoming;
   const currentSeq = current.lastMessageSeq ?? 0;
   const incomingSeq = incoming.lastMessageSeq ?? 0;
-  if (incomingSeq >= currentSeq) return incoming;
+  if (incomingSeq >= currentSeq) return keepMention(current, incoming);
   // Ảnh chụp của server CŨ hơn: lấy siêu dữ liệu (tên/mô tả/lưu trữ) của nó, giữ ba trường "mới nhất".
   return {
     ...incoming,
     lastMessageAt: current.lastMessageAt,
     lastMessageSeq: current.lastMessageSeq,
-    unreadCount: current.unreadCount,
+    ...olderCounters(current, incoming),
   };
 }
 
@@ -699,14 +700,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           : state;
       }
 
-      // Tin của người KHÁC làm tăng badge; tin của chính mình thì không (mình vừa gửi = đã đọc).
-      // Badge tổng của FE-3 cộng dồn `unreadCount` từng phòng — KHÔNG gọi `GET /chat/unread-count`.
+      // Badge + «@» (S20-CHAT-MENTIONPIN-1) — luật ở `bumpCounters`; tin của chính mình không tăng.
       const isMine = state.myUserId !== null && message.senderId === state.myUserId;
       const updatedRoom: ChatRoomDto = {
         ...room,
         lastMessageAt: message.createdAt,
         lastMessageSeq: message.roomSeq,
-        unreadCount: isMine ? (room.unreadCount ?? 0) : (room.unreadCount ?? 0) + 1,
+        ...bumpCounters(room, message, isMine, state.myUserId),
         // S17-CHAT-UX2-FE-1 (CHAT-DEC-022) — dòng preview ở danh sách phòng đi CÙNG chốt `roomSeq` ngay
         // trên, không phải một nhánh riêng: lưới bù `getMessages(roomId, {})` trả nguyên trang 50 tin
         // MỚI NHẤT (đã đọc từ lâu) và cuộn ngược `beforeSeq` cũng đổ tin cũ qua đây. Vá preview ngoài
@@ -861,7 +861,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       if (!room) return state;
       const unreadCount = unreadFrom(room, event.lastReadSeq);
       if (room.unreadCount === unreadCount) return state;
-      return { roomsById: { ...state.roomsById, [event.roomId]: { ...room, unreadCount } } };
+      return { roomsById: { ...state.roomsById, [event.roomId]: withRead(room, unreadCount) } };
     }),
 
   // ── S8-CHAT-UX-FE-3 — cảm xúc · đang gõ · đang online ───────────────────────

@@ -329,6 +329,7 @@ describe("RealtimeEmitterService — cụm CHAT (S7-CHAT-RT-1)", () => {
           isArchived: false,
           createdAt: new Date().toISOString(),
           unreadCount: 42, // của riêng actor — KHÔNG được phát cho cả phòng
+          mentionUnreadCount: 3, // S20-CHAT-MENTIONPIN-1 — cũng PER-MEMBER
         },
       } as never,
       [],
@@ -336,7 +337,24 @@ describe("RealtimeEmitterService — cụm CHAT (S7-CHAT-RT-1)", () => {
 
     const payload = emit.mock.calls[0]?.[1] as { room: Record<string, unknown> };
     expect(payload.room).not.toHaveProperty("unreadCount");
+    expect(payload.room).not.toHaveProperty("mentionUnreadCount");
     expect(payload.room.name).toBe("Phòng A");
+  });
+
+  it("🔒 chat:message-pinned (S20-CHAT-MENTIONPIN-1) — ĐÚNG 4 khoá, `body` nhét vào bị strip", () => {
+    const { svc, emit } = makeEmitter();
+    svc.emitChatMessagePinned(COMPANY, ROOM, {
+      messageId: MESSAGE_ID,
+      roomId: ROOM,
+      pinnedAt: new Date().toISOString(),
+      pinnedBy: USER_A,
+      body: "nội dung tin — đi qua REST theo quyền người đọc, không qua kênh phát chung",
+      mentions: [USER_B],
+    } as never);
+
+    expect(emit.mock.calls[0]?.[0]).toBe(WS_EVENTS.CHAT_MESSAGE_PINNED);
+    const payload = emit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(["messageId", "pinnedAt", "pinnedBy", "roomId"]);
   });
 
   it("payload SAI shape → log warn, KHÔNG throw lên caller (giao dịch đã commit rồi)", () => {

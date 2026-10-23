@@ -131,9 +131,10 @@ function strictWrapper({ children }: { children: ReactNode }) {
 /**
  * Số handler `useChatRealtime` gắn lên socket dùng chung.
  *
- * 7 kênh CHAT + 3 sự kiện vòng đời:
+ * 8 kênh CHAT + 3 sự kiện vòng đời:
  *   `chat:message` · `chat:message-recalled` · `chat:read` · `chat:room`
- *   · `chat:reaction` · `chat:typing` · `chat:presence`   (ba cái cuối: S8-CHAT-UX-FE-3)
+ *   · `chat:reaction` · `chat:typing` · `chat:presence`   (ba cái này: S8-CHAT-UX-FE-3)
+ *   · `chat:message-pinned`   (S20-CHAT-MENTIONPIN-1)
  *   · `connect` · `disconnect` · `connect_error`
  *
  * ⚠️ Con số này là NỬA của một cặp. Vế kia — `unmount ⇒ totalHandlers() === 0` — mới là thứ bắt lỗi
@@ -141,7 +142,7 @@ function strictWrapper({ children }: { children: ReactNode }) {
  * tab, nên một handler sót lại sẽ tích luỹ qua mỗi lần remount shell và xử lý cùng một sự kiện N lần.
  * Sửa số ở đây mà không kiểm vế `=== 0` là vô hiệu hoá đúng bài test đang bảo vệ mình.
  */
-const WS_HANDLER_COUNT = 10;
+const WS_HANDLER_COUNT = 11;
 
 function setCaps(caps: Record<string, boolean>) {
   useAuthStore.setState({
@@ -432,5 +433,70 @@ describe("kiểm hình dạng payload trước khi merge", () => {
     act(() => s().hydrateRooms([room(ROOM_A)]));
     act(() => socket.fire(WS_EVENTS.CHAT_ROOM, { roomId: ROOM_A, action: "member_added" }));
     expect(getRoom).not.toHaveBeenCalled();
+  });
+});
+
+// ── S20-CHAT-MENTIONPIN-1 — ghim realtime ─────────────────────────────────────
+describe("chat:message-pinned (S20-CHAT-MENTIONPIN-1)", () => {
+  function renderWithClient() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    renderHook(() => useChatRealtime(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    return { invalidate };
+  }
+
+  it("vá `pinnedAt`/`pinnedBy` của tin đang giữ + làm mất hiệu lực `/pinned` của ĐÚNG phòng", async () => {
+    const held = seededMessage(3);
+    useChatStore.setState({ messagesByRoom: { [ROOM_A]: [held] } });
+    const { invalidate } = renderWithClient();
+    await waitFor(() => expect(socket.countFor(WS_EVENTS.CHAT_MESSAGE_PINNED)).toBe(1));
+
+    act(() => {
+      socket.fire(WS_EVENTS.CHAT_MESSAGE_PINNED, {
+        messageId: held.id,
+        roomId: ROOM_A,
+        pinnedAt: "2026-10-23T08:00:00.000Z",
+        pinnedBy: ME,
+      });
+    });
+
+    expect(s().messagesByRoom[ROOM_A]?.[0]).toMatchObject({
+      pinnedAt: "2026-10-23T08:00:00.000Z",
+      pinnedBy: ME,
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["chat", "rooms", "pinned", ROOM_A] });
+  });
+
+  it("payload sai hợp đồng ⇒ bỏ qua (không vá, không nạp lại)", async () => {
+    const held = seededMessage(3);
+    useChatStore.setState({ messagesByRoom: { [ROOM_A]: [held] } });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { invalidate } = renderWithClient();
+    await waitFor(() => expect(socket.countFor(WS_EVENTS.CHAT_MESSAGE_PINNED)).toBe(1));
+
+    act(() => {
+      socket.fire(WS_EVENTS.CHAT_MESSAGE_PINNED, { messageId: "không-phải-uuid", roomId: ROOM_A });
+    });
+
+    expect(s().messagesByRoom[ROOM_A]?.[0]?.pinnedAt).toBeNull();
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["chat", "rooms", "pinned", ROOM_A] });
+    error.mockRestore();
+  });
+
+  it("`chat:message-recalled` cũng làm mất hiệu lực `/pinned` — tin ghim vừa thu hồi không giữ nội dung cũ", async () => {
+    const { invalidate } = renderWithClient();
+    await waitFor(() => expect(socket.countFor(WS_EVENTS.CHAT_MESSAGE_RECALLED)).toBe(1));
+    act(() => {
+      socket.fire(WS_EVENTS.CHAT_MESSAGE_RECALLED, {
+        messageId: MSG_A,
+        roomId: ROOM_A,
+        recalledAt: "2026-10-23T08:00:00.000Z",
+      });
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["chat", "rooms", "pinned", ROOM_A] });
   });
 });

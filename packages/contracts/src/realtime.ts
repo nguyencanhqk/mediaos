@@ -49,6 +49,8 @@ export const WS_EVENTS = {
   // server → client — CHỈ một chiều này tồn tại.
   CHAT_MESSAGE: "chat:message",
   CHAT_MESSAGE_RECALLED: "chat:message-recalled",
+  // S20-CHAT-MENTIONPIN-1 (additive) — phát SAU commit của ghim/bỏ ghim (REST), không phải event từ client.
+  CHAT_MESSAGE_PINNED: "chat:message-pinned",
   CHAT_READ: "chat:read",
   CHAT_ROOM: "chat:room",
   // S8-CHAT-UX-RT-1 (additive) — xem khối ⚠️ ở trên: kích hoạt bởi REST / vòng đời kết nối, KHÔNG phải
@@ -137,6 +139,21 @@ export const wsChatMessageRecalledEventSchema = z.object({
 });
 export type WsChatMessageRecalledEvent = z.infer<typeof wsChatMessageRecalledEventSchema>;
 
+/**
+ * chat:message-pinned (S20-CHAT-MENTIONPIN-1 · CHAT-FUNC-010) — một tin vừa được ghim/bỏ ghim.
+ *
+ * Dựng bằng `.pick()` trên CHÍNH `chatMessageSchema` (DTO REST đã qua lớp che) — không khai lại kiểu,
+ * nên trường nào đổi ở REST thì đổi ở đây. `pinnedAt: null` = vừa BỎ ghim.
+ *
+ * ⚠️ CỐ Ý KHÔNG mang `body`/`attachments`/`mentions`: sự kiện phát cho CẢ phòng, còn nội dung tin là
+ * thứ đọc qua REST theo đúng người gọi (vị từ §13.4 + che thu hồi). Client nhận sự kiện thì nạp lại
+ * `GET /chat/rooms/:id/pinned` — Zod strip mọi khoá thừa ở `.parse()` trước emit.
+ */
+export const wsChatMessagePinnedEventSchema = chatMessageSchema
+  .pick({ roomId: true, pinnedAt: true, pinnedBy: true })
+  .extend({ messageId: z.string().uuid() });
+export type WsChatMessagePinnedEvent = z.infer<typeof wsChatMessagePinnedEventSchema>;
+
 /** chat:read — con trỏ đã đọc của MỘT người trong phòng (hệ `room_seq` per-room, mig 0539). */
 export const wsChatReadEventSchema = z.object({
   roomId: z.string().uuid(),
@@ -203,6 +220,8 @@ export const wsChatRoomEventSchema = z.object({
       mutedUntil: true,
       markedUnreadAt: true,
       avatarUrl: true,
+      // S20-CHAT-MENTIONPIN-1 — số @ chưa đọc là PER-MEMBER y hệt `unreadCount`.
+      mentionUnreadCount: true,
     })
     // S17-CHAT-UX2-BE-1 — `lastMessage` đi qua nguyên vẹn (đã che + đã cắt Ở SERVER, không phải URL ký
     // nên không hết hạn); `peer` phải thay bằng bản đã strip `avatarUrl` — xem `wsChatRoomPeerSchema`.

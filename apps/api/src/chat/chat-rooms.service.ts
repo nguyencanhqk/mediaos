@@ -27,6 +27,7 @@ import {
   unreadOf,
 } from "./chat-room-rules";
 import { buildLastMessagePreview } from "./chat-preview";
+import { countUnreadMentionsByRoom } from "./chat-room-mention-count";
 import { toChatRoomDetailDto, toChatRoomDto, toChatRoomPeerDto } from "./chat.mapper";
 
 export interface ChatActor {
@@ -153,8 +154,17 @@ export class ChatRoomsService {
         tx,
       );
 
+      // S20-CHAT-MENTIONPIN-1 — số @ chưa đọc của CHÍNH actor: ĐÚNG MỘT truy vấn cho cả trang, cùng `tx`.
+      const mentionCounts = await countUnreadMentionsByRoom(
+        tx,
+        actor.companyId,
+        actor.id,
+        rows.map((r) => r.id),
+      );
+
       return rows.map((r) =>
         toChatRoomDto(r, undefined, undefined, avatars.get(r.id) ?? null, {
+          mentionUnreadCount: mentionCounts.get(r.id) ?? 0,
           lastMessage: buildLastMessagePreview({
             senderId: r.lastSenderId,
             senderName: r.lastSenderName,

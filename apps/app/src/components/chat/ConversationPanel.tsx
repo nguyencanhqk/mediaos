@@ -21,6 +21,7 @@ import { ConversationHeader } from "./ConversationHeader";
 import { MessageComposer, type ComposerSubmitPayload } from "./MessageComposer";
 import { useChatDraftStore } from "./chat-draft.store";
 import { MessageList } from "./MessageList";
+import { PinnedMessageBar } from "./PinnedMessageBar";
 import { TypingIndicator } from "./TypingIndicator";
 import { roomDisplayName } from "./chat-format";
 import { useChatConversation } from "./use-chat-conversation";
@@ -88,6 +89,12 @@ export function ConversationPanel({
     CHAT_PAIRS.RECALL_MESSAGE.resourceType,
   );
   const canPinPair = useCan(CHAT_PAIRS.PIN_MESSAGE.action, CHAT_PAIRS.PIN_MESSAGE.resourceType);
+  /**
+   * S20-CHAT-MENTIONPIN-1 — nút bỏ ghim trên thanh tin ghim: mirror `requirePinAuthority` của server (cặp
+   * quyền + admin phòng, trừ phòng 1-1) và phòng lưu trữ là chỉ đọc. Server vẫn là cổng thật.
+   */
+  const canUnpinFromBar =
+    canPinPair && !(room.isArchived ?? false) && (room.roomType === "direct" || myRole === "admin");
 
   const myUserId = useChatStore((s) => s.myUserId);
   const messages = useChatStore((s) => s.messagesByRoom[room.id]);
@@ -431,6 +438,15 @@ export function ConversationPanel({
           }
         />
       )}
+
+      {/* S20-CHAT-MENTIONPIN-1 — thanh tin ghim dưới đầu phòng (trang + drawer). `key` = phòng: vị trí
+          xoay và trạng thái thu gọn KHÔNG được mang sang phòng khác khi panel không bị dựng lại. */}
+      <PinnedMessageBar
+        key={room.id}
+        roomId={room.id}
+        canUnpin={canUnpinFromBar}
+        onUnpin={(messageId) => pinMutation.mutate({ messageId, pinned: true })}
+      />
 
       <ConnectionBanner />
 

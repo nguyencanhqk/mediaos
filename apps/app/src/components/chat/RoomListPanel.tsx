@@ -58,6 +58,8 @@ import {
   chipNeedsArchivedScope,
   chipUsesSections,
   filterRoomsByChip,
+  mentionUnreadOf,
+  roomsSupportMentionCount,
   type RoomFilterChip,
 } from "./room-list-filter";
 
@@ -370,7 +372,11 @@ export function RoomListPanel({
         onCreateRoom={canCreate ? onCreateRoom : undefined}
       />
 
-      <RoomFilterChipBar value={chip} onChange={setChip} />
+      <RoomFilterChipBar
+        value={chip}
+        onChange={setChip}
+        showMentions={roomsSupportMentionCount(Object.values(roomsById))}
+      />
 
       {actionError !== null && (
         <div
@@ -537,9 +543,12 @@ function RoomListHeader({
 function RoomFilterChipBar({
   value,
   onChange,
+  showMentions,
 }: {
   value: RoomFilterChip;
   onChange: (chip: RoomFilterChip) => void;
+  /** S20-CHAT-MENTIONPIN-1 — `false` (server cũ) ⇒ chip «Nhắc tôi» ẩn (`roomsSupportMentionCount`). */
+  showMentions: boolean;
 }): React.ReactElement {
   const { t } = useTranslation("chat");
   return (
@@ -549,7 +558,7 @@ function RoomFilterChipBar({
       className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2"
       data-testid="chat-room-chips"
     >
-      {ROOM_FILTER_CHIPS.map((key) => (
+      {ROOM_FILTER_CHIPS.filter((key) => showMentions || key !== "mentions").map((key) => (
         <button
           key={key}
           type="button"
@@ -621,6 +630,7 @@ function RoomRow({
 }: RoomRowProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const unread = room.unreadCount ?? 0;
+  const mentions = mentionUnreadOf(room);
   const muted = isRoomMuted(room);
   // Đậm khi CÓ tin chưa đọc HOẶC người dùng tự đánh dấu chưa đọc: `markRoomUnread` cố ý KHÔNG đổi
   // `unreadCount` (con trỏ `last_read_seq` chỉ tiến — SPEC-15 §13.2), nên suy độ đậm từ mỗi badge là bỏ
@@ -697,6 +707,17 @@ function RoomRow({
               aria-label={t("rooms.mutedAria")}
               data-testid="chat-room-muted-icon"
             />
+          )}
+          {/* S20-CHAT-MENTIONPIN-1 — «@» cạnh badge: có tin chưa đọc NHẮC TÔI (số của riêng tôi, server tính). */}
+          {mentions > 0 && (
+            <span
+              className="shrink-0 text-xs font-bold text-primary"
+              role="img"
+              aria-label={t("rooms.mentionAria", { count: mentions })}
+              data-testid="chat-room-mention"
+            >
+              @
+            </span>
           )}
           {unread > 0 && (
             <Badge
