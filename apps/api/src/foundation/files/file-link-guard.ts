@@ -64,14 +64,30 @@ export async function assertRegisteredLinkTarget(
  * liên kết thật khiến TEMP_FILE_CLEANUP giữ tệp mãi). Gọi SAU quyết định xem: người không xem được tệp
  * không học được trạng thái của nó.
  */
-export function assertLinkableFile(row: Pick<FileRecord, "scanStatus" | "isTemporary">): void {
+export function assertLinkableFile(row: LinkableFileState): void {
+  if (!isLinkableFile(row)) throw unlinkableFileError(row);
+}
+
+/** Phần của hàng `files` mà luật trạng thái gắn được cần. */
+export type LinkableFileState = Pick<FileRecord, "scanStatus" | "isTemporary">;
+
+/**
+ * S19-SEC-FILELINKPATHS-1 — vị từ thuần của luật trên (một luật: `assertLinkableFile` và lần so lại trong tx
+ * ghi `recheckLinkerViewTx` cùng gọi hàm này).
+ */
+export function isLinkableFile(row: LinkableFileState): boolean {
+  return row.scanStatus !== "Infected" && !row.isTemporary;
+}
+
+/** Lỗi 400 của một tệp KHÔNG gắn được — đúng mã cũ: Infected ⇒ INFECTED, tệp tạm ⇒ LINK. */
+export function unlinkableFileError(row: LinkableFileState): BadRequestException {
   if (row.scanStatus === "Infected") {
-    throw new BadRequestException({
+    return new BadRequestException({
       code: FOUNDATION_FILE_ERROR_CODES.INFECTED,
       message: `${FOUNDATION_FILE_ERROR_CODES.INFECTED}: không thể link file đang ở trạng thái Infected.`,
     });
   }
-  if (row.isTemporary) throw linkRejected("tệp tạm do hệ thống sinh không gắn link được.");
+  return linkRejected("tệp tạm do hệ thống sinh không gắn link được.");
 }
 
 /**

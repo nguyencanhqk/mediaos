@@ -138,6 +138,10 @@ export class ChatRoomAvatarService {
    * Ba pha, CỐ Ý tách: (1) tư cách — tx ngắn; (2) validate + confirm file — **NGOÀI** tx vì
    * `confirmUpload` mở tx riêng và đọc bytes từ storage, lồng nó trong `FOR UPDATE` là giữ khoá phòng
    * qua I/O mạng ⇒ pool-starve; (3) atomic pure-DB.
+   *
+   * S19-SEC-FILELINKPATHS-1 D-5: cuối pha (2), người đặt phải XEM được ảnh theo cùng quyết định với lõi gắn
+   * (`FileService.preflightLinkerView` — tệp đã từng gắn mà 0 liên kết sống, hay có liên kết sống người đặt
+   * không xem được ⇒ 403 CHAT-ERR-015); pha (3) so lại quyết định đó TRƯỚC khi khoá phòng (khoá tệp → phòng).
    */
   async setRoomAvatar(
     actor: ChatActor,
@@ -146,8 +150,21 @@ export class ChatRoomAvatarService {
   ): Promise<ChatRoomAvatarResult> {
     await this.db.withTenant(actor.companyId, (tx) => this.assertCanSetAvatarTx(tx, actor, roomId));
     await this.confirmAndValidateOwnImageTx(actor, fileId);
+    const decided = await this.files.preflightLinkerView(actor, fileId, {
+      moduleCode: CHAT_MODULE_CODE,
+      entityType: CHAT_ROOM_AVATAR_ENTITY_TYPE,
+      entityId: roomId,
+    });
+    if (decided.kind !== "allow") throw new ForbiddenException(CHAT_ERR.ROOM_AVATAR_FILE_INVALID);
 
     return this.db.withTenant(actor.companyId, async (tx) => {
+      const checked = await this.files.recheckLinkerViewTx(
+        actor.companyId,
+        fileId,
+        decided.ctx,
+        tx,
+      );
+      if (checked.kind !== "ok") throw new ForbiddenException(CHAT_ERR.ROOM_AVATAR_FILE_INVALID);
       // Kiểm LẠI trong tx atomic: giữa pha (1) và (3) phòng có thể đã bị lưu trữ, hoặc actor đã bị gỡ
       // khỏi phòng/khỏi dự án. Khoá `FOR UPDATE` bắt đầu từ đây.
       const room = await this.assertCanSetAvatarTx(tx, actor, roomId);

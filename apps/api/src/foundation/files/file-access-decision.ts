@@ -33,8 +33,12 @@ export interface FileAccessSubject {
   ownerUserId: string | null;
 }
 
-/** Vế chủ: chỉ cho tệp CHƯA TỪNG gắn, có chủ ghi nhận, đúng người gọi, đủ phạm vi tenant. */
-function isOwnerOfUnlinkedFile(
+/**
+ * Vế chủ: chỉ cho tệp CHƯA TỪNG gắn, có chủ ghi nhận, đúng người gọi, đủ phạm vi tenant.
+ * Export (S19-SEC-FILELINKPATHS-1 D-8): đường đính kèm SOCIAL dùng đúng hàm này cho vế «tệp của tôi, chưa
+ * từng gắn» thay vì một câu SQL riêng.
+ */
+export function isOwnerOfUnlinkedFile(
   actor: FileDecisionActor,
   file: FileAccessSubject,
   ctx: FileAccessContext,

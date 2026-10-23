@@ -15,6 +15,7 @@ import { ForbiddenException, Logger, UnprocessableEntityException } from "@nestj
 import { SOCIAL_ERROR_CODES } from "@mediaos/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { TenantTx } from "../db/db.service";
+import { FileLinkRepository } from "../foundation/files/file-link.repository";
 import {
   ATTACH_GATE_ENFORCED_BY_TIER1,
   SocialAttachGateDeniedException,
@@ -67,6 +68,7 @@ function makeService(alerts?: {
     null as never,
     null as never,
     (alerts ?? null) as never,
+    new FileLinkRepository(),
   );
 }
 
@@ -371,6 +373,7 @@ describe("S16-SOCIAL-ATTMETAMASK-1 — signOne qua decorateMany (gate FULL)", ()
       policy as never,
       storage as never,
       null as never,
+      new FileLinkRepository(),
     );
     return { svc, storage };
   }

@@ -45,15 +45,22 @@ import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
 import { isExtensionConsistentWithMime } from "./mime-extension";
 import { toFileMetadataDto, toLinkDto } from "./file-metadata.mapper";
-import { decideFileAccess, decideLinkAccess, type FileAccessContext } from "./file-access-decision";
+import { decideFileAccess, type FileAccessContext } from "./file-access-decision";
+import { readFileAccessContextTx, readLinkContextTx } from "./file-link-context";
 import {
-  assertLinkableFile,
   assertRegisteredLinkTarget,
-  assertSameLinkSnapshot,
   fileForbidden,
   linkFileMissing,
   rethrowLinkInsertError,
+  unlinkableFileError,
 } from "./file-link-guard";
+import {
+  decideLinkerViewFromSnapshot,
+  recheckLinkerSnapshotTx,
+  type LinkerLogTarget,
+  type LinkerRecheckOutcome,
+  type LinkerViewOutcome,
+} from "./file-linker-view";
 import { FilePolicyAction, FOUNDATION_FILE_PERMISSION } from "./file-policy.types";
 import {
   FOUNDATION_FILE_ENTITY,
@@ -61,6 +68,7 @@ import {
   filePolicyInput,
   fileSelfPolicyInput,
   toFileLinkRef,
+  type FileDecisionActor,
 } from "./file-view-decision";
 
 /** Acting user resolved from the authenticated request (JwtAuthGuard + CompanyGuard). */
@@ -540,13 +548,9 @@ export class FileService {
     const decided = await this.checkLink(user, input);
 
     return this.db.withTenant(user.companyId, async (tx) => {
-      const file = await this.fileRepo.findByIdForUpdateTx(user.companyId, input.fileId, tx);
-      if (!file) throw linkFileMissing();
-      assertLinkableFile(file);
-      assertSameLinkSnapshot(
-        decided,
-        await this.readLinkContextTx(user.companyId, input.fileId, tx),
-      );
+      const checked = await this.recheckLinkerViewTx(user.companyId, input.fileId, decided, tx);
+      if (checked.kind === "missing") throw linkFileMissing();
+      if (checked.kind === "unlinkable") throw unlinkableFileError(checked.row);
 
       const created = await this.insertLinkOrThrow(
         {
@@ -618,41 +622,68 @@ export class FileService {
   }
 
   /**
-   * Thứ tự: (1) cặp đích đã đăng ký + chính tắc (400) → (2) `canLink` trên thực thể đích (403) → (3) hàng + liên
-   * kết một ảnh chụp (tệp vắng 400) → (4) `decideLinkAccess`: XEM như GET /:id, vế dự phòng thêm TẢI —
-   * NGOÀI tx (resolver tự mở `withTenant`) (403) → (5) trạng thái tệp (400), sau cổng xem như đường tải.
-   * Trả ảnh chụp đã dùng để tx ghi so lại.
+   * S19-SEC-FILELINKPATHS-1 — MỘT nguồn quyết định «người gắn xem được tệp» (cùng vị từ với GET /:id) cho mọi
+   * đường tạo liên kết. Chỉ đọc, NGOÀI mọi tx ghi; trả giá trị để route giữ mã lỗi (`file-linker-view.ts`).
+   */
+  async decideLinkerView(actor: FileDecisionActor, fileId: string): Promise<LinkerViewOutcome> {
+    const { row, ctx } = await this.loadFileAccessContext(actor, fileId);
+    return decideLinkerViewFromSnapshot(this.policy, actor, row, ctx);
+  }
+
+  /** `decideLinkerView` + dòng log từ chối `Link` CHỈ khi `forbidden` (như biên gắn lõi). */
+  async preflightLinkerView(
+    actor: FileDecisionActor,
+    fileId: string,
+    logTarget: LinkerLogTarget,
+  ): Promise<LinkerViewOutcome> {
+    const outcome = await this.decideLinkerView(actor, fileId);
+    if (outcome.kind === "forbidden") {
+      const code = this.foundationPermissionCode(outcome.action);
+      await this.logLinkDeny(actor, fileId, logTarget, code, outcome.reason);
+    }
+    return outcome;
+  }
+
+  /** Pha trong tx ghi của người gọi: khoá hàng tệp, trạng thái gắn được, so lại ảnh chụp (lệch ⇒ 409). */
+  recheckLinkerViewTx(
+    companyId: string,
+    fileId: string,
+    decided: FileAccessContext,
+    tx: TenantTx,
+  ): Promise<LinkerRecheckOutcome> {
+    return recheckLinkerSnapshotTx(this.fileRepo, this.linkRepo, companyId, fileId, decided, tx);
+  }
+
+  /**
+   * (1) cặp đích đã đăng ký + chính tắc (400) → (2) `canLink` trên thực thể đích (403) → (3)–(5) `preflightLinkerView`
+   * (tệp vắng 400 · không xem được 403 · không gắn được 400). Trả ảnh chụp đã dùng để tx ghi so lại.
    */
   private async checkLink(user: RequestUser, input: LinkFileInput): Promise<FileAccessContext> {
     await assertRegisteredLinkTarget(this.policy, input, () =>
-      this.logLinkDeny(user, input, "FOUNDATION.FILE.LINK", "deny-no-resolver"),
+      this.logLinkDeny(user, input.fileId, input, "FOUNDATION.FILE.LINK", "deny-no-resolver"),
     );
     const target = await this.policy.canLink(
       filePolicyInput(user, { ...input, action: FilePolicyAction.Link }),
     );
     if (!target.allow) {
-      await this.logLinkDeny(user, input, "FOUNDATION.FILE.LINK", target.reason);
+      await this.logLinkDeny(user, input.fileId, input, "FOUNDATION.FILE.LINK", target.reason);
       throw fileForbidden(target.reason);
     }
 
-    const { row, ctx } = await this.loadFileAccessContext(user, input.fileId);
-    if (!row) throw linkFileMissing();
-    const view = await decideLinkAccess(this.policy, user, row, ctx);
-    if (!view.allow) {
-      await this.logLinkDeny(user, input, this.foundationPermissionCode(view.action), view.reason);
-      throw fileForbidden(view.reason);
-    }
-    assertLinkableFile(row);
-    return ctx;
+    const outcome = await this.preflightLinkerView(user, input.fileId, input);
+    if (outcome.kind === "missing") throw linkFileMissing();
+    if (outcome.kind === "forbidden") throw fileForbidden(outcome.reason);
+    if (outcome.kind === "unlinkable") throw unlinkableFileError(outcome.row);
+    return outcome.ctx;
   }
 
   private logLinkDeny(
-    user: RequestUser,
-    input: LinkFileInput,
+    user: FileDecisionActor,
+    fileId: string,
+    { moduleCode, entityType, entityId }: LinkerLogTarget,
     permissionCode: string,
     reason: string,
   ): Promise<void> {
-    const { fileId, moduleCode, entityType, entityId } = input;
     return this.logDeny(user, {
       fileId,
       action: "Link",
@@ -896,47 +927,21 @@ export class FileService {
     return { allowedMime, maxBytes: maxMb * BYTES_PER_MB, blockedExtensions };
   }
 
-  /**
-   * S7-FND-LINKFALLBACK-1 — nạp NGỮ CẢNH LINK cho một quyết định FilePolicy: link SỐNG + cờ "đã từng có
-   * link module".
-   *
-   * Hai truy vấn trong CÙNG một `withTenant` (không phải hai lần mở tx): chúng phải nhìn CÙNG một ảnh
-   * chụp. Tách ra hai tx thì có cửa sổ mà link cuối bị gỡ ở giữa ⇒ `links` rỗng nhưng `everLinked` đọc
-   * trước khi gỡ trả `false` ⇒ rơi xuống fallback FOUNDATION.FILE.* đúng lúc vừa bị thu hồi.
-   *
-   * Gom về `readLinkContextTx` cho mọi đường (xem · tải · xoá · gắn, kể cả lần đọc lại trong tx ghi của gắn)
-   * để không đường nào lỡ quên cờ — bất biến chốt ở method dùng chung, không rải theo route.
-   */
   private async loadLinkContext(
     user: RequestUser,
     fileId: string,
   ): Promise<{ links: FileLink[]; everLinked: boolean }> {
     const { live, everLinked } = await this.db.withTenant(user.companyId, (tx) =>
-      this.readLinkContextTx(user.companyId, fileId, tx),
+      readLinkContextTx(this.linkRepo, user.companyId, fileId, tx),
     );
     return { links: live, everLinked };
   }
 
-  /** Hàng tệp + ngữ cảnh liên kết trong MỘT `withTenant` (một ảnh chụp) — GET /:id · tải · gắn. */
-  private async loadFileAccessContext(
-    user: RequestUser,
-    fileId: string,
-  ): Promise<{ row: FileRecord | undefined; ctx: FileAccessContext }> {
-    return this.db.withTenant(user.companyId, async (tx) => ({
-      row: await this.fileRepo.findByIdTx(user.companyId, fileId, tx),
-      ctx: await this.readLinkContextTx(user.companyId, fileId, tx),
-    }));
-  }
-
-  private async readLinkContextTx(
-    companyId: string,
-    fileId: string,
-    tx: TenantTx,
-  ): Promise<FileAccessContext & { live: FileLink[] }> {
-    return {
-      live: await this.linkRepo.listByFileTx(companyId, fileId, tx),
-      everLinked: await this.linkRepo.hasEverBeenLinkedTx(companyId, fileId, tx),
-    };
+  /** Ngữ cảnh liên kết (+ hàng tệp) trong MỘT `withTenant` = một ảnh chụp (`file-link-context.ts`). */
+  private async loadFileAccessContext(actor: FileDecisionActor, fileId: string) {
+    return this.db.withTenant(actor.companyId, (tx) =>
+      readFileAccessContextTx(this.fileRepo, this.linkRepo, actor.companyId, fileId, tx),
+    );
   }
 
   /**
@@ -950,19 +955,14 @@ export class FileService {
     return fileDownloadStateDenyReason(row);
   }
 
-  /**
-   * The MODULE.RESOURCE.ACTION permission code logged on a foundation-file access-log row for `action`,
-   * derived from the FOUNDATION_FILE_PERMISSION action map (single source of truth) — e.g. Download →
-   * "FOUNDATION.FILE.DOWNLOAD". Keeps the H2 state-guard deny-log parametrized, not a scattered literal
-   * (CLAUDE.md §5; convention SPEC-01 §9).
-   */
+  /** Mã quyền MODULE.RESOURCE.ACTION của dòng access-log cho `action` — suy từ FOUNDATION_FILE_PERMISSION. */
   private foundationPermissionCode(action: FilePolicyAction): string {
     return `FOUNDATION.FILE.${FOUNDATION_FILE_PERMISSION[action].action.toUpperCase()}`;
   }
 
   /** Ghi 1 dòng file_access_log DENY (access_granted=false + denied_reason) trong tx tenant RIÊNG. */
   private async logDeny(
-    user: RequestUser,
+    user: FileDecisionActor,
     entry: {
       fileId: string;
       action: Parameters<FileAccessLogService["record"]>[1]["action"];
