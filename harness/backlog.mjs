@@ -19642,6 +19642,7 @@ export const backlog = [
     notes: [
       "🟢 Docs-only. Seed 09/10/2026 từ S16-SOCIAL-QA-1 (plan §8). Đặt số 3 vì `S16-SOCIAL-DOC-2` đã là WO đồng bộ tài liệu sau FE-3 (phạm vi khác: UI-07 · SPEC-16 §9 · IMPLEMENTATION-02); hai WO chạm chung SPEC-16 ⇒ làm tuần tự.",
       "KHÔNG gồm các câu hỏi hiển thị O3–O6 của QA-1 (đang chờ owner) — owner trả lời xong mới ghi vào tài liệu.",
+      "Đo 23/10/2026 khi làm: done_when ghi «57 khoá → 51 mã trên dây» — mã thật (`packages/contracts/src/social-errors.ts`) cho 51 mã ở CẢ catalog (22 có số + 29 sentinel), chỉ 47 ra được dây (`006` · `008` · `009` · `SOCIAL-ERR-POST-TYPE-PAIR-DESYNC` thì không) ⇒ SPEC-16 §12 ghi theo mã. Thêm ngoài danh sách, cùng dòng `001` của API-19 §5.1: tên bộ lọc thật `authorUserId` (bản cũ ghi `authorId`) + `orgUnitId` (`listFeedQuerySchema`, `.strict()` ⇒ khoá lạ 400). README: route 53 → 59, DB-17 «chưa migrate» → mig `0577`/`0580`, BE/FE «chưa có» → đã có.",
     ],
   },
   {
