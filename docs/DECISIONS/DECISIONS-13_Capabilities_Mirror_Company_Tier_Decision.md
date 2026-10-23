@@ -108,6 +108,17 @@ sai đúng chiều "thấy-rồi-403" mà cả ADR-12 lẫn WO này sinh ra đ�
 **KHÔNG** viết danh sách literal thứ hai ở `permission.service.ts` — đó đúng là thứ ADR này vừa dẹp.
 Kèm ratchet: mọi cặp catalog có `action` bắt đầu bằng `reveal-secret` phải thuộc `EXCLUDED`.
 
+> **Sửa đổi 23/10/2026 (owner chốt CW-1 — plan v4 §15.3 D-v4-1, D-v4-8):** `EXCLUDED` là **luật tiền
+> tố**, không phải danh sách cặp: `isCapabilityExcluded(action)` ⟺ `action.startsWith("reveal-")`
+> (`apps/api/src/auth/step-up/capability-exclusion.ts`, cạnh `REVEAL_CLASS_PAIRS` — const đó vẫn RỖNG).
+> Catalog hiện có 2 cặp khớp: `reveal-secret:platform-account` (0005) · `reveal-break-glass:break-glass`
+> (0201). Câu "`can()` **không bao giờ** ALLOW ở tầng công ty" ở trên chỉ đúng cho `reveal-secret`;
+> `reveal-break-glass` **được** `can()` ALLOW ở tầng công ty (cổng thật là grant break-glass `active` ở
+> service) ⇒ loại nó khỏi `capabilities` là **chủ đích thu hẹp gợi ý UI**, không suy ra từ
+> `needsObjectGrant`. Ratchet (`capability-exclusion.spec.ts`) **rộng hơn** luật runtime: bắt mọi token
+> action `reveal*` ở đầu tuple trong migration ⇒ một action reveal mới lệch khuôn làm ĐỎ và owner quyết —
+> không tự nới luật runtime. Số "69 cặp" ở §4.2/§5 đọc là **86** (thêm 17 cặp PAYROLL v2).
+
 ### 4.2 Ba điều hợp đồng KHÔNG hứa
 
 1. **Không** phải cổng enforcement — `PermissionGuard`/`can()` per-resource vẫn là cổng thật.
