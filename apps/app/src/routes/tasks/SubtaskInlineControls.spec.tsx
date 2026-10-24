@@ -117,7 +117,7 @@ describe("SubtaskAssigneeControl", () => {
   });
 
   it("bấm avatar mở danh sách chọn người", async () => {
-    setCapabilities({ "read:employee": true });
+    setCapabilities({ "read:employee": true, "assign:task": true });
     renderWithQuery(<SubtaskAssigneeControl {...PROPS} />);
 
     fireEvent.click(screen.getByTestId("subtask-assignee-trigger-sub-001"));
@@ -125,7 +125,7 @@ describe("SubtaskAssigneeControl", () => {
   });
 
   it("chọn người ⇒ PATCH việc con với assigneeEmployeeId", async () => {
-    setCapabilities({ "read:employee": true });
+    setCapabilities({ "read:employee": true, "assign:task": true });
     vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ id: "sub-001" } as never);
     renderWithQuery(<SubtaskAssigneeControl {...PROPS} />);
 
@@ -140,8 +140,8 @@ describe("SubtaskAssigneeControl", () => {
     );
   });
 
-  it("đi PATCH chứ KHÔNG đi route assign — nhân viên thường có update:task@Own nhưng không có assign:task", async () => {
-    setCapabilities({ "read:employee": true });
+  it("có assign:task ⇒ đổi người thực hiện đi PATCH (cổng trường ở server), không gọi route assign", async () => {
+    setCapabilities({ "read:employee": true, "assign:task": true });
     vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ id: "sub-001" } as never);
     renderWithQuery(<SubtaskAssigneeControl {...PROPS} />);
 
@@ -154,7 +154,7 @@ describe("SubtaskAssigneeControl", () => {
   });
 
   it("gỡ được người thực hiện (PATCH nhận null — khác route assign đòi uuid)", async () => {
-    setCapabilities({ "read:employee": true });
+    setCapabilities({ "read:employee": true, "assign:task": true });
     vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ id: "sub-001" } as never);
     renderWithQuery(<SubtaskAssigneeControl {...PROPS} />);
 
@@ -168,7 +168,7 @@ describe("SubtaskAssigneeControl", () => {
   });
 
   it("chọn LẠI đúng người đang giữ ⇒ không gọi API", async () => {
-    setCapabilities({ "read:employee": true });
+    setCapabilities({ "read:employee": true, "assign:task": true });
     renderWithQuery(<SubtaskAssigneeControl {...PROPS} />);
 
     fireEvent.click(screen.getByTestId("subtask-assignee-trigger-sub-001"));
@@ -179,7 +179,7 @@ describe("SubtaskAssigneeControl", () => {
   });
 
   it("lọc theo ô tìm kiếm", async () => {
-    setCapabilities({ "read:employee": true });
+    setCapabilities({ "read:employee": true, "assign:task": true });
     renderWithQuery(<SubtaskAssigneeControl {...PROPS} />);
 
     fireEvent.click(screen.getByTestId("subtask-assignee-trigger-sub-001"));
@@ -193,7 +193,7 @@ describe("SubtaskAssigneeControl", () => {
   });
 
   it("canEdit=false ⇒ avatar không bấm được, không mở picker", () => {
-    setCapabilities({ "read:employee": true });
+    setCapabilities({ "read:employee": true, "assign:task": true });
     renderWithQuery(<SubtaskAssigneeControl {...PROPS} canEdit={false} />);
 
     const trigger = screen.getByTestId("subtask-assignee-trigger-sub-001");
@@ -203,12 +203,25 @@ describe("SubtaskAssigneeControl", () => {
   });
 
   it("thiếu read:employee ⇒ mở picker vẫn được nhưng báo thiếu quyền, không gọi API", async () => {
-    setCapabilities({});
+    setCapabilities({ "assign:task": true });
     renderWithQuery(<SubtaskAssigneeControl {...PROPS} />);
 
     fireEvent.click(screen.getByTestId("subtask-assignee-trigger-sub-001"));
     await waitFor(() => expect(screen.getByText(/quyền/i)).toBeInTheDocument());
     expect(hrApi.listEmployees).not.toHaveBeenCalled();
+  });
+
+  // S20-SEC-TASKPATCHGATE-1 — PATCH đổi người phụ trách đòi assign:task ở server (thiếu ⇒ 403 cả
+  // request) ⇒ thiếu cặp thì control khoá như canEdit=false, không mời bấm rồi từ chối.
+  it("thiếu assign:task ⇒ avatar khoá, không mở picker, không gọi API", () => {
+    setCapabilities({ "read:employee": true });
+    renderWithQuery(<SubtaskAssigneeControl {...PROPS} />);
+
+    const trigger = screen.getByTestId("subtask-assignee-trigger-sub-001");
+    expect(trigger).toBeDisabled();
+    fireEvent.click(trigger);
+    expect(screen.queryByTestId("subtask-assignee-search-sub-001")).not.toBeInTheDocument();
+    expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
   });
 });
 
@@ -219,7 +232,7 @@ describe("SubtaskDueControl", () => {
   });
 
   it("bấm ngày mở ô nhập, Enter là lưu", async () => {
-    setCapabilities({});
+    setCapabilities({ "update-deadline:task": true });
     vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ id: "sub-001" } as never);
     renderWithQuery(<SubtaskDueControl {...PROPS} />);
 
@@ -234,7 +247,7 @@ describe("SubtaskDueControl", () => {
   });
 
   it("rời ô cũng lưu", async () => {
-    setCapabilities({});
+    setCapabilities({ "update-deadline:task": true });
     vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ id: "sub-001" } as never);
     renderWithQuery(<SubtaskDueControl {...PROPS} />);
 
@@ -247,7 +260,7 @@ describe("SubtaskDueControl", () => {
   });
 
   it("Esc huỷ, KHÔNG lưu", () => {
-    setCapabilities({});
+    setCapabilities({ "update-deadline:task": true });
     renderWithQuery(<SubtaskDueControl {...PROPS} />);
 
     fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001"));
@@ -260,7 +273,7 @@ describe("SubtaskDueControl", () => {
   });
 
   it("không đổi gì rồi rời ô ⇒ không gọi API", () => {
-    setCapabilities({});
+    setCapabilities({ "update-deadline:task": true });
     renderWithQuery(<SubtaskDueControl {...PROPS} />);
 
     fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001"));
@@ -269,8 +282,17 @@ describe("SubtaskDueControl", () => {
   });
 
   it("canEdit=false ⇒ chỉ là chữ, không bấm được", () => {
-    setCapabilities({});
+    setCapabilities({ "update-deadline:task": true });
     renderWithQuery(<SubtaskDueControl {...PROPS} canEdit={false} />);
     expect(screen.queryByTestId("subtask-due-trigger-sub-001")).not.toBeInTheDocument();
+  });
+
+  // S20-SEC-TASKPATCHGATE-1 — PATCH đặt/xoá hạn đòi update-deadline:task ở server ⇒ thiếu cặp thì
+  // control chỉ là chữ như canEdit=false.
+  it("thiếu update-deadline:task ⇒ chỉ là chữ, không bấm được, không gọi API", () => {
+    setCapabilities({ "read:employee": true });
+    renderWithQuery(<SubtaskDueControl {...PROPS} />);
+    expect(screen.queryByTestId("subtask-due-trigger-sub-001")).not.toBeInTheDocument();
+    expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
   });
 });

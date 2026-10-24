@@ -1,6 +1,7 @@
 /**
  * S10-FND-PARAMUUID-5 · lane **L1-TASKCORE** (KI-078 đợt 4, CUỐI trong phạm vi) — biên HTTP THẬT cho
- * kênh **PARAM** của Task Hub (SPEC-06). **43 tham số / 1 controller** (`tasks/tasks.controller.ts`).
+ * kênh **PARAM** của Task Hub (SPEC-06). **41 tham số / 1 controller** (`tasks/tasks.controller.ts`;
+ * 43 lúc đo đợt 4 — `S20-SEC-TASKLEGACYREAD-1` gỡ 2 route đọc danh sách đời cũ theo dự án/nhóm).
  *
  * Đây là module RỦI RO NHẤT còn lại của KI-078 và cũng là module ĐÔNG tham số nhất: 43 trong tổng 75
  * chỗ còn nợ. Ba đợt trước (`leave`/`attendance`/`approval` · HR/tổ chức · goals/foundation/noti) đã
@@ -20,8 +21,8 @@
  * DENY vẫn xanh còn ca này đỏ. Route HAI/BA tham số id-like có MỘT dòng cho MỖI VẾ — rác ở vế đang
  * đo, HÀNG THẬT ở các vế còn lại — vì đo một vế rồi ký cả hai dòng verdict là ký cho chỗ chưa đo.
  *
- * Bên cạnh đó là ca **ALLOW-2xx trên HÀNG THẬT cho MỖI LOẠI KHOÁ** được vá (task · project · team ·
- * label · comment · watcher · checklist · checklist-item). Đó là vế DUY NHẤT phân biệt "pipe chặn
+ * Bên cạnh đó là ca **ALLOW-2xx trên HÀNG THẬT cho MỖI LOẠI KHOÁ** được vá (task · label · comment ·
+ * watcher · checklist · checklist-item). Đó là vế DUY NHẤT phân biệt "pipe chặn
  * rác" với "pipe chặn OAN request hợp lệ": nếu một `:id` nào đó thực ra nhận MÃ NGHIỆP VỤ chứ không
  * phải uuid thì ca "UUID hợp lệ → 404" vẫn xanh ([[deny-cases-vacuous-without-allow-case]]).
  *
@@ -80,7 +81,7 @@ interface ParamCase {
 }
 
 describe.skipIf(!hasLaneDb)(
-  "S10-FND-PARAMUUID-5 · L1-TASKCORE — biên HTTP kênh PARAM của tasks.controller.ts (43 tham số)",
+  "S10-FND-PARAMUUID-5 · L1-TASKCORE — biên HTTP kênh PARAM của tasks.controller.ts (41 tham số)",
   () => {
     let app: INestApplication;
     let direct: Pool;
@@ -93,7 +94,6 @@ describe.skipIf(!hasLaneDb)(
 
     // Hàng THẬT dùng làm vế "hợp lệ" của các route nhiều tham số. Không bao giờ bị xoá trong file này.
     let projectId = "";
-    let teamId = "";
     let taskId = "";
     let labelId = "";
     let commentId = "";
@@ -238,19 +238,6 @@ describe.skipIf(!hasLaneDb)(
       );
       projectId = prj.rows[0].id;
 
-      const tm = await direct.query<{ id: string }>(
-        `INSERT INTO teams (company_id, name, org_unit_id) VALUES ($1, $2, $3) RETURNING id`,
-        [A.companyId, `s10pu5l1-team-${uniq()}`, orgUnitId],
-      );
-      teamId = tm.rows[0].id;
-      // ⚠️ `TasksRepository.teamExistsTx` KHÔNG tra bảng `teams` — nó tra `team_members`. Một team
-      // KHÔNG có thành viên nào đọc ra "Team not found" (404), và ca ALLOW-2xx sẽ đỏ vì lý do KHÔNG
-      // liên quan tới tham số. Gieo một thành viên THẬT để team "tồn tại" theo đúng nghĩa của route.
-      await direct.query(
-        `INSERT INTO team_members (company_id, team_id, user_id) VALUES ($1, $2, $3)`,
-        [A.companyId, teamId, actorUserId],
-      );
-
       const st = await post(`/projects/${projectId}/states`).send({
         name: `Cột ${uniq()}`,
         stateGroup: "started",
@@ -305,20 +292,10 @@ describe.skipIf(!hasLaneDb)(
     const isoInDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString();
 
     /**
-     * 43 tham số id-like của `tasks/tasks.controller.ts` — thứ tự theo file. `bad` luôn nằm ĐÚNG một
+     * 41 tham số id-like của `tasks/tasks.controller.ts` — thứ tự theo file. `bad` luôn nằm ĐÚNG một
      * vị trí; các vị trí còn lại dùng hàng THẬT gieo ở `beforeAll`.
      */
     const CASES: ParamCase[] = [
-      {
-        key: "tasks/tasks.controller.ts#getProjectTasks:projectId",
-        name: "GET /tasks/by-project/:projectId",
-        run: (bad) => get(`/tasks/by-project/${bad}`),
-      },
-      {
-        key: "tasks/tasks.controller.ts#getTeamTasks:teamId",
-        name: "GET /tasks/by-team/:teamId",
-        run: (bad) => get(`/tasks/by-team/${bad}`),
-      },
       {
         key: "tasks/tasks.controller.ts#getTask:taskId",
         name: "GET /tasks/:taskId",
@@ -533,11 +510,11 @@ describe.skipIf(!hasLaneDb)(
       },
     ];
 
-    it("(0) BẢNG ĐO phủ ĐỦ 43 tham số và không dòng nào TRÙNG KHOÁ", () => {
+    it("(0) BẢNG ĐO phủ ĐỦ 41 tham số và không dòng nào TRÙNG KHOÁ", () => {
       // Neo chống xanh-RỖNG: nếu một dòng bị xoá nhầm khi rebase thì mọi ca dưới vẫn xanh vì
-      // KHÔNG CÓ GÌ để chạy. Số 43 lấy từ census AST (`param-uuid-census.ts`), không đếm tay.
-      expect(CASES.length, "bảng đo phải phủ đúng 43 tham số của tasks.controller.ts").toBe(43);
-      expect(new Set(CASES.map((c) => c.key)).size, "có dòng TRÙNG KHOÁ trong bảng đo").toBe(43);
+      // KHÔNG CÓ GÌ để chạy. Số 41 lấy từ census AST (`param-uuid-census.ts`), không đếm tay.
+      expect(CASES.length, "bảng đo phải phủ đúng 41 tham số của tasks.controller.ts").toBe(41);
+      expect(new Set(CASES.map((c) => c.key)).size, "có dòng TRÙNG KHOÁ trong bảng đo").toBe(41);
       for (const c of CASES) {
         expect(c.key.startsWith("tasks/tasks.controller.ts#"), `khoá sai file: ${c.key}`).toBe(
           true,
@@ -560,14 +537,6 @@ describe.skipIf(!hasLaneDb)(
     // ══ ALLOW-2xx TRÊN HÀNG THẬT — MỖI LOẠI KHOÁ MỘT CA ═════════════════════════════
     // Đây là vế duy nhất chứng minh pipe KHÔNG chặn oan: nếu một `:id` nào đó thực ra nhận MÃ nghiệp
     // vụ thay vì uuid thì ca "UUID hợp lệ → 404" ở trên vẫn xanh còn ca này sẽ đỏ.
-
-    it("ALLOW-200 · GET /tasks/by-project/:projectId trên DỰ ÁN THẬT (loại khoá project)", async () => {
-      expectExact(await get(`/tasks/by-project/${projectId}`), 200);
-    });
-
-    it("ALLOW-200 · GET /tasks/by-team/:teamId trên TEAM THẬT (loại khoá team)", async () => {
-      expectExact(await get(`/tasks/by-team/${teamId}`), 200);
-    });
 
     it("ALLOW-200 · GET /tasks/:taskId trên TASK THẬT (loại khoá task)", async () => {
       expectExact(await get(`/tasks/${taskId}`), 200);
@@ -707,17 +676,13 @@ describe.skipIf(!hasLaneDb)(
     // ══ Hồi quy ĐỊNH TUYẾN — literal-sibling ════════════════════════════════════════
     /**
      * Liệt kê bằng ĐỌC FILE `tasks/tasks.controller.ts`, không bằng trí nhớ:
-     *  · `@Get("my")` · `@Get("board")` — MỘT segment nên chúng KHỚP `@Get(":taskId")`; chỉ THỨ TỰ
-     *    KHAI BÁO cứu chúng. Gắn pipe vào `:taskId` KHÔNG đổi thứ tự, nhưng ca này là lưới bắt nếu
+     *  · `@Get("my")` — MỘT segment nên nó KHỚP `@Get(":taskId")`; chỉ THỨ TỰ
+     *    KHAI BÁO cứu nó. Gắn pipe vào `:taskId` KHÔNG đổi thứ tự, nhưng ca này là lưới bắt nếu
      *    ai đó sắp xếp lại file trong lúc "dọn cho gọn".
      *  · `@Get()` / `@Post()` trần — gốc `/tasks`.
      */
     it("ĐỊNH TUYẾN · GET /tasks/my vẫn 200 (không bị :taskId nuốt)", async () => {
       expectExact(await get("/tasks/my"), 200);
-    });
-
-    it("ĐỊNH TUYẾN · GET /tasks/board vẫn 200 (không bị :taskId nuốt)", async () => {
-      expectExact(await get("/tasks/board"), 200);
     });
 
     it("ĐỊNH TUYẾN · GET /tasks (list) vẫn 200", async () => {

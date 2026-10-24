@@ -19,6 +19,9 @@ import {
   subtaskItemToFormValues,
   type SubtaskFormValues,
 } from "./subtask-form-schema";
+import { editableDirtyFields } from "./task-form-schema";
+import { useTaskPatchFieldLocks, type TaskPatchFieldLocks } from "./task-patch-field-locks";
+import { TaskFieldLockedHint } from "./TaskFieldLockedHint";
 
 /**
  * Dialog Sửa/Xoá 1 việc con — tách khỏi TaskSubtaskPanel.tsx (S5-TASK-SUBTASK-1) để giữ mỗi file
@@ -38,17 +41,20 @@ export function subtaskErrorKey(err: unknown): string {
 
 /** 3 field dùng chung cho form Thêm/Sửa (D-31: title bắt buộc; assignee/due tuỳ chọn). Options nhân
  * viên lấy từ `hrApi.listEmployees` (read:employee) — server đã lọc theo data-scope của actor, mirror
- * TaskFormDrawer/TaskAssignControl. */
+ * TaskFormDrawer/TaskAssignControl. S20-SEC-TASKPATCHGATE-1: `locked` khoá ô người phụ trách / hạn
+ * khi thiếu cặp chuyên trách (`assign:task` / `update-deadline:task`) — server đòi cặp khi trường ĐỔI. */
 function SubtaskFormFields({
   idPrefix,
   register,
   errors,
   employees,
+  locked,
 }: {
   idPrefix: string;
   register: UseFormRegister<SubtaskFormValues>;
   errors: FieldErrors<SubtaskFormValues>;
   employees: Array<{ id: string; fullName: string }>;
+  locked: Pick<TaskPatchFieldLocks, "assigneeEmployeeId" | "dueAt">;
 }) {
   const { t } = useTranslation("tasks");
   return (
@@ -69,7 +75,12 @@ function SubtaskFormFields({
         <label htmlFor={`${idPrefix}-assignee`} className="text-sm font-medium text-foreground">
           {t("tasks.detail.subtasks.fields.assignee")}
         </label>
-        <Select id={`${idPrefix}-assignee`} {...register("assigneeEmployeeId")}>
+        <Select
+          id={`${idPrefix}-assignee`}
+          {...register("assigneeEmployeeId")}
+          disabled={locked.assigneeEmployeeId}
+          aria-describedby={locked.assigneeEmployeeId ? `${idPrefix}-assignee-locked` : undefined}
+        >
           <option value="">{t("tasks.form.placeholders.none")}</option>
           {employees.map((e) => (
             <option key={e.id} value={e.id}>
@@ -77,12 +88,20 @@ function SubtaskFormFields({
             </option>
           ))}
         </Select>
+        {locked.assigneeEmployeeId && <TaskFieldLockedHint id={`${idPrefix}-assignee-locked`} />}
       </div>
       <div className="space-y-1.5">
         <label htmlFor={`${idPrefix}-due`} className="text-sm font-medium text-foreground">
           {t("tasks.detail.subtasks.fields.dueAt")}
         </label>
-        <Input id={`${idPrefix}-due`} type="datetime-local" {...register("dueAt")} />
+        <Input
+          id={`${idPrefix}-due`}
+          type="datetime-local"
+          {...register("dueAt")}
+          disabled={locked.dueAt}
+          aria-describedby={locked.dueAt ? `${idPrefix}-due-locked` : undefined}
+        />
+        {locked.dueAt && <TaskFieldLockedHint id={`${idPrefix}-due-locked`} />}
       </div>
     </div>
   );
@@ -124,10 +143,11 @@ export function EditSubtaskDialog({
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
   const employees = useEmployeeOptions();
+  const locked = useTaskPatchFieldLocks();
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<SubtaskFormValues>({
     resolver: zodResolver(subtaskFormSchema),
     mode: "onSubmit",
@@ -135,8 +155,12 @@ export function EditSubtaskDialog({
   });
 
   const mutation = useMutation({
-    mutationFn: (values: SubtaskFormValues) =>
-      taskCoreApi.updateTask(item.id, subtaskFormToUpdatePayload(values)),
+    mutationFn: async (values: SubtaskFormValues) => {
+      const payload = subtaskFormToUpdatePayload(values, editableDirtyFields(dirtyFields, locked));
+      // Không sửa gì ⇒ không gọi API (PATCH rỗng bị server từ chối 400).
+      if (Object.keys(payload).length === 0) return null;
+      return taskCoreApi.updateTask(item.id, payload);
+    },
     onSuccess: async () => {
       await Promise.all(
         taskSubtaskInvalidation
@@ -183,6 +207,7 @@ export function EditSubtaskDialog({
           register={register}
           errors={errors}
           employees={employees}
+          locked={locked}
         />
       </form>
     </Dialog>

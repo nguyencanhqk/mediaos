@@ -87,6 +87,10 @@ export default {
     heading: "Chuyển sang cột…",
     noTargets: "Không còn cột nào khác để chuyển.",
   },
+  // S20-SEC-TASKPATCHGATE-1 — ô của form Sửa bị khoá vì thiếu cặp quyền chuyên trách của trường đó.
+  fieldGate: {
+    locked: "Bạn không có quyền đổi mục này.",
+  },
   // S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — cảnh báo sau khi giao (`warnings[]` của route action).
   // ON-LEAVE = đơn nghỉ đã duyệt trùng NGÀY HẠN của việc (task-actions.service) — không phải «đang nghỉ».
   assigneeWarning: {
