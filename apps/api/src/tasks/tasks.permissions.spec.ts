@@ -197,3 +197,18 @@ describe("TasksController — một đường đọc danh sách việc (S20-SEC-
     expect([...declaredGetPaths()].sort()).toEqual([...APPROVED_GET_PATHS].sort());
   });
 });
+
+/**
+ * S20-SEC-TASKPATCHGATE-1 — PATCH `:taskId` giữ ĐÚNG một cặp ở route (`update:task`). Cổng cho trường
+ * có cặp chuyên trách (hạn · ưu tiên · người phụ trách) nằm ở method dùng chung của service — cùng
+ * nguyên tắc với `stateId` — chứ không nâng cặp của route: nâng cặp route sẽ chặn cả việc sửa tiêu đề.
+ */
+describe("TasksController — PATCH :taskId khai đúng một cặp ở route (S20-SEC-TASKPATCHGATE-1)", () => {
+  it("updateTask: PATCH :taskId, @RequirePermission đúng {update, task}, không cờ phụ", () => {
+    const handler = handlerOf("updateTask");
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(":taskId");
+    expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(RequestMethod.PATCH);
+    const meta = Reflect.getMetadata(REQUIRE_PERMISSION, handler) as RequirePermissionMeta;
+    expect(meta).toEqual({ action: "update", resourceType: "task" });
+  });
+});
