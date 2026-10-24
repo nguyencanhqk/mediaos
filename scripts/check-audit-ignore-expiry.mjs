@@ -46,6 +46,8 @@ const HEADER = /^auditConfig:$/;
 const LIST_KEY = /^ {2}ignoreGhsas:$/;
 const LIST_ITEM = /^ {4}- (GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4})$/;
 const MENTION = /auditConfig|ignoreGhsas|ignoreCves|GHSA-|CVE-\d/i;
+// Cột 0 chỉ nhận khoá trần (chặn khoá có nháy/escape kiểu `"\x61uditConfig"` và tệp viết thành flow mapping).
+const TOP_KEY = /^[A-Za-z][A-Za-z0-9]*:( |$)/;
 const WO_ID = /^S\d+-[A-Z0-9]+(-[A-Z0-9]+)*$/;
 const DAY_MS = 86_400_000;
 
@@ -66,6 +68,10 @@ export function parseIgnoreGhsas(yamlText) {
     const code = codeOf(raw);
     if (code === "") return;
     const where = `dòng ${i + 1}: \`${code.trim()}\``;
+    if (/^\S/.test(code) && !TOP_KEY.test(code)) {
+      problems.push(`${where} — dòng ở cột 0 phải là một khoá trần \`tên:\``);
+      return;
+    }
     if (inBlock && /^\S/.test(code)) inBlock = false;
     if (HEADER.test(code)) {
       headers += 1;
@@ -97,10 +103,13 @@ function isRealDate(s) {
   return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
 }
 
-/** Mọi phiên bản của `pkg` có trong `pnpm-lock.yaml` (khoá `packages:` / `snapshots:` dạng `  pkg@x.y.z…:`). */
+/**
+ * Mọi giá trị sau `pkg@` ở khoá `packages:` / `snapshots:` của `pnpm-lock.yaml` (dạng `  pkg@…:`), KHÔNG lọc —
+ * semver, tarball, git đều được trả về để `scopeProblems` áp quy tắc dương lên từng giá trị.
+ */
 export function lockVersions(lockText, pkg) {
   const name = pkg.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-  const re = new RegExp(`^ {2}['"]?${name}@(\\d+\\.\\d+\\.\\d+)`, "gm");
+  const re = new RegExp(`^ {2}['"]?${name}@([^:'"(\\s]+)`, "gm");
   return [...new Set([...lockText.matchAll(re)].map((m) => m[1]))];
 }
 
@@ -112,8 +121,9 @@ function scopeProblems(ghsa, scope, lockText) {
   const versions = lockVersions(lockText, scope.pkg);
   if (versions.length === 0)
     return [`${ghsa}: lockfile không còn bản ${scope.pkg} nào — gỡ ignore + mục EXPIRY`];
+  const allowed = new RegExp(`^${scope.major}\\.\\d+\\.\\d+(-[\\w.]+)?$`);
   return versions
-    .filter((v) => Number(v.split(".")[0]) !== scope.major)
+    .filter((v) => !allowed.test(v))
     .map(
       (v) =>
         `${ghsa}: ${scope.pkg}@${v} trong lockfile nằm NGOÀI phạm vi ngoại lệ (chỉ major ${scope.major})`,
@@ -140,9 +150,11 @@ export function checkIgnores(parsed, expiry, today, lockText) {
       problems.push(`${ghsa}: \`wo\` phải là mã WO (đang là ${JSON.stringify(entry.wo)})`);
     const days =
       (Date.parse(`${entry.until}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS;
-    if (days < 0)
-      problems.push(`${ghsa}: ngoại lệ đã QUÁ HẠN ${entry.until} — làm ${entry.wo} rồi gỡ ignore`);
-    else if (days > MAX_WINDOW_DAYS)
+    if (!(days >= 0))
+      problems.push(
+        `${ghsa}: ngoại lệ đã QUÁ HẠN ${entry.until} (hoặc không so được với ngày ${JSON.stringify(today)}) — làm ${entry.wo} rồi gỡ ignore`,
+      );
+    else if (!(days <= MAX_WINDOW_DAYS))
       problems.push(`${ghsa}: hạn ${entry.until} xa hơn ${MAX_WINDOW_DAYS} ngày kể từ ${today}`);
   }
   for (const ghsa of Object.keys(expiry)) {

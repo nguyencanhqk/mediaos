@@ -35,9 +35,51 @@ test("pnpm-workspace.yaml thật: đúng dạng chuẩn và mọi GHSA trong đ�
   for (const ghsa of parsed.ids) assert.ok(EXPIRY[ghsa], `${ghsa} thiếu hạn`);
 });
 
-test(`cấu hình thật (pnpm-workspace.yaml + pnpm-lock.yaml + EXPIRY) đạt ở ngày ${TODAY}`, () => {
+// Ngày THẬT (không ghim): cùng kết luận với bước CI chạy script — gia hạn hợp lệ không làm ca này đỏ oan, còn
+// quá hạn thì ca này đỏ cùng lúc với script (đúng ý).
+test("cấu hình thật (pnpm-workspace.yaml + pnpm-lock.yaml + EXPIRY) đạt ở ngày hôm nay", () => {
   const parsed = parseIgnoreGhsas(readRepo("pnpm-workspace.yaml"));
-  assert.deepEqual(checkIgnores(parsed, EXPIRY, TODAY, readRepo("pnpm-lock.yaml")), []);
+  const today = new Date().toISOString().slice(0, 10);
+  assert.deepEqual(checkIgnores(parsed, EXPIRY, today, readRepo("pnpm-lock.yaml")), []);
+});
+
+test("CRLF và chú thích cuối dòng ở header ⇒ đọc đúng", () => {
+  const yaml = block("auditConfig: # ghi chú", "  ignoreGhsas:", `    - ${G1}`).replace(
+    /\n/g,
+    "\r\n",
+  );
+  assert.deepEqual(parseIgnoreGhsas(yaml), { ids: [G1], problems: [] });
+});
+
+for (const [name, yaml] of [
+  [
+    "khoá cột 0 có escape trong nháy",
+    `${block()}\n"\\x61uditConfig": {"\\x69gnoreGhsas": ["\\x47HSA-aaaa-bbbb-cccc"]}`,
+  ],
+  [
+    "cả tệp viết thành một dòng flow mapping",
+    `{"packages": ["a #"], "auditConfig": {"ignoreGhsas": ["${G2}"]}}`,
+  ],
+  ["dấu tài liệu YAML thứ hai", `${block()}\n---\nauditConfig:\n  ignoreGhsas:\n    - ${G2}`],
+]) {
+  test(`dòng cột 0 không phải khoá trần — ${name} ⇒ ĐỎ`, () => {
+    const parsed = parseIgnoreGhsas(yaml);
+    assert.ok(parsed.problems.length >= 1, JSON.stringify(parsed));
+    assert.ok(chk(parsed, {}, TODAY).length >= 1);
+  });
+}
+
+test("lockfile có khoá zod dạng tarball/git ⇒ ĐỎ (không lặng lẽ bỏ sót)", () => {
+  const lock = `${LOCK}\n  zod@https://codeload.github.com/colinhacks/zod/tar.gz/abc123: {}`;
+  const p = chk(parseIgnoreGhsas(canonical), { [G1]: OK }, TODAY, lock);
+  assert.equal(p.length, 1);
+  assert.match(p[0], /NGOÀI phạm vi/);
+});
+
+test("today sai dạng ⇒ ĐỎ (so sánh dương, NaN không lọt)", () => {
+  const p = chk(parseIgnoreGhsas(canonical), { [G1]: OK }, "garbage");
+  assert.equal(p.length, 1);
+  assert.match(p[0], /không so được/);
 });
 
 test("dạng chuẩn có chú thích, dòng trống, chú thích cuối dòng ⇒ đọc đủ, không vấn đề", () => {
