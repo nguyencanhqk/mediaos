@@ -136,13 +136,6 @@ export const taskSchema = z.object({
 });
 export type TaskDto = z.infer<typeof taskSchema>;
 
-// ─── Board work item (TaskDto + nhãn gắn) ───────────────────────────────────────
-// Dùng cho GET /tasks/board + detail: trả thêm labels[] (aggregate). My Tasks giữ TaskDto (rẻ, không join nhãn).
-export const boardTaskSchema = taskSchema.extend({
-  labels: z.array(labelSchema),
-});
-export type BoardTaskDto = z.infer<typeof boardTaskSchema>;
-
 // ─── Comment ──────────────────────────────────────────────────────────────────
 
 export const commentSchema = z.object({
@@ -206,31 +199,8 @@ export const updateTaskStatusSchema = z.object({
 });
 export type UpdateTaskStatusRequest = z.infer<typeof updateTaskStatusSchema>;
 
-// ─── Board list query (G9-3) ────────────────────────────────────────────────────
-/**
- * Task Board query — source of truth for the GET /tasks/board DTO (BĐ §contracts).
- * All filters optional (board lists across the tenant); page bounds are CLAMPED here at the
- * boundary so a malicious/huge limit cannot scan the table (repo also re-clamps to MAX_PAGE_SIZE
- * = defense-in-depth). `coerce` lets the controller pass raw @Query strings straight through.
- *
- * `taskType` accepts ALL 8 accepted types (taskTypeSchema) — board surfaces every source, not just
- * the hand-created ones. `status` accepts the full task lifecycle (taskStatusSchema) for filtering;
- * it does NOT loosen the write-side OfficeTaskStatusDto guard (that stays on the PATCH path).
- */
-export const BOARD_PAGE_LIMIT_MAX = 200;
-export const listTasksQuerySchema = z.object({
-  taskType: taskTypeSchema.optional(),
-  status: taskStatusSchema.optional(),
-  projectId: z.string().uuid().optional(),
-  assigneeUserId: z.string().uuid().optional(),
-  // PM-1: lọc board theo state tùy biến / ưu tiên / nhãn.
-  stateId: z.string().uuid().optional(),
-  priority: prioritySchema.optional(),
-  labelId: z.string().uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(BOARD_PAGE_LIMIT_MAX).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
-});
-export type ListTasksQueryRequest = z.infer<typeof listTasksQuerySchema>;
+// S20-SEC-TASKLEGACYREAD-1: họ DTO của các route đọc danh sách đời cũ đã gỡ cùng route. Đường đọc
+// danh sách duy nhất là GET /tasks (`listTaskCoreQuerySchema` bên dưới) với một phạm vi đọc.
 
 // ─── Task attachments (B4 — real file upload) ────────────────────────────────────
 /**
@@ -494,10 +464,10 @@ export type TaskProjectListItemDto = z.infer<typeof taskProjectListItemSchema>;
 
 /**
  * GET /api/v1/projects query (TASK-API-001, read:project). `limit`/`offset` dùng CÙNG pattern
- * `z.coerce.number()` như `listTasksQuerySchema` phía trên — coerce số idempotent tự nhiên
+ * `z.coerce.number()` như các query phân trang khác — coerce số idempotent tự nhiên
  * (Number(5) === 5 dù ZodValidationPipe chạy 2 lần; KHÁC boolean cần z.preprocess riêng — xem
  * memory zod-query-param-double-pipe-idempotent / packages/contracts/src/my-notification.ts).
- * Repo re-clamp TASK_PROJECT_PAGE_LIMIT_MAX lần nữa (defense-in-depth, mirror BOARD_PAGE_LIMIT_MAX).
+ * Repo re-clamp TASK_PROJECT_PAGE_LIMIT_MAX lần nữa (defense-in-depth).
  */
 export const TASK_PROJECT_PAGE_LIMIT_MAX = 200;
 export const listTaskProjectsQuerySchema = z.object({
@@ -692,9 +662,9 @@ export type UpdateTaskCoreRequest = z.infer<typeof updateTaskCoreSchema>;
  * Chi tiết/dòng task core (GET /tasks, GET /tasks/:id) — DTO server-side, join tên project/assignee/creator.
  * `status`/`priority` là cột TitleCase MỚI (nullable — hàng legacy/FSM chưa set). `isOverdue` tính ở server.
  *
- * KHÔNG hợp nhất với `taskSchema`/`boardTaskSchema` phía trên dù chúng CŨNG có stateId/stateName:
- * đó là họ DTO PM-1 legacy (route /tasks/board G9-3, cột `status` lowercase) — FE nghiệp vụ hiện
- * không dùng, sẽ dọn ở WO dead-code. Trộn hai họ = ép cả hai vòng đời đổi cùng lúc (drift 2 chiều).
+ * KHÔNG hợp nhất với `taskSchema` phía trên dù nó CŨNG có stateId/stateName: đó là họ DTO PM-1
+ * legacy (cột `status` lowercase; route đọc danh sách của họ này đã gỡ ở S20-SEC-TASKLEGACYREAD-1).
+ * Trộn hai họ = ép cả hai vòng đời đổi cùng lúc (drift 2 chiều).
  */
 export const taskCoreResponseSchema = z.object({
   id: z.string().uuid(),

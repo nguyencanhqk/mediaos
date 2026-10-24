@@ -720,7 +720,8 @@ function dashPairBySpec(specCode: string): DashPermissionPair {
  * SYSTEM_LOGS/LEAVE_BALANCE/NEW_EMPLOYEES/CONTRACT_EXPIRING/LEAVE_CALENDAR/ATTENDANCE_ALERTS) NAY đã seed
  * (migration 0493 + handler). Còn DEFER đúng 2 (owner Trim-MVP đợt 2):
  *   - TEAM_TASKS_TODAY: KHÔNG có resolver viewer→teamId sạch (resolveContext trả managedUserIds+org-units,
- *     KHÔNG teamId; TasksService.listByTeam nhận teamId tường minh + chỉ tenant-guard) ⇒ không gate scope sạch.
+ *     KHÔNG teamId; đọc việc theo nhóm chỉ còn qua phạm vi đọc của GET /tasks — hàm đọc theo nhóm đời cũ
+ *     đã gỡ ở S20-SEC-TASKLEGACYREAD-1) ⇒ chưa có nguồn dữ liệu đã gate phạm vi cho widget này.
  *   - CONFIG_WARNINGS: chưa có read-service warnings cấu hình hệ thống ⇒ seed sẽ luôn degraded.
  */
 export const DASH_WIDGETS_NOT_SEEDED: readonly string[] = [

@@ -120,6 +120,8 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
       recomputeProjectGoalsTx: vi.fn().mockResolvedValue(undefined),
       recomputeForTaskTx: vi.fn().mockResolvedValue(undefined),
     } as never,
+    // S20-SEC-TASKPATCHGATE-1 — cổng trường của PATCH; createTask không gọi tới.
+    { prepare: vi.fn(), assertTx: vi.fn() } as never,
   );
   return { svc, repo, db, sequence };
 }

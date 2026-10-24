@@ -20,10 +20,20 @@ describe.skipIf(!hasDb)("PM-1 LabelsService (RLS app role)", () => {
   let userA: string;
   let projectA: string;
   let projectB: string;
+  let db: DatabaseService;
+  let repo: TasksRepository;
   let labels: LabelsService;
   let tasks: TasksService;
 
   const user = () => ({ id: userA, companyId: A.companyId });
+
+  /** Nhãn của 1 task, đọc qua ĐÚNG hàm repository mà đường chi tiết GET /tasks/:taskId dùng. */
+  async function labelIdsOf(taskId: string): Promise<string[]> {
+    const rows = await db.withTenant(A.companyId, (tx) =>
+      repo.listLabelsForTaskIdsTx(tx, A.companyId, [taskId]),
+    );
+    return rows.map((r) => r.id);
+  }
 
   async function seedProjectDirect(companyId: string): Promise<string> {
     const r = await direct.query(
@@ -40,16 +50,16 @@ describe.skipIf(!hasDb)("PM-1 LabelsService (RLS app role)", () => {
     projectA = await seedProjectDirect(A.companyId);
     projectB = await seedProjectDirect(B.companyId);
 
-    const db = new DatabaseService();
-    const repo = new TasksRepository(db);
+    db = new DatabaseService();
+    repo = new TasksRepository(db);
     const audit = new AuditService();
     labels = new LabelsService(db, repo, audit);
     tasks = new TasksService(
       db,
       repo,
       audit,
-    { resolveAndAssert: async () => "Company" } as never,
-    { assertTaskInScopeTx: async () => undefined } as never,
+      { resolveAndAssert: async () => "Company" } as never,
+      { assertTaskInScopeTx: async () => undefined } as never,
     );
   });
 
@@ -90,8 +100,10 @@ describe.skipIf(!hasDb)("PM-1 LabelsService (RLS app role)", () => {
     );
   });
 
-  it("assign + unassign label to task; board exposes labels[]", async () => {
-    const l = await labels.createLabel(user(), projectA, { name: `feat-${randomUUID().slice(0, 6)}` });
+  it("assign + unassign label to task; task labels reflect the change", async () => {
+    const l = await labels.createLabel(user(), projectA, {
+      name: `feat-${randomUUID().slice(0, 6)}`,
+    });
     const task = await tasks.createTask(user(), {
       title: "labelled-task",
       taskType: "office",
@@ -99,18 +111,16 @@ describe.skipIf(!hasDb)("PM-1 LabelsService (RLS app role)", () => {
     });
 
     await tasks.addLabelToTask(user(), task.id, l.id);
-    const board = await tasks.listBoard(A.companyId, { projectId: projectA });
-    const row = board.find((b) => b.id === task.id);
-    expect(row?.labels.map((x) => x.id)).toContain(l.id);
+    expect(await labelIdsOf(task.id)).toContain(l.id);
 
     await tasks.removeLabelFromTask(user(), task.id, l.id);
-    const board2 = await tasks.listBoard(A.companyId, { projectId: projectA });
-    const row2 = board2.find((b) => b.id === task.id);
-    expect(row2?.labels.map((x) => x.id)).not.toContain(l.id);
+    expect(await labelIdsOf(task.id)).not.toContain(l.id);
   });
 
   it("idempotent add: assigning the same label twice does not throw or duplicate", async () => {
-    const l = await labels.createLabel(user(), projectA, { name: `idem-${randomUUID().slice(0, 6)}` });
+    const l = await labels.createLabel(user(), projectA, {
+      name: `idem-${randomUUID().slice(0, 6)}`,
+    });
     const task = await tasks.createTask(user(), {
       title: "idem-task",
       taskType: "office",
@@ -118,9 +128,7 @@ describe.skipIf(!hasDb)("PM-1 LabelsService (RLS app role)", () => {
     });
     await tasks.addLabelToTask(user(), task.id, l.id);
     await tasks.addLabelToTask(user(), task.id, l.id); // no throw
-    const board = await tasks.listBoard(A.companyId, { projectId: projectA });
-    const row = board.find((b) => b.id === task.id);
-    expect(row?.labels.filter((x) => x.id === l.id)).toHaveLength(1);
+    expect((await labelIdsOf(task.id)).filter((id) => id === l.id)).toHaveLength(1);
   });
 
   it("same-project guard: label + task must share project", async () => {
@@ -136,27 +144,5 @@ describe.skipIf(!hasDb)("PM-1 LabelsService (RLS app role)", () => {
     await expect(tasks.addLabelToTask(user(), task.id, l.id)).rejects.toBeInstanceOf(
       BadRequestException,
     );
-  });
-
-  it("labelId filter: board returns only tasks carrying the label", async () => {
-    const l = await labels.createLabel(user(), projectA, {
-      name: `filter-${randomUUID().slice(0, 6)}`,
-    });
-    const tagged = await tasks.createTask(user(), {
-      title: "tagged",
-      taskType: "office",
-      projectId: projectA,
-    });
-    const untagged = await tasks.createTask(user(), {
-      title: "untagged",
-      taskType: "office",
-      projectId: projectA,
-    });
-    await tasks.addLabelToTask(user(), tagged.id, l.id);
-
-    const board = await tasks.listBoard(A.companyId, { labelId: l.id });
-    const ids = board.map((b) => b.id);
-    expect(ids).toContain(tagged.id);
-    expect(ids).not.toContain(untagged.id);
   });
 });

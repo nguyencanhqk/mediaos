@@ -16,7 +16,8 @@ import "reflect-metadata";
  * Gọi thẳng PermissionGuard với metadata THẬT của controller (Reflector thật) → enforcement
  * end-to-end mà không cần boot Nest/DB.
  */
-import { ForbiddenException, type ExecutionContext } from "@nestjs/common";
+import { ForbiddenException, RequestMethod, type ExecutionContext } from "@nestjs/common";
+import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { Reflector } from "@nestjs/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TasksController } from "./tasks.controller";
@@ -48,9 +49,6 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "deleteTask", action: "delete", resourceType: "task", isSensitive: true },
   // addComment là WRITE → gate comment:task (G9-2 H-1; recon S4-TASK-RECON canonical hoá về resource `task`).
   { handlerName: "addComment", action: "comment", resourceType: "task" },
-  // getBoard (G9-3) là READ NHẠY CẢM hơn getMyTasks (xem việc của NGƯỜI KHÁC toàn tenant) →
-  // PHẢI gate read:task (seed 0005, is_sensitive=false). User 0-quyền KHÔNG được đọc board.
-  { handlerName: "getBoard", action: "read", resourceType: "task" },
   // S4-TASK-BE-2: task core CRUD/my/list gate read/update:task + data-scope (KHÔNG còn mở như getMyTasks cũ).
   { handlerName: "listTasks", action: "read", resourceType: "task" },
   { handlerName: "getMyTasks", action: "read", resourceType: "task" },
@@ -154,5 +152,63 @@ describe("TasksController — permission guard (G9-2)", () => {
     it("has no @RequirePermission (tenant-scoped by global guards)", () => {
       expect(Reflect.getMetadata(REQUIRE_PERMISSION, handlerOf(name))).toBeUndefined();
     });
+  });
+});
+
+/**
+ * S20-SEC-TASKLEGACYREAD-1 — chốt tĩnh (không cần DB), quy tắc DƯƠNG: tập path GET của `TasksController`
+ * phải KHỚP ĐÚNG danh sách đã duyệt dưới đây. Đường đọc danh sách việc duy nhất là `GET /tasks` (`/`,
+ * một biểu thức phạm vi đọc); các GET còn lại đọc một việc hoặc tài nguyên con của một việc. Thêm BẤT KỲ
+ * GET nào (tên nào cũng vậy) ⇒ đỏ ở đây ⇒ người thêm quyết định phạm vi đọc rồi mới sửa danh sách.
+ * Đọc `PATH_METADATA` + `METHOD_METADATA` của MỌI method trên prototype. Neo DƯƠNG đứng cạnh: tập path
+ * GET phải chứa `my` và `:taskId` — đọc metadata hỏng (tập rỗng) thì neo đỏ.
+ */
+describe("TasksController — một đường đọc danh sách việc (S20-SEC-TASKLEGACYREAD-1)", () => {
+  const APPROVED_GET_PATHS: readonly string[] = [
+    "/",
+    "my",
+    ":taskId",
+    ":taskId/activity",
+    ":taskId/checklists",
+    ":taskId/comments",
+    ":taskId/subtasks",
+    ":taskId/watchers",
+  ];
+
+  function declaredGetPaths(): string[] {
+    const proto = TasksController.prototype as unknown as Record<string, unknown>;
+    const paths: string[] = [];
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (name === "constructor") continue;
+      const handler = proto[name];
+      if (typeof handler !== "function") continue;
+      const path: unknown = Reflect.getMetadata(PATH_METADATA, handler);
+      const method: unknown = Reflect.getMetadata(METHOD_METADATA, handler);
+      if (typeof path === "string" && method === RequestMethod.GET) paths.push(path);
+    }
+    return paths;
+  }
+
+  it("neo: đọc được path GET của controller (chứa my và :taskId)", () => {
+    expect(declaredGetPaths()).toEqual(expect.arrayContaining(["my", ":taskId"]));
+  });
+
+  it("tập path GET khớp đúng danh sách đã duyệt phạm vi đọc", () => {
+    expect([...declaredGetPaths()].sort()).toEqual([...APPROVED_GET_PATHS].sort());
+  });
+});
+
+/**
+ * S20-SEC-TASKPATCHGATE-1 — PATCH `:taskId` giữ ĐÚNG một cặp ở route (`update:task`). Cổng cho trường
+ * có cặp chuyên trách (hạn · ưu tiên · người phụ trách) nằm ở method dùng chung của service — cùng
+ * nguyên tắc với `stateId` — chứ không nâng cặp của route: nâng cặp route sẽ chặn cả việc sửa tiêu đề.
+ */
+describe("TasksController — PATCH :taskId khai đúng một cặp ở route (S20-SEC-TASKPATCHGATE-1)", () => {
+  it("updateTask: PATCH :taskId, @RequirePermission đúng {update, task}, không cờ phụ", () => {
+    const handler = handlerOf("updateTask");
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(":taskId");
+    expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(RequestMethod.PATCH);
+    const meta = Reflect.getMetadata(REQUIRE_PERMISSION, handler) as RequirePermissionMeta;
+    expect(meta).toEqual({ action: "update", resourceType: "task" });
   });
 });
