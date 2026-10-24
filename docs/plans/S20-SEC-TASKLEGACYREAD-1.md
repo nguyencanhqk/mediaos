@@ -146,23 +146,30 @@ Trong `paths` của WO:
 - `apps/api/test/foundation/param-uuid-verdicts.ts` · `param-uuid-ratchet.unit-spec.ts` · `route-http-coverage.e2e-spec.ts`
 - `scripts/perf-smoke.mjs` — đầu dò → `GET /tasks`
 
-KHÔNG đổi: migration, contracts, FE, `harness/backlog.mjs` (luồng chính), dependency.
+Thêm ở bước vá gate (§11):
+
+- `packages/contracts/src/task.ts` — gỡ họ DTO của các route đọc danh sách đời cũ (0 nơi dùng, đo)
+- `apps/api/src/tasks/tasks.module.ts` · `apps/api/src/dashboard/dashboard-widget-catalog.const.ts` · `apps/api/src/dashboard/dashboard-cache-invalidation.dto.ts` — chỉ comment
+- `docs/DEVOPS/DEVOPS-13_…` · `docs/DEVOPS/DEVOPS-15_…` — ghi chú route đã gỡ
+
+KHÔNG đổi: migration, FE, `harness/backlog.mjs` (luồng chính), dependency.
 
 ## §7 Deploy + rollback
 
-- **Chỉ API**, không migration, không FE ⇒ Pages không đổi. Quyết định owner giữ nguyên: merge và cập nhật API PROD **trong cùng ngày**.
+- **Chỉ API** (+ gỡ export contracts không có nơi dùng — bundle FE không đổi), không migration, không FE ⇒ Pages không đổi. Quyết định owner giữ nguyên: merge và cập nhật API PROD **trong cùng ngày**.
 - **Thời điểm mở PR (F1):** luồng chính chỉ mở PR khi owner sẵn sàng deploy API trong **cùng khung giờ** — thu hẹp khoảng giữa lúc PR công khai và lúc PROD nhận bản vá.
-- **Đầu dò hậu deploy:** ở kênh owner (ngoài repo); không dữ liệu PROD vào repo.
+- **Đầu dò hậu deploy (gate M1):** ngay sau khi cập nhật API PROD, gọi ba đường cũ với một token hợp lệ ⇒ mong 400/404 và body không có mảng `data`; ghi kết quả ở kênh owner (ngoài repo), không dữ liệu PROD vào repo. Không để PR mở lâu sau khi push nhánh.
 - **Rollback:** quay về build API trước (không có thay đổi DB ⇒ an toàn, không cần down-migration). Chỉ dùng khi đường chuẩn hỏng.
 - **Rebase song song (F8):** census json, `route-http-coverage.e2e-spec.ts` và `param-uuid-verdicts.ts` là tệp số đếm dùng chung với các chuỗi đang chạy song song. Sau MỖI lần rebase lên master: sinh lại census bằng `ROUTE_CENSUS_WRITE=1`, đặt `MIN_COVERED_COUNT` và sàn param-uuid theo **số spec in ra**. Cấm gộp số bằng tay khi giải xung đột.
 - `check.sh --all --lane-db` + FULL gate (security-reviewer + silent-failure-hunter + santa) là việc của luồng chính trước PR.
 
 ## §8 Ngoài phạm vi / nợ
 
-- `packages/contracts` còn `listTasksQuerySchema`/`boardTaskSchema`/`BoardTaskDto` không còn hộ API sau WO [ĐO: chỉ `tasks.dto.ts` + comment] — dọn ở WO contracts riêng (gói dual-build, tránh phình diff vùng đỏ).
-- `TasksService.getMyTasks` + `repo.findByAssignee` mồ côi **từ trước** WO (controller dùng `TaskCoreService.getMyTasks`) [ĐO: chỉ spec gọi] — không do WO này lộ ra ⇒ ghi nợ, không gỡ.
+- ~~`packages/contracts` còn họ DTO board~~ — đã gỡ ở bước vá gate (§11).
+- `TasksService.getMyTasks` + `repo.findByAssignee` mồ côi **từ trước** WO (controller dùng `TaskCoreService.getMyTasks`) [ĐO: chỉ spec gọi] — không do WO này lộ ra ⇒ ghi nợ, gỡ ở WO dọn mã chết riêng (gate L3).
+- Chốt tĩnh dạng danh sách GET dương (S1) mới có ở `TasksController`; các controller khác có đường đọc danh sách (dự án, kanban, feed) chưa có ratchet phạm vi đọc tương đương — ngoài phạm vi.
 - `DashboardWidgetHandlersService` inject `TasksService` nhưng 0 lời gọi `this.tasks.` [ĐO].
-- Comment lịch sử nhắc ký hiệu bị gỡ, giữ nguyên (không phải mã chạy): `dashboard-widget-catalog.const.ts:723`, `dashboard-cache-invalidation.dto.ts:6`, `tasks.module.ts:123`, `me-aggregation.service.ts:64`, `migrations/0493`. Báo cáo `docs/DEVOPS/DEVOPS-13`/`DEVOPS-15` nêu số đo cũ — tài liệu lịch sử.
+- Comment nhắc ký hiệu bị gỡ: đã cập nhật ở `dashboard-widget-catalog.const.ts`, `dashboard-cache-invalidation.dto.ts`, `tasks.module.ts`; DEVOPS-13/15 thêm ghi chú (số đo cũ giữ — tài liệu lịch sử). Giữ nguyên: `me-aggregation.service.ts:64` (danh sách hàm CẤM gọi — vẫn đúng nghĩa), `migrations/0493` (migration đã áp — không sửa), `apps/app/src/components/dashboard/ProjectProgressWidget.tsx:5` (comment FE — dọn ở WO FE kế, giữ diff vùng đỏ không chạm FE).
 - Các route ghi đời cũ trong `TasksController` (`PATCH :taskId/status`, labels) — ngoài phạm vi.
 - Các đường đọc danh sách khác (`/tasks/my`, `:taskId/subtasks`, kanban, feed dự án) — ngoài I-1 của WO này (F7).
 
@@ -209,3 +216,20 @@ Lệch nhỏ so với §3 (ghi để reviewer đối chiếu):
 - `tasks-core-param-uuid.int-spec.ts`: ngoài 5 ca + seed team, cập nhật số tham số 43 → 41 ở docblock, tên `describe` và ca (0) — bắt buộc để ca (0) khớp census AST.
 - `api-keys.deny-path.int-spec.ts`, `labels.int-spec.ts`: prettier định dạng lại toàn tệp (tệp gốc chưa theo prettier); thay đổi nội dung chỉ là đầu dò `/tasks` và đường đọc nhãn.
 - Docblock `GET /tasks` ở controller thêm một câu nêu I-2 (đường đọc danh sách theo bộ lọc duy nhất của controller).
+
+## §11 Gate FULL → vá gate (đầu `aeaa4d65`)
+
+Reviewer: security · correctness · silent-failure (santa: hai PASS_WITH_FINDINGS). Mỗi finding xác minh bằng mã trước khi quyết.
+
+| #                                                   | Mức        | Quyết định      | Đo / ghi chú                                                                                                                                                                                                                                          |
+| --------------------------------------------------- | ---------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1                                                  | MEDIUM     | NỢ VẬN HÀNH     | Không vá được bằng mã của nhánh: khoảng giữa lúc nhánh công khai và lúc API PROD nhận bản vá. §7 giữ quyết định owner (mở PR khi sẵn sàng deploy, merge + deploy API cùng ngày) + thêm đầu dò hậu deploy                                              |
+| L1 · F1 (correctness) · F2 (silent, phần contracts) | MEDIUM/LOW | ĐÃ VÁ           | Đo trước: 5 ký hiệu họ DTO board, 0 nơi dùng ngoài `task.ts` trong `apps/` + `packages/`. Gỡ cùng comment trỏ tới chúng; `task.ts` 856 → 826 dòng; dist contracts không còn ký hiệu; typecheck api · app · console · auth · web-core xanh             |
+| L2                                                  | LOW        | ĐÃ VÁ           | S1 → quy tắc DƯƠNG: tập path GET của `TasksController` phải khớp đúng 8 path đã duyệt. Đột biến thêm một GET tên mới ⇒ đỏ `expected [ '/', ':taskId', …(7) ] to deeply equal [ '/', ':taskId', …(6) ]` (danh sách phủ định cũ không bắt được tên mới) |
+| L3                                                  | LOW        | NỢ (§8)         | Mồ côi từ trước WO, không do WO lộ ra                                                                                                                                                                                                                 |
+| F2 (correctness)                                    | LOW        | ĐÃ VÁ (ghi chú) | R4 ghi rõ là lưới phụ; lớp chính R1–R3 · S1 · A1–A3                                                                                                                                                                                                   |
+| F1 (silent)                                         | LOW        | ĐÃ VÁ           | `idsOf` ném khi 2xx mà `data` không phải mảng; không 2xx vẫn ⇒ tập rỗng                                                                                                                                                                               |
+| F3 (correctness)                                    | LOW        | KHÔNG VÁ        | `git diff -w` của `api-keys.deny-path.int-spec.ts`: chỉ đổi tên ca (A) + hai đầu dò `/tasks/board` → `/tasks`; phần còn lại là ngắt dòng prettier                                                                                                     |
+| F4 (correctness) · F2 (silent, phần comment)        | LOW        | ĐÃ VÁ một phần  | Cập nhật comment `tasks.module.ts`, `dashboard-widget-catalog.const.ts`, `dashboard-cache-invalidation.dto.ts`; ghi chú ở DEVOPS-13/15. Phần giữ: xem §8                                                                                              |
+
+Kiểm sau vá: `tasks.permissions.spec` + `task-read-paths-scope.int-spec` (lane, 10 ca chạy thật) xanh 120/120; contracts build + typecheck api/FE xanh. Bộ đột biến chạy lại trên đầu mới: 16/16 đột biến bị giết (D1–D3 thêm lại handler: S1 danh sách dương + census route + R1–R3/R4 đỏ; D5a · D11a · D11b dừng ở assert tiền điều kiện `beforeAll`; còn lại như §5), 6 lượt nền xanh, cây sạch sau mỗi lượt.
