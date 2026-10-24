@@ -20,6 +20,10 @@
  *  (k) gate cặp riêng (checkin, goal); bấm biểu tượng mở hộp tại chỗ, KHÔNG kích onRowClick; gửi xong
  *      % trên dòng cập nhật (invalidate); Nháp/đã chốt ⇒ khoá + lý do; không cặp ⇒ không biểu tượng.
  *
+ * S20-GOAL-DECOMPOSE-1 (US-GOAL-QL-08) — lối vào danh mục việc mẫu:
+ *  (l) nút «Mẫu việc» trên header gate cặp `manage:task-template`; bấm ⇒ /goals/templates; không cặp
+ *      ⇒ không thấy nút (gõ URL thì trang mẫu tự báo không đủ quyền — phủ ở TaskTemplateListPage.spec).
+ *
  * Quyền dùng store THẬT (`useAuthStore` capabilities + scopes) — không mock `useCan`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -134,6 +138,12 @@ function mountAt(href: string) {
     component: GoalListPage,
     errorComponent: ({ error }) => <p data-testid="route-error">{error.message}</p>,
   });
+  // Static TRƯỚC "$goalId" như router thật — nếu không "templates" bị coi là goalId.
+  const templatesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/goals/templates",
+    component: () => <p data-testid="goal-templates-stub">mẫu việc</p>,
+  });
   const detailRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/goals/$goalId",
@@ -146,7 +156,7 @@ function mountAt(href: string) {
   });
   const history = createMemoryHistory({ initialEntries: [href] });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([listRoute, detailRoute, homeRoute]),
+    routeTree: rootRoute.addChildren([listRoute, templatesRoute, detailRoute, homeRoute]),
     history,
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -229,6 +239,24 @@ describe("GoalListPage — nút Tạo gate create:goal", () => {
     mountAt(`/goals?period=${Q4}`);
     await screen.findByText("Tăng doanh thu 20%");
     expect(screen.queryByText("Tạo mục tiêu")).not.toBeInTheDocument();
+  });
+});
+
+describe("GoalListPage — nút «Mẫu việc» gate manage:task-template (US-GOAL-QL-08)", () => {
+  it("(l1) có manage:task-template ⇒ thấy nút, bấm mở /goals/templates", async () => {
+    login({ "view:goal": true, "create:goal": true, "manage:task-template": true });
+    const history = mountAt(`/goals?period=${Q4}`);
+    await screen.findByText("Tăng doanh thu 20%");
+    fireEvent.click(screen.getByTestId("goal-list-templates"));
+    expect(await screen.findByTestId("goal-templates-stub")).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/goals/templates");
+  });
+
+  it("(l2) không có cặp ⇒ không thấy nút", async () => {
+    login({ "view:goal": true, "create:goal": true });
+    mountAt(`/goals?period=${Q4}`);
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByTestId("goal-list-templates")).not.toBeInTheDocument();
   });
 });
 

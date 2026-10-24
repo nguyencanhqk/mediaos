@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { List, ListTree, Plus, RefreshCw, Target, UserRound } from "lucide-react";
+import { ClipboardList, List, ListTree, Plus, RefreshCw, Target, UserRound } from "lucide-react";
 import {
   companyTimeZone,
   goalApi,
@@ -12,6 +12,7 @@ import {
   hrKeys,
   meApi,
   meKeys,
+  PermissionGate,
   useCan,
 } from "@mediaos/web-core";
 import {
@@ -20,7 +21,12 @@ import {
   type GoalStatusDto,
 } from "@mediaos/contracts";
 import { Button, DataTable, EmptyState, Input, PageHeader, Select } from "@mediaos/ui";
-import { GOAL_ENGINE_PAIRS, GOAL_LEVEL_OPTIONS, GOAL_STATUS_OPTIONS } from "./constants";
+import {
+  GOAL_ENGINE_PAIRS,
+  GOAL_LEVEL_OPTIONS,
+  GOAL_STATUS_OPTIONS,
+  TASK_TEMPLATE_MANAGE_PAIR,
+} from "./constants";
 import { formatPeriod } from "./goal-format";
 import {
   GOAL_PERIOD_ALL,
@@ -219,7 +225,27 @@ export function GoalListPage() {
         title={t("title")}
         description={t("description")}
         icon={Target}
-        actions={createButton}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            {/* S20-GOAL-DECOMPOSE-1 (US-GOAL-QL-08) — lối vào danh mục việc mẫu (route không có mục
+                sidebar). Thiếu cặp ⇒ không có nút; gõ URL thì trang mẫu tự báo không đủ quyền. */}
+            <PermissionGate
+              action={TASK_TEMPLATE_MANAGE_PAIR.action}
+              resourceType={TASK_TEMPLATE_MANAGE_PAIR.resourceType}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="goal-list-templates"
+                onClick={() => void navigate({ to: "/goals/templates" })}
+              >
+                <ClipboardList className="mr-2 h-4 w-4" />
+                {t("list.templates")}
+              </Button>
+            </PermissionGate>
+            {createButton}
+          </div>
+        }
       >
         <div className="flex flex-wrap items-end gap-3">
           <ViewToggle search={search} onChange={update} />
