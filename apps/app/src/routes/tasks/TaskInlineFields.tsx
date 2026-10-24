@@ -27,6 +27,7 @@ import {
 import { TaskStatusBadge, TaskPriorityBadge } from "./TaskStatusBadge";
 import { useTaskActionMutation } from "./hooks/use-task-action-mutation";
 import { EmployeePicker } from "./EmployeePicker";
+import { useAssigneeWarningToast } from "./AssigneeWarning";
 
 /**
  * TaskInlineFields — bộ ô SỬA-TẠI-CHỖ của màn chi tiết task (S5-TASK-INLINE-1; tách từ
@@ -379,12 +380,25 @@ export function TaskAssigneeField({ task }: { task: TaskCoreResponseDto }) {
     TASK_CORE_ENGINE_PAIRS.ASSIGN.resourceType,
   );
 
+  // S20-TASK-ASSIGNWARN-1 — picker điều khiển từ ngoài để «Đổi người» trên cảnh báo mở lại ĐÚNG nó.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const notifyAssigneeWarnings = useAssigneeWarningToast();
+
   const mutation = useTaskActionMutation<string>({
     taskId: task.id,
     mutationFn: (assigneeEmployeeId) => taskCoreApi.assign(task.id, { assigneeEmployeeId }),
     // Chưa biết tên/ảnh người mới cho tới khi server trả (picker không nâng dữ liệu lên đây) —
     // optimistic chỉ đổi id, tên/ảnh về đúng sau response. Ngắn hơn là đoán rồi hiện sai tên.
     toPatch: (assigneeEmployeeId) => ({ mainAssigneeEmployeeId: assigneeEmployeeId }),
+    // Cảnh báo KHÔNG chặn: việc đã giao như server chấp nhận. `?.` vì đây là dữ liệu ngoài — một
+    // response thiếu `task` không được biến lần giao đã thành công thành lỗi ở bước báo hiệu.
+    onWarnings: (warnings, updated) =>
+      notifyAssigneeWarnings({
+        taskId: task.id,
+        warnings,
+        assigneeName: updated?.assigneeName,
+        onChangeAssignee: canAssign ? () => setPickerOpen(true) : undefined,
+      }),
   });
 
   return (
@@ -400,6 +414,8 @@ export function TaskAssigneeField({ task }: { task: TaskCoreResponseDto }) {
         pending={mutation.isPending}
         testId="task-assignee-picker"
         emptyLabel={t("tasks.detail.subtasks.unassigned")}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
         onSelect={(employeeId) => {
           if (employeeId) mutation.mutate(employeeId);
         }}

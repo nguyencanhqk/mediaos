@@ -85,4 +85,13 @@ export default {
     heading: "Chuyển sang cột…",
     noTargets: "Không còn cột nào khác để chuyển.",
   },
+  // S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — cảnh báo sau khi giao (`warnings[]` của route action).
+  // ON-LEAVE = đơn nghỉ đã duyệt trùng NGÀY HẠN của việc (task-actions.service) — không phải «đang nghỉ».
+  assigneeWarning: {
+    onLeave: "{{name}} nghỉ phép vào ngày hạn của việc",
+    onLeaveUntil: "{{name}} nghỉ phép vào ngày hạn của việc (nghỉ đến {{until}})",
+    notMember: "{{name}} không phải thành viên dự án",
+    fallbackName: "Người được giao",
+    changeAssignee: "Đổi người",
+  },
 };

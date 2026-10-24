@@ -1,8 +1,9 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi, taskCollabApi, taskStatesApi, hrApi } from "@mediaos/web-core";
+import { Toaster, toast } from "@mediaos/ui";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import {
   TaskStateField,
@@ -305,6 +306,86 @@ describe("TaskInlineFields", () => {
       fireEvent.click(trigger);
       expect(screen.queryByTestId("task-assignee-picker-search")).not.toBeInTheDocument();
       expect(hrApi.listEmployees).not.toHaveBeenCalled();
+    });
+
+    // S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — giao xong mà server trả `warnings[]` ⇒ cảnh báo nổi
+    // (toast chung) có «Đổi người» mở lại ĐÚNG picker của việc này: 2 thao tác thay vì 4.
+    describe("cảnh báo sau khi giao", () => {
+      afterEach(() => toast.clear());
+
+      const assignTo = async () => {
+        openPicker();
+        await waitFor(() => expect(screen.getByText("Trần Thị B")).toBeInTheDocument());
+        fireEvent.click(screen.getByText("Trần Thị B"));
+        await waitFor(() => expect(taskCoreApi.assign).toHaveBeenCalled());
+      };
+
+      it("người nhận nghỉ phép ⇒ cảnh báo trong vùng aria-live; «Đổi người» mở lại picker của việc", async () => {
+        setCapabilities({ "assign:task": true, "read:employee": true });
+        vi.mocked(taskCoreApi.assign).mockResolvedValue({
+          task: { ...TASK, mainAssigneeEmployeeId: "emp-002", assigneeName: "Trần Thị B" },
+          warnings: [{ code: "TASK-WARN-ASSIGNEE-ON-LEAVE", message: "x" }],
+        } as never);
+        renderWithQuery(
+          <>
+            <TaskAssigneeField task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await assignTo();
+        const live = screen.getByRole("status");
+        await waitFor(() => expect(live).toHaveTextContent(/Trần Thị B nghỉ phép/));
+        expect(screen.queryByTestId("task-assignee-picker-search")).not.toBeInTheDocument();
+
+        fireEvent.click(within(live).getByRole("button", { name: "Đổi người" }));
+
+        expect(await screen.findByTestId("task-assignee-picker-search")).toBeInTheDocument();
+        expect(live).not.toHaveTextContent(/nghỉ phép/);
+      });
+
+      it("không phải thành viên dự án ⇒ cảnh báo tương ứng, việc VẪN giao (không rollback, không lỗi)", async () => {
+        setCapabilities({ "assign:task": true, "read:employee": true });
+        vi.mocked(taskCoreApi.assign).mockResolvedValue({
+          task: { ...TASK, mainAssigneeEmployeeId: "emp-002", assigneeName: "Trần Thị B" },
+          warnings: [{ code: "TASK-WARN-ASSIGNEE-NOT-MEMBER", message: "y" }],
+        } as never);
+        renderWithQuery(
+          <>
+            <TaskAssigneeField task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await assignTo();
+        await waitFor(() =>
+          expect(screen.getByRole("status")).toHaveTextContent(
+            /Trần Thị B không phải thành viên dự án/,
+          ),
+        );
+        expect(screen.queryByRole("alert")).toBeEmptyDOMElement();
+      });
+
+      it("warnings[] rỗng ⇒ KHÔNG có cảnh báo", async () => {
+        setCapabilities({ "assign:task": true, "read:employee": true });
+        vi.mocked(taskCoreApi.assign).mockResolvedValue({
+          task: { ...TASK, mainAssigneeEmployeeId: "emp-002", assigneeName: "Trần Thị B" },
+          warnings: [],
+        } as never);
+        renderWithQuery(
+          <>
+            <TaskAssigneeField task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await assignTo();
+        // Mock trả ngay ⇒ vài vòng microtask là mutate xong; chờ một nhịp macrotask cho chắc.
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        expect(screen.getByRole("status")).toBeEmptyDOMElement();
+      });
     });
   });
 });

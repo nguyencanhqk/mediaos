@@ -198,4 +198,141 @@ describe("useTaskActionMutation — cache chi tiết sau action mutate", () => {
       expect(invalidatedKeys).toContain(JSON.stringify(goalKeys.detail("goal-cu")));
     });
   });
+
+  // ── S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — `warnings[]` server đã trả (assign / change-deadline)
+  // được CHUẨN HOÁ ngay trong kết quả mutate: phía gọi (ô người phụ trách, sau này thao tác hàng loạt
+  // và quick-add) đọc `data.warnings` / `onWarnings` thay vì tự parse lại. Parse PHÒNG THỦ: shape lạ
+  // hay vắng trường ⇒ không cảnh báo, KHÔNG ném — việc giao server đã chấp nhận không được biến thành lỗi.
+  describe("warnings[] chuẩn hoá trong kết quả mutate", () => {
+    function setupWithWarnings(response: unknown) {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      client.setQueryData(taskKeys.detail("task-1"), DETAIL_WITH_SUBTASKS);
+      const onWarnings = vi.fn();
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+      const { result } = renderHook(
+        () =>
+          useTaskActionMutation<string>({
+            taskId: "task-1",
+            mutationFn: () => Promise.resolve(response as TaskActionResponseDto),
+            toPatch: (id) => ({ mainAssigneeEmployeeId: id }) as Partial<TaskCoreResponseDto>,
+            onWarnings,
+          }),
+        { wrapper },
+      );
+      return { result, onWarnings };
+    }
+
+    const ASSIGNED = { id: "task-1", projectId: "proj-1", assigneeName: "Trần Thị B" };
+
+    it("nghỉ phép + không thành viên ⇒ hai cảnh báo chuẩn hoá, onWarnings nhận đúng danh sách", async () => {
+      const { result, onWarnings } = setupWithWarnings({
+        task: ASSIGNED,
+        warnings: [
+          { code: "TASK-WARN-ASSIGNEE-ON-LEAVE", message: "x" },
+          { code: "TASK-WARN-ASSIGNEE-NOT-MEMBER", message: "y" },
+        ],
+      });
+
+      result.current.mutate("emp-002");
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      const expected = [
+        { kind: "onLeave", until: null },
+        { kind: "notMember", until: null },
+      ];
+      expect(result.current.data?.warnings).toEqual(expected);
+      expect(onWarnings).toHaveBeenCalledTimes(1);
+      expect(onWarnings.mock.calls[0]?.[0]).toEqual(expected);
+      expect(onWarnings.mock.calls[0]?.[1]).toMatchObject({ assigneeName: "Trần Thị B" });
+    });
+
+    it("server trả hạn nghỉ dạng ngày (YYYY-MM-DD) ⇒ giữ `until`; dạng khác ⇒ bỏ hạn, vẫn cảnh báo", async () => {
+      const { result } = setupWithWarnings({
+        task: ASSIGNED,
+        warnings: [
+          { code: "TASK-WARN-ASSIGNEE-ON-LEAVE", message: "x", until: "2026-10-30" },
+          { code: "TASK-WARN-ASSIGNEE-NOT-MEMBER", message: "y", until: "30/10" },
+        ],
+      });
+
+      result.current.mutate("emp-002");
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data?.warnings).toEqual([
+        { kind: "onLeave", until: "2026-10-30" },
+        { kind: "notMember", until: null },
+      ]);
+    });
+
+    it("warnings[] rỗng ⇒ không cảnh báo (onWarnings nhận mảng rỗng)", async () => {
+      const { result, onWarnings } = setupWithWarnings({ task: ASSIGNED, warnings: [] });
+
+      result.current.mutate("emp-002");
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data?.warnings).toEqual([]);
+      expect(onWarnings.mock.calls[0]?.[0]).toEqual([]);
+    });
+
+    it("VẮNG trường warnings ⇒ không cảnh báo, mutate vẫn thành công (không ném)", async () => {
+      const { result, onWarnings } = setupWithWarnings({ task: ASSIGNED });
+
+      result.current.mutate("emp-002");
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data?.warnings).toEqual([]);
+      expect(onWarnings.mock.calls[0]?.[0]).toEqual([]);
+    });
+
+    it("shape lạ (không phải mảng · phần tử rác · mã lạ · trùng mã) ⇒ chỉ giữ cảnh báo hợp lệ, không ném", async () => {
+      const notArray = setupWithWarnings({ task: ASSIGNED, warnings: { code: "x" } });
+      notArray.result.current.mutate("emp-002");
+      await waitFor(() => expect(notArray.result.current.isSuccess).toBe(true));
+      expect(notArray.result.current.data?.warnings).toEqual([]);
+
+      const junk = setupWithWarnings({
+        task: ASSIGNED,
+        warnings: [
+          null,
+          "TASK-WARN-ASSIGNEE-ON-LEAVE",
+          { message: "thiếu mã" },
+          { code: "TASK-WARN-SOMETHING-NEW", message: "mã chưa biết" },
+          { code: "toString" },
+          { code: "TASK-WARN-ASSIGNEE-NOT-MEMBER" },
+          { code: "TASK-WARN-ASSIGNEE-NOT-MEMBER", message: "trùng" },
+        ],
+      });
+      junk.result.current.mutate("emp-002");
+      await waitFor(() => expect(junk.result.current.isSuccess).toBe(true));
+      expect(junk.result.current.data?.warnings).toEqual([{ kind: "notMember", until: null }]);
+    });
+
+    it("mutate LỖI ⇒ KHÔNG gọi onWarnings (không cảnh báo cho việc giao chưa thành)", async () => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      const onWarnings = vi.fn();
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+      const { result } = renderHook(
+        () =>
+          useTaskActionMutation<string>({
+            taskId: "task-1",
+            mutationFn: () => Promise.reject(new Error("boom")),
+            toPatch: (id) => ({ mainAssigneeEmployeeId: id }) as Partial<TaskCoreResponseDto>,
+            onWarnings,
+          }),
+        { wrapper },
+      );
+
+      result.current.mutate("emp-002");
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(onWarnings).not.toHaveBeenCalled();
+    });
+  });
 });
