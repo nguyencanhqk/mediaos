@@ -5,6 +5,7 @@
  * với ĐÚNG cặp `view:chat-room`. Chỉ khẳng định "nội dung bị ẩn" là xanh-giả — một cổng hỏi nhầm cặp
  * (vd `view:chat` không tồn tại trong seed) cũng làm nội dung bị ẩn y hệt.
  */
+import { useState } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -37,6 +38,12 @@ import { useCan } from "@mediaos/web-core";
 import { useChatStore } from "@/stores/chat.store";
 import { ChatPage } from "./ChatPage";
 
+/** S20-CHAT-DEEPLINK-1 — phòng đang mở sống trên URL; ở đây một `useState` đóng vai URL. */
+function StatefulChatPage(): React.ReactElement {
+  const [roomId, setRoomId] = useState<string | null>(null);
+  return <ChatPage roomId={roomId} onRoomChange={setRoomId} />;
+}
+
 const mockUseCan = useCan as unknown as ReturnType<typeof vi.fn>;
 const ROOM_ID = "11111111-1111-4111-8111-111111111111";
 const ME = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -65,7 +72,7 @@ function renderPage() {
   return render(
     <QueryClientProvider client={client}>
       <I18nextProvider i18n={i18n}>
-        <ChatPage />
+        <StatefulChatPage />
       </I18nextProvider>
     </QueryClientProvider>,
   );

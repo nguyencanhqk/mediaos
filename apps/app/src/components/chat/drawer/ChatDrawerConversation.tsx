@@ -32,11 +32,13 @@ export function ChatDrawerConversation({
    * `direct` nhấp nháy giữa hai giá trị.
    *
    * `enabled: canViewRoom` — mirror `ChatDockWindow`: thiếu cặp thì đừng gửi một request chắc chắn 403.
+   * S20-CHAT-DEEPLINK-1 — và chỉ khi phòng CÓ trong danh sách phòng của tôi: không lời gọi nào mang id
+   * của một phòng chưa xác nhận, kể cả khi ai đó `openRoom` một id lạ.
    */
   const detailQuery = useQuery({
     queryKey: chatKeys.rooms.detail(roomId),
     queryFn: () => chatApi.getRoom(roomId),
-    enabled: canViewRoom,
+    enabled: canViewRoom && room !== undefined,
   });
   const detail = detailQuery.data;
 
@@ -55,6 +57,7 @@ export function ChatDrawerConversation({
         members={detail?.members ?? []}
         myRole={detail?.myRole ?? null}
         showHeader={false}
+        autoFocusComposer
       />
     </div>
   );

@@ -1,5 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
+import { chatRoomTargetFromUrl } from "@/routes/chat/chat-room-link";
 import { taskIdFromPath, useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
+import { useChatRoomLinkOpener } from "./use-chat-room-link-opener";
 
 /**
  * NotificationTargetLink — S4-FE-NOTI-1. Deep link AN TOÀN từ 1 thông báo tới nội dung liên quan
@@ -17,6 +19,9 @@ import { taskIdFromPath, useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
  * S20-TASK-DRAWER-1: đích `/tasks/<uuid>` KHÔNG rời trang — thêm `?task=<uuid>` vào URL hiện tại để
  * drawer việc toàn cục mở tại chỗ (đứng ở /goals/G ⇒ /goals/G?task=T). Quyền xem việc vẫn do server
  * quyết khi drawer tải; đích khác giữ nguyên điều hướng cũ.
+ *
+ * S20-CHAT-DEEPLINK-1: đích `/chat/<uuid>` ⇒ drawer chat mở phòng tại chỗ (hoặc `/chat/R` khi đang ở
+ * trang chat) — luật đầy đủ ở `use-chat-room-link-opener.ts`.
  */
 export function isSafeInternalTarget(url: string | null | undefined): url is string {
   if (!url) return false;
@@ -47,6 +52,7 @@ export function NotificationTargetLink({
 }: NotificationTargetLinkProps) {
   const navigate = useNavigate();
   const { openTask } = useTaskDrawer();
+  const openChatRoom = useChatRoomLinkOpener();
   const safe = isSafeInternalTarget(targetUrl);
 
   if (!safe) {
@@ -68,6 +74,11 @@ export function NotificationTargetLink({
         const taskId = taskIdFromPath(targetUrl);
         if (taskId) {
           openTask(taskId);
+          return;
+        }
+        const chatTarget = chatRoomTargetFromUrl(targetUrl);
+        if (chatTarget) {
+          openChatRoom(chatTarget);
           return;
         }
         // target_url là chuỗi động (server) — router yêu cầu literal route ở type-level; cast "as \"/\""

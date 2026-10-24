@@ -17,8 +17,10 @@ import { ChevronLeft, Maximize2, MessagesSquare } from "lucide-react";
 import { chatKeys, useCan } from "@mediaos/web-core";
 import { Button, EmptyState, Sheet } from "@mediaos/ui";
 import { CHAT_PAIRS, CHAT_PATH } from "@/routes/chat/constants";
+import { CHAT_ROOM_PATH } from "@/routes/chat/chat-room-link";
 import { useChatStore } from "@/stores/chat.store";
 import { useChatDockStore } from "../chat-dock.store";
+import { ChatRoomOpenerContext } from "../chat-room-opener";
 import { CreateRoomDialog } from "../CreateRoomDialog";
 import { RoomListPanel } from "../RoomListPanel";
 import { roomDisplayName } from "../chat-format";
@@ -84,126 +86,134 @@ export function ChatDrawerBody(): React.ReactElement {
   const isConversationMode = activeRoomId !== null;
 
   return (
-    <Sheet
-      open
-      onClose={closeDrawer}
-      title={activeLabel ?? t("drawer.title")}
-      description={
-        isConversationMode && activeRoom !== undefined
-          ? t(`rooms.types.${activeRoom.roomType}`)
-          : undefined
-      }
-      leading={
-        isConversationMode ? (
+    // S20-CHAT-DEEPLINK-1 — «Nhắn riêng» trong drawer mở DM TẠI CHỖ (không chuyển trang).
+    <ChatRoomOpenerContext.Provider value={openRoom}>
+      <Sheet
+        open
+        onClose={closeDrawer}
+        title={activeLabel ?? t("drawer.title")}
+        description={
+          isConversationMode && activeRoom !== undefined
+            ? t(`rooms.types.${activeRoom.roomType}`)
+            : undefined
+        }
+        leading={
+          isConversationMode ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0"
+              aria-label={t("conversation.back")}
+              data-testid="chat-drawer-back"
+              onClick={() => closeRoom(activeRoomId)}
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          ) : undefined
+        }
+        actions={
           <Button
             variant="ghost"
             size="icon-sm"
-            className="shrink-0"
-            aria-label={t("conversation.back")}
-            data-testid="chat-drawer-back"
-            onClick={() => closeRoom(activeRoomId)}
+            aria-label={t("drawer.openFullPage")}
+            title={t("drawer.openFullPage")}
+            data-testid="chat-drawer-expand"
+            onClick={() => {
+              /*
+               * Đóng drawer khi đi sang `/chat`.
+               *
+               * KHÔNG phải vì lý do kỹ thuật — `ChatDrawer` đã `return null` trên `/chat*` nên một `isOpen`
+               * còn bật ở đó không dựng instance nào. Lý do là nhất quán: bỏ vế này thì lúc người dùng rời
+               * `/chat` sang một trang khác, drawer tự bung ra dù họ chưa hề mở nó.
+               */
+              closeDrawer();
+              // S20-CHAT-DEEPLINK-1 — ⤢ GIỮ phòng đang đọc: `/chat/R` (chưa chọn phòng ⇒ `/chat`).
+              if (activeRoomId !== null) {
+                void navigate({ to: CHAT_ROOM_PATH, params: { roomId: activeRoomId } });
+                return;
+              }
+              void navigate({ to: CHAT_PATH as "/" });
+            }}
           >
-            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            <Maximize2 className="h-4 w-4" aria-hidden="true" />
           </Button>
-        ) : undefined
-      }
-      actions={
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("drawer.openFullPage")}
-          title={t("drawer.openFullPage")}
-          data-testid="chat-drawer-expand"
-          onClick={() => {
-            /*
-             * Đóng drawer khi đi sang `/chat`.
-             *
-             * KHÔNG phải vì lý do kỹ thuật — `ChatDrawer` đã `return null` trên `/chat*` nên một `isOpen`
-             * còn bật ở đó không dựng instance nào. Lý do là nhất quán: bỏ vế này thì lúc người dùng rời
-             * `/chat` sang một trang khác, drawer tự bung ra dù họ chưa hề mở nó.
-             */
-            closeDrawer();
-            void navigate({ to: CHAT_PATH as "/" });
-          }}
-        >
-          <Maximize2 className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      }
-      // Dưới `md`: toàn màn (CHAT-DEC-026). `max-w-none` cần thiết vì `Sheet` mặc định `max-w-2xl`.
-      className="w-full max-w-none md:max-w-[400px]"
-      /*
-       * `p-0 overflow-hidden`: cả `RoomListPanel` lẫn `ConversationPanel` đều đã có vùng cuộn riêng và
-       * cần chạm mép (dòng phòng 56px, bong bóng tin). Để nguyên `px-5 py-4 overflow-y-auto` mặc định là
-       * hai thanh cuộn lồng nhau và ô soạn tin trôi khỏi đáy khung.
-       */
-      bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
-      /*
-       * Bấm ra nền KHÔNG đóng — khác mặc định của `Sheet`.
-       *
-       * Chữ nháp nay sống ở `chat-draft.store` (S20-CHAT-DRAFT-1) nên đóng drawer không mất chữ nữa, nhưng
-       * TỆP CHỜ thì vẫn mất khi ô soạn tháo — một cú click trượt tay ra nền vẫn bỏ tệp vừa dán. Esc và ✕
-       * vẫn đóng (ngang cửa sổ nổi cũ), và Esc còn được `data-escape-claim` che khi đang soạn câu trả lời.
-       */
-      closeOnBackdrop={false}
-      data-testid="chat-drawer"
-    >
-      {!canViewRoom ? (
-        // §14 "không có quyền": ẩn nội dung, không hard-code role. Cổng thật vẫn ở server.
-        <div className="flex flex-1 items-center justify-center p-6">
-          <EmptyState
-            icon={MessagesSquare}
-            title={t("forbidden.title")}
-            description={t("forbidden.body")}
-          />
-        </div>
-      ) : !isConversationMode ? (
-        <RoomListPanel
-          variant="drawer"
-          selectedRoomId={null}
-          onSelectRoom={openRoom}
-          isBootstrapping={!hasLoadedRooms}
-          query={query}
-          onQueryChange={setQuery}
-          chip={chip}
-          onChipChange={setChip}
-          onCreateRoom={() => setCreateOpen(true)}
-          /*
-           * `onOpenSearch` CỐ Ý không truyền ⇒ nút biến mất: drawer không có cột thứ hai để mở
-           * CHAT-SCREEN-005 vào — render nút ở đây rồi không làm gì mới là thứ người dùng đọc ra là "hỏng".
-           *
-           * `onCreateRoom` thì CÓ từ S20-CHAT-NEWROOM-1: dialog tạo phòng không còn bảng chọn người rộng
-           * (ô tìm đã nhúng thẳng), nên vừa khung drawer — kể cả toàn màn trên điện thoại.
-           */
-        />
-      ) : (
+        }
+        // Dưới `md`: toàn màn (CHAT-DEC-026). `max-w-none` cần thiết vì `Sheet` mặc định `max-w-2xl`.
+        className="w-full max-w-none md:max-w-[400px]"
         /*
-         * `.map` toàn mảng chứ không đọc mỗi phần tử cuối — CHỦ ĐÍCH.
-         *
-         * Ở trần hiện tại (`MAX_DOCK_WINDOWS === 1`) hai cách cho ra cùng một DOM. Khác nhau ở chỗ đo
-         * được: đọc-phần-tử-cuối làm cho "chỉ có đúng một hội thoại" đúng NHỜ CÁCH VIẾT ở đây, nên bài
-         * test đếm node sẽ xanh kể cả khi trần ở store bị nới — một bài test không thể đỏ. `.map` biến
-         * DOM thành ảnh chiếu trung thực của store: trần là chính sách DUY NHẤT, đặt đúng một chỗ.
+         * `p-0 overflow-hidden`: cả `RoomListPanel` lẫn `ConversationPanel` đều đã có vùng cuộn riêng và
+         * cần chạm mép (dòng phòng 56px, bong bóng tin). Để nguyên `px-5 py-4 overflow-y-auto` mặc định là
+         * hai thanh cuộn lồng nhau và ô soạn tin trôi khỏi đáy khung.
          */
-        openRoomIds.map((roomId) => <ChatDrawerConversation key={roomId} roomId={roomId} />)
-      )}
+        bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
+        /*
+         * Bấm ra nền KHÔNG đóng — khác mặc định của `Sheet`.
+         *
+         * Chữ nháp nay sống ở `chat-draft.store` (S20-CHAT-DRAFT-1) nên đóng drawer không mất chữ nữa, nhưng
+         * TỆP CHỜ thì vẫn mất khi ô soạn tháo — một cú click trượt tay ra nền vẫn bỏ tệp vừa dán. Esc và ✕
+         * vẫn đóng (ngang cửa sổ nổi cũ), và Esc còn được `data-escape-claim` che khi đang soạn câu trả lời.
+         */
+        closeOnBackdrop={false}
+        data-testid="chat-drawer"
+      >
+        {!canViewRoom ? (
+          // §14 "không có quyền": ẩn nội dung, không hard-code role. Cổng thật vẫn ở server.
+          <div className="flex flex-1 items-center justify-center p-6">
+            <EmptyState
+              icon={MessagesSquare}
+              title={t("forbidden.title")}
+              description={t("forbidden.body")}
+            />
+          </div>
+        ) : !isConversationMode ? (
+          <RoomListPanel
+            variant="drawer"
+            selectedRoomId={null}
+            onSelectRoom={openRoom}
+            isBootstrapping={!hasLoadedRooms}
+            query={query}
+            onQueryChange={setQuery}
+            chip={chip}
+            onChipChange={setChip}
+            onCreateRoom={() => setCreateOpen(true)}
+            /*
+             * `onOpenSearch` CỐ Ý không truyền ⇒ nút biến mất: drawer không có cột thứ hai để mở
+             * CHAT-SCREEN-005 vào — render nút ở đây rồi không làm gì mới là thứ người dùng đọc ra là "hỏng".
+             *
+             * `onCreateRoom` thì CÓ từ S20-CHAT-NEWROOM-1: dialog tạo phòng không còn bảng chọn người rộng
+             * (ô tìm đã nhúng thẳng), nên vừa khung drawer — kể cả toàn màn trên điện thoại.
+             */
+          />
+        ) : (
+          /*
+           * `.map` toàn mảng chứ không đọc mỗi phần tử cuối — CHỦ ĐÍCH.
+           *
+           * Ở trần hiện tại (`MAX_DOCK_WINDOWS === 1`) hai cách cho ra cùng một DOM. Khác nhau ở chỗ đo
+           * được: đọc-phần-tử-cuối làm cho "chỉ có đúng một hội thoại" đúng NHỜ CÁCH VIẾT ở đây, nên bài
+           * test đếm node sẽ xanh kể cả khi trần ở store bị nới — một bài test không thể đỏ. `.map` biến
+           * DOM thành ảnh chiếu trung thực của store: trần là chính sách DUY NHẤT, đặt đúng một chỗ.
+           */
+          openRoomIds.map((roomId) => <ChatDrawerConversation key={roomId} roomId={roomId} />)
+        )}
 
-      {/*
-       * Dialog đặt TRONG thân `Sheet` (không ngoài): `Sheet` nhường Esc khi thấy một
-       * `[role=dialog][aria-modal]` con trong panel ⇒ Esc đóng dialog trước, Esc lần hai mới đóng drawer.
-       */}
-      {isCreateOpen && canViewRoom && (
-        <CreateRoomDialog
-          variant="drawer"
-          onClose={() => setCreateOpen(false)}
-          onCreated={(room) => {
-            hydrateRooms([room]);
-            // `POST /chat/rooms/direct` trả `peer: null` — xin lại danh sách thay vì bịa `peer` (xem ChatPage).
-            void queryClient.invalidateQueries({ queryKey: chatKeys.rooms.list() });
-            setCreateOpen(false);
-            openRoom(room.id);
-          }}
-        />
-      )}
-    </Sheet>
+        {/*
+         * Dialog đặt TRONG thân `Sheet` (không ngoài): `Sheet` nhường Esc khi thấy một
+         * `[role=dialog][aria-modal]` con trong panel ⇒ Esc đóng dialog trước, Esc lần hai mới đóng drawer.
+         */}
+        {isCreateOpen && canViewRoom && (
+          <CreateRoomDialog
+            variant="drawer"
+            onClose={() => setCreateOpen(false)}
+            onCreated={(room) => {
+              hydrateRooms([room]);
+              // `POST /chat/rooms/direct` trả `peer: null` — xin lại danh sách thay vì bịa `peer` (xem ChatPage).
+              void queryClient.invalidateQueries({ queryKey: chatKeys.rooms.list() });
+              setCreateOpen(false);
+              openRoom(room.id);
+            }}
+          />
+        )}
+      </Sheet>
+    </ChatRoomOpenerContext.Provider>
   );
 }

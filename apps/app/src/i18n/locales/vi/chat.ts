@@ -545,4 +545,22 @@ export default {
     today: "Hôm nay",
     yesterday: "Hôm qua",
   },
+
+  /**
+   * S20-CHAT-DEEPLINK-1 — mở phòng theo liên kết (`/chat/:roomId`, thông báo). MỘT câu cho mọi lý do
+   * (không tồn tại · xoá mềm · lưu trữ · đã rời): phân biệt chúng là lộ sự tồn tại của phòng.
+   */
+  deepLink: {
+    unavailable: "Không mở được cuộc trò chuyện này",
+    forbidden: "Không có quyền truy cập Tin nhắn",
+  },
+
+  /** S20-CHAT-DEEPLINK-1 — «Nhắn riêng» một chạm từ người gửi / danh sách thành viên (US-CHAT-NV-02). */
+  direct: {
+    action: "Nhắn riêng",
+    actionFor: "Nhắn riêng với {{name}}",
+    menuFor: "Tuỳ chọn với {{name}}",
+    peerUnavailable: "Không nhắn riêng được: tài khoản này đã bị khoá hoặc đã nghỉ việc.",
+    failed: "Không mở được tin nhắn riêng. Vui lòng thử lại.",
+  },
 } as const;
