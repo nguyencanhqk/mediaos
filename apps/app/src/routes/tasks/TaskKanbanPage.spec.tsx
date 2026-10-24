@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCollabApi, ApiError } from "@mediaos/web-core";
+import { Toaster, toast } from "@mediaos/ui";
 import { TaskKanbanPage } from "./TaskKanbanPage";
 import { DEFAULT_WORKSPACE_FILTERS, type WorkspaceTaskFilters } from "./workspace-constants";
 import type { TaskKanbanBoardDto, TaskKanbanCardDto } from "@mediaos/contracts";
@@ -33,9 +34,16 @@ function makeQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
+// S20-TASK-FEDEBT-1 — lý do server từ chối đổi cột hiện qua thông báo nổi dùng chung; app thật mount
+// <Toaster /> ở ProtectedShell, harness mount y hệt (vùng lỗi của nó là role=alert).
 function renderWithQuery(ui: React.ReactElement) {
   const client = makeQueryClient();
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={client}>
+      {ui}
+      <Toaster />
+    </QueryClientProvider>,
+  );
 }
 
 const BASE_TASK: TaskKanbanCardDto = {
@@ -197,6 +205,7 @@ describe("TaskKanbanPage", () => {
   beforeEach(() => {
     clearCapabilities();
     vi.clearAllMocks();
+    toast.clear();
   });
 
   // ── DENY-PATH: không có view-kanban:task ────────────────────────────────────

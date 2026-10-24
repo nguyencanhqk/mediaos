@@ -1,7 +1,6 @@
-import { useMemo, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Paperclip, ListChecks, ListTree } from "lucide-react";
 import {
   taskCollabApi,
   taskKeys,
@@ -9,9 +8,8 @@ import {
   taskCoreInvalidation,
   goalInvalidation,
   useCan,
-  ApiError,
 } from "@mediaos/web-core";
-import { Card, Button, EmptyState, Avatar, Badge, cn } from "@mediaos/ui";
+import { Card, Button, EmptyState } from "@mediaos/ui";
 import type {
   TaskCoreStatusDto,
   TaskKanbanBoardDto,
@@ -20,16 +18,10 @@ import type {
   TaskKanbanStatusColumnDto,
 } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
-import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
-import { KanbanQuickCreate } from "./KanbanQuickCreate";
-import { KanbanCardSubtasks } from "./KanbanCardSubtasks";
-import { TaskLabelChip } from "./TaskLabelPicker";
 import { AssigneeRail } from "./AssigneeRail";
-import {
-  KanbanCardMoveMenu,
-  useKanbanCardFocusReturn,
-  type KanbanMoveProps,
-} from "./KanbanCardMoveMenu";
+import { useKanbanCardFocusReturn, type KanbanMoveProps } from "./KanbanCardMoveMenu";
+import { KanbanColumn, StateKanbanColumn } from "./KanbanColumns";
+import { notifyKanbanMoveRejected } from "./kanban-move-error";
 import {
   buildAssigneeSummary,
   DEFAULT_WORKSPACE_FILTERS,
@@ -64,375 +56,12 @@ import {
  * Cancelled), chỉ render khi `subtaskTotal > 0`. Field kế thừa từ `taskCoreResponseSchema` qua
  * `.extend()` (contracts task-collab.ts) — KHÔNG cần đổi schema Kanban riêng. Badge RIÊNG với checklist
  * (hai khái niệm khác nhau — D-31) — KHÔNG đụng badge checklist.
+ *
+ * S20-TASK-FEDEBT-1 — thẻ/cột tách sang `KanbanCard.tsx` · `KanbanColumns.tsx` (trang chỉ còn dữ
+ * liệu + đổi cột). Server từ chối đổi cột (kéo-thả HAY menu ⋯) ⇒ lý do qua thông báo nổi dùng chung
+ * (`kanban-move-error.ts`), không còn dòng `role=alert` riêng ở đầu board.
  */
-const COMPLETED_STATUSES = new Set<TaskCoreStatusDto>(["Done", "Cancelled"]);
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
-
-function moveErrorKey(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (err.status === 409) return "tasks.kanban.errors.conflict";
-    if (err.status === 403) return "tasks.kanban.errors.forbidden";
-    if (err.status === 404) return "tasks.kanban.errors.notFound";
-    // S5-TASK-PIPELINE-1 — kéo sang cột nhóm completed khi checklist bắt buộc chưa xong (400) /
-    // cột không hợp lệ: server từ chối atomic, thẻ bật về chỗ cũ.
-    if (err.status === 400) return "tasks.kanban.errors.badRequest";
-    if (err.status >= 500) return "tasks.kanban.errors.server";
-  }
-  return "tasks.kanban.errors.generic";
-}
-
-function KanbanCardBadges({ task }: { task: TaskKanbanCardDto }) {
-  const { t } = useTranslation("tasks");
-  const commentCount = task.commentCount ?? 0;
-  const attachmentCount = task.attachmentCount ?? 0;
-  const checklistTotal = task.checklistTotal ?? 0;
-  const checklistDone = task.checklistDone ?? 0;
-  // S5-TASK-SUBTASK-1 — badge tiến độ việc con (D-34, mẫu số COUNTABLE_CHILD loại Cancelled). Badge
-  // RIÊNG với checklist (D-31/D-35 "hai khái niệm khác nhau" — KHÔNG gộp, KHÔNG thay).
-  const subtaskTotal = task.subtaskTotal ?? 0;
-  const subtaskDone = task.subtaskDone ?? 0;
-
-  // ⚠️ Early-return PHẢI xét đủ 4 count — thẻ có subtask mà 0 comment/file/checklist từng KHÔNG
-  // render badge nào nếu chỉ xét 3 count cũ (bẫy đã ghi trong plan fe mục 3).
-  if (commentCount <= 0 && attachmentCount <= 0 && checklistTotal <= 0 && subtaskTotal <= 0)
-    return null;
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-      {commentCount > 0 && (
-        <Badge
-          variant="muted"
-          title={t("tasks.kanban.badges.comments", { count: commentCount })}
-          data-testid="kanban-card-badge-comments"
-        >
-          <MessageSquare className="h-3 w-3" aria-hidden="true" />
-          {commentCount}
-        </Badge>
-      )}
-      {attachmentCount > 0 && (
-        <Badge
-          variant="muted"
-          title={t("tasks.kanban.badges.attachments", { count: attachmentCount })}
-          data-testid="kanban-card-badge-attachments"
-        >
-          <Paperclip className="h-3 w-3" aria-hidden="true" />
-          {attachmentCount}
-        </Badge>
-      )}
-      {checklistTotal > 0 && (
-        <Badge
-          variant="muted"
-          title={t("tasks.kanban.badges.checklist", {
-            done: checklistDone,
-            total: checklistTotal,
-          })}
-          data-testid="kanban-card-badge-checklist"
-        >
-          <ListChecks className="h-3 w-3" aria-hidden="true" />
-          {checklistDone}/{checklistTotal}
-        </Badge>
-      )}
-      {/* S5-TASK-CARDSUB-1 — badge việc con chuyển thành NÚT BUNG (KanbanCardSubtasks) ở dưới; ở đây
-          chỉ còn biểu tượng để giữ hàng badge đồng nhất, số liệu nằm trên nút. */}
-      {subtaskTotal > 0 && (
-        <Badge
-          variant="muted"
-          title={t("tasks.kanban.badges.subtasks", {
-            done: subtaskDone,
-            total: subtaskTotal,
-            pct: Math.round((subtaskDone / subtaskTotal) * 100),
-          })}
-          data-testid="kanban-card-badge-subtasks"
-        >
-          <ListTree className="h-3 w-3" aria-hidden="true" />
-          {subtaskDone}/{subtaskTotal}
-        </Badge>
-      )}
-    </div>
-  );
-}
-
-function KanbanCard({
-  task,
-  draggable,
-  onDragStart,
-  onOpen,
-  subtasksExpanded,
-  onToggleSubtasks,
-  showStatus = false,
-  move,
-  columnId,
-}: {
-  task: TaskKanbanCardDto;
-  draggable: boolean;
-  onDragStart: (e: DragEvent<HTMLDivElement>) => void;
-  /** S5-TASK-BOARD-UX-1 — bấm thẻ mở panel chi tiết. Không truyền ⇒ thẻ KHÔNG bấm được (giữ hành vi cũ). */
-  onOpen?: () => void;
-  /** S5-TASK-CARDSUB-1 — trạng thái bung việc con do BOARD giữ (theo taskId), không phải từng thẻ:
-   *  kéo-thả làm thẻ remount sang cột khác, state cục bộ sẽ bị reset về thu. */
-  subtasksExpanded: boolean;
-  onToggleSubtasks: () => void;
-  /** Board state-mode: hiện badge task_status trên thẻ — người dùng THẤY auto-map nhóm→status đã chạy. */
-  showStatus?: boolean;
-  /** S20-TASK-BOARDMOVE-1 — menu ⋯ đổi cột, chỉ khi `draggable`; `columnId` = cột đang chứa thẻ. */
-  move?: KanbanMoveProps;
-  columnId?: string;
-}) {
-  const { t } = useTranslation("tasks");
-  const isCompleted = task.status != null && COMPLETED_STATUSES.has(task.status);
-
-  // S5-TASK-BOARD-UX-1 — thẻ vừa KÉO-THẢ vừa BẤM-MỞ. Kéo không được kích hoạt onClick: trình duyệt
-  // chỉ bắn click khi con trỏ không di chuyển đáng kể, nên dragstart→drop KHÔNG sinh click. Bàn phím
-  // đi qua onKeyDown (Enter/Space) vì div không phải nút thật.
-  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!onOpen) return;
-    if (e.key !== "Enter" && e.key !== " ") return;
-    e.preventDefault();
-    onOpen();
-  };
-
-  return (
-    <div
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onClick={onOpen}
-      onKeyDown={onKeyDown}
-      role={onOpen ? "button" : undefined}
-      tabIndex={onOpen ? 0 : undefined}
-      aria-label={onOpen ? t("tasks.kanban.openDetail", { title: task.title }) : undefined}
-      data-testid={`kanban-card-${task.id}`}
-      data-kanban-card={task.id}
-      className={cn(
-        "space-y-1.5 rounded-md border border-border bg-card p-2.5 text-sm shadow-sm",
-        draggable && "cursor-grab active:cursor-grabbing",
-        onOpen &&
-          "hover:border-primary/50 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-        !draggable && onOpen && "cursor-pointer",
-        isCompleted && "border-border/60 bg-muted/40",
-      )}
-    >
-      {/* S5-TASK-COVER-1 — ảnh bìa. `coverUrl` là URL ĐÃ KÝ TTL-ngắn từ server (không bao giờ là
-          fileId thô). Không có bìa ⇒ KHÔNG chừa chỗ trống, thẻ giữ nguyên dáng cũ.
-          `onError` ẩn hẳn ảnh: URL đã ký có thể hết hạn khi board mở lâu — thà mất bìa còn hơn để
-          một ô ảnh vỡ nằm trên thẻ. `loading="lazy"` vì board có thể hàng chục thẻ. */}
-      {task.coverUrl && (
-        <img
-          // ⚠️ `key` PHẢI là coverUrl, KHÔNG được bỏ. Thẻ có key={task.id} nên React TÁI DÙNG chính
-          // phần tử <img> này qua mọi lần refetch và chỉ đổi `src`. `onError` bên dưới đặt style
-          // display:none TRỰC TIẾP lên DOM — React không biết gì về nó nên KHÔNG BAO GIỜ dọn.
-          // Hệ quả nếu thiếu key: để board mở quá TTL của URL đã ký ⇒ ảnh 403 ⇒ ẩn hết; sau đó dù
-          // đặt bìa mới hay chỉ kéo-thả (moveState trả coverUrl mới), URL hợp lệ về tới nơi mà thẻ
-          // VẪN trắng — chỉ rời route mới khỏi. Người dùng thấy "bấm mà không có gì xảy ra".
-          // Đổi key ⇒ phần tử MỚI ⇒ không mang theo style cũ.
-          key={task.coverUrl}
-          src={task.coverUrl}
-          alt=""
-          loading="lazy"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-          data-testid={`kanban-card-cover-${task.id}`}
-          className="mb-1.5 aspect-video w-full rounded object-cover"
-        />
-      )}
-      <div className="flex items-start justify-between gap-2">
-        <p
-          className={cn(
-            "font-medium text-foreground",
-            isCompleted && "text-muted-foreground line-through",
-          )}
-        >
-          {task.title}
-        </p>
-        {draggable && move && <KanbanCardMoveMenu task={task} currentId={columnId} move={move} />}
-      </div>
-      {/* Gắn thẻ — chip nhãn màu trên thẻ board (server đính labels[] trong board read, không N+1). */}
-      {(task.labels?.length ?? 0) > 0 && (
-        <div className="flex flex-wrap gap-1" data-testid={`kanban-card-labels-${task.id}`}>
-          {(task.labels ?? []).map((label) => (
-            <TaskLabelChip key={label.id} label={label} />
-          ))}
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-2">
-        <Avatar
-          size="sm"
-          name={task.assigneeName}
-          // S5-TASK-AVATAR-1 — URL đã ký từ server; null ⇒ Avatar tự lùi về chữ cái đầu.
-          src={task.assigneeAvatarUrl}
-          title={task.assigneeName ?? t("tasks.kanban.unassigned")}
-        />
-        <div className="flex items-center gap-1.5">
-          {showStatus && <TaskStatusBadge status={task.status} />}
-          <TaskPriorityBadge priority={task.priority} />
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">
-          {task.dueAt ? new Date(task.dueAt).toLocaleDateString("vi-VN") : "—"}
-        </span>
-        <TaskOverdueBadge isOverdue={task.isOverdue} />
-      </div>
-      <KanbanCardBadges task={task} />
-      {/* S5-TASK-CARDSUB-1 — bung danh sách việc con ngay trên thẻ (tải lười, chỉ khi bấm). */}
-      <KanbanCardSubtasks
-        taskId={task.id}
-        done={task.subtaskDone ?? 0}
-        total={task.subtaskTotal ?? 0}
-        expanded={subtasksExpanded}
-        onToggle={onToggleSubtasks}
-      />
-    </div>
-  );
-}
-
-function KanbanColumn({
-  status,
-  tasks,
-  totalCount,
-  canDrag,
-  onDragStartTask,
-  onDrop,
-  onOpenTask,
-  expandedSubtasks,
-  onToggleSubtasks,
-  move,
-}: {
-  status: TaskCoreStatusDto;
-  tasks: TaskKanbanCardDto[];
-  /** Tổng số task GỐC của cột (SPEC-06 §13.8) — header cột không đổi theo bộ lọc assignee. */
-  totalCount: number;
-  canDrag: boolean;
-  onDragStartTask: (taskId: string) => (e: DragEvent<HTMLDivElement>) => void;
-  onDrop: (status: TaskCoreStatusDto) => (e: DragEvent<HTMLDivElement>) => void;
-  onOpenTask?: (taskId: string) => void;
-  expandedSubtasks: ReadonlySet<string>;
-  onToggleSubtasks: (taskId: string) => void;
-  move: KanbanMoveProps;
-}) {
-  const { t } = useTranslation("tasks");
-  return (
-    <div
-      className="flex w-72 shrink-0 flex-col gap-2 rounded-lg bg-muted/40 p-2"
-      onDragOver={(e) => canDrag && e.preventDefault()}
-      onDrop={onDrop(status)}
-      data-testid={`kanban-column-${status}`}
-    >
-      <div className="flex items-center justify-between px-1">
-        <h4 className="text-xs font-semibold uppercase text-muted-foreground">
-          {t(`tasks.status.${status}`)}
-        </h4>
-        <span
-          className="text-xs text-muted-foreground"
-          data-testid={`kanban-column-count-${status}`}
-        >
-          {totalCount}
-        </span>
-      </div>
-      {/* Cột dài tự cuộn TRONG cột (header cột đứng yên) thay vì kéo giãn cả trang;
-          drop handler ở div cột cha nên kéo-thả không đổi. calc ≈ topbar + header
-          project + tabs; min-h giữ vùng thả khi cột rỗng. */}
-      <div className="flex min-h-24 max-h-[calc(100dvh-21rem)] flex-1 flex-col gap-2 overflow-y-auto overscroll-contain">
-        {tasks.length === 0 ? (
-          <p className="px-1 text-xs text-muted-foreground">{t("tasks.kanban.columnEmpty")}</p>
-        ) : (
-          tasks.map((task) => (
-            <KanbanCard
-              key={task.id}
-              task={task}
-              draggable={canDrag}
-              onDragStart={onDragStartTask(task.id)}
-              onOpen={onOpenTask ? () => onOpenTask(task.id) : undefined}
-              subtasksExpanded={expandedSubtasks.has(task.id)}
-              onToggleSubtasks={() => onToggleSubtasks(task.id)}
-              move={move}
-              columnId={status}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * S5-TASK-PIPELINE-1 (lane fe) — cột PIPELINE tuỳ biến (columnMode:'state'): tên/màu/đếm từ chính
- * cột; kéo-thả gọi move-state (đổi CỘT — server auto-map status). Card hiện badge status để người
- * dùng thấy auto-map (plan fe mục 4).
- */
-function StateKanbanColumn({
-  column,
-  tasks,
-  canDrag,
-  projectId,
-  onDragStartTask,
-  onDrop,
-  onOpenTask,
-  expandedSubtasks,
-  onToggleSubtasks,
-  move,
-}: {
-  column: TaskKanbanStateColumnDto;
-  tasks: TaskKanbanCardDto[];
-  canDrag: boolean;
-  /** S5-TASK-BOARD-UX-1 — cần cho tạo nhanh: createTask({ projectId, stateId }). */
-  projectId: string;
-  onDragStartTask: (taskId: string) => (e: DragEvent<HTMLDivElement>) => void;
-  onDrop: (stateId: string) => (e: DragEvent<HTMLDivElement>) => void;
-  onOpenTask?: (taskId: string) => void;
-  expandedSubtasks: ReadonlySet<string>;
-  onToggleSubtasks: (taskId: string) => void;
-  move: KanbanMoveProps;
-}) {
-  const { t } = useTranslation("tasks");
-  return (
-    <div
-      className="flex w-72 shrink-0 flex-col gap-2 rounded-lg bg-muted/40 p-2"
-      onDragOver={(e) => canDrag && e.preventDefault()}
-      onDrop={onDrop(column.stateId)}
-      data-testid={`kanban-state-column-${column.stateId}`}
-    >
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-1.5">
-          <span
-            aria-hidden="true"
-            className="h-2.5 w-2.5 shrink-0 rounded-full"
-            style={{ backgroundColor: column.color }}
-          />
-          <h4 className="text-xs font-semibold uppercase text-muted-foreground">{column.name}</h4>
-        </div>
-        <span
-          className="text-xs text-muted-foreground"
-          data-testid={`kanban-state-column-count-${column.stateId}`}
-        >
-          {column.taskCount}
-        </span>
-      </div>
-      {/* Tạo nhanh ĐẦU cột, ngoài vùng cuộn → luôn thấy nút + việc mới nhập xong hiện ngay cạnh nút. */}
-      <KanbanQuickCreate projectId={projectId} stateId={column.stateId} />
-      <div className="flex min-h-24 max-h-[calc(100dvh-21rem)] flex-1 flex-col gap-2 overflow-y-auto overscroll-contain">
-        {tasks.length === 0 ? (
-          <p className="px-1 text-xs text-muted-foreground">{t("tasks.kanban.columnEmpty")}</p>
-        ) : (
-          tasks.map((task) => (
-            <KanbanCard
-              key={task.id}
-              task={task}
-              draggable={canDrag}
-              onDragStart={onDragStartTask(task.id)}
-              onOpen={onOpenTask ? () => onOpenTask(task.id) : undefined}
-              subtasksExpanded={expandedSubtasks.has(task.id)}
-              onToggleSubtasks={() => onToggleSubtasks(task.id)}
-              showStatus
-              move={move}
-              columnId={column.stateId}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
 
 export function TaskKanbanPage({
   projectId,
@@ -481,7 +110,6 @@ export function TaskKanbanPage({
       else next.add(taskId);
       return next;
     });
-  const [dragErrorKey, setDragErrorKey] = useState<string | null>(null);
   const requestFocusReturn = useKanbanCardFocusReturn();
   const queryKey = taskKeys.kanban(projectId);
 
@@ -555,12 +183,11 @@ export function TaskKanbanPage({
           });
         }
       }
-      setDragErrorKey(null);
       return { previous, movedGoalId };
     },
     onError: (err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
-      setDragErrorKey(moveErrorKey(err));
+      notifyKanbanMoveRejected(err, t);
     },
     onSettled: (_data, _error, variables, context) => {
       for (const key of taskCollabInvalidation.kanban(projectId, variables.taskId))
@@ -613,12 +240,11 @@ export function TaskKanbanPage({
           });
         }
       }
-      setDragErrorKey(null);
       return { previous, movedGoalId };
     },
     onError: (err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
-      setDragErrorKey(moveErrorKey(err));
+      notifyKanbanMoveRejected(err, t);
     },
     onSettled: (_data, _error, variables, context) => {
       for (const key of taskCollabInvalidation.kanban(projectId, variables.taskId))
@@ -741,11 +367,6 @@ export function TaskKanbanPage({
       {/* Nút "Quản lý cột" đã CHUYỂN vào tab Cài đặt của dự án (ProjectSettingsTab). */}
       {!canDragBoard && (
         <p className="text-xs text-muted-foreground">{t("tasks.kanban.readOnlyHint")}</p>
-      )}
-      {dragErrorKey && (
-        <p role="alert" className="text-sm text-destructive">
-          {t(dragErrorKey)}
-        </p>
       )}
       <div className="flex items-start gap-3">
         <Card className="min-w-0 flex-1 overflow-x-auto p-3">

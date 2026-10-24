@@ -19,6 +19,7 @@ import {
   useMentionCandidates,
   type MentionCandidate,
 } from "./task-mention-candidates";
+import { MentionSuggestions, useMentionListbox } from "./MentionSuggestions";
 
 /**
  * TaskCommentThread — bình luận + mention autocomplete (S4-FE-TASK-3, SPEC-06 §13.7/§14.14,
@@ -34,6 +35,7 @@ import {
  * Mention (S20-TASK-QUICKENTRY-1): nguồn gợi ý = người tham gia việc (phụ trách · giao · theo dõi ·
  * thành viên dự án) + danh bạ HR khi có read:employee — xem `task-mention-candidates.ts`. Lọc
  * client-side theo chuỗi gõ sau "@"; validate THẬT (MENTION-OUT-OF-SCOPE/NOT-FOUND) luôn ở server.
+ * Chọn gợi ý bằng ↓/↑ + Enter, Esc đóng (S20-TASK-FEDEBT-1 — `MentionSuggestions.tsx`).
  * Ctrl/Cmd+Enter gửi, Enter đơn xuống dòng; lỗi ⇒ giữ nguyên nội dung đã gõ.
  *
  * Deep link `?comment_id=` — đọc qua `window.location.search` (KHÔNG dùng TanStack Router useSearch: page
@@ -62,38 +64,6 @@ function findMentionToken(text: string, cursor: number): { atIndex: number; quer
   const between = upto.slice(atIndex + 1);
   if (/\s/.test(between)) return null;
   return { atIndex, query: between };
-}
-
-function MentionSuggestions({
-  suggestions,
-  onSelect,
-}: {
-  suggestions: MentionCandidate[];
-  onSelect: (emp: MentionCandidate) => void;
-}) {
-  const { t } = useTranslation("tasks");
-  if (suggestions.length === 0) {
-    return (
-      <p className="p-2 text-xs text-muted-foreground">
-        {t("tasks.detail.comments.mention.noMatch")}
-      </p>
-    );
-  }
-  return (
-    <ul className="max-h-56 space-y-0.5 overflow-y-auto" data-testid="mention-suggestions">
-      {suggestions.map((emp) => (
-        <li key={emp.id}>
-          <button
-            type="button"
-            className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
-            onClick={() => onSelect(emp)}
-          >
-            {emp.fullName}
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 function CommentComposer({
@@ -128,6 +98,13 @@ function CommentComposer({
     () => (mentionState ? filterMentionCandidates(candidates, mentionState.query) : []),
     [mentionState, candidates],
   );
+  const mentionListbox = useMentionListbox({
+    open: mentionState !== null,
+    suggestions,
+    tokenKey: mentionState ? `${mentionState.atIndex}:${mentionState.query}` : "",
+    onSelect: selectMention,
+    onClose: () => setMentionState(null),
+  });
 
   const mutation = useMutation({
     mutationFn: () => mutationFn(draft.trim(), Array.from(mentions.keys())),
@@ -150,6 +127,7 @@ function CommentComposer({
   // Ctrl+Enter (Cmd+Enter trên macOS) gửi; Enter đơn để mặc định (xuống dòng). Bỏ qua khi đang gõ
   // bộ gõ IME (isComposing) để Enter chốt chữ không bị hiểu nhầm.
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionListbox.handleKeyDown(e)) return;
     if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
@@ -203,6 +181,9 @@ function CommentComposer({
           aria-busy={mutation.isPending}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          aria-autocomplete="list"
+          aria-controls={mentionState && suggestions.length > 0 ? mentionListbox.listId : undefined}
+          aria-activedescendant={mentionListbox.activeId}
           placeholder={t("tasks.detail.comments.placeholder")}
           className="flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
@@ -216,7 +197,11 @@ function CommentComposer({
             align="start"
             className="w-64"
           >
-            <MentionSuggestions suggestions={suggestions} onSelect={selectMention} />
+            <MentionSuggestions
+              suggestions={suggestions}
+              listbox={mentionListbox}
+              onSelect={selectMention}
+            />
           </Popover>
         )}
       </div>

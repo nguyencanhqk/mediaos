@@ -46,6 +46,8 @@ export default {
       shortcutHint: "Ctrl/⌘+Enter để gửi · Enter để xuống dòng",
       mentionOutOfScope: "Người được nhắc không có quyền xem công việc này — bỏ nhắc rồi gửi lại.",
       mentionNotFound: "Không tìm thấy người được nhắc hoặc người đó đã ngưng hoạt động.",
+      // S20-TASK-FEDEBT-1 — nhãn listbox gợi ý @ (đọc cùng mục đang sáng qua aria-activedescendant).
+      mentionListLabel: "Gợi ý người để nhắc",
     },
   },
   // S20-TASK-MYTASKS-1 (US-TASK-NV-01) — «Việc của tôi» chia nhóm theo hạn (giờ công ty), chip trên URL.
