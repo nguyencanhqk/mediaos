@@ -16,6 +16,10 @@
  *  (i) «Của tôi» ⇒ GET /me/goals kèm kỳ, KHÔNG ?employeeId=; rỗng ⇒ «Xem kỳ trước».
  *  (j) chip kỳ ghi `period` lên URL.
  *
+ * S20-GOAL-QUICKCHECKIN-1 (US-GOAL-NV-91) — check-in ngay trên dòng / nút cây:
+ *  (k) gate cặp riêng (checkin, goal); bấm biểu tượng mở hộp tại chỗ, KHÔNG kích onRowClick; gửi xong
+ *      % trên dòng cập nhật (invalidate); Nháp/đã chốt ⇒ khoá + lý do; không cặp ⇒ không biểu tượng.
+ *
  * Quyền dùng store THẬT (`useAuthStore` capabilities + scopes) — không mock `useCan`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,7 +40,13 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
-    goalApi: { ...actual.goalApi, listGoals: vi.fn(), getTree: vi.fn() },
+    goalApi: {
+      ...actual.goalApi,
+      listGoals: vi.fn(),
+      getTree: vi.fn(),
+      checkIn: vi.fn(),
+      listUpdates: vi.fn(),
+    },
     meApi: { ...actual.meApi, getGoals: vi.fn() },
     authApi: { ...actual.authApi, me: vi.fn() },
     hrApi: { ...actual.hrApi, listDepartments: vi.fn(), listEmployees: vi.fn() },
@@ -48,6 +58,8 @@ import { GoalListPage } from "./GoalListPage";
 
 const mockListGoals = goalApi.listGoals as ReturnType<typeof vi.fn>;
 const mockGetTree = goalApi.getTree as ReturnType<typeof vi.fn>;
+const mockCheckIn = goalApi.checkIn as ReturnType<typeof vi.fn>;
+const mockListUpdates = goalApi.listUpdates as ReturnType<typeof vi.fn>;
 const mockMeGoals = meApi.getGoals as ReturnType<typeof vi.fn>;
 const mockAuthMe = authApi.me as ReturnType<typeof vi.fn>;
 const mockListDepartments = hrApi.listDepartments as ReturnType<typeof vi.fn>;
@@ -168,6 +180,8 @@ beforeEach(() => {
     { id: OTHER_DEPT_ID, name: "Kỹ thuật" },
   ]);
   mockListEmployees.mockResolvedValue({ items: [], meta: {} });
+  mockListUpdates.mockResolvedValue([]);
+  mockCheckIn.mockResolvedValue({ ...GOAL_ROW, progressPercent: 55 });
 });
 
 afterEach(() => {
@@ -379,5 +393,67 @@ describe("GoalListPage — «Của tôi» (TC4, TC5, TC7)", () => {
     const history = mountAt(`/goals?period=${Q4}`);
     fireEvent.click(await screen.findByRole("button", { name: "Của tôi" }));
     await waitFor(() => expect(searchOf(history).mine).toBe("1"));
+  });
+});
+
+describe("GoalListPage — check-in ngay trên dòng (US-GOAL-NV-91)", () => {
+  const CHECKIN_CAPS = { "view:goal": true, "checkin:goal": true };
+  const LIST_HREF = `/goals?period=${Q4}&view=list`;
+
+  it("(k1) có checkin:goal + Active: bấm biểu tượng mở hộp tại chỗ, KHÔNG mở chi tiết; gửi xong % cập nhật", async () => {
+    login(CHECKIN_CAPS);
+    mockListGoals
+      .mockResolvedValueOnce([GOAL_ROW])
+      .mockResolvedValue([{ ...GOAL_ROW, progressPercent: 55 }]);
+    mountAt(LIST_HREF);
+    const icon = await screen.findByRole("button", { name: "Check-in Tăng doanh thu 20%" });
+    expect(icon.tagName).toBe("BUTTON");
+    fireEvent.click(icon);
+    expect(await screen.findByText("Check-in tiến độ")).toBeInTheDocument();
+    expect(screen.queryByTestId("goal-detail-stub")).not.toBeInTheDocument();
+    // Bấm trong hộp thoại cũng KHÔNG nổi bọt lên dòng (hộp dựng NGOÀI bảng).
+    fireEvent.click(screen.getByTestId("goal-checkin-progress"));
+    expect(screen.queryByTestId("goal-detail-stub")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("goal-checkin-progress"), { target: { value: "11" } });
+    fireEvent.click(screen.getByTestId("goal-checkin-submit"));
+    await waitFor(() => expect(mockCheckIn).toHaveBeenCalledWith("g-1", { progressPercent: 11 }));
+    expect(await screen.findByText("55%")).toBeInTheDocument();
+    expect(screen.queryByText("Check-in tiến độ")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("goal-detail-stub")).not.toBeInTheDocument();
+  });
+
+  it("(k2) không có cặp checkin:goal ⇒ không có biểu tượng", async () => {
+    login({ "view:goal": true });
+    mockListGoals.mockResolvedValue([GOAL_ROW]);
+    mountAt(LIST_HREF);
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByRole("button", { name: /^Check-in / })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["Nháp", { status: "Draft" }, "Nháp"],
+    ["đã chốt kỳ", { finalizedAt: "2026-10-20T00:00:00.000Z" }, "chốt kỳ"],
+  ])(
+    "(k3) mục tiêu %s ⇒ biểu tượng khoá + lý do; bấm không mở hộp, không mở chi tiết",
+    async (_l, patch, reason) => {
+      login(CHECKIN_CAPS);
+      mockListGoals.mockResolvedValue([{ ...GOAL_ROW, ...patch }]);
+      mountAt(LIST_HREF);
+      const icon = await screen.findByRole("button", { name: "Check-in Tăng doanh thu 20%" });
+      expect(icon).toHaveAttribute("aria-disabled", "true");
+      expect(icon.getAttribute("title")).toContain(reason);
+      fireEvent.click(icon);
+      expect(screen.queryByText("Check-in tiến độ")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("goal-detail-stub")).not.toBeInTheDocument();
+    },
+  );
+
+  it("(k4) cây: biểu tượng trên nút mở hộp check-in tại chỗ", async () => {
+    login(CHECKIN_CAPS);
+    mountAt(`/goals?period=${Q4}`);
+    fireEvent.click(await screen.findByRole("button", { name: "Check-in Tăng doanh thu 20%" }));
+    expect(await screen.findByText("Check-in tiến độ")).toBeInTheDocument();
+    expect(screen.queryByTestId("goal-detail-stub")).not.toBeInTheDocument();
   });
 });

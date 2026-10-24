@@ -97,6 +97,7 @@ export default {
       period: "Kỳ",
       progress: "Tiến độ",
       status: "Trạng thái",
+      checkin: "Check-in",
     },
     empty: {
       title: "Chưa có mục tiêu kỳ này",
@@ -269,7 +270,7 @@ export default {
       progressPercent: "Tiến độ (%)",
       currentValue: "Giá trị hiện tại",
       achieved: "Đã đạt mục tiêu",
-      confidence: "Mức tự tin (%)",
+      confidence: "Mức tự tin",
       note: "Ghi chú",
     },
     hints: {
@@ -279,7 +280,28 @@ export default {
       autoMeasured:
         "Tiến độ mục tiêu này do hệ thống tính tự động — check-in chỉ ghi mức tự tin và ghi chú.",
       valueOptional: "Bỏ trống nếu chỉ muốn ghi mức tự tin / ghi chú.",
+      // S20-GOAL-QUICKCHECKIN-1 — độ tự tin một chạm, mặc định không chọn.
+      confidenceOptional: "Không bắt buộc — bấm lại để bỏ chọn.",
+      shortcut: "Ctrl+Enter (⌘+Enter trên Mac) để ghi nhận.",
     },
+    confidenceLevels: {
+      low: "Thấp",
+      medium: "Vừa",
+      high: "Cao",
+    },
+    last: {
+      // «Lần trước» đọc từ GET /goals/:id/updates?limit=1 — chỉ là chú thích.
+      value: "Lần trước: {{value}} → chỉ tiêu {{target}}",
+      progress: "Lần trước: tiến độ {{value}}",
+      simple: "Lần trước: {{value}}",
+      none: "Chưa có lần check-in nào.",
+      unknown: "Lần trước: —",
+      loading: "Lần trước: …",
+      confidence: "Mức tự tin lần trước: {{level}}",
+      achieved: "Đạt",
+      notAchieved: "Chưa đạt",
+    },
+    toastSuccess: "Đã check-in «{{name}}» — tiến độ {{percent}}",
     placeholders: {
       note: "Điều gì đang cản trở hoặc hỗ trợ mục tiêu này?",
     },
@@ -294,7 +316,18 @@ export default {
     locked: {
       finalized: "Mục tiêu đã chốt kỳ — cần mở lại trước khi check-in.",
       notActive: "Chỉ mục tiêu đang chạy mới check-in được.",
+      draft: "Mục tiêu đang ở Nháp — kích hoạt trước khi check-in.",
     },
+    // Biểu tượng Check-in trên dòng /goals và nút cây (US-GOAL-NV-91).
+    trigger: "Check-in {{name}}",
+  },
+
+  tree: {
+    label: "Cây mục tiêu",
+    collapseAll: "Thu gọn tất cả",
+    expandAll: "Mở tất cả",
+    collapse: "Thu gọn {{name}}",
+    expand: "Mở {{name}}",
   },
 
   finalizeDialog: {

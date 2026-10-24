@@ -45,6 +45,24 @@ export const GOAL_MEASURE_TYPE_OPTIONS = ["percent", "number", "boolean"] as con
 export const CHECKIN_CONFIDENCE_MIN = 0;
 export const CHECKIN_CONFIDENCE_MAX = 100;
 
+/**
+ * S20-GOAL-QUICKCHECKIN-1 (US-GOAL-NV-03) — độ tự tin một chạm: 3 mức ánh xạ HẰNG SỐ trong khoảng
+ * 0–100 của `checkinGoalSchema.confidence`. Mặc định KHÔNG chọn (không tự mang mức cũ — sổ
+ * `goal_updates` chỉ-thêm, mang lại mức cũ là ghi một cảm nhận người dùng chưa hề nói).
+ */
+export const GOAL_CONFIDENCE_LEVELS = { low: 30, medium: 60, high: 90 } as const;
+export type GoalConfidenceLevel = keyof typeof GOAL_CONFIDENCE_LEVELS;
+export const GOAL_CONFIDENCE_LEVEL_KEYS = ["low", "medium", "high"] as const;
+/** Ngưỡng xếp một số 0–100 (vd mức lần trước gõ tay trước đây) vào ba mức — chỉ để hiện chú thích. */
+const CONFIDENCE_MEDIUM_FROM = 45;
+const CONFIDENCE_HIGH_FROM = 75;
+
+export function confidenceLevelOf(value: number): GoalConfidenceLevel {
+  if (value >= CONFIDENCE_HIGH_FROM) return "high";
+  if (value >= CONFIDENCE_MEDIUM_FROM) return "medium";
+  return "low";
+}
+
 /** Trần % tiến độ nhập tay (measureType='percent'). */
 export const PROGRESS_PERCENT_MAX = 100;
 

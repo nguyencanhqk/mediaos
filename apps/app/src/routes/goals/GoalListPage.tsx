@@ -36,6 +36,8 @@ import {
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./components/GoalBadges";
 import { GoalProgressBar } from "./components/GoalProgressBar";
 import { GoalTreeView } from "./components/GoalTreeView";
+import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
+import { GoalCheckinDialogTrigger } from "./components/GoalCheckinDialogTrigger";
 
 const TOGGLE_ON = "flex items-center gap-1.5 bg-primary px-3 py-2 text-sm text-primary-foreground";
 const TOGGLE_OFF = "flex items-center gap-1.5 px-3 py-2 text-sm hover:bg-muted";
@@ -61,12 +63,21 @@ function withPeriodEdge(range: GoalPeriodRange, edge: "from" | "to", value: stri
  *
  * Bộ lọc CLIENT duy nhất còn lại: owner (GET /goals không có ownerEmployeeId — lọc trên tập đã tải, tập
  * bị chặn ≤ GOAL_PAGE_LIMIT_MAX). Tree không có cấp/owner (GET /goals/tree chỉ nhận phòng/trạng thái/kỳ).
+ *
+ * S20-GOAL-QUICKCHECKIN-1 (US-GOAL-NV-91): biểu tượng Check-in ở cột cuối + trên nút cây, gate cặp RIÊNG
+ * `(checkin, goal)` như `MeGoalsCard`. Hộp thoại dựng ở CẤP TRANG, NGOÀI bảng — `Dialog` không portal,
+ * dựng trong ô thì mọi click trong hộp nổi bọt lên `onRowClick` của dòng (mở chi tiết).
  */
 export function GoalListPage() {
   const { t } = useTranslation("goals");
   const navigate = useNavigate();
   const canView = useCan(GOAL_ENGINE_PAIRS.VIEW.action, GOAL_ENGINE_PAIRS.VIEW.resourceType);
   const canCreate = useCan(GOAL_ENGINE_PAIRS.CREATE.action, GOAL_ENGINE_PAIRS.CREATE.resourceType);
+  const canCheckin = useCan(
+    GOAL_ENGINE_PAIRS.CHECKIN.action,
+    GOAL_ENGINE_PAIRS.CHECKIN.resourceType,
+  );
+  const [checkinGoal, setCheckinGoal] = useState<GoalCoreResponseDto | null>(null);
 
   const { search, update, replaceFilters } = useGoalListSearch();
   const ready = useGoalListDefaults(search, replaceFilters, canView);
@@ -141,7 +152,7 @@ export function GoalListPage() {
   const openDetail = (goalId: string) =>
     void navigate({ to: "/goals/$goalId", params: { goalId } });
 
-  const columns = useGoalColumns();
+  const columns = useGoalColumns(canCheckin ? setCheckinGoal : undefined);
 
   if (!canView) {
     return (
@@ -335,14 +346,24 @@ export function GoalListPage() {
         listEmpty
       ) : (
         <div className="rounded-lg border border-border p-2">
-          <GoalTreeView nodes={treeQuery.data ?? []} onSelect={openDetail} />
+          <GoalTreeView
+            nodes={treeQuery.data ?? []}
+            onSelect={openDetail}
+            canCheckin={canCheckin}
+            onCheckin={setCheckinGoal}
+          />
         </div>
       )}
+
+      {checkinGoal && <GoalCheckinDialog goal={checkinGoal} onClose={() => setCheckinGoal(null)} />}
     </div>
   );
 }
 
-function useGoalColumns(): ColumnDef<GoalCoreResponseDto>[] {
+/** `onCheckin` có ⇔ người xem có cặp `(checkin, goal)` — không có thì KHÔNG có cột Check-in. */
+function useGoalColumns(
+  onCheckin?: (goal: GoalCoreResponseDto) => void,
+): ColumnDef<GoalCoreResponseDto>[] {
   const { t } = useTranslation("goals");
   return useMemo<ColumnDef<GoalCoreResponseDto>[]>(
     () => [
@@ -389,8 +410,19 @@ function useGoalColumns(): ColumnDef<GoalCoreResponseDto>[] {
           </div>
         ),
       },
+      ...(onCheckin
+        ? [
+            {
+              id: "checkin",
+              header: () => <span className="sr-only">{t("list.columns.checkin")}</span>,
+              cell: ({ row }) => (
+                <GoalCheckinDialogTrigger goal={row.original} onCheckin={onCheckin} />
+              ),
+            } satisfies ColumnDef<GoalCoreResponseDto>,
+          ]
+        : []),
     ],
-    [t],
+    [t, onCheckin],
   );
 }
 
