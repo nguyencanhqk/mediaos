@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,13 +11,11 @@ import {
   useCanExact,
   ApiError,
 } from "@mediaos/web-core";
-import { PageHeader, EmptyState, Button, Card, Badge, Dialog, Input, Select } from "@mediaos/ui";
+import { PageHeader, EmptyState, Button, Card, Badge, Dialog } from "@mediaos/ui";
 import type { TaskProjectResponseDto } from "@mediaos/contracts";
 import {
   PROJECT_STATE_PAIRS,
   TASK_CORE_ENGINE_PAIRS,
-  TASK_CORE_PRIORITY_OPTIONS,
-  TASK_CORE_STATUS_OPTIONS,
   TASK_ENGINE_PAIRS,
   isProjectManagerOrOwner,
   isProjectOwner,
@@ -34,14 +32,23 @@ import { ProjectReportContent } from "./ProjectReportPage";
 import { ProjectProgressCard } from "./ProjectProgressCard";
 import { ProjectProgressWidget } from "@/components/dashboard/ProjectProgressWidget";
 import {
-  DEFAULT_WORKSPACE_FILTERS,
   isAddMembersFlag,
   parseWorkspaceTabParam,
   resolveWorkspaceTab,
-  WORKSPACE_TASK_SORTS,
+  validateProjectWorkspaceSearch,
   type ProjectWorkspaceTab,
   type WorkspaceTaskFilters,
 } from "./workspace-constants";
+import {
+  buildProjectWorkspaceUrl,
+  parseWorkspaceWho,
+  toggleWorkspaceWho,
+  validateWorkspaceFilterSearch,
+  workspaceFilterSearchFrom,
+  workspaceFiltersFromSearch,
+  type WorkspaceFilterSearch,
+} from "./project-workspace-filters";
+import { WorkspaceToolbar } from "./ProjectDetailPageToolbar";
 import { useProjectLastTab, useWorkspaceTabOrder } from "./use-workspace-tab-order";
 import { WorkspaceTabOrderMenu } from "./WorkspaceTabOrderMenu";
 import { useTaskDrawer } from "./task-drawer-nav";
@@ -60,9 +67,11 @@ import { useTaskDrawer } from "./task-drawer-nav";
  * quyền (pair hệ thống HOẶC myProjectRole đủ bậc, D-24). Tab Gantt·Lịch·Tài liệu·Biểu mẫu thuộc
  * đợt D2-D5 — KHÔNG render giả.
  *
- * Toolbar (tìm·lọc·sắp xếp) + rail avatar (multi-select người thực hiện + "Chưa giao") dùng CHUNG
- * giữa tab Bảng và Danh sách: state sống Ở ĐÂY (vỏ luôn mounted khi đổi tab) — đổi tab giữ nguyên
- * filter. Hai tab lọc client-side qua CÙNG helper `workspace-constants` (parity theo cấu trúc).
+ * Toolbar (tìm·«Của tôi»·lọc·sắp xếp) + rail avatar (multi-select người thực hiện + "Chưa giao") dùng
+ * CHUNG giữa tab Bảng và Danh sách và sống trên URL (S20-TASK-PROJTOOLBARURL-1: q · status · priority
+ * · overdue · sort · who — schema thuần ở project-workspace-filters.ts, cũng là validateSearch của
+ * route): F5 · Back · link chia sẻ giữ nguyên bộ lọc; đổi tab mang bộ lọc theo URL mới. Hai tab lọc
+ * client-side qua CÙNG helper `workspace-constants` (parity theo cấu trúc).
  *
  * Overview tab hiển thị field THẬT từ TaskProjectResponseDto; khối "Tiến độ" (S4-FE-DASH-2) nhúng
  * `<ProjectProgressWidget projectId>`; `<ProjectProgressCard>` (S4-FE-TASK-4) — báo cáo NHẠY CẢM
@@ -374,98 +383,6 @@ function ProjectSettingsTab({
   );
 }
 
-/** Toolbar lọc chung tab Bảng·Danh sách (tìm · trạng thái · ưu tiên · quá hạn · sắp xếp · đặt lại). */
-function WorkspaceToolbar({
-  filters,
-  onChange,
-}: {
-  filters: WorkspaceTaskFilters;
-  onChange: (next: WorkspaceTaskFilters) => void;
-}) {
-  const { t } = useTranslation("tasks");
-  const patch = (part: Partial<WorkspaceTaskFilters>) => onChange({ ...filters, ...part });
-  const isDirty =
-    filters.q !== "" ||
-    filters.status !== "" ||
-    filters.priority !== "" ||
-    filters.overdueOnly ||
-    filters.sort !== "default";
-
-  return (
-    <div className="flex flex-wrap items-center gap-3" data-testid="workspace-toolbar">
-      <Input
-        type="search"
-        value={filters.q}
-        onChange={(e) => patch({ q: e.target.value })}
-        placeholder={t("workspace.toolbar.searchPlaceholder")}
-        aria-label={t("workspace.toolbar.searchPlaceholder")}
-        className="w-56"
-        data-testid="workspace-search"
-      />
-      <Select
-        value={filters.status}
-        onChange={(e) => patch({ status: e.target.value as WorkspaceTaskFilters["status"] })}
-        aria-label={t("tasks.list.filters.status")}
-        className="w-40"
-        data-testid="workspace-filter-status"
-      >
-        <option value="">{t("tasks.list.allStatuses")}</option>
-        {TASK_CORE_STATUS_OPTIONS.map((s) => (
-          <option key={s} value={s}>
-            {t(`tasks.status.${s}`)}
-          </option>
-        ))}
-      </Select>
-      <Select
-        value={filters.priority}
-        onChange={(e) => patch({ priority: e.target.value as WorkspaceTaskFilters["priority"] })}
-        aria-label={t("tasks.list.filters.priority")}
-        className="w-36"
-        data-testid="workspace-filter-priority"
-      >
-        <option value="">{t("tasks.list.allPriorities")}</option>
-        {TASK_CORE_PRIORITY_OPTIONS.map((p) => (
-          <option key={p} value={p}>
-            {t(`tasks.priority.${p}`)}
-          </option>
-        ))}
-      </Select>
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <input
-          type="checkbox"
-          checked={filters.overdueOnly}
-          onChange={(e) => patch({ overdueOnly: e.target.checked })}
-          data-testid="workspace-filter-overdue"
-        />
-        {t("tasks.list.filters.overdue")}
-      </label>
-      <Select
-        value={filters.sort}
-        onChange={(e) => patch({ sort: e.target.value as WorkspaceTaskFilters["sort"] })}
-        aria-label={t("workspace.toolbar.sortLabel")}
-        className="w-44"
-        data-testid="workspace-sort"
-      >
-        {WORKSPACE_TASK_SORTS.map((sort) => (
-          <option key={sort} value={sort}>
-            {t(`workspace.toolbar.sort.${sort}`)}
-          </option>
-        ))}
-      </Select>
-      {isDirty && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange(DEFAULT_WORKSPACE_FILTERS)}
-          data-testid="workspace-filters-reset"
-        >
-          {t("workspace.toolbar.reset")}
-        </Button>
-      )}
-    </div>
-  );
-}
-
 export function ProjectDetailPage({
   projectId,
   onBack,
@@ -531,23 +448,20 @@ export function ProjectDetailPage({
   // do drawer lo) và KHÔNG tự vẽ drawer nữa ⇒ `/tasks/projects/P?task=T` chỉ còn MỘT drawer.
   const { openTask } = useTaskDrawer();
 
+  // Bộ lọc toolbar + rail đọc từ URL (search cùng object ⇒ cùng kết quả, không lọc lại mỗi render).
+  const filterSearch = useMemo(() => validateWorkspaceFilterSearch(search), [search]);
+  const filters = useMemo(() => workspaceFiltersFromSearch(filterSearch), [filterSearch]);
+  const assigneeSelection = useMemo(() => parseWorkspaceWho(filterSearch.who), [filterSearch.who]);
+
+  // URL của một tab: mang theo bộ lọc, BỎ `task`/`addMembers`.
   const buildUrl = (nextTab: ProjectWorkspaceTab) =>
-    `/tasks/projects/${projectId}${nextTab === "overview" ? "" : `?tab=${nextTab}`}`;
+    buildProjectWorkspaceUrl(projectId, {
+      tab: nextTab === "overview" ? undefined : nextTab,
+      ...filterSearch,
+    });
 
   // Thứ tự tab — tuỳ chọn hiển thị cá nhân (localStorage), chỉnh trong thẻ "Thứ tự tab" của Cài đặt.
   const { tabOrder, isCustomized, moveTab, resetTabOrder } = useWorkspaceTabOrder();
-
-  // Bộ lọc toolbar + rail avatar sống Ở VỎ — đổi tab Bảng↔Danh sách giữ nguyên (done_when #2/#3).
-  const [filters, setFilters] = useState<WorkspaceTaskFilters>(DEFAULT_WORKSPACE_FILTERS);
-  const [assigneeSelection, setAssigneeSelection] = useState<ReadonlySet<string>>(new Set());
-  const toggleAssignee = (value: string) =>
-    setAssigneeSelection((prev) => {
-      const next = new Set(prev);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
-      return next;
-    });
-  const clearAssignees = () => setAssigneeSelection(new Set());
 
   const [editOpen, setEditOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -644,6 +558,25 @@ export function ProjectDetailPage({
     router.history.push(buildUrl(next));
   };
 
+  // Ghi bộ lọc: ?tab ghi RÕ (link chia sẻ mở đúng tab dù người nhận nhớ tab khác), giữ `task` của
+  // drawer đang mở. Chọn rời rạc = PUSH (Back hoàn tác từng bước); ô tìm = REPLACE.
+  const writeFilters = (next: WorkspaceFilterSearch, replace = false) => {
+    const url = buildProjectWorkspaceUrl(projectId, {
+      tab: tab === "overview" ? undefined : tab,
+      ...next,
+      task: validateProjectWorkspaceSearch(search).task,
+    });
+    if (replace) router.history.replace(url);
+    else router.history.push(url);
+  };
+  const setFilters = (next: WorkspaceTaskFilters, replace?: boolean) =>
+    writeFilters(workspaceFilterSearchFrom(next, assigneeSelection), replace);
+  const setAssignees = (next: ReadonlySet<string>) =>
+    writeFilters(workspaceFilterSearchFrom(filters, next));
+  const toggleAssignee = (value: string) =>
+    setAssignees(toggleWorkspaceWho(assigneeSelection, value));
+  const clearAssignees = () => setAssignees(new Set());
+
   return (
     <div className="space-y-6 p-6">
       {/* Nút "Quay lại danh sách" đã BỎ (sidebar/breadcrumb đảm nhận điều hướng); onBack chỉ còn
@@ -681,7 +614,12 @@ export function ProjectDetailPage({
       </div>
 
       {(tab === "board" || tab === "list") && (
-        <WorkspaceToolbar filters={filters} onChange={setFilters} />
+        <WorkspaceToolbar
+          filters={filters}
+          onChange={setFilters}
+          assigneeSelection={assigneeSelection}
+          onToggleAssignee={toggleAssignee}
+        />
       )}
 
       {tab === "overview" ? (

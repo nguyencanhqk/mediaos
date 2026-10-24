@@ -30,24 +30,18 @@ function makeRepo() {
   return {
     // reads
     findByAssignee: vi.fn(),
-    listAll: vi.fn(),
-    listByProject: vi.fn(),
-    listByTeam: vi.fn(),
     findByIdFull: vi
       .fn()
       .mockResolvedValue([{ id: TASK_ID, taskType: "office", title: "Soạn báo cáo" }]),
     findRawByIdTx: vi
       .fn()
-      .mockResolvedValue([
-        { id: TASK_ID, taskType: "office", status: "not_started" },
-      ]),
+      .mockResolvedValue([{ id: TASK_ID, taskType: "office", status: "not_started" }]),
     // tenant-FK guards (SEC-1) — mặc định hợp lệ
     assigneeActiveTx: vi.fn().mockResolvedValue(true),
     projectExistsTx: vi.fn().mockResolvedValue(true),
     // S4-TASK-BE-1 block-new-task guard — mặc định project KHÔNG bị chặn (Active).
     projectBlocksNewTaskTx: vi.fn().mockResolvedValue(false),
-    // PM-1 (apps/projects, mig 0420): board/list giờ đính labels[] + cấp sequence/state khi tạo task project.
-    listLabelsForTaskIds: vi.fn().mockResolvedValue([]),
+    // PM-1 (apps/projects, mig 0420): cấp sequence/state khi tạo task project.
     allocateSequenceTx: vi.fn().mockResolvedValue(1),
     findDefaultStateTx: vi.fn().mockResolvedValue(null),
     stateInProjectTx: vi.fn().mockResolvedValue(true),
@@ -183,41 +177,6 @@ describe("TasksService.createTask — SEC-1 tenant-FK guard + audit", () => {
   });
 });
 
-describe("TasksService.listBoard — forward filter + page (G9-3)", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("forward NGUYÊN VẸN filter {taskType/status/projectId/assigneeUserId} + page{limit,offset} xuống repo.listAll — KHÔNG kẹp ngầm", async () => {
-    const repo = makeRepo();
-    repo.listAll.mockResolvedValue([{ id: TASK_ID, taskType: "office" }]);
-    const { service } = makeService({ repo });
-
-    const filters = {
-      taskType: "office",
-      status: "in_progress",
-      projectId: PROJECT_ID,
-      assigneeUserId: ASSIGNEE_ID,
-    };
-    const page = { limit: 25, offset: 50 };
-
-    const result = await service.listBoard(COMPANY_ID, filters, page);
-
-    // PM-1: board trả BoardTaskDto (đính labels[] + displayId). Hàng repo {id,taskType} → +labels:[] +displayId:null.
-    expect(result).toEqual([{ id: TASK_ID, taskType: "office", labels: [], displayId: null }]);
-    // companyId LUÔN truyền + filter/page forward y nguyên (không kẹp/đổi ngầm).
-    expect(repo.listAll).toHaveBeenCalledWith(COMPANY_ID, filters, page);
-  });
-
-  it("filter rỗng vẫn truyền companyId + filter object {} (board toàn tenant)", async () => {
-    const repo = makeRepo();
-    repo.listAll.mockResolvedValue([]);
-    const { service } = makeService({ repo });
-
-    await service.listBoard(COMPANY_ID, {});
-
-    expect(repo.listAll).toHaveBeenCalledWith(COMPANY_ID, {}, undefined);
-  });
-});
-
 describe("TasksService.updateStatus — FSM office rút gọn (D3)", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -314,73 +273,5 @@ describe("TasksService.deleteTask — soft-delete (CT11) + reject workflow", () 
     const { service } = makeService({ repo });
 
     await expect(service.deleteTask(USER, TASK_ID)).rejects.toBeInstanceOf(NotFoundException);
-  });
-});
-
-// ─── G9-4: listByProject / listByTeam — SEC-1 tenant-FK guard ────────────────
-
-const TEAM_ID = "66666666-6666-6666-6666-666666666666";
-
-function makeRepoWithHubGuards() {
-  const repo = makeRepo();
-  // G9-4 adds teamExistsTx; default → team exists
-  Object.assign(repo, { teamExistsTx: vi.fn().mockResolvedValue(true) });
-  return repo as ReturnType<typeof makeRepo> & { teamExistsTx: ReturnType<typeof vi.fn> };
-}
-
-describe("TasksService.listByProject — G9-4 SEC-1 guard", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("project hợp lệ cùng tenant → gọi repo.listByProject với companyId + page", async () => {
-    const repo = makeRepoWithHubGuards();
-    repo.listByProject.mockResolvedValue([{ id: TASK_ID, taskType: "office" }]);
-    const { service } = makeService({ repo });
-
-    const result = await service.listByProject(COMPANY_ID, PROJECT_ID, { limit: 50, offset: 0 });
-
-    expect(repo.projectExistsTx).toHaveBeenCalledWith(expect.anything(), COMPANY_ID, PROJECT_ID);
-    expect(repo.listByProject).toHaveBeenCalledWith(COMPANY_ID, PROJECT_ID, {
-      limit: 50,
-      offset: 0,
-    });
-    // PM-1: +labels[] +displayId (attachLabels).
-    expect(result).toEqual([{ id: TASK_ID, taskType: "office", labels: [], displayId: null }]);
-  });
-
-  it("project KHÔNG cùng tenant / không tồn tại → NotFound, KHÔNG gọi repo.listByProject", async () => {
-    const repo = makeRepoWithHubGuards();
-    repo.projectExistsTx.mockResolvedValueOnce(false);
-    const { service } = makeService({ repo });
-
-    await expect(service.listByProject(COMPANY_ID, PROJECT_ID)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-    expect(repo.listByProject).not.toHaveBeenCalled();
-  });
-});
-
-describe("TasksService.listByTeam — G9-4 SEC-1 guard", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("team hợp lệ cùng tenant → gọi repo.listByTeam với companyId + page", async () => {
-    const repo = makeRepoWithHubGuards();
-    repo.listByTeam.mockResolvedValue([{ id: TASK_ID, taskType: "hr" }]);
-    const { service } = makeService({ repo });
-
-    const result = await service.listByTeam(COMPANY_ID, TEAM_ID, { limit: 25, offset: 25 });
-
-    expect(repo.teamExistsTx).toHaveBeenCalledWith(expect.anything(), COMPANY_ID, TEAM_ID);
-    expect(repo.listByTeam).toHaveBeenCalledWith(COMPANY_ID, TEAM_ID, { limit: 25, offset: 25 });
-    // PM-1: +labels[] +displayId (attachLabels).
-    expect(result).toEqual([{ id: TASK_ID, taskType: "hr", labels: [], displayId: null }]);
-  });
-
-  it("team KHÔNG cùng tenant / không tồn tại → NotFound, KHÔNG gọi repo.listByTeam", async () => {
-    const repo = makeRepoWithHubGuards();
-    repo.teamExistsTx.mockResolvedValueOnce(false);
-    const { service } = makeService({ repo });
-
-    await expect(service.listByTeam(COMPANY_ID, TEAM_ID)).rejects.toBeInstanceOf(NotFoundException);
-    expect(repo.listByTeam).not.toHaveBeenCalled();
   });
 });

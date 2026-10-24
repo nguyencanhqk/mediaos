@@ -9,6 +9,7 @@
 import { z } from "zod";
 import type { CreateTaskCoreRequest, UpdateTaskCoreRequest } from "@mediaos/contracts";
 import { localDatetimeToIso, isoToLocalDatetime } from "./constants";
+import { pickEditable } from "./task-form-schema";
 
 export const subtaskFormSchema = z.object({
   title: z.string().trim().min(1, "tasks.form.errors.titleRequired").max(500),
@@ -37,13 +38,20 @@ export function subtaskFormToCreatePayload(
   };
 }
 
-/** PATCH /tasks/:id — sửa nhanh 1 việc con hiện có (title/assignee/due). */
-export function subtaskFormToUpdatePayload(v: SubtaskFormValues): UpdateTaskCoreRequest {
-  return {
+/**
+ * PATCH /tasks/:id — sửa nhanh 1 việc con hiện có (title/assignee/due). S20-SEC-TASKPATCHGATE-1: CHỈ
+ * trường người dùng đã sửa và không bị khoá (`editable`) — cùng quy tắc `taskFormToUpdatePayload`.
+ */
+export function subtaskFormToUpdatePayload(
+  v: SubtaskFormValues,
+  editable: Partial<Record<keyof SubtaskFormValues, boolean | undefined>>,
+): UpdateTaskCoreRequest {
+  const full: UpdateTaskCoreRequest = {
     title: v.title,
     assigneeEmployeeId: v.assigneeEmployeeId || null,
     dueAt: localDatetimeToIso(v.dueAt) ?? null,
   };
+  return pickEditable(full, editable);
 }
 
 /** Prefill form sửa nhanh từ 1 dòng SubtaskListItemDto (đủ field, không cần fetch thêm). */

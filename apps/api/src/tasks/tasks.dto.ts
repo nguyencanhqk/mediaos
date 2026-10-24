@@ -1,5 +1,4 @@
 import { createZodDto } from "nestjs-zod";
-import { z } from "zod";
 import {
   addWatcherSchema,
   assignTaskSchema,
@@ -17,7 +16,6 @@ import {
   createTaskSchema,
   listTaskActivityQuerySchema,
   listTaskCoreQuerySchema,
-  listTasksQuerySchema,
   moveTaskStateRequestSchema,
   updateLabelSchema,
   updateProjectStateSchema,
@@ -37,22 +35,6 @@ export class CreateTaskDto extends createZodDto(createTaskSchema) {}
 
 /** Đổi trạng thái luồng rút gọn (G9-3) — chỉ status office. */
 export class UpdateTaskStatusDto extends createZodDto(updateTaskStatusSchema) {}
-
-/**
- * Task Board query (G9-3) — validate filter + clamp page ở biên (limit ≤ 200, offset ≥ 0).
- * Nguồn sự thật là listTasksQuerySchema ở contracts (z.coerce parse @Query string thô).
- */
-export class ListTasksQueryDto extends createZodDto(listTasksQuerySchema) {}
-
-/**
- * Pagination-only query cho by-team / by-project endpoints (G9-4).
- * Path-param đã chứa teamId/projectId; chỉ cần page{limit,offset} qua query string.
- */
-export const pageQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(200).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
-});
-export class PageQueryDto extends createZodDto(pageQuerySchema) {}
 
 /**
  * Upload-intent body (B4) — fileName/contentType/sizeBytes. allowlist + max-size là nguồn sự thật ở

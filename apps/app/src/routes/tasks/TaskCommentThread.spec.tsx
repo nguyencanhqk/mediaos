@@ -273,7 +273,7 @@ describe("TaskCommentThread — gợi ý @ và phím tắt gửi", () => {
   function suggestionNames(): string[] {
     const list = screen.getByTestId("mention-suggestions");
     return within(list)
-      .getAllByRole("button")
+      .getAllByRole("option")
       .map((b) => b.textContent ?? "");
   }
 
@@ -294,7 +294,7 @@ describe("TaskCommentThread — gợi ý @ và phím tắt gửi", () => {
     fireEvent.change(textarea, { target: { value: "@cuong" } });
     await waitFor(() => expect(suggestionNames()).toEqual(["Cường Theo Dõi"]));
 
-    fireEvent.click(screen.getByRole("button", { name: "Cường Theo Dõi" }));
+    fireEvent.click(screen.getByRole("option", { name: "Cường Theo Dõi" }));
     await waitFor(() => expect(textarea.value).toBe("@Cường Theo Dõi "));
     expect(screen.getByRole("button", { name: "Bỏ nhắc Cường Theo Dõi" })).toBeInTheDocument();
   });
@@ -421,5 +421,86 @@ describe("TaskCommentThread — gợi ý @ và phím tắt gửi", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/không có quyền/i);
     expect(textarea.value).toBe("Nội dung");
+  });
+  // ── S20-TASK-FEDEBT-1 — gợi ý @ chọn bằng bàn phím (mẫu listbox: focus ở ô, aria-activedescendant) ──
+  async function openSuggestions(): Promise<HTMLTextAreaElement> {
+    setCapabilities({ "comment:task": true, "watch:task": true });
+    renderWithQuery(<TaskCommentThread taskId="task-001" />);
+    const textarea = await composer();
+    await waitFor(() => expect(taskCoreApi.listWatchers).toHaveBeenCalled());
+    fireEvent.change(textarea, { target: { value: "@" } });
+    await waitFor(() => expect(suggestionNames()).toHaveLength(3));
+    return textarea;
+  }
+
+  function activeOption(textarea: HTMLTextAreaElement): HTMLElement | null {
+    const id = textarea.getAttribute("aria-activedescendant");
+    return id ? document.getElementById(id) : null;
+  }
+
+  it("gợi ý là listbox nối với ô soạn; mục đầu sáng sẵn, ↓/↑ đi vòng, aria-selected theo mục sáng", async () => {
+    const textarea = await openSuggestions();
+    const listbox = screen.getByRole("listbox");
+    expect(textarea).toHaveAttribute("aria-autocomplete", "list");
+    expect(textarea).toHaveAttribute("aria-controls", listbox.id);
+    expect(activeOption(textarea)).toHaveTextContent("An Phụ Trách");
+    expect(activeOption(textarea)).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    expect(activeOption(textarea)).toHaveTextContent("Bình Giao Việc");
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    expect(activeOption(textarea)).toHaveTextContent("An Phụ Trách");
+    fireEvent.keyDown(textarea, { key: "ArrowUp" });
+    expect(activeOption(textarea)).toHaveTextContent("Cường Theo Dõi");
+    expect(
+      within(listbox)
+        .getAllByRole("option")
+        .filter((o) => o.getAttribute("aria-selected") === "true"),
+    ).toHaveLength(1);
+  });
+
+  it("Enter chọn mục đang sáng (không xuống dòng, không gửi); gõ tiếp ⇒ mục sáng về đầu danh sách lọc", async () => {
+    const textarea = await openSuggestions();
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    const notPrevented = fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(notPrevented).toBe(false);
+    await waitFor(() => expect(textarea.value).toBe("@Bình Giao Việc "));
+    expect(screen.getByRole("button", { name: "Bỏ nhắc Bình Giao Việc" })).toBeInTheDocument();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(textarea).not.toHaveAttribute("aria-activedescendant");
+    expect(taskCollabApi.addComment).not.toHaveBeenCalled();
+
+    fireEvent.change(textarea, { target: { value: "@Bình Giao Việc @cu" } });
+    await waitFor(() => expect(suggestionNames()).toEqual(["Cường Theo Dõi"]));
+    expect(activeOption(textarea)).toHaveTextContent("Cường Theo Dõi");
+  });
+
+  it("Esc đóng gợi ý, giữ nội dung, KHÔNG lọt ra ngoài (drawer chứa ô soạn không bị đóng theo)", async () => {
+    const outside = vi.fn();
+    document.addEventListener("keydown", outside);
+    try {
+      const textarea = await openSuggestions();
+      fireEvent.keyDown(textarea, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+      expect(textarea.value).toBe("@");
+      expect(textarea).not.toHaveAttribute("aria-activedescendant");
+      expect(outside).not.toHaveBeenCalled();
+
+      // Gợi ý đã đóng: Esc tiếp theo là của drawer — không chặn nữa.
+      fireEvent.keyDown(textarea, { key: "Escape" });
+      expect(outside).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("keydown", outside);
+    }
+  });
+
+  it("không có gợi ý nào khớp ⇒ Enter để mặc định (xuống dòng), không chọn gì", async () => {
+    const textarea = await openSuggestions();
+    fireEvent.change(textarea, { target: { value: "@zzz" } });
+    await waitFor(() => expect(screen.getByText(/không tìm thấy/i)).toBeInTheDocument());
+    expect(textarea).not.toHaveAttribute("aria-activedescendant");
+    const notPrevented = fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(notPrevented).toBe(true);
   });
 });

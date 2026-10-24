@@ -582,14 +582,22 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-2 task core surface (DB cô lập, đư�
     expect((await authDelete(t, `/tasks/${workflowTask}`)).status).toBe(400);
   });
 
-  it("PATCH /tasks/:id cập nhật field (title/priority/due) → 200", async () => {
+  // S20-SEC-TASKPATCHGATE-1 — ca cũ khẳng định PATCH đổi `priority` → 200 cho người gọi CHỈ có
+  // update:task (không có update-priority:task). Bất biến mới: đổi trường có cặp chuyên trách đòi cặp đó,
+  // thiếu ⇒ 403 cho cả request. Ca đứng cạnh: chỉ tiêu đề vẫn 200. Ma trận đầy đủ:
+  // task-patch-field-gate.int-spec.ts.
+  it("PATCH /tasks/:id: tiêu đề → 200; kèm đổi ưu tiên khi thiếu update-priority → 403 cả request", async () => {
     const t = await login(A.slug, `admin@${A.slug}.test`);
     const created = await authPost(t, "/tasks").send({ title: "before" });
     const id = created.body.data.id as string;
-    const res = await authPatch(t, `/tasks/${id}`).send({ title: "after", priority: "Urgent" });
+    const denied = await authPatch(t, `/tasks/${id}`).send({ title: "after", priority: "Urgent" });
+    expect(denied.status, JSON.stringify(denied.body)).toBe(403);
+    const row = await direct.query("SELECT title, task_priority FROM tasks WHERE id=$1", [id]);
+    expect(row.rows[0].title).toBe("before");
+    expect(row.rows[0].task_priority).not.toBe("Urgent");
+    const res = await authPatch(t, `/tasks/${id}`).send({ title: "after" });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.data.title).toBe("after");
-    expect(res.body.data.priority).toBe("Urgent");
   });
 
   it("task_activity_logs TASK_CREATED/UPDATED/DELETED target_type='Task' + audit objectType='task'", async () => {

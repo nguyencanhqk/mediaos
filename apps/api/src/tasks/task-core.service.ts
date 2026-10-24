@@ -36,6 +36,12 @@ import {
 import { TaskActivityService } from "./task-activity.service";
 import { TaskActionsService } from "./task-actions.service";
 import { ProjectAccessService } from "./project-access.service";
+import {
+  TaskPatchFieldGate,
+  auditedPatchFields,
+  buildGatedPatch,
+  computeChanged,
+} from "./task-patch-field-gate";
 // S5-GOAL-BE-2 (additive) — recompute tiến độ mục tiêu CÙNG TX khi task đổi dự án / bị xoá mềm.
 import { GoalProgressEngineService } from "./goal-progress-engine.service";
 import { coalesceTaskStatus, type TaskCoreStatus } from "./task-fsm";
@@ -151,6 +157,8 @@ export class TaskCoreService {
     // S5-GOAL-BE-2 — engine đo tiến độ mục tiêu (SPEC-10 §13.3). Đặt CUỐI cùng lý do như `avatars`/
     // `covers`: unit spec dựng service theo VỊ TRÍ tham số, chèn vào giữa sẽ lệch toàn bộ phía sau.
     private readonly goalProgress: GoalProgressEngineService,
+    // S20-SEC-TASKPATCHGATE-1 — cổng trường của PATCH (hạn · ưu tiên · người phụ trách). CUỐI.
+    private readonly patchGate: TaskPatchFieldGate,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -613,6 +621,8 @@ export class TaskCoreService {
     // 3b — GATE + AUTO-MAP Ở METHOD DÙNG CHUNG, KHÔNG ở route: payload có stateId ⇒ PATCH không được
     // thành CỬA THỨ HAI đổi cột (403 TRƯỚC mọi ghi khi thiếu update-state:task).
     const stateCtx = dto.stateId !== undefined ? await this.prepareStateWrite(user) : null;
+    // S20-SEC-TASKPATCHGATE-1 — cùng khuôn: cặp chuyên trách của 3 trường có cổng resolve TRƯỚC tx.
+    const fieldScopes = await this.patchGate.prepare(user, dto);
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
@@ -626,6 +636,9 @@ export class TaskCoreService {
       }
       // DATA-SCOPE WRITE: scope < Company ⇒ task phải nằm trong phạm vi update của actor (fail-closed).
       await this.assertInScopeForWrite(tx, user, id, updateScope);
+      // Trường ĐỔI ⇒ đòi cặp + phạm vi của chính cặp; 403/404 cho CẢ request, trước mọi ghi.
+      const fieldChanges = computeChanged(raw, dto);
+      const assignScope = await this.patchGate.assertTx(tx, user, id, fieldChanges, fieldScopes);
 
       // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-33) — KHOÁ MỘT LẦN, TOÀN BỘ TẬP HÀNG SẼ CHẠM ──────────
       // ⚠️ PHẢI là MỘT lời gọi khoá cho cả request, TRƯỚC mọi kiểm cấu trúc. Khoá làm hai lần (một cho
@@ -688,29 +701,20 @@ export class TaskCoreService {
       if (dto.projectId) await this.assertProjectUsable(tx, user.companyId, dto.projectId);
       if (dto.departmentId) await this.assertDepartment(tx, user.companyId, dto.departmentId);
 
-      const patch: Parameters<TaskCoreRepository["updateTaskCoreTx"]>[3] = {};
+      // Người phụ trách mới buộc theo phạm vi `assign` (I-2), không theo phạm vi update:task.
+      const assignee =
+        assignScope && dto.assigneeEmployeeId
+          ? await this.resolveAssignee(tx, user, assignScope, dto.assigneeEmployeeId)
+          : null;
+      // Ba trường có cổng: CHỈ trường đổi có khoá — trường không đổi không ghi (I-3, chống ghi đè).
+      const patch: Parameters<TaskCoreRepository["updateTaskCoreTx"]>[3] = {
+        ...buildGatedPatch(dto, fieldChanges, assignee),
+      };
       if (dto.title !== undefined) patch.title = dto.title;
       if (dto.description !== undefined) patch.description = dto.description;
       if (dto.projectId !== undefined) patch.projectId = dto.projectId;
       if (dto.departmentId !== undefined) patch.departmentId = dto.departmentId;
-      if (dto.priority !== undefined) patch.taskPriority = dto.priority;
-      if (dto.dueAt !== undefined) patch.dueAt = dto.dueAt;
       if (dto.startAt !== undefined) patch.startAt = dto.startAt;
-      if (dto.assigneeEmployeeId !== undefined) {
-        if (dto.assigneeEmployeeId === null) {
-          patch.mainAssigneeEmployeeId = null;
-          patch.assigneeUserId = null;
-        } else {
-          const assignee = await this.resolveAssignee(
-            tx,
-            user,
-            updateScope,
-            dto.assigneeEmployeeId,
-          );
-          patch.mainAssigneeEmployeeId = assignee.employeeId;
-          patch.assigneeUserId = assignee.userId;
-        }
-      }
 
       // F5 gate: PATCH chỉ-có-stateId ⇒ KHÔNG chạy core patch (updateTaskCoreTx luôn bump
       // updated_at/updated_by — task nổi lên sort "mới cập nhật" với 0 activity; state có đường
@@ -756,11 +760,9 @@ export class TaskCoreService {
       }
 
       // Audit KHÔNG NÓI DỐI (finding gate lane contracts): stateId có bản ghi TASK_STATE_CHANGED
-      // RIÊNG (trong applyStateChangeTx) ⇒ loại khỏi TASK_UPDATED; PATCH chỉ-có-stateId ⇒ bỏ hẳn
-      // TASK_UPDATED (không ghi bản ghi rỗng).
-      const auditedDto = { ...dto };
-      delete (auditedDto as Record<string, unknown>).stateId;
-      const auditedChanges = this.changedFields(auditedDto);
+      // RIÊNG (trong applyStateChangeTx) ⇒ loại khỏi TASK_UPDATED; trường có cổng không đổi không ghi ⇒
+      // không khai (I-3). Rỗng (vd. PATCH chỉ-có-stateId) ⇒ bỏ hẳn TASK_UPDATED (không ghi bản ghi rỗng).
+      const auditedChanges = auditedPatchFields(dto, fieldChanges);
       if (Object.keys(auditedChanges).length > 0) {
         const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
         await this.activity.record(tx, {
@@ -1308,14 +1310,6 @@ export class TaskCoreService {
   private clampLimit(limit?: number): number {
     if (!limit || limit <= 0) return DEFAULT_LIST_LIMIT;
     return Math.min(Math.floor(limit), TASK_CORE_PAGE_LIMIT_MAX);
-  }
-
-  private changedFields(dto: Record<string, unknown>): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(dto)) {
-      if (v !== undefined) out[k] = v;
-    }
-    return out;
   }
 
   private async reload(tx: TenantTx, companyId: string, id: string): Promise<TaskCoreResponseDto> {
