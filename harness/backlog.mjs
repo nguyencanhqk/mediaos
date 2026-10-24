@@ -23407,6 +23407,8 @@ export const backlog = [
       "pnpm-workspace.yaml",
       "pnpm-lock.yaml",
       "apps/api/package.json",
+      "apps/fbpost/package.json",
+      "apps/fbpost/package-lock.json",
       "scripts/check-audit-ignore-expiry.mjs",
       "scripts/check-audit-ignore-expiry.test.mjs",
       ".github/workflows/security.yml",
@@ -23417,14 +23419,16 @@ export const backlog = [
     src: [
       "Đo 24/10/2026: CI của 11 PR #628–#638 (đợt S20 23/10 đêm) đỏ ĐÚNG job `Dependency scan (pnpm audit)` — kể cả #634 chỉ đổi tài liệu ⇒ nợ có sẵn của master, KHÔNG do PR nào sinh ra. Run Security cuối trên master `6e2e58e7` (23/10 14:14Z) còn XANH. `gh api advisories/<id>`: GHSA-27r3-jxmh-p828 body-parser `>=2.0.0 <2.4.0` → 2.4.0 (công bố 23/10 20:53Z) · GHSA-q7qp-rjg7-q26m multer `>=2.0.0 <2.5.0` → 2.5.0 (23/10 22:08Z) · GHSA-mrhx-c7xc-m3w5 zod `<4.6.6` → 4.6.6 (01/10; repo zod 3.25.76).",
       "Đường tới: body-parser qua `@nestjs/platform-express > express` (mọi route API) · multer qua `@nestjs/platform-express` + dep trực tiếp `apps/api` (đường upload) · zod ở api · app · contracts · web-core (+ `nestjs-zod`, `@anthropic-ai/sdk`).",
+      "Sau khi bước pnpm audit xanh, bước `npm audit — apps/fbpost` (cùng job, `--omit=dev`) đỏ đúng GHSA-mrhx-c7xc-m3w5: app vệ tinh SOCIAL khai `zod: ^4.1.11`, lockfile npm khoá 4.4.3 — dòng 4.x CÓ bản vá (4.6.6) ⇒ vá thật, không ngoại lệ.",
     ],
     done_when: [
+      "`apps/fbpost`: zod 4.4.3 → 4.6.7 (`^4.6.7`, dòng 4.x có bản vá — KHÔNG ngoại lệ); `package-lock.json` chỉ đổi đúng mục zod (version/resolved/integrity); `npm audit --omit=dev --audit-level=high` 0 HIGH; `npm ci` + `npm test` (19 tệp) + `npm run typecheck` xanh trong worktree",
       "Override range-scoped `body-parser@>=2.0.0 <2.4.0` → `^2.4.0` và nới `multer@>=1.0.0 <2.5.0` → `^2.5.0` (+ bump dep trực tiếp `apps/api` lên `^2.5.0`) + miễn trừ tuổi phát hành cho đúng hai bản vá; lockfile chỉ đổi body-parser 2.2.2 → 2.4.0 (kéo content-type 2.1.0 · iconv-lite 0.7.3 · qs 6.16.1 · side-channel 1.1.1) và multer 2.3.0 → 2.5.0 (bỏ concat-stream · typedarray)",
       "zod: owner chọn qua hộp hỏi 24/10/2026 «WO deps + bỏ qua zod có hạn» ⇒ `auditConfig.ignoreGhsas: [GHSA-mrhx-c7xc-m3w5]` + `scripts/check-audit-ignore-expiry.mjs` chạy trong job audit, ĐỎ khi GHSA bị bỏ qua không có hạn / quá hạn 23/11/2026 / sổ lệch, lệch dạng YAML chuẩn, `until` không phải ngày thật hoặc xa hơn 45 ngày, lockfile có zod ngoài major 3 (33 ca `node --test`); vá thật = S19-OPS-ZOD4-1",
       "`pnpm audit --audit-level=high` exit 0 (chỉ còn 1 HIGH bị bỏ qua có hạn) · `harness/check.sh --all --lane-db` (hồ sơ storage live ⇒ int-spec upload chạy thật trên multer mới) không đỏ mới so với master · CI Security XANH",
     ],
     notes: [
-      "🟡 Lockfile đổi + dep runtime của API ⇒ deploy API PHẢI cài deps trên checkout chính (PROD chạy trên node_modules của nó; `m prod-update` không install): dừng API → pull → `pnpm install --frozen-lockfile` → build API → khởi động lại → đo /health. Gộp CÙNG khung deploy với S20-SEC-TASKLEGACYREAD-1 + S20-SEC-TASKPATCHGATE-1 (owner chọn 24/10). Merge PR này TRƯỚC mọi PR khác của đợt (gỡ chặn check bắt buộc cho tất cả).",
+      "🟡 Lockfile đổi + dep runtime của API ⇒ deploy API PHẢI cài deps trên checkout chính (PROD chạy trên node_modules của nó; `m prod-update` không install): dừng API → pull → `pnpm install --frozen-lockfile` → build API → khởi động lại → đo /health. fbpost (lockfile npm đổi): Stop-Service MediaOS-Social → `npm ci` → `m prod-update social` trong một cửa sổ elevated (Windows khoá tệp .node đang nạp — xem sự cố 19/10). Gộp CÙNG khung deploy với S20-SEC-TASKLEGACYREAD-1 + S20-SEC-TASKPATCHGATE-1 (owner chọn 24/10). Merge PR này TRƯỚC mọi PR khác của đợt (gỡ chặn check bắt buộc cho tất cả).",
     ],
   },
   {
