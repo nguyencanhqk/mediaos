@@ -24,6 +24,7 @@ import type { StoredChatAttachment, StoredChatMessage } from "@/stores/chat.stor
 import { attachmentUrl } from "@/stores/chat.store";
 import { formatClock, formatFileSize, splitTextWithLinks } from "./chat-format";
 import { MessageActions } from "./MessageActions";
+import { MessageBubbleLink } from "./MessageBubbleLink";
 import { useCanOpenDirect } from "./chat-room-opener";
 import { SenderDirectMenu } from "./SenderDirectMenu";
 import { ReactionBar } from "./ReactionBar";
@@ -84,23 +85,16 @@ interface MessageBubbleProps {
   actions: MessageBubbleActions;
 }
 
-/** Nội dung văn bản — đoạn chữ thành text node, đoạn link thành `<a>` đã chốt `rel`. */
+/**
+ * Nội dung văn bản — đoạn chữ thành text node, đoạn link thành `<a>` đã chốt `rel` (S20-CHAT-INTERNALLINK-1:
+ * link nội bộ mở tại chỗ khi bấm thường — luật ở `MessageBubbleLink`).
+ */
 function MessageBody({ body }: { body: string }): React.ReactElement {
   return (
     <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
       {splitTextWithLinks(body).map((segment, index) =>
         segment.kind === "link" ? (
-          <a
-            key={`${index}-${segment.value}`}
-            href={segment.value}
-            target="_blank"
-            // `noopener noreferrer` chặn tab đích chạm `window.opener`; `nofollow` vì đây là nội dung
-            // do người dùng nhập. Ba giá trị này đi cùng nhau, đừng bỏ bớt cái nào.
-            rel="noopener noreferrer nofollow"
-            className="text-primary underline underline-offset-2 hover:no-underline"
-          >
-            {segment.value}
-          </a>
+          <MessageBubbleLink key={`${index}-${segment.value}`} href={segment.value} />
         ) : (
           // Text node — React escape. `<img src=x onerror=alert(1)>` hiện ra thành CHỮ, đúng chủ đích.
           <span key={`${index}-text`}>{segment.value}</span>
