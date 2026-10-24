@@ -89,4 +89,20 @@ export default {
   fieldGate: {
     locked: "Bạn không có quyền đổi mục này.",
   },
+  // S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — cảnh báo sau khi giao (`warnings[]` của route action).
+  // ON-LEAVE = đơn nghỉ đã duyệt trùng NGÀY HẠN của việc (task-actions.service) — không phải «đang nghỉ».
+  assigneeWarning: {
+    onLeave: "{{name}} nghỉ phép vào ngày hạn của việc",
+    onLeaveUntil: "{{name}} nghỉ phép vào ngày hạn của việc (nghỉ đến {{until}})",
+    notMember: "{{name}} không phải thành viên dự án",
+    // Ý thứ hai trở đi của câu gộp — KHÔNG chủ ngữ (tên chỉ nêu ở ý đầu), khoá riêng thay vì truyền
+    // name rỗng rồi trim (chỉ đúng khi mọi bản dịch mở đầu bằng {{name}}).
+    continued: {
+      onLeave: "nghỉ phép vào ngày hạn của việc",
+      onLeaveUntil: "nghỉ phép vào ngày hạn của việc (nghỉ đến {{until}})",
+      notMember: "không phải thành viên dự án",
+    },
+    fallbackName: "Người được giao",
+    changeAssignee: "Đổi người",
+  },
 };
