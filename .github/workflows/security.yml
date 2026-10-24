@@ -112,6 +112,13 @@ jobs:
       - name: Chốt hồi quy brace-expansion (GHSA-mh99-v99m-4gvg)
         run: node scripts/check-brace-expansion-guard.mjs
 
+      # S19-OPS-AUDITDOS-1 (owner 24/10/2026) — mọi GHSA trong `pnpm-workspace.yaml › auditConfig.ignoreGhsas`
+      # PHẢI có hạn + WO gỡ trong `EXPIRY` của script; quá hạn / không có hạn / sổ lệch ⇒ ĐỎ. Đây là thứ biến
+      # «bỏ qua» thành «ngoại lệ có hạn» thay vì ỉm. `!cancelled()`: vẫn chạy khi bước audit phía trên đỏ.
+      - name: Hạn ngoại lệ audit (auditConfig.ignoreGhsas)
+        if: ${{ !cancelled() }}
+        run: node scripts/check-audit-ignore-expiry.mjs && node --test scripts/check-audit-ignore-expiry.test.mjs
+
       # S19-OPS-SCASATELLITE-1 — app vệ tinh có lockfile RIÊNG nằm ngoài workspace pnpm (pnpm-workspace.yaml
       # loại !apps/fbpost) ⇒ `pnpm audit` phía trên mù với nó. Bước nằm TRONG job dependency-scan sẵn có (không
       # tạo job mới). Job dependency-scan là required check (từ 23/10/2026 — xem đầu tệp), nhưng merge `--admin`
