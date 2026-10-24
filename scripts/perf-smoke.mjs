@@ -4,7 +4,7 @@
  * Smoke/baseline latency probe cho 5 endpoint SLA lõi MVP (§17.2):
  *   1. Employee list          GET /hr/employees?page=1&pageSize=20   (canonical, đã paginate)
  *   2. Attendance records     GET /attendance/records?page&pageSize   (index tháng/employee/scope)
- *   3. Task board             GET /tasks/board                        (không N+1 summary)
+ *   3. Task list              GET /tasks?limit=20                     (danh sách việc theo phạm vi đọc)
  *   4. Notification unread    GET /notifications/unread-count         (partial index idx_notifications_unread)
  *   5. Dashboard me           GET /dashboard/me                       (widget cache/degraded)
  *
@@ -54,7 +54,7 @@ const ENDPOINTS = [
     label: "Attendance records",
     path: "/attendance/records?page=1&pageSize=20",
   },
-  { key: "task_board", label: "Task board", path: "/tasks/board" },
+  { key: "task_list", label: "Task list", path: "/tasks?limit=20" },
   { key: "notification_unread", label: "Notification unread", path: "/notifications/unread-count" },
   { key: "dashboard_me", label: "Dashboard me", path: "/dashboard/me" },
 ];
