@@ -23420,7 +23420,7 @@ export const backlog = [
     ],
     done_when: [
       "Override range-scoped `body-parser@>=2.0.0 <2.4.0` → `^2.4.0` và nới `multer@>=1.0.0 <2.5.0` → `^2.5.0` (+ bump dep trực tiếp `apps/api` lên `^2.5.0`) + miễn trừ tuổi phát hành cho đúng hai bản vá; lockfile chỉ đổi body-parser 2.2.2 → 2.4.0 (kéo content-type 2.1.0 · iconv-lite 0.7.3 · qs 6.16.1 · side-channel 1.1.1) và multer 2.3.0 → 2.5.0 (bỏ concat-stream · typedarray)",
-      "zod: owner chọn qua hộp hỏi 24/10/2026 «WO deps + bỏ qua zod có hạn» ⇒ `auditConfig.ignoreGhsas: [GHSA-mrhx-c7xc-m3w5]` + `scripts/check-audit-ignore-expiry.mjs` chạy trong job audit, ĐỎ khi GHSA bị bỏ qua không có hạn / quá hạn 23/11/2026 / sổ lệch (8 ca `node --test`); vá thật = S19-OPS-ZOD4-1",
+      "zod: owner chọn qua hộp hỏi 24/10/2026 «WO deps + bỏ qua zod có hạn» ⇒ `auditConfig.ignoreGhsas: [GHSA-mrhx-c7xc-m3w5]` + `scripts/check-audit-ignore-expiry.mjs` chạy trong job audit, ĐỎ khi GHSA bị bỏ qua không có hạn / quá hạn 23/11/2026 / sổ lệch, lệch dạng YAML chuẩn, `until` không phải ngày thật hoặc xa hơn 45 ngày, lockfile có zod ngoài major 3 (27 ca `node --test`); vá thật = S19-OPS-ZOD4-1",
       "`pnpm audit --audit-level=high` exit 0 (chỉ còn 1 HIGH bị bỏ qua có hạn) · `harness/check.sh --all --lane-db` (hồ sơ storage live ⇒ int-spec upload chạy thật trên multer mới) không đỏ mới so với master · CI Security XANH",
     ],
     notes: [
