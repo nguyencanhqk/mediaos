@@ -424,4 +424,45 @@ describe("ConversationPanel · khung trả lời cho tin đã ra khỏi RAM (S20
     expect(await within(composer).findByText("xin chào")).toBeTruthy();
     expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
   });
+
+  /**
+   * Trang đầu CHƯA về thì chưa biết tin gốc có trong phần sắp tải hay không: báo «không còn trong phần
+   * đã tải» lúc này là khẳng định sai (chớp rồi tắt khi trang về), còn thân ảnh chụp có thể là thân cũ.
+   */
+  it("trang đầu CHƯA nạp xong ⇒ không báo «không còn trong phần đã tải», không thân ảnh chụp; nạp xong có tin ⇒ thân tin sống", async () => {
+    let resolvePage: (page: unknown[]) => void = () => {};
+    getMessages.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePage = resolve;
+      }),
+    );
+    useChatDraftStore
+      .getState()
+      .setReplyTo(ROOM_ID, { ...seededMessage(), body: "thân cũ trong ảnh chụp" });
+    renderPanel();
+
+    const composer = await screen.findByTestId("chat-composer");
+    expect(screen.getByTestId("chat-messages-loading")).toBeTruthy();
+    expect(within(composer).getByText(/Trả lời Trần B/)).toBeTruthy();
+    expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
+    expect(within(composer).queryByText("thân cũ trong ảnh chụp")).toBeNull();
+
+    resolvePage([seededMessage()]);
+    expect(await within(composer).findByText("xin chào")).toBeTruthy();
+    expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
+  });
+
+  it("nạp trang đầu LỖI ⇒ không khẳng định tin gốc đã ra khỏi phần đã tải, không thân ảnh chụp", async () => {
+    getMessages.mockRejectedValue(new Error("mạng chập"));
+    useChatDraftStore
+      .getState()
+      .setReplyTo(ROOM_ID, { ...seededMessage(), body: "thân cũ trong ảnh chụp" });
+    renderPanel();
+
+    await screen.findByText("Thử lại");
+    const composer = screen.getByTestId("chat-composer");
+    expect(within(composer).getByText(/Trả lời Trần B/)).toBeTruthy();
+    expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
+    expect(within(composer).queryByText("thân cũ trong ảnh chụp")).toBeNull();
+  });
 });

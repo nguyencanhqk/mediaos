@@ -46,7 +46,7 @@ import {
 } from "./use-mention-autocomplete";
 import { AttachmentPreviewList, type PendingAttachment } from "./composer/AttachmentPreviewList";
 import { ComposerActions } from "./composer/ComposerActions";
-import { ComposerNotices } from "./composer/ComposerNotices";
+import { ComposerNotices, type ReplyQuoteState } from "./composer/ComposerNotices";
 import { MentionPopover, mentionOptionId } from "./composer/MentionPopover";
 import { useAttachmentPreviews } from "./composer/use-attachment-previews";
 import { useFileDrop } from "./composer/use-file-drop";
@@ -66,8 +66,8 @@ interface MessageComposerProps {
   roomId: string;
   isArchived: boolean;
   replyTo: StoredChatMessage | null;
-  /** S20-CHAT-FEDEBT-1 — tin đang trả lời đã ra khỏi RAM ⇒ khung chỉ hiện trích dẫn tối thiểu. */
-  isReplyDetached?: boolean;
+  /** S20-CHAT-FEDEBT-1 — thân trích dẫn của khung «đang trả lời»; xem `ReplyQuoteState`. */
+  replyQuote?: ReplyQuoteState;
   onCancelReply: () => void;
   /**
    * S17 — ứng viên gợi ý `@mention`, ĐÃ lọc người còn trong phòng (`rosterToMentionCandidates`).
@@ -84,7 +84,7 @@ export function MessageComposer({
   roomId,
   isArchived,
   replyTo,
-  isReplyDetached = false,
+  replyQuote = "live",
   onCancelReply,
   mentionCandidates = [],
   onSubmit,
@@ -322,6 +322,9 @@ export function MessageComposer({
       return;
     }
     // Chữ + mention + khoá idempotency đã dọn ở `clearSentDraft` (tin kế tiếp là tin KHÁC ⇒ khoá mới).
+    // Bộ đếm cảnh báo rời phòng hạ ĐỒNG BỘ: tháo trước lượt vẽ dọn khay thì effect đồng bộ chưa chạy,
+    // cleanup sẽ đọc số tệp cũ và cảnh báo «bị bỏ» cho chính tệp vừa gửi đi.
+    pendingFileCountRef.current = 0;
     setAttachments([]);
     previews.revokeAll();
     onCancelReply();
@@ -358,7 +361,7 @@ export function MessageComposer({
       <ComposerNotices
         isArchived={isArchived}
         replyTo={replyTo}
-        isReplyDetached={isReplyDetached}
+        replyQuote={replyQuote}
         onCancelReply={onCancelReply}
         uploading={uploading}
         error={error}

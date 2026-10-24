@@ -8,7 +8,7 @@
  * Luật store thuần (reset theo phiên, chốt epoch, quét storage) đo ở `chat-draft.store.spec.ts`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 
@@ -311,6 +311,33 @@ describe("MessageComposer · cảnh báo tệp chưa gửi lúc rời phòng (S2
 
     useAuthStore.getState().logout();
     a.unmount();
+
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Gửi xong ⇒ `setAttachments([])` mới chỉ được XẾP lịch; ô soạn tháo trước khi lượt vẽ đó (và effect
+   * đồng bộ bộ đếm) kịp chạy thì cleanup đọc bộ đếm cũ ⇒ cảnh báo «tệp bị bỏ» cho tệp vừa gửi đi.
+   */
+  it("gửi thành công rồi tháo NGAY, trước khi khay kịp vẽ lại ⇒ KHÔNG cảnh báo tệp vừa gửi", async () => {
+    upload.mockResolvedValue(FILE_META);
+    let resolveSend: (ok: boolean) => void = () => {};
+    const a = mount(
+      ROOM_A,
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    pasteFile();
+    await screen.findByText("bao-cao.txt");
+    fireEvent.click(sendButton());
+
+    await act(async () => {
+      resolveSend(true);
+      await Promise.resolve(); // để phần sau `await onSubmit` chạy (xếp lịch dọn khay), chưa vẽ lại
+      a.unmount();
+    });
 
     expect(warning).not.toHaveBeenCalled();
   });

@@ -19,6 +19,7 @@ import { ChatEmptyHero } from "./ChatEmptyHero";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { ConversationHeader } from "./ConversationHeader";
 import { MessageComposer, type ComposerSubmitPayload } from "./MessageComposer";
+import type { ReplyQuoteState } from "./composer/ComposerNotices";
 import { useChatDraftStore } from "./chat-draft.store";
 import { MessageList } from "./MessageList";
 import { PinnedMessageBar } from "./PinnedMessageBar";
@@ -174,8 +175,11 @@ export function ConversationPanel({
    *
    * S20-CHAT-FEDEBT-1 — tin KHÔNG còn trong RAM (trang cũ bị cắt khi tháo hội thoại · cửa sổ ngữ cảnh đã
    * thay danh sách) ⇒ ảnh chụp vẫn là đích `replyToMessageId` khi gửi, nhưng khung chỉ hiện trích dẫn TỐI
-   * THIỂU (`isReplyDetached`): thân trong ảnh chụp có thể là thân cũ của một tin đã thu hồi mà sự kiện
+   * THIỂU (`detached`): thân trong ảnh chụp có thể là thân cũ của một tin đã thu hồi mà sự kiện
    * thu hồi không với tới. Không hỏi thêm API nào cho riêng tin đó.
+   *
+   * Chỉ khẳng định «không còn trong phần đã tải» khi trang đầu ĐÃ về: trước đó (đang nạp · nạp lỗi) tin
+   * gốc có thể nằm ngay trong trang sắp tới ⇒ `pending` (chỉ người gửi, không thân ảnh chụp).
    */
   const liveReplyTo = useMemo(
     () =>
@@ -183,7 +187,12 @@ export function ConversationPanel({
     [draftReplyTo, messages],
   );
   const replyTo = liveReplyTo ?? draftReplyTo;
-  const isReplyDetached = draftReplyTo !== null && liveReplyTo === null;
+  const replyQuote: ReplyQuoteState =
+    draftReplyTo === null || liveReplyTo !== null
+      ? "live"
+      : conversation.isFirstPageLoaded
+        ? "detached"
+        : "pending";
   const setDraftReplyTo = useChatDraftStore((s) => s.setReplyTo);
   const setReplyTo = useCallback(
     (message: StoredChatMessage | null) => setDraftReplyTo(room.id, message),
@@ -572,7 +581,7 @@ export function ConversationPanel({
         roomId={room.id}
         isArchived={room.isArchived ?? false}
         replyTo={replyTo}
-        isReplyDetached={isReplyDetached}
+        replyQuote={replyQuote}
         mentionCandidates={mentionCandidates}
         onCancelReply={() => setReplyTo(null)}
         onSubmit={submit}
