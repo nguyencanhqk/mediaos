@@ -5,7 +5,8 @@
  *   trang khác, thiếu cặp xem  ⇒ «Không có quyền truy cập Tin nhắn», không mở drawer
  *   danh sách phòng chưa về    ⇒ sang `/chat/R` (trang chờ danh sách rồi mới xác nhận)
  *   R có trong phòng của tôi   ⇒ drawer mở R TẠI CHỖ (URL trang không đổi)
- *   R vắng                     ⇒ «Không mở được cuộc trò chuyện này» — MỘT câu cho mọi lý do (không tồn
+ *   R vắng khỏi store          ⇒ hỏi lại `GET /chat/rooms` MỘT lần (store có thể cũ); có R ⇒ drawer mở R
+ *   R vẫn vắng                 ⇒ «Không mở được cuộc trò chuyện này» — MỘT câu cho mọi lý do (không tồn
  *                                tại · xoá mềm · lưu trữ · đã rời), không tên phòng, 0 lời gọi API của R
  *
  * Đọc store bằng `getState()` lúc BẤM (không subscribe): thành phần thông báo không phải vẽ lại mỗi lần
@@ -24,6 +25,7 @@ import {
   isChatPathname,
   type ChatRoomTarget,
 } from "@/routes/chat/chat-room-link";
+import { recheckRoomListed } from "@/routes/chat/recheck-room-list";
 import { useChatStore } from "@/stores/chat.store";
 import { useChatDockStore } from "@/components/chat/chat-dock.store";
 
@@ -48,11 +50,15 @@ export function useChatRoomLinkOpener(): (target: ChatRoomTarget) => void {
         void navigate({ to: CHAT_ROOM_PATH, params: { roomId }, search });
         return;
       }
-      if (roomsById[roomId] === undefined) {
-        toast.error(t("deepLink.unavailable"), { key: CHAT_LINK_TOAST_KEY });
+      if (roomsById[roomId] !== undefined) {
+        useChatDockStore.getState().openRoom(roomId);
         return;
       }
-      useChatDockStore.getState().openRoom(roomId);
+      // Store có thể cũ (vừa được thêm vào phòng, `chat:room` chưa tới) ⇒ hỏi lại danh sách MỘT lần.
+      void recheckRoomListed(roomId).then((isListed) => {
+        if (isListed) useChatDockStore.getState().openRoom(roomId);
+        else toast.error(t("deepLink.unavailable"), { key: CHAT_LINK_TOAST_KEY });
+      });
     },
     [canViewRoom, navigate, t],
   );

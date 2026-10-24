@@ -39,6 +39,7 @@ import { roomDisplayName } from "@/components/chat/chat-format";
 import { useChatLayoutMode } from "@/components/chat/use-chat-viewport";
 import { useChatStore } from "@/stores/chat.store";
 import { CHAT_LINK_TOAST_KEY } from "./chat-room-link";
+import { recheckRoomListed } from "./recheck-room-list";
 import { CHAT_PAIRS, CONTEXT_AFTER, CONTEXT_BEFORE } from "./constants";
 
 /**
@@ -152,20 +153,37 @@ export function ChatPage({
    *   trước. Giữ id chết lại thì cột giữa đứng hình ở trạng thái "đang tải" vĩnh viễn.
    *
    * Chưa có danh sách (`hasLoadedRooms` false) ⇒ CHỜ: `roomsById` lúc đó rỗng với MỌI phòng.
+   *
+   * Chưa từng mở được ⇒ hỏi lại danh sách MỘT lần trước khi từ chối (`recheckRoomListed`): store có thể
+   * cũ (vừa được thêm vào phòng, sự kiện `chat:room` chưa tới). Lời hỏi lại không mang id của R.
+   * Phụ thuộc vào CỜ `isRequestedListed` chứ không vào `roomsById`: store đổi vì phòng khác thì không
+   * được huỷ/phát lại lời hỏi đang bay.
    */
+  const isRequestedListed = requestedRoomId !== null && roomsById[requestedRoomId] !== undefined;
   const openedRoomIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (requestedRoomId === null) return;
-    if (roomsById[requestedRoomId] !== undefined) {
+    if (isRequestedListed) {
       openedRoomIdRef.current = requestedRoomId;
       return;
     }
     if (!hasLoadedRooms) return;
-    const wasOpen = openedRoomIdRef.current === requestedRoomId;
-    openedRoomIdRef.current = null;
-    if (!wasOpen) toast.error(t("deepLink.unavailable"), { key: CHAT_LINK_TOAST_KEY });
-    onRoomChange(null);
-  }, [requestedRoomId, roomsById, hasLoadedRooms, onRoomChange, t]);
+    if (openedRoomIdRef.current === requestedRoomId) {
+      openedRoomIdRef.current = null;
+      onRoomChange(null);
+      return;
+    }
+    let isSuperseded = false;
+    void recheckRoomListed(requestedRoomId).then((isListed) => {
+      // Có R ⇒ `syncRoomList` đã đưa R vào store và lượt render kế mở nó. Đã đổi phòng ⇒ bỏ kết quả.
+      if (isSuperseded || isListed) return;
+      toast.error(t("deepLink.unavailable"), { key: CHAT_LINK_TOAST_KEY });
+      onRoomChange(null);
+    });
+    return () => {
+      isSuperseded = true;
+    };
+  }, [requestedRoomId, isRequestedListed, hasLoadedRooms, onRoomChange, t]);
 
   const members = useMemo(() => detail?.members ?? [], [detail]);
   const myRole = detail?.myRole ?? null;

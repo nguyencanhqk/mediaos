@@ -63,8 +63,15 @@ function message(over: Partial<StoredChatMessage> = {}): StoredChatMessage {
 }
 
 let fetchSpy: MockInstance<typeof fetch>;
+/** Danh sách phòng SERVER trả cho `GET /chat/rooms` — có thể tươi hơn store (sự kiện `chat:room` lỡ). */
+let serverRooms: ChatRoomDto[] = [];
+const ROOM_LIST_RE = /\/chat\/rooms(?:\?|$)/;
 let toastError: MockInstance<typeof toast.error>;
 const roomChanges: Array<string | null> = [];
+
+function roomListCalls(): string[] {
+  return fetchSpy.mock.calls.map((call) => String(call[0])).filter((u) => ROOM_LIST_RE.test(u));
+}
 
 function urlsFor(id: string): string[] {
   return fetchSpy.mock.calls.map((call) => String(call[0])).filter((u) => u.includes(id));
@@ -103,6 +110,7 @@ function renderPage(initialRoomId: string | null, messageId: string | null = nul
 beforeEach(() => {
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
   roomChanges.length = 0;
+  serverRooms = [];
   useAuthStore.setState({
     capabilities: {
       "view:chat-room": true,
@@ -112,12 +120,13 @@ beforeEach(() => {
   });
   useChatStore.getState().resetChatStore();
   useChatStore.getState().setMyUserId(ME);
-  fetchSpy = vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(
-      async () =>
-        new Response("[]", { status: 200, headers: { "content-type": "application/json" } }),
-    );
+  fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (input) =>
+      new Response(ROOM_LIST_RE.test(String(input)) ? JSON.stringify(serverRooms) : "[]", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  );
   toastError = vi.spyOn(toast, "error");
 });
 
@@ -128,11 +137,14 @@ afterEach(() => {
 
 describe("ChatPage · /chat/$roomId — ca từ chối (RED trước)", () => {
   it("R vắng khỏi danh sách phòng của tôi (không tồn tại · xoá mềm · lưu trữ · đã rời) ⇒ MỘT thông điệp, về /chat, 0 lời gọi API của R", async () => {
-    useChatStore.getState().syncRoomList([room(OTHER, { name: "Nhóm khác" })], false);
+    serverRooms = [room(OTHER, { name: "Nhóm khác" })];
+    useChatStore.getState().syncRoomList(serverRooms, false);
 
     renderPage(R);
 
     await waitFor(() => expect(roomChanges).toEqual([null]));
+    // Từ chối SAU khi hỏi lại danh sách đúng MỘT lần — lời hỏi lại không mang id của R.
+    expect(roomListCalls()).toHaveLength(1);
     expect(toastError).toHaveBeenCalledTimes(1);
     expect(toastError.mock.calls[0]?.[0]).toBe(DENIED);
     expect(String(toastError.mock.calls[0]?.[0])).not.toContain(SECRET_NAME);
@@ -165,6 +177,18 @@ describe("ChatPage · /chat/$roomId — mở đúng phòng", () => {
     await waitFor(() => expect(urlsFor(R).some((u) => u.endsWith(`/chat/rooms/${R}`))).toBe(true));
     await waitFor(() => expect(composer.contains(document.activeElement)).toBe(true));
     expect(document.activeElement?.tagName).toBe("TEXTAREA");
+    expect(toastError).not.toHaveBeenCalled();
+    expect(roomChanges).toEqual([]);
+  });
+
+  it("store CŨ (vừa được thêm vào R, sự kiện chat:room chưa tới) ⇒ hỏi lại danh sách MỘT lần rồi mở R, không thông điệp từ chối", async () => {
+    useChatStore.getState().syncRoomList([room(OTHER, { name: "Nhóm khác" })], false);
+    serverRooms = [room(OTHER, { name: "Nhóm khác" }), room(R, { name: SECRET_NAME })];
+
+    renderPage(R);
+
+    await screen.findByTestId("chat-composer");
+    expect(roomListCalls()).toHaveLength(1);
     expect(toastError).not.toHaveBeenCalled();
     expect(roomChanges).toEqual([]);
   });

@@ -17,8 +17,16 @@ import { useChatRoomOpener } from "./chat-room-opener";
 const PEER_INVALID_CODE = "CHAT-ERR-003";
 const OPEN_DIRECT_TOAST_KEY = "chat-open-direct";
 
+/**
+ * Đọc mã từ `message`, KHÔNG từ `ApiError.code`: CHAT ném `UnprocessableEntityException(CHAT_ERR.…)` với
+ * chuỗi, nên `AllExceptionsFilter` đặt `code = httpStatusToCode(422)` (mã VALIDATION chung) — mã nghiệp vụ
+ * chỉ nằm ở tiền tố `CHAT-ERR-003:` của thông điệp (quy ước `chat.errors.ts`). Hợp đồng được ghim hai
+ * đầu: int-spec server đòi thân phản hồi DM chứa `CHAT-ERR-003`; spec FE dựng đúng hình 422 đó.
+ */
 function isPeerUnavailable(error: unknown): boolean {
-  return error instanceof ApiError && error.message.includes(PEER_INVALID_CODE);
+  return (
+    error instanceof ApiError && error.status === 422 && error.message.includes(PEER_INVALID_CODE)
+  );
 }
 
 export interface OpenDirectControls {

@@ -5,7 +5,7 @@
  * target_url null/rỗng/tuyệt đối/protocol-relative → KHÔNG render button (render span trần, không click được).
  */
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 const mockNavigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
@@ -228,17 +228,37 @@ describe("NotificationTargetLink — đích phòng chat", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it("phòng KHÔNG có trong danh sách của tôi (không tồn tại · xoá mềm · lưu trữ · đã rời) ⇒ thông điệp chung, 0 lời gọi API của R, drawer không mở", () => {
+  it("phòng KHÔNG có trong danh sách của tôi (không tồn tại · xoá mềm · lưu trữ · đã rời) ⇒ hỏi lại danh sách MỘT lần, thông điệp chung, 0 lời gọi API của R, drawer không mở", async () => {
     useChatStore.getState().syncRoomList([chatRoom(OTHER, "Nhóm khác")], false);
 
     clickChatNotification(`/chat/${ROOM}`);
 
-    expect(toastError).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    expect(calledUrls().filter((url) => /\/chat\/rooms(?:\?|$)/.test(url))).toHaveLength(1);
     expect(toastError.mock.calls[0]?.[0]).toBe("Không mở được cuộc trò chuyện này");
     expect(String(toastError.mock.calls[0]?.[0])).not.toContain(SECRET_NAME);
     expect(calledUrls().filter((url) => url.includes(ROOM))).toEqual([]);
     expect(useChatDockStore.getState().isOpen).toBe(false);
     expect(useChatDockStore.getState().openRoomIds).toEqual([]);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("store CŨ (vừa được thêm vào R, sự kiện chat:room chưa tới) ⇒ hỏi lại danh sách rồi mở R trong drawer, không thông điệp", async () => {
+    useChatStore.getState().syncRoomList([chatRoom(OTHER, "Nhóm khác")], false);
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response(JSON.stringify([chatRoom(OTHER, "Nhóm khác"), chatRoom(ROOM, "Nhóm A")]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    clickChatNotification(`/chat/${ROOM}`);
+
+    await waitFor(() => expect(useChatDockStore.getState().openRoomIds).toEqual([ROOM]));
+    expect(useChatDockStore.getState().isOpen).toBe(true);
+    expect(calledUrls().filter((url) => url.includes(ROOM))).toEqual([]);
+    expect(toastError).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
