@@ -257,6 +257,8 @@ export default {
     /** S20-CHAT-DRAFT-1 — tệp chờ không được giữ khi đổi phòng; chữ thì vẫn giữ. */
     filesNotKept:
       "{{count}} tệp chưa gửi không được giữ khi chuyển phòng — chữ vẫn còn, hãy đính kèm lại nếu cần.",
+    /** S20-CHAT-FEDEBT-1 — báo NGAY lúc rời phòng (kể cả tệp đang tải dở). */
+    filesDroppedOnLeave: "{{count}} tệp chưa gửi đã bị bỏ khi rời phòng — chữ nháp vẫn được giữ.",
     archivedNotice: "Phòng đã lưu trữ. Bạn vẫn đọc được nhưng không gửi tin mới.",
 
     // S17-CHAT-UX2-FE-3 — ô soạn v2 (CHAT-DEC-027).

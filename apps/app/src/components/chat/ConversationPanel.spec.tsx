@@ -4,7 +4,7 @@
  * (đang gửi/gửi lỗi), `MessageBubble.spec` (đã thu hồi) và `ChatPage.spec` (không có quyền).
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
@@ -29,6 +29,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 
 import { useChatStore } from "@/stores/chat.store";
 import { ConversationPanel } from "./ConversationPanel";
+import { useChatDraftStore } from "./chat-draft.store";
 
 const ROOM_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -91,6 +92,8 @@ function seededMessage() {
 }
 
 beforeEach(() => {
+  // S20-CHAT-FEDEBT-1 — store nháp là module-global: ca trước để lại nháp/tệp bỏ thì ca sau đọc nhầm.
+  useChatDraftStore.getState().resetChatDrafts();
   getMessages.mockReset();
   getMessages.mockResolvedValue([]);
   getPinned.mockReset().mockResolvedValue([]);
@@ -383,5 +386,83 @@ describe("S20-CHAT-MENTIONPIN-1 · thanh tin ghim trong khung hội thoại", ()
     await waitFor(() => expect(getPinned).toHaveBeenCalled());
     expect(screen.queryByTestId("chat-pinned-bar")).toBeNull();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
+  });
+});
+
+/**
+ * S20-CHAT-FEDEBT-1 — khung «đang trả lời» của nháp khi tin gốc ĐÃ RA KHỎI RAM (trang cũ bị cắt khi tháo
+ * hội thoại, hoặc cửa sổ ngữ cảnh đã thay danh sách). Ảnh chụp trong nháp có thể là thân CŨ của một tin
+ * đã thu hồi mà sự kiện thu hồi không với tới (nó chỉ sửa `messagesByRoom`) ⇒ chỉ hiện trích dẫn tối
+ * thiểu (người gửi + «không còn trong phần đã tải»), và không hỏi thêm API nào cho tin đó.
+ */
+describe("ConversationPanel · khung trả lời cho tin đã ra khỏi RAM (S20-CHAT-FEDEBT-1)", () => {
+  beforeEach(() => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("tin gốc KHÔNG còn trong RAM ⇒ trích dẫn tối thiểu, không thân ảnh chụp, không lời gọi API cho tin đó", async () => {
+    const gone = { ...seededMessage(), body: "thân cũ trong ảnh chụp" };
+    useChatDraftStore.getState().setReplyTo(ROOM_ID, gone);
+    renderPanel();
+
+    const composer = await screen.findByTestId("chat-composer");
+    await screen.findByText("Chưa có tin nhắn nào.");
+    expect(within(composer).getByText(/Trả lời Trần B/)).toBeTruthy();
+    expect(within(composer).queryByText("thân cũ trong ảnh chụp")).toBeNull();
+    expect(within(composer).getByText("Tin gốc không còn trong phần đã tải")).toBeTruthy();
+    // Chỉ lời nạp trang đầu của phòng — không lời gọi nào nhắm riêng vào tin gốc.
+    expect(getMessages).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(getMessages.mock.calls)).not.toContain(gone.id);
+  });
+
+  it("ĐỐI CHỨNG: tin gốc CÒN trong RAM ⇒ khung trả lời hiện thân tin", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    useChatDraftStore.getState().setReplyTo(ROOM_ID, seededMessage());
+    renderPanel();
+
+    const composer = await screen.findByTestId("chat-composer");
+    expect(await within(composer).findByText("xin chào")).toBeTruthy();
+    expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
+  });
+
+  /**
+   * Trang đầu CHƯA về thì chưa biết tin gốc có trong phần sắp tải hay không: báo «không còn trong phần
+   * đã tải» lúc này là khẳng định sai (chớp rồi tắt khi trang về), còn thân ảnh chụp có thể là thân cũ.
+   */
+  it("trang đầu CHƯA nạp xong ⇒ không báo «không còn trong phần đã tải», không thân ảnh chụp; nạp xong có tin ⇒ thân tin sống", async () => {
+    let resolvePage: (page: unknown[]) => void = () => {};
+    getMessages.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePage = resolve;
+      }),
+    );
+    useChatDraftStore
+      .getState()
+      .setReplyTo(ROOM_ID, { ...seededMessage(), body: "thân cũ trong ảnh chụp" });
+    renderPanel();
+
+    const composer = await screen.findByTestId("chat-composer");
+    expect(screen.getByTestId("chat-messages-loading")).toBeTruthy();
+    expect(within(composer).getByText(/Trả lời Trần B/)).toBeTruthy();
+    expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
+    expect(within(composer).queryByText("thân cũ trong ảnh chụp")).toBeNull();
+
+    resolvePage([seededMessage()]);
+    expect(await within(composer).findByText("xin chào")).toBeTruthy();
+    expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
+  });
+
+  it("nạp trang đầu LỖI ⇒ không khẳng định tin gốc đã ra khỏi phần đã tải, không thân ảnh chụp", async () => {
+    getMessages.mockRejectedValue(new Error("mạng chập"));
+    useChatDraftStore
+      .getState()
+      .setReplyTo(ROOM_ID, { ...seededMessage(), body: "thân cũ trong ảnh chụp" });
+    renderPanel();
+
+    await screen.findByText("Thử lại");
+    const composer = screen.getByTestId("chat-composer");
+    expect(within(composer).getByText(/Trả lời Trần B/)).toBeTruthy();
+    expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
+    expect(within(composer).queryByText("thân cũ trong ảnh chụp")).toBeNull();
   });
 });

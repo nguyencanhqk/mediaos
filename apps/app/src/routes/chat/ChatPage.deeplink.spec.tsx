@@ -13,6 +13,7 @@ import type { ChatRoomDto } from "@mediaos/contracts";
 import { toast } from "@mediaos/ui";
 import { useAuthStore } from "@mediaos/web-core";
 import { useChatStore, type StoredChatMessage } from "@/stores/chat.store";
+import { useChatDraftStore } from "@/components/chat/chat-draft.store";
 import { ChatPage } from "./ChatPage";
 
 const R = "4d5e6f70-8192-4a3b-9c4d-5e6f70819203";
@@ -108,6 +109,8 @@ function renderPage(initialRoomId: string | null, messageId: string | null = nul
 }
 
 beforeEach(() => {
+  // S20-CHAT-FEDEBT-1 — store nháp là module-global: ca trước để lại nháp/tệp bỏ thì ca sau đọc nhầm.
+  useChatDraftStore.getState().resetChatDrafts();
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
   roomChanges.length = 0;
   serverRooms = [];

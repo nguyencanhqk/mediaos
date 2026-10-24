@@ -18,6 +18,11 @@ import { MARK_READ_DEBOUNCE_MS, MESSAGE_PAGE_SIZE } from "@/routes/chat/constant
 export interface ChatConversationState {
   /** Trang đầu đang tải (chưa có tin nào trong store cho phòng này). */
   isInitialLoading: boolean;
+  /**
+   * S20-CHAT-FEDEBT-1 — trang đầu của LẦN MỞ phòng này đã về thành công (kể cả khi phòng rỗng). `false`
+   * khi đang nạp hoặc nạp lỗi: lúc đó chưa biết một tin có nằm trong phần sắp tải hay không.
+   */
+  isFirstPageLoaded: boolean;
   /** Lỗi nạp tin — KHÔNG bao gồm lỗi gửi (gửi có trạng thái riêng ở `pendingByClientId`). */
   loadError: boolean;
   isLoadingOlder: boolean;
@@ -44,11 +49,21 @@ export interface SendChatMessageInput {
   replyToMessageId?: string;
 }
 
+function firstPageKey(roomId: string, reloadToken: number): string {
+  return `${roomId}:${reloadToken}`;
+}
+
 export function useChatConversation(roomId: string | null): ChatConversationState {
   const [isInitialLoading, setInitialLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [isLoadingOlder, setLoadingOlder] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  /**
+   * S20-CHAT-FEDEBT-1 — lượt nạp trang đầu ĐÃ VỀ thành công, khoá theo `phòng:lượt nạp`. So khoá thay vì
+   * cờ boolean: đổi phòng hay `reload()` thì cờ cũ không còn khớp NGAY trong lượt vẽ đó, không chờ effect
+   * kịp hạ cờ (một khung hình báo «đã nạp» sai là đủ để khung trả lời chớp trạng thái sai).
+   */
+  const [loadedPageKey, setLoadedPageKey] = useState<string | null>(null);
 
   const messages = useChatStore((s) => (roomId ? s.messagesByRoom[roomId] : undefined));
   const oldestSeq = messages?.length ? messages[0].roomSeq : undefined;
@@ -73,6 +88,7 @@ export function useChatConversation(roomId: string | null): ChatConversationStat
     store.subscribeToRoom(roomId);
 
     let cancelled = false;
+    const pageKey = firstPageKey(roomId, reloadToken);
     const already = (store.messagesByRoom[roomId]?.length ?? 0) > 0;
     // Đã có tin trong store (WS đẩy về từ trước, hoặc quay lại phòng vừa xem) ⇒ không gọi lại trang đầu.
     // Lưới bù + `chat:message` giữ nó tươi; gọi lại chỉ tốn round-trip và làm nhấp nháy skeleton.
@@ -84,6 +100,7 @@ export function useChatConversation(roomId: string | null): ChatConversationStat
       .then((page) => {
         if (cancelled || activeRoomRef.current !== roomId) return;
         for (const message of page) useChatStore.getState().applyIncomingMessage(message);
+        setLoadedPageKey(pageKey);
       })
       .catch((err: unknown) => {
         if (cancelled || activeRoomRef.current !== roomId) return;
@@ -258,6 +275,7 @@ export function useChatConversation(roomId: string | null): ChatConversationStat
 
   return {
     isInitialLoading: isInitialLoading && messageCount === 0,
+    isFirstPageLoaded: roomId !== null && loadedPageKey === firstPageKey(roomId, reloadToken),
     loadError,
     isLoadingOlder,
     hasMoreOlder: oldestSeq !== undefined && oldestSeq > 1,

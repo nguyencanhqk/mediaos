@@ -7,8 +7,8 @@
  *
  * Luật store thuần (reset theo phiên, chốt epoch, quét storage) đo ở `chat-draft.store.spec.ts`.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 
@@ -25,6 +25,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 vi.mock("./chat-upload", () => ({ uploadChatAttachment: vi.fn() }));
 
 import { useAuthStore } from "@mediaos/web-core";
+import { toast } from "@mediaos/ui";
 import { MessageComposer, type ComposerSubmitPayload } from "./MessageComposer";
 import { uploadChatAttachment } from "./chat-upload";
 import { useChatDraftStore } from "./chat-draft.store";
@@ -238,5 +239,106 @@ describe("MessageComposer · đăng xuất / đổi phiên", () => {
 
     signIn("11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     expect(textbox().value).toBe("nháp giữ lại");
+  });
+});
+
+/**
+ * S20-CHAT-FEDEBT-1 — cảnh báo tệp chưa gửi NGAY LÚC RỜI phòng, không đợi người dùng quay lại mới biết.
+ * «Tệp chưa gửi» gồm cả tệp ĐANG TẢI DỞ: tải xong sau khi ô soạn đã tháo thì tệp bị bỏ (blob xem trước
+ * không còn ai thu hồi), nên nó mất y như tệp đã nằm trong khay.
+ */
+describe("MessageComposer · cảnh báo tệp chưa gửi lúc rời phòng (S20-CHAT-FEDEBT-1)", () => {
+  const FILE_META = {
+    fileId: "f1",
+    name: "bao-cao.txt",
+    sizeBytes: 5,
+    mimeType: "text/plain",
+    isImage: false,
+  };
+  const pasteFile = (name = "bao-cao.txt") =>
+    fireEvent.paste(textbox(), {
+      clipboardData: { files: [new File(["x"], name, { type: "text/plain" })] },
+    });
+
+  let warning: MockInstance<typeof toast.warning>;
+  beforeEach(() => {
+    warning = vi.spyOn(toast, "warning");
+  });
+  afterEach(() => {
+    warning.mockRestore();
+  });
+
+  it("tệp đã nằm trong khay mà rời phòng ⇒ cảnh báo NGAY khi ô soạn tháo", async () => {
+    upload.mockResolvedValue(FILE_META);
+    const a = mount(ROOM_A);
+    pasteFile();
+    await screen.findByText("bao-cao.txt");
+    expect(warning).not.toHaveBeenCalled();
+
+    a.unmount();
+
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(String(warning.mock.calls[0]?.[0])).toMatch(/1 tệp/);
+  });
+
+  it("tệp ĐANG TẢI DỞ mà rời phòng ⇒ cũng cảnh báo, và quay lại phòng vẫn thấy cảnh báo nhẹ", async () => {
+    upload.mockReturnValue(new Promise(() => {})); // không bao giờ xong
+    const a = mount(ROOM_A);
+    pasteFile();
+    await screen.findByText(/Đang tải/);
+
+    a.unmount();
+
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(String(warning.mock.calls[0]?.[0])).toMatch(/1 tệp/);
+    mount(ROOM_A);
+    expect(screen.getByTestId("chat-composer-files-not-kept").textContent).toMatch(/1 tệp/);
+  });
+
+  it("ĐỐI CHỨNG: chỉ có chữ ⇒ rời phòng KHÔNG cảnh báo", () => {
+    const a = mount(ROOM_A);
+    type("chỉ có chữ");
+    a.unmount();
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it("ĐỐI CHỨNG: đăng xuất TRƯỚC khi ô soạn tháo ⇒ KHÔNG cảnh báo cho người đăng nhập sau", async () => {
+    upload.mockResolvedValue(FILE_META);
+    signIn("11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    const a = mount(ROOM_A);
+    pasteFile();
+    await screen.findByText("bao-cao.txt");
+
+    useAuthStore.getState().logout();
+    a.unmount();
+
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Gửi xong ⇒ `setAttachments([])` mới chỉ được XẾP lịch; ô soạn tháo trước khi lượt vẽ đó (và effect
+   * đồng bộ bộ đếm) kịp chạy thì cleanup đọc bộ đếm cũ ⇒ cảnh báo «tệp bị bỏ» cho tệp vừa gửi đi.
+   */
+  it("gửi thành công rồi tháo NGAY, trước khi khay kịp vẽ lại ⇒ KHÔNG cảnh báo tệp vừa gửi", async () => {
+    upload.mockResolvedValue(FILE_META);
+    let resolveSend: (ok: boolean) => void = () => {};
+    const a = mount(
+      ROOM_A,
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    pasteFile();
+    await screen.findByText("bao-cao.txt");
+    fireEvent.click(sendButton());
+
+    await act(async () => {
+      resolveSend(true);
+      await Promise.resolve(); // để phần sau `await onSubmit` chạy (xếp lịch dọn khay), chưa vẽ lại
+      a.unmount();
+    });
+
+    expect(warning).not.toHaveBeenCalled();
   });
 });

@@ -38,6 +38,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 
 import { ApiError, useCan } from "@mediaos/web-core";
 import { useChatStore } from "@/stores/chat.store";
+import { useChatDraftStore } from "./chat-draft.store";
 import { RoomListPanel } from "./RoomListPanel";
 
 const mockUseCan = useCan as unknown as ReturnType<typeof vi.fn>;
@@ -103,6 +104,8 @@ function renderPanel(props: Partial<Parameters<typeof RoomListPanel>[0]> = {}) {
 }
 
 beforeEach(() => {
+  // S20-CHAT-FEDEBT-1 — store nháp là module-global: ca trước để lại nháp/tệp bỏ thì ca sau đọc nhầm.
+  useChatDraftStore.getState().resetChatDrafts();
   listRooms.mockReset();
   listRooms.mockResolvedValue([]);
   for (const fn of [pinRoom, unpinRoom, muteRoom, markRoomUnread, archiveRoom]) fn.mockReset();
