@@ -27,13 +27,23 @@ overrides:
   # tất cả qua `@nestjs/core > @nestjs/platform-express > multer`, tức ĐƯỜNG UPLOAD THẬT — không được
   # viện lý do "chỉ dev-tooling". `@nestjs/platform-express` GHIM `multer: "2.1.1"` (chuỗi chính xác,
   # không phải range) nên bump `apps/api/package.json` một mình KHÔNG kéo được cây → vẫn cần override.
-  "multer@>=1.0.0 <2.3.0": "^2.3.0"
+  # 2026-10-24 (S19-OPS-AUDITDOS-1) — NỚI tiếp dải lên `<2.5.0` (lần thứ BA cùng hình dạng): advisory HIGH
+  # `GHSA-q7qp-rjg7-q26m` công bố 23/10 22:08Z (`>=2.0.0 <2.5.0` → 2.5.0) — DoS khi `fileFilter` bất đồng bộ
+  # còn treo sau khi request đã bị huỷ. Vẫn đúng đường upload thật của API (runtime, không phải tooling).
+  "multer@>=1.0.0 <2.5.0": "^2.5.0"
+  # 2026-10-24 (S19-OPS-AUDITDOS-1) — advisory HIGH `GHSA-27r3-jxmh-p828` công bố 23/10 20:53Z
+  # (`>=2.0.0 <2.4.0` → 2.4.0 · `<1.20.9` → 1.20.9): DoS qua byte thừa sau thân request đã nén. Lên registry
+  # sau lần Security cuối trên master (`6e2e58e7`, 23/10 14:14Z XANH) ⇒ đỏ trên MỌI PR, KHÔNG do PR nào sinh
+  # ra. Đường tới là `@nestjs/platform-express > express > body-parser` — bộ đọc thân request của MỌI route
+  # API (runtime). express 5.x khai `body-parser: ^2.x` nên override trong dải 2.x là đủ, không đổi major.
+  "body-parser@>=2.0.0 <2.4.0": "^2.4.0"
   # 2026-07-22 — vá advisory HIGH (cổng CI = `pnpm audit --audit-level high`). Cả 6 đều là dep BẮC CẦU
   # của tooling build/test (eslint · vitest · @nestjs/cli · drizzle-kit · exceljs), KHÔNG phải dep
   # runtime của API. Dùng override thay vì bump devDep gốc để giữ blast radius nhỏ: `pnpm audit
   # --fix=update` kéo theo TypeScript 5.7→5.9 + prettier + eslint + turbo — thay đổi toolchain lớn
   # không cần thiết cho một bản vá bảo mật.
-  # ⚠️ Advisory moderate/low còn lại (esbuild · uuid · body-parser) CỐ Ý KHÔNG override: dưới ngưỡng
+  # ⚠️ Advisory moderate/low còn lại (esbuild · uuid · body-parser — body-parser nay đã có override HIGH ở
+  # trên, 24/10) CỐ Ý KHÔNG override: dưới ngưỡng
   # cổng, và bản pnpm đề xuất cho esbuild (0.24.3) CHƯA TỪNG phát hành ⇒ override làm GÃY install của
   # drizzle-kit (ERR_PNPM_NO_MATCHING_VERSION). Rà lại khi nâng drizzle-kit/vitest.
   # 2026-07-25 — advisory GHSA-mh99-v99m-4gvg (CVE-2026-14257) đã mở rộng phủ cả 5.0.7 → re-bump 5.x lên
@@ -152,6 +162,18 @@ overrides:
 # `<1.1.17` — `gh api /advisories/GHSA-mh99-v99m-4gvg`) ⇒ không còn cờ nhầm bản đã vá; ignore đã THỪA từ
 # hôm đó. Đo: gỡ ignore ⇒ `pnpm audit` vẫn 0 HIGH, tổng y hệt. Script guard chạy-thật trong security.yml
 # GIỮ NGUYÊN — nó đo entry thật, thứ mà audit theo số hiệu không đo được.
+#
+# 2026-10-24 (S19-OPS-AUDITDOS-1) — NGOẠI LỆ CÓ HẠN cho `GHSA-mrhx-c7xc-m3w5` (zod `<4.6.6`, HIGH, công bố
+# 01/10): Zod cạn bộ nhớ khi validate collection có ràng buộc mà kích thước quá lớn. Dòng 3.x KHÔNG có bản vá
+# (bản vá đầu tiên là 4.6.6); repo đang zod 3.25.76 ở api · app · contracts · web-core ⇒ vá thật = nâng
+# major zod 3 → 4 toàn monorepo (contracts là nguồn sự thật DTO) = WO riêng `S19-OPS-ZOD4-1`.
+# Owner chọn qua hộp hỏi 24/10/2026 «WO deps + bỏ qua zod có hạn» — KHÁC nguyên tắc 25/07 «luôn vá, không
+# ỉm» ở chỗ: ĐÚNG MỘT GHSA, có HẠN, và hạn được ÉP bằng máy: `scripts/check-audit-ignore-expiry.mjs` chạy
+# cùng job audit trong security.yml, ĐỎ khi một GHSA bị bỏ qua mà không có hạn, hoặc đã quá hạn (23/11/2026).
+# Gỡ dòng này khi `S19-OPS-ZOD4-1` merge (khi đó `pnpm audit` phải 0 HIGH mà không cần ignore).
+auditConfig:
+  ignoreGhsas:
+    - GHSA-mrhx-c7xc-m3w5
 
 # Cho phép chạy postinstall của các gói cần binary native (pnpm 10+ chặn mặc định).
 allowBuilds:
@@ -165,6 +187,7 @@ allowBuilds:
 # Repo đặt minimumReleaseAge (chặn cài gói vừa phát hành — phòng supply-chain). Bản VÁ bảo mật ở
 # `overrides` bên trên phải được miễn trừ ở đây, nếu không install sẽ từ chối chính bản đã vá.
 minimumReleaseAgeExclude:
+  - body-parser@2.4.0
   - browserslist@4.28.7
   - browserslist@4.28.8
   - brace-expansion@2.1.3
@@ -178,6 +201,7 @@ minimumReleaseAgeExclude:
   - js-yaml@4.3.1
   - js-yaml@4.3.2
   - multer@2.3.0
+  - multer@2.5.0
   - nanoid@3.3.17
   - nanoid@3.3.18
   - nodemailer@9.1.1

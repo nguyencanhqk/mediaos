@@ -23395,6 +23395,73 @@ export const backlog = [
       "Sau merge: API PROD không nạp vite ⇒ không build/restart API. FE trên Pages build lại bằng vite 6.4.4 nếu path-filter của `apps-frontend.yml` bắt `pnpm-lock.yaml` — đo lượt deploy, không giả định.",
     ],
   },
+  {
+    id: "S19-OPS-AUDITDOS-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Cổng bắt buộc `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên mọi PR từ 24/10/2026: ba advisory HIGH mới — body-parser `<2.4.0` và multer `<2.5.0` (DoS trên bộ đọc thân request và đường upload THẬT của API) + zod `<4.6.6` (dòng 3.x không có bản vá)",
+    zone: "amber",
+    status: "todo",
+    paths: [
+      "pnpm-workspace.yaml",
+      "pnpm-lock.yaml",
+      "apps/api/package.json",
+      "scripts/check-audit-ignore-expiry.mjs",
+      "scripts/check-audit-ignore-expiry.test.mjs",
+      ".github/workflows/security.yml",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Đo 24/10/2026: CI của 11 PR #628–#638 (đợt S20 23/10 đêm) đỏ ĐÚNG job `Dependency scan (pnpm audit)` — kể cả #634 chỉ đổi tài liệu ⇒ nợ có sẵn của master, KHÔNG do PR nào sinh ra. Run Security cuối trên master `6e2e58e7` (23/10 14:14Z) còn XANH. `gh api advisories/<id>`: GHSA-27r3-jxmh-p828 body-parser `>=2.0.0 <2.4.0` → 2.4.0 (công bố 23/10 20:53Z) · GHSA-q7qp-rjg7-q26m multer `>=2.0.0 <2.5.0` → 2.5.0 (23/10 22:08Z) · GHSA-mrhx-c7xc-m3w5 zod `<4.6.6` → 4.6.6 (01/10; repo zod 3.25.76).",
+      "Đường tới: body-parser qua `@nestjs/platform-express > express` (mọi route API) · multer qua `@nestjs/platform-express` + dep trực tiếp `apps/api` (đường upload) · zod ở api · app · contracts · web-core (+ `nestjs-zod`, `@anthropic-ai/sdk`).",
+    ],
+    done_when: [
+      "Override range-scoped `body-parser@>=2.0.0 <2.4.0` → `^2.4.0` và nới `multer@>=1.0.0 <2.5.0` → `^2.5.0` (+ bump dep trực tiếp `apps/api` lên `^2.5.0`) + miễn trừ tuổi phát hành cho đúng hai bản vá; lockfile chỉ đổi body-parser 2.2.2 → 2.4.0 (kéo content-type 2.1.0 · iconv-lite 0.7.3 · qs 6.16.1 · side-channel 1.1.1) và multer 2.3.0 → 2.5.0 (bỏ concat-stream · typedarray)",
+      "zod: owner chọn qua hộp hỏi 24/10/2026 «WO deps + bỏ qua zod có hạn» ⇒ `auditConfig.ignoreGhsas: [GHSA-mrhx-c7xc-m3w5]` + `scripts/check-audit-ignore-expiry.mjs` chạy trong job audit, ĐỎ khi GHSA bị bỏ qua không có hạn / quá hạn 23/11/2026 / sổ lệch (8 ca `node --test`); vá thật = S19-OPS-ZOD4-1",
+      "`pnpm audit --audit-level=high` exit 0 (chỉ còn 1 HIGH bị bỏ qua có hạn) · `harness/check.sh --all --lane-db` (hồ sơ storage live ⇒ int-spec upload chạy thật trên multer mới) không đỏ mới so với master · CI Security XANH",
+    ],
+    notes: [
+      "🟡 Lockfile đổi + dep runtime của API ⇒ deploy API PHẢI cài deps trên checkout chính (PROD chạy trên node_modules của nó; `m prod-update` không install): dừng API → pull → `pnpm install --frozen-lockfile` → build API → khởi động lại → đo /health. Gộp CÙNG khung deploy với S20-SEC-TASKLEGACYREAD-1 + S20-SEC-TASKPATCHGATE-1 (owner chọn 24/10). Merge PR này TRƯỚC mọi PR khác của đợt (gỡ chặn check bắt buộc cho tất cả).",
+    ],
+  },
+  {
+    id: "S19-OPS-ZOD4-1",
+    module: "DEVOPS",
+    layer: "OPS",
+    title:
+      "Nâng zod 3 → 4 (≥ 4.6.6) toàn monorepo — api · app · contracts (nguồn sự thật DTO) · web-core · nestjs-zod — để vá GHSA-mrhx-c7xc-m3w5 thật và gỡ ngoại lệ audit có hạn trước 23/11/2026",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "packages/contracts/**",
+      "packages/web-core/**",
+      "apps/api/**",
+      "apps/app/**",
+      "apps/auth/**",
+      "apps/console/**",
+      "pnpm-workspace.yaml",
+      "pnpm-lock.yaml",
+      "scripts/check-audit-ignore-expiry.mjs",
+      "docs/plans/**",
+      "harness/backlog.mjs",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S19-OPS-AUDITDOS-1"],
+    src: [
+      "GHSA-mrhx-c7xc-m3w5 (HIGH, công bố 01/10/2026): Zod cạn bộ nhớ khi validate collection có ràng buộc mà kích thước quá lớn; vulnerable `<4.6.6`, dòng 3.x KHÔNG có bản vá. Repo đang `zod@3.25.76`. Ngoại lệ có hạn do S19-OPS-AUDITDOS-1 đặt (owner 24/10/2026), hạn 23/11/2026 được ép bằng `scripts/check-audit-ignore-expiry.mjs` trong job audit bắt buộc.",
+    ],
+    done_when: [
+      "Plan trước (vùng đỏ: contracts là nguồn DTO + tầng validate input của mọi route): đo mọi API zod 3 đang dùng không còn ở zod 4 (`.nonstrict`, `ZodEffects`, thông điệp lỗi/`issues`, `z.string().email()`…), phiên bản `nestjs-zod` hỗ trợ zod 4, dual build ESM/CJS của contracts; quyết định nâng một lượt hay qua `zod/v4` từng gói",
+      "zod ≥ 4.6.6 ở mọi gói; phong bì lỗi validate trên dây KHÔNG đổi shape (ca test ghim mã + đường dẫn trường); `pnpm audit --audit-level=high` = 0 HIGH khi đã GỠ `auditConfig.ignoreGhsas` GHSA-mrhx-c7xc-m3w5 + mục EXPIRY tương ứng",
+      "FULL gate (security-reviewer + silent-failure-hunter) PASS; `bash harness/check.sh --all --lane-db` xanh; deploy API (install deps trên checkout chính) + FE trước 23/11/2026",
+    ],
+    notes: [
+      "🔴 Seed 24/10/2026 cùng S19-OPS-AUDITDOS-1. Ước 300–500 USD (đổi major của thư viện validate dùng ở mọi tầng). Quá 23/11/2026 mà chưa merge ⇒ job audit bắt buộc tự ĐỎ trên mọi PR (cố ý) — cần gia hạn thì owner quyết, sửa `EXPIRY` kèm lý do.",
+    ],
+  },
   // ════════════════════ S20-WORKUX Đợt 1A — Nền và P0 chỉ FE (seed 2026-10-23) ════════════════════
   {
     id: "S20-FE-TOAST-1",
