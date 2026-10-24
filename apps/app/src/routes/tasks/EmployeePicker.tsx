@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { hrApi, hrKeys, useCan } from "@mediaos/web-core";
@@ -26,6 +26,8 @@ export function EmployeePicker({
   pending = false,
   testId,
   emptyLabel,
+  open: openProp,
+  onOpenChange,
 }: {
   employeeId: string | null;
   name: string | null;
@@ -43,9 +45,24 @@ export function EmployeePicker({
   pending?: boolean;
   testId: string;
   emptyLabel: string;
+  /**
+   * Mở/đóng do phía gọi điều khiển (tuỳ chọn) — vd «Đổi người» trên cảnh báo sau khi giao
+   * (S20-TASK-ASSIGNWARN-1) mở lại đúng picker này. Không truyền ⇒ tự quản như cũ.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const { t } = useTranslation("tasks");
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = openProp ?? uncontrolledOpen;
+  // Ổn định danh tính: Popover gắn lại listener tài liệu mỗi khi `onOpenChange` đổi.
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (openProp === undefined) setUncontrolledOpen(next);
+      onOpenChange?.(next);
+    },
+    [openProp, onOpenChange],
+  );
   const [search, setSearch] = useState("");
   const canReadEmployees = useCan("read", "employee");
 
@@ -68,7 +85,7 @@ export function EmployeePicker({
     <button
       type="button"
       disabled={!canEdit || pending}
-      onClick={() => setOpen((v) => !v)}
+      onClick={() => setOpen(!open)}
       title={label}
       aria-label={t("tasks.picker.change", { name: label })}
       data-testid={testId}

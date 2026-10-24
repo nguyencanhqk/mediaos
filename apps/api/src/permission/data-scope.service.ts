@@ -78,6 +78,16 @@ export class DataScopeService {
       resourceType,
       opts,
     );
+    return this.assertGranted(scope);
+  }
+
+  /**
+   * S20-SEC-TASKPATCHGATE-1 — điều kiện 403 của `resolveAndAssert`, tách ra để người gọi đã resolve cặp
+   * qua bản KHÔNG-NÉM (`resolveOrNull` / `resolveManyOrNull`) quyết định 403 ở CÙNG một nơi, cùng
+   * thông điệp. So LỎNG `scope == null` có chủ đích: kết quả tra trượt của mảng theo chỉ số là
+   * `undefined` — phải là 403, không bao giờ thành «có quyền».
+   */
+  assertGranted(scope: DataScope | null | undefined): DataScope {
     if (scope == null) {
       throw new ForbiddenException("AUTH-ERR-FORBIDDEN: out of permission scope");
     }

@@ -16,10 +16,12 @@ import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout
 // KHÔNG lazy: nó là KHUNG của route, không phải nội dung — lazy hoá khung làm cả cổng nháy trắng
 // một nhịp ở mỗi lần điều hướng giữa các màn /feed*.
 import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
-// S5-TASK-WORKSPACE-1 — validateSearch của workspace dự án (file thuần TS, không component).
-import { validateProjectWorkspaceSearch } from "@/routes/tasks/workspace-constants";
+// S5-TASK-WORKSPACE-1 — validateSearch của workspace dự án (file thuần TS, không component);
+// S20-TASK-PROJTOOLBARURL-1 ghép thêm bộ lọc toolbar + rail (q · status · priority · overdue · sort · who).
+import { validateProjectWorkspaceRouteSearch } from "@/routes/tasks/project-workspace-filters";
 import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
 import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
+import { validateMyTasksSearch } from "@/routes/tasks/my-tasks-groups";
 // S20-GOAL-LISTURL-1 — validateSearch /goals + /goals/$goalId (file thuần TS + hook, không component).
 import {
   goalListBackSearch,
@@ -1475,7 +1477,14 @@ const tasksRoute = createRoute({
   validateSearch: validateTaskListSearch,
   component: () => buildModuleRouteContent(getMeta("task.overview"), "TASK", <TaskListPage />),
 });
-const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
+// S20-TASK-MYTASKS-1 — nhóm + chip nguồn trên URL; rác ⇒ mặc định, KHÔNG ném (my-tasks-groups.ts).
+const tasksMyTasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/my-tasks",
+  beforeLoad: authGuard,
+  validateSearch: validateMyTasksSearch,
+  component: () => buildModuleRouteContent(getMeta("task.my-tasks"), "TASK", <MyTasksPage />),
+});
 
 // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN
 // route param "/tasks/$taskId" (mirror tasksMyTasksRoute) → không bị detail nuốt.
@@ -1516,7 +1525,9 @@ const tasksProjectDetailRoute = createRoute({
   beforeLoad: authGuard,
   // `?task=<id>` (S5-TASK-BOARD-UX-1) mở panel chi tiết đè workspace; `?addMembers=1`
   // (S20-TASK-PROJECTENTRY-1) = vừa tạo dự án ⇒ tab Thành viên tự mở hộp thêm khi có quyền.
-  validateSearch: validateProjectWorkspaceSearch,
+  // Bộ lọc toolbar + rail (S20-TASK-PROJTOOLBARURL-1) phải nằm trong search ĐÃ validate — nếu không,
+  // drawer mở việc (navigate giữ `prev`) làm rơi bộ lọc. Rác ⇒ bỏ khoá, không ném.
+  validateSearch: validateProjectWorkspaceRouteSearch,
   component: () => {
     const { projectId } = tasksProjectDetailRoute.useParams();
     const navigate = useNavigate();

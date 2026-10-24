@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown } from "lucide-react";
@@ -27,6 +27,7 @@ import {
 import { TaskStatusBadge, TaskPriorityBadge } from "./TaskStatusBadge";
 import { useTaskActionMutation } from "./hooks/use-task-action-mutation";
 import { EmployeePicker } from "./EmployeePicker";
+import { useAssigneeWarningToast } from "./AssigneeWarning";
 
 /**
  * TaskInlineFields — bộ ô SỬA-TẠI-CHỖ của màn chi tiết task (S5-TASK-INLINE-1; tách từ
@@ -322,17 +323,41 @@ export function TaskPriorityField({ task }: { task: TaskCoreResponseDto }) {
 }
 
 // ── Deadline ─────────────────────────────────────────────────────────────────
-export function TaskDeadlineField({ task }: { task: TaskCoreResponseDto }) {
+export function TaskDeadlineField({
+  task,
+  onChangeAssignee,
+}: {
+  task: TaskCoreResponseDto;
+  /**
+   * S20-TASK-ASSIGNWARN-1 — mở picker người phụ trách nằm CẠNH ô này (do phía bao điều khiển, vd
+   * {@link TaskAssigneeDeadlineFields}). Không truyền ⇒ cảnh báo dời hạn không kèm «Đổi người».
+   */
+  onChangeAssignee?: () => void;
+}) {
   const { t } = useTranslation("tasks");
   const canDeadline = useCan(
     TASK_CORE_ENGINE_PAIRS.UPDATE_DEADLINE.action,
     TASK_CORE_ENGINE_PAIRS.UPDATE_DEADLINE.resourceType,
   );
+  const canAssign = useCan(
+    TASK_CORE_ENGINE_PAIRS.ASSIGN.action,
+    TASK_CORE_ENGINE_PAIRS.ASSIGN.resourceType,
+  );
   const [draft, setDraft] = useState(() => isoToLocalDatetime(task.dueAt));
+  const notifyAssigneeWarnings = useAssigneeWarningToast();
   const mutation = useTaskActionMutation<string | null>({
     taskId: task.id,
     mutationFn: (dueAt) => taskCoreApi.changeDeadline(task.id, { dueAt }),
     toPatch: (dueAt) => ({ dueAt }),
+    // change-deadline trả ASSIGNEE-ON-LEAVE khi hạn MỚI trùng ngày nghỉ đã duyệt của người nhận
+    // (buildDeadlineWarnings) — cùng câu chữ với khi giao; hạn vẫn dời như server chấp nhận.
+    onWarnings: (warnings, updated) =>
+      notifyAssigneeWarnings({
+        taskId: task.id,
+        warnings,
+        assigneeName: updated?.assigneeName ?? task.assigneeName,
+        onChangeAssignee: canAssign ? onChangeAssignee : undefined,
+      }),
   });
 
   return (
@@ -372,12 +397,27 @@ export function TaskDeadlineField({ task }: { task: TaskCoreResponseDto }) {
  * `update:task` nên đó sẽ là một cửa quyền KHÁC, phải là quyết định có chủ đích chứ không phải hệ quả
  * phụ của việc đổi giao diện. Ô rỗng chỉ hiện khi task CHƯA có người, và chọn nó là no-op.
  */
-export function TaskAssigneeField({ task }: { task: TaskCoreResponseDto }) {
+export function TaskAssigneeField({
+  task,
+  pickerOpen: pickerOpenProp,
+  onPickerOpenChange,
+}: {
+  task: TaskCoreResponseDto;
+  /** Mở/đóng picker do phía bao điều khiển (truyền CẢ HAI); không truyền ⇒ tự quản. */
+  pickerOpen?: boolean;
+  onPickerOpenChange?: (open: boolean) => void;
+}) {
   const { t } = useTranslation("tasks");
   const canAssign = useCan(
     TASK_CORE_ENGINE_PAIRS.ASSIGN.action,
     TASK_CORE_ENGINE_PAIRS.ASSIGN.resourceType,
   );
+
+  // S20-TASK-ASSIGNWARN-1 — picker điều khiển từ ngoài để «Đổi người» trên cảnh báo mở lại ĐÚNG nó.
+  const [ownPickerOpen, setOwnPickerOpen] = useState(false);
+  const pickerOpen = pickerOpenProp ?? ownPickerOpen;
+  const setPickerOpen = onPickerOpenChange ?? setOwnPickerOpen;
+  const notifyAssigneeWarnings = useAssigneeWarningToast();
 
   const mutation = useTaskActionMutation<string>({
     taskId: task.id,
@@ -385,6 +425,15 @@ export function TaskAssigneeField({ task }: { task: TaskCoreResponseDto }) {
     // Chưa biết tên/ảnh người mới cho tới khi server trả (picker không nâng dữ liệu lên đây) —
     // optimistic chỉ đổi id, tên/ảnh về đúng sau response. Ngắn hơn là đoán rồi hiện sai tên.
     toPatch: (assigneeEmployeeId) => ({ mainAssigneeEmployeeId: assigneeEmployeeId }),
+    // Cảnh báo KHÔNG chặn: việc đã giao như server chấp nhận. `?.` vì đây là dữ liệu ngoài — một
+    // response thiếu `task` không được biến lần giao đã thành công thành lỗi ở bước báo hiệu.
+    onWarnings: (warnings, updated) =>
+      notifyAssigneeWarnings({
+        taskId: task.id,
+        warnings,
+        assigneeName: updated?.assigneeName,
+        onChangeAssignee: canAssign ? () => setPickerOpen(true) : undefined,
+      }),
   });
 
   return (
@@ -400,12 +449,35 @@ export function TaskAssigneeField({ task }: { task: TaskCoreResponseDto }) {
         pending={mutation.isPending}
         testId="task-assignee-picker"
         emptyLabel={t("tasks.detail.subtasks.unassigned")}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
         onSelect={(employeeId) => {
           if (employeeId) mutation.mutate(employeeId);
         }}
       />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
+  );
+}
+
+// ── Cặp người phụ trách + hạn ────────────────────────────────────────────────
+/**
+ * S20-TASK-ASSIGNWARN-1 — hai ô đứng cạnh nhau trên màn chi tiết, CHUNG trạng thái mở picker người
+ * phụ trách: cảnh báo «nghỉ phép vào ngày hạn» sau khi DỜI HẠN có «Đổi người» mở đúng picker đó
+ * (như cảnh báo sau khi giao). Trả fragment ⇒ phía gọi tự đặt lưới.
+ */
+export function TaskAssigneeDeadlineFields({ task }: { task: TaskCoreResponseDto }) {
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  const openAssigneePicker = useCallback(() => setAssigneePickerOpen(true), []);
+  return (
+    <>
+      <TaskAssigneeField
+        task={task}
+        pickerOpen={assigneePickerOpen}
+        onPickerOpenChange={setAssigneePickerOpen}
+      />
+      <TaskDeadlineField task={task} onChangeAssignee={openAssigneePicker} />
+    </>
   );
 }
 

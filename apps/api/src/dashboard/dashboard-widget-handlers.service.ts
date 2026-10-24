@@ -411,7 +411,7 @@ export class DashboardWidgetHandlersService {
     };
   }
 
-  // ── PROJECT_PROGRESS (authorize ProjectsService.getProject TRƯỚC → TasksService.listByProject aggregate) ──
+  // ── PROJECT_PROGRESS (authorize ProjectsService.getProject TRƯỚC → ProjectsService.countsByStatusLeaf aggregate) ──
 
   private async gateProjectProgress(ctx: WidgetHandlerContext): Promise<WidgetCacheIdentity> {
     const projectId = ctx.query.projectId;
@@ -423,7 +423,7 @@ export class DashboardWidgetHandlersService {
     }
     await gateWidgetOrThrow(this.permission, ctx.user, "PROJECT_PROGRESS"); // read:project (403 fail-closed)
     // Authorize TRƯỚC aggregate: getProject resolveAndAssert('read','project') (403) + scope 404 (cross-company/
-    // out-scope). listByProject CHỈ tenant-guard (KHÔNG lọc employee-scope) ⇒ authorize project là BẮT BUỘC.
+    // out-scope). countsByStatusLeaf KHÔNG tự scope theo actor ⇒ authorize project ở đây là BẮT BUỘC.
     await this.projects.getProject(ctx.user, projectId);
     return {
       shareScope: "user",
@@ -443,7 +443,7 @@ export class DashboardWidgetHandlersService {
       });
     }
     // ── S5-TASK-SUBTASK-1 (DECISIONS-05 D-35) — MỘT CÔNG THỨC, MỘT CON SỐ ─────────────────────────
-    // TRƯỚC: đếm trong bộ nhớ từ listByProject(limit 200) — không lọc parent VÀ âm thầm cắt ở 200 hàng.
+    // TRƯỚC: đếm trong bộ nhớ từ một danh sách việc giới hạn 200 hàng — không lọc parent VÀ âm thầm cắt ở 200.
     // Sau khi MV dashboard chuyển sang ĐẾM LÁ (mig 0503), cùng MỘT màn dashboard sẽ hiện hai con số
     // khác nhau cho cùng dự án (widget task-status đếm lá vs project-progress đếm thô) — tệ hơn hẳn
     // "dashboard ≠ danh sách" mà owner đã chấp nhận. Nay dùng CHUNG vị từ lá với báo cáo dự án; đồng

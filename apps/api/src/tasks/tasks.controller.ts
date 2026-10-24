@@ -39,9 +39,7 @@ import {
   CreateTaskCoreDto,
   ListTaskActivityQueryDto,
   ListTaskCoreQueryDto,
-  ListTasksQueryDto,
   MoveTaskStateDto,
-  PageQueryDto,
   UpdateTaskChecklistDto,
   UpdateTaskChecklistItemDto,
   UpdateTaskCommentDto,
@@ -84,6 +82,8 @@ export class TasksController {
    * (employee @Own · manager @Team · hr/admin @Company) + membership project; filter status/priority/
    * assignee/project/due-range/overdue + pagination. Gate read:task (KHÁC hành vi cũ = getMyTasks mở).
    * ⚠️ BREAKING: FE web-core tasks-api.ts phải chuyển sang GET /tasks/my (WO FE nối tiếp — xem PR desc).
+   * S20-SEC-TASKLEGACYREAD-1: đây là đường đọc danh sách việc theo bộ lọc DUY NHẤT của controller — một
+   * biểu thức phạm vi đọc (`TaskCoreService.resolveReadScopeExists`); không khai đường đọc danh sách thứ hai.
    */
   @Get()
   @UseGuards(PermissionGuard)
@@ -104,65 +104,8 @@ export class TasksController {
   }
 
   /**
-   * GET /tasks/board — Task Board tổng (G9-3). Đọc việc CỦA NGƯỜI KHÁC toàn tenant → READ NHẠY CẢM
-   * hơn getMyTasks → PHẢI gate `read:task` (seed 0005, is_sensitive=false). User 0-quyền bị chặn 403.
-   * Filter task_type/status/projectId/assigneeUserId + page{limit,offset} validate qua ListTasksQueryDto
-   * (clamp ở biên). Mọi đọc đi qua db.withTenant → RLS là hàng rào thật, app-filter defense-in-depth.
-   */
-  @Get("board")
-  @UseGuards(PermissionGuard)
-  @RequirePermission("read", "task")
-  getBoard(@Req() req: AuthenticatedRequest, @Query() query: ListTasksQueryDto) {
-    const { limit, offset, ...filters } = query;
-    const page = limit !== undefined || offset !== undefined ? { limit, offset } : undefined;
-    return this.tasks.listBoard(req.user.companyId, filters, page);
-  }
-
-  /**
-   * GET /tasks/by-project/:projectId — Project Tasks (G9-4).
-   * Gated read:task (đọc task của tenant, không chỉ của bản thân → nhạy cảm hơn getMyTasks).
-   * SEC-1: service guard projectExistsTx trước khi list (chặn chéo tenant qua path param).
-   * Phân trang tường minh qua PageQueryDto (limit/offset trong query string).
-   */
-  @Get("by-project/:projectId")
-  @UseGuards(PermissionGuard)
-  @RequirePermission("read", "task")
-  getProjectTasks(
-    @Req() req: AuthenticatedRequest,
-    @Param("projectId", ParseUUIDPipe) projectId: string,
-    @Query() query: PageQueryDto,
-  ) {
-    const page =
-      query.limit !== undefined || query.offset !== undefined
-        ? { limit: query.limit, offset: query.offset }
-        : undefined;
-    return this.tasks.listByProject(req.user.companyId, projectId, page);
-  }
-
-  /**
-   * GET /tasks/by-team/:teamId — Team Tasks (G9-4).
-   * Gated read:task (đọc task của thành viên team → toàn tenant scope → nhạy cảm).
-   * SEC-1: service guard teamExistsTx trước khi list (chặn chéo tenant qua path param).
-   * Phân trang tường minh qua PageQueryDto (limit/offset trong query string).
-   */
-  @Get("by-team/:teamId")
-  @UseGuards(PermissionGuard)
-  @RequirePermission("read", "task")
-  getTeamTasks(
-    @Req() req: AuthenticatedRequest,
-    @Param("teamId", ParseUUIDPipe) teamId: string,
-    @Query() query: PageQueryDto,
-  ) {
-    const page =
-      query.limit !== undefined || query.offset !== undefined
-        ? { limit: query.limit, offset: query.offset }
-        : undefined;
-    return this.tasks.listByTeam(req.user.companyId, teamId, page);
-  }
-
-  /**
    * GET /tasks/:taskId — chi tiết 1 task core (S4-TASK-BE-2, TASK-API-203). Gate read:task, cùng data-scope
-   * với list (out-of-scope → 404 nhất quán). Đặt SAU 'board'/'by-project'/'by-team'/'my' (route tĩnh trước).
+   * với list (out-of-scope → 404 nhất quán). Đặt SAU 'my' (route tĩnh trước route tham số).
    */
   @Get(":taskId")
   @UseGuards(PermissionGuard)
@@ -241,6 +184,10 @@ export class TasksController {
    * PATCH /tasks/:taskId — cập nhật field task core (S4-TASK-BE-2, TASK-API-204): title/description/priority/
    * assignee/project/department/due/start. Gate update:task + data-scope; KHÔNG đổi status (action riêng).
    * Task workflow-driven bị service từ chối 400 (FSM giữ nguyên — regression, không phá luồng chính).
+   * S20-SEC-TASKPATCHGATE-1: route giữ đúng một cặp `update:task` (sửa tiêu đề không cần cặp nào khác);
+   * trường có cặp chuyên trách (hạn ↔ update-deadline · ưu tiên ↔ update-priority · người phụ trách ↔
+   * assign) bị gác ở method dùng chung của service khi giá trị ĐỔI — thiếu cặp ⇒ 403 cả request
+   * (`TaskPatchFieldGate`, cùng nguyên tắc với `stateId`).
    */
   @Patch(":taskId")
   @UseGuards(PermissionGuard)

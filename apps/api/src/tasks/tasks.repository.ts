@@ -1,10 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { OfficeTaskStatusDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import { contentItems, projects } from "../db/schema/media";
-import { teamMembers } from "../db/schema/org";
 import { users } from "../db/schema/users";
 import {
   labels,
@@ -15,33 +14,11 @@ import {
   tasks,
 } from "../db/schema/workflow";
 
-// ─── Pagination (G9-2 DB-8/SF-2) ──────────────────────────────────────────────
-// Thay magic-cap `.limit(500)` cũ (silent-truncation: tenant >500 task mất row mà không báo).
-// Board-wide list nhận limit/offset TƯỜNG MINH; G9-3 nối UI phân trang trên cùng method này.
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
 /**
  * My Tasks là per-assignee → bị chặn tự nhiên bởi số task giao cho 1 người; dùng ceiling an toàn,
- * KHÔNG phân trang ở G9-2 (UI "Công việc của tôi" chưa phân trang — giữ shape array, tránh regression).
+ * KHÔNG phân trang (UI "Công việc của tôi" chưa phân trang — giữ shape array, tránh regression).
  */
-const MY_TASKS_CAP = MAX_PAGE_SIZE;
-
-export interface Pagination {
-  limit?: number;
-  offset?: number;
-}
-
-/** Kẹp limit về [1, MAX_PAGE_SIZE]; thiếu/không hợp lệ → DEFAULT_PAGE_SIZE. */
-function clampLimit(limit?: number): number {
-  if (!limit || limit <= 0) return DEFAULT_PAGE_SIZE;
-  return Math.min(Math.floor(limit), MAX_PAGE_SIZE);
-}
-
-/** Offset không âm. */
-function safeOffset(offset?: number): number {
-  if (!offset || offset <= 0) return 0;
-  return Math.floor(offset);
-}
+const MY_TASKS_CAP = 200;
 
 /** Cột trả ra cho TaskDto — join workflow_steps / content_items / projects (đều LEFT — null cho task non-video). */
 const TASK_COLUMNS = {
@@ -86,17 +63,6 @@ const TASK_COLUMNS = {
   // projects/project_states) có cột trùng tên `task_status`. ADDITIVE — không method mới, không đổi schema.
   taskStatus: sql<string | null>`tasks.task_status`,
 } as const;
-
-export interface ListTasksFilter {
-  taskType?: string;
-  status?: string;
-  projectId?: string;
-  assigneeUserId?: string;
-  // PM-1: lọc board theo state tùy biến / ưu tiên / nhãn.
-  stateId?: string;
-  priority?: string;
-  labelId?: string;
-}
 
 /** Patch field work item (PM-1) — chỉ field CÓ MẶT mới đổi (partial). undefined = giữ nguyên. */
 export interface UpdateTaskFieldsData {
@@ -159,84 +125,6 @@ export class TasksRepository {
         .orderBy(desc(tasks.createdAt))
         .limit(MY_TASKS_CAP),
     );
-  }
-
-  /** Task Board tổng — lọc tuỳ chọn theo task_type / status / project / assignee / state / priority / label + phân trang. */
-  listAll(companyId: string, filters: ListTasksFilter, page?: Pagination) {
-    const conditions: (SQL | undefined)[] = [
-      eq(tasks.companyId, companyId),
-      isNull(tasks.deletedAt),
-    ];
-    if (filters.taskType) conditions.push(eq(tasks.taskType, filters.taskType));
-    if (filters.status) conditions.push(eq(tasks.status, filters.status));
-    if (filters.projectId) conditions.push(eq(tasks.projectId, filters.projectId));
-    if (filters.assigneeUserId) conditions.push(eq(tasks.assigneeUserId, filters.assigneeUserId));
-    // PM-1 filters.
-    if (filters.stateId) conditions.push(eq(tasks.stateId, filters.stateId));
-    if (filters.priority) conditions.push(eq(tasks.priority, filters.priority));
-    const labelId = filters.labelId;
-
-    return this.db.withTenant(companyId, (tx) => {
-      if (labelId) {
-        // labelId: chỉ task có gán nhãn này (subselect cùng tenant — task_labels keyed company_id + RLS).
-        const taggedTaskIds = tx
-          .select({ taskId: taskLabels.taskId })
-          .from(taskLabels)
-          .where(and(eq(taskLabels.companyId, companyId), eq(taskLabels.labelId, labelId)));
-        conditions.push(inArray(tasks.id, taggedTaskIds));
-      }
-      return this.baseQuery(tx)
-        .where(and(...conditions))
-        .orderBy(desc(tasks.createdAt))
-        .limit(clampLimit(page?.limit))
-        .offset(safeOffset(page?.offset));
-    });
-  }
-
-  /** Project Tasks — mọi task gắn 1 dự án + phân trang (G9-3). */
-  listByProject(companyId: string, projectId: string, page?: Pagination) {
-    return this.db.withTenant(companyId, (tx) =>
-      this.baseQuery(tx)
-        .where(
-          and(
-            eq(tasks.companyId, companyId),
-            eq(tasks.projectId, projectId),
-            isNull(tasks.deletedAt),
-          ),
-        )
-        .orderBy(desc(tasks.createdAt))
-        .limit(clampLimit(page?.limit))
-        .offset(safeOffset(page?.offset)),
-    );
-  }
-
-  /** Team Tasks — task giao cho thành viên của 1 team (subquery cùng tenant tx) + phân trang (G9-3). */
-  listByTeam(companyId: string, teamId: string, page?: Pagination) {
-    return this.db.withTenant(companyId, (tx) => {
-      const memberIds = tx
-        .select({ userId: teamMembers.userId })
-        .from(teamMembers)
-        // isNull(deletedAt): chỉ thành viên ĐANG active — ex-member (soft-deleted) không lọt
-        // vào Team board (đồng bộ org.repository.listTeamMembers; gate G9-1 SF-1).
-        .where(
-          and(
-            eq(teamMembers.companyId, companyId),
-            eq(teamMembers.teamId, teamId),
-            isNull(teamMembers.deletedAt),
-          ),
-        );
-      return this.baseQuery(tx)
-        .where(
-          and(
-            eq(tasks.companyId, companyId),
-            isNull(tasks.deletedAt),
-            inArray(tasks.assigneeUserId, memberIds),
-          ),
-        )
-        .orderBy(desc(tasks.createdAt))
-        .limit(clampLimit(page?.limit))
-        .offset(safeOffset(page?.offset));
-    });
   }
 
   /** 1 task theo id ở dạng DTO đầy đủ (dùng sau create/update để trả về client). */
@@ -306,25 +194,6 @@ export class TasksRepository {
       row.projectStatus === "Cancelled" ||
       row.projectStatus === "Archived"
     );
-  }
-
-  /**
-   * team_id phải tồn tại, cùng tenant và chưa xoá mềm (G9-4 SEC-1 mirror projectExistsTx).
-   * Guard bắt buộc trước khi listByTeam — DB FK toàn cục không chặn đọc chéo tenant.
-   */
-  async teamExistsTx(tx: TenantTx, companyId: string, teamId: string): Promise<boolean> {
-    const [row] = await tx
-      .select({ id: teamMembers.teamId })
-      .from(teamMembers)
-      .where(
-        and(
-          eq(teamMembers.companyId, companyId),
-          eq(teamMembers.teamId, teamId),
-          isNull(teamMembers.deletedAt),
-        ),
-      )
-      .limit(1);
-    return row !== undefined;
   }
 
   /**
@@ -704,17 +573,6 @@ export class TasksRepository {
   }
 
   // ─── PM-1 — task_labels (M:N link, HARD-delete khi gỡ) ────────────────────────
-
-  /**
-   * Nhãn của 1 tập task (1 query, group ở JS — tránh N+1). Trả mọi nhãn chưa xoá gắn vào các task id đó.
-   * row.taskId để caller gom theo task. KHÔNG xoá link khi nhãn soft-deleted → lọc deleted_at IS NULL.
-   */
-  listLabelsForTaskIds(companyId: string, taskIds: string[]) {
-    if (taskIds.length === 0) return Promise.resolve([]);
-    return this.db.withTenant(companyId, (tx) =>
-      this.listLabelsForTaskIdsTx(tx, companyId, taskIds),
-    );
-  }
 
   /**
    * Biến thể nhận `tx` cho caller ĐANG Ở TRONG withTenant (getTask/kanban) — mở withTenant lồng nhau
