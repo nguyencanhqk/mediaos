@@ -327,9 +327,11 @@ describe("S10-FND-PARAMUUID-1 — ratchet: tham số :id phải validate ở BI�
       "sổ không có dòng 'piped' nào — nhánh đó của assert đang chạy rỗng",
       // 184 → 182 ở `S10-CLEAN-WORKFLOWCLUSTER-2`: hai dòng `piped` của
       // `approval/approval-inbox.controller.ts` bị gỡ vì CẢ MODULE bị xoá, không phải vì gỡ pipe.
-      // Số này chỉ được hạ khi controller biến mất khỏi cây mã — xem `PARAM_UUID_MEASURED_SIZE`.
+      // Số này chỉ được hạ khi controller HOẶC handler bị xoá — xem `PARAM_UUID_MEASURED_SIZE`.
       // 182 → 184 ở `S19-OPS-TASKFILEURL-1`: +2 dòng `piped` `downloadUrl:{taskId,fileId}` (BORN_PIPED).
-    ).toBe(184);
+      // 184 → 182 ở `S20-SEC-TASKLEGACYREAD-1`: −2 dòng `piped` của `tasks/tasks.controller.ts` vì HAI
+      // HANDLER đọc danh sách đời cũ bị xoá (controller còn) — site vắng trong `idLikeParamSites()`.
+    ).toBe(182);
     expect(
       PARAM_UUID_VERDICTS.filter((v) => v.decision === "skipped").length,
       "sổ không có dòng 'skipped' nào — nhánh đó của assert đang chạy rỗng",
