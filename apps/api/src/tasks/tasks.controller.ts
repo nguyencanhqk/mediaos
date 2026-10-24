@@ -184,6 +184,10 @@ export class TasksController {
    * PATCH /tasks/:taskId — cập nhật field task core (S4-TASK-BE-2, TASK-API-204): title/description/priority/
    * assignee/project/department/due/start. Gate update:task + data-scope; KHÔNG đổi status (action riêng).
    * Task workflow-driven bị service từ chối 400 (FSM giữ nguyên — regression, không phá luồng chính).
+   * S20-SEC-TASKPATCHGATE-1: route giữ đúng một cặp `update:task` (sửa tiêu đề không cần cặp nào khác);
+   * trường có cặp chuyên trách (hạn ↔ update-deadline · ưu tiên ↔ update-priority · người phụ trách ↔
+   * assign) bị gác ở method dùng chung của service khi giá trị ĐỔI — thiếu cặp ⇒ 403 cả request
+   * (`TaskPatchFieldGate`, cùng nguyên tắc với `stateId`).
    */
   @Patch(":taskId")
   @UseGuards(PermissionGuard)

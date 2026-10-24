@@ -45,7 +45,7 @@ describe("TASK_PATCH_GATED_FIELDS — bảng trường ↔ cặp chuyên trách"
 });
 
 describe("computeChanged — I-3 so với bản ghi hiện tại", () => {
-  const changed = (dto: Record<string, unknown>, current = CURRENT) =>
+  const changed = (dto: Record<string, unknown>, current: Record<string, unknown> = CURRENT) =>
     [...computeChanged(current as never, dto as never)].sort();
 
   it("hạn cùng thời điểm, khác offset ⇒ không đổi", () => {

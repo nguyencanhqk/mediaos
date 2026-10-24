@@ -196,3 +196,13 @@ Không migration, không đổi seed. FE (Pages) tự lên khi merge; API deploy
 - **D7** Gỡ người phụ trách (`null`) chỉ có ở PATCH; sau WO đòi `assign` — có cần cặp riêng cho «gỡ» là quyết định mới, không chặn WO.
 - **D8** `assertAssigneeInScope` là hai bản giống hệt (`task-core.service.ts:1277-1291`, `task-actions.service.ts:594-608`) — gộp về một nơi (ví dụ `ProjectAccessService`) ở WO dọn; tới lúc đó ca đối chứng R8 ghim hai bản không trôi.
 - **D9** Route chuyên trách còn qua lớp giao `scopeKeys` của PAT trong `PermissionGuard` (`permission.guard.ts:100-115`). Hiện tương đương vì đường PAT đã gỡ (`app.module.ts:141`). Nếu khôi phục PAT, cổng trường phải áp cùng phép giao `scopeKeys` với guard.
+
+## §9 Thi công (GREEN) — lệch / bổ sung so với plan
+
+- **`task-core.repository.ts`** (909 dòng, > 800 ⇒ không làm dài thêm): `computeChanged` so với bản ghi đọc trong tx (§3.3) cần giá trị đang lưu của hạn + ưu tiên ⇒ `findRawByIdTx` thêm `due_at`/`task_priority` vào projection (cùng dòng) và `TaskRawRow` thêm 2 trường; bù bằng gọn 2 chú thích cũ ⇒ net 0 dòng. Tệp ngoài §6, ghi vào pathsNeeded.
+- **`task-core.service.ts`**: 1395 → 1394 dòng (§3.5 đạt). Người phụ trách mới resolve theo phạm vi `assign` do `assertTx` trả về; trường không đổi không resolve, không ghi.
+- **`assertTx`**: mọi 403 (thiếu cặp) đi trước mọi 404 (ngoài phạm vi việc), như guard route đi trước data-scope; phạm vi trùng nhau chỉ kiểm một lần; trường đổi mà `prepare` không có ⇒ `assertGranted(undefined)` ⇒ 403 (fail-closed).
+- **`buildGatedPatch`**: người phụ trách đổi sang một người mà chưa resolve theo phạm vi `assign` ⇒ 500 (lỗi lập trình, không ghi).
+- **FE dùng chung**: `task-patch-field-locks.ts` (`useTaskPatchFieldLocks` — ba cặp từ `TASK_CORE_ENGINE_PAIRS`) + `TaskFieldLockedHint.tsx` cho form Sửa việc, hộp thoại Sửa việc con và control inline việc con; quy tắc payload chung `editableDirtyFields` + `pickEditable` (`task-form-schema.ts`): trường gửi = dirty và không bị khoá. Không có trường nào sửa ⇒ không gọi API (PATCH rỗng bị 400). Khoá i18n mới `fieldGate.locked` ở `tasks-workux.ts` vì `tasks.ts` đã quá 800 dòng.
+- **Ca RED**: sửa kiểu tham số của helper trong `task-patch-field-gate.spec.ts` và bỏ `import React` thừa ở hai spec FE mới (typecheck đỏ) — không đổi assert nào.
+- **Đột biến §5**: chưa chạy ở bước GREEN — thuộc bước gate.

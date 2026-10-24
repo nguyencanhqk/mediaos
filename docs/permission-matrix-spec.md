@@ -381,6 +381,13 @@ Thêm cột **PM** (Project Manager — vai trò cấp-dự-án) và scope **Pro
 > **`TASK.TASK.UPDATE_STATE`** (bổ sung 18/07/2026 — [DECISIONS-03](<DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16/D-17): quyền đổi **cột pipeline** (`tasks.state_id` → `project_states`), TÁCH khỏi `TASK.TASK.UPDATE_STATUS` (đổi `task_status`). Ma trận scope theo 4 role chuẩn **mirror đúng `UPDATE_STATUS`**: `employee = Own` · `manager = Team` · `hr = Company` · `company-admin = Company`.
 >
 > Kéo thẻ sang cột **khác `state_group`** kéo theo đổi trạng thái ⇒ đòi **cả hai** quyền, và phần đổi trạng thái chạy ở **phạm vi của chính `UPDATE_STATUS`**, không mượn phạm vi của `UPDATE_STATE`. Kéo sang cột **cùng nhóm** chỉ đòi `UPDATE_STATE`.
+>
+> **Đường sửa chung `PATCH /tasks/:taskId`** (bổ sung 24/10/2026 — S20-SEC-TASKPATCHGATE-1): route gác `TASK.TASK.UPDATE`; ba trường có cặp chuyên trách gác theo **chính cặp đó**, cùng quyết định với route riêng — hạn ↔ `UPDATE_DEADLINE` (`/change-deadline`) · ưu tiên ↔ `UPDATE_PRIORITY` (`/change-priority`) · người phụ trách ↔ `ASSIGN` (`/assign`). Khuôn giống `stateId` ở trên: cổng nằm ở method dùng chung của service, không nâng cặp của route.
+>
+> - **Cùng thay đổi, cùng quyết định quyền:** body làm giá trị một trong ba trường **đổi** so với bản ghi hiện tại mà người gọi thiếu cặp tương ứng ⇒ **403 cho cả request** (không cột nào đổi, không ghi nhật ký) — không âm thầm bỏ trường.
+> - **Cùng phạm vi:** phần đổi buộc theo phạm vi của chính cặp chuyên trách (việc ngoài phạm vi ⇒ 404; người phụ trách mới ngoài phạm vi `ASSIGN` ⇒ 403), không mượn phạm vi của `UPDATE`.
+> - **Không đổi thì không đòi, không ghi:** trường có trong body nhưng bằng giá trị đang lưu (hạn so theo thời điểm, không theo chuỗi) không đòi cặp **và không được ghi lại** — đây là bất biến quyền, không phải tối ưu: bản ghi được đọc không khoá hàng, ghi lại giá trị cũ có thể đè một thay đổi hợp lệ qua route riêng commit chen giữa. `null` (xoá hạn · bỏ ưu tiên · gỡ người phụ trách) là **đổi**.
+> - **FE:** form Sửa việc, hộp thoại Sửa việc con và control inline của việc con khoá ô theo cặp server trả (`useCan`, không hard-code vai trò) và chỉ gửi trường người dùng đã sửa. Hệ quả: người có `UPDATE` mà thiếu cặp chuyên trách không còn dời hạn / đổi ưu tiên / đổi hoặc gỡ người phụ trách qua đường sửa chung.
 
 ---
 

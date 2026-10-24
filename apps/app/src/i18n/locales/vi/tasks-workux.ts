@@ -54,4 +54,8 @@ export default {
     heading: "Chuyển sang cột…",
     noTargets: "Không còn cột nào khác để chuyển.",
   },
+  // S20-SEC-TASKPATCHGATE-1 — ô của form Sửa bị khoá vì thiếu cặp quyền chuyên trách của trường đó.
+  fieldGate: {
+    locked: "Bạn không có quyền đổi mục này.",
+  },
 };
