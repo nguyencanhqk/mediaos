@@ -181,6 +181,9 @@ function CommentComposer({
           aria-busy={mutation.isPending}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          // Ô nhiều dòng giữ vai trò textbox ngầm định: ARIA in HTML không cho đặt role khác lên
+          // <textarea> (role="combobox" là lỗi aria-allowed-role), và aria-expanded không thuộc
+          // textbox. aria-autocomplete / aria-controls / aria-activedescendant đều hợp lệ với textbox.
           aria-autocomplete="list"
           aria-controls={mentionState && suggestions.length > 0 ? mentionListbox.listId : undefined}
           aria-activedescendant={mentionListbox.activeId}

@@ -94,8 +94,10 @@ function lastTabStorageKey(userId: string): string {
 
 /**
  * S20-TASK-FEDEBT-1 — khoá cũ KHÔNG hậu tố người dùng: bản đầu của tính năng (trước khi khoá gắn id
- * người dùng) ghi một bản đồ CHUNG cho mọi tài khoản trên trình duyệt; trình duyệt từng chạy bản đó còn giữ. Không đọc nó nữa (tab nhớ của người khác không được rò sang), chỉ gỡ: MỘT lần mỗi
- * lần nạp trang, bọc try/catch — storage bị chặn thì thôi, lần nạp sau thử lại.
+ * người dùng) ghi một bản đồ CHUNG cho mọi tài khoản trên trình duyệt; trình duyệt từng chạy bản đó
+ * còn giữ. Không đọc nó nữa (tab nhớ của người khác không được rò sang), chỉ gỡ: MỘT lần mỗi lần nạp
+ * trang (cờ cấp module, bật TRƯỚC khi gỡ), bọc try/catch — storage bị chặn thì bỏ qua tới lần nạp
+ * TRANG sau, không thử lại trong cùng phiên. Spec nạp lại module (`vi.resetModules`) ở từng ca dọn.
  */
 let legacyLastTabKeyCleaned = false;
 

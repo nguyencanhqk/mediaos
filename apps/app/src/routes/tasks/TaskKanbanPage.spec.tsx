@@ -267,7 +267,10 @@ describe("TaskKanbanPage", () => {
     await waitFor(() =>
       expect(todoColumn.textContent?.includes("Chuẩn bị báo cáo tuần")).toBe(true),
     );
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    // Vùng role=alert của <Toaster /> luôn có sẵn ⇒ soi NỘI DUNG lý do 409, không chỉ sự có mặt.
+    expect(
+      await within(screen.getByRole("alert")).findByText(/không thể chuyển sang trạng thái này/i),
+    ).toBeInTheDocument();
   });
 
   // ── Error state với retry ───────────────────────────────────────────────────
@@ -547,11 +550,16 @@ describe("TaskKanbanPage", () => {
         new ApiError({ status: 403, code: "FORBIDDEN", message: "missing update-status" }),
       );
 
-      // Rollback: thẻ về cột cũ + alert lỗi.
+      // Rollback: thẻ về cột cũ + lý do 403 trong vùng thông báo (soi nội dung — vùng role=alert
+      // của <Toaster /> luôn có sẵn).
       await waitFor(() =>
         expect(sourceCol.textContent?.includes("Chuẩn bị báo cáo tuần")).toBe(true),
       );
-      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(
+        await within(screen.getByRole("alert")).findByText(
+          /không có quyền đổi trạng thái công việc này/i,
+        ),
+      ).toBeInTheDocument();
     });
 
     // Nút "Quản lý cột" đã CHUYỂN sang tab Cài đặt của dự án — gate + render test ở

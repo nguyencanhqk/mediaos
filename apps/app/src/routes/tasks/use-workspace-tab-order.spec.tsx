@@ -186,10 +186,12 @@ describe("useProjectLastTab", () => {
   it("dọn khoá cũ khi storage bị chặn ⇒ không làm sập, hook vẫn chạy", async () => {
     vi.resetModules();
     const fresh = await import("./use-workspace-tab-order");
-    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+    const removeItem = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
       throw new Error("blocked");
     });
     const { result } = renderHook(() => fresh.useProjectLastTab("p-1"));
+    // Đã thử gỡ khoá cũ (lỗi bị nuốt), hook vẫn trả kết quả.
+    expect(removeItem).toHaveBeenCalledWith(PREFIX);
     expect(result.current.entryTab).toBeNull();
   });
 });
