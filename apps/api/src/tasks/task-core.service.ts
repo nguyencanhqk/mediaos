@@ -36,7 +36,12 @@ import {
 import { TaskActivityService } from "./task-activity.service";
 import { TaskActionsService } from "./task-actions.service";
 import { ProjectAccessService } from "./project-access.service";
-import { TaskPatchFieldGate, buildGatedPatch, computeChanged } from "./task-patch-field-gate";
+import {
+  TaskPatchFieldGate,
+  auditedPatchFields,
+  buildGatedPatch,
+  computeChanged,
+} from "./task-patch-field-gate";
 // S5-GOAL-BE-2 (additive) — recompute tiến độ mục tiêu CÙNG TX khi task đổi dự án / bị xoá mềm.
 import { GoalProgressEngineService } from "./goal-progress-engine.service";
 import { coalesceTaskStatus, type TaskCoreStatus } from "./task-fsm";
@@ -755,11 +760,9 @@ export class TaskCoreService {
       }
 
       // Audit KHÔNG NÓI DỐI (finding gate lane contracts): stateId có bản ghi TASK_STATE_CHANGED
-      // RIÊNG (trong applyStateChangeTx) ⇒ loại khỏi TASK_UPDATED; PATCH chỉ-có-stateId ⇒ bỏ hẳn
-      // TASK_UPDATED (không ghi bản ghi rỗng).
-      const auditedDto = { ...dto };
-      delete (auditedDto as Record<string, unknown>).stateId;
-      const auditedChanges = this.changedFields(auditedDto);
+      // RIÊNG (trong applyStateChangeTx) ⇒ loại khỏi TASK_UPDATED; trường có cổng không đổi không ghi ⇒
+      // không khai (I-3). Rỗng (vd. PATCH chỉ-có-stateId) ⇒ bỏ hẳn TASK_UPDATED (không ghi bản ghi rỗng).
+      const auditedChanges = auditedPatchFields(dto, fieldChanges);
       if (Object.keys(auditedChanges).length > 0) {
         const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
         await this.activity.record(tx, {
@@ -1307,14 +1310,6 @@ export class TaskCoreService {
   private clampLimit(limit?: number): number {
     if (!limit || limit <= 0) return DEFAULT_LIST_LIMIT;
     return Math.min(Math.floor(limit), TASK_CORE_PAGE_LIMIT_MAX);
-  }
-
-  private changedFields(dto: Record<string, unknown>): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(dto)) {
-      if (v !== undefined) out[k] = v;
-    }
-    return out;
   }
 
   private async reload(tx: TenantTx, companyId: string, id: string): Promise<TaskCoreResponseDto> {

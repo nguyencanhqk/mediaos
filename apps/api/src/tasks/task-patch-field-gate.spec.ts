@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TASK_PATCH_GATED_FIELDS,
   TaskPatchFieldGate,
+  auditedPatchFields,
   buildGatedPatch,
   computeChanged,
 } from "./task-patch-field-gate";
@@ -242,5 +243,61 @@ describe("TaskPatchFieldGate — prepare (trước tx) + assertTx (trong tx)", (
     await expect(
       gate.assertTx(TX, USER, TASK_ID, new Set(["dueAt"]) as never, prepared),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("id người phụ trách — so không phân biệt hoa/thường (UUID cùng giá trị)", () => {
+  it("cùng id đang lưu nhưng viết hoa ⇒ không đổi; id khác viết hoa ⇒ đổi", () => {
+    expect([...computeChanged(CURRENT as never, { assigneeEmployeeId: "EMP-1" } as never)]).toEqual(
+      [],
+    );
+    expect([...computeChanged(CURRENT as never, { assigneeEmployeeId: "EMP-2" } as never)]).toEqual(
+      ["assigneeEmployeeId"],
+    );
+  });
+
+  it("body viết hoa, người đã resolve viết thường ⇒ ghi id đã resolve, không nổ", () => {
+    const dto = { assigneeEmployeeId: "EMP-2" };
+    const patch = buildGatedPatch(dto as never, computeChanged(CURRENT as never, dto as never), {
+      employeeId: "emp-2",
+      userId: "user-2",
+    });
+    expect(patch).toEqual({ mainAssigneeEmployeeId: "emp-2", assigneeUserId: "user-2" });
+  });
+
+  it("người đã resolve là người KHÁC ⇒ vẫn nổ (không ghi người chưa kiểm)", () => {
+    const dto = { assigneeEmployeeId: "EMP-2" };
+    expect(() =>
+      buildGatedPatch(dto as never, computeChanged(CURRENT as never, dto as never), {
+        employeeId: "emp-3",
+        userId: "user-3",
+      }),
+    ).toThrow(/TASK-ERR-PATCH-GATE/);
+  });
+});
+
+describe("auditedPatchFields — nhật ký TASK_UPDATED chỉ khai trường thực sự ghi", () => {
+  it("trường cổng không đổi ⇒ không khai; trường cổng đổi + trường thường ⇒ khai; stateId ⇒ không khai", () => {
+    const dto = {
+      title: "x",
+      description: null,
+      stateId: "state-1",
+      dueAt: "2026-11-20T10:00:00+07:00",
+      priority: "High",
+      assigneeEmployeeId: "EMP-1",
+    };
+    const out = auditedPatchFields(dto as never, computeChanged(CURRENT as never, dto as never));
+    expect(out).toEqual({ title: "x", description: null, priority: "High" });
+  });
+
+  it("body chỉ có trường cổng không đổi ⇒ rỗng (không ghi nhật ký)", () => {
+    const dto = { dueAt: DUE, priority: "Medium", assigneeEmployeeId: "emp-1" };
+    expect(
+      auditedPatchFields(dto as never, computeChanged(CURRENT as never, dto as never)),
+    ).toEqual({});
+  });
+
+  it("trường vắng (undefined) ⇒ không khai", () => {
+    expect(auditedPatchFields({ title: undefined } as never, new Set())).toEqual({});
   });
 });

@@ -20,7 +20,9 @@ import type { TaskCorePatchValues, TaskRawRow } from "./task-core.repository";
  *        tại đọc không khoá hàng, nên ghi lại giá trị «không đổi» theo bản chụp cũ sẽ đè một thay
  *        đổi hợp lệ (qua route chuyên trách) commit chen giữa đọc và ghi = đổi F mà không có P(F).
  *        So sánh: hạn theo epoch ms (cùng phép so no-op của change-deadline); ưu tiên theo chuỗi;
- *        người phụ trách theo id. `null` (xoá hạn · bỏ ưu tiên · gỡ người phụ trách) là ĐỔI.
+ *        người phụ trách theo id không phân biệt hoa/thường (UUID — Postgres so theo giá trị).
+ *        `null` (xoá hạn · bỏ ưu tiên · gỡ người phụ trách) là ĐỔI. Nhật ký `TASK_UPDATED` (activity
+ *        + audit append-only) cũng chỉ khai trường thực sự ghi (`auditedPatchFields`).
  *   I-4  một hàm quyết định — cặp → phạm vi qua `DataScopeService.resolveManyOrNull` (cùng
  *        `decideStrongestScope` với `resolveAndAssert`), 403 qua `DataScopeService.assertGranted`,
  *        phạm vi việc qua `ProjectAccessService.assertTaskInScopeTx` — cùng hàm route chuyên trách.
@@ -64,6 +66,12 @@ function toEpochMs(v: Date | string | null | undefined): number | null {
   return v instanceof Date ? v.getTime() : Date.parse(v);
 }
 
+/** UUID chữ hoa và chữ thường là CÙNG một id (Postgres so theo giá trị, trả về chữ thường). */
+function sameId(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 /** I-3 — tập trường CÓ MẶT trong body mà giá trị KHÁC giá trị đang lưu. Trường vắng không xét. */
 export function computeChanged(
   current: TaskPatchCurrent,
@@ -79,7 +87,7 @@ export function computeChanged(
   }
   if (
     dto.assigneeEmployeeId !== undefined &&
-    dto.assigneeEmployeeId !== current.mainAssigneeEmployeeId
+    !sameId(dto.assigneeEmployeeId, current.mainAssigneeEmployeeId)
   ) {
     changed.add("assigneeEmployeeId");
   }
@@ -101,7 +109,7 @@ export function buildGatedPatch(
   if (dto.assigneeEmployeeId == null) {
     return { ...dueAt, ...priority, mainAssigneeEmployeeId: null, assigneeUserId: null };
   }
-  if (!assignee || assignee.employeeId !== dto.assigneeEmployeeId) {
+  if (!assignee || !sameId(assignee.employeeId, dto.assigneeEmployeeId)) {
     // Lỗi lập trình (người gọi quên resolve theo phạm vi assign) — nổ to, không ghi người chưa kiểm.
     throw new InternalServerErrorException(
       "TASK-ERR-PATCH-GATE: người phụ trách mới chưa được resolve theo phạm vi assign.",
@@ -113,6 +121,27 @@ export function buildGatedPatch(
     mainAssigneeEmployeeId: assignee.employeeId,
     assigneeUserId: assignee.userId,
   };
+}
+
+/**
+ * Đầu vào nhật ký `TASK_UPDATED` (activity + audit append-only): body trừ `stateId` (có bản ghi
+ * `TASK_STATE_CHANGED` riêng), trừ trường có cổng KHÔNG đổi (I-3 không ghi ⇒ nhật ký không khai — kể cả
+ * khi một route chuyên trách commit chen giữa: DB giữ giá trị của route đó, nhật ký PATCH không được nói
+ * khác), trừ khoá vắng. Rỗng ⇒ người gọi không ghi dòng nhật ký nào.
+ */
+export function auditedPatchFields(
+  dto: UpdateTaskCoreRequest,
+  changed: ReadonlySet<TaskPatchGatedField>,
+): Record<string, unknown> {
+  const gated = new Set<string>(TASK_PATCH_GATED_FIELDS.map((g) => g.field));
+  return Object.fromEntries(
+    Object.entries(dto).filter(
+      ([k, v]) =>
+        v !== undefined &&
+        k !== "stateId" &&
+        (!gated.has(k) || changed.has(k as TaskPatchGatedField)),
+    ),
+  );
 }
 
 interface GateUser {

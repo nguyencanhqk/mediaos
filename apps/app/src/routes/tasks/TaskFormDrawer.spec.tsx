@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TaskFormDrawer } from "./TaskFormDrawer";
+import { editableDirtyFields, taskFormToUpdatePayload } from "./task-form-schema";
 
 /**
  * S20-SEC-TASKPATCHGATE-1 — form Sửa việc theo cặp quyền server trả (plan §3.6, §4 FE F1–F3; M10, M11).
@@ -130,6 +131,22 @@ describe("TaskFormDrawer (sửa) — trường theo cặp quyền chuyên trách
     expect(field("task-due-at")).not.toBeDisabled();
   });
 
+  it("F1 · mỗi ô khoá theo ĐÚNG cặp của nó: có assign, thiếu update-priority ⇒ chỉ ô ưu tiên khoá", () => {
+    setCapabilities({ ...BASE_CAPS, "assign:task": true, "update-deadline:task": true });
+    renderEdit();
+    expect(field("task-priority")).toBeDisabled();
+    expect(field("task-assignee")).not.toBeDisabled();
+    expect(field("task-due-at")).not.toBeDisabled();
+  });
+
+  it("F1 · mỗi ô khoá theo ĐÚNG cặp của nó: có update-priority, thiếu assign ⇒ chỉ ô người phụ trách khoá", () => {
+    setCapabilities({ ...BASE_CAPS, "update-priority:task": true, "update-deadline:task": true });
+    renderEdit();
+    expect(field("task-assignee")).toBeDisabled();
+    expect(field("task-priority")).not.toBeDisabled();
+    expect(field("task-due-at")).not.toBeDisabled();
+  });
+
   it("F2a · đủ cặp, chỉ sửa tiêu đề ⇒ body đúng bằng {title}", async () => {
     setCapabilities(ALL_PAIRS);
     renderEdit();
@@ -145,5 +162,42 @@ describe("TaskFormDrawer (sửa) — trường theo cặp quyền chuyên trách
     expect(body).not.toHaveProperty("dueAt");
     expect(body).not.toHaveProperty("priority");
     expect(body).not.toHaveProperty("assigneeEmployeeId");
+  });
+});
+
+describe("payload sửa — trường bị khoá không vào body dù đã dirty", () => {
+  it("F4 · ô khoá bị đánh dấu dirty (đường lập trình) ⇒ payload không có khoá của ô đó", () => {
+    const values = {
+      title: "Việc đã sửa",
+      description: "",
+      projectId: "",
+      assigneeEmployeeId: "emp-002",
+      departmentId: "",
+      priority: "Urgent",
+      startAt: "",
+      dueAt: "2026-12-05T09:30",
+    };
+    const dirty = { title: true, assigneeEmployeeId: true, priority: true, dueAt: true };
+    const locked = { assigneeEmployeeId: true, priority: true, dueAt: true };
+    const body = taskFormToUpdatePayload(values as never, editableDirtyFields(dirty, locked));
+    expect(body).toEqual({ title: "Việc đã sửa" });
+  });
+
+  it("F4 · cùng ô đó KHÔNG khoá ⇒ vào payload (ca đứng cạnh)", () => {
+    const values = {
+      title: "Việc gốc",
+      description: "",
+      projectId: "",
+      assigneeEmployeeId: "emp-002",
+      departmentId: "",
+      priority: "Urgent",
+      startAt: "",
+      dueAt: "",
+    };
+    const body = taskFormToUpdatePayload(
+      values as never,
+      editableDirtyFields({ priority: true, assigneeEmployeeId: true }, {}),
+    );
+    expect(body).toEqual({ priority: "Urgent", assigneeEmployeeId: "emp-002" });
   });
 });

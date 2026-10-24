@@ -1,7 +1,7 @@
 /**
  * S20-SEC-TASKPATCHGATE-1 — đường sửa chung `PATCH /tasks/:taskId` và route chuyên trách
  * (`/assign` · `/change-priority` · `/change-deadline`) cho CÙNG một thay đổi phải ra CÙNG một quyết định
- * quyền, ở CÙNG phạm vi. Plan: `docs/plans/S20-SEC-TASKPATCHGATE-1.md` §4 (R1–R9 · A1–A5 · X1).
+ * quyền, ở CÙNG phạm vi. Plan: `docs/plans/S20-SEC-TASKPATCHGATE-1.md` §4 (R1–R10 · A1–A8 · X1).
  * App THẬT (AppModule) qua `applyMainPipeline`, engine quyền THẬT, Postgres THẬT (lane cô lập).
  *
  * Trường ↔ cặp: hạn `dueAt` ↔ `update-deadline:task` · ưu tiên `priority` ↔ `update-priority:task` ·
@@ -54,6 +54,8 @@ const PRIO1 = "Urgent";
 const FIELD_GATE_403 = /out of permission scope/;
 const ASSIGNEE_OUT_OF_SCOPE = /TASK-ERR-TASK-ASSIGNEE-OUT-OF-SCOPE/;
 const TASK_NOT_FOUND = /TASK-ERR-TASK-NOT-FOUND/;
+/** Khoá của ba trường có cổng trong nhật ký `TASK_UPDATED` (activity + audit). */
+const GATED_KEYS = ["dueAt", "priority", "assigneeEmployeeId"] as const;
 
 const THREE_PAIRS: Pair[] = [
   ["assign", "task"],
@@ -136,6 +138,21 @@ describe.skipIf(!runDb)(
         assignee_user_id: string | null;
       };
       return { ...row, dueMs: row.due_at ? new Date(row.due_at).getTime() : null };
+    }
+
+    /** Nhật ký TASK_UPDATED của việc: activity (old/new_values) + audit (before/after/old/new_values). */
+    async function updateTrail(taskId: string) {
+      const act = await direct.query(
+        `SELECT old_values, new_values FROM task_activity_logs
+          WHERE task_id = $1 AND action = $2`,
+        [taskId, "TASK_UPDATED"],
+      );
+      const aud = await direct.query(
+        `SELECT before, after, old_values, new_values FROM audit_logs
+          WHERE object_type = $2 AND object_id = $1 AND action = $3`,
+        [taskId, "task", "TaskUpdated"],
+      );
+      return { activity: act.rows as unknown[], audit: aud.rows as unknown[] };
     }
 
     /** Assert chung mọi ca R (plan §4): mã · thông điệp đúng nguồn · hàng không đổi · 0 activity/audit. */
@@ -311,6 +328,60 @@ describe.skipIf(!runDb)(
       expect((await snapshot(id)).row).toEqual(before.row);
     });
 
+    // ══ I-3 vế nhật ký — trường không ghi thì nhật ký append-only cũng không khai ═══════════════════
+
+    it("A6 · I-3: body chỉ có trường cổng bằng giá trị đang lưu ⇒ 200, không cột nào ghi, 0 dòng nhật ký", async () => {
+      const id = await freshTask("W");
+      const before = await snapshot(id);
+      const res = await patchAs("G0", id, {
+        dueAt: DUE0_OTHER_OFFSET,
+        priority: PRIO0,
+        assigneeEmployeeId: emp.W,
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const after = await snapshot(id);
+      expect(after.row, "hàng việc không đổi").toEqual(before.row);
+      expect(after.activity, "0 dòng task_activity_logs mới").toBe(before.activity);
+      expect(after.audit, "0 dòng audit_logs mới").toBe(before.audit);
+    });
+
+    it("A7 · I-3: body có trường cổng không đổi + tiêu đề đổi ⇒ nhật ký chỉ khai trường đã ghi", async () => {
+      const id = await freshTask("W");
+      const res = await patchAs("G0", id, {
+        title: "pfg-A7",
+        dueAt: DUE0_OTHER_OFFSET,
+        priority: PRIO0,
+        assigneeEmployeeId: emp.W,
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const trail = await updateTrail(id);
+      expect(trail.activity, "một dòng activity TASK_UPDATED").toHaveLength(1);
+      expect(trail.audit, "một dòng audit TaskUpdated").toHaveLength(1);
+      for (const entry of [...trail.activity, ...trail.audit]) {
+        const text = JSON.stringify(entry);
+        expect(text, "nhật ký khai tiêu đề").toContain('"title"');
+        for (const k of GATED_KEYS) expect(text, `nhật ký không khai ${k}`).not.toContain(`"${k}"`);
+      }
+    });
+
+    it("A8 · id người phụ trách khác hoa/thường vẫn là CÙNG một người", async () => {
+      // Có assign: đổi sang người khác bằng id viết hoa ⇒ 200, cột lưu đúng người.
+      const t1 = await freshTask("W");
+      const viaPatch = await patchAs("G1", t1, { assigneeEmployeeId: emp.V.toUpperCase() });
+      expect(viaPatch.status, JSON.stringify(viaPatch.body)).toBe(200);
+      expect((await columns(t1)).main_assignee_employee_id).toBe(emp.V);
+      // Thiếu assign: gửi lại người đang phụ trách (viết hoa) kèm tiêu đề ⇒ không phải đổi ⇒ 200.
+      const t2 = await freshTask("W");
+      const same = await patchAs("G0", t2, {
+        title: "pfg-A8",
+        assigneeEmployeeId: emp.W.toUpperCase(),
+      });
+      expect(same.status, JSON.stringify(same.body)).toBe(200);
+      const c2 = await columns(t2);
+      expect(c2.title).toBe("pfg-A8");
+      expect(c2.main_assignee_employee_id).toBe(emp.W);
+    });
+
     // ══ I-1 — trường đổi đòi cặp chuyên trách; thiếu ⇒ 403 cho cả request ═══════════════════════════
 
     it("R1 · I-1: đổi hạn mà thiếu update-deadline ⇒ 403, không ghi gì", async () => {
@@ -345,6 +416,13 @@ describe.skipIf(!runDb)(
       const id = await freshTask("W");
       const before = await snapshot(id);
       const res = await patchAs("G0", id, { dueAt: null });
+      await expectRefused(res, id, before, { status: 403, message: FIELD_GATE_403 });
+    });
+
+    it("R10 · I-1/I-3: bỏ ưu tiên (null) là đổi ⇒ thiếu update-priority thì 403", async () => {
+      const id = await freshTask("W");
+      const before = await snapshot(id);
+      const res = await patchAs("G0", id, { priority: null });
       await expectRefused(res, id, before, { status: 403, message: FIELD_GATE_403 });
     });
 
