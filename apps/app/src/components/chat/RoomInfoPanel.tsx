@@ -148,6 +148,15 @@ export function RoomInfoPanel({
   const isGroup = room.roomType === "group";
   // Người đối thoại đã ngừng hoạt động ⇒ server sẽ từ chối họ (CHAT-ERR-003): không mời lập nhóm.
   const dmPeer = room.roomType === "direct" && room.peer?.isActive === true ? room.peer : null;
+  /**
+   * S20-CHAT-FEDEBT-1 — người đối thoại KHÔNG có tên hiển thị ⇒ không có lối «Thêm người». Dialog nhóm
+   * dựng chip người đã chọn từ `fullName`; một chip trống (`""`) không ai nhận ra được là ai.
+   */
+  const dmPeerName = dmPeer?.name?.trim() ?? "";
+  const groupSeed: PersonPick | null =
+    dmPeer !== null && dmPeerName.length > 0
+      ? { userId: dmPeer.userId, fullName: dmPeerName }
+      : null;
   const isRoomAdmin = myRole === "admin";
   const isArchived = room.isArchived ?? false;
   const label = room.name ?? room.roomCode;
@@ -319,13 +328,11 @@ export function RoomInfoPanel({
               testId="chat-info-add-member"
             />
           )}
-          {canCreateRoom && dmPeer !== null && onStartGroupWith !== undefined && (
+          {canCreateRoom && groupSeed !== null && onStartGroupWith !== undefined && (
             <RoundAction
               icon={UserPlus}
               label={t("info.members.addPeople")}
-              onClick={() =>
-                onStartGroupWith({ userId: dmPeer.userId, fullName: dmPeer.name ?? "" })
-              }
+              onClick={() => onStartGroupWith(groupSeed)}
               testId="chat-info-dm-add-people"
             />
           )}

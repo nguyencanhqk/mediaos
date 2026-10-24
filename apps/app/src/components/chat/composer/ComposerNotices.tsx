@@ -13,9 +13,19 @@ import { Button } from "@mediaos/ui";
 import type { StoredChatMessage } from "@/stores/chat.store";
 import { MAX_MESSAGE_LENGTH } from "@/routes/chat/constants";
 
+/**
+ * S20-CHAT-FEDEBT-1 — thân trích dẫn của khung «đang trả lời»:
+ * - `live`: tin gốc đang có trong RAM (hoặc vừa bấm «Trả lời») ⇒ hiện thân tin.
+ * - `detached`: trang đầu ĐÃ về mà tin gốc không có ⇒ người gửi + «không còn trong phần đã tải».
+ * - `pending`: trang đầu chưa về / nạp lỗi ⇒ chưa biết, chỉ người gửi. Không thân ảnh chụp (có thể là
+ *   thân cũ của tin đã thu hồi), không khẳng định tin đã ra khỏi phần đã tải.
+ */
+export type ReplyQuoteState = "live" | "detached" | "pending";
+
 interface ComposerNoticesProps {
   isArchived: boolean;
   replyTo: StoredChatMessage | null;
+  replyQuote: ReplyQuoteState;
   onCancelReply: () => void;
   /** Tên tệp đang tải lên, `null` = không có. */
   uploading: string | null;
@@ -26,6 +36,7 @@ interface ComposerNoticesProps {
 export function ComposerNotices({
   isArchived,
   replyTo,
+  replyQuote,
   onCancelReply,
   uploading,
   error,
@@ -48,9 +59,16 @@ export function ComposerNotices({
               {t("message.replyingTo", { name: replyTo.senderName ?? "" })}
             </p>
             {/* Như trích dẫn trong `MessageBubble`: tin đã thu hồi hiện chữ xám, không bao giờ thân cũ. */}
-            <p className="line-clamp-1 break-words text-muted-foreground">
-              {replyTo.recalledAt !== null ? t("message.recalled") : (replyTo.body ?? "")}
-            </p>
+            {replyQuote === "detached" && (
+              <p className="line-clamp-1 italic text-muted-foreground">
+                {t("message.replyPreviewUnavailable")}
+              </p>
+            )}
+            {replyQuote === "live" && (
+              <p className="line-clamp-1 break-words text-muted-foreground">
+                {replyTo.recalledAt !== null ? t("message.recalled") : (replyTo.body ?? "")}
+              </p>
+            )}
           </div>
           <Button
             variant="ghost"

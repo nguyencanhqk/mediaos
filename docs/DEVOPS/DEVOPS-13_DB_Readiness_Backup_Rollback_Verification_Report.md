@@ -296,6 +296,8 @@ người sau không lặp lại:
 task list · `ATTENDANCE_EXPORT_MAX_ROWS = 10_000` · partial index `idx_notifications_unread` cho badge
 unread · dashboard widget cache TTL + invalidate theo event · `/tasks/board` cap `BOARD_PAGE_LIMIT_MAX`,
 summary bằng JOIN (không loop-per-row). Tất cả vẫn còn nguyên.
+_(Ghi chú sau: route `/tasks/board` và `BOARD_PAGE_LIMIT_MAX` đã gỡ ở S20-SEC-TASKLEGACYREAD-1; danh sách
+việc nay chỉ qua `GET /tasks`.)_
 
 ---
 

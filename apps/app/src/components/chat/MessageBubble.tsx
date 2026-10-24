@@ -24,6 +24,9 @@ import type { StoredChatAttachment, StoredChatMessage } from "@/stores/chat.stor
 import { attachmentUrl } from "@/stores/chat.store";
 import { formatClock, formatFileSize, splitTextWithLinks } from "./chat-format";
 import { MessageActions } from "./MessageActions";
+import { MessageBubbleLink } from "./MessageBubbleLink";
+import { useCanOpenDirect } from "./chat-room-opener";
+import { SenderDirectMenu } from "./SenderDirectMenu";
 import { ReactionBar } from "./ReactionBar";
 import { SeenByAvatars, type SeenByViewer } from "./SeenByAvatars";
 
@@ -82,23 +85,16 @@ interface MessageBubbleProps {
   actions: MessageBubbleActions;
 }
 
-/** Nội dung văn bản — đoạn chữ thành text node, đoạn link thành `<a>` đã chốt `rel`. */
+/**
+ * Nội dung văn bản — đoạn chữ thành text node, đoạn link thành `<a>` đã chốt `rel` (S20-CHAT-INTERNALLINK-1:
+ * link nội bộ mở tại chỗ khi bấm thường — luật ở `MessageBubbleLink`).
+ */
 function MessageBody({ body }: { body: string }): React.ReactElement {
   return (
     <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
       {splitTextWithLinks(body).map((segment, index) =>
         segment.kind === "link" ? (
-          <a
-            key={`${index}-${segment.value}`}
-            href={segment.value}
-            target="_blank"
-            // `noopener noreferrer` chặn tab đích chạm `window.opener`; `nofollow` vì đây là nội dung
-            // do người dùng nhập. Ba giá trị này đi cùng nhau, đừng bỏ bớt cái nào.
-            rel="noopener noreferrer nofollow"
-            className="text-primary underline underline-offset-2 hover:no-underline"
-          >
-            {segment.value}
-          </a>
+          <MessageBubbleLink key={`${index}-${segment.value}`} href={segment.value} />
         ) : (
           // Text node — React escape. `<img src=x onerror=alert(1)>` hiện ra thành CHỮ, đúng chủ đích.
           <span key={`${index}-text`}>{segment.value}</span>
@@ -192,6 +188,22 @@ export function MessageBubble({
   // Roster là nguồn DỰ PHÒNG, không phải nguồn chính: `senderName` đi cùng chính tin nên nó đúng với thời
   // điểm gửi, còn roster là ảnh chụp hiện tại (người đổi tên thì tin cũ vẫn nên mang tên lúc gửi).
   const senderName = message.senderName ?? senderNameFallback;
+  /**
+   * S20-CHAT-DEEPLINK-1 (US-CHAT-NV-02) — «Nhắn riêng» từ avatar/tên: chỉ tin NGƯỜI KHÁC, chưa thu hồi
+   * (tin hệ thống đã thoát sớm ở dưới). Bọc bằng hàm để avatar và tên dùng CHUNG một điều kiện.
+   */
+  const canOpenDirect = useCanOpenDirect();
+  const withDirectMenu = (node: React.ReactElement): React.ReactElement =>
+    canOpenDirect && !isMine && !isRecalled && message.senderId ? (
+      <SenderDirectMenu
+        peerUserId={message.senderId}
+        peerName={senderName ?? t("message.unknownSender")}
+      >
+        {node}
+      </SenderDirectMenu>
+    ) : (
+      node
+    );
   const hasBody = message.body !== null && message.body.length > 0;
   const isLiked = (message.reactions ?? []).some((r) => r.emoji === "like" && r.mine);
 
@@ -226,14 +238,15 @@ export function MessageBubble({
        */}
       {!isMine && (
         <div className="w-8 shrink-0">
-          {!isGrouped && (
-            <Avatar
-              name={senderName}
-              src={senderAvatarUrl}
-              size="sm"
-              data-testid="chat-sender-avatar"
-            />
-          )}
+          {!isGrouped &&
+            withDirectMenu(
+              <Avatar
+                name={senderName}
+                src={senderAvatarUrl}
+                size="sm"
+                data-testid="chat-sender-avatar"
+              />,
+            )}
         </div>
       )}
 
@@ -241,7 +254,11 @@ export function MessageBubble({
         {/* Tên người gửi: chỉ ở tin đầu cụm và chỉ với tin NGƯỜI KHÁC — vị trí đã nói tin nào của tôi. */}
         {!isMine && !isGrouped && (
           <div className="mb-0.5 flex items-baseline gap-2 px-1">
-            <span className="text-xs font-medium">{senderName ?? t("message.unknownSender")}</span>
+            {withDirectMenu(
+              <span className="text-xs font-medium">
+                {senderName ?? t("message.unknownSender")}
+              </span>,
+            )}
             {isPinned && (
               <Badge variant="secondary" className="gap-1 text-[10px]">
                 <Pin className="h-3 w-3" aria-hidden="true" />

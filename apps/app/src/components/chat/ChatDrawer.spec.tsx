@@ -374,16 +374,44 @@ describe("ChatDrawer · danh sách ↔ hội thoại (push/pop)", () => {
     expect(panes[0]).toHaveAttribute("data-room-id", "b");
   });
 
-  it("⤢ ⇒ điều hướng /chat VÀ đóng drawer", async () => {
+  it("⤢ đang mở phòng a ⇒ điều hướng /chat/a (GIỮ phòng đang đọc) VÀ đóng drawer", async () => {
     useChatStore.getState().syncRoomList([room("a")], false);
     useChatDockStore.getState().openRoom("a");
     renderDrawer();
 
     fireEvent.click(await screen.findByTestId("chat-drawer-expand"));
 
-    expect(navigate).toHaveBeenCalledWith({ to: "/chat" });
+    expect(navigate).toHaveBeenCalledWith({ to: "/chat/$roomId", params: { roomId: "a" } });
     // Không đóng thì lúc rời `/chat` sang trang khác, drawer tự bung ra dù người dùng chưa mở nó.
     expect(useChatDockStore.getState().isOpen).toBe(false);
+  });
+
+  it("⤢ ở chế độ danh sách (chưa chọn phòng) ⇒ điều hướng /chat", async () => {
+    useChatStore.getState().syncRoomList([room("a")], false);
+    useChatDockStore.getState().openDrawer();
+    renderDrawer();
+
+    fireEvent.click(await screen.findByTestId("chat-drawer-expand"));
+
+    expect(navigate).toHaveBeenCalledWith({ to: "/chat" });
+  });
+
+  it("S20-CHAT-DEEPLINK-1 — mở một phòng KHÔNG có trong danh sách ⇒ không hỏi chi tiết phòng đó", async () => {
+    useChatStore.getState().syncRoomList([room("a")], false);
+    useChatDockStore.getState().openRoom("lạ");
+    renderDrawer();
+
+    await screen.findByTestId("chat-drawer");
+    expect(getRoom).not.toHaveBeenCalledWith("lạ");
+  });
+
+  it("S20-CHAT-DEEPLINK-1 — mở phòng trong drawer ⇒ ô soạn có tiêu điểm", async () => {
+    useChatStore.getState().syncRoomList([room("a")], false);
+    useChatDockStore.getState().openRoom("a");
+    renderDrawer();
+
+    const composer = await screen.findByTestId("chat-composer");
+    await waitFor(() => expect(composer.contains(document.activeElement)).toBe(true));
   });
 });
 
@@ -670,5 +698,24 @@ describe("ChatDrawer · cuộc trò chuyện mới (S20-CHAT-NEWROOM-1)", () => 
     expect(listEmployees).toHaveBeenCalledTimes(1);
     expect(openDirect).not.toHaveBeenCalled();
     expect(createRoom).not.toHaveBeenCalled();
+  });
+});
+
+// S20-CHAT-DEEPLINK-1 (US-CHAT-NV-02) — «Nhắn riêng» trong drawer mở DM TẠI CHỖ, không chuyển trang.
+describe("ChatDrawer · «Nhắn riêng» từ người gửi", () => {
+  it("avatar/tên người gửi ⇒ «Nhắn riêng» ⇒ DM mở ngay trong drawer, không navigate", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    openDirect.mockReset().mockResolvedValue(room("dm-b", { roomType: "direct", name: null }));
+    useChatStore.getState().syncRoomList([room("a", { name: "Nhóm A" })], false);
+    useChatDockStore.getState().openRoom("a");
+    renderDrawer();
+
+    fireEvent.click((await screen.findAllByRole("button", { name: "Tuỳ chọn với Trần B" }))[0]);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Nhắn riêng" }));
+
+    await waitFor(() => expect(useChatDockStore.getState().openRoomIds).toEqual(["dm-b"]));
+    expect(openDirect).toHaveBeenCalledWith({ peerUserId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
+    expect(useChatDockStore.getState().isOpen).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

@@ -26,7 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SendHorizontal } from "lucide-react";
 import { useCan } from "@mediaos/web-core";
-import { Button, cn } from "@mediaos/ui";
+import { Button, cn, toast } from "@mediaos/ui";
 import type { StoredChatMessage } from "@/stores/chat.store";
 import { createClientMessageId } from "@/stores/chat.store";
 import {
@@ -46,7 +46,7 @@ import {
 } from "./use-mention-autocomplete";
 import { AttachmentPreviewList, type PendingAttachment } from "./composer/AttachmentPreviewList";
 import { ComposerActions } from "./composer/ComposerActions";
-import { ComposerNotices } from "./composer/ComposerNotices";
+import { ComposerNotices, type ReplyQuoteState } from "./composer/ComposerNotices";
 import { MentionPopover, mentionOptionId } from "./composer/MentionPopover";
 import { useAttachmentPreviews } from "./composer/use-attachment-previews";
 import { useFileDrop } from "./composer/use-file-drop";
@@ -66,6 +66,8 @@ interface MessageComposerProps {
   roomId: string;
   isArchived: boolean;
   replyTo: StoredChatMessage | null;
+  /** S20-CHAT-FEDEBT-1 — thân trích dẫn của khung «đang trả lời»; xem `ReplyQuoteState`. */
+  replyQuote?: ReplyQuoteState;
   onCancelReply: () => void;
   /**
    * S17 — ứng viên gợi ý `@mention`, ĐÃ lọc người còn trong phòng (`rosterToMentionCandidates`).
@@ -82,6 +84,7 @@ export function MessageComposer({
   roomId,
   isArchived,
   replyTo,
+  replyQuote = "live",
   onCancelReply,
   mentionCandidates = [],
   onSubmit,
@@ -149,13 +152,27 @@ export function MessageComposer({
    * quay lại phòng có cảnh báo. `epoch` chụp lúc dựng: đăng xuất giữa chừng ⇒ store bỏ qua lần ghi trễ.
    */
   const pendingFileCountRef = useRef(0);
+  /** S20-CHAT-FEDEBT-1 — tệp của lượt chọn đang chạy CHƯA vào khay (đang tải + chờ tải): cũng bị bỏ. */
+  const inFlightFileCountRef = useRef(0);
+  /** `t` qua ref: đổi ngôn ngữ không phải lý do để chạy cleanup «ô soạn bị tháo» bên dưới. */
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   useEffect(() => {
     pendingFileCountRef.current = attachments.length;
   }, [attachments.length]);
   useEffect(() => {
     const epoch = useChatDraftStore.getState().sessionEpoch;
     return () => {
-      useChatDraftStore.getState().noteFilesNotKept(roomId, pendingFileCountRef.current, epoch);
+      // S20-CHAT-FEDEBT-1 — báo NGAY lúc rời (đổi phòng · đóng drawer · ⤢), không đợi quay lại mới biết.
+      // Store từ chối lần ghi (đăng xuất giữa chừng · 0 tệp) ⇒ cũng không báo gì.
+      const count = pendingFileCountRef.current + inFlightFileCountRef.current;
+      if (useChatDraftStore.getState().noteFilesNotKept(roomId, count, epoch)) {
+        toast.warning(tRef.current("composer.filesDroppedOnLeave", { count }), {
+          key: `chat-files-not-kept:${roomId}`,
+        });
+      }
     };
   }, [roomId]);
   /** Vị trí con trỏ cần đặt lại SAU khi React vẽ xong `draft` mới (chèn mention / emoji). */
@@ -197,18 +214,25 @@ export function MessageComposer({
         return;
       }
       ensureClientMessageId(); // soạn đã bắt đầu ngay khi có tệp, dù chưa gõ chữ nào
+      let remaining = picked.length;
+      inFlightFileCountRef.current += remaining;
       for (const file of picked) {
         setUploading(file.name);
         try {
           const uploaded = await uploadChatAttachment(file);
           // Cây có thể ĐÃ THÁO trong lúc `await` bay: cleanup của `useAttachmentPreviews` khi đó đã
           // `revokeAll()` xong ⇒ blob URL tạo sau mốc này KHÔNG AI thu hồi được nữa (rò tới khi tải
-          // lại trang). Dừng ngay — đừng tạo, đừng `setState`.
+          // lại trang). Dừng ngay — đừng tạo, đừng `setState`. (Lúc tháo, tệp này đã được tính vào
+          // cảnh báo rời phòng qua `inFlightFileCountRef`.)
           if (!isMountedRef.current) return;
           // Xem trước dựng từ CHÍNH `File` người dùng chọn, không đợi URL ký của server: tệp chưa gắn
           // vào tin nào nên chưa có `file_links` để ký, mà người dùng cần thấy ngay mình vừa dán gì.
           const previewUrl = previews.create(uploaded.fileId, file, uploaded.isImage);
           setAttachments((prev) => [...prev, { ...uploaded, previewUrl }]);
+          // Chuyển ĐỒNG BỘ từ «đang chờ» sang «trong khay»: tháo trước khi effect kịp chạy vẫn đếm đủ.
+          pendingFileCountRef.current += 1;
+          inFlightFileCountRef.current -= 1;
+          remaining -= 1;
         } catch (err: unknown) {
           // Dừng ở tệp lỗi, GIỮ những tệp đã lên. Bỏ hết là bắt người dùng làm lại từ đầu vì một tệp hỏng.
           setError(t("composer.uploadFailed", { name: file.name }));
@@ -218,6 +242,8 @@ export function MessageComposer({
           setUploading(null);
         }
       }
+      // Hết lượt (xong hết, hoặc dừng ở tệp lỗi): phần còn lại của lượt không còn «đang chờ» nữa.
+      inFlightFileCountRef.current -= remaining;
     },
     [attachments.length, ensureClientMessageId, previews, roomId, t],
   );
@@ -296,6 +322,9 @@ export function MessageComposer({
       return;
     }
     // Chữ + mention + khoá idempotency đã dọn ở `clearSentDraft` (tin kế tiếp là tin KHÁC ⇒ khoá mới).
+    // Bộ đếm cảnh báo rời phòng hạ ĐỒNG BỘ: tháo trước lượt vẽ dọn khay thì effect đồng bộ chưa chạy,
+    // cleanup sẽ đọc số tệp cũ và cảnh báo «bị bỏ» cho chính tệp vừa gửi đi.
+    pendingFileCountRef.current = 0;
     setAttachments([]);
     previews.revokeAll();
     onCancelReply();
@@ -332,6 +361,7 @@ export function MessageComposer({
       <ComposerNotices
         isArchived={isArchived}
         replyTo={replyTo}
+        replyQuote={replyQuote}
         onCancelReply={onCancelReply}
         uploading={uploading}
         error={error}

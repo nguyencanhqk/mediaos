@@ -16,10 +16,21 @@ import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout
 // KHÔNG lazy: nó là KHUNG của route, không phải nội dung — lazy hoá khung làm cả cổng nháy trắng
 // một nhịp ở mỗi lần điều hướng giữa các màn /feed*.
 import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
-// S5-TASK-WORKSPACE-1 — validateSearch của workspace dự án (file thuần TS, không component).
-import { validateProjectWorkspaceSearch } from "@/routes/tasks/workspace-constants";
+// S5-TASK-WORKSPACE-1 — validateSearch của workspace dự án (file thuần TS, không component);
+// S20-TASK-PROJTOOLBARURL-1 ghép thêm bộ lọc toolbar + rail (q · status · priority · overdue · sort · who).
+import { validateProjectWorkspaceRouteSearch } from "@/routes/tasks/project-workspace-filters";
 import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
 import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
+import { validateMyTasksSearch } from "@/routes/tasks/my-tasks-groups";
+// S20-GOAL-LISTURL-1 — validateSearch /goals + /goals/$goalId (file thuần TS + hook, không component).
+import {
+  goalListBackSearch,
+  useGoalDetailTab,
+  validateGoalDetailSearch,
+  validateGoalListSearch,
+} from "@/routes/goals/goal-list-search";
+import { validateTaskTemplateListSearch } from "@/routes/goals/template-return-to";
+import { useGoalFormPrefill, validateGoalFormPrefill } from "@/routes/goals/goal-form-prefill";
 
 // ---------------------------------------------------------------------------
 // Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
@@ -530,6 +541,11 @@ import {
 import { FILES_PATH } from "@/routes/system/files/constants";
 // S7-CHAT-FE-2 — /chat (RouteMeta CỤC BỘ, không ở ROUTE_REGISTRY web-core — cùng pattern hrOrgChartMeta).
 import { CHAT_PATH, CHAT_ROUTE_META } from "@/routes/chat/constants";
+import {
+  CHAT_ROOM_SEGMENT,
+  redirectInvalidChatRoom,
+  validateChatRoomSearch,
+} from "@/routes/chat/chat-room-link";
 import { MODULES_PATH } from "@/routes/system/modules/constants";
 const UsersPage = React.lazy(() =>
   import("@/routes/system/UsersPage").then((m) => ({ default: m.UsersPage })),
@@ -1467,7 +1483,14 @@ const tasksRoute = createRoute({
   validateSearch: validateTaskListSearch,
   component: () => buildModuleRouteContent(getMeta("task.overview"), "TASK", <TaskListPage />),
 });
-const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
+// S20-TASK-MYTASKS-1 — nhóm + chip nguồn trên URL; rác ⇒ mặc định, KHÔNG ném (my-tasks-groups.ts).
+const tasksMyTasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/my-tasks",
+  beforeLoad: authGuard,
+  validateSearch: validateMyTasksSearch,
+  component: () => buildModuleRouteContent(getMeta("task.my-tasks"), "TASK", <MyTasksPage />),
+});
 
 // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN
 // route param "/tasks/$taskId" (mirror tasksMyTasksRoute) → không bị detail nuốt.
@@ -1508,7 +1531,9 @@ const tasksProjectDetailRoute = createRoute({
   beforeLoad: authGuard,
   // `?task=<id>` (S5-TASK-BOARD-UX-1) mở panel chi tiết đè workspace; `?addMembers=1`
   // (S20-TASK-PROJECTENTRY-1) = vừa tạo dự án ⇒ tab Thành viên tự mở hộp thêm khi có quyền.
-  validateSearch: validateProjectWorkspaceSearch,
+  // Bộ lọc toolbar + rail (S20-TASK-PROJTOOLBARURL-1) phải nằm trong search ĐÃ validate — nếu không,
+  // drawer mở việc (navigate giữ `prev`) làm rơi bộ lọc. Rác ⇒ bỏ khoá, không ném.
+  validateSearch: validateProjectWorkspaceRouteSearch,
   component: () => {
     const { projectId } = tasksProjectDetailRoute.useParams();
     const navigate = useNavigate();
@@ -1785,7 +1810,7 @@ const GoalDetailPage = React.lazy(() =>
 );
 // S5-GOAL-TPL-1 — GOAL-SCREEN-006 danh mục việc mẫu (gate màn = manage:task-template ở TRONG page).
 const TaskTemplateListPage = React.lazy(() =>
-  import("@/routes/goals/TaskTemplateListPage").then((m) => ({ default: m.TaskTemplateListPage })),
+  import("@/routes/goals/TaskTemplateListPageRoute").then((m) => ({ default: m.TemplatesRoute })),
 );
 
 // ASSET — Quản lý tài sản (S11-ASSET-FE-1, SPEC-13 ASSET-SCREEN-001..007). List + kiểm kê qua
@@ -2681,7 +2706,14 @@ const meRoomBookingsRoute = makeModuleRoute(
   MeRoomBookingsPage,
 );
 
-const goalsListRoute = makeModuleRoute("/goals", "goal.list", "GOAL", GoalListPage);
+// S20-GOAL-LISTURL-1 — bộ lọc trên URL; rác ⇒ bỏ, KHÔNG ném (goal-list-search.ts).
+const goalsListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/goals",
+  beforeLoad: authGuard,
+  validateSearch: validateGoalListSearch,
+  component: () => buildModuleRouteContent(getMeta("goal.list"), "GOAL", <GoalListPage />),
+});
 
 const goalNewMeta: RouteMeta = {
   routeKey: "goal.new",
@@ -2698,13 +2730,24 @@ const goalNewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/new",
   beforeLoad: authGuard,
+  // S20-GOAL-LISTURL-1 — prefill cha · kỳ · phòng · cấp qua search (gợi ý, BE vẫn validate); rác ⇒ bỏ.
+  validateSearch: validateGoalFormPrefill,
   component: () => {
     const navigate = useNavigate();
+    const prefill = useGoalFormPrefill();
     return buildModuleRouteContent(
       goalNewMeta,
       "GOAL",
       <GoalFormPage
+        prefill={prefill}
         onSuccess={(id) => void navigate({ to: "/goals/$goalId", params: { goalId: id } })}
+        onCreatedFromParent={(parentId) =>
+          void navigate({
+            to: "/goals/$goalId",
+            params: { goalId: parentId },
+            search: { tab: "children" },
+          })
+        }
         onCancel={() => void navigate({ to: "/goals" as "/" })}
       />,
     );
@@ -2732,6 +2775,7 @@ const goalTemplatesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/templates",
   beforeLoad: authGuard,
+  validateSearch: validateTaskTemplateListSearch, // S20-GOAL-DECOMPOSE-1 — ?returnTo= nội bộ
   component: () => buildModuleRouteContent(goalTemplatesMeta, "GOAL", <TaskTemplateListPage />),
 });
 
@@ -2750,16 +2794,21 @@ const goalDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/$goalId",
   beforeLoad: authGuard,
+  // S20-GOAL-LISTURL-1 — `?tab=` mở thẳng tab; «Quay lại» về đúng bộ lọc gần nhất của danh sách.
+  validateSearch: validateGoalDetailSearch,
   component: () => {
     const { goalId } = goalDetailRoute.useParams();
     const navigate = useNavigate();
+    const [tab, setTab] = useGoalDetailTab();
     return buildModuleRouteContent(
       goalDetailMeta,
       "GOAL",
       <GoalDetailPage
         goalId={goalId}
+        tab={tab}
+        onTabChange={setTab}
         onEdit={(id) => void navigate({ to: "/goals/$goalId/edit", params: { goalId: id } })}
-        onBack={() => void navigate({ to: "/goals" as "/" })}
+        onBack={() => void navigate({ to: "/goals", search: goalListBackSearch() })}
       />,
     );
   },
@@ -3021,8 +3070,8 @@ const accountSessionsRoute = createRoute({
 // (danh sách phòng · hội thoại · thông tin phòng), thêm sidebar module là cột thứ TƯ. Cổng quyền không
 // mất gì vì nó nằm ở `ProtectedRoute meta` — `buildChatRouteContent` vẫn bọc nguyên tầng đó.
 // Lối vào (sidebar + badge chưa đọc trên header) thuộc `S7-CHAT-FE-3`; hôm nay vào bằng URL trực tiếp.
-const ChatPage = React.lazy(() =>
-  import("@/routes/chat/ChatPage").then((m) => ({ default: m.ChatPage })),
+const ChatRoute = React.lazy(() =>
+  import("@/routes/chat/ChatRoute").then((m) => ({ default: m.ChatRoute })),
 );
 const chatRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -3032,11 +3081,20 @@ const chatRoute = createRoute({
     <ProtectedShell>
       <ProtectedRoute meta={CHAT_ROUTE_META}>
         <React.Suspense fallback={<RouteSuspenseFallback />}>
-          <ChatPage />
+          <ChatRoute />
         </React.Suspense>
       </ProtectedRoute>
     </ProtectedShell>
   ),
+});
+
+// S20-CHAT-DEEPLINK-1 — route con `/chat/$roomId` (đích thông báo `/chat/{room_id}`): KHÔNG component
+// riêng ⇒ cùng cổng `ProtectedRoute meta` + cùng trang của cha. Id rác ⇒ `replace` về `/chat`.
+const chatRoomRoute = createRoute({
+  getParentRoute: () => chatRoute,
+  path: CHAT_ROOM_SEGMENT,
+  beforeLoad: ({ params }) => redirectInvalidChatRoom(params.roomId),
+  validateSearch: validateChatRoomSearch,
 });
 
 // Tích hợp LMS Giai đoạn A — /lms: authenticated-only (không permission pair — mọi nhân viên
@@ -3689,7 +3747,7 @@ const routeTree = rootRoute.addChildren([
   systemSequencesRoute,
   systemSeedsRoute,
   accountSessionsRoute,
-  chatRoute,
+  chatRoute.addChildren([chatRoomRoute]),
   lmsRedirectRoute,
   socialRedirectRoute,
   // S16-SOCIAL-FE-1 — 6 route /feed* (portal 3 cột). Thứ tự khai KHÔNG quan trọng với TanStack

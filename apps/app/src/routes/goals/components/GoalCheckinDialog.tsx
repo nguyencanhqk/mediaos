@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, goalApi, goalInvalidation } from "@mediaos/web-core";
 import type { CheckinGoalRequest, GoalCoreResponseDto } from "@mediaos/contracts";
-import { Button, Checkbox, Dialog, Input } from "@mediaos/ui";
-import { CHECKIN_CONFIDENCE_MAX, CHECKIN_CONFIDENCE_MIN, PROGRESS_PERCENT_MAX } from "../constants";
+import { Button, Checkbox, Dialog, Input, toast } from "@mediaos/ui";
+import {
+  GOAL_CONFIDENCE_LEVELS,
+  PROGRESS_PERCENT_MAX,
+  type GoalConfidenceLevel,
+} from "../constants";
+import { formatProgress } from "../goal-format";
+import { ConfidencePicker, FieldBlock, LastCheckinHint } from "./GoalCheckinDialogParts";
 
 /**
  * S5-GOAL-FE-2 — hộp thoại check-in tiến độ (GOAL-SCREEN-005 · GOAL-API-007).
@@ -23,6 +29,13 @@ import { CHECKIN_CONFIDENCE_MAX, CHECKIN_CONFIDENCE_MIN, PROGRESS_PERCENT_MAX } 
  * Lỗi từ server hiện VERBATIM `err.message` (mã GOAL-ERR-XXX BE đã viết cho người đọc) và hộp thoại
  * KHÔNG tự đóng — đóng là mất luôn nội dung vừa gõ.
  *
+ * S20-GOAL-QUICKCHECKIN-1 (US-GOAL-NV-03) — check-in nhanh:
+ *   · ô số ĐIỀN SẴN `goal.currentValue` — đúng cột mà ô đó ghi (với `percent`, ô «Tiến độ (%)» cũng
+ *     ghi `current_value`; điền `progressPercent` vào đó rồi gửi nguyên là ghi sai số khi chỉ tiêu ≠ 100);
+ *   · con trỏ ở ô số khi mở; Ctrl/Cmd+Enter ở bất kỳ đâu trong hộp ⇒ gửi;
+ *   · độ tự tin 3 nút, MẶC ĐỊNH KHÔNG CHỌN ⇒ body không có `confidence` (mức lần trước chỉ là chú thích);
+ *   · thành công ⇒ toast kèm % mới server trả về (đã recompute).
+ *
  * `goal_updates` là sổ APPEND-ONLY: ở đây chỉ GHI THÊM, không có đường sửa/xoá dòng lịch sử.
  */
 export function GoalCheckinDialog({
@@ -34,10 +47,13 @@ export function GoalCheckinDialog({
 }) {
   const { t } = useTranslation("goals");
   const queryClient = useQueryClient();
+  const valueInputRef = useRef<HTMLInputElement>(null);
 
-  const [numericDraft, setNumericDraft] = useState("");
+  const [numericDraft, setNumericDraft] = useState(() =>
+    goal.currentValue === null ? "" : String(goal.currentValue),
+  );
   const [achieved, setAchieved] = useState((goal.currentValue ?? 0) > 0);
-  const [confidence, setConfidence] = useState("");
+  const [confidence, setConfidence] = useState<GoalConfidenceLevel | null>(null);
   const [note, setNote] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -50,7 +66,13 @@ export function GoalCheckinDialog({
 
   const mutation = useMutation({
     mutationFn: (body: CheckinGoalRequest) => goalApi.checkIn(goal.id, body),
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
+      toast.success(
+        t("checkinDialog.toastSuccess", {
+          name: goal.name,
+          percent: formatProgress(updated.progressPercent),
+        }),
+      );
       await Promise.all(
         goalInvalidation
           .checkin(goal.id)
@@ -69,19 +91,12 @@ export function GoalCheckinDialog({
   }
 
   function handleSubmit() {
+    if (locked || mutation.isPending) return;
     setLocalError(null);
 
-    const confidenceValue = parseOptionalNumber(confidence);
-    if (confidenceValue === null) return setLocalError(t("checkinDialog.errors.valueInvalid"));
-    if (
-      confidenceValue !== undefined &&
-      (confidenceValue < CHECKIN_CONFIDENCE_MIN || confidenceValue > CHECKIN_CONFIDENCE_MAX)
-    ) {
-      return setLocalError(t("checkinDialog.errors.confidenceRange"));
-    }
-
     const body: CheckinGoalRequest = {};
-    if (confidenceValue !== undefined) body.confidence = Math.round(confidenceValue);
+    // Không chọn ⇒ KHÔNG gửi — không tự mang mức tự tin cũ vào sổ chỉ-thêm.
+    if (confidence) body.confidence = GOAL_CONFIDENCE_LEVELS[confidence];
     if (note.trim() !== "") body.note = note.trim();
 
     if (manualMeasure) {
@@ -106,6 +121,29 @@ export function GoalCheckinDialog({
 
     mutation.mutate(body);
   }
+
+  // Ctrl/Cmd+Enter ⇒ gửi, dù con trỏ đang ở ô số, ghi chú hay nút độ tự tin. Tham chiếu MỚI NHẤT qua
+  // ref để listener không phải đăng ký lại mỗi lần gõ (cùng kỹ thuật phím Esc của `Dialog`).
+  const submitRef = useRef(handleSubmit);
+  useLayoutEffect(() => {
+    submitRef.current = handleSubmit;
+  });
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      submitRef.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Con trỏ vào ô số (bôi đen sẵn để gõ đè). Effect của cha chạy SAU effect focus-phần-tử-đầu của
+  // `Dialog` (con) ⇒ thắng; không có ô số (boolean / đo tự động) ⇒ giữ focus mặc định của Dialog.
+  useEffect(() => {
+    valueInputRef.current?.focus();
+    valueInputRef.current?.select();
+  }, []);
 
   const serverError =
     mutation.error instanceof ApiError && mutation.error.message
@@ -137,9 +175,12 @@ export function GoalCheckinDialog({
       }
     >
       <div className="space-y-4">
-        <p className="text-sm font-medium text-foreground">
-          {goal.goalCode} — {goal.name}
-        </p>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">
+            {goal.goalCode} — {goal.name}
+          </p>
+          <LastCheckinHint goal={goal} />
+        </div>
 
         {locked && (
           <p className="rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-warning">
@@ -166,6 +207,7 @@ export function GoalCheckinDialog({
             hint={t("checkinDialog.hints.valueOptional")}
           >
             <Input
+              ref={valueInputRef}
               id="goal-checkin-progress"
               data-testid="goal-checkin-progress"
               type="number"
@@ -187,6 +229,7 @@ export function GoalCheckinDialog({
             }
           >
             <Input
+              ref={valueInputRef}
               id="goal-checkin-current"
               data-testid="goal-checkin-current"
               type="number"
@@ -197,18 +240,7 @@ export function GoalCheckinDialog({
           </FieldBlock>
         )}
 
-        <FieldBlock id="goal-checkin-confidence" label={t("checkinDialog.fields.confidence")}>
-          <Input
-            id="goal-checkin-confidence"
-            data-testid="goal-checkin-confidence"
-            type="number"
-            min={CHECKIN_CONFIDENCE_MIN}
-            max={CHECKIN_CONFIDENCE_MAX}
-            value={confidence}
-            disabled={locked}
-            onChange={(e) => setConfidence(e.target.value)}
-          />
-        </FieldBlock>
+        <ConfidencePicker value={confidence} onChange={setConfidence} disabled={locked} />
 
         <FieldBlock id="goal-checkin-note" label={t("checkinDialog.fields.note")}>
           <textarea
@@ -223,6 +255,10 @@ export function GoalCheckinDialog({
           />
         </FieldBlock>
 
+        {!locked && (
+          <p className="text-xs text-muted-foreground">{t("checkinDialog.hints.shortcut")}</p>
+        )}
+
         {(localError ?? serverError) && (
           <p className="text-sm text-destructive" role="alert">
             {localError ?? serverError}
@@ -230,27 +266,5 @@ export function GoalCheckinDialog({
         )}
       </div>
     </Dialog>
-  );
-}
-
-function FieldBlock({
-  id,
-  label,
-  hint,
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
-        {label}
-      </label>
-      {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
   );
 }

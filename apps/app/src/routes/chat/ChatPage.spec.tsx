@@ -5,6 +5,7 @@
  * với ĐÚNG cặp `view:chat-room`. Chỉ khẳng định "nội dung bị ẩn" là xanh-giả — một cổng hỏi nhầm cặp
  * (vd `view:chat` không tồn tại trong seed) cũng làm nội dung bị ẩn y hệt.
  */
+import { useState } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -35,7 +36,14 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 
 import { useCan } from "@mediaos/web-core";
 import { useChatStore } from "@/stores/chat.store";
+import { useChatDraftStore } from "@/components/chat/chat-draft.store";
 import { ChatPage } from "./ChatPage";
+
+/** S20-CHAT-DEEPLINK-1 — phòng đang mở sống trên URL; ở đây một `useState` đóng vai URL. */
+function StatefulChatPage(): React.ReactElement {
+  const [roomId, setRoomId] = useState<string | null>(null);
+  return <ChatPage roomId={roomId} onRoomChange={setRoomId} />;
+}
 
 const mockUseCan = useCan as unknown as ReturnType<typeof vi.fn>;
 const ROOM_ID = "11111111-1111-4111-8111-111111111111";
@@ -65,13 +73,15 @@ function renderPage() {
   return render(
     <QueryClientProvider client={client}>
       <I18nextProvider i18n={i18n}>
-        <ChatPage />
+        <StatefulChatPage />
       </I18nextProvider>
     </QueryClientProvider>,
   );
 }
 
 beforeEach(() => {
+  // S20-CHAT-FEDEBT-1 — store nháp là module-global: ca trước để lại nháp/tệp bỏ thì ca sau đọc nhầm.
+  useChatDraftStore.getState().resetChatDrafts();
   // jsdom KHÔNG implement `scrollIntoView` — stub cho đường "cuộn tới tin được làm nổi" của FE-4
   // (cùng khuôn `TaskCommentThread.spec.tsx`). Thiếu nó thì effect NÉM và cả cây component chết,
   // biến một bài test về con trỏ thành một bài test về jsdom.

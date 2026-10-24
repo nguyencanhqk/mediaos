@@ -8,6 +8,7 @@
  *
  * Mỗi mốc khẳng định CẢ cái có LẪN cái không: "hai cột" mà chỉ đo "có danh sách" thì ba cột cũng xanh.
  */
+import { useState } from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -37,8 +38,15 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 import { useChatStore } from "@/stores/chat.store";
+import { useChatDraftStore } from "@/components/chat/chat-draft.store";
 import { CHAT_MD_QUERY, CHAT_XL_QUERY } from "@/components/chat/use-chat-viewport";
 import { ChatPage } from "./ChatPage";
+
+/** S20-CHAT-DEEPLINK-1 — phòng đang mở sống trên URL; ở đây một `useState` đóng vai URL. */
+function StatefulChatPage(): React.ReactElement {
+  const [roomId, setRoomId] = useState<string | null>(null);
+  return <ChatPage roomId={roomId} onRoomChange={setRoomId} />;
+}
 
 const ROOM_ID = "11111111-1111-4111-8111-111111111111";
 const ME = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -100,7 +108,7 @@ function renderPage() {
   return render(
     <QueryClientProvider client={client}>
       <I18nextProvider i18n={i18n}>
-        <ChatPage />
+        <StatefulChatPage />
       </I18nextProvider>
     </QueryClientProvider>,
   );
@@ -113,6 +121,8 @@ async function selectRoom(): Promise<void> {
 }
 
 beforeEach(() => {
+  // S20-CHAT-FEDEBT-1 — store nháp là module-global: ca trước để lại nháp/tệp bỏ thì ca sau đọc nhầm.
+  useChatDraftStore.getState().resetChatDrafts();
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
   getRoom.mockReset();
   getRoom.mockResolvedValue({ ...room(), members: [], myRole: "member" });

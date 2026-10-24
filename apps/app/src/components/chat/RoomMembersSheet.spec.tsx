@@ -26,6 +26,7 @@ import type { ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 
 const removeMember = vi.fn();
 const updateMember = vi.fn();
+const openDirect = vi.fn();
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -36,6 +37,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       ...actual.chatApi,
       removeMember: (...a: unknown[]) => removeMember(...a),
       updateMember: (...a: unknown[]) => updateMember(...a),
+      openDirect: (...a: unknown[]) => openDirect(...a),
     },
   };
 });
@@ -43,6 +45,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 import { useCan } from "@mediaos/web-core";
 import { useChatStore } from "@/stores/chat.store";
 import { RoomMembersSheet, seenLabel } from "./RoomMembersSheet";
+import { ChatRoomOpenerContext } from "./chat-room-opener";
 
 const mockUseCan = useCan as unknown as ReturnType<typeof vi.fn>;
 
@@ -253,7 +256,9 @@ describe("RoomMembersSheet — bớt khỏi phòng", () => {
 
     await waitFor(() => expect(removeMember).toHaveBeenCalledWith(ROOM_ID, BINH));
     await waitFor(() =>
-      expect(screen.queryByRole("heading", { name: "Bớt Lê Bình khỏi phòng?" })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("heading", { name: "Bớt Lê Bình khỏi phòng?" }),
+      ).not.toBeInTheDocument(),
     );
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
@@ -264,7 +269,9 @@ describe("RoomMembersSheet — bớt khỏi phòng", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Huỷ" }));
 
-    expect(screen.queryByRole("heading", { name: "Bớt Lê Bình khỏi phòng?" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Bớt Lê Bình khỏi phòng?" }),
+    ).not.toBeInTheDocument();
     expect(removeMember).not.toHaveBeenCalled();
   });
 });
@@ -299,5 +306,58 @@ describe("RoomMembersSheet — loading / lỗi / rỗng / presence", () => {
     renderSheet();
 
     expect(screen.getByTestId("chat-member-online-dot")).toBeInTheDocument();
+  });
+});
+
+// S20-CHAT-DEEPLINK-1 (US-CHAT-NV-02) — «Nhắn riêng» trên hàng thành viên (không có ở hàng của chính tôi).
+describe("RoomMembersSheet · «Nhắn riêng»", () => {
+  const DM_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+  function renderWithOpener() {
+    const opener = vi.fn();
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <I18nextProvider i18n={i18n}>
+          <ChatRoomOpenerContext.Provider value={opener}>
+            <RoomMembersSheet
+              open
+              room={room()}
+              members={[member({ id: "m-me", userId: ME, userName: "Tôi" }), member()]}
+              myRole="member"
+              isLoading={false}
+              loadError={false}
+              onChanged={vi.fn()}
+              onClose={vi.fn()}
+            />
+          </ChatRoomOpenerContext.Provider>
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+    return { opener };
+  }
+
+  beforeEach(() => {
+    openDirect.mockReset();
+    openDirect.mockResolvedValue({ ...room({ roomType: "direct", name: null }), id: DM_ID });
+    useChatStore.getState().setMyUserId(ME);
+  });
+
+  it("hàng của người khác có «Nhắn riêng», hàng của tôi KHÔNG; bấm ⇒ openDirect + mở DM", async () => {
+    const { opener } = renderWithOpener();
+
+    expect(screen.queryByRole("button", { name: "Nhắn riêng với Tôi" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Nhắn riêng với Lê Bình" }));
+
+    await waitFor(() => expect(opener).toHaveBeenCalledWith(DM_ID));
+    expect(openDirect).toHaveBeenCalledWith({ peerUserId: BINH });
+  });
+
+  it("thiếu `create:chat-room` ⇒ không có «Nhắn riêng»", () => {
+    mockUseCan.mockImplementation(
+      (action: string, resource: string) => !(action === "create" && resource === "chat-room"),
+    );
+    renderWithOpener();
+    expect(screen.queryByRole("button", { name: /Nhắn riêng/ })).toBeNull();
   });
 });

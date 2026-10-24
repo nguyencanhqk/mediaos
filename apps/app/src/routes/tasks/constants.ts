@@ -1,4 +1,4 @@
-import type { ProjectRoleDto } from "@mediaos/contracts";
+import type { ProjectRoleDto, TaskCoreStatusDto } from "@mediaos/contracts";
 
 /**
  * Hằng quyền module TASK (Project) — S4-FE-TASK-1.
@@ -74,6 +74,15 @@ export const TASK_CORE_STATUS_OPTIONS = [
 ] as const;
 
 export const TASK_CORE_PRIORITY_OPTIONS = ["Low", "Medium", "High", "Urgent"] as const;
+
+/** Trạng thái đã đóng — «Việc của tôi» ẩn mặc định (server `GET /tasks/my` chưa lọc chúng). */
+export const TASK_CORE_CLOSED_STATUSES: readonly TaskCoreStatusDto[] = ["Done", "Cancelled"];
+
+/**
+ * S20-TASK-MYTASKS-1 (US-TASK-NV-01) — «Sắp đến hạn» = hạn rơi vào N ngày local NGAY SAU hôm nay
+ * (giờ công ty). Hằng số theo story; đổi số này là đổi nghiệp vụ, không phải tinh chỉnh giao diện.
+ */
+export const MY_TASKS_UPCOMING_DAYS = 3;
 
 /** <input type="datetime-local"> string (giờ LOCAL trình duyệt) → ISO string (offset) cho contract body.
  * Mirror apps/app/src/routes/attendance/adjustment/constants.ts localDatetimeToIso — input datetime-local

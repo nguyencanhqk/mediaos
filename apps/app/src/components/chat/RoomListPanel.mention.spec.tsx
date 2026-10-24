@@ -21,6 +21,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 import { useChatStore } from "@/stores/chat.store";
+import { useChatDraftStore } from "./chat-draft.store";
 import { RoomListPanel } from "./RoomListPanel";
 
 const COMPANY = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -73,6 +74,8 @@ function chip(key: string): HTMLElement {
 }
 
 beforeEach(() => {
+  // S20-CHAT-FEDEBT-1 — store nháp là module-global: ca trước để lại nháp/tệp bỏ thì ca sau đọc nhầm.
+  useChatDraftStore.getState().resetChatDrafts();
   listRooms.mockReset().mockResolvedValue([]);
   useChatStore.getState().resetChatStore();
   useChatStore.getState().setMyUserId(ME);

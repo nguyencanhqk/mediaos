@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCollabApi, ApiError } from "@mediaos/web-core";
+import { Toaster, toast } from "@mediaos/ui";
 import { TaskKanbanPage } from "./TaskKanbanPage";
 import { DEFAULT_WORKSPACE_FILTERS, type WorkspaceTaskFilters } from "./workspace-constants";
 import type { TaskKanbanBoardDto, TaskKanbanCardDto } from "@mediaos/contracts";
@@ -33,9 +34,16 @@ function makeQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
+// S20-TASK-FEDEBT-1 — lý do server từ chối đổi cột hiện qua thông báo nổi dùng chung; app thật mount
+// <Toaster /> ở ProtectedShell, harness mount y hệt (vùng lỗi của nó là role=alert).
 function renderWithQuery(ui: React.ReactElement) {
   const client = makeQueryClient();
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={client}>
+      {ui}
+      <Toaster />
+    </QueryClientProvider>,
+  );
 }
 
 const BASE_TASK: TaskKanbanCardDto = {
@@ -197,6 +205,7 @@ describe("TaskKanbanPage", () => {
   beforeEach(() => {
     clearCapabilities();
     vi.clearAllMocks();
+    toast.clear();
   });
 
   // ── DENY-PATH: không có view-kanban:task ────────────────────────────────────
@@ -258,7 +267,10 @@ describe("TaskKanbanPage", () => {
     await waitFor(() =>
       expect(todoColumn.textContent?.includes("Chuẩn bị báo cáo tuần")).toBe(true),
     );
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    // Vùng role=alert của <Toaster /> luôn có sẵn ⇒ soi NỘI DUNG lý do 409, không chỉ sự có mặt.
+    expect(
+      await within(screen.getByRole("alert")).findByText(/không thể chuyển sang trạng thái này/i),
+    ).toBeInTheDocument();
   });
 
   // ── Error state với retry ───────────────────────────────────────────────────
@@ -538,11 +550,16 @@ describe("TaskKanbanPage", () => {
         new ApiError({ status: 403, code: "FORBIDDEN", message: "missing update-status" }),
       );
 
-      // Rollback: thẻ về cột cũ + alert lỗi.
+      // Rollback: thẻ về cột cũ + lý do 403 trong vùng thông báo (soi nội dung — vùng role=alert
+      // của <Toaster /> luôn có sẵn).
       await waitFor(() =>
         expect(sourceCol.textContent?.includes("Chuẩn bị báo cáo tuần")).toBe(true),
       );
-      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(
+        await within(screen.getByRole("alert")).findByText(
+          /không có quyền đổi trạng thái công việc này/i,
+        ),
+      ).toBeInTheDocument();
     });
 
     // Nút "Quản lý cột" đã CHUYỂN sang tab Cài đặt của dự án — gate + render test ở

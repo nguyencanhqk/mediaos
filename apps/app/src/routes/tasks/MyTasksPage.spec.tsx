@@ -1,30 +1,37 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
 import { MyTasksPage } from "./MyTasksPage";
 import type { MyTaskItemDto } from "@mediaos/contracts";
 
+// S20-TASK-MYTASKS-1 — bộ lọc đọc từ location.search (URL) và ghi bằng navigate(to ".").
+const { searchRef, navigateMock } = vi.hoisted(() => ({
+  searchRef: { current: {} as Record<string, unknown> },
+  navigateMock: vi.fn(),
+}));
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
-  return { ...actual, useNavigate: () => vi.fn() };
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+    useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
+      select({ location: { pathname: "/tasks/my-tasks", search: searchRef.current } }),
+  };
 });
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
-  return {
-    ...actual,
-    taskCoreApi: { getMyTasks: vi.fn() },
-  };
+  return { ...actual, taskCoreApi: { ...actual.taskCoreApi, getMyTasks: vi.fn() } };
 });
 
-function makeQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
+// 06:30 ngày 24/10/2026 giờ công ty (UTC+7) = 23:30 ngày 23/10 UTC — máy UTC vẫn đang ở «hôm qua».
+const NOW = new Date("2026-10-23T23:30:00.000Z");
+const P = "11111111-2222-4333-8444-555555555555";
 
 function renderWithQuery(ui: React.ReactElement) {
-  const client = makeQueryClient();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
@@ -57,6 +64,24 @@ function makeItem(overrides: Partial<MyTaskItemDto>): MyTaskItemDto {
   };
 }
 
+const ITEMS: MyTaskItemDto[] = [
+  makeItem({
+    id: "t-over",
+    title: "Nộp báo cáo 9h",
+    dueAt: "2026-10-24T02:00:00.000Z",
+    isOverdue: true,
+  }),
+  makeItem({ id: "t-today", title: "Gọi khách 23h30", dueAt: "2026-10-24T16:30:00.000Z" }),
+  makeItem({
+    id: "t-soon",
+    title: "Chuẩn bị họp",
+    dueAt: "2026-10-25T03:00:00.000Z",
+    source: "created",
+  }),
+  makeItem({ id: "t-prog", title: "Viết tài liệu", status: "In Progress", source: "watched" }),
+  makeItem({ id: "t-done", title: "Việc đã xong", status: "Done" }),
+];
+
 function setCapabilities(caps: Record<string, boolean>) {
   useAuthStore.setState({
     isAuthenticated: true,
@@ -71,47 +96,246 @@ function setCapabilities(caps: Record<string, boolean>) {
   });
 }
 
-function clearCapabilities() {
-  useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+type NavArg = { to: string; replace?: boolean; search: (prev: Record<string, unknown>) => unknown };
+const lastNav = () => navigateMock.mock.calls.at(-1)?.[0] as NavArg;
+
+function groupIds(): string[] {
+  return screen.getAllByTestId(/^my-tasks-group-(?!count)/).map((el) => el.dataset.group ?? "");
 }
 
-describe("MyTasksPage", () => {
+describe("MyTasksPage — S20-TASK-MYTASKS-1", () => {
   beforeEach(() => {
-    clearCapabilities();
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
     vi.clearAllMocks();
+    searchRef.current = {};
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
-  it("renders forbidden state when user lacks read:task", () => {
-    setCapabilities({});
-    renderWithQuery(<MyTasksPage />);
-    expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
-    expect(taskCoreApi.getMyTasks).not.toHaveBeenCalled();
+  describe("cổng read:task — đo bằng fetch thật", () => {
+    async function wireRealFetch() {
+      const actual = await vi.importActual<typeof import("@mediaos/web-core")>("@mediaos/web-core");
+      vi.mocked(taskCoreApi.getMyTasks).mockImplementation(actual.taskCoreApi.getMyTasks);
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    }
+
+    it("thiếu read:task ⇒ màn không có quyền, 0 lời gọi API", async () => {
+      const fetchMock = await wireRealFetch();
+      setCapabilities({});
+      renderWithQuery(<MyTasksPage />);
+      expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("có read:task ⇒ đúng một lời gọi GET /tasks/my (spy fetch thấy được lời gọi)", async () => {
+      const fetchMock = await wireRealFetch();
+      setCapabilities({ "read:task": true });
+      renderWithQuery(<MyTasksPage />);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain("/tasks/my");
+    });
   });
 
-  it("groups items into assigned/created/watched tabs and switches on click", async () => {
+  it("chia nhóm theo giờ công ty, có số đếm, nhóm rỗng thu gọn, việc đã xong ẩn", async () => {
     setCapabilities({ "read:task": true });
-    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([
-      makeItem({ id: "t1", title: "Việc được giao", source: "assigned" }),
-      makeItem({ id: "t2", title: "Việc tôi tạo", source: "created" }),
-      makeItem({ id: "t3", title: "Việc tôi theo dõi", source: "watched" }),
-    ]);
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue(ITEMS);
     renderWithQuery(<MyTasksPage />);
-    await waitFor(() => expect(screen.getByText("Việc được giao")).toBeInTheDocument());
-    expect(screen.queryByText("Việc tôi tạo")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Nộp báo cáo 9h")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: /tôi tạo/i }));
-    await waitFor(() => expect(screen.getByText("Việc tôi tạo")).toBeInTheDocument());
-    expect(screen.queryByText("Việc được giao")).not.toBeInTheDocument();
+    expect(groupIds()).toEqual(["overdue", "today", "upcoming", "inProgress", "inReview", "other"]);
+    const over = screen.getByTestId("my-tasks-group-overdue");
+    expect(within(over).getByText("Nộp báo cáo 9h")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("my-tasks-group-today")).getByText("Gọi khách 23h30"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("my-tasks-group-upcoming")).getByText("Chuẩn bị họp"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("my-tasks-group-inProgress")).getByText("Viết tài liệu"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("my-tasks-group-count-overdue")).toHaveTextContent("1");
+
+    const review = screen.getByTestId("my-tasks-group-inReview");
+    expect(screen.getByTestId("my-tasks-group-count-inReview")).toHaveTextContent("0");
+    expect(within(review).getByRole("button")).toHaveAttribute("aria-expanded", "false");
+    expect(within(over).getByRole("button", { name: /quá hạn/i })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    expect(screen.queryByText("Việc đã xong")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("my-tasks-group-done")).not.toBeInTheDocument();
   });
 
-  it("shows empty state for a tab with no items", async () => {
+  it("`showDone=1` trên URL ⇒ nhóm «Đã xong»; bật/tắt công tắc ghi URL và giữ `?task=`", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue(ITEMS);
+    searchRef.current = { showDone: 1 };
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(screen.getByText("Việc đã xong")).toBeInTheDocument());
+    expect(
+      within(screen.getByTestId("my-tasks-group-done")).getByText("Việc đã xong"),
+    ).toBeInTheDocument();
+
+    const toggle = screen.getByRole("checkbox", { name: /hiện việc đã xong/i });
+    expect(toggle).toBeChecked();
+    fireEvent.click(toggle);
+    expect(lastNav().to).toBe(".");
+    expect(lastNav().search({ showDone: 1, task: P })).toEqual({ task: P });
+  });
+
+  it("bật «Hiện việc đã xong» ⇒ URL có showDone=1", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue(ITEMS);
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(screen.getByText("Nộp báo cáo 9h")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("checkbox", { name: /hiện việc đã xong/i }));
+    expect(lastNav().search({ task: P })).toEqual({ task: P, showDone: 1 });
+  });
+
+  it("chip «Theo dõi» trên URL (tải lại / mở lại link) ⇒ vẫn chỉ hiện việc theo dõi", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue(ITEMS);
+    searchRef.current = { source: "watched" };
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(screen.getByText("Viết tài liệu")).toBeInTheDocument());
+    expect(screen.queryByText("Nộp báo cáo 9h")).not.toBeInTheDocument();
+    expect(screen.queryByText("Chuẩn bị họp")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theo dõi" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("bấm chip nguồn ⇒ ghi `source=` (push), giữ tham số khác; «Tất cả nguồn» bỏ khoá", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue(ITEMS);
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(screen.getByText("Nộp báo cáo 9h")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Tôi tạo" }));
+    expect(lastNav()).toMatchObject({ to: ".", replace: false });
+    expect(lastNav().search({ task: P, showDone: 1 })).toEqual({
+      task: P,
+      showDone: 1,
+      source: "created",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Tất cả nguồn" }));
+    expect(lastNav().search({ source: "created" })).toEqual({});
+  });
+
+  it("`group=` trên URL ⇒ chỉ hiện nhóm đó; bấm chip nhóm ghi URL", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue(ITEMS);
+    searchRef.current = { group: "overdue" };
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(screen.getByText("Nộp báo cáo 9h")).toBeInTheDocument());
+    expect(groupIds()).toEqual(["overdue"]);
+    expect(screen.queryByText("Gọi khách 23h30")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Hôm nay/ }));
+    expect(lastNav().search({ group: "overdue" })).toEqual({ group: "today" });
+  });
+
+  it("phím «/» focus ô lọc nhanh; không cướp khi đang gõ trong input/textarea/contenteditable", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue(ITEMS);
+    renderWithQuery(
+      <>
+        <MyTasksPage />
+        <input data-testid="other-input" />
+        <textarea data-testid="other-textarea" />
+        <div data-testid="other-editable" contentEditable suppressContentEditableWarning>
+          <span data-testid="editable-child">x</span>
+        </div>
+        <div role="dialog">
+          <button type="button" data-testid="dialog-button">
+            x
+          </button>
+        </div>
+      </>,
+    );
+    await waitFor(() => expect(screen.getByText("Nộp báo cáo 9h")).toBeInTheDocument());
+    const quick = screen.getByRole("searchbox", { name: /lọc nhanh theo tiêu đề/i });
+
+    for (const id of ["other-input", "other-textarea", "editable-child", "dialog-button"]) {
+      const target = screen.getByTestId(id);
+      target.focus();
+      const notPrevented = fireEvent.keyDown(target, { key: "/" });
+      expect(notPrevented).toBe(true);
+      expect(document.activeElement).not.toBe(quick);
+    }
+
+    fireEvent.keyDown(document.body, { key: "/" });
+    expect(document.activeElement).toBe(quick);
+
+    fireEvent.change(quick, { target: { value: "bao cao" } });
+    expect(screen.getByText("Nộp báo cáo 9h")).toBeInTheDocument();
+    expect(screen.queryByText("Viết tài liệu")).not.toBeInTheDocument();
+  });
+
+  it("mở việc ⇒ thêm `?task=` vào URL hiện tại (drawer dùng chung), giữ bộ lọc", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue(ITEMS);
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(screen.getByText("Nộp báo cáo 9h")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Nộp báo cáo 9h" }));
+    expect(lastNav().search({ source: "assigned" })).toEqual({
+      source: "assigned",
+      task: "t-over",
+    });
+  });
+
+  it("không có việc (hoặc chưa liên kết hồ sơ nhân viên) ⇒ trạng thái rỗng có hướng dẫn", async () => {
     setCapabilities({ "read:task": true });
     vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([]);
     renderWithQuery(<MyTasksPage />);
-    await waitFor(() => expect(screen.getByText(/không có công việc/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/chưa có công việc nào/i)).toBeInTheDocument());
+    expect(screen.getByText(/hồ sơ nhân viên/i)).toBeInTheDocument();
   });
 
-  it("shows error state when API call fails", async () => {
+  it("bộ lọc loại hết việc ⇒ rỗng-theo-bộ-lọc có nút «Xoá bộ lọc» giữ `?task=`", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([
+      makeItem({ id: "a", title: "Việc được giao" }),
+      makeItem({ id: "d", title: "Việc theo dõi đã xong", status: "Done", source: "watched" }),
+    ]);
+    searchRef.current = { source: "watched", group: "today" };
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(screen.getByText(/không có việc khớp bộ lọc/i)).toBeInTheDocument());
+    expect(screen.queryByText("Việc được giao")).not.toBeInTheDocument();
+    expect(screen.queryByText("Việc theo dõi đã xong")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /xoá bộ lọc/i }));
+    expect(lastNav().search({ task: P, source: "watched", group: "today" })).toEqual({ task: P });
+  });
+
+  it("chỉ có việc đã xong (không bộ lọc nào) ⇒ không hiện nút «Xoá bộ lọc» vô nghĩa", async () => {
+    setCapabilities({ "read:task": true });
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([makeItem({ id: "d", status: "Done" })]);
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(screen.getByText(/không có việc khớp bộ lọc/i)).toBeInTheDocument());
+    expect(screen.getByText(/hiện việc đã xong/i, { selector: "p" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /xoá bộ lọc/i })).not.toBeInTheDocument();
+  });
+
+  it("lỗi tải ⇒ trạng thái lỗi", async () => {
     setCapabilities({ "read:task": true });
     vi.mocked(taskCoreApi.getMyTasks).mockRejectedValue(new Error("Network error"));
     renderWithQuery(<MyTasksPage />);

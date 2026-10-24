@@ -1,6 +1,49 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { taskKeys, taskCoreInvalidation, goalInvalidation } from "@mediaos/web-core";
 import type { TaskCoreResponseDto, TaskActionResponseDto } from "@mediaos/contracts";
+import {
+  normalizeTaskActionWarnings,
+  type TaskActionMutationResult,
+  type TaskAssigneeWarning,
+} from "./use-task-action-mutation-warnings";
+
+export type {
+  TaskActionMutationResult,
+  TaskAssigneeWarning,
+  TaskAssigneeWarningKind,
+} from "./use-task-action-mutation-warnings";
+export { normalizeTaskActionWarnings } from "./use-task-action-mutation-warnings";
+
+/**
+ * Bóc response route action thành kết quả mutate. `warnings` đọc như `unknown` rồi chuẩn hoá — kiểu
+ * tĩnh nói là mảng hợp lệ nhưng đây là ranh giới dữ liệu ngoài, không tin kiểu tĩnh.
+ */
+function toMutationResult(response: TaskActionResponseDto): TaskActionMutationResult {
+  const warnings: unknown = (response as { readonly warnings?: unknown }).warnings;
+  return { task: response.task, warnings: normalizeTaskActionWarnings(warnings) };
+}
+
+type WarningsCallback = (
+  warnings: readonly TaskAssigneeWarning[],
+  task: TaskCoreResponseDto,
+) => void;
+
+/**
+ * Gọi `onWarnings` mà KHÔNG để nó làm hỏng kết quả mutate. TanStack Query v5: `onSuccess` ném ⇒
+ * mutation chuyển sang LỖI và chạy `onError` ⇒ rollback cache về snapshot cũ dù server ĐÃ ghi
+ * (query-core mutation.js). Cảnh báo là tín hiệu phụ ⇒ lỗi của nó chỉ được ghi log.
+ */
+function notifyWarnings(
+  onWarnings: WarningsCallback | undefined,
+  result: TaskActionMutationResult,
+): void {
+  if (!onWarnings) return;
+  try {
+    onWarnings(result.warnings, result.task);
+  } catch (error) {
+    console.error("[task] hiển thị cảnh báo sau thao tác thất bại — bỏ qua:", error);
+  }
+}
 
 /**
  * useTaskActionMutation — optimistic update CÓ rollback cho action mutate vòng đời task (S4-FE-TASK-2,
@@ -15,21 +58,28 @@ import type { TaskCoreResponseDto, TaskActionResponseDto } from "@mediaos/contra
  *   3. onSuccess: server trả `{task, warnings}` → ghi ĐÈ cache bằng dữ liệu THẬT từ server (nguồn sự
  *      thật, có thể khác optimistic patch nếu server tính toán thêm — vd completedAt khi Done).
  *   4. onSettled: invalidate list/my (prefix) để đồng bộ các view khác đang hiển thị task này.
+ *
+ * S20-TASK-ASSIGNWARN-1: `data` của mutation là {@link TaskActionMutationResult} — `warnings` ĐÃ chuẩn
+ * hoá (rỗng khi không có/không hợp lệ). `onWarnings` gọi sau MỖI lần thành công (kể cả mảng rỗng, để
+ * phía gọi đóng cảnh báo cũ); lỗi ⇒ không gọi; `onWarnings` ném ⇒ chỉ ghi log, mutate VẪN thành công.
+ * Thao tác hàng loạt gộp từ `data.warnings` của từng lời gọi.
  */
 export function useTaskActionMutation<TVariables>({
   taskId,
   mutationFn,
   toPatch,
+  onWarnings,
 }: {
   taskId: string;
   mutationFn: (vars: TVariables) => Promise<TaskActionResponseDto>;
   toPatch: (vars: TVariables) => Partial<TaskCoreResponseDto>;
+  onWarnings?: WarningsCallback;
 }) {
   const queryClient = useQueryClient();
   const queryKey = taskKeys.detail(taskId);
 
   return useMutation({
-    mutationFn,
+    mutationFn: async (vars: TVariables) => toMutationResult(await mutationFn(vars)),
     onMutate: async (vars: TVariables) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<TaskCoreResponseDto>(queryKey);
@@ -57,6 +107,7 @@ export function useTaskActionMutation<TVariables>({
       queryClient.setQueryData<TaskCoreResponseDto>(queryKey, (prev) =>
         prev ? { ...prev, ...result.task } : result.task,
       );
+      notifyWarnings(onWarnings, result);
     },
     onSettled: (data, _err, _vars, context) => {
       for (const key of taskCoreInvalidation.list())

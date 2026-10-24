@@ -92,6 +92,25 @@ function lastTabStorageKey(userId: string): string {
   return `${LAST_TAB_STORAGE_PREFIX}:${userId}`;
 }
 
+/**
+ * S20-TASK-FEDEBT-1 — khoá cũ KHÔNG hậu tố người dùng: bản đầu của tính năng (trước khi khoá gắn id
+ * người dùng) ghi một bản đồ CHUNG cho mọi tài khoản trên trình duyệt; trình duyệt từng chạy bản đó
+ * còn giữ. Không đọc nó nữa (tab nhớ của người khác không được rò sang), chỉ gỡ: MỘT lần mỗi lần nạp
+ * trang (cờ cấp module, bật TRƯỚC khi gỡ), bọc try/catch — storage bị chặn thì bỏ qua tới lần nạp
+ * TRANG sau, không thử lại trong cùng phiên. Spec nạp lại module (`vi.resetModules`) ở từng ca dọn.
+ */
+let legacyLastTabKeyCleaned = false;
+
+function cleanLegacyLastTabKeyOnce(): void {
+  if (legacyLastTabKeyCleaned) return;
+  legacyLastTabKeyCleaned = true;
+  try {
+    window.localStorage.removeItem(LAST_TAB_STORAGE_PREFIX);
+  } catch {
+    // Storage bị chặn/không có → không có gì để dọn.
+  }
+}
+
 function readStoredLastTabMap(userId: string | null): unknown {
   if (!userId) return null;
   try {
@@ -128,11 +147,14 @@ export function useProjectLastTab(projectId: string): {
   rememberTab: (tab: ProjectWorkspaceTab) => void;
 } {
   const userId = useAuthStore((s) => s.user?.id ?? null);
-  const [state, setState] = useState<ProjectEntryTabState>(() => ({
-    userId,
-    projectId,
-    entryTab: pickProjectLastTab(readStoredLastTabMap(userId), projectId),
-  }));
+  const [state, setState] = useState<ProjectEntryTabState>(() => {
+    cleanLegacyLastTabKeyOnce();
+    return {
+      userId,
+      projectId,
+      entryTab: pickProjectLastTab(readStoredLastTabMap(userId), projectId),
+    };
+  });
   // Cùng instance nhưng đổi dự án (cây sidebar P1 → P2) hoặc đổi người dùng ⇒ đọc lại tab nhớ (mẫu
   // React "điều chỉnh state khi prop đổi" — setState có điều kiện trong lúc render).
   let current = state;

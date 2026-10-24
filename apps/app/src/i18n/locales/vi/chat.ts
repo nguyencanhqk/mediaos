@@ -257,6 +257,8 @@ export default {
     /** S20-CHAT-DRAFT-1 — tệp chờ không được giữ khi đổi phòng; chữ thì vẫn giữ. */
     filesNotKept:
       "{{count}} tệp chưa gửi không được giữ khi chuyển phòng — chữ vẫn còn, hãy đính kèm lại nếu cần.",
+    /** S20-CHAT-FEDEBT-1 — báo NGAY lúc rời phòng (kể cả tệp đang tải dở). */
+    filesDroppedOnLeave: "{{count}} tệp chưa gửi đã bị bỏ khi rời phòng — chữ nháp vẫn được giữ.",
     archivedNotice: "Phòng đã lưu trữ. Bạn vẫn đọc được nhưng không gửi tin mới.",
 
     // S17-CHAT-UX2-FE-3 — ô soạn v2 (CHAT-DEC-027).
@@ -544,5 +546,23 @@ export default {
   time: {
     today: "Hôm nay",
     yesterday: "Hôm qua",
+  },
+
+  /**
+   * S20-CHAT-DEEPLINK-1 — mở phòng theo liên kết (`/chat/:roomId`, thông báo). MỘT câu cho mọi lý do
+   * (không tồn tại · xoá mềm · lưu trữ · đã rời): phân biệt chúng là lộ sự tồn tại của phòng.
+   */
+  deepLink: {
+    unavailable: "Không mở được cuộc trò chuyện này",
+    forbidden: "Không có quyền truy cập Tin nhắn",
+  },
+
+  /** S20-CHAT-DEEPLINK-1 — «Nhắn riêng» một chạm từ người gửi / danh sách thành viên (US-CHAT-NV-02). */
+  direct: {
+    action: "Nhắn riêng",
+    actionFor: "Nhắn riêng với {{name}}",
+    menuFor: "Tuỳ chọn với {{name}}",
+    peerUnavailable: "Không nhắn riêng được: tài khoản này đã bị khoá hoặc đã nghỉ việc.",
+    failed: "Không mở được tin nhắn riêng. Vui lòng thử lại.",
   },
 } as const;

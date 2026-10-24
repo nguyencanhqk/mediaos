@@ -13,13 +13,15 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, Trash2 } from "lucide-react";
+import { MessageCircle, Shield, Trash2 } from "lucide-react";
 import { chatApi, chatKeys, useCan } from "@mediaos/web-core";
 import { Avatar, Button, Sheet, Skeleton } from "@mediaos/ui";
 import type { ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useChatStore } from "@/stores/chat.store";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
+import { useCanOpenDirect } from "./chat-room-opener";
+import { useOpenDirect } from "./use-open-direct";
 
 /**
  * S7-CHAT-FE-4 — "đã xem tới đâu" của MỘT thành viên (SPEC-15 §13.2).
@@ -66,6 +68,9 @@ export function RoomMembersSheet({
   const { t } = useTranslation("chat");
   const queryClient = useQueryClient();
   const myUserId = useChatStore((s) => s.myUserId);
+  // S20-CHAT-DEEPLINK-1 (US-CHAT-NV-02) — «Nhắn riêng» trên hàng người khác (cổng `create:chat-room`).
+  const canOpenDirect = useCanOpenDirect();
+  const { openDirect, pendingPeerId } = useOpenDirect();
   /**
    * Ai đang online, đọc TỪ STORE chứ không nhận qua prop: `useRoomRoster` (mount trong
    * `ConversationPanel`, cùng phòng, cùng màn hình) đổ ảnh chụp vào, rồi `chat:presence` vá tiếp cho
@@ -190,6 +195,19 @@ export function RoomMembersSheet({
                       {seenLabel(member.lastReadSeq, room.lastMessageSeq ?? 0, t)}
                     </p>
                   </div>
+                  {canOpenDirect && room.roomType !== "direct" && member.userId !== myUserId && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 shrink-0 gap-1 px-2 text-xs"
+                      aria-label={t("direct.actionFor", { name: member.userName ?? member.userId })}
+                      disabled={pendingPeerId === member.userId}
+                      onClick={() => openDirect(member.userId)}
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t("direct.action")}
+                    </Button>
+                  )}
                   {canManageMember && isGroup && isRoomAdmin && member.userId !== myUserId && (
                     <div className="flex shrink-0 gap-0.5">
                       <Button

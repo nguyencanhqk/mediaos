@@ -57,6 +57,19 @@ describe("splitTextWithLinks — ranh giới nội dung người dùng", () => {
     ]);
   });
 
+  it("S20-CHAT-INTERNALLINK-1 — `\\` và `%5C` ở lại NGUYÊN trong đoạn link (bộ phân loại nội bộ xét chuỗi thô)", () => {
+    // Nếu tầng tách link chuẩn hoá `\` thành `/` (như `new URL` làm), `classifyInternalLink` sẽ không còn
+    // thấy dấu đó để từ chối.
+    expect(splitTextWithLinks("a https://mediaos.vn\\tasks/x b")).toEqual([
+      { kind: "text", value: "a " },
+      { kind: "link", value: "https://mediaos.vn\\tasks/x" },
+      { kind: "text", value: " b" },
+    ]);
+    expect(splitTextWithLinks("https://mediaos.vn/tasks/%5Cx")).toEqual([
+      { kind: "link", value: "https://mediaos.vn/tasks/%5Cx" },
+    ]);
+  });
+
   it("nhiều liên kết trong một tin", () => {
     const segments = splitTextWithLinks("https://a.vn và https://b.vn");
     expect(segments.filter((s) => s.kind === "link").map((s) => s.value)).toEqual([
