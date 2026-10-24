@@ -1,8 +1,9 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi, taskCollabApi, taskStatesApi, hrApi } from "@mediaos/web-core";
+import { Toaster, toast } from "@mediaos/ui";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import {
   TaskStateField,
@@ -10,6 +11,7 @@ import {
   TaskPriorityField,
   TaskDeadlineField,
   TaskAssigneeField,
+  TaskAssigneeDeadlineFields,
 } from "./TaskInlineFields";
 
 /**
@@ -222,6 +224,81 @@ describe("TaskInlineFields", () => {
       renderWithQuery(<TaskDeadlineField task={TASK} />);
       expect(screen.queryByLabelText(/deadline/i)).not.toBeInTheDocument();
     });
+
+    // S20-TASK-ASSIGNWARN-1 — change-deadline cũng trả ASSIGNEE-ON-LEAVE (buildDeadlineWarnings của
+    // task-actions.service): dời hạn sang ngày người nhận nghỉ ⇒ cùng cảnh báo như khi giao.
+    describe("cảnh báo sau khi dời hạn", () => {
+      afterEach(() => toast.clear());
+
+      const ON_LEAVE_RESPONSE = {
+        task: { ...TASK, dueAt: "2026-08-01T02:00:00.000Z" },
+        warnings: [{ code: "TASK-WARN-ASSIGNEE-ON-LEAVE", message: "x" }],
+      } as never;
+
+      const moveDeadline = async () => {
+        const input = screen.getByLabelText(/deadline/i);
+        fireEvent.change(input, { target: { value: "2026-08-01T09:00" } });
+        fireEvent.blur(input);
+        await waitFor(() => expect(taskCoreApi.changeDeadline).toHaveBeenCalledTimes(1));
+      };
+
+      it("hạn mới trùng ngày nghỉ của người nhận ⇒ cảnh báo trong vùng aria-live, việc vẫn dời", async () => {
+        setCapabilities({ "update-deadline:task": true });
+        vi.mocked(taskCoreApi.changeDeadline).mockResolvedValue(ON_LEAVE_RESPONSE);
+        renderWithQuery(
+          <>
+            <TaskDeadlineField task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await moveDeadline();
+        const live = screen.getByRole("status");
+        await waitFor(() => expect(live).toHaveTextContent(/Nguyễn Văn A nghỉ phép/));
+        // Ô hạn đứng một mình không có picker người phụ trách nào để mở ⇒ không mời «Đổi người».
+        expect(within(live).queryByRole("button", { name: "Đổi người" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("alert")).toBeEmptyDOMElement();
+      });
+
+      it("trên màn chi tiết (cặp ô người phụ trách + hạn) ⇒ «Đổi người» mở picker người phụ trách", async () => {
+        setCapabilities({
+          "update-deadline:task": true,
+          "assign:task": true,
+          "read:employee": true,
+        });
+        vi.mocked(taskCoreApi.changeDeadline).mockResolvedValue(ON_LEAVE_RESPONSE);
+        renderWithQuery(
+          <>
+            <TaskAssigneeDeadlineFields task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await moveDeadline();
+        const live = screen.getByRole("status");
+        await waitFor(() => expect(live).toHaveTextContent(/Nguyễn Văn A nghỉ phép/));
+        expect(screen.queryByTestId("task-assignee-picker-search")).not.toBeInTheDocument();
+
+        fireEvent.click(within(live).getByRole("button", { name: "Đổi người" }));
+        expect(await screen.findByTestId("task-assignee-picker-search")).toBeInTheDocument();
+      });
+
+      it("thiếu assign:task ⇒ cảnh báo vẫn hiện nhưng KHÔNG có «Đổi người»", async () => {
+        setCapabilities({ "update-deadline:task": true });
+        vi.mocked(taskCoreApi.changeDeadline).mockResolvedValue(ON_LEAVE_RESPONSE);
+        renderWithQuery(
+          <>
+            <TaskAssigneeDeadlineFields task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await moveDeadline();
+        const live = screen.getByRole("status");
+        await waitFor(() => expect(live).toHaveTextContent(/nghỉ phép/));
+        expect(within(live).queryByRole("button", { name: "Đổi người" })).not.toBeInTheDocument();
+      });
+    });
   });
 
   // ── Người phụ trách ────────────────────────────────────────────────────────
@@ -305,6 +382,86 @@ describe("TaskInlineFields", () => {
       fireEvent.click(trigger);
       expect(screen.queryByTestId("task-assignee-picker-search")).not.toBeInTheDocument();
       expect(hrApi.listEmployees).not.toHaveBeenCalled();
+    });
+
+    // S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — giao xong mà server trả `warnings[]` ⇒ cảnh báo nổi
+    // (toast chung) có «Đổi người» mở lại ĐÚNG picker của việc này: 2 thao tác thay vì 4.
+    describe("cảnh báo sau khi giao", () => {
+      afterEach(() => toast.clear());
+
+      const assignTo = async () => {
+        openPicker();
+        await waitFor(() => expect(screen.getByText("Trần Thị B")).toBeInTheDocument());
+        fireEvent.click(screen.getByText("Trần Thị B"));
+        await waitFor(() => expect(taskCoreApi.assign).toHaveBeenCalled());
+      };
+
+      it("người nhận nghỉ phép ⇒ cảnh báo trong vùng aria-live; «Đổi người» mở lại picker của việc", async () => {
+        setCapabilities({ "assign:task": true, "read:employee": true });
+        vi.mocked(taskCoreApi.assign).mockResolvedValue({
+          task: { ...TASK, mainAssigneeEmployeeId: "emp-002", assigneeName: "Trần Thị B" },
+          warnings: [{ code: "TASK-WARN-ASSIGNEE-ON-LEAVE", message: "x" }],
+        } as never);
+        renderWithQuery(
+          <>
+            <TaskAssigneeField task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await assignTo();
+        const live = screen.getByRole("status");
+        await waitFor(() => expect(live).toHaveTextContent(/Trần Thị B nghỉ phép/));
+        expect(screen.queryByTestId("task-assignee-picker-search")).not.toBeInTheDocument();
+
+        fireEvent.click(within(live).getByRole("button", { name: "Đổi người" }));
+
+        expect(await screen.findByTestId("task-assignee-picker-search")).toBeInTheDocument();
+        expect(live).not.toHaveTextContent(/nghỉ phép/);
+      });
+
+      it("không phải thành viên dự án ⇒ cảnh báo tương ứng, việc VẪN giao (không rollback, không lỗi)", async () => {
+        setCapabilities({ "assign:task": true, "read:employee": true });
+        vi.mocked(taskCoreApi.assign).mockResolvedValue({
+          task: { ...TASK, mainAssigneeEmployeeId: "emp-002", assigneeName: "Trần Thị B" },
+          warnings: [{ code: "TASK-WARN-ASSIGNEE-NOT-MEMBER", message: "y" }],
+        } as never);
+        renderWithQuery(
+          <>
+            <TaskAssigneeField task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await assignTo();
+        await waitFor(() =>
+          expect(screen.getByRole("status")).toHaveTextContent(
+            /Trần Thị B không phải thành viên dự án/,
+          ),
+        );
+        expect(screen.queryByRole("alert")).toBeEmptyDOMElement();
+      });
+
+      it("warnings[] rỗng ⇒ KHÔNG có cảnh báo", async () => {
+        setCapabilities({ "assign:task": true, "read:employee": true });
+        vi.mocked(taskCoreApi.assign).mockResolvedValue({
+          task: { ...TASK, mainAssigneeEmployeeId: "emp-002", assigneeName: "Trần Thị B" },
+          warnings: [],
+        } as never);
+        renderWithQuery(
+          <>
+            <TaskAssigneeField task={TASK} />
+            <Toaster />
+          </>,
+        );
+
+        await assignTo();
+        // Mock trả ngay ⇒ vài vòng microtask là mutate xong; chờ một nhịp macrotask cho chắc.
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        expect(screen.getByRole("status")).toBeEmptyDOMElement();
+      });
     });
   });
 });

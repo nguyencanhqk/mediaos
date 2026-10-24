@@ -50,7 +50,7 @@ export const TASK_LIST_FILTER_KEYS = [
   "search",
 ] as const satisfies readonly (keyof TaskListSearch)[];
 
-function oneOf<T extends string>(value: unknown, options: readonly T[]): T | undefined {
+export function oneOf<T extends string>(value: unknown, options: readonly T[]): T | undefined {
   return typeof value === "string" && (options as readonly string[]).includes(value)
     ? (value as T)
     : undefined;
@@ -68,7 +68,7 @@ function dateParam(value: unknown): string | undefined {
     : value;
 }
 
-function textParam(value: unknown): string | undefined {
+export function textParam(value: unknown): string | undefined {
   const raw =
     typeof value === "string"
       ? value
@@ -89,7 +89,7 @@ function pageParam(value: unknown): number | undefined {
   return Number.isInteger(n) && n >= 2 && n <= PAGE_MAX ? n : undefined;
 }
 
-function flagParam(value: unknown): true | undefined {
+export function flagParam(value: unknown): true | undefined {
   return value === true || value === "true" || value === 1 || value === "1" ? true : undefined;
 }
 

@@ -165,13 +165,26 @@ function findCard(taskId: string): HTMLElement | null {
 }
 
 /**
+ * Chỗ đặt focus trong khối thẻ: chính khối nếu nhận focus được; không thì mặt thẻ mở-được
+ * (`data-kanban-card-open`, S20-TASK-FEDEBT-1 — nút không còn lồng trong mặt thẻ nên mặt thẻ là phần
+ * tử CON của khối); không thì nút ⋯ (board không truyền `onOpenTask`).
+ */
+function focusTargetOf(card: HTMLElement): HTMLElement | null {
+  if (card.tabIndex >= 0) return card;
+  const face = card.querySelector<HTMLElement>("[data-kanban-card-open]");
+  if (face && face.tabIndex >= 0) return face;
+  return card.querySelector<HTMLElement>("[data-kanban-move-trigger]");
+}
+
+/**
  * Trả focus về thẻ sau khi đổi cột bằng menu. Thẻ đổi cột ⇒ React vẽ thẻ MỚI dưới cột đích (cha khác)
  * ⇒ focus rơi về `body` — một lần lúc lạc quan, thêm một lần nữa nếu server từ chối và thẻ về chỗ cũ.
- * Hook chạy sau MỖI lượt vẽ của board: hễ focus đang ở `body` thì đặt lại vào thẻ (thẻ không nhận focus
- * vì board không truyền `onOpenTask` ⇒ vào nút ⋯ của thẻ). Người dùng focus/bấm chỗ khác ⇒ thôi ngay,
+ * Hook chạy sau MỖI lượt vẽ của board: hễ focus đang ở `body` thì đặt lại vào thẻ (mặt thẻ không nhận
+ * focus vì board không truyền `onOpenTask` ⇒ vào nút ⋯ của thẻ). Người dùng focus/bấm chỗ khác ⇒ thôi ngay,
  * không bao giờ giành focus từ chỗ người dùng đang đứng.
  *
- * Hợp đồng DOM: thẻ mang `data-kanban-card={task.id}`, nút ⋯ mang `data-kanban-move-trigger`.
+ * Hợp đồng DOM: khối thẻ mang `data-kanban-card={task.id}`, mặt thẻ mở-được mang
+ * `data-kanban-card-open`, nút ⋯ mang `data-kanban-move-trigger` (cả hai nằm trong khối).
  */
 export function useKanbanCardFocusReturn(): (taskId: string) => void {
   const [taskId, setTaskId] = React.useState<string | null>(null);
@@ -183,9 +196,7 @@ export function useKanbanCardFocusReturn(): (taskId: string) => void {
     if (active && active !== document.body) return;
     const card = findCard(taskId);
     if (!card) return;
-    const target =
-      card.tabIndex >= 0 ? card : card.querySelector<HTMLElement>("[data-kanban-move-trigger]");
-    target?.focus();
+    focusTargetOf(card)?.focus();
   });
 
   React.useEffect(() => {

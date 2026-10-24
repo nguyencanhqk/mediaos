@@ -114,22 +114,22 @@ export interface MyTaskRow extends TaskCoreRow {
   source: "assigned" | "created" | "watched";
 }
 
-/** Hàng THÔ tối thiểu cho guard workflow + tenant-check (không cần projection tên). */
+/** Hàng THÔ cho guard workflow + tenant-check + cổng trường PATCH (S20-SEC-TASKPATCHGATE-1, I-3). */
 export interface TaskRawRow {
   id: string;
   taskType: string;
   projectId: string | null;
   mainAssigneeEmployeeId: string | null;
+  dueAt: Date | string | null;
+  taskPriority: string | null;
   taskStatus: string | null;
-  // S5-TASK-PIPELINE-1 (lane be-write) — cột pipeline hiện tại (stateName NULL khi state soft-deleted
-  // hoặc trỏ project khác — dữ liệu hỏng, coi như chưa có cột, mirror findStateSyncRowTx).
+  // S5-TASK-PIPELINE-1 — cột pipeline hiện tại (stateName NULL: state soft-deleted / trỏ project khác).
   stateId: string | null;
   stateName: string | null;
   // S5-TASK-SUBTASK-1 (D-36) — NULL = task GỐC. Nguồn cho chốt "việc con không có cột" ở
   // applyStateChangeTx (phủ CẢ move-state LẪN PATCH {stateId}) và cho luật D-36a của updateTask.
   parentTaskId: string | null;
-  // S5-GOAL-BE-2 (additive) — mục tiêu đang gắn (`tasks.goal_id`, mig 0505). Cần ở đường sửa/xoá task để
-  // tính lại tiến độ mục tiêu CÙNG TX (SPEC-10 §13.3).
+  // S5-GOAL-BE-2 — mục tiêu đang gắn (mig 0505); sửa/xoá task tính lại tiến độ CÙNG TX (SPEC-10 §13.3).
   goalId: string | null;
 }
 
@@ -455,7 +455,7 @@ export class TaskCoreRepository {
              -- cây mà KHÔNG phải truy vấn thêm. Đi CÙNG LƯỢT với findStateSyncRowTx — thiếu một trong hai
              -- thì chốt tương ứng im lặng không chạy.
              t.parent_task_id as "parentTaskId",
-             t.goal_id as "goalId"
+             t.goal_id as "goalId", t.due_at as "dueAt", t.task_priority as "taskPriority"
         from tasks t
         left join project_states ps
           on ps.id = t.state_id and ps.company_id = t.company_id
