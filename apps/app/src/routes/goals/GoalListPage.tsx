@@ -3,49 +3,64 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { List, ListTree, Plus, RefreshCw, Target } from "lucide-react";
-import { goalApi, goalKeys, hrApi, hrKeys, useCan } from "@mediaos/web-core";
+import { List, ListTree, Plus, RefreshCw, Target, UserRound } from "lucide-react";
+import {
+  companyTimeZone,
+  goalApi,
+  goalKeys,
+  hrApi,
+  hrKeys,
+  meApi,
+  meKeys,
+  useCan,
+} from "@mediaos/web-core";
 import {
   GOAL_PAGE_LIMIT_MAX,
   type GoalCoreResponseDto,
   type GoalStatusDto,
-  type GoalLevelDto,
 } from "@mediaos/contracts";
 import { Button, DataTable, EmptyState, Input, PageHeader, Select } from "@mediaos/ui";
 import { GOAL_ENGINE_PAIRS, GOAL_LEVEL_OPTIONS, GOAL_STATUS_OPTIONS } from "./constants";
 import { formatPeriod } from "./goal-format";
+import {
+  GOAL_PERIOD_ALL,
+  GOAL_PERIOD_CHIPS,
+  formatGoalPeriod,
+  goalPeriodChips,
+  parseGoalPeriod,
+  useGoalListDefaults,
+  useGoalListSearch,
+  type GoalListSearch,
+  type GoalPeriodRange,
+} from "./goal-list-search";
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./components/GoalBadges";
 import { GoalProgressBar } from "./components/GoalProgressBar";
 import { GoalTreeView } from "./components/GoalTreeView";
 
-type ViewMode = "tree" | "list";
+const TOGGLE_ON = "flex items-center gap-1.5 bg-primary px-3 py-2 text-sm text-primary-foreground";
+const TOGGLE_OFF = "flex items-center gap-1.5 px-3 py-2 text-sm hover:bg-muted";
 
-interface GoalFilters {
-  periodFrom: string;
-  periodTo: string;
-  level: GoalLevelDto | "";
-  departmentId: string;
-  status: GoalStatusDto | "";
-  ownerEmployeeId: string;
+/** Đổi một vế của khoảng kỳ; vế kia bị bỏ nếu thành ngược chiều (URL không bao giờ mang kỳ rác). */
+function withPeriodEdge(range: GoalPeriodRange, edge: "from" | "to", value: string): string {
+  const next: GoalPeriodRange = { ...range, [edge]: value || undefined };
+  if (next.from && next.to && next.from > next.to) {
+    return formatGoalPeriod(edge === "from" ? { from: next.from } : { to: next.to });
+  }
+  return formatGoalPeriod(next);
 }
-
-const EMPTY_FILTERS: GoalFilters = {
-  periodFrom: "",
-  periodTo: "",
-  level: "",
-  departmentId: "",
-  status: "",
-  ownerEmployeeId: "",
-};
 
 /**
  * GOAL-SCREEN-001 (S5-GOAL-FE-1) — trang Mục tiêu: cây/danh sách theo kỳ·cấp·phòng ban·trạng thái·owner.
  * Progress từng nút NULL → "—" + cảnh báo (KHÔNG 0%, §13.2). Gate route = access:goal (ProtectedRoute);
  * trang tự gate lại: view:goal cho nội dung, create:goal cho nút Tạo (PermissionGate KHÔNG hard-code role).
  *
- * Bộ lọc SERVER: kỳ/phòng/trạng thái (cả 2 view) + cấp (list). Bộ lọc CLIENT: owner (GET /goals không có
- * ownerEmployeeId — lọc trên tập đã tải, tập bị chặn ≤ GOAL_PAGE_LIMIT_MAX). Tree không có cấp/owner
- * (cấu trúc — GET /goals/tree chỉ nhận phòng/trạng thái/kỳ).
+ * S20-GOAL-LISTURL-1 (US-GOAL-QL-03): kỳ · phòng · trạng thái · cấp · chế độ xem · «Của tôi» sống trên
+ * URL (`goal-list-search.ts`); URL trống ⇒ quý hiện tại theo giờ công ty + phòng của tôi (khi phạm vi
+ * `view:goal` rộng hơn Own) hoặc lựa chọn gần nhất. «Của tôi» đọc `GET /me/goals` (phụ trách HOẶC chủ
+ * thể) — KHÔNG `?employeeId=` (tham số đó chỉ lọc chủ thể neo).
+ *
+ * Bộ lọc CLIENT duy nhất còn lại: owner (GET /goals không có ownerEmployeeId — lọc trên tập đã tải, tập
+ * bị chặn ≤ GOAL_PAGE_LIMIT_MAX). Tree không có cấp/owner (GET /goals/tree chỉ nhận phòng/trạng thái/kỳ).
  */
 export function GoalListPage() {
   const { t } = useTranslation("goals");
@@ -53,10 +68,15 @@ export function GoalListPage() {
   const canView = useCan(GOAL_ENGINE_PAIRS.VIEW.action, GOAL_ENGINE_PAIRS.VIEW.resourceType);
   const canCreate = useCan(GOAL_ENGINE_PAIRS.CREATE.action, GOAL_ENGINE_PAIRS.CREATE.resourceType);
 
-  const [viewMode, setViewMode] = useState<ViewMode>("tree");
-  const [filters, setFilters] = useState<GoalFilters>(EMPTY_FILTERS);
-  const setFilter = <K extends keyof GoalFilters>(key: K, value: GoalFilters[K]) =>
-    setFilters((prev) => ({ ...prev, [key]: value }));
+  const { search, update, replaceFilters } = useGoalListSearch();
+  const ready = useGoalListDefaults(search, replaceFilters, canView);
+  const chips = useMemo(() => goalPeriodChips(new Date(), companyTimeZone()), []);
+  const [ownerEmployeeId, setOwnerEmployeeId] = useState("");
+
+  const mine = search.mine === 1;
+  const viewMode = search.view ?? "tree";
+  const showList = mine || viewMode === "list";
+  const period = useMemo(() => parseGoalPeriod(search.period) ?? {}, [search.period]);
 
   // Danh mục phụ trợ filter — GET /hr/lookups/departments là reference-data non-sensitive (KHÔNG cần
   // read:department). fail-soft: lỗi → không có option, filter vẫn dùng "tất cả".
@@ -70,57 +90,261 @@ export function GoalListPage() {
   const { data: employeesPage } = useQuery({
     queryKey: hrKeys.employees.list({ pageSize: 100, status: "active" }),
     queryFn: () => hrApi.listEmployees({ pageSize: 100, status: "active" }),
-    enabled: canView && canReadEmployees && viewMode === "list",
+    enabled: canView && canReadEmployees && viewMode === "list" && !mine,
     staleTime: 60_000,
   });
 
-  // Bộ lọc gửi server. periodFrom/periodTo/departmentId/status áp cho CẢ 2 view; level chỉ list.
-  const listParams = useMemo(
-    () => ({
-      ...(filters.level ? { level: filters.level } : {}),
-      ...(filters.departmentId ? { departmentId: filters.departmentId } : {}),
-      ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.periodFrom ? { periodFrom: filters.periodFrom } : {}),
-      ...(filters.periodTo ? { periodTo: filters.periodTo } : {}),
-      limit: GOAL_PAGE_LIMIT_MAX,
-    }),
-    [filters.level, filters.departmentId, filters.status, filters.periodFrom, filters.periodTo],
-  );
-  const treeParams = useMemo(
-    () => ({
-      ...(filters.departmentId ? { departmentId: filters.departmentId } : {}),
-      ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.periodFrom ? { periodFrom: filters.periodFrom } : {}),
-      ...(filters.periodTo ? { periodTo: filters.periodTo } : {}),
-    }),
-    [filters.departmentId, filters.status, filters.periodFrom, filters.periodTo],
-  );
+  const { listParams, treeParams, mineParams } = useMemo(() => {
+    const periodParams = {
+      ...(period.from ? { periodFrom: period.from } : {}),
+      ...(period.to ? { periodTo: period.to } : {}),
+    };
+    const statusParam = search.status ? { status: search.status } : {};
+    const departmentParam = search.departmentId ? { departmentId: search.departmentId } : {};
+    return {
+      listParams: {
+        ...(search.level ? { level: search.level } : {}),
+        ...departmentParam,
+        ...statusParam,
+        ...periodParams,
+        limit: GOAL_PAGE_LIMIT_MAX,
+      },
+      treeParams: { ...departmentParam, ...statusParam, ...periodParams },
+      mineParams: { ...statusParam, ...periodParams, limit: GOAL_PAGE_LIMIT_MAX },
+    };
+  }, [period, search.status, search.departmentId, search.level]);
 
   const listQuery = useQuery({
     queryKey: goalKeys.list(listParams),
     queryFn: () => goalApi.listGoals(listParams),
-    enabled: canView && viewMode === "list",
+    enabled: ready && !mine && viewMode === "list",
     staleTime: 30_000,
   });
   const treeQuery = useQuery({
     queryKey: goalKeys.tree(treeParams),
     queryFn: () => goalApi.getTree(treeParams),
-    enabled: canView && viewMode === "tree",
+    enabled: ready && !mine && viewMode === "tree",
+    staleTime: 30_000,
+  });
+  const mineQuery = useQuery({
+    queryKey: meKeys.goals(mineParams),
+    queryFn: () => meApi.getGoals(mineParams),
+    enabled: ready && mine,
     staleTime: 30_000,
   });
 
-  // Owner: lọc CLIENT (GET /goals không nhận ownerEmployeeId).
   const listRows = useMemo(() => {
     const rows = listQuery.data ?? [];
-    return filters.ownerEmployeeId
-      ? rows.filter((g) => g.ownerEmployeeId === filters.ownerEmployeeId)
-      : rows;
-  }, [listQuery.data, filters.ownerEmployeeId]);
+    return ownerEmployeeId ? rows.filter((g) => g.ownerEmployeeId === ownerEmployeeId) : rows;
+  }, [listQuery.data, ownerEmployeeId]);
 
   const openDetail = (goalId: string) =>
     void navigate({ to: "/goals/$goalId", params: { goalId } });
 
-  const columns = useMemo<ColumnDef<GoalCoreResponseDto>[]>(
+  const columns = useGoalColumns();
+
+  if (!canView) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          icon={Target}
+          title={t("list.forbidden.title")}
+          description={t("list.forbidden.description")}
+        />
+      </div>
+    );
+  }
+
+  const activeQuery = mine ? mineQuery : viewMode === "list" ? listQuery : treeQuery;
+
+  const createButton = canCreate ? (
+    <Button size="sm" onClick={() => void navigate({ to: "/goals/new" })}>
+      <Plus className="mr-2 h-4 w-4" />
+      {t("list.create")}
+    </Button>
+  ) : null;
+
+  const listEmpty = (
+    <EmptyState
+      icon={Target}
+      title={t("list.empty.title")}
+      description={t("list.empty.description")}
+      action={createButton}
+    />
+  );
+  const mineEmpty = (
+    <EmptyState
+      icon={Target}
+      title={t("list.mine.empty.title")}
+      description={t("list.mine.empty.description")}
+      action={
+        <div className="flex flex-wrap justify-center gap-2">
+          {createButton}
+          {search.period !== chips.previous && (
+            <Button variant="outline" size="sm" onClick={() => update({ period: chips.previous })}>
+              {t("list.mine.empty.previousPeriod")}
+            </Button>
+          )}
+        </div>
+      }
+    />
+  );
+
+  const clearFilters = () => {
+    setOwnerEmployeeId("");
+    update({
+      period: GOAL_PERIOD_ALL,
+      departmentId: undefined,
+      status: undefined,
+      level: undefined,
+      mine: undefined,
+      risk: undefined,
+    });
+  };
+
+  return (
+    <div className="space-y-4 p-4 sm:p-6">
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        icon={Target}
+        actions={createButton}
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <ViewToggle search={search} onChange={update} />
+          <PeriodChips
+            value={search.period}
+            chips={chips}
+            onSelect={(p) => update({ period: p })}
+          />
+
+          <FilterField label={t("list.filters.periodFrom")}>
+            <Input
+              type="date"
+              value={period.from ?? ""}
+              onChange={(e) => update({ period: withPeriodEdge(period, "from", e.target.value) })}
+            />
+          </FilterField>
+          <FilterField label={t("list.filters.periodTo")}>
+            <Input
+              type="date"
+              value={period.to ?? ""}
+              onChange={(e) => update({ period: withPeriodEdge(period, "to", e.target.value) })}
+            />
+          </FilterField>
+
+          {!mine && (
+            <FilterField label={t("list.filters.department")}>
+              <Select
+                value={search.departmentId ?? ""}
+                onChange={(e) => update({ departmentId: e.target.value || undefined })}
+              >
+                <option value="">{t("list.filters.allDepartments")}</option>
+                {(departments ?? []).map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+          )}
+
+          <FilterField label={t("list.filters.status")}>
+            <Select
+              value={search.status ?? ""}
+              onChange={(e) =>
+                update({ status: (e.target.value || undefined) as GoalStatusDto | undefined })
+              }
+            >
+              <option value="">{t("list.filters.allStatuses")}</option>
+              {GOAL_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {t(`status.${s}`)}
+                </option>
+              ))}
+            </Select>
+          </FilterField>
+
+          {viewMode === "list" && !mine && (
+            <>
+              <FilterField label={t("list.filters.level")}>
+                <Select
+                  value={search.level ?? ""}
+                  onChange={(e) =>
+                    update({
+                      level: (e.target.value || undefined) as GoalListSearch["level"],
+                    })
+                  }
+                >
+                  <option value="">{t("list.filters.allLevels")}</option>
+                  {GOAL_LEVEL_OPTIONS.map((lv) => (
+                    <option key={lv} value={lv}>
+                      {t(`level.${lv}`)}
+                    </option>
+                  ))}
+                </Select>
+              </FilterField>
+              <FilterField label={t("list.filters.owner")}>
+                <Select
+                  value={ownerEmployeeId}
+                  onChange={(e) => setOwnerEmployeeId(e.target.value)}
+                >
+                  <option value="">{t("list.filters.ownerPlaceholder")}</option>
+                  {(employeesPage?.items ?? []).map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.fullName}
+                    </option>
+                  ))}
+                </Select>
+              </FilterField>
+            </>
+          )}
+
+          <Button variant="outline" size="sm" onClick={clearFilters}>
+            {t("list.filters.clear")}
+          </Button>
+        </div>
+      </PageHeader>
+
+      {!ready ? (
+        <ListSkeleton />
+      ) : activeQuery.isError ? (
+        <EmptyState
+          icon={Target}
+          title={t("list.error.title")}
+          description={t("list.error.description")}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void activeQuery.refetch()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {t("actions.retry", { ns: "common" })}
+            </Button>
+          }
+        />
+      ) : showList ? (
+        <DataTable
+          columns={columns}
+          data={mine ? (mineQuery.data ?? []) : listRows}
+          isLoading={activeQuery.isLoading}
+          onRowClick={(row) => openDetail(row.id)}
+          pageSize={20}
+          emptyState={mine ? mineEmpty : listEmpty}
+        />
+      ) : treeQuery.isLoading ? (
+        <ListSkeleton />
+      ) : (treeQuery.data ?? []).length === 0 ? (
+        listEmpty
+      ) : (
+        <div className="rounded-lg border border-border p-2">
+          <GoalTreeView nodes={treeQuery.data ?? []} onSelect={openDetail} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function useGoalColumns(): ColumnDef<GoalCoreResponseDto>[] {
+  const { t } = useTranslation("goals");
+  return useMemo<ColumnDef<GoalCoreResponseDto>[]>(
     () => [
       {
         accessorKey: "name",
@@ -168,193 +392,98 @@ export function GoalListPage() {
     ],
     [t],
   );
+}
 
-  if (!canView) {
-    return (
-      <div className="p-6">
-        <EmptyState
-          icon={Target}
-          title={t("list.forbidden.title")}
-          description={t("list.forbidden.description")}
-        />
-      </div>
-    );
-  }
-
-  const activeQuery = viewMode === "list" ? listQuery : treeQuery;
-
-  const createButton = canCreate ? (
-    <Button size="sm" onClick={() => void navigate({ to: "/goals/new" })}>
-      <Plus className="mr-2 h-4 w-4" />
-      {t("list.create")}
-    </Button>
-  ) : null;
-
+/** Cây · Danh sách · «Của tôi» — «Của tôi» luôn hiện dạng danh sách (nguồn `/me/goals` là tập phẳng). */
+function ViewToggle({
+  search,
+  onChange,
+}: {
+  search: GoalListSearch;
+  onChange: (patch: Partial<GoalListSearch>) => void;
+}) {
+  const { t } = useTranslation("goals");
+  const mine = search.mine === 1;
+  const viewMode = search.view ?? "tree";
+  const options = [
+    {
+      key: "tree",
+      pressed: !mine && viewMode === "tree",
+      icon: ListTree,
+      label: t("list.view.tree"),
+      patch: { view: undefined, mine: undefined },
+    },
+    {
+      key: "list",
+      pressed: !mine && viewMode === "list",
+      icon: List,
+      label: t("list.view.list"),
+      patch: { view: "list" as const, mine: undefined },
+    },
+    {
+      key: "mine",
+      pressed: mine,
+      icon: UserRound,
+      label: t("list.view.mine"),
+      patch: { mine: mine ? undefined : (1 as const) },
+    },
+  ];
   return (
-    <div className="space-y-4 p-4 sm:p-6">
-      <PageHeader
-        title={t("title")}
-        description={t("description")}
-        icon={Target}
-        actions={createButton}
-      >
-        <div className="flex flex-wrap items-end gap-3">
-          {/* Toggle cây / danh sách */}
-          <div className="inline-flex overflow-hidden rounded-md border border-border">
-            <button
-              type="button"
-              onClick={() => setViewMode("tree")}
-              className={
-                viewMode === "tree"
-                  ? "flex items-center gap-1.5 bg-primary px-3 py-2 text-sm text-primary-foreground"
-                  : "flex items-center gap-1.5 px-3 py-2 text-sm hover:bg-muted"
-              }
-              aria-pressed={viewMode === "tree"}
-            >
-              <ListTree className="h-4 w-4" />
-              {t("list.view.tree")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              className={
-                viewMode === "list"
-                  ? "flex items-center gap-1.5 bg-primary px-3 py-2 text-sm text-primary-foreground"
-                  : "flex items-center gap-1.5 px-3 py-2 text-sm hover:bg-muted"
-              }
-              aria-pressed={viewMode === "list"}
-            >
-              <List className="h-4 w-4" />
-              {t("list.view.list")}
-            </button>
-          </div>
+    <div className="inline-flex overflow-hidden rounded-md border border-border">
+      {options.map(({ key, pressed, icon: Icon, label, patch }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(patch)}
+          className={pressed ? TOGGLE_ON : TOGGLE_OFF}
+          aria-pressed={pressed}
+        >
+          <Icon className="h-4 w-4" />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
-          <FilterField label={t("list.filters.periodFrom")}>
-            <Input
-              type="date"
-              value={filters.periodFrom}
-              onChange={(e) => setFilter("periodFrom", e.target.value)}
-            />
-          </FilterField>
-          <FilterField label={t("list.filters.periodTo")}>
-            <Input
-              type="date"
-              value={filters.periodTo}
-              onChange={(e) => setFilter("periodTo", e.target.value)}
-            />
-          </FilterField>
-
-          <FilterField label={t("list.filters.department")}>
-            <Select
-              value={filters.departmentId}
-              onChange={(e) => setFilter("departmentId", e.target.value)}
-            >
-              <option value="">{t("list.filters.allDepartments")}</option>
-              {(departments ?? []).map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
-          </FilterField>
-
-          <FilterField label={t("list.filters.status")}>
-            <Select
-              value={filters.status}
-              onChange={(e) => setFilter("status", e.target.value as GoalStatusDto | "")}
-            >
-              <option value="">{t("list.filters.allStatuses")}</option>
-              {GOAL_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {t(`status.${s}`)}
-                </option>
-              ))}
-            </Select>
-          </FilterField>
-
-          {viewMode === "list" && (
-            <>
-              <FilterField label={t("list.filters.level")}>
-                <Select
-                  value={filters.level}
-                  onChange={(e) => setFilter("level", e.target.value as GoalLevelDto | "")}
-                >
-                  <option value="">{t("list.filters.allLevels")}</option>
-                  {GOAL_LEVEL_OPTIONS.map((lv) => (
-                    <option key={lv} value={lv}>
-                      {t(`level.${lv}`)}
-                    </option>
-                  ))}
-                </Select>
-              </FilterField>
-              <FilterField label={t("list.filters.owner")}>
-                <Select
-                  value={filters.ownerEmployeeId}
-                  onChange={(e) => setFilter("ownerEmployeeId", e.target.value)}
-                >
-                  <option value="">{t("list.filters.ownerPlaceholder")}</option>
-                  {(employeesPage?.items ?? []).map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName}
-                    </option>
-                  ))}
-                </Select>
-              </FilterField>
-            </>
-          )}
-
-          <Button variant="outline" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
-            {t("list.filters.clear")}
-          </Button>
-        </div>
-      </PageHeader>
-
-      {activeQuery.isError ? (
-        <EmptyState
-          icon={Target}
-          title={t("list.error.title")}
-          description={t("list.error.description")}
-          action={
-            <Button variant="outline" size="sm" onClick={() => void activeQuery.refetch()}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              {t("actions.retry", { ns: "common" })}
-            </Button>
+/** Chip «Kỳ trước / Quý này / Năm nay» — nhấn = khoảng tường minh trên URL. */
+function PeriodChips({
+  value,
+  chips,
+  onSelect,
+}: {
+  value: string | undefined;
+  chips: ReturnType<typeof goalPeriodChips>;
+  onSelect: (period: string) => void;
+}) {
+  const { t } = useTranslation("goals");
+  return (
+    <div role="group" aria-label={t("list.periodChips.label")} className="flex flex-wrap gap-1.5">
+      {GOAL_PERIOD_CHIPS.map((chip) => (
+        <button
+          key={chip}
+          type="button"
+          aria-pressed={value === chips[chip]}
+          onClick={() => onSelect(chips[chip])}
+          className={
+            value === chips[chip]
+              ? "rounded-full border border-primary bg-primary px-3 py-1.5 text-sm text-primary-foreground"
+              : "rounded-full border border-border px-3 py-1.5 text-sm hover:bg-muted"
           }
-        />
-      ) : viewMode === "list" ? (
-        <DataTable
-          columns={columns}
-          data={listRows}
-          isLoading={listQuery.isLoading}
-          onRowClick={(row) => openDetail(row.id)}
-          pageSize={20}
-          emptyState={
-            <EmptyState
-              icon={Target}
-              title={t("list.empty.title")}
-              description={t("list.empty.description")}
-              action={createButton}
-            />
-          }
-        />
-      ) : treeQuery.isLoading ? (
-        <div className="space-y-2 p-2">
-          <div className="h-10 w-full animate-pulse rounded bg-muted" />
-          <div className="h-10 w-11/12 animate-pulse rounded bg-muted" />
-          <div className="h-10 w-10/12 animate-pulse rounded bg-muted" />
-        </div>
-      ) : (treeQuery.data ?? []).length === 0 ? (
-        <EmptyState
-          icon={Target}
-          title={t("list.empty.title")}
-          description={t("list.empty.description")}
-          action={createButton}
-        />
-      ) : (
-        <div className="rounded-lg border border-border p-2">
-          <GoalTreeView nodes={treeQuery.data ?? []} onSelect={openDetail} />
-        </div>
-      )}
+        >
+          {t(`list.periodChips.${chip}`)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div className="space-y-2 p-2">
+      <div className="h-10 w-full animate-pulse rounded bg-muted" />
+      <div className="h-10 w-11/12 animate-pulse rounded bg-muted" />
+      <div className="h-10 w-10/12 animate-pulse rounded bg-muted" />
     </div>
   );
 }

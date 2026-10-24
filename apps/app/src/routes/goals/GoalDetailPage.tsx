@@ -2,7 +2,17 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle2, Lock, Pencil, Split, Target, Trash2, Unlock } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Lock,
+  Pencil,
+  Plus,
+  Split,
+  Target,
+  Trash2,
+  Unlock,
+} from "lucide-react";
 import {
   ApiError,
   goalApi,
@@ -13,7 +23,7 @@ import {
   PermissionGate,
   useCan,
 } from "@mediaos/web-core";
-import type { GoalDetailResponseDto } from "@mediaos/contracts";
+import type { GoalCoreResponseDto, GoalDetailResponseDto } from "@mediaos/contracts";
 import {
   Button,
   Card,
@@ -35,14 +45,17 @@ import { GoalCheckinsTab } from "./components/GoalCheckinsTab";
 import { GoalDecomposeWizard } from "./components/GoalDecomposeWizard";
 import { GoalLinkedTasksTab } from "./components/GoalLinkedTasksTab";
 import { SimpleTable, TabError, TabSkeleton } from "./components/GoalTabPrimitives";
+import type { GoalDetailTab } from "./goal-list-search";
+import { childGoalPrefill } from "./goal-form-prefill";
 
 interface GoalDetailPageProps {
   goalId: string;
+  /** S20-GOAL-LISTURL-1 — tab do route giữ trên URL (`?tab=`), F5/link mở thẳng tab. */
+  tab: GoalDetailTab;
+  onTabChange: (tab: GoalDetailTab) => void;
   onEdit: (goalId: string) => void;
   onBack: () => void;
 }
-
-type DetailTab = "overview" | "linked" | "children" | "checkins";
 
 /**
  * GOAL-SCREEN-002/005 (S5-GOAL-FE-1 + FE-2) — chi tiết mục tiêu, 4 tab: Tổng quan · Công việc gắn ·
@@ -56,11 +69,10 @@ type DetailTab = "overview" | "linked" | "children" | "checkins";
  * riêng nút finalize đổi nhãn thành "Mở lại" (đường duy nhất thoát trạng thái đóng băng).
  * Xóa → invalidate list + tree + detail (goalInvalidation) → về danh sách.
  */
-export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) {
+export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: GoalDetailPageProps) {
   const { t } = useTranslation("goals");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<DetailTab>("overview");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
@@ -221,7 +233,7 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
         </div>
       )}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)}>
+      <Tabs value={tab} onValueChange={(v) => onTabChange(v as GoalDetailTab)}>
         <TabsList>
           <TabsTrigger value="overview">{t("detail.tabs.overview")}</TabsTrigger>
           <TabsTrigger value="linked">{t("detail.tabs.linkedTasks")}</TabsTrigger>
@@ -240,6 +252,26 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
         <TabsContent value="children">
           <ChildrenTab
             goalId={goalId}
+            action={
+              // S20-GOAL-LISTURL-1 (US-GOAL-QL-04) — form mở sẵn cha · kỳ · phòng · cấp gợi ý. Cha đã
+              // chốt kỳ ⇒ disable như mọi thao tác ghi khác của màn này.
+              <PermissionGate
+                action={GOAL_ENGINE_PAIRS.CREATE.action}
+                resourceType={GOAL_ENGINE_PAIRS.CREATE.resourceType}
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={finalized}
+                  onClick={() =>
+                    void navigate({ to: "/goals/new", search: childGoalPrefill(goal) })
+                  }
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("detail.children.add")}
+                </Button>
+              </PermissionGate>
+            }
             active={tab === "children"}
             onOpen={(id) => void navigate({ to: "/goals/$goalId", params: { goalId: id } })}
           />
@@ -250,9 +282,7 @@ export function GoalDetailPage({ goalId, onEdit, onBack }: GoalDetailPageProps) 
       </Tabs>
 
       {checkinOpen && <GoalCheckinDialog goal={goal} onClose={() => setCheckinOpen(false)} />}
-      {decomposeOpen && (
-        <GoalDecomposeWizard goal={goal} onClose={() => setDecomposeOpen(false)} />
-      )}
+      {decomposeOpen && <GoalDecomposeWizard goal={goal} onClose={() => setDecomposeOpen(false)} />}
       {finalizeOpen && (
         <GoalFinalizeDialog
           goal={goal}
@@ -377,10 +407,13 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 // ── Tab: Mục tiêu con (list theo parentGoalId) ──────────────────────────────────
 function ChildrenTab({
   goalId,
+  action,
   active,
   onOpen,
 }: {
   goalId: string;
+  /** Nút «Thêm mục tiêu con» (đã bọc PermissionGate) — hiện ở cả trạng thái rỗng lẫn có dữ liệu. */
+  action: React.ReactNode;
   active: boolean;
   onOpen: (goalId: string) => void;
 }) {
@@ -399,9 +432,26 @@ function ChildrenTab({
       <EmptyState
         title={t("detail.children.empty.title")}
         description={t("detail.children.empty.description")}
+        action={action}
       />
     );
   }
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">{action}</div>
+      <ChildrenTable goals={children} onOpen={onOpen} />
+    </div>
+  );
+}
+
+function ChildrenTable({
+  goals: children,
+  onOpen,
+}: {
+  goals: GoalCoreResponseDto[];
+  onOpen: (goalId: string) => void;
+}) {
+  const { t } = useTranslation("goals");
   return (
     <SimpleTable
       head={[

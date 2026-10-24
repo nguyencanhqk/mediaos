@@ -86,6 +86,7 @@ vi.mock("@mediaos/web-core", () => {
 
 import { goalApi } from "@mediaos/web-core";
 import { GoalDetailPage } from "./GoalDetailPage";
+import type { GoalDetailTab } from "./goal-list-search";
 
 const mockGetGoal = goalApi.getGoal as ReturnType<typeof vi.fn>;
 const mockListLinkedTasks = goalApi.listLinkedTasks as ReturnType<typeof vi.fn>;
@@ -142,12 +143,35 @@ const LINKED_TASK = {
   isOverdue: false,
 };
 
-function renderPage() {
+/** S20-GOAL-LISTURL-1 — tab do route điều khiển (`?tab=`); harness giữ tab như router làm. */
+function TabHarness({
+  initialTab,
+  onTabChange,
+}: {
+  initialTab: GoalDetailTab;
+  onTabChange: (tab: GoalDetailTab) => void;
+}) {
+  const [tab, setTab] = React.useState<GoalDetailTab>(initialTab);
+  return (
+    <GoalDetailPage
+      goalId="g-1"
+      tab={tab}
+      onTabChange={(next) => {
+        onTabChange(next);
+        setTab(next);
+      }}
+      onEdit={vi.fn()}
+      onBack={vi.fn()}
+    />
+  );
+}
+
+function renderPage(initialTab: GoalDetailTab = "overview", onTabChange = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <I18nextProvider i18n={i18n}>
-        <GoalDetailPage goalId="g-1" onEdit={vi.fn()} onBack={vi.fn()} />
+        <TabHarness initialTab={initialTab} onTabChange={onTabChange} />
       </I18nextProvider>
     </QueryClientProvider>,
   );
@@ -194,6 +218,27 @@ describe("GoalDetailPage — tab lazy", () => {
     expect(mockListLinkedTasks).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("tab", { name: "Công việc gắn" }));
     await waitFor(() => expect(mockListLinkedTasks).toHaveBeenCalledWith("g-1"));
+  });
+});
+
+// ── S20-GOAL-LISTURL-1 (US-GOAL-QL-03 TC3) — tab trên URL ──────────────────────────────────────────
+describe("GoalDetailPage — tab do URL điều khiển", () => {
+  it("(t1) mở với tab=checkins ⇒ tab Lịch sử check-in hiện ngay, sổ check-in được tải", async () => {
+    renderPage("checkins");
+    await waitFor(() => expect(screen.getByText("Tăng doanh thu 20%")).toBeInTheDocument());
+    expect(screen.getByRole("tab", { name: "Lịch sử check-in" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await waitFor(() => expect(mockListUpdates).toHaveBeenCalled());
+  });
+
+  it("(t2) bấm tab ⇒ báo route đổi `tab` (ghi URL), không giữ trạng thái riêng", async () => {
+    const onTabChange = vi.fn();
+    renderPage("overview", onTabChange);
+    await waitFor(() => expect(screen.getByText("Tăng doanh thu 20%")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: /Mục tiêu con/ }));
+    expect(onTabChange).toHaveBeenCalledWith("children");
   });
 });
 
@@ -363,5 +408,32 @@ describe("GoalDetailPage — lịch sử check-in phân trang", () => {
     await waitFor(() =>
       expect(mockListUpdates).toHaveBeenCalledWith("g-1", { limit: 20, offset: 20 }),
     );
+  });
+});
+
+// ── S20-GOAL-LISTURL-1 (US-GOAL-QL-04 TC1, TC4) — «+ Thêm mục tiêu con» ─────────────────────────────
+describe("GoalDetailPage — Thêm mục tiêu con", () => {
+  it("(k1) có create:goal ⇒ nút trong tab Mục tiêu con, mở /goals/new điền sẵn cha · kỳ · phòng · cấp", async () => {
+    renderPage("children");
+    fireEvent.click(await screen.findByRole("button", { name: /Thêm mục tiêu con/ }));
+    expect(nav.navigate).toHaveBeenCalledWith({
+      to: "/goals/new",
+      search: {
+        parentGoalId: "g-1",
+        level: "employee",
+        departmentId: "dept-1",
+        periodType: "quarter",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-03-31",
+      },
+    });
+  });
+
+  it("(k2) thiếu create:goal ⇒ KHÔNG có nút", async () => {
+    perm.denied.add("create:goal");
+    renderPage("children");
+    await waitFor(() => expect(mockListGoals).toHaveBeenCalled());
+    await screen.findByText("Chưa có mục tiêu con");
+    expect(screen.queryByRole("button", { name: /Thêm mục tiêu con/ })).not.toBeInTheDocument();
   });
 });

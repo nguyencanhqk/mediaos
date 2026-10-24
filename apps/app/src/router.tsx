@@ -22,6 +22,14 @@ import { validateProjectWorkspaceRouteSearch } from "@/routes/tasks/project-work
 import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
 import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
 import { validateMyTasksSearch } from "@/routes/tasks/my-tasks-groups";
+// S20-GOAL-LISTURL-1 — validateSearch /goals + /goals/$goalId (file thuần TS + hook, không component).
+import {
+  goalListBackSearch,
+  useGoalDetailTab,
+  validateGoalDetailSearch,
+  validateGoalListSearch,
+} from "@/routes/goals/goal-list-search";
+import { useGoalFormPrefill, validateGoalFormPrefill } from "@/routes/goals/goal-form-prefill";
 
 // ---------------------------------------------------------------------------
 // Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
@@ -2692,7 +2700,14 @@ const meRoomBookingsRoute = makeModuleRoute(
   MeRoomBookingsPage,
 );
 
-const goalsListRoute = makeModuleRoute("/goals", "goal.list", "GOAL", GoalListPage);
+// S20-GOAL-LISTURL-1 — bộ lọc trên URL; rác ⇒ bỏ, KHÔNG ném (goal-list-search.ts).
+const goalsListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/goals",
+  beforeLoad: authGuard,
+  validateSearch: validateGoalListSearch,
+  component: () => buildModuleRouteContent(getMeta("goal.list"), "GOAL", <GoalListPage />),
+});
 
 const goalNewMeta: RouteMeta = {
   routeKey: "goal.new",
@@ -2709,13 +2724,24 @@ const goalNewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/new",
   beforeLoad: authGuard,
+  // S20-GOAL-LISTURL-1 — prefill cha · kỳ · phòng · cấp qua search (gợi ý, BE vẫn validate); rác ⇒ bỏ.
+  validateSearch: validateGoalFormPrefill,
   component: () => {
     const navigate = useNavigate();
+    const prefill = useGoalFormPrefill();
     return buildModuleRouteContent(
       goalNewMeta,
       "GOAL",
       <GoalFormPage
+        prefill={prefill}
         onSuccess={(id) => void navigate({ to: "/goals/$goalId", params: { goalId: id } })}
+        onCreatedFromParent={(parentId) =>
+          void navigate({
+            to: "/goals/$goalId",
+            params: { goalId: parentId },
+            search: { tab: "children" },
+          })
+        }
         onCancel={() => void navigate({ to: "/goals" as "/" })}
       />,
     );
@@ -2761,16 +2787,21 @@ const goalDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/$goalId",
   beforeLoad: authGuard,
+  // S20-GOAL-LISTURL-1 — `?tab=` mở thẳng tab; «Quay lại» về đúng bộ lọc gần nhất của danh sách.
+  validateSearch: validateGoalDetailSearch,
   component: () => {
     const { goalId } = goalDetailRoute.useParams();
     const navigate = useNavigate();
+    const [tab, setTab] = useGoalDetailTab();
     return buildModuleRouteContent(
       goalDetailMeta,
       "GOAL",
       <GoalDetailPage
         goalId={goalId}
+        tab={tab}
+        onTabChange={setTab}
         onEdit={(id) => void navigate({ to: "/goals/$goalId/edit", params: { goalId: id } })}
-        onBack={() => void navigate({ to: "/goals" as "/" })}
+        onBack={() => void navigate({ to: "/goals", search: goalListBackSearch() })}
       />,
     );
   },

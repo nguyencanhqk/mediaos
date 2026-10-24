@@ -3,9 +3,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Lock, Save } from "lucide-react";
+import { ArrowLeft, Lock, Save, TriangleAlert } from "lucide-react";
 import {
   ApiError,
+  companyTimeZone,
   goalApi,
   goalInvalidation,
   goalKeys,
@@ -13,10 +14,12 @@ import {
   hrKeys,
   taskProjectApi,
   taskKeys,
+  quarterRange,
   useCan,
+  yearRange,
 } from "@mediaos/web-core";
 import type { GoalCoreResponseDto } from "@mediaos/contracts";
-import { Button, Card, CardContent, Input, Select } from "@mediaos/ui";
+import { Button, Card, CardContent, Input, Select, toast } from "@mediaos/ui";
 import { EmployeePicker } from "@/routes/tasks/EmployeePicker";
 import {
   GOAL_LEVEL_OPTIONS,
@@ -33,13 +36,25 @@ import {
   toUpdateDto,
   type GoalFormValues,
 } from "./goal-form-schema";
+import {
+  applyGoalFormPrefill,
+  nextGoalFormValues,
+  type GoalFormPrefill,
+} from "./goal-form-prefill";
 
 interface GoalFormPageProps {
   /** Có → SỬA; không → TẠO. */
   goalId?: string;
   onSuccess: (goalId: string) => void;
   onCancel: () => void;
+  /** S20-GOAL-LISTURL-1 — gợi ý điền sẵn từ search `/goals/new` (chỉ khi TẠO). */
+  prefill?: GoalFormPrefill;
+  /** Tạo xong một mục tiêu con từ cha đã điền sẵn ⇒ về tab Mục tiêu con của cha. */
+  onCreatedFromParent?: (parentGoalId: string) => void;
 }
+
+/** Các select có danh mục tải sau — cần ghi lại giá trị lên DOM khi option tới. */
+const ASYNC_OPTION_FIELDS = ["departmentId", "projectId", "parentGoalId"] as const;
 
 /**
  * GOAL-SCREEN-003 (S5-GOAL-FE-1) — form tạo/sửa mục tiêu. Một component cho CẢ create + edit
@@ -50,7 +65,13 @@ interface GoalFormPageProps {
  * Goal đã chốt kỳ (GOAL-ERR-005): khóa form + disable submit (defense-in-depth — nút Sửa ở detail cũng
  * đã ẩn khi finalized). Mutation invalidate list + tree + detail qua goalInvalidation.
  */
-export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps) {
+export function GoalFormPage({
+  goalId,
+  onSuccess,
+  onCancel,
+  prefill,
+  onCreatedFromParent,
+}: GoalFormPageProps) {
   const { t } = useTranslation("goals");
   const queryClient = useQueryClient();
   const isEdit = Boolean(goalId);
@@ -68,13 +89,31 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
     handleSubmit,
     watch,
     setValue,
+    getValues,
     reset,
     formState: { errors },
   } = useForm<GoalFormValues>({
     resolver: zodResolver(goalFormSchema),
     mode: "onSubmit",
-    defaultValues: EMPTY_GOAL_FORM,
+    defaultValues: isEdit ? EMPTY_GOAL_FORM : applyGoalFormPrefill(EMPTY_GOAL_FORM, prefill ?? {}),
   });
+
+  // S20-GOAL-LISTURL-1 — cha điền sẵn phải TỒN TẠI và CHƯA chốt kỳ; không thì cảnh báo + bỏ cha (BE
+  // vẫn là cổng cuối). Cha hợp lệ luôn có trong select dù nằm ngoài 200 mục tiêu của danh sách chọn.
+  const prefillParentId = isEdit ? undefined : prefill?.parentGoalId;
+  const parentQuery = useQuery({
+    queryKey: goalKeys.detail(prefillParentId ?? ""),
+    queryFn: () => goalApi.getGoal(prefillParentId as string),
+    enabled: Boolean(prefillParentId),
+    staleTime: 15_000,
+  });
+  const parentInvalid =
+    Boolean(prefillParentId) && (parentQuery.isError || Boolean(parentQuery.data?.finalizedAt));
+  const validParent =
+    prefillParentId && parentQuery.data && !parentQuery.data.finalizedAt ? parentQuery.data : null;
+  useEffect(() => {
+    if (parentInvalid) setValue("parentGoalId", "");
+  }, [parentInvalid, setValue]);
 
   // Điền sẵn khi sửa — MỘT LẦN (ref chặn reset đè khi user đang gõ).
   const filledRef = useRef(false);
@@ -132,6 +171,37 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
     enabled: level !== "",
     staleTime: 30_000,
   });
+  const parentOptions = useMemo(() => {
+    const list = (parentCandidates ?? []).filter((g) => g.id !== goalId);
+    return validParent && !list.some((g) => g.id === validParent.id)
+      ? [validParent, ...list]
+      : list;
+  }, [parentCandidates, goalId, validParent]);
+
+  // Select không điều khiển: giá trị điền sẵn đặt TRƯỚC khi option tải về thì DOM hiện ô trống trong
+  // khi form vẫn giữ giá trị ⇒ ghi lại lên DOM mỗi khi một danh mục tới.
+  useEffect(() => {
+    for (const name of ASYNC_OPTION_FIELDS) {
+      const value = getValues(name);
+      if (value) setValue(name, value);
+    }
+  }, [departments, projectsList, parentOptions, getValues, setValue]);
+
+  /** Chọn Quý/Năm ⇒ điền ngày theo giờ công ty (vẫn sửa tay được). */
+  const fillPeriodDates = (periodType: string) => {
+    const now = new Date();
+    const range =
+      periodType === "quarter"
+        ? quarterRange(now, companyTimeZone())
+        : periodType === "year"
+          ? yearRange(now, companyTimeZone())
+          : null;
+    if (!range) return;
+    setValue("periodStart", range.start);
+    setValue("periodEnd", range.end);
+  };
+
+  const addAnotherRef = useRef(false);
 
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -140,9 +210,26 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
       isEdit
         ? goalApi.updateGoal(goalId as string, toUpdateDto(values))
         : goalApi.createGoal(toCreateDto(values)),
-    onSuccess: (saved) => {
+    onSuccess: (saved, values) => {
       const keys = isEdit ? goalInvalidation.update(saved.id) : goalInvalidation.create();
       for (const queryKey of keys) void queryClient.invalidateQueries({ queryKey });
+      if (isEdit) {
+        onSuccess(saved.id);
+        return;
+      }
+      // Số mục tiêu con của cha đổi.
+      if (saved.parentGoalId) {
+        void queryClient.invalidateQueries({ queryKey: goalKeys.detail(saved.parentGoalId) });
+      }
+      if (addAnotherRef.current) {
+        toast.success(t("form.savedAndNext", { name: saved.name }));
+        reset(nextGoalFormValues(values));
+        return;
+      }
+      if (validParent && saved.parentGoalId === validParent.id && onCreatedFromParent) {
+        onCreatedFromParent(validParent.id);
+        return;
+      }
       onSuccess(saved.id);
     },
     onError: (err: unknown) => {
@@ -153,6 +240,10 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
   const onSubmit = (values: GoalFormValues) => {
     setServerError(null);
     saveMutation.mutate(values);
+  };
+  const submit = (addAnother: boolean) => (e?: React.BaseSyntheticEvent) => {
+    addAnotherRef.current = addAnother;
+    void handleSubmit(onSubmit)(e);
   };
 
   if (isEdit && detailQuery.isLoading) {
@@ -175,10 +266,7 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
   const disabled = finalizedLocked || saveMutation.isPending;
 
   return (
-    <form
-      onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-      className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6"
-    >
+    <form onSubmit={submit(false)} className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-foreground">
           {isEdit ? t("form.editTitle") : t("form.createTitle")}
@@ -196,6 +284,16 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
         >
           <Lock className="h-4 w-4" />
           {t("form.finalizedLocked")}
+        </div>
+      )}
+
+      {parentInvalid && (
+        <div
+          className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-warning"
+          role="alert"
+        >
+          <TriangleAlert className="h-4 w-4" />
+          {t("form.parentInvalid")}
         </div>
       )}
 
@@ -307,13 +405,11 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
           <Field label={t("form.fields.parentGoal")} hint={t("form.hints.parentOptional")}>
             <Select {...register("parentGoalId")} disabled={disabled}>
               <option value="">{t("form.placeholders.selectParent")}</option>
-              {(parentCandidates ?? [])
-                .filter((g) => g.id !== goalId)
-                .map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.goalCode} — {g.name}
-                  </option>
-                ))}
+              {parentOptions.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.goalCode} — {g.name}
+                </option>
+              ))}
             </Select>
           </Field>
         </CardContent>
@@ -325,7 +421,10 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
           <p className="text-sm font-semibold text-foreground">{t("form.sections.period")}</p>
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label={t("form.fields.periodType")}>
-              <Select {...register("periodType")} disabled={disabled}>
+              <Select
+                {...register("periodType", { onChange: (e) => fillPeriodDates(e.target.value) })}
+                disabled={disabled}
+              >
                 {GOAL_PERIOD_TYPE_OPTIONS.map((p) => (
                   <option key={p} value={p}>
                     {t(`periodType.${p}`)}
@@ -427,6 +526,11 @@ export function GoalFormPage({ goalId, onSuccess, onCancel }: GoalFormPageProps)
         >
           {t("actions.cancel", { ns: "common" })}
         </Button>
+        {!isEdit && (
+          <Button type="button" variant="outline" onClick={submit(true)} disabled={disabled}>
+            {t("form.submitCreateAndNext")}
+          </Button>
+        )}
         <Button type="submit" disabled={disabled}>
           <Save className="mr-2 h-4 w-4" />
           {isEdit ? t("form.submitSave") : t("form.submitCreate")}
@@ -477,6 +581,8 @@ function errFor(
 
 /** ApiError 422 (GOAL-ERR-XXX) → thông điệp người-đọc từ server (BE trả message vi); fallback generic. */
 function mapSaveError(err: unknown, t: ReturnType<typeof useTranslation<"goals">>["t"]): string {
+  // Tự gõ /goals/new khi thiếu create:goal: BE từ chối ⇒ nói rõ là thiếu quyền.
+  if (err instanceof ApiError && err.status === 403) return t("form.errors.forbidden");
   if (err instanceof ApiError && err.message && err.status !== 500) {
     return err.message;
   }
