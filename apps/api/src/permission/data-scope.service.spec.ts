@@ -506,3 +506,42 @@ describe("DataScopeService.resolveAndAssert", () => {
     await expect(svc.resolveAndAssert("u1", "co1", "view", "employee")).resolves.toBe("Own");
   });
 });
+
+/**
+ * S20-SEC-TASKPATCHGATE-1 (plan §3.4) — điều kiện 403 tách khỏi `resolveAndAssert` thành MỘT nơi, để
+ * cổng trường của PATCH việc dùng chung với route chuyên trách. So LỎNG `scope == null`: kết quả
+ * `resolveManyOrNull` tra trượt là `undefined` — phải là 403, không được thành «có quyền» (M12).
+ */
+describe("DataScopeService.assertGranted", () => {
+  const svc = new DataScopeService(new PermissionService(new ScopeMockRepo()), stubRepo(null));
+
+  it("null ⇒ 403 ForbiddenException", () => {
+    expect(() => svc.assertGranted(null)).toThrow(ForbiddenException);
+  });
+
+  it("undefined ⇒ 403 ForbiddenException (không coi tra trượt là có quyền)", () => {
+    expect(() => svc.assertGranted(undefined)).toThrow(ForbiddenException);
+  });
+
+  it("có phạm vi ⇒ trả lại đúng phạm vi đó", () => {
+    expect(svc.assertGranted("Own")).toBe("Own");
+    expect(svc.assertGranted("Company")).toBe("Company");
+  });
+
+  it("cùng thông điệp với resolveAndAssert (một nguồn 403)", async () => {
+    const denied = new DataScopeService(
+      new PermissionService(new ScopeMockRepo().withScopeGrants([])),
+      stubRepo(null),
+    );
+    const viaResolve = await denied
+      .resolveAndAssert("u1", "co1", "view", "employee")
+      .catch((e: Error) => e.message);
+    let viaAssert = "";
+    try {
+      svc.assertGranted(null);
+    } catch (e) {
+      viaAssert = (e as Error).message;
+    }
+    expect(viaAssert).toBe(viaResolve);
+  });
+});

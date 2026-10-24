@@ -499,30 +499,45 @@ describe("ProjectDetailPage", () => {
     });
   });
 
-  // ── S5-TASK-WORKSPACE-1: toolbar chung giữ filter khi đổi tab Bảng↔Danh sách ──
-  it("giữ nguyên giá trị bộ lọc toolbar khi chuyển tab Bảng → Danh sách", async () => {
+  // ── S20-TASK-PROJTOOLBARURL-1: toolbar + rail đọc/ghi URL (luồng router thật + Back:
+  //    ProjectDetailPage.url.spec.tsx; schema thuần: project-workspace-filters.spec.ts) ──
+  const TASK_ID = "33333333-3333-4333-8333-333333333333";
+  async function renderBoardWith(search: Record<string, unknown>) {
     setCapabilities({ "read:project": true, "view-kanban:task": true, "read:task": true });
     vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
-    searchRef.current = { tab: "board" };
-    const client = makeQueryClient();
-    const makeUi = () => (
-      <QueryClientProvider client={client}>
-        <ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />
-      </QueryClientProvider>
+    searchRef.current = search;
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("workspace-toolbar")).toBeInTheDocument());
+  }
+
+  it("bộ lọc đọc từ URL: F5/link chia sẻ ra đúng toolbar; đổi tab vẫn giữ (URL mang theo)", async () => {
+    await renderBoardWith({ tab: "board", q: "hop dong", status: "Done", overdue: true });
+    expect(screen.getByTestId("workspace-search")).toHaveValue("hop dong");
+    expect(screen.getByTestId("workspace-filter-status")).toHaveValue("Done");
+    expect(screen.getByTestId("workspace-filter-overdue")).toBeChecked();
+    fireEvent.click(screen.getByTestId("workspace-tab-list"));
+    expect(historyPushMock).toHaveBeenCalledWith(
+      "/tasks/projects/proj-001?tab=list&q=hop+dong&status=Done&overdue=true",
     );
-    const { rerender } = render(makeUi());
-    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+  });
 
-    fireEvent.change(screen.getByTestId("workspace-search"), { target: { value: "hop dong" } });
-    expect(screen.getByTestId("workspace-search")).toHaveValue("hop dong");
+  it("đổi bộ lọc = PUSH URL mới, giữ ?tab và ?task của drawer", async () => {
+    await renderBoardWith({ tab: "board", status: "Done", task: TASK_ID });
+    fireEvent.change(screen.getByTestId("workspace-filter-priority"), {
+      target: { value: "High" },
+    });
+    expect(historyPushMock).toHaveBeenCalledWith(
+      `/tasks/projects/proj-001?tab=board&status=Done&priority=High&task=${TASK_ID}`,
+    );
+  });
 
-    // Đổi tab (URL đổi) — vỏ vẫn mounted nên state filter giữ nguyên (element MỚI khi rerender,
-    // element cũ === bị React bail-out).
-    searchRef.current = { tab: "list" };
-    rerender(makeUi());
-    // Tab Danh sách thật sự mount (query list bắn) và ô tìm kiếm GIỮ nguyên giá trị.
-    await waitFor(() => expect(vi.mocked(taskCoreApi.listTasks)).toHaveBeenCalled());
-    expect(screen.getByTestId("workspace-search")).toHaveValue("hop dong");
+  it("giá trị rác trên URL ⇒ toolbar về mặc định, không ném, không nút đặt lại", async () => {
+    await renderBoardWith({ tab: "board", status: "abc", priority: 9, overdue: "x", sort: "zz" });
+    expect(screen.getByTestId("workspace-filter-status")).toHaveValue("");
+    expect(screen.getByTestId("workspace-filter-priority")).toHaveValue("");
+    expect(screen.getByTestId("workspace-filter-overdue")).not.toBeChecked();
+    expect(screen.getByTestId("workspace-sort")).toHaveValue("default");
+    expect(screen.queryByTestId("workspace-filters-reset")).not.toBeInTheDocument();
   });
 
   // ── NOT FOUND (404) ────────────────────────────────────────────────────────

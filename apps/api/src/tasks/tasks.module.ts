@@ -16,6 +16,8 @@ import { TaskActivityService } from "./task-activity.service";
 // S4-TASK-BE-2 (additive) — Task core (SPEC-06): CRUD + my-tasks + filter, tách khỏi Task Hub legacy.
 import { TaskCoreService } from "./task-core.service";
 import { TaskCoreRepository } from "./task-core.repository";
+// S20-SEC-TASKPATCHGATE-1 (additive) — cổng trường của PATCH /tasks/:taskId (hạn · ưu tiên · người phụ trách).
+import { TaskPatchFieldGate } from "./task-patch-field-gate";
 // S4-TASK-BE-3 (additive) — Task actions crown-FSM (assign/change-status/priority/deadline/watch).
 import { TaskActionsService } from "./task-actions.service";
 import { TaskActionsRepository } from "./task-actions.repository";
@@ -92,6 +94,7 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     // S4-TASK-BE-2 — Task core stack (tái dùng TasksRepository cho project guard + TaskActivityService).
     TaskCoreService,
     TaskCoreRepository,
+    TaskPatchFieldGate,
     // S4-TASK-BE-3 — Task actions crown-FSM stack (tái dùng TaskCoreRepository/DataScope/Outbox/Setting).
     TaskActionsService,
     TaskActionsRepository,
@@ -120,7 +123,7 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     GoalProgressEngineRepository,
   ],
   // S4-DASH-BE-2 (additive): + TaskCoreService (MY_TASKS/TASK_ALERTS) + ProjectsService (PROJECT_PROGRESS
-  // authorize getProject TRƯỚC listByProject — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH
+  // authorize getProject TRƯỚC aggregate countsByStatusLeaf — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH
   // inject qua DI — KHÔNG re-provide instance thứ 2, KHÔNG method mới. Chỉ thêm vào exports[].
   // S5-GOAL-BE-1 (additive): + ProjectAccessService — GoalsModule cần lớp đọc project_role DUY NHẤT
   // (D-23/D-24) để cho Owner/Manager dự án ghi goal cấp dự án kể cả khác phòng ban (SPEC-10 §11).

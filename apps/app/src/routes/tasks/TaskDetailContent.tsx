@@ -21,8 +21,7 @@ import {
   TaskStateField,
   TaskStatusField,
   TaskPriorityField,
-  TaskDeadlineField,
-  TaskAssigneeField,
+  TaskAssigneeDeadlineFields,
   TaskTitleField,
   TaskDescriptionField,
 } from "./TaskInlineFields";
@@ -220,8 +219,8 @@ function InfoGrid({ task }: { task: TaskCoreResponseDto }) {
     <Card className="space-y-4 p-4">
       {/* Hai ô SỬA ĐƯỢC đứng trước — đây là thứ người ta vào màn này để đổi. */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <TaskAssigneeField task={task} />
-        <TaskDeadlineField task={task} />
+        {/* S20-TASK-ASSIGNWARN-1 — chung trạng thái picker: cảnh báo sau khi dời hạn mở được «Đổi người». */}
+        <TaskAssigneeDeadlineFields task={task} />
       </div>
       {/* S5-GOAL-FE-2 — "Mục tiêu" (GOAL-API-010): TaskGoalField TỰ gate two-gate (update:goal +
           update:task) và tự về chế độ chỉ-đọc khi thiếu — mount vô điều kiện ở đây. */}

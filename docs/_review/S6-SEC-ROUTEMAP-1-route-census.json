@@ -4,9 +4,9 @@
   "regenerate": "ROUTE_CENSUS_WRITE=1 pnpm --filter @mediaos/api exec vitest run test/foundation/route-guard-coverage.e2e-spec.ts",
   "globalPrefix": "api/v1",
   "totals": {
-    "routes": 692,
+    "routes": 689,
     "controllers": 131,
-    "gated": 653,
+    "gated": 650,
     "gatedAtClassLevel": 8,
     "public": 12,
     "ungated": 27,
@@ -10456,22 +10456,6 @@
       "verdictWo": null
     },
     {
-      "key": "TasksController#getBoard",
-      "httpMethod": "GET",
-      "path": "/api/v1/tasks/board",
-      "hasPermission": true,
-      "permission": "read:task",
-      "permissionLevel": "handler",
-      "isPublic": false,
-      "classGuards": [],
-      "routeGuards": [
-        "PermissionGuard"
-      ],
-      "verdict": null,
-      "verdictReason": null,
-      "verdictWo": null
-    },
-    {
       "key": "TasksController#getComments",
       "httpMethod": "GET",
       "path": "/api/v1/tasks/:taskId/comments",
@@ -10504,41 +10488,9 @@
       "verdictWo": null
     },
     {
-      "key": "TasksController#getProjectTasks",
-      "httpMethod": "GET",
-      "path": "/api/v1/tasks/by-project/:projectId",
-      "hasPermission": true,
-      "permission": "read:task",
-      "permissionLevel": "handler",
-      "isPublic": false,
-      "classGuards": [],
-      "routeGuards": [
-        "PermissionGuard"
-      ],
-      "verdict": null,
-      "verdictReason": null,
-      "verdictWo": null
-    },
-    {
       "key": "TasksController#getTask",
       "httpMethod": "GET",
       "path": "/api/v1/tasks/:taskId",
-      "hasPermission": true,
-      "permission": "read:task",
-      "permissionLevel": "handler",
-      "isPublic": false,
-      "classGuards": [],
-      "routeGuards": [
-        "PermissionGuard"
-      ],
-      "verdict": null,
-      "verdictReason": null,
-      "verdictWo": null
-    },
-    {
-      "key": "TasksController#getTeamTasks",
-      "httpMethod": "GET",
-      "path": "/api/v1/tasks/by-team/:teamId",
       "hasPermission": true,
       "permission": "read:task",
       "permissionLevel": "handler",

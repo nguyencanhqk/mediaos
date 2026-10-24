@@ -20,6 +20,7 @@ import {
 } from "./constants";
 import { TaskStatusBadge } from "./TaskStatusBadge";
 import { BadgeSelect } from "./TaskInlineFields";
+import { useTaskPatchFieldLocks } from "./task-patch-field-locks";
 
 /**
  * SubtaskInlineControls — sửa NGƯỜI THỰC HIỆN và HẠN của từng việc con NGAY TRÊN DÒNG
@@ -28,10 +29,11 @@ import { BadgeSelect } from "./TaskInlineFields";
  * Trước đây hai thông tin này là chữ chết trên dòng (TaskSubtaskPanel), muốn đổi phải bấm bút chì mở
  * hộp thoại — ba cú bấm cho một thao tác lặp đi lặp lại hàng chục lần mỗi ngày.
  *
- * ĐƯỜNG GHI: `PATCH /tasks/:id` (gate `update:task`) — ĐÚNG cửa mà hộp thoại "Sửa việc con" đang dùng
- * (TaskSubtaskDialogs), KHÔNG phải route `POST /assign`. Chọn có chủ đích: theo ma trận seed, nhân
- * viên thường có `update:task`@Own nhưng KHÔNG có `assign:task` ⇒ đi cửa assign sẽ LÀM MẤT khả năng
- * tự sửa việc con mà họ đang có. Đổi cửa = đổi ai làm được việc gì, không phải chuyện giao diện.
+ * ĐƯỜNG GHI: `PATCH /tasks/:id` (gate route `update:task`) — cùng cửa với hộp thoại "Sửa việc con"
+ * (TaskSubtaskDialogs), không phải route `POST /assign` (route đó không nhận `null` để gỡ người).
+ * S20-SEC-TASKPATCHGATE-1: khi giá trị ĐỔI, server đòi CÙNG cặp chuyên trách như route riêng (người
+ * phụ trách ↔ `assign:task`, hạn ↔ `update-deadline:task`; thiếu ⇒ 403) ⇒ control khoá theo đúng cặp
+ * đó (`useTaskPatchFieldLocks`), không theo vai trò. Cùng thay đổi thì cùng quyết định quyền.
  *
  * KHÔNG gửi kèm `projectId`/`stateId`: việc con thừa hưởng dự án từ CHA và không có cột trên board
  * (D-36); gửi lệch → BE 400.
@@ -136,6 +138,9 @@ export function SubtaskAssigneeControl({
   const [search, setSearch] = useState("");
   const canReadEmployees = useCan("read", "employee");
   const mutation = useSubtaskFieldMutation(item, parentTaskId, projectId);
+  // Phạm vi việc (canEdit) VÀ cặp chuyên trách của trường (assign:task) — thiếu một ⇒ chỉ xem.
+  const locks = useTaskPatchFieldLocks();
+  const editable = canEdit && !locks.assigneeEmployeeId;
 
   // Chỉ tải danh sách người khi người dùng THỰC SỰ mở picker — panel có thể có hàng chục dòng, tải
   // sẵn cho từng dòng là lãng phí (query key dùng chung nên mở dòng thứ hai là cache-hit).
@@ -156,14 +161,14 @@ export function SubtaskAssigneeControl({
   const trigger = (
     <button
       type="button"
-      disabled={!canEdit || mutation.isPending}
+      disabled={!editable || mutation.isPending}
       onClick={() => setOpen((v) => !v)}
-      title={canEdit ? t("tasks.detail.subtasks.inline.assigneeAction", { name: label }) : label}
+      title={editable ? t("tasks.detail.subtasks.inline.assigneeAction", { name: label }) : label}
       aria-label={t("tasks.detail.subtasks.inline.assigneeAction", { name: label })}
       data-testid={`subtask-assignee-trigger-${item.id}`}
       className={cn(
         "rounded-full transition-opacity",
-        canEdit ? "hover:opacity-80" : "cursor-default",
+        editable ? "hover:opacity-80" : "cursor-default",
         mutation.isPending && "opacity-50",
       )}
     >
@@ -171,7 +176,7 @@ export function SubtaskAssigneeControl({
     </button>
   );
 
-  if (!canEdit) return trigger;
+  if (!editable) return trigger;
 
   const choose = (employeeId: string | null) => {
     setOpen(false);
@@ -200,7 +205,7 @@ export function SubtaskAssigneeControl({
             data-testid={`subtask-assignee-search-${item.id}`}
           />
           <ul className="mt-1.5 max-h-56 overflow-y-auto">
-            {/* Gỡ người thực hiện đi qua PATCH nên KHÔNG bị chặn như route assign — giữ lựa chọn này. */}
+            {/* Gỡ người thực hiện chỉ có ở PATCH (route assign đòi uuid) — cùng cặp assign:task như đổi người. */}
             {item.mainAssigneeEmployeeId && (
               <li>
                 <button
@@ -265,10 +270,13 @@ export function SubtaskDueControl({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => isoToLocalDatetime(item.dueAt));
   const mutation = useSubtaskFieldMutation(item, parentTaskId, projectId);
+  // Phạm vi việc (canEdit) VÀ cặp chuyên trách của trường (update-deadline:task).
+  const locks = useTaskPatchFieldLocks();
+  const editable = canEdit && !locks.dueAt;
 
   const display = item.dueAt ? new Date(item.dueAt).toLocaleDateString("vi-VN") : "—";
 
-  if (!canEdit) {
+  if (!editable) {
     return <span className="text-xs text-muted-foreground">{display}</span>;
   }
 

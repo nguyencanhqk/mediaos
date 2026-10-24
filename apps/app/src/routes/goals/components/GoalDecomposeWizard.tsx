@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { KanbanSquare, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
+  companyTimeZone,
   goalApi,
   goalDecomposeInvalidation,
   hrApi,
@@ -15,26 +17,33 @@ import {
   useCan,
 } from "@mediaos/web-core";
 import type {
-  DecomposeGoalItemRequest,
   DecomposeGoalRequest,
   GoalDetailResponseDto,
   TaskTemplatePriorityDto,
 } from "@mediaos/contracts";
 import { GOAL_DECOMPOSE_MAX } from "@mediaos/contracts";
 import { Button, Dialog, Input, Select } from "@mediaos/ui";
-import { TASK_TEMPLATE_PRIORITY_OPTIONS, TASK_UPDATE_STATE_PAIR } from "../constants";
-
-/** Một dòng preview — `key` cục bộ để React theo dõi dòng do người dùng THÊM (chưa có id server). */
-interface PreviewRow {
-  key: string;
-  templateItemId?: string;
-  title: string;
-  priority: TaskTemplatePriorityDto;
-  assigneeEmployeeId: string;
-  stateId: string;
-  dueAt: string;
-  checklist: string[];
-}
+import { TASK_CORE_ENGINE_PAIRS } from "@/routes/tasks/constants";
+import { useTaskDrawer } from "@/routes/tasks/task-drawer-nav";
+import {
+  TASK_TEMPLATE_MANAGE_PAIR,
+  TASK_TEMPLATE_PRIORITY_OPTIONS,
+  TASK_UPDATE_STATE_PAIR,
+} from "../constants";
+import {
+  EMPTY_BULK,
+  appendBlankRow,
+  applyBulk,
+  buildDecomposePayload,
+  editRow,
+  rowsFromTemplate,
+  validRowsOf,
+  type BulkValues,
+  type PreviewRow,
+} from "./goal-decompose-rows";
+import { GoalDecomposeWizardApplyAll } from "./GoalDecomposeWizardApplyAll";
+import { GoalDecomposeWizardResult } from "./GoalDecomposeWizardResult";
+import { decomposeReturnPath } from "./GoalDecomposeWizardResume";
 
 /**
  * GOAL-SCREEN-004 (S5-GOAL-TPL-1) — wizard phân rã mục tiêu từ template: chọn template → **xem trước**
@@ -51,6 +60,10 @@ interface PreviewRow {
  *
  * TẤT-CẢ-HOẶC-KHÔNG: server ghi N việc trong 1 transaction — lỗi giữa lô ⇒ 0 việc được tạo, nên hộp
  * thoại giữ nguyên danh sách đã sửa để người dùng chỉnh rồi thử lại (đóng hộp thoại = mất công sửa).
+ *
+ * S20-GOAL-DECOMPOSE-1 (US-GOAL-QL-07 + QL-08): hàng «Áp cho tất cả» người + hạn; hạn = cuối ngày
+ * theo giờ CÔNG TY (`goal-decompose-rows.ts`); tạo xong ⇒ bước «Đã tạo n việc» (mở drawer từng việc,
+ * «Mở board dự án»); chưa có mẫu ⇒ «Tạo mẫu mới» sang /goals/templates kèm `returnTo` về đúng wizard.
  */
 export function GoalDecomposeWizard({
   goal,
@@ -61,10 +74,21 @@ export function GoalDecomposeWizard({
 }) {
   const { t } = useTranslation("goals");
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { openTask } = useTaskDrawer();
   const canPickState = useCan(TASK_UPDATE_STATE_PAIR.action, TASK_UPDATE_STATE_PAIR.resourceType);
+  const canManageTemplates = useCan(
+    TASK_TEMPLATE_MANAGE_PAIR.action,
+    TASK_TEMPLATE_MANAGE_PAIR.resourceType,
+  );
+  const canOpenTask = useCan(
+    TASK_CORE_ENGINE_PAIRS.READ.action,
+    TASK_CORE_ENGINE_PAIRS.READ.resourceType,
+  );
 
   const [templateId, setTemplateId] = useState("");
   const [rows, setRows] = useState<PreviewRow[]>([]);
+  const [bulk, setBulk] = useState<BulkValues>(EMPTY_BULK);
   /** Đã nạp item của template nào rồi — chống nạp lại đè mất phần người dùng vừa sửa. */
   const [loadedFrom, setLoadedFrom] = useState("");
 
@@ -102,26 +126,16 @@ export function GoalDecomposeWizard({
     staleTime: 60_000,
   });
 
-  // Nạp item của template vào preview MỘT LẦN cho mỗi lần chọn template.
+  // Nạp item của template vào preview MỘT LẦN cho mỗi lần chọn template (dòng nhận giá trị chung
+  // hiện tại của «Áp cho tất cả»).
   useEffect(() => {
     if (!detailQuery.data || loadedFrom === detailQuery.data.id) return;
-    setRows(
-      detailQuery.data.items.map((item, index) => ({
-        key: `tpl-${item.id}-${index}`,
-        templateItemId: item.id,
-        title: item.title,
-        priority: item.defaultPriority ?? "none",
-        assigneeEmployeeId: "",
-        stateId: "",
-        dueAt: "",
-        checklist: item.checklist,
-      })),
-    );
+    setRows(rowsFromTemplate(detailQuery.data.items, bulk));
     setLoadedFrom(detailQuery.data.id);
-  }, [detailQuery.data, loadedFrom]);
+  }, [detailQuery.data, loadedFrom, bulk]);
 
-  /** Dòng hợp lệ = có tiêu đề. Nguồn DUY NHẤT cho cả số trên nút lẫn payload gửi lên. */
-  const validRows = useMemo(() => rows.filter((row) => row.title.trim().length > 0), [rows]);
+  const validRows = useMemo(() => validRowsOf(rows), [rows]);
+  const canPickAssignee = showAssignee && canReadEmployees;
 
   /**
    * Dựng payload TẠI THỜI ĐIỂM BẤM, rồi truyền vào `mutate(payload)`.
@@ -137,23 +151,12 @@ export function GoalDecomposeWizard({
    * tất-cả-hoặc-không nên MỌI việc còn lại cũng không được tạo.
    */
   function buildPayload(): DecomposeGoalRequest {
-    return {
+    return buildDecomposePayload(validRows, {
       templateId,
-      items: validRows.map(
-        (row): DecomposeGoalItemRequest => ({
-          ...(row.templateItemId ? { templateItemId: row.templateItemId } : {}),
-          title: row.title.trim(),
-          ...(row.priority !== "none" ? { priority: row.priority } : {}),
-          ...(showAssignee && row.assigneeEmployeeId
-            ? { assigneeEmployeeId: row.assigneeEmployeeId }
-            : {}),
-          ...(showState && row.stateId ? { stateId: row.stateId } : {}),
-          // <input type="date"> cho ngày; server nhận ISO có offset ⇒ ghim cuối ngày UTC.
-          ...(row.dueAt ? { dueAt: `${row.dueAt}T23:59:59.000Z` } : {}),
-          ...(row.checklist.length > 0 ? { checklist: row.checklist } : {}),
-        }),
-      ),
-    };
+      showAssignee,
+      showState,
+      timeZone: companyTimeZone(),
+    });
   }
 
   const mutation = useMutation({
@@ -166,9 +169,10 @@ export function GoalDecomposeWizard({
           queryClient.invalidateQueries({ queryKey }),
         ),
       );
-      onClose();
+      // KHÔNG đóng: bước kết quả «Đã tạo n việc» hiện từ `mutation.data`.
     },
   });
+  const result = mutation.isSuccess ? mutation.data : null;
 
   const overLimit = validRows.length > GOAL_DECOMPOSE_MAX;
   const errorMessage =
@@ -178,23 +182,72 @@ export function GoalDecomposeWizard({
         ? t("decompose.error")
         : null;
 
-  function patchRow(key: string, patch: Partial<PreviewRow>) {
-    setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  function patchRow(key: string, patch: Parameters<typeof editRow>[2]) {
+    setRows((prev) => editRow(prev, key, patch));
   }
 
   function addRow() {
-    setRows((prev) => [
-      ...prev,
-      {
-        key: `new-${prev.length}-${prev.length ? prev[prev.length - 1]!.key : "first"}`,
-        title: "",
-        priority: "none",
-        assigneeEmployeeId: "",
-        stateId: "",
-        dueAt: "",
-        checklist: [],
-      },
-    ]);
+    setRows((prev) => appendBlankRow(prev, bulk));
+  }
+
+  function changeBulk(patch: Partial<BulkValues>) {
+    setBulk((prev) => ({ ...prev, ...patch }));
+    setRows((prev) => applyBulk(prev, patch));
+  }
+
+  function openCreatedTask(taskId: string) {
+    onClose();
+    openTask(taskId);
+  }
+
+  function openProjectBoard(projectId: string) {
+    onClose();
+    void navigate({
+      to: "/tasks/projects/$projectId",
+      params: { projectId },
+      search: { tab: "board" },
+    });
+  }
+
+  function createTemplate() {
+    onClose();
+    void navigate({ to: "/goals/templates", search: { returnTo: decomposeReturnPath(goal.id) } });
+  }
+
+  if (result) {
+    const projectId = goal.projectId;
+    return (
+      <Dialog
+        open
+        onClose={onClose}
+        title={t("decompose.result.dialogTitle")}
+        description={t("decompose.result.description")}
+        footer={
+          <div className="flex justify-end gap-2">
+            {projectId && (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="goal-decompose-open-board"
+                onClick={() => openProjectBoard(projectId)}
+              >
+                <KanbanSquare className="mr-1.5 h-3.5 w-3.5" />
+                {t("decompose.result.openBoard")}
+              </Button>
+            )}
+            <Button size="sm" data-testid="goal-decompose-done" onClick={onClose}>
+              {t("decompose.result.close")}
+            </Button>
+          </div>
+        }
+      >
+        <GoalDecomposeWizardResult
+          result={result}
+          canOpenTask={canOpenTask}
+          onOpenTask={openCreatedTask}
+        />
+      </Dialog>
+    );
   }
 
   return (
@@ -249,8 +302,21 @@ export function GoalDecomposeWizard({
               {t("decompose.templatesError")}
             </p>
           )}
-          {!templatesQuery.isLoading && (templatesQuery.data ?? []).length === 0 && (
-            <p className="text-xs text-muted-foreground">{t("decompose.noTemplates")}</p>
+          {templatesQuery.isSuccess && templatesQuery.data.length === 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">{t("decompose.noTemplates")}</p>
+              {canManageTemplates && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="goal-decompose-create-template"
+                  onClick={createTemplate}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  {t("decompose.createTemplate")}
+                </Button>
+              )}
+            </div>
           )}
         </div>
 
@@ -278,6 +344,12 @@ export function GoalDecomposeWizard({
               </p>
             ) : (
               <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                <GoalDecomposeWizardApplyAll
+                  bulk={bulk}
+                  showAssignee={canPickAssignee}
+                  employees={employeesQuery.data?.items ?? []}
+                  onChange={changeBulk}
+                />
                 {rows.map((row, index) => (
                   <div
                     key={row.key}
