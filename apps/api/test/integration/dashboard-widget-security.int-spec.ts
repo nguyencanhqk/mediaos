@@ -10,8 +10,10 @@
  *      đọc cache_key của A dưới GUC tenant B (app role, RLS) ⇒ 0 row.
  *   S4 masking-tier (hr-overview): 2 user CÙNG read:employee khác view-salary ⇒ CẢ HAI KHÔNG thấy lương/PII
  *      trong response LẪN row cache; HR_OVERVIEW viewer-independent ⇒ 1 cache_key company-wide (user_id NULL).
- *   S5 authorize-before-aggregate (project-progress): getProject gate TRƯỚC ⇒ 403/404 và TasksService.listByProject
- *      KHÔNG được gọi (spy) — deny KHÔNG bị nuốt, aggregate KHÔNG chạy khi authorize fail.
+ *   S5 authorize-before-aggregate (project-progress): getProject gate TRƯỚC ⇒ 403/404 và aggregate thật của handler
+ *      (ProjectsService.countsByStatusLeaf) KHÔNG được gọi (spy) — deny KHÔNG bị nuốt, aggregate KHÔNG chạy khi
+ *      authorize fail. Ca ALLOW đứng cạnh (dự án thật trong phạm vi ⇒ 200 + spy gọi đúng 1 lần) chứng minh spy
+ *      trúng đúng method/instance mà handler gọi — thiếu nó, hai ca deny xanh rỗng.
  *   S6 append-only (dashboard_widget_cache): app role DELETE bị TỪ CHỐI (permission denied); soft-delete =
  *      UPDATE deleted_at (BẤT BIẾN #2) THÀNH CÔNG và row vẫn tồn tại.
  *
@@ -30,7 +32,7 @@ import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
-import { TasksService } from "../../src/tasks/tasks.service";
+import { ProjectsService } from "../../src/tasks/projects.service";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -478,7 +480,7 @@ describe.skipIf(!hasLaneDb)(
 );
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// S5 — authorize-before-aggregate: getProject gate TRƯỚC ⇒ listByProject KHÔNG chạy khi deny (spy)
+// S5 — authorize-before-aggregate: getProject gate TRƯỚC ⇒ countsByStatusLeaf KHÔNG chạy khi deny (spy)
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 describe.skipIf(!hasLaneDb)(
   "S4-DASH-BE-2 CROWN authorize-before-aggregate (project-progress)",
@@ -488,7 +490,8 @@ describe.skipIf(!hasLaneDb)(
     let A: SeededTenant;
     const companyIds: string[] = [];
     const email = { noProj: "", withProj: "" };
-    let listByProjectSpy: MockInstance<TasksService["listByProject"]>;
+    let projectP = "";
+    let countsSpy: MockInstance<ProjectsService["countsByStatusLeaf"]>;
 
     beforeAll(async () => {
       const hash = await hashedPw();
@@ -509,40 +512,53 @@ describe.skipIf(!hasLaneDb)(
       const uWith = await seedUser(direct, A.companyId, email.withProj, hash);
       await seedUserRole(direct, uNo, roleNoProj, A.companyId);
       await seedUserRole(direct, uWith, roleWithProj, A.companyId);
+      // Dự án THẬT cùng công ty — vế ALLOW (read:project @Company ⇒ getProject thấy dự án).
+      projectP = await seedProject(direct, A.companyId, "dashsec-progress");
 
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
       nest = moduleRef.createNestApplication();
       nest.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
       nest.useGlobalFilters(new AllExceptionsFilter());
       await nest.init();
-      // Spy trên instance THẬT trong container (cùng instance mà handler inject as `this.tasks`).
-      listByProjectSpy = vi.spyOn(nest.get(TasksService), "listByProject");
+      // Spy trên instance THẬT trong container (cùng instance mà handler inject as `this.projects`).
+      countsSpy = vi.spyOn(nest.get(ProjectsService), "countsByStatusLeaf");
     });
 
     afterAll(async () => {
-      listByProjectSpy?.mockRestore();
+      countsSpy?.mockRestore();
       await cleanupDashCache(direct, companyIds);
       await cleanupTenants(direct, companyIds);
       await direct.end();
       if (nest) await nest.close();
     });
 
-    it("S5 thiếu read:project ⇒ 403 và listByProject KHÔNG được gọi (gate TRƯỚC aggregate)", async () => {
-      listByProjectSpy.mockClear();
+    it("S5 thiếu read:project ⇒ 403 và aggregate KHÔNG được gọi (gate TRƯỚC aggregate)", async () => {
+      countsSpy.mockClear();
       const res = await api(nest)
         .get(`/dashboard/widgets/project-progress?project_id=${randomUUID()}`)
         .set(bearer(await login(nest, A.slug, email.noProj)));
       expect(res.status).toBe(403);
-      expect(listByProjectSpy).not.toHaveBeenCalled();
+      expect(countsSpy).not.toHaveBeenCalled();
     });
 
-    it("S5 project ngoài scope/không tồn tại ⇒ 404 (getProject) và listByProject KHÔNG được gọi", async () => {
-      listByProjectSpy.mockClear();
+    it("S5 project ngoài scope/không tồn tại ⇒ 404 (getProject) và aggregate KHÔNG được gọi", async () => {
+      countsSpy.mockClear();
       const res = await api(nest)
         .get(`/dashboard/widgets/project-progress?project_id=${randomUUID()}`)
         .set(bearer(await login(nest, A.slug, email.withProj)));
       expect(res.status).toBe(404);
-      expect(listByProjectSpy).not.toHaveBeenCalled();
+      expect(countsSpy).not.toHaveBeenCalled();
+    });
+
+    it("S5 ALLOW · dự án thật trong phạm vi ⇒ 200 và aggregate được gọi đúng 1 lần (spy còn sống)", async () => {
+      countsSpy.mockClear();
+      const res = await api(nest)
+        .get(`/dashboard/widgets/project-progress?project_id=${projectP}`)
+        .set(bearer(await login(nest, A.slug, email.withProj)));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      // Lần gọi đầu cho (user, dự án) là cache-miss ⇒ handler phải chạy aggregate.
+      expect(countsSpy).toHaveBeenCalledTimes(1);
+      expect(countsSpy).toHaveBeenCalledWith(A.companyId, projectP);
     });
   },
 );

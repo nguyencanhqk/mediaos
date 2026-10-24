@@ -21,9 +21,12 @@ import {
   taskToFormValues,
   taskFormToCreatePayload,
   taskFormToUpdatePayload,
+  editableDirtyFields,
   EMPTY_TASK_FORM,
   type TaskFormValues,
 } from "./task-form-schema";
+import { useTaskPatchFieldLocks, type TaskPatchFieldLocks } from "./task-patch-field-locks";
+import { TaskFieldLockedHint } from "./TaskFieldLockedHint";
 
 /**
  * TaskFormDrawer — tạo/sửa task core (S4-FE-TASK-2, SPEC-06 §13.6, TASK-SCREEN-006).
@@ -33,6 +36,10 @@ import {
  * phép). Server là cổng thật. Project/Assignee/Department options lấy từ API scoped theo quyền đọc tương
  * ứng của actor (read:project/read:employee/read:department) — "chỉ hiện lựa chọn trong phạm vi" do
  * SERVER lọc, form không tự lọc thêm.
+ *
+ * S20-SEC-TASKPATCHGATE-1 — chế độ SỬA: ô hạn / ưu tiên / người phụ trách khoá theo cặp quyền chuyên
+ * trách server trả (`useTaskPatchFieldLocks`); payload CHỈ gồm trường người dùng đã sửa và không bị
+ * khoá (server đòi cặp khi trường ĐỔI, thiếu ⇒ 403 cả request). Chế độ TẠO không đổi.
  */
 interface TaskFormDrawerProps {
   mode: "create" | "edit";
@@ -40,6 +47,12 @@ interface TaskFormDrawerProps {
   onClose: () => void;
   onSuccess: (task: TaskCoreResponseDto) => void;
 }
+
+const NO_FIELD_LOCKS: TaskPatchFieldLocks = {
+  assigneeEmployeeId: false,
+  priority: false,
+  dueAt: false,
+};
 
 function submitErrorKey(err: unknown): string {
   if (err instanceof ApiError) {
@@ -58,6 +71,8 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
   const canReadEmployees = useCan("read", "employee");
   const canReadProjects = useCan("read", "project");
   const canReadDepartments = useCan("read", "department");
+  const editLocks = useTaskPatchFieldLocks();
+  const locked = isEdit ? editLocks : NO_FIELD_LOCKS;
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
@@ -68,7 +83,7 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
   const {
     register,
     handleSubmit,
-    formState: { errors, isDirty, isSubmitting },
+    formState: { errors, isDirty, isSubmitting, dirtyFields },
   } = form;
 
   useDirtyFormGuard({ isDirty });
@@ -98,7 +113,10 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
   const mutation = useMutation({
     mutationFn: async (values: TaskFormValues): Promise<TaskCoreResponseDto> => {
       if (isEdit && task) {
-        return taskCoreApi.updateTask(task.id, taskFormToUpdatePayload(values));
+        const payload = taskFormToUpdatePayload(values, editableDirtyFields(dirtyFields, locked));
+        // Không sửa gì ⇒ không gọi API (PATCH rỗng bị server từ chối 400).
+        if (Object.keys(payload).length === 0) return task;
+        return taskCoreApi.updateTask(task.id, payload);
       }
       return taskCoreApi.createTask(taskFormToCreatePayload(values));
     },
@@ -211,7 +229,12 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
           <label htmlFor="task-assignee" className="text-sm font-medium text-foreground">
             {t("tasks.form.fields.assignee")}
           </label>
-          <Select id="task-assignee" {...register("assigneeEmployeeId")}>
+          <Select
+            id="task-assignee"
+            {...register("assigneeEmployeeId")}
+            disabled={locked.assigneeEmployeeId}
+            aria-describedby={locked.assigneeEmployeeId ? "task-assignee-locked" : undefined}
+          >
             <option value="">{t("tasks.form.placeholders.none")}</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
@@ -219,6 +242,7 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
               </option>
             ))}
           </Select>
+          {locked.assigneeEmployeeId && <TaskFieldLockedHint id="task-assignee-locked" />}
         </div>
 
         <div className="space-y-1.5">
@@ -239,7 +263,12 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
           <label htmlFor="task-priority" className="text-sm font-medium text-foreground">
             {t("tasks.form.fields.priority")}
           </label>
-          <Select id="task-priority" {...register("priority")}>
+          <Select
+            id="task-priority"
+            {...register("priority")}
+            disabled={locked.priority}
+            aria-describedby={locked.priority ? "task-priority-locked" : undefined}
+          >
             <option value="">{t("tasks.form.placeholders.none")}</option>
             {TASK_CORE_PRIORITY_OPTIONS.map((p) => (
               <option key={p} value={p}>
@@ -247,6 +276,7 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
               </option>
             ))}
           </Select>
+          {locked.priority && <TaskFieldLockedHint id="task-priority-locked" />}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -260,7 +290,14 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
             <label htmlFor="task-due-at" className="text-sm font-medium text-foreground">
               {t("tasks.form.fields.dueAt")}
             </label>
-            <Input id="task-due-at" type="datetime-local" {...register("dueAt")} />
+            <Input
+              id="task-due-at"
+              type="datetime-local"
+              {...register("dueAt")}
+              disabled={locked.dueAt}
+              aria-describedby={locked.dueAt ? "task-due-at-locked" : undefined}
+            />
+            {locked.dueAt && <TaskFieldLockedHint id="task-due-at-locked" />}
             {errors.dueAt && (
               <p role="alert" className="text-sm text-destructive">
                 {errFor(errors.dueAt)}

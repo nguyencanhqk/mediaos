@@ -25,10 +25,16 @@ import { Button, Dialog, Input, Select } from "@mediaos/ui";
 export function TaskTemplateFormDialog({
   template,
   onClose,
+  onCreated,
 }: {
   /** undefined = tạo mới. */
   template?: TaskTemplateResponseDto;
   onClose: () => void;
+  /**
+   * S20-GOAL-DECOMPOSE-1 — gọi SAU khi đã invalidate danh sách, chỉ cho đường TẠO MỚI (trang mẫu dùng
+   * để quay lại wizard phân rã: wizard mở lại phải thấy mẫu mới mà không cần F5).
+   */
+  onCreated?: (saved: TaskTemplateResponseDto) => void;
 }) {
   const { t } = useTranslation("goals");
   const queryClient = useQueryClient();
@@ -71,6 +77,7 @@ export function TaskTemplateFormDialog({
         ? taskTemplateInvalidation.update(saved.id)
         : taskTemplateInvalidation.create();
       await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+      if (!isEdit) onCreated?.(saved);
       onClose();
     },
   });

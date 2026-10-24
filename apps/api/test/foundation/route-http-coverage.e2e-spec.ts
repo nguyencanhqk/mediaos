@@ -377,7 +377,12 @@ const MAX_UNCOVERED_TOTAL = 0;
 // S19-OPS-TASKFILEURL-1 (14/10/2026): 691 → **692** — SỐ SPEC IN RA ("[S10-QA-ROUTEHTTP-1] Route HTTP
 // coverage: 692/692 (100.0%) — CHƯA phủ: 0"); +1 là `GET /tasks/:taskId/files/:fileId/download-url`
 // (TASK-API-404, `s19-task-file-download-url.int-spec.ts`). Census trước WO: 691 route.
-const MIN_COVERED_COUNT = 692;
+// S20-SEC-TASKLEGACYREAD-1 (24/10/2026): 692 → **689** — HẠ SÀN, lý do bằng văn bản: ba route
+// `GET /tasks/board` · `GET /tasks/by-project/:projectId` · `GET /tasks/by-team/:teamId` bị GỠ khỏi cây
+// mã (census JSON sinh lại: −3 route, +0 route). SỐ SPEC IN RA: "[S10-QA-ROUTEHTTP-1] Route HTTP
+// coverage: 689/689 (100.0%) — CHƯA phủ: 0" — uncovered VẪN = 0 nên tụt tổng là do route biến mất,
+// không phải do mất test (tụt tổng mà uncovered > 0 là mất test ⇒ cấm hạ).
+const MIN_COVERED_COUNT = 689;
 
 describe("Route HTTP coverage census (S10-QA-ROUTEHTTP-1) — phép đo lặp lại được", () => {
   let app: INestApplication;
