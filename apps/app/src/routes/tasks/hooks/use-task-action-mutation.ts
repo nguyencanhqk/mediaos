@@ -23,6 +23,28 @@ function toMutationResult(response: TaskActionResponseDto): TaskActionMutationRe
   return { task: response.task, warnings: normalizeTaskActionWarnings(warnings) };
 }
 
+type WarningsCallback = (
+  warnings: readonly TaskAssigneeWarning[],
+  task: TaskCoreResponseDto,
+) => void;
+
+/**
+ * Gọi `onWarnings` mà KHÔNG để nó làm hỏng kết quả mutate. TanStack Query v5: `onSuccess` ném ⇒
+ * mutation chuyển sang LỖI và chạy `onError` ⇒ rollback cache về snapshot cũ dù server ĐÃ ghi
+ * (query-core mutation.js). Cảnh báo là tín hiệu phụ ⇒ lỗi của nó chỉ được ghi log.
+ */
+function notifyWarnings(
+  onWarnings: WarningsCallback | undefined,
+  result: TaskActionMutationResult,
+): void {
+  if (!onWarnings) return;
+  try {
+    onWarnings(result.warnings, result.task);
+  } catch (error) {
+    console.error("[task] hiển thị cảnh báo sau thao tác thất bại — bỏ qua:", error);
+  }
+}
+
 /**
  * useTaskActionMutation — optimistic update CÓ rollback cho action mutate vòng đời task (S4-FE-TASK-2,
  * SPEC-06 §14: change-status/change-priority/change-deadline/assign). Dùng chung bởi TaskStatusSelect
@@ -39,7 +61,8 @@ function toMutationResult(response: TaskActionResponseDto): TaskActionMutationRe
  *
  * S20-TASK-ASSIGNWARN-1: `data` của mutation là {@link TaskActionMutationResult} — `warnings` ĐÃ chuẩn
  * hoá (rỗng khi không có/không hợp lệ). `onWarnings` gọi sau MỖI lần thành công (kể cả mảng rỗng, để
- * phía gọi đóng cảnh báo cũ); lỗi ⇒ không gọi. Thao tác hàng loạt gộp từ `data.warnings` của từng lời gọi.
+ * phía gọi đóng cảnh báo cũ); lỗi ⇒ không gọi; `onWarnings` ném ⇒ chỉ ghi log, mutate VẪN thành công.
+ * Thao tác hàng loạt gộp từ `data.warnings` của từng lời gọi.
  */
 export function useTaskActionMutation<TVariables>({
   taskId,
@@ -50,7 +73,7 @@ export function useTaskActionMutation<TVariables>({
   taskId: string;
   mutationFn: (vars: TVariables) => Promise<TaskActionResponseDto>;
   toPatch: (vars: TVariables) => Partial<TaskCoreResponseDto>;
-  onWarnings?: (warnings: readonly TaskAssigneeWarning[], task: TaskCoreResponseDto) => void;
+  onWarnings?: WarningsCallback;
 }) {
   const queryClient = useQueryClient();
   const queryKey = taskKeys.detail(taskId);
@@ -84,7 +107,7 @@ export function useTaskActionMutation<TVariables>({
       queryClient.setQueryData<TaskCoreResponseDto>(queryKey, (prev) =>
         prev ? { ...prev, ...result.task } : result.task,
       );
-      onWarnings?.(result.warnings, result.task);
+      notifyWarnings(onWarnings, result);
     },
     onSettled: (data, _err, _vars, context) => {
       for (const key of taskCoreInvalidation.list())

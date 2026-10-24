@@ -311,6 +311,49 @@ describe("useTaskActionMutation — cache chi tiết sau action mutate", () => {
       expect(junk.result.current.data?.warnings).toEqual([{ kind: "notMember", until: null }]);
     });
 
+    // TanStack Query v5: `onSuccess` ném ⇒ mutation chuyển sang LỖI và CHẠY `onError` (mutation.js của
+    // query-core) ⇒ rollback cache về snapshot cũ dù server ĐÃ giao. Cảnh báo là tín hiệu phụ.
+    it("onWarnings NÉM ⇒ mutate VẪN thành công, cache giữ task server trả (không rollback)", async () => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      client.setQueryData(taskKeys.detail("task-1"), {
+        ...DETAIL_WITH_SUBTASKS,
+        mainAssigneeEmployeeId: "emp-001",
+      });
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+      const { result } = renderHook(
+        () =>
+          useTaskActionMutation<string>({
+            taskId: "task-1",
+            mutationFn: () =>
+              Promise.resolve({
+                task: { ...ASSIGNED, mainAssigneeEmployeeId: "emp-002" },
+                warnings: [{ code: "TASK-WARN-ASSIGNEE-ON-LEAVE", message: "x" }],
+              } as unknown as TaskActionResponseDto),
+            toPatch: (id) => ({ mainAssigneeEmployeeId: id }) as Partial<TaskCoreResponseDto>,
+            onWarnings: () => {
+              throw new Error("toast hỏng");
+            },
+          }),
+        { wrapper },
+      );
+
+      result.current.mutate("emp-002");
+      await waitFor(() => expect(result.current.isPending).toBe(false));
+
+      expect(result.current.isSuccess).toBe(true);
+      expect(result.current.isError).toBe(false);
+      expect(
+        client.getQueryData<TaskCoreResponseDto>(taskKeys.detail("task-1"))?.mainAssigneeEmployeeId,
+      ).toBe("emp-002");
+      expect(consoleError).toHaveBeenCalled();
+      consoleError.mockRestore();
+    });
+
     it("mutate LỖI ⇒ KHÔNG gọi onWarnings (không cảnh báo cho việc giao chưa thành)", async () => {
       const client = new QueryClient({
         defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

@@ -5,7 +5,7 @@ import { toast } from "@mediaos/ui";
 import type { TaskAssigneeWarning } from "./hooks/use-task-action-mutation";
 
 /**
- * Cảnh báo «người được giao nghỉ phép / không phải thành viên dự án» sau khi giao việc
+ * Cảnh báo «người được giao nghỉ phép / không phải thành viên dự án» sau khi giao việc hoặc dời hạn
  * (S20-TASK-ASSIGNWARN-1 · US-TASK-QL-91), hiện qua hệ thông báo chung (S20-FE-TOAST-1 · US-X-91).
  *
  * - Không chặn: việc ĐÃ được giao như server chấp nhận; thông báo chỉ là tín hiệu sớm kèm lối
@@ -40,16 +40,33 @@ export function formatAssigneeWarning(
   warnings: readonly TaskAssigneeWarning[],
   assigneeName: string | null | undefined,
 ): string | null {
-  if (warnings.length === 0) return null;
+  const [first, ...rest] = warnings;
+  if (!first) return null;
   const name = assigneeName?.trim() || t("assigneeWarning.fallbackName");
-  const sentences = warnings.map((warning, index) => {
-    const subject = index === 0 ? name : "";
-    if (warning.kind === "notMember") return t("assigneeWarning.notMember", { name: subject });
-    return warning.until
-      ? t("assigneeWarning.onLeaveUntil", { name: subject, until: toDayMonth(warning.until) })
-      : t("assigneeWarning.onLeave", { name: subject });
-  });
-  return sentences.map((sentence) => sentence.trim()).join(SENTENCE_SEPARATOR);
+  return [
+    formatLeadSentence(t, first, name),
+    ...rest.map((warning) => formatContinuedSentence(t, warning)),
+  ].join(SENTENCE_SEPARATOR);
+}
+
+/** Ý đầu — mang chủ ngữ (tên người nhận). */
+function formatLeadSentence(
+  t: TFunction<"tasks">,
+  warning: TaskAssigneeWarning,
+  name: string,
+): string {
+  if (warning.kind === "notMember") return t("assigneeWarning.notMember", { name });
+  return warning.until
+    ? t("assigneeWarning.onLeaveUntil", { name, until: toDayMonth(warning.until) })
+    : t("assigneeWarning.onLeave", { name });
+}
+
+/** Ý tiếp theo — khoá riêng không chủ ngữ, không phụ thuộc vị trí `{{name}}` trong bản dịch. */
+function formatContinuedSentence(t: TFunction<"tasks">, warning: TaskAssigneeWarning): string {
+  if (warning.kind === "notMember") return t("assigneeWarning.continued.notMember");
+  return warning.until
+    ? t("assigneeWarning.continued.onLeaveUntil", { until: toDayMonth(warning.until) })
+    : t("assigneeWarning.continued.onLeave");
 }
 
 /**

@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, within, act } from "@testing-library/react";
 import { Toaster, toast } from "@mediaos/ui";
-import { useAssigneeWarningToast, type AssigneeWarningNotice } from "./AssigneeWarning";
+import type { TFunction } from "i18next";
+import {
+  formatAssigneeWarning,
+  useAssigneeWarningToast,
+  type AssigneeWarningNotice,
+} from "./AssigneeWarning";
 
 /**
  * S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — cảnh báo «người được giao nghỉ phép / không phải thành
@@ -77,6 +82,45 @@ describe("useAssigneeWarningToast", () => {
     expect(within(live).getAllByText(/Trần Thị B/)).toHaveLength(1);
     expect(live).toHaveTextContent(
       "Trần Thị B nghỉ phép vào ngày hạn của việc · không phải thành viên dự án",
+    );
+  });
+
+  // Câu tiếp theo KHÔNG được dựng bằng khoá có {{name}} với name rỗng rồi trim — cách đó chỉ đúng khi
+  // MỌI bản dịch mở đầu bằng {{name}}. Khoá `t` giả ghi lại khoá + tham số để khoá chặt điều đó.
+  it("câu thứ hai dùng khoá riêng KHÔNG có chủ ngữ (không phụ thuộc vị trí {{name}} trong bản dịch)", () => {
+    const calls: Array<{ key: string; options: Record<string, unknown> | undefined }> = [];
+    const fakeT = ((key: string, options?: Record<string, unknown>) => {
+      calls.push({ key, options });
+      return `[${key}]`;
+    }) as unknown as TFunction<"tasks">;
+
+    const message = formatAssigneeWarning(
+      fakeT,
+      [{ kind: "onLeave", until: "2026-10-30" }, NOT_MEMBER],
+      "Trần Thị B",
+    );
+
+    expect(message).toBe("[assigneeWarning.onLeaveUntil] · [assigneeWarning.continued.notMember]");
+    expect(calls.some((call) => call.options?.name === "")).toBe(false);
+
+    const reversed = formatAssigneeWarning(
+      fakeT,
+      [NOT_MEMBER, { kind: "onLeave", until: "2026-10-30" }],
+      "Trần Thị B",
+    );
+    expect(reversed).toBe("[assigneeWarning.notMember] · [assigneeWarning.continued.onLeaveUntil]");
+  });
+
+  it("thứ tự ngược (không thành viên trước) ⇒ câu thật vẫn liền mạch, tên nêu một lần", () => {
+    const live = notifyWith({
+      taskId: "t1",
+      warnings: [NOT_MEMBER, { kind: "onLeave", until: "2026-10-30" }],
+      assigneeName: "Trần Thị B",
+    });
+
+    expect(within(live).getAllByText(/Trần Thị B/)).toHaveLength(1);
+    expect(live).toHaveTextContent(
+      "Trần Thị B không phải thành viên dự án · nghỉ phép vào ngày hạn của việc (nghỉ đến 30/10)",
     );
   });
 
