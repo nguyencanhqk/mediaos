@@ -1011,20 +1011,6 @@ export const PARAM_UUID_VERDICTS: readonly ParamVerdict[] = [
   // ══════════════════════════════════════════════════════════════════════════════════════════════
 
   {
-    key: "tasks/tasks.controller.ts#getProjectTasks:projectId",
-    route: "GET /tasks/by-project/:projectId",
-    decision: "piped",
-    before: BEFORE_500,
-    reason: `Đọc task theo DỰ ÁN. ALLOW-200 trên dự án THẬT ⇒ \`:projectId\` là uuid. ${PIPED_500}`,
-  },
-  {
-    key: "tasks/tasks.controller.ts#getTeamTasks:teamId",
-    route: "GET /tasks/by-team/:teamId",
-    decision: "piped",
-    before: BEFORE_500,
-    reason: `Đọc task theo TEAM. ALLOW-200 trên team THẬT (có thành viên — \`teamExistsTx\` tra \`team_members\`, KHÔNG tra \`teams\`). ${PIPED_500}`,
-  },
-  {
     key: "tasks/tasks.controller.ts#getTask:taskId",
     route: "GET /tasks/:taskId",
     decision: "piped",
@@ -1622,10 +1608,15 @@ export const PARAM_UUID_MEASURED_FILES: readonly string[] = [
  * ⚠️ **185 → 183 LÀ HẠ SÀN — LÝ DO BẰNG VĂN BẢN, đọc trước khi nghi ngờ.** Đợt 1 vốn 32 site; hai
  * site `approval/approval-inbox.controller.ts#{approve,reject}:id` KHÔNG bị "gỡ pipe cho xanh" mà
  * bị XOÁ CÙNG CẢ MODULE ở `S10-CLEAN-WORKFLOWCLUSTER-2` — không còn route để đo.
- * Cách phân biệt nếu sàn này lại tụt: sàn chỉ được hạ khi CONTROLLER biến mất khỏi cây mã (kiểm
- * bằng `PARAM_UUID_MEASURED_FILES` + `git log --diff-filter=D`). Site còn sống mà mất dòng verdict
- * là NỢ, cấm hạ sàn.
+ * Cách phân biệt nếu sàn này lại tụt: sàn chỉ được hạ khi CONTROLLER HOẶC HANDLER bị xoá khỏi cây mã.
+ * Bằng chứng bắt buộc: siteKey không còn trong `idLikeParamSites()` (`param-uuid-census.ts`) VÀ route
+ * vắng trong census route sinh lại (`docs/_review/S6-SEC-ROUTEMAP-1-route-census.json`); xoá cả
+ * controller thì kiểm thêm bằng `PARAM_UUID_MEASURED_FILES` + `git log --diff-filter=D`. Site còn
+ * sống mà mất dòng verdict là NỢ, cấm hạ sàn.
  *
  * S19-OPS-TASKFILEURL-1 (14/10/2026): 183 → **185** — +2 site `downloadUrl:{taskId,fileId}` (route JSON MỚI, `BORN_PIPED`).
+ * S20-SEC-TASKLEGACYREAD-1 (24/10/2026): 185 → **183** — HẠ SÀN: −2 site `tasks/tasks.controller.ts#`
+ * `{getProjectTasks:projectId, getTeamTasks:teamId}` vì HANDLER bị xoá (controller còn); hai site vắng
+ * trong `idLikeParamSites()` và hai route vắng trong census route sinh lại.
  */
-export const PARAM_UUID_MEASURED_SIZE = 185;
+export const PARAM_UUID_MEASURED_SIZE = 183;

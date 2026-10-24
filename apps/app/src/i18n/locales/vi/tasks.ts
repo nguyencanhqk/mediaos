@@ -380,11 +380,7 @@ export default {
       title: "Việc của tôi",
       description: "Công việc được giao cho bạn, do bạn tạo hoặc bạn đang theo dõi.",
       noProject: "Không thuộc dự án",
-      groups: {
-        assigned: "Được giao",
-        created: "Tôi tạo",
-        watched: "Đang theo dõi",
-      },
+      // S20-TASK-MYTASKS-1 — nhóm/chip/trạng thái rỗng mới ở `tasks-workux.ts` (`myTasks.*`).
       forbidden: {
         title: "Không có quyền truy cập",
         description: "Bạn không có quyền xem việc của tôi.",
@@ -392,10 +388,6 @@ export default {
       error: {
         title: "Không thể tải công việc",
         description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
-      },
-      empty: {
-        title: "Không có công việc",
-        description: "Bạn chưa có công việc nào trong mục này.",
       },
     },
     // S5-TASK-MOVEPROJ-1 — đổi dự án của công việc (bắt buộc chọn cột đích để state_id không mồ côi).

@@ -56,9 +56,27 @@ export default {
 
   list: {
     create: "Tạo mục tiêu",
+    // S20-GOAL-DECOMPOSE-1 — lối vào danh mục việc mẫu (gate manage:task-template).
+    templates: "Mẫu việc",
     view: {
       tree: "Cây",
       list: "Danh sách",
+      // S20-GOAL-LISTURL-1 — «Của tôi» = GET /me/goals (phụ trách HOẶC chủ thể).
+      mine: "Của tôi",
+    },
+    // S20-GOAL-LISTURL-1 — chip kỳ theo giờ công ty.
+    periodChips: {
+      label: "Kỳ",
+      previous: "Kỳ trước",
+      quarter: "Quý này",
+      year: "Năm nay",
+    },
+    mine: {
+      empty: {
+        title: "Bạn chưa có mục tiêu trong kỳ này",
+        description: "Bạn chưa phụ trách hay sở hữu mục tiêu nào trong kỳ đang chọn.",
+        previousPeriod: "Xem kỳ trước",
+      },
     },
     filters: {
       periodFrom: "Từ ngày",
@@ -81,6 +99,7 @@ export default {
       period: "Kỳ",
       progress: "Tiến độ",
       status: "Trạng thái",
+      checkin: "Check-in",
     },
     empty: {
       title: "Chưa có mục tiêu kỳ này",
@@ -147,8 +166,15 @@ export default {
       targetRequired: "Cần nhập giá trị mục tiêu khi đo bằng con số.",
       // Fallback khi server trả 422 GOAL-ERR-XXX không map riêng.
       generic: "Không lưu được mục tiêu. Vui lòng kiểm tra lại thông tin.",
+      // S20-GOAL-LISTURL-1 — BE từ chối quyền (vd. tự gõ /goals/new khi thiếu create:goal).
+      forbidden: "Bạn không có quyền thực hiện thao tác này với mục tiêu.",
     },
     submitCreate: "Tạo mục tiêu",
+    // S20-GOAL-LISTURL-1 — phân rã liên tiếp: giữ cha/kỳ/phòng, xoá tên/người/chỉ tiêu.
+    submitCreateAndNext: "Lưu và thêm tiếp",
+    savedAndNext: "Đã tạo mục tiêu «{{name}}»",
+    parentInvalid:
+      "Mục tiêu cha không hợp lệ (không tồn tại hoặc đã chốt kỳ) — đã bỏ chọn mục tiêu cha.",
     submitSave: "Lưu thay đổi",
     finalizedLocked: "Mục tiêu đã chốt kỳ — cần mở lại (reopen) trước khi sửa.",
     loadError: "Không tải được mục tiêu để sửa.",
@@ -208,6 +234,8 @@ export default {
       error: "Không tải được danh sách công việc gắn.",
     },
     children: {
+      // S20-GOAL-LISTURL-1 — mở /goals/new điền sẵn cha · kỳ · phòng · cấp.
+      add: "Thêm mục tiêu con",
       empty: {
         title: "Chưa có mục tiêu con",
         description: "Mục tiêu này chưa có mục tiêu con nào.",
@@ -244,7 +272,7 @@ export default {
       progressPercent: "Tiến độ (%)",
       currentValue: "Giá trị hiện tại",
       achieved: "Đã đạt mục tiêu",
-      confidence: "Mức tự tin (%)",
+      confidence: "Mức tự tin",
       note: "Ghi chú",
     },
     hints: {
@@ -254,7 +282,28 @@ export default {
       autoMeasured:
         "Tiến độ mục tiêu này do hệ thống tính tự động — check-in chỉ ghi mức tự tin và ghi chú.",
       valueOptional: "Bỏ trống nếu chỉ muốn ghi mức tự tin / ghi chú.",
+      // S20-GOAL-QUICKCHECKIN-1 — độ tự tin một chạm, mặc định không chọn.
+      confidenceOptional: "Không bắt buộc — bấm lại để bỏ chọn.",
+      shortcut: "Ctrl+Enter (⌘+Enter trên Mac) để ghi nhận.",
     },
+    confidenceLevels: {
+      low: "Thấp",
+      medium: "Vừa",
+      high: "Cao",
+    },
+    last: {
+      // «Lần trước» đọc từ GET /goals/:id/updates?limit=1 — chỉ là chú thích.
+      value: "Lần trước: {{value}} → chỉ tiêu {{target}}",
+      progress: "Lần trước: tiến độ {{value}}",
+      simple: "Lần trước: {{value}}",
+      none: "Chưa có lần check-in nào.",
+      unknown: "Lần trước: —",
+      loading: "Lần trước: …",
+      confidence: "Mức tự tin lần trước: {{level}}",
+      achieved: "Đạt",
+      notAchieved: "Chưa đạt",
+    },
+    toastSuccess: "Đã check-in «{{name}}» — tiến độ {{percent}}",
     placeholders: {
       note: "Điều gì đang cản trở hoặc hỗ trợ mục tiêu này?",
     },
@@ -269,7 +318,18 @@ export default {
     locked: {
       finalized: "Mục tiêu đã chốt kỳ — cần mở lại trước khi check-in.",
       notActive: "Chỉ mục tiêu đang chạy mới check-in được.",
+      draft: "Mục tiêu đang ở Nháp — kích hoạt trước khi check-in.",
     },
+    // Biểu tượng Check-in trên dòng /goals và nút cây (US-GOAL-NV-91).
+    trigger: "Check-in {{name}}",
+  },
+
+  tree: {
+    label: "Cây mục tiêu",
+    collapseAll: "Thu gọn tất cả",
+    expandAll: "Mở tất cả",
+    collapse: "Thu gọn {{name}}",
+    expand: "Mở {{name}}",
   },
 
   finalizeDialog: {
@@ -348,6 +408,8 @@ export default {
     description:
       "Bộ việc mẫu dùng để phân rã mục tiêu thành công việc. Danh mục của phòng chỉ phòng đó dùng; danh mục dùng chung áp cho toàn công ty.",
     create: "Thêm danh mục",
+    // S20-GOAL-DECOMPOSE-1 — tới từ «Tạo mẫu mới» của wizard phân rã (?returnTo=).
+    returnToWizard: "Quay lại phân rã",
     sharedLabel: "Dùng chung toàn công ty",
     active: "Đang dùng",
     inactive: "Đã tắt",
@@ -435,7 +497,8 @@ export default {
     templateLabel: "Danh mục việc mẫu",
     templatePlaceholder: "Chọn danh mục…",
     templatesError: "Không tải được danh mục việc mẫu.",
-    noTemplates: "Chưa có danh mục việc mẫu đang dùng. Tạo ở trang Danh mục việc mẫu.",
+    noTemplates: "Chưa có danh mục việc mẫu đang dùng.",
+    createTemplate: "Tạo mẫu mới",
     itemCount: "{{count}} việc",
     previewLabel: "Xem trước công việc sẽ tạo",
     addRow: "Thêm việc",
@@ -447,6 +510,21 @@ export default {
     departmentNote:
       "Mục tiêu cấp phòng: nên chọn người thực hiện cho từng việc — nếu phạm vi giao việc của bạn hẹp, để trống sẽ bị từ chối.",
     overLimit: "Tối đa {{max}} việc mỗi lần phân rã — bớt bớt hoặc chia thành nhiều lần.",
+    // S20-GOAL-DECOMPOSE-1 (US-GOAL-QL-07)
+    applyAll: {
+      label: "Áp cho tất cả",
+      assignee: "Người thực hiện cho tất cả",
+      dueAt: "Hạn cho tất cả",
+      hint: "Dòng đã sửa tay giữ giá trị riêng. Hạn tính đến cuối ngày theo giờ công ty.",
+    },
+    result: {
+      dialogTitle: "Đã phân rã mục tiêu",
+      description: "Các việc đã được tạo và gắn vào mục tiêu này.",
+      title: "Đã tạo {{count}} việc",
+      hint: "Bấm một việc để xem chi tiết. Danh sách này cũng có ở tab «Công việc gắn» của mục tiêu.",
+      openBoard: "Mở board dự án",
+      close: "Xong",
+    },
     submit: "Tạo {{count}} công việc",
     submitting: "Đang tạo…",
     error: "Không phân rã được mục tiêu.",
