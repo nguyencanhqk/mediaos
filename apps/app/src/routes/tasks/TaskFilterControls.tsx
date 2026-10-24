@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, UserRound } from "lucide-react";
@@ -40,12 +40,22 @@ export function TaskSearchBox({
     [value],
   );
 
+  // `onCommit` qua ref, KHÔNG nằm trong deps của timer: nơi gọi hay truyền arrow inline ⇒ mỗi lần cha
+  // render lại là một hàm mới, nếu là dep thì timer bị huỷ/đặt lại liên tục và `q` có thể không bao
+  // giờ lên URL. Lúc bắn gọi bản MỚI NHẤT (bộ lọc khác đổi giữa chừng không bị ghi đè bằng bản cũ).
+  const commitRef = useRef(onCommit);
+  useLayoutEffect(() => {
+    commitRef.current = onCommit;
+  }, [onCommit]);
+
+  // Toolbar unmount trước khi bắn (đổi tab) ⇒ chữ chưa ghi bị BỎ, không ghi bù: callback lúc đó mang
+  // `tab` của lần render cũ, ghi bù bằng replace sẽ đè chính lần đổi tab.
   useEffect(() => {
     const trimmed = draft.trim();
     if (trimmed === (value ?? "")) return;
-    const id = window.setTimeout(() => onCommit(trimmed || undefined), SEARCH_DEBOUNCE_MS);
+    const id = window.setTimeout(() => commitRef.current(trimmed || undefined), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
-  }, [draft, value, onCommit]);
+  }, [draft, value]);
 
   useSlashFocus(inputRef);
 

@@ -55,7 +55,14 @@ function whoItems(raw: unknown): string[] {
   return [];
 }
 
-/** Đọc `who` (chuỗi phẩy hoặc mảng) ⇒ danh sách hợp lệ: uuid chữ thường hoặc `unassigned`, bỏ trùng. */
+/**
+ * Đọc `who` (chuỗi phẩy hoặc mảng) ⇒ danh sách hợp lệ: uuid chữ thường hoặc `unassigned`, bỏ trùng.
+ *
+ * Giả định: id phía rail/bộ lọc (`mainAssigneeEmployeeId`, employeeId của /me) là cột `uuid` của
+ * Postgres — dạng văn bản LUÔN chữ thường — nên hạ chữ thường ở đây chỉ chuẩn hoá link sửa tay
+ * (`?who=ABC…`) cho khớp `Set.has` ở `workspace-constants.ts`/`AssigneeRail.tsx` (so khớp phân biệt
+ * hoa thường). Nguồn id nào không chữ thường thì phải chuẩn hoá ở nguồn đó, không nới so khớp.
+ */
 function whoValues(raw: unknown): string[] {
   const valid = whoItems(raw).flatMap((item) => {
     const value = item.trim();
