@@ -7,16 +7,9 @@ import { Input, Select, toast } from "@mediaos/ui";
 import type { TaskCorePriorityDto, TaskCoreStatusDto } from "@mediaos/contracts";
 import { TASK_CORE_PRIORITY_OPTIONS, TASK_CORE_STATUS_OPTIONS } from "./constants";
 import type { TaskListSearch } from "./task-list-search";
+import { useSlashFocus } from "./use-slash-focus";
 
 const SEARCH_DEBOUNCE_MS = 300;
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable ||
-    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName.toUpperCase())
-  );
-}
 
 /** Ô tìm: debounce 300ms rồi ghi `search=` (replace); phím «/» ở bất kỳ đâu ngoài ô nhập ⇒ focus. */
 function TaskSearchBox({
@@ -40,16 +33,7 @@ function TaskSearchBox({
     return () => window.clearTimeout(id);
   }, [draft, value, onCommit]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (isTypingTarget(event.target)) return;
-      event.preventDefault();
-      inputRef.current?.focus();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  useSlashFocus(inputRef);
 
   return (
     <div className="relative">
