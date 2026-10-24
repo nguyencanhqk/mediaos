@@ -1,9 +1,9 @@
-# S20-SEC-TASKLEGACYREAD-1 — plan v1.1
+# S20-SEC-TASKLEGACYREAD-1 — plan v1.2
 
 > Zone 🔴 red · gate FULL · crown. Nhánh `fix/s20-sec-tasklegacyread-1` cắt từ `6e2e58e7`.
 > Mọi số đo dưới đây lấy trên `6e2e58e7`. Nhãn: **[ĐO]** = đã đọc/đếm trên mã; **[SUY RA]** = suy luận, phải đo lại ở bước thi công.
 > Repo PUBLIC: plan này chỉ ghi bất biến + số đo tổng hợp + danh sách tệp. Bảng chi tiết, nhật ký RED và đầu dò hậu deploy nằm ở kênh owner (ngoài repo).
-> v1.1 — áp plan-review (F1–F8), xem §9.
+> v1.1 — áp plan-review (F1–F8); v1.2 — áp plan-review lần 2 (N2–N6) ở bước RED. Xem §9.
 
 ## §1 Bất biến + phạm vi
 
@@ -69,19 +69,19 @@
 5. **Đầu dò:** `api-keys.deny-path` (A)(B) đổi `/tasks/board` → `/tasks` (cùng cặp `read:task`; ca (A) cần 200, ca (B) cần 401 — không phụ thuộc nội dung). `scripts/perf-smoke.mjs` đổi mục `task_board` → `GET /tasks?limit=20` (đường FE thật dùng).
 6. **Test cũ của hàm bị gỡ:**
    - xoá `tasks-board.int-spec.ts` (chỉ kiểm `listBoard`); gỡ các khối `describe` tương ứng trong `tasks.service.spec.ts` (`:186-215`, `:320-385` + stub `listByProject`/`listByTeam`/`listLabelsForTaskIds`/`teamExistsTx` ở `makeRepo`).
-   - **`labels.int-spec.ts` (F5):** ba ca gán/gỡ/idempotent đọc nhãn bằng **đúng hàm repository mà `getTask` dùng**: `db.withTenant(A.companyId, (tx) => repo.listLabelsForTaskIdsTx(tx, A.companyId, [task.id]))` (`task-core.service.ts:204`). KHÔNG dựng tay `TaskCoreService` (cần storage + goal-progress stub, dễ stub nhầm phạm vi). `TasksService` trong spec giữ nguyên (vẫn dùng `createTask`/`addLabelToTask`/`removeLabelFromTask`). Ca "lọc theo labelId" gỡ cùng tính năng (lọc nhãn chỉ có trên board, 0 hộ FE).
-   - **`dashboard-widget-security.int-spec.ts` (F2):** spy chuyển từ `TasksService.listByProject` sang **`ProjectsService.countsByStatusLeaf`** — aggregate thật mà `fetchProjectProgress` gọi (`dashboard-widget-handlers.service.ts:454`). Giữ nguyên hai ca deny (403 thiếu `read:project` · 404 dự án không tồn tại/ngoài phạm vi) + khẳng định aggregate KHÔNG được gọi. Cấm xoá khối describe; cấm giữ `listByProject` chỉ để test xanh. Ghi nhận: spy cũ đã rỗng từ khi handler chuyển sang `countsByStatusLeaf` (`S5-TASK-SUBTASK-1`) — đổi spy làm ca crown có nghĩa trở lại. Tệp 768 dòng: đổi tại chỗ, không làm dài quá 800. Sửa kèm comment cũ ở `dashboard-widget-handlers.service.ts:414/:426/:446` (chỉ comment) để không trỏ tới method đã gỡ.
+   - **`labels.int-spec.ts` (F5):** ba ca gán/gỡ/idempotent đọc nhãn bằng **đúng hàm repository mà `getTask` dùng**: `db.withTenant(A.companyId, (tx) => repo.listLabelsForTaskIdsTx(tx, A.companyId, [task.id]))` (`task-core.service.ts:204`). KHÔNG dựng tay `TaskCoreService` (cần storage + goal-progress stub, dễ stub nhầm phạm vi). `TasksService` trong spec giữ nguyên (vẫn dùng `createTask`/`addLabelToTask`/`removeLabelFromTask`). Ca "lọc theo labelId" gỡ cùng tính năng (lọc nhãn chỉ có trên board, 0 hộ FE). **(N6)** `db`/`repo` hiện là `const` cục bộ trong `beforeAll` (`labels.int-spec.ts:43-44`) ⇒ đưa lên `let` ở phạm vi `describe` để các ca `it` gọi được; KHÔNG dựng `DatabaseService` thứ hai.
+   - **`dashboard-widget-security.int-spec.ts` (F2):** spy chuyển từ `TasksService.listByProject` sang **`ProjectsService.countsByStatusLeaf`** — aggregate thật mà `fetchProjectProgress` gọi (`dashboard-widget-handlers.service.ts:454`). Giữ nguyên hai ca deny (403 thiếu `read:project` · 404 dự án không tồn tại/ngoài phạm vi) + khẳng định aggregate KHÔNG được gọi. Cấm xoá khối describe; cấm giữ `listByProject` chỉ để test xanh. Ghi nhận: spy cũ đã rỗng từ khi handler chuyển sang `countsByStatusLeaf` (`S5-TASK-SUBTASK-1`) — đổi spy làm ca crown có nghĩa trở lại. **(N2, đã áp ở commit RED)** thêm ca ALLOW đứng cạnh: user `withProj`, dự án thật cùng công ty → 200 + spy gọi đúng 1 lần (lần đầu = cache-miss) — giết đột biến D12. Tệp 784 dòng sau RED: đổi tại chỗ, không làm dài quá 800. Sửa kèm comment cũ ở `dashboard-widget-handlers.service.ts:414/:426/:446` (chỉ comment) để không trỏ tới method đã gỡ. **(N5)** comment mới chỉ nêu điều đang đúng: `countsByStatusLeaf` không tự scope theo actor ⇒ `gateProjectProgress` authorize trước; không nhắc route đã gỡ, không mô tả hành vi lọc trước đây.
    - **`tasks-core-param-uuid.int-spec.ts` (F6):** gỡ 2 ca bảng `CASES` (`:312-321`), 2 ca ALLOW-200 (`:564-570`), ca định tuyến `board` (`:719-721`), **và** khối seed team + comment bẫy (`:241-252`) + `let teamId` (`:96`). GIỮ `orgUnitId` (còn dùng ở `:195`, `:237`). Chạy eslint tệp để chắc không còn biến gán-mà-không-đọc.
 7. **Ratchet:**
    - sinh lại census bằng `ROUTE_CENSUS_WRITE=1 … route-guard-coverage.e2e-spec.ts`; hạ `MIN_COVERED_COUNT` theo số spec in ra, lý do kèm "uncovered = 0".
-   - **param-uuid (F4):** sửa docblock luật ở `param-uuid-verdicts.ts:1625-1627` thành: sàn được hạ khi **CONTROLLER hoặc HANDLER** bị xoá khỏi cây mã; bằng chứng bắt buộc = siteKey không còn trong `idLikeParamSites()` (`param-uuid-census.ts:98`) **và** route vắng trong census sinh lại. Site còn sống mà mất dòng verdict vẫn là NỢ, cấm hạ sàn. Ghi dòng lịch sử "`S20-SEC-TASKLEGACYREAD-1`: 185 → 183" ở docblock `PARAM_UUID_MEASURED_SIZE` và "184 → 182" ở comment `param-uuid-ratchet.unit-spec.ts:328-331`.
+   - **param-uuid (F4):** sửa docblock luật ở `param-uuid-verdicts.ts:1625-1627` thành: sàn được hạ khi **CONTROLLER hoặc HANDLER** bị xoá khỏi cây mã; bằng chứng bắt buộc = siteKey không còn trong `idLikeParamSites()` (`param-uuid-census.ts:98`) **và** route vắng trong census sinh lại. Site còn sống mà mất dòng verdict vẫn là NỢ, cấm hạ sàn. Ghi dòng lịch sử "`S20-SEC-TASKLEGACYREAD-1`: 185 → 183" ở docblock `PARAM_UUID_MEASURED_SIZE` và "184 → 182" ở comment `param-uuid-ratchet.unit-spec.ts:328-331`. **(N4)** cùng lúc sửa câu luật trùng ở `param-uuid-ratchet.unit-spec.ts:330` thành «controller HOẶC handler bị xoá — xem `PARAM_UUID_MEASURED_SIZE`», để không còn hai phát biểu luật mâu thuẫn.
 8. **Chốt tĩnh (không cần DB):** `tasks.permissions.spec.ts` thêm ca: `TasksController` không có handler `GET` nào mang path `board` / `by-project/:projectId` / `by-team/:teamId` (đọc metadata `PATH_METADATA` + `METHOD_METADATA` qua mọi method của prototype) — đỏ ngay nếu route được thêm lại.
 
 ## §4 Bảng ca test
 
 Int-spec MỚI `apps/api/test/integration/task-read-paths-scope.int-spec.ts` — dựng app qua **`applyMainPipeline`** (`test/helpers/bootstrap-app.ts`), `describe.skipIf(!hasDb || !LANE_DB)`, chạy lane `mediaos_s20r` qua wrapper. Fixture tái dùng `test/helpers/task-file-seed.ts` (`grant` · `seedEmployee` · `seedTask` · `seedProjectMember`) + `seedCompany`/`seedUser`; mật khẩu qua `loginPasswordFixture`.
 
-**Fixture (công ty A, B):** người gọi `N` (grant `read:task` @Own, có employee); nhân viên `O` (user + employee, không liên quan `N`); người gọi `M` (grant @Team) với nhân viên `E`; người gọi `H` (grant @Company). Dự án `P` (`N` không là thành viên). Team `T` có hàng `team_members` cho `O` (`teamExistsTx` tra `team_members`, không tra `teams`). Việc: `tN` giao `N`; `tO` giao `O`, gắn `P`; `tE` giao `E`; `tB` ở công ty B.
+**Fixture (công ty A, B):** người gọi `N` (grant `read:task` @Own, có employee); nhân viên `O` (user + employee, không liên quan `N`); người gọi `M` (grant @Team) với nhân viên `E`; người gọi `H` (grant @Company). Dự án `P` (`N` không là thành viên). Team `T`: seed hàng `teams` (công ty A) **trước**, rồi `team_members(T, O)` — `team_members.team_id` có FK tới `teams` (`org.ts:107-109`, N3); `teamExistsTx` tra `team_members`, không tra `teams`. Việc: `tN` giao `N`; `tO` giao `O`, gắn `P`; `tE` giao `E`; `tB` ở công ty B.
 
 **Bổ sung cột mà helper không ghi (F3):** `seedTask` (`task-file-seed.ts:49-61`) chỉ ghi `main_assignee_employee_id`/`project_id`; `seedEmployee` (`:33-43`) không ghi `direct_manager_id`. Spec phải `UPDATE` bằng direct pool: `tasks.assignee_user_id = O` cho `tO` (cột mà đường theo team lọc, `tasks.repository.ts:233`) và `employee_profiles.direct_manager_id = M.userId` cho `E` (nhánh Team, `data-scope.service.ts:193`). **Assert tiền điều kiện trong `beforeAll`** (direct pool): `tO.assignee_user_id = O`, có hàng `team_members(T, O)` chưa xoá mềm, `tO.project_id = P`, `E.direct_manager_id = M.userId` — thiếu một cái ⇒ đỏ ngay, không chạy tiếp.
 
@@ -107,21 +107,22 @@ Int-spec MỚI `apps/api/test/integration/task-read-paths-scope.int-spec.ts` —
 
 ## §5 Đột biến (mỗi cái phải ĐỎ ít nhất một ca)
 
-| #   | Đột biến                                                                     | Ca giết                                                     |
-| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| D1  | thêm lại handler `getBoard`                                                  | R1, R4, S1, census `MIN_COVERED_COUNT`/totals               |
-| D2  | thêm lại handler `getProjectTasks`                                           | R2, R4, S1                                                  |
-| D3  | thêm lại handler `getTeamTasks`                                              | R3, R4, S1                                                  |
-| D4  | `resolveReadScopeExists` luôn trả `undefined` (mất phạm vi trên đường chuẩn) | A1, A3, A4 (R4 không đủ một mình)                           |
-| D5  | fixture: bỏ/xoá mềm `tO` (xanh-rỗng)                                         | A2 + assert tiền điều kiện                                  |
-| D6  | gỡ `ParseUUIDPipe` của `getTask`                                             | R1 (đòi 400/404) + `tasks-core-param-uuid`                  |
-| D7  | xoá dòng verdict param-uuid nhưng giữ handler                                | `param-uuid-ratchet` ca (5) song ánh                        |
-| D8  | gỡ nhầm `projectExistsTx` (dùng chung)                                       | typecheck + `labels`/`project-states` int-spec              |
-| D9  | `M` được cấp @Company thay vì @Team trong fixture                            | A3                                                          |
-| D10 | bỏ `await this.projects.getProject` trong `gateProjectProgress` (F2)         | `dashboard-widget-security` ca 404 (status + spy aggregate) |
-| D11 | fixture: không `UPDATE` `assignee_user_id` / `direct_manager_id` (F3)        | assert tiền điều kiện `beforeAll`                           |
+| #   | Đột biến                                                                     | Ca giết                                                           |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| D1  | thêm lại handler `getBoard`                                                  | R1, R4, S1, census `MIN_COVERED_COUNT`/totals                     |
+| D2  | thêm lại handler `getProjectTasks`                                           | R2, R4, S1                                                        |
+| D3  | thêm lại handler `getTeamTasks`                                              | R3, R4, S1                                                        |
+| D4  | `resolveReadScopeExists` luôn trả `undefined` (mất phạm vi trên đường chuẩn) | A1, A3, A4 (R4 không đủ một mình)                                 |
+| D5  | fixture: bỏ/xoá mềm `tO` (xanh-rỗng)                                         | A2 + assert tiền điều kiện                                        |
+| D6  | gỡ `ParseUUIDPipe` của `getTask`                                             | R1 (đòi 400/404) + `tasks-core-param-uuid`                        |
+| D7  | xoá dòng verdict param-uuid nhưng giữ handler                                | `param-uuid-ratchet` ca (5) song ánh                              |
+| D8  | gỡ nhầm `projectExistsTx` (dùng chung)                                       | typecheck + `labels`/`project-states` int-spec                    |
+| D9  | `M` được cấp @Company thay vì @Team trong fixture                            | A3                                                                |
+| D10 | bỏ `await this.projects.getProject` trong `gateProjectProgress` (F2)         | `dashboard-widget-security` ca 404 (status + spy aggregate)       |
+| D11 | fixture: không `UPDATE` `assignee_user_id` / `direct_manager_id` (F3)        | assert tiền điều kiện `beforeAll`                                 |
+| D12 | spy S5 đặt trên method/instance mà handler không gọi (N2)                    | `dashboard-widget-security` S5 ALLOW (`toHaveBeenCalledTimes(1)`) |
 
-Chạy D1, D4, D5, D6, D10 thật trên nhánh (đổi tạm → đo đỏ → hoàn tác); D2/D3 tương đương D1; D7–D9, D11 ghi bằng lập luận + ca có sẵn.
+Chạy D1, D4, D5, D6, D10 thật trên nhánh (D12 đã chạy ở bước RED: spy đặt lại trên method cũ ⇒ ca ALLOW đỏ «0 lần gọi», hai ca deny vẫn xanh) (đổi tạm → đo đỏ → hoàn tác); D2/D3 tương đương D1; D7–D9, D11 ghi bằng lập luận + ca có sẵn.
 
 ## §6 Tệp đổi
 
@@ -177,3 +178,16 @@ KHÔNG đổi: migration, contracts, FE, `harness/backlog.mjs` (luồng chính),
 | F6  | LOW     | ÁP         | Gỡ seed team + `teamId`; giữ `orgUnitId` (còn dùng `:195`, `:237`)                                                                                  |
 | F7  | LOW     | ÁP         | Thu hẹp I-1 về ba đường của WO; bằng chứng done_when 3 = diff census −3/+0 (§2.4)                                                                   |
 | F8  | LOW     | ÁP         | Luật sinh lại số sau rebase (§7)                                                                                                                    |
+
+### Plan-review v1.1 → v1.2 (áp ở bước RED)
+
+| #   | Mức    | Quyết định  | Ghi chú                                                                                                                  |
+| --- | ------ | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| N1  | —      | LUỒNG CHÍNH | Thời điểm push nhánh — ngoài bước RED                                                                                    |
+| N2  | MEDIUM | ÁP          | Ca ALLOW S5 + D12; `ProjectsService` chỉ provide ở `tasks.module.ts:89` (export `:142`) ⇒ spy trúng instance của handler |
+| N3  | LOW    | ÁP          | §4: seed `teams` trước `team_members` (FK `org.ts:107-109`)                                                              |
+| N4  | LOW    | ÁP          | §3 bước 7: sửa câu luật trùng ở `param-uuid-ratchet.unit-spec.ts:330` (thi công ở bước vá)                               |
+| N5  | LOW    | ÁP          | §3 bước 6: ràng buộc nội dung comment thay thế ở `dashboard-widget-handlers.service.ts`                                  |
+| N6  | LOW    | ÁP          | §3 bước 6: `let db`/`let repo` ở phạm vi `describe` của `labels.int-spec.ts` (thi công ở bước vá)                        |
+
+Ca cũ khẳng định hành vi trái I-1 (gỡ/đổi ở bước vá theo §3 bước 5–6; ca đối nghịch ở spec mới): `tasks-core-param-uuid` ALLOW-200 `by-project`/`by-team` + định tuyến `board` 200 (↔ R1–R3) · `api-keys.deny-path` (A) `board` 200 (đổi đầu dò) · `tasks-board.int-spec.ts` · ca lọc nhãn `labels.int-spec.ts` · khối `listBoard`/`listByProject`/`listByTeam` của `tasks.service.spec.ts` · dòng `getBoard` của `tasks.permissions.spec.ts` (↔ S1).
