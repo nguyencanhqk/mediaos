@@ -10,19 +10,23 @@
  *  (f) scope Own ⇒ KHÔNG đặt phòng, KHÔNG gọi /auth/me.
  *  (g) tham số rác ⇒ dùng mặc định, không màn lỗi.
  *  (h) lựa chọn gần nhất (localStorage) khi URL trống; Back từ chi tiết khôi phục y nguyên.
+ *      (h4) Back RỜI `/goals` (về chi tiết, về /home) ⇒ URL trang đích y nguyên: trang danh sách còn
+ *      mount lúc chuyển KHÔNG được ghi mặc định lên URL trang khác. (h5) bấm dòng ⇒ chi tiết KHÔNG mang
+ *      bộ lọc của danh sách.
  *  (i) «Của tôi» ⇒ GET /me/goals kèm kỳ, KHÔNG ?employeeId=; rỗng ⇒ «Xem kỳ trước».
  *  (j) chip kỳ ghi `period` lên URL.
  *
  * Quyền dùng store THẬT (`useAuthStore` capabilities + scopes) — không mock `useCan`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
+  Link,
   RouterProvider,
 } from "@tanstack/react-router";
 import { I18nextProvider } from "react-i18next";
@@ -97,7 +101,19 @@ function login(caps: Record<string, boolean>, viewScopes: string[] = ["Departmen
   });
 }
 
-/** Dựng `/goals` + `/goals/$goalId` (chi tiết giả) trên router THẬT; trả history để đọc URL đã ghi. */
+/** Trang giả có link «Mục tiêu» sang `/goals` (không kèm search — như link sidebar). */
+function StubPage({ testId }: { testId: string }) {
+  return (
+    <div data-testid={testId}>
+      <Link to="/goals">Mục tiêu</Link>
+    </div>
+  );
+}
+
+/**
+ * Dựng `/goals` + `/goals/$goalId` (chi tiết giả) + `/home` (giả) trên router THẬT; trả history để đọc
+ * URL đã ghi.
+ */
 function mountAt(href: string) {
   const rootRoute = createRootRoute();
   const listRoute = createRoute({
@@ -109,11 +125,16 @@ function mountAt(href: string) {
   const detailRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/goals/$goalId",
-    component: () => <p data-testid="goal-detail-stub">chi tiết</p>,
+    component: () => <StubPage testId="goal-detail-stub" />,
+  });
+  const homeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/home",
+    component: () => <StubPage testId="home-stub" />,
   });
   const history = createMemoryHistory({ initialEntries: [href] });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([listRoute, detailRoute]),
+    routeTree: rootRoute.addChildren([listRoute, detailRoute, homeRoute]),
     history,
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -278,6 +299,48 @@ describe("GoalListPage — bộ lọc trên URL (TC2)", () => {
       "aria-pressed",
       "true",
     );
+  });
+});
+
+/** Chờ hết lượt effect/điều hướng sau khi trang đích đã hiện (ghi sai — nếu có — đã xảy ra). */
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+}
+
+describe("GoalListPage — rời /goals KHÔNG ghi bộ lọc lên trang khác (F5 · Back · Quay lại)", () => {
+  it.each([
+    ["/goals/g-1", "goal-detail-stub"],
+    ["/home", "home-stub"],
+  ])(
+    "(h4) %s → link /goals (mặc định được ghi) → Back ⇒ URL trang trước y nguyên, 0 replace",
+    async (start, testId) => {
+      const history = mountAt(start);
+      fireEvent.click(await screen.findByRole("link", { name: "Mục tiêu" }));
+      await waitFor(() => expect(searchOf(history)).toEqual({ period: Q4, departmentId: DEPT_ID }));
+      const replace = vi.spyOn(history, "replace");
+      history.back();
+      await screen.findByTestId(testId);
+      await settle();
+      expect({ pathname: history.location.pathname, search: history.location.search }).toEqual({
+        pathname: start,
+        search: "",
+      });
+      expect(replace.mock.calls.map(([href]) => String(href))).toEqual([]);
+    },
+  );
+
+  it("(h5) bấm dòng ở chế độ danh sách ⇒ chi tiết KHÔNG mang bộ lọc danh sách", async () => {
+    mockListGoals.mockResolvedValue([GOAL_ROW]);
+    const history = mountAt(`/goals?period=${Q4}&view=list&status=Active`);
+    fireEvent.click(await screen.findByText("Tăng doanh thu 20%"));
+    await screen.findByTestId("goal-detail-stub");
+    await settle();
+    expect({ pathname: history.location.pathname, search: history.location.search }).toEqual({
+      pathname: "/goals/g-1",
+      search: "",
+    });
   });
 });
 

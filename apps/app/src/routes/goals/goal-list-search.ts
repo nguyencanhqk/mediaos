@@ -20,7 +20,7 @@
  */
 import { useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import {
   addDaysToLocalDate,
   authApi,
@@ -267,12 +267,17 @@ export function replaceGoalListFilters(prev: SearchRecord, filters: GoalListSear
 }
 
 /**
- * Bộ lọc ĐỌC/GHI trên URL — đọc `location.search` qua CÙNG hàm validate của route (giá trị rác không
- * lọt tới API); `update` = PUSH (Back hoàn tác), `replaceFilters` = REPLACE (áp mặc định).
+ * Bộ lọc ĐỌC/GHI trên URL — đọc search qua CÙNG hàm validate của route (giá trị rác không lọt tới API);
+ * `update` = PUSH (Back hoàn tác), `replaceFilters` = REPLACE (áp mặc định).
+ *
+ * 🔴 Đọc search của MATCH `/goals` (match gần nhất của trang), KHÔNG đọc `location` toàn cục: khi rời
+ * trang (Back, bấm dòng, link) router đổi `location` TRƯỚC khi gỡ trang danh sách. Đọc `location` lúc đó
+ * thấy search rỗng của trang đích ⇒ tưởng «URL trống» ⇒ ghi mặc định (replace) đè lên URL trang đích
+ * (`/goals/{id}?departmentId…`, `/home?period…`). Match giữ search của chính nó tới lúc trang bị gỡ.
  */
 export function useGoalListSearch() {
   const navigate = useNavigate();
-  const raw = useRouterState({ select: (s) => s.location.search });
+  const raw = useSearch({ strict: false }) as SearchRecord | undefined;
   const search = useMemo(() => validateGoalListSearch((raw ?? {}) as SearchRecord), [raw]);
   const update = useCallback(
     (patch: Partial<GoalListSearch>) =>
