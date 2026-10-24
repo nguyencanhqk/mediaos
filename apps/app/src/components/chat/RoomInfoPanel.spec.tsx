@@ -614,3 +614,23 @@ describe("RoomInfoPanel · DM «Thêm người» (S20-CHAT-NEWROOM-1)", () => {
     expect(screen.getByTestId("chat-info-add-member")).toBeTruthy();
   });
 });
+
+/**
+ * S20-CHAT-FEDEBT-1 — người đối thoại KHÔNG có tên hiển thị (`peer.name` null/rỗng). Dialog nhóm dựng
+ * chip người đã chọn từ `fullName`; truyền `""` là một chip trống không ai nhận ra được ⇒ ẩn lối này.
+ */
+describe("RoomInfoPanel · DM «Thêm người» khi người đối thoại không có tên (S20-CHAT-FEDEBT-1)", () => {
+  const PEER = { userId: OTHER, name: "Trần Thị Lan", avatarUrl: null, isActive: true };
+
+  it.each([
+    ["null", null],
+    ["chuỗi rỗng", ""],
+    ["chỉ khoảng trắng", "   "],
+  ])("`peer.name` %s ⇒ KHÔNG có «Thêm người»", (_label, name) => {
+    renderPanel({
+      room: room({ roomType: "direct", name: null, peer: { ...PEER, name } }),
+      onStartGroupWith: vi.fn(),
+    });
+    expect(screen.queryByTestId("chat-info-dm-add-people")).toBeNull();
+  });
+});

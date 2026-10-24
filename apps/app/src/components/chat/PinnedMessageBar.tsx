@@ -2,8 +2,8 @@
  * S20-CHAT-MENTIONPIN-1 — thanh tin ghim ngay dưới đầu hội thoại (US-CHAT-NV-08 · CHAT-FUNC-010).
  *
  * Một dòng: tin ghim MỚI NHẤT (server sắp `pinned_at DESC`) + «1/N». Bấm thân thanh ⇒ nạp cửa sổ ngữ cảnh
- * quanh tin và làm nổi nó (cùng cơ chế `jumpToMessage` của trang); mũi tên ⇒ xoay sang tin kế. Dùng ở CẢ
- * trang lẫn drawer vì nó sống bên trong `ConversationPanel`.
+ * quanh tin và làm nổi nó (`useChatContextWindow` — cùng hook với `jumpToMessage` của trang); mũi tên
+ * ⇒ xoay sang tin kế. Dùng ở CẢ trang lẫn drawer vì nó sống bên trong `ConversationPanel`.
  *
  * ⚠️ Nguồn dữ liệu là `chatApi.getPinned` với CÙNG `queryKey` như `RoomPinnedList` (bảng thông tin): một entry
  * cache, hai nơi hiển thị — ghim/bỏ ghim ở đâu cũng cập nhật cả hai. Người khác ghim/bỏ ghim ⇒ sự kiện
@@ -16,15 +16,15 @@
  * Tin ghim đã bị THU HỒI ⇒ «Tin đã thu hồi», KHÔNG BAO GIỜ nội dung cũ: server đã che `body` trong DTO,
  * và nếu entry cache còn giữ bản trước thu hồi thì bản trong store (đã nhận `chat:message-recalled`) thắng.
  */
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, ChevronUp, Pin, PinOff } from "lucide-react";
 import type { ChatMessageDto } from "@mediaos/contracts";
 import { chatApi, chatKeys } from "@mediaos/web-core";
 import { Button } from "@mediaos/ui";
-import { CONTEXT_AFTER, CONTEXT_BEFORE } from "@/routes/chat/constants";
 import { CHAT_POLL_INTERVAL_MS, useChatStore } from "@/stores/chat.store";
+import { useChatContextWindow } from "./use-chat-context-window";
 
 interface PinnedMessageBarProps {
   roomId: string;
@@ -55,29 +55,6 @@ function writeCollapsed(roomId: string, collapsed: boolean): void {
   }
 }
 
-/** Nạp cửa sổ quanh tin đích rồi vào chế độ ngữ cảnh — cùng hai lời gọi với `ChatPage.jumpToMessage`. */
-function useJumpToPinned(roomId: string): (message: ChatMessageDto) => Promise<boolean> {
-  const enterMessageContext = useChatStore((s) => s.enterMessageContext);
-  return useCallback(
-    async (message: ChatMessageDto): Promise<boolean> => {
-      try {
-        const [olderPage, newerPage] = await Promise.all([
-          chatApi.getMessages(roomId, { beforeSeq: message.roomSeq + 1, limit: CONTEXT_BEFORE }),
-          chatApi.getMessages(roomId, { afterSeq: message.roomSeq, limit: CONTEXT_AFTER }),
-        ]);
-        const window = [...olderPage, ...newerPage];
-        if (!window.some((m) => m.id === message.id)) return false;
-        enterMessageContext(roomId, window, { messageId: message.id, seq: message.roomSeq });
-        return true;
-      } catch (err: unknown) {
-        console.error(`[chat] không mở được ngữ cảnh của tin ghim ${message.id}:`, err);
-        return false;
-      }
-    },
-    [enterMessageContext, roomId],
-  );
-}
-
 export function PinnedMessageBar({
   roomId,
   canUnpin,
@@ -94,7 +71,8 @@ export function PinnedMessageBar({
   const [index, setIndex] = useState(0);
   const [collapsed, setCollapsed] = useState(() => readCollapsed(roomId));
   const [jumpFailed, setJumpFailed] = useState(false);
-  const jump = useJumpToPinned(roomId);
+  // S20-CHAT-FEDEBT-1 — CÙNG hook nạp cửa sổ ngữ cảnh với `ChatPage.jumpToMessage`.
+  const openContext = useChatContextWindow();
 
   const pinned = pinnedQuery.data ?? [];
   const total = pinned.length;
@@ -140,7 +118,9 @@ export function PinnedMessageBar({
             title={t("conversation.pinnedBar.jump")}
             onClick={() => {
               setJumpFailed(false);
-              void jump(current).then((ok) => setJumpFailed(!ok));
+              void openContext(roomId, current.id, current.roomSeq).then((ok) =>
+                setJumpFailed(!ok),
+              );
             }}
             data-testid="chat-pinned-bar-jump"
             className="min-w-0 flex-1 truncate text-left hover:underline"

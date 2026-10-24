@@ -36,11 +36,12 @@ import { MessageSearchPanel } from "@/components/chat/MessageSearchPanel";
 import { RoomInfoPanel } from "@/components/chat/RoomInfoPanel";
 import { RoomListPanel } from "@/components/chat/RoomListPanel";
 import { roomDisplayName } from "@/components/chat/chat-format";
+import { useChatContextWindow } from "@/components/chat/use-chat-context-window";
 import { useChatLayoutMode } from "@/components/chat/use-chat-viewport";
 import { useChatStore } from "@/stores/chat.store";
 import { CHAT_LINK_TOAST_KEY } from "./chat-room-link";
 import { recheckRoomListed } from "./recheck-room-list";
-import { CHAT_PAIRS, CONTEXT_AFTER, CONTEXT_BEFORE } from "./constants";
+import { CHAT_PAIRS } from "./constants";
 
 /**
  * S20-CHAT-DEEPLINK-1 (US-CHAT-NV-01) — phòng đang mở sống trên URL (`/chat/$roomId`), không trong
@@ -79,8 +80,6 @@ export function ChatPage({
   // "đang tải" phải hỏi store. Suy từ `roomOrder.length === 0` là hiện "chưa có cuộc trò chuyện nào"
   // ngay khung hình đầu cho người có 20 phòng.
   const hasLoadedRooms = useChatStore((s) => s.hasLoadedRooms);
-
-  const enterMessageContext = useChatStore((s) => s.enterMessageContext);
 
   /**
    * S20-CHAT-DEEPLINK-1 — phòng XIN mở chỉ thành phòng ĐANG mở khi nó có trong danh sách phòng của tôi
@@ -222,42 +221,21 @@ export function ChatPage({
   const showConversationArea = isSingle ? activeSinglePane === "conversation" : true;
 
   /**
-   * S7-CHAT-FE-4 — nhảy tới MỘT tin bất kỳ trong ngữ cảnh của nó (CHAT-SCREEN-005).
+   * S7-CHAT-FE-4 — nhảy tới MỘT tin bất kỳ trong ngữ cảnh của nó (CHAT-SCREEN-005): mở phòng rồi nạp cửa
+   * sổ quanh `roomSeq` (FE-2 chỉ quét DOM phần đã tải và trả "không thấy" cho mọi tin cũ hơn).
    *
-   * FE-2 chỉ quét DOM phần đã tải và trả "không thấy" cho mọi tin cũ hơn. Nay nạp hẳn cửa sổ quanh
-   * `roomSeq` bằng ĐÚNG hai lời gọi (`/messages` không có `aroundSeq`):
-   *
-   *   beforeSeq = seq + 1  → 25 tin có seq ≤ seq, GỒM chính tin đích (vị từ `lt`, loại trừ)
-   *   afterSeq  = seq      → 25 tin sau nó (vị từ `gt`)
-   *
-   * ⚠️ `+ 1` không phải làm tròn cho đẹp: `beforeSeq = seq` loại trừ đúng tin người dùng vừa bấm vào.
-   *
-   * Cửa sổ THAY THẾ danh sách của phòng (`enterMessageContext`) — ghép vào dải đang giữ sẽ dựng một khe
-   * hở câm giữa hai đoạn cách nhau hàng nghìn tin (xem docblock `ChatMessageContext`).
+   * S20-CHAT-FEDEBT-1 — việc nạp cửa sổ nằm ở `useChatContextWindow`, CÙNG hook với thanh tin ghim
+   * (`PinnedMessageBar`): hai lời gọi `/messages` và dấu `+ 1` của chúng chỉ còn một chỗ (docblock ở đó).
    */
+  const openContext = useChatContextWindow();
   const jumpToMessage = useCallback(
     async (roomId: string, messageId: string, roomSeq: number): Promise<void> => {
       setSelectedRoomId(roomId);
       setJumpError(false);
-      try {
-        const [olderPage, newerPage] = await Promise.all([
-          chatApi.getMessages(roomId, { beforeSeq: roomSeq + 1, limit: CONTEXT_BEFORE }),
-          chatApi.getMessages(roomId, { afterSeq: roomSeq, limit: CONTEXT_AFTER }),
-        ]);
-        const window = [...olderPage, ...newerPage];
-        // Tin đích vắng mặt (vừa bị thu hồi + lọc, hoặc con trỏ lệch): KHÔNG vào chế độ ngữ cảnh — vào
-        // rồi thì người dùng ngồi trong một cửa sổ đóng băng mà không có tin nào được làm nổi.
-        if (!window.some((m) => m.id === messageId)) {
-          setJumpError(true);
-          return;
-        }
-        enterMessageContext(roomId, window, { messageId, seq: roomSeq });
-      } catch (err: unknown) {
-        setJumpError(true);
-        console.error(`[chat] không mở được ngữ cảnh của tin ${messageId}:`, err);
-      }
+      const isOpened = await openContext(roomId, messageId, roomSeq);
+      if (!isOpened) setJumpError(true);
     },
-    [enterMessageContext, setSelectedRoomId],
+    [openContext, setSelectedRoomId],
   );
 
   /**

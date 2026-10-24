@@ -51,8 +51,11 @@ interface ChatDraftState {
   setReplyTo: (roomId: string, replyTo: StoredChatMessage | null) => void;
   /** Trả khoá hiện có, hoặc cấp MỘT lần bằng `create` khi nháp mới bắt đầu. */
   ensureClientMessageId: (roomId: string, create: () => string) => string;
-  /** Ô soạn bị tháo khi còn `count` tệp chờ. `epoch` = epoch lúc ô soạn dựng — lệch thì bỏ qua. */
-  noteFilesNotKept: (roomId: string, count: number, epoch: number) => void;
+  /**
+   * Ô soạn bị tháo khi còn `count` tệp chờ. `epoch` = epoch lúc ô soạn dựng — lệch thì bỏ qua.
+   * Trả `true` khi ĐÃ ghi (ô soạn dựa vào đó để cảnh báo ngay lúc rời — S20-CHAT-FEDEBT-1).
+   */
+  noteFilesNotKept: (roomId: string, count: number, epoch: number) => boolean;
   clearFilesNotKept: (roomId: string) => void;
   /** Server đã nhận ⇒ xoá nháp, NHƯNG chỉ khi nháp vẫn là nháp vừa gửi (cùng `clientMessageId`). */
   clearSentDraft: (roomId: string, clientMessageId: string) => void;
@@ -113,10 +116,11 @@ export const useChatDraftStore = create<ChatDraftState>((set, get) => ({
   noteFilesNotKept: (roomId, count, epoch) => {
     // Ô soạn dựng trước lần reset (đăng xuất) rồi mới tháo sau đó: ghi vào là để lại dấu vết của phiên
     // trước cho người đăng nhập sau.
-    if (epoch !== get().sessionEpoch || count <= 0) return;
+    if (epoch !== get().sessionEpoch || count <= 0) return false;
     set((s) => ({
       drafts: patchDraft(s.drafts, roomId, (d) => ({ ...d, droppedFileCount: count })),
     }));
+    return true;
   },
 
   clearFilesNotKept: (roomId) =>

@@ -36,6 +36,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 
 import { useCan } from "@mediaos/web-core";
 import { useChatStore } from "@/stores/chat.store";
+import { useChatDraftStore } from "@/components/chat/chat-draft.store";
 import { ChatPage } from "./ChatPage";
 
 /** S20-CHAT-DEEPLINK-1 — phòng đang mở sống trên URL; ở đây một `useState` đóng vai URL. */
@@ -79,6 +80,8 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  // S20-CHAT-FEDEBT-1 — store nháp là module-global: ca trước để lại nháp/tệp bỏ thì ca sau đọc nhầm.
+  useChatDraftStore.getState().resetChatDrafts();
   // jsdom KHÔNG implement `scrollIntoView` — stub cho đường "cuộn tới tin được làm nổi" của FE-4
   // (cùng khuôn `TaskCommentThread.spec.tsx`). Thiếu nó thì effect NÉM và cả cây component chết,
   // biến một bài test về con trỏ thành một bài test về jsdom.

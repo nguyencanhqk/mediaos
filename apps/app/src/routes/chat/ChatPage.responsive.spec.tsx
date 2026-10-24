@@ -38,6 +38,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 import { useChatStore } from "@/stores/chat.store";
+import { useChatDraftStore } from "@/components/chat/chat-draft.store";
 import { CHAT_MD_QUERY, CHAT_XL_QUERY } from "@/components/chat/use-chat-viewport";
 import { ChatPage } from "./ChatPage";
 
@@ -120,6 +121,8 @@ async function selectRoom(): Promise<void> {
 }
 
 beforeEach(() => {
+  // S20-CHAT-FEDEBT-1 — store nháp là module-global: ca trước để lại nháp/tệp bỏ thì ca sau đọc nhầm.
+  useChatDraftStore.getState().resetChatDrafts();
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
   getRoom.mockReset();
   getRoom.mockResolvedValue({ ...room(), members: [], myRole: "member" });

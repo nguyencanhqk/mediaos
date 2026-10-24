@@ -16,6 +16,8 @@ import { MAX_MESSAGE_LENGTH } from "@/routes/chat/constants";
 interface ComposerNoticesProps {
   isArchived: boolean;
   replyTo: StoredChatMessage | null;
+  /** Tin đang trả lời đã ra khỏi RAM ⇒ chỉ người gửi + «không còn trong phần đã tải», không thân ảnh chụp. */
+  isReplyDetached: boolean;
   onCancelReply: () => void;
   /** Tên tệp đang tải lên, `null` = không có. */
   uploading: string | null;
@@ -26,6 +28,7 @@ interface ComposerNoticesProps {
 export function ComposerNotices({
   isArchived,
   replyTo,
+  isReplyDetached,
   onCancelReply,
   uploading,
   error,
@@ -48,9 +51,15 @@ export function ComposerNotices({
               {t("message.replyingTo", { name: replyTo.senderName ?? "" })}
             </p>
             {/* Như trích dẫn trong `MessageBubble`: tin đã thu hồi hiện chữ xám, không bao giờ thân cũ. */}
-            <p className="line-clamp-1 break-words text-muted-foreground">
-              {replyTo.recalledAt !== null ? t("message.recalled") : (replyTo.body ?? "")}
-            </p>
+            {isReplyDetached ? (
+              <p className="line-clamp-1 italic text-muted-foreground">
+                {t("message.replyPreviewUnavailable")}
+              </p>
+            ) : (
+              <p className="line-clamp-1 break-words text-muted-foreground">
+                {replyTo.recalledAt !== null ? t("message.recalled") : (replyTo.body ?? "")}
+              </p>
+            )}
           </div>
           <Button
             variant="ghost"
