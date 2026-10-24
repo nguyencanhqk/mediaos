@@ -120,7 +120,7 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     GoalProgressEngineRepository,
   ],
   // S4-DASH-BE-2 (additive): + TaskCoreService (MY_TASKS/TASK_ALERTS) + ProjectsService (PROJECT_PROGRESS
-  // authorize getProject TRƯỚC listByProject — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH
+  // authorize getProject TRƯỚC aggregate countsByStatusLeaf — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH
   // inject qua DI — KHÔNG re-provide instance thứ 2, KHÔNG method mới. Chỉ thêm vào exports[].
   // S5-GOAL-BE-1 (additive): + ProjectAccessService — GoalsModule cần lớp đọc project_role DUY NHẤT
   // (D-23/D-24) để cho Owner/Manager dự án ghi goal cấp dự án kể cả khác phòng ban (SPEC-10 §11).

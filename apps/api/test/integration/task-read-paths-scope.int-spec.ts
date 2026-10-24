@@ -62,11 +62,16 @@ describe.skipIf(!runDb)(
       `/tasks/by-team/${teamT}`,
     ];
 
-    /** id việc trong `data` (mảng) của một response 2xx; không 2xx ⇒ tập rỗng (đường không phục vụ). */
+    /**
+     * id việc trong `data` (mảng) của một response 2xx; không 2xx ⇒ tập rỗng (đường không phục vụ).
+     * 2xx mà `data` không phải mảng ⇒ NÉM: phong bì lạ không được đọc thành «không có việc» (chống xanh rỗng).
+     */
     function idsOf(res: request.Response): string[] {
       if (res.status < 200 || res.status >= 300) return [];
       const data: unknown = res.body?.data;
-      if (!Array.isArray(data)) return [];
+      if (!Array.isArray(data)) {
+        throw new Error(`status ${res.status} nhưng data không phải mảng (${typeof data})`);
+      }
       return data.map((row: { id?: unknown }) => String(row.id));
     }
 
@@ -234,6 +239,8 @@ describe.skipIf(!runDb)(
     });
 
     it("R4 · I-1: với người gọi Own và Team, id từ mỗi đường đời cũ ⊆ id của GET /tasks", async () => {
+      // Lưới PHỤ: sau khi gỡ, ba đường không 2xx ⇒ tập rỗng ⇒ ca này chỉ có giá trị khi một đường được
+      // khai lại; lớp chính là R1–R3 (nội dung + status), S1 (danh sách GET đã duyệt) và neo dương A1–A3.
       // Gom MỌI vi phạm rồi assert một lần — lượt đỏ ghi đủ 2 người gọi × 3 đường, không dừng ở cái đầu.
       const violations: string[] = [];
       for (const who of ["N", "M"] as const) {

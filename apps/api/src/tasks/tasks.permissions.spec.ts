@@ -156,14 +156,24 @@ describe("TasksController — permission guard (G9-2)", () => {
 });
 
 /**
- * S20-SEC-TASKLEGACYREAD-1 — chốt tĩnh (không cần DB): `TasksController` chỉ được phục vụ danh sách việc
- * qua `GET /tasks` (một biểu thức phạm vi đọc duy nhất). Đọc `PATH_METADATA` + `METHOD_METADATA` của
- * MỌI method trên prototype — handler danh sách đời cũ được khai lại ⇒ đỏ ngay ở đây.
- * Neo DƯƠNG đứng cạnh: tập path GET phải chứa `my` và `:taskId` — đọc metadata hỏng (tập rỗng) thì
- * ca phủ định sẽ xanh rỗng, neo này đỏ trước.
+ * S20-SEC-TASKLEGACYREAD-1 — chốt tĩnh (không cần DB), quy tắc DƯƠNG: tập path GET của `TasksController`
+ * phải KHỚP ĐÚNG danh sách đã duyệt dưới đây. Đường đọc danh sách việc duy nhất là `GET /tasks` (`/`,
+ * một biểu thức phạm vi đọc); các GET còn lại đọc một việc hoặc tài nguyên con của một việc. Thêm BẤT KỲ
+ * GET nào (tên nào cũng vậy) ⇒ đỏ ở đây ⇒ người thêm quyết định phạm vi đọc rồi mới sửa danh sách.
+ * Đọc `PATH_METADATA` + `METHOD_METADATA` của MỌI method trên prototype. Neo DƯƠNG đứng cạnh: tập path
+ * GET phải chứa `my` và `:taskId` — đọc metadata hỏng (tập rỗng) thì neo đỏ.
  */
 describe("TasksController — một đường đọc danh sách việc (S20-SEC-TASKLEGACYREAD-1)", () => {
-  const RETIRED_GET_PATHS = ["board", "by-project/:projectId", "by-team/:teamId"];
+  const APPROVED_GET_PATHS: readonly string[] = [
+    "/",
+    "my",
+    ":taskId",
+    ":taskId/activity",
+    ":taskId/checklists",
+    ":taskId/comments",
+    ":taskId/subtasks",
+    ":taskId/watchers",
+  ];
 
   function declaredGetPaths(): string[] {
     const proto = TasksController.prototype as unknown as Record<string, unknown>;
@@ -183,8 +193,7 @@ describe("TasksController — một đường đọc danh sách việc (S20-SEC-
     expect(declaredGetPaths()).toEqual(expect.arrayContaining(["my", ":taskId"]));
   });
 
-  it("không khai GET nào ngoài đường danh sách chuẩn cho board / theo dự án / theo nhóm", () => {
-    const declared = declaredGetPaths();
-    expect(declared.filter((p) => RETIRED_GET_PATHS.includes(p))).toEqual([]);
+  it("tập path GET khớp đúng danh sách đã duyệt phạm vi đọc", () => {
+    expect([...declaredGetPaths()].sort()).toEqual([...APPROVED_GET_PATHS].sort());
   });
 });
