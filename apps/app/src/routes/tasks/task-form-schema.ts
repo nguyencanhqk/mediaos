@@ -95,9 +95,17 @@ export function taskFormToCreatePayload(v: TaskFormValues): CreateTaskCoreReques
  * hai trong CÙNG một PATCH. Bỏ hẳn `projectId` khỏi đây thay vì khoá ô ở giao diện: ô bị `disabled`
  * có thể làm react-hook-form trả `undefined` ⇒ payload gửi `projectId: null` ⇒ GỠ task khỏi dự án.
  * Hỏng nặng hơn bug đang vá, và trông y hệt "không làm gì".
+ *
+ * S20-SEC-TASKPATCHGATE-1 — CHỈ gửi trường người dùng thực sự sửa (`editable` = dirty và không bị
+ * khoá). Server đòi cặp chuyên trách khi hạn / ưu tiên / người phụ trách ĐỔI (thiếu ⇒ 403 cả request);
+ * gửi đủ body thì một giá trị lệch do round-trip của ô (vd. hạn lưu có giây bị cắt về phút) ở ô bị
+ * khoá sẽ làm hỏng cả lần lưu tiêu đề. Không dựa vào giá trị của ô bị khoá.
  */
-export function taskFormToUpdatePayload(v: TaskFormValues): UpdateTaskCoreRequest {
-  return {
+export function taskFormToUpdatePayload(
+  v: TaskFormValues,
+  editable: TaskFormEditableFields,
+): UpdateTaskCoreRequest {
+  const full: UpdateTaskCoreRequest = {
     title: v.title,
     description: v.description || null,
     assigneeEmployeeId: v.assigneeEmployeeId || null,
@@ -106,4 +114,31 @@ export function taskFormToUpdatePayload(v: TaskFormValues): UpdateTaskCoreReques
     startAt: localDatetimeToIso(v.startAt) ?? null,
     dueAt: localDatetimeToIso(v.dueAt) ?? null,
   };
+  return pickEditable(full, editable);
+}
+
+/** Trường của form được phép vào payload sửa: `true` = người dùng đã sửa VÀ được phép đổi. */
+export type TaskFormEditableFields = Partial<Record<keyof TaskFormValues, boolean | undefined>>;
+
+/** Giữ đúng các khoá có `editable[k] === true` (khoá vắng / false / undefined đều bị bỏ). */
+export function pickEditable<T extends object>(
+  full: T,
+  editable: Partial<Record<string, boolean | undefined>>,
+): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(full).filter(([k]) => editable[k] === true),
+  ) as Partial<T>;
+}
+
+/**
+ * Trường sửa được = dirty (RHF) trừ trường bị khoá theo cặp quyền. Dùng chung cho form Sửa việc và
+ * hộp thoại Sửa việc con — cùng một quy tắc, không bảng thứ hai.
+ */
+export function editableDirtyFields(
+  dirty: Partial<Record<string, boolean | undefined>>,
+  locked: Partial<Record<string, boolean>>,
+): Partial<Record<string, boolean>> {
+  return Object.fromEntries(
+    Object.entries(dirty).map(([k, isDirty]) => [k, isDirty === true && locked[k] !== true]),
+  );
 }

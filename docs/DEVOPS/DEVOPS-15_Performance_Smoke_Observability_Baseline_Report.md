@@ -34,7 +34,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | Employee list | `GET /hr/employees?page=1&pageSize=20` | 200 | 22.8 | 29.3 | 33.4 | ✓ |
 | Attendance records | `GET /attendance/records?page=1&pageSize=20` | 200 | 9.9 | 14.2 | 17.6 | ✓ |
-| Task board | `GET /tasks/board` | 200 | 6.3 | 9.6 | 10.3 | ✓ |
+| Task board | `GET /tasks/board` (route đã gỡ ở S20-SEC-TASKLEGACYREAD-1; `scripts/perf-smoke.mjs` nay đo `GET /tasks` — số đo lịch sử) | 200 | 6.3 | 9.6 | 10.3 | ✓ |
 | Notification unread | `GET /notifications/unread-count` | 200 | 3.3 | 6.0 | 6.5 | ✓ |
 | Dashboard me | `GET /dashboard/me` | 200 | 5.9 | 8.8 | 9.9 | ✓ |
 
@@ -56,7 +56,7 @@ node scripts/perf-smoke.mjs --strict     # exit 1 nếu p95 vượt ngưỡng / 
 | Employee list | Pagination/filter, không load toàn bộ | **Canonical** `GET /hr/employees`: `hrEmployeeListQuerySchema` (page/pageSize, clamp `.max`), `listScopedTx` trả `total`/`hasNext`/`hasPrev` ([hr-read.service.ts](../../apps/api/src/employees/hr-read.service.ts#L85)). **Legacy** `GET /employees`: xưa unbounded → **S5-PERF-1 thêm safety-cap** (xem §4.1) | ✅ |
 | Attendance records | Query theo tháng/employee/scope có index | `attendanceRecordListQuerySchema` pageSize clamp; index `(company_id, employee_id, work_date)` | ✅ |
 | Leave approvals | Pending list load được với filter/scope | Pagination + scope filter (LEAVE module) | ✅ |
-| Task list/Kanban | Không N+1 employee/project summary | `GET /tasks/board` cap `BOARD_PAGE_LIMIT_MAX`; summary qua JOIN, không loop-per-row | ✅ |
+| Task list/Kanban | Không N+1 employee/project summary | `GET /tasks/board` cap `BOARD_PAGE_LIMIT_MAX`; summary qua JOIN, không loop-per-row (route + hằng đã gỡ ở S20-SEC-TASKLEGACYREAD-1; danh sách việc nay chỉ qua `GET /tasks`) | ✅ |
 | Notification unread | Không scan toàn bảng lớn | `unreadStatsTx` dùng literal `status='Unread'` để **hit partial index** `idx_notifications_unread WHERE status='Unread'` ([my-notifications.repository.ts](../../apps/api/src/notifications/my-notifications.repository.ts#L142)) | ✅ |
 | Dashboard me | 5–8 widget ổn định/cache | `GET /dashboard/me`: widget fetch song song (`Promise.all`/`allSettled`, degraded per-widget, KHÔNG nuốt 403) + widget cache TTL + invalidation theo event | ✅ |
 | Audit log | Filter/pagination, không trả toàn bộ | Audit viewer offset+limit clamp | ✅ |
