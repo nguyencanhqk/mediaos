@@ -16,7 +16,8 @@ import "reflect-metadata";
  * Gọi thẳng PermissionGuard với metadata THẬT của controller (Reflector thật) → enforcement
  * end-to-end mà không cần boot Nest/DB.
  */
-import { ForbiddenException, type ExecutionContext } from "@nestjs/common";
+import { ForbiddenException, RequestMethod, type ExecutionContext } from "@nestjs/common";
+import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { Reflector } from "@nestjs/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TasksController } from "./tasks.controller";
@@ -154,5 +155,39 @@ describe("TasksController — permission guard (G9-2)", () => {
     it("has no @RequirePermission (tenant-scoped by global guards)", () => {
       expect(Reflect.getMetadata(REQUIRE_PERMISSION, handlerOf(name))).toBeUndefined();
     });
+  });
+});
+
+/**
+ * S20-SEC-TASKLEGACYREAD-1 — chốt tĩnh (không cần DB): `TasksController` chỉ được phục vụ danh sách việc
+ * qua `GET /tasks` (một biểu thức phạm vi đọc duy nhất). Đọc `PATH_METADATA` + `METHOD_METADATA` của
+ * MỌI method trên prototype — handler danh sách đời cũ được khai lại ⇒ đỏ ngay ở đây.
+ * Neo DƯƠNG đứng cạnh: tập path GET phải chứa `my` và `:taskId` — đọc metadata hỏng (tập rỗng) thì
+ * ca phủ định sẽ xanh rỗng, neo này đỏ trước.
+ */
+describe("TasksController — một đường đọc danh sách việc (S20-SEC-TASKLEGACYREAD-1)", () => {
+  const RETIRED_GET_PATHS = ["board", "by-project/:projectId", "by-team/:teamId"];
+
+  function declaredGetPaths(): string[] {
+    const proto = TasksController.prototype as unknown as Record<string, unknown>;
+    const paths: string[] = [];
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (name === "constructor") continue;
+      const handler = proto[name];
+      if (typeof handler !== "function") continue;
+      const path: unknown = Reflect.getMetadata(PATH_METADATA, handler);
+      const method: unknown = Reflect.getMetadata(METHOD_METADATA, handler);
+      if (typeof path === "string" && method === RequestMethod.GET) paths.push(path);
+    }
+    return paths;
+  }
+
+  it("neo: đọc được path GET của controller (chứa my và :taskId)", () => {
+    expect(declaredGetPaths()).toEqual(expect.arrayContaining(["my", ":taskId"]));
+  });
+
+  it("không khai GET nào ngoài đường danh sách chuẩn cho board / theo dự án / theo nhóm", () => {
+    const declared = declaredGetPaths();
+    expect(declared.filter((p) => RETIRED_GET_PATHS.includes(p))).toEqual([]);
   });
 });
