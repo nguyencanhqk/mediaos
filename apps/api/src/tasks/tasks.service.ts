@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -8,7 +7,6 @@ import {
 import {
   officeTaskStatusSchema,
   type CreateTaskRequest,
-  type LabelDto,
   type OfficeTaskStatusDto,
   type TaskTypeDto,
   type UpdateTaskFieldsRequest,
@@ -16,7 +14,7 @@ import {
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
-import { TasksRepository, type ListTasksFilter, type Pagination } from "./tasks.repository";
+import { TasksRepository } from "./tasks.repository";
 import { ProjectAccessService } from "./project-access.service";
 
 interface RequestUser {
@@ -73,41 +71,6 @@ export class TasksService {
   async getMyTasks(companyId: string, userId: string) {
     const rows = await this.repo.findByAssignee(companyId, userId);
     return rows.map(addDisplayId);
-  }
-
-  /**
-   * Board reads (G9-3 nối controller + gate read:task). `page` được forward để KHÔNG bị kẹp ngầm.
-   * PM-1: trả BoardTaskDto (đính labels[] aggregate trong 1 query — tránh N+1) + displayId compute.
-   */
-  async listBoard(companyId: string, filters: ListTasksFilter, page?: Pagination) {
-    const rows = await this.repo.listAll(companyId, filters, page);
-    return this.attachLabels(companyId, rows);
-  }
-
-  /**
-   * Project Tasks (G9-4) — SEC-1 guard: projectId phải thuộc cùng tenant trước khi list.
-   * Trả 404 nếu project không tồn tại (không phân biệt not-found / cross-tenant — tránh oracle).
-   */
-  async listByProject(companyId: string, projectId: string, page?: Pagination) {
-    const rows = await this.db.withTenant(companyId, async (tx) => {
-      const exists = await this.repo.projectExistsTx(tx, companyId, projectId);
-      if (!exists) throw new NotFoundException(`Project not found: ${projectId}`);
-      return this.repo.listByProject(companyId, projectId, page);
-    });
-    return this.attachLabels(companyId, rows);
-  }
-
-  /**
-   * Team Tasks (G9-4) — SEC-1 guard: teamId phải thuộc cùng tenant trước khi list.
-   * Trả 404 nếu team không tồn tại (không phân biệt not-found / cross-tenant — tránh oracle).
-   */
-  async listByTeam(companyId: string, teamId: string, page?: Pagination) {
-    const rows = await this.db.withTenant(companyId, async (tx) => {
-      const exists = await this.repo.teamExistsTx(tx, companyId, teamId);
-      if (!exists) throw new NotFoundException(`Team not found: ${teamId}`);
-      return this.repo.listByTeam(companyId, teamId, page);
-    });
-    return this.attachLabels(companyId, rows);
   }
 
   // ─── Manual task lifecycle (G9-2 / G9-3) ─────────────────────────────────────
@@ -508,32 +471,6 @@ export class TasksService {
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
-
-  /**
-   * PM-1 — tính displayId + đính labels[] cho 1 tập hàng task → BoardTaskDto[]. Nhãn lấy trong 1 query
-   * (listLabelsForTaskIds) rồi gom theo task ở JS (tránh N+1). row gốc giữ nguyên (trả copy mới).
-   */
-  private async attachLabels<T extends TaskRowWithSeq>(
-    companyId: string,
-    rows: T[],
-  ): Promise<(T & { displayId: string | null; labels: LabelDto[] })[]> {
-    if (rows.length === 0) return [];
-    const labelRows = await this.repo.listLabelsForTaskIds(
-      companyId,
-      rows.map((r) => r.id),
-    );
-    const byTask = new Map<string, LabelDto[]>();
-    for (const { taskId, ...label } of labelRows) {
-      const list = byTask.get(taskId) ?? [];
-      list.push({
-        ...label,
-        createdAt:
-          label.createdAt instanceof Date ? label.createdAt.toISOString() : label.createdAt,
-      } as LabelDto);
-      byTask.set(taskId, list);
-    }
-    return rows.map((r) => ({ ...addDisplayId(r), labels: byTask.get(r.id) ?? [] }));
-  }
 
   private async assertTaskExists(companyId: string, taskId: string): Promise<void> {
     const [task] = await this.db.withTenant(companyId, (tx) =>

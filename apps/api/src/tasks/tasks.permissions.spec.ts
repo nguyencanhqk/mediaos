@@ -49,9 +49,6 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "deleteTask", action: "delete", resourceType: "task", isSensitive: true },
   // addComment là WRITE → gate comment:task (G9-2 H-1; recon S4-TASK-RECON canonical hoá về resource `task`).
   { handlerName: "addComment", action: "comment", resourceType: "task" },
-  // getBoard (G9-3) là READ NHẠY CẢM hơn getMyTasks (xem việc của NGƯỜI KHÁC toàn tenant) →
-  // PHẢI gate read:task (seed 0005, is_sensitive=false). User 0-quyền KHÔNG được đọc board.
-  { handlerName: "getBoard", action: "read", resourceType: "task" },
   // S4-TASK-BE-2: task core CRUD/my/list gate read/update:task + data-scope (KHÔNG còn mở như getMyTasks cũ).
   { handlerName: "listTasks", action: "read", resourceType: "task" },
   { handlerName: "getMyTasks", action: "read", resourceType: "task" },

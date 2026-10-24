@@ -1,4 +1,4 @@
-# S20-SEC-TASKLEGACYREAD-1 — plan v1.2
+# S20-SEC-TASKLEGACYREAD-1 — plan v1.2 (+ §10 số đo thi công)
 
 > Zone 🔴 red · gate FULL · crown. Nhánh `fix/s20-sec-tasklegacyread-1` cắt từ `6e2e58e7`.
 > Mọi số đo dưới đây lấy trên `6e2e58e7`. Nhãn: **[ĐO]** = đã đọc/đếm trên mã; **[SUY RA]** = suy luận, phải đo lại ở bước thi công.
@@ -191,3 +191,21 @@ KHÔNG đổi: migration, contracts, FE, `harness/backlog.mjs` (luồng chính),
 | N6  | LOW    | ÁP          | §3 bước 6: `let db`/`let repo` ở phạm vi `describe` của `labels.int-spec.ts` (thi công ở bước vá)                        |
 
 Ca cũ khẳng định hành vi trái I-1 (gỡ/đổi ở bước vá theo §3 bước 5–6; ca đối nghịch ở spec mới): `tasks-core-param-uuid` ALLOW-200 `by-project`/`by-team` + định tuyến `board` 200 (↔ R1–R3) · `api-keys.deny-path` (A) `board` 200 (đổi đầu dò) · `tasks-board.int-spec.ts` · ca lọc nhãn `labels.int-spec.ts` · khối `listBoard`/`listByProject`/`listByTeam` của `tasks.service.spec.ts` · dòng `getBoard` của `tasks.permissions.spec.ts` (↔ S1).
+
+## §10 Thi công (GREEN) — số đo thật
+
+| Mục                                      | Kỳ vọng plan          | Đo được                                                                     |
+| ---------------------------------------- | --------------------- | --------------------------------------------------------------------------- |
+| Census JSON sinh lại (`totals.routes`)   | 692 → 689             | 692 → **689** · `gated` 653 → **650** · các tổng khác giữ nguyên            |
+| done_when 3 — diff tập route so với base | −3 / +0               | **−3 / +0** (đúng ba route của WO)                                          |
+| `route-http-coverage` (số spec in ra)    | 689, uncovered 0      | **689/689 (100.0%) — CHƯA phủ: 0** ⇒ `MIN_COVERED_COUNT = 689`              |
+| `PARAM_UUID_MEASURED_SIZE` · đếm `piped` | 185 → 183 · 184 → 182 | **183** · **182** (ratchet xanh)                                            |
+| `tasks.repository.ts`                    | chỉ giảm              | 933 → **791** dòng                                                          |
+| Bảng `CASES` của `tasks-core-param-uuid` | gỡ 2 ca               | 43 → **41** (ca (0) neo số theo census AST; docblock đầu tệp cập nhật cùng) |
+
+Lệch nhỏ so với §3 (ghi để reviewer đối chiếu):
+
+- `tasks.service.ts`: gỡ thêm import `ForbiddenException` không dùng (cảnh báo eslint có sẵn từ trước, cùng khối import đang sửa).
+- `tasks-core-param-uuid.int-spec.ts`: ngoài 5 ca + seed team, cập nhật số tham số 43 → 41 ở docblock, tên `describe` và ca (0) — bắt buộc để ca (0) khớp census AST.
+- `api-keys.deny-path.int-spec.ts`, `labels.int-spec.ts`: prettier định dạng lại toàn tệp (tệp gốc chưa theo prettier); thay đổi nội dung chỉ là đầu dò `/tasks` và đường đọc nhãn.
+- Docblock `GET /tasks` ở controller thêm một câu nêu I-2 (đường đọc danh sách theo bộ lọc duy nhất của controller).
