@@ -27,6 +27,7 @@ import {
   validateGoalDetailSearch,
   validateGoalListSearch,
 } from "@/routes/goals/goal-list-search";
+import { validateTaskTemplateListSearch } from "@/routes/goals/template-return-to";
 import { useGoalFormPrefill, validateGoalFormPrefill } from "@/routes/goals/goal-form-prefill";
 
 // ---------------------------------------------------------------------------
@@ -1793,7 +1794,7 @@ const GoalDetailPage = React.lazy(() =>
 );
 // S5-GOAL-TPL-1 — GOAL-SCREEN-006 danh mục việc mẫu (gate màn = manage:task-template ở TRONG page).
 const TaskTemplateListPage = React.lazy(() =>
-  import("@/routes/goals/TaskTemplateListPage").then((m) => ({ default: m.TaskTemplateListPage })),
+  import("@/routes/goals/TaskTemplateListPageRoute").then((m) => ({ default: m.TemplatesRoute })),
 );
 
 // ASSET — Quản lý tài sản (S11-ASSET-FE-1, SPEC-13 ASSET-SCREEN-001..007). List + kiểm kê qua
@@ -2758,6 +2759,7 @@ const goalTemplatesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/goals/templates",
   beforeLoad: authGuard,
+  validateSearch: validateTaskTemplateListSearch, // S20-GOAL-DECOMPOSE-1 — ?returnTo= nội bộ
   component: () => buildModuleRouteContent(goalTemplatesMeta, "GOAL", <TaskTemplateListPage />),
 });
 

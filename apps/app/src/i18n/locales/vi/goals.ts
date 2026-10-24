@@ -56,6 +56,8 @@ export default {
 
   list: {
     create: "Tạo mục tiêu",
+    // S20-GOAL-DECOMPOSE-1 — lối vào danh mục việc mẫu (gate manage:task-template).
+    templates: "Mẫu việc",
     view: {
       tree: "Cây",
       list: "Danh sách",
@@ -406,6 +408,8 @@ export default {
     description:
       "Bộ việc mẫu dùng để phân rã mục tiêu thành công việc. Danh mục của phòng chỉ phòng đó dùng; danh mục dùng chung áp cho toàn công ty.",
     create: "Thêm danh mục",
+    // S20-GOAL-DECOMPOSE-1 — tới từ «Tạo mẫu mới» của wizard phân rã (?returnTo=).
+    returnToWizard: "Quay lại phân rã",
     sharedLabel: "Dùng chung toàn công ty",
     active: "Đang dùng",
     inactive: "Đã tắt",
@@ -493,7 +497,8 @@ export default {
     templateLabel: "Danh mục việc mẫu",
     templatePlaceholder: "Chọn danh mục…",
     templatesError: "Không tải được danh mục việc mẫu.",
-    noTemplates: "Chưa có danh mục việc mẫu đang dùng. Tạo ở trang Danh mục việc mẫu.",
+    noTemplates: "Chưa có danh mục việc mẫu đang dùng.",
+    createTemplate: "Tạo mẫu mới",
     itemCount: "{{count}} việc",
     previewLabel: "Xem trước công việc sẽ tạo",
     addRow: "Thêm việc",
@@ -505,6 +510,21 @@ export default {
     departmentNote:
       "Mục tiêu cấp phòng: nên chọn người thực hiện cho từng việc — nếu phạm vi giao việc của bạn hẹp, để trống sẽ bị từ chối.",
     overLimit: "Tối đa {{max}} việc mỗi lần phân rã — bớt bớt hoặc chia thành nhiều lần.",
+    // S20-GOAL-DECOMPOSE-1 (US-GOAL-QL-07)
+    applyAll: {
+      label: "Áp cho tất cả",
+      assignee: "Người thực hiện cho tất cả",
+      dueAt: "Hạn cho tất cả",
+      hint: "Dòng đã sửa tay giữ giá trị riêng. Hạn tính đến cuối ngày theo giờ công ty.",
+    },
+    result: {
+      dialogTitle: "Đã phân rã mục tiêu",
+      description: "Các việc đã được tạo và gắn vào mục tiêu này.",
+      title: "Đã tạo {{count}} việc",
+      hint: "Bấm một việc để xem chi tiết. Danh sách này cũng có ở tab «Công việc gắn» của mục tiêu.",
+      openBoard: "Mở board dự án",
+      close: "Xong",
+    },
     submit: "Tạo {{count}} công việc",
     submitting: "Đang tạo…",
     error: "Không phân rã được mục tiêu.",

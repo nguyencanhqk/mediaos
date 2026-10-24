@@ -43,6 +43,7 @@ import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
 import { GoalFinalizeDialog } from "./components/GoalFinalizeDialog";
 import { GoalCheckinsTab } from "./components/GoalCheckinsTab";
 import { GoalDecomposeWizard } from "./components/GoalDecomposeWizard";
+import { useDecomposeWizardOpen } from "./components/GoalDecomposeWizardResume";
 import { GoalLinkedTasksTab } from "./components/GoalLinkedTasksTab";
 import { SimpleTable, TabError, TabSkeleton } from "./components/GoalTabPrimitives";
 import type { GoalDetailTab } from "./goal-list-search";
@@ -77,7 +78,8 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [finalizeOpen, setFinalizeOpen] = useState(false);
-  const [decomposeOpen, setDecomposeOpen] = useState(false);
+  // S20-GOAL-DECOMPOSE-1 — `?decompose=resume` (quay về từ «Tạo mẫu mới») mở sẵn wizard một lần.
+  const [decomposeOpen, setDecomposeOpen] = useDecomposeWizardOpen();
 
   const canDelete = useCan(GOAL_ENGINE_PAIRS.DELETE.action, GOAL_ENGINE_PAIRS.DELETE.resourceType);
   // S5-GOAL-TPL-1 — phân rã cần HAI cặp: ('update','goal') (PermissionGate bên dưới) VÀ ('create','task')
@@ -85,6 +87,10 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
   const canCreateTask = useCan(
     TASK_CREATE_PAIR_FOR_DECOMPOSE.action,
     TASK_CREATE_PAIR_FOR_DECOMPOSE.resourceType,
+  );
+  const canUpdateGoal = useCan(
+    GOAL_ENGINE_PAIRS.UPDATE.action,
+    GOAL_ENGINE_PAIRS.UPDATE.resourceType,
   );
 
   const goalQuery = useQuery({
@@ -282,7 +288,14 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
       </Tabs>
 
       {checkinOpen && <GoalCheckinDialog goal={goal} onClose={() => setCheckinOpen(false)} />}
-      {decomposeOpen && <GoalDecomposeWizard goal={goal} onClose={() => setDecomposeOpen(false)} />}
+      {/* Cờ trên URL ai cũng gõ được ⇒ gate y như nút mở (hai cặp + chưa chốt + chưa huỷ). */}
+      {decomposeOpen &&
+        canCreateTask &&
+        canUpdateGoal &&
+        !finalized &&
+        goal.status !== "Cancelled" && (
+          <GoalDecomposeWizard goal={goal} onClose={() => setDecomposeOpen(false)} />
+        )}
       {finalizeOpen && (
         <GoalFinalizeDialog
           goal={goal}

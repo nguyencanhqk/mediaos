@@ -2,7 +2,15 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ClipboardList, ListChecks, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ClipboardList,
+  ListChecks,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import {
   ApiError,
   hrApi,
@@ -24,6 +32,7 @@ import {
   Select,
 } from "@mediaos/ui";
 import { TASK_TEMPLATE_MANAGE_PAIR } from "./constants";
+import { sanitizeReturnTo } from "./template-return-to";
 import { TaskTemplateFormDialog } from "./components/TaskTemplateFormDialog";
 import { TaskTemplateItemsDialog } from "./components/TaskTemplateItemsDialog";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -39,8 +48,18 @@ type ActiveFilter = "" | "true" | "false";
  * PHẠM VI DỮ LIỆU do SERVER quyết: `@Department` thấy danh mục của phòng mình + danh mục DÙNG CHUNG
  * (chỉ đọc); `@Company` thấy tất cả. FE KHÔNG đoán scope — bấm sửa danh mục dùng-chung khi không đủ
  * quyền sẽ nhận 403 kèm mã `GOAL-ERR-TPL-FORBIDDEN` và hiện nguyên văn thông điệp đó.
+ *
+ * S20-GOAL-DECOMPOSE-1 (US-GOAL-QL-08): `returnTo` (route đã lọc chỉ còn đường dẫn nội bộ —
+ * `template-return-to.ts`) = tới từ «Tạo mẫu mới» của wizard phân rã ⇒ hộp tạo danh mục tự mở, lưu
+ * xong (sau khi invalidate danh sách) quay lại `returnTo`; nút «Quay lại» về đó mà không lưu.
  */
-export function TaskTemplateListPage() {
+export function TaskTemplateListPage({
+  returnTo,
+  onReturn,
+}: {
+  returnTo?: string;
+  onReturn?: (to: string) => void;
+} = {}) {
   const { t } = useTranslation("goals");
   const queryClient = useQueryClient();
   const canManage = useCan(
@@ -53,7 +72,9 @@ export function TaskTemplateListPage() {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("");
   const [departmentId, setDepartmentId] = useState("");
 
-  const [formOpen, setFormOpen] = useState(false);
+  // Lọc lại TẠI CHỖ DÙNG — không tin rằng mọi đường tới trang đều đã qua validateSearch.
+  const returnTarget = onReturn ? sanitizeReturnTo(returnTo) : null;
+  const [formOpen, setFormOpen] = useState(returnTarget !== null);
   const [editing, setEditing] = useState<TaskTemplateResponseDto | null>(null);
   const [itemsFor, setItemsFor] = useState<TaskTemplateResponseDto | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<TaskTemplateResponseDto | null>(null);
@@ -198,17 +219,30 @@ export function TaskTemplateListPage() {
         description={t("templates.description")}
         icon={ClipboardList}
         actions={
-          <Button
-            size="sm"
-            data-testid="task-template-create"
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {t("templates.create")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {returnTarget && (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="task-template-return"
+                onClick={() => onReturn?.(returnTarget)}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                {t("templates.returnToWizard")}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              data-testid="task-template-create"
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {t("templates.create")}
+            </Button>
+          </div>
         }
       >
         <div className="flex flex-wrap items-end gap-3">
@@ -275,6 +309,7 @@ export function TaskTemplateListPage() {
       {formOpen && (
         <TaskTemplateFormDialog
           {...(editing ? { template: editing } : {})}
+          {...(returnTarget ? { onCreated: () => onReturn?.(returnTarget) } : {})}
           onClose={() => {
             setFormOpen(false);
             setEditing(null);

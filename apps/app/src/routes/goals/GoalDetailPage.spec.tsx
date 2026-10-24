@@ -20,6 +20,9 @@ import i18n from "@/i18n";
 const nav = vi.hoisted(() => ({ navigate: vi.fn() }));
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => nav.navigate,
+  // S20-GOAL-DECOMPOSE-1 — trang đọc cờ `?decompose=resume` từ location.search (rỗng ở đây).
+  useRouterState: ({ select }: { select: (s: { location: { search: object } }) => unknown }) =>
+    select({ location: { search: {} } }),
 }));
 
 // Tập cặp quyền BỊ THU HỒI cho từng test (mặc định rỗng = có đủ quyền). `vi.hoisted` vì factory
