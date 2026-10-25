@@ -554,6 +554,8 @@ export function ConversationPanel({
           hasMoreOlder={conversation.hasMoreOlder}
           isLoadingOlder={conversation.isLoadingOlder}
           historyLimitReached={conversation.historyLimitReached}
+          // S20-CHAT-UNREAD-1 — chỉ đặt vạch chưa đọc khi trang đầu của LẦN MỞ này đã về.
+          isFirstPageLoaded={conversation.isFirstPageLoaded}
           highlightMessageId={context?.targetMessageId ?? null}
           avatarByUser={roster.avatarByUser}
           nameByUser={roster.nameByUser}

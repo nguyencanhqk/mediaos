@@ -6,7 +6,7 @@
  * lúc MẤT kết nối. Đây đúng loại lỗi không ai báo cáo được vì "chat vẫn chạy mà".
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ChatMessageDto } from "@mediaos/contracts";
 
 const getMessages = vi.fn();
@@ -24,6 +24,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 import { attachmentUrl, useChatStore, type StoredChatMessage } from "@/stores/chat.store";
+import { chatApi } from "@mediaos/web-core";
+import { MARK_READ_DEBOUNCE_MS } from "@/routes/chat/constants";
 import { useChatConversation } from "./use-chat-conversation";
 
 const ROOM = "11111111-1111-4111-8111-111111111111";
@@ -177,5 +179,40 @@ describe("useChatConversation · vòng đời", () => {
   it("roomId = null ⇒ không gọi API nào", () => {
     renderHook(() => useChatConversation(null));
     expect(getMessages).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * S20-CHAT-UNREAD-1 — con trỏ đọc CHỈ TIẾN. Mở phòng tại vạch chưa đọc làm `MessageList` báo đọc muộn
+ * hơn và có thể báo lại số nhỏ hơn (cửa sổ ngữ cảnh có đuôi thấp hơn) — số lùi không được thành POST.
+ */
+describe("useChatConversation · đánh dấu đã đọc (con trỏ chỉ tiến)", () => {
+  it("báo 125 rồi 110 ⇒ đúng MỘT POST với 125; báo 130 sau đó ⇒ POST tiếp với 130", async () => {
+    vi.useFakeTimers();
+    try {
+      const markRead = vi.mocked(chatApi.markRead);
+      markRead.mockClear();
+      const { result } = renderHook(() => useChatConversation(ROOM));
+
+      act(() => result.current.markReadUpTo(125));
+      await act(async () => {
+        vi.advanceTimersByTime(MARK_READ_DEBOUNCE_MS);
+      });
+      act(() => result.current.markReadUpTo(110));
+      await act(async () => {
+        vi.advanceTimersByTime(MARK_READ_DEBOUNCE_MS);
+      });
+      expect(markRead).toHaveBeenCalledTimes(1);
+      expect(markRead).toHaveBeenCalledWith(ROOM, { seq: 125 });
+
+      act(() => result.current.markReadUpTo(130));
+      await act(async () => {
+        vi.advanceTimersByTime(MARK_READ_DEBOUNCE_MS);
+      });
+      expect(markRead).toHaveBeenCalledTimes(2);
+      expect(markRead).toHaveBeenLastCalledWith(ROOM, { seq: 130 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

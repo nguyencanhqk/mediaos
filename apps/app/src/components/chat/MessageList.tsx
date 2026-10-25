@@ -16,14 +16,32 @@ import type { PendingChatMessage, StoredChatMessage } from "@/stores/chat.store"
 import { MAX_HISTORY_PER_ROOM } from "@/stores/chat.store";
 import { NEAR_BOTTOM_THRESHOLD_PX } from "@/routes/chat/constants";
 import { canRecallMessage, dayKeyOf, formatDayLabel } from "./chat-format";
+import {
+  MAX_UNREAD_CATCHUP_PAGES,
+  UNREAD_DIVIDER_TOP_GAP_PX,
+  locateUnreadAnchor,
+  unreadSnapshotOf,
+  unseenCountBelow,
+  type UnreadAnchor,
+} from "./chat-unread";
 import { MessageBubble, type MessageBubbleActions } from "./MessageBubble";
 import type { SeenByViewer } from "./SeenByAvatars";
+import { isScrollNearBottom, scrollTopToReveal } from "./use-chat-viewport";
 
 /** Khoảng cách tới ĐỈNH đủ để coi là "đang muốn xem tiếp lịch sử". */
 const LOAD_OLDER_THRESHOLD_PX = 60;
 
 /** Cùng người gửi + cách nhau dưới ngưỡng này ⇒ gộp (không lặp avatar + tên). */
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+/** Mỏ neo DOM của vạch chưa đọc — phép định vị tìm nó trong khung cuộn. */
+const UNREAD_DIVIDER_TESTID = "chat-unread-divider";
+
+/**
+ * S20-CHAT-UNREAD-1 — pha của LẦN MỞ phòng: `pending` = còn phải định vị (tới vạch, hoặc chờ nạp tới
+ * mốc); `done` = khung nhìn thuộc về người dùng. Đang `pending` thì không gì khác được kéo khung nhìn.
+ */
+type OpenPhase = "pending" | "done";
 
 interface MessageListProps {
   room: ChatRoomDto;
@@ -37,6 +55,12 @@ interface MessageListProps {
   hasMoreOlder: boolean;
   isLoadingOlder: boolean;
   historyLimitReached: boolean;
+  /**
+   * S20-CHAT-UNREAD-1 — trang đầu của LẦN MỞ phòng này đã về (`useChatConversation.isFirstPageLoaded`).
+   * Chưa về thì store có thể chỉ còn tin của lần ghé trước, hở một khúc ở giữa ⇒ chưa được đặt vạch.
+   * Mặc định `true` cho nơi gọi không có vòng nạp trang đầu.
+   */
+  isFirstPageLoaded?: boolean;
   /**
    * S7-CHAT-FE-4 — tin cần LÀM NỔI + cuộn tới (đích của một lần nhảy từ tìm kiếm/ghim/tệp).
    *
@@ -73,6 +97,7 @@ export function MessageList({
   hasMoreOlder,
   isLoadingOlder,
   historyLimitReached,
+  isFirstPageLoaded = true,
   highlightMessageId = null,
   avatarByUser,
   nameByUser,
@@ -84,8 +109,36 @@ export function MessageList({
 }: MessageListProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [isNearBottom, setNearBottom] = useState(true);
-  const [hasUnseenBelow, setUnseenBelow] = useState(false);
+
+  /**
+   * S20-CHAT-UNREAD-1 — ảnh chụp chưa đọc, chụp MỘT LẦN lúc dựng và TRƯỚC mọi `onMarkRead` (mỗi phòng
+   * một lần dựng: `ChatPage` lẫn drawer đều gắn `key` theo phòng). Không đọc lại từ `room` mỗi lượt vẽ:
+   * đánh dấu đọc kéo `unreadCount` về 0 và vạch sẽ biến mất đúng lúc người dùng vừa chạm đáy.
+   *
+   * `null` (không có tin chưa đọc, hoặc server cũ thiếu `unreadCount`/`lastMessageSeq`) ⇒ hành vi cũ:
+   * khởi tạo «đang ở đáy», lần vẽ đầu xuống đáy và báo đọc.
+   */
+  const [unread] = useState(() => unreadSnapshotOf(room));
+  const [openPhase, setOpenPhase] = useState<OpenPhase>(() =>
+    unread === null ? "done" : "pending",
+  );
+  // ⚠️ `unread !== null` ⇒ KHỞI TẠO `false`. Mã cũ khởi tạo `true` nên effect đánh dấu đọc chạy ngay lần
+  // vẽ đầu và badge về 0 trước khi người dùng thấy tin chưa đọc nào (ca RED của WO).
+  const [isNearBottom, setNearBottom] = useState(unread === null);
+  /** `room_seq` cao nhất người dùng ĐÃ THẤY — mốc của nút «↓ N tin mới». Chỉ tiến. */
+  const [seenUpToSeq, setSeenUpToSeq] = useState(() =>
+    unread !== null
+      ? unread.firstUnreadSeq - 1
+      : messages.length > 0
+        ? messages[messages.length - 1].roomSeq
+        : 0,
+  );
+  /** Vòng nạp `beforeSeq` CHỈ để với tới mốc chưa đọc (khác lần nạp do người dùng cuộn lên). */
+  const [catchUp, setCatchUp] = useState({ pages: 0, exhausted: false });
+  const catchUpInFlightRef = useRef(false);
+  const [isPageVisible, setPageVisible] = useState(
+    () => typeof document === "undefined" || !document.hidden,
+  );
 
   /** Ảnh chụp hình học NGAY TRƯỚC khi prepend — `null` khi không có lần nạp lịch sử nào đang bay. */
   const anchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -93,11 +146,35 @@ export function MessageList({
 
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
 
+  const canCatchUpOlder =
+    openPhase === "pending" &&
+    hasMoreOlder &&
+    !historyLimitReached &&
+    !catchUp.exhausted &&
+    catchUp.pages < MAX_UNREAD_CATCHUP_PAGES;
+  const unreadAnchor = useMemo<UnreadAnchor>(
+    () =>
+      unread === null
+        ? { kind: "none" }
+        : locateUnreadAnchor(messages, unread.firstUnreadSeq, canCatchUpOlder),
+    [messages, unread, canCatchUpOlder],
+  );
+  // Tin làm nổi (`?msg=` / tìm kiếm / ghim) THẮNG vạch: danh sách lúc đó là cửa sổ ngữ cảnh, không phải
+  // đuôi hội thoại. Trang đầu chưa về thì chưa vẽ vạch — dữ liệu còn có thể hở ở giữa.
+  const dividerBeforeId =
+    highlightMessageId === null &&
+    unreadAnchor.kind === "message" &&
+    (isFirstPageLoaded || openPhase === "done")
+      ? unreadAnchor.messageId
+      : null;
+
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-    setUnseenBelow(false);
+    // Đặt luôn «ở đáy» thay vì chờ sự kiện `scroll`: bấm «↓» là ý định đọc tới cuối, và khi nội dung
+    // không đổi chiều cao thì trình duyệt có thể không bắn `scroll` nào.
+    setNearBottom(true);
   }, []);
 
   const triggerLoadOlder = useCallback(() => {
@@ -114,12 +191,13 @@ export function MessageList({
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const near = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
-    setNearBottom(near);
-    if (near) setUnseenBelow(false);
+    // S20-CHAT-UNREAD-1 — lần mở còn đang định vị: khung đứng ở đỉnh trong lúc vòng nạp tới mốc chạy, và
+    // một `scroll` lúc đó sẽ mở thêm lần nạp thứ hai (`triggerLoadOlder`) tranh với vòng nạp — hook trả 0
+    // cho lần đến sau, vòng nạp tưởng hết lịch sử và dừng ở chỗ sai.
+    if (openPhase === "pending") return;
+    setNearBottom(isScrollNearBottom(el, NEAR_BOTTOM_THRESHOLD_PX));
     if (el.scrollTop <= LOAD_OLDER_THRESHOLD_PX) triggerLoadOlder();
-  }, [triggerLoadOlder]);
+  }, [openPhase, triggerLoadOlder]);
 
   // ── Neo cuộn sau khi prepend ───────────────────────────────────────────────
   useLayoutEffect(() => {
@@ -145,10 +223,74 @@ export function MessageList({
     // khỏi màn hình trước khi họ kịp đọc.
     if (highlightMessageId !== null) return;
 
-    // Người dùng đang đọc tin cũ ⇒ TUYỆT ĐỐI không kéo khung nhìn của họ. Chỉ báo có tin mới.
+    // S20-CHAT-UNREAD-1 — lần mở còn đang định vị (tới vạch chưa đọc) ⇒ khung nhìn thuộc về phép định
+    // vị bên dưới. Thiếu vế này thì lần vẽ đầu cuộn thẳng xuống đáy như mã cũ.
+    if (openPhase === "pending") return;
+
+    // Người dùng đang đọc tin cũ ⇒ TUYỆT ĐỐI không kéo khung nhìn của họ. Nút «↓ N tin mới» tự hiện
+    // (số dẫn xuất từ `seenUpToSeq`, không cần cờ).
     if (isFirstPaint || isNearBottom) scrollToBottom();
-    else setUnseenBelow(true);
-  }, [messages, isNearBottom, scrollToBottom, highlightMessageId]);
+  }, [messages, isNearBottom, scrollToBottom, highlightMessageId, openPhase]);
+
+  // ── Định vị lần mở tại vạch chưa đọc (S20-CHAT-UNREAD-1) ───────────────────
+  //
+  // `useLayoutEffect`: đặt `scrollTop` TRƯỚC lượt vẽ, người dùng không thấy cú nhảy đỉnh → vạch.
+  useLayoutEffect(() => {
+    if (openPhase !== "pending") return;
+    // `?msg=` thắng vạch — cả khi tin làm nổi tới SAU lúc dựng (cửa sổ ngữ cảnh nạp chậm hơn).
+    if (highlightMessageId !== null) {
+      setOpenPhase("done");
+      return;
+    }
+    if (!isFirstPageLoaded || unreadAnchor.kind === "older-needed") return;
+    const el = scrollRef.current;
+    if (!el) return;
+    setOpenPhase("done");
+
+    const divider =
+      unreadAnchor.kind === "message"
+        ? el.querySelector<HTMLElement>(`[data-testid="${UNREAD_DIVIDER_TESTID}"]`)
+        : null;
+    // Không có chỗ đặt vạch (mọi tin chưa đọc đã thu hồi) ⇒ như phòng không có tin chưa đọc.
+    if (divider === null) {
+      scrollToBottom();
+      return;
+    }
+    el.scrollTop = scrollTopToReveal({
+      targetTop: divider.getBoundingClientRect().top,
+      viewportTop: el.getBoundingClientRect().top,
+      scrollTop: el.scrollTop,
+      gapPx: UNREAD_DIVIDER_TOP_GAP_PX,
+    });
+    // Phần chưa đọc lọt vừa khung nhìn ⇒ người dùng ĐANG thấy đáy rồi, không có cú cuộn nào để chờ.
+    if (isScrollNearBottom(el, NEAR_BOTTOM_THRESHOLD_PX)) setNearBottom(true);
+  }, [highlightMessageId, isFirstPageLoaded, openPhase, scrollToBottom, unreadAnchor]);
+
+  // ── Nạp thêm tới mốc chưa đọc (> 1 trang) ──────────────────────────────────
+  //
+  // Cờ đang-bay ở REF (đọc đồng bộ): StrictMode chạy effect hai lần liền, cờ ở state thì lần hai vẫn thấy
+  // `false`, gọi `onLoadOlder` lần nữa và nhận 0 (hook chặn lần trùng) ⇒ tưởng hết lịch sử. `catchUp`
+  // trong deps để effect chạy lại sau MỖI lần về, kể cả khi trang về không đổi `unreadAnchor`.
+  useEffect(() => {
+    if (openPhase !== "pending" || highlightMessageId !== null || !isFirstPageLoaded) return;
+    if (unreadAnchor.kind !== "older-needed" || isLoadingOlder || catchUpInFlightRef.current)
+      return;
+    catchUpInFlightRef.current = true;
+    setCatchUp((c) => ({ ...c, pages: c.pages + 1 }));
+    const settle = (added: number): void => {
+      catchUpInFlightRef.current = false;
+      setCatchUp((c) => ({ ...c, exhausted: c.exhausted || added === 0 }));
+    };
+    onLoadOlder().then(settle, () => settle(0));
+  }, [
+    catchUp,
+    highlightMessageId,
+    isFirstPageLoaded,
+    isLoadingOlder,
+    onLoadOlder,
+    openPhase,
+    unreadAnchor,
+  ]);
 
   // ── Cuộn tới tin được làm nổi (S7-CHAT-FE-4) ───────────────────────────────
   useEffect(() => {
@@ -163,12 +305,29 @@ export function MessageList({
 
   // ── Đánh dấu đã đọc ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isNearBottom || messages.length === 0) return;
+    if (!isNearBottom || !isPageVisible || messages.length === 0) return;
     // `document.hidden`: tab ở nền không phải là "đã đọc". Không có vế này thì mở 5 tab là badge tắt
     // sạch dù người dùng chưa nhìn cái nào.
     if (typeof document !== "undefined" && document.hidden) return;
-    onMarkRead(messages[messages.length - 1].roomSeq);
-  }, [isNearBottom, messages, onMarkRead]);
+    const latestSeq = messages[messages.length - 1].roomSeq;
+    setSeenUpToSeq((prev) => Math.max(prev, latestSeq));
+    onMarkRead(latestSeq);
+  }, [isNearBottom, isPageVisible, messages, onMarkRead]);
+
+  // S20-CHAT-UNREAD-1 — tab quay lại tiền cảnh khi khung đang ở đáy ⇒ báo đọc NGAY. Không nghe sự kiện này
+  // thì phòng mở ở tab nền giữ badge tới khi có tin mới, dù người dùng đã nhìn thấy hết.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const sync = (): void => setPageVisible(!document.hidden);
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+
+  const latestSeq = messages.length > 0 ? messages[messages.length - 1].roomSeq : null;
+  const unseenCount = unseenCountBelow(latestSeq, seenUpToSeq);
+  // Ẩn khi đang xem cửa sổ ngữ cảnh: «↓» ở đó chỉ xuống đáy CỬA SỔ, lối về tin mới nhất là dải ngữ cảnh.
+  const showJump =
+    openPhase === "done" && !isNearBottom && unseenCount > 0 && highlightMessageId === null;
 
   // ── Dẫn xuất "đã xem bởi" (§13.2) — không bảng riêng ───────────────────────
   //
@@ -210,9 +369,12 @@ export function MessageList({
       const showDay = dayKey !== previousDayKey;
       previousDayKey = dayKey;
 
+      // S20-CHAT-UNREAD-1 — vạch chưa đọc CẮT cụm: tin ngay dưới vạch phải mang tên + ảnh người gửi,
+      // không thì người đọc nối tiếp không biết đoạn mới bắt đầu bằng lời của ai.
       const grouped =
         previous !== null &&
         !showDay &&
+        message.id !== dividerBeforeId &&
         previous.senderId === message.senderId &&
         previous.messageType !== "system" &&
         message.messageType !== "system" &&
@@ -225,7 +387,7 @@ export function MessageList({
     // Tin i là CUỐI cụm khi tin i+1 mở cụm mới (hoặc không còn tin nào sau nó).
     for (let i = 0; i < out.length - 1; i += 1) out[i].isLastOfGroup = !out[i + 1].grouped;
     return out;
-  }, [messages]);
+  }, [messages, dividerBeforeId]);
 
   return (
     <div className="relative flex-1 overflow-hidden">
@@ -286,6 +448,16 @@ export function MessageList({
                   </span>
                   <span className="h-px flex-1 bg-border" />
                 </div>
+              )}
+              {message.id === dividerBeforeId && unread !== null && (
+                <UnreadDivider
+                  label={t("conversation.unreadDivider", { count: unread.count })}
+                  aboveLabel={
+                    unreadAnchor.kind === "message" && unreadAnchor.truncated
+                      ? t("conversation.unreadAbove")
+                      : null
+                  }
+                />
               )}
               <MessageBubble
                 message={message}
@@ -349,16 +521,45 @@ export function MessageList({
         ))}
       </div>
 
-      {hasUnseenBelow && (
+      {showJump && (
         <Button
           size="sm"
           className="absolute bottom-3 left-1/2 -translate-x-1/2 gap-1 shadow-md"
           onClick={scrollToBottom}
         >
           <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
-          {t("conversation.newMessages")}
+          {t("conversation.newMessagesCount", { count: unseenCount })}
         </Button>
       )}
+    </div>
+  );
+}
+
+/**
+ * S20-CHAT-UNREAD-1 — vạch «N tin chưa đọc» (SPEC-15 §13.2). `aboveLabel` khác `null` khi vạch dừng ở tin
+ * cũ nhất đang giữ vì không với được tới mốc: nói thẳng còn tin chưa đọc phía trên thay vì để người dùng
+ * tưởng đây là tin chưa đọc đầu tiên.
+ *
+ * KHÔNG `role="separator"`: con của separator bị coi là trình bày và trình đọc màn hình bỏ qua dòng
+ * «còn tin chưa đọc phía trên» — đúng câu cần đọc lên.
+ */
+function UnreadDivider({
+  label,
+  aboveLabel,
+}: {
+  label: string;
+  aboveLabel: string | null;
+}): React.ReactElement {
+  return (
+    <div className="px-3 py-2" data-testid={UNREAD_DIVIDER_TESTID}>
+      {aboveLabel !== null && (
+        <p className="pb-1 text-center text-[11px] text-muted-foreground">{aboveLabel}</p>
+      )}
+      <div className="flex items-center gap-3">
+        <span className="h-px flex-1 bg-destructive/50" aria-hidden="true" />
+        <span className="text-[11px] font-medium text-destructive">{label}</span>
+        <span className="h-px flex-1 bg-destructive/50" aria-hidden="true" />
+      </div>
     </div>
   );
 }

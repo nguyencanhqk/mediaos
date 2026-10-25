@@ -78,3 +78,45 @@ export function useChatLayoutMode(): ChatLayoutMode {
 
   return mode;
 }
+
+// ── S20-CHAT-UNREAD-1 — hình học khung CUỘN của hội thoại ─────────────────────────────────────────
+//
+// Hàm THUẦN nhận số đo, không đọc DOM: jsdom không có layout (`scrollHeight`/`clientHeight`/
+// `getBoundingClientRect` đều 0), nên phép tính chỉ kiểm được khi số đo được truyền vào — ca test đưa số
+// đo giả, `MessageList` đưa số đo thật.
+
+/** Ba số của phần tử cuộn quyết định "đang ở đáy chưa". */
+export interface ScrollMetrics {
+  scrollHeight: number;
+  scrollTop: number;
+  clientHeight: number;
+}
+
+/** Người dùng coi như đang ở đáy khi phần còn lại dưới khung nhìn ≤ `thresholdPx`. */
+export function isScrollNearBottom(metrics: ScrollMetrics, thresholdPx: number): boolean {
+  return metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight <= thresholdPx;
+}
+
+/** Số đo để đưa một phần tử lên mép trên khung cuộn. */
+export interface RevealMetrics {
+  /** `getBoundingClientRect().top` của phần tử đích. */
+  targetTop: number;
+  /** `getBoundingClientRect().top` của chính phần tử cuộn. */
+  viewportTop: number;
+  /** `scrollTop` hiện tại của phần tử cuộn. */
+  scrollTop: number;
+  /** Khe chừa phía trên phần tử đích. */
+  gapPx: number;
+}
+
+/**
+ * `scrollTop` mới để phần tử đích nằm cách mép trên khung cuộn đúng `gapPx`.
+ *
+ * Không dùng `scrollIntoView`: nó cuộn MỌI tổ tiên cuộn được (trang, `Sheet` của drawer) chứ không chỉ
+ * khung tin — mở phòng trong drawer là cả trang xê dịch. Kẹp ≥ 0: phần tử ở sát đỉnh nội dung thì
+ * `scrollTop` âm vô nghĩa.
+ */
+export function scrollTopToReveal(metrics: RevealMetrics): number {
+  const contentTop = metrics.targetTop - metrics.viewportTop + metrics.scrollTop;
+  return Math.max(0, contentTop - metrics.gapPx);
+}
