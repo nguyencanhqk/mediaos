@@ -3,7 +3,6 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -15,18 +14,13 @@ import type {
   DataScope,
   TaskActionResponseDto,
   TaskActionWarning,
-  TaskCoreResponseDto,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { SettingService } from "../foundation/settings/setting.service";
 import { DataScopeService } from "../permission/data-scope.service";
-import {
-  TaskCoreRepository,
-  type EmployeeForScope,
-  type TaskCoreRow,
-} from "./task-core.repository";
+import { TaskCoreRepository, type EmployeeForScope } from "./task-core.repository";
 import { TaskActionsRepository, type ActionTaskRaw } from "./task-actions.repository";
 // S5-GOAL-BE-2 (additive) — vòng đo mục tiêu: recompute CÙNG TX khi task đổi trạng thái (SPEC-10 §13.3).
 import { GoalProgressEngineService } from "./goal-progress-engine.service";
@@ -34,12 +28,8 @@ import { TaskActivityService } from "./task-activity.service";
 import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, deriveStatusTimestamps, evaluateTransition } from "./task-fsm";
 import { isStateInGroupForStatus, pickTargetState } from "./task-state-sync";
-import {
-  toTaskCoreDto,
-  toAvatarSubjects,
-  avatarForRow,
-  type TaskCoreSignedUrls,
-} from "./task-core.mapper";
+import { reloadTaskDtoTx } from "./task-row-decorations";
+import { TaskGoalRefPolicy, hiddenGoalRefViewer, type GoalRefViewer } from "./task-goal-ref.policy";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
@@ -99,6 +89,8 @@ export class TaskActionsService {
     private readonly avatars: AvatarPresignService,
     // S5-TASK-COVER-1 — ký ảnh bìa cho response 4 route action. Đặt CUỐI (spec dựng theo VỊ TRÍ).
     private readonly covers: CoverPresignService,
+    // S20-SEC-GOALNAMEDTO-1 — tham chiếu mục tiêu của phản hồi theo quyết định đọc mục tiêu. CUỐI.
+    private readonly goalRefs: TaskGoalRefPolicy,
   ) {}
 
   // ══════════════════════ ASSIGN ══════════════════════
@@ -109,6 +101,7 @@ export class TaskActionsService {
     dto: AssignTaskRequest,
   ): Promise<TaskActionResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "assign", "task");
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.loadMutable(tx, user, taskId, scope);
       const assignee = await this.resolveAssignee(tx, user, scope, dto.assigneeEmployeeId);
@@ -116,7 +109,7 @@ export class TaskActionsService {
 
       // No-op: gán lại CHÍNH người đang là Main → 200, KHÔNG event/log trùng (open q #6).
       if (raw.mainAssigneeEmployeeId === assignee.employeeId) {
-        return this.respond(tx, user.companyId, taskId, []);
+        return this.respond(tx, viewer, taskId, []);
       }
 
       const isFirst = raw.mainAssigneeEmployeeId === null;
@@ -173,7 +166,7 @@ export class TaskActionsService {
         },
       });
 
-      return this.respond(tx, user.companyId, taskId, warnings);
+      return this.respond(tx, viewer, taskId, warnings);
     });
   }
 
@@ -197,8 +190,9 @@ export class TaskActionsService {
     );
     const checklistGateEnabled =
       dto.status === "Done" ? await this.isChecklistGateEnabled(user.companyId) : false;
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, (tx) =>
-      this.changeStatusTx(tx, user, taskId, dto, scope, checklistGateEnabled),
+      this.changeStatusTx(tx, user, taskId, dto, scope, checklistGateEnabled, viewer),
     );
   }
 
@@ -213,6 +207,7 @@ export class TaskActionsService {
    * (2) PHẢI gọi `isChecklistGateEnabled(companyId)` TRƯỚC khi mở tx và truyền kết quả vào
    *     `checklistGateEnabled` khi đích là Done — TUYỆT ĐỐI không truyền false mù (bypass câm cổng
    *     checklist ĐK-3) và không đọc setting bên trong tx (bẫy 5b cạn pool).
+   * (3) `viewer` mục tiêu resolve TRƯỚC tx; vắng (move-state bỏ phản hồi) ⇒ phản hồi che tham chiếu mục tiêu.
    */
   async changeStatusTx(
     tx: TenantTx,
@@ -221,6 +216,7 @@ export class TaskActionsService {
     dto: ChangeTaskStatusRequest,
     scope: DataScope,
     checklistGateEnabled: boolean,
+    viewer: GoalRefViewer = hiddenGoalRefViewer(user),
   ): Promise<TaskActionResponseDto> {
     // allowCancelled: FSM §6.10.1 quyết định (Cancelled khôi phục được) — 3 action kia vẫn chặn 422.
     const raw = await this.loadMutable(tx, user, taskId, scope, { allowCancelled: true });
@@ -231,7 +227,7 @@ export class TaskActionsService {
       // 422 TASK-CLOSED sống ở loadMutable cho 3 action ngoài changeStatus.
       throw new ConflictException(this.msg("TASK-ERR-WORKFLOW-INVALID", t.code));
     }
-    if (t.noop) return this.respond(tx, user.companyId, taskId, []);
+    if (t.noop) return this.respond(tx, viewer, taskId, []);
 
     // Done + setting bật + còn item bắt buộc chưa xong (ĐK-3) → 400. Setting đã đọc TRƯỚC tx.
     if (dto.status === "Done" && checklistGateEnabled) {
@@ -293,7 +289,7 @@ export class TaskActionsService {
     // Goal đã chốt kỳ được engine tự bỏ qua (§13.4) — KHÔNG chặn việc đổi trạng thái task.
     await this.goalProgress.recomputeForTaskTx(tx, user.companyId, raw.goalId, raw.projectId);
 
-    return this.respond(tx, user.companyId, taskId, []);
+    return this.respond(tx, viewer, taskId, []);
   }
 
   // ══════════════════════ CHANGE PRIORITY ══════════════════════
@@ -309,10 +305,11 @@ export class TaskActionsService {
       "update-priority",
       "task",
     );
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.loadMutable(tx, user, taskId, scope);
       if (raw.taskPriority === dto.priority) {
-        return this.respond(tx, user.companyId, taskId, []); // no-op (W2)
+        return this.respond(tx, viewer, taskId, []); // no-op (W2)
       }
 
       const updated = await this.repo.updatePriorityTx(
@@ -355,7 +352,7 @@ export class TaskActionsService {
         },
       });
 
-      return this.respond(tx, user.companyId, taskId, []);
+      return this.respond(tx, viewer, taskId, []);
     });
   }
 
@@ -372,6 +369,7 @@ export class TaskActionsService {
       "update-deadline",
       "task",
     );
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.loadMutable(tx, user, taskId, scope);
 
@@ -385,7 +383,7 @@ export class TaskActionsService {
       const oldDueMs = this.toMs(raw.dueAt);
       const newDueMs = newDue === null ? null : Date.parse(newDue);
       if (oldDueMs === newDueMs) {
-        return this.respond(tx, user.companyId, taskId, []); // no-op (W2)
+        return this.respond(tx, viewer, taskId, []); // no-op (W2)
       }
 
       const updated = await this.repo.updateDueTx(tx, user.companyId, taskId, newDue, user.id);
@@ -423,7 +421,7 @@ export class TaskActionsService {
         },
       });
 
-      return this.respond(tx, user.companyId, taskId, warnings);
+      return this.respond(tx, viewer, taskId, warnings);
     });
   }
 
@@ -432,6 +430,7 @@ export class TaskActionsService {
 
   async addWatcher(user: RequestUser, taskId: string): Promise<TaskActionResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "watch", "task");
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.loadWatchable(tx, user, taskId, scope);
       const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
@@ -474,7 +473,7 @@ export class TaskActionsService {
         after: { watcherEmployeeId: actorEmp.id },
       });
       // KHÔNG outbox: registry §9.5 không có TASK_WATCHER_* (Producer §9.4 chỉ phát mã có trong registry).
-      return this.respond(tx, user.companyId, taskId, []);
+      return this.respond(tx, viewer, taskId, []);
     });
   }
 
@@ -734,33 +733,20 @@ export class TaskActionsService {
     };
   }
 
+  /**
+   * S5-TASK-AVATAR-1/COVER-1 — PHẢI trang trí ở đây: FE (useTaskActionMutation.onSuccess) GHI ĐÈ TOÀN
+   * BỘ cache chi tiết bằng `result.task`. S20-SEC-GOALNAMEDTO-1 — CÙNG bộ trang trí + mapper hợp nhất
+   * với TaskCoreService (`reloadTaskDtoTx`), không còn bản tự dựng URL thứ hai.
+   */
   private async respond(
     tx: TenantTx,
-    companyId: string,
+    viewer: GoalRefViewer,
     taskId: string,
     warnings: TaskActionWarning[],
   ): Promise<TaskActionResponseDto> {
-    const row = await this.coreRepo.findScopedByIdTx(tx, companyId, taskId);
-    if (!row) throw new InternalServerErrorException("Không tải lại được công việc vừa ghi.");
-    // S5-TASK-AVATAR-1 — PHẢI ký ở đây. FE (useTaskActionMutation.onSuccess) GHI ĐÈ TOÀN BỘ cache
-    // chi tiết bằng `result.task`; trả avatar null là mỗi lần đổi trạng thái/ưu tiên/hạn/người phụ
-    // trách sẽ xoá ảnh vừa hiện, tới lần refetch sau mới về — đúng lớp lỗi "field im lặng không tới
-    // FE ở một phần ba số đường" mà docblock toDto bên dưới đã bị hai lần.
-    // S5-TASK-COVER-1 — ảnh bìa đi CÙNG đường và cùng lý do. TUẦN TỰ, không Promise.all: hai lời gọi
-    // dùng CHUNG `tx` (một kết nối pg không chạy song song hai truy vấn).
-    const avatars = await this.avatars.resolveEmployeeAvatars(
-      companyId,
-      toAvatarSubjects([row]),
-      tx,
-    );
-    const covers = await this.covers.resolveTaskCovers(companyId, [row.id], tx);
-    return {
-      task: this.toDto(row, {
-        assigneeAvatarUrl: avatarForRow(row, avatars),
-        coverUrl: covers.get(row.id) ?? null,
-      }),
-      warnings,
-    };
+    const { coreRepo, avatars, covers, goalRefs } = this;
+    const deps = { coreRepo, avatars, covers, goalRefs };
+    return { task: await reloadTaskDtoTx(deps, { tx, viewer }, taskId), warnings };
   }
 
   private isUniqueViolation(err: unknown): boolean {
@@ -771,7 +757,7 @@ export class TaskActionsService {
     return detail.startsWith(code) ? detail : `${code}: ${detail}`;
   }
 
-  // ── Projection normalize (mirror TaskCoreService.toDto — copy có kiểm soát, W4) ─────
+  // ── Chuẩn hoá timestamptz raw (DTO đi mapper hợp nhất qua `reloadTaskDtoTx`, S5-TASK-SUBTASK-1) ─────
   private toMs(v: string | Date | null): number | null {
     if (v == null) return null;
     return v instanceof Date ? v.getTime() : Date.parse(v);
@@ -779,21 +765,5 @@ export class TaskActionsService {
   private toIso(v: string | Date | null): string | null {
     if (v == null) return null;
     return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
-  }
-  private toBool(v: boolean | string): boolean {
-    return v === true || v === "true" || v === "t";
-  }
-  /**
-   * S5-TASK-SUBTASK-1 — DELEGATE về mapper DÙNG CHUNG, KHÔNG copy bảng field nữa.
-   *
-   * Trước đây có BA bản dựng TaskCoreResponseDto: `task-core.mapper.ts:toTaskCoreDto` (board),
-   * `TaskCoreService.toDto` (list/detail/create/update) và bản này (assign/change-status/priority/
-   * deadline/watch). Thêm một field vào một bản = field im lặng KHÔNG tới FE ở phần ba số đường.
-   * Đã bị đúng lỗi đó HAI LẦN trong WO này (`parentTaskId` thiếu ở bản service, rồi thiếu ở bản này —
-   * biểu hiện: đổi trạng thái một việc con làm panel lật sang chế độ "task gốc" vì `parentTaskId`
-   * biến thành undefined trong cache chi tiết). Hợp nhất là cách duy nhất đóng hẳn lớp lỗi này.
-   */
-  private toDto(row: TaskCoreRow, urls?: TaskCoreSignedUrls): TaskCoreResponseDto {
-    return toTaskCoreDto(row, urls);
   }
 }

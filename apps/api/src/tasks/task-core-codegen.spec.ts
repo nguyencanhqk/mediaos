@@ -122,6 +122,15 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
     } as never,
     // S20-SEC-TASKPATCHGATE-1 — cổng trường của PATCH; createTask không gọi tới.
     { prepare: vi.fn(), assertTx: vi.fn() } as never,
+    // S20-SEC-GOALNAMEDTO-1 — policy tham chiếu mục tiêu: người xem «che hết», tập rỗng (task mới
+    // chưa gắn mục tiêu nên tập id không đổi kết quả của ca này).
+    {
+      resolveViewer: vi
+        .fn()
+        .mockResolvedValue({ userId: "u", companyId: "c", scope: null, ctx: {} }),
+      visibleGoalIdsTx: vi.fn().mockResolvedValue(new Set()),
+      visibleGoalIds: vi.fn().mockResolvedValue(new Set()),
+    } as never,
   );
   return { svc, repo, db, sequence };
 }

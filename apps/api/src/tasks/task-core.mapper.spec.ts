@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { toTaskCoreDto, toTaskKanbanCardDto } from "./task-core.mapper";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import {
+  goalRefCandidates,
+  signedUrlsForRow,
+  toTaskCoreDto,
+  toTaskKanbanCardDto,
+} from "./task-core.mapper";
 import type { TaskCoreRow } from "./task-core.repository";
 
 /**
@@ -163,5 +170,48 @@ describe("task-core.mapper — tham chiếu mục tiêu: cùng dữ liệu, cùn
     const dto = toTaskCoreDto(baseRow, visible);
     expect(dto.goalId).toBeNull();
     expect(field(dto, "hasGoal")).toBe(false);
+  });
+});
+
+/**
+ * S20-SEC-GOALNAMEDTO-1 (plan §4 U6) — MỘT điểm dựng object trang trí: quyết định đọc mục tiêu chỉ đi
+ * vào DTO qua `signedUrlsForRow` (đường nào tự dựng `{ assigneeAvatarUrl, coverUrl }` là đường sẽ quên
+ * trường trang trí mới ⇒ mất cờ quyết định ⇒ che, nhưng cũng lệch hành vi giữa các đường).
+ */
+describe("task-core.mapper — trang trí qua một helper duy nhất", () => {
+  const GOAL_ID = "44444444-4444-4444-4444-444444444444";
+  const linked: TaskCoreRow = { ...baseRow, goalId: GOAL_ID, goalCode: "GOAL-0001", goalName: "X" };
+  const deco = (goals: string[]) => ({
+    avatars: new Map<string, string>(),
+    covers: new Map<string, string>(),
+    goals: new Set(goals),
+  });
+
+  it("U6a signedUrlsForRow mang quyết định đọc mục tiêu của ĐÚNG mục tiêu đang gắn", () => {
+    expect(signedUrlsForRow(linked, deco([GOAL_ID])).goalRefVisible).toBe(true);
+    expect(
+      signedUrlsForRow(linked, deco(["55555555-5555-4555-8555-555555555555"])).goalRefVisible,
+    ).toBe(false);
+    expect(signedUrlsForRow(baseRow, deco([GOAL_ID])).goalRefVisible).toBe(false);
+  });
+
+  it("U6b ứng viên quyết định = hàng join mục tiêu trúng, khử trùng", () => {
+    const deleted: TaskCoreRow = { ...linked, id: "x", goalCode: null, goalName: null };
+    expect(goalRefCandidates([linked, linked, deleted, baseRow])).toEqual([GOAL_ID]);
+  });
+
+  it("U6c không tệp nguồn nào ngoài mapper tự đặt cờ đọc mục tiêu hay tự dựng URL avatar", () => {
+    const roots = [__dirname, join(__dirname, "..", "goals")];
+    const offenders: string[] = [];
+    for (const dir of roots) {
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith(".ts") || f.endsWith(".spec.ts") || f === "task-core.mapper.ts") continue;
+        const text = readFileSync(join(dir, f), "utf8");
+        if (/goalRefVisible\s*:/.test(text) || /assigneeAvatarUrl:\s*avatarForRow\(/.test(text)) {
+          offenders.push(f);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

@@ -467,6 +467,14 @@ Ghi chú:
 - `is_sensitive` đề xuất `false` cho cả 8 cặp; `('finalize','goal')` là quyết định phải chốt tường minh trong plan WO backend đầu tiên của GOAL — nếu đổi thành `true` sau seed, phải cập nhật đồng thời allowlist sensitive FE + pin `auth-seed-canonical-roles` trong CÙNG WO (bẫy `canonical-seed-pin-regression`).
 - RLS+FORCE cô lập **tenant** trên `goals`/`goal_updates`/`task_templates`/`task_template_items`; data scope (own/department/all) ép ở **service layer** GOAL-BE qua `buildReadScopeExists` pattern (không phải RLS).
 - Chi tiết mã lỗi/quy tắc: [SPEC-10 GOAL §11–12](<spec/SPEC-10 GOAL.md>); schema: [DB-11](<DB/DB-11 GOAL Database Design.md>).
+- **Tham chiếu mục tiêu trong dữ liệu việc** (S20-SEC-GOALNAMEDTO-1, quyết định owner 25/10/2026 — «che ở server»). Bất biến: *cùng dữ liệu, cùng quyết định quyền*.
+  - **I-1** — `goalId` / `goalCode` / `goalName` đi kèm một bản ghi việc (danh sách · chi tiết · việc của tôi · bảng kanban · phản hồi tạo/sửa/move-state/action · việc-của-mục-tiêu) **có mặt ⇔ người xem đọc được chính mục tiêu đó** qua đường đọc mục tiêu chuẩn (`GET /goals/:id`: cặp `('view','goal')` + phạm vi đọc của mục tiêu ở trên). Một hàm dựng phạm vi dùng chung (`goal-read-scope.ts`) cho cả hai đường; đường việc dùng bản không ném (thiếu cặp ⇒ che, không 403). Request đến qua khoá API ⇒ che hết (chặt hơn, không lỏng hơn).
+  - **I-2** — điểm hợp nhất duy nhất là mapper `toTaskCoreDto`: thiếu quyết định đi kèm ⇒ null cả ba (mất tên, không bao giờ lộ tên).
+  - **I-3** — `hasGoal: boolean` = việc đang gắn một mục tiêu **còn sống** cùng tenant; cờ trung tính, không mang id/tên/mã. Mục tiêu đã xoá mềm ⇒ `hasGoal = false`, `goalId = null`. FE hiện chip trung tính khi có cờ mà không có tên; FE **không tự ẩn** dữ liệu server đã trả.
+  - **I-4** — cô lập tenant giữ nguyên (composite FK `(company_id, goal_id)` + RLS FORCE); quyết định chạy dưới `withTenant` và luôn ràng `company_id`.
+  - **I-5** — quyết định theo lô: một trang ⇒ tối đa MỘT truy vấn; trang không có hàng gắn mục tiêu ⇒ 0 truy vấn. Đường ghi resolve ngữ cảnh người xem TRƯỚC transaction.
+  - **I-6** — nhật ký hoạt động việc/dự án theo cùng quyết định: dòng phân rã mục tiêu mà người xem không đọc được mục tiêu ⇒ câu trung tính, `newValues` bỏ id/mã. Che **lúc đọc**; sổ append-only không đổi.
+  - Hệ quả có chủ đích: người có quyền sửa việc + sửa mục tiêu nhưng không đọc được mục tiêu đang gắn sẽ không đổi/gỡ mục tiêu đó từ ô «Mục tiêu» của việc.
 
 ---
 
