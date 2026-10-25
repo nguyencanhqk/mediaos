@@ -29,6 +29,15 @@ Quan sát kèm theo (không thuộc đích đo, ghi để người duyệt quy�
 - Popover mốc hạn: hôm nay giả lập là Thứ Năm, nên «Ngày mai 17:00» và «Thứ Sáu này 17:00» cùng ra 23/10/26.
 - Bộ đo: thanh bên hiện «Không tải được cây phòng ban» vì API giả lập không có `/org/units/tree`. Đây là thiếu sót của bộ đo, không phải lỗi sản phẩm.
 
+### Xử lý sau lượt đo
+
+- Hạn hiện hai lần · chip «Đặt hạn» xuống dòng ở cột ~270 px: **đã sửa**. Hạn đang chọn giờ hiện đúng một lần trên hàng chip. Khi chưa có hạn, hoặc hạn trùng mốc một chạm, chip lịch chỉ còn biểu tượng (tên trợ năng và tooltip «Hạn của việc sắp tạo»). Khi hạn khác mốc một chạm, chip lịch in ngày giờ và chip một chạm ẩn. Hàng chip có tối đa hai chip chữ cộng một biểu tượng. Ca test: `TaskQuickAdd.spec.tsx` › «hàng chip Hạn hiện hạn đúng một lần» (3 ca, đỏ trên `2018a207`). Bề rộng thực ở 1366 px cần bước Smoke đo lại.
+- KPI #13 có Hạn = 19 (18 với chip một chạm): **giữ nguyên**. Đích 17 của story (§5.2.2, luồng «+ Thêm · 3 × (mở + chọn) · 5 × (gõ + Enter)») không gồm hạn, và luồng đó đo được 17.
+- KPI #8 = 4 nếu đếm riêng cú bấm vào ô: **giữ nguyên**. Theo §«Cách đếm thao tác», mỗi trường gõ tự do tính 1 thao tác «nhập». Story chọn phím «n» để focus ô, không chọn tự focus khi tải trang. Tự focus sẽ nuốt các phím tắt của trang và kéo trình đọc màn hình khỏi tiêu đề.
+- Picker Người lật lên che ô nhập ở 390 px: **giữ nguyên**. Đây là hành vi chung của `Popover` (`packages/ui/src/components/ui/popover.tsx`): kẹp trong khung nhìn, lật lên khi bên dưới không đủ chỗ. Chọn xong, picker đóng và focus về ô nhập.
+- «Ngày mai» và «Thứ Sáu này» cùng ra 23/10 vào Thứ Năm: **đúng thiết kế**. `deadline-presets.ts` giữ cả hai mốc trùng instant để tìm theo nhãn nào cũng thấy (S20-TASK-QUICKEDIT-1).
+- Cây phòng ban của bộ đo: **đã sửa**. `mock-api.cjs` trả cây rỗng cho `GET /org/units/tree`.
+
 Máy đo chạy Asia/Bangkok, cùng UTC+7 với giờ công ty. «Hôm nay» giả lập là Thứ Năm 22/10/2026 10:00 giờ VN (`page.clock.setFixedTime`).
 
 ## Chạy lại
@@ -40,4 +49,4 @@ Máy đo chạy Asia/Bangkok, cùng UTC+7 với giờ công ty. «Hôm nay» gi�
 5. Chạy từng phần bằng cách sửa dòng `PARTS` trong bản chép: `A` KPI #8 + chip dính · `U` chưa liên kết hồ sơ · `B` KPI #13 · `B2` tiêu chí 1 + Esc · `BD` KPI #13 có cả Hạn · `C` thiếu `assign:task` · `X` người ngoài phạm vi · `layout` 390 px. Mỗi phần tự đặt lại dữ liệu của API giả lập (`reset: true`).
 6. Xong: dừng hai tiến trình theo PID đang nghe cổng 5299 và 59999 (`netstat -ano`), không diệt theo tên ảnh.
 
-`page.route`/`route.fulfill` làm rơi kết nối Playwright MCP trên máy đo, nên API giả lập là một tiến trình node riêng. Đường chưa giả lập (`/foundation/company/branding`, `/me/avatar`, `/org/units/tree`, `/projects?limit=200`, `/socket.io`) trả 404 và được ghi vào `unmocked`. Chúng không ảnh hưởng luồng đo.
+`page.route`/`route.fulfill` làm rơi kết nối Playwright MCP trên máy đo, nên API giả lập là một tiến trình node riêng. Đường chưa giả lập (`/foundation/company/branding`, `/me/avatar`, `/projects?limit=200`, `/socket.io`) trả 404 và được ghi vào `unmocked`. Chúng không ảnh hưởng luồng đo.

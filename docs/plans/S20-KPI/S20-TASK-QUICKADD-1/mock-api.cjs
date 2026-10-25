@@ -102,6 +102,8 @@ function route(method, path, q, body) {
   if (method === "GET" && path === `${P}/kanban`) return [200, env(state.board)];
   if (method === "GET" && path === `${P}/members`) return [200, env(F.members)];
   if (method === "GET" && path === "/hr/employees") return [200, env(F.employees)];
+  // Thanh bên «Dự án» đọc cây phòng ban; cây rỗng là hợp lệ (`orgTreeResponseSchema` = mảng).
+  if (method === "GET" && path === "/org/units/tree") return [200, env([])];
   state.unmocked.push(`${state.phase} ${method} ${path}${q.toString() ? `?${q}` : ""}`);
   return [404, errEnv("SMOKE-404", "not mocked")];
 }

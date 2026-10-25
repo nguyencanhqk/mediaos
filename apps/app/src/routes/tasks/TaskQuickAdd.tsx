@@ -12,7 +12,7 @@ import type { CreateTaskCoreRequest } from "@mediaos/contracts";
 import { cn } from "@mediaos/ui";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
-import { resolveDeadlinePresets } from "./deadline-presets";
+import { resolveDeadlinePresets, type DeadlinePreset } from "./deadline-presets";
 import { EmployeePicker, type PickedEmployee, type PreferredEmployee } from "./EmployeePicker";
 import { TASK_TITLE_MAX_LENGTH } from "./task-form-schema";
 import { classifyTaskCreateError } from "./task-quick-add-errors";
@@ -81,21 +81,21 @@ function buildCreateBody(
 }
 
 /**
- * Mốc gần nhất (thường «Hôm nay 17:00», sau giờ đó là «Ngày mai») bấm thẳng một chạm — luồng «tiêu đề →
- * Hôm nay → Enter» (US-TASK-NV-05: 3 thao tác). Các mốc khác qua popover. Bấm lại ⇒ bỏ hạn.
+ * Mốc gần nhất (thường «Hôm nay 17:00», sau giờ đó là «Hôm nay 23:59») bấm thẳng một chạm — luồng «tiêu
+ * đề → Hôm nay → Enter» (US-TASK-NV-05: 3 thao tác). Các mốc khác qua popover. Bấm lại ⇒ bỏ hạn.
  */
 function NearestDeadlineChip({
   testId,
+  nearest,
   value,
   onSelect,
 }: {
   testId: string;
+  nearest: DeadlinePreset;
   value: string | null;
   onSelect: (dueAt: string | null) => void;
 }) {
   const { t } = useTranslation("tasks");
-  const nearest = resolveDeadlinePresets(new Date(), companyTimeZone())[0];
-  if (!nearest) return null;
   const active = value === nearest.dueAt;
   return (
     <button
@@ -246,6 +246,12 @@ export function TaskQuickAdd({
 
   const messageId = `${id}-message`;
   const showChips = !disabled && (showAssigneeChip || canSetDeadline);
+  // Hạn đang chọn hiện ĐÚNG MỘT lần trên hàng chip (và hàng vừa cột board ~270 px): hạn trống hoặc trùng
+  // mốc một chạm ⇒ chip lịch chỉ là biểu tượng; hạn khác ⇒ chip lịch in ngày giờ, chip một chạm ẩn.
+  const nearest = canSetDeadline
+    ? (resolveDeadlinePresets(new Date(), companyTimeZone())[0] ?? null)
+    : null;
+  const hasOtherDeadline = dueAt !== null && dueAt !== nearest?.dueAt;
 
   return (
     <div
@@ -295,9 +301,10 @@ export function TaskQuickAdd({
               preferred={preferredAssignees}
             />
           )}
-          {canSetDeadline && (
+          {nearest && !hasOtherDeadline && (
             <NearestDeadlineChip
               testId={`${id}-due-nearest`}
+              nearest={nearest}
               value={dueAt}
               onSelect={pickDeadline}
             />
@@ -305,7 +312,7 @@ export function TaskQuickAdd({
           {canSetDeadline && (
             <DeadlineQuickPicker
               id={`${id}-due`}
-              variant="compact"
+              variant={hasOtherDeadline ? "compact" : "icon"}
               value={dueAt}
               onSelect={pickDeadline}
               ariaLabel={t("quickAdd.deadlineChip")}

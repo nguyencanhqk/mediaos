@@ -1,5 +1,5 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi, ApiError } from "@mediaos/web-core";
@@ -211,5 +211,63 @@ describe("TaskQuickAdd — phím «n»", () => {
     fireEvent.keyDown(editor, { key: "n" });
     expect(document.activeElement).not.toBe(input());
     editor.remove();
+  });
+});
+
+/**
+ * Lượt đo trình duyệt thật: (1) chọn «Hôm nay 17:00» thì chip lịch bên cạnh in lại đúng hạn đó — một hạn
+ * hiện hai lần trên một hàng; (2) cột board ~270 px đẩy chip «Đặt hạn» xuống dòng hai. Bất biến: hạn
+ * đang chọn hiện ĐÚNG MỘT lần; chưa có hạn (hoặc hạn = mốc một chạm) thì chip lịch chỉ là biểu tượng
+ * có tên trợ năng; hạn khác mốc một chạm thì chip lịch in ngày giờ và chip một chạm ẩn.
+ * Đồng hồ cố định Thứ Năm 22/10/2026 10:00 giờ công ty (chỉ giả `Date`, hẹn giờ vẫn thật).
+ */
+describe("TaskQuickAdd — hàng chip Hạn hiện hạn đúng một lần", () => {
+  const DUE_LABEL = "Hạn của việc sắp tạo";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(taskCoreApi.createTask).mockResolvedValue({ id: "task-new" } as never);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-22T03:00:00.000Z"));
+    setCapabilities({ "create:task": true, "update-deadline:task": true });
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("chưa có hạn ⇒ chip lịch chỉ là biểu tượng, vẫn có tên trợ năng", () => {
+    renderQuickAdd();
+    const due = screen.getByTestId("qa-due");
+    expect(due.textContent).toBe("");
+    expect(screen.getByRole("button", { name: DUE_LABEL })).toBe(due);
+    expect(screen.getByTestId("qa-due-nearest")).toHaveTextContent("Hôm nay 17:00");
+  });
+
+  it("chọn «Hôm nay 17:00» ⇒ chip lịch KHÔNG in lại ngày giờ của hạn đó", () => {
+    renderQuickAdd();
+    fireEvent.click(screen.getByTestId("qa-due-nearest"));
+    expect(screen.getByTestId("qa-due-nearest")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("qa-due").textContent).toBe("");
+    expect(screen.getByTestId("qa").textContent).not.toMatch(/22\/10/);
+  });
+
+  it("hạn khác mốc một chạm (Thứ Sáu) ⇒ chip lịch in ngày giờ, chip một chạm ẩn; xoá hạn ⇒ chip một chạm quay lại", async () => {
+    renderQuickAdd();
+    fireEvent.click(screen.getByTestId("qa-due"));
+    fireEvent.click(screen.getByTestId("qa-due-preset-friday"));
+
+    expect(screen.getByTestId("qa-due")).toHaveTextContent(/17:00.*23\/10/);
+    expect(screen.queryByTestId("qa-due-nearest")).not.toBeInTheDocument();
+    expect(screen.getByTestId("qa").textContent?.match(/23\/10/g)).toHaveLength(1);
+
+    typeAndEnter("Chốt hợp đồng");
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(taskCoreApi.createTask).mock.calls[0]?.[0]?.dueAt).toBe(
+      "2026-10-23T10:00:00.000Z",
+    );
+
+    fireEvent.click(screen.getByTestId("qa-due"));
+    fireEvent.click(screen.getByTestId("qa-due-clear"));
+    expect(screen.getByTestId("qa-due-nearest")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("qa-due").textContent).toBe("");
   });
 });
