@@ -36,6 +36,7 @@ import { TaskSubtaskPanel } from "./TaskSubtaskPanel";
 import { TaskChecklistPanel } from "./TaskChecklistPanel";
 import { TaskActivityTimeline } from "./TaskActivityTimeline";
 import { TaskFilePanel } from "./TaskFilePanel";
+import { ProjectDiscussButton } from "@/components/chat/ProjectDiscussButton";
 
 /**
  * TaskDetailContent — THÂN màn chi tiết task (SPEC-06 §13.7, TASK-SCREEN-007), dùng chung cho hai
@@ -114,6 +115,10 @@ function TaskHeaderStrip({ task }: { task: TaskCoreResponseDto }) {
           >
             {t("tasks.moveProject.openAction")}
           </button>
+        )}
+        {/* S20-CHAT-DISCUSS-1 — phòng của DỰ ÁN (không có phòng theo việc, CHAT-DEC-009). */}
+        {task.projectId !== null && (
+          <ProjectDiscussButton projectId={task.projectId} className="ml-auto shrink-0" />
         )}
       </div>
 

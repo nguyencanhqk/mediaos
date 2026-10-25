@@ -24,6 +24,12 @@ import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 import type { ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 
+const mockNavigate = vi.fn();
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => mockNavigate,
+}));
+
 const removeMember = vi.fn();
 const updateMember = vi.fn();
 const openDirect = vi.fn();
@@ -359,5 +365,81 @@ describe("RoomMembersSheet · «Nhắn riêng»", () => {
     );
     renderWithOpener();
     expect(screen.queryByRole("button", { name: /Nhắn riêng/ })).toBeNull();
+  });
+});
+
+/**
+ * S20-CHAT-DISCUSS-1 (US-CHAT-QL-12) — lời nhắc «thành viên dẫn xuất» thành liên kết tới nơi quản lý
+ * thành viên thật. Quyền của trang đích đo bằng ĐÚNG cặp của trang đó (tắt một cặp, cặp kia bật).
+ */
+describe("RoomMembersSheet · lời nhắc thành viên dẫn xuất", () => {
+  const PROJECT_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const DEPARTMENT_ID = "99999999-9999-4999-8999-999999999999";
+  const projectLink = () => screen.queryByRole("link", { name: /Quản lý thành viên ở dự án/ });
+  const departmentLink = () => screen.queryByRole("link", { name: /Xem phòng ban ở Nhân sự/ });
+  const denyPair = (action: string, resource: string) =>
+    mockUseCan.mockImplementation((a: string, r: string) => !(a === action && r === resource));
+
+  beforeEach(() => mockNavigate.mockReset());
+
+  it("phòng project, xem được dự án ⇒ liên kết tới tab Thành viên của dự án; bấm ⇒ đi SPA + đóng Sheet", () => {
+    const { onClose } = renderSheet({ room: room({ roomType: "project", refId: PROJECT_ID }) });
+
+    const link = projectLink();
+    expect(link).toHaveAttribute("href", `/tasks/projects/${PROJECT_ID}?tab=members`);
+    fireEvent.click(link!);
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      href: `/tasks/projects/${PROJECT_ID}?tab=members`,
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(mockUseCan).toHaveBeenCalledWith("read", "project");
+  });
+
+  it("bấm kèm Ctrl (mở tab mới) ⇒ để trình duyệt xử lý, ứng dụng không điều hướng", () => {
+    renderSheet({ room: room({ roomType: "project", refId: PROJECT_ID }) });
+
+    fireEvent.click(projectLink()!, { ctrlKey: true });
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("phòng project mà thiếu `read:project` ⇒ chữ thuần, không liên kết", () => {
+    denyPair("read", "project");
+    renderSheet({ room: room({ roomType: "project", refId: PROJECT_ID }) });
+
+    expect(projectLink()).not.toBeInTheDocument();
+    expect(screen.getByText(/do hệ thống đồng bộ tự động/)).toBeInTheDocument();
+  });
+
+  it("phòng department, có `read:department` ⇒ liên kết tới trang phòng ban HR", () => {
+    renderSheet({ room: room({ roomType: "department", refId: DEPARTMENT_ID }) });
+
+    expect(departmentLink()).toHaveAttribute("href", "/hr/departments");
+    expect(projectLink()).not.toBeInTheDocument();
+    expect(mockUseCan).toHaveBeenCalledWith("read", "department");
+  });
+
+  it("phòng department mà thiếu `read:department` ⇒ chữ thuần, không liên kết", () => {
+    denyPair("read", "department");
+    renderSheet({ room: room({ roomType: "department", refId: DEPARTMENT_ID }) });
+
+    expect(departmentLink()).not.toBeInTheDocument();
+    expect(screen.getByText(/do hệ thống đồng bộ tự động/)).toBeInTheDocument();
+  });
+
+  it("phòng group ⇒ không có lời nhắc dẫn xuất, không liên kết", () => {
+    renderSheet({ room: room({ roomType: "group", refId: PROJECT_ID }) });
+
+    expect(screen.queryByText(/do hệ thống đồng bộ tự động/)).not.toBeInTheDocument();
+    expect(projectLink()).not.toBeInTheDocument();
+    expect(departmentLink()).not.toBeInTheDocument();
+  });
+
+  it("phòng project thiếu `refId` ⇒ chữ thuần (không dựng liên kết hỏng)", () => {
+    renderSheet({ room: room({ roomType: "project", refId: null }) });
+
+    expect(projectLink()).not.toBeInTheDocument();
+    expect(screen.getByText(/do hệ thống đồng bộ tự động/)).toBeInTheDocument();
   });
 });
