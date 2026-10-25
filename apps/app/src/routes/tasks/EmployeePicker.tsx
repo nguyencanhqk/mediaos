@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { hrApi, hrKeys, useCan } from "@mediaos/web-core";
@@ -21,6 +21,16 @@ export interface PickedEmployee {
   readonly avatarUrl: string | null;
 }
 
+/**
+ * Ứng viên đưa lên ĐẦU danh sách (vd thành viên dự án — S20-TASK-QUICKADD-1). Thiếu `read:employee`
+ * thì picker chỉ còn nhóm này (thay vì dòng gợi ý «cần quyền xem nhân viên»).
+ */
+export interface PreferredEmployee {
+  readonly id: string;
+  readonly fullName: string | null;
+  readonly avatarUrl: string | null;
+}
+
 export function EmployeePicker({
   employeeId,
   name,
@@ -34,6 +44,7 @@ export function EmployeePicker({
   emptyLabel,
   open: openProp,
   onOpenChange,
+  preferred,
 }: {
   employeeId: string | null;
   name: string | null;
@@ -60,6 +71,7 @@ export function EmployeePicker({
    */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  preferred?: readonly PreferredEmployee[];
 }) {
   const { t } = useTranslation("tasks");
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
@@ -81,7 +93,17 @@ export function EmployeePicker({
     enabled: open && canReadEmployees,
     staleTime: 60_000,
   });
-  const employees = employeesPage?.items ?? [];
+  const employees = useMemo(() => {
+    const all: readonly PreferredEmployee[] = (employeesPage?.items ?? []).map((e) => ({
+      id: e.id,
+      fullName: e.fullName ?? null,
+      avatarUrl: e.avatarUrl ?? null,
+    }));
+    if (!preferred?.length) return all;
+    const preferredIds = new Set(preferred.map((p) => p.id));
+    return [...preferred, ...all.filter((e) => !preferredIds.has(e.id))];
+  }, [employeesPage, preferred]);
+  const hasPreferred = (preferred?.length ?? 0) > 0;
   const filtered = search.trim()
     ? employees.filter((e) =>
         (e.fullName ?? "").toLowerCase().includes(search.trim().toLowerCase()),
@@ -138,7 +160,7 @@ export function EmployeePicker({
       <p className="px-1 pb-1.5 text-xs font-medium text-muted-foreground">
         {t("tasks.picker.title")}
       </p>
-      {!canReadEmployees ? (
+      {!canReadEmployees && !hasPreferred ? (
         <p className="px-1 py-2 text-xs text-muted-foreground">
           {t("tasks.assign.employeeReadHint")}
         </p>
@@ -164,7 +186,7 @@ export function EmployeePicker({
                 </button>
               </li>
             )}
-            {isLoading ? (
+            {isLoading && !hasPreferred ? (
               <li className="px-2 py-2">
                 <div className="h-4 w-32 animate-pulse rounded bg-muted" />
               </li>
@@ -177,9 +199,7 @@ export function EmployeePicker({
                 <li key={e.id}>
                   <button
                     type="button"
-                    onClick={() =>
-                      choose(e.id, { fullName: e.fullName ?? null, avatarUrl: e.avatarUrl ?? null })
-                    }
+                    onClick={() => choose(e.id, { fullName: e.fullName, avatarUrl: e.avatarUrl })}
                     className={cn(
                       "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted",
                       e.id === employeeId && "bg-muted font-medium",

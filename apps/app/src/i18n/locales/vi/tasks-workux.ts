@@ -153,6 +153,36 @@ export default {
       generic: "Không lưu được thay đổi. Vui lòng thử lại.",
     },
   },
+  // S20-TASK-QUICKADD-1 (US-TASK-NV-05 · US-TASK-QL-06) — tạo việc một dòng («Việc của tôi» + board),
+  // chip Người/Hạn giữ cho lượt sau; form Tạo mặc định «Tôi»; «Tạo công việc» trên board.
+  quickAdd: {
+    placeholder: "Thêm việc cho tôi rồi Enter… (phím n)",
+    hint: "Enter để tạo · chip hạn được giữ cho việc kế tiếp",
+    loading: "Đang tải thông tin của bạn…",
+    unlinked:
+      "Tài khoản của bạn chưa liên kết hồ sơ nhân viên nên chưa tạo nhanh được. Hãy nhờ bộ phận nhân sự liên kết.",
+    meFailed: "Không tải được thông tin của bạn nên chưa tạo nhanh được. Tải lại trang để thử lại.",
+    createButton: "Tạo việc",
+    boardCreateButton: "Tạo công việc",
+    assigneeChip: "Người",
+    deadlineChip: "Hạn của việc sắp tạo",
+    errors: {
+      titleRequired: "Nhập tên công việc trước khi Enter",
+      titleTooLong: "Tên công việc tối đa {{max}} ký tự",
+      assignee: "Không giao được cho người này",
+      forbidden: "Bạn không có quyền tạo công việc ở đây.",
+      badRequest: "Không tạo được — kiểm tra lại tên công việc, hạn hoặc cột.",
+      network: "Mất kết nối — chưa tạo được việc. Vui lòng thử lại.",
+      generic: "Không tạo được công việc. Vui lòng thử lại.",
+    },
+    form: {
+      me: "Tôi",
+      meNamed: "Tôi ({{name}})",
+      currentProject: "Dự án này",
+      assigneeOutOfScope: "Hãy chọn người phụ trách trong phạm vi của bạn",
+      titleTooLong: "Tiêu đề tối đa 500 ký tự",
+    },
+  },
   // S20-TASK-OVERDUEDESK-1 (US-TASK-QL-07) — trang Việc quá hạn thành bàn xử lý.
   overdueDesk: {
     lateColumn: "Trễ",
