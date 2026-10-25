@@ -1,7 +1,8 @@
 // S20-TASK-QUICKEDIT-1 — API GIẢ LẬP cho lượt đo trình duyệt thật. Nghe 127.0.0.1:59999 (đúng VITE_API_URL của dev server).
 // Lý do không dùng page.route: trên máy đo mọi route.fulfill trong browser_run_code làm rơi kết nối Playwright MCP.
 // Không bao giờ chuyển tiếp: đường chưa giả lập ⇒ 404 + ghi vào `unmocked` (không chạm API thật).
-// Điều khiển: POST /__smoke/state {me, phase, resetTasks, resetLog, actionDelayMs} · GET /__smoke/log.
+// Điều khiển: POST /__smoke/state {me, phase, resetTasks, resetLog, actionDelayMs, failNext} · GET /__smoke/log.
+// failNext cho change-status: "checklist" ⇒ 400 TASK-ERR-CHECKLIST-REQUIRED (một lần) · "network" ⇒ cắt socket (tới khi đặt null).
 // Chạy: node mock-api.cjs fixtures.json   (fixtures sinh bởi gen-fixtures.cjs)
 const http = require("node:http");
 const fs = require("node:fs");
@@ -15,6 +16,7 @@ const state = {
   phase: "boot",
   tasks: fresh(),
   actionDelayMs: 0,
+  failNext: null,
   log: [],
   unmocked: [],
 };
@@ -88,7 +90,7 @@ http
           state.log = [];
           state.unmocked = [];
         }
-        for (const k of ["me", "phase", "actionDelayMs"]) if (k in p) state[k] = p[k];
+        for (const k of ["me", "phase", "actionDelayMs", "failNext"]) if (k in p) state[k] = p[k];
         return reply(200, JSON.stringify({ ok: true, me: state.me, phase: state.phase }));
       }
       if (url.pathname === "/__smoke/log")
@@ -108,8 +110,18 @@ http
         query: url.search,
         body: req.method === "GET" ? undefined : body,
       });
-      const [status, payload] = route(req.method, path, url.searchParams, body || {});
       const delay = ACTION.test(path) ? state.actionDelayMs : 0;
+      const fail = path.endsWith("/change-status") && req.method === "POST" ? state.failNext : null;
+      if (fail) {
+        // "network" giữ tới khi xoá: Chromium tự gửi lại MỘT lần POST khi socket keep-alive bị cắt
+        // trước byte đầu (lượt đo 1 thấy lần gửi lại thành công ⇒ app không hề thấy lỗi).
+        if (fail !== "network") state.failNext = null;
+        state.log[state.log.length - 1].injected = fail;
+        if (fail === "network") return setTimeout(() => req.socket.destroy(), delay);
+        const msg = "TASK-ERR-CHECKLIST-REQUIRED: checklist chưa xong";
+        return setTimeout(() => reply(400, errEnv("TASK-ERR-CHECKLIST-REQUIRED", msg)), delay);
+      }
+      const [status, payload] = route(req.method, path, url.searchParams, body || {});
       setTimeout(() => reply(status, payload), delay);
     });
   })

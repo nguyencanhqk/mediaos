@@ -13,7 +13,18 @@ async (page) => {
   // «Hôm nay» giả lập: Thứ Năm 22/10/2026 10:00 giờ VN (= 03:00 UTC).
   const NOW = "2026-10-22T03:00:00.000Z";
   const EXPECT_FRIDAY_UTC = "2026-10-23T10:00:00.000Z"; // 23/10 17:00 giờ VN
-  const result = { env: {}, A: {}, B: {}, C: {}, layout: {}, TZ: {}, unmocked: [], errors: [] };
+  const result = {
+    env: {},
+    A: {},
+    U: {},
+    B: {},
+    C: {},
+    E: {},
+    layout: {},
+    TZ: {},
+    unmocked: [],
+    errors: [],
+  };
 
   const setState = async (patch) =>
     (await page.request.post(`${CTL}/state`, { data: patch })).json();
@@ -84,6 +95,38 @@ async (page) => {
     await settle();
   };
   const statusTrigger = (id) => page.getByTestId(`task-row-status-${id}`);
+  // Toast của @mediaos/ui: thẻ [data-slot="toast"] trong vùng role=status (polite) hoặc role=alert (lỗi).
+  const toastCards = () => page.locator('[data-slot="toast"]');
+  const toasts = () =>
+    toastCards().evaluateAll((els) =>
+      els.map((el) => {
+        const region = el.closest('[role="status"],[role="alert"]');
+        const msg = el.querySelector('[data-slot="toast-message"]');
+        return {
+          variant: el.getAttribute("data-variant"),
+          region: region ? region.getAttribute("role") : null,
+          message: msg ? msg.textContent.trim() : "",
+          buttons: Array.from(el.querySelectorAll("button")).map(
+            (b) => b.getAttribute("aria-label") || b.textContent.trim(),
+          ),
+        };
+      }),
+    );
+  // Lỗi hiện DƯỚI DÒNG (role=alert ngoài toaster).
+  const inlineAlerts = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('[role="alert"]'))
+        .filter(
+          (el) => !el.querySelector('[data-slot="toast"]') && !el.closest('[data-slot="toast"]'),
+        )
+        .map((el) => el.textContent.trim())
+        .filter(Boolean),
+    );
+  const pickDone = () =>
+    page.getByRole("listbox").getByRole("option", { name: "Hoàn thành" }).click();
+  const isChangeStatusPost = (r) =>
+    r.url().includes("/change-status") && r.request().method() === "POST";
+
   const deadlineTrigger = (id) => page.getByTestId(`task-row-deadline-${id}`);
 
   // ── Thiết lập phiên ────────────────────────────────────────────────────────────────────────
@@ -95,7 +138,7 @@ async (page) => {
   await page.clock.setFixedTime(new Date(NOW));
   await setState({ resetLog: true, resetTasks: true, me: "meFull", actionDelayMs: 0 });
 
-  const PARTS = ["A", "B", "C", "layout", "TZ"];
+  const PARTS = ["A", "U", "B", "C", "E", "layout", "TZ"];
   async function run(name, fn) {
     if (!PARTS.includes(name)) return;
     try {
@@ -133,7 +176,7 @@ async (page) => {
       page.getByRole("listbox").getByRole("option", { name: "Hoàn thành" }).click(),
     );
     result.A.optimistic = {
-      rowStillVisible: await page.getByText(T1_TITLE).count(),
+      rowStillVisible: await page.getByText(T1_TITLE, { exact: true }).count(),
       triggerCount: await statusTrigger(ids.T1).count(),
       triggerText:
         (await statusTrigger(ids.T1).count()) > 0
@@ -143,6 +186,13 @@ async (page) => {
     await shot("A3-optimistic.png");
     const resp = await posted;
     result.A.responseStatus = resp.status();
+    // Bản vá 3912833f: lưu xong ⇒ toast «Đã chuyển «…» sang …» kèm «Hoàn tác».
+    await toastCards()
+      .first()
+      .waitFor({ timeout: 5000 })
+      .catch(() => {});
+    result.A.toastsAfterSave = await toasts();
+    await shot("A3b-toast.png");
     await settle();
     result.A.totalActions = counter.actions;
     result.A.pathnameTransitions = counter.transitions;
@@ -150,7 +200,7 @@ async (page) => {
     result.A.steps = counter.steps;
     result.A.endUrl = page.url();
     result.A.afterSettle = {
-      rowVisible: await page.getByText(T1_TITLE).count(),
+      rowVisible: await page.getByText(T1_TITLE, { exact: true }).count(),
       alerts: (await page.getByRole("alert").allTextContents()).map((s) => s.trim()),
     };
     await shot("A4-after-save.png");
@@ -173,6 +223,106 @@ async (page) => {
       (r) => r.method === "PATCH" && /^\/tasks\/[^/]+$/.test(r.path),
     ).length;
     await setState({ actionDelayMs: 0 });
+  });
+
+  // ── U · «Hoàn tác» trên toast sau khi dòng đã rời danh sách ───────────────────────────────────
+  await run("U", async () => {
+    await setState({
+      me: "meFull",
+      resetTasks: true,
+      phase: "U-load",
+      actionDelayMs: 0,
+      failNext: null,
+    });
+    await openMyTasks();
+    await setState({ phase: "U-flow" });
+    await resetCounter();
+    await act("bấm badge «Đang làm» trên dòng", () => statusTrigger(ids.T1).click());
+    const first = page.waitForResponse(isChangeStatusPost);
+    await act("chọn «Hoàn thành»", pickDone);
+    await first;
+    const undoBtn = toastCards().getByRole("button", { name: "Hoàn tác" });
+    await undoBtn.first().waitFor({ timeout: 5000 });
+    result.U.rowCountBeforeUndo = await page.getByText(T1_TITLE, { exact: true }).count();
+    result.U.toastsBeforeUndo = await toasts();
+    await shot("U1-toast-undo.png");
+    const second = page.waitForResponse(isChangeStatusPost);
+    await act("bấm «Hoàn tác» trên toast", () => undoBtn.first().click());
+    result.U.undoResponseStatus = (await second).status();
+    await settle();
+    result.U.totalActions = counter.actions;
+    result.U.pathnameTransitions = counter.transitions;
+    result.U.documentReloads = counter.reloads;
+    result.U.steps = counter.steps;
+    result.U.rowCountAfterUndo = await page.getByText(T1_TITLE, { exact: true }).count();
+    result.U.badgeAfterUndo =
+      (await statusTrigger(ids.T1).count()) > 0
+        ? (await statusTrigger(ids.T1).textContent())?.trim()
+        : null;
+    result.U.toastsAfterUndo = await toasts();
+    await shot("U2-after-undo.png");
+    const flow = await logOf("U-flow");
+    result.U.requestsByEndpoint = byEndpoint(flow);
+    result.U.changeStatusCalls = flow
+      .filter((r) => r.method === "POST" && /\/change-status$/.test(r.path))
+      .map((r) => ({ method: r.method, path: r.path, body: r.body }));
+    result.U.patchTaskCalls = flow.filter(
+      (r) => r.method === "PATCH" && /^\/tasks\/[^/]+$/.test(r.path),
+    ).length;
+  });
+
+  // ── E · server từ chối SAU khi dòng đã rời danh sách (checklist / mất mạng) ⇒ toast lỗi ──────────
+  await run("E", async () => {
+    for (const mode of ["checklist", "network"]) {
+      await setState({
+        me: "meFull",
+        resetTasks: true,
+        phase: `E-${mode}-load`,
+        actionDelayMs: 800,
+        failNext: null,
+      });
+      await openMyTasks();
+      await setState({ phase: `E-${mode}`, failNext: mode });
+      await statusTrigger(ids.T1).click();
+      await pickDone();
+      await page.waitForTimeout(200);
+      const r = { rowCountOptimistic: await page.getByText(T1_TITLE, { exact: true }).count() };
+      const errToast = page.locator('[data-slot="toast"][data-variant="error"]');
+      await errToast
+        .first()
+        .waitFor({ timeout: 8000 })
+        .catch(() => {});
+      await page.waitForTimeout(400);
+      r.toasts = await toasts();
+      r.inlineAlerts = await inlineAlerts();
+      r.rowCountAfterError = await page.getByText(T1_TITLE, { exact: true }).count();
+      r.badgeAfterError =
+        (await statusTrigger(ids.T1).count()) > 0
+          ? (await statusTrigger(ids.T1).textContent())?.trim()
+          : null;
+      await shot(`E-${mode}.png`);
+      if (mode === "network") {
+        const retry = errToast.getByRole("button", { name: "Thử lại" });
+        r.retryButton = await retry.count();
+        if (r.retryButton > 0) {
+          await setState({ actionDelayMs: 0, failNext: null });
+          const p = page.waitForResponse(isChangeStatusPost);
+          await retry.first().click();
+          r.retryResponseStatus = (await p).status();
+          await settle();
+          r.afterRetry = {
+            toasts: await toasts(),
+            rowCount: await page.getByText(T1_TITLE, { exact: true }).count(),
+          };
+          await shot("E-network-retry.png");
+        }
+      }
+      r.changeStatusCalls = (await logOf(`E-${mode}`, (x) => /\/change-status$/.test(x.path))).map(
+        (x) => ({ method: x.method, path: x.path, body: x.body, injected: x.injected || null }),
+      );
+      result.E[mode] = r;
+    }
+    await setState({ actionDelayMs: 0, failNext: null });
   });
 
   // ── B · chip «Thứ Sáu này» khi hôm nay = Thứ Năm 22/10/2026 giờ VN ────────────────────────────
@@ -263,6 +413,18 @@ async (page) => {
       .boundingBox();
     await shot("L2-mobile-popover.png");
     await page.keyboard.press("Escape");
+    await page.waitForTimeout(200);
+    // Toast «Đã chuyển … sang Hoàn thành» ở 390 px: nằm trọn khung, không tràn ngang.
+    await statusTrigger(ids.T1).click();
+    await pickDone();
+    await toastCards().first().waitFor({ timeout: 5000 });
+    await page.waitForTimeout(300);
+    result.layout.mobileToastBox = await toastCards().first().boundingBox();
+    result.layout.mobileAfterToast = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    await shot("L3-mobile-toast.png");
     await page.setViewportSize({ width: 1366, height: 900 });
   });
 
