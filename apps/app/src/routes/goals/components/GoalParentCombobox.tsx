@@ -96,7 +96,8 @@ export function GoalParentCombobox({
   const [open, setOpen] = useState(false);
   /** null = không gõ ⇒ ô hiện nhãn cha đang chọn. */
   const [query, setQuery] = useState<string | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  /** Mục đang trỏ; -1 = chưa trỏ mục nào (Enter chỉ đóng, KHÔNG đổi cha). */
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [suggestOnly, setSuggestOnly] = useState(true);
 
   const suggestion = suggestionFilter(departmentId, periodFrom, periodTo);
@@ -127,7 +128,9 @@ export function GoalParentCombobox({
   const openList = () => {
     if (disabled || open) return;
     setOpen(true);
-    setActiveIndex(Math.max(0, selectedIndex));
+    // Cha đang chọn chưa có trong các trang đã tải (đang tải / ngoài gợi ý) ⇒ -1: Enter ngay sau khi mở
+    // không được rơi vào «Không có» mà xoá cha.
+    setActiveIndex(selectedIndex);
   };
   const close = () => {
     setOpen(false);
@@ -146,12 +149,18 @@ export function GoalParentCombobox({
     );
   }, [typing, options.length]);
 
+  // Cha đang chọn tới muộn (trang đầu vừa tải) và người dùng chưa trỏ mục nào ⇒ trỏ vào nó.
+  useEffect(() => {
+    if (open && !typing && selectedIndex >= 0) setActiveIndex((i) => (i < 0 ? selectedIndex : i));
+  }, [open, typing, selectedIndex]);
+
   useEffect(() => {
     if (!open) return;
     document.getElementById(`${baseId}-opt-${activeIndex}`)?.scrollIntoView?.({ block: "nearest" });
   }, [open, activeIndex, baseId]);
 
-  // Bấm ra ngoài ⇒ đóng (focus có thể ở nút «Tải thêm»/ô đánh dấu trong panel nên không dựa vào blur).
+  // Bấm ra ngoài ⇒ đóng (Tab có thể đưa focus tới nút «Tải thêm»/ô đánh dấu trong panel nên không dựa
+  // riêng vào blur).
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: MouseEvent) => {
@@ -174,7 +183,8 @@ export function GoalParentCombobox({
     } else if (e.key === "Enter" && open) {
       // Chặn submit form: Enter ở đây là CHỌN mục đang trỏ.
       e.preventDefault();
-      choose(options[activeIndex] ?? null);
+      if (activeIndex < 0) close();
+      else choose(options[activeIndex] ?? null);
     } else if (e.key === "Escape" && open) {
       // Chỉ đóng danh sách — không để Esc lan ra lớp bao (Sheet/Dialog).
       e.preventDefault();
@@ -204,7 +214,7 @@ export function GoalParentCombobox({
           aria-expanded={open}
           aria-controls={listboxId}
           aria-autocomplete="list"
-          aria-activedescendant={open ? optionId(activeIndex) : undefined}
+          aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
           autoComplete="off"
           value={displayValue}
           placeholder={t("form.parentPicker.placeholder")}
@@ -229,7 +239,12 @@ export function GoalParentCombobox({
           </button>
         )}
         {open && (
-          <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-md border border-border bg-card p-1 shadow-lg">
+          <div
+            className="absolute left-0 right-0 top-full z-30 mt-1 rounded-md border border-border bg-card p-1 shadow-lg"
+            // Giữ focus ở ô nhập khi bấm BẤT KỲ đâu trong panel (mục, thanh cuộn, dòng trạng thái, nút):
+            // aria-activedescendant cần focus ở đó, và blur với relatedTarget null sẽ đóng danh sách.
+            onMouseDown={(e) => e.preventDefault()}
+          >
             <ul
               id={listboxId}
               role="listbox"
@@ -248,8 +263,6 @@ export function GoalParentCombobox({
                     index === activeIndex && "bg-muted",
                     index === selectedIndex && "font-medium text-primary",
                   )}
-                  // Giữ focus ở ô nhập (aria-activedescendant cần focus ở đó).
-                  onMouseDown={(e) => e.preventDefault()}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => choose(goal)}
                 >

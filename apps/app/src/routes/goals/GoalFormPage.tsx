@@ -14,7 +14,6 @@ import {
   hrKeys,
   taskProjectApi,
   taskKeys,
-  useAuthStore,
   useCan,
 } from "@mediaos/web-core";
 import type { GoalCoreResponseDto } from "@mediaos/contracts";
@@ -39,11 +38,10 @@ import {
   defaultGoalStatusForLevel,
   goalCreateInitialValues,
   goalPeriodRangeFor,
-  isPeriodOutsideParent,
-  parentPeriodValues,
   shouldAnchorSelf,
 } from "./goal-form-defaults";
 import { useGoalFormQuickStart } from "./hooks/use-goal-form-quick-start";
+import { useGoalParentPeriod } from "./hooks/use-goal-parent-period";
 import { GoalMeasureTypeChoice } from "./components/GoalMeasureTypeChoice";
 import { GoalParentCombobox } from "./components/GoalParentCombobox";
 
@@ -200,39 +198,17 @@ export function GoalFormPage({
     return map;
   }, [employeesPage]);
 
-  // S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — cha chọn qua ô tìm; kỳ theo cha CHỈ khi kỳ còn mặc định
-  // (cờ «đã sửa tay» = người dùng đổi một trong ba ô kỳ; form SỬA mang kỳ của bản ghi ⇒ coi như đã sửa).
-  const periodTouchedRef = useRef(isEdit);
-  const selfDepartmentId = useAuthStore((s) => s.user?.employee?.departmentId ?? null);
-  const [pickedParent, setPickedParent] = useState<GoalCoreResponseDto | null>(null);
-  const knownParent =
-    [pickedParent, validParent].find((g) => g !== null && g.id === parentGoalId) ?? null;
-  // Cha chưa biết kỳ (form SỬA) ⇒ đọc chi tiết cha để so kỳ + hiện nhãn.
-  const parentDetailQuery = useQuery({
-    queryKey: goalKeys.detail(parentGoalId),
-    queryFn: () => goalApi.getGoal(parentGoalId),
-    enabled: Boolean(parentGoalId) && !knownParent,
-    staleTime: 15_000,
-  });
-  const parentFacts =
-    knownParent ?? (parentDetailQuery.data?.id === parentGoalId ? parentDetailQuery.data : null);
-  const editParent = detailQuery.data?.parent;
-  const parentLabel = parentFacts ?? (editParent?.id === parentGoalId ? editParent : null);
-  const periodOutsideParent =
-    parentFacts !== null && isPeriodOutsideParent({ periodStart, periodEnd }, parentFacts);
-
-  const selectParent = (goal: GoalCoreResponseDto | null) => {
-    setPickedParent(goal);
-    setValue("parentGoalId", goal?.id ?? "");
-    if (!goal || periodTouchedRef.current) return;
-    const period = parentPeriodValues(goal);
-    setValue("periodType", period.periodType);
-    setValue("periodStart", period.periodStart);
-    setValue("periodEnd", period.periodEnd);
-  };
-  const markPeriodTouched = () => {
-    periodTouchedRef.current = true;
-  };
+  // S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — cha chọn qua ô tìm; kỳ theo cha khi kỳ còn mặc định.
+  const { selfDepartmentId, parentLabel, periodOutsideParent, selectParent, markPeriodTouched } =
+    useGoalParentPeriod({
+      isEdit,
+      parentGoalId,
+      periodStart,
+      periodEnd,
+      validParent,
+      editParent: detailQuery.data?.parent,
+      setValue,
+    });
 
   // Select không điều khiển: giá trị điền sẵn đặt TRƯỚC khi option tải về thì DOM hiện ô trống trong
   // khi form vẫn giữ giá trị ⇒ ghi lại lên DOM mỗi khi một danh mục tới.

@@ -263,3 +263,55 @@ describe("GoalParentCombobox — a11y + bàn phím", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 });
+
+describe("GoalParentCombobox — Enter ngay sau khi mở không đổi cha", () => {
+  it("cha đang chọn KHÔNG có trong các trang đã tải ⇒ không trỏ mục nào, Enter giữ cha", async () => {
+    const outside = goal(99, "Cha ngoài trang gợi ý");
+    const { onSelect } = renderBox({ selected: outside });
+    const list = await openList();
+    await waitFor(() => expect(within(list).getAllByRole("option")).toHaveLength(31));
+    expect(input()).not.toHaveAttribute("aria-activedescendant");
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(input().value).toBe("GOAL-0099 — Cha ngoài trang gợi ý");
+  });
+
+  it("danh sách đang tải ⇒ Enter giữ cha đang chọn", async () => {
+    mockListGoals.mockReturnValue(new Promise<GoalCoreResponseDto[]>(() => undefined));
+    const { onSelect } = renderBox({ selected: THIRTY[4] });
+    await openList();
+    expect(await screen.findByText(/Đang tải/)).toBeInTheDocument();
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("cha đang chọn tới cùng trang đầu ⇒ trỏ đúng mục đó; ↓ rồi ↑ về «Không có» vẫn bỏ cha được", async () => {
+    const { onSelect } = renderBox({ selected: THIRTY[4] });
+    const list = await openList();
+    await waitFor(() => expect(within(list).getAllByRole("option")).toHaveLength(31));
+    await waitFor(() =>
+      expect(input().getAttribute("aria-activedescendant")).toBe(
+        within(list).getAllByRole("option")[5].id,
+      ),
+    );
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(onSelect).not.toHaveBeenCalledWith(null);
+
+    await openList();
+    for (let i = 0; i < 6; i += 1) fireEvent.keyDown(input(), { key: "ArrowUp" });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(onSelect).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe("GoalParentCombobox — bấm trong panel giữ focus ở ô nhập", () => {
+  it("mousedown ở vùng panel ngoài các mục (dòng trạng thái, thanh cuộn) bị chặn mặc định", async () => {
+    mockListGoals.mockResolvedValue([]);
+    renderBox();
+    await openList();
+    const status = await screen.findByText("Không tìm thấy");
+    expect(fireEvent.mouseDown(status)).toBe(false);
+    expect(fireEvent.mouseDown(screen.getByRole("listbox"))).toBe(false);
+  });
+});
