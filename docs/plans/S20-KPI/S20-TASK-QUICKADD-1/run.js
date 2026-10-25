@@ -19,7 +19,7 @@ async (page) => {
   const NOW = "2026-10-22T03:00:00.000Z";
   const EXPECT_TODAY_1700_UTC = "2026-10-22T10:00:00.000Z";
   const EXPECT_FRIDAY_1700_UTC = "2026-10-23T10:00:00.000Z";
-  const PARTS = ["A", "U", "B", "B2", "BD", "C", "X", "layout"];
+  const PARTS = ["A", "U", "B", "B2", "BD", "C", "X", "chips", "layout"];
   const result = {
     env: {},
     A: {},
@@ -28,6 +28,7 @@ async (page) => {
     B2: {},
     C: {},
     X: {},
+    chips: {},
     layout: {},
     unmocked: [],
     errors: [],
@@ -108,6 +109,54 @@ async (page) => {
       { timeout: 10000 },
     );
   const exactText = (t) => page.getByText(t, { exact: true });
+  const shotEl = (locator, name) =>
+    locator
+      .screenshot({ path: SHOT + name })
+      .catch((e) => result.errors.push(`shot ${name}: ${e.message}`));
+
+  // Hàng chip của một ô tạo nhanh: chip nào có mặt, chữ, tên trợ năng, toạ độ; số HÀNG chip (gom theo tâm dọc,
+  // lệch ≤ 8 px là cùng hàng); chip có tràn khỏi khung ô; hạn đang chọn hiện ở bao nhiêu chip
+  // (chip một chạm `aria-pressed=true` · chip lịch có chữ khác «Đặt hạn»).
+  const chipRow = (prefix) =>
+    page.evaluate((pfx) => {
+      const root = document.querySelector(`[data-testid="${pfx}"]`);
+      const rb = root && root.getBoundingClientRect();
+      const chips = ["assignee", "due-nearest", "due"].map((k) => {
+        const el = document.querySelector(`[data-testid="${pfx}-${k}"]`);
+        if (!el) return { chip: k, present: false };
+        const b = el.getBoundingClientRect();
+        return {
+          chip: k,
+          present: true,
+          text: el.textContent.replace(/\s+/g, " ").trim(),
+          ariaLabel: el.getAttribute("aria-label"),
+          title: el.getAttribute("title"),
+          pressed: el.getAttribute("aria-pressed"),
+          left: Math.round(b.left),
+          right: Math.round(b.right),
+          width: Math.round(b.width),
+          midY: Math.round(b.top + b.height / 2),
+        };
+      });
+      const on = chips.filter((c) => c.present);
+      const mids = on.map((c) => c.midY).sort((a, b) => a - b);
+      let rows = mids.length ? 1 : 0;
+      for (let i = 1; i < mids.length; i += 1) if (mids[i] - mids[i - 1] > 8) rows += 1;
+      const deadlineShownIn = on
+        .filter(
+          (c) =>
+            (c.chip === "due-nearest" && c.pressed === "true") ||
+            (c.chip === "due" && c.text && c.text !== "Đặt hạn"),
+        )
+        .map((c) => c.chip);
+      return {
+        boxWidth: rb ? Math.round(rb.width) : null,
+        rows,
+        overflow: rb ? on.some((c) => c.right > rb.right + 0.5 || c.left < rb.left - 0.5) : null,
+        deadlineShownIn,
+        chips,
+      };
+    }, prefix);
 
   // ── Thiết lập phiên ────────────────────────────────────────────────────────────────────────
   // Cookie CSRF đặt bằng init script (page.context().addCookies làm rơi kết nối MCP ở máy đo).
@@ -163,6 +212,7 @@ async (page) => {
     });
     await act("bấm chip «Hôm nay 17:00»", () => page.getByTestId(`${MY}-due-nearest`).click());
     result.A.focusAfterChip = await activeTestId();
+    result.A.chipRowAfterChip = await chipRow(MY);
     const resp = createdResponse();
     await act("Enter", () => page.keyboard.press("Enter"));
     result.A.createStatus = (await resp).status();
@@ -330,8 +380,10 @@ async (page) => {
     result.B2.chipsAfterPick = {
       assignee: (await page.getByTestId(`${QC}-assignee`).textContent())?.trim(),
       due: (await page.getByTestId(`${QC}-due`).textContent())?.trim(),
+      nearestChips: await page.getByTestId(`${QC}-due-nearest`).count(),
       focus: await activeTestId(),
     };
+    result.B2.chipRowAfterPick = await chipRow(QC);
     for (const title of ["In tờ rơi", "Gửi thư mời đối tác"]) {
       await act(`gõ «${title}»`, () => page.keyboard.type(title));
       const resp = createdResponse();
@@ -357,6 +409,7 @@ async (page) => {
     result.B2.chipsAfterReopen = {
       assignee: (await page.getByTestId(`${QC}-assignee`).textContent())?.trim(),
       due: (await page.getByTestId(`${QC}-due`).textContent())?.trim(),
+      dueAriaLabel: await page.getByTestId(`${QC}-due`).getAttribute("aria-label"),
       nearestPressed: await page.getByTestId(`${QC}-due-nearest`).getAttribute("aria-pressed"),
     };
     await page.keyboard.press("Escape");
@@ -402,6 +455,7 @@ async (page) => {
     result.BD.allFriday =
       creates.length === 5 && creates.every((r) => r.body.dueAt === EXPECT_FRIDAY_1700_UTC);
     result.BD.dueChipAtEnd = (await page.getByTestId(`${QC}-due`).textContent())?.trim();
+    result.BD.chipRowAtEnd = await chipRow(QC);
     await shot("BD-after-5-with-deadline.png");
     await page.keyboard.press("Escape");
   });
@@ -453,6 +507,61 @@ async (page) => {
     result.X.inputValue = await qcInput().inputValue();
     result.X.cardCreated = await exactText(title).count();
     await shot("X1-out-of-scope.png");
+    await page.keyboard.press("Escape");
+  });
+
+  // ── chips · 1366 px: hàng chip Hạn hiện hạn đúng một lần và vừa một hàng (cột board ~270 px) ────────
+  await run("chips", async () => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    const group = page.getByRole("group", { name: "Mốc hạn nhanh" });
+    const pickFriday = async (prefix) => {
+      await page.getByTestId(`${prefix}-due`).click();
+      await group.waitFor({ timeout: 5000 });
+      await group.getByRole("button", { name: /Thứ Sáu này/ }).click();
+      await page.waitForTimeout(250);
+    };
+    await setState({ me: "meNv", reset: true, phase: "K-my" });
+    await openMyTasks();
+    result.chips.myEmpty = await chipRow(MY);
+    await page.getByTestId(`${MY}-due-nearest`).click();
+    await page.waitForTimeout(250);
+    result.chips.myToday = await chipRow(MY);
+    await shotEl(page.getByTestId(MY), "K1-my-today.png");
+    await pickFriday(MY);
+    result.chips.myFriday = await chipRow(MY);
+    await shotEl(page.getByTestId(MY), "K2-my-friday.png");
+    await setState({ me: "meQl", reset: true, phase: "K-board" });
+    await openBoard();
+    await openQuickCreate();
+    await page.waitForTimeout(250);
+    result.chips.boardEmpty = await chipRow(QC);
+    await shotEl(page.getByTestId(QC), "K3-board-empty.png");
+    await page.getByTestId(`${QC}-assignee`).click();
+    await pickerOption(NAMES.C).click();
+    await page.waitForTimeout(250);
+    result.chips.boardChau = await chipRow(QC);
+    // Ngưỡng xuống dòng: hàng chip (Người + Hôm nay 17:00 + biểu tượng lịch) với từng người trong luồng KPI #13.
+    result.chips.boardByAssignee = {};
+    for (const who of ["A", "B", "C"]) {
+      await page.getByTestId(`${QC}-assignee`).click();
+      await pickerOption(NAMES[who]).click();
+      await page.waitForTimeout(250);
+      const r = await chipRow(QC);
+      result.chips.boardByAssignee[NAMES[who]] = {
+        rows: r.rows,
+        assigneeWidth: r.chips[0].width,
+        rowWidth: r.chips.filter((c) => c.present).reduce((n, c) => n + c.width, 0),
+      };
+    }
+    await shotEl(page.getByTestId(QC), "K3b-board-chau-wrapped.png");
+    await page.getByTestId(`${QC}-due-nearest`).click();
+    await page.waitForTimeout(250);
+    result.chips.boardChauToday = await chipRow(QC);
+    await shotEl(page.getByTestId(QC), "K4-board-chau-today.png");
+    await pickFriday(QC);
+    result.chips.boardChauFriday = await chipRow(QC);
+    await shotEl(page.getByTestId(QC), "K5-board-chau-friday.png");
+    await shot("K6-board-1366.png");
     await page.keyboard.press("Escape");
   });
 
