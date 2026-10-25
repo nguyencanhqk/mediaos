@@ -29,14 +29,16 @@ import { ProjectAccessService } from "./project-access.service";
 import { coalesceTaskStatus, deriveStatusTimestamps, evaluateTransition } from "./task-fsm";
 import { isStateInGroupForStatus, pickTargetState } from "./task-state-sync";
 import { reloadTaskDtoTx } from "./task-row-decorations";
-import { TaskGoalRefPolicy, hiddenGoalRefViewer, type GoalRefViewer } from "./task-goal-ref.policy";
+import {
+  TaskGoalRefPolicy,
+  hiddenGoalRefViewer,
+  type GoalRefUser,
+  type GoalRefViewer,
+} from "./task-goal-ref.policy";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
-interface RequestUser {
-  id: string;
-  companyId: string;
-}
+type RequestUser = GoalRefUser;
 
 const WORKFLOW_TASK_TYPES = new Set<string>(["workflow_step", "production", "review", "revision"]);
 

@@ -56,14 +56,13 @@ import {
   type TaskRowDecorations,
 } from "./task-core.mapper";
 import { decorateTaskRows, reloadTaskDtoTx, type GoalRefSource } from "./task-row-decorations";
-import { TaskGoalRefPolicy, type GoalRefViewer } from "./task-goal-ref.policy";
+import { TaskGoalRefPolicy, type GoalRefUser, type GoalRefViewer } from "./task-goal-ref.policy";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
-interface RequestUser {
-  id: string;
-  companyId: string;
-}
+type RequestUser = GoalRefUser;
+/** Cổng tạo việc — không trả tham chiếu mục tiêu ⇒ không cần cờ khoá API (phân rã mục tiêu gọi lại). */
+type GateUser = Pick<GoalRefUser, "id" | "companyId">;
 
 /**
  * Task types do workflow engine (FSM) làm chủ vòng đời — task core KHÔNG sửa/xoá tay (mirror TasksService,
@@ -368,7 +367,7 @@ export class TaskCoreService {
    * ⚠️ GỌI NGOÀI tx (resolveAndAssert tự mở connection riêng) và TRƯỚC khi cấp mã task.
    */
   async resolveCreateGate(
-    user: RequestUser,
+    user: GateUser,
     dto: Pick<CreateTaskCoreRequest, "stateId" | "projectId" | "parentTaskId">,
   ): Promise<DataScope> {
     // Gate + scope (double-gate với PermissionGuard controller — defense-in-depth). Company/System = toàn tenant.
@@ -421,7 +420,7 @@ export class TaskCoreService {
    */
   async createTaskInTx(
     tx: TenantTx,
-    user: RequestUser,
+    user: GateUser,
     dto: CreateTaskCoreRequest,
     ctx: {
       createScope: DataScope;
@@ -1140,7 +1139,7 @@ export class TaskCoreService {
    */
   private async assertInScopeForWrite(
     tx: TenantTx,
-    user: RequestUser,
+    user: GateUser,
     id: string,
     scope: DataScope,
   ): Promise<void> {
@@ -1236,7 +1235,7 @@ export class TaskCoreService {
    */
   private async resolveAssignee(
     tx: TenantTx,
-    user: RequestUser,
+    user: GateUser,
     scope: DataScope,
     employeeId: string,
   ): Promise<{ employeeId: string; userId: string }> {
@@ -1255,7 +1254,7 @@ export class TaskCoreService {
    */
   private async resolveAssigneeForProject(
     tx: TenantTx,
-    user: RequestUser,
+    user: GateUser,
     employeeId: string,
     projectId: string,
   ): Promise<{ employeeId: string; userId: string }> {
@@ -1275,7 +1274,7 @@ export class TaskCoreService {
   }
 
   private async assertAssigneeInScope(
-    user: RequestUser,
+    user: GateUser,
     scope: DataScope,
     emp: EmployeeForScope,
   ): Promise<void> {

@@ -16,7 +16,7 @@ import {
   toLabelChipsByTask,
   goalRefCandidates,
 } from "./task-core.mapper";
-import { TaskGoalRefPolicy } from "./task-goal-ref.policy";
+import { TaskGoalRefPolicy, type GoalRefUser } from "./task-goal-ref.policy";
 import { TASK_CORE_STATUSES } from "./task-fsm";
 import { TaskCommentsRepository } from "./task-comments.repository";
 import { TaskChecklistsRepository } from "./task-checklists.repository";
@@ -24,10 +24,7 @@ import { TaskFileRepository } from "./task-file.repository";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
-interface RequestUser {
-  id: string;
-  companyId: string;
-}
+type RequestUser = GoalRefUser;
 
 /** Trần list nội bộ cho 1 cột Kanban — MVP không phân trang board (SPEC-06 §6.8, không đặt limit rõ). */
 const KANBAN_TASK_LIMIT = 500;

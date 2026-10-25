@@ -41,7 +41,7 @@ const DENY_FLOOR_2 = "AUTH-ERR-FORBIDDEN: thiếu quyền view:feed ở phạm v
 const EMPTY_1 = "Tuần này chưa có tương tác nào trong phạm vi của bạn";
 const EMPTY_2 = "Bạn đã xác nhận hết các tin cần đọc";
 
-const user: WidgetRequestUser = { id: "u-viewer", companyId: "co-1" };
+const user: WidgetRequestUser = { id: "u-viewer", companyId: "co-1", viaApiKey: undefined };
 
 const WEEK: FeedEngagementWeekDto = {
   weekStart: "2026-10-12",

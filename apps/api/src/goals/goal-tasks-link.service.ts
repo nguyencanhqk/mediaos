@@ -13,7 +13,7 @@ import { ProjectAccessService } from "../tasks/project-access.service";
 import { GoalProgressEngineService } from "../tasks/goal-progress-engine.service";
 import { TaskCoreRepository } from "../tasks/task-core.repository";
 import { goalRefCandidates, signedUrlsForRow, toTaskCoreDto } from "../tasks/task-core.mapper";
-import { TaskGoalRefPolicy } from "../tasks/task-goal-ref.policy";
+import { TaskGoalRefPolicy, type GoalRefUser } from "../tasks/task-goal-ref.policy";
 import type { Goal } from "../db/schema/goals";
 import { GoalAccessService, type GoalRequestUser as RequestUser } from "./goal-access.service";
 import { GOAL_ERR } from "./goals.errors";
@@ -69,7 +69,7 @@ export class GoalTasksLinkService {
    * trách của những việc mà chính họ không có quyền mở (bài học
    * `read-path-gate-pair-must-match-download-pair`).
    */
-  async listLinkedTasks(user: RequestUser, goalId: string): Promise<TaskCoreResponseDto[]> {
+  async listLinkedTasks(user: GoalRefUser, goalId: string): Promise<TaskCoreResponseDto[]> {
     const goalViewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const actor = await this.access.resolveActorScope(tx, user, "view");

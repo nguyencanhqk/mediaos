@@ -17,6 +17,7 @@ import { TaskGoalRefPolicy, type GoalRefViewer } from "./task-goal-ref.policy";
 const USER = {
   id: "11111111-1111-4111-8111-111111111111",
   companyId: "c0c0c0c0-0000-4000-8000-000000000001",
+  viaApiKey: undefined,
 };
 const EMP = {
   id: "e0e0e0e0-0000-4000-8000-000000000001",
@@ -92,10 +93,22 @@ describe("TaskGoalRefPolicy — truy vấn theo lô (U2 · U2b)", () => {
     expect(tx.select).not.toHaveBeenCalled();
   });
 
-  it("U2d engine quyền ném ⇒ ném tiếp (không biến thành «che hết» câm)", async () => {
-    const { policy, dataScope } = makePolicy("Company");
-    vi.spyOn(dataScope, "resolveOrNull").mockRejectedValueOnce(new Error("engine down"));
-    await expect(policy.resolveViewer(USER)).rejects.toThrow("engine down");
+  it("U2d engine quyền trả null (kể cả lỗi hạ tầng đã log ở engine) ⇒ che hết, 0 truy vấn", async () => {
+    const { tx } = mockTx();
+    const { policy, permission, dataScope } = makePolicy("Company", tx);
+    permission.resolveStrongestScope.mockResolvedValueOnce(null);
+    const ctxSpy = vi.spyOn(dataScope, "resolveContext");
+    const viewer = await policy.resolveViewer(USER);
+    expect(viewer.scope).toBeNull();
+    expect(await policy.visibleGoalIdsTx(tx as never, viewer, [G1])).toEqual(new Set());
+    expect(ctxSpy).not.toHaveBeenCalled();
+    expect(tx.select).not.toHaveBeenCalled();
+  });
+
+  it("U2d2 ngữ cảnh phạm vi ném ⇒ ném tiếp (không biến thành «che hết» câm)", async () => {
+    const { policy, dataScope } = makePolicy("Department");
+    vi.spyOn(dataScope, "resolveContext").mockRejectedValueOnce(new Error("ctx down"));
+    await expect(policy.resolveViewer(USER)).rejects.toThrow("ctx down");
   });
 
   it("U2e request mang cờ khoá API ⇒ che hết, không gọi engine quyền", async () => {
@@ -109,6 +122,8 @@ describe("TaskGoalRefPolicy — truy vấn theo lô (U2 · U2b)", () => {
   });
 });
 
+// U4 chỉ ghim ĐẤU NỐI (cả hai đường gọi cùng `buildGoalActorScope`); ngữ nghĩa của hàm dựng phạm vi do
+// int-spec của đường đọc mục tiêu và `task-goal-ref-visibility.int-spec.ts` (ca A0) đo.
 describe("TaskGoalRefPolicy — cùng SQL với đường đọc mục tiêu chuẩn (U4)", () => {
   const scopes: DataScope[] = ["Own", "Team", "Department", "Company", "System"];
 

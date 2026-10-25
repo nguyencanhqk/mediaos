@@ -7,13 +7,10 @@ import {
   TaskActivityFeedRepository,
   type TaskActivityLogRow,
 } from "./task-activity-feed.repository";
-import { TaskGoalRefPolicy, type GoalRefViewer } from "./task-goal-ref.policy";
+import { TaskGoalRefPolicy, type GoalRefUser, type GoalRefViewer } from "./task-goal-ref.policy";
 import { ACTIVITY_UUID_RE, decomposedGoalIds, redactGoalRef } from "./task-activity-goal-redact";
 
-interface RequestUser {
-  id: string;
-  companyId: string;
-}
+type RequestUser = GoalRefUser;
 
 const ERR = {
   TASK_NOT_FOUND: "TASK-ERR-TASK-NOT-FOUND: không tìm thấy công việc.",

@@ -20,7 +20,7 @@ import type { WidgetCacheIdentity, WidgetFetchResult } from "./dashboard-widget-
  * KHÔNG bao giờ vào cache (upsert.data không chứa nó); (5) catalog đính quick_actions + memo dedupe can().
  */
 
-const USER = { id: "u-1", companyId: "co-1" };
+const USER = { id: "u-1", companyId: "co-1", viaApiKey: undefined };
 
 interface CanCall {
   action: string;

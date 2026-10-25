@@ -20,7 +20,7 @@ const COMPANY = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const ACTOR = "11111111-1111-1111-1111-111111111111";
 const NEW_TASK_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const FAKE_TX = { __tx: true };
-const user = { id: ACTOR, companyId: COMPANY };
+const user = { id: ACTOR, companyId: COMPANY, viaApiKey: undefined };
 
 /** Hàng reload sau insert (toDto cần createdAt/updatedAt/isOverdue) — taskCode để chứng minh projection có mã. */
 function reloadRow() {

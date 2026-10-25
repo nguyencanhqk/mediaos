@@ -338,6 +338,17 @@ describe.skipIf(!runDb)("S20-SEC-GOALNAMEDTO-1 — tham chiếu mục tiêu tron
         [A.companyId, t.decomposed, emp[k], uid.f],
       );
     }
+    // «Việc của tôi» gồm việc đang theo dõi — đưa việc gắn mục tiêu đọc được vào danh sách của D và F.
+    for (const [k, task] of [
+      ["d", t.in],
+      ["f", t.out],
+    ] as const) {
+      await direct.query(
+        `INSERT INTO task_watchers (company_id, task_id, employee_id, watcher_type, status, added_by)
+         VALUES ($1,$2,$3,'Manual','Active',$4)`,
+        [A.companyId, task, emp[k], uid.f],
+      );
+    }
   }, 180_000);
 
   afterAll(async () => {
@@ -414,6 +425,12 @@ describe.skipIf(!runDb)("S20-SEC-GOALNAMEDTO-1 — tham chiếu mục tiêu tron
     });
     expect([200, 201], JSON.stringify(prio.body)).toContain(prio.status);
     expectGoalShown(prio.body.data.task as Row, gIn, "D change-priority t.in");
+  });
+
+  it("A1b việc của tôi: cùng quyết định như danh sách (vế cho phép)", async () => {
+    expectGoalShown(byId(await getOk("d", "/tasks/my"), t.in), gIn, "D my t.in");
+    expectGoalShown(byId(await getOk("m", "/tasks/my"), t.decomposed), gProj, "M my t.decomposed");
+    expectGoalShown(byId(await getOk("f", "/tasks/my"), t.out), gOut, "F my t.out");
   });
 
   it("A2 đứng cạnh: thành viên dự án đọc được mục tiêu dự án ⇒ đủ ba trường", async () => {

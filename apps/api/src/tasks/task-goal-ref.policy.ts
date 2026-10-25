@@ -8,11 +8,15 @@ import {
   selectReadableGoalIdsTx,
 } from "../goals/goal-read-scope";
 
-/** Người xem như request mang tới (`req.user`); `viaApiKey` do lớp xác thực khoá API đặt. */
+/**
+ * Người xem như request mang tới (`req.user`); `viaApiKey` do lớp xác thực khoá API đặt (`true`), phiên
+ * thường để trống (`undefined`). Khoá BẮT BUỘC có mặt trong kiểu: dựng lại người dùng thành `{ id, companyId }`
+ * rồi đưa vào đường trả dữ liệu việc là lỗi biên dịch — bỏ sót cờ sẽ âm thầm tắt nhánh «khoá API ⇒ che hết».
+ */
 export interface GoalRefUser {
   id: string;
   companyId: string;
-  viaApiKey?: boolean;
+  viaApiKey: boolean | undefined;
 }
 
 /**
@@ -47,8 +51,10 @@ export function hiddenGoalRefViewer(user: { id: string; companyId: string }): Go
  * với `GoalAccessService.resolveActorScope`; khác duy nhất: thiếu cặp ⇒ che thay vì 403.
  * Ngoại lệ chặt hơn (không lỏng hơn): request mang cờ khoá API ⇒ che hết.
  *
- * Không nuốt lỗi: lỗi engine/truy vấn ném tiếp (KHÔNG biến thành «che hết» câm). Trên tx chung mọi
- * truy vấn tuần tự (một kết nối pg không chạy song song hai truy vấn).
+ * Lỗi: engine quyền (`resolveOrNull` → `PermissionService.resolveStrongestScope`) tự fail-closed — lỗi
+ * hạ tầng được engine log rồi trả `null` ⇒ ở đây thành «che hết» (cùng kết cục 403 của đường đọc mục tiêu
+ * chuẩn). Lỗi của `resolveContext` và truy vấn lô KHÔNG bị bắt — ném tiếp (request lỗi, không che câm).
+ * Trên tx chung mọi truy vấn tuần tự (một kết nối pg không chạy song song hai truy vấn).
  */
 @Injectable()
 export class TaskGoalRefPolicy {
