@@ -216,3 +216,131 @@ describe("useChatConversation · đánh dấu đã đọc (con trỏ chỉ tiế
     }
   });
 });
+
+/**
+ * S20-CHAT-UNREAD-1 (lượt đo trình duyệt) — badge phải về theo CHÍNH response `POST read`. Trước đây badge
+ * chỉ đổi khi nhận tiếng vọng `chat:read` qua socket: mất kết nối thì đọc tới đáy, POST thành công, mà
+ * badge phòng lẫn badge tổng trên header vẫn đứng ở 25.
+ */
+describe("useChatConversation · badge theo response POST read (không cần socket)", () => {
+  const ME = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  function seedRoom(unreadCount: number, lastMessageSeq: number): void {
+    useChatStore.getState().setMyUserId(ME);
+    useChatStore.getState().hydrateRooms([
+      {
+        id: ROOM,
+        companyId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        refId: null,
+        roomType: "group",
+        name: "Phòng thử",
+        roomCode: "CHAT-0001",
+        description: null,
+        lastMessageAt: "2026-08-04T10:00:00.000Z",
+        lastMessageSeq,
+        isArchived: false,
+        unreadCount,
+        createdAt: "2026-08-01T00:00:00.000Z",
+      },
+    ]);
+  }
+
+  it("POST read {seq:125} thành công ⇒ unreadCount của phòng về 0 dù không có `chat:read`", async () => {
+    vi.useFakeTimers();
+    try {
+      seedRoom(25, 125);
+      vi.mocked(chatApi.markRead).mockResolvedValueOnce({
+        roomId: ROOM,
+        lastReadSeq: 125,
+        unreadCount: 0,
+      });
+      const { result } = renderHook(() => useChatConversation(ROOM));
+
+      act(() => result.current.markReadUpTo(125));
+      await act(async () => {
+        vi.advanceTimersByTime(MARK_READ_DEBOUNCE_MS);
+      });
+
+      expect(useChatStore.getState().roomsById[ROOM].unreadCount).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tin tới TRONG LÚC POST bay ⇒ badge tính lại theo con trỏ trả về, không chép số cũ của response", async () => {
+    vi.useFakeTimers();
+    try {
+      seedRoom(25, 125);
+      let resolvePost: (value: {
+        roomId: string;
+        lastReadSeq: number;
+        unreadCount: number;
+      }) => void = () => undefined;
+      vi.mocked(chatApi.markRead).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePost = resolve;
+        }),
+      );
+      const { result } = renderHook(() => useChatConversation(ROOM));
+
+      act(() => result.current.markReadUpTo(110));
+      await act(async () => {
+        vi.advanceTimersByTime(MARK_READ_DEBOUNCE_MS);
+      });
+      // Tin 126 của người khác tới khi POST còn bay: phòng thành 26 chưa đọc, `lastMessageSeq` 126.
+      act(() =>
+        useChatStore.getState().applyIncomingMessage({
+          ...wsMessage,
+          id: "00000126-1111-4111-8111-111111111111",
+          senderId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          roomSeq: 126,
+          attachments: [],
+        }),
+      );
+      // Server tính 15 lúc xử lý (125 − 110) — chép số đó là xoá mất tin 126 khỏi badge.
+      await act(async () => {
+        resolvePost({ roomId: ROOM, lastReadSeq: 110, unreadCount: 15 });
+      });
+
+      expect(useChatStore.getState().roomsById[ROOM].unreadCount).toBe(16);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("response của POST CŨ về sau POST mới (mạng đảo thứ tự) ⇒ bị bỏ, badge không lùi", async () => {
+    vi.useFakeTimers();
+    try {
+      seedRoom(25, 125);
+      type ReadResult = { roomId: string; lastReadSeq: number; unreadCount: number };
+      const resolvers: Array<(value: ReadResult) => void> = [];
+      vi.mocked(chatApi.markRead).mockImplementation(
+        () => new Promise<ReadResult>((resolve) => resolvers.push(resolve)),
+      );
+      const { result } = renderHook(() => useChatConversation(ROOM));
+
+      act(() => result.current.markReadUpTo(110));
+      await act(async () => {
+        vi.advanceTimersByTime(MARK_READ_DEBOUNCE_MS);
+      });
+      act(() => result.current.markReadUpTo(125));
+      await act(async () => {
+        vi.advanceTimersByTime(MARK_READ_DEBOUNCE_MS);
+      });
+      expect(resolvers).toHaveLength(2);
+
+      await act(async () => {
+        resolvers[1]({ roomId: ROOM, lastReadSeq: 125, unreadCount: 0 });
+      });
+      await act(async () => {
+        resolvers[0]({ roomId: ROOM, lastReadSeq: 110, unreadCount: 15 });
+      });
+
+      expect(useChatStore.getState().roomsById[ROOM].unreadCount).toBe(0);
+    } finally {
+      vi.mocked(chatApi.markRead).mockReset();
+      vi.mocked(chatApi.markRead).mockResolvedValue({ roomId: "", lastReadSeq: 0, unreadCount: 0 });
+      vi.useRealTimers();
+    }
+  });
+});

@@ -192,7 +192,9 @@ describe("MessageList · mở phòng tại tin chưa đọc đầu tiên (US-CHA
     // Vạch ở mép trên khung nhìn (chừa khe) ⇒ tin 101 nằm trong khung nhìn ngay dưới nó.
     expect(scroller().scrollTop).toBe(LAYOUT.dividerTop - UNREAD_DIVIDER_TOP_GAP_PX);
     expect(onMarkRead).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /25 tin mới/ })).toBeTruthy();
+    // Vạch đã nói «25 tin chưa đọc». Nút «↓ 25 tin mới» cùng lúc là lặp đúng con số đó, và nút nổi giữa
+    // đáy khung đè lên chữ của tin đang đọc (lượt đo trình duyệt thật). Nút chỉ đếm tin tới SAU lúc mở.
+    expect(screen.queryByRole("button", { name: /tin mới/ })).toBeNull();
   });
 
   it("badge chỉ về 0 khi cuộn SÁT ĐÁY — cuộn giữa chừng không báo đọc", () => {
@@ -202,6 +204,8 @@ describe("MessageList · mở phòng tại tin chưa đọc đầu tiên (US-CHA
 
     userScrollsTo(3000);
     expect(onMarkRead).not.toHaveBeenCalled();
+    // Cuộn dở trong phần chưa đọc, không có tin nào tới thêm ⇒ không có gì «mới» để báo.
+    expect(screen.queryByRole("button", { name: /tin mới/ })).toBeNull();
 
     userScrollsTo(LAYOUT.scrollHeight - LAYOUT.clientHeight);
     expect(onMarkRead).toHaveBeenCalledWith(125);
@@ -434,7 +438,7 @@ describe("MessageList · số chưa đọc vượt trang đầu (> 50)", () => {
 });
 
 describe("MessageList · tin mới tới khi đang đọc giữa chừng", () => {
-  it("đang ở vạch, 2 tin mới tới ⇒ khung nhìn ĐỨNG YÊN, nút «↓ 27 tin mới»", () => {
+  it("đang ở vạch, 2 tin mới tới ⇒ khung nhìn ĐỨNG YÊN, nút «↓ 2 tin mới» (không cộng 25 của vạch)", () => {
     installLayout(LAYOUT);
     const room = roomWith({});
     const { rerender } = render(listElement({ room, messages: range(76, 125) }));
@@ -443,7 +447,8 @@ describe("MessageList · tin mới tới khi đang đọc giữa chừng", () =>
     rerender(listElement({ room, messages: range(76, 127) }));
 
     expect(scroller().scrollTop).toBe(before);
-    expect(screen.getByRole("button", { name: /27 tin mới/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^2 tin mới$/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /27 tin mới/ })).toBeNull();
   });
 
   it("đã đọc hết rồi cuộn lên, 3 tin mới tới ⇒ không kéo, «↓ 3 tin mới»; bấm ⇒ xuống đáy + báo đọc", () => {

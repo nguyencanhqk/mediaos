@@ -125,14 +125,17 @@ export function MessageList({
   // ⚠️ `unread !== null` ⇒ KHỞI TẠO `false`. Mã cũ khởi tạo `true` nên effect đánh dấu đọc chạy ngay lần
   // vẽ đầu và badge về 0 trước khi người dùng thấy tin chưa đọc nào (ca RED của WO).
   const [isNearBottom, setNearBottom] = useState(unread === null);
-  /** `room_seq` cao nhất người dùng ĐÃ THẤY — mốc của nút «↓ N tin mới». Chỉ tiến. */
-  const [seenUpToSeq, setSeenUpToSeq] = useState(() =>
-    unread !== null
-      ? unread.firstUnreadSeq - 1
-      : messages.length > 0
-        ? messages[messages.length - 1].roomSeq
-        : 0,
-  );
+  /**
+   * Mốc của nút «↓ N tin mới»: `room_seq` cao nhất đã BÁO cho người dùng — đã thấy ở đáy, hoặc đã nằm
+   * trong số của vạch. Chỉ tiến. Lúc mở = tin mới nhất đã biết: phần chưa đọc đã có vạch «N tin chưa đọc»
+   * nói, nút chỉ đếm tin tới SAU lúc mở. Mốc cũ (`firstUnreadSeq − 1`) làm nút «↓ 25 tin mới» hiện ngay lần
+   * vẽ đầu, lặp đúng số của vạch, và nút nổi giữa đáy khung đè lên chữ tin đang đọc (lượt đo trình duyệt).
+   */
+  const [seenUpToSeq, setSeenUpToSeq] = useState(() => {
+    const known = room.lastMessageSeq;
+    const loaded = messages.length > 0 ? messages[messages.length - 1].roomSeq : 0;
+    return typeof known === "number" && Number.isFinite(known) ? Math.max(known, loaded) : loaded;
+  });
   /** Vòng nạp `beforeSeq` CHỈ để với tới mốc chưa đọc (khác lần nạp do người dùng cuộn lên). */
   const [catchUp, setCatchUp] = useState({ pages: 0, exhausted: false });
   const catchUpInFlightRef = useRef(false);
