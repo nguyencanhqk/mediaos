@@ -175,7 +175,7 @@ async (page) => {
   });
   await page.setViewportSize({ width: 1366, height: 900 });
 
-  const PARTS = ["A", "A2", "B", "C"];
+  const PARTS = ["L", "A", "A2", "B", "C"];
   async function run(name, fn) {
     if (!PARTS.includes(name)) return;
     try {
@@ -195,6 +195,55 @@ async (page) => {
         ok: hit.length === 1 && hit[0].seq === LAST_SEQ[k],
       };
     });
+
+  // ── L · bố cục hàng chip (lượt đo lại sau 7282a22d): xuống dòng, không cuộn ngang, mọi chip trọn trong cột ──
+  // «Bấm được bằng chuột» = elementFromPoint ở tâm chip trả về chính chip đó (không bị cắt, không bị đè).
+  const chipBar = () =>
+    page.evaluate(() => {
+      const bar = document.querySelector('[data-testid="chat-room-chips"]');
+      if (!bar) return null;
+      const b = bar.getBoundingClientRect();
+      const cs = getComputedStyle(bar);
+      const chips = [...bar.querySelectorAll('[data-testid="chat-room-chip"]')].map((c) => {
+        const r = c.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return {
+          key: c.getAttribute("data-chip"),
+          text: c.textContent.trim(),
+          left: Math.round(r.left - b.left),
+          right: Math.round(r.right - b.left),
+          top: Math.round(r.top - b.top),
+          insideBar: r.left >= b.left - 0.5 && r.right <= b.right + 0.5,
+          clickableAtCenter: !!hit && (hit === c || c.contains(hit)),
+        };
+      });
+      return {
+        barWidth: Math.round(b.width),
+        barHeight: Math.round(b.height),
+        clientWidth: bar.clientWidth,
+        scrollWidth: bar.scrollWidth,
+        hasHorizontalScroll: bar.scrollWidth > bar.clientWidth,
+        overflowX: cs.overflowX,
+        flexWrap: cs.flexWrap,
+        rows: new Set(chips.map((c) => c.top)).size,
+        chips,
+        listTop: Math.round(
+          document.querySelector('[data-testid="chat-room-item"]')?.getBoundingClientRect().top ??
+            -1,
+        ),
+        barBottom: Math.round(b.bottom),
+      };
+    });
+  await run("L", async () => {
+    await openChat("L-load", "six");
+    result.L = { chipBar: await chipBar() };
+    await shot("unreadnav-L1-chip-row.png");
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.waitForTimeout(300);
+    result.L.chipBarAt1024 = await chipBar();
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.waitForTimeout(300);
+  });
 
   // ── A · KPI #4: /chat, 6 phòng chưa đọc → chip «Chưa đọc» → «Đọc hết» ⇒ ≤ 2 thao tác, 0 chuyển trang ──
   await run("A", async () => {
