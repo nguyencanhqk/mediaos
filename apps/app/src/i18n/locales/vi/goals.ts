@@ -584,4 +584,35 @@ export default {
       later: "Để sau",
     },
   },
+
+  // ─── S20-GOAL-BULKACTIVATE-1 (APPEND) — kích hoạt hàng loạt mục tiêu Nháp trên /goals ─────────────
+  bulkActivate: {
+    // Chip lọc = tham số `status=Draft` trên URL (+ chế độ danh sách để chọn được).
+    draftChip: "Nháp",
+    region: "Hành động hàng loạt",
+    selectAll: "Chọn tất cả mục tiêu trên danh sách",
+    selectRow: "Chọn {{name}}",
+    selected: "Đã chọn {{count}} mục tiêu",
+    draftOnly: "Chỉ {{count}} mục Nháp được kích hoạt — mục khác giữ nguyên.",
+    submit: "Kích hoạt ({{count}})",
+    clear: "Bỏ chọn",
+    running: "Đang kích hoạt {{done}}/{{total}}…",
+    confirm: {
+      title: "Kích hoạt {{count}} mục tiêu Nháp?",
+      description:
+        "Mỗi mục tiêu được gửi riêng và được máy chủ kiểm tra lại. Mục bị từ chối giữ trạng thái Nháp, kèm lý do.",
+    },
+    toast: {
+      allDone: "Đã kích hoạt {{count}} mục tiêu",
+      partial: "{{ok}} thành công, {{failed}} lỗi — {{reason}}",
+      unprocessed:
+        "Mất kết nối giữa chừng — {{ok}} thành công, {{failed}} lỗi, {{unprocessed}} mục tiêu chưa xử lý. Kiểm tra mạng rồi thử lại.",
+    },
+    report: {
+      title: "Kết quả kích hoạt",
+      rejected: "{{code}} — {{name}}: {{reason}}",
+      unprocessed: "{{count}} mục tiêu chưa xử lý — vẫn được chọn để thử lại.",
+      dismiss: "Đóng",
+    },
+  },
 } as const;

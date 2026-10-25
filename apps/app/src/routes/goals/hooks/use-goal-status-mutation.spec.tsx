@@ -270,6 +270,58 @@ describe("useGoalStatusMutation — thành công", () => {
   });
 });
 
+describe("useGoalStatusMutation({ notify: false }) — kích hoạt hàng loạt tự tổng kết", () => {
+  function setupSilent() {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    client.setQueryData(goalKeys.detail(GOAL_ID), makeGoal());
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
+      </QueryClientProvider>
+    );
+    const view = renderHook(() => useGoalStatusMutation({ notify: false }), { wrapper });
+    const detailStatus = () =>
+      client.getQueryData<GoalCoreResponseDto>(goalKeys.detail(GOAL_ID))?.status;
+    return { view, detailStatus };
+  }
+
+  it("bị từ chối ⇒ vẫn rollback, KHÔNG toast từng mục, settleStatus trả lỗi gốc", async () => {
+    const error = vi.spyOn(toast, "error");
+    const forbidden = new ApiError({ status: 403, code: "FORBIDDEN", message: "Forbidden" });
+    mockUpdateGoal.mockRejectedValue(forbidden);
+    const { view, detailStatus } = setupSilent();
+
+    let settled: unknown;
+    await act(async () => {
+      settled = await view.result.current.settleStatus({ goalId: GOAL_ID, status: "Active" });
+    });
+
+    expect(settled).toEqual({ ok: false, error: forbidden });
+    expect(detailStatus()).toBe("Draft");
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("thành công ⇒ KHÔNG toast từng mục, settleStatus trả mục tiêu đã lưu", async () => {
+    const success = vi.spyOn(toast, "success");
+    const saved = makeGoal({ status: "Active" });
+    mockUpdateGoal.mockResolvedValue(saved);
+    const { view } = setupSilent();
+
+    let settled: unknown;
+    await act(async () => {
+      settled = await view.result.current.settleStatus({ goalId: GOAL_ID, status: "Active" });
+    });
+
+    expect(settled).toEqual({ ok: true, goal: saved });
+    expect(success).not.toHaveBeenCalled();
+  });
+});
+
 describe("useGoalStatusMutation — trạng thái cũ trong cache phải hợp lệ", () => {
   it("cache chi tiết giữ giá trị lạ ⇒ rollback dùng trạng thái HỢP LỆ từ cache khác, không chép giá trị lạ", async () => {
     const pending = deferred<GoalCoreResponseDto>();
