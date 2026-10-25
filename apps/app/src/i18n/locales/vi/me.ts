@@ -246,9 +246,12 @@ export default {
   // nhân bản ở đây — dùng namespace 'goals'.
   goals: {
     title: "Mục tiêu của tôi",
-    empty: "Bạn chưa có mục tiêu nào đang chạy.",
+    // S20-GOAL-QUICKSTART-1 — thẻ liệt kê mọi mục tiêu ĐANG MỞ của kỳ hiện tại (kể cả Nháp).
+    empty: "Bạn chưa có mục tiêu nào trong kỳ này.",
     checkin: "Check-in",
     viewAll: "Xem tất cả",
+    viewAllCount: "Xem tất cả ({{count}})",
+    create: "Tạo mục tiêu",
     error: {
       title: "Không tải được mục tiêu của bạn",
       description: "Đã có lỗi khi tải mục tiêu. Vui lòng thử lại.",

@@ -70,8 +70,17 @@ export const PROGRESS_PERCENT_MAX = 100;
  * prev/next thuần: còn đủ `limit` dòng thì CÓ THỂ còn trang sau. */
 export const GOAL_UPDATES_PAGE_SIZE = 20;
 
-/** Số mục tiêu hiển thị trong card "Mục tiêu của tôi" ở Tổng quan ME (xem đủ ở /goals). */
-export const ME_GOALS_PREVIEW_LIMIT = 3;
+/**
+ * Số mục tiêu hiển thị trong card "Mục tiêu của tôi" ở Tổng quan ME (xem đủ ở /goals?mine=1).
+ * S20-GOAL-QUICKSTART-1 (US-GOAL-NV-04): 3 → 5 dòng, thẻ liệt kê cả mục Nháp của kỳ hiện tại.
+ */
+export const ME_GOALS_PREVIEW_LIMIT = 5;
+
+/**
+ * Số mục tiêu thẻ /me tải về (`GET /me/goals?limit=`): API trả mảng, KHÔNG có tổng ⇒ thẻ tự đếm phần
+ * đang mở (ẩn Completed/Cancelled ở client). Đủ `limit` dòng ⇒ có thể còn nữa (nhãn «N+»).
+ */
+export const ME_GOALS_FETCH_LIMIT = 20;
 
 /**
  * Cặp quyền TASK mà FE cần cho đường gắn/tháo việc ↔ mục tiêu. CỔNG THỨ HAI (ngoài `update:goal`) do

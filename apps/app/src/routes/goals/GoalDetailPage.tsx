@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,7 +36,7 @@ import {
   TabsTrigger,
 } from "@mediaos/ui";
 import { GOAL_ENGINE_PAIRS, TASK_CREATE_PAIR_FOR_DECOMPOSE } from "./constants";
-import { formatPeriod } from "./goal-format";
+import { formatPeriod, goalCheckinLockReason } from "./goal-format";
 import { GoalFinalizedBadge, GoalLevelBadge, GoalStatusBadge } from "./components/GoalBadges";
 import { GoalProgressBar } from "./components/GoalProgressBar";
 import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
@@ -45,6 +45,11 @@ import { GoalCheckinsTab } from "./components/GoalCheckinsTab";
 import { GoalDecomposeWizard } from "./components/GoalDecomposeWizard";
 import { useDecomposeWizardOpen } from "./components/GoalDecomposeWizardResume";
 import { GoalLinkedTasksTab } from "./components/GoalLinkedTasksTab";
+import {
+  GoalActivateButton,
+  GoalCheckinLockHint,
+  GoalCompletionBanner,
+} from "./components/GoalStatusQuickActions";
 import { SimpleTable, TabError, TabSkeleton } from "./components/GoalTabPrimitives";
 import type { GoalDetailTab } from "./goal-list-search";
 import { childGoalPrefill } from "./goal-form-prefill";
@@ -92,6 +97,12 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
     GOAL_ENGINE_PAIRS.UPDATE.action,
     GOAL_ENGINE_PAIRS.UPDATE.resourceType,
   );
+  const canCheckin = useCan(
+    GOAL_ENGINE_PAIRS.CHECKIN.action,
+    GOAL_ENGINE_PAIRS.CHECKIN.resourceType,
+  );
+  // S20-GOAL-QUICKSTART-1 — nút Check-in đang khoá trỏ tới dòng lý do (aria-describedby).
+  const checkinLockHintId = useId();
 
   const goalQuery = useQuery({
     queryKey: goalKeys.detail(goalId),
@@ -139,6 +150,9 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
     );
   }
 
+  // Chốt kỳ (GOAL-ERR-005) hoặc status ≠ Active (GOAL-ERR-006) ⇒ khoá ở client, kèm lý do.
+  const checkinLocked = goalCheckinLockReason(goal) !== null;
+
   return (
     <div className="space-y-4 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -165,13 +179,17 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
             <Button
               size="sm"
               data-testid="goal-checkin-open"
-              disabled={finalized || goal.status !== "Active"}
+              disabled={checkinLocked}
+              aria-describedby={checkinLocked ? checkinLockHintId : undefined}
               onClick={() => setCheckinOpen(true)}
             >
               <CheckCircle2 className="mr-2 h-4 w-4" />
               {t("checkinActions.open")}
             </Button>
           </PermissionGate>
+          {/* S20-GOAL-QUICKSTART-1 — «Kích hoạt» một chạm cho mục tiêu Nháp (gate update:goal bên trong),
+              cũng là lối tắt của lý do khoá Check-in ngay dưới header. */}
+          <GoalActivateButton goal={goal} />
           {/* Chốt kỳ ↔ Mở lại: CÙNG cặp ('finalize','goal'), chỉ đổi nhãn/hành vi theo finalizedAt. */}
           <PermissionGate
             action={GOAL_ENGINE_PAIRS.FINALIZE.action}
@@ -232,6 +250,10 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
           </PermissionGate>
         </div>
       </div>
+
+      {canCheckin && <GoalCheckinLockHint goal={goal} id={checkinLockHintId} />}
+      {/* key: «Để sau» là của TỪNG mục tiêu — đổi sang mục tiêu khác trên cùng trang phải đọc lại. */}
+      <GoalCompletionBanner key={goal.id} goal={goal} />
 
       {finalized && (
         <div className="rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-warning">

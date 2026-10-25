@@ -60,14 +60,24 @@ vi.mock("@mediaos/web-core", () => {
       reopen: vi.fn(),
       linkTasks: vi.fn(),
       unlinkTask: vi.fn(),
+      // S20-GOAL-QUICKSTART-1 — «Kích hoạt» / «Đánh dấu Hoàn thành» = PATCH {status}.
+      updateGoal: vi.fn(),
     },
+    // Hook đổi trạng thái: lỗi không có mã riêng ⇒ thông điệp của error-mapper (stub: message thô).
+    mapApiErrorToUi: (e: unknown) => ({
+      behavior: "TOAST_ERROR",
+      message: e instanceof Error ? e.message : "",
+    }),
+    meKeys: { all: ["me"], goals: (p?: unknown) => ["me", "goals", p] },
     goalInvalidation: {
+      update: () => [["goals", "list"]],
       remove: () => [["goals", "list"]],
       checkin: () => [["goals", "list"]],
       finalize: () => [["goals", "list"]],
       linkTasks: () => [["goals", "list"]],
     },
     goalKeys: {
+      all: ["goals"],
       detail: (id: string) => ["goals", "detail", id],
       linkedTasks: (id: string) => ["goals", "linked-tasks", id],
       updates: (id: string, p?: unknown) => ["goals", "updates", id, p],
@@ -438,5 +448,139 @@ describe("GoalDetailPage — Thêm mục tiêu con", () => {
     await waitFor(() => expect(mockListGoals).toHaveBeenCalled());
     await screen.findByText("Chưa có mục tiêu con");
     expect(screen.queryByRole("button", { name: /Thêm mục tiêu con/ })).not.toBeInTheDocument();
+  });
+});
+
+// ── S20-GOAL-QUICKSTART-1 (US-GOAL-NV-02) — «Kích hoạt» · gợi ý Hoàn thành · lý do khoá Check-in ──────
+describe("GoalDetailPage — đổi trạng thái một chạm (NV-02)", () => {
+  const mockUpdateGoal = goalApi.updateGoal as ReturnType<typeof vi.fn>;
+  const DRAFT = { ...BASE_GOAL, level: "employee", status: "Draft" };
+  const DONE_100 = { ...BASE_GOAL, progressPercent: 100 };
+  const BANNER = /Đã đạt 100%\. Đánh dấu Hoàn thành\?/;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("(s1) Draft + update:goal ⇒ «Kích hoạt»; Check-in khoá kèm lý do «Mục tiêu đang ở Nháp»", async () => {
+    mockGetGoal.mockResolvedValue(DRAFT);
+    renderPage();
+    const activate = await screen.findByRole("button", { name: "Kích hoạt" });
+    expect(activate).toBeEnabled();
+    const checkin = screen.getByTestId("goal-checkin-open");
+    expect(checkin).toBeDisabled();
+    const reason = screen.getByTestId("goal-checkin-lock-reason");
+    expect(reason).toHaveTextContent("Mục tiêu đang ở Nháp");
+    expect(checkin).toHaveAttribute("aria-describedby", reason.id);
+  });
+
+  it("(s2) bấm «Kích hoạt» ⇒ PATCH {status:'Active'}, Check-in bấm được ngay", async () => {
+    mockGetGoal.mockResolvedValue(DRAFT);
+    mockUpdateGoal.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Kích hoạt" }));
+    // mutationFn chạy SAU onMutate (huỷ query đang chạy + ghi lạc quan) ⇒ chờ một nhịp.
+    await waitFor(() => expect(mockUpdateGoal).toHaveBeenCalledWith("g-1", { status: "Active" }));
+    await waitFor(() => expect(screen.getByTestId("goal-checkin-open")).toBeEnabled());
+    expect(screen.queryByTestId("goal-checkin-lock-reason")).not.toBeInTheDocument();
+  });
+
+  it("(s3) BE 403 (ngoài phạm vi) ⇒ về Draft, «Kích hoạt» trở lại, Check-in khoá lại", async () => {
+    mockGetGoal.mockResolvedValue(DRAFT);
+    const { ApiError } = await import("@mediaos/web-core");
+    const MockApiError = ApiError as unknown as new (m: string) => Error;
+    mockUpdateGoal.mockRejectedValue(Object.assign(new MockApiError("Forbidden"), { status: 403 }));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Kích hoạt" }));
+    await waitFor(() => expect(mockUpdateGoal).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId("goal-checkin-open")).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Kích hoạt" })).toBeInTheDocument();
+    expect(screen.getByTestId("goal-checkin-lock-reason")).toHaveTextContent("Nháp");
+  });
+
+  it("(s4) thiếu update:goal ⇒ không «Kích hoạt», không banner", async () => {
+    perm.denied.add("update:goal");
+    mockGetGoal.mockResolvedValue(DRAFT);
+    const view = renderPage();
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByRole("button", { name: "Kích hoạt" })).not.toBeInTheDocument();
+    view.unmount();
+
+    mockGetGoal.mockResolvedValue(DONE_100);
+    renderPage();
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+  });
+
+  it("(s5) đã chốt kỳ ⇒ lý do «Đã chốt kỳ», không «Kích hoạt»", async () => {
+    mockGetGoal.mockResolvedValue({ ...DRAFT, finalizedAt: "2026-04-01T00:00:00.000Z" });
+    renderPage();
+    expect(await screen.findByTestId("goal-checkin-lock-reason")).toHaveTextContent("Đã chốt kỳ");
+    expect(screen.queryByRole("button", { name: "Kích hoạt" })).not.toBeInTheDocument();
+  });
+
+  it("(s6) Active · 100% · chưa chốt ⇒ banner; bấm «Đánh dấu Hoàn thành» ⇒ PATCH Completed", async () => {
+    mockGetGoal.mockResolvedValue(DONE_100);
+    mockUpdateGoal.mockResolvedValue({ ...DONE_100, status: "Completed" });
+    renderPage();
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    expect(mockUpdateGoal).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Đánh dấu Hoàn thành" }));
+    await waitFor(() =>
+      expect(mockUpdateGoal).toHaveBeenCalledWith("g-1", { status: "Completed" }),
+    );
+  });
+
+  it("(s7) 99,5% hoặc chưa đo (NULL) ⇒ không banner", async () => {
+    mockGetGoal.mockResolvedValue({ ...BASE_GOAL, progressPercent: 99.5 });
+    const view = renderPage();
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+    view.unmount();
+
+    mockGetGoal.mockResolvedValue({ ...BASE_GOAL, progressPercent: null });
+    renderPage();
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+  });
+
+  it("(s8) Completed mà % tụt dưới 100 ⇒ không banner, không tự đổi trạng thái", async () => {
+    mockGetGoal.mockResolvedValue({ ...BASE_GOAL, status: "Completed", progressPercent: 80 });
+    renderPage();
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+    expect(mockUpdateGoal).not.toHaveBeenCalled();
+  });
+
+  it("(s9) «Để sau» ⇒ ẩn và tải lại vẫn ẩn cho mục tiêu đó", async () => {
+    mockGetGoal.mockResolvedValue(DONE_100);
+    const view = renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Để sau" }));
+    expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+    view.unmount();
+
+    renderPage();
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+    expect(mockUpdateGoal).not.toHaveBeenCalled();
+  });
+
+  it("(s10) localStorage hỏng ⇒ banner vẫn hiện, «Để sau» không ném", async () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("SecurityError");
+    });
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+    try {
+      mockGetGoal.mockResolvedValue(DONE_100);
+      renderPage();
+      expect(await screen.findByText(BANNER)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Để sau" }));
+      expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+    }
   });
 });
