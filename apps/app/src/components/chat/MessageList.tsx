@@ -276,10 +276,12 @@ export function MessageList({
     if (unreadAnchor.kind !== "older-needed" || isLoadingOlder || catchUpInFlightRef.current)
       return;
     catchUpInFlightRef.current = true;
-    setCatchUp((c) => ({ ...c, pages: c.pages + 1 }));
+    // `pages` tăng khi trang ĐÃ VỀ, không lúc xin: tăng sớm thì trong lúc trang cuối còn bay
+    // `canCatchUpOlder` đã `false` ⇒ phép định vị đặt vạch tạm ở tin cũ nhất đang giữ và chốt `done`, rồi
+    // trang về prepend KHÔNG mỏ neo — khung nhìn trôi khỏi vạch, mốc thật trong trang đó bị bỏ qua.
     const settle = (added: number): void => {
       catchUpInFlightRef.current = false;
-      setCatchUp((c) => ({ ...c, exhausted: c.exhausted || added === 0 }));
+      setCatchUp((c) => ({ pages: c.pages + 1, exhausted: c.exhausted || added === 0 }));
     };
     onLoadOlder().then(settle, () => settle(0));
   }, [
@@ -307,7 +309,9 @@ export function MessageList({
   useEffect(() => {
     if (!isNearBottom || !isPageVisible || messages.length === 0) return;
     // `document.hidden`: tab ở nền không phải là "đã đọc". Không có vế này thì mở 5 tab là badge tắt
-    // sạch dù người dùng chưa nhìn cái nào.
+    // sạch dù người dùng chưa nhìn cái nào. Giữ CẢ HAI phép kiểm có chủ ý: `isPageVisible` là state —
+    // nằm trong deps để effect CHẠY LẠI khi tab hiện lại, nhưng tụt một nhịp so với thực tế (tin mới tới
+    // trước khi `visibilitychange` kịp cập nhật state); đọc đồng bộ `document.hidden` chặn khe đó.
     if (typeof document !== "undefined" && document.hidden) return;
     const latestSeq = messages[messages.length - 1].roomSeq;
     setSeenUpToSeq((prev) => Math.max(prev, latestSeq));
