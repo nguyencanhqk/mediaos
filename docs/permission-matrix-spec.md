@@ -12,26 +12,26 @@
 
 PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm `action` lên `resource/objId` không?"**. Cross-company KHÔNG thuộc tầng này — đó là RLS.
 
-| Tầng | Tên              | Hỏi gì                                               | Nguồn                        | Kết quả                            |
-| ---- | ---------------- | ---------------------------------------------------- | ---------------------------- | ---------------------------------- |
-| 1    | **RBAC**         | User có `permission(action, resource)` qua role nào? | `roles` → `role_permissions` | allow / deny / none                |
-| 2    | **Scope**        | Quyền phủ tới _phạm vi dữ liệu_ chứa object này?     | `data_scope` của grant       | object có trong scope?             |
-| 3    | **Object-level** | Có grant/deny gắn trực tiếp lên _instance_ này?      | object grant                 | allow/deny — **override Tầng 1+2** |
-| 4    | **Sensitive**    | Action nhạy cảm? Đã cấp **tường minh** chưa?         | `is_sensitive` + grant riêng | gate cứng — **không kế thừa**      |
+| Tầng | Tên | Hỏi gì | Nguồn | Kết quả |
+| --- | --- | --- | --- | --- |
+| 1 | **RBAC** | User có `permission(action, resource)` qua role nào? | `roles` → `role_permissions` | allow / deny / none |
+| 2 | **Scope** | Quyền phủ tới *phạm vi dữ liệu* chứa object này? | `data_scope` của grant | object có trong scope? |
+| 3 | **Object-level** | Có grant/deny gắn trực tiếp lên *instance* này? | object grant | allow/deny — **override Tầng 1+2** |
+| 4 | **Sensitive** | Action nhạy cảm? Đã cấp **tường minh** chưa? | `is_sensitive` + grant riêng | gate cứng — **không kế thừa** |
 
 - **Deny thắng** (deny-overrides) · **deny-by-default** (thiếu grant → từ chối) · **fail-closed** (route không khai quyền → 403).
 - **Sensitive không kế thừa qua wildcard** — `view dữ liệu nhạy cảm` (CCCD/lương) phải có ALLOW tường minh, kể cả Company Admin.
 
 ### 1.1 Phạm vi dữ liệu (data scope — SPEC-01 §11.2)
 
-| Scope          | Ý nghĩa                                                        |
-| -------------- | -------------------------------------------------------------- |
-| **Own**        | Chỉ dữ liệu của chính mình                                     |
-| **Team**       | Dữ liệu team/nhân viên mình quản lý (`direct_manager_id = me`) |
-| **Department** | Dữ liệu trong phòng ban                                        |
-| **Company**    | Toàn công ty                                                   |
-| **System**     | Toàn hệ thống                                                  |
-| **Project**    | _(chỉ TASK)_ dữ liệu trong dự án user là thành viên            |
+| Scope | Ý nghĩa |
+| --- | --- |
+| **Own** | Chỉ dữ liệu của chính mình |
+| **Team** | Dữ liệu team/nhân viên mình quản lý (`direct_manager_id = me`) |
+| **Department** | Dữ liệu trong phòng ban |
+| **Company** | Toàn công ty |
+| **System** | Toàn hệ thống |
+| **Project** | _(chỉ TASK)_ dữ liệu trong dự án user là thành viên |
 
 **Role hệ thống mặc định + scope:** `SUPER_ADMIN` (System) · `COMPANY_ADMIN` (Company) · `HR` (Company) · `MANAGER` (Team) · `EMPLOYEE` (Own). User có thể giữ **nhiều role**.
 
@@ -43,18 +43,18 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 
 **Mã quyền:** `AUTH.LOGIN.ACCESS · AUTH.PROFILE.VIEW · AUTH.PROFILE.UPDATE · AUTH.PASSWORD.CHANGE · AUTH.USER.{VIEW,CREATE,UPDATE,LOCK,UNLOCK,ASSIGN_ROLE} · AUTH.ROLE.{VIEW,CREATE,UPDATE,DELETE} · AUTH.PERMISSION.{VIEW,ASSIGN} · AUTH.AUDIT_LOG.VIEW`
 
-| Chức năng                                         | SA  | ADM           | HR  | MGR | EMP |
-| ------------------------------------------------- | --- | ------------- | --- | --- | --- |
-| Đăng nhập/xuất · Đổi mật khẩu · Xem hồ sơ cá nhân | Có  | Có            | Có  | Có  | Có  |
-| Xem danh sách user                                | Có  | Có            | —   | —   | —   |
-| Tạo / Cập nhật user                               | Có  | Có            | Cấp | —   | —   |
-| Khóa / Mở khóa user                               | Có  | Có            | —   | —   | —   |
-| Xem / Tạo / Cập nhật role                         | Có  | Có (giới hạn) | —   | —   | —   |
-| Gán role cho user                                 | Có  | Có            | —   | —   | —   |
-| Xem / Gán permission                              | Có  | Có (giới hạn) | —   | —   | —   |
-| Xem audit log AUTH                                | Có  | Cấp           | —   | —   | —   |
+| Chức năng | SA | ADM | HR | MGR | EMP |
+|---|---|---|---|---|---|
+| Đăng nhập/xuất · Đổi mật khẩu · Xem hồ sơ cá nhân | Có | Có | Có | Có | Có |
+| Xem danh sách user | Có | Có | — | — | — |
+| Tạo / Cập nhật user | Có | Có | Cấp | — | — |
+| Khóa / Mở khóa user | Có | Có | — | — | — |
+| Xem / Tạo / Cập nhật role | Có | Có (giới hạn) | — | — | — |
+| Gán role cho user | Có | Có | — | — | — |
+| Xem / Gán permission | Có | Có (giới hạn) | — | — | — |
+| Xem audit log AUTH | Có | Cấp | — | — | — |
 
-> **CHỐT canonical (S2-FND-BE-5):** _audit-log viewer_ = cặp engine **`view:audit-log`** (mig 0340, `is_sensitive=true`, grant `company-admin`) — đây là cổng DUY NHẤT của `GET /foundation/audit-logs`. Cặp `view:foundation-audit-log`/`export:foundation-audit-log` (mig 0435, non-sensitive) **DEPRECATE cho app-surface**: KHÔNG route nào enforce, seed row GIỮ (append-only). `MODULE_APP_METADATA.AUTH` dùng `view:audit-log` (không `view:foundation-audit-log`).
+> **CHỐT canonical (S2-FND-BE-5):** *audit-log viewer* = cặp engine **`view:audit-log`** (mig 0340, `is_sensitive=true`, grant `company-admin`) — đây là cổng DUY NHẤT của `GET /foundation/audit-logs`. Cặp `view:foundation-audit-log`/`export:foundation-audit-log` (mig 0435, non-sensitive) **DEPRECATE cho app-surface**: KHÔNG route nào enforce, seed row GIỮ (append-only). `MODULE_APP_METADATA.AUTH` dùng `view:audit-log` (không `view:foundation-audit-log`).
 >
 > **CHỐT `GET /foundation/company/branding` = Authenticated (S5-BRAND-FE-2):** đường ĐỌC thương hiệu công ty (logo + favicon) chỉ cần JWT hợp lệ, **KHÔNG** cặp quyền. Lý do: `view:foundation-company` DB thật chỉ cấp `company-admin`, gate bằng nó ⇒ logo trên vỏ app + favicon động chết với mọi nhân viên còn lại. Logo/favicon là tài sản thương hiệu công khai trong tenant. Cô lập tenant do `CompanyGuard` + `withTenant` ép; `CompanyBrandingFileResolver.canRead` kiểm `entityId === companyId`; `resolveAsset` chỉ ký file CÓ link branding sống (chống đầu độc con trỏ `companies.logo_url`).
 >
@@ -70,27 +70,27 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >
 > Lý do: người chia sẻ đã được phép xem tệp lúc gắn và có vết; thu hồi theo gốc kéo theo rủi ro gỡ dây chuyền nhầm liên kết hợp lệ và người dùng ở thực thể đích bỗng mất tệp. Phía DB: `docs/DB/DB-08 …` §8.7 (bảng `file_links`) quy tắc 9–11.
 
-> **CHỐT `GET /foundation/settings/public` = Authenticated** (chỉ cần JWT hợp lệ, KHÔNG cần `view:foundation-setting`); server vẫn lọc `is_public && !is_sensitive` + mask secret. `resolve`/`PATCH company-settings` VẪN gate `view`/`update:foundation-setting`. _(Pin API-09 chuẩn hoá surface → S2-FND-DOC-1.)_
+> **CHỐT `GET /foundation/settings/public` = Authenticated** (chỉ cần JWT hợp lệ, KHÔNG cần `view:foundation-setting`); server vẫn lọc `is_public && !is_sensitive` + mask secret. `resolve`/`PATCH company-settings` VẪN gate `view`/`update:foundation-setting`. *(Pin API-09 chuẩn hoá surface → S2-FND-DOC-1.)*
 
 > **CHỐT đường ĐỌC `/org` — ranh giới "CƠ CẤU ≠ NGƯỜI" (S6-SEC-ORG-1, đóng KI-030):**
 >
-> | Route                                                     | Cổng                                                                                    | Vì sao                                                                                                                                                                                                                                                                                                         |
-> | --------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | `GET /org/units` · `/org/units/tree` · `/org/departments` | **Authenticated**                                                                       | Danh mục cơ cấu: tên phòng ban + hình dạng cây. `apps/app` dùng trực tiếp ở `OrgChartPage` + `TaskSidebarTree` ⇒ gate = gãy UI mọi nhân viên                                                                                                                                                                   |
-> | `GET /org/roles`                                          | **Authenticated**                                                                       | Danh mục vai trò, trả đúng `{ id, name }`; **không** nêu ai giữ vai trò nào. Repo đã loại role operator-plane khỏi đường đọc                                                                                                                                                                                   |
-> | `GET /org/employees`                                      | **`view:user`** + **`data_scope`**                                                      | Trả `id · email · fullName · status` + team membership. Từ `S6-SEC-ORGSCOPE-1`: hàng được BOUND theo scope, không còn "toàn tenant". Động từ = `view:user` từ `S6-SEC-PERMVERB-1` (DECISIONS-06 D-41) — **cùng cặp** với `GET /auth/users`                                                                     |
-> | `GET /org/teams`                                          | **`read:team`** (vế cơ cấu) + **`view:user` + `data_scope`** (`leaderUserName`)         | Cơ cấu team = ai thuộc nhóm nào. Từ `S6-SEC-IDENTITYBOUND-1` (N-1e, KI-052): **tên trưởng nhóm** là danh tính NGƯỜI nên bound theo cặp danh bạ. ⚠️ Khác `members`: `leaderUserName` là `.nullable()` HỢP LỆ (team chưa có trưởng nhóm) ⇒ `null` không mang được thông tin "ngoài scope" ⇒ **bắt buộc bỏ khoá** |
-> | `GET /recycle-bin/employees`                              | **`read:employee`** (vế nghiệp vụ) + **`view:user` + `data_scope`** (hai cột danh tính) | `S6-SEC-IDENTITYBOUND-1` (N-1d, **KI-051**). Trước đó gate `read:employee` rồi trả `userFullName`+`userEmail` của MỌI hồ sơ xoá mềm, **không resolve scope nào** — mà role seeded `employee` giữ `read:employee@Own` với **45/46 user sống** và không có `view:user` nào                                       |
-> | `GET /org/teams/:id/members`                              | **`read:team`** (vế quan hệ) + **`view:user` + `data_scope`** (hai cột danh tính)       | **HAI lớp dữ liệu, HAI chủ quyền** — `S6-SEC-ORGTEAMSCOPE-1` (N-1c, KI-049). `read:team` quyết định truy cập _tài nguyên team_; `userFullName`/`userEmail` bị buộc bởi **đúng cặp danh bạ** của `/org/employees`. Ngoài scope ⇒ **BỎ HẲN KHOÁ** (không trả `null`: contract `userEmail` chưa `.nullable()`)    |
+> | Route | Cổng | Vì sao |
+> |---|---|---|
+> | `GET /org/units` · `/org/units/tree` · `/org/departments` | **Authenticated** | Danh mục cơ cấu: tên phòng ban + hình dạng cây. `apps/app` dùng trực tiếp ở `OrgChartPage` + `TaskSidebarTree` ⇒ gate = gãy UI mọi nhân viên |
+> | `GET /org/roles` | **Authenticated** | Danh mục vai trò, trả đúng `{ id, name }`; **không** nêu ai giữ vai trò nào. Repo đã loại role operator-plane khỏi đường đọc |
+> | `GET /org/employees` | **`view:user`** + **`data_scope`** | Trả `id · email · fullName · status` + team membership. Từ `S6-SEC-ORGSCOPE-1`: hàng được BOUND theo scope, không còn "toàn tenant". Động từ = `view:user` từ `S6-SEC-PERMVERB-1` (DECISIONS-06 D-41) — **cùng cặp** với `GET /auth/users` |
+> | `GET /org/teams` | **`read:team`** (vế cơ cấu) + **`view:user` + `data_scope`** (`leaderUserName`) | Cơ cấu team = ai thuộc nhóm nào. Từ `S6-SEC-IDENTITYBOUND-1` (N-1e, KI-052): **tên trưởng nhóm** là danh tính NGƯỜI nên bound theo cặp danh bạ. ⚠️ Khác `members`: `leaderUserName` là `.nullable()` HỢP LỆ (team chưa có trưởng nhóm) ⇒ `null` không mang được thông tin "ngoài scope" ⇒ **bắt buộc bỏ khoá** |
+> | `GET /recycle-bin/employees` | **`read:employee`** (vế nghiệp vụ) + **`view:user` + `data_scope`** (hai cột danh tính) | `S6-SEC-IDENTITYBOUND-1` (N-1d, **KI-051**). Trước đó gate `read:employee` rồi trả `userFullName`+`userEmail` của MỌI hồ sơ xoá mềm, **không resolve scope nào** — mà role seeded `employee` giữ `read:employee@Own` với **45/46 user sống** và không có `view:user` nào |
+> | `GET /org/teams/:id/members` | **`read:team`** (vế quan hệ) + **`view:user` + `data_scope`** (hai cột danh tính) | **HAI lớp dữ liệu, HAI chủ quyền** — `S6-SEC-ORGTEAMSCOPE-1` (N-1c, KI-049). `read:team` quyết định truy cập *tài nguyên team*; `userFullName`/`userEmail` bị buộc bởi **đúng cặp danh bạ** của `/org/employees`. Ngoài scope ⇒ **BỎ HẲN KHOÁ** (không trả `null`: contract `userEmail` chưa `.nullable()`) |
 >
 > **`data_scope` của `GET /org/employees` (S6-SEC-ORGSCOPE-1 — đóng nợ N-1):** guard chỉ trả lời "có
 > cặp quyền không"; số hàng do `DataScopeService.buildUserScopeCondition` quyết, dựng trên bảng
 > `users`:
 >
-> | scope                 | Thấy gì                                                                                                                                                                               |
-> | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | `Company` · `System`  | Mọi tài khoản trong tenant — **kể cả tài khoản chưa có `employee_profile`** (màn RBAC console dùng route này làm danh sách subject gán role)                                          |
-> | `Own`                 | Chỉ chính mình                                                                                                                                                                        |
+> | scope | Thấy gì |
+> |---|---|
+> | `Company` · `System` | Mọi tài khoản trong tenant — **kể cả tài khoản chưa có `employee_profile`** (màn RBAC console dùng route này làm danh sách subject gán role) |
+> | `Own` | Chỉ chính mình |
 > | `Team` · `Department` | **0 hàng (fail-closed)** — `users` không mang org-mapping, và §13 chỉ cấp `Company` cho cặp đọc tài khoản ⇒ scope hẹp ở đây là ngữ nghĩa chưa định nghĩa. Giống hệt `GET /auth/users` |
 >
 > Cố ý **phi đơn điệu** (`Team` hẹp hơn `Own`): sai về phía 0 hàng, không sai về phía rò. Muốn `Team`
@@ -112,7 +112,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > **KI-051 `GET /recycle-bin/employees`** là lỗ NẶNG NHẤT của cả loạt N-1: cùng lớp lỗi KI-049 nhưng
 > **45/46 user sống** giữ cặp gate (`employee` → `read:employee@Own`) và **không ai trong số đó có
 > `view:user`**, trong khi KI-049 có 0 người. Phơi nhiễm lúc phát hiện = 0 hàng chỉ vì chưa có hồ sơ
-> nào bị xoá mềm — chặn bởi _thiếu dữ liệu_, không phải bởi một lớp kiểm soát nào.
+> nào bị xoá mềm — chặn bởi *thiếu dữ liệu*, không phải bởi một lớp kiểm soát nào.
 > **KI-052 `GET /org/teams`** nằm ở **phương thức bên cạnh trong chính file mà N-1c vừa vá** ⇒ bằng
 > chứng cụ thể rằng vá-theo-route không quét hết file; lần sau vá lớp lỗi này thì quét CẢ FILE.
 >
@@ -138,7 +138,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > của việc bắt sai là người ta gỡ cơ chế.
 >
 > **Census đo lại 2026-08-19 (con số 2026-07-29 "40+ điểm / 7 module" ĐÃ BỊ BÁC BỎ):** **92 điểm chạm /
-> 37 file / 13 module**, trong đó **71 PROJECTION / 34 file / 12 module** — 13 PREDICATE (lớp _oracle_
+> 37 file / 13 module**, trong đó **71 PROJECTION / 34 file / 12 module** — 13 PREDICATE (lớp *oracle*
 > RIÊNG, không cùng lớp lỗ), 6 ORDER BY, 2 GROUP BY. Grep thẳng trượt ba dạng: `alias(users,…)`,
 > `getTableColumns(users)`, và bản đồ cột hằng ở cấp module. **71 là CẬN DƯỚI** — nguồn census là parse
 > TĨNH, tức lớp bằng chứng yếu hơn `fk-tenant-census`/`route-census` (hai file đó có bất biến "0 regex
@@ -154,78 +154,78 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > viết trong docstring như một sự thật). Ai cấp `view:audit-log` ở scope hẹp phải đọc HÀNG của mình
 > trong bảng, không đọc tiêu đề.
 >
-> | route                            | cặp GATE         | TẬP HÀNG bound?                  | CỘT danh tính bound?      | trạng thái      |
-> | -------------------------------- | ---------------- | -------------------------------- | ------------------------- | --------------- |
-> | `GET /auth/login-logs`           | `view:audit-log` | ✔ `login_logs.user_id`           | ✔ `view:user`             | KI-070 **ĐÓNG** |
-> | `GET /auth/security-events`      | `view:audit-log` | ✔ `user_security_events.user_id` | ✔ `view:user` ×2 grant    | KI-070 **ĐÓNG** |
-> | `GET /foundation/audit-logs`     | `view:audit-log` | ✔ `audit_logs.actor_user_id`     | — (không chiếu email/tên) | KI-072 **ĐÓNG** |
-> | `GET /foundation/audit-logs/:id` | `view:audit-log` | ✔ `audit_logs.actor_user_id`     | —                         | KI-072 **ĐÓNG** |
-> | `GET /auth/roles/:id/members`    | `view:user`      | ✔ `users.id` (qua `user_roles`)  | ✔ `view:user`             | KI-071 **ĐÓNG** |
+> | route | cặp GATE | TẬP HÀNG bound? | CỘT danh tính bound? | trạng thái |
+> | --- | --- | --- | --- | --- |
+> | `GET /auth/login-logs` | `view:audit-log` | ✔ `login_logs.user_id` | ✔ `view:user` | KI-070 **ĐÓNG** |
+> | `GET /auth/security-events` | `view:audit-log` | ✔ `user_security_events.user_id` | ✔ `view:user` ×2 grant | KI-070 **ĐÓNG** |
+> | `GET /foundation/audit-logs` | `view:audit-log` | ✔ `audit_logs.actor_user_id` | — (không chiếu email/tên) | KI-072 **ĐÓNG** |
+> | `GET /foundation/audit-logs/:id` | `view:audit-log` | ✔ `audit_logs.actor_user_id` | — | KI-072 **ĐÓNG** |
+> | `GET /auth/roles/:id/members` | `view:user` | ✔ `users.id` (qua `user_roles`) | ✔ `view:user` | KI-071 **ĐÓNG** |
 >
 > • **Hai bảng nhật ký — ĐÃ ĐÓNG** (`S10-SEC-AUDITLOGROW-1`, KI-070). Chặn TẬP HÀNG theo `data_scope`
-> của **chính cặp gate** `view:audit-log`: `Company`/`System` = cả tenant · `Own` = hàng có
-> `user_id = actor` · `Team`/`Department` = **0 hàng** (lattice chưa định nghĩa membership trên bảng
-> nhật ký). `?user_id=` của caller bị **GIAO** với vị từ scope, không được dùng trần. Cơ chế: brand
-> `IdentityGrant` với `basis:"scoped-predicate"` + hàm cổng `rowScopeSql()` (assert `basis` +
-> assert BẢNG); bề mặt ĐÚC vị từ bị pin thành danh sách (`ROW_SCOPE_MINT_PINS`) ⇒ mở một điểm đúc
-> mới là ĐỎ. Cột danh tính trên hai route đó VẪN đi theo cặp danh bạ `view:user` — không gộp.
+>   của **chính cặp gate** `view:audit-log`: `Company`/`System` = cả tenant · `Own` = hàng có
+>   `user_id = actor` · `Team`/`Department` = **0 hàng** (lattice chưa định nghĩa membership trên bảng
+>   nhật ký). `?user_id=` của caller bị **GIAO** với vị từ scope, không được dùng trần. Cơ chế: brand
+>   `IdentityGrant` với `basis:"scoped-predicate"` + hàm cổng `rowScopeSql()` (assert `basis` +
+>   assert BẢNG); bề mặt ĐÚC vị từ bị pin thành danh sách (`ROW_SCOPE_MINT_PINS`) ⇒ mở một điểm đúc
+>   mới là ĐỎ. Cột danh tính trên hai route đó VẪN đi theo cặp danh bạ `view:user` — không gộp.
 >
 > • **`/foundation/audit-logs` (+ `/:id`) — ĐÃ ĐÓNG 2026-08-22** (`S10-SEC-AUDITLOGROW-2`, KI-072).
-> Cùng cơ chế: `AuditQueryService.rowScopeFor()` (điểm đúc THỨ HAI trong `ROW_SCOPE_MINT_PINS`) +
-> họ `AuditRepository.*ForActorTx` nhận `rowScope` BẮT BUỘC ở CẢ `data` lẫn `count(*)`.
-> ⚠️ **`Own` ở bảng này = "hàng do TÔI GÂY RA"** (`actor_user_id`) — ngữ nghĩa KHÁC hai bảng nhật ký
-> (`Own` = hàng VỀ tôi). `audit_logs` chỉ có MỘT cột người. Hệ quả có chủ đích: **360 hàng
-> `actor_user_id IS NULL`** (job máy) không thuộc scope `Own` của ai. `/:id` ngoài scope trả **404**
-> `AUDIT_NOT_FOUND` — cùng mã với cross-tenant miss, để mã lỗi không thành oracle tồn-tại.
-> ⚠️ **PHẠM VI ĐÓNG = ĐÚNG HAI route COMPANY này**, KHÔNG phải "bảng `audit_logs` đã bound": đường
-> operator `/all` và `ChatOversightRepository.listOversightAudit` (CHAT-API-019, cặp CHAT) vẫn đọc
-> `audit_logs` không bound hàng. Xem gạch đầu dòng "Cặp KHÁC" bên dưới.
+>   Cùng cơ chế: `AuditQueryService.rowScopeFor()` (điểm đúc THỨ HAI trong `ROW_SCOPE_MINT_PINS`) +
+>   họ `AuditRepository.*ForActorTx` nhận `rowScope` BẮT BUỘC ở CẢ `data` lẫn `count(*)`.
+>   ⚠️ **`Own` ở bảng này = "hàng do TÔI GÂY RA"** (`actor_user_id`) — ngữ nghĩa KHÁC hai bảng nhật ký
+>   (`Own` = hàng VỀ tôi). `audit_logs` chỉ có MỘT cột người. Hệ quả có chủ đích: **360 hàng
+>   `actor_user_id IS NULL`** (job máy) không thuộc scope `Own` của ai. `/:id` ngoài scope trả **404**
+>   `AUDIT_NOT_FOUND` — cùng mã với cross-tenant miss, để mã lỗi không thành oracle tồn-tại.
+>   ⚠️ **PHẠM VI ĐÓNG = ĐÚNG HAI route COMPANY này**, KHÔNG phải "bảng `audit_logs` đã bound": đường
+>   operator `/all` và `ChatOversightRepository.listOversightAudit` (CHAT-API-019, cặp CHAT) vẫn đọc
+>   `audit_logs` không bound hàng. Xem gạch đầu dòng "Cặp KHÁC" bên dưới.
 >
-> • _(Bản mô tả khuyết tật gốc, giữ để đọc lịch sử)_ — CÙNG CẶP `view:audit-log`, KHÔNG bound hàng:
-> `AuditQueryService.listCompany(companyId, query)` **không nhận `userId` của actor** ⇒ nó không
-> resolve `data_scope` được, kể cả nếu muốn. Vai `view:audit-log@Own` đọc trọn **13.146** hàng
-> `audit_logs` của tenant (đo 2026-08-21; so với 366 + 65 của hai bảng vừa đóng — bề mặt CÒN MỞ lớn
-> gấp ~30 lần bề mặt đã đóng), và `?actorUserId=` là đúng hình dạng V2 của KI-070: dò được lịch sử
-> hành động của một UUID bất kỳ trong tenant. Che before/after (`AuditMaskerService`) là lớp KHÁC —
-> nó che GIÁ TRỊ trong hàng, không quyết định hàng nào được trả.
+> • *(Bản mô tả khuyết tật gốc, giữ để đọc lịch sử)* — CÙNG CẶP `view:audit-log`, KHÔNG bound hàng:
+>   `AuditQueryService.listCompany(companyId, query)` **không nhận `userId` của actor** ⇒ nó không
+>   resolve `data_scope` được, kể cả nếu muốn. Vai `view:audit-log@Own` đọc trọn **13.146** hàng
+>   `audit_logs` của tenant (đo 2026-08-21; so với 366 + 65 của hai bảng vừa đóng — bề mặt CÒN MỞ lớn
+>   gấp ~30 lần bề mặt đã đóng), và `?actorUserId=` là đúng hình dạng V2 của KI-070: dò được lịch sử
+>   hành động của một UUID bất kỳ trong tenant. Che before/after (`AuditMaskerService`) là lớp KHÁC —
+>   nó che GIÁ TRỊ trong hàng, không quyết định hàng nào được trả.
 >
 > • **`GET /auth/roles/:id/members` — ĐÓNG 2026-08-22 (`S10-SEC-ROLEMEMBERROW-1`, KI-071).** Trước đó
-> vai giữ `view:user@Own` mất email/tên nhưng vẫn nhận trọn `userId` + `status` + `expiresAt` của
-> MỌI thành viên role. Nay tập hàng đi theo `data_scope` của **chính cặp gate** `view:user`, vị từ
-> dựng trên `users.id`/`users.company_id` (điểm đúc thứ BA của cơ chế KI-070).
-> **`Own` ở route này = "hàng NÓI VỀ tôi"** — tư cách thành viên của chính tôi; cùng họ `login_logs`,
-> KHÁC `audit_logs` (`Own` = hàng do tôi GÂY RA). `@Own` gọi role mình không có chân ⇒ **0 hàng +
-> 200**, KHÔNG 404 (404 ở đó là oracle tồn-tại).
-> ⚠️ Cặp gate = cặp bound ⇒ **fail-closed**: `data_scope` không phân giải được ⇒ **403**, không còn
-> nhánh fail-soft "bỏ cột danh tính, vẫn trả hàng" của KI-053.
+>   vai giữ `view:user@Own` mất email/tên nhưng vẫn nhận trọn `userId` + `status` + `expiresAt` của
+>   MỌI thành viên role. Nay tập hàng đi theo `data_scope` của **chính cặp gate** `view:user`, vị từ
+>   dựng trên `users.id`/`users.company_id` (điểm đúc thứ BA của cơ chế KI-070).
+>   **`Own` ở route này = "hàng NÓI VỀ tôi"** — tư cách thành viên của chính tôi; cùng họ `login_logs`,
+>   KHÁC `audit_logs` (`Own` = hàng do tôi GÂY RA). `@Own` gọi role mình không có chân ⇒ **0 hàng +
+>   200**, KHÔNG 404 (404 ở đó là oracle tồn-tại).
+>   ⚠️ Cặp gate = cặp bound ⇒ **fail-closed**: `data_scope` không phân giải được ⇒ **403**, không còn
+>   nhánh fail-soft "bỏ cột danh tính, vẫn trả hàng" của KI-053.
 >
 > • **Đường GHI cạnh route trên — ĐÓNG 2026-08-24 (`S10-SEC-ROLEMEMBERFE-1`, KI-073).** Thân **201**
-> của `POST /permissions/users/:userId/roles` trước đó trả NGUYÊN HÀNG `user_roles` — nhánh no-op
-> (đã là thành viên, cùng expiry) trả **hàng GỐC** với `id`/`grantedBy`/`createdAt` gốc ⇒ 1 request
-> /người dựng lại được tư cách thành viên mà KI-071 vừa giấu, **im lặng** (no-op không ghi gì).
-> Nay thân đồng nhất đúng **4 khoá** `{userId, roleId, companyId, expiresAt}` echo request cho MỌI
-> actor, CẢ BA nhánh (no-op/fresh/reassign) — audit/`user_security_events` vẫn ghi id hàng THẬT
-> (chỉ đổi hình chiếu HTTP). `GET /auth/roles/:id/members` phát thêm cờ **`complete`**
-> (= scope ∈ {Company, System} của CHÍNH actor) để FE thôi khẳng định điều nó không biết (bộ đếm ·
-> dedup batch · empty-state); contract FE parse `complete` bằng `.catch(false)` — thiếu khoá/sai
-> kiểu rơi về partial-mode CÓ NHÃN, không ZodError.
+>   của `POST /permissions/users/:userId/roles` trước đó trả NGUYÊN HÀNG `user_roles` — nhánh no-op
+>   (đã là thành viên, cùng expiry) trả **hàng GỐC** với `id`/`grantedBy`/`createdAt` gốc ⇒ 1 request
+>   /người dựng lại được tư cách thành viên mà KI-071 vừa giấu, **im lặng** (no-op không ghi gì).
+>   Nay thân đồng nhất đúng **4 khoá** `{userId, roleId, companyId, expiresAt}` echo request cho MỌI
+>   actor, CẢ BA nhánh (no-op/fresh/reassign) — audit/`user_security_events` vẫn ghi id hàng THẬT
+>   (chỉ đổi hình chiếu HTTP). `GET /auth/roles/:id/members` phát thêm cờ **`complete`**
+>   (= scope ∈ {Company, System} của CHÍNH actor) để FE thôi khẳng định điều nó không biết (bộ đếm ·
+>   dedup batch · empty-state); contract FE parse `complete` bằng `.catch(false)` — thiếu khoá/sai
+>   kiểu rơi về partial-mode CÓ NHÃN, không ZodError.
 >
 > • **Đường GHI thứ HAI — ĐÓNG 2026-08-25 (`S10-SEC-ROLEMEMBERDEL-1`, KI-074, ADR `DECISIONS-11`).**
-> `DELETE /permissions/users/:userId/roles/:roleId` trước đó phân biệt **404** ("không phải thành
-> viên" — ném TRƯỚC mọi ghi ⇒ **0 hàng forensic, 0 thiệt hại**) với **204** ⇒ câu trả lời ÂM MIỄN
-> PHÍ. Nay theo **hướng (b)**: GIỮ **404** cho actor có `view:user` ở scope `Company`/`System`;
-> **204 + 0 ghi** cho phần còn lại (kể cả scope `null` — "KHÔNG có thẩm quyền" ≠ `Company`). Cùng
-> một cơ chế với cờ `complete` ở trên: **bit CÓ THẨM QUYỀN về scope `view:user` của CHÍNH actor**
-> lái hình dạng câu trả lời. Ba lớp role tách nhau ở nhánh ÂM: company-scoped của tenant KHÁC →
-> **404** (BẤT BIẾN #1, RLS ép) · **system** role (`company_id IS NULL`) → **204** ·
-> operator-audience → **404**. ⚠️ Kênh THỜI GIAN (nhánh ÂM 0 ghi vs nhánh DƯƠNG 4 ghi) **KHÔNG
-> đóng theo** — ghi nhận trong ADR; đóng nó đòi ghi audit giả. ⚠️ Cờ `is_sensitive` của catalog nay
-> là một **CỔNG** của route: lật `('view','user')` sang `true` sẽ ép nhánh exact-only ⇒ mọi actor
-> wildcard-only tụt `null` ⇒ **204-mù trong im lặng** (DECISIONS-11 §6).
+>   `DELETE /permissions/users/:userId/roles/:roleId` trước đó phân biệt **404** ("không phải thành
+>   viên" — ném TRƯỚC mọi ghi ⇒ **0 hàng forensic, 0 thiệt hại**) với **204** ⇒ câu trả lời ÂM MIỄN
+>   PHÍ. Nay theo **hướng (b)**: GIỮ **404** cho actor có `view:user` ở scope `Company`/`System`;
+>   **204 + 0 ghi** cho phần còn lại (kể cả scope `null` — "KHÔNG có thẩm quyền" ≠ `Company`). Cùng
+>   một cơ chế với cờ `complete` ở trên: **bit CÓ THẨM QUYỀN về scope `view:user` của CHÍNH actor**
+>   lái hình dạng câu trả lời. Ba lớp role tách nhau ở nhánh ÂM: company-scoped của tenant KHÁC →
+>   **404** (BẤT BIẾN #1, RLS ép) · **system** role (`company_id IS NULL`) → **204** ·
+>   operator-audience → **404**. ⚠️ Kênh THỜI GIAN (nhánh ÂM 0 ghi vs nhánh DƯƠNG 4 ghi) **KHÔNG
+>   đóng theo** — ghi nhận trong ADR; đóng nó đòi ghi audit giả. ⚠️ Cờ `is_sensitive` của catalog nay
+>   là một **CỔNG** của route: lật `('view','user')` sang `true` sẽ ép nhánh exact-only ⇒ mọi actor
+>   wildcard-only tụt `null` ⇒ **204-mù trong im lặng** (DECISIONS-11 §6).
 >
-> ⇒ Tính chất đạt được sau KI-073 **và** KI-074: _"không enumerate thành viên IM LẶNG theo CẢ HAI
-> chiều"_. Chiều CÓ-DẤU-VẾT vẫn mở **có chủ ý** — mỗi câu hỏi dương trúng đều gỡ vai THẬT và để lại
-> 4 vết.
+>   ⇒ Tính chất đạt được sau KI-073 **và** KI-074: *"không enumerate thành viên IM LẶNG theo CẢ HAI
+>   chiều"*. Chiều CÓ-DẤU-VẾT vẫn mở **có chủ ý** — mỗi câu hỏi dương trúng đều gỡ vai THẬT và để lại
+>   4 vết.
 >
 > ⚠️ **Cặp KHÁC, đừng đọc lây sang:** `/foundation/audit-logs/all` gate `view:platform-audit`
 > (operator-only, chéo tenant) · `/attendance/audit-logs` gate `view:attendance-audit-log` ·
@@ -242,7 +242,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > `masker.mask()`. **Chưa có WO/KI** — cặp quyền khác, cần số hiệu riêng.
 >
 > ⚠️ **LUẬT VẬN HÀNH SAU KHI KI-071 ĐÓNG (2026-08-22) — thay cho workaround cũ.** Workaround cũ
-> (_"không cấp `view:user` ở scope hẹp hơn `Company` cho vai nào"_) **đã hết hiệu lực và không được
+> (*"không cấp `view:user` ở scope hẹp hơn `Company` cho vai nào"*) **đã hết hiệu lực và không được
 > chép lại**: nó mâu thuẫn trực tiếp với mục đích bản vá, vốn làm `@Own` thành cấu hình **cấp được
 > và CÓ HIỆU LỰC ở tầng HÀNG**. Ba điều người cấp quyền phải biết:
 > (1) `@Own` nay cắt TẬP HÀNG chứ không chỉ cột — vai đó chỉ còn thấy tư cách thành viên của chính mình;
@@ -253,7 +253,8 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > `QUẢN LÝ CẤP CAO` 4 hàng `user_roles`/3 active · `company-admin` 2) và `view:user` có **4 vai**
 > (ba vai trên + `hr`, 0 người giữ) — **tất cả đều `@Company`**, 0 hàng `DENY` ⇒ hôm nay chưa ai chạm
 > được lớp này. Đó là lý do KI-071 là lỗ TIỀM TÀNG, không phải sự cố đang chảy.
-> _(Đính chính số 21/08 "SA 10 người": con số đó đếm cả hàng `user_roles` đã soft-delete; đếm sống ra 2. Kết luận không đổi — cả ba vẫn `@Company`.)_
+> *(Đính chính số 21/08 "SA 10 người": con số đó đếm cả hàng `user_roles` đã soft-delete; đếm sống ra
+> 2. Kết luận không đổi — cả ba vẫn `@Company`.)*
 >
 > ⚠️ Lưới scope KHÔNG đơn điệu ở mọi chỗ dùng lattice này: `Team`/`Department` fail-closed 0 hàng nên
 > **hẹp hơn** `Own`, và `resolveStrongestScope` lấy scope MẠNH nhất ⇒ thêm một role có thể LÀM MẤT
@@ -271,19 +272,19 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 > `employee` = mở lại chính lỗ vừa vá. Pin bằng `org-directory-permission.int-spec.ts`.
 >
 > ✅ **Lệch động từ `read:user` vs `view:user` — ĐÃ ĐÓNG (`S6-SEC-PERMVERB-1`, 2026-07-29).**
-> ADR: [DECISIONS-06 D-41](DECISIONS/DECISIONS-06_Permission_Verb_Canonical.md). `/org/employees`
+> ADR: [DECISIONS-06 D-41](<DECISIONS/DECISIONS-06_Permission_Verb_Canonical.md>). `/org/employees`
 > nay gate **`view:user`** — cùng cặp với `/auth/users`, role-admin và widget dashboard
 > `USER_SUMMARY`. Vì `data_scope` là PER-(permission, role), trước đây siết scope trên `view:user`
 > **không** siết `/org/employees`; sau khi thống nhất, một knob siết cả hai đường đọc tài khoản.
 >
 > **KHÔNG migration, KHÔNG grant mới** — số đo PROD 2026-07-29 (1 tenant, 46 user):
 >
-> | Role                     | User sống | Trước | Sau | Ghi chú                                                                                 |
-> | ------------------------ | --------- | ----- | --- | --------------------------------------------------------------------------------------- |
-> | `SA` · `company-admin`   | 6 + 1     | ✅    | ✅  | Giữ **CẢ HAI** động từ @Company ⇒ đổi gate là no-op                                     |
-> | `employee`               | 45        | ❌    | ❌  | Không grant nào — không đổi                                                             |
-> | `project-manager` (…002) | **0**     | ✅    | ❌  | **Mất** — media-era, ngoài §13, de-media-fy ⇒ cố ý không backfill                       |
-> | `hr` (…011)              | **0**     | ❌    | ✅  | **Được** — §13 đặc tả HR = Company; đã có sẵn `view:user` từ `0444`, chỉ chưa dùng được |
+> | Role | User sống | Trước | Sau | Ghi chú |
+> |---|---|---|---|---|
+> | `SA` · `company-admin` | 6 + 1 | ✅ | ✅ | Giữ **CẢ HAI** động từ @Company ⇒ đổi gate là no-op |
+> | `employee` | 45 | ❌ | ❌ | Không grant nào — không đổi |
+> | `project-manager` (…002) | **0** | ✅ | ❌ | **Mất** — media-era, ngoài §13, de-media-fy ⇒ cố ý không backfill |
+> | `hr` (…011) | **0** | ❌ | ✅ | **Được** — §13 đặc tả HR = Company; đã có sẵn `view:user` từ `0444`, chỉ chưa dùng được |
 >
 > ⓘ **Đính chính tiền đề cũ của khối này:** bản trước ghi "BA role lệch" và dự trù backfill cả ba.
 > Số đo bác bỏ — `manager` (…010) **đúng thiết kế** (§13 ghi Manager `-` cho `AUTH.USER.VIEW`, backfill
@@ -292,7 +293,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 >
 > **Pha CONTRACT hoãn có chủ đích:** row `read:user` + grant của `project-manager` **vẫn còn** trong
 > catalog (không revoke cùng release đổi enforce — memory `migration-expand-contract-required`), nhưng
-> không route nào đọc tới. Khoá bằng ca chạy-thật _"`read:user` (LEGACY) KHÔNG còn mở được danh bạ"_.
+> không route nào đọc tới. Khoá bằng ca chạy-thật *"`read:user` (LEGACY) KHÔNG còn mở được danh bạ"*.
 
 ---
 
@@ -300,20 +301,20 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 
 **Mã quyền (nhóm):** `HR.EMPLOYEE.{VIEW,VIEW_SENSITIVE,CREATE,UPDATE,CHANGE_STATUS,DELETE,EXPORT,IMPORT,FILE_VIEW,FILE_UPLOAD,FILE_DELETE} · HR.DEPARTMENT.{VIEW,CREATE,UPDATE,DELETE} · HR.POSITION.{…} · HR.CONTRACT.{…} · HR.ORG_CHART.VIEW · HR.MASTER_DATA.MANAGE · HR.PROFILE_CHANGE_REQUEST.{CREATE,VIEW_OWN,VIEW,APPROVE,REJECT,CANCEL_OWN} · HR.EMPLOYEE_CODE_CONFIG.{VIEW,UPDATE} · HR.EMPLOYEE_CODE.{PREVIEW,MANUAL_OVERRIDE} · HR.AUDIT_LOG.VIEW`
 
-| Chức năng                                                                     | SA  | ADM | HR  | MGR            | EMP                                  |
-| ----------------------------------------------------------------------------- | --- | --- | --- | -------------- | ------------------------------------ |
-| Xem danh sách nhân viên                                                       | Có  | Cấp | Có  | Team/Dept      | —                                    |
-| Xem hồ sơ cá nhân                                                             | Có  | Có  | Có  | Giới hạn       | Own                                  |
-| **Xem dữ liệu nhạy cảm** 🔒 (CCCD/lương)                                      | Có  | Cấp | Cấp | —              | —                                    |
-| Thêm / Cập nhật nhân viên                                                     | Có  | Cấp | Có  | Cấp (giới hạn) | Một số trường cá nhân (nếu cho phép) |
-| Đổi trạng thái · Xóa mềm nhân viên                                            | Có  | Cấp | Có  | —              | —                                    |
-| Quản lý phòng ban / chức vụ / hợp đồng                                        | Có  | Có  | Cấp | —              | —                                    |
-| Upload/Xem file hồ sơ                                                         | Có  | Cấp | Có  | —              | —                                    |
-| Xuất danh sách · Xem lịch sử thay đổi                                         | Có  | Cấp | Cấp | —              | —                                    |
-| **Nhập nhân viên hàng loạt (Excel/CSV)** 🔒 (`import:employee` scope Company) | Có  | Cấp | Cấp | —              | —                                    |
-| Gửi/Xem/Hủy yêu cầu sửa hồ sơ của mình                                        | Có  | Có  | Có  | Có             | Có                                   |
-| Duyệt/Từ chối yêu cầu sửa hồ sơ                                               | Có  | Cấp | Có  | —              | —                                    |
-| Cấu hình mã NV / Sửa mã thủ công                                              | Có  | Cấp | Cấp | —              | —                                    |
+| Chức năng | SA | ADM | HR | MGR | EMP |
+|---|---|---|---|---|---|
+| Xem danh sách nhân viên | Có | Cấp | Có | Team/Dept | — |
+| Xem hồ sơ cá nhân | Có | Có | Có | Giới hạn | Own |
+| **Xem dữ liệu nhạy cảm** 🔒 (CCCD/lương) | Có | Cấp | Cấp | — | — |
+| Thêm / Cập nhật nhân viên | Có | Cấp | Có | Cấp (giới hạn) | Một số trường cá nhân (nếu cho phép) |
+| Đổi trạng thái · Xóa mềm nhân viên | Có | Cấp | Có | — | — |
+| Quản lý phòng ban / chức vụ / hợp đồng | Có | Có | Cấp | — | — |
+| Upload/Xem file hồ sơ | Có | Cấp | Có | — | — |
+| Xuất danh sách · Xem lịch sử thay đổi | Có | Cấp | Cấp | — | — |
+| **Nhập nhân viên hàng loạt (Excel/CSV)** 🔒 (`import:employee` scope Company) | Có | Cấp | Cấp | — | — |
+| Gửi/Xem/Hủy yêu cầu sửa hồ sơ của mình | Có | Có | Có | Có | Có |
+| Duyệt/Từ chối yêu cầu sửa hồ sơ | Có | Cấp | Có | — | — |
+| Cấu hình mã NV / Sửa mã thủ công | Có | Cấp | Cấp | — | — |
 
 ---
 
@@ -321,18 +322,18 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 
 **Mã quyền (nhóm):** `ATT.ATTENDANCE.{CHECK_IN,CHECK_OUT,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,VIEW_DETAIL,EXPORT,ADJUST_DIRECT} · ATT.ADJUSTMENT.{CREATE_OWN,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,APPROVE,REJECT,CANCEL_OWN} · ATT.SHIFT.{VIEW,CREATE,UPDATE,DELETE} · ATT.SHIFT_ASSIGNMENT.{VIEW,UPDATE} · ATT.RULE.{VIEW,CONFIG} · ATT.REMOTE_REQUEST.{CREATE_OWN,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,APPROVE,REJECT} · ATT.AUDIT_LOG.VIEW`
 
-| Chức năng                            | SA  | ADM | HR  | MGR  | EMP |
-| ------------------------------------ | --- | --- | --- | ---- | --- |
-| Check-in/out · Xem bảng công cá nhân | Có  | Có  | Có  | Có   | Có  |
-| Xem bảng công team                   | Có  | Cấp | Cấp | Có   | —   |
-| Xem bảng công toàn công ty           | Có  | Cấp | Có  | —    | —   |
-| Cấu hình ca làm / gán ca / rule      | Có  | Cấp | Cấp | —    | —   |
-| Gửi yêu cầu điều chỉnh công          | Có  | Có  | Có  | Có   | Có  |
-| Duyệt/Từ chối điều chỉnh công        | Có  | Cấp | Có  | Team | —   |
-| Điều chỉnh công trực tiếp            | Có  | Cấp | Có  | —    | —   |
-| Gửi remote/công tác                  | Có  | Có  | Có  | Có   | Có  |
-| Duyệt remote/công tác                | Có  | Cấp | Cấp | Team | —   |
-| Xuất bảng công · Xem audit log ATT   | Có  | Cấp | Cấp | —    | —   |
+| Chức năng | SA | ADM | HR | MGR | EMP |
+|---|---|---|---|---|---|
+| Check-in/out · Xem bảng công cá nhân | Có | Có | Có | Có | Có |
+| Xem bảng công team | Có | Cấp | Cấp | Có | — |
+| Xem bảng công toàn công ty | Có | Cấp | Có | — | — |
+| Cấu hình ca làm / gán ca / rule | Có | Cấp | Cấp | — | — |
+| Gửi yêu cầu điều chỉnh công | Có | Có | Có | Có | Có |
+| Duyệt/Từ chối điều chỉnh công | Có | Cấp | Có | Team | — |
+| Điều chỉnh công trực tiếp | Có | Cấp | Có | — | — |
+| Gửi remote/công tác | Có | Có | Có | Có | Có |
+| Duyệt remote/công tác | Có | Cấp | Cấp | Team | — |
+| Xuất bảng công · Xem audit log ATT | Có | Cấp | Cấp | — | — |
 
 ---
 
@@ -340,18 +341,18 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 
 **Mã quyền (nhóm):** `LEAVE.REQUEST.{CREATE,VIEW_OWN,VIEW_TEAM,VIEW_DEPARTMENT,VIEW_COMPANY,UPDATE_OWN,CANCEL_OWN,APPROVE,REJECT,CANCEL_ANY,EXPORT} · LEAVE.TYPE.{VIEW,CREATE,UPDATE,DELETE} · LEAVE.POLICY.{VIEW,UPDATE} · LEAVE.BALANCE.{VIEW_OWN,VIEW,ADJUST} · LEAVE.CALENDAR.{VIEW_OWN,VIEW_TEAM,VIEW_COMPANY} · LEAVE.AUDIT_LOG.VIEW`
 
-| Chức năng                           | SA  | ADM | HR     | MGR        | EMP |
-| ----------------------------------- | --- | --- | ------ | ---------- | --- |
-| Tạo / Xem / Hủy đơn nghỉ của mình   | Có  | Có  | Có     | Có         | Có  |
-| Xem đơn nghỉ team                   | Có  | Cấp | Cấp    | Có         | —   |
-| Xem đơn nghỉ toàn công ty           | Có  | Cấp | Có     | —          | —   |
-| Duyệt / Từ chối đơn nghỉ            | Có  | Cấp | Cấp    | Team       | —   |
-| Hủy đơn người khác                  | Có  | Cấp | Cấp    | —          | —   |
-| Quản lý loại nghỉ / chính sách phép | Có  | Cấp | Cấp    | —          | —   |
-| Xem số dư phép cá nhân              | Có  | Có  | Có     | Có         | Có  |
-| Xem số dư phép nhân viên            | Có  | Cấp | Có     | Team (cấp) | —   |
-| Điều chỉnh số dư phép               | Có  | Cấp | Cấp    | —          | —   |
-| Xem lịch nghỉ team / công ty        | Có  | Cấp | Cấp/Có | Team       | —   |
+| Chức năng | SA | ADM | HR | MGR | EMP |
+|---|---|---|---|---|---|
+| Tạo / Xem / Hủy đơn nghỉ của mình | Có | Có | Có | Có | Có |
+| Xem đơn nghỉ team | Có | Cấp | Cấp | Có | — |
+| Xem đơn nghỉ toàn công ty | Có | Cấp | Có | — | — |
+| Duyệt / Từ chối đơn nghỉ | Có | Cấp | Cấp | Team | — |
+| Hủy đơn người khác | Có | Cấp | Cấp | — | — |
+| Quản lý loại nghỉ / chính sách phép | Có | Cấp | Cấp | — | — |
+| Xem số dư phép cá nhân | Có | Có | Có | Có | Có |
+| Xem số dư phép nhân viên | Có | Cấp | Có | Team (cấp) | — |
+| Điều chỉnh số dư phép | Có | Cấp | Cấp | — | — |
+| Xem lịch nghỉ team / công ty | Có | Cấp | Cấp/Có | Team | — |
 
 ---
 
@@ -359,25 +360,25 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 
 Thêm cột **PM** (Project Manager — vai trò cấp-dự-án) và scope **Project**.
 
-**Mã quyền (nhóm):** `TASK.PROJECT.{VIEW,CREATE,UPDATE,DELETE,CLOSE,ARCHIVE,MANAGE_MEMBER,VIEW_REPORT} · TASK.TASK.{VIEW,CREATE,UPDATE,DELETE,ASSIGN,UPDATE_STATUS,UPDATE_STATE,UPDATE_PRIORITY,UPDATE_DEADLINE,COMMENT,FILE_UPLOAD,FILE_DELETE,WATCH,VIEW_KANBAN,EXPORT} · `TASK.PROJECT_STATE.{VIEW,CREATE,UPDATE,DELETE}`·`TASK.AUDIT_LOG.VIEW`
+**Mã quyền (nhóm):** `TASK.PROJECT.{VIEW,CREATE,UPDATE,DELETE,CLOSE,ARCHIVE,MANAGE_MEMBER,VIEW_REPORT} · TASK.TASK.{VIEW,CREATE,UPDATE,DELETE,ASSIGN,UPDATE_STATUS,UPDATE_STATE,UPDATE_PRIORITY,UPDATE_DEADLINE,COMMENT,FILE_UPLOAD,FILE_DELETE,WATCH,VIEW_KANBAN,EXPORT} · `TASK.PROJECT_STATE.{VIEW,CREATE,UPDATE,DELETE}` · `TASK.AUDIT_LOG.VIEW`
 
-| Chức năng                              | SA  | ADM               | HR                | MGR               | PM                | EMP                  |
-| -------------------------------------- | --- | ----------------- | ----------------- | ----------------- | ----------------- | -------------------- |
-| Xem danh sách dự án                    | Có  | Cấp               | Cấp               | Scope             | Dự án phụ trách   | Nếu là member        |
-| Tạo dự án                              | Có  | Cấp               | Cấp               | Cấp               | Cấp               | —                    |
-| Cập nhật dự án                         | Có  | Cấp               | Cấp               | Dự án QL          | Dự án phụ trách   | —                    |
-| Đóng/hủy dự án · Quản lý thành viên    | Có  | Cấp               | —                 | Nếu owner         | Nếu owner         | —                    |
-| Xem / Tạo task                         | Có  | Cấp               | Cấp               | Team/Project      | Project           | Task liên quan / Cấp |
-| Giao task                              | Có  | Cấp               | Cấp               | Team/Project      | Project           | —                    |
-| Cập nhật trạng thái task               | Có  | Cấp               | Cấp               | Scope             | Project           | Nếu là assignee      |
-| Đổi cột pipeline task (kéo thả Kanban) | Có  | Cấp               | Cấp               | Scope             | Project           | Own (task của mình)  |
-| Xem cột pipeline của dự án             | Có  | Có                | —                 | —                 | Có                | Có                   |
-| Quản lý cột pipeline (thêm/sửa/xoá)    | Có  | Có                | —                 | **—**             | Có                | —                    |
-| Bình luận / Upload file task           | Có  | Nếu xem được task | Nếu xem được task | Nếu xem được task | Nếu xem được task | Nếu xem được task    |
-| Xóa task                               | Có  | Cấp               | —                 | Creator/owner     | Owner             | —                    |
-| Xem báo cáo dự án · Xuất task          | Có  | Cấp               | Cấp               | Scope             | Dự án phụ trách   | —                    |
+| Chức năng | SA | ADM | HR | MGR | PM | EMP |
+|---|---|---|---|---|---|---|
+| Xem danh sách dự án | Có | Cấp | Cấp | Scope | Dự án phụ trách | Nếu là member |
+| Tạo dự án | Có | Cấp | Cấp | Cấp | Cấp | — |
+| Cập nhật dự án | Có | Cấp | Cấp | Dự án QL | Dự án phụ trách | — |
+| Đóng/hủy dự án · Quản lý thành viên | Có | Cấp | — | Nếu owner | Nếu owner | — |
+| Xem / Tạo task | Có | Cấp | Cấp | Team/Project | Project | Task liên quan / Cấp |
+| Giao task | Có | Cấp | Cấp | Team/Project | Project | — |
+| Cập nhật trạng thái task | Có | Cấp | Cấp | Scope | Project | Nếu là assignee |
+| Đổi cột pipeline task (kéo thả Kanban) | Có | Cấp | Cấp | Scope | Project | Own (task của mình) |
+| Xem cột pipeline của dự án | Có | Có | — | — | Có | Có |
+| Quản lý cột pipeline (thêm/sửa/xoá) | Có | Có | — | **—** | Có | — |
+| Bình luận / Upload file task | Có | Nếu xem được task | Nếu xem được task | Nếu xem được task | Nếu xem được task | Nếu xem được task |
+| Xóa task | Có | Cấp | — | Creator/owner | Owner | — |
+| Xem báo cáo dự án · Xuất task | Có | Cấp | Cấp | Scope | Dự án phụ trách | — |
 
-> **`TASK.TASK.UPDATE_STATE`** (bổ sung 18/07/2026 — [DECISIONS-03](DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md) D-16/D-17): quyền đổi **cột pipeline** (`tasks.state_id` → `project_states`), TÁCH khỏi `TASK.TASK.UPDATE_STATUS` (đổi `task_status`). Ma trận scope theo 4 role chuẩn **mirror đúng `UPDATE_STATUS`**: `employee = Own` · `manager = Team` · `hr = Company` · `company-admin = Company`.
+> **`TASK.TASK.UPDATE_STATE`** (bổ sung 18/07/2026 — [DECISIONS-03](<DECISIONS/DECISIONS-03_Task_Pipeline_Column_And_FSM.md>) D-16/D-17): quyền đổi **cột pipeline** (`tasks.state_id` → `project_states`), TÁCH khỏi `TASK.TASK.UPDATE_STATUS` (đổi `task_status`). Ma trận scope theo 4 role chuẩn **mirror đúng `UPDATE_STATUS`**: `employee = Own` · `manager = Team` · `hr = Company` · `company-admin = Company`.
 >
 > Kéo thẻ sang cột **khác `state_group`** kéo theo đổi trạng thái ⇒ đòi **cả hai** quyền, và phần đổi trạng thái chạy ở **phạm vi của chính `UPDATE_STATUS`**, không mượn phạm vi của `UPDATE_STATE`. Kéo sang cột **cùng nhóm** chỉ đòi `UPDATE_STATE`.
 >
@@ -396,18 +397,18 @@ DASH chỉ hiển thị/deep-link; **module nguồn ép data scope thật**. Quy
 
 **Mã quyền (nhóm):** `DASH.DASHBOARD.{VIEW,VIEW_EMPLOYEE,VIEW_MANAGER,VIEW_HR,VIEW_ADMIN} · DASH.WIDGET.VIEW_* (theo widget) · DASH.CONFIG.{VIEW,UPDATE} · DASH.AUDIT_LOG.VIEW`
 
-| Dashboard / widget                                                               | SA  | ADM | HR        | MGR   | EMP           |
-| -------------------------------------------------------------------------------- | --- | --- | --------- | ----- | ------------- |
-| Xem Dashboard · Dashboard Employee                                               | Có  | Có  | Có        | Có    | Có            |
-| Dashboard Manager                                                                | Có  | Cấp | Cấp       | Có    | —             |
-| Dashboard HR                                                                     | Có  | Cấp | Có        | —     | —             |
-| Dashboard Admin                                                                  | Có  | Có  | —         | —     | —             |
-| Widget chấm công hôm nay · task của tôi · số ngày phép · thông báo mới           | Có  | Có  | Có        | Có    | Có            |
-| Widget đơn nghỉ chờ duyệt · task team quá hạn · lịch nghỉ team                   | Có  | Cấp | Cấp       | Có    | —             |
-| Widget tổng quan nhân sự · nhân sự mới · hợp đồng sắp hết hạn · sắp hết thử việc | Có  | Cấp | Có        | —     | —             |
-| Widget tổng user/nhân viên · module · log hệ thống · tài khoản mới               | Có  | Có  | —         | —     | —             |
-| Widget tiến độ dự án                                                             | Có  | Cấp | Liên quan | Scope | Nếu là member |
-| Cấu hình widget theo role                                                        | Có  | Cấp | —         | —     | —             |
+| Dashboard / widget | SA | ADM | HR | MGR | EMP |
+|---|---|---|---|---|---|
+| Xem Dashboard · Dashboard Employee | Có | Có | Có | Có | Có |
+| Dashboard Manager | Có | Cấp | Cấp | Có | — |
+| Dashboard HR | Có | Cấp | Có | — | — |
+| Dashboard Admin | Có | Có | — | — | — |
+| Widget chấm công hôm nay · task của tôi · số ngày phép · thông báo mới | Có | Có | Có | Có | Có |
+| Widget đơn nghỉ chờ duyệt · task team quá hạn · lịch nghỉ team | Có | Cấp | Cấp | Có | — |
+| Widget tổng quan nhân sự · nhân sự mới · hợp đồng sắp hết hạn · sắp hết thử việc | Có | Cấp | Có | — | — |
+| Widget tổng user/nhân viên · module · log hệ thống · tài khoản mới | Có | Có | — | — | — |
+| Widget tiến độ dự án | Có | Cấp | Liên quan | Scope | Nếu là member |
+| Cấu hình widget theo role | Có | Cấp | — | — | — |
 
 > **Hai hàng cột pipeline ghi theo seed THẬT (mig 0420), không theo suy đoán.** Quản trị cột chỉ cấp cho SA · ADM · PM; quyền xem cấp thêm cho EMP. **MGR và HR hiện không có quyền nào trên cột, kể cả xem.** Không tồn tại kiểm tra "owner dự án" ở các route quản trị cột. Đổi bất kỳ ô nào ở hai hàng này = quyết định mới, phải qua sổ quyết định + migration riêng.
 
@@ -417,13 +418,13 @@ DASH chỉ hiển thị/deep-link; **module nguồn ép data scope thật**. Quy
 
 **Mã quyền (nhóm):** `NOTI.NOTIFICATION.{VIEW_OWN,VIEW_DETAIL_OWN,COUNT_UNREAD_OWN,MARK_READ_OWN,MARK_ALL_READ_OWN,HIDE_OWN,DELETE_OWN,VIEW_COMPANY,CREATE_SYSTEM,SEND_SYSTEM} · NOTI.EVENT.{VIEW,CONFIG} · NOTI.TEMPLATE.{VIEW,UPDATE} · NOTI.CHANNEL.{VIEW,UPDATE} · NOTI.LOG.VIEW · NOTI.AUDIT_LOG.VIEW`
 
-| Chức năng                                               | SA  | ADM | HR  | MGR | EMP |
-| ------------------------------------------------------- | --- | --- | --- | --- | --- |
-| Xem/đếm/đánh dấu đã đọc · ẩn/xóa mềm thông báo của mình | Có  | Có  | Có  | Có  | Có  |
-| Xem log thông báo toàn công ty                          | Có  | Cấp | —   | —   | —   |
-| Tạo thông báo hệ thống thủ công                         | Có  | Cấp | —   | —   | —   |
-| Cấu hình loại / template thông báo                      | Có  | Cấp | Cấp | —   | —   |
-| Cấu hình kênh gửi · Xem audit log NOTI                  | Có  | Cấp | —   | —   | —   |
+| Chức năng | SA | ADM | HR | MGR | EMP |
+|---|---|---|---|---|---|
+| Xem/đếm/đánh dấu đã đọc · ẩn/xóa mềm thông báo của mình | Có | Có | Có | Có | Có |
+| Xem log thông báo toàn công ty | Có | Cấp | — | — | — |
+| Tạo thông báo hệ thống thủ công | Có | Cấp | — | — | — |
+| Cấu hình loại / template thông báo | Có | Cấp | Cấp | — | — |
+| Cấu hình kênh gửi · Xem audit log NOTI | Có | Cấp | — | — | — |
 
 ---
 
@@ -433,13 +434,13 @@ ME chỉ **đọc-lại** dữ liệu Own của chính user (ATT/LEAVE/TASK/NOTI
 
 **Ánh xạ mã quyền ME → cặp (action, resource_type) engine** (mig 0495, is_sensitive=false — cổng nav; web-core `PERMISSION_CODE_TO_PAIR` hạ nguồn PHẢI khớp, chống pair-drift):
 
-| Mã quyền (SPEC-09)                      | Cặp engine `action:resource_type` | Scope | Ghi chú                                   |
-| --------------------------------------- | --------------------------------- | ----- | ----------------------------------------- |
-| `ME.ACCESS`                             | `access:me`                       | Own   | Cổng vào /me — mọi role canonical         |
-| `ME.PREFERENCE.VIEW_OWN`                | `view:user-preference`            | Own   | Đọc tùy chọn cá nhân của mình             |
-| `ME.PREFERENCE.UPDATE_OWN`              | `update:user-preference`          | Own   | Ghi tùy chọn cá nhân của mình (upsert)    |
-| `ME.AVATAR.UPDATE_OWN`                  | `update:avatar`                   | Own   | Cập nhật avatar của mình                  |
-| `ME.NOTIFICATION_PREFERENCE.UPDATE_OWN` | `update:notification-preference`  | Own   | Cập nhật tùy chọn nhận thông báo của mình |
+| Mã quyền (SPEC-09) | Cặp engine `action:resource_type` | Scope | Ghi chú |
+|---|---|---|---|
+| `ME.ACCESS` | `access:me` | Own | Cổng vào /me — mọi role canonical |
+| `ME.PREFERENCE.VIEW_OWN` | `view:user-preference` | Own | Đọc tùy chọn cá nhân của mình |
+| `ME.PREFERENCE.UPDATE_OWN` | `update:user-preference` | Own | Ghi tùy chọn cá nhân của mình (upsert) |
+| `ME.AVATAR.UPDATE_OWN` | `update:avatar` | Own | Cập nhật avatar của mình |
+| `ME.NOTIFICATION_PREFERENCE.UPDATE_OWN` | `update:notification-preference` | Own | Cập nhật tùy chọn nhận thông báo của mình |
 
 Grant scope `Own` cho **cả 4 role canonical** (employee/manager/hr/company-admin) = 20 hàng `role_permissions` (per-role §13). KHÔNG seed `ME.OVERVIEW/PROFILE/ACCOUNT/SESSION/SECURITY_ACTIVITY/DATA_EXPORT` (out-of-scope MVP DB WO).
 
@@ -449,16 +450,16 @@ Grant scope `Own` cho **cả 4 role canonical** (employee/manager/hr/company-adm
 
 GOAL đứng riêng (GOAL-DEC-002), 8 cặp quyền per-(action, resource) theo SPEC-10 §11. Data scope đề xuất theo 4 role canonical — **chốt cùng migration seed** (S5-GOAL-DB-1, KHÔNG để mở sau — flip sau đụng pin canonical-seed):
 
-| Cặp quyền (SPEC-10 §11)      | Ý nghĩa                   | Nhân viên                                                                   | Trưởng đơn vị                     | BOD/Admin |
-| ---------------------------- | ------------------------- | --------------------------------------------------------------------------- | --------------------------------- | --------- |
-| `('access','goal')`          | Cổng nav menu Mục tiêu    | có                                                                          | có                                | có        |
-| `('view','goal')`            | Xem mục tiêu              | **department** (goal phòng + goal cá nhân mình + goal dự án mình là member) | department                        | all       |
-| `('create','goal')`          | Tạo mục tiêu              | **own** (chỉ cấp employee của chính mình)                                   | department (cả 3 cấp trong phòng) | all       |
-| `('update','goal')`          | Sửa mục tiêu              | own                                                                         | department                        | all       |
-| `('delete','goal')`          | Xóa mềm                   | own                                                                         | department                        | all       |
-| `('checkin','goal')`         | Check-in tiến độ          | own                                                                         | department                        | all       |
-| `('finalize','goal')`        | Chốt kỳ + mở lại          | không                                                                       | department                        | all       |
-| `('manage','task-template')` | Danh mục template phân rã | không                                                                       | department                        | all       |
+| Cặp quyền (SPEC-10 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | BOD/Admin |
+| --- | --- | --- | --- | --- |
+| `('access','goal')` | Cổng nav menu Mục tiêu | có | có | có |
+| `('view','goal')` | Xem mục tiêu | **department** (goal phòng + goal cá nhân mình + goal dự án mình là member) | department | all |
+| `('create','goal')` | Tạo mục tiêu | **own** (chỉ cấp employee của chính mình) | department (cả 3 cấp trong phòng) | all |
+| `('update','goal')` | Sửa mục tiêu | own | department | all |
+| `('delete','goal')` | Xóa mềm | own | department | all |
+| `('checkin','goal')` | Check-in tiến độ | own | department | all |
+| `('finalize','goal')` | Chốt kỳ + mở lại | không | department | all |
+| `('manage','task-template')` | Danh mục template phân rã | không | department | all |
 
 Ghi chú:
 
@@ -477,7 +478,7 @@ Ghi chú:
 
 ---
 
-## 9c. CHAT — Chat nội bộ (SPEC-15) · _Phase 4 — chưa seed_
+## 9c. CHAT — Chat nội bộ (SPEC-15) · *Phase 4 — chưa seed*
 
 ⚠️ **CHAT không dùng thang `own / department / all` như các module khác.** Ranh giới dữ liệu của chat là **thành viên phòng**, không phải phạm vi tổ chức: một nhân viên có thể nhắn riêng với giám đốc (ngoài phòng ban của mình), và trưởng phòng **không** được đọc tin nhắn riêng của nhân viên trong phòng mình dù `data_scope` là `department`.
 
@@ -490,18 +491,18 @@ Cả hai phải cùng đúng. Membership ép ở **service layer** qua đúng m�
 
 Ngoại lệ **duy nhất** với ranh giới membership là cặp `('view','chat-oversight')` (CHAT-DEC-004): nó **không** nới scope của cặp nào, mà mở một đường đọc **riêng** (`/chat/oversight/*`, chỉ đọc, có audit) — xem ghi chú bên dưới bảng.
 
-| Cặp quyền (SPEC-15 §11)        | Ý nghĩa                                                                                 | Nhân viên         | Trưởng đơn vị | BOD/Admin           |
-| ------------------------------ | --------------------------------------------------------------------------------------- | ----------------- | ------------- | ------------------- |
-| `('access','chat')`            | Cổng nav + panel nổi                                                                    | có                | có            | có                  |
-| `('view','chat-room')`         | Xem phòng · đọc tin · **tìm kiếm** · tải tệp đính kèm                                   | all               | all           | all                 |
-| `('create','chat-room')`       | Tạo phòng nhóm + mở DM                                                                  | có                | có            | có                  |
-| `('update','chat-room')`       | Sửa tên/mô tả phòng nhóm                                                                | có (admin phòng)  | có            | có                  |
-| `('archive','chat-room')`      | Lưu trữ phòng nhóm                                                                      | có (admin phòng)  | có            | có                  |
-| `('manage','chat-member')`     | Thêm/bớt/phong admin trong phòng nhóm                                                   | có (admin phòng)  | có            | có                  |
-| `('send','chat-message')`      | Gửi tin + đính kèm                                                                      | có                | có            | có                  |
-| `('recall','chat-message')`    | Thu hồi tin                                                                             | có (tin của mình) | có            | có                  |
-| `('pin','chat-message')`       | Ghim/bỏ ghim                                                                            | có (admin phòng)  | có            | có                  |
-| `('view','chat-oversight')` 🔒 | **Đọc-vượt membership**: mở đích danh một phòng với tư cách quản trị, chỉ đọc, có audit | —                 | —             | **chỉ Super Admin** |
+| Cặp quyền (SPEC-15 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | BOD/Admin |
+| --- | --- | --- | --- | --- |
+| `('access','chat')` | Cổng nav + panel nổi | có | có | có |
+| `('view','chat-room')` | Xem phòng · đọc tin · **tìm kiếm** · tải tệp đính kèm | all | all | all |
+| `('create','chat-room')` | Tạo phòng nhóm + mở DM | có | có | có |
+| `('update','chat-room')` | Sửa tên/mô tả phòng nhóm | có (admin phòng) | có | có |
+| `('archive','chat-room')` | Lưu trữ phòng nhóm | có (admin phòng) | có | có |
+| `('manage','chat-member')` | Thêm/bớt/phong admin trong phòng nhóm | có (admin phòng) | có | có |
+| `('send','chat-message')` | Gửi tin + đính kèm | có | có | có |
+| `('recall','chat-message')` | Thu hồi tin | có (tin của mình) | có | có |
+| `('pin','chat-message')` | Ghim/bỏ ghim | có (admin phòng) | có | có |
+| `('view','chat-oversight')` 🔒 | **Đọc-vượt membership**: mở đích danh một phòng với tư cách quản trị, chỉ đọc, có audit | — | — | **chỉ Super Admin** |
 
 Ghi chú:
 
@@ -516,23 +517,23 @@ Ghi chú:
 
 ---
 
-## 9d. ASSET — Quản lý tài sản (SPEC-13) · _Phase 3 — wave S11-OFFICE, chưa seed_
+## 9d. ASSET — Quản lý tài sản (SPEC-13) · *Phase 3 — wave S11-OFFICE, chưa seed*
 
 ASSET đứng riêng, **11 cặp** quyền per-(action, resource) theo SPEC-13 §11 — owner duyệt gói wave 28/08/2026. Data scope **chốt cùng migration seed** (S11-ASSET-DB-1, KHÔNG để mở sau — flip sau đụng pin canonical-seed). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `asset-manager`** (SPEC-01 §10.8; `roles.company_id IS NULL`, `is_system=true`, tiền lệ `hr-manager` mig `0019`) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`.
 
-| Cặp quyền (SPEC-13 §11)          | Ý nghĩa                                                                                   | Nhân viên                          | Trưởng đơn vị                                           | HR    | BOD/Admin · Asset Manager |
-| -------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------- | ----- | ------------------------- |
-| `('access','asset')`             | Cổng nav menu Tài sản                                                                     | có                                 | có                                                      | có    | có                        |
-| `('view','asset')`               | Xem loại · tài sản · lịch sử cấp phát/bảo trì · đợt kiểm kê · thống kê · **`/me/assets`** | **own** (tài sản mình đang/đã giữ) | **department** (tài sản nhân viên đơn vị mình đang giữ) | all   | all                       |
-| `('create','asset')`             | Tạo hồ sơ tài sản                                                                         | không                              | không                                                   | không | all                       |
-| `('update','asset')`             | Sửa thông tin mô tả (không đổi `status`/`asset_code`)                                     | không                              | không                                                   | không | all                       |
-| `('delete','asset')`             | Xoá mềm hồ sơ nhập nhầm (chỉ `In Stock`, 0 lịch sử)                                       | không                              | không                                                   | không | all                       |
-| `('assign','asset')`             | Cấp phát cho nhân viên                                                                    | không                              | không                                                   | không | all                       |
-| `('revoke','asset')`             | Thu hồi                                                                                   | không                              | không                                                   | không | all                       |
-| `('dispose','asset')`            | Thanh lý (`Disposed`) · ghi nhận mất (`Lost`) · tìm thấy lại                              | không                              | không                                                   | không | all                       |
-| `('manage','asset-category')`    | CRUD loại tài sản                                                                         | không                              | không                                                   | không | all                       |
-| `('manage','asset-maintenance')` | Mở/đóng lượt bảo trì                                                                      | không                              | không                                                   | không | all                       |
-| `('manage','asset-inventory')`   | Mở/đánh dấu/đóng đợt kiểm kê                                                              | không                              | không                                                   | không | all                       |
+| Cặp quyền (SPEC-13 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | HR | BOD/Admin · Asset Manager |
+| --- | --- | --- | --- | --- | --- |
+| `('access','asset')` | Cổng nav menu Tài sản | có | có | có | có |
+| `('view','asset')` | Xem loại · tài sản · lịch sử cấp phát/bảo trì · đợt kiểm kê · thống kê · **`/me/assets`** | **own** (tài sản mình đang/đã giữ) | **department** (tài sản nhân viên đơn vị mình đang giữ) | all | all |
+| `('create','asset')` | Tạo hồ sơ tài sản | không | không | không | all |
+| `('update','asset')` | Sửa thông tin mô tả (không đổi `status`/`asset_code`) | không | không | không | all |
+| `('delete','asset')` | Xoá mềm hồ sơ nhập nhầm (chỉ `In Stock`, 0 lịch sử) | không | không | không | all |
+| `('assign','asset')` | Cấp phát cho nhân viên | không | không | không | all |
+| `('revoke','asset')` | Thu hồi | không | không | không | all |
+| `('dispose','asset')` | Thanh lý (`Disposed`) · ghi nhận mất (`Lost`) · tìm thấy lại | không | không | không | all |
+| `('manage','asset-category')` | CRUD loại tài sản | không | không | không | all |
+| `('manage','asset-maintenance')` | Mở/đóng lượt bảo trì | không | không | không | all |
+| `('manage','asset-inventory')` | Mở/đánh dấu/đóng đợt kiểm kê | không | không | không | all |
 
 Ghi chú:
 
@@ -546,17 +547,17 @@ Ghi chú:
 
 ---
 
-## 9e. ROOM — Quản lý phòng họp (SPEC-14) · _Phase 3 — wave S11-OFFICE, chưa seed_
+## 9e. ROOM — Quản lý phòng họp (SPEC-14) · *Phase 3 — wave S11-OFFICE, chưa seed*
 
 ROOM đứng riêng, **5 cặp** quyền per-(action, resource) theo SPEC-14 §11 — owner duyệt gói wave 28/08/2026. Data scope **chốt cùng migration seed** (S11-ROOM-DB-1, KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `office-admin`** (SPEC-01 §10.9; `roles.company_id IS NULL`, `is_system=true`, `requires_two_factor=false` tường minh; tiền lệ `hr-manager` mig `0019`, `asset-manager` §9d) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`.
 
-| Cặp quyền (SPEC-14 §11)     | Ý nghĩa                                                                                                                        | Nhân viên                        | Trưởng đơn vị | HR      | BOD/Admin · Office Admin             |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | ------------- | ------- | ------------------------------------ |
-| `('access','room')`         | Cổng nav menu Phòng họp                                                                                                        | có                               | có            | có      | có                                   |
-| `('view','room')`           | Xem phòng · **lịch mọi phòng** (mọi lượt trong company) · phòng trống · chi tiết lượt · thống kê sử dụng · `/me/room-bookings` | **all**                          | **all**       | **all** | all                                  |
-| `('book','room')`           | Tạo lượt đặt phòng                                                                                                             | **own** (organizer = chính mình) | **own**       | **own** | **all** (đặt hộ — `organizerUserId`) |
-| `('cancel','room-booking')` | Huỷ lượt đặt                                                                                                                   | **own** (lượt mình tổ chức)      | **own**       | **own** | **all** (mọi lượt)                   |
-| `('manage','room')`         | CRUD phòng · kích hoạt/vô hiệu · xoá mềm                                                                                       | không                            | không         | không   | all                                  |
+| Cặp quyền (SPEC-14 §11) | Ý nghĩa | Nhân viên | Trưởng đơn vị | HR | BOD/Admin · Office Admin |
+| --- | --- | --- | --- | --- | --- |
+| `('access','room')` | Cổng nav menu Phòng họp | có | có | có | có |
+| `('view','room')` | Xem phòng · **lịch mọi phòng** (mọi lượt trong company) · phòng trống · chi tiết lượt · thống kê sử dụng · `/me/room-bookings` | **all** | **all** | **all** | all |
+| `('book','room')` | Tạo lượt đặt phòng | **own** (organizer = chính mình) | **own** | **own** | **all** (đặt hộ — `organizerUserId`) |
+| `('cancel','room-booking')` | Huỷ lượt đặt | **own** (lượt mình tổ chức) | **own** | **own** | **all** (mọi lượt) |
+| `('manage','room')` | CRUD phòng · kích hoạt/vô hiệu · xoá mềm | không | không | không | all |
 
 Ghi chú:
 
@@ -569,29 +570,29 @@ Ghi chú:
 
 ---
 
-## 9f. RECRUIT — Tuyển dụng (SPEC-12) · _ĐÃ SEED 31/08/2026 (S12-RECRUIT-DB-1, mig `0560`) · +1 cặp 04/09/2026 (S14-RECRUIT-FILEGRANT-1, mig `0569`)_
+## 9f. RECRUIT — Tuyển dụng (SPEC-12) · *ĐÃ SEED 31/08/2026 (S12-RECRUIT-DB-1, mig `0560`) · +1 cặp 04/09/2026 (S14-RECRUIT-FILEGRANT-1, mig `0569`)*
 
 RECRUIT đứng riêng, **17 cặp** quyền per-(action, resource) theo SPEC-12 §11 — owner duyệt gói wave 31/08/2026 (REC-DEC-001..008). Data scope **chốt cùng migration seed** (S12-RECRUIT-DB-1, KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `recruiter`** (SPEC-01 §10.7; `roles.company_id IS NULL`, `is_system=true`, `requires_two_factor=false` tường minh; tiền lệ `asset-manager` §9d, `office-admin` §9e) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`. Hiring manager = role `manager` hiện có, **không** role mới (REC-DEC-008).
 
-| Cặp quyền (SPEC-12 §11)       | `is_sensitive` | Ý nghĩa                                                                                                                               | Nhân viên | Trưởng đơn vị                | HR      | BOD/Admin · Recruiter |
-| ----------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------------- | ------- | --------------------- |
-| `('access','recruit')`        | false          | Cổng nav menu Tuyển dụng                                                                                                              | không     | có                           | có      | có                    |
-| `('view','job-opening')`      | false          | Xem vị trí tuyển + đếm ứng viên                                                                                                       | không     | không                        | all     | all                   |
-| `('create','job-opening')`    | false          | Tạo vị trí                                                                                                                            | không     | không                        | không   | all                   |
-| `('update','job-opening')`    | false          | Sửa · gán recruiter · đổi trạng thái FSM                                                                                              | không     | không                        | không   | all                   |
-| `('view','candidate')`        | **true**       | Xem ứng viên · timeline · ghi chú · tệp CV (email/phone **dạng che**)                                                                 | không     | không                        | all     | all                   |
-| `('create','candidate')`      | **true**       | Tạo hồ sơ + check-duplicate + upload CV                                                                                               | không     | không                        | không   | all                   |
-| `('update','candidate')`      | **true**       | Sửa hồ sơ — người giữ cặp này thấy email/phone **không che**                                                                          | không     | không                        | không   | all                   |
-| `('move-stage','candidate')`  | **true**       | Chuyển stage kèm lý do (sổ append-only)                                                                                               | không     | không                        | không   | all                   |
-| `('comment','candidate')`     | **true**       | Ghi chú nội bộ                                                                                                                        | không     | không                        | không   | all                   |
-| `('export','candidate')`      | **true**       | Export danh sách (audit bắt buộc)                                                                                                     | không     | không                        | không   | all                   |
-| `('convert','candidate')`     | **true**       | Chuyển ứng viên trúng tuyển → nhân viên HR                                                                                            | không     | không                        | all     | all                   |
-| `('view','interview')`        | false          | Xem lượt phỏng vấn + feedback                                                                                                         | không     | **own** (lượt mình được xếp) | all     | all                   |
-| `('manage','interview')`      | false          | Xếp/sửa/kết thúc/huỷ lượt                                                                                                             | không     | không                        | không   | all                   |
-| `('feedback','interview')`    | false          | Ghi/sửa feedback **của mình** trên lượt mình tham gia                                                                                 | không     | **own**                      | **own** | **own**               |
-| `('view','offer')`            | false          | Xem offer (**không** thấy lương)                                                                                                      | không     | không                        | all     | all                   |
-| `('manage','offer')`          | false          | Tạo/sửa/đổi trạng thái offer + **thấy lương**                                                                                         | không     | không                        | không   | all                   |
-| `('upload','candidate-file')` | **true**       | Đăng ký · xác nhận · **gắn** tệp CV vào ứng viên (RECRUIT-API-035..037). KHÔNG mở đường đọc (đã là `view:candidate`), KHÔNG mở gỡ/xoá | không     | không                        | all     | all                   |
+| Cặp quyền (SPEC-12 §11) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị | HR | BOD/Admin · Recruiter |
+| --- | --- | --- | --- | --- | --- | --- |
+| `('access','recruit')` | false | Cổng nav menu Tuyển dụng | không | có | có | có |
+| `('view','job-opening')` | false | Xem vị trí tuyển + đếm ứng viên | không | không | all | all |
+| `('create','job-opening')` | false | Tạo vị trí | không | không | không | all |
+| `('update','job-opening')` | false | Sửa · gán recruiter · đổi trạng thái FSM | không | không | không | all |
+| `('view','candidate')` | **true** | Xem ứng viên · timeline · ghi chú · tệp CV (email/phone **dạng che**) | không | không | all | all |
+| `('create','candidate')` | **true** | Tạo hồ sơ + check-duplicate + upload CV | không | không | không | all |
+| `('update','candidate')` | **true** | Sửa hồ sơ — người giữ cặp này thấy email/phone **không che** | không | không | không | all |
+| `('move-stage','candidate')` | **true** | Chuyển stage kèm lý do (sổ append-only) | không | không | không | all |
+| `('comment','candidate')` | **true** | Ghi chú nội bộ | không | không | không | all |
+| `('export','candidate')` | **true** | Export danh sách (audit bắt buộc) | không | không | không | all |
+| `('convert','candidate')` | **true** | Chuyển ứng viên trúng tuyển → nhân viên HR | không | không | all | all |
+| `('view','interview')` | false | Xem lượt phỏng vấn + feedback | không | **own** (lượt mình được xếp) | all | all |
+| `('manage','interview')` | false | Xếp/sửa/kết thúc/huỷ lượt | không | không | không | all |
+| `('feedback','interview')` | false | Ghi/sửa feedback **của mình** trên lượt mình tham gia | không | **own** | **own** | **own** |
+| `('view','offer')` | false | Xem offer (**không** thấy lương) | không | không | all | all |
+| `('manage','offer')` | false | Tạo/sửa/đổi trạng thái offer + **thấy lương** | không | không | không | all |
+| `('upload','candidate-file')` | **true** | Đăng ký · xác nhận · **gắn** tệp CV vào ứng viên (RECRUIT-API-035..037). KHÔNG mở đường đọc (đã là `view:candidate`), KHÔNG mở gỡ/xoá | không | không | all | all |
 
 Ghi chú:
 
@@ -606,31 +607,31 @@ Ghi chú:
 
 ---
 
-## 9g. PAYROLL — Tiền lương (SPEC-11) · _v1 ĐÃ SEED 01/09/2026 (S13-PAYROLL-DB-1, mig `0565`) · v2 = +17 cặp, wave S15-PAYROLL-V2 — CHƯA SEED (§9g.2)_
+## 9g. PAYROLL — Tiền lương (SPEC-11) · *v1 ĐÃ SEED 01/09/2026 (S13-PAYROLL-DB-1, mig `0565`) · v2 = +17 cặp, wave S15-PAYROLL-V2 — CHƯA SEED (§9g.2)*
 
 PAYROLL đứng riêng, quyền per-(action, resource) cấp **HAI đợt**: **v1 = 17 cặp** (SPEC-11 §11.1 — owner duyệt gói wave 31/08/2026, PAY-DEC-001..010; **ĐÃ SEED** 01/09/2026 qua `S13-PAYROLL-DB-1`, mig `0565`) và **v2 = +17 cặp MỚI** (SPEC-11 §11.3 — owner ký 02/09/2026, PAY-DEC-011..020; wave **S15-PAYROLL-V2**, **CHƯA SEED** — bảng ở **§9g.2** dưới) ⇒ **tổng 34 cặp, 30 sensitive**. Data scope **chốt cùng migration seed** của từng đợt (KHÔNG để mở sau). Ngoài 4 role canonical, wave này seed thêm **role hệ thống `payroll-officer`** (SPEC-01 §10.6; `roles.company_id IS NULL`, `is_system=true`, **`requires_two_factor=TRUE`** — khác tiền lệ `asset-manager` §9d / `office-admin` §9e / `recruiter` §9f vốn để `false`, vì lương là vùng crown) — **không** phải role canonical, không được thêm vào `DashCanonicalRole`/`NOTI_CANONICAL_ROLES`/pin `auth-seed-canonical-roles`. Id cố định **`…0015`**.
 
 **Nguyên tắc nền — DECISIONS-01 «Phương án B» (Block-code):** quyền lương là nhóm **độc lập**, **KHÔNG mặc định cho HR**. Sau wave này `hr`, `hr-manager` và `manager` giữ **0 cặp PAYROLL**.
 
-| Cặp quyền (SPEC-11 §11.1)                                       | `is_sensitive` | Ý nghĩa                                                                                 | Nhân viên | Trưởng đơn vị · HR · HR Manager | Payroll Officer | BOD/Admin |
-| --------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------- | --------- | ------------------------------- | --------------- | --------- |
-| `('access','payroll')`                                          | false          | Cổng nav menu Tiền lương                                                                | **own**   | không                           | own             | own       |
-| `('view','payroll-period')`                                     | false          | Xem danh sách/chi tiết kỳ — **không số tiền**                                           | không     | không                           | all             | all       |
-| `('manage','payroll-period')`                                   | false          | Tạo kỳ · cấu hình · gắn kỳ công · **khoá kỳ** (cấu hình kỳ — PAY-DEC-006)               | không     | không                           | all             | all       |
-| `('view-line','payroll-period')`                                | **true**       | **Đọc dòng bảng lương (CÓ TIỀN)** + tổng chi phí kỳ + vế đọc export — **cặp ĐỌC thuần** | không     | không                           | all             | all       |
-| `('calculate','payroll-period')`                                | **true**       | Gom đầu vào · tính · điều chỉnh dòng · gửi duyệt (**ghi**)                              | không     | không                           | all             | all       |
-| `('approve','payroll-period')`                                  | **true**       | Duyệt / từ chối bảng lương — **KHÔNG gán Payroll Officer** (four-eyes, PAY-DEC-007)     | không     | không                           | **không**       | all       |
-| `('publish','payroll-period')`                                  | **true**       | Sinh phiếu lương + phát hành cho nhân viên                                              | không     | không                           | all             | all       |
-| `('reopen','payroll-period')`                                   | **true**       | Mở lại kỳ (lý do bắt buộc + audit)                                                      | không     | không                           | all             | all       |
-| `('view','salary-profile')`                                     | **true**       | Xem hồ sơ lương + lịch sử phiên bản (+ danh bạ chọn người)                              | không     | không                           | all             | all       |
-| `('manage','salary-profile')`                                   | **true**       | Tạo phiên bản mới · sửa · xoá mềm                                                       | không     | không                           | all             | all       |
-| `('view','bonus-penalty')`                                      | **true**       | Xem thưởng/phạt/khấu trừ theo kỳ                                                        | không     | không                           | all             | all       |
-| `('manage','bonus-penalty')`                                    | **true**       | Tạo · sửa khi `Pending` · xoá mềm                                                       | không     | không                           | all             | all       |
-| `('approve','bonus-penalty')`                                   | **true**       | Duyệt / từ chối (tự duyệt bị chặn ở service — PAYROLL-ERR-012)                          | không     | không                           | all             | all       |
-| `('export','payroll')`                                          | **true**       | Export XLSX bảng lương (audit bắt buộc)                                                 | không     | không                           | all             | all       |
-| `('view-payslip','payslip')` _(di sản `0097` — GIỮ)_            | **true**       | Xem phiếu lương của **người khác**                                                      | không     | không                           | all             | all       |
-| `('view-own-payslip','payslip')` _(di sản `0180` — GIỮ)_        | **true**       | Xem phiếu lương **của mình**                                                            | **own**   | không                           | không           | không     |
-| `('acknowledge-own-payslip','payslip')` _(di sản `0132` — GIỮ)_ | false          | Xác nhận phiếu lương của mình                                                           | **own**   | không                           | không           | không     |
+| Cặp quyền (SPEC-11 §11.1) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị · HR · HR Manager | Payroll Officer | BOD/Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| `('access','payroll')` | false | Cổng nav menu Tiền lương | **own** | không | own | own |
+| `('view','payroll-period')` | false | Xem danh sách/chi tiết kỳ — **không số tiền** | không | không | all | all |
+| `('manage','payroll-period')` | false | Tạo kỳ · cấu hình · gắn kỳ công · **khoá kỳ** (cấu hình kỳ — PAY-DEC-006) | không | không | all | all |
+| `('view-line','payroll-period')` | **true** | **Đọc dòng bảng lương (CÓ TIỀN)** + tổng chi phí kỳ + vế đọc export — **cặp ĐỌC thuần** | không | không | all | all |
+| `('calculate','payroll-period')` | **true** | Gom đầu vào · tính · điều chỉnh dòng · gửi duyệt (**ghi**) | không | không | all | all |
+| `('approve','payroll-period')` | **true** | Duyệt / từ chối bảng lương — **KHÔNG gán Payroll Officer** (four-eyes, PAY-DEC-007) | không | không | **không** | all |
+| `('publish','payroll-period')` | **true** | Sinh phiếu lương + phát hành cho nhân viên | không | không | all | all |
+| `('reopen','payroll-period')` | **true** | Mở lại kỳ (lý do bắt buộc + audit) | không | không | all | all |
+| `('view','salary-profile')` | **true** | Xem hồ sơ lương + lịch sử phiên bản (+ danh bạ chọn người) | không | không | all | all |
+| `('manage','salary-profile')` | **true** | Tạo phiên bản mới · sửa · xoá mềm | không | không | all | all |
+| `('view','bonus-penalty')` | **true** | Xem thưởng/phạt/khấu trừ theo kỳ | không | không | all | all |
+| `('manage','bonus-penalty')` | **true** | Tạo · sửa khi `Pending` · xoá mềm | không | không | all | all |
+| `('approve','bonus-penalty')` | **true** | Duyệt / từ chối (tự duyệt bị chặn ở service — PAYROLL-ERR-012) | không | không | all | all |
+| `('export','payroll')` | **true** | Export XLSX bảng lương (audit bắt buộc) | không | không | all | all |
+| `('view-payslip','payslip')` *(di sản `0097` — GIỮ)* | **true** | Xem phiếu lương của **người khác** | không | không | all | all |
+| `('view-own-payslip','payslip')` *(di sản `0180` — GIỮ)* | **true** | Xem phiếu lương **của mình** | **own** | không | không | không |
+| `('acknowledge-own-payslip','payslip')` *(di sản `0132` — GIỮ)* | false | Xác nhận phiếu lương của mình | **own** | không | không | không |
 
 Ghi chú:
 
@@ -651,21 +652,21 @@ Ghi chú:
 > ⚠️ Hồ sơ duyệt ghi tay chỉ nhắc `0092`/`0097`/`0180`. Đo bằng grep toàn bộ `apps/api/migrations/` ngày 31/08/2026 cho thấy họ lương trải **5 migration / 19 cặp**. Hai lỗ thật:
 >
 > 1. **`('approve-payroll-period','payroll_period')` và `('publish-payroll-period','payroll_period')` (`0132`) để `is_sensitive = false`** ⇒ **duyệt và phát hành lương đang kế thừa được qua wildcard `*:*`**.
-> 2. **4 cặp `payslip` của `0005:282-285`** (`create`/`read`/`update`/`delete`, đều `is_sensitive=false`) dính **blanket-grant `WHERE p.is_sensitive = false` KHÔNG điều kiện** ở `0005:310-313` — **chỉ của `company-admin` (`…0001`)**. _(Đính chính phép đo: 7 role hệ thống thời media còn lại (`0005:317-433`) đều có thêm `AND (action, resource_type) IN (…)` liệt kê cụ thể và **không** chứa cặp `payslip` nào.)_ Trong bốn cặp đó, `('update','payslip')` mâu thuẫn thẳng bất biến #2 (phiếu lương append-only).
+> 2. **4 cặp `payslip` của `0005:282-285`** (`create`/`read`/`update`/`delete`, đều `is_sensitive=false`) dính **blanket-grant `WHERE p.is_sensitive = false` KHÔNG điều kiện** ở `0005:310-313` — **chỉ của `company-admin` (`…0001`)**. *(Đính chính phép đo: 7 role hệ thống thời media còn lại (`0005:317-433`) đều có thêm `AND (action, resource_type) IN (…)` liệt kê cụ thể và **không** chứa cặp `payslip` nào.)* Trong bốn cặp đó, `('update','payslip')` mâu thuẫn thẳng bất biến #2 (phiếu lương append-only).
 >
 > **GRANT trong migration cũ ≠ hiện trạng DB** (`grant-in-old-migration-is-not-current-state`): WO DB **phải ĐO bảng thật** (`permissions ⋈ role_permissions ⋈ roles`) trước khi viết lệnh thu hồi.
 
-| Cặp di sản                                                                                                                    | sensitive         | Nguồn  | Xử lý                                                                                                          |
-| ----------------------------------------------------------------------------------------------------------------------------- | ----------------- | ------ | -------------------------------------------------------------------------------------------------------------- |
-| `('create','payslip')` · `('read','payslip')` · `('update','payslip')` · `('delete','payslip')` · `('view-salary','payslip')` | 4× false, 1× true | `0005` | **GỠ cả 5** (+ mọi grant)                                                                                      |
-| `('view-salary-profile','salary_profile')` · `('manage-salary-profile','salary_profile')`                                     | true              | `0092` | **GỠ** → thay bằng `('view'/'manage','salary-profile')`                                                        |
-| `('manage-payroll-period','payroll_period')` · `('run-payroll','payroll_period')` · `('read-payslip','payslip')`              | false/true/true   | `0097` | **GỠ** → thay bằng `('manage','payroll-period')` / `('calculate','payroll-period')` / _(trùng `view-payslip`)_ |
-| `('manage-bonus-penalty',…)` · `('approve-bonus-penalty',…)` · `('view-bonus-penalty','bonus_penalty')`                       | true              | `0099` | **GỠ** → thay bằng `('manage'/'approve'/'view','bonus-penalty')`                                               |
-| `('approve-payroll-period','payroll_period')` · `('publish-payroll-period','payroll_period')`                                 | **false ⚠️**      | `0132` | **GỠ** → thay bằng `('approve'/'publish','payroll-period')` **`is_sensitive=true`** — vá lỗ wildcard           |
-| `('resolve-payslip-dispute','payslip')`                                                                                       | true              | `0132` | **GỠ** — khiếu nại ngoài v1, mở lại cùng PARK-PAYROLL-001                                                      |
-| `('view-payslip','payslip')`                                                                                                  | true              | `0097` | **GIỮ** — vào bảng §9g; **thu hồi grant `hr-manager`**                                                         |
-| `('view-own-payslip','payslip')`                                                                                              | true              | `0180` | **GIỮ nguyên grant `employee`**                                                                                |
-| `('acknowledge-own-payslip','payslip')`                                                                                       | false             | `0132` | **GIỮ grant `employee`**; thu hồi grant `company-admin` + `hr-manager`                                         |
+| Cặp di sản | sensitive | Nguồn | Xử lý |
+| --- | --- | --- | --- |
+| `('create','payslip')` · `('read','payslip')` · `('update','payslip')` · `('delete','payslip')` · `('view-salary','payslip')` | 4× false, 1× true | `0005` | **GỠ cả 5** (+ mọi grant) |
+| `('view-salary-profile','salary_profile')` · `('manage-salary-profile','salary_profile')` | true | `0092` | **GỠ** → thay bằng `('view'/'manage','salary-profile')` |
+| `('manage-payroll-period','payroll_period')` · `('run-payroll','payroll_period')` · `('read-payslip','payslip')` | false/true/true | `0097` | **GỠ** → thay bằng `('manage','payroll-period')` / `('calculate','payroll-period')` / *(trùng `view-payslip`)* |
+| `('manage-bonus-penalty',…)` · `('approve-bonus-penalty',…)` · `('view-bonus-penalty','bonus_penalty')` | true | `0099` | **GỠ** → thay bằng `('manage'/'approve'/'view','bonus-penalty')` |
+| `('approve-payroll-period','payroll_period')` · `('publish-payroll-period','payroll_period')` | **false ⚠️** | `0132` | **GỠ** → thay bằng `('approve'/'publish','payroll-period')` **`is_sensitive=true`** — vá lỗ wildcard |
+| `('resolve-payslip-dispute','payslip')` | true | `0132` | **GỠ** — khiếu nại ngoài v1, mở lại cùng PARK-PAYROLL-001 |
+| `('view-payslip','payslip')` | true | `0097` | **GIỮ** — vào bảng §9g; **thu hồi grant `hr-manager`** |
+| `('view-own-payslip','payslip')` | true | `0180` | **GIỮ nguyên grant `employee`** |
+| `('acknowledge-own-payslip','payslip')` | false | `0132` | **GIỮ grant `employee`**; thu hồi grant `company-admin` + `hr-manager` |
 
 > 📏 **ĐO THẬT khi thi công `S13-PAYROLL-DB-1` (01/09/2026) — bề mặt RỘNG HƠN tài liệu 31/08.**
 > Ngoài ba role hệ thống (`company-admin` 13 cặp · `hr-manager` 12 · `employee` 2), **ba role TUỲ BIẾN của
@@ -678,31 +679,31 @@ Ghi chú:
 > NO-OP thực tế), và `('view-own-payslip','payslip')` của `employee` đang ở scope **@Company** chứ không phải
 > **@Own** như bảng §9g ghi — vòng grant `DELETE data_scope <> 'Own'` + INSERT tự sửa.
 
-**Trình tự bắt buộc trong migration seed** (DB-13 §10 bước B): thu hồi **TRƯỚC**, seed cặp mới **SAU** — xoá mọi hàng `role_permissions` **VÀ `object_permissions`** trỏ **16 cặp GỠ** rồi xoá 16 cặp khỏi `permissions`. ⚠️ `object_permissions.permission_id` là **`ON DELETE CASCADE`** (`0005:154`) ⇒ xoá cặp cascade âm thầm: phải ĐO trước rồi xoá tường minh. **Với cặp GIỮ `view-payslip`** (vốn _giữ ngữ nghĩa object-permission override_): thu hồi grant `hr-manager` ở **cả hai** bảng — chỉ xoá `role_permissions` là để lại đường đọc phiếu lương sống trong khi verify vẫn XANH. Verify fail-loud: `hr-manager` = **0 cặp PAYROLL trên CẢ BA bảng**, 16 cặp GỠ = **0 hàng** ở cả ba. Cặp `('view-salary','employee')` (`0019`, domain HR — masking hồ sơ nhân sự của SPEC-03) **KHÔNG đụng tới**. Tiền lệ xoá cặp mồ côi + grant: `0548` (27 cặp / 89 grant của cụm workflow).
+**Trình tự bắt buộc trong migration seed** (DB-13 §10 bước B): thu hồi **TRƯỚC**, seed cặp mới **SAU** — xoá mọi hàng `role_permissions` **VÀ `object_permissions`** trỏ **16 cặp GỠ** rồi xoá 16 cặp khỏi `permissions`. ⚠️ `object_permissions.permission_id` là **`ON DELETE CASCADE`** (`0005:154`) ⇒ xoá cặp cascade âm thầm: phải ĐO trước rồi xoá tường minh. **Với cặp GIỮ `view-payslip`** (vốn *giữ ngữ nghĩa object-permission override*): thu hồi grant `hr-manager` ở **cả hai** bảng — chỉ xoá `role_permissions` là để lại đường đọc phiếu lương sống trong khi verify vẫn XANH. Verify fail-loud: `hr-manager` = **0 cặp PAYROLL trên CẢ BA bảng**, 16 cặp GỠ = **0 hàng** ở cả ba. Cặp `('view-salary','employee')` (`0019`, domain HR — masking hồ sơ nhân sự của SPEC-03) **KHÔNG đụng tới**. Tiền lệ xoá cặp mồ côi + grant: `0548` (27 cặp / 89 grant của cụm workflow).
 
 ### 9g.2 Bộ cặp v2 — wave S15-PAYROLL-V2 (17 cặp, TẤT CẢ sensitive)
 
 > **Nguồn sự thật: SPEC-11 §11.3** (owner ký PAY-DEC-011..020 ngày 02/09/2026). **ĐÃ SEED 11/09/2026** — cả 17 cặp + 31 grant ở mig `0571` (`S15-PAYROLL-DB-1`), kể cả 8 cặp track C mà bảng của chúng ra đời ở `0572` (`S15-PAYROLL-DB-2` chỉ GUARD, không seed lại). Con số **ĐÓNG**: đúng **17 cặp**, WO sau đối chiếu chứ **không tự cấp thêm** (SPEC-11 §5.1b).
 
-| Cặp quyền (SPEC-11 §11.3)        | `is_sensitive` | Ý nghĩa                                                                                     | Nhân viên | Trưởng đơn vị · HR · HR Manager | Payroll Officer | BOD/Admin |
-| -------------------------------- | -------------- | ------------------------------------------------------------------------------------------- | --------- | ------------------------------- | --------------- | --------- |
-| `('view','payroll-employee')`    | **true**       | Đọc thiết lập BH/công đoàn/**TK ngân hàng (4 số cuối)** + người phụ thuộc + chiếu HR bó hẹp | không     | không                           | all             | all       |
-| `('manage','payroll-employee')`  | **true**       | Ghi hai bảng đó (thiết lập BH/công đoàn · người phụ thuộc)                                  | không     | không                           | all             | all       |
-| `('view','salary-component')`    | **true**       | Đọc catalog thành phần lương **+ công thức**                                                | không     | không                           | all             | all       |
-| `('manage','salary-component')`  | **true**       | Tạo/sửa thành phần **+ sửa công thức**                                                      | không     | không                           | all             | all       |
-| `('view','payroll-template')`    | **true**       | Đọc mẫu bảng lương + công thức ghi đè                                                       | không     | không                           | all             | all       |
-| `('manage','payroll-template')`  | **true**       | Tạo/sửa mẫu · đặt thành phần · xem trước                                                    | không     | không                           | all             | all       |
-| `('view','statutory-rate')`      | **true**       | Đọc bảng tỉ lệ luật định                                                                    | không     | không                           | all             | all       |
-| `('manage','statutory-rate')`    | **true**       | Tạo/sửa bản tỉ lệ theo ngày hiệu lực                                                        | không     | không                           | **không**       | all       |
-| `('view','payroll-advance')`     | **true**       | Đọc tạm ứng của mọi người                                                                   | không     | không                           | all             | all       |
-| `('manage','payroll-advance')`   | **true**       | Tạo · sửa khi `Pending` · xoá mềm                                                           | không     | không                           | all             | all       |
-| `('approve','payroll-advance')`  | **true**       | Duyệt / từ chối (tự duyệt bị chặn — PAYROLL-ERR-025)                                        | không     | không                           | all             | all       |
-| `('view-own','payroll-advance')` | **true**       | «Tạm ứng của tôi»                                                                           | **own**   | không                           | không           | không     |
-| `('view','payment-batch')`       | **true**       | Đọc đợt chi trả + dòng chi                                                                  | không     | không                           | all             | all       |
-| `('manage','payment-batch')`     | **true**       | Lập đợt · sửa dòng · **xuất tệp UNC (số TK ĐẦY ĐỦ)** · **hoàn tất ⇒ kỳ `Paid`**             | không     | không                           | all             | all       |
-| `('view','payroll-budget')`      | **true**       | Đọc ngân sách lương + thực hiện                                                             | không     | không                           | all             | all       |
-| `('manage','payroll-budget')`    | **true**       | Lập/sửa ngân sách năm × đơn vị                                                              | không     | không                           | **không**       | all       |
-| `('view','payroll-report')`      | **true**       | Tổng quan module + 7 báo cáo                                                                | không     | không                           | all             | all       |
+| Cặp quyền (SPEC-11 §11.3) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị · HR · HR Manager | Payroll Officer | BOD/Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| `('view','payroll-employee')` | **true** | Đọc thiết lập BH/công đoàn/**TK ngân hàng (4 số cuối)** + người phụ thuộc + chiếu HR bó hẹp | không | không | all | all |
+| `('manage','payroll-employee')` | **true** | Ghi hai bảng đó (thiết lập BH/công đoàn · người phụ thuộc) | không | không | all | all |
+| `('view','salary-component')` | **true** | Đọc catalog thành phần lương **+ công thức** | không | không | all | all |
+| `('manage','salary-component')` | **true** | Tạo/sửa thành phần **+ sửa công thức** | không | không | all | all |
+| `('view','payroll-template')` | **true** | Đọc mẫu bảng lương + công thức ghi đè | không | không | all | all |
+| `('manage','payroll-template')` | **true** | Tạo/sửa mẫu · đặt thành phần · xem trước | không | không | all | all |
+| `('view','statutory-rate')` | **true** | Đọc bảng tỉ lệ luật định | không | không | all | all |
+| `('manage','statutory-rate')` | **true** | Tạo/sửa bản tỉ lệ theo ngày hiệu lực | không | không | **không** | all |
+| `('view','payroll-advance')` | **true** | Đọc tạm ứng của mọi người | không | không | all | all |
+| `('manage','payroll-advance')` | **true** | Tạo · sửa khi `Pending` · xoá mềm | không | không | all | all |
+| `('approve','payroll-advance')` | **true** | Duyệt / từ chối (tự duyệt bị chặn — PAYROLL-ERR-025) | không | không | all | all |
+| `('view-own','payroll-advance')` | **true** | «Tạm ứng của tôi» | **own** | không | không | không |
+| `('view','payment-batch')` | **true** | Đọc đợt chi trả + dòng chi | không | không | all | all |
+| `('manage','payment-batch')` | **true** | Lập đợt · sửa dòng · **xuất tệp UNC (số TK ĐẦY ĐỦ)** · **hoàn tất ⇒ kỳ `Paid`** | không | không | all | all |
+| `('view','payroll-budget')` | **true** | Đọc ngân sách lương + thực hiện | không | không | all | all |
+| `('manage','payroll-budget')` | **true** | Lập/sửa ngân sách năm × đơn vị | không | không | **không** | all |
+| `('view','payroll-report')` | **true** | Tổng quan module + 7 báo cáo | không | không | all | all |
 
 Ghi chú:
 
@@ -720,29 +721,29 @@ Ghi chú:
 
 ---
 
-## 9h. SOCIAL — Mạng xã hội nội bộ (SPEC-16) · _ĐÃ SEED 21/09/2026 (S16-SOCIAL-DB-1, mig `0578`) · +1 cặp 28/09/2026 (S16-SOCIAL-BE-3C, mig `0590`)_
+## 9h. SOCIAL — Mạng xã hội nội bộ (SPEC-16) · *ĐÃ SEED 21/09/2026 (S16-SOCIAL-DB-1, mig `0578`) · +1 cặp 28/09/2026 (S16-SOCIAL-BE-3C, mig `0590`)*
 
 SOCIAL đứng riêng, **15 cặp** quyền per-(action, resource): **14 cặp** theo [SPEC-16 §11](<SPEC/SPEC-16 SOCIAL.md>) — owner duyệt gói wave 02/09/2026 (SOC-DEC-001..010) — **+ `('restore','feed-post')`** (owner ký O1 ngày 28/09/2026, `S16-SOCIAL-BE-3C`; ngoài SPEC-16 §11.1 — SPEC chưa cập nhật). Data scope **chốt cùng migration seed** (`S16-SOCIAL-DB-1`, KHÔNG để mở sau). Wave này **không** seed role hệ thống mới: 4 role canonical là đủ.
 
-> ⚠️ **Mã `SOCIAL` có hai bề mặt — đừng nhầm.** Module `SOCIAL` = **mạng xã hội nội bộ** (bảng tin · tin tức · nhóm · bình chọn · sáng kiến · vinh danh). App vệ tinh **đăng bài Facebook** ([DECISIONS-08](DECISIONS/DECISIONS-08_Social_Satellite_App.md)) là **tiện ích con** bên trong module đó và giữ nguyên **ba cặp cũ** `('view','social-post')` · `('create','social-post')` · `('manage','social-account')` — **không** đổi tên, **không** đổi grant (SOC-DEC-002). Mọi cặp của mạng xã hội nội bộ mang tiền tố **`feed-`**.
+> ⚠️ **Mã `SOCIAL` có hai bề mặt — đừng nhầm.** Module `SOCIAL` = **mạng xã hội nội bộ** (bảng tin · tin tức · nhóm · bình chọn · sáng kiến · vinh danh). App vệ tinh **đăng bài Facebook** ([DECISIONS-08](<DECISIONS/DECISIONS-08_Social_Satellite_App.md>)) là **tiện ích con** bên trong module đó và giữ nguyên **ba cặp cũ** `('view','social-post')` · `('create','social-post')` · `('manage','social-account')` — **không** đổi tên, **không** đổi grant (SOC-DEC-002). Mọi cặp của mạng xã hội nội bộ mang tiền tố **`feed-`**.
 
-| Cặp quyền (SPEC-16 §11.1)   | `is_sensitive` | Ý nghĩa                                                                                                                                                                                                   | Nhân viên | Trưởng đơn vị  | HR  | BOD/Admin |
-| --------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------------- | --- | --------- |
-| `('view','feed')`           | false          | Đọc bảng tin · bài · bình luận · tìm kiếm · sinh nhật (ngày+tháng)                                                                                                                                        | all       | all            | all | all       |
-| `('create','feed-post')`    | false          | Đăng bài `share`/`idea`/`poll`/`kudos`                                                                                                                                                                    | all       | all            | all | all       |
-| `('create','feed-comment')` | false          | Bình luận · trả lời 1 cấp                                                                                                                                                                                 | all       | all            | all | all       |
-| `('create','feed-poll')`    | false          | Tạo bình chọn                                                                                                                                                                                             | all       | all            | all | all       |
-| `('create','feed-idea')`    | false          | Gửi sáng kiến                                                                                                                                                                                             | all       | all            | all | all       |
-| `('create','feed-kudos')`   | false          | Gửi lời vinh danh · **tra danh bạ người nhận `SOCIAL-API-059`** (tên + avatar + `employeeId` của người đang làm — SOC-DEC-013; ⚠️ cặp này MỘT MÌNH đã mở danh bạ, kể cả khi vai thiếu `create:feed-post`) | all       | all            | all | all       |
-| `('create','feed-group')`   | false          | Tạo nhóm                                                                                                                                                                                                  | all       | all            | all | all       |
-| `('manage','feed-news')`    | false          | Đăng **tin tức** công ty · ghim «Tin nổi bật» · xem danh sách đã đọc                                                                                                                                      | không     | không          | all | all       |
-| `('manage','feed-post')`    | false          | Ẩn/hiện · ghim/bỏ ghim · khoá bình luận · xoá bài người khác                                                                                                                                              | không     | không          | all | all       |
-| `('manage','feed-group')`   | false          | Can thiệp nhóm bất kỳ (kể cả nhóm mình không là thành viên)                                                                                                                                               | không     | không          | all | all       |
-| `('manage','feed-kudos')`   | false          | CRUD catalog huy hiệu · ghim vinh danh chính thức                                                                                                                                                         | không     | không          | all | all       |
-| `('manage','feed-report')`  | false          | Xử lý báo cáo (resolve/dismiss) + hành động kiểm duyệt kèm                                                                                                                                                | không     | không          | all | all       |
-| `('approve','feed-idea')`   | false          | Xét duyệt sáng kiến (`under_review`/`accepted`/`rejected`)                                                                                                                                                | không     | không          | all | all       |
-| `('view','feed-report')`    | false          | Đọc hàng đợi báo cáo + thống kê tương tác                                                                                                                                                                 | không     | **department** | all | all       |
-| `('restore','feed-post')`   | false          | Liệt kê + khôi phục bài trong thùng rác (`SOCIAL-API-057/058`) — mig `0590`; **ngoài SPEC-16 §11.1** (owner O1, BE-3C)                                                                                    | không     | không          | all | all       |
+| Cặp quyền (SPEC-16 §11.1) | `is_sensitive` | Ý nghĩa | Nhân viên | Trưởng đơn vị | HR | BOD/Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| `('view','feed')` | false | Đọc bảng tin · bài · bình luận · tìm kiếm · sinh nhật (ngày+tháng) | all | all | all | all |
+| `('create','feed-post')` | false | Đăng bài `share`/`idea`/`poll`/`kudos` | all | all | all | all |
+| `('create','feed-comment')` | false | Bình luận · trả lời 1 cấp | all | all | all | all |
+| `('create','feed-poll')` | false | Tạo bình chọn | all | all | all | all |
+| `('create','feed-idea')` | false | Gửi sáng kiến | all | all | all | all |
+| `('create','feed-kudos')` | false | Gửi lời vinh danh · **tra danh bạ người nhận `SOCIAL-API-059`** (tên + avatar + `employeeId` của người đang làm — SOC-DEC-013; ⚠️ cặp này MỘT MÌNH đã mở danh bạ, kể cả khi vai thiếu `create:feed-post`) | all | all | all | all |
+| `('create','feed-group')` | false | Tạo nhóm | all | all | all | all |
+| `('manage','feed-news')` | false | Đăng **tin tức** công ty · ghim «Tin nổi bật» · xem danh sách đã đọc | không | không | all | all |
+| `('manage','feed-post')` | false | Ẩn/hiện · ghim/bỏ ghim · khoá bình luận · xoá bài người khác | không | không | all | all |
+| `('manage','feed-group')` | false | Can thiệp nhóm bất kỳ (kể cả nhóm mình không là thành viên) | không | không | all | all |
+| `('manage','feed-kudos')` | false | CRUD catalog huy hiệu · ghim vinh danh chính thức | không | không | all | all |
+| `('manage','feed-report')` | false | Xử lý báo cáo (resolve/dismiss) + hành động kiểm duyệt kèm | không | không | all | all |
+| `('approve','feed-idea')` | false | Xét duyệt sáng kiến (`under_review`/`accepted`/`rejected`) | không | không | all | all |
+| `('view','feed-report')` | false | Đọc hàng đợi báo cáo + thống kê tương tác | không | **department** | all | all |
+| `('restore','feed-post')` | false | Liệt kê + khôi phục bài trong thùng rác (`SOCIAL-API-057/058`) — mig `0590`; **ngoài SPEC-16 §11.1** (owner O1, BE-3C) | không | không | all | all |
 
 Ghi chú:
 
