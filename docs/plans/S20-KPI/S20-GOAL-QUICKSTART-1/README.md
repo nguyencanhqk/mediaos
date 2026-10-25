@@ -1,0 +1,34 @@
+# S20-GOAL-QUICKSTART-1 — lượt đếm KPI #15
+
+Theo `docs/plans/S20-WORKUX-STORIES.md` §4 và §7 Q25 = A: đếm trong trình duyệt thật (Playwright MCP) với API giả lập, chạy tay trước khi mở PR. Người dùng đo: nhân viên có mọi cặp GOAL ở phạm vi Own (`create:goal@Own`). Đồng hồ trình duyệt 25/10/2026, múi máy Asia/Bangkok.
+
+## Sổ vết
+
+| Ngày       | Commit     | Phép đo                                                                   | Đích                                                                    | Đo được                                                                                                                                                                                                                    |
+| ---------- | ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 25/10/2026 | `baa8e63e` | KPI #15: tạo mục tiêu cá nhân quý, xuất phát `/goals`, đơn vị đo mặc định | ≤ 5 thao tác                                                            | ✅ 4 thao tác: «Tạo mục tiêu» → nhập tên → nhập chỉ tiêu → «Tạo mục tiêu» (lưu)                                                                                                                                            |
+| 25/10/2026 | `baa8e63e` | KPI #15: số chuyển trang của cùng luồng                                   | ≤ 1 chuyển trang                                                        | ❌ 2 lần đổi pathname: `/goals` → `/goals/new` (bấm Tạo) và `/goals/new` → `/goals/:id` (tự chuyển sau khi lưu, tiêu chí 3 của story cần lần này)                                                                          |
+| 25/10/2026 | `baa8e63e` | Cùng luồng, đổi «Đơn vị đo» sang Số                                       | ≤ 5 thao tác                                                            | ❌ 6 thao tác theo luật đếm (mở dropdown + chọn mục = 2); 5 nếu tính chọn kiểu đo là 1 như bảng «Sau» của story; 2 lần đổi pathname                                                                                        |
+| 25/10/2026 | `baa8e63e` | Body `POST /goals` (cả hai lượt)                                          | cấp Nhân viên · chủ thể = mình · quý hiện tại theo giờ công ty · Active | ✅ `level: "employee"`, `employeeId` = `employee.id` của `/auth/me`, `periodType: "quarter"`, `2026-10-01..2026-12-31`, `status: "Active"`; form ẩn ô Cấp + Chủ thể, hiện dòng «Mục tiêu cá nhân của bạn (cấp Nhân viên).» |
+| 25/10/2026 | `baa8e63e` | Request thêm khi mở `/goals/new`                                          | 0 (done_when: «không thêm request»)                                     | ❌ +1 `GET /auth/me` mỗi lần mở form (2/2 lượt): lúc khởi động app hồ sơ không vào cache `authKeys.me()`, hook của form tự gọi lại                                                                                         |
+| 25/10/2026 | `baa8e63e` | Lưu với mặc định ⇒ Check-in ở chi tiết                                    | bấm được ngay                                                           | ✅ trang chi tiết hiện «Đang chạy», nút Check-in bật, không có dòng khoá                                                                                                                                                   |
+| 25/10/2026 | `baa8e63e` | Thiếu `create:goal` ⇒ lối tạo trên `/goals`                               | 0                                                                       | ✅ 0 nút/link tạo khi danh sách có dữ liệu, khi danh sách rỗng và khi «Của tôi» rỗng; 0 `POST /goals`                                                                                                                      |
+| 25/10/2026 | `baa8e63e` | Mục tiêu Nháp: «Kích hoạt» ở chi tiết                                     | 1 thao tác, `PATCH {status:'Active'}`                                   | ✅ 1 thao tác, 0 chuyển trang; 1 PATCH body `{"status":"Active"}`; trong 1,5 s mock trễ trạng thái hiện «Đang chạy» và Check-in bật; toast «Đã kích hoạt mục tiêu «…».»                                                    |
+| 25/10/2026 | `baa8e63e` | «Kích hoạt», mock trả 403                                                 | quay về Nháp + thông báo                                                | ✅ lạc quan «Đang chạy» rồi về «Nháp», «Kích hoạt» hiện lại, Check-in khoá lại kèm lý do; toast «Bạn không có quyền sửa mục tiêu này»; sau khi tải lại chi tiết vẫn Nháp                                                   |
+| 25/10/2026 | `baa8e63e` | Mốc biên 2026-09-30T17:30Z (UTC còn Q3)                                   | quý theo giờ công ty                                                    | ✅ form điền `2026-10-01..2026-12-31`. Múi máy (UTC+7) trùng giờ công ty nên lượt này phân biệt được với UTC, không phân biệt được với giờ máy                                                                             |
+
+Ghi chú:
+
+- Đích «≤ 1 chuyển trang» lấy từ bảng KPI §4 (cột «2→1»). Luồng «Trước» của story cũng ra 2 khi đếm cùng cách: bấm Tạo rồi tự chuyển về chi tiết sau khi lưu. Muốn đạt 1 thì cần đổi cách đếm (không tính lần tự chuyển sau khi lưu) hoặc đổi luồng (tạo ngay trên `/goals`). Owner chọn.
+- Lúc chờ PATCH (lạc quan), nút Check-in đã bật. Người dùng bấm Check-in trong khoảng đó mà server trả 403 thì check-in sẽ bị BE từ chối (GOAL-ERR-006).
+- Ảnh `C4-403-rolled-back.png`: ở khung 1366 × 900, toast lỗi nằm đè lên ba nút đầu trang chi tiết (Check-in · Kích hoạt · Sửa) trong lúc còn hiện.
+
+## Chạy lại
+
+1. Build `packages/contracts` (dist/cjs) trong cây đang đo.
+2. `node gen-fixtures.cjs > fixtures.json` (tuỳ chọn — `fixtures.json` đã có sẵn), rồi `node mock-api.cjs fixtures.json` (nghe `127.0.0.1:59999`).
+3. Dev server từ gốc repo: `VITE_API_URL=http://127.0.0.1:59999/api/v1 VITE_AUTH_APP_URL=http://127.0.0.1:59998 pnpm --filter @mediaos/app exec vite --port 5299 --strictPort`.
+4. Chép `run.js` vào `.playwright-mcp/` của checkout mà Playwright MCP được phép đọc, bỏ dấu `;` cuối tệp (MCP bọc mã trong `(...)(page)`), rồi `browser_run_code` với `filename=` trỏ vào bản chép. Ảnh lưu dưới `.playwright-mcp/s20-kpi/QS-*.png`.
+5. Xong: dừng hai tiến trình theo PID đang nghe cổng 5299 / 59999 (`netstat -ano`), không diệt theo tên tiến trình.
+
+`page.route`/`route.fulfill` làm rơi kết nối Playwright MCP trên máy đo, nên API giả lập là một tiến trình node riêng. Điều khiển mock: `POST /__smoke/state` (`me` = `meOwn`/`meNoCreate`, `phase`, `resetGoals`, `resetLog`, `listEmpty`, `meGoalsEmpty`, `denyPatch`, `patchDelayMs`) · `GET /__smoke/log`. Đường chưa giả lập trả 404 và ghi vào `unmocked`; lượt này chỉ có `/me/preferences`, `/foundation/company/branding`, `/me/avatar`, `/socket.io` (ngoài luồng đo).
