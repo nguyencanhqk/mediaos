@@ -9,7 +9,7 @@
  *  · I-2 mục tiêu đích chỉ nhận việc khi trạng thái ∈ {Draft, Active} (quyết định owner 25/10/2026).
  *  · I-3 từ chối ⇒ 0 hàng `tasks` đổi, 0 hàng audit mới — tất-cả-hoặc-không cho cả lô.
  *  · I-4 chuyển thành công ⇒ audit ở CẢ HAI mục tiêu + tiến độ tính lại ở cả hai.
- *  · I-5 kiểm + ghi trên hàng ĐÃ KHOÁ trong một transaction (ca đua R7/R8/R9).
+ *  · I-5 kiểm + ghi trên hàng ĐÃ KHOÁ trong một transaction (ca đua R7/R8/R9/R10, U2 ở đường tháo).
  *  · I-6 cô lập tenant giữ nguyên.
  *
  * Vai trò TỰ TẠO (tiền tố riêng của spec; cặp + phạm vi là dữ liệu fixture, không phải vai trò chính tắc):
@@ -624,6 +624,24 @@ describe.skipIf(!hasLaneDb)("S20-SEC-GOALLINKGATE-1 · liên kết việc–mụ
       },
       RACE_TIMEOUT_MS,
     );
+
+    it(
+      "R10 · mục tiêu đích chuyển sang trạng thái đã đóng đồng thời ⇒ 422 GOAL-ERR-016, việc không được gắn",
+      async () => {
+        const target = await goalInX();
+        const t = await seedTask({ departmentId: ouX });
+
+        const res = await raceAgainst(
+          `UPDATE goals SET status = 'Completed'
+            WHERE company_id = $1 AND id = $2 AND status = 'Active'`,
+          [A.companyId, target],
+          () => link(co, target, [t]),
+        );
+        expectDenied(res, 422, "GOAL-ERR-016");
+        expect(await goalIdOf(t)).toBeNull();
+      },
+      RACE_TIMEOUT_MS,
+    );
   });
 
   // ── I-6 · cô lập tenant + hồi quy đường tháo ────────────────────────────────────────────────
@@ -663,5 +681,24 @@ describe.skipIf(!hasLaneDb)("S20-SEC-GOALLINKGATE-1 · liên kết việc–mụ
       expectDenied(await unlink(co, oldGoal, t), 422, "GOAL-ERR-005");
       expect(await goalIdOf(t)).toBe(oldGoal);
     });
+
+    it(
+      "U2 · tháo việc khỏi mục tiêu được chốt kỳ đồng thời ⇒ 422 GOAL-ERR-005, liên kết giữ",
+      async () => {
+        // progress_percent = 0 khớp dữ liệu (1 việc chưa Done) — giá trị thật, không phải số giả.
+        const held = await goalInX({ progressPercent: 0 });
+        const t = await seedTask({ departmentId: ouX, goalId: held });
+
+        const res = await raceAgainst(
+          `UPDATE goals SET finalized_at = now()
+            WHERE company_id = $1 AND id = $2 AND finalized_at IS NULL`,
+          [A.companyId, held],
+          () => unlink(co, held, t),
+        );
+        expectDenied(res, 422, "GOAL-ERR-005");
+        expect(await goalIdOf(t)).toBe(held);
+      },
+      RACE_TIMEOUT_MS,
+    );
   });
 });
