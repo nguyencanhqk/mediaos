@@ -7,6 +7,12 @@ interface User {
   email: string;
   fullName: string | null;
   status: string;
+  /**
+   * Hồ sơ nhân sự liên kết (`/auth/me.employee`, đã có trong lượt /me lúc khởi động — `setUser` giữ nguyên
+   * cả phản hồi). null = tài khoản không gắn hồ sơ; vắng = call site không gửi. Chỉ trường định danh,
+   * không có dữ liệu nhạy cảm (meResponseSchema). Đọc từ đây thay vì gọi lại `/auth/me`.
+   */
+  employee?: { id: string; departmentId: string | null } | null;
 }
 
 interface AuthState {

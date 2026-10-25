@@ -50,6 +50,7 @@ import {
   GoalCheckinLockHint,
   GoalCompletionBanner,
 } from "./components/GoalStatusQuickActions";
+import { useGoalStatusPendingIds } from "./hooks/use-goal-status-mutation";
 import { SimpleTable, TabError, TabSkeleton } from "./components/GoalTabPrimitives";
 import type { GoalDetailTab } from "./goal-list-search";
 import { childGoalPrefill } from "./goal-form-prefill";
@@ -103,6 +104,8 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
   );
   // S20-GOAL-QUICKSTART-1 — nút Check-in đang khoá trỏ tới dòng lý do (aria-describedby).
   const checkinLockHintId = useId();
+  // Đổi trạng thái đang chờ server ⇒ Check-in chờ xác nhận (bản lạc quan có thể bị rollback).
+  const statusPending = useGoalStatusPendingIds().has(goalId);
 
   const goalQuery = useQuery({
     queryKey: goalKeys.detail(goalId),
@@ -179,7 +182,8 @@ export function GoalDetailPage({ goalId, tab, onTabChange, onEdit, onBack }: Goa
             <Button
               size="sm"
               data-testid="goal-checkin-open"
-              disabled={checkinLocked}
+              disabled={checkinLocked || statusPending}
+              aria-busy={statusPending || undefined}
               aria-describedby={checkinLocked ? checkinLockHintId : undefined}
               onClick={() => setCheckinOpen(true)}
             >

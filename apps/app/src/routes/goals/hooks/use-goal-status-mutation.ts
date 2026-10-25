@@ -122,6 +122,25 @@ export function goalStatusErrorMessage(error: unknown, t: (key: string) => strin
   return mapped || t("statusChange.errors.generic");
 }
 
+/**
+ * Mọi mục tiêu đang chờ server đổi trạng thái (mọi hook, mọi màn). Nút ghi PHỤ THUỘC trạng thái mới —
+ * Check-in — khoá trong khoảng chờ: bản lạc quan đã hiện Active nhưng server vẫn có thể từ chối (403/422),
+ * khi đó một lần check-in bấm trong khoảng này sẽ bị BE trả lỗi.
+ */
+export function useGoalStatusPendingIds(): ReadonlySet<string> {
+  const pendingIds = useMutationState({
+    filters: { mutationKey: GOAL_STATUS_MUTATION_KEY, status: "pending" },
+    select: (pending) => {
+      const variables = pending.state.variables;
+      return isRecord(variables) && typeof variables.goalId === "string" ? variables.goalId : null;
+    },
+  });
+  return useMemo<ReadonlySet<string>>(
+    () => new Set(pendingIds.filter((id): id is string => id !== null)),
+    [pendingIds],
+  );
+}
+
 export function useGoalStatusMutation(): GoalStatusMutation {
   const { t } = useTranslation("goals");
   const queryClient = useQueryClient();
@@ -173,17 +192,6 @@ export function useGoalStatusMutation(): GoalStatusMutation {
     [mutateAsync],
   );
 
-  const pendingIds = useMutationState({
-    filters: { mutationKey: GOAL_STATUS_MUTATION_KEY, status: "pending" },
-    select: (pending) => {
-      const variables = pending.state.variables;
-      return isRecord(variables) && typeof variables.goalId === "string" ? variables.goalId : null;
-    },
-  });
-  const pendingGoalIds = useMemo<ReadonlySet<string>>(
-    () => new Set(pendingIds.filter((id): id is string => id !== null)),
-    [pendingIds],
-  );
-
+  const pendingGoalIds = useGoalStatusPendingIds();
   return { changeStatus, pendingGoalIds };
 }

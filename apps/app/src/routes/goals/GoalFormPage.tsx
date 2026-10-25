@@ -21,7 +21,6 @@ import { Button, Card, CardContent, Input, Select, toast } from "@mediaos/ui";
 import { EmployeePicker } from "@/routes/tasks/EmployeePicker";
 import {
   GOAL_LEVEL_OPTIONS,
-  GOAL_MEASURE_TYPE_OPTIONS,
   GOAL_PERIOD_TYPE_OPTIONS,
   GOAL_PROGRESS_MODE_OPTIONS,
   GOAL_STATUS_OPTIONS,
@@ -42,6 +41,7 @@ import {
   shouldAnchorSelf,
 } from "./goal-form-defaults";
 import { useGoalFormQuickStart } from "./hooks/use-goal-form-quick-start";
+import { GoalMeasureTypeChoice } from "./components/GoalMeasureTypeChoice";
 
 interface GoalFormPageProps {
   /** Có → SỬA; không → TẠO. */
@@ -517,15 +517,11 @@ export function GoalFormPage({
                 ))}
               </Select>
             </Field>
-            <Field label={t("form.fields.measureType")}>
-              <Select {...register("measureType")} disabled={disabled}>
-                {GOAL_MEASURE_TYPE_OPTIONS.map((m) => (
-                  <option key={m} value={m}>
-                    {t(`measureType.${m}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <GoalMeasureTypeChoice
+              registration={register("measureType")}
+              value={measureType}
+              disabled={disabled}
+            />
             <Field
               label={t("form.fields.targetValue")}
               error={errFor(errors.targetValue?.message, t)}

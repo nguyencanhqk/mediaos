@@ -84,7 +84,8 @@ async (page) => {
         periodStart: v("periodStart"),
         periodEnd: v("periodEnd"),
         status: v("status"),
-        measureType: v("measureType"),
+        // Nhóm radio: giá trị là ô đang chọn (querySelector trần trả ô ĐẦU TIÊN).
+        measureType: document.querySelector('[name="measureType"]:checked')?.value ?? null,
       };
     });
   const pickBody = (b) => ({
@@ -228,8 +229,10 @@ async (page) => {
   await run("A2", async () => {
     await startOnGoals("A2");
     await openFormAndName("A2", "Chốt 12 hợp đồng mới (đếm số)");
-    await act("mở «Đơn vị đo»", () => page.locator('select[name="measureType"]').click());
-    await act("chọn «Số»", () => page.locator('select[name="measureType"]').selectOption("number"));
+    // «Đơn vị đo» là nhóm chọn một chạm (không còn dropdown mở + chọn = 2).
+    await act("chọn «Con số»", () =>
+      page.getByRole("group", { name: "Đơn vị đo" }).getByText("Con số", { exact: true }).click(),
+    );
     await act("nhập chỉ tiêu", () => page.locator('input[name="targetValue"]').fill("12"));
     await saveAndLand("A2");
   });

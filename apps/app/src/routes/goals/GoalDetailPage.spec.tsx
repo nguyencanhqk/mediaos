@@ -474,15 +474,26 @@ describe("GoalDetailPage — đổi trạng thái một chạm (NV-02)", () => {
     expect(checkin).toHaveAttribute("aria-describedby", reason.id);
   });
 
-  it("(s2) bấm «Kích hoạt» ⇒ PATCH {status:'Active'}, Check-in bấm được ngay", async () => {
+  it("(s2) bấm «Kích hoạt» ⇒ PATCH {status:'Active'}; Check-in chờ server xác nhận rồi bấm được ngay", async () => {
     mockGetGoal.mockResolvedValue(DRAFT);
-    mockUpdateGoal.mockReturnValue(new Promise(() => undefined));
+    let confirm: (saved: unknown) => void = () => undefined;
+    mockUpdateGoal.mockReturnValue(
+      new Promise((resolve) => {
+        confirm = resolve;
+      }),
+    );
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Kích hoạt" }));
     // mutationFn chạy SAU onMutate (huỷ query đang chạy + ghi lạc quan) ⇒ chờ một nhịp.
     await waitFor(() => expect(mockUpdateGoal).toHaveBeenCalledWith("g-1", { status: "Active" }));
+    // Lạc quan: lý do «Nháp» biến mất ngay; Check-in vẫn khoá tới khi PATCH về (server có thể từ chối).
+    await waitFor(() =>
+      expect(screen.queryByTestId("goal-checkin-lock-reason")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("goal-checkin-open")).toBeDisabled();
+    mockGetGoal.mockResolvedValue({ ...DRAFT, status: "Active" });
+    confirm({ ...DRAFT, status: "Active" });
     await waitFor(() => expect(screen.getByTestId("goal-checkin-open")).toBeEnabled());
-    expect(screen.queryByTestId("goal-checkin-lock-reason")).not.toBeInTheDocument();
   });
 
   it("(s3) BE 403 (ngoài phạm vi) ⇒ về Draft, «Kích hoạt» trở lại, Check-in khoá lại", async () => {

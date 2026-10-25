@@ -7,7 +7,7 @@
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
@@ -44,7 +44,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     yearRange: actual.yearRange,
     taskProjectApi: { listProjects: vi.fn() },
     taskKeys: { projects: { list: (p?: unknown) => ["tasks", "projects", "list", p] } },
-    // S20-GOAL-QUICKSTART-1 — mặc định đọc phạm vi create:goal (store THẬT) + hồ sơ của mình (/auth/me).
+    // S20-GOAL-QUICKSTART-1 — mặc định đọc phạm vi create:goal + hồ sơ của mình từ store phiên THẬT
+    // (lượt /auth/me lúc khởi động). `authApi.me` là spy để khoá «mở form không gọi lại /auth/me».
     useAuthStore: actual.useAuthStore,
     authApi: { me: vi.fn() },
     authKeys: actual.authKeys,
@@ -92,7 +93,7 @@ beforeEach(() => {
   mockListEmployees.mockResolvedValue({ items: [], meta: {} });
   mockListProjects.mockResolvedValue([{ id: "prj-1", name: "Dự án A" }]);
   mockMe.mockResolvedValue({ employee: { id: SELF_ID } });
-  useAuthStore.setState({ scopes: {} });
+  useAuthStore.setState({ scopes: {}, user: selfUser(SELF_ID) });
 });
 
 describe("GoalFormPage — chọn cấp → field neo tương ứng (GOAL-SCREEN-003)", () => {
@@ -324,7 +325,6 @@ describe("GoalFormPage — mặc định thông minh (NV-01)", () => {
     mockCreateGoal.mockResolvedValue({ id: "g-new", parentGoalId: null, name: "Doanh số" });
     renderForm({ onSuccess });
 
-    await waitFor(() => expect(mockMe).toHaveBeenCalled());
     expect(screen.queryByRole("combobox", { name: /Cấp mục tiêu/ })).not.toBeInTheDocument();
     await waitFor(() =>
       expect(screen.queryByTestId("goal-employee-anchor")).not.toBeInTheDocument(),
@@ -350,8 +350,7 @@ describe("GoalFormPage — mặc định thông minh (NV-01)", () => {
   });
 
   it("(q2) chỉ Own nhưng không lấy được hồ sơ ⇒ ô Chủ thể hiện để chọn tay + thông báo, form không bị chặn", async () => {
-    useAuthStore.setState({ scopes: { "create:goal": ["Own"] } });
-    mockMe.mockResolvedValue({ employee: null });
+    useAuthStore.setState({ scopes: { "create:goal": ["Own"] }, user: selfUser(null) });
     renderForm();
 
     expect(await screen.findByText(/Không lấy được hồ sơ nhân sự của bạn/)).toBeInTheDocument();
@@ -393,4 +392,48 @@ describe("GoalFormPage — mặc định thông minh (NV-01)", () => {
     expect(field(/Bắt đầu kỳ/).value).toBe("2026-02-01");
     expect(field(/Kết thúc kỳ/).value).toBe("2026-12-31");
   });
+
+  it("(q6) mở form tạo KHÔNG gọi /auth/me — hồ sơ của mình lấy từ phiên đã nạp lúc khởi động", async () => {
+    useAuthStore.setState({ scopes: { "create:goal": ["Own"] }, user: selfUser(SELF_ID) });
+    const onSuccess = vi.fn();
+    renderForm({ onSuccess });
+
+    fireEvent.change(field(/Tên mục tiêu/), { target: { value: "Doanh số" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Tạo mục tiêu$/ }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("g-new"));
+    expect(mockCreateGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ level: "employee", employeeId: SELF_ID }),
+    );
+    expect(mockMe).not.toHaveBeenCalled();
+  });
+
+  it("(q7) «Đơn vị đo» chọn MỘT chạm (nhóm lựa chọn, không phải dropdown) ⇒ lưu gửi kiểu đo đã chọn", async () => {
+    useAuthStore.setState({ scopes: { "create:goal": ["Own"] }, user: selfUser(SELF_ID) });
+    const onSuccess = vi.fn();
+    renderForm({ onSuccess });
+
+    const group = screen.getByRole("group", { name: "Đơn vị đo" });
+    expect(within(group).getByRole("radio", { name: "Phần trăm (%)" })).toBeChecked();
+    fireEvent.click(within(group).getByText("Con số"));
+    expect(within(group).getByRole("radio", { name: "Con số" })).toBeChecked();
+    fireEvent.change(field(/Tên mục tiêu/), { target: { value: "Hợp đồng mới" } });
+    fireEvent.change(field(/Giá trị mục tiêu/), { target: { value: "12" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Tạo mục tiêu$/ }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("g-new"));
+    expect(mockCreateGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ measureType: "number", targetValue: 12 }),
+    );
+  });
 });
+
+/** Phiên đã nạp lúc khởi động (bootstrapSession ghi `/auth/me` vào store). */
+function selfUser(employeeId: string | null) {
+  return {
+    id: "u-self",
+    companyId: "c-1",
+    email: "nv@example.test",
+    fullName: "NV",
+    status: "Active",
+    employee: employeeId === null ? null : { id: employeeId, departmentId: null },
+  };
+}

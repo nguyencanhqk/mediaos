@@ -279,11 +279,23 @@ describe("MeGoalsCard — kỳ hiện tại, cả Nháp (NV-04)", () => {
   it("(c7) «Kích hoạt» ⇒ PATCH {status:'Active'} qua hook dùng chung", async () => {
     setCaps(OPEN_CAPS);
     mockGetGoals.mockResolvedValue([makeGoal({ status: "Draft" })]);
-    mockUpdateGoal.mockReturnValue(new Promise(() => undefined));
+    let confirm: (saved: unknown) => void = () => undefined;
+    mockUpdateGoal.mockReturnValue(
+      new Promise((resolve) => {
+        confirm = resolve;
+      }),
+    );
     renderCard();
     fireEvent.click(await screen.findByRole("button", { name: "Kích hoạt" }));
     // mutationFn chạy SAU onMutate (huỷ query đang chạy + ghi lạc quan) ⇒ chờ một nhịp.
     await waitFor(() => expect(mockUpdateGoal).toHaveBeenCalledWith("g-1", { status: "Active" }));
+    // Lạc quan đổi dòng sang Active ngay, nhưng Check-in chờ server xác nhận (server có thể từ chối).
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Kích hoạt" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("me-goal-checkin-g-1")).toBeDisabled();
+    mockGetGoals.mockResolvedValue([makeGoal({ status: "Active" })]);
+    confirm(makeGoal({ status: "Active" }));
     await waitFor(() => expect(screen.getByTestId("me-goal-checkin-g-1")).toBeEnabled());
   });
 

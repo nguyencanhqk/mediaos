@@ -42,6 +42,7 @@ import {
   GoalActivateButton,
   GoalCheckinLockHint,
 } from "@/routes/goals/components/GoalStatusQuickActions";
+import { useGoalStatusPendingIds } from "@/routes/goals/hooks/use-goal-status-mutation";
 import { goalCheckinLockReason, goalPeriodLabel } from "@/routes/goals/goal-format";
 import {
   GOAL_ENGINE_PAIRS,
@@ -234,6 +235,8 @@ function MeGoalRow({
   const { t } = useTranslation("me");
   const lockHintId = `me-goal-lock-${goal.id}`;
   const locked = goalCheckinLockReason(goal) !== null;
+  // «Kích hoạt» đang chờ server ⇒ Check-in chờ xác nhận (bản lạc quan có thể bị rollback).
+  const statusPending = useGoalStatusPendingIds().has(goal.id);
   return (
     <li className="space-y-1">
       <div className="flex items-start justify-between gap-2">
@@ -255,7 +258,8 @@ function MeGoalRow({
               className="h-auto shrink-0 p-1 text-xs text-brand hover:bg-transparent"
               data-testid={`me-goal-checkin-${goal.id}`}
               // Nháp / đã chốt kỳ ⇒ khoá ngay ở client (GOAL-ERR-005/006) thay vì để ăn 422.
-              disabled={locked}
+              disabled={locked || statusPending}
+              aria-busy={statusPending || undefined}
               aria-describedby={locked ? lockHintId : undefined}
               onClick={onCheckin}
             >
