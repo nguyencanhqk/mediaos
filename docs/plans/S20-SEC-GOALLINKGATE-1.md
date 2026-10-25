@@ -215,16 +215,27 @@ pathsNeeded (ngoài `paths`): `docs/API Design/API-12_GOAL_API_Design.md` dòng 
 
 ## §8 Ngoài phạm vi / nợ
 
-- N1 — Phân rã (W3) chặn `Cancelled` nhưng cho `Completed` (`goal-decompose.service.ts:206`); I-2 cho gắn chặn cả hai.
-  Lệch tập trạng thái giữa hai đường tạo liên kết ⇒ cần owner chốt (ghi ở openQuestions; KHÔNG sửa trong WO này).
-- N2 — Chốt kỳ (`goal-checkin.service.ts:149-195`) không khoá hàng goal trước recompute cuối ⇒ ảnh chụp tiến độ có thể lỡ
-  một thay đổi việc ĐỒNG THỜI (đúng cho mọi writer TASK, không riêng WO này). Bất biến liên kết vẫn giữ nhờ khoá phía chuyển.
+- N1 — **ĐÓNG ở vá gate (§11):** phân rã (W3) từng chặn `Cancelled` nhưng cho `Completed`; nay phân rã và gắn quyết định
+  trạng thái bằng CÙNG vị từ `GoalAccessService.acceptsNewTasks` (theo quyết định owner 25/10 + `done_when` «khớp phân rã»).
+- N2 — Chốt kỳ (`goal-checkin.service.ts:149-195`) đọc + recompute trên hàng goal CHƯA khoá; chỉ các câu UPDATE (recompute,
+  `setFinalizedTx`) chờ khoá của phép gắn/chuyển đồng thời ⇒ `progress_percent` được chốt có thể tính từ tập việc TRƯỚC khi phép
+  chuyển commit, rồi không còn ai tính lại (goal đã chốt). Phía gắn vẫn đúng: chốt commit trước ⇒ quyết định lại trên hàng khoá
+  thấy. Đề xuất WO tiếp: khoá hàng goal (`lockGoalsTx`) đầu tx chốt kỳ, trước recompute cuối, + ca đua `waitForBlockedBy` (gate DB-1).
 - N3 — Bubble lên goal cha khi recompute không theo thứ tự khoá cố định (có từ trước) ⇒ 40P01 hiếm vẫn có thể; không đổi ở đây.
+  Hướng sửa nếu gặp ngoài thực tế: đưa chuỗi cha vào tập `lockGoalsTx` (vẫn `order by id`) hoặc ánh xạ 40P01 → lỗi thử lại (gate F5 · DB-3).
 - N4 — FE: tab «Công việc gắn»/picker nên khoá nút gắn khi mục tiêu `Completed`/`Cancelled` và báo trước «việc đang thuộc mục tiêu
   khác» (thuộc S20-GOAL-BULKLINK-1 / luồng auto-link).
 - N5 — Thông điệp 403 ở goal cũ là thông điệp chung của `assertCanWriteExistingGoal` (cùng hàm ⇒ cùng câu chữ); làm rõ «mục tiêu
   đang giữ việc» là việc UX phía FE.
 - N6 — Mục tiêu xoá mềm vẫn để `tasks.goal_id` trỏ tới (có từ trước, §2e).
+- N7 — Xoá mục tiêu kiểm «chưa chốt» trên hàng chưa khoá (`goals.service.ts:325`) và `softDeleteTx` không có vị từ `finalized_at`
+  (`goals.repository.ts:573`) ⇒ đua xoá ↔ chốt có thể để lại một hàng vừa xoá mềm vừa đã chốt; ngoại lệ I-1 khi đó cho chuyển việc
+  ra khỏi hàng đó. Ảnh hưởng gần 0 (hàng đã xoá không đọc được qua API). Đề xuất: thêm `finalized_at IS NULL` vào vị từ
+  `softDeleteTx` (0 hàng ⇒ 422 GOAL-ERR-005) hoặc khoá hàng trong đường xoá. KHÔNG siết nhánh ngoại lệ — việc sẽ kẹt (gate SEC-GLG-3).
+- N8 — Khoá việc trước khi kiểm phạm vi ghi việc (khoá-rồi-quyết, §3.3): tối đa trần bulk của DTO hàng bị giữ khoá tới hết tx kể cả
+  khi lô bị từ chối, và kiểm phạm vi từng việc chạy khi đang giữ khoá. Không rò dữ liệu (ngoài phạm vi ⇒ 404 như không tồn tại).
+  Nếu đo thấy tranh chấp: kiểm phạm vi gộp một câu trước khoá + kiểm lại sau khoá; `SET LOCAL lock_timeout` cho tx này
+  (gate SEC-GLG-4 · F3 · DB-2).
 
 ## §9 Plan-review v1 → v1.1 (xác minh từng finding bằng mã)
 
@@ -260,3 +271,28 @@ pathsNeeded (ngoài `paths`): `docs/API Design/API-12_GOAL_API_Design.md` dòng 
   ⇒ thêm 2 ca bất biến I-5: **R10** (đích chuyển sang trạng thái đã đóng đồng thời ⇒ 422 GOAL-ERR-016) · **U2** (chốt kỳ đồng thời với
   tháo ⇒ 422 GOAL-ERR-005). Đo lại trên `500e8c66` (nền 32/32): cả hai biến thể bị giết.
 - Còn lại cho luồng chính: `bash harness/check.sh --all --lane-db` · FULL gate · ràng buộc thứ tự với `S20-GOAL-BULKLINK-1` (§7).
+
+## §11 Gate FULL — xử lý finding (25/10/2026, vá `681f8a3f`)
+
+Santa: security PASS_WITH_FINDINGS · correctness PASS_WITH_FINDINGS (+ silent-failure · database). Mỗi finding xác minh bằng mã trước khi quyết.
+
+| Finding (gộp trùng)                                    | Mức    | Quyết định         | Đo / thay đổi                                                                                                                                                                                                                                          |
+| ------------------------------------------------------ | ------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SEC-GLG-1 · F1 (corr) — phân rã nhận mục tiêu đã đóng  | MEDIUM | **vá** (đóng N1)   | Quyết định owner 25/10 + `done_when` «khớp phân rã». Tập `{Draft, Active}` chuyển vào `GoalAccessService.acceptsNewTasks` — MỘT vị từ cho gắn/chuyển (GOAL-ERR-016) và phân rã (GOAL-ERR-009, mã giữ nguyên). Ca mới: đã đóng ⇒ 422 · Nháp ⇒ nhận việc |
+| SEC-GLG-2 · F2 (corr) — pha ghi phân rã không khoá     | MEDIUM | **vá**             | Pha 3 gọi `lockGoalsTx([goalId])` trước `loadDecomposableGoalTx` (câu đọc kế tiếp thấy giá trị đã commit). Ca đua mới: chốt kỳ đồng thời ⇒ 422 GOAL-ERR-005, 0 việc (`waitForBlockedBy` = true)                                                        |
+| F4 (corr) · F1 (silent) — ngoại lệ mục tiêu đã xoá mềm | LOW    | **vá** (spec)      | SPEC-10 §12 ghi «ngoại lệ có tên». Không thu hẹp nhánh: hàng đã xoá không đọc được (`findByIdTx` lọc `deleted_at`), siết ⇒ việc kẹt vĩnh viễn                                                                                                          |
+| F2 (silent) — thứ tự khoá chưa thành hợp đồng          | LOW    | **vá** (chú thích) | `GoalsRepository.lockGoalsTx`: hợp đồng task → goal; phân rã khoá goal rồi chèn việc MỚI (không khoá việc có sẵn ⇒ không đảo thứ tự)                                                                                                                   |
+| F3 (silent) — recompute mục tiêu cũ đã xoá mềm         | LOW    | không đổi          | A5 xanh; `findProgressRowTx` lọc `deleted_at` ⇒ no-op (§3.6)                                                                                                                                                                                           |
+| SEC-GLG-3 — hàng vừa xoá mềm vừa đã chốt               | LOW    | nợ N7              | Xác nhận đọc mã (`goals.service.ts:325` · `goals.repository.ts:573`); ngoài đường gắn                                                                                                                                                                  |
+| SEC-GLG-4 · F3 (corr) · DB-2 — khoá trước kiểm phạm vi | LOW    | chấp nhận, nợ N8   | Khoá-rồi-quyết là thứ tự cần cho I-5 (§3.3); ngoài phạm vi ⇒ 404 như không tồn tại                                                                                                                                                                     |
+| F5 (corr) · DB-3 — bubble cha ngoài tập khoá           | LOW    | nợ N3              | Có từ trước; 40P01 hiếm, rollback sạch                                                                                                                                                                                                                 |
+| DB-1 — chốt kỳ không khoá hàng trước recompute cuối    | MEDIUM | nợ N2 (mở rộng)    | Đường chốt kỳ (`goal-checkin.service.ts`) ngoài `paths` WO, có từ trước, reviewer ghi không chặn; phía gắn đã đúng (chốt commit trước ⇒ quyết định lại trên hàng khoá thấy)                                                                            |
+
+Tệp đổi thêm (ngoài `paths` WO, tối thiểu): `apps/api/src/goals/goal-decompose.service.ts` (vị từ chung + khoá pha 3).
+`goal-access.service.ts` nay CÓ đổi (§6 dự kiến không) — nơi đặt vị từ chung.
+
+Đo:
+
+- `goal-tpl1-decompose` (+3 ca): trước vá 2 đỏ / 1 xanh trên 3 ca mới (ca Nháp xanh như dự kiến — ca ALLOW đứng cạnh); sau vá 19/19.
+- `goal-linkgate` + `goal-be2-link` 32/32 · `tsc --noEmit` (api, gồm `test/`) sạch · eslint 6 tệp chạm: 0 lỗi / 0 cảnh báo.
+- Đột biến (script ngoài repo, neo M5–M7 dời theo vị từ chung, thêm nhóm phân rã D1–D4): nền 32/32 (gắn) + 19/19 (phân rã) xanh; **20/20 được đếm bị giết** (M1–M12, M14, M15, X1, X2 + D1 bỏ cổng trạng thái phân rã · D2 bỏ khoá pha ghi · D3 tập riêng chỉ chặn Cancelled · D4 tập chung chỉ Active — mỗi D bị giết đúng ca mới của nó); M13 · M16 sống như dự đoán (tương đương, §5).
