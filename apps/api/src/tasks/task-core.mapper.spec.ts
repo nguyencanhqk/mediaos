@@ -118,3 +118,50 @@ describe("task-core.mapper — toTaskKanbanCardDto (SPEC-06 §13.8, S5-TASK-BE-6
     ).toBe("11111111-1111-4111-8111-111111111111");
   });
 });
+
+/**
+ * S20-SEC-GOALNAMEDTO-1 (plan §4 U1) — tham chiếu mục tiêu theo quyết định đọc mục tiêu. Mapper là điểm hợp
+ * nhất DUY NHẤT: thiếu quyết định đi kèm ⇒ fail-closed (null×3); cờ `hasGoal` = join mục tiêu còn sống trúng.
+ */
+describe("task-core.mapper — tham chiếu mục tiêu: cùng dữ liệu, cùng quyết định quyền", () => {
+  const GOAL_ID = "44444444-4444-4444-4444-444444444444";
+  const linkedRow: TaskCoreRow = {
+    ...baseRow,
+    goalId: GOAL_ID,
+    goalCode: "GOAL-0001",
+    goalName: "Mục tiêu X",
+  };
+  /** Đọc trường theo tên — `hasGoal` chưa có trong kiểu DTO ở bước RED. */
+  const field = (dto: object, key: string): unknown => (dto as Record<string, unknown>)[key];
+  const visible = { assigneeAvatarUrl: null, coverUrl: null, goalRefVisible: true };
+
+  it("U1a không có quyết định đọc mục tiêu đi kèm ⇒ ba trường null, chỉ cờ có mục tiêu", () => {
+    const dto = toTaskCoreDto(linkedRow);
+    expect(dto.goalName).toBeNull();
+    expect(dto.goalCode).toBeNull();
+    expect(dto.goalId).toBeNull();
+    expect(field(dto, "hasGoal")).toBe(true);
+  });
+
+  it("U1b quyết định thấy được ⇒ đủ ba trường của đúng mục tiêu + cờ", () => {
+    const dto = toTaskCoreDto(linkedRow, visible);
+    expect(dto.goalName).toBe("Mục tiêu X");
+    expect(dto.goalCode).toBe("GOAL-0001");
+    expect(dto.goalId).toBe(GOAL_ID);
+    expect(field(dto, "hasGoal")).toBe(true);
+  });
+
+  it("U1c thấy được nhưng join mục tiêu trượt (mục tiêu đã xoá mềm) ⇒ ba trường null, cờ false", () => {
+    const dto = toTaskCoreDto({ ...linkedRow, goalCode: null, goalName: null }, visible);
+    expect(dto.goalName).toBeNull();
+    expect(dto.goalCode).toBeNull();
+    expect(dto.goalId).toBeNull();
+    expect(field(dto, "hasGoal")).toBe(false);
+  });
+
+  it("U1d việc không gắn mục tiêu ⇒ ba trường null, cờ false", () => {
+    const dto = toTaskCoreDto(baseRow, visible);
+    expect(dto.goalId).toBeNull();
+    expect(field(dto, "hasGoal")).toBe(false);
+  });
+});
