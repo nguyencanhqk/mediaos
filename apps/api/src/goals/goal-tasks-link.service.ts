@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import type {
   DataScope,
+  GoalStatusDto,
   GoalTaskLinkResultDto,
   LinkGoalTasksRequest,
   TaskCoreResponseDto,
@@ -14,12 +15,23 @@ import { GoalProgressEngineService } from "../tasks/goal-progress-engine.service
 import { TaskCoreRepository } from "../tasks/task-core.repository";
 import { toTaskCoreDto } from "../tasks/task-core.mapper";
 import type { Goal } from "../db/schema/goals";
-import { GoalAccessService, type GoalRequestUser as RequestUser } from "./goal-access.service";
+import {
+  GoalAccessService,
+  type GoalActorScope,
+  type GoalRequestUser as RequestUser,
+} from "./goal-access.service";
 import { GOAL_ERR } from "./goals.errors";
 import { GoalsRepository, type TaskRefRow } from "./goals.repository";
 
 /** Trần số việc trả về cho tab "Công việc gắn" của màn hình chi tiết mục tiêu. */
 const LINKED_TASKS_LIMIT = 200;
+
+/**
+ * S20-SEC-GOALLINKGATE-1 · GOAL-ERR-016 — trạng thái mục tiêu ĐÍCH được nhận việc (quy tắc DƯƠNG: tập
+ * cho phép, KHÔNG phải tập cấm ⇒ trạng thái lạ/tương lai bị từ chối). `Draft` được gắn (quyết định owner
+ * 25/10/2026 — chuẩn bị tập việc trước khi chạy); `Completed`/`Cancelled` đã đóng.
+ */
+const LINKABLE_GOAL_STATUSES: ReadonlySet<string> = new Set<GoalStatusDto>(["Draft", "Active"]);
 
 /**
  * S5-GOAL-BE-2 — GoalTasksLinkService (GOAL-API-010: gắn bulk · tháo · liệt kê việc của mục tiêu).
@@ -38,10 +50,17 @@ const LINKED_TASKS_LIMIT = 200;
  *   · mục tiêu `department` → task không liên quan phòng ⇒ **CẢNH BÁO MỀM, VẪN GẮN** (spec ghi rõ
  *     "không chặn": việc liên phòng phục vụ mục tiêu phòng là chuyện bình thường).
  *
- * ── BẤT BIẾN #1 ở đây quan trọng hơn mọi chỗ khác ────────────────────────────────────────────────
- * `taskId` do client gửi và FK `tasks.goal_id → goals.id` là FK ĐƠN CỘT, KHÔNG ép cùng-tenant (finding
- * MEDIUM gate S5-GOAL-DB-1 đã chứng minh tận DB). `resolveTaskRefTx` dưới `company_id` là hàng phòng
- * thủ DUY NHẤT: bỏ nó thì công ty A gắn được task của công ty B (hoặc vỡ FK thành 500).
+ * ── BẤT BIẾN #1 ───────────────────────────────────────────────────────────────────────────────────
+ * `taskId` do client gửi ⇒ đọc task LUÔN dưới `company_id` tường minh (`lockTaskRefsTx`), chồng lên
+ * RLS + FK tổng hợp `(company_id, goal_id)` của migration 0535: ba lớp, không dựa vào một lớp duy nhất.
+ *
+ * ── S20-SEC-GOALLINKGATE-1: «chuyển» = «tháo khỏi mục tiêu đang giữ» + «gắn vào đích» ─────────────
+ *   · Mục tiêu đang giữ việc nhận ĐÚNG quyết định của đường tháo (`assertGoalWritableTx` — CÙNG hàm,
+ *     không biểu thức quyền thứ hai). Ngoại lệ ghi rõ: mục tiêu đang giữ đã xoá mềm ⇒ cho (không đường
+ *     nào khác gỡ được việc khỏi nó) và vẫn ghi audit ở đó. Không đọc được hàng ⇒ từ chối (fail-closed).
+ *   · Đích chỉ nhận việc khi trạng thái ∈ `LINKABLE_GOAL_STATUSES` (GOAL-ERR-016).
+ *   · Kiểm + ghi trong MỘT transaction trên hàng ĐÃ KHOÁ, thứ tự task → goal (khớp writer TASK): chốt kỳ
+ *     hay đổi liên kết đồng thời phải chờ khoá ⇒ quyết định không bao giờ dựa trên giá trị đã cũ.
  */
 @Injectable()
 export class GoalTasksLinkService {
@@ -102,59 +121,45 @@ export class GoalTasksLinkService {
     });
   }
 
-  /** POST /goals/:id/tasks — gắn BULK. Tất-cả-hoặc-không: một task vi phạm GOAL-ERR-008 ⇒ 422, 0 hàng ghi. */
+  /**
+   * POST /goals/:id/tasks — gắn BULK (gồm cả CHUYỂN việc đang thuộc mục tiêu khác).
+   * Tất-cả-hoặc-không: mọi quyết định chạy TRƯỚC mọi phép ghi; một việc bị từ chối ⇒ 0 hàng ghi.
+   */
   async linkTasks(
     user: RequestUser,
     goalId: string,
     dto: LinkGoalTasksRequest,
   ): Promise<GoalTaskLinkResultDto> {
-    // Khử trùng lặp TRƯỚC: gửi cùng một id 50 lần không được biến thành 50 lần "đã gắn".
-    const taskIds = [...new Set(dto.taskIds)];
+    // Khử trùng lặp TRƯỚC (không phân biệt hoa/thường — Postgres trả uuid chữ thường): gửi cùng một id
+    // 50 lần không được biến thành 50 lần "đã gắn".
+    const taskIds = [...new Set(dto.taskIds.map((id) => id.toLowerCase()))];
     return this.db.withTenant(user.companyId, async (tx) => {
-      const goal = await this.loadWritableGoalTx(tx, user, goalId);
+      const actor = await this.access.resolveActorScope(tx, user, "update");
+      // Fail-fast trên hàng CHƯA khoá: giữ thứ tự lỗi cũ, không khoá việc khi đích đã hỏng.
+      const unlocked = await this.loadWritableGoalTx(tx, user, actor, goalId);
+      this.assertLinkTargetOpen(unlocked);
       const taskScope = await this.resolveTaskWriteScope(user);
 
+      // Khoá task → goal (thứ tự cố định), rồi quyết định LẠI trên hàng đã khoá.
+      const tasks = await this.lockTasksInOrderTx(tx, user, taskIds);
+      const heldIds = tasks.map((t) => t.goalId).filter((id): id is string => id !== null);
+      const locked = await this.lockWritableGoalsTx(tx, user, actor, unlocked.id, heldIds);
+      this.assertLinkTargetOpen(locked.goal);
+
       const warnings: GoalTaskLinkResultDto["warnings"] = [];
-      const previousGoalIds = new Set<string>();
-      const projectIds = new Set<string>();
-      let linked = 0;
-      let alreadyLinked = 0;
-
-      for (const taskId of taskIds) {
-        const task = await this.repo.resolveTaskRefTx(tx, user.companyId, taskId);
-        if (!task) throw new NotFoundException(GOAL_ERR.REF_NOT_FOUND("công việc"));
-        await this.assertTaskWritableTx(tx, user, taskId, taskScope);
-        this.assertLinkAllowed(goal, task, warnings);
-
-        if (task.goalId === goalId) {
-          alreadyLinked += 1;
-          continue;
-        }
-        const written = await this.repo.setTaskGoalTx(tx, user.companyId, taskId, goalId, user.id);
-        if (!written) throw new NotFoundException(GOAL_ERR.REF_NOT_FOUND("công việc"));
-        if (task.goalId) previousGoalIds.add(task.goalId);
-        if (task.projectId) projectIds.add(task.projectId);
-        linked += 1;
-
-        await this.audit.record(tx, {
-          action: "GoalTaskLinked",
-          objectType: "goal",
-          objectId: goalId,
-          actorUserId: user.id,
-          after: { taskId, taskCode: task.taskCode, previousGoalId: task.goalId },
-        });
-      }
-
-      // Tiến độ đổi ở CẢ HAI đầu: mục tiêu mới nhận thêm việc, mục tiêu CŨ mất việc. Bỏ vế thứ hai là
-      // để lại một con số cũ đúng-trông-như-thật ở mục tiêu người khác đang theo dõi.
-      await this.engine.recomputeGoalTx(tx, user.companyId, goalId);
-      for (const prev of previousGoalIds)
-        await this.engine.recomputeGoalTx(tx, user.companyId, prev);
-      for (const projectId of projectIds) {
-        await this.engine.recomputeProjectGoalsTx(tx, user.companyId, projectId);
-      }
-
-      return { goalId, linked, alreadyLinked, warnings };
+      const toMove = await this.decideLinkTx(
+        tx,
+        { user, actor, taskScope, ...locked },
+        tasks,
+        warnings,
+      );
+      await this.writeLinksTx(tx, user, locked.goal.id, toMove);
+      return {
+        goalId,
+        linked: toMove.length,
+        alreadyLinked: tasks.length - toMove.length,
+        warnings,
+      };
     });
   }
 
@@ -165,24 +170,32 @@ export class GoalTasksLinkService {
     taskId: string,
   ): Promise<GoalTaskLinkResultDto> {
     return this.db.withTenant(user.companyId, async (tx) => {
-      await this.loadWritableGoalTx(tx, user, goalId);
+      const actor = await this.access.resolveActorScope(tx, user, "update");
+      const unlocked = await this.loadWritableGoalTx(tx, user, actor, goalId);
       const taskScope = await this.resolveTaskWriteScope(user);
-      const task = await this.repo.resolveTaskRefTx(tx, user.companyId, taskId);
+      const [task] = await this.repo.lockTaskRefsTx(tx, user.companyId, [taskId.toLowerCase()]);
       if (!task) throw new NotFoundException(GOAL_ERR.REF_NOT_FOUND("công việc"));
-      await this.assertTaskWritableTx(tx, user, taskId, taskScope);
+      await this.assertTaskWritableTx(tx, user, task.id, taskScope);
+      const { goal } = await this.lockWritableGoalsTx(tx, user, actor, unlocked.id, []);
 
-      const cleared = await this.repo.clearTaskGoalTx(tx, user.companyId, taskId, goalId, user.id);
+      const cleared = await this.repo.clearTaskGoalTx(
+        tx,
+        user.companyId,
+        task.id,
+        goal.id,
+        user.id,
+      );
       if (!cleared)
         throw new NotFoundException(GOAL_ERR.REF_NOT_FOUND("liên kết công việc–mục tiêu"));
 
       await this.audit.record(tx, {
         action: "GoalTaskUnlinked",
         objectType: "goal",
-        objectId: goalId,
+        objectId: goal.id,
         actorUserId: user.id,
-        before: { taskId, taskCode: task.taskCode },
+        before: { taskId: task.id, taskCode: task.taskCode },
       });
-      await this.engine.recomputeGoalTx(tx, user.companyId, goalId);
+      await this.engine.recomputeGoalTx(tx, user.companyId, goal.id);
       await this.engine.recomputeProjectGoalsTx(tx, user.companyId, task.projectId);
       return { goalId, linked: 0, alreadyLinked: 0, warnings: [] };
     });
@@ -257,16 +270,169 @@ export class GoalTasksLinkService {
   }
 
   /**
-   * Gate CHUNG cho cả 3 đường ghi: cặp `('update','goal')` → phạm vi GHI trên chính hàng đó → GOAL-ERR-005.
+   * MỘT nguồn quyết định GHI lên một mục tiêu cho đường gắn/tháo/chuyển: phạm vi GHI trên chính hàng
+   * đó (`update:goal`) → GOAL-ERR-005. Gọi cho: đích của gắn · mục tiêu đang giữ việc khi chuyển ·
+   * mục tiêu của đường tháo — cùng hàm ⇒ cùng dữ liệu cho cùng quyết định.
    * `assertNotFinalized` phải ở đây chứ không ở controller: mục tiêu đã chốt kỳ mà còn gắn/tháo được
    * việc thì `progress_percent` đã chốt sẽ mâu thuẫn với tập việc mà UI hiển thị.
    */
-  private async loadWritableGoalTx(tx: TenantTx, user: RequestUser, goalId: string): Promise<Goal> {
-    const actor = await this.access.resolveActorScope(tx, user, "update");
-    const goal = await this.repo.findByIdTx(tx, user.companyId, goalId);
-    if (!goal) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
+  private async assertGoalWritableTx(
+    tx: TenantTx,
+    user: RequestUser,
+    actor: GoalActorScope,
+    goal: Goal,
+  ): Promise<void> {
     await this.access.assertCanWriteExistingGoal(tx, user, actor, goal);
     this.access.assertNotFinalized(goal);
+  }
+
+  /** Fail-fast trên hàng CHƯA khoá (404 ngoài tenant/đã xoá → quyết định ghi). */
+  private async loadWritableGoalTx(
+    tx: TenantTx,
+    user: RequestUser,
+    actor: GoalActorScope,
+    goalId: string,
+  ): Promise<Goal> {
+    const goal = await this.repo.findByIdTx(tx, user.companyId, goalId);
+    if (!goal) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
+    await this.assertGoalWritableTx(tx, user, actor, goal);
     return goal;
   }
+
+  /** GOAL-ERR-016 — đích chỉ nhận việc khi trạng thái thuộc tập cho phép (quy tắc DƯƠNG). */
+  private assertLinkTargetOpen(goal: Goal): void {
+    if (!LINKABLE_GOAL_STATUSES.has(goal.status)) {
+      throw new UnprocessableEntityException(GOAL_ERR.LINK_CLOSED(goal.status));
+    }
+  }
+
+  /** Khoá các việc của lô (thứ tự id) rồi trả lại theo THỨ TỰ request; thiếu việc nào ⇒ 404 cả lô. */
+  private async lockTasksInOrderTx(
+    tx: TenantTx,
+    user: RequestUser,
+    taskIds: readonly string[],
+  ): Promise<TaskRefRow[]> {
+    const rows = await this.repo.lockTaskRefsTx(tx, user.companyId, taskIds);
+    const byId = new Map(rows.map((t) => [t.id, t]));
+    return taskIds.map((id) => {
+      const task = byId.get(id);
+      if (!task) throw new NotFoundException(GOAL_ERR.REF_NOT_FOUND("công việc"));
+      return task;
+    });
+  }
+
+  /**
+   * Khoá đích + các mục tiêu đang giữ việc (SAU khoá task), rồi quyết định LẠI trên hàng đích đã khoá —
+   * chốt kỳ đồng thời đã commit trong lúc chờ khoá thì bị thấy ở đây.
+   */
+  private async lockWritableGoalsTx(
+    tx: TenantTx,
+    user: RequestUser,
+    actor: GoalActorScope,
+    goalId: string,
+    heldIds: readonly string[],
+  ): Promise<{ goal: Goal; goalsById: ReadonlyMap<string, Goal> }> {
+    const ids = [...new Set([goalId, ...heldIds])];
+    const rows = await this.repo.lockGoalsTx(tx, user.companyId, ids);
+    const goalsById = new Map(rows.map((g) => [g.id, g]));
+    const goal = goalsById.get(goalId);
+    if (!goal || goal.deletedAt !== null) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
+    await this.assertGoalWritableTx(tx, user, actor, goal);
+    return { goal, goalsById };
+  }
+
+  /**
+   * Quyết định cho TỪNG việc của lô, TRƯỚC mọi phép ghi. Trả các việc cần ghi (bỏ việc đã gắn đúng đích).
+   * Việc đang thuộc mục tiêu khác ⇒ mục tiêu đó qua `assertHeldGoalReleasableTx` (một lần/mục tiêu).
+   */
+  private async decideLinkTx(
+    tx: TenantTx,
+    c: LinkDecisionContext,
+    tasks: readonly TaskRefRow[],
+    warnings: GoalTaskLinkResultDto["warnings"],
+  ): Promise<TaskRefRow[]> {
+    const toMove: TaskRefRow[] = [];
+    const released = new Set<string>();
+    for (const task of tasks) {
+      await this.assertTaskWritableTx(tx, c.user, task.id, c.taskScope);
+      this.assertLinkAllowed(c.goal, task, warnings);
+      if (task.goalId === c.goal.id) continue;
+      if (task.goalId !== null && !released.has(task.goalId)) {
+        await this.assertHeldGoalReleasableTx(tx, c, task.goalId);
+        released.add(task.goalId);
+      }
+      toMove.push(task);
+    }
+    return toMove;
+  }
+
+  /**
+   * Mục tiêu ĐANG GIỮ việc nhận đúng quyết định của đường tháo (`assertGoalWritableTx`), trên hàng đã khoá.
+   * Ngoại lệ (quy tắc DƯƠNG): hàng đọc được và đã xoá mềm ⇒ cho — đường tháo trả 404 cho nó nên không
+   * còn đường nào khác gỡ việc ra. Không đọc được hàng ⇒ từ chối (fail-closed, KHÔNG «vắng ⇒ cho»).
+   */
+  private async assertHeldGoalReleasableTx(
+    tx: TenantTx,
+    c: LinkDecisionContext,
+    heldGoalId: string,
+  ): Promise<void> {
+    const held = c.goalsById.get(heldGoalId);
+    if (!held) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
+    if (held.deletedAt !== null) return;
+    await this.assertGoalWritableTx(tx, c.user, c.actor, held);
+  }
+
+  /**
+   * Ghi liên kết + audit ở CẢ HAI đầu (append-only) + tính lại tiến độ cả hai. Chỉ chạy sau khi MỌI
+   * quyết định đã qua (`decideLinkTx`).
+   */
+  private async writeLinksTx(
+    tx: TenantTx,
+    user: RequestUser,
+    goalId: string,
+    toMove: readonly TaskRefRow[],
+  ): Promise<void> {
+    const previousGoalIds = new Set<string>();
+    const projectIds = new Set<string>();
+    for (const task of toMove) {
+      const written = await this.repo.setTaskGoalTx(tx, user.companyId, task.id, goalId, user.id);
+      if (!written) throw new NotFoundException(GOAL_ERR.REF_NOT_FOUND("công việc"));
+      await this.audit.record(tx, {
+        action: "GoalTaskLinked",
+        objectType: "goal",
+        objectId: goalId,
+        actorUserId: user.id,
+        after: { taskId: task.id, taskCode: task.taskCode, previousGoalId: task.goalId },
+      });
+      if (task.goalId !== null) {
+        previousGoalIds.add(task.goalId);
+        await this.audit.record(tx, {
+          action: "GoalTaskUnlinked",
+          objectType: "goal",
+          objectId: task.goalId,
+          actorUserId: user.id,
+          before: { taskId: task.id, taskCode: task.taskCode },
+          after: { movedToGoalId: goalId },
+        });
+      }
+      if (task.projectId) projectIds.add(task.projectId);
+    }
+
+    // Tiến độ đổi ở CẢ HAI đầu: mục tiêu mới nhận thêm việc, mục tiêu CŨ mất việc. Bỏ vế thứ hai là
+    // để lại một con số cũ đúng-trông-như-thật ở mục tiêu người khác đang theo dõi.
+    await this.engine.recomputeGoalTx(tx, user.companyId, goalId);
+    for (const prev of previousGoalIds) await this.engine.recomputeGoalTx(tx, user.companyId, prev);
+    for (const projectId of projectIds) {
+      await this.engine.recomputeProjectGoalsTx(tx, user.companyId, projectId);
+    }
+  }
+}
+
+/** Dữ liệu quyết định của MỘT request gắn — resolve một lần, dùng cho mọi việc của lô. */
+interface LinkDecisionContext {
+  user: RequestUser;
+  actor: GoalActorScope;
+  taskScope: DataScope;
+  goal: Goal;
+  goalsById: ReadonlyMap<string, Goal>;
 }

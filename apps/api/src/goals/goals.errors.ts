@@ -36,6 +36,13 @@ export const GOAL_ERR = {
   /** GOAL-ERR-008 — gắn task sai neo (vế CHẶN: mục tiêu cấp nhân viên/dự án). */
   LINK_ANCHOR: (detail: string) =>
     `GOAL-ERR-008: không gắn được công việc vào mục tiêu — ${detail}`,
+  /**
+   * GOAL-ERR-016 — mục tiêu ĐÍCH chỉ nhận việc khi trạng thái thuộc tập cho phép {Draft, Active}
+   * (quy tắc DƯƠNG: trạng thái lạ/tương lai ⇒ từ chối). Mục tiêu đã đóng (Completed/Cancelled) không
+   * nhận thêm việc — tập đo của nó đã kết thúc.
+   */
+  LINK_CLOSED: (status: string) =>
+    `GOAL-ERR-016: chỉ gắn được công việc vào mục tiêu Nháp (Draft) hoặc đang chạy (Active) — mục tiêu này đang ở trạng thái ${status}.`,
   /** GOAL-ERR-014 — finalize chỉ hợp lệ khi status Active hoặc Completed. */
   FINALIZE_STATUS: (status: string) =>
     `GOAL-ERR-014: chỉ chốt kỳ được mục tiêu Active hoặc Completed — mục tiêu này đang ở trạng thái ${status}.`,
