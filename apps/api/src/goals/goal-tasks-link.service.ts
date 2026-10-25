@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import type {
   DataScope,
-  GoalStatusDto,
   GoalTaskLinkResultDto,
   LinkGoalTasksRequest,
   TaskCoreResponseDto,
@@ -25,13 +24,6 @@ import { GoalsRepository, type TaskRefRow } from "./goals.repository";
 
 /** Trần số việc trả về cho tab "Công việc gắn" của màn hình chi tiết mục tiêu. */
 const LINKED_TASKS_LIMIT = 200;
-
-/**
- * S20-SEC-GOALLINKGATE-1 · GOAL-ERR-016 — trạng thái mục tiêu ĐÍCH được nhận việc (quy tắc DƯƠNG: tập
- * cho phép, KHÔNG phải tập cấm ⇒ trạng thái lạ/tương lai bị từ chối). `Draft` được gắn (quyết định owner
- * 25/10/2026 — chuẩn bị tập việc trước khi chạy); `Completed`/`Cancelled` đã đóng.
- */
-const LINKABLE_GOAL_STATUSES: ReadonlySet<string> = new Set<GoalStatusDto>(["Draft", "Active"]);
 
 /**
  * S5-GOAL-BE-2 — GoalTasksLinkService (GOAL-API-010: gắn bulk · tháo · liệt kê việc của mục tiêu).
@@ -58,7 +50,8 @@ const LINKABLE_GOAL_STATUSES: ReadonlySet<string> = new Set<GoalStatusDto>(["Dra
  *   · Mục tiêu đang giữ việc nhận ĐÚNG quyết định của đường tháo (`assertGoalWritableTx` — CÙNG hàm,
  *     không biểu thức quyền thứ hai). Ngoại lệ ghi rõ: mục tiêu đang giữ đã xoá mềm ⇒ cho (không đường
  *     nào khác gỡ được việc khỏi nó) và vẫn ghi audit ở đó. Không đọc được hàng ⇒ từ chối (fail-closed).
- *   · Đích chỉ nhận việc khi trạng thái ∈ `LINKABLE_GOAL_STATUSES` (GOAL-ERR-016).
+ *   · Đích chỉ nhận việc khi trạng thái ∈ `GoalAccessService.acceptsNewTasks` (GOAL-ERR-016 —
+ *     cùng vị từ với phân rã).
  *   · Kiểm + ghi trong MỘT transaction trên hàng ĐÃ KHOÁ, thứ tự task → goal (khớp writer TASK): chốt kỳ
  *     hay đổi liên kết đồng thời phải chờ khoá ⇒ quyết định không bao giờ dựa trên giá trị đã cũ.
  */
@@ -299,9 +292,9 @@ export class GoalTasksLinkService {
     return goal;
   }
 
-  /** GOAL-ERR-016 — đích chỉ nhận việc khi trạng thái thuộc tập cho phép (quy tắc DƯƠNG). */
+  /** GOAL-ERR-016 — đích chỉ nhận việc khi `acceptsNewTasks` (tập cho phép dùng chung với phân rã). */
   private assertLinkTargetOpen(goal: Goal): void {
-    if (!LINKABLE_GOAL_STATUSES.has(goal.status)) {
+    if (!this.access.acceptsNewTasks(goal)) {
       throw new UnprocessableEntityException(GOAL_ERR.LINK_CLOSED(goal.status));
     }
   }

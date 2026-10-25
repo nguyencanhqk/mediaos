@@ -131,6 +131,10 @@ export class GoalDecomposeService {
     return this.db.withTenant(user.companyId, async (tx) => {
       // KIỂM LẠI, KHÔNG tin pha 1: giữa 2 pha mục tiêu có thể bị chốt kỳ/huỷ/đổi neo, hoặc quyền bị thu
       // hồi. Đây là vế fail-closed của mẫu "cấp mã ngoài tx" — bỏ nó là mở một cửa sổ đua ghi được.
+      // Khoá hàng mục tiêu TRƯỚC khi quyết định (S20-SEC-GOALLINKGATE-1, cùng khuôn với đường gắn): chốt kỳ
+      // hay đổi trạng thái đồng thời phải chờ khoá này, nên câu đọc kế tiếp thấy giá trị đã commit — không
+      // còn cửa sổ «kiểm trên hàng cũ rồi chèn việc vào mục tiêu vừa chốt».
+      await this.goalsRepo.lockGoalsTx(tx, user.companyId, [goalId]);
       const goal = await this.loadDecomposableGoalTx(tx, user, goalId);
       const template = await this.templates.loadTemplateForDecomposeTx(
         tx,
@@ -188,10 +192,12 @@ export class GoalDecomposeService {
 
   /**
    * Gate mục tiêu cho phân rã: cặp `('update','goal')` → phạm vi GHI trên chính hàng đó → GOAL-ERR-005
-   * (đã chốt kỳ, dùng lại `assertNotFinalized` — MỘT hàm cho mọi đường ghi) → GOAL-ERR-009 (Cancelled).
+   * (đã chốt kỳ, dùng lại `assertNotFinalized` — MỘT hàm cho mọi đường ghi) → GOAL-ERR-009 (mục tiêu không
+   * còn nhận việc mới).
    *
-   * `Cancelled` khác `Draft`: mục tiêu nháp vẫn được phân rã (lập kế hoạch trước khi kích hoạt là luồng
-   * bình thường); mục tiêu ĐÃ HUỶ thì không — tạo việc cho nó là tạo việc không ai theo.
+   * Trạng thái quyết định bằng `acceptsNewTasks` — CÙNG vị từ với đường gắn (GOAL-ERR-016), không tập thứ
+   * hai: mục tiêu nháp vẫn được phân rã (lập kế hoạch trước khi kích hoạt là luồng bình thường); mục tiêu
+   * đã đóng (`Completed`/`Cancelled`) thì không — tập đo của nó đã kết thúc.
    */
   private async loadDecomposableGoalTx(
     tx: TenantTx,
@@ -203,8 +209,8 @@ export class GoalDecomposeService {
     if (!goal) throw new NotFoundException(GOAL_ERR.NOT_FOUND);
     await this.access.assertCanWriteExistingGoal(tx, user, actor, goal);
     this.access.assertNotFinalized(goal);
-    if (goal.status === "Cancelled") {
-      throw new UnprocessableEntityException(GOAL_ERR.DECOMPOSE_CANCELLED);
+    if (!this.access.acceptsNewTasks(goal)) {
+      throw new UnprocessableEntityException(GOAL_ERR.DECOMPOSE_CLOSED(goal.status));
     }
     return goal;
   }

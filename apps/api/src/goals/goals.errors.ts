@@ -79,13 +79,13 @@ export const GOAL_ERR = {
 
   // ── S5-GOAL-TPL-1 — phân rã từ template (GOAL-API-011) ────────────────────────
   /**
-   * GOAL-ERR-009 — phân rã bị chặn. 3 vế của SPEC-10 §12: mục tiêu `Cancelled` · template rỗng · vượt
-   * trần 50 task/lần. Vế "đã chốt kỳ" KHÔNG ở đây: §12 xếp nó vào GOAL-ERR-005 (một mã cho MỌI đường
+   * GOAL-ERR-009 — phân rã bị chặn. 3 vế của SPEC-10 §12: mục tiêu không còn nhận việc mới (ngoài tập
+   * {Draft, Active} — cùng tập với GOAL-ERR-016) · template rỗng · vượt trần 50 task/lần. Vế "đã chốt kỳ" KHÔNG ở đây: §12 xếp nó vào GOAL-ERR-005 (một mã cho MỌI đường
    * ghi lên mục tiêu đã chốt) và dùng lại `GoalAccessService.assertNotFinalized`.
    */
   DECOMPOSE: (detail: string) => `GOAL-ERR-009: không phân rã được mục tiêu — ${detail}`,
-  DECOMPOSE_CANCELLED:
-    "GOAL-ERR-009: không phân rã được mục tiêu — mục tiêu đã huỷ (Cancelled); mở lại trạng thái trước khi tạo việc.",
+  DECOMPOSE_CLOSED: (status: string) =>
+    `GOAL-ERR-009: không phân rã được mục tiêu — chỉ mục tiêu Nháp (Draft) hoặc đang chạy (Active) nhận việc mới; mục tiêu này đang ở trạng thái ${status}.`,
   DECOMPOSE_EMPTY:
     "GOAL-ERR-009: không phân rã được mục tiêu — danh sách việc rỗng (template chưa có việc mẫu nào, hoặc bạn đã xoá hết ở bước xem trước).",
   DECOMPOSE_LIMIT: (cap: number, got: number) =>

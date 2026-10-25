@@ -500,6 +500,9 @@ export class GoalsRepository {
    * S20-SEC-GOALLINKGATE-1 — khoá các hàng mục tiêu tham gia một phép gắn/chuyển/tháo (đích + mục tiêu
    * đang giữ việc), `order by id` (thứ tự cố định, sau khoá task — khớp thứ tự task → goal của writer
    * TASK). Chốt kỳ đồng thời phải chờ khoá này ⇒ quyết định «chưa chốt» được lấy trên hàng đã khoá.
+   * Phân rã (`GoalDecomposeService`) cũng khoá qua đây trước khi chèn việc MỚI (không khoá hàng việc có sẵn
+   * ⇒ không đảo thứ tự). HỢP ĐỒNG THỨ TỰ KHOÁ: task → goal. Writer mới cần cả hai thì giữ đúng thứ tự này;
+   * khoá goal rồi mới khoá task có sẵn là mở cửa cho 40P01 với đường gắn/tháo.
    *
    * ⚠️ CỐ Ý KHÔNG lọc `deleted_at` (khác `findByIdTx`): caller cần phân biệt «mục tiêu đã xoá mềm» (đọc
    * được hàng, `deletedAt ≠ null`) với «không có hàng» (fail-closed) — xem `GoalTasksLinkService`.

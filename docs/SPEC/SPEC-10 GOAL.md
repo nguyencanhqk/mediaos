@@ -242,7 +242,7 @@ Ghi chú:
 | GOAL-ERR-006 | Check-in chỉ hợp lệ khi status `Active` và trong data_scope của actor |
 | GOAL-ERR-007 | Xóa goal còn goal con active → chặn (xóa/di dời con trước; KHÔNG xóa lan) |
 | GOAL-ERR-008 | Gắn task sai neo: goal `employee` → task phải có assignee = employee đó; goal `project` → task phải thuộc project đó; goal `department` → cảnh báo mềm nếu task không liên quan phòng (không chặn) |
-| GOAL-ERR-009 | Phân rã bị chặn: goal `Cancelled`/đã chốt, template rỗng, hoặc vượt giới hạn 50 task/lần |
+| GOAL-ERR-009 | Phân rã bị chặn: goal không còn nhận task mới (status ∉ {`Draft`, `Active`} — CÙNG tập cho phép với GOAL-ERR-016, tức `Completed`/`Cancelled`), template rỗng, hoặc vượt giới hạn 50 task/lần. Goal đã chốt → GOAL-ERR-005 |
 | GOAL-ERR-010 | Goal nhân viên: employee phải Active cùng company; `owner_employee_id` = `employee_id` |
 | GOAL-ERR-011 | `weight` ≤ 0 |
 | GOAL-ERR-012 | `progress_mode='project'` chỉ hợp lệ với goal `level='project'` |
@@ -256,7 +256,8 @@ Quy tắc bổ sung (không cần mã lỗi riêng):
 - Goal con có kỳ nằm ngoài kỳ cha → **cảnh báo mềm** trên UI, không chặn (thực tế kỳ có thể lệch nhau).
 - Status `Completed` set tay hoặc gợi ý khi progress đạt 100%; không auto-flip (người quyết).
 - Mọi thay đổi quan trọng (create/update/delete/finalize/reopen/decompose/link-unlink) ghi `audit_logs`.
-- **Chuyển task giữa hai goal = «tháo khỏi goal đang giữ» + «gắn vào goal đích»**: goal đang giữ task nhận đúng quyết định của đường tháo (`DELETE /goals/:id/tasks/:taskId`) — quyền ghi goal đó + chưa chốt kỳ (GOAL-ERR-005); goal đích qua cổng gắn (quyền ghi + chưa chốt + GOAL-ERR-016 + GOAL-ERR-008). Cả lô tất-cả-hoặc-không. Audit ghi ở CẢ HAI goal (`GoalTaskLinked` ở đích, `GoalTaskUnlinked` kèm `movedToGoalId` ở goal cũ); tiến độ tính lại ở cả hai.
+- **Chuyển task giữa hai goal = «tháo khỏi goal đang giữ» + «gắn vào goal đích»**: goal đang giữ task nhận đúng quyết định của đường tháo (`DELETE /goals/:id/tasks/:taskId`) — quyền ghi goal đó + chưa chốt kỳ (GOAL-ERR-005); goal đích qua cổng gắn (quyền ghi + chưa chốt + GOAL-ERR-016 + GOAL-ERR-008). Cả lô tất-cả-hoặc-không. Audit ghi ở CẢ HAI goal (`GoalTaskLinked` ở đích, `GoalTaskUnlinked` kèm `movedToGoalId` ở goal cũ); tiến độ tính lại ở cả hai. **Ngoại lệ có tên:** goal đang giữ task đã xoá mềm ⇒ cho chuyển (đường tháo không còn tới được goal đã xoá, nên không cho = task kẹt vĩnh viễn) và vẫn ghi `GoalTaskUnlinked` ở goal đó; không đọc được hàng goal đang giữ ⇒ từ chối.
+- **Mọi đường tạo liên kết task → goal** (gắn/chuyển GOAL-API-010 · phân rã GOAL-API-011) quyết định trạng thái goal bằng CÙNG một tập cho phép {`Draft`, `Active`}, kiểm trên hàng goal ĐÃ KHOÁ trong cùng transaction với phép ghi (chốt kỳ/đổi trạng thái đồng thời phải chờ). Mỗi đường giữ mã lỗi của nó (GOAL-ERR-016 · GOAL-ERR-009).
 - Ngoại lệ: goal đang giữ task đã **xóa mềm** → cho chuyển (đường tháo không còn với tới goal đã xóa) và vẫn ghi audit ở goal đó. Kiểm và ghi chạy trong một transaction trên hàng đã khóa (task → goal), nên chốt kỳ hay đổi liên kết đồng thời không lọt qua quyết định.
 
 ---
