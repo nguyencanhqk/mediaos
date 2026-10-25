@@ -134,6 +134,25 @@ function collect(entries: ReadonlyArray<readonly [string | null, string | null]>
   return { options, hasEmpty };
 }
 
+/**
+ * Lựa chọn của MỘT ô lọc, luôn chứa giá trị đang lọc. Việc cuối cùng mang giá trị đó vừa rời danh
+ * sách (dời hạn xong) thì bộ lọc VẪN áp dụng ⇒ ô phải hiện đúng thứ đang lọc, không nhảy về «Tất cả».
+ * Tên lấy từ `remembered` (lựa chọn lúc người dùng chọn) khi đúng id; không có thì hiện id.
+ */
+export function keepSelectedOption(
+  options: readonly OverdueFilterOption[],
+  hasEmpty: boolean,
+  selected: string | null,
+  remembered: OverdueFilterOption | undefined,
+): { options: OverdueFilterOption[]; hasEmpty: boolean } {
+  if (selected === OVERDUE_FILTER_NONE) return { options: [...options], hasEmpty: true };
+  if (selected === null || options.some((option) => option.id === selected)) {
+    return { options: [...options], hasEmpty };
+  }
+  const name = remembered?.id === selected ? remembered.name : selected;
+  return { options: [...options, { id: selected, name }], hasEmpty };
+}
+
 /** Lựa chọn của hai ô lọc — lấy từ chính các dòng đã tải (không gọi thêm API, không cần quyền khác). */
 export function overdueFilterOptions(rows: readonly TaskCoreResponseDto[]): OverdueFilterOptions {
   const projects = collect(rows.map((r) => [r.projectId, r.projectName] as const));

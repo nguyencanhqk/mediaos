@@ -65,7 +65,7 @@ export function OverdueTasksPage() {
   const [filters, setFilters] = useState<OverdueDeskFilters>(EMPTY_OVERDUE_FILTERS);
   const timeZone = companyTimeZone();
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, dataUpdatedAt, isLoading, isError, refetch } = useQuery({
     queryKey: taskKeys.list(OVERDUE_QUERY),
     queryFn: () => taskCoreApi.listTasks(OVERDUE_QUERY),
     enabled: canView,
@@ -83,7 +83,10 @@ export function OverdueTasksPage() {
     },
     [queryClient],
   );
-  const columns = useOverdueDeskColumns({ now: new Date(), timeZone, onDeadlineSaved });
+  // «Trễ» tính theo lúc dữ liệu được tải/ghi vào cache — một mốc chung cho mọi dòng, giữ nguyên giữa
+  // các lần render (đổi bộ lọc, mở picker…) thay vì một `Date` mới mỗi lần.
+  const now = useMemo(() => new Date(dataUpdatedAt || Date.now()), [dataUpdatedAt]);
+  const columns = useOverdueDeskColumns({ now, timeZone, onDeadlineSaved });
 
   const items = useMemo(() => [...(data ?? [])].sort(byDueAtAsc), [data]);
   const visible = useMemo(

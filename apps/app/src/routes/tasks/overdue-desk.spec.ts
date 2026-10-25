@@ -11,6 +11,7 @@ import {
   byDueAtAsc,
   EMPTY_OVERDUE_FILTERS,
   filterOverdueRows,
+  keepSelectedOption,
   OVERDUE_DEADLINE_PRESETS,
   OVERDUE_FILTER_NONE,
   overdueDaysOf,
@@ -185,5 +186,36 @@ describe("overdueFilterOptions — lựa chọn lấy từ chính các dòng đ�
     const loose = overdueFilterOptions([row("x")]);
     expect(loose.hasNoProject).toBe(true);
     expect(loose.hasUnassigned).toBe(true);
+  });
+});
+
+describe("keepSelectedOption — ô lọc luôn hiện giá trị đang lọc", () => {
+  const P1 = { id: "p-1", name: "Dự án 1" };
+  const P2 = { id: "p-2", name: "Dự án 2" };
+
+  it("giá trị còn trong lựa chọn (hoặc không lọc) ⇒ giữ nguyên", () => {
+    expect(keepSelectedOption([P1, P2], false, "p-1", undefined)).toEqual({
+      options: [P1, P2],
+      hasEmpty: false,
+    });
+    expect(keepSelectedOption([P1], true, null, P2)).toEqual({ options: [P1], hasEmpty: true });
+  });
+
+  it("dòng cuối của giá trị đang lọc đã rời ⇒ thêm lại bằng tên lúc chọn", () => {
+    expect(keepSelectedOption([P2], false, "p-1", P1)).toEqual({
+      options: [P2, P1],
+      hasEmpty: false,
+    });
+  });
+
+  it("không nhớ tên của đúng giá trị đó ⇒ hiện id, không lấy nhầm tên khác", () => {
+    expect(keepSelectedOption([], false, "p-1", P2).options).toEqual([{ id: "p-1", name: "p-1" }]);
+  });
+
+  it("đang lọc «Không thuộc dự án» mà không còn dòng nào như vậy ⇒ vẫn có lựa chọn đó", () => {
+    expect(keepSelectedOption([P1], false, OVERDUE_FILTER_NONE, undefined)).toEqual({
+      options: [P1],
+      hasEmpty: true,
+    });
   });
 });

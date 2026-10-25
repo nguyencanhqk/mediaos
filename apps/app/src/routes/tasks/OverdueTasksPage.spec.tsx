@@ -13,6 +13,7 @@ import {
   useAuthStore,
 } from "@mediaos/web-core";
 import { OverdueTasksPage } from "./OverdueTasksPage";
+import { customDeadlineToIso, isoToCustomDeadline } from "./deadline-presets";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 
 // ---------------------------------------------------------------------------
@@ -287,6 +288,42 @@ describe("OverdueTasksPage", () => {
       await waitFor(() => expect(screen.queryByText("Task gấp")).not.toBeInTheDocument());
     });
 
+    it("«Tuỳ chỉnh» về một hạn ĐÃ QUA: server trả 200 mà việc VẪN quá hạn ⇒ dòng ở lại", async () => {
+      setCapabilities({ "read:task": true, "update-deadline:task": true });
+      const row = assigned();
+      // Refetch sau khi lưu không bao giờ về ⇒ chỉ phản hồi của server quyết dòng ở hay rời.
+      vi.mocked(taskCoreApi.listTasks)
+        .mockResolvedValueOnce([row])
+        .mockReturnValue(new Promise(() => {}));
+      const tz = companyTimeZone();
+      const draft = isoToCustomDeadline(daysAgo(2), tz);
+      const dueAt = customDeadlineToIso(draft, tz);
+      vi.mocked(taskCoreApi.changeDeadline).mockResolvedValue({
+        task: { ...row, dueAt, isOverdue: true },
+        warnings: [],
+      } as never);
+      renderWithQuery(<OverdueTasksPage />);
+      await screen.findByText("Task gấp");
+
+      fireEvent.click(screen.getByTestId("task-row-deadline-t-1"));
+      fireEvent.click(screen.getByTestId("task-row-deadline-t-1-custom"));
+      fireEvent.change(screen.getByTestId("task-row-deadline-t-1-custom-input"), {
+        target: { value: draft },
+      });
+      fireEvent.click(screen.getByTestId("task-row-deadline-t-1-custom-apply"));
+      await waitFor(() =>
+        expect(taskCoreApi.changeDeadline).toHaveBeenCalledWith("t-1", { dueAt }),
+      );
+      // onSettled (invalidate ⇒ lần tải thứ hai) chạy SAU onSuccess/onSaved; thêm một nhịp hẹn giờ cho
+      // thông báo cache của TanStack Query ⇒ nếu trang bỏ dòng thì lúc này dòng đã rời.
+      await waitFor(() => expect(taskCoreApi.listTasks).toHaveBeenCalledTimes(2));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(screen.getByText("Task gấp")).toBeInTheDocument();
+      expect(lateCell("t-1")).toHaveTextContent("2 ngày");
+    });
+
     it("mốc của trang: +1 ngày · +3 ngày · Thứ Sáu · Tuỳ chỉnh (chọn ngày)", async () => {
       setCapabilities({ "read:task": true, "update-deadline:task": true });
       vi.mocked(taskCoreApi.listTasks).mockResolvedValue([assigned()]);
@@ -463,6 +500,30 @@ describe("OverdueTasksPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Xoá bộ lọc" }));
         expect(visible()).toEqual(["Việc A", "Việc B", "Việc C"]);
+      });
+
+      it("dời hạn việc cuối của dự án đang lọc ⇒ ô Dự án vẫn hiện đúng dự án đó, không nhảy về «Tất cả»", async () => {
+        setCapabilities({ "read:task": true, "update-deadline:task": true });
+        vi.mocked(taskCoreApi.listTasks)
+          .mockResolvedValueOnce(ROWS)
+          .mockReturnValue(new Promise(() => {}));
+        vi.mocked(taskCoreApi.changeDeadline).mockImplementation(
+          async (_id, body) =>
+            ({ task: { ...ROWS[0], dueAt: body.dueAt, isOverdue: false }, warnings: [] }) as never,
+        );
+        renderWithQuery(<OverdueTasksPage />);
+        await screen.findByText("Việc A");
+        const project = screen.getByTestId("overdue-filter-project");
+        fireEvent.change(project, { target: { value: "p-1" } });
+        expect(visible()).toEqual(["Việc A"]);
+
+        fireEvent.click(screen.getByTestId("task-row-deadline-t-a"));
+        fireEvent.click(screen.getByTestId("task-row-deadline-t-a-preset-plus1d"));
+        await waitFor(() => expect(visible()).toEqual([]));
+
+        expect(project).toHaveValue("p-1");
+        expect(project).toHaveDisplayValue("Dự án 1");
+        expect(screen.getByText("Không có việc trễ khớp bộ lọc")).toBeInTheDocument();
       });
     });
   });
