@@ -240,3 +240,23 @@ pathsNeeded (ngoài `paths`): `docs/API Design/API-12_GOAL_API_Design.md` dòng 
 | F8  | áp          | `goal-access.service.ts:243-252` (vai trò dự án) + `:267-271` (người phụ trách) ⇒ ràng buộc fixture + assert tiền điều kiện                                           |
 | F9  | áp một phần | Thêm R9 + M15 (kiểm lại đích sau khoá). Không thêm vòng kiểm phạm vi việc trước khoá — lý do ở §3.3                                                                   |
 | F10 | áp          | Tiền tố riêng cho vai trò/công ty; `cleanupTenants` đã xoá `roles`/`role_permissions` theo công ty (`seed.ts:785-789`)                                                |
+
+## §10 GREEN — kết quả đo (25/10/2026, lane `mediaos_w25r`)
+
+- Mã: `8a3423cf` (vá) + `500e8c66` (2 ca bổ sung). Tệp: `goal-tasks-link.service.ts` (272 → 438 dòng) · `goals.repository.ts`
+  (`resolveTaskRefTx` → `lockTaskRefsTx`, thêm `lockGoalsTx`) · `goals.errors.ts` (`LINK_CLOSED` = GOAL-ERR-016) · SPEC-10 §12 · API-12 (dải 001…016).
+- Lệch thiết kế §3 (có lý do):
+  - Mọi quyết định của lô chạy TRƯỚC mọi phép ghi (`decideLinkTx` → `writeLinksTx`), không xen kẽ kiểm/ghi từng việc — tất-cả-hoặc-không
+    không còn chỉ dựa vào rollback.
+  - `taskIds` khử trùng lặp không phân biệt hoa/thường (Postgres trả uuid chữ thường; tra hàng đã khoá theo id).
+  - Quyết định cho mục tiêu đang giữ chạy một lần mỗi mục tiêu trong một lô.
+- Int-spec `goal-linkgate`: 22/22 xanh (20 ca §4 + R10 · U2 bên dưới). Trước vá: 13 đỏ / 7 xanh trên 20 ca §4.
+- Hồi quy (2 lô ≤ 3 tệp): `goal-be2-link` · `goal-be2-progress` · `goal-be2-checkin` 35/35 · `goals-param-uuid` · `routehttp3-tasks-goals` ·
+  `goal-tpl1-decompose` 67/67.
+- `tsc --noEmit` (api, gồm `test/`) sạch · eslint 4 tệp chạm sạch.
+- Đột biến §5 (spec: `goal-linkgate` + `goal-be2-link`, nền 30/30 xanh): **14/14 được đếm bị giết**; M13 · M16 sống như dự đoán
+  (tương đương — lý do §5).
+- Ngoài plan: 2 biến thể (bỏ cổng trạng thái trên hàng đích đã khoá · đường tháo không quyết định lại trên hàng đã khoá) SỐNG với 20 ca
+  ⇒ thêm 2 ca bất biến I-5: **R10** (đích chuyển sang trạng thái đã đóng đồng thời ⇒ 422 GOAL-ERR-016) · **U2** (chốt kỳ đồng thời với
+  tháo ⇒ 422 GOAL-ERR-005). Đo lại trên `500e8c66` (nền 32/32): cả hai biến thể bị giết.
+- Còn lại cho luồng chính: `bash harness/check.sh --all --lane-db` · FULL gate · ràng buộc thứ tự với `S20-GOAL-BULKLINK-1` (§7).
