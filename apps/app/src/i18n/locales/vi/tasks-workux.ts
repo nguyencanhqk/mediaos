@@ -107,4 +107,44 @@ export default {
     fallbackName: "Người được giao",
     changeAssignee: "Đổi người",
   },
+  // S20-TASK-QUICKEDIT-1 — popover mốc hạn dùng chung (DeadlineQuickPicker). Giờ hiển thị là giờ CÔNG TY.
+  deadlinePicker: {
+    triggerLabel: "Chọn hạn",
+    empty: "Chưa có hạn",
+    setDeadline: "Đặt hạn",
+    quickLabel: "Chọn nhanh",
+    presetsLabel: "Mốc hạn nhanh",
+    presets: {
+      today: "Hôm nay {{time}}",
+      tomorrow: "Ngày mai {{time}}",
+      thisFriday: "Thứ Sáu này {{time}}",
+      nextFriday: "Thứ Sáu tuần sau {{time}}",
+      nextMonday: "Thứ Hai tuần sau {{time}}",
+      custom: "{{time}}",
+    },
+    clear: "Xoá hạn",
+    custom: "Tuỳ chỉnh",
+    customInputLabel: "Hạn tuỳ chỉnh (giờ công ty)",
+    customApply: "Áp dụng",
+    customInvalid: "Ngày giờ không hợp lệ",
+  },
+  // S20-TASK-QUICKEDIT-1 — đổi trạng thái / hạn ngay trên dòng danh sách.
+  quickEdit: {
+    statusLabel: "Đổi trạng thái: {{title}}",
+    deadlineLabel: "Đổi hạn: {{title}}",
+    openChecklist: "Mở checklist",
+    retry: "Thử lại",
+    errors: {
+      checklistRequired: "Cần hoàn tất checklist",
+      dateRange: "Hạn không được sớm hơn ngày bắt đầu của việc — hãy chọn mốc muộn hơn",
+      forbidden: {
+        status: "Bạn không có quyền đổi trạng thái việc này",
+        deadline: "Bạn không có quyền đổi hạn việc này",
+      },
+      closed: "Việc đã huỷ — không đổi được hạn",
+      conflict: "Không chuyển được sang trạng thái này — việc vừa thay đổi, hãy tải lại",
+      network: "Mất kết nối — thay đổi chưa được lưu",
+      generic: "Không lưu được thay đổi. Vui lòng thử lại.",
+    },
+  },
 };

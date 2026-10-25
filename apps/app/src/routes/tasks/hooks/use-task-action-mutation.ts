@@ -6,6 +6,7 @@ import {
   type TaskActionMutationResult,
   type TaskAssigneeWarning,
 } from "./use-task-action-mutation-warnings";
+import { patchTaskRows, restoreTaskRows } from "./optimistic-task-rows";
 
 export type {
   TaskActionMutationResult,
@@ -63,17 +64,22 @@ function notifyWarnings(
  * hoá (rỗng khi không có/không hợp lệ). `onWarnings` gọi sau MỖI lần thành công (kể cả mảng rỗng, để
  * phía gọi đóng cảnh báo cũ); lỗi ⇒ không gọi; `onWarnings` ném ⇒ chỉ ghi log, mutate VẪN thành công.
  * Thao tác hàng loạt gộp từ `data.warnings` của từng lời gọi.
+ *
+ * S20-TASK-QUICKEDIT-1: `rowPatch` (tuỳ chọn) vá lạc quan CẢ các dòng của việc này trong cache danh
+ * sách (`tasks/list/*`, `tasks/my`) — dùng khi sửa ngay trên dòng; lỗi ⇒ hoàn tác cùng lúc với chi tiết.
  */
 export function useTaskActionMutation<TVariables>({
   taskId,
   mutationFn,
   toPatch,
   onWarnings,
+  rowPatch,
 }: {
   taskId: string;
   mutationFn: (vars: TVariables) => Promise<TaskActionResponseDto>;
   toPatch: (vars: TVariables) => Partial<TaskCoreResponseDto>;
   onWarnings?: WarningsCallback;
+  rowPatch?: (vars: TVariables) => Readonly<Record<string, unknown>>;
 }) {
   const queryClient = useQueryClient();
   const queryKey = taskKeys.detail(taskId);
@@ -86,12 +92,14 @@ export function useTaskActionMutation<TVariables>({
       if (previous) {
         queryClient.setQueryData<TaskCoreResponseDto>(queryKey, { ...previous, ...toPatch(vars) });
       }
-      return { previous };
+      const rows = rowPatch ? await patchTaskRows(queryClient, taskId, rowPatch(vars)) : null;
+      return { previous, rows };
     },
     onError: (_err, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(queryKey, context.previous);
       }
+      if (context?.rows) restoreTaskRows(queryClient, context.rows);
     },
     onSuccess: (result) => {
       // HỢP NHẤT, KHÔNG ghi đè. `respond()` (task-actions.service.ts) trả về `toTaskCoreDto(row)` — DTO
