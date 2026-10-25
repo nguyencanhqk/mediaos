@@ -29,6 +29,7 @@ import { useCanOpenDirect } from "./chat-room-opener";
 import { SenderDirectMenu } from "./SenderDirectMenu";
 import { ReactionBar } from "./ReactionBar";
 import { SeenByAvatars, type SeenByViewer } from "./SeenByAvatars";
+import type { SeenByRosterStatus } from "./seen-by-status";
 
 export interface MessageBubbleActions {
   onReply: (message: StoredChatMessage) => void;
@@ -73,6 +74,10 @@ interface MessageBubbleProps {
    * Dẫn xuất từ `members[].lastReadSeq` (§13.2) — không có bảng riêng.
    */
   seenBy: readonly SeenByViewer[];
+  /** S20-CHAT-SEENBY-1 — người nhận CHƯA đọc tin (tab «Chưa xem»). Mặc định rỗng. */
+  unseenBy?: readonly SeenByViewer[];
+  /** S20-CHAT-SEENBY-1 — trạng thái roster; khác `ready` ⇒ bảng chỉ báo tải/lỗi. Mặc định `ready`. */
+  seenByStatus?: SeenByRosterStatus;
   /**
    * S8-CHAT-UX-FE-3 — URL ảnh người gửi, tra từ **ROSTER phòng** (CHAT-DEC-019), KHÔNG từ tin.
    * `null` = chưa có ảnh / roster chưa về ⇒ `<Avatar>` rơi về chữ cái đầu (hành vi cũ, không hồi quy).
@@ -177,6 +182,8 @@ export function MessageBubble({
   canRecall,
   canPin,
   seenBy,
+  unseenBy,
+  seenByStatus,
   senderAvatarUrl,
   senderNameFallback,
   isArchived,
@@ -369,7 +376,9 @@ export function MessageBubble({
             {formatClock(message.createdAt)}
           </time>
 
-          {isMine && !isRecalled && <SeenByAvatars viewers={seenBy} />}
+          {isMine && !isRecalled && (
+            <SeenByAvatars viewers={seenBy} unseen={unseenBy} status={seenByStatus} />
+          )}
         </div>
       </div>
 

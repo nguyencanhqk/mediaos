@@ -25,7 +25,7 @@ import {
   type UnreadAnchor,
 } from "./chat-unread";
 import { MessageBubble, type MessageBubbleActions } from "./MessageBubble";
-import type { SeenByViewer } from "./SeenByAvatars";
+import { seenByStatusOf, type SeenByRosterStatus, type SeenByStatus } from "./seen-by-status";
 import { isScrollNearBottom, scrollTopToReveal } from "./use-chat-viewport";
 
 /** Khoảng cách tới ĐỈNH đủ để coi là "đang muốn xem tiếp lịch sử". */
@@ -33,6 +33,9 @@ const LOAD_OLDER_THRESHOLD_PX = 60;
 
 /** Cùng người gửi + cách nhau dưới ngưỡng này ⇒ gộp (không lặp avatar + tên). */
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+/** S20-CHAT-SEENBY-1 — tin không phải của tôi: không ai «đã/chưa xem» (tham chiếu ổn định). */
+const NO_SEEN_STATUS: SeenByStatus = { seen: [], unseen: [] };
 
 /** Mỏ neo DOM của vạch chưa đọc — phép định vị tìm nó trong khung cuộn. */
 const UNREAD_DIVIDER_TESTID = "chat-unread-divider";
@@ -48,6 +51,12 @@ interface MessageListProps {
   messages: readonly StoredChatMessage[];
   pending: readonly PendingChatMessage[];
   members: readonly ChatRoomMemberDto[];
+  /**
+   * S20-CHAT-SEENBY-1 — trạng thái nguồn `members` (chi tiết phòng). Khác `ready` ⇒ bảng «Đã xem · Chưa
+   * xem» chỉ báo đang tải / không tải được, KHÔNG dựng danh sách từ `members` rỗng hay cũ. Mặc định
+   * `ready` cho nơi gọi không theo dõi trạng thái tải.
+   */
+  membersStatus?: SeenByRosterStatus;
   myUserId: string | null;
   myRole: "member" | "admin" | null;
   canRecallPair: boolean;
@@ -90,6 +99,7 @@ export function MessageList({
   messages,
   pending,
   members,
+  membersStatus = "ready",
   myUserId,
   myRole,
   canRecallPair,
@@ -340,21 +350,13 @@ export function MessageList({
   //
   // S17: trả VIEWER (id · tên · ảnh) thay vì mảng tên, để `SeenByAvatars` vẽ được dãy mặt. Ảnh lấy từ
   // `avatarByUser` (ROSTER phòng, CHAT-DEC-019) — KHÔNG ký lẻ theo từng người ở tầng này.
-  const seenByFor = useCallback(
-    (roomSeq: number): SeenByViewer[] =>
-      members
-        .filter(
-          (m) =>
-            m.userId !== myUserId &&
-            m.lastReadSeq !== undefined &&
-            m.lastReadSeq >= roomSeq &&
-            m.userName,
-        )
-        .map((m) => ({
-          userId: m.userId,
-          name: m.userName ?? null,
-          avatarUrl: avatarByUser?.get(m.userId) ?? null,
-        })),
+  // S20-CHAT-SEENBY-1 — tách «Đã xem · Chưa xem» theo người nhận CỦA TỪNG TIN (`seenByStatusOf`: trừ tôi,
+  // người vào sau lúc gửi, người đã rời). Chỉ tính cho tin của tôi — tin người khác không có bảng.
+  const seenStatusFor = useCallback(
+    (message: StoredChatMessage): SeenByStatus =>
+      myUserId !== null && message.senderId === myUserId
+        ? seenByStatusOf({ members, myUserId, message, avatarByUser })
+        : NO_SEEN_STATUS,
     [members, myUserId, avatarByUser],
   );
 
@@ -429,6 +431,7 @@ export function MessageList({
 
         {rows.map(({ message, showDay, grouped, isLastOfGroup }) => {
           const isHighlighted = message.id === highlightMessageId;
+          const seenStatus = seenStatusFor(message);
 
           return (
             <div
@@ -479,7 +482,9 @@ export function MessageList({
                   canRecallMessage({ message, myUserId, myRole, roomType: room.roomType })
                 }
                 canPin={canPinPair && !room.isArchived}
-                seenBy={seenByFor(message.roomSeq)}
+                seenBy={seenStatus.seen}
+                unseenBy={seenStatus.unseen}
+                seenByStatus={membersStatus}
                 senderAvatarUrl={avatarByUser?.get(message.senderId) ?? null}
                 senderNameFallback={nameByUser?.get(message.senderId) ?? null}
                 isArchived={room.isArchived ?? false}
