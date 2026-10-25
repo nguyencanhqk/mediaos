@@ -30,6 +30,16 @@ import { useTaskDrawer } from "./task-drawer-nav";
  */
 export type TaskQuickEditRow = Pick<TaskCoreResponseDto, "id" | "title" | "status" | "dueAt">;
 
+/**
+ * Server tính `isOverdue` = false cho Done/Cancelled (projection của task-core.repository) ⇒ vá lạc
+ * quan theo, để badge «Quá hạn» tắt cùng lúc với badge trạng thái thay vì đợi refetch.
+ */
+const NOT_OVERDUE_STATUSES: ReadonlySet<TaskCoreStatusDto> = new Set(["Done", "Cancelled"]);
+
+function statusPatch(status: TaskCoreStatusDto): Partial<TaskCoreResponseDto> {
+  return NOT_OVERDUE_STATUSES.has(status) ? { status, isOverdue: false } : { status };
+}
+
 function TaskQuickEditError({
   field,
   error,
@@ -78,8 +88,8 @@ export function TaskRowStatusControl({ task }: { task: TaskQuickEditRow }) {
   const mutation = useTaskActionMutation<TaskCoreStatusDto>({
     taskId: task.id,
     mutationFn: (status) => taskCoreApi.changeStatus(task.id, { status }),
-    toPatch: (status) => ({ status }),
-    rowPatch: (status) => ({ status }),
+    toPatch: statusPatch,
+    rowPatch: statusPatch,
   });
 
   if (!canStatus) return <TaskStatusBadge status={task.status} />;
@@ -114,6 +124,8 @@ export function TaskRowStatusControl({ task }: { task: TaskQuickEditRow }) {
  * `readOnly` = cách dòng hiện hạn khi KHÔNG có `update-deadline:task` (mỗi bề mặt một kiểu chữ).
  * Vá lạc quan đặt `isOverdue: false`: mốc nhanh luôn ở tương lai, «Xoá hạn» thì hết quá hạn; riêng hạn
  * «Tuỳ chỉnh» đã qua thì cờ quá hạn về đúng khi refetch (FE không tự suy cờ quá hạn).
+ * Việc đã Hủy: server khoá hạn (TASK-ERR-TASK-CLOSED — chỉ đường đổi trạng thái được mở để khôi phục)
+ * ⇒ hiện `readOnly`, không mời một thao tác chắc chắn bị từ chối.
  */
 export function TaskRowDeadlineControl({
   task,
@@ -137,7 +149,7 @@ export function TaskRowDeadlineControl({
       notifyAssigneeWarnings({ taskId: task.id, warnings, assigneeName: updated?.assigneeName }),
   });
 
-  if (!canDeadline) return <>{readOnly}</>;
+  if (!canDeadline || task.status === "Cancelled") return <>{readOnly}</>;
 
   return (
     <div className="flex flex-col gap-0.5">

@@ -122,6 +122,15 @@ async function renderWith(items: MyTaskItemDto[], caps: Record<string, boolean>)
   await waitFor(() => expect(screen.getByText(items[0]?.title ?? "")).toBeInTheDocument());
 }
 
+/**
+ * Sau lần tải đầu, mọi lần tải lại TREO. Không có nó, `onSettled` invalidate ⇒ refetch trả lại dữ liệu
+ * gốc và che mất việc `onError` KHÔNG hoàn tác (đo: bỏ `restoreTaskRows` khỏi hook, các ca rollback
+ * vẫn xanh). Tải lại treo ⇒ dòng hiện giá trị cũ CHỈ khi cache đã được hoàn tác.
+ */
+function freezeRefetch() {
+  vi.mocked(taskCoreApi.getMyTasks).mockReturnValue(new Promise(() => {}));
+}
+
 describe("MyTasksPage — S20-TASK-QUICKEDIT-1 đổi trạng thái trên dòng", () => {
   beforeEach(() => {
     useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
@@ -168,6 +177,15 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 đổi trạng thái trên dòng"
     expect(within(group("overdue")).getByText("Nộp báo cáo")).toBeInTheDocument();
   });
 
+  it("đổi sang Hoàn thành ⇒ badge «Quá hạn» tắt ngay (server không tính quá hạn cho Done/Cancelled)", async () => {
+    searchRef.current = { showDone: 1 };
+    await renderWith([OVER], { "update-status:task": true });
+    vi.mocked(taskCoreApi.changeStatus).mockReturnValue(new Promise(() => {}));
+    chooseStatus("t-over", "Hoàn thành");
+    await waitFor(() => expect(within(group("done")).getByText("Nộp báo cáo")).toBeInTheDocument());
+    expect(within(group("done")).queryByText("Quá hạn")).not.toBeInTheDocument();
+  });
+
   it("menu chỉ có chuyển hợp lệ: từ Đã hủy KHÔNG có Chờ review / Hoàn thành", async () => {
     searchRef.current = { showDone: 1 };
     await renderWith([makeItem({ id: "t-cxl", title: "Việc đã huỷ", status: "Cancelled" })], {
@@ -182,6 +200,7 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 đổi trạng thái trên dòng"
 
   it("checklist bắt buộc chưa xong + chọn Hoàn thành ⇒ rollback, «Cần hoàn tất checklist» + link tab Checklist", async () => {
     await renderWith([PROG], { "update-status:task": true });
+    freezeRefetch();
     vi.mocked(taskCoreApi.changeStatus).mockRejectedValue(
       new ApiError({
         status: 400,
@@ -192,6 +211,10 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 đổi trạng thái trên dòng"
     );
     chooseStatus("t-prog", "Hoàn thành");
     expect(await screen.findByText("Cần hoàn tất checklist")).toBeInTheDocument();
+    // Tải lại đã bắn (và treo) ⇒ giá trị cũ dưới đây là do hoàn tác cache, không phải do server.
+    await waitFor(() =>
+      expect(vi.mocked(taskCoreApi.getMyTasks).mock.calls.length).toBeGreaterThanOrEqual(2),
+    );
     expect(within(group("inProgress")).getByText("Viết tài liệu")).toBeInTheDocument();
     expect(within(statusTrigger("t-prog")).getByText("Đang làm")).toBeInTheDocument();
 
@@ -204,6 +227,7 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 đổi trạng thái trên dòng"
 
   it("403 (chỉ theo dõi) ⇒ rollback + «Bạn không có quyền đổi trạng thái việc này», danh sách vẫn hiện", async () => {
     await renderWith([OVER], { "update-status:task": true });
+    freezeRefetch();
     vi.mocked(taskCoreApi.changeStatus).mockRejectedValue(
       new ApiError({ status: 403, code: "AUTH-ERR-FORBIDDEN", message: "Forbidden" }),
     );
@@ -217,6 +241,7 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 đổi trạng thái trên dòng"
 
   it("mất mạng ⇒ rollback + «Thử lại» gửi lại đúng lựa chọn", async () => {
     await renderWith([OVER], { "update-status:task": true });
+    freezeRefetch();
     vi.mocked(taskCoreApi.changeStatus)
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(actionResponse({ ...OVER, status: "In Progress" }));
@@ -247,6 +272,19 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 mốc hạn trên dòng", () => {
   it("thiếu update-deadline:task ⇒ không có nút chọn hạn", async () => {
     await renderWith([OVER], { "update-status:task": true });
     expect(screen.queryByTestId("task-row-deadline-t-over")).not.toBeInTheDocument();
+  });
+
+  it("việc đã Hủy ⇒ hạn chỉ đọc dù có update-deadline:task (server khoá hạn việc đã huỷ)", async () => {
+    searchRef.current = { showDone: 1 };
+    const cancelled = makeItem({
+      id: "t-cxl",
+      title: "Việc đã huỷ",
+      status: "Cancelled",
+      dueAt: "2026-10-20T10:00:00.000Z",
+    });
+    await renderWith([cancelled], { "update-deadline:task": true });
+    expect(screen.queryByTestId("task-row-deadline-t-cxl")).not.toBeInTheDocument();
+    expect(within(group("done")).getByText(/^Hạn /)).toBeInTheDocument();
   });
 
   it("«Ngày mai» ⇒ change-deadline 25/10 17:00 giờ công ty (10:00 UTC), không PATCH", async () => {
@@ -281,6 +319,7 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 mốc hạn trên dòng", () => {
 
   it("start_at sau mốc ⇒ lỗi CHECK của server: rollback + thông điệp dễ hiểu", async () => {
     await renderWith([OVER], { "update-deadline:task": true });
+    freezeRefetch();
     vi.mocked(taskCoreApi.changeDeadline).mockRejectedValue(
       new ApiError({
         status: 400,
@@ -292,10 +331,12 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 mốc hạn trên dòng", () => {
     fireEvent.click(screen.getByTestId("task-row-deadline-t-over-preset-tomorrow"));
     expect(await screen.findByText(/sớm hơn ngày bắt đầu/i)).toBeInTheDocument();
     expect(within(group("overdue")).getByText("Nộp báo cáo")).toBeInTheDocument();
+    expect(screen.getByTestId("my-tasks-group-count-overdue")).toHaveTextContent("1");
   });
 
   it("403 ⇒ rollback + báo không có quyền đổi hạn", async () => {
     await renderWith([OVER], { "update-deadline:task": true });
+    freezeRefetch();
     vi.mocked(taskCoreApi.changeDeadline).mockRejectedValue(
       new ApiError({ status: 403, code: "AUTH-ERR-FORBIDDEN", message: "Forbidden" }),
     );
