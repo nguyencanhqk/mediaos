@@ -100,6 +100,34 @@ async (page) => {
       const jump = [...document.querySelectorAll("button")].find((b) =>
         /tin mới/.test(b.innerText),
       );
+      const jr = jump?.getBoundingClientRect() ?? null;
+      const hit = (a, b) =>
+        a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      // Lượt đo lại: số dòng thật của bong bóng tin ngắn «… — Ok». Chỉ đếm hộp dòng của NÚT CHỮ — Range
+      // trên cả phần tử còn trả hộp của <div>/<p> bọc, lệch đỉnh vài px ⇒ đếm khống thành 2 dòng.
+      const shells = [...el.querySelectorAll('[data-testid="chat-message-body-shell"]')];
+      const lineCount = (node) => {
+        const tops = new Set();
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+          if (!t.textContent.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(t);
+          for (const r of range.getClientRects()) if (r.width > 0) tops.add(Math.round(r.top));
+        }
+        return tops.size;
+      };
+      const shortBubbles = shells
+        .filter((s) => /— Ok$/.test(s.innerText.trim()) && inView(s.getBoundingClientRect()))
+        .map((s) => {
+          const col = s.closest('[data-testid="chat-message-column"]');
+          return {
+            text: s.innerText.trim(),
+            lines: lineCount(s),
+            shellWidth: Math.round(s.getBoundingClientRect().width),
+            columnWidth: col ? Math.round(col.getBoundingClientRect().width) : null,
+          };
+        });
       return {
         scroll: {
           scrollTop: Math.round(el.scrollTop),
@@ -117,6 +145,10 @@ async (page) => {
         targetGapBelowDividerPx: tr && dr ? Math.round(tr.top - dr.bottom) : null,
         bubbles: bubbles.length,
         jumpButton: jump ? jump.innerText.replace(/\s+/g, " ").trim() : null,
+        jumpOverlapsBubbles: jr
+          ? shells.filter((s) => hit(jr, s.getBoundingClientRect())).length
+          : null,
+        shortBubbles,
         pageScrollY: window.scrollY,
       };
     }, targetId ?? null);
@@ -232,7 +264,18 @@ async (page) => {
     await page.waitForTimeout(READ_WAIT_MS);
     result.A.atBottom = await geometry();
     result.A.readsAfterScroll = await readsOf("A-scroll");
+    // Lượt đo lại (sau bản vá 63495c3c): badge phải về theo CHÍNH response POST read — đo TRƯỚC khi bơm
+    // tiếng vọng `chat:read`, và đọc luôn số trong store (badge tổng lấy từ đây).
     result.A.roomItemAfterScroll = await roomItemText("Kinh doanh");
+    result.A.storeAfterScroll = await page.evaluate(async (rid) => {
+      const mod = await import("/src/stores/chat.store.ts");
+      const s = mod.useChatStore.getState();
+      const room = s.roomsById[rid] ?? null;
+      return {
+        roomUnread: room ? room.unreadCount : null,
+        sumUnreadAllRooms: Object.values(s.roomsById).reduce((n, r) => n + (r.unreadCount ?? 0), 0),
+      };
+    }, U);
     result.A.scrollCalls = await callsOf("A-scroll");
     await shot("unread-A2-scrolled-bottom.png");
     // Badge phòng chỉ về 0 qua tiếng vọng `chat:read` của server (applyReadEvent) — API giả lập không có
