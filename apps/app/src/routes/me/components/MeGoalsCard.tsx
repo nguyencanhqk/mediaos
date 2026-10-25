@@ -10,19 +10,22 @@
  * Check-in nhanh gate CẶP RIÊNG `('checkin','goal')` — người xem được mục tiêu chưa chắc check-in được.
  *
  * S20-GOAL-QUICKSTART-1 (US-GOAL-NV-04) — thẻ liệt kê mọi mục tiêu ĐANG MỞ của tôi trong kỳ hiện tại
- * (quý theo giờ công ty), KỂ CẢ Nháp: không lọc `status` ở server, ẩn Completed/Cancelled ở client, 5 dòng
- * + «Xem tất cả (N)» → `/goals?mine=1`. Mục Nháp có badge + «Kích hoạt» (hook dùng chung) và Check-in
+ * (quý theo giờ công ty), KỂ CẢ Nháp, 5 dòng + «Xem tất cả (N)» → `/goals?mine=1`. Lọc trạng thái ở
+ * SERVER — một request cho Active, một cho Nháp (`meGoalsQuerySchema.status` nhận MỘT giá trị): server xếp
+ * `period_start DESC, goal_code ASC`, không ưu tiên mục đang mở, nên một request không lọc với `limit`
+ * có thể trả toàn mục đã đóng và đẩy mục đang mở ra ngoài trang. Completed/Cancelled vẫn bị ẩn ở client
+ * (phòng hờ). Mục Nháp có badge + «Kích hoạt» (hook dùng chung) và Check-in
  * khoá kèm lý do. Chủ thể vẫn lấy từ token (`meGoalsQuerySchema` không có `employeeId`).
  *
  * "CHƯA ĐO" ≠ "0%" (SPEC-10 §13.2): tiến độ LUÔN đi qua GoalProgressBar, KHÔNG tự định dạng số.
  */
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Target, AlertTriangle, RefreshCw, ChevronRight, CheckCircle2, Plus } from "lucide-react";
 import { companyTimeZone, meApi, meKeys, quarterRange, useCan } from "@mediaos/web-core";
-import type { GoalCoreResponseDto } from "@mediaos/contracts";
+import type { GoalCoreResponseDto, GoalStatusDto } from "@mediaos/contracts";
 import {
   Card,
   CardContent,
@@ -52,6 +55,28 @@ const CLOSED_STATUSES: ReadonlySet<GoalCoreResponseDto["status"]> = new Set([
   "Cancelled",
 ]);
 
+/** Trạng thái «đang mở» — mỗi trạng thái một request lọc ở server. */
+const OPEN_STATUSES: readonly GoalStatusDto[] = ["Active", "Draft"];
+
+/** Thứ tự của server (`period_start DESC, goal_code ASC`) — giữ khi gộp các trang theo trạng thái. */
+function compareServerOrder(a: GoalCoreResponseDto, b: GoalCoreResponseDto): number {
+  if (a.periodStart !== b.periodStart) return a.periodStart < b.periodStart ? 1 : -1;
+  if (a.goalCode === b.goalCode) return 0;
+  return a.goalCode < b.goalCode ? -1 : 1;
+}
+
+/**
+ * Gộp các trang theo trạng thái thành một danh sách đang mở — THUẦN: bỏ trùng theo id (một mục vừa đổi
+ * trạng thái có thể còn ở cache cũ trong lúc làm mới), bỏ mục đã đóng, xếp lại theo thứ tự server.
+ */
+function mergeOpenGoals(pages: readonly (readonly GoalCoreResponseDto[])[]): GoalCoreResponseDto[] {
+  const byId = new Map<string, GoalCoreResponseDto>();
+  for (const goal of pages.flat()) {
+    if (!CLOSED_STATUSES.has(goal.status) && !byId.has(goal.id)) byId.set(goal.id, goal);
+  }
+  return [...byId.values()].sort(compareServerOrder);
+}
+
 export function MeGoalsCard() {
   const { t } = useTranslation("me");
   const { t: tc } = useTranslation("common");
@@ -66,20 +91,33 @@ export function MeGoalsCard() {
   const canCreate = useCan(GOAL_ENGINE_PAIRS.CREATE.action, GOAL_ENGINE_PAIRS.CREATE.resourceType);
 
   // Kỳ hiện tại = quý chứa «hôm nay» theo giờ CÔNG TY (không phải giờ máy) — đọc một lần lúc mở thẻ.
-  const params = useMemo(() => {
+  const paramsByStatus = useMemo(() => {
     const quarter = quarterRange(new Date(), companyTimeZone());
-    return { periodFrom: quarter.start, periodTo: quarter.end, limit: ME_GOALS_FETCH_LIMIT };
+    return OPEN_STATUSES.map((status) => ({
+      periodFrom: quarter.start,
+      periodTo: quarter.end,
+      limit: ME_GOALS_FETCH_LIMIT,
+      status,
+    }));
   }, []);
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: meKeys.goals(params),
-    queryFn: () => meApi.getGoals(params),
-    enabled: canAccess,
-    staleTime: 60_000,
+  const results = useQueries({
+    queries: paramsByStatus.map((params) => ({
+      queryKey: meKeys.goals(params),
+      queryFn: () => meApi.getGoals(params),
+      enabled: canAccess,
+      staleTime: 60_000,
+    })),
   });
-  const openGoals = useMemo(
-    () => (data ?? []).filter((goal) => !CLOSED_STATUSES.has(goal.status)),
-    [data],
-  );
+  const isLoading = results.some((result) => result.isLoading);
+  const isError = results.some((result) => result.isError);
+  const pages = results.map((result) => result.data);
+  const data = pages.every((page): page is GoalCoreResponseDto[] => page !== undefined)
+    ? pages
+    : undefined;
+  const openGoals = data ? mergeOpenGoals(data) : [];
+  // Một trang bất kỳ đầy `limit` ⇒ có thể còn nữa ⇒ «N+» (API không trả tổng).
+  const mayHaveMore = (data ?? []).some((page) => page.length >= ME_GOALS_FETCH_LIMIT);
+  const refetch = () => Promise.all(results.map((result) => result.refetch()));
 
   // Thiếu access:goal → ẩn hoàn toàn (không chiếm ô lưới, không lộ sự tồn tại của module Mục tiêu).
   if (!canAccess) return null;
@@ -151,8 +189,7 @@ export function MeGoalsCard() {
   };
 
   const showViewAll = !isLoading && !isError && openGoals.length > 0;
-  // API không trả tổng: tải đủ `limit` dòng thì có thể còn nữa ⇒ «N+».
-  const viewAllCount = `${openGoals.length}${(data?.length ?? 0) >= ME_GOALS_FETCH_LIMIT ? "+" : ""}`;
+  const viewAllCount = `${openGoals.length}${mayHaveMore ? "+" : ""}`;
 
   return (
     <Card className="flex h-full flex-col">

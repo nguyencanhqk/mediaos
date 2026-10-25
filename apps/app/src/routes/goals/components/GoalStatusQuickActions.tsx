@@ -44,7 +44,7 @@ export function GoalActivateButton({
 }) {
   const { t } = useTranslation("goals");
   const canUpdate = useCanUpdateGoal();
-  const { changeStatus, pendingGoalId } = useGoalStatusMutation();
+  const { changeStatus, pendingGoalIds } = useGoalStatusMutation();
   if (!canUpdate || goal.status !== "Draft" || goal.finalizedAt) return null;
   return (
     <Button
@@ -52,7 +52,7 @@ export function GoalActivateButton({
       variant="outline"
       className={className}
       data-testid={testId}
-      disabled={pendingGoalId === goal.id}
+      disabled={pendingGoalIds.has(goal.id)}
       onClick={() => void changeStatus({ goalId: goal.id, status: "Active" })}
     >
       <PlayCircle className="mr-1.5 h-4 w-4" aria-hidden />
@@ -112,7 +112,7 @@ function writeLater(goalId: string): void {
 export function GoalCompletionBanner({ goal }: { goal: QuickStatusGoal }) {
   const { t } = useTranslation("goals");
   const canUpdate = useCanUpdateGoal();
-  const { changeStatus, pendingGoalId } = useGoalStatusMutation();
+  const { changeStatus, pendingGoalIds } = useGoalStatusMutation();
   const [later, setLater] = useState(() => readLater(goal.id));
   if (!canUpdate || later || !shouldSuggestCompletion(goal)) return null;
   return (
@@ -127,7 +127,7 @@ export function GoalCompletionBanner({ goal }: { goal: QuickStatusGoal }) {
       <span className="flex gap-2">
         <Button
           size="sm"
-          disabled={pendingGoalId === goal.id}
+          disabled={pendingGoalIds.has(goal.id)}
           onClick={() => void changeStatus({ goalId: goal.id, status: "Completed" })}
         >
           {t("statusChange.completeBanner.confirm")}

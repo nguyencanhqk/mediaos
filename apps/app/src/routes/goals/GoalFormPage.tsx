@@ -102,8 +102,9 @@ export function GoalFormPage({
         ),
   );
   const anchorSelf = !isEdit && shouldAnchorSelf(quick.ownOnly, prefill ?? {});
-  // Trạng thái theo cấp (Q11 = B) cho tới khi người dùng tự chọn trạng thái.
-  const statusTouchedRef = useRef(false);
+  // Trạng thái theo cấp (Q11 = B) cho tới khi người dùng tự chọn trạng thái. Mở từ mục tiêu cha ⇒ trạng
+  // thái đã theo luật LISTURL (Active) — coi như đã chọn, đổi cấp KHÔNG ghi đè.
+  const statusTouchedRef = useRef(!isEdit && Boolean(prefill?.parentGoalId));
 
   const {
     register,

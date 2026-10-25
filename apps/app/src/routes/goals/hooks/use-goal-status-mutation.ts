@@ -9,9 +9,14 @@
  * Check-in bật lên tức thì; server từ chối (403 ngoài phạm vi, 422 theo mã) ⇒ trả mục tiêu đó về trạng
  * thái cũ + toast lỗi theo mã. Dù thành hay bại đều làm mới các cache đó từ server.
  */
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  useMutation,
+  useMutationState,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import {
   ApiError,
   goalApi,
@@ -20,7 +25,7 @@ import {
   mapApiErrorToUi,
   meKeys,
 } from "@mediaos/web-core";
-import type { GoalCoreResponseDto, GoalStatusDto } from "@mediaos/contracts";
+import { goalStatusSchema, type GoalCoreResponseDto, type GoalStatusDto } from "@mediaos/contracts";
 import { toast } from "@mediaos/ui";
 
 /** Một lần đổi trạng thái (toast thành công dùng tên mục tiêu server trả về). */
@@ -32,9 +37,15 @@ export interface GoalStatusChange {
 export interface GoalStatusMutation {
   /** Đổi trạng thái; KHÔNG ném — trả mục tiêu đã lưu, hoặc null khi server từ chối (đã rollback + toast). */
   readonly changeStatus: (change: GoalStatusChange) => Promise<GoalCoreResponseDto | null>;
-  /** Mục tiêu đang chờ server (để khoá đúng nút đó), null khi rảnh. */
-  readonly pendingGoalId: string | null;
+  /**
+   * Mọi mục tiêu đang chờ server (để khoá đúng nút đó) — gồm MỌI lần đổi đang bay, kể cả nhiều mục tiêu
+   * cùng lúc trên một hook (kích hoạt hàng loạt) và lần đổi từ hook khác (thẻ /me · header chi tiết).
+   */
+  readonly pendingGoalIds: ReadonlySet<string>;
 }
+
+/** Khoá chung của mọi lần đổi trạng thái — để đếm các lần đang chờ qua `useMutationState`. */
+const GOAL_STATUS_MUTATION_KEY = [...goalKeys.all, "status-change"] as const;
 
 /** Prefix các cache có thể giữ bản sao mục tiêu ở dạng phẳng (một mục · mảng · trang `{items}`). */
 const optimisticPrefixes = (goalId: string): readonly QueryKey[] => [
@@ -83,7 +94,11 @@ export function patchGoalStatusInCache(
   return data.id === goalId ? { ...data, status } : data;
 }
 
-/** Trạng thái hiện có của mục tiêu trong một cache (một mục · mảng · trang `{items}`); không thấy ⇒ undefined. */
+/**
+ * Trạng thái hiện có của mục tiêu trong một cache (một mục · mảng · trang `{items}`). Không thấy, hoặc giá
+ * trị không thuộc `GoalStatusDto` (cache lạ) ⇒ undefined — không bao giờ dùng giá trị lạ làm trạng thái
+ * rollback.
+ */
 function findGoalStatus(data: unknown, goalId: string): GoalStatusDto | undefined {
   const list = Array.isArray(data)
     ? data
@@ -91,7 +106,9 @@ function findGoalStatus(data: unknown, goalId: string): GoalStatusDto | undefine
       ? data.items
       : [data];
   const found = list.find((item) => isRecord(item) && item.id === goalId);
-  return isRecord(found) ? (found.status as GoalStatusDto) : undefined;
+  if (!isRecord(found)) return undefined;
+  const parsed = goalStatusSchema.safeParse(found.status);
+  return parsed.success ? parsed.data : undefined;
 }
 
 /** Thông điệp lỗi người đọc: 403 ⇒ thiếu quyền trên mục tiêu này; 422 theo mã; còn lại ⇒ error-mapper. */
@@ -122,6 +139,7 @@ export function useGoalStatusMutation(): GoalStatusMutation {
     GoalStatusChange,
     { previousStatus: GoalStatusDto | undefined }
   >({
+    mutationKey: GOAL_STATUS_MUTATION_KEY,
     mutationFn: ({ goalId, status }) => goalApi.updateGoal(goalId, { status }),
     onMutate: async ({ goalId, status }) => {
       const prefixes = optimisticPrefixes(goalId);
@@ -155,8 +173,17 @@ export function useGoalStatusMutation(): GoalStatusMutation {
     [mutateAsync],
   );
 
-  return {
-    changeStatus,
-    pendingGoalId: mutation.isPending ? (mutation.variables?.goalId ?? null) : null,
-  };
+  const pendingIds = useMutationState({
+    filters: { mutationKey: GOAL_STATUS_MUTATION_KEY, status: "pending" },
+    select: (pending) => {
+      const variables = pending.state.variables;
+      return isRecord(variables) && typeof variables.goalId === "string" ? variables.goalId : null;
+    },
+  });
+  const pendingGoalIds = useMemo<ReadonlySet<string>>(
+    () => new Set(pendingIds.filter((id): id is string => id !== null)),
+    [pendingIds],
+  );
+
+  return { changeStatus, pendingGoalIds };
 }

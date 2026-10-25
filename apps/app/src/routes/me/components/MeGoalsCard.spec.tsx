@@ -173,15 +173,39 @@ describe("MeGoalsCard — kỳ hiện tại, cả Nháp (NV-04)", () => {
     vi.useRealTimers();
   });
 
-  it("(c1) gọi /me/goals với periodFrom/periodTo quý hiện tại (giờ công ty), limit 20, KHÔNG lọc status", async () => {
+  it("(c1) gọi /me/goals với periodFrom/periodTo quý hiện tại (giờ công ty), limit 20, lọc ở server riêng Active và Nháp", async () => {
     setCaps(OPEN_CAPS);
     renderCard();
-    await waitFor(() => expect(mockGetGoals).toHaveBeenCalled());
-    expect(mockGetGoals).toHaveBeenCalledWith({
-      periodFrom: "2026-10-01",
-      periodTo: "2026-12-31",
-      limit: 20,
+    await waitFor(() => expect(mockGetGoals).toHaveBeenCalledTimes(2));
+    const period = { periodFrom: "2026-10-01", periodTo: "2026-12-31", limit: 20 };
+    expect(mockGetGoals).toHaveBeenCalledWith({ ...period, status: "Active" });
+    expect(mockGetGoals).toHaveBeenCalledWith({ ...period, status: "Draft" });
+  });
+
+  it("(c1b) 20 dòng đầu của kỳ toàn mục đã đóng ⇒ mục Active/Nháp vẫn hiện (không bị đẩy khỏi trang)", async () => {
+    setCaps(OPEN_CAPS);
+    // Server xếp period_start DESC, goal_code ASC — không ưu tiên mục đang mở: không lọc status thì
+    // 20 dòng đầu có thể toàn Completed/Cancelled.
+    const closed = Array.from({ length: 20 }, (_, i) =>
+      makeGoal({ id: `x-${i}`, goalCode: `GOAL-${i}`, name: `Đã xong ${i}`, status: "Completed" }),
+    );
+    mockGetGoals.mockImplementation((params: { status?: string }) => {
+      if (params.status === "Active") {
+        return Promise.resolve([makeGoal({ id: "a-9", goalCode: "GOAL-90", name: "Đang chạy" })]);
+      }
+      if (params.status === "Draft") {
+        return Promise.resolve([
+          makeGoal({ id: "d-9", goalCode: "GOAL-91", name: "Còn nháp", status: "Draft" }),
+        ]);
+      }
+      return Promise.resolve(closed);
     });
+    renderCard();
+
+    expect(await screen.findByText("Đang chạy")).toBeInTheDocument();
+    expect(screen.getByText("Còn nháp")).toBeInTheDocument();
+    expect(screen.queryByText("Đã xong 0")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Xem tất cả \(2\)/ })).toBeInTheDocument();
   });
 
   it("(c2) 2 Active + 1 Nháp (+ Completed/Cancelled) ⇒ hiện 3; Nháp có badge, «Kích hoạt», Check-in khoá có lý do", async () => {
@@ -267,7 +291,11 @@ describe("MeGoalsCard — kỳ hiện tại, cả Nháp (NV-04)", () => {
     setCaps(OPEN_CAPS);
     mockGetGoals.mockRejectedValue(new Error("500"));
     renderCard();
-    fireEvent.click(await screen.findByRole("button", { name: /Thử lại/ }));
-    await waitFor(() => expect(mockGetGoals).toHaveBeenCalledTimes(2));
+    const retry = await screen.findByRole("button", { name: /Thử lại/ });
+    const callsBefore = mockGetGoals.mock.calls.length;
+    fireEvent.click(retry);
+    // Lần tải đầu: một request cho Active, một cho Nháp — «Thử lại» gọi lại cả hai.
+    expect(callsBefore).toBe(2);
+    await waitFor(() => expect(mockGetGoals).toHaveBeenCalledTimes(callsBefore + 2));
   });
 });

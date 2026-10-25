@@ -77,8 +77,9 @@ export const GOAL_UPDATES_PAGE_SIZE = 20;
 export const ME_GOALS_PREVIEW_LIMIT = 5;
 
 /**
- * Số mục tiêu thẻ /me tải về (`GET /me/goals?limit=`): API trả mảng, KHÔNG có tổng ⇒ thẻ tự đếm phần
- * đang mở (ẩn Completed/Cancelled ở client). Đủ `limit` dòng ⇒ có thể còn nữa (nhãn «N+»).
+ * Số mục tiêu thẻ /me tải về MỖI trạng thái đang mở (`GET /me/goals?status=…&limit=`, một request cho
+ * Active, một cho Nháp): API trả mảng, KHÔNG có tổng ⇒ thẻ tự đếm. Một trang đủ `limit` dòng ⇒ có thể
+ * còn nữa (nhãn «N+»).
  */
 export const ME_GOALS_FETCH_LIMIT = 20;
 

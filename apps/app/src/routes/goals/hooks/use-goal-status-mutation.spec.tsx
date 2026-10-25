@@ -225,7 +225,7 @@ describe("useGoalStatusMutation — thành công", () => {
     expect(success).toHaveBeenCalledWith("Đã đánh dấu Hoàn thành «Doanh số quý».");
   });
 
-  it("đang chờ ⇒ pendingGoalId = mục tiêu đang đổi", async () => {
+  it("đang chờ ⇒ pendingGoalIds chứa mục tiêu đang đổi; xong ⇒ rỗng", async () => {
     const pending = deferred<GoalCoreResponseDto>();
     mockUpdateGoal.mockReturnValue(pending.promise);
     const { view } = setup();
@@ -233,13 +233,66 @@ describe("useGoalStatusMutation — thành công", () => {
     act(() => {
       void view.result.current.changeStatus({ goalId: GOAL_ID, status: "Active" });
     });
-    await waitFor(() => expect(view.result.current.pendingGoalId).toBe(GOAL_ID));
+    await waitFor(() => expect(view.result.current.pendingGoalIds.has(GOAL_ID)).toBe(true));
 
     await act(async () => {
       pending.resolve(makeGoal({ status: "Active" }));
       await pending.promise;
     });
-    await waitFor(() => expect(view.result.current.pendingGoalId).toBeNull());
+    await waitFor(() => expect(view.result.current.pendingGoalIds.size).toBe(0));
+  });
+
+  it("hai lần đổi song song trên CÙNG hook ⇒ cả hai mục tiêu đều đang chờ; xong một ⇒ mục kia vẫn chờ", async () => {
+    const first = deferred<GoalCoreResponseDto>();
+    const second = deferred<GoalCoreResponseDto>();
+    mockUpdateGoal.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { view } = setup();
+
+    act(() => {
+      void view.result.current.changeStatus({ goalId: GOAL_ID, status: "Active" });
+      void view.result.current.changeStatus({ goalId: OTHER_ID, status: "Completed" });
+    });
+    await waitFor(() => expect(view.result.current.pendingGoalIds.has(OTHER_ID)).toBe(true));
+    expect(view.result.current.pendingGoalIds.has(GOAL_ID)).toBe(true);
+
+    await act(async () => {
+      first.resolve(makeGoal({ status: "Active" }));
+      await first.promise;
+    });
+    await waitFor(() => expect(view.result.current.pendingGoalIds.has(GOAL_ID)).toBe(false));
+    expect(view.result.current.pendingGoalIds.has(OTHER_ID)).toBe(true);
+
+    await act(async () => {
+      second.resolve(makeGoal({ id: OTHER_ID, status: "Completed" }));
+      await second.promise;
+    });
+    await waitFor(() => expect(view.result.current.pendingGoalIds.size).toBe(0));
+  });
+});
+
+describe("useGoalStatusMutation — trạng thái cũ trong cache phải hợp lệ", () => {
+  it("cache chi tiết giữ giá trị lạ ⇒ rollback dùng trạng thái HỢP LỆ từ cache khác, không chép giá trị lạ", async () => {
+    const pending = deferred<GoalCoreResponseDto>();
+    mockUpdateGoal.mockReturnValue(pending.promise);
+    const { client, view, detailStatus, meStatuses } = setup();
+    // Dữ liệu lạ (không thuộc GoalStatusDto) — chỉ ép kiểu để dựng ca, không phải dạng server trả.
+    client.setQueryData(goalKeys.detail(GOAL_ID), {
+      ...makeGoal(),
+      status: "Archived" as unknown as GoalCoreResponseDto["status"],
+    });
+
+    act(() => {
+      void view.result.current.changeStatus({ goalId: GOAL_ID, status: "Active" });
+    });
+    await waitFor(() => expect(detailStatus()).toBe("Active"));
+
+    await act(async () => {
+      pending.reject(new ApiError({ status: 403, code: "FORBIDDEN", message: "Forbidden" }));
+      await pending.promise.catch(() => undefined);
+    });
+
+    await waitFor(() => expect(meStatuses()).toEqual(["Draft", "Active"]));
+    expect(detailStatus()).toBe("Draft");
   });
 });
 

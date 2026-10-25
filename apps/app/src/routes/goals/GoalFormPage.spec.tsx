@@ -196,6 +196,16 @@ describe("GoalFormPage — prefill từ mục tiêu cha (QL-04 TC1, TC5)", () =>
     expect(screen.queryByText(/Mục tiêu cha không hợp lệ/)).not.toBeInTheDocument();
   });
 
+  it("(p1b) mở từ cha, chưa chạm ô Trạng thái ⇒ đổi cấp vẫn giữ Active (không ghi đè theo cấp)", async () => {
+    mockGetGoal.mockResolvedValue(PARENT);
+    renderForm({ prefill: CHILD_PREFILL });
+    await waitFor(() => expect(field(/Mục tiêu cha/).value).toBe(PARENT_ID));
+
+    fireEvent.change(levelSelect(), { target: { value: "department" } });
+    await waitFor(() => expect(levelSelect().value).toBe("department"));
+    expect(field(/Trạng thái/).value).toBe("Active");
+  });
+
   it("(p2) cha không tồn tại ⇒ cảnh báo, bỏ prefill cha (giữ kỳ)", async () => {
     mockGetGoal.mockRejectedValue(httpError(404, "not found"));
     renderForm({ prefill: CHILD_PREFILL });
