@@ -6,6 +6,7 @@ import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskStatusBadge } from "./TaskStatusBadge";
 import { BadgeSelect } from "./TaskInlineFields";
 import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
+import type { DeadlinePresetDefinition } from "./deadline-presets";
 import { useTaskActionMutation } from "./hooks/use-task-action-mutation";
 import { useAssigneeWarningToast } from "./AssigneeWarning";
 import { statusMenuOptions } from "./task-status-transitions";
@@ -166,13 +167,19 @@ export function TaskRowStatusControl({ task }: { task: TaskQuickEditRow }) {
  * «Tuỳ chỉnh» đã qua thì cờ quá hạn về đúng khi refetch (FE không tự suy cờ quá hạn).
  * Việc đã Hủy: server khoá hạn (TASK-ERR-TASK-CLOSED — chỉ đường đổi trạng thái được mở để khôi phục)
  * ⇒ hiện `readOnly`, không mời một thao tác chắc chắn bị từ chối.
+ * S20-TASK-OVERDUEDESK-1: `presets` = mốc riêng của bề mặt (trang Quá hạn: +1 ngày · +3 ngày · Thứ
+ * Sáu); `onSaved` nhận việc SERVER đã xác nhận (trang Quá hạn bỏ dòng khi việc hết quá hạn).
  */
 export function TaskRowDeadlineControl({
   task,
   readOnly,
+  presets,
+  onSaved,
 }: {
   task: TaskQuickEditRow;
   readOnly: ReactNode;
+  presets?: readonly DeadlinePresetDefinition[];
+  onSaved?: (saved: TaskCoreResponseDto) => void;
 }) {
   const { t } = useTranslation("tasks");
   const canDeadline = useCan(
@@ -187,6 +194,7 @@ export function TaskRowDeadlineControl({
     rowPatch: (dueAt) => ({ dueAt, isOverdue: false }),
     onWarnings: (warnings, updated) =>
       notifyAssigneeWarnings({ taskId: task.id, warnings, assigneeName: updated?.assigneeName }),
+    onSaved: onSaved ? (result) => onSaved(result.task) : undefined,
   });
 
   if (!canDeadline || task.status === "Cancelled") return <>{readOnly}</>;
@@ -198,6 +206,7 @@ export function TaskRowDeadlineControl({
         variant="compact"
         ariaLabel={t("quickEdit.deadlineLabel", { title: task.title })}
         value={task.dueAt ?? null}
+        presets={presets}
         disabled={mutation.isPending}
         onSelect={(dueAt) => mutation.mutate(dueAt)}
       />

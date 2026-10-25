@@ -1,12 +1,20 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { taskCoreApi, taskKeys, useCan } from "@mediaos/web-core";
+import { companyTimeZone, taskCoreApi, taskKeys, useAuthStore, useCan } from "@mediaos/web-core";
 import { PageHeader, DataTable, EmptyState, Button } from "@mediaos/ui";
 import type { ListTaskCoreQueryRequest, TaskCoreResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
-import { useTaskReadColumns } from "./task-columns";
+import {
+  byDueAtAsc,
+  EMPTY_OVERDUE_FILTERS,
+  filterOverdueRows,
+  hasOverdueFilters,
+  type OverdueDeskFilters,
+} from "./overdue-desk";
+import { useOverdueDeskColumns } from "./OverdueTasksPage.columns";
+import { OverdueDeskToolbar } from "./OverdueTasksPage.filters";
 
 /**
  * OverdueTasksPage — TASK-SCREEN-010 (SPEC-06 §13.10, S5-FE-TASK-6). Danh sách công việc QUÁ HẠN.
@@ -18,38 +26,70 @@ import { useTaskReadColumns } from "./task-columns";
  *
  * Gate = TASK.TASK.VIEW (read:task) — CÙNG cột đọc của TaskListPage (useTaskReadColumns). Cổng route ở
  * ProtectedRoute; useCan lặp lại ở component (deny-path khi mount trực tiếp ngoài route guard).
+ *
+ * S20-TASK-OVERDUEDESK-1 (US-TASK-QL-07) — «bàn xử lý»: cột «Trễ» (ngày lịch theo giờ công ty), dời hạn
+ * và đổi người ngay trên dòng qua route chuyên trách (`OverdueTasksPage.columns.tsx`), lọc Dự án /
+ * Người / «Tôi giao» trên các dòng đã tải (`OverdueTasksPage.filters.tsx`). Dời hạn xong: dòng chỉ rời
+ * danh sách khi SERVER trả việc đã hết quá hạn — server từ chối ⇒ dòng ở lại (rollback trong control).
  */
 const OVERDUE_FETCH_LIMIT = 200;
 const PAGE_SIZE = 20;
+const OVERDUE_QUERY: Partial<ListTaskCoreQueryRequest> = {
+  overdue: true,
+  limit: OVERDUE_FETCH_LIMIT,
+};
 
-/** So sánh due_at TĂNG DẦN; null (không nên xảy ra với task quá hạn) xuống cuối. */
-function byDueAtAsc(a: TaskCoreResponseDto, b: TaskCoreResponseDto): number {
-  if (!a.dueAt) return b.dueAt ? 1 : 0;
-  if (!b.dueAt) return -1;
-  return a.dueAt < b.dueAt ? -1 : a.dueAt > b.dueAt ? 1 : 0;
+function OverdueEmpty({ filters, total }: { filters: OverdueDeskFilters; total: number }) {
+  const { t } = useTranslation("tasks");
+  if (total === 0 || !hasOverdueFilters(filters)) {
+    return (
+      <EmptyState
+        title={t("tasks.overdue.empty.title")}
+        description={t("tasks.overdue.empty.description")}
+      />
+    );
+  }
+  const onlyMine = filters.mine && filters.project === null && filters.assignee === null;
+  const key = onlyMine ? "overdueDesk.emptyMine" : "overdueDesk.emptyFiltered";
+  return <EmptyState title={t(`${key}.title`)} description={t(`${key}.description`)} />;
 }
 
 export function OverdueTasksPage() {
   const { t } = useTranslation("tasks");
-  const columns = useTaskReadColumns();
+  const queryClient = useQueryClient();
   const canView = useCan(
     TASK_CORE_ENGINE_PAIRS.READ.action,
     TASK_CORE_ENGINE_PAIRS.READ.resourceType,
   );
-
-  const queryParams: Partial<ListTaskCoreQueryRequest> = {
-    overdue: true,
-    limit: OVERDUE_FETCH_LIMIT,
-  };
+  const myUserId = useAuthStore((s) => s.user?.id ?? null);
+  const [filters, setFilters] = useState<OverdueDeskFilters>(EMPTY_OVERDUE_FILTERS);
+  const timeZone = companyTimeZone();
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: taskKeys.list(queryParams),
-    queryFn: () => taskCoreApi.listTasks(queryParams),
+    queryKey: taskKeys.list(OVERDUE_QUERY),
+    queryFn: () => taskCoreApi.listTasks(OVERDUE_QUERY),
     enabled: canView,
     staleTime: 30_000,
   });
 
+  // Server đã xác nhận hạn mới và việc HẾT quá hạn ⇒ bỏ dòng ngay (không đợi refetch của onSettled).
+  // `?.`: response là dữ liệu ngoài — thiếu `task` thì giữ dòng, để refetch quyết.
+  const onDeadlineSaved = useCallback(
+    (saved: TaskCoreResponseDto) => {
+      if (saved?.isOverdue !== false) return;
+      queryClient.setQueryData<TaskCoreResponseDto[]>(taskKeys.list(OVERDUE_QUERY), (rows) =>
+        rows?.filter((row) => row.id !== saved.id),
+      );
+    },
+    [queryClient],
+  );
+  const columns = useOverdueDeskColumns({ now: new Date(), timeZone, onDeadlineSaved });
+
   const items = useMemo(() => [...(data ?? [])].sort(byDueAtAsc), [data]);
+  const visible = useMemo(
+    () => filterOverdueRows(items, filters, myUserId),
+    [items, filters, myUserId],
+  );
   const atLimit = (data?.length ?? 0) >= OVERDUE_FETCH_LIMIT;
   const countLabel = atLimit ? `${OVERDUE_FETCH_LIMIT}+` : String(items.length);
 
@@ -95,16 +135,20 @@ export function OverdueTasksPage() {
         icon={AlertTriangle}
       />
 
+      {items.length > 0 && (
+        <OverdueDeskToolbar
+          rows={items}
+          filters={filters}
+          onChange={setFilters}
+          canFilterMine={myUserId !== null}
+        />
+      )}
+
       <DataTable
         columns={columns}
-        data={items}
+        data={visible}
         isLoading={isLoading}
-        emptyState={
-          <EmptyState
-            title={t("tasks.overdue.empty.title")}
-            description={t("tasks.overdue.empty.description")}
-          />
-        }
+        emptyState={<OverdueEmpty filters={filters} total={items.length} />}
         pageSize={PAGE_SIZE}
       />
     </div>

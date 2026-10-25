@@ -120,6 +120,9 @@ export default {
       thisFriday: "Thứ Sáu này {{time}}",
       nextFriday: "Thứ Sáu tuần sau {{time}}",
       nextMonday: "Thứ Hai tuần sau {{time}}",
+      // S20-TASK-OVERDUEDESK-1 — mốc riêng của trang Quá hạn, tính từ HÔM NAY (giờ công ty).
+      plusOneDay: "+1 ngày {{time}}",
+      plusThreeDays: "+3 ngày {{time}}",
       custom: "{{time}}",
     },
     clear: "Xoá hạn",
@@ -142,11 +145,36 @@ export default {
       forbidden: {
         status: "Bạn không có quyền đổi trạng thái việc này",
         deadline: "Bạn không có quyền đổi hạn việc này",
+        assignee: "Bạn không có quyền đổi người phụ trách việc này",
       },
       closed: "Việc đã huỷ — không đổi được hạn",
       conflict: "Không chuyển được sang trạng thái này — việc vừa thay đổi, hãy tải lại",
       network: "Mất kết nối — thay đổi chưa được lưu",
       generic: "Không lưu được thay đổi. Vui lòng thử lại.",
+    },
+  },
+  // S20-TASK-OVERDUEDESK-1 (US-TASK-QL-07) — trang Việc quá hạn thành bàn xử lý.
+  overdueDesk: {
+    lateColumn: "Trễ",
+    lateDays: "{{days}} ngày",
+    lateUnderDay: "Dưới 1 ngày",
+    filters: {
+      project: "Dự án",
+      allProjects: "Tất cả dự án",
+      noProject: "Không thuộc dự án",
+      assignee: "Người phụ trách",
+      allAssignees: "Tất cả người",
+      unassigned: "Chưa giao",
+      mine: "Tôi giao",
+      clear: "Xoá bộ lọc",
+    },
+    emptyMine: {
+      title: "Không có việc trễ trong số việc bạn giao",
+      description: "Việc bạn tạo hoặc giao cho người khác đều đang đúng hạn.",
+    },
+    emptyFiltered: {
+      title: "Không có việc trễ khớp bộ lọc",
+      description: "Thử chọn dự án hoặc người khác, hoặc xoá bộ lọc để xem lại toàn bộ.",
     },
   },
 };

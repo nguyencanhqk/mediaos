@@ -25,7 +25,7 @@ import {
 } from "./constants";
 import { TaskStatusBadge, TaskPriorityBadge } from "./TaskStatusBadge";
 import { useTaskActionMutation } from "./hooks/use-task-action-mutation";
-import { EmployeePicker } from "./EmployeePicker";
+import { EmployeePicker, type PickedEmployee } from "./EmployeePicker";
 import { useAssigneeWarningToast } from "./AssigneeWarning";
 import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
 import { statusMenuOptions } from "./task-status-transitions";
@@ -417,6 +417,50 @@ export function TaskDeadlineField({
 }
 
 // ── Người phụ trách ──────────────────────────────────────────────────────────
+/** Một lần giao: người mới + tên/ảnh lấy từ picker (để vá lạc quan dòng danh sách đúng tên). */
+interface AssignChoice {
+  readonly employeeId: string;
+  readonly employee?: PickedEmployee;
+}
+
+/**
+ * Mutation giao việc qua route `assign` — DÙNG CHUNG giữa ô chi tiết và ô trên dòng (trang Quá hạn),
+ * để hai nơi không trôi khỏi nhau về cửa quyền và cảnh báo sau khi giao.
+ *
+ * `patchRows` (ô trên dòng): vá lạc quan CẢ dòng trong cache danh sách bằng tên/ảnh lấy từ picker —
+ * không phải đoán, vì picker vừa hiện đúng người đó; server từ chối ⇒ dòng về người cũ. Ô chi tiết giữ
+ * như cũ: chỉ đổi id, tên/ảnh về đúng theo response.
+ */
+function useAssignMutation(
+  task: TaskCoreResponseDto,
+  { reopenPicker, patchRows = false }: { reopenPicker?: () => void; patchRows?: boolean },
+) {
+  const notifyAssigneeWarnings = useAssigneeWarningToast();
+  return useTaskActionMutation<AssignChoice>({
+    taskId: task.id,
+    mutationFn: ({ employeeId }) => taskCoreApi.assign(task.id, { assigneeEmployeeId: employeeId }),
+    // Cache CHI TIẾT: optimistic chỉ đổi id, tên/ảnh về đúng theo response (như trước).
+    toPatch: ({ employeeId }) => ({ mainAssigneeEmployeeId: employeeId }),
+    rowPatch: patchRows
+      ? ({ employeeId, employee }) => ({
+          mainAssigneeEmployeeId: employeeId,
+          ...(employee
+            ? { assigneeName: employee.fullName, assigneeAvatarUrl: employee.avatarUrl }
+            : {}),
+        })
+      : undefined,
+    // Cảnh báo KHÔNG chặn: việc đã giao như server chấp nhận. `?.` vì đây là dữ liệu ngoài — một
+    // response thiếu `task` không được biến lần giao đã thành công thành lỗi ở bước báo hiệu.
+    onWarnings: (warnings, updated) =>
+      notifyAssigneeWarnings({
+        taskId: task.id,
+        warnings,
+        assigneeName: updated?.assigneeName,
+        onChangeAssignee: reopenPicker,
+      }),
+  });
+}
+
 /**
  * Đổi người phụ trách NGAY khi chọn (bản cũ đòi bấm thêm nút "Đổi").
  *
@@ -446,23 +490,8 @@ export function TaskAssigneeField({
   const [ownPickerOpen, setOwnPickerOpen] = useState(false);
   const pickerOpen = pickerOpenProp ?? ownPickerOpen;
   const setPickerOpen = onPickerOpenChange ?? setOwnPickerOpen;
-  const notifyAssigneeWarnings = useAssigneeWarningToast();
-
-  const mutation = useTaskActionMutation<string>({
-    taskId: task.id,
-    mutationFn: (assigneeEmployeeId) => taskCoreApi.assign(task.id, { assigneeEmployeeId }),
-    // Chưa biết tên/ảnh người mới cho tới khi server trả (picker không nâng dữ liệu lên đây) —
-    // optimistic chỉ đổi id, tên/ảnh về đúng sau response. Ngắn hơn là đoán rồi hiện sai tên.
-    toPatch: (assigneeEmployeeId) => ({ mainAssigneeEmployeeId: assigneeEmployeeId }),
-    // Cảnh báo KHÔNG chặn: việc đã giao như server chấp nhận. `?.` vì đây là dữ liệu ngoài — một
-    // response thiếu `task` không được biến lần giao đã thành công thành lỗi ở bước báo hiệu.
-    onWarnings: (warnings, updated) =>
-      notifyAssigneeWarnings({
-        taskId: task.id,
-        warnings,
-        assigneeName: updated?.assigneeName,
-        onChangeAssignee: canAssign ? () => setPickerOpen(true) : undefined,
-      }),
+  const mutation = useAssignMutation(task, {
+    reopenPicker: canAssign ? () => setPickerOpen(true) : undefined,
   });
 
   return (
@@ -481,11 +510,58 @@ export function TaskAssigneeField({
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         onSelect={(employeeId) => {
-          if (employeeId) mutation.mutate(employeeId);
+          if (employeeId) mutation.mutate({ employeeId });
         }}
       />
       {mutation.isError && <FieldError error={mutation.error} />}
     </Field>
+  );
+}
+
+/**
+ * S20-TASK-OVERDUEDESK-1 (US-TASK-QL-07) — ô Người TRÊN DÒNG (trang Quá hạn): cùng picker, cùng route
+ * `assign` với ô chi tiết. Thiếu `assign:task` ⇒ chữ tĩnh, không nút. Lạc quan: dòng đổi tên ngay;
+ * server từ chối ⇒ về người cũ + câu giải thích dưới ô.
+ */
+export function TaskRowAssigneeControl({ task }: { task: TaskCoreResponseDto }) {
+  const { t } = useTranslation("tasks");
+  const canAssign = useCan(
+    TASK_CORE_ENGINE_PAIRS.ASSIGN.action,
+    TASK_CORE_ENGINE_PAIRS.ASSIGN.resourceType,
+  );
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const mutation = useAssignMutation(task, {
+    reopenPicker: () => setPickerOpen(true),
+    patchRows: true,
+  });
+
+  if (!canAssign) return <span className="text-sm">{task.assigneeName ?? "—"}</span>;
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <EmployeePicker
+        employeeId={task.mainAssigneeEmployeeId}
+        name={task.assigneeName}
+        avatarUrl={task.assigneeAvatarUrl}
+        canEdit
+        // Route assign đòi uuid ⇒ không gỡ được người phụ trách (như ô chi tiết).
+        allowClear={false}
+        showName
+        pending={mutation.isPending}
+        testId={`task-row-assignee-${task.id}`}
+        emptyLabel={t("tasks.detail.subtasks.unassigned")}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={(employeeId, employee) => {
+          if (employeeId) mutation.mutate({ employeeId, employee });
+        }}
+      />
+      {mutation.isError && (
+        <p role="alert" className="text-xs text-destructive">
+          {t(taskQuickEditErrorKey("assignee", mutation.error))}
+        </p>
+      )}
+    </div>
   );
 }
 

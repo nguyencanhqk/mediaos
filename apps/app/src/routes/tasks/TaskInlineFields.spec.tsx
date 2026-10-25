@@ -19,6 +19,7 @@ import {
   TaskDeadlineField,
   TaskAssigneeField,
   TaskAssigneeDeadlineFields,
+  TaskRowAssigneeControl,
 } from "./TaskInlineFields";
 
 /**
@@ -517,6 +518,49 @@ describe("TaskInlineFields", () => {
         });
         expect(screen.getByRole("status")).toBeEmptyDOMElement();
       });
+    });
+  });
+  // S20-TASK-OVERDUEDESK-1 (US-TASK-QL-07) — ô Người TRÊN DÒNG (trang Quá hạn): cùng route assign.
+  describe("TaskRowAssigneeControl", () => {
+    const openRowPicker = () => fireEvent.click(screen.getByTestId("task-row-assignee-task-001"));
+
+    it("thiếu assign:task ⇒ chữ tĩnh, KHÔNG có nút mở picker", () => {
+      setCapabilities({ "read:employee": true });
+      renderWithQuery(<TaskRowAssigneeControl task={TASK} />);
+      expect(screen.queryByTestId("task-row-assignee-task-001")).not.toBeInTheDocument();
+      expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument();
+      expect(hrApi.listEmployees).not.toHaveBeenCalled();
+    });
+
+    it("chọn người ⇒ gọi route assign, KHÔNG PATCH", async () => {
+      setCapabilities({ "assign:task": true, "read:employee": true });
+      vi.mocked(taskCoreApi.assign).mockReturnValue(new Promise(() => {}));
+      renderWithQuery(<TaskRowAssigneeControl task={TASK} />);
+
+      openRowPicker();
+      const panel = await screen.findByRole("dialog");
+      fireEvent.click(await within(panel).findByText("Trần Thị B"));
+      await waitFor(() =>
+        expect(taskCoreApi.assign).toHaveBeenCalledWith("task-001", {
+          assigneeEmployeeId: "emp-002",
+        }),
+      );
+      expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
+    });
+
+    it("server từ chối 403 ⇒ câu «không có quyền đổi người phụ trách» dưới ô", async () => {
+      setCapabilities({ "assign:task": true, "read:employee": true });
+      vi.mocked(taskCoreApi.assign).mockRejectedValue(
+        new ApiError({ status: 403, code: "AUTH-ERR-403", message: "Forbidden" }),
+      );
+      renderWithQuery(<TaskRowAssigneeControl task={TASK} />);
+
+      openRowPicker();
+      const panel = await screen.findByRole("dialog");
+      fireEvent.click(await within(panel).findByText("Trần Thị B"));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        /không có quyền đổi người phụ trách/i,
+      );
     });
   });
 });
