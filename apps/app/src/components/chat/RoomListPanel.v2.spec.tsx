@@ -124,6 +124,15 @@ describe("RoomListPanel v2 · chip lọc nhanh (CHAT-DEC-021)", () => {
     expect(bar.getAttribute("aria-label")).toBe("Lọc nhanh danh sách hội thoại");
   });
 
+  it("hàng chip XUỐNG DÒNG, không cuộn ngang (cột trái 320 px: chip cuối không bị cắt, mọi chip bấm được bằng chuột)", () => {
+    // jsdom không đo bố cục ⇒ khoá bằng hợp đồng lớp. Đo trình duyệt thật 1366×900: bảy chip dài ~560 px
+    // trong ~296 px ⇒ cuộn ngang cắt «Nhóm», «Phòng ban · Dự án» + «Lưu trữ» chỉ tới được bằng cuộn ngang.
+    renderPanel();
+    const bar = screen.getByTestId("chat-room-chips");
+    expect(bar.classList.contains("flex-wrap")).toBe(true);
+    expect(bar.classList.contains("overflow-x-auto")).toBe(false);
+  });
+
   it("mặc định là «Tất cả», và ở đó danh sách VẪN chia mục cố định (§9a: chip không đảo DEC-014)", () => {
     renderPanel();
     expect(chip("all").getAttribute("aria-pressed")).toBe("true");
@@ -260,14 +269,12 @@ describe("RoomListPanel v2 · dòng phòng (preview · peer · thời gian)", ()
   });
 
   it("`kind:'file'` ⇒ đếm tệp; `kind:'text'` KÈM tệp ⇒ vẫn hiện CHỮ + kẹp giấy", () => {
-    useChatStore
-      .getState()
-      .hydrateRooms([
-        room("f", {
-          lastMessage: lastMessage({ kind: "file", excerpt: null, attachmentCount: 3 }),
-        }),
-        room("t", { lastMessage: lastMessage({ attachmentCount: 2 }) }),
-      ]);
+    useChatStore.getState().hydrateRooms([
+      room("f", {
+        lastMessage: lastMessage({ kind: "file", excerpt: null, attachmentCount: 3 }),
+      }),
+      room("t", { lastMessage: lastMessage({ attachmentCount: 2 }) }),
+    ]);
     renderPanel();
     const previews = screen.getAllByTestId("chat-room-preview").map((el) => el.textContent ?? "");
     expect(previews.some((p) => p.includes("3 tệp đính kèm"))).toBe(true);

@@ -574,7 +574,9 @@ function RoomFilterChipBar({
     <div
       role="group"
       aria-label={t("rooms.chipsAria")}
-      className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2"
+      // Xuống dòng, KHÔNG cuộn ngang: bảy chip dài hơn cột trái 320 px; dải cuộn ngang cắt chip giữa chừng
+      // và giấu hai chip cuối sau thanh cuộn mà chuột không cuộn ngang được (đo trình duyệt 1366×900).
+      className="flex flex-wrap gap-1 border-b border-border px-3 py-2"
       data-testid="chat-room-chips"
     >
       {ROOM_FILTER_CHIPS.filter((key) => showMentions || key !== "mentions").map((key) => (
