@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiError, useAuthStore, taskCoreApi } from "@mediaos/web-core";
+import { toast, type ToastOptions } from "@mediaos/ui";
 import type { MyTaskItemDto, TaskActionResponseDto } from "@mediaos/contracts";
 import { MyTasksPage } from "./MyTasksPage";
 
@@ -344,5 +345,136 @@ describe("MyTasksPage — S20-TASK-QUICKEDIT-1 mốc hạn trên dòng", () => {
     fireEvent.click(screen.getByTestId("task-row-deadline-t-over-clear"));
     expect(await screen.findByText("Bạn không có quyền đổi hạn việc này")).toBeInTheDocument();
     expect(within(group("overdue")).getByText("Nộp báo cáo")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Lượt đo trình duyệt thật: «Hiện việc đã xong» TẮT (mặc định) + chọn «Hoàn thành» ⇒ dòng rời danh sách
+ * ngay (lạc quan). Không có toast thì người dùng không thấy dấu hiệu đã lưu; dòng đã unmount nên lỗi
+ * server về SAU đó không còn chỗ hiện dưới dòng. Các ca dưới cho lời gọi TREO tới khi dòng đã ẩn hẳn
+ * (ở jsdom, lỗi trả ngay thì dòng không kịp ẩn — đúng cái che lỗi này ở ca checklist phía trên).
+ */
+describe("MyTasksPage — S20-TASK-QUICKEDIT-1 phản hồi khi dòng rời danh sách", () => {
+  beforeEach(() => {
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+    vi.clearAllMocks();
+    // clearAllMocks KHÔNG xoá hàng đợi mockReturnValueOnce: ca trước dừng giữa chừng thì lượt «Once»
+    // còn sót bị ca sau tiêu thụ.
+    vi.mocked(taskCoreApi.changeStatus).mockReset();
+    searchRef.current = {};
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    spies.splice(0).forEach((spy) => spy.mockRestore());
+    toast.clear();
+  });
+
+  const spies: Array<{ mockRestore: () => void }> = [];
+  function spyToast(kind: "success" | "error") {
+    const spy = vi.spyOn(toast, kind);
+    spies.push(spy);
+    return spy;
+  }
+
+  function deferred<T>() {
+    let resolve: (value: T) => void = () => {};
+    let reject: (reason: unknown) => void = () => {};
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  const lastToastOptions = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.at(-1)?.[1] as ToastOptions | undefined;
+
+  it("Hoàn thành khi đang ẩn việc đã xong ⇒ toast «Đã chuyển … sang Hoàn thành» + «Hoàn tác» đưa dòng về Đang làm", async () => {
+    const success = spyToast("success");
+    await renderWith([PROG], { "update-status:task": true });
+    freezeRefetch();
+    const save = deferred<TaskActionResponseDto>();
+    vi.mocked(taskCoreApi.changeStatus).mockReturnValueOnce(save.promise);
+    chooseStatus("t-prog", "Hoàn thành");
+    await waitFor(() => expect(screen.queryByText("Viết tài liệu")).not.toBeInTheDocument());
+    expect(success).not.toHaveBeenCalled();
+
+    await act(async () => save.resolve(actionResponse({ ...PROG, status: "Done" })));
+    await waitFor(() => expect(success).toHaveBeenCalledTimes(1));
+    expect(success.mock.calls[0]?.[0]).toBe("Đã chuyển «Viết tài liệu» sang Hoàn thành");
+    const undo = lastToastOptions(success)?.action;
+    expect(undo?.label).toBe("Hoàn tác");
+
+    vi.mocked(taskCoreApi.changeStatus).mockReturnValueOnce(new Promise(() => {}));
+    act(() => undo?.onClick());
+    await waitFor(() =>
+      expect(vi.mocked(taskCoreApi.changeStatus).mock.calls[1]).toEqual([
+        "t-prog",
+        { status: "In Progress" },
+      ]),
+    );
+    await waitFor(() =>
+      expect(within(group("inProgress")).getByText("Viết tài liệu")).toBeInTheDocument(),
+    );
+  });
+
+  it("hoàn tác thành công ⇒ báo đã lưu nhưng KHÔNG mời hoàn tác lần nữa", async () => {
+    const success = spyToast("success");
+    await renderWith([PROG], { "update-status:task": true });
+    freezeRefetch();
+    vi.mocked(taskCoreApi.changeStatus)
+      .mockResolvedValueOnce(actionResponse({ ...PROG, status: "Done" }))
+      .mockResolvedValueOnce(actionResponse(PROG));
+    chooseStatus("t-prog", "Hoàn thành");
+    await waitFor(() => expect(success).toHaveBeenCalledTimes(1));
+    act(() => lastToastOptions(success)?.action?.onClick());
+    await waitFor(() => expect(success).toHaveBeenCalledTimes(2));
+    expect(success.mock.calls[1]?.[0]).toBe("Đã chuyển «Viết tài liệu» sang Đang làm");
+    expect(lastToastOptions(success)?.action).toBeUndefined();
+  });
+
+  it("server từ chối SAU khi dòng đã ẩn ⇒ dòng quay lại và lỗi hiện bằng toast (kèm «Mở checklist»)", async () => {
+    const error = spyToast("error");
+    await renderWith([PROG], { "update-status:task": true });
+    freezeRefetch();
+    const save = deferred<TaskActionResponseDto>();
+    vi.mocked(taskCoreApi.changeStatus).mockReturnValueOnce(save.promise);
+    chooseStatus("t-prog", "Hoàn thành");
+    await waitFor(() => expect(screen.queryByText("Viết tài liệu")).not.toBeInTheDocument());
+
+    await act(async () =>
+      save.reject(
+        new ApiError({
+          status: 400,
+          code: "VALIDATION-ERR-001",
+          message: "TASK-ERR-CHECKLIST-REQUIRED: còn hạng mục checklist bắt buộc chưa hoàn thành.",
+        }),
+      ),
+    );
+    await waitFor(() => expect(error).toHaveBeenCalledTimes(1));
+    expect(error.mock.calls[0]?.[0]).toBe("Cần hoàn tất checklist");
+    expect(within(group("inProgress")).getByText("Viết tài liệu")).toBeInTheDocument();
+
+    act(() => lastToastOptions(error)?.action?.onClick());
+    const nav = navigateMock.mock.calls.at(-1)?.[0] as {
+      search: (prev: Record<string, unknown>) => unknown;
+    };
+    expect(nav.search({})).toEqual({ task: "t-prog", taskTab: "checklist" });
+  });
+
+  it("lỗi khi dòng VẪN hiện ⇒ chỉ báo dưới dòng, không thêm toast", async () => {
+    const error = spyToast("error");
+    await renderWith([OVER], { "update-status:task": true });
+    freezeRefetch();
+    vi.mocked(taskCoreApi.changeStatus).mockRejectedValue(
+      new ApiError({ status: 403, code: "AUTH-ERR-FORBIDDEN", message: "Forbidden" }),
+    );
+    chooseStatus("t-over", "Đang làm");
+    expect(
+      await screen.findByText("Bạn không có quyền đổi trạng thái việc này"),
+    ).toBeInTheDocument();
+    expect(error).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { taskCoreApi, useCan } from "@mediaos/web-core";
 import type { TaskCoreResponseDto, TaskCoreStatusDto } from "@mediaos/contracts";
@@ -15,6 +15,11 @@ import {
   type TaskQuickEditField,
 } from "./task-quick-edit-errors";
 import { useTaskDrawer } from "./task-drawer-nav";
+import {
+  notifyTaskRowStatusFailed,
+  notifyTaskRowStatusSaved,
+  type TaskRowStatusChange,
+} from "./task-row-status-feedback";
 
 /**
  * S20-TASK-QUICKEDIT-1 (US-TASK-NV-03 + NV-08) — đổi trạng thái và hạn NGAY TRÊN DÒNG («Việc của
@@ -27,6 +32,9 @@ import { useTaskDrawer } from "./task-drawer-nav";
  * - Lạc quan: `rowPatch` vá dòng trong cache danh sách ⇒ badge đổi và việc đổi nhóm ngay; server từ
  *   chối ⇒ hoàn tác + thông điệp dưới dòng (checklist kèm link tab Checklist, mất mạng kèm «Thử lại»).
  * - Menu trạng thái chỉ có chuyển hợp lệ (`statusMenuOptions`); server vẫn là lưới.
+ * - Lưu xong ⇒ toast «Đã chuyển … sang …» kèm «Hoàn tác» (`task-row-status-feedback.ts`): dòng có thể
+ *   đã rời danh sách (đổi sang Hoàn thành khi đang ẩn việc đã xong). Lỗi về khi dòng đã unmount ⇒ báo
+ *   bằng toast vì không còn dòng để hiện lỗi; dòng còn hiện ⇒ chỉ báo dưới dòng.
  */
 export type TaskQuickEditRow = Pick<TaskCoreResponseDto, "id" | "title" | "status" | "dueAt">;
 
@@ -85,12 +93,44 @@ export function TaskRowStatusControl({ task }: { task: TaskQuickEditRow }) {
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.action,
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.resourceType,
   );
-  const mutation = useTaskActionMutation<TaskCoreStatusDto>({
+  // Callback cấp options của mutation còn chạy sau khi dòng unmount ⇒ cần biết dòng còn hiện không.
+  const isMountedRef = useRef(false);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  const mutation = useTaskActionMutation<TaskRowStatusChange>({
     taskId: task.id,
-    mutationFn: (status) => taskCoreApi.changeStatus(task.id, { status }),
-    toPatch: statusPatch,
-    rowPatch: statusPatch,
+    mutationFn: ({ to }) => taskCoreApi.changeStatus(task.id, { status: to }),
+    toPatch: ({ to }) => statusPatch(to),
+    rowPatch: ({ to }) => statusPatch(to),
+    onSaved: (_result, change) => handleSaved(change),
+    onFailed: (error, change) => {
+      if (!isMountedRef.current) handleFailedOffscreen(error, change);
+    },
   });
+
+  // Khai báo hàm (hoisted): callback ở trên gọi tới SAU khi `mutation` đã có.
+  function handleSaved(change: TaskRowStatusChange) {
+    notifyTaskRowStatusSaved({
+      t,
+      taskId: task.id,
+      title: task.title,
+      change,
+      onUndo: (undo) => mutation.mutate(undo),
+    });
+  }
+  function handleFailedOffscreen(error: unknown, change: TaskRowStatusChange) {
+    notifyTaskRowStatusFailed({
+      t,
+      taskId: task.id,
+      error,
+      onRetry: () => mutation.mutate(change),
+      onOpenChecklist: () => openTask(task.id, { tab: "checklist" }),
+    });
+  }
 
   if (!canStatus) return <TaskStatusBadge status={task.status} />;
 
@@ -105,7 +145,7 @@ export function TaskRowStatusControl({ task }: { task: TaskQuickEditRow }) {
         value={task.status ?? null}
         options={statusMenuOptions(task.status ?? null)}
         disabled={mutation.isPending}
-        onSelect={(status) => mutation.mutate(status)}
+        onSelect={(status) => mutation.mutate({ to: status, from: task.status ?? null })}
         renderBadge={(s) => <TaskStatusBadge status={s} />}
       />
       {mutation.isError && (

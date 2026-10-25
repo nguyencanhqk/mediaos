@@ -134,6 +134,8 @@ export default {
     deadlineLabel: "Đổi hạn: {{title}}",
     openChecklist: "Mở checklist",
     retry: "Thử lại",
+    statusSaved: "Đã chuyển «{{title}}» sang {{status}}",
+    undo: "Hoàn tác",
     errors: {
       checklistRequired: "Cần hoàn tất checklist",
       dateRange: "Hạn không được sớm hơn ngày bắt đầu của việc — hãy chọn mốc muộn hơn",
