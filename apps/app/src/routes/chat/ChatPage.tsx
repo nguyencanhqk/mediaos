@@ -35,6 +35,8 @@ import type { PersonPick } from "@/components/chat/create-room-people";
 import { MessageSearchPanel } from "@/components/chat/MessageSearchPanel";
 import { RoomInfoPanel } from "@/components/chat/RoomInfoPanel";
 import { RoomListPanel } from "@/components/chat/RoomListPanel";
+import { DEFAULT_ROOM_FILTER_CHIP, type RoomFilterChip } from "@/components/chat/room-list-filter";
+import { RoomShortcuts } from "@/components/chat/use-room-shortcuts.help";
 import { roomDisplayName } from "@/components/chat/chat-format";
 import { useChatContextWindow } from "@/components/chat/use-chat-context-window";
 import { useChatLayoutMode } from "@/components/chat/use-chat-viewport";
@@ -123,6 +125,13 @@ export function ChatPage({
    */
   const [searchScope, setSearchScope] = useState<"all" | "room">("all");
   const [activeResultId, setActiveResultId] = useState<string | null>(null);
+  /**
+   * S20-CHAT-UNREADNAV-1 — chip + câu lọc phòng giữ Ở ĐÂY (điều khiển `RoomListPanel`): phím tắt chuyển
+   * phòng phải đi theo ĐÚNG danh sách đang lọc, kể cả ở mốc 1 cột khi danh sách đang bị tháo.
+   */
+  const [roomQuery, setRoomQuery] = useState("");
+  const [roomChip, setRoomChip] = useState<RoomFilterChip>(DEFAULT_ROOM_FILTER_CHIP);
+  const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [jumpError, setJumpError] = useState(false);
   const selectedRoom: ChatRoomDto | null =
     selectedRoomId !== null ? (roomsById[selectedRoomId] ?? null) : null;
@@ -361,6 +370,11 @@ export function ChatPage({
             onCreateRoom={() => setCreateOpen(true)}
             onOpenSearch={() => setSearchOpen(true)}
             isBootstrapping={!hasLoadedRooms}
+            query={roomQuery}
+            onQueryChange={setRoomQuery}
+            chip={roomChip}
+            onChipChange={setRoomChip}
+            onOpenShortcutHelp={() => setShortcutHelpOpen(true)}
           />
         )}
 
@@ -502,6 +516,16 @@ export function ChatPage({
             </Button>
           </div>
         )}
+
+        {/* S20-CHAT-UNREADNAV-1 — chọn phòng bằng phím đi qua `onRoomChange` (route đổi URL bằng `replace`). */}
+        <RoomShortcuts
+          chip={roomChip}
+          query={roomQuery}
+          currentRoomId={selectedRoomId}
+          onOpenRoom={setSelectedRoomId}
+          helpOpen={isShortcutHelpOpen}
+          onHelpOpenChange={setShortcutHelpOpen}
+        />
 
         {isCreateOpen && (
           <CreateRoomDialog

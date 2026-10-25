@@ -25,6 +25,7 @@ import {
   BellOff,
   ChevronDown,
   ChevronRight,
+  Keyboard,
   MessageSquarePlus,
   MessagesSquare,
   Pin,
@@ -57,11 +58,14 @@ import {
   ROOM_FILTER_CHIPS,
   chipNeedsArchivedScope,
   chipUsesSections,
-  filterRoomsByChip,
+  effectiveRoomChip,
   mentionUnreadOf,
   roomsSupportMentionCount,
+  selectVisibleRooms,
   type RoomFilterChip,
 } from "./room-list-filter";
+import { useMarkRoomsRead } from "./chat-unread-batch";
+import { ReadAllBar } from "./RoomListPanel.readall";
 
 interface RoomListPanelProps {
   selectedRoomId: string | null;
@@ -104,6 +108,8 @@ interface RoomListPanelProps {
   /** Chip lọc nhanh, điều khiển từ ngoài (cùng lý do `query`). */
   chip?: RoomFilterChip;
   onChipChange?: (chip: RoomFilterChip) => void;
+  /** S20-CHAT-UNREADNAV-1 — mở bảng gợi ý phím tắt (?). `undefined` ⇒ ẩn nút. */
+  onOpenShortcutHelp?: () => void;
 }
 
 export function RoomListPanel({
@@ -117,6 +123,7 @@ export function RoomListPanel({
   onQueryChange,
   chip: chipProp,
   onChipChange,
+  onOpenShortcutHelp,
 }: RoomListPanelProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const canCreate = useCan(CHAT_PAIRS.CREATE_ROOM.action, CHAT_PAIRS.CREATE_ROOM.resourceType);
@@ -159,8 +166,7 @@ export function RoomListPanel({
    * trong lần vẽ này (không chớp danh sách rỗng), và effect dưới đồng bộ nguồn chip để nó không bật lại.
    */
   const selectedChip = chipProp ?? chipState;
-  const chip =
-    selectedChip === "mentions" && !showMentions ? DEFAULT_ROOM_FILTER_CHIP : selectedChip;
+  const chip = effectiveRoomChip(selectedChip, showMentions);
   const setChip = useCallback(
     (next: RoomFilterChip): void => {
       if (isChipControlled) onChipChange?.(next);
@@ -207,32 +213,11 @@ export function RoomListPanel({
     [myUserId, t],
   );
 
-  /**
-   * Thứ tự ba tầng lọc LÀ hợp đồng, không phải sở thích:
-   *
-   *   rổ (lưu trữ hay không)  →  chip  →  ô tìm theo tên/mã
-   *
-   * Đảo hai tầng cuối thì gõ từ khoá trong chip «Chưa đọc» sẽ trả về cả phòng đã đọc. Đảo tầng đầu thì
-   * một phòng đã lưu trữ lọt vào chip «Riêng», và người dùng không có cách nào biết vì sao nó ở đó.
-   */
-  const visible = useMemo(() => {
-    const inScope = roomOrder
-      .map((id) => roomsById[id])
-      .filter((room): room is ChatRoomDto => room !== undefined)
-      .filter((room) => (room.isArchived ?? false) === showArchived);
-
-    const byChip = filterRoomsByChip(inScope, chip);
-
-    const needle = query.trim().toLowerCase();
-    if (needle.length === 0) return byChip;
-    // Lọc trên TÊN/MÃ phòng ở client. Tìm theo NỘI DUNG tin là `GET /chat/search` — màn riêng,
-    // thuộc S7-CHAT-FE-4; trộn hai thứ vào một ô làm người dùng tưởng đã tìm hết.
-    return byChip.filter(
-      (room) =>
-        labelOf(room).toLowerCase().includes(needle) ||
-        room.roomCode.toLowerCase().includes(needle),
-    );
-  }, [chip, labelOf, query, roomOrder, roomsById, showArchived]);
+  /** Thứ tự ba tầng lọc (rổ → chip → ô tìm) là hợp đồng — xem docblock `selectVisibleRooms`. */
+  const visible = useMemo(
+    () => selectVisibleRooms({ roomOrder, roomsById, chip, query, labelOf }),
+    [chip, labelOf, query, roomOrder, roomsById],
+  );
 
   // ─── S8-CHAT-UX-FE-1: chia mục theo loại phòng (CHAT-DEC-013) ───
   // S17-CHAT-UX2-FE-1 — chỉ chip «Tất cả» mới chia mục. Chip khác ra danh sách PHẲNG (§9a), và `null`
@@ -281,6 +266,11 @@ export function RoomListPanel({
     },
     [markRoomUnread],
   );
+
+  // S20-CHAT-UNREADNAV-1 — «Đánh dấu đã đọc» một phòng = «Đọc hết» một phần tử: cùng lạc quan, cùng thông
+  // báo lỗi có «Thử lại». Hai đường riêng sẽ có hai cách hoàn nguyên lệch nhau.
+  const { markRoomsRead, isMarking } = useMarkRoomsRead();
+  const markRead = useCallback((room: ChatRoomDto) => markRoomsRead([room]), [markRoomsRead]);
 
   const archive = useCallback(
     (room: ChatRoomDto) => {
@@ -347,6 +337,7 @@ export function RoomListPanel({
         onTogglePin={togglePin}
         onMute={mute}
         onMarkUnread={markUnread}
+        onMarkRead={markRead}
         onArchive={archive}
       />
     ),
@@ -355,6 +346,7 @@ export function RoomListPanel({
       canArchive,
       isBusy,
       labelOf,
+      markRead,
       markUnread,
       mute,
       myUserId,
@@ -383,9 +375,13 @@ export function RoomListPanel({
         onQueryChange={setQuery}
         onOpenSearch={onOpenSearch}
         onCreateRoom={canCreate ? onCreateRoom : undefined}
+        onOpenShortcutHelp={onOpenShortcutHelp}
       />
 
       <RoomFilterChipBar value={chip} onChange={setChip} showMentions={showMentions} />
+      {chip === "unread" && (
+        <ReadAllBar rooms={visible} isBusy={isMarking} onReadAll={markRoomsRead} />
+      )}
 
       {actionError !== null && (
         <div
@@ -493,11 +489,13 @@ function RoomListHeader({
   onQueryChange,
   onOpenSearch,
   onCreateRoom,
+  onOpenShortcutHelp,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   onOpenSearch?: () => void;
   onCreateRoom?: () => void;
+  onOpenShortcutHelp?: () => void;
 }): React.ReactElement {
   const { t } = useTranslation("chat");
   return (
@@ -535,6 +533,18 @@ function RoomListHeader({
           data-testid="chat-create-room"
         >
           <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
+      {onOpenShortcutHelp !== undefined && (
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t("shortcuts.helpOpen")}
+          title={t("shortcuts.helpOpen")}
+          onClick={onOpenShortcutHelp}
+          data-testid="chat-shortcut-help-open"
+        >
+          <Keyboard className="h-4 w-4" aria-hidden="true" />
         </Button>
       )}
     </div>
@@ -607,6 +617,7 @@ interface RoomRowProps {
   onTogglePin: (room: ChatRoomDto) => void;
   onMute: (room: ChatRoomDto, preset: MutePresetKey | null) => void;
   onMarkUnread: (room: ChatRoomDto) => void;
+  onMarkRead: (room: ChatRoomDto) => void;
   onArchive: (room: ChatRoomDto) => void;
 }
 
@@ -635,6 +646,7 @@ function RoomRow({
   onTogglePin,
   onMute,
   onMarkUnread,
+  onMarkRead,
   onArchive,
 }: RoomRowProps): React.ReactElement {
   const { t } = useTranslation("chat");
@@ -748,6 +760,7 @@ function RoomRow({
           onTogglePin={onTogglePin}
           onMute={onMute}
           onMarkUnread={onMarkUnread}
+          onMarkRead={onMarkRead}
           onArchive={onArchive}
         />
       </div>
