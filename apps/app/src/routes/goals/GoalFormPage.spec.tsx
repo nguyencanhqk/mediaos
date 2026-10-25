@@ -179,6 +179,12 @@ function field(name: RegExp): HTMLInputElement | HTMLSelectElement {
   return screen.getByLabelText(name) as HTMLInputElement | HTMLSelectElement;
 }
 
+/** S20-GOAL-PARENTPICKER-1 — ô chọn cha là combobox có tìm; ô hiện «mã — tên» của cha đang chọn. */
+const PARENT_LABEL = "GOAL-0009 — Doanh thu phòng Kinh doanh Q4";
+function parentInput(): HTMLInputElement {
+  return screen.getByRole("combobox", { name: /Mục tiêu cha/ }) as HTMLInputElement;
+}
+
 describe("GoalFormPage — prefill từ mục tiêu cha (QL-04 TC1, TC5)", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -188,7 +194,7 @@ describe("GoalFormPage — prefill từ mục tiêu cha (QL-04 TC1, TC5)", () =>
   it("(p1) cha hợp lệ ⇒ cha · kỳ Q4 · cấp Nhân viên · Active điền sẵn", async () => {
     mockGetGoal.mockResolvedValue(PARENT);
     renderForm({ prefill: CHILD_PREFILL });
-    await waitFor(() => expect(field(/Mục tiêu cha/).value).toBe(PARENT_ID));
+    await waitFor(() => expect(parentInput().value).toBe(PARENT_LABEL));
     expect(levelSelect().value).toBe("employee");
     expect(field(/Trạng thái/).value).toBe("Active");
     expect(field(/Loại kỳ/).value).toBe("quarter");
@@ -200,7 +206,7 @@ describe("GoalFormPage — prefill từ mục tiêu cha (QL-04 TC1, TC5)", () =>
   it("(p1b) mở từ cha, chưa chạm ô Trạng thái ⇒ đổi cấp vẫn giữ Active (không ghi đè theo cấp)", async () => {
     mockGetGoal.mockResolvedValue(PARENT);
     renderForm({ prefill: CHILD_PREFILL });
-    await waitFor(() => expect(field(/Mục tiêu cha/).value).toBe(PARENT_ID));
+    await waitFor(() => expect(parentInput().value).toBe(PARENT_LABEL));
 
     fireEvent.change(levelSelect(), { target: { value: "department" } });
     await waitFor(() => expect(levelSelect().value).toBe("department"));
@@ -211,7 +217,7 @@ describe("GoalFormPage — prefill từ mục tiêu cha (QL-04 TC1, TC5)", () =>
     mockGetGoal.mockRejectedValue(httpError(404, "not found"));
     renderForm({ prefill: CHILD_PREFILL });
     expect(await screen.findByText(/Mục tiêu cha không hợp lệ/)).toBeInTheDocument();
-    expect(field(/Mục tiêu cha/).value).toBe("");
+    expect(parentInput().value).toBe("");
     expect(field(/Bắt đầu kỳ/).value).toBe("2026-10-01");
   });
 
@@ -219,7 +225,7 @@ describe("GoalFormPage — prefill từ mục tiêu cha (QL-04 TC1, TC5)", () =>
     mockGetGoal.mockResolvedValue({ ...PARENT, finalizedAt: "2026-12-31T10:00:00.000Z" });
     renderForm({ prefill: CHILD_PREFILL });
     expect(await screen.findByText(/Mục tiêu cha không hợp lệ/)).toBeInTheDocument();
-    expect(field(/Mục tiêu cha/).value).toBe("");
+    expect(parentInput().value).toBe("");
   });
 });
 
@@ -247,7 +253,7 @@ describe("GoalFormPage — lưu từ cha (QL-04 TC2)", () => {
       onSuccess,
       onCreatedFromParent,
     });
-    await waitFor(() => expect(field(/Mục tiêu cha/).value).toBe(PARENT_ID));
+    await waitFor(() => expect(parentInput().value).toBe(PARENT_LABEL));
     fillChild();
     fireEvent.click(screen.getByRole("button", { name: "Lưu và thêm tiếp" }));
     await waitFor(() => expect(success).toHaveBeenCalledTimes(1));
@@ -260,7 +266,7 @@ describe("GoalFormPage — lưu từ cha (QL-04 TC2)", () => {
     );
     await waitFor(() => expect(field(/Tên mục tiêu/).value).toBe(""));
     expect(field(/Giá trị mục tiêu/).value).toBe("");
-    expect(field(/Mục tiêu cha/).value).toBe(PARENT_ID);
+    expect(parentInput().value).toBe(PARENT_LABEL);
     expect(field(/Kết thúc kỳ/).value).toBe("2026-12-31");
     expect(onSuccess).not.toHaveBeenCalled();
     expect(onCreatedFromParent).not.toHaveBeenCalled();
@@ -271,7 +277,7 @@ describe("GoalFormPage — lưu từ cha (QL-04 TC2)", () => {
     mockCreateGoal.mockResolvedValue({ ...PARENT, id: "g-child", parentGoalId: PARENT_ID });
     const onCreatedFromParent = vi.fn();
     renderForm({ prefill: { ...CHILD_PREFILL, level: "department" }, onCreatedFromParent });
-    await waitFor(() => expect(field(/Mục tiêu cha/).value).toBe(PARENT_ID));
+    await waitFor(() => expect(parentInput().value).toBe(PARENT_LABEL));
     fillChild();
     fireEvent.click(screen.getByRole("button", { name: /^Tạo mục tiêu$/ }));
     await waitFor(() => expect(onCreatedFromParent).toHaveBeenCalledWith(PARENT_ID));
@@ -281,7 +287,7 @@ describe("GoalFormPage — lưu từ cha (QL-04 TC2)", () => {
     mockCreateGoal.mockRejectedValue(httpError(403, "Forbidden"));
     mockGetGoal.mockResolvedValue(PARENT);
     renderForm({ prefill: { ...CHILD_PREFILL, level: "department" } });
-    await waitFor(() => expect(field(/Mục tiêu cha/).value).toBe(PARENT_ID));
+    await waitFor(() => expect(parentInput().value).toBe(PARENT_LABEL));
     fillChild();
     fireEvent.click(screen.getByRole("button", { name: /^Tạo mục tiêu$/ }));
     expect(await screen.findByText(/không có quyền/)).toBeInTheDocument();
@@ -422,6 +428,119 @@ describe("GoalFormPage — mặc định thông minh (NV-01)", () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("g-new"));
     expect(mockCreateGoal).toHaveBeenCalledWith(
       expect.objectContaining({ measureType: "number", targetValue: 12 }),
+    );
+  });
+});
+
+// ── S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — chọn cha có tìm, kỳ theo cha, cảnh báo lệch kỳ ──────
+describe("GoalFormPage — chọn mục tiêu cha bằng ô tìm (NV-12)", () => {
+  const { parent: _drop, childCount: _count, ...PARENT_CORE } = PARENT;
+  const PARENT_2027 = {
+    ...PARENT_CORE,
+    id: "55555555-5555-4555-8555-555555555555",
+    goalCode: "GOAL-0010",
+    name: "Doanh thu năm 2027",
+    periodType: "year" as const,
+    periodStart: "2027-01-01",
+    periodEnd: "2027-12-31",
+  };
+
+  async function pickParent(query: string, name: RegExp) {
+    fireEvent.change(parentInput(), { target: { value: query } });
+    const list = await screen.findByRole("listbox");
+    fireEvent.click(await within(list).findByRole("option", { name }));
+  }
+
+  beforeEach(() => {
+    mockListGoals.mockResolvedValue([PARENT_CORE, PARENT_2027]);
+  });
+
+  it("(n1) kỳ còn mặc định ⇒ chọn cha tự điền loại kỳ + hai ngày theo cha", async () => {
+    renderForm();
+    await pickParent("2027", /GOAL-0010/);
+    expect(parentInput().value).toBe("GOAL-0010 — Doanh thu năm 2027");
+    expect(field(/Loại kỳ/).value).toBe("year");
+    expect(field(/Bắt đầu kỳ/).value).toBe("2027-01-01");
+    expect(field(/Kết thúc kỳ/).value).toBe("2027-12-31");
+    expect(screen.queryByText("Kỳ nằm ngoài kỳ của mục tiêu cha")).not.toBeInTheDocument();
+  });
+
+  it("(n1b) đổi sang cha khác khi vẫn chưa sửa tay ⇒ kỳ theo cha mới", async () => {
+    renderForm();
+    await pickParent("2027", /GOAL-0010/);
+    await pickParent("goal-0009", /GOAL-0009/);
+    expect(field(/Loại kỳ/).value).toBe("quarter");
+    expect(field(/Bắt đầu kỳ/).value).toBe("2026-10-01");
+    expect(field(/Kết thúc kỳ/).value).toBe("2026-12-31");
+  });
+
+  it("(n2) đã sửa tay sang Q1/2027 rồi chọn cha Q4/2026 ⇒ giữ kỳ, cảnh báo vàng, VẪN lưu được", async () => {
+    mockCreateGoal.mockResolvedValue({ ...PARENT, id: "g-new", parentGoalId: PARENT_ID });
+    renderForm();
+    fireEvent.change(field(/Loại kỳ/), { target: { value: "custom" } });
+    fireEvent.change(field(/Bắt đầu kỳ/), { target: { value: "2027-01-01" } });
+    fireEvent.change(field(/Kết thúc kỳ/), { target: { value: "2027-03-31" } });
+    await pickParent("doanh", /GOAL-0009/);
+
+    expect(field(/Bắt đầu kỳ/).value).toBe("2027-01-01");
+    expect(field(/Kết thúc kỳ/).value).toBe("2027-03-31");
+    expect(await screen.findByText("Kỳ nằm ngoài kỳ của mục tiêu cha")).toBeInTheDocument();
+
+    fireEvent.change(field(/Tên mục tiêu/), { target: { value: "Doanh số Q1" } });
+    fireEvent.click(screen.getByRole("button", { name: /Tạo mục tiêu/ }));
+    await waitFor(() =>
+      expect(mockCreateGoal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentGoalId: PARENT_ID,
+          periodStart: "2027-01-01",
+          periodEnd: "2027-03-31",
+        }),
+      ),
+    );
+  });
+
+  it("(n3) sửa kỳ ra ngoài kỳ cha SAU khi chọn ⇒ cảnh báo hiện; sửa lại vào trong ⇒ cảnh báo tắt", async () => {
+    renderForm();
+    await pickParent("goal-0009", /GOAL-0009/);
+    fireEvent.change(field(/Kết thúc kỳ/), { target: { value: "2027-01-15" } });
+    expect(await screen.findByText("Kỳ nằm ngoài kỳ của mục tiêu cha")).toBeInTheDocument();
+    fireEvent.change(field(/Kết thúc kỳ/), { target: { value: "2026-12-31" } });
+    await waitFor(() =>
+      expect(screen.queryByText("Kỳ nằm ngoài kỳ của mục tiêu cha")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("(n4) không khớp ⇒ «Không tìm thấy»; chọn «Không có» ⇒ lưu không có cha", async () => {
+    renderForm();
+    await pickParent("goal-0009", /GOAL-0009/);
+    fireEvent.change(parentInput(), { target: { value: "khong-co-muc-nay" } });
+    const list = await screen.findByRole("listbox");
+    expect(await screen.findByText("Không tìm thấy")).toBeInTheDocument();
+    fireEvent.click(within(list).getByRole("option", { name: /Không có/ }));
+    expect(parentInput().value).toBe("");
+    fireEvent.change(field(/Tên mục tiêu/), { target: { value: "Mục tiêu gốc" } });
+    fireEvent.click(screen.getByRole("button", { name: /Tạo mục tiêu/ }));
+    await waitFor(() => expect(mockCreateGoal).toHaveBeenCalled());
+    expect(mockCreateGoal.mock.calls[0][0].parentGoalId ?? null).toBeNull();
+  });
+
+  it("(n5) gợi ý mặc định = cùng phòng của mình + cùng kỳ đang chọn (GET /goals sẵn có)", async () => {
+    useAuthStore.setState({
+      scopes: {},
+      user: { ...selfUser(SELF_ID), employee: { id: SELF_ID, departmentId: DEPT_ID } },
+    });
+    renderForm();
+    fireEvent.keyDown(parentInput(), { key: "ArrowDown" });
+    await screen.findByRole("listbox");
+    const period = { from: field(/Bắt đầu kỳ/).value, to: field(/Kết thúc kỳ/).value };
+    await waitFor(() =>
+      expect(mockListGoals).toHaveBeenCalledWith(
+        expect.objectContaining({
+          departmentId: DEPT_ID,
+          periodFrom: period.from,
+          periodTo: period.to,
+        }),
+      ),
     );
   });
 });

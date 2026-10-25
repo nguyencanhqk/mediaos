@@ -15,6 +15,7 @@ import { quarterRange, yearRange, type DataScope, type LocalDateRange } from "@m
 import type { GoalPeriodTypeDto } from "@mediaos/contracts";
 import { EMPTY_GOAL_FORM, type GoalFormValues } from "./goal-form-schema";
 import { applyGoalFormPrefill, type GoalFormPrefill } from "./goal-form-prefill";
+import { isLocalDate } from "./goal-list-search";
 
 /** Cấp mặc định của form tạo nhanh: mục tiêu cá nhân. */
 const QUICK_START_LEVEL = "employee" as const satisfies GoalFormValues["level"];
@@ -114,4 +115,37 @@ export function goalCreateInitialValues(
     level,
     status: prefill.parentGoalId ? merged.status : defaultGoalStatusForLevel(level),
   };
+}
+
+// ── S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — kỳ theo mục tiêu cha ─────────────────────────────────
+
+/** Ba trường kỳ của form (cùng ba trường mà `goalFormDefaults` điền sẵn). */
+export type GoalPeriodValues = Pick<GoalFormValues, "periodType" | "periodStart" | "periodEnd">;
+
+/** Kỳ của mục tiêu con lấy theo cha: chọn cha khi kỳ còn mặc định ⇒ form điền đúng ba trường này. */
+export function parentPeriodValues(parent: {
+  readonly periodType: GoalPeriodTypeDto;
+  readonly periodStart: string;
+  readonly periodEnd: string;
+}): GoalPeriodValues {
+  return {
+    periodType: parent.periodType,
+    periodStart: parent.periodStart,
+    periodEnd: parent.periodEnd,
+  };
+}
+
+/**
+ * Kỳ con nằm NGOÀI kỳ cha (bắt đầu trước, hoặc kết thúc sau)? Chỉ để hiện CẢNH BÁO MỀM — không chặn
+ * lưu (SPEC-10 không có luật kỳ con ⊆ kỳ cha). Thiếu căn cứ (ngày trống/sai định dạng ở con hoặc cha)
+ * ⇒ false: lỗi kỳ của con đã có thông điệp riêng, không cảnh báo chồng. Ngày dạng `YYYY-MM-DD` hợp lệ
+ * so sánh được bằng chuỗi.
+ */
+export function isPeriodOutsideParent(
+  child: { readonly periodStart: string; readonly periodEnd: string },
+  parent: { readonly periodStart: string; readonly periodEnd: string },
+): boolean {
+  const dates = [child.periodStart, child.periodEnd, parent.periodStart, parent.periodEnd];
+  if (!dates.every(isLocalDate)) return false;
+  return child.periodStart < parent.periodStart || child.periodEnd > parent.periodEnd;
 }
