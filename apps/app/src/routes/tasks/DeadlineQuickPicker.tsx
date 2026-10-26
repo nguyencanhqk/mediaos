@@ -37,8 +37,12 @@ export interface DeadlineQuickPickerProps {
   allowClear?: boolean;
   /** Hiện «Tuỳ chỉnh» (mặc định có) — tắt khi phía gọi đã có ô ngày giờ riêng cạnh đó. */
   allowCustom?: boolean;
-  /** «field»: nút rộng hiện ngày giờ · «compact»: chip nhỏ trên dòng · «quick»: nút «Chọn nhanh». */
-  variant?: "field" | "compact" | "quick";
+  /**
+   * «field»: nút rộng hiện ngày giờ · «compact»: chip nhỏ trên dòng · «quick»: nút «Chọn nhanh» ·
+   * «icon»: chỉ biểu tượng lịch (tên trợ năng + tooltip = `ariaLabel`) — khi hạn đã hiện ở chip khác
+   * cạnh đó hoặc hàng chip hẹp (ô tạo nhanh, S20-TASK-QUICKADD-1).
+   */
+  variant?: "field" | "compact" | "quick" | "icon";
   /** Đồng hồ — test truyền mốc cố định; mặc định giờ thật lúc mở popover. */
   getNow?: () => Date;
   timeZone?: string;
@@ -59,6 +63,7 @@ function TriggerContent({
   if (variant === "quick") {
     return <span className="text-xs font-medium">{t("deadlinePicker.quickLabel")}</span>;
   }
+  if (variant === "icon") return <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />;
   if (variant === "compact") {
     return (
       <>
@@ -85,6 +90,7 @@ const TRIGGER_CLASS: Record<NonNullable<DeadlineQuickPickerProps["variant"]>, st
     "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground",
   quick:
     "inline-flex h-7 items-center rounded-md border border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground",
+  icon: "inline-flex h-6 w-6 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted hover:text-foreground",
 };
 
 function PresetChip({
@@ -213,6 +219,7 @@ export function DeadlineQuickPicker({
           id={id}
           data-testid={id}
           aria-label={ariaLabel}
+          title={variant === "icon" ? ariaLabel : undefined}
           aria-haspopup="dialog"
           aria-expanded={open}
           disabled={disabled}

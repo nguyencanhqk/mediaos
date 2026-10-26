@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm, type FieldError } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
@@ -28,6 +29,8 @@ import {
 } from "./task-form-schema";
 import { useTaskPatchFieldLocks, type TaskPatchFieldLocks } from "./task-patch-field-locks";
 import { TaskFieldLockedHint } from "./TaskFieldLockedHint";
+import { useMyEmployeeLink } from "./use-my-employee";
+import { isAssigneeRejection } from "./task-quick-add-errors";
 
 /**
  * TaskFormDrawer — tạo/sửa task core (S4-FE-TASK-2, SPEC-06 §13.6, TASK-SCREEN-006).
@@ -44,12 +47,19 @@ import { TaskFieldLockedHint } from "./TaskFieldLockedHint";
  *
  * S20-TASK-QUICKEDIT-1 — cạnh ô hạn có popover mốc nhanh dùng chung (DeadlineQuickPicker): chọn mốc
  * chỉ ĐIỀN ô (đánh dấu đã sửa), lưu vẫn theo nút Lưu như mọi trường khác của form.
+ *
+ * S20-TASK-QUICKADD-1 (US-TASK-NV-05) — chế độ TẠO: luôn có lựa chọn «Tôi» (employeeId của tôi từ
+ * `/auth/me`, không cần `read:employee`); không mở từ dự án ⇒ người phụ trách điền sẵn «Tôi», đổi được.
+ * Server từ chối vì người phụ trách ⇒ lỗi TẠI Ô người phụ trách. `defaultProject` (board) ⇒ ô dự án
+ * chọn sẵn dự án đó (có option riêng dù danh sách dự án chưa tải / không được đọc).
  */
 interface TaskFormDrawerProps {
   mode: "create" | "edit";
   task?: TaskCoreResponseDto;
   onClose: () => void;
   onSuccess: (task: TaskCoreResponseDto) => void;
+  /** Chỉ chế độ TẠO: dự án điền sẵn (mở từ board/workspace). */
+  defaultProject?: { readonly id: string; readonly name: string | null };
 }
 
 const NO_FIELD_LOCKS: TaskPatchFieldLocks = {
@@ -68,7 +78,13 @@ function submitErrorKey(err: unknown): string {
   return "tasks.form.errors.generic";
 }
 
-export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawerProps) {
+export function TaskFormDrawer({
+  mode,
+  task,
+  onClose,
+  onSuccess,
+  defaultProject,
+}: TaskFormDrawerProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
   const isEdit = mode === "edit";
@@ -77,20 +93,41 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
   const canReadDepartments = useCan("read", "department");
   const editLocks = useTaskPatchFieldLocks();
   const locked = isEdit ? editLocks : NO_FIELD_LOCKS;
+  const me = useMyEmployeeLink(!isEdit);
+  const myEmployeeId = me.status === "linked" ? me.employeeId : null;
+  const defaultProjectId = isEdit ? undefined : defaultProject?.id;
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
     mode: "onSubmit",
-    defaultValues: isEdit && task ? taskToFormValues(task) : EMPTY_TASK_FORM,
+    defaultValues:
+      isEdit && task
+        ? taskToFormValues(task)
+        : { ...EMPTY_TASK_FORM, projectId: defaultProjectId ?? "" },
   });
 
   const {
     register,
     handleSubmit,
     setValue,
+    setError,
+    clearErrors,
     watch,
+    resetField,
+    getValues,
+    getFieldState,
     formState: { errors, isDirty, isSubmitting, dirtyFields },
   } = form;
+
+  // Tạo việc ngoài dự án ⇒ người phụ trách mặc định là TÔI (phạm vi Own/Team bắt buộc có người — thiếu
+  // là 403). Chạy khi /auth/me về; `resetField` đổi cả giá trị mặc định ⇒ form vẫn «chưa sửa». Người
+  // dùng đã tự chọn người / chọn dự án trước đó thì không đè.
+  useEffect(() => {
+    if (isEdit || defaultProjectId || !myEmployeeId) return;
+    if (getFieldState("assigneeEmployeeId").isDirty) return;
+    if (getValues("assigneeEmployeeId") || getValues("projectId")) return;
+    resetField("assigneeEmployeeId", { defaultValue: myEmployeeId });
+  }, [isEdit, defaultProjectId, myEmployeeId, getFieldState, getValues, resetField]);
 
   useDirtyFormGuard({ isDirty });
 
@@ -114,7 +151,10 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
     enabled: canReadEmployees,
     staleTime: 60_000,
   });
-  const employees = employeesPage?.items ?? [];
+  // «Tôi» là option riêng ⇒ bỏ chính tôi khỏi danh sách để không lặp.
+  const employees = (employeesPage?.items ?? []).filter((e) => e.id !== myEmployeeId);
+  const showDefaultProjectOption =
+    defaultProjectId !== undefined && !(projects ?? []).some((p) => p.id === defaultProjectId);
 
   const mutation = useMutation({
     mutationFn: async (values: TaskFormValues): Promise<TaskCoreResponseDto> => {
@@ -133,13 +173,24 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
       // kanban + report của ĐÚNG dự án, mirror taskSubtaskInvalidation.afterMutate.
       const projectId = result.projectId ?? task?.projectId ?? null;
       const keys = [
-        ...(isEdit && task ? taskCoreInvalidation.detail(task.id) : taskCoreInvalidation.list()),
+        ...(isEdit && task
+          ? taskCoreInvalidation.detail(task.id)
+          : [...taskCoreInvalidation.list(), ...taskCoreInvalidation.my()]),
         ...(projectId ? [taskKeys.kanban(projectId), taskKeys.projects.report(projectId)] : []),
       ];
       await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
       onSuccess(result);
     },
+    onError: (err) => {
+      if (isAssigneeRejection(err)) {
+        setError("assigneeEmployeeId", {
+          type: "server",
+          message: "quickAdd.form.assigneeOutOfScope",
+        });
+      }
+    },
   });
+  const assigneeRejected = mutation.isError && isAssigneeRejection(mutation.error);
 
   const busy = isSubmitting || mutation.isPending;
   const noop = () => {};
@@ -161,7 +212,7 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
         </>
       }
     >
-      {mutation.isError && (
+      {mutation.isError && !assigneeRejected && (
         <p
           role="alert"
           aria-live="assertive"
@@ -222,6 +273,11 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
           ) : (
             <Select id="task-project" {...register("projectId")}>
               <option value="">{t("tasks.form.placeholders.none")}</option>
+              {showDefaultProjectOption && (
+                <option value={defaultProjectId}>
+                  {defaultProject?.name ?? t("quickAdd.form.currentProject")}
+                </option>
+              )}
               {(projects ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -237,11 +293,28 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
           </label>
           <Select
             id="task-assignee"
-            {...register("assigneeEmployeeId")}
+            {...register("assigneeEmployeeId", {
+              // Lỗi «ngoài phạm vi» của server gắn với lựa chọn CŨ — đổi người thì gỡ ngay.
+              onChange: () => clearErrors("assigneeEmployeeId"),
+            })}
             disabled={locked.assigneeEmployeeId}
-            aria-describedby={locked.assigneeEmployeeId ? "task-assignee-locked" : undefined}
+            aria-invalid={errors.assigneeEmployeeId ? true : undefined}
+            aria-describedby={
+              locked.assigneeEmployeeId
+                ? "task-assignee-locked"
+                : errors.assigneeEmployeeId
+                  ? "task-assignee-error"
+                  : undefined
+            }
           >
             <option value="">{t("tasks.form.placeholders.none")}</option>
+            {myEmployeeId && (
+              <option value={myEmployeeId}>
+                {me.status === "linked" && me.fullName
+                  ? t("quickAdd.form.meNamed", { name: me.fullName })
+                  : t("quickAdd.form.me")}
+              </option>
+            )}
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.fullName}
@@ -249,6 +322,11 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
             ))}
           </Select>
           {locked.assigneeEmployeeId && <TaskFieldLockedHint id="task-assignee-locked" />}
+          {errors.assigneeEmployeeId && (
+            <p id="task-assignee-error" role="alert" className="text-sm text-destructive">
+              {errFor(errors.assigneeEmployeeId)}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">

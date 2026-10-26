@@ -12,9 +12,16 @@ import type {
 } from "@mediaos/contracts";
 import { TASK_CORE_PRIORITY_OPTIONS, localDatetimeToIso, isoToLocalDatetime } from "./constants";
 
+/** Trần độ dài tiêu đề — khớp `createTaskCoreSchema.title.max(500)` của contracts (form + tạo nhanh). */
+export const TASK_TITLE_MAX_LENGTH = 500;
+
 export const taskFormSchema = z
   .object({
-    title: z.string().trim().min(1, "tasks.form.errors.titleRequired").max(500),
+    title: z
+      .string()
+      .trim()
+      .min(1, "tasks.form.errors.titleRequired")
+      .max(TASK_TITLE_MAX_LENGTH, "quickAdd.form.titleTooLong"),
     description: z.string().max(20000).optional(),
     projectId: z.string().optional(),
     // S5-TASK-MOVEPROJ-1 — CỘT pipeline đích. Chỉ có nghĩa khi đã chọn dự án; gửi kèm để tránh
