@@ -38,6 +38,8 @@ import { TaskChecklistsRepository } from "./task-checklists.repository";
 import { TaskActivityFeedService } from "./task-activity-feed.service";
 import { TaskWatchersService } from "./task-watchers.service";
 import { TaskActivityFeedRepository } from "./task-activity-feed.repository";
+// S20-SEC-GOALNAMEDTO-1 (additive) — quyết định đọc mục tiêu theo lô cho tham chiếu mục tiêu của việc.
+import { TaskGoalRefPolicy } from "./task-goal-ref.policy";
 // S4-TASK-BE-5 (additive) — Task File (đính kèm công việc): controller/service/repo + resolver
 // (module='TASK', entity='task') registered into the shared FilePolicyService in onModuleInit.
 // FilesModule exports FileService (link/getDownloadUrl/deleteFile) + FilePolicyService (registerResolver).
@@ -121,6 +123,7 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     // chỉ được gọi nội bộ từ writer đã tự authorize (xem docblock service).
     GoalProgressEngineService,
     GoalProgressEngineRepository,
+    TaskGoalRefPolicy,
   ],
   // S4-DASH-BE-2 (additive): + TaskCoreService (MY_TASKS/TASK_ALERTS) + ProjectsService (PROJECT_PROGRESS
   // authorize getProject TRƯỚC aggregate countsByStatusLeaf — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH
@@ -148,6 +151,8 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     TaskCoreRepository,
     TaskChecklistsRepository,
     TaskActivityService,
+    // S20-SEC-GOALNAMEDTO-1 — GoalTasksLinkService (GET /goals/:id/tasks) dùng CÙNG policy.
+    TaskGoalRefPolicy,
   ],
 })
 export class TasksModule implements OnModuleInit {

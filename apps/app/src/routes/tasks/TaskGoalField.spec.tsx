@@ -230,3 +230,52 @@ describe("TaskGoalField — đồng bộ cache 2 chiều (pattern PR #250)", () 
     });
   });
 });
+
+/**
+ * S20-SEC-GOALNAMEDTO-1 (plan §4 F1–F3) — FE hiển thị ĐÚNG những gì server quyết định: server chỉ trả cờ
+ * `hasGoal` (không id/tên/mã) khi người xem không đọc được mục tiêu ⇒ chip trung tính, không picker. Dạng
+ * server cũ (không cờ) giữ nguyên hành vi trước đây.
+ */
+describe("TaskGoalField — tham chiếu mục tiêu theo quyết định của server", () => {
+  const RESTRICTED = {
+    ...TASK,
+    goalId: null,
+    goalCode: null,
+    goalName: null,
+    hasGoal: true,
+  } as unknown as TaskCoreResponseDto;
+
+  it("F1 cờ có mục tiêu mà không có tên ⇒ chip trung tính, không picker (kể cả khi có quyền sửa)", () => {
+    renderField(RESTRICTED);
+    expect(screen.getByTestId("task-goal-restricted")).toBeInTheDocument();
+    expect(screen.queryByTestId("task-goal-picker")).toBeNull();
+  });
+
+  it("F1b chỉ đọc: cờ có mục tiêu ⇒ chip trung tính, không hiện «—»", () => {
+    perm.denied.add("update:goal");
+    renderField(RESTRICTED);
+    expect(screen.getByTestId("task-goal-restricted")).toBeInTheDocument();
+    expect(screen.queryByText("—")).toBeNull();
+  });
+
+  it("F2 dạng server cũ (không cờ, đủ ba trường) ⇒ hiện mã — tên như trước", () => {
+    perm.denied.add("update:goal");
+    renderField({
+      ...TASK,
+      goalId: "g-1",
+      goalCode: "GOAL-0001",
+      goalName: "Mục tiêu X",
+    } as unknown as TaskCoreResponseDto);
+    expect(screen.getByTestId("task-goal-readonly").textContent).toContain(
+      "GOAL-0001 — Mục tiêu X",
+    );
+    expect(screen.queryByTestId("task-goal-restricted")).toBeNull();
+  });
+
+  it("F3 không mục tiêu, không cờ ⇒ «—»", () => {
+    perm.denied.add("update:goal");
+    renderField(TASK);
+    expect(screen.getByTestId("task-goal-readonly").textContent).toContain("—");
+    expect(screen.queryByTestId("task-goal-restricted")).toBeNull();
+  });
+});

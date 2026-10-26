@@ -7,11 +7,10 @@ import {
   TaskActivityFeedRepository,
   type TaskActivityLogRow,
 } from "./task-activity-feed.repository";
+import { TaskGoalRefPolicy, type GoalRefUser, type GoalRefViewer } from "./task-goal-ref.policy";
+import { ACTIVITY_UUID_RE, decomposedGoalIds, redactGoalRef } from "./task-activity-goal-redact";
 
-interface RequestUser {
-  id: string;
-  companyId: string;
-}
+type RequestUser = GoalRefUser;
 
 const ERR = {
   TASK_NOT_FOUND: "TASK-ERR-TASK-NOT-FOUND: không tìm thấy công việc.",
@@ -45,6 +44,8 @@ export class TaskActivityFeedService {
     private readonly db: DatabaseService,
     private readonly repo: TaskActivityFeedRepository,
     private readonly permission: PermissionService,
+    // S20-SEC-GOALNAMEDTO-1 — dòng phân rã mục tiêu theo cùng quyết định đọc mục tiêu (che lúc đọc).
+    private readonly goalRefs: TaskGoalRefPolicy,
   ) {}
 
   async list(
@@ -62,6 +63,7 @@ export class TaskActivityFeedService {
       "task-audit-log",
       { isSensitive: true },
     );
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const exists = await this.repo.taskExistsTx(tx, user.companyId, taskId);
       if (!exists) throw new NotFoundException(ERR.TASK_NOT_FOUND);
@@ -70,7 +72,7 @@ export class TaskActivityFeedService {
         if (!involved) throw new ForbiddenException(ERR.NOT_INVOLVED);
       }
       const rows = await this.repo.listByTaskTx(tx, user.companyId, taskId, { limit, offset });
-      return this.toDtosWithNamesTx(tx, user.companyId, rows);
+      return this.toDtosWithNamesTx(tx, user.companyId, rows, viewer);
     });
   }
 
@@ -87,6 +89,7 @@ export class TaskActivityFeedService {
   ): Promise<TaskActivityLogResponseDto[]> {
     const limit = this.clampLimit(query.limit);
     const offset = query.offset && query.offset > 0 ? query.offset : 0;
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const exists = await this.repo.projectExistsTx(tx, user.companyId, projectId);
       if (!exists) throw new NotFoundException(ERR.PROJECT_NOT_FOUND);
@@ -94,7 +97,7 @@ export class TaskActivityFeedService {
         limit,
         offset,
       });
-      return this.toDtosWithNamesTx(tx, user.companyId, rows);
+      return this.toDtosWithNamesTx(tx, user.companyId, rows, viewer);
     });
   }
 
@@ -108,6 +111,7 @@ export class TaskActivityFeedService {
     tx: TenantTx,
     companyId: string,
     rows: TaskActivityLogRow[],
+    viewer: GoalRefViewer,
   ): Promise<TaskActivityLogResponseDto[]> {
     const ids = new Set<string>();
     for (const row of rows) {
@@ -117,18 +121,18 @@ export class TaskActivityFeedService {
       }
     }
     const names = await this.repo.findEmployeeNamesTx(tx, companyId, [...ids]);
-    return rows.map((r) => this.toDto(r, names));
+    // S20-SEC-GOALNAMEDTO-1 — MỘT truy vấn lô cho cả trang (0 khi trang không có dòng phân rã), TUẦN TỰ
+    // sau truy vấn tên trên cùng tx.
+    const visibleGoals = await this.goalRefs.visibleGoalIdsTx(tx, viewer, decomposedGoalIds(rows));
+    return rows.map((r) => this.toDto(redactGoalRef(r, visibleGoals), names));
   }
 
   // Chỉ nhận UUID hợp lệ: log rác/cũ mang assigneeEmployeeId='' hoặc không-phải-uuid mà lọt vào
   // IN-list sẽ làm Postgres ném "invalid input syntax for type uuid" ⇒ 500 CẢ trang activity.
-  private static readonly UUID_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
   private readAssigneeId(values: unknown): string | null {
     if (values === null || typeof values !== "object" || Array.isArray(values)) return null;
     const id = (values as Record<string, unknown>).assigneeEmployeeId;
-    return typeof id === "string" && TaskActivityFeedService.UUID_RE.test(id) ? id : null;
+    return typeof id === "string" && ACTIVITY_UUID_RE.test(id) ? id : null;
   }
 
   /** Immutable: trả object MỚI; giá trị ĐÃ LƯU (vd assigneeName tương lai ghi sẵn) không bị ghi đè. */

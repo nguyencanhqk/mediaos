@@ -24,6 +24,8 @@ import { ME_SECTION_SOURCES, moduleEnabledKey, type MeSectionSource } from "./me
 interface Actor {
   id: string;
   companyId: string;
+  /** Cờ khoá API của request — mục việc đi qua `TaskCoreService.getMyTasks` (xem `GoalRefUser`). */
+  viaApiKey: boolean | undefined;
 }
 
 /** Envelope 1 section: `data` null ở mọi status ≠ 'ok' (khớp meSectionSchema packages/contracts). */

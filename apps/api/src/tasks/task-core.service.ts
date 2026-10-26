@@ -53,14 +53,16 @@ import {
   signedUrlsForRow,
   toLabelChipsByTask,
   type TaskCoreSignedUrls,
+  type TaskRowDecorations,
 } from "./task-core.mapper";
+import { decorateTaskRows, reloadTaskDtoTx, type GoalRefSource } from "./task-row-decorations";
+import { TaskGoalRefPolicy, type GoalRefUser, type GoalRefViewer } from "./task-goal-ref.policy";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
-interface RequestUser {
-  id: string;
-  companyId: string;
-}
+type RequestUser = GoalRefUser;
+/** Cổng tạo việc — không trả tham chiếu mục tiêu ⇒ không cần cờ khoá API (phân rã mục tiêu gọi lại). */
+type GateUser = Pick<GoalRefUser, "id" | "companyId">;
 
 /**
  * Task types do workflow engine (FSM) làm chủ vòng đời — task core KHÔNG sửa/xoá tay (mirror TasksService,
@@ -159,6 +161,8 @@ export class TaskCoreService {
     private readonly goalProgress: GoalProgressEngineService,
     // S20-SEC-TASKPATCHGATE-1 — cổng trường của PATCH (hạn · ưu tiên · người phụ trách). CUỐI.
     private readonly patchGate: TaskPatchFieldGate,
+    // S20-SEC-GOALNAMEDTO-1 — quyết định đọc mục tiêu cho tham chiếu mục tiêu của bản ghi việc. CUỐI.
+    private readonly goalRefs: TaskGoalRefPolicy,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -195,8 +199,8 @@ export class TaskCoreService {
         scopeExists,
       );
     });
-    const { avatars, covers } = await this.resolveSignedUrls(user.companyId, rows);
-    return rows.map((r) => this.toDto(r, signedUrlsForRow(r, avatars, covers)));
+    const deco = await this.resolveSignedUrls(user.companyId, rows, { user });
+    return rows.map((r) => this.toDto(r, signedUrlsForRow(r, deco)));
   }
 
   async getTask(user: RequestUser, id: string): Promise<TaskCoreResponseDto> {
@@ -213,9 +217,9 @@ export class TaskCoreService {
       return { row, progress: progress.get(id), labelRows };
     });
     if (!result) throw new NotFoundException(ERR.NOT_FOUND);
-    const { avatars, covers } = await this.resolveSignedUrls(user.companyId, [result.row]);
+    const deco = await this.resolveSignedUrls(user.companyId, [result.row], { user });
     return {
-      ...this.toDto(result.row, signedUrlsForRow(result.row, avatars, covers)),
+      ...this.toDto(result.row, signedUrlsForRow(result.row, deco)),
       subtaskTotal: result.progress?.total ?? 0,
       subtaskDone: result.progress?.done ?? 0,
       labels: toLabelChipsByTask(result.labelRows).get(id) ?? [],
@@ -349,8 +353,8 @@ export class TaskCoreService {
       const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
       return this.repo.findMyTasksTx(tx, user.companyId, user.id, actorEmp?.id ?? null);
     });
-    const { avatars, covers } = await this.resolveSignedUrls(user.companyId, rows);
-    return rows.map((r) => this.toMyDto(r, signedUrlsForRow(r, avatars, covers)));
+    const deco = await this.resolveSignedUrls(user.companyId, rows, { user });
+    return rows.map((r) => this.toMyDto(r, signedUrlsForRow(r, deco)));
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────────
@@ -363,7 +367,7 @@ export class TaskCoreService {
    * ⚠️ GỌI NGOÀI tx (resolveAndAssert tự mở connection riêng) và TRƯỚC khi cấp mã task.
    */
   async resolveCreateGate(
-    user: RequestUser,
+    user: GateUser,
     dto: Pick<CreateTaskCoreRequest, "stateId" | "projectId" | "parentTaskId">,
   ): Promise<DataScope> {
     // Gate + scope (double-gate với PermissionGuard controller — defense-in-depth). Company/System = toàn tenant.
@@ -393,9 +397,10 @@ export class TaskCoreService {
     // tạo task task_code=NULL câm. Delegate tiện ích DÙNG CHUNG (task-code.util) — CÙNG logic + 1 điểm map
     // lỗi Inactive→409 với HR task (leave/attendance-adjustment). POST /tasks nay trả 409 (không 500 raw).
     const taskCode = await allocateTaskCodeOutsideTx(this.db, this.sequence, user.companyId);
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const created = await this.createTaskInTx(tx, user, dto, { createScope, taskCode });
-      return this.reload(tx, user.companyId, created.id);
+      return this.reload({ tx, viewer }, created.id);
     });
   }
 
@@ -415,7 +420,7 @@ export class TaskCoreService {
    */
   async createTaskInTx(
     tx: TenantTx,
-    user: RequestUser,
+    user: GateUser,
     dto: CreateTaskCoreRequest,
     ctx: {
       createScope: DataScope;
@@ -465,8 +470,7 @@ export class TaskCoreService {
     }
     const effectiveProjectId = dto.parentTaskId ? parentProjectId : (dto.projectId ?? null);
 
-    if (effectiveProjectId)
-      await this.assertProjectUsable(tx, user.companyId, effectiveProjectId);
+    if (effectiveProjectId) await this.assertProjectUsable(tx, user.companyId, effectiveProjectId);
     if (dto.departmentId) await this.assertDepartment(tx, user.companyId, dto.departmentId);
 
     // S5-TASK-PROJROLE-1 — CREATE-SCOPE (D-27, điều kiện un-defer create:task ghi ở
@@ -497,12 +501,7 @@ export class TaskCoreService {
 
     const assignee = dto.assigneeEmployeeId
       ? !isOrgWide && effectiveProjectId
-        ? await this.resolveAssigneeForProject(
-            tx,
-            user,
-            dto.assigneeEmployeeId,
-            effectiveProjectId,
-          )
+        ? await this.resolveAssigneeForProject(tx, user, dto.assigneeEmployeeId, effectiveProjectId)
         : await this.resolveAssignee(tx, user, createScope, dto.assigneeEmployeeId)
       : null;
 
@@ -527,11 +526,7 @@ export class TaskCoreService {
         stateId = state.id;
         initialStatus = this.statusForGroup(state.stateGroup);
       } else if (effectiveProjectId) {
-        const fallback = await this.repo.findDefaultStateTx(
-          tx,
-          user.companyId,
-          effectiveProjectId,
-        );
+        const fallback = await this.repo.findDefaultStateTx(tx, user.companyId, effectiveProjectId);
         stateId = fallback?.id ?? null; // project 0 state ⇒ NULL (hợp lệ)
         if (fallback) initialStatus = this.statusForGroup(fallback.stateGroup);
       }
@@ -623,6 +618,7 @@ export class TaskCoreService {
     const stateCtx = dto.stateId !== undefined ? await this.prepareStateWrite(user) : null;
     // S20-SEC-TASKPATCHGATE-1 — cùng khuôn: cặp chuyên trách của 3 trường có cổng resolve TRƯỚC tx.
     const fieldScopes = await this.patchGate.prepare(user, dto);
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
@@ -812,7 +808,7 @@ export class TaskCoreService {
       }
       if (raw.goalId) await this.goalProgress.recomputeGoalTx(tx, user.companyId, raw.goalId);
 
-      return this.reload(tx, user.companyId, id);
+      return this.reload({ tx, viewer }, id);
     });
   }
 
@@ -830,6 +826,7 @@ export class TaskCoreService {
     dto: MoveTaskStateRequest,
   ): Promise<TaskCoreResponseDto> {
     const stateCtx = await this.prepareStateWrite(user);
+    const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
@@ -843,7 +840,7 @@ export class TaskCoreService {
       // Bound data-scope update-state nằm TRONG applyStateChangeTx (finding security-reviewer:
       // đặt ở caller thì đường PATCH quên — 2 đường hội tụ phải cùng một cổng).
       await this.applyStateChangeTx(tx, user, taskId, raw, raw.projectId, dto.stateId, stateCtx);
-      return this.reload(tx, user.companyId, taskId);
+      return this.reload({ tx, viewer }, taskId);
     });
   }
 
@@ -1142,7 +1139,7 @@ export class TaskCoreService {
    */
   private async assertInScopeForWrite(
     tx: TenantTx,
-    user: RequestUser,
+    user: GateUser,
     id: string,
     scope: DataScope,
   ): Promise<void> {
@@ -1238,7 +1235,7 @@ export class TaskCoreService {
    */
   private async resolveAssignee(
     tx: TenantTx,
-    user: RequestUser,
+    user: GateUser,
     scope: DataScope,
     employeeId: string,
   ): Promise<{ employeeId: string; userId: string }> {
@@ -1257,7 +1254,7 @@ export class TaskCoreService {
    */
   private async resolveAssigneeForProject(
     tx: TenantTx,
-    user: RequestUser,
+    user: GateUser,
     employeeId: string,
     projectId: string,
   ): Promise<{ employeeId: string; userId: string }> {
@@ -1277,7 +1274,7 @@ export class TaskCoreService {
   }
 
   private async assertAssigneeInScope(
-    user: RequestUser,
+    user: GateUser,
     scope: DataScope,
     emp: EmployeeForScope,
   ): Promise<void> {
@@ -1312,27 +1309,12 @@ export class TaskCoreService {
     return Math.min(Math.floor(limit), TASK_CORE_PAGE_LIMIT_MAX);
   }
 
-  private async reload(tx: TenantTx, companyId: string, id: string): Promise<TaskCoreResponseDto> {
-    const row = await this.repo.findScopedByIdTx(tx, companyId, id);
-    if (!row) throw new InternalServerErrorException("Không tải lại được công việc vừa ghi.");
-    // Ký avatar ngay ở đường GHI: FE ghi đè cache chi tiết bằng response này (useTaskActionMutation
-    // /TaskFormDrawer), nên trả null ở đây là ảnh vừa hiện xong đã biến mất tới lần refetch sau.
-    const { avatars, covers } = await this.resolveSignedUrls(companyId, [row], tx);
-    return this.toDto(row, signedUrlsForRow(row, avatars, covers));
+  /** Tải lại bản ghi vừa ghi, trang trí TRONG tx ghi (viewer mục tiêu resolve trước tx). */
+  private reload(at: { tx: TenantTx; viewer: GoalRefViewer }, id: string) {
+    return reloadTaskDtoTx(this.decorationDeps(), at, id);
   }
 
-  // ── Projection (raw tx.execute trả string cho timestamptz/boolean → normalize ISO/boolean) ─────
-
-  /** timestamptz raw ('2026-… +00' hoặc Date) → ISO 8601 chuẩn (Z). null giữ null. */
-  private toIso(v: string | Date | null): string | null {
-    if (v == null) return null;
-    return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
-  }
-
-  /** boolean raw của Postgres qua tx.execute có thể là 't'/'f'|'true'|'false'|boolean → boolean chuẩn. */
-  private toBool(v: boolean | string): boolean {
-    return v === true || v === "true" || v === "t";
-  }
+  // ── Projection (DTO qua mapper dùng chung `task-core.mapper.ts`) ─────
 
   /**
    * S5-TASK-SUBTASK-1 — DELEGATE về mapper DÙNG CHUNG (`task-core.mapper.ts`), KHÔNG giữ bảng field
@@ -1357,26 +1339,18 @@ export class TaskCoreService {
    * `tx` truyền vào khi lời gọi nằm SẴN trong transaction đọc (tái dùng kết nối, tránh nested-tx trên
    * PgBouncer); bỏ trống khi map ở NGOÀI tx (service tự mở withTenant riêng — đúng thiết kế gốc).
    */
-  /**
-   * S5-TASK-COVER-1 — gom CẢ HAI nguồn URL đã ký cho một trang hàng.
-   *
-   * ⚠️ CHẠY TUẦN TỰ, KHÔNG `Promise.all`. Khi `tx` được truyền vào, cả hai lời gọi dùng CHUNG một
-   * kết nối transaction; một `pg` client KHÔNG chạy song song hai truy vấn trên cùng kết nối. Bọc
-   * `Promise.all` sẽ hỏng ngẫu nhiên dưới tải — đúng loại lỗi không tái hiện được trên máy dev.
-   * Phần đắt là ký HMAC cục bộ (không I/O mạng) nên tuần tự không phải nút cổ chai.
-   */
-  private async resolveSignedUrls(
+  /** S5-TASK-COVER-1 + S20-SEC-GOALNAMEDTO-1 — avatar · bìa · mục tiêu theo lô (task-row-decorations). */
+  private resolveSignedUrls(
     companyId: string,
     rows: readonly TaskCoreRow[],
-    tx?: TenantTx,
-  ): Promise<{ avatars: Map<string, string>; covers: Map<string, string> }> {
-    const avatars = await this.resolveAvatars(companyId, rows, tx);
-    const covers = await this.covers.resolveTaskCovers(
-      companyId,
-      rows.map((r) => r.id),
-      tx,
-    );
-    return { avatars, covers };
+    src: GoalRefSource,
+  ): Promise<TaskRowDecorations> {
+    return decorateTaskRows(this.decorationDeps(), companyId, rows, src);
+  }
+
+  private decorationDeps() {
+    const { repo: coreRepo, avatars, covers, goalRefs } = this;
+    return { coreRepo, avatars, covers, goalRefs };
   }
 
   private resolveAvatars(

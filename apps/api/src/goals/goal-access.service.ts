@@ -4,28 +4,19 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import type { SQL } from "drizzle-orm";
-import type { DataScope } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
-import { DataScopeService, type ScopeContext } from "../permission/data-scope.service";
+import { DataScopeService } from "../permission/data-scope.service";
 import { ProjectAccessService } from "../tasks/project-access.service";
 import type { Goal } from "../db/schema/goals";
 import { GOAL_ERR } from "./goals.errors";
 import { GoalsRepository } from "./goals.repository";
+import { buildGoalActorScope, type GoalActorScope } from "./goal-read-scope";
+
+export type { GoalActorScope } from "./goal-read-scope";
 
 export interface GoalRequestUser {
   id: string;
   companyId: string;
-}
-
-/** Ngữ cảnh phạm vi của actor, resolve MỘT LẦN mỗi request rồi dùng cho cả đọc lẫn ghi. */
-export interface GoalActorScope {
-  scope: DataScope;
-  ctx: ScopeContext;
-  deptOrgUnitIds: string[];
-  actorEmployeeId: string | null;
-  /** undefined = Company/System (thấy toàn tenant, KHÔNG áp predicate). */
-  readScopeExists?: SQL;
 }
 
 /** Trạng thái ĐÍCH của một phép ghi (create/update sau merge, hoặc bản ghi đã lưu). */
@@ -70,30 +61,9 @@ export class GoalAccessService {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, action, "goal");
     const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
     const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-    // Bậc phòng ban CHỈ có nghĩa với scope 'Department' (phòng mình ∪ phòng mình phụ trách — mirror
-    // DataScopeService.departmentOrgUnitIds). Với Own/Team phải để RỖNG: nếu không, người scope Own
-    // sẽ đọc/ghi được MỌI mục tiêu cấp phòng của phòng mình = nới quyền câm.
-    const deptOrgUnitIds =
-      scope === "Department"
-        ? [...new Set([...(ctx.orgUnitId ? [ctx.orgUnitId] : []), ...(ctx.headedOrgUnitIds ?? [])])]
-        : [];
-    const base: GoalActorScope = {
-      scope,
-      ctx,
-      deptOrgUnitIds,
-      actorEmployeeId: actorEmp?.id ?? null,
-    };
-    if (scope === "Company" || scope === "System") return base;
-    return {
-      ...base,
-      readScopeExists: this.repo.buildReadScopeExists(
-        user.companyId,
-        this.dataScope.buildEmployeeScopeCondition(scope, ctx),
-        deptOrgUnitIds,
-        base.actorEmployeeId,
-        user.id,
-      ),
-    };
+    // S20-SEC-GOALNAMEDTO-1 — dựng phạm vi ở `goal-read-scope.ts` (bản DUY NHẤT; tham chiếu mục tiêu
+    // trong dữ liệu việc dùng CÙNG hàm ⇒ cùng một quyết định đọc mục tiêu).
+    return buildGoalActorScope(scope, ctx, actorEmp?.id ?? null, user, this.dataScope);
   }
 
   /** 404 khi không thuộc tenant · 403 khi thuộc tenant nhưng ngoài phạm vi ĐỌC (§20.2). */

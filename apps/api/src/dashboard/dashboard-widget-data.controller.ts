@@ -8,7 +8,7 @@ import { WidgetDataQueryDto } from "./dashboard-widget-data.dto";
 import { DASH_READ_PAIR } from "./dashboard-widget-catalog.const";
 
 interface AuthenticatedRequest extends Request {
-  user: { id: string; companyId: string };
+  user: { id: string; companyId: string; viaApiKey: boolean | undefined };
 }
 
 const READ = DASH_READ_PAIR;

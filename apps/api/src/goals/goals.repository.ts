@@ -1,7 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, gte, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lte, gte, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { goals, type Goal } from "../db/schema/goals";
+import {
+  buildGoalReadScopeExists,
+  findActiveActorEmployeeTx,
+  selectReadableGoalIdsTx,
+} from "./goal-read-scope";
 
 /**
  * S5-GOAL-BE-1 — persistence GOAL (DB-11 §6.1/§8). Drizzle TYPED trên `goals` (schema/goals.ts đã đồng
@@ -130,6 +135,7 @@ export class GoalsRepository {
    *   (D) goal CẤP DỰ ÁN mà actor là thành viên Active của dự án — minh bạch theo dự án, KHÔNG theo
    *       phòng ban (SPEC-10 §11 ghi chú: vai trò dự án cắt ngang phòng ban).
    * Company/System KHÔNG gọi hàm này (service bỏ qua predicate ⇒ thấy toàn tenant).
+   * S20-SEC-GOALNAMEDTO-1 — thân hàm ở `goal-read-scope.ts` (bản DUY NHẤT, dùng chung với TASK).
    */
   buildReadScopeExists(
     companyId: string,
@@ -138,34 +144,13 @@ export class GoalsRepository {
     actorEmployeeId: string | null,
     actorUserId: string,
   ): SQL {
-    const ownerExists = sql`exists (
-      select 1 from employee_profiles
-       where employee_profiles.id = ${goals.ownerEmployeeId}
-         and employee_profiles.deleted_at is null
-         and ${scopeCond}
-    )`;
-    const subjectExists = sql`(${goals.employeeId} is not null and exists (
-      select 1 from employee_profiles
-       where employee_profiles.id = ${goals.employeeId}
-         and employee_profiles.deleted_at is null
-         and ${scopeCond}
-    ))`;
-    const deptCond =
-      deptOrgUnitIds.length > 0
-        ? sql`(${goals.departmentId} is not null and ${inArray(goals.departmentId, deptOrgUnitIds)})`
-        : sql`false`;
-    const memberPredicate = actorEmployeeId
-      ? sql`(pm.employee_id = ${actorEmployeeId} or pm.user_id = ${actorUserId})`
-      : sql`pm.user_id = ${actorUserId}`;
-    const projectMemberExists = sql`(${goals.projectId} is not null and exists (
-      select 1 from project_members pm
-       where pm.company_id = ${companyId}
-         and pm.project_id = ${goals.projectId}
-         and pm.member_status = 'Active'
-         and pm.deleted_at is null
-         and ${memberPredicate}
-    ))`;
-    return sql`(${ownerExists} or ${subjectExists} or ${deptCond} or ${projectMemberExists})`;
+    return buildGoalReadScopeExists(
+      companyId,
+      scopeCond,
+      deptOrgUnitIds,
+      actorEmployeeId,
+      actorUserId,
+    );
   }
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -226,14 +211,8 @@ export class GoalsRepository {
     id: string,
     scopeExists: SQL,
   ): Promise<boolean> {
-    const [row] = await tx
-      .select({ id: goals.id })
-      .from(goals)
-      .where(
-        and(eq(goals.id, id), eq(goals.companyId, companyId), isNull(goals.deletedAt), scopeExists),
-      )
-      .limit(1);
-    return row !== undefined;
+    // S20-SEC-GOALNAMEDTO-1 — cùng truy vấn theo lô mà tham chiếu mục tiêu của dữ liệu việc dùng.
+    return (await selectReadableGoalIdsTx(tx, companyId, [id], scopeExists)).has(id);
   }
 
   /**
@@ -326,14 +305,7 @@ export class GoalsRepository {
     companyId: string,
     userId: string,
   ): Promise<EmployeeRefRow | undefined> {
-    const res = await tx.execute(sql`
-      select id, user_id as "userId", status, org_unit_id as "orgUnitId"
-        from employee_profiles
-       where company_id = ${companyId} and user_id = ${userId}
-         and status = 'active' and deleted_at is null
-       limit 1
-    `);
-    return (res.rows as unknown as EmployeeRefRow[])[0];
+    return findActiveActorEmployeeTx(tx, companyId, userId);
   }
 
   // ── Writes ───────────────────────────────────────────────────────────────────

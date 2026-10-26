@@ -45,11 +45,15 @@ export function TaskGoalField({ task }: { task: TaskCoreResponseDto }) {
   const canEdit = canUpdateGoal && canUpdateTask;
 
   const currentGoalId = task.goalId ?? null;
+  // S20-SEC-GOALNAMEDTO-1 — server chỉ trả cờ (không id/mã/tên) khi người xem không đọc được mục tiêu
+  // đang gắn ⇒ chip trung tính, KHÔNG picker (đổi/gỡ mục tiêu mình không thấy là thao tác mù). Chỉ cờ
+  // TƯỜNG MINH của server mới bật nhánh này: phản hồi API cũ (không cờ) giữ nguyên hành vi trước.
+  const isRestricted = task.hasGoal === true && !task.goalCode;
 
   const goalsQuery = useQuery({
     queryKey: goalKeys.list({ status: "Active", limit: GOAL_PAGE_LIMIT_MAX }),
     queryFn: () => goalApi.listGoals({ status: "Active", limit: GOAL_PAGE_LIMIT_MAX }),
-    enabled: canEdit,
+    enabled: canEdit && !isRestricted,
     staleTime: 60_000,
   });
 
@@ -91,6 +95,19 @@ export function TaskGoalField({ task }: { task: TaskCoreResponseDto }) {
   });
 
   const label = t("tasks.detail.fields.goal");
+
+  if (isRestricted) {
+    return (
+      <div className="min-w-0 space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p data-testid="task-goal-restricted" className="flex items-center gap-1.5 text-sm">
+          <Target className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="text-muted-foreground">{t("goalRef.restricted")}</span>
+        </p>
+        <p className="text-xs text-muted-foreground">{t("goalRef.restrictedHint")}</p>
+      </div>
+    );
+  }
 
   if (!canEdit) {
     return (

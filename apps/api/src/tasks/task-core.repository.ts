@@ -231,9 +231,9 @@ const TASK_CORE_SELECT = sql`
   gl.name                      AS "goalName"`;
 
 // S5-GOAL-BE-2 (additive) — JOIN `goals gl` lấy tên/mã mục tiêu đang gắn. Ràng `company_id` TƯỜNG MINH
-// trong mệnh đề ON: FK `tasks.goal_id → goals.id` là FK ĐƠN CỘT, KHÔNG ép cùng-tenant (finding gate
-// S5-GOAL-DB-1 đã chứng minh tận DB) ⇒ thiếu vế này thì một hàng lệch tenant sẽ hiện TÊN MỤC TIÊU CỦA
-// CÔNG TY KHÁC trên thẻ việc.
+// trong mệnh đề ON: phòng thủ chiều sâu — FK `(company_id, goal_id)` đã là FK GHÉP cùng-tenant từ
+// migration 0535 (trước đó là FK đơn cột, finding gate S5-GOAL-DB-1); giữ vế này để JOIN tự đúng tenant
+// kể cả khi ràng buộc DB đổi.
 const TASK_CORE_JOINS = sql`
   from tasks tk
   left join projects pr          on pr.id = tk.project_id

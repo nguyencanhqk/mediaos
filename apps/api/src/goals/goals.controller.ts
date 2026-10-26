@@ -35,8 +35,9 @@ import {
   UpdateGoalDto,
 } from "./goals.dto";
 
+/** `viaApiKey` khai báo tường minh: đường trả dữ liệu việc nhận `GoalRefUser` (cờ khoá API bắt buộc có mặt). */
 interface AuthenticatedRequest extends Request {
-  user: { id: string; companyId: string };
+  user: { id: string; companyId: string; viaApiKey: boolean | undefined };
 }
 
 /**

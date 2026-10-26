@@ -14,7 +14,7 @@ import type { CurrentPerson } from "./me-current-person.resolver";
  * Anomaly >1 employee test ở me-current-person.resolver.spec.ts (mock repo, né partial-unique DB).
  */
 
-const ACTOR = { id: "u1", companyId: "c1" };
+const ACTOR = { id: "u1", companyId: "c1", viaApiKey: undefined };
 const LINKED: CurrentPerson = {
   linkStatus: "linked",
   employee: {

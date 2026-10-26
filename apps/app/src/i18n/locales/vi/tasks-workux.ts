@@ -91,6 +91,11 @@ export default {
   fieldGate: {
     locked: "Bạn không có quyền đổi mục này.",
   },
+  // S20-SEC-GOALNAMEDTO-1 — việc gắn mục tiêu mà người xem không có quyền xem (server chỉ trả cờ).
+  goalRef: {
+    restricted: "Có mục tiêu",
+    restrictedHint: "Việc này đang gắn một mục tiêu mà bạn không có quyền xem.",
+  },
   // S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — cảnh báo sau khi giao (`warnings[]` của route action).
   // ON-LEAVE = đơn nghỉ đã duyệt trùng NGÀY HẠN của việc (task-actions.service) — không phải «đang nghỉ».
   assigneeWarning: {
