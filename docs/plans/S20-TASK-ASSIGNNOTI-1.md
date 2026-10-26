@@ -182,3 +182,15 @@ pathsNeeded (ngoài `paths`, tối thiểu):
 | F8 LOW                                                   | Chấp nhận: hạn C10 lúc 05:00Z                                                                                                      | `task-actions.service.ts:618-623`                                                                                                                                                |
 | F9 LOW                                                   | Chấp nhận một phần: warnings chỉ tính ở wrapper (§3.10); không thêm ca int cho phân rã (followup)                                  | `goal-decompose.service.ts:241-263`                                                                                                                                              |
 | F10 · F11 LOW                                            | Followup (KPI #10 chưa đo; đua đọc không khoá có sẵn như `/assign`)                                                                | `task-core.service.ts:623`, `task-actions.service.ts:522`                                                                                                                        |
+
+## §9 Kết quả đo (lane `mediaos_w26b`)
+
+- RED (`80557cc2`, mã cũ): int-spec 6 đỏ / 7 xanh — đỏ đúng C1 · C4 · C5 · C6 · C6b (0 outbox) và C10 (không có
+  `warnings`); C2 · C3 · C7 · C8 · C9 · C11 · C12 xanh theo thiết kế. Unit đỏ vì chưa có module.
+- GREEN (`ba29d9df`): int-spec 13/13 + unit 8/8 + `task-core-codegen` 4/4. Hồi quy xanh không sửa dòng nào:
+  `task-noti-e2e` · `task-actions` · `task-patch-field-gate` · `goal-be2-link` · `task-core` · `goal-tpl1-decompose`
+  · `qa2-e2e-task-noti-dash` · `dashboard-cache-invalidate` · `task-qa1-fsm-collab` · `task-move-state` ·
+  `task-kanban-move-activity` · `task-subtask-counting` + ratchet `pipeline-parity` · `outbox-worker-lock` + unit
+  `src/tasks` · `src/goals` · `src/dashboard` (455). Typecheck api + build contracts + eslint tệp chạm: sạch.
+- Đột biến (F2): cho `task.assigned` của form Tạo đi qua kết nối riêng ⇒ C1 đỏ (`xmin` outbox ≠ `xmin` hàng việc)
+  và C8 đỏ (1 outbox sau rollback). Đã hoàn nguyên.
