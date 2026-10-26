@@ -592,4 +592,21 @@ export default {
     peerUnavailable: "Không nhắn riêng được: tài khoản này đã bị khoá hoặc đã nghỉ việc.",
     failed: "Không mở được tin nhắn riêng. Vui lòng thử lại.",
   },
+
+  /**
+   * S20-CHAT-SEENBY-1 (US-CHAT-QL-03) — bảng «Đã xem · Chưa xem» trên tin CỦA TÔI. Nhãn trợ năng của dãy
+   * avatar vẫn là `message.seenBy` («Đã xem: …»). Không có chuỗi nào cho thời điểm đọc — cố ý.
+   */
+  seenBy: {
+    title: "Ai đã xem tin này",
+    nobody: "Chưa ai xem",
+    seenTab: "Đã xem ({{count}})",
+    unseenTab: "Chưa xem ({{count}})",
+    nobodySeen: "Chưa ai xem tin này.",
+    everyoneSeen: "Mọi người đã xem tin này.",
+    loading: "Đang tải danh sách…",
+    loadingLabel: "Đang tải danh sách đã xem",
+    error: "Không tải được danh sách.",
+    errorLabel: "Không tải được danh sách đã xem",
+  },
 } as const;

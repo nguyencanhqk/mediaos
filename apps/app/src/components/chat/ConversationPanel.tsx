@@ -28,12 +28,15 @@ import { roomDisplayName } from "./chat-format";
 import { useChatConversation } from "./use-chat-conversation";
 import { rosterToMentionCandidates } from "./use-mention-autocomplete";
 import { useRoomRoster } from "./use-room-roster";
+import type { SeenByRosterStatus } from "./seen-by-status";
 import { CallButtons } from "./call/CallButtons";
 import { useOptionalCallContext } from "./call/CallProvider";
 
 interface ConversationPanelProps {
   room: ChatRoomDto;
   members: readonly ChatRoomMemberDto[];
+  /** S20-CHAT-SEENBY-1 — trạng thái tải `members` (chi tiết phòng) cho bảng «Đã xem · Chưa xem». */
+  membersStatus?: SeenByRosterStatus;
   myRole: "member" | "admin" | null;
   isInfoOpen?: boolean;
   onToggleInfo?: () => void;
@@ -79,6 +82,7 @@ interface ConversationPanelProps {
 export function ConversationPanel({
   room,
   members,
+  membersStatus = "ready",
   myRole,
   isInfoOpen = false,
   onToggleInfo,
@@ -547,6 +551,7 @@ export function ConversationPanel({
           messages={messages ?? []}
           pending={pendingForRoom}
           members={members}
+          membersStatus={membersStatus}
           myUserId={myUserId}
           myRole={myRole}
           canRecallPair={canRecallPair}

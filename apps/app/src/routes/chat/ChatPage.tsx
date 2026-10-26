@@ -38,6 +38,7 @@ import { RoomListPanel } from "@/components/chat/RoomListPanel";
 import { DEFAULT_ROOM_FILTER_CHIP, type RoomFilterChip } from "@/components/chat/room-list-filter";
 import { RoomShortcuts } from "@/components/chat/use-room-shortcuts.help";
 import { roomDisplayName } from "@/components/chat/chat-format";
+import { rosterStatusOf } from "@/components/chat/seen-by-status";
 import { useChatContextWindow } from "@/components/chat/use-chat-context-window";
 import { useChatLayoutMode } from "@/components/chat/use-chat-viewport";
 import { useChatStore } from "@/stores/chat.store";
@@ -431,6 +432,7 @@ export function ChatPage({
               // S20-CHAT-DEEPLINK-1 — mở phòng (từ danh sách, liên kết hay thông báo) là sẵn sàng gõ.
               autoFocusComposer
               members={members}
+              membersStatus={rosterStatusOf(detailQuery)}
               myRole={myRole}
               isInfoOpen={isInfoOpen}
               onToggleInfo={toggleInfo}

@@ -13,6 +13,7 @@ import { chatApi, chatKeys, useCan } from "@mediaos/web-core";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
 import { useChatStore } from "@/stores/chat.store";
 import { ConversationPanel } from "../ConversationPanel";
+import { rosterStatusOf } from "../seen-by-status";
 
 interface ChatDrawerConversationProps {
   roomId: string;
@@ -55,6 +56,7 @@ export function ChatDrawerConversation({
       <ConversationPanel
         room={room}
         members={detail?.members ?? []}
+        membersStatus={rosterStatusOf(detailQuery)}
         myRole={detail?.myRole ?? null}
         showHeader={false}
         autoFocusComposer
