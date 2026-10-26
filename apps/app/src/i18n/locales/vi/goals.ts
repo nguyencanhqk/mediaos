@@ -539,4 +539,38 @@ export default {
       dueAt: "Hạn hoàn thành",
     },
   },
+
+  // ─── S20-GOAL-QUICKSTART-1 (APPEND) — tạo nhanh · đổi trạng thái một chạm ─────────────────────────
+  quickStart: {
+    // create:goal chỉ Own ⇒ ẩn hai ô Cấp + Chủ thể, chỉ còn dòng này.
+    selfAnchored: "Mục tiêu cá nhân của bạn (cấp Nhân viên).",
+    // Chỉ Own mà /auth/me không có hồ sơ (hoặc lỗi mạng): ô Chủ thể hiện để chọn tay, form không bị chặn.
+    selfMissing: "Không lấy được hồ sơ nhân sự của bạn — hãy chọn nhân viên của mục tiêu bằng tay.",
+  },
+  statusChange: {
+    activate: "Kích hoạt",
+    success: {
+      Active: "Đã kích hoạt mục tiêu «{{name}}».",
+      Completed: "Đã đánh dấu Hoàn thành «{{name}}».",
+      Draft: "Đã chuyển mục tiêu «{{name}}» về Nháp.",
+      Cancelled: "Đã huỷ mục tiêu «{{name}}».",
+    },
+    errors: {
+      forbidden: "Bạn không có quyền sửa mục tiêu này",
+      finalized: "Mục tiêu đã chốt kỳ — mở lại kỳ trước khi đổi trạng thái.",
+      generic: "Không đổi được trạng thái mục tiêu. Vui lòng thử lại.",
+    },
+    // Lý do Check-in đang khoá (hiện cạnh nút, nút trỏ aria-describedby tới đây).
+    lockReason: {
+      draft: "Mục tiêu đang ở Nháp",
+      draftHint: "Mục tiêu đang ở Nháp — bấm «Kích hoạt» để bắt đầu check-in.",
+      finalized: "Đã chốt kỳ",
+      notActive: "Chỉ check-in được mục tiêu đang chạy",
+    },
+    completeBanner: {
+      message: "Đã đạt 100%. Đánh dấu Hoàn thành?",
+      confirm: "Đánh dấu Hoàn thành",
+      later: "Để sau",
+    },
+  },
 } as const;

@@ -67,3 +67,63 @@ export function formatPeriod(
 ): string {
   return `${formatDateOnly(periodStart)} – ${formatDateOnly(periodEnd)}`;
 }
+
+// ── S20-GOAL-QUICKSTART-1 (APPEND) — trạng thái một chạm (US-GOAL-NV-02/04) ───────────────────────
+
+/** Ngưỡng gợi ý «Đánh dấu Hoàn thành» (SPEC-10 §12: chỉ GỢI Ý, không tự đổi trạng thái). */
+export const GOAL_COMPLETE_SUGGEST_PERCENT = 100;
+
+/** Phần chung của mục tiêu mà các luật dưới đây cần (Core lẫn Detail DTO đều có). */
+interface GoalStatusFacts {
+  readonly status: GoalStatusDto;
+  readonly finalizedAt: string | null;
+  readonly progressPercent: number | null;
+}
+
+/**
+ * Vì sao Check-in đang khoá — null = check-in được. Chốt kỳ xét TRƯỚC (GOAL-ERR-005 khoá mọi thao tác
+ * ghi, kể cả khi đang Nháp); Nháp tách riêng vì có lối tắt «Kích hoạt»; Hoàn thành/Đã huỷ = «không còn
+ * chạy» (GOAL-ERR-006 chỉ nhận Active).
+ */
+export type GoalCheckinLockReason = "finalized" | "draft" | "notActive";
+
+export function goalCheckinLockReason(goal: GoalStatusFacts): GoalCheckinLockReason | null {
+  if (goal.finalizedAt) return "finalized";
+  if (goal.status === "Draft") return "draft";
+  if (goal.status !== "Active") return "notActive";
+  return null;
+}
+
+/**
+ * Gợi ý «Đã đạt 100%. Đánh dấu Hoàn thành?»: Active · chưa chốt · đã đo và ≥ 100. NULL («chưa đo») và
+ * 99,5 KHÔNG gợi ý; Completed mà % tụt xuống không bao giờ tự đổi (hàm chỉ trả cờ hiển thị).
+ */
+export function shouldSuggestCompletion(goal: GoalStatusFacts): boolean {
+  return (
+    goal.status === "Active" &&
+    !goal.finalizedAt &&
+    goal.progressPercent !== null &&
+    goal.progressPercent !== undefined &&
+    goal.progressPercent >= GOAL_COMPLETE_SUGGEST_PERCENT
+  );
+}
+
+const MONTHS_PER_QUARTER = 3;
+
+/**
+ * Nhãn kỳ gọn: Quý ⇒ «Q4/2026», Năm ⇒ «2026», Tuỳ chỉnh ⇒ «DD/MM/YYYY – DD/MM/YYYY». THUẦN chuỗi (cột
+ * `date`, không đổi múi); ngày lạ ⇒ rơi về dạng khoảng ngày.
+ */
+export function goalPeriodLabel(goal: {
+  readonly periodType: "quarter" | "year" | "custom";
+  readonly periodStart: string;
+  readonly periodEnd: string;
+}): string {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(goal.periodStart);
+  if (match && goal.periodType === "quarter") {
+    const quarter = Math.ceil(Number(match[2]) / MONTHS_PER_QUARTER);
+    return `Q${quarter}/${match[1]}`;
+  }
+  if (match && goal.periodType === "year") return match[1] as string;
+  return formatPeriod(goal.periodStart, goal.periodEnd);
+}
