@@ -366,6 +366,9 @@ export default {
       demote: "Hạ xuống thành viên",
       derivedNotice:
         "Thành viên phòng {{type}} do hệ thống đồng bộ tự động — không thêm/bớt bằng tay được.",
+      // S20-CHAT-DISCUSS-1 (US-CHAT-QL-12) — lời nhắc dẫn xuất dẫn tới nơi quản lý thành viên thật.
+      derivedProjectLink: "Quản lý thành viên ở dự án →",
+      derivedDepartmentLink: "Xem phòng ban ở Nhân sự →",
       actionFailed: "Không thực hiện được thao tác thành viên.",
       // S17-CHAT-UX2-FE-4 — danh sách thành viên chuyển từ tab sang Sheet (DEC-025).
       sheetTitle: "Thành viên ({{count}})",
@@ -591,6 +594,12 @@ export default {
     menuFor: "Tuỳ chọn với {{name}}",
     peerUnavailable: "Không nhắn riêng được: tài khoản này đã bị khoá hoặc đã nghỉ việc.",
     failed: "Không mở được tin nhắn riêng. Vui lòng thử lại.",
+  },
+
+  /** S20-CHAT-DISCUSS-1 (US-CHAT-NV-11) — «Thảo luận» ở dự án / chi tiết việc mở phòng dự án. */
+  discuss: {
+    action: "Thảo luận",
+    pending: "Phòng dự án đang được tạo",
   },
 
   /**
