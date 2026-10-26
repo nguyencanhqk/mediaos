@@ -8,6 +8,9 @@
  * Lạc quan: đổi `status` ngay trong mọi cache đang giữ mục tiêu đó (chi tiết · danh sách · /me/goals) để
  * Check-in bật lên tức thì; server từ chối (403 ngoài phạm vi, 422 theo mã) ⇒ trả mục tiêu đó về trạng
  * thái cũ + toast lỗi theo mã. Dù thành hay bại đều làm mới các cache đó từ server.
+ *
+ * `{ notify: false }` (S20-GOAL-BULKACTIVATE-1): KHÔNG toast từng mục — bên gọi tự tổng kết cả lô từ kết
+ * quả `settleStatus` (lạc quan + rollback + làm mới cache vẫn y nguyên).
  */
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,9 +37,21 @@ export interface GoalStatusChange {
   readonly status: GoalStatusDto;
 }
 
+/** Kết quả một lần đổi: mục tiêu server đã lưu, hoặc lỗi GỐC (để bên gọi phân loại từ chối / mất mạng). */
+export type GoalStatusSettled =
+  | { readonly ok: true; readonly goal: GoalCoreResponseDto }
+  | { readonly ok: false; readonly error: unknown };
+
+export interface GoalStatusMutationOptions {
+  /** Toast thành công/lỗi cho TỪNG lần đổi (mặc định true). */
+  readonly notify?: boolean;
+}
+
 export interface GoalStatusMutation {
   /** Đổi trạng thái; KHÔNG ném — trả mục tiêu đã lưu, hoặc null khi server từ chối (đã rollback + toast). */
   readonly changeStatus: (change: GoalStatusChange) => Promise<GoalCoreResponseDto | null>;
+  /** Như `changeStatus` nhưng giữ lỗi gốc; KHÔNG ném (lỗi đã rollback). */
+  readonly settleStatus: (change: GoalStatusChange) => Promise<GoalStatusSettled>;
   /**
    * Mọi mục tiêu đang chờ server (để khoá đúng nút đó) — gồm MỌI lần đổi đang bay, kể cả nhiều mục tiêu
    * cùng lúc trên một hook (kích hoạt hàng loạt) và lần đổi từ hook khác (thẻ /me · header chi tiết).
@@ -141,7 +156,9 @@ export function useGoalStatusPendingIds(): ReadonlySet<string> {
   );
 }
 
-export function useGoalStatusMutation(): GoalStatusMutation {
+export function useGoalStatusMutation({
+  notify = true,
+}: GoalStatusMutationOptions = {}): GoalStatusMutation {
   const { t } = useTranslation("goals");
   const queryClient = useQueryClient();
   const patchAll = (goalId: string, status: GoalStatusDto) => {
@@ -174,10 +191,10 @@ export function useGoalStatusMutation(): GoalStatusMutation {
       // Trả về trạng thái CŨ của riêng mục tiêu này (không khôi phục cả ảnh chụp cache: nhiều lần đổi
       // song song — vd kích hoạt hàng loạt — không được đè lên nhau khi một lần bị từ chối).
       if (context?.previousStatus) patchAll(goalId, context.previousStatus);
-      toast.error(goalStatusErrorMessage(error, t));
+      if (notify) toast.error(goalStatusErrorMessage(error, t));
     },
     onSuccess: (saved, { status }) => {
-      toast.success(t(`statusChange.success.${status}`, { name: saved.name }));
+      if (notify) toast.success(t(`statusChange.success.${status}`, { name: saved.name }));
     },
     onSettled: (_saved, _error, { goalId }) => {
       for (const queryKey of [...goalInvalidation.update(goalId), [...meKeys.all, "goals"]]) {
@@ -187,11 +204,21 @@ export function useGoalStatusMutation(): GoalStatusMutation {
   });
 
   const { mutateAsync } = mutation;
-  const changeStatus = useCallback(
-    (change: GoalStatusChange) => mutateAsync(change).catch(() => null), // lỗi đã rollback + toast ở onError
+  // Lỗi đã rollback (+ toast khi notify) ở onError — ở đây chỉ chuyển thành giá trị, không ném.
+  const settleStatus = useCallback(
+    (change: GoalStatusChange): Promise<GoalStatusSettled> =>
+      mutateAsync(change).then(
+        (goal) => ({ ok: true, goal }),
+        (error: unknown) => ({ ok: false, error }),
+      ),
     [mutateAsync],
+  );
+  const changeStatus = useCallback(
+    (change: GoalStatusChange) =>
+      settleStatus(change).then((settled) => (settled.ok ? settled.goal : null)),
+    [settleStatus],
   );
 
   const pendingGoalIds = useGoalStatusPendingIds();
-  return { changeStatus, pendingGoalIds };
+  return { changeStatus, settleStatus, pendingGoalIds };
 }
