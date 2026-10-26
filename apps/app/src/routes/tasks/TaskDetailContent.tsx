@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
@@ -294,8 +294,11 @@ export function TaskDetailContent({
   taskId,
   onDeleted,
   variant = "page",
+  initialBreakdownTab = null,
 }: {
   taskId: string;
+  /** S20-TASK-QUICKEDIT-1 — mở sẵn một tab của nhóm phân rã (`checklist`); `null` ⇒ Việc con. */
+  initialBreakdownTab?: "checklist" | null;
   /** Gọi sau khi xoá thành công — trang thì quay lại danh sách, drawer thì đóng panel. */
   onDeleted: () => void;
   variant?: "page" | "drawer";
@@ -306,7 +309,11 @@ export function TaskDetailContent({
     TASK_CORE_ENGINE_PAIRS.READ.resourceType,
   );
   // Tab mặc định của mỗi nhóm; state ở đây (không trong panel con) để đổi tab không mất dữ liệu đã tải.
-  const [breakdownTab, setBreakdownTab] = useState("subtasks");
+  const [breakdownTab, setBreakdownTab] = useState<string>(initialBreakdownTab ?? "subtasks");
+  // Drawer đang mở mà link «Mở checklist» của dòng khác đổi `?taskTab=` ⇒ chuyển tab theo.
+  useEffect(() => {
+    if (initialBreakdownTab) setBreakdownTab(initialBreakdownTab);
+  }, [initialBreakdownTab, taskId]);
   const [collabTab, setCollabTab] = useState("comments");
   const isDrawer = variant === "drawer";
 

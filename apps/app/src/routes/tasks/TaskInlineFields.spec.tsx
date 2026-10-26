@@ -2,7 +2,14 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi, taskCollabApi, taskStatesApi, hrApi } from "@mediaos/web-core";
+import {
+  ApiError,
+  useAuthStore,
+  taskCoreApi,
+  taskCollabApi,
+  taskStatesApi,
+  hrApi,
+} from "@mediaos/web-core";
 import { Toaster, toast } from "@mediaos/ui";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import {
@@ -12,6 +19,7 @@ import {
   TaskDeadlineField,
   TaskAssigneeField,
   TaskAssigneeDeadlineFields,
+  TaskRowAssigneeControl,
 } from "./TaskInlineFields";
 
 /**
@@ -172,6 +180,24 @@ describe("TaskInlineFields", () => {
       // Vẫn thấy giá trị ở dạng badge tĩnh.
       expect(screen.getByText("Cần làm")).toBeInTheDocument();
     });
+
+    // S20-TASK-QUICKEDIT-1 — menu chỉ có chuyển hợp lệ theo task-fsm.ts (D-18).
+    it("việc Đã hủy: menu chỉ có Cần làm / Đang làm (không Chờ review / Hoàn thành)", () => {
+      setCapabilities({ "update-status:task": true });
+      renderWithQuery(<TaskStatusField task={{ ...TASK, status: "Cancelled" }} />);
+      fireEvent.click(screen.getByTestId("task-status-select"));
+      const names = within(screen.getByRole("listbox"))
+        .getAllByRole("option")
+        .map((o) => o.textContent);
+      expect(names).toEqual(["Cần làm", "Đang làm", "Đã hủy"]);
+    });
+
+    it("việc Hoàn thành mở lại được (D-18): menu đủ 5 trạng thái", () => {
+      setCapabilities({ "update-status:task": true });
+      renderWithQuery(<TaskStatusField task={{ ...TASK, status: "Done" }} />);
+      fireEvent.click(screen.getByTestId("task-status-select"));
+      expect(within(screen.getByRole("listbox")).getAllByRole("option")).toHaveLength(5);
+    });
   });
 
   // ── Ưu tiên ────────────────────────────────────────────────────────────────
@@ -223,6 +249,36 @@ describe("TaskInlineFields", () => {
       setCapabilities({});
       renderWithQuery(<TaskDeadlineField task={TASK} />);
       expect(screen.queryByLabelText(/deadline/i)).not.toBeInTheDocument();
+      expect(screen.queryByTestId("task-deadline-quick")).not.toBeInTheDocument();
+    });
+
+    // S20-TASK-QUICKEDIT-1 — chip mốc nhanh cạnh ô hạn: 2 thao tác, lưu NGAY qua change-deadline.
+    it("«Chọn nhanh» → «Ngày mai» lưu ngay qua change-deadline (17:00 giờ công ty), không PATCH", async () => {
+      setCapabilities({ "update-deadline:task": true });
+      vi.mocked(taskCoreApi.changeDeadline).mockResolvedValue({ task: TASK } as never);
+      renderWithQuery(<TaskDeadlineField task={TASK} />);
+      fireEvent.click(screen.getByTestId("task-deadline-quick"));
+      expect(screen.queryByTestId("task-deadline-quick-custom")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("task-deadline-quick-preset-tomorrow"));
+      await waitFor(() => expect(taskCoreApi.changeDeadline).toHaveBeenCalledTimes(1));
+      const [, body] = vi.mocked(taskCoreApi.changeDeadline).mock.calls[0] ?? [];
+      expect(body?.dueAt).toMatch(/T10:00:00[.]000Z$/);
+      expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
+    });
+
+    it("start_at sau mốc ⇒ lỗi CHECK của server hiện câu dễ hiểu", async () => {
+      setCapabilities({ "update-deadline:task": true });
+      vi.mocked(taskCoreApi.changeDeadline).mockRejectedValue(
+        new ApiError({
+          status: 400,
+          code: "VALIDATION-ERR-001",
+          message: "TASK-ERR-INVALID-DATE-RANGE: hạn chót không được sớm hơn ngày bắt đầu.",
+        }),
+      );
+      renderWithQuery(<TaskDeadlineField task={TASK} />);
+      fireEvent.click(screen.getByTestId("task-deadline-quick"));
+      fireEvent.click(screen.getByTestId("task-deadline-quick-preset-tomorrow"));
+      expect(await screen.findByRole("alert")).toHaveTextContent(/sớm hơn ngày bắt đầu/i);
     });
 
     // S20-TASK-ASSIGNWARN-1 — change-deadline cũng trả ASSIGNEE-ON-LEAVE (buildDeadlineWarnings của
@@ -462,6 +518,49 @@ describe("TaskInlineFields", () => {
         });
         expect(screen.getByRole("status")).toBeEmptyDOMElement();
       });
+    });
+  });
+  // S20-TASK-OVERDUEDESK-1 (US-TASK-QL-07) — ô Người TRÊN DÒNG (trang Quá hạn): cùng route assign.
+  describe("TaskRowAssigneeControl", () => {
+    const openRowPicker = () => fireEvent.click(screen.getByTestId("task-row-assignee-task-001"));
+
+    it("thiếu assign:task ⇒ chữ tĩnh, KHÔNG có nút mở picker", () => {
+      setCapabilities({ "read:employee": true });
+      renderWithQuery(<TaskRowAssigneeControl task={TASK} />);
+      expect(screen.queryByTestId("task-row-assignee-task-001")).not.toBeInTheDocument();
+      expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument();
+      expect(hrApi.listEmployees).not.toHaveBeenCalled();
+    });
+
+    it("chọn người ⇒ gọi route assign, KHÔNG PATCH", async () => {
+      setCapabilities({ "assign:task": true, "read:employee": true });
+      vi.mocked(taskCoreApi.assign).mockReturnValue(new Promise(() => {}));
+      renderWithQuery(<TaskRowAssigneeControl task={TASK} />);
+
+      openRowPicker();
+      const panel = await screen.findByRole("dialog");
+      fireEvent.click(await within(panel).findByText("Trần Thị B"));
+      await waitFor(() =>
+        expect(taskCoreApi.assign).toHaveBeenCalledWith("task-001", {
+          assigneeEmployeeId: "emp-002",
+        }),
+      );
+      expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
+    });
+
+    it("server từ chối 403 ⇒ câu «không có quyền đổi người phụ trách» dưới ô", async () => {
+      setCapabilities({ "assign:task": true, "read:employee": true });
+      vi.mocked(taskCoreApi.assign).mockRejectedValue(
+        new ApiError({ status: 403, code: "AUTH-ERR-403", message: "Forbidden" }),
+      );
+      renderWithQuery(<TaskRowAssigneeControl task={TASK} />);
+
+      openRowPicker();
+      const panel = await screen.findByRole("dialog");
+      fireEvent.click(await within(panel).findByText("Trần Thị B"));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        /không có quyền đổi người phụ trách/i,
+      );
     });
   });
 });
