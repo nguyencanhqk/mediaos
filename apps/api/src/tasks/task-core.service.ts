@@ -14,6 +14,7 @@ import type {
   MoveTaskStateRequest,
   MyTaskItemDto,
   SubtaskListItemDto,
+  TaskCoreCreateResponseDto,
   TaskCoreResponseDto,
   TaskCoreSourceDto,
   UpdateTaskCoreRequest,
@@ -35,6 +36,7 @@ import {
 } from "./task-core.repository";
 import { TaskActivityService } from "./task-activity.service";
 import { TaskActionsService } from "./task-actions.service";
+import { TaskAssignEvents } from "./task-assign-events";
 import { ProjectAccessService } from "./project-access.service";
 import {
   TaskPatchFieldGate,
@@ -163,6 +165,8 @@ export class TaskCoreService {
     private readonly patchGate: TaskPatchFieldGate,
     // S20-SEC-GOALNAMEDTO-1 — quyết định đọc mục tiêu cho tham chiếu mục tiêu của bản ghi việc. CUỐI.
     private readonly goalRefs: TaskGoalRefPolicy,
+    // S20-TASK-ASSIGNNOTI-1 — nhật ký tạo/sửa + sự kiện người/hạn/ưu tiên dùng chung với `/assign`. CUỐI.
+    private readonly assignEvents: TaskAssignEvents,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -389,7 +393,10 @@ export class TaskCoreService {
     return createScope;
   }
 
-  async createTask(user: RequestUser, dto: CreateTaskCoreRequest): Promise<TaskCoreResponseDto> {
+  async createTask(
+    user: RequestUser,
+    dto: CreateTaskCoreRequest,
+  ): Promise<TaskCoreCreateResponseDto> {
     const createScope = await this.resolveCreateGate(user, dto);
     // S5-NOTI-FIX-2 / S5-TASK-HRCODE-1: cấp task_code Ở TX RIÊNG TRƯỚC business tx (mirror
     // allocateEmployeeCode) — counter FOR UPDATE serialize (0 dup) rồi COMMIT ngay, KHÔNG giữ lock suốt tx
@@ -400,7 +407,12 @@ export class TaskCoreService {
     const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const created = await this.createTaskInTx(tx, user, dto, { createScope, taskCode });
-      return this.reload({ tx, viewer }, created.id);
+      // Cảnh báo như `/assign` (nghỉ phép · ngoài dự án) — chỉ đường HTTP và chỉ khi có người phụ trách
+      // (không ⇒ không đọc lại hàng); phân rã không tốn truy vấn.
+      const warnings = dto.assigneeEmployeeId
+        ? await this.assignEvents.createdWarningsTx(tx, user.companyId, created.id)
+        : [];
+      return { ...(await this.reload({ tx, viewer }, created.id)), warnings };
     });
   }
 
@@ -554,15 +566,13 @@ export class TaskCoreService {
       goalId: ctx.goalId ?? null,
     });
 
-    await this.activity.record(tx, {
-      action: "TASK_CREATED",
-      targetType: "Task",
-      targetId: created.id,
-      taskId: created.id,
-      projectId: effectiveProjectId,
-      actorUserId: user.id,
+    // S20-TASK-ASSIGNNOTI-1 — activity + audit TASK_CREATED và (giao cho người khác) task.assigned, CÙNG tx,
+    // TRƯỚC recompute bên dưới: lỗi ở bất kỳ bước sau nào cũng rollback cả sự kiện.
+    await this.assignEvents.recordCreatedTx(tx, {
+      actor: user,
       actorEmployeeId: actorEmp?.id ?? null,
-      newValues: {
+      task: { id: created.id, title: dto.title, taskCode, projectId: effectiveProjectId },
+      snapshot: {
         title: dto.title,
         status: initialStatus,
         stateId,
@@ -570,21 +580,7 @@ export class TaskCoreService {
         projectId: effectiveProjectId,
         parentTaskId: dto.parentTaskId ?? null,
       },
-      message: `Tạo công việc ${dto.title}`,
-    });
-    await this.audit.record(tx, {
-      action: "TaskCreated",
-      objectType: "task",
-      objectId: created.id,
-      actorUserId: user.id,
-      after: {
-        title: dto.title,
-        status: initialStatus,
-        stateId,
-        assigneeEmployeeId: assignee?.employeeId ?? null,
-        projectId: effectiveProjectId,
-        parentTaskId: dto.parentTaskId ?? null,
-      },
+      assignee,
     });
 
     // S5-GOAL-BE-2 (SPEC-10 §13.3) — VIỆC MỚI LÀM ĐỔI MẪU SỐ của mục tiêu mode='project' trong dự án
@@ -758,44 +754,16 @@ export class TaskCoreService {
       // Audit KHÔNG NÓI DỐI (finding gate lane contracts): stateId có bản ghi TASK_STATE_CHANGED
       // RIÊNG (trong applyStateChangeTx) ⇒ loại khỏi TASK_UPDATED; trường có cổng không đổi không ghi ⇒
       // không khai (I-3). Rỗng (vd. PATCH chỉ-có-stateId) ⇒ bỏ hẳn TASK_UPDATED (không ghi bản ghi rỗng).
-      const auditedChanges = auditedPatchFields(dto, fieldChanges);
-      if (Object.keys(auditedChanges).length > 0) {
-        const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-        await this.activity.record(tx, {
-          action: "TASK_UPDATED",
-          targetType: "Task",
-          targetId: id,
-          taskId: id,
-          projectId: raw.projectId,
-          actorUserId: user.id,
-          actorEmployeeId: actorEmp?.id ?? null,
-          // S5-TASK-SUBTASK-1 — CHỐNG "THẺ BIẾN MẤT CÂM": gán cha làm thẻ rời board, đó là thay đổi
-          // người dùng NHÌN THẤY nên phải có dòng lịch sử. Ghi oldValues CHỈ cho parentTaskId/stateId
-          // (không đổi hình dạng bản ghi cho mọi field — spec timeline #245 đang pin `newValues`);
-          // TaskActivityTimeline dựng dòng cũ→mới từ cặp này.
-          ...(parentChanged
-            ? {
-                oldValues: { parentTaskId: raw.parentTaskId, stateId: raw.stateId },
-                message: dto.parentTaskId
-                  ? "Chuyển thành việc con"
-                  : "Tách khỏi việc cha thành việc độc lập",
-              }
-            : { message: "Cập nhật công việc" }),
-          newValues: parentChanged
-            ? { ...auditedChanges, parentTaskId: dto.parentTaskId ?? null, stateId: null }
-            : auditedChanges,
-        });
-        await this.audit.record(tx, {
-          action: "TaskUpdated",
-          objectType: "task",
-          objectId: id,
-          actorUserId: user.id,
-          before: parentChanged
-            ? { changed: Object.keys(auditedChanges), parentTaskId: raw.parentTaskId }
-            : { changed: Object.keys(auditedChanges) },
-          after: auditedChanges,
-        });
-      }
+      // S20-TASK-ASSIGNNOTI-1 — + sự kiện của trường có cổng ĐỔI (CHUNG helper với `/assign`), CÙNG tx.
+      await this.assignEvents.recordPatchedTx(tx, {
+        actor: user,
+        taskId: id,
+        before: raw,
+        auditedChanges: auditedPatchFields(dto, fieldChanges),
+        parentChanged,
+        newParentTaskId: dto.parentTaskId ?? null,
+        fieldChanges,
+      });
 
       // S5-GOAL-BE-2 (SPEC-10 §13.3) — ĐỔI DỰ ÁN của task ⇒ mẫu số của goal mode='project' đổi ở CẢ HAI
       // đầu: dự án CŨ mất một việc, dự án MỚI nhận thêm. Tính lại cả hai, CÙNG TX.

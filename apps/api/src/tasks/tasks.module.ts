@@ -18,6 +18,8 @@ import { TaskCoreService } from "./task-core.service";
 import { TaskCoreRepository } from "./task-core.repository";
 // S20-SEC-TASKPATCHGATE-1 (additive) — cổng trường của PATCH /tasks/:taskId (hạn · ưu tiên · người phụ trách).
 import { TaskPatchFieldGate } from "./task-patch-field-gate";
+// S20-TASK-ASSIGNNOTI-1 (additive) — bộ phát sự kiện giao việc dùng chung (form Tạo/Sửa + route chuyên trách).
+import { TaskAssignEvents } from "./task-assign-events";
 // S4-TASK-BE-3 (additive) — Task actions crown-FSM (assign/change-status/priority/deadline/watch).
 import { TaskActionsService } from "./task-actions.service";
 import { TaskActionsRepository } from "./task-actions.repository";
@@ -97,6 +99,7 @@ import { GoalProgressEngineRepository } from "./goal-progress-engine.repository"
     TaskCoreService,
     TaskCoreRepository,
     TaskPatchFieldGate,
+    TaskAssignEvents,
     // S4-TASK-BE-3 — Task actions crown-FSM stack (tái dùng TaskCoreRepository/DataScope/Outbox/Setting).
     TaskActionsService,
     TaskActionsRepository,

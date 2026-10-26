@@ -37,6 +37,8 @@ import {
 } from "./task-goal-ref.policy";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { CoverPresignService } from "../foundation/files/cover-presign.service";
+// S20-TASK-ASSIGNNOTI-1 — MỘT nguồn phát sự kiện người/hạn/ưu tiên (dùng chung với form Tạo/Sửa).
+import { TaskAssignEvents, assignKind, commonTaskPayload } from "./task-assign-events";
 
 type RequestUser = GoalRefUser;
 
@@ -93,6 +95,8 @@ export class TaskActionsService {
     private readonly covers: CoverPresignService,
     // S20-SEC-GOALNAMEDTO-1 — tham chiếu mục tiêu của phản hồi theo quyết định đọc mục tiêu. CUỐI.
     private readonly goalRefs: TaskGoalRefPolicy,
+    // S20-TASK-ASSIGNNOTI-1 — bộ phát sự kiện giao việc dùng chung. CUỐI.
+    private readonly assignEvents: TaskAssignEvents,
   ) {}
 
   // ══════════════════════ ASSIGN ══════════════════════
@@ -114,7 +118,6 @@ export class TaskActionsService {
         return this.respond(tx, viewer, taskId, []);
       }
 
-      const isFirst = raw.mainAssigneeEmployeeId === null;
       // swap-Main tolerant (Risk #7: BE-2 chưa ghi task_assignees ⇒ soft-remove có thể 0 hàng).
       await this.repo.softRemoveMainAssigneesTx(tx, user.companyId, taskId, user.id);
       await this.repo.insertMainAssigneeTx(
@@ -133,13 +136,16 @@ export class TaskActionsService {
         user.id,
       );
 
-      const warnings = await this.buildAssignWarnings(tx, user.companyId, raw, assignee);
+      const warnings = await this.assignEvents.buildAssignWarningsTx(
+        tx,
+        user.companyId,
+        raw,
+        assignee,
+      );
 
-      const action = isFirst ? "TASK_ASSIGNED" : "TASK_ASSIGNEE_CHANGED";
-      const eventType = isFirst ? "task.assigned" : "task.assignee_changed";
-      const eventCode = isFirst ? "TASK_ASSIGNED" : "TASK_ASSIGNEE_CHANGED";
+      const kind = assignKind(raw.mainAssigneeEmployeeId);
       await this.activity.record(tx, {
-        action,
+        action: kind.code,
         targetType: "Assignee",
         targetId: assignee.employeeId,
         taskId,
@@ -151,21 +157,19 @@ export class TaskActionsService {
         message: dto.reason ?? null,
       });
       await this.audit.record(tx, {
-        action: isFirst ? "TaskAssigned" : "TaskAssigneeChanged",
+        action: kind.auditAction,
         objectType: "task",
         objectId: taskId,
         actorUserId: user.id,
         before: { assigneeEmployeeId: raw.mainAssigneeEmployeeId },
         after: { assigneeEmployeeId: assignee.employeeId },
       });
-      await this.outbox.enqueue(tx, {
-        eventType,
-        payload: {
-          ...this.commonPayload(eventCode, raw, user, actorEmp?.id ?? null),
-          oldAssigneeEmployeeId: raw.mainAssigneeEmployeeId,
-          assigneeEmployeeId: assignee.employeeId,
-          assigneeUserId: assignee.userId,
-        },
+      await this.assignEvents.enqueueAssigneeTx(tx, {
+        task: raw,
+        actor: user,
+        actorEmployeeId: actorEmp?.id ?? null,
+        oldAssigneeEmployeeId: raw.mainAssigneeEmployeeId,
+        assignee,
       });
 
       return this.respond(tx, viewer, taskId, warnings);
@@ -276,7 +280,7 @@ export class TaskActionsService {
     await this.outbox.enqueue(tx, {
       eventType: "task.status_changed",
       payload: {
-        ...this.commonPayload("TASK_STATUS_CHANGED", raw, user, actorEmp?.id ?? null),
+        ...commonTaskPayload("TASK_STATUS_CHANGED", raw, user.id, actorEmp?.id ?? null),
         fromStatus: t.from,
         toStatus: t.to,
         assigneeUserId: raw.assigneeUserId,
@@ -344,14 +348,13 @@ export class TaskActionsService {
         before: { priority: raw.taskPriority },
         after: { priority: dto.priority },
       });
-      await this.outbox.enqueue(tx, {
-        eventType: "task.priority_changed",
-        payload: {
-          ...this.commonPayload("TASK_PRIORITY_CHANGED", raw, user, actorEmp?.id ?? null),
-          oldPriority: raw.taskPriority,
-          newPriority: dto.priority,
-          assigneeUserId: raw.assigneeUserId,
-        },
+      await this.assignEvents.enqueuePriorityTx(tx, {
+        task: raw,
+        actor: user,
+        actorEmployeeId: actorEmp?.id ?? null,
+        oldPriority: raw.taskPriority,
+        newPriority: dto.priority,
+        assigneeUserId: raw.assigneeUserId,
       });
 
       return this.respond(tx, viewer, taskId, []);
@@ -391,7 +394,12 @@ export class TaskActionsService {
       const updated = await this.repo.updateDueTx(tx, user.companyId, taskId, newDue, user.id);
       if (!updated) throw new NotFoundException(ERR.NOT_FOUND);
 
-      const warnings = await this.buildDeadlineWarnings(tx, user.companyId, raw, newDue);
+      const warnings = await this.assignEvents.buildDeadlineWarningsTx(
+        tx,
+        user.companyId,
+        raw,
+        newDue,
+      );
       const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
       await this.activity.record(tx, {
         action: "TASK_DUE_DATE_CHANGED",
@@ -413,14 +421,13 @@ export class TaskActionsService {
         before: { dueAt: this.toIso(raw.dueAt) },
         after: { dueAt: newDue },
       });
-      await this.outbox.enqueue(tx, {
-        eventType: "task.due_date_changed",
-        payload: {
-          ...this.commonPayload("TASK_DUE_DATE_CHANGED", raw, user, actorEmp?.id ?? null),
-          oldDueAt: this.toIso(raw.dueAt),
-          newDueAt: newDue,
-          assigneeUserId: raw.assigneeUserId,
-        },
+      await this.assignEvents.enqueueDueDateTx(tx, {
+        task: raw,
+        actor: user,
+        actorEmployeeId: actorEmp?.id ?? null,
+        oldDueAt: this.toIso(raw.dueAt),
+        newDueAt: newDue,
+        assigneeUserId: raw.assigneeUserId,
       });
 
       return this.respond(tx, viewer, taskId, warnings);
@@ -608,65 +615,8 @@ export class TaskActionsService {
     if (!inScope) throw new ForbiddenException(ERR.ASSIGNEE_OUT_OF_SCOPE);
   }
 
-  private async buildAssignWarnings(
-    tx: TenantTx,
-    companyId: string,
-    raw: ActionTaskRaw,
-    assignee: { employeeId: string; userId: string },
-  ): Promise<TaskActionWarning[]> {
-    const warnings: TaskActionWarning[] = [];
-    const dueIso = this.toIso(raw.dueAt);
-    if (dueIso) {
-      const onLeave = await this.repo.hasApprovedLeaveOnDateTx(
-        tx,
-        companyId,
-        dueIso.slice(0, 10),
-        assignee.userId,
-        assignee.employeeId,
-      );
-      if (onLeave) warnings.push(this.warnOnLeave());
-    }
-    if (raw.projectId) {
-      const isMember = await this.repo.isEmployeeProjectMemberTx(
-        tx,
-        companyId,
-        raw.projectId,
-        assignee.employeeId,
-      );
-      if (!isMember) warnings.push(this.warnNotMember());
-    }
-    return warnings;
-  }
-
-  private async buildDeadlineWarnings(
-    tx: TenantTx,
-    companyId: string,
-    raw: ActionTaskRaw,
-    newDue: string | null,
-  ): Promise<TaskActionWarning[]> {
-    if (!newDue || !raw.mainAssigneeEmployeeId) return [];
-    const onLeave = await this.repo.hasApprovedLeaveOnDateTx(
-      tx,
-      companyId,
-      newDue.slice(0, 10),
-      raw.assigneeUserId,
-      raw.mainAssigneeEmployeeId,
-    );
-    return onLeave ? [this.warnOnLeave()] : [];
-  }
-
-  private warnOnLeave(): TaskActionWarning {
-    return {
-      code: "TASK-WARN-ASSIGNEE-ON-LEAVE",
-      message: "Người nhận việc có đơn nghỉ phép đã duyệt trùng với mốc thời gian.",
-    };
-  }
-  private warnNotMember(): TaskActionWarning {
-    return {
-      code: "TASK-WARN-ASSIGNEE-NOT-MEMBER",
-      message: "Người nhận việc không thuộc thành viên dự án của công việc.",
-    };
-  }
+  // buildAssignWarnings / buildDeadlineWarnings / warnOnLeave / warnNotMember DỜI sang TaskAssignEvents
+  // (S20-TASK-ASSIGNNOTI-1) — form Tạo dùng CHUNG cảnh báo với `/assign`.
 
   /**
    * Setting checklist (ĐK-3) — GỌI TRƯỚC KHI MỞ TX: SettingService.resolveSetting tự mở withTenant
@@ -715,24 +665,6 @@ export class TaskActionsService {
 
   private isTruthy(v: unknown): boolean {
     return v === true || v === "true" || v === 1 || v === "1";
-  }
-
-  /** Payload chung (non-sensitive): eventCode/taskId/taskTitle/taskCode/projectId/actorUserId/actorEmployeeId. */
-  private commonPayload(
-    eventCode: string,
-    raw: ActionTaskRaw,
-    user: RequestUser,
-    actorEmployeeId: string | null,
-  ): Record<string, unknown> {
-    return {
-      eventCode,
-      taskId: raw.id,
-      taskTitle: raw.title,
-      taskCode: raw.taskCode,
-      projectId: raw.projectId,
-      actorUserId: user.id,
-      actorEmployeeId,
-    };
   }
 
   /**

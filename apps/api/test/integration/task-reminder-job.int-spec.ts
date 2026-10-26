@@ -25,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
 import { DatabaseService } from "../../src/db/db.service";
+import { OutboxWorker } from "../../src/events/outbox-worker";
 import { NotificationEngineService } from "../../src/notifications/notification-engine.service";
 import { TaskReminderJobHandler } from "../../src/notifications/task-reminder.job-handler";
 import { queryReminderCandidates } from "../../src/notifications/task-reminder.job-handler.query";
@@ -32,6 +33,12 @@ import type { JobRunResult } from "../../src/scheduler/job-handler";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { loginPasswordFixture } from "../helpers/fixture-secrets";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
+import {
+  acquireOutboxWorkerLock,
+  OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS,
+  type OutboxWorkerLock,
+} from "../helpers/outbox-worker-lock";
 import {
   cleanupTenants,
   seedCompany,
@@ -82,6 +89,7 @@ function meta(res: JobRunResult, key: string): unknown {
 describe.skipIf(!runDb)("S20-TASK-DUEREMIND-1 — nhắc hạn việc SPEC-06", () => {
   const direct: Pool = directPool();
   let nest: INestApplication;
+  let outboxLock: OutboxWorkerLock | undefined;
   let handler: TaskReminderJobHandler;
   let A: SeededTenant;
   let B: SeededTenant;
@@ -247,13 +255,29 @@ describe.skipIf(!runDb)("S20-TASK-DUEREMIND-1 — nhắc hạn việc SPEC-06", 
     await direct.query("UPDATE tasks SET task_type = 'workflow_step' WHERE id = $1", [t.otherType]);
     t.inactive = await mkTask("rep", "duerem-r11-inactive", "nv3", -2 * HOUR_MS);
     await direct.query("UPDATE employee_profiles SET status = 'inactive' WHERE id = $1", [emp.nv3]);
-  });
+
+    // POST /tasks (task.assigned — S20-TASK-ASSIGNNOTI-1) · change-status · change-deadline đều phát outbox.
+    // Giữ khoá worker cả spec rồi drain trước khi dọn ⇒ không để event mồ côi cho spec khác nhặt SAU khi
+    // user đã bị xoá (audit `notification_skipped` vỡ FK actor — KI-015 / KI-059).
+    outboxLock = await acquireOutboxWorkerLock("task-reminder-job");
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
+    try {
+      if (outboxLock && A && B) {
+        await drainOutboxUntilSettled({
+          worker: nest.get(OutboxWorker),
+          direct,
+          companyIds: [A.companyId, B.companyId],
+        });
+      }
+    } finally {
+      await outboxLock?.release();
+    }
     await nest?.close();
     if (A && B) await cleanupTenants(direct, [A.companyId, B.companyId]);
     await direct.end();
-  });
+  }, OUTBOX_WORKER_LOCK_HOOK_TIMEOUT_MS);
 
   it("R1 · việc hạn trong 24h ⇒ đúng 1 TASK_DUE_SOON cho người phụ trách", async () => {
     const first = await run(A.companyId);
