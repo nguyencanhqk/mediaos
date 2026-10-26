@@ -375,8 +375,10 @@ describe("MessageList · số chưa đọc vượt trang đầu (> 50)", () => {
     expect(onLoadOlder).toHaveBeenCalledTimes(1);
   });
 
-  it("220 tin chưa đọc (4 trang nạp thêm) ⇒ trang 4 còn đang bay thì CHƯA định vị; trang 4 về mới đặt vạch đúng mốc", async () => {
+  it("55 tin chưa đọc (4 trang nạp thêm) ⇒ trang 4 còn đang bay thì CHƯA định vị; trang 4 về mới đặt vạch đúng mốc", async () => {
     // Bản sao có thể đổi: vạch ở trang 4 nằm chỗ khác vạch tạm ở tin cũ nhất của trang 3.
+    // Phép định vị không phụ thuộc cỡ trang (chỉ so tin cũ nhất với mốc + đếm trang đã về) ⇒ trang 10 tin
+    // giữ đúng kịch bản 4 trang mà jsdom chỉ dựng ~60 tin; bản 50 tin/trang (250 tin) quá 5 s trên CI.
     const layout: FakeLayout = { ...LAYOUT };
     installLayout(layout);
     const resolvers: Array<(added: number) => void> = [];
@@ -386,34 +388,34 @@ describe("MessageList · số chưa đọc vượt trang đầu (> 50)", () => {
           resolvers.push(resolve);
         }),
     );
-    // last 300, 220 chưa đọc ⇒ mốc 81. Trang đầu 251..300; mỗi trang thêm 50 ⇒ trang 4 (51..300) chứa mốc.
-    const room = roomWith({ lastMessageSeq: 300, unreadCount: 220 });
+    // last 65, 55 chưa đọc ⇒ mốc 11. Trang đầu 56..65; mỗi trang thêm 10 ⇒ trang 4 (6..65) chứa mốc.
+    const room = roomWith({ lastMessageSeq: 65, unreadCount: 55 });
     const view = (from: number): React.ReactElement =>
-      listElement({ room, messages: range(from, 300), hasMoreOlder: true, onLoadOlder });
-    const { rerender } = render(view(251));
+      listElement({ room, messages: range(from, 65), hasMoreOlder: true, onLoadOlder });
+    const { rerender } = render(view(56));
 
-    for (const from of [201, 151, 101]) {
+    for (const from of [46, 36, 26]) {
       await act(async () => {
         rerender(view(from));
-        resolvers[resolvers.length - 1](50);
+        resolvers[resolvers.length - 1](10);
       });
     }
 
-    // Trang 4 đang bay: vạch «phía trên» ở tin 101 là chỗ SAI — mốc thật sắp về.
+    // Trang 4 đang bay: vạch «phía trên» ở tin 26 là chỗ SAI — mốc thật sắp về.
     expect(onLoadOlder).toHaveBeenCalledTimes(4);
     expect(screen.queryByTestId(DIVIDER)).toBeNull();
     expect(scroller().scrollTop).toBe(0);
 
     layout.dividerTop = 2500;
     await act(async () => {
-      rerender(view(51));
-      resolvers[3](50);
+      rerender(view(6));
+      resolvers[3](20);
     });
 
     const divider = screen.getByTestId(DIVIDER);
-    expect(divider.textContent).toContain("220 tin chưa đọc");
-    expect(precedes(messageNode(80), divider)).toBe(true);
-    expect(precedes(divider, messageNode(81))).toBe(true);
+    expect(divider.textContent).toContain("55 tin chưa đọc");
+    expect(precedes(messageNode(10), divider)).toBe(true);
+    expect(precedes(divider, messageNode(11))).toBe(true);
     expect(screen.queryByText(/còn tin chưa đọc phía trên/i)).toBeNull();
     expect(scroller().scrollTop).toBe(2500 - UNREAD_DIVIDER_TOP_GAP_PX);
     expect(onLoadOlder).toHaveBeenCalledTimes(4);

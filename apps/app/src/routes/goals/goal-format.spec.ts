@@ -7,8 +7,11 @@ import {
   formatDateOnly,
   formatPeriod,
   formatProgress,
+  goalCheckinLockReason,
+  goalPeriodLabel,
   goalStatusBadgeVariant,
   isUnmeasured,
+  shouldSuggestCompletion,
 } from "./goal-format";
 
 describe("formatProgress — chưa đo (NULL) KHÁC 0%", () => {
@@ -66,5 +69,64 @@ describe("formatDateOnly / formatPeriod — thuần chuỗi, không lệch timez
   });
   it("kỳ 'DD/MM/YYYY – DD/MM/YYYY'", () => {
     expect(formatPeriod("2026-01-01", "2026-03-31")).toBe("01/01/2026 – 31/03/2026");
+  });
+});
+
+// ── S20-GOAL-QUICKSTART-1 — luật trạng thái một chạm ─────────────────────────────────────────────
+
+describe("goalCheckinLockReason", () => {
+  const base = { status: "Active" as const, finalizedAt: null, progressPercent: 40 };
+  it("Active chưa chốt ⇒ null (check-in được)", () => {
+    expect(goalCheckinLockReason(base)).toBeNull();
+  });
+  it("chốt kỳ xét trước Nháp", () => {
+    expect(goalCheckinLockReason({ ...base, status: "Draft", finalizedAt: "2026-04-01" })).toBe(
+      "finalized",
+    );
+  });
+  it("Nháp ⇒ draft; Hoàn thành/Đã huỷ ⇒ notActive", () => {
+    expect(goalCheckinLockReason({ ...base, status: "Draft" })).toBe("draft");
+    expect(goalCheckinLockReason({ ...base, status: "Completed" })).toBe("notActive");
+    expect(goalCheckinLockReason({ ...base, status: "Cancelled" })).toBe("notActive");
+  });
+});
+
+describe("shouldSuggestCompletion", () => {
+  const base = { status: "Active" as const, finalizedAt: null, progressPercent: 100 };
+  it("Active · chưa chốt · ≥ 100 ⇒ true (kể cả vượt 100)", () => {
+    expect(shouldSuggestCompletion(base)).toBe(true);
+    expect(shouldSuggestCompletion({ ...base, progressPercent: 120 })).toBe(true);
+  });
+  it("99,5 · NULL · đã chốt · không Active ⇒ false", () => {
+    expect(shouldSuggestCompletion({ ...base, progressPercent: 99.5 })).toBe(false);
+    expect(shouldSuggestCompletion({ ...base, progressPercent: null })).toBe(false);
+    expect(shouldSuggestCompletion({ ...base, finalizedAt: "2026-04-01" })).toBe(false);
+    expect(shouldSuggestCompletion({ ...base, status: "Completed" })).toBe(false);
+    expect(shouldSuggestCompletion({ ...base, status: "Draft" })).toBe(false);
+  });
+});
+
+describe("goalPeriodLabel", () => {
+  it("Quý ⇒ Qn/YYYY · Năm ⇒ YYYY · Tuỳ chỉnh ⇒ khoảng ngày", () => {
+    expect(
+      goalPeriodLabel({
+        periodType: "quarter",
+        periodStart: "2026-10-01",
+        periodEnd: "2026-12-31",
+      }),
+    ).toBe("Q4/2026");
+    expect(
+      goalPeriodLabel({
+        periodType: "quarter",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-03-31",
+      }),
+    ).toBe("Q1/2026");
+    expect(
+      goalPeriodLabel({ periodType: "year", periodStart: "2026-01-01", periodEnd: "2026-12-31" }),
+    ).toBe("2026");
+    expect(
+      goalPeriodLabel({ periodType: "custom", periodStart: "2026-02-01", periodEnd: "2026-03-15" }),
+    ).toBe("01/02/2026 – 15/03/2026");
   });
 });

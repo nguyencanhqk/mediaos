@@ -14,16 +14,13 @@ import {
   hrKeys,
   taskProjectApi,
   taskKeys,
-  quarterRange,
   useCan,
-  yearRange,
 } from "@mediaos/web-core";
 import type { GoalCoreResponseDto } from "@mediaos/contracts";
 import { Button, Card, CardContent, Input, Select, toast } from "@mediaos/ui";
 import { EmployeePicker } from "@/routes/tasks/EmployeePicker";
 import {
   GOAL_LEVEL_OPTIONS,
-  GOAL_MEASURE_TYPE_OPTIONS,
   GOAL_PERIOD_TYPE_OPTIONS,
   GOAL_PROGRESS_MODE_OPTIONS,
   GOAL_STATUS_OPTIONS,
@@ -36,11 +33,17 @@ import {
   toUpdateDto,
   type GoalFormValues,
 } from "./goal-form-schema";
+import { nextGoalFormValues, type GoalFormPrefill } from "./goal-form-prefill";
 import {
-  applyGoalFormPrefill,
-  nextGoalFormValues,
-  type GoalFormPrefill,
-} from "./goal-form-prefill";
+  defaultGoalStatusForLevel,
+  goalCreateInitialValues,
+  goalPeriodRangeFor,
+  shouldAnchorSelf,
+} from "./goal-form-defaults";
+import { useGoalFormQuickStart } from "./hooks/use-goal-form-quick-start";
+import { useGoalParentPeriod } from "./hooks/use-goal-parent-period";
+import { GoalMeasureTypeChoice } from "./components/GoalMeasureTypeChoice";
+import { GoalParentCombobox } from "./components/GoalParentCombobox";
 
 interface GoalFormPageProps {
   /** Có → SỬA; không → TẠO. */
@@ -54,7 +57,7 @@ interface GoalFormPageProps {
 }
 
 /** Các select có danh mục tải sau — cần ghi lại giá trị lên DOM khi option tới. */
-const ASYNC_OPTION_FIELDS = ["departmentId", "projectId", "parentGoalId"] as const;
+const ASYNC_OPTION_FIELDS = ["departmentId", "projectId"] as const;
 
 /**
  * GOAL-SCREEN-003 (S5-GOAL-FE-1) — form tạo/sửa mục tiêu. Một component cho CẢ create + edit
@@ -84,6 +87,27 @@ export function GoalFormPage({
   });
   const finalizedLocked = Boolean(detailQuery.data?.finalizedAt);
 
+  // S20-GOAL-QUICKSTART-1 — mặc định thông minh khi TẠO: cấp · người · kỳ · trạng thái (giá trị đầu đọc
+  // MỘT lần lúc mở form; hồ sơ tới muộn thì điền chủ thể ở effect bên dưới).
+  const quick = useGoalFormQuickStart(!isEdit);
+  const [initialValues] = useState<GoalFormValues>(() =>
+    isEdit
+      ? EMPTY_GOAL_FORM
+      : goalCreateInitialValues(
+          {
+            now: new Date(),
+            timeZone: companyTimeZone(),
+            selfEmployeeId: quick.selfEmployeeId,
+            ownOnly: quick.ownOnly,
+          },
+          prefill ?? {},
+        ),
+  );
+  const anchorSelf = !isEdit && shouldAnchorSelf(quick.ownOnly, prefill ?? {});
+  // Trạng thái theo cấp (Q11 = B) cho tới khi người dùng tự chọn trạng thái. Mở từ mục tiêu cha ⇒ trạng
+  // thái đã theo luật LISTURL (Active) — coi như đã chọn, đổi cấp KHÔNG ghi đè.
+  const statusTouchedRef = useRef(!isEdit && Boolean(prefill?.parentGoalId));
+
   const {
     register,
     handleSubmit,
@@ -95,11 +119,18 @@ export function GoalFormPage({
   } = useForm<GoalFormValues>({
     resolver: zodResolver(goalFormSchema),
     mode: "onSubmit",
-    defaultValues: isEdit ? EMPTY_GOAL_FORM : applyGoalFormPrefill(EMPTY_GOAL_FORM, prefill ?? {}),
+    defaultValues: initialValues,
   });
 
+  useEffect(() => {
+    if (!anchorSelf || !quick.selfEmployeeId) return;
+    if (getValues("level") === "employee" && getValues("employeeId") === "") {
+      setValue("employeeId", quick.selfEmployeeId);
+    }
+  }, [anchorSelf, quick.selfEmployeeId, getValues, setValue]);
+
   // S20-GOAL-LISTURL-1 — cha điền sẵn phải TỒN TẠI và CHƯA chốt kỳ; không thì cảnh báo + bỏ cha (BE
-  // vẫn là cổng cuối). Cha hợp lệ luôn có trong select dù nằm ngoài 200 mục tiêu của danh sách chọn.
+  // vẫn là cổng cuối). Cha hợp lệ hiện ngay trong ô chọn cha dù nằm ngoài các trang gợi ý.
   const prefillParentId = isEdit ? undefined : prefill?.parentGoalId;
   const parentQuery = useQuery({
     queryKey: goalKeys.detail(prefillParentId ?? ""),
@@ -125,6 +156,9 @@ export function GoalFormPage({
   }, [isEdit, detailQuery.data, reset]);
 
   const level = watch("level");
+  const parentGoalId = watch("parentGoalId");
+  const periodStart = watch("periodStart");
+  const periodEnd = watch("periodEnd");
   const measureType = watch("measureType");
   const progressMode = watch("progressMode");
   const employeeId = watch("employeeId");
@@ -164,19 +198,17 @@ export function GoalFormPage({
     return map;
   }, [employeesPage]);
 
-  // Mục tiêu cha (tùy chọn) — mọi goal trừ chính nó.
-  const { data: parentCandidates } = useQuery({
-    queryKey: goalKeys.list({ scope: "parent-picker" }),
-    queryFn: () => goalApi.listGoals({ limit: 200 }),
-    enabled: level !== "",
-    staleTime: 30_000,
-  });
-  const parentOptions = useMemo(() => {
-    const list = (parentCandidates ?? []).filter((g) => g.id !== goalId);
-    return validParent && !list.some((g) => g.id === validParent.id)
-      ? [validParent, ...list]
-      : list;
-  }, [parentCandidates, goalId, validParent]);
+  // S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — cha chọn qua ô tìm; kỳ theo cha khi kỳ còn mặc định.
+  const { selfDepartmentId, parentLabel, periodOutsideParent, selectParent, markPeriodTouched } =
+    useGoalParentPeriod({
+      isEdit,
+      parentGoalId,
+      periodStart,
+      periodEnd,
+      validParent,
+      editParent: detailQuery.data?.parent,
+      setValue,
+    });
 
   // Select không điều khiển: giá trị điền sẵn đặt TRƯỚC khi option tải về thì DOM hiện ô trống trong
   // khi form vẫn giữ giá trị ⇒ ghi lại lên DOM mỗi khi một danh mục tới.
@@ -185,17 +217,11 @@ export function GoalFormPage({
       const value = getValues(name);
       if (value) setValue(name, value);
     }
-  }, [departments, projectsList, parentOptions, getValues, setValue]);
+  }, [departments, projectsList, getValues, setValue]);
 
-  /** Chọn Quý/Năm ⇒ điền ngày theo giờ công ty (vẫn sửa tay được). */
+  /** Chọn Quý/Năm ⇒ điền ngày theo giờ công ty (vẫn sửa tay được); Tuỳ chỉnh giữ ngày đang có. */
   const fillPeriodDates = (periodType: string) => {
-    const now = new Date();
-    const range =
-      periodType === "quarter"
-        ? quarterRange(now, companyTimeZone())
-        : periodType === "year"
-          ? yearRange(now, companyTimeZone())
-          : null;
+    const range = goalPeriodRangeFor(periodType, new Date(), companyTimeZone());
     if (!range) return;
     setValue("periodStart", range.start);
     setValue("periodEnd", range.end);
@@ -223,7 +249,13 @@ export function GoalFormPage({
       }
       if (addAnotherRef.current) {
         toast.success(t("form.savedAndNext", { name: saved.name }));
-        reset(nextGoalFormValues(values));
+        const next = nextGoalFormValues(values);
+        // Chỉ Own ⇒ chủ thể chỉ có thể là mình (ô đang ẩn) — giữ lại thay vì xoá như phân rã cho người khác.
+        reset(
+          quick.ownOnly && quick.selfEmployeeId
+            ? { ...next, employeeId: quick.selfEmployeeId }
+            : next,
+        );
         return;
       }
       if (validParent && saved.parentGoalId === validParent.id && onCreatedFromParent) {
@@ -264,6 +296,11 @@ export function GoalFormPage({
   }
 
   const disabled = finalizedLocked || saveMutation.isPending;
+  // Chỉ Own ⇒ ẩn Cấp + Chủ thể (là chính mình). Không lấy được hồ sơ, hoặc ô Chủ thể đang báo lỗi ⇒ hiện
+  // ô Chủ thể để chọn tay (không chặn form).
+  const selfMissing = anchorSelf && quick.selfSettled && !quick.selfEmployeeId;
+  const hideLevel = !isEdit && quick.ownOnly;
+  const hideSelfAnchor = hideLevel && !selfMissing && !errors.employeeId;
 
   return (
     <form onSubmit={submit(false)} className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
@@ -324,16 +361,35 @@ export function GoalFormPage({
       <Card>
         <CardContent className="space-y-4 pt-6">
           <p className="text-sm font-semibold text-foreground">{t("form.sections.anchor")}</p>
-          <Field label={t("form.fields.level")} error={errFor(errors.level?.message, t)} required>
-            <Select {...register("level")} disabled={disabled || isEdit}>
-              <option value="">{t("form.fields.level")}…</option>
-              {GOAL_LEVEL_OPTIONS.map((lv) => (
-                <option key={lv} value={lv}>
-                  {t(`level.${lv}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {selfMissing && level === "employee" && (
+            <p className="flex items-center gap-2 text-sm text-warning" role="status">
+              <TriangleAlert className="h-4 w-4 shrink-0" />
+              {t("quickStart.selfMissing")}
+            </p>
+          )}
+          {hideLevel ? (
+            <p className="text-sm text-muted-foreground">{t("quickStart.selfAnchored")}</p>
+          ) : (
+            <Field label={t("form.fields.level")} error={errFor(errors.level?.message, t)} required>
+              <Select
+                {...register("level", {
+                  onChange: (e) => {
+                    if (!isEdit && !statusTouchedRef.current) {
+                      setValue("status", defaultGoalStatusForLevel(e.target.value));
+                    }
+                  },
+                })}
+                disabled={disabled || isEdit}
+              >
+                <option value="">{t("form.fields.level")}…</option>
+                {GOAL_LEVEL_OPTIONS.map((lv) => (
+                  <option key={lv} value={lv}>
+                    {t(`level.${lv}`)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
 
           {level === "department" && (
             <Field
@@ -369,7 +425,7 @@ export function GoalFormPage({
             </Field>
           )}
 
-          {level === "employee" && (
+          {level === "employee" && !hideSelfAnchor && (
             <Field
               label={t("form.fields.employee")}
               error={errFor(errors.employeeId?.message, t)}
@@ -401,17 +457,18 @@ export function GoalFormPage({
             </Select>
           </Field>
 
-          {/* Mục tiêu cha (tùy chọn) */}
-          <Field label={t("form.fields.parentGoal")} hint={t("form.hints.parentOptional")}>
-            <Select {...register("parentGoalId")} disabled={disabled}>
-              <option value="">{t("form.placeholders.selectParent")}</option>
-              {parentOptions.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.goalCode} — {g.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {/* Mục tiêu cha (tùy chọn) — ô tìm, gợi ý cùng phòng + cùng kỳ (NV-12) */}
+          <GoalParentCombobox
+            label={t("form.fields.parentGoal")}
+            hint={t("form.hints.parentOptional")}
+            selected={parentGoalId ? parentLabel : null}
+            onSelect={selectParent}
+            excludeGoalId={goalId}
+            departmentId={selfDepartmentId}
+            periodFrom={periodStart}
+            periodTo={periodEnd}
+            disabled={disabled}
+          />
         </CardContent>
       </Card>
 
@@ -422,7 +479,12 @@ export function GoalFormPage({
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label={t("form.fields.periodType")}>
               <Select
-                {...register("periodType", { onChange: (e) => fillPeriodDates(e.target.value) })}
+                {...register("periodType", {
+                  onChange: (e) => {
+                    markPeriodTouched();
+                    fillPeriodDates(e.target.value);
+                  },
+                })}
                 disabled={disabled}
               >
                 {GOAL_PERIOD_TYPE_OPTIONS.map((p) => (
@@ -437,16 +499,33 @@ export function GoalFormPage({
               error={errFor(errors.periodStart?.message, t)}
               required
             >
-              <Input type="date" {...register("periodStart")} disabled={disabled} />
+              <Input
+                type="date"
+                {...register("periodStart", { onChange: markPeriodTouched })}
+                disabled={disabled}
+              />
             </Field>
             <Field
               label={t("form.fields.periodEnd")}
               error={errFor(errors.periodEnd?.message, t)}
               required
             >
-              <Input type="date" {...register("periodEnd")} disabled={disabled} />
+              <Input
+                type="date"
+                {...register("periodEnd", { onChange: markPeriodTouched })}
+                disabled={disabled}
+              />
             </Field>
           </div>
+          {periodOutsideParent && (
+            <p
+              className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-warning"
+              role="status"
+            >
+              <TriangleAlert className="h-4 w-4 shrink-0" />
+              {t("form.periodOutsideParent")}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -464,15 +543,11 @@ export function GoalFormPage({
                 ))}
               </Select>
             </Field>
-            <Field label={t("form.fields.measureType")}>
-              <Select {...register("measureType")} disabled={disabled}>
-                {GOAL_MEASURE_TYPE_OPTIONS.map((m) => (
-                  <option key={m} value={m}>
-                    {t(`measureType.${m}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <GoalMeasureTypeChoice
+              registration={register("measureType")}
+              value={measureType}
+              disabled={disabled}
+            />
             <Field
               label={t("form.fields.targetValue")}
               error={errFor(errors.targetValue?.message, t)}
@@ -499,7 +574,14 @@ export function GoalFormPage({
               <Input type="number" step="any" {...register("weight")} disabled={disabled} />
             </Field>
             <Field label={t("form.fields.status")}>
-              <Select {...register("status")} disabled={disabled}>
+              <Select
+                {...register("status", {
+                  onChange: () => {
+                    statusTouchedRef.current = true;
+                  },
+                })}
+                disabled={disabled}
+              >
                 {GOAL_STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
                     {t(`status.${s}`)}

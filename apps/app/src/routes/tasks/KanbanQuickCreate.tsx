@@ -1,9 +1,11 @@
-import { useState, type KeyboardEvent } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { taskCoreApi, taskKeys, taskCoreInvalidation, useCan, ApiError } from "@mediaos/web-core";
+import { taskKeys, taskProjectApi, useCan } from "@mediaos/web-core";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
+import type { PreferredEmployee } from "./EmployeePicker";
+import { TaskQuickAdd } from "./TaskQuickAdd";
 
 /**
  * KanbanQuickCreate — S5-TASK-BOARD-UX-1. Nút "+" đáy cột pipeline: bấm → ô nhập ngay TRONG cột,
@@ -19,74 +21,42 @@ import { TASK_CORE_ENGINE_PAIRS } from "./constants";
  *
  * CHỈ dùng cho cột chế độ pipeline (columnMode:'state'). Cột chế độ status cũ KHÔNG có nút này:
  * server từ chối `stateId` ở chế độ đó nên việc tạo ra sẽ rơi vào cột mặc định — sai cột người dùng
- * vừa bấm, tệ hơn là không có nút.
+ * vừa bấm, tệ hơn là không có nút. Board chế độ status tạo việc qua «Tạo công việc» của board.
  *
  * Sau khi tạo: ô nhập TỰ XOÁ và GIỮ focus để gõ tiếp việc sau (nhập liên tiếp), Esc để đóng.
+ *
+ * S20-TASK-QUICKADD-1 (US-TASK-QL-06) — ô nhập là `TaskQuickAdd` dùng chung, thêm chip «Người» (cần
+ * `assign:task`; thành viên dự án đứng đầu picker) + «Hạn» (cần `update-deadline:task`), giữ qua các
+ * lần Enter; Esc đóng ô và xoá chip. Server tự kiểm người phụ trách (thành viên dự án / phạm vi).
  */
+const MEMBERS_STALE_TIME_MS = 60_000;
+
 export function KanbanQuickCreate({ projectId, stateId }: { projectId: string; stateId: string }) {
   const { t } = useTranslation("tasks");
-  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [errorKey, setErrorKey] = useState<string | null>(null);
 
-  const canCreate = useCan(
-    TASK_CORE_ENGINE_PAIRS.CREATE.action,
-    TASK_CORE_ENGINE_PAIRS.CREATE.resourceType,
-  );
-  const canSetState = useCan(
-    TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.action,
-    TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.resourceType,
-  );
+  const { CREATE, UPDATE_STATE, ASSIGN } = TASK_CORE_ENGINE_PAIRS;
+  const canCreate = useCan(CREATE.action, CREATE.resourceType);
+  const canSetState = useCan(UPDATE_STATE.action, UPDATE_STATE.resourceType);
+  const canAssign = useCan(ASSIGN.action, ASSIGN.resourceType);
+  const canReadProject = useCan("read", "project");
 
-  const createMutation = useMutation({
-    mutationFn: (value: string) => taskCoreApi.createTask({ title: value, projectId, stateId }),
-    onSuccess: () => {
-      // Board KHÔNG nằm trong taskCoreInvalidation.list() ⇒ phải invalidate key kanban TƯỜNG MINH,
-      // nếu không thẻ mới chỉ hiện sau khi hết staleTime 15s (refetchOnWindowFocus đang tắt).
-      void queryClient.invalidateQueries({ queryKey: taskKeys.kanban(projectId) });
-      for (const key of taskCoreInvalidation.list())
-        void queryClient.invalidateQueries({ queryKey: key });
-      for (const key of taskCoreInvalidation.my())
-        void queryClient.invalidateQueries({ queryKey: key });
-    },
-    onError: (err: unknown) => {
-      if (err instanceof ApiError) {
-        if (err.status === 403) return setErrorKey("tasks.kanban.quickCreate.errors.forbidden");
-        if (err.status === 400) return setErrorKey("tasks.kanban.quickCreate.errors.badRequest");
-      }
-      setErrorKey("tasks.kanban.quickCreate.errors.generic");
-    },
+  // Thành viên dự án cho chip Người — chỉ tải khi ô MỞ (mỗi cột có một ô; khoá chung ⇒ cache-hit).
+  const { data: members } = useQuery({
+    queryKey: taskKeys.projects.members(projectId),
+    queryFn: () => taskProjectApi.listMembers(projectId),
+    enabled: open && canAssign && canReadProject,
+    staleTime: MEMBERS_STALE_TIME_MS,
   });
-
-  const close = () => {
-    setOpen(false);
-    setTitle("");
-    setErrorKey(null);
-  };
-
-  const submit = () => {
-    const value = title.trim();
-    if (!value) return;
-    setErrorKey(null);
-    // Xoá ô NGAY (không đợi server) để gõ tiếp việc kế — lỗi thì báo ở dòng dưới, người dùng gõ lại.
-    setTitle("");
-    createMutation.mutate(value);
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      submit();
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      // stopPropagation: cột nằm trong board, tránh Esc lọt lên đóng panel/modal đang mở ngoài.
-      e.stopPropagation();
-      close();
-    }
-  };
+  const preferred = useMemo<readonly PreferredEmployee[]>(
+    () =>
+      (members ?? []).flatMap((m) =>
+        m.employeeId && m.status === "Active" && !m.removedAt
+          ? [{ id: m.employeeId, fullName: m.employeeName, avatarUrl: null }]
+          : [],
+      ),
+    [members],
+  );
 
   if (!canCreate || !canSetState) return null;
 
@@ -105,32 +75,17 @@ export function KanbanQuickCreate({ projectId, stateId }: { projectId: string; s
   }
 
   return (
-    <div className="space-y-1">
-      <input
-        autoFocus
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={onKeyDown}
-        // Rời ô mà chưa gõ gì ⇒ tự thu lại (không để ô trống lởm chởm trên board). Còn chữ thì GIỮ
-        // để không nuốt mất phần người dùng đang soạn dở khi lỡ click ra ngoài.
-        onBlur={() => {
-          if (!title.trim()) close();
-        }}
-        maxLength={500}
-        placeholder={t("tasks.kanban.quickCreate.placeholder")}
-        aria-label={t("tasks.kanban.quickCreate.placeholder")}
-        data-testid={`kanban-quick-create-input-${stateId}`}
-        className="w-full rounded-md border border-border bg-card px-2.5 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus:border-primary"
-      />
-      {errorKey ? (
-        <p role="alert" className="px-1 text-xs text-destructive">
-          {t(errorKey)}
-        </p>
-      ) : (
-        <p className="px-1 text-[11px] text-muted-foreground">
-          {t("tasks.kanban.quickCreate.hint")}
-        </p>
-      )}
-    </div>
+    <TaskQuickAdd
+      id={`kanban-quick-create-${stateId}`}
+      inputTestId={`kanban-quick-create-input-${stateId}`}
+      projectId={projectId}
+      stateId={stateId}
+      withAssigneeChip
+      preferredAssignees={preferred}
+      placeholder={t("tasks.kanban.quickCreate.placeholder")}
+      hint={t("tasks.kanban.quickCreate.hint")}
+      autoFocus
+      onClose={() => setOpen(false)}
+    />
   );
 }
