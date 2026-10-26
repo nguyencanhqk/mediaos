@@ -1,4 +1,4 @@
-import { useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -149,6 +149,11 @@ export function TaskQuickAdd({
   const canSetDeadline = useCan(UPDATE_DEADLINE.action, UPDATE_DEADLINE.resourceType);
   const showAssigneeChip = withAssigneeChip && canAssign && !fixedAssigneeEmployeeId;
   useKeyFocus(shortcutKey ?? null, inputRef);
+  // `autoFocus` của DOM chỉ có tác dụng lúc gắn ô; ô gắn khi còn khoá (vd «Việc của tôi» đang hỏi /auth/me)
+  // thì focus khi ô vừa mở khoá — S20-DASH-QUICKACTION-1 (`?create=1`).
+  useEffect(() => {
+    if (autoFocus && !disabled) inputRef.current?.focus();
+  }, [autoFocus, disabled]);
 
   const createMutation = useMutation({
     mutationFn: (body: CreateTaskCoreRequest) => taskCoreApi.createTask(body),

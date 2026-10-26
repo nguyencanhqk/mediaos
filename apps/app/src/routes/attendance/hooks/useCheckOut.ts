@@ -5,6 +5,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CheckOutRequest } from "@mediaos/contracts";
 import { attendanceApi, attendanceInvalidation } from "@mediaos/web-core";
+import { invalidateAfterCheck } from "./invalidate-after-check";
 
 export function useCheckOut() {
   const queryClient = useQueryClient();
@@ -12,9 +13,7 @@ export function useCheckOut() {
   return useMutation({
     mutationFn: (body: CheckOutRequest) => attendanceApi.checkOut(body),
     onSuccess: async () => {
-      for (const key of attendanceInvalidation.checkOut()) {
-        await queryClient.invalidateQueries({ queryKey: key });
-      }
+      await invalidateAfterCheck(queryClient, attendanceInvalidation.checkOut());
     },
     retry: false,
   });

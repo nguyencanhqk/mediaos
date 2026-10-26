@@ -123,6 +123,8 @@ export * from "./dashboard-resolver";
 // S4-DASH-BE-2 (additive): Widget DATA contracts (GET /dashboard/widgets · /widgets/:slug) — data thật
 // + quick action + error/cache state, tách khỏi ./dashboard-resolver (registry, data=null).
 export * from "./dashboard-widget-data";
+// S20-DASH-QUICKACTION-1 (additive): đích điều hướng quick action — nguồn chung API phát + FE đối chiếu route.
+export * from "./dashboard-quick-action-targets";
 export * from "./evaluation";
 export * from "./kpi";
 export * from "./payroll";

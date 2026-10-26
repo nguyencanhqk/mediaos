@@ -7,6 +7,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CheckInRequest } from "@mediaos/contracts";
 import { attendanceApi, attendanceInvalidation } from "@mediaos/web-core";
+import { invalidateAfterCheck } from "./invalidate-after-check";
 
 export function useCheckIn() {
   const queryClient = useQueryClient();
@@ -14,10 +15,8 @@ export function useCheckIn() {
   return useMutation({
     mutationFn: (body: CheckInRequest) => attendanceApi.checkIn(body),
     onSuccess: async () => {
-      // Invalidate today + my-records để UI cập nhật ngay sau check-in.
-      for (const key of attendanceInvalidation.checkIn()) {
-        await queryClient.invalidateQueries({ queryKey: key });
-      }
+      // Invalidate today + my-records để UI cập nhật ngay sau check-in; widget dashboard chỉ đánh dấu cũ.
+      await invalidateAfterCheck(queryClient, attendanceInvalidation.checkIn());
     },
     // Không retry mutation (idempotency: server dùng upsert theo (employee_id, work_date)).
     retry: false,
