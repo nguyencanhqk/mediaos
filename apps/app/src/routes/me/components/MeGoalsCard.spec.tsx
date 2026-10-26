@@ -6,11 +6,11 @@
  * (GET /me/goals) fail-soft độc lập khỏi getOverview. Tiến độ LUÔN qua GoalProgressBar — NULL là
  * "chưa đo", KHÔNG in "0%" (SPEC-10 §13.2).
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
-import { useAuthStore } from "@mediaos/web-core";
+import { goalApi, useAuthStore } from "@mediaos/web-core";
 import type { GoalCoreResponseDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
 import { MeGoalsCard } from "./MeGoalsCard";
@@ -20,11 +20,17 @@ vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mockNavigate }));
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
-  return { ...actual, meApi: { ...actual.meApi, getGoals: vi.fn() } };
+  return {
+    ...actual,
+    meApi: { ...actual.meApi, getGoals: vi.fn() },
+    // S20-GOAL-QUICKSTART-1 — «Kích hoạt» trên thẻ = PATCH {status} qua hook dùng chung.
+    goalApi: { ...actual.goalApi, updateGoal: vi.fn() },
+  };
 });
 
 import { meApi } from "@mediaos/web-core";
 const mockGetGoals = meApi.getGoals as ReturnType<typeof vi.fn>;
+const mockUpdateGoal = goalApi.updateGoal as ReturnType<typeof vi.fn>;
 
 function makeGoal(over: Partial<GoalCoreResponseDto> = {}): GoalCoreResponseDto {
   return {
@@ -151,5 +157,157 @@ describe("MeGoalsCard — check-in nhanh gate ('checkin','goal')", () => {
     mockGetGoals.mockResolvedValue([makeGoal({ finalizedAt: "2026-04-01T00:00:00.000Z" })]);
     renderCard();
     expect(await screen.findByTestId("me-goal-checkin-g-1")).toBeDisabled();
+  });
+});
+
+// ── S20-GOAL-QUICKSTART-1 (US-GOAL-NV-04) — thẻ thấy cả Nháp, theo kỳ, tối đa 5 dòng ────────────────
+describe("MeGoalsCard — kỳ hiện tại, cả Nháp (NV-04)", () => {
+  const OPEN_CAPS = { "access:goal": true, "checkin:goal": true, "update:goal": true };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 01:00 ngày 01/10/2026 giờ công ty (máy múi tây vẫn ở 30/09) ⇒ kỳ hiện tại = Q4/2026.
+    vi.setSystemTime(new Date("2026-09-30T18:00:00.000Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("(c1) gọi /me/goals với periodFrom/periodTo quý hiện tại (giờ công ty), limit 20, lọc ở server riêng Active và Nháp", async () => {
+    setCaps(OPEN_CAPS);
+    renderCard();
+    await waitFor(() => expect(mockGetGoals).toHaveBeenCalledTimes(2));
+    const period = { periodFrom: "2026-10-01", periodTo: "2026-12-31", limit: 20 };
+    expect(mockGetGoals).toHaveBeenCalledWith({ ...period, status: "Active" });
+    expect(mockGetGoals).toHaveBeenCalledWith({ ...period, status: "Draft" });
+  });
+
+  it("(c1b) 20 dòng đầu của kỳ toàn mục đã đóng ⇒ mục Active/Nháp vẫn hiện (không bị đẩy khỏi trang)", async () => {
+    setCaps(OPEN_CAPS);
+    // Server xếp period_start DESC, goal_code ASC — không ưu tiên mục đang mở: không lọc status thì
+    // 20 dòng đầu có thể toàn Completed/Cancelled.
+    const closed = Array.from({ length: 20 }, (_, i) =>
+      makeGoal({ id: `x-${i}`, goalCode: `GOAL-${i}`, name: `Đã xong ${i}`, status: "Completed" }),
+    );
+    mockGetGoals.mockImplementation((params: { status?: string }) => {
+      if (params.status === "Active") {
+        return Promise.resolve([makeGoal({ id: "a-9", goalCode: "GOAL-90", name: "Đang chạy" })]);
+      }
+      if (params.status === "Draft") {
+        return Promise.resolve([
+          makeGoal({ id: "d-9", goalCode: "GOAL-91", name: "Còn nháp", status: "Draft" }),
+        ]);
+      }
+      return Promise.resolve(closed);
+    });
+    renderCard();
+
+    expect(await screen.findByText("Đang chạy")).toBeInTheDocument();
+    expect(screen.getByText("Còn nháp")).toBeInTheDocument();
+    expect(screen.queryByText("Đã xong 0")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Xem tất cả \(2\)/ })).toBeInTheDocument();
+  });
+
+  it("(c2) 2 Active + 1 Nháp (+ Completed/Cancelled) ⇒ hiện 3; Nháp có badge, «Kích hoạt», Check-in khoá có lý do", async () => {
+    setCaps(OPEN_CAPS);
+    mockGetGoals.mockResolvedValue([
+      makeGoal({ id: "a-1", name: "Active một" }),
+      makeGoal({ id: "a-2", name: "Active hai" }),
+      makeGoal({ id: "d-1", name: "Nháp một", status: "Draft" }),
+      makeGoal({ id: "x-1", name: "Xong rồi", status: "Completed" }),
+      makeGoal({ id: "x-2", name: "Đã huỷ", status: "Cancelled" }),
+    ]);
+    renderCard();
+    const draftRow = (await screen.findByText("Nháp một")).closest("li") as HTMLElement;
+    expect(screen.getByText("Active một")).toBeInTheDocument();
+    expect(screen.getByText("Active hai")).toBeInTheDocument();
+    expect(screen.queryByText("Xong rồi")).not.toBeInTheDocument();
+    expect(screen.queryByText("Đã huỷ")).not.toBeInTheDocument();
+    expect(within(draftRow).getByText("Nháp")).toBeInTheDocument();
+    expect(within(draftRow).getByRole("button", { name: "Kích hoạt" })).toBeEnabled();
+    expect(screen.getByTestId("me-goal-checkin-d-1")).toBeDisabled();
+    expect(within(draftRow).getByText(/Mục tiêu đang ở Nháp/)).toBeInTheDocument();
+    expect(screen.getByTestId("me-goal-checkin-a-1")).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Xem tất cả \(3\)/ })).toBeInTheDocument();
+  });
+
+  it("(c3) 7 mục đang mở ⇒ 5 dòng + «Xem tất cả (7)» → /goals?mine=1", async () => {
+    setCaps(OPEN_CAPS);
+    mockGetGoals.mockResolvedValue(
+      Array.from({ length: 7 }, (_, i) => makeGoal({ id: `g-${i}`, name: `Mục tiêu ${i}` })),
+    );
+    renderCard();
+    await screen.findByText("Mục tiêu 0");
+    expect(screen.getAllByRole("listitem")).toHaveLength(5);
+    expect(screen.queryByText("Mục tiêu 5")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Xem tất cả \(7\)/ }));
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/goals", search: { mine: 1 } });
+  });
+
+  it("(c4) bấm tên ⇒ mở chi tiết; nhãn kỳ Q4/2026", async () => {
+    setCaps(OPEN_CAPS);
+    mockGetGoals.mockResolvedValue([
+      makeGoal({ periodStart: "2026-10-01", periodEnd: "2026-12-31", periodType: "quarter" }),
+    ]);
+    renderCard();
+    fireEvent.click(await screen.findByRole("button", { name: /Tăng doanh thu 20%/ }));
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/goals/$goalId", params: { goalId: "g-1" } });
+    expect(screen.getByText("Q4/2026")).toBeInTheDocument();
+  });
+
+  it("(c5) rỗng ⇒ «Tạo mục tiêu» chỉ khi có create:goal", async () => {
+    setCaps({ ...OPEN_CAPS, "create:goal": true });
+    const view = renderCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Tạo mục tiêu" }));
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/goals/new" });
+    view.unmount();
+
+    setCaps(OPEN_CAPS);
+    renderCard();
+    await screen.findByText(/chưa có mục tiêu/i);
+    expect(screen.queryByRole("button", { name: "Tạo mục tiêu" })).not.toBeInTheDocument();
+  });
+
+  it("(c6) thiếu update:goal ⇒ mục Nháp không có «Kích hoạt»", async () => {
+    setCaps({ "access:goal": true, "checkin:goal": true });
+    mockGetGoals.mockResolvedValue([makeGoal({ status: "Draft" })]);
+    renderCard();
+    await screen.findByText("Tăng doanh thu 20%");
+    expect(screen.queryByRole("button", { name: "Kích hoạt" })).not.toBeInTheDocument();
+  });
+
+  it("(c7) «Kích hoạt» ⇒ PATCH {status:'Active'} qua hook dùng chung", async () => {
+    setCaps(OPEN_CAPS);
+    mockGetGoals.mockResolvedValue([makeGoal({ status: "Draft" })]);
+    let confirm: (saved: unknown) => void = () => undefined;
+    mockUpdateGoal.mockReturnValue(
+      new Promise((resolve) => {
+        confirm = resolve;
+      }),
+    );
+    renderCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Kích hoạt" }));
+    // mutationFn chạy SAU onMutate (huỷ query đang chạy + ghi lạc quan) ⇒ chờ một nhịp.
+    await waitFor(() => expect(mockUpdateGoal).toHaveBeenCalledWith("g-1", { status: "Active" }));
+    // Lạc quan đổi dòng sang Active ngay, nhưng Check-in chờ server xác nhận (server có thể từ chối).
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Kích hoạt" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("me-goal-checkin-g-1")).toBeDisabled();
+    mockGetGoals.mockResolvedValue([makeGoal({ status: "Active" })]);
+    confirm(makeGoal({ status: "Active" }));
+    await waitFor(() => expect(screen.getByTestId("me-goal-checkin-g-1")).toBeEnabled());
+  });
+
+  it("(c8) API lỗi ⇒ «Thử lại» gọi lại /me/goals", async () => {
+    setCaps(OPEN_CAPS);
+    mockGetGoals.mockRejectedValue(new Error("500"));
+    renderCard();
+    const retry = await screen.findByRole("button", { name: /Thử lại/ });
+    const callsBefore = mockGetGoals.mock.calls.length;
+    fireEvent.click(retry);
+    // Lần tải đầu: một request cho Active, một cho Nháp — «Thử lại» gọi lại cả hai.
+    expect(callsBefore).toBe(2);
+    await waitFor(() => expect(mockGetGoals).toHaveBeenCalledTimes(callsBefore + 2));
   });
 });

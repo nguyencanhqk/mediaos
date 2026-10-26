@@ -2,12 +2,13 @@ import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "r
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { ChevronDown, ChevronRight, ListTodo, RefreshCw, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, ListTodo, Plus, RefreshCw, Search } from "lucide-react";
 import { companyTimeZone, formatDateTime, taskCoreApi, taskKeys, useCan } from "@mediaos/web-core";
 import { Button, Card, Checkbox, EmptyState, Input, PageHeader } from "@mediaos/ui";
 import type { MyTaskItemDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
-import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskRowDeadlineControl, TaskRowStatusControl } from "./TaskRowQuickEdit";
 import { useTaskDrawer } from "./task-drawer-nav";
 import {
   filterMyTasks,
@@ -19,6 +20,9 @@ import {
   type MyTasksSearch,
 } from "./my-tasks-groups";
 import { useSlashFocus } from "./use-slash-focus";
+import { TaskQuickAdd } from "./TaskQuickAdd";
+import { TaskFormDrawer } from "./TaskFormDrawer";
+import { useMyEmployeeLink } from "./use-my-employee";
 
 /**
  * MyTasksPage — S4-FE-TASK-2 (SPEC-06 §13.9, TASK-SCREEN-009) · S20-TASK-MYTASKS-1 (US-TASK-NV-01).
@@ -31,6 +35,13 @@ import { useSlashFocus } from "./use-slash-focus";
  * Cổng route = TASK.TASK.VIEW (→ read:task): thiếu quyền ⇒ màn «không có quyền», query bị tắt nên
  * KHÔNG có lời gọi API. Tài khoản chưa liên kết hồ sơ nhân viên ⇒ server trả mảng rỗng (không lỗi)
  * ⇒ trạng thái rỗng kèm hướng dẫn.
+ *
+ * S20-TASK-QUICKEDIT-1 — badge trạng thái + chip hạn trên dòng sửa được tại chỗ (TaskRowQuickEdit):
+ * lạc quan, việc đổi nhóm ngay; thiếu cặp quyền ⇒ chữ tĩnh như cũ.
+ *
+ * S20-TASK-QUICKADD-1 (US-TASK-NV-05) — có `create:task` ⇒ ô tạo một dòng ở đầu trang (kể cả khi chưa
+ * có việc nào): người phụ trách = employeeId của tôi từ `/auth/me` (không cần `read:employee`), phím
+ * «n» focus ô; chưa liên kết hồ sơ ⇒ ô khoá kèm giải thích, 0 request. Nút «Tạo việc» mở form Tạo tại chỗ.
  */
 
 /** Bộ lọc của trang ĐỌC/GHI trên URL — cùng `validateMyTasksSearch` mà route khai báo. */
@@ -95,16 +106,24 @@ function TaskRow({ item, onOpen }: { item: MyTaskItemDto; onOpen: (id: string) =
         >
           {item.title}
         </button>
-        <p className="text-xs text-muted-foreground">
-          {item.projectName ?? t("tasks.my.noProject")}
-          {item.dueAt
-            ? ` · ${t("myTasks.due", { value: formatDateTime(item.dueAt, companyTimeZone()) })}`
-            : ""}
-        </p>
+        <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          <span>{item.projectName ?? t("tasks.my.noProject")}</span>
+          <span aria-hidden="true">·</span>
+          <TaskRowDeadlineControl
+            task={item}
+            readOnly={
+              item.dueAt ? (
+                <span>
+                  {t("myTasks.due", { value: formatDateTime(item.dueAt, companyTimeZone()) })}
+                </span>
+              ) : null
+            }
+          />
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <TaskPriorityBadge priority={item.priority} />
-        <TaskStatusBadge status={item.status} />
+        <TaskRowStatusControl task={item} />
         <TaskOverdueBadge isOverdue={item.isOverdue} />
       </div>
     </Card>
@@ -283,12 +302,40 @@ function GroupList({
   );
 }
 
+/** Ô tạo nhanh của trang: giao cho CHÍNH TÔI — chưa biết tôi là ai thì khoá ô, không đoán. */
+function MyTasksQuickAdd() {
+  const { t } = useTranslation("tasks");
+  const me = useMyEmployeeLink(true);
+  const reasonKey =
+    me.status === "unlinked"
+      ? "quickAdd.unlinked"
+      : me.status === "error"
+        ? "quickAdd.meFailed"
+        : "quickAdd.loading";
+  return (
+    <TaskQuickAdd
+      id="my-tasks-quick-add"
+      fixedAssigneeEmployeeId={me.status === "linked" ? me.employeeId : undefined}
+      disabled={me.status !== "linked"}
+      disabledReason={t(reasonKey)}
+      placeholder={t("quickAdd.placeholder")}
+      hint={t("quickAdd.hint")}
+      shortcutKey="n"
+    />
+  );
+}
+
 export function MyTasksPage() {
   const { t } = useTranslation("tasks");
   const canView = useCan(
     TASK_CORE_ENGINE_PAIRS.READ.action,
     TASK_CORE_ENGINE_PAIRS.READ.resourceType,
   );
+  const canCreate = useCan(
+    TASK_CORE_ENGINE_PAIRS.CREATE.action,
+    TASK_CORE_ENGINE_PAIRS.CREATE.resourceType,
+  );
+  const [createOpen, setCreateOpen] = useState(false);
   const { search, update } = useMyTasksSearch();
   const [query, setQuery] = useState("");
   // S20-TASK-DRAWER-1 — mở drawer tại chỗ (`?task=`): bộ lọc + vị trí cuộn giữ nguyên.
@@ -354,7 +401,23 @@ export function MyTasksPage() {
         title={t("tasks.my.title")}
         description={t("tasks.my.description")}
         icon={ListTodo}
+        actions={
+          canCreate ? (
+            <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="my-tasks-create">
+              <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              {t("quickAdd.createButton")}
+            </Button>
+          ) : undefined
+        }
       />
+      {canCreate && <MyTasksQuickAdd />}
+      {createOpen && (
+        <TaskFormDrawer
+          mode="create"
+          onClose={() => setCreateOpen(false)}
+          onSuccess={() => setCreateOpen(false)}
+        />
+      )}
       {!isLoading && (data ?? []).length === 0 ? (
         <EmptyState
           icon={ListTodo}

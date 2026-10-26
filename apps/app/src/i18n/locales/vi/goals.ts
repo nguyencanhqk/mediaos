@@ -148,7 +148,6 @@ export default {
       description: "Mô tả ngắn về mục tiêu (không bắt buộc)",
       selectDepartment: "Chọn phòng ban",
       selectProject: "Chọn dự án",
-      selectParent: "Không có (mục tiêu gốc)",
       unit: "Ví dụ: %, đơn, triệu VNĐ",
     },
     hints: {
@@ -175,6 +174,18 @@ export default {
     savedAndNext: "Đã tạo mục tiêu «{{name}}»",
     parentInvalid:
       "Mục tiêu cha không hợp lệ (không tồn tại hoặc đã chốt kỳ) — đã bỏ chọn mục tiêu cha.",
+    // S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — ô chọn cha có tìm + cảnh báo mềm lệch kỳ.
+    parentPicker: {
+      placeholder: "Gõ tên hoặc mã để tìm mục tiêu cha",
+      none: "Không có (mục tiêu gốc)",
+      clear: "Bỏ chọn mục tiêu cha",
+      noResults: "Không tìm thấy",
+      loading: "Đang tải…",
+      loadError: "Không tải được danh sách mục tiêu.",
+      loadMore: "Tải thêm",
+      suggestOnly: "Chỉ gợi ý mục tiêu cùng phòng, cùng kỳ",
+    },
+    periodOutsideParent: "Kỳ nằm ngoài kỳ của mục tiêu cha",
     submitSave: "Lưu thay đổi",
     finalizedLocked: "Mục tiêu đã chốt kỳ — cần mở lại (reopen) trước khi sửa.",
     loadError: "Không tải được mục tiêu để sửa.",
@@ -537,6 +548,71 @@ export default {
       state: "Cột board",
       statePlaceholder: "Cột mặc định",
       dueAt: "Hạn hoàn thành",
+    },
+  },
+
+  // ─── S20-GOAL-QUICKSTART-1 (APPEND) — tạo nhanh · đổi trạng thái một chạm ─────────────────────────
+  quickStart: {
+    // create:goal chỉ Own ⇒ ẩn hai ô Cấp + Chủ thể, chỉ còn dòng này.
+    selfAnchored: "Mục tiêu cá nhân của bạn (cấp Nhân viên).",
+    // Chỉ Own mà /auth/me không có hồ sơ (hoặc lỗi mạng): ô Chủ thể hiện để chọn tay, form không bị chặn.
+    selfMissing: "Không lấy được hồ sơ nhân sự của bạn — hãy chọn nhân viên của mục tiêu bằng tay.",
+  },
+  statusChange: {
+    activate: "Kích hoạt",
+    success: {
+      Active: "Đã kích hoạt mục tiêu «{{name}}».",
+      Completed: "Đã đánh dấu Hoàn thành «{{name}}».",
+      Draft: "Đã chuyển mục tiêu «{{name}}» về Nháp.",
+      Cancelled: "Đã huỷ mục tiêu «{{name}}».",
+    },
+    errors: {
+      forbidden: "Bạn không có quyền sửa mục tiêu này",
+      finalized: "Mục tiêu đã chốt kỳ — mở lại kỳ trước khi đổi trạng thái.",
+      generic: "Không đổi được trạng thái mục tiêu. Vui lòng thử lại.",
+    },
+    // Lý do Check-in đang khoá (hiện cạnh nút, nút trỏ aria-describedby tới đây).
+    lockReason: {
+      draft: "Mục tiêu đang ở Nháp",
+      draftHint: "Mục tiêu đang ở Nháp — bấm «Kích hoạt» để bắt đầu check-in.",
+      finalized: "Đã chốt kỳ",
+      notActive: "Chỉ check-in được mục tiêu đang chạy",
+    },
+    completeBanner: {
+      message: "Đã đạt 100%. Đánh dấu Hoàn thành?",
+      confirm: "Đánh dấu Hoàn thành",
+      later: "Để sau",
+    },
+  },
+
+  // ─── S20-GOAL-BULKACTIVATE-1 (APPEND) — kích hoạt hàng loạt mục tiêu Nháp trên /goals ─────────────
+  bulkActivate: {
+    // Chip lọc = tham số `status=Draft` trên URL (+ chế độ danh sách để chọn được).
+    draftChip: "Nháp",
+    region: "Hành động hàng loạt",
+    selectAll: "Chọn tất cả mục tiêu trên danh sách",
+    selectRow: "Chọn {{name}}",
+    selected: "Đã chọn {{count}} mục tiêu",
+    draftOnly: "Chỉ {{count}} mục Nháp được kích hoạt — mục khác giữ nguyên.",
+    submit: "Kích hoạt ({{count}})",
+    clear: "Bỏ chọn",
+    running: "Đang kích hoạt {{done}}/{{total}}…",
+    confirm: {
+      title: "Kích hoạt {{count}} mục tiêu Nháp?",
+      description:
+        "Mỗi mục tiêu được gửi riêng và được máy chủ kiểm tra lại. Mục bị từ chối giữ trạng thái Nháp, kèm lý do.",
+    },
+    toast: {
+      allDone: "Đã kích hoạt {{count}} mục tiêu",
+      partial: "{{ok}} thành công, {{failed}} lỗi — {{reason}}",
+      unprocessed:
+        "Mất kết nối giữa chừng — {{ok}} thành công, {{failed}} lỗi, {{unprocessed}} mục tiêu chưa xử lý. Kiểm tra mạng rồi thử lại.",
+    },
+    report: {
+      title: "Kết quả kích hoạt",
+      rejected: "{{code}} — {{name}}: {{reason}}",
+      unprocessed: "{{count}} mục tiêu chưa xử lý — vẫn được chọn để thử lại.",
+      dismiss: "Đóng",
     },
   },
 } as const;
