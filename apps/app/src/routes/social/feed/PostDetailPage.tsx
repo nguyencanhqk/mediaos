@@ -36,14 +36,18 @@ import {
   type ActionErrorReason,
 } from "./components/ActionErrorBanner";
 import { DroppedMentionsNotice } from "./components/DroppedMentionsNotice";
+import { attachmentErrorReason } from "./lib/attachment-draft";
 import { buildPostMenuActions, useFeedActions } from "./lib/use-feed-actions";
 
 interface LocalActionError {
   kind: ActionErrorKind;
   forbidden: boolean;
   /**
-   * Chỉ lỗi của `useFeedActions` (hành động trên BÀI) mang lý do — S16-SOCIAL-FEMODERRMSG-1. Lỗi
-   * bình luận cục bộ để vắng: `SOCIAL-ERR-001` ở đó có thể là bình luận đã mất, không phải bài.
+   * Lý do CỤ THỂ (thắng forbidden/generic — khuôn `CreatePostError`). Hai nguồn đặt nó:
+   *  - `useFeedActions` (hành động trên BÀI) — `postGone`, S16-SOCIAL-FEMODERRMSG-1;
+   *  - lượt GỬI bình luận kèm tệp — CHỈ lý do đính kèm của `attachmentErrorReason`, S16-SOCIAL-FE-2D.
+   * Mọi lỗi bình luận cục bộ KHÁC để vắng: `SOCIAL-ERR-001` ở đó có thể là bình luận đã mất, không
+   * phải bài.
    */
   reason?: ActionErrorReason | null;
 }
@@ -77,7 +81,12 @@ export function PostDetailPage(): React.ReactElement {
   const reportLocalError = (kind: ActionErrorKind) => (err: unknown) => {
     // Lỗi MỚI thay lỗi cũ: giữ lại lỗi của hook sẽ hiện câu của một hành động khác, đã xảy ra trước.
     clearActionError();
-    setLocalError({ kind, forbidden: err instanceof ApiError && err.status === 403 });
+    setLocalError({
+      kind,
+      forbidden: err instanceof ApiError && err.status === 403,
+      // S16-SOCIAL-FE-2D — `015` kèm tệp: 422 `SOCIAL-ERR-007` nói ĐÚNG lý do thay «thử lại» vô ích.
+      reason: kind === "comment" ? attachmentErrorReason(err) : null,
+    });
   };
 
   // Chiều ngược lại: hook vừa báo lỗi ⇒ lỗi cục bộ cũ hết hiệu lực.
@@ -104,16 +113,18 @@ export function PostDetailPage(): React.ReactElement {
   });
 
   /** Làm mới đúng hai nhánh mà một thay đổi về bình luận chạm tới (`commentCount` nằm TRÊN bài). */
-  const invalidateComments = (): void => {
-    void queryClient.invalidateQueries({ queryKey: socialKeys.posts.comments(postId) });
-    void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(postId) });
+  const invalidateComments = (ofPostId: string): void => {
+    void queryClient.invalidateQueries({ queryKey: socialKeys.posts.comments(ofPostId) });
+    void queryClient.invalidateQueries({ queryKey: socialKeys.posts.detail(ofPostId) });
   };
 
   const createComment = useMutation({
-    mutationFn: (dto: CreateFeedCommentDto) => socialApi.createComment(postId, dto),
+    // Lượt gửi mang đích (bài nhận bình luận) từ lúc bấm.
+    mutationFn: (sent: { postId: string; dto: CreateFeedCommentDto }) =>
+      socialApi.createComment(sent.postId, sent.dto),
     onMutate: () => setDroppedMentionCount(0),
-    onSuccess: (created) => {
-      invalidateComments();
+    onSuccess: (created, sent) => {
+      invalidateComments(sent.postId);
       setLocalError(null);
       setDroppedMentionCount(created.droppedMentions.length);
     },
@@ -125,7 +136,7 @@ export function PostDetailPage(): React.ReactElement {
   const deleteComment = useMutation({
     mutationFn: (commentId: string) => socialApi.deleteComment(commentId),
     onSuccess: () => {
-      invalidateComments();
+      invalidateComments(postId);
       setLocalError(null);
     },
     onError: reportLocalError("commentDelete"),
@@ -264,10 +275,16 @@ export function PostDetailPage(): React.ReactElement {
         <h2 className="mb-3 text-sm font-semibold text-foreground">{t("comment.heading")}</h2>
 
         <CommentComposer
+          // `key` theo BÀI — cùng lý do với `<CommentList>` bên dưới (router không mount lại trang khi chỉ `$postId`
+          // đổi): khay tệp và nháp của ô soạn thuộc về MỘT bài. Sang bài khác ⇒ ô soạn mới, khay rỗng, chữ trắng; ô
+          // soạn cũ tháo ra thì lượt tải đang bay của nó bị huỷ. Đo ở `PostDetailPage.post-switch.spec.tsx`.
+          // CÓ tiền tố: `<CommentList>` là anh em cùng cha và đã mang `key={postId}` — hai anh em TRÙNG key thì React
+          // không tháo được ô soạn cũ (nó nằm lại trên trang cùng khay của bài trước).
+          key={`composer:${postId}`}
           // `mutateAsync`, KHÔNG `mutate`: hợp đồng mới của composer là «chỉ dọn ô soạn khi Promise
           // RESOLVE». `mutate` trả `void` ⇒ composer không có cách nào biết lượt gửi đã xong ⇒ giữ
           // nguyên chữ đã gõ mãi mãi (an toàn, nhưng vướng — người dùng phải tự xoá sau mỗi lượt).
-          onSubmit={(dto) => createComment.mutateAsync(dto)}
+          onSubmit={(dto) => createComment.mutateAsync({ postId, dto })}
           isSubmitting={createComment.isPending}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
