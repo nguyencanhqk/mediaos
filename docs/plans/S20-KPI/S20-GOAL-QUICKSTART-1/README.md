@@ -28,6 +28,7 @@ Theo `docs/plans/S20-WORKUX-STORIES.md` §4 và §7 Q25 = A: đếm trong trình
 Ghi chú:
 
 - Đích «≤ 1 chuyển trang» lấy từ bảng KPI §4 (cột «2→1»). Luồng «Trước» của story cũng ra 2 khi đếm cùng cách: bấm Tạo rồi tự chuyển về chi tiết sau khi lưu. Muốn đạt 1 thì cần đổi cách đếm (không tính lần tự chuyển sau khi lưu) hoặc đổi luồng (tạo ngay trên `/goals`). Owner chọn.
+- **Owner chốt 26/10/2026: không đếm lần tự chuyển về chi tiết sau khi lưu** ⇒ KPI #15 ĐẠT: 4 thao tác (5 khi đổi «Đơn vị đo» sang «Con số») · 1 chuyển trang do người dùng (`/goals` → `/goals/new`).
 - Lúc chờ PATCH (lạc quan), nút Check-in đã bật. Người dùng bấm Check-in trong khoảng đó mà server trả 403 thì check-in sẽ bị BE từ chối (GOAL-ERR-006). Đã vá ở `8631fb0c`: lượt đo lại thấy Check-in khoá suốt lúc chờ. Trong khoảng đó dòng lý do khoá đã ẩn (huy hiệu đã là «Đang chạy»), nên nút mờ mà không có chữ giải thích.
 - Ảnh `C4-403-rolled-back.png`: ở khung 1366 × 900, toast lỗi nằm đè lên ba nút đầu trang chi tiết (Check-in · Kích hoạt · Sửa) trong lúc còn hiện. Lượt đo lại ở `8631fb0c` vẫn thấy như vậy (bản vá không chạm toast).
 - Lượt đo lại: `/foundation/company/branding` và `/me/avatar` được gọi lại mỗi lần đổi trang vì mock trả 404 (truy vấn lỗi không vào cache). Đây là hiện tượng của mock, không phải request của luồng tạo mục tiêu.
