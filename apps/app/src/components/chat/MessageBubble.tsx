@@ -250,7 +250,19 @@ export function MessageBubble({
         </div>
       )}
 
-      <div className={cn("flex min-w-0 flex-col", isMine ? "items-end" : "items-start")}>
+      {/*
+       * Trần ngang `max-w-[min(42rem,78%)]` đặt ở CỘT này (con trực tiếp của hàng flex, khối chứa có bề
+       * ngang xác định), không ở bong bóng. Đặt ở bong bóng thì phần trăm tính theo cột — mà cột co theo
+       * chính bong bóng ⇒ bong bóng chỉ còn 78% bề ngang tự nhiên của nó, tin ngắn «KT #46 — Ok» xuống
+       * dòng dù còn chỗ (lượt đo trình duyệt S20-CHAT-UNREAD-1).
+       */}
+      <div
+        className={cn(
+          "flex min-w-0 max-w-[min(42rem,78%)] flex-col",
+          isMine ? "items-end" : "items-start",
+        )}
+        data-testid="chat-message-column"
+      >
         {/* Tên người gửi: chỉ ở tin đầu cụm và chỉ với tin NGƯỜI KHÁC — vị trí đã nói tin nào của tôi. */}
         {!isMine && !isGrouped && (
           <div className="mb-0.5 flex items-baseline gap-2 px-1">
@@ -270,10 +282,10 @@ export function MessageBubble({
 
         <div
           className={cn(
-            // `max-w-[min(42rem,78%)]`: bong bóng không được kéo dài hết chiều ngang cột — mắt mất neo
-            // khi phải quét cả màn để đọc một dòng, và vế "hai phía" biến mất vì mọi tin đều chạm cả
-            // hai mép.
-            "max-w-[min(42rem,78%)] min-w-0 rounded-2xl px-3 py-2",
+            // Trần ngang nằm ở cột bọc (xem trên): bong bóng không được kéo dài hết chiều ngang khung —
+            // mắt mất neo khi phải quét cả màn để đọc một dòng, và vế "hai phía" biến mất vì mọi tin đều
+            // chạm cả hai mép. `max-w-full` giữ từ dài không bẻ được (URL) trong cột.
+            "max-w-full min-w-0 rounded-2xl px-3 py-2",
             isMine
               ? "rounded-br-sm bg-bubble-mine text-foreground"
               : "rounded-bl-sm bg-surface-2 text-foreground",

@@ -134,7 +134,10 @@ export default {
     historyStart: "Đây là phần đầu của cuộc trò chuyện.",
     historyLimitReached:
       "Đã tải tối đa {{count}} tin trong phiên này. Mở lại phòng để tiếp tục xem lịch sử cũ hơn.",
-    newMessages: "Có tin nhắn mới",
+    // S20-CHAT-UNREAD-1 — nút «↓ N tin mới» (số tin sau mốc người dùng đã thấy tới) + vạch chưa đọc.
+    newMessagesCount: "{{count}} tin mới",
+    unreadDivider: "{{count}} tin chưa đọc",
+    unreadAbove: "Còn tin chưa đọc phía trên — cuộn lên để xem tiếp",
     jumpToLatest: "Xuống tin mới nhất",
     membersCount: "{{count}} thành viên",
     infoToggle: "Thông tin phòng",
