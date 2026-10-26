@@ -14,7 +14,8 @@ import { DASH_QUICK_ACTION_TARGET_URLS as TARGETS } from "@mediaos/contracts";
 export const LEGACY_QUICK_ACTION_TARGETS: Readonly<Record<string, string>> = {
   "/tasks/new": TARGETS.CREATE_TASK,
   "/tasks/my": TARGETS.OPEN_MY_TASKS,
-  "/tasks?filter=due-soon": TARGETS.OPEN_TASK_ALERTS,
+  // Đích cũ ghi «due-soon» ⇒ giữ nghĩa «sắp đến hạn» (API mới tách riêng nút này), không đổi thành «quá hạn».
+  "/tasks?filter=due-soon": TARGETS.OPEN_TASKS_DUE_SOON,
   "/leave/approvals?status=Pending": TARGETS.OPEN_PENDING_LEAVE_APPROVAL,
   "/projects": TARGETS.OPEN_PROJECT,
 };

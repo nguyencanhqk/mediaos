@@ -9,6 +9,12 @@
  *    `projectScoped` thì `${đích}/${id}` phải khớp route có đúng tham số đó.
  * 2. Mỗi tham số `?…` phải được `validateSearch` của route đích GIỮ nguyên giá trị. Route không khai
  *    `validateSearch` thì không màn nào đọc tham số ⇒ coi như bị bỏ.
+ *
+ * Phủ ĐỦ registry API là việc của CẶP test: ca «mọi action NAVIGATE lấy đích từ DASH_QUICK_ACTION_TARGET_URLS»
+ * ở `apps/api/src/dashboard/dashboard-widget-quick-actions.spec.ts` + test này. Hằng đọc qua `dist` của
+ * contracts ⇒ chạy lẻ bằng `vitest run` sau khi sửa hằng thì build lại contracts trước; các cổng đã tự build:
+ * turbo `test`/`typecheck` dependsOn `^build`, chunk runner của check.sh build packages, CI build contracts
+ * trước bước test (apps-frontend + api, cả hai lọc theo đường `packages/`).
  */
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
@@ -92,6 +98,13 @@ describe("S20-DASH-QUICKACTION-1 — payload widget CŨ (API chưa deploy) vẫn
     const next = resolveQuickActionTarget(old);
     expect(next).not.toBe(old);
     expect(targetProblems(next ?? "")).toEqual([]);
+  });
+
+  // Đích cũ ghi rõ «due-soon» ⇒ cầu nối giữ nghĩa «sắp đến hạn» (đích riêng của API mới), không đổi thành «quá hạn».
+  it("đích cũ /tasks?filter=due-soon ⇒ nhóm «Sắp đến hạn» của Việc của tôi", () => {
+    expect(resolveQuickActionTarget("/tasks?filter=due-soon")).toBe(
+      DASH_QUICK_ACTION_TARGET_URLS.OPEN_TASKS_DUE_SOON,
+    );
   });
 
   it("đích cũ /projects/:id ⇒ /tasks/projects/:id", () => {

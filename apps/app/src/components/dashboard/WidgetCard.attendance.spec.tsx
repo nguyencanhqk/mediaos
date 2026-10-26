@@ -145,6 +145,36 @@ describe("WidgetCard — Check-in/Check-out trên widget (S20-DASH-QUICKACTION-1
   });
 });
 
+describe("WidgetCard — trạng thái chấm công hôm nay đang tải / lỗi tải (S20-DASH-QUICKACTION-1)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("đang tải trạng thái hôm nay ⇒ skeleton, chưa có nút chấm công", () => {
+    vi.mocked(attendanceApi.getToday).mockReturnValue(new Promise(() => undefined) as never);
+    renderCard([CHECK_IN, CHECK_OUT]);
+    expect(screen.getByTestId("att-actions-loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("btn-check-in")).not.toBeInTheDocument();
+  });
+
+  it("lỗi tải ⇒ báo lý do + nút thử lại; thử lại tải lại trạng thái, KHÔNG tải lại widget", async () => {
+    vi.mocked(attendanceApi.getToday)
+      .mockRejectedValueOnce(new ApiError({ status: 503, kind: "NETWORK", message: "x" }))
+      .mockResolvedValue(today(true));
+    const { onRefresh } = renderCard([CHECK_IN, CHECK_OUT]);
+
+    expect(
+      await screen.findByText("Có lỗi khi tải trạng thái chấm công. Vui lòng thử lại."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("btn-check-in")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("att-actions-retry"));
+    expect(await screen.findByTestId("btn-check-in")).toBeEnabled();
+    expect(attendanceApi.getToday).toHaveBeenCalledTimes(2);
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+});
+
 describe("WidgetCard — payload quick action CŨ (API chưa deploy) vẫn dẫn đúng chỗ", () => {
   it("«Tạo task» với đích cũ /tasks/new ⇒ điều hướng tới /tasks/my-tasks?create=1", () => {
     renderCard([
