@@ -20,6 +20,9 @@ import { MyNotificationsService } from "../notifications/my-notifications.servic
 import { MeCurrentPersonResolver, type CurrentPerson } from "./me-current-person.resolver";
 import { MeRepository } from "./me.repository";
 import { ME_SECTION_SOURCES, moduleEnabledKey, type MeSectionSource } from "./me.constants";
+import { localDateOf } from "../common/tz.util";
+import { getSettingDefault } from "../foundation/settings/setting-defaults";
+import { DEFAULT_TZ } from "../attendance/attendance.types";
 
 interface Actor {
   id: string;
@@ -54,6 +57,13 @@ function isoOrNull(v: Date | string | null | undefined): string | null {
 }
 
 const TASK_TERMINAL = new Set(["Done", "Cancelled"]);
+
+/**
+ * S20-DASH-QUICKACTION-1 — múi của «hôm nay» trong task summary = múi mà FE nhóm «Việc của tôi»
+ * (`companyTimeZone()` của web-core — hiện là mặc định registry vì `/auth/me` chưa trả múi công ty).
+ * Badge «Hôm nay» trên /me mở `/tasks/my-tasks?group=today`: hai phía phải đếm cùng một ngày.
+ */
+const TASK_SUMMARY_TIMEZONE = String(getSettingDefault("company.timezone")?.value ?? DEFAULT_TZ);
 
 /**
  * S5-ME-BE-1 — MeAggregationService (crown-jewel): tổng hợp dữ liệu cá nhân (SPEC-09 §10.1/§11.2/§12/§18.2).
@@ -266,7 +276,11 @@ export class MeAggregationService {
       const live = rows.filter((t) => !(t.status && TASK_TERMINAL.has(t.status)));
       const assignedCount = live.filter((t) => t.source === "assigned").length;
       const overdueCount = live.filter((t) => t.isOverdue).length;
-      const dueTodayCount = live.filter((t) => isDueToday(t.dueAt, now)).length;
+      // Khớp nhóm «Hôm nay» của «Việc của tôi» (my-tasks-groups.ts): hạn hôm nay theo giờ công ty, việc đã
+      // quá hạn thuộc nhóm «Quá hạn» (không đếm hai lần). Badge /me dẫn tới đúng nhóm đó.
+      const dueTodayCount = live.filter(
+        (t) => !t.isOverdue && isDueToday(t.dueAt, now, TASK_SUMMARY_TIMEZONE),
+      ).length;
       return { assignedCount, dueTodayCount, overdueCount } satisfies MeTaskSummary;
     });
   }
@@ -349,15 +363,10 @@ export class MeAggregationService {
   }
 }
 
-/** dueAt (ISO) rơi vào NGÀY hiện tại (UTC) — roll-up nhẹ cho summary (không cần TZ chuẩn của ATT). */
-function isDueToday(dueAt: string | null, now: number): boolean {
+/** dueAt (ISO) rơi vào NGÀY hiện tại theo `timeZone` (ngày local `YYYY-MM-DD`); hạn rỗng/hỏng ⇒ false. */
+function isDueToday(dueAt: string | null, now: number, timeZone: string): boolean {
   if (!dueAt) return false;
   const due = new Date(dueAt);
   if (Number.isNaN(due.getTime())) return false;
-  const today = new Date(now);
-  return (
-    due.getUTCFullYear() === today.getUTCFullYear() &&
-    due.getUTCMonth() === today.getUTCMonth() &&
-    due.getUTCDate() === today.getUTCDate()
-  );
+  return localDateOf(due, timeZone) === localDateOf(new Date(now), timeZone);
 }

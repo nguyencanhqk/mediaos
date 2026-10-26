@@ -123,6 +123,8 @@ export interface MyTasksSearch {
   source?: TaskCoreSourceDto;
   /** `?showDone=1` — router đã `JSON.parse` nên tới đây có thể là số 1. */
   showDone?: 1;
+  /** `?create=1` (quick action «Tạo task» của dashboard — S20-DASH-QUICKACTION-1) ⇒ focus ô tạo nhanh. */
+  create?: 1;
 }
 
 /** Khoá bộ lọc của trang — «Xoá bộ lọc» bỏ `group` + `source` (công tắc `showDone` giữ nguyên). */
@@ -147,6 +149,7 @@ export function validateMyTasksSearch(raw: Record<string, unknown>): MyTasksSear
     ["group", oneOf(raw.group, MY_TASK_GROUP_KEYS)],
     ["source", oneOf(raw.source, MY_TASK_SOURCE_OPTIONS)],
     ["showDone", flagParam(raw.showDone)],
+    ["create", flagParam(raw.create)],
   ];
   return Object.fromEntries(entries.filter(([, value]) => value !== undefined)) as MyTasksSearch;
 }

@@ -81,8 +81,14 @@ export function NotificationTargetLink({
           openChatRoom(chatTarget);
           return;
         }
-        // target_url là chuỗi động (server) — router yêu cầu literal route ở type-level; cast "as \"/\""
-        // là pattern ĐÃ DÙNG khắp router.tsx cho mọi điều hướng path động (vd LEAVE_PATHS.DETAIL(id)).
+        // `to` KHÔNG tách `?…`/`#…` (router dựng cả chuỗi thành pathname — đo ở
+        // routes/dashboard/quick-action-targets.spec.ts) ⇒ đích có query đi bằng `href` (router tự tách
+        // pathname/search/hash). Đích trần giữ `to`: target_url là chuỗi động — cast "as \"/\"" là pattern
+        // ĐÃ DÙNG khắp router.tsx cho mọi điều hướng path động (vd LEAVE_PATHS.DETAIL(id)).
+        if (/[?#]/.test(targetUrl)) {
+          void navigate({ href: targetUrl });
+          return;
+        }
         void navigate({ to: targetUrl as "/" });
       }}
     >

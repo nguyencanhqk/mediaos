@@ -8,6 +8,10 @@
  *
  * "Widget lỗi không làm sập toàn dashboard" (§13.1/§16.2.6): WidgetCard render lỗi CỤC BỘ bên trong chính
  * nó — không throw, không crash boundary — DashboardWidgetGrid vẫn render các widget khác bình thường.
+ *
+ * S20-DASH-QUICKACTION-1: đích NAVIGATE đi qua `resolveQuickActionTarget` (payload API cũ vẫn dẫn đúng chỗ);
+ * `API_CALL` CHECK_IN/CHECK_OUT ⇒ render luồng chấm công ATT (WidgetCardAttendanceActions), KHÔNG gọi
+ * `api_endpoint` tổng quát; widget tải lại (`onRefresh`) chỉ sau khi server xác nhận.
  */
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +30,11 @@ import {
   NotificationTargetLink,
   isSafeInternalTarget,
 } from "@/components/notifications/NotificationTargetLink";
+import { resolveQuickActionTarget } from "@/routes/dashboard/quick-action-targets";
+import {
+  WidgetCardAttendanceActions,
+  hasAttendanceQuickAction,
+} from "./WidgetCardAttendanceActions";
 
 interface WidgetCardProps {
   title: string;
@@ -75,9 +84,10 @@ export function WidgetCard({
   children,
 }: WidgetCardProps) {
   const { t } = useTranslation("dashboard");
-  const navigableActions = (quickActions ?? []).filter(
-    (a) => a.enabled && a.method === "NAVIGATE" && isSafeInternalTarget(a.target_url),
-  );
+  const navigableActions = (quickActions ?? [])
+    .map((a) => ({ ...a, target_url: resolveQuickActionTarget(a.target_url) }))
+    .filter((a) => a.enabled && a.method === "NAVIGATE" && isSafeInternalTarget(a.target_url));
+  const showAttendanceActions = !isLoading && hasAttendanceQuickAction(quickActions);
 
   return (
     <Card className="flex h-full flex-col">
@@ -121,6 +131,12 @@ export function WidgetCard({
           children
         )}
       </CardContent>
+
+      {showAttendanceActions && (
+        <div className="px-6 pb-3">
+          <WidgetCardAttendanceActions onConfirmed={onRefresh} />
+        </div>
+      )}
 
       {(lastUpdatedAt || navigableActions.length > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-6 py-2.5">

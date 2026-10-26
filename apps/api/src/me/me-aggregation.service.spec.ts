@@ -4,7 +4,8 @@ import {
   NotFoundException,
   InternalServerErrorException,
 } from "@nestjs/common";
-import { describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MeAggregationService } from "./me-aggregation.service";
 import type { CurrentPerson } from "./me-current-person.resolver";
 
@@ -221,5 +222,41 @@ describe("MeAggregationService — overview: 1 section forbidden, section khác 
     expect(Object.keys(ov.hr.data ?? {}).sort()).toEqual(
       ["departmentName", "employeeCode", "fullName", "positionName", "startDate", "status"].sort(),
     );
+  });
+});
+
+// S20-DASH-QUICKACTION-1 — badge «Hôm nay»/«Quá hạn» trên /me mở nhóm tương ứng của «Việc của tôi»
+// (`/tasks/my-tasks?group=today|overdue`, mọi nguồn) ⇒ số đếm phải theo đúng quy tắc nhóm của màn đó.
+describe("MeAggregationService — task summary khớp nhóm «Việc của tôi»", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("dueTodayCount = hạn hôm nay theo giờ công ty, trừ việc đã quá hạn; overdueCount gồm mọi nguồn", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 20:00 UTC ngày 26/10 = 03:00 ngày 27/10 giờ công ty (UTC+7): «hôm nay» là 27/10.
+    vi.setSystemTime(new Date("2026-10-26T20:00:00.000Z"));
+    const row = (o: Record<string, unknown>) => ({
+      id: randomUUID(),
+      status: "To Do",
+      source: "assigned",
+      isOverdue: false,
+      dueAt: null,
+      ...o,
+    });
+    const rows = [
+      row({ dueAt: "2026-10-27T10:00:00.000Z" }), // 17:00 27/10 — hôm nay
+      row({ dueAt: "2026-10-26T22:00:00.000Z" }), // 05:00 27/10 — hôm nay, chưa quá hạn
+      row({ dueAt: "2026-10-27T15:00:00.000Z", source: "created" }), // 22:00 27/10 — hôm nay
+      row({ dueAt: "2026-10-26T12:00:00.000Z", isOverdue: true }), // hôm qua, quá hạn
+      row({ dueAt: "2026-10-25T19:30:00.000Z", isOverdue: true, source: "watched" }), // 02:30 26/10, quá hạn
+      row({ dueAt: "2026-10-27T09:00:00.000Z", status: "Done" }), // đã xong — không đếm
+    ];
+    const { svc } = build({ readers: { task: vi.fn(async () => rows) } });
+
+    const sec = await svc.getTaskSummary(ACTOR);
+
+    expect(sec.status).toBe("ok");
+    expect(sec.data).toMatchObject({ dueTodayCount: 3, overdueCount: 2, assignedCount: 3 });
   });
 });

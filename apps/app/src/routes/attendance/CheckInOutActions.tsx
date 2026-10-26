@@ -5,12 +5,15 @@
  *   - Enabled/disabled theo allowedActions từ server (authoritative — bao gồm leave block).
  *   - Khi mutation thành công/thất bại hiển thị inline feedback.
  *   - KHÔNG hard-code logic leave/rule — server quyết định, client render.
+ * S20-DASH-QUICKACTION-1: dùng lại trên widget «Chấm công hôm nay» (`variant="inline"`). Trạng thái chỉ đổi
+ * SAU khi server xác nhận (`onConfirmed` gọi sau khi hook đã invalidate ATT today); server từ chối ⇒ dòng
+ * lỗi nêu đúng lý do server trả (kỳ công khoá, nghỉ cả ngày…), không phải câu chung chung.
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LogIn, LogOut, AlertCircle, CheckCircle } from "lucide-react";
 import type { AttendanceTodayV2Dto } from "@mediaos/contracts";
-import { useCan, showApiErrorToast } from "@mediaos/web-core";
+import { ApiError, mapApiErrorToUi, useCan, showApiErrorToast } from "@mediaos/web-core";
 import { Button, Card, CardContent } from "@mediaos/ui";
 import { ATT_ENGINE_PAIRS } from "./constants";
 import { useCheckIn } from "./hooks/useCheckIn";
@@ -59,11 +62,20 @@ function DisabledReasonNote({ reason, label }: { reason: string; label: string }
 
 interface CheckInOutActionsProps {
   data: AttendanceTodayV2Dto;
+  /** "card" (màn Chấm công hôm nay) | "inline" (trong widget dashboard — không bọc Card, nút nhỏ). */
+  variant?: "card" | "inline";
+  /** Gọi SAU khi server xác nhận check-in/out (vd widget tự tải lại). */
+  onConfirmed?: () => void;
+}
+
+/** Lý do server trả (ApiError) — lỗi không phải ApiError ⇒ câu chung. */
+function rejectionMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? mapApiErrorToUi(err).message || fallback : fallback;
 }
 
 type FeedbackState = { type: "success" | "error"; message: string } | null;
 
-export function CheckInOutActions({ data }: CheckInOutActionsProps) {
+export function CheckInOutActions({ data, variant = "card", onConfirmed }: CheckInOutActionsProps) {
   const { t } = useTranslation("attendance");
 
   // Permission gates — server là cổng thật; useCan quyết định có HIỂN THỊ nút không.
@@ -106,9 +118,13 @@ export function CheckInOutActions({ data }: CheckInOutActionsProps) {
         clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       setFeedback({ type: "success", message: t("today.actions.successCheckIn") });
+      onConfirmed?.();
     } catch (err) {
       showApiErrorToast(err);
-      setFeedback({ type: "error", message: t("today.actions.errorCheckIn") });
+      setFeedback({
+        type: "error",
+        message: rejectionMessage(err, t("today.actions.errorCheckIn")),
+      });
     }
   }
 
@@ -121,70 +137,84 @@ export function CheckInOutActions({ data }: CheckInOutActionsProps) {
         clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       setFeedback({ type: "success", message: t("today.actions.successCheckOut") });
+      onConfirmed?.();
     } catch (err) {
       showApiErrorToast(err);
-      setFeedback({ type: "error", message: t("today.actions.errorCheckOut") });
+      setFeedback({
+        type: "error",
+        message: rejectionMessage(err, t("today.actions.errorCheckOut")),
+      });
     }
   }
 
+  const inline = variant === "inline";
+  const buttonSize = inline ? "sm" : "lg";
+  const body = (
+    <>
+      {/* Disabled reason (khi cả 2 bị block — vd: nghỉ phép cả ngày) */}
+      {reasonToShow && (
+        <DisabledReasonNote reason={reasonToShow} label={t("today.actions.disabledReason.label")} />
+      )}
+
+      {/* Period locked notice */}
+      {periodLocked && (
+        <DisabledReasonNote
+          reason={t("today.periodLocked")}
+          label={t("today.actions.disabledReason.label")}
+        />
+      )}
+
+      {/* Feedback banner */}
+      {feedback && <FeedbackBanner type={feedback.type} message={feedback.message} />}
+
+      {/* Action buttons */}
+      <div className="flex flex-wrap gap-3">
+        {canCheckIn && (
+          <Button
+            size={buttonSize}
+            disabled={checkInDisabled}
+            onClick={() => void handleCheckIn()}
+            data-testid="btn-check-in"
+            aria-label={t("today.actions.checkIn")}
+            className="flex-1 sm:flex-none"
+          >
+            <LogIn className="mr-2 h-4 w-4" />
+            {isBusy && checkInMutation.isPending
+              ? t("today.actions.checking")
+              : t("today.actions.checkIn")}
+          </Button>
+        )}
+
+        {canCheckOut && (
+          <Button
+            size={buttonSize}
+            variant="outline"
+            disabled={checkOutDisabled}
+            onClick={() => void handleCheckOut()}
+            data-testid="btn-check-out"
+            aria-label={t("today.actions.checkOut")}
+            className="flex-1 sm:flex-none"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            {isBusy && checkOutMutation.isPending
+              ? t("today.actions.checking")
+              : t("today.actions.checkOut")}
+          </Button>
+        )}
+      </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div data-testid="checkinout-actions" className="space-y-3">
+        {body}
+      </div>
+    );
+  }
   return (
     <Card data-testid="checkinout-actions">
-      <CardContent className="space-y-4 pt-6">
-        {/* Disabled reason (khi cả 2 bị block — vd: nghỉ phép cả ngày) */}
-        {reasonToShow && (
-          <DisabledReasonNote
-            reason={reasonToShow}
-            label={t("today.actions.disabledReason.label")}
-          />
-        )}
-
-        {/* Period locked notice */}
-        {periodLocked && (
-          <DisabledReasonNote
-            reason={t("today.periodLocked")}
-            label={t("today.actions.disabledReason.label")}
-          />
-        )}
-
-        {/* Feedback banner */}
-        {feedback && <FeedbackBanner type={feedback.type} message={feedback.message} />}
-
-        {/* Action buttons */}
-        <div className="flex flex-wrap gap-3">
-          {canCheckIn && (
-            <Button
-              size="lg"
-              disabled={checkInDisabled}
-              onClick={() => void handleCheckIn()}
-              data-testid="btn-check-in"
-              aria-label={t("today.actions.checkIn")}
-              className="flex-1 sm:flex-none"
-            >
-              <LogIn className="mr-2 h-4 w-4" />
-              {isBusy && checkInMutation.isPending
-                ? t("today.actions.checking")
-                : t("today.actions.checkIn")}
-            </Button>
-          )}
-
-          {canCheckOut && (
-            <Button
-              size="lg"
-              variant="outline"
-              disabled={checkOutDisabled}
-              onClick={() => void handleCheckOut()}
-              data-testid="btn-check-out"
-              aria-label={t("today.actions.checkOut")}
-              className="flex-1 sm:flex-none"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              {isBusy && checkOutMutation.isPending
-                ? t("today.actions.checking")
-                : t("today.actions.checkOut")}
-            </Button>
-          )}
-        </div>
-      </CardContent>
+      <CardContent className="space-y-4 pt-6">{body}</CardContent>
     </Card>
   );
 }
