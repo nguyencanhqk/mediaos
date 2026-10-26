@@ -24,6 +24,11 @@
  *  (l) nút «Mẫu việc» trên header gate cặp `manage:task-template`; bấm ⇒ /goals/templates; không cặp
  *      ⇒ không thấy nút (gõ URL thì trang mẫu tự báo không đủ quyền — phủ ở TaskTemplateListPage.spec).
  *
+ * S20-GOAL-BULKACTIVATE-1 (US-GOAL-QL-11) — kích hoạt hàng loạt mục tiêu Nháp:
+ *  (m) chỉ có checkbox + thanh hàng loạt khi có cặp update:goal; chip «Nháp» ghi status=Draft (+ danh
+ *      sách) lên URL; chọn tất cả → «Kích hoạt (n)» → xác nhận ⇒ mỗi mục một PATCH; chọn lẫn ⇒ chỉ đếm
+ *      và gửi mục Draft. Lỗi một phần · mất mạng phủ ở GoalBulkActivateBar.spec + goal-bulk-activate.spec.
+ *
  * Quyền dùng store THẬT (`useAuthStore` capabilities + scopes) — không mock `useCan`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,6 +55,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       getTree: vi.fn(),
       checkIn: vi.fn(),
       listUpdates: vi.fn(),
+      updateGoal: vi.fn(),
     },
     meApi: { ...actual.meApi, getGoals: vi.fn() },
     authApi: { ...actual.authApi, me: vi.fn() },
@@ -58,12 +64,14 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
 });
 
 import { authApi, goalApi, hrApi, meApi, useAuthStore } from "@mediaos/web-core";
+import { toast } from "@mediaos/ui";
 import { GoalListPage } from "./GoalListPage";
 
 const mockListGoals = goalApi.listGoals as ReturnType<typeof vi.fn>;
 const mockGetTree = goalApi.getTree as ReturnType<typeof vi.fn>;
 const mockCheckIn = goalApi.checkIn as ReturnType<typeof vi.fn>;
 const mockListUpdates = goalApi.listUpdates as ReturnType<typeof vi.fn>;
+const mockUpdateGoal = goalApi.updateGoal as ReturnType<typeof vi.fn>;
 const mockMeGoals = meApi.getGoals as ReturnType<typeof vi.fn>;
 const mockAuthMe = authApi.me as ReturnType<typeof vi.fn>;
 const mockListDepartments = hrApi.listDepartments as ReturnType<typeof vi.fn>;
@@ -483,5 +491,76 @@ describe("GoalListPage — check-in ngay trên dòng (US-GOAL-NV-91)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Check-in Tăng doanh thu 20%" }));
     expect(await screen.findByText("Check-in tiến độ")).toBeInTheDocument();
     expect(screen.queryByTestId("goal-detail-stub")).not.toBeInTheDocument();
+  });
+});
+
+describe("GoalListPage — kích hoạt hàng loạt mục tiêu Nháp (US-GOAL-QL-11)", () => {
+  const BULK_CAPS = { "view:goal": true, "update:goal": true };
+  const DRAFTS = [1, 2, 3, 4, 5, 6].map((n) => ({
+    ...GOAL_ROW,
+    id: `d-${n}`,
+    goalCode: `GOAL-010${n}`,
+    name: `Nháp số ${n}`,
+    status: "Draft",
+  }));
+  const DRAFT_LIST_HREF = `/goals?period=${Q4}&view=list&status=Draft`;
+
+  beforeEach(() => {
+    mockUpdateGoal.mockImplementation((id: string) =>
+      Promise.resolve({ ...GOAL_ROW, id, status: "Active" }),
+    );
+  });
+
+  it("(m1) không có cặp update:goal ⇒ không checkbox, không thanh hàng loạt", async () => {
+    login({ "view:goal": true });
+    mockListGoals.mockResolvedValue(DRAFTS);
+    mountAt(DRAFT_LIST_HREF);
+    await screen.findByText("Nháp số 1");
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.queryByTestId("goal-bulk-bar")).not.toBeInTheDocument();
+  });
+
+  it("(m2) chip «Nháp» ghi status=Draft + chế độ danh sách lên URL (từ cây)", async () => {
+    login(BULK_CAPS);
+    const history = mountAt(`/goals?period=${Q4}`);
+    fireEvent.click(await screen.findByTestId("goal-list-draft-chip"));
+    await waitFor(() =>
+      expect(searchOf(history)).toMatchObject({ status: "Draft", view: "list", period: Q4 }),
+    );
+    expect(screen.getByTestId("goal-list-draft-chip")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("(m3) chọn tất cả 6 Nháp → «Kích hoạt (6)» → xác nhận ⇒ 6 PATCH {status:'Active'} + toast; checkbox KHÔNG mở chi tiết", async () => {
+    const success = vi.spyOn(toast, "success");
+    login(BULK_CAPS);
+    mockListGoals.mockResolvedValue(DRAFTS);
+    mountAt(DRAFT_LIST_HREF);
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Chọn Nháp số 1" }));
+    expect(screen.queryByTestId("goal-detail-stub")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả mục tiêu trên danh sách" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kích hoạt (6)" }));
+    fireEvent.click(screen.getByTestId("goal-bulk-activate-confirm"));
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith("Đã kích hoạt 6 mục tiêu"));
+    expect(mockUpdateGoal.mock.calls.map(([id]) => id).sort()).toEqual(DRAFTS.map((g) => g.id));
+    for (const [, body] of mockUpdateGoal.mock.calls) expect(body).toEqual({ status: "Active" });
+    expect(screen.queryByTestId("goal-detail-stub")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId("goal-bulk-bar")).not.toBeInTheDocument());
+  });
+
+  it("(m4) chọn lẫn 1 Nháp + 1 Đang chạy ⇒ nút đếm 1, chỉ PATCH mục Nháp", async () => {
+    login(BULK_CAPS);
+    mockListGoals.mockResolvedValue([DRAFTS[0], GOAL_ROW]);
+    mountAt(`/goals?period=${Q4}&view=list`);
+
+    await screen.findByText("Nháp số 1");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả mục tiêu trên danh sách" }));
+    expect(screen.getByText("Đã chọn 2 mục tiêu")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Kích hoạt (1)" }));
+    fireEvent.click(screen.getByTestId("goal-bulk-activate-confirm"));
+
+    await waitFor(() => expect(mockUpdateGoal).toHaveBeenCalledTimes(1));
+    expect(mockUpdateGoal).toHaveBeenCalledWith("d-1", { status: "Active" });
   });
 });
