@@ -20,6 +20,21 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 /** Tên tham số URL của drawer việc. */
 export const TASK_DRAWER_PARAM = "task";
 
+/**
+ * S20-TASK-QUICKEDIT-1 — tab mở sẵn trong drawer (`?taskTab=checklist`): lỗi «Cần hoàn tất checklist»
+ * trên dòng dẫn thẳng tới tab Checklist. Chỉ nhận giá trị trong danh sách trắng; đóng drawer bỏ luôn.
+ */
+export const TASK_DRAWER_TAB_PARAM = "taskTab";
+export const TASK_DRAWER_TABS = ["checklist"] as const;
+export type TaskDrawerTab = (typeof TASK_DRAWER_TABS)[number];
+
+/** Tab hợp lệ của `?taskTab=` hoặc `null` (thiếu / giá trị lạ). */
+export function readTaskDrawerTab(search: unknown): TaskDrawerTab | null {
+  if (typeof search !== "object" || search === null) return null;
+  const raw = (search as Record<string, unknown>)[TASK_DRAWER_TAB_PARAM];
+  return (TASK_DRAWER_TABS as readonly unknown[]).includes(raw) ? (raw as TaskDrawerTab) : null;
+}
+
 /** Trang chi tiết mở ở tab mới (không có lịch sử trong app) ⇒ «Quay lại» về đây. */
 export const TASK_DETAIL_BACK_FALLBACK = "/tasks/my-tasks";
 
@@ -50,16 +65,25 @@ export function taskIdFromPath(path: string): string | null {
 
 type SearchRecord = Record<string, unknown>;
 
-function withTask(prev: SearchRecord, taskId: string | null): SearchRecord {
+function withTask(
+  prev: SearchRecord,
+  taskId: string | null,
+  tab: TaskDrawerTab | null = null,
+): SearchRecord {
   const rest = Object.fromEntries(
-    Object.entries(prev ?? {}).filter(([key]) => key !== TASK_DRAWER_PARAM),
+    Object.entries(prev ?? {}).filter(
+      ([key]) => key !== TASK_DRAWER_PARAM && key !== TASK_DRAWER_TAB_PARAM,
+    ),
   );
-  return taskId ? { ...rest, [TASK_DRAWER_PARAM]: taskId } : rest;
+  if (!taskId) return rest;
+  return tab
+    ? { ...rest, [TASK_DRAWER_PARAM]: taskId, [TASK_DRAWER_TAB_PARAM]: tab }
+    : { ...rest, [TASK_DRAWER_PARAM]: taskId };
 }
 
 export interface TaskDrawerControls {
-  /** Thêm/đổi `?task=` trên URL hiện tại (push). */
-  openTask: (taskId: string) => void;
+  /** Thêm/đổi `?task=` trên URL hiện tại (push); `tab` mở sẵn một tab của drawer. */
+  openTask: (taskId: string, opts?: { tab?: TaskDrawerTab }) => void;
   /** Bỏ `?task=` khỏi URL hiện tại (replace). */
   closeTask: () => void;
 }
@@ -67,16 +91,17 @@ export interface TaskDrawerControls {
 export function useTaskDrawer(): TaskDrawerControls {
   const navigate = useNavigate();
   return useMemo(() => {
-    const go = (taskId: string | null, replace: boolean) =>
+    const go = (taskId: string | null, replace: boolean, tab: TaskDrawerTab | null = null) =>
       void navigate({
         to: ".",
-        search: ((prev: SearchRecord) => withTask(prev, taskId)) as never,
+        search: ((prev: SearchRecord) => withTask(prev, taskId, tab)) as never,
         replace,
         // Trang phía sau giữ nguyên vị trí cuộn khi mở/đóng drawer.
         resetScroll: false,
       });
     return {
-      openTask: (taskId: string) => go(taskId, false),
+      openTask: (taskId: string, opts?: { tab?: TaskDrawerTab }) =>
+        go(taskId, false, opts?.tab ?? null),
       closeTask: () => go(null, true),
     };
   }, [navigate]);

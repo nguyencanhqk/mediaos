@@ -1,4 +1,5 @@
 import { useMemo, useState, type DragEvent } from "react";
+import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@mediaos/web-core";
 import { Card, Button, EmptyState } from "@mediaos/ui";
 import type {
+  TaskProjectResponseDto,
   TaskCoreStatusDto,
   TaskKanbanBoardDto,
   TaskKanbanCardDto,
@@ -22,6 +24,7 @@ import { AssigneeRail } from "./AssigneeRail";
 import { useKanbanCardFocusReturn, type KanbanMoveProps } from "./KanbanCardMoveMenu";
 import { KanbanColumn, StateKanbanColumn } from "./KanbanColumns";
 import { notifyKanbanMoveRejected } from "./kanban-move-error";
+import { TaskFormDrawer } from "./TaskFormDrawer";
 import {
   buildAssigneeSummary,
   DEFAULT_WORKSPACE_FILTERS,
@@ -60,6 +63,11 @@ import {
  * S20-TASK-FEDEBT-1 — thẻ/cột tách sang `KanbanCard.tsx` · `KanbanColumns.tsx` (trang chỉ còn dữ
  * liệu + đổi cột). Server từ chối đổi cột (kéo-thả HAY menu ⋯) ⇒ lý do qua thông báo nổi dùng chung
  * (`kanban-move-error.ts`), không còn dòng `role=alert` riêng ở đầu board.
+ *
+ * S20-TASK-QUICKADD-1 (US-TASK-QL-06) — nút «Tạo công việc» (cần `create:task`) mở form Tạo với dự án
+ * điền sẵn: board chế độ status (không có ô «+» đáy cột) cũng tạo được việc, kể cả khi board còn rỗng.
+ * Lưu xong form tự làm mới khoá kanban của dự án ⇒ thẻ hiện không cần F5. Tên dự án đọc từ cache chi
+ * tiết dự án mà vỏ workspace đã tải (không thêm request).
  */
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
 
@@ -111,6 +119,11 @@ export function TaskKanbanPage({
       return next;
     });
   const requestFocusReturn = useKanbanCardFocusReturn();
+  const canCreate = useCan(
+    TASK_CORE_ENGINE_PAIRS.CREATE.action,
+    TASK_CORE_ENGINE_PAIRS.CREATE.resourceType,
+  );
+  const [createOpen, setCreateOpen] = useState(false);
   const queryKey = taskKeys.kanban(projectId);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -291,6 +304,26 @@ export function TaskKanbanPage({
     moveToStatus(e.dataTransfer.getData("text/plain"), status);
   };
 
+  const createButton = canCreate ? (
+    <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="kanban-create-task">
+      <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+      {t("quickAdd.boardCreateButton")}
+    </Button>
+  ) : null;
+  const createDrawer = createOpen ? (
+    <TaskFormDrawer
+      mode="create"
+      defaultProject={{
+        id: projectId,
+        name:
+          queryClient.getQueryData<TaskProjectResponseDto>(taskKeys.projects.detail(projectId))
+            ?.name ?? null,
+      }}
+      onClose={() => setCreateOpen(false)}
+      onSuccess={() => setCreateOpen(false)}
+    />
+  ) : null;
+
   if (!canView) {
     return (
       <EmptyState
@@ -339,10 +372,14 @@ export function TaskKanbanPage({
   // board là nơi tạo việc, giấu cột đi thì không thấy pipeline.
   if (!isStateMode && totalTasks === 0) {
     return (
-      <EmptyState
-        title={t("tasks.kanban.empty.title")}
-        description={t("tasks.kanban.empty.description")}
-      />
+      <>
+        <EmptyState
+          title={t("tasks.kanban.empty.title")}
+          description={t("tasks.kanban.empty.description")}
+          action={createButton ?? undefined}
+        />
+        {createDrawer}
+      </>
     );
   }
 
@@ -365,8 +402,15 @@ export function TaskKanbanPage({
   return (
     <div className="space-y-3">
       {/* Nút "Quản lý cột" đã CHUYỂN vào tab Cài đặt của dự án (ProjectSettingsTab). */}
-      {!canDragBoard && (
-        <p className="text-xs text-muted-foreground">{t("tasks.kanban.readOnlyHint")}</p>
+      {(createButton || !canDragBoard) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {!canDragBoard ? (
+            <p className="text-xs text-muted-foreground">{t("tasks.kanban.readOnlyHint")}</p>
+          ) : (
+            <span />
+          )}
+          {createButton}
+        </div>
       )}
       <div className="flex items-start gap-3">
         <Card className="min-w-0 flex-1 overflow-x-auto p-3">
@@ -413,6 +457,7 @@ export function TaskKanbanPage({
           />
         )}
       </div>
+      {createDrawer}
     </div>
   );
 }

@@ -8,7 +8,13 @@ import { Sheet, toast } from "@mediaos/ui";
 import { useChatDockStore } from "@/components/chat/chat-dock.store";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskDetailContent, TaskDetailActions } from "./TaskDetailContent";
-import { isTaskUuid, readTaskDrawerParam, useTaskDrawer } from "./task-drawer-nav";
+import {
+  isTaskUuid,
+  readTaskDrawerParam,
+  readTaskDrawerTab,
+  useTaskDrawer,
+  type TaskDrawerTab,
+} from "./task-drawer-nav";
 
 /**
  * Mã HTTP coi là «không mở được việc này»: không tồn tại / xoá mềm (404), ngoài phạm vi đọc (403),
@@ -44,9 +50,12 @@ export function TaskDetailDrawer({
   onClose,
   onOpenFull,
   onUnavailable,
+  initialTab = null,
 }: {
   /** null ⇒ panel đóng. */
   taskId: string | null;
+  /** S20-TASK-QUICKEDIT-1 — tab mở sẵn (`?taskTab=`), vd «Cần hoàn tất checklist» ⇒ tab Checklist. */
+  initialTab?: TaskDrawerTab | null;
   onClose: () => void;
   /** Mở task hiện tại ở TRANG đầy đủ /tasks/:taskId — parent lo điều hướng (drawer không cần router). */
   onOpenFull?: () => void;
@@ -111,7 +120,12 @@ export function TaskDetailDrawer({
       }
       data-testid="task-detail-drawer"
     >
-      <TaskDetailContent taskId={taskId} onDeleted={onClose} variant="drawer" />
+      <TaskDetailContent
+        taskId={taskId}
+        onDeleted={onClose}
+        variant="drawer"
+        initialBreakdownTab={initialTab}
+      />
     </Sheet>
   );
 }
@@ -131,6 +145,7 @@ export function GlobalTaskDrawer() {
   const { closeTask } = useTaskDrawer();
   const raw = useRouterState({ select: (s) => readTaskDrawerParam(s.location.search) });
   const taskId = isTaskUuid(raw) ? raw : null;
+  const tab = useRouterState({ select: (s) => readTaskDrawerTab(s.location.search) });
 
   const reportUnavailable = useCallback(() => {
     toast.error(t("taskDrawer.unavailable"), { key: "task-drawer-unavailable" });
@@ -154,6 +169,7 @@ export function GlobalTaskDrawer() {
   return (
     <TaskDetailDrawer
       taskId={taskId}
+      initialTab={tab}
       onClose={closeTask}
       onUnavailable={reportUnavailable}
       // Mở toàn trang = PUSH sang /tasks/:id — Back quay về trang cũ với drawer còn mở.

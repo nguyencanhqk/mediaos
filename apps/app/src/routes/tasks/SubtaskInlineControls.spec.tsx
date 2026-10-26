@@ -2,7 +2,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi, hrApi } from "@mediaos/web-core";
+import { ApiError, useAuthStore, taskCoreApi, hrApi } from "@mediaos/web-core";
 import type { SubtaskListItemDto } from "@mediaos/contracts";
 import {
   SubtaskAssigneeControl,
@@ -26,6 +26,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       assign: vi.fn(),
       // SubtaskStatusControl — đổi trạng thái đi route change-status (không PATCH).
       changeStatus: vi.fn(),
+      // S20-TASK-QUICKEDIT-1 — SubtaskDueControl lưu hạn qua route change-deadline (không PATCH).
+      changeDeadline: vi.fn(),
     },
     hrApi: {
       listEmployees: vi.fn().mockResolvedValue({
@@ -231,54 +233,50 @@ describe("SubtaskDueControl", () => {
     useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
   });
 
-  it("bấm ngày mở ô nhập, Enter là lưu", async () => {
+  // S20-TASK-QUICKEDIT-1 — popover mốc hạn dùng chung; lưu NGAY qua change-deadline, KHÔNG PATCH.
+  it("bấm ngày mở popover mốc nhanh; «Ngày mai» lưu ngay qua change-deadline, không PATCH", async () => {
     setCapabilities({ "update-deadline:task": true });
-    vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ id: "sub-001" } as never);
+    vi.mocked(taskCoreApi.changeDeadline).mockResolvedValue({ task: { id: "sub-001" } } as never);
     renderWithQuery(<SubtaskDueControl {...PROPS} />);
 
     fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001"));
-    const input = screen.getByTestId("subtask-due-input-sub-001");
-    fireEvent.change(input, { target: { value: "2026-08-01T09:00" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001-preset-tomorrow"));
 
-    await waitFor(() => expect(taskCoreApi.updateTask).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(taskCoreApi.updateTask).mock.calls[0][0]).toBe("sub-001");
-    expect(vi.mocked(taskCoreApi.updateTask).mock.calls[0][1]).toHaveProperty("dueAt");
-  });
-
-  it("rời ô cũng lưu", async () => {
-    setCapabilities({ "update-deadline:task": true });
-    vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ id: "sub-001" } as never);
-    renderWithQuery(<SubtaskDueControl {...PROPS} />);
-
-    fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001"));
-    const input = screen.getByTestId("subtask-due-input-sub-001");
-    fireEvent.change(input, { target: { value: "2026-08-01T09:00" } });
-    fireEvent.blur(input);
-
-    await waitFor(() => expect(taskCoreApi.updateTask).toHaveBeenCalledTimes(1));
-  });
-
-  it("Esc huỷ, KHÔNG lưu", () => {
-    setCapabilities({ "update-deadline:task": true });
-    renderWithQuery(<SubtaskDueControl {...PROPS} />);
-
-    fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001"));
-    const input = screen.getByTestId("subtask-due-input-sub-001");
-    fireEvent.change(input, { target: { value: "2026-08-01T09:00" } });
-    fireEvent.keyDown(input, { key: "Escape" });
-
-    expect(screen.queryByTestId("subtask-due-input-sub-001")).not.toBeInTheDocument();
+    await waitFor(() => expect(taskCoreApi.changeDeadline).toHaveBeenCalledTimes(1));
+    const [taskId, body] = vi.mocked(taskCoreApi.changeDeadline).mock.calls[0] ?? [];
+    expect(taskId).toBe("sub-001");
+    expect(body?.dueAt).toMatch(/T10:00:00\.000Z$/); // 17:00 giờ công ty (UTC+7)
     expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
   });
 
-  it("không đổi gì rồi rời ô ⇒ không gọi API", () => {
+  it("«Tuỳ chỉnh» + Áp dụng ⇒ change-deadline với giờ đã nhập (giờ công ty)", async () => {
     setCapabilities({ "update-deadline:task": true });
+    vi.mocked(taskCoreApi.changeDeadline).mockResolvedValue({ task: { id: "sub-001" } } as never);
     renderWithQuery(<SubtaskDueControl {...PROPS} />);
 
     fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001"));
-    fireEvent.blur(screen.getByTestId("subtask-due-input-sub-001"));
-    expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001-custom"));
+    fireEvent.change(screen.getByTestId("subtask-due-trigger-sub-001-custom-input"), {
+      target: { value: "2026-08-01T09:00" },
+    });
+    fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001-custom-apply"));
+
+    await waitFor(() =>
+      expect(taskCoreApi.changeDeadline).toHaveBeenCalledWith("sub-001", {
+        dueAt: "2026-08-01T02:00:00.000Z",
+      }),
+    );
+  });
+
+  it("server từ chối 403 ⇒ báo lỗi dưới dòng", async () => {
+    setCapabilities({ "update-deadline:task": true });
+    vi.mocked(taskCoreApi.changeDeadline).mockRejectedValue(
+      new ApiError({ status: 403, code: "AUTH-ERR-FORBIDDEN", message: "Forbidden" }),
+    );
+    renderWithQuery(<SubtaskDueControl {...PROPS} />);
+    fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001"));
+    fireEvent.click(screen.getByTestId("subtask-due-trigger-sub-001-preset-tomorrow"));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 
   it("canEdit=false ⇒ chỉ là chữ, không bấm được", () => {
@@ -294,5 +292,6 @@ describe("SubtaskDueControl", () => {
     renderWithQuery(<SubtaskDueControl {...PROPS} />);
     expect(screen.queryByTestId("subtask-due-trigger-sub-001")).not.toBeInTheDocument();
     expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
+    expect(taskCoreApi.changeDeadline).not.toHaveBeenCalled();
   });
 });

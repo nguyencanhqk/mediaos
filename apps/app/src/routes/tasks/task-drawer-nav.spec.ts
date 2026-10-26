@@ -17,6 +17,7 @@ import {
   TASK_DETAIL_BACK_FALLBACK,
   isTaskUuid,
   readTaskDrawerParam,
+  readTaskDrawerTab,
   taskIdFromPath,
   useTaskDetailBack,
   useTaskDetailNav,
@@ -110,6 +111,34 @@ describe("useTaskDrawer — mở = push, đóng = replace, chỉ đổi `task`",
     const arg = lastArg();
     expect(arg).toMatchObject({ to: ".", replace: true });
     expect(arg.search({ status: "Todo", task: UUID })).toEqual({ status: "Todo" });
+  });
+
+  // S20-TASK-QUICKEDIT-1 — «Mở checklist» từ lỗi trên dòng ⇒ drawer mở sẵn tab Checklist.
+  it("openTask(id, { tab }) ⇒ thêm `taskTab`; mở việc khác không kèm tab ⇒ bỏ tab cũ", () => {
+    const { result } = renderHook(() => useTaskDrawer());
+    result.current.openTask(UUID, { tab: "checklist" });
+    expect(lastArg().search({ group: "today" })).toEqual({
+      group: "today",
+      task: UUID,
+      taskTab: "checklist",
+    });
+    result.current.openTask(UUID);
+    expect(lastArg().search({ task: "cu", taskTab: "checklist" })).toEqual({ task: UUID });
+  });
+
+  it("closeTask ⇒ bỏ cả `taskTab`", () => {
+    const { result } = renderHook(() => useTaskDrawer());
+    result.current.closeTask();
+    expect(lastArg().search({ task: UUID, taskTab: "checklist", page: 2 })).toEqual({ page: 2 });
+  });
+});
+
+describe("readTaskDrawerTab — chỉ nhận tab trong danh sách trắng", () => {
+  it("checklist ⇒ checklist; thiếu / lạ / không phải object ⇒ null", () => {
+    expect(readTaskDrawerTab({ taskTab: "checklist" })).toBe("checklist");
+    expect(readTaskDrawerTab({ taskTab: "comments" })).toBeNull();
+    expect(readTaskDrawerTab({})).toBeNull();
+    expect(readTaskDrawerTab(null)).toBeNull();
   });
 });
 

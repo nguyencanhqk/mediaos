@@ -837,11 +837,7 @@ export default {
         button: "Thêm công việc",
         placeholder: "Nhập tên công việc…",
         hint: "Enter để tạo · Esc để đóng",
-        errors: {
-          forbidden: "Bạn không có quyền tạo công việc ở cột này.",
-          badRequest: "Không tạo được — kiểm tra lại tên công việc hoặc cột.",
-          generic: "Không tạo được công việc. Vui lòng thử lại.",
-        },
+        // Lỗi tạo nhanh: `quickAdd.errors.*` (tasks-workux.ts — S20-TASK-QUICKADD-1, dùng chung).
       },
       forbidden: {
         title: "Không có quyền truy cập",
