@@ -11,6 +11,9 @@
  *    của QL2 là tín hiệu In Review (dedupe TimeWindow 300s của TASK_STATUS_CHANGED không che được ca này);
  *  · QLR — Manager đã bị gỡ (member_status 'Removed');
  *  · NV — Member, người phụ trách và người đổi trạng thái;
+ *  · MB · VW — Member · Viewer CÒN HIỆU LỰC, không tạo/không phụ trách/không theo dõi (vế lọc vai trò);
+ *  · QLI — Manager 'Inactive' chưa xoá (vế lọc member_status riêng);
+ *  · QLD — Manager 'Active' nhưng hàng thành viên đã xoá mềm (vế lọc deleted_at riêng);
  *  · BO — người dùng công ty B, gieo một hàng thành viên công ty B trỏ vào dự án P.
  *
  * Kéo giữa hai cột cùng nhóm review đo trên `outbox_events` (không đếm thông báo — một sự kiện thừa cũng có
@@ -51,6 +54,8 @@ const runDb = hasDb && Boolean(process.env.LANE_DB);
 const LOGIN_PW = loginPasswordFixture("revaud");
 const STATUS_CHANGED = "TASK_STATUS_CHANGED";
 const IN_REVIEW = "In Review";
+/** Thành viên P mà mỗi người chỉ thoả TRỪ MỘT vế của bộ lọc người duyệt (vai trò · member_status · deleted_at). */
+const NOT_REVIEWERS = ["mb", "vw", "qli", "qld"];
 
 type Pair = [action: string, resourceType: string];
 
@@ -126,20 +131,17 @@ describe.skipIf(!runDb)(
       return (await ok("ql1", "/tasks", body, 201)).id as string;
     }
 
-    async function addMember(k: string, role: string, removed = false): Promise<void> {
+    async function addMember(
+      k: string,
+      role: string,
+      memberStatus = "Active",
+      deleted = false,
+    ): Promise<void> {
       await direct.query(
         `INSERT INTO project_members (company_id, project_id, user_id, employee_id, project_role,
                                     member_status, deleted_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          A.companyId,
-          projectP,
-          uid[k],
-          emp[k],
-          role,
-          removed ? "Removed" : "Active",
-          removed ? new Date() : null,
-        ],
+        [A.companyId, projectP, uid[k], emp[k], role, memberStatus, deleted ? new Date() : null],
       );
     }
 
@@ -180,7 +182,7 @@ describe.skipIf(!runDb)(
        ON CONFLICT DO NOTHING`,
         [A.companyId],
       );
-      for (const k of ["ql1", "ql2", "qlr", "nv"]) await actor(k, A, hash);
+      for (const k of ["ql1", "ql2", "qlr", "nv", ...NOT_REVIEWERS]) await actor(k, A, hash);
       await actor("bo", B, hash);
 
       await grant(A.companyId, uid.ql1, [
@@ -212,8 +214,12 @@ describe.skipIf(!runDb)(
       );
       expect(owner.rows[0].n, "QL1 phải là Owner Active của P").toBe(1);
       await addMember("ql2", "Manager");
-      await addMember("qlr", "Manager", true);
+      await addMember("qlr", "Manager", "Removed", true);
       await addMember("nv", "Member");
+      await addMember("mb", "Member");
+      await addMember("vw", "Viewer");
+      await addMember("qli", "Manager", "Inactive");
+      await addMember("qld", "Manager", "Active", true);
 
       reviewCol1 = (
         await direct.query(
@@ -286,6 +292,15 @@ describe.skipIf(!runDb)(
       await drain();
       expect(await statusEvents(t.move)).toBe(before);
       expect(await statusRows("ql2", t.move)).toHaveLength(1);
+    });
+
+    it("A8 · Member · Viewer · Manager Inactive · Manager đã xoá mềm của P ⇒ không nhận tín hiệu In Review", async () => {
+      for (const taskId of [t.change, t.move]) {
+        expect((await statusRows("ql2", taskId)).map((r) => r.toStatus)).toEqual([IN_REVIEW]);
+        for (const k of NOT_REVIEWERS) {
+          expect(await statusRows(k, taskId), `${k} không phải người duyệt`).toHaveLength(0);
+        }
+      }
     });
 
     it("A6 · trạng thái khác (In Progress) ⇒ QL2 không nhận; người tạo vẫn nhận như cũ", async () => {

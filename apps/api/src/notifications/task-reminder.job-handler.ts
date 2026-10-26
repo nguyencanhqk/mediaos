@@ -13,6 +13,7 @@ import {
   findRemindedPairs,
   queryReminderCandidates,
   recipientKeyId,
+  remindedSince,
   reminderDedupeKey,
   reminderRecipients,
   TASK_DUE_SOON_EVENT,
@@ -163,7 +164,13 @@ export class TaskReminderJobHandler implements JobHandler {
     const pairs = keyed
       .flatMap((k) => k.keys)
       .filter((p): p is RecipientKey => typeof p.key === "string");
-    const reminded = await findRemindedPairs(tx, companyId, ev.eventCode, pairs);
+    const reminded = await findRemindedPairs(
+      tx,
+      companyId,
+      ev.eventCode,
+      pairs,
+      remindedSince(candidates),
+    );
 
     const remainingOf = keyed.map(({ item, keys }) => ({
       ...item,

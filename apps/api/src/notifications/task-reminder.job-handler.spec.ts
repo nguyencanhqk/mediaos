@@ -77,6 +77,9 @@ function intakeFor(engine: { intake: ReturnType<typeof vi.fn> }, taskId: string)
 }
 
 const DUE = "2026-10-26T08:00:00.000Z";
+const DAY = 24 * 60 * 60 * 1000;
+/** `remindedSince` của lô chỉ có mốc DUE: DUE − 24h (cửa sổ sắp hạn) − 24h (biên lệch đồng hồ). */
+const SINCE_OF_DUE = "2026-10-24T08:00:00.000Z";
 
 describe("hàm thuần của phần đọc", () => {
   it("khoá: chuỗi có offset +07:00, text kiểu PG và Date cùng thời điểm ⇒ CÙNG khoá UTC mili-giây", () => {
@@ -102,19 +105,38 @@ describe("hàm thuần của phần đọc", () => {
     expect(q.DUE_SOON_WINDOW_MS).toBe(24 * 60 * 60 * 1000);
   });
 
-  it("vị từ «đã từng nhận» = tầng 1 của engine TRỪ deleted_at (+ user_id cho index)", () => {
+  it("vị từ «đã từng nhận» = tầng 1 của engine TRỪ deleted_at (+ user_id, biên created_at cho index)", () => {
     const recipient = randomUUID();
     const rendered = new PgDialect().sqlToQuery(
-      q.remindedPairsWhere(COMPANY, q.TASK_OVERDUE_EVENT, [recipient], ["k1"]),
+      q.remindedPairsWhere(
+        COMPANY,
+        q.TASK_OVERDUE_EVENT,
+        [recipient],
+        ["k1"],
+        new Date(SINCE_OF_DUE),
+      ),
     );
     const text = rendered.sql.replace(/\s+/g, " ");
     for (const col of ["company_id", "event_code", "recipient_user_id", "user_id", "dedupe_key"]) {
       expect(text).toContain(`"notifications"."${col}"`);
     }
+    expect(text).toContain(`"notifications"."created_at" >= $`);
     expect(text).not.toContain("deleted_at");
     expect(rendered.params).toEqual(
       expect.arrayContaining([COMPANY, q.TASK_OVERDUE_EVENT, recipient, "k1"]),
     );
+    const params = rendered.params.map((p) => (p instanceof Date ? p.toISOString() : p));
+    expect(params).toContain(SINCE_OF_DUE);
+  });
+
+  it("biên created_at = mốc hạn SỚM NHẤT của lô − cửa sổ sắp hạn − biên lệch đồng hồ", () => {
+    const a = randomUUID();
+    const later = cand(DUE, a);
+    const earlier = cand("2026-10-25T08:00:00.000+07:00", a);
+    expect(q.REMINDED_SINCE_MARGIN_MS).toBe(DAY);
+    expect(q.remindedSince([later, earlier]).toISOString()).toBe("2026-10-23T01:00:00.000Z");
+    expect(q.remindedSince([later]).toISOString()).toBe(SINCE_OF_DUE);
+    expect(() => q.remindedSince([])).toThrow(/remindedSince/);
   });
 });
 
@@ -174,11 +196,17 @@ describe("TaskReminderJobHandler.run", () => {
 
     const res = await handler.run({ companyId: COMPANY });
 
-    expect(q.findRemindedPairs).toHaveBeenCalledWith(FAKE_TX, COMPANY, q.TASK_OVERDUE_EVENT, [
-      { recipientUserId: a, key: engineKey(partly) },
-      { recipientUserId: r, key: engineKey(partly) },
-      { recipientUserId: a, key: engineKey(fully) },
-    ]);
+    expect(q.findRemindedPairs).toHaveBeenCalledWith(
+      FAKE_TX,
+      COMPANY,
+      q.TASK_OVERDUE_EVENT,
+      [
+        { recipientUserId: a, key: engineKey(partly) },
+        { recipientUserId: r, key: engineKey(partly) },
+        { recipientUserId: a, key: engineKey(fully) },
+      ],
+      new Date(SINCE_OF_DUE),
+    );
     expect(intakeFor(engine, partly.id)[0]?.recipient).toMatchObject({ userIds: [r] });
     expect(intakeFor(engine, fully.id)).toHaveLength(0);
     expect(res.success).toBe(2);
@@ -213,9 +241,13 @@ describe("TaskReminderJobHandler.run", () => {
     expect(res.metadata).toMatchObject({
       dedupeStrategyMismatch: [q.TASK_DUE_SOON_EVENT, q.TASK_OVERDUE_EVENT],
     });
-    expect(q.findRemindedPairs).toHaveBeenCalledWith(FAKE_TX, COMPANY, q.TASK_OVERDUE_EVENT, [
-      { recipientUserId: a, key: `${q.TASK_OVERDUE_EVENT}:${late.id}:${a}` },
-    ]);
+    expect(q.findRemindedPairs).toHaveBeenCalledWith(
+      FAKE_TX,
+      COMPANY,
+      q.TASK_OVERDUE_EVENT,
+      [{ recipientUserId: a, key: `${q.TASK_OVERDUE_EVENT}:${late.id}:${a}` }],
+      new Date(SINCE_OF_DUE),
+    );
   });
 
   it("sự kiện tắt/không có trong catalog ⇒ không kiểm trước, engine tự quyết", async () => {

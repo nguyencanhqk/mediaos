@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { notifications } from "../db/schema/communication";
 
@@ -155,17 +155,39 @@ export async function queryReminderCandidates(
   return { dueSoon, overdue, overdueSkippedByLookback: Number(n) };
 }
 
+/** Biên an toàn lệch đồng hồ app ↔ DB cho `remindedSince` (`created_at` là `now()` của DB lúc intake). */
+export const REMINDED_SINCE_MARGIN_MS = DAY_MS;
+
+/**
+ * Biên dưới `created_at` của câu «đã từng nhận». Hàng mang khoá (việc, mốc hạn) chỉ được job tạo khi
+ * `now ≥ due_at − DUE_SOON_WINDOW_MS` (sớm nhất là lúc việc vào cửa sổ sắp hạn), nên không thể có
+ * `created_at` sớm hơn mốc đó. Lấy mốc hạn sớm nhất của lô, trừ thêm biên an toàn ⇒ một biên cho cả lô.
+ * Nhờ biên này câu kiểm chỉ đọc thông báo gần đây của người nhận (index `(company_id, user_id, created_at)`)
+ * thay vì toàn bộ lịch sử.
+ */
+export function remindedSince(candidates: ReminderCandidate[]): Date {
+  const earliest = candidates.reduce(
+    (min, c) => Math.min(min, Date.parse(c.dueAt)),
+    Number.POSITIVE_INFINITY,
+  );
+  if (!Number.isFinite(earliest)) {
+    throw new Error("TASK_REMINDER: remindedSince cần ít nhất một ứng viên có due_at đọc được");
+  }
+  return new Date(earliest - DUE_SOON_WINDOW_MS - REMINDED_SINCE_MARGIN_MS);
+}
+
 /**
  * Vị từ «đã từng nhận» = tầng 1 của engine (`NotificationDedupeService.isDuplicate`: company · người nhận ·
  * event_code · dedupe_key) TRỪ `deleted_at` — người nhận đã xoá mềm thông báo vẫn tính là đã nhắc (tiền lệ
- * `attendance-alert-noti.repository.ts` findExistingDedupeKeysTx). `user_id = any(...)` chỉ để dùng index
- * `user_id` không partial (engine ghi `user_id` = người nhận).
+ * `attendance-alert-noti.repository.ts` findExistingDedupeKeysTx). `user_id = any(...)` + `created_at >= since`
+ * để dùng index `(company_id, user_id, created_at)` không partial (engine ghi `user_id` = người nhận).
  */
 export function remindedPairsWhere(
   companyId: string,
   eventCode: string,
   recipientUserIds: string[],
   keys: string[],
+  since: Date,
 ): SQL {
   return and(
     eq(notifications.companyId, companyId),
@@ -173,15 +195,17 @@ export function remindedPairsWhere(
     inArray(notifications.recipientUserId, recipientUserIds),
     inArray(notifications.userId, recipientUserIds),
     inArray(notifications.dedupeKey, keys),
+    gte(notifications.createdAt, since),
   ) as SQL;
 }
 
-/** Tập `recipientKeyId(người nhận, khoá)` đã có hàng `notifications` (còn hay đã xoá mềm). */
+/** Tập `recipientKeyId(người nhận, khoá)` đã có hàng `notifications` (còn hay đã xoá mềm) từ `since`. */
 export async function findRemindedPairs(
   tx: TenantTx,
   companyId: string,
   eventCode: string,
   pairs: RecipientKey[],
+  since: Date,
 ): Promise<Set<string>> {
   const found = new Set<string>();
   for (let i = 0; i < pairs.length; i += REMINDED_LOOKUP_CHUNK) {
@@ -191,7 +215,7 @@ export async function findRemindedPairs(
     const rows = await tx
       .select({ recipientUserId: notifications.recipientUserId, key: notifications.dedupeKey })
       .from(notifications)
-      .where(remindedPairsWhere(companyId, eventCode, recipients, keys));
+      .where(remindedPairsWhere(companyId, eventCode, recipients, keys, since));
     for (const r of rows) {
       if (r.recipientUserId && r.key) found.add(recipientKeyId(r.recipientUserId, r.key));
     }

@@ -24,8 +24,10 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { PasswordService } from "../../src/auth/password.service";
+import { DatabaseService } from "../../src/db/db.service";
 import { NotificationEngineService } from "../../src/notifications/notification-engine.service";
 import { TaskReminderJobHandler } from "../../src/notifications/task-reminder.job-handler";
+import { queryReminderCandidates } from "../../src/notifications/task-reminder.job-handler.query";
 import type { JobRunResult } from "../../src/scheduler/job-handler";
 import { applyMainPipeline } from "../helpers/bootstrap-app";
 import { loginPasswordFixture } from "../helpers/fixture-secrets";
@@ -138,6 +140,14 @@ describe.skipIf(!runDb)("S20-TASK-DUEREMIND-1 — nhắc hạn việc SPEC-06", 
     if (assignee) body.assigneeEmployeeId = emp[assignee];
     if (dueInMs !== null) body.dueAt = fromNow(dueInMs);
     const res = await as(who, "post", "/tasks").send(body);
+    expect(res.status, `POST /tasks ${title}: ${JSON.stringify(res.body)}`).toBe(201);
+    return res.body.data.id as string;
+  }
+
+  /** Như `mkTask` nhưng hạn là mốc tuyệt đối (ca biên R12); người phụ trách NV. */
+  async function mkTaskAt(title: string, dueAt: string): Promise<string> {
+    const body = { title, assigneeEmployeeId: emp.nv, dueAt };
+    const res = await as("rep", "post", "/tasks").send(body);
     expect(res.status, `POST /tasks ${title}: ${JSON.stringify(res.body)}`).toBe(201);
     return res.body.data.id as string;
   }
@@ -384,5 +394,33 @@ describe.skipIf(!runDb)("S20-TASK-DUEREMIND-1 — nhắc hạn việc SPEC-06", 
       [A.companyId, [uid.bnv, uid.brep]],
     );
     expect(leaked.rows[0].n).toBe(0);
+  });
+
+  it("R12 · biên cửa sổ: hạn = now và = now+24h là sắp hạn; = now−7d là quá hạn; sớm hơn 1 phút chỉ được đếm", async () => {
+    // Mốc cố định 30 ngày tới (phút tròn) ⇒ các việc dưới đây không chạm lượt chạy đồng hồ thật của ca khác.
+    const N = Math.ceil(Date.now() / 60_000) * 60_000 + 30 * DAY_MS;
+    const MIN = 60_000;
+    const at = (ms: number) => mkTaskAt(`duerem-r12-${ms}`, new Date(N + ms).toISOString());
+    const e0 = await at(0);
+    const e24 = await at(DAY_MS);
+    const e24p = await at(DAY_MS + MIN);
+    const o1 = await at(-MIN);
+    const o7 = await at(-7 * DAY_MS);
+    const o7m = await at(-7 * DAY_MS - MIN);
+    const db = nest.get(DatabaseService);
+    const read = (ms: number) =>
+      db.withTenant(A.companyId, (tx) => queryReminderCandidates(tx, A.companyId, new Date(ms)));
+
+    const c = await read(N);
+    const soon = c.dueSoon.map((x) => x.id);
+    const over = c.overdue.map((x) => x.id);
+    expect(soon).toEqual(expect.arrayContaining([e0, e24]));
+    expect(soon).not.toContain(e24p);
+    expect(over).toEqual(expect.arrayContaining([o1, o7]));
+    for (const id of [e0, o7m]) expect(over).not.toContain(id);
+    for (const id of [o1, o7, o7m]) expect(soon).not.toContain(id);
+    // Đếm bỏ-do-lookback: o7m vào tập đếm đúng tại N; o7 chỉ vào khi lookback vượt qua nó (N + 1 phút).
+    expect(c.overdueSkippedByLookback - (await read(N - MIN)).overdueSkippedByLookback).toBe(1);
+    expect((await read(N + MIN)).overdueSkippedByLookback - c.overdueSkippedByLookback).toBe(1);
   });
 });
