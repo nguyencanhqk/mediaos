@@ -1,4 +1,7 @@
-# S20-TASK-ASSIGNNOTI-1 — plan v1
+# S20-TASK-ASSIGNNOTI-1 — plan v1.1
+
+> v1.1 (sau plan-review PASS_WITH_FIXES): §3 thêm điểm 7–10, §4 thêm C4′ · C6b · C12 và siết C8 · C11,
+> §8 ghi quyết định từng finding (chấp nhận / chấp nhận một phần + lý do có file:dòng).
 
 > Giao việc qua form Tạo, hoặc đổi người/hạn/ưu tiên qua form Sửa, cũng báo cho người được giao như khi
 > đổi trong chi tiết việc. Zone 🟡 · gate FULL (chạm audit/outbox/NOTI) · không migration · không đổi cổng
@@ -71,6 +74,23 @@
 6. **[SUY RA] Phân rã mục tiêu** đi qua `createTaskInTx` ⇒ từ nay việc phân rã có người phụ trách ≠ người phân rã
    cũng phát `task.assigned` (đúng NOTI-EVENT-002 «được giao việc»). Không cần quyết định mới để làm; nếu owner
    muốn tắt cho phân rã thì thêm cờ `ctx.skipAssignEvent` ở caller đó (một dòng) — ghi ở openQuestions.
+7. **(v1.1 · F3) Một khuôn payload** — `commonPayload` (task-actions :721-736) chuyển thành hàm thuần export
+   `commonTaskPayload(eventCode, task{id,title,taskCode,projectId}, actorUserId, actorEmployeeId)` trong
+   `task-assign-events.ts`; `changeStatusTx` (:279, ngoài phạm vi chuyển) gọi CÙNG hàm. Sau sửa, grep
+   `commonPayload` / `commonTaskPayload` chỉ thấy MỘT định nghĩa, ở `task-assign-events.ts`.
+8. **(v1.1 · F4) Payload PATCH theo hàng SAU patch** — `recordPatchedTx` đọc lại hàng (`findActionRawTx`, cùng
+   `tx`, chỉ khi có trường cổng đổi) và lấy `assigneeUserId`/`title`/`projectId` của hàng SAU patch cho cả ba
+   loại sự kiện; giá trị cũ (`oldAssigneeEmployeeId`/`oldDueAt`/`oldPriority`) lấy từ `raw` trước patch.
+   PATCH đổi người + hạn + ưu tiên trong một request ⇒ GIỮ ba sự kiện (= gọi ba route chuyên trách nối tiếp);
+   gộp thông báo là quyết định sản phẩm ⇒ followup, không tự đổi.
+9. **(v1.1 · F2) Thứ tự** — enqueue nằm trong `recordCreatedTx`, gọi TRƯỚC `recomputeProjectGoalsTx`
+   (task-core :596); `recordPatchedTx` thay khối :761-798, TRƯỚC recompute :805-809.
+10. **(v1.1 · F9) warnings** — tính ở `createTask` (wrapper HTTP) bằng `createdWarningsTx(tx, companyId, id)`
+    SAU `createTaskInTx`, cùng `tx`; phân rã mục tiêu (gọi `createTaskInTx` trực tiếp) KHÔNG tốn truy vấn
+    cảnh báo. (Thay cho «createTaskInTx trả warnings» ở điểm 3.)
+11. **(v1.1 · F5) Chuyển nguyên văn** — helper nhận `auditedChanges`, `parentChanged`, `raw` đã tính ở caller,
+    không tính lại; giữ tên hành động `TASK_CREATED`/`TaskCreated`/`TASK_UPDATED`/`TaskUpdated`, giữ khuôn
+    `oldValues`/`newValues`/`before`/`after` (timeline #245 pin `newValues`).
 
 ## §4 Bảng ca
 
@@ -95,7 +115,25 @@ Int `s20-task-assign-noti.int-spec.ts` (MỚI, `applyMainPipeline`, `describe.sk
 | C10 create, A có đơn nghỉ approved trùng ngày `dueAt`                                                                        | RED                  | `warnings[]` có `TASK-WARN-ASSIGNEE-ON-LEAVE`; payload outbox không có khoá `description`                                                                                                                                                                                                                 | ĐỎ: không có `warnings`          |
 | C11 cross-tenant: actor công ty B PATCH việc công ty A / create ở B với nhân viên A                                          | DENY                 | 404/400; 0 outbox ở cả A và B; người nhận sau drain không bao giờ thuộc công ty khác                                                                                                                                                                                                                      | xanh (chốt)                      |
 
-Chạy RED trước: commit spec, chạy trên mã cũ (C1, C4, C5, C6, C10 đỏ; còn lại xanh), rồi mới implement.
+v1.1 — ca thêm / siết theo plan-review:
+
+| Ca                                                      | Loại     | Kỳ vọng                                                                                                                                                                                                                          | Trên mã cũ |
+| ------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| C4′ (siết C4, F1) — W ≠ QL đều là watcher; người cũ A   | RED      | B 1 · W 1 · QL 0 · A 0 thông báo `TASK_ASSIGNEE_CHANGED` của việc đó; đo cả «∪ watchers» lẫn «loại actor»                                                                                                                        | ĐỎ         |
+| C6b (F4) — PATCH A→B + `dueAt` + `priority` một request | RED      | đúng 1 outbox mỗi loại `task.assignee_changed` · `task.due_date_changed` · `task.priority_changed`; payload hạn/ưu tiên mang `assigneeUserId` = B; sau drain B nhận 1 thông báo mỗi mã (3), A 0                                  | ĐỎ         |
+| C8 (siết, F2) — spy ném 400 ở recompute                 | chốt     | spy được gọi ĐÚNG 1 lần; không gửi `Idempotency-Key` (interceptor bỏ qua khi thiếu khoá); cặp dương tính cùng dữ liệu không spy = C1                                                                                             | xanh (giữ) |
+| C11 (siết, F6) — cross-tenant                           | DENY     | (1) outbox `task.assigned` của C1 có `company_id` = A; (2) người B PATCH việc A ⇒ 404 + 0 outbox mới cho việc đó; (3) người B tạo việc ở B giao NV công ty A ⇒ 400 + 0 outbox theo tiêu đề; (4) sau drain người B có 0 thông báo | xanh (giữ) |
+| C12 — quét payload                                      | bất biến | mọi outbox `task.*` của hai công ty trong spec: không có khoá `description` / `reason`                                                                                                                                           | xanh (giữ) |
+
+Ca nhãn «xanh (giữ)» xanh trên mã cũ theo thiết kế — không tính là RED; mỗi ca đó đứng cạnh một ca dương tính
+(C2/C3 ↔ C1 · C7 ↔ C6 · C8 ↔ C1 · C9 ↔ C4 · C11 ↔ C1). Assert người nhận bằng id người dùng cụ thể của spec,
+không đếm toàn bảng (lane dùng chung với WO kia của chuỗi).
+
+Hồi quy phải xanh KHÔNG sửa dòng nào (F5): `task-noti-e2e.int-spec.ts`, `task-actions.int-spec.ts`,
+`task-patch-field-gate.int-spec.ts`, `goal-be2-link.int-spec.ts`, `task-core.int-spec.ts`; unit
+`task-core-codegen.spec.ts` chỉ thêm đối số DI cuối.
+
+Chạy RED trước: commit spec, chạy trên mã cũ (C1, C4, C5, C6, C6b, C10 đỏ; còn lại xanh), rồi mới implement.
 Hồi quy: `task-noti-e2e.int-spec.ts`, `task-actions.int-spec.ts`, `task-patch-field-gate.int-spec.ts`,
 `goal-be2-link.int-spec.ts` + unit `task-core-codegen.spec.ts` (chia lô ≤ 3 tệp qua wrapper, lane `mediaos_w26b`).
 
@@ -128,3 +166,19 @@ pathsNeeded (ngoài `paths`, tối thiểu):
 - PATCH không ghi `task_assignees` như `/assign` (lệch có sẵn, «Risk #7» trong task-actions) — không sửa ở đây.
 - Ngày kiểm nghỉ phép lấy `dueAt.slice(0,10)` theo UTC (hành vi sẵn có của `/assign`) — nợ múi giờ công ty, ghi followups.
 - `TasksService.createTask` (đường cũ, `tasks.service.ts` :188) — park, không phát.
+
+## §8 Phản hồi plan-review (v1.1)
+
+| Finding                                                  | Quyết định                                                                                                                         | Căn cứ đo                                                                                                                                                                        |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F0 HIGH — plan không đọc được lúc rà                     | Chấp nhận: đối chiếu bảng ca với F1–F6, vá thành v1.1 trước commit RED                                                             | plan có ở `e39bb121`; bảng ca §4                                                                                                                                                 |
+| F1 HIGH — «không phát» chỉ đếm thông báo thì xanh rỗng   | Chấp nhận. C2/C3 đã assert ở tầng outbox (v1); C4′ thêm W ≠ QL và A = 0                                                            | engine loại actor `notification-recipient-resolver.service.ts:50-51`; audience đọc watcher `task-audience.reader.ts`                                                             |
+| F2 MED — C8 chỉ có nghĩa khi enqueue trước recompute     | Chấp nhận (§3.9, C8 siết). Đột biến «enqueue qua kết nối riêng» bị C8 bắt (hàng outbox commit độc lập ⇒ 1 ≠ 0) và C1 (`xmin` lệch) | recompute `task-core.service.ts:596-598`; interceptor bỏ qua khi thiếu khoá `idempotency.interceptor.ts:70`                                                                      |
+| F3 MED — `commonPayload` còn dùng ở changeStatus         | Chấp nhận (§3.7)                                                                                                                   | `task-actions.service.ts:279`                                                                                                                                                    |
+| F4 MED — payload hạn/ưu tiên mang người CŨ khi PATCH gộp | Chấp nhận (§3.8, C6b); gộp thông báo ⇒ followup cho owner                                                                          | `buildGatedPatch` ghi người mới cùng request `task-patch-field-gate.ts:118-123`; cache dashboard theo `payload.assigneeUserId` `dashboard-cache-invalidation.registrar.ts:70-74` |
+| F5 MED — chuyển khối audit phải chứng minh không đổi     | Chấp nhận (§3.11 + danh sách hồi quy §4)                                                                                           | `task-core.service.ts:761-798`                                                                                                                                                   |
+| F6 MED — cross-tenant chưa cụ thể                        | Chấp nhận (C11 siết 4 vế)                                                                                                          | `outbox_events` chung, claim không lọc tenant — drain qua `acquireOutboxWorkerLock`                                                                                              |
+| F7 MED — chung worktree/lane với WO kia                  | Chấp nhận: assert theo id cụ thể; rebase + chạy lại int-spec mới sau khi WO kia merge = việc của luồng chính (followup)            | —                                                                                                                                                                                |
+| F8 LOW                                                   | Chấp nhận: hạn C10 lúc 05:00Z                                                                                                      | `task-actions.service.ts:618-623`                                                                                                                                                |
+| F9 LOW                                                   | Chấp nhận một phần: warnings chỉ tính ở wrapper (§3.10); không thêm ca int cho phân rã (followup)                                  | `goal-decompose.service.ts:241-263`                                                                                                                                              |
+| F10 · F11 LOW                                            | Followup (KPI #10 chưa đo; đua đọc không khoá có sẵn như `/assign`)                                                                | `task-core.service.ts:623`, `task-actions.service.ts:522`                                                                                                                        |
