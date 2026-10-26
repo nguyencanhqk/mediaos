@@ -1,289 +1,388 @@
 /**
- * S4-NOTI-BE-3 — TaskReminderJobHandler (TASK_DUE_SOON / TASK_OVERDUE) trên Nest app + Postgres THẬT.
+ * S20-TASK-DUEREMIND-1 — TaskReminderJobHandler (TASK_DUE_SOON / TASK_OVERDUE) trên việc SPEC-06 + Postgres THẬT.
+ * Plan: `docs/plans/S20-TASK-DUEREMIND-1.md` §4 (R1–R11 · X1). Thay bản S4-NOTI-BE-3 (gieo cột legacy).
  *
- * Phủ (RED-trước → GREEN):
- *   (a) task quá hạn (due_date < now, status != completed, task_type='office', có assignee)
- *       → 1 notification event_code='TASK_OVERDUE' cho ĐÚNG assignee, kèm 1 delivery_log 'Sent'.
- *   (b) task sắp đến hạn (due_date trong 24h tới) → 1 notification event_code='TASK_DUE_SOON' cho assignee.
- *   (c) KHÔNG phát cho: task đã 'completed' (dù overdue) · task KHÔNG có assignee · task task_type khác
- *       'office' (vd 'workflow_step', media-era out-of-scope) · task due xa (>24h, ngoài cửa sổ due-soon).
- *   (d) IDEMPOTENT: chạy job LẦN 2 CÙNG NGÀY → KHÔNG tạo thêm notification (dedupe theo entity+ngày qua
- *       dedupeKey="<taskId>:<YYYY-MM-DD>", strategy 'DedupeKey' APPEND ở notification-dedupe.const.ts).
- *   (e) cross-tenant: chạy job cho company A KHÔNG đụng task/notification của company B (BẤT BIẾN #1).
+ * Bất biến được đo:
+ *  · việc tạo qua `POST /tasks` (task-core: `due_at` + `main_assignee_employee_id`) được nhắc; mở = task_status
+ *    ∉ {Done, Cancelled}; chỉ office; chưa xoá; có người phụ trách giải được (hồ sơ còn active);
+ *  · `TASK_OVERDUE` tới người phụ trách ∪ reporter/người tạo, không trùng người; chỉ xét hạn trong 7 ngày gần
+ *    nhất, số việc bị bỏ do lookback nằm ở metadata;
+ *  · một (việc, sự kiện, mốc hạn) phát đúng một lần cho mỗi người nhận — kể cả khi người nhận đã xoá mềm
+ *    thông báo; đổi hạn ⇒ mốc mới ⇒ nhắc lại;
+ *  · lỗi ở một việc không chặn việc khác, `failed` đếm đúng;
+ *  · chạy cho công ty A không đọc/không phát cho công ty B.
  *
- * Gate CỨNG hasDb && LANE_DB (memory integration-test-lane-db-gate) — band 0479-0485 chỉ có trên DB lane.
- * Handler gọi TRỰC TIẾP qua Nest DI (bỏ qua JobRunner/lock — JobRunner đã có unit test riêng ở
- * job-runner.spec.ts; test này chứng minh LOGIC nghiệp vụ + idempotency thật của handler).
+ * Đếm theo `recipient_user_id` + `source_entity_id`, gồm cả hàng đã xoá mềm khi ca cần. Handler gọi TRỰC
+ * TIẾP qua DI (JobRunner/khoá có unit riêng). Cổng `hasDb && LANE_DB`. Không `Promise.all` quanh supertest.
  */
 
 import "reflect-metadata";
-import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import request from "supertest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../src/app.module";
-import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
-import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
-import { directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
+import { NotificationEngineService } from "../../src/notifications/notification-engine.service";
 import { TaskReminderJobHandler } from "../../src/notifications/task-reminder.job-handler";
+import type { JobRunResult } from "../../src/scheduler/job-handler";
+import { applyMainPipeline } from "../helpers/bootstrap-app";
+import { loginPasswordFixture } from "../helpers/fixture-secrets";
+import { directPool, hasDb } from "../helpers/integration-db";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedPermissionCatalog,
+  seedRole,
+  seedRolePermission,
+  seedUser,
+  seedUserRole,
+  type SeededTenant,
+} from "../helpers/seed";
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
-const PASSWORD = "Passw0rd!test99";
+const LOGIN_PW = loginPasswordFixture("duerem");
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+const DUE_SOON = "TASK_DUE_SOON";
+const OVERDUE = "TASK_OVERDUE";
 
-interface PlantedTask {
+type Pair = [action: string, resourceType: string];
+type Scope = "Own" | "Company";
+
+const REPORTER_PAIRS: Pair[] = [
+  ["read", "task"],
+  ["create", "task"],
+  ["update-status", "task"],
+  ["update-deadline", "task"],
+];
+const RECIPIENT_PAIRS: Pair[] = [
+  ["read", "notification"],
+  ["delete", "notification"],
+];
+
+interface NotiRow {
   id: string;
+  recipient: string;
+  dedupeKey: string | null;
+  deleted: boolean;
 }
 
-async function insertTask(
-  direct: Pool,
-  companyId: string,
-  opts: {
-    title: string;
-    taskType?: string;
-    status?: string;
-    assigneeUserId?: string | null;
-    dueDate?: Date | null;
-  },
-): Promise<PlantedTask> {
-  const res = await direct.query<{ id: string }>(
-    `INSERT INTO tasks (id, company_id, task_type, title, assignee_user_id, status, due_date, origin)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'initial')
-     RETURNING id`,
-    [
-      randomUUID(),
-      companyId,
-      opts.taskType ?? "office",
-      opts.title,
-      opts.assigneeUserId ?? null,
-      opts.status ?? "in_progress",
-      opts.dueDate ?? null,
-    ],
-  );
-  const row = res.rows[0];
-  if (!row) throw new Error("insertTask: INSERT không trả về hàng nào");
-  return row;
+function fromNow(ms: number): string {
+  return new Date(Date.now() + ms).toISOString();
 }
 
-async function notificationsFor(
-  direct: Pool,
-  companyId: string,
-  eventCode: string,
-  sourceEntityId: string,
-): Promise<Array<{ recipient_user_id: string; event_code: string }>> {
-  const res = await direct.query<{ recipient_user_id: string; event_code: string }>(
-    `SELECT recipient_user_id, event_code FROM notifications
-      WHERE company_id = $1 AND event_code = $2 AND source_entity_id = $3 AND deleted_at IS NULL`,
-    [companyId, eventCode, sourceEntityId],
-  );
-  return res.rows;
+function meta(res: JobRunResult, key: string): unknown {
+  return (res.metadata ?? {})[key];
 }
 
-describe.skipIf(!runDb)(
-  "S4-NOTI-BE-3 TaskReminderJobHandler (TASK_DUE_SOON / TASK_OVERDUE)",
-  () => {
-    let app: INestApplication;
-    let direct: Pool;
-    let handler: TaskReminderJobHandler;
-    let A: SeededTenant;
-    let B: SeededTenant;
-    const companyIds: string[] = [];
+describe.skipIf(!runDb)("S20-TASK-DUEREMIND-1 — nhắc hạn việc SPEC-06", () => {
+  const direct: Pool = directPool();
+  let nest: INestApplication;
+  let handler: TaskReminderJobHandler;
+  let A: SeededTenant;
+  let B: SeededTenant;
+  const uid: Record<string, string> = {};
+  const emp: Record<string, string> = {};
+  const token: Record<string, string> = {};
+  const t: Record<string, string> = {};
 
-    let overdueTaskAssignee: string;
-    let dueSoonTaskAssignee: string;
-    let completedTaskAssignee: string;
-    let noAssigneeTaskId: string;
-
-    let overdueTask: PlantedTask;
-    let dueSoonTask: PlantedTask;
-    let completedOverdueTask: PlantedTask;
-    let workflowStepOverdueTask: PlantedTask;
-    let farFutureTask: PlantedTask;
-    let bTask: PlantedTask;
-    let bAssignee: string;
-
-    beforeAll(async () => {
-      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-      app = moduleRef.createNestApplication();
-      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
-      app.useGlobalFilters(new AllExceptionsFilter());
-      await app.init();
-      handler = app.get(TaskReminderJobHandler);
-
-      direct = directPool();
-      const pw = await new PasswordService().hash(PASSWORD);
-
-      A = await seedCompany(direct, "trja");
-      companyIds.push(A.companyId);
-      B = await seedCompany(direct, "trjb");
-      companyIds.push(B.companyId);
-
-      overdueTaskAssignee = await seedUser(
-        direct,
-        A.companyId,
-        `overdue-${randomUUID()}@a.test`,
-        pw,
+  async function grant(companyId: string, userId: string, pairs: Pair[], scope: Scope) {
+    const roleId = await seedRole(direct, companyId, `duerem-${scope}-${userId.slice(0, 8)}`);
+    for (const [action, resourceType] of pairs) {
+      const cat = await direct.query<{ is_sensitive: boolean }>(
+        "SELECT is_sensitive FROM permissions WHERE action = $1 AND resource_type = $2",
+        [action, resourceType],
       );
-      dueSoonTaskAssignee = await seedUser(
+      const permId = await seedPermissionCatalog(
         direct,
-        A.companyId,
-        `duesoon-${randomUUID()}@a.test`,
-        pw,
+        action,
+        resourceType,
+        cat.rows[0]?.is_sensitive === true,
       );
-      completedTaskAssignee = await seedUser(
-        direct,
-        A.companyId,
-        `done-${randomUUID()}@a.test`,
-        pw,
+      await seedRolePermission(direct, roleId, permId, "ALLOW", scope);
+    }
+    await seedUserRole(direct, userId, roleId, companyId);
+  }
+
+  async function actor(k: string, tenant: SeededTenant, hash: string): Promise<void> {
+    uid[k] = await seedUser(direct, tenant.companyId, `${k}@${tenant.slug}.test`, hash);
+    emp[k] = (
+      await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id, status) VALUES ($1,$2,'active') RETURNING id`,
+        [tenant.companyId, uid[k]],
+      )
+    ).rows[0].id as string;
+  }
+
+  async function login(k: string, tenant: SeededTenant): Promise<void> {
+    const res = await request(nest.getHttpServer())
+      .post("/auth/login")
+      .send({ companySlug: tenant.slug, email: `${k}@${tenant.slug}.test`, password: LOGIN_PW });
+    expect(res.status, `login ${k}: ${JSON.stringify(res.body)}`).toBe(200);
+    token[k] = res.body.data.accessToken as string;
+  }
+
+  const as = (k: string, m: "post" | "delete", url: string) =>
+    request(nest.getHttpServer())[m](url).set("Authorization", `Bearer ${token[k]}`);
+
+  /** Tạo việc qua task-core (`POST /tasks`). `dueInMs` null ⇒ không hạn; `assignee` null ⇒ không phụ trách. */
+  async function mkTask(
+    who: string,
+    title: string,
+    assignee: string | null,
+    dueInMs: number | null,
+  ): Promise<string> {
+    const body: Record<string, unknown> = { title };
+    if (assignee) body.assigneeEmployeeId = emp[assignee];
+    if (dueInMs !== null) body.dueAt = fromNow(dueInMs);
+    const res = await as(who, "post", "/tasks").send(body);
+    expect(res.status, `POST /tasks ${title}: ${JSON.stringify(res.body)}`).toBe(201);
+    return res.body.data.id as string;
+  }
+
+  async function setStatus(taskId: string, status: string): Promise<void> {
+    const res = await as("rep", "post", `/tasks/${taskId}/change-status`).send({ status });
+    expect(res.status, `change-status ${status}: ${JSON.stringify(res.body)}`).toBe(200);
+  }
+
+  /** Mọi hàng (kể cả đã xoá mềm) của một sự kiện cho một việc. */
+  async function rows(companyId: string, eventCode: string, taskId: string): Promise<NotiRow[]> {
+    const r = await direct.query(
+      `SELECT id, recipient_user_id AS recipient, dedupe_key AS "dedupeKey",
+              (deleted_at IS NOT NULL) AS deleted
+         FROM notifications
+        WHERE company_id = $1 AND event_code = $2 AND source_entity_id = $3
+        ORDER BY created_at`,
+      [companyId, eventCode, taskId],
+    );
+    return r.rows as NotiRow[];
+  }
+
+  const of = (list: NotiRow[], who: string) => list.filter((r) => r.recipient === uid[who]);
+
+  async function reminderCount(companyId: string, taskId: string): Promise<number> {
+    return (
+      (await rows(companyId, DUE_SOON, taskId)).length +
+      (await rows(companyId, OVERDUE, taskId)).length
+    );
+  }
+
+  async function deleteOwn(who: string, eventCode: string, taskId: string): Promise<void> {
+    const mine = of(await rows(A.companyId, eventCode, taskId), who).filter((r) => !r.deleted);
+    expect(mine, `${who} phải có đúng 1 ${eventCode} còn hiệu lực để xoá`).toHaveLength(1);
+    const res = await as(who, "delete", `/notifications/${mine[0]?.id}`);
+    expect(res.status, `DELETE /notifications: ${JSON.stringify(res.body)}`).toBe(204);
+  }
+
+  const run = (companyId: string) => handler.run({ companyId });
+
+  beforeAll(async () => {
+    const hash = await new PasswordService().hash(LOGIN_PW);
+    A = await seedCompany(direct, "dueremA");
+    B = await seedCompany(direct, "dueremB");
+    for (const c of [A, B]) {
+      await direct.query(
+        `INSERT INTO sequence_counters
+           (company_id, module_code, sequence_key, scope_type, prefix, padding_length,
+            reset_policy, increment_by, current_value, status)
+         VALUES ($1,'TASK','task','Company','TSK-',4,'Never',1,0,'Active')
+         ON CONFLICT DO NOTHING`,
+        [c.companyId],
       );
-      const noAssigneeOwner = await seedUser(
-        direct,
-        A.companyId,
-        `noassignee-${randomUUID()}@a.test`,
-        pw,
-      );
-      void noAssigneeOwner;
-      bAssignee = await seedUser(direct, B.companyId, `b-${randomUUID()}@b.test`, pw);
+    }
 
-      const now = Date.now();
+    for (const k of ["rep", "nv", "nv3"]) await actor(k, A, hash);
+    for (const k of ["brep", "bnv"]) await actor(k, B, hash);
+    await grant(A.companyId, uid.rep, REPORTER_PAIRS, "Company");
+    await grant(A.companyId, uid.rep, RECIPIENT_PAIRS, "Own");
+    await grant(A.companyId, uid.nv, RECIPIENT_PAIRS, "Own");
+    await grant(B.companyId, uid.brep, REPORTER_PAIRS, "Company");
 
-      // (a) quá hạn 2 ngày, status='in_progress', task_type='office' → PHẢI phát TASK_OVERDUE.
-      overdueTask = await insertTask(direct, A.companyId, {
-        title: "Overdue task",
-        status: "in_progress",
-        assigneeUserId: overdueTaskAssignee,
-        dueDate: new Date(now - 2 * DAY_MS),
-      });
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    nest = applyMainPipeline(moduleRef.createNestApplication());
+    await nest.init();
+    handler = nest.get(TaskReminderJobHandler);
+    await login("rep", A);
+    await login("nv", A);
+    await login("brep", B);
 
-      // (b) còn 2h đến hạn → PHẢI phát TASK_DUE_SOON.
-      dueSoonTask = await insertTask(direct, A.companyId, {
-        title: "Due soon task",
-        status: "not_started",
-        assigneeUserId: dueSoonTaskAssignee,
-        dueDate: new Date(now + 2 * HOUR_MS),
-      });
+    // Ứng viên dương (lượt đầu).
+    t.dueSoon = await mkTask("rep", "duerem-r1-due-soon", "nv", 2 * HOUR_MS);
+    t.overdue = await mkTask("rep", "duerem-r2-overdue", "nv", -2 * HOUR_MS);
+    t.self = await mkTask("rep", "duerem-r8-self", "rep", -2 * HOUR_MS);
+    t.legacy = await mkTask("rep", "duerem-r9-legacy", "nv", -2 * HOUR_MS);
+    await direct.query("UPDATE tasks SET main_assignee_employee_id = NULL WHERE id = $1", [
+      t.legacy,
+    ]);
+    // R4c — lượt đầu chỉ người phụ trách là người nhận (chưa có reporter/người tạo).
+    t.perRecipient = await mkTask("rep", "duerem-r4c-per-recipient", "nv", -3 * HOUR_MS);
+    await direct.query(
+      "UPDATE tasks SET reporter_employee_id = NULL, creator_user_id = NULL WHERE id = $1",
+      [t.perRecipient],
+    );
 
-      // (c1) đã completed dù quá hạn 1 ngày → KHÔNG được phát.
-      completedOverdueTask = await insertTask(direct, A.companyId, {
-        title: "Completed overdue task",
-        status: "completed",
-        assigneeUserId: completedTaskAssignee,
-        dueDate: new Date(now - DAY_MS),
-      });
+    // Ứng viên âm (R6 · R11).
+    t.done = await mkTask("rep", "duerem-r6-done", "nv", -2 * HOUR_MS);
+    await setStatus(t.done, "Done");
+    t.cancelled = await mkTask("rep", "duerem-r6-cancelled", "nv", -2 * HOUR_MS);
+    await setStatus(t.cancelled, "Cancelled");
+    t.deleted = await mkTask("rep", "duerem-r6-deleted", "nv", -2 * HOUR_MS);
+    await direct.query("UPDATE tasks SET deleted_at = now() WHERE id = $1", [t.deleted]);
+    t.noDue = await mkTask("rep", "duerem-r6-no-due", "nv", null);
+    t.noAssignee = await mkTask("rep", "duerem-r6-no-assignee", null, -2 * HOUR_MS);
+    t.far = await mkTask("rep", "duerem-r6-far", "nv", 3 * DAY_MS);
+    t.otherType = await mkTask("rep", "duerem-r6-other-type", "nv", -2 * HOUR_MS);
+    await direct.query("UPDATE tasks SET task_type = 'workflow_step' WHERE id = $1", [t.otherType]);
+    t.inactive = await mkTask("rep", "duerem-r11-inactive", "nv3", -2 * HOUR_MS);
+    await direct.query("UPDATE employee_profiles SET status = 'inactive' WHERE id = $1", [emp.nv3]);
+  });
 
-      // (c2) KHÔNG có assignee, quá hạn → KHÔNG được phát (không có ai nhận).
-      const noAssigneeTask = await insertTask(direct, A.companyId, {
-        title: "No assignee overdue task",
-        status: "in_progress",
-        assigneeUserId: null,
-        dueDate: new Date(now - DAY_MS),
-      });
-      noAssigneeTaskId = noAssigneeTask.id;
+  afterAll(async () => {
+    await nest?.close();
+    if (A && B) await cleanupTenants(direct, [A.companyId, B.companyId]);
+    await direct.end();
+  });
 
-      // (c3) task_type='workflow_step' (media-era, ngoài phạm vi TASK module) quá hạn + có assignee → KHÔNG phát.
-      workflowStepOverdueTask = await insertTask(direct, A.companyId, {
-        title: "Workflow-step overdue task (out of scope)",
-        taskType: "workflow_step",
-        status: "in_progress",
-        assigneeUserId: overdueTaskAssignee,
-        dueDate: new Date(now - DAY_MS),
-      });
+  it("R1 · việc hạn trong 24h ⇒ đúng 1 TASK_DUE_SOON cho người phụ trách", async () => {
+    const first = await run(A.companyId);
+    const list = await rows(A.companyId, DUE_SOON, t.dueSoon);
+    expect(list.map((r) => r.recipient)).toEqual([uid.nv]);
+    expect(first.failed).toBe(0);
+    expect(meta(first, "dueSoonCount")).toBe(1);
+    expect(meta(first, "overdueSkippedByLookback")).toBe(0);
+    expect(meta(first, "alreadyRemindedCount")).toBe(0);
+  });
 
-      // (c4) due xa 10 ngày → ngoài cửa sổ due-soon (24h) → KHÔNG phát.
-      farFutureTask = await insertTask(direct, A.companyId, {
-        title: "Far future task",
-        status: "not_started",
-        assigneeUserId: dueSoonTaskAssignee,
-        dueDate: new Date(now + 10 * DAY_MS),
-      });
+  it("R2 · việc quá hạn ⇒ TASK_OVERDUE cho người phụ trách VÀ reporter/người tạo", async () => {
+    const list = await rows(A.companyId, OVERDUE, t.overdue);
+    expect(of(list, "nv")).toHaveLength(1);
+    expect(of(list, "rep")).toHaveLength(1);
+    expect(list).toHaveLength(2);
+  });
 
-      // (e) company B — task quá hạn tương tự — chứng minh chạy job cho A KHÔNG đụng B.
-      bTask = await insertTask(direct, B.companyId, {
-        title: "B overdue task",
-        status: "in_progress",
-        assigneeUserId: bAssignee,
-        dueDate: new Date(now - DAY_MS),
-      });
+  it("R8 · người phụ trách = reporter ⇒ đúng 1 bản", async () => {
+    const list = await rows(A.companyId, OVERDUE, t.self);
+    expect(list.map((r) => r.recipient)).toEqual([uid.rep]);
+  });
+
+  it("R9 · nhánh legacy (chỉ còn assignee_user_id) vẫn được nhắc", async () => {
+    expect(of(await rows(A.companyId, OVERDUE, t.legacy), "nv")).toHaveLength(1);
+  });
+
+  it("R6 · Done · Cancelled · xoá mềm · không hạn · không phụ trách · +3 ngày · khác office ⇒ 0 bản", async () => {
+    for (const k of ["done", "cancelled", "deleted", "noDue", "noAssignee", "far", "otherType"]) {
+      expect(await reminderCount(A.companyId, t[k] as string), k).toBe(0);
+    }
+  });
+
+  it("R11 · hồ sơ người phụ trách đã inactive ⇒ không nhắc ai (không rơi về cột đồng bộ)", async () => {
+    expect(await reminderCount(A.companyId, t.inactive as string)).toBe(0);
+  });
+
+  it("R3 · chạy thêm 2 lượt ⇒ vẫn đúng 1 bản/người", async () => {
+    await run(A.companyId);
+    await run(A.companyId);
+    expect(await rows(A.companyId, DUE_SOON, t.dueSoon)).toHaveLength(1);
+    const overdue = await rows(A.companyId, OVERDUE, t.overdue);
+    expect(of(overdue, "nv")).toHaveLength(1);
+    expect(of(overdue, "rep")).toHaveLength(1);
+  });
+
+  it("R4a · người phụ trách xoá mềm TASK_OVERDUE ⇒ chạy lại 0 bản mới; reporter vẫn đúng 1", async () => {
+    await deleteOwn("nv", OVERDUE, t.overdue);
+    await run(A.companyId);
+    const list = await rows(A.companyId, OVERDUE, t.overdue);
+    expect(of(list, "nv").map((r) => r.deleted)).toEqual([true]);
+    expect(of(list, "rep").map((r) => r.deleted)).toEqual([false]);
+  });
+
+  it("R4b · người phụ trách xoá mềm TASK_DUE_SOON ⇒ chạy lại 0 bản mới", async () => {
+    await deleteOwn("nv", DUE_SOON, t.dueSoon);
+    await run(A.companyId);
+    expect(of(await rows(A.companyId, DUE_SOON, t.dueSoon), "nv").map((r) => r.deleted)).toEqual([
+      true,
+    ]);
+  });
+
+  it("R4c · lọc theo từng người nhận: NV đã xoá vẫn bị bỏ, reporter mới vào vẫn nhận đúng 1", async () => {
+    expect(of(await rows(A.companyId, OVERDUE, t.perRecipient), "rep")).toHaveLength(0);
+    await deleteOwn("nv", OVERDUE, t.perRecipient);
+    await direct.query(
+      "UPDATE tasks SET reporter_employee_id = $2, creator_user_id = $3 WHERE id = $1",
+      [t.perRecipient, emp.rep, uid.rep],
+    );
+    await run(A.companyId);
+    const list = await rows(A.companyId, OVERDUE, t.perRecipient);
+    expect(of(list, "nv").map((r) => r.deleted)).toEqual([true]);
+    expect(of(list, "rep").map((r) => r.deleted)).toEqual([false]);
+  });
+
+  it("R5 · đổi hạn sang mốc quá hạn khác ⇒ thêm đúng 1 bản/người với khoá mới", async () => {
+    const before = await rows(A.companyId, OVERDUE, t.overdue);
+    const res = await as("rep", "post", `/tasks/${t.overdue}/change-deadline`).send({
+      dueAt: fromNow(-3 * HOUR_MS),
     });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    await run(A.companyId);
+    const after = await rows(A.companyId, OVERDUE, t.overdue);
+    expect(of(after, "nv")).toHaveLength(2);
+    expect(of(after, "rep")).toHaveLength(2);
+    const newKeys = new Set(after.slice(before.length).map((r) => r.dedupeKey));
+    expect(newKeys.size).toBe(1);
+    expect(before.map((r) => r.dedupeKey)).not.toContain([...newKeys][0]);
+  });
 
-    afterAll(async () => {
-      await app?.close();
-      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
-      await direct?.end();
+  it("R7 · lookback 7 ngày: −8 ngày không nhắc và được ĐẾM; −6 ngày vẫn nhắc (cùng một lượt)", async () => {
+    t.old8 = await mkTask("rep", "duerem-r7-minus-8d", "nv", -8 * DAY_MS);
+    t.old6 = await mkTask("rep", "duerem-r7-minus-6d", "nv", -6 * DAY_MS);
+    const res = await run(A.companyId);
+    expect(await reminderCount(A.companyId, t.old8)).toBe(0);
+    const recent = await rows(A.companyId, OVERDUE, t.old6);
+    expect(of(recent, "nv")).toHaveLength(1);
+    expect(of(recent, "rep")).toHaveLength(1);
+    expect(meta(res, "overdueSkippedByLookback")).toBe(1);
+  });
+
+  it("R10 · intake ném ở một việc ⇒ việc khác vẫn được nhắc, failed = 1; gỡ lỗi ⇒ việc đó được nhắc", async () => {
+    t.failing = await mkTask("rep", "duerem-r10-failing", "nv", -HOUR_MS);
+    t.healthy = await mkTask("rep", "duerem-r10-healthy", "nv", -HOUR_MS);
+    const engine = nest.get(NotificationEngineService);
+    const original = engine.intake.bind(engine);
+    const spy = vi.spyOn(engine, "intake").mockImplementation(async (companyId, dto) => {
+      if (dto.sourceEntityId === t.failing) throw new Error("R10: lỗi giả ở một việc");
+      return original(companyId, dto);
     });
+    const res = await run(A.companyId).finally(() => spy.mockRestore());
+    expect(res.failed).toBe(1);
+    expect(res.success).toBe(res.total - 1);
+    expect(await reminderCount(A.companyId, t.failing)).toBe(0);
+    expect(of(await rows(A.companyId, OVERDUE, t.healthy), "nv")).toHaveLength(1);
 
-    it("(a) task quá hạn office/active/assignee → TASK_OVERDUE cho ĐÚNG assignee + 1 lần", async () => {
-      await handler.run({ companyId: A.companyId });
-      const rows = await notificationsFor(direct, A.companyId, "TASK_OVERDUE", overdueTask.id);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.recipient_user_id).toBe(overdueTaskAssignee);
-    });
+    const retry = await run(A.companyId);
+    expect(retry.failed).toBe(0);
+    expect(of(await rows(A.companyId, OVERDUE, t.failing), "nv")).toHaveLength(1);
+  });
 
-    it("(b) task sắp đến hạn (24h) → TASK_DUE_SOON cho ĐÚNG assignee", async () => {
-      const rows = await notificationsFor(direct, A.companyId, "TASK_DUE_SOON", dueSoonTask.id);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.recipient_user_id).toBe(dueSoonTaskAssignee);
-    });
+  it("X1 · công ty B có việc quá hạn cùng hình dạng: chạy cho A không đọc/không phát cho B", async () => {
+    const beforeB = await run(A.companyId);
+    t.b = await mkTask("brep", "duerem-x1-b-overdue", "bnv", -2 * HOUR_MS);
+    const afterB = await run(A.companyId);
+    expect(await reminderCount(B.companyId, t.b)).toBe(0);
+    expect(await reminderCount(A.companyId, t.b)).toBe(0);
+    expect(meta(afterB, "overdueCount")).toBe(meta(beforeB, "overdueCount"));
+    expect(meta(afterB, "dueSoonCount")).toBe(meta(beforeB, "dueSoonCount"));
+    expect(afterB.total).toBe(beforeB.total);
 
-    it("(c) KHÔNG phát cho task completed / không assignee / workflow_step / far-future", async () => {
-      const completed = await notificationsFor(
-        direct,
-        A.companyId,
-        "TASK_OVERDUE",
-        completedOverdueTask.id,
-      );
-      expect(completed).toHaveLength(0);
-
-      const noAssignee = await notificationsFor(
-        direct,
-        A.companyId,
-        "TASK_OVERDUE",
-        noAssigneeTaskId,
-      );
-      expect(noAssignee).toHaveLength(0);
-
-      const workflowStep = await notificationsFor(
-        direct,
-        A.companyId,
-        "TASK_OVERDUE",
-        workflowStepOverdueTask.id,
-      );
-      expect(workflowStep).toHaveLength(0);
-
-      const farFuture = await notificationsFor(
-        direct,
-        A.companyId,
-        "TASK_DUE_SOON",
-        farFutureTask.id,
-      );
-      expect(farFuture).toHaveLength(0);
-    });
-
-    it("(d) chạy job LẦN 2 cùng ngày → KHÔNG tạo thêm notification (idempotent, dedupe theo entity+ngày)", async () => {
-      await handler.run({ companyId: A.companyId });
-      const overdueRows = await notificationsFor(
-        direct,
-        A.companyId,
-        "TASK_OVERDUE",
-        overdueTask.id,
-      );
-      expect(overdueRows).toHaveLength(1);
-      const dueSoonRows = await notificationsFor(
-        direct,
-        A.companyId,
-        "TASK_DUE_SOON",
-        dueSoonTask.id,
-      );
-      expect(dueSoonRows).toHaveLength(1);
-    });
-
-    it("(e) cross-tenant: chạy job cho company A KHÔNG tạo notification cho task company B", async () => {
-      const bRows = await notificationsFor(direct, B.companyId, "TASK_OVERDUE", bTask.id);
-      expect(bRows).toHaveLength(0);
-    });
-  },
-);
+    const forB = await run(B.companyId);
+    expect(meta(forB, "overdueCount")).toBe(1);
+    const bRows = await rows(B.companyId, OVERDUE, t.b);
+    expect(bRows.map((r) => r.recipient).sort()).toEqual([uid.bnv, uid.brep].sort());
+    const leaked = await direct.query(
+      "SELECT count(*)::int AS n FROM notifications WHERE company_id = $1 AND recipient_user_id = ANY($2::uuid[])",
+      [A.companyId, [uid.bnv, uid.brep]],
+    );
+    expect(leaked.rows[0].n).toBe(0);
+  });
+});
