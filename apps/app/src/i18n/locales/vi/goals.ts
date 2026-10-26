@@ -148,7 +148,6 @@ export default {
       description: "Mô tả ngắn về mục tiêu (không bắt buộc)",
       selectDepartment: "Chọn phòng ban",
       selectProject: "Chọn dự án",
-      selectParent: "Không có (mục tiêu gốc)",
       unit: "Ví dụ: %, đơn, triệu VNĐ",
     },
     hints: {
@@ -175,6 +174,18 @@ export default {
     savedAndNext: "Đã tạo mục tiêu «{{name}}»",
     parentInvalid:
       "Mục tiêu cha không hợp lệ (không tồn tại hoặc đã chốt kỳ) — đã bỏ chọn mục tiêu cha.",
+    // S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — ô chọn cha có tìm + cảnh báo mềm lệch kỳ.
+    parentPicker: {
+      placeholder: "Gõ tên hoặc mã để tìm mục tiêu cha",
+      none: "Không có (mục tiêu gốc)",
+      clear: "Bỏ chọn mục tiêu cha",
+      noResults: "Không tìm thấy",
+      loading: "Đang tải…",
+      loadError: "Không tải được danh sách mục tiêu.",
+      loadMore: "Tải thêm",
+      suggestOnly: "Chỉ gợi ý mục tiêu cùng phòng, cùng kỳ",
+    },
+    periodOutsideParent: "Kỳ nằm ngoài kỳ của mục tiêu cha",
     submitSave: "Lưu thay đổi",
     finalizedLocked: "Mục tiêu đã chốt kỳ — cần mở lại (reopen) trước khi sửa.",
     loadError: "Không tải được mục tiêu để sửa.",

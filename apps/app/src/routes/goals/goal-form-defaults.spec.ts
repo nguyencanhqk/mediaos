@@ -12,6 +12,8 @@ import {
   goalFormDefaults,
   goalPeriodRangeFor,
   isCreateGoalOwnOnly,
+  isPeriodOutsideParent,
+  parentPeriodValues,
   shouldAnchorSelf,
 } from "./goal-form-defaults";
 
@@ -177,5 +179,57 @@ describe("goalCreateInitialValues — mặc định + gợi ý từ search", () 
     expect(shouldAnchorSelf(true, { parentGoalId: PARENT })).toBe(true);
     expect(shouldAnchorSelf(false, {})).toBe(true);
     expect(shouldAnchorSelf(false, { parentGoalId: PARENT })).toBe(false);
+  });
+});
+
+// ── S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — kỳ theo mục tiêu cha ─────────────────────────────────
+const PARENT_Q4 = {
+  periodType: "quarter" as const,
+  periodStart: "2026-10-01",
+  periodEnd: "2026-12-31",
+};
+
+describe("parentPeriodValues — ba trường kỳ lấy theo cha", () => {
+  it("cha Q4/2026 ⇒ quarter · 2026-10-01 · 2026-12-31", () => {
+    // Bản ghi cha đầy đủ (thừa trường) ⇒ chỉ lấy đúng ba trường kỳ.
+    const parentRow = { ...PARENT_Q4, id: "p-1", name: "bỏ qua" };
+    expect(parentPeriodValues(parentRow)).toEqual(PARENT_Q4);
+  });
+});
+
+describe("isPeriodOutsideParent — kỳ con nằm ngoài kỳ cha", () => {
+  it("trùng khít hoặc nằm trong kỳ cha ⇒ false", () => {
+    expect(isPeriodOutsideParent(PARENT_Q4, PARENT_Q4)).toBe(false);
+    expect(
+      isPeriodOutsideParent({ periodStart: "2026-11-01", periodEnd: "2026-11-30" }, PARENT_Q4),
+    ).toBe(false);
+  });
+
+  it("bắt đầu trước hoặc kết thúc sau kỳ cha ⇒ true", () => {
+    expect(
+      isPeriodOutsideParent({ periodStart: "2027-01-01", periodEnd: "2027-03-31" }, PARENT_Q4),
+    ).toBe(true);
+    expect(
+      isPeriodOutsideParent({ periodStart: "2026-09-30", periodEnd: "2026-12-31" }, PARENT_Q4),
+    ).toBe(true);
+    expect(
+      isPeriodOutsideParent({ periodStart: "2026-10-01", periodEnd: "2027-01-01" }, PARENT_Q4),
+    ).toBe(true);
+  });
+
+  it("ngày con trống hoặc sai định dạng ⇒ false (lỗi kỳ đã có thông điệp riêng của form)", () => {
+    expect(isPeriodOutsideParent({ periodStart: "", periodEnd: "" }, PARENT_Q4)).toBe(false);
+    expect(
+      isPeriodOutsideParent({ periodStart: "2027-02-30", periodEnd: "2027-03-31" }, PARENT_Q4),
+    ).toBe(false);
+  });
+
+  it("kỳ cha không đọc được ⇒ false (không cảnh báo khi thiếu căn cứ)", () => {
+    expect(
+      isPeriodOutsideParent(
+        { periodStart: "2027-01-01", periodEnd: "2027-03-31" },
+        { periodStart: "", periodEnd: "2026-12-31" },
+      ),
+    ).toBe(false);
   });
 });

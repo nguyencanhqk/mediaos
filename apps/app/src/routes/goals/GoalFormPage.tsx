@@ -41,7 +41,9 @@ import {
   shouldAnchorSelf,
 } from "./goal-form-defaults";
 import { useGoalFormQuickStart } from "./hooks/use-goal-form-quick-start";
+import { useGoalParentPeriod } from "./hooks/use-goal-parent-period";
 import { GoalMeasureTypeChoice } from "./components/GoalMeasureTypeChoice";
+import { GoalParentCombobox } from "./components/GoalParentCombobox";
 
 interface GoalFormPageProps {
   /** Có → SỬA; không → TẠO. */
@@ -55,7 +57,7 @@ interface GoalFormPageProps {
 }
 
 /** Các select có danh mục tải sau — cần ghi lại giá trị lên DOM khi option tới. */
-const ASYNC_OPTION_FIELDS = ["departmentId", "projectId", "parentGoalId"] as const;
+const ASYNC_OPTION_FIELDS = ["departmentId", "projectId"] as const;
 
 /**
  * GOAL-SCREEN-003 (S5-GOAL-FE-1) — form tạo/sửa mục tiêu. Một component cho CẢ create + edit
@@ -128,7 +130,7 @@ export function GoalFormPage({
   }, [anchorSelf, quick.selfEmployeeId, getValues, setValue]);
 
   // S20-GOAL-LISTURL-1 — cha điền sẵn phải TỒN TẠI và CHƯA chốt kỳ; không thì cảnh báo + bỏ cha (BE
-  // vẫn là cổng cuối). Cha hợp lệ luôn có trong select dù nằm ngoài 200 mục tiêu của danh sách chọn.
+  // vẫn là cổng cuối). Cha hợp lệ hiện ngay trong ô chọn cha dù nằm ngoài các trang gợi ý.
   const prefillParentId = isEdit ? undefined : prefill?.parentGoalId;
   const parentQuery = useQuery({
     queryKey: goalKeys.detail(prefillParentId ?? ""),
@@ -154,6 +156,9 @@ export function GoalFormPage({
   }, [isEdit, detailQuery.data, reset]);
 
   const level = watch("level");
+  const parentGoalId = watch("parentGoalId");
+  const periodStart = watch("periodStart");
+  const periodEnd = watch("periodEnd");
   const measureType = watch("measureType");
   const progressMode = watch("progressMode");
   const employeeId = watch("employeeId");
@@ -193,19 +198,17 @@ export function GoalFormPage({
     return map;
   }, [employeesPage]);
 
-  // Mục tiêu cha (tùy chọn) — mọi goal trừ chính nó.
-  const { data: parentCandidates } = useQuery({
-    queryKey: goalKeys.list({ scope: "parent-picker" }),
-    queryFn: () => goalApi.listGoals({ limit: 200 }),
-    enabled: level !== "",
-    staleTime: 30_000,
-  });
-  const parentOptions = useMemo(() => {
-    const list = (parentCandidates ?? []).filter((g) => g.id !== goalId);
-    return validParent && !list.some((g) => g.id === validParent.id)
-      ? [validParent, ...list]
-      : list;
-  }, [parentCandidates, goalId, validParent]);
+  // S20-GOAL-PARENTPICKER-1 (US-GOAL-NV-12) — cha chọn qua ô tìm; kỳ theo cha khi kỳ còn mặc định.
+  const { selfDepartmentId, parentLabel, periodOutsideParent, selectParent, markPeriodTouched } =
+    useGoalParentPeriod({
+      isEdit,
+      parentGoalId,
+      periodStart,
+      periodEnd,
+      validParent,
+      editParent: detailQuery.data?.parent,
+      setValue,
+    });
 
   // Select không điều khiển: giá trị điền sẵn đặt TRƯỚC khi option tải về thì DOM hiện ô trống trong
   // khi form vẫn giữ giá trị ⇒ ghi lại lên DOM mỗi khi một danh mục tới.
@@ -214,7 +217,7 @@ export function GoalFormPage({
       const value = getValues(name);
       if (value) setValue(name, value);
     }
-  }, [departments, projectsList, parentOptions, getValues, setValue]);
+  }, [departments, projectsList, getValues, setValue]);
 
   /** Chọn Quý/Năm ⇒ điền ngày theo giờ công ty (vẫn sửa tay được); Tuỳ chỉnh giữ ngày đang có. */
   const fillPeriodDates = (periodType: string) => {
@@ -454,17 +457,18 @@ export function GoalFormPage({
             </Select>
           </Field>
 
-          {/* Mục tiêu cha (tùy chọn) */}
-          <Field label={t("form.fields.parentGoal")} hint={t("form.hints.parentOptional")}>
-            <Select {...register("parentGoalId")} disabled={disabled}>
-              <option value="">{t("form.placeholders.selectParent")}</option>
-              {parentOptions.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.goalCode} — {g.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {/* Mục tiêu cha (tùy chọn) — ô tìm, gợi ý cùng phòng + cùng kỳ (NV-12) */}
+          <GoalParentCombobox
+            label={t("form.fields.parentGoal")}
+            hint={t("form.hints.parentOptional")}
+            selected={parentGoalId ? parentLabel : null}
+            onSelect={selectParent}
+            excludeGoalId={goalId}
+            departmentId={selfDepartmentId}
+            periodFrom={periodStart}
+            periodTo={periodEnd}
+            disabled={disabled}
+          />
         </CardContent>
       </Card>
 
@@ -475,7 +479,12 @@ export function GoalFormPage({
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label={t("form.fields.periodType")}>
               <Select
-                {...register("periodType", { onChange: (e) => fillPeriodDates(e.target.value) })}
+                {...register("periodType", {
+                  onChange: (e) => {
+                    markPeriodTouched();
+                    fillPeriodDates(e.target.value);
+                  },
+                })}
                 disabled={disabled}
               >
                 {GOAL_PERIOD_TYPE_OPTIONS.map((p) => (
@@ -490,16 +499,33 @@ export function GoalFormPage({
               error={errFor(errors.periodStart?.message, t)}
               required
             >
-              <Input type="date" {...register("periodStart")} disabled={disabled} />
+              <Input
+                type="date"
+                {...register("periodStart", { onChange: markPeriodTouched })}
+                disabled={disabled}
+              />
             </Field>
             <Field
               label={t("form.fields.periodEnd")}
               error={errFor(errors.periodEnd?.message, t)}
               required
             >
-              <Input type="date" {...register("periodEnd")} disabled={disabled} />
+              <Input
+                type="date"
+                {...register("periodEnd", { onChange: markPeriodTouched })}
+                disabled={disabled}
+              />
             </Field>
           </div>
+          {periodOutsideParent && (
+            <p
+              className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-warning"
+              role="status"
+            >
+              <TriangleAlert className="h-4 w-4 shrink-0" />
+              {t("form.periodOutsideParent")}
+            </p>
+          )}
         </CardContent>
       </Card>
 
