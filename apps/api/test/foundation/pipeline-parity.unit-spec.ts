@@ -25,8 +25,9 @@ import {
  * Số spec còn gọi `createNestApplication` mà KHÔNG qua `applyMainPipeline`. CHỈ ĐƯỢC GIẢM: chuyển
  * một spec sang helper ⇒ hạ số này đúng bằng số file đã chuyển (ca ratchet ĐỎ nếu quên hạ).
  * Spec MỚI phải dùng helper từ đầu. Mốc 28/09/2026: 271 trước WO − 2 file chuyển trong WO = 269.
+ * S20-TASK-DUEREMIND-1: `task-reminder-job.int-spec.ts` chuyển sang helper ⇒ 268.
  */
-const HAND_ROLLED_BASELINE = 269;
+const HAND_ROLLED_BASELINE = 268;
 
 describe("S16-TEST-PIPELINE-PARITY-1 — helper ≡ main.ts", () => {
   const main = readBoot(MAIN_TS);
