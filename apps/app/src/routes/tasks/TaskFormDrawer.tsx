@@ -15,7 +15,8 @@ import {
 import { Dialog, Button, Input, Select } from "@mediaos/ui";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { useDirtyFormGuard } from "@/hooks/use-dirty-form-guard";
-import { TASK_CORE_PRIORITY_OPTIONS } from "./constants";
+import { TASK_CORE_PRIORITY_OPTIONS, isoToLocalDatetime, localDatetimeToIso } from "./constants";
+import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
 import {
   taskFormSchema,
   taskToFormValues,
@@ -40,6 +41,9 @@ import { TaskFieldLockedHint } from "./TaskFieldLockedHint";
  * S20-SEC-TASKPATCHGATE-1 — chế độ SỬA: ô hạn / ưu tiên / người phụ trách khoá theo cặp quyền chuyên
  * trách server trả (`useTaskPatchFieldLocks`); payload CHỈ gồm trường người dùng đã sửa và không bị
  * khoá (server đòi cặp khi trường ĐỔI, thiếu ⇒ 403 cả request). Chế độ TẠO không đổi.
+ *
+ * S20-TASK-QUICKEDIT-1 — cạnh ô hạn có popover mốc nhanh dùng chung (DeadlineQuickPicker): chọn mốc
+ * chỉ ĐIỀN ô (đánh dấu đã sửa), lưu vẫn theo nút Lưu như mọi trường khác của form.
  */
 interface TaskFormDrawerProps {
   mode: "create" | "edit";
@@ -83,6 +87,8 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isDirty, isSubmitting, dirtyFields },
   } = form;
 
@@ -297,6 +303,21 @@ export function TaskFormDrawer({ mode, task, onClose, onSuccess }: TaskFormDrawe
               disabled={locked.dueAt}
               aria-describedby={locked.dueAt ? "task-due-at-locked" : undefined}
             />
+            {!locked.dueAt && (
+              <DeadlineQuickPicker
+                id="task-due-at-quick"
+                variant="quick"
+                allowCustom={false}
+                ariaLabel={t("deadlinePicker.triggerLabel")}
+                value={localDatetimeToIso(watch("dueAt")) ?? null}
+                onSelect={(dueAt) =>
+                  setValue("dueAt", isoToLocalDatetime(dueAt), {
+                    shouldDirty: true,
+                    shouldValidate: false,
+                  })
+                }
+              />
+            )}
             {locked.dueAt && <TaskFieldLockedHint id="task-due-at-locked" />}
             {errors.dueAt && (
               <p role="alert" className="text-sm text-destructive">

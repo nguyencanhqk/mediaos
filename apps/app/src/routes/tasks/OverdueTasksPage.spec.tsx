@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
 import { OverdueTasksPage } from "./OverdueTasksPage";
@@ -18,7 +18,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
-    taskCoreApi: { listTasks: vi.fn() },
+    taskCoreApi: { listTasks: vi.fn(), changeStatus: vi.fn(), changeDeadline: vi.fn() },
   };
 });
 
@@ -134,5 +134,44 @@ describe("OverdueTasksPage", () => {
     await waitFor(() =>
       expect(screen.getByText(/không thể tải danh sách task quá hạn/i)).toBeInTheDocument(),
     );
+  });
+
+  // S20-TASK-QUICKEDIT-1 — cột Trạng thái + Hạn sửa được tại chỗ khi có cặp quyền, tĩnh khi không.
+  describe("sửa nhanh trên dòng", () => {
+    const ROW = makeTask("t-1", "Task gấp", "2026-08-01T00:00:00.000Z");
+
+    it("thiếu update-status / update-deadline ⇒ badge và hạn tĩnh, không nút", async () => {
+      setCapabilities({ "read:task": true });
+      vi.mocked(taskCoreApi.listTasks).mockResolvedValue([ROW]);
+      renderWithQuery(<OverdueTasksPage />);
+      await waitFor(() => expect(screen.getByText("Task gấp")).toBeInTheDocument());
+      expect(screen.queryByTestId("task-row-status-t-1")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("task-row-deadline-t-1")).not.toBeInTheDocument();
+    });
+
+    it("có cặp ⇒ «Xoá hạn» gọi change-deadline null; đổi trạng thái gọi change-status", async () => {
+      setCapabilities({
+        "read:task": true,
+        "update-status:task": true,
+        "update-deadline:task": true,
+      });
+      vi.mocked(taskCoreApi.listTasks).mockResolvedValue([ROW]);
+      vi.mocked(taskCoreApi.changeDeadline).mockReturnValue(new Promise(() => {}));
+      vi.mocked(taskCoreApi.changeStatus).mockReturnValue(new Promise(() => {}));
+      renderWithQuery(<OverdueTasksPage />);
+      await waitFor(() => expect(screen.getByText("Task gấp")).toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId("task-row-deadline-t-1"));
+      fireEvent.click(screen.getByTestId("task-row-deadline-t-1-clear"));
+      await waitFor(() =>
+        expect(taskCoreApi.changeDeadline).toHaveBeenCalledWith("t-1", { dueAt: null }),
+      );
+
+      fireEvent.click(screen.getByTestId("task-row-status-t-1"));
+      fireEvent.click(screen.getByRole("option", { name: "Chờ review" }));
+      await waitFor(() =>
+        expect(taskCoreApi.changeStatus).toHaveBeenCalledWith("t-1", { status: "In Review" }),
+      );
+    });
   });
 });

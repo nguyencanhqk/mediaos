@@ -7,7 +7,8 @@ import { companyTimeZone, formatDateTime, taskCoreApi, taskKeys, useCan } from "
 import { Button, Card, Checkbox, EmptyState, Input, PageHeader } from "@mediaos/ui";
 import type { MyTaskItemDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
-import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskRowDeadlineControl, TaskRowStatusControl } from "./TaskRowQuickEdit";
 import { useTaskDrawer } from "./task-drawer-nav";
 import {
   filterMyTasks,
@@ -31,6 +32,9 @@ import { useSlashFocus } from "./use-slash-focus";
  * Cổng route = TASK.TASK.VIEW (→ read:task): thiếu quyền ⇒ màn «không có quyền», query bị tắt nên
  * KHÔNG có lời gọi API. Tài khoản chưa liên kết hồ sơ nhân viên ⇒ server trả mảng rỗng (không lỗi)
  * ⇒ trạng thái rỗng kèm hướng dẫn.
+ *
+ * S20-TASK-QUICKEDIT-1 — badge trạng thái + chip hạn trên dòng sửa được tại chỗ (TaskRowQuickEdit):
+ * lạc quan, việc đổi nhóm ngay; thiếu cặp quyền ⇒ chữ tĩnh như cũ.
  */
 
 /** Bộ lọc của trang ĐỌC/GHI trên URL — cùng `validateMyTasksSearch` mà route khai báo. */
@@ -95,16 +99,24 @@ function TaskRow({ item, onOpen }: { item: MyTaskItemDto; onOpen: (id: string) =
         >
           {item.title}
         </button>
-        <p className="text-xs text-muted-foreground">
-          {item.projectName ?? t("tasks.my.noProject")}
-          {item.dueAt
-            ? ` · ${t("myTasks.due", { value: formatDateTime(item.dueAt, companyTimeZone()) })}`
-            : ""}
-        </p>
+        <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          <span>{item.projectName ?? t("tasks.my.noProject")}</span>
+          <span aria-hidden="true">·</span>
+          <TaskRowDeadlineControl
+            task={item}
+            readOnly={
+              item.dueAt ? (
+                <span>
+                  {t("myTasks.due", { value: formatDateTime(item.dueAt, companyTimeZone()) })}
+                </span>
+              ) : null
+            }
+          />
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <TaskPriorityBadge priority={item.priority} />
-        <TaskStatusBadge status={item.status} />
+        <TaskRowStatusControl task={item} />
         <TaskOverdueBadge isOverdue={item.isOverdue} />
       </div>
     </Card>

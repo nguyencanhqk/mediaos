@@ -19,7 +19,6 @@ import type {
 } from "@mediaos/contracts";
 import {
   TASK_CORE_ENGINE_PAIRS,
-  TASK_CORE_STATUS_OPTIONS,
   TASK_CORE_PRIORITY_OPTIONS,
   localDatetimeToIso,
   isoToLocalDatetime,
@@ -28,6 +27,9 @@ import { TaskStatusBadge, TaskPriorityBadge } from "./TaskStatusBadge";
 import { useTaskActionMutation } from "./hooks/use-task-action-mutation";
 import { EmployeePicker } from "./EmployeePicker";
 import { useAssigneeWarningToast } from "./AssigneeWarning";
+import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
+import { statusMenuOptions } from "./task-status-transitions";
+import { classifyTaskQuickEditError, taskQuickEditErrorKey } from "./task-quick-edit-errors";
 
 /**
  * TaskInlineFields — bộ ô SỬA-TẠI-CHỖ của màn chi tiết task (S5-TASK-INLINE-1; tách từ
@@ -182,7 +184,8 @@ export function TaskStatusField({ task }: { task: TaskCoreResponseDto }) {
       id="task-status-select"
       ariaLabel={t("tasks.statusSelect.statusLabel")}
       value={task.status ?? null}
-      options={TASK_CORE_STATUS_OPTIONS}
+      // S20-TASK-QUICKEDIT-1 — chỉ chuyển hợp lệ theo task-fsm.ts (D-18); server vẫn là lưới.
+      options={statusMenuOptions(task.status ?? null)}
       disabled={mutation.isPending}
       onSelect={(status) => mutation.mutate(status)}
       renderBadge={(s) => <TaskStatusBadge status={s} />}
@@ -360,29 +363,55 @@ export function TaskDeadlineField({
       }),
   });
 
+  // S20-TASK-QUICKEDIT-1 — chip mốc nhanh (giờ công ty) lưu NGAY qua cùng route change-deadline.
+  const saveDeadline = (dueAt: string | null) => {
+    setDraft(isoToLocalDatetime(dueAt));
+    mutation.mutate(dueAt);
+  };
+  // Lỗi CHECK hạn < ngày bắt đầu ⇒ câu riêng dễ hiểu; còn lại giữ câu chung của các ô.
+  const dateRangeError =
+    mutation.isError && classifyTaskQuickEditError(mutation.error) === "dateRange";
+
   return (
     <Field label={t("tasks.statusSelect.deadlineLabel")} htmlFor="task-deadline-input">
       {canDeadline ? (
-        <Input
-          id="task-deadline-input"
-          type="datetime-local"
-          value={draft}
-          disabled={mutation.isPending}
-          onChange={(e) => setDraft(e.target.value)}
-          // Lưu khi RỜI ô (không phải mỗi lần gõ): input datetime-local bắn onChange cho từng mảnh
-          // ngày/giờ người dùng chỉnh ⇒ lưu-theo-gõ sẽ bắn một chuỗi request với ngày dở dang.
-          onBlur={() => {
-            const iso = localDatetimeToIso(draft) ?? null;
-            if (iso === task.dueAt) return;
-            mutation.mutate(iso);
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            id="task-deadline-input"
+            type="datetime-local"
+            value={draft}
+            disabled={mutation.isPending}
+            onChange={(e) => setDraft(e.target.value)}
+            // Lưu khi RỜI ô (không phải mỗi lần gõ): input datetime-local bắn onChange cho từng mảnh
+            // ngày/giờ người dùng chỉnh ⇒ lưu-theo-gõ sẽ bắn một chuỗi request với ngày dở dang.
+            onBlur={() => {
+              const iso = localDatetimeToIso(draft) ?? null;
+              if (iso === task.dueAt) return;
+              mutation.mutate(iso);
+            }}
+          />
+          <DeadlineQuickPicker
+            id="task-deadline-quick"
+            variant="quick"
+            allowCustom={false}
+            ariaLabel={t("deadlinePicker.triggerLabel")}
+            value={task.dueAt ?? null}
+            disabled={mutation.isPending}
+            onSelect={saveDeadline}
+          />
+        </div>
       ) : (
         <p className="text-sm text-foreground">
           {task.dueAt ? new Date(task.dueAt).toLocaleString("vi-VN") : "—"}
         </p>
       )}
-      {mutation.isError && <FieldError error={mutation.error} />}
+      {dateRangeError ? (
+        <p role="alert" className="text-xs text-destructive">
+          {t(taskQuickEditErrorKey("deadline", mutation.error))}
+        </p>
+      ) : (
+        mutation.isError && <FieldError error={mutation.error} />
+      )}
     </Field>
   );
 }

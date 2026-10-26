@@ -6,6 +6,7 @@ import {
   type TaskActionMutationResult,
   type TaskAssigneeWarning,
 } from "./use-task-action-mutation-warnings";
+import { patchTaskRows, restoreTaskRows } from "./optimistic-task-rows";
 
 export type {
   TaskActionMutationResult,
@@ -46,6 +47,18 @@ function notifyWarnings(
 }
 
 /**
+ * Gọi callback phụ (`onSaved` / `onFailed`) mà không để nó đổi kết quả mutate — cùng lý do với
+ * `notifyWarnings`: `onSuccess` ném ⇒ TanStack chuyển mutation sang LỖI và rollback dù server đã ghi.
+ */
+function runSideEffect(label: string, effect: () => void): void {
+  try {
+    effect();
+  } catch (error) {
+    console.error(`[task] ${label} thất bại — bỏ qua:`, error);
+  }
+}
+
+/**
  * useTaskActionMutation — optimistic update CÓ rollback cho action mutate vòng đời task (S4-FE-TASK-2,
  * SPEC-06 §14: change-status/change-priority/change-deadline/assign). Dùng chung bởi TaskStatusSelect
  * (status/priority/deadline) + TaskAssignControl (assignee) — tránh trôi logic rollback giữa 2 component.
@@ -63,17 +76,28 @@ function notifyWarnings(
  * hoá (rỗng khi không có/không hợp lệ). `onWarnings` gọi sau MỖI lần thành công (kể cả mảng rỗng, để
  * phía gọi đóng cảnh báo cũ); lỗi ⇒ không gọi; `onWarnings` ném ⇒ chỉ ghi log, mutate VẪN thành công.
  * Thao tác hàng loạt gộp từ `data.warnings` của từng lời gọi.
+ *
+ * S20-TASK-QUICKEDIT-1: `rowPatch` (tuỳ chọn) vá lạc quan CẢ các dòng của việc này trong cache danh
+ * sách (`tasks/list/*`, `tasks/my`) — dùng khi sửa ngay trên dòng; lỗi ⇒ hoàn tác cùng lúc với chi tiết.
+ * `onSaved` / `onFailed` (tuỳ chọn) chạy trong callback CẤP OPTIONS của mutation ⇒ vẫn chạy khi component
+ * gọi đã unmount (dòng rời danh sách vì vá lạc quan) — callback truyền vào `mutate(vars, {…})` thì không.
  */
 export function useTaskActionMutation<TVariables>({
   taskId,
   mutationFn,
   toPatch,
   onWarnings,
+  rowPatch,
+  onSaved,
+  onFailed,
 }: {
   taskId: string;
   mutationFn: (vars: TVariables) => Promise<TaskActionResponseDto>;
   toPatch: (vars: TVariables) => Partial<TaskCoreResponseDto>;
   onWarnings?: WarningsCallback;
+  rowPatch?: (vars: TVariables) => Readonly<Record<string, unknown>>;
+  onSaved?: (result: TaskActionMutationResult, vars: TVariables) => void;
+  onFailed?: (error: unknown, vars: TVariables) => void;
 }) {
   const queryClient = useQueryClient();
   const queryKey = taskKeys.detail(taskId);
@@ -86,14 +110,17 @@ export function useTaskActionMutation<TVariables>({
       if (previous) {
         queryClient.setQueryData<TaskCoreResponseDto>(queryKey, { ...previous, ...toPatch(vars) });
       }
-      return { previous };
+      const rows = rowPatch ? await patchTaskRows(queryClient, taskId, rowPatch(vars)) : null;
+      return { previous, rows };
     },
-    onError: (_err, _vars, context) => {
+    onError: (err, vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(queryKey, context.previous);
       }
+      if (context?.rows) restoreTaskRows(queryClient, context.rows);
+      if (onFailed) runSideEffect("báo lỗi sau thao tác", () => onFailed(err, vars));
     },
-    onSuccess: (result) => {
+    onSuccess: (result, vars) => {
       // HỢP NHẤT, KHÔNG ghi đè. `respond()` (task-actions.service.ts) trả về `toTaskCoreDto(row)` — DTO
       // này KHÔNG mang `subtaskTotal`/`subtaskDone` (hai field đó chỉ `getTask` gắn thêm, và chúng
       // `.optional()` trong contract nên tsc KHÔNG bắt được). Ghi đè thẳng `result.task` là XOÁ chúng
@@ -108,6 +135,7 @@ export function useTaskActionMutation<TVariables>({
         prev ? { ...prev, ...result.task } : result.task,
       );
       notifyWarnings(onWarnings, result);
+      if (onSaved) runSideEffect("báo đã lưu sau thao tác", () => onSaved(result, vars));
     },
     onSettled: (data, _err, _vars, context) => {
       for (const key of taskCoreInvalidation.list())

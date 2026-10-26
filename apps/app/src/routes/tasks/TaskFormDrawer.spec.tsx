@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
@@ -162,6 +162,37 @@ describe("TaskFormDrawer (sửa) — trường theo cặp quyền chuyên trách
     expect(body).not.toHaveProperty("dueAt");
     expect(body).not.toHaveProperty("priority");
     expect(body).not.toHaveProperty("assigneeEmployeeId");
+  });
+});
+
+// S20-TASK-QUICKEDIT-1 — popover mốc nhanh dùng chung cạnh ô hạn: chọn mốc chỉ ĐIỀN ô (lưu theo nút Lưu).
+describe("TaskFormDrawer — mốc hạn nhanh", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ ...TASK, title: "x" } as never);
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+  });
+
+  it("thiếu update-deadline ⇒ không có «Chọn nhanh» (ô hạn khoá)", () => {
+    setCapabilities(BASE_CAPS);
+    renderEdit();
+    expect(screen.queryByTestId("task-due-at-quick")).not.toBeInTheDocument();
+  });
+
+  it("«Ngày mai» điền ô hạn và gửi cùng lần Lưu; chưa bấm Lưu thì không gọi API", async () => {
+    setCapabilities(ALL_PAIRS);
+    renderEdit();
+    fireEvent.click(screen.getByTestId("task-due-at-quick"));
+    fireEvent.click(screen.getByTestId("task-due-at-quick-preset-tomorrow"));
+    expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
+    expect((field("task-due-at") as HTMLInputElement).value).toMatch(/T[0-9]{2}:00$/);
+
+    const form = document.getElementById("task-core-form");
+    if (!form) throw new Error("không thấy form task-core-form");
+    fireEvent.submit(form);
+    await waitFor(() => expect(taskCoreApi.updateTask).toHaveBeenCalledTimes(1));
+    const body = vi.mocked(taskCoreApi.updateTask).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(String(body.dueAt)).toMatch(/T10:00:00[.]000Z$/); // 17:00 giờ công ty
   });
 });
 
