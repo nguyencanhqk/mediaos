@@ -96,6 +96,8 @@ export default {
       },
       unmute: "Bật lại thông báo",
       markUnread: "Đánh dấu chưa đọc",
+      /** S20-CHAT-UNREADNAV-1 (US-CHAT-NV-05) — gửi đúng `lastMessageSeq` của phòng, không số sentinel. */
+      markRead: "Đánh dấu đã đọc",
       archive: "Lưu trữ phòng",
       /**
        * CHAT-ERR-021 — **nêu rõ con số trần**. "Không ghim được" để người dùng bấm lại vô ích; câu này
@@ -106,6 +108,28 @@ export default {
       muteFailed: "Không đổi được trạng thái thông báo. Hội thoại đã trở về như cũ.",
       markUnreadFailed: "Không đánh dấu chưa đọc được. Hội thoại đã trở về như cũ.",
       archiveFailed: "Không lưu trữ được phòng.",
+    },
+    /** S20-CHAT-UNREADNAV-1 (US-CHAT-NV-05) — «Đọc hết» trên chip «Chưa đọc», chỉ phòng đang hiển thị. */
+    readAll: {
+      button: "Đọc hết",
+      aria: "Đánh dấu đã đọc {{count}} phòng đang hiển thị",
+      failed: "Không đánh dấu được {{count}} phòng",
+      retry: "Thử lại",
+    },
+  },
+
+  /** S20-CHAT-UNREADNAV-1 (US-CHAT-NV-13) — phím tắt chuyển phòng (cấp /chat và drawer). */
+  shortcuts: {
+    opened: "Đã mở {{name}}",
+    allRead: "Đã đọc hết",
+    helpOpen: "Phím tắt (?)",
+    helpTitle: "Phím tắt tin nhắn",
+    helpBody: "Đi qua các phòng theo danh sách đang lọc. Ô soạn có chữ vẫn giữ nguyên nháp.",
+    actions: {
+      prev: "Phòng phía trên",
+      next: "Phòng phía dưới",
+      nextUnread: "Phòng chưa đọc kế tiếp",
+      help: "Mở bảng này (ngoài ô soạn)",
     },
   },
 

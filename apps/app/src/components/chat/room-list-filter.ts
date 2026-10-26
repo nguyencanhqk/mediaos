@@ -100,3 +100,58 @@ export function filterRoomsByChip(
       return rooms.filter((room) => room.roomType === "department" || room.roomType === "project");
   }
 }
+
+/**
+ * S20-CHAT-MENTIONPIN-1 — chip «Nhắc tôi» bị ẨN (server cũ / không phòng nào còn số @) thì chip HIỆU LỰC
+ * là «Tất cả»: không giữ một bộ lọc vô hình. S20-CHAT-UNREADNAV-1 tách ra đây để danh sách lẫn phím tắt
+ * chuyển phòng cùng đọc MỘT luật — hai bản luật sẽ để phím tắt nhảy theo một danh sách khác cái đang thấy.
+ */
+export function effectiveRoomChip(selected: RoomFilterChip, showMentions: boolean): RoomFilterChip {
+  return selected === "mentions" && !showMentions ? DEFAULT_ROOM_FILTER_CHIP : selected;
+}
+
+export interface VisibleRoomsInput {
+  roomOrder: readonly string[];
+  roomsById: Readonly<Record<string, ChatRoomDto>>;
+  /** Chip HIỆU LỰC (đã qua `effectiveRoomChip`). */
+  chip: RoomFilterChip;
+  query: string;
+  labelOf: (room: ChatRoomDto) => string;
+}
+
+/**
+ * Các phòng ĐANG HIỂN THỊ, theo đúng thứ tự của store. Thứ tự ba tầng lọc LÀ hợp đồng, không phải sở thích:
+ *
+ *   rổ (lưu trữ hay không)  →  chip  →  ô tìm theo tên/mã
+ *
+ * Đảo hai tầng cuối thì gõ từ khoá trong chip «Chưa đọc» sẽ trả về cả phòng đã đọc. Đảo tầng đầu thì
+ * một phòng đã lưu trữ lọt vào chip «Riêng», và người dùng không có cách nào biết vì sao nó ở đó.
+ *
+ * Lọc trên TÊN/MÃ phòng ở client. Tìm theo NỘI DUNG tin là `GET /chat/search` — màn riêng (S7-CHAT-FE-4);
+ * trộn hai thứ vào một ô làm người dùng tưởng đã tìm hết.
+ *
+ * S20-CHAT-UNREADNAV-1 — chuyển từ `useMemo` của `RoomListPanel` về đây: «Đọc hết» và phím tắt chuyển
+ * phòng đều phải đi theo ĐÚNG danh sách người dùng đang thấy (phòng bị lọc ẩn không bao giờ là đích).
+ */
+export function selectVisibleRooms({
+  roomOrder,
+  roomsById,
+  chip,
+  query,
+  labelOf,
+}: VisibleRoomsInput): ChatRoomDto[] {
+  const showArchived = chipNeedsArchivedScope(chip);
+  const inScope = roomOrder
+    .map((id) => roomsById[id])
+    .filter((room): room is ChatRoomDto => room !== undefined)
+    .filter((room) => (room.isArchived ?? false) === showArchived);
+
+  const byChip = filterRoomsByChip(inScope, chip);
+
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return byChip;
+  return byChip.filter(
+    (room) =>
+      labelOf(room).toLowerCase().includes(needle) || room.roomCode.toLowerCase().includes(needle),
+  );
+}

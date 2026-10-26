@@ -15,10 +15,20 @@
  * `archive:chat-room`, và cổng đó do caller truyền xuống (`canArchive`) chứ không hỏi lại ở đây.
  */
 import { useTranslation } from "react-i18next";
-import { Archive, BellOff, BellRing, MailOpen, MoreHorizontal, Pin, PinOff } from "lucide-react";
+import {
+  Archive,
+  BellOff,
+  BellRing,
+  CheckCheck,
+  MailOpen,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+} from "lucide-react";
 import { Button, Popover, cn } from "@mediaos/ui";
 import type { ChatRoomDto } from "@mediaos/contracts";
 import { MUTE_PRESETS, isRoomMuted, isRoomPinned, type MutePresetKey } from "./chat-room-prefs";
+import { markReadTargetOf } from "./chat-unread-batch";
 
 interface RoomRowMenuProps {
   room: ChatRoomDto;
@@ -32,6 +42,12 @@ interface RoomRowMenuProps {
   onTogglePin: (room: ChatRoomDto) => void;
   onMute: (room: ChatRoomDto, preset: MutePresetKey | null) => void;
   onMarkUnread: (room: ChatRoomDto) => void;
+  /**
+   * S20-CHAT-UNREADNAV-1 — «Đánh dấu đã đọc» (US-CHAT-NV-05). Mục chỉ hiện khi phòng trông chưa đọc
+   * (badge > 0 HOẶC `markedUnreadAt ≠ null`) VÀ có `lastMessageSeq` thật để gửi (`markReadTargetOf`).
+   * Tuỳ chọn CÁ NHÂN như ba mục trên — không cổng quyền.
+   */
+  onMarkRead: (room: ChatRoomDto) => void;
   onArchive: (room: ChatRoomDto) => void;
 }
 
@@ -45,12 +61,14 @@ export function RoomRowMenu({
   onTogglePin,
   onMute,
   onMarkUnread,
+  onMarkRead,
   onArchive,
 }: RoomRowMenuProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const pinned = isRoomPinned(room);
   const muted = isRoomMuted(room);
   const isArchived = room.isArchived ?? false;
+  const canMarkRead = markReadTargetOf(room) !== null;
 
   // Mỗi mục tự đóng menu TRƯỚC khi chạy: để menu mở trên một dòng vừa đổi trạng thái là mời bấm lần hai
   // vào một nhãn đã cũ ("Ghim" trong khi phòng vừa được ghim xong).
@@ -116,6 +134,16 @@ export function RoomRowMenu({
               />
             ))}
           </>
+        )}
+
+        {canMarkRead && (
+          <MenuItem
+            icon={CheckCheck}
+            label={t("rooms.menu.markRead")}
+            disabled={isBusy}
+            onSelect={run(() => onMarkRead(room))}
+            testId="chat-room-menu-read"
+          />
         )}
 
         <MenuItem
