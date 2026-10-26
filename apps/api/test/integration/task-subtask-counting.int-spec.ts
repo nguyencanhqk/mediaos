@@ -659,7 +659,7 @@ describe.skipIf(!hasLaneDb)(
         }
       });
 
-      it("reminder job (task-reminder.job-handler) — GHI CHÚ: đọc cột LEGACY due_date/status (KHÔNG PHẢI due_at/task_status của task-core) nên KHÔNG BAO GIỜ thấy task-core dù có subtask hay không — bất biến D-37 đúng nhưng vì lý do KHÁC (không liên quan WO này, xem báo cáo QA)", async () => {
+      it("reminder job (task-reminder.job-handler) — D-37: việc cha quá hạn CÓ con vẫn là ứng viên nhắc (không đếm-lá; job đọc due_at/task_status của task-core từ S20-TASK-DUEREMIND-1)", async () => {
         const handler = app.get(TaskReminderJobHandler);
         const before = await handler.run({ companyId: A.companyId });
         const parent = await createTask(tok.ca, {
@@ -673,8 +673,8 @@ describe.skipIf(!hasLaneDb)(
           assigneeEmployeeId: otherEmp,
         });
         const after = await handler.run({ companyId: A.companyId });
-        // task-core (due_at/task_status) KHÔNG populate legacy due_date/status ⇒ job luôn thấy 0 task-core row.
-        expect(before.metadata?.overdueCount ?? 0).toBe(after.metadata?.overdueCount ?? 0);
+        // Cha (quá hạn, có người phụ trách) được tính thêm đúng 1; con không có hạn ⇒ không phải ứng viên.
+        expect(after.metadata?.overdueCount).toBe(Number(before.metadata?.overdueCount ?? 0) + 1);
       });
     });
   },

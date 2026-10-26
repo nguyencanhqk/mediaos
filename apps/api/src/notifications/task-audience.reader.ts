@@ -64,4 +64,29 @@ export class TaskAudienceReader {
       watcherUserIds,
     };
   }
+
+  /**
+   * S20-TASK-DUEREMIND-1 — Owner/Manager CÒN HIỆU LỰC (member_status 'Active', chưa xoá) của dự án chứa việc,
+   * dự án chưa xoá. Việc ngoài dự án / đã xoá ⇒ []. Những người này đọc được mọi việc trong dự án qua nhánh
+   * thành viên của đường đọc task-core (`TaskCoreRepository.buildReadScopeExists`, mode 'read').
+   */
+  async projectReviewerUserIds(tx: TenantTx, companyId: string, taskId: string): Promise<string[]> {
+    const res = await tx.execute(sql`
+      select distinct pm.user_id as "userId"
+        from tasks tk
+        join projects p
+          on p.id = tk.project_id and p.company_id = ${companyId} and p.deleted_at is null
+        join project_members pm
+          on pm.project_id = tk.project_id and pm.company_id = ${companyId}
+       where tk.id = ${taskId}
+         and tk.company_id = ${companyId}
+         and tk.deleted_at is null
+         and pm.member_status = 'Active'
+         and pm.deleted_at is null
+         and pm.project_role in ('Owner', 'Manager')
+    `);
+    return (res.rows as unknown as WatcherRow[])
+      .map((row) => row.userId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+  }
 }
