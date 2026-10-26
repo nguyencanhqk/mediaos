@@ -36,6 +36,13 @@ export const GOAL_ERR = {
   /** GOAL-ERR-008 — gắn task sai neo (vế CHẶN: mục tiêu cấp nhân viên/dự án). */
   LINK_ANCHOR: (detail: string) =>
     `GOAL-ERR-008: không gắn được công việc vào mục tiêu — ${detail}`,
+  /**
+   * GOAL-ERR-016 — mục tiêu ĐÍCH chỉ nhận việc khi trạng thái thuộc tập cho phép {Draft, Active}
+   * (quy tắc DƯƠNG: trạng thái lạ/tương lai ⇒ từ chối). Mục tiêu đã đóng (Completed/Cancelled) không
+   * nhận thêm việc — tập đo của nó đã kết thúc.
+   */
+  LINK_CLOSED: (status: string) =>
+    `GOAL-ERR-016: chỉ gắn được công việc vào mục tiêu Nháp (Draft) hoặc đang chạy (Active) — mục tiêu này đang ở trạng thái ${status}.`,
   /** GOAL-ERR-014 — finalize chỉ hợp lệ khi status Active hoặc Completed. */
   FINALIZE_STATUS: (status: string) =>
     `GOAL-ERR-014: chỉ chốt kỳ được mục tiêu Active hoặc Completed — mục tiêu này đang ở trạng thái ${status}.`,
@@ -72,13 +79,13 @@ export const GOAL_ERR = {
 
   // ── S5-GOAL-TPL-1 — phân rã từ template (GOAL-API-011) ────────────────────────
   /**
-   * GOAL-ERR-009 — phân rã bị chặn. 3 vế của SPEC-10 §12: mục tiêu `Cancelled` · template rỗng · vượt
-   * trần 50 task/lần. Vế "đã chốt kỳ" KHÔNG ở đây: §12 xếp nó vào GOAL-ERR-005 (một mã cho MỌI đường
+   * GOAL-ERR-009 — phân rã bị chặn. 3 vế của SPEC-10 §12: mục tiêu không còn nhận việc mới (ngoài tập
+   * {Draft, Active} — cùng tập với GOAL-ERR-016) · template rỗng · vượt trần 50 task/lần. Vế "đã chốt kỳ" KHÔNG ở đây: §12 xếp nó vào GOAL-ERR-005 (một mã cho MỌI đường
    * ghi lên mục tiêu đã chốt) và dùng lại `GoalAccessService.assertNotFinalized`.
    */
   DECOMPOSE: (detail: string) => `GOAL-ERR-009: không phân rã được mục tiêu — ${detail}`,
-  DECOMPOSE_CANCELLED:
-    "GOAL-ERR-009: không phân rã được mục tiêu — mục tiêu đã huỷ (Cancelled); mở lại trạng thái trước khi tạo việc.",
+  DECOMPOSE_CLOSED: (status: string) =>
+    `GOAL-ERR-009: không phân rã được mục tiêu — chỉ mục tiêu Nháp (Draft) hoặc đang chạy (Active) nhận việc mới; mục tiêu này đang ở trạng thái ${status}.`,
   DECOMPOSE_EMPTY:
     "GOAL-ERR-009: không phân rã được mục tiêu — danh sách việc rỗng (template chưa có việc mẫu nào, hoặc bạn đã xoá hết ở bước xem trước).",
   DECOMPOSE_LIMIT: (cap: number, got: number) =>

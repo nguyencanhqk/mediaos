@@ -1,5 +1,17 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, isNotNull, isNull, lte, gte, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  gte,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { goals, type Goal } from "../db/schema/goals";
 import {
@@ -426,19 +438,21 @@ export class GoalsRepository {
   }
 
   /**
-   * Hàng task tối thiểu để validate GOAL-ERR-008 + tenant-check. RAW SQL vì các cột 0478
-   * (`task_status`/`main_assignee_employee_id`/`department_id`) và cột 0505 (`goal_id`) CHƯA typed
-   * trong Drizzle schema `tasks` (mirror TaskCoreRepository/TaskActionsRepository).
+   * S20-SEC-GOALLINKGATE-1 — hàng task tối thiểu để validate GOAL-ERR-008 + tenant-check, ĐÃ KHOÁ
+   * (`for update of tk`) cho tới hết transaction: `goal_id` đọc ở đây là giá trị mà quyết định quyền
+   * dựa vào, nên không writer nào được đổi nó giữa lúc kiểm và lúc ghi. Khoá theo `order by tk.id` (thứ
+   * tự cố định ⇒ hai lô chồng nhau không khoá chéo). Chỉ trả hàng tìm thấy — caller đối chiếu từng id ⇒ 404.
    *
-   * ⚠️ `company_id` BIND TƯỜNG MINH: FK `tasks.goal_id → goals.id` là FK ĐƠN CỘT, KHÔNG ép cùng-tenant
-   * (finding MEDIUM gate S5-GOAL-DB-1) ⇒ lớp resolve dưới company này là hàng phòng thủ DUY NHẤT chống
-   * gắn task của công ty khác vào mục tiêu của mình. undefined ⇒ caller trả 404.
+   * RAW SQL vì giữ đúng projection hợp nhất với TASK (join `projects` để suy phòng dự án).
+   * `company_id` BIND TƯỜNG MINH: lớp thứ hai trên RLS + FK tổng hợp `(company_id, goal_id)` của 0535
+   * (CLAUDE.md §2.1 — không dựa vào một lớp duy nhất).
    */
-  async resolveTaskRefTx(
+  async lockTaskRefsTx(
     tx: TenantTx,
     companyId: string,
-    taskId: string,
-  ): Promise<TaskRefRow | undefined> {
+    taskIds: readonly string[],
+  ): Promise<TaskRefRow[]> {
+    if (taskIds.length === 0) return [];
     const res = await tx.execute(sql`
       select tk.id, tk.goal_id as "goalId", tk.project_id as "projectId",
              tk.department_id as "departmentId", tk.task_code as "taskCode", tk.title,
@@ -446,10 +460,33 @@ export class GoalsRepository {
              pr.department_id as "projectDepartmentId"
         from tasks tk
         left join projects pr on pr.id = tk.project_id and pr.company_id = tk.company_id
-       where tk.id = ${taskId} and tk.company_id = ${companyId} and tk.deleted_at is null
-       limit 1
+       where tk.id = any(${sql.param([...taskIds])}::uuid[])
+         and tk.company_id = ${companyId} and tk.deleted_at is null
+       order by tk.id
+       for update of tk
     `);
-    return (res.rows as unknown as TaskRefRow[])[0];
+    return res.rows as unknown as TaskRefRow[];
+  }
+
+  /**
+   * S20-SEC-GOALLINKGATE-1 — khoá các hàng mục tiêu tham gia một phép gắn/chuyển/tháo (đích + mục tiêu
+   * đang giữ việc), `order by id` (thứ tự cố định, sau khoá task — khớp thứ tự task → goal của writer
+   * TASK). Chốt kỳ đồng thời phải chờ khoá này ⇒ quyết định «chưa chốt» được lấy trên hàng đã khoá.
+   * Phân rã (`GoalDecomposeService`) cũng khoá qua đây trước khi chèn việc MỚI (không khoá hàng việc có sẵn
+   * ⇒ không đảo thứ tự). HỢP ĐỒNG THỨ TỰ KHOÁ: task → goal. Writer mới cần cả hai thì giữ đúng thứ tự này;
+   * khoá goal rồi mới khoá task có sẵn là mở cửa cho 40P01 với đường gắn/tháo.
+   *
+   * ⚠️ CỐ Ý KHÔNG lọc `deleted_at` (khác `findByIdTx`): caller cần phân biệt «mục tiêu đã xoá mềm» (đọc
+   * được hàng, `deletedAt ≠ null`) với «không có hàng» (fail-closed) — xem `GoalTasksLinkService`.
+   */
+  async lockGoalsTx(tx: TenantTx, companyId: string, ids: readonly string[]): Promise<Goal[]> {
+    if (ids.length === 0) return [];
+    return tx
+      .select()
+      .from(goals)
+      .where(and(inArray(goals.id, [...ids]), eq(goals.companyId, companyId)))
+      .orderBy(asc(goals.id))
+      .for("update");
   }
 
   /** Gắn task vào goal (GOAL sở hữu nghiệp vụ; cột nằm trên `tasks` — DB-11 §6.5). Trả {id} hoặc undefined. */

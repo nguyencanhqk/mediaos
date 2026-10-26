@@ -202,7 +202,7 @@ Bảng §5.1 là **thiết kế đích**. Phần đã có code sống trong `app
 
 Mã lỗi theo format API-01 §13 `MODULE-ERR-CODE`. Namespace GOAL gồm **hai nhóm**:
 
-- **Đánh số** `GOAL-ERR-001`..`GOAL-ERR-015` — vi phạm quy tắc nghiệp vụ, định nghĩa đầy đủ ở SPEC-10 §12.
+- **Đánh số** `GOAL-ERR-001`..`GOAL-ERR-016` — vi phạm quy tắc nghiệp vụ, định nghĩa đầy đủ ở SPEC-10 §12.
 - **Đặt tên** — nhóm sentinel chung của module (đúng quy ước sẵn có: `HR-ERR-CONTRACT-DATE`, `ATT-ERR-SELF-APPROVAL`…), KHÔNG chiếm số trong dãy §12:
 
 | Mã sentinel | HTTP | Ý nghĩa | Nguồn |
@@ -220,7 +220,7 @@ Dùng lại nhóm lỗi chung của API-01:
 | `AUTH-ERR-SCOPE-DENIED` | 403 | Truy cập ngoài data scope (own/department) |
 | `RESOURCE-ERR-NOT-FOUND` | 404 | Goal/template không tồn tại hoặc không thuộc company |
 | `VALIDATION-ERR-001` | 400 | Body sai định dạng |
-| `GOAL-ERR-001`..`GOAL-ERR-015` | 422/409 | Vi phạm quy tắc nghiệp vụ GOAL — chi tiết SPEC-10 §12 (stub, chốt DTO ở WO backend) |
+| `GOAL-ERR-001`..`GOAL-ERR-016` | 422/409 | Vi phạm quy tắc nghiệp vụ GOAL — chi tiết SPEC-10 §12 (stub, chốt DTO ở WO backend) |
 
 ```json
 {

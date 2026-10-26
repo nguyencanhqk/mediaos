@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import type { GoalStatusDto } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { ProjectAccessService } from "../tasks/project-access.service";
@@ -13,6 +14,17 @@ import { GoalsRepository } from "./goals.repository";
 import { buildGoalActorScope, type GoalActorScope } from "./goal-read-scope";
 
 export type { GoalActorScope } from "./goal-read-scope";
+
+/**
+ * S20-SEC-GOALLINKGATE-1 — trạng thái mục tiêu NHẬN việc mới (quy tắc DƯƠNG: tập cho phép, KHÔNG phải tập
+ * cấm ⇒ trạng thái lạ/tương lai bị từ chối). `Draft` nhận việc (quyết định owner 25/10/2026 — chuẩn bị tập
+ * việc trước khi chạy); `Completed`/`Cancelled` đã đóng. MỘT nguồn cho MỌI đường tạo liên kết việc → mục
+ * tiêu: gắn/chuyển (GOAL-ERR-016) · phân rã (GOAL-ERR-009) — xem `acceptsNewTasks`.
+ */
+const TASK_ACCEPTING_GOAL_STATUSES: ReadonlySet<string> = new Set<GoalStatusDto>([
+  "Draft",
+  "Active",
+]);
 
 export interface GoalRequestUser {
   id: string;
@@ -249,6 +261,14 @@ export class GoalAccessService {
    */
   assertNotFinalized(goal: Goal): void {
     if (goal.finalizedAt) throw new UnprocessableEntityException(GOAL_ERR.FINALIZED);
+  }
+
+  /**
+   * Mục tiêu có còn nhận việc mới không (SPEC-10 §12 GOAL-ERR-016 · GOAL-ERR-009). Mỗi đường giữ mã lỗi
+   * của nó nhưng quyết định bằng CÙNG vị từ này — không đường nào tự viết tập trạng thái thứ hai.
+   */
+  acceptsNewTasks(goal: Pick<Goal, "status">): boolean {
+    return TASK_ACCEPTING_GOAL_STATUSES.has(goal.status);
   }
 
   /** Phòng ban SUY RA của một goal đã lưu (dự án → phòng dự án · nhân viên → phòng nhân viên). */

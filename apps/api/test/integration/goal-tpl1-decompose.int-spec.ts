@@ -4,8 +4,9 @@
  * Phủ (done_when của WO):
  *  · TRANSACTIONAL ROLLBACK: item thứ 2 vi phạm gate TASK ⇒ 4xx và **0 task** mang `goal_id` (không để
  *    lại nửa lô); mã task bị "đốt" là chấp nhận được, hàng dữ liệu thì KHÔNG;
- *  · GOAL-ERR-005 (đã chốt kỳ) · GOAL-ERR-009 (Cancelled · rỗng · > 50) · GOAL-ERR-008 (mục tiêu cá
- *    nhân, item khai assignee khác);
+ *  · GOAL-ERR-005 (đã chốt kỳ — kể cả chốt ĐỒNG THỜI với phân rã) · GOAL-ERR-009 (mục tiêu đã đóng
+ *    Completed/Cancelled — cùng tập nhận việc {Draft, Active} với đường gắn · rỗng · > 50) · GOAL-ERR-008
+ *    (mục tiêu cá nhân, item khai assignee khác);
  *  · CHÉO TENANT: template/goal của công ty khác ⇒ 404 (FK đơn cột KHÔNG ép cùng-tenant ⇒ nếu service
  *    thiếu vế company_id thì đây là 500 vỡ FK hoặc — tệ hơn — 201 ghi được);
  *  · Đường vui: task mang `goal_id` + `task_code` + checklist map sang task_checklists/items + activity
@@ -18,14 +19,15 @@
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import type { Pool } from "pg";
+import { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
-import { directPool, hasDb } from "../helpers/integration-db";
+import { directPool, directUrl, hasDb } from "../helpers/integration-db";
+import { waitForBlockedBy } from "../helpers/lock-wait";
 import {
   cleanupTenants,
   seedCompany,
@@ -511,6 +513,68 @@ describe.skipIf(!hasLaneDb)("S5-GOAL-TPL-1 template + phân rã (DB cô lập, �
       expect(JSON.stringify(res.body)).toContain("GOAL-ERR-009");
       expect(await goalTaskCount(goalId)).toBe(0);
     });
+
+    it("mục tiêu đã đóng (Completed) ⇒ 422 GOAL-ERR-009, 0 task — cùng tập nhận việc với đường gắn", async () => {
+      const goalId = await projectGoal("Mục tiêu đã hoàn thành", { status: "Completed" });
+      const res = await auth("post", `/goals/${goalId}/decompose`).send({
+        templateId,
+        items: [{ title: "Không được tạo" }],
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(422);
+      expect(JSON.stringify(res.body)).toContain("GOAL-ERR-009");
+      expect(await goalTaskCount(goalId)).toBe(0);
+    });
+
+    it("mục tiêu Nháp (Draft) vẫn nhận việc khi phân rã — cùng tập cho phép với đường gắn", async () => {
+      const goalId = await projectGoal("Mục tiêu nháp", { status: "Draft" });
+      const res = await auth("post", `/goals/${goalId}/decompose`).send({
+        templateId,
+        items: [{ title: "Việc của mục tiêu nháp" }],
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(await goalTaskCount(goalId)).toBe(1);
+    });
+
+    it("mục tiêu được chốt kỳ đồng thời ⇒ 422 GOAL-ERR-005, 0 task (quyết định trên hàng đã khoá)", async () => {
+      const goalId = await projectGoal("Mục tiêu chốt đồng thời");
+      // Holder trên pool RIÊNG giữ khoá hàng mục tiêu (chưa commit) → phóng phân rã → chờ phân rã bị
+      // CHÍNH holder chặn (cạnh chặn thật `pg_blocking_pids`; hết trần ⇒ ĐỎ có nhãn) → COMMIT.
+      const pool = new Pool({ connectionString: directUrl, max: 2 });
+      const client = await pool.connect();
+      let open = false;
+      let settled: Promise<unknown> | undefined;
+      try {
+        await client.query("BEGIN");
+        open = true;
+        await client.query("SET LOCAL lock_timeout = '5s'");
+        const pid = (await client.query("SELECT pg_backend_pid() AS pid")).rows[0].pid as number;
+        const held = await client.query(
+          `UPDATE goals SET finalized_at = now()
+              WHERE company_id = $1 AND id = $2 AND finalized_at IS NULL`,
+          [A.companyId, goalId],
+        );
+        expect(held.rowCount, "holder phải đổi ĐÚNG 1 hàng").toBe(1);
+        const pending = auth("post", `/goals/${goalId}/decompose`)
+          .send({ templateId, items: [{ title: "Không được tạo" }] })
+          .then((r) => r);
+        settled = Promise.allSettled([pending]);
+        expect(
+          await waitForBlockedBy(pool, pid, 1, { timeoutMs: 5_000 }),
+          "phân rã phải bị CHÍNH holder chặn (pg_blocking_pids) — không chồng lấp ⇒ ĐỎ",
+        ).toBe(true);
+        await client.query("COMMIT");
+        open = false;
+        const res = await pending;
+        expect(res.status, JSON.stringify(res.body)).toBe(422);
+        expect(JSON.stringify(res.body)).toContain("GOAL-ERR-005");
+        expect(await goalTaskCount(goalId)).toBe(0);
+      } finally {
+        if (open) await client.query("ROLLBACK");
+        client.release();
+        if (settled) await settled;
+        await pool.end();
+      }
+    }, 30_000);
 
     it("danh sách rỗng ⇒ 400 (trần Zod min(1)) — không tạo gì", async () => {
       const goalId = await projectGoal("Mục tiêu rỗng");

@@ -238,23 +238,26 @@ Ghi chú:
 | GOAL-ERR-002 | `parent_goal_id` không hợp lệ: cha phải cùng company, cấp cao hơn đúng chiều (§3.1), không tạo vòng lặp |
 | GOAL-ERR-003 | Kỳ không hợp lệ: thiếu `period_start/period_end` hoặc end < start |
 | GOAL-ERR-004 | `level='company'` bị chặn ở MVP (service chặn, CHECK vẫn cho phép để phase sau bật) |
-| GOAL-ERR-005 | Goal đã chốt kỳ (`finalized_at`): cấm sửa/xóa/check-in/gắn-tháo task/phân rã. Muốn sửa → reopen trước (cần quyền finalize) |
+| GOAL-ERR-005 | Goal đã chốt kỳ (`finalized_at`): cấm sửa/xóa/check-in/gắn-tháo task/phân rã — kể cả **chuyển** task đang gắn goal đã chốt sang goal khác. Muốn sửa → reopen trước (cần quyền finalize) |
 | GOAL-ERR-006 | Check-in chỉ hợp lệ khi status `Active` và trong data_scope của actor |
 | GOAL-ERR-007 | Xóa goal còn goal con active → chặn (xóa/di dời con trước; KHÔNG xóa lan) |
 | GOAL-ERR-008 | Gắn task sai neo: goal `employee` → task phải có assignee = employee đó; goal `project` → task phải thuộc project đó; goal `department` → cảnh báo mềm nếu task không liên quan phòng (không chặn) |
-| GOAL-ERR-009 | Phân rã bị chặn: goal `Cancelled`/đã chốt, template rỗng, hoặc vượt giới hạn 50 task/lần |
+| GOAL-ERR-009 | Phân rã bị chặn: goal không còn nhận task mới (status ∉ {`Draft`, `Active`} — CÙNG tập cho phép với GOAL-ERR-016, tức `Completed`/`Cancelled`), template rỗng, hoặc vượt giới hạn 50 task/lần. Goal đã chốt → GOAL-ERR-005 |
 | GOAL-ERR-010 | Goal nhân viên: employee phải Active cùng company; `owner_employee_id` = `employee_id` |
 | GOAL-ERR-011 | `weight` ≤ 0 |
 | GOAL-ERR-012 | `progress_mode='project'` chỉ hợp lệ với goal `level='project'` |
 | GOAL-ERR-013 | Đổi `progress_mode` khi đã có dữ liệu: cho phép, nhưng recompute lại ngay + ghi audit; cấm khi đã chốt kỳ |
 | GOAL-ERR-014 | Finalize chỉ hợp lệ khi status `Active` hoặc `Completed`; reopen ghi audit + `goal_updates` type `reopen` |
 | GOAL-ERR-015 | `target_value` bắt buộc khi `measure_type='number'` và mode `manual` |
+| GOAL-ERR-016 | Gắn task vào goal **đích** chỉ khi status ∈ {`Draft`, `Active`} (tập cho phép — trạng thái khác bị từ chối): goal `Completed`/`Cancelled` không nhận thêm task → 422. `Draft` được gắn để chuẩn bị tập việc trước khi chạy |
 
 Quy tắc bổ sung (không cần mã lỗi riêng):
 
 - Goal con có kỳ nằm ngoài kỳ cha → **cảnh báo mềm** trên UI, không chặn (thực tế kỳ có thể lệch nhau).
 - Status `Completed` set tay hoặc gợi ý khi progress đạt 100%; không auto-flip (người quyết).
 - Mọi thay đổi quan trọng (create/update/delete/finalize/reopen/decompose/link-unlink) ghi `audit_logs`.
+- **Chuyển task giữa hai goal = «tháo khỏi goal đang giữ» + «gắn vào goal đích»**: goal đang giữ task nhận đúng quyết định của đường tháo (`DELETE /goals/:id/tasks/:taskId`) — quyền ghi goal đó + chưa chốt kỳ (GOAL-ERR-005); goal đích qua cổng gắn (quyền ghi + chưa chốt + GOAL-ERR-016 + GOAL-ERR-008). Cả lô tất-cả-hoặc-không. Audit ghi ở CẢ HAI goal (`GoalTaskLinked` ở đích, `GoalTaskUnlinked` kèm `movedToGoalId` ở goal cũ); tiến độ tính lại ở cả hai. **Ngoại lệ có tên:** goal đang giữ task đã xoá mềm ⇒ cho chuyển (đường tháo không còn tới được goal đã xoá, nên không cho = task kẹt vĩnh viễn) và vẫn ghi `GoalTaskUnlinked` ở goal đó; không đọc được hàng goal đang giữ ⇒ từ chối.
+- **Mọi đường tạo liên kết task → goal** (gắn/chuyển GOAL-API-010 · phân rã GOAL-API-011) quyết định trạng thái goal bằng CÙNG một tập cho phép {`Draft`, `Active`}, kiểm trên hàng goal ĐÃ KHOÁ trong cùng transaction với phép ghi (chốt kỳ/đổi trạng thái đồng thời phải chờ). Mỗi đường giữ mã lỗi của nó (GOAL-ERR-016 · GOAL-ERR-009).
 
 ---
 
