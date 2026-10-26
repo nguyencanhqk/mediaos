@@ -166,6 +166,20 @@ pathsNeeded (ngoài `paths`, tối thiểu):
 - PATCH không ghi `task_assignees` như `/assign` (lệch có sẵn, «Risk #7» trong task-actions) — không sửa ở đây.
 - Ngày kiểm nghỉ phép lấy `dueAt.slice(0,10)` theo UTC (hành vi sẵn có của `/assign`) — nợ múi giờ công ty, ghi followups.
 - `TasksService.createTask` (đường cũ, `tasks.service.ts` :188) — park, không phát.
+- (gate SEC-ASN-1) Form Tạo trong dự án ở scope Own/Team: người được giao chỉ cần là thành viên Active của dự án
+  (D-27, `resolveAssigneeForProject`), không qua phạm vi tổ chức; `createdWarningsTx` vẫn trả bit
+  `TASK-WARN-ASSIGNEE-ON-LEAVE` cho người đó, trong khi `/assign` với cùng người trả 403 `ASSIGNEE_OUT_OF_SCOPE`.
+  Tiền lệ cùng bit: `/change-deadline` (`buildDeadlineWarningsTx`) không kiểm phạm vi người đổi hạn với người
+  phụ trách. Quyết định sản phẩm cho owner: lịch nghỉ của thành viên dự án ngoài team có cần giới hạn không; nếu
+  có ⇒ chỉ thêm cảnh báo khi người được giao trong phạm vi tạo (Company/System luôn được), áp cùng quy tắc cho
+  `buildDeadlineWarningsTx`, kèm ca int «PM@Own giao cho thành viên ngoài team đang nghỉ».
+- (gate correctness F2) PATCH tự giao khi trước đó chưa có người vẫn phát `task.assigned`, như `/assign`; engine
+  NOTI loại actor nên người dùng không thấy gì. Thống nhất với form Tạo = thêm điều kiện `userId !== actor.id` vào
+  `enqueueAssigneeTx`, đổi luôn `/assign`.
+- (gate silent F2) Tra nghỉ phép/thành viên lỗi ⇒ cả lệnh tạo rollback (500), giống `/assign`. Giữ fail-loud; nếu
+  muốn tạo vẫn thành công thì cần mã cảnh báo riêng (vd. `TASK-WARN-LEAVE-CHECK-FAILED`) kèm log lỗi, không nuốt.
+- (gate DB-1) Tạo việc CÓ người phụ trách vẫn đọc lại một hàng theo PK cho cảnh báo; bỏ hẳn được bằng cách cho
+  `createTaskInTx` trả người phụ trách + dự án hiệu lực (đổi kiểu trả về dùng chung với phân rã) — chưa làm.
 
 ## §8 Phản hồi plan-review (v1.1)
 
@@ -194,3 +208,16 @@ pathsNeeded (ngoài `paths`, tối thiểu):
   `src/tasks` · `src/goals` · `src/dashboard` (455). Typecheck api + build contracts + eslint tệp chạm: sạch.
 - Đột biến (F2): cho `task.assigned` của form Tạo đi qua kết nối riêng ⇒ C1 đỏ (`xmin` outbox ≠ `xmin` hàng việc)
   và C8 đỏ (1 outbox sau rollback). Đã hoàn nguyên.
+
+## §10 Xử lý finding gate
+
+| Finding                                             | Quyết định                                                                                                     | Căn cứ đo                                                                                                                                                                                              |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| silent F1 — PATCH đổi người, hàng sau không có user | Vá: nhánh này nổ `TASK-ERR-ASSIGNEE-WITHOUT-USER` (500, rollback cả PATCH) thay vì bỏ sự kiện không tiếng động | Bất biến có sẵn: `resolveAssignee` đòi tài khoản (400) trước khi ghi. Ca unit mới; gỡ vá ⇒ đỏ «promise resolved "undefined" instead of rejecting». Thêm ca «gỡ người phụ trách ⇒ không phát, không nổ» |
+| DB-1 · correctness F1 — đọc lại hàng mọi lần tạo    | Vá: `createTask` chỉ gọi `createdWarningsTx` khi dto có người phụ trách                                        | Ca unit mới ở `task-core-codegen.spec.ts` (+ ca dương có người phụ trách); gỡ vá ⇒ đỏ «expected "spy" to not be called at all, but actually been called 1 times»                                       |
+| SEC-ASN-1 LOW — bit nghỉ phép ngoài phạm vi tổ chức | Nợ §7, quyết định sản phẩm cho owner                                                                           | `/assign` dùng `assertAssigneeInScope`; nhánh dự án dùng `resolveAssigneeForProject` (D-27); `/change-deadline` cùng bit không kiểm phạm vi                                                            |
+| correctness F2 — PATCH tự giao vẫn phát             | Giữ (khớp `/assign`), ghi §7 + PR                                                                              | `enqueueAssigneeTx` không so actor ở cả hai đường; done_when 1 chỉ nói form Tạo                                                                                                                        |
+| silent F2 — tra cảnh báo lỗi làm hỏng cả lệnh tạo   | Giữ fail-loud (khớp `/assign`), ghi §7 + PR                                                                    | `/assign` cũng gọi `buildAssignWarningsTx` trong tx                                                                                                                                                    |
+
+Sau vá (lane `mediaos_w26b`): unit `task-assign-events` + `task-core-codegen` 16/16 · int `s20-task-assign-noti` 13/13
+· `task-patch-field-gate` + `task-core` 37/37 · typecheck api + eslint tệp chạm sạch.
