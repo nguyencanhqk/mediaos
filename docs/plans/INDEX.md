@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**736 WO** · có micro-plan: **366/736** · ⬜ 115 chờ · 🔵 4 đang làm · ✅ 616 xong · 🔴 1 chặn
+**736 WO** · có micro-plan: **368/736** · ⬜ 115 chờ · 🔵 2 đang làm · ✅ 618 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -841,8 +841,8 @@
 | `S20-GOAL-BULKLINK-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-GOAL-LINKEDTASKS-1 ✅S20-FE-TOAST-1 ✅S20-FE-COMPANYTZ-1 | Tab «Công việc gắn» gợi ý hàng loạt «N việc trong kỳ chưa gắn mục tiêu |
 | `S20-SEC-TASKLEGACYREAD-1` | 🔴 | ✅ xong | [📄](S20-SEC-TASKLEGACYREAD-1.md) | — | Ba route đọc việc đời cũ (board · theo dự án · theo nhóm) — gỡ nếu khô |
 | `S20-SEC-TASKPATCHGATE-1` | 🔴 | ✅ xong | [📄](S20-SEC-TASKPATCHGATE-1.md) | — | Đối chiếu cổng quyền của form Sửa việc với các thao tác chuyên trách ( |
-| `S20-SEC-GOALLINKGATE-1` | 🔴 | 🔵 đang làm | — *(chưa)* | — | Gắn việc vào mục tiêu kiểm cả mục tiêu đang giữ việc đó (quyền ghi · c |
-| `S20-SEC-GOALNAMEDTO-1` | 🔴 | 🔵 đang làm | — *(chưa)* | — | Tên/mã mục tiêu đi kèm dữ liệu việc theo đúng quyền xem mục tiêu — chố |
+| `S20-SEC-GOALLINKGATE-1` | 🔴 | ✅ xong | [📄](S20-SEC-GOALLINKGATE-1.md) | — | Gắn việc vào mục tiêu kiểm cả mục tiêu đang giữ việc đó (quyền ghi · c |
+| `S20-SEC-GOALNAMEDTO-1` | 🔴 | ✅ xong | [📄](S20-SEC-GOALNAMEDTO-1.md) | — | Tên/mã mục tiêu đi kèm dữ liệu việc theo đúng quyền xem mục tiêu — chố |
 | `S20-SEC-LEAVETYPEMASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Lịch nghỉ cấp đội chỉ hiện «Nghỉ» + khoảng ngày; loại nghỉ cụ thể chỉ  |
 | `S20-TASK-PROJTOOLBARURL-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-TASK-DRAWER-1 ✅S20-TASK-PROJECTENTRY-1 | Workspace dự án: toolbar và rail người phụ trách lên URL (q · status · |
 | `S20-FE-TOAST-2` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S20-FE-TOAST-1 | Thông báo nổi cho apps/auth + apps/console, dọn thông báo khi đăng xuấ |
