@@ -52,6 +52,7 @@ import { WorkspaceToolbar } from "./ProjectDetailPageToolbar";
 import { useProjectLastTab, useWorkspaceTabOrder } from "./use-workspace-tab-order";
 import { WorkspaceTabOrderMenu } from "./WorkspaceTabOrderMenu";
 import { useTaskDrawer } from "./task-drawer-nav";
+import { ProjectDiscussButton } from "@/components/chat/ProjectDiscussButton";
 
 /**
  * ProjectDetailPage — VỎ WORKSPACE dự án (S5-TASK-WORKSPACE-1 đợt D1, SPEC-06 §13.3 TASK-SCREEN-003;
@@ -581,8 +582,19 @@ export function ProjectDetailPage({
     <div className="space-y-6 p-6">
       {/* Nút "Quay lại danh sách" đã BỎ (sidebar/breadcrumb đảm nhận điều hướng); onBack chỉ còn
           dùng sau khi XÓA dự án — trang chi tiết không còn tồn tại để đứng lại. */}
-      {/* 3 nút Sửa/Đóng/Xóa dự án đã CHUYỂN vào tab Cài đặt — header chỉ còn tiêu đề. */}
-      <PageHeader title={project.name} description={project.code ?? undefined} />
+      {/* 3 nút Sửa/Đóng/Xóa dự án đã CHUYỂN vào tab Cài đặt. Header còn tiêu đề + «Thảo luận»
+          (S20-CHAT-DISCUSS-1: mở phòng chat của dự án trong drawer; «đang được tạo» chỉ khi tôi là
+          thành viên của dự án còn mở — `canCloseAction` = chưa Completed/Cancelled). */}
+      <PageHeader
+        title={project.name}
+        description={project.code ?? undefined}
+        actions={
+          <ProjectDiscussButton
+            projectId={project.id}
+            expectsRoom={project.myProjectRole !== null && canCloseAction}
+          />
+        }
+      />
 
       <div className="flex items-center gap-2 border-b border-border">
         <div className="flex flex-1 gap-2 overflow-x-auto">

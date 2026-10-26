@@ -8,7 +8,13 @@
  */
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { CHAT_MD_QUERY, CHAT_XL_QUERY, useChatLayoutMode } from "./use-chat-viewport";
+import {
+  CHAT_MD_QUERY,
+  CHAT_XL_QUERY,
+  isScrollNearBottom,
+  scrollTopToReveal,
+  useChatLayoutMode,
+} from "./use-chat-viewport";
 
 type Listener = () => void;
 
@@ -124,5 +130,54 @@ describe("useChatLayoutMode — RATCHET: vắng matchMedia", () => {
     // thay đổi đó thành MỘT dòng đỏ có tên.
     vi.stubGlobal("matchMedia", undefined);
     expect(renderHook(() => useChatLayoutMode()).result.current).toBe("three");
+  });
+});
+
+/**
+ * S20-CHAT-UNREAD-1 — hình học khung CUỘN, kiểm bằng số đo giả (jsdom không có layout). Số đo mô phỏng
+ * khung tin cao 300px trên nội dung 5000px, vạch chưa đọc ở toạ độ nội dung 2000px.
+ */
+describe("isScrollNearBottom", () => {
+  it("phần còn lại dưới khung nhìn ≤ ngưỡng ⇒ đang ở đáy", () => {
+    expect(isScrollNearBottom({ scrollHeight: 5000, scrollTop: 4700, clientHeight: 300 }, 80)).toBe(
+      true,
+    );
+    expect(isScrollNearBottom({ scrollHeight: 5000, scrollTop: 4620, clientHeight: 300 }, 80)).toBe(
+      true,
+    );
+  });
+
+  it("còn hơn ngưỡng ⇒ chưa ở đáy (đứng ở vạch không phải là đã đọc)", () => {
+    expect(isScrollNearBottom({ scrollHeight: 5000, scrollTop: 1984, clientHeight: 300 }, 80)).toBe(
+      false,
+    );
+    expect(isScrollNearBottom({ scrollHeight: 5000, scrollTop: 4619, clientHeight: 300 }, 80)).toBe(
+      false,
+    );
+  });
+
+  it("nội dung lọt vừa khung nhìn ⇒ đang ở đáy dù không cuộn được", () => {
+    expect(isScrollNearBottom({ scrollHeight: 200, scrollTop: 0, clientHeight: 300 }, 80)).toBe(
+      true,
+    );
+  });
+});
+
+describe("scrollTopToReveal", () => {
+  it("đưa vạch lên mép trên khung cuộn, chừa khe", () => {
+    expect(scrollTopToReveal({ targetTop: 2000, viewportTop: 0, scrollTop: 0, gapPx: 16 })).toBe(
+      1984,
+    );
+  });
+
+  it("khung cuộn KHÔNG ở đỉnh trang + đã cuộn sẵn ⇒ quy về toạ độ nội dung", () => {
+    // Khung cuộn bắt đầu ở y=120 trên màn hình, đang cuộn 500px; vạch hiện ở y=1620 ⇒ toạ độ nội dung 2000.
+    expect(
+      scrollTopToReveal({ targetTop: 1620, viewportTop: 120, scrollTop: 500, gapPx: 16 }),
+    ).toBe(1984);
+  });
+
+  it("vạch sát đỉnh nội dung ⇒ kẹp về 0, không âm", () => {
+    expect(scrollTopToReveal({ targetTop: 8, viewportTop: 0, scrollTop: 0, gapPx: 16 })).toBe(0);
   });
 });

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays } from "lucide-react";
 import {
   taskCoreApi,
   hrApi,
@@ -9,18 +8,17 @@ import {
   taskSubtaskInvalidation,
   useCan,
   ApiError,
+  formatDateTime,
+  companyTimeZone,
 } from "@mediaos/web-core";
 import { Avatar, Popover, Input, cn } from "@mediaos/ui";
 import type { SubtaskListItemDto, TaskCoreStatusDto } from "@mediaos/contracts";
-import {
-  localDatetimeToIso,
-  isoToLocalDatetime,
-  TASK_CORE_ENGINE_PAIRS,
-  TASK_CORE_STATUS_OPTIONS,
-} from "./constants";
+import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskStatusBadge } from "./TaskStatusBadge";
 import { BadgeSelect } from "./TaskInlineFields";
 import { useTaskPatchFieldLocks } from "./task-patch-field-locks";
+import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
+import { statusMenuOptions } from "./task-status-transitions";
 
 /**
  * SubtaskInlineControls — sửa NGƯỜI THỰC HIỆN và HẠN của từng việc con NGAY TRÊN DÒNG
@@ -34,6 +32,8 @@ import { useTaskPatchFieldLocks } from "./task-patch-field-locks";
  * S20-SEC-TASKPATCHGATE-1: khi giá trị ĐỔI, server đòi CÙNG cặp chuyên trách như route riêng (người
  * phụ trách ↔ `assign:task`, hạn ↔ `update-deadline:task`; thiếu ⇒ 403) ⇒ control khoá theo đúng cặp
  * đó (`useTaskPatchFieldLocks`), không theo vai trò. Cùng thay đổi thì cùng quyết định quyền.
+ * S20-TASK-QUICKEDIT-1: HẠN nay đi route `POST /tasks/:id/change-deadline` (cùng cặp
+ * `update-deadline:task`) qua popover mốc nhanh dùng chung; PATCH chỉ còn cho người thực hiện.
  *
  * KHÔNG gửi kèm `projectId`/`stateId`: việc con thừa hưởng dự án từ CHA và không có cột trên board
  * (D-36); gửi lệch → BE 400.
@@ -58,7 +58,7 @@ function useSubtaskFieldMutation(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { assigneeEmployeeId?: string | null; dueAt?: string | null }) =>
+    mutationFn: (patch: { assigneeEmployeeId: string | null }) =>
       taskCoreApi.updateTask(item.id, patch),
     onSettled: () => {
       for (const key of taskSubtaskInvalidation.afterMutate(parentTaskId, projectId))
@@ -107,7 +107,7 @@ export function SubtaskStatusControl({
         id={`subtask-status-select-${item.id}`}
         ariaLabel={t("tasks.detail.subtasks.inline.statusAction")}
         value={item.status}
-        options={TASK_CORE_STATUS_OPTIONS}
+        options={statusMenuOptions(item.status)}
         disabled={mutation.isPending}
         onSelect={(status) => mutation.mutate(status)}
         renderBadge={(s) => <TaskStatusBadge status={s} />}
@@ -254,7 +254,11 @@ export function SubtaskAssigneeControl({
   );
 }
 
-// ── Hạn: bấm ngày → sửa tại chỗ ──────────────────────────────────────────────
+// ── Hạn: bấm ngày → mốc nhanh / tuỳ chỉnh ────────────────────────────────────
+/**
+ * S20-TASK-QUICKEDIT-1 — popover mốc hạn dùng chung (DeadlineQuickPicker), lưu NGAY qua route
+ * change-deadline (cặp update-deadline:task — cùng cặp mà khoá trường `dueAt` đo), không qua PATCH.
+ */
 export function SubtaskDueControl({
   item,
   parentTaskId,
@@ -267,68 +271,38 @@ export function SubtaskDueControl({
   canEdit: boolean;
 }) {
   const { t } = useTranslation("tasks");
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(() => isoToLocalDatetime(item.dueAt));
-  const mutation = useSubtaskFieldMutation(item, parentTaskId, projectId);
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (dueAt: string | null) => taskCoreApi.changeDeadline(item.id, { dueAt }),
+    onSettled: () => {
+      for (const key of taskSubtaskInvalidation.afterMutate(parentTaskId, projectId))
+        void queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
   // Phạm vi việc (canEdit) VÀ cặp chuyên trách của trường (update-deadline:task).
   const locks = useTaskPatchFieldLocks();
   const editable = canEdit && !locks.dueAt;
 
-  const display = item.dueAt ? new Date(item.dueAt).toLocaleDateString("vi-VN") : "—";
-
   if (!editable) {
+    const display = item.dueAt ? formatDateTime(item.dueAt, companyTimeZone()) : "—";
     return <span className="text-xs text-muted-foreground">{display}</span>;
   }
 
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setDraft(isoToLocalDatetime(item.dueAt));
-          setEditing(true);
-        }}
-        title={t("tasks.detail.subtasks.inline.dueAction")}
-        aria-label={t("tasks.detail.subtasks.inline.dueAction")}
-        data-testid={`subtask-due-trigger-${item.id}`}
-        className={cn(
-          "flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground",
-          mutation.isPending && "opacity-50",
-        )}
-      >
-        <CalendarDays className="h-3 w-3" aria-hidden="true" />
-        {display}
-      </button>
-    );
-  }
-
-  const commit = () => {
-    setEditing(false);
-    const iso = localDatetimeToIso(draft) ?? null;
-    if (iso === item.dueAt) return; // không đổi ⇒ không gọi API
-    mutation.mutate({ dueAt: iso });
-  };
-
   return (
-    <Input
-      autoFocus
-      type="datetime-local"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commit();
-        }
-        if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation(); // dòng nằm trong panel/drawer — đừng để Esc lọt lên đóng panel
-          setEditing(false);
-        }
-      }}
-      className="h-7 w-auto py-0 text-xs"
-      data-testid={`subtask-due-input-${item.id}`}
-    />
+    <div className="flex flex-col items-end gap-0.5">
+      <DeadlineQuickPicker
+        id={`subtask-due-trigger-${item.id}`}
+        variant="compact"
+        ariaLabel={t("tasks.detail.subtasks.inline.dueAction")}
+        value={item.dueAt}
+        disabled={mutation.isPending}
+        onSelect={(dueAt) => mutation.mutate(dueAt)}
+      />
+      {mutation.isError && (
+        <p role="alert" className="px-1 text-xs text-destructive">
+          {t(inlineErrorTitle(mutation.error, "tasks.detail.subtasks.errors.saveFailed"))}
+        </p>
+      )}
+    </div>
   );
 }

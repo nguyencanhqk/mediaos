@@ -29,6 +29,7 @@ import { useCanOpenDirect } from "./chat-room-opener";
 import { SenderDirectMenu } from "./SenderDirectMenu";
 import { ReactionBar } from "./ReactionBar";
 import { SeenByAvatars, type SeenByViewer } from "./SeenByAvatars";
+import type { SeenByRosterStatus } from "./seen-by-status";
 
 export interface MessageBubbleActions {
   onReply: (message: StoredChatMessage) => void;
@@ -73,6 +74,10 @@ interface MessageBubbleProps {
    * Dẫn xuất từ `members[].lastReadSeq` (§13.2) — không có bảng riêng.
    */
   seenBy: readonly SeenByViewer[];
+  /** S20-CHAT-SEENBY-1 — người nhận CHƯA đọc tin (tab «Chưa xem»). Mặc định rỗng. */
+  unseenBy?: readonly SeenByViewer[];
+  /** S20-CHAT-SEENBY-1 — trạng thái roster; khác `ready` ⇒ bảng chỉ báo tải/lỗi. Mặc định `ready`. */
+  seenByStatus?: SeenByRosterStatus;
   /**
    * S8-CHAT-UX-FE-3 — URL ảnh người gửi, tra từ **ROSTER phòng** (CHAT-DEC-019), KHÔNG từ tin.
    * `null` = chưa có ảnh / roster chưa về ⇒ `<Avatar>` rơi về chữ cái đầu (hành vi cũ, không hồi quy).
@@ -177,6 +182,8 @@ export function MessageBubble({
   canRecall,
   canPin,
   seenBy,
+  unseenBy,
+  seenByStatus,
   senderAvatarUrl,
   senderNameFallback,
   isArchived,
@@ -250,7 +257,19 @@ export function MessageBubble({
         </div>
       )}
 
-      <div className={cn("flex min-w-0 flex-col", isMine ? "items-end" : "items-start")}>
+      {/*
+       * Trần ngang `max-w-[min(42rem,78%)]` đặt ở CỘT này (con trực tiếp của hàng flex, khối chứa có bề
+       * ngang xác định), không ở bong bóng. Đặt ở bong bóng thì phần trăm tính theo cột — mà cột co theo
+       * chính bong bóng ⇒ bong bóng chỉ còn 78% bề ngang tự nhiên của nó, tin ngắn «KT #46 — Ok» xuống
+       * dòng dù còn chỗ (lượt đo trình duyệt S20-CHAT-UNREAD-1).
+       */}
+      <div
+        className={cn(
+          "flex min-w-0 max-w-[min(42rem,78%)] flex-col",
+          isMine ? "items-end" : "items-start",
+        )}
+        data-testid="chat-message-column"
+      >
         {/* Tên người gửi: chỉ ở tin đầu cụm và chỉ với tin NGƯỜI KHÁC — vị trí đã nói tin nào của tôi. */}
         {!isMine && !isGrouped && (
           <div className="mb-0.5 flex items-baseline gap-2 px-1">
@@ -270,10 +289,10 @@ export function MessageBubble({
 
         <div
           className={cn(
-            // `max-w-[min(42rem,78%)]`: bong bóng không được kéo dài hết chiều ngang cột — mắt mất neo
-            // khi phải quét cả màn để đọc một dòng, và vế "hai phía" biến mất vì mọi tin đều chạm cả
-            // hai mép.
-            "max-w-[min(42rem,78%)] min-w-0 rounded-2xl px-3 py-2",
+            // Trần ngang nằm ở cột bọc (xem trên): bong bóng không được kéo dài hết chiều ngang khung —
+            // mắt mất neo khi phải quét cả màn để đọc một dòng, và vế "hai phía" biến mất vì mọi tin đều
+            // chạm cả hai mép. `max-w-full` giữ từ dài không bẻ được (URL) trong cột.
+            "max-w-full min-w-0 rounded-2xl px-3 py-2",
             isMine
               ? "rounded-br-sm bg-bubble-mine text-foreground"
               : "rounded-bl-sm bg-surface-2 text-foreground",
@@ -357,7 +376,9 @@ export function MessageBubble({
             {formatClock(message.createdAt)}
           </time>
 
-          {isMine && !isRecalled && <SeenByAvatars viewers={seenBy} />}
+          {isMine && !isRecalled && (
+            <SeenByAvatars viewers={seenBy} unseen={unseenBy} status={seenByStatus} />
+          )}
         </div>
       </div>
 

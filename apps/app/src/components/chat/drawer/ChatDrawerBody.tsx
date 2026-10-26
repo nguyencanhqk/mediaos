@@ -25,6 +25,7 @@ import { CreateRoomDialog } from "../CreateRoomDialog";
 import { RoomListPanel } from "../RoomListPanel";
 import { roomDisplayName } from "../chat-format";
 import { DEFAULT_ROOM_FILTER_CHIP, type RoomFilterChip } from "../room-list-filter";
+import { RoomShortcuts } from "../use-room-shortcuts.help";
 import { ChatDrawerConversation } from "./ChatDrawerConversation";
 
 export function ChatDrawerBody(): React.ReactElement {
@@ -72,6 +73,8 @@ export function ChatDrawerBody(): React.ReactElement {
    */
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<RoomFilterChip>(DEFAULT_ROOM_FILTER_CHIP);
+  /** S20-CHAT-UNREADNAV-1 — bảng gợi ý phím tắt chuyển phòng (?). */
+  const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
   /** Phòng đang hiện ở tiêu đề = mở gần đây nhất (cuối mảng — hợp đồng của `chat-dock.store`). */
   const activeRoomId = openRoomIds.length > 0 ? openRoomIds[openRoomIds.length - 1] : null;
@@ -176,6 +179,7 @@ export function ChatDrawerBody(): React.ReactElement {
             chip={chip}
             onChipChange={setChip}
             onCreateRoom={() => setCreateOpen(true)}
+            onOpenShortcutHelp={() => setShortcutHelpOpen(true)}
             /*
              * `onOpenSearch` CỐ Ý không truyền ⇒ nút biến mất: drawer không có cột thứ hai để mở
              * CHAT-SCREEN-005 vào — render nút ở đây rồi không làm gì mới là thứ người dùng đọc ra là "hỏng".
@@ -194,6 +198,22 @@ export function ChatDrawerBody(): React.ReactElement {
            * DOM thành ảnh chiếu trung thực của store: trần là chính sách DUY NHẤT, đặt đúng một chỗ.
            */
           openRoomIds.map((roomId) => <ChatDrawerConversation key={roomId} roomId={roomId} />)
+        )}
+
+        {/*
+         * S20-CHAT-UNREADNAV-1 — phím tắt chuyển phòng theo ĐÚNG chip + câu lọc của danh sách drawer, sống
+         * cả khi danh sách đã nhường chỗ cho hội thoại. Đặt TRONG thân `Sheet`: Sheet là khung bao chứa vùng
+         * của lớp phím (không chặn phím), và bảng gợi ý (dialog) nằm trong panel ⇒ Esc đóng bảng trước.
+         */}
+        {canViewRoom && (
+          <RoomShortcuts
+            chip={chip}
+            query={query}
+            currentRoomId={activeRoomId}
+            onOpenRoom={openRoom}
+            helpOpen={isShortcutHelpOpen}
+            onHelpOpenChange={setShortcutHelpOpen}
+          />
         )}
 
         {/*

@@ -22,6 +22,7 @@ import { useChatStore } from "@/stores/chat.store";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
 import { useCanOpenDirect } from "./chat-room-opener";
 import { useOpenDirect } from "./use-open-direct";
+import { DerivedMembersNotice } from "./RoomMembersSheet.derived";
 
 /**
  * S7-CHAT-FE-4 — "đã xem tới đâu" của MỘT thành viên (SPEC-15 §13.2).
@@ -150,11 +151,8 @@ export function RoomMembersSheet({
         <p className="text-xs text-muted-foreground">{t("info.members.loadError")}</p>
       ) : (
         <>
-          {isDerived && (
-            <p className="pb-2 text-xs text-muted-foreground">
-              {t("info.members.derivedNotice", { type: t(`rooms.types.${room.roomType}`) })}
-            </p>
-          )}
+          {/* S20-CHAT-DISCUSS-1 — lời nhắc dẫn xuất kèm liên kết tới nơi quản lý thành viên thật. */}
+          {isDerived && <DerivedMembersNotice room={room} onNavigated={onClose} />}
           {members.length === 0 ? (
             <p className="text-xs text-muted-foreground">{t("info.members.empty")}</p>
           ) : (
