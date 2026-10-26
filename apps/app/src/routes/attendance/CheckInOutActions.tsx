@@ -7,13 +7,14 @@
  *   - KHÔNG hard-code logic leave/rule — server quyết định, client render.
  * S20-DASH-QUICKACTION-1: dùng lại trên widget «Chấm công hôm nay» (`variant="inline"`). Trạng thái chỉ đổi
  * SAU khi server xác nhận (`onConfirmed` gọi sau khi hook đã invalidate ATT today); server từ chối ⇒ dòng
- * lỗi nêu đúng lý do server trả (kỳ công khoá, nghỉ cả ngày…), không phải câu chung chung.
+ * lỗi nêu đúng lý do server trả (kỳ công khoá, nghỉ cả ngày…), không phải câu chung chung. Dòng lỗi ngay dưới
+ * nút là nơi DUY NHẤT báo lý do (không toast lặp lại cùng câu — lượt đo trình duyệt thấy lý do hiện hai lần).
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LogIn, LogOut, AlertCircle, CheckCircle } from "lucide-react";
 import type { AttendanceTodayV2Dto } from "@mediaos/contracts";
-import { ApiError, mapApiErrorToUi, useCan, showApiErrorToast } from "@mediaos/web-core";
+import { ApiError, mapApiErrorToUi, useCan } from "@mediaos/web-core";
 import { Button, Card, CardContent } from "@mediaos/ui";
 import { ATT_ENGINE_PAIRS } from "./constants";
 import { useCheckIn } from "./hooks/useCheckIn";
@@ -120,7 +121,6 @@ export function CheckInOutActions({ data, variant = "card", onConfirmed }: Check
       setFeedback({ type: "success", message: t("today.actions.successCheckIn") });
       onConfirmed?.();
     } catch (err) {
-      showApiErrorToast(err);
       setFeedback({
         type: "error",
         message: rejectionMessage(err, t("today.actions.errorCheckIn")),
@@ -139,7 +139,6 @@ export function CheckInOutActions({ data, variant = "card", onConfirmed }: Check
       setFeedback({ type: "success", message: t("today.actions.successCheckOut") });
       onConfirmed?.();
     } catch (err) {
-      showApiErrorToast(err);
       setFeedback({
         type: "error",
         message: rejectionMessage(err, t("today.actions.errorCheckOut")),

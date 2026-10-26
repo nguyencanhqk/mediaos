@@ -9,11 +9,12 @@
  * - Quick action bị tắt (thiếu quyền) ⇒ không có nút, không gọi ATT.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import { Clock } from "lucide-react";
-import { ApiError, attendanceApi } from "@mediaos/web-core";
+import { ApiError, attendanceApi, dashboardKeys, showApiErrorToast } from "@mediaos/web-core";
 import type { AttendanceTodayV2Dto, QuickActionDto } from "@mediaos/contracts";
 import i18n from "@/i18n";
 import { WidgetCard } from "./WidgetCard";
@@ -66,11 +67,18 @@ function today(canCheckIn: boolean): AttendanceTodayV2Dto {
   } as unknown as AttendanceTodayV2Dto;
 }
 
-function renderCard(quickActions: readonly QuickActionDto[]) {
+/** Một widget KHÁC đang hiển thị trên cùng dashboard (query thật dưới `dashboardKeys.widgets`). */
+function OtherWidgetProbe({ fetchWidget }: { fetchWidget: () => Promise<unknown> }) {
+  useQuery({ queryKey: dashboardKeys.widgets.data("MY_TASKS", {}), queryFn: fetchWidget });
+  return null;
+}
+
+function renderCard(quickActions: readonly QuickActionDto[], sibling?: ReactNode) {
   const onRefresh = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
+      {sibling}
       <I18nextProvider i18n={i18n}>
         <WidgetCard
           title="Chấm công hôm nay"
@@ -121,6 +129,28 @@ describe("WidgetCard — Check-in/Check-out trên widget (S20-DASH-QUICKACTION-1
     expect(screen.getByTestId("btn-check-in")).toBeDisabled();
   });
 
+  // Lượt đo trình duyệt: một lần check-in từng sinh 6 × GET widget thường (mọi widget đang hiển thị) rồi thêm
+  // GET `refresh=true` của widget chấm công. Server không xoá cache widget khi check-in/out ⇒ GET thường chỉ trả
+  // lại bản cache cũ. Widget KHÁC chỉ bị đánh dấu cũ (tải lại ở lần focus/mount kế), widget chấm công tải lại
+  // đúng MỘT lần qua `onRefresh` (refresh=true).
+  it("server xác nhận ⇒ widget khác KHÔNG bị GET lại ngay, widget chấm công tải lại đúng một lần", async () => {
+    vi.mocked(attendanceApi.getToday)
+      .mockResolvedValueOnce(today(true))
+      .mockResolvedValue(today(false));
+    vi.mocked(attendanceApi.checkIn).mockResolvedValue({} as never);
+    const fetchWidget = vi.fn().mockResolvedValue({});
+    const { onRefresh } = renderCard(
+      [CHECK_IN, CHECK_OUT],
+      <OtherWidgetProbe fetchWidget={fetchWidget} />,
+    );
+    await waitFor(() => expect(fetchWidget).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByTestId("btn-check-in"));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId("btn-check-out")).toBeEnabled());
+    expect(fetchWidget).toHaveBeenCalledTimes(1);
+  });
+
   it("server từ chối ⇒ hiện đúng lý do server trả, widget KHÔNG tải lại", async () => {
     vi.mocked(attendanceApi.getToday).mockResolvedValue(today(true));
     vi.mocked(attendanceApi.checkIn).mockRejectedValue(
@@ -130,6 +160,10 @@ describe("WidgetCard — Check-in/Check-out trên widget (S20-DASH-QUICKACTION-1
 
     fireEvent.click(await screen.findByTestId("btn-check-in"));
     expect(await screen.findByText("Kỳ công tháng này đã khoá.")).toBeInTheDocument();
+    // Lượt đo trình duyệt: cùng lý do từng hiện HAI lần (dòng lỗi ngay dưới nút + toast góc màn). Dòng tại
+    // chỗ đã mang đúng lý do server ⇒ không toast lặp lại.
+    expect(screen.getAllByText("Kỳ công tháng này đã khoá.")).toHaveLength(1);
+    expect(showApiErrorToast).not.toHaveBeenCalled();
     expect(onRefresh).not.toHaveBeenCalled();
     expect(attendanceApi.getToday).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByTestId("btn-check-in")).toBeEnabled());

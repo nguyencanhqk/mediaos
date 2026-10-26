@@ -10,12 +10,17 @@
  */
 import { DASH_QUICK_ACTION_TARGET_URLS as TARGETS } from "@mediaos/contracts";
 
-/** Đích cũ (API trước S20-DASH-QUICKACTION-1) → đích mới. Spec kiểm cả hai vế. */
+/**
+ * Đích cũ (API trước S20-DASH-QUICKACTION-1) → đích API mới phát cho CÙNG mã action ⇒ trước và sau khi deploy
+ * API, một nút dẫn tới cùng một màn. Spec kiểm cả hai vế.
+ */
 export const LEGACY_QUICK_ACTION_TARGETS: Readonly<Record<string, string>> = {
   "/tasks/new": TARGETS.CREATE_TASK,
   "/tasks/my": TARGETS.OPEN_MY_TASKS,
-  // Đích cũ ghi «due-soon» ⇒ giữ nghĩa «sắp đến hạn» (API mới tách riêng nút này), không đổi thành «quá hạn».
-  "/tasks?filter=due-soon": TARGETS.OPEN_TASKS_DUE_SOON,
+  // Nút cũ OPEN_TASK_ALERTS «Xem task cần chú ý» (đích ghi «due-soon» nhưng chưa từng lọc được gì). Dẫn tới
+  // nhóm «Sắp đến hạn» thì chỉ còn phần nhỏ của số widget báo (lượt đo: 1 việc, widget ghi «3 quá hạn · 1 sắp
+  // đến hạn») ⇒ đi theo mã action như API mới: màn «Task quá hạn».
+  "/tasks?filter=due-soon": TARGETS.OPEN_TASK_ALERTS,
   "/leave/approvals?status=Pending": TARGETS.OPEN_PENDING_LEAVE_APPROVAL,
   "/projects": TARGETS.OPEN_PROJECT,
 };

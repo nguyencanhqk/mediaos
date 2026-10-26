@@ -100,10 +100,25 @@ describe("S20-DASH-QUICKACTION-1 — payload widget CŨ (API chưa deploy) vẫn
     expect(targetProblems(next ?? "")).toEqual([]);
   });
 
-  // Đích cũ ghi rõ «due-soon» ⇒ cầu nối giữ nghĩa «sắp đến hạn» (đích riêng của API mới), không đổi thành «quá hạn».
-  it("đích cũ /tasks?filter=due-soon ⇒ nhóm «Sắp đến hạn» của Việc của tôi", () => {
-    expect(resolveQuickActionTarget("/tasks?filter=due-soon")).toBe(
-      DASH_QUICK_ACTION_TARGET_URLS.OPEN_TASKS_DUE_SOON,
+  // Payload API trước S20-DASH-QUICKACTION-1: mã action → đích cũ. Cầu nối đưa NÚT CŨ tới đúng màn mà API
+  // mới đưa CÙNG mã action tới ⇒ trước và sau khi deploy API, một nút dẫn tới cùng một màn. Lượt đo trình
+  // duyệt: «Xem task cần chú ý» (OPEN_TASK_ALERTS, đích cũ ghi «due-soon») từng dẫn tới nhóm «Sắp đến hạn»
+  // (1 việc) trong khi widget ngay cạnh ghi «3 quá hạn · 1 sắp đến hạn».
+  const LEGACY_PAYLOAD: ReadonlyArray<readonly [DashQuickActionNavigateCode, string]> = [
+    ["CREATE_TASK", "/tasks/new"],
+    ["OPEN_MY_TASKS", "/tasks/my"],
+    ["OPEN_TASK_ALERTS", "/tasks?filter=due-soon"],
+    ["OPEN_PENDING_LEAVE_APPROVAL", "/leave/approvals?status=Pending"],
+    ["OPEN_PROJECT", "/projects"],
+  ];
+
+  it.each(LEGACY_PAYLOAD)("nút %s với đích cũ %s ⇒ đích API mới phát cho CÙNG mã", (code, old) => {
+    expect(resolveQuickActionTarget(old)).toBe(DASH_QUICK_ACTION_TARGET_URLS[code]);
+  });
+
+  it("bảng cầu nối phủ đúng các đích cũ của payload trước đây, không thừa không thiếu", () => {
+    expect(Object.keys(LEGACY_QUICK_ACTION_TARGETS).sort()).toEqual(
+      LEGACY_PAYLOAD.map(([, old]) => old).sort(),
     );
   });
 
