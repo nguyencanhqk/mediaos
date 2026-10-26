@@ -8,7 +8,7 @@ async (page) => {
   const SHOT = ".playwright-mcp/s20-kpi/dash-quickaction-";
   // «Hôm nay» giả lập: Thứ Năm 22/10/2026 10:00 giờ VN (= 03:00 UTC).
   const NOW = "2026-10-22T03:00:00.000Z";
-  const PARTS = ["D", "L", "M", "MZ", "AR", "AS", "layout"];
+  const PARTS = ["D", "L", "M", "MZ", "AR", "AS", "ASB", "layout"];
   const TASK_TITLES = [
     "Nộp báo cáo tuần",
     "Gửi hợp đồng khách C",
@@ -42,6 +42,7 @@ async (page) => {
     MZ: {},
     AR: {},
     AS: {},
+    ASB: {},
     layout: {},
     unmocked: [],
     errors: [],
@@ -269,6 +270,25 @@ async (page) => {
   }
   await run("AR", () => checkInFlow("AR", "reject"));
   await run("AS", () => checkInFlow("AS", "ok"));
+
+  // ── ASB · sau check-in thành công (nối AS): rời dashboard bằng nút nhanh rồi Quay lại trong SPA ⇒ các widget
+  // chỉ bị đánh dấu cũ lúc check-in có tải lại ở lần mount kế không (bản vá: refetchType none) ───────────────────
+  await run("ASB", async () => {
+    if (!PARTS.includes("AS")) throw new Error("ASB cần chạy ngay sau AS");
+    await setState({ phase: "ASB" });
+    await page.getByRole("button", { name: "Xem tất cả thông báo", exact: true }).first().click();
+    await settle();
+    result.ASB.away = where();
+    await page.goBack();
+    await page.getByTestId("btn-check-out").waitFor({ timeout: 15000 });
+    await settle();
+    result.ASB.backTo = where();
+    result.ASB.panel = await attPanel();
+    result.ASB.requests = (await logOf("ASB"))
+      .filter((r) => r.path.startsWith("/dashboard") || r.path.startsWith("/attendance"))
+      .map((r) => `${r.method} ${r.path}${r.query || ""} → ${r.status}`);
+    await shot("ASB-back.png");
+  });
 
   // ── layout · 390 px: dashboard có nút chấm công + nút nhanh ────────────────────────────────────
   await run("layout", async () => {
