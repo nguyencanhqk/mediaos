@@ -302,8 +302,11 @@ function GroupList({
   );
 }
 
-/** Ô tạo nhanh của trang: giao cho CHÍNH TÔI — chưa biết tôi là ai thì khoá ô, không đoán. */
-function MyTasksQuickAdd() {
+/**
+ * Ô tạo nhanh của trang: giao cho CHÍNH TÔI — chưa biết tôi là ai thì khoá ô, không đoán.
+ * `autoFocus` (`?create=1` — quick action «Tạo task» của dashboard) ⇒ focus ngay khi ô mở khoá.
+ */
+function MyTasksQuickAdd({ autoFocus }: { autoFocus: boolean }) {
   const { t } = useTranslation("tasks");
   const me = useMyEmployeeLink(true);
   const reasonKey =
@@ -321,6 +324,7 @@ function MyTasksQuickAdd() {
       placeholder={t("quickAdd.placeholder")}
       hint={t("quickAdd.hint")}
       shortcutKey="n"
+      autoFocus={autoFocus}
     />
   );
 }
@@ -410,7 +414,7 @@ export function MyTasksPage() {
           ) : undefined
         }
       />
-      {canCreate && <MyTasksQuickAdd />}
+      {canCreate && <MyTasksQuickAdd autoFocus={search.create === 1} />}
       {createOpen && (
         <TaskFormDrawer
           mode="create"

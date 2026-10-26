@@ -10,7 +10,11 @@
  *   check-in/check-out:attendance (0454/att-seed) · create:task, read:task (0005) · read:notification (0005) ·
  *   approve:leave (0455/leave-seed) · read:project (0005) · read:employee (0019). Reviewer FULL gate đối chiếu.
  */
-import type { QuickActionDto, QuickActionMethod } from "@mediaos/contracts";
+import {
+  DASH_QUICK_ACTION_TARGET_URLS,
+  type QuickActionDto,
+  type QuickActionMethod,
+} from "@mediaos/contracts";
 import type { EnginePair } from "./dashboard-widget-catalog.const";
 
 export interface DashWidgetQuickActionDef {
@@ -30,8 +34,10 @@ export interface DashWidgetQuickActionDef {
 }
 
 /**
- * Quick action theo widgetCode (7 widget in-sprint). [] ⇒ widget không có quick action. Danh sách metadata
- * điều hướng — thêm action = thêm dòng ở đây (curated), KHÔNG rải rác trong handler.
+ * Quick action theo widgetCode (7 widget in-sprint). Đích NAVIGATE lấy từ `DASH_QUICK_ACTION_TARGET_URLS`
+ * (@mediaos/contracts) — test FE `quick-action-targets.spec.ts` đối chiếu từng đích với cây route thật.
+ * [] ⇒ widget không có quick action. Danh sách metadata điều hướng — thêm action = thêm dòng ở đây
+ * (curated), KHÔNG rải rác trong handler.
  */
 export const DASH_WIDGET_QUICK_ACTIONS: Readonly<
   Record<string, readonly DashWidgetQuickActionDef[]>
@@ -62,7 +68,7 @@ export const DASH_WIDGET_QUICK_ACTIONS: Readonly<
       label: "Tạo task",
       targetModule: "TASK",
       method: "NAVIGATE",
-      targetUrl: "/tasks/new",
+      targetUrl: DASH_QUICK_ACTION_TARGET_URLS.CREATE_TASK,
       apiEndpoint: null,
       gate: { action: "create", resourceType: "task" },
     },
@@ -71,7 +77,7 @@ export const DASH_WIDGET_QUICK_ACTIONS: Readonly<
       label: "Xem tất cả task",
       targetModule: "TASK",
       method: "NAVIGATE",
-      targetUrl: "/tasks/my",
+      targetUrl: DASH_QUICK_ACTION_TARGET_URLS.OPEN_MY_TASKS,
       apiEndpoint: null,
       gate: { action: "read", resourceType: "task" },
     },
@@ -79,10 +85,19 @@ export const DASH_WIDGET_QUICK_ACTIONS: Readonly<
   TASK_ALERTS: [
     {
       actionCode: "OPEN_TASK_ALERTS",
-      label: "Xem task cần chú ý",
+      label: "Xem task quá hạn",
       targetModule: "TASK",
       method: "NAVIGATE",
-      targetUrl: "/tasks?filter=due-soon",
+      targetUrl: DASH_QUICK_ACTION_TARGET_URLS.OPEN_TASK_ALERTS,
+      apiEndpoint: null,
+      gate: { action: "read", resourceType: "task" },
+    },
+    {
+      actionCode: "OPEN_TASKS_DUE_SOON",
+      label: "Xem việc sắp đến hạn",
+      targetModule: "TASK",
+      method: "NAVIGATE",
+      targetUrl: DASH_QUICK_ACTION_TARGET_URLS.OPEN_TASKS_DUE_SOON,
       apiEndpoint: null,
       gate: { action: "read", resourceType: "task" },
     },
@@ -93,7 +108,7 @@ export const DASH_WIDGET_QUICK_ACTIONS: Readonly<
       label: "Xem tất cả thông báo",
       targetModule: "NOTI",
       method: "NAVIGATE",
-      targetUrl: "/notifications",
+      targetUrl: DASH_QUICK_ACTION_TARGET_URLS.OPEN_NOTIFICATIONS,
       apiEndpoint: null,
       gate: { action: "read", resourceType: "notification" },
     },
@@ -104,7 +119,7 @@ export const DASH_WIDGET_QUICK_ACTIONS: Readonly<
       label: "Duyệt đơn",
       targetModule: "LEAVE",
       method: "NAVIGATE",
-      targetUrl: "/leave/approvals?status=Pending",
+      targetUrl: DASH_QUICK_ACTION_TARGET_URLS.OPEN_PENDING_LEAVE_APPROVAL,
       apiEndpoint: null,
       gate: { action: "approve", resourceType: "leave" },
     },
@@ -115,7 +130,7 @@ export const DASH_WIDGET_QUICK_ACTIONS: Readonly<
       label: "Mở dự án",
       targetModule: "TASK",
       method: "NAVIGATE",
-      targetUrl: "/projects",
+      targetUrl: DASH_QUICK_ACTION_TARGET_URLS.OPEN_PROJECT,
       apiEndpoint: null,
       gate: { action: "read", resourceType: "project" },
       projectScoped: true,
@@ -127,7 +142,7 @@ export const DASH_WIDGET_QUICK_ACTIONS: Readonly<
       label: "Danh bạ nhân sự",
       targetModule: "HR",
       method: "NAVIGATE",
-      targetUrl: "/hr/employees",
+      targetUrl: DASH_QUICK_ACTION_TARGET_URLS.OPEN_HR_DIRECTORY,
       apiEndpoint: null,
       gate: { action: "read", resourceType: "employee" },
     },

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  DASH_QUICK_ACTION_PROJECT_SCOPED_CODES,
+  DASH_QUICK_ACTION_TARGET_URLS,
+} from "@mediaos/contracts";
+import {
   DASH_WIDGET_QUICK_ACTIONS,
   quickActionDefsFor,
   buildQuickAction,
@@ -145,16 +149,19 @@ describe("DASH_WIDGET_QUICK_ACTIONS registry (§8.4/§20)", () => {
     const EXPECTED: Record<string, { module: string; url: string | null; api: string | null }> = {
       CHECK_IN: { module: "ATT", url: null, api: "/api/v1/attendance/check-in" },
       CHECK_OUT: { module: "ATT", url: null, api: "/api/v1/attendance/check-out" },
-      CREATE_TASK: { module: "TASK", url: "/tasks/new", api: null },
-      OPEN_MY_TASKS: { module: "TASK", url: "/tasks/my", api: null },
-      OPEN_TASK_ALERTS: { module: "TASK", url: "/tasks?filter=due-soon", api: null },
+      // S20-DASH-QUICKACTION-1: đích cũ là link chết (`/tasks/new` bị `/tasks/$taskId` nuốt, `/tasks/my`,
+      // `/tasks?filter=`, `/projects` không có route) — test FE quick-action-targets.spec.ts đối chiếu cây route.
+      CREATE_TASK: { module: "TASK", url: "/tasks/my-tasks?create=1", api: null },
+      OPEN_MY_TASKS: { module: "TASK", url: "/tasks/my-tasks", api: null },
+      OPEN_TASK_ALERTS: { module: "TASK", url: "/tasks/overdue", api: null },
+      OPEN_TASKS_DUE_SOON: { module: "TASK", url: "/tasks/my-tasks?group=upcoming", api: null },
       OPEN_NOTIFICATIONS: { module: "NOTI", url: "/notifications", api: null },
       OPEN_PENDING_LEAVE_APPROVAL: {
         module: "LEAVE",
-        url: "/leave/approvals?status=Pending",
+        url: "/leave/approvals",
         api: null,
       },
-      OPEN_PROJECT: { module: "TASK", url: "/projects", api: null },
+      OPEN_PROJECT: { module: "TASK", url: "/tasks/projects", api: null },
       OPEN_HR_DIRECTORY: { module: "HR", url: "/hr/employees", api: null },
     };
 
@@ -171,6 +178,24 @@ describe("DASH_WIDGET_QUICK_ACTIONS registry (§8.4/§20)", () => {
     }
     // Không thừa/thiếu action so với bảng kỳ vọng (thêm/bớt action phải cập nhật bảng này có chủ đích).
     expect([...seen].sort()).toEqual(Object.keys(EXPECTED).sort());
+  });
+
+  // S20-DASH-QUICKACTION-1: test FE đối chiếu cây route duyệt DASH_QUICK_ACTION_TARGET_URLS (contracts) — nó
+  // chỉ phủ hết đích API phát khi MỌI action NAVIGATE lấy đích từ đúng hằng đó (không literal riêng ở đây).
+  it("mọi action NAVIGATE lấy đích từ DASH_QUICK_ACTION_TARGET_URLS (contracts) và phủ đủ hằng đó", () => {
+    const navigate = Object.values(DASH_WIDGET_QUICK_ACTIONS)
+      .flat()
+      .filter((d) => d.method === "NAVIGATE");
+    for (const d of navigate) {
+      const fromContract = (DASH_QUICK_ACTION_TARGET_URLS as Record<string, string>)[d.actionCode];
+      expect(d.targetUrl, `${d.actionCode} phải dùng đích trong contracts`).toBe(fromContract);
+      expect(Boolean(d.projectScoped), `${d.actionCode} projectScoped khớp contracts`).toBe(
+        (DASH_QUICK_ACTION_PROJECT_SCOPED_CODES as readonly string[]).includes(d.actionCode),
+      );
+    }
+    expect(navigate.map((d) => d.actionCode).sort()).toEqual(
+      Object.keys(DASH_QUICK_ACTION_TARGET_URLS).sort(),
+    );
   });
 });
 
@@ -191,8 +216,8 @@ describe("buildQuickAction (pure)", () => {
 
   it("projectScoped + projectId ⇒ target_url deep-link; thiếu projectId ⇒ base", () => {
     const pDef = DASH_WIDGET_QUICK_ACTIONS.PROJECT_PROGRESS[0];
-    expect(buildQuickAction(pDef, true, "proj-9").target_url).toBe("/projects/proj-9");
-    expect(buildQuickAction(pDef, true).target_url).toBe("/projects");
+    expect(buildQuickAction(pDef, true, "proj-9").target_url).toBe("/tasks/projects/proj-9");
+    expect(buildQuickAction(pDef, true).target_url).toBe("/tasks/projects");
   });
 });
 

@@ -29,6 +29,8 @@ vi.mock("@mediaos/web-core", () => ({
     myToday: () => ["attendance", "my", "today"],
     myRecords: (p?: unknown) => ["attendance", "my", "records", p],
   },
+  // useCheckIn/useCheckOut nhận diện tiền tố widget dashboard qua `dashboardKeys.widgets.all` (invalidate-after-check).
+  dashboardKeys: { widgets: { all: ["dashboard", "widgets"] } },
   attendanceInvalidation: {
     checkIn: () => [
       ["attendance", "my", "today"],

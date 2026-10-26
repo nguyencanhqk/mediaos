@@ -413,6 +413,23 @@ describe("MyTasksPage — tạo nhanh việc cho chính mình", () => {
     expect(taskCoreApi.createTask).not.toHaveBeenCalled();
   });
 
+  // S20-DASH-QUICKACTION-1 — đích quick action «Tạo task» của dashboard là `/tasks/my-tasks?create=1`.
+  it("?create=1 ⇒ ô tạo nhanh có focus ngay khi mở khoá; không có tham số ⇒ không tự lấy focus", async () => {
+    setCapabilities({ "read:task": true, "create:task": true });
+    searchRef.current = { create: 1 };
+    const { unmount } = renderWithQuery(<MyTasksPage />);
+    const input = await screen.findByTestId("my-tasks-quick-add-input");
+    await waitFor(() => expect(input).toBeEnabled());
+    await waitFor(() => expect(input).toHaveFocus());
+    unmount();
+
+    searchRef.current = {};
+    renderWithQuery(<MyTasksPage />);
+    const plain = await screen.findByTestId("my-tasks-quick-add-input");
+    await waitFor(() => expect(plain).toBeEnabled());
+    expect(plain).not.toHaveFocus();
+  });
+
   it("thiếu create:task ⇒ không có ô tạo nhanh, không có nút «Tạo việc», không gọi /auth/me", async () => {
     setCapabilities({ "read:task": true });
     renderWithQuery(<MyTasksPage />);
