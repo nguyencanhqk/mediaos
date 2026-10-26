@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { type ColumnDef } from "@tanstack/react-table";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
-import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskRowDeadlineControl, TaskRowStatusControl } from "./TaskRowQuickEdit";
 import { useTaskDrawer } from "./task-drawer-nav";
 
 /**
@@ -12,6 +13,8 @@ import { useTaskDrawer } from "./task-drawer-nav";
  * `t` (ns "tasks") + mở việc gọi nội bộ trong hook → consumer chỉ cần spread mảng trả về.
  * S20-TASK-DRAWER-1: bấm tiêu đề mở drawer TẠI CHỖ (`?task=`), không rời danh sách — bộ lọc + vị trí
  * cuộn của trang phía sau giữ nguyên.
+ * S20-TASK-QUICKEDIT-1: cột Trạng thái + Hạn sửa được tại chỗ khi có cặp quyền (TaskRowQuickEdit) —
+ * Danh sách, Quá hạn và tab việc của dự án dùng chung.
  */
 export function useTaskReadColumns(): ColumnDef<TaskCoreResponseDto>[] {
   const { t } = useTranslation("tasks");
@@ -49,16 +52,21 @@ export function useTaskReadColumns(): ColumnDef<TaskCoreResponseDto>[] {
     {
       accessorKey: "status",
       header: t("tasks.list.columns.status"),
-      cell: ({ row }) => <TaskStatusBadge status={row.original.status} />,
+      cell: ({ row }) => <TaskRowStatusControl task={row.original} />,
     },
     {
       accessorKey: "dueAt",
       header: t("tasks.list.columns.dueAt"),
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <span className="text-sm">
-            {row.original.dueAt ? new Date(row.original.dueAt).toLocaleString("vi-VN") : "—"}
-          </span>
+          <TaskRowDeadlineControl
+            task={row.original}
+            readOnly={
+              <span className="text-sm">
+                {row.original.dueAt ? new Date(row.original.dueAt).toLocaleString("vi-VN") : "—"}
+              </span>
+            }
+          />
           <TaskOverdueBadge isOverdue={row.original.isOverdue} />
         </div>
       ),

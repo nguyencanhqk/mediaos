@@ -12,7 +12,8 @@ import { DataScopeService } from "../permission/data-scope.service";
 import { ProjectAccessService } from "../tasks/project-access.service";
 import { GoalProgressEngineService } from "../tasks/goal-progress-engine.service";
 import { TaskCoreRepository } from "../tasks/task-core.repository";
-import { toTaskCoreDto } from "../tasks/task-core.mapper";
+import { goalRefCandidates, signedUrlsForRow, toTaskCoreDto } from "../tasks/task-core.mapper";
+import { TaskGoalRefPolicy, type GoalRefUser } from "../tasks/task-goal-ref.policy";
 import type { Goal } from "../db/schema/goals";
 import {
   GoalAccessService,
@@ -66,6 +67,8 @@ export class GoalTasksLinkService {
     private readonly dataScope: DataScopeService,
     private readonly taskCore: TaskCoreRepository,
     private readonly projectAccess: ProjectAccessService,
+    // S20-SEC-GOALNAMEDTO-1 — tham chiếu mục tiêu trên hàng việc qua CÙNG policy với GET /tasks.
+    private readonly goalRefs: TaskGoalRefPolicy,
   ) {}
 
   /**
@@ -78,7 +81,8 @@ export class GoalTasksLinkService {
    * trách của những việc mà chính họ không có quyền mở (bài học
    * `read-path-gate-pair-must-match-download-pair`).
    */
-  async listLinkedTasks(user: RequestUser, goalId: string): Promise<TaskCoreResponseDto[]> {
+  async listLinkedTasks(user: GoalRefUser, goalId: string): Promise<TaskCoreResponseDto[]> {
+    const goalViewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const actor = await this.access.resolveActorScope(tx, user, "view");
       await this.access.loadReadableGoalTx(tx, user, goalId, actor);
@@ -110,7 +114,10 @@ export class GoalTasksLinkService {
         { goalId, limit: LINKED_TASKS_LIMIT, offset: 0 },
         scopeExists,
       );
-      return rows.map((row) => toTaskCoreDto(row));
+      // Cùng quyết định với mọi đường dữ liệu việc (một truy vấn lô); đường này không ký ảnh (như trước).
+      const goals = await this.goalRefs.visibleGoalIdsTx(tx, goalViewer, goalRefCandidates(rows));
+      const deco = { avatars: new Map<string, string>(), covers: new Map<string, string>(), goals };
+      return rows.map((row) => toTaskCoreDto(row, signedUrlsForRow(row, deco)));
     });
   }
 

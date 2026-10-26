@@ -44,6 +44,12 @@ import { GoalProgressBar } from "./components/GoalProgressBar";
 import { GoalTreeView } from "./components/GoalTreeView";
 import { GoalCheckinDialog } from "./components/GoalCheckinDialog";
 import { GoalCheckinDialogTrigger } from "./components/GoalCheckinDialogTrigger";
+import {
+  GoalBulkActivateBar,
+  GoalDraftChip,
+  GoalSelectCheckbox,
+} from "./components/GoalBulkActivateBar";
+import { useGoalRowSelection, type GoalRowSelection } from "./hooks/use-goal-row-selection";
 
 const TOGGLE_ON = "flex items-center gap-1.5 bg-primary px-3 py-2 text-sm text-primary-foreground";
 const TOGGLE_OFF = "flex items-center gap-1.5 px-3 py-2 text-sm hover:bg-muted";
@@ -73,6 +79,9 @@ function withPeriodEdge(range: GoalPeriodRange, edge: "from" | "to", value: stri
  * S20-GOAL-QUICKCHECKIN-1 (US-GOAL-NV-91): biểu tượng Check-in ở cột cuối + trên nút cây, gate cặp RIÊNG
  * `(checkin, goal)` như `MeGoalsCard`. Hộp thoại dựng ở CẤP TRANG, NGOÀI bảng — `Dialog` không portal,
  * dựng trong ô thì mọi click trong hộp nổi bọt lên `onRowClick` của dòng (mở chi tiết).
+ *
+ * S20-GOAL-BULKACTIVATE-1 (US-GOAL-QL-11): chế độ danh sách có cột chọn + thanh «Kích hoạt (n)» CHỈ khi
+ * có cặp `update:goal`; chip «Nháp» = `status=Draft` trên URL (+ chuyển sang danh sách để chọn được).
  */
 export function GoalListPage() {
   const { t } = useTranslation("goals");
@@ -83,6 +92,7 @@ export function GoalListPage() {
     GOAL_ENGINE_PAIRS.CHECKIN.action,
     GOAL_ENGINE_PAIRS.CHECKIN.resourceType,
   );
+  const canUpdate = useCan(GOAL_ENGINE_PAIRS.UPDATE.action, GOAL_ENGINE_PAIRS.UPDATE.resourceType);
   const [checkinGoal, setCheckinGoal] = useState<GoalCoreResponseDto | null>(null);
 
   const { search, update, replaceFilters } = useGoalListSearch();
@@ -154,11 +164,19 @@ export function GoalListPage() {
     const rows = listQuery.data ?? [];
     return ownerEmployeeId ? rows.filter((g) => g.ownerEmployeeId === ownerEmployeeId) : rows;
   }, [listQuery.data, ownerEmployeeId]);
+  const tableRows = useMemo(
+    () => (mine ? (mineQuery.data ?? []) : listRows),
+    [mine, mineQuery.data, listRows],
+  );
+  const selection = useGoalRowSelection(tableRows);
 
   const openDetail = (goalId: string) =>
     void navigate({ to: "/goals/$goalId", params: { goalId } });
 
-  const columns = useGoalColumns(canCheckin ? setCheckinGoal : undefined);
+  const columns = useGoalColumns(
+    canCheckin ? setCheckinGoal : undefined,
+    canUpdate ? selection : undefined,
+  );
 
   if (!canView) {
     return (
@@ -253,6 +271,16 @@ export function GoalListPage() {
             value={search.period}
             chips={chips}
             onSelect={(p) => update({ period: p })}
+          />
+          <GoalDraftChip
+            pressed={search.status === "Draft"}
+            onToggle={() =>
+              update(
+                search.status === "Draft"
+                  ? { status: undefined }
+                  : { status: "Draft", ...(mine ? {} : { view: "list" as const }) },
+              )
+            }
           />
 
           <FilterField label={t("list.filters.periodFrom")}>
@@ -358,14 +386,23 @@ export function GoalListPage() {
           }
         />
       ) : showList ? (
-        <DataTable
-          columns={columns}
-          data={mine ? (mineQuery.data ?? []) : listRows}
-          isLoading={activeQuery.isLoading}
-          onRowClick={(row) => openDetail(row.id)}
-          pageSize={20}
-          emptyState={mine ? mineEmpty : listEmpty}
-        />
+        <div className="space-y-3">
+          {canUpdate && (
+            <GoalBulkActivateBar
+              selectedRows={selection.selectedRows}
+              onClearSelection={selection.clear}
+              onFinished={selection.keepOnly}
+            />
+          )}
+          <DataTable
+            columns={columns}
+            data={tableRows}
+            isLoading={activeQuery.isLoading}
+            onRowClick={(row) => openDetail(row.id)}
+            pageSize={20}
+            emptyState={mine ? mineEmpty : listEmpty}
+          />
+        </div>
       ) : treeQuery.isLoading ? (
         <ListSkeleton />
       ) : (treeQuery.data ?? []).length === 0 ? (
@@ -386,13 +423,39 @@ export function GoalListPage() {
   );
 }
 
-/** `onCheckin` có ⇔ người xem có cặp `(checkin, goal)` — không có thì KHÔNG có cột Check-in. */
+/**
+ * `onCheckin` có ⇔ người xem có cặp `(checkin, goal)` — không có thì KHÔNG có cột Check-in.
+ * `selection` có ⇔ người xem có cặp `(update, goal)` — không có thì KHÔNG có cột chọn.
+ */
 function useGoalColumns(
   onCheckin?: (goal: GoalCoreResponseDto) => void,
+  selection?: GoalRowSelection,
 ): ColumnDef<GoalCoreResponseDto>[] {
   const { t } = useTranslation("goals");
   return useMemo<ColumnDef<GoalCoreResponseDto>[]>(
     () => [
+      ...(selection
+        ? [
+            {
+              id: "select",
+              header: () => (
+                <GoalSelectCheckbox
+                  label={t("bulkActivate.selectAll")}
+                  checked={selection.allSelected}
+                  indeterminate={selection.someSelected && !selection.allSelected}
+                  onToggle={selection.toggleAll}
+                />
+              ),
+              cell: ({ row }) => (
+                <GoalSelectCheckbox
+                  label={t("bulkActivate.selectRow", { name: row.original.name })}
+                  checked={selection.selectedIds.has(row.original.id)}
+                  onToggle={() => selection.toggle(row.original.id)}
+                />
+              ),
+            } satisfies ColumnDef<GoalCoreResponseDto>,
+          ]
+        : []),
       {
         accessorKey: "name",
         header: t("list.columns.name"),
@@ -448,7 +511,7 @@ function useGoalColumns(
           ]
         : []),
     ],
-    [t, onCheckin],
+    [t, onCheckin, selection],
   );
 }
 

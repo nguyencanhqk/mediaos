@@ -7,6 +7,8 @@ import type { DashDataScope, DashWidgetEntry } from "./dashboard-widget-catalog.
 export interface WidgetRequestUser {
   id: string;
   companyId: string;
+  /** Cờ khoá API của request — widget việc đi qua `TaskCoreService.getMyTasks` (xem `GoalRefUser`). */
+  viaApiKey: boolean | undefined;
 }
 
 /** Ngữ cảnh 1 lần fetch widget. */

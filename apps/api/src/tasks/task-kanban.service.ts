@@ -14,7 +14,9 @@ import {
   toAvatarSubjects,
   signedUrlsForRow,
   toLabelChipsByTask,
+  goalRefCandidates,
 } from "./task-core.mapper";
+import { TaskGoalRefPolicy, type GoalRefUser } from "./task-goal-ref.policy";
 import { TASK_CORE_STATUSES } from "./task-fsm";
 import { TaskCommentsRepository } from "./task-comments.repository";
 import { TaskChecklistsRepository } from "./task-checklists.repository";
@@ -22,10 +24,7 @@ import { TaskFileRepository } from "./task-file.repository";
 import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { CoverPresignService } from "../foundation/files/cover-presign.service";
 
-interface RequestUser {
-  id: string;
-  companyId: string;
-}
+type RequestUser = GoalRefUser;
 
 /** Trần list nội bộ cho 1 cột Kanban — MVP không phân trang board (SPEC-06 §6.8, không đặt limit rõ). */
 const KANBAN_TASK_LIMIT = 500;
@@ -60,6 +59,8 @@ export class TaskKanbanService {
     private readonly avatars: AvatarPresignService,
     // S5-TASK-COVER-1 — ký ảnh bìa cho thẻ board. Đặt CUỐI (spec dựng theo VỊ TRÍ).
     private readonly covers: CoverPresignService,
+    // S20-SEC-GOALNAMEDTO-1 — tham chiếu mục tiêu trên thẻ theo quyết định đọc mục tiêu. CUỐI.
+    private readonly goalRefs: TaskGoalRefPolicy,
   ) {}
 
   async getBoard(user: RequestUser, projectId: string): Promise<TaskKanbanBoardDto> {
@@ -69,6 +70,7 @@ export class TaskKanbanService {
       "view-kanban",
       "task",
     );
+    const goalViewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const exists = await this.tasksRepo.projectExistsTx(tx, user.companyId, projectId);
       if (!exists) throw new NotFoundException(ERR.PROJECT_NOT_FOUND);
@@ -160,6 +162,8 @@ export class TaskKanbanService {
       const covers = canReadTask
         ? await this.covers.resolveTaskCovers(user.companyId, taskIds, tx)
         : new Map<string, string>();
+      // S20-SEC-GOALNAMEDTO-1 — MỘT truy vấn lô cho cả board (0 khi không thẻ nào gắn mục tiêu), TUẦN TỰ.
+      const goals = await this.goalRefs.visibleGoalIdsTx(tx, goalViewer, goalRefCandidates(rows));
 
       const toCard = (row: (typeof rows)[number]) => {
         const progress = checklistProgress.get(row.id);
@@ -177,7 +181,7 @@ export class TaskKanbanService {
               subtaskDone: subtasks?.done ?? 0,
               subtaskTotal: subtasks?.total ?? 0,
             },
-            signedUrlsForRow(row, avatars, covers),
+            signedUrlsForRow(row, { avatars, covers, goals }),
           ),
           labels: labelsByTask.get(row.id) ?? [],
         };

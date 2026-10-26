@@ -91,6 +91,11 @@ export default {
   fieldGate: {
     locked: "Bạn không có quyền đổi mục này.",
   },
+  // S20-SEC-GOALNAMEDTO-1 — việc gắn mục tiêu mà người xem không có quyền xem (server chỉ trả cờ).
+  goalRef: {
+    restricted: "Có mục tiêu",
+    restrictedHint: "Việc này đang gắn một mục tiêu mà bạn không có quyền xem.",
+  },
   // S20-TASK-ASSIGNWARN-1 (US-TASK-QL-91) — cảnh báo sau khi giao (`warnings[]` của route action).
   // ON-LEAVE = đơn nghỉ đã duyệt trùng NGÀY HẠN của việc (task-actions.service) — không phải «đang nghỉ».
   assigneeWarning: {
@@ -106,5 +111,105 @@ export default {
     },
     fallbackName: "Người được giao",
     changeAssignee: "Đổi người",
+  },
+  // S20-TASK-QUICKEDIT-1 — popover mốc hạn dùng chung (DeadlineQuickPicker). Giờ hiển thị là giờ CÔNG TY.
+  deadlinePicker: {
+    triggerLabel: "Chọn hạn",
+    empty: "Chưa có hạn",
+    setDeadline: "Đặt hạn",
+    quickLabel: "Chọn nhanh",
+    presetsLabel: "Mốc hạn nhanh",
+    presets: {
+      today: "Hôm nay {{time}}",
+      tomorrow: "Ngày mai {{time}}",
+      thisFriday: "Thứ Sáu này {{time}}",
+      nextFriday: "Thứ Sáu tuần sau {{time}}",
+      nextMonday: "Thứ Hai tuần sau {{time}}",
+      // S20-TASK-OVERDUEDESK-1 — mốc riêng của trang Quá hạn, tính từ HÔM NAY (giờ công ty).
+      plusOneDay: "+1 ngày {{time}}",
+      plusThreeDays: "+3 ngày {{time}}",
+      custom: "{{time}}",
+    },
+    clear: "Xoá hạn",
+    custom: "Tuỳ chỉnh",
+    customInputLabel: "Hạn tuỳ chỉnh (giờ công ty)",
+    customApply: "Áp dụng",
+    customInvalid: "Ngày giờ không hợp lệ",
+  },
+  // S20-TASK-QUICKEDIT-1 — đổi trạng thái / hạn ngay trên dòng danh sách.
+  quickEdit: {
+    statusLabel: "Đổi trạng thái: {{title}}",
+    deadlineLabel: "Đổi hạn: {{title}}",
+    openChecklist: "Mở checklist",
+    retry: "Thử lại",
+    statusSaved: "Đã chuyển «{{title}}» sang {{status}}",
+    undo: "Hoàn tác",
+    errors: {
+      checklistRequired: "Cần hoàn tất checklist",
+      dateRange: "Hạn không được sớm hơn ngày bắt đầu của việc — hãy chọn mốc muộn hơn",
+      forbidden: {
+        status: "Bạn không có quyền đổi trạng thái việc này",
+        deadline: "Bạn không có quyền đổi hạn việc này",
+        assignee: "Bạn không có quyền đổi người phụ trách việc này",
+      },
+      closed: "Việc đã huỷ — không đổi được hạn",
+      conflict: "Không chuyển được sang trạng thái này — việc vừa thay đổi, hãy tải lại",
+      network: "Mất kết nối — thay đổi chưa được lưu",
+      generic: "Không lưu được thay đổi. Vui lòng thử lại.",
+    },
+  },
+  // S20-TASK-QUICKADD-1 (US-TASK-NV-05 · US-TASK-QL-06) — tạo việc một dòng («Việc của tôi» + board),
+  // chip Người/Hạn giữ cho lượt sau; form Tạo mặc định «Tôi»; «Tạo công việc» trên board.
+  quickAdd: {
+    placeholder: "Thêm việc cho tôi rồi Enter… (phím n)",
+    hint: "Enter để tạo · chip hạn được giữ cho việc kế tiếp",
+    loading: "Đang tải thông tin của bạn…",
+    unlinked:
+      "Tài khoản của bạn chưa liên kết hồ sơ nhân viên nên chưa tạo nhanh được. Hãy nhờ bộ phận nhân sự liên kết.",
+    meFailed: "Không tải được thông tin của bạn nên chưa tạo nhanh được. Tải lại trang để thử lại.",
+    createButton: "Tạo việc",
+    boardCreateButton: "Tạo công việc",
+    assigneeChip: "Người",
+    deadlineChip: "Hạn của việc sắp tạo",
+    errors: {
+      titleRequired: "Nhập tên công việc trước khi Enter",
+      titleTooLong: "Tên công việc tối đa {{max}} ký tự",
+      assignee: "Không giao được cho người này",
+      forbidden: "Bạn không có quyền tạo công việc ở đây.",
+      badRequest: "Không tạo được — kiểm tra lại tên công việc, hạn hoặc cột.",
+      network: "Mất kết nối — chưa tạo được việc. Vui lòng thử lại.",
+      generic: "Không tạo được công việc. Vui lòng thử lại.",
+    },
+    form: {
+      me: "Tôi",
+      meNamed: "Tôi ({{name}})",
+      currentProject: "Dự án này",
+      assigneeOutOfScope: "Hãy chọn người phụ trách trong phạm vi của bạn",
+      titleTooLong: "Tiêu đề tối đa 500 ký tự",
+    },
+  },
+  // S20-TASK-OVERDUEDESK-1 (US-TASK-QL-07) — trang Việc quá hạn thành bàn xử lý.
+  overdueDesk: {
+    lateColumn: "Trễ",
+    lateDays: "{{days}} ngày",
+    lateUnderDay: "Dưới 1 ngày",
+    filters: {
+      project: "Dự án",
+      allProjects: "Tất cả dự án",
+      noProject: "Không thuộc dự án",
+      assignee: "Người phụ trách",
+      allAssignees: "Tất cả người",
+      unassigned: "Chưa giao",
+      mine: "Tôi giao",
+      clear: "Xoá bộ lọc",
+    },
+    emptyMine: {
+      title: "Không có việc trễ trong số việc bạn giao",
+      description: "Việc bạn tạo hoặc giao cho người khác đều đang đúng hạn.",
+    },
+    emptyFiltered: {
+      title: "Không có việc trễ khớp bộ lọc",
+      description: "Thử chọn dự án hoặc người khác, hoặc xoá bộ lọc để xem lại toàn bộ.",
+    },
   },
 };

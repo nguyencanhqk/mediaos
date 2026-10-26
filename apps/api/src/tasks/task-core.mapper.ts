@@ -58,15 +58,34 @@ export function avatarForRow(
  * Khoá TRA KHÁC NHAU và đó chính là chỗ dễ nhầm: avatar tra theo **employeeId** (một người phụ trách
  * N thẻ ⇒ 1 hàng ký), ảnh bìa tra theo **taskId** (mỗi task một bìa riêng).
  */
-export function signedUrlsForRow(
-  row: TaskCoreRow,
-  avatars: ReadonlyMap<string, string>,
-  covers: ReadonlyMap<string, string>,
-): TaskCoreSignedUrls {
+export function signedUrlsForRow(row: TaskCoreRow, deco: TaskRowDecorations): TaskCoreSignedUrls {
   return {
-    assigneeAvatarUrl: avatarForRow(row, avatars),
-    coverUrl: covers.get(row.id) ?? null,
+    assigneeAvatarUrl: avatarForRow(row, deco.avatars),
+    coverUrl: deco.covers.get(row.id) ?? null,
+    goalRefVisible: row.goalId != null && deco.goals.has(row.goalId),
   };
+}
+
+/**
+ * Kết quả trang trí THEO LÔ cho một trang hàng (`decorateTaskRows`). Object có tên trường thay cho ba
+ * tham số vị trí cùng kiểu: hoán vị nhầm avatar ↔ bìa không bị tsc bắt (xem `TaskCoreSignedUrls`).
+ */
+export interface TaskRowDecorations {
+  avatars: ReadonlyMap<string, string>;
+  covers: ReadonlyMap<string, string>;
+  /** S20-SEC-GOALNAMEDTO-1 — id mục tiêu người xem đọc được (`TaskGoalRefPolicy`). */
+  goals: ReadonlySet<string>;
+}
+
+/**
+ * S20-SEC-GOALNAMEDTO-1 — ứng viên cho `TaskGoalRefPolicy` từ một trang hàng: CHỈ hàng mà join mục
+ * tiêu trúng (mục tiêu còn sống cùng tenant ⇒ `goalCode` có giá trị), khử trùng. Trang không có hàng
+ * gắn mục tiêu ⇒ mảng rỗng ⇒ policy không chạy truy vấn nào.
+ */
+export function goalRefCandidates(rows: readonly TaskCoreRow[]): string[] {
+  const ids = new Set<string>();
+  for (const row of rows) if (row.goalId && row.goalCode != null) ids.add(row.goalId);
+  return [...ids];
 }
 
 function toIso(v: string | Date | null): string | null {
@@ -88,6 +107,11 @@ function toBool(v: boolean | string): boolean {
 export interface TaskCoreSignedUrls {
   assigneeAvatarUrl?: string | null;
   coverUrl?: string | null;
+  /**
+   * S20-SEC-GOALNAMEDTO-1 — người xem đọc được mục tiêu đang gắn (quyết định của `TaskGoalRefPolicy`,
+   * truyền qua `signedUrlsForRow`). Vắng/false ⇒ mapper CHE id/mã/tên mục tiêu (fail-closed).
+   */
+  goalRefVisible?: boolean;
 }
 
 /**
@@ -109,6 +133,10 @@ export function toTaskCoreDto(row: TaskCoreRow, urls?: TaskCoreSignedUrls): Task
   if (createdAt === null || updatedAt === null) {
     throw new InternalServerErrorException("Task thiếu timestamp bắt buộc (createdAt/updatedAt).");
   }
+  // S20-SEC-GOALNAMEDTO-1 — join trúng = mục tiêu còn sống cùng tenant (`goalId` thô có thể trỏ mục
+  // tiêu đã xoá mềm). Ba trường CHỈ có mặt khi caller mang quyết định «đọc được» của chính mục tiêu đó.
+  const goalLinked = row.goalCode != null;
+  const goalShown = goalLinked && urls?.goalRefVisible === true;
   return {
     id: row.id,
     companyId: row.companyId,
@@ -149,9 +177,11 @@ export function toTaskCoreDto(row: TaskCoreRow, urls?: TaskCoreSignedUrls): Task
     // S5-GOAL-BE-2 — mục tiêu đang gắn. MAPPER HỢP NHẤT DUY NHẤT (bài học 3-mapper PR #247): mọi đường
     // đọc task (list/detail/kanban/my-tasks/việc-của-mục-tiêu) đi qua đây, KHÔNG có bản sao thứ hai.
     // Đường đọc chưa join `goals` ⇒ null tường minh (không bịa), giống khuôn reporterName/stateId.
-    goalId: row.goalId ?? null,
-    goalCode: row.goalCode ?? null,
-    goalName: row.goalName ?? null,
+    // S20-SEC-GOALNAMEDTO-1 — che theo quyết định đọc mục tiêu; `hasGoal` là cờ trung tính.
+    goalId: goalShown ? (row.goalId ?? null) : null,
+    goalCode: goalShown ? (row.goalCode ?? null) : null,
+    goalName: goalShown ? (row.goalName ?? null) : null,
+    hasGoal: goalLinked,
   };
 }
 

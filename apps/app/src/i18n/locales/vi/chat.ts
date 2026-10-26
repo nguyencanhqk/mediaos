@@ -96,6 +96,8 @@ export default {
       },
       unmute: "Bật lại thông báo",
       markUnread: "Đánh dấu chưa đọc",
+      /** S20-CHAT-UNREADNAV-1 (US-CHAT-NV-05) — gửi đúng `lastMessageSeq` của phòng, không số sentinel. */
+      markRead: "Đánh dấu đã đọc",
       archive: "Lưu trữ phòng",
       /**
        * CHAT-ERR-021 — **nêu rõ con số trần**. "Không ghim được" để người dùng bấm lại vô ích; câu này
@@ -106,6 +108,28 @@ export default {
       muteFailed: "Không đổi được trạng thái thông báo. Hội thoại đã trở về như cũ.",
       markUnreadFailed: "Không đánh dấu chưa đọc được. Hội thoại đã trở về như cũ.",
       archiveFailed: "Không lưu trữ được phòng.",
+    },
+    /** S20-CHAT-UNREADNAV-1 (US-CHAT-NV-05) — «Đọc hết» trên chip «Chưa đọc», chỉ phòng đang hiển thị. */
+    readAll: {
+      button: "Đọc hết",
+      aria: "Đánh dấu đã đọc {{count}} phòng đang hiển thị",
+      failed: "Không đánh dấu được {{count}} phòng",
+      retry: "Thử lại",
+    },
+  },
+
+  /** S20-CHAT-UNREADNAV-1 (US-CHAT-NV-13) — phím tắt chuyển phòng (cấp /chat và drawer). */
+  shortcuts: {
+    opened: "Đã mở {{name}}",
+    allRead: "Đã đọc hết",
+    helpOpen: "Phím tắt (?)",
+    helpTitle: "Phím tắt tin nhắn",
+    helpBody: "Đi qua các phòng theo danh sách đang lọc. Ô soạn có chữ vẫn giữ nguyên nháp.",
+    actions: {
+      prev: "Phòng phía trên",
+      next: "Phòng phía dưới",
+      nextUnread: "Phòng chưa đọc kế tiếp",
+      help: "Mở bảng này (ngoài ô soạn)",
     },
   },
 
@@ -134,7 +158,10 @@ export default {
     historyStart: "Đây là phần đầu của cuộc trò chuyện.",
     historyLimitReached:
       "Đã tải tối đa {{count}} tin trong phiên này. Mở lại phòng để tiếp tục xem lịch sử cũ hơn.",
-    newMessages: "Có tin nhắn mới",
+    // S20-CHAT-UNREAD-1 — nút «↓ N tin mới» (số tin sau mốc người dùng đã thấy tới) + vạch chưa đọc.
+    newMessagesCount: "{{count}} tin mới",
+    unreadDivider: "{{count}} tin chưa đọc",
+    unreadAbove: "Còn tin chưa đọc phía trên — cuộn lên để xem tiếp",
     jumpToLatest: "Xuống tin mới nhất",
     membersCount: "{{count}} thành viên",
     infoToggle: "Thông tin phòng",
@@ -339,6 +366,9 @@ export default {
       demote: "Hạ xuống thành viên",
       derivedNotice:
         "Thành viên phòng {{type}} do hệ thống đồng bộ tự động — không thêm/bớt bằng tay được.",
+      // S20-CHAT-DISCUSS-1 (US-CHAT-QL-12) — lời nhắc dẫn xuất dẫn tới nơi quản lý thành viên thật.
+      derivedProjectLink: "Quản lý thành viên ở dự án →",
+      derivedDepartmentLink: "Xem phòng ban ở Nhân sự →",
       actionFailed: "Không thực hiện được thao tác thành viên.",
       // S17-CHAT-UX2-FE-4 — danh sách thành viên chuyển từ tab sang Sheet (DEC-025).
       sheetTitle: "Thành viên ({{count}})",
@@ -564,5 +594,28 @@ export default {
     menuFor: "Tuỳ chọn với {{name}}",
     peerUnavailable: "Không nhắn riêng được: tài khoản này đã bị khoá hoặc đã nghỉ việc.",
     failed: "Không mở được tin nhắn riêng. Vui lòng thử lại.",
+  },
+
+  /** S20-CHAT-DISCUSS-1 (US-CHAT-NV-11) — «Thảo luận» ở dự án / chi tiết việc mở phòng dự án. */
+  discuss: {
+    action: "Thảo luận",
+    pending: "Phòng dự án đang được tạo",
+  },
+
+  /**
+   * S20-CHAT-SEENBY-1 (US-CHAT-QL-03) — bảng «Đã xem · Chưa xem» trên tin CỦA TÔI. Nhãn trợ năng của dãy
+   * avatar vẫn là `message.seenBy` («Đã xem: …»). Không có chuỗi nào cho thời điểm đọc — cố ý.
+   */
+  seenBy: {
+    title: "Ai đã xem tin này",
+    nobody: "Chưa ai xem",
+    seenTab: "Đã xem ({{count}})",
+    unseenTab: "Chưa xem ({{count}})",
+    nobodySeen: "Chưa ai xem tin này.",
+    everyoneSeen: "Mọi người đã xem tin này.",
+    loading: "Đang tải danh sách…",
+    loadingLabel: "Đang tải danh sách đã xem",
+    error: "Không tải được danh sách.",
+    errorLabel: "Không tải được danh sách đã xem",
   },
 } as const;

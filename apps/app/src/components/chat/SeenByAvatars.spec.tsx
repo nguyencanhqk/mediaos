@@ -8,10 +8,14 @@
  * ẢNH — nếu nhãn `aria-label` không còn liệt kê đủ tên thì với người đọc màn hình đây là một bước LÙI,
  * và không có bài test nào khác trong repo bắt được điều đó.
  */
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
+import { chatApi, useAuthStore } from "@mediaos/web-core";
 import i18n from "@/i18n";
+import { useChatStore } from "@/stores/chat.store";
+import { ChatRoomOpenerContext } from "./chat-room-opener";
 import { SeenByAvatars, type SeenByViewer } from "./SeenByAvatars";
 
 const NAMES = ["An", "Bình", "Cường", "Dung", "En"] as const;
@@ -102,5 +106,251 @@ describe("SeenByAvatars · ảnh lấy từ roster", () => {
       "https://r2.local/signed/an.png",
     );
     expect(nodes[1].querySelector("img")).toBeNull();
+  });
+});
+// ─── S20-CHAT-SEENBY-1 (US-CHAT-QL-03) — dãy «đã xem» thành NÚT mở «Đã xem · Chưa xem» ────────────
+//
+// Bên gọi (`MessageList`) đã suy sẵn hai danh sách bằng `seenByStatusOf`; ở đây đo phần trình bày:
+// nút mở · hai tab có số · trạng thái tải/lỗi KHÔNG vẽ danh sách · «Nhắn riêng» theo quyền · cảm ứng mở
+// sheet. Không hiện thời điểm đọc nào (luật §3.2-6: trạng thái đọc là dữ liệu hành vi).
+
+const BINH = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const DM_ID = "22222222-2222-4222-8222-222222222222";
+
+function people(prefix: string, count: number): SeenByViewer[] {
+  return Array.from({ length: count }, (_, i) => ({
+    userId: `${prefix}${i}`,
+    name: `${prefix.toUpperCase()} ${i}`,
+    avatarUrl: null,
+  }));
+}
+
+interface StatusProps {
+  seen?: SeenByViewer[];
+  unseen?: SeenByViewer[];
+  status?: "loading" | "error" | "ready";
+}
+
+function renderStatus(props: StatusProps, opener: ((roomId: string) => void) | null = null) {
+  const client = new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <ChatRoomOpenerContext.Provider value={opener}>
+        <I18nextProvider i18n={i18n}>
+          <SeenByAvatars
+            viewers={props.seen ?? []}
+            unseen={props.unseen ?? []}
+            status={props.status ?? "ready"}
+          />
+        </I18nextProvider>
+      </ChatRoomOpenerContext.Provider>
+    </QueryClientProvider>,
+  );
+}
+
+const trigger = (): HTMLElement => screen.getByTestId("chat-seen-by");
+
+describe("SeenByAvatars · nút mở «Đã xem · Chưa xem»", () => {
+  beforeEach(() => {
+    useAuthStore.setState({ capabilities: { "view:chat-room": true } });
+  });
+
+  it("7 đã xem · 2 chưa xem ⇒ bấm dãy mở bảng có hai tab «Đã xem (7)» / «Chưa xem (2)»", () => {
+    renderStatus({ seen: people("s", 7), unseen: people("n", 2) });
+
+    expect(trigger().tagName).toBe("BUTTON");
+    fireEvent.click(trigger());
+
+    expect(screen.getByRole("tab", { name: "Đã xem (7)" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Chưa xem (2)" })).toBeTruthy();
+    // Mở ra ở tab «Đã xem»: đủ 7 dòng, chưa vẽ dòng «Chưa xem» nào.
+    expect(screen.getAllByTestId("chat-seen-row")).toHaveLength(7);
+    expect(screen.queryAllByTestId("chat-unseen-row")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Chưa xem (2)" }));
+    const rows = screen.getAllByTestId("chat-unseen-row");
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining("N 0"),
+      expect.stringContaining("N 1"),
+    ]);
+  });
+
+  it("nhãn trợ năng vẫn đọc đủ «Đã xem: …» khi đã thành nút", () => {
+    renderStatus({ seen: people("s", 5), unseen: people("n", 1) });
+    const label = trigger().getAttribute("aria-label") ?? "";
+    expect(label.startsWith("Đã xem: ")).toBe(true);
+    for (let i = 0; i < 5; i += 1) expect(label).toContain(`S ${i}`);
+    expect(label).not.toContain("N 0");
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(trigger());
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("chưa ai xem ⇒ nhãn «Chưa ai xem» bấm được, mở thẳng tab «Chưa xem»", () => {
+    renderStatus({ seen: [], unseen: people("n", 3) });
+
+    expect(trigger().textContent).toContain("Chưa ai xem");
+    fireEvent.click(trigger());
+
+    expect(screen.getByRole("tab", { name: "Chưa xem (3)" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(screen.getAllByTestId("chat-unseen-row")).toHaveLength(3);
+  });
+
+  it("không có ai để xem (phòng chỉ còn tôi) ⇒ không vẽ gì", () => {
+    const { container } = renderStatus({ seen: [], unseen: [] });
+    expect(container.querySelector('[data-testid="chat-seen-by"]')).toBeNull();
+  });
+
+  it("không hiện thời điểm đọc nào trong bảng", () => {
+    renderStatus({ seen: people("s", 2), unseen: people("n", 1) });
+    fireEvent.click(trigger());
+    const panel = screen.getByTestId("chat-seen-panel");
+    expect(panel.textContent ?? "").not.toMatch(/\d{1,2}:\d{2}/);
+    expect(panel.querySelector("time")).toBeNull();
+  });
+});
+
+describe("SeenByAvatars · roster chưa tải / lỗi ⇒ KHÔNG danh sách sai", () => {
+  beforeEach(() => {
+    useAuthStore.setState({ capabilities: { "view:chat-room": true } });
+  });
+
+  it("đang tải ⇒ bảng báo đang tải, không có tab hay dòng người nào", () => {
+    renderStatus({
+      seen: people("s", 2),
+      unseen: people("n", 2),
+      status: "loading",
+    });
+    fireEvent.click(trigger());
+    const panel = screen.getByTestId("chat-seen-panel");
+    expect(panel.textContent).toContain("Đang tải danh sách");
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.queryAllByTestId("chat-seen-row")).toHaveLength(0);
+    expect(screen.queryAllByTestId("chat-unseen-row")).toHaveLength(0);
+  });
+
+  it("lỗi (gồm 404 đồng nhất khi đã rời phòng) ⇒ «Không tải được danh sách», không tên nào", () => {
+    renderStatus({
+      seen: people("s", 2),
+      unseen: people("n", 2),
+      status: "error",
+    });
+    expect(trigger().getAttribute("aria-label") ?? "").not.toContain("S 0");
+    fireEvent.click(trigger());
+    const panel = screen.getByTestId("chat-seen-panel");
+    expect(panel.textContent).toContain("Không tải được danh sách");
+    expect(panel.textContent).not.toContain("S 0");
+    expect(panel.textContent).not.toContain("N 0");
+  });
+});
+
+describe("SeenByAvatars · «Nhắn riêng» trên dòng «Chưa xem» (US-CHAT-NV-02)", () => {
+  let openDirectSpy: MockInstance<typeof chatApi.openDirect>;
+
+  beforeEach(() => {
+    useAuthStore.setState({
+      capabilities: { "create:chat-room": true, "view:chat-room": true },
+    });
+    useChatStore.getState().resetChatStore();
+    openDirectSpy = vi.spyOn(chatApi, "openDirect").mockResolvedValue({
+      id: DM_ID,
+      companyId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      refId: null,
+      roomType: "direct",
+      name: null,
+      roomCode: "CHAT-0002",
+      description: null,
+      lastMessageAt: null,
+      lastMessageSeq: 0,
+      isArchived: false,
+      unreadCount: 0,
+      createdAt: "2026-10-01T00:00:00.000Z",
+    });
+  });
+
+  afterEach(() => {
+    openDirectSpy.mockRestore();
+  });
+
+  it("có khung mở phòng + `create:chat-room` ⇒ mỗi dòng có «Nhắn riêng», bấm là mở DM và đóng bảng", async () => {
+    const opener = vi.fn();
+    renderStatus(
+      {
+        seen: people("s", 1),
+        unseen: [{ userId: BINH, name: "Lê Bình", avatarUrl: null }],
+      },
+      opener,
+    );
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole("tab", { name: "Chưa xem (1)" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Nhắn riêng với Lê Bình" }));
+
+    await waitFor(() => expect(opener).toHaveBeenCalledWith(DM_ID));
+    expect(openDirectSpy).toHaveBeenCalledWith({ peerUserId: BINH });
+    expect(screen.queryByTestId("chat-seen-panel")).toBeNull();
+  });
+
+  it("dòng «Đã xem» không có «Nhắn riêng»", () => {
+    renderStatus({ seen: people("s", 2), unseen: [] }, vi.fn());
+    fireEvent.click(trigger());
+    expect(screen.queryAllByRole("button", { name: /Nhắn riêng/ })).toHaveLength(0);
+  });
+
+  it("thiếu `create:chat-room` ⇒ bảng chỉ đọc (useCan, không hard-code vai trò)", () => {
+    useAuthStore.setState({ capabilities: { "view:chat-room": true } });
+    renderStatus({ seen: [], unseen: people("n", 2) }, vi.fn());
+    fireEvent.click(trigger());
+    expect(screen.getAllByTestId("chat-unseen-row")).toHaveLength(2);
+    expect(screen.queryAllByRole("button", { name: /Nhắn riêng/ })).toHaveLength(0);
+  });
+
+  it("không có khung mở phòng ⇒ không có «Nhắn riêng»", () => {
+    renderStatus({ seen: [], unseen: people("n", 1) }, null);
+    fireEvent.click(trigger());
+    expect(screen.queryAllByRole("button", { name: /Nhắn riêng/ })).toHaveLength(0);
+  });
+});
+
+describe("SeenByAvatars · cảm ứng mở sheet", () => {
+  const original = Object.getOwnPropertyDescriptor(window, "matchMedia");
+
+  beforeEach(() => {
+    useAuthStore.setState({ capabilities: { "view:chat-room": true } });
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes("coarse"),
+        media: query,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false,
+      }),
+    });
+  });
+
+  afterEach(() => {
+    if (original) Object.defineProperty(window, "matchMedia", original);
+    else delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it("con trỏ thô (điện thoại) ⇒ chạm mở SHEET có cùng hai tab; nút đóng đóng lại", () => {
+    renderStatus({ seen: people("s", 7), unseen: people("n", 2) });
+    fireEvent.click(trigger());
+
+    expect(screen.getByTestId("chat-seen-sheet")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Đã xem (7)" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Chưa xem (2)" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Đóng" }));
+    expect(screen.queryByTestId("chat-seen-sheet")).toBeNull();
   });
 });

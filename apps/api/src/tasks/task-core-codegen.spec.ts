@@ -20,7 +20,7 @@ const COMPANY = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const ACTOR = "11111111-1111-1111-1111-111111111111";
 const NEW_TASK_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const FAKE_TX = { __tx: true };
-const user = { id: ACTOR, companyId: COMPANY };
+const user = { id: ACTOR, companyId: COMPANY, viaApiKey: undefined };
 
 /** Hàng reload sau insert (toDto cần createdAt/updatedAt/isOverdue) — taskCode để chứng minh projection có mã. */
 function reloadRow() {
@@ -122,6 +122,15 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
     } as never,
     // S20-SEC-TASKPATCHGATE-1 — cổng trường của PATCH; createTask không gọi tới.
     { prepare: vi.fn(), assertTx: vi.fn() } as never,
+    // S20-SEC-GOALNAMEDTO-1 — policy tham chiếu mục tiêu: người xem «che hết», tập rỗng (task mới
+    // chưa gắn mục tiêu nên tập id không đổi kết quả của ca này).
+    {
+      resolveViewer: vi
+        .fn()
+        .mockResolvedValue({ userId: "u", companyId: "c", scope: null, ctx: {} }),
+      visibleGoalIdsTx: vi.fn().mockResolvedValue(new Set()),
+      visibleGoalIds: vi.fn().mockResolvedValue(new Set()),
+    } as never,
   );
   return { svc, repo, db, sequence };
 }

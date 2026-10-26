@@ -1,7 +1,8 @@
+import type { ComponentProps } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
+import { useAuthStore, taskCoreApi, authApi, ApiError } from "@mediaos/web-core";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TaskFormDrawer } from "./TaskFormDrawer";
 import { editableDirtyFields, taskFormToUpdatePayload } from "./task-form-schema";
@@ -24,6 +25,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     ...actual,
     taskCoreApi: { updateTask: vi.fn(), createTask: vi.fn() },
     taskProjectApi: { listProjects: vi.fn().mockResolvedValue([]) },
+    // S20-TASK-QUICKADD-1 — form Tạo đọc employeeId của tôi từ /auth/me.
+    authApi: { ...actual.authApi, me: vi.fn() },
     hrApi: {
       listDepartments: vi.fn().mockResolvedValue([]),
       listEmployees: vi.fn().mockResolvedValue({
@@ -165,6 +168,37 @@ describe("TaskFormDrawer (sửa) — trường theo cặp quyền chuyên trách
   });
 });
 
+// S20-TASK-QUICKEDIT-1 — popover mốc nhanh dùng chung cạnh ô hạn: chọn mốc chỉ ĐIỀN ô (lưu theo nút Lưu).
+describe("TaskFormDrawer — mốc hạn nhanh", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(taskCoreApi.updateTask).mockResolvedValue({ ...TASK, title: "x" } as never);
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+  });
+
+  it("thiếu update-deadline ⇒ không có «Chọn nhanh» (ô hạn khoá)", () => {
+    setCapabilities(BASE_CAPS);
+    renderEdit();
+    expect(screen.queryByTestId("task-due-at-quick")).not.toBeInTheDocument();
+  });
+
+  it("«Ngày mai» điền ô hạn và gửi cùng lần Lưu; chưa bấm Lưu thì không gọi API", async () => {
+    setCapabilities(ALL_PAIRS);
+    renderEdit();
+    fireEvent.click(screen.getByTestId("task-due-at-quick"));
+    fireEvent.click(screen.getByTestId("task-due-at-quick-preset-tomorrow"));
+    expect(taskCoreApi.updateTask).not.toHaveBeenCalled();
+    expect((field("task-due-at") as HTMLInputElement).value).toMatch(/T[0-9]{2}:00$/);
+
+    const form = document.getElementById("task-core-form");
+    if (!form) throw new Error("không thấy form task-core-form");
+    fireEvent.submit(form);
+    await waitFor(() => expect(taskCoreApi.updateTask).toHaveBeenCalledTimes(1));
+    const body = vi.mocked(taskCoreApi.updateTask).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(String(body.dueAt)).toMatch(/T10:00:00[.]000Z$/); // 17:00 giờ công ty
+  });
+});
+
 describe("payload sửa — trường bị khoá không vào body dù đã dirty", () => {
   it("F4 · ô khoá bị đánh dấu dirty (đường lập trình) ⇒ payload không có khoá của ô đó", () => {
     const values = {
@@ -199,5 +233,153 @@ describe("payload sửa — trường bị khoá không vào body dù đã dirty
       editableDirtyFields({ priority: true, assigneeEmployeeId: true }, {}),
     );
     expect(body).toEqual({ priority: "Urgent", assigneeEmployeeId: "emp-002" });
+  });
+});
+
+// ── S20-TASK-QUICKADD-1 — form Tạo: mặc định «Tôi», lỗi người phụ trách tại ô ──────────────────────
+describe("TaskFormDrawer (tạo) — người phụ trách mặc định là tôi", () => {
+  const ME_ID = "emp-me";
+
+  function meResponse(employee: { id: string; fullName: string | null } | null) {
+    return {
+      id: "u1",
+      companyId: "co-001",
+      email: "test@demo.local",
+      fullName: "Test User",
+      status: "Active",
+      capabilities: {},
+      mustSetupTwoFactor: false,
+      employee: employee
+        ? {
+            id: employee.id,
+            employeeCode: null,
+            fullName: employee.fullName,
+            departmentId: null,
+            directManagerId: null,
+            employmentStatus: "active",
+          }
+        : null,
+    } as never;
+  }
+
+  function renderCreate(props: Partial<ComponentProps<typeof TaskFormDrawer>> = {}) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <TaskFormDrawer mode="create" onClose={() => {}} onSuccess={() => {}} {...props} />
+      </QueryClientProvider>,
+    );
+  }
+
+  function submitForm() {
+    const form = document.getElementById("task-core-form");
+    if (!form) throw new Error("không thấy form task-core-form");
+    fireEvent.submit(form);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(authApi.me).mockResolvedValue(meResponse({ id: ME_ID, fullName: "Lê Văn Tôi" }));
+    vi.mocked(taskCoreApi.createTask).mockResolvedValue({ id: "t-new", projectId: null } as never);
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+  });
+
+  it("không chọn dự án ⇒ người phụ trách điền sẵn «Tôi» và vào payload", async () => {
+    setCapabilities({ "create:task": true, "read:employee": true });
+    renderCreate();
+    await waitFor(() => expect(field("task-assignee")).toHaveValue(ME_ID));
+    expect(screen.getByRole("option", { name: /Tôi/ })).toBeInTheDocument();
+
+    fireEvent.change(field("task-title"), { target: { value: "Việc của tôi" } });
+    submitForm();
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(taskCoreApi.createTask).mock.calls[0]?.[0]).toMatchObject({
+      title: "Việc của tôi",
+      assigneeEmployeeId: ME_ID,
+    });
+  });
+
+  it("luôn có lựa chọn «Tôi» dù dropdown nhân viên rỗng (không có read:employee)", async () => {
+    setCapabilities({ "create:task": true });
+    renderCreate();
+    await waitFor(() => expect(field("task-assignee")).toHaveValue(ME_ID));
+    const options = Array.from((field("task-assignee") as HTMLSelectElement).options);
+    expect(options.map((o) => o.value)).toEqual(["", ME_ID]);
+  });
+
+  it("«Tôi» không bị lặp khi danh sách nhân viên có chính tôi", async () => {
+    setCapabilities({ "create:task": true, "read:employee": true });
+    const { hrApi } = await import("@mediaos/web-core");
+    vi.mocked(hrApi.listEmployees).mockResolvedValueOnce({
+      items: [
+        { id: ME_ID, fullName: "Lê Văn Tôi" },
+        { id: "emp-002", fullName: "Trần Thị B" },
+      ],
+      meta: {},
+    } as never);
+    renderCreate();
+    await waitFor(() => expect(screen.getByRole("option", { name: "Trần Thị B" })).toBeVisible());
+    const values = Array.from((field("task-assignee") as HTMLSelectElement).options).map(
+      (o) => o.value,
+    );
+    expect(values.filter((v) => v === ME_ID)).toHaveLength(1);
+  });
+
+  it("chưa liên kết hồ sơ ⇒ không có «Tôi», người phụ trách để trống", async () => {
+    setCapabilities({ "create:task": true });
+    vi.mocked(authApi.me).mockResolvedValue(meResponse(null));
+    renderCreate();
+    await waitFor(() => expect(authApi.me).toHaveBeenCalled());
+    expect(screen.queryByRole("option", { name: /Tôi/ })).not.toBeInTheDocument();
+    expect(field("task-assignee")).toHaveValue("");
+  });
+
+  it("server 403 vì người phụ trách ⇒ lỗi TẠI Ô người phụ trách, không phải banner chung", async () => {
+    setCapabilities({ "create:task": true });
+    vi.mocked(taskCoreApi.createTask).mockRejectedValue(
+      new ApiError(
+        403,
+        "FORBIDDEN",
+        "TASK-ERR-TASK-ASSIGNEE-OUT-OF-SCOPE: nhân viên nhận việc ngoài phạm vi giao việc của bạn.",
+      ),
+    );
+    renderCreate();
+    await waitFor(() => expect(field("task-assignee")).toHaveValue(ME_ID));
+    fireEvent.change(field("task-title"), { target: { value: "Việc bị từ chối" } });
+    submitForm();
+
+    const fieldError = await screen.findByText("Hãy chọn người phụ trách trong phạm vi của bạn");
+    expect(fieldError).toHaveAttribute("id", "task-assignee-error");
+    expect(field("task-assignee")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByText(/không có quyền/i)).not.toBeInTheDocument();
+  });
+
+  it("tiêu đề rỗng / quá dài ⇒ không gửi, lỗi tại ô tiêu đề", async () => {
+    setCapabilities({ "create:task": true });
+    renderCreate();
+    fireEvent.change(field("task-title"), { target: { value: "x".repeat(501) } });
+    submitForm();
+    expect(await screen.findByText(/tối đa 500 ký tự/i)).toBeInTheDocument();
+    fireEvent.change(field("task-title"), { target: { value: "   " } });
+    submitForm();
+    await waitFor(() => expect(screen.queryByText(/tối đa 500 ký tự/i)).not.toBeInTheDocument());
+    expect(taskCoreApi.createTask).not.toHaveBeenCalled();
+  });
+
+  it("mở từ board (dự án điền sẵn) ⇒ ô dự án đã chọn đúng dự án, không điền sẵn «Tôi»", async () => {
+    setCapabilities({ "create:task": true });
+    renderCreate({ defaultProject: { id: "proj-001", name: "Dự án A" } });
+    expect(field("task-project")).toHaveValue("proj-001");
+    await waitFor(() => expect(screen.getByRole("option", { name: /Tôi/ })).toBeInTheDocument());
+    expect(field("task-assignee")).toHaveValue("");
+
+    fireEvent.change(field("task-title"), { target: { value: "Việc trong dự án" } });
+    submitForm();
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(taskCoreApi.createTask).mock.calls[0]?.[0]).toMatchObject({
+      projectId: "proj-001",
+    });
   });
 });

@@ -255,12 +255,26 @@ export function useChatConversation(roomId: string | null): ChatConversationStat
         const target = roomId;
         if ((sentReadSeqRef.current[target] ?? 0) >= seq) return;
         sentReadSeqRef.current[target] = seq;
-        void chatApi.markRead(target, { seq }).catch((err: unknown) => {
-          // Thất bại ⇒ NHẢ con trỏ ra để lần cuộn sau thử lại. Giữ nguyên nghĩa là badge phòng này kẹt
-          // đỏ tới khi tải lại trang, im lặng tuyệt đối.
-          sentReadSeqRef.current[target] = 0;
-          console.error(`[chat] không đánh dấu đọc được phòng ${target}:`, err);
-        });
+        void chatApi.markRead(target, { seq }).then(
+          (res) => {
+            // S20-CHAT-UNREAD-1 — badge về theo CHÍNH response, không đợi tiếng vọng `chat:read`: mất socket
+            // thì tiếng vọng không tới và badge phòng + badge tổng đứng yên dù POST đã thành công. Đi qua
+            // đúng `applyReadEvent` (tiếng vọng tới sau ⇒ no-op) và chỉ lấy `lastReadSeq`: số chưa đọc
+            // tính lại trên `lastMessageSeq` đang giữ — chép `unreadCount` của response là xoá mất tin tới
+            // trong lúc POST bay. Response về MUỘN của một POST cũ hơn (mạng đảo thứ tự) bị bỏ: áp nó là
+            // kéo lùi badge mà POST sau đã hạ.
+            if (res.lastReadSeq < (sentReadSeqRef.current[target] ?? 0)) return;
+            const { myUserId, applyReadEvent } = useChatStore.getState();
+            if (myUserId === null) return;
+            applyReadEvent({ roomId: target, userId: myUserId, lastReadSeq: res.lastReadSeq });
+          },
+          (err: unknown) => {
+            // Thất bại ⇒ NHẢ con trỏ ra để lần cuộn sau thử lại. Giữ nguyên nghĩa là badge phòng này kẹt
+            // đỏ tới khi tải lại trang, im lặng tuyệt đối.
+            sentReadSeqRef.current[target] = 0;
+            console.error(`[chat] không đánh dấu đọc được phòng ${target}:`, err);
+          },
+        );
       }, MARK_READ_DEBOUNCE_MS);
     },
     [roomId],

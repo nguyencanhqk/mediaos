@@ -85,6 +85,8 @@ export * from "./org";
 export * from "./media";
 export * from "./platform-accounts";
 export * from "./task";
+// S20-SEC-GOALNAMEDTO-1 (additive): tham chiếu mục tiêu của bản ghi việc + cờ trung tính `hasGoal`.
+export * from "./task-goal-ref";
 // S4-TASK-BE-3 (additive): Task actions crown-FSM — assign/change-status/change-priority/change-deadline/watch.
 export * from "./task-actions";
 // S4-TASK-BE-4 (additive): Kanban board + move · comment/mention · checklist/items · activity feed.

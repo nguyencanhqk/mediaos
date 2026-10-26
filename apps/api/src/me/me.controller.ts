@@ -10,7 +10,7 @@ import { ME_ACCESS_PAIR } from "./me.constants";
  * nào cho phép client truyền user_id/employee_id (chống IDOR, SPEC-09 §14.4/§17.1). Owner 100% từ req.user.
  */
 interface AuthenticatedRequest extends Request {
-  user: { id: string; companyId: string; email: string };
+  user: { id: string; companyId: string; email: string; viaApiKey: boolean | undefined };
 }
 
 /**

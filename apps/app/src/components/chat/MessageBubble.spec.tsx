@@ -249,10 +249,7 @@ describe("MessageBubble v2 · hai phía (done_when #1)", () => {
   it("tin gộp của NGƯỜI KHÁC ⇒ không lặp avatar, nhưng NHÃN GHIM vẫn thấy được", () => {
     // Hàng tên (chỗ bám của nhãn ghim ở tin đầu cụm) không tồn tại ở tin gộp — nhãn phải chuyển vào
     // trong bong bóng, nếu không thì ghim một tin gộp là ghim xong mà không có dấu vết nào.
-    renderBubble(
-      { pinnedAt: "2026-08-04T10:01:00.000Z" },
-      { isMine: false, isGrouped: true },
-    );
+    renderBubble({ pinnedAt: "2026-08-04T10:01:00.000Z" }, { isMine: false, isGrouped: true });
     expect(screen.queryByTestId("chat-sender-avatar")).toBeNull();
     expect(screen.getByText("Đã ghim")).toBeTruthy();
   });
@@ -343,5 +340,24 @@ describe("MessageBubble v2 · thanh tác vụ nổi (done_when #3)", () => {
       { canPin: true, canRecall: true },
     );
     expect(screen.queryByTestId("chat-message-actions")).toBeNull();
+  });
+});
+
+/**
+ * S20-CHAT-UNREAD-1 (lượt đo trình duyệt) — tin ngắn «KT #46 — Ok» xuống 2 dòng dù còn chỗ. Gốc: trần
+ * `max-w-[…78%]` đặt ở bong bóng, mà khối chứa của bong bóng là cột CO THEO chính bong bóng ⇒ phần trăm
+ * vòng tròn, bong bóng chỉ còn 78% bề ngang tự nhiên. jsdom không có layout nên ca này khoá CẤU TRÚC (trần
+ * ở cột con trực tiếp của hàng flex, bong bóng không mang phần trăm); bước đo trình duyệt đo lại số dòng.
+ */
+describe("MessageBubble · bề ngang bong bóng", () => {
+  it("trần 78% ở CỘT con của hàng flex; bong bóng chỉ `max-w-full`, không phần trăm vòng tròn", () => {
+    renderBubble({ body: "KT #46 — Ok" });
+    const column = screen.getByTestId("chat-message-column");
+    const shell = screen.getByTestId("chat-message-body-shell");
+
+    expect(column.parentElement?.getAttribute("data-testid")).toBe("chat-message");
+    expect(column.className).toContain("max-w-[min(42rem,78%)]");
+    expect(shell.className).toContain("max-w-full");
+    expect(shell.className).not.toMatch(/max-w-\[[^\]]*%/);
   });
 });
