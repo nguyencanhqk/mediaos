@@ -24,6 +24,8 @@ import goalsVi from "./locales/vi/goals";
 // EmployeeMultiPickerDialog (components/) — khóa chung deep-merge THÊM vào namespace "common"
 // đã có sẵn ở @mediaos/web-core (KHÔNG ghi đè khóa cũ).
 import employeePickerVi from "./locales/vi/employee-picker";
+// S16-SOCIAL-FILEOPENUX-1 — thông báo lọc sớm ở form tải (lib/upload-precheck.ts), deep-merge THÊM vào "common".
+import uploadPrecheckVi from "./locales/vi/upload-precheck";
 // S7-CHAT-FE-2 — trang /chat (namespace mới "chat", SPEC-15 §9/§14).
 import chatVi from "./locales/vi/chat";
 // S11-ASSET-FE-1 — ASSET-SCREEN-001..007 (namespace mới "assets", SPEC-13 §9/§14).
@@ -40,7 +42,7 @@ import payrollVi from "./locales/vi/payroll";
 import socialVi from "./locales/vi/social";
 
 registerI18nResources("vi", {
-  common: employeePickerVi,
+  common: { ...employeePickerVi, ...uploadPrecheckVi },
   hr: hrVi,
   system: systemVi,
   leave: leaveVi,
