@@ -7,6 +7,8 @@ import { TaskAudienceReader, type TaskAudience } from "./task-audience.reader";
 const SOURCE_MODULE_TASK = "TASK";
 const SOURCE_ENTITY_TASK = "task";
 const SOURCE_ENTITY_PROJECT = "project";
+/** Trạng thái chờ duyệt (SPEC-06 FSM) — việc vào đây thì Owner/Manager dự án cần biết. */
+const REVIEW_STATUS = "In Review";
 const EMPTY_AUDIENCE: TaskAudience = {
   assigneeUserId: null,
   creatorUserId: null,
@@ -16,6 +18,11 @@ const EMPTY_AUDIENCE: TaskAudience = {
 function strField(payload: Record<string, unknown>, key: string): string | undefined {
   const v = payload[key];
   return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
+/** user_id duy nhất, bỏ rỗng/null — người tạo kiêm Owner chỉ xuất hiện MỘT lần. */
+function uniqueIds(ids: ReadonlyArray<string | null | undefined>): string[] {
+  return [...new Set(ids.filter((x): x is string => typeof x === "string" && x.length > 0))];
 }
 
 function strArrayField(payload: Record<string, unknown>, key: string): string[] {
@@ -36,7 +43,8 @@ function strArrayField(payload: Record<string, unknown>, key: string): string[] 
  * producer, vd payload comment mang `assigneeEmployeeId` — EMPLOYEE id — trong khi engine cần user_id):
  *   TASK_ASSIGNED           = assignee mới.
  *   TASK_ASSIGNEE_CHANGED   = assignee mới ∪ watchers (KHÔNG assignee cũ — audience đọc SAU khi đã đổi).
- *   TASK_STATUS_CHANGED     = reporter(creator) ∪ assignee ∪ watchers.
+ *   TASK_STATUS_CHANGED     = reporter(creator) ∪ assignee ∪ watchers; sang 'In Review' + Owner/Manager
+ *                             còn hiệu lực của dự án chứa việc (S20-TASK-DUEREMIND-1).
  *   TASK_PRIORITY_CHANGED   = assignee ∪ watchers.
  *   TASK_DUE_DATE_CHANGED   = assignee ∪ watchers.
  *   TASK_COMMENT_CREATED    = assignee ∪ reporter(creator) ∪ watchers.
@@ -109,12 +117,21 @@ export class TaskNotiBridgeRegistrar implements OnModuleInit {
       sourceModule: SOURCE_MODULE_TASK,
       sourceEntityType: SOURCE_ENTITY_TASK,
       sourceEntityIdOf: (ctx) => strField(ctx.payload, "taskId"),
-      resolveRecipients: async (ctx) => {
-        const a = await this.audienceOf(ctx);
-        return [a.creatorUserId, a.assigneeUserId, ...a.watcherUserIds].filter((x): x is string =>
-          Boolean(x),
-        );
-      },
+      resolveRecipients: (ctx) => this.statusChangedRecipients(ctx),
+    });
+  }
+
+  /** Audience + (khi sang In Review) Owner/Manager dự án, đọc trong MỘT `withTenant`, đã khử trùng. */
+  private async statusChangedRecipients(ctx: EventContext): Promise<string[]> {
+    const taskId = strField(ctx.payload, "taskId");
+    if (!taskId) return [];
+    const toReview = strField(ctx.payload, "toStatus") === REVIEW_STATUS;
+    return this.db.withTenant(ctx.companyId, async (tx) => {
+      const a = await this.reader.resolve(tx, ctx.companyId, taskId);
+      const reviewers = toReview
+        ? await this.reader.projectReviewerUserIds(tx, ctx.companyId, taskId)
+        : [];
+      return uniqueIds([a.creatorUserId, a.assigneeUserId, ...a.watcherUserIds, ...reviewers]);
     });
   }
 

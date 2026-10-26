@@ -105,7 +105,7 @@ Unit `task-reminder.job-handler.spec.ts`: định dạng khoá (chuỗi `+07:00`
 
 Trong `paths`: `apps/api/src/notifications/task-reminder.job-handler.ts` · `task-reminder.job-handler.query.ts` (mới) · `task-reminder.job-handler.spec.ts` (mới) · `task-audience.reader.ts` · `task-noti-bridge.registrar.ts` · `task-noti-bridge.registrar.spec.ts` (mới) · `apps/api/test/integration/task-reminder-job.int-spec.ts` · `apps/api/test/integration/s20-task-review-audience.int-spec.ts` (mới) · plan này.
 
-pathsNeeded ngoài `paths` (F6): `apps/api/test/foundation/pipeline-parity.unit-spec.ts` — hạ `HAND_ROLLED_BASELINE` 269 → 268 vì spec reminder chuyển sang `applyMainPipeline` (ratchet đỏ nếu không hạ). Luồng chính mở rộng `paths` bằng commit backlog riêng (agent không sửa `harness/backlog.mjs`) và chạy `bash harness/check.sh --all --lane-db=w26b` trước khi mở PR.
+pathsNeeded ngoài `paths` (F6): `apps/api/test/foundation/pipeline-parity.unit-spec.ts` — hạ `HAND_ROLLED_BASELINE` 269 → 268 vì spec reminder chuyển sang `applyMainPipeline` (ratchet đỏ nếu không hạ). `apps/api/test/integration/task-subtask-counting.int-spec.ts` — ca «reminder job» (D-37) khẳng định job KHÔNG thấy việc task-core (đúng lỗi WO này sửa); đổi sang: cha quá hạn có con vẫn là ứng viên (+1), con không hạn không tính. Luồng chính mở rộng `paths` bằng commit backlog riêng (agent không sửa `harness/backlog.mjs`) và chạy `bash harness/check.sh --all --lane-db=w26b` trước khi mở PR.
 
 ## §6 Deploy · tương thích · rollback
 
@@ -138,3 +138,9 @@ pathsNeeded ngoài `paths` (F6): `apps/api/test/foundation/pipeline-parity.unit-
 | F7 MED  | Đúng: cột `assignee_user_id` đồng bộ với người phụ trách (`task-patch-field-gate.ts:109-123`) ⇒ `coalesce` lấy lại user đã nghỉ.                       | `case` theo `main_assignee_employee_id is null`; ứng viên cần phụ trách giải được; ca R11.           |
 | F8 LOW  | Đúng.                                                                                                                                                  | §6 + PR do luồng chính đo (agent không truy cập PROD).                                               |
 | F9 LOW  | Đúng là v1 chưa trích dẫn; đã đo: nhánh thành viên đọc mọi việc của dự án (`task-core.repository.ts:332-350`), `employee read:task @Own` (`0485:121`). | Trích dẫn ở §3; thêm join `projects.deleted_at is null`; phần dư → followup.                         |
+
+## §10 Kết quả thi công
+
+- RED trên mã cũ (`92c48428`): 16 đỏ / 10 xanh — R1–R5 · R7 · R8 · R9 · R10 · X1 · A1 · A2 (+A3 phần phụ thuộc A2) · unit registrar «In Review». Ca ALLOW-cạnh (R6 · R11 · A4–A7 · X2 · A3 phần outbox) xanh ngay trên mã cũ.
+- Đỏ đúng lý do của bẫy xoá mềm: truy vấn mới nhưng TẮT kiểm trước ⇒ R4a · R4b · R4c đỏ `[true, false]` ≠ `[true]` (hàng đã xoá + bản phát lại), R5 kéo theo (3 ≠ 2); mọi ca khác xanh. Bật kiểm trước ⇒ xanh.
+- GREEN: 4 tệp mới/viết lại 35/35; hồi quy `src/notifications` (14 tệp) + `task-noti-e2e` · `qa2-e2e-task-noti-dash` · `task-move-state` · `task-actions` · `task-kanban-move-activity` · `task-subtask-counting` · `dashboard-cache-invalidate` · `s5-noti-fix1-deeplink` · `pipeline-parity` · `outbox-worker-lock` xanh trên lane; typecheck API · eslint tệp chạm · prettier sạch.
