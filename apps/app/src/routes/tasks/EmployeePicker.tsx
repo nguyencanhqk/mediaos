@@ -15,6 +15,12 @@ import { Avatar, Popover, Input, cn } from "@mediaos/ui";
  * tự lọc thêm (CLAUDE.md §5: scope là việc của server). Chỉ tải khi popover MỞ: một panel việc con có
  * hàng chục dòng, tải sẵn cho từng dòng là lãng phí (khoá query dùng chung ⇒ dòng thứ hai là cache-hit).
  */
+/** Tên + ảnh của người vừa chọn, lấy từ chính dòng trong danh sách của picker. */
+export interface PickedEmployee {
+  readonly fullName: string | null;
+  readonly avatarUrl: string | null;
+}
+
 export function EmployeePicker({
   employeeId,
   name,
@@ -32,8 +38,11 @@ export function EmployeePicker({
   employeeId: string | null;
   name: string | null;
   avatarUrl: string | null | undefined;
-  /** `null` = gỡ người (chỉ gọi được khi `allowClear`). */
-  onSelect: (employeeId: string | null) => void;
+  /**
+   * `null` = gỡ người (chỉ gọi được khi `allowClear`). `employee` = tên/ảnh của người vừa chọn (đã có
+   * sẵn trong danh sách) — để phía gọi vá lạc quan đúng tên thay vì đợi server trả.
+   */
+  onSelect: (employeeId: string | null, employee?: PickedEmployee) => void;
   canEdit: boolean;
   /**
    * Route `assign` đòi uuid (không nhận rỗng) nên ô người phụ trách của TASK không gỡ được;
@@ -111,11 +120,11 @@ export function EmployeePicker({
 
   if (!canEdit) return trigger;
 
-  const choose = (nextId: string | null) => {
+  const choose = (nextId: string | null, picked?: PickedEmployee) => {
     setOpen(false);
     setSearch("");
     if (nextId === employeeId) return; // không đổi ⇒ không gọi API
-    onSelect(nextId);
+    onSelect(nextId, picked);
   };
 
   return (
@@ -168,7 +177,9 @@ export function EmployeePicker({
                 <li key={e.id}>
                   <button
                     type="button"
-                    onClick={() => choose(e.id)}
+                    onClick={() =>
+                      choose(e.id, { fullName: e.fullName ?? null, avatarUrl: e.avatarUrl ?? null })
+                    }
                     className={cn(
                       "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted",
                       e.id === employeeId && "bg-muted font-medium",

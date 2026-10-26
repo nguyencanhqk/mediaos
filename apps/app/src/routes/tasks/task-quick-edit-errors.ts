@@ -38,8 +38,8 @@ export function classifyTaskQuickEditError(error: unknown): TaskQuickEditErrorKi
   return "generic";
 }
 
-/** Trường đang sửa — câu chữ «không có quyền» khác nhau giữa trạng thái và hạn. */
-export type TaskQuickEditField = "status" | "deadline";
+/** Trường đang sửa — câu chữ «không có quyền» khác nhau giữa trạng thái, hạn và người phụ trách. */
+export type TaskQuickEditField = "status" | "deadline" | "assignee";
 
 /** Khoá i18n (namespace `tasks`, gốc `quickEdit.errors`) cho một lỗi của một trường. */
 export function taskQuickEditErrorKey(field: TaskQuickEditField, error: unknown): string {
