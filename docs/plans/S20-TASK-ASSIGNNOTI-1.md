@@ -65,7 +65,7 @@
    `updateTask` thay khối :761-800 bằng `recordPatchedTx`. Tham số mới thêm CUỐI. Ước net ≈ −50 dòng (yêu cầu ≤ 0).
 4. **Contracts (additive)**: tệp MỚI `packages/contracts/src/task-create-response.ts` —
    `taskCoreCreateResponseSchema = taskCoreResponseSchema.extend({ warnings: z.array(taskActionWarningSchema).optional() })`
-   + type; export qua `index.ts`. `task.ts` không đổi. FE cũ không vỡ (trường optional, FE không parse strict).
+   kèm type; export qua `index.ts`. `task.ts` không đổi. FE cũ không vỡ (trường optional, FE không parse strict).
 5. **Quyết định đã chốt áp dụng**: không đổi cổng PATCH (done_when 4); bridge + người nhận giữ nguyên (story);
    self-assign khi create ⇒ không phát (done_when 1); payload không description (BẤT BIẾN #3 của service).
 6. **[SUY RA] Phân rã mục tiêu** đi qua `createTaskInTx` ⇒ từ nay việc phân rã có người phụ trách ≠ người phân rã
@@ -106,6 +106,7 @@ Trong `paths`: `task-assign-events.ts` (MỚI) · `task-assign-events.spec.ts` (
 `docs/plans/S20-TASK-ASSIGNNOTI-1.md`.
 
 pathsNeeded (ngoài `paths`, tối thiểu):
+
 - `apps/api/src/tasks/tasks.module.ts` — khai provider `TaskAssignEvents` (khối additive).
 - `apps/api/src/tasks/task-core-codegen.spec.ts` — thêm đối số cuối cho hàm khởi tạo theo vị trí.
 - `packages/contracts/src/task-create-response.ts` (MỚI) + `packages/contracts/src/index.ts` (1 dòng export) —
