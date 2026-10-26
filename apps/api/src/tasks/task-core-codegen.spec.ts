@@ -131,6 +131,11 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
       visibleGoalIdsTx: vi.fn().mockResolvedValue(new Set()),
       visibleGoalIds: vi.fn().mockResolvedValue(new Set()),
     } as never,
+    // S20-TASK-ASSIGNNOTI-1 — nhật ký tạo + sự kiện giao việc; ca này không gửi người phụ trách.
+    {
+      recordCreatedTx: vi.fn().mockResolvedValue(undefined),
+      createdWarningsTx: vi.fn().mockResolvedValue([]),
+    } as never,
   );
   return { svc, repo, db, sequence };
 }

@@ -89,6 +89,8 @@ export * from "./task";
 export * from "./task-goal-ref";
 // S4-TASK-BE-3 (additive): Task actions crown-FSM — assign/change-status/change-priority/change-deadline/watch.
 export * from "./task-actions";
+// S20-TASK-ASSIGNNOTI-1 (additive): phản hồi POST /tasks kèm `warnings[]` — tách khỏi ./task (quá 800 dòng).
+export * from "./task-create-response";
 // S4-TASK-BE-4 (additive): Kanban board + move · comment/mention · checklist/items · activity feed.
 export * from "./task-collab";
 // S4-TASK-BE-5 (additive): Task File (đính kèm công việc) — link/list/download/soft-delete DTOs
