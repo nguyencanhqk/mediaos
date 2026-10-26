@@ -407,8 +407,11 @@ export class TaskCoreService {
     const viewer = await this.goalRefs.resolveViewer(user);
     return this.db.withTenant(user.companyId, async (tx) => {
       const created = await this.createTaskInTx(tx, user, dto, { createScope, taskCode });
-      // Cảnh báo như `/assign` (nghỉ phép · ngoài dự án) — chỉ đường HTTP; phân rã không tốn truy vấn.
-      const warnings = await this.assignEvents.createdWarningsTx(tx, user.companyId, created.id);
+      // Cảnh báo như `/assign` (nghỉ phép · ngoài dự án) — chỉ đường HTTP và chỉ khi có người phụ trách
+      // (không ⇒ không đọc lại hàng); phân rã không tốn truy vấn.
+      const warnings = dto.assigneeEmployeeId
+        ? await this.assignEvents.createdWarningsTx(tx, user.companyId, created.id)
+        : [];
       return { ...(await this.reload({ tx, viewer }, created.id)), warnings };
     });
   }

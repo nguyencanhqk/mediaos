@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import type { TaskActionWarning } from "@mediaos/contracts";
 import type { TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
@@ -88,6 +88,8 @@ const WARN_NOT_MEMBER: TaskActionWarning = {
   code: "TASK-WARN-ASSIGNEE-NOT-MEMBER",
   message: "Người nhận việc không thuộc thành viên dự án của công việc.",
 };
+const ERR_ASSIGNEE_WITHOUT_USER =
+  "TASK-ERR-ASSIGNEE-WITHOUT-USER: người phụ trách sau cập nhật không gắn tài khoản — không phát được sự kiện giao việc.";
 
 @Injectable()
 export class TaskAssignEvents {
@@ -328,11 +330,10 @@ export class TaskAssignEvents {
     const after = await this.loadTx(tx, e.actor.companyId, e.taskId);
     const base: EmitBase = { task: after, actor: e.actor, actorEmployeeId };
     const assigneeUserId = after.assigneeUserId;
-    if (
-      e.fieldChanges.has("assigneeEmployeeId") &&
-      after.mainAssigneeEmployeeId &&
-      assigneeUserId
-    ) {
+    if (e.fieldChanges.has("assigneeEmployeeId") && after.mainAssigneeEmployeeId) {
+      // resolveAssignee đã đòi tài khoản (400) TRƯỚC khi ghi ⇒ vắng ở đây = hàng lệch: nổ to (rollback cả
+      // PATCH) thay vì bỏ sự kiện giao việc không tiếng động.
+      if (!assigneeUserId) throw new InternalServerErrorException(ERR_ASSIGNEE_WITHOUT_USER);
       await this.enqueueAssigneeTx(tx, {
         ...base,
         oldAssigneeEmployeeId: e.before.mainAssigneeEmployeeId,

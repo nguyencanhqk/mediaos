@@ -159,6 +159,30 @@ describe("TaskAssignEvents.recordPatchedTx", () => {
     );
   });
 
+  it("đổi người mà hàng sau patch không gắn tài khoản ⇒ nổ TASK-ERR-ASSIGNEE-WITHOUT-USER, 0 enqueue", async () => {
+    const { events, outbox } = makeEvents({ assigneeUserId: null });
+    await expect(
+      events.recordPatchedTx(
+        TX as never,
+        input(["assigneeEmployeeId"], { assigneeEmployeeId: NEXT.employeeId }),
+      ),
+    ).rejects.toThrow("TASK-ERR-ASSIGNEE-WITHOUT-USER");
+    expect(outbox.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("gỡ người phụ trách ⇒ không phát, không nổ", async () => {
+    const { events, outbox, audit } = makeEvents({
+      mainAssigneeEmployeeId: null,
+      assigneeUserId: null,
+    });
+    await events.recordPatchedTx(
+      TX as never,
+      input(["assigneeEmployeeId"], { assigneeEmployeeId: null }),
+    );
+    expect(audit.record).toHaveBeenCalledOnce();
+    expect(outbox.enqueue).not.toHaveBeenCalled();
+  });
+
   it("đổi người + hạn + ưu tiên ⇒ 3 enqueue, payload mang người phụ trách SAU patch, không description/reason", async () => {
     const { events, outbox } = makeEvents();
     await events.recordPatchedTx(

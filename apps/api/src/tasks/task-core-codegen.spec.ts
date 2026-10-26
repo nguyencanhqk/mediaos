@@ -12,6 +12,7 @@
  * RED trước wire: createTask KHÔNG gọi sequence.nextCode ⇒ insertTaskCoreTx nhận taskCode=undefined.
  */
 
+import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { TaskCoreService } from "./task-core.service";
 import { SequenceNotFoundError } from "../foundation/sequences/sequence.types";
@@ -85,6 +86,10 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
   const audit = { record: vi.fn().mockResolvedValue(undefined) };
   const activity = { record: vi.fn().mockResolvedValue(undefined) };
   const sequence = opts.sequence ?? makeSequence();
+  const assignEvents = {
+    recordCreatedTx: vi.fn().mockResolvedValue(undefined),
+    createdWarningsTx: vi.fn().mockResolvedValue([]),
+  };
   // S5-TASK-PIPELINE-1 — 2 dependency mới của đường ghi state (dto test KHÔNG gửi stateId ⇒
   // createTask chỉ gọi findDefaultStateTx khi có projectId; mock trả undefined = project 0 state).
   const taskActions = { isChecklistGateEnabled: vi.fn().mockResolvedValue(false) };
@@ -131,13 +136,10 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
       visibleGoalIdsTx: vi.fn().mockResolvedValue(new Set()),
       visibleGoalIds: vi.fn().mockResolvedValue(new Set()),
     } as never,
-    // S20-TASK-ASSIGNNOTI-1 — nhật ký tạo + sự kiện giao việc; ca này không gửi người phụ trách.
-    {
-      recordCreatedTx: vi.fn().mockResolvedValue(undefined),
-      createdWarningsTx: vi.fn().mockResolvedValue([]),
-    } as never,
+    // S20-TASK-ASSIGNNOTI-1 — nhật ký tạo + sự kiện giao việc.
+    assignEvents as never,
   );
-  return { svc, repo, db, sequence };
+  return { svc, repo, db, sequence, assignEvents };
 }
 
 describe("TaskCoreService.createTask — task_code code-gen (S5-NOTI-FIX-2, QA2-CRIT-002)", () => {
@@ -201,5 +203,36 @@ describe("TaskCoreService.createTask — task_code code-gen (S5-NOTI-FIX-2, QA2-
 
     expect(nextCode).toHaveBeenCalledTimes(2); // gốc + đúng 1 retry, KHÔNG loop
     expect(repo.insertTaskCoreTx).not.toHaveBeenCalled(); // fail-loud: mã lỗi ⇒ KHÔNG tạo task câm
+  });
+});
+
+describe("TaskCoreService.createTask — cảnh báo giao việc (S20-TASK-ASSIGNNOTI-1, gate DB-1)", () => {
+  it("không người phụ trách ⇒ không đọc lại hàng cho cảnh báo, warnings rỗng", async () => {
+    const { svc, assignEvents } = makeService();
+    const res = await svc.createTask(user, { title: "X" } as never);
+    expect(assignEvents.createdWarningsTx).not.toHaveBeenCalled();
+    expect(res.warnings).toEqual([]);
+  });
+
+  it("có người phụ trách ⇒ cảnh báo tính trên việc vừa tạo, trả nguyên văn", async () => {
+    const { svc, repo, assignEvents } = makeService();
+    const assignee = { id: randomUUID(), userId: randomUUID() };
+    Object.assign(repo, {
+      findEmployeeForScopeTx: vi.fn().mockResolvedValue({
+        ...assignee,
+        deletedAt: null,
+        status: "active",
+        orgUnitId: null,
+        directManagerUserId: null,
+      }),
+    });
+    const onLeave = { code: "TASK-WARN-ASSIGNEE-ON-LEAVE", message: "nghỉ" };
+    assignEvents.createdWarningsTx.mockResolvedValueOnce([onLeave]);
+    const res = await svc.createTask(user, {
+      title: "X",
+      assigneeEmployeeId: assignee.id,
+    } as never);
+    expect(assignEvents.createdWarningsTx).toHaveBeenCalledWith(FAKE_TX, COMPANY, NEW_TASK_ID);
+    expect(res.warnings).toEqual([onLeave]);
   });
 });
