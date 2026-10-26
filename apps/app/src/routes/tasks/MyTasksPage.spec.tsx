@@ -2,7 +2,7 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi } from "@mediaos/web-core";
+import { useAuthStore, taskCoreApi, authApi } from "@mediaos/web-core";
 import { MyTasksPage } from "./MyTasksPage";
 import type { MyTaskItemDto } from "@mediaos/contracts";
 
@@ -23,7 +23,12 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
-  return { ...actual, taskCoreApi: { ...actual.taskCoreApi, getMyTasks: vi.fn() } };
+  return {
+    ...actual,
+    taskCoreApi: { ...actual.taskCoreApi, getMyTasks: vi.fn(), createTask: vi.fn() },
+    // S20-TASK-QUICKADD-1 — ô tạo nhanh đọc employeeId của tôi từ /auth/me.
+    authApi: { ...actual.authApi, me: vi.fn() },
+  };
 });
 
 // 06:30 ngày 24/10/2026 giờ công ty (UTC+7) = 23:30 ngày 23/10 UTC — máy UTC vẫn đang ở «hôm qua».
@@ -340,5 +345,88 @@ describe("MyTasksPage — S20-TASK-MYTASKS-1", () => {
     vi.mocked(taskCoreApi.getMyTasks).mockRejectedValue(new Error("Network error"));
     renderWithQuery(<MyTasksPage />);
     await waitFor(() => expect(screen.getByText(/không thể tải công việc/i)).toBeInTheDocument());
+  });
+});
+
+// ── S20-TASK-QUICKADD-1 (US-TASK-NV-05) — tạo việc một dòng ngay đầu trang ─────────────────────────
+describe("MyTasksPage — tạo nhanh việc cho chính mình", () => {
+  const ME_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+  function meResponse(employeeId: string | null) {
+    return {
+      id: "u1",
+      companyId: "co-001",
+      email: "test@demo.local",
+      fullName: "Test User",
+      status: "Active",
+      capabilities: {},
+      mustSetupTwoFactor: false,
+      employee: employeeId
+        ? {
+            id: employeeId,
+            employeeCode: null,
+            fullName: "Test User",
+            departmentId: null,
+            directManagerId: null,
+            employmentStatus: "active",
+          }
+        : null,
+    } as never;
+  }
+
+  beforeEach(() => {
+    useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+    vi.clearAllMocks();
+    searchRef.current = {};
+    vi.mocked(taskCoreApi.getMyTasks).mockResolvedValue([]);
+    vi.mocked(taskCoreApi.createTask).mockResolvedValue({ id: "t-new" } as never);
+    vi.mocked(authApi.me).mockResolvedValue(meResponse(ME_ID));
+  });
+
+  it("phạm vi tạo Own, KHÔNG có read:employee: gõ + Enter ⇒ việc giao cho tôi, danh sách tải lại", async () => {
+    setCapabilities({ "read:task": true, "create:task": true });
+    renderWithQuery(<MyTasksPage />);
+    // Trang rỗng vẫn có ô tạo nhanh — đó là lúc cần nó nhất.
+    await waitFor(() => expect(screen.getByTestId("my-tasks-quick-add-input")).toBeEnabled());
+    const input = screen.getByTestId("my-tasks-quick-add-input");
+    fireEvent.change(input, { target: { value: "Gọi lại khách" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalledTimes(1));
+    expect(taskCoreApi.createTask).toHaveBeenCalledWith({
+      title: "Gọi lại khách",
+      assigneeEmployeeId: ME_ID,
+    });
+    await waitFor(() => expect(taskCoreApi.getMyTasks).toHaveBeenCalledTimes(2));
+    expect(input).toHaveValue("");
+  });
+
+  it("tài khoản chưa liên kết hồ sơ ⇒ ô tạo nhanh vô hiệu kèm giải thích, Enter không gửi", async () => {
+    setCapabilities({ "read:task": true, "create:task": true });
+    vi.mocked(authApi.me).mockResolvedValue(meResponse(null));
+    renderWithQuery(<MyTasksPage />);
+    expect(await screen.findByText(/chưa liên kết hồ sơ nhân viên/i)).toBeInTheDocument();
+    const input = screen.getByTestId("my-tasks-quick-add-input");
+    expect(input).toBeDisabled();
+    fireEvent.change(input, { target: { value: "Không gửi" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(taskCoreApi.createTask).not.toHaveBeenCalled();
+  });
+
+  it("thiếu create:task ⇒ không có ô tạo nhanh, không có nút «Tạo việc», không gọi /auth/me", async () => {
+    setCapabilities({ "read:task": true });
+    renderWithQuery(<MyTasksPage />);
+    await waitFor(() => expect(taskCoreApi.getMyTasks).toHaveBeenCalled());
+    expect(screen.queryByTestId("my-tasks-quick-add-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("my-tasks-create")).not.toBeInTheDocument();
+    expect(authApi.me).not.toHaveBeenCalled();
+  });
+
+  it("nút «Tạo việc» mở form Tạo ngay trên trang (0 chuyển trang)", async () => {
+    setCapabilities({ "read:task": true, "create:task": true });
+    renderWithQuery(<MyTasksPage />);
+    fireEvent.click(screen.getByTestId("my-tasks-create"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });
