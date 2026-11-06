@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { brandingLogoRefSchema } from "./foundation/branding";
+import { emailSchema, emailParams } from "./common/email";
+import { idSchema } from "./common/id";
 
 const workingDaysJsonSchema = z.object({
   days: z.array(z.number().int().min(0).max(6)),
@@ -12,7 +14,7 @@ const payrollConfigJsonSchema = z.object({
 
 /** DTO Company Settings — G5-1 + CS-5 (hồ sơ đầy đủ, migration 0360). */
 export const companySettingsSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string().min(1),
   slug: z.string().min(1),
   status: z.string(),
@@ -39,7 +41,7 @@ export const companySettingsSchema = z.object({
   address: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   fax: z.string().nullable().optional(),
-  email: z.string().email().nullable().optional(),
+  email: emailSchema.nullable().optional(),
   website: z.string().url().nullable().optional(),
 });
 export type CompanySettingsDto = z.infer<typeof companySettingsSchema>;
@@ -81,7 +83,7 @@ export const updateCompanySettingsSchema = z.object({
   address: z.string().max(500).optional().nullable(),
   phone: z.string().max(20).optional().nullable(),
   fax: z.string().max(20).optional().nullable(),
-  email: z.string().email("Email không hợp lệ").optional().nullable(),
+  email: z.string().email(emailParams("Email không hợp lệ")).optional().nullable(),
   website: z.string().url("Website phải là URL hợp lệ").optional().nullable(),
 });
 export type UpdateCompanySettingsRequest = z.infer<typeof updateCompanySettingsSchema>;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * Tham chiếu mục tiêu của bản ghi việc (S5-GOAL-BE-2 · SPEC-10 §7 · GOAL-API-010), dùng chung cho
@@ -13,7 +14,7 @@ import { z } from "zod";
  * parse được phản hồi API cũ (không có cờ) và FE cũ bỏ qua khoá lạ của API mới.
  */
 export const taskGoalRefShape = {
-  goalId: z.string().uuid().nullable().optional(),
+  goalId: idSchema.nullable().optional(),
   goalCode: z.string().nullable().optional(),
   goalName: z.string().nullable().optional(),
   hasGoal: z.boolean().optional(),

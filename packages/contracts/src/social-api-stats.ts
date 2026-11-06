@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-3B — DTO của `SOCIAL-API-052` (`GET /social/stats/engagement`) và `053` (`…/export`, XLSX).
@@ -64,7 +65,7 @@ export const feedEngagementQuerySchema = z
   .object({
     from: isoDateSchema.optional(),
     to: isoDateSchema.optional(),
-    orgUnitId: z.string().uuid().optional(),
+    orgUnitId: idSchema.optional(),
   })
   .strict()
   .superRefine((q, ctx) => {
@@ -100,7 +101,7 @@ export type FeedEngagementQueryDto = z.infer<typeof feedEngagementQuerySchema>;
 
 /** Một đơn vị trong phạm vi của người xem — CŨNG là tập `orgUnitId` hợp lệ duy nhất (plan D6). */
 export const feedEngagementUnitSchema = z.object({
-  orgUnitId: z.string().uuid(),
+  orgUnitId: idSchema,
   name: z.string(),
   isDeleted: z.boolean(),
 });
@@ -116,7 +117,7 @@ const engagementCounts = {
 /** Một ô tuần × đơn vị có hoạt động. `orgUnitId: null` = người chưa gán đơn vị (chỉ scope Company). */
 export const feedEngagementRowSchema = z.object({
   weekStart: z.string(),
-  orgUnitId: z.string().uuid().nullable(),
+  orgUnitId: idSchema.nullable(),
   ...engagementCounts,
 });
 export type FeedEngagementRowDto = z.infer<typeof feedEngagementRowSchema>;

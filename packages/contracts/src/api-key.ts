@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * AC-5 API key / Personal Access Token (PAT) DTOs — nguồn sự thật cho contract api ↔ admin.
@@ -21,10 +22,10 @@ export type ApiKeyStatus = z.infer<typeof apiKeyStatusEnum>;
  * để người dùng nhận diện key. `lastUsedAt` null nếu chưa dùng. `status` dẫn xuất ở server.
  */
 export const apiKeySchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   tokenPrefix: z.string(),
-  scopePermissionIds: z.array(z.string().uuid()),
+  scopePermissionIds: z.array(idSchema),
   status: apiKeyStatusEnum,
   lastUsedAt: z.string().datetime().nullable(),
   expiresAt: z.string().datetime().nullable(),
@@ -40,7 +41,7 @@ export type ApiKeyDto = z.infer<typeof apiKeySchema>;
  */
 export const createApiKeyRequestSchema = z.object({
   name: z.string().min(1).max(120),
-  scopePermissionIds: z.array(z.string().uuid()).min(1).max(100),
+  scopePermissionIds: z.array(idSchema).min(1).max(100),
   /** ISO datetime; null/absent = không hết hạn. */
   expiresAt: z.string().datetime().nullable().optional(),
 });
@@ -62,7 +63,7 @@ export type CreateApiKeyResponse = z.infer<typeof createApiKeyResponseSchema>;
  * render bộ chọn scope; chọn id nào → đưa vào createApiKeyRequest.scopePermissionIds. BE vẫn ép lại ⊆ grant.
  */
 export const apiKeyScopeSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   action: z.string(),
   resourceType: z.string(),
   isSensitive: z.boolean(),

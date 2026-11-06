@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * G13 Finance — Revenue · Cost · Allocation · Profit · Expense.
@@ -77,15 +78,15 @@ export type ExpenseDecision = z.infer<typeof expenseDecisionEnum>;
 // ─── Revenue (G13-1) ─────────────────────────────────────────────────────────
 
 export const revenueRecordSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  platformId: z.string().uuid().nullable().optional(),
+  id: idSchema,
+  companyId: idSchema,
+  platformId: idSchema.nullable().optional(),
   platformName: z.string().nullable().optional(),
-  channelId: z.string().uuid().nullable().optional(),
+  channelId: idSchema.nullable().optional(),
   channelName: z.string().nullable().optional(),
-  projectId: z.string().uuid().nullable().optional(),
+  projectId: idSchema.nullable().optional(),
   projectName: z.string().nullable().optional(),
-  contentItemId: z.string().uuid().nullable().optional(),
+  contentItemId: idSchema.nullable().optional(),
   contentTitle: z.string().nullable().optional(),
   /** null = mask (không có view-finance). */
   amount: z.number().nullable(),
@@ -96,10 +97,10 @@ export const revenueRecordSchema = z.object({
   source: revenueSourceEnum,
   description: z.string().nullable().optional(),
   attachmentUrl: z.string().nullable().optional(),
-  enteredBy: z.string().uuid(),
+  enteredBy: idSchema,
   enteredByName: z.string().nullable().optional(),
   entryKind: financeEntryKindEnum,
-  replacesRecordId: z.string().uuid().nullable().optional(),
+  replacesRecordId: idSchema.nullable().optional(),
   /** false = đã bị thay thế bởi bản ghi khác hoặc là bản void. */
   isEffective: z.boolean(),
   createdAt: z.string().datetime(),
@@ -107,10 +108,10 @@ export const revenueRecordSchema = z.object({
 export type RevenueRecordDto = z.infer<typeof revenueRecordSchema>;
 
 const revenueFieldsSchema = z.object({
-  platformId: z.string().uuid().optional(),
-  channelId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  contentItemId: z.string().uuid().optional(),
+  platformId: idSchema.optional(),
+  channelId: idSchema.optional(),
+  projectId: idSchema.optional(),
+  contentItemId: idSchema.optional(),
   amount: z.number().positive(),
   currency: z.string().min(3).max(3).default("VND"),
   revenueDate: z.string().date(),
@@ -148,10 +149,10 @@ const financePaginationFields = {
 };
 
 export const listRevenueQuerySchema = z.object({
-  platformId: z.string().uuid().optional(),
-  channelId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  contentItemId: z.string().uuid().optional(),
+  platformId: idSchema.optional(),
+  channelId: idSchema.optional(),
+  projectId: idSchema.optional(),
+  contentItemId: idSchema.optional(),
   source: revenueSourceEnum.optional(),
   from: z.string().date().optional(),
   to: z.string().date().optional(),
@@ -164,30 +165,30 @@ export type ListRevenueQuery = z.infer<typeof listRevenueQuerySchema>;
 // ─── Cost (G13-2) ────────────────────────────────────────────────────────────
 
 export const costRecordSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   costType: costTypeEnum,
   /** null = mask. */
   amount: z.number().nullable(),
   currency: z.string(),
   costDate: z.string().date(),
-  orgUnitId: z.string().uuid().nullable().optional(),
-  teamId: z.string().uuid().nullable().optional(),
-  projectId: z.string().uuid().nullable().optional(),
+  orgUnitId: idSchema.nullable().optional(),
+  teamId: idSchema.nullable().optional(),
+  projectId: idSchema.nullable().optional(),
   projectName: z.string().nullable().optional(),
-  channelId: z.string().uuid().nullable().optional(),
+  channelId: idSchema.nullable().optional(),
   channelName: z.string().nullable().optional(),
-  contentItemId: z.string().uuid().nullable().optional(),
+  contentItemId: idSchema.nullable().optional(),
   contentTitle: z.string().nullable().optional(),
-  userId: z.string().uuid().nullable().optional(),
+  userId: idSchema.nullable().optional(),
   vendorName: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   attachmentUrl: z.string().nullable().optional(),
-  enteredBy: z.string().uuid(),
+  enteredBy: idSchema,
   enteredByName: z.string().nullable().optional(),
   entryKind: financeEntryKindEnum,
-  replacesRecordId: z.string().uuid().nullable().optional(),
-  expenseRequestId: z.string().uuid().nullable().optional(),
+  replacesRecordId: idSchema.nullable().optional(),
+  expenseRequestId: idSchema.nullable().optional(),
   isEffective: z.boolean(),
   createdAt: z.string().datetime(),
 });
@@ -198,12 +199,12 @@ const costFieldsSchema = z.object({
   amount: z.number().positive(),
   currency: z.string().min(3).max(3).default("VND"),
   costDate: z.string().date(),
-  orgUnitId: z.string().uuid().optional(),
-  teamId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  channelId: z.string().uuid().optional(),
-  contentItemId: z.string().uuid().optional(),
-  userId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  teamId: idSchema.optional(),
+  projectId: idSchema.optional(),
+  channelId: idSchema.optional(),
+  contentItemId: idSchema.optional(),
+  userId: idSchema.optional(),
   vendorName: z.string().max(300).optional(),
   description: z.string().max(2000).optional(),
   attachmentUrl: z.string().url().max(1000).optional(),
@@ -216,11 +217,11 @@ export type AdjustCostRequest = z.infer<typeof adjustCostSchema>;
 
 export const listCostQuerySchema = z.object({
   costType: costTypeEnum.optional(),
-  channelId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  contentItemId: z.string().uuid().optional(),
-  orgUnitId: z.string().uuid().optional(),
-  teamId: z.string().uuid().optional(),
+  channelId: idSchema.optional(),
+  projectId: idSchema.optional(),
+  contentItemId: idSchema.optional(),
+  orgUnitId: idSchema.optional(),
+  teamId: idSchema.optional(),
   from: z.string().date().optional(),
   to: z.string().date().optional(),
   includeSuperseded: z.coerce.boolean().optional(),
@@ -231,12 +232,12 @@ export type ListCostQuery = z.infer<typeof listCostQuerySchema>;
 // ─── Cost Allocation (G13-2 · FIN-003) ───────────────────────────────────────
 
 export const costAllocationSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  costRecordId: z.string().uuid(),
-  allocationRunId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  costRecordId: idSchema,
+  allocationRunId: idSchema,
   allocationTargetType: allocationTargetTypeEnum,
-  allocationTargetId: z.string().uuid(),
+  allocationTargetId: idSchema,
   targetName: z.string().nullable().optional(),
   allocationMethod: allocationMethodEnum,
   /** null = mask. */
@@ -248,7 +249,7 @@ export type CostAllocationDto = z.infer<typeof costAllocationSchema>;
 
 export const allocationTargetInputSchema = z.object({
   targetType: allocationTargetTypeEnum,
-  targetId: z.string().uuid(),
+  targetId: idSchema,
   /** Bắt buộc với manual_percent (tổng = 100). */
   percent: z.number().positive().max(100).optional(),
   /** Bắt buộc với by_work_hours (G11 chưa có attendance — nhập tay). */
@@ -285,7 +286,7 @@ export const allocateCostSchema = z
 export type AllocateCostRequest = z.infer<typeof allocateCostSchema>;
 
 export const allocationResultSchema = z.object({
-  allocationRunId: z.string().uuid(),
+  allocationRunId: idSchema,
   allocations: z.array(costAllocationSchema),
   /** Vd: cảnh báo phân bổ cost đã có direct target (nguy cơ đếm đôi profit). */
   warnings: z.array(z.string()),
@@ -294,9 +295,9 @@ export type AllocationResultDto = z.infer<typeof allocationResultSchema>;
 
 /** List allocation hiệu lực của 1 cost (hoặc theo target). Pagination như revenue/cost. */
 export const listCostAllocationQuerySchema = z.object({
-  costRecordId: z.string().uuid().optional(),
+  costRecordId: idSchema.optional(),
   allocationTargetType: allocationTargetTypeEnum.optional(),
-  allocationTargetId: z.string().uuid().optional(),
+  allocationTargetId: idSchema.optional(),
   ...financePaginationFields,
 });
 export type ListCostAllocationQuery = z.infer<typeof listCostAllocationQuerySchema>;
@@ -304,10 +305,10 @@ export type ListCostAllocationQuery = z.infer<typeof listCostAllocationQuerySche
 // ─── Profit snapshot (G13-3) ─────────────────────────────────────────────────
 
 export const profitSnapshotSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   targetType: profitTargetTypeEnum,
-  targetId: z.string().uuid().nullable(),
+  targetId: idSchema.nullable(),
   targetName: z.string().nullable().optional(),
   periodStart: z.string().date(),
   periodEnd: z.string().date(),
@@ -320,7 +321,7 @@ export const profitSnapshotSchema = z.object({
   /** profit / totalRevenue; null khi revenue = 0 hoặc bị mask. */
   profitMargin: z.number().nullable(),
   calculatedAt: z.string().datetime(),
-  createdBy: z.string().uuid().nullable().optional(),
+  createdBy: idSchema.nullable().optional(),
 });
 export type ProfitSnapshotDto = z.infer<typeof profitSnapshotSchema>;
 
@@ -328,7 +329,7 @@ export type ProfitSnapshotDto = z.infer<typeof profitSnapshotSchema>;
 export const createProfitSnapshotSchema = z
   .object({
     targetType: z.enum(["company", "channel", "project", "content_item"]),
-    targetId: z.string().uuid().optional(),
+    targetId: idSchema.optional(),
     periodStart: z.string().date(),
     periodEnd: z.string().date(),
   })
@@ -344,7 +345,7 @@ export type CreateProfitSnapshotRequest = z.infer<typeof createProfitSnapshotSch
 
 export const listProfitQuerySchema = z.object({
   targetType: profitTargetTypeEnum.optional(),
-  targetId: z.string().uuid().optional(),
+  targetId: idSchema.optional(),
   from: z.string().date().optional(),
   to: z.string().date().optional(),
 });
@@ -353,10 +354,10 @@ export type ListProfitQuery = z.infer<typeof listProfitQuerySchema>;
 // ─── Expense Request (G13-4 — duyệt qua Task Hub, bất biến #4) ───────────────
 
 export const expenseApprovalSchema = z.object({
-  id: z.string().uuid(),
-  expenseRequestId: z.string().uuid(),
+  id: idSchema,
+  expenseRequestId: idSchema,
   approvalLevel: z.number().int().positive(),
-  approverUserId: z.string().uuid(),
+  approverUserId: idSchema,
   approverName: z.string().nullable().optional(),
   decision: expenseDecisionEnum,
   comment: z.string().nullable().optional(),
@@ -365,13 +366,13 @@ export const expenseApprovalSchema = z.object({
 export type ExpenseApprovalDto = z.infer<typeof expenseApprovalSchema>;
 
 export const expenseRequestSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  requestedBy: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  requestedBy: idSchema,
   requestedByName: z.string().nullable().optional(),
-  orgUnitId: z.string().uuid().nullable().optional(),
-  projectId: z.string().uuid().nullable().optional(),
-  channelId: z.string().uuid().nullable().optional(),
+  orgUnitId: idSchema.nullable().optional(),
+  projectId: idSchema.nullable().optional(),
+  channelId: idSchema.nullable().optional(),
   title: z.string(),
   description: z.string().nullable().optional(),
   /** KHÔNG mask: requester/approver phải thấy số mình đề xuất/duyệt (khác sổ cái). */
@@ -383,9 +384,9 @@ export const expenseRequestSchema = z.object({
   currentApprovalLevel: z.number().int(),
   attachmentUrl: z.string().nullable().optional(),
   /** Task duyệt trong Task Hub (task_type='finance') — tạo cùng tx với request. */
-  taskId: z.string().uuid().nullable().optional(),
+  taskId: idSchema.nullable().optional(),
   /** Cost record sinh ra sau duyệt (lineage). */
-  costRecordId: z.string().uuid().nullable().optional(),
+  costRecordId: idSchema.nullable().optional(),
   approvals: z.array(expenseApprovalSchema).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -399,12 +400,12 @@ export const createExpenseRequestSchema = z.object({
   currency: z.string().min(3).max(3).default("VND"),
   expenseType: costTypeEnum,
   neededAt: z.string().date().optional(),
-  orgUnitId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  channelId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  projectId: idSchema.optional(),
+  channelId: idSchema.optional(),
   attachmentUrl: z.string().url().max(1000).optional(),
   /** Người duyệt — nhận task `finance` trong Task Hub. */
-  approverUserId: z.string().uuid(),
+  approverUserId: idSchema,
 });
 export type CreateExpenseRequestRequest = z.infer<typeof createExpenseRequestSchema>;
 

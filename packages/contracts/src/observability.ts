@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * AC-8 Observability (audit viewer + queue monitor) DTOs — nguồn sự thật contract api ↔ admin.
@@ -27,14 +28,14 @@ export const auditLogQuerySchema = z
   .object({
     action: z.string().min(1).max(128).optional(),
     objectType: z.string().min(1).max(64).optional(),
-    objectId: z.string().uuid().optional(),
-    actorUserId: z.string().uuid().optional(),
+    objectId: idSchema.optional(),
+    actorUserId: idSchema.optional(),
     /** Chỉ operator: lọc theo 1 tenant cụ thể (bỏ trống = mọi tenant). */
-    companyId: z.string().uuid().optional(),
+    companyId: idSchema.optional(),
     // ── DB-08 §8.5 filters (v2, additive — đều optional) ──
     moduleCode: z.string().min(1).max(50).optional(),
     entityType: z.string().min(1).max(100).optional(),
-    entityId: z.string().uuid().optional(),
+    entityId: idSchema.optional(),
     actorType: z.string().min(1).max(50).optional(),
     requestId: z.string().min(1).max(100).optional(),
     // ── DB-08 §8.5 filters (v2 mig 0438, additive — đều optional) ──
@@ -67,12 +68,12 @@ export type AuditLogQuery = z.infer<typeof auditLogQuerySchema>;
  * là forensic metadata công khai cho admin nên giữ; secret/PII chỉ ở before/after nên redact ở đó.
  */
 export const auditLogDtoSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  actorUserId: z.string().uuid().nullable(),
+  id: idSchema,
+  companyId: idSchema,
+  actorUserId: idSchema.nullable(),
   action: z.string(),
   objectType: z.string(),
-  objectId: z.string().uuid().nullable(),
+  objectId: idSchema.nullable(),
   /** Đã redact với object_type nhạy cảm (null hoặc {redacted:true}). */
   before: z.unknown().nullable(),
   after: z.unknown().nullable(),
@@ -81,7 +82,7 @@ export const auditLogDtoSchema = z.object({
   // ── DB-08 §8.5 (v2, additive). Hàng legacy = null. oldValues/newValues ĐÃ redact phía server. ──
   moduleCode: z.string().nullable(),
   entityType: z.string().nullable(),
-  entityId: z.string().uuid().nullable(),
+  entityId: idSchema.nullable(),
   actorType: z.string().nullable(),
   /** Đã redact với field nhạy cảm (mask-by-server). */
   oldValues: z.unknown().nullable(),
@@ -94,7 +95,7 @@ export const auditLogDtoSchema = z.object({
   correlationId: z.string().nullable(),
   ipAddress: z.string().nullable(),
   // ── DB-08 §8.5 (v2 mig 0438, additive). Hàng legacy/caller chỉ-v1 = null. ──
-  actorEmployeeId: z.string().uuid().nullable(),
+  actorEmployeeId: idSchema.nullable(),
   actionGroup: z.string().nullable(),
   entityIdText: z.string().nullable(),
   entityCode: z.string().nullable(),
@@ -132,9 +133,9 @@ export type OutboxStatusCount = z.infer<typeof outboxStatusCountSchema>;
 
 /** 1 dòng dead-letter cho viewer (KHÔNG payload thô — chỉ metadata forensic + error đã cắt). */
 export const deadLetterRowSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  eventId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  eventId: idSchema,
   consumerName: z.string(),
   eventType: z.string(),
   error: z.string(),

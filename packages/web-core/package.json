@@ -26,7 +26,7 @@
     "@mediaos/contracts": "workspace:*",
     "lucide-react": "^0.469.0",
     "socket.io-client": "^4.8.3",
-    "zod": "^3.25.0",
+    "zod": "4.6.7",
     "zustand": "^5.0.2"
   },
   "peerDependencies": {

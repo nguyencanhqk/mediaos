@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * G16-3 SaaS prep — TEMPLATE clone DTOs.
@@ -57,7 +58,7 @@ export type TemplateWorkflow = z.infer<typeof templateWorkflowSchema>;
 
 export const templateDashboardSchema = z.object({
   roleCode: z.string().min(1).max(120),
-  layout: z.record(z.unknown()),
+  layout: z.record(z.string(), z.unknown()),
 });
 export type TemplateDashboard = z.infer<typeof templateDashboardSchema>;
 
@@ -73,7 +74,7 @@ export type TemplateBlueprint = z.infer<typeof templateBlueprintSchema>;
 
 /** DTO tóm tắt 1 template (catalog). blueprint KHÔNG trả ở list (giữ payload gọn). */
 export const templateSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
   description: z.string().nullable(),
@@ -89,7 +90,7 @@ export type ApplyWorkspaceTemplateRequest = z.infer<typeof applyWorkspaceTemplat
 
 /** Kết quả provision: số lượng row tạo cho từng nhóm (đã idempotent-skip nếu trùng). */
 export const provisionResultSchema = z.object({
-  companyId: z.string().uuid(),
+  companyId: idSchema,
   templateCode: z.string(),
   rolesCreated: z.number().int().nonnegative(),
   workflowsCreated: z.number().int().nonnegative(),

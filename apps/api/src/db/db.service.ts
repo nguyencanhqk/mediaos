@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { sql, type SQL } from "drizzle-orm";
-import { z } from "zod";
+import { idSchema } from "@mediaos/contracts";
 import { db, directPool, pool } from "./index";
 
 export interface DbPingResult {
@@ -13,7 +13,7 @@ export interface DbPingResult {
 export type TenantTx = Parameters<Parameters<NonNullable<typeof db>["transaction"]>[0]>[0];
 
 /** companyId PHẢI là UUID — chặn injection/giá trị rác TRƯỚC khi mở transaction. */
-const companyIdSchema = z.string().uuid();
+const companyIdSchema = idSchema;
 
 /**
  * Lỗi khi thiếu cấu hình DB (DATABASE_URL) — fail-fast, không nuốt lỗi (silent-failure-hunter).

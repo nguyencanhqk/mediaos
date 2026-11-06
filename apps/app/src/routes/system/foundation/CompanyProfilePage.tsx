@@ -28,6 +28,7 @@ import { useDirtyFormGuard } from "@/hooks/use-dirty-form-guard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FOUNDATION_ENGINE_PAIRS } from "./constants";
 import { BrandingSection } from "./BrandingSection";
+import { emailSchema } from "@mediaos/contracts";
 
 type TF = ReturnType<typeof useTranslation<"system">>["t"];
 
@@ -44,7 +45,7 @@ const companyFormSchema = z.object({
   email: z
     .string()
     .trim()
-    .refine((v) => v === "" || z.string().email().safeParse(v).success, {
+    .refine((v) => v === "" || emailSchema.safeParse(v).success, {
       message: "company.validation.email",
     }),
   website: z.string().trim(),

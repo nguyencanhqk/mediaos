@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { periodMonthSchema } from "./attendance";
 import { bonusKindEnum, bonusPenaltyStatusEnum, csvEnumList, payrollPageQuery } from "./payroll";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — PAYROLL thưởng/phạt/khấu trừ theo kỳ (`bonus_penalties`, PAYROLL-API-023..028 · SPEC-11 §15).
@@ -14,20 +15,20 @@ import { bonusKindEnum, bonusPenaltyStatusEnum, csvEnumList, payrollPageQuery } 
 
 /** DTO thưởng/phạt. `amount` là tiền per-người ⇒ `.optional()` theo luật masking. */
 export const bonusPenaltySchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  userId: idSchema,
   kind: bonusKindEnum,
   amount: z.number().positive().optional(),
   periodMonth: periodMonthSchema,
   reason: z.string(),
   status: bonusPenaltyStatusEnum,
-  decidedBy: z.string().uuid().nullable(),
+  decidedBy: idSchema.nullable(),
   decidedAt: z.string().datetime().nullable(),
   decisionNote: z.string().nullable(),
-  payrollPeriodId: z.string().uuid().nullable(),
+  payrollPeriodId: idSchema.nullable(),
   consumedAt: z.string().datetime().nullable(),
-  createdBy: z.string().uuid(),
+  createdBy: idSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -38,7 +39,7 @@ export type BonusPenaltyDto = z.infer<typeof bonusPenaltySchema>;
  * `reason NOT NULL` (`.trim().min(1)` là lớp NỘI DUNG — DB chỉ chặn NULL, không chặn chuỗi khoảng trắng).
  */
 export const createBonusPenaltySchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   kind: bonusKindEnum,
   amount: z.number().positive(),
   periodMonth: periodMonthSchema,
@@ -79,7 +80,7 @@ export type RejectBonusPenaltyRequest = z.infer<typeof rejectBonusPenaltySchema>
 
 /** PAYROLL-API-023 — filter `periodMonth` · `status[]` · `kind` · `userId` (SPEC-11 §15) + pagination. */
 export const bonusPenaltyListQuerySchema = z.object({
-  userId: z.string().uuid().optional(),
+  userId: idSchema.optional(),
   status: csvEnumList(bonusPenaltyStatusEnum),
   periodMonth: periodMonthSchema.optional(),
   kind: bonusKindEnum.optional(),

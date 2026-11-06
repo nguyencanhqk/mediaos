@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { chatReactionEmojiSchema } from "./chat";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-DB-1 — enum/hằng chuẩn module SOCIAL Track A (SPEC-16 · DB-17 §8). NGUỒN SỰ THẬT cho DTO
@@ -87,8 +88,8 @@ export const feedPostCoreSchema = z
   .object({
     type: feedPostTypeSchema,
     audience: feedAudienceSchema.default("company"),
-    groupId: z.string().uuid().nullish(),
-    orgUnitId: z.string().uuid().nullish(),
+    groupId: idSchema.nullish(),
+    orgUnitId: idSchema.nullish(),
     body: z.string().max(FEED_POST_BODY_MAX).nullish(),
     status: feedPostStatusSchema.default("published"),
     pinned: z.boolean().default(false),
@@ -171,8 +172,8 @@ export type FeedPostCoreDto = z.infer<typeof feedPostCoreSchema>;
 
 /** Mirror `chk_feed_comments_body_len` + `chk_feed_comments_like_count`. */
 export const feedCommentCoreSchema = z.object({
-  postId: z.string().uuid(),
-  parentCommentId: z.string().uuid().nullish(),
+  postId: idSchema,
+  parentCommentId: idSchema.nullish(),
   body: z.string().min(1).max(FEED_COMMENT_BODY_MAX),
   likeCount: z.number().int().nonnegative().default(0),
 });
@@ -185,7 +186,7 @@ export type FeedCommentCoreDto = z.infer<typeof feedCommentCoreSchema>;
 export const feedReactionCoreSchema = z
   .object({
     targetType: feedTargetTypeSchema,
-    targetId: z.string().uuid(),
+    targetId: idSchema,
     emoji: feedReactionEmojiSchema,
   })
   .strict();
@@ -194,9 +195,9 @@ export type FeedReactionCoreDto = z.infer<typeof feedReactionCoreSchema>;
 /** Mirror `chk_feed_mentions_target`. */
 export const feedMentionCoreSchema = z.object({
   targetType: feedTargetTypeSchema,
-  targetId: z.string().uuid(),
-  mentionedUserId: z.string().uuid(),
-  mentionedEmployeeId: z.string().uuid().nullish(),
+  targetId: idSchema,
+  mentionedUserId: idSchema,
+  mentionedEmployeeId: idSchema.nullish(),
 });
 export type FeedMentionCoreDto = z.infer<typeof feedMentionCoreSchema>;
 
@@ -211,11 +212,11 @@ export type FeedTagCoreDto = z.infer<typeof feedTagCoreSchema>;
 export const feedReportCoreSchema = z
   .object({
     targetType: feedTargetTypeSchema,
-    targetId: z.string().uuid(),
+    targetId: idSchema,
     reason: feedReportReasonSchema,
     note: z.string().nullish(),
     status: feedReportStatusSchema.default("open"),
-    resolvedBy: z.string().uuid().nullish(),
+    resolvedBy: idSchema.nullish(),
     resolvedAt: z.string().datetime({ offset: true }).nullish(),
     resolutionNote: z.string().nullish(),
   })
@@ -291,9 +292,9 @@ export const FEED_POLL_QUESTION_MAX = 500;
  */
 export const feedGroupMemberCoreSchema = z
   .object({
-    groupId: z.string().uuid(),
-    userId: z.string().uuid(),
-    employeeId: z.string().uuid().nullish(),
+    groupId: idSchema,
+    userId: idSchema,
+    employeeId: idSchema.nullish(),
     role: feedGroupRoleSchema,
     status: feedGroupMemberStatusSchema.default("pending"),
     joinedAt: z.string().datetime({ offset: true }).nullish(),
@@ -317,7 +318,7 @@ export type FeedGroupMemberCoreDto = z.infer<typeof feedGroupMemberCoreSchema>;
  */
 export const feedPollCoreSchema = z
   .object({
-    postId: z.string().uuid(),
+    postId: idSchema,
     question: z.string().min(1).max(FEED_POLL_QUESTION_MAX),
     multipleChoice: z.boolean().default(false),
     isAnonymous: z.boolean().default(false),
@@ -343,9 +344,9 @@ export type FeedPollCoreDto = z.infer<typeof feedPollCoreSchema>;
  */
 export const feedIdeaCoreSchema = z
   .object({
-    postId: z.string().uuid(),
+    postId: idSchema,
     status: feedIdeaStatusSchema.default("submitted"),
-    reviewedBy: z.string().uuid().nullish(),
+    reviewedBy: idSchema.nullish(),
     reviewedAt: z.string().datetime({ offset: true }).nullish(),
     reviewNote: z.string().nullish(),
   })

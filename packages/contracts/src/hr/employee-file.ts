@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fileScanStatusSchema, fileUploadStatusSchema } from "../files";
+import { idSchema } from "../common/id";
 
 /**
  * S2-HR-EMPFILE-1 — Employee File (hồ sơ đính kèm nhân viên) DTOs. Source of truth: API-03 HR-API-801..805 /
@@ -16,7 +17,7 @@ import { fileScanStatusSchema, fileUploadStatusSchema } from "../files";
 
 export const linkEmployeeFileSchema = z.object({
   /** File đã register+PUT+confirm qua Foundation FileService (upload_status='Uploaded'). */
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   /**
    * Phân loại tài liệu (CCCD / Bằng cấp / Hợp đồng / Khác…). Lưu vào file_links.purpose. Tự do trong
    * giới hạn độ dài — KHÔNG hard-code danh mục ở đây (client tự đặt nhãn, mask không cần).
@@ -37,9 +38,9 @@ export type ListEmployeeFilesQuery = z.infer<typeof listEmployeeFilesQuerySchema
 
 export const employeeFileDtoSchema = z.object({
   /** file_links.id — dùng cho tham chiếu link (unlink/audit). */
-  linkId: z.string().uuid(),
+  linkId: idSchema,
   /** files.id. */
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   originalName: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int().nonnegative(),

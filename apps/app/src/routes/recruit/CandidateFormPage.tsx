@@ -18,6 +18,7 @@ import {
   recruitErrorI18nKey,
   shouldRotateIdempotencyKey,
 } from "./recruit-errors";
+import { emailParams } from "@mediaos/contracts";
 
 interface CandidateFormPageProps {
   /** `undefined` = tạo mới; có id = sửa. */
@@ -35,7 +36,10 @@ interface CandidateFormPageProps {
 const candidateFormSchema = z.object({
   jobOpeningId: z.string().min(1, "candidateForm.errors.selectJobOpening"),
   fullName: z.string().trim().min(1, "candidateForm.errors.required"),
-  email: z.union([z.literal(""), z.string().trim().email("candidateForm.errors.invalidEmail")]),
+  email: z.union([
+    z.literal(""),
+    z.string().trim().email(emailParams("candidateForm.errors.invalidEmail")),
+  ]),
   phone: z.string().trim(),
   source: z.string().trim(),
   note: z.string().trim(),

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
 import { feedPollStatusSchema } from "./social";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-2B-1 — DTO của `SOCIAL-API-040..044` (BÌNH CHỌN).
@@ -39,7 +40,7 @@ export type ListPollsQueryDto = z.infer<typeof listPollsQuerySchema>;
  */
 export const votePollSchema = z
   .object({
-    optionIds: z.array(z.string().uuid()).max(10),
+    optionIds: z.array(idSchema).max(10),
   })
   .strict();
 export type VotePollDto = z.infer<typeof votePollSchema>;
@@ -58,8 +59,8 @@ export type VotePollDto = z.infer<typeof votePollSchema>;
  * khối bỏ phiếu đầy đủ đọc `043` theo `postId`.
  */
 export const feedPollListItemSchema = z.object({
-  pollId: z.string().uuid(),
-  postId: z.string().uuid(),
+  pollId: idSchema,
+  postId: idSchema,
   question: z.string(),
   status: feedPollStatusSchema,
   isAnonymous: z.boolean(),

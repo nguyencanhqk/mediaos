@@ -1,6 +1,5 @@
 import { createZodDto } from "nestjs-zod";
 import {
-  candidateSummaryQuerySchema,
   changeInterviewStatusSchema,
   changeJobOpeningStatusSchema,
   changeOfferStatusSchema,
@@ -46,7 +45,6 @@ export class ListCandidatesQueryDto extends createZodDto(listCandidatesQuerySche
 /** KHÔNG `page`/`per_page` — client gửi ⇒ 400 (export toàn tập, RECRUIT-ERR-015 chặn trần). */
 export class ExportCandidatesQueryDto extends createZodDto(exportCandidatesQuerySchema) {}
 export class CheckDuplicateQueryDto extends createZodDto(checkDuplicateQuerySchema) {}
-export class CandidateSummaryQueryDto extends createZodDto(candidateSummaryQuerySchema) {}
 export class CreateCandidateDto extends createZodDto(createCandidateSchema) {}
 /** `.strict()` — KHÔNG `stage`/`employeeId`. */
 export class UpdateCandidateDto extends createZodDto(updateCandidateSchema) {}

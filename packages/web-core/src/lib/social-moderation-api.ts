@@ -7,6 +7,7 @@ import {
   type FeedReportDto,
   type ListFeedReportsQueryDto,
   type resolveFeedReportSchema,
+  idSchema,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -39,7 +40,7 @@ export type ResolveFeedReportBody = z.input<typeof resolveFeedReportSchema>;
  * Phản hồi của `027` — `{ id }`. Khai TẠI ĐÂY chứ không ở contracts vì service trả literal này thẳng
  * (`social-reports.service.ts#create`), không qua schema contracts nào (khuôn `feedDeletedResultSchema`).
  */
-export const feedReportCreatedSchema = z.object({ id: z.string().uuid() });
+export const feedReportCreatedSchema = z.object({ id: idSchema });
 export type FeedReportCreatedDto = z.infer<typeof feedReportCreatedSchema>;
 
 /** Khoá `signal` CHỈ có mặt khi nơi gọi truyền — init không mang `signal: undefined`. */

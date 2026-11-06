@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S2-FND-BE-2 — Foundation seed-run status DTO (nguồn sự thật contracts cho GET /api/v1/foundation/seeds).
@@ -32,7 +33,7 @@ export type SeedBatchStatusDto = z.infer<typeof seedBatchStatusSchema>;
  */
 export const seedBatchStatusViewSchema = z
   .object({
-    id: z.string().uuid(),
+    id: idSchema,
     seedKey: z.string(),
     seedVersion: z.string(),
     environment: z.string().nullable(),

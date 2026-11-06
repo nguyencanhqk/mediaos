@@ -54,6 +54,5 @@ export function applyMainPipeline(
  */
 function readMemoFlag(): "true" | "false" {
   return envSchema
-    .innerType()
     .shape.PERMISSION_GRANT_MEMO_ENABLED.parse(process.env.PERMISSION_GRANT_MEMO_ENABLED);
 }

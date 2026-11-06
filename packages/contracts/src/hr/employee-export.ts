@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { HR_EMPLOYEE_SORT_FIELDS } from "./employee-read";
 import type { HrEmployeeListItem } from "./employee-read";
+import { idSchema } from "../common/id";
 
 /**
  * HR-PROFILE-UI-2 (HR.EMPLOYEE.EXPORT, SPEC-03 / API-10) — CSV export of the scoped employee
@@ -22,8 +23,8 @@ export const HR_EMPLOYEE_EXPORT_MAX_ROWS = 10_000;
  */
 export const hrEmployeeExportQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
-  orgUnitId: z.string().uuid().optional(),
-  positionId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  positionId: idSchema.optional(),
   status: z.enum(["active", "inactive", "resigned", "terminated"]).optional(),
   sort: z.enum(HR_EMPLOYEE_SORT_FIELDS).optional(),
   order: z.enum(["asc", "desc"]).optional(),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S2-HR-BE-4 — Profile change request contracts (SPEC-03 §14.18/14.19/14.20 / API-03 §16.7).
@@ -112,7 +113,7 @@ export const profileChangeRequestListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(20),
   status: z.enum(PROFILE_CHANGE_STATUSES).optional(),
-  employeeId: z.string().uuid().optional(),
+  employeeId: idSchema.optional(),
 });
 export type ProfileChangeRequestListQuery = z.infer<typeof profileChangeRequestListQuerySchema>;
 
@@ -120,8 +121,8 @@ export type ProfileChangeRequestListQuery = z.infer<typeof profileChangeRequestL
 
 /** One row in list. */
 export const profileChangeRequestListItemSchema = z.object({
-  id: z.string().uuid(),
-  employeeId: z.string().uuid(),
+  id: idSchema,
+  employeeId: idSchema,
   employeeCode: z.string().nullable(),
   employeeFullName: z.string(),
   status: z.enum(PROFILE_CHANGE_STATUSES),
@@ -136,18 +137,18 @@ export type ProfileChangeRequestListItem = z.infer<typeof profileChangeRequestLi
 
 /** Detail view — includes old/new values comparison (BẤT BIẾN #3: sensitive fields masked). */
 export const profileChangeRequestDetailSchema = z.object({
-  id: z.string().uuid(),
-  employeeId: z.string().uuid(),
+  id: idSchema,
+  employeeId: idSchema,
   employeeCode: z.string().nullable(),
   employeeFullName: z.string(),
-  requestedBy: z.string().uuid(),
+  requestedBy: idSchema,
   status: z.enum(PROFILE_CHANGE_STATUSES),
   changedFields: z.array(z.string()),
   oldValues: z.record(z.string(), z.unknown()),
   newValues: z.record(z.string(), z.unknown()),
   reason: z.string().nullable(),
   rejectionReason: z.string().nullable(),
-  reviewedBy: z.string().uuid().nullable(),
+  reviewedBy: idSchema.nullable(),
   reviewedByName: z.string().nullable(),
   reviewedAt: z.string().nullable(),
   submittedAt: z.string(),

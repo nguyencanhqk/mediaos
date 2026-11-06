@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
+import { coerceDate } from "../common/coerce-date";
 
 /**
  * S2-HR-BE-6 — Employee contracts (hợp đồng lao động) DTOs. Source of truth: DB-03 §7.7 / SPEC-03 / API-03.
@@ -17,10 +19,10 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date phải là YYYY-MM
 // ── Response DTO ───────────────────────────────────────────────────────────────
 
 export const employeeContractSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  employeeId: z.string().uuid(),
-  contractTypeId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  employeeId: idSchema,
+  contractTypeId: idSchema,
   contractCode: z.string().nullable(),
   title: z.string().nullable(),
   startDate: z.string(),
@@ -28,19 +30,19 @@ export const employeeContractSchema = z.object({
   signedDate: z.string().nullable(),
   status: contractStatusEnum,
   isPrimary: z.boolean(),
-  fileId: z.string().uuid().nullable(),
+  fileId: idSchema.nullable(),
   note: z.string().nullable(),
   /** true khi hợp đồng active có end_date trong ngưỡng cảnh báo (mặc định 30 ngày). */
   expiringSoon: z.boolean(),
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
+  createdAt: coerceDate(),
+  updatedAt: coerceDate(),
 });
 export type EmployeeContractDto = z.infer<typeof employeeContractSchema>;
 
 // ── List query ─────────────────────────────────────────────────────────────────
 
 export const listContractsQuerySchema = z.object({
-  employeeId: z.string().uuid().optional(),
+  employeeId: idSchema.optional(),
   status: contractStatusEnum.optional(),
   /** Chỉ trả HĐ sắp hết hạn (active, end_date trong ngưỡng expiringWithinDays). */
   expiringOnly: z.coerce.boolean().optional(),
@@ -54,8 +56,8 @@ export type ListContractsQuery = z.infer<typeof listContractsQuerySchema>;
 // ── Create / Update ──────────────────────────────────────────────────────────────
 
 export const createContractSchema = z.object({
-  employeeId: z.string().uuid(),
-  contractTypeId: z.string().uuid(),
+  employeeId: idSchema,
+  contractTypeId: idSchema,
   contractCode: z.string().min(1).max(100).optional(),
   title: z.string().min(1).max(255).optional(),
   startDate: isoDate,
@@ -63,13 +65,13 @@ export const createContractSchema = z.object({
   signedDate: isoDate.optional(),
   status: contractStatusEnum.optional(),
   isPrimary: z.boolean().optional(),
-  fileId: z.string().uuid().optional(),
+  fileId: idSchema.optional(),
   note: z.string().max(2000).optional(),
 });
 export type CreateContractRequest = z.infer<typeof createContractSchema>;
 
 export const updateContractSchema = z.object({
-  contractTypeId: z.string().uuid().optional(),
+  contractTypeId: idSchema.optional(),
   contractCode: z.string().min(1).max(100).nullable().optional(),
   title: z.string().min(1).max(255).nullable().optional(),
   startDate: isoDate.optional(),
@@ -77,7 +79,7 @@ export const updateContractSchema = z.object({
   signedDate: isoDate.nullable().optional(),
   status: contractStatusEnum.optional(),
   isPrimary: z.boolean().optional(),
-  fileId: z.string().uuid().nullable().optional(),
+  fileId: idSchema.nullable().optional(),
   note: z.string().max(2000).nullable().optional(),
 });
 export type UpdateContractRequest = z.infer<typeof updateContractSchema>;
@@ -85,6 +87,6 @@ export type UpdateContractRequest = z.infer<typeof updateContractSchema>;
 // ── Link file to contract (FileService entity 'contract') ────────────────────────
 
 export const linkContractFileSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
 });
 export type LinkContractFileRequest = z.infer<typeof linkContractFileSchema>;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S2-FND-BE-2 — Foundation sequence-counter DTO (nguồn sự thật contracts cho
@@ -41,11 +42,11 @@ export type SequenceScopeTypeDto = z.infer<typeof sequenceScopeTypeSchema>;
  */
 export const sequenceCounterViewSchema = z
   .object({
-    id: z.string().uuid(),
+    id: idSchema,
     moduleCode: z.string(),
     sequenceKey: z.string(),
     scopeType: sequenceScopeTypeSchema,
-    scopeReferenceId: z.string().uuid().nullable(),
+    scopeReferenceId: idSchema.nullable(),
     prefix: z.string().nullable(),
     suffix: z.string().nullable(),
     datePattern: z.string().nullable(),

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CreatePositionRequest, UpdatePositionRequest } from "@mediaos/contracts";
-import { positionSchema } from "@mediaos/contracts";
+import { positionSchema, idSchema } from "@mediaos/contracts";
 import { apiFetch } from "@mediaos/web-core";
 
 /**
@@ -10,7 +10,7 @@ import { apiFetch } from "@mediaos/web-core";
  * TENANT SELF: server ép RLS + withTenant(JWT.companyId).
  */
 
-const roleOptionSchema = z.object({ id: z.string().uuid(), name: z.string() });
+const roleOptionSchema = z.object({ id: idSchema, name: z.string() });
 export type RoleOption = z.infer<typeof roleOptionSchema>;
 
 export const positionsApi = {

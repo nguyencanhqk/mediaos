@@ -29,6 +29,18 @@ const block = (...lines) =>
 const canonical = block("auditConfig:", "  ignoreGhsas:", `    - ${G1}`);
 const readRepo = (name) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
 
+test("S19-OPS-ZOD4-1 C4: EXPIRY rỗng, không còn ignore nào, và lockfile chỉ có zod ≥ 4.6.6 (bản vá GHSA-mrhx-c7xc-m3w5)", () => {
+  assert.deepEqual(EXPIRY, {});
+  assert.deepEqual(parseIgnoreGhsas(readRepo("pnpm-workspace.yaml")), { ids: [], problems: [] });
+  const versions = lockVersions(readRepo("pnpm-lock.yaml"), "zod");
+  assert.ok(versions.length >= 1, "lockfile không có zod ⇒ ca mù");
+  for (const v of versions) {
+    const [maj, min, pat] = v.split(".").map(Number);
+    const ok = maj > 4 || (maj === 4 && (min > 6 || (min === 6 && pat >= 6)));
+    assert.ok(ok, `zod@${v} < 4.6.6 — dính GHSA-mrhx-c7xc-m3w5`);
+  }
+});
+
 test("pnpm-workspace.yaml thật: đúng dạng chuẩn và mọi GHSA trong đó có hạn", () => {
   const parsed = parseIgnoreGhsas(readRepo("pnpm-workspace.yaml"));
   assert.deepEqual(parsed.problems, []);

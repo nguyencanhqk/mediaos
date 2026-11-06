@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { taskCorePrioritySchema, taskCoreResponseSchema, taskCoreStatusSchema } from "./task";
+import { idSchema } from "./common/id";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // S4-TASK-BE-3 — Task actions crown-FSM (SPEC-06 §14, API-06 §14 · TASK-API-206..209).
@@ -19,7 +20,7 @@ import { taskCorePrioritySchema, taskCoreResponseSchema, taskCoreStatusSchema } 
  */
 export const assignTaskSchema = z
   .object({
-    assigneeEmployeeId: z.string().uuid(),
+    assigneeEmployeeId: idSchema,
     reason: z.string().trim().max(1000).optional(),
   })
   .strict();
@@ -74,11 +75,11 @@ export type AddWatcherRequest = z.infer<typeof addWatcherSchema>;
  * là người quyết — watcher người khác → 404).
  */
 export const taskWatcherResponseSchema = z.object({
-  id: z.string().uuid(),
-  taskId: z.string().uuid(),
-  employeeId: z.string().uuid(),
+  id: idSchema,
+  taskId: idSchema,
+  employeeId: idSchema,
   employeeName: z.string().nullable(),
-  userId: z.string().uuid().nullable(),
+  userId: idSchema.nullable(),
   watcherType: z.string(),
   status: z.string(),
   createdAt: z.string().datetime(),

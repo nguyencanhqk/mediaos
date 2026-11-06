@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dashboardTypeEnum } from "./dashboard-resolver";
+import { idSchema } from "./common/id";
 
 /**
  * S4-DASH-BE-2 — Widget DATA contracts (dữ liệu THẬT của 1 widget: GET /dashboard/widgets ·
@@ -109,7 +110,7 @@ export const widgetDataQuerySchema = z.object({
   dashboard_type: dashboardTypeEnum.optional(),
   /** true = catalog trả kèm `data` từng widget (chỉ áp dụng cho GET /dashboard/widgets). */
   include_data: optionalBooleanParam(),
-  project_id: z.string().uuid().optional(),
+  project_id: idSchema.optional(),
 });
 export type WidgetDataQuery = z.infer<typeof widgetDataQuerySchema>;
 

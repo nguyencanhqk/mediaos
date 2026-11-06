@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
+import { coerceDate } from "../common/coerce-date";
 
 /**
  * S2-HR-BE-3 — HR master data CRUD contracts: job_levels + contract_types.
@@ -11,14 +13,14 @@ const masterDataStatusEnum = z.enum(["active", "inactive"]);
 // ── Job Levels ───────────────────────────────────────────────────────────────
 
 export const jobLevelSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   code: z.string().nullable(),
   name: z.string(),
   rankOrder: z.number().int().nullable(),
   status: masterDataStatusEnum,
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
+  createdAt: coerceDate(),
+  updatedAt: coerceDate(),
 });
 export type JobLevelDto = z.infer<typeof jobLevelSchema>;
 
@@ -40,14 +42,14 @@ export type UpdateJobLevelRequest = z.infer<typeof updateJobLevelSchema>;
 // ── Contract Types ───────────────────────────────────────────────────────────
 
 export const contractTypeSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   code: z.string().nullable(),
   name: z.string(),
   requiresEndDate: z.boolean(),
   status: masterDataStatusEnum,
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
+  createdAt: coerceDate(),
+  updatedAt: coerceDate(),
 });
 export type ContractTypeDto = z.infer<typeof contractTypeSchema>;
 
@@ -73,13 +75,13 @@ export const departmentStatusEnum = z.enum(["active", "inactive"]);
 export const createDepartmentSchema = z.object({
   name: z.string().min(1).max(200),
   code: z.string().min(1).max(50).optional(),
-  parentId: z.string().uuid().nullable().optional(),
+  parentId: idSchema.nullable().optional(),
   /**
    * Trưởng phòng = EMPLOYEE id (DB-03 §15: FK employees, "employee active cùng company").
    * BE validate rồi resolve user liên kết để ghi vào cột legacy org_units.head_user_id (FK users) —
    * employee chưa liên kết tài khoản → 400 (ràng buộc hiện thực hoá, xem erd-current Phụ lục A).
    */
-  managerEmployeeId: z.string().uuid().nullable().optional(),
+  managerEmployeeId: idSchema.nullable().optional(),
   description: z.string().optional(),
   status: departmentStatusEnum.optional().default("active"),
 });
@@ -89,9 +91,9 @@ export type CreateDepartmentRequest = z.input<typeof createDepartmentSchema>;
 export const updateDepartmentSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   code: z.string().min(1).max(50).nullable().optional(),
-  parentId: z.string().uuid().nullable().optional(),
+  parentId: idSchema.nullable().optional(),
   /** Trưởng phòng = EMPLOYEE id (xem createDepartmentSchema); null = GỠ trưởng phòng. */
-  managerEmployeeId: z.string().uuid().nullable().optional(),
+  managerEmployeeId: idSchema.nullable().optional(),
   description: z.string().nullable().optional(),
   status: departmentStatusEnum.optional(),
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 export const notificationTypeSchema = z.enum([
   "task_assigned",
@@ -16,11 +17,11 @@ export const notificationTypeSchema = z.enum([
 export type NotificationType = z.infer<typeof notificationTypeSchema>;
 
 export const notificationSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  userId: idSchema,
   type: notificationTypeSchema,
-  refId: z.string().uuid().nullable(),
+  refId: idSchema.nullable(),
   refType: z.string().nullable(),
   body: z.string(),
   isRead: z.boolean(),
@@ -36,9 +37,9 @@ export type UnreadCount = z.infer<typeof unreadCountSchema>;
 // ─── notification_preference (user-level opt-in/out) ─────────────────────────
 
 export const notificationPreferenceSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  userId: idSchema,
   notificationType: notificationTypeSchema,
   enabled: z.boolean(),
   updatedAt: z.string().datetime(),
@@ -54,13 +55,13 @@ export type UpsertNotificationPreferenceDto = z.infer<typeof upsertNotificationP
 // ─── notification_rule (company-level config) ─────────────────────────────────
 
 export const notificationRuleSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   notificationType: notificationTypeSchema,
   enabled: z.boolean(),
   /** true = user không được opt-out loại thông báo này (NOTI-002). */
   mandatory: z.boolean(),
-  config: z.record(z.unknown()),
+  config: z.record(z.string(), z.unknown()),
   createdAt: z.string().datetime(),
 });
 export type NotificationRuleDto = z.infer<typeof notificationRuleSchema>;
@@ -129,20 +130,20 @@ export type NotificationRecipientMode = z.infer<typeof notificationRecipientMode
 
 export const internalEventRecipientSchema = z.object({
   mode: notificationRecipientModeSchema,
-  userIds: z.array(z.string().uuid()).default([]),
-  employeeIds: z.array(z.string().uuid()).default([]),
+  userIds: z.array(idSchema).default([]),
+  employeeIds: z.array(idSchema).default([]),
 });
 export type InternalEventRecipient = z.infer<typeof internalEventRecipientSchema>;
 
 export const internalEventIntakeSchema = z.object({
   eventCode: z.string().trim().min(1).max(100),
-  actorUserId: z.string().uuid().optional(),
+  actorUserId: idSchema.optional(),
   sourceModule: z.string().trim().min(1).max(50),
   sourceEntityType: z.string().trim().min(1).max(100).optional(),
-  sourceEntityId: z.string().uuid().optional(),
+  sourceEntityId: idSchema.optional(),
   dedupeKey: z.string().trim().min(1).max(255).optional(),
   recipient: internalEventRecipientSchema,
-  payload: z.record(z.unknown()).default({}),
+  payload: z.record(z.string(), z.unknown()).default({}),
   priorityOverride: notificationPrioritySchema.optional(),
   occurredAt: z.string().datetime({ offset: true }).optional(),
 });

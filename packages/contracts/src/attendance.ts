@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * G11-1 — Attendance contracts (chấm công, ca làm, đơn bổ sung công, khoá kỳ công).
@@ -32,7 +33,7 @@ const timeHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Expec
 const workingDaysSchema = z.array(z.number().int().min(1).max(7)).min(1).max(7);
 
 export const workScheduleSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   workType: z.enum(["fixed", "shift", "flexible"]),
   startTime: timeHHMM,
@@ -75,11 +76,11 @@ export type UpdateWorkScheduleRequest = z.infer<typeof updateWorkScheduleSchema>
 // ─── attendance_records ───────────────────────────────────────────────────────
 
 export const attendanceRecordSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  userId: idSchema,
   userFullName: z.string().nullable().optional(),
   workDate: z.string().date(),
-  workScheduleId: z.string().uuid().nullable(),
+  workScheduleId: idSchema.nullable(),
   checkInAt: z.string().datetime().nullable(),
   checkOutAt: z.string().datetime().nullable(),
   checkInMethod: attendanceMethodSchema.nullable(),
@@ -134,10 +135,10 @@ export type AttendanceTodayDto = z.infer<typeof attendanceTodaySchema>;
 
 /** Bản ghi chấm công V2 (cột legacy + DB-04 §7.4 additive). instant = ISO datetime UTC. */
 export const attendanceRecordV2Schema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   workDate: z.string().date(),
-  employeeId: z.string().uuid().nullable(),
-  shiftId: z.string().uuid().nullable(),
+  employeeId: idSchema.nullable(),
+  shiftId: idSchema.nullable(),
   checkInAt: z.string().datetime().nullable(),
   checkOutAt: z.string().datetime().nullable(),
   checkInMethod: z.string().nullable(),
@@ -160,7 +161,7 @@ export type AttendanceRecordV2Dto = z.infer<typeof attendanceRecordV2Schema>;
 
 /** Ca làm hiệu lực (rút gọn) cho màn Today. */
 export const attendanceShiftSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   shiftCode: z.string(),
   name: z.string(),
   startTime: z.string().nullable(),
@@ -177,7 +178,7 @@ export type AttendanceShiftSummaryDto = z.infer<typeof attendanceShiftSummarySch
 
 /** Rule chấm công hiệu lực (rút gọn) cho màn Today. */
 export const attendanceRuleSummarySchema = z.object({
-  id: z.string().uuid().nullable(),
+  id: idSchema.nullable(),
   ruleCode: z.string().nullable(),
   requireCheckIn: z.boolean(),
   requireCheckOut: z.boolean(),
@@ -188,7 +189,7 @@ export type AttendanceRuleSummaryDto = z.infer<typeof attendanceRuleSummarySchem
 /** GET /attendance/today V2 — employee/shift/rule/record + allowedActions + disabledReason. */
 export const attendanceTodayV2Schema = z.object({
   workDate: z.string().date(),
-  employee: z.object({ id: z.string().uuid(), status: z.string() }).nullable(),
+  employee: z.object({ id: idSchema, status: z.string() }).nullable(),
   shift: attendanceShiftSummarySchema.nullable(),
   rule: attendanceRuleSummarySchema.nullable(),
   record: attendanceRecordV2Schema.nullable(),
@@ -213,7 +214,7 @@ export type ListPaginationQuery = z.infer<typeof listPaginationSchema>;
 
 export const attendanceListQuerySchema = z.object({
   month: periodMonthSchema,
-  userId: z.string().uuid().optional(),
+  userId: idSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -236,10 +237,10 @@ export type ReviewNoteRequest = z.infer<typeof reviewNoteSchema>;
 // ─── attendance_periods (khoá kỳ công) ────────────────────────────────────────
 
 export const attendancePeriodSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   periodMonth: periodMonthSchema,
   status: z.enum(["open", "locked"]),
-  lockedBy: z.string().uuid().nullable(),
+  lockedBy: idSchema.nullable(),
   lockedAt: z.string().datetime().nullable(),
 });
 export type AttendancePeriodDto = z.infer<typeof attendancePeriodSchema>;
@@ -287,10 +288,10 @@ export const attendanceRecordListQuerySchema = z.object({
   /** DB-04 TitleCase attendance_status (Present/Late/Missing Hours/…). */
   attendanceStatus: z.string().min(1).max(64).optional(),
   /** Filter by org_unit (Department) — honored on team/company lists only. */
-  departmentId: z.string().uuid().optional(),
-  shiftId: z.string().uuid().optional(),
+  departmentId: idSchema.optional(),
+  shiftId: idSchema.optional(),
   /** employee_profiles.id — honored only when scope permits (ignored on my-records). */
-  employeeId: z.string().uuid().optional(),
+  employeeId: idSchema.optional(),
   sort: attendanceRecordSortFieldSchema.default("workDate"),
   order: z.enum(["asc", "desc"]).default("desc"),
 });
@@ -301,10 +302,10 @@ export type AttendanceRecordListQuery = z.infer<typeof attendanceRecordListQuery
  * NO location_json / gps / ip / device (those live on attendance_logs and are never listed).
  */
 export const attendanceRecordListItemSchema = attendanceRecordV2Schema.extend({
-  userId: z.string().uuid(),
+  userId: idSchema,
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
-  orgUnitId: z.string().uuid().nullable(),
+  orgUnitId: idSchema.nullable(),
   orgUnitName: z.string().nullable(),
 });
 export type AttendanceRecordListItem = z.infer<typeof attendanceRecordListItemSchema>;
@@ -333,7 +334,7 @@ export type AttendanceRecordListResponse = z.infer<typeof attendanceRecordListRe
 export const attendanceRecordDetailSchema = attendanceRecordListItemSchema.extend({
   /** SENSITIVE (view-sensitive:attendance) — null when unauthorized. jsonb → unknown. */
   locationJson: z.unknown().nullable(),
-  workScheduleId: z.string().uuid().nullable(),
+  workScheduleId: idSchema.nullable(),
   checkInStatus: z.string().nullable(),
   checkOutStatus: z.string().nullable(),
   attendanceSource: z.string().nullable(),
@@ -349,7 +350,7 @@ export type AttendanceRecordDetail = z.infer<typeof attendanceRecordDetailSchema
  * There is NO own-record bypass: an employee viewing their OWN logs still sees gps=null.
  */
 export const attendanceLogListItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   logType: z.string(),
   logTime: z.string().datetime(),
   source: z.string(),
@@ -465,9 +466,9 @@ export const createAdjustmentRequestSchema = z
     requestedCheckInAt: z.string().datetime().nullable().optional(),
     requestedCheckOutAt: z.string().datetime().nullable().optional(),
     items: z.array(adjustmentItemInputSchema).max(20).optional(),
-    attachmentFileId: z.string().uuid().optional(),
+    attachmentFileId: idSchema.optional(),
     /** Tạo hộ nhân viên khác — optional, gate quyền ở server (create-thay). */
-    targetEmployeeId: z.string().uuid().optional(),
+    targetEmployeeId: idSchema.optional(),
   })
   .refine(
     (v) =>
@@ -500,7 +501,7 @@ export const adjustmentListQuerySchema = z.object({
   status: attendanceAdjustmentStatusSchema.optional(),
   requestType: attendanceAdjustmentRequestTypeSchema.optional(),
   /** Chỉ có hiệu lực khi scope team/company (bỏ qua trên scope me). */
-  employeeId: z.string().uuid().optional(),
+  employeeId: idSchema.optional(),
   /** [fromDate, toDate] inclusive trên work_date. */
   fromDate: z.string().date().optional(),
   toDate: z.string().date().optional(),
@@ -539,8 +540,8 @@ export type RejectAdjustmentRequest = z.infer<typeof rejectAdjustmentSchema>;
  */
 export const directAdjustSchema = z
   .object({
-    recordId: z.string().uuid().optional(),
-    employeeId: z.string().uuid().optional(),
+    recordId: idSchema.optional(),
+    employeeId: idSchema.optional(),
     workDate: z.string().date().optional(),
     items: z.array(adjustmentItemInputSchema).min(1).max(20),
     reason: z.string().min(3).max(1000),
@@ -553,7 +554,7 @@ export type DirectAdjustRequest = z.infer<typeof directAdjustSchema>;
 
 /** 1 item lịch sử điều chỉnh (response — attendance_adjustment_items §7.7, APPEND-ONLY ledger). */
 export const attendanceAdjustmentItemDtoSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   fieldName: z.string(),
   oldValue: z.unknown().nullable(),
   newValue: z.unknown(),
@@ -569,12 +570,12 @@ export type AttendanceAdjustmentItemDto = z.infer<typeof attendanceAdjustmentIte
  * reviewNote null cho đơn Pending/Draft; requestedBy/currentApproverUserId để FE resolve tên.
  */
 export const attendanceAdjustmentRequestDetailSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   requestCode: z.string().nullable(),
-  employeeId: z.string().uuid().nullable(),
+  employeeId: idSchema.nullable(),
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
-  attendanceRecordId: z.string().uuid().nullable(),
+  attendanceRecordId: idSchema.nullable(),
   workDate: z.string().date(),
   requestType: attendanceAdjustmentRequestTypeSchema,
   requestedCheckInAt: z.string().datetime().nullable(),
@@ -582,12 +583,12 @@ export const attendanceAdjustmentRequestDetailSchema = z.object({
   reason: z.string(),
   status: attendanceAdjustmentStatusSchema,
   submittedAt: z.string().datetime().nullable(),
-  requestedBy: z.string().uuid().nullable(),
-  currentApproverUserId: z.string().uuid().nullable(),
-  reviewedBy: z.string().uuid().nullable(),
+  requestedBy: idSchema.nullable(),
+  currentApproverUserId: idSchema.nullable(),
+  reviewedBy: idSchema.nullable(),
   reviewedAt: z.string().datetime().nullable(),
   reviewNote: z.string().nullable(),
-  attachmentFileId: z.string().uuid().nullable(),
+  attachmentFileId: idSchema.nullable(),
   items: z.array(attendanceAdjustmentItemDtoSchema),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -627,7 +628,7 @@ const timeHHMMSS = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Exp
 
 /** GET /attendance/shifts item — full shift config (DB-04 §7.1) for HR/Admin management screens. */
 export const shiftSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   shiftCode: z.string(),
   name: z.string(),
   description: z.string().nullable(),
@@ -656,32 +657,48 @@ export type ShiftDto = z.infer<typeof shiftSchema>;
 export const shiftListResponseSchema = z.object({ items: z.array(shiftSchema) });
 export type ShiftListResponse = z.infer<typeof shiftListResponseSchema>;
 
-/** POST /attendance/shifts (ATT.SHIFT.CREATE) — MVP scope: Fixed/Flexible only (Split/Night reserved). */
-export const createShiftSchema = z.object({
+/**
+ * S19-OPS-ZOD4-1 (C2.4): lõi ca làm việc KHÔNG có `.default()`. Tách ra vì `.partial()` trên field có default ⇒
+ * zod 4 ÁP default cho field vắng (`optional(default)`) ⇒ PATCH `{ name }` ghi đè im lặng 8 cột. Create gắn
+ * default trên lõi; update = lõi.partial(). Hành vi trên zod 3 không đổi (ghim: `zod4-pins.spec.ts`).
+ */
+const shiftCoreSchema = z.object({
   shiftCode: z.string().min(1).max(50),
   name: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
-  shiftType: z.enum(["Fixed", "Flexible"]).default("Fixed"),
+  shiftType: z.enum(["Fixed", "Flexible"]),
   startTime: timeHHMMSS.optional(),
   endTime: timeHHMMSS.optional(),
   breakStartTime: timeHHMMSS.optional(),
   breakEndTime: timeHHMMSS.optional(),
-  breakMinutes: z.number().int().min(0).default(0),
+  breakMinutes: z.number().int().min(0),
   requiredWorkingMinutes: z.number().int().positive(),
   flexibleCheckInFrom: timeHHMMSS.optional(),
   flexibleCheckInTo: timeHHMMSS.optional(),
-  graceLateMinutes: z.number().int().min(0).default(0),
-  graceEarlyLeaveMinutes: z.number().int().min(0).default(0),
-  allowEarlyCheckIn: z.boolean().default(true),
-  allowLateCheckOut: z.boolean().default(true),
-  crossDay: z.boolean().default(false),
+  graceLateMinutes: z.number().int().min(0),
+  graceEarlyLeaveMinutes: z.number().int().min(0),
+  allowEarlyCheckIn: z.boolean(),
+  allowLateCheckOut: z.boolean(),
+  crossDay: z.boolean(),
   workDays: z.array(z.number().int().min(1).max(7)).min(1).max(7).optional(),
-  isDefault: z.boolean().default(false),
+  isDefault: z.boolean(),
+});
+
+/** POST /attendance/shifts (ATT.SHIFT.CREATE) — MVP scope: Fixed/Flexible only (Split/Night reserved). */
+export const createShiftSchema = shiftCoreSchema.extend({
+  shiftType: shiftCoreSchema.shape.shiftType.default("Fixed"),
+  breakMinutes: shiftCoreSchema.shape.breakMinutes.default(0),
+  graceLateMinutes: shiftCoreSchema.shape.graceLateMinutes.default(0),
+  graceEarlyLeaveMinutes: shiftCoreSchema.shape.graceEarlyLeaveMinutes.default(0),
+  allowEarlyCheckIn: shiftCoreSchema.shape.allowEarlyCheckIn.default(true),
+  allowLateCheckOut: shiftCoreSchema.shape.allowLateCheckOut.default(true),
+  crossDay: shiftCoreSchema.shape.crossDay.default(false),
+  isDefault: shiftCoreSchema.shape.isDefault.default(false),
 });
 export type CreateShiftRequest = z.infer<typeof createShiftSchema>;
 
 /** PUT /attendance/shifts/{id} (ATT.SHIFT.UPDATE) — partial patch. */
-export const updateShiftSchema = createShiftSchema.partial().extend({
+export const updateShiftSchema = shiftCoreSchema.partial().extend({
   status: shiftStatusSchema.optional(),
 });
 export type UpdateShiftRequest = z.infer<typeof updateShiftSchema>;
@@ -740,13 +757,13 @@ export type RuleStatusDto = z.infer<typeof ruleStatusSchema>;
 
 /** GET /attendance/rules item — full rule config (DB-04 §7.3) for HR/Admin management screens. */
 export const attendanceRuleSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   ruleCode: z.string(),
   name: z.string(),
   description: z.string().nullable(),
   ruleScope: ruleScopeSchema,
-  departmentId: z.string().uuid().nullable(),
-  employeeId: z.string().uuid().nullable(),
+  departmentId: idSchema.nullable(),
+  employeeId: idSchema.nullable(),
   priority: z.number().int(),
   effectiveFrom: z.string().date(),
   effectiveTo: z.string().date().nullable(),
@@ -783,8 +800,8 @@ export const createRuleSchema = z
     name: z.string().min(1).max(200),
     description: z.string().max(1000).optional(),
     ruleScope: ruleScopeSchema.default("Company"),
-    departmentId: z.string().uuid().optional(),
-    employeeId: z.string().uuid().optional(),
+    departmentId: idSchema.optional(),
+    employeeId: idSchema.optional(),
     priority: z.number().int().default(0),
     effectiveFrom: z.string().date(),
     effectiveTo: z.string().date().optional(),
@@ -840,11 +857,11 @@ export const shiftAssignmentScopeSchema = z.enum(["Company", "Department", "Empl
 export type ShiftAssignmentScopeDto = z.infer<typeof shiftAssignmentScopeSchema>;
 
 export const shiftAssignmentSchema = z.object({
-  id: z.string().uuid(),
-  shiftId: z.string().uuid(),
+  id: idSchema,
+  shiftId: idSchema,
   assignmentScope: shiftAssignmentScopeSchema,
-  departmentId: z.string().uuid().nullable(),
-  employeeId: z.string().uuid().nullable(),
+  departmentId: idSchema.nullable(),
+  employeeId: idSchema.nullable(),
   effectiveFrom: z.string().date(),
   effectiveTo: z.string().date().nullable(),
   priority: z.number().int(),
@@ -863,10 +880,10 @@ export type ShiftAssignmentListResponse = z.infer<typeof shiftAssignmentListResp
 /** POST /attendance/shift-assignments (ATT.SHIFT_ASSIGNMENT.UPDATE — spec API-10 dùng action `update` cho gán ca). */
 export const createShiftAssignmentSchema = z
   .object({
-    shiftId: z.string().uuid(),
+    shiftId: idSchema,
     assignmentScope: shiftAssignmentScopeSchema.default("Company"),
-    departmentId: z.string().uuid().optional(),
-    employeeId: z.string().uuid().optional(),
+    departmentId: idSchema.optional(),
+    employeeId: idSchema.optional(),
     effectiveFrom: z.string().date(),
     effectiveTo: z.string().date().optional(),
     priority: z.number().int().default(0),
@@ -882,14 +899,14 @@ export type CreateShiftAssignmentRequest = z.infer<typeof createShiftAssignmentS
 
 /** employeeId tuỳ chọn (mặc định = hồ sơ của caller — HR/Admin có ATT.RULE.VIEW có thể xem nhân viên khác). */
 export const effectiveShiftRuleQuerySchema = z.object({
-  employeeId: z.string().uuid().optional(),
+  employeeId: idSchema.optional(),
   workDate: z.string().date().optional(),
 });
 export type EffectiveShiftRuleQuery = z.infer<typeof effectiveShiftRuleQuerySchema>;
 
 export const effectiveShiftRuleResponseSchema = z.object({
   workDate: z.string().date(),
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   shift: attendanceShiftSummarySchema.nullable(),
   rule: attendanceRuleSummarySchema.nullable(),
 });
@@ -900,12 +917,12 @@ export type EffectiveShiftRuleResponse = z.infer<typeof effectiveShiftRuleRespon
 // (x-internal-key). Body is server-authoritative other than requestId — company_id from the token.
 
 export const recalculateAttendanceRequestSchema = z.object({
-  leaveRequestId: z.string().uuid(),
+  leaveRequestId: idSchema,
 });
 export type RecalculateAttendanceRequest = z.infer<typeof recalculateAttendanceRequestSchema>;
 
 export const recalculateAttendanceResponseSchema = z.object({
-  leaveRequestId: z.string().uuid(),
+  leaveRequestId: idSchema,
   processedDays: z.number().int().nonnegative(),
 });
 export type RecalculateAttendanceResponse = z.infer<typeof recalculateAttendanceResponseSchema>;
@@ -956,11 +973,11 @@ export const createRemoteWorkRequestSchema = z
     attendanceMode: remoteRequestAttendanceModeSchema.default("SELF_CHECK_IN"),
     locationText: z.string().max(255).optional(),
     reason: z.string().min(3).max(1000),
-    taskId: z.string().uuid().optional(),
-    projectId: z.string().uuid().optional(),
-    attachmentFileId: z.string().uuid().optional(),
+    taskId: idSchema.optional(),
+    projectId: idSchema.optional(),
+    attachmentFileId: idSchema.optional(),
     /** Tạo hộ nhân viên khác — optional, gate quyền ở server (create-own scope > Own). */
-    targetEmployeeId: z.string().uuid().optional(),
+    targetEmployeeId: idSchema.optional(),
   })
   .refine((v) => v.endDate >= v.startDate, {
     message: "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu",
@@ -974,8 +991,8 @@ export type CreateRemoteWorkRequest = z.infer<typeof createRemoteWorkRequestSche
  * validate cross-tenant deny, done_when). watcherUserIds tối đa 20 — tránh spam NOTI không giới hạn.
  */
 export const submitRemoteWorkRequestSchema = z.object({
-  currentApproverUserId: z.string().uuid(),
-  watcherUserIds: z.array(z.string().uuid()).max(20).default([]),
+  currentApproverUserId: idSchema,
+  watcherUserIds: z.array(idSchema).max(20).default([]),
 });
 export type SubmitRemoteWorkRequest = z.infer<typeof submitRemoteWorkRequestSchema>;
 
@@ -989,7 +1006,7 @@ export const remoteWorkRequestListQuerySchema = z.object({
   status: remoteRequestStatusSchema.optional(),
   requestType: remoteRequestTypeSchema.optional(),
   /** Chỉ có hiệu lực khi scope team/company (bỏ qua trên scope me). */
-  employeeId: z.string().uuid().optional(),
+  employeeId: idSchema.optional(),
   /** [fromDate, toDate] inclusive trên start_date. */
   fromDate: z.string().date().optional(),
   toDate: z.string().date().optional(),
@@ -1026,9 +1043,9 @@ export type RejectRemoteWorkRequest = z.infer<typeof rejectRemoteWorkRequestSche
  * watcherUserIds luôn mảng (rỗng nếu Draft chưa submit). currentApproverUserId null cho Draft.
  */
 export const remoteWorkRequestDetailSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   requestCode: z.string().nullable(),
-  employeeId: z.string().uuid().nullable(),
+  employeeId: idSchema.nullable(),
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
   requestType: remoteRequestTypeSchema,
@@ -1039,21 +1056,21 @@ export const remoteWorkRequestDetailSchema = z.object({
   attendanceMode: remoteRequestAttendanceModeSchema,
   locationText: z.string().nullable(),
   reason: z.string(),
-  taskId: z.string().uuid().nullable(),
-  projectId: z.string().uuid().nullable(),
+  taskId: idSchema.nullable(),
+  projectId: idSchema.nullable(),
   status: remoteRequestStatusSchema,
   submittedAt: z.string().datetime().nullable(),
-  requestedBy: z.string().uuid().nullable(),
-  currentApproverUserId: z.string().uuid().nullable(),
-  watcherUserIds: z.array(z.string().uuid()),
-  approvedBy: z.string().uuid().nullable(),
+  requestedBy: idSchema.nullable(),
+  currentApproverUserId: idSchema.nullable(),
+  watcherUserIds: z.array(idSchema),
+  approvedBy: idSchema.nullable(),
   approvedAt: z.string().datetime().nullable(),
-  rejectedBy: z.string().uuid().nullable(),
+  rejectedBy: idSchema.nullable(),
   rejectedAt: z.string().datetime().nullable(),
   rejectReason: z.string().nullable(),
   cancelledAt: z.string().datetime().nullable(),
-  cancelledBy: z.string().uuid().nullable(),
-  attachmentFileId: z.string().uuid().nullable(),
+  cancelledBy: idSchema.nullable(),
+  attachmentFileId: idSchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -1081,7 +1098,7 @@ export const attendanceReportQuerySchema = z
   .object({
     fromDate: z.string().date(),
     toDate: z.string().date(),
-    departmentId: z.string().uuid().optional(),
+    departmentId: idSchema.optional(),
     page: z.coerce.number().int().positive().default(1),
     pageSize: z.coerce
       .number()
@@ -1103,11 +1120,11 @@ export type AttendanceReportQuery = z.infer<typeof attendanceReportQuerySchema>;
  * work_date trong kỳ đã khớp scope (present+late+missing+leave, KHÔNG double-count).
  */
 export const attendanceReportRowSchema = z.object({
-  employeeId: z.string().uuid(),
-  userId: z.string().uuid(),
+  employeeId: idSchema,
+  userId: idSchema,
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
-  orgUnitId: z.string().uuid().nullable(),
+  orgUnitId: idSchema.nullable(),
   orgUnitName: z.string().nullable(),
   totalDays: z.number().int().nonnegative(),
   presentDays: z.number().int().nonnegative(),
@@ -1150,10 +1167,10 @@ export const attendanceExportQuerySchema = z.object({
   /** DB-04 TitleCase attendance_status (Present/Late/Missing Hours/…). */
   attendanceStatus: z.string().min(1).max(64).optional(),
   /** Filter by org_unit (Department) — honored only when scope permits (parity with company list). */
-  departmentId: z.string().uuid().optional(),
-  shiftId: z.string().uuid().optional(),
+  departmentId: idSchema.optional(),
+  shiftId: idSchema.optional(),
   /** employee_profiles.id — honored only when scope permits (parity with company list). */
-  employeeId: z.string().uuid().optional(),
+  employeeId: idSchema.optional(),
 });
 export type AttendanceExportQuery = z.infer<typeof attendanceExportQuerySchema>;
 

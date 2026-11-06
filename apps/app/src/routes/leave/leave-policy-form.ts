@@ -3,6 +3,8 @@ import {
   LEAVE_ENGINE_ACCRUAL_METHODS,
   carryForwardScopeIsSupported,
   hasValidCarryForwardDeadline,
+  idSchema,
+  idSchemaWith,
 } from "@mediaos/contracts";
 import type {
   CreateLeavePolicyRequest,
@@ -24,14 +26,14 @@ const optionalInt = (msg = "masterData.common.validation.numberInvalid") =>
 const uuidOrEmpty = z
   .string()
   .refine(
-    (v) => v === "" || z.string().uuid().safeParse(v).success,
+    (v) => v === "" || idSchema.safeParse(v).success,
     "masterData.common.validation.numberInvalid",
   );
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 
 export const leavePolicyFormSchema = z
   .object({
-    leaveTypeId: z.string().uuid("masterData.leavePolicies.validation.dateInvalid"),
+    leaveTypeId: idSchemaWith("masterData.leavePolicies.validation.dateInvalid"),
     policyCode: z
       .string()
       .trim()

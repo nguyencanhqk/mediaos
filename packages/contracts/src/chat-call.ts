@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * S7-CALL — hợp đồng cuộc gọi thoại/hình.
@@ -36,7 +37,7 @@ export const chatCallOutcomeSchema = z.enum([
 export type ChatCallOutcome = z.infer<typeof chatCallOutcomeSchema>;
 
 export const chatCallParticipantSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   invitedAt: z.string().datetime(),
   joinedAt: z.string().datetime().nullable().optional(),
   leftAt: z.string().datetime().nullable().optional(),
@@ -46,9 +47,9 @@ export const chatCallParticipantSchema = z.object({
 export type ChatCallParticipantDto = z.infer<typeof chatCallParticipantSchema>;
 
 export const chatCallSchema = z.object({
-  id: z.string().uuid(),
-  roomId: z.string().uuid(),
-  initiatorUserId: z.string().uuid(),
+  id: idSchema,
+  roomId: idSchema,
+  initiatorUserId: idSchema,
   kind: chatCallKindSchema,
   status: chatCallStatusSchema,
   startedAt: z.string().datetime(),
@@ -112,7 +113,7 @@ export type ChatCallInboundEvent = (typeof CHAT_CALL_INBOUND_EVENTS)[number];
 export const CHAT_CALL_SDP_MAX_LENGTH = 65_536;
 export const CHAT_CALL_CANDIDATE_MAX_LENGTH = 4_096;
 
-const callIdOnly = z.object({ callId: z.string().uuid() });
+const callIdOnly = z.object({ callId: idSchema });
 
 /** `call:join` · `call:leave` · `call:ping` */
 export const chatCallJoinSchema = callIdOnly;
@@ -120,28 +121,28 @@ export const chatCallLeaveSchema = callIdOnly;
 export const chatCallPingSchema = callIdOnly;
 
 export const chatCallSdpSchema = z.object({
-  callId: z.string().uuid(),
-  toUserId: z.string().uuid(),
+  callId: idSchema,
+  toUserId: idSchema,
   sdp: z.string().min(1).max(CHAT_CALL_SDP_MAX_LENGTH),
 });
 export type ChatCallSdpPayload = z.infer<typeof chatCallSdpSchema>;
 
 export const chatCallIceCandidateSchema = z.object({
-  callId: z.string().uuid(),
-  toUserId: z.string().uuid(),
+  callId: idSchema,
+  toUserId: idSchema,
   candidate: z.string().min(1).max(CHAT_CALL_CANDIDATE_MAX_LENGTH),
 });
 export type ChatCallIceCandidatePayload = z.infer<typeof chatCallIceCandidateSchema>;
 
 export const chatCallMediaStateSchema = z.object({
-  callId: z.string().uuid(),
+  callId: idSchema,
   micOn: z.boolean(),
   camOn: z.boolean(),
 });
 export type ChatCallMediaStatePayload = z.infer<typeof chatCallMediaStateSchema>;
 
 export const chatCallScreenStateSchema = z.object({
-  callId: z.string().uuid(),
+  callId: idSchema,
   sharing: z.boolean(),
 });
 export type ChatCallScreenStatePayload = z.infer<typeof chatCallScreenStateSchema>;
@@ -191,39 +192,39 @@ export type ChatCallOutboundEvent =
  * kèm (kể cả `fromUserId` giả mạo), nên nó phải chạy TRƯỚC mỗi lần emit, không phải "khi tiện".
  */
 export const chatCallRelaySdpSchema = z.object({
-  callId: z.string().uuid(),
-  fromUserId: z.string().uuid(),
+  callId: idSchema,
+  fromUserId: idSchema,
   sdp: z.string().min(1).max(CHAT_CALL_SDP_MAX_LENGTH),
 });
 export type ChatCallRelaySdpPayload = z.infer<typeof chatCallRelaySdpSchema>;
 
 export const chatCallRelayIceCandidateSchema = z.object({
-  callId: z.string().uuid(),
-  fromUserId: z.string().uuid(),
+  callId: idSchema,
+  fromUserId: idSchema,
   candidate: z.string().min(1).max(CHAT_CALL_CANDIDATE_MAX_LENGTH),
 });
 export type ChatCallRelayIceCandidatePayload = z.infer<typeof chatCallRelayIceCandidateSchema>;
 
 /** `call:media-state` chiều RA — thêm `userId` (SERVER gán) để bên nhận biết ai vừa tắt mic/cam. */
 export const chatCallRelayMediaStateSchema = z.object({
-  callId: z.string().uuid(),
-  userId: z.string().uuid(),
+  callId: idSchema,
+  userId: idSchema,
   micOn: z.boolean(),
   camOn: z.boolean(),
 });
 export type ChatCallRelayMediaStatePayload = z.infer<typeof chatCallRelayMediaStateSchema>;
 
 export const chatCallRelayScreenStateSchema = z.object({
-  callId: z.string().uuid(),
-  userId: z.string().uuid(),
+  callId: idSchema,
+  userId: idSchema,
   sharing: z.boolean(),
 });
 export type ChatCallRelayScreenStatePayload = z.infer<typeof chatCallRelayScreenStateSchema>;
 
 /** `call:peer-joined` · `call:peer-left` — ai vừa vào/rời phiên signalling của cuộc gọi. */
 export const chatCallPeerSchema = z.object({
-  callId: z.string().uuid(),
-  userId: z.string().uuid(),
+  callId: idSchema,
+  userId: idSchema,
 });
 export type ChatCallPeerPayload = z.infer<typeof chatCallPeerSchema>;
 
@@ -235,5 +236,5 @@ export type ChatCallPeerPayload = z.infer<typeof chatCallPeerSchema>;
  * hình dạng response) có thể rơi vào `ack` mà chính client gắn. Mọi khoá thêm vào đây là dữ liệu chảy
  * qua kênh đó (xem docblock handler `call:ping`).
  */
-export const chatCallPongSchema = z.object({ callId: z.string().uuid() });
+export const chatCallPongSchema = z.object({ callId: idSchema });
 export type ChatCallPongPayload = z.infer<typeof chatCallPongSchema>;

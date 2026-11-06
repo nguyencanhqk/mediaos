@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
+import { coerceDate } from "./common/coerce-date";
 
 /**
  * S4-NOTI-BE-1 — My-Notification API contracts (SPEC-08 §17.1/17.2, API-07 §11–12). Own-scope TUYỆT ĐỐI:
@@ -51,8 +53,8 @@ export const myNotificationListQuerySchema = z
     source_module: z.string().trim().min(1).max(50).optional(),
     event_code: z.string().trim().min(1).max(100).optional(),
     priority: myNotificationPrioritySchema.optional(),
-    created_from: z.coerce.date().optional(),
-    created_to: z.coerce.date().optional(),
+    created_from: coerceDate().optional(),
+    created_to: coerceDate().optional(),
     /** Mặc định false (SPEC-08 §17.1 business validation #4). */
     include_archived: optionalBooleanParam(),
     include_hidden: optionalBooleanParam(),
@@ -68,7 +70,7 @@ export type MyNotificationListQuery = z.infer<typeof myNotificationListQuerySche
 
 /** 1 dòng list (NOTI-API-001) — response snake_case theo API-07 §11.1. */
 export const myNotificationListItemSchema = z.object({
-  notification_id: z.string().uuid(),
+  notification_id: idSchema,
   title: z.string(),
   short_content: z.string(),
   notification_type: z.string().nullable(),
@@ -79,7 +81,7 @@ export const myNotificationListItemSchema = z.object({
   event_code: z.string().nullable(),
   target_module: z.string().nullable(),
   target_type: z.string().nullable(),
-  target_id: z.string().uuid().nullable(),
+  target_id: idSchema.nullable(),
   target_url: z.string().nullable(),
   created_at: z.string().datetime({ offset: true }),
   read_at: z.string().datetime({ offset: true }).nullable(),
@@ -95,7 +97,7 @@ export const myNotificationDropdownQuerySchema = z.object({
 export type MyNotificationDropdownQuery = z.infer<typeof myNotificationDropdownQuerySchema>;
 
 export const myNotificationDropdownItemSchema = z.object({
-  notification_id: z.string().uuid(),
+  notification_id: idSchema,
   title: z.string(),
   short_content: z.string(),
   notification_type: z.string().nullable(),
@@ -135,13 +137,13 @@ export type MyNotificationDetailQuery = z.infer<typeof myNotificationDetailQuery
 export const myNotificationTargetSchema = z.object({
   target_module: z.string().nullable(),
   target_type: z.string().nullable(),
-  target_id: z.string().uuid().nullable(),
+  target_id: idSchema.nullable(),
   target_url: z.string().nullable(),
 });
 export type MyNotificationTarget = z.infer<typeof myNotificationTargetSchema>;
 
 export const myNotificationDetailSchema = z.object({
-  notification_id: z.string().uuid(),
+  notification_id: idSchema,
   title: z.string(),
   content: z.string(),
   short_content: z.string(),
@@ -152,7 +154,7 @@ export const myNotificationDetailSchema = z.object({
   source_module: z.string().nullable(),
   event_code: z.string().nullable(),
   target: myNotificationTargetSchema,
-  payload: z.record(z.unknown()).nullable(),
+  payload: z.record(z.string(), z.unknown()).nullable(),
   created_at: z.string().datetime({ offset: true }),
   read_at: z.string().datetime({ offset: true }).nullable(),
 });
@@ -161,7 +163,7 @@ export type MyNotificationDetail = z.infer<typeof myNotificationDetailSchema>;
 // ─── NOTI-API-101: POST /notifications/:id/mark-read ──────────────────────────
 
 export const myNotificationMarkReadResponseSchema = z.object({
-  notification_id: z.string().uuid(),
+  notification_id: idSchema,
   status: myNotificationStatusSchema,
   read_at: z.string().datetime({ offset: true }).nullable(),
 });
@@ -172,7 +174,7 @@ export type MyNotificationMarkReadResponse = z.infer<typeof myNotificationMarkRe
 export const markAllNotificationsReadRequestSchema = z.object({
   source_module: z.string().trim().min(1).max(50).nullable().optional(),
   notification_type: z.string().trim().min(1).max(50).nullable().optional(),
-  created_before: z.coerce.date().nullable().optional(),
+  created_before: coerceDate().nullable().optional(),
 });
 export type MarkAllNotificationsReadRequest = z.infer<typeof markAllNotificationsReadRequestSchema>;
 

@@ -6,6 +6,7 @@ import {
   payrollPeriodStatusEnum,
   payslipItemTypeEnum,
 } from "./payroll";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — PAYROLL v2 track D phần 1 (S15-PAYROLL-BE-5 · SPEC-11 §9.1 PAY-SCREEN-015/016 · §15.1 hàng
@@ -77,8 +78,8 @@ const reportFilterShape = {
   fromMonth: periodMonthSchema.optional(),
   toMonth: periodMonthSchema.optional(),
   /** Lọc CHÍNH XÁC một đơn vị (không đệ quy cây con — cùng luật 036). */
-  orgUnitId: z.string().uuid().optional(),
-  userId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  userId: idSchema.optional(),
   fiscalYear: z.coerce.number().int().min(2000).max(2100).optional(),
   batchStatus: paymentBatchStatusEnum.optional(),
 };
@@ -199,7 +200,7 @@ export const payrollOverviewSchema = z.object({
    */
   latestPeriod: z
     .object({
-      id: z.string().uuid(),
+      id: idSchema,
       periodMonth: periodMonthSchema,
       status: payrollPeriodStatusEnum,
     })
@@ -240,7 +241,7 @@ export const payrollOverviewSchema = z.object({
   /** Khối 6 — thu nhập theo đơn vị HIỆN TẠI ở kỳ neo; `orgUnitId = null` = chưa gán đơn vị. */
   byOrgUnit: z.array(
     z.object({
-      orgUnitId: z.string().uuid().nullable(),
+      orgUnitId: idSchema.nullable(),
       orgUnitName: z.string().nullable(),
       headcount: z.number().int().nonnegative(),
       avgGross: z.number(),
@@ -261,7 +262,7 @@ export const payrollOverviewRemindersSchema = z.object({
     payslipCount: z.number().int().nonnegative(),
     periods: z.array(
       z.object({
-        id: z.string().uuid(),
+        id: idSchema,
         periodMonth: periodMonthSchema,
         payslipCount: z.number().int().nonnegative(),
       }),

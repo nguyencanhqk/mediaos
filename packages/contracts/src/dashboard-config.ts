@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * S4-DASH-BE-3 — Dashboard widget CONFIG contracts (admin CRUD trên `dashboard_widget_configs`,
@@ -52,14 +53,14 @@ export type DashboardConfigLayoutDto = z.infer<typeof dashboardConfigLayoutSchem
 
 /** 1 phần tử GET /dashboard/configs — 1 row dashboard_widget_configs (đã join widget_code/name). */
 export const dashboardConfigItemSchema = z.object({
-  id: z.string().uuid(),
-  widget_id: z.string().uuid(),
+  id: idSchema,
+  widget_id: idSchema,
   widget_code: z.string(),
   widget_name: z.string(),
   dashboard_type: dashboardConfigDashboardTypeEnum,
   config_scope: dashboardConfigScopeEnum,
-  role_id: z.string().uuid().nullable().optional(),
-  user_id: z.string().uuid().nullable().optional(),
+  role_id: idSchema.nullable().optional(),
+  user_id: idSchema.nullable().optional(),
   is_enabled: z.boolean(),
   sort_order: z.number().int(),
   layout: dashboardConfigLayoutSchema,
@@ -67,7 +68,7 @@ export const dashboardConfigItemSchema = z.object({
   refresh_seconds_override: z.number().int().nullable().optional(),
   config: z.record(z.string(), z.unknown()).nullable().optional(),
   updated_at: z.string(),
-  updated_by: z.string().uuid().nullable().optional(),
+  updated_by: idSchema.nullable().optional(),
 });
 export type DashboardConfigItemDto = z.infer<typeof dashboardConfigItemSchema>;
 
@@ -77,7 +78,7 @@ export type DashboardConfigItemDto = z.infer<typeof dashboardConfigItemSchema>;
  * vì lần 2 nhận LẠI giá trị đã pass qua z.enum (không transform giá trị, khác optionalBooleanParam
  * phải coerce true/false).
  */
-const optionalEnumParam = <T extends [string, ...string[]]>(values: T) =>
+const optionalEnumParam = <T extends readonly string[]>(values: T) =>
   z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.enum(values).optional(),
@@ -87,8 +88,8 @@ const optionalEnumParam = <T extends [string, ...string[]]>(values: T) =>
 export const dashboardConfigListQuerySchema = z.object({
   dashboard_type: optionalEnumParam(dashboardConfigDashboardTypeEnum.options),
   config_scope: optionalEnumParam(dashboardConfigScopeEnum.options),
-  role_id: z.string().uuid().optional(),
-  user_id: z.string().uuid().optional(),
+  role_id: idSchema.optional(),
+  user_id: idSchema.optional(),
 });
 export type DashboardConfigListQueryDto = z.infer<typeof dashboardConfigListQuerySchema>;
 

@@ -67,7 +67,7 @@ export function RetentionEditDialog({ open, onClose, policy }: RetentionEditDial
   const updateMut = useUpdateRetentionPolicy();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const form = useForm<RetentionFormValues>({
+  const form = useForm<z.input<typeof retentionFormSchema>, unknown, RetentionFormValues>({
     resolver: zodResolver(retentionFormSchema),
     defaultValues: fromView(policy),
     values: fromView(policy),

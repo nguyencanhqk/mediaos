@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
+import { coerceDate } from "../common/coerce-date";
 
 /**
  * S2-FND-BE-3 (L2) — Foundation file-access-log DTO (nguồn sự thật contracts cho GET
@@ -44,11 +46,11 @@ export const listFileAccessLogsQuerySchema = z.object({
     .catch(LIST_LIMIT_DEFAULT)
     .transform((n) => Math.min(LIST_LIMIT_MAX, Math.max(LIST_LIMIT_MIN, n)))
     .default(LIST_LIMIT_DEFAULT),
-  fileId: z.string().uuid().optional(),
-  actorUserId: z.string().uuid().optional(),
+  fileId: idSchema.optional(),
+  actorUserId: idSchema.optional(),
   action: fileAccessActionSchema.optional(),
-  from: z.coerce.date().optional(),
-  to: z.coerce.date().optional(),
+  from: coerceDate().optional(),
+  to: coerceDate().optional(),
 });
 export type ListFileAccessLogsQuery = z.infer<typeof listFileAccessLogsQuerySchema>;
 
@@ -59,15 +61,15 @@ export type ListFileAccessLogsQuery = z.infer<typeof listFileAccessLogsQuerySche
  */
 export const fileAccessLogViewSchema = z
   .object({
-    id: z.string().uuid(),
-    fileId: z.string().uuid(),
+    id: idSchema,
+    fileId: idSchema,
     action: fileAccessActionSchema,
     accessGranted: z.boolean(),
     deniedReason: z.string().nullable(),
-    actorUserId: z.string().uuid().nullable(),
+    actorUserId: idSchema.nullable(),
     moduleCode: z.string().nullable(),
     entityType: z.string().nullable(),
-    entityId: z.string().uuid().nullable(),
+    entityId: idSchema.nullable(),
     permissionCode: z.string().nullable(),
     requestId: z.string().nullable(),
     createdAt: z.string(),

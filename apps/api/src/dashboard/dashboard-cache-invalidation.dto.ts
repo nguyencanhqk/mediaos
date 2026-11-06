@@ -1,5 +1,6 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
+import { idSchema } from "@mediaos/contracts";
 
 /**
  * S4-INT-2 — DTO cho `POST /internal/v1/dashboard/cache/invalidate`. Zod local (KHÔNG @mediaos/contracts —
@@ -13,7 +14,7 @@ import { z } from "zod";
  */
 export const dashboardCacheInvalidateRequestSchema = z.object({
   eventCode: z.string().trim().min(1).max(100),
-  userIds: z.array(z.string().uuid()).max(500).optional(),
+  userIds: z.array(idSchema).max(500).optional(),
 });
 
 export class DashboardCacheInvalidateRequestDto extends createZodDto(

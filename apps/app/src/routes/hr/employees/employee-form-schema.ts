@@ -4,6 +4,7 @@ import type {
   HrEmployeeDetail,
   UpdateHrEmployeeRequest,
 } from "@mediaos/contracts";
+import { emailSchema, emailParams } from "@mediaos/contracts";
 
 /**
  * S2-FE-HR-2 — EmployeeForm schema + DTO mappers.
@@ -65,7 +66,7 @@ const personalShape = {
   personalEmail: z
     .string()
     .max(255)
-    .refine((v) => v === "" || z.string().email().safeParse(v).success, {
+    .refine((v) => v === "" || emailSchema.safeParse(v).success, {
       message: "form.validation.emailInvalid",
     }),
   phone: z.string().max(50),
@@ -111,7 +112,7 @@ const createSchema = z
     email: z
       .string()
       .min(1, { message: "form.validation.emailRequired" })
-      .email({ message: "form.validation.emailInvalid" })
+      .email(emailParams("form.validation.emailInvalid"))
       .max(255, { message: "form.validation.emailInvalid" }),
     fullName: z
       .string()

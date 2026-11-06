@@ -84,7 +84,7 @@ export function RuleFormDialog({ open, onClose, rule }: RuleFormDialogProps) {
   const createMut = useCreateRule();
   const updateMut = useUpdateRule();
 
-  const form = useForm<RuleFormValues>({
+  const form = useForm<z.input<typeof ruleFormSchema>, unknown, RuleFormValues>({
     resolver: zodResolver(ruleFormSchema),
     defaultValues: rule ? fromDto(rule) : emptyValues(),
     values: rule ? fromDto(rule) : emptyValues(),

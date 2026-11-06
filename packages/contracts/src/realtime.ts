@@ -15,6 +15,7 @@ import {
   feedReactionSummarySchema,
 } from "./social-api";
 import { feedTargetTypeSchema } from "./social";
+import { idSchema } from "./common/id";
 
 /**
  * Realtime (G10-1) — hợp đồng WS giữa api ↔ web (Socket.IO namespace `/ws`).
@@ -101,8 +102,8 @@ export type WsEventName = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
  * `chatAttachmentSchema` sau này sẽ tự động chảy sang kênh WS mà không ai phải duyệt.
  */
 export const wsChatAttachmentSchema = z.object({
-  id: z.string().uuid(),
-  fileId: z.string().uuid(),
+  id: idSchema,
+  fileId: idSchema,
   name: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int().nonnegative(),
@@ -133,8 +134,8 @@ export type WsChatMessageEvent = z.infer<typeof wsChatMessageEventSchema>;
  * chắc chắn vừa xảy ra, nên luôn có mốc thời gian thật.
  */
 export const wsChatMessageRecalledEventSchema = z.object({
-  messageId: z.string().uuid(),
-  roomId: z.string().uuid(),
+  messageId: idSchema,
+  roomId: idSchema,
   recalledAt: z.string().datetime(),
 });
 export type WsChatMessageRecalledEvent = z.infer<typeof wsChatMessageRecalledEventSchema>;
@@ -156,13 +157,13 @@ export type WsChatMessageRecalledEvent = z.infer<typeof wsChatMessageRecalledEve
  */
 export const wsChatMessagePinnedEventSchema = chatMessageSchema
   .pick({ roomId: true, pinnedAt: true, pinnedBy: true })
-  .extend({ messageId: z.string().uuid() });
+  .extend({ messageId: idSchema });
 export type WsChatMessagePinnedEvent = z.infer<typeof wsChatMessagePinnedEventSchema>;
 
 /** chat:read — con trỏ đã đọc của MỘT người trong phòng (hệ `room_seq` per-room, mig 0539). */
 export const wsChatReadEventSchema = z.object({
-  roomId: z.string().uuid(),
-  userId: z.string().uuid(),
+  roomId: idSchema,
+  userId: idSchema,
   lastReadSeq: z.number().int().nonnegative(),
 });
 export type WsChatReadEvent = z.infer<typeof wsChatReadEventSchema>;
@@ -216,7 +217,7 @@ export type WsChatRoomAction = z.infer<typeof wsChatRoomActionSchema>;
 const wsChatRoomPeerSchema = chatRoomPeerSchema.omit({ avatarUrl: true });
 
 export const wsChatRoomEventSchema = z.object({
-  roomId: z.string().uuid(),
+  roomId: idSchema,
   action: wsChatRoomActionSchema,
   room: chatRoomSchema
     .omit({
@@ -247,8 +248,8 @@ export type WsChatRoomEvent = z.infer<typeof wsChatRoomEventSchema>;
  * ai đóng được — sự kiện "stop" mất là chỉ báo kẹt vĩnh viễn.
  */
 export const wsChatTypingEventSchema = z.object({
-  roomId: z.string().uuid(),
-  userId: z.string().uuid(),
+  roomId: idSchema,
+  userId: idSchema,
 });
 export type WsChatTypingEvent = z.infer<typeof wsChatTypingEventSchema>;
 
@@ -267,7 +268,7 @@ export type WsChatPresenceStatus = z.infer<typeof wsChatPresenceStatusSchema>;
  * `userRoomName` (xem `rooms.ts`: room đó chứa cả socket đã bị thu hồi cặp `view:chat-room`).
  */
 export const wsChatPresenceEventSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   status: wsChatPresenceStatusSchema,
 });
 export type WsChatPresenceEvent = z.infer<typeof wsChatPresenceEventSchema>;
@@ -288,8 +289,8 @@ export type WsChatPresenceEvent = z.infer<typeof wsChatPresenceEventSchema>;
  * `reactions` RỖNG là hợp lệ và có nghĩa: người cuối cùng vừa bỏ thả ⇒ client xoá sạch thanh cảm xúc.
  */
 export const wsChatReactionEventSchema = z.object({
-  roomId: z.string().uuid(),
-  messageId: z.string().uuid(),
+  roomId: idSchema,
+  messageId: idSchema,
   reactions: z.array(chatMessageReactionSchema.omit({ mine: true })),
 });
 export type WsChatReactionEvent = z.infer<typeof wsChatReactionEventSchema>;
@@ -321,11 +322,11 @@ export const wsChatCallActionSchema = z.enum([
 export type WsChatCallAction = z.infer<typeof wsChatCallActionSchema>;
 
 export const wsChatCallEventSchema = z.object({
-  callId: z.string().uuid(),
-  roomId: z.string().uuid(),
+  callId: idSchema,
+  roomId: idSchema,
   kind: chatCallKindSchema,
   status: chatCallStatusSchema,
-  initiatorUserId: z.string().uuid(),
+  initiatorUserId: idSchema,
   startedAt: z.string().datetime(),
   action: wsChatCallActionSchema,
 });
@@ -462,7 +463,7 @@ export type WsFeedCompanyPostCreatedEvent = z.infer<typeof wsFeedCompanyPostCrea
  */
 export const wsFeedGroupPostCreatedEventSchema = wsFeedPostCreatedCoreSchema.extend({
   audience: z.literal("group"),
-  groupId: z.string().uuid(),
+  groupId: idSchema,
   orgUnitId: z.null(),
   attachments: z.array(wsFeedAttachmentSchema),
 });
@@ -496,9 +497,9 @@ export type WsFeedCommentCreatedEvent = z.infer<typeof wsFeedCommentCreatedEvent
  */
 export const wsFeedReactionChangedEventSchema = z.object({
   targetType: feedTargetTypeSchema,
-  targetId: z.string().uuid(),
+  targetId: idSchema,
   /** Bài gốc — FE định vị thẻ cần cập nhật khi đích là một bình luận. */
-  postId: z.string().uuid(),
+  postId: idSchema,
   likeCount: z.number().int().nonnegative(),
   reactions: z.array(feedReactionSummarySchema.omit({ mine: true })),
 });

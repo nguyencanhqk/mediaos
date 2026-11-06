@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { feedIdeaStatusSchema, feedPollStatusSchema } from "./social";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-2D — khối CHI TIẾT theo loại bài chở trên thẻ bài (`feedPostSchema.kudos?/poll?/idea?`)
@@ -30,7 +31,7 @@ import { feedIdeaStatusSchema, feedPollStatusSchema } from "./social";
  * cùng luật `feedAuthorSchema`. Che theo CÙNG vị từ với tên (K1): người bị che tên không có ảnh.
  */
 export const feedKudosRecipientSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   fullName: z.string().nullable(),
   avatarUrl: z.string().nullable(),
   isFormerEmployee: z.boolean(),
@@ -39,7 +40,7 @@ export type FeedKudosRecipientDto = z.infer<typeof feedKudosRecipientSchema>;
 
 /** Huy hiệu gắn trên một lời vinh danh. Huy hiệu ĐÃ TẮT vẫn hiện trên bài cũ (D13 của BE-2B-2). */
 export const feedKudosBadgeRefSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
   /** Tên icon lucide — `null` = FE dùng icon mặc định. */
@@ -53,7 +54,7 @@ export type FeedKudosBadgeRefDto = z.infer<typeof feedKudosBadgeRefSchema>;
  * Người nhận xếp theo `employeeId` (thứ tự của `047`), KHÔNG theo thứ tự chọn lúc soạn.
  */
 export const feedKudosBlockSchema = z.object({
-  kudosId: z.string().uuid(),
+  kudosId: idSchema,
   message: z.string().nullable(),
   isOfficial: z.boolean(),
   badge: feedKudosBadgeRefSchema.nullable(),
@@ -65,7 +66,7 @@ export type FeedKudosBlockDto = z.infer<typeof feedKudosBlockSchema>;
 
 /** Một lựa chọn kèm số phiếu. KHÔNG có danh sách cử tri — kể cả với bình chọn công khai. */
 export const feedPollOptionResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   label: z.string(),
   voteCount: z.number().int().min(0),
 });
@@ -86,15 +87,15 @@ export type FeedPollOptionResultDto = z.infer<typeof feedPollOptionResultSchema>
  * CẢ `status` lẫn `closesAt` (`isPollAcceptingVotes`).
  */
 export const feedPollResultsSchema = z.object({
-  pollId: z.string().uuid(),
-  postId: z.string().uuid(),
+  pollId: idSchema,
+  postId: idSchema,
   question: z.string(),
   status: feedPollStatusSchema,
   multipleChoice: z.boolean(),
   isAnonymous: z.boolean(),
   closesAt: z.string().datetime({ offset: true }).nullable(),
   totalVoters: z.number().int().min(0),
-  myVote: z.array(z.string().uuid()),
+  myVote: z.array(idSchema),
   options: z.array(feedPollOptionResultSchema),
 });
 export type FeedPollResultsDto = z.infer<typeof feedPollResultsSchema>;

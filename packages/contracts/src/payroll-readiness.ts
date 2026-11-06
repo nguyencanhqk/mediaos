@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { periodMonthSchema } from "./attendance";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — PAYROLL readiness + picker (PAYROLL-API-006 · 034 · 035, S13-PAYROLL-BE-1). Tách nguyên văn khỏi
@@ -22,7 +23,7 @@ export const payrollReadinessWarningKindEnum = z.enum([
 export type PayrollReadinessWarningKind = z.infer<typeof payrollReadinessWarningKindEnum>;
 
 export const payrollReadinessWarningSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   /** Qua điểm chiếu danh tính DUY NHẤT `PayrollPeopleRepository`; `null` khi ngoài vị từ chiếu. */
   fullName: z.string().nullable(),
   kind: payrollReadinessWarningKindEnum,
@@ -60,7 +61,7 @@ export type PayrollPeoplePickerQuery = z.infer<typeof payrollPeoplePickerQuerySc
 
 /** Trường bó HẸP — không `email`, không số điện thoại (SPEC-11 §18). */
 export const payrollPersonRefSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   fullName: z.string().nullable(),
   employeeCode: z.string().nullable(),
 });
@@ -89,7 +90,7 @@ export type PayrollAttendancePeriodPickerQuery = z.infer<
 >;
 
 export const payrollAttendancePeriodRefSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   periodMonth: periodMonthSchema,
   status: attendancePeriodStatusEnum,
 });

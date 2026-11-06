@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
 import { feedKudosBlockSchema } from "./social-feed-blocks";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-2B-2 — DTO của `SOCIAL-API-047..048` (VINH DANH · CATALOG HUY HIỆU).
@@ -71,7 +72,7 @@ export type ListKudosBadgesQueryDto = z.infer<typeof listKudosBadgesQuerySchema>
  * `icon`: tên icon lucide HOẶC emoji (DB-17) — FE vẽ qua map CỐ ĐỊNH, không tra cứu tự do.
  */
 export const kudosBadgeSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
   description: z.string().nullable(),
@@ -148,7 +149,7 @@ export type UpdateKudosBadgeDto = z.infer<typeof updateKudosBadgeSchema>;
 
 /** Huy hiệu ở góc nhìn QUẢN TRỊ (`049`/`050`/`056`) — khác `048`: có `isActive`. */
 export const kudosBadgeAdminSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
   description: z.string().nullable(),
@@ -181,7 +182,7 @@ export type KudosBadgeAdminPageDto = z.infer<typeof kudosBadgeAdminPageSchema>;
 
 /** Một dòng của `047` = khối vinh danh của thẻ bài + `postId` + `createdAt` (plan BE-2D D11). */
 export const feedKudosListItemSchema = feedKudosBlockSchema.extend({
-  postId: z.string().uuid(),
+  postId: idSchema,
   createdAt: z.string().datetime({ offset: true }),
 });
 export type FeedKudosListItemDto = z.infer<typeof feedKudosListItemSchema>;
@@ -256,7 +257,7 @@ export type KudosRecipientSearchQueryDto = z.infer<typeof kudosRecipientSearchQu
  * `isFormerEmployee`. `avatarUrl` = URL ĐÃ KÝ hoặc `null` (chữ cái đầu) — xem `feedAuthorSchema`.
  */
 export const kudosRecipientCandidateSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   fullName: z.string(),
   avatarUrl: z.string().nullable(),
 });

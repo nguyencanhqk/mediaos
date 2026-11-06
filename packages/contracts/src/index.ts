@@ -238,3 +238,7 @@ export * from "./social-errors";
 // S4-DASH-HROVERVIEW-FLOOR-1 (additive): SÀN data-scope widget DASH (`DASH_WIDGET_MIN_DATA_SCOPE`) — api ép ở
 // metadata + đường số liệu, web đọc làm tín hiệu mount ô. Chỉ import type từ ./auth.
 export * from "./dashboard-widget-floor";
+// S19-OPS-ZOD4-1 (additive): nguồn DUY NHẤT của schema id + kiểm email (chuẩn bị nâng zod 4 — xem docblock).
+export * from "./common/id";
+export * from "./common/email";
+export * from "./common/coerce-date";

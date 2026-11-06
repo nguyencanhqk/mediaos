@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
+import { coerceDate } from "./common/coerce-date";
 
 /**
  * S4-NOTI-BE-3/BE-4 — Notification ADMIN config contracts (API-07 §14.1–14.5, SPEC-08).
@@ -39,8 +41,8 @@ export const notificationEventAdminQuerySchema = z.object({
 export type NotificationEventAdminQuery = z.infer<typeof notificationEventAdminQuerySchema>;
 
 export const notificationEventAdminItemSchema = z.object({
-  id: z.string().uuid(),
-  company_id: z.string().uuid().nullable(),
+  id: idSchema,
+  company_id: idSchema.nullable(),
   is_company_override: z.boolean(),
   module_code: z.string(),
   event_code: z.string(),
@@ -71,7 +73,7 @@ export const notificationTemplateAdminQuerySchema = z.object({
     .positive()
     .max(NOTI_ADMIN_PAGE_SIZE_MAX)
     .default(NOTI_ADMIN_PAGE_SIZE_DEFAULT),
-  event_id: z.string().uuid().optional(),
+  event_id: idSchema.optional(),
   event_code: z.string().trim().min(1).max(100).optional(),
   channel: z.enum(["IN_APP", "EMAIL", "PUSH", "REALTIME", "INTEGRATION"]).optional(),
   locale: z.string().trim().min(1).max(20).optional(),
@@ -81,10 +83,10 @@ export type NotificationTemplateAdminQuery = z.infer<typeof notificationTemplate
 // ─── NOTI-API-303 (thu hẹp): GET /notifications/templates/{id} (detail) — tái dùng item cho LIST ────
 
 export const notificationTemplateAdminItemSchema = z.object({
-  id: z.string().uuid(),
-  company_id: z.string().uuid().nullable(),
+  id: idSchema,
+  company_id: idSchema.nullable(),
   is_company_override: z.boolean(),
-  event_id: z.string().uuid(),
+  event_id: idSchema,
   template_code: z.string(),
   channel: z.string(),
   locale: z.string(),
@@ -93,7 +95,7 @@ export const notificationTemplateAdminItemSchema = z.object({
   short_body_template: z.string().nullable(),
   action_label_template: z.string().nullable(),
   target_url_template: z.string().nullable(),
-  variables_schema: z.record(z.unknown()).nullable(),
+  variables_schema: z.record(z.string(), z.unknown()).nullable(),
   status: z.string(),
   is_default: z.boolean(),
   version: z.number().int(),
@@ -137,12 +139,12 @@ export const notificationDeliveryLogAdminQuerySchema = z
       .positive()
       .max(NOTI_ADMIN_PAGE_SIZE_MAX)
       .default(NOTI_ADMIN_PAGE_SIZE_DEFAULT),
-    notification_id: z.string().uuid().optional(),
-    recipient_user_id: z.string().uuid().optional(),
+    notification_id: idSchema.optional(),
+    recipient_user_id: idSchema.optional(),
     channel: z.string().trim().min(1).max(50).optional(),
     delivery_status: z.string().trim().min(1).max(50).optional(),
-    created_from: z.coerce.date().optional(),
-    created_to: z.coerce.date().optional(),
+    created_from: coerceDate().optional(),
+    created_to: coerceDate().optional(),
   })
   .refine(
     (q) => !q.created_from || !q.created_to || q.created_from.getTime() <= q.created_to.getTime(),
@@ -153,9 +155,9 @@ export type NotificationDeliveryLogAdminQuery = z.infer<
 >;
 
 export const notificationDeliveryLogAdminItemSchema = z.object({
-  id: z.string().uuid(),
-  notification_id: z.string().uuid(),
-  recipient_user_id: z.string().uuid(),
+  id: idSchema,
+  notification_id: idSchema,
+  recipient_user_id: idSchema,
   channel: z.string(),
   provider: z.string().nullable(),
   delivery_status: z.string(),

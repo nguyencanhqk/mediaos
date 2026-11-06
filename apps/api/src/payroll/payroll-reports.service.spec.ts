@@ -1,3 +1,4 @@
+import type { ZodError } from "zod";
 import { UnprocessableEntityException } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { ZodValidationException } from "nestjs-zod";
@@ -178,7 +179,7 @@ describe("S15-PAYROLL-BE-5 · checkFilter", () => {
     })();
     expect(err).toBeInstanceOf(ZodValidationException);
     expect(
-      (err as ZodValidationException).getZodError().issues.map((i) => i.path.join(".")),
+      ((err as ZodValidationException).getZodError() as ZodError).issues.map((i) => i.path.join(".")),
     ).toEqual(["fiscalYear"]);
   });
 

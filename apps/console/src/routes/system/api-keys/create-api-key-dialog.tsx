@@ -81,7 +81,7 @@ export function CreateApiKeyDialog({ open, onClose, onSuccess }: CreateApiKeyDia
     };
     const parsed = createApiKeyRequestSchema.safeParse(body);
     if (!parsed.success) {
-      setError(parsed.error.errors[0]?.message ?? t("feedback.createFailed"));
+      setError(parsed.error.issues[0]?.message ?? t("feedback.createFailed"));
       return;
     }
     mutation.mutate(parsed.data);

@@ -5,6 +5,7 @@ import {
   feedGroupMemberStatusSchema,
 } from "./social";
 import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-2A — DTO request/response **NHÓM** (10 route `SOCIAL-API-030..039`).
@@ -25,7 +26,7 @@ import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
  */
 
 /** UUID — bản sao CỤC BỘ (helper cùng tên ở hai file kia là `const` nội bộ, không export). */
-const uuid = () => z.string().uuid();
+const uuid = () => idSchema;
 
 /** Mirror `varchar(255)` của `feed_groups.name` (giới hạn KIỂU). Tên trống/chỉ khoảng trắng bị chặn ở Zod. */
 export const FEED_GROUP_NAME_MAX = 255;

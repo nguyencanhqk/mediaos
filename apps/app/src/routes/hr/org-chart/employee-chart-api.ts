@@ -10,6 +10,7 @@
  */
 import { z } from "zod";
 import { apiFetch } from "@mediaos/web-core";
+import { idSchema } from "@mediaos/contracts";
 
 export interface OrgChartEmployeeNode {
   employeeId: string;
@@ -26,8 +27,8 @@ export interface OrgChartEmployeeNode {
 const orgChartEmployeeNodeSchema: z.ZodType<OrgChartEmployeeNode> = z.lazy(() =>
   z
     .object({
-      employeeId: z.string().uuid(),
-      userId: z.string().uuid().nullable(),
+      employeeId: idSchema,
+      userId: idSchema.nullable(),
       displayName: z.string().nullable(),
       positionName: z.string().nullable(),
       orgUnitName: z.string().nullable(),

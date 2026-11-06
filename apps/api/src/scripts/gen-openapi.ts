@@ -12,7 +12,7 @@ import { buildOpenApiDocument } from "../config/swagger";
 /**
  * S2-FND-CONTRACT-1 — sinh openapi.json (artifact, KHÔNG commit — xem .gitignore).
  *
- * Dùng `buildOpenApiDocument` (patchNestJsSwagger + createDocument) như đường mount runtime để artifact
+ * Dùng `buildOpenApiDocument` (createDocument + cleanupOpenApiDoc) như đường mount runtime để artifact
  * KHỚP đúng document phục vụ /docs-json. Chạy: `pnpm --filter @mediaos/api gen:openapi`.
  * KHÔNG env-gate ở đây (đây là công cụ dev sinh tài liệu, KHÔNG phải endpoint mạng).
  *

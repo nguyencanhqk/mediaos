@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S5-BRAND-BE-1 — Thương hiệu công ty (logo + favicon) cho /api/v1/foundation/company/branding.
@@ -52,7 +53,7 @@ export type BrandingKind = z.infer<typeof brandingKindSchema>;
  */
 export const brandingAssetSchema = z.object({
   source: z.enum(["file", "external"]),
-  fileId: z.string().uuid().nullable(),
+  fileId: idSchema.nullable(),
   url: z.string().min(1),
   expiresAt: z.string().datetime().nullable(),
 });
@@ -88,7 +89,7 @@ export type BrandingUploadUrlInput = z.infer<typeof brandingUploadUrlInputSchema
 
 /** Response upload-url — presigned-PUT ephemeral TTL-ngắn. KHÔNG lộ storage_path (BẤT BIẾN #3). */
 export const brandingUploadUrlResponseSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   uploadUrl: z.string().url(),
   expiresAt: z.string().datetime(),
 });
@@ -96,7 +97,7 @@ export type BrandingUploadUrlResponse = z.infer<typeof brandingUploadUrlResponse
 
 /** Body `POST /:kind/confirm` và `PUT /:kind` — fileId của file đã (hoặc sắp) upload xong. */
 export const setBrandingInputSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
 });
 export type SetBrandingInput = z.infer<typeof setBrandingInputSchema>;
 

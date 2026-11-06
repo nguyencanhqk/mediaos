@@ -12,6 +12,7 @@ import {
   type RemoveObjectPermissionRequest,
   type SetObjectPermissionRequest,
   type UserRoleDto,
+  idSchema,
 } from "@mediaos/contracts";
 import { apiFetch } from "@mediaos/web-core";
 
@@ -36,7 +37,7 @@ import { apiFetch } from "@mediaos/web-core";
 
 /** GET /org/roles trả `{ id, name }` (org.repository.listRoles) — không có schema trong contracts → khai tại đây. */
 export const roleSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
 });
 export type RoleSummary = z.infer<typeof roleSummarySchema>;

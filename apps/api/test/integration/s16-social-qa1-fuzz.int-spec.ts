@@ -96,13 +96,20 @@ function hasControlChar(text: string): boolean {
 
 interface BodyCase {
   body: string;
-  /** Kỳ vọng tính ĐỘC LẬP với sản phẩm: sau `trim()`, độ dài (đơn vị UTF-16) trong 1…4000 ⇒ 201. */
+  /**
+   * Kỳ vọng tính ĐỘC LẬP với sản phẩm: sau `trim()`, độ dài theo CODE POINT trong 1…4000 ⇒ 201.
+   * zod 4 (S19-OPS-ZOD4-1, plan §10.9) đếm `.min/.max` của chuỗi theo code point, không theo đơn
+   * vị UTF-16 như zod 3 — khớp `length()` của Postgres, cũng đếm theo ký tự.
+   */
   expect: 201 | 400;
   kind: string;
 }
 
+/** Số code point — cùng cách đếm với zod 4 và `length()` của Postgres. */
+const codePoints = (text: string): number => [...text].length;
+
 const expectBody = (body: string): 201 | 400 => {
-  const n = body.trim().length;
+  const n = codePoints(body.trim());
   return n >= 1 && n <= BODY_MAX ? 201 : 400;
 };
 
@@ -113,11 +120,17 @@ function bodyCorpus(): BodyCase[] {
     out.push({ body, expect: expectBody(body), kind });
   };
   // Ca biên đặt tên tường minh.
-  push("x".repeat(BODY_MAX), "đúng 4000 đơn vị");
-  push("x".repeat(BODY_MAX + 1), "4001 đơn vị");
-  push("😀".repeat(BODY_MAX / 2), "2000 ký tự ngoài BMP = 4000 đơn vị");
-  push("😀".repeat(BODY_MAX / 2 + 1), "2001 ký tự ngoài BMP");
-  push(`  ${"y".repeat(BODY_MAX)}\n`, "4000 đơn vị + viền khoảng trắng");
+  push("x".repeat(BODY_MAX), "đúng 4000 ký tự ASCII");
+  push("x".repeat(BODY_MAX + 1), "4001 ký tự ASCII");
+  // Ký tự ngoài BMP = 1 code point = 2 đơn vị UTF-16. zod 4 đếm code point ⇒ trần là 4000 KÝ TỰ
+  // (8000 đơn vị). DB không thể từ chối thay: `chk_feed_posts_body_len` (20000) và
+  // `chk_feed_comments_body_len` (5000) dùng `length(body)` — Postgres cũng đếm theo ký tự, nên
+  // mọi CHECK có trần ≥ trần zod là đủ chỗ, kể cả khi trần đó nhỏ hơn 2× trần zod (5000 < 8000).
+  push("😀".repeat(BODY_MAX / 2), "2000 ký tự ngoài BMP (4000 đơn vị UTF-16)");
+  push("😀".repeat(BODY_MAX / 2 + 1), "2001 ký tự ngoài BMP (4002 đơn vị UTF-16)");
+  push("😀".repeat(BODY_MAX), "4000 ký tự ngoài BMP (8000 đơn vị UTF-16)");
+  push("😀".repeat(BODY_MAX + 1), "4001 ký tự ngoài BMP");
+  push(`  ${"y".repeat(BODY_MAX)}\n`, "4000 ký tự ASCII + viền khoảng trắng");
   push("   ", "chỉ dấu cách");
   push("\u00A0\u00A0", "chỉ NBSP");
   push("\uFEFF", "chỉ BOM");
@@ -282,7 +295,7 @@ describe.skipIf(!hasLaneDb)("S16-SOCIAL-QA-1 · L8 · fuzz có hạt giống", (
   });
 
   it(
-    "QA1-F-B thân bài: không bao giờ 5xx; nhận ⇔ sau khi cắt viền còn 1…4000 đơn vị; bài nhận đọc lại đúng chuỗi đã gửi",
+    "QA1-F-B thân bài: không bao giờ 5xx; nhận ⇔ sau khi cắt viền còn 1…4000 code point; bài nhận đọc lại đúng chuỗi đã gửi",
     async () => {
       const corpus = bodyCorpus();
       const results = await mapLimit(corpus, PARALLEL, async (c) => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema, emailSchema } from "@mediaos/contracts";
 
 /**
  * Thứ tự file env — DÙNG CHUNG giữa preload (`config/load-env.ts`) và `ConfigModule.forRoot`
@@ -51,7 +52,7 @@ const optionalSecret = (minLength: number) =>
 const optionalUuid = () =>
   z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    z.string().uuid().optional(),
+    idSchema.optional(),
   );
 
 /**
@@ -214,7 +215,7 @@ export const envSchema = z
     // aud='operator' (AC-0b). KHÔNG đụng engine phân quyền (chỉ seed DATA, BẤT BIẾN giữ nguyên). Idempotent.
     // VẮNG → no-op (không tạo gì). Đổi email → boot lại trỏ tài khoản MỚI; KHÔNG tự thu hồi operator cũ
     // (an toàn: không hạ quyền chéo tenant âm thầm lúc boot — gỡ qua RBAC nếu muốn).
-    PLATFORM_OPERATOR_EMAIL: z.string().email().optional(),
+    PLATFORM_OPERATOR_EMAIL: emailSchema.optional(),
     // Mật khẩu khởi tạo/cập nhật cho operator (argon2id-hash phía app, KHÔNG bao giờ log — BẤT BIẾN #3).
     // BẮT BUỘC khi có PLATFORM_OPERATOR_EMAIL (ép ở superRefine). Tối thiểu 12 ký tự (tài khoản quyền cao).
     PLATFORM_OPERATOR_PASSWORD: z.string().min(12).optional(),
@@ -234,7 +235,7 @@ export const envSchema = z
     // KHÔNG cần migration, KHÔNG escape-hatch. KHÔNG đụng engine phân quyền (chỉ seed DATA). VẮNG → no-op.
     // ⚠️ TRẦN: reveal-secret:platform-account (lộ mật khẩu kênh) vẫn CHỈ qua break-glass per-object (ADR-0010)
     // — không role-grant nào với tới, CỐ Ý. 2FA: role này requires_two_factor=false (tiện dùng); bật ở prod nếu cần.
-    PLATFORM_SUPERADMIN_EMAIL: z.string().email().optional(),
+    PLATFORM_SUPERADMIN_EMAIL: emailSchema.optional(),
     // Mật khẩu khởi tạo/cập nhật cho super-admin (argon2id-hash phía app, KHÔNG bao giờ log — BẤT BIẾN #3).
     // BẮT BUỘC khi có PLATFORM_SUPERADMIN_EMAIL (ép ở superRefine). Tối thiểu 12 ký tự (tài khoản quyền cao).
     PLATFORM_SUPERADMIN_PASSWORD: z.string().min(12).optional(),

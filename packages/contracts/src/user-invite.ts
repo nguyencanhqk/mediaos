@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
+import { emailSchema } from "./common/email";
 
 /**
  * CS-10 Đối tượng: Mời / Duyệt / Kích hoạt user — nguồn sự thật contract api ↔ console ↔ auth.
@@ -30,7 +32,7 @@ export const USER_INVITE_TTL_HOURS = 72;
  * Tạo lời mời. `email` của tài khoản sẽ tạo; `fullName` để hiển thị + điền sẵn. companyId lấy từ JWT.
  */
 export const createUserInviteSchema = z.object({
-  email: z.string().email().max(320),
+  email: emailSchema.max(320),
   fullName: z.string().min(1).max(255),
 });
 export type CreateUserInviteRequest = z.infer<typeof createUserInviteSchema>;
@@ -41,14 +43,14 @@ export type CreateUserInviteRequest = z.infer<typeof createUserInviteSchema>;
  * DTO view 1 lời mời — KHÔNG token/hash/password. Dùng cho hàng đợi "Chờ duyệt" + "Yêu cầu kích hoạt".
  */
 export const userInviteSchema = z.object({
-  id: z.string().uuid(),
-  email: z.string().email(),
+  id: idSchema,
+  email: emailSchema,
   fullName: z.string(),
   status: z.enum(USER_INVITE_STATUSES),
   expiresAt: z.string().datetime(),
   acceptedAt: z.string().datetime().nullable(),
-  createdUserId: z.string().uuid().nullable(),
-  invitedBy: z.string().uuid(),
+  createdUserId: idSchema.nullable(),
+  invitedBy: idSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * CS-7 Tình hình sử dụng — contracts cho GET /tenant/usage.
@@ -22,7 +23,7 @@ export type UsageQuery = z.infer<typeof usageQuerySchema>;
 
 /** Thông tin đăng nhập per-user: tên, email, đơn vị (phòng ban), lần cuối dùng. */
 export const userLastLoginDtoSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   fullName: z.string().nullable(),
   email: z.string(),
   /** Tên phòng ban / đơn vị (nullable nếu chưa phân công). */

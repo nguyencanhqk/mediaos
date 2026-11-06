@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * S5-GOAL-BE-1 — contracts module GOAL (SPEC-10 · DB-11 §7 enum chuẩn).
@@ -48,11 +49,11 @@ export const createGoalSchema = z.object({
   name: z.string().trim().min(1).max(255),
   description: z.string().max(5000).nullish(),
   level: goalLevelSchema,
-  departmentId: z.string().uuid().nullish(),
-  projectId: z.string().uuid().nullish(),
-  employeeId: z.string().uuid().nullish(),
-  parentGoalId: z.string().uuid().nullish(),
-  ownerEmployeeId: z.string().uuid().nullish(),
+  departmentId: idSchema.nullish(),
+  projectId: idSchema.nullish(),
+  employeeId: idSchema.nullish(),
+  parentGoalId: idSchema.nullish(),
+  ownerEmployeeId: idSchema.nullish(),
   /** Vắng ⇒ service mặc định 'custom' (kỳ tự do). */
   periodType: goalPeriodTypeSchema.optional(),
   periodStart: goalDateSchema.optional(),
@@ -78,17 +79,17 @@ export type UpdateGoalRequest = z.infer<typeof updateGoalSchema>;
 
 /** Bản ghi goal chuẩn trả về mọi endpoint đọc. `progressPercent` NULL = "chưa đo" (KHÁC 0% — §13.2). */
 export const goalCoreResponseSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   goalCode: z.string(),
   name: z.string(),
   description: z.string().nullable(),
   level: goalLevelSchema,
-  departmentId: z.string().uuid().nullable(),
-  projectId: z.string().uuid().nullable(),
-  employeeId: z.string().uuid().nullable(),
-  parentGoalId: z.string().uuid().nullable(),
-  ownerEmployeeId: z.string().uuid(),
+  departmentId: idSchema.nullable(),
+  projectId: idSchema.nullable(),
+  employeeId: idSchema.nullable(),
+  parentGoalId: idSchema.nullable(),
+  ownerEmployeeId: idSchema,
   periodType: goalPeriodTypeSchema,
   periodStart: z.string(),
   periodEnd: z.string(),
@@ -108,7 +109,7 @@ export type GoalCoreResponseDto = z.infer<typeof goalCoreResponseSchema>;
 
 /** Breadcrumb cha (GOAL-API-003) — chỉ định danh, KHÔNG lồng cả bản ghi cha. */
 export const goalBreadcrumbSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   goalCode: z.string(),
   name: z.string(),
   level: goalLevelSchema,
@@ -139,10 +140,10 @@ export const GOAL_PAGE_LIMIT_MAX = 200;
  */
 export const listGoalsQuerySchema = z.object({
   level: goalLevelSchema.optional(),
-  departmentId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  employeeId: z.string().uuid().optional(),
-  parentGoalId: z.string().uuid().optional(),
+  departmentId: idSchema.optional(),
+  projectId: idSchema.optional(),
+  employeeId: idSchema.optional(),
+  parentGoalId: idSchema.optional(),
   status: goalStatusSchema.optional(),
   periodFrom: goalDateSchema.optional(),
   periodTo: goalDateSchema.optional(),
@@ -153,7 +154,7 @@ export type ListGoalsQueryRequest = z.infer<typeof listGoalsQuerySchema>;
 
 /** GET /goals/tree (GOAL-API-006) — cùng bộ lọc kỳ/phòng/trạng thái, KHÔNG phân trang (cây nông). */
 export const goalTreeQuerySchema = z.object({
-  departmentId: z.string().uuid().optional(),
+  departmentId: idSchema.optional(),
   status: goalStatusSchema.optional(),
   periodFrom: goalDateSchema.optional(),
   periodTo: goalDateSchema.optional(),
@@ -208,10 +209,10 @@ export type FinalizeGoalRequest = z.infer<typeof finalizeGoalSchema>;
 
 /** Một dòng sổ `goal_updates` (GOAL-API-008). Ledger append-only ⇒ KHÔNG có updatedAt/deletedAt. */
 export const goalUpdateResponseSchema = z.object({
-  id: z.string().uuid(),
-  goalId: z.string().uuid(),
+  id: idSchema,
+  goalId: idSchema,
   updateType: goalUpdateTypeSchema,
-  actorUserId: z.string().uuid(),
+  actorUserId: idSchema,
   oldCurrentValue: z.number().nullable(),
   newCurrentValue: z.number().nullable(),
   oldProgressPercent: z.number().nullable(),
@@ -234,7 +235,7 @@ export const GOAL_LINK_TASKS_MAX = 100;
 
 /** POST /goals/:id/tasks (GOAL-API-010, bulk) — gắn task vào mục tiêu. */
 export const linkGoalTasksSchema = z.object({
-  taskIds: z.array(z.string().uuid()).min(1).max(GOAL_LINK_TASKS_MAX),
+  taskIds: z.array(idSchema).min(1).max(GOAL_LINK_TASKS_MAX),
 });
 export type LinkGoalTasksRequest = z.infer<typeof linkGoalTasksSchema>;
 
@@ -244,12 +245,12 @@ export type LinkGoalTasksRequest = z.infer<typeof linkGoalTasksSchema>;
  * nên không bao giờ xuất hiện ở đây.
  */
 export const goalTaskLinkResultSchema = z.object({
-  goalId: z.string().uuid(),
+  goalId: idSchema,
   linked: z.number().int().nonnegative(),
   alreadyLinked: z.number().int().nonnegative(),
   warnings: z.array(
     z.object({
-      taskId: z.string().uuid(),
+      taskId: idSchema,
       taskCode: z.string().nullable(),
       message: z.string(),
     }),
@@ -293,7 +294,7 @@ export const createTaskTemplateSchema = z.object({
   name: z.string().trim().min(1).max(255),
   description: z.string().max(5000).nullish(),
   /** NULL = template DÙNG CHUNG công ty. id do client gửi ⇒ BE resolve dưới company actor (404 nếu lạ). */
-  departmentId: z.string().uuid().nullish(),
+  departmentId: idSchema.nullish(),
   isActive: z.boolean().optional(),
   items: z.array(taskTemplateItemCoreSchema).max(TASK_TEMPLATE_ITEMS_MAX).optional(),
 });
@@ -312,8 +313,8 @@ export const updateTaskTemplateItemSchema = taskTemplateItemCoreSchema.partial()
 export type UpdateTaskTemplateItemRequest = z.infer<typeof updateTaskTemplateItemSchema>;
 
 export const taskTemplateItemResponseSchema = z.object({
-  id: z.string().uuid(),
-  templateId: z.string().uuid(),
+  id: idSchema,
+  templateId: idSchema,
   title: z.string(),
   description: z.string().nullable(),
   defaultPriority: taskTemplatePrioritySchema.nullable(),
@@ -324,10 +325,10 @@ export const taskTemplateItemResponseSchema = z.object({
 export type TaskTemplateItemResponseDto = z.infer<typeof taskTemplateItemResponseSchema>;
 
 export const taskTemplateResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   description: z.string().nullable(),
-  departmentId: z.string().uuid().nullable(),
+  departmentId: idSchema.nullable(),
   departmentName: z.string().nullable(),
   isActive: z.boolean(),
   itemCount: z.number().int().nonnegative(),
@@ -340,7 +341,7 @@ export type TaskTemplateResponseDto = z.infer<typeof taskTemplateResponseSchema>
 
 /** GET /task-templates — filter phòng/trạng thái/từ khoá + phân trang. */
 export const listTaskTemplatesQuerySchema = z.object({
-  departmentId: z.string().uuid().optional(),
+  departmentId: idSchema.optional(),
   /** `z.coerce` KHÔNG idempotent với boolean ⇒ preprocess (memory zod-query-param-double-pipe-idempotent). */
   isActive: z
     .preprocess((v) => {
@@ -376,14 +377,14 @@ export const GOAL_DECOMPOSE_HARD_MAX = 200;
  */
 export const decomposeGoalItemSchema = z.object({
   /** Nguồn gốc từ template (nếu dòng này không phải do người dùng thêm tay) — chỉ để đối chiếu/audit. */
-  templateItemId: z.string().uuid().optional(),
+  templateItemId: idSchema.optional(),
   title: z.string().trim().min(1, "Tiêu đề là bắt buộc").max(500),
   description: z.string().max(20000).nullish(),
   /** LOWERCASE như template; BE map sang TitleCase của `tasks.task_priority`. */
   priority: taskTemplatePrioritySchema.nullish(),
-  assigneeEmployeeId: z.string().uuid().nullish(),
+  assigneeEmployeeId: idSchema.nullish(),
   /** Cột board — CHỈ hợp lệ khi mục tiêu cấp dự án (không có dự án ⇒ 400 của TASK). */
-  stateId: z.string().uuid().nullish(),
+  stateId: idSchema.nullish(),
   dueAt: z.string().datetime({ offset: true }).nullish(),
   startAt: z.string().datetime({ offset: true }).nullish(),
   checklist: templateChecklistSchema.nullish(),
@@ -393,19 +394,19 @@ export type DecomposeGoalItemRequest = z.infer<typeof decomposeGoalItemSchema>;
 /** POST /goals/:id/decompose (GOAL-API-011) — `items` là danh sách CUỐI sau preview. */
 export const decomposeGoalSchema = z.object({
   /** Template nguồn (provenance + audit). BE resolve dưới company actor ⇒ id lạ = 404. */
-  templateId: z.string().uuid(),
+  templateId: idSchema,
   items: z.array(decomposeGoalItemSchema).min(1).max(GOAL_DECOMPOSE_HARD_MAX),
 });
 export type DecomposeGoalRequest = z.infer<typeof decomposeGoalSchema>;
 
 /** Kết quả phân rã — tất-cả-hoặc-không (1 transaction), nên `created` = `items.length` khi 2xx. */
 export const decomposeGoalResultSchema = z.object({
-  goalId: z.string().uuid(),
-  templateId: z.string().uuid(),
+  goalId: idSchema,
+  templateId: idSchema,
   created: z.number().int().nonnegative(),
   tasks: z.array(
     z.object({
-      id: z.string().uuid(),
+      id: idSchema,
       taskCode: z.string().nullable(),
       title: z.string(),
     }),

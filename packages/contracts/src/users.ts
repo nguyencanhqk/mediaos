@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { emailSchema } from "./common/email";
+import { idSchema } from "./common/id";
 
 /**
  * Users — DTO hồ sơ người dùng. Module 2a: self-service (cập nhật hồ sơ của chính mình).
@@ -37,8 +39,8 @@ export type UserStatus = (typeof USER_STATUSES)[number];
  * `deletedAt` để FE phân biệt user đã xoá-mềm (nếu list bao gồm — mặc định list chỉ live).
  */
 export const adminUserSchema = z.object({
-  id: z.string().uuid(),
-  email: z.string().email(),
+  id: idSchema,
+  email: emailSchema,
   fullName: z.string().nullable(),
   status: z.enum(USER_STATUSES),
   lastLoginAt: z.string().datetime().nullable(),

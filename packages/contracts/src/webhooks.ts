@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * AC-6 Webhooks (TENANT self-service) DTOs — nguồn sự thật cho contract api ↔ admin.
@@ -48,7 +49,7 @@ export const webhookUrlSchema = z
  * DTO 1 webhook endpoint cho màn list/get (KHÔNG secret / KHÔNG cột envelope). `active` bật/tắt giao.
  */
 export const webhookEndpointSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   url: z.string(),
   description: z.string().nullable(),
   active: z.boolean(),
@@ -87,8 +88,8 @@ export type CreateWebhookEndpointResponse = z.infer<typeof createWebhookEndpoint
 
 /** DTO 1 subscription event_type của endpoint. */
 export const webhookSubscriptionSchema = z.object({
-  id: z.string().uuid(),
-  endpointId: z.string().uuid(),
+  id: idSchema,
+  endpointId: idSchema,
   eventType: webhookEventTypeEnum,
   createdAt: z.string().datetime(),
 });
@@ -102,8 +103,8 @@ export type CreateWebhookSubscriptionRequest = z.infer<typeof createWebhookSubsc
 
 /** DTO 1 lần giao (delivery log). KHÔNG chứa payload/secret. */
 export const webhookDeliverySchema = z.object({
-  id: z.string().uuid(),
-  endpointId: z.string().uuid(),
+  id: idSchema,
+  endpointId: idSchema,
   eventType: z.string(),
   status: webhookDeliveryStatusEnum,
   attempts: z.number().int(),

@@ -171,7 +171,7 @@ describe("OpenAPI /docs (e2e) — env-gate + schema hygiene", () => {
 
     const allProps = new Set<string>();
     collectPropertyNames(schemas, allProps);
-    // Nếu patchNestJsSwagger KHÔNG introspect được zod → schema rỗng → set rỗng → FAIL (bắt false-green).
+    // Nếu cleanupOpenApiDoc KHÔNG introspect được zod → schema rỗng → set rỗng → FAIL (bắt false-green).
     expect(allProps.size).toBeGreaterThan(0);
 
     // Field mong đợi từ các input DTO đã biết (PatchCompanySettingDto.valueType · LoginDto.companySlug/email).

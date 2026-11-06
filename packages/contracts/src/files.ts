@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * FILE subsystem contracts — nguồn sự thật DTO cho FileService / Controller (S1-FND-FILE-1).
@@ -98,7 +99,7 @@ export const uploadFileInputSchema = z.object({
   /** Loại entity nghiệp vụ (Employee / LeaveRequest / Task …). */
   entityType: z.string().min(1).max(100).optional(),
   /** UUID entity nghiệp vụ — phải cùng company (validate ở service). */
-  entityId: z.string().uuid().optional(),
+  entityId: idSchema.optional(),
 });
 export type UploadFileInput = z.infer<typeof uploadFileInputSchema>;
 
@@ -106,10 +107,10 @@ export type UploadFileInput = z.infer<typeof uploadFileInputSchema>;
  * LinkFileInput — gắn một file đã upload vào entity nghiệp vụ.
  */
 export const linkFileInputSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   moduleCode: z.string().min(1).max(50),
   entityType: z.string().min(1).max(100),
-  entityId: z.string().uuid(),
+  entityId: idSchema,
   linkType: fileLinkTypeSchema,
   /** Phạm vi truy cập mặc định Company (DB-08 §8.7). */
   accessScope: fileAccessScopeSchema.default("Company"),
@@ -139,7 +140,7 @@ export const listFilesQuerySchema = z.object({
     .default(PAGE_LIMIT_DEFAULT),
   moduleCode: z.string().min(1).max(50).optional(),
   entityType: z.string().min(1).max(100).optional(),
-  entityId: z.string().uuid().optional(),
+  entityId: idSchema.optional(),
   visibility: fileVisibilitySchema.optional(),
 });
 export type ListFilesQuery = z.infer<typeof listFilesQuerySchema>;
@@ -154,7 +155,7 @@ export type ListFilesQuery = z.infer<typeof listFilesQuerySchema>;
  * ownerUserId optional — server mask nếu caller không có quyền xem.
  */
 export const fileMetadataSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   originalName: z.string(),
   mimeType: z.string(),
   fileExtension: z.string().nullable(),
@@ -164,16 +165,16 @@ export const fileMetadataSchema = z.object({
   scanStatus: fileScanStatusSchema,
   uploadedAt: z.string().datetime(),
   downloadCount: z.number().int().nonnegative(),
-  ownerUserId: z.string().uuid().nullable().optional(),
+  ownerUserId: idSchema.nullable().optional(),
   isTemporary: z.boolean(),
   /** Links hiện tại của file (nếu service eager-load). */
   links: z
     .array(
       z.object({
-        id: z.string().uuid(),
+        id: idSchema,
         moduleCode: z.string(),
         entityType: z.string(),
-        entityId: z.string().uuid(),
+        entityId: idSchema,
         linkType: fileLinkTypeSchema,
         accessScope: fileAccessScopeSchema,
         isPrimary: z.boolean(),
@@ -219,11 +220,11 @@ export type DownloadUrlDto = z.infer<typeof downloadUrlSchema>;
  * TUYỆT ĐỐI KHÔNG lộ storage internals.
  */
 export const fileLinkSchema = z.object({
-  id: z.string().uuid(),
-  fileId: z.string().uuid(),
+  id: idSchema,
+  fileId: idSchema,
   moduleCode: z.string(),
   entityType: z.string(),
-  entityId: z.string().uuid(),
+  entityId: idSchema,
   linkType: fileLinkTypeSchema,
   accessScope: fileAccessScopeSchema,
   isPrimary: z.boolean(),
@@ -284,7 +285,7 @@ export type FoundationFileErrorCode =
  * `expiresAt` = thời điểm uploadUrl hết hiệu lực (clamp TTL ở adapter — MAX_PRESIGN_TTL_SEC).
  */
 export const registerFileResponseSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   /** Luôn 'Pending' ngay sau register (client PUT rồi confirm mới → 'Uploaded'). */
   uploadStatus: fileUploadStatusSchema,
   /** Presigned-PUT URL (ephemeral) — client PUT bytes trực tiếp lên storage. KHÔNG chứa storage_path thô. */
@@ -313,7 +314,7 @@ export type ConfirmUploadInput = z.infer<typeof confirmUploadInputSchema>;
  * FOUNDATION-FILE-ERR-CONFIRM-* (422/409), KHÔNG trả body này.
  */
 export const confirmUploadResponseSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   /** 'Uploaded' khi confirm thành công. */
   uploadStatus: fileUploadStatusSchema,
   /** Size (bytes) đã verify khớp giữa storage stat và khai báo lúc register. */

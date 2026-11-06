@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
+import { coerceDate } from "./common/coerce-date";
 
 /**
  * G6-2 PR-A — KMS / encryption-key provisioning contracts (BẤT BIẾN #3).
@@ -68,7 +70,7 @@ export type BreakGlassGrantStatus = z.infer<typeof breakGlassGrantStatusEnum>;
 
 /** Input requestBreakGlass — mở 1 yêu cầu khẩn cấp trên 1 account, kèm lý do + TTL (giây). */
 export const requestBreakGlassInputSchema = z.object({
-  platformAccountId: z.string().uuid(),
+  platformAccountId: idSchema,
   reason: z.string().trim().min(1).max(2000),
   ttlSeconds: z.number().int().min(BREAK_GLASS_MIN_TTL_SECONDS).max(BREAK_GLASS_MAX_TTL_SECONDS),
 });
@@ -76,7 +78,7 @@ export type RequestBreakGlassInput = z.infer<typeof requestBreakGlassInputSchema
 
 /** Input approveBreakGlass / revokeBreakGlass — chỉ cần id của grant. */
 export const breakGlassGrantIdInputSchema = z.object({
-  grantId: z.string().uuid(),
+  grantId: idSchema,
 });
 export type BreakGlassGrantIdInput = z.infer<typeof breakGlassGrantIdInputSchema>;
 
@@ -85,16 +87,16 @@ export type BreakGlassGrantIdInput = z.infer<typeof breakGlassGrantIdInputSchema
  * đã thu (`approvalCount`) để UI hiển thị tiến độ SoD. `reason` là lý do nghiệp vụ (non-secret).
  */
 export const breakGlassGrantSchema = z.object({
-  id: z.string().uuid(),
-  platformAccountId: z.string().uuid(),
-  requesterUserId: z.string().uuid(),
+  id: idSchema,
+  platformAccountId: idSchema,
+  requesterUserId: idSchema,
   reason: z.string(),
   requiredApprovals: z.number().int().min(BREAK_GLASS_MIN_APPROVALS),
   approvalCount: z.number().int().nonnegative(),
   status: breakGlassGrantStatusEnum,
-  expiresAt: z.coerce.date(),
-  activatedAt: z.coerce.date().nullable(),
-  createdAt: z.coerce.date(),
+  expiresAt: coerceDate(),
+  activatedAt: coerceDate().nullable(),
+  createdAt: coerceDate(),
 });
 export type BreakGlassGrantDto = z.infer<typeof breakGlassGrantSchema>;
 
@@ -116,6 +118,6 @@ export const BREAK_GLASS_RESOURCE_TYPE = "break-glass";
  */
 export const breakGlassRevealResponseSchema = z.object({
   secret: z.string(),
-  grantId: z.string().uuid(),
+  grantId: idSchema,
 });
 export type BreakGlassRevealResponse = z.infer<typeof breakGlassRevealResponseSchema>;

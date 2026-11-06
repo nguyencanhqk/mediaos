@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * G14-1: Dashboard aggregate contracts — read-only, server-filtered by company_id + role.
@@ -130,9 +131,9 @@ export const mvStatsQuerySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}$/)
     .optional(),
-  channelId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  departmentId: z.string().uuid().optional(),
+  channelId: idSchema.optional(),
+  projectId: idSchema.optional(),
+  departmentId: idSchema.optional(),
 });
 export type MvStatsQueryDto = z.infer<typeof mvStatsQuerySchema>;
 
@@ -146,9 +147,9 @@ export const taskStatusStatSchema = z.object({
 
 export const outputStatSchema = z.object({
   status: z.string(),
-  projectId: z.string().uuid().nullable(),
-  departmentId: z.string().uuid().nullable(),
-  channelId: z.string().uuid().nullable(),
+  projectId: idSchema.nullable(),
+  departmentId: idSchema.nullable(),
+  channelId: idSchema.nullable(),
   /** YYYY-MM-DD date string (first day of month). */
   month: z.string().nullable(),
   taskCount: z.number().int().nonnegative(),
@@ -165,16 +166,16 @@ export type MvStatsResponseDto = z.infer<typeof mvStatsResponseSchema>;
 
 export const overdueAlertSchema = z.object({
   type: z.literal("overdue_task"),
-  taskId: z.string().uuid(),
+  taskId: idSchema,
   title: z.string(),
   dueDate: z.string(),
   status: z.string(),
-  assigneeUserId: z.string().uuid().nullable(),
+  assigneeUserId: idSchema.nullable(),
 });
 
 export const channelRiskAlertSchema = z.object({
   type: z.literal("channel_risk"),
-  channelId: z.string().uuid(),
+  channelId: idSchema,
   overdueRate: z.number().nonnegative(),
   overdueCount: z.number().int().nonnegative(),
   totalCount: z.number().int().nonnegative(),

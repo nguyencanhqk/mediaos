@@ -57,7 +57,7 @@ export function DashboardConfigFormDialog({ config, onClose }: DashboardConfigFo
   const { t } = useTranslation("dashboard");
   const updateMut = useUpdateDashboardConfig();
 
-  const { register, handleSubmit, formState } = useForm<ConfigFormValues>({
+  const { register, handleSubmit, formState } = useForm<z.input<typeof configFormSchema>, unknown, ConfigFormValues>({
     resolver: zodResolver(configFormSchema),
     defaultValues: fromDto(config),
     mode: "onBlur",

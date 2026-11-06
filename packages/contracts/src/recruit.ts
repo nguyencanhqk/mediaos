@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { emailParams } from "./common/email";
+import { idSchema } from "./common/id";
 
 /**
  * S12-RECRUIT-DB-1 — enum/hằng chuẩn module RECRUIT (SPEC-12 · DB-14 §7). NGUỒN SỰ THẬT cho DTO của
@@ -102,8 +104,8 @@ const csvEnumList = <T extends z.ZodTypeAny>(item: T) =>
 
 export const listJobOpeningsQuerySchema = z.object({
   status: csvEnumList(jobOpeningStatusSchema),
-  orgUnitId: z.string().uuid().optional(),
-  recruiterUserId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  recruiterUserId: idSchema.optional(),
   q: z.string().trim().min(1).max(120).optional(),
   ...recruitPageQuery,
 });
@@ -112,10 +114,10 @@ export type ListJobOpeningsQuery = z.infer<typeof listJobOpeningsQuerySchema>;
 export const createJobOpeningSchema = z.object({
   title: recruitText(255),
   description: recruitNullableText(10_000),
-  orgUnitId: z.string().uuid(),
-  positionId: z.string().uuid().nullish(),
+  orgUnitId: idSchema,
+  positionId: idSchema.nullish(),
   headcount: z.number().int().min(1).default(1),
-  recruiterUserId: z.string().uuid().nullish(),
+  recruiterUserId: idSchema.nullish(),
 });
 export type CreateJobOpeningInput = z.infer<typeof createJobOpeningSchema>;
 
@@ -124,9 +126,9 @@ export const updateJobOpeningSchema = z
   .object({
     title: recruitText(255).optional(),
     description: recruitNullableText(10_000).optional(),
-    positionId: z.string().uuid().nullish().optional(),
+    positionId: idSchema.nullish().optional(),
     headcount: z.number().int().min(1).optional(),
-    recruiterUserId: z.string().uuid().nullish().optional(),
+    recruiterUserId: idSchema.nullish().optional(),
   })
   .strict();
 export type UpdateJobOpeningInput = z.infer<typeof updateJobOpeningSchema>;
@@ -140,7 +142,7 @@ export type ChangeJobOpeningStatusInput = z.infer<typeof changeJobOpeningStatusS
 // ── Candidates (006–017, 029) ───────────────────────────────────────────────────────────────────
 
 export const listCandidatesQuerySchema = z.object({
-  jobOpeningId: z.string().uuid().optional(),
+  jobOpeningId: idSchema.optional(),
   stage: csvEnumList(candidateStageSchema),
   source: z.string().trim().min(1).max(120).optional(),
   q: z.string().trim().min(1).max(120).optional(),
@@ -158,9 +160,9 @@ export const exportCandidatesQuerySchema = listCandidatesQuerySchema
 export type ExportCandidatesQuery = z.infer<typeof exportCandidatesQuerySchema>;
 
 export const createCandidateSchema = z.object({
-  jobOpeningId: z.string().uuid(),
+  jobOpeningId: idSchema,
   fullName: recruitText(255),
-  email: z.string().trim().email().max(255).nullish(),
+  email: z.string().trim().email(emailParams()).max(255).nullish(),
   phone: recruitNullableText(30),
   source: recruitNullableText(120),
   note: recruitNullableText(10_000),
@@ -170,9 +172,9 @@ export type CreateCandidateInput = z.infer<typeof createCandidateSchema>;
 /** KHÔNG `stage`/`employeeId` (move-stage/convert là route riêng) — field lạ ⇒ 400. */
 export const updateCandidateSchema = z
   .object({
-    jobOpeningId: z.string().uuid().optional(),
+    jobOpeningId: idSchema.optional(),
     fullName: recruitText(255).optional(),
-    email: z.string().trim().email().max(255).nullish().optional(),
+    email: z.string().trim().email(emailParams()).max(255).nullish().optional(),
     phone: recruitNullableText(30).optional(),
     source: recruitNullableText(120).optional(),
     note: recruitNullableText(10_000).optional(),
@@ -183,7 +185,7 @@ export type UpdateCandidateInput = z.infer<typeof updateCandidateSchema>;
 /** Thiếu CẢ HAI tham số ⇒ 400 (service không đoán). */
 export const checkDuplicateQuerySchema = z
   .object({
-    email: z.string().trim().email().max(255).optional(),
+    email: z.string().trim().email(emailParams()).max(255).optional(),
     phone: z.string().trim().min(3).max(30).optional(),
   })
   .refine((v) => v.email !== undefined || v.phone !== undefined, {
@@ -192,6 +194,10 @@ export const checkDuplicateQuerySchema = z
   });
 export type CheckDuplicateQuery = z.infer<typeof checkDuplicateQuerySchema>;
 
+/**
+ * ⚠️ KHÔNG gắn lại vào `@Query()` (S19-OPS-ZOD4-1 §10.8): nestjs-zod 5 `cleanupOpenApiDoc` NÉM với object rỗng làm
+ * tham số ⇒ boot swagger (dev/dev-online) sập. DTO api tương ứng đã xoá vì không ai dùng; schema giữ cho hợp đồng.
+ */
 export const candidateSummaryQuerySchema = z.object({});
 export type CandidateSummaryQuery = z.infer<typeof candidateSummaryQuerySchema>;
 
@@ -227,7 +233,7 @@ export type ListCandidateSubQuery = z.infer<typeof listCandidateSubQuerySchema>;
 // ── Interviews (018–024) ────────────────────────────────────────────────────────────────────────
 
 export const listInterviewsQuerySchema = z.object({
-  candidateId: z.string().uuid().optional(),
+  candidateId: idSchema.optional(),
   from: recruitInstantSchema.optional(),
   to: recruitInstantSchema.optional(),
   status: csvEnumList(interviewStatusSchema),
@@ -236,13 +242,13 @@ export const listInterviewsQuerySchema = z.object({
 export type ListInterviewsQuery = z.infer<typeof listInterviewsQuerySchema>;
 
 export const createInterviewSchema = z.object({
-  candidateId: z.string().uuid(),
+  candidateId: idSchema,
   round: z.number().int().min(1).default(1),
   startsAt: recruitInstantSchema,
   endsAt: recruitInstantSchema,
   location: recruitNullableText(500),
   note: recruitNullableText(10_000),
-  participantEmployeeIds: z.array(z.string().uuid()).min(1).max(20),
+  participantEmployeeIds: z.array(idSchema).min(1).max(20),
 });
 export type CreateInterviewInput = z.infer<typeof createInterviewSchema>;
 
@@ -283,7 +289,7 @@ export type UpdateInterviewFeedbackInput = z.infer<typeof updateInterviewFeedbac
 // ── Offers (025–028, 030) ───────────────────────────────────────────────────────────────────────
 
 export const listOffersQuerySchema = z.object({
-  candidateId: z.string().uuid().optional(),
+  candidateId: idSchema.optional(),
   status: csvEnumList(offerStatusSchema),
   ...recruitPageQuery,
 });
@@ -295,7 +301,7 @@ export const recruitSalarySchema = z
   .regex(/^\d{1,16}(\.\d{1,2})?$/, "expected numeric string");
 
 export const createOfferSchema = z.object({
-  candidateId: z.string().uuid(),
+  candidateId: idSchema,
   title: recruitNullableText(255),
   startDate: recruitDateSchema,
   salary: recruitSalarySchema,
@@ -338,13 +344,13 @@ export type RecruitPickerQuery = z.infer<typeof recruitPickerQuerySchema>;
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 
 export const jobOpeningResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   title: z.string(),
   description: z.string().nullable(),
-  orgUnitId: z.string().uuid(),
-  positionId: z.string().uuid().nullable(),
+  orgUnitId: idSchema,
+  positionId: idSchema.nullable(),
   headcount: z.number().int(),
-  recruiterUserId: z.string().uuid().nullable(),
+  recruiterUserId: idSchema.nullable(),
   recruiterName: z.string().nullable(),
   status: jobOpeningStatusSchema,
   createdAt: z.string(),
@@ -353,14 +359,14 @@ export const jobOpeningResponseSchema = z.object({
 export type JobOpeningResponseDto = z.infer<typeof jobOpeningResponseSchema>;
 
 export const candidateListItemResponseSchema = z.object({
-  id: z.string().uuid(),
-  jobOpeningId: z.string().uuid(),
+  id: idSchema,
+  jobOpeningId: idSchema,
   fullName: z.string(),
   email: z.string().nullable(),
   phone: z.string().nullable(),
   source: z.string().nullable(),
   stage: candidateStageSchema,
-  employeeId: z.string().uuid().nullable(),
+  employeeId: idSchema.nullable(),
   /** true = email/phone đang bị server che (caller thiếu ('update','candidate')). */
   piiMasked: z.boolean(),
   createdAt: z.string(),
@@ -375,21 +381,21 @@ export type CandidateDetailResponseDto = z.infer<typeof candidateDetailResponseS
 
 /** Embed trong interview (018/020) — CHỈ fullName + stage, KHÔNG PII (SPEC-12 §4.6). */
 export const candidateEmbedResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   fullName: z.string(),
   stage: candidateStageSchema,
 });
 export type CandidateEmbedResponseDto = z.infer<typeof candidateEmbedResponseSchema>;
 
 export const interviewParticipantResponseSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   fullName: z.string().nullable(),
   employeeCode: z.string().nullable(),
 });
 export type InterviewParticipantResponseDto = z.infer<typeof interviewParticipantResponseSchema>;
 
 export const interviewResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   candidate: candidateEmbedResponseSchema,
   round: z.number().int(),
   startsAt: z.string(),
@@ -403,9 +409,9 @@ export const interviewResponseSchema = z.object({
 export type InterviewResponseDto = z.infer<typeof interviewResponseSchema>;
 
 export const interviewFeedbackResponseSchema = z.object({
-  id: z.string().uuid(),
-  interviewId: z.string().uuid(),
-  interviewerEmployeeId: z.string().uuid(),
+  id: idSchema,
+  interviewId: idSchema,
+  interviewerEmployeeId: idSchema,
   rating: z.number().int(),
   comment: z.string().nullable(),
   recommendation: interviewRecommendationSchema,
@@ -421,8 +427,8 @@ export const interviewDetailResponseSchema = interviewResponseSchema.extend({
 export type InterviewDetailResponseDto = z.infer<typeof interviewDetailResponseSchema>;
 
 export const offerResponseSchema = z.object({
-  id: z.string().uuid(),
-  candidateId: z.string().uuid(),
+  id: idSchema,
+  candidateId: idSchema,
   title: z.string().nullable(),
   startDate: z.string(),
   /** VẮNG MẶT khi caller thiếu ('manage','offer') — REC-DEC-004, KHÔNG đổi thành nullable. */
@@ -437,7 +443,7 @@ export type OfferResponseDto = z.infer<typeof offerResponseSchema>;
 
 /** 008 — check-duplicate: bó hẹp, KHÔNG PII (kể cả email/phone khớp cũng không echo lại). */
 export const candidateDuplicateResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   fullName: z.string(),
   stage: candidateStageSchema,
   jobOpeningTitle: z.string(),
@@ -447,26 +453,26 @@ export type CandidateDuplicateResponseDto = z.infer<typeof candidateDuplicateRes
 
 /** 009 — summary: byStage chỉ chứa stage CÓ ứng viên (khoá vắng = 0). */
 export const candidateSummaryResponseSchema = z.object({
-  byStage: z.record(z.number().int()),
+  byStage: z.record(z.string(), z.number().int()),
   openJobOpenings: z.number().int(),
 });
 export type CandidateSummaryResponseDto = z.infer<typeof candidateSummaryResponseSchema>;
 
 export const candidateStageEventResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   fromStage: candidateStageSchema,
   toStage: candidateStageSchema,
   action: candidateStageActionSchema,
   reason: z.string(),
-  actedBy: z.string().uuid().nullable(),
+  actedBy: idSchema.nullable(),
   actedAt: z.string(),
 });
 export type CandidateStageEventResponseDto = z.infer<typeof candidateStageEventResponseSchema>;
 
 export const candidateNoteResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   body: z.string(),
-  createdBy: z.string().uuid().nullable(),
+  createdBy: idSchema.nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -474,15 +480,15 @@ export type CandidateNoteResponseDto = z.infer<typeof candidateNoteResponseSchem
 
 /** 017 — `{delete:true}` trả `{id,deleted:true}`; sửa body trả note đầy đủ. */
 export const candidateNoteUpdateResponseSchema = z.union([
-  z.object({ id: z.string().uuid(), deleted: z.literal(true) }),
+  z.object({ id: idSchema, deleted: z.literal(true) }),
   candidateNoteResponseSchema,
 ]);
 export type CandidateNoteUpdateResponseDto = z.infer<typeof candidateNoteUpdateResponseSchema>;
 
 /** 029 — convert 1 bước (REC-DEC-005): stage sau LUÔN là Hired. */
 export const convertCandidateResponseSchema = z.object({
-  candidateId: z.string().uuid(),
-  employeeId: z.string().uuid(),
+  candidateId: idSchema,
+  employeeId: idSchema,
   employeeCode: z.string(),
   stage: z.literal("Hired"),
 });
@@ -490,7 +496,7 @@ export type ConvertCandidateResponseDto = z.infer<typeof convertCandidateRespons
 
 /** 031 — picker interviewer (id = employee_profiles.id, trường bó hẹp — RecruitPeopleRepository). */
 export const recruitEmployeePickerItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   fullName: z.string().nullable(),
   employeeCode: z.string().nullable(),
 });
@@ -498,7 +504,7 @@ export type RecruitEmployeePickerItemDto = z.infer<typeof recruitEmployeePickerI
 
 /** 032 — picker recruiter (id = users.id). */
 export const recruitUserPickerItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   fullName: z.string().nullable(),
 });
 export type RecruitUserPickerItemDto = z.infer<typeof recruitUserPickerItemSchema>;
@@ -533,8 +539,8 @@ export type RecruitCandidateFileUploadUrlInput = z.infer<
  * tệp đó là hình thức (plan §3.9).
  */
 export const recruitCandidateFileSchema = z.object({
-  linkId: z.string().uuid(),
-  fileId: z.string().uuid(),
+  linkId: idSchema,
+  fileId: idSchema,
   originalName: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int().nonnegative(),

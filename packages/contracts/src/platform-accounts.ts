@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { emailSchema } from "./common/email";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — Platform Account contracts (🔒 G6-2 crown-jewel).
@@ -12,13 +14,13 @@ import { z } from "zod";
 
 /** Phản hồi masked cho list/detail/create/update — khớp SafePlatformAccountDto (12 cột an toàn). */
 export const safePlatformAccountSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  platformId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  platformId: idSchema,
   accountName: z.string().nullable(),
   accountEmail: z.string().nullable(),
   accountIdentifier: z.string().nullable(),
-  ownerUserId: z.string().uuid().nullable(),
+  ownerUserId: idSchema.nullable(),
   securityLevel: z.string().nullable(),
   status: z.string(),
   lastRotatedAt: z.string().datetime().nullable(),
@@ -32,14 +34,14 @@ export type SafePlatformAccountDto = z.infer<typeof safePlatformAccountSchema>;
  * recovery hint (recovery_email/phone, two_factor_note) là PII lưu plaintext nhưng KHÔNG vào DTO masked.
  */
 export const createPlatformAccountSchema = z.object({
-  platformId: z.string().uuid(),
+  platformId: idSchema,
   secret: z.string().min(1).max(8192),
   accountName: z.string().max(200).optional(),
-  accountEmail: z.string().email().max(320).optional(),
+  accountEmail: emailSchema.max(320).optional(),
   accountIdentifier: z.string().max(200).optional(),
-  ownerUserId: z.string().uuid().optional(),
+  ownerUserId: idSchema.optional(),
   securityLevel: z.string().max(40).optional(),
-  recoveryEmail: z.string().email().max(320).optional(),
+  recoveryEmail: emailSchema.max(320).optional(),
   recoveryPhone: z.string().max(40).optional(),
   twoFactorNote: z.string().max(1000).optional(),
 });
@@ -53,7 +55,7 @@ export type UpdatePlatformAccountSecretRequest = z.infer<typeof updatePlatformAc
 
 /** Step-up (re-auth) — mint cửa sổ per-(userId, accountId). password bắt buộc; otp dành 2FA sau. */
 export const reauthRequestSchema = z.object({
-  accountId: z.string().uuid(),
+  accountId: idSchema,
   password: z.string().min(1),
   otp: z.string().optional(),
 });
@@ -73,7 +75,7 @@ export type RevealSecretResponse = z.infer<typeof revealSecretResponseSchema>;
 
 /** Query list — chặn DoS (q ≤ 200) + lọc uuid (mirror ListContentQueryDto fix FULL-gate G6-4). */
 export const listPlatformAccountsQuerySchema = z.object({
-  platformId: z.string().uuid().optional(),
+  platformId: idSchema.optional(),
   status: z.string().max(40).optional(),
   q: z.string().max(200).optional(),
 });
