@@ -70,6 +70,18 @@ describe("onSessionBoundary + configureToast — dọn thông báo khi đổi ng
     expect(sink.clear).not.toHaveBeenCalled();
   });
 
+  it("sau A → B, B làm mới /me nhiều lần ⇒ vẫn chỉ dọn ĐÚNG MỘT lần (mốc so sánh dời sang B)", () => {
+    const sink = makeSink();
+    signIn(USER_A);
+    configureToast(sink);
+
+    signIn(USER_B);
+    signIn({ ...USER_B, fullName: "B (đổi tên)" });
+    signIn({ ...USER_B, status: "active" });
+
+    expect(sink.clear).toHaveBeenCalledTimes(1);
+  });
+
   it("gắn lại đích ⇒ chỉ đích MỚI được dọn; configureToast(null) ⇒ không dọn gì", () => {
     const first = makeSink();
     const second = makeSink();

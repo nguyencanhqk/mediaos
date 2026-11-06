@@ -65,3 +65,9 @@ Không. (Sửa chú thích trong `routes/social/**` + spec mới đều nằm tr
   dõi cùng S19-SEC-FECACHELOGOUT-1 (huỷ mutation khi dọn QueryClient).
 - Owner xem trên trình duyệt thật: vị trí `top-4` ở apps/auth, toast trên lớp phủ hộp thoại console,
   tương phản chế độ tối.
+
+## Sổ vết gate (06/11/2026, luồng chính)
+
+- Review LIGHT (workflow 3 góc nhìn + xác minh đối kháng, 9 agent): 5 finding đề xuất, 0 đứng vững sau phản biện.
+- Cổng máy: `check.sh --quick` XANH · chunk-test app 462 · auth 6 · console 23 · ui 25 · web-core 53 tệp XANH.
+- Kiểm toán mutant `session-boundary.spec.ts`: bỏ đăng ký `clear` (đỏ 3 ca) · bỏ so danh tính (đỏ 1) · không gỡ đích cũ khi gắn lại (đỏ 1) · bỏ dời mốc `previous` — SỐNG ⇒ thêm ca «sau A → B, B làm mới /me nhiều lần ⇒ dọn đúng một lần» (đỏ trên mutant, xanh trên mã thật).
