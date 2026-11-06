@@ -22662,7 +22662,7 @@ export const backlog = [
     ],
     notes: [
       "🟡 Seed 19/10/2026 khi đóng S19-OPS-SCASATELLITE-1. Dependency dev không chạy trong dịch vụ PROD nhưng `npm ci` / `pnpm install` trên máy PROD có cài chúng. LMS là repo git riêng ⇒ thi công trong worktree của repo LMS, không sửa/build trong `apps/lms`.",
-      "🛠️ Thi công 06/11/2026 (sau Dependabot báo critical trên master): SOCIAL — nâng major bộ chạy test (PR này) ⇒ toàn cây 0 high/critical; LMS — commit `7631a92` nhánh `fix/scadevdeps-1` repo LMS local, có 1 high ở dependency CHẠY THẬT (cùng advisory ZOD4) ⇒ cần owner deploy LMS. Chi tiết + quyết định cổng dev còn chờ owner: `docs/plans/S19-OPS-SCADEVDEPS-1.md`.",
+      "🛠️ Thi công 06/11/2026 (sau Dependabot báo critical trên master): SOCIAL — nâng major bộ chạy test (PR này) ⇒ toàn cây 0 high/critical; LMS — commit `7631a92` nhánh `fix/scadevdeps-1` repo LMS local ⇒ cần owner deploy LMS. Chi tiết + quyết định cổng dev còn chờ owner: `docs/plans/S19-OPS-SCADEVDEPS-1.md`.",
     ],
   },
   {

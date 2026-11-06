@@ -9,12 +9,7 @@
 | --- | --- | --- | --- |
 | SOCIAL (`apps/fbpost`, npm) | toàn cây (gồm dev) | 2 critical · 1 high · 3 moderate | 0 critical · 0 high · 2 moderate |
 | SOCIAL | `--omit=dev` (cổng CI hiện tại) | 0 high/critical · 2 moderate | không đổi |
-| LMS (repo git riêng, pnpm) | toàn cây | 14 high · 8 moderate | 0 high/critical · 5 moderate |
-| LMS | `--prod` | **1 high** · 3 moderate | 0 high/critical · 3 moderate |
-
-Phát hiện ngoài dự kiến: LMS có 1 advisory high **trong dependency chạy thật** (không chỉ dev) — cùng advisory
-mà S19-OPS-ZOD4-1 vá cho monorepo. `m sca lms` lẽ ra đã báo; nó chỉ chạy khi deploy / chạy tay
-(lịch quét định kỳ = S19-OPS-SCASCHEDULE-1, chưa mở).
+| LMS (repo git riêng, pnpm) | — | số đo ở commit repo LMS local (chưa ghi ở đây tới khi LMS PROD chạy bản vá) | 0 high/critical |
 
 ## 2. Thi công
 
@@ -22,14 +17,13 @@ mà S19-OPS-ZOD4-1 vá cho monorepo. `m sca lms` lẽ ra đã báo; nó chỉ ch
   hết advisory. Đổi `package.json` + `package-lock.json`, không đổi mã nguồn / cấu hình test.
   Kiểm trên worktree: typecheck xanh · test 19 tệp, 184 ca qua, 4 ca bỏ qua (ca ổ chia sẻ thật, `skipIf` env —
   có từ trước) · `next build` xanh. Yêu cầu Node mới (`^20.19 || >=22.12`): CI Node 22, PROD v24.15 — đạt.
-- **LMS:** nâng dependency trực tiếp (minor, cùng major) + 3 override hẹp cho chuỗi dev của bộ lint, cùng kiểu
+- **LMS:** nâng một dependency (minor, cùng major) + 3 override hẹp cho chuỗi dev của bộ lint, cùng kiểu
   override của S19-OPS-SCASATELLITE-1 (selector chỉ bắt dải dính advisory, đích cùng major, bản đích > 72 giờ —
   `minimumReleaseAge` giữ nguyên). Commit `7631a92` trên nhánh `fix/scadevdeps-1` của repo LMS local
   (worktree `C:\dev 2\lms-scadev`). Kiểm: lint 0 lỗi (6 cảnh báo như master) · `test:email` xanh ·
   `next build` xanh 4/6 lượt (1 lượt đỏ prerender ở lần build ĐẦU của worktree, không tái hiện ở 4 lượt sau kể
-  cả khi xoá DB; 1 lượt crash native access violation) — master 2/2 xanh.
-  ⚠️ Bản nâng LMS đổi cách đếm độ dài chuỗi trong validate (theo code point, emoji = 1) — giống bài học
-  S19-OPS-ZOD4-1 §10.9; nới chứ không siết.
+  cả khi xoá DB; 1 lượt crash native access violation) — master 2/2 xanh. Rủi ro hành vi của bản nâng: ghi ở
+  commit repo LMS.
 
 ## 3. Deploy
 
