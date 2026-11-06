@@ -16,6 +16,7 @@ async function main(): Promise<void> {
     walkSchema(v, `contracts:${name}`, contractsWalk);
   }
   const files = localSchemaFiles();
+  const apiFiles = files.filter((f) => repoRel(f).startsWith("apps/api/src/")).length;
   const walk = newWalk();
   const failed: string[] = [];
   let schemas = 0;
@@ -34,7 +35,7 @@ async function main(): Promise<void> {
     }
   }
   process.stdout.write(
-    `\n@@CENSUS@@${JSON.stringify({ files: files.length, schemas, failed, walk, contractSchemas, contractsWalk })}\n`,
+    `\n@@CENSUS@@${JSON.stringify({ files: files.length, apiFiles, schemas, failed, walk, contractSchemas, contractsWalk })}\n`,
   );
 }
 

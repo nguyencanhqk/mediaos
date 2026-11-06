@@ -47,6 +47,24 @@ function unwrapToDefault(s: unknown): Def | null {
   return null;
 }
 
+/**
+ * Luật A — vá FULL gate (plan §10.8): zod 4.6.7 vẫn ÁP default khi optional bọc default qua lớp TRUNG GIAN
+ * (đo: `.default().nullable().optional()`, `.readonly()`, `.pipe(..)`, `.transform(..)` (= pipe có `in`),
+ * `.nullable()` + `.partial()`). Nên bóc nullable/readonly/catch/nonoptional và pipe theo `in` trước khi xét
+ * default. `.refine(..)`/check KHÔNG tạo lớp bọc (giữ `type` của schema) nên tự lộ. KHÔNG bóc `optional` lồng:
+ * optional bên trong tự bị báo ở lượt duyệt của nó (tránh đếm đôi).
+ */
+function reachesDefault(s: unknown): boolean {
+  let d = defOf(s);
+  for (let i = 0; d && i < 16; i++) {
+    if (d.type === "default" || d.type === "prefault") return true;
+    if (["nullable", "readonly", "nonoptional", "catch"].includes(d.type)) d = defOf(d.innerType);
+    else if (d.type === "pipe") d = defOf(d.in);
+    else return false;
+  }
+  return false;
+}
+
 function children(d: Def): unknown[] {
   const kids: unknown[] = [];
   if (d.innerType) kids.push(d.innerType);
@@ -93,11 +111,8 @@ export function walkSchema(root: unknown, label: string, into: Walk, seen = new 
     if (!d || seen.has(s as object)) return;
     seen.add(s as object);
     into.nodes += 1;
-    if (d.type === "optional") {
-      const inner = defOf(d.innerType);
-      if (inner && (inner.type === "default" || inner.type === "prefault"))
-        into.optionalOverDefault.push({ rule: "optional-over-default", path: at });
-    }
+    if (d.type === "optional" && reachesDefault(d.innerType))
+      into.optionalOverDefault.push({ rule: "optional-over-default", path: at });
     if (d.type === "default") {
       const inner = defOf(d.innerType);
       if (inner?.type === "object" && inner.shape) {
@@ -119,16 +134,26 @@ export function walkSchema(root: unknown, label: string, into: Walk, seen = new 
 
 export const repoRel = (f: string): string => path.relative(REPO, f).split(path.sep).join("/");
 
-/** Tệp `.ts` (không test/d.ts) ngoài contracts có `import … from "zod"` và export const — schema cục bộ cần quét. */
+/**
+ * Tệp `.ts` (không test/spec/d.ts) ngoài contracts có `import … from "zod"` và export const — schema cục bộ cần
+ * quét. `apps/api/src` thêm khi vá FULL gate (§10.8): chỉ ~5 tệp khớp, nạp trong tiến trình con rẻ ⇒ chọn nạp THẬT
+ * thay ratchet AST `.partial(`, vì đọc `_zod.def` bắt mọi đường tạo hình dạng (partial, spread shape, extend…).
+ */
 export function localSchemaFiles(): string[] {
-  const roots = ["packages/web-core/src", "apps/app/src", "apps/auth/src", "apps/console/src"];
+  const roots = [
+    "packages/web-core/src",
+    "apps/app/src",
+    "apps/auth/src",
+    "apps/console/src",
+    "apps/api/src",
+  ];
   const out: string[] = [];
   const rec = (dir: string) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) {
         if (e.name !== "node_modules") rec(p);
-      } else if (/\.ts$/.test(e.name) && !/\.(test|spec|d)\.ts$/.test(e.name)) {
+      } else if (/\.ts$/.test(e.name) && !/[.-](test|spec)\.ts$|\.d\.ts$/.test(e.name)) {
         const src = fs.readFileSync(p, "utf8");
         if (/from ["']zod["']/.test(src) && /export (const|let) \w+/.test(src)) out.push(p);
       }

@@ -24,6 +24,7 @@ const key = (p: string) => p.split(">")[0].replace(/ \(field.*$/, "");
 
 interface ChildResult {
   files: number;
+  apiFiles: number;
   schemas: number;
   failed: string[];
   walk: Walk;
@@ -54,7 +55,11 @@ function runCensusChild(): Promise<ChildResult> {
       (err, stdout, stderr) => {
         const line = stdout.split(String.fromCharCode(10)).find((l) => l.startsWith("@@CENSUS@@"));
         if (!line)
-          return reject(new Error(`tiến trình con không trả kết quả (${err?.message}): ${stderr.slice(0, 500)}`));
+          return reject(
+            new Error(
+              `tiến trình con không trả kết quả (${err?.message}): ${stderr.slice(0, 500)}`,
+            ),
+          );
         resolve(JSON.parse(line.slice("@@CENSUS@@".length)) as ChildResult);
       },
     );
@@ -78,9 +83,13 @@ describe("S19-OPS-ZOD4-1 — census default (optional/default/prefault) trên sc
     ).toEqual([]);
   }, 120_000);
 
-  it("schema cục bộ web-core/app/auth/console: cùng luật (mọi tệp phải nạp được)", async () => {
+  it("schema cục bộ web-core/app/auth/console/api: cùng luật (mọi tệp phải nạp được)", async () => {
     const r = await census();
     expect(r.files, "không thấy tệp schema cục bộ").toBeGreaterThanOrEqual(15);
+    expect(
+      r.apiFiles,
+      "không thấy schema của apps/api/src ⇒ census mù ở api",
+    ).toBeGreaterThanOrEqual(3);
     expect(r.failed, "tệp schema cục bộ không nạp được ⇒ census mù ở đó").toEqual([]);
     expect(r.schemas).toBeGreaterThan(20);
     expect(r.walk.nodes).toBeGreaterThan(200);
@@ -98,6 +107,33 @@ describe("S19-OPS-ZOD4-1 — census default (optional/default/prefault) trên sc
       expect(scan(z.string().prefault("x").optional()).optionalOverDefault).toHaveLength(1);
       const nested = z.object({ a: z.array(z.object({ b: z.number().default(1).optional() })) });
       expect(scan(nested).optionalOverDefault).toHaveLength(1);
+    });
+    it("bắt optional bọc default QUA lớp trung gian (vá FULL gate §10.8 — zod 4.6.7 vẫn áp default)", () => {
+      const d = () => z.string().default("x");
+      const shapes = {
+        nullable: d().nullable().optional(),
+        readonly: d().readonly().optional(),
+        pipe: d().pipe(z.string()).optional(),
+        transform: d()
+          .transform((s) => s)
+          .optional(),
+        refine: d()
+          .refine(() => true)
+          .optional(),
+        partial: z.object({ a: d().nullable() }).partial(),
+      };
+      for (const [name, s] of Object.entries(shapes)) {
+        // Tiền đề: zod THẬT áp default ở hình dạng này (zod đổi hành vi ⇒ ca này báo để xét lại luật).
+        const parsed = name === "partial" ? s.parse({}) : z.object({ a: s }).parse({});
+        expect(parsed, name).toEqual({ a: "x" });
+        expect(scan(s).optionalOverDefault, name).toHaveLength(1);
+      }
+      expect(scan(d().nullable().prefault("y").optional()).optionalOverDefault).toHaveLength(1);
+    });
+    it("KHÔNG báo optional bọc pipe khi default chỉ nằm ở phía `out`", () => {
+      expect(
+        scan(z.string().optional().pipe(z.string().default("x")).optional()).optionalOverDefault,
+      ).toEqual([]);
     });
     it("bắt default bọc object có field default, và field default bọc nullable", () => {
       const obj = z.object({ a: z.string().default("x") });

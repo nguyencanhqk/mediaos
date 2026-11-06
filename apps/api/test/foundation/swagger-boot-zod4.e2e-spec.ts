@@ -11,6 +11,7 @@
  */
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
+import type { OpenAPIObject } from "@nestjs/swagger";
 import { SwaggerModule } from "@nestjs/swagger";
 import { Test } from "@nestjs/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -23,12 +24,16 @@ const MIN_PATHS = 300;
 
 describe("S19-OPS-ZOD4-1 — boot swagger với NODE_ENV khác production", () => {
   let app: INestApplication;
+  // Dựng document MỘT lần rồi dùng lại (vá FULL gate §10.8): mỗi lần build duyệt mọi DTO, chặn worker nhiều giây —
+  // gọi lặp làm tinypool đứt IPC (ERR_IPC_CHANNEL_CLOSED, KI-014) khi chạy cả thư mục.
+  let doc: OpenAPIObject;
 
   beforeAll(async () => {
     const env = loadEnv();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = applyMainPipeline(moduleRef.createNestApplication());
     app.setGlobalPrefix(`${env.API_PREFIX}/${env.API_VERSION}`);
+    doc = buildOpenApiDocument(app);
   }, 60_000);
 
   afterAll(async () => {
@@ -37,13 +42,15 @@ describe("S19-OPS-ZOD4-1 — boot swagger với NODE_ENV khác production", () =
 
   for (const nodeEnv of ["development", "test", undefined]) {
     it(`setupSwagger(NODE_ENV=${String(nodeEnv)}) KHÔNG ném và mount tài liệu`, () => {
-      expect(() => setupSwagger(app, nodeEnv)).not.toThrow();
-      expect(setupSwagger(app, nodeEnv)).toBe(true);
+      let mounted: boolean | undefined;
+      expect(() => {
+        mounted = setupSwagger(app, nodeEnv);
+      }).not.toThrow();
+      expect(mounted).toBe(true);
     });
   }
 
   it("buildOpenApiDocument: có paths (chống tài liệu rỗng) và không còn $ref treo", () => {
-    const doc = buildOpenApiDocument(app);
     const paths = Object.keys(doc.paths ?? {});
     expect(paths.length, "tài liệu rỗng/hụt ⇒ boot xanh giả").toBeGreaterThan(MIN_PATHS);
     expect(paths.every((p) => p.startsWith("/api/v1/"))).toBe(true);
@@ -56,12 +63,10 @@ describe("S19-OPS-ZOD4-1 — boot swagger với NODE_ENV khác production", () =
   });
 
   it("đường mount runtime: SwaggerModule.setup chấp nhận document đã dựng", () => {
-    const doc = buildOpenApiDocument(app);
     expect(() => SwaggerModule.setup("docs-boot-check", app, doc)).not.toThrow();
   });
 
   it("tham số query ngày của coerceDate() có kiểu string/date-time (không mất kiểu như {items} trơ)", () => {
-    const doc = buildOpenApiDocument(app);
     const params = Object.values(doc.paths ?? {})
       .flatMap((item) => Object.values(item as Record<string, { parameters?: unknown[] }>))
       .flatMap((op) => op.parameters ?? []) as {
@@ -71,6 +76,7 @@ describe("S19-OPS-ZOD4-1 — boot swagger với NODE_ENV khác production", () =
     }[];
     const created = params.filter((p) => p.in === "query" && p.name === "created_from");
     expect(created.length, "không thấy tham số created_from ⇒ ca mù").toBeGreaterThan(0);
-    for (const p of created) expect(p.schema).toMatchObject({ type: "string", format: "date-time" });
+    for (const p of created)
+      expect(p.schema).toMatchObject({ type: "string", format: "date-time" });
   });
 });
