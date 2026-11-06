@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "./common/id";
+import { coerceDate } from "./common/coerce-date";
 
 /**
  * S4-NOTI-BE-1 — My-Notification API contracts (SPEC-08 §17.1/17.2, API-07 §11–12). Own-scope TUYỆT ĐỐI:
@@ -52,8 +53,8 @@ export const myNotificationListQuerySchema = z
     source_module: z.string().trim().min(1).max(50).optional(),
     event_code: z.string().trim().min(1).max(100).optional(),
     priority: myNotificationPrioritySchema.optional(),
-    created_from: z.coerce.date().optional(),
-    created_to: z.coerce.date().optional(),
+    created_from: coerceDate().optional(),
+    created_to: coerceDate().optional(),
     /** Mặc định false (SPEC-08 §17.1 business validation #4). */
     include_archived: optionalBooleanParam(),
     include_hidden: optionalBooleanParam(),
@@ -173,7 +174,7 @@ export type MyNotificationMarkReadResponse = z.infer<typeof myNotificationMarkRe
 export const markAllNotificationsReadRequestSchema = z.object({
   source_module: z.string().trim().min(1).max(50).nullable().optional(),
   notification_type: z.string().trim().min(1).max(50).nullable().optional(),
-  created_before: z.coerce.date().nullable().optional(),
+  created_before: coerceDate().nullable().optional(),
 });
 export type MarkAllNotificationsReadRequest = z.infer<typeof markAllNotificationsReadRequestSchema>;
 

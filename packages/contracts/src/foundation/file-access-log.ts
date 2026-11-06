@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "../common/id";
+import { coerceDate } from "../common/coerce-date";
 
 /**
  * S2-FND-BE-3 (L2) — Foundation file-access-log DTO (nguồn sự thật contracts cho GET
@@ -48,8 +49,8 @@ export const listFileAccessLogsQuerySchema = z.object({
   fileId: idSchema.optional(),
   actorUserId: idSchema.optional(),
   action: fileAccessActionSchema.optional(),
-  from: z.coerce.date().optional(),
-  to: z.coerce.date().optional(),
+  from: coerceDate().optional(),
+  to: coerceDate().optional(),
 });
 export type ListFileAccessLogsQuery = z.infer<typeof listFileAccessLogsQuerySchema>;
 

@@ -410,7 +410,7 @@ export type StatutoryRateDto = z.infer<typeof statutoryRateDtoSchema>;
  */
 export const payrollTemplatePreviewSchema = z
   .object({
-    inputs: z.record(payrollSysRefEnum, DECIMAL_STRING).default({}),
+    inputs: z.partialRecord(payrollSysRefEnum, DECIMAL_STRING).default({}),
     /** ≤ 120 khoá — bằng trần thành phần của một mẫu (payload lớn hơn không thể là dữ liệu giả hợp lý). */
     profileItems: z
       .record(COMPONENT_CODE, DECIMAL_STRING)

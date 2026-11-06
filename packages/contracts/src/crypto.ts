@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "./common/id";
+import { coerceDate } from "./common/coerce-date";
 
 /**
  * G6-2 PR-A — KMS / encryption-key provisioning contracts (BẤT BIẾN #3).
@@ -93,9 +94,9 @@ export const breakGlassGrantSchema = z.object({
   requiredApprovals: z.number().int().min(BREAK_GLASS_MIN_APPROVALS),
   approvalCount: z.number().int().nonnegative(),
   status: breakGlassGrantStatusEnum,
-  expiresAt: z.coerce.date(),
-  activatedAt: z.coerce.date().nullable(),
-  createdAt: z.coerce.date(),
+  expiresAt: coerceDate(),
+  activatedAt: coerceDate().nullable(),
+  createdAt: coerceDate(),
 });
 export type BreakGlassGrantDto = z.infer<typeof breakGlassGrantSchema>;
 

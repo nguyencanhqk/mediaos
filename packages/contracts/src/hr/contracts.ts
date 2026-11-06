@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "../common/id";
+import { coerceDate } from "../common/coerce-date";
 
 /**
  * S2-HR-BE-6 — Employee contracts (hợp đồng lao động) DTOs. Source of truth: DB-03 §7.7 / SPEC-03 / API-03.
@@ -33,8 +34,8 @@ export const employeeContractSchema = z.object({
   note: z.string().nullable(),
   /** true khi hợp đồng active có end_date trong ngưỡng cảnh báo (mặc định 30 ngày). */
   expiringSoon: z.boolean(),
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
+  createdAt: coerceDate(),
+  updatedAt: coerceDate(),
 });
 export type EmployeeContractDto = z.infer<typeof employeeContractSchema>;
 

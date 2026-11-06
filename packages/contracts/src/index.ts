@@ -241,3 +241,4 @@ export * from "./dashboard-widget-floor";
 // S19-OPS-ZOD4-1 (additive): nguồn DUY NHẤT của schema id + kiểm email (chuẩn bị nâng zod 4 — xem docblock).
 export * from "./common/id";
 export * from "./common/email";
+export * from "./common/coerce-date";

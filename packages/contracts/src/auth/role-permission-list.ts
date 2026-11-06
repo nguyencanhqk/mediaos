@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "../common/id";
+import { coerceDate } from "../common/coerce-date";
 
 /**
  * S2-AUTH-BE-3 — read-only catalogs cho UI gán quyền (GET /auth/roles · GET /auth/permissions).
@@ -69,8 +70,8 @@ export const roleMemberSchema = z.object({
   fullName: z.string().nullable().optional(),
   status: z.string(),
   /** Hết hạn grant (null = vô hạn). Hàng đã hết hạn KHÔNG xuất hiện trong list. */
-  expiresAt: z.coerce.date().nullable(),
-  grantedAt: z.coerce.date(),
+  expiresAt: coerceDate().nullable(),
+  grantedAt: coerceDate(),
 });
 export type RoleMemberDto = z.infer<typeof roleMemberSchema>;
 

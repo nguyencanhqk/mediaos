@@ -78,7 +78,7 @@ export type DashboardConfigItemDto = z.infer<typeof dashboardConfigItemSchema>;
  * vì lần 2 nhận LẠI giá trị đã pass qua z.enum (không transform giá trị, khác optionalBooleanParam
  * phải coerce true/false).
  */
-const optionalEnumParam = <T extends [string, ...string[]]>(values: T) =>
+const optionalEnumParam = <T extends readonly string[]>(values: T) =>
   z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.enum(values).optional(),

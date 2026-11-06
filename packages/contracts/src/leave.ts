@@ -393,9 +393,7 @@ interface LeaveDraftDateRefineFields {
  * ⇒ predicate `(v: LeaveDraftDateRefineFields)` hợp lệ qua contravariance (object rộng hơn assignable). Trả về
  * ZodEffects — createZodDto vẫn nhận được. Một nguồn refine duy nhất cho create-draft + update-draft.
  */
-function withLeaveDraftRefines<Shape extends z.ZodRawShape, Out extends LeaveDraftDateRefineFields>(
-  schema: z.ZodObject<Shape, "strip", z.ZodTypeAny, Out>,
-) {
+function withLeaveDraftRefines<S extends z.ZodType<LeaveDraftDateRefineFields>>(schema: S) {
   return schema
     .refine((v: LeaveDraftDateRefineFields) => v.startDate <= v.endDate, {
       message: "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc",
@@ -785,15 +783,14 @@ const leavePolicyBaseSchema = z.object({
 });
 
 function refineLeavePolicyTarget<
-  Shape extends z.ZodRawShape,
-  Out extends {
+  S extends z.ZodType<{
     policyScope: LeavePolicyScope;
     departmentId?: string;
     employeeId?: string;
     jobLevelId?: string;
     contractTypeId?: string;
-  },
->(schema: z.ZodObject<Shape, "strip", z.ZodTypeAny, Out>) {
+  }>,
+>(schema: S) {
   return schema
     .refine(
       (v) =>

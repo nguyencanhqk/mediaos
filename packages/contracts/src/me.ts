@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "./common/id";
+import { coerceDate } from "./common/coerce-date";
 
 /**
  * S5-ME-BE-1 — FOUNDATION DTO cho module ME (Trung tâm cá nhân / Personal Hub).
@@ -440,8 +441,8 @@ export const meSecurityActivityQuerySchema = z
       .positive()
       .max(ME_SECURITY_ACTIVITY_PAGE_SIZE_MAX)
       .default(ME_SECURITY_ACTIVITY_PAGE_SIZE_DEFAULT),
-    from_date: z.coerce.date().optional(),
-    to_date: z.coerce.date().optional(),
+    from_date: coerceDate().optional(),
+    to_date: coerceDate().optional(),
   })
   .refine((q) => !q.from_date || !q.to_date || q.from_date.getTime() <= q.to_date.getTime(), {
     message: "from_date phải <= to_date.",

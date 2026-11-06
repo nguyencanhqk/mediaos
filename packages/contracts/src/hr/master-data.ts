@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "../common/id";
+import { coerceDate } from "../common/coerce-date";
 
 /**
  * S2-HR-BE-3 — HR master data CRUD contracts: job_levels + contract_types.
@@ -18,8 +19,8 @@ export const jobLevelSchema = z.object({
   name: z.string(),
   rankOrder: z.number().int().nullable(),
   status: masterDataStatusEnum,
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
+  createdAt: coerceDate(),
+  updatedAt: coerceDate(),
 });
 export type JobLevelDto = z.infer<typeof jobLevelSchema>;
 
@@ -47,8 +48,8 @@ export const contractTypeSchema = z.object({
   name: z.string(),
   requiresEndDate: z.boolean(),
   status: masterDataStatusEnum,
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
+  createdAt: coerceDate(),
+  updatedAt: coerceDate(),
 });
 export type ContractTypeDto = z.infer<typeof contractTypeSchema>;
 

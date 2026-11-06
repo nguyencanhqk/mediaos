@@ -295,7 +295,7 @@ export const assetDetailResponseSchema = assetListItemResponseSchema.extend({
 export type AssetDetailResponseDto = z.infer<typeof assetDetailResponseSchema>;
 
 export const assetSummaryResponseSchema = z.object({
-  byStatus: z.record(assetLifecycleStatusSchema, z.number().int().nonnegative()),
+  byStatus: z.partialRecord(assetLifecycleStatusSchema, z.number().int().nonnegative()),
   byCategory: z.array(
     z.object({
       categoryId: idSchema,

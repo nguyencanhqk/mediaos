@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiResponseSchema } from "./index";
 import { idSchema } from "./common/id";
 import { emailSchema } from "./common/email";
+import { coerceDate } from "./common/coerce-date";
 
 /**
  * Auth DTO (G2-6) — nguồn sự thật cho api ↔ web. Login cần `companySlug` vì email chỉ unique theo
@@ -376,8 +377,8 @@ export const loginLogListQuerySchema = z
     // `failure_reason` là dữ liệu APPEND-ONLY LỊCH SỬ: enum hoá làm hàng mang mã cũ (hoặc mã mới
     // thêm sau) không lọc được, và mỗi lần đổi danh mục là một lần mồ côi lịch sử.
     failure_reason: z.string().min(1).max(64).optional(),
-    from_date: z.coerce.date().optional(),
-    to_date: z.coerce.date().optional(),
+    from_date: coerceDate().optional(),
+    to_date: coerceDate().optional(),
     sort: z.enum(LOGIN_LOG_SORT_FIELDS).default("created_at"),
     order: z.enum(AUTH_LOG_SORT_ORDERS).default("desc"),
   })
@@ -431,8 +432,8 @@ export const securityEventListQuerySchema = z
     user_id: idSchema.optional(),
     event_type: z.string().trim().min(1).max(100).optional(),
     severity: z.enum(SECURITY_EVENT_SEVERITIES).optional(),
-    from_date: z.coerce.date().optional(),
-    to_date: z.coerce.date().optional(),
+    from_date: coerceDate().optional(),
+    to_date: coerceDate().optional(),
     sort: z.enum(SECURITY_EVENT_SORT_FIELDS).default("created_at"),
     order: z.enum(AUTH_LOG_SORT_ORDERS).default("desc"),
   })

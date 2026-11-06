@@ -21,8 +21,10 @@ export const ZOD3_EMAIL_REGEX = new RegExp(
 );
 
 /** Tham số cho `.email()`. Không thông điệp ⇒ `{}` (y như `.email()` không đối số trên zod 3). */
-export function emailParams(message?: string): { message?: string } {
-  return message === undefined ? {} : { message };
+export function emailParams(message?: string): { pattern: RegExp; message?: string } {
+  return message === undefined
+    ? { pattern: ZOD3_EMAIL_REGEX }
+    : { pattern: ZOD3_EMAIL_REGEX, message };
 }
 
 export const emailSchema = z.string().email(emailParams());

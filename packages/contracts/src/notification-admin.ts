@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "./common/id";
+import { coerceDate } from "./common/coerce-date";
 
 /**
  * S4-NOTI-BE-3/BE-4 — Notification ADMIN config contracts (API-07 §14.1–14.5, SPEC-08).
@@ -142,8 +143,8 @@ export const notificationDeliveryLogAdminQuerySchema = z
     recipient_user_id: idSchema.optional(),
     channel: z.string().trim().min(1).max(50).optional(),
     delivery_status: z.string().trim().min(1).max(50).optional(),
-    created_from: z.coerce.date().optional(),
-    created_to: z.coerce.date().optional(),
+    created_from: coerceDate().optional(),
+    created_to: coerceDate().optional(),
   })
   .refine(
     (q) => !q.created_from || !q.created_to || q.created_from.getTime() <= q.created_to.getTime(),

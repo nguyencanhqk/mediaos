@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema } from "../common/id";
+import { coerceDate } from "../common/coerce-date";
 
 /**
  * S2-HR-BE-7 — Employee-code CONFIG admin contracts (API-03 §10.10 HR-API-901/902/903).
@@ -31,8 +32,8 @@ export const employeeCodeConfigSchema = z.object({
   numberLength: z.number().int(),
   allowManualOverride: z.boolean(),
   status: employeeCodeConfigStatusEnum,
-  createdAt: z.coerce.date().nullable(),
-  updatedAt: z.coerce.date().nullable(),
+  createdAt: coerceDate().nullable(),
+  updatedAt: coerceDate().nullable(),
 });
 export type EmployeeCodeConfigDto = z.infer<typeof employeeCodeConfigSchema>;
 

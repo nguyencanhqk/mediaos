@@ -36,8 +36,8 @@ describe("emailSchema — regex Y HỆT zod 3.25.76", () => {
     expect(ZOD3_EMAIL_REGEX.test(input)).toBe(ok);
   });
 
-  it("emailParams(): không thông điệp ⇒ {} · có thông điệp ⇒ đi vào issue", () => {
-    expect(emailParams()).toEqual({});
+  it("emailParams(): không thông điệp ⇒ chỉ pattern zod3 · có thông điệp ⇒ đi vào issue", () => {
+    expect(emailParams()).toEqual({ pattern: ZOD3_EMAIL_REGEX });
     const res = z.string().trim().email(emailParams("khoa.i18n.email")).safeParse(" x ");
     expect(res.success).toBe(false);
     if (!res.success) expect(res.error.issues[0]?.message).toBe("khoa.i18n.email");
