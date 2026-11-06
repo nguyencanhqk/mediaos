@@ -1,3 +1,4 @@
+import type { ZodError } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import type { ArgumentMetadata } from "@nestjs/common";
@@ -137,7 +138,7 @@ describe("SocialInputTextPipe", () => {
         thrown = e;
       }
       expect(thrown).toBeInstanceOf(ZodValidationException);
-      const issues = (thrown as ZodValidationException).getZodError().issues;
+      const issues = ((thrown as ZodValidationException).getZodError() as ZodError).issues;
       expect(issues.map((i) => i.path.join("."))).toEqual(["q", "nested.list.1"]);
       expect(issues.every((i) => i.code === "custom")).toBe(true);
       expect(issues.every((i) => i.message === SOCIAL_INPUT_TEXT_MESSAGE)).toBe(true);
@@ -154,7 +155,7 @@ describe("SocialInputTextPipe", () => {
     try {
       pipe.transform(bad(), meta("query", "q"));
     } catch (e) {
-      expect((e as ZodValidationException).getZodError().issues[0]?.path).toEqual(["q"]);
+      expect(((e as ZodValidationException).getZodError() as ZodError).issues[0]?.path).toEqual(["q"]);
     }
   });
 

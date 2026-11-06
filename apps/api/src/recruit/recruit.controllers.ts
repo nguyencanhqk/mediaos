@@ -18,7 +18,6 @@ import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { RECRUIT_ROUTE_PAIRS as P } from "./recruit-route-pairs.const";
 import {
-  CandidateSummaryQueryDto,
   ChangeInterviewStatusDto,
   ChangeJobOpeningStatusDto,
   ChangeOfferStatusDto,
@@ -150,8 +149,10 @@ export class CandidatesController {
   @Get("summary")
   @UseGuards(PermissionGuard)
   @RequirePermission(P.candidateSummary.action, P.candidateSummary.resourceType)
+  // zod 4 + nestjs-zod 5: DTO query rỗng (`z.object({})`) khiến cleanupOpenApiDoc ném "Query or url parameters must be
+  // an object type" — và nó vốn không validate gì (object rỗng strip mọi khoá) ⇒ bỏ tham số, giữ route.
   @UsePipes(ZodValidationPipe)
-  summary(@Req() req: AuthenticatedRequest, @Query() _query: CandidateSummaryQueryDto) {
+  summary(@Req() req: AuthenticatedRequest) {
     return this.candidates.summary(req.user);
   }
 

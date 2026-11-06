@@ -11,6 +11,7 @@ import type { Request, Response } from "express";
 import { ZodValidationException } from "nestjs-zod";
 import { ERROR_CODES, httpStatusToCode } from "../errors/error-codes";
 import { retryAfterHeaderValue } from "./retry-after";
+import { zodIssuesToDetails } from "./zod-issue-rule";
 
 interface ResolvedError {
   status: number;
@@ -75,11 +76,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // 1) Validation (Zod) — PHẢI bắt TRƯỚC nhánh HttpException: ZodValidationException extends
     //    BadRequestException (status 400) nên sẽ bị map generic nếu không branch riêng ở đây.
     if (exception instanceof ZodValidationException) {
-      const details: ErrorDetail[] = exception.getZodError().issues.map((issue) => ({
-        field: issue.path.join("."),
-        message: issue.message,
-        rule: issue.code,
-      }));
+      // nestjs-zod 5: getZodError() trả `unknown` ⇒ thu hẹp theo HÌNH DẠNG (issues là mảng), không instanceof.
+      // Không có issues ⇒ 400 không details — KHÔNG BAO GIỜ 500 (zod-issue-rule.ts).
+      const details = zodIssuesToDetails(exception.getZodError());
       return {
         status: HttpStatus.BAD_REQUEST,
         code: ERROR_CODES.VALIDATION,

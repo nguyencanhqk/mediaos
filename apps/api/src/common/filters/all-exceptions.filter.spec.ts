@@ -90,7 +90,6 @@ describe("AllExceptionsFilter — error mapping (API-01 §12)", () => {
       {
         code: "invalid_type",
         expected: "string",
-        received: "undefined",
         path: ["email"],
         message: "Required",
       },
@@ -107,6 +106,14 @@ describe("AllExceptionsFilter — error mapping (API-01 §12)", () => {
     expect(error.code).toBe("VALIDATION-ERR-001");
     expect(error.details?.[0]?.field).toBe("email");
     expect(error.details?.[0]?.message).toBe("Required");
+  });
+
+  it("ZodValidationException KHÔNG có issues ⇒ 400 không details, KHÔNG BAO GIỜ 500 (nestjs-zod 5: getZodError() là unknown)", () => {
+    vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const { statusCode, body } = invoke(new ZodValidationException({ lạ: true }));
+    expect(statusCode).toBe(400);
+    expect((body.error as { code: string; details: unknown }).code).toBe("VALIDATION-ERR-001");
+    expect((body.error as { details: unknown }).details).toBeNull();
   });
 
   it("ForbiddenException → AUTH-ERR-FORBIDDEN, status 403", () => {

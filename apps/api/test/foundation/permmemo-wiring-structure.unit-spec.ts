@@ -38,8 +38,8 @@ describe("S1 — main.ts đăng ký grantMemoMiddleware (DECISIONS-15)", () => {
   });
 
   it("cờ PERMISSION_GRANT_MEMO_ENABLED mặc định 'true', nhận đúng 'true'|'false'", () => {
-    // `envSchema` là ZodEffects (superRefine) ⇒ đọc shape của object bên trong.
-    const shape: Record<string, ZodTypeAny> = envSchema.innerType().shape;
+    // zod 4: `superRefine` giữ nguyên ZodObject ⇒ đọc thẳng `.shape`.
+    const shape: Record<string, ZodTypeAny> = envSchema.shape;
     const flag = shape.PERMISSION_GRANT_MEMO_ENABLED;
     expect(flag, "env.schema PHẢI khai PERMISSION_GRANT_MEMO_ENABLED").toBeDefined();
     expect(flag.safeParse(undefined).data).toBe("true");
