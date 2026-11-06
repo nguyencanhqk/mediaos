@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { brandingLogoRefSchema } from "./branding";
+import { emailSchema } from "../common/email";
+import { idSchema } from "../common/id";
 
 /**
  * S1-FND-WIRE-1 — Foundation Company response DTO (nguồn sự thật contracts cho GET/PATCH
@@ -7,7 +9,7 @@ import { brandingLogoRefSchema } from "./branding";
  * id/slug/status + hồ sơ; KHÔNG có secret. BACKEND-04 §9.2.
  */
 export const companyViewSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   slug: z.string(),
   status: z.string(),
@@ -79,7 +81,7 @@ export const patchCompanySchema = z
     address: z.string().max(1024).nullable(),
     phone: z.string().max(50).nullable(),
     fax: z.string().max(50).nullable(),
-    email: z.string().email().max(255).nullable(),
+    email: emailSchema.max(255).nullable(),
     website: z.string().url().max(2048).nullable(),
   })
   .partial();

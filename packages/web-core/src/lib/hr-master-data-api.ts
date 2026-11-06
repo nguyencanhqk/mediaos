@@ -14,6 +14,7 @@ import {
   type UpdateContractTypeRequest,
   type CreateDepartmentRequest,
   type UpdateDepartmentRequest,
+  idSchema,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -38,13 +39,13 @@ import { buildQueryString } from "./api-params";
 // tại ranh giới khớp SHAPE repo trả (hr-department.repository listDepartments/findById + .returning()).
 // z.object mặc định strip key thừa (type/deletedAt của .returning()) → an toàn cho mọi biến thể response.
 const hrDepartmentSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  parentId: z.string().uuid().nullable(),
+  id: idSchema,
+  companyId: idSchema,
+  parentId: idSchema.nullable(),
   name: z.string(),
   code: z.string().nullable(),
   description: z.string().nullable(),
-  headUserId: z.string().uuid().nullable(),
+  headUserId: idSchema.nullable(),
   status: z.enum(["active", "inactive"]),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),

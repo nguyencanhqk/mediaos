@@ -18,6 +18,7 @@ import {
   wsChatRoomEventSchema,
   type ChatMessageDto,
   type ChatRoomDto,
+  idSchema,
 } from "@mediaos/contracts";
 import {
   CHAT_POLL_INTERVAL_MS,
@@ -556,7 +557,7 @@ describe("gửi lạc quan (§R3.4 — pending CHỈ do response POST của chí
     const a = createClientMessageId();
     const b = createClientMessageId();
     expect(a).not.toBe(b);
-    expect(z.string().uuid().safeParse(a).success).toBe(true);
+    expect(idSchema.safeParse(a).success).toBe(true);
   });
 
   it("WS echo về TRƯỚC response POST → đúng 1 bản ghi, pending xoá sau khi POST resolve", () => {

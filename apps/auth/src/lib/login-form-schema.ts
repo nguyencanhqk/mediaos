@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { emailParams } from "@mediaos/contracts";
 
 /**
  * Schema validate FORM đăng nhập (chỉ email + password) — tương thích `loginRequestSchema` của
@@ -12,7 +13,7 @@ export const loginFormSchema = z.object({
   email: z
     .string()
     .min(1, { message: "validation.emailRequired" })
-    .email({ message: "validation.emailInvalid" })
+    .email(emailParams("validation.emailInvalid"))
     .max(255, { message: "validation.emailInvalid" }),
   password: z.string().min(1, { message: "validation.passRequired" }).max(200),
 });

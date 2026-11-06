@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dependentRelationshipEnum, payrollPageQuery } from "./payroll";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — PAYROLL **track A v2** contracts (SPEC-11 §15.1 `036..043` · API-18 §5b, wave S15-PAYROLL-V2).
@@ -51,7 +52,7 @@ export const payrollEmployeeListQuerySchema = z.object({
    * Lọc CHÍNH XÁC một đơn vị, **KHÔNG đệ quy cây con** (plan §9 mục 3 — SPEC không chốt; đệ quy là
    * quyết định cần ký riêng, và mở rộng ngầm thì không ai đo được lúc nào phạm vi đổi).
    */
-  orgUnitId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
   /** `true` = chỉ nhân sự đã có ≥1 phiên bản hồ sơ lương chưa xoá mềm (không xét ngày hiệu lực). */
   hasSalaryProfile: queryBoolean.optional(),
   insuranceIssue: payrollInsuranceIssueEnum.optional(),
@@ -64,7 +65,7 @@ export type PayrollEmployeeListQuery = z.infer<typeof payrollEmployeeListQuerySc
  * KHÔNG `email`, KHÔNG số điện thoại, KHÔNG lương (SPEC-11 §18).
  */
 export const payrollEmployeeListItemSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
   orgUnitName: z.string().nullable(),
@@ -99,7 +100,7 @@ export type PayrollEmployeeDetailDto = z.infer<typeof payrollEmployeeDetailSchem
  * Hàng có thể CHƯA tồn tại (1 hàng/nhân sự, tạo lần đầu ở 039) ⇒ mọi trường nullable, `id` cũng vậy.
  */
 export const payrollEmployeeSettingsSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   joinsSocialInsurance: z.boolean(),
   socialInsuranceNo: z.string().nullable(),
   joinsUnion: z.boolean(),
@@ -152,8 +153,8 @@ export type PutPayrollEmployeeSettingsRequest = z.infer<typeof putPayrollEmploye
 
 /** DTO đọc (040) — `fullName`/`dependentTaxCode` là **PII**, chỉ ra qua `('view','payroll-employee')`. */
 export const payrollDependentSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  userId: idSchema,
   fullName: z.string(),
   relationship: dependentRelationshipEnum,
   dependentTaxCode: z.string().nullable(),
@@ -215,7 +216,7 @@ export type PayrollTimesheetQuery = z.infer<typeof payrollTimesheetQuerySchema>;
  * `workDays` là hằng của KỲ (mẫu số), lặp trên mọi hàng để FE không phải ghép hai nguồn.
  */
 export const payrollTimesheetRowSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
   workDays: z.number(),
@@ -236,7 +237,7 @@ export type PayrollTimesheetRowDto = z.infer<typeof payrollTimesheetRowSchema>;
  * (038 / 040) — route ĐỌC gác bằng `('view','payroll-employee')`, đúng cặp mà §3.12 đòi.
  */
 export const payrollEmployeeWriteResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   /**
    * BẮT BUỘC, **KHÔNG** `.default([])` — cùng luật với `payrollWriteResultSchema` (`payroll.ts` §4): BE set
    * tường minh ở cả 4 đường ghi (settings upsert · dependent create/update/delete), và `.default()` trên

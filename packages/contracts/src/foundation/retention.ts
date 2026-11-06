@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S2-FND-BE-3 (L2) — Foundation retention-policy DTO (nguồn sự thật contracts cho
@@ -21,7 +22,7 @@ export type CleanupActionDto = z.infer<typeof cleanupActionSchema>;
  */
 export const retentionPolicyViewSchema = z
   .object({
-    id: z.string().uuid(),
+    id: idSchema,
     moduleCode: z.string(),
     entityType: z.string(),
     retentionDays: z.number().int(),
@@ -95,7 +96,7 @@ export type CreateRetentionPolicyDto = z.infer<typeof createRetentionPolicySchem
  */
 export const simulateResultSchema = z
   .object({
-    policyId: z.string().uuid(),
+    policyId: idSchema,
     moduleCode: z.string(),
     entityType: z.string(),
     eligibleRecords: z.number().int(),

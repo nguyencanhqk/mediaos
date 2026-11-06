@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AuthUserDto, CreateAuthUserRequest, UpdateAuthUserRequest } from "@mediaos/contracts";
+import { emailParams } from "@mediaos/contracts";
 
 /**
  * S2-FE-AUTH-3 — UserForm schema + DTO mappers cho /system/users/new + /system/users/:id/edit.
@@ -16,7 +17,7 @@ const createSchema = z.object({
   email: z
     .string()
     .min(1, { message: "users.form.validation.emailRequired" })
-    .email({ message: "users.form.validation.emailInvalid" })
+    .email(emailParams("users.form.validation.emailInvalid"))
     .max(255, { message: "users.form.validation.emailInvalid" }),
   fullName: z
     .string()

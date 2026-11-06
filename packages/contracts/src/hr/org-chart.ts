@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S5-HR-ORGCHART-BE-1 — sơ đồ tổ chức: cây nhân sự theo `employee_profiles.direct_manager_id`
@@ -35,8 +36,8 @@ export type OrgChartEmployeeNode = {
 export const orgChartEmployeeNodeSchema: z.ZodType<OrgChartEmployeeNode> = z.lazy(() =>
   z
     .object({
-      employeeId: z.string().uuid(),
-      userId: z.string().uuid().nullable(),
+      employeeId: idSchema,
+      userId: idSchema.nullable(),
       displayName: z.string().nullable(),
       positionName: z.string().nullable(),
       orgUnitName: z.string().nullable(),

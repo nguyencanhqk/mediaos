@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { emailSchema, emailParams } from "../common/email";
+import { idSchema } from "../common/id";
 
 /**
  * S2-AUTH-BE-3 — User admin DTOs cho /auth/users (list/get/create/update/lock/unlock).
@@ -50,8 +52,8 @@ export type AuthUserStatus = (typeof AUTH_USER_STATUSES)[number];
  * nhạy cảm-vận hành trừ khi spec yêu cầu (ẩn mặc định).
  */
 export const authUserSchema = z.object({
-  id: z.string().uuid(),
-  email: z.string().email(),
+  id: idSchema,
+  email: emailSchema,
   fullName: z.string().nullable(),
   status: z.enum(AUTH_USER_STATUSES),
   lockedAt: z.string().datetime().nullable(),
@@ -174,7 +176,7 @@ export const newPasswordSchema = z
  */
 export const createAuthUserRequestSchema = z
   .object({
-    email: z.string().trim().email().max(255),
+    email: z.string().trim().email(emailParams()).max(255),
     password: newPasswordSchema,
     fullName: z.string().trim().min(1).max(200),
   })

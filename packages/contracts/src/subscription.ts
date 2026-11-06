@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * G16-3 SaaS prep — subscription / feature-flag / usage-limit DTOs (KIẾN TRÚC, KHÔNG billing thật).
@@ -15,7 +16,7 @@ export type PlanEntitlementKind = z.infer<typeof planEntitlementKindEnum>;
 
 /** DTO 1 gói (catalog). */
 export const planSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
   description: z.string().nullable(),
@@ -25,9 +26,9 @@ export type PlanSummaryDto = z.infer<typeof planSummarySchema>;
 
 /** DTO subscription của 1 công ty. */
 export const companySubscriptionSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  planId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  planId: idSchema,
   planCode: z.string(),
   status: subscriptionStatusEnum,
   currentPeriodEnd: z.string().datetime().nullable(),

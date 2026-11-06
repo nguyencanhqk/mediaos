@@ -9,6 +9,7 @@ import {
   payrollPageQuery,
   payrollPeriodStatusEnum,
 } from "./payroll";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — PAYROLL v2 track C contracts (S15-PAYROLL-BE-4 · SPEC-11 §13 · §15.1 hàng 059–077 · DB-13 §14):
@@ -41,19 +42,19 @@ export const PAYROLL_ADVANCE_NOTE_MAX = 500;
  * `createdBy` nullable ở kiểu cột dù trigger `insert-shape` ép NOT NULL khi INSERT — DTO mirror CỘT.
  */
 export const payrollAdvanceSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  userId: idSchema,
   amount: z.number().positive().optional(),
   deductPeriodMonth: periodMonthSchema,
   reason: z.string(),
   status: payrollAdvanceStatusEnum,
-  decidedBy: z.string().uuid().nullable(),
+  decidedBy: idSchema.nullable(),
   decidedAt: z.string().datetime().nullable(),
   decisionNote: z.string().nullable(),
-  payrollPeriodId: z.string().uuid().nullable(),
+  payrollPeriodId: idSchema.nullable(),
   consumedAt: z.string().datetime().nullable(),
-  createdBy: z.string().uuid().nullable(),
+  createdBy: idSchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -66,7 +67,7 @@ export type PayrollAdvanceDto = z.infer<typeof payrollAdvanceSchema>;
  */
 export const createPayrollAdvanceSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: idSchema,
     amount: z.number().positive(),
     deductPeriodMonth: periodMonthSchema,
     reason: z.string().trim().min(1).max(PAYROLL_ADVANCE_REASON_MAX),
@@ -114,7 +115,7 @@ export type RejectPayrollAdvanceRequest = z.infer<typeof rejectPayrollAdvanceSch
  */
 export const payrollAdvanceListQuerySchema = z
   .object({
-    userId: z.string().uuid().optional(),
+    userId: idSchema.optional(),
     status: csvEnumList(payrollAdvanceStatusEnum),
     deductPeriodMonth: periodMonthSchema.optional(),
     ...payrollPageQuery,
@@ -136,7 +137,7 @@ export type MePayrollAdvanceListQuery = z.infer<typeof mePayrollAdvanceListQuery
  * `["recalculate-required"]` — tín hiệu an toàn, không được biến "server quên gửi" thành "không cảnh báo".
  */
 export const payrollAdvanceWriteResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   status: payrollAdvanceStatusEnum,
   warnings: z.array(z.string()),
 });
@@ -164,8 +165,8 @@ export const paymentBatchCodeSchema = z
  * `lineCount`/`paidLineCount` là SỐ ĐẾM dòng sống / dòng đã `paid_at` — không phải tiền.
  */
 export const paymentBatchSchema = z.object({
-  id: z.string().uuid(),
-  payrollPeriodId: z.string().uuid(),
+  id: idSchema,
+  payrollPeriodId: idSchema,
   periodMonth: periodMonthSchema,
   code: z.string(),
   method: paymentBatchMethodEnum,
@@ -175,9 +176,9 @@ export const paymentBatchSchema = z.object({
   lineCount: z.number().int().nonnegative(),
   paidLineCount: z.number().int().nonnegative(),
   totalNet: z.number().optional(),
-  createdBy: z.string().uuid().nullable(),
+  createdBy: idSchema.nullable(),
   createdAt: z.string().datetime(),
-  completedBy: z.string().uuid().nullable(),
+  completedBy: idSchema.nullable(),
   completedAt: z.string().datetime().nullable(),
   updatedAt: z.string().datetime(),
 });
@@ -189,11 +190,11 @@ export type PaymentBatchDto = z.infer<typeof paymentBatchSchema>;
  * (một nguồn sự thật cho một khoản tiền) ⇒ `.optional()`. Tên qua điểm chiếu danh tính (null khi ngoài vị từ).
  */
 export const paymentLineSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  userId: idSchema,
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
-  payslipId: z.string().uuid(),
+  payslipId: idSchema,
   net: z.number().optional(),
   bankAccountLast4: z.string().nullable(),
   bankName: z.string().nullable(),
@@ -212,12 +213,12 @@ export type PaymentLineDto = z.infer<typeof paymentLineSchema>;
  */
 export const createPaymentBatchSchema = z
   .object({
-    payrollPeriodId: z.string().uuid(),
+    payrollPeriodId: idSchema,
     method: paymentBatchMethodEnum,
     code: paymentBatchCodeSchema.optional(),
     payDate: z.string().date().optional(),
     note: z.string().trim().max(PAYMENT_BATCH_NOTE_MAX).optional(),
-    userIds: z.array(z.string().uuid()).min(1).max(PAYMENT_BATCH_LINES_MAX).optional(),
+    userIds: z.array(idSchema).min(1).max(PAYMENT_BATCH_LINES_MAX).optional(),
   })
   .strict();
 export type CreatePaymentBatchRequest = z.infer<typeof createPaymentBatchSchema>;
@@ -241,9 +242,9 @@ export const updatePaymentBatchSchema = z
     status: paymentBatchEditableStatusEnum.optional(),
     payDate: z.string().date().nullable().optional(),
     note: z.string().trim().max(PAYMENT_BATCH_NOTE_MAX).nullable().optional(),
-    addUserIds: z.array(z.string().uuid()).min(1).max(PAYMENT_BATCH_LINES_MAX).optional(),
-    removeUserIds: z.array(z.string().uuid()).min(1).max(PAYMENT_BATCH_LINES_MAX).optional(),
-    markPaidUserIds: z.array(z.string().uuid()).min(1).max(PAYMENT_BATCH_LINES_MAX).optional(),
+    addUserIds: z.array(idSchema).min(1).max(PAYMENT_BATCH_LINES_MAX).optional(),
+    removeUserIds: z.array(idSchema).min(1).max(PAYMENT_BATCH_LINES_MAX).optional(),
+    markPaidUserIds: z.array(idSchema).min(1).max(PAYMENT_BATCH_LINES_MAX).optional(),
   })
   .strict();
 export type UpdatePaymentBatchRequest = z.infer<typeof updatePaymentBatchSchema>;
@@ -262,7 +263,7 @@ export type CompletePaymentBatchRequest = z.infer<typeof completePaymentBatchSch
 
 /** 066 — filter `payrollPeriodId` · `status[]` · `method` + pagination. */
 export const paymentBatchListQuerySchema = z.object({
-  payrollPeriodId: z.string().uuid().optional(),
+  payrollPeriodId: idSchema.optional(),
   status: csvEnumList(paymentBatchStatusEnum),
   method: paymentBatchMethodEnum.optional(),
   ...payrollPageQuery,
@@ -278,7 +279,7 @@ export type PaymentLineListQuery = z.infer<typeof paymentLineListQuerySchema>;
  * `no-eligible-payees` (067 tự nạp trúng 0 người — đợt vẫn tạo, 072 sẽ chặn `batch-empty`).
  */
 export const paymentBatchWriteResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   warnings: z.array(z.string()),
 });
 export type PaymentBatchWriteResultDto = z.infer<typeof paymentBatchWriteResultSchema>;
@@ -289,7 +290,7 @@ export type PaymentBatchWriteResultDto = z.infer<typeof paymentBatchWriteResultS
  * dòng sống thuộc đợt `Completed` (số ĐẾM người, không tiền).
  */
 export const completePaymentBatchResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   batchStatus: paymentBatchStatusEnum,
   periodStatus: payrollPeriodStatusEnum,
   unpaidPayees: z.number().int().nonnegative(),
@@ -312,9 +313,9 @@ export const PAYROLL_BUDGET_NOTE_MAX = 500;
  * hàng toàn công ty = tổng mọi phiếu. Chưa gồm phần BH doanh nghiệp. `variance = planned − actual`.
  */
 export const payrollBudgetSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   fiscalYear: z.number().int(),
-  orgUnitId: z.string().uuid().nullable(),
+  orgUnitId: idSchema.nullable(),
   orgUnitName: z.string().nullable(),
   plannedAmount: z.number().optional(),
   actualAmount: z.number().optional(),
@@ -329,7 +330,7 @@ export type PayrollBudgetDto = z.infer<typeof payrollBudgetSchema>;
 export const createPayrollBudgetSchema = z
   .object({
     fiscalYear: z.number().int().min(PAYROLL_BUDGET_YEAR_MIN).max(PAYROLL_BUDGET_YEAR_MAX),
-    orgUnitId: z.string().uuid().nullable().optional(),
+    orgUnitId: idSchema.nullable().optional(),
     plannedAmount: z.number().nonnegative(),
     note: z.string().trim().max(PAYROLL_BUDGET_NOTE_MAX).optional(),
   })
@@ -354,13 +355,13 @@ export const payrollBudgetListQuerySchema = z.object({
     .min(PAYROLL_BUDGET_YEAR_MIN)
     .max(PAYROLL_BUDGET_YEAR_MAX)
     .optional(),
-  orgUnitId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
 });
 export type PayrollBudgetListQuery = z.infer<typeof payrollBudgetListQuerySchema>;
 
 /** Envelope 074/075 — `{ id, warnings }` (0 khoá tiền). */
 export const payrollBudgetWriteResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   warnings: z.array(z.string()),
 });
 export type PayrollBudgetWriteResultDto = z.infer<typeof payrollBudgetWriteResultSchema>;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * S11-ROOM-DB-1 — enum/hằng chuẩn module ROOM (SPEC-14 · DB-16 §7). NGUỒN SỰ THẬT cho DTO của S11-ROOM-BE-1 (API-15).
@@ -150,7 +151,7 @@ export const roomBookingsWindowQuerySchema = z.object({
 export type RoomBookingsWindowQueryDto = z.infer<typeof roomBookingsWindowQuerySchema>;
 
 export const roomResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   location: z.string().nullable(),
   capacity: z.number().int(),
@@ -167,7 +168,7 @@ export const roomResponseSchema = z.object({
 export type RoomResponseDto = z.infer<typeof roomResponseSchema>;
 
 export const roomAvailabilityItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   location: z.string().nullable(),
   capacity: z.number().int(),
@@ -176,7 +177,7 @@ export const roomAvailabilityItemSchema = z.object({
 export type RoomAvailabilityItemDto = z.infer<typeof roomAvailabilityItemSchema>;
 
 export const roomUsageSummaryItemSchema = z.object({
-  roomId: z.string().uuid(),
+  roomId: idSchema,
   name: z.string(),
   bookingsCount: z.number().int(),
   hoursBooked: z.number(),
@@ -188,22 +189,22 @@ export type RoomUsageSummaryItemDto = z.infer<typeof roomUsageSummaryItemSchema>
 
 export const listRoomBookingsQuerySchema = z.object({
   ...windowQueryShape,
-  roomId: queryListSchema(z.string().uuid(), ROOM_LIST_ROOM_IDS_MAX),
-  organizerUserId: z.string().uuid().optional(),
+  roomId: queryListSchema(idSchema, ROOM_LIST_ROOM_IDS_MAX),
+  organizerUserId: idSchema.optional(),
   status: roomBookingStatusFilterSchema.default("Confirmed"),
 });
 export type ListRoomBookingsQueryDto = z.infer<typeof listRoomBookingsQuerySchema>;
 
 export const createRoomBookingSchema = z.object({
-  roomId: z.string().uuid(),
+  roomId: idSchema,
   title: z.string().trim().min(1).max(ROOM_BOOKING_TITLE_MAX),
   startsAt: roomIsoDateTimeSchema,
   endsAt: roomIsoDateTimeSchema,
   description: nullableText(ROOM_DESCRIPTION_MAX),
   /** KHÔNG dedupe ở Zod — trùng/chứa organizer là 422 ROOM-ERR-006 `attendee-duplicate` ở service. */
-  attendeeUserIds: z.array(z.string().uuid()).max(ROOM_MAX_ATTENDEES).optional(),
+  attendeeUserIds: z.array(idSchema).max(ROOM_MAX_ATTENDEES).optional(),
   /** Chỉ được honour khi scope `book` = Company (đặt hộ); scope Own gửi khác caller ⇒ 403 ROOM-ERR-010. */
-  organizerUserId: z.string().uuid().optional(),
+  organizerUserId: idSchema.optional(),
 });
 export type CreateRoomBookingDto = z.infer<typeof createRoomBookingSchema>;
 
@@ -250,16 +251,16 @@ export type MyRoomBookingsQueryDto = z.infer<typeof myRoomBookingsQuerySchema>;
 
 /** Người trong lượt — KHÔNG email/số điện thoại (SPEC-14 §18). `displayName` null khi ngoài scope danh tính. */
 export const roomPersonSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   displayName: z.string().nullable(),
   employeeCode: z.string().nullable().optional(),
 });
 export type RoomPersonDto = z.infer<typeof roomPersonSchema>;
 
 export const roomBookingResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   room: z.object({
-    id: z.string().uuid(),
+    id: idSchema,
     name: z.string(),
     location: z.string().nullable(),
     capacity: z.number().int(),
@@ -290,7 +291,7 @@ export type MyRoomBookingResponseDto = z.infer<typeof myRoomBookingResponseSchem
 
 /** `details.conflicts[]` của ROOM-ERR-001 (chỉ lượt `Confirmed` giao `[startsAt, endsAt)`). */
 export const roomBookingConflictSchema = z.object({
-  bookingId: z.string().uuid(),
+  bookingId: idSchema,
   title: z.string(),
   startsAt: z.string(),
   endsAt: z.string(),

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { periodMonthSchema } from "./attendance";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — PAYROLL contracts (SPEC-11 · DB-13 §7, wave S13-PAYROLL).
@@ -192,7 +193,7 @@ export type Allowance = z.infer<typeof allowanceSchema>;
  * DEFAULT** — object rỗng là "snapshot giả" và sẽ ăn 23514 ở DB.
  */
 export const inputSnapshotSchema = z
-  .record(z.unknown())
+  .record(z.string(), z.unknown())
   .refine((v) => Object.keys(v).length > 0, { message: "input snapshot must not be empty" });
 export type InputSnapshot = z.infer<typeof inputSnapshotSchema>;
 
@@ -242,7 +243,7 @@ export type SalaryProfileItemInput = z.infer<typeof salaryProfileItemInputSchema
  * im lặng**, đúng thứ nợ DB-1 cấm.
  */
 export const salaryProfileItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   componentCode: z.string(),
   componentName: z.string().nullable(),
   kind: salaryComponentKindEnum.nullable(),
@@ -257,9 +258,9 @@ export type SalaryProfileItemDto = z.infer<typeof salaryProfileItemSchema>;
  * `('view','salary-profile')` thì server trả DTO **vắng hai khoá này** (không null, không 0).
  */
 export const salaryProfileSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  userId: idSchema,
   effectiveDate: z.string().date(),
   baseSalary: z.number().optional(),
   /**
@@ -287,8 +288,8 @@ export type SalaryProfileDto = z.infer<typeof salaryProfileSchema>;
 
 /** Hàng list — cùng masking như detail. */
 export const salaryProfileListItemSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  userId: idSchema,
   effectiveDate: z.string().date(),
   baseSalary: z.number().optional(),
   allowances: z.array(allowanceSchema).optional(),
@@ -304,7 +305,7 @@ export type SalaryProfileListItemDto = z.infer<typeof salaryProfileListItemSchem
  */
 export const createSalaryProfileSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: idSchema,
     effectiveDate: z.string().date(),
     baseSalary: z.number().positive(),
     /**
@@ -354,7 +355,7 @@ export type UpdateSalaryProfileRequest = z.infer<typeof updateSalaryProfileSchem
 
 /** GET /salary-profiles query filters (PAYROLL-API-019) + pagination API-01 §16.1. */
 export const salaryProfileListQuerySchema = z.object({
-  userId: z.string().uuid().optional(),
+  userId: idSchema.optional(),
   /** Lọc phiên bản có hiệu lực tại ngày X (bản `effective_date <= X` mới nhất). */
   effectiveOn: z.string().date().optional(),
   ...payrollPageQuery,
@@ -372,34 +373,34 @@ export type SalaryProfileListQuery = z.infer<typeof salaryProfileListQuerySchema
  * `payslipsGeneratedAt` là cờ đã-sinh-phiếu — nguồn kiểm của reopen/publish, đọc dưới row-lock ở service.
  */
 export const payrollPeriodSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   periodMonth: periodMonthSchema,
   status: payrollPeriodStatusEnum,
   payDate: z.string().date().nullable(),
-  attendancePeriodId: z.string().uuid().nullable(),
+  attendancePeriodId: idSchema.nullable(),
   /** S15-PAYROLL-BE-3 — mẫu bảng lương gắn vào kỳ (id, không tiền). `null` ⇒ `calculate` trả 409 023 `template-missing`. */
-  templateId: z.string().uuid().nullable(),
+  templateId: idSchema.nullable(),
   note: z.string().nullable(),
   reopenReason: z.string().nullable(),
-  createdBy: z.string().uuid().nullable(),
-  updatedBy: z.string().uuid().nullable(),
-  calculatedBy: z.string().uuid().nullable(),
+  createdBy: idSchema.nullable(),
+  updatedBy: idSchema.nullable(),
+  calculatedBy: idSchema.nullable(),
   calculatedAt: z.string().datetime().nullable(),
-  submittedBy: z.string().uuid().nullable(),
+  submittedBy: idSchema.nullable(),
   submittedAt: z.string().datetime().nullable(),
-  approvedBy: z.string().uuid().nullable(),
+  approvedBy: idSchema.nullable(),
   approvedAt: z.string().datetime().nullable(),
-  publishedBy: z.string().uuid().nullable(),
+  publishedBy: idSchema.nullable(),
   publishedAt: z.string().datetime().nullable(),
   /** S15-PAYROLL-BE-4 — vết `Paid` (cạnh `complete-batch`, mig 0572). ⚠️ «đã chi» hiển thị DẪN XUẤT từ dòng chi, KHÔNG từ cặp này. */
-  paidBy: z.string().uuid().nullable(),
+  paidBy: idSchema.nullable(),
   paidAt: z.string().datetime().nullable(),
   /** S15-PAYROLL-BE-4 — kỳ `Locked` di sản (O-1 lối A, DB-2 LOW-2): `paid_* = published_*` ⇒ FE KHÔNG hiện «đã chi». */
   legacyPaidTrail: z.boolean(),
-  lockedBy: z.string().uuid().nullable(),
+  lockedBy: idSchema.nullable(),
   lockedAt: z.string().datetime().nullable(),
-  payslipsGeneratedBy: z.string().uuid().nullable(),
+  payslipsGeneratedBy: idSchema.nullable(),
   payslipsGeneratedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -408,9 +409,9 @@ export type PayrollPeriodDto = z.infer<typeof payrollPeriodSchema>;
 
 export const createPayrollPeriodSchema = z.object({
   periodMonth: periodMonthSchema,
-  attendancePeriodId: z.string().uuid().optional(),
+  attendancePeriodId: idSchema.optional(),
   /** S15-PAYROLL-BE-3 — gắn mẫu ngay lúc tạo; validate lúc GẮN (tồn tại · active · scope company · đồ thị biên dịch). */
-  templateId: z.string().uuid().optional(),
+  templateId: idSchema.optional(),
   note: z.string().max(500).optional(),
 });
 export type CreatePayrollPeriodRequest = z.infer<typeof createPayrollPeriodSchema>;
@@ -426,12 +427,12 @@ export type CreatePayrollPeriodRequest = z.infer<typeof createPayrollPeriodSchem
  */
 export const updatePayrollPeriodSchema = z
   .object({
-    attendancePeriodId: z.string().uuid().optional(),
+    attendancePeriodId: idSchema.optional(),
     /**
      * S15-PAYROLL-BE-3 — đổi mẫu chỉ khi kỳ ≤ `CollectingData` (khác ⇒ 409 023 `template-locked`). **KHÔNG `.nullable()`**
      * (cùng lý do `attendancePeriodId`): gỡ về NULL thì `calculate` chỉ còn 409 `template-missing`, không có đường dùng.
      */
-    templateId: z.string().uuid().optional(),
+    templateId: idSchema.optional(),
     note: z.string().max(500).nullable().optional(),
   })
   .strict();
@@ -476,7 +477,7 @@ export type PayrollPeriodListQuery = z.infer<typeof payrollPeriodListQuerySchema
  * sau** (SPEC-11 §11.1). FE tải lại số qua `GET …/lines`.
  */
 export const payrollWriteResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   status: payrollPeriodStatusEnum,
   affectedLines: z.number().int().nonnegative(),
   /**
@@ -500,10 +501,10 @@ export type PayrollWriteResultDto = z.infer<typeof payrollWriteResultSchema>;
  * (mirror: nó cố ý nằm NGOÀI `payroll_period_lines_amounts_check`).
  */
 export const payrollPeriodLineSchema = z.object({
-  id: z.string().uuid(),
-  payrollPeriodId: z.string().uuid(),
-  userId: z.string().uuid(),
-  salaryProfileId: z.string().uuid().nullable(),
+  id: idSchema,
+  payrollPeriodId: idSchema,
+  userId: idSchema,
+  salaryProfileId: idSchema.nullable(),
   workDays: z.number(),
   presentDays: z.number(),
   paidLeaveDays: z.number(),
@@ -540,7 +541,7 @@ export const payrollPeriodLineSchema = z.object({
   /** SHA-256 tập công thức + bản tỉ lệ đã dùng (§13.6 G) — không tiền. `null` cho dòng v1. */
   templateFingerprint: z.string().nullable().optional(),
   /** Bản tỉ lệ luật định đã dùng — không tiền. `null` cho dòng v1. */
-  statutoryRateId: z.string().uuid().nullable().optional(),
+  statutoryRateId: idSchema.nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -577,7 +578,7 @@ export type AdjustPayrollLineRequest = z.infer<typeof adjustPayrollLineSchema>;
  * (lấy từ picker 034). Export (017) KHÔNG phân trang nên ở đó `q` an toàn.
  */
 export const payrollLineListQuerySchema = z.object({
-  userId: z.string().uuid().optional(),
+  userId: idSchema.optional(),
   ...payrollPageQuery,
 });
 export type PayrollLineListQuery = z.infer<typeof payrollLineListQuerySchema>;
@@ -594,13 +595,13 @@ export type PayrollExportQuery = z.infer<typeof payrollExportQuerySchema>;
  * DASH giữ nguyên). Có ⇒ tóm tắt KỲ ĐÓ + `lineTotals`/`componentTotals` toàn kỳ (S15-PAYROLL-BE-5 D-15).
  */
 export const payrollSummaryQuerySchema = z
-  .object({ payrollPeriodId: z.string().uuid().optional() })
+  .object({ payrollPeriodId: idSchema.optional() })
   .strict();
 export type PayrollSummaryQuery = z.infer<typeof payrollSummaryQuerySchema>;
 
 /** Tổng chi phí kỳ — gác bằng `('view-line','payroll-period')` + SÀN scope Company (§9g). */
 export const payrollSummarySchema = z.object({
-  payrollPeriodId: z.string().uuid(),
+  payrollPeriodId: idSchema,
   periodMonth: periodMonthSchema,
   status: payrollPeriodStatusEnum,
   headcount: z.number().int().nonnegative(),
@@ -644,11 +645,11 @@ export type PayrollSummaryDto = z.infer<typeof payrollSummarySchema>;
  * `status` là **DẪN XUẤT** (§13.2), `.nullable()` cho nhánh fail-closed mặc định.
  */
 export const payslipSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  payrollPeriodId: z.string().uuid(),
-  userId: z.string().uuid(),
-  salaryProfileId: z.string().uuid().nullable(),
+  id: idSchema,
+  companyId: idSchema,
+  payrollPeriodId: idSchema,
+  userId: idSchema,
+  salaryProfileId: idSchema.nullable(),
   status: payslipDerivedStatusEnum.nullable(),
   baseSalary: z.number().nonnegative().optional(),
   totalAllowances: z.number().nonnegative().optional(),
@@ -664,15 +665,15 @@ export const payslipSchema = z.object({
   paidLeaveDays: z.number(),
   unpaidLeaveDays: z.number(),
   lateMinutes: z.number().int(),
-  createdBy: z.string().uuid(),
+  createdBy: idSchema,
   createdAt: z.string().datetime(),
 });
 export type PayslipDto = z.infer<typeof payslipSchema>;
 
 /** Dòng chi tiết phiếu. `amount` CÓ DẤU theo `itemType` (ép ở service, không có CHECK dấu ở DB). */
 export const payslipItemSchema = z.object({
-  id: z.string().uuid(),
-  payslipId: z.string().uuid(),
+  id: idSchema,
+  payslipId: idSchema,
   itemType: payslipItemTypeEnum,
   label: z.string(),
   amount: z.number().optional(),
@@ -682,7 +683,7 @@ export const payslipItemSchema = z.object({
    * để nó bắt buộc là mở một kênh rò không kiểm soát (đơn giá · mức lương · hệ số rất dễ nằm trong đây).
    * Server strip cả hai cùng lúc theo cặp quyền chở-tiền.
    */
-  meta: z.record(z.unknown()).nullable().optional(),
+  meta: z.record(z.string(), z.unknown()).nullable().optional(),
   createdAt: z.string().datetime(),
 });
 export type PayslipItemDto = z.infer<typeof payslipItemSchema>;
@@ -692,15 +693,15 @@ export type PayslipItemDto = z.infer<typeof payslipItemSchema>;
  * `page`/`per_page` nên client không lật được trang ở kỳ 500 người.
  */
 export const payslipListQuerySchema = z.object({
-  payrollPeriodId: z.string().uuid().optional(),
-  userId: z.string().uuid().optional(),
+  payrollPeriodId: idSchema.optional(),
+  userId: idSchema.optional(),
   ...payrollPageQuery,
 });
 export type PayslipListQuery = z.infer<typeof payslipListQuerySchema>;
 
 /** `GET /me/payslips` (031) — Own scope; chỉ phiếu của kỳ ĐÃ phát hành (`Published`/`Paid`/`Locked`, §13.2). */
 export const mePayslipListQuerySchema = z.object({
-  payrollPeriodId: z.string().uuid().optional(),
+  payrollPeriodId: idSchema.optional(),
   ...payrollPageQuery,
 });
 export type MePayslipListQuery = z.infer<typeof mePayslipListQuerySchema>;
@@ -725,9 +726,9 @@ export type AcknowledgePayslipRequest = z.infer<typeof acknowledgePayslipSchema>
 
 /** DTO xác nhận — sổ chỉ-INSERT, KHÔNG chứa tiền và KHÔNG có trạng thái/khiếu nại (ngoài v1). */
 export const payslipAcknowledgementSchema = z.object({
-  id: z.string().uuid(),
-  payslipId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  payslipId: idSchema,
+  userId: idSchema,
   createdAt: z.string().datetime(),
 });
 export type PayslipAcknowledgementDto = z.infer<typeof payslipAcknowledgementSchema>;

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { taskGoalRefShape } from "./task-goal-ref";
+import { idSchema } from "./common/id";
 
 // ─── Task type (G9-1: unified hub — BẤT BIẾN #4) ──────────────────────────────
 // Spec mandates 7 sources: production·review·revision·meeting_action·office·finance·hr.
@@ -72,12 +73,12 @@ export type ProjectStateGroupDto = z.infer<typeof projectStateGroupSchema>;
 
 /** Nhãn màu theo project (labels). */
 export const labelSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  projectId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  projectId: idSchema,
   name: z.string(),
   color: z.string(),
-  createdBy: z.string().uuid().nullable(),
+  createdBy: idSchema.nullable(),
   createdAt: z.string().datetime(),
 });
 export type LabelDto = z.infer<typeof labelSchema>;
@@ -88,7 +89,7 @@ export type LabelDto = z.infer<typeof labelSchema>;
  * trả qua đường đọc task là phơi lộ thừa. Nguồn đầy đủ vẫn là `labelSchema` (GET /projects/:id/labels).
  */
 export const taskLabelChipSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   color: z.string(),
 });
@@ -100,8 +101,8 @@ export type TaskLabelChipDto = z.infer<typeof taskLabelChipSchema>;
 // schema and broke the contracts build; the 8-type union is the single source of truth.)
 
 export const taskSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   taskType: taskTypeSchema,
   title: z.string(),
   status: taskStatusSchema,
@@ -110,16 +111,16 @@ export const taskSchema = z.object({
   dueDate: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
-  assigneeUserId: z.string().uuid().nullable(),
+  assigneeUserId: idSchema.nullable(),
   // ⓘ 7 cột join từ `workflow_steps` (stepId · stepCode · stepName · stepStatus · submissionUrl ·
   // submissionNote · workflowInstanceId) ĐÃ GỠ ở S10-CLEAN-WORKFLOWCLUSTER-2: bảng `workflow_steps`
   // + cột `tasks.workflow_step_id`/`workflow_instance_id` bị DROP. 0 hộ tiêu thụ FE, và mọi hàng
   // `tasks` hiện có đều NULL ở hai cột đó ⇒ hợp đồng cũ chỉ hứa 7 trường luôn `null`.
   // Joined from content_items (null for non-video tasks)
-  contentItemId: z.string().uuid().nullable(),
+  contentItemId: idSchema.nullable(),
   contentTitle: z.string().nullable(),
   // Joined from projects (null when not project-scoped)
-  projectId: z.string().uuid().nullable(),
+  projectId: idSchema.nullable(),
   projectName: z.string().nullable(),
   // ── PM-1 (apps/projects, mig 0420) — work item kiểu Plane (ADDITIVE; mọi endpoint task trả các cột này) ──
   priority: prioritySchema,
@@ -130,7 +131,7 @@ export const taskSchema = z.object({
   displayId: z.string().nullable(),
   projectIdentifier: z.string().nullable(),
   // State tùy biến (joined từ project_states; null cho task chưa map state — fallback `status` legacy).
-  stateId: z.string().uuid().nullable(),
+  stateId: idSchema.nullable(),
   stateName: z.string().nullable(),
   stateGroup: projectStateGroupSchema.nullable(),
   stateColor: z.string().nullable(),
@@ -140,9 +141,9 @@ export type TaskDto = z.infer<typeof taskSchema>;
 // ─── Comment ──────────────────────────────────────────────────────────────────
 
 export const commentSchema = z.object({
-  id: z.string().uuid(),
-  taskId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  taskId: idSchema,
+  userId: idSchema,
   userFullName: z.string().nullable(),
   body: z.string(),
   createdAt: z.string().datetime(),
@@ -164,13 +165,13 @@ export type CreateCommentRequest = z.infer<typeof createCommentSchema>;
 export const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
   taskType: manualTaskTypeSchema.default("office"),
-  assigneeUserId: z.string().uuid().nullable().optional(),
-  projectId: z.string().uuid().nullable().optional(),
+  assigneeUserId: idSchema.nullable().optional(),
+  projectId: idSchema.nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   // PM-1: tạo work item kèm thuộc tính Plane (đều optional — luồng office cũ không cần).
   priority: prioritySchema.optional(),
   description: z.string().max(50000).nullable().optional(),
-  stateId: z.string().uuid().nullable().optional(),
+  stateId: idSchema.nullable().optional(),
   startDate: z.string().datetime().nullable().optional(),
 });
 export type CreateTaskRequest = z.infer<typeof createTaskSchema>;
@@ -185,8 +186,8 @@ export const updateTaskFieldsSchema = z
     title: z.string().min(1).max(200),
     description: z.string().max(50000).nullable(),
     priority: prioritySchema,
-    stateId: z.string().uuid().nullable(),
-    assigneeUserId: z.string().uuid().nullable(),
+    stateId: idSchema.nullable(),
+    assigneeUserId: idSchema.nullable(),
     dueDate: z.string().datetime().nullable(),
     startDate: z.string().datetime().nullable(),
   })
@@ -248,12 +249,12 @@ export type CreateAttachmentIntentRequest = z.infer<typeof createAttachmentInten
 
 /** Metadata DTO returned to the client — NO signed URL / credential is ever persisted (BẤT BIẾN #3). */
 export const attachmentSchema = z.object({
-  id: z.string().uuid(),
-  taskId: z.string().uuid(),
+  id: idSchema,
+  taskId: idSchema,
   fileName: z.string(),
   contentType: z.string(),
   sizeBytes: z.number().int().nonnegative(),
-  uploadedBy: z.string().uuid().nullable(),
+  uploadedBy: idSchema.nullable(),
   createdAt: z.string().datetime(),
 });
 export type AttachmentDto = z.infer<typeof attachmentSchema>;
@@ -276,9 +277,9 @@ export type AttachmentDownloadUrlDto = z.infer<typeof attachmentDownloadUrlSchem
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 export const projectStateSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  projectId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  projectId: idSchema,
   name: z.string(),
   stateGroup: projectStateGroupSchema,
   color: z.string(),
@@ -382,8 +383,8 @@ export const createTaskProjectSchema = z
     name: z.string().min(1, "Tên dự án là bắt buộc").max(255),
     code: z.string().min(1).max(50).optional(),
     description: z.string().max(10000).nullable().optional(),
-    ownerEmployeeId: z.string().uuid().optional(),
-    departmentId: z.string().uuid().optional(),
+    ownerEmployeeId: idSchema.optional(),
+    departmentId: idSchema.optional(),
     priority: taskProjectPrioritySchema.optional(),
     startDate: z.string().regex(TASK_PROJECT_ISO_DATE, "startDate phải là YYYY-MM-DD").optional(),
     endDate: z.string().regex(TASK_PROJECT_ISO_DATE, "endDate phải là YYYY-MM-DD").optional(),
@@ -404,8 +405,8 @@ export const updateTaskProjectSchema = z
     name: z.string().min(1, "Tên dự án là bắt buộc").max(255),
     code: z.string().min(1).max(50).nullable(),
     description: z.string().max(10000).nullable(),
-    ownerEmployeeId: z.string().uuid().nullable(),
-    departmentId: z.string().uuid().nullable(),
+    ownerEmployeeId: idSchema.nullable(),
+    departmentId: idSchema.nullable(),
     priority: taskProjectPrioritySchema.nullable(),
     startDate: z.string().regex(TASK_PROJECT_ISO_DATE, "startDate phải là YYYY-MM-DD").nullable(),
     endDate: z.string().regex(TASK_PROJECT_ISO_DATE, "endDate phải là YYYY-MM-DD").nullable(),
@@ -428,14 +429,14 @@ export type CloseTaskProjectRequest = z.infer<typeof closeTaskProjectSchema>;
 /** Chi tiết dự án (GET /:id) — DTO trả về server-side, join owner_employee_id → employee_profiles.full_name
  * và department_id → org_units.name (ownerName/departmentName null nếu chưa gán/không tồn tại). */
 export const taskProjectResponseSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   code: z.string().nullable(),
   name: z.string(),
   description: z.string().nullable(),
-  ownerEmployeeId: z.string().uuid().nullable(),
+  ownerEmployeeId: idSchema.nullable(),
   ownerName: z.string().nullable(),
-  departmentId: z.string().uuid().nullable(),
+  departmentId: idSchema.nullable(),
   departmentName: z.string().nullable(),
   priority: taskProjectPrioritySchema.nullable(),
   status: taskProjectStatusSchema.nullable(),
@@ -448,11 +449,11 @@ export const taskProjectResponseSchema = z.object({
   // null = không phải member (hoặc Removed/Inactive). FE CHỈ dùng ẩn/hiện (menu ⋯ "Cài đặt quyền",
   // control member) — BE là người quyết cuối qua tầng role service-layer.
   myProjectRole: projectRoleSchema.nullable(),
-  createdBy: z.string().uuid().nullable(),
+  createdBy: idSchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   closedAt: z.string().datetime().nullable(),
-  closedBy: z.string().uuid().nullable(),
+  closedBy: idSchema.nullable(),
 });
 export type TaskProjectResponseDto = z.infer<typeof taskProjectResponseSchema>;
 
@@ -473,10 +474,10 @@ export type TaskProjectListItemDto = z.infer<typeof taskProjectListItemSchema>;
 export const TASK_PROJECT_PAGE_LIMIT_MAX = 200;
 export const listTaskProjectsQuerySchema = z.object({
   status: taskProjectStatusSchema.optional(),
-  ownerEmployeeId: z.string().uuid().optional(),
+  ownerEmployeeId: idSchema.optional(),
   // S5-TASK-NAV-TREE-1 (đợt B) — lọc theo phòng ban (sidebar cây phòng ban → "Xem báo cáo" deep-link
   // /tasks/projects?departmentId=X). Server AND thêm eq(projects.departmentId) — KHÔNG thay data-scope.
-  departmentId: z.string().uuid().optional(),
+  departmentId: idSchema.optional(),
   search: z.string().trim().min(1).max(200).optional(),
   limit: z.coerce.number().int().min(1).max(TASK_PROJECT_PAGE_LIMIT_MAX).optional(),
   offset: z.coerce.number().int().min(0).optional(),
@@ -491,7 +492,7 @@ export type ListTaskProjectsQueryRequest = z.infer<typeof listTaskProjectsQueryS
  * employee_profiles.user_id ở service layer (fail-loud nếu NULL — nhân viên chưa có tài khoản).
  */
 export const addMemberSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   projectRole: projectRoleSchema,
 });
 export type AddMemberRequest = z.infer<typeof addMemberSchema>;
@@ -505,9 +506,9 @@ export type UpdateMemberRoleRequest = z.infer<typeof updateMemberRoleSchema>;
 /** DTO thành viên dự án (GET /:id/members, TASK-SCREEN-004 §Cột hiển thị). `employeeId`/`employeeName`
  * null nếu hàng legacy (employee_id NULL, chưa cut-over) — KHÔNG lộ user_id nội bộ ra response. */
 export const memberResponseSchema = z.object({
-  id: z.string().uuid(),
-  projectId: z.string().uuid(),
-  employeeId: z.string().uuid().nullable(),
+  id: idSchema,
+  projectId: idSchema,
+  employeeId: idSchema.nullable(),
   employeeName: z.string().nullable(),
   employeeCode: z.string().nullable(),
   departmentName: z.string().nullable(),
@@ -564,12 +565,12 @@ export const TASK_CORE_PAGE_LIMIT_MAX = 200;
 export const listTaskCoreQuerySchema = z.object({
   status: taskCoreStatusSchema.optional(),
   priority: taskCorePrioritySchema.optional(),
-  assigneeEmployeeId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
+  assigneeEmployeeId: idSchema.optional(),
+  projectId: idSchema.optional(),
   // S5-TASK-DEPTFILTER-1 — neo theo phòng ban (mục tiêu cấp `department`/`company` không có projectId
   // để lọc). AND thêm `tk.department_id = $x` TRONG phạm vi đọc — KHÔNG thay data-scope: người xem
   // vẫn chỉ thấy task mình có quyền, filter chỉ THU HẸP thêm (mirror projectId/assigneeEmployeeId).
-  departmentId: z.string().uuid().optional(),
+  departmentId: idSchema.optional(),
   // S5-TASK-DEPTFILTER-1 — tìm theo tiêu đề (ILIKE '%…%'). `search` là quy ước của task-module
   // (khớp listTaskProjectsQuerySchema/notification-admin). Cũng chỉ thu hẹp trong scope.
   search: z.string().trim().min(1).max(200).optional(),
@@ -595,9 +596,9 @@ export const createTaskCoreSchema = z
   .object({
     title: z.string().trim().min(1, "Tiêu đề là bắt buộc").max(500),
     description: z.string().max(20000).optional(),
-    projectId: z.string().uuid().optional(),
-    assigneeEmployeeId: z.string().uuid().optional(),
-    departmentId: z.string().uuid().optional(),
+    projectId: idSchema.optional(),
+    assigneeEmployeeId: idSchema.optional(),
+    departmentId: idSchema.optional(),
     priority: taskCorePrioritySchema.optional(),
     dueAt: z.string().datetime({ offset: true }).optional(),
     startAt: z.string().datetime({ offset: true }).optional(),
@@ -606,13 +607,13 @@ export const createTaskCoreSchema = z
      * Server: đòi update-state:task + suy task_status khởi tạo từ STATE_GROUP_TO_STATUS (KHÔNG
      * hardcode 'Todo' khi có stateId — chống desync-lúc-sinh, plan 3c). Bỏ trống = is_default.
      */
-    stateId: z.string().uuid().optional(),
+    stateId: idSchema.optional(),
     /**
      * S5-TASK-SUBTASK-1 (DECISIONS-05 D-31) — tạo VIỆC CON. Server ép: cây ĐÚNG 1 CẤP (cha phải là
      * gốc), con cùng project với cha (projectId suy TỪ CHA — gửi kèm mà lệch ⇒ 400), state_id NULL
      * (D-36: con ẩn khỏi board nên cột không mang nghĩa ⇒ gửi kèm stateId ⇒ 400).
      */
-    parentTaskId: z.string().uuid().nullable().optional(),
+    parentTaskId: idSchema.nullable().optional(),
   })
   .strict()
   .refine((v) => !v.startAt || !v.dueAt || v.dueAt >= v.startAt, {
@@ -629,9 +630,9 @@ export const updateTaskCoreSchema = z
   .object({
     title: z.string().trim().min(1).max(500),
     description: z.string().max(20000).nullable(),
-    projectId: z.string().uuid().nullable(),
-    assigneeEmployeeId: z.string().uuid().nullable(),
-    departmentId: z.string().uuid().nullable(),
+    projectId: idSchema.nullable(),
+    assigneeEmployeeId: idSchema.nullable(),
+    departmentId: idSchema.nullable(),
     priority: taskCorePrioritySchema.nullable(),
     dueAt: z.string().datetime({ offset: true }).nullable(),
     startAt: z.string().datetime({ offset: true }).nullable(),
@@ -641,14 +642,14 @@ export const updateTaskCoreSchema = z
      * update-state:task + auto-map status), KHÔNG ở route — PATCH không được thành cửa vòng qua.
      * KHÔNG nullable: spec không có thao tác "gỡ thẻ khỏi board".
      */
-    stateId: z.string().uuid(),
+    stateId: idSchema,
     /**
      * S5-TASK-SUBTASK-1 (DECISIONS-05 D-31/D-33) — gán/gỡ cha sau khi tạo. `null` = gỡ khỏi cha (task
      * thành GỐC KHÔNG CỘT — không tự đoán cột mặc định, người dùng kéo vào cột sau bằng move-state).
      * Server ép trong CÙNG tx SAU khi khoá hàng (D-33): cha ≠ chính nó · cha tồn tại cùng company ·
      * cha là GỐC (chặn tầng 3) · task CHƯA có con active (task đang làm cha không được thành con).
      */
-    parentTaskId: z.string().uuid().nullable(),
+    parentTaskId: idSchema.nullable(),
   })
   .partial()
   .strict()
@@ -668,16 +669,16 @@ export type UpdateTaskCoreRequest = z.infer<typeof updateTaskCoreSchema>;
  * Trộn hai họ = ép cả hai vòng đời đổi cùng lúc (drift 2 chiều).
  */
 export const taskCoreResponseSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   title: z.string(),
   description: z.string().nullable(),
   taskType: z.string(),
   status: taskCoreStatusSchema.nullable(),
   priority: taskCorePrioritySchema.nullable(),
-  projectId: z.string().uuid().nullable(),
+  projectId: idSchema.nullable(),
   projectName: z.string().nullable(),
-  mainAssigneeEmployeeId: z.string().uuid().nullable(),
+  mainAssigneeEmployeeId: idSchema.nullable(),
   assigneeName: z.string().nullable(),
   // S5-TASK-AVATAR-1 (Nhóm C) — URL ẢNH đại diện người phụ trách, ĐÃ KÝ sẵn TTL-ngắn bởi server
   // (AvatarPresignService, cùng đường HR list/org-chart dùng). KHÔNG BAO GIỜ là fileId thô: cột
@@ -697,19 +698,19 @@ export const taskCoreResponseSchema = z.object({
   // Không xác minh được / ký lỗi ⇒ null ⇒ thẻ không có bìa (fail-soft, KHÔNG vỡ board).
   // `.optional()` additive: FE và API deploy lệch pha vẫn parse được.
   coverUrl: z.string().nullable().optional(),
-  creatorUserId: z.string().uuid().nullable(),
+  creatorUserId: idSchema.nullable(),
   creatorName: z.string().nullable(),
-  reporterEmployeeId: z.string().uuid().nullable(),
+  reporterEmployeeId: idSchema.nullable(),
   // S5-TASK-DETAIL-1 (GAP 3) — tên NGƯỜI GIAO VIỆC (join employee_profiles→users như assigneeName).
   // `.optional()` additive (KHÔNG `.default()`): FE Pages và API deploy lệch pha được — client mới
   // parse response API cũ (chưa có field) không gãy; server mới LUÔN điền (null khi không có reporter).
   reporterName: z.string().nullable().optional(),
-  departmentId: z.string().uuid().nullable(),
+  departmentId: idSchema.nullable(),
   dueAt: z.string().datetime().nullable(),
   startAt: z.string().datetime().nullable(),
   completedAt: z.string().datetime().nullable(),
   isOverdue: z.boolean(),
-  createdBy: z.string().uuid().nullable(),
+  createdBy: idSchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   // ── S5-TASK-PIPELINE-1 — cột pipeline (resolved từ project_states, READ-ONLY qua DTO này;
@@ -717,7 +718,7 @@ export const taskCoreResponseSchema = z.object({
   // BE mapper điền ở lane be-read — client parse response CŨ (chưa có field) không được gãy,
   // và `.optional()` (không `.default()`) giữ Input=Output cho apiFetch<T> (bẫy suy luận generic
   // đã ghi ở task-collab.ts). stateId NULL = task chưa lên board (legacy/ngoài dự án).
-  stateId: z.string().uuid().nullable().optional(),
+  stateId: idSchema.nullable().optional(),
   stateName: z.string().nullable().optional(),
   stateColor: z.string().nullable().optional(),
   stateGroup: projectStateGroupSchema.nullable().optional(),
@@ -726,7 +727,7 @@ export const taskCoreResponseSchema = z.object({
   // parentTaskId NULL = task GỐC. subtaskTotal/subtaskDone theo COUNTABLE_CHILD (D-32): mẫu số LOẠI
   // con Cancelled (việc đã huỷ không còn là việc), tử số = con 'Done'. Task 0 con ⇒ total 0 ⇒ FE
   // KHÔNG hiện % (D-34: một nguồn duy nhất, KHÔNG fallback sang checklist — xem D-35).
-  parentTaskId: z.string().uuid().nullable().optional(),
+  parentTaskId: idSchema.nullable().optional(),
   subtaskTotal: z.number().int().nullable().optional(),
   subtaskDone: z.number().int().nullable().optional(),
   // ── Gắn thẻ (labels PM-1, UX kiểu Base) — nhãn màu tự do gắn N-N vào task. `.optional()` additive
@@ -752,12 +753,12 @@ export type TaskCoreResponseDto = z.infer<typeof taskCoreResponseSchema>;
  * KHÔNG nút sửa/xoá (sẽ 403). Server tính bằng 2 truy vấn tập hợp, KHÔNG phải N+1.
  */
 export const subtaskListItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   taskCode: z.string().nullable(),
   title: z.string(),
   status: taskCoreStatusSchema.nullable(),
   priority: taskCorePrioritySchema.nullable(),
-  mainAssigneeEmployeeId: z.string().uuid().nullable(),
+  mainAssigneeEmployeeId: idSchema.nullable(),
   assigneeName: z.string().nullable(),
   // S5-TASK-AVATAR-1 — xem ghi chú ở taskCoreResponseSchema.assigneeAvatarUrl (cùng luật ký + fail-soft).
   assigneeAvatarUrl: z.string().nullable().optional(),
@@ -775,7 +776,7 @@ export type SubtaskListItemDto = z.infer<typeof subtaskListItemSchema>;
  * (thay đổi trình bày, không phải vòng đời — DECISIONS-05).
  */
 export const reorderSubtasksSchema = z
-  .object({ subtaskIds: z.array(z.string().uuid()).min(1).max(200) })
+  .object({ subtaskIds: z.array(idSchema).min(1).max(200) })
   .strict();
 export type ReorderSubtasksRequest = z.infer<typeof reorderSubtasksSchema>;
 
@@ -807,7 +808,7 @@ export type ProjectReportCountsByStatusDto = z.infer<typeof projectReportCountsB
 
 /** Tải công việc theo người phụ trách chính — chỉ đếm task ACTIVE (task_status ∉ Done/Cancelled). */
 export const projectReportAssigneeWorkloadSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   employeeName: z.string().nullable(),
   activeCount: z.number().int().nonnegative(),
 });
@@ -815,7 +816,7 @@ export type ProjectReportAssigneeWorkloadDto = z.infer<typeof projectReportAssig
 
 /** GET /projects/:id/report — báo cáo tổng hợp 1 dự án (SPEC-06 §16.1). */
 export const projectReportSchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: idSchema,
   countsByStatus: projectReportCountsByStatusSchema,
   overdueCount: z.number().int().nonnegative(),
   assigneeWorkload: z.array(projectReportAssigneeWorkloadSchema),

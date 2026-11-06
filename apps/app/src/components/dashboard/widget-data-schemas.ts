@@ -14,6 +14,7 @@ import {
   taskCoreStatusSchema,
   taskCorePrioritySchema,
   feedEngagementWeekSchema,
+  idSchema,
 } from "@mediaos/contracts";
 
 /** message localized do SERVER trả (§16.6/§16.7) — component ưu tiên message này hơn copy i18n tĩnh. */
@@ -248,7 +249,7 @@ export type RecruitFunnelWidgetData = z.infer<typeof recruitFunnelWidgetDataSche
  */
 export const payrollCostWidgetDataSchema = z.object({
   period: z.object({
-    payrollPeriodId: z.string().uuid(),
+    payrollPeriodId: idSchema,
     periodMonth: z.string(),
     status: z.string(),
   }),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * AC-7 module-registry — DTO cho lớp "module" TRÊN feature-flag (G16-3).
@@ -14,7 +15,7 @@ import { z } from "zod";
 
 /** Metadata catalog 1 module (no secret — chỉ field hiển thị + bundle feature-key + DAG). */
 export const systemModuleSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   key: z.string(),
   name: z.string(),
   description: z.string().nullable(),

@@ -52,7 +52,7 @@ import { TokenService } from "./token.service";
 import { TWO_FACTOR_ENFORCED, TwoFactorService } from "./two-factor.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
-import { ACCESS_RESTRICTED_CODE } from "@mediaos/contracts";
+import { ACCESS_RESTRICTED_CODE, idSchema } from "@mediaos/contracts";
 import { SecurityPolicyService } from "../security-policy/security-policy.service";
 import { RealtimeEmitterService } from "../realtime/realtime-emitter.service";
 
@@ -82,7 +82,7 @@ export function requestMeta(req: {
   return { ip: req.ip, userAgent: Array.isArray(ua) ? ua[0] : ua };
 }
 
-const uuidSchema = z.string().uuid();
+const uuidSchema = idSchema;
 /** 401 ĐỒNG NHẤT cho mọi lỗi đăng nhập — không lộ user/tenant tồn tại (plan §3b/G2-6). */
 const UNIFORM_LOGIN_ERROR = "Thông tin đăng nhập không hợp lệ.";
 /**

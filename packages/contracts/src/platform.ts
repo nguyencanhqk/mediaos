@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { brandingLogoRefSchema } from "./foundation/branding";
+import { idSchema } from "./common/id";
 
 /**
  * G16-3 SaaS prep — PLATFORM tier DTOs (workspace/company management above company-admin).
@@ -20,7 +21,7 @@ const slugSchema = z
 
 /** DTO tóm tắt 1 công ty (workspace) — trả về cho platform-admin list/get. */
 export const companySummarySchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   slug: z.string(),
   status: z.string(),

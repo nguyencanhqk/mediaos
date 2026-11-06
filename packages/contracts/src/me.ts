@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * S5-ME-BE-1 — FOUNDATION DTO cho module ME (Trung tâm cá nhân / Personal Hub).
@@ -104,14 +105,14 @@ export type MeLinkStatus = z.infer<typeof meLinkStatusEnum>;
  * (TÊN hiển thị, KHÔNG lộ cấu trúc permission chi tiết — §17.1). KHÔNG có password_hash/token/secret.
  */
 export const meAccountSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   /** Email đăng nhập (SPEC-09 §10.4 — không phải secret). */
   email: z.string(),
   /** Trạng thái tài khoản (Active/…) — string để không trôi khỏi CHECK khi AUTH thêm trạng thái. */
   status: z.string(),
   displayName: z.string().nullable(),
   /** Danh sách role (chỉ id + tên hiển thị — §10.4). KHÔNG kèm danh mục permission chi tiết. */
-  roles: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
+  roles: z.array(z.object({ id: idSchema, name: z.string() })),
   lastLoginAt: z.string().nullable(),
   createdAt: z.string().nullable(),
 });
@@ -122,7 +123,7 @@ export type MeAccount = z.infer<typeof meAccountSchema>;
  * KHÔNG kèm PII (DOB/phone/địa chỉ/lương) — các field đó thuộc GET /me/profile với masking HR riêng.
  */
 export const meEmployeeLinkSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
   departmentName: z.string().nullable(),
@@ -357,13 +358,13 @@ export type MePreferencesPatch = z.infer<typeof mePreferencesPatchSchema>;
 
 /** POST /api/v1/me/avatar body — `fileId` của file ĐÃ upload+confirm qua flow `/foundation/files/*` chuẩn. */
 export const setMeAvatarInputSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
 });
 export type SetMeAvatarInput = z.infer<typeof setMeAvatarInputSchema>;
 
 /** Response POST /api/v1/me/avatar — fileId (reference bền) + downloadUrl/expiresAt (ephemeral, KHÔNG cache dài). */
 export const meAvatarSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   downloadUrl: z.string().url(),
   expiresAt: z.string().datetime(),
 });
@@ -394,7 +395,7 @@ export type MeAvatarUploadUrlInput = z.infer<typeof meAvatarUploadUrlInputSchema
  * storage, KHÔNG persist ngoài phiên upload; rồi gọi /me/avatar/confirm). KHÔNG lộ storage_path.
  */
 export const meAvatarUploadUrlResponseSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   uploadUrl: z.string().url(),
   expiresAt: z.string().datetime(),
 });
@@ -455,7 +456,7 @@ export type MeSecurityActivityQuery = z.infer<typeof meSecurityActivityQuerySche
  * mask server-side (§10.6) — KHÔNG raw IP. severity chỉ có ở security_event (login → null).
  */
 export const meSecurityActivityItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   source: meSecurityActivitySourceSchema,
   eventType: z.string(),
   severity: z.string().nullable(),

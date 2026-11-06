@@ -7,6 +7,7 @@ import {
   type FeedTargetTypeDto,
 } from "./social";
 import { FEED_NOTE_MAX, FEED_PAGE_LIMIT_MAX, feedPostSchema } from "./social-api";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-1B — DTO request/response của **Nhóm B** (10 route `SOCIAL-API-020..029`).
@@ -24,7 +25,7 @@ import { FEED_NOTE_MAX, FEED_PAGE_LIMIT_MAX, feedPostSchema } from "./social-api
  * KHÔNG chở `userId` (danh tính = `employeeId` + tên + avatar).
  */
 /** UUID — bản sao CỤC BỘ của helper cùng tên ở `./social-api` (ở đó nó là `const` nội bộ, không export). */
-const uuid = () => z.string().uuid();
+const uuid = () => idSchema;
 
 /**
  * Trần `limit` của các danh sách phân trang **OFFSET** (022 acks · 024 thẻ · 028 hàng đợi báo cáo).

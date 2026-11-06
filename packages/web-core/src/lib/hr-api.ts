@@ -38,6 +38,7 @@ import {
   type UnlinkUserRequest,
   type HrImportReport,
   type HrImportResult,
+  idSchema,
 } from "@mediaos/contracts";
 import { apiFetch, apiFetchBlob, apiFetchMultipart, type ApiBlobResult } from "./api-client";
 import { idempotencyKeyFor } from "./api-idempotency";
@@ -47,14 +48,14 @@ import { buildQueryString } from "./api-params";
 // unlinkUser trả { id, userId }). KHÔNG có response schema riêng trong @mediaos/contracts (theo mẫu
 // createProfileChangeRequest ở dưới: object nhỏ khai TẠI ĐÂY thay vì mở thêm export ở contracts).
 const hrLinkUserResponseSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid().nullable(),
+  id: idSchema,
+  userId: idSchema.nullable(),
 });
 
 // S10-HR-STATUSUI-1 — response POST /hr/employees/:id/change-status (HrWriteService.changeStatus trả
 // { id, status }). Cùng lý do như trên: object nhỏ khai TẠI ĐÂY thay vì mở thêm export ở contracts.
 const hrChangeStatusResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   status: z.string(),
 });
 
@@ -208,14 +209,10 @@ export const hrApi = {
   createProfileChangeRequest: (
     body: CreateProfileChangeRequest,
   ): Promise<{ id: string; status: string }> =>
-    apiFetch(
-      "/hr/profile-change-requests",
-      z.object({ id: z.string().uuid(), status: z.string() }),
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-      },
-    ),
+    apiFetch("/hr/profile-change-requests", z.object({ id: idSchema, status: z.string() }), {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   /**
    * GET /hr/profile-change-requests/me — danh sách yêu cầu CỦA CHÍNH user hiện tại.
@@ -254,7 +251,7 @@ export const hrApi = {
   ): Promise<{ id: string; status: string }> =>
     apiFetch(
       `/hr/profile-change-requests/${id}/approve`,
-      z.object({ id: z.string().uuid(), status: z.string() }),
+      z.object({ id: idSchema, status: z.string() }),
       { method: "POST", body: JSON.stringify(body ?? {}) },
     ),
 
@@ -267,7 +264,7 @@ export const hrApi = {
   ): Promise<{ id: string; status: string }> =>
     apiFetch(
       `/hr/profile-change-requests/${id}/reject`,
-      z.object({ id: z.string().uuid(), status: z.string() }),
+      z.object({ id: idSchema, status: z.string() }),
       { method: "POST", body: JSON.stringify({ rejectionReason }) },
     ),
 
@@ -277,7 +274,7 @@ export const hrApi = {
   cancelProfileChangeRequest: (id: string): Promise<{ id: string; status: string }> =>
     apiFetch(
       `/hr/profile-change-requests/${id}/cancel`,
-      z.object({ id: z.string().uuid(), status: z.string() }),
+      z.object({ id: idSchema, status: z.string() }),
       { method: "POST" },
     ),
 

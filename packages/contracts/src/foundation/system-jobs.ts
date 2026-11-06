@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S5-FND-JOBS-OBS-1 — System Jobs observability DTO (READ-ONLY). Nguồn sự thật cho
@@ -39,10 +40,10 @@ export type SystemJobTriggeredByDto = z.infer<typeof systemJobTriggeredBySchema>
  */
 export const systemJobRunViewSchema = z
   .object({
-    id: z.string().uuid(),
+    id: idSchema,
     jobCode: z.string(),
     /** NULL = job cấp system/global (không thuộc riêng tenant nào). */
-    companyId: z.string().uuid().nullable(),
+    companyId: idSchema.nullable(),
     status: systemJobRunStatusSchema,
     triggeredBy: systemJobTriggeredBySchema,
     startedAt: z.string(),

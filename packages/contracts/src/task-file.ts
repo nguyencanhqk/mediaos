@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fileScanStatusSchema, fileUploadStatusSchema } from "./files";
+import { idSchema } from "./common/id";
 
 /**
  * S4-TASK-BE-5 — Task File (đính kèm công việc) DTOs. Source of truth: API-06 / DB-08 §8.7 (file_links) /
@@ -17,7 +18,7 @@ import { fileScanStatusSchema, fileUploadStatusSchema } from "./files";
 
 export const linkTaskFileSchema = z.object({
   /** File đã register+PUT+confirm qua Foundation FileService (upload_status='Uploaded'). */
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   /**
    * Phân loại tài liệu (Attachment / Proof / Spec / Khác…). Lưu vào file_links.purpose. Tự do trong giới
    * hạn độ dài — KHÔNG hard-code danh mục (client tự đặt nhãn).
@@ -38,9 +39,9 @@ export type ListTaskFilesQuery = z.infer<typeof listTaskFilesQuerySchema>;
 
 export const taskFileDtoSchema = z.object({
   /** file_links.id — dùng cho tham chiếu link (unlink/audit). */
-  linkId: z.string().uuid(),
+  linkId: idSchema,
   /** files.id. */
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   originalName: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int().nonnegative(),

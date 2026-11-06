@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { emailSchema } from "../common/email";
+import { idSchema } from "../common/id";
 
 /**
  * S2-HR-BE-1 — HR read-core DTOs (SPEC-03 / API-10).
@@ -70,8 +72,8 @@ export const hrEmployeeListQuerySchema = z.object({
     .max(HR_EMPLOYEE_PAGE_SIZE_MAX)
     .default(HR_EMPLOYEE_PAGE_SIZE_DEFAULT),
   search: z.string().trim().min(1).optional(),
-  orgUnitId: z.string().uuid().optional(),
-  positionId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  positionId: idSchema.optional(),
   status: z.enum(["active", "inactive", "resigned", "terminated"]).optional(),
   sort: z.enum(HR_EMPLOYEE_SORT_FIELDS).default("fullName"),
   order: z.enum(["asc", "desc"]).default("asc"),
@@ -80,16 +82,16 @@ export type HrEmployeeListQuery = z.infer<typeof hrEmployeeListQuerySchema>;
 
 /** One row in GET /hr/employees. baseSalary is null unless the caller holds view-salary:employee. */
 export const hrEmployeeListItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   // S2-HR-BE-2: nullable — an employee can exist without a linked user (unlink-user). fullName/email
   // come from the users LEFT JOIN, so they are null for an unlinked (nameless) employee.
-  userId: z.string().uuid().nullable(),
+  userId: idSchema.nullable(),
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
-  email: z.string().email().nullable(),
-  orgUnitId: z.string().uuid().nullable(),
+  email: emailSchema.nullable(),
+  orgUnitId: idSchema.nullable(),
   orgUnitName: z.string().nullable(),
-  positionId: z.string().uuid().nullable(),
+  positionId: idSchema.nullable(),
   positionName: z.string().nullable(),
   workType: z.string().nullable(),
   employmentType: z.string().nullable(),
@@ -118,17 +120,17 @@ export type HrEmployeeListItem = z.infer<typeof hrEmployeeListItemSchema>;
 
 /** GET /hr/employees/:id detail. Sensitive fields null/omitted unless authorized. */
 export const hrEmployeeDetailSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   // S2-HR-BE-2: nullable for an unlinked employee (see list-item note).
-  userId: z.string().uuid().nullable(),
+  userId: idSchema.nullable(),
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
-  email: z.string().email().nullable(),
-  orgUnitId: z.string().uuid().nullable(),
+  email: emailSchema.nullable(),
+  orgUnitId: idSchema.nullable(),
   orgUnitName: z.string().nullable(),
-  positionId: z.string().uuid().nullable(),
+  positionId: idSchema.nullable(),
   positionName: z.string().nullable(),
-  directManagerId: z.string().uuid().nullable(),
+  directManagerId: idSchema.nullable(),
   workType: z.string().nullable(),
   employmentType: z.string().nullable(),
   startDate: z.string().nullable(),
@@ -144,7 +146,7 @@ export const hrEmployeeDetailSchema = z.object({
   //   indirectManagerName   = quản lý của quản lý (1 cấp)
   jobLevelName: z.string().nullable(),
   directManagerName: z.string().nullable(),
-  directManagerEmployeeId: z.string().uuid().nullable(),
+  directManagerEmployeeId: idSchema.nullable(),
   indirectManagerName: z.string().nullable(),
   /** SENSITIVE (view-salary) — both null when unauthorized; salaryType is salary-class (§18.8). */
   baseSalary: z.number().nullable(),

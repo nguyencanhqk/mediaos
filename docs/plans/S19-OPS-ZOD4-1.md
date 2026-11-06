@@ -398,3 +398,81 @@ Kiểm sau install: lockfile chỉ còn MỘT `zod@4.6.7`, không còn `zod@3`, 
 - C2: + `emailSchema` (9.2-5) · bảng soát `.partial()` (9.2-4) · ratchet AST (9.2-8). Kết thúc C2: `bash harness/check.sh --all --lane-db=zod4` XANH trên zod 3.
 - C3: + ca boot `setupSwagger` (9.2-2) · census mở rộng (9.2-4).
 - Cổng trước PR: FULL gate 4 reviewer (9.2-1) có ngân sách lượt → vá → review hẹp → `check.sh --all --lane-db=zod4` → PR (body ghi runbook §5 + 9.2-2).
+
+---
+
+## §10 Kết quả pha C1 + C2 (06/11/2026, trên zod 3.25.76 — chưa nâng)
+
+### 10.1 Codemod (script AST TypeScript, đếm khớp census)
+
+| Gói | `z.string().uuid()`→`idSchema` | `z.string().email()`→`emailSchema` | `.email(…)`→`.email(emailParams(…))` | `z.record(X)`→`z.record(z.string(), X)` | tệp |
+| --- | --- | --- | --- | --- | --- |
+| contracts | 1.092 | 24 | 6 (5 `trim().email()` + `settings.ts:84` có thông điệp) | **11** | 86 |
+| web-core | 12 | 0 | 0 | 0 | 3 |
+| app | 6 (+1 tay: `leave-policy-form.ts:34` → `idSchemaWith(msg)`) | 2 | 3 | 0 | 9 |
+| auth | 0 | 0 | 2 | 0 | 2 |
+| console | 2 | 0 | 0 | 0 | 2 |
+| api | 4 (`db.service.ts:16` · `auth.service.ts:85` · `env.schema.ts:54` · `dashboard-cache-invalidation.dto.ts:16`) | 2 (`env.schema.ts`) | 0 | 0 | 4 |
+
+- Chênh so với census §2.2 (grep): uuid grep đếm cả chú thích (web-core 1, app 3, api 2) — AST không. `z.record` một tham số
+  thật là **11**, không 10: `payroll.ts:195` (`inputSnapshotSchema = z\n  .record(z.unknown())`) bị grep bỏ sót vì xuống dòng.
+- Kiểm diff bằng script: 1.165 dòng = đúng phép thay · 110 dòng import thêm · 9 dòng import gộp vào import sẵn có ·
+  1 dòng `.record(` xuống dòng — 0 dòng lạ. Sau đó prettier CHỈ trên 9 tệp vốn sạch prettier ở HEAD (5 tệp vốn đã bẩn để nguyên).
+- `.uuid(` không đúng dạng `z.string().uuid()`: **1** — `apps/app/src/routes/leave/leave-policy-form.ts:34`
+  `z.string().uuid("masterData…")` ⇒ `idSchemaWith("masterData…")` (hàm mới trong `common/id.ts`, C3: `z.guid(message)`). Còn
+  lại toàn chú thích/chuỗi (ratchet AST bỏ qua).
+- `required_error` (`leave-form-schema.ts:26`, enum) và `invalid_type_error` (`employees.ts:79`, `z.null().optional()`) → `message`.
+  `employees.ts`: trung tính (`.optional()` chặn `undefined` trước). `leave-form-schema.ts`: **lệch nhỏ có chủ đích** — giá trị
+  rỗng/sai enum (không phải `undefined`) nay cũng ra khoá i18n `durationTypeRequired` thay vì thông điệp mặc định tiếng Anh của zod.
+- `ZodError.errors` → `.issues`: `hr-employee-import.service.ts:353`.
+
+### 10.2 `emailSchema` — cách giữ hành vi
+
+`ZOD3_EMAIL_REGEX` chép nguyên văn `node_modules/zod/v3/types.js:384` (so sánh `source` bằng script: bằng nhau). Trên zod 3
+`emailSchema = z.string().email(emailParams())` — KHÔNG dùng `.regex()` vì issue sẽ ra `validation: "regex"` và OpenAPI sinh
+`pattern` thay `format: email`. Mọi `.email(` toàn monorepo đi qua `emailParams(msg?)` (ratchet ép) ⇒ **C3 chỉ sửa
+`emailParams()` để thêm `pattern: ZOD3_EMAIL_REGEX`** (cần xác minh `.email({ pattern })` trên zod 4.6.7; không được thì
+`z.email({ pattern })`). Bảng vàng 20 ca ở `common/email.spec.ts` đỏ nếu C3 quên.
+
+### 10.3 Soát 31 lời gọi `.partial()` (33 dòng grep, 2 là chú thích)
+
+Cách soát: census cấu trúc trên schema export đã build (`dist/cjs`), đệ quy object/array, tìm field `ZodOptional(…ZodDefault)` — đúng
+hình mà zod 4 sẽ áp default. Mọi lời gọi `.partial()` đều nằm trong một schema export.
+
+| file:dòng | schema | kết quả |
+| --- | --- | --- |
+| `attendance.ts:684` | `updateShiftSchema` | **ĐÃ TÁCH** — 8 field default (`shiftType` `breakMinutes` `graceLateMinutes` `graceEarlyLeaveMinutes` `allowEarlyCheckIn` `allowLateCheckOut` `crossDay` `isDefault`) ⇒ `shiftCoreSchema` (không default, không export); `createShiftSchema = shiftCoreSchema.extend({ f: shiftCoreSchema.shape.f.default(v) })` (thứ tự khoá giữ nguyên); `updateShiftSchema = shiftCoreSchema.partial().extend({ status })` |
+| `asset.ts:150` · `asset.ts:228` | `updateAssetCategorySchema` · `updateAssetSchema` | an toàn — base không default |
+| `foundation/company.ts:85` · `holidays.ts:43` · `retention.ts:58` · `sequences.ts:95` | `patchCompanySchema` · `updateHolidaySchema` · `patchRetentionPolicySchema` · `patchSequenceSchema` | an toàn |
+| `goal.ts:74` · `:303` · `:311` | `updateGoalSchema` · `updateTaskTemplateSchema` · `updateTaskTemplateItemSchema` | an toàn (`:311` đã dùng `…CoreSchema`) |
+| `media.ts:87,97,148,282,343,413,543,578,606` (9) | `updateChannel…` · `updateProject…` · `updateContent…` (park) | an toàn |
+| `payroll-catalog.ts:160,273,385` | `updateSalaryComponentSchema` · `updatePayrollTemplateSchema` · `updateStatutoryRateSchema` | an toàn |
+| `room.ts:125` · `social-api-groups.ts:119` | `updateRoomSchema` · `updateFeedGroupSchema` | an toàn |
+| `task-collab.ts:152,172` | `updateTaskChecklistSchema` · `updateTaskChecklistItemSchema` | an toàn |
+| `task.ts:193,308,325,413,653` | `updateTaskFieldsSchema` · `updateProjectStateSchema` · `updateLabelSchema` · `updateTaskProjectSchema` · `updateTaskCoreSchema` | an toàn |
+
+Tổng: **1 tách / 30 an toàn**. Ngoài `.partial()`, census cũng không thấy `optional(default)` viết tay ở schema export nào.
+Ghim hành vi (bất kể phiên bản): `zod4-pins.spec.ts` — `updateShiftSchema.parse({ name })` = `{ name }` + quét mọi
+`update…/patch…Schema` nhận `{}` phải trả `{}`. Census cấu trúc trên zod 4 vẫn là việc C3.7.
+
+### 10.4 Soát `.transform / z.preprocess / .trim … .default(v)` (mục 10a)
+
+Quét AST `src/` 6 gói (bỏ spec): 131 chuỗi `.default()` có bước biến đổi trước đó — **0** với `preprocess`/`trim`/`toLowerCase`/`pipe`.
+- 120 chuỗi `z.coerce.number()…default(<số>)` (contracts + `env.schema.ts`): an toàn — default đã là kiểu OUTPUT, coerce(số) = số.
+- 11 chuỗi `z.coerce.number().int().catch(D).transform(clamp).default(D)` (`auth/user-admin.ts:142,148` · `files.ts:129,135` ·
+  `foundation/file-access-log.ts:36,42` · `foundation/system-jobs.ts:75,81` · `users.ts:70,76`): an toàn — D nằm trong miền clamp
+  (50∈[1,100], 20∈[1,100], 1≥1, 0≥0) ⇒ `clamp(D) = D`; zod 4 trả D thẳng cũng ra cùng giá trị.
+- Giới hạn: chỉ bắt chuỗi viết liền một biểu thức; schema biến đổi gán vào biến rồi `.default()` ở chỗ khác không bắt được (không thấy
+  mẫu đó khi đọc tay các tệp có `transform`).
+
+### 10.5 Ratchet + ca ghim
+
+- Ratchet AST `apps/api/test/foundation/zod-id-record-ratchet.unit-spec.ts` (+ `zod-id-record-census.ts`): cấm `.uuid(` ngoài
+  `packages/contracts/src/common/id.ts`; cấm `z.record(` một tham số; mọi `.email(` phải mang `emailParams(...)` (ngoài `common/email.ts`).
+  Có ca chống-xanh-rỗng (≥1.000 tệp, ≥1.000 tham chiếu `idSchema`, ≥11 record hai tham số, ≥11 `emailParams`) và ca nguồn tổng hợp.
+- Ca ghim C1: `apps/api/test/integration/zod-error-envelope.int-spec.ts` (10) · `apps/api/src/db/db.service.spec.ts` (+5 dương) ·
+  `apps/api/src/auth/auth-canonical-id.spec.ts` (18) · `packages/contracts/src/zod4-pins.spec.ts` (6) ·
+  `packages/web-core/src/lib/zod4-response-pins.spec.ts` (3) · `packages/contracts/src/common/{id,email}.spec.ts` (18 + 22).
+- Lệch có chủ đích so với §4.1: int-spec phong bì dùng controller THĂM DÒ `@Public()` chỉ trong module test (app thật qua
+  `applyMainPipeline`, cùng pipe toàn cục + filter), thay vì route nghiệp vụ — tránh lẫn 401/403 và seed quyền; đo đúng đường
+  pipe → `ZodValidationException` → filter. Ca «`getZodError()` không có `issues`» để C3 (chỉ có nghĩa với nestjs-zod 5).

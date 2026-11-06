@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { projectStateGroupSchema, taskCoreResponseSchema, taskCoreStatusSchema } from "./task";
+import { idSchema } from "./common/id";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // S4-TASK-BE-4 — Kanban board + move · comment/mention · checklist/items · activity feed
@@ -37,7 +38,7 @@ export type TaskKanbanCardDto = z.infer<typeof taskKanbanCardSchema>;
  */
 export const taskKanbanStateColumnSchema = z.object({
   columnMode: z.literal("state"),
-  stateId: z.string().uuid(),
+  stateId: idSchema,
   name: z.string(),
   color: z.string(),
   stateGroup: projectStateGroupSchema,
@@ -61,7 +62,7 @@ export const taskKanbanColumnSchema = z.discriminatedUnion("columnMode", [
 export type TaskKanbanColumnDto = z.infer<typeof taskKanbanColumnSchema>;
 
 export const taskKanbanBoardSchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: idSchema,
   columns: z.array(taskKanbanColumnSchema),
 });
 export type TaskKanbanBoardDto = z.infer<typeof taskKanbanBoardSchema>;
@@ -74,7 +75,7 @@ export type TaskKanbanBoardDto = z.infer<typeof taskKanbanBoardSchema>;
  */
 export const moveTaskStateRequestSchema = z
   .object({
-    stateId: z.string().uuid(),
+    stateId: idSchema,
   })
   .strict();
 export type MoveTaskStateRequest = z.infer<typeof moveTaskStateRequestSchema>;
@@ -88,7 +89,7 @@ const uniqueMentions = (v: { mentionEmployeeIds: string[] }) =>
 export const createTaskCommentSchema = z
   .object({
     content: z.string().trim().min(1).max(5000),
-    mentionEmployeeIds: z.array(z.string().uuid()).max(MENTION_MAX).default([]),
+    mentionEmployeeIds: z.array(idSchema).max(MENTION_MAX).default([]),
   })
   .strict()
   .refine(uniqueMentions, {
@@ -100,7 +101,7 @@ export type CreateTaskCommentRequest = z.infer<typeof createTaskCommentSchema>;
 export const updateTaskCommentSchema = z
   .object({
     content: z.string().trim().min(1).max(5000),
-    mentionEmployeeIds: z.array(z.string().uuid()).max(MENTION_MAX).default([]),
+    mentionEmployeeIds: z.array(idSchema).max(MENTION_MAX).default([]),
   })
   .strict()
   .refine(uniqueMentions, {
@@ -110,16 +111,16 @@ export const updateTaskCommentSchema = z
 export type UpdateTaskCommentRequest = z.infer<typeof updateTaskCommentSchema>;
 
 export const taskCommentMentionSchema = z.object({
-  employeeId: z.string().uuid(),
-  userId: z.string().uuid(),
+  employeeId: idSchema,
+  userId: idSchema,
   name: z.string().nullable(),
 });
 export type TaskCommentMentionDto = z.infer<typeof taskCommentMentionSchema>;
 
 export const taskCommentResponseSchema = z.object({
-  id: z.string().uuid(),
-  taskId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  taskId: idSchema,
+  userId: idSchema,
   userName: z.string().nullable(),
   content: z.string(),
   // Mention KHÔNG có bảng lưu quan hệ (task_comment_mentions chưa tồn tại — DB debt, xem PR desc) —
@@ -175,19 +176,19 @@ export const updateTaskChecklistItemSchema = z
 export type UpdateTaskChecklistItemRequest = z.infer<typeof updateTaskChecklistItemSchema>;
 
 export const taskChecklistItemResponseSchema = z.object({
-  id: z.string().uuid(),
-  checklistId: z.string().uuid(),
+  id: idSchema,
+  checklistId: idSchema,
   title: z.string(),
   isDone: z.boolean(),
-  doneBy: z.string().uuid().nullable(),
+  doneBy: idSchema.nullable(),
   doneAt: z.string().datetime().nullable(),
   orderIndex: z.number(),
 });
 export type TaskChecklistItemResponseDto = z.infer<typeof taskChecklistItemResponseSchema>;
 
 export const taskChecklistResponseSchema = z.object({
-  id: z.string().uuid(),
-  taskId: z.string().uuid(),
+  id: idSchema,
+  taskId: idSchema,
   title: z.string(),
   description: z.string().nullable(),
   isRequiredForDone: z.boolean(),
@@ -207,13 +208,13 @@ export const listTaskActivityQuerySchema = z.object({
 export type ListTaskActivityQueryRequest = z.infer<typeof listTaskActivityQuerySchema>;
 
 export const taskActivityLogResponseSchema = z.object({
-  id: z.string().uuid(),
-  taskId: z.string().uuid().nullable(),
-  projectId: z.string().uuid().nullable(),
+  id: idSchema,
+  taskId: idSchema.nullable(),
+  projectId: idSchema.nullable(),
   action: z.string(),
   targetType: z.string(),
-  targetId: z.string().uuid().nullable(),
-  actorUserId: z.string().uuid().nullable(),
+  targetId: idSchema.nullable(),
+  actorUserId: idSchema.nullable(),
   actorName: z.string().nullable(),
   oldValues: z.unknown().nullable(),
   newValues: z.unknown().nullable(),

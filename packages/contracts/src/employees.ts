@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { emailSchema } from "./common/email";
+import { idSchema } from "./common/id";
 
 const workTypeEnum = z.enum(["offline", "remote", "hybrid"]);
 const employmentTypeEnum = z.enum(["full_time", "part_time", "freelancer", "intern", "probation"]);
@@ -7,15 +9,15 @@ const employeeStatusEnum = z.enum(["active", "inactive", "resigned", "terminated
 
 /** DTO employee profile — base_salary nullable: null = không có quyền xem. */
 export const employeeProfileSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  userId: idSchema,
   employeeCode: z.string().nullable().optional(),
-  orgUnitId: z.string().uuid().nullable().optional(),
+  orgUnitId: idSchema.nullable().optional(),
   orgUnitName: z.string().nullable().optional(),
-  positionId: z.string().uuid().nullable().optional(),
+  positionId: idSchema.nullable().optional(),
   positionName: z.string().nullable().optional(),
-  directManagerId: z.string().uuid().nullable().optional(),
+  directManagerId: idSchema.nullable().optional(),
   directManagerName: z.string().nullable().optional(),
   workType: workTypeEnum,
   employmentType: employmentTypeEnum,
@@ -29,18 +31,18 @@ export const employeeProfileSchema = z.object({
   notes: z.string().nullable().optional(),
   status: employeeStatusEnum,
   userFullName: z.string().nullable().optional(),
-  userEmail: z.string().email().optional(),
+  userEmail: emailSchema.optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
 export type EmployeeProfileDto = z.infer<typeof employeeProfileSchema>;
 
 export const employeeListItemSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  userId: idSchema,
   employeeCode: z.string().nullable().optional(),
   userFullName: z.string().nullable().optional(),
-  userEmail: z.string().email().optional(),
+  userEmail: emailSchema.optional(),
   orgUnitName: z.string().nullable().optional(),
   positionName: z.string().nullable().optional(),
   workType: workTypeEnum,
@@ -74,7 +76,7 @@ export const AVATAR_REMOVE_ONLY_MESSAGE =
   "avatarUrl chỉ nhận null (gỡ ảnh); đặt ảnh qua /me/avatar hoặc endpoint ảnh của HR";
 
 const avatarRemoveOnlySchema = z
-  .null({ invalid_type_error: AVATAR_REMOVE_ONLY_MESSAGE })
+  .null({ message: AVATAR_REMOVE_ONLY_MESSAGE })
   .optional()
   .describe(
     "Chỉ nhận null (gỡ ảnh); mọi chuỗi ⇒ 400. Ảnh đặt qua /me/avatar hoặc endpoint ảnh của HR.",
@@ -87,14 +89,14 @@ const avatarRemoveOnlySchema = z
  * "userId XOR (email+fullName)" rule is enforced server-side (EmployeesService).
  */
 export const createEmployeeProfileSchema = z.object({
-  userId: z.string().uuid().optional(),
-  email: z.string().email().optional(),
+  userId: idSchema.optional(),
+  email: emailSchema.optional(),
   fullName: z.string().min(1).max(200).optional(),
   password: z.string().min(8).optional(),
   employeeCode: z.string().optional(),
-  orgUnitId: z.string().uuid().optional(),
-  positionId: z.string().uuid().optional(),
-  directManagerId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  positionId: idSchema.optional(),
+  directManagerId: idSchema.optional(),
   workType: workTypeEnum.default("offline"),
   employmentType: employmentTypeEnum.default("full_time"),
   startDate: z.string().date().optional(),
@@ -109,9 +111,9 @@ export type CreateEmployeeProfileRequest = z.infer<typeof createEmployeeProfileS
 
 export const updateEmployeeProfileSchema = z.object({
   employeeCode: z.string().optional(),
-  orgUnitId: z.string().uuid().nullable().optional(),
-  positionId: z.string().uuid().nullable().optional(),
-  directManagerId: z.string().uuid().nullable().optional(),
+  orgUnitId: idSchema.nullable().optional(),
+  positionId: idSchema.nullable().optional(),
+  directManagerId: idSchema.nullable().optional(),
   workType: workTypeEnum.optional(),
   employmentType: employmentTypeEnum.optional(),
   startDate: z.string().date().nullable().optional(),
@@ -132,7 +134,7 @@ export type UpdateEmployeeProfileRequest = z.infer<typeof updateEmployeeProfileS
  * `update-salary` permission + audit (PATCH /employees/:id). Bulk import must never set salaries.
  */
 export const importEmployeeRowSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   fullName: z.string().min(1).max(200),
   employeeCode: z.string().optional(),
   orgUnitName: z.string().optional(),
@@ -185,8 +187,8 @@ export const employeeListQuerySchema = z.object({
     .positive()
     .max(EMPLOYEE_LIST_PAGE_SIZE_MAX)
     .default(EMPLOYEE_LIST_PAGE_SIZE_DEFAULT),
-  orgUnitId: z.string().uuid().optional(),
-  positionId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  positionId: idSchema.optional(),
   status: z.string().optional(),
   search: z.string().trim().min(1).optional(),
 });

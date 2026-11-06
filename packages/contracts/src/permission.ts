@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * G3 mutation-path — runtime permission management DTOs.
@@ -18,7 +19,7 @@ export type ObjectSubjectType = z.infer<typeof objectSubjectTypeEnum>;
 
 /** POST /permissions/users/:userId/roles — body. expiresAt null/absent = role vĩnh viễn. */
 export const assignRoleSchema = z.object({
-  roleId: z.string().uuid(),
+  roleId: idSchema,
   /** Thời điểm role hết hạn (ISO datetime). null/bỏ trống = không hết hạn. */
   expiresAt: z.string().datetime().nullable().optional(),
 });
@@ -38,9 +39,9 @@ export type AssignRoleRequest = z.infer<typeof assignRoleSchema>;
  * `expiresAt` echo INSTANT của request (ISO) — an toàn vì `sameExpiry` là bằng-tuyệt-đối.
  */
 export const userRoleSchema = z.object({
-  userId: z.string().uuid(),
-  roleId: z.string().uuid(),
-  companyId: z.string().uuid(),
+  userId: idSchema,
+  roleId: idSchema,
+  companyId: idSchema,
   expiresAt: z.string().datetime().nullable(),
 });
 export type UserRoleDto = z.infer<typeof userRoleSchema>;
@@ -53,11 +54,11 @@ export type UserRoleDto = z.infer<typeof userRoleSchema>;
  */
 export const setObjectPermissionSchema = z.object({
   subjectType: objectSubjectTypeEnum,
-  subjectId: z.string().uuid(),
+  subjectId: idSchema,
   action: z.string().min(1).max(100),
   resourceType: z.string().min(1).max(100),
   objectType: z.string().min(1).max(100),
-  objectId: z.string().uuid(),
+  objectId: idSchema,
   effect: permissionEffectEnum,
 });
 export type SetObjectPermissionRequest = z.infer<typeof setObjectPermissionSchema>;
@@ -69,26 +70,26 @@ export type SetObjectPermissionRequest = z.infer<typeof setObjectPermissionSchem
  */
 export const removeObjectPermissionSchema = z.object({
   subjectType: objectSubjectTypeEnum,
-  subjectId: z.string().uuid(),
+  subjectId: idSchema,
   action: z.string().min(1).max(100),
   resourceType: z.string().min(1).max(100),
   objectType: z.string().min(1).max(100),
-  objectId: z.string().uuid(),
+  objectId: idSchema,
   effect: permissionEffectEnum,
 });
 export type RemoveObjectPermissionRequest = z.infer<typeof removeObjectPermissionSchema>;
 
 /** DTO 1 object_permission grant trả về sau khi set. */
 export const objectPermissionSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   subjectType: objectSubjectTypeEnum,
-  subjectId: z.string().uuid(),
-  permissionId: z.string().uuid(),
+  subjectId: idSchema,
+  permissionId: idSchema,
   objectType: z.string(),
-  objectId: z.string().uuid(),
+  objectId: idSchema,
   effect: permissionEffectEnum,
-  grantedBy: z.string().uuid().nullable(),
+  grantedBy: idSchema.nullable(),
   createdAt: z.string().datetime(),
 });
 export type ObjectPermissionDto = z.infer<typeof objectPermissionSchema>;
@@ -123,8 +124,8 @@ export type UpdateRoleRequest = z.infer<typeof updateRoleSchema>;
 
 /** DTO 1 role trả về sau khi create/update (KHÔNG lộ role operator-audience qua đường write này). */
 export const roleWriteResultSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid().nullable(),
+  id: idSchema,
+  companyId: idSchema.nullable(),
   name: z.string(),
   description: z.string().nullable(),
   isSystem: z.boolean(),
@@ -140,7 +141,7 @@ export type RoleWriteResultDto = z.infer<typeof roleWriteResultSchema>;
  * (is_system=true) → server REJECT 400 (KHÔNG cho xoá).
  */
 export const roleDeleteResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   revokedMembers: z.number().int().nonnegative(),
 });
 export type RoleDeleteResultDto = z.infer<typeof roleDeleteResultSchema>;
@@ -166,8 +167,8 @@ export type RevokeRolePermissionRequest = z.infer<typeof revokeRolePermissionSch
 
 /** DTO 1 role_permission grant trả về sau khi assign (role_permissions không có uuid PK riêng). */
 export const rolePermissionGrantSchema = z.object({
-  roleId: z.string().uuid(),
-  permissionId: z.string().uuid(),
+  roleId: idSchema,
+  permissionId: idSchema,
   action: z.string(),
   resourceType: z.string(),
   effect: permissionEffectEnum,

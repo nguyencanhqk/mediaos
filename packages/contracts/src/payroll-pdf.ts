@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — PAYROLL v2 track D phần 2 (S15-PAYROLL-BE-5B · SPEC-11 §15.1 hàng 083–085 · PAY-DEC-019 ·
@@ -21,7 +22,7 @@ export const PAYSLIP_PDF_BATCH_MAX = 2_000;
 
 /** 083 · 084 — một phiếu. */
 export const payslipPdfDto = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   fileName: z.string(),
   /** Signed-URL TTL ngắn — dùng ngay, không lưu. */
   url: z.string().url(),
@@ -65,8 +66,8 @@ export const PAYSLIP_PDF_BATCH_RUNTIME_CAP_MS = 240_000;
  * `url`/`expiresAt` chỉ có khi `Uploaded`; `failure` chỉ có khi `Failed` (mã máy, không chi tiết nội bộ).
  */
 export const payslipPdfBatchDto = z.object({
-  fileId: z.string().uuid(),
-  periodId: z.string().uuid(),
+  fileId: idSchema,
+  periodId: idSchema,
   status: payslipPdfBatchStatusEnum,
   payslipCount: z.number().int().nonnegative(),
   fileName: z.string(),

@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import { HR_EMPLOYMENT_TYPES, HR_SALARY_TYPES, HR_WORK_TYPES } from "./employee-write";
+import { idSchema } from "../common/id";
+import { emailParams } from "../common/email";
 
 /**
  * S5-HR-IMPORT-BE-1 — bulk employee import contracts (SPEC-03 §7 "Import hàng loạt" / §8
@@ -38,7 +40,7 @@ export const hrEmployeeImportRowSchema = z
     // Optional — omit to auto-generate via SequenceService; provide to set manually (allow_manual_override).
     employeeCode: z.string().trim().min(1).max(50).optional(),
     // DUP-CHECK ONLY — never provisions a user; validated as an address only when present.
-    email: z.string().trim().email().max(255).optional(),
+    email: z.string().trim().email(emailParams()).max(255).optional(),
     // Reference data BY NAME — resolved to ids server-side via HR lookups.
     orgUnitName: z.string().trim().min(1).max(200).optional(),
     positionName: z.string().trim().min(1).max(200).optional(),
@@ -113,7 +115,7 @@ export type HrImportReport = z.infer<typeof hrImportReportSchema>;
 /** One successfully-created row in an apply result. `employeeCode` may be null if not yet allocated. */
 export const hrImportCreatedRowSchema = z.object({
   row: z.number().int().positive(),
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   employeeCode: z.string().nullable(),
 });
 export type HrImportCreatedRow = z.infer<typeof hrImportCreatedRowSchema>;
@@ -129,7 +131,7 @@ export const hrImportResultSchema = z.object({
   counts: hrImportCountsSchema,
   created: z.array(hrImportCreatedRowSchema),
   skipped: z.array(hrImportRowErrorSchema),
-  sessionAuditId: z.string().uuid(),
+  sessionAuditId: idSchema,
 });
 export type HrImportResult = z.infer<typeof hrImportResultSchema>;
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
 import { FEED_NOTE_MAX } from "./social-api";
 import { feedIdeaStatusSchema } from "./social";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-2B-2 — DTO của `SOCIAL-API-045..046` (SÁNG KIẾN).
@@ -77,8 +78,8 @@ export type ReviewFeedIdeaDto = z.infer<typeof reviewFeedIdeaSchema>;
  * `reviewer` chỉ chở `fullName` — không `userId` (luật `feedAuthorSchema`).
  */
 export const feedIdeaItemSchema = z.object({
-  ideaId: z.string().uuid(),
-  postId: z.string().uuid(),
+  ideaId: idSchema,
+  postId: idSchema,
   status: feedIdeaStatusSchema,
   body: z.string().nullable(),
   reviewNote: z.string().nullable(),
@@ -102,8 +103,8 @@ export type FeedIdeaPageDto = z.infer<typeof feedIdeaPageSchema>;
  * Không chở `reviewNote`: người vừa gửi đã có nó, và response không phải chỗ phát lại chữ tự do.
  */
 export const feedIdeaReviewResultSchema = z.object({
-  postId: z.string().uuid(),
-  ideaId: z.string().uuid(),
+  postId: idSchema,
+  ideaId: idSchema,
   status: feedIdeaReviewTargetSchema,
   reviewedAt: z.string().datetime({ offset: true }),
 });

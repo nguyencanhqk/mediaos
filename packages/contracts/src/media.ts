@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /** Mã nền tảng — khớp catalog `platforms` (0021) gồm 6 code. */
 export const channelPlatformSchema = z.enum([
@@ -26,7 +27,7 @@ export type ChannelHealthStatus = z.infer<typeof channelHealthStatusSchema>;
 
 /** Catalog nền tảng (read-only). */
 export const platformSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   code: channelPlatformSchema,
   type: z.string().nullable(),
@@ -35,19 +36,19 @@ export const platformSchema = z.object({
 export type PlatformDto = z.infer<typeof platformSchema>;
 
 export const channelSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   name: z.string(),
   /** Cột text legacy (mirror platform_id; DROP ở 0029). */
   platform: channelPlatformSchema,
-  platformId: z.string().uuid(),
+  platformId: idSchema,
   code: z.string().nullable(),
   url: z.string().nullable(),
   language: z.string().nullable(),
   targetCountry: z.string().nullable(),
   niche: z.string().nullable(),
-  channelManagerId: z.string().uuid().nullable(),
-  primaryTeamId: z.string().uuid().nullable(),
+  channelManagerId: idSchema.nullable(),
+  primaryTeamId: idSchema.nullable(),
   healthStatus: channelHealthStatusSchema.nullable(),
   /** numeric(5,2) — Drizzle trả string. */
   healthScore: z.string().nullable(),
@@ -66,8 +67,8 @@ export const createChannelSchema = z.object({
   language: z.string().max(20).optional(),
   targetCountry: z.string().max(80).optional(),
   niche: z.string().max(120).optional(),
-  channelManagerId: z.string().uuid().optional(),
-  primaryTeamId: z.string().uuid().optional(),
+  channelManagerId: idSchema.optional(),
+  primaryTeamId: idSchema.optional(),
 });
 export type CreateChannelRequest = z.infer<typeof createChannelSchema>;
 
@@ -80,8 +81,8 @@ export const updateChannelSchema = z
     language: z.string().max(20).nullable(),
     targetCountry: z.string().max(80).nullable(),
     niche: z.string().max(120).nullable(),
-    channelManagerId: z.string().uuid().nullable(),
-    primaryTeamId: z.string().uuid().nullable(),
+    channelManagerId: idSchema.nullable(),
+    primaryTeamId: idSchema.nullable(),
     status: channelStatusSchema,
   })
   .partial();
@@ -101,7 +102,7 @@ export type UpdateChannelHealthRequest = z.infer<typeof updateChannelHealthSchem
 export const listChannelsQuerySchema = z.object({
   platform: channelPlatformSchema.optional(),
   status: channelStatusSchema.optional(),
-  managerId: z.string().uuid().optional(),
+  managerId: idSchema.optional(),
   niche: z.string().max(120).optional(),
   q: z.string().max(200).optional(),
   risk: z.coerce.boolean().optional(),
@@ -120,10 +121,10 @@ export const channelRoleSchema = z.enum([
 export type ChannelRole = z.infer<typeof channelRoleSchema>;
 
 export const channelMemberSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  channelId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  channelId: idSchema,
+  userId: idSchema,
   roleInChannel: channelRoleSchema.nullable(),
   permissionLevel: z.string().nullable(),
   status: z.enum(["active", "inactive"]),
@@ -133,7 +134,7 @@ export const channelMemberSchema = z.object({
 export type ChannelMemberDto = z.infer<typeof channelMemberSchema>;
 
 export const addChannelMemberSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   roleInChannel: channelRoleSchema.optional(),
   permissionLevel: z.string().max(40).optional(),
 });
@@ -169,8 +170,8 @@ export type ProjectPriority = z.infer<typeof projectPrioritySchema>;
 
 /** Kênh gán vào project (light — dùng cho list + detail). */
 export const projectChannelLinkSchema = z.object({
-  id: z.string().uuid(),
-  channelId: z.string().uuid(),
+  id: idSchema,
+  channelId: idSchema,
   name: z.string(),
   platform: channelPlatformSchema,
   roleInProject: z.string().nullable(),
@@ -180,18 +181,18 @@ export type ProjectChannelLinkDto = z.infer<typeof projectChannelLinkSchema>;
 
 /** Team gán vào project. */
 export const projectTeamLinkSchema = z.object({
-  id: z.string().uuid(),
-  teamId: z.string().uuid(),
+  id: idSchema,
+  teamId: idSchema,
   name: z.string(),
   roleInProject: z.string().nullable(),
 });
 export type ProjectTeamLinkDto = z.infer<typeof projectTeamLinkSchema>;
 
 export const projectMemberSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  projectId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  projectId: idSchema,
+  userId: idSchema,
   roleInProject: z.string().nullable(),
   permissionLevel: z.string().nullable(),
   /** numeric(5,2) — Drizzle trả string. */
@@ -205,15 +206,15 @@ export const projectMemberSchema = z.object({
 export type ProjectMemberDto = z.infer<typeof projectMemberSchema>;
 
 export const projectSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  orgUnitId: z.string().uuid().nullable(),
+  id: idSchema,
+  companyId: idSchema,
+  orgUnitId: idSchema.nullable(),
   name: z.string(),
   code: z.string().nullable(),
   projectType: projectTypeSchema.nullable(),
   description: z.string().nullable(),
-  ownerUserId: z.string().uuid().nullable(),
-  projectManagerId: z.string().uuid().nullable(),
+  ownerUserId: idSchema.nullable(),
+  projectManagerId: idSchema.nullable(),
   startDate: z.string().nullable(),
   endDate: z.string().nullable(),
   priority: projectPrioritySchema.nullable(),
@@ -250,9 +251,9 @@ export const createProjectSchema = z.object({
   code: z.string().max(80).optional(),
   projectType: projectTypeSchema.optional(),
   description: z.string().max(2000).optional(),
-  orgUnitId: z.string().uuid().optional(),
-  ownerUserId: z.string().uuid().optional(),
-  projectManagerId: z.string().uuid().optional(),
+  orgUnitId: idSchema.optional(),
+  ownerUserId: idSchema.optional(),
+  projectManagerId: idSchema.optional(),
   startDate: z.string().date().optional(),
   endDate: z.string().date().optional(),
   priority: projectPrioritySchema.optional(),
@@ -268,9 +269,9 @@ export const updateProjectSchema = z
     code: z.string().max(80).nullable(),
     projectType: projectTypeSchema.nullable(),
     description: z.string().max(2000).nullable(),
-    orgUnitId: z.string().uuid().nullable(),
-    ownerUserId: z.string().uuid().nullable(),
-    projectManagerId: z.string().uuid().nullable(),
+    orgUnitId: idSchema.nullable(),
+    ownerUserId: idSchema.nullable(),
+    projectManagerId: idSchema.nullable(),
     startDate: z.string().date().nullable(),
     endDate: z.string().date().nullable(),
     priority: projectPrioritySchema.nullable(),
@@ -287,7 +288,7 @@ export const listProjectsQuerySchema = z.object({
   status: projectStatusSchema.optional(),
   projectType: projectTypeSchema.optional(),
   priority: projectPrioritySchema.optional(),
-  managerId: z.string().uuid().optional(),
+  managerId: idSchema.optional(),
   q: z.string().max(200).optional(),
 });
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
@@ -301,14 +302,14 @@ export type ContentTypeStatus = z.infer<typeof contentTypeStatusSchema>;
  * breaking change G6-4b (content_type text → content_type_id FK).
  */
 export const contentTypeSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   name: z.string(),
   code: z.string().nullable(),
   description: z.string().nullable(),
   /** uuid trần (KHÔNG FK ở M2; defer G7/G8). */
-  defaultWorkflowTemplateId: z.string().uuid().nullable(),
-  defaultEvaluationTemplateId: z.string().uuid().nullable(),
+  defaultWorkflowTemplateId: idSchema.nullable(),
+  defaultEvaluationTemplateId: idSchema.nullable(),
   targetPlatform: z.string().nullable(),
   /** integer — Drizzle trả number. */
   standardDuration: z.number().int().nullable(),
@@ -322,8 +323,8 @@ export const createContentTypeSchema = z.object({
   name: z.string().min(1).max(200),
   code: z.string().max(80).optional(),
   description: z.string().max(2000).optional(),
-  defaultWorkflowTemplateId: z.string().uuid().optional(),
-  defaultEvaluationTemplateId: z.string().uuid().optional(),
+  defaultWorkflowTemplateId: idSchema.optional(),
+  defaultEvaluationTemplateId: idSchema.optional(),
   targetPlatform: z.string().max(80).optional(),
   standardDuration: z.coerce.number().int().min(0).max(100000).optional(),
 });
@@ -334,8 +335,8 @@ export const updateContentTypeSchema = z
     name: z.string().min(1).max(200),
     code: z.string().max(80).nullable(),
     description: z.string().max(2000).nullable(),
-    defaultWorkflowTemplateId: z.string().uuid().nullable(),
-    defaultEvaluationTemplateId: z.string().uuid().nullable(),
+    defaultWorkflowTemplateId: idSchema.nullable(),
+    defaultEvaluationTemplateId: idSchema.nullable(),
     targetPlatform: z.string().max(80).nullable(),
     standardDuration: z.coerce.number().int().min(0).max(100000).nullable(),
     status: contentTypeStatusSchema,
@@ -380,12 +381,12 @@ export type PublishStatus = z.infer<typeof publishStatusSchema>;
 
 /** 1 publish-target (content ↔ kênh) — embed channelName/platform cho FE (join ở repo). */
 export const contentChannelSchema = z.object({
-  id: z.string().uuid(),
-  contentItemId: z.string().uuid(),
-  channelId: z.string().uuid(),
+  id: idSchema,
+  contentItemId: idSchema,
+  channelId: idSchema,
   channelName: z.string(),
   platform: channelPlatformSchema,
-  platformId: z.string().uuid().nullable(),
+  platformId: idSchema.nullable(),
   publishStatus: publishStatusSchema.nullable(),
   publishUrl: z.string().nullable(),
   plannedPublishAt: z.string().datetime().nullable(),
@@ -396,7 +397,7 @@ export const contentChannelSchema = z.object({
 export type ContentChannelDto = z.infer<typeof contentChannelSchema>;
 
 export const addContentChannelSchema = z.object({
-  channelId: z.string().uuid(),
+  channelId: idSchema,
   publishStatus: publishStatusSchema.optional(),
   publishUrl: z.string().url().max(1000).optional(),
   plannedPublishAt: z.string().datetime().optional(),
@@ -430,19 +431,19 @@ export const assetStatusSchema = z.enum(["active", "archived"]);
 export type AssetStatus = z.infer<typeof assetStatusSchema>;
 
 export const contentAssetSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  contentItemId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  contentItemId: idSchema,
   assetType: assetTypeSchema.nullable(),
   name: z.string().nullable(),
   fileUrl: z.string().nullable(),
   externalUrl: z.string().nullable(),
   version: z.number().int(),
-  versionGroupId: z.string().uuid(),
-  parentAssetId: z.string().uuid().nullable(),
+  versionGroupId: idSchema,
+  parentAssetId: idSchema.nullable(),
   isCurrent: z.boolean(),
-  supersededBy: z.string().uuid().nullable(),
-  uploadedBy: z.string().uuid().nullable(),
+  supersededBy: idSchema.nullable(),
+  uploadedBy: idSchema.nullable(),
   status: assetStatusSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -479,15 +480,15 @@ export type CreateContentAssetVersionRequest = z.infer<typeof createContentAsset
 
 // ── Content items (ERD-full) ────────────────────────────────────────────────
 export const contentItemSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  projectId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  projectId: idSchema,
   title: z.string(),
-  contentTypeId: z.string().uuid().nullable(),
+  contentTypeId: idSchema.nullable(),
   code: z.string().nullable(),
   description: z.string().nullable(),
-  ownerUserId: z.string().uuid().nullable(),
-  mainChannelId: z.string().uuid().nullable(),
+  ownerUserId: idSchema.nullable(),
+  mainChannelId: idSchema.nullable(),
   language: z.string().nullable(),
   status: contentStatusSchema,
   productionStatus: productionStatusSchema.nullable(),
@@ -508,13 +509,13 @@ export const contentItemSchema = z.object({
 export type ContentItemDto = z.infer<typeof contentItemSchema>;
 
 export const createContentItemSchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: idSchema,
   title: z.string().min(1).max(300),
-  contentTypeId: z.string().uuid().optional(),
+  contentTypeId: idSchema.optional(),
   code: z.string().max(80).optional(),
   description: z.string().max(2000).optional(),
-  ownerUserId: z.string().uuid().optional(),
-  mainChannelId: z.string().uuid().optional(),
+  ownerUserId: idSchema.optional(),
+  mainChannelId: idSchema.optional(),
   language: z.string().max(20).optional(),
   priority: contentPrioritySchema.optional(),
   plannedPublishAt: z.string().datetime().optional(),
@@ -524,11 +525,11 @@ export type CreateContentItemRequest = z.infer<typeof createContentItemSchema>;
 export const updateContentItemSchema = z
   .object({
     title: z.string().min(1).max(300),
-    contentTypeId: z.string().uuid().nullable(),
+    contentTypeId: idSchema.nullable(),
     code: z.string().max(80).nullable(),
     description: z.string().max(2000).nullable(),
-    ownerUserId: z.string().uuid().nullable(),
-    mainChannelId: z.string().uuid().nullable(),
+    ownerUserId: idSchema.nullable(),
+    mainChannelId: idSchema.nullable(),
     language: z.string().max(20).nullable(),
     status: contentStatusSchema,
     productionStatus: productionStatusSchema.nullable(),
@@ -545,27 +546,27 @@ export type UpdateContentItemRequest = z.infer<typeof updateContentItemSchema>;
 
 /** Filter list content (CNT-001: project/status/production/type/kênh chính/q). */
 export const listContentQuerySchema = z.object({
-  projectId: z.string().uuid().optional(),
+  projectId: idSchema.optional(),
   status: contentStatusSchema.optional(),
   productionStatus: productionStatusSchema.optional(),
-  contentTypeId: z.string().uuid().optional(),
-  mainChannelId: z.string().uuid().optional(),
+  contentTypeId: idSchema.optional(),
+  mainChannelId: idSchema.optional(),
   q: z.string().max(200).optional(),
 });
 export type ListContentQuery = z.infer<typeof listContentQuerySchema>;
 
 /** Gợi ý workflow theo content type (CNT-001) — chỉ trả template id (instance thật ở G7). */
 export const suggestWorkflowSchema = z.object({
-  contentTypeId: z.string().uuid().nullable(),
-  defaultWorkflowTemplateId: z.string().uuid().nullable(),
-  defaultEvaluationTemplateId: z.string().uuid().nullable(),
+  contentTypeId: idSchema.nullable(),
+  defaultWorkflowTemplateId: idSchema.nullable(),
+  defaultEvaluationTemplateId: idSchema.nullable(),
 });
 export type SuggestWorkflowDto = z.infer<typeof suggestWorkflowSchema>;
 
 // ── Project ↔ channel / team / member links (G6-3) ──────────────────────────
 
 export const addProjectChannelSchema = z.object({
-  channelId: z.string().uuid(),
+  channelId: idSchema,
   roleInProject: z.string().max(120).optional(),
 });
 export type AddProjectChannelRequest = z.infer<typeof addProjectChannelSchema>;
@@ -579,13 +580,13 @@ export const updateProjectChannelSchema = z
 export type UpdateProjectChannelRequest = z.infer<typeof updateProjectChannelSchema>;
 
 export const addProjectTeamSchema = z.object({
-  teamId: z.string().uuid(),
+  teamId: idSchema,
   roleInProject: z.string().max(120).optional(),
 });
 export type AddProjectTeamRequest = z.infer<typeof addProjectTeamSchema>;
 
 export const addProjectMemberSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   roleInProject: z.string().max(120).optional(),
   permissionLevel: z.string().max(40).optional(),
   workloadPercent: z.coerce.number().min(0).max(100).optional(),

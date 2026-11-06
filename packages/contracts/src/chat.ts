@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 // S7-CHAT-DB-1 (mig 0538 · CHAT-DEC-001): BỎ 'channel' — cụm media out-of-scope sau de-media-fy.
 // Đổi CÙNG COMMIT với migration đổi CHECK chat_rooms_room_type_chk, nếu không FE/BE lệch DB.
@@ -19,7 +20,7 @@ export type ChatRoomType = z.infer<typeof chatRoomTypeSchema>;
  * client là không cắt gì cả: toàn bộ nội dung vẫn đi qua dây.
  */
 export const chatRoomLastMessageSchema = z.object({
-  senderId: z.string().uuid(),
+  senderId: idSchema,
   /**
    * ⚠️ VẪN HIỆN TÊN khi người gửi đã rời phòng hoặc bị vô hiệu hoá — nhất quán với roster
    * `CHAT-API-007a`, vốn CỐ Ý giữ người đã rời kèm `leftAt` thay vì ẩn tên. `null` = không tra được
@@ -46,7 +47,7 @@ export type ChatRoomLastMessageDto = z.infer<typeof chatRoomLastMessageSchema>;
  * ai-nhắn-với-ai và không bao giờ rời server; peer suy từ `chat_room_members` của chính phòng.
  */
 export const chatRoomPeerSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   name: z.string().nullable(),
   /** URL ký TƯƠI mỗi lần trả (`AvatarPresignService`). `null` = chưa có ảnh / đầu độc / ký lỗi. */
   avatarUrl: z.string().nullable(),
@@ -64,9 +65,9 @@ export const chatRoomPeerSchema = z.object({
 export type ChatRoomPeerDto = z.infer<typeof chatRoomPeerSchema>;
 
 export const chatRoomSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  refId: z.string().uuid().nullable(),
+  id: idSchema,
+  companyId: idSchema,
+  refId: idSchema.nullable(),
   roomType: chatRoomTypeSchema,
   // ⚠️ NULLABLE: phòng `direct` không có tên (mig 0538 DROP NOT NULL) — client dựng tên từ 2 người.
   // Thiếu .nullable() ở đây là ZodError runtime DÙ HTTP 200 (lớp server-masking-needs-optional-fe-schema).
@@ -160,7 +161,7 @@ export const createChatRoomSchema = z.object({
    * `createGroup` chạy 5.000 INSERT tuần tự trong MỘT transaction đang giữ hàng phòng — giao dịch dài
    * trên pool PgBouncer transaction-mode. Cạn tài nguyên bằng tài khoản hợp lệ, không cần lỗ hổng nào.
    */
-  memberUserIds: z.array(z.string().uuid()).max(200).default([]),
+  memberUserIds: z.array(idSchema).max(200).default([]),
 });
 export type CreateChatRoomRequest = z.infer<typeof createChatRoomSchema>;
 
@@ -183,8 +184,8 @@ export type ChatMessageType = z.infer<typeof chatMessageTypeSchema>;
  */
 export const chatAttachmentSchema = z.object({
   /** id của hàng `file_links` — khoá ổn định để FE `key=`; KHÔNG phải id tệp. */
-  id: z.string().uuid(),
-  fileId: z.string().uuid(),
+  id: idSchema,
+  fileId: idSchema,
   /** `files.original_name` — đã sanitize lúc upload (chống path-traversal). */
   name: z.string(),
   mimeType: z.string(),
@@ -238,10 +239,10 @@ export type ChatMessageReactionDto = z.infer<typeof chatMessageReactionSchema>;
  * key thừa bị strip. Mọi field dưới đây server PHẢI cung cấp (repo select đủ cột + join senderName).
  */
 export const chatMessageSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  roomId: z.string().uuid(),
-  senderId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  roomId: idSchema,
+  senderId: idSchema,
   senderName: z.string().nullable(),
   /**
    * ⚠️ NULLABLE CÓ CHỦ ĐÍCH — tin đã thu hồi trả `null` (SPEC-15 §13.6). Che ở **SERVER**, không ở
@@ -256,11 +257,11 @@ export const chatMessageSchema = z.object({
   // + URL ký hạn ngắn (SPEC-15 §13.5, `S7-CHAT-BE-3`) — đọc `attachments` bên dưới.
   // Đừng thêm lại: URL trần trong DTO là đường rò tệp KHÔNG qua kiểm quyền, đúng lý do khai tử.
   /** Đã LỌC ở server: chỉ còn userId thực sự là thành viên phòng (CHAT-ERR-010). */
-  mentions: z.array(z.string().uuid()),
+  mentions: z.array(idSchema),
   pinnedAt: z.string().datetime().nullable(),
-  pinnedBy: z.string().uuid().nullable(),
+  pinnedBy: idSchema.nullable(),
   /** Tin được trả lời (cùng phòng). NULL = tin độc lập. */
-  replyToMessageId: z.string().uuid().nullable(),
+  replyToMessageId: idSchema.nullable(),
   /** Mốc thu hồi. Khác NULL ⇒ `body` là `null` — hai trường đi CÙNG NHAU, đừng đọc lẻ một cái. */
   recalledAt: z.string().datetime().nullable(),
   /** Số tệp đính kèm (đặt ngay lúc INSERT — `S7-CHAT-BE-3`). Tin không tệp = 0. */
@@ -322,10 +323,10 @@ export const sendMessageSchema = z
      * `chat_messages.body` NOT NULL nên chuỗi rỗng là giá trị hợp lệ ở DB.
      */
     body: z.string().max(4000).default(""),
-    clientMessageId: z.string().uuid(),
-    replyToMessageId: z.string().uuid().optional(),
+    clientMessageId: idSchema,
+    replyToMessageId: idSchema.optional(),
     /** userId được mention. Server LỌC bỏ người ngoài phòng, KHÔNG chặn gửi (CHAT-ERR-010). */
-    mentions: z.array(z.string().uuid()).max(20).optional(),
+    mentions: z.array(idSchema).max(20).optional(),
     /**
      * S7-CHAT-BE-3 — fileId đã upload xong qua FOUNDATION Files (SPEC-15 §13.5 bước 2).
      *
@@ -336,7 +337,7 @@ export const sendMessageSchema = z
      * trần thì một POST hợp lệ giữ giao dịch dài trên pool PgBouncer transaction-mode (cùng lớp bẫy với
      * trần 200 thành viên của `createChatRoomSchema`).
      */
-    fileIds: z.array(z.string().uuid()).max(10).optional(),
+    fileIds: z.array(idSchema).max(10).optional(),
   })
   .superRefine((v, ctx) => {
     if (v.body.trim().length === 0 && (v.fileIds?.length ?? 0) === 0) {
@@ -384,7 +385,7 @@ export const chatMarkReadSchema = z.object({
 export type ChatMarkReadRequest = z.infer<typeof chatMarkReadSchema>;
 
 export const chatMarkReadResultSchema = z.object({
-  roomId: z.string().uuid(),
+  roomId: idSchema,
   lastReadSeq: z.number().int().nonnegative(),
   unreadCount: z.number().int().nonnegative(),
 });
@@ -420,10 +421,10 @@ export type ListChatRoomFilesQuery = z.infer<typeof listChatRoomFilesQuerySchema
 
 /** Một dòng của tab "Tệp": đính kèm + ngữ cảnh tin chứa nó (để FE nhảy tới tin). */
 export const chatRoomFileSchema = chatAttachmentSchema.extend({
-  messageId: z.string().uuid(),
+  messageId: idSchema,
   /** `room_seq` của tin chứa tệp — cũng là con trỏ cho trang kế (`beforeSeq`). */
   roomSeq: z.number().int().positive(),
-  senderId: z.string().uuid(),
+  senderId: idSchema,
   senderName: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
@@ -445,13 +446,13 @@ export type ChatRoomFileDto = z.infer<typeof chatRoomFileSchema>;
  *     (memory `duplicate-sibling-key-leaks-dom-node`).
  */
 export const chatRoomLinkSchema = z.object({
-  messageId: z.string().uuid(),
+  messageId: idSchema,
   /** `room_seq` của tin chứa liên kết — vế THỨ NHẤT của khoá keyset (DESC). */
   roomSeq: z.number().int().positive(),
   /** Thứ tự liên kết trong tin, 0-based — vế THỨ HAI của khoá keyset (ASC). */
   linkIndex: z.number().int().nonnegative(),
   url: z.string(),
-  senderId: z.string().uuid(),
+  senderId: idSchema,
   senderName: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
@@ -500,7 +501,7 @@ export type ChatUnreadCountDto = z.infer<typeof chatUnreadCountSchema>;
 
 export const openDirectRoomSchema = z.object({
   /** userId của người đối thoại — server tự lấy userId mình từ JWT, ghép direct_key dedup. */
-  peerUserId: z.string().uuid(),
+  peerUserId: idSchema,
 });
 export type OpenDirectRoomRequest = z.infer<typeof openDirectRoomSchema>;
 
@@ -510,15 +511,15 @@ export const chatMemberRoleSchema = z.enum(["member", "admin"]);
 export type ChatMemberRole = z.infer<typeof chatMemberRoleSchema>;
 
 export const addChatMemberSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   role: chatMemberRoleSchema.default("member"),
 });
 export type AddChatMemberRequest = z.infer<typeof addChatMemberSchema>;
 
 export const chatRoomMemberSchema = z.object({
-  id: z.string().uuid(),
-  roomId: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: idSchema,
+  roomId: idSchema,
+  userId: idSchema,
   role: chatMemberRoleSchema,
   joinedAt: z.string().datetime(),
   // ── S7-CHAT-BE-1 (additive, optional — caller cũ không gãy) ──
@@ -691,7 +692,7 @@ export const chatSearchQuerySchema = z.object({
         }),
     ),
   /** Bó theo MỘT phòng. Không thuộc phòng → 404 GIỐNG HỆT phòng không tồn tại (CHAT-ERR-017). */
-  roomId: z.string().uuid().optional(),
+  roomId: idSchema.optional(),
   /** Con trỏ opaque của trang trước. Rác → 400, KHÔNG im lặng rơi về trang đầu (vòng lặp vô hạn ở FE). */
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -710,13 +711,13 @@ export type ChatSearchQuery = z.infer<typeof chatSearchQuerySchema>;
  * Nó là thứ FE cần để "nhảy tới tin trong ngữ cảnh" (CHAT-SCREEN-005).
  */
 export const chatSearchResultSchema = z.object({
-  id: z.string().uuid(),
-  roomId: z.string().uuid(),
+  id: idSchema,
+  roomId: idSchema,
   /** DM không có tên phòng ⇒ `.nullable()` (memory `server-masking-needs-optional-fe-schema`). */
   roomName: z.string().nullable(),
   roomType: chatRoomTypeSchema,
   roomSeq: z.number().int().positive(),
-  senderId: z.string().uuid(),
+  senderId: idSchema,
   senderName: z.string().nullable(),
   body: z.string(),
   createdAt: z.string().datetime(),
@@ -793,7 +794,7 @@ export type ChatOversightRoomQuery = z.infer<typeof chatOversightRoomQuerySchema
  * ⚠️ **KHÔNG có `unreadCount`**: người đọc-vượt không thuộc phòng nên "chưa đọc" vô nghĩa; trả 0 là bịa.
  */
 export const chatOversightRoomSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   roomCode: z.string(),
   /** Phòng `direct` KHÔNG có tên (mig `0538` DROP NOT NULL) ⇒ tra theo tên không bao giờ ra DM. */
   name: z.string().nullable(),
@@ -840,7 +841,7 @@ export type ChatOversightRoomDetailDto = z.infer<typeof chatOversightRoomDetailS
  * payload oversight — im lặng, đúng lúc không ai review lại WO này nữa.
  */
 export const chatOversightAttachmentSchema = z.object({
-  fileId: z.string().uuid(),
+  fileId: idSchema,
   name: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int().nonnegative(),
@@ -857,15 +858,15 @@ export type ChatOversightAttachmentDto = z.infer<typeof chatOversightAttachmentS
  * `roomSeq` per-room; `seq` cấp bảng KHÔNG BAO GIỜ rời server (SPEC-15 §13.1).
  */
 export const chatOversightMessageSchema = z.object({
-  id: z.string().uuid(),
-  roomId: z.string().uuid(),
-  senderId: z.string().uuid(),
+  id: idSchema,
+  roomId: idSchema,
+  senderId: idSchema,
   senderName: z.string().nullable(),
   body: z.string().nullable(),
   messageType: chatMessageTypeSchema,
-  mentions: z.array(z.string().uuid()),
+  mentions: z.array(idSchema),
   pinnedAt: z.string().datetime().nullable(),
-  replyToMessageId: z.string().uuid().nullable(),
+  replyToMessageId: idSchema.nullable(),
   recalledAt: z.string().datetime().nullable(),
   attachmentCount: z.number().int().nonnegative(),
   attachments: z.array(chatOversightAttachmentSchema),
@@ -929,7 +930,7 @@ export const chatOversightAuditQuerySchema = z
     cursor: z.string().max(200).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
     /** Lọc theo NGƯỜI đọc-vượt. Khớp `audit_logs.actor_user_id`. */
-    actorUserId: z.string().uuid().optional(),
+    actorUserId: idSchema.optional(),
     /** Ngày bắt đầu (BAO GỒM), theo **TZ công ty** — server quy đổi, xem `calendarDaySchema`. */
     from: calendarDaySchema.optional(),
     /** Ngày kết thúc (BAO GỒM), theo **TZ công ty**. */
@@ -948,10 +949,10 @@ export type ChatOversightAuditQuery = z.infer<typeof chatOversightAuditQuerySche
  * `Denied` không mang `:id` trên URL.
  */
 export const chatOversightAuditEntrySchema = z.object({
-  id: z.string().uuid(),
-  actorUserId: z.string().uuid().nullable(),
+  id: idSchema,
+  actorUserId: idSchema.nullable(),
   actorName: z.string().nullable(),
-  roomId: z.string().uuid().nullable(),
+  roomId: idSchema.nullable(),
   roomCode: z.string().nullable(),
   roomName: z.string().nullable(),
   /**
@@ -966,7 +967,7 @@ export const chatOversightAuditEntrySchema = z.object({
   /** `018a` | `018b` | `018c` | `019` | `unknown` — để CHAT-SCREEN-008 nhãn hoá đúng loại truy cập. */
   endpoint: z.string().nullable(),
   /** Tiêu chí tìm của `018a` (`q`, `roomType`) — bằng chứng "đã tra cái gì". KHÔNG chứa nội dung tin. */
-  criteria: z.record(z.unknown()).nullable(),
+  criteria: z.record(z.string(), z.unknown()).nullable(),
   createdAt: z.string().datetime(),
 });
 export type ChatOversightAuditEntryDto = z.infer<typeof chatOversightAuditEntrySchema>;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * G8-3 Evaluation — template + tiêu chí (trọng số) + chấm điểm gắn vào workflow step.
@@ -16,9 +17,9 @@ export const EVALUATION_WEIGHT_SUM = 100;
 // ─── Criteria ────────────────────────────────────────────────────────────────
 
 export const evaluationCriterionSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  templateId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  templateId: idSchema,
   name: z.string(),
   description: z.string().nullable().optional(),
   /** Trọng số phần trăm — dương, tối đa 100. Tổng các tiêu chí active = 100. */
@@ -49,8 +50,8 @@ export type CriterionInput = z.infer<typeof criterionInputSchema>;
 // ─── Template ────────────────────────────────────────────────────────────────
 
 export const evaluationTemplateSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   name: z.string(),
   description: z.string().nullable().optional(),
   /** Gắn template với 1 loại bước workflow (advisory; nullable). */
@@ -90,10 +91,10 @@ export type UpdateCriteriaRequest = z.infer<typeof updateCriteriaSchema>;
 // ─── Score / Result (append-only) ────────────────────────────────────────────
 
 export const evaluationScoreSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  resultId: z.string().uuid(),
-  criteriaId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  resultId: idSchema,
+  criteriaId: idSchema,
   score: z.number(),
   comment: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
@@ -101,14 +102,14 @@ export const evaluationScoreSchema = z.object({
 export type EvaluationScoreDto = z.infer<typeof evaluationScoreSchema>;
 
 export const evaluationResultSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  templateId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
+  templateId: idSchema,
   /** Bước workflow được chấm (gắn evaluation vào workflow step). */
-  workflowStepId: z.string().uuid(),
+  workflowStepId: idSchema,
   /** Người được đánh giá (chủ thể). */
-  subjectUserId: z.string().uuid().nullable().optional(),
-  evaluatorUserId: z.string().uuid(),
+  subjectUserId: idSchema.nullable().optional(),
+  evaluatorUserId: idSchema,
   /** Điểm tổng có trọng số (server tính). */
   totalScore: z.number().nullable(),
   scores: z.array(evaluationScoreSchema).optional(),
@@ -118,7 +119,7 @@ export type EvaluationResultDto = z.infer<typeof evaluationResultSchema>;
 
 /** 1 điểm tiêu chí khi chấm. criteriaId bắt buộc; score là số hữu hạn. */
 export const scoreInputSchema = z.object({
-  criteriaId: z.string().uuid(),
+  criteriaId: idSchema,
   score: z.number().finite(),
   comment: z.string().max(2000).optional(),
 });
@@ -127,9 +128,9 @@ export type ScoreInput = z.infer<typeof scoreInputSchema>;
 /** Chấm điểm 1 bước workflow theo 1 template. Mỗi tiêu chí 1 điểm; không trùng criteriaId. */
 export const recordScoresSchema = z
   .object({
-    templateId: z.string().uuid(),
-    workflowStepId: z.string().uuid(),
-    subjectUserId: z.string().uuid().optional(),
+    templateId: idSchema,
+    workflowStepId: idSchema,
+    subjectUserId: idSchema.optional(),
     scores: z.array(scoreInputSchema).min(1).max(50),
   })
   .refine((d) => new Set(d.scores.map((s) => s.criteriaId)).size === d.scores.length, {

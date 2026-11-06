@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S2-HR-BE-7 — Employee-code CONFIG admin contracts (API-03 §10.10 HR-API-901/902/903).
@@ -23,8 +24,8 @@ export const EMPLOYEE_CODE_NUMBER_LENGTH_MAX = 12;
  * tenant may not have persisted a config row yet → the server returns the effective defaults, never 404.
  */
 export const employeeCodeConfigSchema = z.object({
-  id: z.string().uuid().nullable(),
-  companyId: z.string().uuid(),
+  id: idSchema.nullable(),
+  companyId: idSchema,
   prefix: z.string().nullable(),
   pattern: z.string().nullable(),
   numberLength: z.number().int(),

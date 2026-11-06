@@ -350,7 +350,7 @@ export class HrEmployeeImportService {
   // ── Helpers ───────────────────────────────────────────────────────────────────────
 
   private zodMessages(error: z.ZodError): string[] {
-    return error.errors.map((e) => `${e.path.join(".") || "row"}: ${e.message}`);
+    return error.issues.map((e) => `${e.path.join(".") || "row"}: ${e.message}`);
   }
 
   private errorMessage(err: unknown): string {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DB_BROWSER_ALLOWLIST, type DbBrowserTable } from "./db-ops-allowlist";
+import { idSchema } from "./common/id";
 
 /**
  * AC-9 db-ops (operator-only, platform-admin, CHỈ-ĐỌC) DTOs — nguồn sự thật contract api ↔ admin.
@@ -52,7 +53,7 @@ export type DbBrowserFilter = z.infer<typeof dbBrowserFilterSchema>;
  */
 export const dbBrowserQuerySchema = z
   .object({
-    targetCompanyId: z.string().uuid(),
+    targetCompanyId: idSchema,
     table: z.enum(allowedTablesTuple),
     cols: z.array(z.string().min(1).max(64)).max(64).optional(),
     filters: z.array(dbBrowserFilterSchema).max(16).optional(),
@@ -65,7 +66,7 @@ export type DbBrowserQuery = z.infer<typeof dbBrowserQuerySchema>;
 /** Response data-browser: rows (object cột→giá trị, ĐÃ project allowlist) + meta row-capped. */
 export const dbBrowserResultSchema = z.object({
   table: z.string(),
-  targetCompanyId: z.string().uuid(),
+  targetCompanyId: idSchema,
   columns: z.array(z.string()),
   rows: z.array(z.record(z.string(), z.unknown())),
   meta: z.object({
@@ -119,9 +120,9 @@ export type DbOpsGrantStatus = z.infer<typeof dbOpsGrantStatusSchema>;
 
 /** DTO 1 grant break-glass db-ops. KHÔNG company_id (global, operator-scoped). targetTenantId nullable = all. */
 export const dbOpsGrantDtoSchema = z.object({
-  id: z.string().uuid(),
-  requesterUserId: z.string().uuid(),
-  targetTenantId: z.string().uuid().nullable(),
+  id: idSchema,
+  requesterUserId: idSchema,
+  targetTenantId: idSchema.nullable(),
   reason: z.string(),
   requiredApprovals: z.number().int().positive(),
   approvalCount: z.number().int().nonnegative(),
@@ -136,7 +137,7 @@ export type DbOpsGrantDto = z.infer<typeof dbOpsGrantDtoSchema>;
 /** Request input cho 1 grant break-glass db-ops. targetTenantId optional (vắng = all-tenant). */
 export const dbOpsGrantRequestSchema = z
   .object({
-    targetTenantId: z.string().uuid().nullable().optional(),
+    targetTenantId: idSchema.nullable().optional(),
     reason: z.string().min(1).max(1000),
     ttlSeconds: z.coerce
       .number()
@@ -164,9 +165,9 @@ export type DbExportJobStatus = z.infer<typeof dbExportJobStatusSchema>;
 export const DB_EXPORT_MAX_ROWS = 10000 as const;
 
 export const dbExportJobDtoSchema = z.object({
-  id: z.string().uuid(),
-  requesterUserId: z.string().uuid(),
-  targetTenantId: z.string().uuid(),
+  id: idSchema,
+  requesterUserId: idSchema,
+  targetTenantId: idSchema,
   tableName: z.string(),
   filter: z.unknown().nullable(),
   status: dbExportJobStatusSchema,
@@ -182,7 +183,7 @@ export type DbExportJobDto = z.infer<typeof dbExportJobDtoSchema>;
 
 export const dbExportJobCreateSchema = z
   .object({
-    targetCompanyId: z.string().uuid(),
+    targetCompanyId: idSchema,
     table: z.enum(allowedTablesTuple),
     filters: z.array(dbBrowserFilterSchema).max(16).optional(),
   })

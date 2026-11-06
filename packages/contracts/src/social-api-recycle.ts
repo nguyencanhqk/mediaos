@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { feedAudienceSchema, feedPostTypeSchema } from "./social";
 import { FEED_ADMIN_PAGE_LIMIT_MAX, FEED_PAGE_MAX } from "./social-api-b";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-3C — DTO thùng rác bài viết: `SOCIAL-API-057` (`GET /recycle-bin/feed-posts`) và `058`
@@ -37,7 +38,7 @@ export type FeedRecycleBinQueryDto = z.infer<typeof feedRecycleBinQuerySchema>;
 /** Tác giả của bài trong thùng rác — `null` ở cấp item khi bài ngoài audience người xem (D10). */
 export const feedRecycleBinAuthorSchema = z.object({
   /** `null` khi tác giả không có (hoặc không còn) hồ sơ nhân sự trong công ty. */
-  employeeId: z.string().uuid().nullable(),
+  employeeId: idSchema.nullable(),
   fullName: z.string().nullable(),
 });
 export type FeedRecycleBinAuthorDto = z.infer<typeof feedRecycleBinAuthorSchema>;
@@ -52,13 +53,13 @@ export type FeedRecycleBinAuthorDto = z.infer<typeof feedRecycleBinAuthorSchema>
  * không được suy «bị che» từ riêng giá trị này.
  */
 export const feedRecycleBinItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   type: feedPostTypeSchema,
   audience: feedAudienceSchema,
-  groupId: z.string().uuid().nullable(),
+  groupId: idSchema.nullable(),
   /** Nhóm của bài đã bị xoá mềm ⇒ `058` trả 409 `RESTORE_GROUP_DELETED` (D12). */
   groupDeleted: z.boolean(),
-  orgUnitId: z.string().uuid().nullable(),
+  orgUnitId: idSchema.nullable(),
   author: feedRecycleBinAuthorSchema.nullable(),
   /**
    * ≤ `FEED_RECYCLE_EXCERPT_MAX` KÝ TỰ (cắt ở SQL bằng `left()`). CỐ Ý không `.max()` — khuôn `bodyExcerpt` của
@@ -88,7 +89,7 @@ export type FeedRecycleBinPageDto = z.infer<typeof feedRecycleBinPageSchema>;
 
 /** `SOCIAL-API-058` — kết quả khôi phục: status SAU khôi phục (D4). */
 export const feedPostRestoreResultSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   status: feedRestorableStatusSchema,
 });
 export type FeedPostRestoreResultDto = z.infer<typeof feedPostRestoreResultSchema>;

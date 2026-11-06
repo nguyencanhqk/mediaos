@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { emailSchema } from "./common/email";
 
 /**
  * CS-8 Cấu hình mail server (SMTP, 🔴 SECRET) — nguồn sự thật contract api ↔ console.
@@ -43,7 +44,7 @@ export const mailConfigSchema = z.object({
   username: z.string().min(1),
   secure: z.boolean(),
   fromName: z.string().nullable(),
-  fromEmail: z.string().email(),
+  fromEmail: emailSchema,
   /** TRUE khi đã có password envelope lưu (KHÔNG bao giờ trả password thật). */
   hasPassword: z.boolean(),
   updatedAt: z.string().datetime(),
@@ -72,7 +73,7 @@ export const upsertMailConfigSchema = z.object({
   username: z.string().min(1).max(255),
   secure: z.boolean().optional(),
   fromName: z.string().max(255).nullable().optional(),
-  fromEmail: z.string().email().max(320),
+  fromEmail: emailSchema.max(320),
   /** Plaintext SMTP password — chỉ tồn tại trong RAM (encrypt). KHÔNG bao giờ trả về / log. */
   password: z.string().min(1).max(1024).optional(),
 });

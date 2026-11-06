@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * G8-4 KPI cá nhân/team — định nghĩa công thức (trọng số 5 thành phần) + kết quả KPI (snapshot append-only).
@@ -67,8 +68,8 @@ export type KpiComponentKey = (typeof KPI_COMPONENT_KEYS)[number];
 // ─── Definition ──────────────────────────────────────────────────────────────
 
 export const kpiDefinitionSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
+  id: idSchema,
+  companyId: idSchema,
   name: z.string(),
   description: z.string().nullable().optional(),
   /** Trọng số 5 thành phần — tổng = 100. */
@@ -95,9 +96,9 @@ export type CreateKpiDefinitionRequest = z.infer<typeof createKpiDefinitionSchem
  */
 export const computeKpiRequestSchema = z
   .object({
-    definitionId: z.string().uuid(),
-    subjectUserId: z.string().uuid().optional(),
-    subjectTeamId: z.string().uuid().optional(),
+    definitionId: idSchema,
+    subjectUserId: idSchema.optional(),
+    subjectTeamId: idSchema.optional(),
     periodStart: z.string().datetime(),
     periodEnd: z.string().datetime(),
   })
@@ -113,7 +114,7 @@ export type ComputeKpiRequest = z.infer<typeof computeKpiRequestSchema>;
 
 /** Xác nhận 1 kết quả KPI (BR-007: chỉ confirm:kpi). Tạo snapshot MỚI có cờ confirmed (append-only). */
 export const confirmKpiResultSchema = z.object({
-  kpiResultId: z.string().uuid(),
+  kpiResultId: idSchema,
 });
 export type ConfirmKpiResultRequest = z.infer<typeof confirmKpiResultSchema>;
 
@@ -130,11 +131,11 @@ export const kpiComponentScoresSchema = z.object({
 export type KpiComponentScores = z.infer<typeof kpiComponentScoresSchema>;
 
 export const kpiResultSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  definitionId: z.string().uuid(),
-  subjectUserId: z.string().uuid().nullable().optional(),
-  subjectTeamId: z.string().uuid().nullable().optional(),
+  id: idSchema,
+  companyId: idSchema,
+  definitionId: idSchema,
+  subjectUserId: idSchema.nullable().optional(),
+  subjectTeamId: idSchema.nullable().optional(),
   periodStart: z.string().datetime(),
   periodEnd: z.string().datetime(),
   /** Điểm thành phần đã tính (0..100). */
@@ -142,9 +143,9 @@ export const kpiResultSchema = z.object({
   /** Điểm KPI tổng có trọng số, clamp [0,100]. */
   totalScore: z.number(),
   /** BR-007: NULL = chưa xác nhận = THAM KHẢO. Set qua confirm:kpi (snapshot mới). readonly snapshot. */
-  confirmedBy: z.string().uuid().nullable(),
+  confirmedBy: idSchema.nullable(),
   confirmedAt: z.string().datetime().nullable(),
-  computedBy: z.string().uuid(),
+  computedBy: idSchema,
   createdAt: z.string().datetime(),
 });
 export type KpiResultDto = z.infer<typeof kpiResultSchema>;
@@ -170,9 +171,9 @@ export const KPI_RESULT_LIST_LIMIT_MAX = 200;
  * khi bật filter (mirror includeInactive); confirmedOnly chỉ THU HẸP kết quả → không rò dữ liệu.
  */
 export const listKpiResultQuerySchema = z.object({
-  definitionId: z.string().uuid().optional(),
-  subjectUserId: z.string().uuid().optional(),
-  subjectTeamId: z.string().uuid().optional(),
+  definitionId: idSchema.optional(),
+  subjectUserId: idSchema.optional(),
+  subjectTeamId: idSchema.optional(),
   periodFrom: z.string().datetime().optional(),
   periodTo: z.string().datetime().optional(),
   confirmedOnly: z.coerce.boolean().optional(),

@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { hrPersonalExtraSchema } from "./employee-read";
+import { emailSchema } from "../common/email";
+import { idSchema } from "../common/id";
 
 /**
  * S2-HR-BE-2 — HR write-core DTOs (API-03 §11.2/§11.5/§11.6/§11.7/§11.8).
@@ -105,16 +107,16 @@ const isoDate = z.string().refine(isValidIsoDate, "Expected a real calendar date
  */
 export const createHrEmployeeSchema = z
   .object({
-    userId: z.string().uuid().optional(),
-    email: z.string().email().optional(),
+    userId: idSchema.optional(),
+    email: emailSchema.optional(),
     fullName: z.string().min(1).max(200).optional(),
     password: z.string().min(8).max(200).optional(),
     employeeCode: z.string().min(1).max(50).optional(),
-    orgUnitId: z.string().uuid().optional(),
-    positionId: z.string().uuid().optional(),
-    jobLevelId: z.string().uuid().optional(),
-    contractTypeId: z.string().uuid().optional(),
-    directManagerId: z.string().uuid().optional(),
+    orgUnitId: idSchema.optional(),
+    positionId: idSchema.optional(),
+    jobLevelId: idSchema.optional(),
+    contractTypeId: idSchema.optional(),
+    directManagerId: idSchema.optional(),
     workType: workTypeEnum.default("offline"),
     employmentType: employmentTypeEnum.default("full_time"),
     salaryType: salaryTypeEnum.default("monthly"),
@@ -136,11 +138,11 @@ export type CreateHrEmployeeRequest = z.infer<typeof createHrEmployeeSchema>;
 export const updateHrEmployeeSchema = z
   .object({
     employeeCode: z.string().min(1).max(50).optional(),
-    orgUnitId: z.string().uuid().nullable().optional(),
-    positionId: z.string().uuid().nullable().optional(),
-    jobLevelId: z.string().uuid().nullable().optional(),
-    contractTypeId: z.string().uuid().nullable().optional(),
-    directManagerId: z.string().uuid().nullable().optional(),
+    orgUnitId: idSchema.nullable().optional(),
+    positionId: idSchema.nullable().optional(),
+    jobLevelId: idSchema.nullable().optional(),
+    contractTypeId: idSchema.nullable().optional(),
+    directManagerId: idSchema.nullable().optional(),
     workType: workTypeEnum.optional(),
     employmentType: employmentTypeEnum.optional(),
     salaryType: salaryTypeEnum.optional(),
@@ -154,7 +156,7 @@ export const updateHrEmployeeSchema = z
     gender: z.enum(["Male", "Female", "Other"]).nullable().optional(),
     dateOfBirth: isoDate.nullable().optional(),
     maritalStatus: z.enum(["single", "married", "other"]).nullable().optional(),
-    personalEmail: z.string().email().max(255).nullable().optional(),
+    personalEmail: emailSchema.max(255).nullable().optional(),
     phone: z.string().min(1).max(50).nullable().optional(),
     currentAddress: z.string().min(1).max(1000).nullable().optional(),
     permanentAddress: z.string().min(1).max(1000).nullable().optional(),
@@ -189,15 +191,15 @@ export type HrEmployeePiiWriteField = (typeof HR_EMPLOYEE_PII_WRITE_FIELDS)[numb
 // ── Write responses ────────────────────────────────────────────────────────────────
 /** POST /hr/employees response — the new id + allocated code + resolved login user. */
 export const createHrEmployeeResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   employeeCode: z.string().nullable(),
-  userId: z.string().uuid().nullable(),
+  userId: idSchema.nullable(),
 });
 export type CreateHrEmployeeResponse = z.infer<typeof createHrEmployeeResponseSchema>;
 
 /** PATCH /hr/employees/:id response — the id + the list of fields actually changed. */
 export const updateHrEmployeeResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   changedFields: z.array(z.string()),
 });
 export type UpdateHrEmployeeResponse = z.infer<typeof updateHrEmployeeResponseSchema>;
@@ -239,7 +241,7 @@ export type ChangeEmployeeStatusRequest = z.infer<typeof changeEmployeeStatusSch
 
 // ── Link / unlink user ───────────────────────────────────────────────────────────
 /** POST /hr/employees/:id/link-user — link an existing user account to an employee. */
-export const linkUserSchema = z.object({ userId: z.string().uuid() }).strict();
+export const linkUserSchema = z.object({ userId: idSchema }).strict();
 export type LinkUserRequest = z.infer<typeof linkUserSchema>;
 
 /** DELETE /hr/employees/:id/link-user — detach the user; optionally lock the detached account. */

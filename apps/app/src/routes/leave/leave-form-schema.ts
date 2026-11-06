@@ -23,7 +23,7 @@ export const leaveFormSchema = z
         LEAVE_DURATION_TYPE.HOURLY,
         LEAVE_DURATION_TYPE.MULTIPLE_DAYS,
       ],
-      { required_error: "form.validation.durationTypeRequired" },
+      { message: "form.validation.durationTypeRequired" },
     ),
     startDate: z.string().min(1, "form.validation.startDateRequired"),
     endDate: z.string().min(1, "form.validation.endDateRequired"),

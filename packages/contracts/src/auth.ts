@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { apiResponseSchema } from "./index";
+import { idSchema } from "./common/id";
+import { emailSchema } from "./common/email";
 
 /**
  * Auth DTO (G2-6) — nguồn sự thật cho api ↔ web. Login cần `companySlug` vì email chỉ unique theo
@@ -8,7 +10,7 @@ import { apiResponseSchema } from "./index";
 
 export const loginRequestSchema = z.object({
   companySlug: z.string().min(1).max(100),
-  email: z.string().email().max(255),
+  email: emailSchema.max(255),
   password: z.string().min(1).max(200),
 });
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
@@ -59,7 +61,7 @@ export const CSRF_HEADER_NAME = "x-csrf-token" as const;
 
 export const forgotPasswordRequestSchema = z.object({
   companySlug: z.string().min(1).max(100),
-  email: z.string().email().max(255),
+  email: emailSchema.max(255),
 });
 export type ForgotPasswordRequest = z.infer<typeof forgotPasswordRequestSchema>;
 
@@ -103,9 +105,9 @@ export type DataScope = (typeof DATA_SCOPES)[number];
  * `capabilities`/`mustSetupTwoFactor` GIỮ nguyên (FE web-core đang dùng). `scopes` keyed Y HỆT `capabilities`.
  */
 export const meResponseSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  email: z.string().email(),
+  id: idSchema,
+  companyId: idSchema,
+  email: emailSchema,
   fullName: z.string().nullable(),
   status: z.string(),
   /**
@@ -117,7 +119,7 @@ export const meResponseSchema = z.object({
    * literal (BE có ratchet). Cặp sensitive CÓ mặt khi actor giữ ALLOW exact; wildcard không mở cặp sensitive.
    * Chỉ là GỢI Ý UI — enforcement vẫn per-resource (PermissionGuard/can()). Zod shape không đổi.
    */
-  capabilities: z.record(z.boolean()),
+  capabilities: z.record(z.string(), z.boolean()),
   /** true khi role ép 2FA (requires_two_factor) nhưng user CHƯA bật → FE buộc enroll (G16-1, AUTH-003). */
   mustSetupTwoFactor: z.boolean(),
   /**
@@ -133,31 +135,31 @@ export const meResponseSchema = z.object({
    */
   mustChangePassword: z.boolean().optional(),
   /** Company hiện tại (tenant của phiên). */
-  company: z.object({ id: z.string().uuid(), name: z.string(), status: z.string() }).optional(),
+  company: z.object({ id: idSchema, name: z.string(), status: z.string() }).optional(),
   /**
    * Hồ sơ nhân sự liên kết user — null khi không có (operator/super-admin). KHÔNG bao giờ chứa base_salary
    * (nhạy cảm). full_name lấy từ users.full_name; departmentId = org_unit_id; employmentStatus = profile.status.
    */
   employee: z
     .object({
-      id: z.string().uuid(),
+      id: idSchema,
       employeeCode: z.string().nullable(),
       fullName: z.string().nullable(),
-      departmentId: z.string().uuid().nullable(),
-      directManagerId: z.string().uuid().nullable(),
+      departmentId: idSchema.nullable(),
+      directManagerId: idSchema.nullable(),
       employmentStatus: z.string(),
     })
     .nullable()
     .optional(),
   /** Role active (user_roles ⋈ roles, chưa xoá/hết hạn). roles không có cột `code` → `name` chính là code. */
-  roles: z.array(z.object({ id: z.string().uuid(), name: z.string() })).optional(),
+  roles: z.array(z.object({ id: idSchema, name: z.string() })).optional(),
   /**
    * data_scope theo từng cặp (BACKEND-03 §15.3 rule 6 — mảng, KHÔNG scalar). KEYSET === keyset
    * `capabilities` (cùng phép chiếu, kể cả cặp sensitive có ALLOW exact — S14-SEC-CAPWILDCARD-1); cặp bị
    * DENY-override KHÔNG xuất hiện. Giá trị = scope của grant đóng góp: ALLOW exact THẮNG, wildcard chỉ khi
    * cặp không có exact (soi gương `decideStrongestScope`). Đã dedupe.
    */
-  scopes: z.record(z.array(z.enum(DATA_SCOPES))).optional(),
+  scopes: z.record(z.string(), z.array(z.enum(DATA_SCOPES))).optional(),
   /** Module user thấy ở Home/App-Switcher — TÁI DÙNG ModuleCatalogService.getMyApps() (KHÔNG re-implement). */
   modules: z.array(z.object({ code: z.string(), name: z.string() })).optional(),
 });
@@ -344,8 +346,8 @@ export type AuthLogSortOrder = (typeof AUTH_LOG_SORT_ORDERS)[number];
  * `server-masking-needs-optional-fe-schema`).
  */
 export const authLogUserRefSchema = z.object({
-  id: z.string().uuid(),
-  email: z.string().email().optional(),
+  id: idSchema,
+  email: emailSchema.optional(),
   display_name: z.string().nullable(),
 });
 export type AuthLogUserRef = z.infer<typeof authLogUserRefSchema>;
@@ -364,7 +366,7 @@ export const loginLogListQuerySchema = z
       .positive()
       .max(AUTH_LOG_PAGE_SIZE_MAX)
       .default(AUTH_LOG_PAGE_SIZE_DEFAULT),
-    user_id: z.string().uuid().optional(),
+    user_id: idSchema.optional(),
     status: z.enum(LOGIN_LOG_STATUSES).optional(),
     // S10-SEC-LOGINLOG429-1 (KI-048): lọc theo MÃ LÝ DO. Không có nó thì hàng `blocked`
     // (`TooManyAttempts`) — thứ có tốc độ sinh do KẺ TẤN CÔNG điều khiển — chôn mọi tín hiệu khác
@@ -390,7 +392,7 @@ export type LoginLogListQuery = z.infer<typeof loginLogListQuerySchema>;
  * KHÔNG có user liên kết. failure_reason chỉ mã lý do (WrongPassword/Locked…), KHÔNG chứa secret.
  */
 export const loginLogListItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   user: authLogUserRefSchema.nullable(),
   status: z.enum(LOGIN_LOG_STATUSES),
   ip_address: z.string().nullable(),
@@ -426,7 +428,7 @@ export const securityEventListQuerySchema = z
       .positive()
       .max(AUTH_LOG_PAGE_SIZE_MAX)
       .default(AUTH_LOG_PAGE_SIZE_DEFAULT),
-    user_id: z.string().uuid().optional(),
+    user_id: idSchema.optional(),
     event_type: z.string().trim().min(1).max(100).optional(),
     severity: z.enum(SECURITY_EVENT_SEVERITIES).optional(),
     from_date: z.coerce.date().optional(),
@@ -445,7 +447,7 @@ export type SecurityEventListQuery = z.infer<typeof securityEventListQuerySchema
  * `user` nullable phòng user đã soft-delete. KHÔNG phơi cột jsonb `payload` (có thể chứa secret).
  */
 export const securityEventListItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   user: authLogUserRefSchema.nullable(),
   event_type: z.string(),
   severity: z.enum(SECURITY_EVENT_SEVERITIES),
@@ -475,7 +477,7 @@ export type SecurityEventListResponse = z.infer<typeof securityEventListResponse
 
 /** 1 phiên đăng nhập ACTIVE của chính user (KHÔNG lộ token/hash — BẤT BIẾN #3). */
 export const sessionListItemSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   device_name: z.string().nullable(),
   platform: z.string().nullable(),
   ip_address: z.string().nullable(),
@@ -537,7 +539,7 @@ export const stepUpRequestSchema = z.object({
   code: z.string().trim().min(6).max(10),
   action: z.string().min(1).max(100).regex(STEP_UP_PAIR_SEGMENT_RE),
   resourceType: z.string().min(1).max(100).regex(STEP_UP_PAIR_SEGMENT_RE),
-  resourceId: z.string().uuid(),
+  resourceId: idSchema,
 });
 export type StepUpRequest = z.infer<typeof stepUpRequestSchema>;
 

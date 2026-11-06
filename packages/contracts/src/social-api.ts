@@ -11,6 +11,7 @@ import {
   feedPollResultsSchema,
   feedPostIdeaBlockSchema,
 } from "./social-feed-blocks";
+import { idSchema } from "./common/id";
 
 /**
  * S16-SOCIAL-BE-1 — DTO request/response của **Nhóm A** (19 route `SOCIAL-API-001..019`: bảng tin/bài
@@ -108,7 +109,7 @@ export type FeedAttachmentKindDto = z.infer<typeof feedAttachmentKindSchema>;
 
 // ═══════════════ Mảnh dùng lại ═══════════════
 
-const uuid = () => z.string().uuid();
+const uuid = () => idSchema;
 const feedBody = () => z.string().trim().min(1).max(FEED_BODY_MAX);
 const mentionIds = () => z.array(uuid()).max(FEED_MAX_MENTIONS).optional();
 /**

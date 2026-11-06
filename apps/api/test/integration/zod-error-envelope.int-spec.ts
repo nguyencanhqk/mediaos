@@ -26,6 +26,7 @@ import { Test } from "@nestjs/testing";
 import { createZodDto, ZodValidationPipe } from "nestjs-zod";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { emailSchema, idSchema } from "@mediaos/contracts";
 import { z } from "zod";
 import { AppModule } from "../../src/app.module";
 import { Public } from "../../src/permission/public.decorator";
@@ -44,8 +45,8 @@ const lengthSchema = z.object({
   tags: z.array(z.string()).max(2).optional(),
 });
 const formatSchema = z.object({
-  id: z.string().uuid().optional(),
-  email: z.string().email().optional(),
+  id: idSchema.optional(),
+  email: emailSchema.optional(),
   at: z.string().datetime().optional(),
 });
 const enumSchema = z.object({ status: z.enum(["Draft", "Active", "Closed"]) });

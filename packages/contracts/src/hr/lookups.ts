@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S2-HR-BE-1 — HR lookup DTOs (department / position / job-level / contract-type) + employee-code
@@ -7,22 +8,22 @@ import { z } from "zod";
 
 /** org_units → department lookup item. */
 export const hrDepartmentLookupSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   code: z.string().nullable(),
-  parentId: z.string().uuid().nullable(),
+  parentId: idSchema.nullable(),
 });
 export type HrDepartmentLookup = z.infer<typeof hrDepartmentLookupSchema>;
 
 export const hrPositionLookupSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   code: z.string().nullable(),
 });
 export type HrPositionLookup = z.infer<typeof hrPositionLookupSchema>;
 
 export const hrJobLevelLookupSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   code: z.string().nullable(),
   rankOrder: z.number().int().nullable(),
@@ -30,7 +31,7 @@ export const hrJobLevelLookupSchema = z.object({
 export type HrJobLevelLookup = z.infer<typeof hrJobLevelLookupSchema>;
 
 export const hrContractTypeLookupSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   code: z.string().nullable(),
   requiresEndDate: z.boolean(),

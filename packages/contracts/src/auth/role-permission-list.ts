@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../common/id";
 
 /**
  * S2-AUTH-BE-3 — read-only catalogs cho UI gán quyền (GET /auth/roles · GET /auth/permissions).
@@ -22,7 +23,7 @@ export const AUTH_PERMISSION = { action: "view", resource: "permission" } as con
  * khai tường minh — mặc-định-ngầm chính là lỗi đang vá. ⚠️ Deploy: BE TRƯỚC FE (FE parse schema này).
  */
 export const roleSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
   description: z.string().nullable(),
   isSystem: z.boolean(),
@@ -37,7 +38,7 @@ export type RoleListDto = z.infer<typeof roleListSchema>;
 
 /** 1 permission trong catalog. isSensitive=true ⇒ cổng nhạy cảm (không kế thừa qua '*:*'). */
 export const permissionSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   action: z.string(),
   resourceType: z.string(),
   isSensitive: z.boolean(),
@@ -55,7 +56,7 @@ export type PermissionListDto = z.infer<typeof permissionListSchema>;
  * Membership là PER-TENANT (user_roles.company_id) kể cả với system role dùng chung.
  */
 export const roleMemberSchema = z.object({
-  userId: z.string().uuid(),
+  userId: idSchema,
   /**
    * S6-SEC-IDENTITY-PROJ-1 (KI-053) — `.optional()`, KHÔNG `.nullable()`: server BỎ HẲN KHOÁ khi actor
    * ở ngoài `data_scope` của cặp danh bạ `view:user`. Dùng `null` để mang tin "ngoài scope" là lẫn

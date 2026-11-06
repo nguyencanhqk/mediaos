@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * S11-ASSET-DB-1 — enum chuẩn module ASSET (SPEC-13 · DB-15 §7). NGUỒN SỰ THẬT cho DTO của S11-ASSET-BE-1.
@@ -157,7 +158,7 @@ export const updateAssetCategorySchema = createAssetCategorySchema
 export type UpdateAssetCategoryDto = z.infer<typeof updateAssetCategorySchema>;
 
 export const assetCategoryResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
   codePrefix: z.string(),
@@ -187,10 +188,10 @@ const statusListQuerySchema = z.preprocess((v) => {
 }, z.array(assetLifecycleStatusSchema).min(1).optional());
 
 export const listAssetsQuerySchema = z.object({
-  categoryId: z.string().uuid().optional(),
+  categoryId: idSchema.optional(),
   status: statusListQuerySchema,
   /** Lọc theo người ĐANG giữ (lượt Active) — phục vụ màn offboarding. Vẫn qua scope của caller. */
-  holderEmployeeId: z.string().uuid().optional(),
+  holderEmployeeId: idSchema.optional(),
   q: z.string().trim().min(1).max(120).optional(),
   maintenanceDueBefore: assetDateSchema.optional(),
   sortBy: z.enum(["assetCode", "createdAt"]).default("assetCode"),
@@ -200,12 +201,12 @@ export const listAssetsQuerySchema = z.object({
 export type ListAssetsQueryDto = z.infer<typeof listAssetsQuerySchema>;
 
 export const assetSummaryQuerySchema = z.object({
-  categoryId: z.string().uuid().optional(),
+  categoryId: idSchema.optional(),
 });
 export type AssetSummaryQueryDto = z.infer<typeof assetSummaryQuerySchema>;
 
 export const createAssetSchema = z.object({
-  categoryId: z.string().uuid(),
+  categoryId: idSchema,
   name: z.string().trim().min(1).max(255),
   serialNumber: nullableText(120),
   brand: nullableText(120),
@@ -231,7 +232,7 @@ export const updateAssetSchema = createAssetSchema
 export type UpdateAssetDto = z.infer<typeof updateAssetSchema>;
 
 export const assetCategoryRefSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
 });
@@ -241,7 +242,7 @@ export const assetCategoryRefSchema = z.object({
  * Own chỉ khi là chính caller · Department chỉ nhân viên trong đơn vị · Company đủ.
  */
 export const assetCurrentHolderSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
   assignedAt: z.string(),
@@ -249,7 +250,7 @@ export const assetCurrentHolderSchema = z.object({
 export type AssetCurrentHolderDto = z.infer<typeof assetCurrentHolderSchema>;
 
 export const assetListItemResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   assetCode: z.string(),
   name: z.string(),
   category: assetCategoryRefSchema,
@@ -266,7 +267,7 @@ export const assetListItemResponseSchema = z.object({
 export type AssetListItemResponseDto = z.infer<typeof assetListItemResponseSchema>;
 
 export const assetOpenMaintenanceRefSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   openedAt: z.string(),
   reason: z.string(),
   vendor: z.string().nullable(),
@@ -297,7 +298,7 @@ export const assetSummaryResponseSchema = z.object({
   byStatus: z.record(assetLifecycleStatusSchema, z.number().int().nonnegative()),
   byCategory: z.array(
     z.object({
-      categoryId: z.string().uuid(),
+      categoryId: idSchema,
       code: z.string(),
       name: z.string(),
       total: z.number().int().nonnegative(),
@@ -312,7 +313,7 @@ export type AssetSummaryResponseDto = z.infer<typeof assetSummaryResponseSchema>
 // ── Cấp phát / thu hồi (ASSET-API-010..012) ───────────────────────────────────────────────────────
 
 export const assignAssetSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: idSchema,
   issueCondition: assetIssueConditionSchema.optional(),
   issueNote: nullableText(2000),
   expectedReturnDate: assetDateSchema.nullish(),
@@ -330,19 +331,19 @@ export const listAssetAssignmentsQuerySchema = z.object({ ...pageQuerySchema });
 export type ListAssetAssignmentsQueryDto = z.infer<typeof listAssetAssignmentsQuerySchema>;
 
 export const assetAssignmentResponseSchema = z.object({
-  id: z.string().uuid(),
-  assetId: z.string().uuid(),
-  employeeId: z.string().uuid(),
+  id: idSchema,
+  assetId: idSchema,
+  employeeId: idSchema,
   employeeCode: z.string().nullable(),
   employeeFullName: z.string().nullable(),
   assignedAt: z.string(),
-  assignedBy: z.string().uuid().nullable(),
+  assignedBy: idSchema.nullable(),
   issueCondition: assetIssueConditionSchema.nullable(),
   issueNote: z.string().nullable(),
   expectedReturnDate: z.string().nullable(),
   status: assetAssignmentStatusSchema,
   returnedAt: z.string().nullable(),
-  returnedBy: z.string().uuid().nullable(),
+  returnedBy: idSchema.nullable(),
   returnCondition: assetReturnConditionSchema.nullable(),
   returnNote: z.string().nullable(),
 });
@@ -369,15 +370,15 @@ export const listAssetMaintenancesQuerySchema = z.object({ ...pageQuerySchema })
 export type ListAssetMaintenancesQueryDto = z.infer<typeof listAssetMaintenancesQuerySchema>;
 
 export const assetMaintenanceResponseSchema = z.object({
-  id: z.string().uuid(),
-  assetId: z.string().uuid(),
+  id: idSchema,
+  assetId: idSchema,
   openedAt: z.string(),
-  openedBy: z.string().uuid().nullable(),
+  openedBy: idSchema.nullable(),
   reason: z.string(),
   vendor: z.string().nullable(),
   status: assetMaintenanceStatusSchema,
   closedAt: z.string().nullable(),
-  closedBy: z.string().uuid().nullable(),
+  closedBy: idSchema.nullable(),
   resultNote: z.string().nullable(),
   /** Chỉ có khoá ở scope Company. */
   cost: z.number().nullable().optional(),
@@ -411,7 +412,7 @@ export type ListAssetInventoriesQueryDto = z.infer<typeof listAssetInventoriesQu
 export const openInventorySchema = z.object({
   name: z.string().trim().min(1).max(255),
   /** NULL = toàn bộ tài sản. */
-  categoryId: z.string().uuid().nullish(),
+  categoryId: idSchema.nullish(),
   note: nullableText(2000),
 });
 export type OpenInventoryDto = z.infer<typeof openInventorySchema>;
@@ -436,7 +437,7 @@ export const markInventoryItemSchema = z.object({
 export type MarkInventoryItemDto = z.infer<typeof markInventoryItemSchema>;
 
 export const bulkMarkInventoryItemsSchema = z.object({
-  itemIds: z.array(z.string().uuid()).min(1).max(ASSET_BULK_MARK_MAX),
+  itemIds: z.array(idSchema).min(1).max(ASSET_BULK_MARK_MAX),
   result: assetInventoryMarkResultSchema,
   note: nullableText(2000),
 });
@@ -448,14 +449,14 @@ export const closeInventorySchema = z.object({
 export type CloseInventoryDto = z.infer<typeof closeInventorySchema>;
 
 export const assetInventoryResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   name: z.string(),
-  categoryId: z.string().uuid().nullable(),
+  categoryId: idSchema.nullable(),
   status: assetInventoryStatusSchema,
   openedAt: z.string(),
-  openedBy: z.string().uuid().nullable(),
+  openedBy: idSchema.nullable(),
   closedAt: z.string().nullable(),
-  closedBy: z.string().uuid().nullable(),
+  closedBy: idSchema.nullable(),
   note: z.string().nullable(),
   totalItems: z.number().int().nullable(),
   foundCount: z.number().int().nullable(),
@@ -465,16 +466,16 @@ export const assetInventoryResponseSchema = z.object({
 export type AssetInventoryResponseDto = z.infer<typeof assetInventoryResponseSchema>;
 
 export const assetInventoryItemResponseSchema = z.object({
-  id: z.string().uuid(),
-  inventoryId: z.string().uuid(),
-  assetId: z.string().uuid(),
+  id: idSchema,
+  inventoryId: idSchema,
+  assetId: idSchema,
   assetCode: z.string(),
   assetName: z.string(),
   expectedStatus: assetInventoryExpectedStatusSchema,
-  expectedHolderEmployeeId: z.string().uuid().nullable(),
+  expectedHolderEmployeeId: idSchema.nullable(),
   result: assetInventoryItemResultSchema,
   checkedAt: z.string().nullable(),
-  checkedBy: z.string().uuid().nullable(),
+  checkedBy: idSchema.nullable(),
   note: z.string().nullable(),
 });
 export type AssetInventoryItemResponseDto = z.infer<typeof assetInventoryItemResponseSchema>;
@@ -490,8 +491,8 @@ export type MeAssetsQueryDto = z.infer<typeof meAssetsQuerySchema>;
 
 /** KHÔNG BAO GIỜ có trường tài chính — bất kể data_scope của caller (SPEC-13 §18). */
 export const meAssetItemResponseSchema = z.object({
-  assignmentId: z.string().uuid(),
-  assetId: z.string().uuid(),
+  assignmentId: idSchema,
+  assetId: idSchema,
   assetCode: z.string(),
   assetName: z.string(),
   category: assetCategoryRefSchema,

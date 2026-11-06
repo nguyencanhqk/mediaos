@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * AI-1 — AI Insight (read-only): tóm tắt KPI + chi phí ĐÃ MASK theo permission qua Claude API.
@@ -35,9 +36,9 @@ export const aiInsightQuerySchema = z.object({
   scope: aiInsightScopeEnum.default("company"),
   /** Số dòng tối đa mỗi nguồn (KPI/cost) đưa vào prompt — clamp chống prompt quá dài. */
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  definitionId: z.string().uuid().optional(),
-  subjectUserId: z.string().uuid().optional(),
-  subjectTeamId: z.string().uuid().optional(),
+  definitionId: idSchema.optional(),
+  subjectUserId: idSchema.optional(),
+  subjectTeamId: idSchema.optional(),
 });
 export type AiInsightQuery = z.infer<typeof aiInsightQuerySchema>;
 

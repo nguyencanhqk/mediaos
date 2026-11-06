@@ -12,10 +12,11 @@ import type { CreateShiftAssignmentRequest, ShiftDto } from "@mediaos/contracts"
 import { Button, Dialog, Input, Select } from "@mediaos/ui";
 import { useCreateShiftAssignment } from "../hooks/useAttendanceAdmin";
 import { AdminField, adminMapApiError } from "./AdminField";
+import { idSchema } from "@mediaos/contracts";
 
 const assignmentFormSchema = z
   .object({
-    shiftId: z.string().uuid(),
+    shiftId: idSchema,
     assignmentScope: z.enum(["Company", "Department", "Employee"]),
     departmentId: z.string().optional(),
     employeeId: z.string().optional(),

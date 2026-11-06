@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./common/id";
 
 /**
  * CS-9 Bảo mật nâng cao (per-company security policy) — nguồn sự thật contract api ↔ console.
@@ -88,7 +89,7 @@ export const securityPolicySchema = z.object({
   timeWindows: z.array(timeWindowSchema),
   applyScope: applyScopeEnum,
   applyAppKeys: z.array(z.string().min(1).max(64)),
-  exemptUserIds: z.array(z.string().uuid()),
+  exemptUserIds: z.array(idSchema),
   emailDomainRestrictionEnabled: z.boolean(),
   allowedEmailDomains: z.array(emailDomainSchema),
   /** null = theo sàn global (TWO_FACTOR_ENFORCEMENT_ENABLED). true = ép thêm cho công ty. KHÔNG hạ global. */
@@ -113,7 +114,7 @@ export const updateSecurityPolicySchema = z
     timeWindows: z.array(timeWindowSchema).max(128).optional(),
     applyScope: applyScopeEnum.optional(),
     applyAppKeys: z.array(z.string().min(1).max(64)).max(64).optional(),
-    exemptUserIds: z.array(z.string().uuid()).max(1024).optional(),
+    exemptUserIds: z.array(idSchema).max(1024).optional(),
     emailDomainRestrictionEnabled: z.boolean().optional(),
     allowedEmailDomains: z.array(emailDomainSchema).max(256).optional(),
     twoFactorEnforced: z.boolean().nullable().optional(),

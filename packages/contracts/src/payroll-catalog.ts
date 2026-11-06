@@ -6,6 +6,7 @@ import {
   salaryComponentKindEnum,
   salaryComponentValueTypeEnum,
 } from "./payroll";
+import { idSchema } from "./common/id";
 
 /**
  * MediaOS — PAYROLL **track B v2** contracts (SPEC-11 §15.1 `044..058` · API-18 §5b, wave S15-PAYROLL-V2):
@@ -208,7 +209,7 @@ export type ValidateFormulaResult = z.infer<typeof validateFormulaResultSchema>;
  * sensitive `('view','salary-component')` ở route.
  */
 export const salaryComponentDtoSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
   kind: salaryComponentKindEnum,
@@ -224,7 +225,7 @@ export const salaryComponentDtoSchema = z.object({
 export type SalaryComponentDto = z.infer<typeof salaryComponentDtoSchema>;
 
 export const salaryComponentDetailDtoSchema = salaryComponentDtoSchema.extend({
-  usedByTemplates: z.array(z.object({ id: z.string().uuid(), code: z.string(), name: z.string() })),
+  usedByTemplates: z.array(z.object({ id: idSchema, code: z.string(), name: z.string() })),
 });
 export type SalaryComponentDetailDto = z.infer<typeof salaryComponentDetailDtoSchema>;
 
@@ -246,7 +247,7 @@ export const createPayrollTemplateSchema = z
     code: z.string().trim().min(1).max(64),
     name: z.string().trim().min(1).max(200),
     scope: payrollTemplateScopeEnum.default("company"),
-    orgUnitId: z.string().uuid().nullable().optional(),
+    orgUnitId: idSchema.nullable().optional(),
     isActive: z.boolean().default(true),
   })
   .strict()
@@ -266,7 +267,7 @@ export const updatePayrollTemplateSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
     scope: payrollTemplateScopeEnum,
-    orgUnitId: z.string().uuid().nullable(),
+    orgUnitId: idSchema.nullable(),
     isActive: z.boolean(),
     delete: z.literal(true),
   })
@@ -277,7 +278,7 @@ export type UpdatePayrollTemplateRequest = z.infer<typeof updatePayrollTemplateS
 
 export const payrollTemplateComponentInputSchema = z
   .object({
-    componentId: z.string().uuid(),
+    componentId: idSchema,
     columnLabel: z.string().trim().min(1).max(200).nullable().optional(),
     /** KHÔNG cap độ dài — luật 1 ở docblock đầu file. `null`/vắng = dùng công thức của catalog. */
     formulaOverride: z.string().nullable().optional(),
@@ -303,18 +304,18 @@ export type PutPayrollTemplateComponentsRequest = z.infer<
 >;
 
 export const payrollTemplateDtoSchema = z.object({
-  id: z.string().uuid(),
+  id: idSchema,
   code: z.string(),
   name: z.string(),
   scope: payrollTemplateScopeEnum,
-  orgUnitId: z.string().uuid().nullable(),
+  orgUnitId: idSchema.nullable(),
   isActive: z.boolean(),
   updatedAt: z.string(),
 });
 export type PayrollTemplateDto = z.infer<typeof payrollTemplateDtoSchema>;
 
 export const payrollTemplateComponentDtoSchema = z.object({
-  componentId: z.string().uuid(),
+  componentId: idSchema,
   code: z.string(),
   name: z.string(),
   kind: salaryComponentKindEnum,
@@ -388,7 +389,7 @@ export const updateStatutoryRateSchema = createStatutoryRateSchema
 export type UpdateStatutoryRateRequest = z.infer<typeof updateStatutoryRateSchema>;
 
 export const statutoryRateDtoSchema = statutoryRateValuesSchema.extend({
-  id: z.string().uuid(),
+  id: idSchema,
   effectiveFrom: z.string().date(),
   pitBrackets: z.array(z.object({ upTo: z.number().nullable(), rate: z.number() })),
   note: z.string().nullable(),
@@ -440,5 +441,5 @@ export const payrollTemplatePreviewResultSchema = z.object({
 export type PayrollTemplatePreviewResult = z.infer<typeof payrollTemplatePreviewResultSchema>;
 
 /** Envelope GHI của 045/047/050/052/053/056/058 — 0 khoá tiền. */
-export const payrollCatalogWriteResultSchema = z.object({ id: z.string().uuid() });
+export const payrollCatalogWriteResultSchema = z.object({ id: idSchema });
 export type PayrollCatalogWriteResult = z.infer<typeof payrollCatalogWriteResultSchema>;
