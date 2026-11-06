@@ -80,6 +80,8 @@ interface TaskFormDrawerProps {
    * (cảnh báo ngữ cảnh) ⇒ gắn vào `aria-describedby` của hộp thoại.
    */
   describedById?: string;
+  /** Báo khi form bắt đầu / thôi gửi (validate + mutation) — caller cần biết để không cắt ngang lần gửi. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 const NO_FIELD_LOCKS: TaskPatchFieldLocks = {
@@ -109,6 +111,7 @@ export function TaskFormDrawer({
   beforeFields,
   afterFields,
   describedById,
+  onBusyChange,
 }: TaskFormDrawerProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -251,6 +254,9 @@ export function TaskFormDrawer({
   const assigneeRejected = mutation.isError && isAssigneeRejection(mutation.error);
 
   const busy = isSubmitting || mutation.isPending;
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
   const noop = () => {};
   const errFor = (e: FieldError | undefined) => (e ? t(e.message ?? "") : undefined);
 

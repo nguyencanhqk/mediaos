@@ -11,6 +11,8 @@ import i18n from "@/i18n";
 import type { ChatRoomDto } from "@mediaos/contracts";
 
 const getMessages = vi.fn();
+const sendMessage = vi.fn();
+const createTask = vi.fn();
 // S20-CHAT-MSGTOTASK-1 — hộp «Tạo việc» dùng router (drawer việc · guard rời trang); ca ở đây không dựng router.
 vi.mock("@/routes/tasks/task-drawer-nav", () => ({ useTaskDrawer: () => ({ openTask: vi.fn() }) }));
 vi.mock("@/hooks/use-dirty-form-guard", () => ({ useDirtyFormGuard: () => {} }));
@@ -26,7 +28,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       getMessages: (...args: unknown[]) => getMessages(...args),
       getPinned: (...args: unknown[]) => getPinned(...args),
       markRead: vi.fn().mockResolvedValue({ roomId: "", lastReadSeq: 0, unreadCount: 0 }),
+      sendMessage: (...args: unknown[]) => sendMessage(...args),
     },
+    taskCoreApi: { createTask: (...args: unknown[]) => createTask(...args), updateTask: vi.fn() },
     // S20-CHAT-MSGTOTASK-1 — hộp «Tạo việc» nạp dự án / nhân viên / phòng ban / hồ sơ tôi.
     taskProjectApi: { listProjects: vi.fn().mockResolvedValue([]) },
     hrApi: {
@@ -480,6 +484,21 @@ describe("ConversationPanel · khung trả lời cho tin đã ra khỏi RAM (S20
 // ── S20-CHAT-MSGTOTASK-1 — gate review: focus khi đóng hộp · tin bị thu hồi lúc hộp đang mở ──────────
 
 describe("ConversationPanel · tạo việc từ tin", () => {
+  const TASK_ID = "44444444-4444-4444-8444-444444444444";
+  const recallSource = () =>
+    act(() => {
+      useChatStore.getState().applyMessageRecalled({
+        roomId: ROOM_ID,
+        messageId: seededMessage().id,
+        recalledAt: "2026-08-04T10:05:00.000Z",
+      } as never);
+    });
+
+  beforeEach(() => {
+    sendMessage.mockReset();
+    createTask.mockReset();
+  });
+
   async function openCreateTask() {
     getMessages.mockResolvedValue([seededMessage()]);
     renderPanel();
@@ -499,18 +518,62 @@ describe("ConversationPanel · tạo việc từ tin", () => {
     const { toast } = await import("@mediaos/ui");
     const warning = vi.spyOn(toast, "warning");
     await openCreateTask();
-    act(() => {
-      useChatStore.getState().applyMessageRecalled({
-        roomId: ROOM_ID,
-        messageId: seededMessage().id,
-        recalledAt: "2026-08-04T10:05:00.000Z",
-      } as never);
-    });
+    recallSource();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(warning).toHaveBeenCalledWith(
       "Tin đã bị thu hồi hoặc không còn trong phòng — không tạo việc từ tin này.",
     );
     expect(document.activeElement?.tagName).toBe("TEXTAREA");
     warning.mockRestore();
+  });
+
+  it("LƯU XONG ⇒ focus quay về nút ⋯ của đúng tin", async () => {
+    createTask.mockResolvedValue({ id: TASK_ID, projectId: null });
+    const dialog = await openCreateTask();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tạo" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(createTask).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(screen.getByTestId("chat-message-more"));
+  });
+
+  it("thu hồi TRONG LÚC đang gửi ⇒ chờ kết quả; thành công thì KHÔNG gửi link, một toast cảnh báo đúng sự thật", async () => {
+    const { toast } = await import("@mediaos/ui");
+    const warning = vi.spyOn(toast, "warning");
+    const success = vi.spyOn(toast, "success");
+    let resolveCreate: (task: unknown) => void = () => {};
+    createTask.mockReturnValue(new Promise((resolve) => (resolveCreate = resolve)));
+    const dialog = await openCreateTask();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Gửi link việc vào phòng" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tạo" }));
+    await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
+
+    recallSource();
+    // Đang gửi ⇒ hộp KHÔNG bị gỡ ngang.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await act(async () => resolveCreate({ id: TASK_ID, projectId: null }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(success).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0]?.[0]).toBe(
+      "Đã tạo việc, nhưng tin gốc vừa bị thu hồi — hãy kiểm tra lại mô tả.",
+    );
+    expect(warning.mock.calls[0]?.[1]).toMatchObject({ action: { label: "Mở" } });
+    warning.mockRestore();
+    success.mockRestore();
+  });
+
+  it("tin bị CẮT khỏi bộ nhớ (không phải thu hồi) ⇒ hộp vẫn mở, giữ nội dung đang gõ", async () => {
+    const dialog = await openCreateTask();
+    const title = within(dialog).getByLabelText(/Tiêu đề/) as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "Đang gõ dở" } });
+    act(() => {
+      useChatStore.setState((state) => ({
+        messagesByRoom: { ...state.messagesByRoom, [ROOM_ID]: [] },
+      }));
+    });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(title).toHaveValue("Đang gõ dở");
   });
 });

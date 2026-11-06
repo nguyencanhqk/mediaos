@@ -15,7 +15,7 @@
  * Cổng `create:task` nằm ở `MessageActions` (caller). Thiếu quyền mà gọi API thẳng ⇒ server 403, form hiện
  * lỗi như luồng thường.
  */
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "@mediaos/ui";
@@ -36,6 +36,12 @@ export interface MessageToTaskDialogProps {
   message: Pick<StoredChatMessage, "id" | "body" | "createdAt">;
   /** Tên người gửi đã tra (tin → roster); `null` ⇒ «Người dùng không xác định». */
   senderName: string | null;
+  /**
+   * Tin nguồn vừa bị THU HỒI (cha đọc từ store, hộp KHÔNG bị gỡ ngang). Chưa gửi ⇒ hộp tự đóng + báo thu
+   * hồi. Đang gửi ⇒ chờ kết quả: thành công ⇒ không gửi link vào phòng, báo «đã tạo nhưng tin gốc vừa bị
+   * thu hồi»; lỗi ⇒ đóng + báo thu hồi.
+   */
+  sourceRecalled?: boolean;
   onClose: () => void;
   /** Gửi MỘT tin chỉ chứa URL việc vào phòng. Bỏ trống (vd phòng lưu trữ) ⇒ không có tuỳ chọn. */
   onSendTaskLink?: (url: string) => void;
@@ -45,6 +51,7 @@ export function MessageToTaskDialog({
   room,
   message,
   senderName,
+  sourceRecalled = false,
   onClose,
   onSendTaskLink,
 }: MessageToTaskDialogProps): React.ReactElement {
@@ -76,11 +83,31 @@ export function MessageToTaskDialog({
     [message.body, message.createdAt, message.id, origin, room.id, senderName, t],
   );
 
+  const [isBusy, setBusy] = useState(false);
+  // Ref chứ không đọc prop trong closure: `onSuccess` của mutation có thể chạy trên closure của lượt render
+  // lúc bấm Lưu — trước khi thu hồi tới. `isDoneRef` chặn báo lần hai sau khi hộp đã tự kết thúc.
+  const isRecalledRef = useRef(sourceRecalled);
+  isRecalledRef.current = sourceRecalled;
+  const isDoneRef = useRef(false);
+
+  // Thu hồi lúc KHÔNG gửi (chưa bấm Lưu, hoặc lần gửi vừa lỗi) ⇒ đóng hộp, không tạo việc từ tin đã gỡ.
+  useEffect(() => {
+    if (!sourceRecalled || isBusy || isDoneRef.current) return;
+    isDoneRef.current = true;
+    toast.warning(t("toTask.sourceGone"));
+    onClose();
+  }, [sourceRecalled, isBusy, onClose, t]);
+
   const handleSuccess = (task: TaskCoreResponseDto) => {
-    if (sendLink && onSendTaskLink) onSendTaskLink(taskUrl(origin, task.id));
-    toast.success(t("toTask.created"), {
-      action: { label: t("toTask.open"), onClick: () => openTask(task.id) },
-    });
+    isDoneRef.current = true;
+    const openAction = { label: t("toTask.open"), onClick: () => openTask(task.id) };
+    if (isRecalledRef.current) {
+      // Server đã ghi việc với nội dung cũ — nói đúng sự thật, KHÔNG phát thêm link vào phòng.
+      toast.warning(t("toTask.createdSourceRecalled"), { action: openAction });
+    } else {
+      if (sendLink && onSendTaskLink) onSendTaskLink(taskUrl(origin, task.id));
+      toast.success(t("toTask.created"), { action: openAction });
+    }
     onClose();
   };
 
@@ -92,6 +119,7 @@ export function MessageToTaskDialog({
       defaultProject={project}
       initialValues={initialValues}
       defaultAssigneeMe
+      onBusyChange={setBusy}
       describedById={project === undefined ? warningId : undefined}
       beforeFields={
         project === undefined ? (

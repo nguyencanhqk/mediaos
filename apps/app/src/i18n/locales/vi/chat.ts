@@ -632,6 +632,7 @@ export default {
     sendLinkHint: "Chỉ gửi đường dẫn tới việc, không gửi tiêu đề hay mô tả.",
     created: "Đã tạo việc",
     open: "Mở",
+    createdSourceRecalled: "Đã tạo việc, nhưng tin gốc vừa bị thu hồi — hãy kiểm tra lại mô tả.",
     sourceGone: "Tin đã bị thu hồi hoặc không còn trong phòng — không tạo việc từ tin này.",
   },
 } as const;

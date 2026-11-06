@@ -55,11 +55,21 @@ mở chồng, lưu xong vẫn ở phòng). Deny-path: thiếu `create:task` ⇒ 
 1. [MEDIUM] Focus rơi về `body` khi đóng hộp mở từ menu ⋯ — `MessageActions` đưa focus về nút ⋯ TRƯỚC khi
    mở hộp (`Dialog` ghi phần tử kích hoạt = nút ⋯); `ConversationPanel` đưa focus về ô soạn nếu nút đã mất
    (tin bị thu hồi). Test: `ConversationPanel.spec` «Huỷ hộp ⇒ focus quay về nút ⋯» (đã thử bỏ vá ⇒ đỏ).
-2. [MEDIUM] Hộp giữ ảnh chụp tin — `ConversationPanel` chỉ giữ id, tra tin hiện tại từ store; tin biến mất
-   hoặc `recalledAt !== null` ⇒ đóng hộp + toast `toTask.sourceGone`. Test: «tin bị THU HỒI qua realtime».
+2. [MEDIUM] Hộp giữ ảnh chụp tin — `ConversationPanel` tra tin hiện tại từ store và chuyền `sourceRecalled`
+   (xem lượt 2). Test: «tin bị THU HỒI qua realtime».
 3. [LOW] Cảnh báo không được đọc khi mở hộp — prop additive `describedById` của `TaskFormDrawer` gắn
    `aria-describedby` của hộp tới cảnh báo (không sửa packages/ui). Test: `MessageToTaskDialog.spec` nhóm
    «trợ năng cảnh báo».
+
+Lượt 2 (review hẹp bản vá `8405d918`):
+4. [MEDIUM] Thu hồi TRONG LÚC đang gửi — cha không còn gỡ hộp; hộp nhận `sourceRecalled` + biết mình đang
+   gửi (prop additive `onBusyChange` của `TaskFormDrawer`). Chưa gửi ⇒ đóng + `toTask.sourceGone`; đang gửi ⇒
+   chờ: thành công ⇒ KHÔNG gửi link, toast cảnh báo `toTask.createdSourceRecalled` kèm «Mở»; lỗi ⇒ đóng +
+   `sourceGone`. Test: «thu hồi TRONG LÚC đang gửi» (đã thử bỏ vá ⇒ đỏ).
+5. [LOW] Tin bị cắt khỏi bộ nhớ bị coi như thu hồi — chỉ coi là thu hồi khi tin CÒN trong store và
+   `recalledAt !== null`; không thấy ⇒ giữ hộp với bản chụp lúc mở. Drawer chat dùng chung một panel khi đổi
+   phòng ⇒ hộp gắn `roomId`, đổi phòng thì bỏ. Test: «tin bị CẮT khỏi bộ nhớ».
+6. [LOW] Thêm ca focus sau khi LƯU XONG ⇒ nút ⋯.
 
 Bị bác (4): theo phán quyết đối kháng của luồng chính — không đổi code.
 
@@ -70,6 +80,9 @@ Bị bác (4): theo phán quyết đối kháng của luồng chính — không 
 - `components/chat/message-to-task.ts` — hàm điền sẵn thuần (glob `MessageToTask*.tsx` không nhận `.ts`).
 
 ## Nợ
+
+- **Chặn thu hồi ở SERVER** (đề xuất WO riêng): tạo việc kèm id tin nguồn, server từ chối nếu tin đã thu
+  hồi. Client không thấy được thu hồi xảy ra SAU khi server đã ghi việc nhưng TRƯỚC khi WS báo về.
 
 - Đo KPI #6 trong trình duyệt thật với API giả lập (owner/luồng chính).
 - Phòng `department` có thể điền sẵn phòng ban (`refId`) — chưa làm, chờ đo mức dùng.

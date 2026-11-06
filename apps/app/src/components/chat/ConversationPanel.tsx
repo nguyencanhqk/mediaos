@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History } from "lucide-react";
 import { ApiError, chatApi, chatKeys, useCan } from "@mediaos/web-core";
-import { Button, Skeleton, toast } from "@mediaos/ui";
+import { Button, Skeleton } from "@mediaos/ui";
 import type { ChatReactionEmoji, ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
@@ -210,15 +210,21 @@ export function ConversationPanel({
   );
   const [recallTarget, setRecallTarget] = useState<StoredChatMessage | null>(null);
   /**
-   * S20-CHAT-MSGTOTASK-1 — tin đang được tạo việc (hộp «Tạo việc» mở chồng trên phòng). Giữ ID chứ KHÔNG
-   * giữ ảnh chụp tin (gate review): tin bị thu hồi qua realtime lúc hộp đang mở thì ảnh chụp vẫn mang
-   * `body` cũ ⇒ nội dung đã thu hồi thành mô tả việc. Tra tin hiện tại từ store mỗi lần render.
+   * S20-CHAT-MSGTOTASK-1 — tin đang được tạo việc (hộp «Tạo việc» mở chồng trên phòng), kèm phòng của nó.
+   *
+   * Gate review: `snapshot` là bản CHƯA thu hồi lúc mở — chỉ dùng khi tin bị cắt khỏi bộ nhớ (store giữ tối
+   * đa N tin/phòng), KHÔNG phải nguồn sự thật về thu hồi. Thu hồi đọc từ tin CÒN trong store
+   * (`recalledAt !== null`) và chuyền xuống hộp qua `sourceRecalled` — cha KHÔNG gỡ hộp, vì hộp có thể
+   * đang gửi (gỡ ngang thì `onSuccess` của mutation vẫn chạy trên closure cũ).
    */
-  const [taskSourceId, setTaskSourceId] = useState<string | null>(null);
-  const taskSource =
+  const [taskSource, setTaskSource] = useState<{
+    readonly roomId: string;
+    readonly snapshot: StoredChatMessage;
+  } | null>(null);
+  const taskSourceId = taskSource?.roomId === room.id ? taskSource.snapshot.id : null;
+  const liveTaskSource =
     taskSourceId === null ? undefined : messages?.find((m) => m.id === taskSourceId);
-  const isTaskSourceGone =
-    taskSourceId !== null && (taskSource === undefined || taskSource.recalledAt !== null);
+  const isTaskSourceRecalled = liveTaskSource !== undefined && liveTaskSource.recalledAt !== null;
   const [actionError, setActionError] = useState<string | null>(null);
 
   /**
@@ -262,13 +268,10 @@ export function ConversationPanel({
     [context, conversation, leaveContext],
   );
 
-  // S20-CHAT-MSGTOTASK-1 — tin nguồn bị thu hồi / không còn trong phòng lúc hộp đang mở ⇒ đóng hộp, báo
-  // ngắn. Không tạo việc từ nội dung người gửi đã gỡ đi.
+  // Đổi phòng mà panel không dựng lại (drawer chat dùng chung một panel) ⇒ bỏ hộp của phòng cũ.
   useEffect(() => {
-    if (!isTaskSourceGone) return;
-    setTaskSourceId(null);
-    toast.warning(t("toTask.sourceGone"));
-  }, [isTaskSourceGone, t]);
+    setTaskSource((current) => (current !== null && current.roomId !== room.id ? null : current));
+  }, [room.id]);
 
   // Hộp vừa đóng mà focus rơi về `body` (nút ⋯ đã mất cùng tin bị thu hồi) ⇒ đưa về ô soạn, không để người
   // dùng bàn phím lạc ra đầu trang. Effect của cha chạy SAU cleanup trả-focus của `Dialog`.
@@ -621,7 +624,7 @@ export function ConversationPanel({
             onRecall: setRecallTarget,
             onToggleReaction: toggleReaction,
             onCopy: copyMessage,
-            onCreateTask: (m) => setTaskSourceId(m.id),
+            onCreateTask: (m) => setTaskSource({ roomId: room.id, snapshot: m }),
           }}
         />
       )}
@@ -641,12 +644,17 @@ export function ConversationPanel({
         onSubmit={submit}
       />
 
-      {taskSource !== undefined && !isTaskSourceGone && (
+      {taskSource !== null && taskSourceId !== null && (
         <MessageToTaskDialog
           room={room}
-          message={taskSource}
-          senderName={taskSource.senderName ?? roster.nameByUser.get(taskSource.senderId) ?? null}
-          onClose={() => setTaskSourceId(null)}
+          message={taskSource.snapshot}
+          senderName={
+            taskSource.snapshot.senderName ??
+            roster.nameByUser.get(taskSource.snapshot.senderId) ??
+            null
+          }
+          sourceRecalled={isTaskSourceRecalled}
+          onClose={() => setTaskSource(null)}
           onSendTaskLink={(room.isArchived ?? false) ? undefined : sendTaskLink}
         />
       )}
