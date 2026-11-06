@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emailParams } from "@mediaos/contracts";
 import { z } from "zod";
 import { aliasZodRule, zodIssuesToDetails } from "./zod-issue-rule";
 
@@ -10,7 +11,7 @@ const rule = (schema: z.ZodType, v: unknown) => {
 
 describe("aliasZodRule — v4 → v3", () => {
   it("email → invalid_string", () => {
-    expect(rule(z.string().email(), "x")).toBe("invalid_string");
+    expect(rule(z.string().email(emailParams()), "x")).toBe("invalid_string");
   });
   it("enum → invalid_enum_value · literal → invalid_literal", () => {
     expect(rule(z.enum(["a", "b"]), "c")).toBe("invalid_enum_value");
