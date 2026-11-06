@@ -19,7 +19,7 @@
  * TỤC hiện dù chuột đã rời bong bóng: `data-open` giữ nó lại, nếu không thì menu nổi mồ côi phía trên
  * một bong bóng không còn thanh nào.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, CornerUpLeft, ListPlus, MoreHorizontal, Pin, ThumbsUp, Undo2 } from "lucide-react";
 import { Button, Popover, cn } from "@mediaos/ui";
@@ -81,9 +81,21 @@ export function MessageActions({
     setMenuOpen(false);
     action();
   };
+  const barRef = useRef<HTMLDivElement>(null);
+  /**
+   * S20-CHAT-MSGTOTASK-1 (gate review) — mục menu nằm trong Popover sắp bị gỡ khỏi DOM. Mở hộp «Tạo việc»
+   * ngay trong cùng lượt thì `Dialog` ghi «phần tử đã kích hoạt» là `body` và khi đóng trả focus về
+   * `body` — người dùng bàn phím mất chỗ. Đưa focus về nút ⋯ (còn sống, `focus-within` giữ thanh hiện)
+   * TRƯỚC khi mở hộp ⇒ hộp đóng (huỷ hay lưu xong) focus quay về đúng tin.
+   */
+  const openFromMenu = (action: () => void) => () => {
+    barRef.current?.querySelector<HTMLElement>('button[aria-haspopup="menu"]')?.focus();
+    runAndClose(action)();
+  };
 
   return (
     <div
+      ref={barRef}
       data-testid="chat-message-actions"
       data-open={isMenuOpen ? "true" : "false"}
       className={cn(
@@ -191,7 +203,7 @@ export function MessageActions({
                   role="menuitem"
                   data-testid="chat-message-create-task"
                   className={MENU_ITEM_CLASS}
-                  onClick={runAndClose(createTask)}
+                  onClick={openFromMenu(createTask)}
                 >
                   <ListPlus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {t("message.createTask")}

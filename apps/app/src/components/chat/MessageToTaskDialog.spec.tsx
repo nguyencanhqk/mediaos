@@ -159,6 +159,21 @@ describe("điền sẵn từ tin", () => {
   });
 });
 
+describe("trợ năng cảnh báo (gate review)", () => {
+  it("phòng direct ⇒ hộp thoại aria-describedby trỏ tới cảnh báo hiển thị nội dung", () => {
+    renderDialog({ room: DIRECT_ROOM });
+    const warningEl = screen.getByTestId("message-to-task-visibility-warning");
+    expect(warningEl.id).not.toBe("");
+    const describedBy = screen.getByRole("dialog").getAttribute("aria-describedby") ?? "";
+    expect(describedBy.split(" ")).toContain(warningEl.id);
+  });
+
+  it("phòng dự án (không có cảnh báo) ⇒ hộp không mang aria-describedby", () => {
+    renderDialog();
+    expect(screen.getByRole("dialog")).not.toHaveAttribute("aria-describedby");
+  });
+});
+
 describe("lưu", () => {
   it("chưa gọi API nào tới khi bấm Lưu; lưu xong đóng hộp + toast «Đã tạo việc · Mở» mở drawer việc", async () => {
     const { onClose, onSendTaskLink } = renderDialog();

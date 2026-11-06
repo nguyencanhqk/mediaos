@@ -4,13 +4,16 @@
  * (đang gửi/gửi lỗi), `MessageBubble.spec` (đã thu hồi) và `ChatPage.spec` (không có quyền).
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 import type { ChatRoomDto } from "@mediaos/contracts";
 
 const getMessages = vi.fn();
+// S20-CHAT-MSGTOTASK-1 — hộp «Tạo việc» dùng router (drawer việc · guard rời trang); ca ở đây không dựng router.
+vi.mock("@/routes/tasks/task-drawer-nav", () => ({ useTaskDrawer: () => ({ openTask: vi.fn() }) }));
+vi.mock("@/hooks/use-dirty-form-guard", () => ({ useDirtyFormGuard: () => {} }));
 // S20-CHAT-MENTIONPIN-1 — thanh tin ghim nạp `/pinned`; mock để ca cũ không gọi mạng thật.
 const getPinned = vi.fn();
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -24,6 +27,13 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       getPinned: (...args: unknown[]) => getPinned(...args),
       markRead: vi.fn().mockResolvedValue({ roomId: "", lastReadSeq: 0, unreadCount: 0 }),
     },
+    // S20-CHAT-MSGTOTASK-1 — hộp «Tạo việc» nạp dự án / nhân viên / phòng ban / hồ sơ tôi.
+    taskProjectApi: { listProjects: vi.fn().mockResolvedValue([]) },
+    hrApi: {
+      listDepartments: vi.fn().mockResolvedValue([]),
+      listEmployees: vi.fn().mockResolvedValue({ items: [], meta: {} }),
+    },
+    authApi: { ...actual.authApi, me: vi.fn().mockResolvedValue({ employee: null }) },
   };
 });
 
@@ -464,5 +474,43 @@ describe("ConversationPanel · khung trả lời cho tin đã ra khỏi RAM (S20
     expect(within(composer).getByText(/Trả lời Trần B/)).toBeTruthy();
     expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
     expect(within(composer).queryByText("thân cũ trong ảnh chụp")).toBeNull();
+  });
+});
+
+// ── S20-CHAT-MSGTOTASK-1 — gate review: focus khi đóng hộp · tin bị thu hồi lúc hộp đang mở ──────────
+
+describe("ConversationPanel · tạo việc từ tin", () => {
+  async function openCreateTask() {
+    getMessages.mockResolvedValue([seededMessage()]);
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("chat-message-more"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Tạo việc" }));
+    return screen.findByRole("dialog");
+  }
+
+  it("Huỷ hộp ⇒ focus quay về nút ⋯ của đúng tin, không rơi về body", async () => {
+    const dialog = await openCreateTask();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Hủy" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(screen.getByTestId("chat-message-more"));
+  });
+
+  it("tin bị THU HỒI qua realtime lúc hộp đang mở ⇒ đóng hộp, báo ngắn, focus về ô soạn", async () => {
+    const { toast } = await import("@mediaos/ui");
+    const warning = vi.spyOn(toast, "warning");
+    await openCreateTask();
+    act(() => {
+      useChatStore.getState().applyMessageRecalled({
+        roomId: ROOM_ID,
+        messageId: seededMessage().id,
+        recalledAt: "2026-08-04T10:05:00.000Z",
+      } as never);
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(warning).toHaveBeenCalledWith(
+      "Tin đã bị thu hồi hoặc không còn trong phòng — không tạo việc từ tin này.",
+    );
+    expect(document.activeElement?.tagName).toBe("TEXTAREA");
+    warning.mockRestore();
   });
 });

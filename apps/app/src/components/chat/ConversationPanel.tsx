@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History } from "lucide-react";
 import { ApiError, chatApi, chatKeys, useCan } from "@mediaos/web-core";
-import { Button, Skeleton } from "@mediaos/ui";
+import { Button, Skeleton, toast } from "@mediaos/ui";
 import type { ChatReactionEmoji, ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
@@ -209,8 +209,16 @@ export function ConversationPanel({
     [room.id, setDraftReplyTo],
   );
   const [recallTarget, setRecallTarget] = useState<StoredChatMessage | null>(null);
-  /** S20-CHAT-MSGTOTASK-1 — tin đang được tạo việc (hộp «Tạo việc» mở chồng trên phòng). */
-  const [taskSource, setTaskSource] = useState<StoredChatMessage | null>(null);
+  /**
+   * S20-CHAT-MSGTOTASK-1 — tin đang được tạo việc (hộp «Tạo việc» mở chồng trên phòng). Giữ ID chứ KHÔNG
+   * giữ ảnh chụp tin (gate review): tin bị thu hồi qua realtime lúc hộp đang mở thì ảnh chụp vẫn mang
+   * `body` cũ ⇒ nội dung đã thu hồi thành mô tả việc. Tra tin hiện tại từ store mỗi lần render.
+   */
+  const [taskSourceId, setTaskSourceId] = useState<string | null>(null);
+  const taskSource =
+    taskSourceId === null ? undefined : messages?.find((m) => m.id === taskSourceId);
+  const isTaskSourceGone =
+    taskSourceId !== null && (taskSource === undefined || taskSource.recalledAt !== null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   /**
@@ -253,6 +261,27 @@ export function ConversationPanel({
     },
     [context, conversation, leaveContext],
   );
+
+  // S20-CHAT-MSGTOTASK-1 — tin nguồn bị thu hồi / không còn trong phòng lúc hộp đang mở ⇒ đóng hộp, báo
+  // ngắn. Không tạo việc từ nội dung người gửi đã gỡ đi.
+  useEffect(() => {
+    if (!isTaskSourceGone) return;
+    setTaskSourceId(null);
+    toast.warning(t("toTask.sourceGone"));
+  }, [isTaskSourceGone, t]);
+
+  // Hộp vừa đóng mà focus rơi về `body` (nút ⋯ đã mất cùng tin bị thu hồi) ⇒ đưa về ô soạn, không để người
+  // dùng bàn phím lạc ra đầu trang. Effect của cha chạy SAU cleanup trả-focus của `Dialog`.
+  const hadTaskDialogRef = useRef(false);
+  useEffect(() => {
+    const isOpen = taskSourceId !== null;
+    const justClosed = hadTaskDialogRef.current && !isOpen;
+    hadTaskDialogRef.current = isOpen;
+    if (!justClosed) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body && active.isConnected) return;
+    sectionRef.current?.querySelector<HTMLElement>("textarea:not([disabled])")?.focus();
+  }, [taskSourceId]);
 
   /** S20-CHAT-MSGTOTASK-1 — «Gửi link việc vào phòng»: một tin CHỈ có URL, cùng đường gửi/thử lại như ô soạn. */
   const sendTaskLink = useCallback(
@@ -405,7 +434,7 @@ export function ConversationPanel({
     const handler = (e: KeyboardEvent) => {
       if (document.querySelector('[data-floating-layer="open"]') !== null) return;
       // Hộp «Tạo việc» tự nghe Esc — không để một Esc vừa đóng hộp vừa huỷ câu trả lời đang soạn.
-      if (taskSource !== null) return;
+      if (taskSourceId !== null) return;
 
       if (e.key === "Escape") {
         if (replyTo !== null) {
@@ -429,7 +458,7 @@ export function ConversationPanel({
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [replyTo, isInfoOpen, onToggleInfo, onSearchInRoom, escapeClosesInfo, taskSource]);
+  }, [replyTo, isInfoOpen, onToggleInfo, onSearchInRoom, escapeClosesInfo, taskSourceId]);
 
   const title = roomDisplayName(room, members, myUserId, (code) =>
     t("rooms.directFallback", { code }),
@@ -592,7 +621,7 @@ export function ConversationPanel({
             onRecall: setRecallTarget,
             onToggleReaction: toggleReaction,
             onCopy: copyMessage,
-            onCreateTask: setTaskSource,
+            onCreateTask: (m) => setTaskSourceId(m.id),
           }}
         />
       )}
@@ -612,12 +641,12 @@ export function ConversationPanel({
         onSubmit={submit}
       />
 
-      {taskSource !== null && (
+      {taskSource !== undefined && !isTaskSourceGone && (
         <MessageToTaskDialog
           room={room}
           message={taskSource}
           senderName={taskSource.senderName ?? roster.nameByUser.get(taskSource.senderId) ?? null}
-          onClose={() => setTaskSource(null)}
+          onClose={() => setTaskSourceId(null)}
           onSendTaskLink={(room.isArchived ?? false) ? undefined : sendTaskLink}
         />
       )}

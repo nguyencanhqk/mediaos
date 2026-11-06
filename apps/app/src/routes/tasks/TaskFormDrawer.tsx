@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useForm, type FieldError } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
@@ -75,6 +75,11 @@ interface TaskFormDrawerProps {
   beforeFields?: React.ReactNode;
   /** Khe nội dung DƯỚI các ô, trong form (tuỳ chọn phụ của caller). */
   afterFields?: React.ReactNode;
+  /**
+   * id của một phần tử trong `beforeFields`/`afterFields` mà trình đọc màn hình phải đọc khi hộp mở
+   * (cảnh báo ngữ cảnh) ⇒ gắn vào `aria-describedby` của hộp thoại.
+   */
+  describedById?: string;
 }
 
 const NO_FIELD_LOCKS: TaskPatchFieldLocks = {
@@ -103,6 +108,7 @@ export function TaskFormDrawer({
   defaultAssigneeMe = false,
   beforeFields,
   afterFields,
+  describedById,
 }: TaskFormDrawerProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -162,6 +168,26 @@ export function TaskFormDrawer({
   ]);
 
   useDirtyFormGuard({ isDirty });
+
+  // `Dialog` (packages/ui) chỉ nhận `description` dạng chuỗi muted dưới tiêu đề — không đủ nổi bật cho
+  // cảnh báo, và không có prop gắn id ngoài. Gắn thẳng lên phần tử `role="dialog"` tổ tiên: React để
+  // `aria-describedby={undefined}` nên không ghi đè thuộc tính này ở lượt render sau. `useLayoutEffect`
+  // để thuộc tính có TRƯỚC effect chuyển focus của `Dialog` (thời điểm trình đọc màn hình đọc hộp).
+  const formRef = useRef<HTMLFormElement>(null);
+  useLayoutEffect(() => {
+    if (!describedById) return;
+    const dialog = formRef.current?.closest('[role="dialog"]');
+    if (!dialog) return;
+    const previous = dialog.getAttribute("aria-describedby");
+    dialog.setAttribute(
+      "aria-describedby",
+      previous ? `${previous} ${describedById}` : describedById,
+    );
+    return () => {
+      if (previous) dialog.setAttribute("aria-describedby", previous);
+      else dialog.removeAttribute("aria-describedby");
+    };
+  }, [describedById]);
 
   const { data: projects } = useQuery({
     queryKey: taskKeys.projects.list({ limit: 100 }),
@@ -255,6 +281,7 @@ export function TaskFormDrawer({
       )}
       <form
         id="task-core-form"
+        ref={formRef}
         noValidate
         className="space-y-4"
         onSubmit={handleSubmit((values) => mutation.mutate(values))}

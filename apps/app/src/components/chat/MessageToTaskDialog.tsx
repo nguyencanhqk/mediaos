@@ -52,6 +52,7 @@ export function MessageToTaskDialog({
   const { openTask } = useTaskDrawer();
   const [sendLink, setSendLink] = useState(false);
   const sendLinkId = useId();
+  const warningId = useId();
   const origin = window.location.origin;
 
   const project =
@@ -91,9 +92,11 @@ export function MessageToTaskDialog({
       defaultProject={project}
       initialValues={initialValues}
       defaultAssigneeMe
+      describedById={project === undefined ? warningId : undefined}
       beforeFields={
         project === undefined ? (
           <div
+            id={warningId}
             role="note"
             data-testid="message-to-task-visibility-warning"
             className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-sm font-medium text-foreground"

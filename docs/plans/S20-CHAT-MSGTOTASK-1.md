@@ -5,7 +5,7 @@ link `?msg=`, không bảng nối) · Q25 = A.
 
 ## Quyết định chính
 
-1. **Một form duy nhất.** `TaskFormDrawer` nhận 4 prop ADDITIVE, chỉ có nghĩa ở chế độ TẠO:
+1. **Một form duy nhất.** `TaskFormDrawer` nhận 5 prop ADDITIVE (thêm `describedById` ở gate review), chỉ có nghĩa ở chế độ TẠO:
    `initialValues` (trộn vào giá trị mặc định ⇒ form vẫn «chưa sửa», hủy không hỏi lại — S20-GOAL-LINKEDTASKS-1
    dùng lại prop này) · `defaultAssigneeMe` (điền «Tôi» kể cả khi có dự án — luật cũ chỉ điền khi không có
    dự án) · `beforeFields` / `afterFields` (khe cho cảnh báo + ô «Gửi link việc vào phòng"). Guard, lỗi
@@ -41,13 +41,27 @@ link `?msg=`, không bảng nối) · Q25 = A.
 | `initialValues` + `defaultAssigneeMe` additive | `TaskFormDrawer.spec.tsx` |
 | KPI #6 đếm thao tác | `MessageToTaskDialog.spec.tsx` ca «KPI #6» |
 
-## KPI #6 (đếm bằng user-event, jsdom)
+## KPI #6 (đếm bằng `fireEvent` trong jsdom — kho không có `@testing-library/user-event`)
 
 Xuất phát phòng dự án đang mở, tin có chữ: ⋯ (1) → «Tạo việc» (2) → «Tạo» (3) = **NV tự nhận 3 thao tác**
 (≤5). QL giao người khác: + chọn người ở ô người phụ trách (4) = **4 thao tác** (≤7). 0 chuyển trang (hộp
 mở chồng, lưu xong vẫn ở phòng). Deny-path: thiếu `create:task` ⇒ không có mục.
 
 Đo trình duyệt thật: **chưa**, để luồng chính/owner (Cách kiểm KPI §4).
+
+## Gate review 06/11
+
+Đã vá (3):
+1. [MEDIUM] Focus rơi về `body` khi đóng hộp mở từ menu ⋯ — `MessageActions` đưa focus về nút ⋯ TRƯỚC khi
+   mở hộp (`Dialog` ghi phần tử kích hoạt = nút ⋯); `ConversationPanel` đưa focus về ô soạn nếu nút đã mất
+   (tin bị thu hồi). Test: `ConversationPanel.spec` «Huỷ hộp ⇒ focus quay về nút ⋯» (đã thử bỏ vá ⇒ đỏ).
+2. [MEDIUM] Hộp giữ ảnh chụp tin — `ConversationPanel` chỉ giữ id, tra tin hiện tại từ store; tin biến mất
+   hoặc `recalledAt !== null` ⇒ đóng hộp + toast `toTask.sourceGone`. Test: «tin bị THU HỒI qua realtime».
+3. [LOW] Cảnh báo không được đọc khi mở hộp — prop additive `describedById` của `TaskFormDrawer` gắn
+   `aria-describedby` của hộp tới cảnh báo (không sửa packages/ui). Test: `MessageToTaskDialog.spec` nhóm
+   «trợ năng cảnh báo».
+
+Bị bác (4): theo phán quyết đối kháng của luồng chính — không đổi code.
 
 ## Lệch paths (tối thiểu)
 
