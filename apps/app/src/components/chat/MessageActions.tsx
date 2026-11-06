@@ -21,8 +21,13 @@
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, CornerUpLeft, MoreHorizontal, Pin, ThumbsUp, Undo2 } from "lucide-react";
+import { Copy, CornerUpLeft, ListPlus, MoreHorizontal, Pin, ThumbsUp, Undo2 } from "lucide-react";
 import { Button, Popover, cn } from "@mediaos/ui";
+import { useCan } from "@mediaos/web-core";
+import { TASK_CORE_ENGINE_PAIRS } from "@/routes/tasks/constants";
+
+const MENU_ITEM_CLASS =
+  "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent";
 
 interface MessageActionsProps {
   /** Tin của tôi ⇒ thanh neo mép PHẢI (bong bóng ở phải); tin người khác ⇒ mép trái. */
@@ -41,6 +46,11 @@ interface MessageActionsProps {
   onTogglePin: () => void;
   onRecall: () => void;
   onCopy: () => void;
+  /**
+   * S20-CHAT-MSGTOTASK-1 — mở hộp «Tạo việc» từ tin này. Tin hệ thống / tin thu hồi không vẽ thanh tác vụ
+   * (nhánh riêng ở `MessageBubble`). Mục chỉ hiện khi có prop này VÀ `useCan(create:task)` — server vẫn là cổng thật.
+   */
+  onCreateTask?: () => void;
 }
 
 export function MessageActions({
@@ -56,9 +66,21 @@ export function MessageActions({
   onTogglePin,
   onRecall,
   onCopy,
+  onCreateTask,
 }: MessageActionsProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const [isMenuOpen, setMenuOpen] = useState(false);
+  const canCreateTaskPair = useCan(
+    TASK_CORE_ENGINE_PAIRS.CREATE.action,
+    TASK_CORE_ENGINE_PAIRS.CREATE.resourceType,
+  );
+  const createTask = canCreateTaskPair ? onCreateTask : undefined;
+  // Đóng TRƯỚC khi chạy — cùng lý do đã ghi ở `RoomRowMenu`: để menu mở trên một hành động vừa xong là
+  // mời bấm lần hai.
+  const runAndClose = (action: () => void) => () => {
+    setMenuOpen(false);
+    action();
+  };
 
   return (
     <div
@@ -125,7 +147,8 @@ export function MessageActions({
         </Button>
       )}
 
-      {hasBody && (
+      {/* Tin chỉ có tệp vẫn tạo việc được (tiêu đề để trống, bắt nhập) ⇒ menu hiện khi có MỘT mục bất kỳ. */}
+      {(hasBody || createTask !== undefined) && (
         <Popover
           open={isMenuOpen}
           onOpenChange={setMenuOpen}
@@ -147,23 +170,34 @@ export function MessageActions({
           }
         >
           <ul role="menu" aria-label={t("message.actions")} className="space-y-0.5">
-            <li role="none">
-              <button
-                type="button"
-                role="menuitem"
-                data-testid="chat-message-copy"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-                onClick={() => {
-                  // Đóng TRƯỚC khi chạy — cùng lý do đã ghi ở `RoomRowMenu`: để menu mở trên một hành
-                  // động vừa xong là mời bấm lần hai.
-                  setMenuOpen(false);
-                  onCopy();
-                }}
-              >
-                <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {t("message.copy")}
-              </button>
-            </li>
+            {hasBody && (
+              <li role="none">
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="chat-message-copy"
+                  className={MENU_ITEM_CLASS}
+                  onClick={runAndClose(onCopy)}
+                >
+                  <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {t("message.copy")}
+                </button>
+              </li>
+            )}
+            {createTask !== undefined && (
+              <li role="none">
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="chat-message-create-task"
+                  className={MENU_ITEM_CLASS}
+                  onClick={runAndClose(createTask)}
+                >
+                  <ListPlus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {t("message.createTask")}
+                </button>
+              </li>
+            )}
           </ul>
         </Popover>
       )}

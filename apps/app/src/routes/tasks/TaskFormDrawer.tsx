@@ -60,6 +60,21 @@ interface TaskFormDrawerProps {
   onSuccess: (task: TaskCoreResponseDto) => void;
   /** Chỉ chế độ TẠO: dự án điền sẵn (mở từ board/workspace). */
   defaultProject?: { readonly id: string; readonly name: string | null };
+  /**
+   * S20-CHAT-MSGTOTASK-1 — chỉ chế độ TẠO: giá trị điền sẵn, trộn vào giá trị MẶC ĐỊNH của form (không
+   * phải giá trị đã sửa) ⇒ form vẫn «chưa sửa», hủy không bị hỏi lại, chưa gọi API nào tới khi bấm Lưu.
+   * `projectId` ở đây thắng `defaultProject`. Dùng lại ở S20-GOAL-LINKEDTASKS-1 — đừng dựng prop thứ hai.
+   */
+  initialValues?: Partial<TaskFormValues>;
+  /**
+   * Chỉ chế độ TẠO: điền «Tôi» vào người phụ trách KỂ CẢ khi có dự án (mặc định chỉ điền khi không có dự
+   * án). Vẫn không đè lựa chọn người dùng đã tự chọn.
+   */
+  defaultAssigneeMe?: boolean;
+  /** Khe nội dung TRÊN các ô (cảnh báo ngữ cảnh) — chế độ TẠO lẫn SỬA. */
+  beforeFields?: React.ReactNode;
+  /** Khe nội dung DƯỚI các ô, trong form (tuỳ chọn phụ của caller). */
+  afterFields?: React.ReactNode;
 }
 
 const NO_FIELD_LOCKS: TaskPatchFieldLocks = {
@@ -84,6 +99,10 @@ export function TaskFormDrawer({
   onClose,
   onSuccess,
   defaultProject,
+  initialValues,
+  defaultAssigneeMe = false,
+  beforeFields,
+  afterFields,
 }: TaskFormDrawerProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -96,6 +115,7 @@ export function TaskFormDrawer({
   const me = useMyEmployeeLink(!isEdit);
   const myEmployeeId = me.status === "linked" ? me.employeeId : null;
   const defaultProjectId = isEdit ? undefined : defaultProject?.id;
+  const assignMeWithProject = !isEdit && defaultAssigneeMe;
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
@@ -103,7 +123,7 @@ export function TaskFormDrawer({
     defaultValues:
       isEdit && task
         ? taskToFormValues(task)
-        : { ...EMPTY_TASK_FORM, projectId: defaultProjectId ?? "" },
+        : { ...EMPTY_TASK_FORM, projectId: defaultProjectId ?? "", ...initialValues },
   });
 
   const {
@@ -122,12 +142,24 @@ export function TaskFormDrawer({
   // Tạo việc ngoài dự án ⇒ người phụ trách mặc định là TÔI (phạm vi Own/Team bắt buộc có người — thiếu
   // là 403). Chạy khi /auth/me về; `resetField` đổi cả giá trị mặc định ⇒ form vẫn «chưa sửa». Người
   // dùng đã tự chọn người / chọn dự án trước đó thì không đè.
+  // S20-CHAT-MSGTOTASK-1: `defaultAssigneeMe` bỏ điều kiện «không có dự án» (tạo việc từ tin nhắn ở phòng
+  // dự án vẫn giao cho tôi), các điều kiện không-đè còn nguyên.
   useEffect(() => {
-    if (isEdit || defaultProjectId || !myEmployeeId) return;
+    if (isEdit || !myEmployeeId) return;
+    if (defaultProjectId && !assignMeWithProject) return;
     if (getFieldState("assigneeEmployeeId").isDirty) return;
-    if (getValues("assigneeEmployeeId") || getValues("projectId")) return;
+    if (getValues("assigneeEmployeeId")) return;
+    if (getValues("projectId") && !assignMeWithProject) return;
     resetField("assigneeEmployeeId", { defaultValue: myEmployeeId });
-  }, [isEdit, defaultProjectId, myEmployeeId, getFieldState, getValues, resetField]);
+  }, [
+    isEdit,
+    defaultProjectId,
+    assignMeWithProject,
+    myEmployeeId,
+    getFieldState,
+    getValues,
+    resetField,
+  ]);
 
   useDirtyFormGuard({ isDirty });
 
@@ -227,6 +259,7 @@ export function TaskFormDrawer({
         className="space-y-4"
         onSubmit={handleSubmit((values) => mutation.mutate(values))}
       >
+        {beforeFields}
         <div className="space-y-1.5">
           <label htmlFor="task-title" className="text-sm font-medium text-foreground">
             {t("tasks.form.fields.title")}
@@ -404,6 +437,7 @@ export function TaskFormDrawer({
             )}
           </div>
         </div>
+        {afterFields}
       </form>
     </Dialog>
   );

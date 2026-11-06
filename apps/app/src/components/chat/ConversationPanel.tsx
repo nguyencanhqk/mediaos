@@ -13,7 +13,12 @@ import { ApiError, chatApi, chatKeys, useCan } from "@mediaos/web-core";
 import { Button, Skeleton } from "@mediaos/ui";
 import type { ChatReactionEmoji, ChatRoomDto, ChatRoomMemberDto } from "@mediaos/contracts";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useChatStore, type PendingChatMessage, type StoredChatMessage } from "@/stores/chat.store";
+import {
+  createClientMessageId,
+  useChatStore,
+  type PendingChatMessage,
+  type StoredChatMessage,
+} from "@/stores/chat.store";
 import { CHAT_PAIRS } from "@/routes/chat/constants";
 import { ChatEmptyHero } from "./ChatEmptyHero";
 import { ConnectionBanner } from "./ConnectionBanner";
@@ -22,6 +27,7 @@ import { MessageComposer, type ComposerSubmitPayload } from "./MessageComposer";
 import type { ReplyQuoteState } from "./composer/ComposerNotices";
 import { useChatDraftStore } from "./chat-draft.store";
 import { MessageList } from "./MessageList";
+import { MessageToTaskDialog } from "./MessageToTaskDialog";
 import { PinnedMessageBar } from "./PinnedMessageBar";
 import { TypingIndicator } from "./TypingIndicator";
 import { roomDisplayName } from "./chat-format";
@@ -203,6 +209,8 @@ export function ConversationPanel({
     [room.id, setDraftReplyTo],
   );
   const [recallTarget, setRecallTarget] = useState<StoredChatMessage | null>(null);
+  /** S20-CHAT-MSGTOTASK-1 — tin đang được tạo việc (hộp «Tạo việc» mở chồng trên phòng). */
+  const [taskSource, setTaskSource] = useState<StoredChatMessage | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   /**
@@ -244,6 +252,13 @@ export function ConversationPanel({
       return ok;
     },
     [context, conversation, leaveContext],
+  );
+
+  /** S20-CHAT-MSGTOTASK-1 — «Gửi link việc vào phòng»: một tin CHỈ có URL, cùng đường gửi/thử lại như ô soạn. */
+  const sendTaskLink = useCallback(
+    (url: string) =>
+      void submit({ clientMessageId: createClientMessageId(), body: url, fileIds: [], mentions: [] }),
+    [submit],
   );
 
   const resend = useCallback(
@@ -389,6 +404,8 @@ export function ConversationPanel({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (document.querySelector('[data-floating-layer="open"]') !== null) return;
+      // Hộp «Tạo việc» tự nghe Esc — không để một Esc vừa đóng hộp vừa huỷ câu trả lời đang soạn.
+      if (taskSource !== null) return;
 
       if (e.key === "Escape") {
         if (replyTo !== null) {
@@ -412,7 +429,7 @@ export function ConversationPanel({
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [replyTo, isInfoOpen, onToggleInfo, onSearchInRoom, escapeClosesInfo]);
+  }, [replyTo, isInfoOpen, onToggleInfo, onSearchInRoom, escapeClosesInfo, taskSource]);
 
   const title = roomDisplayName(room, members, myUserId, (code) =>
     t("rooms.directFallback", { code }),
@@ -575,6 +592,7 @@ export function ConversationPanel({
             onRecall: setRecallTarget,
             onToggleReaction: toggleReaction,
             onCopy: copyMessage,
+            onCreateTask: setTaskSource,
           }}
         />
       )}
@@ -593,6 +611,16 @@ export function ConversationPanel({
         onCancelReply={() => setReplyTo(null)}
         onSubmit={submit}
       />
+
+      {taskSource !== null && (
+        <MessageToTaskDialog
+          room={room}
+          message={taskSource}
+          senderName={taskSource.senderName ?? roster.nameByUser.get(taskSource.senderId) ?? null}
+          onClose={() => setTaskSource(null)}
+          onSendTaskLink={(room.isArchived ?? false) ? undefined : sendTaskLink}
+        />
+      )}
 
       {recallTarget !== null && (
         <ConfirmDialog

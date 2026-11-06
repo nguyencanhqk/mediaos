@@ -382,4 +382,40 @@ describe("TaskFormDrawer (tạo) — người phụ trách mặc định là tô
       projectId: "proj-001",
     });
   });
+
+  // S20-CHAT-MSGTOTASK-1 — prop additive cho caller điền sẵn (tạo việc từ tin nhắn, GOAL-LINKEDTASKS sau).
+  it("initialValues điền tiêu đề/mô tả; projectId của initialValues thắng defaultProject", async () => {
+    setCapabilities({ "create:task": true });
+    renderCreate({
+      defaultProject: { id: "proj-001", name: "Dự án A" },
+      initialValues: { title: "Tiêu đề từ tin", description: "Mô tả từ tin", projectId: "" },
+    });
+    expect(field("task-title")).toHaveValue("Tiêu đề từ tin");
+    expect(field("task-description")).toHaveValue("Mô tả từ tin");
+    expect(field("task-project")).toHaveValue("");
+    submitForm();
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(taskCoreApi.createTask).mock.calls[0]?.[0]).toMatchObject({
+      title: "Tiêu đề từ tin",
+      description: "Mô tả từ tin",
+    });
+  });
+
+  it("defaultAssigneeMe ⇒ có dự án vẫn điền «Tôi»; không có cờ thì giữ luật cũ (để trống)", async () => {
+    setCapabilities({ "create:task": true });
+    renderCreate({ defaultProject: { id: "proj-001", name: "Dự án A" }, defaultAssigneeMe: true });
+    await waitFor(() => expect(field("task-assignee")).toHaveValue(ME_ID));
+    expect(field("task-project")).toHaveValue("proj-001");
+  });
+
+  it("beforeFields / afterFields vẽ trong form, chế độ không có thì không vẽ gì thêm", () => {
+    setCapabilities({ "create:task": true });
+    renderCreate({
+      beforeFields: <p data-testid="slot-before">trước</p>,
+      afterFields: <p data-testid="slot-after">sau</p>,
+    });
+    const form = document.getElementById("task-core-form");
+    expect(form).toContainElement(screen.getByTestId("slot-before"));
+    expect(form).toContainElement(screen.getByTestId("slot-after"));
+  });
 });
