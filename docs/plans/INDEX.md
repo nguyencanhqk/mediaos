@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**736 WO** · có micro-plan: **370/736** · ⬜ 112 chờ · 🔵 2 đang làm · ✅ 621 xong · 🔴 1 chặn
+**736 WO** · có micro-plan: **371/736** · ⬜ 111 chờ · 🔵 2 đang làm · ✅ 622 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -771,7 +771,7 @@
 | `S19-OPS-MINIOTESTUSER-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S16-SOCIAL-STORAGETESTGATE-1 | Hồ sơ storage `live` của int-spec chạy bằng tài khoản MinIO riêng chỉ  |
 | `S19-OPS-AUDITVITE-1` | amber | ✅ xong | — *(chưa)* | — | Cổng `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trên mọi PR  |
 | `S19-OPS-AUDITDOS-1` | amber | ✅ xong | — *(chưa)* | — | Cổng bắt buộc `Dependency scan (pnpm audit --audit-level=high)` ĐỎ trê |
-| `S19-OPS-ZOD4-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-AUDITDOS-1 | Nâng zod 3 → 4 (≥ 4.6.6) toàn monorepo — api · app · contracts (nguồn  |
+| `S19-OPS-ZOD4-1` | 🔴 | ✅ xong | [📄](S19-OPS-ZOD4-1.md) | ✅S19-OPS-AUDITDOS-1 | Nâng zod 3 → 4 (≥ 4.6.6) toàn monorepo — api · app · contracts (nguồn  |
 
 ## Sprint 20
 
