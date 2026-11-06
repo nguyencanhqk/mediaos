@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import * as contracts from "./index";
 import {
   assetSummaryResponseSchema,
+  createFeedCommentSchema,
+  FEED_BODY_MAX,
   payrollSysRefEnum,
   payrollTemplatePreviewSchema,
   updateShiftSchema,
@@ -75,5 +78,38 @@ describe("C1.4 — z.record(<enum>) nhận map THIẾU khoá", () => {
     const one = payrollTemplatePreviewSchema.shape.inputs.parse({ [key]: "100.00" });
     expect(one).toEqual({ [key]: "100.00" });
     expect(payrollTemplatePreviewSchema.shape.inputs.parse(undefined)).toEqual({});
+  });
+});
+
+/**
+ * S19-OPS-ZOD4-1 plan §10.9 — zod 4 đếm `.min/.max/.length` của CHUỖI theo CODE POINT (zod 3: đơn vị
+ * UTF-16), không có cờ cấu hình. Chấp nhận có chủ đích: khớp `length()`/`varchar(n)` của Postgres.
+ * Lần nâng zod sau mà đổi lại cách đếm ⇒ các ca dưới ĐỎ, buộc ra quyết định lại thay vì trôi im lặng.
+ */
+describe("§10.9 — độ dài chuỗi đếm theo code point", () => {
+  const EMOJI = "😀"; // 1 code point = 2 đơn vị UTF-16
+  const N = 5;
+
+  it(".max(n) nhận n emoji (2n đơn vị UTF-16), từ chối n+1", () => {
+    const schema = z.string().max(N);
+    expect(EMOJI.repeat(N).length).toBe(2 * N);
+    expect(schema.safeParse(EMOJI.repeat(N)).success).toBe(true);
+    expect(schema.safeParse(EMOJI.repeat(N + 1)).success).toBe(false);
+  });
+
+  it(".min(2) từ chối MỘT emoji dù nó dài 2 đơn vị UTF-16", () => {
+    expect(z.string().min(2).safeParse(EMOJI).success).toBe(false);
+    expect(z.string().min(2).safeParse(EMOJI.repeat(2)).success).toBe(true);
+  });
+
+  it(".length(n) khớp đúng n emoji", () => {
+    expect(z.string().length(N).safeParse(EMOJI.repeat(N)).success).toBe(true);
+    expect(z.string().length(2 * N).safeParse(EMOJI.repeat(N)).success).toBe(false);
+  });
+
+  it("schema thật: thân bình luận nhận FEED_BODY_MAX emoji, từ chối thêm một", () => {
+    const body = createFeedCommentSchema.shape.body;
+    expect(body.safeParse(EMOJI.repeat(FEED_BODY_MAX)).success).toBe(true);
+    expect(body.safeParse(EMOJI.repeat(FEED_BODY_MAX + 1)).success).toBe(false);
   });
 });
