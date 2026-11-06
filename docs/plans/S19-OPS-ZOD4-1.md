@@ -476,3 +476,38 @@ Quét AST `src/` 6 gói (bỏ spec): 131 chuỗi `.default()` có bước biến
 - Lệch có chủ đích so với §4.1: int-spec phong bì dùng controller THĂM DÒ `@Public()` chỉ trong module test (app thật qua
   `applyMainPipeline`, cùng pipe toàn cục + filter), thay vì route nghiệp vụ — tránh lẫn 401/403 và seed quyền; đo đúng đường
   pipe → `ZodValidationException` → filter. Ca «`getZodError()` không có `issues`» để C3 (chỉ có nghĩa với nestjs-zod 5).
+
+### 10.6 Pha C3a (06/11/2026) — `coerceDate`, alias mã issue, swagger (đánh số §10.6 vì §10.5 đã dùng cho ratchet)
+
+**Quyết định `z.coerce.date()` → `coerceDate()`** (`packages/contracts/src/common/coerce-date.ts`, export từ index):
+`z.codec(z.union([z.string(), z.number()]), z.date(), { decode: v => new Date(v), encode: d => d.toISOString() })`.
+
+Đo thực (nestjs-zod 5.5.0): `createZodDto` sinh OpenAPI qua `_OPENAPI_METADATA_FACTORY` với `io: "input"` CỐ ĐỊNH; phía
+`io: "output"` chỉ chạy khi dùng `ZodResponse`/`ZodSerializerDto` — repo KHÔNG dùng cái nào (`grep` ở `apps/api/src` = 0).
+Vì vậy codec (phía vào biểu diễn được) là đủ; `openapi-docs` + `openapi-contract` e2e xanh trên document thật. Hạn chế ghi nhận:
+nếu sau này dùng `ZodResponse` với DTO có `coerceDate()` ⇒ `toJSONSchema(io:"output")` NÉM — lúc đó chuyển field phản hồi sang
+`z.iso.datetime()` (chuỗi) hoặc đổi `override`.
+
+| Nhóm | Chỗ dùng (file) | Chiều | Ghi chú |
+| --- | --- | --- | --- |
+| Query/filter (input) | `auth.ts` (from/to_date ×4) · `me.ts` · `my-notification.ts` (created_from/to, created_before) · `notification-admin.ts` · `foundation/file-access-log.ts` | input | JSON Schema `["string","number"]` |
+| Phản hồi (output, KHÔNG qua ZodResponse) | `auth/role-permission-list.ts` · `crypto.ts` · `hr/contracts.ts` · `hr/employee-code-config.ts` · `hr/master-data.ts` | output | FE `parse` JSON (chuỗi) ⇒ Date; không sinh JSON Schema output |
+| Ngoài contracts | `web-core/src/lib/hr-master-data-api.ts` (2 chỗ) | output FE | để agent gói web-core |
+
+Khác `z.coerce.date()`, ghim ở `common/coerce-date.spec.ts`: `null` ⇒ `invalid_union` (coerce ra 1970-01-01); đối tượng `Date`
+truyền vào parse ⇒ `invalid_union` (coerce nhận). Chuỗi ngày/ISO/epoch-ms cho kết quả y hệt; `"nope"`/`""` ⇒ `invalid_type` expected `date`.
+
+**Alias mã issue** (`apps/api/src/common/filters/zod-issue-rule.ts`, spec cạnh): `invalid_format→invalid_string`;
+`invalid_value→invalid_enum_value` (values ≥ 2) | `invalid_literal` (values = 1); `invalid_union` có `discriminator`/`note`
+→ `invalid_union_discriminator`; `invalid_type` expected `date` → `invalid_date`; còn lại giữ mã v4. Path nối bằng `String(p)`
+từng phần tử (v4 cho phép symbol; `join` thẳng sẽ ném). Không có `issues` ⇒ 400, `details: null`, không 500.
+Thông điệp mặc định v4 khác v3 («Required» ⇒ «Invalid input: expected string, received undefined»): FE KHÔNG hiển thị
+`details[].message` thô (chỉ đọc `details.kind` của lỗi nghiệp vụ do server tự đặt) ⇒ KHÔNG đặt `z.config({ customError })`.
+
+**Swagger**: `patchNestJsSwagger` + nạp SchemaObjectFactory bằng `createRequire` ⇒ bỏ; thay `cleanupOpenApiDoc(createDocument(...))`.
+Bẫy: DTO query RỖNG (`z.object({})`, `CandidateSummaryQueryDto`) làm `cleanupOpenApiDoc` ném «Query or url parameters must be an
+object type» ⇒ bỏ tham số `@Query()` thừa ở `recruit.controllers.ts` (schema rỗng vốn không validate gì).
+
+**Khuôn sửa contracts**: `idSchema = z.guid()` · `emailParams()` trả `{ pattern: ZOD3_EMAIL_REGEX, message? }` ·
+`z.record(enum, X)` → `z.partialRecord` (asset `byStatus`, payroll preview `inputs`) · `withLeaveDraftRefines` /
+`refineLeavePolicyTarget` generic `S extends z.ZodType<Fields>` (refine trả `this`) · `optionalEnumParam<T extends readonly string[]>`.
