@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, taskCoreApi, authApi, ApiError } from "@mediaos/web-core";
+import { useAuthStore, taskCoreApi, taskProjectApi, authApi, ApiError } from "@mediaos/web-core";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TaskFormDrawer } from "./TaskFormDrawer";
 import { editableDirtyFields, taskFormToUpdatePayload } from "./task-form-schema";
@@ -381,5 +381,63 @@ describe("TaskFormDrawer (tạo) — người phụ trách mặc định là tô
     expect(vi.mocked(taskCoreApi.createTask).mock.calls[0]?.[0]).toMatchObject({
       projectId: "proj-001",
     });
+  });
+
+  // Đo trên trình duyệt thật 06/11 (smoke KPI MSGTOTASK): lần mở ĐẦU, /projects về SAU khi form mount và CÓ dự
+  // án điền sẵn ⇒ option dự phòng bị gỡ, node <option> đang chọn biến mất ⇒ ô hiện «Không chọn» trong khi form
+  // vẫn gửi projectId. Lần mở sau (cache ấm) thì đúng — nên ca này cho danh sách về muộn.
+  it("danh sách dự án về SAU khi mở và có dự án điền sẵn ⇒ ô dự án vẫn chọn đúng dự án đó", async () => {
+    setCapabilities({ "create:task": true, "read:project": true });
+    vi.mocked(taskProjectApi.listProjects).mockResolvedValueOnce([
+      { id: "proj-000", name: "Dự án Z" },
+      { id: "proj-001", name: "Dự án A (từ danh sách)" },
+    ] as never);
+    renderCreate({ defaultProject: { id: "proj-001", name: "Dự án A" } });
+    expect(field("task-project")).toHaveValue("proj-001");
+
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "Dự án Z" })).toBeInTheDocument(),
+    );
+    expect(field("task-project")).toHaveValue("proj-001");
+    expect(screen.getAllByRole("option", { selected: true }).map((o) => o.textContent)).toContain(
+      "Dự án A (từ danh sách)",
+    );
+    expect(screen.queryByRole("option", { name: "Dự án A" })).not.toBeInTheDocument();
+  });
+
+  // S20-CHAT-MSGTOTASK-1 — prop additive cho caller điền sẵn (tạo việc từ tin nhắn, GOAL-LINKEDTASKS sau).
+  it("initialValues điền tiêu đề/mô tả; projectId của initialValues thắng defaultProject", async () => {
+    setCapabilities({ "create:task": true });
+    renderCreate({
+      defaultProject: { id: "proj-001", name: "Dự án A" },
+      initialValues: { title: "Tiêu đề từ tin", description: "Mô tả từ tin", projectId: "" },
+    });
+    expect(field("task-title")).toHaveValue("Tiêu đề từ tin");
+    expect(field("task-description")).toHaveValue("Mô tả từ tin");
+    expect(field("task-project")).toHaveValue("");
+    submitForm();
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(taskCoreApi.createTask).mock.calls[0]?.[0]).toMatchObject({
+      title: "Tiêu đề từ tin",
+      description: "Mô tả từ tin",
+    });
+  });
+
+  it("defaultAssigneeMe ⇒ có dự án vẫn điền «Tôi»; không có cờ thì giữ luật cũ (để trống)", async () => {
+    setCapabilities({ "create:task": true });
+    renderCreate({ defaultProject: { id: "proj-001", name: "Dự án A" }, defaultAssigneeMe: true });
+    await waitFor(() => expect(field("task-assignee")).toHaveValue(ME_ID));
+    expect(field("task-project")).toHaveValue("proj-001");
+  });
+
+  it("beforeFields / afterFields vẽ trong form, chế độ không có thì không vẽ gì thêm", () => {
+    setCapabilities({ "create:task": true });
+    renderCreate({
+      beforeFields: <p data-testid="slot-before">trước</p>,
+      afterFields: <p data-testid="slot-after">sau</p>,
+    });
+    const form = document.getElementById("task-core-form");
+    expect(form).toContainElement(screen.getByTestId("slot-before"));
+    expect(form).toContainElement(screen.getByTestId("slot-after"));
   });
 });

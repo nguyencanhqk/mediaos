@@ -221,6 +221,8 @@ export default {
     quickLike: "Thích nhanh",
     copyFailed: "Không chép được nội dung. Trình duyệt đang chặn quyền truy cập clipboard.",
     moreActions: "Thêm tác vụ",
+    // S20-CHAT-MSGTOTASK-1 — mục trong menu ⋯
+    createTask: "Tạo việc",
   },
 
   // ── S8-CHAT-UX-FE-3 — thả cảm xúc (CHAT-FUNC-019 · CHAT-DEC-018) ──
@@ -617,5 +619,20 @@ export default {
     loadingLabel: "Đang tải danh sách đã xem",
     error: "Không tải được danh sách.",
     errorLabel: "Không tải được danh sách đã xem",
+  },
+
+  /**
+   * S20-CHAT-MSGTOTASK-1 (US-CHAT-NV-10) — tạo việc từ một tin. `sourceLine` đi vào MÔ TẢ việc (dữ liệu
+   * lưu ở server), không phải nhãn giao diện — đổi câu chữ chỉ ảnh hưởng việc tạo về sau.
+   */
+  toTask: {
+    sourceLine: "Từ tin nhắn của {{name}} lúc {{time}}",
+    visibilityWarning: "Nội dung tin sẽ hiển thị cho những ai xem được việc này",
+    sendLinkToRoom: "Gửi link việc vào phòng",
+    sendLinkHint: "Chỉ gửi đường dẫn tới việc, không gửi tiêu đề hay mô tả.",
+    created: "Đã tạo việc",
+    open: "Mở",
+    createdSourceRecalled: "Đã tạo việc, nhưng tin gốc vừa bị thu hồi — hãy kiểm tra lại mô tả.",
+    sourceGone: "Tin đã bị thu hồi hoặc không còn trong phòng — không tạo việc từ tin này.",
   },
 } as const;

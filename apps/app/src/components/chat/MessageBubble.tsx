@@ -53,6 +53,11 @@ export interface MessageBubbleActions {
    * cho ra một nút bấm im lặng không làm gì.
    */
   onCopy: (message: StoredChatMessage) => void;
+  /**
+   * S20-CHAT-MSGTOTASK-1 — mở hộp «Tạo việc» từ tin. Tuỳ chọn: caller không có chỗ mount hộp thì bỏ trống
+   * và mục không hiện. Tin `system` (nhánh vẽ riêng) và tin thu hồi không có thanh tác vụ ⇒ không có mục.
+   */
+  onCreateTask?: (message: StoredChatMessage) => void;
 }
 
 interface MessageBubbleProps {
@@ -191,6 +196,7 @@ export function MessageBubble({
 }: MessageBubbleProps): React.ReactElement {
   const { t } = useTranslation("chat");
   const isRecalled = message.recalledAt !== null;
+  const onCreateTask = actions.onCreateTask;
   const isPinned = message.pinnedAt !== null;
   // Roster là nguồn DỰ PHÒNG, không phải nguồn chính: `senderName` đi cùng chính tin nên nó đúng với thời
   // điểm gửi, còn roster là ảnh chụp hiện tại (người đổi tên thì tin cũ vẫn nên mang tên lúc gửi).
@@ -397,6 +403,7 @@ export function MessageBubble({
           onTogglePin={() => (isPinned ? actions.onUnpin(message) : actions.onPin(message))}
           onRecall={() => actions.onRecall(message)}
           onCopy={() => actions.onCopy(message)}
+          onCreateTask={onCreateTask !== undefined ? () => onCreateTask(message) : undefined}
         />
       )}
     </div>

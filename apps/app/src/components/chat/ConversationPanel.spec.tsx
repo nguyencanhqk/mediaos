@@ -4,13 +4,18 @@
  * (đang gửi/gửi lỗi), `MessageBubble.spec` (đã thu hồi) và `ChatPage.spec` (không có quyền).
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 import type { ChatRoomDto } from "@mediaos/contracts";
 
 const getMessages = vi.fn();
+const sendMessage = vi.fn();
+const createTask = vi.fn();
+// S20-CHAT-MSGTOTASK-1 — hộp «Tạo việc» dùng router (drawer việc · guard rời trang); ca ở đây không dựng router.
+vi.mock("@/routes/tasks/task-drawer-nav", () => ({ useTaskDrawer: () => ({ openTask: vi.fn() }) }));
+vi.mock("@/hooks/use-dirty-form-guard", () => ({ useDirtyFormGuard: () => {} }));
 // S20-CHAT-MENTIONPIN-1 — thanh tin ghim nạp `/pinned`; mock để ca cũ không gọi mạng thật.
 const getPinned = vi.fn();
 vi.mock("@mediaos/web-core", async (importOriginal) => {
@@ -23,7 +28,16 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       getMessages: (...args: unknown[]) => getMessages(...args),
       getPinned: (...args: unknown[]) => getPinned(...args),
       markRead: vi.fn().mockResolvedValue({ roomId: "", lastReadSeq: 0, unreadCount: 0 }),
+      sendMessage: (...args: unknown[]) => sendMessage(...args),
     },
+    taskCoreApi: { createTask: (...args: unknown[]) => createTask(...args), updateTask: vi.fn() },
+    // S20-CHAT-MSGTOTASK-1 — hộp «Tạo việc» nạp dự án / nhân viên / phòng ban / hồ sơ tôi.
+    taskProjectApi: { listProjects: vi.fn().mockResolvedValue([]) },
+    hrApi: {
+      listDepartments: vi.fn().mockResolvedValue([]),
+      listEmployees: vi.fn().mockResolvedValue({ items: [], meta: {} }),
+    },
+    authApi: { ...actual.authApi, me: vi.fn().mockResolvedValue({ employee: null }) },
   };
 });
 
@@ -464,5 +478,156 @@ describe("ConversationPanel · khung trả lời cho tin đã ra khỏi RAM (S20
     expect(within(composer).getByText(/Trả lời Trần B/)).toBeTruthy();
     expect(within(composer).queryByText("Tin gốc không còn trong phần đã tải")).toBeNull();
     expect(within(composer).queryByText("thân cũ trong ảnh chụp")).toBeNull();
+  });
+});
+
+// ── S20-CHAT-MSGTOTASK-1 — gate review: focus khi đóng hộp · tin bị thu hồi lúc hộp đang mở ──────────
+
+describe("ConversationPanel · tạo việc từ tin", () => {
+  const TASK_ID = "44444444-4444-4444-8444-444444444444";
+  const recallSource = () =>
+    act(() => {
+      useChatStore.getState().applyMessageRecalled({
+        roomId: ROOM_ID,
+        messageId: seededMessage().id,
+        recalledAt: "2026-08-04T10:05:00.000Z",
+      } as never);
+    });
+
+  beforeEach(() => {
+    sendMessage.mockReset();
+    createTask.mockReset();
+  });
+
+  async function openCreateTask() {
+    getMessages.mockResolvedValue([seededMessage()]);
+    renderPanel();
+    fireEvent.click(await screen.findByTestId("chat-message-more"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Tạo việc" }));
+    return screen.findByRole("dialog");
+  }
+
+  it("Huỷ hộp ⇒ focus quay về nút ⋯ của đúng tin, không rơi về body", async () => {
+    const dialog = await openCreateTask();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Hủy" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(screen.getByTestId("chat-message-more"));
+  });
+
+  it("tin bị THU HỒI qua realtime lúc hộp đang mở ⇒ đóng hộp, báo ngắn, focus về ô soạn", async () => {
+    const { toast } = await import("@mediaos/ui");
+    const warning = vi.spyOn(toast, "warning");
+    await openCreateTask();
+    recallSource();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0]?.[0]).toBe(
+      "Tin đã bị thu hồi hoặc không còn trong phòng — không tạo việc từ tin này.",
+    );
+    expect(document.activeElement?.tagName).toBe("TEXTAREA");
+    warning.mockRestore();
+  });
+
+  it("LƯU XONG ⇒ focus quay về nút ⋯ của đúng tin", async () => {
+    createTask.mockResolvedValue({ id: TASK_ID, projectId: null });
+    const dialog = await openCreateTask();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tạo" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(createTask).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(screen.getByTestId("chat-message-more"));
+  });
+
+  it("thu hồi TRONG LÚC đang gửi ⇒ chờ kết quả; thành công thì KHÔNG gửi link, một toast cảnh báo đúng sự thật", async () => {
+    const { toast } = await import("@mediaos/ui");
+    const warning = vi.spyOn(toast, "warning");
+    const success = vi.spyOn(toast, "success");
+    let resolveCreate: (task: unknown) => void = () => {};
+    createTask.mockReturnValue(new Promise((resolve) => (resolveCreate = resolve)));
+    const dialog = await openCreateTask();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Gửi link việc vào phòng" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tạo" }));
+    await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
+
+    recallSource();
+    // Đang gửi ⇒ hộp KHÔNG bị gỡ ngang.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await act(async () => resolveCreate({ id: TASK_ID, projectId: null }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(success).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0]?.[0]).toBe(
+      "Đã tạo việc, nhưng tin gốc vừa bị thu hồi — hãy kiểm tra lại mô tả.",
+    );
+    expect(warning.mock.calls[0]?.[1]).toMatchObject({ action: { label: "Mở" } });
+    warning.mockRestore();
+    success.mockRestore();
+  });
+
+  it("tin bị CẮT khỏi bộ nhớ (không phải thu hồi) ⇒ hộp vẫn mở, giữ nội dung đang gõ", async () => {
+    const dialog = await openCreateTask();
+    const title = within(dialog).getByLabelText(/Tiêu đề/) as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "Đang gõ dở" } });
+    act(() => {
+      useChatStore.setState((state) => ({
+        messagesByRoom: { ...state.messagesByRoom, [ROOM_ID]: [] },
+      }));
+    });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(title).toHaveValue("Đang gõ dở");
+  });
+
+  it("thu hồi lúc đang gửi rồi mutation LỖI ⇒ đóng hộp, đúng một cảnh báo thu hồi, không gửi link", async () => {
+    const { toast } = await import("@mediaos/ui");
+    const warning = vi.spyOn(toast, "warning");
+    let rejectCreate: (err: unknown) => void = () => {};
+    createTask.mockReturnValue(new Promise((_, reject) => (rejectCreate = reject)));
+    const dialog = await openCreateTask();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Gửi link việc vào phòng" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tạo" }));
+    await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
+
+    recallSource();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await act(async () => rejectCreate(new TypeError("Failed to fetch")));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0]?.[0]).toBe(
+      "Tin đã bị thu hồi hoặc không còn trong phòng — không tạo việc từ tin này.",
+    );
+    expect(sendMessage).not.toHaveBeenCalled();
+    warning.mockRestore();
+  });
+
+  it("ĐỔI PHÒNG khi panel không dựng lại (drawer) ⇒ hộp của phòng cũ bị bỏ", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (current: ChatRoomDto) => (
+      <QueryClientProvider client={client}>
+        <I18nextProvider i18n={i18n}>
+          <ConversationPanel
+            room={current}
+            members={[]}
+            myRole="member"
+            isInfoOpen={false}
+            onToggleInfo={vi.fn()}
+          />
+        </I18nextProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree(room));
+    fireEvent.click(await screen.findByTestId("chat-message-more"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Tạo việc" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    rerender(tree({ ...room, id: "99999999-9999-4999-8999-999999999999", name: "Phòng khác" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // Quay lại phòng cũ: hộp KHÔNG tự hiện lại.
+    rerender(tree(room));
+    await screen.findByTestId("chat-message-more");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

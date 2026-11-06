@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useForm, type FieldError } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
@@ -60,6 +60,28 @@ interface TaskFormDrawerProps {
   onSuccess: (task: TaskCoreResponseDto) => void;
   /** Chỉ chế độ TẠO: dự án điền sẵn (mở từ board/workspace). */
   defaultProject?: { readonly id: string; readonly name: string | null };
+  /**
+   * S20-CHAT-MSGTOTASK-1 — chỉ chế độ TẠO: giá trị điền sẵn, trộn vào giá trị MẶC ĐỊNH của form (không
+   * phải giá trị đã sửa) ⇒ form vẫn «chưa sửa», hủy không bị hỏi lại, chưa gọi API nào tới khi bấm Lưu.
+   * `projectId` ở đây thắng `defaultProject`. Dùng lại ở S20-GOAL-LINKEDTASKS-1 — đừng dựng prop thứ hai.
+   */
+  initialValues?: Partial<TaskFormValues>;
+  /**
+   * Chỉ chế độ TẠO: điền «Tôi» vào người phụ trách KỂ CẢ khi có dự án (mặc định chỉ điền khi không có dự
+   * án). Vẫn không đè lựa chọn người dùng đã tự chọn.
+   */
+  defaultAssigneeMe?: boolean;
+  /** Khe nội dung TRÊN các ô (cảnh báo ngữ cảnh) — chế độ TẠO lẫn SỬA. */
+  beforeFields?: React.ReactNode;
+  /** Khe nội dung DƯỚI các ô, trong form (tuỳ chọn phụ của caller). */
+  afterFields?: React.ReactNode;
+  /**
+   * id của một phần tử trong `beforeFields`/`afterFields` mà trình đọc màn hình phải đọc khi hộp mở
+   * (cảnh báo ngữ cảnh) ⇒ gắn vào `aria-describedby` của hộp thoại.
+   */
+  describedById?: string;
+  /** Báo khi form bắt đầu / thôi gửi (validate + mutation) — caller cần biết để không cắt ngang lần gửi. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 const NO_FIELD_LOCKS: TaskPatchFieldLocks = {
@@ -84,6 +106,12 @@ export function TaskFormDrawer({
   onClose,
   onSuccess,
   defaultProject,
+  initialValues,
+  defaultAssigneeMe = false,
+  beforeFields,
+  afterFields,
+  describedById,
+  onBusyChange,
 }: TaskFormDrawerProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -96,6 +124,7 @@ export function TaskFormDrawer({
   const me = useMyEmployeeLink(!isEdit);
   const myEmployeeId = me.status === "linked" ? me.employeeId : null;
   const defaultProjectId = isEdit ? undefined : defaultProject?.id;
+  const assignMeWithProject = !isEdit && defaultAssigneeMe;
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
@@ -103,7 +132,7 @@ export function TaskFormDrawer({
     defaultValues:
       isEdit && task
         ? taskToFormValues(task)
-        : { ...EMPTY_TASK_FORM, projectId: defaultProjectId ?? "" },
+        : { ...EMPTY_TASK_FORM, projectId: defaultProjectId ?? "", ...initialValues },
   });
 
   const {
@@ -122,14 +151,46 @@ export function TaskFormDrawer({
   // Tạo việc ngoài dự án ⇒ người phụ trách mặc định là TÔI (phạm vi Own/Team bắt buộc có người — thiếu
   // là 403). Chạy khi /auth/me về; `resetField` đổi cả giá trị mặc định ⇒ form vẫn «chưa sửa». Người
   // dùng đã tự chọn người / chọn dự án trước đó thì không đè.
+  // S20-CHAT-MSGTOTASK-1: `defaultAssigneeMe` bỏ điều kiện «không có dự án» (tạo việc từ tin nhắn ở phòng
+  // dự án vẫn giao cho tôi), các điều kiện không-đè còn nguyên.
   useEffect(() => {
-    if (isEdit || defaultProjectId || !myEmployeeId) return;
+    if (isEdit || !myEmployeeId) return;
+    if (defaultProjectId && !assignMeWithProject) return;
     if (getFieldState("assigneeEmployeeId").isDirty) return;
-    if (getValues("assigneeEmployeeId") || getValues("projectId")) return;
+    if (getValues("assigneeEmployeeId")) return;
+    if (getValues("projectId") && !assignMeWithProject) return;
     resetField("assigneeEmployeeId", { defaultValue: myEmployeeId });
-  }, [isEdit, defaultProjectId, myEmployeeId, getFieldState, getValues, resetField]);
+  }, [
+    isEdit,
+    defaultProjectId,
+    assignMeWithProject,
+    myEmployeeId,
+    getFieldState,
+    getValues,
+    resetField,
+  ]);
 
   useDirtyFormGuard({ isDirty });
+
+  // `Dialog` (packages/ui) chỉ nhận `description` dạng chuỗi muted dưới tiêu đề — không đủ nổi bật cho
+  // cảnh báo, và không có prop gắn id ngoài. Gắn thẳng lên phần tử `role="dialog"` tổ tiên: React để
+  // `aria-describedby={undefined}` nên không ghi đè thuộc tính này ở lượt render sau. `useLayoutEffect`
+  // để thuộc tính có TRƯỚC effect chuyển focus của `Dialog` (thời điểm trình đọc màn hình đọc hộp).
+  const formRef = useRef<HTMLFormElement>(null);
+  useLayoutEffect(() => {
+    if (!describedById) return;
+    const dialog = formRef.current?.closest('[role="dialog"]');
+    if (!dialog) return;
+    const previous = dialog.getAttribute("aria-describedby");
+    dialog.setAttribute(
+      "aria-describedby",
+      previous ? `${previous} ${describedById}` : describedById,
+    );
+    return () => {
+      if (previous) dialog.setAttribute("aria-describedby", previous);
+      else dialog.removeAttribute("aria-describedby");
+    };
+  }, [describedById]);
 
   const { data: projects } = useQuery({
     queryKey: taskKeys.projects.list({ limit: 100 }),
@@ -153,8 +214,13 @@ export function TaskFormDrawer({
   });
   // «Tôi» là option riêng ⇒ bỏ chính tôi khỏi danh sách để không lặp.
   const employees = (employeesPage?.items ?? []).filter((e) => e.id !== myEmployeeId);
-  const showDefaultProjectOption =
-    defaultProjectId !== undefined && !(projects ?? []).some((p) => p.id === defaultProjectId);
+  // Option của dự án điền sẵn là MỘT node cố định (đứng đầu), danh sách bỏ dự án đó ra. Trước đây option dự
+  // phòng chỉ hiện khi danh sách CHƯA có dự án ⇒ /projects về sau khi mở thì React gỡ đúng node <option> đang
+  // chọn ⇒ trình duyệt reset ô về «Không chọn» trong khi form vẫn giữ (và gửi) projectId — đo trên trình
+  // duyệt thật 06/11; lần mở sau (cache ấm) không lộ.
+  const defaultProjectName =
+    (projects ?? []).find((p) => p.id === defaultProjectId)?.name ?? defaultProject?.name ?? null;
+  const listedProjects = (projects ?? []).filter((p) => p.id !== defaultProjectId);
 
   const mutation = useMutation({
     mutationFn: async (values: TaskFormValues): Promise<TaskCoreResponseDto> => {
@@ -193,6 +259,10 @@ export function TaskFormDrawer({
   const assigneeRejected = mutation.isError && isAssigneeRejection(mutation.error);
 
   const busy = isSubmitting || mutation.isPending;
+  // Layout effect: caller biết «đang gửi» ngay trong commit của lượt bấm Lưu, không hở một nhịp render.
+  useLayoutEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
   const noop = () => {};
   const errFor = (e: FieldError | undefined) => (e ? t(e.message ?? "") : undefined);
 
@@ -223,10 +293,12 @@ export function TaskFormDrawer({
       )}
       <form
         id="task-core-form"
+        ref={formRef}
         noValidate
         className="space-y-4"
         onSubmit={handleSubmit((values) => mutation.mutate(values))}
       >
+        {beforeFields}
         <div className="space-y-1.5">
           <label htmlFor="task-title" className="text-sm font-medium text-foreground">
             {t("tasks.form.fields.title")}
@@ -273,12 +345,12 @@ export function TaskFormDrawer({
           ) : (
             <Select id="task-project" {...register("projectId")}>
               <option value="">{t("tasks.form.placeholders.none")}</option>
-              {showDefaultProjectOption && (
+              {defaultProjectId !== undefined && (
                 <option value={defaultProjectId}>
-                  {defaultProject?.name ?? t("quickAdd.form.currentProject")}
+                  {defaultProjectName ?? t("quickAdd.form.currentProject")}
                 </option>
               )}
-              {(projects ?? []).map((p) => (
+              {listedProjects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -404,6 +476,7 @@ export function TaskFormDrawer({
             )}
           </div>
         </div>
+        {afterFields}
       </form>
     </Dialog>
   );
