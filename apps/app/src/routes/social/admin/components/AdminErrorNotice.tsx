@@ -1,8 +1,8 @@
 /**
  * S16-SOCIAL-FE-3 — dải báo lỗi của cụm quản trị bảng tin (plan D5).
  *
- * App không có hệ toast và `QueryClient` không khai `MutationCache.onError` ⇒ một lời gọi hỏng mà không
- * vẽ dải này là IM LẶNG tuyệt đối (bài học ở `feed/components/ActionErrorBanner.tsx`). Dải riêng, không
+ * `QueryClient` không khai `MutationCache.onError` ⇒ một lời gọi hỏng mà không vẽ dải này (hoặc gọi
+ * `showApiErrorToast`) là IM LẶNG tuyệt đối (bài học ở `feed/components/ActionErrorBanner.tsx`). Dải riêng, không
  * mở rộng `ActionErrorBanner`: tập lý do của cụm quản trị tra theo bảng của từng lời gọi (`admin-errors`).
  *
  * ⚠️ Chỉ nhận `reason` thuộc tập đóng — KHÔNG có prop nhận chuỗi. Câu chữ là việc của i18n

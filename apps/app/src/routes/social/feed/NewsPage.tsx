@@ -249,7 +249,7 @@ function NewsRow({ item }: { item: FeedNewsItemDto }): React.ReactElement {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: socialKeys.news.allOf() });
     },
-    // 🔴 KHÔNG được bỏ nhánh này. Không có toast, không có `MutationCache.onError` — thiếu `onError`
+    // 🔴 KHÔNG được bỏ nhánh này. Không có `MutationCache.onError` — thiếu `onError`
     // thì 021 hỏng là câm tuyệt đối: nút nhả ra, nhãn về như cũ, người dùng đóng tab tin rằng đã xác
     // nhận. `feed_post_acks` append-only, không có đường sửa tay, nên cái thiếu đó là VĨNH VIỄN.
     onError: (err: unknown) =>

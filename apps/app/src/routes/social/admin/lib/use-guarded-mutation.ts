@@ -40,7 +40,7 @@ export interface GuardedMutationOptions<TData, TVariables> {
    */
   mutationFn: (variables: TVariables, signal: AbortSignal) => Promise<TData>;
   onSuccess: (data: TData, variables: TVariables) => void;
-  /** BẮT BUỘC: app không có toast toàn cục — mutation thiếu `onError` là hỏng im lặng. */
+  /** BẮT BUỘC: không có `MutationCache.onError` toàn cục — mutation thiếu `onError` là hỏng im lặng. */
   onError: (error: unknown, variables: TVariables) => void;
   /** `true` ⇒ sau lượt THÀNH CÔNG khoá không nhả nữa (một lượt mount, một lần ghi). Mặc định `false`. */
   keepLockAfterSuccess?: boolean;

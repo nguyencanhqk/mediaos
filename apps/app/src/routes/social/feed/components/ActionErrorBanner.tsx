@@ -2,11 +2,13 @@
  * S16-SOCIAL-FE-1 — dải báo lỗi cho HÀNH ĐỘNG GHI của bảng tin.
  *
  * ┌─ VÌ SAO TỒN TẠI ─────────────────────────────────────────────────────────────────────────────┐
- * │ FULL gate 23/09/2026 đo được: `routes/social` có 12 `useMutation` và **0** `onError`, trong    │
- * │ khi 13 module khác của app có tổng cộng 203 chỗ. App KHÔNG có hệ toast (`grep Toaster|useToast │
- * │ |sonner` = 0) và `QueryClient` ở `main.tsx` KHÔNG khai `MutationCache.onError`. Nghĩa là mọi   │
+ * │ FULL gate 23/09/2026 đo được: `routes/social` có 12 `useMutation` và **0** `onError` ⇒ mọi    │
  * │ hành động ghi hỏng đều IM LẶNG TUYỆT ĐỐI: nút nhả ra như cũ, không một ký tự nào xuất hiện.    │
  * │ Người dùng bấm lại vài lần rồi kết luận nút hỏng — hoặc tệ hơn, tin rằng việc đã xong.         │
+ * │                                                                                               │
+ * │ Từ S20-FE-TOAST-1 app CÓ hệ thông báo nổi (`toast` của @mediaos/ui, `showApiErrorToast`).    │
+ * │ Dải này vẫn là đường báo lỗi CHÍNH của SOCIAL: lỗi nằm cạnh đúng thẻ/khối hỏng, có lý do cụ    │
+ * │ thể. Mutation đã vẽ dải thì KHÔNG gọi toast thêm (báo hai lần). Rào: social-mutation-onerror. │
  * └───────────────────────────────────────────────────────────────────────────────────────────────┘
  *
  * `role="alert"` để trình đọc màn hình đọc ngay khi nó xuất hiện — người dùng bàn phím/screen reader

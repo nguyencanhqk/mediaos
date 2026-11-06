@@ -117,8 +117,8 @@ export function PostDetailPage(): React.ReactElement {
       setLocalError(null);
       setDroppedMentionCount(created.droppedMentions.length);
     },
-    // Thiếu `onError` ở đây là câm TUYỆT ĐỐI: app không có hệ toast và `QueryClient` ở `main.tsx`
-    // không khai `MutationCache.onError` ⇒ nút nhả ra như cũ, không một ký tự nào xuất hiện.
+    // Thiếu `onError` ở đây là câm TUYỆT ĐỐI: `QueryClient` ở `main.tsx` không khai
+    // `MutationCache.onError` ⇒ nút nhả ra như cũ, không một ký tự nào xuất hiện.
     onError: reportLocalError("comment"),
   });
 

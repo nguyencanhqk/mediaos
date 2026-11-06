@@ -40,6 +40,9 @@ vi.mock("@/routes/tasks/TaskDetailDrawer", () => ({
 vi.mock("../topbar/GlobalTopbar", () => ({ GlobalTopbar: () => <div data-testid="topbar" /> }));
 vi.mock("../home/AppSwitcher", () => ({ AppSwitcher: () => null }));
 vi.mock("@/hooks/use-current-route-meta", () => ({ useCurrentRouteMeta: () => undefined }));
+// S20-FE-TOAST-2 — favicon động gọi API thương hiệu thật ⇒ 401 → redirectToAuth ⇒ jsdom in nhiễu
+// «Not implemented: navigation». Favicon không thuộc phạm vi spec này: trả «chưa có dữ liệu».
+vi.mock("@/hooks/use-branding", () => ({ useBrandingQuery: () => ({ data: undefined }) }));
 
 // S7-CHAT-FE-1: cô lập hạ tầng realtime khỏi spec guard (hành vi của hook có spec riêng —
 // `use-chat-realtime.spec.tsx`), ĐỒNG THỜI làm điểm neo cho ca "shell có thật sự gọi hook" bên dưới.
@@ -168,6 +171,28 @@ describe("ProtectedShell — hệ thông báo nổi dùng chung (S20-FE-TOAST-1)
     expect(within(region).getByRole("alert")).toHaveTextContent("Máy chủ đang bận");
     expect(consoleError).not.toHaveBeenCalledWith("[api]", "Máy chủ đang bận");
     consoleError.mockRestore();
+  });
+
+  // Ca «đăng xuất rồi B đăng nhập» nằm ở console root-layout.spec + web-core session-boundary.spec: ở đây vỏ
+  // không phiên tự điều hướng về app đăng nhập (jsdom không có navigation) nên chỉ khoá đổi phiên TẠI CHỖ.
+  it("đổi phiên tại chỗ A → B ⇒ người sau KHÔNG thấy thông báo của người trước (S20-FE-TOAST-2)", () => {
+    setUser(false);
+    renderShell("/home");
+    act(() =>
+      showApiErrorToast(new ApiError({ message: "Lỗi riêng của A", kind: "SERVER", status: 500 })),
+    );
+    const region = screen.getByRole("region", { name: "Thông báo" });
+    expect(region).toHaveTextContent("Lỗi riêng của A");
+
+    act(() =>
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: { id: "u2", email: "b@demo.local", fullName: "B", status: "Active", companyId: "co1" },
+      }),
+    );
+
+    // Truy vấn lại cả tài liệu: vỏ có thể dựng lại vùng thông báo khi đổi người dùng.
+    expect(screen.queryByText("Lỗi riêng của A")).toBeNull();
   });
 
   it("Toaster mount ĐÚNG một lần ở shell", () => {

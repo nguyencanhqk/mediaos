@@ -132,8 +132,8 @@ export function useFeedActions(): FeedActions {
   };
 
   /**
-   * Một `onError` cho cả bốn mutation. KHÔNG bỏ trống cái nào: app này không có hệ toast và
-   * `QueryClient` ở `main.tsx` không khai `MutationCache.onError`, nên mutation thiếu `onError` là
+   * Một `onError` cho cả bốn mutation. KHÔNG bỏ trống cái nào: `QueryClient` ở `main.tsx` không
+   * khai `MutationCache.onError` (toast chỉ hiện khi CÓ người gọi), nên mutation thiếu `onError` là
    * hỏng IM LẶNG TUYỆT ĐỐI — nút nhả ra như cũ, không một ký tự nào xuất hiện.
    *
    * S16-SOCIAL-FEMODERRMSG-1 — `"postGone"` (bài đã mất dưới chân) ⇒ kéo lại các danh sách + chi tiết

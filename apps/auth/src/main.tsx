@@ -2,7 +2,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 import { createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
-import { configureApiBaseUrl, configureClientVersion, i18n } from "@mediaos/web-core";
+import { configureApiBaseUrl, configureClientVersion, configureToast, i18n } from "@mediaos/web-core";
+import { toast } from "@mediaos/ui";
+import { RootLayout } from "@/routes/root-layout";
 import { LoginPage } from "@/routes/login";
 import { ForgotPasswordPage } from "@/routes/forgot-password";
 import { ResetPasswordPage } from "@/routes/reset-password";
@@ -18,11 +20,14 @@ import "@/index.css";
 // hướng về CHÍNH apps/auth = vòng lặp. KHÔNG configureAuthAppUrl ở đây.
 configureApiBaseUrl(import.meta.env.VITE_API_URL);
 configureClientVersion(import.meta.env.VITE_APP_VERSION);
+// S20-FE-TOAST-2 — đích hiển thị của showApiErrorToast (thiếu ⇒ lỗi chỉ rơi vào console). <Toaster /> mount
+// một lần ở RootLayout. Đích có `clear` ⇒ web-core tự dọn thông báo ở mỗi ranh giới phiên.
+configureToast(toast);
 
 // App đăng nhập trung tâm = SPA mỏng nhiều trang tĩnh (login/forgot/reset/session-expired) — KHÔNG có route
 // nội bộ cần bootstrapSession/TanStack Query (chưa có phiên để bootstrap). Router chỉ để điều hướng qua lại
 // giữa các trang public này (Link/redirect), không guard quyền.
-const rootRoute = createRootRoute();
+const rootRoute = createRootRoute({ component: RootLayout });
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
