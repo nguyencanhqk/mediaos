@@ -73,7 +73,7 @@ export function ShiftFormDialog({ open, onClose, shift }: ShiftFormDialogProps) 
   const createMut = useCreateShift();
   const updateMut = useUpdateShift();
 
-  const form = useForm<ShiftFormValues>({
+  const form = useForm<z.input<typeof shiftFormSchema>, unknown, ShiftFormValues>({
     resolver: zodResolver(shiftFormSchema),
     defaultValues: shift ? fromDto(shift) : emptyValues(),
     values: shift ? fromDto(shift) : emptyValues(),

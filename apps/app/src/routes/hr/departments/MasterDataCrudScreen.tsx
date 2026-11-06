@@ -51,7 +51,7 @@ export interface MasterDataScreenConfig<TItem, TValues extends FieldValues> {
   getLabel: (item: TItem) => string;
 
   // ── Form ─────────────────────────────────────────────────────────────────────
-  schema: ZodType<TValues>;
+  schema: ZodType<TValues, TValues>;
   emptyValues: TValues;
   toFormValues: (item: TItem) => TValues;
   toCreate: (values: TValues) => unknown;

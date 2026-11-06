@@ -4,6 +4,7 @@
  *
  * API: PATCH /foundation/sequences/:id (update:foundation-sequence) — gate ở màn cha (PermissionGate).
  */
+import type { z } from "zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,13 +45,13 @@ export function SequenceEditDialog({ sequence, onClose }: SequenceEditDialogProp
   const { t } = useTranslation("system");
   const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingValues, setPendingValues] = useState<SequenceFormValues | null>(null);
 
   const {
     register,
     handleSubmit,
-    getValues,
     formState: { isSubmitting },
-  } = useForm<SequenceFormValues>({
+  } = useForm<z.input<typeof sequenceFormSchema>, unknown, SequenceFormValues>({
     resolver: zodResolver(sequenceFormSchema),
     mode: "onSubmit",
     defaultValues: sequenceToFormValues(sequence),
@@ -96,7 +97,10 @@ export function SequenceEditDialog({ sequence, onClose }: SequenceEditDialogProp
           id="sequence-edit-form"
           noValidate
           className="space-y-4"
-          onSubmit={handleSubmit(() => setConfirmOpen(true))}
+          onSubmit={handleSubmit((values) => {
+            setPendingValues(values);
+            setConfirmOpen(true);
+          })}
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -165,7 +169,9 @@ export function SequenceEditDialog({ sequence, onClose }: SequenceEditDialogProp
         cancelLabel={t("sequences.form.confirm.cancelLabel")}
         busy={mutation.isPending}
         busyLabel={t("sequences.form.saving")}
-        onConfirm={() => mutation.mutate(getValues())}
+        onConfirm={() => {
+          if (pendingValues) mutation.mutate(pendingValues);
+        }}
         onCancel={() => setConfirmOpen(false)}
       />
     </>

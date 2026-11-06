@@ -125,7 +125,7 @@ export function buildCreateBadgeBody(draft: BadgeDraft): BadgeSubmission<CreateK
   };
   const parsed = createKudosBadgeSchema.safeParse(body);
   if (parsed.success) return { kind: "ready", body };
-  return { kind: "invalid", fields: invalidFields(parsed.error.issues.map((issue) => issue.path)) };
+  return { kind: "invalid", fields: invalidFields(parsed.error.issues.map((issue) => issue.path.filter((k): k is string | number => typeof k !== "symbol"))) };
 }
 
 /**
@@ -147,5 +147,5 @@ export function buildUpdateBadgeBody(
   if (Object.keys(body).length === 0) return { kind: "unchanged" };
   const parsed = updateKudosBadgeSchema.safeParse(body);
   if (parsed.success) return { kind: "ready", body };
-  return { kind: "invalid", fields: invalidFields(parsed.error.issues.map((issue) => issue.path)) };
+  return { kind: "invalid", fields: invalidFields(parsed.error.issues.map((issue) => issue.path.filter((k): k is string | number => typeof k !== "symbol"))) };
 }

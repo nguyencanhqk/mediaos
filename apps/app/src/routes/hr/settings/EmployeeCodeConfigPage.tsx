@@ -12,6 +12,7 @@
  *
  * States: forbidden · loading · error · form (luôn có config — server trả default, KHÔNG 404).
  */
+import type { z } from "zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -142,7 +143,7 @@ export function EmployeeCodeConfigPage() {
     staleTime: 30_000,
   });
 
-  const form = useForm<EmployeeCodeConfigFormValues>({
+  const form = useForm<z.input<typeof employeeCodeConfigFormSchema>, unknown, EmployeeCodeConfigFormValues>({
     resolver: zodResolver(employeeCodeConfigFormSchema),
     values: query.data ? fromConfigDto(query.data) : undefined,
     mode: "onBlur",

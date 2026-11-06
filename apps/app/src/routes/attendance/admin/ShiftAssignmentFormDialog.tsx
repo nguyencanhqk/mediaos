@@ -65,7 +65,7 @@ export function ShiftAssignmentFormDialog({
   const createMut = useCreateShiftAssignment();
   const defaultShiftId = shifts[0]?.id ?? "";
 
-  const form = useForm<AssignmentFormValues>({
+  const form = useForm<z.input<typeof assignmentFormSchema>, unknown, AssignmentFormValues>({
     resolver: zodResolver(assignmentFormSchema),
     defaultValues: emptyValues(defaultShiftId),
     mode: "onBlur",

@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import { useEffect, useCallback } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -170,7 +171,7 @@ export function LeaveRequestForm(props: LeaveRequestFormProps) {
   });
 
   // Form
-  const form = useForm<LeaveFormValues>({
+  const form = useForm<z.input<typeof leaveFormSchema>, unknown, LeaveFormValues>({
     resolver: zodResolver(leaveFormSchema),
     defaultValues: initialValues ?? EMPTY_LEAVE_FORM,
     mode: "onBlur",
