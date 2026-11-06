@@ -543,3 +543,23 @@ object type» ⇒ bỏ tham số `@Query()` thừa ở `recruit.controllers.ts` 
 | 6 | [LOW] `CandidateSummaryQueryDto` không ai dùng | Xoá DTO ở `apps/api/src/recruit/recruit.dto.ts`; FE không dùng schema — giữ `candidateSummaryQuerySchema` kèm chú thích KHÔNG gắn lại vào `@Query()` (cleanupOpenApiDoc ném với object rỗng) | typecheck |
 | 7 | [LOW] `coerceDate` ngày rác ra «expected date, received Date» | `z.date({ error: "Invalid date" })` ở phía ra codec; mã vẫn `invalid_type`/expected `date` ⇒ alias `invalid_date`. Docblock: (i) không parse hàng DB (Date bị từ chối) · (ii) `.meta({anyOf: undefined})` phụ thuộc zod ghim 4.6.7, ca `created_from` canh | `coerce-date.spec.ts` ghim message · `zod-error-envelope.int-spec` xanh |
 | 8 | [LOW] `z.enum` một phần tử ra `invalid_literal` | Chú thích ở `zod-issue-rule.ts`: issue v4 không phân biệt với `z.literal`; FE không rẽ nhánh theo mã này (grep FE: 0 chỗ) | — |
+
+**Vá review hẹp sau §10.8 (4 mục LOW, 06/11/2026):** (a) ratchet `zod/v3` quét mọi đuôi `\.(c|m)?[jt]sx?$` (trừ `.d.*ts`), thêm `packages/ui/src`, và RIÊNG luật `zod/v3` quét cả cây `scripts/` + `apps/api/test` (loại chính census/ratchet); luật uuid/email/record không áp cho test/script. Đo bằng vi phạm thật: tệp tạm `scripts/*.mjs` nạp `zod/v3` ⇒ ratchet đỏ đúng dòng, xoá ⇒ xanh · (b) nhánh `.email(` dùng `calledName()` như uuid ⇒ bắt `x["email"]()` · (c) `ZodValidationException` gói giá trị KHÔNG phải Error, không issues (`throw "x"`, `throw {…}`) ⇒ vẫn 400 nhưng ghi `logger.warn` CHỈ KIỂU giá trị (`describeKind`), không ghi giá trị · (d) chú thích ràng buộc ở chỗ log stack: `message` của Error ném trong transform/refine KHÔNG được chứa input người dùng (vào log server).
+
+### 10.9 Đếm độ dài theo code point (06/11/2026, quyết định phiên chính)
+
+**Số đo.** zod 4.6.x (`node_modules/zod/v4/core/checks.js` ~:262–330) đếm `.min/.max/.length` của CHUỖI theo **code point**; zod 3 đếm đơn vị UTF-16 (`String#length`). Không có cờ cấu hình nào đổi lại. Hệ quả trên dây: `"😀".repeat(2001)` (4002 đơn vị) giờ QUA `.max(4000)`; `"😀".repeat(4000)` (8000 đơn vị) qua, 4001 bị từ chối; `z.string().min(2)` từ chối MỘT emoji.
+
+**Quyết định.** CHẤP NHẬN cách đếm mới — thay đổi trên dây có chủ đích, chỉ khác với ký tự ngoài BMP (emoji, chữ Hán mở rộng…). Không bọc lại bằng `.refine(s => s.length <= n)`.
+
+**DB khớp.** Postgres `length()` / `varchar(n)` cũng đếm theo ký tự (code point) ⇒ mọi CHECK `length(col) <= n` và cột `varchar(n)` có trần ≥ trần zod KHÔNG thể từ chối thứ zod đã nhận, kể cả khi trần DB < 2× trần zod (vd `chk_feed_comments_body_len` 5000 vs `FEED_BODY_MAX` 4000: 4000 emoji = 4000 ký tự ≤ 5000). Trước đây zod 3 chặt hơn DB với chuỗi ngoài BMP; giờ hai bên đếm cùng một đơn vị.
+
+**Phạm vi ảnh hưởng.**
+- `.min(k)` với k > 1: chuỗi toàn emoji ngắn hơn trước tính là "đủ dài" ít hơn — vd mật khẩu/tên `.min(2)` từ chối một emoji đơn (trước: 2 đơn vị ⇒ qua). Mật khẩu toàn ký tự ngoài BMP coi như hiếm; độ mạnh mật khẩu không dựa vào `.min` đơn thuần.
+- `.max(n)`: nhận tới n ký tự ngoài BMP (tối đa 2n đơn vị UTF-16 trên dây/bộ nhớ) — vẫn nằm trong trần DB vì DB đếm ký tự.
+- FE counter lệch (NỢ, không sửa trong WO này): `apps/app/src/routes/social/feed/components/CommentComposer.tsx:82`, `FeedComposer.tsx:134`, `apps/app/src/routes/social/kudos/lib/kudos-draft.ts:79` đếm `.length` (UTF-16) ⇒ CHẶT HƠN server với emoji (chặn ở 2000 emoji trong khi server nhận 4000). Không sai dữ liệu, chỉ hẹp hơn. WO sau: đếm `[...s].length` hoặc dùng chung một hàm đếm.
+- Chú thích cũ hết đúng: `packages/contracts/src/social-api-recycle.ts:66` (lý do «Zod đếm đơn vị UTF-16» cho việc KHÔNG `.max()` `bodyExcerpt`) — lựa chọn không `.max()` vẫn an toàn, chỉ lý do đã cũ; sửa chữ ở lần chạm tệp sau.
+
+**Ca ghim.** `packages/contracts/src/zod4-pins.spec.ts` §10.9: `.max(n)` nhận n emoji, từ chối n+1 · `.min(2)` từ chối 1 emoji · `.length(n)` khớp n emoji · schema thật `createFeedCommentSchema.body` nhận `FEED_BODY_MAX` emoji, từ chối thêm một. Lần nâng zod sau mà đổi cách đếm ⇒ đỏ. `s16-social-qa1-fuzz.int-spec.ts`: `expectBody` đếm `[...s.trim()].length`; ca biên 2000/2001/4000 ký tự ngoài BMP ⇒ 201, 4001 ⇒ 400.
+
+**Soát spec khác.** Grep toàn bộ test api/contracts/web-core/app (`\u{1F…}`, `\u{2…}`, ký tự ngoài BMP, «ngoài BMP», surrogate, `.repeat(` cạnh MAX/length): ngoài fuzz, không spec nào ghim độ dài UTF-16 qua schema zod. `content-disposition.spec.ts:109` (cắt tên tệp theo byte) và `CommentList.spec.tsx:330` (ASCII) không qua đường đếm của zod.
