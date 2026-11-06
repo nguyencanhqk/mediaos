@@ -520,7 +520,8 @@ describe("ConversationPanel · tạo việc từ tin", () => {
     await openCreateTask();
     recallSource();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(warning).toHaveBeenCalledWith(
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0]?.[0]).toBe(
       "Tin đã bị thu hồi hoặc không còn trong phòng — không tạo việc từ tin này.",
     );
     expect(document.activeElement?.tagName).toBe("TEXTAREA");
@@ -575,5 +576,58 @@ describe("ConversationPanel · tạo việc từ tin", () => {
     });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(title).toHaveValue("Đang gõ dở");
+  });
+
+  it("thu hồi lúc đang gửi rồi mutation LỖI ⇒ đóng hộp, đúng một cảnh báo thu hồi, không gửi link", async () => {
+    const { toast } = await import("@mediaos/ui");
+    const warning = vi.spyOn(toast, "warning");
+    let rejectCreate: (err: unknown) => void = () => {};
+    createTask.mockReturnValue(new Promise((_, reject) => (rejectCreate = reject)));
+    const dialog = await openCreateTask();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Gửi link việc vào phòng" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tạo" }));
+    await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
+
+    recallSource();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await act(async () => rejectCreate(new TypeError("Failed to fetch")));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0]?.[0]).toBe(
+      "Tin đã bị thu hồi hoặc không còn trong phòng — không tạo việc từ tin này.",
+    );
+    expect(sendMessage).not.toHaveBeenCalled();
+    warning.mockRestore();
+  });
+
+  it("ĐỔI PHÒNG khi panel không dựng lại (drawer) ⇒ hộp của phòng cũ bị bỏ", async () => {
+    getMessages.mockResolvedValue([seededMessage()]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (current: ChatRoomDto) => (
+      <QueryClientProvider client={client}>
+        <I18nextProvider i18n={i18n}>
+          <ConversationPanel
+            room={current}
+            members={[]}
+            myRole="member"
+            isInfoOpen={false}
+            onToggleInfo={vi.fn()}
+          />
+        </I18nextProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree(room));
+    fireEvent.click(await screen.findByTestId("chat-message-more"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Tạo việc" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    rerender(tree({ ...room, id: "99999999-9999-4999-8999-999999999999", name: "Phòng khác" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // Quay lại phòng cũ: hộp KHÔNG tự hiện lại.
+    rerender(tree(room));
+    await screen.findByTestId("chat-message-more");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

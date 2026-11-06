@@ -254,7 +254,8 @@ export function TaskFormDrawer({
   const assigneeRejected = mutation.isError && isAssigneeRejection(mutation.error);
 
   const busy = isSubmitting || mutation.isPending;
-  useEffect(() => {
+  // Layout effect: caller biết «đang gửi» ngay trong commit của lượt bấm Lưu, không hở một nhịp render.
+  useLayoutEffect(() => {
     onBusyChange?.(busy);
   }, [busy, onBusyChange]);
   const noop = () => {};

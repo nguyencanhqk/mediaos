@@ -71,6 +71,13 @@ Lượt 2 (review hẹp bản vá `8405d918`):
    phòng ⇒ hộp gắn `roomId`, đổi phòng thì bỏ. Test: «tin bị CẮT khỏi bộ nhớ».
 6. [LOW] Thêm ca focus sau khi LƯU XONG ⇒ nút ⋯.
 
+Lượt 3 (review hẹp `8405d918..18ef5fe3`, chỉ còn LOW):
+7. [LOW] Khe một nhịp render giữa `isSubmitting` và `isBusy` — `onBusyChange` gọi trong `useLayoutEffect`;
+   mọi toast của hộp dùng MỘT khoá (`chat-msg-to-task:<id>`) ⇒ nếu lượt gửi vẫn về sau khi đã báo «thu hồi —
+   không tạo việc», toast kết quả THAY toast đó, không bao giờ hai thông báo trái nhau.
+8. [LOW test] Thu hồi lúc đang gửi rồi mutation LỖI ⇒ đóng hộp, đúng một cảnh báo thu hồi, không gửi link.
+9. [LOW test] Đổi phòng khi panel không dựng lại ⇒ hộp bị bỏ, quay lại phòng cũ không tự hiện lại.
+
 Bị bác (4): theo phán quyết đối kháng của luồng chính — không đổi code.
 
 - Guard `taskSource !== null` ở keydown của `ConversationPanel` chặn cả phím tắt khác ngoài Esc (2 reviewer nêu trùng) — hộp là modal, phím tắt tìm-trong-phòng phía sau hộp không có ý nghĩa khi hộp mở.

@@ -89,24 +89,27 @@ export function MessageToTaskDialog({
   const isRecalledRef = useRef(sourceRecalled);
   isRecalledRef.current = sourceRecalled;
   const isDoneRef = useRef(false);
+  // MỘT khoá toast cho cả vòng đời hộp: nếu lượt gửi vẫn về SAU khi đã báo «thu hồi — không tạo việc», toast
+  // kết quả THAY toast đó (cùng khoá) thay vì hiện hai thông báo trái nhau.
+  const toastKey = `chat-msg-to-task:${message.id}`;
 
   // Thu hồi lúc KHÔNG gửi (chưa bấm Lưu, hoặc lần gửi vừa lỗi) ⇒ đóng hộp, không tạo việc từ tin đã gỡ.
   useEffect(() => {
     if (!sourceRecalled || isBusy || isDoneRef.current) return;
     isDoneRef.current = true;
-    toast.warning(t("toTask.sourceGone"));
+    toast.warning(t("toTask.sourceGone"), { key: toastKey });
     onClose();
-  }, [sourceRecalled, isBusy, onClose, t]);
+  }, [sourceRecalled, isBusy, onClose, t, toastKey]);
 
   const handleSuccess = (task: TaskCoreResponseDto) => {
     isDoneRef.current = true;
     const openAction = { label: t("toTask.open"), onClick: () => openTask(task.id) };
     if (isRecalledRef.current) {
       // Server đã ghi việc với nội dung cũ — nói đúng sự thật, KHÔNG phát thêm link vào phòng.
-      toast.warning(t("toTask.createdSourceRecalled"), { action: openAction });
+      toast.warning(t("toTask.createdSourceRecalled"), { action: openAction, key: toastKey });
     } else {
       if (sendLink && onSendTaskLink) onSendTaskLink(taskUrl(origin, task.id));
-      toast.success(t("toTask.created"), { action: openAction });
+      toast.success(t("toTask.created"), { action: openAction, key: toastKey });
     }
     onClose();
   };
