@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**736 WO** · có micro-plan: **371/736** · ⬜ 111 chờ · 🔵 2 đang làm · ✅ 622 xong · 🔴 1 chặn
+**736 WO** · có micro-plan: **372/736** · ⬜ 110 chờ · 🔵 2 đang làm · ✅ 623 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -752,7 +752,7 @@
 | `S19-LMS-DOCSCONTENT-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S19-LMS-DOCSAUTH-1 | LMS: rà nội dung sổ tay |
 | `S19-SEC-SCOPEDENIEDCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S16-SOCIAL-SCOPEDENIEDCODE-1 | Mã máy `AUTH-ERR-SCOPE-DENIED` cho RECRUIT · PAYROLL · HR (403 sàn sco |
 | `S19-SEC-FILEMETAGATE-1` | 🔴 | ✅ xong | [📄](S19-SEC-FILEMETAGATE-1.md) | ✅S16-SOCIAL-ATTMETAMASK-1 | Rà metadata tệp (tên · cỡ) trên các đường đọc NGOÀI SOCIAL — danh sách |
-| `S19-OPS-SCADEVDEPS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-SCASATELLITE-1 | Phần devDependency của hai app vệ tinh (SOCIAL · LMS) còn advisory mức |
+| `S19-OPS-SCADEVDEPS-1` | 🟡 | ✅ xong | [📄](S19-OPS-SCADEVDEPS-1.md) | ✅S19-OPS-SCASATELLITE-1 | Phần devDependency của hai app vệ tinh (SOCIAL · LMS) còn advisory mức |
 | `S19-OPS-SCASCHEDULE-1` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-SCASATELLITE-1 ✅S10-OPS-ALERTCHAN-1 | Quét SCA định kỳ cho hai app vệ tinh bằng tác vụ lịch, kết quả đỏ gửi  |
 | `S19-OPS-REQUIREDCHECK-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S19-OPS-SCASATELLITE-1 | Đưa check «Dependency scan» và «Secret scan» vào required status check |
 | `S19-OPS-FBPOSTDEPLOYORDER-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S19-OPS-SCASATELLITE-1 | `m prod-update social` tự dừng dịch vụ rồi `npm ci` đúng thứ tự khi de |
