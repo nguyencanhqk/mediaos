@@ -50,7 +50,12 @@ function runCensusChild(): Promise<ChildResult> {
   return new Promise((resolve, reject) => {
     execFile(
       process.execPath,
-      [viteNodeCli(), path.join(__dirname, "zod-default-census-local.ts")],
+      [
+        viteNodeCli(),
+        "--config",
+        path.join(__dirname, "zod-default-census.vite.config.ts"),
+        path.join(__dirname, "zod-default-census-local.ts"),
+      ],
       { encoding: "utf8", maxBuffer: 1 << 26, cwd: path.join(__dirname, "..", "..") },
       (err, stdout, stderr) => {
         const line = stdout.split(String.fromCharCode(10)).find((l) => l.startsWith("@@CENSUS@@"));
