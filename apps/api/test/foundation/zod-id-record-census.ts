@@ -3,7 +3,7 @@ import path from "node:path";
 import ts from "typescript";
 
 /**
- * S19-OPS-ZOD4-1 (C2.6, plan §9.2-8) — census AST cho ba lối zod dễ vỡ khi nâng 3 → 4, trên `src/` của 6 gói.
+ * S19-OPS-ZOD4-1 (C2.6, plan §9.2-8) — census AST cho ba lối zod dễ vỡ khi nâng 3 → 4, trên `src/` của 7 gói.
  *
  *  - `.uuid(`  : zod 4 `z.uuid()`/`.uuid()` CHẶT RFC ⇒ từ chối id canonical đang sống (`…0010`, `…00a1`…). Mọi
  *                id đi qua `idSchema`/`idSchemaWith` (`packages/contracts/src/common/id.ts` — nơi DUY NHẤT gọi `.uuid(`).
@@ -15,6 +15,10 @@ import ts from "typescript";
  *                export-from, `import x = require`, `require(`, `import(` động và kiểu `import("…")` (vá FULL gate §10.8).
  *
  * Đọc AST (CallExpression + PropertyAccess), KHÔNG regex thô ⇒ chú thích/chuỗi không bị khớp.
+ *
+ * Phạm vi (vá review hẹp §10.8): `src/` của 7 gói (thêm `packages/ui`), mọi đuôi `.ts/.tsx/.js/.jsx/.mjs/.cjs/
+ * .mts/.cts`. Riêng luật `zod/v3` quét THÊM cả cây `scripts/` và `apps/api/test` (`V3_ONLY_ROOTS`) — luật
+ * uuid/email/record KHÔNG áp cho test/script (test cố ý dựng id/email lệch chuẩn để đo đường từ chối).
  */
 
 const REPO = path.join(__dirname, "..", "..", "..", "..");
@@ -25,7 +29,15 @@ export const PACKAGES = [
   "apps/auth",
   "apps/console",
   "apps/api",
+  "packages/ui",
 ] as const;
+/** Gốc quét CHỈ cho luật `zod/v3` (cả cây, không riêng `src/`). */
+export const V3_ONLY_ROOTS = ["scripts", "apps/api/test"] as const;
+/** Tệp chứa nguồn TỔNG HỢP có chuỗi `zod/v3` (chính census + ratchet) — loại khỏi quét. */
+const SELF_FILES: ReadonlySet<string> = new Set([
+  "apps/api/test/foundation/zod-id-record-census.ts",
+  "apps/api/test/foundation/zod-id-record-ratchet.unit-spec.ts",
+]);
 const ID_HOME = "packages/contracts/src/common/id.ts";
 const EMAIL_HOME = "packages/contracts/src/common/email.ts";
 
@@ -80,6 +92,18 @@ function moduleSpecifierOf(n: ts.Node): string | null {
   return null;
 }
 
+/** Đuôi nguồn JS/TS được quét (bỏ khai báo kiểu `.d.ts/.d.mts/.d.cts`). */
+export function isSourceFile(name: string): boolean {
+  return /\.(c|m)?[jt]sx?$/.test(name) && !/\.d\.(c|m)?ts$/.test(name);
+}
+
+function scriptKindOf(file: string): ts.ScriptKind {
+  if (file.endsWith(".tsx")) return ts.ScriptKind.TSX;
+  if (file.endsWith(".jsx")) return ts.ScriptKind.JSX;
+  if (/\.(c|m)?js$/.test(file)) return ts.ScriptKind.JS;
+  return ts.ScriptKind.TS;
+}
+
 function isEmailParamsCall(n: ts.Expression | undefined): boolean {
   return (
     !!n &&
@@ -91,8 +115,7 @@ function isEmailParamsCall(n: ts.Expression | undefined): boolean {
 
 /** Quét MỘT nguồn (file thật hoặc nguồn tổng hợp trong spec). */
 export function analyzeSource(file: string, text: string): SourceScan {
-  const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKindOf(file));
   const out: SourceScan = {
     uuidCalls: [],
     zodV3Refs: [],
@@ -115,12 +138,8 @@ export function analyzeSource(file: string, text: string): SourceScan {
     if (ts.isCallExpression(n)) {
       if (isEmailParamsCall(n)) out.emailParamsCalls++;
       if (calledName(n.expression) === "uuid") out.uuidCalls.push(hit(n));
-      if (ts.isPropertyAccessExpression(n.expression)) {
-        const name = n.expression.name.text;
-        if (name === "email" && !(n.arguments.length === 1 && isEmailParamsCall(n.arguments[0]))) {
-          out.emailBare.push(hit(n));
-        }
-      }
+      const viaParams = n.arguments.length === 1 && isEmailParamsCall(n.arguments[0]);
+      if (calledName(n.expression) === "email" && !viaParams) out.emailBare.push(hit(n));
       if (isZRecord(n)) {
         if (n.arguments.length === 1) out.recordOneArg.push(hit(n));
         else out.recordTwoArg++;
@@ -144,7 +163,7 @@ async function walk(dir: string): Promise<string[]> {
     entries.map(async (e): Promise<string[]> => {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) return e.name === "node_modules" || e.name === "dist" ? [] : walk(p);
-      return /\.tsx?$/.test(e.name) && !e.name.endsWith(".d.ts") ? [p] : [];
+      return isSourceFile(e.name) ? [p] : [];
     }),
   );
   return nested.flat();
@@ -153,6 +172,8 @@ async function walk(dir: string): Promise<string[]> {
 export interface RepoScan {
   files: number;
   perPackageFiles: Record<string, number>;
+  /** Số tệp đã đọc ở mỗi gốc `V3_ONLY_ROOTS` (chống xanh-rỗng cho luật `zod/v3`). */
+  perV3RootFiles: Record<string, number>;
   total: SourceScan;
 }
 
@@ -161,22 +182,27 @@ const YIELD_EVERY = 40;
 const yieldLoop = (): Promise<void> => new Promise((r) => setImmediate(r));
 
 /**
- * Quét `src/` của 6 gói; bỏ qua lời gọi ở NHÀ hợp lệ của chúng (`common/id.ts`, `common/email.ts`).
+ * Quét `src/` của 7 gói (+ `V3_ONLY_ROOTS` cho riêng luật `zod/v3`); bỏ qua lời gọi ở NHÀ hợp lệ của chúng (`common/id.ts`, `common/email.ts`).
  * BẤT ĐỒNG BỘ + nhường vòng lặp mỗi `YIELD_EVERY` tệp (vá FULL gate §10.8): parse ~2.000 tệp liền một mạch chặn
  * worker vitest nhiều giây ⇒ tinypool đứt IPC (ERR_IPC_CHANNEL_CLOSED, KI-014) khi chạy cả thư mục.
  */
 export async function scanRepo(): Promise<RepoScan> {
   const total = analyzeSource("<empty>.ts", "");
   const perPackageFiles: Record<string, number> = {};
+  const perV3RootFiles: Record<string, number> = {};
   let files = 0;
+  /** Đọc + phân tích một tệp, nhường vòng lặp mỗi `YIELD_EVERY` tệp. */
+  const scanFile = async (abs: string): Promise<{ rel: string; s: SourceScan }> => {
+    files++;
+    if (files % YIELD_EVERY === 0) await yieldLoop();
+    const rel = path.relative(REPO, abs).split(path.sep).join("/");
+    return { rel, s: analyzeSource(rel, await fsp.readFile(abs, "utf8")) };
+  };
   for (const pkg of PACKAGES) {
     const list = (await walk(path.join(REPO, pkg, "src"))).sort();
     perPackageFiles[pkg] = list.length;
     for (const abs of list) {
-      files++;
-      if (files % YIELD_EVERY === 0) await yieldLoop();
-      const rel = path.relative(REPO, abs).split(path.sep).join("/");
-      const s = analyzeSource(rel, await fsp.readFile(abs, "utf8"));
+      const { rel, s } = await scanFile(abs);
       if (rel !== ID_HOME) total.uuidCalls.push(...s.uuidCalls);
       if (rel !== EMAIL_HOME) total.emailBare.push(...s.emailBare);
       total.zodV3Refs.push(...s.zodV3Refs);
@@ -186,5 +212,13 @@ export async function scanRepo(): Promise<RepoScan> {
       total.idSchemaRefs += s.idSchemaRefs;
     }
   }
-  return { files, perPackageFiles, total };
+  for (const root of V3_ONLY_ROOTS) {
+    const list = (await walk(path.join(REPO, root))).sort();
+    perV3RootFiles[root] = list.length;
+    for (const abs of list) {
+      const { rel, s } = await scanFile(abs);
+      if (!SELF_FILES.has(rel)) total.zodV3Refs.push(...s.zodV3Refs);
+    }
+  }
+  return { files, perPackageFiles, perV3RootFiles, total };
 }

@@ -35,6 +35,31 @@ export function unwrapZodWrapped(exception: unknown): unknown {
   return current;
 }
 
+/**
+ * Kiểu (KHÔNG phải giá trị) của thứ nằm trong ZodValidationException — giá trị có thể chứa input người dùng
+ * nên chỉ kiểu được phép vào log. Object thường ⇒ tên constructor nếu có, để phân biệt `{…}` với instance lạ.
+ */
+export function describeKind(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value !== "object") return typeof value;
+  const ctor = (Object.getPrototypeOf(value) as { constructor?: { name?: unknown } } | null)
+    ?.constructor?.name;
+  return typeof ctor === "string" && ctor !== "" && ctor !== "Object" ? `object:${ctor}` : "object";
+}
+
+/**
+ * ZodValidationException không issues mà bên trong KHÔNG phải Error (`throw "x"`, `throw {…}` trong
+ * transform/refine) ⇒ trả kiểu của giá trị để ghi cảnh báo; ngược lại `null`. Vẫn trả 400 như cũ — chỉ thêm
+ * dấu vết, vì không cảnh báo thì lỗi lập trình này im lặng thành 400 không details.
+ */
+function opaqueZodPayloadKind(exception: unknown): string | null {
+  if (!(exception instanceof ZodValidationException)) return null;
+  const inner = exception.getZodError();
+  if (extractZodIssues(inner) !== null || inner instanceof Error) return null;
+  return describeKind(inner);
+}
+
 interface ResolvedError {
   status: number;
   code: string;
@@ -66,11 +91,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // nhánh (status, code, log stack) làm việc trên lỗi THẬT — TypeError ra 500 kèm stack của chính nó.
     const effective = unwrapZodWrapped(exception);
     const { status, code, message, type, details } = this.resolve(effective);
+    // Chỉ log method + PATH (đã bỏ query-string) + req-id. Headers (Authorization/Cookie/CSRF) KHÔNG vào log.
+    const path = (request?.url ?? "").split("?")[0];
+
+    this.warnOpaqueZodPayload(effective, `${request?.method ?? "-"} ${path}`, requestId);
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
-      // Server-side ONLY. Chỉ log method + PATH (đã bỏ query-string) + status + code + req-id.
-      // Headers (Authorization/Cookie/CSRF) KHÔNG đi vào log.
-      const path = (request?.url ?? "").split("?")[0];
+      // Server-side ONLY. Ràng buộc: `message` của Error ném trong transform/refine KHÔNG được chứa giá trị
+      // input người dùng — stack (kèm message) bên dưới đi thẳng vào log server.
       this.logger.error(
         `${request?.method ?? "-"} ${path} -> ${status} [${code}] req=${requestId || "-"}${
           effective === exception ? "" : " (ném từ transform/refine của schema zod)"
@@ -98,6 +126,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
     });
   }
 
+  /** Cảnh báo khi ZodValidationException gói giá trị mờ (xem `opaqueZodPayloadKind`) — chỉ ghi KIỂU. */
+  private warnOpaqueZodPayload(exception: unknown, where: string, requestId: string): void {
+    const kind = opaqueZodPayloadKind(exception);
+    if (kind === null) return;
+    this.logger.warn(
+      `${where} -> 400 [${ERROR_CODES.VALIDATION}] req=${requestId || "-"} ` +
+        `ZodValidationException gói giá trị không phải Error, không issues (kiểu: ${kind})`,
+    );
+  }
+
   /** Phân giải exception → status + mã lỗi chuẩn + details (nếu validation). */
   private resolve(exception: unknown): ResolvedError {
     // 1) Validation (Zod) — PHẢI bắt TRƯỚC nhánh HttpException: ZodValidationException extends
@@ -105,7 +143,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof ZodValidationException) {
       // nestjs-zod 5: getZodError() trả `unknown` ⇒ thu hẹp theo HÌNH DẠNG (issues là mảng), không instanceof.
       // Không có issues (và bên trong KHÔNG phải Error — Error đã được `unwrapZodWrapped` bóc ra ở catch())
-      // ⇒ 400 không details.
+      // ⇒ 400 không details (catch() đã ghi warn kèm KIỂU giá trị — `opaqueZodPayloadKind`).
       const details = zodIssuesToDetails(exception.getZodError());
       return {
         status: HttpStatus.BAD_REQUEST,

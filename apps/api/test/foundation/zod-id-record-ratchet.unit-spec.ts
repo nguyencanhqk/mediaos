@@ -1,5 +1,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { analyzeSource, PACKAGES, scanRepo, type RepoScan } from "./zod-id-record-census";
+import {
+  analyzeSource,
+  isSourceFile,
+  PACKAGES,
+  scanRepo,
+  V3_ONLY_ROOTS,
+  type RepoScan,
+} from "./zod-id-record-census";
 
 /**
  * S19-OPS-ZOD4-1 (C2.6) — RATCHET: không `.uuid(` ngoài `common/id.ts`, không `z.record(` một tham số, mọi
@@ -18,9 +25,12 @@ describe("S19-OPS-ZOD4-1 — ratchet id/record/email/zod-v3 cho lần nâng zod 
     scan = await scanRepo();
   }, 120_000);
 
-  it("census KHÔNG rỗng: thấy đủ 6 gói và các lối đã chuẩn hoá", () => {
+  it("census KHÔNG rỗng: thấy đủ 7 gói, gốc zod/v3 và các lối đã chuẩn hoá", () => {
     for (const pkg of PACKAGES) {
       expect(scan.perPackageFiles[pkg], `không đọc được ${pkg}/src`).toBeGreaterThan(5);
+    }
+    for (const root of V3_ONLY_ROOTS) {
+      expect(scan.perV3RootFiles[root], `không đọc được ${root}`).toBeGreaterThan(5);
     }
     expect(scan.files).toBeGreaterThan(1000);
     expect(scan.total.idSchemaRefs, "không thấy idSchema ⇒ census mù").toBeGreaterThan(1000);
@@ -65,13 +75,15 @@ describe("S19-OPS-ZOD4-1 — ratchet id/record/email/zod-v3 cho lần nâng zod 
       "const h = z.string().email(emailParams());",
       "const i = idSchema.optional();",
       'const j = z.string()["uuid"]();',
+      'const k = z.string()["email"]();',
+      'const l = z.string()["email"](emailParams());',
     ].join("\n");
     const r = analyzeSource("synthetic.ts", src);
     expect(r.uuidCalls.map((h) => h.line)).toEqual([3, 4, 13]);
     expect(r.recordOneArg.map((h) => h.line)).toEqual([5, 6]);
     expect(r.recordTwoArg).toBe(1);
-    expect(r.emailBare.map((h) => h.line)).toEqual([9, 10]);
-    expect(r.emailParamsCalls).toBe(1);
+    expect(r.emailBare.map((h) => h.line)).toEqual([9, 10, 14]);
+    expect(r.emailParamsCalls).toBe(2);
     expect(r.idSchemaRefs).toBe(1);
   });
 
@@ -102,5 +114,27 @@ describe("S19-OPS-ZOD4-1 — ratchet id/record/email/zod-v3 cho lần nâng zod 
       'import { z } from "zod/v3";\nexport const A = () => <div />;',
     );
     expect(tsx.zodV3Refs).toHaveLength(1);
+  });
+});
+
+describe("S19-OPS-ZOD4-1 — census đọc đủ đuôi JS/TS (vá review hẹp §10.8)", () => {
+  it("isSourceFile: nhận .ts/.tsx/.js/.jsx/.mjs/.cjs/.mts/.cts, bỏ .d.ts/.d.mts/.d.cts và đuôi khác", () => {
+    const ok = ["a.ts", "a.tsx", "a.js", "a.jsx", "a.mjs", "a.cjs", "a.mts", "a.cts"];
+    const no = ["a.d.ts", "a.d.mts", "a.d.cts", "a.json", "a.sh", "a.md", "a.ts.bak"];
+    expect(ok.filter((f) => !isSourceFile(f))).toEqual([]);
+    expect(no.filter((f) => isSourceFile(f))).toEqual([]);
+  });
+
+  it("zod/v3 trong .mjs (import ESM) và .cjs (require) đều bị bắt", () => {
+    const mjs = analyzeSource(
+      "scripts/synthetic.mjs",
+      'import { z } from "zod/v3";\nconst m = await import("zod/v3/index.js");\nconst ok = "zod/v3";',
+    );
+    expect(mjs.zodV3Refs.map((h) => h.line)).toEqual([1, 2]);
+    const cjs = analyzeSource(
+      "scripts/synthetic.cjs",
+      'const { z } = require("zod/v3");\nmodule.exports = require("zod");',
+    );
+    expect(cjs.zodV3Refs.map((h) => h.line)).toEqual([1]);
   });
 });

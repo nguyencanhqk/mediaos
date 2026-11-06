@@ -8,7 +8,7 @@ import { validate, ZodValidationException, ZodValidationPipe } from "nestjs-zod"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z, ZodError, type ZodIssue } from "zod";
 import { httpStatusToCode } from "../errors/error-codes";
-import { AllExceptionsFilter } from "./all-exceptions.filter";
+import { AllExceptionsFilter, describeKind } from "./all-exceptions.filter";
 import { TOO_MANY_REQUESTS_MESSAGE, tooManyRequests } from "./retry-after";
 
 interface MockRequest {
@@ -110,7 +110,9 @@ describe("AllExceptionsFilter — error mapping (API-01 §12)", () => {
 
   it("ZodValidationException KHÔNG có issues ⇒ 400 không details, KHÔNG BAO GIỜ 500 (nestjs-zod 5: getZodError() là unknown)", () => {
     vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
     const { statusCode, body } = invoke(new ZodValidationException({ lạ: true }));
+    expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(statusCode).toBe(400);
     expect((body.error as { code: string; details: unknown }).code).toBe("VALIDATION-ERR-001");
     expect((body.error as { details: unknown }).details).toBeNull();
@@ -186,6 +188,53 @@ describe("AllExceptionsFilter — lỗi ném từ transform bị nestjs-zod 5 g�
     const [line, stack] = logSpy.mock.calls[0] as [string, string];
     expect(line).toContain("transform/refine");
     expect(stack).toContain("TypeError: hỏng khi xử lý (1)");
+  });
+
+  it("transform ném giá trị KHÔNG phải Error (chuỗi / object) ⇒ vẫn 400 không details + warn chỉ ghi KIỂU", () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const throwsString = z.string().transform((): string => {
+      throw "bi-mat-cua-nguoi-dung"; // chính là ca đang đo: throw giá trị không phải Error
+    });
+    const throwsObject = z.string().transform((): string => {
+      throw { email: "nguoi-dung@example.test" };
+    });
+    const cases: Array<[unknown, string]> = [
+      [thrownBy(() => new ZodValidationPipe(throwsString).transform("x", meta)), "string"],
+      [thrownBy(() => validate("x", throwsObject)), "object"],
+    ];
+    for (const [thrown, kind] of cases) {
+      warnSpy.mockClear();
+      const { statusCode, body } = invoke(thrown);
+      expect(statusCode).toBe(400);
+      expect((body.error as { code: string }).code).toBe("VALIDATION-ERR-001");
+      expect((body.error as { details: unknown }).details).toBeNull();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const line = String(warnSpy.mock.calls[0]?.[0]);
+      expect(line).toContain(`(kiểu: ${kind})`);
+      expect(line).not.toContain("bi-mat-cua-nguoi-dung");
+      expect(line).not.toContain("nguoi-dung@example.test");
+    }
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("ZodValidationException CÓ issues ⇒ KHÔNG warn (warn chỉ dành cho giá trị mờ)", () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    invoke(thrownBy(() => validate(1, z.string())));
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("describeKind: null / mảng / nguyên thuỷ / object thường / instance lạ", () => {
+    class Lạ {}
+    expect([null, [], 1, "s", undefined, {}, new Lạ()].map(describeKind)).toEqual([
+      "null",
+      "array",
+      "number",
+      "string",
+      "undefined",
+      "object",
+      "object:Lạ",
+    ]);
   });
 
   it("lỗi ZodError THẬT ném lồng trong transform vẫn là 400 + details (không bị bóc)", () => {
