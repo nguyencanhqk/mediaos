@@ -73,6 +73,10 @@ Lượt 2 (review hẹp bản vá `8405d918`):
 
 Bị bác (4): theo phán quyết đối kháng của luồng chính — không đổi code.
 
+- Guard `taskSource !== null` ở keydown của `ConversationPanel` chặn cả phím tắt khác ngoài Esc (2 reviewer nêu trùng) — hộp là modal, phím tắt tìm-trong-phòng phía sau hộp không có ý nghĩa khi hộp mở.
+- Link gửi vào phòng là URL tuyệt đối — done_when không đòi đường dẫn tương đối; URL tuyệt đối mới bấm được và được nhận diện là link nội bộ (đã ghi ở quyết định).
+- `handleSuccess` chạy sau khi hộp gỡ (onSuccess của react-query v5 sống qua unmount) — bác ở lượt 1 vì không có hại khi tin còn; đường có hại (thu hồi lúc đang gửi) do review hẹp lượt 2 tìm ra và ĐÃ vá ở `18ef5fe3`.
+
 ## Lệch paths (tối thiểu)
 
 - `components/chat/MessageBubble.tsx` — chuyền `onCreateTask` (tuỳ chọn) xuống `MessageActions`.
