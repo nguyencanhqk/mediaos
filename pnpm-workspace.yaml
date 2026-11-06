@@ -170,10 +170,10 @@ overrides:
 # Owner chọn qua hộp hỏi 24/10/2026 «WO deps + bỏ qua zod có hạn» — KHÁC nguyên tắc 25/07 «luôn vá, không
 # ỉm» ở chỗ: ĐÚNG MỘT GHSA, có HẠN, và hạn được ÉP bằng máy: `scripts/check-audit-ignore-expiry.mjs` chạy
 # cùng job audit trong security.yml, ĐỎ khi một GHSA bị bỏ qua mà không có hạn, hoặc đã quá hạn (23/11/2026).
-# Gỡ dòng này khi `S19-OPS-ZOD4-1` merge (khi đó `pnpm audit` phải 0 HIGH mà không cần ignore).
-auditConfig:
-  ignoreGhsas:
-    - GHSA-mrhx-c7xc-m3w5
+# 2026-11-06 (S19-OPS-ZOD4-1, C4) — ĐÃ GỠ `auditConfig.ignoreGhsas: [GHSA-mrhx-c7xc-m3w5]`. Monorepo đã nâng zod 3.25.76
+# → 4.6.7 (≥ 4.6.6 = bản vá đầu tiên), lockfile chỉ còn một `zod@4.6.7` ⇒ cổng `pnpm audit --audit-level=high` đạt
+# mà KHÔNG cần ngoại lệ. `scripts/check-audit-ignore-expiry.mjs` GIỮ NGUYÊN làm lưới: `EXPIRY = {}`; ai thêm lại
+# `auditConfig` mà không có hạn + WO thì job audit ĐỎ.
 
 # Cho phép chạy postinstall của các gói cần binary native (pnpm 10+ chặn mặc định).
 allowBuilds:

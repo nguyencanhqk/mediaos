@@ -31,13 +31,10 @@ import { pathToFileURL } from "node:url";
  * một gói ở một major (`ignoreGhsas` của pnpm bỏ qua CẢ advisory, không theo phiên bản ⇒ nếu lockfile có bản
  * của gói đó ở major KHÁC — dòng có bản vá — script ĐỎ thay vì để ignore ỉm luôn nó).
  */
-export const EXPIRY = {
-  "GHSA-mrhx-c7xc-m3w5": {
-    until: "2026-11-23",
-    wo: "S19-OPS-ZOD4-1",
-    scope: { pkg: "zod", major: 3 },
-  },
-};
+export const EXPIRY = {};
+// 2026-11-06 (S19-OPS-ZOD4-1, C4): mục `GHSA-mrhx-c7xc-m3w5` (zod major 3, hạn 2026-11-23) ĐÃ GỠ cùng ignore —
+// monorepo lên zod 4.6.7. Khuôn mục khi cần ngoại lệ mới (CÓ hạn ≤ MAX_WINDOW_DAYS + WO + scope):
+//   "GHSA-xxxx-xxxx-xxxx": { until: "YYYY-MM-DD", wo: "SNN-AAA-BBB-N", scope: { pkg: "<gói>", major: <n> } },
 
 /** Hạn không được xa hơn số ngày này kể từ hôm nay. */
 export const MAX_WINDOW_DAYS = 45;
