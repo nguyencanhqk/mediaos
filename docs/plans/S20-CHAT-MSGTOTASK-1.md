@@ -98,3 +98,11 @@ Bị bác (4): theo phán quyết đối kháng của luồng chính — không 
 - Đo KPI #6 trong trình duyệt thật với API giả lập (owner/luồng chính).
 - Phòng `department` có thể điền sẵn phòng ban (`refId`) — chưa làm, chờ đo mức dùng.
 - Liên kết hai chiều bền việc ↔ tin = WO đỏ riêng (Q4 = A).
+
+## Đo trình duyệt thật (06/11/2026, luồng chính)
+
+Chromium qua Playwright MCP, API giả lập (cổng chết cho request quên mock), 1366×768, @ `b05c1aae`:
+- **KPI #6 ĐẠT** — NV tự nhận 3 thao tác (⋯ · «Tạo việc» · «Tạo»); QL giao người khác 4 (+ chọn người phụ trách); URL trước = sau (0 chuyển trang); POST mang `projectId` của phòng + đúng người phụ trách; toast «Đã tạo việc · Mở»; focus sau lưu về nút ⋯.
+- **Deny-path**: thiếu `create:task` ⇒ menu ⋯ chỉ còn «Sao chép nội dung».
+- **Lỗi lộ ra (đã vá)**: lần mở ĐẦU ô «Dự án» hiện «Không chọn» dù POST gửi `projectId` — `/projects` về sau khi mở ⇒ option dự phòng bị gỡ, node `<option>` đang chọn biến mất ⇒ trình duyệt reset ô. Có sẵn ở mọi caller có `defaultProject` (board). Vá: option dự án điền sẵn là một node cố định, danh sách lọc dự án đó ra; ca test «danh sách dự án về SAU khi mở» (đỏ trên mã cũ, xanh sau vá).
+- Ghi nhận LOW: ở 1366×768 nút «Tạo» nằm dưới mép thân hộp cuộn (826/689 px) ⇒ cần cuộn 1 lần (KPI tính cả cuộn: NV 4, QL 5 — vẫn đạt). Chưa đo: 390×844, cảnh báo phòng direct trên trình duyệt.

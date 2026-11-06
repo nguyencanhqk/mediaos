@@ -214,8 +214,13 @@ export function TaskFormDrawer({
   });
   // «Tôi» là option riêng ⇒ bỏ chính tôi khỏi danh sách để không lặp.
   const employees = (employeesPage?.items ?? []).filter((e) => e.id !== myEmployeeId);
-  const showDefaultProjectOption =
-    defaultProjectId !== undefined && !(projects ?? []).some((p) => p.id === defaultProjectId);
+  // Option của dự án điền sẵn là MỘT node cố định (đứng đầu), danh sách bỏ dự án đó ra. Trước đây option dự
+  // phòng chỉ hiện khi danh sách CHƯA có dự án ⇒ /projects về sau khi mở thì React gỡ đúng node <option> đang
+  // chọn ⇒ trình duyệt reset ô về «Không chọn» trong khi form vẫn giữ (và gửi) projectId — đo trên trình
+  // duyệt thật 06/11; lần mở sau (cache ấm) không lộ.
+  const defaultProjectName =
+    (projects ?? []).find((p) => p.id === defaultProjectId)?.name ?? defaultProject?.name ?? null;
+  const listedProjects = (projects ?? []).filter((p) => p.id !== defaultProjectId);
 
   const mutation = useMutation({
     mutationFn: async (values: TaskFormValues): Promise<TaskCoreResponseDto> => {
@@ -340,12 +345,12 @@ export function TaskFormDrawer({
           ) : (
             <Select id="task-project" {...register("projectId")}>
               <option value="">{t("tasks.form.placeholders.none")}</option>
-              {showDefaultProjectOption && (
+              {defaultProjectId !== undefined && (
                 <option value={defaultProjectId}>
-                  {defaultProject?.name ?? t("quickAdd.form.currentProject")}
+                  {defaultProjectName ?? t("quickAdd.form.currentProject")}
                 </option>
               )}
-              {(projects ?? []).map((p) => (
+              {listedProjects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
