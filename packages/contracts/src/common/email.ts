@@ -15,9 +15,15 @@ import { z } from "zod";
  * `z.string().trim().email(emailParams())` / `.email(emailParams("khoá.i18n"))` (giữ thứ tự check của zod 3:
  * trim TRƯỚC email). Ca ghim: `common/email.spec.ts`.
  */
+/**
+ * Bản gốc zod 3 là `/…[A-Z0-9…]…/i`. Vá FULL gate (plan §10.8): JSON Schema `pattern` KHÔNG mang cờ ⇒ client sinh
+ * từ openapi.json đọc `[A-Z]` theo nghĩa đen và từ chối email chữ thường. Nên viết lại KHÔNG cờ: mọi lớp ký tự
+ * `A-Z` thành `A-Za-z`. TƯƠNG ĐƯƠNG bản có `/i`: cờ `i` không-unicode chỉ gập chữ ASCII (ký tự ngoài ASCII không
+ * bao giờ gập về ASCII — ES Canonicalize) ⇒ `[A-Z]/i` ≡ `[A-Za-z]`. Ca ghim (`email.spec.ts`): so hai regex trên
+ * tập chuỗi sinh có hạt giống + `pattern` của `z.toJSONSchema` dùng không cờ. KHÔNG thêm cờ trở lại.
+ */
 export const ZOD3_EMAIL_REGEX = new RegExp(
-  String.raw`^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$`,
-  "i",
+  String.raw`^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$`,
 );
 
 /** Tham số cho `.email()`. Không thông điệp ⇒ `{}` (y như `.email()` không đối số trên zod 3). */

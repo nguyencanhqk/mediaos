@@ -194,6 +194,10 @@ export const checkDuplicateQuerySchema = z
   });
 export type CheckDuplicateQuery = z.infer<typeof checkDuplicateQuerySchema>;
 
+/**
+ * ⚠️ KHÔNG gắn lại vào `@Query()` (S19-OPS-ZOD4-1 §10.8): nestjs-zod 5 `cleanupOpenApiDoc` NÉM với object rỗng làm
+ * tham số ⇒ boot swagger (dev/dev-online) sập. DTO api tương ứng đã xoá vì không ai dùng; schema giữ cho hợp đồng.
+ */
 export const candidateSummaryQuerySchema = z.object({});
 export type CandidateSummaryQuery = z.infer<typeof candidateSummaryQuerySchema>;
 

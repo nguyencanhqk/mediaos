@@ -24,6 +24,8 @@ describe("coerceDate", () => {
     if (!r.success) {
       expect(r.error.issues[0]?.code).toBe("invalid_type");
       expect((r.error.issues[0] as { expected?: string }).expected).toBe("date");
+      // Vá FULL gate §10.8: không còn "expected date, received Date" gây hiểu nhầm.
+      expect(r.error.issues[0]?.message).toBe("Invalid date");
     }
   });
 
