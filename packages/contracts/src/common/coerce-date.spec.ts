@@ -41,7 +41,11 @@ describe("coerceDate", () => {
   });
 
   it("phía vào sinh được JSON Schema, phía ra vẫn ném (ghi nhận hạn chế)", () => {
-    expect(z.toJSONSchema(coerceDate(), { io: "input" })).toMatchObject({ type: ["string", "number"] });
+    expect(z.toJSONSchema(coerceDate(), { io: "input" })).toEqual({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "string",
+      format: "date-time",
+    });
     expect(() => z.toJSONSchema(coerceDate(), { io: "output" })).toThrow();
   });
 });

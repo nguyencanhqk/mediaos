@@ -23449,6 +23449,7 @@ export const backlog = [
       "pnpm-workspace.yaml",
       "pnpm-lock.yaml",
       "scripts/check-audit-ignore-expiry.mjs",
+      "scripts/check-audit-ignore-expiry.test.mjs",
       "docs/plans/**",
       "harness/backlog.mjs",
     ],
@@ -23464,6 +23465,8 @@ export const backlog = [
     ],
     notes: [
       "🔴 Seed 24/10/2026 cùng S19-OPS-AUDITDOS-1. Ước 300–500 USD (đổi major của thư viện validate dùng ở mọi tầng). Quá 23/11/2026 mà chưa merge ⇒ job audit bắt buộc tự ĐỎ trên mọi PR (cố ý) — cần gia hạn thì owner quyết, sửa `EXPIRY` kèm lý do.",
+      "ZOD4 C3c+C4 (06/11/2026): zod 4.6.7 ghim thẳng ở 6 package.json (KHÔNG catalog) · nestjs-zod ^5.5.0 · @hookform/resolvers ^5.2.2 (KHÔNG 6.x/7.x) · lockfile chỉ còn zod@4.6.7. Quyết định: `idSchema = z.guid()` (z.uuid()/.uuid() từ chối id canonical …0001/…0010/…00a1; ratchet AST cấm `.uuid(` ngoài common/id.ts) · `.email()` luôn qua `emailParams()` (pattern = regex zod 3) · `z.coerce.date()` → `coerceDate()` (codec string|number→Date, meta {type:string, format:date-time, anyOf:undefined} để OpenAPI không mất kiểu; khác coerce: null/Date bị từ chối; không dùng với ZodResponse vì io output NÉM) · bảng alias mã issue v4→v3 ở `apps/api/src/common/filters/zod-issue-rule.ts` (dây lỗi validate giữ `invalid_string`/`invalid_enum_value`/`invalid_literal`/`invalid_union_discriminator`/`invalid_date`) · swagger = `cleanupOpenApiDoc(createDocument(...))`, bỏ @Query DTO rỗng ở recruit · census default `test/foundation/zod-default-ratchet.unit-spec.ts` (1290 schema contracts + 59 schema cục bộ, 0 vi phạm; chạy ở tiến trình con vite-node) · ca boot `swagger-boot-zod4.e2e-spec.ts` (đường setupSwagger NODE_ENV≠production) · C4: đã gỡ `auditConfig.ignoreGhsas`, `EXPIRY = {}`, `pnpm audit --audit-level=high` = 0 HIGH.",
+      "ZOD4 RUNBOOK deploy (owner, plan §5 + §9.2-2): 1) liệt kê và dừng MỌI tiến trình nạp `C:\dev 2\MediaOS\node_modules` (MediaOS-API, API/FE dev-online watch, dashboard, tác vụ lịch) — lọc theo ĐƯỜNG DẪN dòng lệnh, KHÔNG diệt theo tên ảnh; kiểm còn 0 tiến trình rồi mới install · 2) pull master + `pnpm install --frozen-lockfile` ở checkout chính (pnpm exec/run bất kỳ sau pull lockfile mới sẽ tự cài) · 3) `pnpm build` + `m prod-update api` · 4) boot dev-online (NODE_ENV≠production ⇒ buildOpenApiDocument chạy lúc boot) + kiểm health của nó · 5) FE Pages tự lên từ master. Đường lùi: `pnpm install --frozen-lockfile --offline` trên lockfile cũ + `m prod-rollback`. Lưu ý: vitest api chạy cả thư mục test/foundation có thể chết ngẫu nhiên `Channel closed` (tinypool 2.2.0) — chạy lại hoặc theo tệp.",
     ],
   },
   // ════════════════════ S20-WORKUX Đợt 1A — Nền và P0 chỉ FE (seed 2026-10-23) ════════════════════

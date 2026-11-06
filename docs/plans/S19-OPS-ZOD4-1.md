@@ -511,3 +511,22 @@ object type» ⇒ bỏ tham số `@Query()` thừa ở `recruit.controllers.ts` 
 **Khuôn sửa contracts**: `idSchema = z.guid()` · `emailParams()` trả `{ pattern: ZOD3_EMAIL_REGEX, message? }` ·
 `z.record(enum, X)` → `z.partialRecord` (asset `byStatus`, payroll preview `inputs`) · `withLeaveDraftRefines` /
 `refineLeavePolicyTarget` generic `S extends z.ZodType<Fields>` (refine trả `this`) · `optionalEnumParam<T extends readonly string[]>`.
+
+### 10.7 Pha C3c + C4 (06/11/2026) — tích hợp, census default, boot swagger, mutant, gỡ ngoại lệ audit
+
+- **Cổng**: `pnpm typecheck` xanh (10 task) · `pnpm build` xanh (contracts dual · api nest · 3 app vite) · `gen-openapi` ra 523 path / 250 schema.
+- **`coerceDate()` thêm `.meta({ type: "string", format: "date-time", anyOf: undefined })`**: đo trên document thật thấy nestjs-zod/swagger làm hỏng
+  `type: ["string","number"]` thành `{ items: { type: "string" } }` (tham số query ngày mất kiểu). Meta đưa tài liệu về string/date-time như bản zod 3;
+  runtime vẫn nhận epoch-ms. Ghim: `coerce-date.spec.ts` + ca `created_from` ở `swagger-boot-zod4.e2e-spec.ts`.
+- **Census C3.7** `apps/api/test/foundation/zod-default-ratchet.unit-spec.ts` (đọc `_zod.def` của schema THẬT): 1290 schema export của contracts
+  (15 565 nút) + 59 schema cục bộ ở 75 tệp web-core/app/auth/console (609 nút) ⇒ **0** `optional(default|prefault)`, **0** `default(object có field default)`;
+  allowlist hai bảng RỖNG (kèm khung lý do). Chống xanh rỗng: ngưỡng đếm (>300 schema, >3000 nút, ≥15 tệp, 0 tệp nạp lỗi) + 4 ca nguồn tổng hợp.
+  Chạy ở TIẾN TRÌNH CON bằng vite-node, bất đồng bộ: nạp ~40 tệp FE trong worker, hoặc `spawnSync`, làm tinypool 2.2.0 sập `Channel closed`.
+- **Ca boot** `swagger-boot-zod4.e2e-spec.ts`: AppModule thật (qua `applyMainPipeline`), `setupSwagger` với NODE_ENV `development`/`test`/chưa đặt không ném,
+  document > 300 path, không `$ref` treo, `SwaggerModule.setup` nhận document.
+- **Mutant (script, sao lưu → cấy khớp đúng 1 lần → chạy đúng spec → khôi phục, `git diff --quiet` sạch)**: (a) `idSchema → z.uuid()` ĐỎ ở `id.spec` (6) +
+  `db.service.spec` withTenant (5 ca canonical) + `auth-canonical-id.spec` (5) · (b) bỏ bảng alias ĐỎ ở `zod-issue-rule.spec` (4) + `zod-error-envelope.int-spec` ·
+  (c) `updateShiftSchema` partial trên schema có default ĐỎ ở `zod4-pins.spec` (3) · (d) `emailParams` bỏ pattern ĐỎ ở `email.spec` (1). Cả bốn ĐỎ, không cần sửa spec.
+- **C4**: gỡ `auditConfig.ignoreGhsas` (giữ chú thích lịch sử), `EXPIRY = {}`, script in «không có GHSA nào bị bỏ qua». Ca mới: EXPIRY rỗng + không còn
+  ignore + mọi `zod@` trong lockfile ≥ 4.6.6. Các ca cơ chế cũ (scope major 3 trên lockfile giả) GIỮ NGUYÊN — chúng dùng EXPIRY/lockfile tổng hợp nên vẫn đúng ý
+  «ignore không được ỉm bản đã vá», không phụ thuộc trạng thái thật. `pnpm audit --audit-level=high` = 0 HIGH (26 thấp/vừa).

@@ -16,7 +16,12 @@ import { z } from "zod";
  *     `z.date()` nên io "output" vẫn ném) — xem plan §10.5.
  */
 export const coerceDate = () =>
-  z.codec(z.union([z.string(), z.number()]), z.date(), {
-    decode: (v) => new Date(v),
-    encode: (d) => d.toISOString(),
-  });
+  z
+    .codec(z.union([z.string(), z.number()]), z.date(), {
+      decode: (v) => new Date(v),
+      encode: (d) => d.toISOString(),
+    })
+    // Tài liệu OpenAPI: nestjs-zod/swagger làm hỏng `type: ["string","number"]` (ra `{items:{type:"string"}}` —
+    // tham số ngày mất kiểu). Khai tường minh là chuỗi ngày-giờ như bản zod 3; `anyOf: undefined` gỡ nhánh union
+    // do toJSONSchema tự sinh. Runtime vẫn nhận cả epoch-ms (ghim ở coerce-date.spec.ts).
+    .meta({ type: "string", format: "date-time", anyOf: undefined });
