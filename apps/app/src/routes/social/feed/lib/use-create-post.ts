@@ -3,8 +3,7 @@
  *
  * Tách từ `FeedPage` (plan FE-2B D10 + §8 M3) để trang nhóm KHÔNG chép lại — và không mất — ba thứ
  * lượt đăng phải có:
- *  1. `onError` (thiếu = hỏng IM LẶNG TUYỆT ĐỐI: app không có hệ toast, `QueryClient` không khai
- *     `MutationCache.onError`);
+ *  1. `onError` (thiếu = hỏng IM LẶNG TUYỆT ĐỐI: `QueryClient` không khai `MutationCache.onError`);
  *  2. số lượt nhắc bị BỎ (`droppedMentions`, SPEC-16 §12 `ERR-009`) — càng cần trong nhóm: server bỏ
  *     im lặng mọi mention người NGOÀI nhóm rồi vẫn trả 201;
  *  3. invalidate đúng danh sách (`feed.allOf()` gồm cả feed nhóm `feed.list({groupId,…})`, + màn

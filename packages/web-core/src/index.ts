@@ -55,6 +55,8 @@ export {
   parseKindError,
   type KindErrorInfo,
 } from "./lib/error-mapper";
+// S20-FE-TOAST-2 — tín hiệu «đổi người dùng» dùng chung (dọn toast; S19-SEC-FECACHELOGOUT-1 cắm thêm QueryClient)
+export { onSessionBoundary, type SessionBoundaryHandler } from "./lib/session-boundary";
 
 // API types (FRONTEND-04 §9) — NAMED re-export; no wildcard (contracts exports type ApiError)
 export type {

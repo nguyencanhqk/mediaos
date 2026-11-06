@@ -9,6 +9,7 @@
 
 import { ApiError } from "./api-client";
 import type { ApiValidationDetail } from "./api-types";
+import { onSessionBoundary } from "./session-boundary";
 
 // ── UI behavior constants ─────────────────────────────────────────────────────
 
@@ -198,13 +199,26 @@ export function parseKindError(error: unknown): KindErrorInfo {
 export interface ToastFn {
   error: (message: string) => void;
   warning: (message: string) => void;
+  /**
+   * Đóng mọi thông báo đang hiện. Có ⇒ `configureToast` tự gọi nó ở MỖI ranh giới phiên (đăng xuất ·
+   * hết phiên · đổi người dùng tại chỗ — S20-FE-TOAST-2) để người sau không đọc được thông báo của người trước.
+   */
+  clear?: () => void;
 }
 
 let _toast: ToastFn | null = null;
+let _detachToastClear: (() => void) | null = null;
 
-/** App gọi 1 lần khi khởi động để gắn đích hiển thị. `null` gỡ đích (test / HMR) ⇒ quay về console. */
+/**
+ * App gọi 1 lần khi khởi động để gắn đích hiển thị. `null` gỡ đích (test / HMR) ⇒ quay về console.
+ * Gọi lại thì đích cũ được gỡ khỏi ranh giới phiên trước khi gắn đích mới (không dọn trùng / dọn nhầm đích).
+ */
 export function configureToast(toast: ToastFn | null): void {
   _toast = toast;
+  _detachToastClear?.();
+  _detachToastClear = null;
+  const clear = toast?.clear;
+  if (clear) _detachToastClear = onSessionBoundary(() => clear());
 }
 
 /**

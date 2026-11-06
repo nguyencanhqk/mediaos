@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { AppShell, Skeleton } from "@mediaos/ui";
+import { AppShell, Skeleton, Toaster } from "@mediaos/ui";
 import { useFavicon } from "@mediaos/web-core";
 import { useConsoleBranding } from "@/lib/use-console-branding";
 import { useConsoleNavItems } from "@/lib/nav";
@@ -45,21 +45,29 @@ export function RootLayout() {
   // đây là app quản trị hệ thống, brand Funtime của nó là chủ đích (khác vỏ nghiệp vụ apps/app).
   useFavicon(useConsoleBranding().data?.favicon?.url ?? null);
 
+  // S20-FE-TOAST-2 — MỘT <Toaster /> cho cả hai nhánh (route bare lẫn route có shell): đích hiển thị của
+  // showApiErrorToast (main.tsx gắn configureToast). Đặt ngoài AppShell để route bare cũng có thông báo.
   if (BARE_ROUTES.has(pathname)) {
     return (
-      <React.Suspense fallback={<RouteSuspenseFallback />}>
-        <Outlet />
-      </React.Suspense>
+      <>
+        <React.Suspense fallback={<RouteSuspenseFallback />}>
+          <Outlet />
+        </React.Suspense>
+        <Toaster />
+      </>
     );
   }
 
   // Slot `notifications` bỏ trống — console không có chuông NOTI; SPEC-08/FRONTEND-12 chỉ định NOTI
   // cho apps/app (owner chốt 2026-07-10).
   return (
-    <AppShell navItems={navItems} brand={brand}>
-      <React.Suspense fallback={<RouteSuspenseFallback />}>
-        <Outlet />
-      </React.Suspense>
-    </AppShell>
+    <>
+      <AppShell navItems={navItems} brand={brand}>
+        <React.Suspense fallback={<RouteSuspenseFallback />}>
+          <Outlet />
+        </React.Suspense>
+      </AppShell>
+      <Toaster />
+    </>
   );
 }
