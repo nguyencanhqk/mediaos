@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**736 WO** · có micro-plan: **372/736** · ⬜ 110 chờ · 🔵 2 đang làm · ✅ 623 xong · 🔴 1 chặn
+**736 WO** · có micro-plan: **374/736** · ⬜ 108 chờ · 🔵 2 đang làm · ✅ 625 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -791,7 +791,7 @@
 | `S20-DASH-TODAY-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-DRAWER-1 ✅S20-TASK-MYTASKS-1 ✅S20-FE-COMPANYTZ-1 ✅S20-GOAL-QUICKSTART-1 | Dashboard Employee thành màn «Hôm nay» làm được việc ngay: hàng việc v |
 | `S20-CHAT-DRAFT-1` | 🟢 | ✅ xong | — *(chưa)* | — | Tin nhắn: nháp đang gõ dở (kể cả @nhắc và tin đang trả lời) được giữ t |
 | `S20-CHAT-UNREADNAV-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-CHAT-DRAFT-1 ✅S20-CHAT-UNREAD-1 ✅S20-FE-TOAST-1 | Tin nhắn: bắt kịp tin chưa đọc nhanh — «Đánh dấu đã đọc» trên dòng phò |
-| `S20-CHAT-MSGTOTASK-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-CHAT-DEEPLINK-1 ✅S20-FE-TOAST-1 | Tạo việc từ một tin nhắn ngay trong phòng chat: tiêu đề, mô tả, dự án  |
+| `S20-CHAT-MSGTOTASK-1` | 🟡 | ✅ xong | [📄](S20-CHAT-MSGTOTASK-1.md) | ✅S20-CHAT-DEEPLINK-1 ✅S20-FE-TOAST-1 | Tạo việc từ một tin nhắn ngay trong phòng chat: tiêu đề, mô tả, dự án  |
 | `S20-CHAT-DISCUSS-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-CHAT-DEEPLINK-1 | Nối hai chiều phòng chat dự án ↔ dự án: nút «Thảo luận» ở dự án/chi ti |
 | `S20-CHAT-NEWROOM-1` | 🟢 | ✅ xong | — *(chưa)* | — | Tin nhắn: lập nhóm nhanh từ người liên hệ gần đây (ô tìm nhúng, tên nh |
 | `S20-CHAT-SEENBY-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-CHAT-DEEPLINK-1 | Người gửi xem được ai ĐÃ xem và ai CHƯA xem tin của mình (popover/shee |
@@ -808,7 +808,7 @@
 | `S20-TASK-LEAVEHANDOFF-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ASSIGNWARN-1 ✅S20-TASK-DRAWER-1 ✅S20-TASK-QUICKEDIT-1 ✅S20-FE-COMPANYTZ-1 | Trên đơn nghỉ của tôi thấy ngay các việc đến hạn trong kỳ nghỉ và bàn  |
 | `S20-TASK-LEAVEPICKER-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-TASK-ASSIGNWARN-1 ⏳S20-TASK-BULKACTIONS-1 ✅S20-TASK-OVERDUEDESK-1 ⏳S20-TASK-LEAVEHANDOFF-1 ✅S20-TASK-DRAWER-1 ✅S20-FE-COMPANYTZ-1 | Quản lý bàn giao quanh kỳ nghỉ: từ đơn đang duyệt một chạm tới danh sá |
 | `S20-GOAL-QUICKCHECKIN-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-FE-TOAST-1 | Mục tiêu: check-in nhanh (điền sẵn số cũ, độ tự tin một chạm, Ctrl+Ent |
-| `S20-GOAL-LINKEDTASKS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S20-CHAT-MSGTOTASK-1 ✅S20-TASK-DRAWER-1 | Tab «Công việc gắn» của mục tiêu: bấm dòng mở drawer việc, nhóm theo n |
+| `S20-GOAL-LINKEDTASKS-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-CHAT-MSGTOTASK-1 ✅S20-TASK-DRAWER-1 | Tab «Công việc gắn» của mục tiêu: bấm dòng mở drawer việc, nhóm theo n |
 | `S20-GOAL-PARENTPICKER-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-GOAL-QUICKSTART-1 | Form mục tiêu: chọn mục tiêu cha bằng ô tìm kiếm, kỳ tự lấy theo cha,  |
 | `S20-GOAL-DECOMPOSE-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-FE-COMPANYTZ-1 ✅S20-TASK-DRAWER-1 | Wizard phân rã mục tiêu: áp người/hạn cho mọi dòng một lần, hạn cuối n |
 | `S20-GOAL-BULKACTIVATE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S20-GOAL-LISTURL-1 ✅S20-GOAL-QUICKSTART-1 | Quản lý chọn nhiều mục tiêu Nháp của đội và kích hoạt cùng lúc ngay tr |
@@ -845,7 +845,7 @@
 | `S20-SEC-GOALNAMEDTO-1` | 🔴 | ✅ xong | [📄](S20-SEC-GOALNAMEDTO-1.md) | — | Tên/mã mục tiêu đi kèm dữ liệu việc theo đúng quyền xem mục tiêu — chố |
 | `S20-SEC-LEAVETYPEMASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Lịch nghỉ cấp đội chỉ hiện «Nghỉ» + khoảng ngày; loại nghỉ cụ thể chỉ  |
 | `S20-TASK-PROJTOOLBARURL-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-TASK-DRAWER-1 ✅S20-TASK-PROJECTENTRY-1 | Workspace dự án: toolbar và rail người phụ trách lên URL (q · status · |
-| `S20-FE-TOAST-2` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S20-FE-TOAST-1 | Thông báo nổi cho apps/auth + apps/console, dọn thông báo khi đăng xuấ |
+| `S20-FE-TOAST-2` | 🟢 | ✅ xong | [📄](S20-FE-TOAST-2.md) | ✅S20-FE-TOAST-1 | Thông báo nổi cho apps/auth + apps/console, dọn thông báo khi đăng xuấ |
 | `S20-NOTI-PRIORITYFILTER-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S20-NOTI-LISTNAV-1 | Lọc thông báo theo mức ưu tiên khớp hiển thị: hàng priority NULL tính  |
 | `S20-CHAT-MENTIONIDX-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S20-CHAT-MENTIONPIN-1 | Đo truy vấn đếm @ chưa đọc của danh sách phòng trên dữ liệu cỡ PROD; c |
 | `S20-CHAT-FEDEBT-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S20-CHAT-MENTIONPIN-1 | Nợ FE CHAT sau S20: hook nạp cửa sổ ngữ cảnh dùng chung (nhảy tới tin  |
