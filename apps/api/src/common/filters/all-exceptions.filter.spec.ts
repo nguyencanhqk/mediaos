@@ -4,9 +4,9 @@ import {
   InternalServerErrorException,
   Logger,
 } from "@nestjs/common";
-import { ZodValidationException } from "nestjs-zod";
+import { validate, ZodValidationException, ZodValidationPipe } from "nestjs-zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ZodError, type ZodIssue } from "zod";
+import { z, ZodError, type ZodIssue } from "zod";
 import { httpStatusToCode } from "../errors/error-codes";
 import { AllExceptionsFilter } from "./all-exceptions.filter";
 import { TOO_MANY_REQUESTS_MESSAGE, tooManyRequests } from "./retry-after";
@@ -135,6 +135,67 @@ describe("AllExceptionsFilter — error mapping (API-01 §12)", () => {
 });
 
 // ── S18-AUTH-RETRYAFTER-1 — header `Retry-After` suy TỪ `details` của 429 ────────────────────────
+describe("AllExceptionsFilter — lỗi ném từ transform bị nestjs-zod 5 gói (vá FULL gate S19-OPS-ZOD4-1 §10.8)", () => {
+  const meta = { type: "body" } as const;
+  /** Chạy đúng đường production: pipe/validate của nestjs-zod 5 → ném → filter. */
+  function thrownBy(run: () => unknown): unknown {
+    try {
+      run();
+    } catch (e) {
+      return e;
+    }
+    throw new Error("không ném");
+  }
+  const forbid = z.string().transform((): string => {
+    throw new ForbiddenException("Không có quyền");
+  });
+  const typeErr = z.string().transform((s): string => {
+    throw new TypeError(`hỏng khi xử lý (${s.length})`);
+  });
+
+  it("tiền đề: nestjs-zod 5 gói lỗi của transform thành ZodValidationException (pipe lẫn validate)", () => {
+    expect(thrownBy(() => new ZodValidationPipe(forbid).transform("x", meta))).toBeInstanceOf(
+      ZodValidationException,
+    );
+    expect(thrownBy(() => validate("x", typeErr))).toBeInstanceOf(ZodValidationException);
+  });
+
+  it("transform ném ForbiddenException ⇒ 403 với mã của chính nó (không phải 400 không details)", () => {
+    for (const run of [
+      () => new ZodValidationPipe(forbid).transform("x", meta),
+      () => validate("x", forbid),
+    ]) {
+      const { statusCode, body } = invoke(thrownBy(run));
+      expect(statusCode).toBe(403);
+      expect((body.error as { code: string }).code).toBe(httpStatusToCode(403));
+      expect((body.error as { type: string }).type).toBe("ForbiddenException");
+      expect(body.message).toBe("Không có quyền");
+    }
+  });
+
+  it("transform ném TypeError ⇒ 500 generic + log mức error có stack của TypeError (không lộ ra client)", () => {
+    const logSpy = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const { statusCode, body } = invoke(
+      thrownBy(() => new ZodValidationPipe(typeErr).transform("x", meta)),
+    );
+    expect(statusCode).toBe(500);
+    expect(body.message).toBe("Lỗi hệ thống");
+    expect((body.error as { type: string }).type).toBe("TypeError");
+    expect(JSON.stringify(body)).not.toContain("hỏng khi xử lý");
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const [line, stack] = logSpy.mock.calls[0] as [string, string];
+    expect(line).toContain("transform/refine");
+    expect(stack).toContain("TypeError: hỏng khi xử lý (1)");
+  });
+
+  it("lỗi ZodError THẬT ném lồng trong transform vẫn là 400 + details (không bị bóc)", () => {
+    const nested = z.string().transform((s) => z.number().parse(s));
+    const { statusCode, body } = invoke(thrownBy(() => validate("x", nested)));
+    expect(statusCode).toBe(400);
+    expect(Array.isArray((body.error as { details: unknown }).details)).toBe(true);
+  });
+});
+
 describe("AllExceptionsFilter — header Retry-After (429 mang retryAfterSec)", () => {
   const retryDetail = { field: "retryAfterSec", message: "900", rule: "retry-after" };
 

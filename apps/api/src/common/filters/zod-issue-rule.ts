@@ -5,6 +5,9 @@ import type { ErrorDetail } from "@mediaos/contracts";
  * Bảng đo trên zod 4.6.7. Không khớp ⇒ giữ mã v4 (KHÔNG bịa mã).
  *   invalid_format → invalid_string
  *   invalid_value  → invalid_enum_value (values ≥ 2) | invalid_literal (values = 1)
+ *     ⚠️ issue v4 của `z.enum([một phần tử])` Y HỆT issue của `z.literal(x)` (cùng `invalid_value`, `values` dài 1)
+ *     ⇒ không phân biệt được ⇒ ra `invalid_literal` (zod 3 ra `invalid_enum_value`). Chấp nhận: FE KHÔNG rẽ nhánh
+ *     theo hai mã này (chỉ hiện `message`). Đừng thêm phỏng đoán ở đây.
  *   invalid_union có `discriminator`/`note` → invalid_union_discriminator
  *   invalid_type có expected "date" → invalid_date
  */
@@ -46,7 +49,10 @@ export function extractZodIssues(zodError: unknown): RawIssue[] | null {
   return issues.filter((i): i is RawIssue => typeof i === "object" && i !== null);
 }
 
-/** issues → details của envelope. `null` khi không có issues (⇒ 400 không details, không bao giờ 500). */
+/**
+ * issues → details của envelope. `null` khi không có issues ⇒ filter trả 400 không details, TRỪ KHI lỗi gói bên
+ * trong là `Error` ném từ transform/refine — khi đó filter xử lý như chính lỗi đó (`unwrapZodWrapped`).
+ */
 export function zodIssuesToDetails(zodError: unknown): ErrorDetail[] | null {
   const issues = extractZodIssues(zodError);
   if (issues === null) return null;

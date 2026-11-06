@@ -11,7 +11,29 @@ import type { Request, Response } from "express";
 import { ZodValidationException } from "nestjs-zod";
 import { ERROR_CODES, httpStatusToCode } from "../errors/error-codes";
 import { retryAfterHeaderValue } from "./retry-after";
-import { zodIssuesToDetails } from "./zod-issue-rule";
+import { extractZodIssues, zodIssuesToDetails } from "./zod-issue-rule";
+
+/** Trần bóc lồng (ZodValidationException gói ZodValidationException…) — chống vòng lạ. */
+const MAX_UNWRAP = 4;
+
+/**
+ * S19-OPS-ZOD4-1 — vá FULL gate (plan §10.8). nestjs-zod 5.5.0 `validate()` (mà `ZodValidationPipe.transform` gọi)
+ * là `try { schema.parse(v) } catch (e) { throw new ZodValidationException(e) }` ⇒ MỌI lỗi ném từ transform/refine
+ * (ForbiddenException, TypeError…) thành 400 không details. nestjs-zod 4.3.1 cho lỗi không-phải-ZodError đi xuyên.
+ * Ở đây khôi phục hành vi đó: không có issues mà lỗi gói bên trong là `Error` (kể cả HttpException) ⇒ trả về lỗi
+ * đó để filter xử lý như chính nó (HttpException ⇒ đúng status/code; Error khác ⇒ 500 + log stack). Có issues,
+ * hoặc bên trong không phải Error ⇒ giữ ZodValidationException (400).
+ */
+export function unwrapZodWrapped(exception: unknown): unknown {
+  let current = exception;
+  for (let i = 0; i < MAX_UNWRAP; i++) {
+    if (!(current instanceof ZodValidationException)) return current;
+    const inner = current.getZodError();
+    if (extractZodIssues(inner) !== null || !(inner instanceof Error)) return current;
+    current = inner;
+  }
+  return current;
+}
 
 interface ResolvedError {
   status: number;
@@ -40,15 +62,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const requestId = request?.requestId ?? "";
 
-    const { status, code, message, type, details } = this.resolve(exception);
+    // Bóc lỗi mà nestjs-zod 5 gói nhầm thành ZodValidationException (xem `unwrapZodWrapped`). Từ đây mọi
+    // nhánh (status, code, log stack) làm việc trên lỗi THẬT — TypeError ra 500 kèm stack của chính nó.
+    const effective = unwrapZodWrapped(exception);
+    const { status, code, message, type, details } = this.resolve(effective);
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       // Server-side ONLY. Chỉ log method + PATH (đã bỏ query-string) + status + code + req-id.
       // Headers (Authorization/Cookie/CSRF) KHÔNG đi vào log.
       const path = (request?.url ?? "").split("?")[0];
       this.logger.error(
-        `${request?.method ?? "-"} ${path} -> ${status} [${code}] req=${requestId || "-"}`,
-        exception instanceof Error ? exception.stack : String(exception),
+        `${request?.method ?? "-"} ${path} -> ${status} [${code}] req=${requestId || "-"}${
+          effective === exception ? "" : " (ném từ transform/refine của schema zod)"
+        }`,
+        effective instanceof Error ? effective.stack : String(effective),
       );
     }
 
@@ -77,7 +104,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     //    BadRequestException (status 400) nên sẽ bị map generic nếu không branch riêng ở đây.
     if (exception instanceof ZodValidationException) {
       // nestjs-zod 5: getZodError() trả `unknown` ⇒ thu hẹp theo HÌNH DẠNG (issues là mảng), không instanceof.
-      // Không có issues ⇒ 400 không details — KHÔNG BAO GIỜ 500 (zod-issue-rule.ts).
+      // Không có issues (và bên trong KHÔNG phải Error — Error đã được `unwrapZodWrapped` bóc ra ở catch())
+      // ⇒ 400 không details.
       const details = zodIssuesToDetails(exception.getZodError());
       return {
         status: HttpStatus.BAD_REQUEST,
