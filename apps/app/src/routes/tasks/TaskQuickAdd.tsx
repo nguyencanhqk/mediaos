@@ -59,6 +59,10 @@ export interface TaskQuickAddProps {
   onExpand?: (draft: { title: string }) => void;
   /** Nhãn nút «Thêm chi tiết» (bắt buộc khi có `onExpand`). */
   expandLabel?: string;
+  /** Mặc định true: rời ô khi trống thì gọi `onClose`. Hộp thoại (tự lo Esc/bấm ngoài/focus) đặt false. */
+  closeOnBlur?: boolean;
+  /** Server từ chối: phía gọi báo lỗi nổi (hộp có thể đã đóng nên dòng lỗi tại ô không còn ai thấy). */
+  onCreateError?: (message: string, title: string) => void;
   /** Tắt chip Hạn (tạo nhanh toàn cục chỉ hỏi Tiêu đề). Mặc định bật. */
   withDeadlineChip?: boolean;
   /** Thay thông điệp «thiếu tiêu đề» mặc định. */
@@ -145,6 +149,8 @@ export function TaskQuickAdd({
   expandLabel,
   withDeadlineChip = true,
   titleRequiredMessage,
+  closeOnBlur = true,
+  onCreateError,
 }: TaskQuickAddProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -184,7 +190,9 @@ export function TaskQuickAdd({
       await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
     },
     onError: (err, body) => {
-      setError(t(`quickAdd.errors.${classifyTaskCreateError(err)}`));
+      const message = t(`quickAdd.errors.${classifyTaskCreateError(err)}`);
+      setError(message);
+      onCreateError?.(message, body.title);
       setTitle((current) => (current === "" ? body.title : current));
     },
   });
@@ -239,7 +247,7 @@ export function TaskQuickAdd({
   const onBlur = (e: FocusEvent<HTMLInputElement>) => {
     const pointerInside = pointerInsideRef.current;
     pointerInsideRef.current = false;
-    if (!onClose || pickerOpen || pointerInside) return;
+    if (!onClose || !closeOnBlur || pickerOpen || pointerInside) return;
     const next = e.relatedTarget;
     if (next instanceof Node && containerRef.current?.contains(next)) return;
     if (!title.trim() && !assignee && !dueAt) {
@@ -336,8 +344,9 @@ export function TaskQuickAdd({
             <button
               type="button"
               data-testid={`${id}-expand`}
+              disabled={createMutation.isPending}
               onClick={() => onExpand?.({ title })}
-              className="ml-auto inline-flex h-6 items-center rounded-full border border-border px-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className="ml-auto inline-flex h-6 items-center rounded-full border border-border px-2 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               {expandLabel}
             </button>

@@ -66,11 +66,37 @@ describe("useQuickCreateHotkey — Alt+Shift+N", () => {
     expect(onTrigger).not.toHaveBeenCalled();
   });
 
-  it("bỏ qua khi đang trong hộp thoại khác (không chồng modal)", () => {
+  it("mở được khi MỘT modal duy nhất (drawer chat/việc dạng Sheet) đang mở và focus trong đó", () => {
+    const onTrigger = vi.fn();
+    renderHook(() => useQuickCreateHotkey(true, onTrigger));
+    const sheet = document.body.appendChild(document.createElement("div"));
+    sheet.setAttribute("role", "dialog");
+    sheet.setAttribute("aria-modal", "true");
+    const btn = sheet.appendChild(document.createElement("button"));
+    const event = press(CHORD, btn);
+    expect(onTrigger).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("bỏ qua khi sẽ chồng modal lên modal (drawer + hộp thoại con)", () => {
+    const onTrigger = vi.fn();
+    renderHook(() => useQuickCreateHotkey(true, onTrigger));
+    const sheet = document.body.appendChild(document.createElement("div"));
+    sheet.setAttribute("role", "dialog");
+    sheet.setAttribute("aria-modal", "true");
+    const child = sheet.appendChild(document.createElement("div"));
+    child.setAttribute("role", "dialog");
+    child.setAttribute("aria-modal", "true");
+    const btn = child.appendChild(document.createElement("button"));
+    press(CHORD, btn);
+    expect(onTrigger).not.toHaveBeenCalled();
+  });
+
+  it("bỏ qua khi focus trong hộp cảnh báo (alertdialog)", () => {
     const onTrigger = vi.fn();
     renderHook(() => useQuickCreateHotkey(true, onTrigger));
     const dlg = document.body.appendChild(document.createElement("div"));
-    dlg.setAttribute("role", "dialog");
+    dlg.setAttribute("role", "alertdialog");
     const btn = dlg.appendChild(document.createElement("button"));
     press(CHORD, btn);
     expect(onTrigger).not.toHaveBeenCalled();

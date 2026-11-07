@@ -16,6 +16,7 @@ import { readRecentProjectId } from "./recent-project";
 export interface QuickCreateDialogProps {
   onClose: () => void;
   onCreated: (task: TaskCoreResponseDto) => void;
+  onCreateError: (message: string, title: string) => void;
   onExpand: (draft: { title: string; project: { id: string; name: string } | null }) => void;
 }
 
@@ -44,7 +45,12 @@ function useRecentProjectSuggestion(): TaskProjectResponseDto | null {
   return data && isSuggestableProject(data) ? data : null;
 }
 
-export function QuickCreateDialog({ onClose, onCreated, onExpand }: QuickCreateDialogProps) {
+export function QuickCreateDialog({
+  onClose,
+  onCreated,
+  onCreateError,
+  onExpand,
+}: QuickCreateDialogProps) {
   const { t } = useTranslation("tasks");
   const me = useMyEmployeeLink(true);
   const suggestion = useRecentProjectSuggestion();
@@ -72,7 +78,9 @@ export function QuickCreateDialog({ onClose, onCreated, onExpand }: QuickCreateD
           withDeadlineChip={false}
           autoFocus
           onClose={onClose}
+          closeOnBlur={false}
           onCreated={onCreated}
+          onCreateError={onCreateError}
           expandLabel={t("quickCreate.expand")}
           onExpand={({ title }) =>
             onExpand({ title, project: project ? { id: project.id, name: project.name } : null })

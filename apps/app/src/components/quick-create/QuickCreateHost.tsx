@@ -34,17 +34,38 @@ export function QuickCreateHost() {
 
   useQuickCreateHotkey(canCreate && !isOpen && fullDraft === null, open);
 
-  const handleCreated = useCallback(
+  const announceCreated = useCallback(
     (task: TaskCoreResponseDto) => {
       if (task.projectId) writeRecentProjectId(task.projectId);
       toast.success(t("quickCreate.created"), {
         key: TOAST_KEY,
         action: { label: t("quickCreate.open"), onClick: () => openTask(task.id) },
       });
+    },
+    [openTask, t],
+  );
+  // Hộp gọn: KHÔNG đụng form đầy đủ — request cũ của hộp gọn có thể về sau khi người dùng đã mở form đầy đủ.
+  const handleQuickCreated = useCallback(
+    (task: TaskCoreResponseDto) => {
+      announceCreated(task);
+      close();
+    },
+    [announceCreated, close],
+  );
+  const handleFullCreated = useCallback(
+    (task: TaskCoreResponseDto) => {
+      announceCreated(task);
       close();
       setFullDraft(null);
     },
-    [close, openTask, t],
+    [announceCreated, close],
+  );
+  // Hộp có thể đã đóng khi server lỗi ⇒ toast để người dùng biết việc CHƯA được tạo (kèm tiêu đề).
+  const handleCreateError = useCallback(
+    (message: string, title: string) => {
+      toast.error(t("quickCreate.createFailed", { title, reason: message }));
+    },
+    [t],
   );
 
   if (!canCreate) return null;
@@ -53,7 +74,7 @@ export function QuickCreateHost() {
       <TaskFormDrawer
         mode="create"
         onClose={() => setFullDraft(null)}
-        onSuccess={handleCreated}
+        onSuccess={handleFullCreated}
         defaultProject={fullDraft.project ?? undefined}
         initialValues={{ title: fullDraft.title }}
         defaultAssigneeMe
@@ -64,7 +85,8 @@ export function QuickCreateHost() {
   return (
     <QuickCreateDialog
       onClose={close}
-      onCreated={handleCreated}
+      onCreated={handleQuickCreated}
+      onCreateError={handleCreateError}
       onExpand={(draft) => {
         close();
         setFullDraft(draft);

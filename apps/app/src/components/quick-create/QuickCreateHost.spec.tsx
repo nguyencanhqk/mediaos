@@ -20,7 +20,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 vi.mock("@mediaos/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/ui")>();
-  return { ...actual, toast: { ...actual.toast, success: vi.fn() } };
+  return { ...actual, toast: { ...actual.toast, success: vi.fn(), error: vi.fn() } };
 });
 vi.mock("@/routes/tasks/TaskFormDrawer", () => ({
   TaskFormDrawer: (props: {
@@ -286,5 +286,52 @@ describe("QuickCreateHost — S20-X-QUICKCREATE-1", () => {
     expect(full.dataset.project).toBe("");
     expect(screen.queryByTestId("quick-create-dialog")).toBeNull();
     expect(taskCoreApi.createTask).not.toHaveBeenCalled();
+  });
+
+  it("chip dự án: rời ô nhập (đang trống) sang chip ⇒ hộp KHÔNG đóng, chip bấm được", async () => {
+    window.localStorage.setItem(QUICK_CREATE_RECENT_PROJECT_KEY, PROJECT_ID);
+    setCaps({ "create:task": true });
+    renderHost();
+    await openDialog();
+    const chip = await screen.findByTestId("quick-create-recent-project");
+    fireEvent.blur(input(), { relatedTarget: chip });
+    fireEvent.blur(input(), { relatedTarget: null });
+    expect(screen.getByTestId("quick-create-dialog")).toBeInTheDocument();
+    fireEvent.click(chip);
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("đóng hộp khi request đang bay rồi server lỗi ⇒ toast lỗi kèm tiêu đề", async () => {
+    setCaps({ "create:task": true });
+    let reject: (e: unknown) => void = () => undefined;
+    vi.mocked(taskCoreApi.createTask).mockReturnValue(
+      new Promise((_, r) => {
+        reject = r;
+      }) as never,
+    );
+    renderHost();
+    await openDialog();
+    fireEvent.change(input(), { target: { value: "Việc F" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalled());
+    act(() => useQuickCreateStore.getState().close());
+    expect(screen.queryByTestId("quick-create-dialog")).toBeNull();
+    await act(async () => {
+      reject(new ApiError(500, "INTERNAL", "x"));
+    });
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toContain("Việc F");
+  });
+
+  it("request đang bay ⇒ «Thêm chi tiết» bị khoá (không mở form rỗng/tạo trùng)", async () => {
+    setCaps({ "create:task": true });
+    vi.mocked(taskCoreApi.createTask).mockReturnValue(new Promise(() => undefined) as never);
+    renderHost();
+    await openDialog();
+    fireEvent.change(input(), { target: { value: "Việc G" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("quick-create-expand")).toBeDisabled());
+    fireEvent.click(screen.getByTestId("quick-create-expand"));
+    expect(screen.queryByTestId("full-form")).toBeNull();
   });
 });
