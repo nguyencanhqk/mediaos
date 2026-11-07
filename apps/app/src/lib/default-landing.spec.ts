@@ -125,6 +125,28 @@ describe("useApplyDefaultLanding", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  it("lỗi tạm rồi retry THÀNH CÔNG ⇒ Home đã nhả thì ở nguyên, không nhảy trang muộn", async () => {
+    vi.useFakeTimers();
+    try {
+      getPrefs
+        .mockRejectedValueOnce(new Error("tạm"))
+        .mockResolvedValueOnce({ defaultLanding: "/dashboard" });
+      const { result } = setup(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(result.current).toBe(false);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_010);
+      });
+      expect(getPrefs).toHaveBeenCalledTimes(2);
+      expect(result.current).toBe(false);
+      expect(mockNavigate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("lượt tải đầu treo quá trần ⇒ nhả Home, dữ liệu về muộn KHÔNG kéo điều hướng", async () => {
     vi.useFakeTimers();
     try {

@@ -63,3 +63,9 @@ Nguồn: `docs/plans/S20-WORKUX-STORIES.md` §5.4 US-X-03 + US-X-08 (biến th�
 6. LOW widget gọi lại 2x sau đổi trạng thái: NỢ, có SẴN trên master — `routes/tasks/hooks/use-task-action-mutation.ts:141-144` duyệt cả `taskCoreInvalidation.list()` và `.my()`, mà cả hai đều chứa `dashboardKeys.widgets.all` (`packages/web-core/src/lib/query-keys.ts:521-522`) ⇒ mỗi widget bị invalidate 2 lần (cùng widget pending-leave). Ngoài paths (routes/tasks + web-core).
 
 KPI luồng A (/home, defaultLanding=null): 4 thao tác, 1 chuyển trang; POST /tasks/T1/change-status {status:Done}; landing độc hại ở lại origin. Đo 07/11/2026 Chromium Playwright MCP 1440x1600 @ d2de717e.
+
+### Sổ vết — vòng 3 (luồng điều phối, 07/11/2026)
+
+1. LOW nhả Home KHÔNG chốt (review hẹp vòng 2): react-query đưa `failureCount` về 0 khi retry thành công ⇒ Home đã vẽ bị nhảy sang đích muộn. ĐÃ VÁ — cờ nhả chốt một chiều (`releasedLatch`, dùng chung cho trần thời gian); ca «lỗi tạm rồi retry thành công» ĐỎ trên mã cũ (`expected true to be false`), xanh sau vá.
+2. MEDIUM (đo trình duyệt) `?request=123` vẫn tới trang dạng SỐ: route gốc không có validateSearch nên search thô của cha gộp xuống dù hàm validate của route này đã bỏ ⇒ ĐÃ VÁ ở router.tsx: chuẩn hoá `String(request)` ⇒ hành vi giống `?request=abc` (thông điệp «không tìm thấy», 0 lời gọi), kiểu khớp khai báo. Mục 3 vòng 2 hiệu chỉnh: URL vẫn sạch `?request=123`, trang CÓ báo «không tìm thấy».
+3. Đo lại trình duyệt thật vòng 2 (@ f5f395d8): preferences luôn 500 ⇒ Home hiện ~60 ms sau lời gọi đầu, TRƯỚC retry đầu ~1 s, không điều hướng muộn sau 8 s; nút Check-in có aria-label «Check-in: <tên mục tiêu>».

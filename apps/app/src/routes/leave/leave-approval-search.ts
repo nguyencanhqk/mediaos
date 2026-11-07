@@ -2,8 +2,9 @@
  * S20-DASH-TODAY-1 — `?request=<uuid>` của `/leave/approvals`: mở sẵn dialog chi tiết đơn.
  *
  * Giá trị rác KHÔNG ném (không vỡ trang): router parse search bằng JSON.parse nên `?request=123` tới đây
- * là SỐ — bỏ khỏi search; chuỗi không phải UUID giữ nguyên để trang báo «không tìm thấy». Không bao giờ
- * thành lời gọi API (kiểm UUID TRƯỚC mọi request).
+ * là SỐ — bỏ khỏi kết quả của hàm này (URL không bị viết lại thành `%22123%22`); chuỗi không phải UUID giữ
+ * nguyên để trang báo «không tìm thấy». LƯU Ý: search thô của route gốc vẫn gộp `request:123` xuống ⇒ chỗ
+ * dùng ở router.tsx chuẩn hoá về chuỗi. Không bao giờ thành lời gọi API (kiểm UUID TRƯỚC mọi request).
  */
 export const LEAVE_APPROVAL_REQUEST_PARAM = "request";
 

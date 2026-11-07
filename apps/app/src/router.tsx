@@ -1237,7 +1237,10 @@ const leaveApprovalsRoute = createRoute({
       leaveApprovalsMeta,
       "LEAVE",
       <LeaveApprovalPage
-        requestId={request ?? null}
+        // Route gốc không có validateSearch nên search thô của cha (vd `?request=123` → SỐ) vẫn gộp xuống đây
+        // dù validateSearch của route này đã bỏ nó ⇒ chuẩn hoá về chuỗi: hành vi giống `?request=abc`
+        // (báo «không tìm thấy», 0 lời gọi vì không phải UUID).
+        requestId={request == null ? null : String(request)}
         onClearRequest={() => void navigate({ search: {}, replace: true })}
       />,
     );

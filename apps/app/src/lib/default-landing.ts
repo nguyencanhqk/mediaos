@@ -58,17 +58,22 @@ export function resolveDefaultLanding(raw: unknown): DefaultLandingPath {
 export function useApplyDefaultLanding(): boolean {
   const navigate = useNavigate();
   const applied = useRef(false);
-  const [timedOut, setTimedOut] = useState(false);
+  const [releasedLatch, setReleasedLatch] = useState(false);
   const { data, isPending, failureCount } = useQuery({
     queryKey: meKeys.preferences(),
     queryFn: meApi.getPreferences,
     staleTime: 60_000,
   });
   // Lỗi (kể cả đang retry sau lỗi) hoặc quá trần ⇒ nhả Home ngay, không điều hướng muộn gây nháy.
-  const released = timedOut || failureCount > 0;
+  // CHỐT một chiều: react-query đưa `failureCount` về 0 khi retry thành công — nếu không chốt, Home đã vẽ
+  // sẽ bị nhảy sang đích muộn (đúng kiểu nháy mà cơ chế này muốn tránh).
+  const released = releasedLatch || failureCount > 0;
+  useEffect(() => {
+    if (failureCount > 0 && !releasedLatch) setReleasedLatch(true);
+  }, [failureCount, releasedLatch]);
   useEffect(() => {
     if (!isPending || released) return;
-    const id = setTimeout(() => setTimedOut(true), DEFAULT_LANDING_HOLD_MAX_MS);
+    const id = setTimeout(() => setReleasedLatch(true), DEFAULT_LANDING_HOLD_MAX_MS);
     return () => clearTimeout(id);
   }, [isPending, released]);
   const target = !released && data ? resolveDefaultLanding(data.defaultLanding) : null;
