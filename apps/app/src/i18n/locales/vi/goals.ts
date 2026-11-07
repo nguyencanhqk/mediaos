@@ -389,6 +389,18 @@ export default {
     unlink: "Tháo",
     unlinkError: "Không tháo được công việc khỏi mục tiêu.",
     lockedFinalized: "Mục tiêu đã chốt kỳ — không sửa được danh sách công việc.",
+    groupByAssignee: "Nhóm theo người",
+    unassigned: "Chưa giao",
+    groupDone: "{{done}}/{{total}} xong",
+  },
+
+  // S20-GOAL-LINKEDTASKS-1 — «Thêm việc»: tạo việc mới rồi gắn vào mục tiêu, không rời trang.
+  addTask: {
+    button: "Thêm việc",
+    linked: "Đã tạo việc và gắn vào mục tiêu.",
+    notLinked: "Đã tạo việc «{{name}}» nhưng chưa gắn vào mục tiêu.",
+    retry: "Thử gắn lại",
+    open: "Mở việc",
   },
 
   checkinActions: {

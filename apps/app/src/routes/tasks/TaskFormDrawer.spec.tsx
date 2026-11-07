@@ -405,6 +405,31 @@ describe("TaskFormDrawer (tạo) — người phụ trách mặc định là tô
     expect(screen.queryByRole("option", { name: "Dự án A" })).not.toBeInTheDocument();
   });
 
+  // S20-GOAL-LINKEDTASKS-1 — nợ MSGTOTASK: initialValues.projectId KHÁC defaultProject.id (hoặc không có
+  // defaultProject) thì option cố định phải mang đúng id đó ngay lúc mở, trước khi /projects về.
+  it("initialValues.projectId (không có defaultProject) ⇒ ô dự án chọn đúng dự án đó khi /projects về SAU", async () => {
+    setCapabilities({ "create:task": true, "read:project": true });
+    vi.mocked(taskProjectApi.listProjects).mockResolvedValueOnce([
+      { id: "proj-000", name: "Dự án Z" },
+      { id: "proj-009", name: "Dự án Mục tiêu" },
+    ] as never);
+    renderCreate({ initialValues: { projectId: "proj-009", title: "Việc của mục tiêu" } });
+    expect(field("task-project")).toHaveValue("proj-009");
+
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "Dự án Z" })).toBeInTheDocument(),
+    );
+    expect(field("task-project")).toHaveValue("proj-009");
+    expect(screen.getAllByRole("option", { selected: true }).map((o) => o.textContent)).toContain(
+      "Dự án Mục tiêu",
+    );
+    submitForm();
+    await waitFor(() => expect(taskCoreApi.createTask).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(taskCoreApi.createTask).mock.calls[0]?.[0]).toMatchObject({
+      projectId: "proj-009",
+    });
+  });
+
   // S20-CHAT-MSGTOTASK-1 — prop additive cho caller điền sẵn (tạo việc từ tin nhắn, GOAL-LINKEDTASKS sau).
   it("initialValues điền tiêu đề/mô tả; projectId của initialValues thắng defaultProject", async () => {
     setCapabilities({ "create:task": true });

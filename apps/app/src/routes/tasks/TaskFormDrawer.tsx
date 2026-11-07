@@ -123,7 +123,15 @@ export function TaskFormDrawer({
   const locked = isEdit ? editLocks : NO_FIELD_LOCKS;
   const me = useMyEmployeeLink(!isEdit);
   const myEmployeeId = me.status === "linked" ? me.employeeId : null;
-  const defaultProjectId = isEdit ? undefined : defaultProject?.id;
+  // Dự án điền sẵn = `initialValues.projectId` nếu caller truyền (kể cả "" = cố ý không chọn), ngược lại
+  // `defaultProject`. Option cố định của ô dự án bám ĐÚNG id này (S20-GOAL-LINKEDTASKS-1): trước đây chỉ bám
+  // `defaultProject` ⇒ `initialValues.projectId` khác nó thì chưa có option mang giá trị ⇒ trình duyệt hiện
+  // «Không chọn» tới khi /projects về.
+  const defaultProjectId = isEdit
+    ? undefined
+    : initialValues && "projectId" in initialValues
+      ? initialValues.projectId || undefined
+      : defaultProject?.id;
   const assignMeWithProject = !isEdit && defaultAssigneeMe;
 
   const form = useForm<TaskFormValues>({
@@ -219,7 +227,9 @@ export function TaskFormDrawer({
   // chọn ⇒ trình duyệt reset ô về «Không chọn» trong khi form vẫn giữ (và gửi) projectId — đo trên trình
   // duyệt thật 06/11; lần mở sau (cache ấm) không lộ.
   const defaultProjectName =
-    (projects ?? []).find((p) => p.id === defaultProjectId)?.name ?? defaultProject?.name ?? null;
+    (projects ?? []).find((p) => p.id === defaultProjectId)?.name ??
+    (defaultProject?.id === defaultProjectId ? defaultProject?.name : null) ??
+    null;
   const listedProjects = (projects ?? []).filter((p) => p.id !== defaultProjectId);
 
   const mutation = useMutation({

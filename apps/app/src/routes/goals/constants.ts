@@ -116,3 +116,8 @@ export const TASK_UPDATE_STATE_PAIR = { action: "update-state", resourceType: "t
  * BE map một chiều khi áp template). `none` = không đặt ưu tiên.
  */
 export const TASK_TEMPLATE_PRIORITY_OPTIONS = ["urgent", "high", "medium", "low", "none"] as const;
+
+/** S20-GOAL-LINKEDTASKS-1 — trạng thái việc tính «xong» ở nhóm theo người (`taskCoreStatusSchema`). */
+export const GOAL_LINKED_TASK_DONE_STATUS = "Done";
+/** Khoá nhóm «Chưa giao» (không trùng được với id nhân viên — không phải UUID). */
+export const GOAL_LINKED_TASK_UNASSIGNED_KEY = "__unassigned__";
