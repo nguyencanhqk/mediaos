@@ -153,7 +153,7 @@ describe("ForbiddenPage", () => {
   it("renders link về trang chủ", async () => {
     await renderForbidden();
     const link = screen.getByRole("link");
-    expect(link).toHaveAttribute("href", "/");
+    expect(link).toHaveAttribute("href", "/home") // S20-DASH-TODAY-1: link về trang chủ trỏ /home, không qua cổng vào '/';
   });
 });
 
