@@ -12,12 +12,13 @@
  * theme 'system'; mock theo mẫu packages/ui/src/hooks/use-theme.spec.ts để nhãn nút xác định
  * (không phụ thuộc fallback fail-soft ngầm).
  */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { ReactNode, MouseEventHandler } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
 import { useLayoutStore } from "@/stores/layout.store";
+import { useQuickCreateStore } from "@/components/quick-create/quick-create.store";
 import { GlobalTopbar } from "./GlobalTopbar";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -152,5 +153,23 @@ describe("GlobalTopbar — nhãn cụ thể theo từng control icon-only", () =
   it("liên kết Trang chủ/logo có accessible name (KHÔNG phải icon trần dù chỉ có ảnh/wordmark)", () => {
     renderTopbar();
     expect(screen.getByRole("link", { name: "Về trang chủ" })).toBeInTheDocument();
+  });
+});
+
+describe("GlobalTopbar — «+ Tạo việc» (S20-X-QUICKCREATE-1)", () => {
+  it("thiếu create:task ⇒ không có nút", () => {
+    renderTopbar();
+    expect(screen.queryByTestId("topbar-quick-create")).toBeNull();
+  });
+
+  it("có create:task ⇒ nút có tên truy cập, bấm mở form gọn (store)", () => {
+    useAuthStore.setState({ capabilities: { "read:notification": true, "create:task": true } });
+    useQuickCreateStore.setState({ isOpen: false });
+    renderTopbar();
+    const button = screen.getByRole("button", { name: "Tạo việc" });
+    expect(button).toHaveAttribute("aria-keyshortcuts", "Alt+Shift+N");
+    fireEvent.click(button);
+    expect(useQuickCreateStore.getState().isOpen).toBe(true);
+    useQuickCreateStore.setState({ isOpen: false });
   });
 });

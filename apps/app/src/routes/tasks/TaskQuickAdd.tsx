@@ -8,7 +8,7 @@ import {
   taskCoreInvalidation,
   useCan,
 } from "@mediaos/web-core";
-import type { CreateTaskCoreRequest } from "@mediaos/contracts";
+import type { CreateTaskCoreRequest, TaskCoreResponseDto } from "@mediaos/contracts";
 import { cn } from "@mediaos/ui";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
@@ -53,6 +53,16 @@ export interface TaskQuickAddProps {
   onClose?: () => void;
   disabled?: boolean;
   disabledReason?: string;
+  /** S20-X-QUICKCREATE-1 — gọi ngay khi server ghi xong (trước khi làm mới danh sách): toast «Mở», đóng hộp. */
+  onCreated?: (task: TaskCoreResponseDto) => void;
+  /** Có ⇒ nút «Thêm chi tiết» chuyển tiêu đề đang gõ sang form đầy đủ (phía gọi mở form). */
+  onExpand?: (draft: { title: string }) => void;
+  /** Nhãn nút «Thêm chi tiết» (bắt buộc khi có `onExpand`). */
+  expandLabel?: string;
+  /** Tắt chip Hạn (tạo nhanh toàn cục chỉ hỏi Tiêu đề). Mặc định bật. */
+  withDeadlineChip?: boolean;
+  /** Thay thông điệp «thiếu tiêu đề» mặc định. */
+  titleRequiredMessage?: string;
 }
 
 interface StickyAssignee {
@@ -130,6 +140,11 @@ export function TaskQuickAdd({
   onClose,
   disabled = false,
   disabledReason,
+  onCreated,
+  onExpand,
+  expandLabel,
+  withDeadlineChip = true,
+  titleRequiredMessage,
 }: TaskQuickAddProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -146,7 +161,8 @@ export function TaskQuickAdd({
   const [pickerOpen, setPickerOpen] = useState(false);
   const { ASSIGN, UPDATE_DEADLINE } = TASK_CORE_ENGINE_PAIRS;
   const canAssign = useCan(ASSIGN.action, ASSIGN.resourceType);
-  const canSetDeadline = useCan(UPDATE_DEADLINE.action, UPDATE_DEADLINE.resourceType);
+  const canSetDeadline =
+    useCan(UPDATE_DEADLINE.action, UPDATE_DEADLINE.resourceType) && withDeadlineChip;
   const showAssigneeChip = withAssigneeChip && canAssign && !fixedAssigneeEmployeeId;
   useKeyFocus(shortcutKey ?? null, inputRef);
   // `autoFocus` của DOM chỉ có tác dụng lúc gắn ô; ô gắn khi còn khoá (vd «Việc của tôi» đang hỏi /auth/me)
@@ -157,7 +173,8 @@ export function TaskQuickAdd({
 
   const createMutation = useMutation({
     mutationFn: (body: CreateTaskCoreRequest) => taskCoreApi.createTask(body),
-    onSuccess: async () => {
+    onSuccess: async (task) => {
+      onCreated?.(task);
       // Board KHÔNG nằm dưới taskCoreInvalidation.list() ⇒ khoá kanban của đúng dự án phải TƯỜNG MINH.
       const keys = [
         ...taskCoreInvalidation.list(),
@@ -182,7 +199,7 @@ export function TaskQuickAdd({
   const submit = () => {
     if (disabled) return;
     const value = title.trim();
-    if (!value) return setError(t("quickAdd.errors.titleRequired"));
+    if (!value) return setError(titleRequiredMessage ?? t("quickAdd.errors.titleRequired"));
     if (value.length > TASK_TITLE_MAX_LENGTH) {
       return setError(t("quickAdd.errors.titleTooLong", { max: TASK_TITLE_MAX_LENGTH }));
     }
@@ -250,7 +267,8 @@ export function TaskQuickAdd({
   };
 
   const messageId = `${id}-message`;
-  const showChips = !disabled && (showAssigneeChip || canSetDeadline);
+  const showExpand = !disabled && onExpand !== undefined;
+  const showChips = !disabled && (showAssigneeChip || canSetDeadline || showExpand);
   // Hạn đang chọn hiện ĐÚNG MỘT lần trên hàng chip (và hàng vừa cột board ~270 px): hạn trống hoặc trùng
   // mốc một chạm ⇒ chip lịch chỉ là biểu tượng; hạn khác ⇒ chip lịch in ngày giờ, chip một chạm ẩn.
   const nearest = canSetDeadline
@@ -313,6 +331,16 @@ export function TaskQuickAdd({
               value={dueAt}
               onSelect={pickDeadline}
             />
+          )}
+          {showExpand && (
+            <button
+              type="button"
+              data-testid={`${id}-expand`}
+              onClick={() => onExpand?.({ title })}
+              className="ml-auto inline-flex h-6 items-center rounded-full border border-border px-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {expandLabel}
+            </button>
           )}
           {canSetDeadline && (
             <DeadlineQuickPicker

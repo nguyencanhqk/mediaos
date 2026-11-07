@@ -26,6 +26,7 @@ import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
 import { useBrandingQuery } from "@/hooks/use-branding";
 import { useChatRealtime } from "@/hooks/use-chat-realtime";
+import { QuickCreateHost } from "@/components/quick-create/QuickCreateHost";
 import { ChatDrawer } from "@/components/chat/ChatDrawer";
 import { CallProvider } from "@/components/chat/call/CallProvider";
 import { ACCOUNT_SETUP_2FA_PATH, SETUP_2FA_PATHS } from "@/routes/account/constants";
@@ -163,6 +164,8 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
         <ChatDrawer />
         {/* S20-TASK-DRAWER-1 — drawer chi tiết việc DUY NHẤT (`?task=<uuid>` trên mọi route), đặt SAU
             drawer chat để nằm trên nó. Ở shell nên trang phía sau giữ nguyên bộ lọc + vị trí cuộn. */}
+        {/* S20-X-QUICKCREATE-1 — phím tắt + hộp «Tạo việc nhanh» từ mọi trang (tự gate create:task). */}
+        <QuickCreateHost />
         {hasTaskParam && (
           <React.Suspense fallback={null}>
             <GlobalTaskDrawer />
