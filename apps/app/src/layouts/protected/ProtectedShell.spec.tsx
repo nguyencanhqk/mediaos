@@ -36,6 +36,11 @@ vi.mock("@/routes/tasks/TaskDetailDrawer", () => ({
   GlobalTaskDrawer: () => <div data-testid="global-task-drawer" />,
 }));
 
+// S20-X-QUICKCREATE-1 — host tạo nhanh toàn cục: thân có spec riêng, ở đây chỉ khoá việc shell mount nó.
+vi.mock("@/components/quick-create/QuickCreateHost", () => ({
+  QuickCreateHost: () => <div data-testid="quick-create-host" />,
+}));
+
 // Chrome nặng — không thuộc phạm vi guard.
 vi.mock("../topbar/GlobalTopbar", () => ({ GlobalTopbar: () => <div data-testid="topbar" /> }));
 vi.mock("../home/AppSwitcher", () => ({ AppSwitcher: () => null }));
@@ -187,7 +192,13 @@ describe("ProtectedShell — hệ thông báo nổi dùng chung (S20-FE-TOAST-1)
     act(() =>
       useAuthStore.setState({
         isAuthenticated: true,
-        user: { id: "u2", email: "b@demo.local", fullName: "B", status: "Active", companyId: "co1" },
+        user: {
+          id: "u2",
+          email: "b@demo.local",
+          fullName: "B",
+          status: "Active",
+          companyId: "co1",
+        },
       }),
     );
 
@@ -228,5 +239,19 @@ describe("ProtectedShell — drawer việc toàn cục (S20-TASK-DRAWER-1)", () 
       await Promise.resolve();
     });
     expect(screen.queryByTestId("global-task-drawer")).not.toBeInTheDocument();
+  });
+});
+
+describe("ProtectedShell — tạo việc nhanh toàn cục (S20-X-QUICKCREATE-1)", () => {
+  afterEach(() => {
+    cleanup();
+    useAuthStore.setState({ isAuthenticated: false, user: null, mustSetupTwoFactor: false });
+  });
+
+  it("shell mount QuickCreateHost ĐÚNG một lần, ở mọi route", () => {
+    setUser(false);
+    renderShell("/goals/g-1");
+
+    expect(screen.getAllByTestId("quick-create-host")).toHaveLength(1);
   });
 });

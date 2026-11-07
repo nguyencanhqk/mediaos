@@ -6,9 +6,10 @@ import {
   taskCoreApi,
   taskKeys,
   taskCoreInvalidation,
+  parseKindError,
   useCan,
 } from "@mediaos/web-core";
-import type { CreateTaskCoreRequest } from "@mediaos/contracts";
+import type { CreateTaskCoreRequest, TaskCoreResponseDto } from "@mediaos/contracts";
 import { cn } from "@mediaos/ui";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { DeadlineQuickPicker } from "./DeadlineQuickPicker";
@@ -53,6 +54,31 @@ export interface TaskQuickAddProps {
   onClose?: () => void;
   disabled?: boolean;
   disabledReason?: string;
+  /** S20-X-QUICKCREATE-1 — gọi ngay khi server ghi xong (trước khi làm mới danh sách): toast «Mở», đóng hộp. */
+  onCreated?: (task: TaskCoreResponseDto) => void;
+  /** Có ⇒ nút «Thêm chi tiết» chuyển tiêu đề đang gõ sang form đầy đủ (phía gọi mở form). */
+  onExpand?: (draft: { title: string }) => void;
+  /** Nhãn nút «Thêm chi tiết» (bắt buộc khi có `onExpand`). */
+  expandLabel?: string;
+  /** Mặc định true: rời ô khi trống thì gọi `onClose`. Hộp thoại (tự lo Esc/bấm ngoài/focus) đặt false. */
+  closeOnBlur?: boolean;
+  /** Server từ chối: phía gọi báo lỗi nổi (hộp có thể đã đóng nên dòng lỗi tại ô không còn ai thấy). */
+  onCreateError?: (message: string, title: string) => void;
+  /** Tắt chip Hạn (tạo nhanh toàn cục chỉ hỏi Tiêu đề). Mặc định bật. */
+  withDeadlineChip?: boolean;
+  /** Thay thông điệp «thiếu tiêu đề» mặc định. */
+  titleRequiredMessage?: string;
+  /** Lỗi 400/422 nghiệp vụ: hiện thông điệp của server (không bao giờ với 5xx/mạng). Mặc định tắt. */
+  showServerReason?: boolean;
+  /** Chuỗi dự phòng cho 400/422 khi server không kèm lý do (hộp gọn không có hạn/cột). */
+  badRequestMessage?: string;
+}
+
+/** Bỏ tiền tố mã slug `TASK-ERR-…: ` — chỉ giữ phần người đọc được; rỗng ⇒ null. */
+function readBusinessReason(error: unknown): string | null {
+  const { message } = parseKindError(error);
+  const text = message.replace(/^[A-Z][A-Z0-9-]*:\s*/, "").trim();
+  return text === "" || /^[A-Z][A-Z0-9-]+$/.test(text) ? null : text;
 }
 
 interface StickyAssignee {
@@ -130,6 +156,15 @@ export function TaskQuickAdd({
   onClose,
   disabled = false,
   disabledReason,
+  onCreated,
+  onExpand,
+  expandLabel,
+  withDeadlineChip = true,
+  titleRequiredMessage,
+  closeOnBlur = true,
+  onCreateError,
+  showServerReason = false,
+  badRequestMessage,
 }: TaskQuickAddProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
@@ -146,7 +181,8 @@ export function TaskQuickAdd({
   const [pickerOpen, setPickerOpen] = useState(false);
   const { ASSIGN, UPDATE_DEADLINE } = TASK_CORE_ENGINE_PAIRS;
   const canAssign = useCan(ASSIGN.action, ASSIGN.resourceType);
-  const canSetDeadline = useCan(UPDATE_DEADLINE.action, UPDATE_DEADLINE.resourceType);
+  const canSetDeadline =
+    useCan(UPDATE_DEADLINE.action, UPDATE_DEADLINE.resourceType) && withDeadlineChip;
   const showAssigneeChip = withAssigneeChip && canAssign && !fixedAssigneeEmployeeId;
   useKeyFocus(shortcutKey ?? null, inputRef);
   // `autoFocus` của DOM chỉ có tác dụng lúc gắn ô; ô gắn khi còn khoá (vd «Việc của tôi» đang hỏi /auth/me)
@@ -157,7 +193,8 @@ export function TaskQuickAdd({
 
   const createMutation = useMutation({
     mutationFn: (body: CreateTaskCoreRequest) => taskCoreApi.createTask(body),
-    onSuccess: async () => {
+    onSuccess: async (task) => {
+      onCreated?.(task);
       // Board KHÔNG nằm dưới taskCoreInvalidation.list() ⇒ khoá kanban của đúng dự án phải TƯỜNG MINH.
       const keys = [
         ...taskCoreInvalidation.list(),
@@ -167,7 +204,13 @@ export function TaskQuickAdd({
       await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
     },
     onError: (err, body) => {
-      setError(t(`quickAdd.errors.${classifyTaskCreateError(err)}`));
+      const kind = classifyTaskCreateError(err);
+      const message =
+        kind === "badRequest" && showServerReason
+          ? (readBusinessReason(err) ?? badRequestMessage ?? t("quickAdd.errors.badRequest"))
+          : t(`quickAdd.errors.${kind}`);
+      setError(message);
+      onCreateError?.(message, body.title);
       setTitle((current) => (current === "" ? body.title : current));
     },
   });
@@ -182,7 +225,7 @@ export function TaskQuickAdd({
   const submit = () => {
     if (disabled) return;
     const value = title.trim();
-    if (!value) return setError(t("quickAdd.errors.titleRequired"));
+    if (!value) return setError(titleRequiredMessage ?? t("quickAdd.errors.titleRequired"));
     if (value.length > TASK_TITLE_MAX_LENGTH) {
       return setError(t("quickAdd.errors.titleTooLong", { max: TASK_TITLE_MAX_LENGTH }));
     }
@@ -222,7 +265,7 @@ export function TaskQuickAdd({
   const onBlur = (e: FocusEvent<HTMLInputElement>) => {
     const pointerInside = pointerInsideRef.current;
     pointerInsideRef.current = false;
-    if (!onClose || pickerOpen || pointerInside) return;
+    if (!onClose || !closeOnBlur || pickerOpen || pointerInside) return;
     const next = e.relatedTarget;
     if (next instanceof Node && containerRef.current?.contains(next)) return;
     if (!title.trim() && !assignee && !dueAt) {
@@ -250,7 +293,8 @@ export function TaskQuickAdd({
   };
 
   const messageId = `${id}-message`;
-  const showChips = !disabled && (showAssigneeChip || canSetDeadline);
+  const showExpand = !disabled && onExpand !== undefined;
+  const showChips = !disabled && (showAssigneeChip || canSetDeadline || showExpand);
   // Hạn đang chọn hiện ĐÚNG MỘT lần trên hàng chip (và hàng vừa cột board ~270 px): hạn trống hoặc trùng
   // mốc một chạm ⇒ chip lịch chỉ là biểu tượng; hạn khác ⇒ chip lịch in ngày giờ, chip một chạm ẩn.
   const nearest = canSetDeadline
@@ -313,6 +357,17 @@ export function TaskQuickAdd({
               value={dueAt}
               onSelect={pickDeadline}
             />
+          )}
+          {showExpand && (
+            <button
+              type="button"
+              data-testid={`${id}-expand`}
+              disabled={createMutation.isPending}
+              onClick={() => onExpand?.({ title })}
+              className="ml-auto inline-flex h-6 items-center rounded-full border border-border px-2 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {expandLabel}
+            </button>
           )}
           {canSetDeadline && (
             <DeadlineQuickPicker

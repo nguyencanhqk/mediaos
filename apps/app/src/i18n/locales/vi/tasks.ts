@@ -2,6 +2,25 @@
  * i18n (vi) — namespace "tasks", module TASK (Project) — S4-FE-TASK-1 (SPEC-06 §13.1/§13.2/§13.3/§13.4).
  */
 export default {
+  // S20-X-QUICKCREATE-1 (US-X-05) — «+ Tạo việc» ở topbar + phím tắt: form gọn từ MỌI trang.
+  quickCreate: {
+    button: "Tạo việc",
+    buttonTitle: "Tạo việc ({{hotkey}})",
+    dialogTitle: "Tạo việc nhanh",
+    placeholder: "Tiêu đề việc, rồi Enter",
+    hint: "Giao cho tôi · chưa chọn dự án · Enter để tạo · Esc để đóng",
+    titleRequired: "Nhập tiêu đề",
+    expand: "Thêm chi tiết",
+    loading: "Đang tải thông tin của bạn…",
+    unlinked:
+      "Tài khoản của bạn chưa liên kết hồ sơ nhân viên nên chưa tạo nhanh được. Hãy nhờ bộ phận nhân sự liên kết.",
+    meFailed: "Không tải được thông tin của bạn nên chưa tạo nhanh được. Tải lại trang để thử lại.",
+    recentProject: "Dự án gần nhất: {{name}}",
+    created: "Đã tạo việc",
+    badRequest: "Không tạo được — kiểm tra lại tiêu đề công việc.",
+    createFailed: "Chưa tạo được việc «{{title}}». {{reason}}",
+    open: "Mở",
+  },
   // S5-TASK-NAV-TREE-1 (đợt B) — cây phòng ban + dự án trong sidebar TASK (TaskSidebarTree.tsx)
   sidebarTree: {
     title: "Dự án theo phòng ban",

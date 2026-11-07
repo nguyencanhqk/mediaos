@@ -15,7 +15,7 @@
 import * as React from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Grid3x3, Menu } from "lucide-react";
+import { Grid3x3, Menu, Plus } from "lucide-react";
 import { cn, ThemeToggle } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
@@ -25,7 +25,10 @@ import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 import { DynamicIcon } from "../workspace/DynamicIcon";
 import { NotificationBadge } from "@/components/notifications/NotificationBadge";
 import { ChatBadge } from "@/components/chat/ChatBadge";
-import { APP_REGISTRY } from "@mediaos/web-core";
+import { APP_REGISTRY, useCan } from "@mediaos/web-core";
+import { useQuickCreateStore } from "@/components/quick-create/quick-create.store";
+import { QUICK_CREATE_HOTKEY_LABEL } from "@/hooks/use-quick-create-hotkey";
+import { TASK_CORE_ENGINE_PAIRS } from "@/routes/tasks/constants";
 
 // Module accent colors mapped from registry icon — hiển thị trên chrome navy hằng số
 // (không đổi theo theme) nên palette cố định là chủ đích; slate-400 đủ tương phản.
@@ -63,6 +66,28 @@ function CurrentAppIndicator() {
       <DynamicIcon name={icon} className={cn("h-4 w-4", accentClass)} />
       {name}
     </span>
+  );
+}
+
+/** S20-X-QUICKCREATE-1 — «+ Tạo việc»: gate create:task; mở form gọn tại chỗ (QuickCreateHost ở shell). */
+function QuickCreateButton() {
+  const { t } = useTranslation("tasks");
+  const { CREATE } = TASK_CORE_ENGINE_PAIRS;
+  const canCreate = useCan(CREATE.action, CREATE.resourceType);
+  const open = useQuickCreateStore((s) => s.open);
+  if (!canCreate) return null;
+  return (
+    <button
+      onClick={open}
+      data-testid="topbar-quick-create"
+      className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-chrome-foreground/80 transition-colors hover:bg-white/10"
+      aria-label={t("quickCreate.button")}
+      aria-keyshortcuts="Alt+Shift+N"
+      title={t("quickCreate.buttonTitle", { hotkey: QUICK_CREATE_HOTKEY_LABEL })}
+    >
+      <Plus className="h-4.5 w-4.5" />
+      <span className="hidden text-sm md:inline">{t("quickCreate.button")}</span>
+    </button>
   );
 }
 
@@ -122,6 +147,8 @@ export function GlobalTopbar() {
 
         {/* Right actions */}
         <div className="flex items-center gap-0.5">
+          <QuickCreateButton />
+
           {/* App Switcher */}
           <button
             onClick={toggleAppSwitcher}
