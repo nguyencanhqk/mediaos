@@ -12,14 +12,52 @@
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, RefreshCw } from "lucide-react";
 import { dashboardApi, dashboardKeys, useCan } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Skeleton } from "@mediaos/ui";
-import type { DashboardTypeValue } from "@mediaos/contracts";
+import type { DashboardTypeValue, DashboardWidgetSummaryDto } from "@mediaos/contracts";
 import { DashboardWidgetGrid } from "@/components/dashboard/DashboardWidgetGrid";
 import { DashboardTypeSwitcher } from "@/components/dashboard/DashboardTypeSwitcher";
-import { DASH_READ_PAIR } from "./constants";
+import { GoalCheckinDueBlock } from "@/components/dashboard/GoalCheckinDueBlock";
+import { DASH_READ_PAIR, DASH_WIDGET_CODE } from "./constants";
+
+/** Các nguồn của màn «Hôm nay» mà khối mục tiêu cần biết đã rỗng hết chưa (cùng khoá cache với widget). */
+const TODAY_SOURCE_CODES: readonly string[] = [
+  DASH_WIDGET_CODE.MY_TASKS,
+  DASH_WIDGET_CODE.TASK_ALERTS,
+  DASH_WIDGET_CODE.PENDING_LEAVE,
+];
+
+/**
+ * Khối «Mục tiêu cần check-in» của dashboard Employee. Đọc LẠI cùng query của các widget việc/đơn (cùng
+ * `queryKey` ⇒ dùng chung cache, không thêm lời gọi) chỉ để biết «xong hết» hay chưa.
+ */
+function EmployeeTodayBlocks({
+  widgets,
+  dashboardType,
+}: {
+  widgets: readonly DashboardWidgetSummaryDto[];
+  dashboardType: DashboardTypeValue;
+}) {
+  const present = widgets.filter((w) => TODAY_SOURCE_CODES.includes(w.widget_code));
+  const results = useQueries({
+    queries: present.map((w) => ({
+      queryKey: dashboardKeys.widgets.data(w.widget_code, {
+        dashboard_type: dashboardType,
+        project_id: undefined,
+      }),
+      queryFn: () =>
+        dashboardApi.getWidgetData(w.widget_code, {
+          dashboard_type: dashboardType,
+          project_id: undefined,
+        }),
+      staleTime: 15_000,
+    })),
+  });
+  const othersClear = results.every((r) => r.isSuccess && r.data?.status === "Empty");
+  return <GoalCheckinDueBlock othersClear={othersClear} />;
+}
 
 function DashboardShellSkeleton() {
   return (
@@ -84,6 +122,11 @@ function DashboardMePageInner() {
         <EmptyState title={t("shell.empty.title")} description={t("shell.empty.description")} />
       ) : (
         <DashboardWidgetGrid widgets={widgets} dashboardType={data!.dashboard_type} />
+      )}
+
+      {/* S20-DASH-TODAY-1 — chỉ dashboard Employee; tự ẩn khi thiếu access:goal / checkin:goal. */}
+      {data?.dashboard_type === "Employee" && (
+        <EmployeeTodayBlocks widgets={widgets} dashboardType={data.dashboard_type} />
       )}
     </div>
   );

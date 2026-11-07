@@ -20,6 +20,8 @@ import { SocialPortalShell } from "@/routes/social/feed/SocialPortalShell";
 // S20-TASK-PROJTOOLBARURL-1 ghép thêm bộ lọc toolbar + rail (q · status · priority · overdue · sort · who).
 import { validateProjectWorkspaceRouteSearch } from "@/routes/tasks/project-workspace-filters";
 import { useTaskDetailNav } from "@/routes/tasks/task-drawer-nav";
+import { useApplyDefaultLanding } from "@/lib/default-landing";
+import { validateLeaveApprovalSearch } from "@/routes/leave/leave-approval-search";
 import { validateTaskListSearch } from "@/routes/tasks/task-list-search";
 import { validateMyTasksSearch } from "@/routes/tasks/my-tasks-groups";
 // S20-GOAL-LISTURL-1 — validateSearch /goals + /goals/$goalId (file thuần TS + hook, không component).
@@ -65,15 +67,20 @@ const homeRoute = createRoute({
 });
 
 // Index redirect → /home
+// S20-DASH-TODAY-1 — cổng vào app (đích đăng nhập): tôn trọng «Trang mở đầu» (allowlist, default-landing.ts).
+function IndexEntry() {
+  useApplyDefaultLanding();
+  return (
+    <ProtectedShell>
+      <HomePortalLayout />
+    </ProtectedShell>
+  );
+}
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: authGuard,
-  component: () => (
-    <ProtectedShell>
-      <HomePortalLayout />
-    </ProtectedShell>
-  ),
+  component: IndexEntry,
 });
 
 // ---------------------------------------------------------------------------
@@ -1220,12 +1227,26 @@ const leaveMyRequestsRoute = makeModuleRoute(
   "LEAVE",
   MyLeaveRequestsPage,
 );
-const leaveApprovalsRoute = makeModuleRoute(
-  "/leave/approvals",
-  "leave.approvals",
-  "LEAVE",
-  LeaveApprovalPage,
-);
+// S20-DASH-TODAY-1 — `?request=<uuid>` mở sẵn dialog chi tiết đơn (từ widget «Đơn nghỉ chờ duyệt»).
+const leaveApprovalsMeta = getMeta("leave.approvals");
+const leaveApprovalsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/approvals",
+  beforeLoad: authGuard,
+  validateSearch: validateLeaveApprovalSearch,
+  component: function LeaveApprovalsRouteBody() {
+    const { request } = leaveApprovalsRoute.useSearch();
+    const navigate = leaveApprovalsRoute.useNavigate();
+    return buildModuleRouteContent(
+      leaveApprovalsMeta,
+      "LEAVE",
+      <LeaveApprovalPage
+        requestId={request ?? null}
+        onClearRequest={() => void navigate({ search: {}, replace: true })}
+      />,
+    );
+  },
+});
 
 // S3-FE-LEAVE-3 — LEAVE-SCREEN-006 (tất cả đơn nghỉ, HR/Admin).
 const leaveAllRequestsRoute = makeModuleRoute(

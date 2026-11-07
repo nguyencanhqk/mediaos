@@ -1,0 +1,103 @@
+// @vitest-environment jsdom
+/**
+ * S20-DASH-TODAY-1 — allowlist `defaultLanding`. Ca TẤN CÔNG viết trước: mỗi dạng thoát khỏi allowlist
+ * phải về `/home`, không bao giờ trả lại chuỗi đầu vào.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
+import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  DEFAULT_LANDING_OPTIONS,
+  resolveDefaultLanding,
+  useApplyDefaultLanding,
+} from "./default-landing";
+
+const mockNavigate = vi.fn();
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mockNavigate }));
+vi.mock("@mediaos/web-core", () => ({
+  meApi: { getPreferences: vi.fn() },
+  meKeys: { preferences: () => ["me", "preferences"] },
+}));
+import { meApi } from "@mediaos/web-core";
+const getPrefs = meApi.getPreferences as ReturnType<typeof vi.fn>;
+
+const ATTACKS = [
+  "/evil",
+  "https://evil.example/home",
+  "http://localhost/dashboard",
+  "//evil.example",
+  "/\\evil.example",
+  "\\\\evil.example",
+  "javascript:alert(1)",
+  "/dashboard?x=1",
+  "/dashboard#frag",
+  "/dashboard/",
+  "/dashboard/../admin",
+  "/DASHBOARD",
+  " /dashboard",
+  "/dashboard ",
+  "/dashboard\n",
+  "/me/security",
+  "/tasks/my-tasks?group=due",
+  "",
+];
+
+describe("resolveDefaultLanding", () => {
+  it.each(DEFAULT_LANDING_OPTIONS)("nhận đúng %s", (path) => {
+    expect(resolveDefaultLanding(path)).toBe(path);
+  });
+  it.each(ATTACKS)("chặn %j ⇒ /home", (raw) => {
+    expect(resolveDefaultLanding(raw)).toBe("/home");
+  });
+  it.each([null, undefined, 42, {}, ["/me"]])("không phải chuỗi (%j) ⇒ /home", (raw) => {
+    expect(resolveDefaultLanding(raw)).toBe("/home");
+  });
+});
+
+function setup() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client }, children);
+  return renderHook(() => useApplyDefaultLanding(), { wrapper });
+}
+
+describe("useApplyDefaultLanding", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("/dashboard đã chọn ⇒ replace tới /dashboard đúng một lần", async () => {
+    getPrefs.mockResolvedValue({ defaultLanding: "/dashboard" });
+    const { rerender } = setup();
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+    rerender();
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/dashboard", replace: true });
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["/\\evil", "https://evil.example", "//evil.example", "/\\evil", "/me?x=1"])(
+    "giá trị tấn công %j ⇒ KHÔNG điều hướng đi đâu",
+    async (raw) => {
+      getPrefs.mockResolvedValue({ defaultLanding: raw });
+      setup();
+      await waitFor(() => expect(getPrefs).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r, 20));
+      expect(mockNavigate).not.toHaveBeenCalled();
+    },
+  );
+
+  it("chưa đặt (null) hoặc /home ⇒ ở nguyên", async () => {
+    getPrefs.mockResolvedValue({ defaultLanding: null });
+    setup();
+    await waitFor(() => expect(getPrefs).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("lỗi tải preferences ⇒ ở nguyên (fail-soft)", async () => {
+    getPrefs.mockRejectedValue(new Error("boom"));
+    setup();
+    await waitFor(() => expect(getPrefs).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
