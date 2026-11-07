@@ -162,6 +162,7 @@ export function GoalCheckinDueBlock({ othersClear = false }: GoalCheckinDueBlock
 
 function GoalDueRow({ goal, onCheckin }: { goal: GoalCoreResponseDto; onCheckin: () => void }) {
   const { t } = useTranslation("me");
+  const { t: td } = useTranslation("dashboard");
   const lockHintId = `dash-goal-lock-${goal.id}`;
   const locked = goalCheckinLockReason(goal) !== null;
   return (
@@ -178,6 +179,7 @@ function GoalDueRow({ goal, onCheckin }: { goal: GoalCoreResponseDto; onCheckin:
             className="h-auto shrink-0 p-1 text-xs text-brand hover:bg-transparent"
             data-testid={`dash-goal-checkin-${goal.id}`}
             disabled={locked}
+            aria-label={td("goalCheckin.checkinFor", { name: goal.name })}
             aria-describedby={locked ? lockHintId : undefined}
             onClick={onCheckin}
           >

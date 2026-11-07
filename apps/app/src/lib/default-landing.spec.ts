@@ -4,10 +4,11 @@
  * phải về `/home`, không bao giờ trả lại chuỗi đầu vào.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor, act } from "@testing-library/react";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  DEFAULT_LANDING_HOLD_MAX_MS,
   DEFAULT_LANDING_OPTIONS,
   resolveDefaultLanding,
   useApplyDefaultLanding,
@@ -55,8 +56,10 @@ describe("resolveDefaultLanding", () => {
   });
 });
 
-function setup() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function setup(retry: number | false = false) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry, retryDelay: 60_000 } },
+  });
   const wrapper = ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client }, children);
   return renderHook(() => useApplyDefaultLanding(), { wrapper });
@@ -111,5 +114,35 @@ describe("useApplyDefaultLanding", () => {
     await waitFor(() => expect(getPrefs).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 20));
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("lỗi tạm + react-query đang retry ⇒ nhả Home NGAY (không đợi retry), không điều hướng", async () => {
+    getPrefs.mockRejectedValue(new Error("tạm"));
+    const { result } = setup(3);
+    await waitFor(() => expect(getPrefs).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current).toBe(false));
+    expect(getPrefs).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("lượt tải đầu treo quá trần ⇒ nhả Home, dữ liệu về muộn KHÔNG kéo điều hướng", async () => {
+    vi.useFakeTimers();
+    try {
+      let resolve: (v: unknown) => void = () => undefined;
+      getPrefs.mockReturnValue(new Promise((r) => (resolve = r)));
+      const { result } = setup();
+      expect(result.current).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DEFAULT_LANDING_HOLD_MAX_MS + 10);
+      });
+      expect(result.current).toBe(false);
+      await act(async () => {
+        resolve({ defaultLanding: "/dashboard" });
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

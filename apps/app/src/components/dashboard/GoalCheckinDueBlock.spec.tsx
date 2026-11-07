@@ -163,6 +163,22 @@ describe("GoalCheckinDueBlock — dữ liệu", () => {
     expect(screen.getByTestId("checkin-dialog")).toHaveTextContent("g-9");
   });
 
+  it("mỗi nút Check-in có aria-label nêu tên mục tiêu (không trùng tên trợ năng)", async () => {
+    mockGetGoals.mockImplementation((p: { status: string }) =>
+      Promise.resolve(
+        p.status === "Active"
+          ? [makeGoal({ id: "g-1", name: "Mục A" }), makeGoal({ id: "g-2", name: "Mục B" })]
+          : [],
+      ),
+    );
+    renderBlock();
+    await screen.findByText("Mục A");
+    const labels = screen
+      .getAllByTestId(/^dash-goal-checkin-/)
+      .map((el) => el.getAttribute("aria-label"));
+    expect(labels).toEqual(["Check-in: Mục A", "Check-in: Mục B"]);
+  });
+
   it("mục Nháp ⇒ Check-in bị khoá kèm lý do", async () => {
     mockGetGoals.mockImplementation((p: { status: string }) =>
       Promise.resolve(p.status === "Draft" ? [makeGoal({ id: "g-d", status: "Draft" })] : []),

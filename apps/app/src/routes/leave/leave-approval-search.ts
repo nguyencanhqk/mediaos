@@ -2,8 +2,8 @@
  * S20-DASH-TODAY-1 — `?request=<uuid>` của `/leave/approvals`: mở sẵn dialog chi tiết đơn.
  *
  * Giá trị rác KHÔNG ném (không vỡ trang): router parse search bằng JSON.parse nên `?request=123` tới đây
- * là SỐ — đều quy về chuỗi để trang báo «không tìm thấy», không bao giờ thành lời gọi API (kiểm UUID
- * TRƯỚC mọi request).
+ * là SỐ — bỏ khỏi search; chuỗi không phải UUID giữ nguyên để trang báo «không tìm thấy». Không bao giờ
+ * thành lời gọi API (kiểm UUID TRƯỚC mọi request).
  */
 export const LEAVE_APPROVAL_REQUEST_PARAM = "request";
 
@@ -19,6 +19,8 @@ export interface LeaveApprovalSearch {
 
 export function validateLeaveApprovalSearch(search: Record<string, unknown>): LeaveApprovalSearch {
   const raw = search[LEAVE_APPROVAL_REQUEST_PARAM];
-  if (raw === undefined || raw === null || raw === "") return {};
-  return { request: typeof raw === "string" ? raw : JSON.stringify(raw) };
+  // Không phải chuỗi (`?request=123` → số, object…) ⇒ BỎ khỏi search: router không viết lại URL thành
+  // `?request=%22123%22`, trang không mở dialog, 0 lời gọi API.
+  if (typeof raw !== "string" || raw === "") return {};
+  return { request: raw };
 }

@@ -44,6 +44,7 @@ export default {
     allClear: "Hôm nay bạn đã xong hết",
     error: "Không tải được mục tiêu cần check-in",
     viewAll: "Xem tất cả",
+    checkinFor: "Check-in: {{name}}",
   },
   myTasks: {
     title: "Việc của tôi hôm nay",

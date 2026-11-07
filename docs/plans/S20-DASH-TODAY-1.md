@@ -52,3 +52,14 @@ Nguồn: `docs/plans/S20-WORKUX-STORIES.md` §5.4 US-X-03 + US-X-08 (biến th�
 3. LOW allClear đếm widget không thấy: ĐÃ VÁ — nguồn lọc theo useCan (read:task; view:leave + approve:leave), rỗng ⇒ false; 2 ca test.
 4. LOW quý đóng băng useMemo([]): ĐÃ VÁ — tính mỗi render; ca test đổi quý.
 5. LOW radiogroup thiếu bàn phím: ĐÃ VÁ — roving tabindex, mũi tên chọn mục kế, aria-disabled thay disabled; 2 ca test.
+
+### Sổ vết — vá vòng 2 (07/11/2026)
+
+1. MEDIUM Home trống suốt retry: ĐÃ VÁ — `useApplyDefaultLanding` nhả Home khi `failureCount>0` hoặc quá `DEFAULT_LANDING_HOLD_MAX_MS` (1500ms); dữ liệu về muộn không điều hướng. 2 ca test (đỏ trên mã cũ).
+2. LOW GET /me/preferences gọi 2 lần: NỢ — `packages/web-core/src/lib/session.ts:45` gọi `meApi.getPreferences()` không ghi cache; sửa sạch cần đổi web-core (ngoài paths) ⇒ đề xuất `queryClient.setQueryData(meKeys.preferences(), prefs)` ở session.
+3. LOW `?request=123` bị viết lại: ĐÃ VÁ — giá trị không phải chuỗi bị bỏ khỏi search (URL sạch, 0 lời gọi; trang không mở dialog/thông điệp cho dạng số, chuỗi sai UUID vẫn báo như cũ). Spec mới `leave-approval-search.spec.ts`.
+4. LOW hai nút Check-in cùng tên: ĐÃ VÁ — `aria-label` «Check-in: {tên mục tiêu}» (i18n `dashboard.goalCheckin.checkinFor`); ca đo bằng getAttribute.
+5. INFO defaultLanding độc hại: KHÔNG ĐỔI — `/` (IndexEntry, router.tsx:71) bình thường cũng ở `/` và vẽ Home; ca bị bỏ qua giống hệt ⇒ giữ. done_when «vào /home» hiểu là «Home hiện, ở lại origin».
+6. LOW widget gọi lại 2x sau đổi trạng thái: NỢ, có SẴN trên master — `routes/tasks/hooks/use-task-action-mutation.ts:141-144` duyệt cả `taskCoreInvalidation.list()` và `.my()`, mà cả hai đều chứa `dashboardKeys.widgets.all` (`packages/web-core/src/lib/query-keys.ts:521-522`) ⇒ mỗi widget bị invalidate 2 lần (cùng widget pending-leave). Ngoài paths (routes/tasks + web-core).
+
+KPI luồng A (/home, defaultLanding=null): 4 thao tác, 1 chuyển trang; POST /tasks/T1/change-status {status:Done}; landing độc hại ở lại origin. Đo 07/11/2026 Chromium Playwright MCP 1440x1600 @ d2de717e.
